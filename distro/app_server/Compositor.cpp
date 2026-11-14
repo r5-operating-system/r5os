@@ -2464,21 +2464,22 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 		}
 	}
 	if (failure != NULL) {
-		// M11 review: the job may still run. The buffers of this frame
-		// are freed after the device is idle or lost
-		// (docs/APP-SERVER-COMPOSITOR.md), so wait once more; a job that
-		// still runs keeps every buffer for good.
-		if (strcmp(failure, "fence timeout") == 0
-			&& vk->vkWaitForFences(vk->device, 1, &vk->fence, VK_TRUE,
-				kFenceGraceNs) != VK_SUCCESS) {
-			atomic_set(&fGpuBusy, 1);
-			log_line("compose fence still busy: window memory kept");
-		}
 		if (exclusive)
 			fScreen->UnlockExclusiveAccess();
 		if (compare) {
 			for (int32 i = 0; i < layers.CountItems(); i++)
 				layers.ItemAt(i)->entry->iface->UnlockExclusiveAccess();
+		}
+		// M11 review: the job may still run. The buffers of this frame
+		// are freed after the device is idle or lost
+		// (docs/APP-SERVER-COMPOSITOR.md), so wait once more, with the
+		// screen and the windows unlocked; a job that still runs keeps
+		// every buffer for good.
+		if (strcmp(failure, "fence timeout") == 0
+			&& vk->vkWaitForFences(vk->device, 1, &vk->fence, VK_TRUE,
+				kFenceGraceNs) != VK_SUCCESS) {
+			atomic_set(&fGpuBusy, 1);
+			log_line("compose fence still busy: window memory kept");
 		}
 		// handled by _ComposeLoop() once the compose slot is free: the
 		// restart after a reset, or the CPU mode (step 5)
@@ -4033,8 +4034,11 @@ Compositor::_ShareRetireDone()
 				|| fVulkan->markGet(image.importId, &sequence) != 0;
 			if (gone) {
 				// nothing reads it any more; an ended share's program
-				// has stopped waiting on it
+				// has stopped waiting on it. M11 review: not when
+				// app_server ended it (giveBack): that program still waits.
 				image.retiring = false;
+				if (share->giveBack)
+					release_sem_etc(image.sem, 1, B_DO_NOT_RESCHEDULE);
 				continue;
 			}
 			if (!_ShareReady(sequence)) {
