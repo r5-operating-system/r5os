@@ -108,6 +108,14 @@ bool gpu_selftest_enabled();
 static bool gpu_job_blocks(const gpu_sync* sync, uint64 target, bool binary);
 static void gpu_sync_host(gpu_sync* sync);
 static void gpu_release_parked(uint64 seen);
+/* M11 review: the device is lost and a reset stopped the CP, so nothing
+ * it was given can be fetched any more. Lost without a stopped CP (the
+ * hang before its reset, a second hang, a failed reset): it still may. */
+static inline bool
+gpu_cp_stopped_after_loss()
+{
+	return sLost && sCpStopped;
+}
 static void gpu_watchdog();
 static status_t gpu_file_root(gpu_client* client);
 static void gpu_defer_reclaim(uint64 seen);
@@ -855,9 +863,10 @@ gpu_wait_reset()
 static void
 gpu_release_parked(uint64 seen)
 {
-	/* A lost device never retires the fence, so every parked buffer
-	 * and the file tree it holds are released. */
-	if (sLost)
+	/* A lost device never retires the fence. Its parked buffers and the
+	 * file trees they hold are released only once a reset stopped the
+	 * CP; before that it may still fetch them (M11 review). */
+	if (gpu_cp_stopped_after_loss())
 		seen = ~0ull;
 	gpu_defer_reclaim(seen);
 	for (uint32 i = 0; i < kMaxBo; i++) {
@@ -1037,7 +1046,7 @@ gpu_bo_detach(gpu_client* client, gpu_bo* bo, uint32 handle)
 	}
 	uint64 sequence = client->lastSequence;
 	uint64 seen = gpu_hw_seen();
-	if (!sLost && sequence != 0 && seen < sequence) {
+	if (!gpu_cp_stopped_after_loss() && sequence != 0 && seen < sequence) {
 		bo->owner = NULL;
 		bo->parked = true;
 		bo->parkSequence = sequence;
@@ -3220,7 +3229,7 @@ gpu_free(void* cookie)
 		if (!bo->live || bo->owner != client)
 			continue;
 		uint64 sequence = client->lastSequence;
-		if (!sLost && sequence != 0 && seen < sequence) {
+		if (!gpu_cp_stopped_after_loss() && sequence != 0 && seen < sequence) {
 			bo->owner = NULL;
 			bo->parked = true;
 			bo->parkSequence = sequence;
