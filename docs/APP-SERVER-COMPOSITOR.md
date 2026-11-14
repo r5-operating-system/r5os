@@ -303,6 +303,7 @@ Changed in step 3b (user, 13 Nov 2026): the refusal rules are cases of the host 
 | Lavapipe | QEMU or VirtualBox | `app_server: window <id> zero-copy off: lavapipe` |
 | a Vulkan window that shares (VulkanTeapot, `vkcube`) | the stick, boot 1 | `app_server: window <id> zero-copy on`, once per window, after its first swapchain is imported |
 | the two scanout ways (decision 4) | the stick, `gpu_debug`, once with and once without `gpu_compositor_scanout true` | `app_server: present median <us> (vulkan)` and `... (cpu)`, both in `CHANGELOG.md` |
+| zero-copy against the copy path (FPS and app_server's CPU time, one boot) | the stick, boot 1, `gpu_debug`: `check` adds `gpu_compositor_zero_copy false` to the settings (a test switch, default off; app_server reads it at start and at every 10 s report, and only new swapchains follow it), runs VulkanTeapot again and takes the line out | `app_server: zero-copy setting off` / `on`; `app_server: window <id> zero-copy off: setting`; `app_server: team cpu <n> ms per 10 s` (the whole app_server, user and kernel) |
 
 An acquire timeout (`VK_TIMEOUT`, decision 5) has no test of its own: a program that waits with `UINT64_MAX`, as VulkanTeapot does, never sees it.
 

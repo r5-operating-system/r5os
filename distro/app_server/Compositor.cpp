@@ -83,6 +83,10 @@ struct settings {
 	// vkCmdCopyBuffer puts it on the scanout. Opt-in until the stick has
 	// measured both ways.
 	bool	scanout;
+	// M11 stick: gpu_compositor_zero_copy false, a test switch. Every
+	// program keeps the copy path, so the stick can measure both ways in
+	// one boot.
+	bool	noZeroCopy;
 };
 
 
@@ -115,8 +119,22 @@ load_settings(settings& out)
 			out.debug = true;
 		if (strncmp(line, "gpu_compositor_scanout true", 27) == 0)
 			out.scanout = true;
+		if (strncmp(line, "gpu_compositor_zero_copy false", 30) == 0)
+			out.noZeroCopy = true;
 	}
 	fclose(file);
+}
+
+
+/*!	The CPU time of the whole app_server team, user and kernel. */
+static bigtime_t
+team_cpu_time()
+{
+	team_usage_info usage;
+	if (get_team_usage_info(B_CURRENT_TEAM, B_TEAM_USAGE_SELF, &usage)
+			!= B_OK)
+		return 0;
+	return usage.user_time + usage.kernel_time;
 }
 
 
@@ -569,6 +587,9 @@ Compositor::Create(Desktop* desktop, HWInterface* screen)
 	compositor->fDebug = options.debug;
 	compositor->fForceFail = options.fail;
 	compositor->fWantScanout = options.scanout;
+	compositor->fZeroCopyOff = options.noZeroCopy ? 1 : 0;
+	if (options.noZeroCopy)
+		log_line("zero-copy setting off");
 
 	const char* reason = NULL;
 	uint64 gttBytes = 0;
@@ -663,6 +684,8 @@ Compositor::Compositor(Desktop* desktop, HWInterface* screen)
 	fSampleCount(0),
 	fReportStart(0),
 	fCpuAtReport(0),
+	fTeamCpuAtReport(0),
+	fZeroCopyOff(0),
 	fLateLogged(0),
 	fEffects(kWindowEffectShadow | kWindowEffectFrostedGlass
 		| kWindowEffectAnimations),
@@ -1854,6 +1877,7 @@ void
 Compositor::_ComposeLoop()
 {
 	fCpuAtReport = thread_cpu_time();
+	fTeamCpuAtReport = team_cpu_time();
 
 	while (true) {
 		// A compose that failed, outside the compose slot: the switch to
@@ -3940,6 +3964,10 @@ Compositor::ShareImages(Window* window, int32 viewToken, team_id team,
 		_ShareLog(window, "lavapipe");
 		return B_NOT_ALLOWED;
 	}
+	if (atomic_get(&fZeroCopyOff) != 0) {
+		_ShareLog(window, "setting");
+		return B_NOT_ALLOWED;
+	}
 	CompositorVulkan* vk = fVulkan;
 	if (vk == NULL || !vk->canImport || fFenceFd < 0) {
 		_ShareLog(window, "no import");
@@ -4176,6 +4204,21 @@ Compositor::_Report()
 	}
 	log_line("compose median %" B_PRId64 " us cpu %" B_PRId64
 		" ms per 10 s", median, (cpu - fCpuAtReport) / 1000);
+	// M11 stick: the whole app_server, for the FPS compare of zero-copy
+	// and the copy path. A standard account cannot read another uid's
+	// team usage, so app_server logs it itself.
+	bigtime_t teamCpu = team_cpu_time();
+	log_line("team cpu %" B_PRId64 " ms per 10 s",
+		(teamCpu - fTeamCpuAtReport) / 1000);
+	fTeamCpuAtReport = teamCpu;
+	// M11 stick: the zero-copy test switch, read again every report, so
+	// the stick can change it without a restart. Only new swapchains
+	// follow it.
+	settings options;
+	load_settings(options);
+	int32 off = options.noZeroCopy ? 1 : 0;
+	if (atomic_get_and_set(&fZeroCopyOff, off) != off)
+		log_line("zero-copy setting %s", off != 0 ? "off" : "on");
 	// M11 step 4: what the median above was measured with
 	uint32 effects = fEffects;
 	log_line("compose effects shadow %s frosted %s strength %s",

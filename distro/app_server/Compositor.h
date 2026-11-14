@@ -257,6 +257,10 @@ private:
 			int32				fSampleCount;
 			bigtime_t			fReportStart;
 			bigtime_t			fCpuAtReport;
+			bigtime_t			fTeamCpuAtReport;
+			// M11 stick: gpu_compositor_zero_copy false. Read by ShareImages,
+			// written at start and by _Report.
+			int32				fZeroCopyOff;
 			bigtime_t			fLateLogged;
 
 			// M11 step 4: written with all windows locked, read by the
