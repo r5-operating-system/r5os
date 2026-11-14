@@ -719,8 +719,6 @@ gpu_bo_create(gpu_client* client, void* buffer, size_t length)
 	bo->area = -1;
 	bo->mapTeam = -1;
 	bo->backing = backing;
-	backing->domain = in.domain;
-	backing->flags = in.flags;
 	backing->bytes = bytes;
 	status = gpu_bo_fill(client, bo, &in, bytes);
 	if (status != B_OK) {
@@ -728,6 +726,12 @@ gpu_bo_create(gpu_client* client, void* buffer, size_t length)
 		gpu_backing_drop(backing);
 		return status;
 	}
+	/* M11 review: set only now. A refusal before the VRAM allocation
+	 * would otherwise free offset 0, and in.flags are the flags that
+	 * were used (WC cleared when it is not allowed): BO_MAP and
+	 * BO_IMPORT must not report or map WC over a cached page. */
+	backing->domain = in.domain;
+	backing->flags = in.flags;
 	bo->live = true;
 	bo->owner = client;
 	client->handles[client->handleCount++] = (uint32)slot + 1u;
