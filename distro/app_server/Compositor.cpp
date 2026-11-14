@@ -4054,7 +4054,11 @@ Compositor::_ShareFrame(ShareDrawList& draws, BRegion& retry)
 		if (share->pending >= 0) {
 			Share::Image& next = share->images[share->pending];
 			uint64 sequence = 0;
-			if (fVulkan->markGet(next.importId, &sequence) != 0) {
+			// M11 review: mark 0 never passes (the WSI marks after its
+			// copy, so it is never 0); retrying it would compose every
+			// refresh period for good. Such a share is broken.
+			if (fVulkan->markGet(next.importId, &sequence) != 0
+				|| sequence == 0) {
 				share->broken = true;
 				// M11 review: the program still waits on these
 				_ShareGiveBack(share);
