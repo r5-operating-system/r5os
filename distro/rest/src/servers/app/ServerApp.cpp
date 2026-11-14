@@ -3812,6 +3812,14 @@ ServerApp::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 				}
 				log_window_effects(before, after, strengthBefore,
 					strengthAfter);
+				// M11 review: the value is applied and on screen; a failed
+				// save is logged, not reported, or the Settings box and
+				// the screen would disagree.
+				if (status != B_OK) {
+					syslog(LOG_WARNING, "app_server: window effects not saved: "
+						"%s\n", strerror(status));
+					status = B_OK;
+				}
 			}
 			fLink.StartMessage(status);
 			fLink.Flush();
