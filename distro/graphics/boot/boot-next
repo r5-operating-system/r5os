@@ -17,6 +17,15 @@
 # time to ~/m10/alive every second. check in the next boot reports the span
 # from the start to the last heartbeat that reached the disk.
 #
+# M11 stick (generated/gpu-m11/BRIEF.md, "Stick (step 6)"): when the
+# settings file has gpu_compositor true, or with "boot-next m11", the order
+# is M11's: 1, 2, 3, 4, then no settings file at all, so the machine keeps
+# no test switch. The note is ~/m11/next. Every M11 boot has
+# gpu_compositor true, gpu_debug true and gpu_selftest true (the self-test
+# starts gpu_hang_test and prints the kernel bo lines); boot 2 adds
+# gpu_compositor_fail true, boot 3 gpu_compositor_lavapipe true, boot 4
+# gpu_hang_test 1.
+#
 # For the host tests: R5_HOME and R5_USER_SETTINGS move the paths, BOOT_NEXT_YES=0 never
 # restarts.
 
@@ -31,13 +40,43 @@ file=${R5_USER_SETTINGS:-$(fd B_USER_SETTINGS_DIRECTORY "$home/config/settings")
 sysfile=${R5_SYSTEM_SETTINGS:-$(fd B_SYSTEM_SETTINGS_DIRECTORY /boot/system/settings)/kernel/drivers/radeon_hd}
 mkdir -p "$m10"
 
+# M11: the settings of the boot that just ran say so, or "boot-next m11".
+stick=m10
+start11=0
+if [ "$1" = m11 ]; then
+	stick=m11
+	start11=1
+	set -- 1
+elif [ -f "$file" ] && grep -q '^gpu_compositor true' "$file"; then
+	stick=m11
+fi
+if [ "$stick" = m11 ]; then
+	m10=$home/m11
+	mkdir -p "$m10"
+fi
+
 # The boot that just ran: the note, else no note means boot 1.
 cur=1
 if [ -f "$m10/next" ]; then
 	cur=$(head -n 1 "$m10/next" | tr -d ' \r')
 fi
 
-if [ -n "$1" ]; then
+if [ "$stick" = m11 ]; then
+	if [ -n "$1" ]; then
+		next=$1
+	else
+		case $cur in
+		1) next=2 ;;
+		2) next=3 ;;
+		3) next=4 ;;
+		4) next=done ;;
+		*)
+			echo "FAIL no M11 boot follows $cur; run boot-next <1|2|3|4|done>"
+			exit 1
+			;;
+		esac
+	fi
+elif [ -n "$1" ]; then
 	next=$1
 else
 	case $cur in
@@ -58,11 +97,30 @@ for d in "$m10/boot$cur" "$m10/boot$cur"-*; do
 		done_check=1
 	fi
 done
-if [ "$done_check" -ne 1 ]; then
+if [ "$done_check" -ne 1 ] && [ "$start11" != 1 ]; then
 	echo "FAIL run check first (no check.txt for boot $cur in $m10)"
 	exit 1
 fi
 
+m11="gpu_compositor true
+gpu_debug true
+gpu_selftest true"
+if [ "$stick" = m11 ]; then
+	case $next in
+	1) lines=$m11 ;;
+	2) lines="$m11
+gpu_compositor_fail true" ;;
+	3) lines="$m11
+gpu_compositor_lavapipe true" ;;
+	4) lines="$m11
+gpu_hang_test 1" ;;
+	done) lines= ;;
+	*)
+		echo "FAIL unknown M11 boot $next (1, 2, 3, 4 or done)"
+		exit 1
+		;;
+	esac
+else
 case $next in
 1) lines="gpu_selftest true" ;;
 1b) lines="gfx9_ring true
@@ -102,6 +160,7 @@ gpu_app_server_fail true"
 	exit 1
 	;;
 esac
+fi
 
 echo "boot-next: remove the settings file"
 rm -f "$file"

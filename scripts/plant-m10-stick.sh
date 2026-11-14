@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: 2026 R5OS Contributors
 # SPDX-License-Identifier: MIT
 #
-# M10 stick: plant the boot 1 settings (distro/graphics/boot/radeon_hd,
-# "gpu_selftest true" and nothing else) into r5-os-anyboot.iso, so the
+# Stick: plant the boot 1 settings (distro/graphics/boot/radeon_hd; for M11
+# gpu_compositor true, gpu_debug true, gpu_selftest true) into r5-os-anyboot.iso, so the
 # first boot runs the self-test with every GPU switch at its default.
 # check, boot-next and check-user come from the mesa_radv package.
 # No periodic sync: rounds 3-5 synced to the stick every 2-30 s and every

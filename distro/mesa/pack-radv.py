@@ -3,7 +3,11 @@
 
 The previous file kept the name mesa_radv-25.3.6-1. An older copy of that
 same name, from 9 Nov, could be the one the image installed. The new name
-is mesa_radv-25.3.6-8, so a cached older build cannot be installed in its place.
+is mesa_radv-25.3.6-9, so a cached older build cannot be installed in its place.
+
+pack-radv.py ROOT               -1 plus the freshly built library, as before
+pack-radv.py ROOT --tools-only  -8 with its library unchanged and the current
+                                stick scripts (M11 stick: only the scripts changed)
 """
 import shutil
 import subprocess
@@ -38,17 +42,20 @@ def drop_build_path(path: Path) -> None:
 
 def main() -> None:
     root = Path(sys.argv[1])
+    tools_only = len(sys.argv) > 2 and sys.argv[2] == "--tools-only"
     out_dir = root / "distro" / "packages" / "x86_64"
-    previous = out_dir / "mesa_radv-25.3.6-1-x86_64.hpkg"
-    dest = out_dir / "mesa_radv-25.3.6-8-x86_64.hpkg"
+    base = "25.3.6-8" if tools_only else "25.3.6-1"
+    previous = out_dir / f"mesa_radv-{base}-x86_64.hpkg"
+    dest = out_dir / "mesa_radv-25.3.6-9-x86_64.hpkg"
     stage = Path("/tmp/r5-radv-pkg")
     shutil.rmtree(stage, ignore_errors=True)
     stage.mkdir(parents=True)
     subprocess.check_call([str(PKG), "extract", "-C", str(stage), str(previous)])
     so = stage / "lib" / "libvulkan_radeon.so"
-    shutil.copy2(SRC, so)
-    subprocess.check_call([str(STRIP), "--strip-unneeded", str(so)])
-    drop_build_path(so)
+    if not tools_only:
+        shutil.copy2(SRC, so)
+        subprocess.check_call([str(STRIP), "--strip-unneeded", str(so)])
+        drop_build_path(so)
     if b"/home/nickr" in so.read_bytes():
         raise SystemExit("libvulkan_radeon.so still contains /home/nickr")
     boot = root / "distro" / "graphics" / "boot"
@@ -61,9 +68,9 @@ def main() -> None:
         (bindir / name).chmod(0o755)
     info = stage / ".PackageInfo"
     text = info.read_text(encoding="utf-8")
-    text = text.replace("version\t\t\t25.3.6-1", "version\t\t\t25.3.6-8")
-    text = text.replace("mesa_radv = 25.3.6-1", "mesa_radv = 25.3.6-8")
-    if "25.3.6-8" not in text:
+    text = text.replace(f"version\t\t\t{base}", "version\t\t\t25.3.6-9")
+    text = text.replace(f"mesa_radv = {base}", "mesa_radv = 25.3.6-9")
+    if "25.3.6-9" not in text or base in text:
         raise SystemExit("package version was not bumped")
     info.write_text(text, encoding="utf-8")
     if dest.exists():
