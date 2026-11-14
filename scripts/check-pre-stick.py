@@ -350,9 +350,9 @@ def check_login_sources(commit: str) -> None:
 
 
 def extract(iso_wsl: str, out: str) -> None:
-    gets = [f"get myfs/system/packages/{HAIKU_PKG} {out}/{HAIKU_PKG}"]
+    gets = [f"cp myfs/system/packages/{HAIKU_PKG} :{out}/{HAIKU_PKG}"]
     for package in PACKAGES:
-        gets.append(f"get myfs/system/packages/{package} {out}/{package}")
+        gets.append(f"cp myfs/system/packages/{package} :{out}/{package}")
     script = ROOT / "generated" / "_pre-stick-extract.sh"
     script.write_text(
         "#!/bin/bash\nset -eu\n"
@@ -380,8 +380,8 @@ def extract(iso_wsl: str, out: str) -> None:
         f"mkdir -p {out}/home\n"
         f"'{BFS}' --start-offset {OFFSET} '{iso_wsl}' <<EOF\n"
         + "".join(
-            f"get myfs/home/{name} {out}/home/{name}\n" for name in HOME)
-        + f"get myfs/home/config/settings/kernel/drivers/radeon_hd {out}/home/radeon_hd\n"
+            f"cp myfs/home/{name} :{out}/home/{name}\n" for name in HOME)
+        + f"cp myfs/home/config/settings/kernel/drivers/radeon_hd :{out}/home/radeon_hd\n"
         "quit\nEOF\n",
         encoding="utf-8", newline="\n")
     wsl_script = wsl(f"wslpath -u '{script}'").strip()
