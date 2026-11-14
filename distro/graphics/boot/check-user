@@ -91,11 +91,15 @@ if [ "$stick" = m11 ]; then
 	runlive teapot "$bin"/VulkanTeapot --window --seconds 15
 	tail -n +"$((${from:-0} + 1))" "$syslog" > "$keep/teapot-syslog.txt" 2>/dev/null
 	have '^window fps [0-9]' "$keep/teapot.txt" "VulkanTeapot: window fps line"
-	have 'app_server: window [0-9]+ zero-copy on' "$keep/teapot-syslog.txt" 		"VulkanTeapot of a standard account: zero-copy on"
+	have 'app_server: window [0-9]+ zero-copy on' "$keep/teapot-syslog.txt" \
+		"VulkanTeapot of a standard account: zero-copy on"
 	runlive share "$bin"/r5-share-check
-	have 'app_server as a user refused: pass' "$keep/share.txt" 		"r5-share-check: argv[0] app_server as a user refused: pass"
-	have 'not app_server refused: pass' "$keep/share.txt" 		"r5-share-check: import by a program that is not app_server refused: pass"
-	have 'same number refused: pass' "$keep/share.txt" 		"r5-share-check: second import of the same number refused: pass"
+	have 'app_server as a user refused: pass' "$keep/share.txt" \
+		"r5-share-check: argv[0] app_server as a user refused: pass"
+	have 'not app_server refused: pass' "$keep/share.txt" \
+		"r5-share-check: import by a program that is not app_server refused: pass"
+	have 'same number refused: pass' "$keep/share.txt" \
+		"r5-share-check: second import of the same number refused: pass"
 	none ': fail' "$keep/share.txt" "r5-share-check: no fail"
 	if [ "$bad" -eq 0 ]; then
 		emit PASS
