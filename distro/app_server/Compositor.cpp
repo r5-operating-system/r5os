@@ -1194,6 +1194,73 @@ allocate_host_buffer(CompositorVulkan* vk, uint64 bytes, VkBuffer* _buffer,
 }
 
 
+/*!	One pass the way Painter writes a window: a fill (stores only) or a
+	blend (each pixel read, mixed and written back). Returns the time of
+	the faster of three runs. The sum keeps the stores from being dropped.
+*/
+static bigtime_t
+time_write(uint32* bits, uint64 pixels, bool blend, volatile uint32* sink)
+{
+	bigtime_t best = B_INFINITE_TIMEOUT;
+	for (int run = 0; run < 3; run++) {
+		bigtime_t start = system_time();
+		if (blend) {
+			for (uint64 i = 0; i < pixels; i++) {
+				uint32 dst = bits[i];
+				bits[i] = ((dst >> 1) & 0x7f7f7f7f) + 0x20202020;
+			}
+		} else {
+			uint32 color = 0xff336699 + run;
+			for (uint64 i = 0; i < pixels; i++)
+				bits[i] = color;
+		}
+		bigtime_t took = system_time() - start;
+		if (took < best)
+			best = took;
+		*sink += bits[pixels / 2];
+	}
+	return best;
+}
+
+
+/*!	M11 stick, gpu_debug: the window buffer memory against malloc, once,
+	with the size of the first window buffer. A separate buffer, so no
+	window shows the test pattern. Decision 5 wants the window buffer
+	cached; an uncached one is many times slower here.
+*/
+static void
+log_write_test(CompositorVulkan* vk, uint64 bytes)
+{
+	VkBuffer buffer;
+	VkDeviceMemory memory;
+	void* bits;
+	if (!allocate_host_buffer(vk, bytes, &buffer, &memory, &bits)) {
+		log_line("window buffer write test skipped: no memory");
+		return;
+	}
+	uint32* heap = (uint32*)malloc(bytes);
+	if (heap == NULL) {
+		vk->vkDestroyBuffer(vk->device, buffer, NULL);
+		vk->vkFreeMemory(vk->device, memory, NULL);
+		log_line("window buffer write test skipped: no memory");
+		return;
+	}
+	uint64 pixels = bytes / 4;
+	volatile uint32 sink = 0;
+	bigtime_t bufferFill = time_write((uint32*)bits, pixels, false, &sink);
+	bigtime_t bufferBlend = time_write((uint32*)bits, pixels, true, &sink);
+	bigtime_t heapFill = time_write(heap, pixels, false, &sink);
+	bigtime_t heapBlend = time_write(heap, pixels, true, &sink);
+	free(heap);
+	vk->vkDestroyBuffer(vk->device, buffer, NULL);
+	vk->vkFreeMemory(vk->device, memory, NULL);
+	log_line("window buffer write fill %" B_PRId64 " us blend %" B_PRId64
+		" us, malloc fill %" B_PRId64 " us blend %" B_PRId64 " us, %"
+		B_PRIu64 " KB", bufferFill, bufferBlend, heapFill, heapBlend,
+		bytes / 1024);
+}
+
+
 WindowBuffer*
 Compositor::_AllocateBuffer(uint32 width, uint32 height)
 {
@@ -1227,6 +1294,8 @@ Compositor::_AllocateBuffer(uint32 width, uint32 height)
 		log_line("window memory type %" B_PRIu32 " flags %#" B_PRIx32,
 			fVulkan->memoryType,
 			(uint32)memory.memoryTypes[fVulkan->memoryType].propertyFlags);
+		if (fDebug)
+			log_write_test(fVulkan, bytes);
 	}
 	return windowBuffer;
 }
