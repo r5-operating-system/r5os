@@ -386,7 +386,18 @@ teapot_report() {
 
 m11_common() {
 	have 'decorator: r5 loaded' "$slog" "decorator: r5 loaded"
-	none 'gpu lost' "$slog" "no gpu lost"
+	if [ "$boot" != 4 ]; then
+		none 'gpu lost' "$slog" "no gpu lost"
+	# Boot 4: every hang dumps "radeon_hd: gpu lost watchdog ..." (the
+	# kernel's gpu_lost, also before a good reset). Any other gpu lost
+	# line is a fault.
+	elif [ -s "$slog" ] && ! grep -E 'gpu lost' "$slog" \
+			| grep -vq 'gpu lost watchdog'; then
+		say 0 "no gpu lost other than the hang's watchdog dump"
+	else
+		say 1 "no gpu lost other than the hang's watchdog dump ($(grep -E 'gpu lost' \
+			"$slog" | grep -v 'gpu lost watchdog' | head -n 1))"
+	fi
 }
 
 m11_compose() {

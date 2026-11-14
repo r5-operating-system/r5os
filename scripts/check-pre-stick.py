@@ -119,6 +119,7 @@ M11_LINES = (
     ("radeon_hd: gpu selftest after reset ok", "gpu selftest after reset", KERNEL),
     ("gpu off until reboot", "gpu off until reboot", KERNEL),
     ("gpu lost", "gpu lost", KERNEL),
+    ("gpu lost watchdog", '"gpu lost watchdog"', KERNEL),
     ("app_server: gpu compositor on radv", "gpu compositor on radv (%s)", COMPOSITOR),
     ("app_server: gpu compositor on lavapipe: forced", "gpu compositor on lavapipe: %s",
      COMPOSITOR),
