@@ -1359,6 +1359,18 @@ Compositor::_AllocateOrMakeRoom(uint32 width, uint32 height,
 		if (oldest == NULL)
 			return NULL;
 		oldest->iface->SetBuffer(NULL, 0, 0);
+		// M11 review: the last layer list still holds it, or nothing is
+		// freed and every off-screen window loses its buffer for nothing.
+		// The compose skips a layer without a buffer; a frame in flight
+		// keeps its own reference until its fence.
+		{
+			BAutolock layerLock(fLayerLock);
+			for (int32 i = 0; i < fLayers->CountItems(); i++) {
+				Layer* layer = fLayers->ItemAt(i);
+				if (layer->entry.Get() == oldest)
+					layer->buffer.Unset();
+			}
+		}
 		buffer = _AllocateBuffer(width, height);
 	}
 	return buffer;
