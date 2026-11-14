@@ -3,7 +3,9 @@
  * SPDX-License-Identifier: MIT
  *
  * VulkanTeapot --window. The picture is a swapchain in an ordinary
- * window. --selftest does not call this file.
+ * window. --selftest does not call this file. --seconds <n> closes the
+ * window after n seconds and prints "window fps <x> frames <n> over <s> s"
+ * (the M11 stick compares zero-copy and the copy path with it).
  */
 
 #ifndef VK_USE_PLATFORM_VIEW_RFIVE
@@ -43,6 +45,7 @@ uint32_t memory_type(VkPhysicalDevice gpu, uint32_t bits, VkMemoryPropertyFlags 
 
 
 static int gDeviceLost = 0;
+static int gSeconds = 0;
 
 
 static void
@@ -331,8 +334,9 @@ device_rank(VkPhysicalDeviceType type)
 }
 
 int
-run_window(int cube)
+run_window(int cube, int seconds)
 {
+	gSeconds = seconds;
 	Mesh mesh = cube ? build_cube() : build_teapot();
 	BApplication* app = new BApplication("application/x-vnd.R5OS-VulkanTeapot");
 	WindowHost* host = new WindowHost();
@@ -633,7 +637,11 @@ window_draw(void* data)
 	VkPhysicalDevice gpu = loop->gpu;
 	VkSurfaceKHR surface = loop->surface;
 	Swap* swap = loop->swap;
+	bigtime_t started = system_time();
+	int frames = 0;
 	for (;;) {
+		if (gSeconds > 0 && system_time() - started >= (bigtime_t)gSeconds * 1000000)
+			break;
 		if (!host->Lock())
 			break;
 		bool stop = host->Stopping();
@@ -752,6 +760,14 @@ window_draw(void* data)
 				break;
 		} else if (presented != VK_SUCCESS)
 			break;
+		else
+			frames++;
+	}
+	if (gSeconds > 0) {
+		double took = (double)(system_time() - started) / 1000000.0;
+		printf("window fps %.1f frames %d over %.1f s\n",
+			took > 0 ? frames / took : 0.0, frames, took);
+		fflush(stdout);
 	}
 	host->Finish();
 	if (swap->pass != VK_NULL_HANDLE)
