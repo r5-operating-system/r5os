@@ -182,6 +182,7 @@ private:
 									uint32 background,
 									const BRegion& shared);
 			void				_ShareLog(Window* window, const char* reason);
+			void				_ShareLogOn(Window* window);
 			void				_ShareShape(Share* share);
 			void				_ShareFrame(ShareDrawList& draws,
 									BRegion& retry);

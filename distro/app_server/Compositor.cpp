@@ -347,6 +347,7 @@ struct Compositor::Entry : public BReferenceable {
 		iface(iface),
 		lastShown(0),
 		shareLogged(false),
+		shareOnLogged(false),
 		hasGlassViews(false),
 		maskWidth(0),
 		maskHeight(0),
@@ -375,6 +376,8 @@ struct Compositor::Entry : public BReferenceable {
 	bigtime_t			lastShown;
 	// "window <id> zero-copy off: <reason>" was logged for this window.
 	bool				shareLogged;
+	// "window <id> zero-copy on" was logged for this window (M11 stick).
+	bool				shareOnLogged;
 	// M11 step 4: ContentDamage taken by the compose thread this frame.
 	BRegion				takenDamage;
 
@@ -3718,6 +3721,24 @@ Compositor::_ShareLog(Window* window, const char* reason)
 }
 
 
+/*!	"app_server: window <id> zero-copy on", once per window, when its
+	first swapchain is imported (M11 stick, the counterpart of _ShareLog).
+	Takes fEntryLock, so it is never called with fShareLock held.
+*/
+void
+Compositor::_ShareLogOn(Window* window)
+{
+	BAutolock _(fEntryLock);
+	Entry* entry = _FindEntry(window);
+	if (entry == NULL || entry->shareOnLogged)
+		return;
+	entry->shareOnLogged = true;
+	int32 id = window->ServerWindow() != NULL
+		? window->ServerWindow()->ClientToken() : -1;
+	log_line("window %" B_PRId32 " zero-copy on", id);
+}
+
+
 /*!	The view's part of the screen and the screen position of its pixel
 	(0, 0), from its window. Called with all windows and fShareLock locked.
 	A view that is gone, or that is in another window now, has no shape.
@@ -4039,21 +4060,25 @@ Compositor::ShareImages(Window* window, int32 viewToken, team_id team,
 		_ShareLog(window, reason);
 		return B_NOT_ALLOWED;
 	}
-	BAutolock _(fShareLock);
-	// A view has one swapchain: an older one of the same view ends.
-	for (int32 i = 0; i < fShares.CountItems(); i++) {
-		Share* old = fShares.ItemAt(i);
-		if (old->team == team && old->viewToken == viewToken)
-			old->ended = true;
+	{
+		BAutolock _(fShareLock);
+		// A view has one swapchain: an older one of the same view ends.
+		for (int32 i = 0; i < fShares.CountItems(); i++) {
+			Share* old = fShares.ItemAt(i);
+			if (old->team == team && old->viewToken == viewToken)
+				old->ended = true;
+		}
+		share->id = ++fShareCounter;
+		if (!fShares.AddItem(share)) {
+			_ShareFree(share);
+			delete share;
+			return B_NO_MEMORY;
+		}
+		_ShareShape(share);
+		*_shareId = share->id;
 	}
-	share->id = ++fShareCounter;
-	if (!fShares.AddItem(share)) {
-		_ShareFree(share);
-		delete share;
-		return B_NO_MEMORY;
-	}
-	_ShareShape(share);
-	*_shareId = share->id;
+	// After fShareLock: _ShareLogOn takes fEntryLock, which comes first.
+	_ShareLogOn(window);
 	return B_OK;
 }
 

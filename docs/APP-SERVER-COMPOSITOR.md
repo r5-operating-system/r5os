@@ -301,6 +301,7 @@ Changed in step 3b (user, 13 Nov 2026): the refusal rules are cases of the host 
 | a size that lies, a semaphore of another team | app_server, once per window | `app_server: window <id> zero-copy off: size`, `... off: sem` |
 | a job that never finishes, with VulkanTeapot open | the stick: `gpu_hang_test 1` (M10) | `app_server: gpu compositor restarted after reset`; the teapot window shows its window background, then turns again |
 | Lavapipe | QEMU or VirtualBox | `app_server: window <id> zero-copy off: lavapipe` |
+| a Vulkan window that shares (VulkanTeapot, `vkcube`) | the stick, boot 1 | `app_server: window <id> zero-copy on`, once per window, after its first swapchain is imported |
 | the two scanout ways (decision 4) | the stick, `gpu_debug`, once with and once without `gpu_compositor_scanout true` | `app_server: present median <us> (vulkan)` and `... (cpu)`, both in `CHANGELOG.md` |
 
 An acquire timeout (`VK_TIMEOUT`, decision 5) has no test of its own: a program that waits with `UINT64_MAX`, as VulkanTeapot does, never sees it.
