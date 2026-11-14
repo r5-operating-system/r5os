@@ -58,6 +58,8 @@
 
 static const bigtime_t kFenceSlice = 100000;
 static const bigtime_t kFenceLimit = 15000000;
+// M11 review: after a fence timeout, the last wait before memory is freed
+static const uint64 kFenceGraceNs = 5000000000ULL;
 static const bigtime_t kReportInterval = 10000000;
 
 
@@ -715,7 +717,8 @@ Compositor::Compositor(Desktop* desktop, HWInterface* screen)
 	fPauseRedraw(false),
 	fDirectWindows(4),
 	fDirectScreen(false),
-	fFailure(NULL)
+	fFailure(NULL),
+	fGpuBusy(0)
 {
 }
 
@@ -1089,6 +1092,13 @@ Compositor::_ExitVulkan()
 	if (vk == NULL)
 		return;
 	fVulkan = NULL;
+	// M11 review: a job that never ended; waiting for idle would block
+	// app_server, freeing would hand the GPU's memory to someone else.
+	if (atomic_get(&fGpuBusy) != 0) {
+		_ReturnSharedImages();
+		log_line("compositor device kept: the gpu is still busy");
+		return;
+	}
 
 	// A device that failed half way has some functions not loaded; they
 	// are loaded in this order, so the last one tells all were.
@@ -1310,7 +1320,8 @@ Compositor::_FreeBuffer(WindowBuffer* buffer, uint64 vulkanBuffer,
 	uint64 vulkanMemory)
 {
 	atomic_add64((int64*)&fWindowBytes, -(int64)buffer->Bytes());
-	if (fVulkan == NULL || buffer->Generation() != fGeneration)
+	if (fVulkan == NULL || buffer->Generation() != fGeneration
+		|| atomic_get(&fGpuBusy) != 0)
 		return;
 	fVulkan->vkDestroyBuffer(fVulkan->device, (VkBuffer)vulkanBuffer, NULL);
 	fVulkan->vkFreeMemory(fVulkan->device, (VkDeviceMemory)vulkanMemory,
@@ -2435,6 +2446,16 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 		}
 	}
 	if (failure != NULL) {
+		// M11 review: the job may still run. The buffers of this frame
+		// are freed after the device is idle or lost
+		// (docs/APP-SERVER-COMPOSITOR.md), so wait once more; a job that
+		// still runs keeps every buffer for good.
+		if (strcmp(failure, "fence timeout") == 0
+			&& vk->vkWaitForFences(vk->device, 1, &vk->fence, VK_TRUE,
+				kFenceGraceNs) != VK_SUCCESS) {
+			atomic_set(&fGpuBusy, 1);
+			log_line("compose fence still busy: window memory kept");
+		}
 		if (exclusive)
 			fScreen->UnlockExclusiveAccess();
 		if (compare) {

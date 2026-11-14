@@ -300,6 +300,10 @@ private:
 			BObjectList<Window, false> fDirectWindows;
 	volatile bool				fDirectScreen;
 			const char*	volatile fFailure;
+			// M11 review: a compose job outlived its fence limit and the
+			// grace after it; its memory is never freed (the GPU may still
+			// read or write it), and the device is not torn down.
+			int32				fGpuBusy;
 };
 
 
