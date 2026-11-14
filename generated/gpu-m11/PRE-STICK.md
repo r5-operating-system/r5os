@@ -48,7 +48,7 @@ De R5-decorator: een vers image heeft geen `decorator_settings`, dan laadt app_s
 
 ## Boot 4 (hang tijdens de compose)
 
-`gpu_hang_test 1` start na de laatste oproep van de self-test (`r5_gpu_core.cpp:2770`), dus het scenario begint meteen na Sign in, zonder `check wait`. Regels: precies één `radeon_hd: gpu hang ring`, `gpu reset mode2 ok`, `gpu selftest after reset ok`, `app_server: gpu compositor restarted after reset`, geen `gpu compositor off`, geen `gpu off until reboot`. Met de hand: de aanwijzer bewoog de hele tijd.
+`gpu_hang_test 1` start na de laatste oproep van de self-test (`r5_gpu_core.cpp:2770`), dus het scenario begint meteen na Sign in, zonder `check wait`. Regels: precies één `radeon_hd: gpu hang ring`, `gpu reset mode2 ok`, `gpu selftest after reset ok`, `app_server: gpu compositor restarted after reset`, geen `gpu compositor off`, geen `gpu off until reboot`, en geen `gpu lost` behalve de dump van de hang zelf (`radeon_hd: gpu lost watchdog ...`, `r5_gpu_core.cpp:971`, bij elke hang, ook voor een goede reset). Met de hand: de aanwijzer bewoog de hele tijd.
 
 ## In het image (te controleren met `check-pre-stick.py <image>`)
 
