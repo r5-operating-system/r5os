@@ -298,7 +298,9 @@ private:
 	volatile bool				fModePending;
 			bool				fPauseRedraw;
 			BObjectList<Window, false> fDirectWindows;
-	volatile bool				fDirectScreen;
+	// M11 review: the teams that hold or wait for the direct screen
+	// (LockDirectScreen); the pause ends when none is left
+			int32				fDirectScreenWanted;
 			const char*	volatile fFailure;
 			// M11 review: a compose job outlived its fence limit and the
 			// grace after it; its memory is never freed (the GPU may still

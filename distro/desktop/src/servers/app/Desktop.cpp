@@ -1114,9 +1114,9 @@ Desktop::LockDirectScreen(team_id team)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-	else if (fCompositor != NULL && fDirectScreenTeam < 0) {
-		// nobody has the screen (another team still holding it keeps the
-		// pause)
+	else if (fCompositor != NULL) {
+		// this team does not get the screen; the compositor counts the
+		// teams that hold or wait for it (M11 review)
 		fCompositor->DirectScreenChanged(false);
 	}
 // SPDX-SnippetEnd
@@ -1129,11 +1129,13 @@ status_t
 Desktop::UnlockDirectScreen(team_id team)
 {
 	if (fDirectScreenTeam == team) {
-		fDirectScreenLock.Unlock();
-		fDirectScreenTeam = -1;
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+		// M11 review: the owner is cleared before the unlock; a waiting
+		// team takes the lock and sets itself, and must not be cleared.
+		fDirectScreenTeam = -1;
+		fDirectScreenLock.Unlock();
 		if (fCompositor != NULL)
 			fCompositor->DirectScreenChanged(false);
 // SPDX-SnippetEnd
@@ -4061,7 +4063,13 @@ Desktop::_SetCurrentWorkspaceConfiguration()
 			"lock.\n", fDirectScreenTeam);
 
 		debug_thread(fDirectScreenTeam);
-		fDirectScreenTeam = -1;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// M11 review: the owner stays. Its thread still holds the lock,
+		// and its UnlockDirectScreen (also the one when the app ends)
+		// must still match, or the lock and the pause stay for good.
+// SPDX-SnippetEnd
 	} else
 		fDirectScreenLock.Unlock();
 

@@ -716,7 +716,7 @@ Compositor::Compositor(Desktop* desktop, HWInterface* screen)
 	fModePending(false),
 	fPauseRedraw(false),
 	fDirectWindows(4),
-	fDirectScreen(false),
+	fDirectScreenWanted(0),
 	fFailure(NULL),
 	fGpuBusy(0)
 {
@@ -3596,12 +3596,23 @@ Compositor::DirectScreenChanged(bool locked)
 		if (!fDesktop->LockAllWindows())
 			return;
 		// set before the pause, so a resume the pause schedules sees it
-		fDirectScreen = true;
+		atomic_add(&fDirectScreenWanted, 1);
 		DirectAccessStarting();
 		fDesktop->UnlockAllWindows();
 		return;
 	}
-	fDirectScreen = false;
+	// M11 review: a count, not a flag. A team that waits for the lock
+	// while another gives it up keeps the pause.
+	int32 wanted = atomic_get(&fDirectScreenWanted);
+	while (wanted > 0) {
+		int32 was = atomic_test_and_set(&fDirectScreenWanted, wanted - 1,
+			wanted);
+		if (was == wanted)
+			break;
+		wanted = was;
+	}
+	if (wanted > 1)
+		return;
 	fModePending = true;
 	release_sem_etc(fWakeSem, 1, B_DO_NOT_RESCHEDULE);
 }
@@ -3619,7 +3630,8 @@ Compositor::_ApplyMode()
 		return;
 	fModePending = false;
 	fEntryLock.Lock();
-	bool direct = !fDirectWindows.IsEmpty() || fDirectScreen;
+	bool direct = !fDirectWindows.IsEmpty()
+		|| atomic_get(&fDirectScreenWanted) > 0;
 	fEntryLock.Unlock();
 	if (fActive && fPaused && !direct) {
 		_RebindEngines(true);
