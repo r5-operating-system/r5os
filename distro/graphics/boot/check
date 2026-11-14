@@ -451,7 +451,8 @@ m11_share() {
 	have 'hold: exported' "$keep/share-hold.txt" "r5-share-check hold: exported"
 	n=$(values 's/^r5-share-check: buffers \([0-9-]*\)/\1/p' "$keep/share-hold.txt")
 	set -- $n
-	if [ $# -eq 2 ] && [ "$1" = "$2" ]; then
+	# -1 means no render node: not a count, so not a pass.
+	if [ $# -eq 2 ] && [ "$1" = "$2" ] && [ "$1" -ge 0 ] 2>/dev/null; then
 		say 0 "exporter stopped: buffers $1 before and after"
 	else
 		say 1 "exporter stopped: the same buffer count before and after (got: ${n:-none})"
