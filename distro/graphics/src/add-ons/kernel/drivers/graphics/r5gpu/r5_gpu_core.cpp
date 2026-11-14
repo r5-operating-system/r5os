@@ -666,13 +666,21 @@ static int
 gpu_slot_take(gpu_client* client, int* reason)
 {
 	uint32 live = 0;
+	uint32 backings = 0;
 	int slot = -1;
 	for (uint32 i = 0; i < kMaxBo; i++) {
 		if (sBo[i].live)
 			live++;
 		else if (slot < 0)
 			slot = (int)i;
+		if (sBacking[i].live)
+			backings++;
 	}
+	/* M11 review: an export of a freed buffer keeps its backing for
+	 * R5_SHARE_LIFE_US without a slot. Count the larger of the two, so
+	 * the app_server reserve also holds for backings. */
+	if (backings > live)
+		live = backings;
 	/* The team info is read only when the reserve is all that is left. */
 	int appServer = live >= kMaxBo - R5_SHARE_RESERVE
 		&& gpu_caller_is_app_server() ? 1 : 0;
@@ -747,6 +755,36 @@ gpu_bo_create(gpu_client* client, void* buffer, size_t length)
 }
 
 
+/* M11 review: the VRAM this file still holds only through pending
+ * exports (the buffer itself was freed), so the VRAM limit counts it. */
+static uint64
+gpu_export_only_vram(gpu_client* client)
+{
+	uint64 bytes = 0;
+	for (uint32 i = 0; i < R5_SHARE_EXPORTS_PER_FILE; i++) {
+		const r5_share_export* record = &client->exports[i];
+		if (!record->live || record->backing >= kMaxBo)
+			continue;
+		const gpu_backing* backing = &sBacking[record->backing];
+		if (!backing->live || backing->domain != R5_GPU_DOMAIN_VRAM)
+			continue;
+		bool slot = false;
+		for (uint32 n = 0; n < kMaxBo && !slot; n++) {
+			slot = sBo[n].live && sBo[n].owner == client
+				&& sBo[n].backing == backing;
+		}
+		/* Two exports of one freed buffer count it once. */
+		for (uint32 n = 0; n < i && !slot; n++) {
+			slot = client->exports[n].live
+				&& client->exports[n].backing == record->backing;
+		}
+		if (!slot)
+			bytes += backing->bytes;
+	}
+	return bytes;
+}
+
+
 /* The memory of a new backing. A refusal leaves nothing allocated. */
 static status_t
 gpu_bo_fill(gpu_client* client, gpu_bo* bo, r5_gpu_bo* request, uint64 bytes)
@@ -766,6 +804,7 @@ gpu_bo_fill(gpu_client* client, gpu_bo* bo, r5_gpu_bo* request, uint64 bytes)
 					&& sBo[i].backing->domain == R5_GPU_DOMAIN_VRAM)
 					held += sBo[i].backing->bytes;
 			}
+			held += gpu_export_only_vram(client);
 			if (!r5_vram_fits(limit, held, client->tree->vm.used, bytes))
 				return gpu_refuse("BO_CREATE", "vram", B_NO_MEMORY, 0,
 					in.domain, bytes, 0, 0, 0, in.flags);
