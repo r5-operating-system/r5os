@@ -40,15 +40,17 @@ quit
 EOT
 # bfs_shell has no "put" (the old lines failed and still printed planted):
 # read both files back and stop when they differ.
-got=$("$BFS" --start-offset 6291456 "$IMG" <<EOT 2>/dev/null
-cat myfs/home/config/settings/kernel/drivers/radeon_hd
+for name in radeon_hd kernel; do
+	got=$("$BFS" --start-offset 6291456 "$IMG" <<EOT 2>/dev/null
+cat myfs/home/config/settings/kernel/drivers/$name
 quit
 EOT
 )
-for line in $(tr ' ' '_' < "$STAGE/radeon_hd"); do
-	if ! printf '%s\n' "$got" | tr ' ' '_' | grep -q -- "$line"; then
-		echo "plant FAIL: $line is not in the image" >&2
-		exit 1
-	fi
+	for line in $(tr ' ' '_' < "$STAGE/$name"); do
+		if ! printf '%s\n' "$got" | tr ' ' '_' | grep -q -- "$line"; then
+			echo "plant FAIL: $line is not in the image's $name" >&2
+			exit 1
+		fi
+	done
 done
 echo planted
