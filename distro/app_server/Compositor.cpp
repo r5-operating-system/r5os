@@ -1447,17 +1447,23 @@ Compositor::CreateWindowEngine(WindowHWInterface** _iface)
 void
 Compositor::AddWindow(Window* window, WindowHWInterface* iface)
 {
+	DrawingEngine* engine = window->GetDrawingEngine();
 	Entry* entry = new(std::nothrow) Entry(window, iface);
-	if (entry == NULL)
-		return;
 	BAutolock _(fEntryLock);
-	if (!fEntries.AddItem(entry)) {
-		entry->ReleaseReference();
+	if (entry == NULL || !fEntries.AddItem(entry)) {
+		// M11 review: no entry, no buffer; the engine must not keep the
+		// interface ~Entry deletes. The window draws to the screen.
+		if (engine != NULL)
+			engine->SetHWInterface(fScreen);
+		if (entry != NULL)
+			entry->ReleaseReference();
 		return;
 	}
-	// M11 step 5: made during a pause; the resume binds it to its buffer
-	if (fPaused && window->GetDrawingEngine() != NULL)
-		window->GetDrawingEngine()->SetHWInterface(fScreen);
+	// M11 step 5: made during a pause; the resume binds it to its buffer.
+	// M11 review: or after the switch to the CPU mode, which rebound only
+	// the windows it had. fActive and fPaused change under fEntryLock.
+	if ((!fActive || fPaused) && engine != NULL)
+		engine->SetHWInterface(fScreen);
 }
 
 
@@ -2667,8 +2673,11 @@ Compositor::_TurnOff(const char* reason)
 	if (!fDesktop->LockAllWindows())
 		return;
 
+	// M11 review: under fEntryLock, so AddWindow sees the CPU mode
+	fEntryLock.Lock();
 	fActive = false;
 	fPaused = false;
+	fEntryLock.Unlock();
 	_DropEffects();
 	fEntryLock.Lock();
 	for (int32 i = 0; i < fEntries.CountItems(); i++) {
@@ -3632,6 +3641,10 @@ Compositor::_RebindEngines(bool toBuffers)
 		else
 			entry->window->GetDrawingEngine()->SetHWInterface(fScreen);
 	}
+	// M11 review: the resume ends the pause under the same lock, so a
+	// window AddWindow binds in between is not left on the screen
+	if (toBuffers)
+		fPaused = false;
 }
 
 
