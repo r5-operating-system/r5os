@@ -1,0 +1,12 @@
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+#
+# M11 stick, the scenario: VulkanTeapot and vkcube in their own windows,
+# both in the background, so the card has one short command. Close both
+# windows after 20 s. app_server logs "window <id> zero-copy on" for each.
+
+VulkanTeapot --window > /dev/null 2>&1 &
+vkcube > /dev/null 2>&1 &
+echo "m11-vulkan: VulkanTeapot and vkcube started; put them side by side,"
+echo "m11-vulkan: wait 20 s, then close both windows"

@@ -92,6 +92,8 @@ SCRIPTS = {
     "check": "distro/graphics/boot/check",
     "boot-next": "distro/graphics/boot/boot-next",
     "check-user": "distro/graphics/boot/check-user",
+    "m11-vulkan": "distro/graphics/boot/m11-vulkan",
+    "m11-scroll": "distro/graphics/boot/m11-scroll",
 }
 
 # Files planted in /boot/home (plant-m8-stick.sh, M8). The M10 stick runs
@@ -372,6 +374,8 @@ def extract(iso_wsl: str, out: str) -> None:
         f"test -s {out}/radv/bin/check\n"
         f"test -s {out}/radv/bin/boot-next\n"
         f"test -s {out}/radv/bin/check-user\n"
+        f"test -s {out}/radv/bin/m11-vulkan\n"
+        f"test -s {out}/radv/bin/m11-scroll\n"
         f"test -s {out}/teapot/bin/r5-wsi-window-test.sh\n"
         f"mkdir -p {out}/home\n"
         f"'{BFS}' --start-offset {OFFSET} '{iso_wsl}' <<EOF\n"
