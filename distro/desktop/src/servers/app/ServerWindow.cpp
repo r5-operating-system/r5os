@@ -162,6 +162,23 @@ compare_message_profiles(const void* _a, const void* _b)
 #endif
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+/*!	M11 review: removes the tokens of a view and of all its children from
+	the app's token space, without detaching the views.
+*/
+static void
+remove_view_tokens(BPrivate::BTokenSpace& tokens, View* view)
+{
+	tokens.RemoveToken(view->Token());
+	for (View* child = view->FirstChild(); child != NULL;
+			child = child->NextSibling())
+		remove_view_tokens(tokens, child);
+}
+// SPDX-SnippetEnd
+
+
 //	#pragma mark -
 
 
@@ -215,6 +232,21 @@ ServerWindow::~ServerWindow()
 	STRACE(("ServerWindow(%s@%p):~ServerWindow()\n", fTitle, this));
 
 	BPrivate::gDefaultTokens.RemoveToken(fServerToken);
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// M11 review: the views' tokens go before fServerApp is cleared;
+	// after that View::DetachedFromWindow() cannot reach the token space,
+	// and AS_R5_SET_VIEW_GLASS or AS_R5_SHARE_IMAGES would find a deleted
+	// view. Under the all-windows lock, which those handlers hold for
+	// their lookup.
+	if (App() != NULL && fWindow.IsSet() && fWindow->TopView() != NULL
+		&& fDesktop != NULL && fDesktop->LockAllWindows()) {
+		remove_view_tokens(App()->ViewTokens(), fWindow->TopView());
+		fDesktop->UnlockAllWindows();
+	}
+// SPDX-SnippetEnd
 
 	if (!fWindow->IsOffscreenWindow()) {
 		fWindowAddedToDesktop = false;
