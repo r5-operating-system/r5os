@@ -123,6 +123,7 @@ static void gpu_prt_release_tree(r5_vm* vm);
 static void gpu_hang_test_step();
 static void gpu_wait_reset();
 static bool gpu_caller_is_app_server();
+static bool gpu_caller_is_selftest();
 static status_t gpu_bo_fill(gpu_client* client, gpu_bo* bo, r5_gpu_bo* request,
 	uint64 bytes);
 static void gpu_share_purge(bigtime_t now);
@@ -2484,6 +2485,27 @@ gpu_caller_is_app_server()
 }
 
 
+/*!	argv[0] is r5-gpu-selftest (Login starts it as the session user). */
+static bool
+gpu_caller_is_selftest()
+{
+	team_info info;
+	if (_get_team_info(B_CURRENT_TEAM, &info, sizeof(info)) != B_OK)
+		return false;
+	static const char* kPaths[] = {
+		"/system/bin/r5-gpu-selftest",
+		"/boot/system/bin/r5-gpu-selftest"
+	};
+	for (uint32 i = 0; i < sizeof(kPaths) / sizeof(kPaths[0]); i++) {
+		size_t length = strlen(kPaths[i]);
+		if (strncmp(info.args, kPaths[i], length) == 0
+			&& (info.args[length] == '\0' || info.args[length] == ' '))
+			return true;
+	}
+	return false;
+}
+
+
 static status_t
 gpu_scanout(gpu_client* client, void* buffer, size_t length)
 {
@@ -2783,7 +2805,11 @@ gpu_control(void* cookie, uint32 op, void* buffer, size_t length)
 		/* The last call of r5-gpu-selftest. gpu_hang_test starts after
 		 * it, from the retire thread. */
 		gpu_lock();
-		if (sHangTest != 0 && !sHangTestArmed) {
+		/* M11 review: only r5-gpu-selftest arms it, not the first
+		 * program that asks for the counts. argv[0] can be set by any
+		 * program; gpu_hang_test is a test switch, so this guards
+		 * against an accidental start, it is not a security check. */
+		if (sHangTest != 0 && !sHangTestArmed && gpu_caller_is_selftest()) {
 			sHangTestArmed = true;
 			sInfo = client->info;
 			dprintf("radeon_hd: gpu hang test armed %lu\n",
