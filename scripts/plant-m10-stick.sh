@@ -32,8 +32,23 @@ mkdir myfs/home/config
 mkdir myfs/home/config/settings
 mkdir myfs/home/config/settings/kernel
 mkdir myfs/home/config/settings/kernel/drivers
-put $STAGE/radeon_hd myfs/home/config/settings/kernel/drivers/radeon_hd
-put $STAGE/kernel myfs/home/config/settings/kernel/drivers/kernel
+rm myfs/home/config/settings/kernel/drivers/radeon_hd
+rm myfs/home/config/settings/kernel/drivers/kernel
+cp :$STAGE/radeon_hd myfs/home/config/settings/kernel/drivers/radeon_hd
+cp :$STAGE/kernel myfs/home/config/settings/kernel/drivers/kernel
 quit
 EOT
+# bfs_shell has no "put" (the old lines failed and still printed planted):
+# read both files back and stop when they differ.
+got=$("$BFS" --start-offset 6291456 "$IMG" <<EOT 2>/dev/null
+cat myfs/home/config/settings/kernel/drivers/radeon_hd
+quit
+EOT
+)
+for line in $(tr ' ' '_' < "$STAGE/radeon_hd"); do
+	if ! printf '%s\n' "$got" | tr ' ' '_' | grep -q -- "$line"; then
+		echo "plant FAIL: $line is not in the image" >&2
+		exit 1
+	fi
+done
 echo planted
