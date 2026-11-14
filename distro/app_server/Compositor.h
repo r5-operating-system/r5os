@@ -188,6 +188,7 @@ private:
 									BRegion& retry);
 			void				_ShareFree(Share* share);
 			void				_ShareRetire();
+			void				_ShareGiveBack(Share* share);
 			bool				_ShareReady(uint64 sequence);
 			void				_ShareRetireDone();
 			void				_ScanoutFree(CompositorVulkan* vk);

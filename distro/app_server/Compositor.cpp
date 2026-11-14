@@ -485,6 +485,10 @@ struct Compositor::Share {
 	// The import is gone (mark_get failed): the program gets a refusal
 	// at its next present and makes a copy swapchain.
 	bool				broken;
+	// M11 review: ended by app_server (its window went, or a newer
+	// swapchain of the view), not by the program: the images app_server
+	// holds go back when it is freed, or an acquire may wait for good.
+	bool				giveBack;
 	// From the last clipping rebuild: the view's part of the screen and
 	// the screen position of the image's pixel (0, 0).
 	BRegion				shape;
@@ -1450,6 +1454,21 @@ void
 Compositor::RemoveWindow(Window* window)
 {
 	BAutolock _(fEntryLock);
+	// M11 step 3b: the window's shared views end with it. M11 review:
+	// also a window without an entry (an offscreen window, a failed
+	// engine), or a share would keep the freed Window.
+	{
+		BAutolock shareLock(fShareLock);
+		for (int32 i = 0; i < fShares.CountItems(); i++) {
+			Share* share = fShares.ItemAt(i);
+			if (share->window == window) {
+				if (!share->ended)
+					share->giveBack = true;
+				share->ended = true;
+				share->window = NULL;
+			}
+		}
+	}
 	Entry* entry = _FindEntry(window);
 	if (entry == NULL)
 		return;
@@ -1461,16 +1480,6 @@ Compositor::RemoveWindow(Window* window)
 	if (fDirectWindows.RemoveItem(window) && fDirectWindows.IsEmpty()) {
 		fModePending = true;
 		release_sem_etc(fWakeSem, 1, B_DO_NOT_RESCHEDULE);
-	}
-
-	// M11 step 3b: the window's shared views end with it.
-	BAutolock shareLock(fShareLock);
-	for (int32 i = 0; i < fShares.CountItems(); i++) {
-		Share* share = fShares.ItemAt(i);
-		if (share->window == window) {
-			share->ended = true;
-			share->window = NULL;
-		}
 	}
 }
 
@@ -3881,6 +3890,28 @@ Compositor::_ShareFree(Share* share)
 }
 
 
+/*!	M11 review: gives every image app_server holds of this share back to
+	the program (current, pending, overtaken), as _ReturnSharedImages does
+	for all. Compose thread at the start of a frame, with fShareLock: the
+	frame before waited for its fence, so no GPU work reads them.
+*/
+void
+Compositor::_ShareGiveBack(Share* share)
+{
+	share->giveBack = false;
+	for (uint32 n = 0; n < share->count; n++) {
+		Share::Image& image = share->images[n];
+		if ((int32)n == share->current || (int32)n == share->pending
+			|| image.retiring) {
+			image.retiring = false;
+			release_sem_etc(image.sem, 1, B_DO_NOT_RESCHEDULE);
+		}
+	}
+	share->current = -1;
+	share->pending = -1;
+}
+
+
 //!	Frees the shares that ended. Compose thread, between frames.
 void
 Compositor::_ShareRetire()
@@ -3889,6 +3920,8 @@ Compositor::_ShareRetire()
 		Share* share = fShares.ItemAt(i);
 		if (!share->ended)
 			continue;
+		if (share->giveBack)
+			_ShareGiveBack(share);
 		_ShareFree(share);
 		fShares.RemoveItemAt(i);
 		delete share;
@@ -3977,6 +4010,8 @@ Compositor::_ShareFrame(ShareDrawList& draws, BRegion& retry)
 			uint64 sequence = 0;
 			if (fVulkan->markGet(next.importId, &sequence) != 0) {
 				share->broken = true;
+				// M11 review: the program still waits on these
+				_ShareGiveBack(share);
 				continue;
 			}
 			if (_ShareReady(sequence)) {
@@ -4077,6 +4112,7 @@ Compositor::ShareImages(Window* window, int32 viewToken, team_id team,
 	share->pending = -1;
 	share->ended = false;
 	share->broken = false;
+	share->giveBack = false;
 	share->left = 0;
 	share->top = 0;
 
@@ -4162,8 +4198,11 @@ Compositor::ShareImages(Window* window, int32 viewToken, team_id team,
 		// A view has one swapchain: an older one of the same view ends.
 		for (int32 i = 0; i < fShares.CountItems(); i++) {
 			Share* old = fShares.ItemAt(i);
-			if (old->team == team && old->viewToken == viewToken)
+			if (old->team == team && old->viewToken == viewToken
+				&& !old->ended) {
 				old->ended = true;
+				old->giveBack = true;
+			}
 		}
 		share->id = ++fShareCounter;
 		if (!fShares.AddItem(share)) {
@@ -4241,6 +4280,8 @@ Compositor::ShareEnd(team_id team, int32 viewToken, int32 shareId)
 			if (share->id == shareId && share->team == team
 				&& share->viewToken == viewToken) {
 				share->ended = true;
+				// its semaphores may be gone: release none of them
+				share->giveBack = false;
 				damage = share->shape;
 			}
 		}
