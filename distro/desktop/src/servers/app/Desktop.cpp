@@ -3891,6 +3891,17 @@ Desktop::RebuildAndRedrawAfterWindowChange(Window* changedWindow,
 			stillAvailableOnScreen.Exclude(&window->VisibleRegion());
 		}
 	}
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+
+	// M11 (QEMU after the stack review): a new title, look or tab place
+	// changes the window's shape too. Without this the compositor kept
+	// the old shape, and a tab that got shorter left its old end on
+	// screen until something else rebuilt the clipping.
+	if (fCompositor != NULL)
+		fCompositor->ClippingChanged();
+// SPDX-SnippetEnd
 
 	_SetBackground(stillAvailableOnScreen);
 	_WindowChanged(changedWindow);
