@@ -175,14 +175,18 @@ def patch_jams() -> None:
         "SYSTEM_ADD_ONS_SETTINGS += settings_appearance ;\n",
         "settings addon on minimum",
     )
-    replace_once(
-        HAIKU / "build" / "jam" / "images" / "definitions" / "regular",
-        "\tSpider\n] ;\n",
-        "\tSpider\n] ;\n"
-        "\n"
-        "SYSTEM_ADD_ONS_SETTINGS += settings_appearance ;\n",
-        "settings addon list",
-    )
+    regular = HAIKU / "build" / "jam" / "images" / "definitions" / "regular"
+    # The split below turns this line into settings_fonts and settings_look;
+    # inserting it again on a later apply left one more empty line each time.
+    if "settings_fonts" not in regular.read_text(encoding="utf-8"):
+        replace_once(
+            regular,
+            "\tSpider\n] ;\n",
+            "\tSpider\n] ;\n"
+            "\n"
+            "SYSTEM_ADD_ONS_SETTINGS += settings_appearance ;\n",
+            "settings addon list",
+        )
     # The Settings add-ons, settings fonts and ui fonts are packaged by the
     # native build/jam/packages/Haiku in distro/desktop.
     split = (
