@@ -22,6 +22,7 @@
 
 #include <FindDirectory.h>
 #include <stdio.h>
+#include <string.h>
 #include <new>
 
 
@@ -167,7 +168,18 @@ LocalDeviceImpl::LoadRemoteDevices()
 		device.FindUInt8("class_of_device", 0, &rd->classOfDevice[0]);
 		device.FindUInt8("class_of_device", 1, &rd->classOfDevice[1]);
 		device.FindUInt8("class_of_device", 2, &rd->classOfDevice[2]);
-		device.FindData("link key", B_ANY_TYPE, (const void**)&rd->link_key, &size);
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// FindData() hands out a pointer; it was written into the key itself,
+		// so every saved link key came back as garbage.
+		const void* key;
+		if (device.FindData("link key", B_ANY_TYPE, &key, &size) == B_OK
+			&& size == (ssize_t)sizeof(linkkey_t))
+			memcpy(&rd->link_key, key, sizeof(linkkey_t));
+		else
+			rd->link_key = LinkKeyUtils::NullKey();
+		// SPDX-SnippetEnd
 		device.FindUInt8("link type", &rd->link_type);
 		rd->conn_state = RemoteDevice::DISCONNECTED;
 
@@ -1367,7 +1379,16 @@ LocalDeviceImpl::CreateConnection(BMessage* message)
 {
 	const bdaddr_t* bdaddr;
 	ssize_t addr_size;
-	message->FindData("bdaddr", B_ANY_TYPE, (const void**)&bdaddr, &addr_size);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	if (message->FindData("bdaddr", B_ANY_TYPE, (const void**)&bdaddr,
+			&addr_size) != B_OK || addr_size != (ssize_t)sizeof(bdaddr_t)) {
+		TRACE_BT("LocalDeviceImpl: Create Connection without an address\n");
+		return;
+	}
+	bool added = false;
+	// SPDX-SnippetEnd
 
 	TRACE_BT("LocalDeviceImpl: Create Connection to %s...\n",
 		bdaddrUtils::ToString(*bdaddr).String());
@@ -1379,13 +1400,22 @@ LocalDeviceImpl::CreateConnection(BMessage* message)
 		rdConn = new ServerRemoteDevice();
 		rdConn->bdaddr = *bdaddr;
 		rdConn->link_key = LinkKeyUtils::NullKey();
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		added = true;
+		// SPDX-SnippetEnd
 	}
 
 	message->FindString("name", &rdConn->friendly_name);
 	message->FindUInt8("pscan_rep_mode", &rdConn->pscan_rep_mode);
 	message->FindUInt16("clock_offset", &rdConn->clock_offset);
 
-	uint32 record;
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	uint32 record = 0;
+	// SPDX-SnippetEnd
 	message->FindUInt32("record", &record);
 	rdConn->classOfDevice[0] = (record & 0x000000FF);
 	rdConn->classOfDevice[1] = (record & 0x0000FF00) >> 8;
@@ -1394,14 +1424,26 @@ LocalDeviceImpl::CreateConnection(BMessage* message)
 	rdConn->conn_state = RemoteDevice::CONNECTING;
 	rdConn->link_type = HCI_ACL_CONN;
 
-	AddRemoteDevice(rdConn);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// A device that was already known was added a second time.
+	if (added)
+		AddRemoteDevice(rdConn);
+	// SPDX-SnippetEnd
 
 	BluetoothCommand<typed_command(hci_cp_create_conn)>
 		command(OGF_LINK_CONTROL, OCF_CREATE_CONN);
 
 	command->bdaddr = *bdaddr;
-	message->FindUInt16("packet type", &command->pkt_type);
-	command->pkt_type &= ACL_PTYPE_MASK;
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// pkt_type is a packed member: read into an aligned value first.
+	uint16 packetType = 0;
+	message->FindUInt16("packet type", &packetType);
+	command->pkt_type = packetType & ACL_PTYPE_MASK;
+	// SPDX-SnippetEnd
 	command->pscan_rep_mode = rdConn->pscan_rep_mode;
 	message->FindUInt8("pscan_mode", &command->pscan_mode); // Reserved in spec 2.1
 	command->clock_offset = rdConn->clock_offset;

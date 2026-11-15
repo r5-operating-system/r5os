@@ -600,7 +600,13 @@ BluetoothServer::HandleAcquireLocalDevice(BMessage* message, BMessage* reply)
 {
 	hci_id hid;
 	ssize_t size;
-	bdaddr_t bdaddr;
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// FindData() hands out a pointer; it was written into a 6-byte
+	// bdaddr_t on the stack.
+	const void* bdaddr;
+	// SPDX-SnippetEnd
 	LocalDeviceImpl* lDeviceImpl = NULL;
 	static int32 lastIndex = 0;
 
@@ -608,8 +614,8 @@ BluetoothServer::HandleAcquireLocalDevice(BMessage* message, BMessage* reply)
 		TRACE_BT("BluetoothServer: GetLocalDevice requested with id\n");
 		lDeviceImpl = LocateDelegateFromMessage(message);
 
-	} else if (message->FindData("bdaddr", B_ANY_TYPE,
-		(const void**)&bdaddr, &size) == B_OK) {
+	} else if (message->FindData("bdaddr", B_ANY_TYPE, &bdaddr, &size)
+			== B_OK) {
 
 		// Try to find out when the user specified the address
 		TRACE_BT("BluetoothServer: GetLocalDevice requested with bdaddr\n");
