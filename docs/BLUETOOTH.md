@@ -116,6 +116,7 @@ Each step is its own small pull request. It is built for AMD64 with `scripts/bui
 
 - **What:** new line glyphs at the end of `enum r5_glyph`; a new call `r5_level_glyph_draw()` with `enum r5_level_glyph` (`R5_LEVEL_SIGNAL`, `R5_LEVEL_BATTERY`) in `libr5icons.so`; the description in `docs/ICONS.md` ("Line glyphs") and `docs/LIBR5.md`; and `DrawWiFiSignalBars` in `R5WiFiGlyphs.h` moved onto the new call.
 - **Pass:** a QEMU boot with a screenshot before and after: the Wi-Fi list and Deskbar look pixel-identical to before the change.
+- **As built (16 Nov 2026, while the owner slept; open to change):** the new line glyph is `R5_GLYPH_BLUETOOTH` (7). The pass check is `r5_level_glyph_test` instead of screenshots: QEMU has no Wi-Fi adapter, so its list and Deskbar show no bars, and the desktop sits behind Sign in. The test draws the old `DrawWiFiSignalBars()` and the new call into bitmaps for 6,552 signal cases (sizes, levels −1 to 5, three styles, three color pairs) and compares them byte for byte; a screenshot of a real adapter on the 5625U still has to confirm it.
 
 ### Step 3a (PR 6): `libr5bt.so` and Settings (Devices → Bluetooth)
 

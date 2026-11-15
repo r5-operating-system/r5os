@@ -1,5 +1,25 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-16 - Icons: one place for signal and battery symbols (Bluetooth step 2)
+
+Problem: Bluetooth needs the same signal symbol as Wi-Fi, and a battery symbol, but the Wi-Fi bars were an inline function in `R5WiFiGlyphs.h` that only Wi-Fi could use (`docs/BLUETOOTH.md`, step 2). Done overnight while the owner slept.
+
+What changed:
+- `libr5icons.so`: `r5_level_glyph_draw(view, which, frame, level, foreground, background, style)` with `R5_LEVEL_SIGNAL` (four rising bars) and `R5_LEVEL_BATTERY` (body, cap, four segments; the outline stays in the full color so an empty battery still shows), styles normal, disabled and outline. The signal geometry and colors are those of the old `DrawWiFiSignalBars()`.
+- New line glyph `R5_GLYPH_BLUETOOTH` (7), the rune, for the Bluetooth page of step 3a.
+- `DrawWiFiSignalBars()` calls `r5_level_glyph_draw()`. `libr5wifi.so` and NetworkStatus link `libr5icons.so`.
+- Bug: `r5_glyph_bitmap()` refused every glyph after `R5_GLYPH_LOG_OUT`, so a new glyph would have given NULL; the bound is now the last glyph.
+- `docs/ICONS.md` ("Level glyphs", the new glyph row) and `docs/LIBR5.md`.
+- `r5_level_glyph_test` (`/system/bin`, added by `apply-icons.py`): the old function, copied unchanged, and the new call drawn into bitmaps for 6,552 signal cases (13 widths from 4 to 40, 8 heights from 4 to 39, levels −1 to 5, three styles, three color pairs), compared byte for byte; the battery and the Bluetooth glyph must draw something.
+
+Deviation from the plan: the pass check is this test, not before-and-after screenshots. QEMU has no Wi-Fi adapter, so the list and Deskbar show no bars, and the desktop sits behind Sign in.
+
+Review: read twice. The second read found that two blank bitmaps compare equal, so a failed draw would have passed the test; it now fails when the old code drew nothing for a lit level. It also fixed an `int32`/`size_t` comparison in the test.
+
+Tested: built with `scripts/build-locked.sh` (`jam_exit=0`, `build_s=182`, no warnings in these files). QEMU (KVM), own copy of that image, one boot: `r5_level_glyph_test: ok (6576 cases)`, `exit 0` (`generated/bluetooth/qemu-step2/`).
+
+Not tested: the Wi-Fi list and the Deskbar replicant on a real adapter (5625U or X1); the battery and Bluetooth glyphs by eye. ARM64 and RISC-V 64 were not built or tested.
+
 ## 2026-11-15 - Bluetooth step 1a: HCI command timeouts, safe reassembly, HCI fuzzer
 
 Problem: a radio could stop the kernel, and a silent radio left programs waiting forever. `hci/bluetooth.cpp` `Assemble()` panicked on an event header split over two transfers and on every event that arrived in pieces, looped forever on an SCO packet (it consumed 0 bytes), and did not check the ACL buffer allocation. No HCI command had a timeout. Reading the code turned up more bugs in the same files (owner, 15 Nov: fix what you find).
