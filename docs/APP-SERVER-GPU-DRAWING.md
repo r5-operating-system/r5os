@@ -508,3 +508,22 @@ The user answered the open questions:
   - **Where:** `distro/settings/AntialiasingSettingsView.cpp`, the one source of the Antialiasing tab in Settings and in the separate Appearance program. The slider and its label are hidden, and the rest of the tab closes up; no empty space. Nothing else on the page moves.
   - **How it knows:** a new call at the end of `libr5ui` that asks app_server whether the GPU draws the text (not in `libbe`), described in `docs/LIBR5.md` in the same change.
   - **When:** step 4 (text), because the GPU drawing exists only then. Test: the slider is gone with `gpu_draw true` and back without it, in QEMU.
+
+## Scaling later: what M12 must not block (15 Nov 2026)
+
+`docs/ROADMAP.md` says scaling (HiDPI, fractional and per-monitor) "is designed together with the GPU plan for app_server". The scaling design itself is a brief of its own, later, with its own questions for the user. M12 builds nothing that a user sees for it. It only keeps the way open, so scaling does not mean rebuilding the M12 drawing.
+
+**One path for RADV and Lavapipe.** Scaling will sit where the M12 drawing sits: in Skia and the compositor. Both run the same way on RADV and on Lavapipe, so a scaled window looks the same with and without a GPU. Only the speed differs: more pixels cost more time, and on Lavapipe the CPU does that work. That is measured, as in M12, and is not a reason to change the path. **Safe mode** draws with Painter, which does not scale sharply; there only Haiku's existing way works (larger letters through the font size, and the decorator, which already grows with the font size).
+
+**What M12 keeps open, at no cost now:**
+
+1. **A scale per window in `SkiaDrawingEngine`.** One factor (a float, always 1 in M12), applied as the outermost matrix of the canvas, before the view's transform and the renderer offset. The copied Painter alignment helpers (part 4) take that factor, so the alignment to whole pixels happens in device pixels.
+2. **Text at device size.** The `SkFont` size is the `ServerFont` size times that factor, so letters are rasterised at their real size, not stretched. Metrics stay `ServerFont`'s, in the program's units, so layout does not change.
+3. **Bitmaps** go through the same `DrawBitmap()` path under that factor (filtered when it is not 1).
+4. **Window image size.** The window image and buffer are sized from the frame times the factor. In M12 that is the frame itself.
+5. **The compose.** M11 composes a window at the size of its buffer. M12 does not change that; the scaling brief adds a layer whose buffer size and screen size differ.
+6. **The compare set** gets an option `--scale <f>` (not part of the M12 pass lines): Skia drawing at 1.5× is compared with Painter drawing under a `BAffineTransform` scale of 1.5, on RADV and on Lavapipe, so the scaled path is checked from the start.
+
+**Not in M12:** a setting, scaling per monitor, mapping the mouse and window positions, `BScreen` sizes, `BDirectWindow` and `BWindowScreen` under a scale, larger icon and bitmap variants.
+
+**Questions for the scaling brief, when you ask for it:** how programs see the scale (Haiku's font-size way, the compositor drawing a whole window larger, or a mix); what happens to programs with fixed pixel sizes; where larger icons come from (Haiku's vector icons help); fractional factors such as 1.25 and 1.5; one factor per monitor.
