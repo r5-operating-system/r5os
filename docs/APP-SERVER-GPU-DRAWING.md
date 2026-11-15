@@ -307,3 +307,58 @@ Because no existing program reads without `Sync()`, step 5 writes one test progr
 - **Step 1 already measures one typical frame on Lavapipe** with Skia alone, before app_server uses it: an 800×600 window with a decorator-like tab, 30 lines of text, 10 rectangles, a gradient, two bitmaps and a row of round buttons. The line is `skia: <version> ok lavapipe frame <n> us`.
 - **Result:** the medians and CPU times side by side in `CHANGELOG.md`, and the slower operations from `draw-time`. Slower on Lavapipe than Painter is recorded, not a reason to change the path (decision 9).
 
+## 8. Safe mode (decision 10)
+
+### What Haiku already has (read in the source, used first)
+
+- **The boot menu** (`src/system/boot/loader/menu.cpp`, `user_menu()`): "Select boot volume/state" (this is where Haiku's older system states are, the package states), "Select safe mode options", "Select debug options", the platform's own menu, "Reboot", "Continue booting". The safe mode menu has the markable item "Safe mode" (`B_SAFEMODE_SAFE_MODE`, `"safemode"`, `headers/os/drivers/driver_settings.h`) and "Disable user add-ons" and others (`headers/private/system/safemode_defs.h`). The platform menus of `bios_ia32` and `efi` add "Use fail-safe video mode" (`B_SAFEMODE_FAIL_SAFE_VIDEO_MODE`). After the menu, `apply_safe_mode_options()` and `add_safe_mode_settings()` turn the marks into the safe mode driver settings in the kernel arguments; userland reads them with `_kern_get_safemode_option()`.
+- **When the menu shows** (`src/system/boot/loader/main.cpp`): when no boot volume is found, or when `platform_boot_options()` has `BOOT_OPTION_MENU` (a key held at start). The decision is made right after `get_boot_file_system()`, before `load_driver_settings()`.
+- **What reads the boot volume:** the loader has its own read-only file system code; `load_driver_settings()` already opens `home/config/settings/kernel/drivers` on the boot volume with `open_from()`. It cannot write or delete.
+- **What "safemode" does today:** `LaunchDaemon::_RetrieveKernelOptions()` sets `fSafeMode`, and every job or service marked `no_safemode` in `data/launch/` is not started: mount_server, media_server, midi_server, net_server, print server, notification_server, power_daemon, cddb_lookup, and from R5 the AirPlay service; in the user session NetworkStatus, the VirtualBox clipboard, the AirPlay tray, LaunchBox and the `x-vnd.Be-POST` service. The Translation Kit (`TranslatorRoster.cpp`) and the add-on monitor (`AddOnMonitorHandler.cpp`) skip user add-ons; input_server reads it too. `fail_safe_video_mode` makes app_server use the fail-safe accelerant (`use_fail_safe_video_mode()` in `drawing/interface/local/AccelerantHWInterface.cpp`).
+- **packagefs shine-through:** `cache`, `non-packaged`, `packages`, `settings` and `var` under `/boot/system` are plain directories of the boot volume (`packagefs/volume/Volume.cpp`), so the loader can read `system/var/...` on the volume itself.
+
+### The marker
+
+- **File:** `/boot/system/var/r5/desktop-start-failed`. A runtime state, so `var`, not `settings`; root's, not in anyone's home; not in `kernel/drivers`, so the kernel never parses it.
+- **Content:** one line, the same reason as the log line (`desktop start failed: <reason>`), the build number from `r5_os_version.h`, and the time. At most 255 bytes. Nothing else, no user data.
+- **Written by app_server** (uid 0) at step 3 of the ladder: to a temporary name, `fsync()`, `rename()`, then `fsync()` of the directory, so a crash right after still leaves a whole file.
+- **Read by the loader:** an R5 change in `main.cpp` (copied to `distro/boot/loader/main.cpp`, R5 parts in SPDX snippets): after `get_boot_file_system()` returns a valid volume, `open_from(bootVolume.RootDirectory(), "system/var/r5/desktop-start-failed")`. If it exists, the loader shows the menu as with `BOOT_OPTION_MENU`, and passes a flag to `user_menu()`.
+- **Removed by Login** (uid 0, `distro/login/LoginApp.cpp`) after a good Sign in **in a normal start**: when `BLaunchRoster::StartSession()` has returned `B_OK` and the safemode option is off. A Sign in in Safe mode does not remove it, so the menu keeps offering Safe mode until a normal start has worked once. Nobody else removes it.
+- **Additive and MIT:** one new file, R5 snippets in the loader, app_server and Login. No change to Haiku's settings formats.
+- **AMD64 only:** the loader code is shared by every platform, but only app_server on AMD64 writes the marker (decision 10, scope), so ARM64 and RISC-V never see it.
+
+### The boot menu with Safe mode selected
+
+- With the flag, `user_menu()` (an R5 snippet in `distro/boot/loader/menu.cpp`) puts two items at the top of the main menu, above Haiku's: **"Start in Safe mode"** (selected) and **"Start normally"**, with one line above them: "The desktop could not start last time." Haiku's items stay below, so "Select boot volume/state" (the older system state) is one step away, with the help text "To go back to an older system state, choose Select boot volume/state."
+- **"Start in Safe mode"** marks "Safe mode" in the safe mode menu and "Use fail-safe video mode" in the platform menu, then continues booting. "Start normally" continues without them.
+- **Safe mode chosen by hand** (stick boot 2): in R5, marking "Safe mode" in Haiku's safe mode menu also marks "Use fail-safe video mode" (an R5 snippet), so a choice by hand and the automatic choice give the same Safe mode. The fail-safe video item can still be unmarked by hand.
+- **Waiting:** Haiku's menu waits for a key without a time limit. Whether R5 counts down to Safe mode is Q7.
+
+### What Safe mode turns off
+
+- **Haiku's safe mode, unchanged:** the `no_safemode` jobs above, user add-ons in the kits that check it. So there is no network in Safe mode (net_server is `no_safemode` in Haiku); the older system state from the boot menu needs none.
+- **The fail-safe graphics driver:** app_server uses the fail-safe accelerant (VESA or the boot frame buffer), as Haiku.
+- **No GPU driver:** an R5 snippet in `radeon_hd` (`distro/graphics/src/add-ons/kernel/drivers/graphics/radeon_hd/driver.cpp`, next to the existing `gpu` setting) reads `B_SAFEMODE_SAFE_MODE` and then acts as `gpu false`: no ring, no self-test, no render node. Vulkan then has only Lavapipe and OpenGL only llvmpipe, which is what programs see.
+- **The CPU mode:** app_server makes no compositor and no Skia: Painter, one back buffer, no shadow, no frosted glass, no animations, no zero-copy windows. `BDirectWindow` and `BWindowScreen` work as in Haiku. One line: `app_server: safe mode: cpu mode`.
+- **The mark:** app_server draws the words "Safe mode" in the four corners of the screen, over the desktop background (`Desktop::_SetBackground()`, CPU path, only when the safemode option is on), in the system font and colours. app_server draws it, so it is there also when Tracker does not start.
+
+### The ladder in a session: RADV → Lavapipe
+
+**When:** RADV is lost and the one restart after a reset fails (M11 decision 14), or a submit fails after that restart. Today that is `gpu compositor off`; on AMD64 it becomes the move to Lavapipe. A late fence is still not a failure.
+
+**Where and in which order.** On the compose thread, at the top of its loop, outside `fComposeSlot`, as M11 step 5 already handles a failed compose. The M11 lock order does not change: `fWindowLock` (write) → `fComposeSlot` → the compositor's own locks (`fEntryLock`, `fLayerLock`, `fAnimLock`, `fShareLock`, `fDamageLock`) → `HWInterface` (exclusive). The recorder locks of part 4 come after `fWindowLock` and are not taken by the compose thread during the move, because no window draws under the write lock.
+
+1. `LockAllWindows()`: no `ServerWindow` draws, no recorder is in use.
+2. Take `fComposeSlot` (the compose thread holds no frame).
+3. Under the compositor's own locks: give every shared image back to its program (`_ReturnSharedImages()`, M11 step 5); drop every pending recording; destroy each engine's `Recorder` and each window and bitmap image; destroy the Graphite `Context`; free the window buffers; destroy the RADV `VkDevice`.
+4. **Keep the `VkInstance`.** Lavapipe is another physical device of the same instance, so the Vulkan loader unloads no driver and no library with thread-local storage goes away (the crash path fixed in M11 step 5 is not touched).
+5. Make the Lavapipe `VkDevice` the way the session start does (`gpu_compositor_lavapipe`), a new Graphite `Context`, and the window buffers and images again, within Lavapipe's budget (a quarter of physical memory). Each engine sees a new device generation and makes its `Recorder` again on its own thread at its next drawing call.
+6. `HWInterface` exclusive: the scanout goes from the RADV way (M11 step 3b, option A: the GPU writes the back buffer and the scanout) to the Lavapipe way (`_Present` copies). The old imports are closed.
+7. Every window dirty (`Desktop::Redraw()`), the whole screen damaged; offscreen bitmaps upload from their memory at their next drawing (part 6). Release the locks in reverse order. One line: `app_server: gpu lost, going on with lavapipe: <reason>`, with M11's reasons plus `restart failed`. With `gpu_debug`, the time between 1 and 7: `app_server: lavapipe move <n> ms`.
+
+Between 1 and 7 nothing is drawn or composed, but the cursor still moves (it is drawn by `HWInterface`). The pass line asks for no freeze; the move's time is measured, not given a limit, and a long time is reported.
+
+**The test switches.** In QEMU there is no RADV. `gpu_compositor_fail true` and `gpu_draw_fail true` make the first submit of the session's first device fail, whatever that device is; in QEMU the move then goes from Lavapipe to a new Lavapipe device, which runs the same code (steps 1–7). `gpu_lavapipe_fail true` makes every Lavapipe device creation fail, which tests step 3 of the ladder (one retry, then the failed start). On ARM64 and RISC-V the switches keep their M11 meaning (the switch to the CPU mode, decision 8).
+
+**When Lavapipe fails too.** app_server tries once more; if that fails it writes the marker and logs `app_server: desktop start failed: <reason>`. What this boot shows after that, at the Sign in screen or in the middle of a session with programs open, the brief does not say. It is Q6.
+
