@@ -133,6 +133,12 @@ r5_screen_change_allowed(team_id team)
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 #include "Compositor.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include "DrawCompare.h"
+#include "SkiaGpu.h"
+// SPDX-SnippetEnd
 #include "View.h"
 #include "WindowEffectLevels.h"
 
@@ -3661,6 +3667,80 @@ ServerApp::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+		// M12 step 2: one operation of r5-draw-compare, drawn by Painter
+		// and by Skia and compared in app_server (DrawCompare.h). The
+		// pictures come as AS_CREATE_PICTURE data; they are not kept.
+		case AS_R5_DRAW_COMPARE:
+		{
+			draw_compare_request request;
+			int32 repeat = 1;
+			link.Read<int32>(&request.width);
+			link.Read<int32>(&request.height);
+			link.Read<uint32>(&request.background);
+			link.Read<int32>(&request.compareClass);
+			link.Read<int32>(&request.subpixel);
+			link.Read<float>(&request.scale);
+			link.Read<int32>(&repeat);
+			link.Read<int32>(&request.dump);
+			BReference<ServerPicture> picture(new(std::nothrow) ServerPicture,
+				true);
+			BReference<ServerPicture> scaled(new(std::nothrow) ServerPicture,
+				true);
+			status_t status = picture != NULL && scaled != NULL
+				? picture->ImportData(link) : B_NO_MEMORY;
+			if (status == B_OK)
+				status = scaled->ImportData(link);
+
+			Compositor* compositor = fDesktop->GetCompositor();
+			const char* refused = NULL;
+			if (compositor == NULL || !compositor->DebugEnabled())
+				refused = "gpu_debug off";
+			else if (compositor->Skia() == NULL)
+				refused = "gpu_draw off";
+			else if (!compositor->IsActive())
+				refused = "cpu mode";
+			draw_compare_result result;
+			memset(&result, 0, sizeof(result));
+			if (status == B_OK && refused == NULL) {
+				status = draw_compare(compositor->Skia(), request,
+					picture.Get(), scaled.Get(), repeat, result);
+			}
+			if (refused != NULL) {
+				fLink.StartMessage(B_NOT_ALLOWED);
+				fLink.AttachString(refused);
+			} else if (status != B_OK) {
+				fLink.StartMessage(status);
+				fLink.AttachString(result.gpuFailed ? "gpu failed"
+					: strerror(status));
+			} else {
+				fLink.StartMessage(B_OK);
+				fLink.Attach<int32>(result.maxDifference);
+				fLink.Attach<float>(result.share);
+				fLink.Attach<int32>(result.innerDifferences);
+				fLink.Attach<int32>(result.pixels);
+				fLink.Attach<int32>(result.ok ? 1 : 0);
+				fLink.Attach<int64>(result.gpuTime);
+				fLink.Attach<int64>(result.cpuTime);
+			}
+			fLink.Flush();
+			break;
+		}
+
+		// M12 step 4, Q13: the GPU draws the letters now (gpu_draw, the
+		// compositor active, Skia running), so the average weight of
+		// Painter's subpixel filter has no effect.
+		case AS_R5_GPU_DRAWS_TEXT:
+		{
+			Compositor* compositor = fDesktop->GetCompositor();
+			bool gpu = compositor != NULL && compositor->IsActive()
+				&& compositor->Skia() != NULL
+				&& !compositor->Skia()->IsShutDown();
+			fLink.StartMessage(B_OK);
+			fLink.Attach<bool>(gpu);
+			fLink.Flush();
+			break;
+		}
+
 		// M11 step 3b (docs/APP-SERVER-COMPOSITOR.md, "The link message"):
 		// a Vulkan view's swapchain images. The view is found by its token
 		// in this application's token space, so a view of another
