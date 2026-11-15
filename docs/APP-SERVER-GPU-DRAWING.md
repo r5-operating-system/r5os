@@ -229,7 +229,7 @@ How a result is measured: `r5-draw-compare` (part 7) draws one operation with Pa
 - **The Antialiasing tab of Appearance** sets the globals in `GlobalSubpixelSettings.h`, which both engines read:
   - hinting `HINTING_MODE_OFF` → `SkFontHinting::kNone`; `HINTING_MODE_ON` → `kNormal` (`FT_LOAD_TARGET_NORMAL`, as `FontEngine.cpp`), or `kFull` with subpixel text (`FT_LOAD_TARGET_LCD`, as `FontEngine.cpp`); `HINTING_MODE_MONOSPACED_ONLY` → hinting only for fixed-width fonts, as Haiku;
   - grey antialiasing → `SkFont::Edging::kAntiAlias`; no antialiasing (`B_DISABLE_ANTIALIASING`, or the global off without `B_FORCE_ANTIALIASING`) → `kAlias`;
-  - subpixel antialiasing (`gSubpixelAntialiasing`) with the order from `gSubpixelOrderingRGB` and the average weight `gSubpixelAverageWeight`: Skia's own LCD text uses FreeType's LCD filter, which has no "average weight". So subpixel text uses the two-pass way of part 4: Skia draws the glyphs three times as wide in grey from its glyph cache into a coverage image, and the composite shader applies Haiku's average weight and order, the way `agg_scanline_*_subpix_avrg_filtering.h` does. The setting then means the same in both modes. This is Q5.
+  - subpixel antialiasing (`gSubpixelAntialiasing`) with the order from `gSubpixelOrderingRGB`: **Skia's own subpixel text** (user, 15 Nov 2026, Q5): `SkFont::Edging::kSubpixelAntiAlias`, with `SkSurfaceProps` pixel geometry `kRGB_H` or `kBGR_H` from that order. Skia uses FreeType's LCD filter, which has no "average weight", so `gSubpixelAverageWeight` has no effect in the GPU mode; it still works in Safe mode (Painter). RADV and Lavapipe both draw through Skia, so both give the same letters. Text stays in class T against Painter.
 - **Underline and strikeout** (`B_UNDERSCORE_FACE`, `B_STRIKEOUT_FACE`) are rectangles that `AGGTextRenderer.cpp` places from the font metrics; the same positions (copied code), drawn as rectangles.
 - **Drawing mode and colour:** the text goes through the R5 blender of the current mode, direct or in two passes, like every shape.
 - **Seen, not changed:** `LayoutGlyphs()` makes Haiku's own glyph cache entries (FreeType outlines or bitmaps) as a side effect, also when only positions are wanted. That is metrics work that `StringWidth()` already does today; M13 can ask for metrics only.
@@ -332,7 +332,7 @@ Because no existing program reads without `Sync()`, step 5 writes one test progr
 - With the flag, `user_menu()` (an R5 snippet in `distro/boot/loader/menu.cpp`) puts two items at the top of the main menu, above Haiku's: **"Start in Safe mode"** (selected) and **"Start normally"**, with one line above them: "The desktop could not start last time." Haiku's items stay below, so "Select boot volume/state" (the older system state) is one step away, with the help text "To go back to an older system state, choose Select boot volume/state."
 - **"Start in Safe mode"** marks "Safe mode" in the safe mode menu and "Use fail-safe video mode" in the platform menu, then continues booting. "Start normally" continues without them.
 - **Safe mode chosen by hand** (stick boot 2): in R5, marking "Safe mode" in Haiku's safe mode menu also marks "Use fail-safe video mode" (an R5 snippet), so a choice by hand and the automatic choice give the same Safe mode. The fail-safe video item can still be unmarked by hand.
-- **Waiting:** Haiku's menu waits for a key without a time limit. Whether R5 counts down to Safe mode is Q7.
+- **Waiting:** the menu waits for a key without a time limit, as Haiku's (user, 15 Nov 2026, Q7). No countdown. The stick card for boot 6 therefore has a press of Enter.
 
 ### What Safe mode turns off
 
@@ -360,7 +360,7 @@ Between 1 and 7 nothing is drawn or composed, but the cursor still moves (it is 
 
 **The test switches.** In QEMU there is no RADV. `gpu_compositor_fail true` and `gpu_draw_fail true` make the first submit of the session's first device fail, whatever that device is; in QEMU the move then goes from Lavapipe to a new Lavapipe device, which runs the same code (steps 1–7). `gpu_lavapipe_fail true` makes every Lavapipe device creation fail, which tests step 3 of the ladder (one retry, then the failed start). On ARM64 and RISC-V the switches keep their M11 meaning (the switch to the CPU mode, decision 8).
 
-**When Lavapipe fails too.** app_server tries once more; if that fails it writes the marker and logs `app_server: desktop start failed: <reason>`. What this boot shows after that, at the Sign in screen or in the middle of a session with programs open, the brief does not say. It is Q6.
+**When Lavapipe fails too.** app_server tries once more; if that fails it writes the marker and logs `app_server: desktop start failed: <reason>`. What this boot shows after that, at the Sign in screen or in the middle of a session with programs open, the brief does not say. **Decided (user, 15 Nov 2026, Q6):** the CPU mode for the rest of this one boot, as a last resort, the way M11 switches today (`SetHWInterface(screen)`, every window redrawn by Painter), so the Sign in screen appears and open programs keep their work. One more line: `app_server: cpu mode until restart`. The next boot opens the menu with Safe mode selected. It cannot loop, because the menu waits for the user.
 
 ## 9. A buffer of their own for `BDirectWindow` and `BWindowScreen`? (decision 10, advice only)
 
@@ -372,7 +372,7 @@ Between 1 and 7 nothing is drawn or composed, but the cursor still moves (it is 
 2. **The memory.** The area must be cloneable by the program and readable by the Vulkan device. Lavapipe could import host memory (`VK_EXT_external_memory_host`). RADV would need the R5 DRM library and the kernel to import an area as a GPU buffer, which does not exist.
 3. **The compose** must read that window again every frame, because a direct window reports no damage (like a window during an animation, M11 step 4b).
 
-**Advice:** not in M12. The pause stays the one use of the CPU mode outside Safe mode, written down as such (part 10). If a program needs it later, the first step would be Lavapipe only, as its own small step with the user's yes.
+**Advice was:** not in M12. **Decided (user, 15 Nov 2026, Q10): build it for Lavapipe only, as an extra step in M12.** See [Decided after step 0](#decided-after-step-0-15-nov-2026). On RADV, and for `BWindowScreen` everywhere, the pause stays.
 
 ## 10. Changes to other documents
 
@@ -384,7 +384,7 @@ Proposed, made in the step that builds the thing, so the document never describe
 
 - **Step 1, "Components and versions":** a row `Skia | commit hash and date in the recipe (now chrome/m158, 707e33875f) | One pin per R5 release; static, only in app_server; update with the steps below`, and a section **"Updating Skia, step by step"**: (1) move the pin to the newest `chrome/mNNN` branch below beta, with its commit; (2) build it with the recipe; the `gn` arguments of part 1 must still exist, and the list of built third-party parts is checked against `DEPS` again; (3) read the release notes of every milestone in between for changes to Graphite, `VulkanBackendContext` and runtime effects; (4) the step 1 host test, then `r5-draw-compare` on Lavapipe in QEMU and on RADV on the 5625U, every line `ok`; (5) the `draw-time` list against the previous pin, recorded in `CHANGELOG.md`; (6) the previous pin stays in the recipe history; a rollback is one pin back.
 - **Step 1, "Licensing":** "Skia (BSD-3-Clause, Google and the other authors in its `AUTHORS` file) with skcms (BSD-3-Clause) and the Vulkan Memory Allocator (MIT, AMD) is linked statically into app_server. No GPL code. Its notices are in `THIRD_PARTY_NOTICES.md` and on the Licenses tab of About."
-- **Step 6, "Two modes, never mixed"** becomes: "On AMD64 the desktop is always composed: on RADV where the GPU is available, otherwise on Lavapipe. When RADV is lost and its restart fails, the session goes on on Lavapipe. When Lavapipe fails as well, the next boot offers Safe mode. The CPU mode (Painter, no compositor) runs only in Safe mode, and during a direct-window pause. On ARM64 and RISC-V the CPU mode stays the automatic fallback until Lavapipe is proven there." And "When things go wrong", second point: "app_server goes on on Lavapipe (AMD64) or falls back to Painter (ARM64, RISC-V)".
+- **Step 6, "Two modes, never mixed"** becomes: "On AMD64 the desktop is always composed: on RADV where the GPU is available, otherwise on Lavapipe. When RADV is lost and its restart fails, the session goes on on Lavapipe. When Lavapipe fails as well, the next boot offers Safe mode. The CPU mode (Painter, no compositor) runs only in Safe mode, during a direct-window pause, and for the rest of a boot in which Lavapipe failed as well. On ARM64 and RISC-V the CPU mode stays the automatic fallback until Lavapipe is proven there." And "When things go wrong", second point: "app_server goes on on Lavapipe (AMD64) or falls back to Painter (ARM64, RISC-V)".
 - **After the stick:** the M12 row of "Milestones" with its result.
 
 ### `THIRD_PARTY_NOTICES.md`
@@ -410,7 +410,7 @@ And one block in `distro/about/licenses.txt` with the same three parts.
 
 In the GPU section, after "The software path (app_server Painter, llvmpipe, Lavapipe) always stays installed and working.":
 
-> On AMD64 the desktop is always composed: on RADV when the GPU is available, otherwise on Lavapipe; the GPU draws every window through Skia (`docs/APP-SERVER-GPU-DRAWING.md`). When RADV is lost and its restart fails, the session goes on on Lavapipe. The CPU mode (Painter, no compositor) runs only in Safe mode, and during a direct-window pause. Safe mode is Haiku's safe mode plus the fail-safe video mode plus no GPU driver, with "Safe mode" on the screen. After a failed desktop start app_server writes `/boot/system/var/r5/desktop-start-failed`; the boot loader then opens the menu with Safe mode selected; Login removes the file after a good Sign in in a normal start. Painter stays in every image and must keep working in Safe mode. ARM64 and RISC-V keep the automatic switch to the CPU mode until Lavapipe is proven there. Skia is linked only into app_server, statically, from R5's own recipe at a pinned version; never in a public header, `libbe` or a `libr5*` library.
+> On AMD64 the desktop is always composed: on RADV when the GPU is available, otherwise on Lavapipe; the GPU draws every window through Skia (`docs/APP-SERVER-GPU-DRAWING.md`). When RADV is lost and its restart fails, the session goes on on Lavapipe. The CPU mode (Painter, no compositor) runs only in Safe mode, during a direct-window pause (a `BWindowScreen`, or a `BDirectWindow` on RADV), and for the rest of a boot in which Lavapipe failed as well; that boot writes the marker. Safe mode is Haiku's safe mode plus the fail-safe video mode plus no GPU driver, with "Safe mode" on the screen. After a failed desktop start app_server writes `/boot/system/var/r5/desktop-start-failed`; the boot loader then opens the menu with Safe mode selected; Login removes the file after a good Sign in in a normal start. Painter stays in every image and must keep working in Safe mode. ARM64 and RISC-V keep the automatic switch to the CPU mode until Lavapipe is proven there. Skia is linked only into app_server, statically, from R5's own recipe at a pinned version; never in a public header, `libbe` or a `libr5*` library.
 
 ## Open questions for the user
 
@@ -473,3 +473,35 @@ Each with the options and my advice. Q1 is the gate for step 1.
 - (a) Accept it as a written limit.
 - (b) Read every bitmap back after every batch, so nothing is ever lost, at a cost for every program that draws offscreen.
 - **Advice: (a).** It only happens after a GPU loss, and the program's next drawing fixes it.
+
+## Decided after step 0 (15 Nov 2026)
+
+The user answered the open questions:
+
+| Question | Decision |
+|---|---|
+| Q1 Skia | Approved as reported in part 1: m158, core and Graphite on Vulkan, skcms and VMA, no codecs, no ICU, no HarfBuzz, static in app_server. Step 1 may start |
+| Q2 Backend | Graphite |
+| Q3 Curved shapes | GPU only, 4× MSAA on RADV and Lavapipe |
+| Q4 Window memory | Accepted and measured in M12; M13 lets the compose read the images |
+| Q5 Subpixel text | **Skia's own subpixel text**, one way on RADV and Lavapipe, a new look in the GPU mode; part 6 is changed. `gSubpixelAverageWeight` only acts in Safe mode |
+| Q6 Lavapipe fails too | The CPU mode for the rest of that one boot, the marker written; part 8 and the proposed `AGENTS.md` text are changed |
+| Q7 Boot menu | Waits for a key, as Haiku; no countdown |
+| Q8 Marker in Safe mode | Removed only after a good Sign in in a normal start |
+| Q9 Network in Safe mode | None, as Haiku |
+| Q10 `BDirectWindow` | **Built for Lavapipe only, as an extra step in M12** (below) |
+| Q11 Offscreen loss | Accepted as a written limit |
+
+**`BDirectWindow` on Lavapipe (Q10), the design on paper.** From part 9:
+
+- **Layout:** the window's direct buffer is laid out like the screen (the screen's `bytes_per_row`), from screen row 0 down to the window's bottom edge, so `window_bounds` and `clip_list` stay in screen coordinates and programs see nothing new. This costs up to a screen of memory per direct window, counted in the window memory budget.
+- **Memory:** a Haiku area made cloneable (as `DirectWindowInfo::SetState()` does for the frame buffer), imported into the Lavapipe device with `VK_EXT_external_memory_host`. Step 1 checks that Lavapipe in Mesa 25.3.6 offers that extension; if not, this step is reported as blocked.
+- **Compose:** a direct window reports no damage, so while one is active, the compose reads its rows every refresh period, as during an animation (M11 step 4b).
+- **Where:** in the GPU mode on Lavapipe only. On RADV, and for `BWindowScreen` everywhere, the M11 pause stays.
+- **Which step:** its own step and PR, after step 6 and before the stick, because it touches the compositor and the direct-window path, not the drawing. The brief still lists it under "Not in M12"; the user updates the brief, or gives the step its number.
+- **Pass line, proposed:** with a `BDirectWindow` program on Lavapipe in QEMU, no `compositor paused: direct window`, its pixels in the composed frame, and `app_server: direct window buffer <w>x<h>` once.
+
+**Still open after the answers:**
+
+- **Q12. Subpixel shapes.** Skia has subpixel coverage only for text. With Q5 the text is Skia's, but Painter also draws shapes in subpixel when `gSubpixelAntialiasing` is on. Options: (a) shapes in grey in the GPU mode, like every current system, so only text has colour fringes; (b) the two-pass Haiku way of part 4 for shapes only. **Advice: (a)**, in the spirit of Q5: one new way, less work. Painter keeps its subpixel shapes in Safe mode.
+- **Q13. The "average weight" slider** in Appearance (tab Antialiasing). After Q5 it only acts in Safe mode. Options: (a) leave the page as it is in M12, with a note in the help text; (b) hide the slider in the GPU mode. The Settings layout is fixed by `AGENTS.md`, so (b) is a Settings change of its own. **Advice: (a)** in M12; (b) only when you ask for it.
