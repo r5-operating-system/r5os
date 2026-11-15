@@ -20,6 +20,16 @@ Tested in QEMU (KVM, Lavapipe, `gpu_draw true`, `gpu_debug true`), not finished:
 
 Not done: the forced fallback in QEMU, the measurement (three runs, with and without `gpu_draw`), screenshots of Tracker, Terminal, Settings, About and WebPositive, group 12 (decorator) and 13 (offscreen in the set), layers (`BView::BeginLayer` still draws with Painter through `BitmapDrawingEngine`: a gap), offscreen bitmaps in other colour spaces than 32 bits (Painter: a gap). RADV on the 5625U: not run. The commits are grouped by files per step; a single commit alone may not build.
 
+## 2026-11-15 - Build scripts: one build at a time in the shared WSL Haiku tree
+
+Problem: every session copies its `distro/` into the one WSL Haiku tree and jams into the one `generated.x86_64`. On 15 Nov two sessions did that at the same time: an image with a kernel and a package from two different builds stopped in the kernel (`search_module called during kernel startup`, `generic/dpc/v1`), and `r5-os.image` disappeared.
+
+What changed: `scripts/build-lock.sh` takes an exclusive `flock` on `/home/nickr/r5os/.r5-build.lock`, shared by every worktree, and writes who holds it. `apply-overlay.sh`, `jam-r5-raw.sh` and `build-image.sh` take it; a second session waits (at most `R5_BUILD_LOCK_WAIT` s, default 2 hours) and says who is building. `scripts/build-locked.sh` runs apply and jam under one lock, so nobody can copy in between; use it instead of the two scripts one after the other.
+
+Tested in WSL with a test lock file: a second script waited until the first ended, `R5_BUILD_LOCK_WAIT=0` gave up at once with exit 1, and a nested script with the lock held did not wait for itself. `bash -n` on all five scripts. Not run: a real jam under the lock.
+
+Limits: the `apply-*.py` scripts run on their own (for example `apply-settings.py`) and copying `r5-os.image` for QEMU do not take the lock. Files that a previous branch copied into the tree and the current one does not have stay there.
+
 ## 2026-11-15 - Review of the merged M11 stack (#4264): seven fixes, the rest left with a reason
 
 Problem: a read-only review of the merged M11 diff found a weak compare-and-swap in the direct screen count, a resize rule in the VM that was broader than needed, a missing kernel mapping read as "no copies", a hung frame that quit had to wait out, a test switch read only with gpu_debug, a self-test date fallback that took an old file, and a settings rewrite that could leave no file.

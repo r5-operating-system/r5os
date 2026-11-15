@@ -1,102 +1,198 @@
 # R5 Operating System
 
-R5 is a desktop operating system built on [Haiku](https://www.haiku-os.org/). It keeps what makes Haiku pleasant: one fast, coherent system with a clean desktop. On top of that it adds what a daily computer needs: accounts with sign-in, modern networking, better sound, and support for current laptops.
+**A desktop with a little more attitude.**
+
+Meet R5. An independent desktop operating system built on
+[Haiku](https://www.haiku-os.org/), with a fresh perspective on what a
+desktop can be.
+
+R5 brings together the things we love about a great desktop: speed,
+simplicity and a sense of control, with a modern look, better
+hardware support and the features you need to make yourself at home.
+
+No unnecessary clutter. No complicated nonsense. Just a desktop that's a
+pleasure to use, with plenty of personality of its own.
 
 <p align="center"><img src="docs/screenshots/about-r5.png" alt="The R5 desktop with About R5 open" width="800"></p>
 
-The name is a nod to BeOS R5, as history. It is not a product claim.
+## A desktop with personality
 
-> R5 Operating System is **not** the official Haiku distribution, and it is **not** BeOS. It is an independent project and is not associated with the Haiku Project. See [`distro/DISCLAIMER.txt`](distro/DISCLAIMER.txt).
+**Same soul. Whole new attitude.**
 
-**Status:** in development. The current tree is **R5 Operating System 2026.1-dev, build 10064**. There is no public release yet.
+We gave the desktop room to shine. Think floating windows, soft shadows,
+frosted glass and animations that make everything feel right at home.
+And yes, your graphics hardware is doing the heavy lifting. This isn't a
+desktop pretending to be modern. It's R5 taking a big, beautiful step
+forward.
 
----
+Want a subtle look? Something with a little more depth? Or the full
+glass treatment? R5 gives you three visual styles to make the desktop
+feel like yours: Quiet, Balanced and Glassy.
 
-## What works today
+We've also polished the everyday details. Dark mode, a more capable
+notification system, improved Deskbar and Tracker behaviour, and better
+touchpad support all help make the desktop feel more at home on modern
+hardware.
 
-### Desktop
-- R5 Operating System branding throughout: Deskbar, installer, boot splash, About.
-- Dark mode, plus fixes to the Deskbar, Tracker and the desktop icons.
-- **Settings** is one window. Home shows a card per category; the list on the left folds open to the pages of one category, and Search jumps to any page. Pages include Information (your computer at a glance), Display (your screen and workspaces), Appearance, Desktop and Deskbar, Wallpaper, Notifications and Virtual memory. A change applies at once. Revert goes back to how the page was when you opened it, and Defaults to the factory setup. The separate preference programs are still installed.
-- Notifications, with a choice of where they appear on screen.
-- A new Device Manager
-- Touchpad support
+And finding your way around system settings shouldn't be an adventure.
+R5 brings them together in one place, neatly organised and easy to use.
+Change something, see the result straight away, and keep it, or
+switch back if you change your mind.
 
-### Accounts
-- A **sign-in screen** before the desktop starts. **Log out** and **Lock screen** are in the leaf menu.
-- **Users & Accounts** to add and remove people. Every person gets a private home folder.
-- The administrator is a normal account, not root. Machine-wide settings (network, display, time, users, printers, repositories) are locked. A standard account can still view them, and unlocks them with an administrator's password.
+## Make yourself at home
 
-### Network
-- Wi-Fi: join a network, and it is remembered.
-- IPv6 on a home network (SLAAC).
-- Printing to AirPrint/IPP printers.
-- **Network shares:** mount a Windows (SMB) share from Tracker, by IP address. The password stays in the keystore.
-- Sound to AirPlay 1 speakers. AirPlay 2 is not supported.
+**Your computer. Your space. Your rules.**
 
-### Sound
-- Clearer resampling, and a mixer that recovers from late sound.
-- A latency choice: Normal, Low latency, or Pro audio.
-- USB sound devices can be set to stereo, 4.0, 5.1 or 7.1. HDMI outputs are labeled as HDMI.
-- Virtual surround for headphones.
-- More reliable USB sound cards
-- Finer MIDI velocity and controller values. Existing MIDI programs keep working.
-- MIDI 2.0 support
-- A new MIDI Monitor
+A computer is personal. It should feel that way, even when you share it.
 
-### Graphics
-**Not just any port.** We've done it the Haiku and BeOS way: a native layer between Vulkan and R5.
+R5 brings proper user accounts to the desktop, complete with a sign-in
+screen, screen locking and separate home folders. Everyone gets their
+own space, their own files and their own settings. Step away? Lock your
+screen. Finished for the day? Log out. Simple.
 
-- Native Vulkan (no Linux kernel) \*
-- Native OpenGL, running on top of Vulkan \*
-- On a laptop with an AMD Ryzen 5 5625U the graphics chip is used by default, after a check at start; if the chip hangs, R5 restarts it on its own
-- Your existing Haiku apps keep working, unchanged
-- Software rendering as a fallback, and wherever the chip is not supported yet
+And because not everyone needs the keys to the whole house, important
+system settings stay protected. The administrator can manage the
+computer without handing out unrestricted system access.
 
-\* In active development. Only the Ryzen 5 5625U has been tested so far; other graphics chips draw in software. Details: [`docs/GRAPHICS.md`](docs/GRAPHICS.md).
+## Everything just a little more connected
 
-### The desktop on the GPU
-**Your desktop, with depth.** Every window gets its own canvas, and the graphics chip puts the whole screen together from those canvases, frame by frame. Your apps don't change. The desktop just feels lighter.
+**Your devices should get along. R5 helps make that happen.**
 
-- **Soft shadows** lift windows off the desktop, so you see at a glance what's on top.
-- **Frosted glass** lets the desktop show through window tabs and menus, softly blurred.
-- **Three looks:** Quiet, Balanced and Glassy. Pick the one you like in Settings → Appearance → Look and feel. Less effect uses less processor time.
-- **Gentle animations:** windows fade in and out, and workspaces slide into place. One switch turns them off.
-- **Vulkan apps and games go straight to the screen**, without an extra copy along the way.
-- **Full-screen games and video keep working.** When a program wants to draw on the screen itself, the compositor steps aside, and it comes back when the program is done.
-- **There's always a way back.** If the graphics chip ever stops, the desktop carries on in the classic way, without a restart. On a computer without a supported chip, the same desktop is drawn in software.
+Connect to Wi-Fi, find other computers on your network, print a document
+or send music to a compatible speaker. R5 is bringing the pieces of your
+digital world closer together.
 
-It is on by default. On a computer without a supported graphics chip, such as a virtual machine, drawing it in software uses more processor time. Safe mode in the boot menu brings back the classic desktop.
+Network discovery makes it easier to find nearby devices and services.
+Shared folders let you reach files on other computers, while support for
+AirPrint and IPP makes network printing more straightforward. And when
+you want your music somewhere else, R5 can send audio to AirPlay 1
+speakers. AirPlay 2 is not supported yet.
 
-### Processor
-- Better CPU support (AMD/Intel)
-- AMD processors load AMD's latest microcode at start
+Under the hood, networking has had a serious upgrade too. R5 supports
+modern IPv4 and IPv6 networking, flexible DNS configuration, and Wi-Fi
+drivers for MediaTek MT7921 and MT7922 hardware.
 
-### Virtual machines
-- VirtualBox Guest Additions 7.2.22 are included: the guest modules, `VBoxService`, `VBoxTray` and `VBoxControl`.
+## Sound that feels right
 
-The full list, build by build, is in About R5 → What's new ([`distro/WHATSNEW`](distro/WHATSNEW)). The technical details and the known limits are in [`CHANGELOG.md`](CHANGELOG.md).
+**From a quick video to a serious session, sound matters.**
 
-## Not there yet
+Audio should be something you enjoy, not something you have to
+troubleshoot.
 
-- The graphics chip puts the desktop together, but the processor still draws what is inside each window. Having the chip draw that too is the next step.
-- One graphical session at a time. There is no fast user switching and no guest account.
-- The bundled browser (WebPositive) is weak for today's web.
-- Sleep, backlight and HiDPI on the reference laptop are still open.
+R5 brings more reliable USB audio, improved audio mixing and resampling,
+and better handling of connected sound devices. Whether you're listening
+through headphones, using HDMI audio or connecting surround speakers,
+there's more room to make things sound the way you want.
 
-Where the project is heading: [`docs/ROADMAP.md`](docs/ROADMAP.md).
+And if you're particular about latency, you're in control. Choose Normal
+for everyday use, Low latency when responsiveness matters, or Pro audio
+for more demanding audio work.
 
-## Hardware
+There's attention for music makers too, with MIDI improvements, MIDI 2.0
+support and a built-in MIDI monitor.
 
-R5 Operating System is **64-bit only**.
+## More of your hardware, put to work
 
-| Architecture | Status |
-|---|---|
-| AMD64 (`x86_64`) | Primary target. The reference machine is a laptop with a Ryzen 5 5625U. Also runs in VirtualBox and QEMU. |
-| ARM64 (`aarch64`) | Planned. QEMU first, then real hardware. |
-| RISC-V 64 | Planned, after AMD64 and ARM64. |
+**A modern desktop deserves modern graphics.**
 
-## Trying it
+R5 is bringing modern graphics technology to the party, with native
+Vulkan support and OpenGL support built on top of it. No Linux kernel
+required.
+
+The new desktop compositor already puts the GPU to work, making those
+shadows, glass effects and smooth animations possible. On supported
+hardware, that means a desktop with more depth and a more fluid feel.
+
+There's still work to do. GPU compositor support has so far been tested
+on an AMD Ryzen 5 5625U system. Other graphics hardware may use software
+rendering instead, and performance can vary. We're expanding support as
+development moves forward.
+
+And don't worry about your existing apps: Haiku applications continue to
+work unchanged.
+
+## Under the hood
+
+**The little things add up.**
+
+A great desktop isn't just about what you see. It's also about how well
+everything works together.
+
+R5 supports AMD and Intel processors, includes AMD microcode updates and
+makes smarter use of available CPU cores. It favours real and faster
+cores when scheduling work, and makes better use of deeper sleep states
+when your computer is idle.
+
+It's the kind of work you might never notice directly. That's rather the
+point.
+
+## Bring R5 along for the ride
+
+**At home on real hardware. Happy to visit a virtual machine too.**
+
+Want to give R5 a spin without dedicating a whole computer to it? R5
+includes VirtualBox Guest Additions 7.2.22 to improve the experience
+when running in a virtual machine.
+
+Existing Haiku applications continue to run unchanged, so there's no
+need to leave familiar software behind.
+
+R5 is currently developed primarily for AMD64 systems. ARM64 and RISC-V
+are on the horizon, but aren't supported targets yet.
+
+## What's coming next?
+
+**We're not done dreaming. Not even close.**
+
+One of the big things we're working on is GPU-powered drawing inside
+application windows, using Skia.
+
+The goal? Crisp text, smoother drawing and a more consistent visual
+experience across supported hardware. It's also an important step
+towards future HiDPI support.
+
+This is still a work in progress, not a feature of the current build.
+But it's a good glimpse of where we're heading.
+
+## Project status
+
+**A work in progress. And very much alive.**
+
+R5 is under active development. There's no public release just yet, but
+development is moving forward.
+
+-   **Current build:** 10064
+-   **Version:** 2026.1-dev
+-   **Primary architecture:** AMD64
+
+Some features are still evolving, and hardware support varies. GPU
+compositor testing is currently limited to the AMD Ryzen 5 5625U system
+mentioned above. Vulkan and OpenGL support are also under active
+development.
+
+## A note about R5 and Haiku
+
+R5 is built on [Haiku](https://www.haiku-os.org/), but it is an
+independent project. It is not an official Haiku distribution, nor is it
+affiliated with or endorsed by the Haiku Project. See
+[`distro/DISCLAIMER.txt`](distro/DISCLAIMER.txt).
+
+The name R5 is a nod to the history of BeOS R5. It does not mean that R5
+is BeOS, a continuation of BeOS, or an official Haiku release.
+
+Haiku and BeOS names and logos belong to their respective owners.
+
+## Our relationship with Haiku
+
+R5 is built on Haiku, and we regularly bring in fixes and improvements from its source code. R5 is an independent project, though, and changes made specifically for R5 stay with R5.
+
+There's one important distinction worth making: R5 development uses AI-assisted tools. The Haiku Project does not accept contributions created or modified using AI, so R5's changes are not submitted upstream.
+
+## For developers
+
+Everything below is for people who build R5 or work on it.
+
+### Trying it
 
 R5 Operating System is built from source; there are no downloads yet. After a build (see below) you can:
 
@@ -104,7 +200,7 @@ R5 Operating System is built from source; there are no downloads yet. After a bu
 - **Run it in QEMU.** Use [`scripts/run-qemu-r5.sh`](scripts/run-qemu-r5.sh). QEMU's default user-mode network is not a real home network.
 - **Boot it from USB.** Build the `r5-anyboot` image and write it to a USB stick. Check the target disk twice before writing.
 
-## Building
+### Building
 
 Haiku does not build natively on Windows. Use Linux, or WSL with Ubuntu on Windows. Keep the checkout on the Linux file system (for example `~/Projects/R5OS`), not under `/mnt/c`: the Windows file system is case-insensitive and slow for this.
 
@@ -144,7 +240,7 @@ Build an image:
 | `r5-anyboot` | A bootable ISO or USB stick |
 | `r5-vmware` | VMware |
 
-## How the repository is organized
+### How the repository is organized
 
 | Path | What it holds |
 |---|---|
@@ -157,27 +253,18 @@ Build an image:
 | `tools/r5-befs/` | A small read-only BeFS reader for Windows. |
 | `LICENSES/` | The unmodified license texts. |
 
-## Relationship with Haiku
-
-Haiku is the foundation, and its source is where R5 gets many of its fixes. R5 does not send changes back. Haiku does not accept AI-generated or AI-modified contributions, and R5 Operating System work is AI-assisted. So:
-
-- Do not open pull requests against Haiku. Do not push to Haiku's servers.
-- Haiku's repositories are only fetched from.
-- Open Haiku bugs are tracked in [`tracker/`](tracker/) and as GitHub issues with the `haiku` label. The Haiku ticket number is only used as an id.
-
-## Licensing
+### Licensing
 
 R5 Operating System is **multi-license**:
 
 - Files that come from Haiku keep their original license and copyright, mostly MIT.
-- New files that R5 owns are MIT, so other Haiku-based systems can use them (since 12 Nov 2026).
+- New files that R5 owns are MIT, so other Haiku-based systems can use them (since 12 Nov 2026). The R5 artwork and brand files stay GPL-3.0-or-later.
 - Libraries and public headers that applications link or include are MIT, so any program can use them: the R5 libraries (`libr5icons`, `libr5ui`), the R5 GPU interface header and the R5 DRM library.
-- Third-party parts keep their own licenses; some of them, such as the VirtualBox Guest Additions, are GPL.
-- Third-party components keep their own licenses. They are listed in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). Examples are the VirtualBox Guest Additions (GPL-3.0-only), the AMD firmware and Mesa.
+- Third-party components keep their own licenses. They are listed in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). Examples are the VirtualBox Guest Additions (GPL-3.0-only), the AMD firmware, Mesa and Skia (BSD-3-Clause).
 
 The full policy is in [`docs/LICENSING.md`](docs/LICENSING.md). About R5 shows the licenses and credits on the system itself.
 
-## Contributing
+### Contributing
 
 AI-assisted work is welcome here. It is held to the same bar as any other change: it has to build, boot and be tested before it counts as done. Before you start, read [`AGENTS.md`](AGENTS.md). It covers the development loop, the fixed parts of the system, versioning, and how to record changes.
 
@@ -185,6 +272,8 @@ AI-assisted work is welcome here. It is held to the same bar as any other change
 - User-visible changes get a What's new entry in plain language. Technical details go in `CHANGELOG.md`.
 - Use the name **R5 Operating System**, short **R5** (see "Name" in `AGENTS.md`). Do not use Haiku or BeOS names or logos on the image.
 
-## Versions
+### Versions
 
 Releases will be called **R5 Operating System 2026.1**, **2026.2**, and so on; a new year starts again at `.1`. Development trees carry `-dev`, and About R5 shows the version together with an increasing build number. The sources for those are [`distro/VERSION`](distro/VERSION) and [`distro/BUILD`](distro/BUILD).
+
+Haiku's own rules for R5 work: do not open pull requests against Haiku, and do not push to Haiku's servers. Haiku does not accept AI-generated or AI-modified contributions. Open Haiku bugs are tracked in [`tracker/`](tracker/) and as GitHub issues with the `haiku` label.

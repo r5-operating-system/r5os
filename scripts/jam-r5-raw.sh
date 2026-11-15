@@ -2,6 +2,8 @@
 set -uo pipefail
 HAIKU=/home/nickr/r5os/haiku
 WIN="$(cd "$(dirname "$0")/.." && pwd)"
+# One build at a time in the shared WSL tree (build-lock.sh).
+. "$WIN/scripts/build-lock.sh"
 export PATH=/usr/bin:/bin:/home/nickr/bin:$PATH
 
 "$WIN/scripts/pin-mesa-packages.sh" || exit 1
