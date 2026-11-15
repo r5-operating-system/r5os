@@ -274,6 +274,9 @@ SkiaDrawingEngine::SkiaDrawingEngine(WindowHWInterface* windowInterface,
 {
 	fTarget = new(std::nothrow) WindowTarget(gpu, compositor,
 		windowInterface);
+	// a new window has no glass view yet (Compositor::GlassViewChanged)
+	if (fTarget != NULL)
+		fTarget->SetOpaque(true);
 	_Init();
 	{
 		BAutolock _(sCpuLock);
@@ -342,6 +345,14 @@ SkiaDrawingEngine::_Gpu() const
 {
 	// the GPU drawing went off (decision 8): Painter, as everywhere
 	return fOnGpu && fGpu != NULL && !fGpu->IsShutDown();
+}
+
+
+void
+SkiaDrawingEngine::SetOpaque(bool opaque)
+{
+	if (fTarget != NULL)
+		fTarget->SetOpaque(opaque);
 }
 
 

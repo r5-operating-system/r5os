@@ -40,6 +40,9 @@ public:
 			bool				OnGpu() const { return _Gpu(); }
 	// An offscreen window's bitmap (skia_offscreen_sync() finds it).
 			void				SetTrackedBitmap(ServerBitmap* bitmap);
+	// Every pixel of the image has alpha 255 (no glass views): COPY and
+	// OVER with one colour use Skia's own blending.
+			void				SetOpaque(bool opaque);
 			SkiaTarget*			Target() const { return fTarget; }
 
 	// A read point (part 6): everything drawn so far is in memory when

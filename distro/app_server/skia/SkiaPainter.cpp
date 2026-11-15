@@ -168,7 +168,8 @@ SkiaTarget::SkiaTarget(SkiaGpu* gpu)
 	fHeight(0),
 	fRecorded(false),
 	fFirstDraw(0),
-	fUploadPending(false)
+	fUploadPending(false),
+	fOpaque(false)
 {
 	if (fGpu != NULL)
 		fRecorder = (skgpu::graphite::Recorder*)fGpu->NewRecorder();
@@ -205,8 +206,12 @@ SkiaTarget::SetSurface(int32 width, int32 height, int32 left, int32 top,
 		return true;
 	}
 
+	// linear coverage, as AGG, and the subpixel order of the Antialiasing
+	// tab for text drawn straight into the image
+	SkSurfaceProps props(0, gSubpixelOrderingRGB ? kRGB_H_SkPixelGeometry
+		: kBGR_H_SkPixelGeometry, 0, 1);
 	sk_sp<SkSurface> surface = SkSurfaces::RenderTarget(fRecorder,
-		target_info(width, height));
+		target_info(width, height), skgpu::Mipmapped::kNo, &props);
 	if (surface == nullptr)
 		return false;
 
@@ -918,6 +923,66 @@ SkiaPainter::_FillSolid(const BRegion& region, const rgb_color& color,
 }
 
 
+/*!	B_OP_COPY and B_OP_OVER with one colour on an opaque image: Haiku's
+	copy_solid and over_solid write the colour at full coverage and
+	BLEND(d, c, cover) with alpha 255 at the edges, which is Skia's
+	kSrcOver with that opaque colour (alpha 255 stays 255). _draw is false
+	when nothing is drawn at all (B_OP_OVER with B_SOLID_LOW).
+*/
+bool
+SkiaPainter::_DirectColor(bool forceSolidHigh, bool* _draw,
+	SkColor* _color) const
+{
+	if (fTarget == NULL || !fTarget->IsOpaque() || fHasAlphaMask)
+		return false;
+	if (fDrawingMode != B_OP_COPY && fDrawingMode != B_OP_OVER)
+		return false;
+	bool high = forceSolidHigh || same_pattern(fPattern, kR5SolidHigh);
+	bool low = !forceSolidHigh && same_pattern(fPattern, kR5SolidLow);
+	if (!high && !low)
+		return false;
+	*_draw = true;
+	rgb_color color = fHighColor;
+	if (low) {
+		if (fDrawingMode == B_OP_OVER) {
+			*_draw = false;
+			return true;
+		}
+		color = fLowColor;
+	}
+	*_color = SkColorSetARGB(255, color.red, color.green, color.blue);
+	return true;
+}
+
+
+/*!	Draws straight into the target, once per clipping rectangle inside
+	bounds (screen pixels), under matrix.
+*/
+void
+SkiaPainter::_DirectDraw(const SkIRect& _bounds, const SkMatrix& matrix,
+	const std::function<void(SkCanvas*)>& draw)
+{
+	SkIRect surfaceBounds = SkIRect::MakeXYWH(fTarget->Left(),
+		fTarget->Top(), fTarget->Width(), fTarget->Height());
+	SkIRect bounds = _bounds;
+	if (!bounds.intersect(surfaceBounds))
+		return;
+	BRegion rects;
+	_ClipRects(bounds, rects);
+	SkCanvas* canvas = fTarget->Canvas();
+	for (int32 i = 0; i < rects.CountRects(); i++) {
+		clipping_rect r = rects.RectAtInt(i);
+		canvas->save();
+		canvas->clipIRect(SkIRect::MakeLTRB(r.left, r.top, r.right + 1,
+			r.bottom + 1));
+		canvas->concat(matrix);
+		draw(canvas);
+		canvas->restore();
+	}
+	fTarget->AddDamage(rects);
+}
+
+
 /*!	Skia computes the coverage of the shape (white on clear, in the scratch
 	image) under the current transform; the R5 shader blends it.
 */
@@ -940,6 +1005,27 @@ SkiaPainter::_DrawCoverage(const SkRect& deviceBounds, const SkPath* path,
 	if (!bounds.intersect(surfaceBounds) || !bounds.intersect(clip))
 		return _Clipped(BRect(deviceBounds.fLeft, deviceBounds.fTop,
 			deviceBounds.fRight, deviceBounds.fBottom));
+
+	bool directDraw;
+	SkColor directColor;
+	if (gradient == NULL && _DirectColor(false, &directDraw, &directColor)) {
+		if (directDraw) {
+			SkPaint paint;
+			if (shapePaint != NULL)
+				paint = *shapePaint;
+			paint.setColor(directColor);
+			paint.setBlendMode(SkBlendMode::kSrcOver);
+			paint.setAntiAlias(true);
+			_DirectDraw(bounds, _Matrix(), [&](SkCanvas* canvas) {
+				if (rrect != NULL)
+					canvas->drawRRect(*rrect, paint);
+				else if (path != NULL)
+					canvas->drawPath(*path, paint);
+			});
+		}
+		return _Clipped(BRect(deviceBounds.fLeft, deviceBounds.fTop,
+			deviceBounds.fRight, deviceBounds.fBottom));
+	}
 
 	SkSurface* scratch = fTarget->Scratch();
 	if (scratch == NULL)
@@ -1863,6 +1949,16 @@ SkiaPainter::DrawBitmap(const ServerBitmap* bitmap, BRect bitmapRect,
 	if (fIdentityTransform && !fHasAlphaMask && !tile) {
 		SkIRect bounds = dest.round();
 		if (!hasScale) {
+			if (fDrawingMode == B_OP_COPY && !fHasAlphaMask) {
+				// Bgr32Copy, CMap8Copy: the bytes as they are, kSrc
+				SkPaint copy;
+				copy.setBlendMode(SkBlendMode::kSrc);
+				copy.setShader(source.colors);
+				_DirectDraw(bounds, SkMatrix::I(), [&](SkCanvas* canvas) {
+					canvas->drawRect(dest, copy);
+				});
+				return touched;
+			}
 			if (space == B_CMAP8 && fDrawingMode == B_OP_OVER)
 				source.special = kSpecialCopyIfAlpha;
 			else if (fDrawingMode == B_OP_COPY)

@@ -199,6 +199,7 @@ draw_compare(SkiaGpu* gpu, const draw_compare_request& request,
 	{
 		SkiaDrawingEngine skia(&lockInterface, target);
 		skia.SetScale(request.scale);
+		skia.SetOpaque(((const uint8*)&request.background)[3] == 255);
 		if (!skia.SetTargetSize(width, height)) {
 			gSubpixelAntialiasing = savedSubpixel;
 			result.gpuFailed = true;
@@ -223,23 +224,50 @@ draw_compare(SkiaGpu* gpu, const draw_compare_request& request,
 		gSubpixelAntialiasing = savedSubpixel;
 
 		// part 5: the box of what either engine drew, grown by 2
-		const uint8* a = (const uint8*)painted->Bits();
+		const uint8* rawA = (const uint8*)painted->Bits();
 		uint32 aRow = painted->BytesPerRow();
-		const uint8* g = target->Pixels();
+		const uint8* rawG = target->Pixels();
 		uint32 gRow = width * 4;
+		const uint8* a = rawA;
+		const uint8* g = rawG;
+		// part 5 (owner, 15 Nov 2026): on a transparent background both
+		// images are compared premultiplied (colour times alpha), with the
+		// same limits; a colour under alpha 0 is not seen
+		std::vector<uint8> premulA;
+		std::vector<uint8> premulG;
+		if (((const uint8*)&request.background)[3] == 0) {
+			premulA.resize(height * aRow);
+			premulG.resize(height * gRow);
+			for (int32 y = 0; y < height; y++) {
+				for (int32 x = 0; x < width; x++) {
+					const uint8* pa = rawA + y * aRow + x * 4;
+					const uint8* pg = rawG + y * gRow + x * 4;
+					uint8* qa = &premulA[y * aRow + x * 4];
+					uint8* qg = &premulG[y * gRow + x * 4];
+					for (int c = 0; c < 3; c++) {
+						qa[c] = (pa[c] * pa[3] + 127) / 255;
+						qg[c] = (pg[c] * pg[3] + 127) / 255;
+					}
+					qa[3] = pa[3];
+					qg[3] = pg[3];
+				}
+			}
+			a = premulA.data();
+			g = premulG.data();
+		}
 		if (request.dump != 0) {
 			char name[32];
 			snprintf(name, sizeof(name), "%d-painter", (int)request.dump);
-			dump(name, a, aRow, width, height);
+			dump(name, rawA, aRow, width, height);
 			snprintf(name, sizeof(name), "%d-gpu", (int)request.dump);
-			dump(name, g, gRow, width, height);
+			dump(name, rawG, gRow, width, height);
 		}
 		const uint8* back = (const uint8*)&request.background;
 		int32 left = width, top = height, right = -1, bottom = -1;
 		for (int32 y = 0; y < height; y++) {
 			for (int32 x = 0; x < width; x++) {
-				if (!same(a + y * aRow + x * 4, back)
-					|| !same(g + y * gRow + x * 4, back)) {
+				if (!same(rawA + y * aRow + x * 4, back)
+					|| !same(rawG + y * gRow + x * 4, back)) {
 					left = min_c(left, x);
 					right = max_c(right, x);
 					top = min_c(top, y);

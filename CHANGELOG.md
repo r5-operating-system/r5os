@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-15 - Painter: semi-transparent fills no longer write random alpha (a bug also in Haiku)
+
+Problem: Painter's `blend_line32()` (`drawing_support.h`), used for `B_OP_ALPHA` fills of whole rows (`_BlendRect32()`, the alpha overlay modes on runs of 4 pixels or more), built the row in a temporary buffer and never set its alpha byte, so the copy back wrote stack memory into the destination's alpha. On screen it does not show, but a `B_RGBA32` offscreen bitmap is read by programs, alpha included. Found by the M12 compare set (`draw-compare alpha-pixel-overlay-rect`: equal colour, Painter's alpha 0 or 30).
+
+What changed: `distro/app_server/drawing/drawing_support.h`, a copy of Haiku's header with one SPDX-Snippet: the row keeps the destination's alpha. The GPU drawing (M12) does the same. `apply-app-server.py` copies it.
+
+Tested: with M12 in QEMU (below); not on its own.
+
 ## 2026-11-15 - M12 steps 2 to 5, work in progress: the GPU draws the windows (gpu_draw true)
 
 Problem: in the GPU mode Painter still drew every window on the CPU into the M11 window buffers. M12 (`generated/gpu-m12/BRIEF.md`, `docs/APP-SERVER-GPU-DRAWING.md`) moves all drawing to Skia (Graphite on Vulkan), behind the test switch `gpu_draw true` (radeon_hd settings, off by default).

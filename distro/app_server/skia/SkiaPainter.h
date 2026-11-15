@@ -23,6 +23,7 @@
 #include <Rect.h>
 #include <Region.h>
 
+#include <functional>
 #include <memory>
 
 #include "include/core/SkCanvas.h"
@@ -30,6 +31,7 @@
 #include "include/core/SkPath.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkShader.h"
+#include "include/core/SkPaint.h"
 #include "include/core/SkSurface.h"
 
 #include "ServerFont.h"
@@ -77,6 +79,12 @@ public:
 			void				DropGpu();
 			bool				HasSurface() const
 									{ return fSurface != nullptr; }
+	// Every pixel has alpha 255 (a window without glass views, an opaque
+	// compare background): Skia's own blending then gives Haiku's result
+	// for B_OP_COPY and B_OP_OVER with one colour, without a copy of the
+	// destination (owner, 15 Nov 2026). Set without the lock.
+			void				SetOpaque(bool opaque) { fOpaque = opaque; }
+			bool				IsOpaque() const { return fOpaque; }
 
 			int32				Left() const { return fLeft; }
 			int32				Top() const { return fTop; }
@@ -132,6 +140,7 @@ protected:
 			bool				fRecorded;
 			bigtime_t			fFirstDraw;
 			bool				fUploadPending;
+	volatile bool				fOpaque;
 };
 
 
@@ -279,6 +288,14 @@ private:
 
 			BRect				_FillPath(const SkPath& path,
 									const BGradient* gradient);
+			void				_DrawTextLines(SkCanvas* canvas,
+									const class GlyphCollector& collector,
+									const SkPaint& ink);
+			bool				_DirectColor(bool forceSolidHigh,
+									bool* _draw, SkColor* _color) const;
+			void				_DirectDraw(const SkIRect& bounds,
+									const SkMatrix& matrix,
+									const std::function<void(SkCanvas*)>& draw);
 			BRect				_StrokePath(const SkPath& path,
 									cap_mode cap, const BGradient* gradient);
 			BRect				_DrawCoverage(const SkRect& bounds,

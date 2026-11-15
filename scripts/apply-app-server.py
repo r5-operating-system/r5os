@@ -45,6 +45,8 @@ def main() -> int:
     copy("app_server-Jamfile", app / "Jamfile")
     # SkiaDrawingEngine needs to know which HWInterface it is bound to.
     copy("drawing/DrawingEngine.h", app / "drawing" / "DrawingEngine.h")
+    # blend_line32() keeps the destination's alpha (Haiku left it unset).
+    copy("drawing/drawing_support.h", app / "drawing" / "drawing_support.h")
     # M12 step 4: alpha masks are drawn by Skia in the GPU mode. The
     # offscreen header sits in drawing/, which both libraries include.
     copy("drawing/AlphaMask.cpp", app / "drawing" / "AlphaMask.cpp")

@@ -181,6 +181,32 @@ struct GlyphRun {
 };
 
 
+/*!	AGGTextRenderer::StringRenderer::_DrawHorizontalLine(): from the left to
+	the right of the glyph boxes, size / 12 wide.
+*/
+void
+SkiaPainter::_DrawTextLines(SkCanvas* canvas, const GlyphCollector& collector,
+	const SkPaint& ink)
+{
+	SkPaint line;
+	line.setColor(ink.getColor());
+	line.setAntiAlias(true);
+	line.setStyle(SkPaint::kStroke_Style);
+	line.setStrokeWidth(fFont.Size() / 12.0f);
+	float y = (float)collector.fEndY;
+	float left = collector.fBounds.left + 0.5f;
+	float right = collector.fBounds.right + 0.5f;
+	if ((fFont.Face() & B_UNDERSCORE_FACE) != 0)
+		canvas->drawLine(left, y + 2.5f, right, y + 2.5f, line);
+	if ((fFont.Face() & B_STRIKEOUT_FACE) != 0) {
+		font_height height;
+		fFont.GetHeight(height);
+		float strike = y - (height.ascent + height.descent) / 4 + 0.5f;
+		canvas->drawLine(left, strike, right, strike, line);
+	}
+}
+
+
 /*!	Painter::DrawString() and AGGTextRenderer::RenderString(). */
 BRect
 SkiaPainter::DrawString(const char* string, uint32 length, BPoint baseLine,
@@ -290,6 +316,28 @@ SkiaPainter::DrawString(const char* string, uint32 length, BPoint baseLine,
 	if (!bounds.intersect(surfaceBounds) || !bounds.intersect(clip))
 		return touched;
 
+	// B_OP_COPY and B_OP_OVER on an opaque image: the letters straight into
+	// it with Skia's own blending (owner, 15 Nov 2026), Painter's
+	// SolidPatternGuard: the high colour
+	bool directDraw;
+	SkColor directColor;
+	if (_DirectColor(true, &directDraw, &directColor)) {
+		SkPaint ink;
+		ink.setColor(directColor);
+		ink.setAntiAlias(fAntialiasText);
+		_DirectDraw(bounds, matrix, [&](SkCanvas* canvas) {
+			for (GlyphRun& run : runs) {
+				SkFont runFont(font);
+				runFont.setTypeface(run.typeface);
+				canvas->drawGlyphs(run.glyphs, run.positions,
+					SkPoint::Make(0, 0), runFont, ink);
+			}
+			if (lines)
+				_DrawTextLines(canvas, collector, ink);
+		});
+		return touched;
+	}
+
 	SkSurface* scratch = fTarget->Scratch(subpixel);
 	if (scratch == NULL)
 		return touched;
@@ -309,26 +357,8 @@ SkiaPainter::DrawString(const char* string, uint32 length, BPoint baseLine,
 		canvas->drawGlyphs(run.glyphs, run.positions, SkPoint::Make(0, 0),
 			runFont, ink);
 	}
-	if (lines) {
-		// AGGTextRenderer::StringRenderer::_DrawHorizontalLine(): from the
-		// left to the right of the glyph boxes, size / 12 wide
-		SkPaint line;
-		line.setColor(ink.getColor());
-		line.setAntiAlias(true);
-		line.setStyle(SkPaint::kStroke_Style);
-		line.setStrokeWidth(fFont.Size() / 12.0f);
-		float y = (float)collector.fEndY;
-		float left = collector.fBounds.left + 0.5f;
-		float right = collector.fBounds.right + 0.5f;
-		if ((fFont.Face() & B_UNDERSCORE_FACE) != 0)
-			canvas->drawLine(left, y + 2.5f, right, y + 2.5f, line);
-		if ((fFont.Face() & B_STRIKEOUT_FACE) != 0) {
-			font_height height;
-			fFont.GetHeight(height);
-			float strike = y - (height.ascent + height.descent) / 4 + 0.5f;
-			canvas->drawLine(left, strike, right, strike, line);
-		}
-	}
+	if (lines)
+		_DrawTextLines(canvas, collector, ink);
 	canvas->restore();
 
 	sk_sp<SkImage> coverage = scratch->makeImageSnapshot(bounds.makeOffset(

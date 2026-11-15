@@ -2122,6 +2122,12 @@ Compositor::GlassViewChanged(Window* window, View* view)
 	if (entry != NULL)
 		entry->hasGlassViews = hasGlass;
 	fEntryLock.Unlock();
+	// M12: a window with glass has pixels with alpha below 255; its GPU
+	// drawing then always goes through the R5 shader
+	SkiaDrawingEngine* skia
+		= dynamic_cast<SkiaDrawingEngine*>(window->GetDrawingEngine());
+	if (skia != NULL)
+		skia->SetOpaque(!hasGlass);
 
 	if (GlassActive()) {
 		BRegion content;
