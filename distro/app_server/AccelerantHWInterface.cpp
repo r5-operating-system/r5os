@@ -113,11 +113,6 @@ AccelerantHWInterface::AccelerantHWInterface()
 	HWInterface(),
 	fCardFD(-1),
 	fAccelerantImage(-1),
-// SPDX-SnippetBegin
-// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
-// SPDX-License-Identifier: MIT
-	fModeGuard(NULL),
-// SPDX-SnippetEnd
 	fAccelerantHook(NULL),
 	fEngineToken(NULL),
 	fSyncToken(),
@@ -167,6 +162,11 @@ AccelerantHWInterface::AccelerantHWInterface()
 	fInitialModeSwitch(true),
 
 	fRetraceSemaphore(-1),
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	fModeGuard(NULL),
+// SPDX-SnippetEnd
 
 	fRectParams(new (nothrow) fill_rect_params[kDefaultParamsCount]),
 	fRectParamsCount(kDefaultParamsCount),
