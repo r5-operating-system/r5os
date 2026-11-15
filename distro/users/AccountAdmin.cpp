@@ -530,8 +530,6 @@ ensure_desktop_links(const char* home)
 	if (home == NULL)
 		return;
 	ensure_desktop_link(home, "Home", home);
-	ensure_desktop_link(home, "Quick Tour", "/boot/system/bin/quicktour");
-	ensure_desktop_link(home, "User Guide", "/boot/system/bin/userguide");
 }
 
 
