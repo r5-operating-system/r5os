@@ -167,7 +167,17 @@ main()
 						LegacySignalBars(legacy.View(), frame, level,
 							foreground, background, style);
 						legacy.View()->Sync();
+						bool legacyDrew = draws_something(legacy, background);
 						legacy.Bitmap().Unlock();
+						// Two blank bitmaps would compare equal: make sure the
+						// old code really drew (a lit bar is never blank).
+						if (level >= 1 && style == 0 && !legacyDrew) {
+							char what[128];
+							snprintf(what, sizeof(what), "nothing drawn:"
+								" %gx%g level %d colors %d", width, height,
+								(int)level, c);
+							fail(what);
+						}
 
 						current.Bitmap().Lock();
 						current.Clear(background);
@@ -220,7 +230,8 @@ main()
 		bool visible = false;
 		if (glyph != NULL) {
 			const uint8* bits = (const uint8*)glyph->Bits();
-			for (int32 i = 3; i < glyph->BitsLength(); i += 4) {
+			int32 length = glyph->BitsLength();
+			for (int32 i = 3; i < length; i += 4) {
 				if (bits[i] != 0) {
 					visible = true;
 					break;
