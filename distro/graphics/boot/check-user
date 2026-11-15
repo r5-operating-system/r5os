@@ -12,11 +12,22 @@
 # standard account can write them. read-stick-logs.py copies ~/m10 of the
 # administrator and of every account under /boot/home/users.
 #
-# For the host tests: CHECK_LIVE=0 runs no program.
+# M11 stick (optional, end of boot 1): when the administrator's radeon_hd
+# settings have gpu_compositor true, check-user runs the M11 part instead:
+# VulkanTeapot of a standard account shares without a copy, and
+# r5-share-check passes as that account. Files in ~/m11/user-<account>.
+#
+# For the host tests: CHECK_LIVE=0 runs no program, R5_ADMIN_SETTINGS
+# moves the administrator's settings file.
 
 who=$(id -un 2>/dev/null || echo unknown)
 home=${R5_HOME:-$HOME}
-keep=$home/m10/user-$who
+stick=m10
+admin=${R5_ADMIN_SETTINGS:-/boot/home/config/settings/kernel/drivers/radeon_hd}
+if grep -q '^gpu_compositor true' "$admin" 2>/dev/null; then
+	stick=m11
+fi
+keep=$home/$stick/user-$who
 mkdir -p "$keep"
 report=$keep/check-user.txt
 : > "$report"
@@ -73,6 +84,41 @@ if [ "$(id -u 2>/dev/null)" = 0 ]; then
 	say 1 "account is a standard account (this one is uid 0)"
 else
 	say 0 "account is a standard account"
+fi
+
+if [ "$stick" = m11 ]; then
+	from=$(wc -l < "$syslog" 2>/dev/null | tr -d ' ')
+	first=$(head -n 1 "$syslog" 2>/dev/null | cksum)
+	runlive teapot "$bin"/VulkanTeapot --window --seconds 15
+	# M11 fourth review: a syslog rotated meanwhile is read on from
+	# syslog.1.
+	if [ "$first" != "$(head -n 1 "$syslog" 2>/dev/null | cksum)" ] \
+		&& [ -f "$syslog.1" ]; then
+		{ tail -n +"$((${from:-0} + 1))" "$syslog.1"; cat "$syslog"; } \
+			> "$keep/teapot-syslog.txt" 2>/dev/null
+	else
+		tail -n +"$((${from:-0} + 1))" "$syslog" > "$keep/teapot-syslog.txt" 2>/dev/null
+	fi
+	have '^window fps [0-9]' "$keep/teapot.txt" "VulkanTeapot: window fps line"
+	have 'app_server: window [0-9]+ zero-copy on' "$keep/teapot-syslog.txt" \
+		"VulkanTeapot of a standard account: zero-copy on"
+	runlive share "$bin"/r5-share-check
+	have 'app_server as a user refused: pass' "$keep/share.txt" \
+		"r5-share-check: argv[0] app_server as a user refused: pass"
+	have 'not app_server refused: pass' "$keep/share.txt" \
+		"r5-share-check: import by a program that is not app_server refused: pass"
+	have 'same number refused: pass' "$keep/share.txt" \
+		"r5-share-check: second import of the same number refused: pass"
+	none ': fail' "$keep/share.txt" "r5-share-check: no fail"
+	if [ "$bad" -eq 0 ]; then
+		emit PASS
+	else
+		emit FAIL
+	fi
+	sync
+	echo "check-user: files in $keep"
+	[ "$bad" -eq 0 ]
+	exit
 fi
 
 runlive gl-test "$bin"/r5-gl-test --selftest

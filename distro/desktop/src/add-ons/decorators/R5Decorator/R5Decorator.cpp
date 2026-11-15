@@ -93,6 +93,21 @@ R5Decorator::RegionAt(BPoint where, int32& tab) const
 	if (!fThinFrame || (fTopTab->flags & B_NOT_RESIZABLE) != 0)
 		return region;
 
+	// M11 review: the tab ends on the top line, so TabDecorator gives the
+	// line under the tab to the tab. The line itself is the top border,
+	// or a full-width tab could be resized from the top only at the
+	// corners. The buttons keep their regions.
+	if (region == REGION_TAB && where.y >= fBorderRect.top
+		&& where.y < fBorderRect.top + kFrameWidth
+		&& where.x >= fBorderRect.left && where.x <= fBorderRect.right)
+		region = REGION_TOP_BORDER;
+	// The same for a tab on the left (kLeftTitledWindowLook) and its line.
+	if (region == REGION_TAB && fTopTab->look == kLeftTitledWindowLook
+		&& where.x >= fBorderRect.left
+		&& where.x < fBorderRect.left + kFrameWidth
+		&& where.y >= fBorderRect.top && where.y <= fBorderRect.bottom)
+		region = REGION_LEFT_BORDER;
+
 	switch (region) {
 		case REGION_NONE:
 		case REGION_LEFT_BORDER:
@@ -301,11 +316,31 @@ R5Decorator::_DrawFrame(BRect rect)
 	if (!rect.Intersects(fBorderRect))
 		return;
 
-	// The line Haiku draws for a bordered window.
-	ComponentColors colors;
-	GetComponentColors(COMPONENT_LEFT_BORDER,
-		RegionHighlight(REGION_LEFT_BORDER), colors, fTopTab);
-	fDrawingEngine->StrokeRect(fBorderRect, colors[5]);
+	// The line Haiku draws for a bordered window. M11 review: each side
+	// has its own highlight (a resize or stack-and-tile highlight is per
+	// border), as DefaultDecorator::_DrawFrame does.
+	const BRect& r = fBorderRect;
+	const struct {
+		Component	component;
+		Region		region;
+		BPoint		start;
+		BPoint		end;
+	} sides[] = {
+		{ COMPONENT_LEFT_BORDER, REGION_LEFT_BORDER, r.LeftTop(),
+			r.LeftBottom() },
+		{ COMPONENT_TOP_BORDER, REGION_TOP_BORDER, r.LeftTop(),
+			r.RightTop() },
+		{ COMPONENT_RIGHT_BORDER, REGION_RIGHT_BORDER, r.RightTop(),
+			r.RightBottom() },
+		{ COMPONENT_BOTTOM_BORDER, REGION_BOTTOM_BORDER, r.LeftBottom(),
+			r.RightBottom() }
+	};
+	for (size_t i = 0; i < sizeof(sides) / sizeof(sides[0]); i++) {
+		ComponentColors colors;
+		GetComponentColors(sides[i].component,
+			RegionHighlight(sides[i].region), colors, fTopTab);
+		fDrawingEngine->StrokeLine(sides[i].start, sides[i].end, colors[5]);
+	}
 }
 
 

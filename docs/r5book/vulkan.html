@@ -65,6 +65,15 @@
 			<p>Each swapchain image has its own <code class="inline">BBitmap</code>. Present copies the image into it
 			and makes it the view's bitmap. Your <code class="inline">Draw()</code> is not replaced. Lavapipe renders
 			on the CPU; RADV renders on the GPU and copies the result into the bitmap.</p>
+
+			<p>When the windows are composed on the GPU and your program renders with RADV, nothing is copied:
+			present hands the swapchain image to app_server, which composes it straight into the screen, and the
+			image comes back to your swapchain once a newer one is shown. The image follows your view when it is
+			hidden, shown, moved, resized or scrolled. In the CPU mode, with Lavapipe, or when app_server does not
+			take the images, a new swapchain takes the copy path above by itself. When app_server stops taking them
+			while your swapchain runs (the switch to the CPU mode, a GPU reset), the next present returns
+			<code class="inline">VK_ERROR_OUT_OF_DATE_KHR</code>: build a new swapchain, as for a size change, and it
+			takes the copy path. Your program uses the same calls either way.</p>
 		</section>
 
 		<section class="entry" id="surface">

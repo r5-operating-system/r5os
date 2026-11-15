@@ -1,0 +1,4 @@
+r5-share-check: argv[0] app_server as a user refused: pass
+r5-share-check: import by a program that is not app_server refused: pass
+r5-share-check: second import of the same number refused: pass
+exit 0 after 0 s

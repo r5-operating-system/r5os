@@ -146,7 +146,13 @@ public:
 			MultiLocker&		ScreenLocker() { return fScreenLock; }
 
 			status_t			LockDirectScreen(team_id team);
-			status_t			UnlockDirectScreen(team_id team);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			// all: the team ended, give back every nested lock (M11 review)
+			status_t			UnlockDirectScreen(team_id team,
+									bool all = false);
+// SPDX-SnippetEnd
 
 			const ::VirtualScreen& VirtualScreen() const
 									{ return fVirtualScreen; }
@@ -385,6 +391,11 @@ private:
 			MultiLocker			fScreenLock;
 			BLocker				fDirectScreenLock;
 			team_id				fDirectScreenTeam;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			int32				fDirectScreenCount;
+// SPDX-SnippetEnd
 			int32				fCurrentWorkspace;
 			int32				fPreviousWorkspace;
 

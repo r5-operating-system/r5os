@@ -1,7 +1,8 @@
 #!/bin/bash
 # Cross-build vkcube from Vulkan-Tools 1.4.367 and put it in vulkan_tools.
 # Also refreshes r5-wsi-window-test.sh and r5-gl-test inside the vulkanteapot
-# package (1.0.0-4). r5-gl-test links libglvnd (libEGL, libGL).
+# package (1.0.0-5). r5-gl-test links libglvnd (libEGL, libGL).
+# TEAPOT_ONLY=1 repacks only vulkanteapot and leaves vulkan_tools as it is.
 # Apache-2.0 for cube.c. The window file is MIT.
 set -eu
 HAIKU=/home/nickr/r5os/haiku
@@ -21,7 +22,7 @@ STAGE="$SRCROOT/vkcube-out"
 TOOLS_SRC="$REPO/distro/packages/x86_64/vulkan_tools-1.4.367-1-x86_64.hpkg"
 TEAPOT_SRC="$REPO/distro/packages/x86_64/vulkanteapot-1.0.0-1-x86_64.hpkg"
 TOOLS="$REPO/distro/packages/x86_64/vulkan_tools-1.4.367-2-x86_64.hpkg"
-TEAPOT="$REPO/distro/packages/x86_64/vulkanteapot-1.0.0-4-x86_64.hpkg"
+TEAPOT="$REPO/distro/packages/x86_64/vulkanteapot-1.0.0-5-x86_64.hpkg"
 
 if [[ ! -f "$CUBE_SRC/cube.c" ]]; then
 	if [[ ! -f "$TARBALL" ]]; then
@@ -137,12 +138,14 @@ PY
 import pathlib, sys
 path = pathlib.Path(sys.argv[1])
 text = path.read_text()
-text = text.replace("version\t\t\t1.0.0-1", "version\t\t\t1.0.0-4")
-text = text.replace("vulkanteapot = 1.0.0-1", "vulkanteapot = 1.0.0-4")
+text = text.replace("version\t\t\t1.0.0-1", "version\t\t\t1.0.0-5")
+text = text.replace("vulkanteapot = 1.0.0-1", "vulkanteapot = 1.0.0-5")
 path.write_text(text)
 PY
 }
 
-repack "$TOOLS_SRC" "$TOOLS" "$SRCROOT/vulkan-tools-pkg" add_vkcube
+if [[ "${TEAPOT_ONLY:-0}" != 1 ]]; then
+	repack "$TOOLS_SRC" "$TOOLS" "$SRCROOT/vulkan-tools-pkg" add_vkcube
+fi
 repack "$TEAPOT_SRC" "$TEAPOT" "$SRCROOT/teapot-pkg" add_script
 echo "packed vkcube and the window script"

@@ -1,0 +1,4 @@
+gpu_compositor true
+gpu_debug true
+gpu_selftest true
+gpu_hang_test 1

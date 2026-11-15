@@ -42,6 +42,11 @@
 #include <Accelerant.h>
 #include <Cursor.h>
 #include <Directory.h>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <Locker.h>
+// SPDX-SnippetEnd
 #include <FindDirectory.h>
 #include <Path.h>
 #include <PathFinder.h>
@@ -157,6 +162,11 @@ AccelerantHWInterface::AccelerantHWInterface()
 	fInitialModeSwitch(true),
 
 	fRetraceSemaphore(-1),
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	fModeGuard(NULL),
+// SPDX-SnippetEnd
 
 	fRectParams(new (nothrow) fill_rect_params[kDefaultParamsCount]),
 	fRectParamsCount(kDefaultParamsCount),
@@ -554,6 +564,18 @@ AccelerantHWInterface::_SetFallbackMode(display_mode& newMode) const
 status_t
 AccelerantHWInterface::SetMode(const display_mode& mode)
 {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// M11 review: after the frame that may use the old back buffer
+	BLocker* guard = fModeGuard;
+	if (guard != NULL)
+		guard->Lock();
+	struct GuardUnlock {
+		BLocker* guard;
+		~GuardUnlock() { if (guard != NULL) guard->Unlock(); }
+	} guardUnlock = { guard };
+// SPDX-SnippetEnd
 	AutoWriteLocker _(this);
 	// TODO: There are places this function can fail,
 	// maybe it needs to roll back changes in case of an

@@ -494,6 +494,11 @@ Desktop::Desktop(uid_t userID, const char* targetScreen)
 	fScreenLock("screen lock"),
 	fDirectScreenLock("direct screen lock"),
 	fDirectScreenTeam(-1),
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	fDirectScreenCount(0),
+// SPDX-SnippetEnd
 	fCurrentWorkspace(0),
 	fPreviousWorkspace(0),
 	fAllWindows(kAllWindowList),
@@ -1103,20 +1108,28 @@ Desktop::LockDirectScreen(team_id team)
 	// M11 step 5, decision 9: a BWindowScreen pauses the compositor. The
 	// pause takes the window lock, so it comes before the direct screen
 	// lock: _SetCurrentWorkspaceConfiguration() takes them the other way.
+	// M11 review: a second lock of the team that holds it (two
+	// BWindowScreens) nests; it neither pauses again nor locks again, so
+	// the last unlock gives the screen and the pause back.
+	if (fDirectScreenTeam == team
+		&& fDirectScreenLock.LockingThread() == find_thread(NULL)) {
+		fDirectScreenCount++;
+		return B_OK;
+	}
 	if (fCompositor != NULL)
 		fCompositor->DirectScreenChanged(true);
 // SPDX-SnippetEnd
 
 	status_t status = fDirectScreenLock.LockWithTimeout(1000000L);
-	if (status == B_OK)
-		fDirectScreenTeam = team;
-
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-	else if (fCompositor != NULL && fDirectScreenTeam < 0) {
-		// nobody has the screen (another team still holding it keeps the
-		// pause)
+	if (status == B_OK) {
+		fDirectScreenTeam = team;
+		fDirectScreenCount = 1;
+	} else if (fCompositor != NULL) {
+		// this team does not get the screen; the compositor counts the
+		// teams that hold or wait for it (M11 review)
 		fCompositor->DirectScreenChanged(false);
 	}
 // SPDX-SnippetEnd
@@ -1126,14 +1139,23 @@ Desktop::LockDirectScreen(team_id team)
 
 
 status_t
-Desktop::UnlockDirectScreen(team_id team)
-{
-	if (fDirectScreenTeam == team) {
-		fDirectScreenLock.Unlock();
-		fDirectScreenTeam = -1;
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+Desktop::UnlockDirectScreen(team_id team, bool all)
+// SPDX-SnippetEnd
+{
+	if (fDirectScreenTeam == team) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// M11 review: the owner is cleared before the unlock; a waiting
+		// team takes the lock and sets itself, and must not be cleared.
+		if (!all && --fDirectScreenCount > 0)
+			return B_OK;
+		fDirectScreenCount = 0;
+		fDirectScreenTeam = -1;
+		fDirectScreenLock.Unlock();
 		if (fCompositor != NULL)
 			fCompositor->DirectScreenChanged(false);
 // SPDX-SnippetEnd
@@ -2159,7 +2181,9 @@ Desktop::WindowAt(BPoint where)
 		::Decorator* decorator = window->Decorator();
 		if (window->IsVisible() && decorator != NULL
 			&& decorator->InputMarginContains(where)) {
-			return window;
+			// M11 fourth review: the stack's front window, as above
+			Window* front = window->TopLayerStackWindow();
+			return front != NULL ? front : window;
 		}
 // SPDX-SnippetEnd
 	}
@@ -3874,10 +3898,17 @@ Desktop::RebuildAndRedrawAfterWindowChange(Window* changedWindow,
 	for (Window* window = CurrentWindows().LastWindow(); window != NULL;
 			window = window->PreviousWindow(fCurrentWorkspace)) {
 		if (!window->IsHidden()) {
-			if (window == changedWindow)
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			// M11 review: in the GPU mode the window's buffer is drawn in
+			// full, its covered parts too (after ClippingChanged, below).
+			bool composed = fCompositor != NULL && fCompositor->IsActive();
+			if (window == changedWindow && !composed)
 				dirty.IntersectWith(&stillAvailableOnScreen);
 
 			window->SetClipping(&stillAvailableOnScreen);
+// SPDX-SnippetEnd
 			window->SetScreen(_DetermineScreenFor(window->Frame()));
 
 			if (window->ServerWindow()->IsDirectlyAccessing()) {
@@ -3889,6 +3920,21 @@ Desktop::RebuildAndRedrawAfterWindowChange(Window* changedWindow,
 			stillAvailableOnScreen.Exclude(&window->VisibleRegion());
 		}
 	}
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+
+	// M11 (QEMU after the stack review): a new title, look or tab place
+	// changes the window's shape too. Without this the compositor kept
+	// the old shape, and a tab that got shorter left its old end on
+	// screen until something else rebuilt the clipping.
+	if (fCompositor != NULL)
+		fCompositor->ClippingChanged();
+	// M11 third review: the buffer has its new size only now, so a tab or
+	// border that grew is cut to the new buffer, not the old one.
+	if (fCompositor != NULL && fCompositor->IsActive())
+		dirty.IntersectWith(&changedWindow->DrawableRegion());
+// SPDX-SnippetEnd
 
 	_SetBackground(stillAvailableOnScreen);
 	_WindowChanged(changedWindow);
@@ -4061,7 +4107,13 @@ Desktop::_SetCurrentWorkspaceConfiguration()
 			"lock.\n", fDirectScreenTeam);
 
 		debug_thread(fDirectScreenTeam);
-		fDirectScreenTeam = -1;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// M11 review: the owner stays. Its thread still holds the lock,
+		// and its UnlockDirectScreen (also the one when the app ends)
+		// must still match, or the lock and the pause stay for good.
+// SPDX-SnippetEnd
 	} else
 		fDirectScreenLock.Unlock();
 

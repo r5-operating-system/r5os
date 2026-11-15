@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: 2026 R5OS Contributors
 # SPDX-License-Identifier: MIT
 #
-# M10 stick: plant the boot 1 settings (distro/graphics/boot/radeon_hd,
-# "gpu_selftest true" and nothing else) into r5-os-anyboot.iso, so the
+# Stick: plant the boot 1 settings (distro/graphics/boot/radeon_hd; for M11
+# gpu_compositor true, gpu_debug true, gpu_selftest true) into r5-os-anyboot.iso, so the
 # first boot runs the self-test with every GPU switch at its default.
 # check, boot-next and check-user come from the mesa_radv package.
 # No periodic sync: rounds 3-5 synced to the stick every 2-30 s and every
@@ -32,8 +32,25 @@ mkdir myfs/home/config
 mkdir myfs/home/config/settings
 mkdir myfs/home/config/settings/kernel
 mkdir myfs/home/config/settings/kernel/drivers
-put $STAGE/radeon_hd myfs/home/config/settings/kernel/drivers/radeon_hd
-put $STAGE/kernel myfs/home/config/settings/kernel/drivers/kernel
+rm myfs/home/config/settings/kernel/drivers/radeon_hd
+rm myfs/home/config/settings/kernel/drivers/kernel
+cp :$STAGE/radeon_hd myfs/home/config/settings/kernel/drivers/radeon_hd
+cp :$STAGE/kernel myfs/home/config/settings/kernel/drivers/kernel
 quit
 EOT
+# bfs_shell has no "put" (the old lines failed and still printed planted):
+# read both files back and stop when they differ.
+for name in radeon_hd kernel; do
+	got=$("$BFS" --start-offset 6291456 "$IMG" <<EOT 2>/dev/null
+cat myfs/home/config/settings/kernel/drivers/$name
+quit
+EOT
+)
+	for line in $(tr ' ' '_' < "$STAGE/$name"); do
+		if ! printf '%s\n' "$got" | tr ' ' '_' | grep -q -- "$line"; then
+			echo "plant FAIL: $line is not in the image's $name" >&2
+			exit 1
+		fi
+	done
+done
 echo planted

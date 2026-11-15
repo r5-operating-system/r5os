@@ -21,6 +21,13 @@
 
 #include <KernelExport.h>
 #include <kernel.h>
+/* radeon_hd has its own lock.h (guard LOCK_H); the VM headers need the
+ * kernel's (mutex, rw_lock), so it is named by its path. */
+#include <kernel/lock.h>
+#include <vm/VMAddressSpace.h>
+#include <vm/VMArea.h>
+#include <vm/VMCache.h>
+#include <vm/vm.h>
 
 #include <driver_settings.h>
 #include <stdio.h>
@@ -828,7 +835,13 @@ gpu_stage_pace_wait(radeon_info* info, int slot, uint64 sequence,
 	pace.ms = (int32)((system_time() - start) / 1000);
 	gpu_lock();
 	if (!pace.hang) {
-		if (slot >= 0 && slot < (int)kMaxJob)
+		/* M11 stick 50, boot 4: while this wait ran unlocked, the EOP
+		 * retire may have freed this slot and a client's job (app_server's
+		 * compose) taken it. Clearing it then dropped that job: its sync
+		 * points were never signaled and the compositor waited for good.
+		 * Only this job's own sequence is cleared. */
+		if (slot >= 0 && slot < (int)kMaxJob && sJobs[slot].live
+			&& sJobs[slot].sequence == sequence)
 			sJobs[slot].live = false;
 	} else if (slot >= 0) {
 		bigtime_t deadline = system_time() + 2000000;
@@ -2128,6 +2141,63 @@ static int amd_scanout(void* info, uint32* width, uint32* height,
 	uint32* bytesPerRow, uint32* format, uint64* vramOffset, uint64* bytes);
 
 
+/* M11 third review: fork() copies every area of a team, a BO_MAP mapping
+ * too (B_KERNEL_AREA does not stop that), onto the same cache. A child
+ * that never calls exec would keep the VRAM after the buffer is freed and
+ * given to another one. The last reference deletes those copies first;
+ * the program's own clones are gone by then. The ids are taken under the
+ * cache lock and deleted after it (vm_delete_area locks the cache). */
+extern "C" bool team_is_valid(team_id id);
+
+
+static int
+amd_drop_copies(int32_t kernelArea)
+{
+	/* M11 fourth review: no small cap (a program could leave the VRAM out
+	 * of the allocator with more copies than that), and one log line per
+	 * call, not per copy. Each round deletes what it found, so the loop
+	 * ends unless copies are made faster than they are deleted. */
+	int32 deleted = 0;
+	team_id lastTeam = -1;
+	for (int round = 0; round < 4096; round++) {
+		team_id teams[16];
+		area_id areas[16];
+		int32 count = 0;
+		VMArea* source = VMAreas::Lookup(kernelArea);
+		if (source == NULL)
+			return B_OK;
+		VMCache* cache = vm_area_get_locked_cache(source);
+		for (VMArea* area = cache->areas.First(); area != NULL && count < 16;
+				area = cache->areas.GetNext(area)) {
+			if (area->id == kernelArea)
+				continue;
+			teams[count] = area->address_space->ID();
+			areas[count] = area->id;
+			count++;
+		}
+		vm_area_put_locked_cache(cache);
+		if (count == 0) {
+			if (deleted != 0) {
+				dprintf("radeon_hd: %" B_PRId32 " vram mapping copies deleted,"
+					" last of team %" B_PRId32 "\n", deleted, lastTeam);
+			}
+			return B_OK;
+		}
+		for (int32 i = 0; i < count; i++) {
+			// External review: a copy whose team just ended is gone
+			// with it, as in gpu_bo_release.
+			if (team_is_valid(teams[i]))
+				vm_delete_area(teams[i], areas[i], true);
+			deleted++;
+			lastTeam = teams[i];
+		}
+	}
+	dprintf("radeon_hd: vram mapping copies left after %" B_PRId32
+		" deleted\n", deleted);
+	return B_BUSY;
+}
+
+
 r5_gpu_backend_ops gR5GpuOps = {
 	amd_device,
 	amd_read_reg,
@@ -2171,7 +2241,8 @@ r5_gpu_backend_ops gR5GpuOps = {
 	amd_selftest,
 	amd_hang_job,
 	amd_fault_status,
-	amd_hang_release
+	amd_hang_release,
+	amd_drop_copies
 };
 
 

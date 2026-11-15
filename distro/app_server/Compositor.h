@@ -74,6 +74,10 @@ public:
 									WindowHWInterface* iface);
 	// Window::~Window, after its engine is gone.
 			void				RemoveWindow(Window* window);
+	// Window::~Window, around the engine's end and RemoveWindow, so a
+	// rebind (pause, CPU mode, restart) never uses the deleted engine.
+			bool				LockEntries() { return fEntryLock.Lock(); }
+			void				UnlockEntries() { fEntryLock.Unlock(); }
 
 	// Desktop thread, all windows locked.
 			void				ClippingChanged();
@@ -113,6 +117,11 @@ public:
 									int32 shareId, uint32 index);
 			void				ShareEnd(team_id team, int32 viewToken,
 									int32 shareId);
+	// M11 fourth review: from a ServerWindow thread, window read-locked.
+			void				ShareViewsChanged(Window* window);
+	// M11 fourth review: from ~ServerWindow, all windows locked, before
+	// the app can go.
+			void				ShareWindowGone(Window* window);
 
 private:
 	friend class WindowBuffer;
@@ -182,11 +191,13 @@ private:
 									uint32 background,
 									const BRegion& shared);
 			void				_ShareLog(Window* window, const char* reason);
+			void				_ShareLogOn(Window* window);
 			void				_ShareShape(Share* share);
 			void				_ShareFrame(ShareDrawList& draws,
 									BRegion& retry);
 			void				_ShareFree(Share* share);
 			void				_ShareRetire();
+			void				_ShareGiveBack(Share* share);
 			bool				_ShareReady(uint64 sequence);
 			void				_ShareRetireDone();
 			void				_ScanoutFree(CompositorVulkan* vk);
@@ -256,6 +267,10 @@ private:
 			int32				fSampleCount;
 			bigtime_t			fReportStart;
 			bigtime_t			fCpuAtReport;
+			bigtime_t			fTeamCpuAtReport;
+			// M11 stick: gpu_compositor_zero_copy false. Read by ShareImages,
+			// written at start and by _Report.
+			int32				fZeroCopyOff;
 			bigtime_t			fLateLogged;
 
 			// M11 step 4: written with all windows locked, read by the
@@ -270,6 +285,8 @@ private:
 			BLocker				fAnimLock;
 			BObjectList<Ghost, true> fGhosts;
 			int32				fLastWorkspace;
+			// M11 review: the start of the last ClippingChanged pass
+			bigtime_t			fClipPassTime;
 			bool				fSlideActive;
 			bool				fSlideSnapshot;
 			bigtime_t			fSlideStart;
@@ -292,8 +309,14 @@ private:
 	volatile bool				fModePending;
 			bool				fPauseRedraw;
 			BObjectList<Window, false> fDirectWindows;
-	volatile bool				fDirectScreen;
+	// M11 review: the teams that hold or wait for the direct screen
+	// (LockDirectScreen); the pause ends when none is left
+			int32				fDirectScreenWanted;
 			const char*	volatile fFailure;
+			// M11 review: a compose job outlived its fence limit and the
+			// grace after it; its memory is never freed (the GPU may still
+			// read or write it), and the device is not torn down.
+			int32				fGpuBusy;
 };
 
 

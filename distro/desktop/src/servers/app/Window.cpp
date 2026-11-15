@@ -202,8 +202,12 @@ Window::~Window()
 	// window has already detached its engine in its own destructor.)
 	Compositor* compositor = fDesktop != NULL ? fDesktop->GetCompositor() : NULL;
 	if (compositor != NULL) {
+		// M11 review: under the entry lock, or a rebind between the two
+		// calls sets an interface on the deleted engine.
+		compositor->LockEntries();
 		fDrawingEngine.Unset();
 		compositor->RemoveWindow(this);
+		compositor->UnlockEntries();
 	}
 // SPDX-SnippetEnd
 }

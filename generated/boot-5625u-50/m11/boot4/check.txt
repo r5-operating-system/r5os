@@ -1,0 +1,17 @@
+boot 4 (m11)
+settings: gpu_compositor true gpu_debug true gpu_selftest true gpu_hang_test 1 
+PASS boot number matches m11/next
+PASS boot marker
+PASS self-test finished
+PASS decorator: r5 loaded
+PASS no gpu lost other than the hang's watchdog dump
+PASS gpu compositor on radv
+FAIL one gpu hang (found 0, want 1)
+FAIL gpu reset mode2 ok
+FAIL gpu selftest after reset ok
+FAIL gpu compositor restarted after reset
+FAIL no gpu compositor off
+PASS no gpu off until reboot
+MANUAL the pointer moved the whole time: ____
+INFO shutdown of boot 3: 0 s from boot-next to the last heartbeat
+FAIL

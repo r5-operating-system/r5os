@@ -947,8 +947,8 @@ DefaultWindowBehaviour::MouseDown(BMessage* message, BPoint where,
 // SPDX-License-Identifier: MIT
 	bool primaryEdgeResize = action == ACTION_RESIZE_BORDER
 		&& (buttons & B_PRIMARY_MOUSE_BUTTON) != 0;
-// SPDX-SnippetEnd
 	if (action != ACTION_RESIZE_BORDER || primaryEdgeResize) {
+// SPDX-SnippetEnd
 		// activate window if in click to activate mode, else only focus it
 		if (desktopSettings.MouseMode() == B_NORMAL_MOUSE) {
 			fDesktop->ActivateWindow(fWindow);

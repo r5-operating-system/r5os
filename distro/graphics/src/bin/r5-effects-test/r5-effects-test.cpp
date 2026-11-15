@@ -248,17 +248,20 @@ private:
 		TextView* view = new TextView(window->Bounds(), glass || full, tick);
 		window->AddChild(view);
 		window->Show();
+		int result = 0;
 		if (glass || full) {
 			// The window's top view, and the view that fills it: a child
-			// with its own colour stays opaque otherwise.
-			_Check(set_window_glass(window, true));
+			// with its own colour stays opaque otherwise. M11 review: a
+			// refused call is the exit code, not only a printed line.
+			result = _Check(set_window_glass(window, true));
 			if (window->Lock()) {
-				_Check(set_view_glass(view, true));
+				if (_Check(set_view_glass(view, true)) != 0)
+					result = 1;
 				window->Unlock();
 			}
 		}
 		SetPulseRate(fWindowSeconds * 1000000LL);
-		return 0;
+		return result;
 	}
 
 	virtual void Pulse()

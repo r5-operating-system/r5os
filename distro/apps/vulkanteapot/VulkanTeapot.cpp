@@ -31,7 +31,7 @@ typedef float GLfloat;
 
 static const int kSize = 384;
 
-int run_window(int cube);
+int run_window(int cube, int seconds);
 static const int kSubDiv = 8;
 
 
@@ -660,6 +660,7 @@ main(int argc, char** argv)
 	int selftest = 0;
 	int cube = 0;
 	int windowMode = 0;
+	int seconds = 0;
 	for (int i = 1; i < argc; i++) {
 		if (strcmp(argv[i], "--selftest") == 0)
 			selftest = 1;
@@ -667,9 +668,11 @@ main(int argc, char** argv)
 			cube = 1;
 		else if (strcmp(argv[i], "--window") == 0)
 			windowMode = 1;
+		else if (strcmp(argv[i], "--seconds") == 0 && i + 1 < argc)
+			seconds = atoi(argv[++i]);
 	}
 	if (windowMode && !selftest)
-		return run_window(cube);
+		return run_window(cube, seconds);
 	Mesh mesh = cube ? build_cube() : build_teapot();
 	float matrix[16];
 	mvp(matrix);

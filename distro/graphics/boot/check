@@ -11,6 +11,16 @@
 # ~/m10/boot<k>/. A directory that already has a check.txt is never
 # reused: the next one is boot<k>-2, boot<k>-3, ...
 #
+# M11 stick: a settings file with gpu_compositor true is an M11 boot:
+# gpu_hang_test 1 = 4, gpu_compositor_lavapipe true = 3,
+# gpu_compositor_fail true = 2, otherwise 1 (generated/gpu-m11/BRIEF.md,
+# "Stick (step 6)"). The note and the files are in ~/m11 instead of ~/m10.
+# "check wait" waits for the self-test and says when the scenario can
+# start; in M11 it writes only ~/m11/scenario-from-boot<k>, where this
+# boot's scenario lines start. In boot 1 check runs r5-share-check and
+# VulkanTeapot twice (zero-copy, then the copy path with
+# gpu_compositor_zero_copy false for that run only), about three minutes.
+#
 # For the host tests: R5_HOME, R5_SYSLOG, R5_SYSTEM_SETTINGS and
 # R5_NODE_DIR, R5_USER_SETTINGS, R5_CACHE and R5_BIN move the paths,
 # CHECK_WAIT=0 does not wait, CHECK_LIVE=0 runs no program.
@@ -39,8 +49,20 @@ if [ ! -f "$settings" ]; then
 	settings=$sysset
 fi
 
-# Which boot is this?
-if [ ! -f "$settings" ]; then
+# Which boot is this? M11 first: its boot 4 also has gpu_hang_test 1.
+stick=m10
+if [ -f "$settings" ] && grep -q '^gpu_compositor true' "$settings"; then
+	stick=m11
+	if grep -Eq '^gpu_hang_test[[:space:]]+1' "$settings"; then
+		boot=4
+	elif grep -q '^gpu_compositor_lavapipe true' "$settings"; then
+		boot=3
+	elif grep -q '^gpu_compositor_fail true' "$settings"; then
+		boot=2
+	else
+		boot=1
+	fi
+elif [ ! -f "$settings" ]; then
 	boot=1
 elif grep -q '^gpu_app_server_fail true' "$settings"; then
 	boot=6
@@ -60,6 +82,83 @@ elif ! grep -Ev '^(gpu_selftest true)?[[:space:]]*$' "$settings" | grep -q .; th
 else
 	echo "FAIL settings match no boot: $settings"
 	echo FAIL
+	exit 1
+fi
+
+# M11: its own note and files, so the M10 boots are never mixed in.
+if [ "$stick" = m11 ]; then
+	m10=$home/m11
+	mkdir -p "$m10"
+fi
+
+# This boot's syslog lines: after the last boot loader line.
+this_boot() {
+	for part in "$syslog.1" "$syslog.old" "$syslog"; do
+		[ -f "$part" ] && cat "$part"
+	done | awk '
+		/Welcome to the Haiku boot loader!/ { buf = ""; seen = 1 }
+		{ all = all $0 "\n" }
+		seen { buf = buf $0 "\n" }
+		END { if (seen) printf "%s", buf; else printf "%s", all }
+	'
+}
+
+# check wait: the self-test, and in M11 where the scenario starts.
+if [ "$1" = wait ]; then
+	# M11 fourth review: a boot 1 that froze during check's copy-path run
+	# (no trap runs on a reset) left the zero-copy switch off. It goes
+	# before the scenario, or three checks fail that it did not cause.
+	if [ "$stick" = m11 ] && [ "$settings" != "$sysset" ] \
+		&& grep -q '^gpu_compositor_zero_copy' "$settings" 2>/dev/null; then
+		grep -v '^gpu_compositor_zero_copy' "$settings" > "$settings.wait"
+		rm -f "$settings"
+		mv "$settings.wait" "$settings"
+		sync
+		echo "check: the zero-copy switch of a stopped check is gone again"
+		# app_server reads the switch at its 10 s report
+		sleep 12
+	fi
+	# M11 third review: the file of an earlier boot also ends in
+	# "selftest done" until this boot's self-test renames it, about 5 s
+	# after Deskbar. Only a file written after this boot's first dated
+	# syslog line counts (syslog_time_stamps true). After 60 s of waiting
+	# any finished file counts: by then this boot's self-test has renamed
+	# the old one (so a clock that differs only costs that minute).
+	since=$(this_boot | awk '
+		/^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9] / {
+			print substr($0, 1, 19); exit
+		}')
+	selftest_ready() {
+		grep -q '^selftest done' "$selftest" 2>/dev/null || return 1
+		[ -n "$since" ] && [ "$i" -lt 60 ] || return 0
+		written=$(date -r "$selftest" '+%Y-%m-%d %H:%M:%S' 2>/dev/null) \
+			|| return 0
+		[ ! "$written" \< "$since" ]
+	}
+	i=0
+	while [ "$i" -lt "$wait_s" ] && ! selftest_ready; do
+		if [ $((i % 30)) -eq 0 ]; then
+			echo "check: waiting for the self-test, $i of $wait_s s"
+		fi
+		sleep 5
+		i=$((i + 5))
+	done
+	if selftest_ready; then
+		# M11: the last syslog line now, and how often this boot has it;
+		# the scenario's lines come after that copy, so the self-test's
+		# own windows do not count for it.
+		# External review: only boot 1 reads it.
+		if [ "$stick" = m11 ] && [ "$boot" = 1 ] && [ -f "$syslog" ]; then
+			this_boot > "$m10/scenario-wait.txt"
+			last=$(tail -n 1 "$m10/scenario-wait.txt")
+			copies=$(grep -cxF -- "$last" "$m10/scenario-wait.txt")
+			{ echo "$copies"; echo "$last"; } > "$m10/scenario-from-boot$boot"
+			rm -f "$m10/scenario-wait.txt"
+		fi
+		echo "check: the self-test is done; start the scenario now (boot $boot)"
+		exit 0
+	fi
+	echo "FAIL the self-test did not finish in $wait_s s"
 	exit 1
 fi
 
@@ -162,9 +261,10 @@ extract_syslog
 slog=$keep/syslog.txt
 
 # The hang test writes its lines late. Wait for the last one.
-case $boot in
-2) until_pat='gpu selftest after reset (ok|failed)' ;;
-3) until_pat='gpu off until reboot' ;;
+case $stick$boot in
+m102) until_pat='gpu selftest after reset (ok|failed)' ;;
+m103) until_pat='gpu off until reboot' ;;
+m114) until_pat='gpu compositor (restarted after reset|off)|gpu off until reboot' ;;
 *) until_pat= ;;
 esac
 if [ "$wait_s" -gt 0 ] && [ -n "$until_pat" ]; then
@@ -203,7 +303,7 @@ runlive() {
 	fi
 }
 
-emit "boot $boot"
+emit "boot $boot ($stick)"
 if [ -f "$settings" ]; then
 	emit "settings: $(tr '\n' ' ' < "$settings")"
 else
@@ -216,9 +316,9 @@ if [ -f "$m10/next" ]; then
 	want=$(head -n 1 "$m10/next" | tr -d ' \r')
 fi
 if [ "$want" = "$boot" ]; then
-	say 0 "boot number matches m10/next"
+	say 0 "boot number matches $stick/next"
 else
-	say 1 "boot number $boot, but m10/next says $want"
+	say 1 "boot number $boot, but $stick/next says $want"
 fi
 
 have 'Welcome to the Haiku boot loader!' "$slog" "boot marker"
@@ -271,6 +371,299 @@ window_ok() {
 	have '^device lost no' "$w" "win-glteapot: device lost no"
 }
 
+# --- M11 (generated/gpu-m11/BRIEF.md, "Stick (step 6)") ---
+
+# The syslog from line n + 1 on, for a live run of check itself. M11
+# fourth review: the count carries the checksum of the first line, so a
+# syslog that was rotated meanwhile is read on from syslog.1.
+syslog_count() {
+	if [ -f "$syslog" ]; then
+		n=$(wc -l < "$syslog" | tr -d ' ')
+		echo "$n $(head -n 1 "$syslog" | cksum | cut -d ' ' -f 1)"
+	else
+		echo "0 none"
+	fi
+}
+syslog_since() {
+	n=${1%% *}
+	sum=${1#* }
+	now=$(head -n 1 "$syslog" 2>/dev/null | cksum | cut -d ' ' -f 1)
+	if [ "$sum" != none ] && [ "$sum" != "$now" ] && [ -f "$syslog.1" ]; then
+		tail -n +"$((n + 1))" "$syslog.1" 2>/dev/null
+		cat "$syslog" 2>/dev/null
+	else
+		tail -n +"$((n + 1))" "$syslog" 2>/dev/null
+	fi
+}
+# wait_line <pattern> <from line> <seconds>
+wait_line() {
+	j=0
+	while [ "$j" -lt "$3" ]; do
+		if syslog_since "$2" | grep -Eq -- "$1"; then
+			return 0
+		fi
+		sleep 1
+		j=$((j + 1))
+	done
+	return 1
+}
+# The numbers of a line, as one list: values <sed expression> <file>
+values() {
+	sed -n "$1" "$2" 2>/dev/null | tr '\n' ' '
+}
+
+# VulkanTeapot for 30 s, with the buffer count before, during and after.
+teapot_run() {
+	name=$1
+	: > "$keep/$name.txt"
+	if [ "$live" -ne 1 ]; then
+		return
+	fi
+	from=$(syslog_count)
+	"$bin"/r5-share-check count > "$keep/$name-count.txt" 2>&1
+	timeout 90 "$bin"/VulkanTeapot --window --seconds 30 \
+		> "$keep/$name.txt" 2>&1 &
+	tp=$!
+	sleep 10
+	"$bin"/r5-share-check count >> "$keep/$name-count.txt" 2>&1
+	wait "$tp"
+	echo "exit $?" >> "$keep/$name.txt"
+	sleep 2
+	"$bin"/r5-share-check count >> "$keep/$name-count.txt" 2>&1
+	syslog_since "$from" > "$keep/$name-syslog.txt"
+}
+teapot_report() {
+	name=$1
+	what=$2
+	have '^window fps [0-9]' "$keep/$name.txt" "VulkanTeapot fps line ($what)"
+	fps=$(values 's/^window fps \([0-9.]*\) .*/\1/p' "$keep/$name.txt")
+	cpu=$(values 's/.*app_server: team cpu \([0-9]*\) ms per 10 s.*/\1/p' \
+		"$keep/$name-syslog.txt")
+	med=$(values 's/.*compose median \([0-9]*\) us cpu \([0-9]*\) ms.*/\1 us \2 ms/p' \
+		"$keep/$name-syslog.txt")
+	bos=$(values 's/^r5-share-check: buffers \([0-9-]*\)/\1/p' "$keep/$name-count.txt")
+	emit "INFO $what: fps ${fps:-none}; app_server team cpu ms per 10 s: ${cpu:-none}"
+	emit "INFO $what: compose median, cpu per 10 s: ${med:-none}"
+	emit "INFO $what: bo_count before, during, after VulkanTeapot: ${bos:-none}"
+	printf '%s fps %s team_cpu %s compose %s bo %s\n' "$what" "${fps:-none}" \
+		"${cpu:-none}" "${med:-none}" "${bos:-none}" >> "$keep/measure.txt"
+}
+
+m11_common() {
+	have 'decorator: r5 loaded' "$slog" "decorator: r5 loaded"
+	if [ "$boot" != 4 ]; then
+		none 'gpu lost' "$slog" "no gpu lost"
+	# Boot 4: every hang dumps "radeon_hd: gpu lost watchdog ..." (the
+	# kernel's gpu_lost, also before a good reset). Any other gpu lost
+	# line is a fault.
+	elif [ -s "$slog" ] && ! grep -E 'gpu lost' "$slog" \
+			| grep -vq 'gpu lost watchdog'; then
+		say 0 "no gpu lost other than the hang's watchdog dump"
+	else
+		say 1 "no gpu lost other than the hang's watchdog dump ($(grep -E 'gpu lost' \
+			"$slog" | grep -v 'gpu lost watchdog' | head -n 1))"
+	fi
+}
+
+m11_compose() {
+	atleast 1 'app_server: compose compare ok' "$slog" "compose compare ok"
+	none 'compose compare MISMATCH' "$slog" "never compose compare MISMATCH"
+	atleast 3 'app_server: compose median [0-9]+ us cpu [0-9]+ ms per 10 s' "$slog" \
+		"compose median x3"
+	have 'compose effects shadow on frosted on' "$slog" "a median with effects"
+	have 'compose effects shadow off frosted off' "$slog" "a median without effects"
+	have 'app_server: window memory [0-9]+ MB' "$slog" "window memory <n> MB"
+	none 'app_server: gpu compositor off' "$slog" "no gpu compositor off"
+}
+
+m11_window_memory() {
+	# Decision 5: the window buffer is host-cached (Vulkan bit 0x8).
+	flags=$(sed -n 's/.*app_server: window memory type [0-9]* flags \(0x[0-9a-fA-F]*\).*/\1/p' \
+		"$slog" | head -n 1)
+	if [ -n "$flags" ] && [ $((flags & 8)) -ne 0 ]; then
+		say 0 "window memory type flags $flags with the cached bit"
+	else
+		say 1 "window memory type with the cached bit (flags: ${flags:-none})"
+	fi
+	have 'radeon_hd: bo domain .* snooped 1' "$slog" "kernel bo line with snooped 1"
+	line=$(grep -E 'app_server: window buffer write fill' "$slog" | head -n 1)
+	set -- $(echo "$line" | sed -n \
+		's/.*fill \([0-9]*\) us blend \([0-9]*\) us, malloc fill \([0-9]*\) us blend \([0-9]*\) us.*/\1 \2 \3 \4/p')
+	if [ $# -eq 4 ]; then
+		emit "INFO Painter write test: buffer fill $1 us blend $2 us, malloc fill $3 us blend $4 us"
+		echo "painter buffer_fill $1 buffer_blend $2 malloc_fill $3 malloc_blend $4" \
+			>> "$keep/measure.txt"
+		if [ "$2" -le $(($4 * 2 + 100)) ] && [ "$1" -le $(($3 * 2 + 100)) ]; then
+			say 0 "Painter write test: window buffer at most 2x malloc"
+		else
+			say 1 "Painter write test: window buffer at most 2x malloc"
+		fi
+	else
+		say 1 "Painter write test line"
+	fi
+}
+
+m11_share() {
+	runlive share "$bin"/r5-share-check
+	for c in "argv\[0\] app_server as a user refused" \
+			"import by a program that is not app_server refused" \
+			"second import of the same number refused"; do
+		have "^r5-share-check: $c: pass" "$keep/share.txt" \
+			"r5-share-check: $(echo "$c" | sed 's/\\//g'): pass"
+	done
+	none ': fail' "$keep/share.txt" "r5-share-check: no fail"
+	# The exporter stopped before an import: the count comes back.
+	: > "$keep/share-hold.txt"
+	if [ "$live" -eq 1 ]; then
+		"$bin"/r5-share-check count >> "$keep/share-hold.txt" 2>&1
+		"$bin"/r5-share-check hold >> "$keep/share-hold.txt" 2>&1 &
+		hp=$!
+		sleep 3
+		kill "$hp" 2>/dev/null
+		wait "$hp" 2>/dev/null
+		sleep 2
+		"$bin"/r5-share-check count >> "$keep/share-hold.txt" 2>&1
+	fi
+	have 'hold: exported' "$keep/share-hold.txt" "r5-share-check hold: exported"
+	n=$(values 's/^r5-share-check: buffers \([0-9-]*\)/\1/p' "$keep/share-hold.txt")
+	set -- $n
+	# -1 means no render node: not a count, so not a pass.
+	if [ $# -eq 2 ] && [ "$1" = "$2" ] && [ "$1" -ge 0 ] 2>/dev/null; then
+		say 0 "exporter stopped: buffers $1 before and after"
+	else
+		say 1 "exporter stopped: the same buffer count before and after (got: ${n:-none})"
+	fi
+}
+
+# Zero-copy, then the copy path in the same boot. app_server reads the
+# switch at every 10 s report, so check waits for its line each time.
+m11_fps() {
+	teapot_run teapot-zero-copy
+	have 'app_server: window [0-9]+ zero-copy on' "$keep/teapot-zero-copy-syslog.txt" \
+		"check's VulkanTeapot: zero-copy on"
+	teapot_report teapot-zero-copy zero-copy
+	if [ "$live" -ne 1 ]; then
+		say 1 "copy path run (CHECK_LIVE=0)"
+		return
+	fi
+	if [ "$settings" = "$sysset" ]; then
+		say 1 "copy path run: the settings file is the system one"
+		return
+	fi
+	# M11 third review: a stopped check gives the zero-copy setting back,
+	# and a saved copy never holds the switch (a boot restarted after a
+	# freeze would keep it).
+	grep -v '^gpu_compositor_zero_copy' "$settings" > "$keep/radeon_hd.orig"
+	trap 'rm -f "$settings"; cp "$keep/radeon_hd.orig" "$settings"; sync; exit 1' INT TERM HUP
+	from=$(syslog_count)
+	rm -f "$settings"
+	{ cat "$keep/radeon_hd.orig"; echo "gpu_compositor_zero_copy false"; } > "$settings"
+	if wait_line 'app_server: zero-copy setting off' "$from" 30; then
+		say 0 "zero-copy setting off"
+		teapot_run teapot-copy
+		have 'app_server: window [0-9]+ zero-copy off: setting' \
+			"$keep/teapot-copy-syslog.txt" "check's VulkanTeapot: zero-copy off: setting"
+		teapot_report teapot-copy copy-path
+	else
+		say 1 "zero-copy setting off (no line in 30 s)"
+	fi
+	from=$(syslog_count)
+	rm -f "$settings"
+	cp "$keep/radeon_hd.orig" "$settings"
+	trap - INT TERM HUP
+	if wait_line 'app_server: zero-copy setting on' "$from" 30; then
+		say 0 "zero-copy setting on again"
+	else
+		say 1 "zero-copy setting on again (no line in 30 s)"
+	fi
+}
+
+m11_boot() {
+	m11_common
+	case $boot in
+	1)
+		have 'radeon_hd: gpu available' "$slog" "radeon_hd: gpu available"
+		have 'app_server: gpu compositor on radv' "$slog" "gpu compositor on radv"
+		m11_compose
+		# The scenario's lines: after the last syslog line at check wait,
+		# so the self-test's own Vulkan, GL and DirectWindow windows do
+		# not count. Without check wait the file is empty: FAIL.
+		scen=$keep/scenario-syslog.txt
+		: > "$scen"
+		mark=$m10/scenario-from-boot$boot
+		if [ -s "$mark" ]; then
+			N=$(head -n 1 "$mark") M=$(sed -n 2p "$mark") awk '
+				!seen && $0 == ENVIRON["M"] && ++c == ENVIRON["N"] + 0 {
+					seen = 1; next
+				}
+				seen { print }
+			' "$slog" > "$scen"
+			# M11 third review: used once; a check after a restart needs
+			# a new check wait and the scenario again.
+			mv "$mark" "$keep/scenario-from-boot$boot"
+		fi
+		have '.' "$scen" "scenario lines after check wait"
+		# The scenario's VulkanTeapot and vkcube, before check's own runs.
+		atleast 2 'app_server: window [0-9]+ zero-copy on' "$scen" \
+			"zero-copy on for VulkanTeapot and vkcube"
+		if grep -E 'app_server: window [0-9]+ zero-copy off' "$slog" \
+				| grep -vq 'off: setting'; then
+			say 1 "no zero-copy off on RADV ($(grep -E 'zero-copy off' "$slog" | grep -v 'off: setting' | head -n 1))"
+		else
+			say 0 "no zero-copy off on RADV"
+		fi
+		m11_window_memory
+		for e in shadow frosted animations; do
+			have "app_server: $e off" "$scen" "$e off"
+			have "app_server: $e on" "$scen" "$e on"
+		done
+		for a in open close workspace; do
+			have "app_server: animation $a [0-9]+ ms frames [0-9]+" "$scen" \
+				"animation $a"
+		done
+		have 'app_server: compositor paused: direct window' "$scen" \
+			"compositor paused: direct window (Chart)"
+		have 'app_server: compositor resumed' "$scen" "compositor resumed"
+		m11_share
+		m11_fps
+		extract_syslog
+		none 'app_server: gpu compositor off' "$slog" "no gpu compositor off after check's runs"
+		manual "Chart (BDirectWindow) drew correctly: ____"
+		manual "shadow and frosted glass visible, then gone, then back: ____"
+		;;
+	2)
+		have 'app_server: gpu compositor on radv' "$slog" "gpu compositor on radv"
+		exactly 1 'app_server: gpu compositor off' "$slog" "one gpu compositor off"
+		have 'app_server: gpu compositor off: forced failure' "$slog" \
+			"gpu compositor off: forced failure"
+		manual "desktop kept working in the CPU mode, R5 frame (no shadow): ____"
+		;;
+	3)
+		have 'app_server: gpu compositor on lavapipe: forced' "$slog" \
+			"gpu compositor on lavapipe: forced"
+		m11_compose
+		have 'app_server: window [0-9]+ zero-copy off: lavapipe' "$slog" \
+			"zero-copy off: lavapipe"
+		teapot_run teapot-lavapipe
+		teapot_report teapot-lavapipe lavapipe
+		;;
+	4)
+		have 'app_server: gpu compositor on radv' "$slog" "gpu compositor on radv"
+		exactly 1 'radeon_hd: gpu hang ring' "$slog" "one gpu hang"
+		have 'radeon_hd: gpu reset mode2 ok' "$slog" "gpu reset mode2 ok"
+		have 'radeon_hd: gpu selftest after reset ok' "$slog" "gpu selftest after reset ok"
+		have 'app_server: gpu compositor restarted after reset' "$slog" \
+			"gpu compositor restarted after reset"
+		none 'app_server: gpu compositor off' "$slog" "no gpu compositor off"
+		none 'gpu off until reboot' "$slog" "no gpu off until reboot"
+		manual "the pointer moved the whole time: ____"
+		;;
+	esac
+}
+
+if [ "$stick" = m11 ]; then
+	m11_boot
+else
 case $boot in
 1|1b)
 	if [ "$boot" = 1 ]; then
@@ -357,6 +750,7 @@ case $boot in
 	manual "desktop still running (move a window): ____"
 	;;
 esac
+fi
 
 # The shutdown of the boot before, measured by boot-next's heartbeat.
 if [ -f "$m10/shutdown-start" ]; then

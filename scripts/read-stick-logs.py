@@ -34,8 +34,10 @@ WANTED = (
     ("home/r5-session.log", "r5-session.log"),
     ("system/var/log/syslog", "syslog"),
     ("system/var/log/syslog.old", "syslog.old"),
+    ("system/var/log/syslog.1", "syslog.1"),
     ("common/var/log/syslog", "syslog"),
     ("common/var/log/syslog.old", "syslog.old"),
+    ("common/var/log/syslog.1", "syslog.1"),
     ("system/settings/kernel/drivers/radeon_hd", "radeon_hd"),
     ("home/config/settings/kernel/drivers/radeon_hd", "radeon_hd-home"),
     # Deskbar's add-on list (TReplicantTray). The M10 stick crashed in it.
@@ -329,17 +331,19 @@ def copy_tree(bfs, path, dest, depth=0):
 
 def copy_m10(bfs, dest):
     """The M10 stick tools keep their files in ~/m10, and the standard
-    account's in its own home (check-user)."""
-    total = copy_tree(bfs, "home/m10", dest / "m10")
+    account's in its own home (check-user). The M11 stick uses ~/m11."""
     users = bfs.walk("home/users")
-    if users is not None and (bfs.mode(users) & 0o170000) == 0o040000:
-        for name, _block in bfs.list_dir(users):
-            total += copy_tree(bfs, "home/users/%s/m10" % name,
-                               dest / "users" / name / "m10")
-    if total:
-        print("copied %u files from /boot/home/m10 into %s" % (total, dest / "m10"))
-    else:
-        print("missing home/m10")
+    for stick in ("m10", "m11"):
+        total = copy_tree(bfs, "home/%s" % stick, dest / stick)
+        if users is not None and (bfs.mode(users) & 0o170000) == 0o040000:
+            for name, _block in bfs.list_dir(users):
+                total += copy_tree(bfs, "home/users/%s/%s" % (name, stick),
+                                   dest / "users" / name / stick)
+        if total:
+            print("copied %u files from /boot/home/%s into %s"
+                  % (total, stick, dest / stick))
+        else:
+            print("missing home/%s" % stick)
 
 
 def copy_logs(bfs, dest, list_root):

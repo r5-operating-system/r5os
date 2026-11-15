@@ -5,7 +5,8 @@
 
 The shared Haiku tree can still hold another branch's overlay. This compares
 the radeon sources, the Login sources, and the built programs, and stops on
-the first mismatch:
+the first mismatch (and, for M11, "--paper" runs only the line and the
+settings checks below, before an image exists):
 
 - every radeon source at this commit, the worktree, and the Haiku tree
 - every Login source apply-login.py copies, the same three ways
@@ -32,10 +33,10 @@ OFFSET = "6291456"
 
 PACKAGES = (
     "mesa_lavapipe-25.3.6-5-x86_64.hpkg",
-    "mesa_radv-25.3.6-8-x86_64.hpkg",
+    "mesa_radv-25.3.6-9-x86_64.hpkg",
     "vulkan_loader-1.4.367-4-x86_64.hpkg",
     "vulkan_tools-1.4.367-2-x86_64.hpkg",
-    "vulkanteapot-1.0.0-4-x86_64.hpkg",
+    "vulkanteapot-1.0.0-5-x86_64.hpkg",
 )
 
 HAIKU_PKG = "haiku-r1~beta6_r5_2026.1_dev-1-x86_64.hpkg"
@@ -91,6 +92,8 @@ SCRIPTS = {
     "check": "distro/graphics/boot/check",
     "boot-next": "distro/graphics/boot/boot-next",
     "check-user": "distro/graphics/boot/check-user",
+    "m11-vulkan": "distro/graphics/boot/m11-vulkan",
+    "m11-scroll": "distro/graphics/boot/m11-scroll",
 }
 
 # Files planted in /boot/home (plant-m8-stick.sh, M8). The M10 stick runs
@@ -99,6 +102,139 @@ SCRIPTS = {
 HOME = ()
 
 STRINGS = (b"gpu_isolation_test", b"window vkcube")
+
+# M11 stick (generated/gpu-m11/BRIEF.md, "Stick (step 6)"). Every line the
+# M11 part of check looks for: the pattern as check has it, and the text
+# and the source file that print it.
+COMPOSITOR = "distro/app_server/Compositor.cpp"
+KERNEL = "distro/graphics/src/add-ons/kernel/drivers/graphics/r5gpu/r5_gpu_core.cpp"
+SHARE = "distro/graphics/src/bin/r5-share-check/r5-share-check.cpp"
+M11_LINES = (
+    ("decorator: r5 loaded", "decorator: r5 loaded",
+     "distro/desktop/src/add-ons/decorators/R5Decorator/R5Decorator.cpp"),
+    ("radeon_hd: gpu available", "radeon_hd: gpu available", KERNEL),
+    ("radeon_hd: bo domain .* snooped 1", "bytes %llu snooped %d", KERNEL),
+    ("radeon_hd: gpu hang ring", "radeon_hd: gpu hang ring", KERNEL),
+    ("radeon_hd: gpu reset mode2 ok", "radeon_hd: gpu reset mode2 %s", KERNEL),
+    ("radeon_hd: gpu selftest after reset ok", "gpu selftest after reset", KERNEL),
+    ("gpu off until reboot", "gpu off until reboot", KERNEL),
+    ("gpu lost", "gpu lost", KERNEL),
+    ("gpu lost watchdog", '"gpu lost watchdog"', KERNEL),
+    ("app_server: gpu compositor on radv", "gpu compositor on radv (%s)", COMPOSITOR),
+    ("app_server: gpu compositor on lavapipe: forced", "gpu compositor on lavapipe: %s",
+     COMPOSITOR),
+    ("app_server: gpu compositor off", "gpu compositor off: %s", COMPOSITOR),
+    ("gpu compositor off: forced failure", '"forced failure"', COMPOSITOR),
+    ("app_server: gpu compositor restarted after reset",
+     "gpu compositor restarted after reset", COMPOSITOR),
+    ("app_server: compose compare ok", "compose compare ok", COMPOSITOR),
+    ("compose compare MISMATCH", "compose compare MISMATCH", COMPOSITOR),
+    ("app_server: compose median [0-9]+ us cpu [0-9]+ ms per 10 s", "compose median %",
+     COMPOSITOR),
+    ("compose effects shadow on frosted on", "compose effects shadow %s frosted %s",
+     COMPOSITOR),
+    ("app_server: window memory [0-9]+ MB", "window memory %", COMPOSITOR),
+    ("app_server: window memory type", "window memory type %", COMPOSITOR),
+    ("app_server: window buffer write fill", "window buffer write fill %", COMPOSITOR),
+    ("zero-copy on", "\" zero-copy on\"", COMPOSITOR),
+    ("zero-copy off: setting", '"setting"', COMPOSITOR),
+    ("zero-copy off: lavapipe", '"lavapipe"', COMPOSITOR),
+    ("app_server: zero-copy setting off", "zero-copy setting %s", COMPOSITOR),
+    ("app_server: team cpu", "team cpu %", COMPOSITOR),
+    ("app_server: animation $a [0-9]+ ms frames [0-9]+", "animation workspace %",
+     COMPOSITOR),
+    ("app_server: compositor paused: direct window", "compositor paused: direct window",
+     COMPOSITOR),
+    ("app_server: compositor resumed", "compositor resumed", COMPOSITOR),
+    ("app_server: $e off", "app_server: %s %s",
+     "distro/rest/src/servers/app/ServerApp.cpp"),
+    ("second import of the same number refused", "second import of the same number refused",
+     SHARE),
+    ("not app_server refused", "import by a program that is not app_server refused", SHARE),
+    ("hold: exported", "hold: exported", SHARE),
+    ("r5-share-check: buffers", "r5-share-check: buffers %d", SHARE),
+    ("^window fps [0-9]", "window fps %.1f", "distro/apps/vulkanteapot/VulkanWindow.cpp"),
+    ("^selftest done", "selftest done",
+     "distro/graphics/src/bin/r5-gpu-selftest/r5-gpu-selftest.cpp"),
+)
+
+# The settings boot-next writes for each M11 boot, and nothing after boot 4.
+M11_BASE = ["gpu_compositor true", "gpu_debug true", "gpu_selftest true"]
+M11_BOOTS = {
+    "1": M11_BASE,
+    "2": M11_BASE + ["gpu_compositor_fail true"],
+    "3": M11_BASE + ["gpu_compositor_lavapipe true"],
+    "4": M11_BASE + ["gpu_hang_test 1"],
+    "done": None,
+}
+
+# Programs the M11 stick runs, in the extracted packages.
+M11_IMAGE = (
+    "haiku/bin/r5-share-check",
+    "haiku/bin/r5-effects-test",
+    "haiku/demos/Chart",
+    "haiku/add-ons/decorators/R5Decorator",
+    "teapot/bin/VulkanTeapot",
+    "tools/bin/vkcube",
+)
+M11_STRINGS = {
+    "haiku/servers/app_server": (b" zero-copy on", b"team cpu", b"window buffer write fill",
+                                 b"zero-copy setting", b"compositor paused: direct window"),
+    "teapot/bin/VulkanTeapot": (b"window fps", b"--seconds"),
+}
+
+
+def check_m11_sources(commit: str) -> None:
+    check = blob(commit, "distro/graphics/boot/check").decode("utf-8")
+    for pattern, text, path in M11_LINES:
+        if pattern not in check:
+            die(f"check has no M11 line {pattern!r}")
+        if text.encode() not in blob(commit, path):
+            die(f"{path} at {commit} does not print {text!r} (check: {pattern!r})")
+    print(f"m11 lines {len(M11_LINES)} have a source at {commit}")
+
+
+def check_m11_boots(commit: str) -> None:
+    """boot-next and check from this commit, in a sandbox in WSL."""
+    stage = ROOT / "generated" / "_pre-stick-m11"
+    stage.mkdir(parents=True, exist_ok=True)
+    for name in ("boot-next", "check"):
+        data = blob(commit, f"distro/graphics/boot/{name}").replace(b"\r\n", b"\n")
+        (stage / name).write_bytes(data)
+    steps = ["m11", "", "", "", ""]
+    script = ["#!/bin/sh", "set -u", "T=/tmp/r5-pre-stick-m11", "rm -rf $T",
+              "mkdir -p $T/home $T/us $T/ss $T/cache",
+              "echo 'selftest done' > $T/cache/r5-gpu-selftest.txt",
+              "echo x > $T/syslog",
+              "export R5_HOME=$T/home R5_USER_SETTINGS=$T/us R5_SYSTEM_SETTINGS=$T/ss",
+              "export R5_SYSLOG=$T/syslog R5_CACHE=$T/cache CHECK_WAIT=0 CHECK_LIVE=0",
+              "export BOOT_NEXT_YES=0", 'D="$(dirname "$0")"']
+    for i, arg in enumerate(steps):
+        script.append(f'sh "$D/boot-next" {arg} > /dev/null || echo "step {i} boot-next failed"')
+        script.append(f'echo "== step {i} next $(cat $T/home/m11/next)"')
+        script.append("cat $T/us/kernel/drivers/radeon_hd 2>/dev/null || echo '(none)'")
+        script.append(f'sh "$D/check" 2>/dev/null | grep "^boot " || true')
+    (stage / "run.sh").write_text("\n".join(script) + "\n", encoding="utf-8", newline="\n")
+    path = wsl(f"wslpath -u '{stage / 'run.sh'}'").strip()
+    out = wsl(f"sh '{path}'")
+    blocks = out.split("== step ")[1:]
+    if len(blocks) != len(steps):
+        die(f"boot-next sandbox: {out}")
+    for block in blocks:
+        lines = [line for line in block.strip().splitlines() if line]
+        boot = lines[0].split("next ", 1)[1]
+        want = M11_BOOTS.get(boot, "unknown")
+        got = [line for line in lines[1:] if not line.startswith("boot ")]
+        if want is None:
+            if got != ["(none)"]:
+                die(f"after boot 4 a settings file stays: {got}")
+        elif got != want:
+            die(f"boot {boot}: boot-next wrote {got}, want {want}")
+        else:
+            seen = [line for line in lines if line.startswith("boot ")]
+            if seen != [f"boot {boot} (m11)"]:
+                die(f"boot {boot}: check says {seen}")
+        print(f"m11 boot {boot} settings ok")
 
 
 def die(message: str) -> None:
@@ -215,18 +351,19 @@ def check_login_sources(commit: str) -> None:
 
 
 def extract(iso_wsl: str, out: str) -> None:
-    gets = [f"get myfs/system/packages/{HAIKU_PKG} {out}/{HAIKU_PKG}"]
+    gets = [f"cp myfs/system/packages/{HAIKU_PKG} :{out}/{HAIKU_PKG}"]
     for package in PACKAGES:
-        gets.append(f"get myfs/system/packages/{package} {out}/{package}")
+        gets.append(f"cp myfs/system/packages/{package} :{out}/{package}")
     script = ROOT / "generated" / "_pre-stick-extract.sh"
     script.write_text(
         "#!/bin/bash\nset -eu\n"
-        f"rm -rf {out}\nmkdir -p {out}/haiku {out}/radv {out}/teapot\n"
+        f"rm -rf {out}\nmkdir -p {out}/haiku {out}/radv {out}/teapot {out}/tools\n"
         f"'{BFS}' --start-offset {OFFSET} '{iso_wsl}' <<EOF\n"
         + "\n".join(gets) + "\nquit\nEOF\n"
         f"'{PKG}' extract -C {out}/haiku {out}/{HAIKU_PKG}\n"
-        f"'{PKG}' extract -C {out}/radv {out}/mesa_radv-25.3.6-8-x86_64.hpkg\n"
-        f"'{PKG}' extract -C {out}/teapot {out}/vulkanteapot-1.0.0-4-x86_64.hpkg\n"
+        f"'{PKG}' extract -C {out}/radv {out}/mesa_radv-25.3.6-9-x86_64.hpkg\n"
+        f"'{PKG}' extract -C {out}/teapot {out}/vulkanteapot-1.0.0-5-x86_64.hpkg\n"
+        f"'{PKG}' extract -C {out}/tools {out}/vulkan_tools-1.4.367-2-x86_64.hpkg\n"
         f"test -s {out}/haiku/bin/r5-gpu-selftest\n"
         f"test -s {out}/haiku/servers/app_server\n"
         f"test -s {out}/haiku/apps/Login\n"
@@ -238,12 +375,14 @@ def extract(iso_wsl: str, out: str) -> None:
         f"test -s {out}/radv/bin/check\n"
         f"test -s {out}/radv/bin/boot-next\n"
         f"test -s {out}/radv/bin/check-user\n"
+        f"test -s {out}/radv/bin/m11-vulkan\n"
+        f"test -s {out}/radv/bin/m11-scroll\n"
         f"test -s {out}/teapot/bin/r5-wsi-window-test.sh\n"
         f"mkdir -p {out}/home\n"
         f"'{BFS}' --start-offset {OFFSET} '{iso_wsl}' <<EOF\n"
         + "".join(
-            f"get myfs/home/{name} {out}/home/{name}\n" for name in HOME)
-        + f"get myfs/home/config/settings/kernel/drivers/radeon_hd {out}/home/radeon_hd\n"
+            f"cp myfs/home/{name} :{out}/home/{name}\n" for name in HOME)
+        + f"cp myfs/home/config/settings/kernel/drivers/radeon_hd :{out}/home/radeon_hd\n"
         "quit\nEOF\n",
         encoding="utf-8", newline="\n")
     wsl_script = wsl(f"wslpath -u '{script}'").strip()
@@ -312,16 +451,35 @@ def check_image(commit: str, iso: str) -> None:
             f"boot 1 settings are not {commit}: "
             f"image {settings} branch {wanted}")
     print(f"home radeon_hd {settings}")
+    check_m11_image(out)
+
+
+def check_m11_image(out: str) -> None:
+    for relative in M11_IMAGE:
+        wsl(f"test -s '{out}/{relative}' || {{ echo 'missing {relative}'; exit 1; }}")
+        print(f"m11 program {relative}")
+    for relative, needles in M11_STRINGS.items():
+        data = Path(wsl(f"wslpath -w '{out}/{relative}'").strip()).read_bytes()
+        for needle in needles:
+            if needle not in data:
+                die(f"{relative} in the image has no {needle.decode()}; an older build")
+            print(f"m11 string {relative} {needle.decode()}")
 
 
 def main() -> int:
     if len(sys.argv) != 2:
-        die("usage: check-pre-stick.py IMAGE")
+        die("usage: check-pre-stick.py IMAGE | --paper")
+    commit = head_commit()
+    print(f"branch HEAD {commit}")
+    check_m11_sources(commit)
+    check_m11_boots(commit)
+    if sys.argv[1] == "--paper":
+        # M11: the lines and the settings per boot, before an image exists.
+        print(f"pre-stick paper ok {commit}")
+        return 0
     iso = str(Path(sys.argv[1]).resolve())
     if not Path(iso).is_file():
         die(f"no image at {iso}")
-    commit = head_commit()
-    print(f"branch HEAD {commit}")
     check_sources(commit)
     check_image(commit, iso)
     print(f"pre-stick ok {commit}")

@@ -58,6 +58,8 @@
 
 static const bigtime_t kFenceSlice = 100000;
 static const bigtime_t kFenceLimit = 15000000;
+// M11 review: after a fence timeout, the last wait before memory is freed
+static const uint64 kFenceGraceNs = 5000000000ULL;
 static const bigtime_t kReportInterval = 10000000;
 
 
@@ -83,6 +85,10 @@ struct settings {
 	// vkCmdCopyBuffer puts it on the scanout. Opt-in until the stick has
 	// measured both ways.
 	bool	scanout;
+	// M11 stick: gpu_compositor_zero_copy false, a test switch. Every
+	// program keeps the copy path, so the stick can measure both ways in
+	// one boot.
+	bool	noZeroCopy;
 };
 
 
@@ -115,8 +121,22 @@ load_settings(settings& out)
 			out.debug = true;
 		if (strncmp(line, "gpu_compositor_scanout true", 27) == 0)
 			out.scanout = true;
+		if (strncmp(line, "gpu_compositor_zero_copy false", 30) == 0)
+			out.noZeroCopy = true;
 	}
 	fclose(file);
+}
+
+
+/*!	The CPU time of the whole app_server team, user and kernel. */
+static bigtime_t
+team_cpu_time()
+{
+	team_usage_info usage;
+	if (get_team_usage_info(B_CURRENT_TEAM, B_TEAM_USAGE_SELF, &usage)
+			!= B_OK)
+		return 0;
+	return usage.user_time + usage.kernel_time;
 }
 
 
@@ -347,6 +367,7 @@ struct Compositor::Entry : public BReferenceable {
 		iface(iface),
 		lastShown(0),
 		shareLogged(false),
+		shareOnLogged(false),
 		hasGlassViews(false),
 		maskWidth(0),
 		maskHeight(0),
@@ -375,6 +396,8 @@ struct Compositor::Entry : public BReferenceable {
 	bigtime_t			lastShown;
 	// "window <id> zero-copy off: <reason>" was logged for this window.
 	bool				shareLogged;
+	// "window <id> zero-copy on" was logged for this window (M11 stick).
+	bool				shareOnLogged;
 	// M11 step 4: ContentDamage taken by the compose thread this frame.
 	BRegion				takenDamage;
 
@@ -464,6 +487,10 @@ struct Compositor::Share {
 	// The import is gone (mark_get failed): the program gets a refusal
 	// at its next present and makes a copy swapchain.
 	bool				broken;
+	// M11 review: ended by app_server (its window went, or a newer
+	// swapchain of the view), not by the program: the images app_server
+	// holds go back when it is freed, or an acquire may wait for good.
+	bool				giveBack;
 	// From the last clipping rebuild: the view's part of the screen and
 	// the screen position of the image's pixel (0, 0).
 	BRegion				shape;
@@ -566,6 +593,9 @@ Compositor::Create(Desktop* desktop, HWInterface* screen)
 	compositor->fDebug = options.debug;
 	compositor->fForceFail = options.fail;
 	compositor->fWantScanout = options.scanout;
+	compositor->fZeroCopyOff = options.noZeroCopy ? 1 : 0;
+	if (options.noZeroCopy)
+		log_line("zero-copy setting off");
 
 	const char* reason = NULL;
 	uint64 gttBytes = 0;
@@ -660,6 +690,8 @@ Compositor::Compositor(Desktop* desktop, HWInterface* screen)
 	fSampleCount(0),
 	fReportStart(0),
 	fCpuAtReport(0),
+	fTeamCpuAtReport(0),
+	fZeroCopyOff(0),
 	fLateLogged(0),
 	fEffects(kWindowEffectShadow | kWindowEffectFrostedGlass
 		| kWindowEffectAnimations),
@@ -668,6 +700,7 @@ Compositor::Compositor(Desktop* desktop, HWInterface* screen)
 	fAnimLock("compositor animations"),
 	fGhosts(4),
 	fLastWorkspace(-1),
+	fClipPassTime(0),
 	fSlideActive(false),
 	fSlideSnapshot(false),
 	fSlideStart(0),
@@ -684,14 +717,19 @@ Compositor::Compositor(Desktop* desktop, HWInterface* screen)
 	fModePending(false),
 	fPauseRedraw(false),
 	fDirectWindows(4),
-	fDirectScreen(false),
-	fFailure(NULL)
+	fDirectScreenWanted(0),
+	fFailure(NULL),
+	fGpuBusy(0)
 {
 }
 
 
 Compositor::~Compositor()
 {
+	AccelerantHWInterface* accelerant
+		= dynamic_cast<AccelerantHWInterface*>(fScreen);
+	if (accelerant != NULL)
+		accelerant->SetModeGuard(NULL);
 	if (fThread >= 0) {
 		fQuit = true;
 		release_sem(fWakeSem);
@@ -721,6 +759,11 @@ Compositor::_Init()
 	_UpdatePeriod();
 	fActive = true;
 	fReportStart = system_time();
+	// M11 review: a mode change waits for the frame in the compose slot
+	AccelerantHWInterface* accelerant
+		= dynamic_cast<AccelerantHWInterface*>(fScreen);
+	if (accelerant != NULL)
+		accelerant->SetModeGuard(&fComposeSlot);
 
 	fThread = spawn_thread(_ComposeThread, "compositor",
 		B_URGENT_DISPLAY_PRIORITY, this);
@@ -1059,6 +1102,13 @@ Compositor::_ExitVulkan()
 	if (vk == NULL)
 		return;
 	fVulkan = NULL;
+	// M11 review: a job that never ended; waiting for idle would block
+	// app_server, freeing would hand the GPU's memory to someone else.
+	if (atomic_get(&fGpuBusy) != 0) {
+		_ReturnSharedImages();
+		log_line("compositor device kept: the gpu is still busy");
+		return;
+	}
 
 	// A device that failed half way has some functions not loaded; they
 	// are loaded in this order, so the last one tells all were.
@@ -1168,6 +1218,73 @@ allocate_host_buffer(CompositorVulkan* vk, uint64 bytes, VkBuffer* _buffer,
 }
 
 
+/*!	One pass the way Painter writes a window: a fill (stores only) or a
+	blend (each pixel read, mixed and written back). Returns the time of
+	the faster of three runs. The sum keeps the stores from being dropped.
+*/
+static bigtime_t
+time_write(uint32* bits, uint64 pixels, bool blend, volatile uint32* sink)
+{
+	bigtime_t best = B_INFINITE_TIMEOUT;
+	for (int run = 0; run < 3; run++) {
+		bigtime_t start = system_time();
+		if (blend) {
+			for (uint64 i = 0; i < pixels; i++) {
+				uint32 dst = bits[i];
+				bits[i] = ((dst >> 1) & 0x7f7f7f7f) + 0x20202020;
+			}
+		} else {
+			uint32 color = 0xff336699 + run;
+			for (uint64 i = 0; i < pixels; i++)
+				bits[i] = color;
+		}
+		bigtime_t took = system_time() - start;
+		if (took < best)
+			best = took;
+		*sink += bits[pixels / 2];
+	}
+	return best;
+}
+
+
+/*!	M11 stick, gpu_debug: the window buffer memory against malloc, once,
+	with the size of the first window buffer. A separate buffer, so no
+	window shows the test pattern. Decision 5 wants the window buffer
+	cached; an uncached one is many times slower here.
+*/
+static void
+log_write_test(CompositorVulkan* vk, uint64 bytes)
+{
+	VkBuffer buffer;
+	VkDeviceMemory memory;
+	void* bits;
+	if (!allocate_host_buffer(vk, bytes, &buffer, &memory, &bits)) {
+		log_line("window buffer write test skipped: no memory");
+		return;
+	}
+	uint32* heap = (uint32*)malloc(bytes);
+	if (heap == NULL) {
+		vk->vkDestroyBuffer(vk->device, buffer, NULL);
+		vk->vkFreeMemory(vk->device, memory, NULL);
+		log_line("window buffer write test skipped: no memory");
+		return;
+	}
+	uint64 pixels = bytes / 4;
+	volatile uint32 sink = 0;
+	bigtime_t bufferFill = time_write((uint32*)bits, pixels, false, &sink);
+	bigtime_t bufferBlend = time_write((uint32*)bits, pixels, true, &sink);
+	bigtime_t heapFill = time_write(heap, pixels, false, &sink);
+	bigtime_t heapBlend = time_write(heap, pixels, true, &sink);
+	free(heap);
+	vk->vkDestroyBuffer(vk->device, buffer, NULL);
+	vk->vkFreeMemory(vk->device, memory, NULL);
+	log_line("window buffer write fill %" B_PRId64 " us blend %" B_PRId64
+		" us, malloc fill %" B_PRId64 " us blend %" B_PRId64 " us, %"
+		B_PRIu64 " KB", bufferFill, bufferBlend, heapFill, heapBlend,
+		bytes / 1024);
+}
+
+
 WindowBuffer*
 Compositor::_AllocateBuffer(uint32 width, uint32 height)
 {
@@ -1201,6 +1318,8 @@ Compositor::_AllocateBuffer(uint32 width, uint32 height)
 		log_line("window memory type %" B_PRIu32 " flags %#" B_PRIx32,
 			fVulkan->memoryType,
 			(uint32)memory.memoryTypes[fVulkan->memoryType].propertyFlags);
+		if (fDebug)
+			log_write_test(fVulkan, bytes);
 	}
 	return windowBuffer;
 }
@@ -1211,7 +1330,8 @@ Compositor::_FreeBuffer(WindowBuffer* buffer, uint64 vulkanBuffer,
 	uint64 vulkanMemory)
 {
 	atomic_add64((int64*)&fWindowBytes, -(int64)buffer->Bytes());
-	if (fVulkan == NULL || buffer->Generation() != fGeneration)
+	if (fVulkan == NULL || buffer->Generation() != fGeneration
+		|| atomic_get(&fGpuBusy) != 0)
 		return;
 	fVulkan->vkDestroyBuffer(fVulkan->device, (VkBuffer)vulkanBuffer, NULL);
 	fVulkan->vkFreeMemory(fVulkan->device, (VkDeviceMemory)vulkanMemory,
@@ -1249,6 +1369,33 @@ Compositor::_AllocateOrMakeRoom(uint32 width, uint32 height,
 		if (oldest == NULL)
 			return NULL;
 		oldest->iface->SetBuffer(NULL, 0, 0);
+		// M11 review: the last layer list still holds it, or nothing is
+		// freed and every off-screen window loses its buffer for nothing.
+		// The compose skips a layer without a buffer; a frame in flight
+		// keeps its own reference until its fence.
+		{
+			BAutolock layerLock(fLayerLock);
+			for (int32 i = 0; i < fLayers->CountItems(); i++) {
+				Layer* layer = fLayers->ItemAt(i);
+				if (layer->entry.Get() == oldest)
+					layer->buffer.Unset();
+			}
+		}
+		// M11 review: a closing window's fade holds it too; it ends early.
+		// (A frame in flight still holds it until its fence: near the
+		// budget that can still end the GPU mode.)
+		BRegion faded;
+		{
+			BAutolock animLock(fAnimLock);
+			for (int32 i = fGhosts.CountItems(); i-- > 0;) {
+				Ghost* ghost = fGhosts.ItemAt(i);
+				if (ghost->entry.Get() != oldest)
+					continue;
+				faded.Include(&ghost->area);
+				delete fGhosts.RemoveItemAt(i);
+			}
+		}
+		Damage(faded);
 		buffer = _AllocateBuffer(width, height);
 	}
 	return buffer;
@@ -1337,17 +1484,25 @@ Compositor::CreateWindowEngine(WindowHWInterface** _iface)
 void
 Compositor::AddWindow(Window* window, WindowHWInterface* iface)
 {
+	DrawingEngine* engine = window->GetDrawingEngine();
 	Entry* entry = new(std::nothrow) Entry(window, iface);
-	if (entry == NULL)
-		return;
 	BAutolock _(fEntryLock);
-	if (!fEntries.AddItem(entry)) {
-		entry->ReleaseReference();
+	if (entry == NULL || !fEntries.AddItem(entry)) {
+		// M11 review: no entry, no buffer; the engine must not keep the
+		// interface ~Entry deletes. The window draws to the screen.
+		if (engine != NULL)
+			engine->SetHWInterface(fScreen);
+		if (entry != NULL)
+			entry->ReleaseReference();
+		else
+			delete iface;
 		return;
 	}
-	// M11 step 5: made during a pause; the resume binds it to its buffer
-	if (fPaused && window->GetDrawingEngine() != NULL)
-		window->GetDrawingEngine()->SetHWInterface(fScreen);
+	// M11 step 5: made during a pause; the resume binds it to its buffer.
+	// M11 review: or after the switch to the CPU mode, which rebound only
+	// the windows it had. fActive and fPaused change under fEntryLock.
+	if ((!fActive || fPaused) && engine != NULL)
+		engine->SetHWInterface(fScreen);
 }
 
 
@@ -1355,6 +1510,27 @@ void
 Compositor::RemoveWindow(Window* window)
 {
 	BAutolock _(fEntryLock);
+	// M11 step 3b: the window's shared views end with it. M11 review:
+	// also a window without an entry (an offscreen window, a failed
+	// engine), or a share would keep the freed Window.
+	bool ended = false;
+	{
+		BAutolock shareLock(fShareLock);
+		for (int32 i = 0; i < fShares.CountItems(); i++) {
+			Share* share = fShares.ItemAt(i);
+			if (share->window == window) {
+				if (!share->ended)
+					share->giveBack = true;
+				share->ended = true;
+				share->window = NULL;
+				ended = true;
+			}
+		}
+	}
+	// M11 review: a hidden view has no damage; wake the frame that
+	// gives its images back and frees its imports
+	if (ended)
+		release_sem_etc(fWakeSem, 1, B_DO_NOT_RESCHEDULE);
 	Entry* entry = _FindEntry(window);
 	if (entry == NULL)
 		return;
@@ -1366,16 +1542,6 @@ Compositor::RemoveWindow(Window* window)
 	if (fDirectWindows.RemoveItem(window) && fDirectWindows.IsEmpty()) {
 		fModePending = true;
 		release_sem_etc(fWakeSem, 1, B_DO_NOT_RESCHEDULE);
-	}
-
-	// M11 step 3b: the window's shared views end with it.
-	BAutolock shareLock(fShareLock);
-	for (int32 i = 0; i < fShares.CountItems(); i++) {
-		Share* share = fShares.ItemAt(i);
-		if (share->window == window) {
-			share->ended = true;
-			share->window = NULL;
-		}
 	}
 }
 
@@ -1425,6 +1591,10 @@ Compositor::ClippingChanged()
 	BObjectList<Window, false> fresh(10);
 	BRegion damage;
 	int32 workspace = fDesktop->CurrentWorkspace();
+	// M11 review: a window that was not on screen in the last pass
+	// (hidden, another workspace) was resized without a redraw.
+	bigtime_t previousPass = fClipPassTime;
+	fClipPassTime = system_time();
 
 	// M11 step 4b: a workspace switch slides; it opens and closes nothing
 	bool animations = (fEffects & kWindowEffectAnimations) != 0;
@@ -1459,6 +1629,7 @@ Compositor::ClippingChanged()
 		WindowHWInterface* iface = entry->iface;
 		WindowBuffer* buffer = iface->Buffer();
 		bool firstBuffer = buffer == NULL;
+		bool wasOnScreen = entry->lastShown >= previousPass;
 		if (buffer == NULL || buffer->Width() != width
 			|| buffer->Height() != height) {
 			WindowBuffer* newBuffer = _AllocateOrMakeRoom(width, height,
@@ -1495,6 +1666,10 @@ Compositor::ClippingChanged()
 							+ (left - iface->Left()) * 4,
 						(right - left + 1) * 4);
 				}
+				// M11 review: its new parts got no redraw while it was
+				// off screen; _ShowWindow redraws only what is visible.
+				if (!wasOnScreen)
+					fresh.AddItem(window);
 			} else {
 				fresh.AddItem(window);
 			}
@@ -1851,6 +2026,7 @@ void
 Compositor::_ComposeLoop()
 {
 	fCpuAtReport = thread_cpu_time();
+	fTeamCpuAtReport = team_cpu_time();
 
 	while (true) {
 		// A compose that failed, outside the compose slot: the switch to
@@ -1898,16 +2074,35 @@ Compositor::_ComposeLoop()
 		// M11 step 5: the pause's redraw, and the resume
 		if (fModePending)
 			_ApplyMode();
-		if (fPaused)
+		if (fPaused) {
+			// M11 review: no frame runs while paused, but a program whose
+			// window app_server ended still waits for its images. The
+			// last frame waited for its fence, so none is read. Third
+			// review: their imports go now too, not at the resume.
+			// Fourth review: the last frame's closing windows go too, or
+			// their buffers stay held for the whole pause.
+			delete fFrameGhosts;
+			fFrameGhosts = NULL;
+			BAutolock _(fShareLock);
+			_ShareRetire();
 			continue;
+		}
 		bool animating = _AnimationDamage(system_time());
 		if (status == B_TIMED_OUT && !animating)
 			continue;
 
 		// One frame, in the compose slot: a pause waits for it to end.
 		BAutolock slot(fComposeSlot);
-		if (fPaused)
+		if (fPaused) {
+			// Fourth review: the pause began after the check above; the
+			// ended shares still go now, not at the resume.
+			slot.Unlock();
+			delete fFrameGhosts;
+			fFrameGhosts = NULL;
+			BAutolock _(fShareLock);
+			_ShareRetire();
 			continue;
+		}
 
 		// at most once per refresh period
 		if (fPeriod > 0) {
@@ -1955,8 +2150,13 @@ Compositor::_ComposeLoop()
 		BRegion screen(BRect(0, 0, (float)fFrameWidth - 1,
 			(float)fFrameHeight - 1));
 		damage.IntersectWith(&screen);
-		if (damage.CountRects() == 0)
+		if (damage.CountRects() == 0) {
+			// Fourth review: the wake of an ended share has no damage when
+			// its view is hidden; what ended is still freed and given back.
+			BAutolock _(fShareLock);
+			_ShareRetire();
 			continue;
+		}
 
 		LayerList layers(20);
 		{
@@ -1983,6 +2183,18 @@ Compositor::_ComposeLoop()
 		bool effects = false;
 		{
 			BAutolock _(fEntryLock);
+			// M11 third review: a window whose buffer was taken to make
+			// room gives its shadow mask and glass back too; they count
+			// in the window memory. Only this thread uses them.
+			for (int32 i = 0; i < fEntries.CountItems(); i++) {
+				Entry* entry = fEntries.ItemAt(i);
+				if (entry->iface != NULL && entry->iface->Buffer() == NULL
+					&& (entry->mask.IsSet() || entry->glass.IsSet())) {
+					entry->mask.Unset();
+					entry->glass.Unset();
+					entry->glassValid = false;
+				}
+			}
 			for (int32 i = 0; i < layers.CountItems(); i++) {
 				Layer* layer = layers.ItemAt(i);
 				layer->contentDamage = layer->entry->takenDamage;
@@ -2007,8 +2219,20 @@ Compositor::_ComposeLoop()
 
 		fLastCompose = system_time();
 		if (!_Compose(damage, layers, shares, effects)) {
-			// fFailure is set; the top of the loop handles it, after the
-			// slot is released
+			// M11 review: the job may still run. The buffers of this
+			// frame are freed after the device is idle or lost
+			// (docs/APP-SERVER-COMPOSITOR.md), so wait once more, with
+			// the slot, the screen and the windows unlocked (a pause does
+			// not wait for it), before the layers go at the end of this
+			// pass; a job that still runs keeps every buffer for good.
+			slot.Unlock();
+			if (fFailure != NULL && strcmp(fFailure, "fence timeout") == 0
+				&& fVulkan->vkWaitForFences(fVulkan->device, 1,
+					&fVulkan->fence, VK_TRUE, kFenceGraceNs) != VK_SUCCESS) {
+				atomic_set(&fGpuBusy, 1);
+				log_line("compose fence still busy: window memory kept");
+			}
+			// fFailure is set; the top of the loop handles it
 			continue;
 		}
 		Damage(retry);
@@ -2517,11 +2741,15 @@ Compositor::_RestartAfterReset()
 		// all buffers are new now: every window draws once
 		ClippingChanged();
 		fEntryLock.Lock();
+		// M11 third review: a pause that began during the restart keeps
+		// the windows on the screen (as AddWindow does); the resume binds
+		// them to their buffers.
 		for (int32 i = 0; i < fEntries.CountItems(); i++) {
 			Entry* entry = fEntries.ItemAt(i);
 			if (entry->window != NULL
 				&& entry->window->GetDrawingEngine() != NULL)
-				entry->window->GetDrawingEngine()->SetHWInterface(entry->iface);
+				entry->window->GetDrawingEngine()->SetHWInterface(
+					fPaused ? (HWInterface*)fScreen : entry->iface);
 		}
 		fEntryLock.Unlock();
 		log_line("gpu compositor restarted after reset");
@@ -2541,8 +2769,11 @@ Compositor::_TurnOff(const char* reason)
 	if (!fDesktop->LockAllWindows())
 		return;
 
+	// M11 review: under fEntryLock, so AddWindow sees the CPU mode
+	fEntryLock.Lock();
 	fActive = false;
 	fPaused = false;
+	fEntryLock.Unlock();
 	_DropEffects();
 	fEntryLock.Lock();
 	for (int32 i = 0; i < fEntries.CountItems(); i++) {
@@ -3443,18 +3674,31 @@ Compositor::DirectAccessChanged(Window* window, bool accessing)
 void
 Compositor::DirectScreenChanged(bool locked)
 {
-	if (!fActive)
+	// M11 fourth review: an unlock gives its count back below even when
+	// the GPU mode has ended meanwhile.
+	if (!fActive && locked)
 		return;
 	if (locked) {
 		if (!fDesktop->LockAllWindows())
 			return;
 		// set before the pause, so a resume the pause schedules sees it
-		fDirectScreen = true;
+		atomic_add(&fDirectScreenWanted, 1);
 		DirectAccessStarting();
 		fDesktop->UnlockAllWindows();
 		return;
 	}
-	fDirectScreen = false;
+	// M11 review: a count, not a flag. A team that waits for the lock
+	// while another gives it up keeps the pause.
+	int32 wanted = atomic_get(&fDirectScreenWanted);
+	while (wanted > 0) {
+		int32 was = atomic_test_and_set(&fDirectScreenWanted, wanted - 1,
+			wanted);
+		if (was == wanted)
+			break;
+		wanted = was;
+	}
+	if (wanted > 1 || !fActive)
+		return;
 	fModePending = true;
 	release_sem_etc(fWakeSem, 1, B_DO_NOT_RESCHEDULE);
 }
@@ -3472,7 +3716,8 @@ Compositor::_ApplyMode()
 		return;
 	fModePending = false;
 	fEntryLock.Lock();
-	bool direct = !fDirectWindows.IsEmpty() || fDirectScreen;
+	bool direct = !fDirectWindows.IsEmpty()
+		|| atomic_get(&fDirectScreenWanted) > 0;
 	fEntryLock.Unlock();
 	if (fActive && fPaused && !direct) {
 		_RebindEngines(true);
@@ -3506,6 +3751,10 @@ Compositor::_RebindEngines(bool toBuffers)
 		else
 			entry->window->GetDrawingEngine()->SetHWInterface(fScreen);
 	}
+	// M11 review: the resume ends the pause under the same lock, so a
+	// window AddWindow binds in between is not left on the screen
+	if (toBuffers)
+		fPaused = false;
 }
 
 
@@ -3535,8 +3784,12 @@ Compositor::_ReturnSharedImages()
 	for (int32 i = 0; i < fShares.CountItems(); i++) {
 		Share* share = fShares.ItemAt(i);
 		share->broken = true;
-		if (share->ended)
+		if (share->ended) {
+			// M11 review: app_server ended it, the program still waits
+			if (share->giveBack)
+				_ShareGiveBack(share);
 			continue;
+		}
 		for (uint32 n = 0; n < share->count; n++) {
 			Share::Image& image = share->images[n];
 			if ((int32)n == share->current || (int32)n == share->pending
@@ -3718,6 +3971,24 @@ Compositor::_ShareLog(Window* window, const char* reason)
 }
 
 
+/*!	"app_server: window <id> zero-copy on", once per window, when its
+	first swapchain is imported (M11 stick, the counterpart of _ShareLog).
+	Takes fEntryLock, so it is never called with fShareLock held.
+*/
+void
+Compositor::_ShareLogOn(Window* window)
+{
+	BAutolock _(fEntryLock);
+	Entry* entry = _FindEntry(window);
+	if (entry == NULL || entry->shareOnLogged)
+		return;
+	entry->shareOnLogged = true;
+	int32 id = window->ServerWindow() != NULL
+		? window->ServerWindow()->ClientToken() : -1;
+	log_line("window %" B_PRId32 " zero-copy on", id);
+}
+
+
 /*!	The view's part of the screen and the screen position of its pixel
 	(0, 0), from its window. Called with all windows and fShareLock locked.
 	A view that is gone, or that is in another window now, has no shape.
@@ -3727,10 +3998,15 @@ Compositor::_ShareShape(Share* share)
 {
 	share->shape.MakeEmpty();
 	Window* window = share->window;
+	// M11 review: ~ServerWindow clears App() before ~Window ends the share.
+	// Read once (third review): it can be cleared between two reads.
 	if (window == NULL || share->ended || window->ServerWindow() == NULL)
 		return;
+	ServerApp* app = window->ServerWindow()->App();
+	if (app == NULL)
+		return;
 	View* view = NULL;
-	if (window->ServerWindow()->App()->ViewTokens().GetToken(share->viewToken,
+	if (app->ViewTokens().GetToken(share->viewToken,
 			B_HANDLER_TOKEN, (void**)&view) != B_OK
 		|| view == NULL || view->Window() != window || !view->IsVisible())
 		return;
@@ -3767,6 +4043,28 @@ Compositor::_ShareFree(Share* share)
 }
 
 
+/*!	M11 review: gives every image app_server holds of this share back to
+	the program (current, pending, overtaken), as _ReturnSharedImages does
+	for all. Compose thread at the start of a frame, with fShareLock: the
+	frame before waited for its fence, so no GPU work reads them.
+*/
+void
+Compositor::_ShareGiveBack(Share* share)
+{
+	share->giveBack = false;
+	for (uint32 n = 0; n < share->count; n++) {
+		Share::Image& image = share->images[n];
+		if ((int32)n == share->current || (int32)n == share->pending
+			|| image.retiring) {
+			image.retiring = false;
+			release_sem_etc(image.sem, 1, B_DO_NOT_RESCHEDULE);
+		}
+	}
+	share->current = -1;
+	share->pending = -1;
+}
+
+
 //!	Frees the shares that ended. Compose thread, between frames.
 void
 Compositor::_ShareRetire()
@@ -3775,6 +4073,8 @@ Compositor::_ShareRetire()
 		Share* share = fShares.ItemAt(i);
 		if (!share->ended)
 			continue;
+		if (share->giveBack)
+			_ShareGiveBack(share);
 		_ShareFree(share);
 		fShares.RemoveItemAt(i);
 		delete share;
@@ -3828,8 +4128,13 @@ Compositor::_ShareRetireDone()
 				|| fVulkan->markGet(image.importId, &sequence) != 0;
 			if (gone) {
 				// nothing reads it any more; an ended share's program
-				// has stopped waiting on it
+				// has stopped waiting on it. M11 review: not when
+				// app_server ended it (giveBack): that program still waits.
+				// Fourth review: so does the program of a share that did
+				// not end (broken, a restart, a failed mark read).
 				image.retiring = false;
+				if (share->giveBack || !share->ended)
+					release_sem_etc(image.sem, 1, B_DO_NOT_RESCHEDULE);
 				continue;
 			}
 			if (!_ShareReady(sequence)) {
@@ -3861,8 +4166,14 @@ Compositor::_ShareFrame(ShareDrawList& draws, BRegion& retry)
 		if (share->pending >= 0) {
 			Share::Image& next = share->images[share->pending];
 			uint64 sequence = 0;
-			if (fVulkan->markGet(next.importId, &sequence) != 0) {
+			// M11 review: mark 0 never passes (the WSI marks after its
+			// copy, so it is never 0); retrying it would compose every
+			// refresh period for good. Such a share is broken.
+			if (fVulkan->markGet(next.importId, &sequence) != 0
+				|| sequence == 0) {
 				share->broken = true;
+				// M11 review: the program still waits on these
+				_ShareGiveBack(share);
 				continue;
 			}
 			if (_ShareReady(sequence)) {
@@ -3919,6 +4230,10 @@ Compositor::ShareImages(Window* window, int32 viewToken, team_id team,
 		_ShareLog(window, "lavapipe");
 		return B_NOT_ALLOWED;
 	}
+	if (atomic_get(&fZeroCopyOff) != 0) {
+		_ShareLog(window, "setting");
+		return B_NOT_ALLOWED;
+	}
 	CompositorVulkan* vk = fVulkan;
 	if (vk == NULL || !vk->canImport || fFenceFd < 0) {
 		_ShareLog(window, "no import");
@@ -3959,6 +4274,7 @@ Compositor::ShareImages(Window* window, int32 viewToken, team_id team,
 	share->pending = -1;
 	share->ended = false;
 	share->broken = false;
+	share->giveBack = false;
 	share->left = 0;
 	share->top = 0;
 
@@ -4039,21 +4355,34 @@ Compositor::ShareImages(Window* window, int32 viewToken, team_id team,
 		_ShareLog(window, reason);
 		return B_NOT_ALLOWED;
 	}
-	BAutolock _(fShareLock);
-	// A view has one swapchain: an older one of the same view ends.
-	for (int32 i = 0; i < fShares.CountItems(); i++) {
-		Share* old = fShares.ItemAt(i);
-		if (old->team == team && old->viewToken == viewToken)
-			old->ended = true;
+	{
+		BAutolock _(fShareLock);
+		// A view has one swapchain: an older one of the same view ends.
+		// Fourth review: the compose thread is woken to free it, as for
+		// ShareEnd, or it waits for the next damage.
+		bool endedOld = false;
+		for (int32 i = 0; i < fShares.CountItems(); i++) {
+			Share* old = fShares.ItemAt(i);
+			if (old->team == team && old->viewToken == viewToken
+				&& !old->ended) {
+				old->ended = true;
+				old->giveBack = true;
+				endedOld = true;
+			}
+		}
+		if (endedOld)
+			release_sem_etc(fWakeSem, 1, B_DO_NOT_RESCHEDULE);
+		share->id = ++fShareCounter;
+		if (!fShares.AddItem(share)) {
+			_ShareFree(share);
+			delete share;
+			return B_NO_MEMORY;
+		}
+		_ShareShape(share);
+		*_shareId = share->id;
 	}
-	share->id = ++fShareCounter;
-	if (!fShares.AddItem(share)) {
-		_ShareFree(share);
-		delete share;
-		return B_NO_MEMORY;
-	}
-	_ShareShape(share);
-	*_shareId = share->id;
+	// After fShareLock: _ShareLogOn takes fEntryLock, which comes first.
+	_ShareLogOn(window);
 	return B_OK;
 }
 
@@ -4105,6 +4434,65 @@ Compositor::SharePresent(team_id team, int32 viewToken, int32 shareId,
 }
 
 
+/*!	M11 fourth review: the window's ServerWindow is going, and its app may
+	go before ~Window ends the shares (RemoveWindow). Until then
+	ClippingChanged would look the views up in the app's token space. The
+	shares end here; RemoveWindow finds none left.
+*/
+void
+Compositor::ShareWindowGone(Window* window)
+{
+	bool ended = false;
+	{
+		BAutolock shareLock(fShareLock);
+		for (int32 i = 0; i < fShares.CountItems(); i++) {
+			Share* share = fShares.ItemAt(i);
+			if (share->window != window)
+				continue;
+			if (!share->ended)
+				share->giveBack = true;
+			share->ended = true;
+			share->window = NULL;
+			ended = true;
+		}
+	}
+	if (ended)
+		release_sem_etc(fWakeSem, 1, B_DO_NOT_RESCHEDULE);
+}
+
+
+/*!	M11 fourth review: a view of this window was hidden, shown, moved,
+	resized, scrolled or removed. That changes no window's clipping, so
+	ClippingChanged does not run; the shared views of the window get their
+	place again here, or the last image stays where the view was. From the
+	window's ServerWindow thread, with the window read-locked.
+*/
+void
+Compositor::ShareViewsChanged(Window* window)
+{
+	BRegion damage;
+	{
+		BAutolock shareLock(fShareLock);
+		for (int32 i = 0; i < fShares.CountItems(); i++) {
+			Share* share = fShares.ItemAt(i);
+			if (share->window != window || share->ended)
+				continue;
+			BRegion before = share->shape;
+			int32 left = share->left;
+			int32 top = share->top;
+			_ShareShape(share);
+			if (before == share->shape && left == share->left
+				&& top == share->top)
+				continue;
+			damage.Include(&before);
+			damage.Include(&share->shape);
+		}
+	}
+	if (damage.CountRects() > 0)
+		Damage(damage);
+}
+
+
 /*!	The program's swapchain is gone. From the reply on, no semaphore of it
 	is released; the imports are freed at the start of the next frame.
 */
@@ -4119,11 +4507,15 @@ Compositor::ShareEnd(team_id team, int32 viewToken, int32 shareId)
 			if (share->id == shareId && share->team == team
 				&& share->viewToken == viewToken) {
 				share->ended = true;
+				// its semaphores may be gone: release none of them
+				share->giveBack = false;
 				damage = share->shape;
 			}
 		}
 	}
 	Damage(damage);
+	// M11 review: a hidden view has no damage; the frame frees the imports
+	release_sem_etc(fWakeSem, 1, B_DO_NOT_RESCHEDULE);
 }
 
 
@@ -4151,6 +4543,21 @@ Compositor::_Report()
 	}
 	log_line("compose median %" B_PRId64 " us cpu %" B_PRId64
 		" ms per 10 s", median, (cpu - fCpuAtReport) / 1000);
+	// M11 stick: the whole app_server, for the FPS compare of zero-copy
+	// and the copy path. A standard account cannot read another uid's
+	// team usage, so app_server logs it itself.
+	bigtime_t teamCpu = team_cpu_time();
+	log_line("team cpu %" B_PRId64 " ms per 10 s",
+		(teamCpu - fTeamCpuAtReport) / 1000);
+	fTeamCpuAtReport = teamCpu;
+	// M11 stick: the zero-copy test switch, read again every report, so
+	// the stick can change it without a restart. Only new swapchains
+	// follow it.
+	settings options;
+	load_settings(options);
+	int32 off = options.noZeroCopy ? 1 : 0;
+	if (atomic_get_and_set(&fZeroCopyOff, off) != off)
+		log_line("zero-copy setting %s", off != 0 ? "off" : "on");
 	// M11 step 4: what the median above was measured with
 	uint32 effects = fEffects;
 	log_line("compose effects shadow %s frosted %s strength %s",

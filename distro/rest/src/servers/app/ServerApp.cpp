@@ -3812,6 +3812,14 @@ ServerApp::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 				}
 				log_window_effects(before, after, strengthBefore,
 					strengthAfter);
+				// M11 review: the value is applied and on screen; a failed
+				// save is logged, not reported, or the Settings box and
+				// the screen would disagree.
+				if (status != B_OK) {
+					syslog(LOG_WARNING, "app_server: window effects not saved: "
+						"%s\n", strerror(status));
+					status = B_OK;
+				}
 			}
 			fLink.StartMessage(status);
 			fLink.Flush();
@@ -3960,7 +3968,7 @@ ServerApp::_MessageLooper()
 	// screen back (killed, crashed) kept the direct screen lock, and the
 	// compositor paused, for good. This thread took the lock, so it can
 	// give it back; a team that does not hold it gets B_PERMISSION_DENIED.
-	fDesktop->UnlockDirectScreen(fClientTeam);
+	fDesktop->UnlockDirectScreen(fClientTeam, true);
 // SPDX-SnippetEnd
 
 	// Quit() will send us a message; we're handling the exiting procedure

@@ -114,6 +114,10 @@ WindowEffectsBox::MessageReceived(BMessage* message)
 				flag = BAppearanceKit::B_WINDOW_FROSTED_GLASS;
 				box = fGlass;
 			}
+			// M11 review: the Appearance program or r5-effects-test may
+			// have changed the other effects since this page opened.
+			fEffects = BAppearanceKit::window_effects();
+			fStrength = BAppearanceKit::window_effect_strength();
 			uint32 effects = fEffects & ~flag;
 			if (box->Value() == B_CONTROL_ON)
 				effects |= flag;
@@ -124,8 +128,11 @@ WindowEffectsBox::MessageReceived(BMessage* message)
 		case kMsgStrength:
 		{
 			int32 strength;
-			if (message->FindInt32("strength", &strength) == B_OK)
+			if (message->FindInt32("strength", &strength) == B_OK) {
+				fEffects = BAppearanceKit::window_effects();
+				fStrength = BAppearanceKit::window_effect_strength();
 				_Apply(fEffects, strength);
+			}
 			break;
 		}
 
@@ -143,25 +150,30 @@ WindowEffectsBox::SetTarget(BHandler* target)
 }
 
 
+// M11 fourth review: Defaults and Revert read the values that are in
+// effect now too; another program may have changed them since the last
+// click here.
 bool
 WindowEffectsBox::IsDefaultable() const
 {
-	return (fEffects & kBoxEffects) != kDefaultEffects
-		|| fStrength != kDefaultStrength;
+	return (BAppearanceKit::window_effects() & kBoxEffects) != kDefaultEffects
+		|| BAppearanceKit::window_effect_strength() != kDefaultStrength;
 }
 
 
 void
 WindowEffectsBox::SetDefaults()
 {
-	_Apply((fEffects & ~kBoxEffects) | kDefaultEffects, kDefaultStrength);
+	_Apply((BAppearanceKit::window_effects() & ~kBoxEffects)
+		| kDefaultEffects, kDefaultStrength);
 }
 
 
 bool
 WindowEffectsBox::IsRevertable() const
 {
-	return fEffects != fSavedEffects || fStrength != fSavedStrength;
+	return BAppearanceKit::window_effects() != fSavedEffects
+		|| BAppearanceKit::window_effect_strength() != fSavedStrength;
 }
 
 
@@ -175,6 +187,8 @@ WindowEffectsBox::Revert()
 void
 WindowEffectsBox::_Apply(uint32 effects, int32 strength)
 {
+	fEffects = BAppearanceKit::window_effects();
+	fStrength = BAppearanceKit::window_effect_strength();
 	if (effects != fEffects
 		&& BAppearanceKit::set_window_effects(effects) == B_OK)
 		fEffects = effects;

@@ -108,6 +108,14 @@ bool gpu_selftest_enabled();
 static bool gpu_job_blocks(const gpu_sync* sync, uint64 target, bool binary);
 static void gpu_sync_host(gpu_sync* sync);
 static void gpu_release_parked(uint64 seen);
+/* M11 review: the device is lost and a reset stopped the CP, so nothing
+ * it was given can be fetched any more. Lost without a stopped CP (the
+ * hang before its reset, a second hang, a failed reset): it still may. */
+static inline bool
+gpu_cp_stopped_after_loss()
+{
+	return sLost && sCpStopped;
+}
 static void gpu_watchdog();
 static status_t gpu_file_root(gpu_client* client);
 static void gpu_defer_reclaim(uint64 seen);
@@ -115,6 +123,7 @@ static void gpu_prt_release_tree(r5_vm* vm);
 static void gpu_hang_test_step();
 static void gpu_wait_reset();
 static bool gpu_caller_is_app_server();
+static bool gpu_caller_is_selftest();
 static status_t gpu_bo_fill(gpu_client* client, gpu_bo* bo, r5_gpu_bo* request,
 	uint64 bytes);
 static void gpu_share_purge(bigtime_t now);
@@ -593,7 +602,22 @@ gpu_backing_drop(gpu_backing* backing)
 		return;
 	if (!r5_share_ref_drop(&backing->refs))
 		return;
-	if (backing->domain == R5_GPU_DOMAIN_VRAM && !backing->borrowed) {
+	/* M11 third review: a copy fork() made of the program's mapping goes
+	 * first. If one stays, the page is kept out of the allocator. */
+	bool copies = false;
+	if (backing->domain == R5_GPU_DOMAIN_VRAM && !backing->borrowed
+		&& backing->kernelArea >= 0 && gR5GpuOps.drop_copies != NULL
+		&& gR5GpuOps.drop_copies(backing->kernelArea) != 0) {
+		copies = true;
+		static bool sCopiesLogged = false;
+		if (!sCopiesLogged) {
+			sCopiesLogged = true;
+			dprintf("radeon_hd: vram mapping copies left, vram page %llx "
+				"kept\n", (unsigned long long)backing->vramOffset);
+		}
+	}
+	if (backing->domain == R5_GPU_DOMAIN_VRAM && !backing->borrowed
+		&& !copies) {
 		if (!sDeferred)
 			gpu_hw_vram_free(backing->vramOffset);
 		else if (!r5_defer_add(sDefer, kMaxBo, backing->vramOffset)) {
@@ -657,13 +681,21 @@ static int
 gpu_slot_take(gpu_client* client, int* reason)
 {
 	uint32 live = 0;
+	uint32 backings = 0;
 	int slot = -1;
 	for (uint32 i = 0; i < kMaxBo; i++) {
 		if (sBo[i].live)
 			live++;
 		else if (slot < 0)
 			slot = (int)i;
+		if (sBacking[i].live)
+			backings++;
 	}
+	/* M11 review: an export of a freed buffer keeps its backing for
+	 * R5_SHARE_LIFE_US without a slot. Count the larger of the two, so
+	 * the app_server reserve also holds for backings. */
+	if (backings > live)
+		live = backings;
 	/* The team info is read only when the reserve is all that is left. */
 	int appServer = live >= kMaxBo - R5_SHARE_RESERVE
 		&& gpu_caller_is_app_server() ? 1 : 0;
@@ -680,6 +712,9 @@ gpu_slot_take(gpu_client* client, int* reason)
 	}
 	return -1;
 }
+
+
+static void gpu_bo_detach(gpu_client* client, gpu_bo* bo, uint32 handle);
 
 
 static status_t
@@ -711,8 +746,6 @@ gpu_bo_create(gpu_client* client, void* buffer, size_t length)
 	bo->area = -1;
 	bo->mapTeam = -1;
 	bo->backing = backing;
-	backing->domain = in.domain;
-	backing->flags = in.flags;
 	backing->bytes = bytes;
 	status = gpu_bo_fill(client, bo, &in, bytes);
 	if (status != B_OK) {
@@ -720,6 +753,12 @@ gpu_bo_create(gpu_client* client, void* buffer, size_t length)
 		gpu_backing_drop(backing);
 		return status;
 	}
+	/* M11 review: set only now. A refusal before the VRAM allocation
+	 * would otherwise free offset 0, and in.flags are the flags that
+	 * were used (WC cleared when it is not allowed): BO_MAP and
+	 * BO_IMPORT must not report or map WC over a cached page. */
+	backing->domain = in.domain;
+	backing->flags = in.flags;
 	bo->live = true;
 	bo->owner = client;
 	client->handles[client->handleCount++] = (uint32)slot + 1u;
@@ -727,10 +766,44 @@ gpu_bo_create(gpu_client* client, void* buffer, size_t length)
 	in.area = bo->area;
 	in.bytes = bytes;
 	status = gpu_copy_out(buffer, length, &in, sizeof(in));
-	if (status != B_OK)
+	if (status != B_OK) {
+		/* External review: the program never learns the handle, so the
+		 * buffer goes again, as in BO_IMPORT and SCANOUT_BO. */
+		gpu_bo_detach(client, bo, in.handle);
 		return gpu_refuse("BO_CREATE", "copy", status, in.handle, in.domain,
 			bytes, 0, 0, 0, in.flags);
+	}
 	return B_OK;
+}
+
+
+/* M11 review: the VRAM this file still holds only through pending
+ * exports (the buffer itself was freed), so the VRAM limit counts it. */
+static uint64
+gpu_export_only_vram(gpu_client* client)
+{
+	uint64 bytes = 0;
+	for (uint32 i = 0; i < R5_SHARE_EXPORTS_PER_FILE; i++) {
+		const r5_share_export* record = &client->exports[i];
+		if (!record->live || record->backing >= kMaxBo)
+			continue;
+		const gpu_backing* backing = &sBacking[record->backing];
+		if (!backing->live || backing->domain != R5_GPU_DOMAIN_VRAM)
+			continue;
+		bool slot = false;
+		for (uint32 n = 0; n < kMaxBo && !slot; n++) {
+			slot = sBo[n].live && sBo[n].owner == client
+				&& sBo[n].backing == backing;
+		}
+		/* Two exports of one freed buffer count it once. */
+		for (uint32 n = 0; n < i && !slot; n++) {
+			slot = client->exports[n].live
+				&& client->exports[n].backing == record->backing;
+		}
+		if (!slot)
+			bytes += backing->bytes;
+	}
+	return bytes;
 }
 
 
@@ -753,6 +826,7 @@ gpu_bo_fill(gpu_client* client, gpu_bo* bo, r5_gpu_bo* request, uint64 bytes)
 					&& sBo[i].backing->domain == R5_GPU_DOMAIN_VRAM)
 					held += sBo[i].backing->bytes;
 			}
+			held += gpu_export_only_vram(client);
 			if (!r5_vram_fits(limit, held, client->tree->vm.used, bytes))
 				return gpu_refuse("BO_CREATE", "vram", B_NO_MEMORY, 0,
 					in.domain, bytes, 0, 0, 0, in.flags);
@@ -855,9 +929,10 @@ gpu_wait_reset()
 static void
 gpu_release_parked(uint64 seen)
 {
-	/* A lost device never retires the fence, so every parked buffer
-	 * and the file tree it holds are released. */
-	if (sLost)
+	/* A lost device never retires the fence. Its parked buffers and the
+	 * file trees they hold are released only once a reset stopped the
+	 * CP; before that it may still fetch them (M11 review). */
+	if (gpu_cp_stopped_after_loss())
 		seen = ~0ull;
 	gpu_defer_reclaim(seen);
 	for (uint32 i = 0; i < kMaxBo; i++) {
@@ -905,6 +980,10 @@ gpu_hang_run(uint32 actions)
 				 * last sequence (restart), so nothing parked is left. */
 				for (uint32 i = 0; i < kMaxJob; i++)
 					sJobs[i].live = false;
+				/* The CP runs again: a later loss (a failed self-test,
+				 * a STAGE_P error) has not stopped it, so parked
+				 * buffers stay until the next reset that stops it. */
+				sCpStopped = false;
 				sLost = false;
 				ok = gR5GpuOps.selftest != NULL
 					&& gR5GpuOps.selftest(sInfo) == B_OK && !sLost;
@@ -1037,7 +1116,7 @@ gpu_bo_detach(gpu_client* client, gpu_bo* bo, uint32 handle)
 	}
 	uint64 sequence = client->lastSequence;
 	uint64 seen = gpu_hw_seen();
-	if (!sLost && sequence != 0 && seen < sequence) {
+	if (!gpu_cp_stopped_after_loss() && sequence != 0 && seen < sequence) {
 		bo->owner = NULL;
 		bo->parked = true;
 		bo->parkSequence = sequence;
@@ -2471,6 +2550,27 @@ gpu_caller_is_app_server()
 }
 
 
+/*!	argv[0] is r5-gpu-selftest (Login starts it as the session user). */
+static bool
+gpu_caller_is_selftest()
+{
+	team_info info;
+	if (_get_team_info(B_CURRENT_TEAM, &info, sizeof(info)) != B_OK)
+		return false;
+	static const char* kPaths[] = {
+		"/system/bin/r5-gpu-selftest",
+		"/boot/system/bin/r5-gpu-selftest"
+	};
+	for (uint32 i = 0; i < sizeof(kPaths) / sizeof(kPaths[0]); i++) {
+		size_t length = strlen(kPaths[i]);
+		if (strncmp(info.args, kPaths[i], length) == 0
+			&& (info.args[length] == '\0' || info.args[length] == ' '))
+			return true;
+	}
+	return false;
+}
+
+
 static status_t
 gpu_scanout(gpu_client* client, void* buffer, size_t length)
 {
@@ -2770,7 +2870,11 @@ gpu_control(void* cookie, uint32 op, void* buffer, size_t length)
 		/* The last call of r5-gpu-selftest. gpu_hang_test starts after
 		 * it, from the retire thread. */
 		gpu_lock();
-		if (sHangTest != 0 && !sHangTestArmed) {
+		/* M11 review: only r5-gpu-selftest arms it, not the first
+		 * program that asks for the counts. argv[0] can be set by any
+		 * program; gpu_hang_test is a test switch, so this guards
+		 * against an accidental start, it is not a security check. */
+		if (sHangTest != 0 && !sHangTestArmed && gpu_caller_is_selftest()) {
 			sHangTestArmed = true;
 			sInfo = client->info;
 			dprintf("radeon_hd: gpu hang test armed %lu\n",
@@ -3134,6 +3238,14 @@ gpu_bo_map(gpu_client* client, void* buffer, size_t length)
 	 * does not read or write through that clone.
 	 */
 	team_id team = team_get_current_team_id();
+	/* M11 fourth review: the mapping is the program's own area now, so it
+	 * may have deleted it (RADV does at vkUnmapMemory). Area ids are not
+	 * reused; a gone id is cloned again. */
+	if (bo->area >= 0 && bo->mapTeam == team) {
+		area_info gone;
+		if (get_area_info(bo->area, &gone) != B_OK || gone.team != team)
+			bo->area = -1;
+	}
 	if (bo->area >= 0) {
 		if (bo->mapTeam != team)
 			return gpu_refuse("BO_MAP", "team", B_NOT_ALLOWED, in.handle,
@@ -3158,8 +3270,16 @@ gpu_bo_map(gpu_client* client, void* buffer, size_t length)
 		bo->backing->kernel = kernel;
 	}
 	void* user = NULL;
+	/* M11 third review: not B_KERNEL_AREA (RADV deletes this area when it
+	 * unmaps a buffer, and fork() copied it anyway). A clone, a transfer or
+	 * a fork copy of this mapping is on the same cache; gpu_backing_drop
+	 * deletes them all before the VRAM is freed (drop_copies), so a
+	 * mapping must not be shared by area id: shares use BO_EXPORT. The
+	 * kernel's vm_resize_area refuses a team a cache that a kernel area
+	 * also maps, so the program cannot shrink a GTT buffer under the GPU. */
 	area_id area = vm_clone_area(team, "r5 gpu bo", &user, B_ANY_ADDRESS,
-		B_READ_AREA | B_WRITE_AREA, kRegionNoPrivateMap, bo->backing->kernelArea,
+		B_READ_AREA | B_WRITE_AREA, kRegionNoPrivateMap,
+		bo->backing->kernelArea,
 		true);
 	if (area < 0)
 		return gpu_refuse("BO_MAP", "clone", area, in.handle, bo->backing->domain,
@@ -3220,7 +3340,7 @@ gpu_free(void* cookie)
 		if (!bo->live || bo->owner != client)
 			continue;
 		uint64 sequence = client->lastSequence;
-		if (!sLost && sequence != 0 && seen < sequence) {
+		if (!gpu_cp_stopped_after_loss() && sequence != 0 && seen < sequence) {
 			bo->owner = NULL;
 			bo->parked = true;
 			bo->parkSequence = sequence;
