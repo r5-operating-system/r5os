@@ -1,5 +1,26 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-15 - Bluetooth step 0: bluetooth_server in distro/, six fixes, a smoke test
+
+Problem: `bluetooth_server` came only from `haiku/`, and a review found six bugs (`docs/BLUETOOTH.md`, step 0). A connection-state request for an unknown radio or address got no reply or dereferenced NULL; a missing or short `bdaddr` was read anyway; the port listener thread used the local device list while the application thread changed it; stop-watching never matched; `DeviceManager` leaked per device, its looper never ran (so a radio plugged in later was never seen), and a removed radio was ignored; the SDP server leaked every client descriptor.
+
+What changed:
+- `distro/bluetooth/server/` is `haiku/src/servers/bluetooth/` with the fixes as MIT snippets (first commit the copy as it is, then the fixes). `scripts/apply-bluetooth.py` only copies it and the test into the tree and adds the Jam and `SYSTEM_BIN` lines; `apply-overlay.sh` runs it.
+- One `BLocker` (`fDevicesLock`) over `MessageReceived()` and over the HCI event dispatch (`DispatchToDevice`), for the local devices, their remote devices and the watchers. Not the looper lock: `QuitRequested()` waits for the listener thread with that lock held.
+- `BT_MSG_GET_REMOTE_DEVICES` and `BT_REQ_CONN_STATE` always reply; an unknown radio or address answers `DISCONNECTED` with an error status. `ServerRemoteDevice::conn_state` starts `DISCONNECTED`. `libbluetooth` is unchanged.
+- `bdaddr` is checked for presence and size (`_FindAddress`), also when paired devices are loaded. A radio with an invalid hci id is deleted, not launched.
+- Stop-watching matches the messenger by value and deletes it; `NotifyWatchers()` deletes invalid watchers and sends with timeout 0.
+- `DeviceManager::LoadState()` runs the looper; `AddDevice()` uses stack objects; `B_ENTRY_REMOVED` sends `BT_MSG_REMOVE_DEVICE` with the device path, and the server finds the radio by the path it was opened from.
+- `SDPServer` closes each client and checks descriptors with `>= 0`.
+- The server logs `bluetooth_server: started, N radios` after the radios present at start are added.
+- `bt_server_smoke_test` (`/system/bin`, MIT) starts the server and sends a connection state for an unknown radio, a short and a missing `bdaddr`, remote devices of an unknown radio, a removal and a stop-watching that match nothing; every request with a reply must get one. `distro/bluetooth/tests/run-qemu-smoke.sh` runs it in QEMU on an own copy of `r5-os.image`.
+
+Tested: built with `scripts/build-locked.sh` in WSL (`jam_exit=0`, `mesa_exit=0`; `bluetooth_server` and `bt_server_smoke_test` linked, no warnings in those files). QEMU, KVM, headless, an own copy of that image with a launch job, one boot: the syslog has `bluetooth_server: started, 0 radios` and `bt_server_smoke_test: ok (0 crashes)`, the test log `exit 0`. Not run: a second boot through the fixed read-back of `run-qemu-smoke.sh` (another session was jamming; the same files were read back by hand with `bfs_shell cp`). QEMU has no Bluetooth hardware: no radio, pairing, hot-plug or removal was tested. ARM64 and RISC-V 64 were not built or tested.
+
+Mistakes on the way: the first jam failed on app_server, because of files another worktree had left in the shared tree (fixed on main by `tree-owner.sh`); I stopped my second build halfway, and the apply after it stopped on an apply order that #4285 fixed.
+
+Limits: `BT_REQ_REMOVE_DEVICE` still only removes the remote device from the list, without deleting it. The boot log line `bt: bluetooth_std_ops: Connection Thread error` comes from the kernel stack and is not touched here.
+
 ## 2026-11-15 - Build scripts: the apply works on a clean Haiku tree
 
 Problem: after `tree-owner.sh` put the image definitions back to the Haiku `HEAD`, the Bluetooth session's apply stopped with `gfxinfo anchor missing in regular image`. `apply-radeon.py` anchors `SYSTEM_BIN += gfxinfo ;` on lines that `apply-media.py` adds, and `apply-overlay.sh` runs `apply-media.py` later. It only ever worked because the shared tree kept the lines of earlier applies, so an apply on a clean tree had never been tested. Mistake: #4283 was not tested with a full apply on a clean tree.
