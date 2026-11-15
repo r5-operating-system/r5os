@@ -6,8 +6,8 @@ Meet R5. An independent desktop operating system built on
 [Haiku](https://www.haiku-os.org/), with a fresh perspective on what a
 desktop can be.
 
-R5 brings together the things we love about a great desktop — speed,
-simplicity and a sense of control — with a modern look, better
+R5 brings together the things we love about a great desktop: speed,
+simplicity and a sense of control, with a modern look, better
 hardware support and the features you need to make yourself at home.
 
 No unnecessary clutter. No complicated nonsense. Just a desktop that's a
