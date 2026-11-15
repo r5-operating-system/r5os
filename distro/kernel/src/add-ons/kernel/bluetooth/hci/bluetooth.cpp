@@ -162,8 +162,7 @@ struct NetBufferAssembleOps {
 
 	void PostEvent(const uint8* event, size_t size)
 	{
-		TRACE("%s: EVENT posted in HCI
-", __func__);
+		TRACE("%s: EVENT posted in HCI\n", __func__);
 		btCoreData->PostEvent(device, (void*)event, size);
 	}
 
@@ -183,11 +182,9 @@ Assemble(bluetooth_device* bluetoothDevice, bt_packet_t type, void* data,
 	status_t status = hci_assemble(ops, (uint8)type, (const uint8*)data,
 		count);
 	if (status == B_BAD_VALUE)
-		ERROR("%s: unknown packet type %d
-", __func__, type);
+		ERROR("%s: unknown packet type %d\n", __func__, type);
 	else if (status != B_OK)
-		ERROR("%s: dropped a packet of type %d: %s
-", __func__, type,
+		ERROR("%s: dropped a packet of type %d: %s\n", __func__, type,
 			strerror(status));
 	return status;
 }
