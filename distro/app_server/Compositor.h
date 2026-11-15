@@ -74,6 +74,10 @@ public:
 									WindowHWInterface* iface);
 	// Window::~Window, after its engine is gone.
 			void				RemoveWindow(Window* window);
+	// Window::~Window, around the engine's end and RemoveWindow, so a
+	// rebind (pause, CPU mode, restart) never uses the deleted engine.
+			bool				LockEntries() { return fEntryLock.Lock(); }
+			void				UnlockEntries() { fEntryLock.Unlock(); }
 
 	// Desktop thread, all windows locked.
 			void				ClippingChanged();
