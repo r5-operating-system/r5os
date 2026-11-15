@@ -521,41 +521,75 @@ record(const Operation& op, float scale)
 	sView->ResizeTo(op.width - 1, op.height - 1);
 	BPicture* picture = new BPicture;
 	sView->BeginPicture(picture);
-	sView->PushState();
+	bool text = op.klass == kT;
+	if (!text)
+		sView->PushState();
 	if (scale != 1.0f)
 		sView->SetTransform(BAffineTransform().ScaleBy(scale));
 	op.draw(sView);
-	sView->PopState();
+	if (!text)
+		sView->PopState();
 	sView->EndPicture();
+	if (text) {
+		sView->SetTransform(BAffineTransform());
+		sView->SetFont(be_plain_font);
+		sView->SetHighColor(0, 0, 0);
+		sView->SetLowColor(255, 255, 255);
+		sView->SetDrawingMode(B_OP_COPY);
+		sView->SetOrigin(0, 0);
+		sView->MovePenTo(0, 0);
+	}
 	sCanvas->Unlock();
 	return picture;
 }
 
 
-//! The AS_CREATE_PICTURE data of a picture: its size, then its bytes.
+/*!	One flattened picture at bytes (BPicture::Flatten(): two header words,
+	the count of nested pictures, each of them flattened the same way, then
+	the size and the data) as AS_R5_DRAW_COMPARE sends it: the count, each
+	nested picture in this form, the size, the data. ClipToPicture() and
+	DrawPicture() refer to the nested ones by their place.
+*/
+static bool
+picture_blob(const uint8* bytes, size_t length, size_t& offset,
+	BMallocIO& out, int depth)
+{
+	if (depth > 8 || offset + 12 > length)
+		return false;
+	offset += 8;
+	int32 count;
+	memcpy(&count, bytes + offset, 4);
+	offset += 4;
+	if (count < 0 || count > 64)
+		return false;
+	out.Write(&count, 4);
+	for (int32 i = 0; i < count; i++) {
+		if (!picture_blob(bytes, length, offset, out, depth + 1))
+			return false;
+	}
+	if (offset + 4 > length)
+		return false;
+	int32 size;
+	memcpy(&size, bytes + offset, 4);
+	offset += 4;
+	if (size < 0 || offset + size > length)
+		return false;
+	out.Write(&size, 4);
+	out.Write(bytes + offset, size);
+	offset += size;
+	return true;
+}
+
+
 static bool
 picture_data(BPicture* picture, BMallocIO& out)
 {
 	BMallocIO flat;
 	if (picture->Flatten(&flat) != B_OK)
 		return false;
-	// BPicture::Flatten(): two header words, the count of sub-pictures,
-	// then the size and the data
-	const uint8* bytes = (const uint8*)flat.Buffer();
-	size_t length = flat.BufferLength();
-	if (length < 16)
-		return false;
-	int32 count;
-	memcpy(&count, bytes + 8, 4);
-	if (count != 0)
-		return false;
-	int32 size;
-	memcpy(&size, bytes + 12, 4);
-	if (size < 0 || (size_t)size + 16 > length)
-		return false;
-	out.Write(&size, 4);
-	out.Write(bytes + 16, size);
-	return true;
+	size_t offset = 0;
+	return picture_blob((const uint8*)flat.Buffer(), flat.BufferLength(),
+		offset, out, 0);
 }
 
 
@@ -641,11 +675,16 @@ main(int argc, char** argv)
 				continue;
 			}
 			int32 maxDifference, inner, pixels, ok;
-			float share;
+			float share, edge;
 			int64 gpuTime, cpuTime;
 			link.Read<int32>(&maxDifference);
 			link.Read<float>(&share);
 			link.Read<int32>(&inner);
+			link.Read<float>(&edge);
+			int32 penEqual;
+			float inkBox;
+			link.Read<int32>(&penEqual);
+			link.Read<float>(&inkBox);
 			link.Read<int32>(&pixels);
 			link.Read<int32>(&ok);
 			link.Read<int64>(&gpuTime);
@@ -653,12 +692,17 @@ main(int argc, char** argv)
 			total++;
 			if (ok) {
 				passed++;
-				printf("draw-compare %s ok max %d share %.1f%%\n", name.c_str(),
-					(int)maxDifference, share);
+				printf("draw-compare %s ok max %d share %.1f%% edge %.2f px\n",
+					name.c_str(), (int)maxDifference, share, edge);
 			} else {
 				printf("draw-compare %s FAIL max %d share %.1f%% class %s"
-					" inner %d\n", name.c_str(), (int)maxDifference, share,
-					kClassNames[op.klass], (int)inner);
+					" inner %d edge %.2f px\n", name.c_str(), (int)maxDifference,
+					share, kClassNames[op.klass], (int)inner, edge);
+			}
+			if (op.klass == kT) {
+				printf("draw-compare %s metrics %s pen %s ink box %.0f px\n",
+					name.c_str(), penEqual && inkBox <= 1 ? "ok" : "FAIL",
+					penEqual ? "same" : "different", inkBox);
 			}
 			if (timing && b == 0) {
 				printf("draw-time %s gpu %lld us cpu %lld us\n", op.name.c_str(),

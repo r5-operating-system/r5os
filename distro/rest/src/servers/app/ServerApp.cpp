@@ -3682,14 +3682,12 @@ ServerApp::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 			link.Read<float>(&request.scale);
 			link.Read<int32>(&repeat);
 			link.Read<int32>(&request.dump);
-			BReference<ServerPicture> picture(new(std::nothrow) ServerPicture,
-				true);
-			BReference<ServerPicture> scaled(new(std::nothrow) ServerPicture,
-				true);
-			status_t status = picture != NULL && scaled != NULL
-				? picture->ImportData(link) : B_NO_MEMORY;
+			// each picture with its nested ones (ClipToPicture())
+			BReference<ServerPicture> picture;
+			BReference<ServerPicture> scaled;
+			status_t status = draw_compare_import(link, picture);
 			if (status == B_OK)
-				status = scaled->ImportData(link);
+				status = draw_compare_import(link, scaled);
 
 			Compositor* compositor = fDesktop->GetCompositor();
 			const char* refused = NULL;
@@ -3717,6 +3715,9 @@ ServerApp::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 				fLink.Attach<int32>(result.maxDifference);
 				fLink.Attach<float>(result.share);
 				fLink.Attach<int32>(result.innerDifferences);
+				fLink.Attach<float>(result.edge);
+				fLink.Attach<int32>(result.penEqual ? 1 : 0);
+				fLink.Attach<float>(result.inkBox);
 				fLink.Attach<int32>(result.pixels);
 				fLink.Attach<int32>(result.ok ? 1 : 0);
 				fLink.Attach<int64>(result.gpuTime);

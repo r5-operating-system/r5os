@@ -9,6 +9,7 @@
 #include "DrawCompare.h"
 
 #include <stdio.h>
+#include <math.h>
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <string.h>
@@ -23,6 +24,9 @@
 #include "GlobalSubpixelSettings.h"
 #include "ServerBitmap.h"
 #include "ServerPicture.h"
+
+#include <LinkReceiver.h>
+#include <Referenceable.h>
 
 #include "SkiaDrawingEngine.h"
 #include "SkiaGpu.h"
@@ -82,10 +86,11 @@ private:
 };
 
 
-static void
+static BPoint
 play(DrawingEngine* engine, ServerPicture* picture, const IntRect& bounds,
 	uint32 background)
 {
+	BPoint pen(-1, -1);
 	DrawState state;
 	OffscreenCanvas canvas(engine, state, bounds);
 	if (engine->LockParallelAccess()) {
@@ -98,8 +103,54 @@ play(DrawingEngine* engine, ServerPicture* picture, const IntRect& bounds,
 		engine->FillRect(BRect(bounds.left, bounds.top, bounds.right,
 			bounds.bottom), color);
 		picture->Play(&canvas);
+		// the pen after DrawString() (CanvasCallbacks::DrawString())
+		pen = canvas.CurrentState()->PenLocation();
 		engine->UnlockParallelAccess();
 	}
+	return pen;
+}
+
+
+/*!	Text: the ink's left, top, right and bottom (pixels that moved at least
+	half way from the background), the largest difference in pixels.
+*/
+static float
+ink_box_difference(const uint8* a, uint32 aRow, const uint8* g, uint32 gRow,
+	int32 width, int32 height, uint32 background)
+{
+	const uint8* back = (const uint8*)&background;
+	auto move = [back](const uint8* p) {
+		int m = 0;
+		for (int c = 0; c < 4; c++)
+			m = max_c(m, abs((int)p[c] - (int)back[c]));
+		return m;
+	};
+	int maxMove = 0;
+	for (int32 y = 0; y < height; y++) {
+		for (int32 x = 0; x < width; x++)
+			maxMove = max_c(maxMove, move(a + y * aRow + x * 4));
+	}
+	if (maxMove == 0)
+		return 0;
+	int box[2][4] = { { width, height, -1, -1 }, { width, height, -1, -1 } };
+	for (int i = 0; i < 2; i++) {
+		const uint8* bits = i == 0 ? a : g;
+		uint32 row = i == 0 ? aRow : gRow;
+		for (int32 y = 0; y < height; y++) {
+			for (int32 x = 0; x < width; x++) {
+				if (move(bits + y * row + x * 4) * 2 < maxMove)
+					continue;
+				box[i][0] = min_c(box[i][0], x);
+				box[i][1] = min_c(box[i][1], y);
+				box[i][2] = max_c(box[i][2], x);
+				box[i][3] = max_c(box[i][3], y);
+			}
+		}
+	}
+	float worst = 0;
+	for (int k = 0; k < 4; k++)
+		worst = max_c(worst, (float)abs(box[0][k] - box[1][k]));
+	return worst;
 }
 
 
@@ -128,10 +179,113 @@ dump(const char* name, const uint8* bits, uint32 bytesPerRow, int32 width,
 }
 
 
+static uint32
+back_premultiplied(uint32 background)
+{
+	const uint8* b = (const uint8*)&background;
+	if (b[3] == 255)
+		return background;
+	uint32 result;
+	uint8* r = (uint8*)&result;
+	for (int c = 0; c < 3; c++)
+		r[c] = (b[c] * b[3] + 127) / 255;
+	r[3] = b[3];
+	return result;
+}
+
+
+/*!	The edge rule of part 5. The ink of a pixel is how far it moved from
+	the background (the largest channel), divided by the largest move in
+	Painter's image, so a fully covered pixel is 1. Summed per row, the ink
+	is the width of the shape in that row (or of its strokes); per column
+	its height. The result is the largest difference, in pixels, between
+	the two images, of a row's or a column's ink, or of its centre (for
+	rows and columns with at least one pixel of ink): position, size and
+	stroke width, not single pixel values.
+*/
+static float
+edge_difference(const uint8* a, uint32 aRow, const uint8* g, uint32 gRow,
+	int32 width, int32 height, uint32 background)
+{
+	const uint8* back = (const uint8*)&background;
+	auto move = [back](const uint8* p) {
+		int m = 0;
+		for (int c = 0; c < 4; c++)
+			m = max_c(m, abs((int)p[c] - (int)back[c]));
+		return m;
+	};
+	int maxMove = 0;
+	for (int32 y = 0; y < height; y++) {
+		for (int32 x = 0; x < width; x++)
+			maxMove = max_c(maxMove, move(a + y * aRow + x * 4));
+	}
+	if (maxMove == 0)
+		return 0;
+	std::vector<double> rowA(height, 0), rowG(height, 0);
+	std::vector<double> rowCA(height, 0), rowCG(height, 0);
+	std::vector<double> colA(width, 0), colG(width, 0);
+	std::vector<double> colCA(width, 0), colCG(width, 0);
+	for (int32 y = 0; y < height; y++) {
+		for (int32 x = 0; x < width; x++) {
+			double inkA = (double)move(a + y * aRow + x * 4) / maxMove;
+			double inkG = (double)move(g + y * gRow + x * 4) / maxMove;
+			rowA[y] += inkA;
+			rowG[y] += inkG;
+			rowCA[y] += inkA * x;
+			rowCG[y] += inkG * x;
+			colA[x] += inkA;
+			colG[x] += inkG;
+			colCA[x] += inkA * y;
+			colCG[x] += inkG * y;
+		}
+	}
+	double worst = 0;
+	auto check = [&worst](const std::vector<double>& sumA,
+		const std::vector<double>& sumG, const std::vector<double>& centreA,
+		const std::vector<double>& centreG) {
+		for (size_t i = 0; i < sumA.size(); i++) {
+			worst = std::max(worst, fabs(sumA[i] - sumG[i]));
+			if (sumA[i] >= 1 && sumG[i] >= 1) {
+				worst = std::max(worst, fabs(centreA[i] / sumA[i]
+					- centreG[i] / sumG[i]));
+			}
+		}
+	};
+	check(rowA, rowG, rowCA, rowCG);
+	check(colA, colG, colCA, colCG);
+	return (float)worst;
+}
+
+
 static inline bool
 same(const uint8* a, const uint8* b)
 {
 	return memcmp(a, b, 4) == 0;
+}
+
+
+status_t
+draw_compare_import(BPrivate::LinkReceiver& link,
+	BReference<ServerPicture>& _picture)
+{
+	BReference<ServerPicture> picture(new(std::nothrow) ServerPicture, true);
+	if (picture == NULL)
+		return B_NO_MEMORY;
+	int32 count = 0;
+	if (link.Read<int32>(&count) != B_OK || count < 0 || count > 64)
+		return B_BAD_DATA;
+	for (int32 i = 0; i < count; i++) {
+		BReference<ServerPicture> nested;
+		status_t status = draw_compare_import(link, nested);
+		if (status != B_OK)
+			return status;
+		if (picture->NestPicture(nested.Get()) < 0)
+			return B_NO_MEMORY;
+	}
+	status_t status = picture->ImportData(link);
+	if (status == B_OK)
+		_picture = picture;
+	return status;
 }
 
 
@@ -165,9 +319,12 @@ draw_compare(SkiaGpu* gpu, const draw_compare_request& request,
 	else if (request.subpixel == 2)
 		gSubpixelAntialiasing = true;
 	std::vector<bigtime_t> cpuTimes;
+	BPoint painterPen;
+	BPoint gpuPen;
 	for (int32 i = 0; i < repeat; i++) {
 		bigtime_t start = system_time();
-		play(&painter, painterPicture, bounds, request.background);
+		painterPen = play(&painter, painterPicture, bounds,
+			request.background);
 		cpuTimes.push_back(system_time() - start);
 	}
 	BReference<UtilityBitmap> painted(painter.ExportToBitmap(width, height,
@@ -207,7 +364,7 @@ draw_compare(SkiaGpu* gpu, const draw_compare_request& request,
 		}
 		for (int32 i = 0; i < repeat; i++) {
 			bigtime_t start = system_time();
-			play(&skia, picture, bounds, request.background);
+			gpuPen = play(&skia, picture, bounds, request.background);
 			if (target->Lock()) {
 				target->AddDamage(BRect(0, 0, width - 1, height - 1));
 				target->Unlock();
@@ -315,7 +472,7 @@ draw_compare(SkiaGpu* gpu, const draw_compare_request& request,
 					}
 				}
 				if (isInner && klass != kCompareNearest
-					&& klass != kCompareGradient)
+					&& (klass != kCompareGradient || difference > 3))
 					inner++;
 				if (klass == kCompareNearest) {
 					bool neighbour = false;
@@ -343,22 +500,33 @@ draw_compare(SkiaGpu* gpu, const draw_compare_request& request,
 				ok = ok && maxDifference == 0;
 				break;
 			case kCompareAnalytic:
-				ok = ok && maxDifference <= 24 && result.share <= 3.0f;
-				break;
 			case kComparePath:
-				ok = ok && maxDifference <= 64 && result.share <= 6.0f;
-				break;
 			case kCompareText:
-				ok = ok && result.share <= 10.0f;
+			case kCompareGradient:
+			{
+				// part 5 (owner, 15 Nov 2026): the interior keeps its
+				// limits; an edge is judged on its position, its size and
+				// the stroke width only, not on single pixel values
+				float limit = klass == kCompareText ? 1.0f : 0.5f;
+				result.edge = edge_difference(a, aRow, g, gRow, width,
+					height, back_premultiplied(request.background));
+				ok = ok && result.edge <= limit;
+				if (klass == kCompareText) {
+					// the letters may differ, the metrics may not: the pen
+					// after the string (advance) is the same, and the ink's
+					// box (baseline, height, width) within one pixel
+					result.penEqual = painterPen == gpuPen;
+					result.inkBox = ink_box_difference(a, aRow, g, gRow,
+						width, height, back_premultiplied(request.background));
+					ok = ok && result.penEqual && result.inkBox <= 1.0f;
+				}
 				break;
+			}
 			case kCompareNearest:
 				ok = result.share <= 1.0f && nearestMiss == 0;
 				break;
 			case kCompareBilinear:
 				ok = ok && maxDifference <= 4 && result.share <= 5.0f;
-				break;
-			case kCompareGradient:
-				ok = maxDifference <= 3;
 				break;
 		}
 		result.ok = ok;

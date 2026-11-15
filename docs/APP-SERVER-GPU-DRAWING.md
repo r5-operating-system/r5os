@@ -213,6 +213,14 @@ How a result is measured: `r5-draw-compare` (part 7) draws one operation with Pa
 | **B2** bitmap, bilinear | `DrawBitmap()` with `B_FILTER_BITMAP_BILINEAR` | exact where the bitmap is unscaled | 4 | 5 % | weights in float against AGG's 8-bit weights |
 | **G** gradient | the five types, on any shape | – | 3 | no limit | the same colour array; only the position (float against fixed point) can land one entry over |
 
+**The edge rule (owner, 15 Nov 2026, after the first runs of step 2; it replaces the "largest difference" and "share" columns for A1, A2, T and G).** The goal is not pixel parity with AGG: the GPU may, and should, look better. So:
+
+- **Interior:** an inner pixel (its 3×3 neighbours in Painter's image are equal) keeps the limit above: exact, and for G within 3.
+- **Edges** are judged on position, size and stroke width only. The ink of a pixel is how far it moved from the background (the largest channel, premultiplied on a transparent background), divided by the largest move in Painter's image, so a fully covered pixel counts 1. Summed per row the ink is the width of the shape (or of its strokes) in that row, per column its height. For every row and column the two sums, and the centres of the ink of rows and columns with at least one pixel of ink, may differ by at most **0.5 px** (A1, A2, G) or **1 px** (T). One edge pixel's value does not count.
+- **Text** may be rasterised differently, the metrics may not: the pen after `DrawString()` (the advance) is exactly equal in both engines, and the box of the ink (pixels at least half way from the background: left, top, right, bottom, which give the width, the height and the baseline) lies within 1 px. `r5-draw-compare` prints a `metrics` line per text operation.
+- **Bitmaps** (E, B1, B2) keep the rules above, strictly.
+- `r5-draw-compare` prints the edge result as `edge <n> px` on every line. 0.5 and 1 px are starting values; they change only by a decision of the owner.
+
 - An operation in several classes (a gradient inside a Bézier curve, a pattern in a transformed rectangle) is held to the looser of its classes for its edge pixels and to the stricter for its inner pixels.
 - Subpixel shapes and text keep their class; the difference is counted per channel, so a colour fringe that moved counts.
 - The same set also compares **Skia on RADV against Skia on Lavapipe**, in the same classes, so a driver difference shows up as a line of its own.
@@ -549,3 +557,24 @@ Written down so the next step and the review read the code with the same picture
 - **Painter's scaled bitmaps:** `B_OP_COPY` and the bilinear alpha overlay use Painter's own index and 8-bit weights in the shader (`DrawBitmapNearestNeighbor.h`, `DrawBitmapBilinear.h`), not Skia's sampling.
 - **Found while comparing:** `blend_line32()` (Painter's `B_OP_ALPHA` fills of whole runs) left the alpha byte of its temporary row unset and wrote stack memory into the destination's alpha. Fixed in Painter (`distro/app_server/drawing/drawing_support.h`, owner, 15 Nov 2026): it keeps the destination's alpha, and so does the GPU. On a transparent background the images are compared premultiplied (part 5).
 - **Gaps (decision 4: they block the GPU drawing, never drawn on the CPU on purpose, but still Painter today):** `BView::BeginLayer()` layers (`Layer.cpp` uses a `BitmapDrawingEngine`), offscreen bitmaps in colour spaces other than 32 bits, drag bitmaps as a read point. Group 12 (the decorator) and 13 (offscreen bitmaps) of the compare set are not built yet; the text check of part 5 (pen position, ink boxes) is not in the set.
+
+## Scope change (owner, 15 Nov 2026, during steps 2 to 5)
+
+**The M12 deliverable is Skia drawing on by default, with or without a GPU** (RADV, or Lavapipe without one). Only Safe mode draws with Painter (step 6 and decision 10 already say so for the CPU mode). This replaces "`gpu_draw` stays opt-in until the stick" as the end state of M12; `gpu_draw` stays the test switch until the gate below and the stick pass.
+
+**M12 now includes optimisation, with one gate:** on the 5625U (RADV), **no draw class is slower with Skia than with Painter**. A draw class is a class of part 5 (E, A1, A2, T, B1, B2, G), measured per operation with `r5-draw-compare --time` (median of 100, GPU against CPU) and in the scenario of decision 9 (`draw median` against `draw cpu median`). Lavapipe numbers are recorded, not gated (decision 9). Anything beyond the gate, such as 60 frames per second while dragging, scrolling or resizing, stays M13. The copy of the window images into the window buffers may move into M12 if the profile shows it is the cause of a class being slower; otherwise it stays M13 (Q4).
+
+**Order of work for the gate:** first profile which classes and which parts of the path cause the 43 ms scenario median on Lavapipe (and the same on the 5625U once it can run), report the top causes to the owner, and only then fix.
+
+## New step: gamma-correct blending and better text on the Skia path (owner, 15 Nov 2026)
+
+After the compare work (steps 2 to 5, with the edge rule of part 5) and before the performance gate:
+
+1. **Gamma-correct blending** of anti-aliased edges and alpha on the Skia path: coverage and alpha blending in linear light instead of on the 8-bit sRGB values Haiku blends today.
+2. **Better text:** light hinting (`SkFontHinting::kSlight`) and clean grayscale anti-aliasing, as the default look of text drawn by Skia.
+3. **What stays:** glyph metrics (advance, height, baseline) stay identical; the compare set's `metrics` lines keep checking that. The software path (Painter, Safe mode) keeps working and keeps its look.
+4. **On by default on the GPU path** (Skia, RADV or Lavapipe), with a setting to turn it off (proposed: `gpu_draw_classic true` in the radeon_hd settings for both, until the look and feel redesign gives it a place in Settings).
+5. **Judged by the owner on a side-by-side sheet:** AGG, Skia as built in steps 3 and 4, and Skia with this step, a few operations per class.
+6. **Compare set:** with this step on, the interior of a shape with alpha or anti-aliasing is no longer AGG's value; the compare runs with the setting off, and with it on only the metrics and the edge rule's position and size checks apply (a decision for the owner when the sheet is judged).
+
+Step order of M12 from here: 2 to 5 (compare set, engine, text, offscreen, fallback, measurement) → **5b** gamma-correct blending and better text → **5c** performance gate (profile, report, fix) → 6 Safe mode → 6b `BDirectWindow` on Lavapipe → 7 stick.

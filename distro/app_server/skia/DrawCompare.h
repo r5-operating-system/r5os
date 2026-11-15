@@ -13,6 +13,7 @@
 #define DRAW_COMPARE_H
 
 
+#include <Referenceable.h>
 #include <SupportDefs.h>
 
 
@@ -46,6 +47,9 @@ struct draw_compare_result {
 	int32		maxDifference;
 	float		share;			// percent
 	int32		innerDifferences;
+	float		edge;			// px, the edge rule of part 5
+	bool		penEqual;		// text: the pen after DrawString()
+	float		inkBox;			// text: px, the ink's box
 	int32		pixels;
 	bool		ok;
 	bool		gpuFailed;
@@ -53,6 +57,14 @@ struct draw_compare_result {
 	int64		cpuTime;
 };
 
+
+namespace BPrivate { class LinkReceiver; }
+
+
+// One picture as r5-draw-compare sends it: the count of nested pictures,
+// each of them the same way, then the AS_CREATE_PICTURE data.
+status_t draw_compare_import(BPrivate::LinkReceiver& link,
+	BReference<ServerPicture>& _picture);
 
 // picture: the operation; scaledPicture: the same under a 1.5x transform
 // for Painter when request.scale is not 1 (may be NULL otherwise).
