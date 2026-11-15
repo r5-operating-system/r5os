@@ -30,6 +30,10 @@
 #include <FindDirectory.h>
 
 #include <r5_gpu.h>
+#include <driver_settings.h>
+#include <safemode_defs.h>
+#include <strings.h>
+#include <syscalls.h>
 #include <r5_share.h>
 #include <TokenSpace.h>
 
@@ -99,6 +103,9 @@ static void
 load_settings(settings& out)
 {
 	memset(&out, 0, sizeof(out));
+	// On by default (user, 15 Nov 2026): RADV when the GPU passed its
+	// checks, Lavapipe otherwise. gpu_compositor false is the opt-out.
+	out.want = true;
 	char path[B_PATH_NAME_LENGTH];
 	if (find_directory(B_USER_SETTINGS_DIRECTORY, -1, false, path,
 			sizeof(path)) != B_OK)
@@ -113,6 +120,8 @@ load_settings(settings& out)
 	while (fgets(line, sizeof(line), file) != NULL) {
 		if (strncmp(line, "gpu_compositor true", 19) == 0)
 			out.want = true;
+		if (strncmp(line, "gpu_compositor false", 20) == 0)
+			out.want = false;
 		if (strncmp(line, "gpu_compositor_lavapipe true", 28) == 0)
 			out.lavapipe = true;
 		if (strncmp(line, "gpu_compositor_fail true", 24) == 0)
@@ -576,6 +585,24 @@ ease_out(float t)
 }
 
 
+/*!	Whether the boot menu asked for safe mode or the fail-safe video
+	mode. Both keep the desktop in the CPU mode, the way back when the
+	composed desktop does not start.
+*/
+static bool
+safe_mode_option(const char* name)
+{
+	char buffer[B_FILE_NAME_LENGTH];
+	size_t size = sizeof(buffer);
+	if (_kern_get_safemode_option(name, buffer, &size) != B_OK)
+		return false;
+	return strncasecmp(buffer, "true", size) == 0
+		|| strncasecmp(buffer, "yes", size) == 0
+		|| strncasecmp(buffer, "on", size) == 0
+		|| strncasecmp(buffer, "enabled", size) == 0;
+}
+
+
 //	#pragma mark - Compositor
 
 
@@ -584,8 +611,15 @@ Compositor::Create(Desktop* desktop, HWInterface* screen)
 {
 	settings options;
 	load_settings(options);
-	if (!options.want)
+	if (!options.want) {
+		log_line("gpu compositor off: setting");
 		return NULL;
+	}
+	if (safe_mode_option(B_SAFEMODE_SAFE_MODE)
+		|| safe_mode_option(B_SAFEMODE_FAIL_SAFE_VIDEO_MODE)) {
+		log_line("gpu compositor off: safe mode");
+		return NULL;
+	}
 
 	Compositor* compositor = new(std::nothrow) Compositor(desktop, screen);
 	if (compositor == NULL)

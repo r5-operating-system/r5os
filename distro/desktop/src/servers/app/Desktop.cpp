@@ -689,8 +689,9 @@ Desktop::Init()
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-	// M11: the compositor, when gpu_compositor is set. Without it, or
-	// when no Vulkan device starts, the desktop is the CPU mode.
+	// M11: the compositor, on by default. With gpu_compositor false, in
+	// safe mode, or when no Vulkan device starts, the desktop is the CPU
+	// mode.
 	fCompositor = Compositor::Create(this, fVirtualScreen.HWInterface());
 	// M11 step 4: the window effects from the appearance file
 	if (fCompositor != NULL) {

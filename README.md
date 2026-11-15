@@ -53,7 +53,7 @@ The name is a nod to BeOS R5, as history. It is not a product claim.
 
 \* In active development. Only the Ryzen 5 5625U has been tested so far; other graphics chips draw in software. Details: [`docs/GRAPHICS.md`](docs/GRAPHICS.md).
 
-### The desktop on the GPU (preview)
+### The desktop on the GPU
 **Your desktop, with depth.** Every window gets its own canvas, and the graphics chip puts the whole screen together from those canvases, frame by frame. Your apps don't change. The desktop just feels lighter.
 
 - **Soft shadows** lift windows off the desktop, so you see at a glance what's on top.
@@ -64,7 +64,7 @@ The name is a nod to BeOS R5, as history. It is not a product claim.
 - **Full-screen games and video keep working.** When a program wants to draw on the screen itself, the compositor steps aside, and it comes back when the program is done.
 - **There's always a way back.** If the graphics chip ever stops, the desktop carries on in the classic way, without a restart. On a computer without a supported chip, the same desktop is drawn in software.
 
-This is a preview: it stays off by default while it is tested on real hardware.
+It is on by default. Safe mode in the boot menu brings back the classic desktop.
 
 ### Processor
 - Better CPU support (AMD/Intel)
@@ -77,7 +77,6 @@ The full list, build by build, is in About R5 → What's new ([`distro/WHATSNEW`
 
 ## Not there yet
 
-- The desktop on the GPU is not on by default yet. Until it is, the desktop is drawn by the CPU.
 - One graphical session at a time. There is no fast user switching and no guest account.
 - The bundled browser (WebPositive) is weak for today's web.
 - Sleep, backlight and HiDPI on the reference laptop are still open.
