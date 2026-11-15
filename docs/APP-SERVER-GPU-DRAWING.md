@@ -219,3 +219,54 @@ How a result is measured: `r5-draw-compare` (part 7) draws one operation with Pa
 - M11's `compose compare` stays as it is (exact, effects off).
 - These are starting values. A failing operation is a gap and is reported; the numbers change only by a decision of the user, never to make a test pass.
 
+## 6. Text, offscreen bitmaps and `Sync()`
+
+### Text (decision 5)
+
+- **Glyphs and positions stay `ServerFont`'s.** Painter's `AGGTextRenderer` gets glyphs and positions from `GlyphLayoutEngine::LayoutGlyphs()` (`font/GlyphLayoutEngine.h`), which applies the escapement delta, the spacing mode, the offsets of `DrawString(offsets)` and the font fallback. `SkiaDrawingEngine` calls the same function with its own consumer, which collects glyph indices and positions instead of drawing, and draws them with `SkCanvas::drawGlyphs()`. A run is cut where the fallback changes the font. So line heights, widths and positions are identical in both modes by construction; `StringWidth()`, `DrawStringDry()` and `BoundingBox()` do not change at all.
+- **The same font files.** Each `FontStyle` gets one `SkTypeface`, made by an empty custom font manager (`skia_enable_fontmgr_custom_empty`) from the same file (`FontStyle::Path()`, with its face index) or, for a font a program loaded from memory, from the same bytes (`FontStyle::FontData()`, `FontDataSize()`). Skia reads them through R5's own FreeType (part 1).
+- **Size, shear, rotation.** `SkFont` size is `ServerFont::Size()`. Painter shears by `(90 - Shear())` degrees and rotates by `-Rotation()` degrees about the baseline origin (`AGGTextRenderer.cpp`); `SkiaDrawingEngine` builds the same matrix and draws under it.
+- **The Antialiasing tab of Appearance** sets the globals in `GlobalSubpixelSettings.h`, which both engines read:
+  - hinting `HINTING_MODE_OFF` → `SkFontHinting::kNone`; `HINTING_MODE_ON` → `kNormal` (`FT_LOAD_TARGET_NORMAL`, as `FontEngine.cpp`), or `kFull` with subpixel text (`FT_LOAD_TARGET_LCD`, as `FontEngine.cpp`); `HINTING_MODE_MONOSPACED_ONLY` → hinting only for fixed-width fonts, as Haiku;
+  - grey antialiasing → `SkFont::Edging::kAntiAlias`; no antialiasing (`B_DISABLE_ANTIALIASING`, or the global off without `B_FORCE_ANTIALIASING`) → `kAlias`;
+  - subpixel antialiasing (`gSubpixelAntialiasing`) with the order from `gSubpixelOrderingRGB` and the average weight `gSubpixelAverageWeight`: Skia's own LCD text uses FreeType's LCD filter, which has no "average weight". So subpixel text uses the two-pass way of part 4: Skia draws the glyphs three times as wide in grey from its glyph cache into a coverage image, and the composite shader applies Haiku's average weight and order, the way `agg_scanline_*_subpix_avrg_filtering.h` does. The setting then means the same in both modes. This is Q5.
+- **Underline and strikeout** (`B_UNDERSCORE_FACE`, `B_STRIKEOUT_FACE`) are rectangles that `AGGTextRenderer.cpp` places from the font metrics; the same positions (copied code), drawn as rectangles.
+- **Drawing mode and colour:** the text goes through the R5 blender of the current mode, direct or in two passes, like every shape.
+- **Seen, not changed:** `LayoutGlyphs()` makes Haiku's own glyph cache entries (FreeType outlines or bitmaps) as a side effect, also when only positions are wanted. That is metrics work that `StringWidth()` already does today; M13 can ask for metrics only.
+
+### Offscreen `BBitmap` views (decision 7)
+
+**Today.** A `BBitmap` with `B_BITMAP_ACCEPTS_VIEWS` is an `OffscreenWindow` in app_server, with a `BitmapHWInterface` over the bitmap's memory (`OffscreenWindow.cpp`), an area the program shares. Its `ServerWindow` thread draws with Painter straight into that memory. `BView::Sync()` sends `AS_SYNC`, and `ServerWindow` answers at once (`distro/desktop/src/servers/app/ServerWindow.cpp`, `case AS_SYNC`): Painter has already finished. A bitmap in a colour space other than `B_RGB32` or `B_RGBA32` is drawn in a 32-bit back buffer and converted when copied to the bitmap (`drawing/BitmapHWInterface.cpp`).
+
+**In the GPU mode.**
+
+1. The offscreen window's engine is a `SkiaDrawingEngine` on a GPU image of its own (`B8G8R8A8`, the size of the bitmap), with its own `Recorder` on that window's thread.
+2. **Upload at the start of a drawing session.** The program can write the bits itself at any time (for example `distro/ui`'s `ActionCard.cpp` and `PageHeader.cpp` `memcpy` an icon into a fresh `B_BITMAP_ACCEPTS_VIEWS` bitmap before a view draws into it). So the first drawing command after the bitmap was created, or after its last read point, first uploads the bitmap's memory into the image (through the 32-bit conversion for other colour spaces).
+3. **Read points.** At each of these the engine snaps its recording, the compose thread submits it, app_server waits for that submit's fence, and the image is copied back into the bitmap's memory (converted back for other colour spaces, as `BitmapHWInterface` does):
+   - `AS_SYNC` from that bitmap's view: the answer is sent only after the copy;
+   - app_server itself reading those pixels: `DrawBitmap()` of that bitmap into anything (a window, another bitmap, a picture), a drag bitmap, a cursor made from it, a `BPicture` that records it, an alpha mask made from it, and `ReadBitmap()`;
+   - the bitmap being deleted or its view being removed (`RemoveChild`), so nothing is pending afterwards.
+   A read point from another thread (a window drawing the bitmap) takes the bitmap engine's recorder lock to snap; that lock comes after the window lock, like the `HWInterface` lock.
+4. **`DrawBitmap()` always reads memory.** A bitmap is uploaded from its memory every time it is drawn, also a view bitmap after its read point, because the program may have changed the bits since; app_server cannot see such a write. Keeping uploads for unchanged bitmaps is M13 work.
+5. **Lost content.** If the GPU is lost (decision 8, later the ladder), drawing into a bitmap since its last read point is lost; the memory holds the state of that point. Haiku has no such case; it is written in the limits.
+6. **The wait.** The fence wait of a read point follows M11 decision 14: late is not a failure; a lost device is the fallback.
+
+**Programs that read without `Sync()`.** Decision 7 says a correct program calls `Sync()` first. A search of the Haiku tree (every `.cpp` under `src/` that names `ACCEPTS_VIEWS`, checked for a pixel read and for `Sync()`) found no program that reads the bits of a view bitmap without `Sync()`:
+
+| Program | File | What it does | Expected |
+|---|---|---|---|
+| Icon-O-Matic | `src/apps/icon-o-matic/generic/gui/IconButton.cpp` | draws into a view bitmap, `Sync()`, then reads | unchanged |
+| Shared `BIconButton` | `src/kits/shared/IconButton.cpp` | the same | unchanged |
+| FileTypes | `src/preferences/filetypes/IconView.cpp` | the same | unchanged |
+| MediaPlayer subtitles | `src/apps/mediaplayer/interface/SubtitleBitmap.cpp` | draws text into a view bitmap, `Sync()`, then draws it | unchanged |
+| R5 Settings cards | `distro/ui/` `ActionCard.cpp`, `PageHeader.cpp` (in the WSL tree under `src/preferences/r5ui/`) | writes the bits of a fresh view bitmap with `memcpy` before drawing | upload at point 2 |
+| R5 icons | `distro/icons/R5Icons.cpp` | draws, `Sync()`, reads | unchanged |
+| `src/tests/servers/app/` | – | no test there uses a view bitmap | – |
+
+Because no existing program reads without `Sync()`, step 5 writes one test program, `r5-offscreen-test` (MIT, `/system/bin`), with four cases, each printing one line:
+
+- `offscreen sync ok`: draw, `Sync()`, read: the pixels equal Painter's (class E content);
+- `offscreen cpu write ok`: write the bits, attach a view, draw over half: both halves are right (point 2);
+- `offscreen drawbitmap ok`: draw into a bitmap, no `Sync()`, `DrawBitmap()` it into a window, read the window back with `BScreen::GetBitmap()`: the drawing is there (point 3, app_server's own read);
+- `offscreen nosync`: draw, no `Sync()`, read at once: reports what it saw, `stale` or `fresh`, without a pass or a fail, because Haiku itself does not promise either. The step report records the line.
+
