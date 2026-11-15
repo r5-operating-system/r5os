@@ -58,7 +58,8 @@ cd "$SKIA"
 # R5 patches, each with its reason in the file (THIRD_PARTY_NOTICES.md
 # lists them). The grep guard keeps a second run from applying it twice.
 if grep -q 'char const \* const name;' src/ports/SkFontHost_FreeType.cpp; then
-	git apply "$HERE/patches/gcc13-to-array.patch"
+	# A Windows checkout may hold the patch with CRLF; Skia's files are LF.
+	sed 's/\r$//' "$HERE/patches/gcc13-to-array.patch" | git apply
 fi
 bin/gn gen "$OUT" --args="$ARGS"
 "$NINJA" -C "$OUT" skia
