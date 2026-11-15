@@ -127,4 +127,17 @@ set_window_effect_strength(enum window_effect_strength strength)
 }
 
 
+bool
+gpu_draws_text()
+{
+	BPrivate::AppServerLink link;
+	link.StartMessage(AS_R5_GPU_DRAWS_TEXT);
+	int32 code;
+	bool gpu = false;
+	if (link.FlushWithReply(code) == B_OK && code == B_OK)
+		link.Read<bool>(&gpu);
+	return gpu;
+}
+
+
 }	// namespace BAppearanceKit

@@ -64,6 +64,11 @@ window_effect_strength	window_effect_strength();
 status_t	set_window_effect_strength(
 				enum window_effect_strength strength);
 
+// M12 (Q13): true while the GPU draws the letters (Skia, its own subpixel
+// filter). Painter's average weight then has no effect. False in the CPU
+// mode and when app_server cannot be asked.
+bool		gpu_draws_text();
+
 
 }	// namespace BAppearanceKit
 
