@@ -44,6 +44,12 @@ LocalDeviceImpl::CreateControllerAccessor(BPath* path)
 		return NULL;
 	}
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	device->fPath = path->Path();
+	// SPDX-SnippetEnd
+
 	return device;
 }
 
@@ -60,6 +66,12 @@ LocalDeviceImpl::CreateTransportAccessor(BPath* path)
 		delete delegate;
 		return NULL;
 	}
+
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	device->fPath = path->Path();
+	// SPDX-SnippetEnd
 
 	return device;
 }
@@ -137,10 +149,17 @@ LocalDeviceImpl::LoadRemoteDevices()
 
 	BMessage device;
 	for (int32 i = 0; devices.FindMessage("remote", i, &device) == B_OK; i++) {
-		ServerRemoteDevice* rd = new ServerRemoteDevice();
 		ssize_t size;
 		bdaddr_t* bdaddr;
-		device.FindData("bdaddr", B_ANY_TYPE, (const void**)&bdaddr, &size);
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// A damaged settings file skips the entry instead of crashing.
+		if (device.FindData("bdaddr", B_ANY_TYPE, (const void**)&bdaddr,
+				&size) != B_OK || size != (ssize_t)sizeof(bdaddr_t))
+			continue;
+		ServerRemoteDevice* rd = new ServerRemoteDevice();
+		// SPDX-SnippetEnd
 		rd->bdaddr = *bdaddr;
 		device.FindString("name", &rd->friendly_name);
 		device.FindUInt16("clock_offset", &rd->clock_offset);

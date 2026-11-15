@@ -58,7 +58,12 @@ SDPServer::Stop()
 		fIsShuttingDown = true;
 
 		// Close the socket to unblock the accept() call
-		if (fServerSocket > 0) {
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// 0 is a valid descriptor.
+		if (fServerSocket >= 0) {
+		// SPDX-SnippetEnd
 			close(fServerSocket);
 			fServerSocket = -1;
 		}
@@ -132,8 +137,12 @@ SDPServer::_Run()
 
 		// Check if we woke up because of shutdown
 		if (fIsShuttingDown) {
-			if (client > 0)
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			if (client >= 0)
 				close(client);
+			// SPDX-SnippetEnd
 			break;
 		}
 
@@ -159,6 +168,13 @@ SDPServer::_Run()
 				TRACE_BT("\n");
 			}
 		} while (receivedSize > 0);
+
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// Every accepted connection used to leak its descriptor.
+		close(client);
+		// SPDX-SnippetEnd
 
 		snooze(50000);
 		TRACE_BT("SDP: Waiting for next connection...\n");

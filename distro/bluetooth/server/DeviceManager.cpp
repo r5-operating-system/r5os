@@ -64,6 +64,28 @@ DeviceManager::MessageReceived(BMessage* msg)
 				{
 					TRACE_BT("Something removed from the bus ...\n");
 
+					// SPDX-SnippetBegin
+					// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+					// SPDX-License-Identifier: MIT
+					// The radio left /dev/bluetooth: let the server drop the
+					// local device that was opened from this path. A path that
+					// is no radio (a driver directory) matches nothing there.
+					entry_ref ref;
+					const char* name;
+					if (msg->FindInt32("device", &ref.device) != B_OK
+						|| msg->FindInt64("directory", &ref.directory) != B_OK
+						|| msg->FindString("name", &name) != B_OK)
+						return;
+					ref.set_name(name);
+
+					BPath path(&ref);
+					if (path.InitCheck() != B_OK)
+						return;
+
+					BMessage remove(BT_MSG_REMOVE_DEVICE);
+					remove.AddString("name", path.Path());
+					be_app_messenger.SendMessage(&remove);
+					// SPDX-SnippetEnd
 				}
 				break;
 				case B_STAT_CHANGED:
@@ -145,17 +167,21 @@ status_t
 DeviceManager::AddDevice(entry_ref* ref)
 {
 	BPath path(ref);
-	BString* str = new BString(path.Path());
 
-	BMessage* msg =	new	BMessage(BT_MSG_ADD_DEVICE);
-	msg->AddInt32("opcode",	B_ENTRY_CREATED);
-	msg->AddInt32("device",	ref->device);
-	msg->AddInt64("directory", ref->directory);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// SendMessage() copies the message; nothing here needs the heap.
+	BMessage msg(BT_MSG_ADD_DEVICE);
+	msg.AddInt32("opcode", B_ENTRY_CREATED);
+	msg.AddInt32("device", ref->device);
+	msg.AddInt64("directory", ref->directory);
 
-	msg->AddString("name", *str	);
+	msg.AddString("name", path.Path());
 
 	TRACE_BT("DeviceManager: Device %s registered\n", path.Path());
-	return be_app_messenger.SendMessage(msg);
+	return be_app_messenger.SendMessage(&msg);
+	// SPDX-SnippetEnd
 }
 
 

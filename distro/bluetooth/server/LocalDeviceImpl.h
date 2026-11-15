@@ -32,7 +32,13 @@ struct ServerRemoteDevice
 	uint8				encryption_enabled;
 
 	uint16				handle;
-	RemoteDevice::ConnectionState			conn_state;
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Every new remote device starts disconnected, not with stack garbage.
+	RemoteDevice::ConnectionState			conn_state
+		= RemoteDevice::DISCONNECTED;
+	// SPDX-SnippetEnd
 	BMessage			services;
 };
 
@@ -68,9 +74,21 @@ public:
 	void				RemoveRemoteDevice(ServerRemoteDevice* rd);
 	RemoteDevicesList*	GetRemoteDevicesList();
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// The /dev/bluetooth path this radio was opened from.
+	const BString&		Path() const { return fPath; }
+	// SPDX-SnippetEnd
+
 private:
 
 	RemoteDevicesList	fRemoteDevicesList;
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	BString				fPath;
+	// SPDX-SnippetEnd
 
 	void SaveRemoteDevices();
 	void LoadRemoteDevices();

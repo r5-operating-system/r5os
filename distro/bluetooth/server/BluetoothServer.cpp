@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <sys/select.h>
 
+#include <Autolock.h>
 #include <Entry.h>
 #include <Deskbar.h>
 #include <Directory.h>
@@ -19,6 +20,7 @@
 #include <Window.h>
 
 #include <TypeConstants.h>
+#include <new>
 #include <syslog.h>
 
 #include <bluetoothserver_p.h>
@@ -43,24 +45,40 @@ DispatchEvent(struct hci_event_header* header, int32 code, size_t size)
 		return B_OK;
 	}
 
-	// fetch the LocalDevice who belongs this event
-	LocalDeviceImpl* lDeviceImplementation = ((BluetoothServer*)be_app)->
-		LocateLocalDeviceImpl(GET_PORTCODE_HID(code));
-
-	if (lDeviceImplementation == NULL) {
-		TRACE_BT("BluetoothServer: LocalDevice could not be fetched\n");
-		return B_OK;
-	}
-
-	lDeviceImplementation->HandleEvent(header);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// This runs on the port listener thread. The local device list is
+	// changed on the application thread, so look up and use the device
+	// under the list lock (BluetoothServer::DispatchToDevice).
+	((BluetoothServer*)be_app)->DispatchToDevice(GET_PORTCODE_HID(code),
+		header);
 
 	return B_OK;
 }
 
 
+void
+BluetoothServer::DispatchToDevice(hci_id hid, struct hci_event_header* header)
+{
+	BAutolock locker(fDevicesLock);
+
+	// fetch the LocalDevice who belongs this event
+	LocalDeviceImpl* lDeviceImplementation = LocateLocalDeviceImpl(hid);
+	if (lDeviceImplementation == NULL) {
+		TRACE_BT("BluetoothServer: LocalDevice could not be fetched\n");
+		return;
+	}
+
+	lDeviceImplementation->HandleEvent(header);
+}
+// SPDX-SnippetEnd
+
+
 BluetoothServer::BluetoothServer()
 	:
-	BApplication(BLUETOOTH_SIGNATURE)
+	BApplication(BLUETOOTH_SIGNATURE),
+	fDevicesLock("bluetooth local devices")
 {
 	fDeviceManager = new DeviceManager();
 	fLocalDevicesList.MakeEmpty();
@@ -75,9 +93,19 @@ BluetoothServer::BluetoothServer()
 bool BluetoothServer::QuitRequested(void)
 {
 	LocalDeviceImpl* lDeviceImpl = NULL;
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	fDevicesLock.Lock();
 	while ((lDeviceImpl = (LocalDeviceImpl*)
 		fLocalDevicesList.RemoveItemAt(0)) != NULL)
 		delete lDeviceImpl;
+	fDevicesLock.Unlock();
+
+	fDeviceManager->Lock();
+	fDeviceManager->Quit();
+	fDeviceManager = NULL;
+	// SPDX-SnippetEnd
 
 	_RemoveDeskbarIcon();
 
@@ -102,6 +130,14 @@ void BluetoothServer::ArgvReceived(int32 argc, char **argv)
 
 void BluetoothServer::ReadyToRun(void)
 {
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// The device manager is a looper; without Run() it never sees a radio
+	// that is plugged in or removed after the server started.
+	fDeviceManager->LoadState();
+	// SPDX-SnippetEnd
+
 	fDeviceManager->StartMonitoringDevice("bluetooth/h2");
 	fDeviceManager->StartMonitoringDevice("bluetooth/h3");
 	fDeviceManager->StartMonitoringDevice("bluetooth/h4");
@@ -117,6 +153,14 @@ void BluetoothServer::ReadyToRun(void)
 	status_t status = fSDPServer->Start();
 	if (status != B_OK)
 		TRACE_BT("BluetoothServer: Failed launching the SDP server thread\n");
+
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// The radios found at start are queued as BT_MSG_ADD_DEVICE before this
+	// message, so the count in the log line includes them.
+	PostMessage(kMsgReportStarted);
+	// SPDX-SnippetEnd
 }
 
 
@@ -131,6 +175,15 @@ void BluetoothServer::MessageReceived(BMessage* message)
 	BMessage reply;
 	status_t status = B_WOULD_BLOCK; // mark somehow to do not reply anything
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// The port listener thread handles HCI events under this same lock
+	// (DispatchToDevice), so the local devices, their remote devices and the
+	// watchers are never changed by both threads at once.
+	BAutolock locker(fDevicesLock);
+	// SPDX-SnippetEnd
+
 	switch (message->what) {
 		case BT_MSG_ADD_DEVICE:
 		{
@@ -144,14 +197,26 @@ void BluetoothServer::MessageReceived(BMessage* message)
 			LocalDeviceImpl* lDeviceImpl
 				= LocalDeviceImpl::CreateTransportAccessor(&path);
 
-			if (lDeviceImpl->GetID() >= 0) {
-				fLocalDevicesList.AddItem(lDeviceImpl);
-
-				TRACE_BT("LocalDevice %s id=%" B_PRId32 " added\n", str.String(),
-					lDeviceImpl->GetID());
-			} else {
-				TRACE_BT("BluetoothServer: Adding LocalDevice hci id invalid\n");
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			if (lDeviceImpl == NULL) {
+				syslog(LOG_ERR, "bluetooth_server: no memory for %s",
+					str.String());
+				break;
 			}
+
+			if (lDeviceImpl->GetID() < 0) {
+				TRACE_BT("BluetoothServer: Adding LocalDevice hci id invalid\n");
+				delete lDeviceImpl;
+				break;
+			}
+
+			fLocalDevicesList.AddItem(lDeviceImpl);
+			// SPDX-SnippetEnd
+
+			TRACE_BT("LocalDevice %s id=%" B_PRId32 " added\n", str.String(),
+				lDeviceImpl->GetID());
 
 			status = B_WOULD_BLOCK;
 			/* TODO: This should be by user request only! */
@@ -161,11 +226,28 @@ void BluetoothServer::MessageReceived(BMessage* message)
 
 		case BT_MSG_REMOVE_DEVICE:
 		{
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			// By hci_id (the device unregisters itself), or by device path
+			// (DeviceManager, when the entry leaves /dev/bluetooth).
 			LocalDeviceImpl* lDeviceImpl = LocateDelegateFromMessage(message);
+			const char* path;
+			if (lDeviceImpl == NULL
+				&& message->FindString("name", &path) == B_OK) {
+				for (int32 i = 0; i < fLocalDevicesList.CountItems(); i++) {
+					LocalDeviceImpl* candidate = fLocalDevicesList.ItemAt(i);
+					if (candidate->Path() == path) {
+						lDeviceImpl = candidate;
+						break;
+					}
+				}
+			}
 			if (lDeviceImpl != NULL) {
 				fLocalDevicesList.RemoveItem(lDeviceImpl);
 				delete lDeviceImpl;
 			}
+			// SPDX-SnippetEnd
 		}
 		break;
 
@@ -237,36 +319,63 @@ void BluetoothServer::MessageReceived(BMessage* message)
 
 			lDeviceImpl->Disconnect(message);
 
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
 			const bdaddr_t* bdaddr;
-			ssize_t addr_size;
-			message->FindData("bdaddr", B_ANY_TYPE, (const void**)&bdaddr, &addr_size);
+			if (!_FindAddress(message, &bdaddr))
+				break;
 
 			ServerRemoteDevice* rd = lDeviceImpl->RemoteDeviceByAddr(*bdaddr);
-			lDeviceImpl->RemoveRemoteDevice(rd);
+			if (rd != NULL)
+				lDeviceImpl->RemoveRemoteDevice(rd);
+			// SPDX-SnippetEnd
 		}
 		break;
 
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
 		case BT_START_WATCHING_CONNECTIONS:
 		{
-			BMessenger* messenger = new BMessenger();
-			if (message->FindMessenger("messenger", messenger) == B_OK)
-				fWatchersList.AddItem(messenger);
+			BMessenger* messenger = new(std::nothrow) BMessenger();
+			if (messenger == NULL)
+				break;
+			if (message->FindMessenger("messenger", messenger) != B_OK) {
+				delete messenger;
+				break;
+			}
+			fWatchersList.AddItem(messenger);
 		}
 		break;
 
 		case BT_STOP_WATCHING_CONNECTIONS:
 		{
-			BMessenger* messenger = new BMessenger();
-			if (message->FindMessenger("messenger", messenger) == B_OK)
-				fWatchersList.RemoveItem(messenger);
+			// The list holds its own copies, so match by value.
+			BMessenger messenger;
+			if (message->FindMessenger("messenger", &messenger) != B_OK)
+				break;
+			for (int32 i = fWatchersList.CountItems() - 1; i >= 0; i--) {
+				if (*fWatchersList.ItemAt(i) == messenger)
+					delete fWatchersList.RemoveItemAt(i);
+			}
 		}
 		break;
+		// SPDX-SnippetEnd
 
 		case BT_MSG_GET_REMOTE_DEVICES:
 		{
 			LocalDeviceImpl* lDeviceImpl = LocateDelegateFromMessage(message);
-			if (lDeviceImpl == NULL)
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			// The caller waits for a reply; an unknown radio gets an empty
+			// list with an error status instead of no answer.
+			if (lDeviceImpl == NULL) {
+				status = B_BAD_VALUE;
 				break;
+			}
+			// SPDX-SnippetEnd
 
 			RemoteDevicesList* rdList = lDeviceImpl->GetRemoteDevicesList();
 
@@ -290,20 +399,42 @@ void BluetoothServer::MessageReceived(BMessage* message)
 
 		case BT_REQ_CONN_STATE:
 		{
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			// RemoteDevice::GetConnectionState() waits for this reply and
+			// reads "conn state". An unknown radio or address answers
+			// DISCONNECTED with an error status, instead of no reply or a
+			// NULL dereference.
+			RemoteDevice::ConnectionState state = RemoteDevice::DISCONNECTED;
+			status = B_BAD_VALUE;
+
 			LocalDeviceImpl* lDeviceImpl = LocateDelegateFromMessage(message);
-			if (lDeviceImpl == NULL)
-				break;
-
 			const bdaddr_t* bdaddr;
-			ssize_t addr_size;
-			message->FindData("bdaddr", B_ANY_TYPE, (const void**)&bdaddr, &addr_size);
+			if (lDeviceImpl != NULL && _FindAddress(message, &bdaddr)) {
+				ServerRemoteDevice* rd
+					= lDeviceImpl->RemoteDeviceByAddr(*bdaddr);
+				if (rd != NULL) {
+					state = rd->conn_state;
+					status = B_OK;
+				}
+			}
 
-			ServerRemoteDevice* rd = lDeviceImpl->RemoteDeviceByAddr(*bdaddr);
-			reply.AddUInt8("conn state", static_cast<uint8>(rd->conn_state));
-
-			message->SendReply(&reply);
+			reply.AddUInt8("conn state", static_cast<uint8>(state));
+			// SPDX-SnippetEnd
 		}
 		break;
+
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		case kMsgReportStarted:
+		{
+			syslog(LOG_INFO, "bluetooth_server: started, %" B_PRId32
+				" radios", fLocalDevicesList.CountItems());
+		}
+		break;
+		// SPDX-SnippetEnd
 
 		default:
 			BApplication::MessageReceived(message);
@@ -324,16 +455,40 @@ void BluetoothServer::MessageReceived(BMessage* message)
 void
 BluetoothServer::NotifyWatchers(BMessage* notice)
 {
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	BAutolock locker(fDevicesLock);
 	for (int32 i = 0; i < fWatchersList.CountItems(); i++) {
 		BMessenger* messenger = fWatchersList.ItemAt(i);
 		if (!messenger->IsValid()) {
-			fWatchersList.RemoveItemAt(i);
+			delete fWatchersList.RemoveItemAt(i);
 			i--;
 			continue;
 		}
-		messenger->SendMessage(notice);
+		// Never wait on a watcher while the lock is held.
+		messenger->SendMessage(notice, (BHandler*)NULL, 0);
 	}
+	// SPDX-SnippetEnd
 }
+
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+bool
+BluetoothServer::_FindAddress(BMessage* message, const bdaddr_t** _address)
+{
+	const void* data;
+	ssize_t size;
+	if (message->FindData("bdaddr", B_ANY_TYPE, &data, &size) != B_OK
+		|| data == NULL || size != (ssize_t)sizeof(bdaddr_t))
+		return false;
+
+	*_address = (const bdaddr_t*)data;
+	return true;
+}
+// SPDX-SnippetEnd
 
 
 void

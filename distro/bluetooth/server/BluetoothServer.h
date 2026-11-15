@@ -8,6 +8,7 @@
 #include <stdlib.h>
 
 #include <Application.h>
+#include <Locker.h>
 #include <ObjectList.h>
 #include <OS.h>
 
@@ -25,6 +26,13 @@
 #include <PortListener.h>
 
 #define BT "bluetooth_server: "
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// Private to the server: posted to itself at the end of ReadyToRun().
+static const uint32 kMsgReportStarted = 'r5bs';
+// SPDX-SnippetEnd
 
 typedef enum {
 	BLACKBOARD_GENERAL = 0,
@@ -72,10 +80,27 @@ public:
 	void		NotifyServices(ServerRemoteDevice* rd);
 
     LocalDeviceImpl*    LocateLocalDeviceImpl(hci_id hid);
-	
+
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	void		DispatchToDevice(hci_id hid, struct hci_event_header* header);
+	// SPDX-SnippetEnd
+
 private:
 
 	LocalDeviceImpl*	LocateDelegateFromMessage(BMessage* message);
+
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	static bool			_FindAddress(BMessage* message,
+							const bdaddr_t** _address);
+
+	// Held by MessageReceived() and by the port listener thread
+	// (DispatchToDevice); guards the local devices and the watchers.
+	BLocker				fDevicesLock;
+	// SPDX-SnippetEnd
 
 	void 				ShowWindow(BWindow* pWindow);
 
