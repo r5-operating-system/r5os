@@ -77,3 +77,125 @@ Skia is built as a **static library** and linked only into `app_server`.
 
 A private shared library would only pay off if Skia were updated without app_server, which the release mechanism does not do.
 
+## 4. The mapping table
+
+Read from `drawing/DrawingEngine.h`, `drawing/Painter/Painter.h` and the files they use. R5 has no copy of these files in `distro/` yet, so the Haiku files are the source.
+
+### How `SkiaDrawingEngine` is built
+
+- **A subclass, with the base class as the CPU path.** `class SkiaDrawingEngine : public DrawingEngine` (new R5 file, MIT, `distro/app_server/`). It overrides every virtual call of `DrawingEngine`, as `RemoteDrawingEngine` (`drawing/interface/remote/`) already does; that class shows that the interface can be served without Painter. When the desktop is in the CPU mode, each override calls the base class, so the fallback is a flag plus `SetHWInterface(screen)`, and the engine object that `Window`, `ServerWindow` and the decorator hold stays the same (as in M11). The flag is desktop-wide, so the GPU and Painter never mix (decision 1).
+- **The same geometry as Painter.** Painter moves coordinates before AGG sees them: pixel-centre alignment for strokes, the pen size rules, `B_SUBPIXEL_PRECISE`, the ellipse and rectangle alignment (`AlignRect()`, `AlignEllipseRect()`, `TransformAlignAndClipRect()`, the `_Align` helpers in `Painter.cpp`). These helpers are copied (Haiku MIT notice kept, into `distro/`) and called by `SkiaDrawingEngine` before it calls Skia, so both engines start from the same numbers. Skia only does coverage and blending.
+- **The same blending as Painter: the R5 blenders.** Haiku's drawing modes are integer formulas in `drawing_modes/*.h`, for example `BLEND(d, r, g, b, a)`: `d + ((s - d) * a) >> 8`, alpha always 255 (`DrawingMode.h`). Skia's own blend modes compute in floating point on premultiplied colour, so they are not the same. Every drawing call therefore goes through an **R5 blender**: an `SkRuntimeEffect::MakeForBlender()` in SkSL, one per mode, that does Haiku's formula on the 8-bit values (small integers, so `float` is exact). The coverage reaches the blender in one of two ways:
+  - **Direct:** the paint carries the colour and the R5 blender, and Skia applies its own coverage (`mix(dst, blend, coverage)`). That equals Painter where Painter's partial coverage is the same linear mix: every mode at full coverage, and `B_OP_OVER`, `B_OP_ERASE`, `B_OP_INVERT`, `B_OP_SELECT` and `B_OP_ALPHA` overlay at the edges, on an opaque target.
+  - **Two passes:** Skia first draws the shape's coverage into an 8-bit coverage image (white with `kSrc` on a cleared `R8` image the size of the shape's bounds), then one rectangle with a runtime shader that reads that coverage and the pattern, plus the R5 blender, which gets the coverage inside the source colour. This is exact for any formula. It is needed for `B_OP_COPY` at partial coverage (Haiku blends towards the **low colour**, not the destination: `BLEND_COPY` is `BLEND_FROM(d, low, color, cover)` in `DrawingModeCopy.h`), for `B_OP_ADD`, `B_OP_SUBTRACT`, `B_OP_BLEND`, `B_OP_MIN` and `B_OP_MAX` (their single-pixel paths use `BLEND` even at full coverage, which is one off from the source colour), for subpixel shapes, and on a window with a transparent background (frosted glass), where Haiku writes alpha 255 at every pixel it touches.
+  - Step 3 starts with two passes for every mode, and switches a mode to direct only where the compare set shows the same pixels.
+- **Straight alpha in the image.** Haiku's buffers keep straight (not premultiplied) alpha, and the M11 compose reads a pixel's colour also where its alpha is 0 (the background of a frosted-glass view). The window image keeps Haiku's bytes exactly: Skia is told the image is premultiplied and has no colour space (`nullptr`), so it never converts, and because every draw goes through an R5 blender, the bytes mean what Painter means. The copy from the image into the M11 buffer is then a plain `vkCmdCopyImageToBuffer` of the damaged rectangles. Uploaded bitmaps are treated the same way, so bilinear filtering works on straight colour, as Painter's does.
+- **Recorders, recordings and damage.** Each engine has a `skgpu::graphite::Recorder`, used under a lock of its own. Drawing calls record. At the end of each batch of messages in `ServerWindow::_MessageLooper()`, and at every point where a pixel must be read (part 6), the engine snaps a `Recording` and hands it, with the damage of that batch, to the compositor. The compose thread inserts the recordings in order, submits, copies the damage into the window buffers, and composes. `CopyToFront()` only adds damage; it does not snap, so a stream of small drawings outside an update does not become a stream of submits.
+
+### `DrawingEngine` calls
+
+Class is the tolerance class of part 5: E exact; A1 analytic edges; A2 path edges; T text; B1 scaled bitmap, nearest; B2 bitmap, bilinear; G gradient; – no pixels.
+
+| Call | Painter today | Skia in `SkiaDrawingEngine` | Class |
+|---|---|---|---|
+| `FrameBufferChanged()` | re-attaches Painter to the new buffer | wraps the new window image in a new `SkSurface` (`SkSurfaces::WrapBackendTexture()`) | – |
+| `SetHWInterface()` | rebinds to a buffer | GPU mode: the window image of the new `WindowHWInterface`; CPU mode: base class | – |
+| `SetCopyToFrontEnabled()`, `CopyToFront()` | copy to the front buffer, or M11 damage | damage only; the recording is snapped at the end of the batch | – |
+| `LockParallelAccess()`, `UnlockParallelAccess()`, `LockExclusiveAccess()`, `UnlockExclusiveAccess()`, `IsParallelAccessLocked()`, `IsExclusiveAccessLocked()` | the `HWInterface` lock | unchanged, plus the engine's own recorder lock, taken after it | – |
+| `DumpToBitmap()`, `ReadBitmap()` | read the buffer | a read point (part 6): snap, finish, then read the image back | E |
+| `ConstrainClippingRegion()` | `BRegion` clip | `SkCanvas::clipRegion()` with an `SkRegion` of the same rectangles | E |
+| `SetDrawState()` | copies the whole state, the offsets, the alpha mask | the same state in the engine; the alpha mask as below | – |
+| `SetHighColor()`, `SetLowColor()` | pattern colours | uniforms of the pattern shader and the R5 blender | – |
+| `SetPenSize()` | stroke width | `SkPaint::setStrokeWidth()` after Painter's pen-size rules (copied helper) | – |
+| `SetStrokeMode()` | caps `B_BUTT_CAP`, `B_ROUND_CAP`, `B_SQUARE_CAP`; joins `B_MITER_JOIN`, `B_ROUND_JOIN`, and `B_BEVEL_JOIN`, `B_BUTT_JOIN`, `B_SQUARE_JOIN` all as bevel (the AGG join switch in `Painter.cpp`); miter limit | `SkPaint::Cap` `kButt`, `kRound`, `kSquare`; `SkPaint::Join` `kMiter`, `kRound`, and `kBevel` for the three that Painter makes bevel; `setStrokeMiter()` | – |
+| `SetFillRule()` | `B_EVEN_ODD`, `B_NONZERO` | `SkPathFillType::kEvenOdd`, `kWinding` | – |
+| `SetPattern()` | 8×8 pattern, high and low colour, anchored by the draw state's offsets (`PatternHandler`) | runtime shader: the 64 pattern bits as a uniform, anchored at the same offset; it tells the blender "high" or "low" per pixel | E |
+| `SetDrawingMode()` (both) | picks a `drawing_modes/` family | picks the R5 blender | – |
+| `SetBlendingMode()` | `B_PIXEL_ALPHA` or `B_CONSTANT_ALPHA`, with `B_ALPHA_OVERLAY`, `B_ALPHA_COMPOSITE` or one of the twelve other `B_ALPHA_COMPOSITE_*` functions | the matching R5 blender (table below) | – |
+| `SetFont()` (both) | `AGGTextRenderer` gets the `ServerFont` | an `SkFont` from the same font (part 6) | – |
+| `SetTransform()` | `BAffineTransform` plus offsets | `SkMatrix` (`sx`, `shx`, `tx`, `shy`, `sy`, `ty`) after the same offsets | – |
+| `CopyRegion()` | sorts the rectangles so none overwrites another, then `CopyRect()` (`memmove`) | per rectangle `SkSurface::makeImageSnapshot(rect)`, then `drawImage()` at the offset with `kSrc`; a snapshot is a copy, so the order does not matter | E |
+| `CopyRect()` | helper of `CopyRegion()` | not used; see `CopyRegion()` | E |
+| `InvertRect()` | inverts the rectangle in the buffer | rectangle with the `invert` blender | E |
+| `DrawBitmap()` | `BitmapPainter`: colour-space conversion, `B_TRANSPARENT_MAGIC_*`, scale, `B_FILTER_BITMAP_BILINEAR`, drawing mode | the same conversion (copied from `BitmapPainter::_ConvertColorSpace()`), upload to an image, `drawImageRect()` with `SkFilterMode::kNearest` or `kLinear` and the R5 blender | E unscaled, B1, B2 |
+| `DrawArc()` (both) | `StrokeArc()`, `FillArc()` with `agg::arc` | `SkPath::addArc()` for a stroke, centre + arc + `close()` for a fill; Haiku's angles are counter-clockwise in degrees, Skia's clockwise: start `-angle`, sweep `-span` | A2 |
+| `DrawBezier()` (both) | cubic `agg::curve4` | `SkPath::cubicTo()` | A2 |
+| `DrawEllipse()` (both) | `AlignEllipseRect()`, `agg::ellipse` | `drawOval()` on the aligned rectangle | A1 |
+| `DrawPolygon()` (both) | `agg::path_storage`, open or closed | `SkPath` `moveTo()`/`lineTo()`, `close()` when closed | A2 |
+| `StrokePoint()` | one pixel in a colour | 1×1 rectangle, `kSrc` | E |
+| `StrokeRect(rect, color)`, `FillRect(rect, color)` | the server's own solid rectangles (decorator, backgrounds) | aligned rectangle, `kSrc` | E |
+| `FillRegion(region, color)` | solid region | `drawRegion()`, `kSrc` | E |
+| `StrokeRect()`, `FillRect()` | with pattern and mode; through AGG when transformed | aligned rectangle with the pattern shader and the R5 blender; `drawRect()` under the matrix when transformed | E, A1 transformed |
+| `StrokeRect()`, `FillRect()` with a gradient | gradient span generator | the R5 gradient shader (below) | G |
+| `FillRegion()` (both) | per rectangle, pattern or gradient | `drawRegion()` with the pattern or gradient shader | E, G |
+| `DrawRoundRect()` (both) | `agg::rounded_rect` | `SkRRect::MakeRectXY()`, `drawRRect()` | A1 |
+| `DrawShape()` (both) | the `BShape` op list into an AGG path, scaled and offset to the screen | `SkPath`: `OP_MOVETO` → `moveTo()`, `OP_LINETO` → `lineTo()`, `OP_BEZIERTO` → `cubicTo()`, the four `OP_*ARC_TO_*` → `arcTo(rx, ry, 0, large, sweep, x, y)` (the SVG form Haiku uses), `OP_CLOSE` → `close()`; the same offset and scale | A2 |
+| `DrawTriangle()` (both) | `StrokeTriangle()`, `FillTriangle()` | three-point `SkPath` | A2 |
+| `StrokeLine(a, b, color)` | decorator lines; `StraightLine()` for horizontal and vertical lines | horizontal and vertical: aligned rectangle, `kSrc`; else `drawLine()` | E, A1 |
+| `StrokeLine()` (both) | line with pen size, caps, pattern or gradient | `drawLine()` with the stroke paint | A1 |
+| `StrokeLineArray()` | one colour per line | one `drawLine()` per entry, in order | A1 |
+| `DrawString()` (both) | `AGGTextRenderer`; returns the pen position | part 6; the pen position still comes from `ServerFont` | T |
+| `StringWidth()` (both), `DrawStringDry()` (both) | metrics only | unchanged (`ServerFont`) | – |
+| `SetRendererOffset()` | offset of the base renderer | `SkCanvas::translate(-left, -top)` on the window image | – |
+
+### Painter functions
+
+Every public function of `Painter.h`. Those that only serve a `DrawingEngine` call point to its row.
+
+| Painter | Skia |
+|---|---|
+| `AttachToBuffer()`, `DetachFromBuffer()`, `Bounds()` | the window or bitmap image wrapped as an `SkSurface`, and its bounds |
+| `SetDrawState()`, `ConstrainClipping()`, `ClippingRegion()` | `SetDrawState()`, `ConstrainClippingRegion()` |
+| `SetTransform()`, `IsIdentityTransform()`, `Transform()` | `SetTransform()`; the identity test picks the aligned paths, as in Painter |
+| `SetHighColor()`, `HighColor()`, `SetLowColor()`, `LowColor()`, `SetPattern()`, `Pattern()` | uniforms of the pattern shader |
+| `SetPenSize()`, `PenSize()`, `SetStrokeMode()`, `SetFillRule()` | the stroke and fill rows |
+| `SetDrawingMode()`, `DrawingMode()`, `SetBlendingMode()` | the R5 blender rows |
+| `SetFont()` (both), `Font()` | part 6 |
+| `StrokeLine()` (both), `StraightLine()` | the `StrokeLine()` rows |
+| `StrokeTriangle()` (both), `FillTriangle()` (both) | `DrawTriangle()` |
+| `DrawPolygon()` (both), `DrawBezier()` (both), `DrawShape()` (both) | their rows |
+| `StrokeRect()` (three forms), `FillRect()` (three forms) | the rectangle rows |
+| `FillRectVerticalGradient()` | the decorator's vertical linear gradients: the R5 gradient shader, linear |
+| `FillRectNoClipping()` | rectangle with the colour's own alpha, `kSrc`, no clip (M11 step 4 uses that alpha for the frosted-glass view background) |
+| `StrokeRoundRect()` (both), `FillRoundRect()` (both) | `DrawRoundRect()` |
+| `AlignEllipseRect()`, `TransformAndClipRect()`, `ClipRect()`, `TransformAlignAndClipRect()`, `AlignAndClipRect()`, `AlignRect()` | the copied geometry helpers; no Skia call |
+| `DrawEllipse()` (both), `StrokeArc()` (both), `FillArc()` (both) | their rows |
+| `DrawString()` (both), `BoundingBox()` (both), `StringWidth()` | part 6; `BoundingBox()` and `StringWidth()` are metrics |
+| `DrawBitmap()`, `FillRegion()` (both), `InvertRect()`, `SetRendererOffset()` | their rows |
+
+### Drawing modes
+
+Every R5 blender writes alpha 255, except `B_OP_ALPHA` with a `B_ALPHA_COMPOSITE*` function, as in Painter (M11 step 4: "Every other mode writes alpha 255").
+
+| Mode | Haiku formula (`drawing_modes/`) | R5 blender | A Skia blend mode that equals it? |
+|---|---|---|---|
+| `B_OP_COPY` | the pattern colour; at partial coverage between the **low colour** and it | `copy`, two passes at partial coverage | no (`kSrc` differs at the edges) |
+| `B_OP_OVER` | only the high pixels of the pattern, `BLEND` towards the high colour | `over` | close to `kSrcOver`, not exact |
+| `B_OP_ERASE` | only high pixels, towards the low colour | `erase` | no |
+| `B_OP_INVERT` | only high pixels, towards `255 - d` | `invert` | no |
+| `B_OP_ADD` | `min(255, d + s)`, then `BLEND` | `add` | no (`kPlus` is premultiplied, without `BLEND`) |
+| `B_OP_SUBTRACT` | `max(0, d - s)`, then `BLEND` | `subtract` | no |
+| `B_OP_BLEND` | `(d + s) >> 1`, then `BLEND` | `blend` | no |
+| `B_OP_MIN`, `B_OP_MAX` | Haiku's own comparison (`DrawingModeMin.h`, `DrawingModeMax.h`) | `min`, `max`, the same comparison | no (`kDarken`, `kLighten` work per channel) |
+| `B_OP_SELECT` | a pixel equal to the high colour becomes the low colour and the reverse; others stay | `select`, exact comparison of the 8-bit values | no |
+| `B_OP_ALPHA` with `B_ALPHA_OVERLAY` | over by the source alpha (`B_PIXEL_ALPHA`) or the high colour's alpha (`B_CONSTANT_ALPHA`); alpha 255 | `alpha_overlay` | close to `kSrcOver` on an opaque target only |
+| `B_OP_ALPHA` with `B_ALPHA_COMPOSITE` (`_SOURCE_OVER`) | straight-alpha composite that writes alpha (`BLEND_COMPOSITE`) | `composite_over` | `kSrcOver`, but on premultiplied colour |
+| `B_ALPHA_COMPOSITE_SOURCE_IN`, `_SOURCE_OUT`, `_SOURCE_ATOP`, `_DESTINATION_OVER`, `_DESTINATION_IN`, `_DESTINATION_OUT`, `_DESTINATION_ATOP`, `_XOR`, `_CLEAR`, `_DIFFERENCE`, `_LIGHTEN`, `_DARKEN` | AGG's comp-op formulas through `AggCompOpAdapter.h` | one R5 blender each, on straight values, with AGG's formulas | the Porter-Duff forms exist in `SkBlendMode`, on premultiplied colour |
+
+Every mode also has a `SUBPIX` form (`*SUBPIX.h`) with three coverages; in the two-pass way the coverage image then has three channels (below).
+
+### Other Painter features
+
+| Feature | Painter | Skia |
+|---|---|---|
+| **The five gradient types** (`BGradient::TYPE_LINEAR`, `TYPE_RADIAL`, `TYPE_RADIAL_FOCUS`, `TYPE_DIAMOND`, `TYPE_CONIC`) | a colour array made from the stops by `Painter::_MakeGradient()`, looked up through an AGG gradient function: `gradient_x` (with `_CalcLinearGradientTransform()`), `gradient_radial`, `gradient_radial_focus`, `gradient_diamond`, `gradient_conic` | one **R5 gradient shader** (a runtime shader) for all five: the colour array is made by the same copied `_MakeGradient()` and uploaded as a small image; the shader computes AGG's position function for the type and looks it up. Skia's own gradients are not used, so all five follow Painter's ramp, also the diamond, which Skia does not have |
+| **Alpha masks** (`AlphaMask.h`: `UniformAlphaMask`, `PictureAlphaMask` for `ClipToPicture()`, `ShapeAlphaMask` for `ClipToShape()`, the inverse forms, each chained to the previous mask) | Painter draws the picture or shape into an 8-bit mask through a `BitmapDrawingEngine` and clips its scanlines by it | Skia draws the mask into an `A8` image (a picture through a nested `SkiaDrawingEngine` on that image, a shape with `drawPath()`, a uniform mask as a constant), combines it with the previous mask the way `AlphaMask` does, and applies it with `SkCanvas::clipShader()` (the image as a shader in screen coordinates). Painter draws no mask in the GPU mode either (decision 1) |
+| **Subpixel shapes** (`gSubpixelAntialiasing`, `gSubpixelOrderingRGB`, `gSubpixelAverageWeight` in `GlobalSubpixelSettings.h`; the `*_subpix` rasterizer and scanlines) | AGG rasterises at three times the horizontal resolution and filters by the average weight | two passes: Skia draws the shape three times as wide (`SkMatrix::Scale(3, 1)`) into a coverage image; the composite shader reads three coverages per pixel, applies the same weight and order, and gives them to the `SUBPIX` form of the R5 blender. Skia itself has subpixel coverage only for text |
+| **Aliased drawing** (`gamma_threshold(0.5)` on the rasterizers in `Painter.cpp`) | coverage cut at one half | `SkPaint::setAntiAlias(false)` where Painter cuts; whether Skia's pixel centres match AGG's threshold is Q4 |
+| **Bitmap colour spaces**, `B_TRANSPARENT_MAGIC_RGBA32`, `_RGBA15`, `_CMAP8` | converted to 32 bits first (`BitmapPainter::_ConvertColorSpace()`); the magic colour is transparent in the modes that honour it | the same copied conversion before the upload |
+| **`B_FILTER_BITMAP_BILINEAR`** | AGG's bilinear span generator | `SkFilterMode::kLinear` on the straight bytes |
+| **`B_WAIT_FOR_RETRACE`** | ignored by Painter | ignored |
+| **Tiled view bitmaps** (`B_TILE_BITMAP*`) | `View` draws the bitmap several times through `DrawBitmap()` | the same calls: the `DrawBitmap()` row |
+
+No row is left without a mapping. Where a mapping is known but its result is not proven, the compare set decides (part 7) and a failure is reported as a gap, never drawn on the CPU (decision 4).
+
