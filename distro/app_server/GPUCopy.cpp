@@ -63,6 +63,7 @@ uint32 sFrame = 0;
 void* sBits = NULL;
 uint32 sBackHandle = 0;
 uint64 sBackVa = 0;
+uint64 sBackBytes = 0;
 uint32 sIbHandle = 0;
 uint64 sIbVa = 0;
 void* sIbBits = NULL;
@@ -169,6 +170,43 @@ map_bo(uint32* handle, uint64 va, uint64 bytes, uint32 flags, void** cpu)
 	if (ioctl(sFd, R5_GPU_VA_MAP, &map, sizeof(map)) != 0)
 		return false;
 	return true;
+}
+
+
+/*!	Gives the back buffer back before a new one is mapped at the same
+	address (a mode change): its address range, its CPU mapping and its
+	handle. The compose slot is held, so no copy uses it.
+*/
+void
+free_back()
+{
+	if (sBackHandle == 0)
+		return;
+	r5_gpu_va unmap;
+	memset(&unmap, 0, sizeof(unmap));
+	unmap.size = (uint32)sizeof(unmap);
+	unmap.version = 1;
+	unmap.context = 1;
+	unmap.handle = sBackHandle;
+	unmap.gpu_va = sBackVa;
+	unmap.map_bytes = sBackBytes;
+	if (sBackVa != 0)
+		ioctl(sFd, R5_GPU_VA_UNMAP, &unmap, sizeof(unmap));
+	if (sBits != NULL) {
+		area_id area = area_for(sBits);
+		if (area >= 0)
+			delete_area(area);
+	}
+	r5_gpu_bo gone;
+	memset(&gone, 0, sizeof(gone));
+	gone.size = (uint32)sizeof(gone);
+	gone.version = 1;
+	gone.handle = sBackHandle;
+	ioctl(sFd, R5_GPU_BO_FREE, &gone, sizeof(gone));
+	sBackHandle = 0;
+	sBackVa = 0;
+	sBackBytes = 0;
+	sBits = NULL;
 }
 
 
@@ -502,6 +540,11 @@ RenderingBuffer*
 GPUCopy::BackBuffer(uint32 width, uint32 height, uint32 bytesPerRow)
 {
 	load_settings();
+	// A new back buffer, or none, is always a new generation: the compositor
+	// must not keep importing the one from before a mode change.
+	sGeneration++;
+	if (sFd >= 0)
+		free_back();
 	if (!sWant || sOff || width == 0 || height == 0)
 		return NULL;
 	if (bytesPerRow < width * 4u || (bytesPerRow & 3u) != 0) {
@@ -523,7 +566,7 @@ GPUCopy::BackBuffer(uint32 width, uint32 height, uint32 bytesPerRow)
 	}
 	sBits = bits;
 	sBackVa = 0x200000000ull;
-	sGeneration++;
+	sBackBytes = (bytes + 4095ull) & ~4095ull;
 	memset(bits, 255, (size_t)bytes);
 	return new(std::nothrow) GpuBackBuffer(width, height, bytesPerRow, bits);
 }

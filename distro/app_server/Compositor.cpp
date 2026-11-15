@@ -2079,6 +2079,10 @@ Compositor::_ComposeLoop()
 			// window app_server ended still waits for its images. The
 			// last frame waited for its fence, so none is read. Third
 			// review: their imports go now too, not at the resume.
+			// Fourth review: the last frame's closing windows go too, or
+			// their buffers stay held for the whole pause.
+			delete fFrameGhosts;
+			fFrameGhosts = NULL;
 			BAutolock _(fShareLock);
 			_ShareRetire();
 			continue;
@@ -2089,8 +2093,16 @@ Compositor::_ComposeLoop()
 
 		// One frame, in the compose slot: a pause waits for it to end.
 		BAutolock slot(fComposeSlot);
-		if (fPaused)
+		if (fPaused) {
+			// Fourth review: the pause began after the check above; the
+			// ended shares still go now, not at the resume.
+			slot.Unlock();
+			delete fFrameGhosts;
+			fFrameGhosts = NULL;
+			BAutolock _(fShareLock);
+			_ShareRetire();
 			continue;
+		}
 
 		// at most once per refresh period
 		if (fPeriod > 0) {
@@ -2138,8 +2150,13 @@ Compositor::_ComposeLoop()
 		BRegion screen(BRect(0, 0, (float)fFrameWidth - 1,
 			(float)fFrameHeight - 1));
 		damage.IntersectWith(&screen);
-		if (damage.CountRects() == 0)
+		if (damage.CountRects() == 0) {
+			// Fourth review: the wake of an ended share has no damage when
+			// its view is hidden; what ended is still freed and given back.
+			BAutolock _(fShareLock);
+			_ShareRetire();
 			continue;
+		}
 
 		LayerList layers(20);
 		{
@@ -3657,7 +3674,9 @@ Compositor::DirectAccessChanged(Window* window, bool accessing)
 void
 Compositor::DirectScreenChanged(bool locked)
 {
-	if (!fActive)
+	// M11 fourth review: an unlock gives its count back below even when
+	// the GPU mode has ended meanwhile.
+	if (!fActive && locked)
 		return;
 	if (locked) {
 		if (!fDesktop->LockAllWindows())
@@ -3678,7 +3697,7 @@ Compositor::DirectScreenChanged(bool locked)
 			break;
 		wanted = was;
 	}
-	if (wanted > 1)
+	if (wanted > 1 || !fActive)
 		return;
 	fModePending = true;
 	release_sem_etc(fWakeSem, 1, B_DO_NOT_RESCHEDULE);
@@ -4111,8 +4130,10 @@ Compositor::_ShareRetireDone()
 				// nothing reads it any more; an ended share's program
 				// has stopped waiting on it. M11 review: not when
 				// app_server ended it (giveBack): that program still waits.
+				// Fourth review: so does the program of a share that did
+				// not end (broken, a restart, a failed mark read).
 				image.retiring = false;
-				if (share->giveBack)
+				if (share->giveBack || !share->ended)
 					release_sem_etc(image.sem, 1, B_DO_NOT_RESCHEDULE);
 				continue;
 			}
@@ -4337,14 +4358,20 @@ Compositor::ShareImages(Window* window, int32 viewToken, team_id team,
 	{
 		BAutolock _(fShareLock);
 		// A view has one swapchain: an older one of the same view ends.
+		// Fourth review: the compose thread is woken to free it, as for
+		// ShareEnd, or it waits for the next damage.
+		bool endedOld = false;
 		for (int32 i = 0; i < fShares.CountItems(); i++) {
 			Share* old = fShares.ItemAt(i);
 			if (old->team == team && old->viewToken == viewToken
 				&& !old->ended) {
 				old->ended = true;
 				old->giveBack = true;
+				endedOld = true;
 			}
 		}
+		if (endedOld)
+			release_sem_etc(fWakeSem, 1, B_DO_NOT_RESCHEDULE);
 		share->id = ++fShareCounter;
 		if (!fShares.AddItem(share)) {
 			_ShareFree(share);
@@ -4404,6 +4431,65 @@ Compositor::SharePresent(team_id team, int32 viewToken, int32 shareId,
 	if (fShareRetiring)
 		release_sem_etc(fWakeSem, 1, B_DO_NOT_RESCHEDULE);
 	return B_OK;
+}
+
+
+/*!	M11 fourth review: the window's ServerWindow is going, and its app may
+	go before ~Window ends the shares (RemoveWindow). Until then
+	ClippingChanged would look the views up in the app's token space. The
+	shares end here; RemoveWindow finds none left.
+*/
+void
+Compositor::ShareWindowGone(Window* window)
+{
+	bool ended = false;
+	{
+		BAutolock shareLock(fShareLock);
+		for (int32 i = 0; i < fShares.CountItems(); i++) {
+			Share* share = fShares.ItemAt(i);
+			if (share->window != window)
+				continue;
+			if (!share->ended)
+				share->giveBack = true;
+			share->ended = true;
+			share->window = NULL;
+			ended = true;
+		}
+	}
+	if (ended)
+		release_sem_etc(fWakeSem, 1, B_DO_NOT_RESCHEDULE);
+}
+
+
+/*!	M11 fourth review: a view of this window was hidden, shown, moved,
+	resized, scrolled or removed. That changes no window's clipping, so
+	ClippingChanged does not run; the shared views of the window get their
+	place again here, or the last image stays where the view was. From the
+	window's ServerWindow thread, with the window read-locked.
+*/
+void
+Compositor::ShareViewsChanged(Window* window)
+{
+	BRegion damage;
+	{
+		BAutolock shareLock(fShareLock);
+		for (int32 i = 0; i < fShares.CountItems(); i++) {
+			Share* share = fShares.ItemAt(i);
+			if (share->window != window || share->ended)
+				continue;
+			BRegion before = share->shape;
+			int32 left = share->left;
+			int32 top = share->top;
+			_ShareShape(share);
+			if (before == share->shape && left == share->left
+				&& top == share->top)
+				continue;
+			damage.Include(&before);
+			damage.Include(&share->shape);
+		}
+	}
+	if (damage.CountRects() > 0)
+		Damage(damage);
 }
 
 

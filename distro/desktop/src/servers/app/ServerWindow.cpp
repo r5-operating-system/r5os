@@ -244,6 +244,10 @@ ServerWindow::~ServerWindow()
 	if (App() != NULL && fWindow.IsSet() && fWindow->TopView() != NULL
 		&& fDesktop != NULL && fDesktop->LockAllWindows()) {
 		remove_view_tokens(App()->ViewTokens(), fWindow->TopView());
+		// M11 fourth review: and its shared views end, before the app
+		// (and its token space) can go.
+		if (Compositor* compositor = fDesktop->GetCompositor())
+			compositor->ShareWindowGone(fWindow.Get());
 		fDesktop->UnlockAllWindows();
 	}
 // SPDX-SnippetEnd
@@ -1238,6 +1242,18 @@ ServerWindow::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 			}
 
 			_DispatchViewMessage(code, link);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			// M11 fourth review: a shared Vulkan view follows its view.
+			if (code == AS_VIEW_HIDE || code == AS_VIEW_SHOW
+				|| code == AS_VIEW_MOVE_TO || code == AS_VIEW_RESIZE_TO
+				|| code == AS_VIEW_SCROLL || code == AS_VIEW_DELETE) {
+				Compositor* compositor = fDesktop->GetCompositor();
+				if (compositor != NULL && compositor->IsActive())
+					compositor->ShareViewsChanged(fWindow.Get());
+			}
+// SPDX-SnippetEnd
 			break;
 	}
 }

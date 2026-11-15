@@ -117,6 +117,11 @@ public:
 									int32 shareId, uint32 index);
 			void				ShareEnd(team_id team, int32 viewToken,
 									int32 shareId);
+	// M11 fourth review: from a ServerWindow thread, window read-locked.
+			void				ShareViewsChanged(Window* window);
+	// M11 fourth review: from ~ServerWindow, all windows locked, before
+	// the app can go.
+			void				ShareWindowGone(Window* window);
 
 private:
 	friend class WindowBuffer;
