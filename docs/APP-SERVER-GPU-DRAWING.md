@@ -412,3 +412,64 @@ In the GPU section, after "The software path (app_server Painter, llvmpipe, Lava
 
 > On AMD64 the desktop is always composed: on RADV when the GPU is available, otherwise on Lavapipe; the GPU draws every window through Skia (`docs/APP-SERVER-GPU-DRAWING.md`). When RADV is lost and its restart fails, the session goes on on Lavapipe. The CPU mode (Painter, no compositor) runs only in Safe mode, and during a direct-window pause. Safe mode is Haiku's safe mode plus the fail-safe video mode plus no GPU driver, with "Safe mode" on the screen. After a failed desktop start app_server writes `/boot/system/var/r5/desktop-start-failed`; the boot loader then opens the menu with Safe mode selected; Login removes the file after a good Sign in in a normal start. Painter stays in every image and must keep working in Safe mode. ARM64 and RISC-V keep the automatic switch to the CPU mode until Lavapipe is proven there. Skia is linked only into app_server, statically, from R5's own recipe at a pinned version; never in a public header, `libbe` or a `libr5*` library.
 
+## Open questions for the user
+
+Each with the options and my advice. Q1 is the gate for step 1.
+
+**Q1. Do you approve Skia as reported in part 1?** Skia m158 (commit `707e33875f`), only the core and Graphite on Vulkan, with skcms and the Vulkan Memory Allocator, no codecs, no ICU, no HarfBuzz, linked statically into app_server.
+- (a) Yes, as reported.
+- (b) Yes, but a different milestone (for example the newest, m159, which is still beta).
+- (c) No.
+- **Advice: (a).** BSD-3 and MIT ask only for the notices; nothing has to be shipped as source; the build stays small.
+
+**Q2. Graphite rather than Ganesh?**
+- (a) Graphite: windows keep drawing in parallel, and every submit stays on the compose thread; but it is the younger backend.
+- (b) Ganesh: more mature, but all windows draw one at a time through one lock, and the queue needs a second lock against the compose.
+- **Advice: (a).** The way app_server draws (one thread per window) is what Graphite was made for. The risk of a young backend is caught by the compare set and the fallback.
+
+**Q3. Shapes with curves: GPU only, or Skia's small-shape shortcut?** For general shapes (polygons, curves, `BShape`) Graphite can either draw on the GPU with 4× multisampling (edges in steps of a quarter), or make small ones on the CPU into a coverage atlas (finer edges, closer to Painter).
+- (a) GPU only, 4× on RADV and Lavapipe (part 2).
+- (b) Allow the small-shape atlas: finer edges, but that coverage is made on the CPU by Skia (letters are made on the CPU by FreeType anyway, decision 5).
+- (c) 8× on RADV and 4× on Lavapipe: finer on the GPU, but the two give different pictures.
+- **Advice: (a) for M12**, with the looser A2 tolerance; M13 can look at (b) with numbers.
+
+**Q4. Twice the window memory.** Each window gets a GPU image besides the M11 buffer, so the memory budget is reached with about half as many windows open.
+- (a) Accept it in M12 and measure; M13 lets the compose read the images directly.
+- (b) Change the compose shaders in M12 to read images, so there is one copy.
+- **Advice: (a).** It keeps the M11 compose byte-identical, so a compare failure in M12 is always the drawing, never the compose.
+
+**Q5. Subpixel text: Haiku's "average weight" or Skia's own filter?** Skia's own subpixel text uses FreeType's colour filter and has no "average weight" slider.
+- (a) Two passes: Skia's glyph cache draws grey letters at three times the width, and R5's shader applies Haiku's average weight and order. The Antialiasing tab means the same in both modes.
+- (b) Skia's own subpixel text: simpler and faster, but the "average weight" setting does nothing in the GPU mode, and letters look a little different from the CPU mode.
+- **Advice: (a).** It stays within decision 5 (Skia's glyph cache on FreeType) and keeps your setting working.
+
+**Q6. When Lavapipe fails too, what does this boot show?** (A conflict with the brief: decision 10 says the CPU mode runs only in Safe mode, and does not say what happens until the next boot.)
+- (a) The CPU mode for the rest of this one boot, as a last resort, with the marker written: at the Sign in screen you can still sign in, and in a session your open programs keep their work. The next boot offers Safe mode.
+- (b) Restart the computer at once into the boot menu: no CPU mode outside Safe mode, but unsaved work in open programs is lost.
+- (c) Stop drawing until you turn the computer off.
+- **Advice: (a).** Losing open work is worse than one session on the CPU, and it cannot loop, because the next boot asks. The proposed `AGENTS.md` text would then say "only in Safe mode, during a direct-window pause, and for the rest of a boot in which Lavapipe failed".
+
+**Q7. Does the boot menu wait for you, or count down?**
+- (a) Wait for a key, as Haiku.
+- (b) Count down 10 seconds, shown in the line, then start in Safe mode; any key stops the count.
+- **Advice: (b).** A computer nobody is watching (or the stick test) still reaches a desktop.
+
+**Q8. Who removes the marker when you stay in Safe mode?**
+- (a) Only a good Sign in in a normal start (part 8): the menu keeps offering Safe mode until a normal start has worked.
+- (b) Also a Sign in in Safe mode: the next boot is normal again, and if it fails, the menu comes back.
+- **Advice: (a).** After a rollback to an older state you choose "Start normally" once, and that clears it.
+
+**Q9. Network in Safe mode?** Haiku's safe mode does not start the network (net_server is `no_safemode`).
+- (a) Keep Haiku's behaviour: no network in Safe mode.
+- (b) Start the network in R5's Safe mode, for example to download a fixed package.
+- **Advice: (a)** for M12: the older system state needs no network, and it keeps Safe mode Haiku's. (b) can come later on its own.
+
+**Q10. A buffer of their own for `BDirectWindow` (part 9)?**
+- (a) Not in M12; the direct-window pause stays, written down as the exception.
+- (b) Build it for Lavapipe only, as an extra step.
+- **Advice: (a).** It is not simple, it needs new kernel work for RADV, and few programs use direct access.
+
+**Q11. Offscreen drawing lost when the GPU is lost.** If the GPU is lost, drawing into a `BBitmap` since its last `Sync()` is gone; the bitmap keeps what it had at that point (part 6). Haiku has no such case.
+- (a) Accept it as a written limit.
+- (b) Read every bitmap back after every batch, so nothing is ever lost, at a cost for every program that draws offscreen.
+- **Advice: (a).** It only happens after a GPU loss, and the program's next drawing fixes it.
