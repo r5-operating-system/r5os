@@ -835,7 +835,13 @@ gpu_stage_pace_wait(radeon_info* info, int slot, uint64 sequence,
 	pace.ms = (int32)((system_time() - start) / 1000);
 	gpu_lock();
 	if (!pace.hang) {
-		if (slot >= 0 && slot < (int)kMaxJob)
+		/* M11 stick 50, boot 4: while this wait ran unlocked, the EOP
+		 * retire may have freed this slot and a client's job (app_server's
+		 * compose) taken it. Clearing it then dropped that job: its sync
+		 * points were never signaled and the compositor waited for good.
+		 * Only this job's own sequence is cleared. */
+		if (slot >= 0 && slot < (int)kMaxJob && sJobs[slot].live
+			&& sJobs[slot].sequence == sequence)
 			sJobs[slot].live = false;
 	} else if (slot >= 0) {
 		bigtime_t deadline = system_time() + 2000000;
