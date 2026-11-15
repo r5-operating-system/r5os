@@ -527,3 +527,12 @@ The user answered the open questions:
 **Not in M12:** a setting, scaling per monitor, mapping the mouse and window positions, `BScreen` sizes, `BDirectWindow` and `BWindowScreen` under a scale, larger icon and bitmap variants.
 
 **Questions for the scaling brief, when you ask for it:** how programs see the scale (Haiku's font-size way, the compositor drawing a whole window larger, or a mix); what happens to programs with fixed pixel sizes; where larger icons come from (Haiku's vector icons help); fractional factors such as 1.25 and 1.5; one factor per monitor.
+
+## Follow-up: the look and feel settings (user, 15 Nov 2026)
+
+Not designed here. The user wants it designed in step 1 or later.
+
+- **Scaling gets a setting** in the Settings window, when scaling is built. Which page it goes on is a question for the scaling brief.
+- **The look and feel settings need a redesign**, in the Settings window and in the separate Appearance program, for everything added since Haiku: the "Window effects" box (shadow, frosted glass, strength, animations, M11), the antialiasing choices after Q5, Q12 and Q13 (Skia's subpixel text, grey shapes, the hidden average weight slider), and later scaling. The shared sources are in `distro/settings/` (`LookAndFeelSettingsView.cpp`, `WindowEffectsBox.cpp`, `AntialiasingSettingsView.cpp`, `FontView.cpp`, `ColorsView.cpp`, `LookModule.cpp`, `FontsModule.cpp`).
+- **Seen while reading, to settle first:** `AGENTS.md` describes one Appearance page with the tabs Fonts, Colors, Look and feel and Antialiasing, while `docs/SETTINGS.md` describes two pages, Fonts and Look and Feel, with no tabs, Antialiasing and Colors as boxes. The two disagree. The redesign starts by asking the user which one holds; neither is changed here.
+- The fixed Settings layout in `AGENTS.md` stays as it is until the user approves the redesign.
