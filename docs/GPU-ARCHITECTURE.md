@@ -212,7 +212,7 @@ A **compatibility table** in this document (or a separate `distro/gpu/COMPAT` fi
 ### Updating Skia, step by step
 
 1. Move the pin in `distro/skia/pins.sh` to the newest `chrome/mNNN` branch below beta (check Chrome's release schedule), with its commit, and the VMA and `gn` commits that branch names.
-2. Build it with the recipe. Every `gn` argument of `build-skia.sh` must still exist in `gn/skia.gni` or the `BUILD.gn` that declares it, every patch must still apply or be dropped, and the list of built third-party parts is checked against `DEPS` again.
+2. Build it with the recipe. Every `gn` argument of `build-skia.sh` must still exist in `gn/skia.gni` or the `BUILD.gn` that declares it, every patch must still apply or be dropped, and the list of built third-party parts is checked against `DEPS` again. `pack-skia.sh` ships one private Skia header, `src/gpu/vk/vulkanmemoryallocator/VulkanMemoryAllocatorPriv.h` (the only way to make the allocator Graphite needs); Skia may change it without notice, so check that app_server still builds against it.
 3. Read the release notes of every milestone in between for changes to Graphite, `VulkanBackendContext` and runtime effects.
 4. The step 1 host test (`distro/skia/test`), then `r5-draw-compare` on Lavapipe in QEMU and on RADV on the 5625U, every line `ok`.
 5. The `draw-time` list against the previous pin, recorded in `CHANGELOG.md`.
