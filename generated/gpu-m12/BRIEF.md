@@ -12,7 +12,7 @@ For Cursor or Claude. It does not override `AGENTS.md` or `docs/GPU-ARCHITECTURE
 7. **Never claim a test that did not run.** Report Veranderd / Getest / Onbewezen / Documentatie, with the pass lines quoted, and stop. The next step starts only with a new prompt from the user.
 
 **Status (15 Nov 2026):**
-- M11 steps 0–5 are merged (last: #4261, the direct-window pause and the forced failure). The M11 stick (step 6) is being prepared (`generated/gpu-m11/PROMPT-STEP6-STICK.md`).
+- M11 steps 0–5 are merged (last: #4261, the direct-window pause and the forced failure). The M11 stick (step 6) passed (user, 15 Nov 2026). M12 step 0, the design, is merged (#4266, #4267; `docs/APP-SERVER-GPU-DRAWING.md`); the prompt for step 1 is `generated/gpu-m12/PROMPT-STEP1.md`.
 - **Start after the M11 stick has passed.** Steps 0–5 need no GPU (Lavapipe in QEMU or VirtualBox). Step 0 (paper) may be written before the M11 stick passes. Nothing of M12 goes on a stick before M11 has passed.
 - Performance work is **M13**, after M12 (user, 15 Nov 2026). M12 measures; it does not tune.
 
