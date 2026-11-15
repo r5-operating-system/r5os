@@ -1,5 +1,23 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-15 - Second M11 stack review: 16 findings fixed, two left with a reason
+
+Problem: a second round of five read-only reviews of the whole M11 stack, after the 20 fixes of 14 Nov, found 18 items; one list with the status of each is `generated/gpu-m11/REVIEW-STACK-2.md`. The reviewers found the fixes of the first round correct, except three that were incomplete (13, 2 and 16 of `REVIEW-STACK.md`). The owner asked to fix everything.
+
+What changed:
+- Kernel (`r5_gpu_core.cpp`): a successful restart after a reset clears "the CP is stopped", so a later loss without a reset (a failed self-test, a STAGE_P error) keeps the parked buffers (completes the item 13 fix; the hang policy itself is unchanged). The program's `BO_MAP` mapping is a kernel area (`B_KERNEL_AREA`): the program reads and writes it, but cannot clone, move or reprotect it, so no copy keeps VRAM after it is freed and given to another buffer.
+- Compositor: a share that app_server ended is also given back on the switch to the CPU mode, before a restart and during a pause, and ending a share wakes the compose thread (completes item 2). `_ShareShape` checks for a cleared `App()` of a closing window (could crash app_server). Making room ends the fade of the window it takes from (completes item 3); a failed entry frees its interface. A window resized while off screen draws all of itself when it shows again. The 5 s wait after a fence timeout runs after the compose slot is released. A screen mode change takes the compose slot first (`AccelerantHWInterface::SetModeGuard`), so a frame never uses a freed back buffer.
+- app_server: a closing window ends its engine and its compositor entry under the entry lock, so a rebind never uses the deleted engine. A changed title or border is drawn in full in the GPU mode, its covered part too. The direct screen lock nests per team: the last unlock, or the program's end, gives the screen and the pause back.
+- R5 decorator: the left line under a side tab (`kLeftTitledWindowLook`) resizes (completes item 16). Settings: the window effects box reads the effects again before a click, so a change made in the Appearance program is not undone.
+- Stick: `check wait` saves the last syslog line; boot 1 counts the scenario's zero-copy, effects, animation and pause lines only after it, because the self-test's own Vulkan, GL and DirectWindow windows passed them before. The boot 4 card: keep dragging until the picture froze once, because the self-test (and so the hang) can take up to 15 minutes.
+- Mistake: the first build failed on `-Werror=reorder` (the new `fModeGuard` initializer was out of member order); fixed in its own commit.
+
+Not changed: a single window larger than the whole budget still ends the GPU mode for the session (the documented fallback; a clipped buffer is a design change). A frame in flight still holds an evicted buffer until its fence. GET_INFO was reported as unlocked, but it takes the lock.
+
+Tested: jam in WSL (`apply_exit=0`, `jamraw_exit=0`, `mesa_exit=0`, `anyboot_exit=0`), `mesa_radv-25.3.6-9` repacked with the new `check`, planted, `check-pre-stick.py` `pre-stick ok 1d2252f461`. QEMU on Lavapipe (KVM), on the image before the repack (same binaries): the desktop came up composed with the R5 frame and shadow; `gpu compositor on lavapipe`, `window memory type 0 flags 0xf`, `compose compare ok`; no `compositor off`, `MISMATCH`, `still busy`, `not saved` or `device kept` (count 0); `VulkanTeapot --window --seconds 5` 71.1 fps, `device lost no`; `r5-effects-test glass` showed its glass window (its exit code was not read: the QEMU key sender has no `$`).
+
+Limits: the kernel fixes, the shares, the direct screen nesting, the mode guard, the off-screen resize, the eviction and the boot 1 marker are compiled and read, not run: QEMU has no radeon_hd, Lavapipe shares nothing, and no mode change, BWindowScreen or near-full budget was tried. Not booted on the 5625U.
+
 ## 2026-11-14 - M11 stack review: 19 findings fixed before the stick, and a tab that left its old end on screen
 
 Problem: five read-only reviews of the whole M11 stack (steps 0-5 on main, step 6 on this branch) found 19 open findings, listed with their status in `generated/gpu-m11/REVIEW-STACK.md`. The owner asked to fix all of them before the stick.
