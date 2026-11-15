@@ -38,6 +38,12 @@
 #define BT_REQ_REMOVE_DEVICE            'rdRD'
 
 #define BT_REQ_CONN_STATE               'rdCS'
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// RemoteDevice::GetConnectionDetails() (docs/BLUETOOTH.md, step 1b).
+#define BT_REQ_CONN_DETAILS             'rdCD'
+// SPDX-SnippetEnd
 
 
 #endif

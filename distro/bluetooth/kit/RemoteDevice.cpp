@@ -208,6 +208,13 @@ status_t
 RemoteDevice::Connect()
 {
 	CALLED();
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Without an owning radio or a running server this dereferenced NULL.
+	if (fDiscovererLocalDevice == NULL || fMessenger == NULL)
+		return B_NO_INIT;
+	// SPDX-SnippetEnd
 	BMessage request(BT_REQ_CREATE_CONN);
 
 	request.AddInt32("hci_id", fDiscovererLocalDevice->ID());
@@ -218,17 +225,27 @@ RemoteDevice::Connect()
 	request.AddString("name", GetFriendlyName());
 	request.AddUInt32("record", fDeviceClass.Record());
 
-	uint16 packetType;
-	fDiscovererLocalDevice->GetProperty("packet_type", (uint32*)&packetType);
-	request.AddUInt16("packet type", packetType);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// GetProperty() writes 32 bits; these were a uint16 and a uint8, so it
+	// wrote past them on the stack.
+	uint32 packetType = 0;
+	fDiscovererLocalDevice->GetProperty("packet_type", &packetType);
+	request.AddUInt16("packet type", (uint16)packetType);
+	// SPDX-SnippetEnd
 
 	request.AddUInt8("pscan_rep_mode", fPageRepetitionMode);
 	request.AddUInt8("pscan_mode", fScanMode);
 	request.AddUInt16("clock_offset", fClockOffset);
 
-	uint8 roleSwitch;
-	fDiscovererLocalDevice->GetProperty("role_switch_capable", (uint32*)&roleSwitch);
-	request.AddUInt8("role_switch", roleSwitch);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	uint32 roleSwitch = 0;
+	fDiscovererLocalDevice->GetProperty("role_switch_capable", &roleSwitch);
+	request.AddUInt8("role_switch", (uint8)roleSwitch);
+	// SPDX-SnippetEnd
 
 	if (fMessenger->SendMessage(&request) == B_OK)
 		return B_OK;
@@ -240,6 +257,13 @@ status_t
 RemoteDevice::CancelConnection()
 {
 	CALLED();
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Without an owning radio or a running server this dereferenced NULL.
+	if (fDiscovererLocalDevice == NULL || fMessenger == NULL)
+		return B_NO_INIT;
+	// SPDX-SnippetEnd
 	BMessage request(BT_REQ_CANCEL_CONN);
 
 	request.AddInt32("hci_id", fDiscovererLocalDevice->ID());
@@ -257,6 +281,13 @@ status_t
 RemoteDevice::Disconnect(bool removeDevice)
 {
 	CALLED();
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Without an owning radio or a running server this dereferenced NULL.
+	if (fDiscovererLocalDevice == NULL || fMessenger == NULL)
+		return B_NO_INIT;
+	// SPDX-SnippetEnd
 	BMessage request(BT_REQ_DISCONNECT);
 	if (removeDevice)
 		request.what = BT_REQ_REMOVE_DEVICE;
@@ -288,13 +319,73 @@ RemoteDevice::GetConnectionState()
 	bdaddr_t bdaddr = GetBluetoothAddress();
 	request.AddData("bdaddr", B_ANY_TYPE, &bdaddr, sizeof(bdaddr_t));
 
-	if (fMessenger->SendMessage(&request, &reply) != B_OK)
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// The server finds the radio by "hci_id"; without it every answer was
+	// DISCONNECTED. A reply without the field left conn_state undefined.
+	if (fDiscovererLocalDevice != NULL)
+		request.AddInt32("hci_id", fDiscovererLocalDevice->ID());
+
+	if (fMessenger == NULL || fMessenger->SendMessage(&request, &reply) != B_OK)
 		return RemoteDevice::DISCONNECTED;
 
-	uint8 conn_state;
+	uint8 conn_state = RemoteDevice::DISCONNECTED;
 	reply.FindUInt8("conn state", &conn_state);
 	return static_cast<RemoteDevice::ConnectionState>(conn_state);
+	// SPDX-SnippetEnd
 }
+
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+status_t
+RemoteDevice::GetConnectionDetails(bt_connection_details* details)
+{
+	CALLED();
+	if (details == NULL || details->size < sizeof(bt_connection_details))
+		return B_BAD_VALUE;
+
+	details->state = RemoteDevice::DISCONNECTED;
+	details->transport = BT_TRANSPORT_BR_EDR;
+	details->link_type = 0;
+	details->encrypted = false;
+	details->handle = 0;
+	details->hci = -1;
+
+	if (fDiscovererLocalDevice == NULL || fMessenger == NULL)
+		return B_NO_INIT;
+
+	BMessage request(BT_REQ_CONN_DETAILS);
+	BMessage reply;
+	bdaddr_t bdaddr = GetBluetoothAddress();
+	request.AddData("bdaddr", B_ANY_TYPE, &bdaddr, sizeof(bdaddr_t));
+	request.AddInt32("hci_id", fDiscovererLocalDevice->ID());
+
+	status_t status = fMessenger->SendMessage(&request, &reply);
+	if (status != B_OK)
+		return status;
+	if (reply.FindInt32("status", &status) != B_OK)
+		return B_ERROR;
+	if (status != B_OK)
+		return status;
+
+	uint8 value;
+	if (reply.FindUInt8("conn state", &value) == B_OK)
+		details->state = value;
+	if (reply.FindUInt8("link type", &value) == B_OK)
+		details->link_type = value;
+	bool encrypted;
+	if (reply.FindBool("encrypted", &encrypted) == B_OK)
+		details->encrypted = encrypted;
+	uint16 handle;
+	if (reply.FindUInt16("handle", &handle) == B_OK)
+		details->handle = handle;
+	details->hci = fDiscovererLocalDevice->ID();
+	return B_OK;
+}
+// SPDX-SnippetEnd
 
 
 //  bool IsAuthorized(Connection conn);

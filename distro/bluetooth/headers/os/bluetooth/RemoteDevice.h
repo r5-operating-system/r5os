@@ -8,6 +8,11 @@
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/bluetooth_error.h>
 #include <bluetooth/BluetoothDevice.h>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <bluetooth/HCI/btHCI.h>
+// SPDX-SnippetEnd
 
 #include <bluetoothserver_p.h>
 #include <support/String.h>
@@ -21,6 +26,26 @@ namespace Bluetooth {
 
 class Connection;
 class LocalDevice;
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// What RemoteDevice::GetConnectionDetails() fills in. The caller sets
+// "size" to sizeof(bt_connection_details); a later, larger version of this
+// struct only adds fields at the end.
+struct bt_connection_details {
+	uint32			size;
+	uint8			state;		// RemoteDevice::ConnectionState
+	uint8			transport;	// BT_TRANSPORT_BR_EDR (LE: step 6)
+	uint8			link_type;	// HCI link type: 0 SCO, 1 ACL, 2 eSCO
+	bool			encrypted;
+	uint16			handle;		// HCI connection handle while connected
+	hci_id			hci;		// the local radio
+};
+
+#define BT_TRANSPORT_BR_EDR		0
+#define BT_TRANSPORT_LE			1
+// SPDX-SnippetEnd
 
 class RemoteDevice : public BluetoothDevice {
 
@@ -59,6 +84,13 @@ public:
 	/*bool Encrypt(Connection conn, bool on);  Throwing */
 	/*bool IsAuthorized(Connection conn);  Throwing */
 	RemoteDevice::ConnectionState 	GetConnectionState();
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Additive: B_OK with "details" filled in, or an error (and state
+	// DISCONNECTED) for a device the server does not know.
+	status_t		GetConnectionDetails(bt_connection_details* details);
+	// SPDX-SnippetEnd
 	bool 			IsEncrypted(); /* Throwing */
 
 	BString 		GetProperty(const char* property); /* Throwing */

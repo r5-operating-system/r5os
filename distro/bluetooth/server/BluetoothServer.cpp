@@ -428,6 +428,36 @@ void BluetoothServer::MessageReceived(BMessage* message)
 		// SPDX-SnippetBegin
 		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 		// SPDX-License-Identifier: MIT
+		// RemoteDevice::GetConnectionDetails() (docs/BLUETOOTH.md, step 1b).
+		case BT_REQ_CONN_DETAILS:
+		{
+			status = B_BAD_VALUE;
+			LocalDeviceImpl* lDeviceImpl = LocateDelegateFromMessage(message);
+			const bdaddr_t* bdaddr;
+			if (lDeviceImpl != NULL && _FindAddress(message, &bdaddr)) {
+				ServerRemoteDevice* rd
+					= lDeviceImpl->RemoteDeviceByAddr(*bdaddr);
+				if (rd != NULL) {
+					reply.AddUInt8("conn state",
+						static_cast<uint8>(rd->conn_state));
+					reply.AddUInt8("link type", rd->link_type);
+					reply.AddBool("encrypted", rd->encryption_enabled != 0);
+					if (rd->conn_state == RemoteDevice::CONNECTED)
+						reply.AddUInt16("handle", rd->handle);
+					status = B_OK;
+				}
+			}
+			if (status != B_OK) {
+				reply.AddUInt8("conn state",
+					static_cast<uint8>(RemoteDevice::DISCONNECTED));
+			}
+		}
+		break;
+		// SPDX-SnippetEnd
+
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
 		case kMsgReportStarted:
 		{
 			syslog(LOG_INFO, "bluetooth_server: started, %" B_PRId32
