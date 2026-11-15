@@ -2184,8 +2184,20 @@ Compositor::_ComposeLoop()
 
 		fLastCompose = system_time();
 		if (!_Compose(damage, layers, shares, effects)) {
-			// fFailure is set; the top of the loop handles it, after the
-			// slot is released
+			// M11 review: the job may still run. The buffers of this
+			// frame are freed after the device is idle or lost
+			// (docs/APP-SERVER-COMPOSITOR.md), so wait once more, with
+			// the slot, the screen and the windows unlocked (a pause does
+			// not wait for it), before the layers go at the end of this
+			// pass; a job that still runs keeps every buffer for good.
+			slot.Unlock();
+			if (fFailure != NULL && strcmp(fFailure, "fence timeout") == 0
+				&& fVulkan->vkWaitForFences(fVulkan->device, 1,
+					&fVulkan->fence, VK_TRUE, kFenceGraceNs) != VK_SUCCESS) {
+				atomic_set(&fGpuBusy, 1);
+				log_line("compose fence still busy: window memory kept");
+			}
+			// fFailure is set; the top of the loop handles it
 			continue;
 		}
 		Damage(retry);
@@ -2512,17 +2524,6 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 		if (compare) {
 			for (int32 i = 0; i < layers.CountItems(); i++)
 				layers.ItemAt(i)->entry->iface->UnlockExclusiveAccess();
-		}
-		// M11 review: the job may still run. The buffers of this frame
-		// are freed after the device is idle or lost
-		// (docs/APP-SERVER-COMPOSITOR.md), so wait once more, with the
-		// screen and the windows unlocked; a job that still runs keeps
-		// every buffer for good.
-		if (strcmp(failure, "fence timeout") == 0
-			&& vk->vkWaitForFences(vk->device, 1, &vk->fence, VK_TRUE,
-				kFenceGraceNs) != VK_SUCCESS) {
-			atomic_set(&fGpuBusy, 1);
-			log_line("compose fence still busy: window memory kept");
 		}
 		// handled by _ComposeLoop() once the compose slot is free: the
 		// restart after a reset, or the CPU mode (step 5)
