@@ -1121,15 +1121,13 @@ Desktop::LockDirectScreen(team_id team)
 // SPDX-SnippetEnd
 
 	status_t status = fDirectScreenLock.LockWithTimeout(1000000L);
-	if (status == B_OK) {
-		fDirectScreenTeam = team;
-		fDirectScreenCount = 1;
-	}
-
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-	else if (fCompositor != NULL) {
+	if (status == B_OK) {
+		fDirectScreenTeam = team;
+		fDirectScreenCount = 1;
+	} else if (fCompositor != NULL) {
 		// this team does not get the screen; the compositor counts the
 		// teams that hold or wait for it (M11 review)
 		fCompositor->DirectScreenChanged(false);
@@ -1141,7 +1139,11 @@ Desktop::LockDirectScreen(team_id team)
 
 
 status_t
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
 Desktop::UnlockDirectScreen(team_id team, bool all)
+// SPDX-SnippetEnd
 {
 	if (fDirectScreenTeam == team) {
 // SPDX-SnippetBegin
@@ -3898,14 +3900,12 @@ Desktop::RebuildAndRedrawAfterWindowChange(Window* changedWindow,
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 			// M11 review: in the GPU mode the window's buffer is drawn in
-			// full, its covered parts too (after SetClipping, below).
+			// full, its covered parts too (after ClippingChanged, below).
 			bool composed = fCompositor != NULL && fCompositor->IsActive();
 			if (window == changedWindow && !composed)
 				dirty.IntersectWith(&stillAvailableOnScreen);
 
 			window->SetClipping(&stillAvailableOnScreen);
-			if (window == changedWindow && composed)
-				dirty.IntersectWith(&window->DrawableRegion());
 // SPDX-SnippetEnd
 			window->SetScreen(_DetermineScreenFor(window->Frame()));
 
@@ -3928,6 +3928,10 @@ Desktop::RebuildAndRedrawAfterWindowChange(Window* changedWindow,
 	// screen until something else rebuilt the clipping.
 	if (fCompositor != NULL)
 		fCompositor->ClippingChanged();
+	// M11 third review: the buffer has its new size only now, so a tab or
+	// border that grew is cut to the new buffer, not the old one.
+	if (fCompositor != NULL && fCompositor->IsActive())
+		dirty.IntersectWith(&changedWindow->DrawableRegion());
 // SPDX-SnippetEnd
 
 	_SetBackground(stillAvailableOnScreen);
