@@ -36,7 +36,7 @@ hardware.
 
 And finding your way around system settings shouldn't be an adventure.
 R5 brings them together in one place, neatly organised and easy to use.
-Change something, see the result straight away, and keep it — or
+Change something, see the result straight away, and keep it, or
 switch back if you change your mind.
 
 ## Make yourself at home
