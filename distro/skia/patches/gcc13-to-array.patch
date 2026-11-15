@@ -1,0 +1,20 @@
+GCC 13.3's libstdc++ std::to_array() default-constructs the array and
+assigns each element. A struct with const members has neither, so
+SkFontHost_FreeType.cpp does not compile with x86_64-unknown-haiku-gcc
+13.3.0. The table is static constexpr, so it stays constant without the
+const on its members. Upstream status: not reported. Applies to Skia
+chrome/m158 707e33875f.
+
+--- a/src/ports/SkFontHost_FreeType.cpp
++++ b/src/ports/SkFontHost_FreeType.cpp
+@@ -2262,8 +2262,8 @@
+         struct CommonWeights {
+             // Must remain the first member: the lookup below indexes with a
+             // sizeof(CommonWeights) stride starting at &commonWeights[0].name.
+-            char const * const name;
+-            int const weight;
++            char const * name;
++            int weight;
+         };
+         // SkStrLCSearch binary searches this table, so the names must be lower-case and sorted.
+         // There are probably more common names, but these are known to exist.
