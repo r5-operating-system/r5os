@@ -1,5 +1,23 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-15 - Third M11 stack review: 15 findings fixed, one left with a reason
+
+Problem: a third round of four read-only reviews of the whole M11 stack found 16 items; one list with the status of each is `generated/gpu-m11/REVIEW-STACK-3.md`. Two fixes of review 2 were incomplete (items 9 and 16 there). The owner asked to fix everything.
+
+What changed:
+- Desktop: the composed dirty region of a changed title or border is cut to the window's buffer after `ClippingChanged`, so a grown tab is drawn. Two R5 lines of the direct screen lock got their SPDX snippet.
+- Settings: the window effects box reads the strength again too, not only the effects.
+- Compositor: a pause that begins during the restart after a reset keeps the windows on the screen; `_ShareShape` reads `App()` once; a window whose buffer was taken to make room gives back its shadow mask and glass at the next frame; during a pause an ended share frees its imports (`_ShareRetire`).
+- Kernel: before the VRAM of a buffer is freed, every other area on the cache of its mapping is deleted (`drop_copies`, a new backend call at the end of `r5_gpu_backend_ops`, in `radeon_hd`). That covers a copy made by `fork()`, which `B_KERNEL_AREA` did not stop, and a clone or a transfer; if one stays, the page is kept out of the allocator. The mapping is no longer `B_KERNEL_AREA`: RADV munmaps it when a buffer goes, which then failed and logged one line per buffer.
+- Stick: `check wait` accepts only this boot's self-test file (written after this boot's first dated syslog line, or any finished file after 60 s); the boot 1 marker stores which copy of its line it is and is used once; a stopped copy-path run restores the settings, and its saved copy never holds the zero-copy switch; the card says `check wait` and the scenario again after a boot 1 restart. `read-stick-logs.py` copies `syslog.1`. `pin-mesa-packages.sh` names -9 in its error.
+- Mistakes: the first build of the kernel fix failed twice: the VM headers need the kernel's `lock.h`, and radeon_hd has its own (`kernel/lock.h` by path now); then the image step lacked `PATH` in my build script.
+
+Not changed: RADV turns on `VK_EXT_map_memory_placed` and ignores the address on R5 (before this branch too); no R5 program uses it and the fix is a Mesa rebuild. `HWInterface` listener list without a lock: unchanged Haiku code.
+
+Tested: jam in WSL (`apply_exit=0`, `jamraw_exit=0`, `anyboot_exit=0`, `plant_exit=0`), `mesa_radv-25.3.6-9` repacked with the new `check`, `check-pre-stick.py` `pre-stick ok c9284f9989`. The `check wait` date test, the marker count and the awk cut were run as shell pieces in WSL. QEMU on Lavapipe (KVM), this image: the desktop came up composed; `gpu compositor on lavapipe`, `window memory type 0 flags 0xf`, `compose compare ok`; no `compositor off`, `MISMATCH`, `still busy`, `not saved` or `device kept` (count 0); `VulkanTeapot --window --seconds 5` 70.6 fps, `device lost no`; `r5-effects-test glass` ran (its exit code was not read: the QEMU key sender has no `$`).
+
+Limits: `drop_copies`, the restart pause, the eviction of masks and the paused retire are compiled and read, not run: QEMU has no radeon_hd, Lavapipe shares nothing, and no fork of a GPU program was tried. The new `check` was not run on Haiku. Not booted on the 5625U.
+
 ## 2026-11-15 - Second M11 stack review: 16 findings fixed, two left with a reason
 
 Problem: a second round of five read-only reviews of the whole M11 stack, after the 20 fixes of 14 Nov, found 18 items; one list with the status of each is `generated/gpu-m11/REVIEW-STACK-2.md`. The reviewers found the fixes of the first round correct, except three that were incomplete (13, 2 and 16 of `REVIEW-STACK.md`). The owner asked to fix everything.
