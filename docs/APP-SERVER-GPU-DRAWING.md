@@ -270,3 +270,40 @@ Because no existing program reads without `Sync()`, step 5 writes one test progr
 - `offscreen drawbitmap ok`: draw into a bitmap, no `Sync()`, `DrawBitmap()` it into a window, read the window back with `BScreen::GetBitmap()`: the drawing is there (point 3, app_server's own read);
 - `offscreen nosync`: draw, no `Sync()`, read at once: reports what it saw, `stale` or `fresh`, without a pass or a fail, because Haiku itself does not promise either. The step report records the line.
 
+## 7. The compare set and the measurement
+
+### `r5-draw-compare` (step 2)
+
+- **Where the comparing happens: inside app_server**, because both engines live there (as M11's `compose compare`). `r5-draw-compare` (MIT, `/system/bin`) is a small client. It records each operation into a `BPicture` with the public `BView` calls and sends it to app_server with one private message, which app_server only accepts with `gpu_debug true`; otherwise it answers with `draw-compare refused: gpu_debug off`. The private message is additive; nothing changes in `libbe`'s public API.
+- **How one operation is compared.** app_server plays the picture twice through its own picture player: once into a Painter on a plain memory buffer (`BitmapHWInterface` and a `DrawingEngine`, as offscreen bitmaps work today), once into a `SkiaDrawingEngine` on a GPU image of the same size. Both start from the same background. Then the GPU image is read back (a read point, part 6) and compared with the class of part 5.
+- **Calls a picture cannot reach** (the server's own: `StrokeRect`, `FillRect`, `FillRegion` and `StrokeLine` with a colour, `StrokePoint()`, `CopyRegion()`, `FillRectNoClipping()`, `ReadBitmap()`) are called directly by a fixed list in app_server's compare code, with the same two engines.
+- **One line per operation**, exactly the brief's pass line with the numbers behind it: `draw-compare <op> ok max <n> share <p>%`, or `draw-compare <op> FAIL max <n> share <p>% class <c>`. At the end `draw-compare <n>/<n> ok`. `<n>` is fixed by step 2 when the set is built and written into this document.
+
+**The set.** Every operation runs on an opaque background and again on a transparent one (alpha 0 with a colour, as a frosted-glass view).
+
+1. Every row of the `DrawingEngine` table in part 4 in `B_OP_COPY` with a solid high colour, pen sizes 1 and 3.
+2. Every drawing mode on four shapes: an aligned rectangle, an ellipse, a text line, a bitmap with alpha.
+3. `B_OP_ALPHA`: `B_PIXEL_ALPHA` and `B_CONSTANT_ALPHA` with `B_ALPHA_OVERLAY` and all thirteen `B_ALPHA_COMPOSITE*` functions, on a rectangle and an ellipse.
+4. Patterns: `B_MIXED_COLORS` and one custom pattern, on a rectangle, an ellipse and a line, with an odd draw offset.
+5. Gradients: the five types on a rectangle, a round rectangle and a Bézier curve, with stops that have alpha.
+6. Transforms: rotation by 30°, scale by 1.5, a shear, on a rectangle, an ellipse, text and a bitmap.
+7. Clipping: a region of three rectangles, `ClipToPicture()`, `ClipToShape()`, the inverse forms, and one inside another.
+8. Bitmaps: unscaled, scaled by 2 and by 0.7, nearest and bilinear; `B_RGB32`, `B_RGBA32`, `B_CMAP8`, `B_RGB16`, `B_GRAY8`; the transparent magic colour.
+9. Text: plain, bold and fixed system fonts at 9, 12, 24 and 72 points; grey, aliased and subpixel (RGB and BGR); hinting off, on and monospaced only; shear and rotation; underline and strikeout; a glyph from a fallback font; `DrawString()` with offsets and with an escapement delta. Each text line also checks the layout exactly (part 5, T).
+10. Subpixel shapes: an ellipse and a polygon with `gSubpixelAntialiasing` on and off.
+11. Strokes: each cap with each join on an open polygon, miter limits 2 and 10, pen sizes 0.5, 1 and 2.5.
+12. The R5 decorator: one whole window frame (tab, buttons, frame line) for an active and an inactive window, drawn by the decorator into both engines.
+13. Offscreen: group 1 again into a view bitmap, through `Sync()`.
+14. Devices: where RADV and Lavapipe are both present, groups 1–9 are also compared Skia on RADV against Skia on Lavapipe.
+
+**Time per operation.** `r5-draw-compare --time` draws each operation of groups 1–11 a hundred times in each engine and prints `draw-time <op> gpu <n> us cpu <n> us` (median). That gives the list of operations that are slower on the GPU, for M13 (decision 9), without guessing from a scenario.
+
+### The measurement (decision 9)
+
+- **The lines,** every 10 s with `gpu_debug true`: in the GPU mode `app_server: draw median <n> us cpu <n> ms per 10 s` (the brief's line), and in the CPU mode (Safe mode) `app_server: draw cpu median <n> us cpu <n> ms per 10 s`.
+- **Draw time** is per drawing session of one window: from its first drawing command after `BeginUpdate()` (or the first command of a batch outside an update) until its pixels are in the window buffer. In the GPU mode that is the fence of the submit that carried the recording and its copy into the buffer; in the CPU mode it is the moment Painter returns. The median is over all sessions of the 10 s. So both modes measure the same thing: how long a program waits before its drawing can be shown.
+- **CPU time** is app_server's own CPU time (user and kernel) in those 10 s, from `get_team_usage_info()`, as M11's compose lines.
+- **The scenario,** the same 60 s in each mode: the M11 scenario (a Tracker window dragged in circles over other windows for 20 s, a long Terminal output scrolled for 20 s, VulkanTeapot and `vkcube` side by side for 20 s), then 20 s of WebPositive on a long page, then the Appearance page with every tab opened once (brief, stick boot 1). Run on the 5625U in the GPU mode on RADV (boot 1), in Safe mode (boot 2) and on Lavapipe (boot 3), and in VirtualBox on Lavapipe (step 5).
+- **Step 1 already measures one typical frame on Lavapipe** with Skia alone, before app_server uses it: an 800×600 window with a decorator-like tab, 30 lines of text, 10 rectangles, a gradient, two bitmaps and a row of round buttons. The line is `skia: <version> ok lavapipe frame <n> us`.
+- **Result:** the medians and CPU times side by side in `CHANGELOG.md`, and the slower operations from `draw-time`. Slower on Lavapipe than Painter is recorded, not a reason to change the path (decision 9).
+
