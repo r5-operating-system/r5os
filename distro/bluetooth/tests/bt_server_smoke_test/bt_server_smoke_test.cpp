@@ -27,7 +27,9 @@
 #include <Roster.h>
 #include <String.h>
 
+#include <bluetooth/LocalDevice.h>
 #include <bluetooth/RemoteDevice.h>
+#include <bluetooth/bdaddrUtils.h>
 #include <bluetooth/bluetooth.h>
 #include <bluetoothserver_p.h>
 
@@ -177,6 +179,34 @@ main()
 		BMessage request(BT_MSG_COUNT_LOCAL_DEVICES);
 		BMessage reply;
 		ask(server, request, reply, "count radios after");
+	}
+
+	// With a radio (VirtualBox, a stick), ask each one for its address and
+	// name: two real HCI commands (Read BD_ADDR, Read Local Name), each
+	// answered or timed out by h2generic within 2 s.
+	uint32 radios = LocalDevice::GetLocalDeviceCount();
+	printf("bt_server_smoke_test: %" B_PRIu32 " radios\n", radios);
+	syslog(LOG_INFO, "bt_server_smoke_test: %" B_PRIu32 " radios", radios);
+	for (uint32 i = 0; i < radios; i++) {
+		LocalDevice* radio = LocalDevice::GetLocalDevice();
+		if (radio == NULL) {
+			fail("a radio could not be acquired");
+			continue;
+		}
+		bigtime_t start = system_time();
+		bdaddr_t address = radio->GetBluetoothAddress();
+		BString name = radio->GetFriendlyName();
+		bigtime_t took = (system_time() - start) / 1000;
+
+		bdaddr_t none = {{ 0, 0, 0, 0, 0, 0 }};
+		printf("bt_server_smoke_test: radio %" B_PRId32 " address %s name \"%s\""
+			" in %" B_PRIdBIGTIME " ms\n", radio->ID(),
+			bdaddrUtils::ToString(address).String(), name.String(), took);
+		syslog(LOG_INFO, "bt_server_smoke_test: radio %" B_PRId32 " address %s"
+			" name \"%s\" in %" B_PRIdBIGTIME " ms", radio->ID(),
+			bdaddrUtils::ToString(address).String(), name.String(), took);
+		if (memcmp(&address, &none, sizeof(address)) == 0)
+			fail("the radio gave no address");
 	}
 
 	team_info info;
