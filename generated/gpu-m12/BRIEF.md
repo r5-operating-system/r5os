@@ -62,7 +62,7 @@ For Cursor or Claude. It does not override `AGENTS.md` or `docs/GPU-ARCHITECTURE
     4. after a failed desktop start, the next boot shows the boot menu by itself with **Safe mode** selected and one line why ("The desktop could not start last time"). How app_server tells the boot loader: step 0 designs it (a marker on the boot volume, removed after a good Sign in; additive, MIT);
     5. **Safe mode** = Haiku's safe mode, the fail-safe graphics driver and the CPU mode: no GPU driver, no compositor, no effects, a clear "Safe mode" mark on the desktop. The older system state (Haiku's package states) is offered in the boot menu.
     - **Scope:** AMD64. ARM64 and RISC-V keep the automatic switch to the CPU mode (decision 8) until Lavapipe is proven there; the brief and `docs/GPU-ARCHITECTURE.md` say so.
-    - **The direct-window pause** (M11 decision 9) stays the one use of the CPU path outside Safe mode, written down as such, unless step 0 finds a simple way to give `BDirectWindow` and `BWindowScreen` their own buffer. That is not built in M12 without the user's yes.
+    - **The direct-window pause** (M11 decision 9) stays the one use of the CPU path outside Safe mode for `BWindowScreen`, and for `BDirectWindow` on RADV. On Lavapipe a `BDirectWindow` gets a buffer of its own (user, 15 Nov 2026, after step 0, Q10): step 6b.
     - The test switches `gpu_draw_fail` and `gpu_compositor_fail` now test the ladder (RADV → Lavapipe), and a new `gpu_lavapipe_fail true` tests the failed start.
     - The `AGENTS.md` sentence that the software path "always stays installed and working" stays true: Painter stays in the image and works in Safe mode. The user updates `AGENTS.md`; step 6 proposes the text.
 
@@ -81,9 +81,10 @@ For Cursor or Claude. It does not override `AGENTS.md` or `docs/GPU-ARCHITECTURE
 | 4 | **Part 2:** polygons, Bézier curves, `BShape`, the five gradient types, `BAffineTransform`, `BAlphaMask`, and **text** | the same | the compare set complete: `draw-compare <n>/<n> ok` |
 | 5 | **Offscreen bitmaps and `Sync()`**, the fallback of decision 8 (`gpu_draw_fail true`), and the measurement | the same; the test programs from step 0; the M11 scenario for 60 s | `app_server: gpu draw off: forced failure` exactly once; offscreen test `ok`; `app_server: draw median <n> us cpu <n> ms per 10 s` recorded in `CHANGELOG.md` |
 | 6 | **Safe mode** (decision 10): RADV → Lavapipe in a session, the failed-start marker, the boot menu with Safe mode selected, Safe mode with the CPU mode and its mark, the test switches | QEMU (Lavapipe; RADV loss simulated by `gpu_compositor_fail true`), then the stick | with `gpu_compositor_fail true`: `gpu lost, going on with lavapipe: forced failure` once, the desktop keeps working, no `gpu compositor off`; with `gpu_lavapipe_fail true`: `desktop start failed`, the next boot opens the menu with Safe mode selected, Safe mode shows the mark and draws with Painter; the boot after a good Sign in starts normally |
+| 6b | **A buffer of its own for `BDirectWindow` on Lavapipe** (Q10 of step 0): laid out like the screen, a cloneable area imported with `VK_EXT_external_memory_host`, read by the compose every refresh while active (`docs/APP-SERVER-GPU-DRAWING.md`, "Decided after step 0"). RADV and `BWindowScreen` keep the pause | QEMU, Lavapipe, a `BDirectWindow` program | no `compositor paused: direct window`; its pixels in the composed frame; `app_server: direct window buffer <w>x<h>` once |
 | 7 | **The stick** (one, after the M11 stick has passed) | 5625U | below |
 
-PRs, from `origin/main`, not stacked: step 0 alone (documentation). Step 1 alone (the recipe). Steps 2–5 depend on each other: **one PR**, one commit per step. Step 6 alone (it touches the boot loader and the fallback, not the drawing).
+PRs, from `origin/main`, not stacked: step 0 alone (documentation). Step 1 alone (the recipe). Steps 2–5 depend on each other: **one PR**, one commit per step. Step 6 alone (it touches the boot loader and the fallback, not the drawing). Step 6b alone (it touches the compositor and the direct-window path).
 
 ---
 
@@ -141,6 +142,7 @@ Counted in sessions, not weeks; the bottleneck is testing.
 | 1 | Step 1, after the user approved Skia | one | WSL build, QEMU |
 | 2 | Steps 2–5 | one, a commit per step | QEMU or VirtualBox, one boot per step |
 | 3 | Step 6 | one | QEMU, the boots of its pass line |
+| 3b | Step 6b | one | QEMU, a `BDirectWindow` program on Lavapipe |
 | 4 | The stick (step 7) | results in `CHANGELOG.md` | 5625U, seven boots |
 
 ---
@@ -153,7 +155,7 @@ Counted in sessions, not weeks; the bottleneck is testing.
 - GPU-rendered letter outlines (Slug-style), colour fonts beyond what FreeType already does.
 - DCN, vsync, scanout planes, more than one screen.
 - Skia's own CPU raster backend as another software path. Only if the Lavapipe numbers ask for it, and only after a user decision.
-- A buffer of their own for `BDirectWindow` and `BWindowScreen` (decision 10), unless the user says yes after step 0.
+- A buffer of its own for `BWindowScreen`, and for `BDirectWindow` on RADV (decision 10; the user said yes only for `BDirectWindow` on Lavapipe, step 6b).
 - Safe mode on ARM64 and RISC-V (decision 10, scope).
 
 **PR titles:** "Area - what changes for the user", in plain English. Example: "Graphics - The GPU draws your windows".
