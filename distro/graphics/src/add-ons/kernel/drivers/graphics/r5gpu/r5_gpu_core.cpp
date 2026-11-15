@@ -3082,6 +3082,8 @@ extern "C" team_id team_get_current_team_id(void);
 
 /* headers/private/system/vm_defs.h: REGION_NO_PRIVATE_MAP = 0. */
 static const uint32 kRegionNoPrivateMap = 0;
+/* headers/private/system/vm_defs.h: B_KERNEL_AREA = 1 << 14. */
+static const uint32 kKernelArea = 1 << 14;
 
 
 static void
@@ -3240,8 +3242,12 @@ gpu_bo_map(gpu_client* client, void* buffer, size_t length)
 		bo->backing->kernel = kernel;
 	}
 	void* user = NULL;
+	/* B_KERNEL_AREA: the program can use the mapping but not clone,
+	 * transfer, delete or reprotect it, so no copy outlives the release
+	 * and keeps VRAM that is given to another buffer. */
 	area_id area = vm_clone_area(team, "r5 gpu bo", &user, B_ANY_ADDRESS,
-		B_READ_AREA | B_WRITE_AREA, kRegionNoPrivateMap, bo->backing->kernelArea,
+		B_READ_AREA | B_WRITE_AREA | kKernelArea, kRegionNoPrivateMap,
+		bo->backing->kernelArea,
 		true);
 	if (area < 0)
 		return gpu_refuse("BO_MAP", "clone", area, in.handle, bo->backing->domain,
