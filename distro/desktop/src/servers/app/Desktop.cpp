@@ -2181,7 +2181,9 @@ Desktop::WindowAt(BPoint where)
 		::Decorator* decorator = window->Decorator();
 		if (window->IsVisible() && decorator != NULL
 			&& decorator->InputMarginContains(where)) {
-			return window;
+			// M11 fourth review: the stack's front window, as above
+			Window* front = window->TopLayerStackWindow();
+			return front != NULL ? front : window;
 		}
 // SPDX-SnippetEnd
 	}
