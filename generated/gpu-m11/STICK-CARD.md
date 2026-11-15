@@ -48,4 +48,4 @@ Commando's: `check wait`, `m11-scroll`, `m11-vulkan`, `check`, `boot-next`.
 
 Na boot 4: stick terug in de pc, dan `py scripts/read-stick-logs.py`. De bestanden staan op de stick in `~/m11/boot1` … `boot4`.
 
-Faalt iets dat de desktop laat vastlopen (aanwijzer staat stil)? Houd de aan-knop ingedrukt. Start opnieuw (dezelfde boot), typ `check`, dan `boot-next` en `y`. Bij boot 1: typ na het opnieuw starten eerst `check wait` en doe het scenario nog een keer, dan pas `check`. Schrijf op bij welke stap het vastliep.
+Faalt iets dat de desktop laat vastlopen (aanwijzer staat stil)? Houd de aan-knop ingedrukt. Start opnieuw (dezelfde boot), typ `check`, dan `boot-next` en `y`. Bij boot 1: typ na het opnieuw starten eerst `check wait` en doe het scenario nog een keer, dan pas `check`. Schrijf op bij welke stap het vastliep. Heb je `check` zelf afgebroken (Ctrl+C of Terminal dicht)? Doe dan hetzelfde: `check wait`, het scenario, `check`.

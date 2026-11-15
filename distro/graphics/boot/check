@@ -15,8 +15,9 @@
 # gpu_hang_test 1 = 4, gpu_compositor_lavapipe true = 3,
 # gpu_compositor_fail true = 2, otherwise 1 (generated/gpu-m11/BRIEF.md,
 # "Stick (step 6)"). The note and the files are in ~/m11 instead of ~/m10.
-# "check wait" only waits for the self-test and says when the scenario
-# can start; it writes nothing. In boot 1 check runs r5-share-check and
+# "check wait" waits for the self-test and says when the scenario can
+# start; in M11 it writes only ~/m11/scenario-from-boot<k>, where this
+# boot's scenario lines start. In boot 1 check runs r5-share-check and
 # VulkanTeapot twice (zero-copy, then the copy path with
 # gpu_compositor_zero_copy false for that run only), about three minutes.
 #
@@ -102,8 +103,21 @@ this_boot() {
 	'
 }
 
-# check wait: the self-test only, nothing written.
+# check wait: the self-test, and in M11 where the scenario starts.
 if [ "$1" = wait ]; then
+	# M11 fourth review: a boot 1 that froze during check's copy-path run
+	# (no trap runs on a reset) left the zero-copy switch off. It goes
+	# before the scenario, or three checks fail that it did not cause.
+	if [ "$stick" = m11 ] && [ "$settings" != "$sysset" ] \
+		&& grep -q '^gpu_compositor_zero_copy' "$settings" 2>/dev/null; then
+		grep -v '^gpu_compositor_zero_copy' "$settings" > "$settings.wait"
+		rm -f "$settings"
+		mv "$settings.wait" "$settings"
+		sync
+		echo "check: the zero-copy switch of a stopped check is gone again"
+		# app_server reads the switch at its 10 s report
+		sleep 12
+	fi
 	# M11 third review: the file of an earlier boot also ends in
 	# "selftest done" until this boot's self-test renames it, about 5 s
 	# after Deskbar. Only a file written after this boot's first dated
@@ -358,16 +372,27 @@ window_ok() {
 
 # --- M11 (generated/gpu-m11/BRIEF.md, "Stick (step 6)") ---
 
-# The syslog from line n + 1 on, for a live run of check itself.
+# The syslog from line n + 1 on, for a live run of check itself. M11
+# fourth review: the count carries the checksum of the first line, so a
+# syslog that was rotated meanwhile is read on from syslog.1.
 syslog_count() {
 	if [ -f "$syslog" ]; then
-		wc -l < "$syslog" | tr -d ' '
+		n=$(wc -l < "$syslog" | tr -d ' ')
+		echo "$n $(head -n 1 "$syslog" | cksum | cut -d ' ' -f 1)"
 	else
-		echo 0
+		echo "0 none"
 	fi
 }
 syslog_since() {
-	tail -n +"$(($1 + 1))" "$syslog" 2>/dev/null
+	n=${1%% *}
+	sum=${1#* }
+	now=$(head -n 1 "$syslog" 2>/dev/null | cksum | cut -d ' ' -f 1)
+	if [ "$sum" != none ] && [ "$sum" != "$now" ] && [ -f "$syslog.1" ]; then
+		tail -n +"$((n + 1))" "$syslog.1" 2>/dev/null
+		cat "$syslog" 2>/dev/null
+	else
+		tail -n +"$((n + 1))" "$syslog" 2>/dev/null
+	fi
 }
 # wait_line <pattern> <from line> <seconds>
 wait_line() {
@@ -528,7 +553,7 @@ m11_fps() {
 	# and a saved copy never holds the switch (a boot restarted after a
 	# freeze would keep it).
 	grep -v '^gpu_compositor_zero_copy' "$settings" > "$keep/radeon_hd.orig"
-	trap 'rm -f "$settings"; cp "$keep/radeon_hd.orig" "$settings"; exit 1' INT TERM HUP
+	trap 'rm -f "$settings"; cp "$keep/radeon_hd.orig" "$settings"; sync; exit 1' INT TERM HUP
 	from=$(syslog_count)
 	rm -f "$settings"
 	{ cat "$keep/radeon_hd.orig"; echo "gpu_compositor_zero_copy false"; } > "$settings"

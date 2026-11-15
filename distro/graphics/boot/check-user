@@ -88,8 +88,17 @@ fi
 
 if [ "$stick" = m11 ]; then
 	from=$(wc -l < "$syslog" 2>/dev/null | tr -d ' ')
+	first=$(head -n 1 "$syslog" 2>/dev/null | cksum)
 	runlive teapot "$bin"/VulkanTeapot --window --seconds 15
-	tail -n +"$((${from:-0} + 1))" "$syslog" > "$keep/teapot-syslog.txt" 2>/dev/null
+	# M11 fourth review: a syslog rotated meanwhile is read on from
+	# syslog.1.
+	if [ "$first" != "$(head -n 1 "$syslog" 2>/dev/null | cksum)" ] \
+		&& [ -f "$syslog.1" ]; then
+		{ tail -n +"$((${from:-0} + 1))" "$syslog.1"; cat "$syslog"; } \
+			> "$keep/teapot-syslog.txt" 2>/dev/null
+	else
+		tail -n +"$((${from:-0} + 1))" "$syslog" > "$keep/teapot-syslog.txt" 2>/dev/null
+	fi
 	have '^window fps [0-9]' "$keep/teapot.txt" "VulkanTeapot: window fps line"
 	have 'app_server: window [0-9]+ zero-copy on' "$keep/teapot-syslog.txt" \
 		"VulkanTeapot of a standard account: zero-copy on"
