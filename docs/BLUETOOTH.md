@@ -117,6 +117,7 @@ Each step is its own small pull request. It is built for AMD64 with `scripts/bui
 
 - **What:** LE credit-based flow control (CoC) in `distro/kernel/.../l2cap/`, and recognition of the ISO USB endpoints in `h2generic`.
 - **Pass:** QEMU SMAP boot, `l2cap_fuzz: 60s 0 crashes`, and `l2cap_coc_test: ok`.
+- **Moved (16 Nov 2026, while the owner slept; open to change):** this step runs just before step 6, not after 1b. CoC and EATT run over the LE signalling channel of an LE link, and the ISO endpoints carry LE Audio (step 7); no LE link exists before step 6 asks for LE events, so nothing could use or test them earlier than the fuzzer. Built next to step 6, CoC shares the fixed-channel socket interface and gets a real LE link to test against.
 
 ### Step 2 (PR 5): "Icons - one place for signal and battery symbols" (`libr5icons` and Wi-Fi)
 
