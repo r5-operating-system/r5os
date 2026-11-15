@@ -64,3 +64,16 @@ Skia has two GPU backends: **Ganesh** (the older one, `GrDirectContext`) and **G
 
 **The window images.** Skia draws into Vulkan images, but the M11 window buffer is a host-visible `VkBuffer` that `compose.comp` and `effects.comp` read as a storage buffer (`distro/app_server/WindowBuffer.h`). M12 keeps the compose unchanged: each window gets, besides its buffer, a `VkImage` (`VK_FORMAT_B8G8R8A8_UNORM`, optimal tiling, colour attachment, sampled, transfer source), which Graphite draws into (`BackendTextures::MakeVulkan` and `SkSurfaces::WrapBackendTexture`, `skia/include/gpu/graphite/vk/VulkanGraphiteTypes.h`). After Skia's work, the compose thread copies the damaged rectangles from the image into the buffer with one small compute shader in its own command buffer (part 4, "Alpha"), and then composes as in M11. The compose shaders stay byte-identical. The image is counted in the window memory budget of M11, so the budget is reached earlier. Reading the images directly in the compose is M13 work.
 
+## 3. Static library, not a private shared library (decision 3)
+
+Skia is built as a **static library** and linked only into `app_server`.
+
+- **Hidden by construction.** A private `.so` would still be a file in the image that any program could load, and it would need a rule to keep it private. A static library exists only inside the one binary. That is decision 3 without a rule to police.
+- **No Skia ABI.** Skia has no stable binary interface between milestones. Linked statically, app_server and Skia always come from the same build; there is no second file that can be out of step after an update.
+- **No Skia symbols leave app_server.** Decorator add-ons are loaded into app_server and resolve their symbols against it. Skia is built with `-fvisibility=hidden`, and app_server is linked with `-Wl,--exclude-libs,ALL` for the Skia archive, so a decorator still sees only the Haiku classes (`DrawingEngine` and the rest), never a Skia name. The R5 Skia code (`SkiaDrawingEngine` and its helpers) is the only code that includes a Skia header.
+- **Vulkan through the compositor.** Skia gets `vkGetInstanceProcAddr` from the compositor (`fGetProc`); it does not link `libvulkan` itself, so the Vulkan loader is loaded once, as in M11.
+- **Cost.** app_server grows by the size of Skia (step 1 measures it), only once in memory because there is one app_server. Every Skia update relinks app_server, which the recipe does anyway.
+- **Packaging.** The recipe builds `libskia.a` and its headers into a build-only package that jam uses to link app_server, next to the Mesa recipe. Nothing of that package is installed in the image; the image only has the larger `app_server`.
+
+A private shared library would only pay off if Skia were updated without app_server, which the release mechanism does not do.
+
