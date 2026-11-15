@@ -78,6 +78,11 @@
 #include <VolumeRoster.h>
 #include <Window.h>
 #include <WindowPrivate.h>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <WindowEffects.h>
+// SPDX-SnippetEnd
 
 #include <AppMisc.h>
 #include <AutoDeleter.h>
@@ -544,6 +549,28 @@ r5_make_transparent(BView* view)
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+static void
+r5_glass_children(BView* parent)
+{
+	for (int32 index = 0; index < parent->CountChildren(); index++) {
+		BView* view = parent->ChildAt(index);
+		if (view == NULL || dynamic_cast<BDragger*>(view) != NULL)
+			continue;
+		view->SetFlags(view->Flags() | B_TRANSPARENT_BACKGROUND);
+		view->SetViewColor(B_TRANSPARENT_COLOR);
+		view->SetLowColor(blend_color(B_TRANSPARENT_COLOR,
+			view->HighColor(), 192));
+		view->SetDrawingMode(B_OP_ALPHA);
+		view->SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_COMPOSITE);
+		r5_glass_children(view);
+	}
+}
+// SPDX-SnippetEnd
+
+
 static void
 r5_allow_wide(BView* view)
 {
@@ -996,6 +1023,14 @@ SysInfoView::AttachedToWindow()
 			fDragger->Hide();
 	}
 	DoLayout();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// In the About window the panel is frosted glass (see Draw). A child's
+	// AttachedToWindow runs after its parent's, so this view is set here.
+	if (!_IsReplicant() && !_OnDesktop())
+		BAppearanceKit::set_view_glass(this, true);
+// SPDX-SnippetEnd
 
 	if (_IsReplicant()) {
 		// if we are a replicant the parent view doesn't do this for us
@@ -1057,6 +1092,32 @@ SysInfoView::CacheInitialSize()
 void
 SysInfoView::Draw(BRect updateRect)
 {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// In the About window the panel is frosted glass (GPU mode): its face
+	// is drawn half transparent over the blur. In the CPU mode the view
+	// colour is erased first, so it looks as before.
+	if (!_IsReplicant() && !_OnDesktop()) {
+		BRect bounds = Bounds();
+		float radius = be_plain_font->Size() * 0.25f;
+		rgb_color face = tint_color(ui_color(B_PANEL_BACKGROUND_COLOR),
+			B_DARKEN_1_TINT);
+		rgb_color border = tint_color(ui_color(B_PANEL_BACKGROUND_COLOR),
+			B_DARKEN_2_TINT);
+		face.alpha = 110;
+		border.alpha = 170;
+		PushState();
+		SetDrawingMode(B_OP_ALPHA);
+		SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_COMPOSITE);
+		SetHighColor(face);
+		FillRoundRect(bounds, radius, radius);
+		SetHighColor(border);
+		StrokeRoundRect(bounds, radius, radius);
+		PopState();
+		return;
+	}
+// SPDX-SnippetEnd
 	BAppearanceKit::BCard::Draw(updateRect);
 
 	// stroke a line around the view
@@ -1170,6 +1231,11 @@ SysInfoView::_UpdateColors()
 		r5_color_system_info(this, textColor);
 		if (fBuildView != NULL)
 			fBuildView->SetHighColor(tint_color(textColor, B_LIGHTEN_1_TINT));
+		// The panel is glass in the About window (see Draw). Its children
+		// draw with alpha, as on the desktop, so no label erases a gray
+		// box onto the glass; in the CPU mode that looks as before.
+		if (!_IsReplicant())
+			r5_glass_children(this);
 // SPDX-SnippetEnd
 	}
 }
@@ -1623,6 +1689,14 @@ AboutView::AttachedToWindow()
 
 	SetEventMask(B_POINTER_EVENTS);
 	DoLayout();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// Frosted glass behind the window when the windows are composed on
+	// the GPU; the system information sets its own. The header and the tabs stay
+	// opaque, so the text there stays easy to read.
+	BAppearanceKit::set_view_glass(this, true);
+// SPDX-SnippetEnd
 }
 
 
