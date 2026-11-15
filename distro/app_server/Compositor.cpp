@@ -4750,6 +4750,19 @@ Compositor::_Report()
 		fSkia->TakeDrawMedian(&drawMedian, &drawCount);
 		log_line("draw median %" B_PRId64 " us cpu %" B_PRId64
 			" ms per 10 s", drawMedian, (teamCpu - fTeamCpuAtReport) / 1000);
+		// M12 step 5c: the profile of these 10 s
+		int64 p[SkiaGpu::kProfileCount];
+		fSkia->TakeProfile(p);
+		int64 runs = p[SkiaGpu::kCountRuns] > 0 ? p[SkiaGpu::kCountRuns] : 1;
+		log_line("draw profile runs %" B_PRId64 " per run us snap %" B_PRId64
+			" insert %" B_PRId64 " submit %" B_PRId64 " deliver %" B_PRId64,
+			p[SkiaGpu::kCountRuns], p[SkiaGpu::kTimeSnap] / runs,
+			p[SkiaGpu::kTimeInsert] / runs, p[SkiaGpu::kTimeSubmit] / runs,
+			p[SkiaGpu::kTimeDeliver] / runs);
+		log_line("draw profile composite %" B_PRId64 " coverage %" B_PRId64
+			" direct %" B_PRId64 " upload %" B_PRId64,
+			p[SkiaGpu::kCountComposite], p[SkiaGpu::kCountCoverage],
+			p[SkiaGpu::kCountDirect], p[SkiaGpu::kCountUpload]);
 	} else {
 		bigtime_t drawMedian = 0;
 		int32 drawCount = 0;

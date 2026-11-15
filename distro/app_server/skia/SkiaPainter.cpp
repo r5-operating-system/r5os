@@ -83,6 +83,15 @@ target_info(int32 width, int32 height)
 }
 
 
+//! A texture from CPU memory (counted for the step 5c profile).
+static sk_sp<SkImage>
+upload_texture(skgpu::graphite::Recorder* recorder, sk_sp<SkImage> image)
+{
+	SkiaGpu::Profile(SkiaGpu::kCountUpload);
+	return SkImages::TextureFromImage(recorder, image.get());
+}
+
+
 static sk_sp<SkRuntimeEffect>
 blend_effect()
 {
@@ -822,6 +831,9 @@ SkiaPainter::_Composite(const SkIRect& _bounds, const sk_sp<SkImage>& coverage,
 	paint.setShader(shader);
 	paint.setBlendMode(SkBlendMode::kSrc);
 	paint.setAntiAlias(false);
+	SkiaGpu::Profile(SkiaGpu::kCountComposite);
+	if (coverage != nullptr)
+		SkiaGpu::Profile(SkiaGpu::kCountCoverage);
 
 	SkCanvas* canvas = fTarget->Canvas();
 	for (int32 i = 0; i < rects.CountRects(); i++) {
@@ -871,7 +883,7 @@ SkiaPainter::_MaskShader(const SkIRect& bounds)
 	}
 	delete[] full;
 	pixels.setImmutable();
-	sk_sp<SkImage> image = SkImages::TextureFromImage(fTarget->Recorder(),
+	sk_sp<SkImage> image = upload_texture(fTarget->Recorder(),
 		pixels.asImage());
 	if (image == nullptr)
 		return nullptr;
@@ -969,6 +981,7 @@ SkiaPainter::_DirectDraw(const SkIRect& _bounds, const SkMatrix& matrix,
 		return;
 	BRegion rects;
 	_ClipRects(bounds, rects);
+	SkiaGpu::Profile(SkiaGpu::kCountDirect);
 	SkCanvas* canvas = fTarget->Canvas();
 	for (int32 i = 0; i < rects.CountRects(); i++) {
 		clipping_rect r = rects.RectAtInt(i);
@@ -1578,7 +1591,7 @@ SkiaPainter::FillRect(const BRect& r, const BGradient* gradient)
 				}
 			}
 			column.setImmutable();
-			sk_sp<SkImage> image = SkImages::TextureFromImage(
+			sk_sp<SkImage> image = upload_texture(
 				fTarget->Recorder(), column.asImage());
 			if (image == nullptr)
 				return _Clipped(BRect(a, b));
@@ -1923,7 +1936,7 @@ SkiaPainter::DrawBitmap(const ServerBitmap* bitmap, BRect bitmapRect,
 		}
 	}
 	pixels.setImmutable();
-	sk_sp<SkImage> image = SkImages::TextureFromImage(fTarget->Recorder(),
+	sk_sp<SkImage> image = upload_texture(fTarget->Recorder(),
 		pixels.asImage());
 	if (image == nullptr)
 		return touched;
@@ -2167,7 +2180,7 @@ SkiaPainter::_GradientShader(const BGradient& gradient, bool* _ok)
 		out[3] = stop->color.alpha;
 	}
 	ramp.setImmutable();
-	sk_sp<SkImage> image = SkImages::TextureFromImage(fTarget->Recorder(),
+	sk_sp<SkImage> image = upload_texture(fTarget->Recorder(),
 		ramp.asImage());
 	if (image == nullptr)
 		return nullptr;

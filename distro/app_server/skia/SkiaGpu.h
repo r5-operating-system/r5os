@@ -96,6 +96,24 @@ public:
 	// B_BUSY meanwhile instead of holding that wait up.
 			void				SetComposeBlocked(bool blocked);
 
+	// M12 step 5c, the profile: where a compose's GPU drawing spends its
+	// time (us, summed), and what the drawing calls did (counts). Any
+	// thread adds; the compositor reports and clears every 10 s.
+	enum {
+		kTimeSnap = 0,		// snapping the recordings
+		kTimeInsert,		// Context::insertRecording()
+		kTimeSubmit,		// submit and wait for the GPU
+		kTimeDeliver,		// read-back into the window buffers
+		kCountComposite,	// R5 shader passes (with a copy of the destination)
+		kCountDirect,		// draws with Skia's own blending
+		kCountCoverage,		// coverage images drawn for the R5 shader
+		kCountUpload,		// textures made from CPU memory
+		kCountRuns,			// RunWork() calls with work
+		kProfileCount
+	};
+	static	void				Profile(int which, int64 value = 1);
+			void				TakeProfile(int64 values[kProfileCount]);
+
 	// gpu_debug: draw times, one median line per 10 s.
 			void				AddDrawSample(bigtime_t time);
 			bool				TakeDrawMedian(bigtime_t* _median,

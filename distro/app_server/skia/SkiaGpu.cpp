@@ -229,6 +229,23 @@ SkiaGpu::Create(const skia_vulkan_device& device, bool forceFail,
 
 
 static SkiaGpu* sCurrent = NULL;
+static int64 sProfile[SkiaGpu::kProfileCount];
+
+
+/*static*/ void
+SkiaGpu::Profile(int which, int64 value)
+{
+	if (which >= 0 && which < kProfileCount)
+		atomic_add64(&sProfile[which], value);
+}
+
+
+void
+SkiaGpu::TakeProfile(int64 values[kProfileCount])
+{
+	for (int i = 0; i < kProfileCount; i++)
+		values[i] = atomic_get_and_set64(&sProfile[i], 0);
+}
 
 
 /*static*/ SkiaGpu*
@@ -319,6 +336,7 @@ SkiaGpu::RunWork(const char** _reason)
 		return false;
 	}
 
+	bigtime_t profileStart = system_time();
 	std::vector<std::unique_ptr<WorkItem>> items;
 	for (int32 i = 0; i < fTargets.CountItems(); i++) {
 		SkiaTarget* target = fTargets.ItemAt(i);
@@ -344,6 +362,11 @@ SkiaGpu::RunWork(const char** _reason)
 		target->Unlock();
 	}
 
+	bigtime_t profileSnapped = system_time();
+	if (!items.empty()) {
+		Profile(kCountRuns);
+		Profile(kTimeSnap, profileSnapped - profileStart);
+	}
 	bool ok = true;
 	if (!items.empty() && fForceFail) {
 		// gpu_draw_fail: the first submit with work counts as failed
@@ -361,6 +384,9 @@ SkiaGpu::RunWork(const char** _reason)
 			ok = false;
 		}
 	}
+	bigtime_t profileInserted = system_time();
+	if (!items.empty())
+		Profile(kTimeInsert, profileInserted - profileSnapped);
 	for (size_t i = 0; ok && i < items.size(); i++) {
 		WorkItem* item = items[i].get();
 		if (item->damage.CountRects() == 0)
@@ -379,11 +405,17 @@ SkiaGpu::RunWork(const char** _reason)
 	if (ok && !items.empty()) {
 		SubmitInfo submit;
 		submit.fSync = SyncToCpu::kYes;
+		bigtime_t submitStart = system_time();
 		if (!context->submit(submit)) {
 			*_reason = "submit failed";
 			ok = false;
-		} else
+		} else {
+			bigtime_t submitted = system_time();
+			Profile(kTimeSubmit, submitted - submitStart);
+			// read_done() copies into the window buffers from here
 			context->checkAsyncWorkCompletion();
+			Profile(kTimeDeliver, system_time() - submitted);
+		}
 		if (context->isDeviceLost()) {
 			*_reason = "device lost";
 			ok = false;
