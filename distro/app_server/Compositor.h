@@ -211,6 +211,7 @@ private:
 			void				_ReturnSharedImages();
 			bool				_RestartAfterReset();
 			void				_Report();
+			void				_ReadZeroCopySwitch();
 			void				_UpdatePeriod();
 
 private:

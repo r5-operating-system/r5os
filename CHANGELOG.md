@@ -1,5 +1,18 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-15 - Review of the merged M11 stack (#4264): seven fixes, the rest left with a reason
+
+Problem: a read-only review of the merged M11 diff found a weak compare-and-swap in the direct screen count, a resize rule in the VM that was broader than needed, a missing kernel mapping read as "no copies", a hung frame that quit had to wait out, a test switch read only with gpu_debug, a self-test date fallback that took an old file, and a settings rewrite that could leave no file.
+
+What changed:
+- Compositor: `DirectScreenChanged` counts down with `atomic_add`. Haiku's inline `atomic_test_and_set` is a weak CAS that returns the expected value also when it failed, which on ARM64 could resume the compositor while a `BWindowScreen` still holds the screen. The 5 s fence grace waits in 100 ms steps and stops at `fQuit`. A buffer kept because the GPU may still use it stays in the window memory count. The zero-copy test switch is read every 10 s also without `gpu_debug` (`_ReadZeroCopySwitch`). The mode guard is published and cleared with release and acquire, and cleared with the compose slot held. `Locker.h` sits in alphabetical order; the `GuardUnlock` destructor has braces.
+- Kernel: `vm_resize_area` refuses a team only the shrink of a cache that a kernel area also maps; growing stays allowed. `amd_drop_copies` returns an error, so the VRAM is kept, when the kernel mapping cannot be found. Two blank lines before `gpu_cp_stopped_after_loss`.
+- Stick: `check wait` counts a self-test file without a readable date only after 60 s. The copy-path run writes a new settings file and moves it over the old one, also in its trap.
+
+Not changed, with the reason: the GPU lock stays held while `drop_copies` deletes fork copies, and the radeon_hd driver still walks the VM itself (a kernel helper is a larger change; review 4 lists it). An empty dirty region in `RebuildAndRedrawAfterWindowChange` returns before `ClippingChanged`, as Haiku returns before it rebuilds its own clipping. `ShareViewsChanged` per scroll, `ClippingChanged` per look change and the debug write test are cost only. C casts follow the surrounding GPU code.
+
+Tested: not built and not booted; the owner asked for no jam for now. `bash -n` on `check`. The packed `check` in `mesa_radv-25.3.6-9` is the old one until the next repack (the pre-stick check catches that).
+
 ## 2026-11-15 - M12 step 1: the Skia recipe, and one typical frame on Lavapipe
 
 Problem: M12 draws the windows with Skia (approved 15 Nov 2026, `docs/APP-SERVER-GPU-DRAWING.md`, Q1). Step 1 builds Skia from R5's own recipe and measures one frame on Lavapipe before any app_server code is written.

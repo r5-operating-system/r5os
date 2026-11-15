@@ -111,8 +111,7 @@ if [ "$1" = wait ]; then
 	if [ "$stick" = m11 ] && [ "$settings" != "$sysset" ] \
 		&& grep -q '^gpu_compositor_zero_copy' "$settings" 2>/dev/null; then
 		grep -v '^gpu_compositor_zero_copy' "$settings" > "$settings.wait"
-		rm -f "$settings"
-		mv "$settings.wait" "$settings"
+		mv -f "$settings.wait" "$settings"
 		sync
 		echo "check: the zero-copy switch of a stopped check is gone again"
 		# app_server reads the switch at its 10 s report
@@ -131,8 +130,9 @@ if [ "$1" = wait ]; then
 	selftest_ready() {
 		grep -q '^selftest done' "$selftest" 2>/dev/null || return 1
 		[ -n "$since" ] && [ "$i" -lt 60 ] || return 0
+		# Review after M11: without a file date only the 60 s rule counts.
 		written=$(date -r "$selftest" '+%Y-%m-%d %H:%M:%S' 2>/dev/null) \
-			|| return 0
+			|| return 1
 		[ ! "$written" \< "$since" ]
 	}
 	i=0
@@ -554,10 +554,13 @@ m11_fps() {
 	# and a saved copy never holds the switch (a boot restarted after a
 	# freeze would keep it).
 	grep -v '^gpu_compositor_zero_copy' "$settings" > "$keep/radeon_hd.orig"
-	trap 'rm -f "$settings"; cp "$keep/radeon_hd.orig" "$settings"; sync; exit 1' INT TERM HUP
+	trap 'cp "$keep/radeon_hd.orig" "$settings.new"; mv -f "$settings.new" "$settings"; sync; exit 1' INT TERM HUP
 	from=$(syslog_count)
-	rm -f "$settings"
-	{ cat "$keep/radeon_hd.orig"; echo "gpu_compositor_zero_copy false"; } > "$settings"
+	# Review after M11: a new file moved over the old one, so a stop never
+	# leaves no settings file.
+	{ cat "$keep/radeon_hd.orig"; echo "gpu_compositor_zero_copy false"; } \
+		> "$settings.new"
+	mv -f "$settings.new" "$settings"
 	if wait_line 'app_server: zero-copy setting off' "$from" 30; then
 		say 0 "zero-copy setting off"
 		teapot_run teapot-copy
@@ -568,8 +571,8 @@ m11_fps() {
 		say 1 "zero-copy setting off (no line in 30 s)"
 	fi
 	from=$(syslog_count)
-	rm -f "$settings"
-	cp "$keep/radeon_hd.orig" "$settings"
+	cp "$keep/radeon_hd.orig" "$settings.new"
+	mv -f "$settings.new" "$settings"
 	trap - INT TERM HUP
 	if wait_line 'app_server: zero-copy setting on' "$from" 30; then
 		say 0 "zero-copy setting on again"

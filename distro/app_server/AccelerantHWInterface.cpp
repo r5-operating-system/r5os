@@ -42,12 +42,12 @@
 #include <Accelerant.h>
 #include <Cursor.h>
 #include <Directory.h>
+#include <FindDirectory.h>
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 #include <Locker.h>
 // SPDX-SnippetEnd
-#include <FindDirectory.h>
 #include <Path.h>
 #include <PathFinder.h>
 #include <String.h>
@@ -568,12 +568,18 @@ AccelerantHWInterface::SetMode(const display_mode& mode)
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 	// M11 review: after the frame that may use the old back buffer
-	BLocker* guard = fModeGuard;
+	// Review after M11: published and cleared with release and acquire
+	// (SetModeGuard), so this thread sees the whole locker.
+	BLocker* guard = __atomic_load_n(&fModeGuard, __ATOMIC_ACQUIRE);
 	if (guard != NULL)
 		guard->Lock();
 	struct GuardUnlock {
 		BLocker* guard;
-		~GuardUnlock() { if (guard != NULL) guard->Unlock(); }
+		~GuardUnlock()
+		{
+			if (guard != NULL)
+				guard->Unlock();
+		}
 	} guardUnlock = { guard };
 // SPDX-SnippetEnd
 	AutoWriteLocker _(this);

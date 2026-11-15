@@ -2164,8 +2164,12 @@ amd_drop_copies(int32_t kernelArea)
 		area_id areas[16];
 		int32 count = 0;
 		VMArea* source = VMAreas::Lookup(kernelArea);
-		if (source == NULL)
-			return B_OK;
+		if (source == NULL) {
+			/* Review after M11: the caller still holds the kernel area,
+			 * so it cannot be gone; if it is, keeping the VRAM is the
+			 * safe side (B_OK would give the page back). */
+			return B_ERROR;
+		}
 		VMCache* cache = vm_area_get_locked_cache(source);
 		for (VMArea* area = cache->areas.First(); area != NULL && count < 16;
 				area = cache->areas.GetNext(area)) {
