@@ -1,5 +1,15 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-15 - Build scripts: an apply puts back what another worktree left in the shared tree
+
+Problem: the build lock (below) keeps builds apart in time, but not in content. The Bluetooth session's jam stopped linking `app_server`: `AlphaMask.cpp` in the WSL tree was the M12 session's version (it calls `skia_offscreen_engine()`), copied there by M12's earlier apply, while the Skia files it needs are not on `main`. That was the limit "files that a previous branch copied into the tree stay there".
+
+What changed: `scripts/tree-owner.sh`, called by `apply-overlay.sh` under the lock. After an apply (also a failed one) it records which paths of the tree that apply wrote: changed or new in the tree's git, with a change time after the apply began. It keeps that list and the worktree in `/home/nickr/r5os/.r5-tree-owner/`. Before an apply from another worktree it puts those paths back: a tracked file to the Haiku `HEAD` of the tree, a new file removed (and its folder if empty). Nothing else in the tree is touched; no `git clean`, no reset of the whole tree. The same worktree twice in a row puts nothing back and keeps adding to its list.
+
+Tested in WSL on a throwaway git tree: a changed file came back as `HEAD`, a new file and its new folder were removed (also a name with a space), a local change no apply wrote stayed, and a second apply from the same worktree kept the list. Not run: an apply and jam on the real tree (the M12 build held the lock).
+
+Limits: it works only once every worktree that builds has this change; a build with the older scripts records nothing, so its files stay for the next one. The first record for the M12 apply that was running was written by hand from the change times since that apply began.
+
 ## 2026-11-15 - Build scripts: one build at a time in the shared WSL Haiku tree
 
 Problem: every session copies its `distro/` into the one WSL Haiku tree and jams into the one `generated.x86_64`. On 15 Nov two sessions did that at the same time: an image with a kernel and a package from two different builds stopped in the kernel (`search_module called during kernel startup`, `generic/dpc/v1`), and `r5-os.image` disappeared.
@@ -8,7 +18,7 @@ What changed: `scripts/build-lock.sh` takes an exclusive `flock` on `/home/nickr
 
 Tested in WSL with a test lock file: a second script waited until the first ended, `R5_BUILD_LOCK_WAIT=0` gave up at once with exit 1, and a nested script with the lock held did not wait for itself. `bash -n` on all five scripts. Not run: a real jam under the lock.
 
-Limits: the `apply-*.py` scripts run on their own (for example `apply-settings.py`) and copying `r5-os.image` for QEMU do not take the lock. Files that a previous branch copied into the tree and the current one does not have stay there.
+Limits: the `apply-*.py` scripts run on their own (for example `apply-settings.py`) and copying `r5-os.image` for QEMU do not take the lock. Files that a previous branch copied into the tree and the current one does not have stay there (fixed by `tree-owner.sh`, above).
 
 ## 2026-11-15 - Review of the merged M11 stack (#4264): seven fixes, the rest left with a reason
 
