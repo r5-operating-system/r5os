@@ -147,7 +147,8 @@ if [ "$1" = wait ]; then
 		# M11: the last syslog line now, and how often this boot has it;
 		# the scenario's lines come after that copy, so the self-test's
 		# own windows do not count for it.
-		if [ "$stick" = m11 ] && [ -f "$syslog" ]; then
+		# External review: only boot 1 reads it.
+		if [ "$stick" = m11 ] && [ "$boot" = 1 ] && [ -f "$syslog" ]; then
 			this_boot > "$m10/scenario-wait.txt"
 			last=$(tail -n 1 "$m10/scenario-wait.txt")
 			copies=$(grep -cxF -- "$last" "$m10/scenario-wait.txt")
@@ -607,7 +608,7 @@ m11_boot() {
 			"zero-copy on for VulkanTeapot and vkcube"
 		if grep -E 'app_server: window [0-9]+ zero-copy off' "$slog" \
 				| grep -vq 'off: setting'; then
-			say 1 "no zero-copy off on RADV ($(grep -E 'zero-copy off' "$slog" | head -n 1))"
+			say 1 "no zero-copy off on RADV ($(grep -E 'zero-copy off' "$slog" | grep -v 'off: setting' | head -n 1))"
 		else
 			say 0 "no zero-copy off on RADV"
 		fi
