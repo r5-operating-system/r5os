@@ -40,7 +40,7 @@ Commando's: `check wait`, `m11-scroll`, `m11-vulkan`, `check`, `boot-next`.
 ## M11-boot4 (een GPU-hang tijdens het werk)
 
 1. Sign in. **Niet** `check wait`: begin meteen.
-2. Stap 2 t/m 7 van boot 1. Ergens in deze minuten komt de hang. Het beeld mag tot 10 s stilstaan. Let op: **bleef de aanwijzer bewegen?**
+2. Stap 2 t/m 7 van boot 1. De hang komt pas als de self-test klaar is (kan 15 minuten duren). Het beeld staat dan tot 10 s stil. Was er nog geen stilstand na stap 7? Blijf een venster rondslepen tot het beeld één keer stilstond en weer verder ging, en sleep dan nog 20 s door. Na 15 minuten zonder stilstand: ga door naar stap 3. Let op: **bleef de aanwijzer bewegen?**
 3. Typ `check`. Noteer FAIL-regels en of de aanwijzer bleef bewegen.
 4. Typ `boot-next`, dan `y`. Daarna staat er geen testinstelling meer op de machine.
 

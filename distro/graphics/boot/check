@@ -101,6 +101,11 @@ if [ "$1" = wait ]; then
 		i=$((i + 5))
 	done
 	if grep -q '^selftest done' "$selftest" 2>/dev/null; then
+		# M11: the last syslog line now; the scenario's lines come after
+		# it, so the self-test's own windows do not count for it.
+		if [ "$stick" = m11 ] && [ -f "$syslog" ]; then
+			tail -n 1 "$syslog" > "$m10/scenario-from-boot$boot"
+		fi
 		echo "check: the self-test is done; start the scenario now (boot $boot)"
 		exit 0
 	fi
@@ -515,8 +520,22 @@ m11_boot() {
 		have 'radeon_hd: gpu available' "$slog" "radeon_hd: gpu available"
 		have 'app_server: gpu compositor on radv' "$slog" "gpu compositor on radv"
 		m11_compose
+		# The scenario's lines: after the last syslog line at check wait,
+		# so the self-test's own Vulkan, GL and DirectWindow windows do
+		# not count. Without check wait the file is empty: FAIL.
+		scen=$keep/scenario-syslog.txt
+		: > "$scen"
+		mark=$m10/scenario-from-boot$boot
+		if [ -s "$mark" ]; then
+			M=$(cat "$mark") awk '
+				$0 == ENVIRON["M"] { buf = ""; seen = 1; next }
+				seen { buf = buf $0 "\n" }
+				END { printf "%s", buf }
+			' "$slog" > "$scen"
+		fi
+		have '.' "$scen" "scenario lines after check wait"
 		# The scenario's VulkanTeapot and vkcube, before check's own runs.
-		atleast 2 'app_server: window [0-9]+ zero-copy on' "$slog" \
+		atleast 2 'app_server: window [0-9]+ zero-copy on' "$scen" \
 			"zero-copy on for VulkanTeapot and vkcube"
 		if grep -E 'app_server: window [0-9]+ zero-copy off' "$slog" \
 				| grep -vq 'off: setting'; then
@@ -526,16 +545,16 @@ m11_boot() {
 		fi
 		m11_window_memory
 		for e in shadow frosted animations; do
-			have "app_server: $e off" "$slog" "$e off"
-			have "app_server: $e on" "$slog" "$e on"
+			have "app_server: $e off" "$scen" "$e off"
+			have "app_server: $e on" "$scen" "$e on"
 		done
 		for a in open close workspace; do
-			have "app_server: animation $a [0-9]+ ms frames [0-9]+" "$slog" \
+			have "app_server: animation $a [0-9]+ ms frames [0-9]+" "$scen" \
 				"animation $a"
 		done
-		have 'app_server: compositor paused: direct window' "$slog" \
-			"compositor paused: direct window"
-		have 'app_server: compositor resumed' "$slog" "compositor resumed"
+		have 'app_server: compositor paused: direct window' "$scen" \
+			"compositor paused: direct window (Chart)"
+		have 'app_server: compositor resumed' "$scen" "compositor resumed"
 		m11_share
 		m11_fps
 		extract_syslog
