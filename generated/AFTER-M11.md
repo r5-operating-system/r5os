@@ -1,11 +1,11 @@
 # Still to do: the list for after M11 (15 Nov 2026)
 
-M11 is done and stays opt-in (`gpu_compositor true`). Stick 50 passed boots 1–3 on the 5625U; boot 4 (a hang while composed) failed on a self-test bug, fixed in `6829434c46` and not booted again. Results: `CHANGELOG.md`, 15 Nov, "M11 done". Logs: `generated/boot-5625u-50/m11/`.
+M11 is done. Since build 10064 the GPU mode is on by default (user, 15 Nov 2026), before boot 4 passed; `gpu_compositor false` and Safe mode keep the CPU mode. Stick 50 passed boots 1–3 on the 5625U; boot 4 (a hang while composed) failed on a self-test bug, fixed in `6829434c46` and not booted again. Results: `CHANGELOG.md`, 15 Nov, "M11 done". Logs: `generated/boot-5625u-50/m11/`.
 
 ## Order
 
 1. **The next stick that is made anyway** (the first M12 stick, or a short one if the default should come sooner) runs M11 boot 4 again with `6829434c46`. Pass: one hang, `gpu reset mode2 ok`, `gpu selftest after reset ok`, `gpu compositor restarted after reset`, no `gpu compositor off`, the pointer moving the whole time.
-2. **Then the default** (M11 decision 1) as its own small PR: the GPU mode by default on Lavapipe everywhere and on RADV for GC 9.3. Not before item 1 and item 3 pass.
+2. **The default** (M11 decision 1): done in build 10064 on the user's word, before items 1 and 3. Those two are now checks of the default, not conditions for it.
 3. **The second boot-1 run on stick 50:** `window 2 zero-copy off: import` on RADV, and the scenario lines not found after `check wait`. Read the syslog in `generated/boot-5625u-50/m11/boot1-2/` before the next stick; find why the import failed.
 
 ## Stick tools

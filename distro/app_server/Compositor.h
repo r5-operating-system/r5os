@@ -4,8 +4,9 @@
  *
  * The compositor in app_server (M11 A1, docs/APP-SERVER-COMPOSITOR.md).
  * Each window draws into its own buffer; a compose thread puts them on
- * the screen with Vulkan (RADV, or Lavapipe without a GPU). Off unless
- * gpu_compositor is set in the radeon_hd settings.
+ * the screen with Vulkan (RADV, or Lavapipe without a GPU). On by
+ * default; gpu_compositor false in the radeon_hd settings, safe mode and
+ * the fail-safe video mode keep the CPU mode.
  */
 #ifndef COMPOSITOR_H
 #define COMPOSITOR_H
@@ -46,7 +47,8 @@ struct CompositorVulkan;
 
 class Compositor {
 public:
-	// NULL when gpu_compositor is off, or when no Vulkan device starts:
+	// NULL when gpu_compositor is false, in safe mode, or when no Vulkan
+	// device starts:
 	// the desktop then runs in the CPU mode.
 	static	Compositor*			Create(Desktop* desktop, HWInterface* screen);
 								~Compositor();
