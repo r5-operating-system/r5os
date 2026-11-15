@@ -1486,6 +1486,7 @@ Compositor::RemoveWindow(Window* window)
 	// M11 step 3b: the window's shared views end with it. M11 review:
 	// also a window without an entry (an offscreen window, a failed
 	// engine), or a share would keep the freed Window.
+	bool ended = false;
 	{
 		BAutolock shareLock(fShareLock);
 		for (int32 i = 0; i < fShares.CountItems(); i++) {
@@ -1495,9 +1496,14 @@ Compositor::RemoveWindow(Window* window)
 					share->giveBack = true;
 				share->ended = true;
 				share->window = NULL;
+				ended = true;
 			}
 		}
 	}
+	// M11 review: a hidden view has no damage; wake the frame that
+	// gives its images back and frees its imports
+	if (ended)
+		release_sem_etc(fWakeSem, 1, B_DO_NOT_RESCHEDULE);
 	Entry* entry = _FindEntry(window);
 	if (entry == NULL)
 		return;
@@ -2032,8 +2038,18 @@ Compositor::_ComposeLoop()
 		// M11 step 5: the pause's redraw, and the resume
 		if (fModePending)
 			_ApplyMode();
-		if (fPaused)
+		if (fPaused) {
+			// M11 review: no frame runs while paused, but a program whose
+			// window app_server ended still waits for its images. The
+			// last frame waited for its fence, so none is read.
+			BAutolock _(fShareLock);
+			for (int32 i = 0; i < fShares.CountItems(); i++) {
+				Share* share = fShares.ItemAt(i);
+				if (share->ended && share->giveBack)
+					_ShareGiveBack(share);
+			}
 			continue;
+		}
 		bool animating = _AnimationDamage(system_time());
 		if (status == B_TIMED_OUT && !animating)
 			continue;
@@ -3699,8 +3715,12 @@ Compositor::_ReturnSharedImages()
 	for (int32 i = 0; i < fShares.CountItems(); i++) {
 		Share* share = fShares.ItemAt(i);
 		share->broken = true;
-		if (share->ended)
+		if (share->ended) {
+			// M11 review: app_server ended it, the program still waits
+			if (share->giveBack)
+				_ShareGiveBack(share);
 			continue;
+		}
 		for (uint32 n = 0; n < share->count; n++) {
 			Share::Image& image = share->images[n];
 			if ((int32)n == share->current || (int32)n == share->pending
@@ -3909,7 +3929,9 @@ Compositor::_ShareShape(Share* share)
 {
 	share->shape.MakeEmpty();
 	Window* window = share->window;
-	if (window == NULL || share->ended || window->ServerWindow() == NULL)
+	// M11 review: ~ServerWindow clears App() before ~Window ends the share
+	if (window == NULL || share->ended || window->ServerWindow() == NULL
+		|| window->ServerWindow()->App() == NULL)
 		return;
 	View* view = NULL;
 	if (window->ServerWindow()->App()->ViewTokens().GetToken(share->viewToken,
@@ -4353,6 +4375,8 @@ Compositor::ShareEnd(team_id team, int32 viewToken, int32 shareId)
 		}
 	}
 	Damage(damage);
+	// M11 review: a hidden view has no damage; the frame frees the imports
+	release_sem_etc(fWakeSem, 1, B_DO_NOT_RESCHEDULE);
 }
 
 
