@@ -5,6 +5,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PROFILE="${1:-r5-raw}"
 GEN="$ROOT/haiku/generated.x86_64"
+# Apply and jam under one lock (build-lock.sh).
+. "$ROOT/scripts/build-lock.sh"
 
 "$ROOT/scripts/apply-overlay.sh"
 
