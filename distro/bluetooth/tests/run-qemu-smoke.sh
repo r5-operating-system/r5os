@@ -5,7 +5,8 @@
 # Step 0 of docs/BLUETOOTH.md in QEMU, on an own copy of the jammed image:
 #  1. copy r5-os.image to $BT_WORK/bt-smoke.image (the jammed image is not
 #     changed);
-#  2. plant a system launch job that runs bt_server_smoke_test once, after
+#  2. plant a system launch job that runs bt_server_smoke_test and
+#     bt_l2cap_abi_test once, after
 #     the desktop servers are up, and writes /boot/home/bt-smoke.log;
 #  3. boot QEMU headless for $SECONDS_UP seconds, with its own monitor
 #     socket ($BT_WORK/monitor.sock);
@@ -23,20 +24,22 @@ BFS=$GEN/objects/linux/x86_64/release/tools/bfs_shell/bfs_shell
 BT_WORK=${BT_WORK:-/home/nickr/r5os/bt-smoke}
 IMG=$BT_WORK/bt-smoke.image
 SECONDS_UP=${SECONDS_UP:-150}
+# SRC_IMAGE: an own image copy to start from instead of the jammed one.
+SRC_IMAGE=${SRC_IMAGE:-$GEN/r5-os.image}
 
-if pgrep -x jam >/dev/null; then
+if [ "$SRC_IMAGE" = "$GEN/r5-os.image" ] && pgrep -x jam >/dev/null; then
 	echo "run-qemu-smoke: a jam is running and may rewrite r5-os.image" >&2
 	exit 1
 fi
 mkdir -p "$BT_WORK"
-cp --sparse=always "$GEN/r5-os.image" "$IMG"
+cp --sparse=always "$SRC_IMAGE" "$IMG"
 if [ "${KEEP:-0}" != 1 ]; then
 	trap 'rm -f "$IMG" "$BT_WORK/bt-smoke.job" "$BT_WORK/monitor.sock"' EXIT
 fi
 
 cat > "$BT_WORK/bt-smoke.job" <<'EOF'
 job bt-smoke {
-	launch /bin/sh -c "sleep 60; /bin/bt_server_smoke_test > /boot/home/bt-smoke.log 2>&1; echo exit $? >> /boot/home/bt-smoke.log; sleep 5; sync"
+	launch /bin/sh -c "sleep 60; /bin/bt_server_smoke_test > /boot/home/bt-smoke.log 2>&1; echo exit $? >> /boot/home/bt-smoke.log; /bin/bt_l2cap_abi_test >> /boot/home/bt-smoke.log 2>&1; echo exit $? >> /boot/home/bt-smoke.log; sleep 5; sync"
 	on initial_volumes_mounted
 }
 EOF
@@ -76,5 +79,5 @@ fi
 echo "== bt-smoke.log"
 cat "$BT_WORK/out-smoke.log" 2>/dev/null || echo "(no log)"
 echo "== syslog (Bluetooth lines)"
-grep -aE 'bluetooth_server|bt_server_smoke_test|DeviceManager|h2generic' \
+grep -aE 'bluetooth_server|bt_server_smoke_test|bt_l2cap_abi_test|DeviceManager|h2generic|l2cap' \
 	"$BT_WORK/out-syslog" 2>/dev/null || echo "(no lines)"
