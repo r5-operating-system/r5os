@@ -6,7 +6,7 @@ The name is a nod to BeOS R5, as history. It is not a product claim.
 
 > R5 Operating System is **not** the official Haiku distribution, and it is **not** BeOS. It is an independent project and is not associated with the Haiku Project. See [`distro/DISCLAIMER.txt`](distro/DISCLAIMER.txt).
 
-**Status:** in development. The current tree is **R5 Operating System 2026.1-dev, build 10059**. There is no public release yet.
+**Status:** in development. The current tree is **R5 Operating System 2026.1-dev, build 10064**. There is no public release yet.
 
 ---
 
@@ -64,7 +64,7 @@ The name is a nod to BeOS R5, as history. It is not a product claim.
 - **Full-screen games and video keep working.** When a program wants to draw on the screen itself, the compositor steps aside, and it comes back when the program is done.
 - **There's always a way back.** If the graphics chip ever stops, the desktop carries on in the classic way, without a restart. On a computer without a supported chip, the same desktop is drawn in software.
 
-It is on by default. Safe mode in the boot menu brings back the classic desktop.
+It is on by default. On a computer without a supported graphics chip, such as a virtual machine, drawing it in software uses more processor time. Safe mode in the boot menu brings back the classic desktop.
 
 ### Processor
 - Better CPU support (AMD/Intel)
@@ -77,6 +77,7 @@ The full list, build by build, is in About R5 → What's new ([`distro/WHATSNEW`
 
 ## Not there yet
 
+- The graphics chip puts the desktop together, but the processor still draws what is inside each window. Having the chip draw that too is the next step.
 - One graphical session at a time. There is no fast user switching and no guest account.
 - The bundled browser (WebPositive) is weak for today's web.
 - Sleep, backlight and HiDPI on the reference laptop are still open.
