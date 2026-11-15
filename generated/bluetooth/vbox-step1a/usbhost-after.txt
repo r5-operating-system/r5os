@@ -1,0 +1,15 @@
+﻿UUID:               80572fd4-e862-4670-9aba-519c301ea91b
+VendorId:           0x13d3 (13D3)
+ProductId:          0x3567 (3567)
+Revision:           1.0 (0100)
+Port:               3
+USB version/speed:  2/High
+Manufacturer:       IMC Networks
+Address:            {36fc9e60-c465-11cf-8056-444553540000}\0005
+Current State:      Busy
+
+UUID:               0b1b2fb8-7e39-4850-9d80-54b4e356ccdb
+VendorId:           0x0781 (0781)
+ProductId:          0x55a9 (55A9)
+Revision:           1.0 (0100)
+Port:               5

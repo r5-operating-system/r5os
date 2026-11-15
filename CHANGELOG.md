@@ -1,5 +1,30 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-15 - Bluetooth step 1a: HCI command timeouts, safe reassembly, HCI fuzzer
+
+Problem: a radio could stop the kernel, and a silent radio left programs waiting forever. `hci/bluetooth.cpp` `Assemble()` panicked on an event header split over two transfers and on every event that arrived in pieces, looped forever on an SCO packet (it consumed 0 bytes), and did not check the ACL buffer allocation. No HCI command had a timeout. Reading the code turned up more bugs in the same files (owner, 15 Nov: fix what you find).
+
+What changed:
+- **Reassembly:** `distro/kernel/.../bluetooth/hci/hci_assemble.h` (MIT, no kernel dependencies). Every byte is consumed: a split header is collected first, a split packet is appended, a piece with several packets is split; a packet that cannot be stored is dropped. `Assemble()` drives it with net_buffers.
+- **Command timeout:** `h2generic/h2command.h` and `h2generic.cpp`. Every command from `ISSUE_BT_COMMAND` is noted before it is sent. Without a Command Complete or Command Status for that opcode within 2 s (Linux `HCI_CMD_TIMEOUT`), a kernel thread logs `command 0x.... got no answer in 2000 ms; reporting status 0x1f` and posts a Command Status with 0x1F (Unspecified Error) for it; a real answer that comes later is dropped and logged (owner's choice, 15 Nov). The thread posts by HCI id and never touches a `bt_usb_dev`; open and close clear the radio's commands. Commands that the kernel sends itself (`submit_nbuffer`) are not tracked.
+- **Not in this step (owner, 15 Nov):** the Event Mask and LE Event Mask. An HCI Reset from the kit (`LocalDevice::Reset()`) clears what a driver sets, so step 6 sets them in `bluetooth_server`. `docs/BLUETOOTH.md` is updated.
+- **Bugs fixed in `hci/bluetooth.cpp`:** the device list is a recursive lock, held by the RX thread while a packet is posted and by `UnregisterDriver()` (a use-after-free window), which now also frees half-assembled packets; `PostACL()` leaked a frame when the header did not fit and wrote the ACL header in host order; `PostCommand()`/`PostACL()` no longer panic on NULL; the module put `NET_STACK_MODULE_NAME`, which it never got (init failure and uninit); the `bt: bluetooth_std_ops: Connection Thread error` logged on every boot is gone (that thread was never started).
+- **Bugs fixed in `h2generic`:** `ISSUE_BT_COMMAND` passed the caller's size to `alloca()`, returned with `bdev->lock` held when the copy failed, and did not check `snb_fetch()`; commands are now 3 to 258 bytes, copied into a fixed buffer. A failed submit leaked its buffer. `submit_nbuffer()` panicked on an unknown packet type. A received event counted as `successfulTX`.
+- `BT_UP` logs `h2generic: controller ready (<device>)`, the VirtualBox pass line of step 1a.
+- **Fuzzer:** `scripts/fuzz-bt.sh hci [seconds]` builds `scripts/bt-fuzz.cpp` with ASan and UBSan against both headers (`scripts/bt-host` has the host types). Well-formed events, ACL and SCO cut at random places must come out once and unchanged; random bytes, unknown types and failing storage must not fault or hang; the tracker must pass, time out and drop as specified.
+- `distro/bluetooth/tests/run-qemu-smoke.sh`: `SMAP=1` adds SMAP and SMEP to the guest CPU and prints the SMAP and panic lines of the serial log.
+
+Manual SMAP review: the only user memory is in `device_control`. `ISSUE_BT_COMMAND` copies with `user_memcpy` into a 258-byte kernel buffer (with `IS_USER_ADDRESS` checked before, as it was); `GET_STATS` and `GET_HCI_ID` are unchanged `user_memcpy` out. The reassembly, the event check and the watchdog only read kernel buffers. Lock order checked: the RX path takes the device list, then at most `dev_table_sem` (`fetch_device`); nothing takes them the other way round.
+
+Tested:
+- `scripts/fuzz-bt.sh hci 60` in WSL: `hci_fuzz: 60s 0 crashes (193528 rounds)`. With an overread planted in a copy of `hci_assemble.h`, ASan stopped it at once (`heap-buffer-overflow`), so the harness sees that class of bug.
+- Built with `scripts/build-locked.sh` (`jam_exit=0`, `mesa_exit=0`, no warnings in these files).
+- QEMU, KVM, `-cpu host,+smap,+smep`, own copy of that image, one boot: serial `enable SMEP`, `enable SMAP`, no panic; syslog `loaded driver .../h2generic`, `bluetooth_server: started, 0 radios`, `bt_server_smoke_test: ok (0 crashes)`, and no "Connection Thread error".
+
+Mistakes on the way: the script that moved `Assemble()` turned three `\n` escapes into line breaks; the first jam stopped on them (fixed in its own commit).
+
+Not tested: no radio. The timeout, the late-answer drop, split events and ACL from a real controller, and `h2generic: controller ready` need the passed-through MT7922 in VirtualBox, which takes Bluetooth from Windows and waits for the owner's yes. ARM64 and RISC-V 64 were not built or tested.
+
 ## 2026-11-15 - Build: jam uses every core
 
 Problem: `scripts/jam-r5-raw.sh` ran `jam -q @r5-raw` without `-j`, so jam ran one job at a time while WSL has 12 cores.

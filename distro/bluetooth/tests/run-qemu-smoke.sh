@@ -11,6 +11,8 @@
 #     socket ($BT_WORK/monitor.sock);
 #  4. read the log and the Bluetooth lines of the syslog back with
 #     bfs_shell, then remove the copy.
+# SMAP=1 gives the guest SMAP and SMEP (the kernel checks of steps 1a to
+# 1c) and prints the panic and SMAP lines of the serial log.
 # QEMU has no Bluetooth hardware: the server sees 0 radios. This script
 # stops no other QEMU. Run it in WSL, not under the build lock, and not
 # while a jam may rewrite r5-os.image.
@@ -50,6 +52,9 @@ if [ -r /dev/kvm ]; then
 	accel=kvm
 	cpu=host
 fi
+if [ "${SMAP:-0}" = 1 ]; then
+	cpu="$cpu,+smap,+smep"
+fi
 echo "run-qemu-smoke: booting $IMG ($accel) for $SECONDS_UP s"
 timeout "$SECONDS_UP" qemu-system-x86_64 -machine pc,accel=$accel -cpu $cpu \
 	-m 2048 -smp 2 -display none \
@@ -64,6 +69,10 @@ cp myfs/home/bt-smoke.log :$BT_WORK/out-smoke.log
 cp myfs/system/var/log/syslog :$BT_WORK/out-syslog
 quit
 EOT
+if [ "${SMAP:-0}" = 1 ]; then
+	echo "== serial (SMAP, panic)"
+	grep -aiE 'smap|smep|panic|kernel debugger|vm_page_fault' 		"$BT_WORK/serial.log" || echo "(no lines)"
+fi
 echo "== bt-smoke.log"
 cat "$BT_WORK/out-smoke.log" 2>/dev/null || echo "(no log)"
 echo "== syslog (Bluetooth lines)"
