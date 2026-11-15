@@ -28,6 +28,34 @@ Two checks for later, written down only:
 
 Not done: arm64 and riscv64 are not built. Nothing of Skia is in app_server or in the image (steps 2 to 5). No VirtualBox run, no RADV run, no second QEMU run for the spread. The 5625U has not run this.
 
+## 2026-11-15 - The desktop on the graphics chip on by default: tested in QEMU with and without the setting and in safe mode
+
+Tested by the owner on 15 Nov 2026, in QEMU, with the build of #4271: no `gpu_compositor` line in the radeon_hd settings, and the desktop started composed in software (reported as llvmpipe; the compositor itself uses Lavapipe). My first QEMU boot of that build stopped in the kernel (`search_module called during kernel startup`, `generic/dpc/v1`) while another session was building in the same WSL tree. A clean rebuild of `main` in a quiet tree booted without a panic, so it was a mixed build.
+
+Tested after the rebuild (QEMU, KVM, three copies of the image, about 110 s each, read back with `bfs_shell`), with no panic in any boot:
+- no setting: `app_server: gpu compositor on lavapipe: no render node`;
+- `gpu_compositor false`: `app_server: gpu compositor off: setting`;
+- `safemode true` in the kernel settings: `app_server: gpu compositor off: safe mode`.
+
+Not tested: Safe mode chosen in the boot menu itself (the kernel settings file sets the same option), and the 5625U with RADV by default.
+
+The README gets a screenshot of the desktop with About R5 (`docs/screenshots/about-r5.png`).
+## 2026-11-15 - About R5: frosted glass behind the window and the system information
+
+Problem: no program used frosted glass yet besides `r5-effects-test`; the window effects showed only on the tab and the frame line.
+
+What changed: About R5 asks for glass on its background view (`set_view_glass`), and the system information panel draws its face half transparent (alpha 110, `B_ALPHA_COMPOSITE`) over the blur. Its labels draw with alpha (`r5_glass_children`), as the panel already did as a desktop replicant, so no label erases a gray box onto the glass. The header and the What's new, Credits and Licenses tabs stay opaque. In the CPU mode the view colour is erased first, so About looks as before. Mistake: the first try left a gray box behind every label (seen in QEMU), fixed before the PR.
+
+Tested: jam in WSL from the `claude/about-glass` worktree (apply, jam, anyboot, plant exit 0). QEMU with the anyboot image (compositor on Lavapipe): About shows the blurred desktop through the window background and the information panel, the labels have no boxes; checked by the owner. Not booted on the 5625U; the build tested was based on main before #4271, the branch is rebased on it without a conflict.
+
+## 2026-11-15 - GPU kernel: the self-test no longer drops app_server's GPU job (stick 50 boot 4)
+
+Problem: on stick 50 boot 4 the screen froze for 14 s 8 s after sign-in and the compositor went to the CPU mode (`fence timeout`), while every self-test step passed. The stage self-test cleared its slot in `sJobs` after its unlocked wait by index; the EOP retire had already freed that slot and app_server's compose job had taken it, so that job's sync points were never signaled. This is also a likely cause of AFTER-M8 item 4.
+
+What changed: `gpu_stage_pace_wait` clears the slot only when it still holds this job's sequence (6829434c46, merged in #4264).
+
+Tested: jam and QEMU (Lavapipe: compose compare ok, 0 bad lines, VulkanTeapot 70.4 fps). Not booted on the 5625U; QEMU has no radeon_hd. (This entry was missing from #4264, which was merged before it was pushed.)
+
 ## 2026-11-15 - M11 done: the desktop composed on the GPU, tested on the 5625U (stick 50); it stays opt-in
 
 Problem: close M11 with the results of the stick, and say what is proven and what is not.
