@@ -1,6 +1,6 @@
 # The CPU mode only in Safe mode (note, 13 Nov 2026)
 
-Agreed with the user on 13 Nov 2026. Not a brief yet. A step after M12 (`generated/gpu-m12/BRIEF.md`). It builds on M11 (`generated/gpu-m11/BRIEF.md`, decisions 1, 11 and 14).
+Agreed with the user on 13 Nov 2026. On 15 Nov 2026 the user made it the last step of M12 before the stick: step 6 and decision 10 in `generated/gpu-m12/BRIEF.md`, which decide the scope (AMD64 only; ARM64 and RISC-V keep the automatic CPU fallback until Lavapipe is proven there) and replace the conditions below where they differ. It builds on M11 (`generated/gpu-m11/BRIEF.md`, decisions 1, 11 and 14).
 
 ## The idea
 
