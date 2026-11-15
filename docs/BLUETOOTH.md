@@ -59,7 +59,7 @@ Tracker, changelog and release files:
 
 | Layer | Where | License | What it does |
 |---|---|---|---|
-| Kernel transport and HCI | `distro/kernel/src/add-ons/kernel/drivers/bluetooth/h2/h2generic/` and `.../bluetooth/hci/` | Haiku (MIT) + R5 `SPDX-Snippet` (MIT) | USB HCI, ACL, SCO and ISO transport, command timeouts, LE event mask set from what the controller supports |
+| Kernel transport and HCI | `distro/kernel/src/add-ons/kernel/drivers/bluetooth/h2/h2generic/` and `.../bluetooth/hci/` | Haiku (MIT) + R5 `SPDX-Snippet` (MIT) | USB HCI, ACL, SCO and ISO transport, packet reassembly, command timeouts |
 | Kernel L2CAP | `distro/kernel/src/add-ons/kernel/network/protocols/bluetooth/l2cap/` | Haiku (MIT) + R5 `SPDX-Snippet` (MIT) | BLE fixed channels (CID 4 ATT, CID 6 SMP), incoming PSM (`0x11` and `0x13` HID, `0x19` AVDTP), CoC and EATT |
 | System server | `distro/bluetooth/server/` (`bluetooth_server`) | Haiku (MIT) + R5 `SPDX-Snippet` (MIT) | Radio control, pairing and keys (uid 0, mode 0700), SDP, GATT, Classic HID, LE Secure Connections |
 | Media add-on | `distro/media/bluetooth_audio/` | R5 (MIT) | Classic A2DP source (SBC, royalty-free per the Bluetooth SIG, R5's own MIT encoder) and AVRCP; audio output choice per user |
@@ -94,9 +94,10 @@ Each step is its own small pull request. It is built for AMD64 with `scripts/bui
 - **Note (checked in the source):** `bluetooth_server` has no launch job in `data/launch`. It is in the regular image (`build/jam/images/definitions/regular`, line 160 in `haiku/`, line 189 after apply) and is started on request. The smoke test therefore starts it itself (through `BRoster`), and only then the log line appears.
 - **Pass:** QEMU boots, `bt_server_smoke_test` starts `bluetooth_server`, syslog has `bluetooth_server: started, 0 radios`, and the test prints `bt_server_smoke_test: ok (0 crashes)` (no crash on an unknown `bdaddr` or on `BT_REQ_CONN_STATE`).
 
-### Step 1a (PR 2): `h2generic` HCI timeouts, LE event mask, HCI fuzzer
+### Step 1a (PR 2): `h2generic` HCI timeouts, safe reassembly, HCI fuzzer
 
-- **What:** in `distro/kernel/src/add-ons/kernel/drivers/bluetooth/h2/h2generic/`: hard HCI command timeouts, and an LE event mask set from what the controller supports (safe for Bluetooth 5.x and 6.0).
+- **What:** in `distro/kernel/src/add-ons/kernel/drivers/bluetooth/h2/h2generic/`: a hard HCI command timeout. A command without a Command Complete or Command Status within 2 s (Linux `HCI_CMD_TIMEOUT`) gets a Command Status with error `0x1F` (Unspecified Error) for that opcode, the timeout is logged with the opcode, and a real answer that still comes later is dropped (`h2command.h`). In `distro/kernel/src/add-ons/kernel/bluetooth/hci/`: the packet reassembly moves to `hci_assemble.h`, without the `panic()` on a split event and without the endless loop on SCO.
+- **Not in this step (owner, 15 Nov 2026):** the Event Mask and the LE Event Mask. An HCI Reset from the kit (`LocalDevice::Reset()`) clears what a driver sets, so `bluetooth_server` sets both after every reset, in step 6.
 - **Required checks:** manual SMAP review, a QEMU boot with SMAP, and `scripts/fuzz-bt.sh hci 60` in WSL (60 seconds of ASan and UBSan on the separately compiled HCI event and packet parser).
 - **Pass:** QEMU SMAP boot without kernel panic, log line `hci_fuzz: 60s 0 crashes`, and in VirtualBox with the passed-through radio: `h2generic: controller ready`.
 
@@ -141,7 +142,7 @@ Each step is its own small pull request. It is built for AMD64 with `scripts/bui
 
 ### Step 6 (PR 10): BLE Secure Connections, extended advertising, BLE HID over GATT
 
-- **What:** LE Secure Connections (ECDH P-256 through `openssl3` `libcrypto`), extended advertising, 2M PHY and subrating in `bluetooth_server`, and BLE HID over GATT (`bluetooth_le_hid` to `input_server` or `/dev/joystick/bluetooth/N`, 7.5 ms interval, cached report layout).
+- **What:** the Event Mask (with the LE Meta event) and the LE Event Mask, set by `bluetooth_server` after every HCI Reset, with only the bits the controller supports (safe for Bluetooth 5.x and 6.0); LE Secure Connections (ECDH P-256 through `openssl3` `libcrypto`), extended advertising, 2M PHY and subrating in `bluetooth_server`, and BLE HID over GATT (`bluetooth_le_hid` to `input_server` or `/dev/joystick/bluetooth/N`, 7.5 ms interval, cached report layout).
 - **Test path:** VirtualBox USB passthrough and a second bundled 5625U stick.
 - **Pass:** `bluetooth_server: smp sc pairing ok`, and a BLE mouse and keyboard move smoothly in `input_server`.
 
