@@ -3876,10 +3876,19 @@ Desktop::RebuildAndRedrawAfterWindowChange(Window* changedWindow,
 	for (Window* window = CurrentWindows().LastWindow(); window != NULL;
 			window = window->PreviousWindow(fCurrentWorkspace)) {
 		if (!window->IsHidden()) {
-			if (window == changedWindow)
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			// M11 review: in the GPU mode the window's buffer is drawn in
+			// full, its covered parts too (after SetClipping, below).
+			bool composed = fCompositor != NULL && fCompositor->IsActive();
+			if (window == changedWindow && !composed)
 				dirty.IntersectWith(&stillAvailableOnScreen);
 
 			window->SetClipping(&stillAvailableOnScreen);
+			if (window == changedWindow && composed)
+				dirty.IntersectWith(&window->DrawableRegion());
+// SPDX-SnippetEnd
 			window->SetScreen(_DetermineScreenFor(window->Frame()));
 
 			if (window->ServerWindow()->IsDirectlyAccessing()) {
