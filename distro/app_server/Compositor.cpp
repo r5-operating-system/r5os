@@ -1372,6 +1372,21 @@ Compositor::_AllocateOrMakeRoom(uint32 width, uint32 height,
 					layer->buffer.Unset();
 			}
 		}
+		// M11 review: a closing window's fade holds it too; it ends early.
+		// (A frame in flight still holds it until its fence: near the
+		// budget that can still end the GPU mode.)
+		BRegion faded;
+		{
+			BAutolock animLock(fAnimLock);
+			for (int32 i = fGhosts.CountItems(); i-- > 0;) {
+				Ghost* ghost = fGhosts.ItemAt(i);
+				if (ghost->entry.Get() != oldest)
+					continue;
+				faded.Include(&ghost->area);
+				delete fGhosts.RemoveItemAt(i);
+			}
+		}
+		Damage(faded);
 		buffer = _AllocateBuffer(width, height);
 	}
 	return buffer;
@@ -1470,6 +1485,8 @@ Compositor::AddWindow(Window* window, WindowHWInterface* iface)
 			engine->SetHWInterface(fScreen);
 		if (entry != NULL)
 			entry->ReleaseReference();
+		else
+			delete iface;
 		return;
 	}
 	// M11 step 5: made during a pause; the resume binds it to its buffer.
