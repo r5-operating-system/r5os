@@ -13,6 +13,11 @@
 
 #include "l2cap_command.h"
 #include "l2cap_internal.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include "l2cap_parse.h"
+// SPDX-SnippetEnd
 #include "l2cap_signal.h"
 #include "L2capEndpoint.h"
 #include "L2capEndpointManager.h"
@@ -230,9 +235,18 @@ l2cap_receive_data(net_buffer* buffer)
 		return EMSGSIZE;
 	}
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// This module owns the buffer (acl.cpp does not free it). Every error
+	// return below leaked it, a signalling packet without a connection
+	// panicked, and the connectionless header was used without checking
+	// that it was there.
 	NetBufferHeaderReader<l2cap_basic_header> bufferHeader(buffer);
-	if (bufferHeader.Status() != B_OK)
+	if (bufferHeader.Status() != B_OK) {
+		gBufferModule->free(buffer);
 		return ENOBUFS;
+	}
 
 	uint16 length = le16toh(bufferHeader->length);
 	uint16 dcid = le16toh(bufferHeader->dcid);
@@ -244,6 +258,7 @@ l2cap_receive_data(net_buffer* buffer)
 	if (length != buffer->size) {
 		ERROR("l2cap: payload length mismatch, packetlen=%d, bufferlen=%" B_PRIu32 "\n",
 			length, buffer->size);
+		gBufferModule->free(buffer);
 		return EMSGSIZE;
 	}
 
@@ -254,7 +269,8 @@ l2cap_receive_data(net_buffer* buffer)
 			// We need to find the connection this packet is associated with.
 			struct HciConnection* connection = connection_for(buffer);
 			if (connection == NULL) {
-				panic("no connection for received L2CAP command");
+				ERROR("l2cap: no connection for a received signalling packet\n");
+				gBufferModule->free(buffer);
 				return ENOTCONN;
 			}
 
@@ -265,10 +281,16 @@ l2cap_receive_data(net_buffer* buffer)
 		case L2CAP_CONNECTIONLESS_CID:
 		{
 			NetBufferHeaderReader<l2cap_connectionless_header> connlessHeader(buffer);
+			if (connlessHeader.Status() != B_OK) {
+				gBufferModule->free(buffer);
+				return EMSGSIZE;
+			}
 			const uint16 psm = le16toh(connlessHeader->psm);
 			L2capEndpoint* endpoint = gL2capEndpointManager.GetForPSM(psm);
-			if (endpoint == NULL)
+			if (endpoint == NULL) {
+				gBufferModule->free(buffer);
 				return ECONNRESET;
+			}
 
 			connlessHeader.Remove();
 			buffer->interface_address = NULL;
@@ -280,9 +302,23 @@ l2cap_receive_data(net_buffer* buffer)
 
 		default:
 		{
+			// The LE and BR/EDR fixed channels (ATT 0x0004, LE signalling
+			// 0x0005, SMP 0x0006 and 0x0007) have no endpoint yet: no LE link
+			// exists before step 6 of docs/BLUETOOTH.md asks for LE events,
+			// and their socket interface is designed with its user there.
+			if (l2cap_parse_is_fixed_channel(dcid)) {
+				TRACE("%s: fixed channel %#x not served, %" B_PRIu32 " bytes"
+					" dropped\n", __func__, dcid, buffer->size);
+				gBufferModule->free(buffer);
+				return B_OK;
+			}
+
 			L2capEndpoint* endpoint = gL2capEndpointManager.GetForChannel(dcid);
-			if (endpoint == NULL)
+			if (endpoint == NULL) {
+				gBufferModule->free(buffer);
 				return ECONNRESET;
+			}
+	// SPDX-SnippetEnd
 
 			buffer->interface_address = NULL;
 			status = endpoint->ReceiveData(buffer);

@@ -3,6 +3,11 @@
  * Distributed under the terms of the MIT License.
  */
 #include "L2capEndpointManager.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include "l2cap_parse.h"
+// SPDX-SnippetEnd
 
 #include <AutoDeleter.h>
 
@@ -35,9 +40,14 @@ L2capEndpointManager::Bind(L2capEndpoint* endpoint, const sockaddr_l2cap& addres
 	if (memcmp(&address.l2cap_bdaddr, &anyAddr, sizeof(bdaddr_t)) != 0)
 		return EINVAL;
 
-	// PSM values must be odd.
-	if ((address.l2cap_psm & 1) == 0)
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// PSM values must be odd, and bit 8 must be 0 (Core 6.0, Vol 3, Part A,
+	// 4.2); only the first was checked.
+	if (!l2cap_parse_valid_psm(address.l2cap_psm))
 		return EINVAL;
+	// SPDX-SnippetEnd
 
 	WriteLocker _(fBoundEndpointsLock);
 

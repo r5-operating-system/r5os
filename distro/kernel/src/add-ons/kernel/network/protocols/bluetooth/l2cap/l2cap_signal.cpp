@@ -15,6 +15,13 @@
 #include "l2cap_internal.h"
 #include "l2cap_signal.h"
 #include "l2cap_command.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include "l2cap_parse.h"
+
+#include <stdlib.h>
+// SPDX-SnippetEnd
 
 #include <btDebug.h>
 
@@ -30,6 +37,12 @@ struct l2cap_config_options {
 	l2cap_qos qos;
 	bool qos_set;
 	net_buffer* rejected;
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// An option ran past the command, or there was no memory to look.
+	bool malformed;
+	// SPDX-SnippetEnd
 };
 
 
@@ -63,6 +76,15 @@ l2cap_handle_connection_req(HciConnection* conn, uint8 ident, net_buffer* buffer
 static void
 l2cap_handle_connection_rsp(L2capEndpoint* endpoint, uint8 ident, net_buffer* buffer)
 {
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// A response whose identifier nobody waits for (a remote can send one).
+	if (endpoint == NULL) {
+		ERROR("l2cap: unexpected connection response: ident %d unknown\n", ident);
+		return;
+	}
+	// SPDX-SnippetEnd
 	NetBufferHeaderReader<l2cap_connection_rsp> command(buffer);
 	if (command.Status() != B_OK)
 		return;
@@ -80,25 +102,58 @@ l2cap_handle_connection_rsp(L2capEndpoint* endpoint, uint8 ident, net_buffer* bu
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// The options are copied out of the buffer and walked with
+// l2cap_parse_next_option(), which the host fuzzer runs too. Before, an
+// option that ran past the command was read from the next command, a short
+// value left the rest of "value" uninitialized, and a failed create() of
+// the reject buffer was not checked.
 static void
 parse_configuration_options(net_buffer* buffer, size_t offset, uint16 length,
 	l2cap_config_options& options)
 {
-	while (offset < length) {
-		l2cap_configuration_option option;
-		if (gBufferModule->read(buffer, offset, &option, sizeof(option)) != B_OK)
-			break;
+	if (offset >= length)
+		return;
 
+	const size_t size = length - offset;
+	uint8* data = (uint8*)malloc(size);
+	if (data == NULL || gBufferModule->read(buffer, offset, data, size) != B_OK) {
+		free(data);
+		options.malformed = true;
+		return;
+	}
+
+	size_t position = 0;
+	l2cap_parse_option parsed;
+	bool malformed = false;
+	while (l2cap_parse_next_option(data, size, &position, &parsed, &malformed)) {
 		l2cap_configuration_option_value value;
-		if (gBufferModule->read(buffer, offset + sizeof(option), &value,
-				min_c(sizeof(value), option.length)) != B_OK) {
-			break;
-		}
+		memset(&value, 0, sizeof(value));
+		memcpy(&value, parsed.value, min_c(sizeof(value), (size_t)parsed.length));
 
-		const bool hint = (option.type & l2cap_configuration_option::OPTION_HINT_BIT);
-		option.type &= ~l2cap_configuration_option::OPTION_HINT_BIT;
+		const bool hint = parsed.hint;
+		l2cap_configuration_option option;
+		option.type = parsed.type;
+		option.length = parsed.length;
+
+		// A known option shorter than its value is treated as unknown.
+		bool known = true;
+		switch (option.type) {
+			case l2cap_configuration_option::OPTION_MTU:
+			case l2cap_configuration_option::OPTION_FLUSH_TIMEOUT:
+				known = option.length >= sizeof(uint16);
+				break;
+			case l2cap_configuration_option::OPTION_QOS:
+				known = option.length >= sizeof(l2cap_qos);
+				break;
+		}
+		if (!known)
+			option.type = 0xff;
 
 		switch (option.type) {
+// SPDX-SnippetEnd
 			case l2cap_configuration_option::OPTION_MTU:
 				options.mtu = le16toh(value.mtu);
 				options.mtu_set = true;
@@ -124,16 +179,31 @@ parse_configuration_options(net_buffer* buffer, size_t offset, uint16 length,
 				if (hint)
 					break;
 
+				// SPDX-SnippetBegin
+				// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+				// SPDX-License-Identifier: MIT
 				// Unknown option: we need to reject it.
 				if (options.rejected == NULL)
 					options.rejected = gBufferModule->create(128);
-				gBufferModule->append_cloned(options.rejected, buffer, offset,
-					sizeof(option) + option.length);
+				if (options.rejected == NULL) {
+					options.malformed = true;
+					break;
+				}
+				gBufferModule->append(options.rejected,
+					parsed.value - L2CAP_PARSE_OPTION_HEADER,
+					L2CAP_PARSE_OPTION_HEADER + parsed.length);
+				// SPDX-SnippetEnd
 			}
 		}
-
-		offset += sizeof(option) + option.length;
 	}
+
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	if (malformed)
+		options.malformed = true;
+	free(data);
+	// SPDX-SnippetEnd
 }
 
 
@@ -158,6 +228,19 @@ l2cap_handle_configuration_req(HciConnection* conn, uint8 ident, net_buffer* buf
 	// Read options (if any).
 	l2cap_config_options options = {};
 	parse_configuration_options(buffer, sizeof(l2cap_configuration_req), length, options);
+
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	if (options.malformed) {
+		if (options.rejected != NULL)
+			gBufferModule->free(options.rejected);
+		send_l2cap_command_reject(conn, ident,
+			l2cap_command_reject::REJECTED_NOT_UNDERSTOOD, 0, 0, 0);
+		gSocketModule->release_socket(endpoint->socket);
+		return B_BAD_DATA;
+	}
+	// SPDX-SnippetEnd
 
 	if (options.rejected != NULL) {
 		// Reject without doing anything else.
@@ -198,12 +281,19 @@ l2cap_handle_configuration_rsp(HciConnection* conn, L2capEndpoint* endpoint,
 	l2cap_config_options options = {};
 	parse_configuration_options(buffer, sizeof(l2cap_configuration_rsp), length, options);
 
-	if (options.rejected != NULL) {
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// The reject buffer was leaked here.
+	if (options.rejected != NULL || options.malformed) {
+		if (options.rejected != NULL)
+			gBufferModule->free(options.rejected);
 		// Reject without doing anything else.
 		send_l2cap_command_reject(conn, ident,
 			l2cap_command_reject::REJECTED_NOT_UNDERSTOOD, 0, 0, 0);
 		return B_OK;
 	}
+	// SPDX-SnippetEnd
 
 	endpoint->_HandleConfigurationRsp(ident, scid, flags, result,
 		options.mtu_set ? &options.mtu : NULL,
@@ -240,6 +330,15 @@ l2cap_handle_disconnection_req(HciConnection* conn, uint8 ident, net_buffer* buf
 static status_t
 l2cap_handle_disconnection_rsp(L2capEndpoint* endpoint, uint8 ident, net_buffer* buffer)
 {
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	if (endpoint == NULL) {
+		ERROR("l2cap: unexpected disconnection response: ident %d unknown\n",
+			ident);
+		return B_ERROR;
+	}
+	// SPDX-SnippetEnd
 	NetBufferHeaderReader<l2cap_disconnection_rsp> command(buffer);
 	if (command.Status() != B_OK)
 		return ENOBUFS;
@@ -323,9 +422,18 @@ l2cap_handle_command_reject(L2capEndpoint* endpoint, uint8 ident, net_buffer* bu
 	const uint16 reason = le16toh(command->reason);
 	TRACE("%s: reason=%d\n", __func__, command->reason);
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Only what is left after the reason (it asked for up to the whole
+	// buffer size from that offset, which read() refused).
 	l2cap_command_reject_data data = {};
-	gBufferModule->read(buffer, sizeof(l2cap_command_reject),
-		&data, min_c(buffer->size, sizeof(l2cap_command_reject_data)));
+	if (buffer->size > sizeof(l2cap_command_reject)) {
+		gBufferModule->read(buffer, sizeof(l2cap_command_reject), &data,
+			min_c(buffer->size - sizeof(l2cap_command_reject),
+				sizeof(l2cap_command_reject_data)));
+	}
+	// SPDX-SnippetEnd
 
 	endpoint->_HandleCommandRejected(ident, reason, data);
 
@@ -457,14 +565,47 @@ l2cap_handle_signaling_command(HciConnection* connection, net_buffer* buffer)
 	// TODO: If there are multiple commands in a packet, we could accumulate the
 	// responses into a single packet also...
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// The length was checked before the 4 header bytes were removed, so a
+	// command up to 4 bytes too long passed; remove_header() then failed,
+	// the size stayed the same and this loop never ended. A command shorter
+	// than its code needs was read from the next command. The early
+	// returns leaked the buffer. Now l2cap_parse_check() decides, and the
+	// buffer is always freed.
+	status_t result = B_OK;
 	while (buffer->size != 0) {
 		NetBufferHeaderReader<l2cap_command_header> commandHeader(buffer);
-		if (commandHeader.Status() != B_OK)
-			return ENOBUFS;
+		if (commandHeader.Status() != B_OK) {
+			result = ENOBUFS;
+			break;
+		}
 
 		const uint8 code = commandHeader->code;
 		const uint8 ident = commandHeader->ident;
 		const uint16 length = le16toh(commandHeader->length);
+		commandHeader.Remove();
+
+		const int check = l2cap_parse_check(code, length, buffer->size);
+		if (check == L2CAP_PARSE_TRUNCATED) {
+			ERROR("%s: invalid L2CAP signaling command packet, code=%#x, "
+				"ident=%d, length=%d, buffer size=%" B_PRIu32 "\n", __func__,
+				code, ident, length, buffer->size);
+			result = EMSGSIZE;
+			break;
+		}
+		if (check == L2CAP_PARSE_REJECT) {
+			ERROR("%s: L2CAP command %#x too short (%d bytes)\n", __func__,
+				code, length);
+			send_l2cap_command_reject(connection, ident,
+				l2cap_command_reject::REJECTED_NOT_UNDERSTOOD, 0, 0, 0);
+			if (gBufferModule->remove_header(buffer, length) != B_OK) {
+				result = EMSGSIZE;
+				break;
+			}
+			continue;
+		}
 
 		L2capEndpoint* endpoint = NULL;
 		bool releaseIdent = false;
@@ -473,20 +614,7 @@ l2cap_handle_signaling_command(HciConnection* connection, net_buffer* buffer)
 				btCoreData->lookup_command_ident(connection, ident));
 			releaseIdent = true;
 		}
-
-		if (buffer->size < length) {
-			ERROR("%s: invalid L2CAP signaling command packet, code=%#x, "
-				"ident=%d, length=%d, buffer size=%" B_PRIu32 "\n", __func__,
-				code, ident, length, buffer->size);
-			if (releaseIdent) {
-				btCoreData->free_command_ident(connection, ident);
-				if (endpoint != NULL)
-					gSocketModule->release_socket(endpoint->socket);
-			}
-			return EMSGSIZE;
-		}
-
-		commandHeader.Remove();
+		// SPDX-SnippetEnd
 
 		switch (code) {
 			case L2CAP_COMMAND_REJECT_RSP:
@@ -550,10 +678,17 @@ l2cap_handle_signaling_command(HciConnection* connection, net_buffer* buffer)
 				gSocketModule->release_socket(endpoint->socket);
 		}
 
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
 		// Advance to the next command (if any.)
-		gBufferModule->remove_header(buffer, length);
+		if (gBufferModule->remove_header(buffer, length) != B_OK) {
+			result = EMSGSIZE;
+			break;
+		}
+		// SPDX-SnippetEnd
 	}
 
 	gBufferModule->free(buffer);
-	return B_OK;
+	return result;
 }

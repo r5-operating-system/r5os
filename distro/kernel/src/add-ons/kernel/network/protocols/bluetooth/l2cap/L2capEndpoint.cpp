@@ -565,6 +565,14 @@ L2capEndpoint::_HandleConnectionReq(HciConnection* connection,
 		ERROR("l2cap: could not allocate channel for endpoint: %s\n", strerror(status));
 		send_l2cap_connection_rsp(connection, ident, 0, scid,
 			l2cap_connection_rsp::RESULT_NO_RESOURCES, 0);
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// The spawned child stayed pending forever; drop it, as TCP does for
+		// a child that was never accepted.
+		newEndpointLocker.Unlock();
+		gSocketModule->set_aborted(newSocket);
+		// SPDX-SnippetEnd
 		return;
 	}
 
