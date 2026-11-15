@@ -1,5 +1,21 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-15 - Fourth M11 stack review and an external review: 23 findings fixed, eight left with a reason
+
+Problem: five read-only reviews of the whole M11 stack (on bb4658aea2) found 19 items, and an external read-only review of 5b0b19bb03 (`generated/gpu-m11/PROMPT-REVIEW-EXTERNAL.md`) found five more. One list with the status of each is `generated/gpu-m11/REVIEW-STACK-4.md`. Review 3 items 2 and 16 were incomplete. The owner asked to fix everything.
+
+What changed:
+- Compositor: a mode change unmaps and frees the GPU back buffer before it maps a new one at the same address, and every call is a new generation (before, a second `SetMode` leaked it, turned GPU copy off and kept the old scanout imports). The last frame's closing windows go during a pause. A newer swapchain of a view wakes the compose thread, and a wake without damage still retires what ended, also when the pause began after the first check. An overtaken image of a share that did not end goes back to its program. A shared view follows its view after hide, show, move, resize, scroll and delete (`ShareViewsChanged`), not only on a clipping rebuild. `~ServerWindow` ends the window's shares with the view tokens, before the app can go (`ShareWindowGone`). An unlock of the direct screen gives its count back after the GPU mode ended.
+- Kernel: `vm_resize_area` refuses a team a cache that a kernel area also maps (R5 snippet in `vm.cpp`), so a program cannot shrink a GTT buffer under the GPU now that its mapping is not `B_KERNEL_AREA`. `BO_MAP` clones again when the program deleted its mapping (RADV does at `vkUnmapMemory`). `drop_copies` runs up to 4096 rounds, skips ended teams and logs one line per call. `BO_CREATE` frees the buffer when the handle cannot be written back.
+- Desktop and Settings: the resize margin of a stack goes to its front window; Defaults and Revert of the window effects use the values in effect; one R5 line in `DefaultWindowBehaviour.cpp` got its SPDX snippet.
+- Stick: `check wait` removes a `gpu_compositor_zero_copy` line left by a boot 1 that froze in check's copy-path run, and writes the scenario start in boot 1 only. `check` and `check-user` read on in `syslog.1` when the syslog was rotated during a live run. A stopped check syncs what its trap restored; the card says what to do after it. The FAIL line for zero-copy off quotes the real line.
+
+Not changed (reasons in the list): the eviction near the budget can end the GPU mode early (CPU mode follows); the fence-timeout grace frees the compose slot; Painter keeps an evicted buffer's raw bits (every draw is cut to the buffer); the present mark assumes RADV submits in the calling thread; the GPU lock is held while a fork copy waits for a wired range; GTT pages of a fork copy stay until it goes; extra redraws on a title change; the WSI makes a semaphore after a failed export (Mesa build).
+
+Tested: jam in WSL from a worktree of claude/m11-stick at 3d3b8ebe3e (apply_exit=0, jamraw_exit=0, anyboot_exit=0, plant_exit=0); check-pre-stick.py pre-stick ok 3d3b8ebe3e. QEMU (Lavapipe, KVM): gpu compositor on lavapipe, compose compare ok, 0 bad syslog lines, VulkanTeapot 69.7 fps with device lost no; the frosted glass window was drawn (its exit code was not read). The syslog rotation path of check was run as a shell piece in Git Bash. Mistakes: the BO_CREATE fix first did not build (gpu_bo_detach is defined later; a declaration was added in 3d3b8ebe3e, after it was pushed); one build ran on another session's branch in the shared checkout and failed, so the image was built again from a separate worktree.
+
+Limits: the kernel, compositor and share changes are compiled and read, not run: QEMU has no radeon_hd, Lavapipe shares nothing, and no mode change on the 5625U, fork, `resize_area` or `vkUnmapMemory` of a GPU program was tried. The new `check` was not run on Haiku. Not booted on the 5625U.
+
 ## 2026-11-15 - Third M11 stack review: 15 findings fixed, one left with a reason
 
 Problem: a third round of four read-only reviews of the whole M11 stack found 16 items; one list with the status of each is `generated/gpu-m11/REVIEW-STACK-3.md`. Two fixes of review 2 were incomplete (items 9 and 16 there). The owner asked to fix everything.
