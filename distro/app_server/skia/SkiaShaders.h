@@ -102,6 +102,96 @@ int4 alpha16(int4 d, int3 s, int a16, int compositeKind) {
 	return int4(blend16RGB(d.rgb, s, a16), 255);
 }
 
+// AGG's comp_op_rgba_* (agg_pixfmt_rgba.h) as Painter's AggCompOpAdapter
+// applies them to Haiku's straight bytes; base_mask 255, base_shift 8,
+// AGG's own rounding kept (also dst_out's "+ base_shift")
+int4 scaleBy(int4 s, int cov) { return (s * cov + 255) / 256; }
+
+int4 compOp(int op, int4 d, int4 s, int cov) {
+	if (op == 0 || op == 1) {
+		// source in, source out
+		int da = op == 0 ? d.a : 255 - d.a;
+		int4 v = (s * da + 255) / 256;
+		if (cov < 255)
+			return (d * (255 - cov) + 255) / 256 + (v * cov + 255) / 256;
+		return v;
+	}
+	if (op == 2) {
+		// source atop
+		if (cov < 255)
+			s = scaleBy(s, cov);
+		int sa = 255 - s.a;
+		return int4((s.rgb * d.a + d.rgb * sa + 255) / 256, d.a);
+	}
+	if (op == 3) {
+		// destination over
+		if (cov < 255)
+			s = scaleBy(s, cov);
+		int d1a = 255 - d.a;
+		return int4(d.rgb + (s.rgb * d1a + 255) / 256,
+			s.a + d.a - (s.a * d.a + 255) / 256);
+	}
+	if (op == 4) {
+		// destination in
+		int sa = s.a;
+		if (cov < 255)
+			sa = 255 - (cov * (255 - sa) + 255) / 256;
+		return (d * sa + 255) / 256;
+	}
+	if (op == 5) {
+		// destination out
+		int sa = s.a;
+		if (cov < 255)
+			sa = (sa * cov + 255) / 256;
+		sa = 255 - sa;
+		return (d * sa + 8) / 256;
+	}
+	if (op == 6) {
+		// destination atop
+		int da = 255 - d.a;
+		if (cov < 255) {
+			int3 v = (d.rgb * s.a + s.rgb * da + 255) / 256;
+			int alpha = 255 - cov;
+			return int4((d.rgb * alpha + 255) / 256 + (v * cov + 255) / 256,
+				(d.a * alpha + 255) / 256 + (s.a * cov + 255) / 256);
+		}
+		return int4((d.rgb * s.a + s.rgb * da + 255) / 256, s.a);
+	}
+	if (op == 8) {
+		// clear
+		if (cov < 255)
+			return (d * (255 - cov) + 255) / 256;
+		return int4(0);
+	}
+	if (cov < 255)
+		s = scaleBy(s, cov);
+	if (s.a == 0)
+		return d;
+	if (op == 7) {
+		// xor
+		int s1a = 255 - s.a;
+		int d1a = 255 - d.a;
+		return int4((d.rgb * s1a + s.rgb * d1a + 255) / 256,
+			s.a + d.a - (s.a * d.a + 127) / 128);
+	}
+	int alpha = s.a + d.a - (s.a * d.a + 255) / 256;
+	if (op == 9) {
+		// difference
+		int3 m = int3(imin(s.r * d.a, d.r * s.a), imin(s.g * d.a, d.g * s.a),
+			imin(s.b * d.a, d.b * s.a));
+		return int4(s.rgb + d.rgb - (2 * m + 255) / 256, alpha);
+	}
+	// lighten (10) and darken (11)
+	int d1a = 255 - d.a;
+	int s1a = 255 - s.a;
+	int3 sd = s.rgb * d.a;
+	int3 ds = d.rgb * s.a;
+	int3 m = op == 10
+		? int3(imax(sd.r, ds.r), imax(sd.g, ds.g), imax(sd.b, ds.b))
+		: int3(imin(sd.r, ds.r), imin(sd.g, ds.g), imin(sd.b, ds.b));
+	return int4((m + s.rgb * d1a + d.rgb * s1a + 255) / 256, alpha);
+}
+
 int brightness(int3 c) { return (308 * c.r + 600 * c.g + 116 * c.b) / 1024; }
 
 float patRow(int y) {
@@ -258,6 +348,9 @@ int4 blendPixel(int4 d, int cov, float2 p, float2 px) {
 		} else if (mode == 9) {
 			if (hi)
 				r = selectSwap(d, H.rgb, L.rgb, cov);
+		} else if (mode == 10 && alphaKind >= 4) {
+			// AggCompOpAdapter: the pattern's colour at this pixel
+			r = compOp(alphaKind - 4, d, col, cov);
 		} else if (mode == 10) {
 			int3 c3 = solid != 0 ? rend.rgb : col.rgb;
 			int ca = solid != 0 ? rend.a : col.a;
@@ -291,6 +384,8 @@ int4 blendPixel(int4 d, int cov, float2 p, float2 px) {
 			r = c;
 		else
 			r = int4(blendRGB(L.rgb, c.rgb, cov), 255);
+	} else if (mode == 10 && alphaKind >= 4) {
+		r = compOp(alphaKind - 4, d, c, cov);
 	} else if (mode == 10) {
 		if (alphaKind == 0 || alphaKind == 1)
 			r = alpha16(d, c.rgb, (H.a * c.a * cov) / 255, alphaKind);

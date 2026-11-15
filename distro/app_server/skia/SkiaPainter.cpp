@@ -746,11 +746,32 @@ SkiaPainter::_Composite(const SkIRect& _bounds, const sk_sp<SkImage>& coverage,
 		kR5SolidHigh);
 	bool solidLow = !source.forceSolidHigh && same_pattern(fPattern,
 		kR5SolidLow);
+	// PixelFormat::SetDrawingMode(): overlay and composite per alpha
+	// source; the other functions are AGG's comp ops (pixel alpha)
 	int alphaKind = 0;
-	if (fAlphaSrcMode == B_CONSTANT_ALPHA)
-		alphaKind = fAlphaFncMode == B_ALPHA_OVERLAY ? 0 : 1;
-	else
-		alphaKind = fAlphaFncMode == B_ALPHA_OVERLAY ? 2 : 3;
+	switch (fAlphaFncMode) {
+		case B_ALPHA_OVERLAY:
+			alphaKind = fAlphaSrcMode == B_CONSTANT_ALPHA ? 0 : 2;
+			break;
+		case B_ALPHA_COMPOSITE:
+			alphaKind = fAlphaSrcMode == B_CONSTANT_ALPHA ? 1 : 3;
+			break;
+		case B_ALPHA_COMPOSITE_SOURCE_IN: alphaKind = 4; break;
+		case B_ALPHA_COMPOSITE_SOURCE_OUT: alphaKind = 5; break;
+		case B_ALPHA_COMPOSITE_SOURCE_ATOP: alphaKind = 6; break;
+		case B_ALPHA_COMPOSITE_DESTINATION_OVER: alphaKind = 7; break;
+		case B_ALPHA_COMPOSITE_DESTINATION_IN: alphaKind = 8; break;
+		case B_ALPHA_COMPOSITE_DESTINATION_OUT: alphaKind = 9; break;
+		case B_ALPHA_COMPOSITE_DESTINATION_ATOP: alphaKind = 10; break;
+		case B_ALPHA_COMPOSITE_XOR: alphaKind = 11; break;
+		case B_ALPHA_COMPOSITE_CLEAR: alphaKind = 12; break;
+		case B_ALPHA_COMPOSITE_DIFFERENCE: alphaKind = 13; break;
+		case B_ALPHA_COMPOSITE_LIGHTEN: alphaKind = 14; break;
+		case B_ALPHA_COMPOSITE_DARKEN: alphaKind = 15; break;
+		default:
+			alphaKind = 2;
+			break;
+	}
 
 	builder.uniform("mode") = (int)fDrawingMode;
 	builder.uniform("alphaKind") = alphaKind;
