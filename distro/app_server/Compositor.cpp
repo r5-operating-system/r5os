@@ -59,6 +59,10 @@
 
 #include "compositor_shaders.h"
 
+// M12 steps 2-5: the GPU draws the windows (gpu_draw true)
+#include "SkiaDrawingEngine.h"
+#include "SkiaGpu.h"
+
 
 static const bigtime_t kFenceSlice = 100000;
 static const bigtime_t kFenceLimit = 15000000;
@@ -94,6 +98,10 @@ struct settings {
 	// program keeps the copy path, so the stick can measure both ways in
 	// one boot.
 	bool	noZeroCopy;
+	// M12: Skia draws the windows on the GPU. Off by default until the
+	// stick (decision 1); gpu_draw_fail is the test switch of decision 8.
+	bool	draw;
+	bool	drawFail;
 };
 
 
@@ -133,6 +141,12 @@ load_settings(settings& out)
 			out.scanout = true;
 		if (strncmp(line, "gpu_compositor_zero_copy false", 30) == 0)
 			out.noZeroCopy = true;
+		if (strncmp(line, "gpu_draw true", 13) == 0)
+			out.draw = true;
+		if (strncmp(line, "gpu_draw false", 14) == 0)
+			out.draw = false;
+		if (strncmp(line, "gpu_draw_fail true", 18) == 0)
+			out.drawFail = true;
 	}
 	fclose(file);
 }
@@ -293,6 +307,10 @@ struct CompositorVulkan {
 	VkDeviceMemory				slideNewMemory;
 	uint64						slideBytes;
 	char						deviceName[VK_MAX_PHYSICAL_DEVICE_NAME_SIZE];
+	// M12: what Skia is told about this device
+	uint32						family;
+	const char*					extensions[3];
+	uint32						extensionCount;
 
 	// M11 step 3b: imports of shared views (RADV only).
 	bool						canImport;
@@ -675,11 +693,57 @@ Compositor::Create(Desktop* desktop, HWInterface* screen)
 		log_line("gpu compositor on lavapipe: %s", reason);
 	}
 
+	SkiaDrawingEngine::SetDebug(options.debug);
+	if (options.draw)
+		compositor->_InitSkia(options.drawFail);
+
 	if (compositor->_Init() != B_OK) {
 		delete compositor;
 		return NULL;
 	}
 	return compositor;
+}
+
+
+/*!	M12: Skia's Graphite context on this device and queue (decision 4).
+	When it does not start, Painter keeps drawing into the window buffers,
+	as in M11.
+*/
+void
+Compositor::_InitSkia(bool forceFail)
+{
+	CompositorVulkan* vk = fVulkan;
+	skia_vulkan_device device;
+	memset(&device, 0, sizeof(device));
+	device.getInstanceProc = (void*)vk->vkGetInstanceProcAddr;
+	device.instance = (void*)vk->instance;
+	device.physicalDevice = (void*)vk->physical;
+	device.device = (void*)vk->device;
+	device.queue = (void*)vk->queue;
+	device.queueFamily = vk->family;
+	device.apiVersion = VK_API_VERSION_1_1;
+	device.deviceExtensions = vk->extensions;
+	device.deviceExtensionCount = vk->extensionCount;
+	const char* reason = NULL;
+	fSkia = SkiaGpu::Create(device, forceFail, &reason);
+	if (fSkia == NULL) {
+		log_line("gpu draw off: %s", reason);
+		return;
+	}
+	fSkia->SetWaker(&_SkiaWake, this);
+	SkiaGpu::SetCurrent(fSkia);
+	SkiaDrawingEngine::SetDebug(fDebug);
+	log_line("gpu draw on %s skia %s", vk->deviceName, SkiaGpu::Version());
+}
+
+
+/*static*/ void
+Compositor::_SkiaWake(void* cookie)
+{
+	// SkiaGpu wakes once per RunWork(); fWakePending is the damage's flag
+	// and may stay set while the loop runs without damage
+	Compositor* compositor = (Compositor*)cookie;
+	release_sem_etc(compositor->fWakeSem, 1, B_DO_NOT_RESCHEDULE);
 }
 
 
@@ -754,7 +818,9 @@ Compositor::Compositor(Desktop* desktop, HWInterface* screen)
 	fDirectWindows(4),
 	fDirectScreenWanted(0),
 	fFailure(NULL),
-	fGpuBusy(0)
+	fGpuBusy(0),
+	fSkia(NULL),
+	fDrawFailure(false)
 {
 }
 
@@ -986,6 +1052,10 @@ Compositor::_InitVulkan(bool radv, const char** _reason)
 	deviceInfo.pQueueCreateInfos = &queueInfo;
 	deviceInfo.enabledExtensionCount = vk->canImport ? 3 : 1;
 	deviceInfo.ppEnabledExtensionNames = deviceExtensions;
+	vk->family = family;
+	vk->extensionCount = deviceInfo.enabledExtensionCount;
+	for (uint32 i = 0; i < vk->extensionCount; i++)
+		vk->extensions[i] = deviceExtensions[i];
 	if (vk->vkCreateDevice(vk->physical, &deviceInfo, NULL, &vk->device)
 			!= VK_SUCCESS) {
 		*_reason = "no vulkan device";
@@ -1154,6 +1224,9 @@ Compositor::_ExitVulkan()
 	// are loaded in this order, so the last one tells all were.
 	if (vk->device != VK_NULL_HANDLE && vk->vkDeviceWaitIdle != NULL) {
 		vk->vkDeviceWaitIdle(vk->device);
+		// M12: Skia's context and every GPU image of it, before the device
+		if (fSkia != NULL)
+			fSkia->DestroyContext();
 		_ScanoutFree(vk);
 		// M11 step 3b: the imports of shared views go with this device;
 		// the programs get a refusal at their next present. Step 5: the
@@ -1514,7 +1587,15 @@ Compositor::CreateWindowEngine(WindowHWInterface** _iface)
 		delete iface;
 		return NULL;
 	}
-	DrawingEngine* engine = iface->CreateDrawingEngine();
+	DrawingEngine* engine;
+	if ((fSkia != NULL && !fSkia->IsShutDown()) || fDebug) {
+		// M12: the GPU draws this window while it is bound to its buffer;
+		// without gpu_draw (fSkia NULL) the same engine is Painter and only
+		// measures with gpu_debug (decision 9)
+		engine = new(std::nothrow) SkiaDrawingEngine(iface,
+			fSkia != NULL && !fSkia->IsShutDown() ? fSkia : NULL, this);
+	} else
+		engine = iface->CreateDrawingEngine();
 	if (engine == NULL) {
 		delete iface;
 		return NULL;
@@ -2077,8 +2158,10 @@ Compositor::_ComposeLoop()
 		if (fFailure != NULL) {
 			const char* failure = fFailure;
 			fFailure = NULL;
-			// one restart after a successful reset (RADV only)
-			if (!fOnLavapipe && !fRestarted
+			// one restart after a successful reset (RADV only). M12: not
+			// while Skia draws; its images went with the device, so the
+			// GPU drawing goes off (decision 8; step 6 brings the ladder).
+			if (!fOnLavapipe && !fRestarted && fSkia == NULL
 				&& strcmp(failure, "device lost") == 0
 				&& _RestartAfterReset()) {
 				Damage(BRegion(BRect(0, 0, (float)fFrameWidth - 1,
@@ -2116,6 +2199,19 @@ Compositor::_ComposeLoop()
 			return;
 		}
 		_ShareRetireDone();
+		// M12: what the windows drew reaches their buffers before the
+		// compose reads them (SkiaGpu::RunWork, the only thread that
+		// submits). A failure turns the GPU drawing off (decision 8).
+		if (fSkia != NULL && !fSkia->IsShutDown()) {
+			const char* drawReason = NULL;
+			if (!fSkia->RunWork(&drawReason)) {
+				fDrawFailure = true;
+				fFailure = drawReason != NULL ? drawReason : "draw";
+				continue;
+			}
+		}
+		// M12, decision 9: Painter's drawing sessions end at a compose
+		SkiaDrawingEngine::CloseCpuSessions();
 		// M11 step 5: the pause's redraw, and the resume
 		if (fModePending)
 			_ApplyMode();
@@ -2819,7 +2915,12 @@ Compositor::_RestartAfterReset()
 void
 Compositor::_TurnOff(const char* reason)
 {
-	if (!fDesktop->LockAllWindows())
+	if (fSkia != NULL)
+		fSkia->SetComposeBlocked(true);
+	bool locked = fDesktop->LockAllWindows();
+	if (fSkia != NULL)
+		fSkia->SetComposeBlocked(false);
+	if (!locked)
 		return;
 
 	// M11 review: under fEntryLock, so AddWindow sees the CPU mode
@@ -2846,7 +2947,14 @@ Compositor::_TurnOff(const char* reason)
 		BAutolock _(fLayerLock);
 		fLayers->MakeEmpty();
 	}
-	log_line("gpu compositor off: %s", reason);
+	// M12: every engine is on the screen now (Painter); the GPU images go
+	// before the device does. Decision 8: one line when the drawing failed.
+	if (fSkia != NULL)
+		fSkia->Shutdown();
+	if (fDrawFailure)
+		log_line("gpu draw off: %s", reason);
+	else
+		log_line("gpu compositor off: %s", reason);
 
 	fDesktop->CompositorTurnedOff();
 	fDesktop->UnlockAllWindows();
@@ -3767,7 +3875,12 @@ Compositor::DirectScreenChanged(bool locked)
 void
 Compositor::_ApplyMode()
 {
-	if (!fDesktop->LockAllWindows())
+	if (fSkia != NULL)
+		fSkia->SetComposeBlocked(true);
+	bool locked = fDesktop->LockAllWindows();
+	if (fSkia != NULL)
+		fSkia->SetComposeBlocked(false);
+	if (!locked)
 		return;
 	fModePending = false;
 	fEntryLock.Lock();
@@ -4623,6 +4736,21 @@ Compositor::_Report()
 	// and the copy path. A standard account cannot read another uid's
 	// team usage, so app_server logs it itself.
 	bigtime_t teamCpu = team_cpu_time();
+	// M12, decision 9: the median of the drawing sessions (first command
+	// until the pixels are in the window buffer) and app_server's CPU time
+	if (fSkia != NULL && !fSkia->IsShutDown()) {
+		bigtime_t drawMedian = 0;
+		int32 drawCount = 0;
+		fSkia->TakeDrawMedian(&drawMedian, &drawCount);
+		log_line("draw median %" B_PRId64 " us cpu %" B_PRId64
+			" ms per 10 s", drawMedian, (teamCpu - fTeamCpuAtReport) / 1000);
+	} else {
+		bigtime_t drawMedian = 0;
+		int32 drawCount = 0;
+		SkiaDrawingEngine::TakeCpuMedian(&drawMedian, &drawCount);
+		log_line("draw cpu median %" B_PRId64 " us cpu %" B_PRId64
+			" ms per 10 s", drawMedian, (teamCpu - fTeamCpuAtReport) / 1000);
+	}
 	log_line("team cpu %" B_PRId64 " ms per 10 s",
 		(teamCpu - fTeamCpuAtReport) / 1000);
 	fTeamCpuAtReport = teamCpu;

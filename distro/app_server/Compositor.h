@@ -38,6 +38,7 @@ class Desktop;
 class DrawingEngine;
 class HWInterface;
 class RenderingBuffer;
+class SkiaGpu;
 class View;
 class Window;
 class WindowBuffer;
@@ -99,6 +100,10 @@ public:
 			void				SetEffects(uint32 effects, int32 strength);
 	// Whether a glass view's background is drawn with alpha 0 now.
 			bool				GlassActive() const;
+
+	// M12: Skia's context while the GPU draws (gpu_draw), else NULL.
+			SkiaGpu*			Skia() const { return fSkia; }
+			bool				DebugEnabled() const { return fDebug; }
 	// All windows locked: a view of this window was marked or unmarked.
 			void				GlassViewChanged(Window* window, View* view);
 
@@ -141,6 +146,9 @@ private:
 
 			status_t			_Init();
 			status_t			_InitVulkan(bool radv, const char** reason);
+			// M12
+			void				_InitSkia(bool forceFail);
+	static	void				_SkiaWake(void* cookie);
 			void				_ExitVulkan();
 			WindowBuffer*		_AllocateBuffer(uint32 width, uint32 height);
 			void				_FreeBuffer(WindowBuffer* buffer,
@@ -320,6 +328,12 @@ private:
 			// grace after it; its memory is never freed (the GPU may still
 			// read or write it), and the device is not torn down.
 			int32				fGpuBusy;
+
+			// M12: Skia draws the windows (gpu_draw true). The compose
+			// thread runs its work; fDrawFailure says the switch to the
+			// CPU mode came from the drawing (decision 8).
+			SkiaGpu*			fSkia;
+			bool				fDrawFailure;
 };
 
 

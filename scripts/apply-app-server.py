@@ -34,6 +34,21 @@ def main() -> int:
             "WindowBuffer.h", "WindowHWInterface.cpp", "WindowHWInterface.h"):
         copy(name, local / name)
     copy("compositor/compositor_shaders.h", local / "compositor_shaders.h")
+    # M12 steps 2-5: Skia draws the windows (gpu_draw true). The Skia code
+    # sits next to the compositor; app_server links the static Skia.
+    for name in ("SkiaGpu.cpp", "SkiaGpu.h", "SkiaPainter.cpp",
+            "SkiaPainter.h", "SkiaShaders.h", "SkiaText.cpp", "SkiaDrawingEngine.cpp",
+            "SkiaDrawingEngine.h", "DrawCompare.cpp", "DrawCompare.h",
+            "SkiaOffscreen.cpp"):
+        copy("skia/" + name, local / name)
+    app = HAIKU / "src" / "servers" / "app"
+    copy("app_server-Jamfile", app / "Jamfile")
+    # SkiaDrawingEngine needs to know which HWInterface it is bound to.
+    copy("drawing/DrawingEngine.h", app / "drawing" / "DrawingEngine.h")
+    # M12 step 4: alpha masks are drawn by Skia in the GPU mode. The
+    # offscreen header sits in drawing/, which both libraries include.
+    copy("drawing/AlphaMask.cpp", app / "drawing" / "AlphaMask.cpp")
+    copy("skia/SkiaOffscreen.h", app / "drawing" / "SkiaOffscreen.h")
     return 0
 
 
