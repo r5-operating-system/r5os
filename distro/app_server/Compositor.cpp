@@ -2077,13 +2077,10 @@ Compositor::_ComposeLoop()
 		if (fPaused) {
 			// M11 review: no frame runs while paused, but a program whose
 			// window app_server ended still waits for its images. The
-			// last frame waited for its fence, so none is read.
+			// last frame waited for its fence, so none is read. Third
+			// review: their imports go now too, not at the resume.
 			BAutolock _(fShareLock);
-			for (int32 i = 0; i < fShares.CountItems(); i++) {
-				Share* share = fShares.ItemAt(i);
-				if (share->ended && share->giveBack)
-					_ShareGiveBack(share);
-			}
+			_ShareRetire();
 			continue;
 		}
 		bool animating = _AnimationDamage(system_time());
@@ -2169,6 +2166,18 @@ Compositor::_ComposeLoop()
 		bool effects = false;
 		{
 			BAutolock _(fEntryLock);
+			// M11 third review: a window whose buffer was taken to make
+			// room gives its shadow mask and glass back too; they count
+			// in the window memory. Only this thread uses them.
+			for (int32 i = 0; i < fEntries.CountItems(); i++) {
+				Entry* entry = fEntries.ItemAt(i);
+				if (entry->iface != NULL && entry->iface->Buffer() == NULL
+					&& (entry->mask.IsSet() || entry->glass.IsSet())) {
+					entry->mask.Unset();
+					entry->glass.Unset();
+					entry->glassValid = false;
+				}
+			}
 			for (int32 i = 0; i < layers.CountItems(); i++) {
 				Layer* layer = layers.ItemAt(i);
 				layer->contentDamage = layer->entry->takenDamage;
@@ -2715,11 +2724,15 @@ Compositor::_RestartAfterReset()
 		// all buffers are new now: every window draws once
 		ClippingChanged();
 		fEntryLock.Lock();
+		// M11 third review: a pause that began during the restart keeps
+		// the windows on the screen (as AddWindow does); the resume binds
+		// them to their buffers.
 		for (int32 i = 0; i < fEntries.CountItems(); i++) {
 			Entry* entry = fEntries.ItemAt(i);
 			if (entry->window != NULL
 				&& entry->window->GetDrawingEngine() != NULL)
-				entry->window->GetDrawingEngine()->SetHWInterface(entry->iface);
+				entry->window->GetDrawingEngine()->SetHWInterface(
+					fPaused ? (HWInterface*)fScreen : entry->iface);
 		}
 		fEntryLock.Unlock();
 		log_line("gpu compositor restarted after reset");
@@ -3966,12 +3979,15 @@ Compositor::_ShareShape(Share* share)
 {
 	share->shape.MakeEmpty();
 	Window* window = share->window;
-	// M11 review: ~ServerWindow clears App() before ~Window ends the share
-	if (window == NULL || share->ended || window->ServerWindow() == NULL
-		|| window->ServerWindow()->App() == NULL)
+	// M11 review: ~ServerWindow clears App() before ~Window ends the share.
+	// Read once (third review): it can be cleared between two reads.
+	if (window == NULL || share->ended || window->ServerWindow() == NULL)
+		return;
+	ServerApp* app = window->ServerWindow()->App();
+	if (app == NULL)
 		return;
 	View* view = NULL;
-	if (window->ServerWindow()->App()->ViewTokens().GetToken(share->viewToken,
+	if (app->ViewTokens().GetToken(share->viewToken,
 			B_HANDLER_TOKEN, (void**)&view) != B_OK
 		|| view == NULL || view->Window() != window || !view->IsVisible())
 		return;
