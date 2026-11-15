@@ -34,7 +34,10 @@ sed 's/\r$//' "$WIN/distro/WHATSNEW" > "$HAIKU/src/apps/aboutsystem/r5_whatsnew.
 touch "$HAIKU/src/apps/aboutsystem/AboutSystem.rdef"
 
 cd "$HAIKU/generated.x86_64"
-jam -q @r5-raw
+# One job per core; R5_JAM_JOBS overrides it (for example 1 to read an error).
+jobs="${R5_JAM_JOBS:-$(nproc)}"
+echo "jam jobs=$jobs"
+jam -q -j"$jobs" @r5-raw
 jam_exit=$?
 echo jam_exit=$jam_exit
 if [[ "$jam_exit" -eq 0 ]]; then
