@@ -19,6 +19,7 @@
 
 
 class AccelerantBuffer;
+class BLocker;
 class RenderingBuffer;
 
 
@@ -93,6 +94,11 @@ public:
 	// with a hardware cursor or no cursor. The compositor leaves it out of
 	// its Vulkan copy to the front, as CopyBackToFront does.
 			bool				SoftwareCursorFrame(clipping_rect* frame);
+	// M11 review: the compositor's compose slot. SetMode takes it
+	// first, so a frame never uses a back buffer the new mode freed.
+	// Order: fWindowLock (write) -> the slot -> this interface.
+			void				SetModeGuard(BLocker* guard)
+									{ fModeGuard = guard; }
 // SPDX-SnippetEnd
 
 protected:
@@ -179,6 +185,11 @@ private:
 			bool				fInitialModeSwitch;
 
 			sem_id				fRetraceSemaphore;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			BLocker*			fModeGuard;
+// SPDX-SnippetEnd
 
 	mutable	fill_rect_params*	fRectParams;
 	mutable	uint32				fRectParamsCount;

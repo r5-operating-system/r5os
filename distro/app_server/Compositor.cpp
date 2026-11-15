@@ -726,6 +726,10 @@ Compositor::Compositor(Desktop* desktop, HWInterface* screen)
 
 Compositor::~Compositor()
 {
+	AccelerantHWInterface* accelerant
+		= dynamic_cast<AccelerantHWInterface*>(fScreen);
+	if (accelerant != NULL)
+		accelerant->SetModeGuard(NULL);
 	if (fThread >= 0) {
 		fQuit = true;
 		release_sem(fWakeSem);
@@ -755,6 +759,11 @@ Compositor::_Init()
 	_UpdatePeriod();
 	fActive = true;
 	fReportStart = system_time();
+	// M11 review: a mode change waits for the frame in the compose slot
+	AccelerantHWInterface* accelerant
+		= dynamic_cast<AccelerantHWInterface*>(fScreen);
+	if (accelerant != NULL)
+		accelerant->SetModeGuard(&fComposeSlot);
 
 	fThread = spawn_thread(_ComposeThread, "compositor",
 		B_URGENT_DISPLAY_PRIORITY, this);
