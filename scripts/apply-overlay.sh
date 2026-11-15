@@ -3,6 +3,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# One build at a time in the shared WSL tree (build-lock.sh).
+. "$ROOT/scripts/build-lock.sh"
 python3 "$ROOT/scripts/generate-r5-artwork.py" --check
 DEST="$ROOT/haiku/build/jam/UserBuildConfig"
 REV="$("$ROOT/scripts/r5-version.sh" --revision)"
