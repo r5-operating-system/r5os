@@ -374,3 +374,41 @@ Between 1 and 7 nothing is drawn or composed, but the cursor still moves (it is 
 
 **Advice:** not in M12. The pause stays the one use of the CPU mode outside Safe mode, written down as such (part 10). If a program needs it later, the first step would be Lavapipe only, as its own small step with the user's yes.
 
+## 10. Changes to other documents
+
+### `docs/GPU-ARCHITECTURE.md`
+
+Made in this step (decision 1 says step 0 writes it): "2D in app_server" step 3 gets the all-or-nothing rule, the test switch and a pointer to this document. The sentence the brief replaces ("only if measurements show it is faster") is already gone from that step.
+
+Proposed, made in the step that builds the thing, so the document never describes what is not there:
+
+- **Step 1, "Components and versions":** a row `Skia | commit hash and date in the recipe (now chrome/m158, 707e33875f) | One pin per R5 release; static, only in app_server; update with the steps below`, and a section **"Updating Skia, step by step"**: (1) move the pin to the newest `chrome/mNNN` branch below beta, with its commit; (2) build it with the recipe; the `gn` arguments of part 1 must still exist, and the list of built third-party parts is checked against `DEPS` again; (3) read the release notes of every milestone in between for changes to Graphite, `VulkanBackendContext` and runtime effects; (4) the step 1 host test, then `r5-draw-compare` on Lavapipe in QEMU and on RADV on the 5625U, every line `ok`; (5) the `draw-time` list against the previous pin, recorded in `CHANGELOG.md`; (6) the previous pin stays in the recipe history; a rollback is one pin back.
+- **Step 1, "Licensing":** "Skia (BSD-3-Clause, Google and the other authors in its `AUTHORS` file) with skcms (BSD-3-Clause) and the Vulkan Memory Allocator (MIT, AMD) is linked statically into app_server. No GPL code. Its notices are in `THIRD_PARTY_NOTICES.md` and on the Licenses tab of About."
+- **Step 6, "Two modes, never mixed"** becomes: "On AMD64 the desktop is always composed: on RADV where the GPU is available, otherwise on Lavapipe. When RADV is lost and its restart fails, the session goes on on Lavapipe. When Lavapipe fails as well, the next boot offers Safe mode. The CPU mode (Painter, no compositor) runs only in Safe mode, and during a direct-window pause. On ARM64 and RISC-V the CPU mode stays the automatic fallback until Lavapipe is proven there." And "When things go wrong", second point: "app_server goes on on Lavapipe (AMD64) or falls back to Painter (ARM64, RISC-V)".
+- **After the stick:** the M12 row of "Milestones" with its result.
+
+### `THIRD_PARTY_NOTICES.md`
+
+Proposed for step 1, the change that puts Skia in the image (until then the file would list a component the image does not have). Under "Identified in this repository" or a new "Linked into app_server":
+
+> ### Skia (in app_server)
+>
+> Skia, branch `chrome/m158`, commit `707e33875fb45f2997a4d781128bec122fb777b4`, built from R5's recipe and linked statically into `/system/servers/app_server`. Not changed by R5 (any patch would be listed here). Built with its Graphite Vulkan backend only; no codecs, no ICU, no HarfBuzz.
+>
+> | Piece | Project | License |
+> |---|---|---|
+> | Skia core and Graphite | skia.googlesource.com/skia ("Copyright (c) 2011 Google Inc." in `LICENSE`; files by Google Inc., Google LLC, The Android Open Source Project and others, see `AUTHORS`) | BSD-3-Clause |
+> | skcms | `modules/skcms` in Skia ("Copyright (c) 2018 Google Inc.") | BSD-3-Clause |
+> | Vulkan Memory Allocator 3.4.0 | GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator ("Copyright (c) 2017-2026 Advanced Micro Devices, Inc.") | MIT |
+> | Vulkan headers (compile time only) | Khronos Group, in Skia's `include/third_party/vulkan` | Apache-2.0 |
+>
+> A release ships the three licence texts with this list and on the Licenses tab of About. No source offer is required.
+
+And one block in `distro/about/licenses.txt` with the same three parts.
+
+### `AGENTS.md` (proposed text; the user makes the change)
+
+In the GPU section, after "The software path (app_server Painter, llvmpipe, Lavapipe) always stays installed and working.":
+
+> On AMD64 the desktop is always composed: on RADV when the GPU is available, otherwise on Lavapipe; the GPU draws every window through Skia (`docs/APP-SERVER-GPU-DRAWING.md`). When RADV is lost and its restart fails, the session goes on on Lavapipe. The CPU mode (Painter, no compositor) runs only in Safe mode, and during a direct-window pause. Safe mode is Haiku's safe mode plus the fail-safe video mode plus no GPU driver, with "Safe mode" on the screen. After a failed desktop start app_server writes `/boot/system/var/r5/desktop-start-failed`; the boot loader then opens the menu with Safe mode selected; Login removes the file after a good Sign in in a normal start. Painter stays in every image and must keep working in Safe mode. ARM64 and RISC-V keep the automatic switch to the CPU mode until Lavapipe is proven there. Skia is linked only into app_server, statically, from R5's own recipe at a pinned version; never in a public header, `libbe` or a `libr5*` library.
+
