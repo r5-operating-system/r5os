@@ -1,0 +1,40 @@
+boot 1 (m11)
+settings: gpu_compositor true gpu_debug true gpu_selftest true 
+PASS boot number matches m11/next
+PASS boot marker
+PASS self-test finished
+PASS decorator: r5 loaded
+PASS no gpu lost
+PASS radeon_hd: gpu available
+PASS gpu compositor on radv
+PASS compose compare ok
+PASS never compose compare MISMATCH
+PASS compose median x3
+PASS a median with effects
+PASS a median without effects
+PASS window memory <n> MB
+PASS no gpu compositor off
+FAIL scenario lines after check wait
+FAIL zero-copy on for VulkanTeapot and vkcube (found 0, want 2)
+FAIL no zero-copy off on RADV (2026-11-15 16:06:35 USER: app_server: window 2 zero-copy off: import)
+PASS window memory type flags 0xe with the cached bit
+PASS kernel bo line with snooped 1
+INFO Painter write test: buffer fill 41 us blend 128 us, malloc fill 40 us blend 128 us
+PASS Painter write test: window buffer at most 2x malloc
+FAIL shadow off
+FAIL shadow on
+FAIL frosted off
+FAIL frosted on
+FAIL animations off
+FAIL animations on
+FAIL animation open
+FAIL animation close
+FAIL animation workspace
+FAIL compositor paused: direct window (Chart)
+FAIL compositor resumed
+PASS r5-share-check: argv[0] app_server as a user refused: pass
+PASS r5-share-check: import by a program that is not app_server refused: pass
+PASS r5-share-check: second import of the same number refused: pass
+PASS r5-share-check: no fail
+PASS r5-share-check hold: exported
+FAIL exporter stopped: the same buffer count before and after (got: 20 23 )

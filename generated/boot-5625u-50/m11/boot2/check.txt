@@ -1,0 +1,13 @@
+boot 2 (m11)
+settings: gpu_compositor true gpu_debug true gpu_selftest true gpu_compositor_fail true 
+PASS boot number matches m11/next
+PASS boot marker
+PASS self-test finished
+PASS decorator: r5 loaded
+PASS no gpu lost
+PASS gpu compositor on radv
+PASS one gpu compositor off
+PASS gpu compositor off: forced failure
+MANUAL desktop kept working in the CPU mode, R5 frame (no shadow): ____
+INFO shutdown of boot 1: 0 s from boot-next to the last heartbeat
+PASS

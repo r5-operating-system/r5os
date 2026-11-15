@@ -1,0 +1,4 @@
+gpu_compositor true
+gpu_debug true
+gpu_selftest true
+gpu_compositor_lavapipe true

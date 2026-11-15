@@ -1,0 +1,56 @@
+boot 1 (m11)
+settings: gpu_compositor true gpu_debug true gpu_selftest true 
+PASS boot number matches m11/next
+PASS boot marker
+PASS self-test finished
+PASS decorator: r5 loaded
+PASS no gpu lost
+PASS radeon_hd: gpu available
+PASS gpu compositor on radv
+PASS compose compare ok
+PASS never compose compare MISMATCH
+PASS compose median x3
+PASS a median with effects
+PASS a median without effects
+PASS window memory <n> MB
+PASS no gpu compositor off
+PASS scenario lines after check wait
+PASS zero-copy on for VulkanTeapot and vkcube
+PASS no zero-copy off on RADV
+PASS window memory type flags 0xe with the cached bit
+PASS kernel bo line with snooped 1
+INFO Painter write test: buffer fill 41 us blend 128 us, malloc fill 40 us blend 128 us
+PASS Painter write test: window buffer at most 2x malloc
+PASS shadow off
+PASS shadow on
+PASS frosted off
+PASS frosted on
+FAIL animations off
+FAIL animations on
+PASS animation open
+PASS animation close
+FAIL animation workspace
+PASS compositor paused: direct window (Chart)
+PASS compositor resumed
+PASS r5-share-check: argv[0] app_server as a user refused: pass
+PASS r5-share-check: import by a program that is not app_server refused: pass
+PASS r5-share-check: second import of the same number refused: pass
+PASS r5-share-check: no fail
+PASS r5-share-check hold: exported
+PASS exporter stopped: buffers 20 before and after
+PASS check's VulkanTeapot: zero-copy on
+PASS VulkanTeapot fps line (zero-copy)
+INFO zero-copy: fps 59.4 ; app_server team cpu ms per 10 s: 326 728 658 
+INFO zero-copy: compose median, cpu per 10 s: 1442 us 292 ms 1085 us 646 ms 917 us 592 ms 
+INFO zero-copy: bo_count before, during, after VulkanTeapot: 20 49 20 
+PASS zero-copy setting off
+PASS check's VulkanTeapot: zero-copy off: setting
+PASS VulkanTeapot fps line (copy-path)
+INFO copy-path: fps 59.5 ; app_server team cpu ms per 10 s: 688 691 903 
+INFO copy-path: compose median, cpu per 10 s: 1037 us 580 ms 1393 us 592 ms 1232 us 641 ms 
+INFO copy-path: bo_count before, during, after VulkanTeapot: 20 42 20 
+PASS zero-copy setting on again
+PASS no gpu compositor off after check's runs
+MANUAL Chart (BDirectWindow) drew correctly: ____
+MANUAL shadow and frosted glass visible, then gone, then back: ____
+FAIL

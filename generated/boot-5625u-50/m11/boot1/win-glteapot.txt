@@ -1,0 +1,10 @@
+window driver zink: zink Vulkan 1.4(AMD Radeon Graphics (RADV RENOIR) (MESA_RADV))
+window resize ok
+window resize ok
+window resize ok
+window workspace ok
+window workspace ok
+window minimise ok
+window restore ok
+window close ok
+device lost no
