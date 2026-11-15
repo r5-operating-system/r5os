@@ -280,6 +280,8 @@ private:
 			BLocker				fAnimLock;
 			BObjectList<Ghost, true> fGhosts;
 			int32				fLastWorkspace;
+			// M11 review: the start of the last ClippingChanged pass
+			bigtime_t			fClipPassTime;
 			bool				fSlideActive;
 			bool				fSlideSnapshot;
 			bigtime_t			fSlideStart;

@@ -700,6 +700,7 @@ Compositor::Compositor(Desktop* desktop, HWInterface* screen)
 	fAnimLock("compositor animations"),
 	fGhosts(4),
 	fLastWorkspace(-1),
+	fClipPassTime(0),
 	fSlideActive(false),
 	fSlideSnapshot(false),
 	fSlideStart(0),
@@ -1564,6 +1565,10 @@ Compositor::ClippingChanged()
 	BObjectList<Window, false> fresh(10);
 	BRegion damage;
 	int32 workspace = fDesktop->CurrentWorkspace();
+	// M11 review: a window that was not on screen in the last pass
+	// (hidden, another workspace) was resized without a redraw.
+	bigtime_t previousPass = fClipPassTime;
+	fClipPassTime = system_time();
 
 	// M11 step 4b: a workspace switch slides; it opens and closes nothing
 	bool animations = (fEffects & kWindowEffectAnimations) != 0;
@@ -1598,6 +1603,7 @@ Compositor::ClippingChanged()
 		WindowHWInterface* iface = entry->iface;
 		WindowBuffer* buffer = iface->Buffer();
 		bool firstBuffer = buffer == NULL;
+		bool wasOnScreen = entry->lastShown >= previousPass;
 		if (buffer == NULL || buffer->Width() != width
 			|| buffer->Height() != height) {
 			WindowBuffer* newBuffer = _AllocateOrMakeRoom(width, height,
@@ -1634,6 +1640,10 @@ Compositor::ClippingChanged()
 							+ (left - iface->Left()) * 4,
 						(right - left + 1) * 4);
 				}
+				// M11 review: its new parts got no redraw while it was
+				// off screen; _ShowWindow redraws only what is visible.
+				if (!wasOnScreen)
+					fresh.AddItem(window);
 			} else {
 				fresh.AddItem(window);
 			}
