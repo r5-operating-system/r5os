@@ -383,6 +383,18 @@ glyph_paint(BView* view, r5_glyph which, BRect frame)
 			glyph_line(view, space, 21, 12, 16, 17);
 			break;
 
+		case R5_GLYPH_BLUETOOTH:
+		{
+			// The Bluetooth rune: the stem, and the two arrow heads that
+			// cross it, as one line.
+			BPoint points[6] = {
+				space.Map(7, 7.5f), space.Map(17, 16.5f), space.Map(12, 21),
+				space.Map(12, 3), space.Map(17, 7.5f), space.Map(7, 16.5f)
+			};
+			view->StrokePolygon(points, 6, false);
+			break;
+		}
+
 		default:
 			break;
 	}
@@ -409,7 +421,8 @@ BBitmap*
 r5_glyph_bitmap(r5_glyph which, float side, rgb_color color)
 {
 	int32 pixels = icon_pixels(side);
-	if (pixels < 1 || which < R5_GLYPH_POWER || which > R5_GLYPH_LOG_OUT)
+	// The last glyph of enum r5_glyph; update it with every new glyph.
+	if (pixels < 1 || which < R5_GLYPH_POWER || which > R5_GLYPH_BLUETOOTH)
 		return NULL;
 
 	BRect bounds(0, 0, pixels - 1, pixels - 1);
@@ -458,4 +471,145 @@ r5_button_set_glyph(BButton* button, r5_glyph which)
 	status_t status = button->SetIcon(glyph);
 	delete glyph;
 	return status;
+}
+
+
+// #pragma mark - Level glyphs
+
+
+static const int32 kLevelSteps = 4;
+
+
+static rgb_color
+level_tint(rgb_color foreground, rgb_color background, float amount)
+{
+	// amount is the share of the foreground color (R5WiFiGlyphs.h used the
+	// same mix before it moved here).
+	return mix_color(background, foreground, (uint8)(255 * amount));
+}
+
+
+static void
+level_colors(rgb_color foreground, rgb_color background, r5_level_style style,
+	rgb_color& filled, rgb_color& empty)
+{
+	filled = foreground;
+	empty = level_tint(foreground, background, 0.25f);
+	if (style == R5_LEVEL_STYLE_DISABLED) {
+		filled = level_tint(foreground, background, 0.45f);
+		empty = level_tint(foreground, background, 0.2f);
+	} else if (style == R5_LEVEL_STYLE_OFF)
+		filled = empty = level_tint(foreground, background, 0.45f);
+}
+
+
+static void
+level_signal(BView* view, BRect frame, int32 level, rgb_color filled,
+	rgb_color empty, bool outline)
+{
+	// The geometry of DrawWiFiSignalBars() as it shipped, so the Wi-Fi list
+	// and the Deskbar replicant draw the same pixels after the move.
+	float gap = std::max(1.0f, floorf(frame.Width() / 12));
+	float width = floorf((frame.Width() + 1 - gap * (kLevelSteps - 1))
+		/ kLevelSteps);
+	if (width < 1)
+		width = 1;
+	float totalWidth = width * kLevelSteps + gap * (kLevelSteps - 1);
+	float left = floorf(frame.left + (frame.Width() + 1 - totalWidth) / 2);
+	float bottom = floorf(frame.bottom);
+	float height = frame.Height() + 1;
+
+	for (int32 i = 0; i < kLevelSteps; i++) {
+		float barHeight = std::max(2.0f,
+			floorf(height * (i + 1) / kLevelSteps));
+		BRect bar(left, bottom - barHeight + 1, left + width - 1, bottom);
+		view->SetHighColor(i < level ? filled : empty);
+		if (outline)
+			view->StrokeRect(bar);
+		else
+			view->FillRect(bar);
+		left += width + gap;
+	}
+}
+
+
+static void
+level_battery(BView* view, BRect frame, int32 level, rgb_color filled,
+	rgb_color empty, bool outline)
+{
+	// A body twice as wide as it is high, centered, with a cap on the right
+	// and four segments inside a one-pixel margin.
+	float height = floorf(std::min(frame.Height() + 1,
+		(frame.Width() + 1) / 2));
+	if (height < 5)
+		height = 5;
+	float capWidth = std::max(1.0f, floorf(height / 5));
+	float bodyWidth = floorf(height * 2) - capWidth;
+	float left = floorf(frame.left + (frame.Width() + 1 - bodyWidth
+		- capWidth) / 2);
+	float top = floorf(frame.top + (frame.Height() + 1 - height) / 2);
+	BRect body(left, top, left + bodyWidth - 1, top + height - 1);
+	float capHeight = std::max(1.0f, floorf(height / 2));
+	float capTop = floorf(body.top + (height - capHeight) / 2);
+	BRect cap(body.right + 1, capTop, body.right + capWidth,
+		capTop + capHeight - 1);
+
+	// The outline is always in the filled color, so an empty battery still
+	// shows; only the segments go faint.
+	view->SetHighColor(filled);
+	view->StrokeRect(body);
+	view->FillRect(cap);
+
+	BRect inside = body.InsetByCopy(2, 2);
+	if (!inside.IsValid())
+		return;
+	float gap = 1;
+	float segment = floorf((inside.Width() + 1 - gap * (kLevelSteps - 1))
+		/ kLevelSteps);
+	if (segment < 1)
+		segment = 1;
+	float x = inside.left;
+	for (int32 i = 0; i < kLevelSteps; i++) {
+		BRect cell(x, inside.top, std::min(x + segment - 1, inside.right),
+			inside.bottom);
+		if (cell.IsValid()) {
+			view->SetHighColor(i < level ? filled : empty);
+			if (outline)
+				view->StrokeRect(cell);
+			else
+				view->FillRect(cell);
+		}
+		x += segment + gap;
+	}
+}
+
+
+void
+r5_level_glyph_draw(BView* view, r5_level_glyph which, BRect frame,
+	int32 level, rgb_color foreground, rgb_color background,
+	r5_level_style style)
+{
+	if (view == NULL || !frame.IsValid())
+		return;
+	if (level < 0)
+		level = 0;
+	if (level > kLevelSteps)
+		level = kLevelSteps;
+
+	rgb_color filled;
+	rgb_color empty;
+	level_colors(foreground, background, style, filled, empty);
+	bool outline = style == R5_LEVEL_STYLE_OFF;
+
+	view->PushState();
+	view->SetDrawingMode(B_OP_COPY);
+	switch (which) {
+		case R5_LEVEL_SIGNAL:
+			level_signal(view, frame, level, filled, empty, outline);
+			break;
+		case R5_LEVEL_BATTERY:
+			level_battery(view, frame, level, filled, empty, outline);
+			break;
+	}
+	view->PopState();
 }

@@ -16,7 +16,7 @@ SharedLibrary [ MultiArchDefaultGristFiles libr5wifi.so ] :
 	NetworkListView.cpp
 	JoinOtherWindow.cpp
 	WiFiView.cpp
-	: be bnetapi shared localestub [ TargetLibstdc++ ]
+	: be bnetapi shared localestub libr5icons.so [ TargetLibstdc++ ]
 	;
 
 DoCatalogs libr5wifi.so :
