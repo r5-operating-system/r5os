@@ -1,5 +1,11 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-15 - The desktop on the graphics chip on by default: first boot without the setting
+
+Tested by the owner on 15 Nov 2026, in QEMU, with the build of #4271: no `gpu_compositor` line in the radeon_hd settings, and the desktop started composed in software (reported as llvmpipe; the compositor itself uses Lavapipe). Not yet run: a boot with `gpu_compositor false`, and a boot in Safe mode. My own QEMU boot of that build stopped in the kernel (`search_module called during kernel startup`, `generic/dpc/v1`) while another session was building in the same WSL tree; most likely a mixed build, not checked further.
+
+The README gets a screenshot of the desktop with About R5 (`docs/screenshots/about-r5.png`).
+
 ## 2026-11-15 - M11 done: the desktop composed on the GPU, tested on the 5625U (stick 50); it stays opt-in
 
 Problem: close M11 with the results of the stick, and say what is proven and what is not.
