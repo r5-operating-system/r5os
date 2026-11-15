@@ -180,6 +180,7 @@ The goal: a new Mesa is a small change and not a project, and a mismatch shows u
 | R5 DRM library | Its own version, plus the lowest supported `R5_GPU_API` | Supports at least the current and the previous `MINOR` |
 | Mesa (RADV, Zink, llvmpipe, Lavapipe) | Pin with version and sha256 of the source tarball | One pin per R5 release |
 | Vulkan loader, libglvnd, LLVM | Pins in `distro/packages` (now Mesa 25.3.6, loader 1.4.367, libglvnd 1.7.0, LLVM 21.1.8) | Update together with Mesa when Mesa asks for it |
+| Skia | Commit hash and date in `distro/skia/pins.sh` (now `chrome/m158`, `707e33875f`, 13 Nov 2026) | One pin per R5 release; static, only in app_server; update with the steps below |
 
 A **compatibility table** in this document (or a separate `distro/gpu/COMPAT` file) records per R5 release which Mesa pin, which library version and which `R5_GPU_API` belong together, and on which machine that was tested.
 
@@ -203,6 +204,19 @@ A **compatibility table** in this document (or a separate `distro/gpu/COMPAT` fi
    - fallback: with `gpu false`, everything runs on Lavapipe and llvmpipe.
 5. Record the result in `CHANGELOG.md` and in the compatibility table.
 6. Keep the previous Mesa package available. A rollback is one pin back.
+
+### Skia, the recipe
+
+`distro/skia` builds Skia for x86_64 (M12 step 1). `pins.sh` holds the Skia commit, the Vulkan Memory Allocator commit from Skia's `DEPS`, and the `gn` revision from Skia's `bin/fetch-gn`. `fetch-skia.sh` fetches those three by hash into `/home/nickr/r5os/skia-build` (outside the Haiku tree) and builds `gn` from source; none of the other 44 `DEPS` entries is fetched. `build-skia.sh` runs `gn` with the arguments of `docs/APP-SERVER-GPU-DRAWING.md` part 1 plus the ones for the cross build, which the script lists with their reason, and builds `libskia.a` with `x86_64-unknown-haiku-gcc` 13.3.0. `pack-skia.sh` makes the build-only package `skia_devel-<milestone>.0-<n>` in `distro/packages/x86_64`; no image list names it. Patches are in `distro/skia/patches`, each with its reason, and are listed in `THIRD_PARTY_NOTICES.md`. arm64 and riscv64 are not built. `distro/skia/COMPAT.md` records each build error and its fix.
+
+### Updating Skia, step by step
+
+1. Move the pin in `distro/skia/pins.sh` to the newest `chrome/mNNN` branch below beta (check Chrome's release schedule), with its commit, and the VMA and `gn` commits that branch names.
+2. Build it with the recipe. Every `gn` argument of `build-skia.sh` must still exist in `gn/skia.gni` or the `BUILD.gn` that declares it, every patch must still apply or be dropped, and the list of built third-party parts is checked against `DEPS` again.
+3. Read the release notes of every milestone in between for changes to Graphite, `VulkanBackendContext` and runtime effects.
+4. The step 1 host test (`distro/skia/test`), then `r5-draw-compare` on Lavapipe in QEMU and on RADV on the 5625U, every line `ok`.
+5. The `draw-time` list against the previous pin, recorded in `CHANGELOG.md`.
+6. The previous pin stays in the recipe history and its package in `distro/packages`; a rollback is one pin back.
 
 ## 2D in app_server
 
@@ -300,6 +314,7 @@ The same path serves a new AMD generation (for example GC 11 in the Ryzen 7640U,
 - The kernel driver `radeon_hd` stays as it is: the Haiku parts MIT, the R5 snippets MIT too since 12 Nov 2026.
 - Mesa and libdrm headers are MIT. Most files of Linux `amdgpu` carry an MIT-style notice from AMD, and most of `i915` is `SPDX-License-Identifier: MIT`. The Linux kernel as a whole is GPL-2.0, and some DRM core files are GPL-2.0-only. So: register offsets, values and their order are taken as facts. A single file or table may be taken over only when that file itself is MIT, with its notice kept, a row in `THIRD_PARTY_NOTICES.md`, and never from a GPL-2.0-only file.
 - VulkanTeapot is forked from GLTeapot. The files it takes over keep their notices: the Be Sample Code License (Be Incorporated, 1991–1999) and MIT (Haiku, 2008). The new Vulkan code is MIT. The teapot geometry comes from a source with a known license, recorded in `THIRD_PARTY_NOTICES.md`; GLTeapot itself does not carry it (it calls `auxSolidTeapot`).
+- Skia (BSD-3-Clause, Google and the other authors in its `AUTHORS` file) with skcms (BSD-3-Clause) and the Vulkan Memory Allocator (MIT, AMD) is built as a static library for app_server (M12). No GPL code. Its notices are in `THIRD_PARTY_NOTICES.md` and on the Licenses tab of About.
 - New components get a row in `THIRD_PARTY_NOTICES.md` and `docs/LICENSING.md`.
 
 ## Open decisions

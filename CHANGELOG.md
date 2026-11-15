@@ -1,5 +1,33 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-15 - M12 step 1: the Skia recipe, and one typical frame on Lavapipe
+
+Problem: M12 draws the windows with Skia (approved 15 Nov 2026, `docs/APP-SERVER-GPU-DRAWING.md`, Q1). Step 1 builds Skia from R5's own recipe and measures one frame on Lavapipe before any app_server code is written.
+
+What changed:
+- **Pin check:** Chrome's release data on 15 Nov 2026: Stable 158.0.8127.37 on Windows and Mac (early stable, 12 Nov), 157.0.8103.78 on Linux, Beta 159.0.8154.6; m158's stable date is 17 Nov. The user kept m158.
+- **Recipe `distro/skia`** (MIT): `pins.sh` (Skia `chrome/m158` `707e33875fb45f2997a4d781128bec122fb777b4`, VMA 3.4.0 `eb744ea7a2`, gn `b2afae122e`), `fetch-skia.sh` (those three by hash, gn built from source with the host `g++`, none of the other `DEPS`), `build-skia.sh` (the part 1 `gn` arguments, all of them present in m158, plus the cross-build ones with their reason), `pack-skia.sh` (the build-only package `skia_devel-158.0-1`, 5282796 bytes, in `distro/packages/x86_64`; no image list names it). Build directory `/home/nickr/r5os/skia-build`, outside the Haiku tree. Compiler `x86_64-unknown-haiku-gcc` 13.3.0.
+- **On top of part 1:** `target_os="linux"` (Skia knows no Haiku; only the POSIX ports), `skia_system_freetype2_include_path` (R5's `freetype-2.14.3`), `skia_use_freetype_svg=false`, `skia_use_freetype_zlib=false`, `werror=false`, and `-DSK_BUILD_FOR_UNIX`: `SkFeatures.h` falls back to `SK_BUILD_FOR_MAC` without it. Every user of the headers needs that define and `-I include/third_party/vulkan` (`skia-defines.txt` in the package).
+- **One R5 patch** (approved by the user): `patches/gcc13-to-array.patch` removes two `const`s in a constant table of `SkFontHost_FreeType.cpp`, because GCC 13.3's `std::to_array` cannot build a struct with const members. Every error and fix: `distro/skia/COMPAT.md`.
+- **Host test `distro/skia/test`** (MIT): `skia-frame` draws the part 7 frame (800×600, a tab, 30 lines of text in Noto Sans 12, 10 rectangles, a gradient, two 64×64 bitmaps, one scaled with filtering, six round buttons) with Graphite on Vulkan offscreen, reads it back and checks four pixels; the time is the median of 50 frames after 3 warm-up frames, each drawn, snapped, inserted and submitted with a wait. `run-qemu.sh` plants it in a copy of `r5-os.image` with a system launch job and reads the log back; no jam.
+- **Documentation:** the Skia row, the recipe and "Updating Skia, step by step" in `docs/GPU-ARCHITECTURE.md`, its Licensing sentence, a row in `docs/LICENSING.md`, the Skia block in `THIRD_PARTY_NOTICES.md` and in `distro/about/licenses.txt`, and the unmodified texts `LICENSES/Skia-BSD-3-Clause.txt`, `LICENSES/skcms-BSD-3-Clause.txt`, `LICENSES/VulkanMemoryAllocator-MIT.txt`.
+
+Tested: in WSL, `[703/703] link libskia.a`, then the host test linked. QEMU (KVM, headless, Lavapipe), a copy of the `r5-os.image` that another session jammed at 17:34 (not this branch; the test needs only the Vulkan loader, Lavapipe and the fonts), one run:
+- `skia-vk: llvmpipe (LLVM 21.1.8, 256 bits) type lavapipe api 1.4.328 dualSrcBlend 1 external_memory_host yes`
+- `skia: device llvmpipe (LLVM 21.1.8, 256 bits), first frame 1023542 us, min 3800 us, max 11005 us`
+- `skia: m158-707e33875f ok lavapipe frame 5177 us`
+The test ran at boot while the desktop was starting, on 2 virtual CPUs; the first frame includes compiling the pipelines.
+
+Measured:
+- `libskia.a` 18979230 bytes; code in it (text) 6791261 bytes.
+- The host test, stripped, has 6076802 bytes of code, nearly all Skia. app_server has 1717830 bytes of code today. So app_server will grow by about 6.1 to 6.8 MB (to about 7.8 to 8.5 MB of code), once, because there is one app_server.
+
+Two checks for later, written down only:
+- Lavapipe (Mesa 25.3.6) offers `VK_EXT_external_memory_host` (measured above): step 6b is not blocked.
+- Vulkan version and `dualSrcBlend`: Lavapipe 1.4.328 and 1 (measured). RADV, from the Mesa 25.3.6 source, not measured: API 1.4 for GFX8 and newer (Renoir is GFX9), `dualSrcBlend = true`; it lists `VK_EXT_external_memory_host` when `has_userptr`, which is set for every non-virtio device; whether R5's DRM library carries userptr was not checked.
+
+Not done: arm64 and riscv64 are not built. Nothing of Skia is in app_server or in the image (steps 2 to 5). No VirtualBox run, no RADV run, no second QEMU run for the spread. The 5625U has not run this.
+
 ## 2026-11-15 - The desktop on the graphics chip on by default: tested in QEMU with and without the setting and in safe mode
 
 Tested by the owner on 15 Nov 2026, in QEMU, with the build of #4271: no `gpu_compositor` line in the radeon_hd settings, and the desktop started composed in software (reported as llvmpipe; the compositor itself uses Lavapipe). My first QEMU boot of that build stopped in the kernel (`search_module called during kernel startup`, `generic/dpc/v1`) while another session was building in the same WSL tree. A clean rebuild of `main` in a quiet tree booted without a panic, so it was a mixed build.
