@@ -177,14 +177,16 @@ independent project. It is not an official Haiku distribution, nor is it
 affiliated with or endorsed by the Haiku Project. See
 [`distro/DISCLAIMER.txt`](distro/DISCLAIMER.txt).
 
-Haiku provides the technical foundation for R5. We incorporate fixes
-from its source tree, but changes made in R5 are not contributed back to
-Haiku.
-
 The name R5 is a nod to the history of BeOS R5. It does not mean that R5
 is BeOS, a continuation of BeOS, or an official Haiku release.
 
 Haiku and BeOS names and logos belong to their respective owners.
+
+## Our relationship with Haiku
+
+R5 is built on Haiku, and we regularly bring in fixes and improvements from its source code. R5 is an independent project, though, and changes made specifically for R5 stay with R5.
+
+There's one important distinction worth making: R5 development uses AI-assisted tools. The Haiku Project does not accept contributions created or modified using AI, so R5's changes are not submitted upstream.
 
 ## For developers
 
