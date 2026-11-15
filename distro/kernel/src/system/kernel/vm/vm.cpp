@@ -4799,6 +4799,16 @@ vm_resize_area(area_id areaID, size_t newSize, bool kernel)
 		}
 	} while (restart);
 
+// SPDX-SnippetBegin
+// SPDX-License-Identifier: MIT
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// R5: a team may not resize a cache that a kernel area also maps, such
+	// as the clone of a GPU buffer: the kernel and the GPU still use those
+	// pages.
+	if (!kernel && anyKernelArea)
+		return B_NOT_ALLOWED;
+// SPDX-SnippetEnd
+
 	// Okay, looks good so far, so let's do it
 
 	int priority = kernel && anyKernelArea

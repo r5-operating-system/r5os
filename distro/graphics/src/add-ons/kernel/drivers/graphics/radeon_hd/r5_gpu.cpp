@@ -2144,7 +2144,13 @@ static int amd_scanout(void* info, uint32* width, uint32* height,
 static int
 amd_drop_copies(int32_t kernelArea)
 {
-	for (int round = 0; round < 8; round++) {
+	/* M11 fourth review: no small cap (a program could leave the VRAM out
+	 * of the allocator with more copies than that), and one log line per
+	 * call, not per copy. Each round deletes what it found, so the loop
+	 * ends unless copies are made faster than they are deleted. */
+	int32 deleted = 0;
+	team_id lastTeam = -1;
+	for (int round = 0; round < 4096; round++) {
 		team_id teams[16];
 		area_id areas[16];
 		int32 count = 0;
@@ -2161,14 +2167,21 @@ amd_drop_copies(int32_t kernelArea)
 			count++;
 		}
 		vm_area_put_locked_cache(cache);
-		if (count == 0)
+		if (count == 0) {
+			if (deleted != 0) {
+				dprintf("radeon_hd: %" B_PRId32 " vram mapping copies deleted,"
+					" last of team %" B_PRId32 "\n", deleted, lastTeam);
+			}
 			return B_OK;
+		}
 		for (int32 i = 0; i < count; i++) {
-			dprintf("radeon_hd: vram mapping copy %" B_PRId32 " of team %"
-				B_PRId32 " deleted\n", areas[i], teams[i]);
 			vm_delete_area(teams[i], areas[i], true);
+			deleted++;
+			lastTeam = teams[i];
 		}
 	}
+	dprintf("radeon_hd: vram mapping copies left after %" B_PRId32
+		" deleted\n", deleted);
 	return B_BUSY;
 }
 

@@ -3231,6 +3231,14 @@ gpu_bo_map(gpu_client* client, void* buffer, size_t length)
 	 * does not read or write through that clone.
 	 */
 	team_id team = team_get_current_team_id();
+	/* M11 fourth review: the mapping is the program's own area now, so it
+	 * may have deleted it (RADV does at vkUnmapMemory). Area ids are not
+	 * reused; a gone id is cloned again. */
+	if (bo->area >= 0 && bo->mapTeam == team) {
+		area_info gone;
+		if (get_area_info(bo->area, &gone) != B_OK || gone.team != team)
+			bo->area = -1;
+	}
 	if (bo->area >= 0) {
 		if (bo->mapTeam != team)
 			return gpu_refuse("BO_MAP", "team", B_NOT_ALLOWED, in.handle,
@@ -3255,10 +3263,13 @@ gpu_bo_map(gpu_client* client, void* buffer, size_t length)
 		bo->backing->kernel = kernel;
 	}
 	void* user = NULL;
-	/* M11 third review: not B_KERNEL_AREA (RADV munmaps it when a buffer
-	 * goes, and fork() copied it anyway). A clone, a transfer or a fork
-	 * copy of this mapping is on the same cache; gpu_backing_drop deletes
-	 * them all before the VRAM is freed (drop_copies). */
+	/* M11 third review: not B_KERNEL_AREA (RADV deletes this area when it
+	 * unmaps a buffer, and fork() copied it anyway). A clone, a transfer or
+	 * a fork copy of this mapping is on the same cache; gpu_backing_drop
+	 * deletes them all before the VRAM is freed (drop_copies), so a
+	 * mapping must not be shared by area id: shares use BO_EXPORT. The
+	 * kernel's vm_resize_area refuses a team a cache that a kernel area
+	 * also maps, so the program cannot shrink a GTT buffer under the GPU. */
 	area_id area = vm_clone_area(team, "r5 gpu bo", &user, B_ANY_ADDRESS,
 		B_READ_AREA | B_WRITE_AREA, kRegionNoPrivateMap,
 		bo->backing->kernelArea,
