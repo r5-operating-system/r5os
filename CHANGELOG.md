@@ -1,5 +1,17 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-15 - The desktop on the graphics chip on by default: tested in QEMU with and without the setting and in safe mode
+
+Tested by the owner on 15 Nov 2026, in QEMU, with the build of #4271: no `gpu_compositor` line in the radeon_hd settings, and the desktop started composed in software (reported as llvmpipe; the compositor itself uses Lavapipe). My first QEMU boot of that build stopped in the kernel (`search_module called during kernel startup`, `generic/dpc/v1`) while another session was building in the same WSL tree. A clean rebuild of `main` in a quiet tree booted without a panic, so it was a mixed build.
+
+Tested after the rebuild (QEMU, KVM, three copies of the image, about 110 s each, read back with `bfs_shell`), with no panic in any boot:
+- no setting: `app_server: gpu compositor on lavapipe: no render node`;
+- `gpu_compositor false`: `app_server: gpu compositor off: setting`;
+- `safemode true` in the kernel settings: `app_server: gpu compositor off: safe mode`.
+
+Not tested: Safe mode chosen in the boot menu itself (the kernel settings file sets the same option), and the 5625U with RADV by default.
+
+The README gets a screenshot of the desktop with About R5 (`docs/screenshots/about-r5.png`).
 ## 2026-11-15 - About R5: frosted glass behind the window and the system information
 
 Problem: no program used frosted glass yet besides `r5-effects-test`; the window effects showed only on the tab and the frame line.
