@@ -21,6 +21,13 @@
 
 #include <KernelExport.h>
 #include <kernel.h>
+/* radeon_hd has its own lock.h (guard LOCK_H); the VM headers need the
+ * kernel's (mutex, rw_lock), so it is named by its path. */
+#include <kernel/lock.h>
+#include <vm/VMAddressSpace.h>
+#include <vm/VMArea.h>
+#include <vm/VMCache.h>
+#include <vm/vm.h>
 
 #include <driver_settings.h>
 #include <stdio.h>
@@ -2128,6 +2135,44 @@ static int amd_scanout(void* info, uint32* width, uint32* height,
 	uint32* bytesPerRow, uint32* format, uint64* vramOffset, uint64* bytes);
 
 
+/* M11 third review: fork() copies every area of a team, a BO_MAP mapping
+ * too (B_KERNEL_AREA does not stop that), onto the same cache. A child
+ * that never calls exec would keep the VRAM after the buffer is freed and
+ * given to another one. The last reference deletes those copies first;
+ * the program's own clones are gone by then. The ids are taken under the
+ * cache lock and deleted after it (vm_delete_area locks the cache). */
+static int
+amd_drop_copies(int32_t kernelArea)
+{
+	for (int round = 0; round < 8; round++) {
+		team_id teams[16];
+		area_id areas[16];
+		int32 count = 0;
+		VMArea* source = VMAreas::Lookup(kernelArea);
+		if (source == NULL)
+			return B_OK;
+		VMCache* cache = vm_area_get_locked_cache(source);
+		for (VMArea* area = cache->areas.First(); area != NULL && count < 16;
+				area = cache->areas.GetNext(area)) {
+			if (area->id == kernelArea)
+				continue;
+			teams[count] = area->address_space->ID();
+			areas[count] = area->id;
+			count++;
+		}
+		vm_area_put_locked_cache(cache);
+		if (count == 0)
+			return B_OK;
+		for (int32 i = 0; i < count; i++) {
+			dprintf("radeon_hd: vram mapping copy %" B_PRId32 " of team %"
+				B_PRId32 " deleted\n", areas[i], teams[i]);
+			vm_delete_area(teams[i], areas[i], true);
+		}
+	}
+	return B_BUSY;
+}
+
+
 r5_gpu_backend_ops gR5GpuOps = {
 	amd_device,
 	amd_read_reg,
@@ -2171,7 +2216,8 @@ r5_gpu_backend_ops gR5GpuOps = {
 	amd_selftest,
 	amd_hang_job,
 	amd_fault_status,
-	amd_hang_release
+	amd_hang_release,
+	amd_drop_copies
 };
 
 

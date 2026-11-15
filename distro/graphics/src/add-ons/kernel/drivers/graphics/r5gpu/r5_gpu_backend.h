@@ -77,6 +77,10 @@ typedef struct r5_gpu_backend_ops {
 	int			(*fault_status)(uint32_t* status);
 	/* GPU off: free the gpu_hang_test pages. With the GPU lock. */
 	void		(*hang_release)(void);
+	/* M11: deletes every area on the cache of kernelArea but kernelArea
+	 * (the copies fork() made of a BO_MAP mapping). 0 when none is left.
+	 * With the GPU lock, before the VRAM under it is freed. */
+	int			(*drop_copies)(int32_t kernelArea);
 } r5_gpu_backend_ops;
 
 extern r5_gpu_backend_ops gR5GpuOps;

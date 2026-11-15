@@ -602,7 +602,22 @@ gpu_backing_drop(gpu_backing* backing)
 		return;
 	if (!r5_share_ref_drop(&backing->refs))
 		return;
-	if (backing->domain == R5_GPU_DOMAIN_VRAM && !backing->borrowed) {
+	/* M11 third review: a copy fork() made of the program's mapping goes
+	 * first. If one stays, the page is kept out of the allocator. */
+	bool copies = false;
+	if (backing->domain == R5_GPU_DOMAIN_VRAM && !backing->borrowed
+		&& backing->kernelArea >= 0 && gR5GpuOps.drop_copies != NULL
+		&& gR5GpuOps.drop_copies(backing->kernelArea) != 0) {
+		copies = true;
+		static bool sCopiesLogged = false;
+		if (!sCopiesLogged) {
+			sCopiesLogged = true;
+			dprintf("radeon_hd: vram mapping copies left, vram page %llx "
+				"kept\n", (unsigned long long)backing->vramOffset);
+		}
+	}
+	if (backing->domain == R5_GPU_DOMAIN_VRAM && !backing->borrowed
+		&& !copies) {
 		if (!sDeferred)
 			gpu_hw_vram_free(backing->vramOffset);
 		else if (!r5_defer_add(sDefer, kMaxBo, backing->vramOffset)) {
@@ -3082,8 +3097,6 @@ extern "C" team_id team_get_current_team_id(void);
 
 /* headers/private/system/vm_defs.h: REGION_NO_PRIVATE_MAP = 0. */
 static const uint32 kRegionNoPrivateMap = 0;
-/* headers/private/system/vm_defs.h: B_KERNEL_AREA = 1 << 14. */
-static const uint32 kKernelArea = 1 << 14;
 
 
 static void
@@ -3242,11 +3255,12 @@ gpu_bo_map(gpu_client* client, void* buffer, size_t length)
 		bo->backing->kernel = kernel;
 	}
 	void* user = NULL;
-	/* B_KERNEL_AREA: the program can use the mapping but not clone,
-	 * transfer, delete or reprotect it, so no copy outlives the release
-	 * and keeps VRAM that is given to another buffer. */
+	/* M11 third review: not B_KERNEL_AREA (RADV munmaps it when a buffer
+	 * goes, and fork() copied it anyway). A clone, a transfer or a fork
+	 * copy of this mapping is on the same cache; gpu_backing_drop deletes
+	 * them all before the VRAM is freed (drop_copies). */
 	area_id area = vm_clone_area(team, "r5 gpu bo", &user, B_ANY_ADDRESS,
-		B_READ_AREA | B_WRITE_AREA | kKernelArea, kRegionNoPrivateMap,
+		B_READ_AREA | B_WRITE_AREA, kRegionNoPrivateMap,
 		bo->backing->kernelArea,
 		true);
 	if (area < 0)
