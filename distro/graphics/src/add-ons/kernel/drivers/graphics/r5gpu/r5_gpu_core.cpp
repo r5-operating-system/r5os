@@ -108,6 +108,8 @@ bool gpu_selftest_enabled();
 static bool gpu_job_blocks(const gpu_sync* sync, uint64 target, bool binary);
 static void gpu_sync_host(gpu_sync* sync);
 static void gpu_release_parked(uint64 seen);
+
+
 /* M11 review: the device is lost and a reset stopped the CP, so nothing
  * it was given can be fetched any more. Lost without a stopped CP (the
  * hang before its reset, a second hang, a failed reset): it still may. */
@@ -3275,8 +3277,9 @@ gpu_bo_map(gpu_client* client, void* buffer, size_t length)
 	 * a fork copy of this mapping is on the same cache; gpu_backing_drop
 	 * deletes them all before the VRAM is freed (drop_copies), so a
 	 * mapping must not be shared by area id: shares use BO_EXPORT. The
-	 * kernel's vm_resize_area refuses a team a cache that a kernel area
-	 * also maps, so the program cannot shrink a GTT buffer under the GPU. */
+	 * kernel's vm_resize_area refuses a team the shrink of a cache that a
+	 * kernel area also maps, so the program cannot shrink a GTT buffer
+	 * under the GPU. */
 	area_id area = vm_clone_area(team, "r5 gpu bo", &user, B_ANY_ADDRESS,
 		B_READ_AREA | B_WRITE_AREA, kRegionNoPrivateMap,
 		bo->backing->kernelArea,
