@@ -36,6 +36,24 @@ Tested in QEMU (KVM, Lavapipe, `gpu_draw true`, `gpu_debug true`), not finished:
 
 Not done: Tracker, Terminal, Settings and About are not checked on screenshots (the test script used wrong paths for Settings and Tracker; Terminal and About were behind WebPositive), the Appearance tabs and the hidden slider (Q13) are not checked on screen, `compose compare` with effects off not read in these runs, group 12 (decorator) and 13 (offscreen in the set), layers (`BView::BeginLayer` still draws with Painter through `BitmapDrawingEngine`: a gap), offscreen bitmaps in other colour spaces than 32 bits (Painter: a gap). RADV on the 5625U: not run. The commits are grouped by files per step; a single commit alone may not build.
 
+## 2026-11-15 - Build scripts: the apply works on a clean Haiku tree
+
+Problem: after `tree-owner.sh` put the image definitions back to the Haiku `HEAD`, the Bluetooth session's apply stopped with `gfxinfo anchor missing in regular image`. `apply-radeon.py` anchors `SYSTEM_BIN += gfxinfo ;` on lines that `apply-media.py` adds, and `apply-overlay.sh` runs `apply-media.py` later. It only ever worked because the shared tree kept the lines of earlier applies, so an apply on a clean tree had never been tested. Mistake: #4283 was not tested with a full apply on a clean tree.
+
+What changed: `apply-radeon.py` falls back to `SYSTEM_BIN += userguide quicktour welcome ;`, which is in the Haiku tree itself. `apply-settings.py` no longer inserts the Appearance add-on line in `regular` again once it has been split into the fonts and look lines; each apply left one more empty line there.
+
+Tested in WSL on a fresh clone of the WSL Haiku tree (same `HEAD`, own lock and record): the full `apply-overlay.sh` exits 0, and a second and third apply change nothing (same diff, same new files). The doubled lines in `regular` are one per firmware file and an app in two lists, as before. Not run: jam on a clean tree; the next jam in the shared tree is the first.
+
+## 2026-11-15 - Build scripts: an apply puts back what another worktree left in the shared tree
+
+Problem: the build lock (below) keeps builds apart in time, but not in content. The Bluetooth session's jam stopped linking `app_server`: `AlphaMask.cpp` in the WSL tree was the M12 session's version (it calls `skia_offscreen_engine()`), copied there by M12's earlier apply, while the Skia files it needs are not on `main`. That was the limit "files that a previous branch copied into the tree stay there".
+
+What changed: `scripts/tree-owner.sh`, called by `apply-overlay.sh` under the lock. After an apply (also a failed one) it records which paths of the tree that apply wrote: changed or new in the tree's git, with a change time after the apply began. It keeps that list and the worktree in `/home/nickr/r5os/.r5-tree-owner/`. Before an apply from another worktree it puts those paths back: a tracked file to the Haiku `HEAD` of the tree, a new file removed (and its folder if empty). Nothing else in the tree is touched; no `git clean`, no reset of the whole tree. The same worktree twice in a row puts nothing back and keeps adding to its list.
+
+Tested in WSL on a throwaway git tree: a changed file came back as `HEAD`, a new file and its new folder were removed (also a name with a space), a local change no apply wrote stayed, and a second apply from the same worktree kept the list. Not run: an apply and jam on the real tree (the M12 build held the lock).
+
+Limits: it works only once every worktree that builds has this change; a build with the older scripts records nothing, so its files stay for the next one. The first record for the M12 apply that was running was written by hand from the change times since that apply began.
+
 ## 2026-11-15 - Build scripts: one build at a time in the shared WSL Haiku tree
 
 Problem: every session copies its `distro/` into the one WSL Haiku tree and jams into the one `generated.x86_64`. On 15 Nov two sessions did that at the same time: an image with a kernel and a package from two different builds stopped in the kernel (`search_module called during kernel startup`, `generic/dpc/v1`), and `r5-os.image` disappeared.
@@ -44,7 +62,7 @@ What changed: `scripts/build-lock.sh` takes an exclusive `flock` on `/home/nickr
 
 Tested in WSL with a test lock file: a second script waited until the first ended, `R5_BUILD_LOCK_WAIT=0` gave up at once with exit 1, and a nested script with the lock held did not wait for itself. `bash -n` on all five scripts. Not run: a real jam under the lock.
 
-Limits: the `apply-*.py` scripts run on their own (for example `apply-settings.py`) and copying `r5-os.image` for QEMU do not take the lock. Files that a previous branch copied into the tree and the current one does not have stay there.
+Limits: the `apply-*.py` scripts run on their own (for example `apply-settings.py`) and copying `r5-os.image` for QEMU do not take the lock. Files that a previous branch copied into the tree and the current one does not have stay there (fixed by `tree-owner.sh`, above).
 
 ## 2026-11-15 - Review of the merged M11 stack (#4264): seven fixes, the rest left with a reason
 

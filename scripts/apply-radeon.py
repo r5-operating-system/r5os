@@ -127,6 +127,10 @@ def hook_gfxinfo(haiku: pathlib.Path) -> None:
         if anchor not in text:
             anchor = "SYSTEM_BIN += midi2test ;\n"
         if anchor not in text:
+            # A fresh tree: apply-media.py, which adds the two lines above,
+            # runs after this script.
+            anchor = "SYSTEM_BIN += userguide quicktour welcome ;\n"
+        if anchor not in text:
             raise SystemExit("gfxinfo anchor missing in regular image")
         regular.write_text(text.replace(anchor, anchor + line, 1), encoding="utf-8")
         print("patched regular image")
