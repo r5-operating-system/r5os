@@ -90,21 +90,55 @@ if [ "$stick" = m11 ]; then
 	mkdir -p "$m10"
 fi
 
+# This boot's syslog lines: after the last boot loader line.
+this_boot() {
+	for part in "$syslog.1" "$syslog.old" "$syslog"; do
+		[ -f "$part" ] && cat "$part"
+	done | awk '
+		/Welcome to the Haiku boot loader!/ { buf = ""; seen = 1 }
+		{ all = all $0 "\n" }
+		seen { buf = buf $0 "\n" }
+		END { if (seen) printf "%s", buf; else printf "%s", all }
+	'
+}
+
 # check wait: the self-test only, nothing written.
 if [ "$1" = wait ]; then
+	# M11 third review: the file of an earlier boot also ends in
+	# "selftest done" until this boot's self-test renames it, about 5 s
+	# after Deskbar. Only a file written after this boot's first dated
+	# syslog line counts (syslog_time_stamps true). After 60 s of waiting
+	# any finished file counts: by then this boot's self-test has renamed
+	# the old one (so a clock that differs only costs that minute).
+	since=$(this_boot | awk '
+		/^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9] / {
+			print substr($0, 1, 19); exit
+		}')
+	selftest_ready() {
+		grep -q '^selftest done' "$selftest" 2>/dev/null || return 1
+		[ -n "$since" ] && [ "$i" -lt 60 ] || return 0
+		written=$(date -r "$selftest" '+%Y-%m-%d %H:%M:%S' 2>/dev/null) \
+			|| return 0
+		[ ! "$written" \< "$since" ]
+	}
 	i=0
-	while [ "$i" -lt "$wait_s" ] && ! grep -q '^selftest done' "$selftest" 2>/dev/null; do
+	while [ "$i" -lt "$wait_s" ] && ! selftest_ready; do
 		if [ $((i % 30)) -eq 0 ]; then
 			echo "check: waiting for the self-test, $i of $wait_s s"
 		fi
 		sleep 5
 		i=$((i + 5))
 	done
-	if grep -q '^selftest done' "$selftest" 2>/dev/null; then
-		# M11: the last syslog line now; the scenario's lines come after
-		# it, so the self-test's own windows do not count for it.
+	if selftest_ready; then
+		# M11: the last syslog line now, and how often this boot has it;
+		# the scenario's lines come after that copy, so the self-test's
+		# own windows do not count for it.
 		if [ "$stick" = m11 ] && [ -f "$syslog" ]; then
-			tail -n 1 "$syslog" > "$m10/scenario-from-boot$boot"
+			this_boot > "$m10/scenario-wait.txt"
+			last=$(tail -n 1 "$m10/scenario-wait.txt")
+			copies=$(grep -cxF -- "$last" "$m10/scenario-wait.txt")
+			{ echo "$copies"; echo "$last"; } > "$m10/scenario-from-boot$boot"
+			rm -f "$m10/scenario-wait.txt"
 		fi
 		echo "check: the self-test is done; start the scenario now (boot $boot)"
 		exit 0
@@ -490,7 +524,11 @@ m11_fps() {
 		say 1 "copy path run: the settings file is the system one"
 		return
 	fi
-	cp "$settings" "$keep/radeon_hd.orig"
+	# M11 third review: a stopped check gives the zero-copy setting back,
+	# and a saved copy never holds the switch (a boot restarted after a
+	# freeze would keep it).
+	grep -v '^gpu_compositor_zero_copy' "$settings" > "$keep/radeon_hd.orig"
+	trap 'rm -f "$settings"; cp "$keep/radeon_hd.orig" "$settings"; exit 1' INT TERM HUP
 	from=$(syslog_count)
 	rm -f "$settings"
 	{ cat "$keep/radeon_hd.orig"; echo "gpu_compositor_zero_copy false"; } > "$settings"
@@ -506,6 +544,7 @@ m11_fps() {
 	from=$(syslog_count)
 	rm -f "$settings"
 	cp "$keep/radeon_hd.orig" "$settings"
+	trap - INT TERM HUP
 	if wait_line 'app_server: zero-copy setting on' "$from" 30; then
 		say 0 "zero-copy setting on again"
 	else
@@ -527,11 +566,15 @@ m11_boot() {
 		: > "$scen"
 		mark=$m10/scenario-from-boot$boot
 		if [ -s "$mark" ]; then
-			M=$(cat "$mark") awk '
-				$0 == ENVIRON["M"] { buf = ""; seen = 1; next }
-				seen { buf = buf $0 "\n" }
-				END { printf "%s", buf }
+			N=$(head -n 1 "$mark") M=$(sed -n 2p "$mark") awk '
+				!seen && $0 == ENVIRON["M"] && ++c == ENVIRON["N"] + 0 {
+					seen = 1; next
+				}
+				seen { print }
 			' "$slog" > "$scen"
+			# M11 third review: used once; a check after a restart needs
+			# a new check wait and the scenario again.
+			mv "$mark" "$keep/scenario-from-boot$boot"
 		fi
 		have '.' "$scen" "scenario lines after check wait"
 		# The scenario's VulkanTeapot and vkcube, before check's own runs.

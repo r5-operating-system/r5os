@@ -103,7 +103,7 @@ text = text.replace("\tmesa_radv-25.3.6-8\n", "\tmesa_radv-25.3.6-9\n")
 text = text.replace("\tmesa_lavapipe-25.3.6-4\n", "\tmesa_lavapipe-25.3.6-5\n")
 text = text.replace("\tlibdrm-2.4.124-1\n", "\tlibdrm-2.4.124-2\n")
 if "\tmesa_radv-25.3.6-9\n" not in text:
-    sys.exit("mesa_radv 25.3.6-8 missing from the pin")
+    sys.exit("mesa_radv 25.3.6-9 missing from the pin")
 text = text.replace("\tvulkan_loader-1.4.367-1\n", "\tvulkan_loader-1.4.367-4\n")
 text = text.replace("\tvulkan_loader-1.4.367-2\n", "\tvulkan_loader-1.4.367-4\n")
 text = text.replace("\tvulkan_loader-1.4.367-3\n", "\tvulkan_loader-1.4.367-4\n")

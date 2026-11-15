@@ -34,8 +34,10 @@ WANTED = (
     ("home/r5-session.log", "r5-session.log"),
     ("system/var/log/syslog", "syslog"),
     ("system/var/log/syslog.old", "syslog.old"),
+    ("system/var/log/syslog.1", "syslog.1"),
     ("common/var/log/syslog", "syslog"),
     ("common/var/log/syslog.old", "syslog.old"),
+    ("common/var/log/syslog.1", "syslog.1"),
     ("system/settings/kernel/drivers/radeon_hd", "radeon_hd"),
     ("home/config/settings/kernel/drivers/radeon_hd", "radeon_hd-home"),
     # Deskbar's add-on list (TReplicantTray). The M10 stick crashed in it.
