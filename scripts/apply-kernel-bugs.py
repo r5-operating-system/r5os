@@ -81,6 +81,7 @@ def install_kernel_sources() -> None:
         "src/add-ons/kernel/bluetooth/hci/bluetooth.cpp",
         "src/add-ons/kernel/bluetooth/hci/hci_assemble.h",
         "src/add-ons/kernel/drivers/bluetooth/h2/h2generic/Jamfile",
+        "src/add-ons/kernel/drivers/bluetooth/h2/h2generic/h2command.h",
         "src/add-ons/kernel/drivers/bluetooth/h2/h2generic/h2generic.cpp",
         "src/add-ons/kernel/drivers/bluetooth/h2/h2generic/h2mediatek.cpp",
         "src/add-ons/kernel/drivers/bluetooth/h2/h2generic/h2mediatek.h",
