@@ -530,7 +530,7 @@ The user answered the open questions:
 
 ## Follow-up: the look and feel settings (user, 15 Nov 2026)
 
-Not designed here. The user wants it designed in step 1 or later.
+Not designed here. The user wants it designed in step 1 or later, starting with a mockup that the user reviews before any code.
 
 - **Scaling gets a setting** in the Settings window, when scaling is built. Which page it goes on is a question for the scaling brief.
 - **The look and feel settings need a redesign**, in the Settings window and in the separate Appearance program, for everything added since Haiku: the "Window effects" box (shadow, frosted glass, strength, animations, M11), the antialiasing choices after Q5, Q12 and Q13 (Skia's subpixel text, grey shapes, the hidden average weight slider), and later scaling. The shared sources are in `distro/settings/` (`LookAndFeelSettingsView.cpp`, `WindowEffectsBox.cpp`, `AntialiasingSettingsView.cpp`, `FontView.cpp`, `ColorsView.cpp`, `LookModule.cpp`, `FontsModule.cpp`).
