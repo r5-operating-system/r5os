@@ -714,6 +714,9 @@ gpu_slot_take(gpu_client* client, int* reason)
 }
 
 
+static void gpu_bo_detach(gpu_client* client, gpu_bo* bo, uint32 handle);
+
+
 static status_t
 gpu_bo_create(gpu_client* client, void* buffer, size_t length)
 {
