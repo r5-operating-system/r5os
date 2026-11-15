@@ -25,6 +25,24 @@ Mistakes on the way: the script that moved `Assemble()` turned three `\n` escape
 
 Not tested: no radio. The timeout, the late-answer drop, split events and ACL from a real controller, and `h2generic: controller ready` need the passed-through MT7922 in VirtualBox, which takes Bluetooth from Windows and waits for the owner's yes. ARM64 and RISC-V 64 were not built or tested.
 
+## 2026-11-15 - Build: jam uses every core
+
+Problem: `scripts/jam-r5-raw.sh` ran `jam -q @r5-raw` without `-j`, so jam ran one job at a time while WSL has 12 cores.
+
+What changed: jam now runs with `-j$(nproc)`; `R5_JAM_JOBS` overrides it (for example `R5_JAM_JOBS=1` to read one error without the output of other jobs mixed in). The log shows `jam jobs=<n>`.
+
+Limits: not timed yet; the first build with it shows the gain. A worktree gets it only after it merges origin/main. With `-q` jam still stops at the first failure, but lines of parallel jobs can interleave in the log.
+
+
+## 2026-11-15 - Desktop: no Quick Tour and User Guide links
+
+Problem: a new desktop showed Haiku's Quick Tour and User Guide links. They introduce Haiku, not R5, and are not needed to start.
+
+What changed: `distro/rest/build/jam/OptionalPackages`, a copy of Haiku's file with one SPDX-Snippet: the two `AddSymlinkToHaikuImage home Desktop` lines are gone, so the administrator's image home no longer gets them. `distro/users/AccountAdmin.cpp` `ensure_desktop_links()` no longer creates them for new accounts (Home stays). `apply-rest-native.py` copies the file; no script change.
+
+Limits: the programs and the documentation stay installed (`quicktour`, `userguide` in Terminal; Help links in apps still work). Existing installs keep the links until the user removes them. Removing the packages is a later step, after checking which apps link to the guide. No What's new section yet; it goes into the next build's section.
+
+
 ## 2026-11-15 - Painter: semi-transparent fills no longer write random alpha (a bug also in Haiku)
 
 Problem: Painter's `blend_line32()` (`drawing_support.h`), used for `B_OP_ALPHA` fills of whole rows (`_BlendRect32()`, the alpha overlay modes on runs of 4 pixels or more), built the row in a temporary buffer and never set its alpha byte, so the copy back wrote stack memory into the destination's alpha. On screen it does not show, but a `B_RGBA32` offscreen bitmap is read by programs, alpha included. Found by the M12 compare set (`draw-compare alpha-pixel-overlay-rect`: equal colour, Painter's alpha 0 or 30).
