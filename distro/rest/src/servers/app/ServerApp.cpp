@@ -3968,7 +3968,7 @@ ServerApp::_MessageLooper()
 	// screen back (killed, crashed) kept the direct screen lock, and the
 	// compositor paused, for good. This thread took the lock, so it can
 	// give it back; a team that does not hold it gets B_PERMISSION_DENIED.
-	fDesktop->UnlockDirectScreen(fClientTeam);
+	fDesktop->UnlockDirectScreen(fClientTeam, true);
 // SPDX-SnippetEnd
 
 	// Quit() will send us a message; we're handling the exiting procedure

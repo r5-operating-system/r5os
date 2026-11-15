@@ -494,6 +494,11 @@ Desktop::Desktop(uid_t userID, const char* targetScreen)
 	fScreenLock("screen lock"),
 	fDirectScreenLock("direct screen lock"),
 	fDirectScreenTeam(-1),
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	fDirectScreenCount(0),
+// SPDX-SnippetEnd
 	fCurrentWorkspace(0),
 	fPreviousWorkspace(0),
 	fAllWindows(kAllWindowList),
@@ -1103,13 +1108,23 @@ Desktop::LockDirectScreen(team_id team)
 	// M11 step 5, decision 9: a BWindowScreen pauses the compositor. The
 	// pause takes the window lock, so it comes before the direct screen
 	// lock: _SetCurrentWorkspaceConfiguration() takes them the other way.
+	// M11 review: a second lock of the team that holds it (two
+	// BWindowScreens) nests; it neither pauses again nor locks again, so
+	// the last unlock gives the screen and the pause back.
+	if (fDirectScreenTeam == team
+		&& fDirectScreenLock.LockingThread() == find_thread(NULL)) {
+		fDirectScreenCount++;
+		return B_OK;
+	}
 	if (fCompositor != NULL)
 		fCompositor->DirectScreenChanged(true);
 // SPDX-SnippetEnd
 
 	status_t status = fDirectScreenLock.LockWithTimeout(1000000L);
-	if (status == B_OK)
+	if (status == B_OK) {
 		fDirectScreenTeam = team;
+		fDirectScreenCount = 1;
+	}
 
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
@@ -1126,7 +1141,7 @@ Desktop::LockDirectScreen(team_id team)
 
 
 status_t
-Desktop::UnlockDirectScreen(team_id team)
+Desktop::UnlockDirectScreen(team_id team, bool all)
 {
 	if (fDirectScreenTeam == team) {
 // SPDX-SnippetBegin
@@ -1134,6 +1149,9 @@ Desktop::UnlockDirectScreen(team_id team)
 // SPDX-License-Identifier: MIT
 		// M11 review: the owner is cleared before the unlock; a waiting
 		// team takes the lock and sets itself, and must not be cleared.
+		if (!all && --fDirectScreenCount > 0)
+			return B_OK;
+		fDirectScreenCount = 0;
 		fDirectScreenTeam = -1;
 		fDirectScreenLock.Unlock();
 		if (fCompositor != NULL)
