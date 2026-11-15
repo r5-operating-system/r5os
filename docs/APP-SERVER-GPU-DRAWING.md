@@ -199,3 +199,23 @@ Every mode also has a `SUBPIX` form (`*SUBPIX.h`) with three coverages; in the t
 
 No row is left without a mapping. Where a mapping is known but its result is not proven, the compare set decides (part 7) and a failure is reported as a gap, never drawn on the CPU (decision 4).
 
+## 5. Tolerances per class (decision 6)
+
+How a result is measured: `r5-draw-compare` (part 7) draws one operation with Painter and with `SkiaDrawingEngine` into two images of the same size, starting from the same background, and compares the bytes (B, G, R, A) inside the operation's bounding box grown by 2 pixels. Two numbers come out: the **largest difference** of any channel of any pixel, and the **share** of pixels in that box where some channel differs by more than 1. An **inner pixel** is a pixel whose 3×3 neighbours in Painter's image all have the same value; inner pixels are held to exact equality in every class, because a fill or a stroke body must not change colour.
+
+| Class | Operations | Inner pixels | Largest difference | Share above 1 | Why this number |
+|---|---|---|---|---|---|
+| **E** exact | solid fills, rectangles and regions on whole pixels, `CopyRegion()`, `InvertRect()`, `StrokePoint()`, horizontal and vertical lines, patterns, unscaled bitmaps, every drawing mode at full coverage | exact | 0 | 0 % | the R5 blenders do Haiku's integer formulas; nothing is left to round |
+| **A1** analytic edges | transformed rectangles, ellipses, round rectangles, lines that are not straight | exact | 24 | 3 % | Skia computes edge coverage analytically in floating point, AGG by exact cell area in 8-bit fixed point; a difference of about a tenth of the coverage at an edge pixel |
+| **A2** path edges | polygons, triangles, Bézier curves, `BShape`, arcs, mask edges | exact | 64 | 6 % | general paths use 4× MSAA (part 2), so coverage comes in steps of a quarter (64 of 255) |
+| **T** text | `DrawString()` in all its forms | exact (stems of large text) | no limit | 10 % of the pixels in the string's box differ by more than 16 | decision 5: only the rasterisation of the letters may differ. Layout is checked separately, exactly: the returned pen position is equal, and each glyph's ink box lies within 1 pixel of Painter's |
+| **B1** scaled bitmap, nearest | `DrawBitmap()` scaled without filter | – | no limit | 1 %, and every differing pixel equals one of Painter's 3×3 neighbours | the two may pick the next source row or column where the scale falls exactly between two |
+| **B2** bitmap, bilinear | `DrawBitmap()` with `B_FILTER_BITMAP_BILINEAR` | exact where the bitmap is unscaled | 4 | 5 % | weights in float against AGG's 8-bit weights |
+| **G** gradient | the five types, on any shape | – | 3 | no limit | the same colour array; only the position (float against fixed point) can land one entry over |
+
+- An operation in several classes (a gradient inside a Bézier curve, a pattern in a transformed rectangle) is held to the looser of its classes for its edge pixels and to the stricter for its inner pixels.
+- Subpixel shapes and text keep their class; the difference is counted per channel, so a colour fringe that moved counts.
+- The same set also compares **Skia on RADV against Skia on Lavapipe**, in the same classes, so a driver difference shows up as a line of its own.
+- M11's `compose compare` stays as it is (exact, effects off).
+- These are starting values. A failing operation is a gap and is reported; the numbers change only by a decision of the user, never to make a test pass.
+
