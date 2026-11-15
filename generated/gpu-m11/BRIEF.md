@@ -11,6 +11,8 @@ For Cursor or Claude. It does not override `AGENTS.md` or `docs/GPU-ARCHITECTURE
 6. **Only one agent jams at a time.** Ask before you jam in the shared WSL tree.
 7. **Never claim a test that did not run.** Report Veranderd / Getest / Onbewezen / Documentatie, with the pass lines quoted, and stop. The next step starts only with a new prompt from the user.
 
+**Status (15 Nov 2026): M11 is done, opt-in.** Steps 0–6 merged; stick 50 passed boots 1–3, boot 4 failed on a self-test bug (fixed, not booted again). Results in `CHANGELOG.md` (15 Nov, "M11 done"), open work in `generated/AFTER-M11.md`. The rest of this brief is the record of how it was built.
+
 **Status (13 Nov 2026):**
 - M10 is done (build 10061, PR #4233): GC 9.3 `0x15e7` is release-supported, the reset and the hang policy are tested on the 5625U. The condition "a hang must not freeze the composed screen" now has a kernel to stand on.
 - Step 0 is done and merged (`docs/APP-SERVER-COMPOSITOR.md`, three PRs up to `2e513bbe9f`). Its three open questions are decided ("Decided after step 0").

@@ -1,5 +1,23 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-15 - M11 done: the desktop composed on the GPU, tested on the 5625U (stick 50); it stays opt-in
+
+Problem: close M11 with the results of the stick, and say what is proven and what is not.
+
+Stick 50 (PR #4264, logs in `generated/boot-5625u-50/m11/`), four boots on the 5625U:
+- **Boot 1** (`gpu_compositor true`, `gpu_debug true`): `gpu compositor on radv`, `compose compare ok`, never `MISMATCH`, no `gpu compositor off`. VulkanTeapot and `vkcube` zero-copy on, no `zero-copy off` on RADV. Window memory type flags `0xe` with the cached bit, the kernel `bo` line with `snooped 1`. Painter write test: window buffer 41/128 against `malloc` 40/128. Shadow and frosted glass off and on, `animation open` and `close`, the Chart pause (`compositor paused: direct window`, `resumed`), every `r5-share-check` case pass, the exporter's buffers 20 before and after. 41 PASS, three FAIL: `animations off`, `animations on` (the compositor prints no such line; the check expected one that does not exist) and `animation workspace` (no workspace switch in the log).
+- **Boot 1, second run** of the scenario: `window 2 zero-copy off: import` on RADV, and the scenario lines (effects, animations, pause) not found after `check wait`. Not explained yet.
+- **Measurement, boot 1** (VulkanTeapot, the same boot): zero-copy 59.4 fps, app_server CPU 326–728 ms per 10 s; copy path 59.5 fps, 688–903 ms per 10 s. Compose median 0.9–1.4 ms in both. Both are held at the refresh rate, so zero-copy shows in the CPU time, not in the frame rate.
+- **Boot 2** (`gpu_compositor_fail true`): exactly one `gpu compositor off: forced failure`, the desktop kept going in the CPU mode. Pass.
+- **Boot 3** (`gpu_compositor_lavapipe true`): `gpu compositor on lavapipe: forced`, `compose compare ok`, `zero-copy off: lavapipe`, VulkanTeapot 59.5 fps, compose median about 2.0–2.1 ms, app_server CPU 3.5–3.7 s per 10 s. Pass.
+- **Boot 4** (`gpu_hang_test 1`): failed. The GPU self-test dropped app_server's GPU job, the screen froze for 14 s and the desktop switched to the CPU mode; no hang, no reset, no restart of the compositor. Fixed in `6829434c46` (the self-test no longer drops another client's job); **not booted again**.
+
+What changed in this close: the M11 row in `docs/GPU-ARCHITECTURE.md`, the status in `generated/gpu-m11/BRIEF.md`, What's new (build 10063), and `generated/AFTER-M11.md` with the open items.
+
+Decided: the GPU mode stays **opt-in** (`gpu_compositor true`). The default of decision 1 waits for a boot 4 that passes (the restart after a reset while composed, decision 14) and for the second-run zero-copy failure to be understood.
+
+Not tested: boot 4 with the fix, VirtualBox with the M11 image, the 5625U with a second screen.
+
 ## 2026-11-15 - Fourth M11 stack review and an external review: 23 findings fixed, eight left with a reason
 
 Problem: five read-only reviews of the whole M11 stack (on bb4658aea2) found 19 items, and an external read-only review of 5b0b19bb03 (`generated/gpu-m11/PROMPT-REVIEW-EXTERNAL.md`) found five more. One list with the status of each is `generated/gpu-m11/REVIEW-STACK-4.md`. Review 3 items 2 and 16 were incomplete. The owner asked to fix everything.
