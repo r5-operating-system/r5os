@@ -25,6 +25,14 @@ Mistakes on the way: the script that moved `Assemble()` turned three `\n` escape
 
 Not tested: no radio. The timeout, the late-answer drop, split events and ACL from a real controller, and `h2generic: controller ready` need the passed-through MT7922 in VirtualBox, which takes Bluetooth from Windows and waits for the owner's yes. ARM64 and RISC-V 64 were not built or tested.
 
+## 2026-11-15 - Painter: semi-transparent fills no longer write random alpha (a bug also in Haiku)
+
+Problem: Painter's `blend_line32()` (`drawing_support.h`), used for `B_OP_ALPHA` fills of whole rows (`_BlendRect32()`, the alpha overlay modes on runs of 4 pixels or more), built the row in a temporary buffer and never set its alpha byte, so the copy back wrote stack memory into the destination's alpha. On screen it does not show, but a `B_RGBA32` offscreen bitmap is read by programs, alpha included. Found by the M12 compare set (`draw-compare alpha-pixel-overlay-rect`: equal colour, Painter's alpha 0 or 30).
+
+What changed: `distro/app_server/drawing/drawing_support.h`, a copy of Haiku's header with one SPDX-Snippet: the row keeps the destination's alpha. `apply-app-server.py` copies it.
+
+Tested: built with `scripts/build-locked.sh` from this branch, `jam_exit=0`; the fix itself was seen in M12's compare set in QEMU (`alpha-pixel-*` operations equal after it).
+
 ## 2026-11-15 - Bluetooth step 0: bluetooth_server in distro/, six fixes, a smoke test
 
 Problem: `bluetooth_server` came only from `haiku/`, and a review found six bugs (`docs/BLUETOOTH.md`, step 0). A connection-state request for an unknown radio or address got no reply or dereferenced NULL; a missing or short `bdaddr` was read anyway; the port listener thread used the local device list while the application thread changed it; stop-watching never matched; `DeviceManager` leaked per device, its looper never ran (so a radio plugged in later was never seen), and a removed radio was ignored; the SDP server leaked every client descriptor.
