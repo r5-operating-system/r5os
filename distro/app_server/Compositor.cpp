@@ -64,6 +64,7 @@ static const bigtime_t kFenceSlice = 100000;
 static const bigtime_t kFenceLimit = 15000000;
 // M11 review: after a fence timeout, the last wait before memory is freed
 static const uint64 kFenceGraceNs = 5000000000ULL;
+static const uint64 kFenceStepNs = 100000000ULL;
 static const bigtime_t kReportInterval = 10000000;
 
 
@@ -762,8 +763,13 @@ Compositor::~Compositor()
 {
 	AccelerantHWInterface* accelerant
 		= dynamic_cast<AccelerantHWInterface*>(fScreen);
-	if (accelerant != NULL)
+	// Review after M11: cleared with the slot held, so a SetMode that
+	// already holds it ends first.
+	if (accelerant != NULL) {
+		fComposeSlot.Lock();
 		accelerant->SetModeGuard(NULL);
+		fComposeSlot.Unlock();
+	}
 	if (fThread >= 0) {
 		fQuit = true;
 		release_sem(fWakeSem);
@@ -1363,9 +1369,12 @@ void
 Compositor::_FreeBuffer(WindowBuffer* buffer, uint64 vulkanBuffer,
 	uint64 vulkanMemory)
 {
+	// Review after M11: a buffer kept because the GPU may still use it
+	// (fGpuBusy) still counts in the window memory.
+	if (atomic_get(&fGpuBusy) != 0)
+		return;
 	atomic_add64((int64*)&fWindowBytes, -(int64)buffer->Bytes());
-	if (fVulkan == NULL || buffer->Generation() != fGeneration
-		|| atomic_get(&fGpuBusy) != 0)
+	if (fVulkan == NULL || buffer->Generation() != fGeneration)
 		return;
 	fVulkan->vkDestroyBuffer(fVulkan->device, (VkBuffer)vulkanBuffer, NULL);
 	fVulkan->vkFreeMemory(fVulkan->device, (VkDeviceMemory)vulkanMemory,
@@ -2096,6 +2105,8 @@ Compositor::_ComposeLoop()
 			return;
 		if (fDebug)
 			_Report();
+		else
+			_ReadZeroCopySwitch();
 
 		// app_server ends: no switch, the desktop is going away
 		if (fQuit)
@@ -2260,11 +2271,19 @@ Compositor::_ComposeLoop()
 			// not wait for it), before the layers go at the end of this
 			// pass; a job that still runs keeps every buffer for good.
 			slot.Unlock();
-			if (fFailure != NULL && strcmp(fFailure, "fence timeout") == 0
-				&& fVulkan->vkWaitForFences(fVulkan->device, 1,
-					&fVulkan->fence, VK_TRUE, kFenceGraceNs) != VK_SUCCESS) {
-				atomic_set(&fGpuBusy, 1);
-				log_line("compose fence still busy: window memory kept");
+			if (fFailure != NULL && strcmp(fFailure, "fence timeout") == 0) {
+				// Review after M11: in steps, so app_server's quit does
+				// not wait the whole grace.
+				VkResult waited = VK_TIMEOUT;
+				for (uint64 spent = 0; spent < kFenceGraceNs && !fQuit
+						&& waited == VK_TIMEOUT; spent += kFenceStepNs) {
+					waited = fVulkan->vkWaitForFences(fVulkan->device, 1,
+						&fVulkan->fence, VK_TRUE, kFenceStepNs);
+				}
+				if (waited != VK_SUCCESS) {
+					atomic_set(&fGpuBusy, 1);
+					log_line("compose fence still busy: window memory kept");
+				}
 			}
 			// fFailure is set; the top of the loop handles it
 			continue;
@@ -3723,13 +3742,15 @@ Compositor::DirectScreenChanged(bool locked)
 	}
 	// M11 review: a count, not a flag. A team that waits for the lock
 	// while another gives it up keeps the pause.
-	int32 wanted = atomic_get(&fDirectScreenWanted);
-	while (wanted > 0) {
-		int32 was = atomic_test_and_set(&fDirectScreenWanted, wanted - 1,
-			wanted);
-		if (was == wanted)
-			break;
-		wanted = was;
+	// Review after M11: atomic_add, not a compare-and-swap. Haiku's inline
+	// atomic_test_and_set is a weak CAS and returns the expected value
+	// also when it failed (ARM64), which would resume while a team still
+	// holds the screen. A count that was already 0 (a lock taken while the
+	// GPU mode was off) is given back.
+	int32 wanted = atomic_add(&fDirectScreenWanted, -1);
+	if (wanted <= 0) {
+		atomic_add(&fDirectScreenWanted, 1);
+		wanted = 0;
 	}
 	if (wanted > 1 || !fActive)
 		return;
@@ -4553,6 +4574,27 @@ Compositor::ShareEnd(team_id team, int32 viewToken, int32 shareId)
 }
 
 
+/*!	M11 stick: the zero-copy test switch, read again at most every report
+	interval, so the stick can change it without a restart. Only new
+	swapchains follow it. Review after M11: also without gpu_debug.
+	Compose thread only.
+*/
+void
+Compositor::_ReadZeroCopySwitch()
+{
+	static bigtime_t sLastRead = 0;
+	bigtime_t now = system_time();
+	if (now - sLastRead < kReportInterval)
+		return;
+	sLastRead = now;
+	settings options;
+	load_settings(options);
+	int32 off = options.noZeroCopy ? 1 : 0;
+	if (atomic_get_and_set(&fZeroCopyOff, off) != off)
+		log_line("zero-copy setting %s", off != 0 ? "off" : "on");
+}
+
+
 void
 Compositor::_Report()
 {
@@ -4584,14 +4626,7 @@ Compositor::_Report()
 	log_line("team cpu %" B_PRId64 " ms per 10 s",
 		(teamCpu - fTeamCpuAtReport) / 1000);
 	fTeamCpuAtReport = teamCpu;
-	// M11 stick: the zero-copy test switch, read again every report, so
-	// the stick can change it without a restart. Only new swapchains
-	// follow it.
-	settings options;
-	load_settings(options);
-	int32 off = options.noZeroCopy ? 1 : 0;
-	if (atomic_get_and_set(&fZeroCopyOff, off) != off)
-		log_line("zero-copy setting %s", off != 0 ? "off" : "on");
+	_ReadZeroCopySwitch();
 	// M11 step 4: what the median above was measured with
 	uint32 effects = fEffects;
 	log_line("compose effects shadow %s frosted %s strength %s",

@@ -98,7 +98,8 @@ public:
 	// first, so a frame never uses a back buffer the new mode freed.
 	// Order: fWindowLock (write) -> the slot -> this interface.
 			void				SetModeGuard(BLocker* guard)
-									{ fModeGuard = guard; }
+									{ __atomic_store_n(&fModeGuard, guard,
+										__ATOMIC_RELEASE); }
 // SPDX-SnippetEnd
 
 protected:
