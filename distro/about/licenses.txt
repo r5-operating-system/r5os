@@ -28,6 +28,12 @@ OpenGL support using Mesa 25 and libglvnd.
 License: MIT, Apache-2.0
 Source: https://www.mesa3d.org
 
+# Skia
+2D drawing in app_server using Skia, skcms and the Vulkan Memory Allocator.
+
+License: BSD-3-Clause, MIT
+Source: https://skia.org
+
 # VirtualBox
 VirtualBox Guest Additions.
 
