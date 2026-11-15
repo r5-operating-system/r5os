@@ -107,12 +107,11 @@ Support levels (do not skip): **buildable → bootable → functional → deskto
 
 1. Run relevant tests; inspect the diff for unrelated edits.
 2. Commit locally. Ticket-status changes must include `python3 scripts/tracker-report.py` plus `tracker/r5-status.tsv` and `tracker/STATUS.md` in the same commit.
-3. Apply overlays into the WSL Haiku tree (`scripts/apply-overlay.sh` or the relevant `apply-*.py`). `scripts/jam-r5-raw.sh` does not apply overlays by itself.
-4. Jam AMD64 (`scripts/jam-r5-raw.sh` in WSL).
-5. Boot QEMU (`scripts/run-qemu-r5.sh`).
-6. For arch-specific code, test that arch (or state that it was not tested).
-7. Update `CHANGELOG.md` (newest first) for user-visible behavior, chosen paths, mistakes, and limits.
-8. Ask before `git push` / PR to `main`.
+3. Build AMD64 from your own worktree with `scripts/build-locked.sh` in WSL. It applies `distro/` (`scripts/apply-overlay.sh`) and jams under one lock on the shared WSL Haiku tree. The apply first puts back what another worktree left in that tree (`scripts/tree-owner.sh`). Do not run `apply-overlay.sh`, an `apply-*.py` and `jam-r5-raw.sh` one after the other. Do not reset or `git clean` the shared tree, and do not change another session's files in it.
+4. Boot QEMU on your own copy of `r5-os.image`. `scripts/run-qemu-r5.sh` stops every QEMU, so do not use it while another session may run one.
+5. For arch-specific code, test that arch (or state that it was not tested).
+6. Update `CHANGELOG.md` (newest first) for user-visible behavior, chosen paths, mistakes, and limits.
+7. Ask before `git push` / PR to `main`.
 
 A USB stick is written only with `scripts/write-stick.py <image>`, from Windows Python (`py`). The script asks for elevation itself, writes only to a known test stick (the SanDisk Ultra USB 3 or the old General UDisk, list `STICK_NAMES`), and checks the read-back hash. After a boot, `scripts/read-stick-logs.py` copies the self-test, the syslog, the session log and the radeon_hd settings into `generated/boot-5625u-<n>/`. It only reads, it refuses disk 0, and it asks for elevation itself. If it needs a change (a larger image, another stick, a new Windows error), change that script. Do not use PowerShell, `dd` or another tool to write a stick, and do not write a new writer script. Build the stick as the normal output (`r5-os-anyboot.iso`), and give a copy a name with `stick` in it only when it must be kept apart. After a matching write the script removes older `*stick*` images in that folder and in the WSL `r5os` folder (`--keep-old` keeps them). Do not leave `-part`, `-m4` or `-vm` images behind; remove them when the stick is written.
 
