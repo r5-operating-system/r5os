@@ -15,6 +15,10 @@ if [[ ! -d "$ROOT/haiku/build/jam" ]]; then
 	echo "haiku/ is missing. Run scripts/setup-wsl.sh first." >&2
 	exit 1
 fi
+# Put back what an apply from another worktree left in the shared tree, and
+# record what this apply writes (tree-owner.sh), also when it fails.
+bash "$ROOT/scripts/tree-owner.sh" begin "$ROOT"
+trap 'bash "$ROOT/scripts/tree-owner.sh" end "$ROOT"' EXIT
 
 tr -d '\r' < "$ROOT/distro/UserBuildConfig" | sed "s/^HAIKU_REVISION = .*/HAIKU_REVISION = ${REV} ;/" > "$DEST"
 echo "Wrote $DEST (HAIKU_REVISION=${REV})"
