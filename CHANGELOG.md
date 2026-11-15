@@ -1,5 +1,14 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-15 - Build: jam uses every core
+
+Problem: `scripts/jam-r5-raw.sh` ran `jam -q @r5-raw` without `-j`, so jam ran one job at a time while WSL has 12 cores.
+
+What changed: jam now runs with `-j$(nproc)`; `R5_JAM_JOBS` overrides it (for example `R5_JAM_JOBS=1` to read one error without the output of other jobs mixed in). The log shows `jam jobs=<n>`.
+
+Limits: not timed yet; the first build with it shows the gain. A worktree gets it only after it merges origin/main. With `-q` jam still stops at the first failure, but lines of parallel jobs can interleave in the log.
+
+
 ## 2026-11-15 - Desktop: no Quick Tour and User Guide links
 
 Problem: a new desktop showed Haiku's Quick Tour and User Guide links. They introduce Haiku, not R5, and are not needed to start.
