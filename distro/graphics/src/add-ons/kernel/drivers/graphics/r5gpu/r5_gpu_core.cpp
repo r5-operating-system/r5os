@@ -763,9 +763,13 @@ gpu_bo_create(gpu_client* client, void* buffer, size_t length)
 	in.area = bo->area;
 	in.bytes = bytes;
 	status = gpu_copy_out(buffer, length, &in, sizeof(in));
-	if (status != B_OK)
+	if (status != B_OK) {
+		/* External review: the program never learns the handle, so the
+		 * buffer goes again, as in BO_IMPORT and SCANOUT_BO. */
+		gpu_bo_detach(client, bo, in.handle);
 		return gpu_refuse("BO_CREATE", "copy", status, in.handle, in.domain,
 			bytes, 0, 0, 0, in.flags);
+	}
 	return B_OK;
 }
 

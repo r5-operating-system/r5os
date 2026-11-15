@@ -2141,6 +2141,9 @@ static int amd_scanout(void* info, uint32* width, uint32* height,
  * given to another one. The last reference deletes those copies first;
  * the program's own clones are gone by then. The ids are taken under the
  * cache lock and deleted after it (vm_delete_area locks the cache). */
+extern "C" bool team_is_valid(team_id id);
+
+
 static int
 amd_drop_copies(int32_t kernelArea)
 {
@@ -2175,7 +2178,10 @@ amd_drop_copies(int32_t kernelArea)
 			return B_OK;
 		}
 		for (int32 i = 0; i < count; i++) {
-			vm_delete_area(teams[i], areas[i], true);
+			// External review: a copy whose team just ended is gone
+			// with it, as in gpu_bo_release.
+			if (team_is_valid(teams[i]))
+				vm_delete_area(teams[i], areas[i], true);
 			deleted++;
 			lastTeam = teams[i];
 		}
