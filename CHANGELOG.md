@@ -1,5 +1,14 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-15 - Desktop: no Quick Tour and User Guide links
+
+Problem: a new desktop showed Haiku's Quick Tour and User Guide links. They introduce Haiku, not R5, and are not needed to start.
+
+What changed: `distro/rest/build/jam/OptionalPackages`, a copy of Haiku's file with one SPDX-Snippet: the two `AddSymlinkToHaikuImage home Desktop` lines are gone, so the administrator's image home no longer gets them. `distro/users/AccountAdmin.cpp` `ensure_desktop_links()` no longer creates them for new accounts (Home stays). `apply-rest-native.py` copies the file; no script change.
+
+Limits: the programs and the documentation stay installed (`quicktour`, `userguide` in Terminal; Help links in apps still work). Existing installs keep the links until the user removes them. Removing the packages is a later step, after checking which apps link to the guide. No What's new section yet; it goes into the next build's section.
+
+
 ## 2026-11-15 - Painter: semi-transparent fills no longer write random alpha (a bug also in Haiku)
 
 Problem: Painter's `blend_line32()` (`drawing_support.h`), used for `B_OP_ALPHA` fills of whole rows (`_BlendRect32()`, the alpha overlay modes on runs of 4 pixels or more), built the row in a temporary buffer and never set its alpha byte, so the copy back wrote stack memory into the destination's alpha. On screen it does not show, but a `B_RGBA32` offscreen bitmap is read by programs, alpha included. Found by the M12 compare set (`draw-compare alpha-pixel-overlay-rect`: equal colour, Painter's alpha 0 or 30).
