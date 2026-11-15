@@ -1,0 +1,7 @@
+SubDir HAIKU_TOP src bin r5-offscreen-test ;
+
+# M12 step 5: offscreen BBitmap views and Sync() (APP-SERVER-GPU-DRAWING.md).
+Application r5-offscreen-test :
+	r5-offscreen-test.cpp
+	: be [ TargetLibstdc++ ]
+	;
