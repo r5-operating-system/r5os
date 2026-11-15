@@ -101,6 +101,12 @@ R5Decorator::RegionAt(BPoint where, int32& tab) const
 		&& where.y < fBorderRect.top + kFrameWidth
 		&& where.x >= fBorderRect.left && where.x <= fBorderRect.right)
 		region = REGION_TOP_BORDER;
+	// The same for a tab on the left (kLeftTitledWindowLook) and its line.
+	if (region == REGION_TAB && fTopTab->look == kLeftTitledWindowLook
+		&& where.x >= fBorderRect.left
+		&& where.x < fBorderRect.left + kFrameWidth
+		&& where.y >= fBorderRect.top && where.y <= fBorderRect.bottom)
+		region = REGION_LEFT_BORDER;
 
 	switch (region) {
 		case REGION_NONE:
