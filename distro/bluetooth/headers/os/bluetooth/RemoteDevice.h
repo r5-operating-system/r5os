@@ -22,15 +22,11 @@
 #define B_BT_SUCCEEDED 0x01
 
 
-namespace Bluetooth {
-
-class Connection;
-class LocalDevice;
-
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-// What RemoteDevice::GetConnectionDetails() fills in. The caller sets
+// What RemoteDevice::GetConnectionDetails() fills in. Outside the
+// namespace, like bdaddr_t, so it needs no qualifier. The caller sets
 // "size" to sizeof(bt_connection_details); a later, larger version of this
 // struct only adds fields at the end.
 struct bt_connection_details {
@@ -46,6 +42,12 @@ struct bt_connection_details {
 #define BT_TRANSPORT_BR_EDR		0
 #define BT_TRANSPORT_LE			1
 // SPDX-SnippetEnd
+
+namespace Bluetooth {
+
+class Connection;
+class LocalDevice;
+
 
 class RemoteDevice : public BluetoothDevice {
 
