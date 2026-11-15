@@ -39,6 +39,11 @@
 #include <bluetooth/bdaddrUtils.h>
 
 #include "acl.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include "hci_assemble.h"
+// SPDX-SnippetEnd
 
 
 int32 api_version = B_CUR_DRIVER_API_VERSION;
@@ -54,7 +59,13 @@ typedef PortListener<void,
 net_buffer_module_info* gBufferModule = NULL;
 struct bluetooth_core_data_module_info* btCoreData = NULL;
 
-static mutex sListLock;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// Recursive: the RX thread holds it while a packet is assembled and posted,
+// and that path may look a device up again.
+static recursive_lock sListLock;
+// SPDX-SnippetEnd
 static sem_id sLinkChangeSemaphore;
 static DoublyLinkedList<bluetooth_device> sDeviceList;
 
@@ -68,6 +79,11 @@ bluetooth_device*
 FindDeviceByID(hci_id hid)
 {
 	bluetooth_device* device;
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	RecursiveLocker locker(&sListLock);
+	// SPDX-SnippetEnd
 
 	DoublyLinkedList<bluetooth_device>::Iterator iterator
 		= sDeviceList.GetIterator();
@@ -94,123 +110,88 @@ PostTransportPacket(hci_id hid, bt_packet_t type, void* data, size_t count)
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// The reassembly itself is hci_assemble.h, which scripts/fuzz-bt.sh also
+// runs on the host. The old code here panicked on an event header split
+// over two transfers and on every event that arrived in pieces, looped
+// forever on SCO, and did not check the ACL allocation.
+struct NetBufferAssembleOps {
+	typedef net_buffer* Buffer;
+
+	bluetooth_device* device;
+
+	Buffer Current(uint8 type)
+	{
+		return device->fBuffersRx[type];
+	}
+
+	void SetCurrent(uint8 type, Buffer buffer)
+	{
+		device->fBuffersRx[type] = buffer;
+		if (buffer == NULL)
+			device->fExpectedPacketSize[type] = 0;
+	}
+
+	Buffer Create()
+	{
+		net_buffer* buffer = gBufferModule->create(0);
+		return buffer;
+	}
+
+	bool Append(Buffer buffer, const uint8* data, size_t size)
+	{
+		return gBufferModule->append(buffer, data, size) == B_OK;
+	}
+
+	size_t Size(Buffer buffer)
+	{
+		return buffer->size;
+	}
+
+	bool Read(Buffer buffer, size_t offset, uint8* data, size_t size)
+	{
+		return gBufferModule->read(buffer, offset, data, size) == B_OK;
+	}
+
+	void Destroy(Buffer buffer)
+	{
+		gBufferModule->free(buffer);
+	}
+
+	void PostEvent(const uint8* event, size_t size)
+	{
+		TRACE("%s: EVENT posted in HCI
+", __func__);
+		btCoreData->PostEvent(device, (void*)event, size);
+	}
+
+	void PostAcl(Buffer buffer)
+	{
+		buffer->protocol = BT_ACL;
+		AclAssembly(buffer, device->index);
+	}
+};
+
+
 status_t
 Assemble(bluetooth_device* bluetoothDevice, bt_packet_t type, void* data,
 	size_t count)
 {
-	net_buffer* nbuf = bluetoothDevice->fBuffersRx[type];
-
-	size_t currentPacketLen = 0;
-
-	while (count) {
-
-		if (nbuf == NULL) {
-			// new buffer incoming
-			switch (type) {
-				case BT_EVENT:
-					if (count >= HCI_EVENT_HDR_SIZE) {
-						struct hci_event_header* headerPacket
-							= (struct hci_event_header*)data;
-						bluetoothDevice->fExpectedPacketSize[type]
-							= HCI_EVENT_HDR_SIZE + headerPacket->elen;
-
-						if (count >= bluetoothDevice->fExpectedPacketSize[type]) {
-							// the whole packet is here so it can be already posted.
-							TRACE("%s: EVENT posted in HCI\n", __func__);
-							btCoreData->PostEvent(bluetoothDevice, data,
-								bluetoothDevice->fExpectedPacketSize[type]);
-
-						} else {
-							nbuf = gBufferModule->create(
-								bluetoothDevice->fExpectedPacketSize[type]);
-							bluetoothDevice->fBuffersRx[type] = nbuf;
-
-							nbuf->protocol = type;
-						}
-
-					} else {
-						panic("EVENT frame corrupted\n");
-						return EILSEQ;
-					}
-					break;
-
-				case BT_ACL:
-					if (count >= HCI_ACL_HDR_SIZE) {
-						struct hci_acl_header* headerPkt = (struct hci_acl_header*)data;
-
-						bluetoothDevice->fExpectedPacketSize[type] = HCI_ACL_HDR_SIZE
-							+ B_LENDIAN_TO_HOST_INT16(headerPkt->alen);
-
-						// Create the buffer -> TODO: this allocation can fail
-						nbuf = gBufferModule->create(
-							bluetoothDevice->fExpectedPacketSize[type]);
-						bluetoothDevice->fBuffersRx[type] = nbuf;
-
-						nbuf->protocol = type;
-					} else {
-						panic("ACL frame corrupted\n");
-						return EILSEQ;
-					}
-					break;
-
-				case BT_SCO:
-
-					break;
-
-				default:
-					panic("unknown packet type in assembly");
-					break;
-			}
-
-			currentPacketLen = bluetoothDevice->fExpectedPacketSize[type];
-
-		} else {
-			// Continuation of a packet
-			currentPacketLen = bluetoothDevice->fExpectedPacketSize[type] - nbuf->size;
-		}
-		if (nbuf != NULL) {
-			currentPacketLen = min_c(currentPacketLen, count);
-
-			gBufferModule->append(nbuf, data, currentPacketLen);
-
-			if ((bluetoothDevice->fExpectedPacketSize[type] - nbuf->size) == 0) {
-
-				switch (nbuf->protocol) {
-					case BT_EVENT:
-						panic("need to send full buffer to btdatacore!\n");
-						btCoreData->PostEvent(bluetoothDevice, data,
-							bluetoothDevice->fExpectedPacketSize[type]);
-
-						break;
-					case BT_ACL:
-						// TODO: device descriptor has been fetched better not
-						// pass id again
-						TRACE("%s: ACL parsed in ACL!\n", __func__);
-						AclAssembly(nbuf, bluetoothDevice->index);
-						break;
-					default:
-
-						break;
-				}
-
-				bluetoothDevice->fBuffersRx[type] = nbuf = NULL;
-				bluetoothDevice->fExpectedPacketSize[type] = 0;
-			} else {
-				if (type == BT_ACL) {
-					TRACE("%s: ACL Packet not filled size %" B_PRIu32
-						" expected=%" B_PRIuSIZE "\n", __func__, nbuf->size,
-						bluetoothDevice->fExpectedPacketSize[type]);
-				}
-			}
-
-		}
-		// in case in the pipe there is info about the next buffer
-		count -= currentPacketLen;
-		data = (void*)((uint8*)data + currentPacketLen);
-	}
-
-	return B_OK;
+	NetBufferAssembleOps ops = { bluetoothDevice };
+	status_t status = hci_assemble(ops, (uint8)type, (const uint8*)data,
+		count);
+	if (status == B_BAD_VALUE)
+		ERROR("%s: unknown packet type %d
+", __func__, type);
+	else if (status != B_OK)
+		ERROR("%s: dropped a packet of type %d: %s
+", __func__, type,
+			strerror(status));
+	return status;
 }
+// SPDX-SnippetEnd
 
 
 status_t
@@ -218,6 +199,13 @@ HciPacketHandler(void* data, int32 code, size_t size)
 {
 	hci_id deviceId = Bluetooth::CodeHandler::Device(code);
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Held until the packet is posted, so UnregisterDriver() cannot free the
+	// device in between.
+	RecursiveLocker locker(&sListLock);
+	// SPDX-SnippetEnd
 	bluetooth_device* bluetoothDevice = FindDeviceByID(deviceId);
 
 	TRACE("%s: to assemble %" B_PRIuSIZE " bytes of 0x%" B_PRIx32 "\n",
@@ -257,7 +245,11 @@ RegisterDriver(bt_hci_transport_hooks* hooks, bluetooth_device** _device)
 	device->linkMode = (HCI_LM_ACCEPT);
 	device->mtu = L2CAP_MTU_MINIMUM; // TODO: ensure specs min value
 
-	MutexLocker _(&sListLock);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	RecursiveLocker _(&sListLock);
+	// SPDX-SnippetEnd
 
 	if (sDeviceList.IsEmpty())
 		device->index = HCI_DEVICE_INDEX_OFFSET; // REVIEW: dev index
@@ -279,10 +271,27 @@ RegisterDriver(bt_hci_transport_hooks* hooks, bluetooth_device** _device)
 status_t
 UnregisterDriver(hci_id id)
 {
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// The RX thread uses the list too (HciPacketHandler).
+	RecursiveLocker locker(&sListLock);
+	// SPDX-SnippetEnd
 	bluetooth_device* device = FindDeviceByID(id);
 
 	if (device == NULL)
 		return B_ERROR;
+
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// A packet that was half assembled when the radio went away.
+	for (int index = 0; index < HCI_NUM_PACKET_TYPES; index++) {
+		if (device->fBuffersRx[index] != NULL)
+			gBufferModule->free(device->fBuffersRx[index]);
+		device->fBuffersRx[index] = NULL;
+	}
+	// SPDX-SnippetEnd
 
 	if (device->GetDoublyLinkedListLink()->next != NULL
 		|| device->GetDoublyLinkedListLink()->previous != NULL
@@ -298,8 +307,12 @@ UnregisterDriver(hci_id id)
 status_t
 PostCommand(hci_id hciId, net_buffer* buffer)
 {
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
 	if (buffer == NULL)
-		panic("passing null buffer");
+		return B_BAD_VALUE;
+	// SPDX-SnippetEnd
 
 	bluetooth_device* device = FindDeviceByID(hciId);
 	if (device == NULL) {
@@ -321,8 +334,12 @@ PostACL(hci_id hciId, net_buffer* buffer)
 	net_buffer* next_frame = buffer;
 	uint8 flag = HCI_ACL_PACKET_START;
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
 	if (buffer == NULL)
-		panic("passing null buffer");
+		return B_BAD_VALUE;
+	// SPDX-SnippetEnd
 
 	uint16 handle = buffer->type; // TODO: CodeHandler
 
@@ -355,13 +372,24 @@ PostACL(hci_id hciId, net_buffer* buffer)
 		{
 			NetBufferPrepend<struct hci_acl_header> bufferHeader(curr_frame);
 			status_t status = bufferHeader.Status();
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			// The frame was leaked here, and the rest went out without it.
 			if (status < B_OK) {
-				// free the buffer
-				continue;
+				gBufferModule->free(curr_frame);
+				if (next_frame != NULL)
+					gBufferModule->free(next_frame);
+				return status;
 			}
 
-			bufferHeader->handle = pack_acl_handle_flags(handle, flag, 0);
-			bufferHeader->alen = curr_frame->size - sizeof(struct hci_acl_header);
+			// The ACL header is little-endian (Core 6.0, Vol 4, Part E,
+			// 5.4.2).
+			bufferHeader->handle = B_HOST_TO_LENDIAN_INT16(
+				pack_acl_handle_flags(handle, flag, 0));
+			bufferHeader->alen = B_HOST_TO_LENDIAN_INT16(
+				curr_frame->size - sizeof(struct hci_acl_header));
+			// SPDX-SnippetEnd
 		}
 
 		// Send to driver
@@ -457,15 +485,26 @@ bluetooth_std_ops(int32 op, ...)
 
 			sLinkChangeSemaphore = create_sem(0, "bt sem");
 			if (sLinkChangeSemaphore < B_OK) {
-				put_module(NET_STACK_MODULE_NAME);
+				// SPDX-SnippetBegin
+				// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+				// SPDX-License-Identifier: MIT
+				// NET_STACK_MODULE_NAME was never taken here.
+				put_module(BT_CORE_DATA_MODULE_NAME);
+				put_module(NET_BUFFER_MODULE_NAME);
+				// SPDX-SnippetEnd
 				ERROR("%s: Link change semaphore failed\n", __func__);
 				return sLinkChangeSemaphore;
 			}
 
-			mutex_init(&sListLock, "bluetooth devices");
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			recursive_lock_init(&sListLock, "bluetooth devices");
 
 			// status = InitializeAclConnectionThread();
-			ERROR("%s: Connection Thread error\n", __func__);
+			// That thread was never started, so the "Connection Thread
+			// error" logged here on every boot said nothing.
+			// SPDX-SnippetEnd
 
 			add_debugger_command("btLocalDevices", &dump_bluetooth_devices,
 				"Lists Bluetooth LocalDevices registered in the Stack");
@@ -477,10 +516,14 @@ bluetooth_std_ops(int32 op, ...)
 		{
 			delete_sem(sLinkChangeSemaphore);
 
-			mutex_destroy(&sListLock);
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			recursive_lock_destroy(&sListLock);
 			put_module(NET_BUFFER_MODULE_NAME);
-			put_module(NET_STACK_MODULE_NAME);
+			// NET_STACK_MODULE_NAME was never taken, so it is not put.
 			put_module(BT_CORE_DATA_MODULE_NAME);
+			// SPDX-SnippetEnd
 			remove_debugger_command("btLocalDevices", &dump_bluetooth_devices);
 			// status_t status = QuitAclConnectionThread();
 
