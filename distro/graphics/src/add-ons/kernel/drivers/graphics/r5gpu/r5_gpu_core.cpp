@@ -958,6 +958,10 @@ gpu_hang_run(uint32 actions)
 				 * last sequence (restart), so nothing parked is left. */
 				for (uint32 i = 0; i < kMaxJob; i++)
 					sJobs[i].live = false;
+				/* The CP runs again: a later loss (a failed self-test,
+				 * a STAGE_P error) has not stopped it, so parked
+				 * buffers stay until the next reset that stops it. */
+				sCpStopped = false;
 				sLost = false;
 				ok = gR5GpuOps.selftest != NULL
 					&& gR5GpuOps.selftest(sInfo) == B_OK && !sLost;
