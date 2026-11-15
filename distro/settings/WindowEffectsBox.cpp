@@ -117,6 +117,7 @@ WindowEffectsBox::MessageReceived(BMessage* message)
 			// M11 review: the Appearance program or r5-effects-test may
 			// have changed the other effects since this page opened.
 			fEffects = BAppearanceKit::window_effects();
+			fStrength = BAppearanceKit::window_effect_strength();
 			uint32 effects = fEffects & ~flag;
 			if (box->Value() == B_CONTROL_ON)
 				effects |= flag;
@@ -129,6 +130,7 @@ WindowEffectsBox::MessageReceived(BMessage* message)
 			int32 strength;
 			if (message->FindInt32("strength", &strength) == B_OK) {
 				fEffects = BAppearanceKit::window_effects();
+				fStrength = BAppearanceKit::window_effect_strength();
 				_Apply(fEffects, strength);
 			}
 			break;
