@@ -12,7 +12,10 @@
  *		tracker and the event stream filter (h2generic/h2command.h).
  *	l2cap	the L2CAP signalling checks (l2cap/l2cap_parse.h): random and
  *		well-formed signalling packets walked the way the dispatcher
- *		walks them, configuration options, PSM and fixed CID rules.
+ *		walks them, configuration options, PSM and fixed CID rules; the
+ *		LE codes and credit-based frames (step 1c).
+ *	le	what bluetooth_server reads from an LE device (server/le_parse.h,
+ *		step 6): advertising reports and data, SMP lengths, ATT responses.
  * Prints "<target>_fuzz: <seconds>s 0 crashes" when it ends; ASan or UBSan
  * stop it with a report on a fault.
  */
@@ -28,6 +31,9 @@
 #include "hci_assemble.h"
 #include "h2command.h"
 #include "l2cap_parse.h"
+#include "le_parse.h"
+
+#include <algorithm>
 
 
 static uint64_t gState = 0x9e3779b97f4a7c15ULL;
@@ -530,6 +536,141 @@ fuzz_l2cap_round()
 		&& l2cap_parse_is_fixed_channel(0x0006)
 		&& !l2cap_parse_is_fixed_channel(0x0040)
 		&& !l2cap_parse_is_fixed_channel(0), "fixed channels");
+
+	// Step 1c: the LE codes, the response rule and the CID counts.
+	for (int code = 0; code < 256; code++) {
+		const bool le = l2cap_parse_code_allowed((uint8)code, true);
+		const bool bredr = l2cap_parse_code_allowed((uint8)code, false);
+		check(!(le && bredr) || code == 0x01 || code == 0x06 || code == 0x07,
+			"only reject and disconnection serve both channels");
+	}
+	check(l2cap_parse_is_response(0x18) && l2cap_parse_is_response(0x15)
+		&& !l2cap_parse_is_response(0x19) && !l2cap_parse_is_response(0x16)
+		&& !l2cap_parse_is_response(0x13) && !l2cap_parse_is_response(0x1a),
+		"credit-based answers");
+	uint16 length = (uint16)(next_word() % 40);
+	int cids = l2cap_parse_cid_count(length, 8);
+	check(cids >= 0 && cids <= L2CAP_PARSE_ECRED_MAX_CHANNELS, "cid count");
+	if (cids > 0)
+		check(8 + 2 * cids == length, "cid count fits the length");
+
+	// LE credit-based frames: random frames never break the state, and
+	// a well-formed SDU split into frames comes out whole.
+	l2cap_coc_rx rx = {};
+	rx.mtu = (uint16)(23 + next_word() % 2000);
+	rx.mps = (uint16)(23 + next_word() % 300);
+	for (int i = 0; i < 20; i++) {
+		std::vector<uint8> frame(next_word() % (rx.mps + 8));
+		for (size_t j = 0; j < frame.size(); j++)
+			frame[j] = (uint8)next_word();
+		size_t offset = 0;
+		int result = l2cap_coc_rx_frame(&rx, frame.data(), frame.size(),
+			&offset);
+		check(result == L2CAP_COC_ERROR || offset <= frame.size(), "offset");
+		check(rx.received <= rx.sdu_length || rx.sdu_length == 0, "progress");
+		if (result == L2CAP_COC_ERROR)
+			rx.sdu_length = rx.received = 0;
+	}
+
+	rx.sdu_length = rx.received = 0;
+	const size_t sdu = 1 + next_word() % rx.mtu;
+	size_t sent = 0;
+	bool first = true;
+	int complete = 0;
+	while (sent < sdu) {
+		const size_t room = rx.mps - (first ? 2 : 0);
+		const size_t piece = std::min(room, sdu - sent);
+		std::vector<uint8> frame;
+		if (first) {
+			frame.push_back((uint8)(sdu & 0xff));
+			frame.push_back((uint8)(sdu >> 8));
+		}
+		frame.resize(frame.size() + piece, 0x5a);
+		size_t offset = 0;
+		int result = l2cap_coc_rx_frame(&rx, frame.data(), frame.size(),
+			&offset);
+		check(result != L2CAP_COC_ERROR, "well-formed frame");
+		check(((result & L2CAP_COC_START) != 0) == first, "start flag");
+		check(offset == (first ? 2u : 0u), "data offset");
+		if ((result & L2CAP_COC_COMPLETE) != 0)
+			complete++;
+		sent += piece;
+		first = false;
+	}
+	check(complete == 1 && rx.sdu_length == 0, "one whole SDU");
+}
+
+
+// Step 6: what bluetooth_server reads from an LE device (le_parse.h).
+static void
+fuzz_le_round()
+{
+	// Advertising reports, legacy and extended, mostly near-valid.
+	for (int extended = 0; extended < 2; extended++) {
+		std::vector<uint8> event(next_word() % 260);
+		for (size_t i = 0; i < event.size(); i++)
+			event[i] = (uint8)next_word();
+		if (!event.empty())
+			event[0] = (uint8)(1 + next_word() % 3);
+		size_t offset = 1;
+		le_adv_report report;
+		int reports = 0;
+		while (le_adv_report_next(event.data(), event.size(), extended != 0,
+				&offset, &report)) {
+			check(report.data >= event.data()
+				&& report.data + report.data_length
+					<= event.data() + event.size(), "report data inside");
+			le_ad_info info;
+			memset(&info, 0, sizeof(info));
+			le_ad_parse(report.data, report.data_length, &info);
+			check(strlen(info.name) <= LE_AD_NAME_MAX, "name length");
+			le_ad_class_of_device(&info);
+			check(++reports < 300, "reports end");
+		}
+		check(offset <= event.size() + 1, "report offset");
+	}
+
+	// AD structures on their own.
+	{
+		std::vector<uint8> data(next_word() % 64);
+		for (size_t i = 0; i < data.size(); i++)
+			data[i] = (uint8)next_word();
+		for (size_t i = 0; i + 1 < data.size(); i += 2 + next_word() % 6) {
+			data[i] = (uint8)(next_word() % 12);
+			data[i + 1] = (uint8)(next_word() % 2 == 0 ? 0x09 : 0x19);
+		}
+		le_ad_info info;
+		memset(&info, 0, sizeof(info));
+		le_ad_parse(data.data(), data.size(), &info);
+		check(strlen(info.name) <= LE_AD_NAME_MAX, "ad name length");
+	}
+
+	// SMP lengths.
+	for (int code = 0; code < 256; code++) {
+		size_t length = le_smp_pdu_length((uint8)code);
+		check(length == 0 || (length >= 2 && length <= 65), "smp length");
+	}
+
+	// ATT responses, walked like the GATT client walks them.
+	{
+		std::vector<uint8> pdu(next_word() % 120);
+		for (size_t i = 0; i < pdu.size(); i++)
+			pdu[i] = (uint8)next_word();
+		if (pdu.size() >= 2) {
+			const uint8 opcodes[3] = { 0x05, 0x09, 0x11 };
+			pdu[0] = opcodes[next_word() % 3];
+			pdu[1] = (uint8)(next_word() % 24);
+		}
+		size_t offset = 0;
+		le_att_entry entry;
+		int entries = 0;
+		while (le_att_next(pdu.data(), pdu.size(), &offset, &entry)) {
+			check(entry.value >= pdu.data() && entry.value + entry.value_length
+				<= pdu.data() + pdu.size(), "att entry inside");
+			le_att_uuid16(entry.value, entry.value_length);
+			check(++entries < 200, "att entries end");
+		}
+	}
 }
 
 
@@ -545,8 +686,9 @@ main(int argc, char** argv)
 {
 	bool hci = argc == 3 && strcmp(argv[1], "hci") == 0;
 	bool l2cap = argc == 3 && strcmp(argv[1], "l2cap") == 0;
-	if (!hci && !l2cap) {
-		fprintf(stderr, "usage: bt-fuzz hci|l2cap <seconds>\n");
+	bool le = argc == 3 && strcmp(argv[1], "le") == 0;
+	if (!hci && !l2cap && !le) {
+		fprintf(stderr, "usage: bt-fuzz hci|l2cap|le <seconds>\n");
 		return 2;
 	}
 	int seconds = atoi(argv[2]);
@@ -559,7 +701,9 @@ main(int argc, char** argv)
 			fuzz_reassembly_garbage();
 			fuzz_tracker_round();
 			fuzz_event_stream_round();
-		} else
+		} else if (le)
+			fuzz_le_round();
+		else
 			fuzz_l2cap_round();
 		rounds++;
 	}

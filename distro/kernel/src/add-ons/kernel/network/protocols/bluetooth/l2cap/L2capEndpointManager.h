@@ -24,6 +24,21 @@ public:
 	L2capEndpoint*		GetForChannel(uint16 cid);
 	void				Disconnected(HciConnection* connection);
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// LE (<R5BluetoothLE.h>): LE PSMs are their own space, the fixed
+	// channels have one socket each, and LE channels are 0x40 to 0x7F.
+	status_t			BindLE(L2capEndpoint* endpoint, const sockaddr* address);
+	L2capEndpoint*		GetForLEPSM(uint16 psm);
+	status_t			BindFixed(L2capEndpoint* endpoint, const sockaddr* address);
+	L2capEndpoint*		GetForFixed(uint16 cid);
+	status_t			BindToLEChannel(L2capEndpoint* endpoint);
+	// The channel on this link whose remote CID is dcid.
+	L2capEndpoint*		GetForDestination(HciConnection* connection,
+							uint16 dcid);
+	// SPDX-SnippetEnd
+
 private:
 	struct EndpointTreeDefinitionBase {
 		typedef uint16			Key;
@@ -68,6 +83,17 @@ private:
 	rw_lock fChannelEndpointsLock;
 	uint16 fNextChannelID;
 	AVLTree<EndpointChannelTreeDefinition> fChannelEndpoints;
+
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Under fBoundEndpointsLock.
+	AVLTree<EndpointBindTreeDefinition> fLEBoundEndpoints;
+	L2capEndpoint* fFixedATT;
+	L2capEndpoint* fFixedSMP;
+	// Under fChannelEndpointsLock.
+	uint16 fNextLEChannelID;
+	// SPDX-SnippetEnd
 };
 
 extern L2capEndpointManager gL2capEndpointManager;

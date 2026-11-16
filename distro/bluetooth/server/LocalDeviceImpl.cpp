@@ -33,6 +33,8 @@
 #include <unistd.h>
 
 #include "PasskeyWindow.h"
+#include "LEManager.h"
+#include "PairingNotice.h"
 // SPDX-SnippetEnd
 
 
@@ -97,6 +99,9 @@ LocalDeviceImpl::LocalDeviceImpl(HCIDelegate* hd) : LocalDeviceHandler(hd)
 	fHasSSP = false;
 	memset(&fPasskeyAddress, 0, sizeof(fPasskeyAddress));
 	fPasskeyUsed = false;
+	memset(&fRemoteIOAddress, 0, sizeof(fRemoteIOAddress));
+	fRemoteIOCapability = 0x03;
+	fLE = new(std::nothrow) LEManager(this);
 	// SPDX-SnippetEnd
 	LoadRemoteDevices();
 }
@@ -105,6 +110,12 @@ LocalDeviceImpl::LocalDeviceImpl(HCIDelegate* hd) : LocalDeviceHandler(hd)
 LocalDeviceImpl::~LocalDeviceImpl()
 {
 	SaveRemoteDevices();
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	delete fLE;
+	fLE = NULL;
+	// SPDX-SnippetEnd
 }
 
 
@@ -667,6 +678,70 @@ LocalDeviceImpl::HandleEvent(struct hci_event_header* event, size_t size)
 			size >= sizeof(*event) ? event->ecode : 0, size);
 		return;
 	}
+	// Answers worth a log line while pairing does not work yet (outside
+	// diagnosis of the first sticks). Only logged; they go on.
+	if (event->ecode == HCI_EVENT_CMD_COMPLETE && event->elen >= 4) {
+		const uint8* data = (const uint8*)(event + 1);
+		const uint16 opcode = data[1] | (data[2] << 8);
+		if (opcode == PACK_OPCODE(OGF_LINK_CONTROL,
+				OCF_IO_CAPABILITY_REQUEST_REPLY)) {
+			syslog(LOG_INFO, "bluetooth_server: io capability reply answered"
+				" %#x", data[3]);
+		}
+	}
+	// The remote host features the server asked for itself.
+	if (event->ecode == HCI_EVENT_REMOTE_EXTENDED_FEATURES
+		&& event->elen >= sizeof(struct hci_ev_remote_extended_features)) {
+		const struct hci_ev_remote_extended_features* features
+			= JumpEventHeader<struct hci_ev_remote_extended_features>(event);
+		const uint16 handle = B_LENDIAN_TO_HOST_INT16(features->handle)
+			& 0x0fff;
+		if (_TakeFeatureHandle(handle)) {
+			const uint64 bits = B_LENDIAN_TO_HOST_INT64(
+				features->extended_lmp_features);
+			syslog(LOG_INFO, "bluetooth_server: remote host features read"
+				" (%#x, page %u, ssp host %s)", features->status,
+				features->page_number,
+				features->status == BT_OK && features->page_number == 1
+					? ((bits & 1) != 0 ? "yes" : "no") : "unknown");
+			Authenticate(handle);
+			return;
+		}
+	}
+	// A refused Read Remote Extended Features: authenticate anyway.
+	if (event->ecode == HCI_EVENT_CMD_STATUS
+		&& event->elen >= sizeof(struct hci_ev_cmd_status)) {
+		const struct hci_ev_cmd_status* status
+			= JumpEventHeader<struct hci_ev_cmd_status>(event);
+		if (status->opcode == PACK_OPCODE(OGF_LINK_CONTROL, 0x001c)
+			&& status->status != BT_OK && !fFeatureHandles.empty()) {
+			const uint16 handle = fFeatureHandles.front();
+			fFeatureHandles.erase(fFeatureHandles.begin());
+			syslog(LOG_NOTICE, "bluetooth_server: remote host features not"
+				" read (%#x)", status->status);
+			Authenticate(handle);
+			return;
+		}
+		if (status->opcode == PACK_OPCODE(OGF_LINK_CONTROL, 0x001c))
+			return;
+	}
+	// LE events and the answers to LE commands belong to LEManager. An
+	// answer someone else also waits for (the kit asking the address
+	// while LEManager does) goes on to them as well.
+	if (fLE != NULL && fLE->HandleEvent(event, size)) {
+		bool shared = false;
+		if (event->ecode == HCI_EVENT_CMD_COMPLETE) {
+			shared = FindPetition(event->ecode, JumpEventHeader<
+				struct hci_ev_cmd_complete>(event)->opcode) != NULL;
+		} else if (event->ecode == HCI_EVENT_CMD_STATUS) {
+			const uint16 opcode = JumpEventHeader<
+				struct hci_ev_cmd_status>(event)->opcode;
+			shared = FindPetition(event->ecode, opcode) != NULL
+				|| FindPetition(HCI_EVENT_CMD_COMPLETE, opcode) != NULL;
+		}
+		if (!shared)
+			return;
+	}
 	// SPDX-SnippetEnd
 
 /*
@@ -1168,6 +1243,12 @@ LocalDeviceImpl::CommandComplete(struct hci_ev_cmd_complete* event,
 			BMessage* inquiry_request = FindPetition(HCI_EVENT_INQUIRY_COMPLETE);
 			if (inquiry_request != NULL)
 				ClearWantedEvent(inquiry_request);
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			if (fLE != NULL)
+				fLE->StopScan();
+			// SPDX-SnippetEnd
 
 			ClearWantedEvent(request);
 			break;
@@ -1246,8 +1327,11 @@ LocalDeviceImpl::CommandComplete(struct hci_ev_cmd_complete* event,
 			}
 			syslog(LOG_INFO, "bluetooth_server: hci%" B_PRId32 " event mask %#"
 				B_PRIx64 " (secure simple pairing %s)", GetID(),
-				r5_event_mask(fHasSSP ? fFeatures : NULL),
-				fHasSSP ? "on" : "not supported");
+				_EventMask(), fHasSSP ? "on" : "not supported");
+			// The LE part of the setup (step 6), after the Event Mask.
+			if (commandStatus == BT_OK && fLE != NULL
+				&& LEManager::Supported(fFeatures))
+				fLE->Setup(fFeatures);
 
 			// A reset leaves the radio unreachable (Scan Enable 0). A paired
 			// controller or keyboard pages the computer to come back after
@@ -1306,6 +1390,13 @@ LocalDeviceImpl::CommandStatus(struct hci_ev_cmd_status* event,
 			request->SendReply(&reply);
 			//printf("Sending reply... %ld\n", status);
 			// debug reply.PrintToStream();
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			// LE devices join the same scan list (step 6).
+			if (event->status == BT_OK && fLE != NULL)
+				fLE->StartScan(request->ReturnAddress());
+			// SPDX-SnippetEnd
 
 			ClearWantedEvent(request, HCI_EVENT_CMD_STATUS,
 				PACK_OPCODE(OGF_LINK_CONTROL, OCF_INQUIRY));
@@ -1428,6 +1519,13 @@ LocalDeviceImpl::InquiryResult(uint8* numberOfResponses, BMessage* request)
 			clock_offset_array[i]);
 
 		reply.AddData("bdaddr", B_ANY_TYPE, &bdaddr_array[i], sizeof(bdaddr_t));
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// Found by Classic: Pair stays Classic for it (step 6).
+		if (fLE != NULL)
+			fLE->NoteClassic(bdaddr_array[i]);
+		// SPDX-SnippetEnd
 		reply.AddData("dev_class", B_ANY_TYPE, &dev_class_array[i * 3], 3);
 		reply.AddUInt8("page_repetition_mode", page_repetition_mode_array[i]);
 		reply.AddUInt8("scan_period_mode", scan_period_mode_array[i]);
@@ -1469,6 +1567,13 @@ LocalDeviceImpl::InquiryResultWithRSSI(uint8* numberOfResponses, BMessage* reque
 			rssi_array[i]);
 
 		reply.AddData("bdaddr", B_ANY_TYPE, &bdaddr_array[i], sizeof(bdaddr_t));
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// Found by Classic: Pair stays Classic for it (step 6).
+		if (fLE != NULL)
+			fLE->NoteClassic(bdaddr_array[i]);
+		// SPDX-SnippetEnd
 		reply.AddData("dev_class", B_ANY_TYPE, &dev_class_array[i * 3], 3);
 		reply.AddUInt8("page_repetition_mode", page_repetition_mode_array[i]);
 		reply.AddUInt8("scan_period_mode", scan_period_mode_array[i]);
@@ -1502,6 +1607,13 @@ LocalDeviceImpl::ExtendedInquiryResult(uint8* numberOfResponses, BMessage* reque
 		info->page_repetition_mode, info->scan_period_mode, info->clock_offset, info->rssi);
 
 	reply.AddData("bdaddr", B_ANY_TYPE, &info->bdaddr, sizeof(bdaddr_t));
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Found by Classic: Pair stays Classic for it (step 6).
+	if (fLE != NULL)
+		fLE->NoteClassic(info->bdaddr);
+	// SPDX-SnippetEnd
 	reply.AddData("dev_class", B_ANY_TYPE, info->dev_class, 3);
 	reply.AddUInt8("page_repetition_mode", info->page_repetition_mode);
 	reply.AddUInt8("scan_period_mode", info->scan_period_mode);
@@ -1629,6 +1741,12 @@ LocalDeviceImpl::InquiryComplete(uint8* status, BMessage* request)
 	BMessage reply(BT_MSG_INQUIRY_COMPLETED);
 
 	reply.AddUInt8("status", *status);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	if (fLE != NULL)
+		fLE->StopScan();
+	// SPDX-SnippetEnd
 
 	printf("%s: Sending reply...\n", __func__);
 	status_t stat = request->SendReply(&reply);
@@ -1763,6 +1881,9 @@ LocalDeviceImpl::CreateConnection(BMessage* message)
 		TRACE_BT("LocalDeviceImpl: Create Connection without an address\n");
 		return;
 	}
+	// A device the LE scan found pairs over LE (step 6).
+	if (fLE != NULL && fLE->Pair(*bdaddr, message->ReturnAddress()))
+		return;
 	bool added = false;
 	// SPDX-SnippetEnd
 
@@ -1803,6 +1924,7 @@ LocalDeviceImpl::CreateConnection(BMessage* message)
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
 	rdConn->user_pairing = true;
+	rdConn->pair_reply = message->ReturnAddress();
 	// SPDX-SnippetEnd
 
 	// SPDX-SnippetBegin
@@ -2017,14 +2139,11 @@ LocalDeviceImpl::ConnectionComplete(struct hci_ev_conn_complete* event)
 		// SPDX-SnippetBegin
 		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 		// SPDX-License-Identifier: MIT
-		// rd is NULL for a connection this radio did not know (review of
-		// #4286); the window then shows the address without a class.
-		uint8 noClass[3] = { 0, 0, 0 };
-		ConnectionIncoming* iConnection = new ConnectionIncoming(
-			new RemoteDevice(event->bdaddr,
-				rd != NULL ? rd->classOfDevice : noClass));
+		// Haiku's "Incoming Connection" window showed at every connection,
+		// also for a pairing started on the Bluetooth page, with a broken
+		// name. The end of a pairing is a notification now
+		// (PairingNotice.cpp).
 		// SPDX-SnippetEnd
-		iConnection->Show();
 
 		// SPDX-SnippetBegin
 		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
@@ -2045,7 +2164,16 @@ LocalDeviceImpl::ConnectionComplete(struct hci_ev_conn_complete* event)
 		newrequest->AddInt16("eventExpected", HCI_EVENT_LINK_KEY_NOTIFY);
 		AddWantedEvent(newrequest);
 
-		Authenticate(event->handle);
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// First the remote's extended features, page 1 (its host's Secure
+		// Simple Pairing support), as BlueZ does; then authenticate. On
+		// the 5625U (MT7922) an Authentication Requested right after the
+		// connection ended in 0x37, "Simple Pairing Not Supported by
+		// Host", before any pairing step (first BLE stick).
+		_ReadRemoteHostFeatures(event->handle);
+		// SPDX-SnippetEnd
 
 		reply.what = BT_MSG_CONN_COMPLETED;
 	} else {
@@ -2055,6 +2183,12 @@ LocalDeviceImpl::ConnectionComplete(struct hci_ev_conn_complete* event)
 		// SPDX-License-Identifier: MIT
 		// rd is NULL for an address this radio did not know (review of
 		// #4286).
+		if (rd != NULL && rd->user_pairing) {
+			// A pairing started here whose connection never came up.
+			rd->user_pairing = false;
+			r5_pairing_result(false, rd->friendly_name, &rd->pair_reply,
+				rd->bdaddr);
+		}
 		if (rd != NULL) {
 			if (LinkKeyUtils::Compare(&rd->link_key, &nullLinkKey))
 				RemoveRemoteDevice(rd);
@@ -2112,6 +2246,11 @@ LocalDeviceImpl::PinCodeRequest(struct hci_ev_pin_code_req* event,
 	BMessage* request)
 {
 	TRACE_BT("LocalDeviceImpl: Opening PincodeWindow...");
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	syslog(LOG_INFO, "bluetooth_server: pin code request (legacy pairing)");
+	// SPDX-SnippetEnd
 	PincodeWindow* iPincode = new PincodeWindow(event->bdaddr, GetID());
 	iPincode->Show();
 }
@@ -2297,18 +2436,29 @@ LocalDeviceImpl::IOCapabilityRequest(struct hci_ev_io_capability_request* event,
 
 	TRACE_BT("LocalDeviceImpl: IO Capability Request from %s...\n",
 		bdaddrUtils::ToString(event->bdaddr).String());
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	syslog(LOG_INFO, "bluetooth_server: io capability request");
+	// SPDX-SnippetEnd
 
 	// TODO: this should be temporary, need to change this to HCI_IO_CAP_DISPLAY_YES_NO
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
-	// KeyboardDisplay, as BlueZ: a keyboard (KeyboardOnly) gets Passkey
-	// Entry with the passkey shown here, a device with only a display gets
-	// Passkey Entry typed here, a phone gets Numeric Comparison
-	// (Core 6.0, Vol 3, Part C, 5.2.2.6).
+	// DisplayYesNo, as BlueZ sends for BR/EDR: a keyboard (KeyboardOnly)
+	// gets Passkey Entry with the passkey shown here, a phone gets
+	// Numeric Comparison, a gamepad Just Works (Core 6.0, Vol 3, Part C,
+	// 5.2.2.6). KeyboardDisplay (0x04) is an LE value only: BR/EDR takes
+	// 0x00 to 0x03 (Vol 4, Part E, 7.1.29). The MT7922 refused our reply
+	// with 0x12 (Invalid HCI Command Parameters) and every Classic pairing
+	// then ended in 0x37 (third stick boot).
 	command = buildIOCapabilityRequestReply(event->bdaddr,
-		R5_HCI_IO_CAP_KEYBOARD_DISPLAY, HCI_OOB_DATA_NOT_PRESENT,
-		HCI_AUTH_REQ_MITM_GENERAL_BOND, &size);
+		HCI_IO_CAP_DISPLAY_YES_NO, HCI_OOB_DATA_NOT_PRESENT,
+		R5_HCI_AUTH_REQ_MITM_DEDICATED_BOND, &size);
+	syslog(LOG_INFO, "bluetooth_server: io capability reply %#x %#x %#x",
+		HCI_IO_CAP_DISPLAY_YES_NO, HCI_OOB_DATA_NOT_PRESENT,
+		R5_HCI_AUTH_REQ_MITM_DEDICATED_BOND);
 	if (command == NULL)
 		return;
 	// SPDX-SnippetEnd
@@ -2347,6 +2497,14 @@ LocalDeviceImpl::IOCapabilityResponse(struct hci_ev_io_capability_response* even
 	TRACE_BT("LocalDeviceImpl: %s for %s - Capability: 0x%02x, OOB: 0x%02x, Auth: 0x%02x\n",
 		__FUNCTION__, bdaddrUtils::ToString(event->bdaddr).String(), event->capability,
 		event->oob_data, event->authentication);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	syslog(LOG_INFO, "bluetooth_server: io capability of the device %#x"
+		" (auth %#x)", event->capability, event->authentication);
+	fRemoteIOAddress = event->bdaddr;
+	fRemoteIOCapability = event->capability;
+	// SPDX-SnippetEnd
 }
 
 
@@ -2381,6 +2539,28 @@ LocalDeviceImpl::UserConfirmationRequest(struct hci_ev_user_confirmation_request
 	}
 	// SPDX-SnippetEnd
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Numeric Comparison when the device can show a number and answer
+	// (DisplayYesNo or KeyboardDisplay, Core 6.0, Vol 3, Part C, 5.2.2.6):
+	// the person compares the six digits and says yes or no. Otherwise it
+	// is Just Works, which has no number to show.
+	if (bdaddrUtils::Compare(fRemoteIOAddress, event->bdaddr)
+		&& (fRemoteIOCapability == 0x01 || fRemoteIOCapability == 0x04)) {
+		syslog(LOG_INFO, "bluetooth_server: numeric comparison shown");
+		_ClosePasskeyWindow();
+		fPasskeyAddress = event->bdaddr;
+		PasskeyWindow* window = new(std::nothrow) PasskeyWindow(
+			event->bdaddr, GetID(), _PeerName(event->bdaddr),
+			B_LENDIAN_TO_HOST_INT32(event->passkey) % 1000000, true, false);
+		if (window != NULL) {
+			fPasskeyWindow = BMessenger(window);
+			window->Show();
+			return;
+		}
+	}
+	// SPDX-SnippetEnd
 	command = buildUserConfirmReply(event->bdaddr, &size);
 
 
@@ -2416,8 +2596,13 @@ LocalDeviceImpl::SimplePairingComplete(struct hci_ev_simple_pairing_complete* ev
 	// One pairing asked for here allows one confirmation: a later pairing
 	// that the other side starts is refused again.
 	ServerRemoteDevice* paired = RemoteDeviceByAddr(event->bdaddr);
+	if (paired != NULL && paired->user_pairing)
+		r5_pairing_result(event->status == BT_OK, paired->friendly_name,
+			&paired->pair_reply, event->bdaddr);
 	if (paired != NULL)
 		paired->user_pairing = false;
+	if (bdaddrUtils::Compare(fPasskeyAddress, event->bdaddr))
+		_ClosePasskeyWindow();
 
 	syslog(event->status == BT_OK ? LOG_INFO : LOG_NOTICE,
 		"bluetooth_server: simple pairing %s (%#x)",
@@ -2476,6 +2661,17 @@ LocalDeviceImpl::AuthComplete(struct hci_ev_auth_complete* eventData, BMessage* 
 			handle, status);
 
 		ServerRemoteDevice* rd = RemoteDeviceByHandle(eventData->handle);
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// A pairing started here that ended before Simple Pairing
+		// Complete (refused, or the device did not answer).
+		if (rd != NULL && rd->user_pairing) {
+			r5_pairing_result(false, rd->friendly_name, &rd->pair_reply,
+				rd->bdaddr);
+			rd->user_pairing = false;
+		}
+		// SPDX-SnippetEnd
 		if (rd != NULL) {
 			rd->link_key = LinkKeyUtils::NullKey();
 			BMessage disconnReq;
@@ -2635,13 +2831,65 @@ LocalDeviceImpl::_WriteEventMask()
 {
 	// Only the bits this controller supports: the SSP events need its SSP
 	// feature, and Simple Pairing Mode must have been accepted.
-	uint64 mask = r5_event_mask(fHasSSP ? fFeatures : NULL);
+	uint64 mask = _EventMask();
 	BluetoothCommand<typed_command(r5_hci_cp_set_event_mask)>
 		command(OGF_CONTROL_BASEBAND, R5_OCF_SET_EVENT_MASK);
 	for (int i = 0; i < 8; i++)
 		command->mask[i] = (uint8)(mask >> (8 * i));
 	_IssueSetupCommand(command.Data(), command.Size(),
 		PACK_OPCODE(OGF_CONTROL_BASEBAND, R5_OCF_SET_EVENT_MASK));
+}
+
+
+void
+LocalDeviceImpl::_ReadRemoteHostFeatures(uint16 handle)
+{
+	// Read Remote Extended Features (OGF 0x01, OCF 0x001C; Core 6.0,
+	// Vol 4, Part E, 7.1.22): handle, page 1.
+	uint8 command[3 + 3];
+	command[0] = 0x1c;
+	command[1] = 0x04;
+	command[2] = 3;
+	command[3] = handle & 0xff;
+	command[4] = (handle >> 8) & 0x0f;
+	command[5] = 1;
+	fFeatureHandles.push_back(handle);
+	if (R5IssueCommand(command, sizeof(command)) != B_OK) {
+		fFeatureHandles.pop_back();
+		Authenticate(handle);
+	}
+}
+
+
+bool
+LocalDeviceImpl::_TakeFeatureHandle(uint16 handle)
+{
+	for (size_t i = 0; i < fFeatureHandles.size(); i++) {
+		if (fFeatureHandles[i] == handle) {
+			fFeatureHandles.erase(fFeatureHandles.begin() + i);
+			return true;
+		}
+	}
+	return false;
+}
+
+
+uint64
+LocalDeviceImpl::_EventMask() const
+{
+	uint64 mask = r5_event_mask(fHasSSP ? fFeatures : NULL);
+	// LE Meta (0x3E, bit 61) only when the controller has LE (step 6).
+	if (LEManager::Supported(fFeatures))
+		mask |= 1ULL << 61;
+	return mask;
+}
+
+
+status_t
+LocalDeviceImpl::R5IssueCommand(const void* command, size_t size)
+{
+	return fHCIDelegate->IssueCommand((raw_command)command, size) == B_ERROR
+		? B_ERROR : B_OK;
 }
 
 

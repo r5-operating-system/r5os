@@ -9,4 +9,6 @@ KernelAddon l2cap :
 	l2cap_signal.cpp
 	L2capEndpoint.cpp
 	L2capEndpointManager.cpp
+	L2capEndpointLE.cpp
+	l2cap_tx.cpp
 ;

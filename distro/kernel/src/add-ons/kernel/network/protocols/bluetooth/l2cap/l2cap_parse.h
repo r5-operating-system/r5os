@@ -45,8 +45,139 @@ l2cap_parse_min_length(uint8 code)
 		case 0x09:	return 0;	// Echo Response
 		case 0x0a:	return 2;	// Information Request: type
 		case 0x0b:	return 4;	// Information Response: type, result
+		// LE signalling and credit-based channels (4.20 to 4.27).
+		case 0x12:	return 8;	// Connection Parameter Update Request
+		case 0x13:	return 2;	// Connection Parameter Update Response
+		case 0x14:	return 10;	// LE Credit Based Connection Request
+		case 0x15:	return 10;	// LE Credit Based Connection Response
+		case 0x16:	return 4;	// Flow Control Credit Indication
+		case 0x17:	return 10;	// Credit Based Connection Request, 1 CID
+		case 0x18:	return 8;	// Credit Based Connection Response
+		case 0x19:	return 6;	// Credit Based Reconfigure Request, 1 CID
+		case 0x1a:	return 2;	// Credit Based Reconfigure Response
 	}
 	return 0;
+}
+
+
+// Whether a code is an answer to a command of ours, which carries our
+// identifier. Not simply odd: 0x18 is an answer, 0x19 is not. The answers
+// to commands we never send (0x13, 0x1a) take no identifier, so a forged
+// one cannot take that of a command that waits.
+static inline bool
+l2cap_parse_is_response(uint8 code)
+{
+	switch (code) {
+		case 0x01: case 0x03: case 0x05: case 0x07: case 0x09: case 0x0b:
+		case 0x15: case 0x18:
+			return true;
+	}
+	return false;
+}
+
+
+// Which codes each signalling channel serves here. The BR/EDR channel
+// (CID 0x0001) has the classic commands; the LE channel (CID 0x0005) has
+// Command Reject, Disconnection and the LE commands (Part A, 4).
+static inline bool
+l2cap_parse_code_allowed(uint8 code, bool le)
+{
+	if (code == 0x01)
+		return true;
+	if (le)
+		return code == 0x06 || code == 0x07 || (code >= 0x12 && code <= 0x1a);
+	return code >= 0x02 && code <= 0x0b;
+}
+
+
+// The most channels one Credit Based Connection Request opens (4.25).
+#define L2CAP_PARSE_ECRED_MAX_CHANNELS	5
+
+// MTU and MPS of an LE credit-based channel: 23 to 65535 and 23 to 65533;
+// for the enhanced mode both at least 64 (4.22, 4.25).
+static inline bool
+l2cap_parse_valid_coc(uint16 mtu, uint16 mps, bool enhanced)
+{
+	const uint16 least = enhanced ? 64 : 23;
+	return mtu >= least && mps >= least && mps <= 65533;
+}
+
+
+// A dynamic channel of an LE link is 0x0040 to 0x007F (2.1).
+static inline bool
+l2cap_parse_valid_le_cid(uint16 cid)
+{
+	return cid >= 0x0040 && cid <= 0x007f;
+}
+
+
+// How many channels a Credit Based Connection Request (8 bytes and a
+// source CID each) or Reconfigure Request (4 bytes and a CID each) names;
+// 0 when the length does not fit 1 to 5 of them.
+static inline int
+l2cap_parse_cid_count(uint16 length, uint16 fixed)
+{
+	if (length < fixed + 2 || ((length - fixed) & 1) != 0)
+		return 0;
+	int count = (length - fixed) / 2;
+	return count <= L2CAP_PARSE_ECRED_MAX_CHANNELS ? count : 0;
+}
+
+
+// Receiving K-frames of an LE credit-based channel (Part A, 3.4): the
+// first frame of an SDU starts with its 16-bit length, the rest is data.
+// No frame is longer than our MPS, no SDU longer than our MTU, and the
+// frames of an SDU add up to exactly its length.
+struct l2cap_coc_rx {
+	uint16	mtu;		// ours
+	uint16	mps;		// ours
+	uint16	sdu_length;	// 0: no SDU in progress
+	uint16	received;
+};
+
+enum {
+	L2CAP_COC_ERROR		= -1,	// close the channel (4.24)
+	L2CAP_COC_START		= 0x1,	// this frame starts an SDU
+	L2CAP_COC_COMPLETE	= 0x2	// this frame ends an SDU
+};
+
+
+// "frame" is the frame after the basic header, at least min(size, 2)
+// bytes of it; *_dataOffset is where its data starts (2 or 0).
+static inline int
+l2cap_coc_rx_frame(l2cap_coc_rx* rx, const uint8* frame, size_t size,
+	size_t* _dataOffset)
+{
+	if (size > rx->mps)
+		return L2CAP_COC_ERROR;
+
+	int result = 0;
+	size_t data = size;
+	*_dataOffset = 0;
+	if (rx->sdu_length == 0) {
+		if (size < 2)
+			return L2CAP_COC_ERROR;
+		const uint16 length = frame[0] | (frame[1] << 8);
+		if (length == 0 || length > rx->mtu)
+			return L2CAP_COC_ERROR;
+		data = size - 2;
+		*_dataOffset = 2;
+		rx->sdu_length = length;
+		rx->received = 0;
+		result |= L2CAP_COC_START;
+	}
+
+	if (data > (size_t)(rx->sdu_length - rx->received)) {
+		rx->sdu_length = 0;
+		return L2CAP_COC_ERROR;
+	}
+	rx->received += data;
+	if (rx->received == rx->sdu_length) {
+		rx->sdu_length = 0;
+		rx->received = 0;
+		result |= L2CAP_COC_COMPLETE;
+	}
+	return result;
 }
 
 

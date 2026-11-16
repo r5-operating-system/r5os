@@ -2,10 +2,12 @@
 # SPDX-License-Identifier: MIT
 # Copyright 2026 R5OS Contributors
 #
-# Host AddressSanitizer and UBSan fuzz for the Bluetooth parsers
-# (docs/BLUETOOTH.md, steps 1a to 1c and 5). Run it in WSL.
-# Usage: fuzz-bt.sh <target> [seconds]   (target: hci, l2cap or audio;
-# default 60 s). audio is the AVDTP, AVRCP and SBC code of bluetooth_audio.
+# Host AddressSanitizer and UBSan fuzz for the Bluetooth kernel parsers
+# (docs/BLUETOOTH.md, steps 1a to 1c), the LE parsers of bluetooth_server
+# (step 6), and the AVDTP, AVRCP and SBC code of bluetooth_audio (step 5).
+# Run it in WSL.
+# Usage: fuzz-bt.sh <target> [seconds]   (target: hci, l2cap, le or audio;
+# default 60 s)
 # The log is generated/bluetooth/fuzz-<target>.log; its last line is
 # "<target>_fuzz: <seconds>s 0 crashes" when nothing failed.
 set -eu
@@ -15,7 +17,7 @@ seconds="${2:-60}"
 K=distro/kernel/src/add-ons/kernel
 A=distro/media/bluetooth_audio
 case "$target" in
-	hci|l2cap|audio) ;;
+	hci|l2cap|le|audio) ;;
 	*) echo "fuzz-bt: unknown target $target" >&2; exit 2 ;;
 esac
 out=/tmp/bt-fuzz-$$
@@ -30,6 +32,7 @@ else
 		-I "$K/bluetooth/hci" \
 		-I "$K/drivers/bluetooth/h2/h2generic" \
 		-I "$K/network/protocols/bluetooth/l2cap" \
+		-I distro/bluetooth/server \
 		scripts/bt-fuzz.cpp -o "$out"
 fi
 mkdir -p generated/bluetooth

@@ -57,6 +57,9 @@
 #define BT_MSG_R5_GET_RADIO             'r5rG'
 // bool "enabled". Reply: int32 "status".
 #define BT_MSG_R5_SET_RADIO             'r5rS'
+// The end of a pairing started with Create Connection, sent to the
+// sender of that request: data "bdaddr", bool "paired", string "name".
+#define BT_MSG_R5_PAIR_RESULT           'r5pR'
 // SPDX-SnippetEnd
 
 // SPDX-SnippetBegin

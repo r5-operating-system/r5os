@@ -68,6 +68,9 @@
 			["bluetooth-kit.html#state", "BluetoothState", true],
 			["bluetooth-kit.html#switch", "The Bluetooth switch", true],
 			["bluetooth-kit.html#remote", "RemoteDevice", true],
+			["bluetooth-kit.html#hid", "Game controllers, mice and keyboards", true],
+			["bluetooth-kit.html#le", "Low Energy devices", true],
+			["bluetooth-kit.html#le-l2cap", "sockaddr_l2cap_le", true],
 			["bluetooth-kit.html#settings", "Where people see it", true],
 		]},
 		{ title: "Vulkan", file: "vulkan.html", items: [

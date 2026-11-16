@@ -24,6 +24,11 @@
 
 #include <btDebug.h>
 #include <btCoreData.h>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <R5BluetoothLE.h>
+// SPDX-SnippetEnd
 #include <btModules.h>
 #include <CodeHandler.h>
 #define KERNEL_LAND
@@ -378,14 +383,31 @@ PostACL(hci_id hciId, net_buffer* buffer)
 		" bytes (flags 0x%" B_PRIx32 "):\n", __func__, device->index,
 		buffer->size, buffer->flags);
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// An LE link may have smaller buffers of its own (LE Read Buffer Size,
+	// read by bluetooth_server; btCoreData keeps it in the connection).
+	uint32 fragment = device->mtu;
+	HciConnection* connection = btCoreData != NULL
+		? btCoreData->ConnectionByHandle(handle, hciId) : NULL;
+	if (connection != NULL && connection->type == R5_HCI_LINK_LE
+		&& connection->mtu != 0 && connection->mtu < fragment)
+		fragment = connection->mtu;
+	// SPDX-SnippetEnd
+
 	// TODO: ATOMIC! any other thread should stop here
 	do {
 		// Divide packet if big enough
 		curr_frame = next_frame;
 
-		if (curr_frame->size > device->mtu) {
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		if (curr_frame->size > fragment) {
 			next_frame = curr_frame;
-			curr_frame = gBufferModule->split(next_frame, device->mtu);
+			curr_frame = gBufferModule->split(next_frame, fragment);
+		// SPDX-SnippetEnd
 			// SPDX-SnippetBegin
 			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 			// SPDX-License-Identifier: MIT
