@@ -31,6 +31,8 @@
 #include <sys/stat.h>
 #include <syslog.h>
 #include <unistd.h>
+
+#include "PasskeyWindow.h"
 // SPDX-SnippetEnd
 
 
@@ -88,6 +90,14 @@ LocalDeviceImpl::CreateTransportAccessor(BPath* path)
 
 LocalDeviceImpl::LocalDeviceImpl(HCIDelegate* hd) : LocalDeviceHandler(hd)
 {
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	memset(fFeatures, 0, sizeof(fFeatures));
+	fHasSSP = false;
+	memset(&fPasskeyAddress, 0, sizeof(fPasskeyAddress));
+	fPasskeyUsed = false;
+	// SPDX-SnippetEnd
 	LoadRemoteDevices();
 }
 
@@ -318,6 +328,48 @@ LocalDeviceImpl::HandleUnexpectedEvent(struct hci_event_header* event)
 			EncryptChange(JumpEventHeader<struct hci_ev_encrypt_change>(event));
 			break;
 
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// Secure Simple Pairing that no petition waited for, for example
+		// a second pairing on the same link or one the remote started.
+		// Dropped before, so that pairing hung until it timed out.
+		case HCI_EVENT_IO_CAPABILITY_REQUEST:
+			IOCapabilityRequest(
+				JumpEventHeader<struct hci_ev_io_capability_request>(event),
+				NULL);
+			break;
+
+		case HCI_EVENT_USER_CONFIRMATION_REQUEST:
+			UserConfirmationRequest(
+				JumpEventHeader<struct hci_ev_user_confirmation_request>(event),
+				NULL);
+			break;
+
+		case HCI_EVENT_USER_PASSKEY_REQUEST:
+			UserPasskeyRequest(
+				JumpEventHeader<struct r5_hci_ev_user_passkey_request>(event),
+				NULL);
+			break;
+
+		case R5_HCI_EVENT_USER_PASSKEY_NOTIFICATION:
+			UserPasskeyNotification(JumpEventHeader
+				<struct r5_hci_ev_user_passkey_notification>(event), NULL);
+			break;
+
+		case R5_HCI_EVENT_KEYPRESS_NOTIFICATION:
+			KeypressNotification(
+				JumpEventHeader<struct r5_hci_ev_keypress_notification>(event),
+				NULL);
+			break;
+
+		case HCI_EVENT_SIMPLE_PAIRING_COMPLETE:
+			SimplePairingComplete(
+				JumpEventHeader<struct hci_ev_simple_pairing_complete>(event),
+				NULL);
+			break;
+		// SPDX-SnippetEnd
+
 		default:
 			TRACE_BT("Couldn't handle the unexpected event with code: %x", event->ecode);
 			break;
@@ -456,6 +508,27 @@ LocalDeviceImpl::HandleExpectedRequest(struct hci_event_header* event,
 				request);
 			break;
 
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		case HCI_EVENT_USER_PASSKEY_REQUEST:
+			UserPasskeyRequest(
+				JumpEventHeader<struct r5_hci_ev_user_passkey_request>(event),
+				request);
+			break;
+
+		case R5_HCI_EVENT_USER_PASSKEY_NOTIFICATION:
+			UserPasskeyNotification(JumpEventHeader
+				<struct r5_hci_ev_user_passkey_notification>(event), request);
+			break;
+
+		case R5_HCI_EVENT_KEYPRESS_NOTIFICATION:
+			KeypressNotification(
+				JumpEventHeader<struct r5_hci_ev_keypress_notification>(event),
+				request);
+			break;
+		// SPDX-SnippetEnd
+
 		case HCI_EVENT_PIN_CODE_REQ:
 			PinCodeRequest(JumpEventHeader<struct hci_ev_pin_code_req>(event), NULL);
 			break;
@@ -471,6 +544,34 @@ LocalDeviceImpl::_EventFits(const struct hci_event_header* event, size_t size)
 {
 	if (event == NULL || size < sizeof(*event)
 		|| size - sizeof(*event) < event->elen)
+		return false;
+
+	// Fixed-size events that the pairing code reads (7.7.40 to 7.7.49).
+	size_t minimum = 0;
+	switch (event->ecode) {
+		case HCI_EVENT_IO_CAPABILITY_REQUEST:
+			minimum = sizeof(struct hci_ev_io_capability_request);
+			break;
+		case HCI_EVENT_IO_CAPABILITY_RESPONSE:
+			minimum = sizeof(struct hci_ev_io_capability_response);
+			break;
+		case HCI_EVENT_USER_CONFIRMATION_REQUEST:
+			minimum = sizeof(struct hci_ev_user_confirmation_request);
+			break;
+		case HCI_EVENT_USER_PASSKEY_REQUEST:
+			minimum = sizeof(struct r5_hci_ev_user_passkey_request);
+			break;
+		case HCI_EVENT_SIMPLE_PAIRING_COMPLETE:
+			minimum = sizeof(struct hci_ev_simple_pairing_complete);
+			break;
+		case R5_HCI_EVENT_USER_PASSKEY_NOTIFICATION:
+			minimum = sizeof(struct r5_hci_ev_user_passkey_notification);
+			break;
+		case R5_HCI_EVENT_KEYPRESS_NOTIFICATION:
+			minimum = sizeof(struct r5_hci_ev_keypress_notification);
+			break;
+	}
+	if (event->elen < minimum)
 		return false;
 
 	// Events that carry a count of records (Core 6.0, Vol 4, Part E, 7.7):
@@ -720,6 +821,30 @@ LocalDeviceImpl::CommandComplete(struct hci_ev_cmd_complete* event,
 			}
 
 			TRACE_BT("LocalDeviceImpl: Reply for Local Features %x\n", features->status);
+
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			// SetupController(): the next step writes Simple Pairing Mode
+			// or the Event Mask. Nobody waits for a reply.
+			if (request->HasBool("r5_setup")) {
+				ClearWantedEvent(request);
+				delete request;
+				if (features->status != BT_OK) {
+					syslog(LOG_WARNING, "bluetooth_server: hci%" B_PRId32
+						" read features failed (%#x), event mask unchanged",
+						GetID(), features->status);
+					break;
+				}
+				memcpy(fFeatures, features->features, sizeof(fFeatures));
+				fHasSSP = r5_has_ssp(fFeatures);
+				if (fHasSSP)
+					_WriteSimplePairingMode();
+				else
+					_WriteEventMask();
+				break;
+			}
+			// SPDX-SnippetEnd
 
 			reply.AddUInt8("status", features->status);
 			status = request->SendReply(&reply);
@@ -1001,6 +1126,12 @@ LocalDeviceImpl::CommandComplete(struct hci_ev_cmd_complete* event,
 		case PACK_OPCODE(OGF_CONTROL_BASEBAND, OCF_WRITE_AUTH_ENABLE):
 		case PACK_OPCODE(OGF_CONTROL_BASEBAND, OCF_WRITE_LOCAL_NAME):
 		case PACK_OPCODE(OGF_VENDOR_CMD, OCF_WRITE_BCM2035_BDADDR):
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		case PACK_OPCODE(OGF_LINK_CONTROL, R5_OCF_USER_PASSKEY_REPLY):
+		case PACK_OPCODE(OGF_LINK_CONTROL, R5_OCF_USER_PASSKEY_NEG_REPLY):
+		// SPDX-SnippetEnd
 		{
 			reply.AddUInt8("status", *(uint8*)(event + 1));
 
@@ -1013,8 +1144,52 @@ LocalDeviceImpl::CommandComplete(struct hci_ev_cmd_complete* event,
 				printf("%s: Error sending reply write!\n", __func__);
 
 			ClearWantedEvent(request);
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			// A reset clears the Event Mask and Simple Pairing Mode.
+			if ((uint16)opcodeExpected
+					== PACK_OPCODE(OGF_CONTROL_BASEBAND, OCF_RESET)
+				&& *(uint8*)(event + 1) == BT_OK) {
+				SetupController();
+			}
+			// SPDX-SnippetEnd
 			break;
 		}
+
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		case PACK_OPCODE(OGF_CONTROL_BASEBAND, R5_OCF_WRITE_SIMPLE_PAIRING_MODE):
+		case PACK_OPCODE(OGF_CONTROL_BASEBAND, R5_OCF_SET_EVENT_MASK):
+		{
+			uint8 commandStatus = *(uint8*)(event + 1);
+			bool simplePairing = (uint16)opcodeExpected
+				== PACK_OPCODE(OGF_CONTROL_BASEBAND,
+					R5_OCF_WRITE_SIMPLE_PAIRING_MODE);
+			ClearWantedEvent(request);
+			delete request;
+
+			if (commandStatus != BT_OK) {
+				syslog(LOG_WARNING, "bluetooth_server: hci%" B_PRId32
+					" %s failed (%#x)", GetID(), simplePairing
+						? "simple pairing mode" : "event mask", commandStatus);
+				if (!simplePairing)
+					break;
+				// Without SSP on the host the pairing events do not come.
+				fHasSSP = false;
+			}
+			if (simplePairing) {
+				_WriteEventMask();
+				break;
+			}
+			syslog(LOG_INFO, "bluetooth_server: hci%" B_PRId32 " event mask %#"
+				B_PRIx64 " (secure simple pairing %s)", GetID(),
+				r5_event_mask(fHasSSP ? fFeatures : NULL),
+				fHasSSP ? "on" : "not supported");
+			break;
+		}
+		// SPDX-SnippetEnd
 
 		default:
 			TRACE_BT("LocalDeviceImpl: Command Complete not handled\n");
@@ -1542,6 +1717,11 @@ LocalDeviceImpl::CreateConnection(BMessage* message)
 
 	rdConn->conn_state = RemoteDevice::CONNECTING;
 	rdConn->link_type = HCI_ACL_CONN;
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	rdConn->user_pairing = true;
+	// SPDX-SnippetEnd
 
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
@@ -2017,8 +2197,19 @@ LocalDeviceImpl::IOCapabilityRequest(struct hci_ev_io_capability_request* event,
 		bdaddrUtils::ToString(event->bdaddr).String());
 
 	// TODO: this should be temporary, need to change this to HCI_IO_CAP_DISPLAY_YES_NO
-	command = buildIOCapabilityRequestReply(event->bdaddr, HCI_IO_CAP_DISPLAY_YES_NO,
-		HCI_OOB_DATA_NOT_PRESENT, HCI_AUTH_REQ_MITM_GENERAL_BOND, &size);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// KeyboardDisplay, as BlueZ: a keyboard (KeyboardOnly) gets Passkey
+	// Entry with the passkey shown here, a device with only a display gets
+	// Passkey Entry typed here, a phone gets Numeric Comparison
+	// (Core 6.0, Vol 3, Part C, 5.2.2.6).
+	command = buildIOCapabilityRequestReply(event->bdaddr,
+		R5_HCI_IO_CAP_KEYBOARD_DISPLAY, HCI_OOB_DATA_NOT_PRESENT,
+		HCI_AUTH_REQ_MITM_GENERAL_BOND, &size);
+	if (command == NULL)
+		return;
+	// SPDX-SnippetEnd
 
 	BMessage* newrequest = new BMessage;
 
@@ -2029,6 +2220,13 @@ LocalDeviceImpl::IOCapabilityRequest(struct hci_ev_io_capability_request* event,
 	// TODO:Check if there are more events we need to look for
 	newrequest->AddInt16("eventExpected", HCI_EVENT_USER_CONFIRMATION_REQUEST);
 	newrequest->AddInt16("eventExpected", HCI_EVENT_USER_PASSKEY_REQUEST);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	newrequest->AddInt16("eventExpected",
+		R5_HCI_EVENT_USER_PASSKEY_NOTIFICATION);
+	newrequest->AddInt16("eventExpected", R5_HCI_EVENT_KEYPRESS_NOTIFICATION);
+	// SPDX-SnippetEnd
 	newrequest->AddInt16("eventExpected", HCI_EVENT_SIMPLE_PAIRING_COMPLETE);
 
 	AddWantedEvent(newrequest);
@@ -2063,6 +2261,22 @@ LocalDeviceImpl::UserConfirmationRequest(struct hci_ev_user_confirmation_request
 	// The passkey is not logged.
 	TRACE_BT("LocalDeviceImpl: User Confirmation Request for %s\n",
 		bdaddrUtils::ToString(event->bdaddr).String());
+
+	// The confirmation is answered without asking the person (Just Works
+	// or Numeric Comparison without showing the number). That was also
+	// done for a pairing a stranger started, who could then pair silently
+	// and, from step 4 on, type as a keyboard. Refused unless the pairing
+	// was asked for here.
+	ServerRemoteDevice* rd = RemoteDeviceByAddr(event->bdaddr);
+	if (rd == NULL || !rd->user_pairing) {
+		syslog(LOG_NOTICE, "bluetooth_server: pairing refused, not started "
+			"on this computer");
+		BluetoothCommand<typed_command(hci_cp_user_confirm_neg_reply)>
+			refuse(OGF_LINK_CONTROL, OCF_USER_CONFIRM_NEG_REPLY);
+		refuse->bdaddr = event->bdaddr;
+		fHCIDelegate->IssueCommand(refuse.Data(), refuse.Size());
+		return;
+	}
 	// SPDX-SnippetEnd
 
 	command = buildUserConfirmReply(event->bdaddr, &size);
@@ -2093,6 +2307,23 @@ LocalDeviceImpl::SimplePairingComplete(struct hci_ev_simple_pairing_complete* ev
 		TRACE_BT("LocalDeviceImpl: %s failed for %s with error %s\n", __FUNCTION__,
 			bdaddrUtils::ToString(event->bdaddr).String(), BluetoothError(event->status));
 	}
+
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// The pass line of step 4 (docs/BLUETOOTH.md); never the passkey.
+	if (fPasskeyUsed && bdaddrUtils::Compare(fPasskeyAddress, event->bdaddr)) {
+		if (event->status == BT_OK)
+			syslog(LOG_INFO, "bluetooth_server: ssp passkey ok");
+		else {
+			syslog(LOG_NOTICE, "bluetooth_server: ssp passkey failed (%#x)",
+				event->status);
+		}
+		fPasskeyUsed = false;
+		_ClosePasskeyWindow();
+	}
+	// SPDX-SnippetEnd
+
 	if (request != NULL)
 		ClearWantedEvent(request);
 }
@@ -2212,5 +2443,166 @@ LocalDeviceImpl::WriteScanEnable(uint8 mode)
 	status_t status = fHCIDelegate->IssueCommand(command, size);
 	free(command);
 	return status == B_ERROR ? B_ERROR : B_OK;
+}
+// SPDX-SnippetEnd
+
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#if 0
+#pragma mark - R5 controller setup and Passkey Entry -
+#endif
+
+
+void
+LocalDeviceImpl::SetupController()
+{
+	BluetoothCommand<> command(OGF_INFORMATIONAL_PARAM,
+		OCF_READ_LOCAL_FEATURES);
+	_IssueSetupCommand(command.Data(), command.Size(),
+		PACK_OPCODE(OGF_INFORMATIONAL_PARAM, OCF_READ_LOCAL_FEATURES));
+}
+
+
+void
+LocalDeviceImpl::_IssueSetupCommand(const void* command, size_t size,
+	uint16 opcode)
+{
+	// The petition is in place before the command goes out, so the answer
+	// cannot arrive first. "r5_setup" marks it as the server's own: the
+	// Command Complete handler continues the setup instead of replying.
+	BMessage* request = new(std::nothrow) BMessage;
+	if (request == NULL)
+		return;
+	request->AddInt32("hci_id", fHCIDelegate->Id());
+	request->AddInt16("eventExpected", HCI_EVENT_CMD_COMPLETE);
+	request->AddInt16("opcodeExpected", opcode);
+	request->AddBool("r5_setup", true);
+	AddWantedEvent(request);
+
+	if (fHCIDelegate->IssueCommand((void*)command, size) == B_ERROR) {
+		syslog(LOG_WARNING, "bluetooth_server: hci%" B_PRId32
+			" setup command %#x not sent", GetID(), opcode);
+		ClearWantedEvent(request);
+		delete request;
+	}
+}
+
+
+void
+LocalDeviceImpl::_WriteSimplePairingMode()
+{
+	BluetoothCommand<typed_command(r5_hci_cp_write_simple_pairing_mode)>
+		command(OGF_CONTROL_BASEBAND, R5_OCF_WRITE_SIMPLE_PAIRING_MODE);
+	command->mode = 1;
+	_IssueSetupCommand(command.Data(), command.Size(),
+		PACK_OPCODE(OGF_CONTROL_BASEBAND, R5_OCF_WRITE_SIMPLE_PAIRING_MODE));
+}
+
+
+void
+LocalDeviceImpl::_WriteEventMask()
+{
+	// Only the bits this controller supports: the SSP events need its SSP
+	// feature, and Simple Pairing Mode must have been accepted.
+	uint64 mask = r5_event_mask(fHasSSP ? fFeatures : NULL);
+	BluetoothCommand<typed_command(r5_hci_cp_set_event_mask)>
+		command(OGF_CONTROL_BASEBAND, R5_OCF_SET_EVENT_MASK);
+	for (int i = 0; i < 8; i++)
+		command->mask[i] = (uint8)(mask >> (8 * i));
+	_IssueSetupCommand(command.Data(), command.Size(),
+		PACK_OPCODE(OGF_CONTROL_BASEBAND, R5_OCF_SET_EVENT_MASK));
+}
+
+
+BString
+LocalDeviceImpl::_PeerName(const bdaddr_t& bdaddr)
+{
+	ServerRemoteDevice* rd = RemoteDeviceByAddr(bdaddr);
+	if (rd != NULL && rd->friendly_name.Length() > 0)
+		return rd->friendly_name;
+	return bdaddrUtils::ToString(bdaddr);
+}
+
+
+void
+LocalDeviceImpl::_ClosePasskeyWindow()
+{
+	if (fPasskeyWindow.IsValid())
+		fPasskeyWindow.SendMessage(B_QUIT_REQUESTED);
+	fPasskeyWindow = BMessenger();
+}
+
+
+void
+LocalDeviceImpl::UserPasskeyRequest(
+	struct r5_hci_ev_user_passkey_request* event, BMessage* request)
+{
+	// The remote shows a passkey; the person types it here (Passkey Entry,
+	// Core 6.0, Vol 4, Part E, 7.7.43). Never logged.
+	TRACE_BT("LocalDeviceImpl: User Passkey Request for %s\n",
+		bdaddrUtils::ToString(event->bdaddr).String());
+
+	_ClosePasskeyWindow();
+	fPasskeyAddress = event->bdaddr;
+	fPasskeyUsed = true;
+
+	PasskeyWindow* window = new(std::nothrow) PasskeyWindow(event->bdaddr,
+		GetID(), _PeerName(event->bdaddr));
+	if (window == NULL) {
+		// Without a window nobody can answer: refuse at once.
+		BluetoothCommand<typed_command(r5_hci_cp_user_passkey_neg_reply)>
+			reply(OGF_LINK_CONTROL, R5_OCF_USER_PASSKEY_NEG_REPLY);
+		reply->bdaddr = event->bdaddr;
+		fHCIDelegate->IssueCommand(reply.Data(), reply.Size());
+		return;
+	}
+	fPasskeyWindow = BMessenger(window);
+	window->Show();
+}
+
+
+void
+LocalDeviceImpl::UserPasskeyNotification(
+	struct r5_hci_ev_user_passkey_notification* event, BMessage* request)
+{
+	// The remote (a keyboard) has no display: the passkey is shown here and
+	// typed there (7.7.48). Never logged.
+	TRACE_BT("LocalDeviceImpl: User Passkey Notification for %s\n",
+		bdaddrUtils::ToString(event->bdaddr).String());
+
+	uint32 passkey = B_LENDIAN_TO_HOST_INT32(event->passkey);
+	if (passkey > R5_PASSKEY_MAX) {
+		syslog(LOG_WARNING, "bluetooth_server: passkey out of range, ignored");
+		return;
+	}
+
+	_ClosePasskeyWindow();
+	fPasskeyAddress = event->bdaddr;
+	fPasskeyUsed = true;
+
+	PasskeyWindow* window = new(std::nothrow) PasskeyWindow(event->bdaddr,
+		GetID(), _PeerName(event->bdaddr), passkey);
+	if (window == NULL)
+		return;
+	fPasskeyWindow = BMessenger(window);
+	window->Show();
+}
+
+
+void
+LocalDeviceImpl::KeypressNotification(
+	struct r5_hci_ev_keypress_notification* event, BMessage* request)
+{
+	// The keyboard reports each digit typed (7.7.49); the window counts
+	// them. The digits themselves are not sent.
+	if (!fPasskeyUsed || !bdaddrUtils::Compare(fPasskeyAddress, event->bdaddr)
+		|| !fPasskeyWindow.IsValid())
+		return;
+
+	BMessage keypress(kMsgPasskeyKeypress);
+	keypress.AddUInt8("type", event->type);
+	fPasskeyWindow.SendMessage(&keypress);
 }
 // SPDX-SnippetEnd

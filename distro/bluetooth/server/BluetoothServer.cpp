@@ -115,6 +115,11 @@ BluetoothServer::BluetoothServer()
 	fEventListener2 = new BluetoothPortListener(BT_USERLAND_PORT_NAME,
 		(BluetoothPortListener::port_listener_func)&DispatchEvent);
 	fSDPServer = new SDPServer();
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	fHIDHost = new HIDHost();
+	// SPDX-SnippetEnd
 }
 
 
@@ -139,6 +144,14 @@ bool BluetoothServer::QuitRequested(void)
 
 	fSDPServer->Stop();
 	delete fSDPServer;
+
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	fHIDHost->Stop();
+	delete fHIDHost;
+	fHIDHost = NULL;
+	// SPDX-SnippetEnd
 
 	delete fEventListener2;
 	TRACE_BT("Shutting down bluetooth_server.\n");
@@ -181,6 +194,14 @@ void BluetoothServer::ReadyToRun(void)
 	status_t status = fSDPServer->Start();
 	if (status != B_OK)
 		TRACE_BT("BluetoothServer: Failed launching the SDP server thread\n");
+
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Classic HID: listens on PSM 0x11 and 0x13 (logs when the driver is
+	// missing; Bluetooth works without it).
+	fHIDHost->Start();
+	// SPDX-SnippetEnd
 
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
@@ -249,6 +270,13 @@ void BluetoothServer::MessageReceived(BMessage* message)
 			status = B_WOULD_BLOCK;
 			/* TODO: This should be by user request only! */
 			lDeviceImpl->Launch();
+
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			// Simple Pairing Mode and the Event Mask (step 4).
+			lDeviceImpl->SetupController();
+			// SPDX-SnippetEnd
 
 			// SPDX-SnippetBegin
 			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors

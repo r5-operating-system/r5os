@@ -14,6 +14,12 @@
 #include <ObjectList.h>
 
 #include "LocalDeviceHandler.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <Messenger.h>
+#include "R5Pairing.h"
+// SPDX-SnippetEnd
 
 #include "HCIDelegate.h"
 #include "HCIControllerAccessor.h"
@@ -38,6 +44,9 @@ struct ServerRemoteDevice
 	// Every new remote device starts disconnected, not with stack garbage.
 	RemoteDevice::ConnectionState			conn_state
 		= RemoteDevice::DISCONNECTED;
+	// Pairing was asked for here (Create Connection from the Bluetooth
+	// page): only then is a Numeric Comparison or Just Works accepted.
+	bool				user_pairing = false;
 	// SPDX-SnippetEnd
 	BMessage			services;
 };
@@ -80,6 +89,11 @@ public:
 	// Writes HCI Write Scan Enable without waiting for its answer (the
 	// radio switch, BT_MSG_R5_SET_RADIO).
 	status_t WriteScanEnable(uint8 mode);
+
+	// Reads the controller features, then writes Simple Pairing Mode and
+	// the Event Mask (docs/BLUETOOTH.md, step 4). Called when the radio is
+	// added and after every HCI Reset, which clears both.
+	void SetupController();
 	// SPDX-SnippetEnd
 
 	ServerRemoteDevice*	RemoteDeviceByAddr(bdaddr_t bdaddr);
@@ -102,6 +116,30 @@ private:
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
 	BString				fPath;
+
+	// Controller setup after a reset (SetupController()).
+	uint8				fFeatures[8];
+	bool				fHasSSP;
+	void				_IssueSetupCommand(const void* command, size_t size,
+							uint16 opcode);
+	void				_WriteSimplePairingMode();
+	void				_WriteEventMask();
+
+	// Passkey Entry (Secure Simple Pairing): one pairing at a time.
+	BMessenger			fPasskeyWindow;
+	bdaddr_t			fPasskeyAddress;
+	bool				fPasskeyUsed;
+	BString				_PeerName(const bdaddr_t& bdaddr);
+	void				_ClosePasskeyWindow();
+	void				UserPasskeyRequest(
+							struct r5_hci_ev_user_passkey_request* event,
+							BMessage* request);
+	void				UserPasskeyNotification(
+							struct r5_hci_ev_user_passkey_notification* event,
+							BMessage* request);
+	void				KeypressNotification(
+							struct r5_hci_ev_keypress_notification* event,
+							BMessage* request);
 	// SPDX-SnippetEnd
 
 	void SaveRemoteDevices();
