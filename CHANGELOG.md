@@ -1,5 +1,17 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-16 - Documentation: R5Book on disk, linked from the welcome page
+
+Problem: the R5Book (developer guide, `docs/r5book`) was only in the repository. The welcome page in WebPositive linked the Be Book and the Haiku Book, not the R5Book.
+
+What changed:
+- `scripts/apply-welcome.py` (called by `apply-overlay.sh`) copies `docs/r5book` to `data/r5/r5book` in the Haiku tree on every apply; the haiku package installs it in `/boot/system/documentation/r5book/`. So an R5Book change is in the next build without a second copy. The image copy has no Google Fonts link (the CSS falls back to the system font offline), the `LIBR5.md` and `ICONS.md` links go to GitHub, and the two pictures from outside `docs/r5book` (`r5-symbol.svg`, `people.svg`) are copied into its `img/`.
+- `distro/welcome/welcome_en.html` is Haiku's page from `haiku_welcome-2026_08_11-1`, unchanged except one list item "The R5Book" under "Getting to know the API" (SPDX snippet) and a note in the header. It is in the haiku package, a system package, so packagefs gives it precedence over the same file in `haiku_welcome` (`PackageNode::HasPrecedenceOver`). The rest of Haiku's welcome guide, its style, the other languages, the Quick Tour and the bug-report page stay as Haiku ships them.
+
+Limits: only the English page links the R5Book; the other languages are Haiku's. The page still names Haiku as the product and sends bug reports to Haiku's tracker: an R5 welcome guide was tried on `claude/r5-welcome` (not merged) and set aside to be done separately. The minimum image gets the R5Book too (same haiku package, about 0.5 MB). Not checked in WebPositive yet whether the R5Book's CSS (variables, grid) shows well.
+
+Tested: `scripts/build-locked.sh` (exit 0). `package list` of the built `haiku.hpkg` shows `documentation/r5book/` (the pages, `r5book.css`, `r5book.js`, `img/` with `r5-symbol.svg` and `people.svg`) and `documentation/welcome/welcome_en.html` with the R5Book link; no Google Fonts link is left in the extracted pages. Not booted: no QEMU or hardware test, so WebPositive showing the link and the R5Book is not proven.
+
 ## 2026-11-16 - Build: after another worktree built in the shared tree, the next one's files are built again
 
 Problem: a build of `claude/vram-fallback` failed to link `libr5wifi.so`, `libr5bt.so` and `r5_level_glyph_test` (`undefined reference to r5_level_glyph_draw`), although the source in the tree had that function. The applies copy with `shutil.copy2`, which keeps the source file's modification time. A bluetooth worktree had built `R5Icons.o` in the shared tree at 10:53; the next apply put back the other worktree's `R5Icons.cpp` with its checkout time of 10:40. The object looked newer than the source, so jam kept it, and `libr5icons.so` came out without the function. Any file can be hit this way, also without a link error (an old object that still links).
