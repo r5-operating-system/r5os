@@ -178,6 +178,11 @@ public:
 	// text. gpu_draw_classic true in the radeon_hd settings.
 	static	void				SetClassic(bool classic);
 	static	bool				Classic();
+	// Step 5b: anti-aliased edges mixed in linear light (a coverage pass
+	// per shape). Off by default: thin dark lines on a light background
+	// come out lighter and uneven, and the pass costs time (side-by-side
+	// sheet, 16 Nov 2026); gpu_draw_linear_edges true turns it on.
+	static	void				SetLinearEdges(bool linear);
 
 								SkiaPainter();
 								~SkiaPainter();

@@ -341,6 +341,13 @@ SkiaDrawingEngine::SetClassic(bool classic)
 
 
 /*static*/ void
+SkiaDrawingEngine::SetLinearEdges(bool linear)
+{
+	SkiaPainter::SetLinearEdges(linear);
+}
+
+
+/*static*/ void
 SkiaDrawingEngine::SetDebug(bool debug)
 {
 	sDebug = debug;

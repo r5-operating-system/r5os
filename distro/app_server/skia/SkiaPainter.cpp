@@ -201,6 +201,14 @@ gradient_effect()
 
 
 static bool sClassic = false;
+static bool sLinearEdges = false;
+
+
+/*static*/ void
+SkiaPainter::SetLinearEdges(bool linear)
+{
+	sLinearEdges = linear;
+}
 
 
 /*static*/ void
@@ -227,7 +235,10 @@ text_props()
 		: kBGR_H_SkPixelGeometry;
 	if (sClassic)
 		return SkSurfaceProps(0, geometry, 0, 1);
-	return SkSurfaceProps(0, geometry);
+	// step 5b: Skia's own text gamma (1.2) with a little more contrast than
+	// its default 0.2, so light-hinted grayscale text at 9 to 12 points does
+	// not go pale (judged on the side-by-side sheet, 16 Nov 2026)
+	return SkSurfaceProps(0, geometry, 0.4f, 1.2f);
 }
 
 
@@ -1120,8 +1131,12 @@ SkiaPainter::_BlenderPaint(bool forceSolidHigh, const sk_sp<SkShader>& colors,
 		return false;
 	// the source: the gradient, the coverage, or any colour (the blender
 	// takes the pattern's colour from its uniforms)
+	// text: the colour Skia sees picks its text contrast curve, so it is the
+	// text's own (the blender takes the colour from its uniforms anyway)
+	rgb_color ink = solidLow ? fLowColor : fHighColor;
 	paint->setShader(colors != nullptr ? colors : coverage != nullptr
-		? coverage : SkShaders::Color(SK_ColorWHITE));
+		? coverage : SkShaders::Color(text ? SkColorSetRGB(ink.red,
+			ink.green, ink.blue) : SK_ColorWHITE));
 	paint->setBlender(blender);
 	paint->setAntiAlias(coverage == nullptr);
 	SkiaGpu::Profile(SkiaGpu::kCountBlender);
@@ -1253,7 +1268,7 @@ SkiaPainter::_DrawCoverage(const SkRect& deviceBounds, const SkPath* path,
 	SkColor directColor;
 	// step 5b: the new look mixes the edges in linear light, so Skia draws
 	// only the coverage there (below)
-	bool linearEdges = !sClassic;
+	bool linearEdges = !sClassic && sLinearEdges;
 	if (!linearEdges && gradient == NULL
 		&& _DirectColor(false, &directDraw, &directColor)) {
 		if (directDraw) {

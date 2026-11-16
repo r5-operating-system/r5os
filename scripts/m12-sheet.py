@@ -3,11 +3,13 @@
 # Copyright 2026 R5OS Contributors
 """M12 side-by-side sheet: AGG (Painter), Skia classic look, Skia step 5b.
 
-Reads the dumps of two r5-draw-compare runs (one with --dump, one with
---dump --new-look) copied out of the image, and writes one PNG with a row
-per operation, each image enlarged three times.
+Reads the dumps of r5-draw-compare runs (one with --dump, one with
+--dump --new-look, optionally one more with --new-look and
+gpu_draw_linear_edges true) copied out of the image, and writes one PNG
+with a row per operation, each image enlarged three times.
 
 usage: m12-sheet.py <dump dir> <classic log> <new-look log> <out.png>
+	[<linear-edges log>]
 """
 
 import re
@@ -59,30 +61,42 @@ def main():
 	folder, classic_log, new_log, out = sys.argv[1:5]
 	classic = dumps(classic_log)
 	new = dumps(new_log)
+	edges = dumps(sys.argv[5]) if len(sys.argv) > 5 else None
+	titles = ["AGG (Painter, today)", "Skia, classic look",
+		"Skia, step 5b (default)"]
+	if edges is not None:
+		titles.append("Skia, step 5b + linear edges")
+	count = len(titles)
 	rows = []
 	for name in OPERATIONS:
-		if name not in classic or name not in new:
+		if name not in classic or name not in new or (edges is not None
+				and name not in edges):
 			print("missing", name)
 			continue
-		images = [
-			read_pam(f"{folder}/{classic[name]}-painter.pam"),
-			read_pam(f"{folder}/{classic[name]}-gpu.pam"),
-			read_pam(f"{folder}/{new[name]}-gpu.pam"),
-		]
+		try:
+			images = [
+				read_pam(f"{folder}/{classic[name]}-painter.pam"),
+				read_pam(f"{folder}/{classic[name]}-gpu.pam"),
+				read_pam(f"{folder}/{new[name]}-gpu.pam"),
+			]
+			if edges is not None:
+				images.append(read_pam(f"{folder}/{edges[name]}-gpu.pam"))
+		except OSError as error:
+			print("missing", name, error)
+			continue
 		rows.append((name, [i.resize((i.width * ZOOM, i.height * ZOOM),
 			Image.NEAREST) for i in images]))
 	label = 200
 	gap = 8
 	width = label + sum(max(r[1][c].width for r in rows) + gap
-		for c in range(3))
+		for c in range(count))
 	height = 30 + sum(max(i.height for i in r[1]) + gap for r in rows)
 	sheet = Image.new("RGB", (width, height), (255, 255, 255))
 	draw = ImageDraw.Draw(sheet)
 	columns = [label]
-	for c in range(3):
+	for c in range(count):
 		columns.append(columns[-1] + max(r[1][c].width for r in rows) + gap)
-	for c, title in enumerate(["AGG (Painter, today)", "Skia, classic look",
-			"Skia, step 5b (default)"]):
+	for c, title in enumerate(titles):
 		draw.text((columns[c] + 4, 8), title, fill=(0, 0, 0))
 	y = 30
 	for name, images in rows:

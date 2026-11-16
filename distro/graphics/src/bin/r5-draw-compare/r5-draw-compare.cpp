@@ -606,7 +606,8 @@ main(int argc, char** argv)
 	// grayscale text) instead of the classic one; for the side-by-side
 	// sheet, the limits are not meant for it
 	bool newLook = false;
-	int32 dumpCount = (getpid() % 1000) * 100;
+	// about 1000 dumps per run: runs 10000 apart
+	int32 dumpCount = (getpid() % 1000) * 10000;
 	for (int i = 1; i < argc; i++) {
 		if (strcmp(argv[i], "--time") == 0)
 			timing = true;
