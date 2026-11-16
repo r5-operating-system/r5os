@@ -43,6 +43,8 @@ Game or program
   - `StartWatching(BMessenger)`: `B_GAME_CONTROLLER_ADDED` and `..._REMOVED` messages when a controller is plugged in or paired, the BeOS way, no polling;
   - rumble and lights later, as calls added at the end (option C).
 - One additive call in the joystick driver interface (an R5 snippet) for vendor and product ID, filled by `usb_hid` and by `bluetooth_hid`.
+- Old programs: a controller under `/dev/joystick/` works in every `BJoystick` program (and in SDL games, which read through `BJoystick` on Haiku) with no change, because `BJoystick` scans the subfolders too (`JoystickTweaker.cpp`, `_ScanIncludingDisabled()`): a Bluetooth pad is `bluetooth/0`, a USB pad `usb/0`, when the driver speaks the same joystick protocol as `usb_hid` (`JoystickProtocolHandler`). Old programs see raw button and axis numbers in the controller's own order, and no plug or unplug messages; the named layout and `StartWatching()` are for programs that use `BGameController`.
+- Rule for option C: swapping buttons happens below `BJoystick`, in the driver path, so old programs get it too; never only in `BGameController`.
 - Settings → Devices → Game controllers (alphabetical, between Bluetooth and Keyboard): a `BCard` per controller with name, layout (Xbox or PlayStation labels) and battery (`R5_LEVEL_BATTERY`), and a live test drawn in the real layout. The same view later in a separate program, as with Bluetooth and Wi-Fi.
 - The controller battery shows in the existing Bluetooth item in Deskbar, not in an item of its own.
 
