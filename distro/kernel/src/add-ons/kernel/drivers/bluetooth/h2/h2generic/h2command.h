@@ -101,11 +101,38 @@ h2_command_answer(const uint8* event, size_t size, uint16* _opcode)
 }
 
 
-// Note a command that was sent at "now". A full tracker gives up on the
-// slot that waited longest.
-static inline void
-h2_command_sent(h2_command_tracker* tracker, uint16 opcode, bigtime_t now)
+// The same from the first bytes of an event only: the first
+// min(6, 2 + length) bytes, enough for both opcodes.
+static inline bool
+h2_command_answer_head(const uint8* event, size_t size, uint16* _opcode)
 {
+	if (event == NULL || size < 2)
+		return false;
+
+	uint16 opcode;
+	if (event[0] == H2_EVENT_COMMAND_COMPLETE && event[1] >= 3 && size >= 5)
+		opcode = (uint16)(event[3] | (event[4] << 8));
+	else if (event[0] == H2_EVENT_COMMAND_STATUS && event[1] >= 4 && size >= 6)
+		opcode = (uint16)(event[4] | (event[5] << 8));
+	else
+		return false;
+
+	if (opcode == 0)
+		return false;
+	*_opcode = opcode;
+	return true;
+}
+
+
+// Note a command that was sent at "now" and return the slot it uses. A full
+// tracker gives up on the slot that waited longest; *_dropped is then that
+// command's opcode, so the caller can report its timeout at once (it was
+// lost silently). Otherwise *_dropped is 0.
+static inline int
+h2_command_sent(h2_command_tracker* tracker, uint16 opcode, bigtime_t now,
+	uint16* _dropped)
+{
+	*_dropped = 0;
 	int use = -1;
 	for (int i = 0; i < H2_TRACKED_COMMANDS && use < 0; i++) {
 		if (tracker->slots[i].state == H2_COMMAND_FREE)
@@ -122,11 +149,27 @@ h2_command_sent(h2_command_tracker* tracker, uint16 opcode, bigtime_t now)
 			if (tracker->slots[i].deadline < tracker->slots[use].deadline)
 				use = i;
 		}
+		*_dropped = tracker->slots[use].opcode;
 	}
 
 	tracker->slots[use].opcode = opcode;
 	tracker->slots[use].state = H2_COMMAND_WAITING;
 	tracker->slots[use].deadline = now + kH2CommandTimeout;
+	return use;
+}
+
+
+// The command noted in "slot" was not sent after all. Frees exactly that
+// slot (freeing by opcode took the oldest command of that opcode, which
+// could be another one still in flight).
+static inline void
+h2_command_unsent(h2_command_tracker* tracker, int slot, uint16 opcode)
+{
+	if (slot < 0 || slot >= H2_TRACKED_COMMANDS)
+		return;
+	h2_command_slot& entry = tracker->slots[slot];
+	if (entry.opcode == opcode && entry.state == H2_COMMAND_WAITING)
+		entry.state = H2_COMMAND_FREE;
 }
 
 
@@ -211,13 +254,87 @@ h2_command_timeout_event(uint16 opcode, uint8 event[H2_TIMEOUT_EVENT_SIZE])
 }
 
 
+// The event endpoint does not cut its transfers at event boundaries. An
+// event whose length is a multiple of the packet size has no short packet
+// after it, so the next event lands in the same transfer; a transfer that
+// fills its buffer ends inside an event. This follows the boundaries across
+// transfers, so every event is judged from its first bytes, and an event
+// that must go is removed whole, without the events around it.
+#define H2_EVENT_HEAD_SIZE		6
+
+struct h2_event_stream {
+	uint8		head[H2_EVENT_HEAD_SIZE];
+		// The first bytes of an event not judged yet
+	uint8		headSize;
+	uint16		left;
+		// Bytes of the judged event still to come
+	bool		dropping;
+};
+
+
+static inline void
+h2_event_stream_reset(h2_event_stream* stream)
+{
+	stream->headSize = 0;
+	stream->left = 0;
+	stream->dropping = false;
+}
+
+
+// Copies the bytes of "in" that go up to "out" (room for inSize +
+// H2_EVENT_HEAD_SIZE bytes) and returns their count. drop(cookie, head,
+// headSize) is called once per event with its first min(6, 2 + length)
+// bytes and returns true when the whole event must go.
+template<typename Drop>
+static inline size_t
+h2_event_stream_filter(h2_event_stream* stream, const uint8* in,
+	size_t inSize, uint8* out, Drop drop)
+{
+	size_t outSize = 0;
+	size_t i = 0;
+	while (i < inSize) {
+		if (stream->left > 0) {
+			size_t count = inSize - i;
+			if (count > stream->left)
+				count = stream->left;
+			if (!stream->dropping) {
+				for (size_t j = 0; j < count; j++)
+					out[outSize++] = in[i + j];
+			}
+			i += count;
+			stream->left -= count;
+			continue;
+		}
+
+		stream->head[stream->headSize++] = in[i++];
+		if (stream->headSize < 2)
+			continue;
+		size_t eventSize = 2 + (size_t)stream->head[1];
+		size_t need = eventSize < H2_EVENT_HEAD_SIZE
+			? eventSize : H2_EVENT_HEAD_SIZE;
+		if (stream->headSize < need)
+			continue;
+
+		stream->dropping = drop(stream->head, stream->headSize);
+		if (!stream->dropping) {
+			for (size_t j = 0; j < stream->headSize; j++)
+				out[outSize++] = stream->head[j];
+		}
+		stream->left = (uint16)(eventSize - stream->headSize);
+		stream->headSize = 0;
+	}
+	return outSize;
+}
+
+
 #ifdef _KERNEL_MODE
 struct bt_usb_dev;
 
-// h2generic.cpp: called by event_complete() for each event transfer;
-// returns true when the transfer must not go up.
-bool h2_command_event(struct bt_usb_dev* bdev, const uint8* data,
-	size_t size);
+// h2generic.cpp: called by event_complete() for each event transfer.
+// Returns the bytes to pass up (none when the transfer only held a late
+// answer, or the start of an event not judged yet) and their count.
+const uint8* h2_command_events(struct bt_usb_dev* bdev, const uint8* data,
+	size_t size, size_t* _outSize);
 #endif
 
 

@@ -7,8 +7,9 @@
  * reply: a connection state for an unknown radio and address, an address of
  * the wrong size, no address at all, remote devices of an unknown radio, a
  * removal of an unknown device, and a stop-watching for a messenger that
- * never watched. Every request that waits for a reply must get one, and the
- * server must still run at the end.
+ * never watched; and the radio switch (step 3a): off, a refused
+ * connection, on again. Every request that waits for a reply must get one,
+ * and the server must still run at the end.
  *
  * Prints, and writes to the syslog, "bt_server_smoke_test: ok (0 crashes)"
  * or "bt_server_smoke_test: FAIL <reason>". Exit status 0 on ok.
@@ -207,6 +208,47 @@ main()
 			bdaddrUtils::ToString(address).String(), name.String(), took);
 		if (memcmp(&address, &none, sizeof(address)) == 0)
 			fail("the radio gave no address");
+	}
+
+	// The radio switch (step 3a): off, read back, a connection is refused,
+	// on again, read back. Leaves the switch on.
+	{
+		bool before = true;
+		BMessage request(BT_MSG_R5_GET_RADIO);
+		BMessage reply;
+		if (ask(server, request, reply, "radio switch, read")
+			&& reply.FindBool("enabled", &before) != B_OK)
+			fail("radio switch, read: no \"enabled\" in the reply");
+
+		for (int pass = 0; pass < 2; pass++) {
+			bool on = pass == 1;
+			BMessage set(BT_MSG_R5_SET_RADIO);
+			set.AddBool("enabled", on);
+			BMessage setReply;
+			if (ask(server, set, setReply, "radio switch, set")
+				&& setReply.GetInt32("status", B_ERROR) != B_OK)
+				fail("radio switch, set: not saved");
+
+			BMessage get(BT_MSG_R5_GET_RADIO);
+			BMessage getReply;
+			if (ask(server, get, getReply, "radio switch, read back")
+				&& getReply.GetBool("enabled", !on) != on)
+				fail("radio switch, read back: wrong value");
+
+			if (!on) {
+				BMessage connect(BT_REQ_CREATE_CONN);
+				connect.AddInt32("hci_id", kUnknownRadio);
+				connect.AddData("bdaddr", B_ANY_TYPE, &unknown, sizeof(unknown));
+				BMessage connectReply;
+				if (ask(server, connect, connectReply, "connect while off")
+					&& connectReply.GetInt32("status", B_OK) != B_NOT_ALLOWED)
+					fail("connect while off: not refused");
+			}
+		}
+		printf("bt_server_smoke_test: radio switch ok (was %s)\n",
+			before ? "on" : "off");
+		syslog(LOG_INFO, "bt_server_smoke_test: radio switch ok (was %s)",
+			before ? "on" : "off");
 	}
 
 	team_info info;

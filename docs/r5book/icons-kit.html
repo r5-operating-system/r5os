@@ -136,7 +136,7 @@ status_t r5_button_set_mime_icon(BButton* button, const char* type, float button
 					<span class="sys-button"><svg data-glyph="restart"></svg>Restart</span>
 					<span class="sys-button"><svg data-glyph="power"></svg>Shut down</span>
 				</div>
-				<figcaption><span>The six glyphs at 48 pixels, and on buttons with <code>r5_button_set_glyph()</code></span><span class="badge-mockup">Mockup &middot; same geometry as the code</span></figcaption>
+				<figcaption><span>The first six glyphs at 48 pixels, and on buttons with <code>r5_button_set_glyph()</code>; the Bluetooth glyph is not drawn in this mockup</span><span class="badge-mockup">Mockup &middot; same geometry as the code</span></figcaption>
 			</figure>
 
 			<table class="spec">
@@ -147,6 +147,7 @@ status_t r5_button_set_mime_icon(BButton* button, const char* type, float button
 				<tr><td><code>R5_GLYPH_EYE</code></td><td>4</td><td>An open eye: show the password</td></tr>
 				<tr><td><code>R5_GLYPH_EYE_OFF</code></td><td>5</td><td>The eye with a line through it: hide the password</td></tr>
 				<tr><td><code>R5_GLYPH_LOG_OUT</code></td><td>6</td><td>An open door frame with an arrow out to the right</td></tr>
+				<tr><td><code>R5_GLYPH_BLUETOOTH</code></td><td>7</td><td>The Bluetooth rune</td></tr>
 			</table>
 
 			<div class="member">
@@ -169,6 +170,38 @@ status_t r5_button_set_mime_icon(BButton* button, const char* type, float button
 <pre class="code">BButton* restart = <span class="k">new</span> BButton(<span class="s">"reboot"</span>, <span class="s">"Restart"</span>, <span class="k">new</span> BMessage(kRebootAction));
 restart-&gt;SetFont(&amp;buttonFont);
 r5_button_set_glyph(restart, R5_GLYPH_RESTART);</pre>
+		</section>
+
+		<!-- level glyphs -->
+		<section class="entry" id="r5_level_glyph">
+			<div class="entry-header"><h2>r5_level_glyph</h2><span class="kind">enum and function</span></div>
+			<p>A signal strength or a battery charge, drawn in code from a level, in the colors the caller
+			passes. The Wi-Fi list and the Deskbar network icon draw their bars with it, so they look the
+			same. The numbers are part of the contract: a new one is added at the end.</p>
+
+			<table class="spec">
+				<tr><th>Value</th><th>Number</th><th>Picture</th></tr>
+				<tr><td><code>R5_LEVEL_SIGNAL</code></td><td>1</td><td>Four bars of rising height, left to right</td></tr>
+				<tr><td><code>R5_LEVEL_BATTERY</code></td><td>2</td><td>A battery body with a cap on the right, four segments inside</td></tr>
+			</table>
+			<table class="spec">
+				<tr><th>r5_level_style</th><th>Number</th><th>Use</th></tr>
+				<tr><td><code>R5_LEVEL_STYLE_NORMAL</code></td><td>0</td><td>The level in the foreground color</td></tr>
+				<tr><td><code>R5_LEVEL_STYLE_DISABLED</code></td><td>1</td><td>Greyed, for example while disconnected</td></tr>
+				<tr><td><code>R5_LEVEL_STYLE_OFF</code></td><td>2</td><td>Outlines only</td></tr>
+			</table>
+
+			<div class="member">
+				<div class="sig">void r5_level_glyph_draw(BView* view, r5_level_glyph which, BRect frame, int32 level, rgb_color foreground, rgb_color background, r5_level_style style);</div>
+				<p>Draws <code class="inline">which</code> inside <code class="inline">frame</code> with
+				<code class="inline">level</code> of its four steps filled (0 to 4; other values are clamped).
+				The empty steps are a faint tint of <code class="inline">foreground</code> over
+				<code class="inline">background</code>. The view's drawing state is the same afterwards.</p>
+			</div>
+
+<pre class="code">r5_level_glyph_draw(<span class="k">this</span>, R5_LEVEL_SIGNAL, barsFrame, 3,
+	ui_color(B_LIST_ITEM_TEXT_COLOR), ui_color(B_LIST_BACKGROUND_COLOR),
+	R5_LEVEL_STYLE_NORMAL);</pre>
 		</section>
 
 		<!-- r5_icon -->

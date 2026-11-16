@@ -57,7 +57,13 @@ public:
 	~LocalDeviceImpl();
 	void Unregister();
 
-	void HandleEvent(struct hci_event_header* event);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// size: what the port delivered, header included.
+	void HandleEvent(struct hci_event_header* event, size_t size);
+	static bool _EventFits(const struct hci_event_header* event, size_t size);
+	// SPDX-SnippetEnd
 
 	// Request handling
 	status_t 	ProcessSimpleRequest(BMessage* request);
@@ -67,6 +73,14 @@ public:
 	void CancelConnection(BMessage* message);
 	void Disconnect(BMessage* message);
 	void SetConnEncryption(uint16 handle, bool encryption_enabled);
+
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Writes HCI Write Scan Enable without waiting for its answer (the
+	// radio switch, BT_MSG_R5_SET_RADIO).
+	status_t WriteScanEnable(uint8 mode);
+	// SPDX-SnippetEnd
 
 	ServerRemoteDevice*	RemoteDeviceByAddr(bdaddr_t bdaddr);
 	ServerRemoteDevice*	RemoteDeviceByHandle(uint16 handle);

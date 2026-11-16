@@ -7,6 +7,7 @@
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 #include "l2cap_parse.h"
+#include <stdlib.h>
 // SPDX-SnippetEnd
 
 #include <AutoDeleter.h>
@@ -134,20 +135,51 @@ L2capEndpointManager::GetForChannel(uint16 cid)
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// The state was written without the endpoint's lock and nobody was woken,
+// so a connect() or shutdown() waiting on that link stayed blocked
+// (review of #4291). The endpoint lock is taken outside the channel lock:
+// Connect() holds the endpoint lock while it binds a channel.
 void
 L2capEndpointManager::Disconnected(HciConnection* connection)
 {
-	ReadLocker _(fChannelEndpointsLock);
-	auto iter = fChannelEndpoints.GetIterator();
-	while (iter.HasNext()) {
-		L2capEndpoint* endpoint = iter.Next();
-		if (endpoint->fConnection != connection)
-			continue;
-
-		endpoint->fConnection = NULL;
-		endpoint->fState = L2capEndpoint::CLOSED;
-
-		endpoint->socket->error = ENOTCONN;
-		gSocketModule->notify(endpoint->socket, B_SELECT_ERROR, ENOTCONN);
+	L2capEndpoint** endpoints = NULL;
+	int32 count = 0;
+	{
+		ReadLocker _(fChannelEndpointsLock);
+		int32 total = 0;
+		auto iter = fChannelEndpoints.GetIterator();
+		while (iter.HasNext()) {
+			if (iter.Next()->fConnection == connection)
+				total++;
+		}
+		if (total == 0)
+			return;
+		endpoints = (L2capEndpoint**)malloc(total * sizeof(L2capEndpoint*));
+		auto collect = fChannelEndpoints.GetIterator();
+		while (collect.HasNext()) {
+			L2capEndpoint* endpoint = collect.Next();
+			if (endpoint->fConnection != connection)
+				continue;
+			if (endpoints == NULL) {
+				// No memory: at least mark it, as before.
+				endpoint->fConnection = NULL;
+				endpoint->fState = L2capEndpoint::CLOSED;
+				continue;
+			}
+			gSocketModule->acquire_socket(endpoint->socket);
+			endpoints[count++] = endpoint;
+		}
 	}
+
+	for (int32 i = 0; i < count; i++) {
+		L2capEndpoint* endpoint = endpoints[i];
+		endpoint->_HandleLinkLost();
+		gSocketModule->notify(endpoint->socket, B_SELECT_ERROR, ENOTCONN);
+		gSocketModule->release_socket(endpoint->socket);
+	}
+	free(endpoints);
 }
+// SPDX-SnippetEnd

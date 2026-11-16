@@ -70,6 +70,7 @@ SOURCES = (
     "VirtualMemoryModule.h",
     "WiFiModule.cpp",
     "WiFiModule.h",
+    "BluetoothModule.cpp",
     "ConnectionsModule.cpp",
     "ConnectionsModule.h",
     "DiscoveryModule.cpp",

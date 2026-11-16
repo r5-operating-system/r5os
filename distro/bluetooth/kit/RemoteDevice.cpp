@@ -385,6 +385,14 @@ RemoteDevice::GetConnectionDetails(bt_connection_details* details)
 	details->hci = fDiscovererLocalDevice->ID();
 	return B_OK;
 }
+
+
+int8
+RemoteDevice::GetRSSI()
+{
+	CALLED();
+	return fRSSI;
+}
 // SPDX-SnippetEnd
 
 
@@ -424,6 +432,13 @@ RemoteDevice::RemoteDevice(const bdaddr_t address, uint8 record[3])
 	fScanMode(0)
 {
 	CALLED();
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Read by GetRSSI() and GetFriendlyName() before an inquiry sets them.
+	fRSSI = HCI_RSSI_INVALID;
+	fFriendlyNameIsComplete = false;
+	// SPDX-SnippetEnd
 	fBdaddr = address;
 	fDeviceClass.SetRecord(record);
 	fMessenger = _RetrieveBluetoothMessenger();
@@ -437,6 +452,13 @@ RemoteDevice::RemoteDevice(const BString& address)
 	fScanMode(0)
 {
 	CALLED();
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Read by GetRSSI() and GetFriendlyName() before an inquiry sets them.
+	fRSSI = HCI_RSSI_INVALID;
+	fFriendlyNameIsComplete = false;
+	// SPDX-SnippetEnd
 	fBdaddr = bdaddrUtils::FromString((const char*)address.String());
 	fMessenger = _RetrieveBluetoothMessenger();
 }
