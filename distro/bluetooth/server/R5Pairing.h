@@ -29,7 +29,8 @@
 // person started on the Bluetooth page, as BlueZ asks it.
 #define R5_HCI_AUTH_REQ_MITM_DEDICATED_BOND	0x03
 
-// IO capability KeyboardDisplay (7.1.29), not in btHCI_event.h.
+// IO capability KeyboardDisplay: an LE (SMP) value only; BR/EDR takes
+// 0x00 to 0x03 (Vol 4, Part E, 7.1.29).
 #define R5_HCI_IO_CAP_KEYBOARD_DISPLAY		0x04
 
 // LMP feature "Secure Simple Pairing (Controller Support)", bit 51 of the

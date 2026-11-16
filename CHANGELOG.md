@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-16 - Bluetooth: Classic pairing answered with an IO capability BR/EDR has (third stick boot)
+
+Problem: on the third stick boot the radio refused our IO Capability Request Reply with 0x12 (Invalid HCI Command Parameters), and every Classic pairing ended in 0x37. We sent KeyboardDisplay (0x04), an LE-only value; BR/EDR takes 0x00 to 0x03 (Core 6.0, Vol 4, Part E, 7.1.29). This was in step 4 since it was written.
+
+What changed: `bluetooth_server` answers DisplayYesNo for BR/EDR, as BlueZ: a keyboard still gets Passkey Entry with the number shown here, a phone Numeric Comparison, a gamepad Just Works. The same boot: the outside diagnosis's changes (MediaTek low power setting, SSP and Secure Connections host bits) are in and logged clean; LE still ends in 0x3E (open, a second read-only review is asked); the legacy connect after extended commands is refused with 0x0C, as allowed.
+
+Tested: built for x86_64. Not on a stick yet.
+
 ## 2026-11-16 - Bluetooth: first two stick boots of Low Energy, pairing windows and notifications
 
 Problem: the first two stick boots of PR #4314 on the 5625U (MT7922) showed the LE setup and scan working (`le event mask 0x1a5f`, extended scan; the Designer Mouse, the 8BitDo M30 and phones in the list), but no pairing: every LE link to the Designer Mouse dropped in the same second with `0x3E`, and the Classic M30 ended in `0x37` (Simple Pairing Not Supported by Host). Haiku's "Incoming Connection" window showed at every connection, also our own Pair, with a broken name.

@@ -2439,12 +2439,15 @@ LocalDeviceImpl::IOCapabilityRequest(struct hci_ev_io_capability_request* event,
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
-	// KeyboardDisplay, as BlueZ: a keyboard (KeyboardOnly) gets Passkey
-	// Entry with the passkey shown here, a device with only a display gets
-	// Passkey Entry typed here, a phone gets Numeric Comparison
-	// (Core 6.0, Vol 3, Part C, 5.2.2.6).
+	// DisplayYesNo, as BlueZ sends for BR/EDR: a keyboard (KeyboardOnly)
+	// gets Passkey Entry with the passkey shown here, a phone gets
+	// Numeric Comparison, a gamepad Just Works (Core 6.0, Vol 3, Part C,
+	// 5.2.2.6). KeyboardDisplay (0x04) is an LE value only: BR/EDR takes
+	// 0x00 to 0x03 (Vol 4, Part E, 7.1.29). The MT7922 refused our reply
+	// with 0x12 (Invalid HCI Command Parameters) and every Classic pairing
+	// then ended in 0x37 (third stick boot).
 	command = buildIOCapabilityRequestReply(event->bdaddr,
-		R5_HCI_IO_CAP_KEYBOARD_DISPLAY, HCI_OOB_DATA_NOT_PRESENT,
+		HCI_IO_CAP_DISPLAY_YES_NO, HCI_OOB_DATA_NOT_PRESENT,
 		R5_HCI_AUTH_REQ_MITM_DEDICATED_BOND, &size);
 	if (command == NULL)
 		return;
