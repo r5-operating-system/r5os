@@ -93,6 +93,12 @@ FILES = (
     # M11 step 4: sets the window effects from a shell, opens a glass window.
     "src/bin/r5-effects-test/Jamfile",
     "src/bin/r5-effects-test/r5-effects-test.cpp",
+    # M12 step 2: the compare set, Painter against Skia.
+    "src/bin/r5-draw-compare/Jamfile",
+    "src/bin/r5-draw-compare/r5-draw-compare.cpp",
+    # M12 step 5: offscreen BBitmap views and Sync().
+    "src/bin/r5-offscreen-test/Jamfile",
+    "src/bin/r5-offscreen-test/r5-offscreen-test.cpp",
 )
 
 
@@ -238,6 +244,42 @@ def hook_gfxinfo(haiku: pathlib.Path) -> None:
             raise SystemExit("effects-test anchor missing in regular image")
         regular.write_text(text.replace(anchor, anchor + line, 1), encoding="utf-8")
         print("patched regular image effects-test")
+
+    jam = haiku / "src" / "bin" / "Jamfile"
+    text = jam.read_text(encoding="utf-8")
+    line = "SubInclude HAIKU_TOP src bin r5-draw-compare ;\n"
+    if line not in text:
+        anchor = "SubInclude HAIKU_TOP src bin r5-effects-test ;\n"
+        if anchor not in text:
+            raise SystemExit("draw-compare anchor missing in src/bin/Jamfile")
+        jam.write_text(text.replace(anchor, anchor + line, 1), encoding="utf-8")
+        print("patched src/bin/Jamfile draw-compare")
+    text = regular.read_text(encoding="utf-8")
+    line = "SYSTEM_BIN += r5-draw-compare ;\n"
+    if line not in text:
+        anchor = "SYSTEM_BIN += r5-effects-test ;\n"
+        if anchor not in text:
+            raise SystemExit("draw-compare anchor missing in regular image")
+        regular.write_text(text.replace(anchor, anchor + line, 1), encoding="utf-8")
+        print("patched regular image draw-compare")
+
+    jam = haiku / "src" / "bin" / "Jamfile"
+    text = jam.read_text(encoding="utf-8")
+    line = "SubInclude HAIKU_TOP src bin r5-offscreen-test ;\n"
+    if line not in text:
+        anchor = "SubInclude HAIKU_TOP src bin r5-draw-compare ;\n"
+        if anchor not in text:
+            raise SystemExit("offscreen-test anchor missing in src/bin/Jamfile")
+        jam.write_text(text.replace(anchor, anchor + line, 1), encoding="utf-8")
+        print("patched src/bin/Jamfile offscreen-test")
+    text = regular.read_text(encoding="utf-8")
+    line = "SYSTEM_BIN += r5-offscreen-test ;\n"
+    if line not in text:
+        anchor = "SYSTEM_BIN += r5-draw-compare ;\n"
+        if anchor not in text:
+            raise SystemExit("offscreen-test anchor missing in regular image")
+        regular.write_text(text.replace(anchor, anchor + line, 1), encoding="utf-8")
+        print("patched regular image offscreen-test")
 
     launch = haiku / "data" / "launch" / "user"
     text = launch.read_text(encoding="utf-8")

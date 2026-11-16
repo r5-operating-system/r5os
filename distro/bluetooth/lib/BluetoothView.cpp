@@ -41,6 +41,15 @@
 static const uint32 kMsgRadioSwitch = 'btvS';
 static const uint32 kMsgRadioChosen = 'btvR';
 static const uint32 kMsgScanButton = 'btvB';
+static const uint32 kMsgPairButton = 'btvP';
+static const uint32 kMsgDeviceSelected = 'btvD';
+
+
+static BButton*
+pair_button(BView* view)
+{
+	return dynamic_cast<BButton*>(view->FindView("pair"));
+}
 
 
 static float
@@ -243,6 +252,9 @@ BluetoothView::BluetoothView(bool settingsPage)
 	fScanStatus->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
 	fScanButton = new BButton("scan", B_TRANSLATE("Scan"),
 		new BMessage(kMsgScanButton));
+	fDeviceList->SetSelectionMessage(new BMessage(kMsgDeviceSelected));
+	BButton* pairButton = new BButton("pair", B_TRANSLATE("Pair"),
+		new BMessage(kMsgPairButton));
 
 	BStringView* devicesTitle = new BStringView("devices title",
 		B_TRANSLATE("Devices nearby"));
@@ -257,6 +269,7 @@ BluetoothView::BluetoothView(bool settingsPage)
 		.AddGroup(B_HORIZONTAL)
 			.Add(fScanStatus)
 			.AddGlue()
+			.Add(pairButton)
 			.Add(fScanButton)
 		.End();
 	devicesBox->AddChild(devicesInner);
@@ -287,6 +300,9 @@ BluetoothView::AttachedToWindow()
 
 	fRadioSwitch->SetTarget(this);
 	fScanButton->SetTarget(this);
+	fDeviceList->SetTarget(this);
+	if (BButton* pairButton = pair_button(this))
+		pairButton->SetTarget(this);
 	fRadioMenu->SetTargetForItems(this);
 
 	if (fController == NULL) {
@@ -357,6 +373,25 @@ BluetoothView::MessageReceived(BMessage* message)
 		{
 			BMessage request(fState.scanning ? kMsgBluetoothCancelScan
 				: kMsgBluetoothScan);
+			_SendToController(&request);
+			break;
+		}
+
+		case kMsgDeviceSelected:
+			_UpdateControls();
+			break;
+
+		case kMsgPairButton:
+		{
+			DeviceItem* item = dynamic_cast<DeviceItem*>(
+				fDeviceList->ItemAt(fDeviceList->CurrentSelection()));
+			if (item == NULL)
+				break;
+			BMessage request(kMsgBluetoothPair);
+			request.AddData("bdaddr", B_ANY_TYPE, &item->Info().address,
+				sizeof(bdaddr_t));
+			request.AddString("name", item->Info().name);
+			request.AddUInt32("class", item->Info().deviceClass);
 			_SendToController(&request);
 			break;
 		}
@@ -565,6 +600,10 @@ BluetoothView::_UpdateControls()
 	fScanButton->SetLabel(fState.scanning ? B_TRANSLATE("Stop")
 		: B_TRANSLATE("Scan"));
 	fScanButton->SetEnabled(running && fState.radioEnabled && radio != NULL);
+	if (BButton* pairButton = pair_button(this)) {
+		pairButton->SetEnabled(running && fState.radioEnabled && radio != NULL
+			&& fDeviceList->CurrentSelection() >= 0);
+	}
 
 	BString status;
 	if (!running || radio == NULL)

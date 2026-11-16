@@ -16,7 +16,9 @@ UseHeaders [ FDirName $(HAIKU_TOP) src servers app drawing Painter font_support 
 UseHeaders [ FDirName $(HAIKU_TOP) src servers app decorator ] ;
 UseHeaders [ FDirName $(HAIKU_TOP) src servers app stackandtile ] ;
 UseBuildFeatureHeaders freetype ;
-Includes [ FGristFiles Compositor.cpp WindowBuffer.cpp WindowHWInterface.cpp ]
+Includes [ FGristFiles Compositor.cpp WindowBuffer.cpp WindowHWInterface.cpp
+	SkiaGpu.cpp SkiaPainter.cpp SkiaText.cpp SkiaDrawingEngine.cpp
+	DrawCompare.cpp SkiaOffscreen.cpp ]
 	: [ BuildFeatureAttribute freetype : headers ] ;
 
 # M11: the compositor loads Vulkan at run time (VK_NO_PROTOTYPES). The
@@ -25,6 +27,28 @@ ObjectC++Flags Compositor.cpp :
 	-I/home/nickr/r5os/mesa-build/vulkan-headers-r5/install/include
 	;
 
+# M12 (docs/APP-SERVER-GPU-DRAWING.md, part 3): Skia's headers only for the
+# R5 Skia code, from the skia_devel staging tree of distro/skia/pack-skia.sh.
+# Skia m158 needs C++20; the defines are those of skia-defines.txt.
+local skiaStage = /home/nickr/r5os/skia-build/pkg-root/develop ;
+local skiaFlags =
+	-std=gnu++20
+	-DSK_CODEC_DECODES_BMP -DSK_CODEC_DECODES_WBMP -DSK_R32_SHIFT=16
+	-DSK_ENABLE_YUVA_PACKED_422 -DSK_ENABLE_PRECOMPILE -DSK_GRAPHITE
+	-DSK_DISABLE_TRACING -DSK_GAMMA_APPLY_TO_A8 -DSK_ENABLE_AVX512_OPTS
+	-DSK_TYPEFACE_FACTORY_FREETYPE -DSK_FONTMGR_FREETYPE_DIRECTORY_AVAILABLE
+	-DSK_FONTMGR_FREETYPE_EMBEDDED_AVAILABLE
+	-DSK_FONTMGR_FREETYPE_EMPTY_AVAILABLE -DSK_VULKAN -DSK_BUILD_FOR_UNIX
+	-I$(skiaStage)/headers/skia
+	-I$(skiaStage)/headers/skia/include/third_party/vulkan
+	-Wno-missing-field-initializers -Wno-unused-parameter
+	-Wno-deprecated-enum-enum-conversion -Wno-volatile -Wno-deprecated
+	-Wno-attributes
+	;
+ObjectC++Flags SkiaGpu.cpp SkiaPainter.cpp SkiaText.cpp SkiaDrawingEngine.cpp
+	DrawCompare.cpp SkiaOffscreen.cpp
+	: $(skiaFlags) ;
+
 StaticLibrary libaslocal.a :
 	AccelerantBuffer.cpp
 	AccelerantHWInterface.cpp
@@ -32,4 +56,10 @@ StaticLibrary libaslocal.a :
 	GPUCopy.cpp
 	WindowBuffer.cpp
 	WindowHWInterface.cpp
+	SkiaGpu.cpp
+	SkiaPainter.cpp
+	SkiaText.cpp
+	SkiaDrawingEngine.cpp
+	DrawCompare.cpp
+	SkiaOffscreen.cpp
 ;

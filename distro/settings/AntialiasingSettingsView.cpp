@@ -24,6 +24,11 @@
 
 
 #include "AppearanceNotify.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <WindowEffects.h>
+// SPDX-SnippetEnd
 
 #undef B_TRANSLATION_CONTEXT
 #define B_TRANSLATION_CONTEXT "AntialiasingSettingsView"
@@ -118,6 +123,16 @@ AntialiasingSettingsView::AntialiasingSettingsView(const char* name)
 	_SetCurrentAntialiasing();
 	_SetCurrentHinting();
 	_SetCurrentAverageWeight();
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// M12 (Q13): when Skia draws the letters, its own subpixel filter has
+	// no average weight; the slider goes and the tab closes up. With
+	// Painter (gpu_draw off) it stays.
+	if (BAppearanceKit::gpu_draws_text())
+		fAverageWeightControl->Hide();
+// SPDX-SnippetEnd
 }
 
 

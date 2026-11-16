@@ -462,6 +462,57 @@ main()
 		if (r5_span_has_room(full, 2) || r5_span_add(full, 2, 0x3000, 0x1000))
 			return fail("span room full");
 	}
+	{
+		// the GTT limit also counts exports whose buffer was freed
+		static char fill[16000];
+		if (snippet("distro/graphics/src/add-ons/kernel/drivers/graphics/"
+				"r5gpu/r5_gpu_core.cpp",
+				"gpu_bo_fill(gpu_client* client, gpu_bo* bo, r5_gpu_bo* request, "
+				"uint64 bytes)",
+				"create_area(", fill, sizeof(fill)) != 0)
+			return 1;
+		if (strstr(fill, "gpu_export_only(client, R5_GPU_DOMAIN_GTT)") == NULL
+				|| strstr(fill, "gpu_export_only(client, R5_GPU_DOMAIN_VRAM)")
+					== NULL)
+			return fail("export-only memory in the limits");
+		if (strstr(fill, "sBacking[i].domain == R5_GPU_DOMAIN_GTT") == NULL
+				|| strstr(fill, "r5_gtt_fits(limit * 2, total, bytes)") == NULL)
+			return fail("system-wide gtt limit");
+	}
+	{
+		// a too large free block without a row for its rest does not hide
+		// an exact fit further on
+		r5_span full[3];
+		memset(full, 0, sizeof(full));
+		full[0].live = 1;
+		full[0].offset = 0x10000;
+		full[0].bytes = 0x4000;
+		full[1].live = 1;
+		full[1].used = 1;
+		full[1].offset = 0x20000;
+		full[1].bytes = 0x1000;
+		full[2].live = 1;
+		full[2].offset = 0x30000;
+		full[2].bytes = 0x1000;
+		uint64_t at = 0;
+		if (!r5_span_take(full, 3, 0x1000, &at) || at != 0x30000 || !full[2].used
+				|| full[0].used)
+			return fail("span exact fit after a split without a row");
+	}
+	{
+		int errors = 0;
+		int once = 0;
+		int printed = 0;
+		for (int i = 0; i < 40; i++)
+			printed += r5_log_allow(0, 0, R5_LOG_ERROR, &errors, &once, 0);
+		if (printed != 32 || errors != 32)
+			return fail("error lines");
+		if (!r5_log_allow(0, 0, R5_LOG_ONCE, &errors, &once, R5_ONCE_VRAM_FULL)
+				|| r5_log_allow(0, 0, R5_LOG_ONCE, &errors, &once,
+					R5_ONCE_VRAM_FULL)
+				|| !r5_log_allow(0, 0, R5_LOG_ONCE, &errors, &once, R5_ONCE_RB))
+			return fail("once lines");
+	}
 	printf("ok gtt limit and span room\n");
 	static_assert(R5_GPU_OP_BASE == 9999u + 0x5000u, "ioctl base");
 	static_assert(R5_GPU_GET_INFO == 30479u, "GET_INFO number");

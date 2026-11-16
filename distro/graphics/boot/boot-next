@@ -26,6 +26,14 @@
 # gpu_compositor_fail true, boot 3 gpu_compositor_lavapipe true, boot 4
 # gpu_hang_test 1.
 #
+# M12 measurement stick (generated/gpu-m12/STICK-PLAN.md): when the
+# settings file has gpu_draw true, when ~/m12/next names a boot of 2 or 3,
+# or with "boot-next m12", the order is 1, 2, 3, 4, then no settings file.
+# Boot 1 is Skia on RADV (gpu_draw true), boot 2 Painter under the
+# compositor, boot 3 Skia on Lavapipe. Boot 4 is M11's boot 4 again,
+# with M11's settings and note, so check and boot-next treat it as M11
+# (the hang while composed, never re-run after the fix in 6829434c46).
+#
 # For the host tests: R5_HOME and R5_USER_SETTINGS move the paths, BOOT_NEXT_YES=0 never
 # restarts.
 
@@ -41,9 +49,21 @@ sysfile=${R5_SYSTEM_SETTINGS:-$(fd B_SYSTEM_SETTINGS_DIRECTORY /boot/system/sett
 mkdir -p "$m10"
 
 # M11: the settings of the boot that just ran say so, or "boot-next m11".
+# M12 first: its boots 2 and 3 have no gpu_compositor line, boot 4 does.
 stick=m10
 start11=0
-if [ "$1" = m11 ]; then
+m12note=$home/m12/next
+if [ "$1" = m12 ]; then
+	stick=m12
+	start11=1
+	set -- 1
+elif [ -f "$file" ] && grep -q '^gpu_draw true' "$file" \
+		&& ! grep -q '^gpu_compositor true' "$file"; then
+	stick=m12
+elif [ -f "$m12note" ] && grep -Eq '^(2|3)$' "$m12note" \
+		&& ! { [ -f "$file" ] && grep -q '^gpu_compositor true' "$file"; }; then
+	stick=m12
+elif [ "$1" = m11 ]; then
 	stick=m11
 	start11=1
 	set -- 1
@@ -54,6 +74,10 @@ if [ "$stick" = m11 ]; then
 	m10=$home/m11
 	mkdir -p "$m10"
 fi
+if [ "$stick" = m12 ]; then
+	m10=$home/m12
+	mkdir -p "$m10"
+fi
 
 # The boot that just ran: the note, else no note means boot 1.
 cur=1
@@ -61,7 +85,21 @@ if [ -f "$m10/next" ]; then
 	cur=$(head -n 1 "$m10/next" | tr -d ' \r')
 fi
 
-if [ "$stick" = m11 ]; then
+if [ "$stick" = m12 ]; then
+	if [ -n "$1" ]; then
+		next=$1
+	else
+		case $cur in
+		1) next=2 ;;
+		2) next=3 ;;
+		3) next=4 ;;
+		*)
+			echo "FAIL no M12 boot follows $cur; run boot-next <1|2|3|4|done>"
+			exit 1
+			;;
+		esac
+	fi
+elif [ "$stick" = m11 ]; then
 	if [ -n "$1" ]; then
 		next=$1
 	else
@@ -105,7 +143,28 @@ fi
 m11="gpu_compositor true
 gpu_debug true
 gpu_selftest true"
-if [ "$stick" = m11 ]; then
+m12="gpu_debug true
+gpu_selftest true"
+if [ "$stick" = m12 ]; then
+	case $next in
+	1) lines="gpu_draw true
+$m12" ;;
+	2) lines=$m12 ;;
+	3) lines="gpu_draw true
+gpu_compositor_lavapipe true
+$m12" ;;
+	4) lines="$m11
+gpu_hang_test 1"
+		# M11's own note: check and boot-next read boot 4 as M11's.
+		mkdir -p "$home/m11"
+		echo 4 > "$home/m11/next" ;;
+	done) lines= ;;
+	*)
+		echo "FAIL unknown M12 boot $next (1, 2, 3, 4 or done)"
+		exit 1
+		;;
+	esac
+elif [ "$stick" = m11 ]; then
 	case $next in
 	1) lines=$m11 ;;
 	2) lines="$m11

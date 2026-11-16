@@ -52,8 +52,8 @@ r5_span_take(r5_span* spans, int count, uint64_t bytes, uint64_t* offset)
 	for (int i = 0; i < count; i++) {
 		if (!spans[i].live || spans[i].used || spans[i].bytes < bytes)
 			continue;
-		*offset = spans[i].offset;
 		if (spans[i].bytes == bytes) {
+			*offset = spans[i].offset;
 			spans[i].used = 1;
 			if (spans[i].cpu != NULL) {
 				for (uint64_t n = 0; n < bytes; n++)
@@ -68,8 +68,11 @@ r5_span_take(r5_span* spans, int count, uint64_t bytes, uint64_t* offset)
 				break;
 			}
 		}
+		/* No row for the rest: a later exact fit needs none (review of
+		 * the VRAM fallback, 16 Nov 2026). */
 		if (slot < 0)
-			return 0;
+			continue;
+		*offset = spans[i].offset;
 		spans[slot].live = 1;
 		spans[slot].used = 0;
 		spans[slot].offset = spans[i].offset + bytes;

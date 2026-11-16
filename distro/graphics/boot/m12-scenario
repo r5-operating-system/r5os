@@ -1,0 +1,99 @@
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+#
+# M12 measurement stick (generated/gpu-m12/STICK-PLAN.md), every boot of
+# 1 to 3: the scenario of the design (docs/APP-SERVER-GPU-DRAWING.md,
+# "The measurement"), done by hand. The script opens each program, says
+# what to do and counts down. Its syslog lines (the 10 s draw and compose
+# medians) go to ~/m12/boot<k>/scenario-syslog.txt, the start of each
+# step to scenario.txt.
+
+set -- $(check which | tail -n 1)
+stick=$1
+boot=$2
+dir=$3
+if [ "$stick" != m12 ]; then
+	echo "m12-scenario: FAIL this is not an M12 boot ($stick boot $boot)"
+	exit 1
+fi
+mkdir -p "$dir"
+log=$dir/scenario.txt
+syslog=$(finddir B_SYSTEM_LOG_DIRECTORY)/syslog
+
+# The syslog from here on; a rotation meanwhile is read on from syslog.1.
+from=$(wc -l < "$syslog" | tr -d ' ')
+sum=$(head -n 1 "$syslog" | cksum | cut -d ' ' -f 1)
+
+step() {
+	echo
+	echo "== $1"
+	echo "$2"
+	echo "step $1 $(date +%T)" >> "$log"
+}
+count() {
+	n=$1
+	while [ "$n" -gt 0 ]; do
+		if [ $((n % 5)) -eq 0 ]; then
+			echo "   $n s"
+		fi
+		sleep 1
+		n=$((n - 1))
+	done
+	echo "   stop"
+}
+
+echo "m12-scenario: boot $boot, start $(date +%T)" | tee "$log"
+
+step tracker "Drag the Tracker window that opens now in circles over the other windows."
+open /boot/system/apps
+sleep 3
+count 20
+
+step terminal "Scroll the long output in the new Terminal up and down with the mouse wheel."
+/boot/system/apps/Terminal /bin/sh -c "m11-scroll; sleep 600" > /dev/null 2>&1 &
+term=$!
+sleep 5
+count 20
+kill "$term" 2> /dev/null
+
+step vulkan "Put VulkanTeapot and vkcube side by side and leave them running."
+VulkanTeapot --window > /dev/null 2>&1 &
+teapot=$!
+vkcube > /dev/null 2>&1 &
+cube=$!
+sleep 3
+count 20
+kill "$teapot" "$cube" 2> /dev/null
+
+page=/boot/system/data/licenses
+if [ -f "$page/GNU GPL v2" ]; then
+	page="$page/GNU GPL v2"
+fi
+step web "Scroll the page in WebPositive up and down."
+/boot/system/apps/WebPositive "file://$page" > /dev/null 2>&1 &
+web=$!
+sleep 5
+count 20
+kill "$web" 2> /dev/null
+
+step appearance "In Settings click Appearance, then each tab once: Fonts, Colors, Look and feel, Antialiasing."
+/boot/system/preferences/Settings > /dev/null 2>&1 &
+set=$!
+echo "Press Enter here when you have opened every tab."
+read ans
+kill "$set" 2> /dev/null
+
+echo
+echo "m12-scenario: waiting 15 s for the last 10 s measurement"
+sleep 15
+now=$(head -n 1 "$syslog" | cksum | cut -d ' ' -f 1)
+if [ "$now" != "$sum" ] && [ -f "$syslog.1" ]; then
+	{ tail -n +"$((from + 1))" "$syslog.1"; cat "$syslog"; } > "$dir/scenario-syslog.txt"
+else
+	tail -n +"$((from + 1))" "$syslog" > "$dir/scenario-syslog.txt"
+fi
+echo "scenario done $(date +%T)" >> "$log"
+sync
+grep -Eo '(draw|draw cpu|compose) median [0-9]+ us' "$dir/scenario-syslog.txt" | tail -n 6
+echo "m12-scenario: done"
