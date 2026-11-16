@@ -15,7 +15,9 @@
   line in the regular image,
 - the bluetooth_hid driver (distro/kernel/.../drivers/input/bluetooth_hid)
   into src/add-ons/kernel/drivers/input, in dev/bluetooth/hid of the
-  regular image.
+  regular image,
+- bluetooth_audio.media_addon (distro/media/bluetooth_audio), the bt_audio
+  command and bt_audio_smoke_test, regular image only (step 5).
 
 docs/BLUETOOTH.md is the plan."""
 from __future__ import annotations
@@ -211,6 +213,44 @@ def main() -> int:
         "SYSTEM_ADD_ONS_DRIVERS_BT_H2 +=\n\th2generic\n;\n",
         "SYSTEM_ADD_ONS_DRIVERS_BT_HID += bluetooth_hid ;\n",
         "bluetooth_hid image")
+    # Step 5: bluetooth_audio.media_addon (A2DP source, SBC, AVRCP), the
+    # bt_audio command (each person's headset choice) and the QEMU smoke
+    # test, regular image only like the rest of Bluetooth.
+    audio = ROOT / "distro" / "media" / "bluetooth_audio"
+    copy_files(audio, ("A2DPSource.cpp", "A2DPSource.h", "AudioSettings.cpp",
+        "AudioSettings.h", "BluetoothAudioAddOn.cpp", "BluetoothAudioNode.cpp",
+        "BluetoothAudioNode.h", "Jamfile", "a2dp_proto.h", "sbc_encoder.cpp",
+        "sbc_encoder.h"), HAIKU / "src" / "add-ons" / "media" / "media-add-ons"
+        / "bluetooth_audio", "bluetooth_audio")
+    insert_once(HAIKU / "src" / "add-ons" / "media" / "media-add-ons"
+        / "Jamfile",
+        "SubInclude HAIKU_TOP src add-ons media media-add-ons dvb ;\n",
+        "SubInclude HAIKU_TOP src add-ons media media-add-ons bluetooth_audio ;\n",
+        "bluetooth_audio jam")
+    insert_once(HAIKU / "build" / "jam" / "images" / "definitions" / "regular",
+        "SYSTEM_ADD_ONS_MEDIA += [ FFilterByBuildFeatures\n",
+        "\tbluetooth_audio.media_addon\n",
+        "bluetooth_audio image")
+    copy_dir(audio / "bt_audio", HAIKU / "src" / "bin" / "bt_audio",
+        "bt_audio")
+    insert_once(HAIKU / "src" / "bin" / "Jamfile",
+        "SubInclude HAIKU_TOP src bin bt_hid_driver_test ;\n",
+        "SubInclude HAIKU_TOP src bin bt_audio ;\n",
+        "bt_audio jam")
+    insert_once(HAIKU / "build" / "jam" / "images" / "definitions" / "regular",
+        "SYSTEM_BIN += bt_hid_driver_test ;\n",
+        "SYSTEM_BIN += bt_audio ;\n",
+        "bt_audio image")
+    copy_dir(SRC / "tests" / "bt_audio_smoke_test",
+        HAIKU / "src" / "bin" / "bt_audio_smoke_test", "bt_audio_smoke_test")
+    insert_once(HAIKU / "src" / "bin" / "Jamfile",
+        "SubInclude HAIKU_TOP src bin bt_audio ;\n",
+        "SubInclude HAIKU_TOP src bin bt_audio_smoke_test ;\n",
+        "bt_audio_smoke_test jam")
+    insert_once(HAIKU / "build" / "jam" / "images" / "definitions" / "regular",
+        "SYSTEM_BIN += bt_audio ;\n",
+        "SYSTEM_BIN += bt_audio_smoke_test ;\n",
+        "bt_audio_smoke_test image")
     return 0
 
 

@@ -197,6 +197,32 @@ BLayoutBuilder::Group&lt;&gt;(this, B_VERTICAL, 0)
 				GATT through it.</p></div>
 		</section>
 
+		<section class="entry" id="audio">
+			<div class="entry-header"><h2 class="plain">Headphones and speakers</h2><span class="kind">Media Kit</span></div>
+			<p>A Bluetooth headset is an ordinary audio output of the Media Kit, so a program needs nothing new:
+			it plays to the system mixer as always. The media add-on
+			<code class="inline">bluetooth_audio.media_addon</code> adds one output, "Bluetooth audio"
+			(<code class="inline">B_BUFFER_CONSUMER | B_PHYSICAL_OUTPUT</code>), that takes float stereo at
+			44.1 kHz from the mixer. Choose it as the audio output in Media. Its one parameter, Volume, is the
+			headset's own volume when the headset supports AVRCP absolute volume; the buttons on the headset
+			move it too.</p>
+			<p>The sound goes out as SBC, the codec every A2DP headset has, encoded by R5's own MIT encoder. R5
+			picks the best setting the headset accepts: joint stereo, 16 blocks, 8 subbands and the highest
+			bitpool within A2DP's limit of 512 kb/s. The encoder works on the mixer's float samples directly. The
+			latency the node reports includes the delay the headset reports, so a video player keeps picture and
+			sound together. After 5 seconds of silence the stream pauses, so the headset can sleep; the next
+			sound starts it again.</p>
+			<p>Which headset is each person's own choice, in
+			<code class="inline">~/config/settings/Media/bluetooth_audio</code>. A program finds it with
+			<code class="inline">find_directory(B_USER_SETTINGS_DIRECTORY)</code>; the command
+			<code class="inline">bt_audio use XX:XX:XX:XX:XX:XX</code> sets it. With no choice, a paired headset
+			that connects plays.</p>
+			<div class="note"><strong>Not yet.</strong> Not tried with a real headset yet: that waits for Classic
+			pairing on the test laptop. Play and pause on the headset start and stop the sound, but do not yet
+			pause the program that plays. No choice of headset on the Bluetooth page yet, and no AAC, aptX or LE
+			Audio.</div>
+		</section>
+
 		<section class="entry" id="settings">
 			<div class="entry-header"><h2 class="plain">Where people see it</h2></div>
 			<p>Settings, Devices, Bluetooth, the first page under Devices: the panel as a page, with its own icon

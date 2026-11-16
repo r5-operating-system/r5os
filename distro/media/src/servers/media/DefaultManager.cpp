@@ -599,11 +599,24 @@ DefaultManager::_FindPhysical(volatile media_node_id *id, uint32 default_type,
 					continue;
 			}
 		}
-		if (firstReal < 0)
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// media_addon_server starts every physical output, Bluetooth audio
+		// too (docs/BLUETOOTH.md, step 5). It is the default output only
+		// when someone chose it in Media, never the first one found: the
+		// sound would go to a headset that may not be there.
+		bool chosenOnly = isAudio && !isInput
+			&& strcmp(info[i].name, "Bluetooth audio") == 0;
+		if (firstReal < 0 && !chosenOnly)
 			firstReal = i;
 
-		if (msg == NULL)
-			break;
+		if (msg == NULL) {
+			if (firstReal >= 0)
+				break;
+			continue;
+		}
+		// SPDX-SnippetEnd
 
 		dormant_node_info dninfo;
 		if (fRoster->GetDormantNodeFor(info[i].node, &dninfo) != B_OK) {

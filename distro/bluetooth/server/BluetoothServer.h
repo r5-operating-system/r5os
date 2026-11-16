@@ -139,6 +139,16 @@ private:
 	bool				fRadioEnabled;
 	// SPDX-SnippetEnd
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// The team of bluetooth_audio while it streams (BT_MSG_R5_AUDIO_STREAMING),
+	// -1 otherwise; scans are refused while that team lives.
+	bool				_AudioStreaming() const;
+
+	team_id				fAudioTeam;
+	// SPDX-SnippetEnd
+
 	void 				ShowWindow(BWindow* pWindow);
 
 	void				_InstallDeskbarIcon();
