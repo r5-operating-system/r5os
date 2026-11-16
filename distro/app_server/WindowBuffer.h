@@ -9,18 +9,25 @@
 #define WINDOW_BUFFER_H
 
 
+#include <Locker.h>
 #include <Referenceable.h>
 
 #include "RenderingBuffer.h"
 
 
 class Compositor;
+class SkiaImage;
 
 
 /*!	The real buffer: memory the compositor reads, with its real size. Its
 	pixel (0, 0) is the screen pixel (Left(), Top()) of the window it belongs
 	to. Freed by the compositor when the last reference goes, which is after
 	the fence of the last compose that read it.
+
+	M13 step 2: a window that Skia draws has a buffer without memory
+	(Bits() NULL, VulkanBuffer() 0). It still holds the window's size and
+	counts in the window memory; the compositor samples the image set
+	with SetImage() instead.
 */
 class WindowBuffer : public BReferenceable {
 public:
@@ -39,6 +46,15 @@ public:
 			uint64				VulkanBuffer() const { return fVulkanBuffer; }
 			uint32				Generation() const { return fGeneration; }
 
+	// M13 step 2, any thread: the image shown for this buffer, with
+	// image pixel (0, 0) at buffer pixel (offsetX, offsetY). After a
+	// resize the new buffer shows the old image until its own is drawn.
+			void				SetImage(SkiaImage* image, int32 offsetX,
+									int32 offsetY);
+			SkiaImage*			AcquireImage(int32* _offsetX,
+									int32* _offsetY);
+									// a reference for the caller, or NULL
+
 private:
 			Compositor*			fOwner;
 			void*				fBits;
@@ -47,6 +63,10 @@ private:
 			uint64				fVulkanBuffer;
 			uint64				fVulkanMemory;
 			uint32				fGeneration;
+			BLocker				fImageLock;
+			SkiaImage*			fImage;
+			int32				fImageX;
+			int32				fImageY;
 };
 
 

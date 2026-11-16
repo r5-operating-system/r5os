@@ -34,6 +34,7 @@
 #include "include/core/SkPathBuilder.h"
 #include "include/core/SkRRect.h"
 #include "include/effects/SkRuntimeEffect.h"
+#include "include/gpu/graphite/BackendTexture.h"
 #include "include/gpu/graphite/Image.h"
 #include "include/gpu/graphite/Recorder.h"
 #include "include/gpu/graphite/Recording.h"
@@ -207,6 +208,14 @@ text_props()
 //	#pragma mark - SkiaTarget
 
 
+//!	M13 step 2: Graphite is done with a window image (SkiaTarget::SetSurface).
+static void
+release_image(void* context)
+{
+	((SkiaImage*)context)->ReleaseReference();
+}
+
+
 SkiaTarget::SkiaTarget(SkiaGpu* gpu)
 	:
 	fGpu(gpu),
@@ -260,12 +269,34 @@ SkiaTarget::SetSurface(int32 width, int32 height, int32 left, int32 top,
 
 	// the text settings (step 5b) for text drawn straight into the image
 	SkSurfaceProps props = text_props();
-	sk_sp<SkSurface> surface = SkSurfaces::RenderTarget(fRecorder,
-		target_info(width, height), skgpu::Mipmapped::kNo, &props);
+	sk_sp<SkSurface> surface;
+	BReference<SkiaImage> image;
+	if (UsesSharedImage()) {
+		// M13 step 2: an image the compositor samples. Graphite keeps a
+		// reference until its last work with it is done (the release
+		// proc, also called when the wrap fails).
+		image.SetTo(fGpu != NULL ? fGpu->NewImage(width, height) : NULL,
+			true);
+		if (!image.IsSet())
+			return false;
+		image->AcquireReference();
+		surface = SkSurfaces::WrapBackendTexture(fRecorder,
+			*(const skgpu::graphite::BackendTexture*)image->Texture(),
+			kBGRA_8888_SkColorType, nullptr, &props, &release_image,
+			image.Get());
+	} else {
+		surface = SkSurfaces::RenderTarget(fRecorder,
+			target_info(width, height), skgpu::Mipmapped::kNo, &props);
+	}
 	if (surface == nullptr)
 		return false;
 
 	SkCanvas* canvas = surface->getCanvas();
+	if (image.IsSet() && initialBits == NULL) {
+		// a new image has no defined pixels: transparent, as the
+		// compositor's new buffers are
+		canvas->clear(SK_ColorTRANSPARENT);
+	}
 	if (initialBits != NULL) {
 		SkPixmap pixmap(target_info(width, height), initialBits, bytesPerRow);
 		surface->writePixels(pixmap, 0, 0);
@@ -282,6 +313,7 @@ SkiaTarget::SetSurface(int32 width, int32 height, int32 left, int32 top,
 		}
 	}
 	fSurface = surface;
+	fImage = image;
 	fScratch.reset();
 	fScratchLcd.reset();
 	fWidth = width;
@@ -345,11 +377,24 @@ SkiaTarget::SetOrigin(int32 left, int32 top)
 
 
 void
+SkiaTarget::ReleaseSurface()
+{
+	fSurface.reset();
+	fImage.Unset();
+	fScratch.reset();
+	fScratchLcd.reset();
+	fWidth = 0;
+	fHeight = 0;
+}
+
+
+void
 SkiaTarget::DropGpu()
 {
 	// SkiaGpu::Shutdown(), with its lock held (BLocker is recursive):
 	// nothing of Graphite outlives the device
 	fSurface.reset();
+	fImage.Unset();
 	fScratch.reset();
 	fScratchLcd.reset();
 	fDamage.MakeEmpty();

@@ -4,7 +4,9 @@
 // The A1 compose: copies one rectangle of a window buffer into the frame,
 // or fills one rectangle of the frame with the background colour. Pixels
 // are 32-bit words, copied unchanged, so the frame is the picture the CPU
-// mode would show. Compiled by scripts/gen-compositor-shaders.sh.
+// mode would show. M13 step 2: a window that Skia draws is read from its
+// image (fill 2), texel by texel, so its bytes come out unchanged too.
+// Compiled by scripts/gen-compositor-shaders.sh.
 
 #version 450
 
@@ -17,6 +19,9 @@ layout(std430, set = 0, binding = 0) readonly buffer Source {
 layout(std430, set = 0, binding = 1) buffer Frame {
 	uint pixels[];
 } frame;
+
+// M13 step 2: the window's image (B8G8R8A8), or a 1x1 image when unused
+layout(set = 0, binding = 2) uniform sampler2D image;
 
 layout(push_constant) uniform Rect {
 	uint sourceX;
@@ -39,6 +44,13 @@ main()
 		return;
 
 	uint target = (rect.frameY + at.y) * rect.frameStride + rect.frameX + at.x;
+	if (rect.fill == 2u) {
+		// the image's bytes as the buffer word: B, G, R, A from low to high
+		uvec4 c = uvec4(texelFetch(image, ivec2(rect.sourceX + at.x,
+			rect.sourceY + at.y), 0) * 255.0 + 0.5);
+		frame.pixels[target] = c.b | (c.g << 8) | (c.r << 16) | (c.a << 24);
+		return;
+	}
 	if (rect.fill != 0u) {
 		frame.pixels[target] = rect.color;
 		return;

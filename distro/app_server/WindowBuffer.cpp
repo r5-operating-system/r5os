@@ -6,7 +6,10 @@
 
 #include "WindowBuffer.h"
 
+#include <Autolock.h>
+
 #include "Compositor.h"
+#include "SkiaGpu.h"
 
 
 WindowBuffer::WindowBuffer(Compositor* owner, void* bits, uint32 width,
@@ -18,14 +21,51 @@ WindowBuffer::WindowBuffer(Compositor* owner, void* bits, uint32 width,
 	fHeight(height),
 	fVulkanBuffer(vulkanBuffer),
 	fVulkanMemory(vulkanMemory),
-	fGeneration(generation)
+	fGeneration(generation),
+	fImageLock("window image"),
+	fImage(NULL),
+	fImageX(0),
+	fImageY(0)
 {
 }
 
 
 WindowBuffer::~WindowBuffer()
 {
+	if (fImage != NULL)
+		fImage->ReleaseReference();
 	fOwner->_FreeBuffer(this, fVulkanBuffer, fVulkanMemory);
+}
+
+
+void
+WindowBuffer::SetImage(SkiaImage* image, int32 offsetX, int32 offsetY)
+{
+	if (image != NULL)
+		image->AcquireReference();
+	SkiaImage* old;
+	{
+		BAutolock _(fImageLock);
+		old = fImage;
+		fImage = image;
+		fImageX = offsetX;
+		fImageY = offsetY;
+	}
+	// a compose frame that samples the old one holds its own reference
+	if (old != NULL)
+		old->ReleaseReference();
+}
+
+
+SkiaImage*
+WindowBuffer::AcquireImage(int32* _offsetX, int32* _offsetY)
+{
+	BAutolock _(fImageLock);
+	if (fImage != NULL)
+		fImage->AcquireReference();
+	*_offsetX = fImageX;
+	*_offsetY = fImageY;
+	return fImage;
 }
 
 
@@ -46,6 +86,16 @@ void
 WindowBufferView::SetTo(WindowBuffer* buffer, int32 left, int32 top)
 {
 	if (buffer == NULL) {
+		fBits = 0;
+		fBytesPerRow = 0;
+		fWidth = 0;
+		fHeight = 0;
+		return;
+	}
+
+	// M13 step 2: a buffer without memory (a window that Skia draws) has
+	// no pixels for Painter; it never draws into one.
+	if (buffer->Bits() == NULL) {
 		fBits = 0;
 		fBytesPerRow = 0;
 		fWidth = 0;

@@ -19,6 +19,8 @@
 #include <Referenceable.h>
 #include <Region.h>
 
+#include <vector>
+
 
 // M11 step 3b: one image of a Vulkan view's swapchain, from the program's
 // AS_R5_SHARE_IMAGES message (docs/APP-SERVER-COMPOSITOR.md).
@@ -150,6 +152,11 @@ private:
 
 			status_t			_Init();
 			status_t			_InitVulkan(bool radv, const char** reason);
+			// M13 step 2: the sampler and the blank image
+			bool				_InitImages(const char** _reason);
+			// M13 step 2: a pass without a compose still waits for the
+			// runs' semaphores, so they can be signalled again
+			void				_ConsumeSkiaSignals();
 			// M12
 			void				_InitSkia(bool forceFail);
 	static	void				_SkiaWake(void* cookie);
@@ -161,12 +168,14 @@ private:
 			void				_DrawLoop();
 			void				_StopDrawThread();
 			void				_ExitVulkan();
-			WindowBuffer*		_AllocateBuffer(uint32 width, uint32 height);
+			WindowBuffer*		_AllocateBuffer(uint32 width, uint32 height,
+									bool memory = true);
 			void				_FreeBuffer(WindowBuffer* buffer,
 									uint64 vulkanBuffer, uint64 vulkanMemory);
 			bool				_EnsureFrame(uint32 width, uint32 height);
 			WindowBuffer*		_AllocateOrMakeRoom(uint32 width,
-									uint32 height, const Entry* keep);
+									uint32 height, const Entry* keep,
+									bool memory);
 			Entry*				_FindEntry(Window* window) const;
 
 	static	status_t			_ComposeThread(void* data);
@@ -196,21 +205,31 @@ private:
 			bool				_AnimationDamage(bigtime_t now);
 			void				_AnimationFrame(LayerList& layers,
 									bigtime_t now);
-			void				_RecordWindowAnimation(uint64 buffer,
-									uint32 width, uint32 height, int32 left,
-									int32 top, const BRegion& shape,
-									float visible, const BRegion& damage,
-									uint64 frame, uint32 frameStride);
+			void				_RecordWindowAnimation(const Layer* layer,
+									const BRegion& damage, uint64 frame,
+									uint32 frameStride);
 			bool				_EnsureSlideBuffers(uint32 frameStride);
 			void				_RecordSlideCopy(uint64 from, uint64 to,
 									uint32 frameStride);
 			void				_RecordSlide(uint64 frame,
 									uint32 frameStride);
 			void				_Present(const BRegion& damage);
+			// M13 step 2: a compare frame's copies of the window images
+			struct CompareCopy {
+				const Layer*		layer;
+				uint64				buffer;		// VkBuffer
+				uint64				memory;		// VkDeviceMemory
+				void*				bits;
+			};
+			typedef std::vector<CompareCopy> CompareCopies;
+			void				_RecordCompareCopies(const LayerList& layers,
+									CompareCopies& copies);
+			void				_FreeCompareCopies(CompareCopies& copies);
 			bool				_Compare(const BRegion& damage,
 									const LayerList& layers,
 									uint32 background,
-									const BRegion& shared);
+									const BRegion& shared,
+									const CompareCopies& copies);
 			void				_ShareLog(Window* window, const char* reason);
 			void				_ShareLogOn(Window* window);
 			void				_ShareShape(Share* share);

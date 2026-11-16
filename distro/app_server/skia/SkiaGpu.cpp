@@ -8,28 +8,38 @@
 
 #include "SkiaGpu.h"
 
+#include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
 #include <syslog.h>
+#include <unistd.h>
+#include <sys/stat.h>
 
 #include <Autolock.h>
+#include <FindDirectory.h>
 
 #include <algorithm>
 #include <memory>
 #include <vector>
 
+#include "include/core/SkData.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkMilestone.h"
 #include "include/core/SkSurface.h"
 #include "include/gpu/graphite/Context.h"
 #include "include/gpu/graphite/ContextOptions.h"
 #include "include/gpu/graphite/GraphiteTypes.h"
+#include "include/gpu/graphite/PersistentPipelineStorage.h"
 #include "include/gpu/graphite/Recorder.h"
 #include "include/gpu/graphite/Recording.h"
+#include "include/gpu/graphite/BackendTexture.h"
 #include "include/gpu/graphite/vk/VulkanGraphiteContext.h"
+#include "include/gpu/graphite/vk/VulkanGraphiteTypes.h"
+#include "include/gpu/MutableTextureState.h"
 #include "include/gpu/vk/VulkanBackendContext.h"
 #include "include/gpu/vk/VulkanExtensions.h"
 #include "include/gpu/vk/VulkanMemoryAllocator.h"
+#include "include/gpu/vk/VulkanMutableTextureState.h"
 #include "src/gpu/vk/vulkanmemoryallocator/VulkanMemoryAllocatorPriv.h"
 
 #include "SkiaPainter.h"
@@ -41,6 +51,7 @@
 
 
 namespace ContextFactory = skgpu::graphite::ContextFactory;
+using skgpu::graphite::BackendTexture;
 using skgpu::graphite::ContextOptions;
 using skgpu::graphite::InsertRecordingInfo;
 using skgpu::graphite::InsertStatus;
@@ -86,6 +97,10 @@ smallest_local_heap(VkInstance instance, VkPhysicalDevice physical)
 // externally synchronized, so Graphite's queue calls (through get_proc) and
 // the compositor's (SkiaGpu::LockQueue()) take this lock.
 static BLocker sQueueLock("vulkan queue");
+
+// M13 step 2: the pipeline cache on disk
+static const bigtime_t kPipelineSyncInterval = 10000000;
+static const size_t kPipelineDataLargest = 32 * 1024 * 1024;
 static PFN_vkQueueSubmit sQueueSubmit;
 static PFN_vkQueueWaitIdle sQueueWaitIdle;
 static PFN_vkDeviceWaitIdle sDeviceWaitIdle;
@@ -154,6 +169,65 @@ get_proc(const char* name, VkInstance instance, VkDevice device)
 }
 
 
+// M13 step 2: the window images and the run's semaphores, made by
+// app_server on the compositor's device
+static VkDevice sDevice;
+static VkQueue sQueue;
+static PFN_vkQueueSubmit sRawQueueSubmit;
+static PFN_vkCreateImage sCreateImage;
+static PFN_vkDestroyImage sDestroyImage;
+static PFN_vkGetImageMemoryRequirements sGetImageMemoryRequirements;
+static PFN_vkAllocateMemory sAllocateMemory;
+static PFN_vkFreeMemory sFreeMemory;
+static PFN_vkBindImageMemory sBindImageMemory;
+static PFN_vkCreateImageView sCreateImageView;
+static PFN_vkDestroyImageView sDestroyImageView;
+static PFN_vkCreateSemaphore sCreateSemaphore;
+static PFN_vkDestroySemaphore sDestroySemaphore;
+static PFN_vkCreateFence sCreateFence;
+static PFN_vkDestroyFence sDestroyFence;
+static PFN_vkResetFences sResetFences;
+static PFN_vkWaitForFences sWaitForFences;
+static VkPhysicalDeviceMemoryProperties sMemoryProperties;
+static int32 sKeepImageMemory = 0;
+
+
+SkiaImage::SkiaImage()
+	:
+	fImage(0),
+	fView(0),
+	fMemory(0),
+	fWidth(0),
+	fHeight(0),
+	fTexture(NULL)
+{
+}
+
+
+SkiaImage::~SkiaImage()
+{
+	// Every user is done: Graphite called the release proc after its last
+	// command buffer with the image finished, and the last compose frame
+	// that sampled it passed its fence.
+	delete (BackendTexture*)fTexture;
+	if (atomic_get(&sKeepImageMemory) != 0)
+		return;
+	if (fView != 0)
+		sDestroyImageView(sDevice, (VkImageView)fView, NULL);
+	if (fImage != 0)
+		sDestroyImage(sDevice, (VkImage)fImage, NULL);
+	if (fMemory != 0)
+		sFreeMemory(sDevice, (VkDeviceMemory)fMemory, NULL);
+}
+
+
+/*static*/ void
+SkiaGpu::KeepImageMemory()
+{
+	atomic_set(&sKeepImageMemory, 1);
+}
+
+
 /*static*/ void
 SkiaGpu::LockQueue()
 {
@@ -168,10 +242,133 @@ SkiaGpu::UnlockQueue()
 }
 
 
+/*!	M13 step 2 (step 1's item, owner 16 Nov 2026): Graphite's Vulkan
+	pipeline cache on disk, so the warm-up after the first boot is short.
+	app_server runs as uid 0, so the file is in the system cache directory
+	(/boot/system/cache/app_server), not in a user's ~/config/cache. Its
+	header holds a key made of the Skia version, the device and the driver
+	(driverVersion and pipelineCacheUUID, which change with every Mesa
+	build), so a Mesa update throws it away. A file that is too short or
+	too long, or has another key, another size or a wrong checksum, is
+	ignored and replaced at the next store.
+*/
+class PipelineStorage : public skgpu::graphite::PersistentPipelineStorage {
+public:
+	PipelineStorage(const VkPhysicalDeviceProperties& properties)
+	{
+		snprintf(fKey, sizeof(fKey), "r5 skia %s vendor %#" B_PRIx32
+			" device %#" B_PRIx32 " driver %#" B_PRIx32 " %s uuid ",
+			R5_SKIA_VERSION, (uint32)properties.vendorID,
+			(uint32)properties.deviceID, (uint32)properties.driverVersion,
+			properties.deviceName);
+		size_t length = strlen(fKey);
+		for (uint32 i = 0; i < VK_UUID_SIZE && length + 3 < sizeof(fKey); i++) {
+			snprintf(fKey + length, sizeof(fKey) - length, "%02x",
+				properties.pipelineCacheUUID[i]);
+			length += 2;
+		}
+		fPath[0] = '\0';
+		char directory[B_PATH_NAME_LENGTH];
+		if (find_directory(B_SYSTEM_CACHE_DIRECTORY, -1, true, directory,
+				sizeof(directory)) == B_OK) {
+			strlcat(directory, "/app_server", sizeof(directory));
+			mkdir(directory, 0755);
+			snprintf(fPath, sizeof(fPath), "%s/skia-pipelines", directory);
+		}
+	}
+
+	sk_sp<SkData> load() override
+	{
+		if (fPath[0] == '\0')
+			return nullptr;
+		int fd = open(fPath, O_RDONLY);
+		if (fd < 0) {
+			syslog(LOG_INFO, "app_server: gpu draw pipeline cache none\n");
+			return nullptr;
+		}
+		struct stat st;
+		sk_sp<SkData> data;
+		if (fstat(fd, &st) == 0 && st.st_size > (off_t)sizeof(Header)
+			&& st.st_size <= (off_t)(sizeof(Header) + kLargest)) {
+			Header header;
+			size_t size = (size_t)st.st_size - sizeof(Header);
+			sk_sp<SkData> bytes = SkData::MakeUninitialized(size);
+			if (read(fd, &header, sizeof(header)) == (ssize_t)sizeof(header)
+				&& read(fd, bytes->writable_data(), size) == (ssize_t)size
+				&& memcmp(header.magic, kMagic, sizeof(header.magic)) == 0
+				&& strncmp(header.key, fKey, sizeof(header.key)) == 0
+				&& header.size == size
+				&& header.checksum == _Checksum(bytes->data(), size))
+				data = bytes;
+		}
+		close(fd);
+		syslog(LOG_INFO, "app_server: gpu draw pipeline cache %s\n",
+			data ? "loaded" : "ignored");
+		return data;
+	}
+
+	void store(const SkData& data) override
+	{
+		if (fPath[0] == '\0' || data.size() == 0 || data.size() > kLargest)
+			return;
+		Header header;
+		memset(&header, 0, sizeof(header));
+		memcpy(header.magic, kMagic, sizeof(header.magic));
+		strlcpy(header.key, fKey, sizeof(header.key));
+		header.size = data.size();
+		header.checksum = _Checksum(data.data(), data.size());
+		// a new file, renamed over the old one: a crash leaves the old
+		// file or the new one, never half of one
+		char temporary[B_PATH_NAME_LENGTH + 8];
+		snprintf(temporary, sizeof(temporary), "%s.new", fPath);
+		int fd = open(temporary, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+		if (fd < 0)
+			return;
+		bool ok = write(fd, &header, sizeof(header)) == (ssize_t)sizeof(header)
+			&& write(fd, data.data(), data.size()) == (ssize_t)data.size();
+		close(fd);
+		if (!ok || rename(temporary, fPath) != 0) {
+			unlink(temporary);
+			return;
+		}
+		syslog(LOG_INFO, "app_server: gpu draw pipeline cache stored %zu KB\n",
+			data.size() / 1024);
+	}
+
+private:
+	struct Header {
+		char		magic[8];
+		char		key[256];
+		uint64		size;
+		uint64		checksum;
+	};
+
+	static uint64 _Checksum(const void* data, size_t size)
+	{
+		// FNV-1a: finds a damaged file, not an attack (only uid 0 writes)
+		const uint8* bytes = (const uint8*)data;
+		uint64 hash = 0xcbf29ce484222325ull;
+		for (size_t i = 0; i < size; i++) {
+			hash ^= bytes[i];
+			hash *= 0x100000001b3ull;
+		}
+		return hash;
+	}
+
+	static const size_t	kLargest = 64 * 1024 * 1024;
+	static constexpr char kMagic[8] = {'R', '5', 'S', 'K', 'P', 'C', '1',
+		'\0'};
+			char				fKey[256];
+			char				fPath[B_PATH_NAME_LENGTH];
+};
+
+
 struct SkiaBackend {
 	skgpu::VulkanExtensions			extensions;
 	VkPhysicalDeviceFeatures2		features;
 	skgpu::VulkanBackendContext		backend;
+	// M13 step 2: outlives the context (ContextOptions)
+	std::unique_ptr<PipelineStorage> pipelines;
 };
 
 
@@ -194,6 +391,8 @@ struct WorkItem {
 	void*				cookie;
 	bool				read;
 	bool				delivered;
+	// M13 step 2: a window's image, which stays on the GPU
+	BReference<SkiaImage> image;
 };
 
 
@@ -230,7 +429,11 @@ SkiaGpu::SkiaGpu()
 	fDoneSem(-1),
 	fWaiters(0),
 	fStatsLock("skia stats"),
-	fSampleCount(0)
+	fSampleCount(0),
+	fQueueFamily(0),
+	fRunFence(0),
+	fRunInFlight(false),
+	fPipelinesSynced(0)
 {
 	fDoneSem = create_sem(0, "skia done");
 }
@@ -249,9 +452,13 @@ SkiaGpu::DestroyContext()
 {
 	Shutdown();
 	BAutolock _(fLock);
+	// M13 step 2: what the session compiled, for the next boot
+	if (fContext != NULL)
+		((GraphiteContext*)fContext)->syncPipelineData(kPipelineDataLargest);
 	delete (GraphiteContext*)fContext;
 	fContext = NULL;
 	sLeftovers.clear();
+	_DestroySemaphores();
 	SkiaBackend* backend = (SkiaBackend*)fBackend;
 	if (backend != NULL)
 		backend->backend.fMemoryAllocator.reset();
@@ -293,6 +500,52 @@ SkiaGpu::Create(const skia_vulkan_device& device, bool forceFail,
 	}
 
 	VkPhysicalDevice physical = (VkPhysicalDevice)device.physicalDevice;
+
+	// M13 step 2: what app_server calls itself for the window images
+	sDevice = (VkDevice)device.device;
+	sQueue = (VkQueue)device.queue;
+	gpu->fQueueFamily = device.queueFamily;
+#define R5_DEVICE_PROC(variable, name) \
+	variable = (PFN_##name)sGetDeviceProc(sDevice, #name)
+	R5_DEVICE_PROC(sRawQueueSubmit, vkQueueSubmit);
+	R5_DEVICE_PROC(sCreateImage, vkCreateImage);
+	R5_DEVICE_PROC(sDestroyImage, vkDestroyImage);
+	R5_DEVICE_PROC(sGetImageMemoryRequirements, vkGetImageMemoryRequirements);
+	R5_DEVICE_PROC(sAllocateMemory, vkAllocateMemory);
+	R5_DEVICE_PROC(sFreeMemory, vkFreeMemory);
+	R5_DEVICE_PROC(sBindImageMemory, vkBindImageMemory);
+	R5_DEVICE_PROC(sCreateImageView, vkCreateImageView);
+	R5_DEVICE_PROC(sDestroyImageView, vkDestroyImageView);
+	R5_DEVICE_PROC(sCreateSemaphore, vkCreateSemaphore);
+	R5_DEVICE_PROC(sDestroySemaphore, vkDestroySemaphore);
+	R5_DEVICE_PROC(sCreateFence, vkCreateFence);
+	R5_DEVICE_PROC(sDestroyFence, vkDestroyFence);
+	R5_DEVICE_PROC(sResetFences, vkResetFences);
+	R5_DEVICE_PROC(sWaitForFences, vkWaitForFences);
+#undef R5_DEVICE_PROC
+	PFN_vkGetPhysicalDeviceMemoryProperties getMemory
+		= (PFN_vkGetPhysicalDeviceMemoryProperties)sGetInstanceProc(instance,
+			"vkGetPhysicalDeviceMemoryProperties");
+	VkFence runFence = VK_NULL_HANDLE;
+	VkFenceCreateInfo fenceInfo = {};
+	fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+	if (sRawQueueSubmit == NULL || sCreateImage == NULL
+		|| sDestroyImage == NULL || sGetImageMemoryRequirements == NULL
+		|| sAllocateMemory == NULL || sFreeMemory == NULL
+		|| sBindImageMemory == NULL || sCreateImageView == NULL
+		|| sDestroyImageView == NULL || sCreateSemaphore == NULL
+		|| sDestroySemaphore == NULL || sCreateFence == NULL
+		|| sDestroyFence == NULL || sResetFences == NULL
+		|| sWaitForFences == NULL || getMemory == NULL
+		|| sCreateFence(sDevice, &fenceInfo, NULL, &runFence)
+			!= VK_SUCCESS) {
+		delete gpu;
+		*_reason = "no vulkan image calls";
+		return NULL;
+	}
+	gpu->fRunFence = (uint64)runFence;
+	getMemory(physical, &sMemoryProperties);
+
 	backend->extensions.init(get_proc, instance, physical, 0, NULL,
 		device.deviceExtensionCount,
 		(const char* const*)device.deviceExtensions);
@@ -339,6 +592,18 @@ SkiaGpu::Create(const skia_vulkan_device& device, bool forceFail,
 	syslog(LOG_INFO, "app_server: gpu draw budget heap %zu MB context %zu MB window "
 		"%zu MB\n", heap >> 20, options.fGpuBudgetInBytes >> 20,
 		gpu->fRecorderBudget >> 20);
+	// M13 step 2: the pipeline cache on disk
+	PFN_vkGetPhysicalDeviceProperties getProperties
+		= (PFN_vkGetPhysicalDeviceProperties)sGetInstanceProc(instance,
+			"vkGetPhysicalDeviceProperties");
+	if (getProperties != NULL) {
+		VkPhysicalDeviceProperties properties;
+		getProperties(physical, &properties);
+		backend->pipelines.reset(new(std::nothrow) PipelineStorage(
+			properties));
+		options.fPersistentPipelineStorage = backend->pipelines.get();
+	}
+
 	// Q3: curved shapes on the GPU with 4x MSAA, no CPU path atlas
 	options.fInternalMultisampleCount = SampleCount::k4;
 	options.fMinimumPathSizeForMSAA = 0;
@@ -393,6 +658,169 @@ SkiaGpu::SetWaker(void (*wake)(void*), void* cookie)
 {
 	fWake = wake;
 	fWakeCookie = cookie;
+}
+
+
+// M13 step 2: device-local memory first (VRAM on RADV), any other type the
+// image allows when that fails (the R5 DRM library itself moves a full
+// VRAM to GTT, #4305; Lavapipe has only host memory).
+static VkDeviceMemory
+allocate_image_memory(const VkMemoryRequirements& requirements)
+{
+	for (int pass = 0; pass < 2; pass++) {
+		for (uint32 i = 0; i < sMemoryProperties.memoryTypeCount; i++) {
+			if ((requirements.memoryTypeBits & (1u << i)) == 0)
+				continue;
+			bool local = (sMemoryProperties.memoryTypes[i].propertyFlags
+				& VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != 0;
+			if (pass == 0 && !local)
+				continue;
+			VkMemoryAllocateInfo info = {};
+			info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+			info.allocationSize = requirements.size;
+			info.memoryTypeIndex = i;
+			VkDeviceMemory memory;
+			if (sAllocateMemory(sDevice, &info, NULL, &memory) == VK_SUCCESS)
+				return memory;
+		}
+	}
+	return VK_NULL_HANDLE;
+}
+
+
+SkiaImage*
+SkiaGpu::NewImage(int32 width, int32 height)
+{
+	if (fShutDown || width <= 0 || height <= 0)
+		return NULL;
+	const VkImageUsageFlags usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
+		| VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT
+		| VK_IMAGE_USAGE_TRANSFER_DST_BIT
+		| VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+	VkImageCreateInfo info = {};
+	info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+	info.imageType = VK_IMAGE_TYPE_2D;
+	info.format = VK_FORMAT_B8G8R8A8_UNORM;
+	info.extent.width = (uint32)width;
+	info.extent.height = (uint32)height;
+	info.extent.depth = 1;
+	info.mipLevels = 1;
+	info.arrayLayers = 1;
+	info.samples = VK_SAMPLE_COUNT_1_BIT;
+	info.tiling = VK_IMAGE_TILING_OPTIMAL;
+	info.usage = usage;
+	info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	VkImage image;
+	if (sCreateImage(sDevice, &info, NULL, &image) != VK_SUCCESS)
+		return NULL;
+	VkMemoryRequirements requirements;
+	sGetImageMemoryRequirements(sDevice, image, &requirements);
+	VkDeviceMemory memory = allocate_image_memory(requirements);
+	if (memory == VK_NULL_HANDLE
+		|| sBindImageMemory(sDevice, image, memory, 0) != VK_SUCCESS) {
+		if (memory != VK_NULL_HANDLE)
+			sFreeMemory(sDevice, memory, NULL);
+		sDestroyImage(sDevice, image, NULL);
+		return NULL;
+	}
+	VkImageViewCreateInfo viewInfo = {};
+	viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	viewInfo.image = image;
+	viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+	viewInfo.format = info.format;
+	viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	viewInfo.subresourceRange.levelCount = 1;
+	viewInfo.subresourceRange.layerCount = 1;
+	VkImageView view;
+	if (sCreateImageView(sDevice, &viewInfo, NULL, &view) != VK_SUCCESS) {
+		sFreeMemory(sDevice, memory, NULL);
+		sDestroyImage(sDevice, image, NULL);
+		return NULL;
+	}
+
+	skgpu::graphite::VulkanTextureInfo textureInfo(VK_SAMPLE_COUNT_1_BIT,
+		skgpu::Mipmapped::kNo, 0, info.format, info.tiling, usage,
+		info.sharingMode, VK_IMAGE_ASPECT_COLOR_BIT,
+		skgpu::VulkanYcbcrConversionInfo());
+	skgpu::VulkanAlloc alloc;
+	alloc.fMemory = memory;
+	alloc.fSize = requirements.size;
+	BackendTexture* texture = new(std::nothrow) BackendTexture(
+		skgpu::graphite::BackendTextures::MakeVulkan(
+			SkISize::Make(width, height), textureInfo,
+			VK_IMAGE_LAYOUT_UNDEFINED, fQueueFamily, image, alloc));
+	SkiaImage* result = new(std::nothrow) SkiaImage;
+	if (texture == NULL || result == NULL || !texture->isValid()) {
+		delete texture;
+		delete result;
+		sDestroyImageView(sDevice, view, NULL);
+		sFreeMemory(sDevice, memory, NULL);
+		sDestroyImage(sDevice, image, NULL);
+		return NULL;
+	}
+	result->fImage = (uint64)image;
+	result->fView = (uint64)view;
+	result->fMemory = (uint64)memory;
+	result->fWidth = width;
+	result->fHeight = height;
+	result->fTexture = texture;
+	return result;
+}
+
+
+//!	Queue lock held: a semaphore for one run to signal.
+uint64
+SkiaGpu::_Signal()
+{
+	if (!fFreeSemaphores.empty()) {
+		uint64 semaphore = fFreeSemaphores.back();
+		fFreeSemaphores.pop_back();
+		return semaphore;
+	}
+	VkSemaphoreCreateInfo info = {};
+	info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+	VkSemaphore semaphore;
+	if (sCreateSemaphore(sDevice, &info, NULL, &semaphore) != VK_SUCCESS)
+		return 0;
+	return (uint64)semaphore;
+}
+
+
+void
+SkiaGpu::TakeSignals(std::vector<uint64>& signals)
+{
+	BAutolock _(sQueueLock);
+	signals.swap(fSignalled);
+	fSignalled.clear();
+}
+
+
+void
+SkiaGpu::ReturnSignals(const std::vector<uint64>& signals)
+{
+	BAutolock _(sQueueLock);
+	for (size_t i = 0; i < signals.size(); i++)
+		fFreeSemaphores.push_back(signals[i]);
+}
+
+
+//!	The device is idle or gone with the context: every semaphore goes.
+void
+SkiaGpu::_DestroySemaphores()
+{
+	BAutolock _(sQueueLock);
+	if (sDestroySemaphore != NULL) {
+		for (size_t i = 0; i < fFreeSemaphores.size(); i++)
+			sDestroySemaphore(sDevice, (VkSemaphore)fFreeSemaphores[i], NULL);
+		for (size_t i = 0; i < fSignalled.size(); i++)
+			sDestroySemaphore(sDevice, (VkSemaphore)fSignalled[i], NULL);
+	}
+	fFreeSemaphores.clear();
+	fSignalled.clear();
+	if (fRunFence != 0 && sDestroyFence != NULL)
+		sDestroyFence(sDevice, (VkFence)fRunFence, NULL);
+	fRunFence = 0;
 }
 
 
@@ -465,6 +893,35 @@ SkiaGpu::RunWork(const char** _reason)
 		return false;
 	}
 
+	// M13 step 2: one run on the GPU at a time. Without this wait the
+	// draw thread sent two to three times as many, smaller runs as the GPU
+	// could do (QEMU, Lavapipe: 143-177 runs per 10 s against 60 with
+	// SyncToCpu), and the composes waited behind them (frame 205 ms
+	// against 138 ms). Waiting here, before the snap, lets the windows'
+	// drawing gather into the next run while the GPU works, as before;
+	// the compose itself never waits on the CPU.
+	if (fRunInFlight) {
+		VkFence fence = (VkFence)fRunFence;
+		bigtime_t waitStart = system_time();
+		VkResult result;
+		do {
+			// a late GPU is not a failure (M11 decision 14)
+			result = sWaitForFences(sDevice, 1, &fence, VK_TRUE,
+				1000000000ull);
+		} while (result == VK_TIMEOUT);
+		fRunInFlight = false;
+		Profile(kTimeDeliver, system_time() - waitStart);
+		if (result != VK_SUCCESS) {
+			*_reason = "device lost";
+			atomic_set64(&fDone, ticket);
+			_ReleaseWaiters();
+			return false;
+		}
+	}
+	// finished work calls Graphite's release procs (the window images it
+	// let go of) here
+	context->checkAsyncWorkCompletion();
+
 	bigtime_t profileStart = system_time();
 	// a Finish() waits for everything drawn so far: no window is held
 	bool holds = atomic_get(&fWaiters) == 0;
@@ -489,6 +946,7 @@ SkiaGpu::RunWork(const char** _reason)
 				item->frame = item->damage.FrameInt();
 				item->read = false;
 				item->delivered = false;
+				item->image.SetTo(target->SharedImage());
 				item->cookie = target->PrepareDelivery();
 				items.push_back(std::move(item));
 			}
@@ -525,10 +983,27 @@ SkiaGpu::RunWork(const char** _reason)
 	bigtime_t profileInserted = system_time();
 	if (!items.empty())
 		Profile(kTimeInsert, profileInserted - profileSnapped);
+	// M13 step 2: a window's image ends every run ready for the compose's
+	// sampler; Graphite takes it from there for its next drawing
+	bool shared = false;
+	bool readBack = false;
 	for (size_t i = 0; ok && i < items.size(); i++) {
 		WorkItem* item = items[i].get();
+		if (item->image.IsSet()) {
+			shared = true;
+			if (!context->setMutableState(
+					*(BackendTexture*)item->image->Texture(),
+					skgpu::MutableTextureStates::MakeVulkan(
+						VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+						fQueueFamily))) {
+				*_reason = "image layout";
+				ok = false;
+			}
+			continue;
+		}
 		if (item->damage.CountRects() == 0)
 			continue;
+		readBack = true;
 		SkIRect rect = SkIRect::MakeLTRB(
 			item->frame.left - item->left,
 			item->frame.top - item->top,
@@ -541,18 +1016,65 @@ SkiaGpu::RunWork(const char** _reason)
 			read_done, item);
 	}
 	if (ok && !items.empty()) {
+		// M13 step 2: no CPU wait (SyncToCpu::kNo). Right after Graphite's
+		// submit, under the same queue lock, an empty batch signals the
+		// semaphore the compose waits on: its signal covers everything
+		// submitted before it, and no compose submit lands in between.
+		// Only a read-back waits, for a fence of that same batch.
 		SubmitInfo submit;
-		submit.fSync = SyncToCpu::kYes;
+		submit.fSync = SyncToCpu::kNo;
 		bigtime_t submitStart = system_time();
-		if (!context->submit(submit)) {
+		// the fence: the next run waits for it, a read-back right now
+		VkFence fence = (VkFence)fRunFence;
+		bool submitted;
+		{
+			BAutolock queueLock(sQueueLock);
+			submitted = context->submit(submit);
+			if (submitted) {
+				VkSemaphore semaphore = shared
+					? (VkSemaphore)_Signal() : VK_NULL_HANDLE;
+				VkSubmitInfo batch = {};
+				batch.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+				batch.signalSemaphoreCount = semaphore != VK_NULL_HANDLE
+					? 1 : 0;
+				batch.pSignalSemaphores = &semaphore;
+				if (fence != VK_NULL_HANDLE)
+					sResetFences(sDevice, 1, &fence);
+				if ((shared && semaphore == VK_NULL_HANDLE)
+					|| sRawQueueSubmit(sQueue, 1, &batch, fence)
+						!= VK_SUCCESS) {
+					if (semaphore != VK_NULL_HANDLE)
+						sDestroySemaphore(sDevice, semaphore, NULL);
+					submitted = false;
+				} else {
+					fRunInFlight = true;
+					if (semaphore != VK_NULL_HANDLE)
+						fSignalled.push_back((uint64)semaphore);
+				}
+			}
+		}
+		if (!submitted) {
 			*_reason = "submit failed";
 			ok = false;
 		} else {
-			bigtime_t submitted = system_time();
-			Profile(kTimeSubmit, submitted - submitStart);
-			// read_done() copies into the window buffers from here
+			bigtime_t submitTime = system_time();
+			Profile(kTimeSubmit, submitTime - submitStart);
+			if (readBack) {
+				// a late GPU is not a failure (M11 decision 14)
+				VkResult result;
+				do {
+					result = sWaitForFences(sDevice, 1, &fence, VK_TRUE,
+						1000000000ull);
+				} while (result == VK_TIMEOUT);
+				if (result != VK_SUCCESS) {
+					*_reason = "device lost";
+					ok = false;
+				}
+				fRunInFlight = false;
+			}
+			// read_done() copies into the bitmaps from here
 			context->checkAsyncWorkCompletion();
-			Profile(kTimeDeliver, system_time() - submitted);
+			Profile(kTimeDeliver, system_time() - submitTime);
 		}
 		if (context->isDeviceLost()) {
 			*_reason = "device lost";
@@ -563,6 +1085,13 @@ SkiaGpu::RunWork(const char** _reason)
 	bigtime_t now = system_time();
 	for (size_t i = 0; i < items.size(); i++) {
 		WorkItem* item = items[i].get();
+		if (item->image.IsSet() && ok) {
+			// the semaphore is signalled first, then the damage goes out:
+			// the compose that takes it waits for this run on the GPU
+			item->target->Drawn(item->cookie, item->damage,
+				item->image.Get());
+			item->delivered = true;
+		}
 		if (!item->delivered)
 			item->target->DeliveryFailed(item->cookie);
 		else if (item->firstDraw > 0)
@@ -578,6 +1107,13 @@ SkiaGpu::RunWork(const char** _reason)
 	if (!ok) {
 		for (size_t i = 0; i < items.size(); i++)
 			sLeftovers.push_back(std::move(items[i]));
+	}
+
+	// M13 step 2: new pipelines go to disk, at most every 10 s (Graphite
+	// returns at once when there are none)
+	if (ok && now - fPipelinesSynced > kPipelineSyncInterval) {
+		fPipelinesSynced = now;
+		context->syncPipelineData(kPipelineDataLargest);
 	}
 
 	atomic_set64(&fDone, ticket);
