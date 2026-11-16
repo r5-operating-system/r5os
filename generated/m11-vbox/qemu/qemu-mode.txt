@@ -1,0 +1,7 @@
+mode 1280 800 32 exit 0 took 0 s
+mode 800 600 32 exit 0 took 0 s
+mode 1024 768 32 exit 0 took 0 s
+2026-11-16 00:47:21 DAEMON 'app_server': app_server: gpu compositor on lavapipe: no render node
+2026-11-16 00:47:21 USER: app_server: frame follows the screen 1280x800, period 13334 us
+2026-11-16 00:51:00 USER: app_server: frame follows the screen 800x600, period 16666 us
+2026-11-16 00:51:25 USER: app_server: frame follows the screen 1024x768, period 16666 us

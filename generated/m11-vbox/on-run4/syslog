@@ -1,0 +1,1437 @@
+KERN: options = 0
+KERN: APM version 0.0 available, flags 0.
+KERN: smp: using ACPI to detect MP configuration
+KERN: smp: local apic address is 0xfee00000
+KERN: smp: found local APIC with id 0
+KERN: smp: found local APIC with id 1
+KERN: smp: found io APIC with id 2 and address 0xfec00000
+KERN: VESA version = 2.0, capabilities 1
+KERN: OEM string: VirtualBox VESA BIOS
+KERN:  0x100: 640 x 400 x 8 (a = 155, mem = 4, phy = e0000000, p = 1, b = 1)
+KERN: 	mask: r: 0 0 g: 0 0 b: 0 0 dcmi: 0
+KERN:  0x101: 640 x 480 x 8 (a = 155, mem = 4, phy = e0000000, p = 1, b = 1)
+KERN: 	mask: r: 0 0 g: 0 0 b: 0 0 dcmi: 0
+KERN:  0x102: 800 x 600 x 4 (a = 31, mem = 3, phy = e0000000, p = 4, b = 1)
+KERN: 	mask: r: 0 0 g: 0 0 b: 0 0 dcmi: 0
+KERN:  0x103: 800 x 600 x 8 (a = 155, mem = 4, phy = e0000000, p = 1, b = 1)
+KERN: 	mask: r: 0 0 g: 0 0 b: 0 0 dcmi: 0
+KERN:  0x104: 1024 x 768 x 4 (a = 31, mem = 3, phy = e0000000, p = 4, b = 1)
+KERN: 	mask: r: 0 0 g: 0 0 b: 0 0 dcmi: 0
+KERN:  0x105: 1024 x 768 x 8 (a = 155, mem = 4, phy = e0000000, p = 1, b = 1)
+KERN: 	mask: r: 0 0 g: 0 0 b: 0 0 dcmi: 0
+KERN:  0x106: 1280 x 1024 x 4 (a = 31, mem = 3, phy = e0000000, p = 4, b = 1)
+KERN: 	mask: r: 0 0 g: 0 0 b: 0 0 dcmi: 0
+KERN:  0x107: 1280 x 1024 x 8 (a = 155, mem = 4, phy = e0000000, p = 1, b = 1)
+KERN: 	mask: r: 0 0 g: 0 0 b: 0 0 dcmi: 0
+KERN:  0x10d: 320 x 200 x 15 (a = 155, mem = 6, phy = e0000000, p = 1, b = 1)
+KERN: 	mask: r: 5 10 g: 5 5 b: 5 0 dcmi: 0
+KERN:  0x10e: 320 x 200 x 16 (a = 155, mem = 6, phy = e0000000, p = 1, b = 1)
+KERN: 	mask: r: 5 11 g: 6 5 b: 5 0 dcmi: 0
+KERN:  0x10f: 320 x 200 x 24 (a = 155, mem = 6, phy = e0000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 0
+KERN:  0x110: 640 x 480 x 15 (a = 155, mem = 6, phy = e0000000, p = 1, b = 1)
+KERN: 	mask: r: 5 10 g: 5 5 b: 5 0 dcmi: 0
+KERN:  0x111: 640 x 480 x 16 (a = 155, mem = 6, phy = e0000000, p = 1, b = 1)
+KERN: 	mask: r: 5 11 g: 6 5 b: 5 0 dcmi: 0
+KERN:  0x112: 640 x 480 x 24 (a = 155, mem = 6, phy = e0000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 0
+KERN:  0x113: 800 x 600 x 15 (a = 155, mem = 6, phy = e0000000, p = 1, b = 1)
+KERN: 	mask: r: 5 10 g: 5 5 b: 5 0 dcmi: 0
+KERN:  0x114: 800 x 600 x 16 (a = 155, mem = 6, phy = e0000000, p = 1, b = 1)
+KERN: 	mask: r: 5 11 g: 6 5 b: 5 0 dcmi: 0
+KERN:  0x115: 800 x 600 x 24 (a = 155, mem = 6, phy = e0000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 0
+KERN:  0x116: 1024 x 768 x 15 (a = 155, mem = 6, phy = e0000000, p = 1, b = 1)
+KERN: 	mask: r: 5 10 g: 5 5 b: 5 0 dcmi: 0
+KERN:  0x117: 1024 x 768 x 16 (a = 155, mem = 6, phy = e0000000, p = 1, b = 1)
+KERN: 	mask: r: 5 11 g: 6 5 b: 5 0 dcmi: 0
+KERN:  0x118: 1024 x 768 x 24 (a = 155, mem = 6, phy = e0000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 0
+KERN:  0x119: 1280 x 1024 x 15 (a = 155, mem = 6, phy = e0000000, p = 1, b = 1)
+KERN: 	mask: r: 5 10 g: 5 5 b: 5 0 dcmi: 0
+KERN:  0x11a: 1280 x 1024 x 16 (a = 155, mem = 6, phy = e0000000, p = 1, b = 1)
+KERN: 	mask: r: 5 11 g: 6 5 b: 5 0 dcmi: 0
+KERN:  0x11b: 1280 x 1024 x 24 (a = 155, mem = 6, phy = e0000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 0
+KERN:  0x140: 320 x 200 x 32 (a = 155, mem = 6, phy = e0000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 2
+KERN:  0x141: 640 x 400 x 32 (a = 155, mem = 6, phy = e0000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 2
+KERN:  0x142: 640 x 480 x 32 (a = 155, mem = 6, phy = e0000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 2
+KERN:  0x143: 800 x 600 x 32 (a = 155, mem = 6, phy = e0000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 2
+KERN:  0x144: 1024 x 768 x 32 (a = 155, mem = 6, phy = e0000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 2
+KERN:  0x145: 1280 x 1024 x 32 (a = 155, mem = 6, phy = e0000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 2
+KERN:  0x146: 320 x 200 x 8 (a = 155, mem = 4, phy = e0000000, p = 1, b = 1)
+KERN: 	mask: r: 0 0 g: 0 0 b: 0 0 dcmi: 0
+KERN:  0x147: 1600 x 1200 x 32 (a = 155, mem = 6, phy = e0000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 2
+KERN:  0x148: 1152 x 864 x 8 (a = 155, mem = 4, phy = e0000000, p = 1, b = 1)
+KERN: 	mask: r: 0 0 g: 0 0 b: 0 0 dcmi: 0
+KERN:  0x149: 1152 x 864 x 15 (a = 155, mem = 6, phy = e0000000, p = 1, b = 1)
+KERN: 	mask: r: 5 10 g: 5 5 b: 5 0 dcmi: 0
+KERN:  0x14a: 1152 x 864 x 16 (a = 155, mem = 6, phy = e0000000, p = 1, b = 1)
+KERN: 	mask: r: 5 11 g: 6 5 b: 5 0 dcmi: 0
+KERN:  0x14b: 1152 x 864 x 24 (a = 155, mem = 6, phy = e0000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 0
+KERN:  0x14c: 1152 x 864 x 32 (a = 155, mem = 6, phy = e0000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 2
+KERN: Using mode 0x144
+KERN: VESA compatible graphics!
+KERN: Welcome to the Haiku boot loader!
+KERN: Haiku revision: r5-2026.1-dev
+KERN: number of drives: 1
+KERN: add_partitions_for(0x001014b8, mountFS = no)
+KERN: add_partitions_for(fd = 0, mountFS = no)
+KERN: 0x00101620 Partition::Partition
+KERN: 0x00101620 Partition::Scan()
+KERN: check for partitioning_system: GUID Partition Map
+KERN: check for partitioning_system: Intel Partition Map
+KERN:   priority: 610
+KERN: check for partitioning_system: Intel Extended Partition
+KERN: boot partition offset: 0
+KERN: 0x00101620 Partition::_Mount check for file_system: BFS Filesystem
+KERN: PackageVolumeInfo::SetTo()
+KERN: PackageVolumeInfo::_InitState(): failed to parse activated-packages: No such file or directory
+KERN: load kernel kernel_x86_64...
+KERN: video mode: 1024x768x32
+KERN: ucode_load: system/non-packaged/data/firmware/amd-ucode/microcode_amd_fam19h.bin
+KERN: ucode_load: microcode file read in memory
+KERN: smp: found 2 cpus
+KERN: smp: apic_phys = 0xfee00000
+KERN: smp: ioapic_phys = 0xfec00000
+KERN: smp: apic (mapped) = 0x81b47000
+KERN: GDT at 0x5ff80
+KERN: phys memory ranges:
+KERN:     base 0x0000000000100000, length 0x000000007fef0000
+KERN: allocated phys memory ranges:
+KERN:     base 0x0000000000100000, length 0x0000000000181000
+KERN:     base 0x0000000000800000, length 0x0000000000998000
+KERN:     base 0x0000000003f00000, length 0x0000000000100000
+KERN: allocated virt memory ranges:
+KERN:     base 0xffffffff80000000, length 0x0000000001b4d000
+KERN: maximum boot loader heap usage: 804424, currently used: 577160
+KERN: kernel args ranges:
+KERN:     base 0xffffffff81107000, length 0x0000000000080000
+KERN: kernel entry at 0xffffffff8006b6a0
+KERN: smp: booting 1 other cpu
+KERN: Welcome to kernel debugger output!
+KERN: Haiku revision: r5-2026.1-dev, debug level: 2
+KERN: CPU: TSC frequency calibrated via PIT: 1874859
+KERN: R5 kernel: arch_timer TSC guards active
+KERN: find_microcode_amd found equiv cpu: a500
+KERN: find_microcode_amd update found rev_id a010
+KERN: find_microcode_amd update found rev_id a011
+Last message repeated 1 time
+KERN: find_microcode_amd update found rev_id a012
+Last message repeated 1 time
+KERN: find_microcode_amd update found rev_id a082
+KERN: find_microcode_amd update found rev_id a111
+Last message repeated 1 time
+KERN: find_microcode_amd update found rev_id a112
+Last message repeated 1 time
+KERN: find_microcode_amd update found rev_id a181
+KERN: find_microcode_amd update found rev_id a210
+KERN: find_microcode_amd update found rev_id a212
+KERN: find_microcode_amd update found rev_id a441
+KERN: find_microcode_intel update_revision is lower
+KERN: find_microcode_amd update found rev_id a612
+KERN: find_microcode_amd update found rev_id a741
+KERN: find_microcode_amd update found rev_id a752
+KERN: find_microcode_amd update found rev_id a780
+KERN: find_microcode_amd update found rev_id a7c0
+KERN: find_microcode_amd update found rev_id aa01
+KERN: find_microcode_amd update found rev_id aa02
+Last message repeated 1 time
+KERN: find_microcode_amd no fw update found for this cpu
+KERN: CPU 0: no update found
+KERN: CPU 0: type 0 family 15 extended_family 10 model 0 extended_model 5 stepping 0, string 'AuthenticAMD'
+KERN: CPU 0: vendor 'AMD' model name 'AMD Ryzen 5 5625U with Radeon Graphics         '
+KERN: R5 CPU topology: leaf1 ebx 0x00020800 ecx 0x76d83203 stored ecx 0x76d83203 80000008 ecx 0x00000001 8000001e ebx 0x00000100 smt mask 0x0 core mask 0x1
+KERN: CPU 0: apic id 0, package 0, core 0, smt 0
+KERN: CPU 0: features: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clfsh mmx fxsr sse sse2 htt sse3 pclmulqdq ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrnd syscall nx mmxext ffxsr long arat bmi1 avx2 bmi2 invpcid rdseed adx cflushopt sha_ni constant_tsc amd_ssb_no 
+KERN: CPU 0: patch_level 0xffffffff
+KERN: using PAT for memory type configuration
+KERN: PAT MSR on CPU 0 before init: 0x7040600070406
+KERN: PAT MSR on CPU 0 after init: 0x7040100070406
+KERN: reserve_io_interrupt_vectors: reserved 16 vectors starting from 0
+KERN: kernel malloc: using slab_heap
+KERN: mark_page_range_in_use(0x0, 0x100): start page is before free list
+KERN: mark_page_range_in_use(0x0, 0xa0): start page is before free list
+KERN: Welcome to KERN: syslog debug output!
+KERN: Haiku revision: r5-2026.1-dev
+KERN: [0.357] arch_altcodepatch_replace found 2 altcodepatches for tag 3
+KERN: [0.357] arch_altcodepatch_replace found 5 altcodepatches for tag 4
+KERN: [0.358] arch_altcodepatch_replace found 4 altcodepatches for tag 5
+KERN: [0.358] enable XSAVE 0x7 832
+KERN: [0.359] find_microcode_amd found equiv cpu: a500
+KERN: [0.361] find_microcode_amd update found rev_id a010
+KERN: [0.364] find_microcode_amd update found rev_id a011
+KERN: [0.366] find_microcode_amd update found rev_id a011
+KERN: [0.368] find_microcode_amd update found rev_id a012
+KERN: [0.370] find_microcode_amd update found rev_id a012
+KERN: [0.371] find_microcode_amd update found rev_id a082
+KERN: [0.372] find_microcode_amd update found rev_id a111
+Last message repeated 1 time
+KERN: [0.372] find_microcode_amd update found rev_id a112
+KERN: [0.373] find_microcode_amd update found rev_id a112
+KERN: [0.373] find_microcode_amd update found rev_id a181
+KERN: [0.374] find_microcode_amd update found rev_id a210
+KERN: [0.374] find_microcode_amd update found rev_id a212
+KERN: [0.375] find_microcode_amd update found rev_id a441
+KERN: [0.375] find_microcode_intel update_revision is lower
+KERN: [0.376] find_microcode_amd update found rev_id a612
+KERN: [0.376] find_microcode_amd update found rev_id a741
+KERN: [0.377] find_microcode_amd update found rev_id a752
+KERN: [0.377] find_microcode_amd update found rev_id a780
+KERN: [0.377] find_microcode_amd update found rev_id a7c0
+KERN: [0.378] find_microcode_amd update found rev_id aa01
+KERN: [0.378] find_microcode_amd update found rev_id aa02
+Last message repeated 1 time
+KERN: [0.378] find_microcode_amd no fw update found for this cpu
+KERN: [0.379] CPU 1: no update found
+KERN: [0.379] CPU 1: type 0 family 15 extended_family 10 model 0 extended_model 5 stepping 0, string 'AuthenticAMD'
+KERN: [0.380] CPU 1: vendor 'AMD' model name 'AMD Ryzen 5 5625U with Radeon Graphics         '
+KERN: [0.381] CPU 1: apic id 1, package 0, core 1, smt 0
+KERN: [0.382] CPU 1: patch_level 0xffffffff
+KERN: [0.382] PAT MSR on CPU 1 before init: 0x7040600070406
+KERN: [0.382] PAT MSR on CPU 1 after init: 0x7040100070406
+KERN: [0.384] reserve_io_interrupt_vectors: reserved 3 vectors starting from 221
+KERN: [0.390] APIC timer frequency: 1999715007
+KERN: [0.390] reserve_io_interrupt_vectors: reserved 1 vectors starting from 219
+KERN: [0.391] arch_init_timer: using APIC timer.
+KERN: [0.391] allocate_commpage_entry(2, 16) -> 0x0000000000000200
+KERN: [0.393] scheduler_init: found 2 logical cpus and 0 cache levels
+KERN: [0.394] scheduler switches: single core: false, cpu load tracking: false, core load tracking: true
+KERN: [0.394] scheduler: switching to low latency mode
+KERN: [0.395] msi support enabled
+KERN: [0.395] PCI: pci_module_init
+KERN: [0.395] ACPI: RSDP 0x00000000000E0000 000024 (v02 VBOX  )
+KERN: [0.396] ACPI: XSDT 0x000000007FFF0030 00003C (v01 VBOX   VBOXXSDT 00000001 ASL  00000061)
+KERN: [0.396] ACPI: FACP 0x000000007FFF00F0 0000F4 (v04 VBOX   VBOXFACP 00000001 ASL  00000061)
+KERN: [0.398] ACPI: DSDT 0x000000007FFF02F0 002353 (v02 VBOX   VBOXBIOS 00000002 VBOX 0002AC8D)
+KERN: [0.398] ACPI: FACS 0x000000007FFF0200 000040
+KERN: [0.399] ACPI: APIC 0x000000007FFF0240 00005C (v02 VBOX   VBOXAPIC 00000001 ASL  00000061)
+KERN: [0.399] ACPI: SSDT 0x000000007FFF02A0 000045 (v01 VBOX   VBOXCPUT 00000002 VBOX 0002AC8D)
+KERN: [0.400] smbios_scan
+KERN: [0.401] found System Information at 0xffffffff82023c3c
+KERN: [0.401] found vendor 1 product 2
+KERN: [0.402] smbios_scan found vendor innotek GmbH product VirtualBox
+KERN: [0.405] ACPI: Forced DSDT copy: length 0x02353 copied locally, original unmapped
+KERN: [0.408] ACPI: 2 ACPI AML tables successfully acquired and loaded
+KERN: [0.411] ACPI: Enabled 2 GPEs in block 00 to 07
+KERN: [0.411] found io-apic with address 0xfec00000, global interrupt base 0, apic-id 2
+KERN: [0.412] mapping io-apic 0 at physical address 0xfec00000
+KERN: [0.413] io-apic 0 has range 0-23, 24 entries, version 0x00170020, apic-id 2
+KERN: [0.414] setting ACPI interrupt model to APIC
+KERN: [0.418] found interrupt override for bus 0, source irq 0, global irq 2, flags 0x00000000
+KERN: [0.419] found interrupt override for bus 0, source irq 9, global irq 9, flags 0x0000000f
+KERN: [0.420] free_io_interrupt_vectors: freeing 16 vectors starting from 0
+KERN: [0.421] reserve_io_interrupt_vectors: reserved 24 vectors starting from 0
+KERN: [0.422] using io-apics for interrupt routing
+KERN: [0.429] allocate_commpage_entry(3, 69) -> 0x0000000000000210
+KERN: [0.445] slab memory manager: created area 0xffffffff80801000 (191)
+KERN: [0.515] publish device: node 0xffffffff821303c0, path acpi/namespace, module bus_managers/acpi/namespace/device_v1
+KERN: [0.517] publish device: node 0xffffffff821303c0, path acpi/call, module bus_managers/acpi/call/device_v1
+KERN: [0.517] registering power button
+KERN: [0.518] registering sleep button
+KERN: [0.520] PCI: mechanism 1 controller found
+KERN: [0.547] PCI: find_pci_capability ERROR 0:6:0 capability 0x5 empty list
+KERN: [0.547] PCI: find_pci_capability ERROR 0:6:0 capability 0x11 empty list
+KERN: [0.548] PCI: find_pci_capability ERROR 0:6:0 capability 0x8 empty list
+KERN: [0.566] PCI: find_pci_capability ERROR 0:6:0 capability 0x5 empty list
+KERN: [0.566] PCI: find_pci_capability ERROR 0:6:0 capability 0x11 empty list
+KERN: [0.567] PCI: find_pci_capability ERROR 0:6:0 capability 0x8 empty list
+KERN: [0.583] IRQ routing table with 6 entries
+KERN: [0.584] address 0x2ffff; pin 0;[0.584]  GSI 18;[0.584]  pci 0:2 pin 1 func mask 1; bios irq: 10; gsi 18; config 0x03
+KERN: [0.585] address 0x3ffff; pin 0;[0.585]  GSI 19;[0.585]  pci 0:3 pin 1 func mask 1; bios irq: 9; gsi 19; config 0x03
+KERN: [0.586] address 0x4ffff; pin 0;[0.586]  GSI 20;[0.586]  pci 0:4 pin 1 func mask 1; bios irq: 11; gsi 20; config 0x03
+KERN: [0.586] address 0x5ffff; pin 0;[0.586]  GSI 21;[0.586]  pci 0:5 pin 1 func mask 1; bios irq: 11; gsi 21; config 0x03
+KERN: [0.587] address 0x6ffff; pin 0;[0.587]  GSI 22;[0.587]  pci 0:6 pin 1 func mask 1; bios irq: 10; gsi 22; config 0x03
+KERN: [0.588] address 0x7ffff; pin 0;[0.588]  GSI 23;[0.588]  pci 0:7 pin 1 func mask 1; bios irq: 9; gsi 23; config 0x03
+KERN: [0.606] PCI: find_pci_capability ERROR 0:6:0 capability 0x5 empty list
+KERN: [0.606] PCI: find_pci_capability ERROR 0:6:0 capability 0x11 empty list
+KERN: [0.607] PCI: find_pci_capability ERROR 0:6:0 capability 0x8 empty list
+KERN: [0.610] PCI: [dom 0, bus  0] bus   0, device  0, function  0: vendor 8086, device 1237, revision 02
+KERN: [0.611] PCI:   class_base 06, class_function 00, class_api 00
+KERN: [0.611] PCI:   vendor 8086: Intel Corporation
+KERN: [0.611] PCI:   device 1237: 440FX - 82441FX PMC [Natoma]
+KERN: [0.612] PCI:   info: Bridge (Host bridge)
+KERN: [0.612] PCI:   line_size 00, latency 00, header_type 00, BIST 00
+KERN: [0.612] PCI:   ROM base host 00000000, pci 00000000, size 00000000
+KERN: [0.613] PCI:   cardbus_CIS 00000000, subsystem_id 0000, subsystem_vendor_id 0000
+KERN: [0.613] PCI:   interrupt_line 00, interrupt_pin 00, min_grant 00, max_latency 00
+KERN: [0.613] PCI:   base reg 0: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.614] PCI:   base reg 1: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.614] PCI:   base reg 2: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.615] PCI:   base reg 3: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.615] PCI:   base reg 4: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.616] PCI:   base reg 5: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.616] PCI:   Capabilities: [0.616] (not supported)
+KERN: [0.617] PCI: [dom 0, bus  0] bus   0, device  1, function  0: vendor 8086, device 7000, revision 00
+KERN: [0.617] PCI:   class_base 06, class_function 01, class_api 00
+KERN: [0.618] PCI:   vendor 8086: Intel Corporation
+KERN: [0.619] PCI:   device 7000: 82371SB PIIX3 ISA [Natoma/Triton II]
+KERN: [0.619] PCI:   info: Bridge (ISA bridge)
+KERN: [0.619] PCI:   line_size 00, latency 00, header_type 80, BIST 00
+KERN: [0.620] PCI:   ROM base host 00000000, pci 00000000, size 00000000
+KERN: [0.620] PCI:   cardbus_CIS 00000000, subsystem_id 0000, subsystem_vendor_id 0000
+KERN: [0.621] PCI:   interrupt_line 00, interrupt_pin 00, min_grant 00, max_latency 00
+KERN: [0.621] PCI:   base reg 0: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.622] PCI:   base reg 1: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.622] PCI:   base reg 2: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.623] PCI:   base reg 3: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.623] PCI:   base reg 4: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.624] PCI:   base reg 5: host KERN: 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.624] PCI:   Capabilities: [0.625] (not supported)
+KERN: [0.625] PCI: [dom 0, bus  0] bus   0, device  1, function  1: vendor 8086, device 7111, revision 01
+KERN: [0.626] PCI:   class_base 01, class_function 01, class_api 8a
+KERN: [0.626] PCI:   vendor 8086: Intel Corporation
+KERN: [0.626] PCI:   device 7111: 82371AB/EB/MB PIIX4 IDE
+KERN: [0.627] PCI:   info: Mass storage controller (IDE interface, ISA Compatibility mode controller, supports both channels switched to PCI native mode, 
+KERN: [0.628] PCI:   line_size 00, latency 00, header_type 00, BIST 00
+KERN: [0.629] PCI:   ROM base host 00000000, pci 00000000, size 00000000
+KERN: [0.629] PCI:   cardbus_CIS 00000000, subsystem_id 0000, subsystem_vendor_id 0000
+KERN: [0.629] PCI:   interrupt_line 00, interrupt_pin 00, min_grant 00, max_latency 00
+KERN: [0.630] PCI:   base reg 0: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.630] PCI:   base reg 1: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.631] PCI:   base reg 2: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.632] PCI:   base reg 3: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.632] PCI:   base reg 4: host 0000d000, pci 0000d000, size 00000010, flags 01
+KERN: [0.633] PCI:   base reg 5: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.633] PCI:   Capabilities: [0.634] (not supported)
+KERN: [0.634] PCI: [dom 0, bus  0] bus   0, device  2, function  0: vendor 80ee, device beef, revision 00
+KERN: [0.635] PCI:   class_base 03, class_function 00, class_api 00
+KERN: [0.635] PCI:   vendor 80ee: InnoTek Systemberatung GmbH
+KERN: [0.635] PCI:   device beef: VirtualBox Graphics Adapter
+KERN: [0.636] PCI:   info: Display controller (VGA compatible controller, VGA controller)
+KERN: [0.637] PCI:   line_size 00, latency 00, header_type 00, BIST 00
+KERN: [0.637] PCI:   ROM base host 00000000, pci 00000000, size 00000000
+KERN: [0.637] PCI:   cardbus_CIS 00000000, subsystem_id 0000, subsystem_vendor_id 0000
+KERN: [0.638] PCI:   interrupt_line 12, interrupt_pin 01, min_grant 00, max_latency 00
+KERN: [0.639] PCI:   base reg 0: host e0000000, pci e0000000, size 01000000, flags 08
+KERN: [0.639] PCI:   base reg 1: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.640] PCI:   base reg 2: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.640] PCI:   base reg 3: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.641] PCI:   base reg 4: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.641] PCI:   base reg 5: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.642] PCI:   Capabilities: [0.642] (not supported)
+KERN: [0.642] PCI: [dom 0, bus  0] bus   0, device  3, function  0: vendor 8086, device 100e, revision 02
+KERN: [0.643] PCI:   class_base 02, class_function 00, class_api 00
+KERN: [0.644] PCI:   vendor 8086: Intel Corporation
+KERN: [0.644] PCI:   device 100e: 82540EM Gigabit Ethernet Controller (PRO/1000 MT Desktop Adapter)
+KERN: [0.644] PCI:   info: Network controller (Ethernet controller)
+KERN: [0.645] PCI:   line_size 00, latency 00, header_type 00, BIST 00
+KERN: [0.645] PCI:   ROM base host 00000000, pci 00000000, size 00000000
+KERN: [0.646] PCI:   cardbus_CIS 00000000, subsystem_id 001e, subsystem_vendor_id 8086
+KERN: [0.646] PCI:   interrupt_line 13, interrupt_pin 01, min_grant ff, max_latency 00
+KERN: [0.647] PCI:   base reg 0: host f0000000, pci f0000000, size 00020000, flags 00
+KERN: [0.647] PCI:   base reg 1: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.649] PCI:   base reg 2: host 0000d010, pci 0000d010, size 00000008, flags 01
+KERN: [0.649] PCI:   base reg 3: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.650] PCI:   base reg 4: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.650] PCI:   base reg 5: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.651] PCI:   Capabilities: [0.651] PM[0.651] , [0.651] PCI-X[0.652] 
+KERN: [0.652] PCI: [dom 0, bus  0] bus   0, device  4, function  0: vendor 80ee, device cafe, revision 00
+KERN: [0.652] PCI:   class_base 08, class_function 80, class_api 00
+KERN: [0.653] PCI:   vendor 80ee: InnoTek Systemberatung GmbH
+KERN: [0.653] PCI:   device cafe: VirtualBox Guest Service
+KERN: [0.653] PCI:   info: Generic system peripheral
+KERN: [0.654] PCI:   line_size 00, latency 00, header_type 00, BIST 00
+KERN: [0.654] PCI:   ROM base host 00000000, pci 00000000, size 00000000
+KERN: [0.654] PCI:   cardbus_CIS 00000000, subsystem_id 0000, subsystem_vendor_id 0000
+KERN: [0.655] PCI:   interrupt_line 14, interrupt_pin 01, min_grant 00, max_latency 00
+KERN: [0.655] PCI:   base reg 0: host 0000d020, pci 0000d020, size 00000020, flags 01
+KERN: [0.656] PCI:   base reg 1: host f0400000, pci f0400000, size 00400000, flags 00
+KERN: [0.656] PCI:   base reg 2: host f0800000, pci f0800000, size 00004000, flags 08
+KERN: [0.657] PCI:   base reg 3: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.657] PCI:   base reg 4: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.658] PCI:   base reg 5: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.659] PCI:   Capabilities: [0.659] (not supported)
+KERN: [0.659] PCI: [dom 0, bus  0] bus   0, device  5, function  0: vendor 8086, device 2668, revision 01
+KERN: [0.660] PCI:   class_base 04, class_function 03, class_api 00
+KERN: [0.660] PCI:   vendor 8086: Intel Corporation
+KERN: [0.660] PCI:   device 2668: 82801FB/FBM/FR/FW/FRW (ICH6 Family) High Definition Audio Controller
+KERN: [0.661] PCI:   info: Multimedia controller (Audio device)
+KERN: [0.662] PCI:   line_size 00, latency 00, header_type 00, BIST 00
+KERN: [0.662] PCI:   ROM base host 00000000, pci 00000000, size 00000000
+KERN: [0.662] PCI:   cardbus_CIS 00000000, subsystem_id 7680, subsystem_vendor_id 8384
+KERN: [0.663] PCI:   interrupt_line 15, interrupt_pin 01, min_grant 00, max_latency 00
+KERN: [0.664] PCI:   base reg 0: host f0804000, pci f0804000, size 00004000, flags 00
+KERN: [0.664] PCI:   base reg 1: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.665] PCI:   base reg 2: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.665] PCI:   base reg 3: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.666] PCI:   base reg 4: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.666] PCI:   base reg 5: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.667] PCI:   Capabilities: [0.667] PM[0.667] 
+KERN: [0.668] PCI: [dom 0, bus  0] bus   0, device  6, function  0: vendor 106b, device 003f, revision 00
+KERN: [0.669] PCI:   class_base 0c, class_function 03, class_api 10
+KERN: [0.669] PCI:   vendor 106b: Apple Inc.
+KERN: [0.669] PCI:   device 003f: KeyLargo/Intrepid USB
+KERN: [0.670] PCI:   info: Serial bus controller (USB controller, OHCI)
+KERN: [0.670] PCI:   line_size 00, latency 00, header_type 00, BIST 00
+KERN: [0.671] PCI:   ROM base host 00000000, pci 00000000, size 00000000
+KERN: [0.671] PCI:   cardbus_CIS 00000000, subsystem_id 0000, subsystem_vendor_id 0000
+KERN: [0.672] PCI:   interrupt_line 16, interrupt_pin 01, min_grant 00, max_latency 00
+KERN: [0.672] PCI:   base reg 0: host f0808000, pci f0808000, size 00001000, flags 00
+KERN: [0.673] PCI:   base reg 1: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.674] PCI:   base reg 2: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.674] PCI:   base reg 3: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.675] PCI:   base reg 4: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.675] PCI:   base reg 5: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.676] PCI:   Capabilities: [0.676] (empty list)
+KERN: [0.676] PCI: find_pci_capability ERROR 0:6:0 capability 0x10 empty list
+KERN: [0.677] PCI: [dom 0, bus  0] bus   0, device  7, function  0: vendor 8086, device 7113, revision 08
+KERN: [0.677] PCI:   class_base 06, class_function 80, class_api 00
+KERN: [0.678] PCI:   vendor 8086: Intel Corporation
+KERN: [0.678] PCI:   device 7113: 82371AB/EB/MB PIIX4 ACPI
+KERN: [0.679] PCI:   info: Bridge
+KERN: [0.679] PCI:   line_size 00, latency 00, header_type 80, BIST 00
+KERN: [0.680] PCI:   ROM base host 00000000, pci 00000000, size 00000000
+KERN: [0.680] PCI:   cardbus_CIS 00000000, subsystem_id 0000, subsystem_vendor_id 0000
+KERN: [0.681] PCI:   interrupt_line 09, interrupt_pin 01, min_grant 00, max_latency 00
+KERN: [0.681] PCI:   base reg 0: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.682] PCI:   base reg 1: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.682] PCI:   base reg 2: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.682] PCI:   base reg 3: host 0000000KERN: 0, pci 00000000, size 00000000, flags 00
+KERN: [0.683] PCI:   base reg 4: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.683] PCI:   base reg 5: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: [0.684] PCI:   Capabilities: [0.684] (not supported)
+KERN: [0.685] usb ohci -1: [0.685] iospace offset: 0xf0808000
+KERN: [1.098] usb ohci -1: [1.098] successfully started the controller
+KERN: [1.099] usb hub 2: [1.099] port 0: new device connected
+KERN: [1.567] get_boot_partitions(): boot volume message:
+KERN: [1.568] KMessage: buffer: 0xffffffff8113c3f0 (size/capacity: 347/347), flags: 0xa
+KERN: [1.569]   field: "booted from image" (BOOL): [1.569] false
+KERN: [1.569]   field: "partition offset"  (LLNG): [1.570] 0 (0x0)
+KERN: [1.570]   field: "packaged"          (BOOL): [1.570] true
+KERN: [1.570]   field: "boot method"       (LONG): [1.571] 0 (0x0)
+KERN: [1.571]   field: "boot drive number" (LLNG): [1.571] 128 (0x80)
+KERN: [1.572]   field: "disk identifier"   (RAWT): [1.572] data at 0xffffffff8113c4fc, 79 bytes
+KERN: [1.572] get_boot_partitions(): boot method type: 0
+KERN: [1.578] PCI-ATA: Controller in legacy mode: cmd 0x1f0, ctrl 0x3f6, irq 14
+KERN: [1.578] PCI-ATA: init channel...
+KERN: [1.578] PCI-ATA: channel index 0
+KERN: [1.579] PCI-ATA: bus master base 0xd000
+KERN: [1.580] PCI-ATA: init channel done
+KERN: [1.580] ata 0: _DevicePresent: device 0, presence 1
+KERN: [1.581] ata 0: _DevicePresent: device 1, presence 1
+KERN: [1.756] ata 0: deviceMask 3
+KERN: [1.756] ata 0: probing device 0
+KERN: [1.757] ata 0: signature of device 0: 0x0000
+KERN: [1.763] ata 0-0: model number: VBOX HARDDISK                           
+KERN: [1.764] ata 0-0: serial number: VB014c99d4-e6a15b8e 
+KERN: [1.764] ata 0-0: firmware rev.: 1.0     
+KERN: [1.765] ata 0-0: using DMA mode 0x12
+KERN: [1.766] ata 0: identified ATA device 0
+KERN: [1.766] ata 0: probing device 1
+KERN: [1.766] ata 0 error: device 1 failed, error code is 0x00
+KERN: [1.767] ata 0: signature of device 1: 0x0000
+KERN: [1.767] ata 0 error: device ready not set
+KERN: [1.768] ata 0-1 error: sending identify request failed
+KERN: [1.768] ata 0 error: command failed, error bit is set. status 0x51, error 0x04
+KERN: [1.769] publish device: node 0xffffffff82133200, path disk/ata/0/master/raw, module drivers/disk/scsi/scsi_disk/device_v1
+KERN: [1.770] ata 0-0 error: invalid target lun 1 for ATA device
+KERN: [1.771] ata 0-0 error: invalid target lun 2 for ATA device
+KERN: [1.772] ata 0-0 error: invalid target lun 3 for ATA device
+KERN: [1.772] ata 0-0 error: invalid target lun 4 for ATA device
+KERN: [1.773] ata 0-0 error: invalid target lun 5 for ATA device
+KERN: [1.774] ata 0-0 error: invalid target lun 6 for ATA device
+KERN: [1.774] ata 0-0 error: invalid target lun 7 for ATA device
+KERN: [1.775] ata 0 error: target device not present
+KERN: [1.775] ata 0 error: invalid target device
+KERN: [1.776] ata 0 error: invalid target device
+KERN: [1.777] ata 0 error: invalid target device
+KERN: Last message repeated 10 times.
+KERN: [1.777] PCI-ATA: Controller in legacy mode: cmd 0x170, ctrl 0x376, irq 15
+KERN: [1.778] PCI-ATA: init channel...
+KERN: [1.778] PCI-ATA: channel index 1
+KERN: [1.779] PCI-ATA: bus master base 0xd008
+KERN: [1.779] PCI-ATA: init channel done
+KERN: [1.780] ata 1: _DevicePresent: device selection failed for device 0
+KERN: [1.781] ata 1: _DevicePresent: device 1, presence 0
+KERN: [1.991] ata 1: deviceMask 0
+KERN: [1.991] ata 1: ignoring device 0
+KERN: [1.992] ata 1: ignoring device 1
+KERN: [1.992] ata 1 error: target device not present
+KERN: [1.993] ata 1 error: target device not present
+KERN: [1.994] ata 1 error: invalid target device
+KERN: [1.995] ata 1 error: invalid target device
+KERN: [1.996] ata 1 error: invalid target device
+KERN: Last message repeated 8 times.
+KERN: [1.997] ata 1 error: invalid target device
+KERN: [1.998] ata 1 error: invalid target device
+KERN: [1.999] periph_check_capacity: TRIM: Setting trim support to disabled
+KERN: [2.000] DMAResource@0xffffffff821332a0: low/high 0/100000000, max segment count 512, align 2, boundary 65536, max transfer 131072, max segment size 33554432
+KERN: [2.001] slab memory manager: created area 0xffffffff86801000 (216)
+KERN: [2.041] slab memory manager: created area 0xffffffff87001000 (217)
+KERN: [2.056] periph_check_capacity: TRIM: Setting trim support to disabled
+KERN: [2.062] identify(0, 0xffffffff82078930)
+KERN: [2.080] raw_command: 
+KERN: [2.088] device 0: /dev/disk/ata/0/master/raw
+KERN: [2.088]   media status:      No error
+KERN: [2.089]   device flags:      2
+KERN: [2.089]   offset:            0
+KERN: [2.089]   size:              2147483648 (2048 MB)
+KERN: [2.090]   content size:      2147483648
+KERN: [2.090]   block size:        2048
+KERN: [2.090]   physical block size: 512
+KERN: [2.091]   child count:       0
+KERN: [2.091]   index:             -1
+KERN: [2.091]   status:            0
+KERN: [2.091]   flags:             3
+KERN: [2.092]   volume:            -1
+KERN: [2.092]   disk system:       file_systems/bfs/v1
+KERN: [2.092]   name:              VBOX HARDDISK
+KERN: [2.093]   content name:      R5
+KERN: [2.093]   type:              <NULL>
+KERN: [2.093]   content type:      Be File System
+KERN: [2.094]   params:            <NULL>
+KERN: [2.094]   content params:    <NULL>
+KERN: [2.101] Identified boot partition by partition offset.
+KERN: [2.105] periph_check_capacity: TRIM: Setting trim support to disabled
+KERN: [2.108] periph_check_capacity: TRIM: Setting trim support to disabled
+KERN: [2.122] bfs: [2.122] mounted "R5" (root node at 262144, device = /dev/disk/ata/0/master/raw)
+KERN: [2.124] Mounted boot partition: /dev/disk/ata/0/master/raw
+KERN: [2.150] packagefs: [   17] [2.151] Adding packages from "/boot/system/packages"
+KERN: [2.151] packagefs: [   17] [2.151] Failed to open packages activation file: No such file or directory
+KERN: [2.152] packagefs: [   17] [2.152] Loading packages from activation file failed. Loading all packages in packages directory.
+KERN: [2.225] slab memory manager: created area 0xffffffff87801000 (250)
+KERN: [3.112] slab memory manager: created area 0xffffffff88001000 (252)
+KERN: [3.977] packagefs: [   17] [3.977] StringPool usage:
+KERN: [3.978] packagefs: [   17] [3.978]   total unique strings:       11742,   133558 bytes, overhead: 187872 bytes + 131072 bytes
+KERN: [3.979] packagefs: [   17] [3.979]   total strings with dups:    99436,  1132851 bytes
+KERN: [3.979] packagefs: [   17] [3.979]   unshared strings:            1288
+KERN: [3.980] packagefs: [   17] [3.980]   bytes saved:               680349
+KERN: [3.986] slab memory manager: created area 0xffffffff88801000 (253)
+KERN: [4.005] packagefs: [   17] [4.006] Adding packages from "/boot/home/config/packages"
+KERN: [4.006] packagefs: [   17] [4.006] Failed to open packages activation file: No such file or directory
+KERN: [4.008] packagefs: [   17] [4.008] Loading packages from activation file failed. Loading all packages in packages directory.
+KERN: [4.020] packagefs: [   17] [4.020] StringPool usage:
+KERN: [4.020] packagefs: [   17] [4.021]   total unique strings:       11742,   133558 bytes, overhead: 187872 bytes + 131072 bytes
+KERN: [4.022] packagefs: [   17] [4.022]   total strings with dups:    99447,  1132916 bytes
+KERN: [4.022] packagefs: [   17] [4.022]   unshared strings:            1283
+KERN: [4.023] packagefs: [   17] [4.023]   bytes saved:               680414
+KERN: [4.048] module: Search for file_cache/launch_speedup/v1 failed.
+KERN: [4.072] file_systems/vboxsf: B_MODULE_INIT
+KERN: [4.072] vboxsf: module ready
+KERN: [4.073] file_systems/vboxsf: B_MODULE_UNINIT
+KERN: [4.303] publish device: node 0xffffffff8213a5a0, path disk/virtual/ram/control, module drivers/disk/virtual/ram_disk/control/device_v1
+KERN: [4.345] loaded driver /boot/system/add-ons/kernel/drivers/dev/pty
+KERN: [4.348] loaded driver /boot/system/add-ons/kernel/drivers/dev/null
+KERN: [4.351] usb_modeswitch: init_hardware()
+KERN: [4.352] usb_modeswitch: init_driver()
+KERN: [4.352] usb_modeswitch: trying module bus_managers/usb/v3.1
+KERN: [4.353] usb_modeswitch: publish_devices()
+KERN: [4.353] usb_modeswitch: uninit_driver()
+KERN: [4.353] loaded driver /boot/system/add-ons/kernel/drivers/dev/usb_modeswitch
+KERN: [4.357] loaded driver /boot/system/add-ons/kernel/drivers/dev/dprintf
+KERN: [4.362] con_init: trying module console/frame_buffer/v1
+KERN: [4.363] loaded driver /boot/system/add-ons/kernel/drivers/dev/console
+KERN: [4.529] mtrr: [cpu 0] MTRRs are enabled
+KERN: [4.530] mtrr: [cpu 0] default type is 0 uncacheable
+KERN: [4.530] mtrr: [cpu 0] fixed range MTRRs are enabled
+KERN: [4.531] ignoring MTRRs due to PAT support
+KERN: [4.531] allocate_commpage_entry(4, 16) -> 0x0000000000000258
+KERN: [4.532] R5 CPU: cpu 0 vendor amd family 0x19 model 0x50 name AMD Ryzen 5 5625U with Radeon Graphics         
+KERN: [4.532] R5 CPU: tsc_hz 2290821308
+KERN: [4.532] R5 CPU: amd_hw_pstate 0 cppc 0
+KERN: [4.533] R5 CPU: no msr write
+KERN: [4.533] R5 CPU: publish miKERN: sc/r5_pstate status 0
+KERN: [4.533] R5 kernel: arch_cpu from distro, microcode match uses installed_cpu
+KERN: [4.535] no valid cpufreq module found
+KERN: [4.536] acpi cpu 0 maps to cpu 0
+KERN: [4.536] acpi cpu 1 maps to cpu 1
+KERN: [4.537] acpi_eval_osc@0xffffffff8203f500
+KERN: [4.537] failed to eval _OSC and _PDC
+KERN: [4.537] evaluate _CST @0xffffffff8203f500
+KERN: [4.537] failed to get _CST
+KERN: [4.538] no valid cpuidle module found
+KERN: [4.538] ignoring MTRRs due to PAT support
+KERN: [4.542] kernel debugger extension "debugger/usb_keyboard/v1": loaded
+KERN: [4.543] kernel debugger extension "debugger/run_on_exit/v1": loaded
+KERN: [4.577] kernel debugger extension "debugger/disasm/v1": loaded
+KERN: [4.577] kernel debugger extension "debugger/invalidate_on_exit/v1": loaded
+KERN: [4.581] kernel debugger extension "debugger/hangman/v1": loaded
+KERN: [4.587] publish device: node 0xffffffff88030468, path random, module bus_managers/random/device_v1
+KERN: [4.588] publish device: node 0xffffffff88030468, path urandom, module bus_managers/random/device_v1
+KERN: [4.598] publish device: node 0xffffffff88030648, path power/button/power_fixed, module drivers/power/acpi_button/device_v1
+KERN: [4.614] publish device: node 0xffffffff88030828, path power/button/sleep_fixed, module drivers/power/acpi_button/device_v1
+KERN: [5.040] publish device: node 0xffffffff88030968, path power/acpi_battery/0, module drivers/power/acpi_battery/device_v1
+KERN: [5.056] acpi_ac_support ac device found
+KERN: [5.057] publish device: node 0xffffffff88030b48, path power/acpi_ac/0, module drivers/power/acpi_ac/device_v1
+KERN: REG: Failed to open shadow passwd DB file "/etc/shadow": No such file or directory
+KERN: R5 net_server: NetServer from distro
+KERN: package_daemon: [7999733:    39] root at "/boot" (device: 3, node: 262144) registered
+KERN: package_daemon: [8001695:    39] volume at "/boot/system" registered
+KERN: package_daemon: [8006347:    39] volume at "/boot/home/config" registered
+KERN: [8.020] register_domain(5, internet6)
+KERN: [8.040] register_domain(10, bluetooth)
+KERN: [8.053] register_domain(9, unix)
+KERN: [8.103] register_domain(1, internet)
+KERN: [8.103] unregister_domain(0xffffffff87e2aa80, 5, internet6)
+KERN: [8.105] unregister_domain(0xffffffff87e2ab80, 9, unix)
+KERN: [8.105] unregister_domain(0xffffffff87e2ab00, 10, bluetooth)
+KERN: [8.107] unregister_domain(0xffffffff87e2ad00, 1, internet)
+KERN: [8.109] register_domain(5, internet6)
+KERN: [8.110] unregister_domain(0xffffffff87e2ae00, 5, internet6)
+KERN: [8.111] register_domain(4, link)
+KERN: [8.112] unregister_domain(0xffffffff87e2ae80, 4, link)
+KERN: [8.120] register_domain(5, internet6)
+KERN: [8.122] register_domain(10, bluetooth)
+KERN: [8.123] register_domain(9, unix)
+KERN: [8.131] register_domain(1, internet)
+KERN: [8.131] unregister_domain(0xffffffff87e2af80, 5, internet6)
+KERN: [8.133] unregister_domain(0xffffffff87e2b080, 9, unix)
+KERN: [8.134] unregister_domain(0xffffffff87e2b000, 10, bluetooth)
+KERN: [8.136] unregister_domain(0xffffffff87e2b100, 1, internet)
+KERN: [8.138] register_domain(5, internet6)
+KERN: [8.139] unregister_domain(0xffffffff87e2b200, 5, internet6)
+KERN: [8.141] register_domain(1, internet)
+KERN: [8.142] unregister_domain(0xffffffff87e2b280, 1, internet)
+KERN: [8.146] register_domain(5, internet6)
+KERN: [8.149] register_domain(10, bluetooth)
+KERN: [8.151] register_domain(9, unix)
+KERN: [8.154] register_domain(1, internet)
+KERN: [8.154] unregister_domain(0xffffffff87e2b380, 5, internet6)
+KERN: [8.156] unregister_domain(0xffffffff87e2b480, 9, unix)
+KERN: [8.162] unregister_domain(0xffffffff87e2b400, 10, bluetooth)
+KERN: [8.164] unregister_domain(0xffffffff87e2b500, 1, internet)
+KERN: [8.166] register_domain(5, internet6)
+KERN: [8.167] unregister_domain(0xffffffff87e2b600, 5, internet6)
+KERN: [8.169] register_domain(1, internet)
+KERN: [8.170] unregister_domain(0xffffffff87e2b680, 1, internet)
+KERN: [8.176] register_domain(5, internet6)
+KERN: [8.182] register_domain(10, bluetooth)
+KERN: [8.187] register_domain(9, unix)
+KERN: [8.188] register_domain(1, internet)
+KERN: [8.189] unregister_domain(0xffffffff87e29c80, 5, internet6)
+KERN: [8.199] unregister_domain(0xffffffff87e29e80, 9, unix)
+KERN: [8.200] unregister_domain(0xffffffff87e29d00, 10, bluetooth)
+KERN: [8.203] unregister_domain(0xffffffff87e29f00, 1, internet)
+KERN: [8.226] register_domain(5, internet6)
+KERN: [8.228] unregister_domain(0xffffffff87e2a800, 5, internet6)
+KERN: [8.237] register_domain(5, internet6)
+KERN: [8.240] unregister_domain(0xffffffff82110180, 5, internet6)
+KERN: [8.245] register_domain(5, internet6)
+KERN: [8.246] register_domain(10, bluetooth)
+KERN: [8.250] register_domain(9, unix)
+KERN: [8.252] register_domain(1, internet)
+KERN: [8.253] unregister_domain(0xffffffff87e2aa00, 5, internet6)
+KERN: [8.255] unregister_domain(0xffffffff87e2ab80, 9, unix)
+KERN: Test: and [file_exists [/system/bin/FirstBootPrompt], or [not [file_exists [/boot/home/config/settings/Locale settings]], readonly ]] -> 1
+KERN: [8.257] unregister_domain(0xffffffff87e2aa80, 10, bluetooth)
+KERN: [8.268] unregister_domain(0xffffffff87e2ab00, 1, internet)
+KERN: [8.278] register_domain(5, internet6)
+KERN: [8.279] unregister_domain(0xffffffff87e2b300, 5, internet6)
+KERN: [8.286] register_domain(1, internet)
+KERN: [8.289] unregister_domain(0xffffffff87e2b380, 1, internet)
+KERN: [8.294] register_domain(5, internet6)
+KERN: [8.298] register_domain(10, bluetooth)
+KERN: [8.301] register_domain(9, unix)
+KERN: [8.303] register_domain(1, internet)
+KERN: [8.304] unregister_domain(0xffffffff87e2b500, 5, internet6)
+KERN: [8.305] unregister_domain(0xffffffff87e2b600, 9, unix)
+KERN: [8.306] unregister_domain(0xffffffff87e2b580, 10, bluetooth)
+KERN: [8.308] unregister_domain(0xffffffff87e2bc80, 1, internet)
+KERN: [8.313] register_domain(5, internet6)
+KERN: [8.318] unregister_domain(0xffffffff87e2bd80, 5, internet6)
+KERN: [8.327] register_domain(1, internet)
+KERN: [8.357] register_domain(5, internet6)
+KERN: [8.490] loaded driver /boot/system/non-packaged/add-ons/kernel/drivers/dev/misc/vboxguest
+KERN: [8.589] nvmm: SVM not supported
+KERN: [8.589] nvmm: CPU not supported
+KERN: [8.615] loaded driver /boot/system/add-ons/kernel/drivers/dev/misc/mem
+KERN: [8.651] loaded driver /boot/system/add-ons/kernel/drivers/dev/misc/poke
+KERN: [8.705] loaded driver /boot/system/add-ons/kernel/drivers/dev/net/usb_rndis
+2026-11-16 00:20:43 USER: decorator: r5 loaded
+KERN: [9.862] loaded driver /boot/system/add-ons/kernel/drivers/dev/net/usb_ncm
+KERN: [10.092] etherpci: init_driver [10.092] init_driver: etherpci not found
+KERN: [10.177] pci_reserve_device(0, 3, 0, ipro1000)
+KERN: [10.260] if_initname(0xffffffff87f11800, em, 2)
+KERN: [10.261] [ipro1000] ipro1000: /dev/net/ipro1000/0
+KERN: [10.261] [ipro1000] (em) attach_pre capping queues at 1
+KERN: [10.262] [ipro1000] (em) bus_alloc_resource(3, [16], 0x0, 0xffffffffffffffff, 0x1,0x2)
+KERN: [10.263] [ipro1000] (em) bus_alloc_resource(4, [24], 0x0, 0xffffffffffffffff, 0x1,0x2)
+KERN: package_daemon: [10322069:    51] Failed to get activated packages info from activated packages file. Assuming all package files in package directory are activated.
+KERN: package_daemon: [10323858:    51] The latest volume state is also the currently active one
+KERN: package_daemon: [10331675:    51] Volume::InitPackages Requesting delayed first boot processing for packages dir /boot/system/packages.
+KERN: package_daemon: [10343340:    51] Volume::InitialVerify((nil), (nil))
+KERN: package_daemon: [10393624:    51] Volume::InitialVerify(): volume at "/boot/system" is consistent
+KERN: package_daemon: [10394497:    51] Failed to get activated packages info from activated packages file. Assuming all package files in package directory are activated.
+KERN: package_daemon: [10396293:    51] The latest volume state is also the currently active one
+KERN: package_daemon: [10409658:    51] Volume::InitPackages Requesting delayed first boot processing for packages dir /boot/home/config/packages.
+KERN: package_daemon: [10410972:    51] Volume::InitialVerify(0x3a003a8200, (nil))
+KERN: package_daemon: [10414555:    51] Volume::InitialVerify(): volume at "/boot/home/config" is consistent
+KERN: package_daemon: [10416225:    51] Starting First Boot Processing for 137 packages in /boot/system/packages/administrative/transaction-1.
+KERN: package_daemon: [10417068:    51] Doing first boot processing #0 for package vulkan_tools-1.4.367-2-x86_64.hpkg.
+KERN: package_daemon: [10418390:    51] Doing first boot processing #1 for package zip-3.0-4-x86_64.hpkg.
+KERN: package_daemon: [10419357:    51] Doing first boot processing #2 for package haiku_datatranslators-r1~beta6_r5_2026.1_dev-1-x86_64.hpkg.
+KERN: package_daemon: [10420665:    51] Doing first boot processing #3 for package ralink_wifi_firmwares-2023_08_04-1-any.hpkg.
+KERN: package_daemon: [10422283:    51] KERN: Doing first boot processing #4 for package graphite2-1.3.14-4-x86_64.hpkg.
+KERN: package_daemon: [10424928:    51] KERN: Doing first boot processing #5 for package vulkanteapot-1.0.0-5-x86_64.hpkg.
+KERN: package_daemon: [10426344:    51] KERN: Doing first boot processing #6 for package tar-1.35-2-x86_64.hpkg.
+KERN: package_daemon: [10428175:    51] KERN: Doing first boot processing #7 for package haiku_userguide_de-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [10431037:    51] KERN: Doing first boot processing #8 for package noto_sans_cjk_jp-2.004-2-any.hpkg.
+KERN: package_daemon: [10437266:    51] KERN: Doing first boot processing #9 for package smbfs.hpkg.
+KERN: package_daemon: [10445729:    51] KERN: Doing first boot processing #10 for package opus-1.3.1-2-x86_64.hpkg.
+KERN: package_daemon: [10449476:    51] KERN: Doing first boot processing #11 for package libidn2-2.0.5-4-x86_64.hpkg.
+KERN: package_daemon: [10453278:    51] KERN: Doing first boot processing #12 for package less-668-1-x86_64.hpkg.
+KERN: [11.026] [ipro1000] (em) Using 1024 TX descriptors and 1024 RX descriptors
+KERN: [11.041] [ipro1000] (em) allocated for 1 tx_queues
+KERN: [11.042] [ipro1000] (em) allocated for 1 rx_queues
+KERN: [11.042] [ipro1000] (em) bus_alloc_resource(1, [0], 0x0, 0xffffffffffffffff, 0x1,0x6)
+KERN: [11.044] if_attach 0xffffffff87ef4cf0
+KERN: [11.113] ipro1000: init_driver(0xffffffff802cbed0)
+KERN: [11.114] loaded driver /boot/system/add-ons/kernel/drivers/dev/net/ipro1000
+KERN: [11.119] [33musb_davicom:[0m00.11.119:init_driver::ver.0.9.5
+KERN: [11.125] loaded driver /boot/system/add-ons/kernel/drivers/dev/net/usb_davicom
+KERN: package_daemon: [11297659:    51] Doing first boot processing #13 for package intel_wifi_firmwares-2025_02_11-1-any.hpkg.
+KERN: package_daemon: [11302865:    51] KERN: Doing first boot processing #14 for package libicns-0.8.1-9-x86_64.hpkg.
+KERN: package_daemon: [11307703:    51] KERN: Doing first boot processing #15 for package netcat-1.10-4-x86_64.hpkg.
+KERN: package_daemon: [11313331:    51] KERN: Doing first boot processing #16 for package coreutils-9.11-2-x86_64.hpkg.
+KERN: package_daemon: [11315331:    51] KERN: Doing first boot processing #17 for package nano-9.1-1-x86_64.hpkg.
+KERN: package_daemon: [11317496:    51] KERN: Doing first boot processing #18 for package haiku_loader-r1~beta6_r5_2026.1_dev-1-x86_64.hpkg.
+KERN: package_daemon: [11319823:    51] KERN: Doing first boot processing #19 for package haiku_userguide_ca-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [11321552:    51] KERN: Doing first boot processing #20 for package fdk_aac-2.0.2-4-x86_64.hpkg.
+KERN: package_daemon: [11323258:    51] KERN: Doing first boot processing #21 for package libtheora-1.1.1-8-x86_64.hpkg.
+KERN: package_daemon: [11324331:    51] KERN: Doing first boot processing #22 for package haiku-r1~beta6_r5_2026.1_dev-1-x86_64.hpkg.
+KERN: package_daemon: [11325929:    51] KERN: Doing first boot processing #23 for package speex-1.2.1-2-x86_64.hpkg.
+KERN: package_daemon: [11328189:    51] KERN: Doing first boot processing #24 for package sed-4.9-1-x86_64.hpkg.
+KERN: package_daemon: [11331303:    51] KERN: Doing first boot processing #25 for package haikuwebkit-1.10.0-2-x86_64.hpkg.
+KERN: package_daemon: [11338368:    51] KERN: Doing first boot processing #26 for package perl-5.42.2-1-x86_64.hpkg.
+KERN: package_daemon: [11340020:    51] KERN: Doing first boot processing #27 for package xz_utils-5.8.3-1-x86_64.hpkg.
+KERN: package_daemon: [11345575:    51] KERN: Doing first boot processing #28 for package wget-1.24.5-2-x86_64.hpkg.
+KERN: [11.380] register_domain(4, link)
+KERN: [11.380] [net/ipro1000/0] compat_open(0x2)
+KERN: [11.430] slab memory manager: created area 0xffffffff89001000 (6678)
+KERN: package_daemon: [11434935:    51] Doing first boot processing #29 for package giflib-5.2.2-1-x86_64.hpkg.
+KERN: package_daemon: [11442057:    51] Doing first boot processing #30 for package libraw-0.20.2-2-x86_64.hpkg.
+KERN: package_daemon: [11444038:    51] Doing first boot processing #31 for package dav1d-1.5.4-2-x86_64.hpkg.
+KERN: package_daemon: [11449667:    51] Doing first boot processing #32 for package llvm21_runtime-21.1.8-1-x86_64.hpkg.
+KERN: package_daemon: [11450742:    51] Doing first boot processing #33 for package gcc_syslibs-13.3.0_2023_08_10-6-x86_64.hpkg.
+KERN: package_daemon: [11457826:    51] KERN: Doing first boot processing #34 for package libxslt-1.1.45-2-x86_64.hpkg.
+KERN: package_daemon: [11461432:    51] KERN: Doing first boot processing #35 for package ncurses6-6.6-1-x86_64.hpkg.
+KERN: package_daemon: [11466944:    51] KERN: Doing first boot processing #36 for package sqlite-3.50.4.0-1-x86_64.hpkg.
+KERN: package_daemon: [11469486:    51] KERN: Doing first boot processing #37 for package bash-5.3.015-1-x86_64.hpkg.
+KERN: package_daemon: [11601463:    51] Doing first boot processing #38 for package libwebp-1.6.0-3-x86_64.hpkg.
+KERN: package_daemon: [11602997:    51] KERN: Doing first boot processing #39 for package libexecinfo-1.1-6-x86_64.hpkg.
+KERN: package_daemon: [11609933:    51] KERN: Doing first boot processing #40 for package readline-8.3.003-1-x86_64.hpkg.
+KERN: package_daemon: [11619346:    51] KERN: Doing first boot processing #41 for package gzip-1.14-1-x86_64.hpkg.
+KERN: package_daemon: [11650038:    51] KERN: Doing first boot processing #42 for package bzip2-1.0.8-3-x86_64.hpkg.
+KERN: package_daemon: [11655118:    51] KERN: Doing first boot processing #43 for package libiconv-1.18-1-x86_64.hpkg.
+KERN: package_daemon: [11657696:    51] KERN: Doing first boot processing #44 for package libpcap-1.10.6-1-x86_64.hpkg.
+KERN: package_daemon: [11659776:    51] KERN: Doing first boot processing #45 for package gettext_libintl-1.0-1-x86_64.hpkg.
+KERN: package_daemon: [11663504:    51] KERN: Doing first boot processing #46 for package mesa_devel-25.3.6-1-x86_64.hpkg.
+KERN: package_daemon: [11666723:    51] KERN: Doing first boot processing #47 for package mesa_radv-25.3.6-9-x86_64.hpkg.
+KERN: package_daemon: [11668701:    51] KERN: Doing first boot processing #48 for package mesa_lavapipe-25.3.6-5-x86_64.hpkg.
+KERN: package_daemon: [11673596:    51] KERN: Doing first boot processing #49 for package libogg-1.3.6-2-x86_64.hpkg.
+KERN: package_daemon: [11678811:    51] KERN: Doing first boot processing #50 for package libpcre2-10.45-1-x86_64.hpkg.
+KERN: package_daemon: [11682177:    51] KERN: Doing first boot processing #51 for package haiku_userguide_ru-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [11685574:    51] KERN: Doing first boot processing #52 for package haiku_userguide_pt_pt-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [11693851:    51] KERN: Doing first boot processing #53 for package webpositive-r1~beta6_r5_2026.1_dev-1-x86_64.hpkg.
+KERN: package_daemon: [11699767:    51] KERN: Doing first boot processing #54 for package libdrm-2.4.124-2-x86_64.hpkg.
+KERN: package_daemon: [11705922:    51] KERN: Doing first boot processing #55 for package haiku_userguide_fur-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [11741062:    51] KERN: Doing first boot processing #56 for package fontconfig-2.18.2-2-x86_64.hpkg.
+KERN: [11.842] /dev/net/ipro1000/0: link down, media 0x20 quality 1000 speed 0
+KERN: package_daemon: [12079047:    51] Doing first boot processing #57 for package expat-2.8.2-1-x86_64.hpkg.
+KERN: package_daemon: [12080306:    51] Doing first boot processing #58 for package haiku_userguide_zh_cn-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [12081638:    51] Doing first boot processing #59 for package brotli-1.2.0-1-x86_64.hpkg.
+KERN: package_daemon: [12082977:    51] Doing first boot processing #60 for package libjpeg_turbo-3.1.4.1-1-x86_64.hpkg.
+KERN: package_daemon: [12084456:    51] Doing first boot processing #61 for package soxr-0.1.3-2-x86_64.hpkg.
+KERN: package_daemon: [12085490:    51] KERN: Doing first boot processing #62 for package libavif1.0-1.4.2-1-x86_64.hpkg.
+KERN: package_daemon: [12088019:    51] KERN: Doing first boot processing #63 for package libvpx1.16-1.16.0-1-x86_64.hpkg.
+KERN: package_daemon: [12093713:    51] KERN: Doing first boot processing #64 for package haiku_userguide_es-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [12096704:    51] KERN: Doing first boot processing #65 for package libvorbis-1.3.7-1-x86_64.hpkg.
+KERN: package_daemon: [12100140:    51] KERN: Doing first boot processing #66 for package libedit-20230828_3.1-1-x86_64.hpkg.
+KERN: package_daemon: [12103789:    51] KERN: Doing first boot processing #67 for package haiku_userguide_uk-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [12107432:    51] KERN: Doing first boot processing #68 for package haiku_welcome-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [12110453:    51] KERN: Doing first boot processing #69 for package libass-0.17.5-2-x86_64.hpkg.
+KERN: package_daemon: [12112191:    51] KERN: Doing first boot processing #70 for package sharutils-4.15.2-3-x86_64.hpkg.
+KERN: package_daemon: [12114369:    51] KERN: Doing first boot processing #71 for package haiku_userguide-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [12118234:    51] KERN: Doing first boot processing #72 for package jasper-2.0.33-2-x86_64.hpkg.
+KERN: package_daemon: [12121077:    51] KERN: Doing first boot processing #73 for package vulkan_loader-1.4.367-4-x86_64.hpkg.
+KERN: package_daemon: [12123849:    51] KERN: Doing first boot processing #74 for package userland_fs.hpkg.
+KERN: package_daemon: [12127524:    51] KERN: Doing first boot processing #75 for package harfbuzz-14.2.0-1-x86_64.hpkg.
+KERN: package_daemon: [12131090:    51] KERN: Doing first boot processing #76 for package lame-3.100-4-x86_64.hpkg.
+KERN: package_daemon: [12135198:    51] Doing first boot processing #77 for package gmp-6.3.0-1-x86_64.hpkg.
+KERN: package_daemon: [12136270:    51] Doing first boot processing #78 for package icu74-74.1-6-x86_64.hpkg.
+KERN: package_daemon: [12137911:    51] KERN: Doing first boot processing #79 for package speexdsp-1.2.1-1-x86_64.hpkg.
+KERN: package_daemon: [12143395:    51] KERN: Doing first boot processing #80 for package curl-8.21.0-1-x86_64.hpkg.
+KERN: package_daemon: [12146376:    51] KERN: Doing first boot processing #81 for package zstd-1.5.6-2-x86_64.hpkg.
+KERN: package_daemon: [12149099:    51] KERN: Doing first boot processing #82 for package haiku_userguide_pt_br-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [12151533:    51] KERN: Doing first boot processing #83 for package haiku_userguide_fr-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [12155557:    51] KERN: Doing first boot processing #84 for package libxml2-2.15.3-1-x86_64.hpkg.
+KERN: package_daemon: [12159260:    51] KERN: Doing first boot processing #85 for package haiku_userguide_jp-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [12163063:    51] KERN: Doing first boot processing #86 for package openssh-10.4p1-1-x86_64.hpkg.
+KERN: package_daemon: [12478652:    51] KERN: Doing first boot processing #87 for package haiku_userguide_hu-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [12483161:    51] KERN: Doing first boot processing #88 for package noto-20260201-1-any.hpkg.
+KERN: package_daemon: [12485535:    51] KERN: Doing first boot processing #89 for package pe-2.5.0-1-x86_64.hpkg.
+KERN: package_daemon: [12489072:    51] KERN: Doing first boot processing #90 for package git-2.54.0-1-x86_64.hpkg.
+KERN: package_daemon: [12553921:    51] Doing first boot processing #91 for package findutils-4.9.0-3-x86_64.hpkg.
+KERN: package_daemon: [12554997:    51] Doing first boot processing #92 for package libpng16-1.6.53-1-x86_64.hpkg.
+KERN: package_daemon: [12556576:    51] KERN: Doing first boot processing #93 for package libpcre-8.45-3-x86_64.hpkg.
+KERN: package_daemon: [12559155:    51] KERN: Doing first boot processing #94 for package woff2-1.0.2-3-x86_64.hpkg.
+KERN: package_daemon: [12561543:    51] KERN: Doing first boot processing #95 for package tcpdump-4.99.6-1-x86_64.hpkg.
+KERN: package_daemon: [12567889:    51] KERN: Doing first boot processing #96 for package haiku_userguide_id-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [12571139:    51] KERN: Doing first boot processing #97 for package haiku_userguide_en-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [12573500:    51] KERN: Doing first boot processing #98 for package vision-0.10.6-2-x86_64.hpkg.
+KERN: package_daemon: [12576492:    51] KERN: Doing first boot processing #99 for package gawk-5.3.0-1-x86_64.hpkg.
+KERN: package_daemon: [12712855:    51] KERN: Doing first boot processing #100 for package tiff-4.7.0-1-x86_64.hpkg.
+KERN: package_daemon: [12717395:    51] Doing first boot processing #101 for package ffmpeg6-6.1.5-2-x86_64.hpkg.
+KERN: package_daemon: [12719403:    51] Doing first boot processing #102 for package glu-9.0.0-8-x86_64.hpkg.
+KERN: package_daemon: [12720065:    51] Doing first boot processing #103 for package libgpg_error-1.61-2-x86_64.hpkg.
+KERN: package_daemon: [12721266:    51] Doing first boot processing #104 for package haiku_userguide_sk-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [12722899:    51] KERN: Doing first boot processing #105 for package haiku_userguide_sv_se-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [12728386:    51] Doing first boot processing #106 for package wpa_supplicant-2.11.haiku.1-1-x86_64.hpkg.
+KERN: package_daemon: [12729760:    51] Doing first boot processing #107 for package bc-1.07.1-2-x86_64.hpkg.
+KERN: package_daemon: [12730450:    51] Doing first boot processing #108 for package nghttp2-1.63.0-1-x86_64.hpkg.
+KERN: package_daemon: [12731233:    51] Doing first boot processing #109 for package openjpeg-2.5.3-2-x86_64.hpkg.
+KERN: package_daemon: [12731809:    51] Doing first boot processing #110 for package libopenmpt-0.8.3-1-x86_64.hpkg.
+KERN: package_daemon: [12732569:    51] Doing first boot processing #111 for package grep-3.11-2-x86_64.hpkg.
+KERN: package_daemon: [12733155:    51] Doing first boot processing #112 for package rav1e-0.8.1-1-x86_64.hpkg.
+KERN: package_daemon: [12734646:    51] Doing first boot processing #113 for package haiku_userguide_fi-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [12736122:    51] KERN: Doing first boot processing #114 for package lcms-2.19.1-1-x86_64.hpkg.
+KERN: package_daemon: [12740187:    51] KERN: Doing first boot processing #115 for package which-2.21-6-x86_64.hpkg.
+KERN: package_daemon: [12746166:    51] KERN: Doing first boot processing #116 for package libunibreak-5.1-1-x86_64.hpkg.
+KERN: package_daemon: [12749254:    51] KERN: Doing first boot processing #117 for package fribidi-1.0.16-1-x86_64.hpkg.
+KERN: package_daemon: [12753860:    51] KERN: Doing first boot processing #118 for package gutenprint9-5.3.4-2-x86_64.hpkg.
+KERN: package_daemon: [12756518:    51] KERN: Doing first boot processing #119 for package zlib-1.3.2-1-x86_64.hpkg.
+KERN: package_daemon: [12760378:    51] KERN: Doing first boot processing #120 for package haiku_userguide_pl-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [12763051:    51] KERN: Doing first boot processing #121 for package libglvnd-1.7.0-1-x86_64.hpkg.
+KERN: package_daemon: [12767451:    51] KERN: Doing first boot processing #122 for package unzip-6.10c23-6-x86_64.hpkg.
+KERN: package_daemon: [12771459:    51] KERN: Doing first boot processing #123 for package haiku_userguide_ro-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [12775100:    51] KERN: Doing first boot processing #124 for package freetype-2.14.3-1-x86_64.hpkg.
+KERN: package_daemon: [12779043:    51] KERN: Doing first boot processing #125 for package libpsl-0.21.5-1-x86_64.hpkg.
+KERN: package_daemon: [12782929:    51] KERN: Doing first boot processing #126 for package realtek_wifi_firmwares-2019_01_02-1-any.hpkg.
+KERN: package_daemon: [12786286:    51] KERN: Doing first boot processing #127 for package ca_root_certificates-2026_07_16-1-any.hpkg.
+KERN: package_daemon: [12789844:    51] KERN: Doing first boot processing #128 for package libunistring-1.3-1-x86_64.hpkg.
+KERN: package_daemon: [12794547:    51] KERN: Doing first boot processing #129 for package snappy-1.2.2-2-x86_64.hpkg.
+KERN: package_daemon: [12800458:    51] Doing first boot processing #130 for package haiku_userguide_tr-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [12802494:    51] Doing first boot processing #131 for package diffutils-3.12-1-x86_64.hpkg.
+KERN: package_daemon: [12803434:    51] Doing first boot processing #132 for package openssl3-3.5.7-1-x86_64.hpkg.
+KERN: package_daemon: [12805050:    51] KERN: Doing first boot processing #133 for package mesa-25.3.6-5-x86_64.hpkg.
+KERN: package_daemon: [12810364:    51] KERN: Doing first boot processing #134 for package game_music_emu-0.6.5-1-x86_64.hpkg.
+KERN: package_daemon: [12813600:    51] KERN: Doing first boot processing #135 for package libssh2-1.11.1-1-x86_64.hpkg.
+KERN: package_daemon: [12816612:    51] KERN: Doing first boot processing #136 for package mandoc-1.14.6-1-x86_64.hpkg.
+KERN: package_daemon: [12818626:    51] KERN: post-installation script starting: boot/post-install/sshd_keymaker.sh, package openssh-10.4p1-1-x86_64.hpkg
+KERN: [13.808] [ipro1000] (em) Link is up 1000 Mbps Full Duplex
+KERN: [13.818] /dev/net/ipro1000/0: link up, media 0x900030 quality 1000 speed 1000000000
+2026-11-16 00:20:47 DAEMON 'DHCP': /dev/net/ipro1000/0: Send DHCP_DISCOVER to 255.255.255.255:67
+2026-11-16 00:20:47 USER: slaac /dev/net/ipro1000/0: listening, ifindex 2
+2026-11-16 00:20:47 USER: slaac /dev/net/ipro1000/0: router solicitation sent
+2026-11-16 00:20:47 USER: slaac /dev/net/ipro1000/0: RA from fe80::105f:408f:7a41:6cc2 lifetime=0 M=0 O=0
+2026-11-16 00:20:47 USER: slaac /dev/net/ipro1000/0: PIO fdae:aeb4:a752:9ae4::/64 A=1 L=1
+2026-11-16 00:20:47 DAEMON 'DHCP': /dev/net/ipro1000/0: Received DHCP_OFFER from 192.168.1.1
+2026-11-16 00:20:47 DAEMON 'DHCP':   your_address: 192.168.1.191
+2026-11-16 00:20:47 DAEMON 'DHCP':   server: 192.168.1.1
+2026-11-16 00:20:47 DAEMON 'DHCP':   lease time: 86400 seconds
+2026-11-16 00:20:47 DAEMON 'DHCP':   renewal time: 43200 seconds
+2026-11-16 00:20:47 DAEMON 'DHCP':   rebinding time: 75600 seconds
+2026-11-16 00:20:47 DAEMON 'DHCP':   subnet: 255.255.255.0
+2026-11-16 00:20:47 DAEMON 'DHCP':   broadcast: 192.168.1.255
+2026-11-16 00:20:47 DAEMON 'DHCP':   gateway: 192.168.1.1
+2026-11-16 00:20:47 DAEMON 'DHCP':   domain name: "home"
+2026-11-16 00:20:47 DAEMON 'DHCP':   nameserver[0]: 192.168.1.1
+2026-11-16 00:20:47 DAEMON 'DHCP': /dev/net/ipro1000/0: Send DHCP_REQUEST for 192.168.1.191 to 255.255.255.255:67
+2026-11-16 00:20:47 DAEMON 'DHCP': /dev/net/ipro1000/0: Received DHCP_ACK from 192.168.1.1
+2026-11-16 00:20:47 DAEMON 'DHCP':   server: 192.168.1.1
+2026-11-16 00:20:47 DAEMON 'DHCP':   lease time: 86400 seconds
+2026-11-16 00:20:47 DAEMON 'DHCP':   renewal time: 43200 seconds
+2026-11-16 00:20:47 DAEMON 'DHCP':   rebinding time: 75600 seconds
+2026-11-16 00:20:47 DAEMON 'DHCP':   subnet: 255.255.255.0
+2026-11-16 00:20:47 DAEMON 'DHCP':   broadcast: 192.168.1.255
+2026-11-16 00:20:47 DAEMON 'DHCP':   gateway: 192.168.1.1
+2026-11-16 00:20:47 DAEMON 'DHCP':   domain name: "home"
+2026-11-16 00:20:47 DAEMON 'DHCP':   nameserver[0]: 192.168.1.1
+2026-11-16 00:20:47 USER: _ConfigureIPv6LinkLocal: Local Link address already assigned to /dev/net/ipro1000/0
+2026-11-16 00:20:47 USER: mdns: joined ff02::fb on /dev/net/ipro1000/0
+2026-11-16 00:20:47 USER: mdns: IPv6 announce on /dev/net/ipro1000/0: Network is unreachable
+2026-11-16 00:20:47 DAEMON 'DHCP': /dev/net/ipro1000/0: DHCP status = No error
+KERN: [14.414] VBoxVideo: found device graphics/vd_80EE_BEEF_000200
+KERN: [14.415] assuming memory type 20000000 for overlapping 0xe0000000, 0x1000000 area 8318 from existing 0xe0000000, 0x300000 area 132
+KERN: [14.417] loaded driver /boot/system/non-packaged/add-ons/kernel/drivers/dev/graphics/vboxvideo
+KERN: [14.423] Radeon - init_hardware: Version: 5.1.6.0
+KERN: [14.424] Radeon - Radeon_CardDetect: no supported devices found
+KERN: [14.425] S3: init_hardware() - no supported devices
+KERN: [14.426] framebuffer: init_hardware()
+KERN: [14.448] radeon_hd: init_hardware
+KERN: [14.450] ati: init_hardware() - no supported devices
+KERN: [14.452] devfs: "intel_810" api_version missing
+KERN: [14.452] i810: init_hardware() - no supported devices
+KERN: [14.453] nvidia: CALLED init_hardware
+KERN: [14.453] nvidia: init_hardware: no supported device found
+KERN: [14.458] intel_extreme: CALLED status_t init_hardware()
+KERN: [14.460] vesa: init_hardware()
+KERN: [14.461] vesa: init_driver()
+KERN: [14.462] vesa: publish_devices()
+KERN: [14.462] vesa: find_device()
+KERN: [14.463] loaded driver /boot/system/add-ons/kernel/drivers/dev/graphics/vesa
+2026-11-16 00:20:48 DAEMON 'app_server': app_server: DIAG SetMode request 1024x768
+2026-11-16 00:20:48 DAEMON 'app_server': app_server: DIAG SetMode guard after 0 ms
+2026-11-16 00:20:48 DAEMON 'app_server': app_server: DIAG SetMode driver done after 0 ms
+2026-11-16 00:20:48 USER: mdns: joined 224.0.0.251 on /dev/net/ipro1000/0 (192.168.1.191)
+2026-11-16 00:20:48 USER: dad /dev/net/ipro1000/0: fdae:aeb4:a752:9ae4:a00:27ff:fefb:7048 unique
+2026-11-16 00:20:48 USER: slaac /dev/net/ipro1000/0: fdae:aeb4:a752:9ae4:a00:27ff:fefb:7048 via fe80::105f:408f:7a41:6cc2
+2026-11-16 00:20:48 USER: slaac /dev/net/ipro1000/0: RA lifetime 0, using advertiser as default router
+2026-11-16 00:20:48 USER: slaac /dev/net/ipro1000/0: default route via fe80::105f:408f:7a41:6cc2%2
+2026-11-16 00:20:48 USER: slaac /dev/net/ipro1000/0: RA from fe80::82b5:4eff:fe67:e7a4 lifetime=0 M=0 O=0
+2026-11-16 00:20:48 USER: slaac /dev/net/ipro1000/0: RA from fe80::82b5:4eff:fe67:e7a4 M=0 O=0 without SLAAC /64 prefix (DHCPv6 may be absent)
+2026-11-16 00:20:48 USER: slaac /dev/net/ipro1000/0: RA from fe80::56ef:44ff:fe98:772f lifetime=0 M=0 O=0
+2026-11-16 00:20:48 USER: slaac /dev/net/ipro1000/0: PIO fdae:aeb4:a752:9ae4::/64 A=1 L=1
+2026-11-16 00:20:48 USER: slaac /dev/net/ipro1000/0: fdae:aeb4:a752:9ae4:a00:27ff:fefb:7048 already assigned
+2026-11-16 00:20:48 USER: slaac /dev/net/ipro1000/0: RA from fe80::e3c6:3c8b:715c:3d88 lifetime=0 M=0 O=0
+2026-11-16 00:20:48 USER: slaac /dev/net/ipro1000/0: PIO fdae:aeb4:a752:9ae4::/64 A=1 L=1
+2026-11-16 00:20:48 USER: slaac /dev/net/ipro1000/0: fdae:aeb4:a752:9ae4:a00:27ff:fefb:7048 already assigned
+2026-11-16 00:20:50 DAEMON 'app_server': app_server: vulkan queue family 0 flags 0x7
+2026-11-16 00:20:52 DAEMON 'app_server': app_server: gpu compositor on lavapipe: no render node
+2026-11-16 00:20:52 USER: app_server: frame follows the screen 1024x768
+KERN: R5 interface: HaikuControlLook from distro
+2026-11-16 00:20:52 USER: slaac /dev/net/ipro1000/0: RA from fe80::105f:408f:7a41:6cc2 lifetime=0 M=0 O=0
+2026-11-16 00:20:52 USER: slaac /dev/net/ipro1000/0: PIO fdae:aeb4:a752:9ae4::/64 A=1 L=1
+2026-11-16 00:20:52 USER: slaac /dev/net/ipro1000/0: fdae:aeb4:a752:9ae4:a00:27ff:fefb:7048 already assigned
+2026-11-16 00:20:52 USER: app_server: compose late 104 ms
+KERN: Last message repeated 4 times.
+KERN: [18.778] loaded driver /boot/system/add-ons/kernel/drivers/dev/input/usb_hid
+KERN: [18.780] ps2_hid: init_hardware
+KERN: [18.781] ps2_hid: init_driver
+KERN: [18.785] ps2_hid: publish_devices
+KERN: [18.785] ps2_hid: uninit_driver
+KERN: [18.785] loaded driver /boot/system/add-ons/kernel/drivers/dev/input/ps2_hid
+KERN: [18.795] loaded driver /boot/system/add-ons/kernel/drivers/dev/input/wacom
+KERN: [18.812] ALPS not supported: 10 00 64
+KERN: [18.821] ps2: probe_mouse Extended PS/2 mouse found
+KERN: AddOnManager::_RegisterAddOn(): InitCheck() in "/boot/system/add-ons/input_server/devices/virtio" returned No such file or directory
+KERN: [18.827] ps2: devfs_publish_device input/mouse/ps2/intelli_0, status = 0x00000000
+KERN: [18.830] ps2: devfs_publish_device input/keyboard/at/0, status = 0x00000000
+KERN: R5 interface: HaikuControlLook from distro
+KERN: [19.106] slab memory manager: created area 0xffffffff89801000 (8910)
+2026-11-16 00:20:52 USER: Notify of added/removed/started/stopped device
+Last message repeated 2 times
+KERN: [19.145] ps2: keyboard found
+2026-11-16 00:20:53 USER: app_server: window memory type 0 flags 0xf
+2026-11-16 00:20:53 USER: app_server: compose late 1122 ms
+2026-11-16 00:20:53 USER: app_server: animation open 244 ms frames 0
+KERN: R5 interface: HaikuControlLook from distro
+Last message repeated 1 time
+KERN: [20.103] loaded driver /boot/system/add-ons/kernel/drivers/dev/audio/hmulti/usb_audio
+KERN: [20.107] pci_reserve_device(0, 5, 0, hda)
+KERN: [20.196] HDA: Detected controller @ PCI:0:5:0, IRQ:21, type 8086/2668 (8384/7680)
+KERN: [20.197] loaded driver /boot/system/add-ons/kernel/drivers/dev/audio/hmulti/hda
+KERN: [20.202] emuxki: init_hardware()
+KERN: [20.203] auich: init_hardware()
+KERN: [20.209] sis7018:init_hardware:ver:2.0.2
+KERN: [20.214] auvia: init_hardware()
+KERN: [20.230] echo3g: init_hardware()
+KERN: [20.231] echo3g: no card found
+KERN: [20.241] hda: enabling PCI bus mastering
+KERN: [20.242] hda: DMA snooping: no
+KERN: [20.243] hda: HDA v1.0, O:4/I:4/B:0, #SDO:1, 64bit:yes
+KERN: [20.365] hda: Audio Group: Output delay: 13 samples, Input delay: 13 samples, Beep Generator: yes
+KERN: [20.369] hda:   #GPIO: 4, #GPO: 0, #GPI: 0, unsol: yes, wake: yes
+KERN: [20.370] hda: 	Supported formats: 16bits 
+KERN: [20.370] hda: 	Supported rates: 16khz 22khz 44khz 
+KERN: [20.371] hda:   widget start 2, count 26
+KERN: R5 interface: HaikuControlLook from distro
+KERN: [20.381] hda: 2: Audio output
+KERN: [20.382] hda: 	Supported formats: 16bits 
+KERN: [20.383] hda: 	Supported rates: 16khz 22khz 44khz 
+KERN: [20.384] hda: 	Supported power states: 
+KERN: [20.384] hda: 	[L-R swap] [Power] [Out amplifier] [Stereo] 
+KERN: [20.385] hda: 	Out Amp: supports mute, step size: 0.75 dB, # steps: 127, offset to 0 dB: 127
+KERN: [20.391] hda: 3: Audio output
+KERN: [20.392] hda: 	Supported formats: 16bits 
+KERN: [20.392] hda: 	Supported rates: 16khz 22khz 44khz 
+KERN: [20.393] hda: 	Supported power states: 
+KERN: [20.393] hda: 	[L-R swap] [Power] [Out amplifier] [Stereo] 
+KERN: [20.393] hda: 	Out Amp: supports mute, step size: 0.75 dB, # steps: 127, offset to 0 dB: 127
+KERN: [20.402] hda: 4: Audio output
+KERN: [20.402] hda: 	Supported formats: 16bits 
+KERN: [20.403] hda: 	Supported rates: 16khz 22khz 44khz 
+KERN: [20.405] hda: 	Supported power states: 
+KERN: [20.406] hda: 	[L-R swap] [Power] [Out amplifier] [Stereo] 
+KERN: [20.418] hda: 	Out Amp: supports mute, step size: 0.75 dB, # steps: 127, offset to 0 dB: 127
+KERN: [20.444] hda: 5: Audio output
+KERN: [20.444] hda: 	Supported formats: 16bits 
+KERN: [20.444] hda: 	Supported rates: 16khz 22khz 44khz 
+KERN: [20.445] hda: 	Supported power states: 
+KERN: [20.445] hda: 	[L-R swap] [Power] [Out amplifier] [Stereo] 
+KERN: [20.446] hda: 	Out Amp: supports mute, step size: 0.75 dB, # steps: 127, offset to 0 dB: 127
+KERN: R5 interface: HaikuControlLook from distro
+KERN: [20.458] hda: 6: Audio input
+KERN: [20.458] hda: 	Supported formats: 16bits 
+KERN: [20.461] hda: 	Supported rates: 16khz 22khz 44khz 
+KERN: [20.463] hda: 	Supported power states: 
+KERN: [20.464] hda: 	[Power] [Conn. list] [Proc widget] [Stereo] 
+KERN: [20.465] hda: 	Inputs: <23> 
+KERN: [20.475] hda: 7: Audio input
+KERN: [20.475] hda: 	Supported formats: 16bits 
+KERN: [20.476] hda: 	Supported rates: 16khz 22khz 44khz 
+KERN: [20.478] hda: 	Supported power states: 
+KERN: [20.480] hda: 	[Power] [Conn. list] [Proc widget] [Stereo] 
+KERN: [20.481] hda: 	Inputs: <24> 
+KERN: [20.482] hda: 8: Audio output
+KERN: [20.483] hda: 	Supported formats: 16bits 
+KERN: [20.483] hda: 	Supported rates: 16khz 22khz 44khz 
+KERN: [20.485] hda: 	Supported power states: 
+KERN: [20.485] hda: 	[Digital] [Format override] [Stereo] 
+KERN: [20.486] hda: 9: Audio input
+KERN: [20.487] hda: 	Supported formats: 16bits 
+KERN: [20.487] hda: 	Supported rates: 16khz 22khz 44khz 
+KERN: [20.488] hda: 	Supported power states: 
+KERN: [20.488] hda: 	[Digital] [Conn. list] [Format override] [Stereo] 
+KERN: [20.489] hda: 	Inputs: <17> 
+KERN: [20.489] hda: 10: Pin complex
+KERN: [20.490] hda: 	[Input] [Output]
+KERN: [20.490] hda: 	Jack, Front HP out, 1/8", Green, Association:2
+KERN: [20.491] hda: 	Supported power states: 
+KERN: [20.491] hda: 	[Conn. list] [Unsol. responses] [Stereo] 
+KERN: [20.492] hda: 	Inputs: <2> 
+KERN: [20.492] hda: 11: Pin complex
+KERN: [20.493] hda: 	[Input] [Output]
+KERN: [20.494] hda: 	Jack, Speaker, 1/8", Black, Association:1
+KERN: [20.495] hda: 	Supported power states: 
+KERN: [20.495] hda: 	[Conn. list] [Unsol. responses] [Stereo] 
+KERN: [20.496] hda: 	Inputs: <4> 
+KERN: [20.497] hda: 12: Pin complex
+KERN: [20.497] hda: 	[Input] [Output]
+KERN: [20.497] hda: 	Jack, Speaker, 1/8", Green, Association:1
+KERN: [20.499] hda: 	Supported power states: 
+KERN: [20.499] hda: 	[Conn. list] [Unsol. responses] [Stereo] 
+KERN: [20.500] hda: 	Inputs: <3> 
+KERN: [20.500] hda: 13: Pin complex
+KERN: [20.501] hda: 	[Input] [Output]
+KERN: [20.501] hda: 	Jack, Front Mic in, 1/8", Pink, Association:15
+KERN: [20.502] hda: 	Supported power states: 
+KERN: [20.502] hda: 	[Conn. list] [Unsol. responses] [Stereo] 
+KERN: [20.503] hda: 	Inputs: <2> 
+KERN: [20.503] hda: 14: Pin complex
+KERN: [20.504] hda: 	[Input] 
+KERN: [20.504] hda: 	Jack, Line in, 1/8", Blue, Association:5
+KERN: [20.505] hda: 	Supported power states: 
+KERN: [20.505] hda: 	[Unsol. responses] [Stereo] 
+KERN: [20.506] hda: 15: Pin complex
+KERN: [20.506] hda: 	[Input] [Output]
+KERN: [20.506] hda: 	Jack, Speaker, 1/8", Orange, Association:1
+KERN: [20.507] hda: 	Supported power states: 
+KERN: [20.508] hda: 	[Conn. list] [Unsol. responses] [Out amplifier] [Stereo] 
+KERN: [20.508] hda: 	Out Amp: supports mute, step size: 0.75 dB, # steps: 127, offset to 0 dB: 127
+KERN: [20.508] hda: 	Inputs: <5> 
+KERN: [20.509] hda: 16: Pin complex
+KERN: [20.509] hda: 	[Output]
+KERN: [20.510] hda: 	Jack, SPDIF out, Multichannel analog (DIN), Black, Association:3
+KERN: [20.511] hda: 	Supported power states: 
+KERN: [20.511] hda: 	[Digital] [Conn. list] [Stereo] 
+KERN: [20.511] hda: 	Inputs: 8 23 25 
+KERN: [20.514] hda: 17: Pin complex
+KERN: [20.523] hda: 	[Input] 
+KERN: [20.524] hda: 	Jack, SPDIF in, Other digital, Black, Association:6
+KERN: [20.541] hda: 	Supported power states: 
+KERN: [20.541] hda: 	[Power] [Digital] [Unsol. responses] [Stereo] 
+KERN: [20.542] hda: 18: Audio selector
+KERN: [20.544] hda: 	Supported power states: 
+KERN: [20.545] hda: 	[Conn. list] [Amplifier override] [Out amplifier] [Stereo] 
+KERN: [20.546] hda: 	Inputs: 14 21 15 11 12 13 10 
+KERN: [20.547] hda: 19: Audio selector
+KERN: [20.548] hda: 	Supported power states: 
+KERN: [20.549] hda: 	[Conn. list] [Amplifier override] [Out amplifier] [Stereo] 
+KERN: [20.551] hda: 	Inputs: 14 21 15 11 12 13 10 
+KERN: [20.552] hda: 20: Beep generator
+KERN: [20.553] hda: 	Supported power states: 
+KERN: [20.553] hda: 	[Amplifier override] [Out amplifier] 
+KERN: [20.554] hda: 21: Pin complex
+KERN: [20.554] hda: 	[Input] 
+2026-11-16 00:20:54 USER: app_server: compose late 984 ms
+KERN: [20.555] hda: 	Fixed, CD, ATAPI internal, N/A, Association:5
+KERN: [20.556] hda: 	Supported power states: 
+KERN: [20.556] hda: 	[Stereo] 
+KERN: [20.557] hda: 22: Volume knob
+KERN: [20.558] hda: 	Supported power states: 
+KERN: [20.559] hda: 	Inputs: 2 3 4 5 
+KERN: [20.560] hda: 23: Audio selector
+KERN: [20.561] hda: 	Supported power states: 
+KERN: [20.561] hda: 	[L-R swap] [Conn. list] [In amplifier] [Stereo] 
+KERN: [20.562] hda: 	In Amp: supports mute, step size: 0.75 dB, # steps: 127, offset to 0 dB: 127
+KERN: [20.563] hda: 	Inputs: <18> 
+KERN: [20.563] hda: 24: Audio selector
+KERN: [20.564] hda: 	Supported power states: 
+KERN: [20.565] hda: 	[L-R swap] [Conn. list] [In amplifier] [Stereo] 
+KERN: [20.565] hda: 	In Amp: supports mute, step size: 0.75 dB, # steps: 127, offset to 0 dB: 127
+KERN: [20.566] hda: 	Inputs: <19> 
+KERN: [20.566] hda: 25: Vendor defined
+KERN: [20.567] hda: 	Supported power states: 
+KERN: [20.568] hda: 	[Digital] [Stereo] 
+KERN: [20.568] hda: 26: Audio output
+KERN: [20.569] hda: 	Supported formats: 16bits 
+KERN: [20.569] hda: 	Supported rates: 16khz 22khz 44khz 
+KERN: [20.570] hda: 	Supported power states: 
+KERN: [20.570] hda: 	[Digital] [Stereo] 
+KERN: [20.571] hda: 27: Pin complex
+KERN: [20.572] hda: 	[Output]
+KERN: [20.572] hda: 	None, Line out, N/A, N/A, Association:15
+KERN: [20.573] hda: 	Supported power states: 
+KERN: [20.574] hda: 	[Digital] [Conn. list] [Stereo] 
+KERN: [20.574] hda: 	Inputs: <26> 
+KERN: [20.575] hda: build output tree: use mixer
+KERN: [20.575] hda:   look at pin widget 10 (1 inputs)
+KERN: [20.576] hda:     try widget 2: 0xffffffff82708c00
+KERN: [20.576] hda:   look at pin widget 11 (1 inputs)
+KERN: [20.576] hda:     try widget 4: 0xffffffff82708d58
+KERN: [20.577] hda:   look at pin widget 12 (1 inputs)
+KERN: [20.577] hda:     try widget 3: 0xffffffff82708cac
+KERN: [20.578] hda:   look at pin widget 15 (1 inputs)
+KERN: [20.578] hda:     try widget 5: 0xffffffff82708e04
+KERN: [20.578] hda:   look at pin widget 27 (1 inputs)
+KERN: [20.579] hda:     try widget 26: 0xffffffff82709c20
+KERN: [20.579] hda: try without mixer!
+KERN: [20.579] hda: build output tree: don't use mixer
+KERN: [20.580] hda:   look at pin widget 10 (1 inputs)
+KERN: [20.580] hda:     try widget 2: 0xffffffff82708c00
+KERN: [20.581] hda:     widget 2 is candidate
+KERN: [20.581] hda:       output: added output widget 2
+KERN: [20.581] hda:     add pin widget 10
+KERN: [20.581] hda:   look at pin widget 11 (1 inputs)
+KERN: [20.581] hda:     try widget 4: 0xffffffff82708d58
+KERN: [20.582] hda:     widget 4 is candidate
+KERN: [20.582] hda:       output: added output widget 4
+KERN: [20.582] hda:     add pin widget 11
+KERN: [20.582] hda:   look at pin widget 12 (1 inputs)
+KERN: [20.582] hda:     try widget 3: 0xffffffff82708cac
+KERN: [20.582] hda:     widget 3 is candidate
+KERN: [20.583] hda:       output: added output widget 3
+KERN: [20.583] hda:     add pin widget 12
+KERN: [20.583] hda:   look at pin widget 15 (1 inputs)
+KERN: [20.584] hda:     try widget 5: 0xffffffff82708e04
+KERN: [20.584] hda:     widget 5 is candidate
+KERN: [20.584] hda:       output: added output widget 5
+KERN: [20.585] hda:     add pin widget 15
+KERN: [20.585] hda:   look at pin widget 27 (1 inputs)
+KERN: [20.585] hda:     try widget 26: 0xffffffff82709c20
+KERN: [20.585] hda:     widget 26 is candidate
+KERN: [20.586] hda:       output: added output widget 26
+KERN: [20.586] hda:     add pin widget 27
+KERN: [20.586] hda: build input tree
+KERN: [20.586] hda:   look at input widget 6 (1 inputs)
+KERN: [20.586] hda:     try widget 23: 0xffffffff82709a1c
+KERN: [20.586] hda:     widget 23 is candidate
+KERN: [20.587] hda:           input: added input widget 14
+KERN: [20.587] hda:         input: added mixer/selector widget 18
+KERN: [20.587] hda:           input: added input widget 21
+KERN: [20.587] hda:         input: added mixer/selector widget 18
+KERN: [20.588] hda:           input: added input widget 13
+KERN: [20.588] hda:         input: added mixer/selector widget 18
+KERN: [20.588] hda:       input: added mixer/selector widget 23
+KERN: [20.588] hda:     add pin widget 6
+KERN: [20.588] hda:   look at input widget 7 (1 inputs)
+KERN: [20.589] hda:     try widget 24: 0xffffffff82709ac8
+KERN: [20.589] hda:     widget 24 is candidate
+KERN: [20.589] hda:         input: not added mixer/selector widget 19
+KERN: [20.589] hda:       input: not added mixer/selector widget 24
+KERN: [20.589] hda:   look at input widget 9 (1 inputs)
+KERN: [20.590] hda:     try widget 17: 0xffffffff82709614
+KERN: [20.590] hda:     widget 17 is candidate
+KERN: [20.590] hda: build tree!
+KERN: [20.591] hda: Setting gpio 0x3
+KERN: [20.592] hda: 	Audiogroup:
+KERN: [20.592] hda: 2: Audio output
+KERN: [20.592] hda: 	Supported power states: 
+KERN: [20.593] hda: 	[L-R swap] [Power] [Out amplifier] [Stereo] 
+KERN: [20.593] hda: 	Out Amp: supports mute, step size: 0.75 dB, # steps: 127, offset to 0 dB: 127
+KERN: [20.593] hda: 3: Audio output
+KERN: [20.593] hda: 	Supported power states: 
+KERN: [20.594] hda: 	[L-R swap] [Power] [Out amplifier] [Stereo] 
+KERN: [20.594] hda: 	Out Amp: supports mute, step size: 0.75 dB, # steps: 127, offset to 0 dB: 127
+KERN: [20.594] hda: 4: Audio output
+KERN: [20.594] hda: 	Supported power states: 
+KERN: [20.595] hda: 	[L-R swap] [Power] [Out amplifier] [Stereo] 
+KERN: [20.595] hda: 	Out Amp: supports mute, step size: 0.75 dB, # steps: 127, offset to 0 dB: 127
+KERN: [20.596] hda: 5: Audio output
+KERN: [20.596] hda: 	Supported power states: 
+KERN: [20.596] hda: 	[L-R swap] [Power] [Out amplifier] [Stereo] 
+KERN: [20.596] hda: 	Out Amp: supports mute, step size: 0.75 dB, # steps: 127, offset to 0 dB: 127
+KERN: [20.597] hda: 6: Audio input
+KERN: [20.597] hda: 	Supported power states: 
+KERN: [20.597] hda: 	[Power] [Conn. list] [Proc widget] [Stereo] 
+KERN: [20.598] hda: 	Inputs: <23> 
+KERN: [20.598] hda: 7: Audio input
+KERN: [20.598] hda: 	Supported power states: 
+KERN: [20.599] hda: 	[Power] [Conn. list] [Proc widget] [Stereo] 
+KERN: [20.599] hda: 	Inputs: <24> 
+KERN: [20.599] hda: 8: Audio output
+KERN: [20.600] hda: 	Supported power states: 
+KERN: [20.600] hda: 	[Digital] [Format override] [Stereo] 
+KERN: [20.600] hda: 9: Audio input
+KERN: [20.601] hda: 	Supported power states: 
+KERN: [20.601] hda: 	[Digital] [Conn. list] [Format override] [Stereo] 
+KERN: [20.601] hda: 	Inputs: <17> 
+KERN: [20.602] hda: 10: Pin complex
+KERN: [20.602] hda: 	[Trigger Req][Pres Detect][HP Drive][Output][Input][VRef HIZ][VRef 50][VRef Gr][VRef 80]
+KERN: [20.603] hda: 	Supported power states: 
+KERN: [20.603] hda: 	[Conn. list] [Unsol. responses] [Stereo] 
+KERN: [20.603] hda: 	Inputs: <2> 
+KERN: [20.604] hda: 11: Pin complex
+KERN: [20.604] hda: 	[Trigger Req][Pres Detect][Output][Input][VRef HIZ][VRef 50][VRef Gr][VRef 80]
+KERN: [20.605] hda: 	Supported power states: 
+KERN: [20.605] hda: 	[Conn. list] [Unsol. responses] [Stereo] 
+KERN: [20.605] hda: 	Inputs: <4> 
+KERN: [20.606] hda: 12: Pin complex
+KERN: [20.606] hda: 	[Trigger Req][Pres Detect][Output][Input][VRef HIZ][VRef 50][VRef Gr][VRef 80]
+KERN: [20.606] hda: 	Supported power states: 
+KERN: [20.606] hda: 	[Conn. list] [Unsol. responses] [Stereo] 
+KERN: [20.607] hda: 	Inputs: <3> 
+KERN: [20.607] hda: 13: Pin complex
+KERN: [20.607] hda: 	[Trigger Req][Pres Detect][HP Drive][Output][Input][VRef HIZ][VRef 50][VRef Gr][VRef 80]
+KERN: [20.608] hda: 	Supported power states: 
+KERN: [20.608] hda: 	[Conn. list] [Unsol. responses] [Stereo] 
+KERN: [20.608] hda: 	Inputs: <2> 
+KERN: [20.609] hda: 14: Pin complex
+KERN: [20.609] hda: 	[Pres Detect][Input]
+KERN: [20.609] hda: 	Supported power states: 
+KERN: [20.609] hda: 	[Unsol. responses] [Stereo] 
+KERN: [20.609] hda: 15: Pin complex
+KERN: [20.609] hda: 	[Output][Input]
+KERN: [20.609] hda: 	Supported power states: 
+KERN: [20.610] hda: 	[Conn. list] [Unsol. responses] [Out amplifier] [Stereo] 
+KERN: [20.610] hda: 	Out Amp: supports mute, step size: 0.75 dB, # steps: 127, offset to 0 dB: 127
+KERN: [20.610] hda: 	Inputs: <5> 
+KERN: [20.610] hda: 16: Pin complex
+KERN: [20.611] hda: 	[Output]
+KERN: [20.611] hda: 	Supported power states: 
+KERN: [20.611] hda: 	[Digital] [Conn. list] [Stereo] 
+KERN: [20.611] hda: 	Inputs: <8> 23 25 
+KERN: [20.611] hda: 17: Pin complex
+KERN: [20.611] hda: 	[Pres Detect][Input][EAPD]
+KERN: [20.612] hda: 	Supported power states: 
+KERN: [20.612] hda: 	[Power] [Digital] [Unsol. responses] [Stereo] 
+KERN: [20.612] hda: 18: Audio selector
+KERN: [20.612] hda: 	Supported power states: 
+KERN: [20.613] hda: 	[Conn. list] [Amplifier override] [Out amplifier] [Stereo] 
+KERN: [20.613] hda: 	Inputs: <14> 21 15 11 12 13 10 
+KERN: [20.614] hda: 19: Audio selector
+KERN: [20.614] hda: 	Supported power states: 
+KERN: [20.614] hda: 	[Conn. list] [Amplifier override] [Out amplifier] [Stereo] 
+KERN: [20.615] hda: 	Inputs: <14> 21 15 11 12 13 10 
+KERN: [20.615] hda: 20: Beep generator
+KERN: [20.615] hda: 	Supported power states: 
+KERN: [20.615] hda: 	[Amplifier override] [Out amplifier] 
+KERN: [20.616] hda: 21: Pin complex
+KERN: [20.616] hda: 	[Input]
+KERN: [20.616] hda: 	Supported power states: 
+KERN: [20.616] hda: 	[Stereo] 
+KERN: [20.616] hda: 22: Volume knob
+KERN: [20.616] hda: 	Supported poKERN: wer states: 
+KERN: [20.617] hda: 	Inputs: <2> 3 4 5 
+KERN: [20.617] hda: 23: Audio selector
+KERN: [20.617] hda: 	Supported power states: 
+KERN: [20.617] hda: 	[L-R swap] [Conn. list] [In amplifier] [Stereo] 
+KERN: [20.618] hda: 	In Amp: supports mute, step size: 0.75 dB, # steps: 127, offset to 0 dB: 127
+KERN: [20.618] hda: 	Inputs: <18> 
+KERN: [20.618] hda: 24: Audio selector
+KERN: [20.619] hda: 	Supported power states: 
+KERN: [20.619] hda: 	[L-R swap] [Conn. list] [In amplifier] [Stereo] 
+KERN: [20.620] hda: 	In Amp: supports mute, step size: 0.75 dB, # steps: 127, offset to 0 dB: 127
+KERN: [20.620] hda: 	Inputs: <19> 
+KERN: [20.621] hda: 25: Vendor defined
+KERN: [20.621] hda: 	Supported power states: 
+KERN: [20.621] hda: 	[Digital] [Stereo] 
+KERN: [20.621] hda: 26: Audio output
+KERN: [20.621] hda: 	Supported power states: 
+KERN: [20.622] hda: 	[Digital] [Stereo] 
+KERN: [20.622] hda: 27: Pin complex
+KERN: [20.622] hda: 	[Output]
+KERN: [20.622] hda: 	Supported power states: 
+KERN: [20.623] hda: 	[Digital] [Conn. list] [Stereo] 
+KERN: [20.623] hda: 	Inputs: <26> 
+KERN: [20.624] hda: Enabled unsolicited responses on widget 10
+KERN: [20.624] hda: Enabled unsolicited responses on widget 11
+KERN: [20.625] hda: Enabled unsolicited responses on widget 12
+KERN: [20.625] hda: Enabled unsolicited responses on widget 13
+KERN: [20.626] hda: Enabled unsolicited responses on widget 14
+KERN: [20.627] hda: Enabled unsolicited responses on widget 17
+KERN: [20.628] hda: UNMUTE/SET OUTPUT GAIN widget 2 (offset 127)
+KERN: [20.628] hda: UNMUTE/SET OUTPUT GAIN widget 3 (offset 127)
+KERN: [20.630] hda: UNMUTE/SET OUTPUT GAIN widget 4 (offset 127)
+KERN: [20.630] hda: UNMUTE/SET OUTPUT GAIN widget 5 (offset 127)
+KERN: [20.631] hda: ENABLE pin widget 10
+KERN: [20.632] hda: ENABLE pin widget 11
+KERN: [20.632] hda: ENABLE pin widget 12
+KERN: [20.633] hda: ENABLE pin widget 15
+KERN: [20.634] hda: UNMUTE/SET OUTPUT GAIN widget 15 (offset 127)
+KERN: [20.635] hda: ENABLE pin widget 27
+KERN: [20.635] hda: input vref 50 enabled
+KERN: [20.636] hda: input vref 80 enabled
+KERN: [20.636] hda: ENABLE pin widget 13
+KERN: [20.636] hda: ENABLE pin widget 14
+KERN: [20.637] hda: ENABLE pin widget 21
+KERN: [20.637] hda: UNMUTE/SET INPUT GAIN widget 23 (offset 127)
+KERN: [20.638] hda: streams playback 0xffffffff8862d0a8, record 0xffffffff8862d328
+KERN: [20.638] hda: sensed pin widget 10, 0
+KERN: [20.640] hda: Codec 0 Vendor: 8384 Product: 7680 Subsystem: 83847680, Revision: 1.0.52.1 Quirks: 0703
+KERN: [20.640] looking for settings file
+KERN: [20.645] hda: sample size 2, num channels 2, buffer length 2048
+KERN: [20.646] hda: hda_stream_setup_buffers: setup stream 1: SR=44100, SF=16 F=0x4011 (0x10)
+KERN: [20.647] hda: hda_stream_setup_buffers(Playback): Allocated 16384 bytes for 2 buffers
+KERN: [20.651] hda: hda_stream_setup_buffers(Playback): Allocated 4096 bytes for 2 BDLEs
+KERN: [20.669] hda: stream: 1 fifo size: 191 num_io_widgets: 5
+KERN: [20.670] hda: widgets: KERN: [20.671] 2 [20.671] 3 [20.672] 4 [20.672] 5 [20.673] 26 [20.673] 
+KERN: [20.678] hda: sample size 2, num channels 2, buffer length 2048
+KERN: [20.679] hda: hda_stream_setup_buffers: setup stream 2: SR=44100, SF=16 F=0x4011 (0x10)
+KERN: [20.680] hda: hda_stream_setup_buffers(Recording): Allocated 16384 bytes for 2 buffers
+KERN: [20.681] hda: hda_stream_setup_buffers(Recording): Allocated 4096 bytes for 2 BDLEs
+KERN: [20.697] hda: stream: 2 fifo size: 119 num_io_widgets: 1
+KERN: [20.698] hda: widgets: KERN: [20.698] 6 [20.698] 
+KERN: R5 interface: HaikuControlLook from distro
+KERN: [20.861] loaded driver /boot/system/add-ons/kernel/drivers/dev/bus/usb_raw
+KERN: package_daemon: [20909756:    51] post-installation script finished: boot/post-install/sshd_keymaker.sh, package openssh-10.4p1-1-x86_64.hpkg, result 0
+KERN: package_daemon: [20911992:    51] post-installation script starting: boot/post-install/fix_openssh_config_paths.sh, package openssh-10.4p1-1-x86_64.hpkg
+KERN: package_daemon: [21031420:    51] post-installation script finished: boot/post-install/fix_openssh_config_paths.sh, package openssh-10.4p1-1-x86_64.hpkg, result 0
+2026-11-16 00:20:54 USER: app_server: animation close 140 ms frames 5
+2026-11-16 00:20:55 USER: dhcpv6 /dev/net/ipro1000/0: no server
+2026-11-16 00:20:56 USER: slaac /dev/net/ipro1000/0: RA from fe80::105f:408f:7a41:6cc2 lifetime=0 M=0 O=0
+2026-11-16 00:20:56 USER: slaac /dev/net/ipro1000/0: PIO fdae:aeb4:a752:9ae4::/64 A=1 L=1
+2026-11-16 00:20:56 USER: slaac /dev/net/ipro1000/0: fdae:aeb4:a752:9ae4:a00:27ff:fefb:7048 already assigned
+2026-11-16 00:21:01 USER: slaac /dev/net/ipro1000/0: RA from fe80::105f:408f:7a41:6cc2 lifetime=0 M=0 O=0
+2026-11-16 00:21:01 USER: slaac /dev/net/ipro1000/0: PIO fdae:aeb4:a752:9ae4::/64 A=1 L=1
+2026-11-16 00:21:01 USER: slaac /dev/net/ipro1000/0: fdae:aeb4:a752:9ae4:a00:27ff:fefb:7048 already assigned
+2026-11-16 00:21:19 USER: slaac /dev/net/ipro1000/0: RA from fe80::82b5:4eff:fe67:e7a4 lifetime=0 M=0 O=0
+2026-11-16 00:21:19 USER: slaac /dev/net/ipro1000/0: RA from fe80::82b5:4eff:fe67:e7a4 M=0 O=0 without SLAAC /64 prefix (DHCPv6 may be absent)
+2026-11-16 00:23:06 USER: slaac /dev/net/ipro1000/0: RA from fe80::105f:408f:7a41:6cc2 lifetime=0 M=0 O=0
+2026-11-16 00:23:06 USER: slaac /dev/net/ipro1000/0: PIO fdae:aeb4:a752:9ae4::/64 A=1 L=1
+2026-11-16 00:23:06 USER: slaac /dev/net/ipro1000/0: fdae:aeb4:a752:9ae4:a00:27ff:fefb:7048 already assigned
+2026-11-16 00:23:44 USER: slaac /dev/net/ipro1000/0: RA from fe80::e3c6:3c8b:715c:3d88 lifetime=0 M=0 O=0
+2026-11-16 00:23:44 USER: slaac /dev/net/ipro1000/0: PIO fdae:aeb4:a752:9ae4::/64 A=1 L=1
+2026-11-16 00:23:44 USER: slaac /dev/net/ipro1000/0: fdae:aeb4:a752:9ae4:a00:27ff:fefb:7048 already assigned
+2026-11-16 00:24:28 USER: slaac /dev/net/ipro1000/0: RA from fe80::82b5:4eff:fe67:e7a4 lifetime=0 M=0 O=0
+2026-11-16 00:24:28 USER: slaac /dev/net/ipro1000/0: RA from fe80::82b5:4eff:fe67:e7a4 M=0 O=0 without SLAAC /64 prefix (DHCPv6 may be absent)
+KERN: R5 interface: HaikuControlLook from distro
+2026-11-16 00:25:15 USER: app_server: animation close 125 ms frames 4
+2026-11-16 00:25:15 USER: app_server: animation open 163 ms frames 9
+2026-11-16 00:25:15 USER: app_server: animation open 150 ms frames 7
+2026-11-16 00:26:07 USER: slaac /dev/net/ipro1000/0: RA from fe80::105f:408f:7a41:6cc2 lifetime=0 M=0 O=0
+2026-11-16 00:26:07 USER: slaac /dev/net/ipro1000/0: PIO fdae:aeb4:a752:9ae4::/64 A=1 L=1
+2026-11-16 00:26:07 USER: slaac /dev/net/ipro1000/0: fdae:aeb4:a752:9ae4:a00:27ff:fefb:7048 already assigned
+KERN: R5 interface: HaikuControlLook from distro
+KERN: R5 tracker: Tracker from distro
+KERN: R5 interface: HaikuControlLook from distro
+KERN: R5 deskbar: BarApp from distro
+KERN: R5 interface: HaikuControlLook from distro
+2026-11-16 00:26:15 USER: app_server: animation open 155 ms frames 5
+KERN: Last message repeated 3 times.
+KERN: [342.200] [32mpc_serial:[0m Skipping port 0 as it is used for kernel debug.
+KERN: [342.202] [32mpc_serial:[0m scanning PCI bus (alt)...
+KERN: [342.203] loaded driver /boot/system/add-ons/kernel/drivers/dev/ports/pc_serial
+KERN: [342.212] [32musb_serial:[0m probing device: 0x0000/0x0000
+KERN: [342.213] [32musb_serial:[0m probing device: 0x80ee/0x0021
+KERN: [342.216] loaded driver /boot/system/add-ons/kernel/drivers/dev/ports/usb_serial
+KERN: r5-vbox-shares: start /boot/home
+2026-11-16 00:26:16 USER: app_server: animation open 155 ms frames 2
+2026-11-16 00:26:19 USER: slaac /dev/net/ipro1000/0: RA from fe80::82b5:4eff:fe67:e7a4 lifetime=0 M=0 O=0
+2026-11-16 00:26:19 USER: slaac /dev/net/ipro1000/0: RA from fe80::82b5:4eff:fe67:e7a4 M=0 O=0 without SLAAC /64 prefix (DHCPv6 may be absent)
+KERN: r5-vbox-shares: list try 8
+KERN: R5 interface: HaikuControlLook from distro
+KERN: Running first login script /boot/system/boot/first-login/default_deskbar_items.sh ...
+2026-11-16 00:26:24 USER: app_server: animation close 138 ms frames 4
+2026-11-16 00:26:24 USER: app_server: animation close 120 ms frames 3
+2026-11-16 00:26:25 USER: app_server: DIAG SetScreenMode 1600x895
+2026-11-16 00:26:25 USER: app_server: DIAG SetScreenMode window lock after 0 ms
+2026-11-16 00:26:25 USER: app_server: DIAG SetMode request 1600x895
+2026-11-16 00:26:25 USER: app_server: DIAG SetMode guard after 0 ms
+2026-11-16 00:26:25 USER: app_server: DIAG SetMode driver done after 0 ms
+2026-11-16 00:26:25 USER: app_server: frame follows the screen 1600x895
+2026-11-16 00:26:25 DAEMON 'app_server': Application for user 0 does not support the current server protocol (0), team 144 (/boot/system/servers/input_server).
+2026-11-16 00:26:25 USER: app_server: compose late 101 ms
+2026-11-16 00:26:49 USER: slaac /dev/net/ipro1000/0: RA from fe80::e3c6:3c8b:715c:3d88 lifetime=0 M=0 O=0
+2026-11-16 00:26:49 USER: slaac /dev/net/ipro1000/0: PIO fdae:aeb4:a752:9ae4::/64 A=1 L=1
+2026-11-16 00:26:49 USER: slaac /dev/net/ipro1000/0: fdae:aeb4:a752:9ae4:a00:27ff:fefb:7048 already assigned
+2026-11-16 00:27:15 USER: app_server: DIAG SetScreenMode 1437x649
+2026-11-16 00:27:15 USER: app_server: DIAG SetScreenMode window lock after 0 ms
+2026-11-16 00:27:15 USER: app_server: DIAG SetMode request 1437x649
+2026-11-16 00:27:22 USER: slaac /dev/net/ipro1000/0: RA from fe80::56ef:44ff:fe98:772f lifetime=0 M=0 O=0
+2026-11-16 00:27:22 USER: slaac /dev/net/ipro1000/0: PIO fdae:aeb4:a752:9ae4::/64 A=1 L=1
+2026-11-16 00:27:22 USER: slaac /dev/net/ipro1000/0: fdae:aeb4:a752:9ae4:a00:27ff:fefb:7048 already assigned
+2026-11-16 00:27:37 USER: app_server: DIAG SetMode guard after 21661 ms
+2026-11-16 00:27:37 USER: app_server: DIAG SetMode driver done after 21662 ms
+2026-11-16 00:27:37 DAEMON 'app_server': Application for user 0 does not support the current server protocol (0), team 144 (/boot/system/servers/input_server).
+2026-11-16 00:27:37 USER: app_server: DIAG SetScreenMode 1436x648
+2026-11-16 00:27:37 USER: app_server: DIAG SetScreenMode window lock after 0 ms
+2026-11-16 00:27:37 USER: app_server: DIAG SetMode request 1436x648
+2026-11-16 00:28:00 USER: app_server: frame follows the screen 1437x649
+2026-11-16 00:28:00 USER: app_server: DIAG SetMode guard after 23423 ms
+2026-11-16 00:28:00 USER: app_server: DIAG SetMode driver done after 23423 ms
+2026-11-16 00:28:00 DAEMON 'app_server': Application for user 0 does not support the current server protocol (0), team 144 (/boot/system/servers/input_server).
+2026-11-16 00:28:01 USER: app_server: DIAG SetScreenMode 1435x647
+2026-11-16 00:28:01 USER: app_server: DIAG SetScreenMode window lock after 0 ms
+2026-11-16 00:28:01 USER: app_server: DIAG SetMode request 1435x647
+2026-11-16 00:28:16 USER: app_server: frame follows the screen 1436x648
+2026-11-16 00:28:16 USER: app_server: compose late 101 ms
+2026-11-16 00:28:16 USER: app_server: DIAG SetMode guard after 15500 ms
+2026-11-16 00:28:16 USER: app_server: DIAG SetMode driver done after 15500 ms
+2026-11-16 00:28:16 DAEMON 'app_server': Application for user 0 does not support the current server protocol (0), team 144 (/boot/system/servers/input_server).
+2026-11-16 00:28:16 USER: app_server: DIAG SetScreenMode 1920x923
+2026-11-16 00:28:16 USER: app_server: DIAG SetScreenMode window lock after 2 ms
+2026-11-16 00:28:16 USER: app_server: DIAG SetMode request 1920x923
+2026-11-16 00:28:31 USER: app_server: frame follows the screen 1435x647
+2026-11-16 00:28:32 USER: app_server: compose late 101 ms
+2026-11-16 00:28:32 USER: app_server: DIAG SetMode guard after 15474 ms
+2026-11-16 00:28:32 USER: app_server: DIAG SetMode driver done after 15474 ms
+2026-11-16 00:28:32 DAEMON 'app_server': Application for user 0 does not support the current server protocol (0), team 144 (/boot/system/servers/input_server).
+2026-11-16 00:28:32 USER: app_server: DIAG SetScreenMode 1435x646
+2026-11-16 00:28:32 USER: app_server: DIAG SetScreenMode window lock after 0 ms
+2026-11-16 00:28:32 USER: app_server: DIAG SetMode request 1435x646
+2026-11-16 00:28:47 USER: app_server: frame follows the screen 1920x923
+2026-11-16 00:28:47 USER: app_server: compose late 102 ms
+2026-11-16 00:28:47 USER: app_server: DIAG SetMode guard after 15639 ms
+2026-11-16 00:28:47 USER: app_server: DIAG SetMode driver done after 15640 ms
+2026-11-16 00:28:47 DAEMON 'app_server': Application for user 0 does not support the current server protocol (0), team 144 (/boot/system/servers/input_server).
+2026-11-16 00:28:47 USER: app_server: DIAG SetScreenMode 1920x922
+2026-11-16 00:28:47 USER: app_server: DIAG SetScreenMode window lock after 0 ms
+2026-11-16 00:28:47 USER: app_server: DIAG SetMode request 1920x922
+2026-11-16 00:29:04 USER: slaac /dev/net/ipro1000/0: RA from fe80::56ef:44ff:fe98:772f lifetime=0 M=0 O=0
+2026-11-16 00:29:04 USER: slaac /dev/net/ipro1000/0: PIO fdae:aeb4:a752:9ae4::/64 A=1 L=1
+2026-11-16 00:29:04 USER: slaac /dev/net/ipro1000/0: fdae:aeb4:a752:9ae4:a00:27ff:fefb:7048 already assigned
+2026-11-16 00:29:04 USER: slaac /dev/net/ipro1000/0: RA from fe80::e3c6:3c8b:715c:3d88 lifetime=0 M=0 O=0
+2026-11-16 00:29:04 USER: slaac /dev/net/ipro1000/0: PIO fdae:aeb4:a752:9ae4::/64 A=1 L=1
+2026-11-16 00:29:04 USER: slaac /dev/net/ipro1000/0: fdae:aeb4:a752:9ae4:a00:27ff:fefb:7048 already assigned
+2026-11-16 00:29:08 USER: slaac /dev/net/ipro1000/0: RA from fe80::105f:408f:7a41:6cc2 lifetime=0 M=0 O=0
+2026-11-16 00:29:08 USER: slaac /dev/net/ipro1000/0: PIO fdae:aeb4:a752:9ae4::/64 A=1 L=1
+2026-11-16 00:29:08 USER: slaac /dev/net/ipro1000/0: fdae:aeb4:a752:9ae4:a00:27ff:fefb:7048 already assigned
+2026-11-16 00:29:10 USER: slaac /dev/net/ipro1000/0: RA from fe80::82b5:4eff:fe67:e7a4 lifetime=0 M=0 O=0
+2026-11-16 00:29:10 USER: slaac /dev/net/ipro1000/0: RA from fe80::82b5:4eff:fe67:e7a4 M=0 O=0 without SLAAC /64 prefix (DHCPv6 may be absent)
+2026-11-16 00:29:17 USER: app_server: frame follows the screen 1435x646
+2026-11-16 00:29:17 USER: app_server: DIAG SetMode guard after 29177 ms
+2026-11-16 00:29:17 USER: app_server: DIAG SetMode driver done after 29178 ms
+2026-11-16 00:29:17 DAEMON 'app_server': Application for user 0 does not support the current server protocol (0), team 144 (/boot/system/servers/input_server).
+2026-11-16 00:29:17 USER: app_server: DIAG SetScreenMode 1280x720
+2026-11-16 00:29:17 USER: app_server: DIAG SetScreenMode window lock after 1 ms
+2026-11-16 00:29:17 USER: app_server: DIAG SetMode request 1280x720
+2026-11-16 00:29:32 USER: app_server: frame follows the screen 1920x922
+2026-11-16 00:29:32 USER: app_server: DIAG SetMode guard after 15440 ms
+2026-11-16 00:29:32 USER: app_server: DIAG SetMode driver done after 15440 ms
+2026-11-16 00:29:32 DAEMON 'app_server': Application for user 0 does not support the current server protocol (0), team 144 (/boot/system/servers/input_server).
+2026-11-16 00:29:32 USER: app_server: DIAG SetScreenMode 1920x921
+2026-11-16 00:29:32 USER: app_server: DIAG SetScreenMode window lock after 1 ms
+2026-11-16 00:29:32 USER: app_server: DIAG SetMode request 1920x921
+2026-11-16 00:30:02 USER: app_server: frame follows the screen 1280x720
+2026-11-16 00:30:02 USER: app_server: DIAG SetMode guard after 29530 ms
+2026-11-16 00:30:02 USER: app_server: DIAG SetMode driver done after 29531 ms
+2026-11-16 00:30:02 DAEMON 'app_server': Application for user 0 does not support the current server protocol (0), team 144 (/boot/system/servers/input_server).
+2026-11-16 00:30:02 USER: app_server: DIAG SetScreenMode 1601x899
+2026-11-16 00:30:02 USER: app_server: DIAG SetScreenMode window lock after 3 ms
+2026-11-16 00:30:02 USER: app_server: DIAG SetMode request 1601x899
+2026-11-16 00:30:17 USER: app_server: frame follows the screen 1920x921
+2026-11-16 00:30:17 USER: app_server: DIAG SetMode guard after 15419 ms
+2026-11-16 00:30:17 USER: app_server: DIAG SetMode driver done after 15420 ms
+2026-11-16 00:30:17 DAEMON 'app_server': Application for user 0 does not support the current server protocol (0), team 144 (/boot/system/servers/input_server).
+2026-11-16 00:30:17 USER: app_server: DIAG SetScreenMode 1920x920
+2026-11-16 00:30:17 USER: app_server: DIAG SetScreenMode window lock after 0 ms
+2026-11-16 00:30:17 USER: app_server: DIAG SetMode request 1920x920
+2026-11-16 00:30:47 USER: app_server: frame follows the screen 1601x899
+2026-11-16 00:30:47 USER: app_server: DIAG SetMode guard after 29601 ms
+2026-11-16 00:30:47 USER: app_server: DIAG SetMode driver done after 29602 ms
+2026-11-16 00:30:47 DAEMON 'app_server': Application for user 0 does not support the current server protocol (0), team 144 (/boot/system/servers/input_server).
+2026-11-16 00:30:47 USER: app_server: DIAG SetScreenMode 1600x898
+2026-11-16 00:30:47 USER: app_server: DIAG SetScreenMode window lock after 11 ms
+2026-11-16 00:30:47 USER: app_server: DIAG SetMode request 1600x898
