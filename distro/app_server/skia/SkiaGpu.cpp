@@ -385,12 +385,15 @@ SkiaGpu::RunWork(const char** _reason)
 	}
 
 	bigtime_t profileStart = system_time();
+	// a Finish() waits for everything drawn so far: no window is held
+	bool holds = atomic_get(&fWaiters) == 0;
 	std::vector<std::unique_ptr<WorkItem>> items;
 	for (int32 i = 0; i < fTargets.CountItems(); i++) {
 		SkiaTarget* target = fTargets.ItemAt(i);
 		if (!target->Lock())
 			continue;
-		if (target->HasWork() && target->HasSurface()) {
+		if (target->HasWork() && target->HasSurface()
+			&& !(holds && target->Held(profileStart))) {
 			std::unique_ptr<WorkItem> item(new(std::nothrow) WorkItem);
 			if (item) {
 				item->target = target;

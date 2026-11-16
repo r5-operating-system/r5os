@@ -257,6 +257,7 @@ SkiaTarget::SkiaTarget(SkiaGpu* gpu)
 	fHeight(0),
 	fRecorded(false),
 	fFirstDraw(0),
+	fHeldSince(0),
 	fUploadPending(false),
 	fOpaque(false)
 {
@@ -518,6 +519,25 @@ SkiaTarget::MarkDrawn()
 	if (!fRecorded)
 		fFirstDraw = system_time();
 	fRecorded = true;
+}
+
+
+void
+SkiaTarget::SetHeld(bool held)
+{
+	if (!held)
+		fHeldSince = 0;
+	else if (fHeldSince == 0)
+		fHeldSince = system_time();
+}
+
+
+bool
+SkiaTarget::Held(bigtime_t now) const
+{
+	// a program that never ends its update does not stop the screen:
+	// after 100 ms its drawing goes as it is
+	return fHeldSince != 0 && now - fHeldSince < 100000;
 }
 
 

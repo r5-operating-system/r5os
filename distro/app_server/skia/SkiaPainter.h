@@ -120,6 +120,12 @@ public:
 
 	// SkiaGpu::RunWork, under the lock.
 			bool				HasWork() const { return fRecorded; }
+	// A window inside BeginUpdate()..EndUpdate() (Haiku turns copy to
+	// front off for it): RunWork leaves its drawing for a later run, so
+	// a half-drawn update is never composed (5625U stick, 16 Nov 2026:
+	// the Settings list flickered under the pointer). Under the lock.
+			void				SetHeld(bool held);
+			bool				Held(bigtime_t now) const;
 			std::unique_ptr<skgpu::graphite::Recording> Snap(
 									BRegion& screenDamage,
 									bigtime_t* _firstDraw);
@@ -152,6 +158,7 @@ protected:
 			BRegion				fDamage;
 			bool				fRecorded;
 			bigtime_t			fFirstDraw;
+			bigtime_t			fHeldSince;
 			bool				fUploadPending;
 	volatile bool				fOpaque;
 

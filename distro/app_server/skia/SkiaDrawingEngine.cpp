@@ -469,6 +469,12 @@ void
 SkiaDrawingEngine::SetCopyToFrontEnabled(bool enable)
 {
 	DrawingEngine::SetCopyToFrontEnabled(enable);
+	// Window::_BeginUpdate() turns it off, EndUpdate() on again and then
+	// calls CopyToFront(), which wakes the run that takes the update
+	if (fTarget != NULL && fTarget->Lock()) {
+		fTarget->SetHeld(!enable);
+		fTarget->Unlock();
+	}
 }
 
 
