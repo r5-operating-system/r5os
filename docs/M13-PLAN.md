@@ -3,7 +3,7 @@
 
 # M13 - speed: the 60 fps feel (RADV and Lavapipe)
 
-M12 made Skia the drawing engine by default; its gate was "it feels smooth". M13 makes R5 fast: window drag, scroll and resize at 60 fps on the Ryzen 5 5625U (RADV), and smooth on Lavapipe (about 8 ms or less per full frame). This plan is the owner's performance advice (16 Nov 2026) with the R5 corrections and the M13 items that were already agreed. Rules: `AGENTS.md` and `docs/GPU-ARCHITECTURE.md`.
+M12 made Skia work as the drawing engine, opt-in (`gpu_draw true` in the radeon_hd settings); it closed on correctness, not speed (owner, 16 Nov 2026). M13 makes R5 fast, and then turns Skia on by default: window drag, scroll and resize at 60 fps on the Ryzen 5 5625U (RADV), and smooth on Lavapipe (about 8 ms or less per full frame). This plan is the owner's performance advice (16 Nov 2026) with the R5 corrections and the M13 items that were already agreed. Rules: `AGENTS.md` and `docs/GPU-ARCHITECTURE.md`.
 
 ## Part 1: the core of M13 in plain language
 
@@ -28,7 +28,7 @@ M12 made Skia the drawing engine by default; its gate was "it feels smooth". M13
 | Double copy and `memcpy` gone | Large: no VRAM to RAM read-back, no snap/deliver peaks (up to 7-19 ms in M12) | Clear: two needless CPU pixel copies disappear |
 | No CPU stall (`SyncToCpu`) | Large: the GPU keeps working through the semaphore | Moderate: the work stays on the same CPU, but the sync overhead goes |
 | Frosted glass and animations (`effects.comp`) | Large: hardware texture unit and bilinear filtering instead of 32 manual `unpack()` calls | Large: Lavapipe's SIMD sampler instead of 32 bit shifts (up to 6.7 ms in boot 3) |
-| Memory per window | About half the VRAM per window; helps against `insert failed` (VRAM limit) in boot 1 | Less RAM bandwidth and fewer allocations |
+| Memory per window | About half the VRAM per window (no second canvas). Not the cause of boot 1's `insert failed` on M12 stick 2: that was the page-table pool, fixed in #4324 | Less RAM bandwidth and fewer allocations |
 
 These gains are expected, not measured. Step 0 measures them.
 
@@ -65,15 +65,22 @@ These gains are expected, not measured. Step 0 measures them.
 - app_server locking: where drawing waits for a lock.
 - Start times: boot to Sign in, and Sign in to desktop.
 
+## Owner decisions of 16 Nov 2026 (after M12 stick 2)
+
+- **Skia is not on by default yet.** `gpu_draw` stays opt-in through M13. Turning Skia on by default, for RADV and Lavapipe together, with Painter only in Safe mode, is the **last step of M13**, after the speed work (step 5 below). On Lavapipe Skia is still slower than Painter. Source: `docs/APP-SERVER-GPU-DRAWING.md`, "Changed again (owner, 16 Nov 2026, after M12 stick 2)".
+- **Step 6b moves here (M13 or later):** a buffer of its own for `BDirectWindow` on Lavapipe, design on paper in `docs/APP-SERVER-GPU-DRAWING.md` (Q10). Preferably built together with a RADV variant, so the direct-window pause goes on both. Until then the pause stays. It is not on the critical path of the speed work; it comes after step 2, when the compositor reads images.
+- **The first M13 stick also proves #4324** (8 MiB VRAM reserve for page-table pages, 1024 table pages per file). Boot 1 (Skia on RADV) must stay on for the whole scenario: no `page table pool full` and no `gpu draw off` in the syslog. On M12 stick 2 boot 1 turned the drawing off after about 3.5 minutes with `insert failed`, because no page-table page could be made with the VRAM full.
+
 ## Recommended order
 
 | Step | What | Test |
 |---|---|---|
-| 0 | **Measure.** One script reads a few numbers from the syslog: frame time while dragging, scrolling and resizing, input latency, warm-up time; on Lavapipe in QEMU, on RADV on the next stick. Targets: RADV at most 16.7 ms per frame, Lavapipe about 8 ms per full frame. | One QEMU run |
+| 0 | **Measure.** One script reads a few numbers from the syslog: frame time while dragging, scrolling and resizing, input latency, warm-up time; on Lavapipe in QEMU, on RADV on the next stick. Targets: RADV at most 16.7 ms per frame, Lavapipe about 8 ms per full frame. Built: `distro/graphics/boot/m13-measure` (on the machine, or `m13-measure numbers <dir>` for stick logs), and `scripts/qemu-m13-measure.py` for the QEMU run on an own image copy. | One QEMU run |
 | 1 | **Low-hanging fruit.** `FindTexture` with a checksum, `DrawString` once, `_FillSolid` with `setColor`, `_Wake` batching, the gradient cache, `fPersistentPipelineStorage`, `snprintf` in `r5_translate.c` behind the debug flag. Small and separate, each measurable with step 0. | Jam, plus the step 0 script once |
 | 2 | **Architecture.** `VkImage` + `VkSampler` in the compositor, and the `VkSemaphore` sync. Removes the CPU read-back, the double buffer and `SyncToCpu`. Painter windows keep the buffer path; `compose compare` must pass. | One short QEMU boot, the step 0 script |
-| 3 | **Fine-tuning and hardware.** The `vkCmdCopyImage` fast path, `gpu_compositor_scanout` on RADV, Lavapipe MSAA and threads, the userland EOP fence check, write-combined GTT. | One stick for all of them |
-| 4 | **The rest of M13.** Frame pacing and vsync, input latency, locking, start times. | The step 0 script |
+| 3 | **Fine-tuning and hardware.** The `vkCmdCopyImage` fast path, `gpu_compositor_scanout` on RADV, Lavapipe MSAA and threads, the userland EOP fence check, write-combined GTT. The same stick proves #4324 (boot 1 stays on) and gives the first RADV step 0 numbers. | One stick for all of them |
+| 4 | **The rest of M13.** Frame pacing and vsync, input latency, locking, start times. Step 6b (`BDirectWindow`, Lavapipe and preferably RADV) here or later. | The step 0 script |
+| 5 | **Skia on by default** (owner, 16 Nov 2026): RADV and Lavapipe together, Painter only in Safe mode. Only after steps 1 to 4. | One stick, by "From opt-in to default" in `docs/GPU-ARCHITECTURE.md` |
 
 Why the small fixes come before the architecture: they are safe and quick, and afterwards the step 0 numbers show what the architecture itself gains, without noise from the small fixes.
 

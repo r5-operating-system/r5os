@@ -47,6 +47,7 @@
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 #include <Locker.h>
+#include "Compositor.h"
 // SPDX-SnippetEnd
 #include <Path.h>
 #include <PathFinder.h>
@@ -1384,6 +1385,12 @@ void
 AccelerantHWInterface::MoveCursorTo(float x, float y)
 {
 	HWInterface::MoveCursorTo(x, y);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// M13 step 0: the input latency of the compositor's report
+	Compositor::NoteInput();
+// SPDX-SnippetEnd
 
 	if (fHardwareCursorEnabled && LockExclusiveAccess()) {
 		if (fAccMoveCursor != NULL)

@@ -54,6 +54,10 @@ public:
 	static	Compositor*			Create(Desktop* desktop, HWInterface* screen);
 								~Compositor();
 
+	// M13 step 0: a mouse move, for the input latency in the report.
+	// Called by the screen's MoveCursorTo, from the mouse thread.
+	static	void				NoteInput();
+
 	// Whether windows draw into their buffers and the compose runs now.
 	// False in the CPU mode and while paused for direct access (step 5).
 			bool				IsActive() const
@@ -283,6 +287,15 @@ private:
 			uint32				fFrames;
 			bigtime_t			fSamples[128];
 			int32				fSampleCount;
+			// M13 step 0: the time between two frames while something
+			// moves, and from a mouse move to its frame (compose thread;
+			// fFrameInput under fDamageLock)
+			bigtime_t			fFrameSamples[1024];
+			int32				fFrameCount;
+			bigtime_t			fLastFrame;
+			bigtime_t			fInputSamples[1024];
+			int32				fInputCount;
+			bigtime_t			fFrameInput;
 			bigtime_t			fReportStart;
 			bigtime_t			fCpuAtReport;
 			bigtime_t			fTeamCpuAtReport;

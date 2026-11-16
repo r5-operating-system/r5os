@@ -1,5 +1,21 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-16 - Graphics (M13 step 0): one script for frame time, input latency and warm-up
+
+Problem: M13 is the speed milestone, and step 0 of `docs/M13-PLAN.md` asks for one measurement before any tuning: frame time while dragging, scrolling and resizing, input latency, and warm-up, read from the syslog. The syslog had the compose and draw medians and the warm-up, but no frame interval and no input latency.
+
+What changed:
+- app_server (compositor, `gpu_debug true`) logs two more lines every 10 s, only when something moved: `frame interval median <us> p95 <us> frames <n>` (time between two frames on the screen, counted when they are less than 400 ms apart) and `input latency median <us> p95 <us> moves <n>` (from a mouse move, noted in `AccelerantHWInterface::MoveCursorTo`, to the frame that shows the damage that followed it within 400 ms). Logging only; nothing is drawn differently.
+- `distro/graphics/boot/m13-measure`: waits for the drawing warm-up, places a Tracker and a Terminal window, then three motions of 30 s (drag, scroll, resize), by hand or driven from QEMU. It prints per motion the worst 10 s window of frame interval, input latency, compose median and draw median, plus warm-up and refresh period, and checks the targets (frame at most 16.7 ms; on Lavapipe compose at most 8 ms). `m13-measure numbers <dir>` does only the reading, also on Linux for stick logs; checked on M12 stick 2 boot 3 (compose 6.2 ms and warm-up 10.2 s, as in that boot's report).
+- `scripts/qemu-m13-measure.py`: the QEMU run on an own image copy (never the shared one): plants the settings, the script and a UserBootscript with bfs_shell, signs in, drives the mouse over QMP following the steps on the serial port, and copies the results out.
+- `docs/M13-PLAN.md` follows the owner's decisions of 16 Nov 2026: Skia is not on by default yet; that is the last step of M13 (step 5); step 6b (`BDirectWindow`, preferably also on RADV) moved into M13 or later; the first M13 stick proves #4324; the boot 1 `insert failed` was the page-table pool, not window memory.
+
+Mistakes on the way: a bfs_shell `cat` in the session that planted the files kept the volume busy, the unmount failed and nothing was written (now read back in a session of its own, and the run stops when a file is missing). The first measured run used another session's app_server, because that session jammed the shared tree between my jam and my copy; the image is now copied while the build lock is still held (`--image`). With a 100 ms frame gap no frame was counted at all on this slow QEMU; the gap is 400 ms now. One run was lost when WSL restarted.
+
+Tested: `scripts/build-locked.sh` jam_exit=0. One QEMU run (KVM, 6 virtual CPUs, 2 GB, Lavapipe, 1280x800, `gpu_draw`, `gpu_debug`, `gpu_compositor_lavapipe` true), with another session's QEMU running beside it: warm-up 10.5 s; drag frame 138 ms (p95 219), input 273 ms (p95 411), compose 138 ms, draw 161 ms; scroll frame 115 ms (p95 235), compose 105 ms, draw 214 ms; resize frame 113 ms (p95 319), input 223 ms (p95 302), compose 75 ms, draw 3.9 s. No target met. These numbers are far slower than earlier QEMU runs (draw median 9-10 ms on 12 cores), so they show that the script works, not a baseline; step 1 needs a run with the host otherwise idle.
+
+Not tested: RADV and the 5625U (no stick). `m13-measure` is not in the `mesa_radv` package yet (with the next repack, for the first M13 stick). Scroll has no input latency, because the wheel moves no cursor. ARM64 and RISC-V 64 not built.
+
 ## 2026-11-16 - Admin requests: the sender is the one the kernel names (libr5admin.so)
 
 Problem: Login (accounts, unlock grant, clock, time zone, driver blocking and driver settings) and bluetooth_server (the radio switch, bluetooth_audio's requests) decided by `BMessage::ReturnAddress().Team()`. That is the reply messenger the sender chose: any program, also a standard account's, could name Login's own team or another uid 0 team there and act as an administrator. Login's `sender_is_admin()` even took a message whose reply address was Login itself as local. Found by the stack review of #4322 (bluetooth_server) and then in Login's AccountAdmin.cpp; seen in the code, not exploited on R5.

@@ -1,0 +1,256 @@
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+#
+# M13 step 0 (docs/M13-PLAN.md, "Recommended order"): the speed numbers,
+# read from app_server's 10 s report lines in the syslog (gpu_debug true;
+# syslog_time_stamps true in the kernel settings, as the stick plants it).
+#
+#   m13-measure [dir]          three motions of 30 s each (drag, scroll,
+#                              resize), done by hand or driven from QEMU,
+#                              then the numbers. Files go to dir (default
+#                              ~/m13/<date>-<time>).
+#   m13-measure numbers <dir>  only the numbers, from <dir>/scenario.txt and
+#                              <dir>/syslog.txt; runs on Linux too, for
+#                              the logs of a stick.
+#
+# Per motion: the time between frames (frame interval, only frames less
+# than 400 ms apart), from a mouse move to the frame that answers it
+# (input latency; the wheel moves no cursor, so scroll has none), the
+# compose median and the draw median. Once: the warm-up of the drawing.
+# Targets: at most 16.7 ms per frame on RADV; on Lavapipe about 8 ms per
+# full frame (the compose median is any damage, not only full frames).
+#
+# Each step start is also written to /dev/dprintf (the serial port), so a
+# QEMU driver on the host can follow the steps.
+
+numbers() {
+	dir=$1
+	if [ ! -f "$dir/scenario.txt" ] || [ ! -f "$dir/syslog.txt" ]; then
+		echo "m13-measure: FAIL no scenario.txt or syslog.txt in $dir"
+		return 1
+	fi
+	awk '
+	function secs(d, t,    a, b) {
+		split(d, a, "-")
+		split(t, b, ":")
+		return (((a[1] * 12 + a[2]) * 31 + a[3]) * 86400) \
+			+ b[1] * 3600 + b[2] * 60 + b[3]
+	}
+	function after(key,    i) {
+		i = index($0, key)
+		if (i == 0)
+			return ""
+		return substr($0, i + length(key))
+	}
+	function ms(us) {
+		return sprintf("%.1f", us / 1000)
+	}
+	# the step whose 10 s report window this line closes, or ""
+	function stepof(t,    k) {
+		for (k = 1; k <= n; k++) {
+			if (t >= start[k] + 9 && t <= stop[k] + 1)
+				return k
+		}
+		return ""
+	}
+	function worst(arr, k, v) {
+		if (!(k in arr) || v + 0 > arr[k] + 0)
+			arr[k] = v
+	}
+	FNR == NR {
+		if ($1 == "step") {
+			n++
+			name[n] = $2
+			start[n] = secs($3, $4)
+		} else if ($1 == "stop") {
+			for (k = 1; k <= n; k++) {
+				if (name[k] == $2)
+					stop[k] = secs($3, $4)
+			}
+		}
+		next
+	}
+	# a later boot in the same syslog: only its own lines count
+	/Welcome to the Haiku boot loader/ {
+		comp = draw = off = warm = period = ""
+		next
+	}
+	$1 !~ /^[0-9][0-9][0-9][0-9]-/ || index($0, "app_server: ") == 0 {
+		next
+	}
+	{
+		t = secs($1, $2)
+		if ((v = after("app_server: gpu compositor on ")) != "")
+			comp = v
+		if ((v = after("app_server: gpu draw on ")) != "")
+			draw = v
+		if ((v = after("app_server: gpu draw off: ")) != "")
+			off = v
+		if ((v = after("app_server: gpu draw warm up ")) != "") {
+			split(v, w, " ")
+			warm = w[1]
+		}
+		if ((v = after(", period ")) != "") {
+			split(v, w, " ")
+			period = w[1]
+		}
+		k = stepof(t)
+		if (k == "")
+			next
+		if ((v = after("app_server: frame interval median ")) != "") {
+			split(v, w, " ")
+			worst(fmed, k, w[1])
+			worst(fp95, k, w[4])
+			frames[k] += w[7]
+		} else if ((v = after("app_server: input latency median ")) != "") {
+			split(v, w, " ")
+			worst(imed, k, w[1])
+			worst(ip95, k, w[4])
+			moves[k] += w[7]
+		} else if ((v = after("app_server: compose median ")) != "") {
+			split(v, w, " ")
+			worst(cmed, k, w[1])
+		} else if ((v = after("app_server: draw median ")) != "") {
+			split(v, w, " ")
+			worst(dmed, k, w[1])
+		} else if ((v = after("app_server: draw cpu median ")) != "") {
+			split(v, w, " ")
+			worst(dmed, k, w[1])
+			cpu = 1
+		} else if (index($0, "app_server: compose late ") > 0) {
+			late[k]++
+		}
+	}
+	END {
+		radv = comp ~ /^radv/
+		print "m13-measure: compositor " (comp == "" ? "not seen" : comp)
+		print "m13-measure: drawing " (draw == "" ? "Painter" : draw) \
+			(off == "" ? "" : ", turned off: " off)
+		if (warm != "")
+			print "m13-measure: warm-up " warm " ms"
+		else
+			print "m13-measure: warm-up not in the syslog"
+		if (period != "")
+			print "m13-measure: refresh period " period " us"
+		print "m13-measure: per motion, the worst 10 s window (ms):"
+		for (k = 1; k <= n; k++) {
+			line = sprintf("  %-7s", name[k])
+			if (k in fmed)
+				line = line " frame " ms(fmed[k]) " (p95 " ms(fp95[k]) \
+					", " frames[k] " frames)"
+			else
+				line = line " frame none"
+			if (k in imed)
+				line = line "  input " ms(imed[k]) " (p95 " ms(ip95[k]) ")"
+			else
+				line = line "  input none"
+			line = line "  compose " ((k in cmed) ? ms(cmed[k]) : "none")
+			line = line "  draw" (cpu ? " cpu " : " ") \
+				((k in dmed) ? ms(dmed[k]) : "none")
+			if (late[k] > 0)
+				line = line "  compose late x" late[k]
+			print line
+		}
+		for (k = 1; k <= n; k++) {
+			if (!(k in fmed))
+				fr = fr " " name[k] " no frames;"
+			else if (fmed[k] <= 16700)
+				fr = fr " " name[k] " met;"
+			else
+				fr = fr " " name[k] " not met (" ms(fmed[k]) ");"
+			if (!(k in cmed))
+				co = co " " name[k] " none;"
+			else if (cmed[k] <= 8000)
+				co = co " " name[k] " met;"
+			else
+				co = co " " name[k] " not met (" ms(cmed[k]) ");"
+		}
+		print "m13-measure: target frame <= 16.7 ms" \
+			(radv ? " (RADV):" : ":") fr
+		if (!radv)
+			print "m13-measure: target compose <= 8 ms (Lavapipe):" co
+	}
+	' "$dir/scenario.txt" "$dir/syslog.txt"
+}
+
+if [ "${1:-}" = numbers ]; then
+	numbers "${2:-.}"
+	exit $?
+fi
+
+dir=${1:-$HOME/m13/$(date +%Y%m%d-%H%M%S)}
+mkdir -p "$dir"
+log=$dir/scenario.txt
+: > "$log"
+syslog=$(finddir B_SYSTEM_LOG_DIRECTORY)/syslog
+
+say() {
+	echo "m13-measure: $1"
+	echo "m13-measure: $1" > /dev/dprintf 2> /dev/null
+}
+mark() {
+	echo "$1 $2 $(date '+%Y-%m-%d %H:%M:%S')" >> "$log"
+}
+count() {
+	n=$1
+	while [ "$n" -gt 0 ]; do
+		if [ $((n % 10)) -eq 0 ]; then
+			echo "   $n s"
+		fi
+		sleep 1
+		n=$((n - 1))
+	done
+	echo "   stop"
+}
+step() {
+	echo
+	echo "== $1: $2"
+	say "step $1"
+	mark step "$1"
+	count 30
+	mark stop "$1"
+	say "stop $1"
+	sleep 5
+}
+
+say "start $(date +%T)"
+# The drawing warms up after Sign in (shaders, Skia pipelines); its
+# numbers are not the motion's. Wait for the warm-up line, at most 120 s.
+if grep -q 'app_server: gpu draw on' "$syslog"; then
+	n=0
+	while [ "$n" -lt 120 ] && ! grep -q 'app_server: gpu draw warm up' "$syslog"
+	do
+		sleep 2
+		n=$((n + 2))
+	done
+fi
+
+# The windows, at known places for the hand and for the QEMU driver.
+open /boot/system/apps
+/boot/system/apps/Terminal /bin/sh -c "ls -lR /boot/system/apps; sleep 600" \
+	> /dev/null 2>&1 &
+term=$!
+sleep 5
+hey Tracker set Frame of Window apps to "BRect(60,80,460,380)" > /dev/null 2>&1
+hey Terminal set Frame of Window 0 to "BRect(520,80,980,600)" > /dev/null 2>&1
+sleep 2
+say "ready"
+
+step drag "drag the Tracker window (apps) by its yellow tab in circles"
+step scroll "scroll the Terminal up and down with the mouse wheel"
+step resize "drag the lower right corner of the Tracker window in and out"
+kill "$term" 2> /dev/null
+
+echo
+echo "m13-measure: waiting 12 s for the last 10 s report"
+sleep 12
+# this boot's syslog: from the last boot loader line, over a rotation
+{ cat "$syslog.1" 2> /dev/null; cat "$syslog"; } | awk '
+	/Welcome to the Haiku boot loader/ { n = 0 }
+	{ line[++n] = $0 }
+	END { for (i = 1; i <= n; i++) print line[i] }
+' > "$dir/syslog.txt"
+sync
+numbers "$dir" | tee "$dir/numbers.txt"
+say "done"
