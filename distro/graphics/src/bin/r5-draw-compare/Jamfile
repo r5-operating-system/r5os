@@ -1,0 +1,9 @@
+SubDir HAIKU_TOP src bin r5-draw-compare ;
+
+# M12 step 2: the compare set (docs/APP-SERVER-GPU-DRAWING.md, part 7).
+UsePrivateHeaders app interface ;
+
+Application r5-draw-compare :
+	r5-draw-compare.cpp
+	: be [ TargetLibstdc++ ]
+	;

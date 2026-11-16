@@ -392,6 +392,16 @@ enum {
 	AS_R5_SET_WINDOW_EFFECT_STRENGTH,
 // SPDX-SnippetEnd
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// M12 step 2 (docs/APP-SERVER-GPU-DRAWING.md, part 7): r5-draw-compare,
+	// accepted only with gpu_debug true.
+	AS_R5_DRAW_COMPARE,
+	// M12 step 4, Q13: whether Skia draws the letters (libr5ui)
+	AS_R5_GPU_DRAWS_TEXT,
+// SPDX-SnippetEnd
+
 	AS_LAST_CODE
 };
 

@@ -94,6 +94,8 @@ SCRIPTS = {
     "check-user": "distro/graphics/boot/check-user",
     "m11-vulkan": "distro/graphics/boot/m11-vulkan",
     "m11-scroll": "distro/graphics/boot/m11-scroll",
+    "m12-measure": "distro/graphics/boot/m12-measure",
+    "m12-scenario": "distro/graphics/boot/m12-scenario",
 }
 
 # Files planted in /boot/home (plant-m8-stick.sh, M8). The M10 stick runs
@@ -182,6 +184,103 @@ M11_STRINGS = {
                                  b"zero-copy setting", b"compositor paused: direct window"),
     "teapot/bin/VulkanTeapot": (b"window fps", b"--seconds"),
 }
+
+
+# M12 measurement stick (generated/gpu-m12/STICK-PLAN.md). The lines the
+# M12 part of check looks for, as for M11. Boot 4 is M11's boot 4.
+DRAW_COMPARE = "distro/graphics/src/bin/r5-draw-compare/r5-draw-compare.cpp"
+M12_LINES = (
+    ("app_server: gpu draw on .*RADV", "gpu draw on %s skia %s", COMPOSITOR),
+    ("app_server: gpu draw on llvmpipe", "gpu draw on %s skia %s", COMPOSITOR),
+    ("app_server: gpu draw off", "gpu draw off: %s", COMPOSITOR),
+    ("app_server: gpu draw budget heap [0-9]+ MB", "gpu draw budget heap %zu MB",
+     "distro/app_server/skia/SkiaGpu.cpp"),
+    ("gpu draw memory freed", "gpu draw memory freed, insert %s",
+     "distro/app_server/skia/SkiaGpu.cpp"),
+    ("app_server: gpu draw warm up [0-9]+ ms", "gpu draw warm up %",
+     "distro/app_server/skia/SkiaOffscreen.cpp"),
+    ("app_server: $1 median [0-9]+ us cpu [0-9]+ ms per 10 s", "draw median %",
+     COMPOSITOR),
+    ("m12_scenario 'draw cpu'", "draw cpu median %", COMPOSITOR),
+    ("app_server: gpu compositor on lavapipe", "gpu compositor on lavapipe: %s",
+     COMPOSITOR),
+    ("draw-compare [0-9]+/[0-9]+ ok", "draw-compare %d/%d ok", DRAW_COMPARE),
+    ("^draw-time ", "draw-time %s gpu %", DRAW_COMPARE),
+    ("scenario done", "scenario done", "distro/graphics/boot/m12-scenario"),
+)
+M12_DRAW = ["gpu_draw true"]
+M12_BASE = ["gpu_debug true", "gpu_selftest true"]
+M12_BOOTS = {
+    "1": M12_DRAW + M12_BASE,
+    "2": M12_BASE,
+    "3": M12_DRAW + ["gpu_compositor_lavapipe true"] + M12_BASE,
+    "4": M11_BOOTS["4"],
+    "done": None,
+}
+M12_STRINGS = {
+    "haiku/servers/app_server": (b"gpu draw on", b"gpu draw warm up", b"draw cpu median"),
+    "haiku/bin/r5-draw-compare": (b"--new-look", b"draw-time"),
+}
+
+
+def check_m12_sources(commit: str) -> None:
+    check = blob(commit, "distro/graphics/boot/check").decode("utf-8")
+    for pattern, text, path in M12_LINES:
+        if pattern not in check:
+            die(f"check has no M12 line {pattern!r}")
+        if text.encode() not in blob(commit, path):
+            die(f"{path} at {commit} does not print {text!r} (check: {pattern!r})")
+    settings = blob(commit, "distro/graphics/boot/radeon_hd").decode("utf-8").split()
+    if " ".join(settings) != " ".join(" ".join(M12_BOOTS["1"]).split()):
+        die(f"distro/graphics/boot/radeon_hd is not M12 boot 1: {settings}")
+    print(f"m12 lines {len(M12_LINES)} have a source at {commit}")
+
+
+def check_m12_boots(commit: str) -> None:
+    """The M12 order 1, 2, 3, 4 (M11's), done, in a sandbox in WSL."""
+    stage = ROOT / "generated" / "_pre-stick-m12"
+    stage.mkdir(parents=True, exist_ok=True)
+    for name in ("boot-next", "check"):
+        data = blob(commit, f"distro/graphics/boot/{name}").replace(b"\r\n", b"\n")
+        (stage / name).write_bytes(data)
+    steps = ["m12", "", "", "", ""]
+    script = ["#!/bin/sh", "set -u", "T=/tmp/r5-pre-stick-m12", "rm -rf $T",
+              "mkdir -p $T/home $T/us $T/ss $T/cache",
+              "echo 'selftest done' > $T/cache/r5-gpu-selftest.txt",
+              "echo x > $T/syslog",
+              "export R5_HOME=$T/home R5_USER_SETTINGS=$T/us R5_SYSTEM_SETTINGS=$T/ss",
+              "export R5_SYSLOG=$T/syslog R5_CACHE=$T/cache CHECK_WAIT=0 CHECK_LIVE=0",
+              "export BOOT_NEXT_YES=0", 'D="$(dirname "$0")"']
+    for i, arg in enumerate(steps):
+        script.append(f'sh "$D/boot-next" {arg} > /dev/null || echo "step {i} boot-next failed"')
+        script.append(f'echo "== step {i} next $(cat $T/home/m12/next)"')
+        script.append("cat $T/us/kernel/drivers/radeon_hd 2>/dev/null || echo '(none)'")
+        script.append(f'sh "$D/check" 2>/dev/null | grep "^boot " || true')
+    (stage / "run.sh").write_text("\n".join(script) + "\n", encoding="utf-8", newline="\n")
+    path = wsl(f"wslpath -u '{stage / 'run.sh'}'").strip()
+    out = wsl(f"sh '{path}'")
+    blocks = out.split("== step ")[1:]
+    if len(blocks) != len(steps):
+        die(f"m12 boot-next sandbox: {out}")
+    for block in blocks:
+        lines = [line for line in block.strip().splitlines() if line]
+        boot = lines[0].split("next ", 1)[1]
+        # after boot 4 the M11 note says done; the M12 note stays at 4
+        got = [line for line in lines[1:] if not line.startswith("boot ")]
+        if boot == "4" and got == ["(none)"]:
+            boot = "done"
+        want = M12_BOOTS.get(boot, "unknown")
+        if want is None:
+            if got != ["(none)"]:
+                die(f"m12: after boot 4 a settings file stays: {got}")
+        elif got != want:
+            die(f"m12 boot {boot}: boot-next wrote {got}, want {want}")
+        else:
+            seen = [line for line in lines if line.startswith("boot ")]
+            stick = "m11" if boot == "4" else "m12"
+            if seen != [f"boot {boot} ({stick})"]:
+                die(f"m12 boot {boot}: check says {seen}")
+        print(f"m12 boot {boot} settings ok")
 
 
 def check_m11_sources(commit: str) -> None:
@@ -377,6 +476,8 @@ def extract(iso_wsl: str, out: str) -> None:
         f"test -s {out}/radv/bin/check-user\n"
         f"test -s {out}/radv/bin/m11-vulkan\n"
         f"test -s {out}/radv/bin/m11-scroll\n"
+        f"test -s {out}/radv/bin/m12-measure\n"
+        f"test -s {out}/radv/bin/m12-scenario\n"
         f"test -s {out}/teapot/bin/r5-wsi-window-test.sh\n"
         f"mkdir -p {out}/home\n"
         f"'{BFS}' --start-offset {OFFSET} '{iso_wsl}' <<EOF\n"
@@ -464,6 +565,12 @@ def check_m11_image(out: str) -> None:
             if needle not in data:
                 die(f"{relative} in the image has no {needle.decode()}; an older build")
             print(f"m11 string {relative} {needle.decode()}")
+    for relative, needles in M12_STRINGS.items():
+        data = Path(wsl(f"wslpath -w '{out}/{relative}'").strip()).read_bytes()
+        for needle in needles:
+            if needle not in data:
+                die(f"{relative} in the image has no {needle.decode()}; an older build")
+            print(f"m12 string {relative} {needle.decode()}")
 
 
 def main() -> int:
@@ -473,6 +580,8 @@ def main() -> int:
     print(f"branch HEAD {commit}")
     check_m11_sources(commit)
     check_m11_boots(commit)
+    check_m12_sources(commit)
+    check_m12_boots(commit)
     if sys.argv[1] == "--paper":
         # M11: the lines and the settings per boot, before an image exists.
         print(f"pre-stick paper ok {commit}")

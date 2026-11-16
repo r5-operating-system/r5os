@@ -331,9 +331,10 @@ def copy_tree(bfs, path, dest, depth=0):
 
 def copy_m10(bfs, dest):
     """The M10 stick tools keep their files in ~/m10, and the standard
-    account's in its own home (check-user). The M11 stick uses ~/m11."""
+    account's in its own home (check-user). The M11 stick uses ~/m11,
+    the M12 stick ~/m12 and the compare images in ~/draw-compare."""
     users = bfs.walk("home/users")
-    for stick in ("m10", "m11"):
+    for stick in ("m10", "m11", "m12", "draw-compare"):
         total = copy_tree(bfs, "home/%s" % stick, dest / stick)
         if users is not None and (bfs.mode(users) & 0o170000) == 0o040000:
             for name, _block in bfs.list_dir(users):
