@@ -345,6 +345,39 @@ PostCommand(hci_id hciId, net_buffer* buffer)
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// The frame itself when its bytes are one block, else a copy that is (the
+// frame is then freed). NULL when there is no memory; the frame is freed.
+static net_buffer*
+r5_contiguous_frame(net_buffer* frame)
+{
+	void* data;
+	if (gBufferModule->direct_access(frame, 0, frame->size, &data) == B_OK)
+		return frame;
+
+	const size_t size = frame->size;
+	net_buffer* copy = gBufferModule->create(0);
+	void* bytes = malloc(size);
+	if (copy == NULL || bytes == NULL
+		|| gBufferModule->read(frame, 0, bytes, size) != B_OK
+		|| gBufferModule->append(copy, bytes, size) != B_OK
+		|| gBufferModule->direct_access(copy, 0, size, &data) != B_OK) {
+		free(bytes);
+		if (copy != NULL)
+			gBufferModule->free(copy);
+		gBufferModule->free(frame);
+		return NULL;
+	}
+	free(bytes);
+	copy->type = frame->type;
+	gBufferModule->free(frame);
+	return copy;
+}
+// SPDX-SnippetEnd
+
+
 // PostACL
 status_t
 PostACL(hci_id hciId, net_buffer* buffer)
@@ -448,6 +481,20 @@ PostACL(hci_id hciId, net_buffer* buffer)
 				curr_frame->size - sizeof(struct hci_acl_header));
 			// SPDX-SnippetEnd
 		}
+
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// The USB transport sends a frame as one block and panics on one
+		// in pieces (h2generic, nb_get_whole_buffer()). A frame in pieces
+		// is copied into one buffer first, whoever built it.
+		curr_frame = r5_contiguous_frame(curr_frame);
+		if (curr_frame == NULL) {
+			if (next_frame != NULL)
+				gBufferModule->free(next_frame);
+			return B_NO_MEMORY;
+		}
+		// SPDX-SnippetEnd
 
 		// Send to driver
 		curr_frame->protocol = BT_ACL;
