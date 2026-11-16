@@ -181,6 +181,13 @@ struct LEManager::Link {
 	std::vector<Report> reports;
 	bool		usesReportIDs;
 	int32		kernelID;
+
+	// Battery Service (BAS 1.1): its range, the Battery Level value
+	// handle, and the last level in percent (-1 unknown).
+	uint16		batteryStart;
+	uint16		batteryEnd;
+	uint16		batteryHandle;
+	int16		battery;
 };
 
 

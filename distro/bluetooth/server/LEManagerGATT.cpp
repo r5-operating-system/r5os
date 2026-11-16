@@ -39,7 +39,8 @@ enum {
 	kGATTReportMap,
 	kGATTReportReferences,
 	kGATTNotifications,
-	kGATTReady
+	kGATTReady,
+	kGATTBattery
 };
 
 // UUIDs (Assigned Numbers, 3.4 to 3.8).
@@ -49,6 +50,8 @@ enum {
 	kUUIDCCCD				= 0x2902,
 	kUUIDReportReference	= 0x2908,
 	kUUIDHIDService			= 0x1812,
+	kUUIDBatteryService		= 0x180f,
+	kUUIDBatteryLevel		= 0x2a19,
 	kUUIDReportMap			= 0x2a4b,
 	kUUIDReport				= 0x2a4d,
 	kUUIDProtocolMode		= 0x2a4e
@@ -97,6 +100,11 @@ LEManager::_ATTReceived(Link* link, const uint8* pdu, size_t size)
 
 		case 0x1b:
 			// Handle Value Notification.
+			if (size >= 4 && link->batteryHandle != 0
+				&& le16(pdu + 1) == link->batteryHandle) {
+				link->battery = pdu[3] <= 100 ? pdu[3] : -1;
+				return;
+			}
 			if (size >= 3)
 				_HIDInput(link, le16(pdu + 1), pdu + 3, size - 3);
 			return;
@@ -167,6 +175,9 @@ LEManager::_GATTStart(Link* link)
 	link->reportMap.clear();
 	link->serviceStart = 0;
 	link->serviceEnd = 0;
+	link->batteryStart = 0;
+	link->batteryEnd = 0;
+	link->batteryHandle = 0;
 
 	link->gattStep = kGATTMTU;
 	uint8 request[3] = { 0x02, 0, 0 };
@@ -203,10 +214,15 @@ LEManager::_GATTStep(Link* link, const uint8* pdu, size_t size)
 			while (le_att_next(pdu, size, &offset, &entry)) {
 				if (entry.end < entry.handle)
 					continue;
-				if (link->serviceStart == 0 && le_att_uuid16(entry.value,
-						entry.value_length) == kUUIDHIDService) {
+				const uint16 uuid = le_att_uuid16(entry.value,
+					entry.value_length);
+				if (link->serviceStart == 0 && uuid == kUUIDHIDService) {
 					link->serviceStart = entry.handle;
 					link->serviceEnd = entry.end;
+				}
+				if (link->batteryStart == 0 && uuid == kUUIDBatteryService) {
+					link->batteryStart = entry.handle;
+					link->batteryEnd = entry.end;
 				}
 				if (entry.end > last)
 					last = entry.end;
@@ -302,6 +318,15 @@ LEManager::_GATTStep(Link* link, const uint8* pdu, size_t size)
 			link->index++;
 			break;
 
+		case kGATTBattery:
+			// Read By Type Response: length, then handle and value.
+			if (!error && pdu[0] == 0x09 && size >= 5 && pdu[1] >= 3) {
+				link->batteryHandle = le16(pdu + 2);
+				link->battery = pdu[4] <= 100 ? pdu[4] : -1;
+			}
+			link->next = 0;
+			break;
+
 		case kGATTNotifications:
 			if (error) {
 				syslog(LOG_NOTICE, "bluetooth_server: gatt notifications"
@@ -334,6 +359,19 @@ LEManager::_GATTNext(Link* link)
 				_ATTRequest(link, request, 7);
 				return;
 			}
+			// The battery level, once, when the device has the service.
+			if (link->batteryStart != 0) {
+				link->gattStep = kGATTBattery;
+				request[0] = 0x08;	// Read By Type
+				le_put16(request + 1, link->batteryStart);
+				le_put16(request + 3, link->batteryEnd);
+				le_put16(request + 5, kUUIDBatteryLevel);
+				_ATTRequest(link, request, 7);
+				return;
+			}
+			// fall through
+
+		case kGATTBattery:
 			if (link->serviceStart == 0) {
 				syslog(LOG_NOTICE, "bluetooth_server: gatt no hid service");
 				link->gattStep = kGATTReady;

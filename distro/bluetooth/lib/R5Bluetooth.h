@@ -58,9 +58,14 @@ enum {
 	kMsgBluetoothForget			= 'btFg',
 		// data "bdaddr", string "name": forget a paired device (its keys)
 		// and end its link; answered with kMsgBluetoothForgetResult
-	kMsgBluetoothDisconnect		= 'btDc'
+	kMsgBluetoothDisconnect		= 'btDc',
 		// data "bdaddr": end the link to a paired device and keep its keys.
 		// The new state shows the result.
+	kMsgBluetoothUseForSound	= 'btUs'
+		// data "bdaddr", bool "use": play this person's sound on that
+		// headset (bluetooth_audio's choice, and "Bluetooth audio" as the
+		// Media output), or stop (the choice cleared, the first other
+		// audio output back). The new state shows it.
 };
 
 // Notifications sent to the controller's target
@@ -133,6 +138,15 @@ struct BluetoothPairedDevice {
 			bool				hid;
 				// LE HID over GATT
 			bool				connected;
+			// Added after the first release (end of the struct):
+			int32				battery;
+				// Percent, or -1 when not known (LE devices with the
+				// Battery Service report it while connected)
+
+			// Audio/Video major class: "Use for sound" applies
+			bool				IsAudio() const;
+			// Peripheral with the joystick or gamepad minor class
+			bool				IsGameController() const;
 };
 
 
@@ -162,6 +176,10 @@ struct BluetoothState {
 	static	void				UnarchivePaired(const BMessage& archive,
 									std::vector<BluetoothPairedDevice>&
 										devices);
+	// The headset this person's sound goes to ("sound:address" in the
+	// same message); false when none is chosen.
+	static	bool				UnarchiveSoundDevice(const BMessage& archive,
+									bdaddr_t& address);
 };
 
 
@@ -204,6 +222,7 @@ private:
 			void				_ReadPaired();
 			void				_DeviceRequest(BMessage* message);
 			void				_PairFailed(const char* name);
+			void				_UseForSound(BMessage* message);
 
 			BMessenger			fTarget;
 			BMessageRunner*		fRunner;
@@ -254,6 +273,7 @@ private:
 			void				_SendToController(BMessage* message);
 			void				_UpdateMine();
 			void				_UpdateInfo();
+			void				_ShowBattery(bool show);
 			bool				_IsPaired(const bdaddr_t& address) const;
 
 private:

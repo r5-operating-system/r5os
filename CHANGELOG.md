@@ -22,6 +22,20 @@ Tested (QEMU, KVM, 8 virtual CPUs, 2 GB, Lavapipe, 1280x800, `gpu_draw`, `gpu_de
 
 Not tested: RADV and the 5625U (QEMU has no RADV). The proof on RADV, the warm-up with a real pipeline cache, and #4324 go on the first M13 stick (step 3). ARM64 and RISC-V 64 not built.
 
+## 2026-11-16 - Bluetooth: the review's open points, battery, Use for sound, Test buttons
+
+Problem: the stack review (#4322) left points open, and the device panel of the Bluetooth page had no battery, no way to send sound to a headset, and no way to try a controller.
+
+What changed:
+- Kernel: `R5ConnectionByType()` added at the end of the btCoreData module (the header is now in `distro`): LE `connect()` and fixed-channel `sendto()` take the LE link of a dual-mode device, not whichever link comes first. A connection leaves the list before its L2CAP endpoints are told, and LE `connect()` checks after binding that its connection is still listed, so a link that drops during `connect()` no longer leaves a freed pointer behind. `_SendFixed()` uses only the handle read under the list lock.
+- bluetooth_server: the resolving list is rewritten with the scan paused (the controller refuses it while scanning), and a refused list command keeps the list marked for the next connect. Removed records are freed, and a device that is not paired keeps no record after its link (every unknown device that connected stayed in the list and the saved file). A full HID session table reuses an idle session (its old report descriptor freed) instead of refusing new devices. SDP runs on its own thread after authentication, on a record of its own; when it ends it stores the records under the devices lock and tells the profiles, or Encryption Change does when SDP was first.
+- Battery: GATT discovery also finds the Battery Service and reads Battery Level once, then follows its notifications. `BT_MSG_R5_GET_PAIRED` adds int32 "battery".
+- The page: a Battery line for a connected device that reports it; "Use for sound" for a headset (writes bluetooth_audio's choice for this person and sets "Bluetooth audio" as the Media output; off clears it and sets the first other output); "Test buttons…" for a game controller: a window with its buttons, sticks and D-pad, live through BJoystick.
+
+Not done: resolving private addresses in the host. The MT7922 has LL Privacy (bit 9 in the LE event mask 0x1a5f of stick 5), so the controller does it; a radio without it still cannot reconnect a device with a changing address. Classic devices report no battery (that needs HFP or the Sony's own commands).
+
+Tested: built for x86_64 (exit 0). QEMU with SMAP and Login: all Bluetooth tests ok (admin port, standard user refused, L2CAP, HID, CoC, SMP, audio), no panic; the Bluetooth page draws without a page scroll bar. QEMU has no radio: battery, Use for sound, Test buttons, the dual-mode and race fixes and SDP on its own thread are not tried with a device. Not on a stick.
+
 ## 2026-11-16 - Graphics (M13 step 0): one script for frame time, input latency and warm-up
 
 Problem: M13 is the speed milestone, and step 0 of `docs/M13-PLAN.md` asks for one measurement before any tuning: frame time while dragging, scrolling and resizing, input latency, and warm-up, read from the syslog. The syslog had the compose and draw medians and the warm-up, but no frame interval and no input latency.

@@ -579,8 +579,26 @@ HIDHost::_FindOrAddLocked(const bdaddr_t& address)
 	if (session != NULL)
 		return session;
 
-	if (fSessions.CountItems() >= 64)
+	if (fSessions.CountItems() >= 64) {
+		// Full: a session that no thread uses any more (no channel, no
+		// reader, no connect, no device) takes the new address. Devices
+		// that come and go (or change their address) filled all 64, and
+		// real keyboards and mice were refused until the server restarted.
+		for (int32 i = 0; i < fSessions.CountItems(); i++) {
+			Session* idle = fSessions.ItemAt(i);
+			if (idle->connecting || idle->kernelID >= 0
+				|| idle->channel[0] >= 0 || idle->channel[1] >= 0
+				|| idle->reading[0] || idle->reading[1])
+				continue;
+			// Its report descriptor was the old device's.
+			free(idle->descriptor);
+			idle->descriptor = NULL;
+			idle->descriptorLength = 0;
+			idle->address = address;
+			return idle;
+		}
 		return NULL;
+	}
 	session = new(std::nothrow) Session(address);
 	if (session == NULL || !fSessions.AddItem(session)) {
 		delete session;

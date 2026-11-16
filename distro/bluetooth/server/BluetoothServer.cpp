@@ -1148,6 +1148,72 @@ BluetoothServer::DiscoverServices(ServerRemoteDevice* rd)
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+struct r5_sdp_args {
+	hci_id		hid;
+	bdaddr_t	address;
+};
+
+
+void
+BluetoothServer::R5DiscoverServices(hci_id hid, ServerRemoteDevice* rd)
+{
+	r5_sdp_args* args = new(std::nothrow) r5_sdp_args;
+	if (args == NULL)
+		return;
+	args->hid = hid;
+	args->address = rd->bdaddr;
+	thread_id thread = spawn_thread(_SDPThread, "bluetooth sdp",
+		B_NORMAL_PRIORITY, args);
+	if (thread < 0) {
+		delete args;
+		return;
+	}
+	rd->sdp_running = true;
+	resume_thread(thread);
+}
+
+
+status_t
+BluetoothServer::_SDPThread(void* data)
+{
+	r5_sdp_args* args = (r5_sdp_args*)data;
+
+	// SDP into a record of its own: the real one may be gone (Forget, an
+	// unpaired device that left) by the time the device answered.
+	ServerRemoteDevice probe;
+	probe.bdaddr = args->address;
+	bool read;
+	{
+		SDPClient client(&probe);
+		read = client.Start() == B_OK
+			&& client.RequestServiceRecords() == B_OK;
+	}
+	if (!read)
+		syslog(LOG_NOTICE, "bluetooth_server: service records not read");
+
+	BluetoothServer* server = (BluetoothServer*)be_app;
+	BAutolock locker(server->fDevicesLock);
+	LocalDeviceImpl* radio = server->LocateLocalDeviceImpl(args->hid);
+	ServerRemoteDevice* rd = radio != NULL
+		? radio->RemoteDeviceByAddr(args->address) : NULL;
+	if (rd != NULL) {
+		rd->sdp_running = false;
+		if (read)
+			rd->services = probe.services;
+		// Encryption came first: it left the profiles to this thread.
+		if (rd->encryption_enabled != 0
+			&& rd->conn_state == RemoteDevice::CONNECTED)
+			server->NotifyServices(rd);
+	}
+	delete args;
+	return B_OK;
+}
+// SPDX-SnippetEnd
+
+
 void
 BluetoothServer::NotifyServices(ServerRemoteDevice* rd)
 {

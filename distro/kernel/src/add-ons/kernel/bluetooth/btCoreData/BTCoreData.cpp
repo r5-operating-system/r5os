@@ -253,6 +253,15 @@ bcd_std_ops(int32 op, ...)
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// ConnectionInterface.cpp
+HciConnection* R5ConnectionByType(const bdaddr_t& destination, hci_id hid,
+	int type, uint16* _handle);
+// SPDX-SnippetEnd
+
+
 bluetooth_core_data_module_info sBCDModule = {
 	{
 		BT_CORE_DATA_MODULE_NAME,
@@ -272,6 +281,11 @@ bluetooth_core_data_module_info sBCDModule = {
 	allocate_command_ident,
 	lookup_command_ident,
 	free_command_ident,
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	R5ConnectionByType,
+	// SPDX-SnippetEnd
 };
 
 

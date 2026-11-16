@@ -289,6 +289,14 @@ void
 LocalDeviceImpl::RemoveRemoteDevice(ServerRemoteDevice* rd)
 {
 	fRemoteDevicesList.RemoveItem(rd);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// The list does not own its records, and a removed one was never
+	// freed. Nothing keeps a record past the event that uses it: every
+	// later lookup goes through the list.
+	delete rd;
+	// SPDX-SnippetEnd
 }
 
 
@@ -2313,6 +2321,15 @@ LocalDeviceImpl::DisconnectionComplete(hci_ev_disconnection_complete_reply* even
 		r5_pairing_result(false, rd->friendly_name, &rd->pair_reply,
 			rd->bdaddr);
 	}
+	// A device that is not paired keeps no record after its link: every
+	// unknown device that connected stayed in the list and in the saved
+	// file for good.
+	linkkey_t nullKey = LinkKeyUtils::NullKey();
+	if (rd != NULL && rd->conn_state == RemoteDevice::DISCONNECTED
+		&& LinkKeyUtils::Compare(&rd->link_key, &nullKey)) {
+		RemoveRemoteDevice(rd);
+		rd = NULL;
+	}
 	// SPDX-SnippetEnd
 
 
@@ -2747,7 +2764,12 @@ LocalDeviceImpl::AuthComplete(struct hci_ev_auth_complete* eventData, BMessage* 
 					rd->bdaddr);
 			}
 			SetConnEncryption(rd->handle, true);
-			((BluetoothServer*)be_app)->DiscoverServices(rd);
+			// On its own thread: SDP waits for the device, up to seconds
+			// per answer, and held up every HCI event meanwhile.
+			if (!rd->sdp_running) {
+				((BluetoothServer*)be_app)->R5DiscoverServices(GetID(),
+					rd);
+			}
 		}
 		// SPDX-SnippetEnd
 	} else {
@@ -2813,7 +2835,12 @@ LocalDeviceImpl::EncryptChange(struct hci_ev_encrypt_change* event)
 		return;
 
 	rd->encryption_enabled = event->encrypt;
-	if (rd->encryption_enabled != 0)
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// While SDP still runs, its thread tells the profiles when it ends.
+	if (rd->encryption_enabled != 0 && !rd->sdp_running)
+	// SPDX-SnippetEnd
 		((BluetoothServer*)be_app)->NotifyServices(rd);
 }
 
@@ -2956,8 +2983,8 @@ LocalDeviceImpl::R5Forget(const bdaddr_t& address)
 		}
 		rd->link_key = LinkKeyUtils::NullKey();
 		rd->user_pairing = false;
-		// Out of the list and the saved file. The record itself stays: a
-		// disconnection that is still on its way may look it up.
+		// Out of the list and the saved file, and freed: a disconnection
+		// still on its way finds no record by its handle.
 		RemoveRemoteDevice(rd);
 		SaveRemoteDevices();
 		forgotten = true;
@@ -2987,6 +3014,8 @@ LocalDeviceImpl::R5AddPaired(BMessage& reply)
 		reply.AddBool("hid", false);
 		reply.AddBool("connected",
 			rd->conn_state == RemoteDevice::CONNECTED);
+		// Classic devices report no battery level R5 reads yet.
+		reply.AddInt32("battery", -1);
 	}
 	if (fLE != NULL)
 		fLE->AddPaired(reply);

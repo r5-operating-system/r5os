@@ -130,9 +130,13 @@ L2capEndpoint::_ConnectLE(const sockaddr* _address)
 	hci_id hid = btCoreData->RouteConnection(address->l2cap_bdaddr);
 	if (hid <= 0)
 		return ENETUNREACH;
-	HciConnection* connection = btCoreData->ConnectionByDestination(
-		address->l2cap_bdaddr, hid);
-	if (connection == NULL || connection->type != R5_HCI_LINK_LE)
+	// The LE link to it, also when a BR/EDR link to the same device (dual
+	// mode) comes first in the list. The handle is read under the list
+	// lock: the connection may go away at any moment after it.
+	uint16 handle;
+	HciConnection* connection = btCoreData->R5ConnectionByType(
+		address->l2cap_bdaddr, hid, R5_HCI_LINK_LE, &handle);
+	if (connection == NULL)
 		return EHOSTUNREACH;
 	fConnection = connection;
 
@@ -142,6 +146,15 @@ L2capEndpoint::_ConnectLE(const sockaddr* _address)
 	if (status != B_OK) {
 		fConnection = NULL;
 		return status;
+	}
+	// Still in the list after the bind? A connection leaves the list
+	// before its endpoints are told (RemoveConnection()): one that left
+	// before this bind never tells this endpoint, so it is checked here,
+	// by pointer, without reading the connection.
+	if (btCoreData->ConnectionByHandle(handle, hid) != connection) {
+		gL2capEndpointManager.UnbindFromChannel(this);
+		fConnection = NULL;
+		return EHOSTUNREACH;
 	}
 
 	fLEMode = mode;
@@ -204,9 +217,12 @@ L2capEndpoint::_SendFixed(net_buffer* buffer)
 	hci_id hid = btCoreData->RouteConnection(to->l2cap_bdaddr);
 	if (hid <= 0)
 		return ENETUNREACH;
-	HciConnection* connection = btCoreData->ConnectionByDestination(
-		to->l2cap_bdaddr, hid);
-	if (connection == NULL || connection->type != R5_HCI_LINK_LE)
+	// Only the handle is used, read under the list lock: the connection
+	// itself may be gone by the time the PDU is queued, and a dual-mode
+	// device's BR/EDR link must not be taken for its LE link.
+	uint16 handle;
+	if (btCoreData->R5ConnectionByType(to->l2cap_bdaddr, hid,
+			R5_HCI_LINK_LE, &handle) == NULL)
 		return EHOSTUNREACH;
 
 	NetBufferPrepend<l2cap_basic_header> header(buffer);
@@ -218,8 +234,8 @@ L2capEndpoint::_SendFixed(net_buffer* buffer)
 
 	// PostACL() owns the buffer from here, also when it fails; the stack
 	// must not free it again, so the PDU counts as sent.
-	buffer->type = connection->handle;
-	if (l2cap_post_acl(connection->Hid, buffer) != B_OK)
+	buffer->type = handle;
+	if (l2cap_post_acl(hid, buffer) != B_OK)
 		TRACE("%s: PDU on fixed channel %#x not sent\n", __func__, fFixedChannel);
 	return B_OK;
 }
