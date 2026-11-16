@@ -30,6 +30,7 @@ Application Settings :
 	DisplayModule.cpp
 	DisplayScreens.cpp
 	WiFiModule.cpp
+	BluetoothModule.cpp
 	ConnectionsModule.cpp
 	DiscoveryModule.cpp
 	NetworkPage.cpp
@@ -39,6 +40,7 @@ Application Settings :
 	ServiceView.cpp
 	: <src!bin!network!ifconfig>MediaTypes.o
 		be tracker translation shared libr5icons.so libr5ui.so libr5wifi.so
+		libr5bt.so
 		bnetapi network [ TargetLibstdc++ ] localestub
 	: Settings.rdef
 	;

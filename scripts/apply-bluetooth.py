@@ -8,7 +8,10 @@
   distro/bluetooth/headers),
 - bt_server_smoke_test and bt_l2cap_abi_test (distro/bluetooth/tests) into
   src/bin, with their Jam
-  SubInclude and SYSTEM_BIN line in the regular image.
+  SubInclude and SYSTEM_BIN line in the regular image,
+- libr5bt.so (distro/bluetooth/lib) into src/preferences/r5bt and
+  <R5Bluetooth.h> into headers/os/interface, with its SubInclude and its
+  line in the regular image.
 
 docs/BLUETOOTH.md is the plan."""
 from __future__ import annotations
@@ -31,6 +34,23 @@ def copy_dir(source: pathlib.Path, dest: pathlib.Path, tag: str) -> None:
             continue
         data = path.read_bytes().replace(b"\r\n", b"\n")
         target = dest / path.name
+        if target.is_file() and target.read_bytes() == data:
+            continue
+        target.write_bytes(data)
+        count += 1
+    print(f"copied {count} {tag} files")
+
+
+def copy_files(source: pathlib.Path, names: tuple[str, ...],
+        dest: pathlib.Path, tag: str) -> None:
+    dest.mkdir(parents=True, exist_ok=True)
+    count = 0
+    for name in names:
+        path = source / name
+        if not path.is_file():
+            raise SystemExit(f"missing {path}")
+        data = path.read_bytes().replace(b"\r\n", b"\n")
+        target = dest / name
         if target.is_file() and target.read_bytes() == data:
             continue
         target.write_bytes(data)
@@ -85,6 +105,21 @@ def main() -> int:
         "SYSTEM_BIN += bt_server_smoke_test ;\n",
         "SYSTEM_BIN += bt_l2cap_abi_test ;\n",
         "bt_l2cap_abi_test image")
+    # libr5bt.so (step 3a): the sources into src/preferences/r5bt, the
+    # public header next to R5Icons.h and Card.h. It needs libbluetooth,
+    # so it is in the regular image only, like the rest of Bluetooth.
+    copy_files(SRC / "lib", ("BluetoothController.cpp", "BluetoothView.cpp",
+        "Jamfile"), HAIKU / "src" / "preferences" / "r5bt", "libr5bt")
+    copy_files(SRC / "lib", ("R5Bluetooth.h",),
+        HAIKU / "headers" / "os" / "interface", "libr5bt header")
+    insert_once(HAIKU / "src" / "preferences" / "Jamfile",
+        "SubInclude HAIKU_TOP src preferences r5ui ;\n",
+        "SubInclude HAIKU_TOP src preferences r5bt ;\n",
+        "libr5bt jam")
+    insert_once(HAIKU / "build" / "jam" / "images" / "definitions" / "regular",
+        "\t\t\tlibr5ui.so\n",
+        "\t\t\tlibr5bt.so\n",
+        "libr5bt image")
     return 0
 
 
