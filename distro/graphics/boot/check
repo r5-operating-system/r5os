@@ -757,9 +757,11 @@ m12_boot() {
 	2)
 		have 'app_server: gpu compositor on radv' "$slog" "gpu compositor on radv"
 		none 'app_server: gpu draw on' "$slog" "no gpu draw (Painter draws)"
-		# Painter under the compositor reports "draw median" too; "draw
-		# cpu median" is only the CPU mode (compositor off, Safe mode).
-		m12_scenario draw
+		# Painter reports "draw cpu median" (Compositor.cpp, without
+		# Skia), also under the compositor: the 5625U stick of 16 Nov
+		# 2026 showed it; the "draw median" of the QEMU proof before it
+		# was a misreading, which made boot 2 FAIL.
+		m12_scenario 'draw cpu'
 		;;
 	esac
 	none 'app_server: gpu compositor off' "$slog" "no gpu compositor off"
