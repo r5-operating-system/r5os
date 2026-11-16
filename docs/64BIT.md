@@ -147,6 +147,8 @@ Each step is its own small pull request, built for AMD64 with `scripts/build-loc
 
 ## 7. The owner's choices
 
+**Chosen on 16 Nov 2026** (all five as recommended): 1 (d) v2 baseline plus v3 dispatch in the hot paths, after the step 0 measurement; 2 (a) 64-bit only, stated in the R5Book; 3 (b) new 64-bit calls next to the old ones, area info first; 4 (a) PCID first, after M13; 5 (a) plus (b) Haiku's flags plus frame pointers in user space.
+
 1. **CPU baseline on AMD64.** (a) Stay on v1, (b) v2, (c) v3 with a clear boot message, (d) v2 plus v3 dispatch in the hot paths.
    *Recommendation: (d), but only after step 0 measures.* v2 drops almost nothing; v3 drops many laptops and VMs that people will try R5 on, for a gain that is not measured yet. If the numbers after step 3 at v3 are large, revisit (c).
 2. **32-bit programs.** (a) None, R5 is 64-bit only, or (b) a secondary `x86` architecture with compat mode, so 32-bit Haiku and gcc2 programs run.
