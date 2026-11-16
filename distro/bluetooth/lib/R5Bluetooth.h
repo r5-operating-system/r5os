@@ -152,8 +152,9 @@ private:
 			};
 
 			void				_Update();
-			bool				_ReadServer(int32& count, bool& enabled);
-			void				_ReadRadios(int32 count);
+			bool				_ReadServer(std::vector<hci_id>& ids,
+									bool& enabled);
+			void				_ReadRadios(const std::vector<hci_id>& ids);
 			Radio*				_FindRadio(hci_id id);
 			void				_StartScan();
 			void				_CancelScan();

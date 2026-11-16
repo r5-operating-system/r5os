@@ -312,15 +312,10 @@ public:
 	{
 		if (device == NULL)
 			return;
+		// Only kept for deleting: the filter below reports every answer,
+		// also the repeats that DiscoveryListener does not pass on.
+		(void)deviceClass;
 		fDevices.push_back(device);
-
-		bdaddr_t address = device->GetBluetoothAddress();
-		BMessage found(kMsgListenerFound);
-		found.AddData("address", B_RAW_TYPE, &address, sizeof(address));
-		found.AddUInt32("class", deviceClass.Record());
-		found.AddString("name", device->GetCachedFriendlyName());
-		found.AddInt8("rssi", device->GetRSSI());
-		fController.SendMessage(&found);
 	}
 
 	virtual void InquiryResponse(int type)
@@ -365,7 +360,46 @@ private:
 				fController.SendMessage(&done);
 				return B_SKIP_MESSAGE;
 			}
+			if (message->what == BT_MSG_INQUIRY_DEVICE)
+				_ReportAnswers(message);
 			return B_DISPATCH_MESSAGE;
+		}
+
+		// Every inquiry answer, the first and the repeats. DiscoveryListener
+		// only calls DeviceDiscovered() for the first one of an address and
+		// keeps the newer signal strength of a repeat to itself, so a device
+		// first heard far away kept one bar.
+		void _ReportAnswers(BMessage* message)
+		{
+			uint8 count = 0;
+			if (message->FindUInt8("count", &count) != B_OK)
+				return;
+			for (uint8 i = 0; i < count; i++) {
+				const void* address;
+				const void* deviceClass;
+				ssize_t addressSize;
+				ssize_t classSize;
+				if (message->FindData("bdaddr", B_ANY_TYPE, i, &address,
+						&addressSize) != B_OK
+					|| addressSize != (ssize_t)sizeof(bdaddr_t)
+					|| message->FindData("dev_class", B_ANY_TYPE, i,
+						&deviceClass, &classSize) != B_OK
+					|| classSize != 3)
+					continue;
+				const uint8* record = (const uint8*)deviceClass;
+				int8 rssi = HCI_RSSI_INVALID;
+				message->FindInt8("rssi", i, &rssi);
+				BString name;
+				message->FindString("friendly_name", i, &name);
+
+				BMessage found(kMsgListenerFound);
+				found.AddData("address", B_RAW_TYPE, address, addressSize);
+				found.AddUInt32("class", record[0] | (record[1] << 8)
+					| (record[2] << 16));
+				found.AddString("name", name);
+				found.AddInt8("rssi", rssi);
+				fController.SendMessage(&found);
+			}
 		}
 
 	private:
@@ -529,9 +563,9 @@ BluetoothController::_Update()
 		return;
 	}
 
-	int32 count;
+	std::vector<hci_id> ids;
 	bool enabled;
-	if (!_ReadServer(count, enabled)) {
+	if (!_ReadServer(ids, enabled)) {
 		// Registered but not answering yet: it has just been started.
 		if (fState.service != BLUETOOTH_SERVICE_RUNNING
 			&& fLaunched && system_time() - fLaunchTime > kStartTimeout)
@@ -542,8 +576,7 @@ BluetoothController::_Update()
 
 	fState.service = BLUETOOTH_SERVICE_RUNNING;
 	fState.radioEnabled = enabled;
-	if (count != (int32)fRadios.size())
-		_ReadRadios(count);
+	_ReadRadios(ids);
 	if (!enabled && fState.scanning) {
 		_CancelScan();
 		_StopScan();
@@ -553,67 +586,85 @@ BluetoothController::_Update()
 
 
 bool
-BluetoothController::_ReadServer(int32& count, bool& enabled)
+BluetoothController::_ReadServer(std::vector<hci_id>& ids, bool& enabled)
 {
 	BMessenger server(BLUETOOTH_SIGNATURE);
 	if (!server.IsValid())
 		return false;
 
-	BMessage request(BT_MSG_COUNT_LOCAL_DEVICES);
+	// The switch and the radios by hci_id, in one request with a timeout.
+	BMessage request(BT_MSG_R5_GET_RADIO);
 	BMessage reply;
 	if (server.SendMessage(&request, &reply, kServerTimeout, kServerTimeout)
 			!= B_OK
-		|| reply.FindInt32("count", &count) != B_OK || count < 0)
+		|| reply.FindBool("enabled", &enabled) != B_OK)
 		return false;
 
-	// A server without the radio switch does not answer this; it has no
-	// way to turn the radio off, so it counts as on.
-	enabled = true;
-	BMessage radioRequest(BT_MSG_R5_GET_RADIO);
-	BMessage radioReply;
-	if (server.SendMessage(&radioRequest, &radioReply, kServerTimeout,
-			kServerTimeout) == B_OK)
-		radioReply.FindBool("enabled", &enabled);
+	ids.clear();
+	int32 id;
+	for (int32 i = 0; reply.FindInt32("hci_id", i, &id) == B_OK; i++)
+		ids.push_back(id);
 	return true;
 }
 
 
+// Acquires exactly the radios it does not know yet and forgets the ones that
+// went away. It used the plain acquire, which hands the radios out in turn:
+// a known radio handed out again was a leaked LocalDevice, and a radio
+// replaced within one poll (same count, new hci_id) was never seen.
 void
-BluetoothController::_ReadRadios(int32 count)
+BluetoothController::_ReadRadios(const std::vector<hci_id>& ids)
 {
-	if (count < (int32)fRadios.size()) {
-		// A radio went away. Its hci_id may come back for another radio, so
-		// start over (the old objects are forgotten, see _Update()).
-		_CancelScan();
-		_StopScan();
-		fRadios.clear();
-	}
-
-	// bluetooth_server hands out its radios in turn when no hci_id is given
-	// (BluetoothServer::HandleAcquireLocalDevice), the way Haiku's
-	// Bluetooth preferences list them.
-	for (int32 tries = 0; tries < count * 2 && (int32)fRadios.size() < count;
-			tries++) {
-		LocalDevice* device = LocalDevice::GetLocalDevice();
-		if (device == NULL)
-			break;
-		if (_FindRadio(device->ID()) != NULL)
+	bool changed = false;
+	for (size_t i = 0; i < fRadios.size();) {
+		bool present = false;
+		for (size_t j = 0; j < ids.size() && !present; j++)
+			present = ids[j] == fRadios[i].id;
+		if (present) {
+			i++;
 			continue;
-		Radio radio = { device->ID(), device, NULL };
-		fRadios.push_back(radio);
+		}
+		// Gone. Its objects talk to a radio that no longer exists; they
+		// cannot be deleted (private destructor), only forgotten.
+		if (fRadios[i].id == fState.radio) {
+			_CancelScan();
+			_StopScan();
+		}
+		fRadios.erase(fRadios.begin() + i);
+		changed = true;
 	}
 
-	fState.radios.clear();
-	for (size_t i = 0; i < fRadios.size(); i++) {
+	std::vector<BluetoothRadioInfo> radios;
+	for (size_t i = 0; i < ids.size(); i++) {
+		const BluetoothRadioInfo* known = NULL;
+		for (size_t j = 0; j < fState.radios.size() && known == NULL; j++) {
+			if (fState.radios[j].id == ids[i] && _FindRadio(ids[i]) != NULL)
+				known = &fState.radios[j];
+		}
+		if (known != NULL) {
+			radios.push_back(*known);
+			continue;
+		}
+
+		LocalDevice* device = LocalDevice::GetLocalDevice(ids[i]);
+		if (device == NULL)
+			continue;
+		Radio radio = { ids[i], device, NULL };
+		fRadios.push_back(radio);
+		changed = true;
+
 		BluetoothRadioInfo info;
-		info.id = fRadios[i].id;
-		info.name = fRadios[i].device->GetFriendlyName();
+		info.id = ids[i];
+		info.name = device->GetFriendlyName();
 		// libbluetooth's error strings are "Unknown|<reason>".
 		if (info.name.StartsWith("Unknown|"))
 			info.name = "";
-		info.address = fRadios[i].device->GetBluetoothAddress();
-		fState.radios.push_back(info);
+		info.address = device->GetBluetoothAddress();
+		radios.push_back(info);
 	}
+	if (!changed && radios.size() == fState.radios.size())
+		return;
+	fState.radios = radios;
 
 	if (fState.CurrentRadio() == NULL) {
 		fState.radio = fState.radios.empty() ? -1 : fState.radios[0].id;
@@ -706,6 +757,8 @@ BluetoothController::_DeviceFound(BMessage* message)
 		if (bdaddrUtils::Compare(fState.devices[i].address, info.address)) {
 			if (info.name.IsEmpty())
 				info.name = fState.devices[i].name;
+			if (info.rssi == HCI_RSSI_INVALID)
+				info.rssi = fState.devices[i].rssi;
 			fState.devices[i] = info;
 			_PostState();
 			return;

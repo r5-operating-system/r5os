@@ -30,7 +30,6 @@ Application Settings :
 	DisplayModule.cpp
 	DisplayScreens.cpp
 	WiFiModule.cpp
-	BluetoothModule.cpp
 	ConnectionsModule.cpp
 	DiscoveryModule.cpp
 	NetworkPage.cpp
@@ -40,9 +39,17 @@ Application Settings :
 	ServiceView.cpp
 	: <src!bin!network!ifconfig>MediaTypes.o
 		be tracker translation shared libr5icons.so libr5ui.so libr5wifi.so
-		libr5bt.so
 		bnetapi network [ TargetLibstdc++ ] localestub
 	: Settings.rdef
+	;
+
+# The Bluetooth page (docs/BLUETOOTH.md, step 3a). An add-on, so Settings
+# itself does not need libr5bt.so and libbluetooth.so, which only the regular
+# image ships.
+Addon settings_bluetooth :
+	BluetoothModule.cpp
+	SettingsFont.cpp
+	: be shared localestub libr5bt.so [ TargetLibstdc++ ]
 	;
 
 Addon settings_fonts :

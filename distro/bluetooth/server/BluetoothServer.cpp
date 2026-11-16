@@ -15,9 +15,16 @@
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 #include <errno.h>
+#include <grp.h>
+#include <pwd.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <time.h>
 #include <File.h>
 #include <FindDirectory.h>
+
+class BMessage;
+static bool radio_sender_allowed(BMessage* message);
 // SPDX-SnippetEnd
 #include <Deskbar.h>
 #include <Directory.h>
@@ -498,6 +505,14 @@ void BluetoothServer::MessageReceived(BMessage* message)
 		// SPDX-License-Identifier: MIT
 		case BT_MSG_R5_GET_RADIO:
 			status = reply.AddBool("enabled", fRadioEnabled);
+			// The radios by hci_id, so a client acquires exactly the ones it
+			// does not know yet (the plain BT_MSG_ACQUIRE_LOCAL_DEVICE hands
+			// them out in turn).
+			for (int32 i = 0; status == B_OK
+					&& i < fLocalDevicesList.CountItems(); i++) {
+				status = reply.AddInt32("hci_id",
+					fLocalDevicesList.ItemAt(i)->GetID());
+			}
 			break;
 
 		case BT_MSG_R5_SET_RADIO:
@@ -505,6 +520,14 @@ void BluetoothServer::MessageReceived(BMessage* message)
 			bool enabled;
 			if (message->FindBool("enabled", &enabled) != B_OK) {
 				status = B_BAD_VALUE;
+				break;
+			}
+			// Any program could send this; the page's lock is not enough.
+			if (!radio_sender_allowed(message)) {
+				syslog(LOG_NOTICE, "bluetooth_server: radio switch refused: "
+					"the sender is not an administrator");
+				status = B_NOT_ALLOWED;
+				reply.AddBool("enabled", fRadioEnabled);
 				break;
 			}
 			status = _SetRadioEnabled(enabled);
@@ -610,6 +633,47 @@ BluetoothServer::_RadioRequestAllowed(BMessage* message) const
 }
 
 
+// Whether the sender of a radio switch request may change a machine
+// setting: uid 0, a member of group "admin", or a team that Login gave a
+// grant (the administrator lock opened by a standard account). The same
+// rule as sender_may_change() in distro/users/AccountAdmin.cpp; Login keeps
+// its grants in /boot/system/settings/r5-machine-unlock, readable by all.
+static bool
+radio_sender_allowed(BMessage* message)
+{
+	team_id team = message->ReturnAddress().Team();
+	team_info info;
+	if (team < 0 || get_team_info(team, &info) != B_OK)
+		return false;
+	if (info.uid == 0)
+		return true;
+
+	struct passwd* account = getpwuid(info.uid);
+	struct group* admin = getgrnam("admin");
+	if (account != NULL && account->pw_name != NULL && admin != NULL
+		&& admin->gr_mem != NULL) {
+		for (int32 i = 0; admin->gr_mem[i] != NULL; i++) {
+			if (strcmp(admin->gr_mem[i], account->pw_name) == 0)
+				return true;
+		}
+	}
+
+	FILE* grants = fopen("/boot/system/settings/r5-machine-unlock", "r");
+	if (grants == NULL)
+		return false;
+	bool granted = false;
+	long grantTeam;
+	long long until;
+	time_t now = time(NULL);
+	while (!granted
+		&& fscanf(grants, " team %ld until %lld", &grantTeam, &until) == 2) {
+		granted = grantTeam == (long)team && until > (long long)now;
+	}
+	fclose(grants);
+	return granted;
+}
+
+
 static status_t
 radio_setting_path(BPath& path)
 {
@@ -661,6 +725,9 @@ BluetoothServer::_SaveRadioSetting() const
 	status = file.InitCheck();
 	if (status != B_OK)
 		return status;
+	// The next administrator may be another account in group admin
+	// (Login's refresh_machine_settings_access() sets the group).
+	file.SetPermissions(S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
 	ssize_t written = file.Write(line, strlen(line));
 	if (written != (ssize_t)strlen(line))
 		return written < 0 ? (status_t)written : B_IO_ERROR;

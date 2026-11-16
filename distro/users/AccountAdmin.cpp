@@ -1150,6 +1150,7 @@ static const char* kRepoSettings = "/boot/system/settings/Repositories_settings"
 static const char* kUserRepoSettings =
 	"/boot/home/config/settings/Repositories_settings";
 static const char* kPackageRepos = "/boot/system/settings/package-repositories";
+static const char* kBluetoothSettings = "/boot/system/settings/bluetooth";
 
 
 static void
@@ -1413,6 +1414,12 @@ refresh_machine_settings_access()
 
 	mkdir(kPackageRepos, 0755);
 	chmod_settings_tree(kPackageRepos, dirMode, fileMode, gid);
+
+	// The Bluetooth switch (bluetooth_server, docs/BLUETOOTH.md step 3a).
+	// The server runs as the signed-in person, like the network settings
+	// above, so the same rule applies.
+	mkdir(kBluetoothSettings, 0755);
+	chmod_settings_tree(kBluetoothSettings, dirMode, fileMode, gid);
 
 	write_grant_file();
 }

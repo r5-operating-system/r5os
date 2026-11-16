@@ -12,10 +12,7 @@
  */
 
 
-#include "BluetoothModule.h"
-
 #include "SettingsFont.h"
-#include "SettingsManager.h"
 #include "SettingsMessages.h"
 #include "SettingsModule.h"
 
@@ -100,8 +97,18 @@ public:
 };
 
 
-void
-register_bluetooth_page(SettingsManager& manager)
+// An add-on (settings_bluetooth), not part of Settings itself: it links
+// libr5bt.so and libbluetooth.so, which only the regular image has. In the
+// minimum image Settings starts without this page.
+extern "C" _EXPORT int32
+settings_api_version()
 {
-	manager.Add(new BluetoothModule());
+	return kSettingsApiVersion;
+}
+
+
+extern "C" _EXPORT SettingsModule*
+instantiate_settings_module()
+{
+	return new BluetoothModule();
 }

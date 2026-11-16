@@ -53,7 +53,7 @@
 // every radio, and the server refuses scans and connections, outgoing and
 // incoming, until the switch is on again. The choice is kept in
 // bluetooth_server's settings file and survives a restart.
-// Reply: bool "enabled".
+// Reply: bool "enabled", and int32 "hci_id" once per radio.
 #define BT_MSG_R5_GET_RADIO             'r5rG'
 // bool "enabled". Reply: int32 "status".
 #define BT_MSG_R5_SET_RADIO             'r5rS'

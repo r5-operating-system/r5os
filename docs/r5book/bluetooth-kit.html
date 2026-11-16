@@ -83,8 +83,9 @@ BLayoutBuilder::Group&lt;&gt;(this, B_VERTICAL, 0)
 			<div class="member"><div class="sig">BluetoothController(const BMessenger&amp; target);</div>
 				<p><code class="inline">target</code> receives the state.</p></div>
 			<div class="member"><div class="sig">status_t Start();</div>
-				<p>Runs the looper and sends the first state. Stop it with <code class="inline">Lock()</code> and
-				<code class="inline">Quit()</code>, or <code class="inline">B_QUIT_REQUESTED</code>.</p></div>
+				<p>Runs the looper and sends the first state. Stop it by sending it <code class="inline">B_QUIT_REQUESTED</code>.
+				Do not <code class="inline">Lock()</code> it from a window: libbluetooth's own calls have no
+				timeout.</p></div>
 			<p>Send these to the controller:</p>
 			<table class="facts">
 				<tr><th>kMsgBluetoothScan</th><td>Look for devices nearby, about 13 seconds.</td></tr>

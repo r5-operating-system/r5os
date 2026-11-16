@@ -16,7 +16,6 @@
 #include "SettingsMessages.h"
 #include "WallpaperModule.h"
 #include "WiFiModule.h"
-#include "BluetoothModule.h"
 #include "SettingsStorage.h"
 #include "SettingsWindow.h"
 
@@ -57,7 +56,6 @@ SettingsApp::SettingsApp()
 	register_wallpaper_page(fManager);
 	register_information_page(fManager);
 	register_wifi_page(fManager);
-	register_bluetooth_page(fManager);
 	register_connections_page(fManager);
 	register_discovery_page(fManager);
 }

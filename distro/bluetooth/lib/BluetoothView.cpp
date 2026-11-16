@@ -384,8 +384,11 @@ BluetoothView::_StopController()
 {
 	if (fController == NULL)
 		return;
-	if (fController->Lock())
-		fController->Quit();
+	// Asked to quit, not locked and quit here: Lock() waits while the
+	// controller sits in a libbluetooth call without a timeout, and its
+	// destructor cancels a scan with one. Both now happen on its own thread,
+	// never on the window's.
+	fControllerMessenger.SendMessage(B_QUIT_REQUESTED);
 	fController = NULL;
 	fControllerMessenger = BMessenger();
 }
