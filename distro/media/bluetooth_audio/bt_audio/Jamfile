@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: MIT
+# Copyright 2026 R5OS Contributors
+SubDir HAIKU_TOP src bin bt_audio ;
+
+SEARCH_SOURCE += [ FDirName $(HAIKU_TOP) src add-ons media media-add-ons
+	bluetooth_audio ] ;
+SubDirHdrs [ FDirName $(HAIKU_TOP) src add-ons media media-add-ons
+	bluetooth_audio ] ;
+
+Application bt_audio :
+	bt_audio.cpp
+	AudioSettings.cpp
+	: be [ TargetLibsupc++ ]
+	;

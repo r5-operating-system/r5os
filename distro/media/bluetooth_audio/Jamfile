@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: MIT
+# Copyright 2026 R5OS Contributors
+# bluetooth_audio.media_addon (docs/BLUETOOTH.md, step 5), regular image.
+SubDir HAIKU_TOP src add-ons media media-add-ons bluetooth_audio ;
+
+UsePrivateHeaders bluetooth ;
+
+Addon bluetooth_audio.media_addon :
+	A2DPSource.cpp
+	AudioSettings.cpp
+	BluetoothAudioAddOn.cpp
+	BluetoothAudioNode.cpp
+	sbc_encoder.cpp
+	: be media network [ TargetLibstdc++ ]
+;
