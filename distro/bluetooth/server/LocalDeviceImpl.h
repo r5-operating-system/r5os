@@ -57,7 +57,13 @@ public:
 	~LocalDeviceImpl();
 	void Unregister();
 
-	void HandleEvent(struct hci_event_header* event);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// size: what the port delivered, header included.
+	void HandleEvent(struct hci_event_header* event, size_t size);
+	static bool _EventFits(const struct hci_event_header* event, size_t size);
+	// SPDX-SnippetEnd
 
 	// Request handling
 	status_t 	ProcessSimpleRequest(BMessage* request);

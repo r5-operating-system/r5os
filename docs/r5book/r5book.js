@@ -18,6 +18,7 @@
 			["icons-kit.html#icon-bitmaps", "Icon bitmaps", true],
 			["icons-kit.html#icon-buttons", "Icon buttons", true],
 			["icons-kit.html#r5_glyph", "r5_glyph", true],
+			["icons-kit.html#r5_level_glyph", "r5_level_glyph", true],
 			["icons-kit.html#r5_icon", "r5_icon", true],
 		]},
 		{ title: "Appearance Kit", file: "appearance-kit.html", items: [

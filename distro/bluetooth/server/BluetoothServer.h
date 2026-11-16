@@ -84,7 +84,8 @@ public:
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
-	void		DispatchToDevice(hci_id hid, struct hci_event_header* header);
+	void		DispatchToDevice(hci_id hid, struct hci_event_header* header,
+					size_t size);
 	// SPDX-SnippetEnd
 
 private:
