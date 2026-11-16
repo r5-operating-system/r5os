@@ -212,15 +212,19 @@ l2cap_get_mtu(net_protocol* protocol, const struct sockaddr* address)
 
 
 static HciConnection*
-connection_for(net_buffer* buffer)
+connection_for(net_buffer* buffer, net_interface_address* interfaceAddress)
 {
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// l2cap_receive_data() has already taken the address off the buffer.
+	if (interfaceAddress == NULL || interfaceAddress->local == NULL)
+		return NULL;
 	const sockaddr_l2cap* l2capAddr = (sockaddr_l2cap*)buffer->source;
-	const sockaddr_dl* interfaceAddr = (sockaddr_dl*)buffer->interface_address->local;
+	const sockaddr_dl* interfaceAddr = (sockaddr_dl*)interfaceAddress->local;
+	// SPDX-SnippetEnd
 	struct HciConnection* connection = btCoreData->ConnectionByDestination(
 		l2capAddr->l2cap_bdaddr, interfaceAddr->sdl_index);
-	buffer->interface_address = NULL;
-		// This isn't a real interface_address; it could confuse the buffer module.
-		// FIXME: We probably should have an alternate interface for passing along data.
 	return connection;
 }
 
@@ -228,6 +232,19 @@ connection_for(net_buffer* buffer)
 status_t
 l2cap_receive_data(net_buffer* buffer)
 {
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// acl.cpp points interface_address at the plain struct inside the
+	// HciConnection, not at a reference-counted InterfaceAddress. Freeing the
+	// buffer with it set calls ReleaseReference() on that struct, so it is
+	// taken off before any path can free the buffer (review of #4291).
+	// FIXME: We probably should have an alternate interface for passing
+	// along data.
+	net_interface_address* interfaceAddress = buffer->interface_address;
+	buffer->interface_address = NULL;
+	// SPDX-SnippetEnd
+
 	if (buffer->size < sizeof(l2cap_basic_header)) {
 		ERROR("%s: invalid L2CAP packet: too small. len=%" B_PRIu32 "\n",
 			__func__, buffer->size);
@@ -267,7 +284,8 @@ l2cap_receive_data(net_buffer* buffer)
 		case L2CAP_SIGNALING_CID:
 		{
 			// We need to find the connection this packet is associated with.
-			struct HciConnection* connection = connection_for(buffer);
+			struct HciConnection* connection = connection_for(buffer,
+				interfaceAddress);
 			if (connection == NULL) {
 				ERROR("l2cap: no connection for a received signalling packet\n");
 				gBufferModule->free(buffer);
@@ -337,7 +355,15 @@ l2cap_error_received(net_error error, net_error_data* errorData, net_buffer* dat
 	CALLED();
 
 	if (error == B_NET_ERROR_UNREACH_HOST) {
-		struct HciConnection* connection = connection_for(data);
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// The same not-really-an-InterfaceAddress as in l2cap_receive_data().
+		net_interface_address* interfaceAddress = data->interface_address;
+		data->interface_address = NULL;
+		struct HciConnection* connection = connection_for(data,
+			interfaceAddress);
+		// SPDX-SnippetEnd
 		if (connection == NULL) {
 			ERROR("Couldn't find the connection to complete l2cap disconnection\n");
 			return ENOTCONN;

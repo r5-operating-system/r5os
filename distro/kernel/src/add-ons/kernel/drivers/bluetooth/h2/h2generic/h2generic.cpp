@@ -74,6 +74,15 @@ static volatile bool sCommandQuit = false;
 // parameters (Core 6.0, Vol 4, Part E, 5.4.1).
 static const size_t kMaxCommandSize = 3 + 255;
 
+// The event stream of each device slot (h2_event_stream). Only
+// event_complete() uses it, and one event transfer is in flight per device.
+// A transfer is max(HCI_MAX_EVENT_SIZE, the endpoint's packet size) bytes,
+// and an interrupt packet is at most 1024 bytes (USB 2.0, 5.7.3).
+static const size_t kMaxEventTransfer = 1024;
+static h2_event_stream sEventStreams[MAX_BT_GENERIC_USB_DEVICES];
+static uint8 sEventOut[MAX_BT_GENERIC_USB_DEVICES]
+	[kMaxEventTransfer + H2_EVENT_HEAD_SIZE];
+
 
 static cpu_status
 command_lock()
@@ -101,6 +110,7 @@ command_forget(int32 num)
 	h2_command_reset(&sCommands[num]);
 	sCommandRadio[num] = -1;
 	command_unlock(state);
+	h2_event_stream_reset(&sEventStreams[num]);
 }
 
 
@@ -148,23 +158,57 @@ command_watchdog(void*)
 }
 
 
-bool
-h2_command_event(bt_usb_dev* bdev, const uint8* data, size_t size)
-{
-	uint16 opcode;
-	if (bdev == NULL || bdev->num < 0 || bdev->num >= MAX_BT_GENERIC_USB_DEVICES
-		|| !h2_command_answer(data, size, &opcode))
-		return false;
+// Judges one event from its first bytes: an answer frees its command's
+// slot, and an answer that comes after its timeout was reported is dropped.
+struct DropLateAnswer {
+	int32	num;
 
-	cpu_status state = command_lock();
-	bool drop = h2_command_answered(&sCommands[bdev->num], opcode);
-	command_unlock(state);
+	bool operator()(const uint8* head, size_t size) const
+	{
+		uint16 opcode;
+		if (!h2_command_answer_head(head, size, &opcode))
+			return false;
 
-	if (drop) {
-		ERROR("%s: dropped the late answer for command %#06x\n", __func__,
-			opcode);
+		cpu_status state = command_lock();
+		bool drop = h2_command_answered(&sCommands[num], opcode);
+		command_unlock(state);
+
+		if (drop) {
+			ERROR("h2_command_events: dropped the late answer for command "
+				"%#06x\n", opcode);
+		}
+		return drop;
 	}
-	return drop;
+};
+
+
+// The answer check ran on each USB transfer and needed it to be one whole
+// event, so a split or a shared transfer was not seen: the command then
+// timed out although it was answered, or a late answer went up after its
+// timeout (review of #4288). It now follows the event boundaries.
+const uint8*
+h2_command_events(bt_usb_dev* bdev, const uint8* data, size_t size,
+	size_t* _outSize)
+{
+	if (bdev == NULL || bdev->num < 0 || bdev->num >= MAX_BT_GENERIC_USB_DEVICES
+		|| data == NULL) {
+		*_outSize = size;
+		return data;
+	}
+
+	h2_event_stream* stream = &sEventStreams[bdev->num];
+	if (size > kMaxEventTransfer) {
+		// Cannot happen with the transfer size used; pass it on unjudged
+		// and start over at the next transfer.
+		h2_event_stream_reset(stream);
+		*_outSize = size;
+		return data;
+	}
+
+	DropLateAnswer drop = { bdev->num };
+	*_outSize = h2_event_stream_filter(stream, data, size,
+		sEventOut[bdev->num], drop);
+	return sEventOut[bdev->num];
 }
 // SPDX-SnippetEnd
 
@@ -916,17 +960,32 @@ device_control(void* cookie, uint32 msg, void* params, size_t size)
 
 			// Noted before it is sent: the answer can come before
 			// submit_tx_command() returns.
+			uint16 dropped;
 			cpu_status state = command_lock();
-			h2_command_sent(&sCommands[bdev->num], opcode, system_time());
+			int slot = h2_command_sent(&sCommands[bdev->num], opcode,
+				system_time(), &dropped);
 			sCommandRadio[bdev->num] = bdev->hdev;
 			command_unlock(state);
+
+			// A full tracker gave up on its oldest command; report its
+			// timeout now, or its sender waits forever (review of #4288).
+			if (dropped != 0 && btDevices != NULL) {
+				ERROR("%s: too many commands waiting; reporting %#06x as "
+					"timed out\n", __func__, dropped);
+				uint8 event[H2_TIMEOUT_EVENT_SIZE];
+				h2_command_timeout_event(dropped, event);
+				btDevices->PostTransportPacket(bdev->hdev, BT_EVENT, event,
+					sizeof(event));
+			}
 
 			err = submit_tx_command(bdev, snbuf);
 			if (err != B_OK) {
 				ERROR("%s: Queing failed at submit_tx_command()\n", __func__);
 				snb_park(&bdev->snetBufferRecycleTrash, snbuf);
+				// Only this command's slot: freeing by opcode took the
+				// oldest one of that opcode, which may still be in flight.
 				state = command_lock();
-				h2_command_answered(&sCommands[bdev->num], opcode);
+				h2_command_unsent(&sCommands[bdev->num], slot, opcode);
 				command_unlock(state);
 			} else {
 				TRACE("%s: command launched\n", __func__);

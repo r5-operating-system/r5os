@@ -167,8 +167,18 @@ L2capEndpoint::Shutdown()
 
 	while (fState != CLOSED) {
 		status = _WaitForStateChange(timeout);
-		if (status != B_OK)
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// As in Connect(): free the identifier unless an answer took it.
+		if (status != B_OK) {
+			if (fConnection != NULL
+				&& l2cap_claim_command_ident(fConnection, ident, this))
+				gSocketModule->release_socket(socket);
+			fState = CLOSED;
 			return status;
+		}
+		// SPDX-SnippetEnd
 	}
 
 	return B_OK;
@@ -334,8 +344,20 @@ L2capEndpoint::Connect(const struct sockaddr* _address)
 
 	while (fState != CLOSED && fState != OPEN) {
 		status = _WaitForStateChange(timeout);
-		if (status != B_OK)
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// Timed out or interrupted: give the identifier and its socket
+		// reference back unless an answer took them first, and close, so
+		// a late answer is ignored (review of #4291).
+		if (status != B_OK) {
+			if (fConnection != NULL
+				&& l2cap_claim_command_ident(fConnection, ident, this))
+				gSocketModule->release_socket(socket);
+			fState = CLOSED;
 			return status;
+		}
+		// SPDX-SnippetEnd
 	}
 	return (fState == OPEN) ? B_OK : ECONNREFUSED;
 }
@@ -525,7 +547,24 @@ L2capEndpoint::_HandleCommandRejected(uint8 ident, uint16 reason,
 
 		case CONFIGURATION:
 			// TODO: Adjust and resend configuration request.
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			// Nothing resends it, so connect() waited forever. Close.
+			fState = CLOSED;
+			socket->error = ECONNREFUSED;
+			// SPDX-SnippetEnd
 		break;
+
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		case WAIT_FOR_DISCONNECTION_RSP:
+			// The remote refused our disconnection request; the channel is
+			// gone for us either way, and shutdown() waited forever.
+			fState = CLOSED;
+		break;
+		// SPDX-SnippetEnd
 
 	default:
 		ERROR("l2cap: unknown command unexpectedly rejected (ident %d)\n", ident);
@@ -534,6 +573,48 @@ L2capEndpoint::_HandleCommandRejected(uint8 ident, uint16 reason,
 
 	fCommandWait.NotifyAll();
 }
+
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+void
+L2capEndpoint::_HandleBadResponse(uint8 ident)
+{
+	CALLED();
+	MutexLocker locker(fLock);
+
+	ERROR("l2cap: unusable answer to our command (ident %d, state %d)\n",
+		ident, fState);
+	switch (fState) {
+		case WAIT_FOR_CONNECTION_RSP:
+		case CONFIGURATION:
+			fState = CLOSED;
+			socket->error = ECONNABORTED;
+			break;
+		case WAIT_FOR_DISCONNECTION_RSP:
+			fState = CLOSED;
+			break;
+		default:
+			break;
+	}
+
+	fCommandWait.NotifyAll();
+}
+
+
+void
+L2capEndpoint::_HandleLinkLost()
+{
+	CALLED();
+	MutexLocker locker(fLock);
+
+	fConnection = NULL;
+	fState = CLOSED;
+	socket->error = ENOTCONN;
+	fCommandWait.NotifyAll();
+}
+// SPDX-SnippetEnd
 
 
 void
@@ -624,6 +705,13 @@ L2capEndpoint::_HandleConnectionRsp(uint8 ident, const l2cap_connection_rsp& res
 
 		fState = CLOSED;
 		fCommandWait.NotifyAll();
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// It went on into CONFIGURATION and sent a configuration request
+		// for a refused channel.
+		return;
+		// SPDX-SnippetEnd
 	}
 
 	// Success: channel is now open for configuration.

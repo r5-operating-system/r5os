@@ -74,7 +74,8 @@ l2cap_handle_connection_req(HciConnection* conn, uint8 ident, net_buffer* buffer
 
 
 static void
-l2cap_handle_connection_rsp(L2capEndpoint* endpoint, uint8 ident, net_buffer* buffer)
+l2cap_handle_connection_rsp(L2capEndpoint* endpoint, uint8 ident, net_buffer* buffer,
+	bool& releaseIdent)
 {
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
@@ -97,6 +98,14 @@ l2cap_handle_connection_rsp(L2capEndpoint* endpoint, uint8 ident, net_buffer* bu
 
 	TRACE("%s: dcid=%d scid=%d result=%d status%d\n",
 		__func__, response.dcid, response.scid, response.result, response.status);
+
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// A second Connection Response with the same identifier follows.
+	if (response.result == l2cap_connection_rsp::RESULT_PENDING)
+		releaseIdent = false;
+	// SPDX-SnippetEnd
 
 	endpoint->_HandleConnectionRsp(ident, response);
 }
@@ -246,6 +255,12 @@ l2cap_handle_configuration_req(HciConnection* conn, uint8 ident, net_buffer* buf
 		// Reject without doing anything else.
 		send_l2cap_configuration_rsp(conn, ident, endpoint->DestinationChannelID(), 0,
 			l2cap_configuration_rsp::RESULT_UNKNOWN_OPTION, options.rejected);
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// The response clones the options; the buffer was leaked here.
+		gBufferModule->free(options.rejected);
+		// SPDX-SnippetEnd
 		gSocketModule->release_socket(endpoint->socket);
 		return B_OK;
 	}
@@ -291,6 +306,10 @@ l2cap_handle_configuration_rsp(HciConnection* conn, L2capEndpoint* endpoint,
 		// Reject without doing anything else.
 		send_l2cap_command_reject(conn, ident,
 			l2cap_command_reject::REJECTED_NOT_UNDERSTOOD, 0, 0, 0);
+		// No usable answer will come for this identifier: free it and
+		// wake the waiting connect() (it kept waiting before).
+		releaseIdent = true;
+		endpoint->_HandleBadResponse(ident);
 		return B_OK;
 	}
 	// SPDX-SnippetEnd
@@ -408,7 +427,8 @@ l2cap_handle_info_rsp(L2capEndpoint* endpoint, uint8 ident, net_buffer* buffer)
 
 
 static status_t
-l2cap_handle_command_reject(L2capEndpoint* endpoint, uint8 ident, net_buffer* buffer)
+l2cap_handle_command_reject(L2capEndpoint* endpoint, uint8 ident, net_buffer* buffer,
+	uint16 length)
 {
 	if (endpoint == NULL) {
 		ERROR("l2cap: unexpected command rejected: ident %d unknown\n", ident);
@@ -425,12 +445,13 @@ l2cap_handle_command_reject(L2capEndpoint* endpoint, uint8 ident, net_buffer* bu
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
-	// Only what is left after the reason (it asked for up to the whole
-	// buffer size from that offset, which read() refused).
+	// Only what this command has after the reason: the buffer also holds
+	// the commands after it in the same packet (review of #4291).
 	l2cap_command_reject_data data = {};
-	if (buffer->size > sizeof(l2cap_command_reject)) {
+	if (length > sizeof(l2cap_command_reject)
+		&& buffer->size >= length) {
 		gBufferModule->read(buffer, sizeof(l2cap_command_reject), &data,
-			min_c(buffer->size - sizeof(l2cap_command_reject),
+			min_c(length - sizeof(l2cap_command_reject),
 				sizeof(l2cap_command_reject_data)));
 	}
 	// SPDX-SnippetEnd
@@ -459,10 +480,13 @@ send_l2cap_command(HciConnection* conn, uint8 code, uint8 ident, net_buffer* com
 		basicHeader->dcid = htole16(L2CAP_SIGNALING_CID);
 	}
 	command->type = conn->handle;
-	status_t status = btDevices->PostACL(conn->Hid, command);
-	if (status != B_OK)
-		gBufferModule->free(command);
-	return status;
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// PostACL() owns the buffer, also on failure (it freed part of it on
+	// some errors, so freeing it here was a double free).
+	return btDevices->PostACL(conn->Hid, command);
+	// SPDX-SnippetEnd
 }
 
 
@@ -576,6 +600,9 @@ l2cap_handle_signaling_command(HciConnection* connection, net_buffer* buffer)
 	// buffer is always freed.
 	status_t result = B_OK;
 	while (buffer->size != 0) {
+		// Every round must consume at least the 4 header bytes; stop
+		// rather than spin when it does not (review of #4291).
+		const size_t sizeBefore = buffer->size;
 		NetBufferHeaderReader<l2cap_command_header> commandHeader(buffer);
 		if (commandHeader.Status() != B_OK) {
 			result = ENOBUFS;
@@ -586,8 +613,26 @@ l2cap_handle_signaling_command(HciConnection* connection, net_buffer* buffer)
 		const uint8 ident = commandHeader->ident;
 		const uint16 length = le16toh(commandHeader->length);
 		commandHeader.Remove();
+		if (buffer->size >= sizeBefore) {
+			result = EMSGSIZE;
+			break;
+		}
+
+		// An answer takes its identifier, and with it the socket reference,
+		// before anything else, so a waiting connect() or shutdown() is also
+		// woken by an answer that turns out to be broken (review of #4291).
+		L2capEndpoint* endpoint = NULL;
+		if (L2CAP_IS_SIGNAL_RSP(code)) {
+			endpoint = static_cast<L2capEndpoint*>(
+				l2cap_take_command_ident(connection, ident));
+		}
 
 		const int check = l2cap_parse_check(code, length, buffer->size);
+		if (check != L2CAP_PARSE_HANDLE && endpoint != NULL) {
+			endpoint->_HandleBadResponse(ident);
+			gSocketModule->release_socket(endpoint->socket);
+			endpoint = NULL;
+		}
 		if (check == L2CAP_PARSE_TRUNCATED) {
 			ERROR("%s: invalid L2CAP signaling command packet, code=%#x, "
 				"ident=%d, length=%d, buffer size=%" B_PRIu32 "\n", __func__,
@@ -607,18 +652,14 @@ l2cap_handle_signaling_command(HciConnection* connection, net_buffer* buffer)
 			continue;
 		}
 
-		L2capEndpoint* endpoint = NULL;
-		bool releaseIdent = false;
-		if (L2CAP_IS_SIGNAL_RSP(code)) {
-			endpoint = static_cast<L2capEndpoint*>(
-				btCoreData->lookup_command_ident(connection, ident));
-			releaseIdent = true;
-		}
+		// A handler clears this when more answers with this identifier
+		// follow (a pending connection, a configuration continuation).
+		bool releaseIdent = true;
 		// SPDX-SnippetEnd
 
 		switch (code) {
 			case L2CAP_COMMAND_REJECT_RSP:
-				l2cap_handle_command_reject(endpoint, ident, buffer);
+				l2cap_handle_command_reject(endpoint, ident, buffer, length);
 				break;
 
 			case L2CAP_CONNECTION_REQ:
@@ -626,7 +667,8 @@ l2cap_handle_signaling_command(HciConnection* connection, net_buffer* buffer)
 				break;
 
 			case L2CAP_CONNECTION_RSP:
-				l2cap_handle_connection_rsp(endpoint, ident, buffer);
+				l2cap_handle_connection_rsp(endpoint, ident, buffer,
+					releaseIdent);
 				break;
 
 			case L2CAP_CONFIGURATION_REQ:
@@ -671,12 +713,18 @@ l2cap_handle_signaling_command(HciConnection* connection, net_buffer* buffer)
 				break;
 		}
 
-		// Only release the ident if no more signals with it are expected.
-		if (releaseIdent) {
-			btCoreData->free_command_ident(connection, ident);
-			if (endpoint != NULL)
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// The identifier was taken above; put it back while more answers
+		// with it are expected, else drop its socket reference.
+		if (endpoint != NULL) {
+			if (releaseIdent)
 				gSocketModule->release_socket(endpoint->socket);
+			else
+				l2cap_keep_command_ident(connection, ident, endpoint);
 		}
+		// SPDX-SnippetEnd
 
 		// SPDX-SnippetBegin
 		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors

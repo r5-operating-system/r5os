@@ -165,8 +165,16 @@ hci_assemble(Ops& ops, uint8 type, const uint8* data, size_t count)
 
 		if (have == headerSize) {
 			uint8 header[kHciAclHeader];
-			if (ops.Read(buffer, 0, header, headerSize))
-				target = hci_assemble_packet_size(type, header);
+			// A failed read left target at the header size, so the header
+			// alone went up as a whole packet and the payload was taken for
+			// the next one (review of #4288). Drop it, as above.
+			if (!ops.Read(buffer, 0, header, headerSize)) {
+				ops.SetCurrent(type, NULL);
+				ops.Destroy(buffer);
+				result = B_NO_MEMORY;
+				continue;
+			}
+			target = hci_assemble_packet_size(type, header);
 		}
 
 		if (have >= headerSize && have == target)
