@@ -507,6 +507,15 @@ BluetoothController::MessageReceived(BMessage* message)
 			_Pair(message);
 			break;
 
+		case BT_MSG_R5_PAIR_RESULT:
+		{
+			BMessage result(kMsgBluetoothPairResult);
+			result.AddBool("paired", message->GetBool("paired", false));
+			result.AddString("name", message->GetString("name", ""));
+			fTarget.SendMessage(&result, (BHandler*)NULL, kServerTimeout);
+			break;
+		}
+
 		case kMsgBluetoothSelectRadio:
 		{
 			int32 id;
@@ -815,7 +824,8 @@ BluetoothController::_Pair(BMessage* message)
 	request.AddUInt16("clock_offset", 0);
 	request.AddUInt32("record", message->GetUInt32("class", 0));
 	// Not waiting: pairing takes as long as the person needs.
-	server.SendMessage(&request, (BHandler*)NULL, kServerTimeout);
+	// The answer (BT_MSG_R5_PAIR_RESULT) comes back to this looper.
+	server.SendMessage(&request, this, kServerTimeout);
 }
 
 

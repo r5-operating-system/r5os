@@ -543,6 +543,26 @@ mediatek_setup(bt_usb_dev* bdev)
 		return status;
 	}
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// The low-power setting MediaTek's MT79xx radios get from Linux after
+	// Bluetooth is on: vendor HCI command 0xFC7A with sleep mode 5, a
+	// duration and a host duration of 0x0640, wake-up pin 0 and time
+	// compensation 0 (the values, not code, described from the Linux
+	// driver's behaviour). Without it, every LE link to a mouse failed in
+	// its first connection events on the 5625U (0x3E), while scanning and
+	// Classic worked. Its answer comes later on the event endpoint, where
+	// nobody waits for it.
+	uint8 sleep[3 + 7] = { 0x7a, 0xfc, 7, 0x05, 0x40, 0x06, 0x40, 0x06,
+		0x00, 0x00 };
+	size_t sleepActual = 0;
+	status_t sleepStatus = usb->send_request(bdev->dev, USB_CLASS_OUT, 0x00,
+		0, 0, sizeof(sleep), sleep, &sleepActual);
+	ERROR("%s: low power setting %s\n", __func__,
+		sleepStatus == B_OK ? "sent" : strerror(sleepStatus));
+	// SPDX-SnippetEnd
+
 	ERROR("%s: MT%04" B_PRIx32 " ready in %" B_PRIdBIGTIME " ms\n", __func__,
 		chipId & 0xffff, (system_time() - started) / 1000);
 

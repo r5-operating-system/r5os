@@ -1,5 +1,47 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-16 - Bluetooth: the page says when pairing runs, works or fails; LE connects with the report's address type
+
+Problem: pressing Pair showed nothing: no progress, no result; an LE connect refused by the controller sent no notice either. A second read-only review of the three stick boots also found that the LE address type from the scan (0 to 3) was collapsed to public or random, and that the legacy fallback after extended commands is refused by specification (0x0C).
+
+What changed:
+- The Bluetooth page (`libr5bt.so`): after Pair the status line says "Pairing with …" and Pair is disabled; then "Paired with …" or "Pairing with … did not work." until the next scan. New notification for the target: `kMsgBluetoothPairResult` (additive; the view takes its two fields from its reserved room, so its size stays the same).
+- `bluetooth_server`: one result for every end of a pairing started on the page, Classic and LE (`BT_MSG_R5_PAIR_RESULT` to the page, plus the notification, with "notice sent/not sent" in the syslog), including a Classic connection that never came up and an LE connect the controller refused.
+- LE: Extended Create Connection gets the report's address type unchanged; one try, no legacy fallback; the pairing log line has the raw address type, the Flags AD and the primary PHY. Classic: the IO capability reply logs its three bytes.
+
+Tested: built for x86_64; QEMU with SMAP (Settings Bluetooth page open, all Bluetooth tests ok, no panic); `fuzz-bt.sh le`: 0 crashes. The status line, the results and the LE connect need the stick; not tested there.
+
+## 2026-11-16 - Bluetooth: Classic pairing answered with an IO capability BR/EDR has (third stick boot)
+
+Problem: on the third stick boot the radio refused our IO Capability Request Reply with 0x12 (Invalid HCI Command Parameters), and every Classic pairing ended in 0x37. We sent KeyboardDisplay (0x04), an LE-only value; BR/EDR takes 0x00 to 0x03 (Core 6.0, Vol 4, Part E, 7.1.29). This was in step 4 since it was written.
+
+What changed: `bluetooth_server` answers DisplayYesNo for BR/EDR, as BlueZ: a keyboard still gets Passkey Entry with the number shown here, a phone Numeric Comparison, a gamepad Just Works. The same boot: the outside diagnosis's changes (MediaTek low power setting, SSP and Secure Connections host bits) are in and logged clean; LE still ends in 0x3E (open, a second read-only review is asked); the legacy connect after extended commands is refused with 0x0C, as allowed.
+
+Tested: built for x86_64. Not on a stick yet.
+
+## 2026-11-16 - Bluetooth: first two stick boots of Low Energy, pairing windows and notifications
+
+Problem: the first two stick boots of PR #4314 on the 5625U (MT7922) showed the LE setup and scan working (`le event mask 0x1a5f`, extended scan; the Designer Mouse, the 8BitDo M30 and phones in the list), but no pairing: every LE link to the Designer Mouse dropped in the same second with `0x3E`, and the Classic M30 ended in `0x37` (Simple Pairing Not Supported by Host). Haiku's "Incoming Connection" window showed at every connection, also our own Pair, with a broken name.
+
+What changed:
+- Between boot 1 and 2: Classic reads Read Remote Extended Features page 1 before Authentication Requested (BlueZ's order); LE uses BlueZ's connection parameters (30 to 50 ms, 420 ms timeout, full scan window), no PHY preference, two retries after `0x3E`, Pair pressed again while one runs is ignored; more steps in the syslog. Boot 2: Classic now gets to the IO Capability Request and fails with `0x37` right after our reply; LE unchanged. The cause is being investigated in a separate read-only session (both failures open).
+- After boot 2: the "Incoming Connection" window is gone; the end of a pairing started here is a notification (`PairingNotice.cpp`, BNotification: "Paired with ..." or "Pairing with ... did not work"), Classic and LE. Numeric Comparison shows the six digits with Yes and No (Classic when the device has DisplayYesNo or KeyboardDisplay, LE Secure Connections); before, it was confirmed without showing them. LE Passkey Entry where the device shows the number has a window to type it (was refused). SMP and ATT procedures without an answer end after 30 s and close the link, checked every 5 s.
+
+Tested: built for x86_64 (`build-locked.sh`); QEMU smoke with SMAP (no radio). The windows, notifications and timeouts need a real device; not tested. ARM64 and RISC-V 64 not built or tested.
+
+## 2026-11-16 - Bluetooth steps 1c and 6: Low Energy links, LE Secure Connections pairing, BLE HID over GATT
+
+Problem: R5 had no Bluetooth Low Energy. The owner's Microsoft Modern mouse is BLE, so it could not be used; the owner chose BLE before audio (docs/BLUETOOTH.md, step 4, "Order after this step").
+
+What changed (on top of the step 4 fixes, PR #4311):
+- Kernel, step 1c: `btCoreData` (now in `distro/`) registers LE links from the LE Meta connection events and keeps the LE buffer length; `PostACL()` splits LE packets by it. `l2cap` serves the LE signalling channel (Connection Parameter Update, LE and enhanced credit-based connections, credits, reconfigure), fixed-channel sockets for ATT and SMP (uid 0, `<R5BluetoothLE.h>`), and credit-based channels with K-frame segmentation and reassembly (EATT's mode on PSM 0x27 included).
+- `bluetooth_server`, step 6 (`LEManager`): LE Meta in the Event Mask and the LE setup after every reset with only the supported bits; LE scan (extended or legacy) in the existing scan list; Pair makes an LE link and pairs over SMP (Secure Connections with ECDH P-256 through OpenSSL `libcrypto`, Just Works, Numeric Comparison, passkey shown here; legacy pairing for older devices); keys in `/boot/system/settings/bluetooth/le_paired_devices` (0600, never logged); paired devices come back through the controller's accept list; a GATT client finds the HID service and feeds the `bluetooth_hid` driver of step 4, so a BLE mouse or keyboard goes to input_server.
+- Fixed on the way, found in review (two passes: own and an independent one): a deadlock between the HCI receive thread (holds the device list lock while it delivers up) and any thread that sent while holding an L2CAP endpoint lock; this also hit Classic. L2CAP now sends through one send thread (`l2cap_tx.cpp`) that calls `PostACL()` without L2CAP locks. `AddConnection()` added a known connection to the list a second time; a packet was matched to the first link of its address instead of its own link, and a device on one link could close, reconfigure or feed a channel of another link (now refused); closing a socket bound but never used asked an identifier of a NULL connection; a full receive queue leaked a buffer; `_SendQueued()` wrote into a buffer `PostACL()` already owned; `htole32` was the 16-bit swap; a forged answer to a command we never send could take the identifier of a waiting connect(); SMP keys that arrive before the Encryption Change event were dropped; a dual-mode device found by the Classic inquiry now pairs Classic; the resolving list is written again after a new pairing; LE Command Complete answers that the kit also waits for (Read BD_ADDR) go to both.
+- Mistake during the work: the LE sockets were bound with a zero address, but Haiku's `BDADDR_ANY` is ff:ff:ff:ff:ff:ff, so the first QEMU run showed `le channels missing`; fixed.
+
+Limits: nothing ran with a real radio or LE device; the pass rule (`smp sc pairing ok`, a BLE mouse moving) is open. Numeric Comparison is confirmed without showing the number (as Classic, step 4), and the stored key does not record that; Passkey Entry where this computer must type the device's number is refused; no SMP timer (a stuck pairing may restart after 30 s); no ACL flow control by Number of Completed Packets (an existing gap, now more visible with credits); the HID report layout is read again on each connection; subrating not asked; bluetooth_server does not open EATT channels itself; the ISO endpoints of `h2generic` are not in this step; a device with both a BR/EDR and an LE link at once is sent to by address (`sendto`, `connect()`), which finds the first link.
+
+Tested: built for x86_64 with `scripts/build-locked.sh`; QEMU with SMAP (`run-qemu-smoke.sh`, own `BT_WORK`), no radio: `bt_smp_crypto_test: ok` (every SMP function against the sample data of Core 6.0, Vol 3, Part H, Appendix D; ECDH with the debug keys, a point off the curve refused), `l2cap_coc_test`, `bt_server_smoke_test`, `bt_l2cap_abi_test`, `bt_hid_driver_test`; `scripts/fuzz-bt.sh l2cap 60`, `le 60` and `hci 60`: 0 crashes. Manual SMAP review: no new user pointer in the kernel. ARM64 and RISC-V 64 not built or tested.
 ## 2026-11-16 - Documentation: R5Book on disk, linked from the welcome page
 
 Problem: the R5Book (developer guide, `docs/r5book`) was only in the repository. The welcome page in WebPositive linked the Be Book and the Haiku Book, not the R5Book.

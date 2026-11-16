@@ -37,6 +37,19 @@ public:
 									size_t listLength, const uint8** _start,
 									size_t* _length);
 
+	// BLE HID over GATT (LEManager, step 6): the same driver node. The
+	// output hook gets the reports the driver has for an LE device
+	// (keyboard lights), report ID first.
+	typedef	void				(*LEOutputHook)(int32 id, const uint8* data,
+									size_t length, void* cookie);
+			int32				CreateLEDevice(const uint8* descriptor,
+									size_t length, uint32* _handlers);
+			void				LEInput(int32 id, const uint8* data,
+									size_t length);
+			void				DestroyLEDevice(int32 id);
+			void				SetLEOutputHook(LEOutputHook hook,
+									void* cookie);
+
 private:
 			struct Session;
 
@@ -63,6 +76,8 @@ private:
 			thread_id			fListenThreads[2];
 			thread_id			fOutputThread;
 	volatile bool				fQuitting;
+			LEOutputHook		fLEOutputHook;
+			void*				fLEOutputCookie;
 };
 
 

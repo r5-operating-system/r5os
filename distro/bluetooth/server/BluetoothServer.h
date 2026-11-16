@@ -37,6 +37,7 @@
 // SPDX-License-Identifier: MIT
 // Private to the server: posted to itself at the end of ReadyToRun().
 static const uint32 kMsgReportStarted = 'r5bs';
+static const uint32 kMsgR5LEPulse = 'r5lp';
 
 // B_SYSTEM_SETTINGS_DIRECTORY/bluetooth: the radio switch and the pairing
 // keys, root's alone (mode 0700). create makes it and sets that mode.
@@ -160,6 +161,7 @@ private:
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
 	HIDHost*				fHIDHost;
+	class BMessageRunner*	fLEPulse;
 	// SPDX-SnippetEnd
 };
 

@@ -61,8 +61,10 @@ enum {
 enum {
 	kMsgBluetoothStateChanged	= 'btST',
 		// A flattened BluetoothState
-	kMsgBluetoothRadioResult	= 'btRR'
+	kMsgBluetoothRadioResult	= 'btRR',
 		// bool "on", int32 "status"
+	kMsgBluetoothPairResult		= 'btPR'
+		// bool "paired", string "name": the end of a kMsgBluetoothPair
 };
 
 
@@ -234,8 +236,12 @@ private:
 			BStringView*		fScanStatus;
 			BButton*			fScanButton;
 
+			// The pairing status line (taken from the reserved room; the
+			// size of the class stays the same).
+			BString*			fPairStatus;
+			int32				fPairing;
 			// room for later private state (libr5bt.so)
-			uint32				_reserved[8];
+			uint32				_reserved[5];
 };
 
 

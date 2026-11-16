@@ -45,6 +45,8 @@ PasskeyWindow::PasskeyWindow(const bdaddr_t& address, hci_id hid,
 	fAddress(address),
 	fHid(hid),
 	fEntry(true),
+	fCompare(false),
+	fLE(false),
 	fAnswered(false),
 	fPasskey(0),
 	fTyped(0),
@@ -65,8 +67,32 @@ PasskeyWindow::PasskeyWindow(const bdaddr_t& address, hci_id hid,
 	fAddress(address),
 	fHid(hid),
 	fEntry(false),
+	fCompare(false),
+	fLE(false),
 	fAnswered(true),
 	fPasskey(passkey),
+	fTyped(0),
+	fPasskeyText(NULL),
+	fTypedView(NULL),
+	fPairButton(NULL)
+{
+	_Build(name);
+}
+
+
+PasskeyWindow::PasskeyWindow(const bdaddr_t& address, hci_id hid,
+	const BString& name, uint32 number, bool compare, bool le)
+	:
+	BWindow(BRect(0, 0, 10, 10), B_TRANSLATE("Bluetooth pairing"),
+		B_TITLED_WINDOW, B_NOT_ZOOMABLE | B_NOT_RESIZABLE
+			| B_AUTO_UPDATE_SIZE_LIMITS | B_CLOSE_ON_ESCAPE),
+	fAddress(address),
+	fHid(hid),
+	fEntry(!compare && number == kLEEntry),
+	fCompare(compare),
+	fLE(le),
+	fAnswered(!compare && number != kLEEntry),
+	fPasskey(number == kLEEntry ? 0 : number),
 	fTyped(0),
 	fPasskeyText(NULL),
 	fTypedView(NULL),
@@ -83,7 +109,31 @@ PasskeyWindow::_Build(const BString& name)
 	BLayoutBuilder::Group<> builder(this, B_VERTICAL);
 	builder.SetInsets(B_USE_WINDOW_SPACING);
 
-	if (fEntry) {
+	if (fCompare) {
+		text = B_TRANSLATE("Does %name% show this number?");
+		text.ReplaceFirst("%name%", name);
+
+		char digits[8];
+		snprintf(digits, sizeof(digits), "%06" B_PRIu32, fPasskey);
+		BStringView* numberView = new BStringView("number", digits);
+		BFont font(be_bold_font);
+		font.SetSize(font.Size() * 2.5f);
+		numberView->SetFont(&font);
+		numberView->SetAlignment(B_ALIGN_CENTER);
+		memset(digits, 0, sizeof(digits));
+
+		fPairButton = new BButton("pair", B_TRANSLATE("Yes, pair"),
+			new BMessage(kMsgPair));
+		builder.Add(new BStringView("text", text))
+			.Add(numberView)
+			.AddGroup(B_HORIZONTAL)
+				.AddGlue()
+				.Add(new BButton("cancel", B_TRANSLATE("No"),
+					new BMessage(kMsgCancel)))
+				.Add(fPairButton)
+			.End();
+		SetDefaultButton(fPairButton);
+	} else if (fEntry) {
 		text = B_TRANSLATE("Type the number that %name% shows.");
 		text.ReplaceFirst("%name%", name);
 		fPasskeyText = new BTextControl("passkey", NULL, "", NULL);
@@ -193,11 +243,8 @@ PasskeyWindow::_SendReply(bool accept)
 	if (fAnswered)
 		return;
 
-	BMessage request(BT_MSG_HANDLE_SIMPLE_REQUEST);
-	request.AddInt32("hci_id", fHid);
-	request.AddInt16("eventExpected", HCI_EVENT_CMD_COMPLETE);
-
-	if (accept) {
+	uint32 passkey = 0;
+	if (accept && fEntry) {
 		const char* text = fPasskeyText->Text();
 		size_t length = strlen(text);
 		if (length == 0 || length > 6
@@ -205,12 +252,50 @@ PasskeyWindow::_SendReply(bool accept)
 			fPasskeyText->MarkAsInvalid(true);
 			return;
 		}
-		uint32 passkey = (uint32)strtoul(text, NULL, 10);
+		passkey = (uint32)strtoul(text, NULL, 10);
 		if (passkey > R5_PASSKEY_MAX) {
 			fPasskeyText->MarkAsInvalid(true);
 			return;
 		}
+	}
 
+	if (fLE) {
+		// LE pairing runs in LEManager, not in the radio.
+		BMessage answer(kMsgLEUserAnswer);
+		answer.AddData("bdaddr", B_RAW_TYPE, &fAddress, sizeof(fAddress));
+		answer.AddBool("accept", accept);
+		answer.AddUInt32("passkey", passkey);
+		be_app_messenger.SendMessage(&answer);
+		passkey = 0;
+		fAnswered = true;
+		return;
+	}
+
+	BMessage request(BT_MSG_HANDLE_SIMPLE_REQUEST);
+	request.AddInt32("hci_id", fHid);
+	request.AddInt16("eventExpected", HCI_EVENT_CMD_COMPLETE);
+
+	if (fCompare) {
+		// Numeric Comparison: User Confirmation Reply or Negative Reply
+		// (Core 6.0, Vol 4, Part E, 7.1.30 and 7.1.31).
+		if (accept) {
+			BluetoothCommand<typed_command(hci_cp_user_confirm_reply)>
+				command(OGF_LINK_CONTROL, OCF_USER_CONFIRM_REPLY);
+			command->bdaddr = fAddress;
+			request.AddData("raw command", B_ANY_TYPE, command.Data(),
+				command.Size());
+			request.AddInt16("opcodeExpected",
+				PACK_OPCODE(OGF_LINK_CONTROL, OCF_USER_CONFIRM_REPLY));
+		} else {
+			BluetoothCommand<typed_command(hci_cp_user_confirm_neg_reply)>
+				command(OGF_LINK_CONTROL, OCF_USER_CONFIRM_NEG_REPLY);
+			command->bdaddr = fAddress;
+			request.AddData("raw command", B_ANY_TYPE, command.Data(),
+				command.Size());
+			request.AddInt16("opcodeExpected",
+				PACK_OPCODE(OGF_LINK_CONTROL, OCF_USER_CONFIRM_NEG_REPLY));
+		}
+	} else if (accept) {
 		BluetoothCommand<typed_command(r5_hci_cp_user_passkey_reply)>
 			command(OGF_LINK_CONTROL, R5_OCF_USER_PASSKEY_REPLY);
 		command->bdaddr = fAddress;
