@@ -12,9 +12,9 @@ The R5Book (`docs/r5book/index.html`) shows each part with a picture, what it is
 
 | Library | Header | Source | What it is |
 |---|---|---|---|
-| `libr5icons.so` | `<R5Icons.h>` | `distro/icons` | Icons and icon buttons. `docs/ICONS.md` |
+| `libr5icons.so` | `<R5Icons.h>` | `distro/icons` | Icons and icon buttons, line glyphs (`r5_glyph_draw()`) and level glyphs for signal and battery (`r5_level_glyph_draw()`). `docs/ICONS.md` |
 | `libr5ui.so` | `<R5UI.h>` | `distro/ui` | The screen picture, cards, the sidebar, the page heading, the administrator lock (`<AdminLock.h>`), and the window effects (`<WindowEffects.h>`). It links `libr5icons.so` because a locked sidebar row draws `R5_ICON_LOCKED` |
-| `libr5wifi.so` | `<R5WiFi.h>` | `distro/wifi/lib` | The Wi-Fi panel (`WiFiView`), the Wi-Fi state machine (`WiFiController`), the network list, and the Wi-Fi glyphs. From air/OS, MIT. Regular image only. See "Wi-Fi Kit" below |
+| `libr5wifi.so` | `<R5WiFi.h>` | `distro/wifi/lib` | The Wi-Fi panel (`WiFiView`), the Wi-Fi state machine (`WiFiController`), the network list, and the Wi-Fi glyphs. From air/OS, MIT. Regular image only. It links `libr5icons.so`, which draws the signal bars. See "Wi-Fi Kit" below |
 
 `scripts/apply-icons.py` and `scripts/apply-r5ui.py` copy the sources into the Haiku tree, copy the header to `headers/os/interface/`, and add the library to the regular image and the minimum image. On a running system the files are `/system/lib/libr5icons.so` and `/system/lib/libr5ui.so`. The soname is the file name, with no version suffix, the same way `libbe.so` is named.
 

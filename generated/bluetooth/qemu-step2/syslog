@@ -1,0 +1,975 @@
+KERN: options = 0
+KERN: APM version 0.0 available, flags 0.
+KERN: smp: using ACPI to detect MP configuration
+KERN: smp: local apic address is 0xfee00000
+KERN: smp: found local APIC with id 0
+KERN: smp: found local APIC with id 1
+KERN: smp: found io APIC with id 0 and address 0xfec00000
+KERN: VESA version = 3.0, capabilities 1
+KERN: OEM string: SeaBIOS VBE(C) 2011
+KERN:  0x100: 640 x 400 x 8 (a = 187, mem = 4, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 0 0 g: 0 0 b: 0 0 dcmi: 0
+KERN:  0x101: 640 x 480 x 8 (a = 187, mem = 4, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 0 0 g: 0 0 b: 0 0 dcmi: 0
+KERN:  0x102: 800 x 600 x 4 (a = 59, mem = 3, phy = 0, p = 4, b = 1)
+KERN: 	mask: r: 0 0 g: 0 0 b: 0 0 dcmi: 0
+KERN:  0x103: 800 x 600 x 8 (a = 187, mem = 4, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 0 0 g: 0 0 b: 0 0 dcmi: 0
+KERN:  0x104: 1024 x 768 x 4 (a = 59, mem = 3, phy = 0, p = 4, b = 1)
+KERN: 	mask: r: 0 0 g: 0 0 b: 0 0 dcmi: 0
+KERN:  0x105: 1024 x 768 x 8 (a = 187, mem = 4, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 0 0 g: 0 0 b: 0 0 dcmi: 0
+KERN:  0x106: 1280 x 1024 x 4 (a = 59, mem = 3, phy = 0, p = 4, b = 1)
+KERN: 	mask: r: 0 0 g: 0 0 b: 0 0 dcmi: 0
+KERN:  0x107: 1280 x 1024 x 8 (a = 187, mem = 4, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 0 0 g: 0 0 b: 0 0 dcmi: 0
+KERN:  0x10d: 320 x 200 x 15 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 5 10 g: 5 5 b: 5 0 dcmi: 0
+KERN:  0x10e: 320 x 200 x 16 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 5 11 g: 6 5 b: 5 0 dcmi: 0
+KERN:  0x10f: 320 x 200 x 24 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 0
+KERN:  0x110: 640 x 480 x 15 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 5 10 g: 5 5 b: 5 0 dcmi: 0
+KERN:  0x111: 640 x 480 x 16 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 5 11 g: 6 5 b: 5 0 dcmi: 0
+KERN:  0x112: 640 x 480 x 24 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 0
+KERN:  0x113: 800 x 600 x 15 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 5 10 g: 5 5 b: 5 0 dcmi: 0
+KERN:  0x114: 800 x 600 x 16 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 5 11 g: 6 5 b: 5 0 dcmi: 0
+KERN:  0x115: 800 x 600 x 24 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 0
+KERN:  0x116: 1024 x 768 x 15 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 5 10 g: 5 5 b: 5 0 dcmi: 0
+KERN:  0x117: 1024 x 768 x 16 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 5 11 g: 6 5 b: 5 0 dcmi: 0
+KERN:  0x118: 1024 x 768 x 24 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 0
+KERN:  0x119: 1280 x 1024 x 15 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 5 10 g: 5 5 b: 5 0 dcmi: 0
+KERN:  0x11a: 1280 x 1024 x 16 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 5 11 g: 6 5 b: 5 0 dcmi: 0
+KERN:  0x11b: 1280 x 1024 x 24 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 0
+KERN:  0x11c: 1600 x 1200 x 8 (a = 187, mem = 4, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 0 0 g: 0 0 b: 0 0 dcmi: 0
+KERN:  0x11d: 1600 x 1200 x 15 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 5 10 g: 5 5 b: 5 0 dcmi: 0
+KERN:  0x11e: 1600 x 1200 x 16 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 5 11 g: 6 5 b: 5 0 dcmi: 0
+KERN:  0x11f: 1600 x 1200 x 24 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 0
+KERN:  0x140: 320 x 200 x 32 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 2
+KERN:  0x141: 640 x 400 x 32 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 2
+KERN:  0x142: 640 x 480 x 32 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 2
+KERN:  0x143: 800 x 600 x 32 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 2
+KERN:  0x144: 1024 x 768 x 32 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 2
+KERN:  0x145: 1280 x 1024 x 32 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 2
+KERN:  0x146: 320 x 200 x 8 (a = 187, mem = 4, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 0 0 g: 0 0 b: 0 0 dcmi: 0
+KERN:  0x147: 1600 x 1200 x 32 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 2
+KERN:  0x148: 1152 x 864 x 8 (a = 187, mem = 4, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 0 0 g: 0 0 b: 0 0 dcmi: 0
+KERN:  0x149: 1152 x 864 x 15 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 5 10 g: 5 5 b: 5 0 dcmi: 0
+KERN:  0x14a: 1152 x 864 x 16 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 5 11 g: 6 5 b: 5 0 dcmi: 0
+KERN:  0x14b: 1152 x 864 x 24 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 0
+KERN:  0x14c: 1152 x 864 x 32 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 2
+KERN:  0x175: 1280 x 768 x 16 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 5 11 g: 6 5 b: 5 0 dcmi: 0
+KERN:  0x176: 1280 x 768 x 24 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 0
+KERN:  0x177: 1280 x 768 x 32 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 2
+KERN:  0x178: 1280 x 800 x 16 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 5 11 g: 6 5 b: 5 0 dcmi: 0
+KERN:  0x179: 1280 x 800 x 24 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 0
+KERN:  0x17a: 1280 x 800 x 32 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 2
+KERN:  0x17b: 1280 x 960 x 16 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 5 11 g: 6 5 b: 5 0 dcmi: 0
+KERN:  0x17c: 1280 x 960 x 24 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 0
+KERN:  0x17d: 1280 x 960 x 32 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 2
+KERN:  0x17e: 1440 x 900 x 16 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 5 11 g: 6 5 b: 5 0 dcmi: 0
+KERN:  0x17f: 1440 x 900 x 24 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 0
+KERN:  0x180: 1440 x 900 x 32 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 2
+KERN:  0x181: 1400 x 1050 x 16 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 5 11 g: 6 5 b: 5 0 dcmi: 0
+KERN:  0x182: 1400 x 1050 x 24 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 0
+KERN:  0x183: 1400 x 1050 x 32 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 2
+KERN:  0x184: 1680 x 1050 x 16 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 5 11 g: 6 5 b: 5 0 dcmi: 0
+KERN:  0x185: 1680 x 1050 x 24 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 0
+KERN:  0x186: 1680 x 1050 x 32 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 2
+KERN:  0x187: 1920 x 1200 x 16 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 5 11 g: 6 5 b: 5 0 dcmi: 0
+KERN:  0x188: 1920 x 1200 x 24 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 0
+KERN:  0x189: 1920 x 1200 x 32 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 2
+KERN:  0x18a: 2560 x 1600 x 16 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 5 11 g: 6 5 b: 5 0 dcmi: 0
+KERN:  0x18b: 2560 x 1600 x 24 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 0
+KERN:  0x18c: 2560 x 1600 x 32 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 2
+KERN:  0x18d: 1280 x 720 x 16 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 5 11 g: 6 5 b: 5 0 dcmi: 0
+KERN:  0x18e: 1280 x 720 x 24 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 0
+KERN:  0x18f: 1280 x 720 x 32 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 2
+KERN:  0x190: 1920 x 1080 x 16 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 5 11 g: 6 5 b: 5 0 dcmi: 0
+KERN:  0x191: 1920 x 1080 x 24 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 0
+KERN:  0x192: 1920 x 1080 x 32 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 2
+KERN:  0x193: 1600 x 900 x 16 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 5 11 g: 6 5 b: 5 0 dcmi: 0
+KERN:  0x194: 1600 x 900 x 24 (a = 187, mem = 6, phy = fd0KERN: 00000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 0
+KERN:  0x195: 1600 x 900 x 32 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 2
+KERN:  0x196: 2560 x 1440 x 16 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 5 11 g: 6 5 b: 5 0 dcmi: 0
+KERN:  0x197: 2560 x 1440 x 24 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 0
+KERN:  0x198: 2560 x 1440 x 32 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 8 16 g: 8 8 b: 8 0 dcmi: 2
+KERN:  0x199: 3840 x 2160 x 16 (a = 187, mem = 6, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 5 11 g: 6 5 b: 5 0 dcmi: 0
+KERN:  0x000: 40 x 25 x 4 (a = 47, mem = 0, phy = 0, p = 1, b = 1)
+KERN: 	mask: r: 0 0 g: 0 0 b: 0 0 dcmi: 0
+KERN:  0x001: 40 x 25 x 4 (a = 47, mem = 0, phy = 0, p = 1, b = 1)
+KERN: 	mask: r: 0 0 g: 0 0 b: 0 0 dcmi: 0
+KERN:  0x002: 80 x 25 x 4 (a = 47, mem = 0, phy = 0, p = 1, b = 1)
+KERN: 	mask: r: 0 0 g: 0 0 b: 0 0 dcmi: 0
+KERN:  0x003: 80 x 25 x 4 (a = 47, mem = 0, phy = 0, p = 1, b = 1)
+KERN: 	mask: r: 0 0 g: 0 0 b: 0 0 dcmi: 0
+KERN:  0x004: 320 x 200 x 2 (a = 59, mem = 1, phy = 0, p = 1, b = 2)
+KERN: 	mask: r: 0 0 g: 0 0 b: 0 0 dcmi: 0
+KERN:  0x005: 320 x 200 x 2 (a = 59, mem = 1, phy = 0, p = 1, b = 2)
+KERN: 	mask: r: 0 0 g: 0 0 b: 0 0 dcmi: 0
+KERN:  0x006: 640 x 200 x 1 (a = 59, mem = 1, phy = 0, p = 1, b = 2)
+KERN: 	mask: r: 0 0 g: 0 0 b: 0 0 dcmi: 0
+KERN:  0x007: 80 x 25 x 4 (a = 39, mem = 0, phy = 0, p = 1, b = 1)
+KERN: 	mask: r: 0 0 g: 0 0 b: 0 0 dcmi: 0
+KERN:  0x00d: 320 x 200 x 4 (a = 59, mem = 3, phy = 0, p = 4, b = 1)
+KERN: 	mask: r: 0 0 g: 0 0 b: 0 0 dcmi: 0
+KERN:  0x00e: 640 x 200 x 4 (a = 59, mem = 3, phy = 0, p = 4, b = 1)
+KERN: 	mask: r: 0 0 g: 0 0 b: 0 0 dcmi: 0
+KERN:  0x00f: 640 x 350 x 1 (a = 59, mem = 3, phy = 0, p = 4, b = 1)
+KERN: 	mask: r: 0 0 g: 0 0 b: 0 0 dcmi: 0
+KERN:  0x010: 640 x 350 x 4 (a = 59, mem = 3, phy = 0, p = 4, b = 1)
+KERN: 	mask: r: 0 0 g: 0 0 b: 0 0 dcmi: 0
+KERN:  0x011: 640 x 480 x 1 (a = 59, mem = 3, phy = 0, p = 4, b = 1)
+KERN: 	mask: r: 0 0 g: 0 0 b: 0 0 dcmi: 0
+KERN:  0x012: 640 x 480 x 4 (a = 59, mem = 3, phy = 0, p = 4, b = 1)
+KERN: 	mask: r: 0 0 g: 0 0 b: 0 0 dcmi: 0
+KERN:  0x013: 320 x 200 x 8 (a = 187, mem = 4, phy = fd000000, p = 1, b = 1)
+KERN: 	mask: r: 0 0 g: 0 0 b: 0 0 dcmi: 0
+KERN:  0x06a: 800 x 600 x 4 (a = 59, mem = 3, phy = 0, p = 4, b = 1)
+KERN: 	mask: r: 0 0 g: 0 0 b: 0 0 dcmi: 0
+KERN: Using mode 0x144
+KERN: VESA compatible graphics!
+KERN: EDID1: 4f
+KERN: EDID2: ebx 103
+KERN: EDID3: 4f
+KERN: EDID info:
+KERN:   EDID version: 1.4
+KERN:   Vendor: RHT Product ID: 0x1234
+KERN:   Serial #: 0
+KERN:   Produced in week/year: 42/2014
+KERN:   Type: Digital
+KERN:   Digital Bit Depth: 8
+KERN:   DisplayPort interface
+KERN:   Size: 32 cm x 20 cm
+KERN:   Gamma=2.2
+KERN:   Red (X,Y)=(0.639,0.33)
+KERN:   Green (X,Y)=(0.299,0.599)
+KERN:   Blue (X,Y)=(0.15,0.059)
+KERN:   White (X,Y)=(0.312,0.329)
+KERN: Supported Future Video Modes:
+KERN: 2048x1152@60Hz (id=49377)
+KERN: 1920x1080@60Hz (id=49361)
+KERN: 1920x1920@60Hz (id=209)
+KERN: 1600x1200@60Hz (id=16553)
+KERN: 1680x1680@60Hz (id=179)
+KERN: 1440x1440@60Hz (id=149)
+KERN: 1280x1024@60Hz (id=32897)
+KERN: 1280x960@60Hz (id=16513)
+KERN: Supported VESA Video Modes:
+KERN: 640x480@60Hz
+KERN: 800x600@60Hz
+KERN: 1024x768@60Hz
+KERN: Additional Video Mode (1280x800@74Hz):
+KERN: clock=107.299 MHz
+KERN: h: (1280, 1600, 1638, 1728)
+KERN: v: (800, 804, 808, 828)
+KERN: size: 32.5 cm x 20.3 cm
+KERN: border: 0 cm x 0 cm
+KERN: Horizontal frequency range = 30..160 kHz
+KERN: Vertical frequency range = 50..125 Hz
+KERN: Maximum pixel clock = 2550 MHz
+KERN: Monitor Name: QEMU Monitor
+KERN: Extension blocks: 1
+KERN: crtc: h 1600/1638/1728, v 804/808/828, pixel clock 107300000, refresh 7607
+KERN: Welcome to the Haiku boot loader!
+KERN: Haiku revision: r5-2026.1-dev
+KERN: number of drives: 1
+KERN: add_partitions_for(0x00101a20, mountFS = no)
+KERN: add_partitions_for(fd = 0, mountFS = no)
+KERN: 0x00101b88 Partition::Partition
+KERN: 0x00101b88 Partition::Scan()
+KERN: check for partitioning_system: GUID Partition Map
+KERN: check for partitioning_system: Intel Partition Map
+KERN:   priority: 610
+KERN: check for partitioning_system: Intel Extended Partition
+KERN: boot partition offset: 0
+KERN: 0x00101b88 Partition::_Mount check for file_system: BFS Filesystem
+KERN: PackageVolumeInfo::SetTo()
+KERN: PackageVolumeInfo::_InitState(): failed to parse activated-packages: No such file or directory
+KERN: load kernel kernel_x86_64...
+KERN: video mode: 1280x800x32
+KERN: ucode_load: system/non-packaged/data/firmware/amd-ucode/microcode_amd_fam19h.bin
+KERN: ucode_load: microcode file read in memory
+KERN: smp: found 2 cpus
+KERN: smp: apic_phys = 0xfee00000
+KERN: smp: ioapic_phys = 0xfec00000
+KERN: smp: apic (mapped) = 0x81db1000
+KERN: GDT at 0x5ff80
+KERN: phys memory ranges:
+KERN:     base 0x0000000000100000, length 0x000000007fee0000
+KERN: allocated phys memory ranges:
+KERN:     base 0x0000000000100000, length 0x0000000000181000
+KERN:     base 0x0000000000800000, length 0x0000000000b19000
+KERN:     base 0x0000000003f00000, length 0x0000000000100000
+KERN: allocated virt memory ranges:
+KERN:     base 0xffffffff80000000, length 0x0000000001db7000
+KERN: maximum boot loader heap usage: 807672, currently used: 578640
+KERN: kernel args ranges:
+KERN:     base 0xffffffff81109000, length 0x0000000000080000
+KERN:     base 0xffffffff815c5000, length 0x0000000000080000
+KERN:     base 0xffffffff81a91000, length 0x0000000000080000
+KERN:     base 0xffffffff81d31000, length 0x0000000000080000
+KERN: kernel entry at 0xffffffff8006b6a0
+KERN: smp: booting 1 other cpu
+KERN: Welcome to kernel debugger output!
+KERN: Haiku revision: r5-2026.1-dev, debug level: 2
+KERN: CPU: TSC frequency calibrated via HPET: 1872301
+KERN: R5 kernel: arch_timer TSC guards active
+KERN: CPU 0: type 0 family 15 extended_family 10 model 0 extended_model 5 stepping 0, string 'AuthenticAMD'
+KERN: CPU 0: vendor 'AMD' model name 'AMD Ryzen 5 5625U with Radeon Graphics         '
+KERN: R5 CPU topology: leaf1 ebx 0x00020800 ecx 0xf7f83203 stored ecx 0xf7f83203 80000008 ecx 0x00001001 8000001e ebx 0x00000000 smt mask 0x0 core mask 0x1
+KERN: CPU 0: apic id 0, package 0, core 0, smt 0
+KERN: CPU 0: features: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clfsh mmx fxsr sse sse2 htt sse3 pclmulqdq ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt tscdeadline aes xsave avx f16c rdrnd hypervisor syscall nx mmxext ffxsr pdpe1gb long arat tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap cflushopt clwb sha_ni umip vaes vpclmulqdq rdpid stibp ssbd xsaveopt xsavec xgetbv1 xsaves clzero ibpb amd_ssbd virt_ssbd 
+KERN: CPU 0: patch_level 0x0
+KERN: using PAT for memory type configuration
+KERN: PAT MSR on CPU 0 before init: 0x7040600070406
+KERN: PAT MSR on CPU 0 after init: 0x7040100070406
+KERN: reserve_io_interrupt_vectors: reserved 16 vectors starting from 0
+KERN: kernel malloc: using slab_heap
+KERN: mark_page_range_in_use(0x0, 0x100): start page is before free list
+KERN: mark_page_range_in_use(0x0, 0xa0): start page is before free list
+KERN: Welcome to syslog debug output!
+KERN: Haiku revision: r5-2026.1-dev
+KERN: enable SMEP
+KERN: enable SMAP
+KERN: arch_altcodepatch_replace found 22 altcodepatches for tag 1
+KERN: arch_altcodepatch_replace found 285 altcodepatches for tag 2
+KERN: arch_altcodepatch_replace found 2 altcodepatches for tag 3
+KERN: arch_altcodepatch_replace found 5 altcodepatches for tag 4
+KERN: arch_altcodepatch_replace found 4 altcodepatches for tag 5
+KERN: enable XSAVEC 0x7 832
+KERN: CPU 1: type 0 family 15 extended_family 10 model 0 extended_model 5 stepping 0, string 'AuthenticAMD'
+KERN: CPU 1: vendor 'AMD' model name 'AMD Ryzen 5 5625U with Radeon Graphics         '
+KERN: CPU 1: apic id 1, package 0, core 1, smt 0
+KERN: CPU 1: patch_level 0x0
+KERN: PAT MSR on CPU 1 before init: 0x7040600070406
+KERN: PAT MSR on CPU 1 after init: 0x7040100070406
+KERN: reserve_io_interrupt_vectors: reserved 3 vectors starting from 221
+KERN: APIC timer frequency: 999303135
+KERN: reserve_io_interrupt_vectors: reserved 1 vectors starting from 219
+KERN: arch_init_timer: using APIC timer.
+KERN: allocate_commpage_entry(2, 16) -> 0x0000000000000200
+KERN: scheduler_init: found 2 logical cpus and 0 cache levels
+KERN: scheduler switches: single core: false, cpu load tracking: false, core load tracking: true
+KERN: scheduler: switching to low latency mode
+KERN: msi support enabled
+KERN: PCI: pci_module_init
+KERN: ACPI: RSDP 0x00000000000F5290 000014 (v00 BOCHS )
+KERN: ACPI: RSDT 0x000000007FFE2390 000034 (v01 BOCHS  BXPC     00000001 BXPC 00000001)
+KERN: ACPI: FACP 0x000000007FFE223C 000074 (v01 BOCHS  BXPC     00000001 BXPC 00000001)
+KERN: ACPI: DSDT 0x000000007FFE0040 0021FC (v01 BOCHS  BXPC     00000001 BXPC 00000001)
+KERN: ACPI: FACS 0x000000007FFE0000 000040
+KERN: ACPI: APIC 0x000000007FFE22B0 000080 (v03 BOCHS  BXPC     00000001 BXPC 00000001)
+KERN: ACPI: HPET 0x000000007FFE2330 000038 (v01 BOCHS  BXPC     00000001 BXPC 00000001)
+KERN: ACPI: WAET 0x000000007FFE2368 000028 (v01 BOCHS  BXPC     00000001 BXPC 00000001)
+KERN: smbios_scan
+KERN: found System Information atKERN:  0xffffffff82527052
+KERN: found vendor 1 product 2
+KERN: smbios_scan found vendor QEMU product Standard PC (i440FX + PIIX, 1996)
+KERN: ACPI: Forced DSDT copy: length 0x021FC copied locally, original unmapped
+KERN: ACPI: 1 ACPI AML tables successfully acquired and loaded
+KERN: ACPI: Enabled 2 GPEs in block 00 to 0F
+KERN: found io-apic with address 0xfec00000, global interrupt base 0, apic-id 0
+KERN: mapping io-apic 0 at physical address 0xfec00000
+KERN: io-apic 0 has range 0-23, 24 entries, version 0x00170011, apic-id 0
+KERN: setting ACPI interrupt model to APIC
+KERN: failed to put ACPI into APIC interrupt model, ignoring
+KERN: found interrupt override for bus 0, source irq 0, global irq 2, flags 0x00000000
+KERN: found interrupt override for bus 0, source irq 5, global irq 5, flags 0x0000000d
+KERN: found interrupt override for bus 0, source irq 9, global irq 9, flags 0x0000000d
+KERN: found interrupt override for bus 0, source irq 10, global irq 10, flags 0x0000000d
+KERN: found interrupt override for bus 0, source irq 11, global irq 11, flags 0x0000000d
+KERN: free_io_interrupt_vectors: freeing 16 vectors starting from 0
+KERN: reserve_io_interrupt_vectors: reserved 24 vectors starting from 0
+KERN: using io-apics for interrupt routing
+KERN: allocate_commpage_entry(3, 69) -> 0x0000000000000210
+KERN: slab memory manager: created area 0xffffffff80801000 (194)
+KERN: slab memory manager: created area 0xffffffff86001000 (195)
+KERN: publish device: node 0xffffffff82140500, path acpi/namespace, module bus_managers/acpi/namespace/device_v1
+KERN: publish device: node 0xffffffff82140500, path acpi/call, module bus_managers/acpi/call/device_v1
+KERN: registering power button
+KERN: PCI: mechanism 1 controller found
+KERN: IRQ routing table with 2 entries
+KERN: address 0x1ffff; pin 0; source 0xffffffff82526690 0; pci 0:1 pin 1 func mask 8; bios irq: 9; gsi 9; config 0x02
+KERN: address 0x3ffff; pin 0; source 0xffffffff82526390 0; pci 0:3 pin 1 func mask 1; bios irq: 11; gsi 11; config 0x02
+KERN: PCI: [dom 0, bus  0] bus   0, device  0, function  0: vendor 8086, device 1237, revision 02
+KERN: PCI:   class_base 06, class_function 00, class_api 00
+KERN: PCI:   vendor 8086: Intel Corporation
+KERN: PCI:   device 1237: 440FX - 82441FX PMC [Natoma] (Qemu virtual machine)
+KERN: PCI:   info: Bridge (Host bridge)
+KERN: PCI:   line_size 00, latency 00, header_type 00, BIST 00
+KERN: PCI:   ROM base host 00000000, pci 00000000, size 00000000
+KERN: PCI:   cardbus_CIS 00000000, subsystem_id 1100, subsystem_vendor_id 1af4
+KERN: PCI:   interrupt_line 00, interrupt_pin 00, min_grant 00, max_latency 00
+KERN: PCI:   base reg 0: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: PCI:   base reg 1: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: PCI:   base reg 2: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: PCI:   base reg 3: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: PCI:   base reg 4: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: PCI:   base reg 5: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: PCI:   Capabilities: (not supported)
+KERN: PCI: [dom 0, bus  0] bus   0, device  1, function  0: vendor 8086, device 7000, revision 00
+KERN: PCI:   class_base 06, class_function 01, class_api 00
+KERN: PCI:   vendor 8086: Intel Corporation
+KERN: PCI:   device 7000: 82371SB PIIX3 ISA [Natoma/Triton II] (Qemu virtual machine)
+KERN: PCI:   info: Bridge (ISA bridge)
+KERN: PCI:   line_size 00, latency 00, header_type 80, BIST 00
+KERN: PCI:   ROM base host 00000000, pci 00000000, size 00000000
+KERN: PCI:   cardbus_CIS 00000000, subsystem_id 1100, subsystem_vendor_id 1af4
+KERN: PCI:   interrupt_line 00, interrupt_pin 00, min_grant 00, max_latency 00
+KERN: PCI:   base reg 0: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: PCI:   base reg 1: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: PCI:   base reg 2: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: PCI:   base reg 3: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: PCI:   base reg 4: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: PCI:   base reg 5: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: PCI:   Capabilities: (not supported)
+KERN: PCI: [dom 0, bus  0] bus   0, device  1, function  1: vendor 8086, device 7010, revision 00
+KERN: PCI:   class_base 01, class_function 01, class_api 80
+KERN: PCI:   vendor 8086: Intel Corporation
+KERN: PCI:   device 7010: 82371SB PIIX3 IDE [Natoma/Triton II] (Qemu virtual machine)
+KERN: PCI:   info: Mass storage controller (IDE interface, ISA Compatibility mode-only controller, supports bus mastering)
+KERN: PCI:   line_size 00, latency 00, header_type 00, BIST 00
+KERN: PCI:   ROM base host 00000000, pci 00000000, size 00000000
+KERN: PCI:   cardbus_CIS 00000000, subsystem_id 1100, subsystem_vendor_id 1af4
+KERN: PCI:   interrupt_line 00, interrupt_pin 00, min_grant 00, max_latency 00
+KERN: PCI:   base reg 0: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: PCI:   base reg 1: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: PCI:   base reg 2: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: PCI:   base reg 3: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: PCI:   base reg 4: host 0000c040, pci 0000c040, size 00000010, flags 01
+KERN: PCI:   base reg 5: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: PCI:   Capabilities: (not supported)
+KERN: PCI: [dom 0, bus  0] bus   0, device  1, function  3: vendor 8086, device 7113, revision 03
+KERN: PCI:   class_base 06, class_function 80, class_api 00
+KERN: PCI:   vendor 8086: Intel Corporation
+KERN: PCI:   device 7113: 82371AB/EB/MB PIIX4 ACPI (Qemu virtual machine)
+KERN: PCI:   info: Bridge
+KERN: PCI:   line_size 00, latency 00, header_type 00, BIST 00
+KERN: PCI:   ROM base host 00000000, pci 00000000, size 00000000
+KERN: PCI:   cardbus_CIS 00000000, subsystem_id 1100, subsystem_vendor_id 1af4
+KERN: PCI:   interrupt_line 09, interrupt_pin 01, min_grant 00, max_latency 00
+KERN: PCI:   base reg 0: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: PCI:   base reg 1: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: PCI:   base reg 2: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: PCI:   base reg 3: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: PCI:   base reg 4: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: PCI:   base reg 5: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: PCI:   Capabilities: (not supported)
+KERN: PCI: [dom 0, bus  0] bus   0, device  2, function  0: vendor 1234, device 1111, revision 02
+KERN: PCI:   class_base 03, class_function 00, class_api 00
+KERN: PCI:   vendor 1234: Unknown
+KERN: PCI:   device 1111: Unknown
+KERN: PCI:   info: Display controller (VGA compatible controller, VGA controller)
+KERN: PCI:   line_size 00, latency 00, header_type 00, BIST 00
+KERN: PCI:   ROM base host feba0000, pci feba0000, size 00010000
+KERN: PCI:   cardbus_CIS 00000000, subsystem_id 1100, subsystem_vendor_id 1af4
+KERN: PCI:   interrupt_line 00, interrupt_pin 00, min_grant 00, max_latency 00
+KERN: PCI:   base reg 0: host fd000000, pci fd000000, size 01000000, flags 08
+KERN: PCI:   base reg 1: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: PCI:   base reg 2: host febb0000, pci febb0000, size 00001000, flags 00
+KERN: PCI:   base reg 3: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: PCI:   base reg 4: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: PCI:   base reg 5: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: PCI:   Capabilities: (not supported)
+KERN: PCI: [dom 0, bus  0] bus   0, device  3, function  0: vendor 8086, device 100e, revision 03
+KERN: PCI:   class_base 02, class_function 00, class_api 00
+KERN: PCI:   vendor 8086: Intel Corporation
+KERN: PCI:   device 100e: 82540EM Gigabit Ethernet Controller (QEMU Virtual Machine)
+KERN: PCI:   info: Network controller (Ethernet controller)
+KERN: PCI:   line_size 00, latency 00, header_type 00, BIST 00
+KERN: PCI:   ROM base host feb00000, pci feb00000, size 00080000
+KERN: PCI:   cardbus_CIS 00000000, subsystem_id 1100, subsystem_vendor_id 1af4
+KERN: PCI:   interrupt_line 0b, interrupt_pin 01, min_grant 00, max_latency 00
+KERN: PCI:   base reg 0: host feb80000, pci feb80000, size 00020000, flags 00
+KERN: PCI:   base reg 1: host 0000c000, pci 0000c000, size 00000040, flags 01
+KERN: PCI:   base reg 2: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: PCI:   base reg 3: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: PCI:   base reg 4: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: PCI:   base reg 5: host 00000000, pci 00000000, size 00000000, flags 00
+KERN: PCI:   Capabilities: (not supported)
+KERN: get_boot_partitions(): boot volume message:
+KERN: KMessage: buffer: 0xffffffff81d5069KERN: 8 (size/capacity: 347/347), flags: 0xa
+KERN:   field: "booted from image" (BOOL): false
+KERN:   field: "partition offset"  (LLNG): 0 (0x0)
+KERN:   field: "packaged"          (BOOL): true
+KERN:   field: "boot method"       (LONG): 0 (0x0)
+KERN:   field: "boot drive number" (LLNG): 128 (0x80)
+KERN:   field: "disk identifier"   (RAWT): data at 0xffffffff81d507a4, 79 bytes
+KERN: get_boot_partitions(): boot method type: 0
+KERN: PCI-ATA: Controller in legacy mode: cmd 0x1f0, ctrl 0x3f6, irq 14
+KERN: PCI-ATA: enabling bus mastering
+KERN: PCI-ATA: pcicmd changed from 0x0103 to 0x0107
+KERN: PCI-ATA: init channel...
+KERN: PCI-ATA: channel index 0
+KERN: PCI-ATA: bus master base 0xc040
+KERN: PCI-ATA: init channel done
+KERN: ata 0: _DevicePresent: device 0, presence 1
+KERN: ata 0: _DevicePresent: device 1, presence 1
+KERN: ata 0: deviceMask 3
+KERN: ata 0: probing device 0
+KERN: ata 0: signature of device 0: 0x0000
+KERN: ata 0-0: model number: QEMU HARDDISK                           
+KERN: ata 0-0: serial number: QM00001             
+KERN: ata 0-0: firmware rev.: 2.5+    
+KERN: ata 0-0: using DMA mode 0x15
+KERN: ata 0: identified ATA device 0
+KERN: ata 0: probing device 1
+KERN: ata 0 error: device 1 failed, error code is 0x00
+KERN: ata 0: signature of device 1: 0xffff
+KERN: ata 0 error: device ready not set
+KERN: ata 0-1 error: sending identify request failed
+KERN: ata 0 error: command failed, error bit is set. status 0x41, error 0x04
+KERN: publish device: node 0xffffffff82143ac0, path disk/ata/0/master/raw, module drivers/disk/scsi/scsi_disk/device_v1
+KERN: ata 0-0 error: invalid target lun 1 for ATA device
+KERN: ata 0-0 error: invalid target lun 2 for ATA device
+KERN: ata 0-0 error: invalid target lun 3 for ATA device
+KERN: ata 0-0 error: invalid target lun 4 for ATA device
+KERN: ata 0-0 error: invalid target lun 5 for ATA device
+KERN: ata 0-0 error: invalid target lun 6 for ATA device
+KERN: ata 0-0 error: invalid target lun 7 for ATA device
+KERN: ata 0 error: target device not present
+KERN: ata 0 error: invalid target device
+KERN: Last message repeated 12 times.
+KERN: PCI-ATA: Controller in legacy mode: cmd 0x170, ctrl 0x376, irq 15
+KERN: PCI-ATA: init channel...
+KERN: PCI-ATA: channel index 1
+KERN: PCI-ATA: bus master base 0xc048
+KERN: PCI-ATA: init channel done
+KERN: ata 1: _DevicePresent: device 0, presence 1
+KERN: ata 1: _DevicePresent: device 1, presence 1
+KERN: ata 1: deviceMask 3
+KERN: ata 1: probing device 0
+KERN: ata 1: signature of device 0: 0xeb14
+KERN: atapi 1-0: model number: QEMU DVD-ROM                            
+KERN: atapi 1-0: serial number: QM00003             
+KERN: atapi 1-0: firmware rev.: 2.5+    
+KERN: atapi 1-0: using DMA mode 0x15
+KERN: ata 1: identified ATAPI device 0
+KERN: ata 1: probing device 1
+KERN: ata 1 error: device 1 failed, error code is 0x00
+KERN: ata 1: signature of device 1: 0xffff
+KERN: ata 1 error: device ready not set
+KERN: ata 1-1 error: sending identify request failed
+KERN: publish device: node 0xffffffff82144240, path disk/atapi/1/master/raw, module drivers/disk/scsi/scsi_cd/device_v1
+KERN: atapi 1-0 error: invalid target lun 1
+KERN: atapi 1-0 error: invalid target lun 2
+KERN: atapi 1-0 error: invalid target lun 3
+KERN: atapi 1-0 error: invalid target lun 4
+KERN: atapi 1-0 error: invalid target lun 5
+KERN: atapi 1-0 error: invalid target lun 6
+KERN: atapi 1-0 error: invalid target lun 7
+KERN: ata 1 error: target device not present
+KERN: ata 1 error: invalid target device
+KERN: Last message repeated 12 times.
+KERN: periph_check_capacity: TRIM: Setting trim support to disabled
+KERN: DMAResource@0xffffffff82143b60: low/high 0/100000000, max segment count 512, align 2, boundary 65536, max transfer 33553920, max segment size 33554432
+KERN: slab memory manager: created area 0xffffffff87801000 (220)
+KERN: periph_check_capacity: TRIM: Setting trim support to disabled
+Last message repeated 1 time
+KERN: identify(0, 0xffffffff82571648)
+KERN: raw_command: 
+KERN: device 0: /dev/disk/ata/0/master/raw
+KERN:   media status:      No error
+KERN:   device flags:      2
+KERN:   offset:            0
+KERN:   size:              2147483648 (2048 MB)
+KERN:   content size:      2147483648
+KERN:   block size:        2048
+KERN:   physical block size: 512
+KERN:   child count:       0
+KERN:   index:             -1
+KERN:   status:            0
+KERN:   flags:             3
+KERN:   volume:            -1
+KERN:   disk system:       file_systems/bfs/v1
+KERN:   name:              QEMU HARDDISK
+KERN:   content name:      R5
+KERN:   type:              <NULL>
+KERN:   content type:      Be File System
+KERN:   params:            <NULL>
+KERN:   content params:    <NULL>
+KERN: device 1: /dev/disk/atapi/1/master/raw
+KERN:   media status:      No media present
+KERN:   device flags:      5
+KERN: Identified boot partition by partition offset.
+KERN: periph_check_capacity: TRIM: Setting trim support to disabled
+Last message repeated 1 time
+KERN: bfs: mounted "R5" (root node at 262144, device = /dev/disk/ata/0/master/raw)
+KERN: Mounted boot partition: /dev/disk/ata/0/master/raw
+KERN: packagefs: [   17] Adding packages from "/boot/system/packages"
+KERN: packagefs: [   17] Failed to open packages activation file: No such file or directory
+KERN: packagefs: [   17] Loading packages from activation file failed. Loading all packages in packages directory.
+KERN: slab memory manager: created area 0xffffffff88001000 (253)
+KERN: slab memory manager: created area 0xffffffff88801000 (255)
+KERN: packagefs: [   17] StringPool usage:
+KERN: packagefs: [   17]   total unique strings:       11743,   133576 bytes, overhead: 187888 bytes + 131072 bytes
+KERN: packagefs: [   17]   total strings with dups:    99440,  1132910 bytes
+KERN: packagefs: [   17]   unshared strings:            1288
+KERN: packagefs: [   17]   bytes saved:               680374
+KERN: slab memory manager: created area 0xffffffff89001000 (256)
+KERN: packagefs: [   17] Adding packages from "/boot/home/config/packages"
+KERN: packagefs: [   17] Failed to open packages activation file: No such file or directory
+KERN: packagefs: [   17] Loading packages from activation file failed. Loading all packages in packages directory.
+KERN: packagefs: [   17] StringPool usage:
+KERN: packagefs: [   17]   total unique strings:       11743,   133576 bytes, overhead: 187888 bytes + 131072 bytes
+KERN: packagefs: [   17]   total strings with dups:    99451,  1132975 bytes
+KERN: packagefs: [   17]   unshared strings:            1283
+KERN: packagefs: [   17]   bytes saved:               680439
+KERN: module: Search for file_cache/launch_speedup/v1 failed.
+KERN: file_systems/vboxsf: B_MODULE_INIT
+KERN: vboxsf: module ready
+KERN: file_systems/vboxsf: B_MODULE_UNINIT
+KERN: publish device: node 0xffffffff8214b180, path disk/virtual/ram/control, module drivers/disk/virtual/ram_disk/control/device_v1
+KERN: loaded driver /boot/system/add-ons/kernel/drivers/dev/pty
+KERN: loaded driver /boot/system/add-ons/kernel/drivers/dev/null
+KERN: usb_modeswitch: init_hardware()
+KERN: usb_modeswitch: init_driver()
+KERN: usb_modeswitch: trying module bus_managers/usb/v3.1
+KERN: usb_modeswitch: publish_devices()
+KERN: usb_modeswitch: uninit_driver()
+KERN: loaded driver /boot/system/add-ons/kernel/drivers/dev/usb_modeswitch
+KERN: loaded driver /boot/system/add-ons/kernel/drivers/dev/dprintf
+KERN: con_init: trying module console/frame_buffer/v1
+KERN: loaded driver /boot/system/add-ons/kernel/drivers/dev/console
+KERN: mtrr: [cpu 0] MTRRs are enabled
+KERN: mtrr: [cpu 0] default type is 6 write-back
+KERN: mtrr: [cpu 0] fixed range MTRRs are enabled
+KERN: mtrr: [cpu 0] 0: base: 0x80000000; length: 0x80000000; type: 0 uncacheable
+KERN: ignoring MTRRs due to PAT support
+KERN: allocate_commpage_entry(4, 16) -> 0x0000000000000258
+KERN: R5 CPU: cpu 0 vendor amd family 0x19 model 0x50 name AMD Ryzen 5 5625U with Radeon Graphics         
+KERN: R5 CPU: tsc_hz 2293950639
+KERN: R5 CPU: hypervisor bit set, hardware MSRs not read
+KERN: R5 CPU: no msr write
+KERN: R5 CPU: publish misc/r5_pstate status 0
+KERN: R5 kernel: arch_cpu from distro, microcode match uses installed_cpu
+KERN: no valid cpufreq module found
+KERN: no valid cpuidle module found
+KERN: ignoring MTRRs due to PAT support
+KERN: kernel debugger extension "debugger/usb_keyboard/v1": loaded
+KERN: kernel debugger extension "debugger/run_on_exit/v1": loaded
+KERN: kernel debugger extension "debugger/disasm/v1": loaded
+KERN: kernel debugger extension "debugger/invalidate_on_exit/v1": loaded
+KERN: kernel debugger extension "debugger/hangman/v1": loaded
+KERN: publish device: node 0xffffffff888d1048, path random, module bus_managers/random/device_v1
+KERN: publish device: node 0xffffffff888d1048, path urandom, module bus_managers/random/device_v1
+KERN: publish device: node 0xffffffff888d1228, path power/button/power_fixed, module drivers/power/acpi_button/device_v1
+KERN: REG: Failed to open shadow passwd DB file "/etc/shadow": No such file or directory
+KERN: package_daemon: [3969830:    39] root at "/boot" (device: 3, node: 262144) registered
+KERN: package_daemon: [3972193:KERN:     39] volume at "/boot/system" registered
+KERN: package_daemon: [3974085:    39] volume at "/boot/home/config" registered
+KERN: Test: and [file_exists [/system/bin/FirstBootPrompt], or [not [file_exists [/boot/home/config/settings/Locale settings]], readonly ]] -> 1
+KERN: R5 net_server: NetServer from distro
+KERN: register_domain(5, internet6)
+KERN: register_domain(10, bluetooth)
+KERN: register_domain(9, unix)
+KERN: register_domain(1, internet)
+KERN: unregister_domain(0xffffffff886cbb00, 5, internet6)
+KERN: unregister_domain(0xffffffff886cbb80, 9, unix)
+KERN: unregister_domain(0xffffffff886cc200, 10, bluetooth)
+KERN: unregister_domain(0xffffffff886cb100, 1, internet)
+KERN: register_domain(5, internet6)
+KERN: unregister_domain(0xffffffff886cc280, 5, internet6)
+KERN: register_domain(4, link)
+KERN: unregister_domain(0xffffffff886cc400, 4, link)
+KERN: nvmm: DecodeAssists not available; performance may be reduced
+KERN: register_domain(5, internet6)
+KERN: nvmm: DecodeAssists not available; performance may be reduced
+KERN: nvmm: init_driver OK
+KERN: register_domain(10, bluetooth)
+KERN: loaded driver /boot/system/add-ons/kernel/drivers/dev/misc/nvmm
+KERN: register_domain(9, unix)
+KERN: loaded driver /boot/system/add-ons/kernel/drivers/dev/misc/mem
+KERN: register_domain(1, internet)
+KERN: unregister_domain(0xffffffff886cc580, 5, internet6)
+KERN: unregister_domain(0xffffffff886cc700, 9, unix)
+KERN: unregister_domain(0xffffffff886cc680, 10, bluetooth)
+KERN: unregister_domain(0xffffffff886cc900, 1, internet)
+KERN: register_domain(5, internet6)
+KERN: unregister_domain(0xffffffff886cca00, 5, internet6)
+KERN: loaded driver /boot/system/add-ons/kernel/drivers/dev/misc/poke
+KERN: register_domain(1, internet)
+KERN: unregister_domain(0xffffffff886cb200, 1, internet)
+KERN: register_domain(5, internet6)
+KERN: register_domain(10, bluetooth)
+KERN: register_domain(9, unix)
+KERN: register_domain(1, internet)
+KERN: unregister_domain(0xffffffff886cb500, 5, internet6)
+KERN: unregister_domain(0xffffffff886ccb00, 9, unix)
+KERN: unregister_domain(0xffffffff886cca80, 10, bluetooth)
+KERN: unregister_domain(0xffffffff886ccb80, 1, internet)
+KERN: register_domain(5, internet6)
+KERN: unregister_domain(0xffffffff886ccc80, 5, internet6)
+KERN: register_domain(1, internet)
+KERN: unregister_domain(0xffffffff886ccd00, 1, internet)
+KERN: register_domain(5, internet6)
+KERN: register_domain(10, bluetooth)
+KERN: register_domain(9, unix)
+KERN: register_domain(1, internet)
+KERN: unregister_domain(0xffffffff886cce00, 5, internet6)
+KERN: unregister_domain(0xffffffff886ccf00, 9, unix)
+KERN: unregister_domain(0xffffffff886cce80, 10, bluetooth)
+KERN: unregister_domain(0xffffffff886ca280, 1, internet)
+KERN: register_domain(5, internet6)
+KERN: unregister_domain(0xffffffff886c4900, 5, internet6)
+KERN: register_domain(5, internet6)
+KERN: unregister_domain(0xffffffff886c9780, 5, internet6)
+KERN: register_domain(5, internet6)
+KERN: register_domain(10, bluetooth)
+KERN: register_domain(9, unix)
+KERN: register_domain(1, internet)
+KERN: unregister_domain(0xffffffff886c2c80, 5, internet6)
+KERN: unregister_domain(0xffffffff886c4780, 9, unix)
+KERN: unregister_domain(0xffffffff886c4700, 10, bluetooth)
+KERN: unregister_domain(0xffffffff8811ea80, 1, internet)
+KERN: register_domain(5, internet6)
+KERN: unregister_domain(0xffffffff886c9700, 5, internet6)
+KERN: register_domain(1, internet)
+KERN: unregister_domain(0xffffffff886c9480, 1, internet)
+KERN: register_domain(5, internet6)
+KERN: register_domain(10, bluetooth)
+KERN: register_domain(9, unix)
+KERN: register_domain(1, internet)
+KERN: unregister_domain(0xffffffff886c9680, 5, internet6)
+KERN: unregister_domain(0xffffffff88113480, 9, unix)
+KERN: unregister_domain(0xffffffff886caa80, 10, bluetooth)
+KERN: unregister_domain(0xffffffff886caf00, 1, internet)
+KERN: register_domain(5, internet6)
+KERN: unregister_domain(0xffffffff886cb800, 5, internet6)
+KERN: register_domain(1, internet)
+KERN: register_domain(5, internet6)
+KERN: loaded driver /boot/system/add-ons/kernel/drivers/dev/net/usb_rndis
+USER: decorator: r5 loaded
+KERN: loaded driver /boot/system/add-ons/kernel/drivers/dev/net/usb_ncm
+KERN: etherpci: init_driver init_driver: etherpci not found
+KERN: pci_reserve_device(0, 3, 0, ipro1000)
+KERN: if_initname(0xffffffff8869f000, em, 2)
+KERN: [ipro1000] ipro1000: /dev/net/ipro1000/0
+KERN: [ipro1000] (em) attach_pre capping queues at 1
+KERN: [ipro1000] (em) bus_alloc_resource(3, [16], 0x0, 0xffffffffffffffff, 0x1,0x2)
+KERN: [ipro1000] (em) bus_alloc_resource(4, [20], 0x0, 0xffffffffffffffff, 0x1,0x2)
+KERN: package_daemon: [5235041:    50] Failed to get activated packages info from activated packages file. Assuming all package files in package directory are activated.
+KERN: package_daemon: [5239124:    50] The latest volume state is also the currently active one
+KERN: package_daemon: [5243078:    50] Volume::InitPackages Requesting delayed first boot processing for packages dir /boot/system/packages.
+KERN: package_daemon: [5249735:    50] Volume::InitialVerify((nil), (nil))
+KERN: package_daemon: [5377587:    50] Volume::InitialVerify(): volume at "/boot/system" is consistent
+KERN: package_daemon: [5380300:    50] Failed to get activated packages info from activated packages file. Assuming all package files in package directory are activated.
+KERN: package_daemon: [5383976:    50] KERN: The latest volume state is also the currently active one
+KERN: package_daemon: [5407591:    50] Volume::InitPackages Requesting delayed first boot processing for packages dir /boot/home/config/packages.
+KERN: package_daemon: [5412792:    50] Volume::InitialVerify(0x948e771200, (nil))
+KERN: package_daemon: [5417314:    50] KERN: Volume::InitialVerify(): volume at "/boot/home/config" is consistent
+KERN: package_daemon: [5428552:    50] Starting First Boot Processing for 137 packages in /boot/system/packages/administrative/transaction-1.
+KERN: package_daemon: [5437510:    50] KERN: Doing first boot processing #0 for package vulkan_tools-1.4.367-2-x86_64.hpkg.
+KERN: package_daemon: [5441562:    50] KERN: Doing first boot processing #1 for package zip-3.0-4-x86_64.hpkg.
+KERN: package_daemon: [5445520:    50] KERN: Doing first boot processing #2 for package haiku_datatranslators-r1~beta6_r5_2026.1_dev-1-x86_64.hpkg.
+KERN: package_daemon: [5450852:    50] KERN: Doing first boot processing #3 for package ralink_wifi_firmwares-2023_08_04-1-any.hpkg.
+KERN: package_daemon: [5456335:    50] KERN: Doing first boot processing #4 for package graphite2-1.3.14-4-x86_64.hpkg.
+KERN: package_daemon: [5461498:    50] KERN: Doing first boot processing #5 for package vulkanteapot-1.0.0-5-x86_64.hpkg.
+KERN: package_daemon: [5466931:    50] KERN: Doing first boot processing #6 for package tar-1.35-2-x86_64.hpkg.
+KERN: package_daemon: [5471207:    50] KERN: Doing first boot processing #7 for package haiku_userguide_de-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [5476543:    50] KERN: Doing first boot processing #8 for package noto_sans_cjk_jp-2.004-2-any.hpkg.
+KERN: package_daemon: [5481608:    50] KERN: Doing first boot processing #9 for package smbfs.hpkg.
+KERN: package_daemon: [5485658:    50] KERN: Doing first boot processing #10 for package opus-1.3.1-2-x86_64.hpkg.
+KERN: package_daemon: [5492329:    50] KERN: Doing first boot processing #11 for package libidn2-2.0.5-4-x86_64.hpkg.
+KERN: package_daemon: [5497791:    50] KERN: Doing first boot processing #12 for package less-668-1-x86_64.hpkg.
+KERN: slab memory manager: created area 0xffffffff89801000 (7677)
+KERN: [ipro1000] (em) Using 1024 TX descriptors and 1024 RX descriptors
+KERN: [ipro1000] (em) allocated for 1 tx_queues
+KERN: [ipro1000] (em) allocated for 1 rx_queues
+KERN: [ipro1000] (em) bus_alloc_resource(1, [0], 0x0, 0xffffffffffffffff, 0x1,0x6)
+KERN: if_attach 0xffffffff820738f0
+KERN: ipro1000: init_driver(0xffffffff81c4ced0)
+KERN: loaded driver /boot/system/add-ons/kernel/drivers/dev/net/ipro1000
+KERN: [33musb_davicom:[0m00.06.003:init_driver::ver.0.9.5
+KERN: loaded driver /boot/system/add-ons/kernel/drivers/dev/net/usb_davicom
+KERN: package_daemon: [6120347:    50] Doing first boot processing #13 for package intel_wifi_firmwares-2025_02_11-1-any.hpkg.
+KERN: package_daemon: [6125120:    50] Doing first boot processing #14 for package libicns-0.8.1-9-x86_64.hpkg.
+KERN: package_daemon: [6127713:    50] KERN: Doing first boot processing #15 for package netcat-1.10-4-x86_64.hpkg.
+KERN: package_daemon: [6132936:    50] KERN: Doing first boot processing #16 for package coreutils-9.11-2-x86_64.hpkg.
+KERN: package_daemon: [6137960:    50] KERN: Doing first boot processing #17 for package nano-9.1-1-x86_64.hpkg.
+KERN: package_daemon: [6143351:    50] KERN: Doing first boot processing #18 for package haiku_loader-r1~beta6_r5_2026.1_dev-1-x86_64.hpkg.
+KERN: package_daemon: [6147258:    50] KERN: Doing first boot processing #19 for package haiku_userguide_ca-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [6153120:    50] KERN: Doing first boot processing #20 for package fdk_aac-2.0.2-4-x86_64.hpkg.
+KERN: package_daemon: [6156752:    50] KERN: Doing first boot processing #21 for package libtheora-1.1.1-8-x86_64.hpkg.
+KERN: package_daemon: [6162128:    50] KERN: Doing first boot processing #22 for package haiku-r1~beta6_r5_2026.1_dev-1-x86_64.hpkg.
+KERN: package_daemon: [6167510:    50] KERN: Doing first boot processing #23 for package speex-1.2.1-2-x86_64.hpkg.
+KERN: package_daemon: [6180676:    50] KERN: Doing first boot processing #24 for package sed-4.9-1-x86_64.hpkg.
+KERN: register_domain(4, link)
+KERN: package_daemon: [6185895:    50] KERN: [net/ipro1000/0] compat_open(0x2)
+KERN: Doing first boot processing #25 for package haikuwebkit-1.10.0-2-x86_64.hpkg.
+KERN: package_daemon: [6194916:    50] KERN: Doing first boot processing #26 for package perl-5.42.2-1-x86_64.hpkg.
+KERN: package_daemon: [6200911:    50] KERN: Doing first boot processing #27 for package xz_utils-5.8.3-1-x86_64.hpkg.
+KERN: package_daemon: [6204705:    50] KERN: Doing first boot processing #28 for package wget-1.24.5-2-x86_64.hpkg.
+KERN: package_daemon: [6262389:    50] Doing first boot processing #29 for package giflib-5.2.2-1-x86_64.hpkg.
+KERN: package_daemon: [6266362:    50] Doing first boot processing #30 for package libraw-0.20.2-2-x86_64.hpkg.
+KERN: package_daemon: [6270193:    50] Doing first boot processing #31 for package dav1d-1.5.4-2-x86_64.hpkg.
+KERN: package_daemon: [6274249:    50] KERN: Doing first boot processing #32 for package llvm21_runtime-21.1.8-1-x86_64.hpkg.
+KERN: package_daemon: [6279200:    50] KERN: Doing first boot processing #33 for package gcc_syslibs-13.3.0_2023_08_10-6-x86_64.hpkg.
+KERN: package_daemon: [6286175:    50] KERN: Doing first boot processing #34 for package libxslt-1.1.45-2-x86_64.hpkg.
+KERN: package_daemon: [6291449:    50] KERN: Doing first boot processing #35 for package ncurses6-6.6-1-x86_64.hpkg.
+KERN: package_daemon: [6299569:    50] KERN: Doing first boot processing #36 for package sqlite-3.50.4.0-1-x86_64.hpkg.
+KERN: package_daemon: [6305582:    50] KERN: Doing first boot processing #37 for package bash-5.3.015-1-x86_64.hpkg.
+KERN: package_daemon: [6371390:    50] Doing first boot processing #38 for package libwebp-1.6.0-3-x86_64.hpkg.
+KERN: package_daemon: [6374769:    50] KERN: Doing first boot processing #39 for package libexecinfo-1.1-6-x86_64.hpkg.
+KERN: package_daemon: [6381161:    50] KERN: Doing first boot processing #40 for package readline-8.3.003-1-x86_64.hpkg.
+KERN: package_daemon: [6386621:    50] KERN: Doing first boot processing #41 for package gzip-1.14-1-x86_64.hpkg.
+KERN: package_daemon: [6390267:    50] KERN: Doing first boot processing #42 for package bzip2-1.0.8-3-x86_64.hpkg.
+KERN: package_daemon: [6393736:    50] KERN: Doing first boot processing #43 for package libiconv-1.18-1-x86_64.hpkg.
+KERN: package_daemon: [6398176:    50] KERN: Doing first boot processing #44 for package libpcap-1.10.6-1-x86_64.hpkg.
+KERN: package_daemon: [6403274:    50] KERN: Doing first boot processing #45 for package gettext_libintl-1.0-1-x86_64.hpkg.
+KERN: package_daemon: [6407693:    50] KERN: Doing first boot processing #46 for package mesa_devel-25.3.6-1-x86_64.hpkg.
+KERN: package_daemon: [6412923:    50] KERN: Doing first boot processing #47 for package mesa_radv-25.3.6-9-x86_64.hpkg.
+KERN: package_daemon: [6417867:    50] KERN: Doing first boot processing #48 for package mesa_lavapipe-25.3.6-5-x86_64.hpkg.
+KERN: package_daemon: [6423323:    50] KERN: Doing first boot processing #49 for package libogg-1.3.6-2-x86_64.hpkg.
+KERN: package_daemon: [6429735:    50] KERN: Doing first boot processing #50 for package libpcre2-10.45-1-x86_64.hpkg.
+KERN: package_daemon: [6434659:    50] KERN: Doing first boot processing #51 for package haiku_userguide_ru-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [6438926:    50] KERN: Doing first boot processing #52 for package haiku_userguide_pt_pt-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [6443466:    50] KERN: Doing first boot processing #53 for package webpositive-r1~beta6_r5_2026.1_dev-1-x86_64.hpkg.
+KERN: package_daemon: [6450369:    50] KERN: Doing first boot processing #54 for package libdrm-2.4.124-2-x86_64.hpkg.
+KERN: package_daemon: [6455543:    50] KERN: Doing first boot processing #55 for package haiku_userguide_fur-2026_08_11-1-any.hpkg.
+KERN: /dev/net/ipro1000/0: link down, media 0x20 quality 1000 speed 0
+KERN: package_daemon: [6461803:    50] Doing first boot processing #56 for package fontconfig-2.18.2-2-x86_64.hpkg.
+KERN: package_daemon: [6650791:    50] KERN: Doing first boot processing #57 for package expat-2.8.2-1-x86_64.hpkg.
+KERN: package_daemon: [6654882:    50] Doing first boot processing #58 for package haiku_userguide_zh_cn-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [6678776:    50] Doing first boot processing #59 for package brotli-1.2.0-1-x86_64.hpkg.
+KERN: package_daemon: [6682277:    50] KERN: Doing first boot processing #60 for package libjpeg_turbo-3.1.4.1-1-x86_64.hpkg.
+KERN: package_daemon: [6688134:    50] KERN: Doing first boot processing #61 for package soxr-0.1.3-2-x86_64.hpkg.
+KERN: package_daemon: [6692068:    50] Doing first boot processing #62 for package libavif1.0-1.4.2-1-x86_64.hpkg.
+KERN: package_daemon: [6697022:    50] KERN: Doing first boot processing #63 for package libvpx1.16-1.16.0-1-x86_64.hpkg.
+KERN: package_daemon: [6702536:    50] KERN: Doing first boot processing #64 for package haiku_userguide_es-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [6709179:    50] KERN: Doing first boot processing #65 for package libvorbis-1.3.7-1-x86_64.hpkg.
+KERN: package_daemon: [6713381:    50] KERN: Doing first boot processing #66 for package libedit-20230828_3.1-1-x86_64.hpkg.
+KERN: package_daemon: [6716987:    50] KERN: Doing first boot processing #67 for package haiku_userguide_uk-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [6721268:    50] KERN: Doing first boot processing #68 for package haiku_welcome-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [6726155:    50] KERN: Doing first boot processing #69 for package libass-0.17.5-2-x86_64.hpkg.
+KERN: package_daemon: [6729933:    50] KERN: Doing first boot processing #70 for package sharutils-4.15.2-3-x86_64.hpkg.
+KERN: package_daemon: [6734484:    50] KERN: Doing first boot processing #71 for package haiku_userguide-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [6739110:    50] KERN: Doing first boot processing #72 for package jasper-2.0.33-2-x86_64.hpkg.
+KERN: package_daemon: [6743798:    50] KERN: Doing first boot processing #73 for package vulkan_loader-1.4.367-4-x86_64.hpkg.
+KERN: package_daemon: [6748877:    50] KERN: Doing first boot processing #74 for package userland_fs.hpkg.
+KERN: package_daemon: [6753246:    50] KERN: Doing first boot processing #75 for package harfbuzz-14.2.0-1-x86_64.hpkg.
+KERN: package_daemon: [6757980:    50] KERN: Doing first boot processing #76 for package lame-3.100-4-x86_64.hpkg.
+KERN: package_daemon: [6762276:    50] KERN: Doing first boot processing #77 for package gmp-6.3.0-1-x86_64.hpkg.
+KERN: package_daemon: [6766747:    50] KERN: Doing first boot processing #78 for package icu74-74.1-6-x86_64.hpkg.
+KERN: package_daemon: [6770622:    50] KERN: Doing first boot processing #79 for package speexdsp-1.2.1-1-x86_64.hpkg.
+KERN: package_daemon: [6774811:    50] KERN: Doing first boot processing #80 for package curl-8.21.0-1-x86_64.hpkg.
+KERN: package_daemon: [6778639:    50] KERN: Doing first boot processing #81 for package zstd-1.5.6-2-x86_64.hpkg.
+KERN: package_daemon: [6781752:    50] Doing first boot processing #82 for package haiku_userguide_pt_br-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [6786598:    50] Doing first boot processing #83 for package haiku_userguide_fr-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [6790756:    50] KERN: Doing first boot processing #84 for package libxml2-2.15.3-1-x86_64.hpkg.
+KERN: package_daemon: [6795480:    50] KERN: Doing first boot processing #85 for package haiku_userguide_jp-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [6800658:    50] KERN: Doing first boot processing #86 for package openssh-10.4p1-1-x86_64.hpkg.
+KERN: [ipro1000] (em) Link is up 1000 Mbps Full Duplex
+KERN: /dev/net/ipro1000/0: link up, media 0x900030 quality 1000 speed 1000000000
+DAEMON 'DHCP': /dev/net/ipro1000/0: Send DHCP_DISCOVER to 255.255.255.255:67
+USER: slaac /dev/net/ipro1000/0: listening, ifindex 2
+USER: slaac /dev/net/ipro1000/0: router solicitation sent
+KERN: package_daemon: [7012387:    50] Doing first boot processing #87 for package haiku_userguide_hu-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [7015688:    50] KERN: Doing first boot processing #88 for package noto-20260201-1-any.hpkg.
+KERN: package_daemon: [7020072:    50] KERN: Doing first boot processing #89 for package pe-2.5.0-1-x86_64.hpkg.
+KERN: package_daemon: [7024133:    50] Doing first boot processing #90 for package git-2.54.0-1-x86_64.hpkg.
+KERN: package_daemon: [7069817:    50] Doing first boot processing #91 for package findutils-4.9.0-3-x86_64.hpkg.
+KERN: package_daemon: [7073406:    50] KERN: Doing first boot processing #92 for package libpng16-1.6.53-1-x86_64.hpkg.
+KERN: package_daemon: [7077718:    50] KERN: Doing first boot processing #93 for package libpcre-8.45-3-x86_64.hpkg.
+KERN: package_daemon: [7082329:    50] KERN: Doing first boot processing #94 for package woff2-1.0.2-3-x86_64.hpkg.
+KERN: package_daemon: [7086339:    50] KERN: Doing first boot processing #95 for package tcpdump-4.99.6-1-x86_64.hpkg.
+KERN: package_daemon: [7090879:    50] KERN: Doing first boot processing #96 for package haiku_userguide_id-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [7095787:    50] KERN: Doing first boot processing #97 for package haiku_userguide_en-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [7100305:    50] KERN: Doing first boot processing #98 for package vision-0.10.6-2-x86_64.hpkg.
+KERN: package_daemon: [7104293:    50] KERN: Doing first boot processing #99 for package gawk-5.3.0-1-x86_64.hpkg.
+KERN: package_daemon: [7177318:    50] Doing first boot processing #100 for package tiff-4.7.0-1-x86_64.hpkg.
+KERN: package_daemon: [7180205:    50] KERN: Doing first boot processing #101 for package ffmpeg6-6.1.5-2-x86_64.hpkg.
+KERN: package_daemon: [7185230:    50] KERN: Doing first boot processing #102 for package glu-9.0.0-8-x86_64.hpkg.
+KERN: package_daemon: [7190086:    50] KERN: Doing first boot processing #103 for package libgpg_error-1.61-2-x86_64.hpkg.
+KERN: package_daemon: [7194300:    50] KERN: Doing first boot processing #104 for package haiku_userguide_sk-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [7198340:    50] KERN: Doing first boot processing #105 for package haiku_userguide_sv_se-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [7203101:    50] Doing first boot processing #106 for package wpa_supplicant-2.11.haiku.1-1-x86_64.hpkg.
+KERN: package_daemon: [7208919:    50] DAEMON 'DHCP': /dev/net/ipro1000/0: Timeout shift: 500 msecs (try 1)
+DAEMON 'DHCP': /dev/net/ipro1000/0: Send DHCP_DISCOVER to 255.255.255.255:67
+KERN: Doing first boot processing #107 for package bc-1.07.1-2-x86_64.hpkg.
+KERN: package_daemon: [7213596:    50] KERN: Doing first boot processing #108 for package nghttp2-1.63.0-1-x86_64.hpkg.
+KERN: package_daemon: [7217196:    50] KERN: Doing first boot processing #109 for package openjpeg-2.5.3-2-x86_64.hpkg.
+KERN: package_daemon: [7221683:    50] KERN: Doing first boot processing #110 for package libopenmpt-0.8.3-1-x86_64.hpkg.
+KERN: package_daemon: [7225863:    50] KERN: Doing first boot processing #111 for package grep-3.11-2-x86_64.hpkg.
+KERN: package_daemon: [7229837:    50] KERN: Doing first boot processing #112 for package rav1e-0.8.1-1-x86_64.hpkg.
+KERN: package_daemon: [7234204:    50] KERN: Doing first boot processing #113 for package haiku_userguide_fi-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [7238848:    50] KERN: Doing first boot processing #114 for package lcms-2.19.1-1-x86_64.hpkg.
+KERN: package_daemon: [7243678:    50] KERN: Doing first boot processing #115 for package which-2.21-6-x86_64.hpkg.
+KERN: package_daemon: [7247814:    50] KERN: Doing first boot processing #116 for package libunibreak-5.1-1-x86_64.hpkg.
+KERN: package_daemon: [7251938:    50] Doing first boot processing #117 for package fribidi-1.0.16-1-x86_64.hpkg.
+KERN: package_daemon: [7255698:    50] Doing first boot processing #118 for package gutenprint9-5.3.4-2-x86_64.hpkg.
+KERN: package_daemon: [7259579:    50] KERN: Doing first boot processing #119 for package zlib-1.3.2-1-x86_64.hpkg.
+KERN: package_daemon: [7263581:    50] KERN: Doing first boot processing #120 for package haiku_userguide_pl-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [7268271:    50] KERN: Doing first boot processing #121 for package libglvnd-1.7.0-1-x86_64.hpkg.
+KERN: package_daemon: [7272484:    50] KERN: Doing first boot processing #122 for package unzip-6.10c23-6-x86_64.hpkg.
+KERN: package_daemon: [7277344:    50] KERN: Doing first boot processing #123 for package haiku_userguide_ro-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [7282075:    50] KERN: Doing first boot processing #124 for package freetype-2.14.3-1-x86_64.hpkg.
+KERN: package_daemon: [7286630:    50] KERN: Doing first boot processing #125 for package libpsl-0.21.5-1-x86_64.hpkg.
+KERN: package_daemon: [7290836:    50] KERN: Doing first boot processing #126 for package realtek_wifi_firmwares-2019_01_02-1-any.hpkg.
+KERN: package_daemon: [7295827:    50] KERN: Doing first boot processing #127 for package ca_root_certificates-2026_07_16-1-any.hpkg.
+KERN: package_daemon: [7300125:    50] KERN: Doing first boot processing #128 for package libunistring-1.3-1-x86_64.hpkg.
+KERN: package_daemon: [7304291:    50] KERN: Doing first boot processing #129 for package snappy-1.2.2-2-x86_64.hpkg.
+KERN: package_daemon: [7308781:    50] KERN: Doing first boot processing #130 for package haiku_userguide_tr-2026_08_11-1-any.hpkg.
+KERN: package_daemon: [7312991:    50] KERN: Doing first boot processing #131 for package diffutils-3.12-1-x86_64.hpkg.
+KERN: package_daemon: [7317175:    50] KERN: Doing first boot processing #132 for package openssl3-3.5.7-1-x86_64.hpkg.
+KERN: package_daemon: [7321900:    50] KERN: Doing first boot processing #133 for package mesa-25.3.6-5-x86_64.hpkg.
+KERN: package_daemon: [7325537:    50] KERN: Doing first boot processing #134 for package game_music_emu-0.6.5-1-x86_64.hpkg.
+KERN: package_daemon: [7330478:    50] KERN: Doing first boot processing #135 for package libssh2-1.11.1-1-x86_64.hpkg.
+KERN: package_daemon: [7334697:    50] KERN: Doing first boot processing #136 for package mandoc-1.14.6-1-x86_64.hpkg.
+KERN: package_daemon: [7338694:    50] KERN: post-installation script starting: boot/post-install/sshd_keymaker.sh, package openssh-10.4p1-1-x86_64.hpkg
+USER: mdns: joined ff02::fb on /dev/net/ipro1000/0
+USER: mdns: IPv6 announce on /dev/net/ipro1000/0: Network is unreachable
+DAEMON 'DHCP': /dev/net/ipro1000/0: Timeout shift: 1000 msecs (try 2)
+DAEMON 'DHCP': /dev/net/ipro1000/0: Send DHCP_DISCOVER to 255.255.255.255:67
+KERN: Radeon - init_hardware: Version: 5.1.6.0
+KERN: Radeon - Radeon_CardDetect: no supported devices found
+KERN: S3: init_hardware() - no supported devices
+KERN: framebuffer: init_hardware()
+KERN: radeon_hd: init_hardware
+KERN: ati: init_hardware() - no supported devices
+KERN: devfs: "intel_810" api_version missing
+KERN: i810: init_hardware() - no supported devices
+KERN: nvidia: CALLED init_hardware
+KERN: nvidia: init_hardware: no supported device found
+KERN: intel_extreme: CALLED status_t init_hardware()
+KERN: vesa: init_hardware()
+KERN: vesa: init_driver()
+KERN: vesa: publish_devices()
+KERN: vesa: find_device()
+KERN: loaded driver /boot/system/add-ons/kernel/drivers/dev/graphics/vesa
+KERN: assuming memory type 20000000 for overlapping 0xfd000000, 0x1000000 area 9631 from existing 0xfd000000, 0x3e8000 area 135
+KERN: vesa: vesa_init() completed successfully!
+KERN: vesa: acc: vesa.accelerant
+USER: slaac /dev/net/ipro1000/0: RA from fe80::2 lifetime=1800 M=0 O=0
+USER: slaac /dev/net/ipro1000/0: PIO fec0::/64 A=1 L=1
+DAEMON 'DHCP': /dev/net/ipro1000/0: Received DHCP_OFFER from 10.0.2.2
+DAEMON 'DHCP':   your_address: 10.0.2.15
+DAEMON 'DHCP':   server: 10.0.2.2
+DAEMON 'DHCP':   subnet: 255.255.255.0
+DAEMON 'DHCP':   gateway: 10.0.2.2
+DAEMON 'DHCP':   nameserver[0]: 10.0.2.3
+DAEMON 'DHCP':   lease time: 86400 seconds
+DAEMON 'DHCP': /dev/net/ipro1000/0: Send DHCP_REQUEST for 10.0.2.15 to 255.255.255.255:67
+DAEMON 'DHCP': /dev/net/ipro1000/0: Received DHCP_OFFER from 10.0.2.2
+Last message repeated 1 time
+DAEMON 'DHCP': /dev/net/ipro1000/0: Received DHCP_ACK from 10.0.2.2
+DAEMON 'DHCP':   server: 10.0.2.2
+DAEMON 'DHCP':   subnet: 255.255.255.0
+DAEMON 'DHCP':   gateway: 10.0.2.2
+DAEMON 'DHCP':   nameserver[0]: 10.0.2.3
+DAEMON 'DHCP':   lease time: 86400 seconds
+DAEMON 'app_server': app_server: vulkan queue family 0 flags 0x7
+USER: dad /dev/net/ipro1000/0: fec0::5054:ff:fe12:3456 unique
+USER: slaac /dev/net/ipro1000/0: fec0::5054:ff:fe12:3456 via fe80::2
+USER: slaac /dev/net/ipro1000/0: default route via fe80::2%2
+KERN: slab memory manager: created area 0xffffffff8b001000 (9729)
+DAEMON 'app_server': app_server: gpu compositor on lavapipe: no render node
+KERN: R5 interface: HaikuControlLook from distro
+USER: _ConfigureIPv6LinkLocal: Local Link address already assigned to /dev/net/ipro1000/0
+DAEMON 'DHCP': /dev/net/ipro1000/0: DHCP status = No error
+USER: app_server: compose late 109 ms
+KERN: Last message repeated 5 times.
+KERN: loaded driver /boot/system/add-ons/kernel/drivers/dev/input/usb_hid
+KERN: ps2_hid: init_hardware
+KERN: ps2_hid: init_driver
+KERN: ps2_hid: publish_devices
+KERN: ps2_hid: uninit_driver
+KERN: loaded driver /boot/system/add-ons/kernel/drivers/dev/input/ps2_hid
+KERN: loaded driver /boot/system/add-ons/kernel/drivers/dev/input/wacom
+KERN: AddOnManager::_RegisterAddOn(): InitCheck() in "/boot/system/add-ons/input_server/devices/virtio" returned No such file or directory
+USER: mdns: joined 224.0.0.251 on /dev/net/ipro1000/0 (10.0.2.15)
+USER: app_server: window memory type 0 flags 0xf
+KERN: R5 interface: HaikuControlLook from distro
+USER: app_server: animation open 693 ms frames 1
+USER: app_server: animation close 343 ms frames 0
+USER: app_server: animation close 399 ms frames 0
+KERN: Last message repeated 3 times.
+KERN: loaded driver /boot/system/add-ons/kernel/drivers/dev/audio/hmulti/usb_audio
+KERN: emuxki: init_hardware()
+KERN: auich: init_hardware()
+KERN: sis7018:init_hardware:ver:2.0.2
+KERN: auvia: init_hardware()
+KERN: echo3g: init_hardware()
+KERN: echo3g: no card found
+KERN: loaded driver /boot/system/add-ons/kernel/drivers/dev/bus/usb_raw
+KERN: R5 interface: HaikuControlLook from distro
+KERN: package_daemon: [11669824:    50] post-installation script finished: boot/post-install/sshd_keymaker.sh, package openssh-10.4p1-1-x86_64.hpkg, result 0
+KERN: package_daemon: [11673861:    50] KERN: post-installation script starting: boot/post-install/fix_openssh_config_paths.sh, package openssh-10.4p1-1-x86_64.hpkg
+KERN: package_daemon: [11732163:    50] KERN: post-installation script finished: boot/post-install/fix_openssh_config_paths.sh, package openssh-10.4p1-1-x86_64.hpkg, result 0
+USER: app_server: animation close 131 ms frames 8
+KERN: ALPS not supported: 10 00 64
+KERN: ps2: probe_mouse Extended PS/2 mouse found
+KERN: ps2: devfs_publish_device input/mouse/ps2/intelli_0, status = 0x00000000
+KERN: ps2: devfs_publish_device input/keyboard/at/0, status = 0x00000000
+USER: Notify of added/removed/started/stopped device
+Last message repeated 1 time
+KERN: ps2: keyboard found
+KERN: R5 interface: HaikuControlLook from distro
+USER: r5_level_glyph_test: ok (6576 cases)
