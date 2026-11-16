@@ -10,6 +10,9 @@
  *		events, ACL and SCO packets, checking that every whole packet
  *		that goes in comes out once, unchanged; and the command
  *		timeout tracker (h2generic/h2command.h).
+ *	l2cap	the L2CAP signalling checks (l2cap/l2cap_parse.h): random and
+ *		well-formed signalling packets walked the way the dispatcher
+ *		walks them, configuration options, PSM and fixed CID rules.
  * Prints "<target>_fuzz: <seconds>s 0 crashes" when it ends; ASan or UBSan
  * stop it with a report on a fault.
  */
@@ -24,6 +27,7 @@
 
 #include "hci_assemble.h"
 #include "h2command.h"
+#include "l2cap_parse.h"
 
 
 static uint64_t gState = 0x9e3779b97f4a7c15ULL;
@@ -279,6 +283,150 @@ fuzz_tracker_round()
 }
 
 
+// --- L2CAP signalling ---------------------------------------------------
+
+
+struct WalkedCommand {
+	uint8	code;
+	uint16	length;
+	int		check;
+	std::vector<std::vector<uint8> > options;
+	bool	malformed;
+};
+
+
+// Walks a signalling packet the way l2cap_handle_signaling_command() does.
+static std::vector<WalkedCommand>
+walk_signalling(const std::vector<uint8>& packet)
+{
+	std::vector<WalkedCommand> walked;
+	size_t position = 0;
+	int steps = 0;
+	while (position < packet.size()) {
+		check(++steps <= 70000, "walk ends");
+		if (packet.size() - position < L2CAP_PARSE_COMMAND_HEADER)
+			break;
+		const uint8* header = packet.data() + position;
+		WalkedCommand command;
+		command.code = header[0];
+		command.length = (uint16)(header[2] | (header[3] << 8));
+		command.malformed = false;
+		size_t remaining = packet.size() - position - L2CAP_PARSE_COMMAND_HEADER;
+		command.check = l2cap_parse_check(command.code, command.length,
+			remaining);
+		if (command.check == L2CAP_PARSE_TRUNCATED) {
+			check(command.length > remaining, "truncated means too long");
+			walked.push_back(command);
+			break;
+		}
+		const uint8* data = header + L2CAP_PARSE_COMMAND_HEADER;
+		if (command.check == L2CAP_PARSE_HANDLE) {
+			check(command.length >= l2cap_parse_min_length(command.code),
+				"handled commands are long enough");
+			// Configuration request and response carry options after 4
+			// and 6 bytes.
+			size_t optionsAt = command.code == 0x04 ? 4
+				: command.code == 0x05 ? 6 : 0;
+			if (optionsAt != 0 && command.length > optionsAt) {
+				// The kernel copies exactly this range out first.
+				std::vector<uint8> copy(data + optionsAt, data + command.length);
+				size_t offset = 0;
+				l2cap_parse_option option;
+				bool malformed;
+				while (l2cap_parse_next_option(copy.data(), copy.size(),
+						&offset, &option, &malformed)) {
+					check(option.value >= copy.data() && option.value
+						+ option.length <= copy.data() + copy.size(),
+						"option value inside");
+					check(offset <= copy.size(), "option offset");
+					command.options.push_back(std::vector<uint8>(option.value,
+						option.value + option.length));
+				}
+				command.malformed = malformed;
+			}
+		}
+		walked.push_back(command);
+		position += L2CAP_PARSE_COMMAND_HEADER + command.length;
+	}
+	return walked;
+}
+
+
+static void
+fuzz_l2cap_round()
+{
+	// Random bytes, kept as their own allocation so ASan sees overreads.
+	{
+		std::vector<uint8> packet(next_word() % 300);
+		for (size_t i = 0; i < packet.size(); i++)
+			packet[i] = (uint8)next_word();
+		// Mostly small codes and lengths, so the handled paths are reached.
+		for (size_t i = 0; i + 3 < packet.size(); i += 4 + next_word() % 9) {
+			packet[i] = (uint8)(next_word() % 13);
+			packet[i + 3] = 0;
+			packet[i + 2] = (uint8)(next_word() % 40);
+		}
+		walk_signalling(packet);
+	}
+
+	// Well-formed commands with options come back as they went in.
+	std::vector<uint8> packet;
+	std::vector<WalkedCommand> expected;
+	int count = 1 + next_word() % 4;
+	for (int i = 0; i < count; i++) {
+		WalkedCommand command;
+		command.code = (uint8)(1 + next_word() % 11);
+		command.malformed = false;
+		command.check = L2CAP_PARSE_HANDLE;
+		std::vector<uint8> data(l2cap_parse_min_length(command.code));
+		for (size_t j = 0; j < data.size(); j++)
+			data[j] = (uint8)next_word();
+		if (command.code == 0x04 || command.code == 0x05) {
+			int options = next_word() % 4;
+			for (int j = 0; j < options; j++) {
+				std::vector<uint8> value(next_word() % 24);
+				for (size_t k = 0; k < value.size(); k++)
+					value[k] = (uint8)next_word();
+				data.push_back((uint8)next_word());
+				data.push_back((uint8)value.size());
+				data.insert(data.end(), value.begin(), value.end());
+				command.options.push_back(value);
+			}
+		}
+		command.length = (uint16)data.size();
+		packet.push_back(command.code);
+		packet.push_back((uint8)next_word());
+		packet.push_back((uint8)(command.length & 0xff));
+		packet.push_back((uint8)(command.length >> 8));
+		packet.insert(packet.end(), data.begin(), data.end());
+		expected.push_back(command);
+	}
+	std::vector<WalkedCommand> walked = walk_signalling(packet);
+	check(walked.size() == expected.size(), "command count");
+	for (size_t i = 0; i < walked.size(); i++) {
+		check(walked[i].check == L2CAP_PARSE_HANDLE, "well-formed is handled");
+		check(walked[i].code == expected[i].code, "code");
+		check(walked[i].length == expected[i].length, "length");
+		check(!walked[i].malformed, "options well formed");
+		check(walked[i].options == expected[i].options, "options");
+	}
+
+	// The PSM and fixed channel rules.
+	uint16 psm = (uint16)next_word();
+	check(l2cap_parse_valid_psm(psm)
+		== (((psm & 1) != 0) && ((psm & 0x100) == 0)), "psm rule");
+	check(l2cap_parse_valid_psm(0x0011) && l2cap_parse_valid_psm(0x0013)
+		&& l2cap_parse_valid_psm(0x0019) && l2cap_parse_valid_psm(0x1001),
+		"hid and avdtp psm");
+	check(!l2cap_parse_valid_psm(0x0010) && !l2cap_parse_valid_psm(0x0101),
+		"bad psm");
+	check(l2cap_parse_is_fixed_channel(0x0004)
+		&& l2cap_parse_is_fixed_channel(0x0006)
+		&& !l2cap_parse_is_fixed_channel(0x0040)
+		&& !l2cap_parse_is_fixed_channel(0), "fixed channels");
+}
+
+
 static bool
 seconds_left(time_t start, int seconds)
 {
@@ -289,8 +437,10 @@ seconds_left(time_t start, int seconds)
 int
 main(int argc, char** argv)
 {
-	if (argc != 3 || strcmp(argv[1], "hci") != 0) {
-		fprintf(stderr, "usage: bt-fuzz hci <seconds>\n");
+	bool hci = argc == 3 && strcmp(argv[1], "hci") == 0;
+	bool l2cap = argc == 3 && strcmp(argv[1], "l2cap") == 0;
+	if (!hci && !l2cap) {
+		fprintf(stderr, "usage: bt-fuzz hci|l2cap <seconds>\n");
 		return 2;
 	}
 	int seconds = atoi(argv[2]);
@@ -298,9 +448,12 @@ main(int argc, char** argv)
 	uint64_t rounds = 0;
 
 	while (seconds_left(start, seconds)) {
-		fuzz_reassembly_round();
-		fuzz_reassembly_garbage();
-		fuzz_tracker_round();
+		if (hci) {
+			fuzz_reassembly_round();
+			fuzz_reassembly_garbage();
+			fuzz_tracker_round();
+		} else
+			fuzz_l2cap_round();
 		rounds++;
 	}
 
