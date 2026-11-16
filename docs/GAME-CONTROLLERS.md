@@ -47,9 +47,14 @@ Game or program
 - Rule for option C: swapping buttons happens below `BJoystick`, in the driver path, so old programs get it too; never only in `BGameController`.
 - Settings → Devices → Game controllers (alphabetical, between Bluetooth and Keyboard): a `BCard` per controller with name, layout (Xbox or PlayStation labels) and battery (`R5_LEVEL_BATTERY`), and a live test drawn in the real layout. The same view later in a separate program, as with Bluetooth and Wi-Fi.
 - The picture is made automatically for every controller (owner, 16 Nov 2026), drawn in code like `r5_screen_draw()`: vector, scaled, dark mode, every part lighting up live.
-  - **Known controller** (in the mapping database): one general gamepad shape with the standard layout and the labels of its family, found from the vendor ID: Xbox (A B X Y), PlayStation (✕ ○ □ △), Nintendo (A and B swapped).
-  - **Unknown controller**: a layout built from what it reports: each pair of axes a stick (a circle with a dot), triggers as bars, buttons as round keys, a hat as a d-pad. So every controller gets a picture of its own, also a six-button pad like the 8BitDo M30.
-  - Not done: a drawing per model (the real DualSense or M30 shape): a lot of work per model and a trademark risk.
+  - **Known controller** (in the mapping database): one of four family shapes (owner, 16 Nov 2026), chosen from the vendor and product ID, each with the standard layout and its family's labels:
+    - PlayStation style: both sticks side by side at the bottom; ✕ ○ □ △.
+    - Xbox style: the left stick high, the right stick low; A B X Y.
+    - Nintendo style (Switch Pro-like): Xbox-like placement with A and B swapped.
+    - Sega Genesis style: a d-pad and six face buttons in two rows (A B C over X Y Z), shoulders where present, no sticks. The 8BitDo M30 is this shape; other 8BitDo models (vendor `0x2DC8`) get the shape of their product ID.
+  - The shapes are simplified silhouettes in R5's thin-line style, drawn for R5, not traced from photographs, with no logos. A family name in text ("PlayStation layout") only describes the hardware.
+  - **Unknown controller**: a layout built from what it reports: each pair of axes a stick (a circle with a dot), triggers as bars, buttons as round keys, a hat as a d-pad. So every controller gets a picture of its own.
+  - Not done: a drawing per exact model: a lot of work per model and a trademark risk. The four shapes are about half a session on top of the rest.
   - The PlayStation symbols become line glyphs in `libr5icons.so`, added at the end of `enum r5_glyph` (`docs/ICONS.md`), so other programs can use them.
   - About one session of work on top of the page.
 - The controller battery shows in the existing Bluetooth item in Deskbar, not in an item of its own.
