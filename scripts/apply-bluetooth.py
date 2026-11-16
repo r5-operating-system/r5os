@@ -17,7 +17,8 @@
   into src/add-ons/kernel/drivers/input, in dev/bluetooth/hid of the
   regular image,
 - bluetooth_audio.media_addon (distro/media/bluetooth_audio), the bt_audio
-  command and bt_audio_smoke_test, regular image only (step 5).
+  command and bt_audio_smoke_test, regular image only (step 5),
+- bt_rfcomm_test (distro/bluetooth/tests), regular image only (step 7a).
 
 docs/BLUETOOTH.md is the plan."""
 from __future__ import annotations
@@ -263,6 +264,18 @@ def main() -> int:
         "SYSTEM_BIN += bt_audio ;\n",
         "SYSTEM_BIN += bt_audio_smoke_test ;\n",
         "bt_audio_smoke_test image")
+    # Step 7a: RFCOMM framing, the mux back to back and two links over
+    # ports, no radio.
+    copy_dir(SRC / "tests" / "bt_rfcomm_test",
+        HAIKU / "src" / "bin" / "bt_rfcomm_test", "bt_rfcomm_test")
+    insert_once(HAIKU / "src" / "bin" / "Jamfile",
+        "SubInclude HAIKU_TOP src bin bt_audio_smoke_test ;\n",
+        "SubInclude HAIKU_TOP src bin bt_rfcomm_test ;\n",
+        "bt_rfcomm_test jam")
+    insert_once(HAIKU / "build" / "jam" / "images" / "definitions" / "regular",
+        "SYSTEM_BIN += bt_audio_smoke_test ;\n",
+        "SYSTEM_BIN += bt_rfcomm_test ;\n",
+        "bt_rfcomm_test image")
     return 0
 
 

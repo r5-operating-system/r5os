@@ -1,5 +1,23 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-16 - Bluetooth step 7a: RFCOMM, the serial link headsets use for HFP
+
+Problem: a headset like the Sony WH-1000XM4 sends its battery level only over HFP, and HFP runs over RFCOMM, a serial multiplexer on L2CAP PSM 3. Haiku's stack never had RFCOMM.
+
+What changed:
+- `bluetooth_server`: RFCOMM 1.2 in user space, R5's own MIT code from RFCOMM 1.2 and ETSI TS 07.10 (`RFCOMMMux.cpp`, `RFCOMMLink.cpp`). R5 connects as initiator: SABM on DLCI 0, PN asking for credit-based flow control (N1 127, 7 credits), SABM on the DLC, MSC both ways. The control channel answers PN, MSC, Test, FCon/FCoff, RPN, RLS, and NSC for unknown commands. Every wait has a timeout (20 s). Credits are only given for room in the 2048-byte receive buffer.
+- `RFCOMMLink` is the internal API step 7b uses: connect to a channel, send, read lines, close.
+- The Hands-Free channel comes from the device's SDP record (`R5FindRFCOMMChannel()`); SDP logs `hands-free service on RFCOMM channel <n>`, without the address.
+- New test `bt_rfcomm_test` in the regular image and in `run-qemu-smoke.sh`; new fuzz target `scripts/fuzz-bt.sh rfcomm`.
+
+Mistake on the way: the first host run of the test showed that a DM during PN (the other side has no such channel) was not seen as a refusal; the link would have waited for the timeout. Fixed before the first build. The first QEMU run had one failure: after a clean close, the link's reader saw its own transport shut down and reported "remote closed" instead of no error. The reader now stops without that when `Close()` ended the transport.
+
+Limits: no profile uses RFCOMM yet (that is 7b), so a person sees nothing new. Not tried with a headset; the L2CAP connect follows the kernel's own timeout. No RFCOMM server and no SDP record of R5's own. One session per device.
+
+Tested: `scripts/build-locked.sh` exit 0 (x86_64). QEMU (KVM, SMAP and SMEP, Login) on an own image copy with `run-qemu-smoke.sh`: `bt_rfcomm_test` 0 failed (frames, PN/MSC, SDP channel, two muxes back to back, two links over ports with 4000 bytes through 7-credit windows and a clean close, `Connect()` without a radio fails at once with "Network is unreachable"); all other Bluetooth tests exit 0; no SMAP fault or panic in the serial log. `scripts/fuzz-bt.sh rfcomm` 60 s: 1.79 million rounds (1.39 million with an open DLC), 0 crashes. Host: the framing, mux and SDP parts of `bt_rfcomm_test` with ASan and UBSan, 0 failures.
+
+Not tested: a real headset (QEMU has no radio; 7b comes with a stick boot on the 5625U with the WH-1000XM4). ARM64 and RISC-V 64 not built or tested.
+
 ## 2026-11-16 - Bluetooth: the review's open points, battery, Use for sound, Test buttons
 
 Problem: the stack review (#4322) left points open, and the device panel of the Bluetooth page had no battery, no way to send sound to a headset, and no way to try a controller.

@@ -58,8 +58,13 @@ static void admin_request(BMessage* request, const r5_admin_sender& sender,
 // SPDX-License-Identifier: MIT
 #include "LEManager.h"
 #include "PasskeyWindow.h"
+#include "RFCOMMMux.h"
 
 #include <MessageRunner.h>
+
+// The Hands-Free unit's service class (Bluetooth Assigned Numbers), whose
+// SDP record names the RFCOMM channel the Audio Gateway connects to.
+static const uint16 kR5ServiceHandsFree = 0x111e;
 // SPDX-SnippetEnd
 #include "DeskbarReplicant.h"
 #include "LocalDeviceImpl.h"
@@ -1193,6 +1198,14 @@ BluetoothServer::_SDPThread(void* data)
 	}
 	if (!read)
 		syslog(LOG_NOTICE, "bluetooth_server: service records not read");
+	else {
+		// Step 7a: where a headset's HFP lives (step 7b connects to it).
+		uint8 channel = R5RFCOMMChannel(probe.services, kR5ServiceHandsFree);
+		if (channel != 0) {
+			syslog(LOG_INFO, "bluetooth_server: hands-free service on "
+				"RFCOMM channel %u", channel);
+		}
+	}
 
 	BluetoothServer* server = (BluetoothServer*)be_app;
 	BAutolock locker(server->fDevicesLock);
@@ -1210,6 +1223,52 @@ BluetoothServer::_SDPThread(void* data)
 	}
 	delete args;
 	return B_OK;
+}
+
+
+uint8
+BluetoothServer::R5RFCOMMChannel(const BMessage& services,
+	uint16 serviceClass)
+{
+	BMessage record;
+	for (int32 i = 0; services.FindMessage("service", i, &record) == B_OK;
+			i++) {
+		const void* classList;
+		const void* protocolList;
+		ssize_t classLength;
+		ssize_t protocolLength;
+		if (record.FindData("0x0001", B_RAW_TYPE, &classList, &classLength)
+				!= B_OK
+			|| record.FindData("0x0004", B_RAW_TYPE, &protocolList,
+				&protocolLength) != B_OK
+			|| classLength <= 0 || protocolLength <= 0)
+			continue;
+		uint8 channel = r5rfcomm::FindChannel((const uint8*)classList,
+			classLength, (const uint8*)protocolList, protocolLength,
+			serviceClass);
+		if (channel != 0)
+			return channel;
+	}
+	return 0;
+}
+
+
+status_t
+BluetoothServer::R5FindRFCOMMChannel(const bdaddr_t& address,
+	uint16 serviceClass, uint8* _channel)
+{
+	if (_channel == NULL)
+		return B_BAD_VALUE;
+	BAutolock locker(fDevicesLock);
+	for (int32 i = 0; i < fLocalDevicesList.CountItems(); i++) {
+		ServerRemoteDevice* rd
+			= fLocalDevicesList.ItemAt(i)->RemoteDeviceByAddr(address);
+		if (rd == NULL)
+			continue;
+		*_channel = R5RFCOMMChannel(rd->services, serviceClass);
+		return *_channel != 0 ? B_OK : B_NAME_NOT_FOUND;
+	}
+	return B_NAME_NOT_FOUND;
 }
 // SPDX-SnippetEnd
 

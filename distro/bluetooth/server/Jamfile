@@ -30,6 +30,8 @@ Application bluetooth_server
 	LocalDeviceImpl.cpp
 	PairingNotice.cpp
 	PasskeyWindow.cpp
+	RFCOMMLink.cpp
+	RFCOMMMux.cpp
 	SDPServer.cpp
 	SDPClient.cpp
 	SMPCrypto.cpp
@@ -43,4 +45,6 @@ DoCatalogs bluetooth_server :
 	DeskbarReplicant.cpp
 	PairingNotice.cpp
 	PasskeyWindow.cpp
+	RFCOMMLink.cpp
+	RFCOMMMux.cpp
 ;

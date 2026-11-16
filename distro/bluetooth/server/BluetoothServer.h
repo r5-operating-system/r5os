@@ -105,6 +105,19 @@ public:
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
+	// Step 7a: the RFCOMM server channel of a service class (for HFP the
+	// Hands-Free unit, 0x111E) in SDP records as SDPClient keeps them; 0
+	// when there is none. R5FindRFCOMMChannel() looks up a device by
+	// address on every radio, under fDevicesLock; RFCOMMLink::Connect()
+	// then opens it.
+	static uint8 R5RFCOMMChannel(const BMessage& services,
+					uint16 serviceClass);
+	status_t	R5FindRFCOMMChannel(const bdaddr_t& address,
+					uint16 serviceClass, uint8* _channel);
+	// SPDX-SnippetEnd
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
 	// Classic HID (step 4); NULL until ReadyToRun().
 	HIDHost*	GetHIDHost() { return fHIDHost; }
 	// SPDX-SnippetEnd
