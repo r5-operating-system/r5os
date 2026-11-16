@@ -62,5 +62,17 @@
 #define BT_MSG_R5_PAIR_RESULT           'r5pR'
 // SPDX-SnippetEnd
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// bluetooth_audio (docs/BLUETOOTH.md, step 5). Only from uid 0, the
+// media_addon_server. bool "streaming": while true, and while the sending
+// team lives, the server refuses Inquiry and Periodic Inquiry, so a scan
+// does not take radio time from the audio. Reply: int32 "status".
+#define BT_MSG_R5_AUDIO_STREAMING       'r5aS'
+// data "bdaddr" (bdaddr_t). Reply: bool "paired" (a link key is stored).
+#define BT_MSG_R5_AUDIO_PAIRED          'r5aP'
+// SPDX-SnippetEnd
+
 
 #endif

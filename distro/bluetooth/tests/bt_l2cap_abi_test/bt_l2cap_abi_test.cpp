@@ -86,11 +86,12 @@ check_sockets()
 		}
 		int error = bind_psm(listening[i], kListen[i]);
 		// Since step 4 bluetooth_server listens on the HID PSMs itself, so
-		// they are taken: that is the bind and listen this checks. 0x19 is
-		// still bound here.
-		if (error == EADDRINUSE && kListen[i] != 0x0019) {
-			printf("bt_l2cap_abi_test: PSM %#06x held by bluetooth_server\n",
-				kListen[i]);
+		// they are taken: that is the bind and listen this checks. Since
+		// step 5 the bluetooth_audio node holds 0x19 while it is the audio
+		// output.
+		if (error == EADDRINUSE) {
+			printf("bt_l2cap_abi_test: PSM %#06x held by %s\n", kListen[i],
+				kListen[i] == 0x0019 ? "bluetooth_audio" : "bluetooth_server");
 			continue;
 		}
 		if (error != 0) {
