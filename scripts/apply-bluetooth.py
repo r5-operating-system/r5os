@@ -34,15 +34,6 @@ AddDirectoryToHaikuImage system non-packaged data launch ;
 AddFilesToHaikuImage system non-packaged data launch : $(r5BtLaunch) ;
 """
 
-USER_LAUNCH_BLOCK = """
-# The Bluetooth Deskbar item for every session (regular image only). In the
-# system launch folder, like the AirPlay item in data/launch/user: R5 has no
-# session launch_daemon, so user_launch is never read (5625U, 16 Nov 2026).
-local r5BtDeskbarLaunch = <r5-launch>bluetooth-deskbar ;
-SEARCH on $(r5BtDeskbarLaunch) = [ FDirName $(HAIKU_TOP) data launch r5 ] ;
-AddFilesToHaikuImage system non-packaged data launch
-	: $(r5BtDeskbarLaunch) ;
-"""
 
 
 def copy_dir(source: pathlib.Path, dest: pathlib.Path, tag: str) -> None:
@@ -182,12 +173,8 @@ def main() -> int:
         "\tbluetooth_server\n",
         "\tbluetooth_deskbar\n",
         "bluetooth_deskbar image")
-    copy_files(SRC / "launch", ("bluetooth-deskbar",),
-        HAIKU / "data" / "launch" / "r5", "bluetooth_deskbar launch job")
-    insert_once(HAIKU / "build" / "jam" / "images" / "definitions" / "regular",
-        LAUNCH_BLOCK,
-        USER_LAUNCH_BLOCK,
-        "bluetooth_deskbar launch image")
+    # The Deskbar item is started by Login at Sign in (distro/login), like the
+    # AirPlay item: R5 never starts the target desktop jobs.
     # Step 4: the bluetooth_hid driver (Classic HID on hid_shared), fed by
     # bluetooth_server. Regular image only: the variable is set in the
     # regular definitions, so the minimum image's package stays without it.

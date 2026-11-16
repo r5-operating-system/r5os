@@ -70,6 +70,12 @@ bold_font()
 // #pragma mark - GlyphView
 
 
+// Internal to libr5bt.so: Settings has a DeviceItem class of its own, and an
+// exported one here made the program's DrawItem() draw these rows (crash on the
+// 5625U after the first scan, 16 Nov 2026).
+namespace {
+
+
 /*!	R5_GLYPH_BLUETOOTH in the panel text color, faint while off. */
 class GlyphView : public BView {
 public:
@@ -190,6 +196,9 @@ private:
 	BluetoothDeviceInfo	fInfo;
 	float				fLineHeight;
 };
+
+
+} // namespace
 
 
 // #pragma mark - BluetoothView
