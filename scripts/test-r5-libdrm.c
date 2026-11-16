@@ -1729,6 +1729,7 @@ share_ids(int node)
 static void
 vram_full_falls_back(amdgpu_device_handle dev)
 {
+	int failBefore = gFail;
 	uint64_t saved = gVramUsed;
 	gVramUsed = HOST_VRAM_POOL;
 	struct amdgpu_bo_alloc_request request;
@@ -1755,18 +1756,35 @@ vram_full_falls_back(amdgpu_device_handle dev)
 	request.preferred_heap = AMDGPU_GEM_DOMAIN_VRAM | AMDGPU_GEM_DOMAIN_GTT;
 	bo = NULL;
 	CHECK(amdgpu_bo_alloc(dev, &request, &bo) == 0);
+	handle = 0;
+	CHECK(bo != NULL && amdgpu_bo_export(bo, amdgpu_bo_handle_type_kms,
+		&handle) == 0);
+	CHECK(handle != 0 && gDomain[handle - 1] == R5_GPU_DOMAIN_GTT);
 	CHECK(bo != NULL && amdgpu_bo_free(bo) == 0);
+
+	/* DISCARDABLE that names GTT too may live there (Linux
+	 * allowed_domains); VRAM only stays refused. */
+	request.flags = AMDGPU_GEM_CREATE_DISCARDABLE;
+	bo = NULL;
+	CHECK(amdgpu_bo_alloc(dev, &request, &bo) == 0);
+	CHECK(bo != NULL && amdgpu_bo_free(bo) == 0);
+	request.flags = 0;
 
 	request.preferred_heap = AMDGPU_GEM_DOMAIN_VRAM;
 	request.flags = AMDGPU_GEM_CREATE_DISCARDABLE;
 	bo = NULL;
 	CHECK(amdgpu_bo_alloc(dev, &request, &bo) != 0);
 	request.flags = 0;
+	request.preferred_heap = AMDGPU_GEM_DOMAIN_GDS;
+	bo = NULL;
+	CHECK(amdgpu_bo_alloc(dev, &request, &bo) != 0);
+	request.preferred_heap = AMDGPU_GEM_DOMAIN_VRAM;
 	request.alloc_size = HOST_MAX_BO + 4096;
 	bo = NULL;
 	CHECK(amdgpu_bo_alloc(dev, &request, &bo) != 0);
 	gVramUsed = saved;
-	printf("ok vram full falls back to gtt\n");
+	if (gFail == failBefore)
+		printf("ok vram full falls back to gtt\n");
 }
 
 

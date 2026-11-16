@@ -128,4 +128,16 @@ r5_range_overlap(uint64_t start, uint64_t bytes, uint64_t other,
 	return start < otherEnd && other < end;
 }
 
+/* A free row for r5_span_add(). Asked before new memory is taken, so a
+ * full table never leaves memory that no row records. */
+static inline int
+r5_span_has_room(const r5_span* spans, int count)
+{
+	for (int i = 0; i < count; i++) {
+		if (!spans[i].live)
+			return 1;
+	}
+	return 0;
+}
+
 #endif
