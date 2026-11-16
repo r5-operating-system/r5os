@@ -5,8 +5,10 @@
  * Smoke test of bluetooth_audio (docs/BLUETOOTH.md, step 5) without a
  * radio, run by distro/bluetooth/tests/run-qemu-smoke.sh:
  *  1. the media add-on lists "Bluetooth audio" as a physical audio output;
- *  2. the node instantiates in media_addon_server, holds PSM 0x19 (AVDTP)
- *     and 0x17 (AVCTP) while it lives, and lets go when it is released;
+ *  2. media_addon_server runs the node from boot (or the test starts it),
+ *     it is not the default output unless chosen, and it holds PSM 0x19
+ *     (AVDTP) and 0x17 (AVCTP); a node the test started lets go of them
+ *     when it is released;
  *  3. its volume parameter takes a value and gives it back;
  *  4. bluetooth_server answers the two audio messages (paired, streaming).
  * Prints "bt_audio_smoke_test: ok" and exits 0 when all passed.
@@ -79,12 +81,30 @@ check_node()
 	if (status != B_OK || count != 1)
 		return;
 
+	// media_addon_server starts every physical output itself at boot, so
+	// the node is live already; only without it does the test start one.
 	media_node node;
-	status = roster->InstantiateDormantNode(infos[0], &node);
-	check(status == B_OK, "node instantiates");
-	if (status != B_OK)
-		return;
-	snooze(500000);
+	bool ownNode = false;
+	live_node_info live[8];
+	int32 liveCount = 8;
+	status = roster->GetLiveNodes(live, &liveCount, NULL, NULL,
+		"Bluetooth audio", B_BUFFER_CONSUMER | B_PHYSICAL_OUTPUT);
+	if (status == B_OK && liveCount >= 1) {
+		node = live[0].node;
+		check(liveCount == 1, "media_addon_server runs one node");
+	} else {
+		status = roster->InstantiateDormantNode(infos[0], &node);
+		check(status == B_OK, "node instantiates");
+		if (status != B_OK)
+			return;
+		ownNode = true;
+		snooze(500000);
+	}
+
+	// Never the default output by itself (DefaultManager).
+	media_node output;
+	if (roster->GetAudioOutput(&output) == B_OK)
+		check(output.node != node.node, "not the default output unchosen");
 
 	check(try_bind(0x0019) == EADDRINUSE, "node listens on PSM 0x19 (AVDTP)");
 	check(try_bind(0x0017) == EADDRINUSE, "node listens on PSM 0x17 (AVCTP)");
@@ -111,6 +131,9 @@ check_node()
 	}
 	delete web;
 
+	// GetLiveNodes() took no reference: media_addon_server's node stays.
+	if (!ownNode)
+		return;
 	status = roster->ReleaseNode(node);
 	check(status == B_OK, "node released");
 	// The listen threads close their sockets when the node is deleted.
