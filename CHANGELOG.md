@@ -1,5 +1,22 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-16 - Bluetooth: headphones and speakers (A2DP with R5's own SBC, AVRCP), step 5
+
+Problem: R5 had no Bluetooth audio. Step 5 of `docs/BLUETOOTH.md`: an A2DP source with a royalty-free SBC encoder written by R5 (no third-party codec, owner's choice), AVRCP play, pause and volume, an audio output choice per person, a real-time audio thread and no scans while it streams.
+
+What changed:
+- `distro/media/bluetooth_audio/` (MIT, new): `bluetooth_audio.media_addon` with one output, "Bluetooth audio" (buffer consumer, physical output, Volume parameter), float stereo at 44.1 kHz from the mixer. `sbc_encoder.cpp` from the A2DP 1.3.2 appendix B only, float analysis. `a2dp_proto.h`: AVDTP 1.3, the SBC element, the RTP media header, AVCTP and AVRCP, parse and build, plain C++ so the host fuzzer builds it. `A2DPSource.cpp`: signalling as initiator and acceptor on PSM `0x19`, media channel, AVRCP on `0x17`, the `B_REAL_TIME_PRIORITY` send thread. Choice of setting: joint stereo, 16 blocks, 8 subbands, Loudness, the highest bitpool the headset allows within A2DP's 512 kb/s and one 672-byte packet (86 if allowed, else the headset's maximum, usually 53); one retry at 53 if the headset refuses. Delay reporting goes into the node's latency (video sync). After 5 s of silence the stream is suspended.
+- Each person's headset in `~/config/settings/Media/bluetooth_audio`. The add-on (uid 0 in media_addon_server) reads the file of the account in `r5-desktop-session` and never writes it; the new command `bt_audio` writes it with `find_directory()`. With no choice, only a device bluetooth_server calls paired may connect.
+- `bluetooth_server` (SPDX snippets): `BT_MSG_R5_AUDIO_STREAMING` (Inquiry and Periodic Inquiry refused while the sending team lives) and `BT_MSG_R5_AUDIO_PAIRED`, both uid 0 only.
+- Mistake in the step brief, corrected: `bluetooth_server` did not listen on PSM `0x19`; the add-on listens itself, and `bt_l2cap_abi_test` accepts `0x19` held by bluetooth_audio.
+- Tests: `scripts/test-sbc.sh` (host, ASan and UBSan), fuzz target `audio` in `scripts/fuzz-bt.sh`, `bt_audio_smoke_test` in `run-qemu-smoke.sh`.
+
+Limits: no headset tried; Classic pairing on the 5625U (MT7922) is fixed in #4314 first, so the Sony WH-1000XM3 and XM4 lines of the pass rule stay open. No SDP record for A2DP Source or AVRCP (R5's `SDPServer` answers nothing yet), so absolute volume may not be offered by a headset that checks it. Play and pause on the headset start and suspend the stream; the playing program is not paused. No headset choice on the Bluetooth page yet (`bt_audio` only). The link's encryption is not checked before audio. Packets stay within the default L2CAP MTU of 672 bytes because the socket does not report the headset's. A scan already running when the stream starts is not stopped. ARM64 and RISC-V 64 were not built or tested.
+
+- `DefaultManager` (SPDX snippet): media_addon_server starts every physical output, so the Bluetooth node is live from boot; it is never taken as the default output only because it was found first, only when it was chosen in Media.
+
+Tested: `scripts/test-sbc.sh` passes. Table 4.7 lengths and bit rates, the header and CRC against a table CRC, a tone lands in its subband, and a decoder written from the same appendix reads every frame back: 59 dB SNR at bitpool 53 and 66 dB at bitpool 86, with the known SBC delay of 73 samples (8 subbands) and 37 (4 subbands). `scripts/fuzz-bt.sh audio 60`: 60 s, 12.5 million rounds, 0 crashes. `scripts/build-locked.sh`: jam_exit=0. QEMU with SMAP (`run-qemu-smoke.sh`, own copy, no radio): the add-on is listed as an audio output, `bt_l2cap_abi_test` sees PSM `0x19` held by bluetooth_audio, bluetooth_server answers both audio messages, and `bt_audio use`, show and `off` work; no SMAP or panic line. Failed twice: `bt_audio_smoke_test` did not find the live node and could not start a second one. Cause found by reading the code: the node did not add `B_PHYSICAL_OUTPUT` to its own kinds, so the live node was not seen as an output (in Media either). Fixed, not built or tested yet. No kernel code changed.
+
 ## 2026-11-16 - Documentation: R5Book on disk, linked from the welcome page
 
 Problem: the R5Book (developer guide, `docs/r5book`) was only in the repository. The welcome page in WebPositive linked the Be Book and the Haiku Book, not the R5Book.
