@@ -1,6 +1,6 @@
 # Game controllers on R5
 
-Plan and license check, 16 Nov 2026. Not on the roadmap until the owner says so (`docs/ROADMAP.md`). Bluetooth controllers depend on `docs/BLUETOOTH.md`, step 4 (classic HID) and step 6 (BLE).
+Plan and license check, 16 Nov 2026. On the roadmap since 16 Nov 2026 (`docs/ROADMAP.md`, near term). Bluetooth controllers depend on `docs/BLUETOOTH.md`, step 4 (classic HID) and step 6 (BLE).
 
 ## 1. Why
 
@@ -22,7 +22,7 @@ A game controller needs other settings than a mouse or a keyboard: a test, the b
 
 The Linux kernel, SDL and iOS lines come from general knowledge, not from a source read for this plan. Sources: [FreeBSD hgame(4)](https://cgit.freebsd.org/src/tree/share/man/man4/hgame.4), [FreeBSD ps4dshock(4)](https://kernelsources.org/source/xref/freebsd/share/man/man4/ps4dshock.4), [OWC on macOS Ventura](https://eshop.macsales.com/blog/84976-customize-your-control-with-enhanced-game-controller-support-in-macos-ventura/), [Xbox Accessories](https://xbox.com/accessories-app), [Google on Android](https://support.google.com/android/answer/17149243), [Digital Trends on Android 17](https://www.digitaltrends.com/gaming/android-17-brings-system-level-remapping-for-controllers-and-its-such-a-relief/), [KDE Game Controller](https://docs.kde.org/stable_kf6/en/plasma-desktop/kcontrol/joystick/), [KDE bug 494913](https://bugs.kde.org/show_bug.cgi?id=494913).
 
-## 3. Design (option B, advised; the owner decides)
+## 3. Design (option B, the owner's choice of 16 Nov 2026)
 
 Options: A, a Settings page with a list and a live test; B, A plus vendor and product ID, a standard layout, Xbox or PlayStation labels and the battery; C, B plus swapping buttons, rumble, lights, touchpad, motion and a buddy controller. Advised: B, as its own step after Bluetooth step 6.
 
@@ -43,6 +43,8 @@ Game or program
   - `StartWatching(BMessenger)`: `B_GAME_CONTROLLER_ADDED` and `..._REMOVED` messages when a controller is plugged in or paired, the BeOS way, no polling;
   - rumble and lights later, as calls added at the end (option C).
 - One additive call in the joystick driver interface (an R5 snippet) for vendor and product ID, filled by `usb_hid` and by `bluetooth_hid`.
+- Old programs: a controller under `/dev/joystick/` works in every `BJoystick` program (and in SDL games, which read through `BJoystick` on Haiku) with no change, because `BJoystick` scans the subfolders too (`JoystickTweaker.cpp`, `_ScanIncludingDisabled()`): a Bluetooth pad is `bluetooth/0`, a USB pad `usb/0`, when the driver speaks the same joystick protocol as `usb_hid` (`JoystickProtocolHandler`). Old programs see raw button and axis numbers in the controller's own order, and no plug or unplug messages; the named layout and `StartWatching()` are for programs that use `BGameController`.
+- Rule for option C: swapping buttons happens below `BJoystick`, in the driver path, so old programs get it too; never only in `BGameController`.
 - Settings → Devices → Game controllers (alphabetical, between Bluetooth and Keyboard): a `BCard` per controller with name, layout (Xbox or PlayStation labels) and battery (`R5_LEVEL_BATTERY`), and a live test drawn in the real layout. The same view later in a separate program, as with Bluetooth and Wi-Fi.
 - The controller battery shows in the existing Bluetooth item in Deskbar, not in an item of its own.
 
@@ -64,7 +66,9 @@ Not in option B (option C, later): swapping buttons for the whole system and per
 
 **Result:** the database may ship in R5, unmodified, with its `LICENSE`, credited in `THIRD_PARTY_NOTICES.md` when it ships.
 
-## 5. Steps (when the owner puts it on the roadmap)
+## 5. When and steps
+
+Owner, 16 Nov 2026: not inside the Bluetooth steps (option B is for USB controllers too), but right after Bluetooth step 4 is merged, in parallel with Low Energy (steps 1c and 6), in its own session. It starts after step 4 because it adds one small call to `bluetooth_hid`. Test over a USB cable in VirtualBox (USB passthrough), so no stick of its own; the Bluetooth part rides on the Low Energy stick. Modern Xbox controllers (2020 and later) use Low Energy and come after step 6; the M30 and the DualSense are classic.
 
 1. Take the RenkuOS joystick fixes `244bf43292` and `823649eb6e` (credit them in `THIRD_PARTY_NOTICES.md`).
 2. The additive driver call for vendor and product ID in `usb_hid` (and `bluetooth_hid` after step 4).

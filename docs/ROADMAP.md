@@ -45,7 +45,8 @@ The order is impact, not ticket number.
    6. WireGuard.
    7. LAN tests: VirtualBox bridged (`docs/vbox.md`), or QEMU bridged/tap. QEMU usernet is not a LAN.
 6. **Dark mode in the remaining system applications** and Deskbar (Haiku #18970). The dark color scheme exists; some applications still keep their own look.
-7. **Polish:** screenshots, emoji and fonts, the image clipboard. Rounder windows and Deskbar: `docs/LOOK.md`, not while multi-user is still open.
+7. **Bluetooth and game controllers** (owner, 16 Nov 2026). Bluetooth follows `docs/BLUETOOTH.md`: step 4 (classic HID, with the owner's 8BitDo M30 and PS5 DualSense) on a stick, then Low Energy (steps 1c and 6) before audio (step 5). Game controllers follow `docs/GAME-CONTROLLERS.md`, option B: right after step 4 is merged, in parallel with Low Energy, tested over a USB cable in VirtualBox; their Bluetooth part rides on the Low Energy stick.
+8. **Polish:** screenshots, emoji and fonts, the image clipboard. Rounder windows and Deskbar: `docs/LOOK.md`, not while multi-user is still open.
 
 Zeroconf, AirPrint, AirPlay 1 and the network tray exist. They are not "done" until LAN tests exist.
 
