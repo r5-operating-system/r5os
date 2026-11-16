@@ -9,6 +9,8 @@ import sys
 HAIKU = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else "/home/nickr/r5os/haiku")
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SRC = ROOT / "distro" / "ui"
+ADMIN_SRC = ROOT / "distro" / "admin"
+ADMIN_FILES = ("Jamfile", "R5Admin.cpp", "R5Admin.h")
 FILES = (
     "Jamfile",
     "R5UI.cpp",
@@ -95,6 +97,31 @@ def apply_r5ui(haiku: pathlib.Path | None = None) -> None:
             lib_line,
             lib_insert,
             "libr5ui.so on " + profile,
+        )
+
+    # libr5admin.so (distro/admin): admin requests with a sender the kernel
+    # names. libr5ui, Login and bluetooth_server link it.
+    admin_dest = tree / "src" / "preferences" / "r5admin"
+    admin_dest.mkdir(parents=True, exist_ok=True)
+    for name in ADMIN_FILES:
+        shutil.copy2(ADMIN_SRC / name, admin_dest / name)
+        print(f"copied admin/{name}")
+    shutil.copy2(ADMIN_SRC / "R5Admin.h",
+        tree / "headers" / "os" / "app" / "R5Admin.h")
+    print("copied R5Admin.h into the public headers")
+    admin_line = "SubInclude HAIKU_TOP src preferences r5admin ;\n"
+    jam_text = jamfile.read_text(encoding="utf-8")
+    if admin_line in jam_text:
+        print(f"already {jamfile.name} (r5admin jam)")
+    else:
+        replace_once(jamfile, r5ui_line, admin_line + r5ui_line,
+            "r5admin jam")
+    for profile in ("regular", "minimum"):
+        replace_once(
+            tree / "build" / "jam" / "images" / "definitions" / profile,
+            "\t\t\tlibr5ui.so\n",
+            "\t\t\tlibr5ui.so\n\t\t\tlibr5admin.so\n",
+            "libr5admin.so on " + profile,
         )
 
 

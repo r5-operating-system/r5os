@@ -23,6 +23,8 @@
 #include <TextControl.h>
 #include <Window.h>
 
+#include <R5Admin.h>
+
 #include <string.h>
 #include <unistd.h>
 
@@ -100,7 +102,9 @@ ask_login(BMessage& request, BMessage& reply, BString& error)
 		return B_ERROR;
 	}
 
-	status_t status = login.SendMessage(&request, &reply);
+	// Through Login's admin port: there the kernel names this team as the
+	// sender, so an unlock grant is this program's and nobody else's.
+	status_t status = r5_admin_send(login, &request, &reply);
 	if (status != B_OK) {
 		error = strerror(status);
 		return status;

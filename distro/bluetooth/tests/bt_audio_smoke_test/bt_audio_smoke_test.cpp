@@ -31,6 +31,8 @@
 #include <bluetooth/L2CAP/btL2CAP.h>
 #include <bluetoothserver_p.h>
 
+#include <R5Admin.h>
+
 
 static int sFailures = 0;
 
@@ -159,7 +161,7 @@ check_server()
 	paired.AddData("bdaddr", B_ANY_TYPE, &address, sizeof(address));
 	BMessage reply;
 	bool isPaired = true;
-	status_t status = server.SendMessage(&paired, &reply, 2000000, 2000000);
+	status_t status = r5_admin_send(server, &paired, &reply, 2000000);
 	check(status == B_OK && reply.FindBool("paired", &isPaired) == B_OK
 		&& !isPaired, "server: unknown device is not paired");
 
@@ -167,7 +169,7 @@ check_server()
 		BMessage streaming(BT_MSG_R5_AUDIO_STREAMING);
 		streaming.AddBool("streaming", i == 0);
 		reply.MakeEmpty();
-		status = server.SendMessage(&streaming, &reply, 2000000, 2000000);
+		status = r5_admin_send(server, &streaming, &reply, 2000000);
 		int32 result = B_ERROR;
 		reply.FindInt32("status", &result);
 		check(status == B_OK && result == B_OK, i == 0

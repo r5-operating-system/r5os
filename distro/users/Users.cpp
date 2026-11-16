@@ -29,6 +29,8 @@
 #include <View.h>
 #include <Window.h>
 
+#include <R5Admin.h>
+
 #include "AccountAdmin.h"
 #include "AdminLock.h"
 #include "HomeLock.h"
@@ -85,7 +87,9 @@ ask_login(BMessage& request, BMessage& reply, BString& error)
 		return B_ERROR;
 	}
 
-	status_t status = login.SendMessage(&request, &reply);
+	// Through Login's admin port, where the kernel names the sender
+	// (libr5admin.so).
+	status_t status = r5_admin_send(login, &request, &reply);
 	if (status != B_OK) {
 		error = strerror(status);
 		return status;

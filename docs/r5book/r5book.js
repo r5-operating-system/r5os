@@ -61,6 +61,13 @@
 			["wifi-kit.html#roster", "BNetworkRoster", true],
 			["wifi-kit.html#settings", "Where people see it", true],
 		]},
+		{ title: "Admin Kit", file: "admin-kit.html", items: [
+			["admin-kit.html", "Overview"],
+			["admin-kit.html#why", "Why not ReturnAddress()", true],
+			["admin-kit.html#service", "Service side", true],
+			["admin-kit.html#client", "Client side", true],
+			["admin-kit.html#services", "Where it is used", true],
+		]},
 		{ title: "Bluetooth Kit", file: "bluetooth-kit.html", items: [
 			["bluetooth-kit.html", "Overview"],
 			["bluetooth-kit.html#view", "BluetoothView", true],

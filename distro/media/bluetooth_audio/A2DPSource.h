@@ -77,6 +77,7 @@ private:
 	static	int32				_ManagerEntry(void* data);
 	static	int32				_StreamEntry(void* data);
 	static	int32				_ControlEntry(void* data);
+	static	int32				_TellServerEntry(void* data);
 
 			void				_Listen(int index);
 			void				_Manage();

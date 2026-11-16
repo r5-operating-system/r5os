@@ -7,6 +7,7 @@
 #define R5_ACCOUNT_ADMIN_H
 
 
+#include <OS.h>
 #include <SupportDefs.h>
 
 #include <pwd.h>
@@ -63,6 +64,11 @@ void refresh_machine_settings_access();
 status_t handle_admin_message(BMessage* request, BMessage& reply);
 // True when the sender is an administrator or holds a running grant.
 bool admin_sender_may_change(BMessage* request);
+// The sender of the request being handled, as the kernel named it
+// (libr5admin.so, Login's admin port). Only while it is set do the
+// requests that change something pass; a request on Login's normal
+// messenger has a reply address its sender chose, which proves nothing.
+void set_admin_sender(bool verified, uid_t uid, team_id team);
 
 
 #endif

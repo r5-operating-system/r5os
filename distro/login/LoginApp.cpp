@@ -15,6 +15,12 @@
 #include "LoginWindow.h"
 #include "SessionLog.h"
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <R5Admin.h>
+// SPDX-SnippetEnd
+
 #include <Alert.h>
 #include <FindDirectory.h>
 #include <LaunchRoster.h>
@@ -137,14 +143,69 @@ LoginApp::LoginApp()
 	fDesktopWindow(NULL),
 	fLoginWindow(NULL),
 	fLockWindow(NULL),
-	fEditShelfMode(false)
+	fEditShelfMode(false),
+	fAdminPort(-1)
 {
 }
 
 
 LoginApp::~LoginApp()
 {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (fAdminPort >= 0)
+		r5_admin_port_stop(fAdminPort);
+// SPDX-SnippetEnd
 }
+
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// Every request that changes the machine or an account comes here, on the
+// admin port's thread, with the sender the kernel named. The normal
+// messenger only answers the query (AccountAdmin.cpp): its reply address is
+// whatever the sender chose.
+void
+LoginApp::_AdminRequest(BMessage* request, const r5_admin_sender& sender,
+	BMessage* reply, void* cookie)
+{
+	LoginApp* app = (LoginApp*)cookie;
+	// BLooper's lock: LoginApp::Lock() locks the screen.
+	if (!app->BLooper::Lock())
+		return;
+	set_admin_sender(true, sender.uid, sender.team);
+	switch (request->what) {
+		case kMsgAdminAdd:
+		case kMsgAdminDelete:
+		case kMsgAdminSetDisabled:
+		case kMsgAdminQuery:
+		case kMsgAdminUnlock:
+		case kMsgAdminRelock:
+		case kMsgAdminSetClock:
+		case kMsgAdminSetTimezone:
+		case kMsgAdminSetClockGmt:
+		case kMsgAdminGetProfile:
+		case kMsgAdminSetProfile:
+			handle_admin_message(request, *reply);
+			break;
+		case kMsgAdminSetDriverBlocked:
+			handle_driver_admin_message(request, *reply);
+			break;
+		case kMsgAdminSetDriverSetting:
+			handle_driver_settings_admin_message(request, *reply);
+			break;
+		default:
+			reply->AddString("text", "Unknown request.");
+			reply->AddInt32("error", B_BAD_VALUE);
+			break;
+	}
+	set_admin_sender(false, (uid_t)-1, -1);
+	app->BLooper::Unlock();
+}
+// SPDX-SnippetEnd
+
 
 
 void
@@ -166,6 +227,17 @@ LoginApp::ReadyToRun()
 
 	lock_private_homes();
 	refresh_machine_settings_access();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (fAdminPort < 0
+		&& r5_admin_port_start("r5 login admin", &LoginApp::_AdminRequest,
+			this, &fAdminPort) != B_OK) {
+		fAdminPort = -1;
+		syslog(LOG_ERR, "Login: no admin port, settings cannot be changed");
+	}
+// SPDX-SnippetEnd
+
 	fDesktopWindow = new DesktopWindow(screen.Frame(), false);
 	fDesktopWindow->Show();
 	_OpenLoginWindow();
@@ -181,6 +253,14 @@ LoginApp::MessageReceived(BMessage* message)
 		case kAttemptLogin:
 			TryLogin(message);
 			break;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		case R5_ADMIN_PORT_REQUEST:
+			r5_admin_port_reply(message, fAdminPort);
+			break;
+// SPDX-SnippetEnd
+
 		case kMsgAdminAdd:
 		case kMsgAdminDelete:
 		case kMsgAdminSetDisabled:

@@ -63,6 +63,16 @@ private:
 	LoginWindow*	fLoginWindow;
 	LockWindow*		fLockWindow;
 	bool			fEditShelfMode;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// Requests that change the machine: on this port the kernel names
+	// the sender (libr5admin.so).
+	static	void	_AdminRequest(BMessage* request,
+						const struct r5_admin_sender& sender, BMessage* reply,
+						void* cookie);
+	port_id			fAdminPort;
+// SPDX-SnippetEnd
 };
 
 

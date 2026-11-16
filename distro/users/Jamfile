@@ -12,6 +12,6 @@ Application Users :
 	AccountAdmin.cpp
 	HomeLock.cpp
 	Users.cpp
-	: be tracker translation libr5ui.so [ TargetLibstdc++ ]
+	: be tracker translation libr5ui.so libr5admin.so [ TargetLibstdc++ ]
 	: Users.rdef
 ;

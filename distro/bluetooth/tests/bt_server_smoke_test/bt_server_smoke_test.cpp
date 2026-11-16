@@ -34,6 +34,8 @@
 #include <bluetooth/bluetooth.h>
 #include <bluetoothserver_p.h>
 
+#include <R5Admin.h>
+
 
 static const bigtime_t kTimeout = 3000000;
 static const int32 kUnknownRadio = 0x7fff;
@@ -225,9 +227,22 @@ main()
 			BMessage set(BT_MSG_R5_SET_RADIO);
 			set.AddBool("enabled", on);
 			BMessage setReply;
-			if (ask(server, set, setReply, "radio switch, set")
-				&& setReply.GetInt32("status", B_ERROR) != B_OK)
+			// The switch is only on the admin port (libr5admin.so).
+			if (r5_admin_send(server, &set, &setReply, kTimeout) != B_OK)
+				fail("radio switch, set: no answer on the admin port");
+			else if (setReply.GetInt32("status", B_ERROR) != B_OK)
 				fail("radio switch, set: not saved");
+			if (pass == 0) {
+				// The normal messenger refuses it: its reply address
+				// proves nothing.
+				BMessage plain(BT_MSG_R5_SET_RADIO);
+				plain.AddBool("enabled", true);
+				BMessage plainReply;
+				if (server.SendMessage(&plain, &plainReply, kTimeout,
+						kTimeout) == B_OK
+					&& plainReply.GetInt32("status", B_OK) != B_NOT_ALLOWED)
+					fail("radio switch: taken on the normal messenger");
+			}
 
 			BMessage get(BT_MSG_R5_GET_RADIO);
 			BMessage getReply;
@@ -250,6 +265,59 @@ main()
 		syslog(LOG_INFO, "bt_server_smoke_test: radio switch ok (was %s)",
 			before ? "on" : "off");
 	}
+
+	// Login's admin port (libr5admin.so): a change on the normal messenger
+	// is refused, the admin port answers. An unlock with a wrong password
+	// gets "wrong password" or "no such account", not "not allowed".
+	// Only when Login runs: on a first boot FirstBootPrompt comes first,
+	// and a BMessenger for Login, which launch_daemon pre-registered,
+	// waits until it starts.
+	bool loginRuns = false;
+	int32 cookie = 0;
+	team_info loginInfo;
+	while (!loginRuns && get_next_team_info(&cookie, &loginInfo) == B_OK) {
+		const char* name = strrchr(loginInfo.args, '/');
+		name = name != NULL ? name + 1 : loginInfo.args;
+		loginRuns = strncmp(name, "Login", 5) == 0
+			&& (name[5] == 0 || name[5] == ' ');
+	}
+	BMessenger login;
+	if (loginRuns)
+		login = BMessenger("application/x-vnd.Haiku-Login");
+	if (!loginRuns) {
+		printf("bt_server_smoke_test: admin: Login does not run (first "
+			"boot), not tested\n");
+		syslog(LOG_INFO, "bt_server_smoke_test: admin: Login does not run, "
+			"not tested");
+	} else if (login.IsValid()) {
+		BMessage change('r5ad');	// kMsgAdminDelete
+		change.AddString("name", "nobody-r5-test");
+		BMessage changeReply;
+		if (login.SendMessage(&change, &changeReply, kTimeout, kTimeout)
+				!= B_OK
+			|| changeReply.GetInt32("error", B_OK) != B_NOT_ALLOWED)
+			fail("admin: Login took a change on its normal messenger");
+
+		syslog(LOG_INFO, "bt_server_smoke_test: admin: normal messenger done");
+		BMessage unlock('r5au');	// kMsgAdminUnlock
+		unlock.AddString("name", "user");
+		unlock.AddString("password", "not-the-password-r5-test");
+		BMessage unlockReply;
+		status_t status = r5_admin_send(login, &unlock, &unlockReply,
+			kTimeout);
+		syslog(LOG_INFO, "bt_server_smoke_test: admin: port answered %s",
+			strerror(status));
+		int32 code = unlockReply.GetInt32("error", B_OK);
+		if (status != B_OK)
+			fail("admin: no answer on Login's admin port");
+		else if (code == B_OK || code == B_NOT_ALLOWED)
+			fail("admin: Login's admin port gave a wrong answer");
+		else {
+			printf("bt_server_smoke_test: admin port ok\n");
+			syslog(LOG_INFO, "bt_server_smoke_test: admin port ok");
+		}
+	} else
+		fail("admin: no messenger for Login");
 
 	team_info info;
 	if (get_team_info(team, &info) != B_OK)
