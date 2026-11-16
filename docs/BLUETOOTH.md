@@ -225,9 +225,42 @@ Each step is its own small pull request. It is built for AMD64 with `scripts/bui
 
 ### Step 7 and later (separate pull requests, each only after a third-party license and patent report)
 
+Order (owner, 16 Nov 2026): first HFP (step 7), then game controllers (step 8, `docs/GAME-CONTROLLERS.md`, option B). The other items stay below and come only when the owner asks.
+
+#### Step 7: HFP (Hands-Free Profile) for classic headsets
+
+**What the person gets:** the headset's battery level in the Bluetooth page and in Deskbar (7b), the headset's buttons for calls and its volume (7b), and later its microphone as an audio input (7c). A headset like the Sony WH-1000XM4 sends its battery only over HFP: A2DP carries no battery, and AVRCP only in the other direction.
+
+**What is missing today:**
+- RFCOMM: HFP runs over RFCOMM, a serial multiplexer on L2CAP PSM `0x0003`. Haiku's stack never had it.
+- SCO and eSCO audio: `h2generic` sets `BT_SCO_NOT_WORKING` and starts no isochronous transfers (a standing transfer on the MT7922 starved the events, see the note in `h2generic.cpp`). The microphone needs isochronous USB transfers started only while a voice link exists, an HCI SCO path, and a voice codec.
+
+**Phases (each its own PR):**
+- **7a. RFCOMM in user space**, in `bluetooth_server` (or a small R5 library if a second program needs it), on an L2CAP socket on PSM 3: frames with FCS, the multiplexer control channel (DLC 0), PN, MSC, credit-based flow control, a server channel number in an SDP record. No kernel code. Testable in QEMU only against itself (a loopback test of the frame and FCS code, and a fuzzer target for the frame parser, 60 s).
+- **7b. HFP service level connection, without audio.** R5 is the Audio Gateway (the side a phone takes); the headset is the Hands-Free unit. The AT exchange of HFP 1.8: `BRSF`, `CIND`, `CMER`, `CHLD`, `BIND`/`BIEV` (HF indicators, indicator 2 is the battery), plus the Apple extension `AT+XAPL`/`AT+IPHONEACCEV` that many headsets use for the battery. Volume (`VGS`, `VGM`). The battery goes to `BT_MSG_R5_GET_PAIRED` ("battery") and so to My devices; the Deskbar item shows it with `R5_LEVEL_BATTERY`. Connected after A2DP, so it never delays music.
+- **7c. Voice: eSCO with mSBC (wideband) and CVSD (narrowband).** `h2generic`: isochronous transfers on the alternate setting the voice link needs, started at Synchronous Connection Complete and stopped at its disconnection. HCI SCO packets up and down. An own MIT SBC decoder for mSBC (the encoder exists), CVSD through the controller's air coding where it offers it. A Media Kit input node "Bluetooth headset microphone". Only on the 5625U: QEMU has no radio.
+
+**License and patent report (AGENTS.md "Before adding a component", owner's rule for step 7):**
+1. **Project and source.** No third-party code. R5 writes RFCOMM, the HFP AT layer, the mSBC decoder and the voice path itself, MIT, from the Bluetooth specifications: RFCOMM 1.2 (with ETSI TS 07.10, which it adapts), HFP 1.8 (or later), Core 5.4 (eSCO, HCI SCO), A2DP for SBC. Linux BlueZ and the kernel's `rfcomm` are GPL-2.0 and are not read for code; FreeBSD's `ng_btsocket_rfcomm` is BSD-2-Clause and may be read, but nothing is copied.
+2. **License.** R5's own: `MIT`, SPDX header on new files, snippets in Haiku files (`h2generic`).
+3. **Copyright.** R5OS Contributors.
+4. **Dependencies.** None new. OpenSSL is not needed.
+5. **Integration.** 7a and 7b in user space (`bluetooth_server`); 7c touches the `h2generic` kernel driver (SMAP review, QEMU with SMAP, fuzz the SCO packet path) and adds a media input in `bluetooth_audio`.
+6. **Compatibility.** MIT only; no combination question.
+7. **Patents and trademarks.** CVSD and SBC/mSBC are part of the Bluetooth specifications. The specifications are free to download and read; the Bluetooth SIG's patent commitments cover members' compliant products, and using the Bluetooth name and logo needs SIG membership and qualification of a product. That question is the same for all of R5's Bluetooth (A2DP with SBC, LE Secure Connections) and is not new with HFP. R5 does not use the Bluetooth logo and does not call a release "Bluetooth qualified". Open for the owner: whether a release that ships Bluetooth needs SIG membership and qualification, before 2026.1 ships, and whether to ask a lawyer.
+8. **Source duties.** None beyond R5's own MIT notices.
+9. **Lawyer.** Not needed for the code in my reading; the qualification question in 7 is the owner's.
+
+**Tests:** 7a in QEMU (loopback, fuzzer, SMAP). 7b and 7c on the 5625U with the Sony WH-1000XM4, riding on a milestone stick: the battery shows in My devices; a call button press reaches the log; for 7c, a recording through the headset microphone in a recording program. No claim without that boot.
+
+#### Step 8: game controllers (option B)
+
+The plan, the license check of `SDL_GameControllerDB` and the steps are in `docs/GAME-CONTROLLERS.md`. It starts after step 7b, in its own session: the RenkuOS joystick fixes, the vendor and product ID call in `usb_hid` and `bluetooth_hid`, `BGameController` with the mapping database, and Settings → Devices → Game controllers with the battery in the Bluetooth Deskbar item. The page's "Test buttons…" window from the Bluetooth page (#4328) becomes the live test of that page. Tested over USB in VirtualBox first, then on a stick, with the 8BitDo M30 and the DualSense.
+
+#### Later, only when the owner asks
+
 - **LE Audio (LC3 and ISO):** a report on `liblc3` (Apache-2.0).
 - **A2DP AAC:** a report on the FDK-AAC license and AAC patents.
-- **HFP (eSCO and mSBC):** microphone support for classic headsets.
 - **More vendor firmware:** a report on the redistribution rights for Realtek (`0x0bda`) and Qualcomm (`0x0cf3`).
 
 ## 4. The owner's choices
