@@ -1724,7 +1724,8 @@ share_ids(int node)
 
 
 /* VRAM full (5625U, 16 Nov 2026): a VRAM buffer is made in GTT, as Linux
- * amdgpu_gem_create_ioctl() does; a DISCARDABLE one and a bad size still
+ * amdgpu_gem_create_ioctl() does; a DISCARDABLE one that names GTT too
+ * falls back as well, one for VRAM only fails, and GDS and a bad size
  * fail. The fallen-back buffer maps for the CPU and frees again. */
 static void
 vram_full_falls_back(amdgpu_device_handle dev)
