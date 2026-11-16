@@ -93,8 +93,8 @@ public:
 			SkiaImage*			SharedImage() const { return fImage.Get(); }
 
 	// Step 5c: textures of bitmaps drawn into this target, kept while the
-	// bitmap's bytes stay the same (compared with a copy; a program may
-	// write a bitmap's memory at any time).
+	// bitmap's bytes stay the same (M13 step 1: compared by a hash of all
+	// bytes; a program may write a bitmap's memory at any time).
 			sk_sp<SkImage>		FindTexture(const void* id, const uint8* bits,
 									int32 length, int32 width, int32 height,
 									int32 bytesPerRow, int32 space, bool raw);
@@ -189,7 +189,9 @@ protected:
 				int32				bytesPerRow;
 				int32				space;
 				bool				raw;
-				std::vector<uint8>	bits;
+				// M13 step 1: a hash of the bytes instead of a copy
+				int32				length;
+				uint64				hash;
 				sk_sp<SkImage>		image;
 				bigtime_t			used;
 			};
