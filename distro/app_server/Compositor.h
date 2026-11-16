@@ -171,6 +171,10 @@ private:
 			};
 			static const int32	kPassStamps = 128;
 			void				_Stamp(int32 pass);
+			void				_RecordImageCopy(const Layer* layer,
+									const BRegion& region,
+									struct VkBuffer_T* frame,
+									uint32 frameStride);
 			void				_TakeStamps();
 			int32				fStampCount = 0;
 			int32				fStampPass[kPassStamps];

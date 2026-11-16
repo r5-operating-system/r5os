@@ -1683,7 +1683,10 @@ allocate_host_buffer(CompositorVulkan* vk, uint64 bytes, VkBuffer* _buffer,
 	VkBufferCreateInfo bufferInfo = {};
 	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 	bufferInfo.size = bytes;
-	bufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+	// M13: the frame is also a transfer target (the image copy), and the
+	// compare's copies are written by vkCmdCopyImageToBuffer
+	bufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
+		| VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	if (vk->vkCreateBuffer(vk->device, &bufferInfo, NULL, _buffer)
 			!= VK_SUCCESS)
@@ -3012,6 +3015,15 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 		rect.fill = layer == NULL ? 1 : fromImage ? kComposeFromImage : 0;
 		rect.color = background;
 		rect.sourceStride = layer != NULL ? layer->buffer->Width() : 0;
+		if (fromImage && part.CountRects() > 0) {
+			// M13 (step 3's copy path, done with step 2): the plain part of
+			// a Skia window is a transfer copy from its image into the
+			// frame, the same bytes as the copy shader. On Lavapipe
+			// texelFetch in compose.comp cost 150-160 ms per frame while
+			// dragging (QEMU, "compose passes"), a copy is a row memcpy.
+			_RecordImageCopy(layer, part, frameInfo.buffer, rect.frameStride);
+			part.MakeEmpty();
+		}
 		for (int32 i = 0; i < part.CountRects(); i++) {
 			clipping_rect r = part.RectAtInt(i);
 			rect.frameX = r.left;
@@ -3345,6 +3357,79 @@ Compositor::_FreeCompareCopies(CompareCopies& copies)
 		vk->vkFreeMemory(vk->device, (VkDeviceMemory)copies[i].memory, NULL);
 	}
 	copies.clear();
+}
+
+
+/*!	M13: \a region (screen pixels inside the window's image) copied from
+	the image into the frame with vkCmdCopyImageToBuffer. The image goes
+	to TRANSFER_SRC_OPTIMAL and back to the sampler's layout; the frame's
+	writes before and after are ordered with the compute passes.
+*/
+void
+Compositor::_RecordImageCopy(const Layer* layer, const BRegion& region,
+	VkBuffer_T* frame, uint32 frameStride)
+{
+	CompositorVulkan* vk = fVulkan;
+	SkiaImage* image = layer->image.Get();
+	int32 count = region.CountRects();
+	VkBufferImageCopy* copies = new(std::nothrow) VkBufferImageCopy[count];
+	if (copies == NULL)
+		return;
+	int32 sourceLeft = layer->SourceLeft();
+	int32 sourceTop = layer->SourceTop();
+	for (int32 i = 0; i < count; i++) {
+		clipping_rect r = region.RectAtInt(i);
+		VkBufferImageCopy& copy = copies[i];
+		memset(&copy, 0, sizeof(copy));
+		copy.bufferOffset = ((uint64)r.top * frameStride + r.left) * 4;
+		copy.bufferRowLength = frameStride;
+		copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		copy.imageSubresource.layerCount = 1;
+		copy.imageOffset.x = r.left - sourceLeft;
+		copy.imageOffset.y = r.top - sourceTop;
+		copy.imageExtent.width = r.right - r.left + 1;
+		copy.imageExtent.height = r.bottom - r.top + 1;
+		copy.imageExtent.depth = 1;
+	}
+
+	VkMemoryBarrier before = {};
+	before.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+	before.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT
+		| VK_ACCESS_TRANSFER_WRITE_BIT;
+	before.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+	VkImageMemoryBarrier toCopy = {};
+	toCopy.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	toCopy.srcAccessMask = 0;
+	toCopy.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+	toCopy.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	toCopy.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+	toCopy.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	toCopy.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	toCopy.image = (VkImage)image->Image();
+	toCopy.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	toCopy.subresourceRange.levelCount = 1;
+	toCopy.subresourceRange.layerCount = 1;
+	vk->vkCmdPipelineBarrier(vk->commands,
+		VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+		VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &before, 0, NULL, 1, &toCopy);
+	vk->vkCmdCopyImageToBuffer(vk->commands, (VkImage)image->Image(),
+		VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, frame, count, copies);
+	delete[] copies;
+
+	VkMemoryBarrier after = {};
+	after.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+	after.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+	after.dstAccessMask = VK_ACCESS_SHADER_READ_BIT
+		| VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT
+		| VK_ACCESS_TRANSFER_WRITE_BIT;
+	VkImageMemoryBarrier toRead = toCopy;
+	toRead.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+	toRead.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+	toRead.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+	toRead.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	vk->vkCmdPipelineBarrier(vk->commands, VK_PIPELINE_STAGE_TRANSFER_BIT,
+		VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+		0, 1, &after, 0, NULL, 1, &toRead);
 }
 
 
@@ -4821,7 +4906,8 @@ Compositor::_ScanoutPrepare(RenderingBuffer* back)
 	else if (!import_own(vk, backToken,
 			(uint64)back->BytesPerRow() * back->Height(),
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
-				| VK_BUFFER_USAGE_TRANSFER_SRC_BIT, false, &vk->back,
+				| VK_BUFFER_USAGE_TRANSFER_SRC_BIT
+				| VK_BUFFER_USAGE_TRANSFER_DST_BIT, false, &vk->back,
 			&vk->backMemory)
 		|| !import_own(vk, scanToken, (uint64)scanPitch * back->Height(),
 			VK_BUFFER_USAGE_TRANSFER_DST_BIT, true, &vk->scanout,

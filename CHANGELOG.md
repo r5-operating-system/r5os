@@ -1,14 +1,24 @@
 # R5OS changelog (lokaal)
 
-## 2026-11-16 - Graphics (M13 step 2 fix): a late Skia run no longer turns the compositor off at once
+## 2026-11-17 - Graphics (M13 step 2 fix): no compositor off on Lavapipe, a copy instead of texelFetch, Mesa's cache, compose time per pass
 
-Problem: after #4330, a second measurement pair (QEMU, Lavapipe, `gpu_draw true`) turned the compositor off with `fence timeout` in both runs of the new build. Two causes in step 2's own code: the damage of a Skia run went to the compositor right after the submit, so a compose was queued at once behind runs that take 11-15 s after Sign in and ran into its 15 s fence limit; and a pass without a compose waited up to 15 s on the CPU for the runs' semaphores and turned the compositor off when that ran out.
+Problem: after #4330 the compositor turned itself off with `fence timeout` on Lavapipe (QEMU, `gpu_draw true`). Two causes were in step 2's own code: the damage of a Skia run went out right after the submit, so a compose was queued behind runs of 11-15 s after Sign in and hit its 15 s limit; and a pass without a compose waited up to 15 s on the CPU for the runs' semaphores. The old build (main with step 0) also turned it off, in 2 of 5 runs, so the limit itself did not fit Lavapipe. And with the images, the plain copy of a Skia window (`texelFetch` in `compose.comp`) cost 150-163 ms per frame while dragging on Lavapipe.
 
-What changed: the draw thread waits for its run's fence before it reports the damage (the compose still waits only on the GPU; nothing is read back). A pass without a compose no longer waits on the CPU; its semaphores go back to the pool after the next compose's fence.
+What changed:
+- The draw thread waits for its run's fence before it reports the damage; the compose still waits only on the GPU (the semaphores), nothing is read back. A pass without a compose no longer waits on the CPU; its semaphores go back after the next compose's fence.
+- No fence limit on Lavapipe (owner, 16 Nov 2026): Lavapipe is the CPU, not a GPU that can hang, so a late frame waits on (logged every 10 s after 15 s). RADV keeps the 15 s limit and the reset ladder.
+- The plain part of a Skia window is copied from its image into the frame with `vkCmdCopyImageToBuffer` (the image goes to `TRANSFER_SRC_OPTIMAL` and back), the same bytes as the copy shader. This is step 3's copy fast path, for Skia windows only; Painter windows keep the copy shader. The host buffers and the scanout back buffer are also transfer targets now (the compare copies of step 2 wrote into a buffer without `TRANSFER_DST`, which Lavapipe let pass).
+- `MESA_SHADER_CACHE_DIR` for app_server (uid 0) is `/boot/system/cache/app_server/mesa`, set before the driver loads, unless the environment has one (owner, 16 Nov 2026). It was `/boot/home/config/cache/mesa_shader_cache`, root-owned inside the administrator's home. The Mesa recipe is unchanged.
+- With `gpu_debug`: GPU timestamps between the compose's passes, one line per 10 s, `compose passes us per frame copy <n> blur <n> shadow <n> glass <n> animation <n> frames <n>`.
 
-Tested: `scripts/build-locked.sh` jam_exit=0. Pairs of runs one right after the other (`scripts/qemu-m13-measure.py`, own image copies; load average 0.1-3.5, another session's Bluetooth QEMU with 2 CPUs ran during some runs). The old build (`main` with step 0) also turned the compositor off with `fence timeout` in 2 of 4 runs; in its good run of this evening: drag 212.9 ms (143 frames), scroll 164.3 ms (188 frames), resize 228.4 ms (33 frames), resize draw 8.0 s. The fixed build turned it off too in its one run (with the Bluetooth QEMU beside it); before the off the syslog of both builds stops for 40-50 s, so the guest stalls under Lavapipe. So `fence timeout` on Lavapipe under host load is older than step 2, and this fix is not proven by a measurement. No new numbers for the fixed build.
+Tested (QEMU, KVM, 8 virtual CPUs, Lavapipe, 1280x800, `scripts/qemu-m13-measure.py` on own image copies, before and after one right after the other). Host load: load average about 2 during both runs (another session's 2-CPU QEMU ran part of the time); a jam of another session ran during the second boot.
+- Before (main with step 0): warm-up 10.5 s; drag frame 175.1 ms (p95 270.0, 110 frames), input 338.5 ms, draw 248.4 ms; scroll 169.8 ms (p95 327.4, 121 frames), draw 303.9 ms; resize 2 frames, draw 5.7 s.
+- After: warm-up 11.6 s; drag frame 171.1 ms (p95 199.5, 120 frames), input 339.3 ms, draw 98.0 ms; scroll 167.3 ms (p95 307.5, 172 frames), draw 157.3 ms; resize 1 frame, draw 13.1 s. Compose passes while dragging: copy about 50 ms, blur 18-25 ms, shadow 10-14 ms, glass 8-12 ms per frame (before the copy path: copy 150-163, blur 63-66, shadow 25, glass 19-20 ms). Glass does not dominate a drag; the copy and the blur do.
+- No `compositor off` and no `gpu draw off` in the before or after runs of this pair (an earlier pair of this evening, before the fence fix, had the old build off 2 times and the new one 2 times).
+- Warm-up on the second boot of the same image (Mesa's cache in the system cache directory now): 4.9 s in the earlier pair, 10.3 s in this pair (with another session's jam beside it), against 11.6 s on the first boot. Skia's pipeline cache holds only the Vulkan header on Lavapipe (312 bytes, `stored 0 KB`): the gain is Mesa's own shader cache.
+- `compose compare ok` 6 times with effects off and a window drawing every 16 ms, no MISMATCH; `r5-draw-compare` 459/490, the same FAILs.
 
-Not tested: RADV and the 5625U. A quiet host for the measurement pair.
+Not tested: RADV and the 5625U (the stick of step 3). The resize numbers have 1-2 frames per run, too few to compare.
 
 ## 2026-11-16 - Graphics (M13 step 2): the compositor reads Skia's window images on the GPU, and the pipeline cache on disk
 
