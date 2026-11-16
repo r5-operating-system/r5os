@@ -13,8 +13,10 @@
 
 #include "SkiaDrawingEngine.h"
 
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+#include <syslog.h>
 
 #include <Autolock.h>
 #include <ObjectList.h>
@@ -33,6 +35,23 @@
 
 
 static bool sDebug = false;
+
+// TEMPORARY trace (M12 buffer investigation, 16 Nov 2026), gpu_debug only,
+// at most 800 lines per boot. To be removed before the PR.
+static int32 sTraceLines = 0;
+void
+skia_trace(const char* format, ...)
+{
+	if (!sDebug || atomic_add(&sTraceLines, 1) >= 800)
+		return;
+	char line[256];
+	va_list args;
+	va_start(args, format);
+	vsnprintf(line, sizeof(line), format, args);
+	va_end(args);
+	syslog(LOG_INFO, "app_server: skia trace %s %lld\n", line,
+		(long long)(system_time() / 1000));
+}
 
 // Decision 9, Painter's side: one drawing session of a window is its first
 // drawing call since the last compose until its last one returned (Painter
@@ -139,6 +158,21 @@ public:
 	// under the lock, from FrameBufferChanged()
 	void SetBuffer(WindowBuffer* buffer, int32 left, int32 top)
 	{
+		// 5625U stick, 16 Nov 2026 (boot 3): after a direct window paused
+		// the compositor, Deskbar showed a black square and Tracker lost
+		// icons; in QEMU the same pause showed Chart's stars in Deskbar.
+		// A window that gets another buffer (a new one, or one the
+		// compositor hands out again) finds that buffer's old pixels, and
+		// Deliver() copies only the damage. The image holds the whole
+		// window, so all of it goes into the new buffer at the next run.
+		skia_trace("setbuf %p %p->%p %dx%d at %d,%d", this, fBuffer.Get(), buffer,
+			buffer != NULL ? (int)buffer->Width() : 0,
+			buffer != NULL ? (int)buffer->Height() : 0, (int)left, (int)top);
+		if (buffer != NULL && buffer != fBuffer.Get()) {
+			AddDamage(BRect(left, top, left + (int32)buffer->Width() - 1,
+				top + (int32)buffer->Height() - 1));
+			MarkDrawn();
+		}
 		fBuffer.SetTo(buffer);
 		fBufferLeft = left;
 		fBufferTop = top;
@@ -167,7 +201,20 @@ public:
 		Delivery* delivery = (Delivery*)cookie;
 		if (delivery == NULL)
 			return;
-		WindowBuffer* buffer = delivery->buffer.Get();
+		// The buffer the window has now: a slow run (seconds on Lavapipe)
+		// can end after the compositor gave the window another buffer,
+		// and pixels copied into the old one would never be shown.
+		BReference<WindowBuffer> current;
+		if (fInterface->LockParallelAccess()) {
+			current.SetTo(fInterface->Buffer());
+			delivery->left = fInterface->Left();
+			delivery->top = fInterface->Top();
+			fInterface->UnlockParallelAccess();
+		}
+		WindowBuffer* buffer = current.Get();
+		skia_trace("deliver %p buf %p frame %d,%d-%d,%d rects %d", this, buffer,
+			(int)frame.left, (int)frame.top, (int)frame.right, (int)frame.bottom,
+			(int)screenDamage.CountRects());
 		if (buffer != NULL) {
 			BRegion copy(screenDamage);
 			BRegion inside(BRect(delivery->left, delivery->top,
@@ -460,7 +507,22 @@ SkiaDrawingEngine::FrameBufferChanged()
 			}
 		}
 	}
+	skia_trace("fbc %p gpu %d card %p win %p", fTarget, (int)gpu, card,
+		fWindowInterface);
 	fOnGpu = gpu;
+	fTarget->Unlock();
+}
+
+
+void
+SkiaDrawingEngine::ReleaseBuffer()
+{
+	// WindowHWInterface::SetBuffer(NULL) does not call
+	// FrameBufferChanged(), so the target let go of nothing and the
+	// compositor's eviction freed no memory for a Skia window
+	if (fWindowInterface == NULL || fTarget == NULL || !fTarget->Lock())
+		return;
+	((WindowTarget*)fTarget)->SetBuffer(NULL, 0, 0);
 	fTarget->Unlock();
 }
 
@@ -471,6 +533,7 @@ SkiaDrawingEngine::SetCopyToFrontEnabled(bool enable)
 	DrawingEngine::SetCopyToFrontEnabled(enable);
 	// Window::_BeginUpdate() turns it off, EndUpdate() on again and then
 	// calls CopyToFront(), which wakes the run that takes the update
+	skia_trace("hold %p %d", fTarget, (int)!enable);
 	if (fTarget != NULL && fTarget->Lock()) {
 		fTarget->SetHeld(!enable);
 		fTarget->Unlock();

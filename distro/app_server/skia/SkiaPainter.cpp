@@ -2235,6 +2235,17 @@ SkiaPainter::DrawBitmap(const ServerBitmap* bitmap, BRect bitmapRect,
 		|| (space == B_RGB32 && fDrawingMode == B_OP_OVER && !hasScale
 			&& fIdentityTransform && !fHasAlphaMask && !tile);
 	// step 5c: the texture of the same bytes, from an earlier drawing
+	// TEMPORARY trace (M12 buffer investigation): which bitmap, its bytes
+	{
+		extern void skia_trace(const char* format, ...);
+		uint32 hash = 2166136261u;
+		const uint8* b = bitmap->Bits();
+		for (int32 n = 0; n < bitmap->BitsLength(); n++)
+			hash = (hash ^ b[n]) * 16777619u;
+		skia_trace("bitmap %p target %p %ldx%ld space %d mode %d hash %08lx",
+			bitmap, fTarget, (long)bitmap->Width(), (long)bitmap->Height(),
+			(int)bitmap->ColorSpace(), (int)fDrawingMode, (unsigned long)hash);
+	}
 	sk_sp<SkImage> image = fTarget->FindTexture(bitmap, bitmap->Bits(),
 		bitmap->BitsLength(), width, height, bitmap->BytesPerRow(), space, raw);
 	if (image == nullptr) {

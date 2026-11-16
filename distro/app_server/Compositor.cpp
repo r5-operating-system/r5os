@@ -1439,6 +1439,12 @@ Compositor::_AllocateBuffer(uint32 width, uint32 height)
 	void* bits;
 	if (!allocate_host_buffer(fVulkan, bytes, &buffer, &memory, &bits))
 		return NULL;
+	// Vulkan does not promise cleared memory: Lavapipe hands out reused
+	// heap memory (RADV's GTT comes cleared from the kernel). Skia takes a
+	// new buffer's pixels as the window's first image (SkiaTarget::
+	// SetSurface()), so the old pixels showed until the window drew
+	// (QEMU and the 5625U's boot 3, 16 Nov 2026). Transparent instead.
+	memset(bits, 0, (size_t)bytes);
 
 	WindowBuffer* windowBuffer = new(std::nothrow) WindowBuffer(this, bits,
 		width, height, (uint64)buffer, (uint64)memory, fGeneration);
@@ -1512,6 +1518,9 @@ Compositor::_AllocateOrMakeRoom(uint32 width, uint32 height,
 		if (oldest == NULL)
 			return NULL;
 		oldest->iface->SetBuffer(NULL, 0, 0);
+		if (SkiaDrawingEngine* skia = dynamic_cast<SkiaDrawingEngine*>(
+				oldest->window->GetDrawingEngine()))
+			skia->ReleaseBuffer();
 		// M11 review: the last layer list still holds it, or nothing is
 		// freed and every off-screen window loses its buffer for nothing.
 		// The compose skips a layer without a buffer; a frame in flight
@@ -2247,8 +2256,19 @@ Compositor::_ComposeLoop()
 		// M12, decision 9: Painter's drawing sessions end at a compose
 		SkiaDrawingEngine::CloseCpuSessions();
 		// M11 step 5: the pause's redraw, and the resume
-		if (fModePending)
+		if (fModePending) {
+			bool wasPaused = fPaused;
 			_ApplyMode();
+			// M12: the resume binds every window to a buffer again, which
+			// still holds other pixels; Skia's next run fills it with the
+			// whole window (WindowTarget::SetBuffer()). Compose after that
+			// run, not now, or the old pixels show for a frame.
+			if (wasPaused && !fPaused && fSkia != NULL
+				&& !fSkia->IsShutDown()) {
+				release_sem_etc(fWakeSem, 1, B_DO_NOT_RESCHEDULE);
+				continue;
+			}
+		}
 		if (fPaused) {
 			// M11 review: no frame runs while paused, but a program whose
 			// window app_server ended still waits for its images. The
