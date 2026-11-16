@@ -284,6 +284,34 @@ gpu_refuse(const char* op, const char* why, status_t status, uint32 handle,
 }
 
 
+/* VRAM full (the file's limit or the pool). The R5 DRM library makes the
+ * buffer in GTT then, as Linux amdgpu_gem_create_ioctl() does, so this
+ * is printed once per boot and does not use up the 32 error lines. */
+static status_t
+gpu_refuse_vram_full(uint64 bytes, uint32 flags)
+{
+	if (r5_log_allow(0, 0, R5_LOG_ONCE, &sErrorLines, &sOnceBits,
+			R5_ONCE_VRAM_FULL)) {
+		dprintf("radeon_hd: refuse BO_CREATE vram full bytes %llu flags %#lx; "
+			"later ones are not printed\n", (unsigned long long)bytes,
+			(unsigned long)flags);
+	}
+	return B_NO_MEMORY;
+}
+
+
+/* A file's GTT limit: a quarter of system memory (docs/GPU-ARCHITECTURE.md,
+ * "Memory limits per address space"). 0 when unknown. */
+uint64
+gpu_gtt_limit()
+{
+	system_info info;
+	if (get_system_info(&info) != B_OK)
+		return 0;
+	return (uint64)info.max_pages * B_PAGE_SIZE / 4;
+}
+
+
 bool
 gpu_render_enabled()
 {
@@ -830,18 +858,30 @@ gpu_bo_fill(gpu_client* client, gpu_bo* bo, r5_gpu_bo* request, uint64 bytes)
 			}
 			held += gpu_export_only_vram(client);
 			if (!r5_vram_fits(limit, held, client->tree->vm.used, bytes))
-				return gpu_refuse("BO_CREATE", "vram", B_NO_MEMORY, 0,
-					in.domain, bytes, 0, 0, 0, in.flags);
+				return gpu_refuse_vram_full(bytes, in.flags);
 			}
 		}
 		if (gR5GpuOps.vram_alloc == NULL)
 			return gpu_refuse("BO_CREATE", "vram", B_NOT_SUPPORTED, 0, in.domain,
 				bytes, 0, 0, 0, in.flags);
 		if (gR5GpuOps.vram_alloc(bytes, &offset) != B_OK)
-			return gpu_refuse("BO_CREATE", "vram", B_NO_MEMORY, 0, in.domain,
-				bytes, 0, 0, 0, in.flags);
+			return gpu_refuse_vram_full(bytes, in.flags);
 		bo->backing->vramOffset = offset;
 	} else {
+		// Review of the VRAM fallback (16 Nov 2026): GTT is locked RAM
+		// and had no limit; a full VRAM now sends more buffers here.
+		uint64 limit = gpu_gtt_limit();
+		if (limit != 0) {
+			uint64 held = 0;
+			for (uint32 i = 0; i < kMaxBo; i++) {
+				if (sBo[i].live && sBo[i].owner == client
+					&& sBo[i].backing->domain == R5_GPU_DOMAIN_GTT)
+					held += sBo[i].backing->bytes;
+			}
+			if (!r5_gtt_fits(limit, held, bytes))
+				return gpu_refuse("BO_CREATE", "gtt limit", B_NO_MEMORY, 0,
+					in.domain, bytes, 0, 0, 0, in.flags);
+		}
 		void* kernel = NULL;
 		/* Not B_CLONEABLE_AREA. The user mapping is vm_clone_area below,
 		 * with kernel true, so the source does not have to be cloneable.

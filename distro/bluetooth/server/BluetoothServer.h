@@ -21,6 +21,11 @@
 #include "HCIDelegate.h"
 #include "LocalDeviceImpl.h"
 #include "SDPServer.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include "HIDHost.h"
+// SPDX-SnippetEnd
 #include "SDPClient.h"
 
 #include <PortListener.h>
@@ -83,6 +88,12 @@ public:
 	void		NotifyWatchers(BMessage* notice);
 	void		DiscoverServices(ServerRemoteDevice* rd);
 	void		NotifyServices(ServerRemoteDevice* rd);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Classic HID (step 4); NULL until ReadyToRun().
+	HIDHost*	GetHIDHost() { return fHIDHost; }
+	// SPDX-SnippetEnd
 
     LocalDeviceImpl*    LocateLocalDeviceImpl(hci_id hid);
 
@@ -145,6 +156,11 @@ private:
 	
 	SDPServer*              fSDPServer;
 	SDPClient*				fSDPClient;
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	HIDHost*				fHIDHost;
+	// SPDX-SnippetEnd
 };
 
 #endif

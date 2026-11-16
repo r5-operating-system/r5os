@@ -11,7 +11,10 @@
   SubInclude and SYSTEM_BIN line in the regular image,
 - libr5bt.so (distro/bluetooth/lib) into src/preferences/r5bt and
   <R5Bluetooth.h> into headers/os/interface, with its SubInclude and its
-  line in the regular image.
+  line in the regular image,
+- the bluetooth_hid driver (distro/kernel/.../drivers/input/bluetooth_hid)
+  into src/add-ons/kernel/drivers/input, in dev/bluetooth/hid of the
+  regular image.
 
 docs/BLUETOOTH.md is the plan."""
 from __future__ import annotations
@@ -122,6 +125,17 @@ def main() -> int:
         "SYSTEM_BIN += bt_server_smoke_test ;\n",
         "SYSTEM_BIN += bt_l2cap_abi_test ;\n",
         "bt_l2cap_abi_test image")
+    # Step 4: the bluetooth_hid driver test (gamepad, BJoystick, mouse).
+    copy_dir(SRC / "tests" / "bt_hid_driver_test",
+        HAIKU / "src" / "bin" / "bt_hid_driver_test", "bt_hid_driver_test")
+    insert_once(HAIKU / "src" / "bin" / "Jamfile",
+        "SubInclude HAIKU_TOP src bin bt_l2cap_abi_test ;\n",
+        "SubInclude HAIKU_TOP src bin bt_hid_driver_test ;\n",
+        "bt_hid_driver_test jam")
+    insert_once(HAIKU / "build" / "jam" / "images" / "definitions" / "regular",
+        "SYSTEM_BIN += bt_l2cap_abi_test ;\n",
+        "SYSTEM_BIN += bt_hid_driver_test ;\n",
+        "bt_hid_driver_test image")
     # libr5bt.so (step 3a): the sources into src/preferences/r5bt, the
     # public header next to R5Icons.h and Card.h. It needs libbluetooth,
     # so it is in the regular image only, like the rest of Bluetooth.
@@ -173,6 +187,26 @@ def main() -> int:
         LAUNCH_BLOCK,
         USER_LAUNCH_BLOCK,
         "bluetooth_deskbar launch image")
+    # Step 4: the bluetooth_hid driver (Classic HID on hid_shared), fed by
+    # bluetooth_server. Regular image only: the variable is set in the
+    # regular definitions, so the minimum image's package stays without it.
+    copy_dir(ROOT / "distro" / "kernel" / "src" / "add-ons" / "kernel"
+        / "drivers" / "input" / "bluetooth_hid",
+        HAIKU / "src" / "add-ons" / "kernel" / "drivers" / "input"
+        / "bluetooth_hid", "bluetooth_hid")
+    insert_once(HAIKU / "src" / "add-ons" / "kernel" / "drivers" / "input"
+        / "Jamfile",
+        "SubInclude HAIKU_TOP src add-ons kernel drivers input i2c_hid ;\n",
+        "SubInclude HAIKU_TOP src add-ons kernel drivers input bluetooth_hid ;\n",
+        "bluetooth_hid jam")
+    insert_once(HAIKU / "build" / "jam" / "packages" / "Haiku",
+        "AddDriversToPackage bluetooth h2 :\n\t$(SYSTEM_ADD_ONS_DRIVERS_BT_H2) ;\n",
+        "AddDriversToPackage bluetooth hid :\n\t$(SYSTEM_ADD_ONS_DRIVERS_BT_HID) ;\n",
+        "bluetooth_hid package")
+    insert_once(HAIKU / "build" / "jam" / "images" / "definitions" / "regular",
+        "SYSTEM_ADD_ONS_DRIVERS_BT_H2 +=\n\th2generic\n;\n",
+        "SYSTEM_ADD_ONS_DRIVERS_BT_HID += bluetooth_hid ;\n",
+        "bluetooth_hid image")
     return 0
 
 

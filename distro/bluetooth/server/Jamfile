@@ -10,9 +10,11 @@ Application bluetooth_server
 	DeskbarReplicant.cpp
 	DeviceManager.cpp
 	HCIControllerAccessor.cpp
+	HIDHost.cpp
 	HCITransportAccessor.cpp
 	LocalDeviceHandler.cpp
 	LocalDeviceImpl.cpp
+	PasskeyWindow.cpp
 	SDPServer.cpp
 	SDPClient.cpp
 	: be network libbluetooth.so localestub
@@ -23,4 +25,5 @@ DoCatalogs bluetooth_server :
 	x-vnd.Haiku-bluetooth_server
 	:
 	DeskbarReplicant.cpp
+	PasskeyWindow.cpp
 ;

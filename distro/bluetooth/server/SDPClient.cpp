@@ -8,6 +8,12 @@
 
 #include "Debug.h"
 #include "SDPClient.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include "BluetoothServer.h"
+#include "HIDHost.h"
+// SPDX-SnippetEnd
 
 
 SDPClient::SDPClient(ServerRemoteDevice* rd)
@@ -269,5 +275,26 @@ status_t
 SDPClient::_NotifyHIDProfile(BMessage* attrList)
 {
 	TRACE_BT("Notifying HID Profile...\n");
-	return B_NOT_SUPPORTED;
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Step 4: the report descriptor (HIDDescriptorList, attribute 0x0206)
+	// goes to the HID host, which opens the HID channels.
+	const uint8* list;
+	ssize_t listSize;
+	if (attrList->FindData("0x0206", B_RAW_TYPE, (const void**)&list,
+			&listSize) != B_OK || listSize <= 0)
+		return B_NOT_SUPPORTED;
+
+	const uint8* descriptor;
+	size_t length;
+	if (!HIDHost::FindReportDescriptor(list, listSize, &descriptor, &length))
+		return B_BAD_DATA;
+
+	HIDHost* host = ((BluetoothServer*)be_app)->GetHIDHost();
+	if (host == NULL)
+		return B_NO_INIT;
+	host->DeviceReady(fRemoteDevice->bdaddr, descriptor, length);
+	return B_OK;
+	// SPDX-SnippetEnd
 }

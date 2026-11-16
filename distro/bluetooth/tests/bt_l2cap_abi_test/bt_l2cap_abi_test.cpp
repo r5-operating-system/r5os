@@ -6,7 +6,8 @@
  * radio.
  *
  * L2CAP sockets: a socket binds and listens on the HID PSMs 0x11 and 0x13
- * and on AVDTP 0x19; a second bind on a taken PSM fails with EADDRINUSE; an
+ * (or finds them held by bluetooth_server, which listens there since step
+ * 4) and on AVDTP 0x19; a second bind on a taken PSM fails with EADDRINUSE; an
  * even PSM and one with bit 8 set fail with EINVAL.
  *
  * libbluetooth: RemoteDevice::GetConnectionState() keeps its signature and
@@ -84,6 +85,14 @@ check_sockets()
 			return;
 		}
 		int error = bind_psm(listening[i], kListen[i]);
+		// Since step 4 bluetooth_server listens on the HID PSMs itself, so
+		// they are taken: that is the bind and listen this checks. 0x19 is
+		// still bound here.
+		if (error == EADDRINUSE && kListen[i] != 0x0019) {
+			printf("bt_l2cap_abi_test: PSM %#06x held by bluetooth_server\n",
+				kListen[i]);
+			continue;
+		}
 		if (error != 0) {
 			char what[64];
 			snprintf(what, sizeof(what), "bind PSM %#06x", kListen[i]);

@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: MIT
+# Copyright 2026 R5OS Contributors
+# bluetooth_hid: Bluetooth Classic HID on Haiku's hid_shared
+# (docs/BLUETOOTH.md, step 4). Regular image only.
+SubDir HAIKU_TOP src add-ons kernel drivers input bluetooth_hid ;
+
+SubDirC++Flags -fno-rtti ;
+
+SubDirSysHdrs $(HAIKU_TOP) headers os drivers ;
+SubDirSysHdrs $(HAIKU_TOP) src add-ons kernel drivers input hid_shared ;
+UsePrivateHeaders [ FDirName kernel util ] input drivers device ;
+# Only <R5BluetoothHID.h> from headers/private/bluetooth, included as
+# "bluetooth/R5BluetoothHID.h": that directory also has a debug.h that
+# would replace the kernel's.
+SubDirHdrs $(HAIKU_TOP) headers private ;
+UsePrivateKernelHeaders ;
+
+SEARCH_SOURCE += [ FDirName $(HAIKU_TOP) src add-ons kernel drivers input hid_shared ] ;
+
+KernelAddon bluetooth_hid :
+	DeviceList.cpp
+	Driver.cpp
+	HIDDevice.cpp
+
+	HIDCollection.cpp
+	HIDParser.cpp
+	HIDReport.cpp
+	HIDReportItem.cpp
+	HIDWriter.cpp
+
+	ProtocolHandler.cpp
+
+	JoystickProtocolHandler.cpp
+	KeyboardProtocolHandler.cpp
+	MouseProtocolHandler.cpp
+	TabletProtocolHandler.cpp
+;
