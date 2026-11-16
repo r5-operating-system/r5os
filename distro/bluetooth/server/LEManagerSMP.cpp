@@ -70,9 +70,16 @@ LEManager::_SMPCleanup(Link* link)
 void
 LEManager::_SMPStart(Link* link)
 {
+	// One pairing at a time; one that got stuck for longer than the SMP
+	// timeout (30 s, Vol 3, Part H, 3.4) may start again.
+	if (link->pairing && link->smpState != Link::kSMPDone
+		&& link->smpState != Link::kSMPFailed
+		&& system_time() - link->smpStarted < 30000000)
+		return;
 	if (link->pairing && link->smpState != Link::kSMPDone
 		&& link->smpState != Link::kSMPFailed)
-		return;
+		syslog(LOG_NOTICE, "bluetooth_server: smp pairing timed out");
+	link->smpStarted = system_time();
 
 	_SMPCleanup(link);
 	link->pairing = true;
@@ -190,7 +197,10 @@ LEManager::_SMPReceived(Link* link, const uint8* pdu, size_t size)
 		case kSMPIdentityInformation:
 		case kSMPIdentityAddress:
 		case kSMPSigningInformation:
-			if (link->smpState == Link::kSMPWaitKeys)
+			// Keys come over the encrypted link, but their PDUs can be
+			// read before the Encryption Change event (another thread).
+			if (link->smpState == Link::kSMPWaitKeys
+				|| link->smpState == Link::kSMPWaitEncryption)
 				_SMPKeyDistribution(link, pdu, size);
 			break;
 
@@ -493,7 +503,7 @@ LEManager::_SMPEncrypted(Link* link)
 {
 	if (link->smpState != Link::kSMPWaitEncryption)
 		return;
-	if (link->keysExpected != 0) {
+	if ((link->keysReceived & link->keysExpected) != link->keysExpected) {
 		link->smpState = Link::kSMPWaitKeys;
 		return;
 	}
@@ -535,7 +545,8 @@ LEManager::_SMPKeyDistribution(Link* link, const uint8* pdu, size_t size)
 			break;
 	}
 
-	if ((link->keysReceived & link->keysExpected) == link->keysExpected)
+	if (link->smpState == Link::kSMPWaitKeys
+		&& (link->keysReceived & link->keysExpected) == link->keysExpected)
 		_SMPFinish(link);
 }
 

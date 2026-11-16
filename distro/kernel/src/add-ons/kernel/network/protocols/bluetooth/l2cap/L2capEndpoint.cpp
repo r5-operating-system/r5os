@@ -608,9 +608,11 @@ L2capEndpoint::_SendQueued()
 		// Written back before the buffer goes: PostACL() owns it, and
 		// the destructor wrote into it afterwards.
 		header.Sync();
-		// SPDX-SnippetEnd
 		buffer->type = fConnection->handle;
-		btDevices->PostACL(fConnection->ndevice->index, buffer);
+		// Through the send thread, not under this endpoint's lock
+		// (l2cap_tx.cpp).
+		l2cap_post_acl(fConnection->ndevice->index, buffer);
+		// SPDX-SnippetEnd
 	}
 }
 

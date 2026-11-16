@@ -544,8 +544,9 @@ fuzz_l2cap_round()
 		check(!(le && bredr) || code == 0x01 || code == 0x06 || code == 0x07,
 			"only reject and disconnection serve both channels");
 	}
-	check(l2cap_parse_is_response(0x18) && l2cap_parse_is_response(0x1a)
-		&& !l2cap_parse_is_response(0x19) && !l2cap_parse_is_response(0x16),
+	check(l2cap_parse_is_response(0x18) && l2cap_parse_is_response(0x15)
+		&& !l2cap_parse_is_response(0x19) && !l2cap_parse_is_response(0x16)
+		&& !l2cap_parse_is_response(0x13) && !l2cap_parse_is_response(0x1a),
 		"credit-based answers");
 	uint16 length = (uint16)(next_word() % 40);
 	int cids = l2cap_parse_cid_count(length, 8);

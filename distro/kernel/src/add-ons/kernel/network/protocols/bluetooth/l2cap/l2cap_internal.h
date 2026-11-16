@@ -65,6 +65,12 @@ l2cap_keep_command_ident(HciConnection* conn, uint8 ident, void* owner)
 	MutexLocker _(&conn->fLock);
 	conn->fInUseIdents.Insert(ident, owner);
 }
+
+// The one send thread (l2cap_tx.cpp): every PDU goes to PostACL() through
+// it, never while an L2CAP lock is held. Takes the buffer, also on error.
+status_t l2cap_post_acl(hci_id hid, net_buffer* buffer);
+status_t l2cap_tx_init();
+void l2cap_tx_uninit();
 // SPDX-SnippetEnd
 
 

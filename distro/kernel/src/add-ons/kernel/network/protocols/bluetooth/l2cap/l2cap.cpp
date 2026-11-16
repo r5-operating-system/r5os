@@ -19,6 +19,7 @@
 #include "l2cap_parse.h"
 
 #include <R5BluetoothLE.h>
+#include <stddef.h>
 // SPDX-SnippetEnd
 #include "l2cap_signal.h"
 #include "L2capEndpoint.h"
@@ -224,6 +225,20 @@ connection_for(net_buffer* buffer, net_interface_address* interfaceAddress)
 		return NULL;
 	const sockaddr_l2cap* l2capAddr = (sockaddr_l2cap*)buffer->source;
 	const sockaddr_dl* interfaceAddr = (sockaddr_dl*)interfaceAddress->local;
+
+	// acl.cpp and btCoreData point interface_address into the connection
+	// the packet came on. Searching by address found the first link to that
+	// device, which is the wrong one when a device has a BR/EDR and an LE
+	// link (review of steps 1c and 6). The connection is taken from there,
+	// and only used when btCoreData still knows it by its handle.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Winvalid-offsetof"
+	HciConnection* owner = (HciConnection*)((uint8*)interfaceAddress
+		- offsetof(HciConnection, interface_address));
+#pragma GCC diagnostic pop
+	if (btCoreData->ConnectionByHandle(owner->handle,
+			interfaceAddr->sdl_index) == owner)
+		return owner;
 	// SPDX-SnippetEnd
 	struct HciConnection* connection = btCoreData->ConnectionByDestination(
 		l2capAddr->l2cap_bdaddr, interfaceAddr->sdl_index);
@@ -368,8 +383,10 @@ l2cap_receive_data(net_buffer* buffer)
 				return ECONNRESET;
 			}
 
-			// A credit-based channel takes frames only from its own link.
-			if (endpoint->IsLECredit() && endpoint->Connection()
+			// A channel takes frames only from its own link: a device on
+			// another link (an LE one guessing the CID of a Classic HID
+			// channel) could put data into it.
+			if (endpoint->Connection() != NULL && endpoint->Connection()
 					!= connection_for(buffer, interfaceAddress)) {
 				gSocketModule->release_socket(endpoint->socket);
 				gBufferModule->free(buffer);
@@ -442,6 +459,13 @@ l2cap_std_ops(int32 op, ...)
 		case B_MODULE_INIT:
 		{
 			new(&gL2capEndpointManager) L2capEndpointManager;
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			error = l2cap_tx_init();
+			if (error != B_OK)
+				return error;
+			// SPDX-SnippetEnd
 
 			error = gStackModule->register_domain_protocols(AF_BLUETOOTH,
 				SOCK_SEQPACKET, BLUETOOTH_PROTO_L2CAP,
@@ -459,6 +483,11 @@ l2cap_std_ops(int32 op, ...)
 		}
 
 		case B_MODULE_UNINIT:
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			l2cap_tx_uninit();
+			// SPDX-SnippetEnd
 			gL2capEndpointManager.~L2capEndpointManager();
 			return B_OK;
 

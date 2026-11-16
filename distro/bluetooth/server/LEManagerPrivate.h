@@ -121,6 +121,7 @@ struct LEManager::Link {
 		kSMPFailed
 	}			smpState;
 	bool		pairing;
+	bigtime_t	smpStarted;
 	bool		secureConnections;
 	enum {
 		kJustWorks,

@@ -194,26 +194,7 @@ LEManager::_SetupStep(int step)
 		_Issue(kOpLESetDefaultPHY, phy, sizeof(phy));
 	}
 
-	if (fPrivacy) {
-		_Issue(kOpLEClearResolvingList, NULL, 0);
-		bool any = false;
-		for (size_t i = 0; i < fBonds.size(); i++) {
-			const LEBond* bond = fBonds[i];
-			if (!bond->hasIRK)
-				continue;
-			uint8 entry[1 + 6 + 16 + 16];
-			entry[0] = bond->addressType == R5_BDADDR_LE_RANDOM ? 1 : 0;
-			memcpy(entry + 1, &bond->address, 6);
-			memcpy(entry + 7, bond->irk, 16);
-			memset(entry + 23, 0, 16);	// we use our public address
-			_Issue(kOpLEAddResolvingList, entry, sizeof(entry));
-			memset(entry, 0, sizeof(entry));
-			any = true;
-		}
-		const uint8 enable = any ? 1 : 0;
-		_Issue(kOpLESetResolutionEnable, &enable, 1);
-	}
-
+	_ResolvingListSetup();
 	_AcceptListSetup();
 	fReady = true;
 	if (fScanning)
@@ -594,6 +575,7 @@ LEManager::_ConnectionComplete(const uint8* data, size_t size, uint8 subevent)
 		&& bdaddrUtils::Compare(link->address, fDirectAddress);
 	link->smpState = Link::kSMPIdle;
 	link->pairing = false;
+	link->smpStarted = 0;
 	link->secureConnections = false;
 	link->method = Link::kJustWorks;
 	link->keyPair.privateKey = NULL;
@@ -772,6 +754,10 @@ LEManager::Pair(const bdaddr_t& address)
 	Seen* seen = _FindSeen(address);
 	if (seen == NULL)
 		return false;
+	for (size_t i = 0; i < fClassic.size(); i++) {
+		if (bdaddrUtils::Compare(fClassic[i], address))
+			return false;
+	}
 
 	if (!fRadioEnabled || !fReady) {
 		syslog(LOG_NOTICE, "bluetooth_server: hci%" B_PRId32
@@ -840,6 +826,7 @@ LEManager::_Connect()
 	// nothing initiates.
 	if (fAcceptListDirty) {
 		fAcceptListDirty = false;
+		_ResolvingListSetup();
 		_AcceptListSetup();
 	}
 
@@ -939,6 +926,52 @@ LEManager::_AcceptListSetup()
 		memcpy(entry + 1, &fBonds[i]->address, 6);
 		_Issue(kOpLEAddAcceptList, entry, sizeof(entry));
 	}
+}
+
+
+void
+LEManager::_ResolvingListSetup()
+{
+	// The IRKs of paired devices, so the controller knows them under their
+	// private addresses (7.8.38); only while nothing initiates, with
+	// resolution off while the list changes (7.8.44).
+	if (!fPrivacy)
+		return;
+	const uint8 off = 0;
+	_Issue(kOpLESetResolutionEnable, &off, 1);
+	_Issue(kOpLEClearResolvingList, NULL, 0);
+	bool any = false;
+	for (size_t i = 0; i < fBonds.size(); i++) {
+		const LEBond* bond = fBonds[i];
+		if (!bond->hasIRK)
+			continue;
+		uint8 entry[1 + 6 + 16 + 16];
+		entry[0] = bond->addressType == R5_BDADDR_LE_RANDOM ? 1 : 0;
+		memcpy(entry + 1, &bond->address, 6);
+		memcpy(entry + 7, bond->irk, 16);
+		memset(entry + 23, 0, 16);	// we use our public address
+		_Issue(kOpLEAddResolvingList, entry, sizeof(entry));
+		memset(entry, 0, sizeof(entry));
+		any = true;
+	}
+	if (any) {
+		const uint8 on = 1;
+		_Issue(kOpLESetResolutionEnable, &on, 1);
+	}
+}
+
+
+void
+LEManager::NoteClassic(const bdaddr_t& address)
+{
+	BAutolock _(fLock);
+	for (size_t i = 0; i < fClassic.size(); i++) {
+		if (bdaddrUtils::Compare(fClassic[i], address))
+			return;
+	}
+	if (fClassic.size() >= kMaxSeen)
+		fClassic.erase(fClassic.begin());
+	fClassic.push_back(address);
 }
 
 

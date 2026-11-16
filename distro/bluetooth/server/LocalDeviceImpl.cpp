@@ -1469,6 +1469,13 @@ LocalDeviceImpl::InquiryResult(uint8* numberOfResponses, BMessage* request)
 			clock_offset_array[i]);
 
 		reply.AddData("bdaddr", B_ANY_TYPE, &bdaddr_array[i], sizeof(bdaddr_t));
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// Found by Classic: Pair stays Classic for it (step 6).
+		if (fLE != NULL)
+			fLE->NoteClassic(bdaddr_array[i]);
+		// SPDX-SnippetEnd
 		reply.AddData("dev_class", B_ANY_TYPE, &dev_class_array[i * 3], 3);
 		reply.AddUInt8("page_repetition_mode", page_repetition_mode_array[i]);
 		reply.AddUInt8("scan_period_mode", scan_period_mode_array[i]);
@@ -1510,6 +1517,13 @@ LocalDeviceImpl::InquiryResultWithRSSI(uint8* numberOfResponses, BMessage* reque
 			rssi_array[i]);
 
 		reply.AddData("bdaddr", B_ANY_TYPE, &bdaddr_array[i], sizeof(bdaddr_t));
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// Found by Classic: Pair stays Classic for it (step 6).
+		if (fLE != NULL)
+			fLE->NoteClassic(bdaddr_array[i]);
+		// SPDX-SnippetEnd
 		reply.AddData("dev_class", B_ANY_TYPE, &dev_class_array[i * 3], 3);
 		reply.AddUInt8("page_repetition_mode", page_repetition_mode_array[i]);
 		reply.AddUInt8("scan_period_mode", scan_period_mode_array[i]);
@@ -1543,6 +1557,13 @@ LocalDeviceImpl::ExtendedInquiryResult(uint8* numberOfResponses, BMessage* reque
 		info->page_repetition_mode, info->scan_period_mode, info->clock_offset, info->rssi);
 
 	reply.AddData("bdaddr", B_ANY_TYPE, &info->bdaddr, sizeof(bdaddr_t));
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Found by Classic: Pair stays Classic for it (step 6).
+	if (fLE != NULL)
+		fLE->NoteClassic(info->bdaddr);
+	// SPDX-SnippetEnd
 	reply.AddData("dev_class", B_ANY_TYPE, info->dev_class, 3);
 	reply.AddUInt8("page_repetition_mode", info->page_repetition_mode);
 	reply.AddUInt8("scan_period_mode", info->scan_period_mode);

@@ -77,6 +77,7 @@ public:
 			// L2capEndpointLE.cpp). A fixed channel (ATT, SMP) or an LE
 			// credit-based channel; see <R5BluetoothLE.h>.
 			bool		IsLECredit() const { return fLEMode != 0; }
+			uint8		LEMode() const { return fLEMode; }
 			uint16		FixedChannel() const { return fFixedChannel; }
 			HciConnection* Connection() const { return fConnection; }
 			status_t	_BindLE(const sockaddr* address);

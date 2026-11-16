@@ -76,6 +76,9 @@ public:
 	// A Create Connection for a device the LE scan found pairs it here;
 	// false when the address is not one of them.
 			bool				Pair(const bdaddr_t& address);
+	// A device the Classic inquiry found: Pair uses Classic for it, also
+	// when it advertises on LE with the same address (dual mode).
+			void				NoteClassic(const bdaddr_t& address);
 			void				RadioChanged(bool enabled);
 
 	// From the fixed-channel sockets and the bluetooth_hid driver.
@@ -112,6 +115,7 @@ private:
 									uint8 addressType);
 			void				_CancelConnection();
 			void				_AcceptListSetup();
+			void				_ResolvingListSetup();
 			void				_StartEncryption(Link* link, const uint8 ltk[16],
 									uint16 ediv, const uint8 rand[8]);
 
@@ -206,6 +210,7 @@ private:
 			std::vector<LEBond*> fBonds;
 			bool				fRadioEnabled;
 			bool				fAcceptListDirty;
+			std::vector<bdaddr_t> fClassic;
 };
 
 

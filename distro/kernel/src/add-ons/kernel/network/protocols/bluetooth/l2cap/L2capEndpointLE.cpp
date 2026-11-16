@@ -212,7 +212,7 @@ L2capEndpoint::_SendFixed(net_buffer* buffer)
 	// PostACL() owns the buffer from here, also when it fails; the stack
 	// must not free it again, so the PDU counts as sent.
 	buffer->type = connection->handle;
-	if (btDevices->PostACL(connection->Hid, buffer) != B_OK)
+	if (l2cap_post_acl(connection->Hid, buffer) != B_OK)
 		TRACE("%s: PDU on fixed channel %#x not sent\n", __func__, fFixedChannel);
 	return B_OK;
 }
@@ -270,7 +270,7 @@ L2capEndpoint::_SendLECreditQueued()
 
 		fLETxCredits--;
 		frame->type = fConnection->handle;
-		btDevices->PostACL(fConnection->Hid, frame);
+		l2cap_post_acl(fConnection->Hid, frame);
 	}
 }
 
@@ -494,10 +494,11 @@ L2capEndpoint::_HandleLECreditConnectionRsp(uint8 ident, uint16 dcid,
 		if (result == kLEResultSuccess && l2cap_parse_valid_le_cid(dcid)) {
 			uint8 closeIdent = btCoreData->allocate_command_ident(fConnection,
 				NULL);
+			// The identifier stays taken until the answer comes, so
+			// that answer cannot reach the next command that waits.
 			if (closeIdent != L2CAP_NULL_IDENT) {
 				send_l2cap_disconnection_req(fConnection, closeIdent, dcid,
 					fChannelID);
-				btCoreData->free_command_ident(fConnection, closeIdent);
 			}
 		}
 		_MarkClosed();
@@ -730,8 +731,11 @@ l2cap_handle_le_command(HciConnection* conn, uint8 code, uint8 ident,
 
 		case 0x15:
 			// LE Credit Based Connection Response: DCID, MTU, MPS,
-			// credits, result.
-			if (endpoint != NULL) {
+			// credits, result. Only for a request of that mode.
+			if (endpoint != NULL
+				&& endpoint->LEMode() != R5_L2CAP_MODE_LE_CREDIT) {
+				endpoint->_HandleBadResponse(ident);
+			} else if (endpoint != NULL) {
 				endpoint->_HandleLECreditConnectionRsp(ident, values[0],
 					values[1], values[2], values[3], values[4]);
 			}
@@ -797,7 +801,10 @@ l2cap_handle_le_command(HciConnection* conn, uint8 code, uint8 ident,
 			// Credit Based Connection Response: MTU, MPS, credits, result,
 			// the DCIDs. We ask for one channel at a time; it is open when
 			// its DCID is not 0.
-			if (endpoint != NULL) {
+			if (endpoint != NULL
+				&& endpoint->LEMode() != R5_L2CAP_MODE_ENHANCED_CREDIT) {
+				endpoint->_HandleBadResponse(ident);
+			} else if (endpoint != NULL) {
 				const uint16 dcid = length >= 10 ? values[4] : 0;
 				uint16 result = values[3];
 				if (dcid == 0 && result == kLEResultSuccess)

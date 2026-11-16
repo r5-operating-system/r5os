@@ -10,4 +10,5 @@ KernelAddon l2cap :
 	L2capEndpoint.cpp
 	L2capEndpointManager.cpp
 	L2capEndpointLE.cpp
+	l2cap_tx.cpp
 ;

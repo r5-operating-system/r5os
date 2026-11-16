@@ -233,6 +233,18 @@ l2cap_handle_configuration_req(HciConnection* conn, uint8 ident, net_buffer* buf
 			l2cap_command_reject::REJECTED_INVALID_CID, 0, 0, 0);
 		return B_ERROR;
 	}
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Only a channel of this link: a device on another link could close
+	// or reconfigure it by guessing its CID.
+	if (endpoint->Connection() != NULL && endpoint->Connection() != conn) {
+		gSocketModule->release_socket(endpoint->socket);
+		send_l2cap_command_reject(conn, ident,
+			l2cap_command_reject::REJECTED_INVALID_CID, 0, 0, 0);
+		return B_ERROR;
+	}
+	// SPDX-SnippetEnd
 
 	const uint16 flags = le16toh(command->flags);
 
@@ -339,6 +351,18 @@ l2cap_handle_disconnection_req(HciConnection* conn, uint8 ident, net_buffer* buf
 			l2cap_command_reject::REJECTED_INVALID_CID, 0, 0, 0);
 		return B_ERROR;
 	}
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Only a channel of this link: a device on another link could close
+	// or reconfigure it by guessing its CID.
+	if (endpoint->Connection() != NULL && endpoint->Connection() != conn) {
+		gSocketModule->release_socket(endpoint->socket);
+		send_l2cap_command_reject(conn, ident,
+			l2cap_command_reject::REJECTED_INVALID_CID, 0, 0, 0);
+		return B_ERROR;
+	}
+	// SPDX-SnippetEnd
 
 	const uint16 scid = le16toh(command->scid);
 
@@ -494,7 +518,7 @@ send_l2cap_command(HciConnection* conn, uint8 code, uint8 ident, net_buffer* com
 	// SPDX-License-Identifier: MIT
 	// PostACL() owns the buffer, also on failure (it freed part of it on
 	// some errors, so freeing it here was a double free).
-	return btDevices->PostACL(conn->Hid, command);
+	return l2cap_post_acl(conn->Hid, command);
 	// SPDX-SnippetEnd
 }
 

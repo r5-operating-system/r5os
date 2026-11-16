@@ -61,13 +61,15 @@ l2cap_parse_min_length(uint8 code)
 
 
 // Whether a code is an answer to a command of ours, which carries our
-// identifier. Not simply odd: 0x18 and 0x1a are answers, 0x19 is not.
+// identifier. Not simply odd: 0x18 is an answer, 0x19 is not. The answers
+// to commands we never send (0x13, 0x1a) take no identifier, so a forged
+// one cannot take that of a command that waits.
 static inline bool
 l2cap_parse_is_response(uint8 code)
 {
 	switch (code) {
 		case 0x01: case 0x03: case 0x05: case 0x07: case 0x09: case 0x0b:
-		case 0x13: case 0x15: case 0x18: case 0x1a:
+		case 0x15: case 0x18:
 			return true;
 	}
 	return false;
