@@ -25,6 +25,8 @@
 #include <ScrollView.h>
 #include <StringFormat.h>
 #include <StringView.h>
+#include <Joystick.h>
+#include <MessageRunner.h>
 #include <Window.h>
 
 #include <Card.h>
@@ -33,6 +35,7 @@
 #include <bluetooth/bdaddrUtils.h>
 
 #include <new>
+#include <string.h>
 
 
 #undef B_TRANSLATION_CONTEXT
@@ -47,6 +50,9 @@ static const uint32 kMsgForgetButton = 'btvF';
 static const uint32 kMsgDeviceSelected = 'btvD';
 static const uint32 kMsgMineSelected = 'btvM';
 static const uint32 kMsgDisconnectButton = 'btvX';
+static const uint32 kMsgUseForSound = 'btvU';
+static const uint32 kMsgTestButtons = 'btvT';
+static const uint32 kMsgGamepadPoll = 'btvG';
 
 
 static BButton*
@@ -248,6 +254,155 @@ private:
 };
 
 
+// #pragma mark - GamepadWindow
+
+
+/*!	"Test buttons": what a Bluetooth game controller sends, read through
+	BJoystick as a game reads it, live. The same as the gamepad command.
+*/
+class GamepadWindow : public BWindow {
+public:
+	GamepadWindow(const BString& name)
+		:
+		BWindow(BRect(0, 0, 10, 10), "", B_TITLED_WINDOW,
+			B_NOT_ZOOMABLE | B_AUTO_UPDATE_SIZE_LIMITS
+				| B_CLOSE_ON_ESCAPE),
+		fRunner(NULL),
+		fOpen(false)
+	{
+		BString title(B_TRANSLATE("Test buttons: %name%"));
+		title.ReplaceFirst("%name%", name);
+		SetTitle(title.String());
+
+		fController = new BStringView("controller", "");
+		fButtons = new BStringView("buttons", "");
+		fAxes = new BStringView("axes", "");
+		fHats = new BStringView("hats", "");
+		BStringView* hint = new BStringView("hint",
+			B_TRANSLATE("Press buttons and move the sticks."));
+		BStringView* views[] = { fController, fButtons, fAxes, fHats, hint };
+		for (size_t i = 0; i < sizeof(views) / sizeof(views[0]); i++)
+			views[i]->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
+		BFont bold(be_bold_font);
+		fController->SetFont(&bold);
+		const float width = be_plain_font->StringWidth("M") * 34;
+		fButtons->SetExplicitMinSize(BSize(width, B_SIZE_UNSET));
+
+		BLayoutBuilder::Group<>(this, B_VERTICAL, B_USE_SMALL_SPACING)
+			.SetInsets(B_USE_WINDOW_SPACING)
+			.Add(fController)
+			.Add(hint)
+			.AddStrut(be_plain_font->Size())
+			.Add(fButtons)
+			.Add(fAxes)
+			.Add(fHats);
+
+		_Open();
+		BMessage poll(kMsgGamepadPoll);
+		fRunner = new BMessageRunner(BMessenger(this), &poll, 50000);
+		_Poll();
+		CenterOnScreen();
+	}
+
+	virtual ~GamepadWindow()
+	{
+		delete fRunner;
+		if (fOpen)
+			fStick.Close();
+	}
+
+	virtual void MessageReceived(BMessage* message)
+	{
+		if (message->what == kMsgGamepadPoll) {
+			_Poll();
+			return;
+		}
+		BWindow::MessageReceived(message);
+	}
+
+private:
+	void _Open()
+	{
+		// The first controller of the Bluetooth HID driver.
+		char name[B_OS_NAME_LENGTH];
+		const int32 count = fStick.CountDevices();
+		for (int32 i = 0; i < count && !fOpen; i++) {
+			if (fStick.GetDeviceName(i, name, sizeof(name)) != B_OK
+				|| strncmp(name, "bluetooth/", 10) != 0)
+				continue;
+			fOpen = fStick.Open(name, true) >= 0;
+			if (fOpen)
+				fController->SetText(name);
+		}
+		if (!fOpen) {
+			fController->SetText(B_TRANSLATE("No Bluetooth game controller "
+				"is connected."));
+		}
+	}
+
+	void _Poll()
+	{
+		if (!fOpen) {
+			_Open();
+			if (!fOpen)
+				return;
+		}
+		if (fStick.Update() != B_OK) {
+			fStick.Close();
+			fOpen = false;
+			fController->SetText(B_TRANSLATE("The controller went away."));
+			return;
+		}
+
+		BString text(B_TRANSLATE("Buttons:"));
+		const uint32 pressed = fStick.ButtonValues();
+		bool any = false;
+		for (int32 i = 0; i < 32 && i < fStick.CountButtons(); i++) {
+			if ((pressed & (1UL << i)) == 0)
+				continue;
+			text << " " << i + 1;
+			any = true;
+		}
+		if (!any)
+			text << " " << B_TRANSLATE("none");
+		fButtons->SetText(text.String());
+
+		text = B_TRANSLATE("Sticks:");
+		const int32 axes = fStick.CountAxes();
+		if (axes > 0 && axes <= 16) {
+			int16 values[16];
+			if (fStick.GetAxisValues(values) == B_OK) {
+				for (int32 i = 0; i < axes; i++)
+					text << " " << (int32)(values[i] * 100 / 32767);
+			}
+		}
+		fAxes->SetText(text.String());
+
+		text = B_TRANSLATE("D-pad:");
+		const int32 hats = fStick.CountHats();
+		if (hats > 0 && hats <= 8) {
+			uint8 values[8];
+			if (fStick.GetHatValues(values) == B_OK) {
+				static const char* const kDirections[] = { "-", "N", "NE",
+					"E", "SE", "S", "SW", "W", "NW" };
+				for (int32 i = 0; i < hats; i++)
+					text << " " << (values[i] <= 8 ? kDirections[values[i]]
+						: "?");
+			}
+		}
+		fHats->SetText(text.String());
+	}
+
+	BJoystick			fStick;
+	BMessageRunner*		fRunner;
+	bool				fOpen;
+	BStringView*		fController;
+	BStringView*		fButtons;
+	BStringView*		fAxes;
+	BStringView*		fHats;
+};
+
+
 } // namespace
 
 
@@ -264,9 +419,16 @@ struct BluetoothView::MyDevices {
 	BStringView*		connection;
 	BStringView*		addressLabel;
 	BStringView*		address;
+	BStringView*		batteryLabel;
+	BStringView*		battery;
+	BCheckBox*			useForSound;
+	BButton*			testButtons;
 	BButton*			disconnect;
 	BButton*			forget;
 	std::vector<BluetoothPairedDevice> paired;
+	bool				hasSound;
+	bdaddr_t			soundAddress;
+		// the headset this person's sound goes to
 };
 
 
@@ -281,7 +443,8 @@ same_paired(const std::vector<BluetoothPairedDevice>& a,
 			|| a[i].info.name != b[i].info.name
 			|| a[i].info.deviceClass != b[i].info.deviceClass
 			|| a[i].lowEnergy != b[i].lowEnergy || a[i].hid != b[i].hid
-			|| a[i].connected != b[i].connected)
+			|| a[i].connected != b[i].connected
+			|| a[i].battery != b[i].battery)
 			return false;
 	}
 	return true;
@@ -325,8 +488,17 @@ BluetoothView::BluetoothView(bool settingsPage)
 	fMine->connection = new BStringView("connection", "");
 	fMine->addressLabel = new BStringView("address label", "");
 	fMine->address = new BStringView("address", "");
+	fMine->batteryLabel = new BStringView("battery label", "");
+	fMine->battery = new BStringView("battery", "");
+	fMine->useForSound = new BCheckBox("use for sound",
+		B_TRANSLATE("Use for sound"), new BMessage(kMsgUseForSound));
+	fMine->testButtons = new BButton("test buttons",
+		B_TRANSLATE("Test buttons" B_UTF8_ELLIPSIS),
+		new BMessage(kMsgTestButtons));
+	fMine->hasSound = false;
+	memset(&fMine->soundAddress, 0, sizeof(fMine->soundAddress));
 	BStringView* texts[] = { fMine->name, fMine->kind, fMine->status,
-		fMine->connection, fMine->address };
+		fMine->connection, fMine->address, fMine->battery };
 	for (size_t i = 0; i < sizeof(texts) / sizeof(texts[0]); i++)
 		texts[i]->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
 	fMine->disconnect = new BButton("disconnect", B_TRANSLATE("Disconnect"),
@@ -352,9 +524,14 @@ BluetoothView::BluetoothView(bool settingsPage)
 			.Add(fMine->connection, 1, 1)
 			.Add(fMine->addressLabel, 0, 2)
 			.Add(fMine->address, 1, 2)
+			.Add(fMine->batteryLabel, 0, 3)
+			.Add(fMine->battery, 1, 3)
 		.End()
+		// Only for a headset, or only for a game controller.
+		.Add(fMine->useForSound)
 		.AddGlue()
 		.AddGroup(B_HORIZONTAL)
+			.Add(fMine->testButtons)
 			.AddGlue()
 			.Add(fMine->disconnect)
 			.Add(fMine->forget)
@@ -453,6 +630,8 @@ BluetoothView::AttachedToWindow()
 	fMine->list->SetTarget(this);
 	fMine->disconnect->SetTarget(this);
 	fMine->forget->SetTarget(this);
+	fMine->useForSound->SetTarget(this);
+	fMine->testButtons->SetTarget(this);
 	if (BButton* pairButton = pair_button(this))
 		pairButton->SetTarget(this);
 	fRadioMenu->SetTargetForItems(this);
@@ -494,6 +673,16 @@ BluetoothView::MessageReceived(BMessage* message)
 			BluetoothState::UnarchivePaired(*message, paired);
 			bool pairedChanged = !same_paired(paired, fMine->paired);
 			fMine->paired.swap(paired);
+			bdaddr_t sound;
+			const bool hasSound = BluetoothState::UnarchiveSoundDevice(
+				*message, sound);
+			if (hasSound != fMine->hasSound || (hasSound
+					&& !bdaddrUtils::Compare(sound, fMine->soundAddress))) {
+				fMine->hasSound = hasSound;
+				if (hasSound)
+					fMine->soundAddress = sound;
+				pairedChanged = true;
+			}
 			_SetState(state);
 			if (pairedChanged) {
 				_UpdateMine();
@@ -550,6 +739,30 @@ BluetoothView::MessageReceived(BMessage* message)
 		case kMsgDeviceSelected:
 			_UpdateControls();
 			break;
+
+		case kMsgUseForSound:
+		{
+			PairedItem* item = dynamic_cast<PairedItem*>(
+				fMine->list->ItemAt(fMine->list->CurrentSelection()));
+			if (item == NULL)
+				break;
+			BMessage request(kMsgBluetoothUseForSound);
+			request.AddData("bdaddr", B_ANY_TYPE,
+				&item->Device().info.address, sizeof(bdaddr_t));
+			request.AddBool("use",
+				fMine->useForSound->Value() == B_CONTROL_ON);
+			_SendToController(&request);
+			break;
+		}
+
+		case kMsgTestButtons:
+		{
+			PairedItem* item = dynamic_cast<PairedItem*>(
+				fMine->list->ItemAt(fMine->list->CurrentSelection()));
+			if (item != NULL)
+				(new GamepadWindow(item->Device().info.DisplayName()))->Show();
+			break;
+		}
 
 		case kMsgMineSelected:
 			_UpdateInfo();
@@ -896,6 +1109,22 @@ BluetoothView::_UpdateMine()
 }
 
 
+// The battery line takes no room when the device reports no level.
+void
+BluetoothView::_ShowBattery(bool show)
+{
+	BView* views[] = { fMine->batteryLabel, fMine->battery };
+	for (size_t i = 0; i < 2; i++) {
+		if (show == views[i]->IsHidden(views[i])) {
+			if (show)
+				views[i]->Show();
+			else
+				views[i]->Hide();
+		}
+	}
+}
+
+
 void
 BluetoothView::_UpdateInfo()
 {
@@ -915,6 +1144,11 @@ BluetoothView::_UpdateInfo()
 		fMine->connection->SetText("");
 		fMine->addressLabel->SetText("");
 		fMine->address->SetText("");
+		_ShowBattery(false);
+		if (!fMine->useForSound->IsHidden(fMine->useForSound))
+			fMine->useForSound->Hide();
+		if (!fMine->testButtons->IsHidden(fMine->testButtons))
+			fMine->testButtons->Hide();
 		fMine->disconnect->SetEnabled(false);
 		fMine->forget->SetEnabled(false);
 		return;
@@ -942,6 +1176,37 @@ BluetoothView::_UpdateInfo()
 	fMine->disconnect->SetEnabled(running && fState.radioEnabled
 		&& device.connected);
 	fMine->forget->SetEnabled(running && fPairing == 0);
+
+	// Battery: only what the device reports while connected.
+	if (device.connected && device.battery >= 0) {
+		BString level;
+		level << device.battery << " %";
+		fMine->batteryLabel->SetText(B_TRANSLATE("Battery:"));
+		fMine->battery->SetText(level.String());
+		_ShowBattery(true);
+	} else
+		_ShowBattery(false);
+
+	// A headset: its sound choice. A game controller: the button test.
+	const bool audio = device.IsAudio();
+	if (audio == fMine->useForSound->IsHidden(fMine->useForSound)) {
+		if (audio)
+			fMine->useForSound->Show();
+		else
+			fMine->useForSound->Hide();
+	}
+	fMine->useForSound->SetValue(fMine->hasSound
+		&& bdaddrUtils::Compare(fMine->soundAddress, device.info.address)
+			? B_CONTROL_ON : B_CONTROL_OFF);
+	fMine->useForSound->SetEnabled(running);
+	const bool controller = device.IsGameController();
+	if (controller == fMine->testButtons->IsHidden(fMine->testButtons)) {
+		if (controller)
+			fMine->testButtons->Show();
+		else
+			fMine->testButtons->Hide();
+	}
+	fMine->testButtons->SetEnabled(device.connected);
 }
 
 

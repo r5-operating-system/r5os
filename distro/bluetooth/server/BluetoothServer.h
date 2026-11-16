@@ -97,6 +97,14 @@ public:
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
+	// DiscoverServices() on a thread of its own, by address: the record
+	// is looked up again under the devices lock when SDP ends.
+	void		R5DiscoverServices(hci_id hid, ServerRemoteDevice* rd);
+	static status_t _SDPThread(void* data);
+	// SPDX-SnippetEnd
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
 	// Classic HID (step 4); NULL until ReadyToRun().
 	HIDHost*	GetHIDHost() { return fHIDHost; }
 	// SPDX-SnippetEnd

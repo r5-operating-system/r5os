@@ -110,11 +110,18 @@ RemoveConnection(const bdaddr_t& destination, hci_id hid)
 	if (conn->GetDoublyLinkedListLink()->next != NULL
 		|| conn->GetDoublyLinkedListLink()->previous != NULL
 		|| conn == sConnectionList.Head()) {
-		DisconnectL2capEndpoints(conn);
-
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// Out of the list first, then the endpoints: an LE connect() that
+		// bound after the endpoints were told sees the connection gone
+		// (L2capEndpoint::_ConnectLE()), one that bound before is told.
 		MutexLocker locker(&sConnectionListLock);
 		sConnectionList.Remove(conn);
 		locker.Unlock();
+
+		DisconnectL2capEndpoints(conn);
+		// SPDX-SnippetEnd
 
 		delete conn;
 		return B_OK;
@@ -135,11 +142,16 @@ RemoveConnection(uint16 handle, hci_id hid)
 	if (conn->GetDoublyLinkedListLink()->next != NULL
 		|| conn->GetDoublyLinkedListLink()->previous != NULL
 		|| conn == sConnectionList.Head()) {
-		DisconnectL2capEndpoints(conn);
-
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// See above: out of the list before the endpoints are told.
 		MutexLocker locker(&sConnectionListLock);
 		sConnectionList.Remove(conn);
 		locker.Unlock();
+
+		DisconnectL2capEndpoints(conn);
+		// SPDX-SnippetEnd
 
 		delete conn;
 		return B_OK;
@@ -236,6 +248,31 @@ ConnectionByDestination(const bdaddr_t& destination, hci_id hid)
 
 	return NULL;
 }
+
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+HciConnection*
+R5ConnectionByType(const bdaddr_t& destination, hci_id hid, int type,
+	uint16* _handle)
+{
+	MutexLocker _(&sConnectionListLock);
+
+	DoublyLinkedList<HciConnection>::Iterator iterator
+		= sConnectionList.GetIterator();
+	while (iterator.HasNext()) {
+		HciConnection* conn = iterator.Next();
+		if (conn->Hid == hid && conn->type == type
+			&& bdaddrUtils::Compare(conn->destination, destination)) {
+			if (_handle != NULL)
+				*_handle = conn->handle;
+			return conn;
+		}
+	}
+	return NULL;
+}
+// SPDX-SnippetEnd
 
 
 uint8

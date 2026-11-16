@@ -28,7 +28,14 @@
 
 #include <R5Admin.h>
 
+#include <MediaAddOn.h>
+#include <MediaRoster.h>
+#include <Path.h>
+
+#include "AudioSettings.h"
+
 #include <new>
+#include <syslog.h>
 #include <string.h>
 
 
@@ -291,6 +298,7 @@ BluetoothState::UnarchivePaired(const BMessage& archive,
 		archive.FindBool("paired:le", i, &device.lowEnergy);
 		archive.FindBool("paired:hid", i, &device.hid);
 		archive.FindBool("paired:connected", i, &device.connected);
+		device.battery = archive.GetInt32("paired:battery", i, -1);
 		// A dual-mode device paired both ways shows once, connected when
 		// either link is up.
 		bool merged = false;
@@ -312,8 +320,33 @@ BluetoothPairedDevice::BluetoothPairedDevice()
 	:
 	lowEnergy(false),
 	hid(false),
-	connected(false)
+	connected(false),
+	battery(-1)
 {
+}
+
+
+bool
+BluetoothPairedDevice::IsAudio() const
+{
+	return !lowEnergy && ((info.deviceClass >> 8) & 0x1f) == 4;
+}
+
+
+bool
+BluetoothPairedDevice::IsGameController() const
+{
+	const uint32 minor = (info.deviceClass >> 2) & 0x3f;
+	return !lowEnergy && ((info.deviceClass >> 8) & 0x1f) == 5
+		&& ((minor & 0x0f) == 1 || (minor & 0x0f) == 2);
+}
+
+
+bool
+BluetoothState::UnarchiveSoundDevice(const BMessage& archive,
+	bdaddr_t& address)
+{
+	return find_address(archive, "sound:address", 0, address);
 }
 
 
@@ -564,6 +597,10 @@ BluetoothController::MessageReceived(BMessage* message)
 
 		case kMsgBluetoothDisconnect:
 			_DeviceRequest(message);
+			break;
+
+		case kMsgBluetoothUseForSound:
+			_UseForSound(message);
 			break;
 
 		case kMsgBluetoothForget:
@@ -993,6 +1030,63 @@ BluetoothController::_ReadPaired()
 }
 
 
+// The Media output: "Bluetooth audio" for use, else the first other
+// physical audio output. As the Media preferences set it.
+static status_t
+set_audio_output(bool bluetooth)
+{
+	BMediaRoster* roster = BMediaRoster::Roster();
+	if (roster == NULL)
+		return B_ERROR;
+	dormant_node_info nodes[32];
+	int32 count = 32;
+	status_t status = roster->GetDormantNodes(nodes, &count, NULL, NULL,
+		NULL, B_BUFFER_CONSUMER | B_PHYSICAL_OUTPUT, 0);
+	if (status != B_OK)
+		return status;
+	for (int32 i = 0; i < count; i++) {
+		const bool isBluetooth = strcmp(nodes[i].name, "Bluetooth audio") == 0;
+		if (isBluetooth == bluetooth)
+			return roster->SetAudioOutput(nodes[i]);
+	}
+	return B_NAME_NOT_FOUND;
+}
+
+
+void
+BluetoothController::_UseForSound(BMessage* message)
+{
+	const void* data;
+	ssize_t size;
+	if (message->FindData("bdaddr", B_ANY_TYPE, &data, &size) != B_OK
+		|| size != (ssize_t)sizeof(bdaddr_t))
+		return;
+	const bool use = message->GetBool("use", false);
+
+	// The person's own choice file, which bluetooth_audio reads for the
+	// person signed in (AudioSettings.h).
+	BPath path;
+	if (bluetooth_audio_own_settings_path(path) == B_OK) {
+		bdaddr_t address;
+		memcpy(&address, data, sizeof(address));
+		if (use)
+			bluetooth_audio_write_device(path, &address);
+		else {
+			bdaddr_t chosen;
+			if (bluetooth_audio_read_device(path, &chosen) == B_OK
+				&& bdaddrUtils::Compare(chosen, address))
+				bluetooth_audio_write_device(path, NULL);
+		}
+	}
+	status_t status = set_audio_output(use);
+	syslog(LOG_INFO, "libr5bt: sound %s (Media output %s)",
+		use ? "to a headset" : "back from the headset",
+		status == B_OK ? "set" : "not set");
+	fLastPosted.clear();
+	_PostState();
+}
+
+
 void
 BluetoothController::_DeviceRequest(BMessage* message)
 {
@@ -1017,6 +1111,15 @@ BluetoothController::_PostState()
 	if (fState.Archive(state) != B_OK)
 		return;
 
+	// The headset this person's sound goes to
+	BPath soundPath;
+	bdaddr_t soundAddress;
+	if (bluetooth_audio_own_settings_path(soundPath) == B_OK
+		&& bluetooth_audio_read_device(soundPath, &soundAddress) == B_OK) {
+		state.AddData("sound:address", B_RAW_TYPE, &soundAddress,
+			sizeof(soundAddress));
+	}
+
 	// My devices, from the last BT_MSG_R5_GET_PAIRED answer
 	const void* data;
 	ssize_t dataSize;
@@ -1031,6 +1134,7 @@ BluetoothController::_PostState()
 		state.AddBool("paired:hid", fPaired->GetBool("hid", i, false));
 		state.AddBool("paired:connected",
 			fPaired->GetBool("connected", i, false));
+		state.AddInt32("paired:battery", fPaired->GetInt32("battery", i, -1));
 	}
 
 	ssize_t size = state.FlattenedSize();
