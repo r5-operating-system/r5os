@@ -1170,6 +1170,9 @@ LocalDeviceImpl::CommandComplete(struct hci_ev_cmd_complete* event,
 				&& *(uint8*)(event + 1) == BT_OK) {
 				SetupController();
 			}
+			// The server's own setup step (Write Scan Enable) has no sender.
+			if (request->HasBool("r5_setup"))
+				delete request;
 			// SPDX-SnippetEnd
 			break;
 		}
@@ -1204,6 +1207,20 @@ LocalDeviceImpl::CommandComplete(struct hci_ev_cmd_complete* event,
 				B_PRIx64 " (secure simple pairing %s)", GetID(),
 				r5_event_mask(fHasSSP ? fFeatures : NULL),
 				fHasSSP ? "on" : "not supported");
+
+			// A reset leaves the radio unreachable (Scan Enable 0). A paired
+			// controller or keyboard pages the computer to come back after
+			// sleep, so the radio answers pages (0x02), without being
+			// visible to a scan. Off by the radio switch stays 0x00.
+			if (((BluetoothServer*)be_app)->RadioEnabled()) {
+				size_t size;
+				void* command = buildWriteScan(0x02, &size);
+				if (command != NULL) {
+					_IssueSetupCommand(command, size, PACK_OPCODE(
+						OGF_CONTROL_BASEBAND, OCF_WRITE_SCAN_ENABLE));
+					free(command);
+				}
+			}
 			break;
 		}
 		// SPDX-SnippetEnd
@@ -2335,6 +2352,12 @@ LocalDeviceImpl::SimplePairingComplete(struct hci_ev_simple_pairing_complete* ev
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
+	// One pairing asked for here allows one confirmation: a later pairing
+	// that the other side starts is refused again.
+	ServerRemoteDevice* paired = RemoteDeviceByAddr(event->bdaddr);
+	if (paired != NULL)
+		paired->user_pairing = false;
+
 	// The pass line of step 4 (docs/BLUETOOTH.md); never the passkey.
 	if (fPasskeyUsed && bdaddrUtils::Compare(fPasskeyAddress, event->bdaddr)) {
 		if (event->status == BT_OK)
