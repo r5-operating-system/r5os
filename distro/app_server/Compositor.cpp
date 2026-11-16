@@ -1317,7 +1317,9 @@ Compositor::_ExitVulkan()
 	// A device that failed half way has some functions not loaded; they
 	// are loaded in this order, so the last one tells all were.
 	if (vk->device != VK_NULL_HANDLE && vk->vkDeviceWaitIdle != NULL) {
+		SkiaGpu::LockQueue();
 		vk->vkDeviceWaitIdle(vk->device);
+		SkiaGpu::UnlockQueue();
 		// M12: Skia's context and every GPU image of it, before the device
 		if (fSkia != NULL) {
 			_StopDrawThread();
@@ -2804,7 +2806,9 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 	submit.pCommandBuffers = &vk->commands;
 	vk->vkResetFences(vk->device, 1, &vk->fence);
 	bigtime_t started = system_time();
+	SkiaGpu::LockQueue();
 	VkResult result = vk->vkQueueSubmit(vk->queue, 1, &submit, vk->fence);
+	SkiaGpu::UnlockQueue();
 	bool forced = fForceFail;
 	if (forced) {
 		// gpu_compositor_fail: the first submit counts as failed
@@ -4890,10 +4894,9 @@ Compositor::_Report()
 			p[SkiaGpu::kTimeInsert] / runs, p[SkiaGpu::kTimeSubmit] / runs,
 			p[SkiaGpu::kTimeDeliver] / runs);
 		log_line("draw profile composite %" B_PRId64 " coverage %" B_PRId64
-			" direct %" B_PRId64 " blender %" B_PRId64 " upload %" B_PRId64,
+			" direct %" B_PRId64 " upload %" B_PRId64,
 			p[SkiaGpu::kCountComposite], p[SkiaGpu::kCountCoverage],
-			p[SkiaGpu::kCountDirect], p[SkiaGpu::kCountBlender],
-			p[SkiaGpu::kCountUpload]);
+			p[SkiaGpu::kCountDirect], p[SkiaGpu::kCountUpload]);
 	} else {
 		bigtime_t drawMedian = 0;
 		int32 drawCount = 0;

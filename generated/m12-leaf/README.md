@@ -30,6 +30,6 @@ All 8 call sites of `_SpecialPaint` / `_BlenderPaint` use this read (bitmaps, te
 - Waiting for the run in flight before a resize does not help (f1).
 - The tray icons are all there in every boot, Painter too; only their order over two rows differs (`tray-order-p1-l5-l6-l7-l8.png`, final frames of p1, l5, l6, l7, l8). Not a drawing loss.
 
-## Open
+## Decision and result
 
-Which fix: the copy path for every destination-reading draw on Lavapipe only (RADV unchanged until measured), everywhere, only for bitmaps, or Skia's `kTextureCopy` on Lavapipe. The cost of the copy path on Lavapipe is not measured. The 300 ms delay, the traces and the copy-path experiment are not in this commit.
+The owner chose option B: the copy path for every drawing that reads the destination, on Lavapipe and RADV alike; the direct blender is removed. Results are in `CHANGELOG.md` (16 Nov 2026, "the Deskbar leaf, Skia's destination read removed, one queue lock"): leaf in every frame in 3 boots, `r5-draw-compare 459/490 ok`, draw median 8.9-10.0 ms against 7.6-9.4 ms before. The 300 ms delay and the leaf experiments were never committed; the earlier `skia trace` lines are removed.

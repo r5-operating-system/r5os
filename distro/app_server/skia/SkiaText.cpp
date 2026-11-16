@@ -344,37 +344,21 @@ SkiaPainter::DrawString(const char* string, uint32 length, BPoint baseLine,
 		return touched;
 	}
 
-	{
-		// step 5c: the R5 blender, the letters straight into the image
-		SkPaint ink;
-		if (_BlenderPaint(true, nullptr, &ink, true)) {
-			ink.setAntiAlias(fAntialiasText);
-			_DirectDraw(bounds, matrix, [&](SkCanvas* canvas) {
-				for (GlyphRun& run : runs) {
-					SkFont runFont(font);
-					runFont.setTypeface(run.typeface);
-					canvas->drawGlyphs(run.glyphs, run.positions,
-						SkPoint::Make(0, 0), runFont, ink);
-				}
-				if (lines)
-					_DrawTextLines(canvas, collector, ink);
-			});
-			return touched;
-		}
-	}
-
 	SkSurface* scratch = fTarget->Scratch(subpixel);
 	if (scratch == NULL)
 		return touched;
 	SkCanvas* canvas = scratch->getCanvas();
 	canvas->save();
 	canvas->clipIRect(bounds);
-	// grey: white on clear; subpixel: black on opaque white, so Skia's own
-	// subpixel coverage comes out per channel
+	// grey: the text's own colour on clear, the coverage in the alpha (the
+	// colour picks Skia's text contrast curve, as the direct draw did);
+	// subpixel: black on opaque white, so Skia's own subpixel coverage
+	// comes out per channel
 	canvas->clear(subpixel ? SK_ColorWHITE : SK_ColorTRANSPARENT);
 	canvas->concat(matrix);
 	SkPaint ink;
-	ink.setColor(subpixel ? SK_ColorBLACK : SK_ColorWHITE);
+	ink.setColor(subpixel ? SK_ColorBLACK : SkColorSetRGB(fHighColor.red,
+		fHighColor.green, fHighColor.blue));
 	ink.setAntiAlias(fAntialiasText);
 	for (GlyphRun& run : runs) {
 		SkFont runFont(font);

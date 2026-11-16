@@ -1,5 +1,24 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-16 - Graphics (M12): the Deskbar leaf, Skia's destination read removed, one queue lock
+
+Problem: with Skia drawing on Lavapipe (`gpu_draw true`) the Deskbar's R5 leaf was missing or showed other pixels (QEMU 1 boot in 8; the 5625U stick boot 3 also lost labels and icons). The first brief tied it to window buffers that start transparent; one boot per condition was not enough for that, and it is not the cause.
+
+Cause, measured in QEMU (12 cores, Lavapipe; details and screenshots in `generated/m12-leaf/README.md`): step 5c drew most icons, labels and fills with a direct R5 blender (`kR5BlenderSkSL`, `_BlenderPaint()`, `_SpecialPaint()`), which lets Graphite read the destination itself. On Vulkan Graphite reads it as an input attachment (`VulkanCaps::getDstReadStrategy()` = `kReadFromInput`). On Lavapipe that read did not always see the drawing before it when a run held many draws. With a 300 ms delay in every Skia run (test build) the leaf was lost in 3 of 3 boots; the leaf texture read back correct on the GPU each time, the copies on a Deskbar resize were right, and readbacks of different windows never shared memory. With the same leaf drawn through the copy of the destination (`_Composite`), the leaf was there in every frame, also with the delay. Mistake on the way: making a resize wait for the run in flight did not help and was taken out.
+
+What changed:
+- Option B (owner's choice: one path on Lavapipe and RADV): the direct blender is removed (`_BlenderPaint()`, `_SpecialPaint()`, `blender_effect()`, `coverage_effect()`, `kR5BlenderSkSL`, `kCoverageSkSL`). Its 8 call sites (bitmaps, text, fills, `blend_line32`, the linear-edge coverage) use the copy of the destination and the R5 shader (`kR5BlendSkSL`) again. `_FillSolid()`, `_DirectColor()` and the `kSrc` paths (vertical gradient fill, unscaled `B_OP_COPY` bitmap) stay. The draw profile line has no `blender` count any more.
+- Text in the scratch image is drawn in its own colour and the R5 shader reads the coverage from the alpha, so Skia keeps picking the text contrast curve of that colour, as the direct text blender did (white scratch text would have picked the curve for light text). Shapes are drawn white, so for them alpha and red are the same.
+- One lock for the `VkQueue`: Skia's runs moved to their own draw thread on this branch (`9d58e7bca4`), so Graphite and the compose thread both used the queue without a shared lock. Graphite's `vkQueueSubmit`, `vkQueueWaitIdle`, `vkDeviceWaitIdle` and `vkQueueBindSparse` are wrapped where `SkiaGpu`'s `get_proc` hands them out; the compositor's submit and its `vkDeviceWaitIdle` take the same lock (`SkiaGpu::LockQueue()`).
+- The temporary `skia trace` lines of the buffer investigation are removed. `mesa_radv-25.3.6-9` repacked with this branch's `check` (`pack-radv.py --tools-only`; the packed `check` is byte-identical).
+
+Tested (QEMU, KVM, 12 cores, Lavapipe, `gpu_draw`, `gpu_debug`, `gpu_selftest`, `gpu_compositor_lavapipe` true, a screenshot every 10 s after Sign in):
+- Leaf present in every frame in 3 boots of this change (n1, n2, final); a fourth (n3) stayed at Sign in because the key came early while a build ran beside it, not a drawing fault.
+- `r5-draw-compare` (classic look): `459/490 ok`; the last recorded run was `458/490`. The FAILs are the known groups (aliased text, 72-point subpixel text on clear, rotated, scaled and sheared bitmaps, pattern edges, two 3-pixel strokes, clip-region inner diff 1), plus three `gpu failed` (`gradient-linear-roundrect`, `transform-rotate30-bitmap/opaque`, `clip-picture`): `Finish()` did not complete in time while the desktop session ran beside the compare. Not looked into further.
+- Cost on Lavapipe: the desktop's draw median after Sign in was 8.9-10.0 ms against 7.6-9.4 ms before (3 boots each, few samples). In `r5-draw-compare --time` (cut off at the end of the boot) fills and strokes take about 0.25-2.5 ms on the GPU path, the `B_OP_ERASE`, `B_OP_INVERT`, `B_OP_ADD`, `B_OP_SUBTRACT` and `B_OP_BLEND` cases 7-30 ms; there is no run of the old build for the same table.
+
+Not tested: RADV and the 5625U (no stick); whether RADV had the same input-attachment fault is not known. The new text colour in the scratch image is checked by the compare set only in the classic look; the new look was not looked at on a sheet. ARM64 and RISC-V 64 not built.
+
 ## 2026-11-16 - Graphics: second review of the VRAM fallback (system-wide GTT limit, exports counted, span take, atomic log bits)
 
 Problem: two outside read-only reviews of #4307 (round 2 of the VRAM fallback) found these, each checked against the code here:

@@ -81,12 +81,90 @@ smallest_local_heap(VkInstance instance, VkPhysicalDevice physical)
 }
 
 
+// One VkQueue, two threads: the draw thread submits Skia's work and the
+// compose thread its frame. Vulkan wants every call that uses the queue
+// externally synchronized, so Graphite's queue calls (through get_proc) and
+// the compositor's (SkiaGpu::LockQueue()) take this lock.
+static BLocker sQueueLock("vulkan queue");
+static PFN_vkQueueSubmit sQueueSubmit;
+static PFN_vkQueueWaitIdle sQueueWaitIdle;
+static PFN_vkDeviceWaitIdle sDeviceWaitIdle;
+static PFN_vkQueueBindSparse sQueueBindSparse;
+
+
+static VKAPI_ATTR VkResult VKAPI_CALL
+locked_queue_submit(VkQueue queue, uint32_t count, const VkSubmitInfo* submits,
+	VkFence fence)
+{
+	BAutolock _(sQueueLock);
+	return sQueueSubmit(queue, count, submits, fence);
+}
+
+
+static VKAPI_ATTR VkResult VKAPI_CALL
+locked_queue_wait_idle(VkQueue queue)
+{
+	BAutolock _(sQueueLock);
+	return sQueueWaitIdle(queue);
+}
+
+
+static VKAPI_ATTR VkResult VKAPI_CALL
+locked_device_wait_idle(VkDevice device)
+{
+	BAutolock _(sQueueLock);
+	return sDeviceWaitIdle(device);
+}
+
+
+static VKAPI_ATTR VkResult VKAPI_CALL
+locked_queue_bind_sparse(VkQueue queue, uint32_t count,
+	const VkBindSparseInfo* infos, VkFence fence)
+{
+	BAutolock _(sQueueLock);
+	return sQueueBindSparse(queue, count, infos, fence);
+}
+
+
 static PFN_vkVoidFunction
 get_proc(const char* name, VkInstance instance, VkDevice device)
 {
-	if (device != VK_NULL_HANDLE)
-		return sGetDeviceProc(device, name);
-	return sGetInstanceProc(instance, name);
+	if (device == VK_NULL_HANDLE)
+		return sGetInstanceProc(instance, name);
+	PFN_vkVoidFunction function = sGetDeviceProc(device, name);
+	if (function == NULL)
+		return NULL;
+	if (strcmp(name, "vkQueueSubmit") == 0) {
+		sQueueSubmit = (PFN_vkQueueSubmit)function;
+		return (PFN_vkVoidFunction)locked_queue_submit;
+	}
+	if (strcmp(name, "vkQueueWaitIdle") == 0) {
+		sQueueWaitIdle = (PFN_vkQueueWaitIdle)function;
+		return (PFN_vkVoidFunction)locked_queue_wait_idle;
+	}
+	if (strcmp(name, "vkDeviceWaitIdle") == 0) {
+		sDeviceWaitIdle = (PFN_vkDeviceWaitIdle)function;
+		return (PFN_vkVoidFunction)locked_device_wait_idle;
+	}
+	if (strcmp(name, "vkQueueBindSparse") == 0) {
+		sQueueBindSparse = (PFN_vkQueueBindSparse)function;
+		return (PFN_vkVoidFunction)locked_queue_bind_sparse;
+	}
+	return function;
+}
+
+
+/*static*/ void
+SkiaGpu::LockQueue()
+{
+	sQueueLock.Lock();
+}
+
+
+/*static*/ void
+SkiaGpu::UnlockQueue()
+{
+	sQueueLock.Unlock();
 }
 
 
