@@ -1104,11 +1104,20 @@ SkiaPainter::_FillSolid(const BRegion& region, const rgb_color& color,
 	SkPaint paint;
 	paint.setBlendMode(SkBlendMode::kSrc);
 	paint.setAntiAlias(false);
-	// straight bytes, no conversion: the colour as Haiku writes it
-	sk_sp<SkShader> shader = color_shader(color);
-	if (shader == nullptr)
-		return;
-	paint.setShader(shader);
+	if (color.alpha == 255) {
+		// M13 step 1: an opaque colour is the same premultiplied and
+		// straight, and an 8-bit value goes through Skia's float colour
+		// unchanged, so a plain colour writes Haiku's bytes without the
+		// runtime shader
+		paint.setColor(SkColorSetARGB(255, color.red, color.green,
+			color.blue));
+	} else {
+		// straight bytes, no conversion: the colour as Haiku writes it
+		sk_sp<SkShader> shader = color_shader(color);
+		if (shader == nullptr)
+			return;
+		paint.setShader(shader);
+	}
 	SkCanvas* canvas = fTarget->Canvas();
 	for (int32 i = 0; i < rects.CountRects(); i++) {
 		clipping_rect r = rects.RectAtInt(i);
