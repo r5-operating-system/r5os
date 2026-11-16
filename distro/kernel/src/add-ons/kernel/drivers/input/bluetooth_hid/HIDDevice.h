@@ -11,6 +11,7 @@
 #define BLUETOOTH_HID_DEVICE_H
 
 
+#include <joystick_driver.h>
 #include <lock.h>
 
 #include "bluetooth/R5BluetoothHID.h"
@@ -60,6 +61,11 @@ public:
 			uint32				CountProtocolHandlers() const
 									{ return fProtocolHandlerCount; }
 
+			// R5_BTHID_SET_INFO from bluetooth_server, and
+			// R5_JOYSTICK_GET_INFO from hid_shared (docs/GAME-CONTROLLERS.md).
+			void				SetInfo(const r5_bthid_info& info);
+			void				GetJoystickInfo(r5_joystick_info& info) const;
+
 private:
 			void				_Deliver(const uint8* data, size_t length);
 
@@ -91,6 +97,8 @@ private:
 
 			uint32				fProtocolHandlerCount;
 			ProtocolHandler*	fProtocolHandlerList;
+
+			r5_bthid_info		fInfo;
 };
 
 

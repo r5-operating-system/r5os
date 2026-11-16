@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+#
+# libr5game.so: the R5 Game Kit (<GameController.h>, <GameControllerView.h>),
+# BGameController on top of BJoystick. docs/GAME-CONTROLLERS.md and
+# docs/LIBR5.md, "Game Kit".
+
+SubDir HAIKU_TOP src preferences r5game ;
+
+# <joystick_driver.h>, for R5_JOYSTICK_GET_INFO.
+UsePrivateHeaders device ;
+
+SharedLibrary [ MultiArchDefaultGristFiles libr5game.so ] :
+	GameController.cpp
+	GameControllerMapping.cpp
+	GameControllerView.cpp
+	: be device libr5icons.so [ TargetLibstdc++ ]
+	;

@@ -104,6 +104,10 @@ Haiku's icon set has no power symbol, no circular arrow, no clock face for a sma
 | `R5_GLYPH_EYE_OFF` | 5 | The eye with a line through it (hide the password) |
 | `R5_GLYPH_LOG_OUT` | 6 | An open door frame with an arrow out to the right |
 | `R5_GLYPH_BLUETOOTH` | 7 | The Bluetooth rune: a stem with two arrow heads crossing it |
+| `R5_GLYPH_CROSS` | 8 | A cross of two diagonal lines (the lower face button of a PlayStation-style game controller) |
+| `R5_GLYPH_CIRCLE` | 9 | A ring (the right face button) |
+| `R5_GLYPH_SQUARE` | 10 | A square outline (the left face button) |
+| `R5_GLYPH_TRIANGLE` | 11 | A triangle outline, point up (the upper face button) |
 
 The numbers are part of the contract, the same as `r5_icon`. A new glyph is added at the end of `enum r5_glyph`, with a row in this table.
 

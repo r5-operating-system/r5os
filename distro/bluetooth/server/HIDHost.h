@@ -30,6 +30,13 @@ public:
 			void				DeviceReady(const bdaddr_t& address,
 									const uint8* descriptor, size_t length);
 
+	// From SDPClient, before DeviceReady(): the vendor and product ID of
+	// the SDP Device ID record and the device's name, handed to the driver
+	// for R5_JOYSTICK_GET_INFO (docs/GAME-CONTROLLERS.md, step 8).
+			void				SetDeviceInfo(const bdaddr_t& address,
+									uint16 vendorID, uint16 productID,
+									uint16 version, const char* name);
+
 	// The SDP HIDDescriptorList (attribute 0x0206, without its outer
 	// sequence header, as SDPDataIO keeps it): the first report
 	// descriptor. Bounds-checked; returns false on anything malformed.
