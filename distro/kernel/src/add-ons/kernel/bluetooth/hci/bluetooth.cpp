@@ -501,7 +501,19 @@ PostACL(hci_id hciId, net_buffer* buffer)
 
 		TRACE("%s: Tolower nbuf %p!\n", __func__, curr_frame);
 		// We could pass a cookie and avoid the driver fetch the Id
-		device->hooks->SendACL(device->index, curr_frame);
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// The driver keeps a frame only when it queued it; a refused one
+		// (radio closing, USB error) was never freed.
+		status_t sent = device->hooks->SendACL(device->index, curr_frame);
+		if (sent != B_OK) {
+			gBufferModule->free(curr_frame);
+			if (next_frame != NULL)
+				gBufferModule->free(next_frame);
+			return sent;
+		}
+		// SPDX-SnippetEnd
 		flag = HCI_ACL_PACKET_FRAGMENT;
 
 	} while (next_frame != NULL);

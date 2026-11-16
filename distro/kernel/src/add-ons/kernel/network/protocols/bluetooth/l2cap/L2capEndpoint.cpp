@@ -219,7 +219,9 @@ L2capEndpoint::Shutdown()
 			if (fConnection != NULL
 				&& l2cap_claim_command_ident(fConnection, ident, this))
 				gSocketModule->release_socket(socket);
-			fState = CLOSED;
+			// Out of the channel table too: a closed endpoint kept its CID
+			// and its socket reference.
+			_MarkClosed();
 			return status;
 		}
 		// SPDX-SnippetEnd
@@ -286,8 +288,14 @@ L2capEndpoint::Unbind()
 	CALLED();
 	MutexLocker _(fLock);
 
-	if (LocalAddress().IsEmpty(true))
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// The address module does not know sockaddr_l2cap_le, so an LE bind
+	// (fixed channel or LE PSM) looked empty and was never released.
+	if (fFixedChannel == 0 && !fLEBound && LocalAddress().IsEmpty(true))
 		return EINVAL;
+	// SPDX-SnippetEnd
 
 	status_t status = gL2capEndpointManager.Unbind(this);
 	if (status != B_OK)
@@ -412,7 +420,7 @@ L2capEndpoint::Connect(const struct sockaddr* _address)
 			if (fConnection != NULL
 				&& l2cap_claim_command_ident(fConnection, ident, this))
 				gSocketModule->release_socket(socket);
-			fState = CLOSED;
+			_MarkClosed();
 			return status;
 		}
 		// SPDX-SnippetEnd
@@ -662,7 +670,11 @@ L2capEndpoint::_HandleCommandRejected(uint8 ident, uint16 reason,
 	switch (fState) {
 		case WAIT_FOR_CONNECTION_RSP:
 			// Connection request was rejected. Reset state.
-			fState = CLOSED;
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			_MarkClosed();
+			// SPDX-SnippetEnd
 			socket->error = ECONNREFUSED;
 		break;
 
@@ -672,7 +684,7 @@ L2capEndpoint::_HandleCommandRejected(uint8 ident, uint16 reason,
 			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 			// SPDX-License-Identifier: MIT
 			// Nothing resends it, so connect() waited forever. Close.
-			fState = CLOSED;
+			_MarkClosed();
 			socket->error = ECONNREFUSED;
 			// SPDX-SnippetEnd
 		break;
@@ -683,7 +695,7 @@ L2capEndpoint::_HandleCommandRejected(uint8 ident, uint16 reason,
 		case WAIT_FOR_DISCONNECTION_RSP:
 			// The remote refused our disconnection request; the channel is
 			// gone for us either way, and shutdown() waited forever.
-			fState = CLOSED;
+			_MarkClosed();
 		break;
 		// SPDX-SnippetEnd
 
@@ -710,11 +722,11 @@ L2capEndpoint::_HandleBadResponse(uint8 ident)
 	switch (fState) {
 		case WAIT_FOR_CONNECTION_RSP:
 		case CONFIGURATION:
-			fState = CLOSED;
+			_MarkClosed();
 			socket->error = ECONNABORTED;
 			break;
 		case WAIT_FOR_DISCONNECTION_RSP:
-			fState = CLOSED;
+			_MarkClosed();
 			break;
 		default:
 			break;
@@ -730,9 +742,11 @@ L2capEndpoint::_HandleLinkLost()
 	CALLED();
 	MutexLocker locker(fLock);
 
+	// The channel leaves the table with the link: a zombie at its CID let
+	// any device's Disconnection or Configuration Request reach this
+	// endpoint and answer on a NULL connection (kernel panic).
 	fConnection = NULL;
-	fState = CLOSED;
-	socket->error = ENOTCONN;
+	_MarkClosed();
 	fCommandWait.NotifyAll();
 }
 // SPDX-SnippetEnd
@@ -822,9 +836,12 @@ L2capEndpoint::_HandleConnectionRsp(uint8 ident, const l2cap_connection_rsp& res
 	} else if (response.result != l2cap_connection_rsp::RESULT_SUCCESS) {
 		// Some error response.
 		// TODO: Translate `result` if possible?
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		_MarkClosed();
+		// SPDX-SnippetEnd
 		socket->error = ECONNREFUSED;
-
-		fState = CLOSED;
 		fCommandWait.NotifyAll();
 		// SPDX-SnippetBegin
 		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
@@ -1059,7 +1076,12 @@ L2capEndpoint::_HandleDisconnectionRsp(uint8 ident, uint16 dcid, uint16 scid)
 		return;
 	}
 
-	if (dcid != fDestinationChannelID && scid != fChannelID) {
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Both CIDs must match (Core 5.4, Vol 3, Part A, 4.7).
+	if (dcid != fDestinationChannelID || scid != fChannelID) {
+	// SPDX-SnippetEnd
 		ERROR("l2cap: unexpected disconnection rsp: mismatched CIDs (dcid=%d, scid=%d)\n",
 			dcid, scid);
 		return;

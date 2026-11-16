@@ -75,8 +75,15 @@ L2capEndpoint::_BindLE(const sockaddr* _address)
 		if (geteuid() != 0)
 			return EPERM;
 		status = gL2capEndpointManager.BindFixed(this, _address);
-	} else
+	} else {
+		// The LE PSMs the Bluetooth SIG assigns (0x01 to 0x7F, EATT is
+		// 0x27) are the system's: another program could take EATT first
+		// and receive every device's GATT traffic.
+		if (B_LENDIAN_TO_HOST_INT16(address->l2cap_psm) < 0x80
+			&& geteuid() != 0)
+			return EPERM;
 		status = gL2capEndpointManager.BindLE(this, _address);
+	}
 	if (status != B_OK)
 		return status;
 

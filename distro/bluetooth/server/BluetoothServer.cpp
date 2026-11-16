@@ -832,14 +832,34 @@ BluetoothServer::_RadioRequestAllowed(BMessage* message) const
 	}
 	// SPDX-SnippetEnd
 
-	if (fRadioEnabled)
-		return true;
-
 	const void* data;
 	ssize_t size;
 	if (message->FindData("raw command", B_ANY_TYPE, &data, &size) != B_OK
 		|| data == NULL || size < (ssize_t)sizeof(struct hci_command_header))
 		return true;
+
+	// Never from a client: the testing commands (OGF 0x06), among them
+	// Write Simple Pairing Debug Mode, after which Classic pairing uses the
+	// published debug key and a listener can work out the link keys.
+	const uint16 rawOpcode = B_LENDIAN_TO_HOST_INT16(
+		((const struct hci_command_header*)data)->opcode);
+	if ((rawOpcode >> 10) == 0x06)
+		return false;
+
+	if (fRadioEnabled)
+		return true;
+
+	// While the switch is off, LE does not scan, connect or advertise
+	// either (Core 6.0, Vol 4, Part E, 7.8).
+	switch (rawOpcode) {
+		case 0x200a:	// LE Set Advertising Enable
+		case 0x200c:	// LE Set Scan Enable
+		case 0x200d:	// LE Create Connection
+		case 0x2039:	// LE Set Extended Advertising Enable
+		case 0x2042:	// LE Set Extended Scan Enable
+		case 0x2043:	// LE Extended Create Connection
+			return false;
+	}
 
 	const struct hci_command_header* header
 		= (const struct hci_command_header*)data;
@@ -1223,8 +1243,14 @@ BluetoothServer::HandleSimpleRequest(BMessage* message, BMessage* reply)
 	if (lDeviceImpl->ProcessSimpleRequest(DetachCurrentMessage()) == B_OK)
 		return B_WOULD_BLOCK;
 	else {
-		lDeviceImpl->Unregister();
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// A command the driver refused (a bad size from any program)
+		// removed the radio for everyone. A radio that is really gone is
+		// removed by the device manager.
 		return B_ERROR;
+		// SPDX-SnippetEnd
 	}
 
 }

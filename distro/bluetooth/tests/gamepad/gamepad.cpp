@@ -9,7 +9,8 @@
  *
  * Usage: gamepad [seconds]   (default: until Ctrl+C, like a MIDI monitor)
  * Lists the controllers, opens the first one, and prints a line each time
- * a button or an axis changes.
+ * a button, a hat (the D-pad on most controllers) or an axis changes.
+ * Only the first 32 buttons are shown. Exit code 2: nothing changed.
  */
 
 
@@ -32,7 +33,7 @@ main(int argc, char** argv)
 		printf("gamepad: no controller found (is it paired and on?)\n");
 		return 1;
 	}
-	char name[B_OS_NAME_LENGTH];
+	char name[B_OS_NAME_LENGTH] = "";
 	for (int32 i = 0; i < count; i++) {
 		if (stick.GetDeviceName(i, name, sizeof(name)) == B_OK)
 			printf("gamepad: controller %" B_PRId32 ": %s\n", i, name);
@@ -49,16 +50,38 @@ main(int argc, char** argv)
 		" hats. Press buttons and move the sticks%s.\n", name, axes,
 		buttons, stick.CountHats(), seconds > 0 ? "" : " (Ctrl+C ends)");
 
+	const int32 hats = stick.CountHats();
 	int16* axis = new int16[axes > 0 ? axes : 1];
 	int16* lastAxis = new int16[axes > 0 ? axes : 1];
-	memset(lastAxis, 0, sizeof(int16) * (axes > 0 ? axes : 1));
+	uint8* hat = new uint8[hats > 0 ? hats : 1];
+	uint8* lastHat = new uint8[hats > 0 ? hats : 1];
+	bool haveFirst = false;
 	uint32 lastButtons = 0;
 	int changes = 0;
+	int failures = 0;
 
 	const bigtime_t end = seconds > 0
 		? system_time() + (bigtime_t)seconds * 1000000 : B_INFINITE_TIMEOUT;
 	while (system_time() < end) {
 		if (stick.Update() != B_OK) {
+			// About 3 seconds without an answer: the controller is gone.
+			if (++failures > 300) {
+				printf("gamepad: the controller does not answer any more\n");
+				break;
+			}
+			snooze(10000);
+			continue;
+		}
+		failures = 0;
+		if (!haveFirst) {
+			// Where everything rests now (a trigger may rest at one end):
+			// shown, not counted as a change.
+			haveFirst = true;
+			lastButtons = stick.ButtonValues();
+			if (axes > 0)
+				stick.GetAxisValues(lastAxis);
+			if (hats > 0)
+				stick.GetHatValues(lastHat);
 			snooze(10000);
 			continue;
 		}
@@ -80,12 +103,24 @@ main(int argc, char** argv)
 				}
 			}
 		}
+		if (hats > 0 && stick.GetHatValues(hat) == B_OK) {
+			for (int32 i = 0; i < hats; i++) {
+				if (hat[i] != lastHat[i]) {
+					printf("gamepad: hat %" B_PRId32 " %u\n", i, hat[i]);
+					fflush(stdout);
+					lastHat[i] = hat[i];
+					changes++;
+				}
+			}
+		}
 		snooze(10000);
 	}
 
 	printf("gamepad: %d change%s seen\n", changes, changes == 1 ? "" : "s");
 	delete[] axis;
 	delete[] lastAxis;
+	delete[] hat;
+	delete[] lastHat;
 	stick.Close();
 	return changes > 0 ? 0 : 2;
 }

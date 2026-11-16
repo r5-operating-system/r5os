@@ -38,7 +38,16 @@ struct ServerRemoteDevice
 	uint8				link_type;
 	uint8				encryption_enabled;
 
-	uint16				handle;
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// The connection handle while a link is up. The controller hands the
+	// same number to the next link, so it is cleared when the link ends
+	// (kNoHandle): a headset paired after the 8BitDo got the 8BitDo's
+	// record for its authentication, SDP and encryption (stick 5).
+	static const uint16	kNoHandle = 0xffff;
+	uint16				handle = kNoHandle;
+	// SPDX-SnippetEnd
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT

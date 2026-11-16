@@ -88,6 +88,7 @@ LEManager::LEManager(LocalDeviceImpl* device)
 	memset(fFeatures, 0, sizeof(fFeatures));
 	memset(&fLocalAddress, 0, sizeof(fLocalAddress));
 	memset(&fDirectAddress, 0, sizeof(fDirectAddress));
+	fDirectStarted = 0;
 	_LoadBonds();
 
 	BAutolock _(sManagersLock);
@@ -968,6 +969,10 @@ LEManager::Pair(const bdaddr_t& address, const BMessenger& reply)
 		return true;
 	}
 
+	// Pair on another device while one connects: the first page gets its
+	// result, and its connect attempt makes way.
+	if (fWantDirect)
+		_DirectResult(false);
 	fWantDirect = true;
 	fDirectAddress = address;
 	// The address type as the report gave it (0 to 3): a random identity
@@ -975,7 +980,7 @@ LEManager::Pair(const bdaddr_t& address, const BMessenger& reply)
 	fDirectType = seen->hciAddressType;
 	fDirectReply = reply;
 	fDirectResultPending = true;
-	if (fInitiating == kAuto)
+	if (fInitiating == kAuto || fInitiating == kDirect)
 		_CancelConnection();
 	else
 		_Connect();
@@ -1030,6 +1035,7 @@ LEManager::_Connect()
 
 	if (fWantDirect) {
 		fInitiating = kDirect;
+		fDirectStarted = system_time();
 		_CreateConnection(&fDirectAddress, fDirectType);
 		return;
 	}
@@ -1645,6 +1651,18 @@ LEManager::_Pulse()
 	// link with it (Vol 3, Part H, 3.4; Part F, 3.3.3).
 	const bigtime_t now = system_time();
 	const bigtime_t limit = 30000000;
+
+	// A device that stopped advertising: the controller would try for
+	// ever, and paired mice and keyboards could not come back meanwhile.
+	if (fInitiating == kDirect && fDirectStarted != 0
+		&& now - fDirectStarted > limit) {
+		syslog(LOG_NOTICE, "bluetooth_server: hci%" B_PRId32
+			" le pairing connect timed out", fDevice->GetID());
+		fWantDirect = false;
+		_DirectResult(false);
+		_CancelConnection();
+	}
+
 	std::vector<Link*> expired;
 	for (size_t i = 0; i < fLinks.size(); i++) {
 		Link* link = fLinks[i];

@@ -265,8 +265,14 @@ LocalDeviceImpl::RemoteDeviceByHandle(uint16 handle)
 {
 	for (int32 i = 0; i < fRemoteDevicesList.CountItems(); i++) {
 		ServerRemoteDevice* rd = fRemoteDevicesList.ItemAt(i);
-		if (rd->handle == handle)
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// Only a device whose link is up has this handle.
+		if (handle != ServerRemoteDevice::kNoHandle && rd->handle == handle
+			&& rd->conn_state != RemoteDevice::DISCONNECTED)
 			return rd;
+		// SPDX-SnippetEnd
 	}
 	return NULL;
 }
@@ -1859,6 +1865,13 @@ LocalDeviceImpl::ConnectionRequest(struct hci_ev_conn_request* event,
 
 		ServerRemoteDevice* serverRd;
 		serverRd = RemoteDeviceByAddr(event->bdaddr);
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// A known device was added to the list again at every connection
+		// it started itself, and Forget removed only one copy.
+		const bool newDevice = serverRd == NULL;
+		// SPDX-SnippetEnd
 
 		if (serverRd == NULL) {
 			serverRd = new ServerRemoteDevice();
@@ -1876,7 +1889,12 @@ LocalDeviceImpl::ConnectionRequest(struct hci_ev_conn_request* event,
 			sizeof(serverRd->classOfDevice));
 
 		((BluetoothServer*)be_app)->NotifyWatchers(&notice);
-		AddRemoteDevice(serverRd);
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		if (newDevice)
+			AddRemoteDevice(serverRd);
+		// SPDX-SnippetEnd
 
 		// Keep ourselves as slave
 		command = buildAcceptConnectionRequest(event->bdaddr, 0x01 , &size);
@@ -2284,8 +2302,11 @@ LocalDeviceImpl::DisconnectionComplete(hci_ev_disconnection_complete_reply* even
 	// SPDX-License-Identifier: MIT
 	// rd is NULL for an unknown handle (review of #4286).
 	if (rd != NULL
-		&& (event->status == BT_OK || event->status == BT_NO_CONNECTION))
+		&& (event->status == BT_OK || event->status == BT_NO_CONNECTION)) {
 		rd->conn_state = RemoteDevice::DISCONNECTED;
+		rd->handle = ServerRemoteDevice::kNoHandle;
+		rd->encryption_enabled = 0;
+	}
 	// A pairing started here that lost its link before it ended.
 	if (rd != NULL && rd->user_pairing) {
 		rd->user_pairing = false;
@@ -2351,6 +2372,18 @@ LocalDeviceImpl::LinkKeyNotify(hci_ev_link_key_notify* event,
 	ServerRemoteDevice* rd = RemoteDeviceByAddr(event->bdaddr);
 	if (rd == NULL)
 		return;
+
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// A Debug Combination Key (type 0x03) comes from the published debug
+	// key pair: anyone listening can work it out. It serves this link but
+	// is not kept, as in BlueZ.
+	if (event->key_type == 0x03) {
+		syslog(LOG_NOTICE, "bluetooth_server: debug link key not stored");
+		return;
+	}
+	// SPDX-SnippetEnd
 
 	rd->link_key = event->link_key;
 	rd->link_type = event->key_type;
