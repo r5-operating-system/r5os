@@ -147,6 +147,19 @@ LEManager::Setup(const uint8 lmpFeatures[8])
 	// the rest (_CommandDone()).
 	const uint8 hostSupport[2] = { 1, 0 };
 	_Issue(kOpWriteLEHostSupport, hostSupport, sizeof(hostSupport));
+	// On the MT7922 a Classic pairing ended in 0x37 (Simple Pairing Not
+	// Supported by Host): Write LE Host Support may clear the SSP host bit
+	// of feature page 1. Simple Pairing Mode is written again after it,
+	// and pages 1 and 2 are read: page 2 says whether the controller has
+	// Secure Connections, which the host then turns on, as Linux does.
+	if ((lmpFeatures[6] & 0x08) != 0) {
+		const uint8 on = 1;
+		_Issue(kOpWriteSimplePairingMode, &on, 1);
+	}
+	const uint8 page1 = 1;
+	_Issue(kOpReadLocalExtFeatures, &page1, 1);
+	const uint8 page2 = 2;
+	_Issue(kOpReadLocalExtFeatures, &page2, 1);
 	_Issue(kOpReadBDAddr, NULL, 0);
 	_Issue(kOpLEReadFeatures, NULL, 0);
 }
@@ -336,8 +349,51 @@ LEManager::_CommandDone(uint16 opcode, uint8 status, const uint8* data,
 
 	switch (opcode) {
 		case kOpReadBDAddr:
+		{
 			if (status == BT_OK && length >= 6)
 				memcpy(&fLocalAddress, data, 6);
+			const bdaddr_t none = {{0, 0, 0, 0, 0, 0}};
+			syslog(LOG_INFO, "bluetooth_server: hci%" B_PRId32 " local address"
+				" %s", fDevice->GetID(), status == BT_OK
+					&& !bdaddrUtils::Compare(fLocalAddress, none)
+						? "set" : "missing");
+			break;
+		}
+
+		case kOpReadLocalExtFeatures:
+			// Status, page, maximum page, features (8).
+			if (status != BT_OK || length < 10) {
+				syslog(LOG_NOTICE, "bluetooth_server: hci%" B_PRId32
+					" local features page not read (%#x)", fDevice->GetID(),
+					status);
+				break;
+			}
+			if (data[0] == 1) {
+				syslog(LOG_INFO, "bluetooth_server: hci%" B_PRId32 " local"
+					" features page 1 %#x (ssp host %s, le host %s)",
+					fDevice->GetID(), data[2],
+					(data[2] & 0x01) != 0 ? "on" : "off",
+					(data[2] & 0x02) != 0 ? "on" : "off");
+			} else if (data[0] == 2) {
+				// Secure Connections (Controller Support): page 2, bit 8.
+				const bool sc = (data[3] & 0x01) != 0;
+				syslog(LOG_INFO, "bluetooth_server: hci%" B_PRId32 " local"
+					" features page 2 %#x%02x (secure connections %s)",
+					fDevice->GetID(), data[3], data[2],
+					sc ? "supported" : "not supported");
+				if (sc) {
+					const uint8 on = 1;
+					_Issue(kOpWriteSCHostSupport, &on, 1);
+				}
+			}
+			break;
+
+		case kOpWriteSCHostSupport:
+		case kOpWriteSimplePairingMode:
+			syslog(LOG_INFO, "bluetooth_server: hci%" B_PRId32 " %s %s (%#x)",
+				fDevice->GetID(), opcode == kOpWriteSCHostSupport
+					? "secure connections host" : "simple pairing mode",
+				status == BT_OK ? "on" : "failed", status);
 			break;
 
 		case kOpLEReadFeatures:
@@ -488,12 +544,18 @@ LEManager::_AdvertisingReport(const uint8* data, size_t size, bool extended)
 			seen->classOfDevice = 0;
 			seen->connectable = false;
 			seen->lastSent = 0;
+			seen->eventType = 0;
+			seen->extendedReport = false;
 			fSeen.push_back(seen);
 		}
 		seen->addressType = (report.address_type & 0x01) != 0
 			? R5_BDADDR_LE_RANDOM : R5_BDADDR_LE_PUBLIC;
 		seen->rssi = report.rssi;
 		seen->lastSeen = now;
+		if (!report.scan_response) {
+			seen->eventType = report.event_type;
+			seen->extendedReport = extended;
+		}
 		if (report.connectable)
 			seen->connectable = true;
 
@@ -818,8 +880,10 @@ LEManager::Pair(const bdaddr_t& address)
 			break;
 		}
 	}
-	syslog(LOG_INFO, "bluetooth_server: hci%" B_PRId32 " le pairing started",
-		fDevice->GetID());
+	syslog(LOG_INFO, "bluetooth_server: hci%" B_PRId32 " le pairing started"
+		" (advertising type %#x, %s, address type %u)", fDevice->GetID(),
+		seen->eventType, seen->extendedReport ? "extended" : "legacy",
+		seen->addressType);
 
 	Link* link = _FindLink(address);
 	if (link != NULL) {
@@ -904,7 +968,14 @@ LEManager::_CreateConnection(const bdaddr_t* address, uint8 addressType)
 	if (address != NULL)
 		peer = *address;
 
-	if (fExtended) {
+	// The last retry of a pairing connect goes the legacy way, in case the
+	// extended initiator is what fails (outside diagnosis of the first
+	// sticks); the controller may refuse it once extended commands ran.
+	const bool legacy = !fExtended
+		|| (address != NULL && fConnectRetries >= kMaxConnectRetries);
+	syslog(LOG_INFO, "bluetooth_server: hci%" B_PRId32 " le connect via %s",
+		fDevice->GetID(), legacy ? "legacy" : "extended");
+	if (!legacy) {
 		// Filter policy, own address type, peer address type, peer
 		// address, PHYs (1M), then for 1M: scan interval and window,
 		// interval min and max, latency, timeout, CE length min and max.

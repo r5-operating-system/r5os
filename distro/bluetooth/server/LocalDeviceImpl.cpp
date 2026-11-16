@@ -678,6 +678,17 @@ LocalDeviceImpl::HandleEvent(struct hci_event_header* event, size_t size)
 			size >= sizeof(*event) ? event->ecode : 0, size);
 		return;
 	}
+	// Answers worth a log line while pairing does not work yet (outside
+	// diagnosis of the first sticks). Only logged; they go on.
+	if (event->ecode == HCI_EVENT_CMD_COMPLETE && event->elen >= 4) {
+		const uint8* data = (const uint8*)(event + 1);
+		const uint16 opcode = data[1] | (data[2] << 8);
+		if (opcode == PACK_OPCODE(OGF_LINK_CONTROL,
+				OCF_IO_CAPABILITY_REQUEST_REPLY)) {
+			syslog(LOG_INFO, "bluetooth_server: io capability reply answered"
+				" %#x", data[3]);
+		}
+	}
 	// The remote host features the server asked for itself.
 	if (event->ecode == HCI_EVENT_REMOTE_EXTENDED_FEATURES
 		&& event->elen >= sizeof(struct hci_ev_remote_extended_features)) {
@@ -2434,7 +2445,7 @@ LocalDeviceImpl::IOCapabilityRequest(struct hci_ev_io_capability_request* event,
 	// (Core 6.0, Vol 3, Part C, 5.2.2.6).
 	command = buildIOCapabilityRequestReply(event->bdaddr,
 		R5_HCI_IO_CAP_KEYBOARD_DISPLAY, HCI_OOB_DATA_NOT_PRESENT,
-		HCI_AUTH_REQ_MITM_GENERAL_BOND, &size);
+		R5_HCI_AUTH_REQ_MITM_DEDICATED_BOND, &size);
 	if (command == NULL)
 		return;
 	// SPDX-SnippetEnd

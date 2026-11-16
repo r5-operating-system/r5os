@@ -111,6 +111,7 @@ le_ad_class_of_device(const le_ad_info* info)
 struct le_adv_report {
 	uint8			address_type;	// 0 public, 1 random (+2: resolved)
 	const uint8*	address;		// 6 bytes, HCI order
+	uint16			event_type;		// as the report has it
 	bool			connectable;
 	bool			scan_response;
 	int8			rssi;
@@ -138,6 +139,7 @@ le_adv_report_next(const uint8* event, size_t size, bool extended,
 		// secondary PHY, SID, TX power, RSSI, periodic interval (2),
 		// direct address type and address (6), data length, data.
 		const uint16 type = r[0] | (r[1] << 8);
+		report->event_type = type;
 		report->connectable = (type & 0x0001) != 0;
 		report->scan_response = (type & 0x0008) != 0;
 		report->address_type = r[2];
@@ -148,6 +150,7 @@ le_adv_report_next(const uint8* event, size_t size, bool extended,
 	} else {
 		// Event type, address type, address (6), data length, data, RSSI.
 		const uint8 type = r[0];
+		report->event_type = type;
 		report->connectable = type == 0x00 || type == 0x01;
 		report->scan_response = type == 0x04;
 		report->address_type = r[1];

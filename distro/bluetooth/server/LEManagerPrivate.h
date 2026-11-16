@@ -18,6 +18,9 @@
 enum {
 	kOpDisconnect				= 0x0406,
 	kOpWriteLEHostSupport		= 0x0c6d,
+	kOpWriteSimplePairingMode	= 0x0c56,
+	kOpWriteSCHostSupport		= 0x0c7a,
+	kOpReadLocalExtFeatures		= 0x1004,
 	kOpReadBDAddr				= 0x1009,
 	kOpLESetEventMask			= 0x2001,
 	kOpLEReadBufferSize			= 0x2002,
@@ -186,6 +189,8 @@ struct LEManager::Seen {
 	bool		connectable;
 	bigtime_t	lastSeen;
 	bigtime_t	lastSent;
+	uint16		eventType;		// of the last advertisement
+	bool		extendedReport;
 };
 
 
