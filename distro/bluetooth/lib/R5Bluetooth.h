@@ -51,10 +51,13 @@ enum {
 		// bool "on". System-wide: callers check the administrator lock
 	kMsgBluetoothSelectRadio	= 'btSr',
 		// int32 "hci_id"
-	kMsgBluetoothPair			= 'btPa'
+	kMsgBluetoothPair			= 'btPa',
 		// data "bdaddr" (bdaddr_t), string "name", uint32 "class": pair
 		// with a device found by a scan (step 4). The result shows in the
 		// device's own connection and pairing events.
+	kMsgBluetoothForget			= 'btFg'
+		// data "bdaddr", string "name": forget a paired device (its keys)
+		// and end its link; answered with kMsgBluetoothForgetResult
 };
 
 // Notifications sent to the controller's target
@@ -63,8 +66,10 @@ enum {
 		// A flattened BluetoothState
 	kMsgBluetoothRadioResult	= 'btRR',
 		// bool "on", int32 "status"
-	kMsgBluetoothPairResult		= 'btPR'
+	kMsgBluetoothPairResult		= 'btPR',
 		// bool "paired", string "name": the end of a kMsgBluetoothPair
+	kMsgBluetoothForgetResult	= 'btFR'
+		// bool "forgotten", string "name"
 };
 
 

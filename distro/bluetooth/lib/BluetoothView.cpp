@@ -42,6 +42,7 @@ static const uint32 kMsgRadioSwitch = 'btvS';
 static const uint32 kMsgRadioChosen = 'btvR';
 static const uint32 kMsgScanButton = 'btvB';
 static const uint32 kMsgPairButton = 'btvP';
+static const uint32 kMsgForgetButton = 'btvF';
 static const uint32 kMsgDeviceSelected = 'btvD';
 
 
@@ -267,6 +268,8 @@ BluetoothView::BluetoothView(bool settingsPage)
 	fDeviceList->SetSelectionMessage(new BMessage(kMsgDeviceSelected));
 	BButton* pairButton = new BButton("pair", B_TRANSLATE("Pair"),
 		new BMessage(kMsgPairButton));
+	BButton* forgetButton = new BButton("forget", B_TRANSLATE("Forget"),
+		new BMessage(kMsgForgetButton));
 
 	BStringView* devicesTitle = new BStringView("devices title",
 		B_TRANSLATE("Devices nearby"));
@@ -281,6 +284,7 @@ BluetoothView::BluetoothView(bool settingsPage)
 		.AddGroup(B_HORIZONTAL)
 			.Add(fScanStatus)
 			.AddGlue()
+			.Add(forgetButton)
 			.Add(pairButton)
 			.Add(fScanButton)
 		.End();
@@ -416,6 +420,33 @@ BluetoothView::MessageReceived(BMessage* message)
 			*fPairStatus = B_TRANSLATE("Pairing with %name%" B_UTF8_ELLIPSIS);
 			fPairStatus->ReplaceFirst("%name%", name);
 			fPairing = 1;
+			_UpdateControls();
+			break;
+		}
+
+		case kMsgForgetButton:
+		{
+			DeviceItem* item = dynamic_cast<DeviceItem*>(
+				fDeviceList->ItemAt(fDeviceList->CurrentSelection()));
+			if (item == NULL)
+				break;
+			BMessage request(kMsgBluetoothForget);
+			request.AddData("bdaddr", B_ANY_TYPE, &item->Info().address,
+				sizeof(bdaddr_t));
+			request.AddString("name", item->Info().name);
+			_SendToController(&request);
+			break;
+		}
+
+		case kMsgBluetoothForgetResult:
+		{
+			BString name = message->GetString("name", "");
+			if (name.IsEmpty())
+				name = B_TRANSLATE("the device");
+			*fPairStatus = message->GetBool("forgotten", false)
+				? B_TRANSLATE("%name% is forgotten. Pair it again to use it.")
+				: B_TRANSLATE("%name% was not paired.");
+			fPairStatus->ReplaceFirst("%name%", name);
 			_UpdateControls();
 			break;
 		}
@@ -665,6 +696,10 @@ BluetoothView::_UpdateControls()
 	fScanButton->SetEnabled(running && fState.radioEnabled && radio != NULL);
 	if (BButton* pairButton = pair_button(this)) {
 		pairButton->SetEnabled(running && fState.radioEnabled && radio != NULL
+			&& fDeviceList->CurrentSelection() >= 0 && fPairing == 0);
+	}
+	if (BButton* forgetButton = dynamic_cast<BButton*>(FindView("forget"))) {
+		forgetButton->SetEnabled(running && radio != NULL
 			&& fDeviceList->CurrentSelection() >= 0 && fPairing == 0);
 	}
 

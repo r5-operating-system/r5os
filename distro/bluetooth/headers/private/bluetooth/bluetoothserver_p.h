@@ -60,6 +60,9 @@
 // The end of a pairing started with Create Connection, sent to the
 // sender of that request: data "bdaddr", bool "paired", string "name".
 #define BT_MSG_R5_PAIR_RESULT           'r5pR'
+// Forget a paired device (its Classic link key or LE keys), and end its
+// link: data "bdaddr"; the reply has bool "forgotten".
+#define BT_MSG_R5_FORGET                'r5fG'
 // SPDX-SnippetEnd
 
 // SPDX-SnippetBegin

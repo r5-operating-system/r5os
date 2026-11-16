@@ -1693,3 +1693,35 @@ LEManager::_DirectResult(bool paired)
 	r5_pairing_result(paired, _Name(fDirectAddress), &fDirectReply,
 		fDirectAddress);
 }
+
+
+bool
+LEManager::Forget(const bdaddr_t& address)
+{
+	BAutolock _(fLock);
+	bool found = false;
+	for (size_t i = 0; i < fBonds.size(); i++) {
+		if (!bdaddrUtils::Compare(fBonds[i]->address, address))
+			continue;
+		memset(fBonds[i]->ltk, 0, sizeof(fBonds[i]->ltk));
+		memset(fBonds[i]->irk, 0, sizeof(fBonds[i]->irk));
+		delete fBonds[i];
+		fBonds.erase(fBonds.begin() + i);
+		_SaveBonds();
+		fAcceptListDirty = true;
+		found = true;
+		break;
+	}
+	Link* link = _FindLink(address);
+	if (link != NULL) {
+		_CloseLink(link, true);
+		found = true;
+	}
+	if (found) {
+		// The accept list is written again once nothing initiates.
+		if (fInitiating == kAuto)
+			_CancelConnection();
+		_Connect();
+	}
+	return found;
+}

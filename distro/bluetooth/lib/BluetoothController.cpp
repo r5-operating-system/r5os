@@ -507,6 +507,29 @@ BluetoothController::MessageReceived(BMessage* message)
 			_Pair(message);
 			break;
 
+		case kMsgBluetoothForget:
+		{
+			const void* address;
+			ssize_t size;
+			BMessage result(kMsgBluetoothForgetResult);
+			result.AddString("name", message->GetString("name", ""));
+			bool forgotten = false;
+			BMessenger server(BLUETOOTH_SIGNATURE);
+			if (message->FindData("bdaddr", B_ANY_TYPE, &address, &size)
+					== B_OK && size == (ssize_t)sizeof(bdaddr_t)
+				&& server.IsValid()) {
+				BMessage request(BT_MSG_R5_FORGET);
+				request.AddData("bdaddr", B_ANY_TYPE, address, size);
+				BMessage reply;
+				if (server.SendMessage(&request, &reply, kServerTimeout,
+						kServerTimeout) == B_OK)
+					forgotten = reply.GetBool("forgotten", false);
+			}
+			result.AddBool("forgotten", forgotten);
+			fTarget.SendMessage(&result, (BHandler*)NULL, kServerTimeout);
+			break;
+		}
+
 		case BT_MSG_R5_PAIR_RESULT:
 		{
 			BMessage result(kMsgBluetoothPairResult);

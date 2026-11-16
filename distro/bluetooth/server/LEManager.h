@@ -81,6 +81,8 @@ public:
 	// when it advertises on LE with the same address (dual mode).
 			void				NoteClassic(const bdaddr_t& address);
 			void				RadioChanged(bool enabled);
+	// Removes the keys of a paired LE device and ends its link.
+			bool				Forget(const bdaddr_t& address);
 			// bluetooth_audio starts or stops a stream: the scan pauses
 			// meanwhile (docs/BLUETOOTH.md, step 5).
 			void				AudioChanged(bool streaming);
