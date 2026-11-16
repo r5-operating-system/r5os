@@ -241,7 +241,13 @@ gpu_get_info(gpu_client* client, void* buffer, size_t length)
 	out.subsystem_device = info->pci->u.h0.subsystem_id;
 	if (info->shared_info != NULL) {
 		out.vram_bytes = (uint64)info->shared_info->frame_buffer_size * 1024ull;
-		out.gtt_bytes = out.vram_bytes;
+		// Review of the VRAM fallback (16 Nov 2026): this was the VRAM
+		// size again, which is the PCI frame buffer window and no GTT
+		// measure. GTT is what BO_CREATE allows a file: the limit below.
+		// RADV sizes its heaps from it, app_server its window memory.
+		out.gtt_bytes = gpu_gtt_limit();
+		if (out.gtt_bytes == 0)
+			out.gtt_bytes = out.vram_bytes;
 	}
 	/* M11 step 3b: the memory, not the handles. A shared buffer has a
 	 * slot in each file that holds it and is counted once. */
