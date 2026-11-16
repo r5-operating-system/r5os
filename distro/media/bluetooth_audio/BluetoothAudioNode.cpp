@@ -42,6 +42,10 @@ BluetoothAudioNode::BluetoothAudioNode(BMediaAddOn* addOn, int32 internalID)
 	fVolumeChanged(0),
 	fLatency(0)
 {
+	// The flavor's kinds are not the live node's: without this, Media and
+	// media_server's default output never see it as an output
+	// (multi_audio does the same).
+	AddNodeKind(B_PHYSICAL_OUTPUT);
 }
 
 
