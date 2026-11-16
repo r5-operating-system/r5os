@@ -143,7 +143,11 @@ BluetoothServer::BluetoothServer()
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
 	fHIDHost = new HIDHost();
-	fHFPGateway = new HFPGateway();
+	{
+		HFPGateway::Options options = HFPGateway::DefaultOptions();
+		options.connected = _R5DeviceConnected;
+		fHFPGateway = new HFPGateway(options);
+	}
 	fLEPulse = NULL;
 	// SPDX-SnippetEnd
 }
@@ -167,6 +171,8 @@ bool BluetoothServer::QuitRequested(void)
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
+	// HFP first, while the links are up: its sessions end at once (step 7b).
+	fHFPGateway->Stop();
 	fDevicesLock.Lock();
 	while ((lDeviceImpl = (LocalDeviceImpl*)
 		fLocalDevicesList.RemoveItemAt(0)) != NULL)
@@ -192,7 +198,6 @@ bool BluetoothServer::QuitRequested(void)
 	fHIDHost->Stop();
 	delete fHIDHost;
 	fHIDHost = NULL;
-	fHFPGateway->Stop();
 	delete fHFPGateway;
 	fHFPGateway = NULL;
 	// SPDX-SnippetEnd
@@ -1274,6 +1279,21 @@ BluetoothServer::R5FindRFCOMMChannel(const bdaddr_t& address,
 		return *_channel != 0 ? B_OK : B_NAME_NOT_FOUND;
 	}
 	return B_NAME_NOT_FOUND;
+}
+
+
+bool
+BluetoothServer::_R5DeviceConnected(const bdaddr_t& address, void*)
+{
+	BluetoothServer* server = (BluetoothServer*)be_app;
+	BAutolock locker(server->fDevicesLock);
+	for (int32 i = 0; i < server->fLocalDevicesList.CountItems(); i++) {
+		ServerRemoteDevice* rd
+			= server->fLocalDevicesList.ItemAt(i)->RemoteDeviceByAddr(address);
+		if (rd != NULL && rd->conn_state == RemoteDevice::CONNECTED)
+			return true;
+	}
+	return false;
 }
 // SPDX-SnippetEnd
 

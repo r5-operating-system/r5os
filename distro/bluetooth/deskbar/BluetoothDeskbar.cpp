@@ -269,9 +269,12 @@ public:
 
 			default:
 				// bluetooth_server's answers have no code of their own;
-				// only the radio answer has "enabled".
+				// only the radio answer has "enabled". An error answer (only
+				// "status") replaces no list.
 				if (message->what == 0 && !message->HasBool("enabled")) {
-					fPaired = *message;
+					if (message->HasString("name")
+						|| message->GetInt32("status", B_OK) == B_OK)
+						fPaired = *message;
 					break;
 				}
 				if (message->what == 0 && message->HasBool("enabled")) {
@@ -308,7 +311,7 @@ public:
 		// From the last BT_MSG_R5_GET_PAIRED answer (_Poll()).
 		bool batteries = false;
 		const char* name;
-		for (int32 i = 0; fEnabled
+		for (int32 i = 0; fReached && fEnabled
 				&& fPaired.FindString("name", i, &name) == B_OK; i++) {
 			int32 battery = fPaired.GetInt32("battery", i, -1);
 			if (!fPaired.GetBool("connected", i, false) || battery < 0)
@@ -371,6 +374,9 @@ private:
 
 	void _SetState(bool reached, bool enabled, int32 radios)
 	{
+		// A server that is gone has no batteries to show.
+		if (!reached)
+			fPaired.MakeEmpty();
 		if (reached && !fLogged) {
 			// The pass line of docs/BLUETOOTH.md, step 3b.
 			syslog(LOG_INFO, "deskbar_bt_replicant: attached via messenger");

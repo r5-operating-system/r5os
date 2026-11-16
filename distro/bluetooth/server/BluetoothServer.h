@@ -114,6 +114,9 @@ public:
 					uint16 serviceClass);
 	status_t	R5FindRFCOMMChannel(const bdaddr_t& address,
 					uint16 serviceClass, uint8* _channel);
+	// Step 7b: whether a Classic device has its link, for HFPGateway
+	// (takes fDevicesLock).
+	static bool	_R5DeviceConnected(const bdaddr_t& address, void* cookie);
 	// SPDX-SnippetEnd
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors

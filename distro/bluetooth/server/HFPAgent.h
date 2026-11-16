@@ -23,12 +23,11 @@
 namespace r5hfp {
 
 
-// The AG's features in +BRSF (HFP 1.8, 4.34.1): extended error result
-// codes (bit 8) and HF indicators (bit 10). No calls, no voice
-// recognition, no codec negotiation (there is no voice path before 7c).
-static const uint32_t kGatewayFeatures = 0x0500;
-// The HF feature bit for HF indicators.
-static const uint32_t kHandsFreeIndicators = 0x0100;
+// The AG's features in +BRSF (HFP 1.8, 4.34.1): HF indicators (bit 10)
+// only. No calls, no voice recognition, no codec negotiation (there is no
+// voice path before 7c), and no extended error codes: failures are a plain
+// ERROR, so +CME ERROR is never owed after AT+CMEE.
+static const uint32_t kGatewayFeatures = 0x0400;
 // HF indicator 2 is the battery level, 0 to 100 (Bluetooth Assigned
 // Numbers, HFP HF indicators).
 static const int kIndicatorBattery = 2;

@@ -170,7 +170,7 @@ Agent::Handle(const char* line, size_t length, char* out, size_t outSize)
 	size_t n = commandLength - 2;
 	const char* rest;
 	size_t restLength;
-	long values[8];
+	long values[16];
 
 	if (starts(c, n, "+BRSF=", &rest, &restLength)) {
 		if (ParseNumbers(rest, restLength, values, 1) != 1) {
@@ -191,6 +191,8 @@ Agent::Handle(const char* line, size_t length, char* out, size_t outSize)
 	} else if (starts(c, n, "+CMER=", &rest, &restLength)) {
 		answer.Ok();
 		// Without three-way calling the SLC is up now (HFP 1.8, 4.2.1.6).
+		// With HF indicators on both sides BIND follows; R5 does not wait
+		// for it, so a headset that skips BIND still gets its session.
 		if (!fServiceLevel) {
 			fServiceLevel = true;
 			fEvents |= kEventServiceLevel;
@@ -206,7 +208,7 @@ Agent::Handle(const char* line, size_t length, char* out, size_t outSize)
 		answer.Add("\r\n+BIND: %d,1\r\n", kIndicatorBattery);
 		answer.Ok();
 	} else if (starts(c, n, "+BIND=", &rest, &restLength)) {
-		int count = ParseNumbers(rest, restLength, values, 8);
+		int count = ParseNumbers(rest, restLength, values, 16);
 		if (count < 1) {
 			answer.Error();
 			return answer.length;
@@ -231,7 +233,7 @@ Agent::Handle(const char* line, size_t length, char* out, size_t outSize)
 		answer.Line("+XAPL=iPhone,2");
 		answer.Ok();
 	} else if (starts(c, n, "+IPHONEACCEV=", &rest, &restLength)) {
-		int count = ParseNumbers(rest, restLength, values, 8);
+		int count = ParseNumbers(rest, restLength, values, 16);
 		if (count < 1 || count != 1 + 2 * values[0]) {
 			answer.Error();
 			return answer.length;
@@ -283,6 +285,9 @@ Agent::Handle(const char* line, size_t length, char* out, size_t outSize)
 		|| starts(c, n, "+BCS=", &rest, &restLength)
 		|| is(c, n, "+CLCC") || is(c, n, "+CNUM") || is(c, n, "+BTRH?")) {
 		// Taken, nothing to report: no calls, no number.
+		answer.Ok();
+	} else if (n == 0) {
+		// A bare AT, which some units send to check the link.
 		answer.Ok();
 	} else if (is(c, n, "+COPS?")) {
 		answer.Line("+COPS: 0");
