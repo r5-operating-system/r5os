@@ -134,6 +134,7 @@ public:
 	}
 
 	const BluetoothDeviceInfo& Info() const { return fInfo; }
+	void SetInfo(const BluetoothDeviceInfo& info) { fInfo = info; }
 
 	virtual void Update(BView* owner, const BFont* font)
 	{
@@ -283,12 +284,13 @@ BluetoothView::BluetoothView(bool settingsPage)
 		.End();
 	devicesBox->AddChild(devicesInner);
 
+	// The list of devices takes the rest of the height, down to the bottom
+	// of the page (in Settings: as far down as the list of pages).
 	BLayoutBuilder::Group<>(this)
 		.SetInsets(settingsPage ? 0 : B_USE_WINDOW_SPACING)
 		.Add(summary)
 		.Add(radioBox)
-		.Add(devicesBox)
-		.AddGlue();
+		.Add(devicesBox, 10.0f);
 
 	_SetState(fState);
 }
@@ -582,6 +584,29 @@ BluetoothView::_UpdateDevices()
 	if (current != NULL)
 		selected = current->Info().AddressString();
 
+	// Every scan answer brings a new list. The same devices in the same
+	// order are updated where they are; otherwise the list is filled again
+	// at the same scroll position. It emptied the list each time, which
+	// scrolled back to the top and lost a device selected further down.
+	bool sameOrder = fDeviceList->CountItems()
+		== (int32)fState.devices.size();
+	for (int32 i = 0; sameOrder && i < fDeviceList->CountItems(); i++) {
+		DeviceItem* item = dynamic_cast<DeviceItem*>(fDeviceList->ItemAt(i));
+		sameOrder = item != NULL && item->Info().AddressString()
+			== fState.devices[i].AddressString();
+	}
+	if (sameOrder) {
+		for (int32 i = 0; i < fDeviceList->CountItems(); i++) {
+			DeviceItem* item = static_cast<DeviceItem*>(
+				fDeviceList->ItemAt(i));
+			item->SetInfo(fState.devices[i]);
+			fDeviceList->InvalidateItem(i);
+		}
+		return;
+	}
+
+	const float top = fDeviceList->Bounds().top;
+	fDeviceList->SetSelectionMessage(NULL);
 	for (int32 i = fDeviceList->CountItems() - 1; i >= 0; i--)
 		delete fDeviceList->RemoveItem(i);
 
@@ -591,6 +616,8 @@ BluetoothView::_UpdateDevices()
 		if (!selected.IsEmpty() && item->Info().AddressString() == selected)
 			fDeviceList->Select(fDeviceList->CountItems() - 1);
 	}
+	fDeviceList->ScrollTo(0, top);
+	fDeviceList->SetSelectionMessage(new BMessage(kMsgDeviceSelected));
 }
 
 
