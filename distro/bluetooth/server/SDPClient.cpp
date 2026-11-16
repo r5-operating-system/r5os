@@ -13,6 +13,7 @@
 // SPDX-License-Identifier: MIT
 #include "BluetoothServer.h"
 #include "HIDHost.h"
+#include <syslog.h>
 // SPDX-SnippetEnd
 
 
@@ -283,13 +284,20 @@ SDPClient::_NotifyHIDProfile(BMessage* attrList)
 	const uint8* list;
 	ssize_t listSize;
 	if (attrList->FindData("0x0206", B_RAW_TYPE, (const void**)&list,
-			&listSize) != B_OK || listSize <= 0)
+			&listSize) != B_OK || listSize <= 0) {
+		syslog(LOG_NOTICE, "bluetooth_hid: HID service without a report "
+			"descriptor");
 		return B_NOT_SUPPORTED;
+	}
 
 	const uint8* descriptor;
 	size_t length;
-	if (!HIDHost::FindReportDescriptor(list, listSize, &descriptor, &length))
+	if (!HIDHost::FindReportDescriptor(list, listSize, &descriptor, &length)) {
+		syslog(LOG_NOTICE, "bluetooth_hid: report descriptor not readable");
 		return B_BAD_DATA;
+	}
+	syslog(LOG_INFO, "bluetooth_hid: report descriptor, %" B_PRIuSIZE
+		" bytes", length);
 
 	HIDHost* host = ((BluetoothServer*)be_app)->GetHIDHost();
 	if (host == NULL)

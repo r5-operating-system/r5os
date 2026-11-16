@@ -334,6 +334,29 @@ LocalDeviceImpl::HandleUnexpectedEvent(struct hci_event_header* event)
 		// Secure Simple Pairing that no petition waited for, for example
 		// a second pairing on the same link or one the remote started.
 		// Dropped before, so that pairing hung until it timed out.
+		// The Link Key Request that starts every authentication was one of
+		// them: no petition waits for it, so on the 5625U pairing stopped
+		// after "Incoming connection" (16 Nov 2026).
+		case HCI_EVENT_LINK_KEY_REQ:
+			LinkKeyRequested(
+				JumpEventHeader<struct hci_ev_link_key_req>(event), NULL);
+			break;
+
+		case HCI_EVENT_LINK_KEY_NOTIFY:
+			LinkKeyNotify(
+				JumpEventHeader<struct hci_ev_link_key_notify>(event), NULL);
+			break;
+
+		case HCI_EVENT_PIN_CODE_REQ:
+			PinCodeRequest(
+				JumpEventHeader<struct hci_ev_pin_code_req>(event), NULL);
+			break;
+
+		case HCI_EVENT_AUTH_COMPLETE:
+			AuthComplete(
+				JumpEventHeader<struct hci_ev_auth_complete>(event), NULL);
+			break;
+
 		case HCI_EVENT_IO_CAPABILITY_REQUEST:
 			IOCapabilityRequest(
 				JumpEventHeader<struct hci_ev_io_capability_request>(event),
@@ -569,6 +592,24 @@ LocalDeviceImpl::_EventFits(const struct hci_event_header* event, size_t size)
 			break;
 		case R5_HCI_EVENT_KEYPRESS_NOTIFICATION:
 			minimum = sizeof(struct r5_hci_ev_keypress_notification);
+			break;
+		case HCI_EVENT_LINK_KEY_REQ:
+			minimum = sizeof(struct hci_ev_link_key_req);
+			break;
+		case HCI_EVENT_LINK_KEY_NOTIFY:
+			minimum = sizeof(struct hci_ev_link_key_notify);
+			break;
+		case HCI_EVENT_PIN_CODE_REQ:
+			minimum = sizeof(struct hci_ev_pin_code_req);
+			break;
+		case HCI_EVENT_AUTH_COMPLETE:
+			minimum = sizeof(struct hci_ev_auth_complete);
+			break;
+		case HCI_EVENT_ENCRYPT_CHANGE:
+			minimum = sizeof(struct hci_ev_encrypt_change);
+			break;
+		case HCI_EVENT_CONN_COMPLETE:
+			minimum = sizeof(struct hci_ev_conn_complete);
 			break;
 	}
 	if (event->elen < minimum)
@@ -1985,6 +2026,13 @@ LocalDeviceImpl::ConnectionComplete(struct hci_ev_conn_complete* event)
 		// SPDX-SnippetEnd
 		iConnection->Show();
 
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// The steps of connecting and pairing, without addresses or keys,
+		// so a stick boot shows how far it got.
+		syslog(LOG_INFO, "bluetooth_server: connection up");
+		// SPDX-SnippetEnd
 		TRACE_BT("LocalDeviceImpl: %s: Address %s handle=%#x type=%d encrypt=%d\n", __FUNCTION__,
 				bdaddrUtils::ToString(event->bdaddr).String(), event->handle,
 				event->link_type, event->encrypt_mode);
@@ -2015,6 +2063,12 @@ LocalDeviceImpl::ConnectionComplete(struct hci_ev_conn_complete* event)
 		}
 		// SPDX-SnippetEnd
 
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		syslog(LOG_NOTICE, "bluetooth_server: connection failed (%#x)",
+			event->status);
+		// SPDX-SnippetEnd
 		TRACE_BT("LocalDeviceImpl: %s: failed with error %s\n", __FUNCTION__,
 			BluetoothError(event->status));
 
@@ -2123,6 +2177,13 @@ LocalDeviceImpl::LinkKeyRequested(struct hci_ev_link_key_req* keyRequested,
 
 	ServerRemoteDevice* rd = RemoteDeviceByAddr(keyRequested->bdaddr);
 	linkkey_t nullLinkKey = LinkKeyUtils::NullKey();
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	syslog(LOG_INFO, "bluetooth_server: link key request (%s)",
+		rd == NULL || LinkKeyUtils::Compare(&rd->link_key, &nullLinkKey)
+			? "no key, pairing" : "paired before");
+	// SPDX-SnippetEnd
 	if (rd == NULL || LinkKeyUtils::Compare(&rd->link_key, &nullLinkKey)) {
 		BluetoothCommand<typed_command(hci_cp_link_key_neg_reply)>
 			linkKeyNegativeReply(OGF_LINK_CONTROL, OCF_LINK_KEY_NEG_REPLY);
@@ -2358,6 +2419,10 @@ LocalDeviceImpl::SimplePairingComplete(struct hci_ev_simple_pairing_complete* ev
 	if (paired != NULL)
 		paired->user_pairing = false;
 
+	syslog(event->status == BT_OK ? LOG_INFO : LOG_NOTICE,
+		"bluetooth_server: simple pairing %s (%#x)",
+		event->status == BT_OK ? "ok" : "failed", event->status);
+
 	// The pass line of step 4 (docs/BLUETOOTH.md); never the passkey.
 	if (fPasskeyUsed && bdaddrUtils::Compare(fPasskeyAddress, event->bdaddr)) {
 		if (event->status == BT_OK)
@@ -2384,6 +2449,11 @@ LocalDeviceImpl::AuthComplete(struct hci_ev_auth_complete* eventData, BMessage* 
 
 	if (status == BT_OK) {
 		TRACE_BT("LocalDeviceImpl: Authentication Successful for handle %d\n", handle);
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		syslog(LOG_INFO, "bluetooth_server: authentication ok");
+		// SPDX-SnippetEnd
 		ServerRemoteDevice* rd = RemoteDeviceByHandle(eventData->handle);
 
 		// SPDX-SnippetBegin
@@ -2396,6 +2466,12 @@ LocalDeviceImpl::AuthComplete(struct hci_ev_auth_complete* eventData, BMessage* 
 		}
 		// SPDX-SnippetEnd
 	} else {
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		syslog(LOG_NOTICE, "bluetooth_server: authentication failed (%#x)",
+			status);
+		// SPDX-SnippetEnd
 		TRACE_BT("LocalDeviceImpl: Authentication Failed for handle %d with status 0x%02x\n",
 			handle, status);
 
@@ -2429,6 +2505,12 @@ LocalDeviceImpl::EncryptChange(struct hci_ev_encrypt_change* event)
 {
 	TRACE_BT("LocalDeviceImpl: %s: Handle=%#x, encrypt=%x, status=%x\n",
 		__FUNCTION__, event->handle, event->encrypt, event->status);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	syslog(LOG_INFO, "bluetooth_server: encryption %s (%#x)",
+		event->encrypt != 0 ? "on" : "off", event->status);
+	// SPDX-SnippetEnd
 
 	ServerRemoteDevice* rd = RemoteDeviceByHandle(event->handle);
 	if (rd == NULL)
