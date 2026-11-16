@@ -395,6 +395,9 @@ RFCOMMLink::_Read()
 	uint8 buffer[1024];
 	while (!fQuitting) {
 		ssize_t received = fTransport->Receive(buffer, sizeof(buffer), kPoll);
+		// Close() ended the transport: that is not the other side leaving.
+		if (fQuitting)
+			break;
 		BAutolock locker(fLock);
 		Mux::State before = fMux.GetState();
 		size_t pending = fMux.Pending();
