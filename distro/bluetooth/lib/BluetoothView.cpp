@@ -509,6 +509,9 @@ BluetoothView::MessageReceived(BMessage* message)
 			// change did not take.
 			fRadioFailed = message->GetInt32("status", B_ERROR) != B_OK;
 			_UpdateRadio();
+			// A refused change sends no new state (it did not change), so
+			// the check box is set back here.
+			_UpdateControls();
 			break;
 		}
 
@@ -632,6 +635,7 @@ BluetoothView::SetRadioSwitchAllowed(bool allowed)
 	if (allowed == fRadioSwitchAllowed)
 		return;
 	fRadioSwitchAllowed = allowed;
+	fRadioFailed = false;
 	_UpdateRadio();
 	_UpdateControls();
 }
@@ -694,6 +698,14 @@ BluetoothView::_SetState(const BluetoothState& state)
 		|| !same_devices(state.devices, fState.devices);
 	bool enabledChanged = state.radioEnabled != fState.radioEnabled
 		|| state.service != fState.service;
+	if (state.radioEnabled != fState.radioEnabled)
+		fRadioFailed = false;
+	// A pairing cannot end well once bluetooth_server is gone: "Pairing…"
+	// would stay and keep Pair and Forget disabled.
+	if (fPairing != 0 && state.service != BLUETOOTH_SERVICE_RUNNING) {
+		fPairing = 0;
+		fPairStatus->Truncate(0);
+	}
 	fState = state;
 	fHasState = true;
 

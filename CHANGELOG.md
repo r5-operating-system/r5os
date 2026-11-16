@@ -1,5 +1,22 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-16 - Bluetooth: review of the whole stack (kernel, server, library, audio)
+
+Problem: four independent read-only reviews of the Bluetooth stack after #4321 (kernel L2CAP/HCI/drivers, bluetooth_server, libr5bt and the page, bluetooth_audio). The stick 5 headset (Sony WH-1000XM4) paired, but its LED kept blinking and no sound came.
+
+Why the headset failed (from the stick 5 syslog and the code): `rd->handle` was never cleared when a link ended, and the controller gives the next link the same number. After the 8BitDo the headset got the 8BitDo's record for Authentication Complete, SDP and Encryption Change: SDP went to the 8BitDo's address ("service records not read"), the 8BitDo's cached HID record was replayed ("report descriptor, 86 bytes"), and the headset never showed as encrypted, so bluetooth_audio refused it. Nothing opened AVDTP either without a `bt_audio use` choice, so the headset dropped the link and stayed in pairing mode.
+
+What changed:
+- bluetooth_server: a record's handle starts and ends at "none" (0xffff) and only a connected record matches a handle; an incoming connection no longer adds a known device a second time; SDP replies are checked against what arrived (a remote continuation length up to 255 overflowed a 17-byte stack buffer in a uid 0 process; the attribute length read past the heap buffer); a new SDP answer replaces the device's old records; testing commands (OGF 0x06, including Simple Pairing Debug Mode) are refused from clients; with the switch off LE does not scan, connect or advertise through raw commands; a refused raw command no longer unregisters the radio; a Debug Combination Key is not stored; an LE pairing connect ends after 30 s, and Pair on a second device gives the first its result; a new LE pairing replaces an older bond of the same identity address.
+- Kernel: an L2CAP channel whose link is lost (and every other path that closes it) leaves the channel table, so a remote Disconnection or Configuration Request can no longer reach a closed channel and answer on a NULL connection (kernel panic); an LE bind (fixed channel, LE PSM) is released on close; an ACL frame the driver refuses is freed; Disconnection Complete is checked for size and status; a failed header prepend no longer dereferences NULL; LE PSMs 0x01 to 0x7F need uid 0; a Disconnection Response needs both CIDs to match.
+- bluetooth_audio: without a `bt_audio` choice it connects to a paired Audio/Video device (connected one first); one log line when it listens; a failed Discover ends the session; the media header and the clock count the frames really sent.
+- libr5bt: `BluetoothView` is 32 bytes at its tail again (`_reserved[2]`; #4321 made it 8 bytes bigger); "Pairing…" always ends (early returns, a refused request, a stopped server); a refused radio change sets the check box back; the failure note clears.
+- gamepad: axes start where they rest, hats (the D-pad) are shown, it stops when the controller goes away.
+
+Open (not fixed here): the sender checks of BT_MSG_R5_SET_RADIO and the audio messages trust the reply address a program chooses (needs the sender's identity from the kernel or Login, an owner decision); raw HCI commands from any local program (Haiku's design) are only narrowed; no host-side RPA resolution without LL Privacy; the resolving list is written while scanning; unpaired remote records and Classic HID sessions are never freed; SDP still runs on the event thread; LE lookups ignore the link type for dual-mode devices; the connection pointer in LE connect() has no reference; bluetooth_audio needs "Bluetooth audio" as the Media output to run at all.
+
+Tested: built for x86_64 (exit 0); QEMU with SMAP: server smoke, L2CAP ABI, HID driver, CoC, SMP crypto and audio smoke ok, the audio node listens on PSM 0x19 and 0x17, no panic. Not on a stick: the headset fix is unproven until a boot on the 5625U.
+
 ## 2026-11-16 - Bluetooth: My devices with a device panel, the switch on the last line
 
 Problem: the Bluetooth page only showed what a scan found. A paired mouse or controller was not listed unless it was found again, there was no way to see whether it was connected, and Forget sat beside Pair in the scan list. The radio card and the switch box stood above the devices, though they are rarely used.

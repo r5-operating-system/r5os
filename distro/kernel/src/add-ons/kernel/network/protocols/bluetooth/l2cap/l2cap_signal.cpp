@@ -497,11 +497,27 @@ send_l2cap_command(HciConnection* conn, uint8 code, uint8 ident, net_buffer* com
 	// TODO: Command timeouts (probably in L2capEndpoint.)
 	{
 		NetBufferPrepend<l2cap_command_header> header(command);
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		if (header.Status() != B_OK) {
+			gBufferModule->free(command);
+			return ENOBUFS;
+		}
+		// SPDX-SnippetEnd
 		header->code = code;
 		header->ident = ident;
 		header->length = htole16(command->size - sizeof(l2cap_command_header));
 	} {
 		NetBufferPrepend<l2cap_basic_header> basicHeader(command);
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		if (basicHeader.Status() != B_OK) {
+			gBufferModule->free(command);
+			return ENOBUFS;
+		}
+		// SPDX-SnippetEnd
 		basicHeader->length = htole16(command->size - sizeof(l2cap_basic_header));
 		// SPDX-SnippetBegin
 		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors

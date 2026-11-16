@@ -615,6 +615,18 @@ LEManager::_SMPFinish(Link* link)
 	if (keep) {
 		// The link keeps its connection address: the kernel names its
 		// PDUs by it. A later link to the identity address finds the bond.
+		// A new pairing replaces an older bond of the same identity
+		// address (Pair removed the bond of the address it advertised,
+		// often a private one): _FindBond() would return the old LTK.
+		for (size_t i = 0; i < fBonds.size(); i++) {
+			if (bdaddrUtils::Compare(fBonds[i]->address, bond->address)) {
+				memset(fBonds[i]->ltk, 0, sizeof(fBonds[i]->ltk));
+				memset(fBonds[i]->irk, 0, sizeof(fBonds[i]->irk));
+				delete fBonds[i];
+				fBonds.erase(fBonds.begin() + i);
+				break;
+			}
+		}
 		fBonds.push_back(bond);
 		_SaveBonds();
 		fAcceptListDirty = true;
