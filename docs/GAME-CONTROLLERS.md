@@ -79,7 +79,9 @@ Not in option B (option C, later): swapping buttons for the whole system and per
 
 ## 5. When and steps
 
-Owner, 16 Nov 2026: not inside the Bluetooth steps (option B is for USB controllers too), but right after Bluetooth step 4 is merged, in parallel with Low Energy (steps 1c and 6), in its own session. It starts after step 4 because it adds one small call to `bluetooth_hid`. Test over a USB cable in VirtualBox (USB passthrough), so no stick of its own; the Bluetooth part rides on the Low Energy stick. Modern Xbox controllers (2020 and later) use Low Energy and come after step 6; the M30 and the DualSense are classic.
+Owner, 16 Nov 2026 (later the same day): after HFP, as Bluetooth step 8 in `docs/BLUETOOTH.md`; it starts once step 7b (the HFP connection without voice) is merged. The page is a Settings add-on of its own (`settings_gamecontrollers`, like `settings_bluetooth`), not part of the Bluetooth page; the Bluetooth page's "Test buttons…" window points there once it exists.
+
+Earlier, 16 Nov 2026: not inside the Bluetooth steps (option B is for USB controllers too), but right after Bluetooth step 4 is merged, in parallel with Low Energy (steps 1c and 6), in its own session. It starts after step 4 because it adds one small call to `bluetooth_hid`. Test over a USB cable in VirtualBox (USB passthrough), so no stick of its own; the Bluetooth part rides on the Low Energy stick. Modern Xbox controllers (2020 and later) use Low Energy and come after step 6; the M30 and the DualSense are classic.
 
 1. Take the RenkuOS joystick fixes `244bf43292` and `823649eb6e` (credit them in `THIRD_PARTY_NOTICES.md`).
 2. The additive driver call for vendor and product ID in `usb_hid` (and `bluetooth_hid` after step 4).
