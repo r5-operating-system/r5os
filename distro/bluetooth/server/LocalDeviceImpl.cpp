@@ -374,6 +374,18 @@ LocalDeviceImpl::HandleUnexpectedEvent(struct hci_event_header* event)
 				NULL);
 			break;
 
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// Also without a petition: Numeric Comparison needs the device's
+		// IO capability (review of the third stick boot).
+		case HCI_EVENT_IO_CAPABILITY_RESPONSE:
+			IOCapabilityResponse(
+				JumpEventHeader<struct hci_ev_io_capability_response>(event),
+				NULL);
+			break;
+		// SPDX-SnippetEnd
+
 		case HCI_EVENT_USER_CONFIRMATION_REQUEST:
 			UserConfirmationRequest(
 				JumpEventHeader<struct hci_ev_user_confirmation_request>(event),
@@ -1287,9 +1299,14 @@ LocalDeviceImpl::CommandComplete(struct hci_ev_cmd_complete* event,
 			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 			// SPDX-License-Identifier: MIT
 			// A reset clears the Event Mask and Simple Pairing Mode.
+			// The server's own reset (ResetController()) goes on to the
+			// setup even when refused.
 			if ((uint16)opcodeExpected
 					== PACK_OPCODE(OGF_CONTROL_BASEBAND, OCF_RESET)
-				&& *(uint8*)(event + 1) == BT_OK) {
+				&& (*(uint8*)(event + 1) == BT_OK
+					|| request->HasBool("r5_setup"))) {
+				syslog(LOG_INFO, "bluetooth_server: hci%" B_PRId32 " reset"
+					" (%#x)", GetID(), *(uint8*)(event + 1));
 				SetupController();
 			}
 			// The server's own setup step (Write Scan Enable) has no sender.
@@ -1437,12 +1454,35 @@ LocalDeviceImpl::CommandStatus(struct hci_ev_cmd_status* event,
 					break;
 
 				default:
+				{
 					reply.what = BT_MSG_CONN_FAILED;
 					reply.AddUInt8("status", event->status);
 					request->SendReply(&reply);
 
+					// SPDX-SnippetBegin
+					// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+					// SPDX-License-Identifier: MIT
+					// The radio refused the connection for a pairing started
+					// here: it ends now, not silently.
+					const void* data;
+					ssize_t size;
+					if (request->FindData("r5_bdaddr", B_ANY_TYPE, &data,
+							&size) == B_OK && size == (ssize_t)sizeof(bdaddr_t)) {
+						ServerRemoteDevice* rd
+							= RemoteDeviceByAddr(*(const bdaddr_t*)data);
+						if (rd != NULL && rd->user_pairing) {
+							rd->user_pairing = false;
+							syslog(LOG_NOTICE, "bluetooth_server: connection"
+								" refused (%#x)", event->status);
+							r5_pairing_result(false, rd->friendly_name,
+								&rd->pair_reply, rd->bdaddr);
+						}
+					}
+					// SPDX-SnippetEnd
+
 					ClearWantedEvent(request);
 					break;
+				}
 			}
 		}
 		break;
@@ -1973,6 +2013,12 @@ LocalDeviceImpl::CreateConnection(BMessage* message)
 
 	newRequest->AddInt16("eventExpected",  HCI_EVENT_CMD_STATUS);
 	newRequest->AddInt16("opcodeExpected", PACK_OPCODE(OGF_LINK_CONTROL, OCF_CREATE_CONN));
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// So a refused Create Connection can end the pairing it was for.
+	newRequest->AddData("r5_bdaddr", B_ANY_TYPE, bdaddr, sizeof(bdaddr_t));
+	// SPDX-SnippetEnd
 
 	newRequest->AddInt16("eventExpected", HCI_EVENT_LINK_KEY_REQ);
 	newRequest->AddInt16("eventExpected", HCI_EVENT_ROLE_CHANGE);
@@ -2240,6 +2286,12 @@ LocalDeviceImpl::DisconnectionComplete(hci_ev_disconnection_complete_reply* even
 	if (rd != NULL
 		&& (event->status == BT_OK || event->status == BT_NO_CONNECTION))
 		rd->conn_state = RemoteDevice::DISCONNECTED;
+	// A pairing started here that lost its link before it ended.
+	if (rd != NULL && rd->user_pairing) {
+		rd->user_pairing = false;
+		r5_pairing_result(false, rd->friendly_name, &rd->pair_reply,
+			rd->bdaddr);
+	}
 	// SPDX-SnippetEnd
 
 
@@ -2844,6 +2896,15 @@ LocalDeviceImpl::_WriteEventMask()
 		command->mask[i] = (uint8)(mask >> (8 * i));
 	_IssueSetupCommand(command.Data(), command.Size(),
 		PACK_OPCODE(OGF_CONTROL_BASEBAND, R5_OCF_SET_EVENT_MASK));
+}
+
+
+void
+LocalDeviceImpl::ResetController()
+{
+	BluetoothCommand<> command(OGF_CONTROL_BASEBAND, OCF_RESET);
+	_IssueSetupCommand(command.Data(), command.Size(),
+		PACK_OPCODE(OGF_CONTROL_BASEBAND, OCF_RESET));
 }
 
 

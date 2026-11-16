@@ -299,8 +299,10 @@ void BluetoothServer::MessageReceived(BMessage* message)
 			// SPDX-SnippetBegin
 			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 			// SPDX-License-Identifier: MIT
-			// Simple Pairing Mode and the Event Mask (step 4).
-			lDeviceImpl->SetupController();
+			// Simple Pairing Mode and the Event Mask (step 4), after an HCI
+			// Reset: a radio that comes from a warm boot (Windows, or the
+			// last R5 boot) keeps its settings and links otherwise.
+			lDeviceImpl->ResetController();
 			// SPDX-SnippetEnd
 
 			// SPDX-SnippetBegin

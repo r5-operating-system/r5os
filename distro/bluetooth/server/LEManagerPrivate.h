@@ -31,6 +31,7 @@ enum {
 	kOpLECreateConnectionCancel	= 0x200e,
 	kOpLEClearAcceptList		= 0x2010,
 	kOpLEAddAcceptList			= 0x2011,
+	kOpLEReadRemoteFeatures		= 0x2016,
 	kOpLEEnableEncryption		= 0x2019,
 	kOpLELTKNegativeReply		= 0x201b,
 	kOpLEConnParamReply			= 0x2020,
@@ -110,6 +111,7 @@ struct LEManager::Link {
 	bool		encrypted;
 	bool		pairRequested;	// made by Pair on the Bluetooth page
 	bool		resultPending;	// its result not yet told
+	bool		featuresPending;	// LE Read Remote Features runs
 	BMessenger	pairReply;		// the page that asked
 
 	// SMP
