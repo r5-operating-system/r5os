@@ -67,7 +67,7 @@ Tracker, changelog and release files:
 | R5 Bluetooth Kit | `distro/bluetooth/lib/` (`libr5bt.so`, `<R5Bluetooth.h>`) | R5 (MIT) | Top-level classes, like `<R5WiFi.h>` (not in `namespace BAppearanceKit`): `BluetoothState`, `BluetoothDeviceInfo`, `BluetoothController`, `BluetoothView` (uses `BAppearanceKit::BCard` inside) |
 | Deskbar replicant | `distro/bluetooth/server/` (replicant) | R5 (MIT) | Talks to `bluetooth_server` only through `BMessenger` and `BMessage`. It never loads the server into Deskbar with `load_add_on` |
 
-`distro/bluetooth/`, `distro/media/bluetooth_audio/` and `distro/input/` do not exist yet.
+`distro/media/bluetooth_audio/` and `distro/input/` do not exist yet. `distro/bluetooth/` has the server, the kit additions, the tests and, since step 3a, `lib/` (`libr5bt.so`).
 
 **Settings page.** Under the `Devices` category (`distro/settings/SettingsWindow.cpp`), in alphabetical order, so Bluetooth is first under Devices. The icon comes from `module_icon()` with `r5_settings_apply_prefs_overlay()`. Checked: there is already a legacy item `bluetooth` under `devices` in `distro/settings/LegacyPages.cpp` (line 205) that opens the old Bluetooth program. Step 3a replaces that item with the real page, in the same place.
 
@@ -129,6 +129,11 @@ Each step is its own small pull request. It is built for AMD64 with `scripts/bui
 
 - **What:** `distro/bluetooth/lib/` (`libr5bt.so`, `<R5Bluetooth.h>`), the Bluetooth page in alphabetical order under Devices in Settings (with `r5_settings_apply_prefs_overlay()`), and `docs/LIBR5.md`, `docs/SETTINGS.md` and an R5Book chapter.
 - **Pass:** in QEMU and VirtualBox the page is first under Devices. It shows `0 radios` in QEMU and a real scan list in VirtualBox, without a `bluetooth_server` crash.
+- **As built (16 Nov 2026):**
+  - `<R5Bluetooth.h>` is installed in `headers/os/interface/`, beside `R5Icons.h` and `Card.h`, so `#include <R5Bluetooth.h>` needs no extra path. `libr5bt.so` is in the regular image only: it needs `libbluetooth.so`, and the minimum image ships no Bluetooth (section 1).
+  - The radio switch: HCI has no power off. Off writes Write Scan Enable `0x00` to every radio and makes `bluetooth_server` refuse inquiry, Create Connection and Remote Name Request and reject incoming connections; the choice is in `B_SYSTEM_SETTINGS_DIRECTORY/bluetooth/r5_radio`, written by the server, so it survives a restart. Chosen because it is small, honest (nothing can find, page or be paged), and needs no new kernel call. On does not make the computer visible; visibility belongs with pairing in step 4. `docs/LIBR5.md`, "Bluetooth Kit".
+  - Additive `RemoteDevice::GetRSSI()` for the signal bars; both `RemoteDevice` constructors now initialize the signal strength and the name flag.
+  - Pass checked in QEMU (`bt_server_smoke_test` now also turns the switch off and on). The VirtualBox scan list waits for real hardware and is not claimed.
 
 ### Step 3b (PR 7): a separate Bluetooth program and a message-based Deskbar replicant
 

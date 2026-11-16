@@ -1,0 +1,23 @@
+Team                                                  Id #Threads  Gid  Uid 
+kernel_team                                            1       41    0    0 
+/boot/system/servers/launch_daemon                    30        2    0    0 
+/boot/system/servers/debug_server                     34        2    0    0 
+/boot/system/servers/mount_server                     36        2    0    0 
+/boot/system/servers/net_server                       37        7    0    0 
+/boot/system/servers/package_daemon                   39        2    0    0 
+/boot/system/servers/power_daemon                     40        2    0    0 
+/boot/system/servers/registrar                        41        6    0    0 
+/boot/system/servers/syslog_daemon                    42        2    0    0 
+/boot/system/servers/airplay_server                   43        2    0    0 
+/boot/system/servers/launch_daemon user               50        2    0    0 
+/boot/system/servers/media_server                     64        4    0    0 
+/boot/system/bin/r5_pstate_log                        65        1    0    0 
+/boot/system/bin/sh -c sleep 60; /boot/system/preferences/Setti    68        1    0    0 
+/boot/system/servers/app_server                       95       36    0    0 
+/boot/system/bin/FirstBootPrompt                      99        2    0    0 
+/boot/system/servers/input_server                    143        9    0    0 
+/boot/system/servers/media_addon_server              169        6    0    0 
+/boot/system/servers/notification_server             187        2    0    0 
+/boot/system/preferences/Settings --page bluetooth   238        3    0    0 
+/boot/system/servers/bluetooth_server                252        4    0    0 
+/bin/ps                                              262        1    0    0 

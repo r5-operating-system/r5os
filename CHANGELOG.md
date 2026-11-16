@@ -1,5 +1,27 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-16 - Bluetooth step 3a: libr5bt.so and the Bluetooth page in Settings
+
+Problem: Settings had only a launcher row for Haiku's old Bluetooth program, and there was no shared R5 Bluetooth code for a page, a program or a Deskbar item (`docs/BLUETOOTH.md`, step 3a).
+
+What changed:
+- **`libr5bt.so`** (`distro/bluetooth/lib`, MIT, header `<R5Bluetooth.h>` in `headers/os/interface/`): `BluetoothView` (a `BCard` summary with `R5_GLYPH_BLUETOOTH` and the radio count, a box whose title is the Bluetooth switch, the devices nearby with Scan and `r5_level_glyph_draw(R5_LEVEL_SIGNAL)` bars), `BluetoothController` (a `BLooper`; every server request has a 2-second timeout; it starts `bluetooth_server` once and does not restart it after it stops), `BluetoothState`, `BluetoothRadioInfo`, `BluetoothDeviceInfo`. The scan follows Haiku's InquiryPanel (`DiscoveryAgent::StartInquiry()`, a `DiscoveryListener`). Regular image only, because it needs `libbluetooth.so`.
+- **Settings:** Devices → Bluetooth ("Find Bluetooth devices nearby"), first under Devices by name, replacing the launcher row in `LegacyPages.cpp`. Only the switch waits for the lock: the page keeps `RequiresAdmin()` false and enables the switch on `kMsgRefreshPage` through `AdminChangeAllowed()`. Written down as an exception in `docs/SETTINGS.md`. The old Bluetooth program stays installed.
+- **The switch (`bluetooth_server`)**, choice made for the owner: HCI has no power off. Off writes Write Scan Enable `0x00` to every radio (also a radio added later), refuses inquiry, periodic inquiry, Create Connection, Remote Name Request, a non-zero Write Scan Enable and `BT_REQ_CREATE_CONN` (`B_NOT_ALLOWED`), and rejects incoming connection requests (reason `0x0D`). It is kept in `B_SYSTEM_SETTINGS_DIRECTORY/bluetooth/r5_radio`, written by the server through a temporary file and a rename. New messages `BT_MSG_R5_GET_RADIO` and `BT_MSG_R5_SET_RADIO`.
+- **libbluetooth:** additive `int8 RemoteDevice::GetRSSI()` (Haiku ticket [#1916](https://dev.haiku-os.org/ticket/1916) asks for this; left open until it is seen on a real radio). Bug, also in Haiku: both `RemoteDevice` constructors left `fRSSI` and `fFriendlyNameIsComplete` unset, so `GetFriendlyName()` could skip asking the device.
+- **Tests:** `bt_server_smoke_test` now turns the switch off, reads it back, checks that a connection is refused, and turns it on again. `run-qemu-smoke.sh` takes `SETTINGS_PAGE=<id>` (opens that page and logs whether Settings and `bluetooth_server` still run 30 s later) and `SHOTS="<s> ..."` (screendumps over its own monitor socket).
+- **Docs:** `docs/LIBR5.md` ("Bluetooth Kit"), `docs/SETTINGS.md` ("Bluetooth"), R5Book `docs/r5book/bluetooth-kit.html` with a QEMU screenshot, `docs/BLUETOOTH.md` (as built).
+
+Review: read twice. The first read moved the scan-off write after the radio is brought up (`Launch()`), restored the switch when a click arrives while it is locked, stopped re-sending an unchanged state every 3 seconds, and found that Settings would turn the page's bold titles plain (the page now gives them `r5_settings_bold_font()`). Checked and harmless: `bluetooth_server` hands out each radio to any number of callers (`Available()` is always true). The second read found the uninitialized `RemoteDevice` fields.
+
+Tested:
+- Built with `scripts/build-locked.sh` three times, last `jam_exit=0`, `build_s=194`, no warnings in the changed files.
+- QEMU (KVM), own copy of that image, page opened by a launch job: Bluetooth is the first item under Devices, the page shows "0 radios" (screenshot `docs/r5book/img/bluetooth-page-qemu.png`); 30 s later `Settings` and `bluetooth_server` both still run; syslog `bluetooth_server: started, 0 radios`, `radio switch off`, `radio switch on`; `bt_server_smoke_test: radio switch ok`, `ok (0 crashes)`; `bt_l2cap_abi_test: ok`. Logs: `generated/bluetooth/qemu-step3a/`.
+
+Not tested: a real radio (no scan list, no device found, no signal bars, no rejected incoming connection, radio name and address); the VirtualBox scan list waits for hardware. The gray switch under a closed lock (needs a standard account). Clicking the switch by hand. ARM64 and RISC-V 64 were not built or tested.
+
+Limits: `bluetooth_server` does not check who sends `BT_MSG_R5_SET_RADIO`; the lock is in the program. Device names are only what a device sent in the inquiry. Found, not fixed (older than this change, needs the owner's choice): the minimum image has Settings but not `libr5wifi.so`, which Settings links, so the runtime loader cannot start Settings there (read from the image definition, not booted). This change adds the same kind of link (`libr5bt.so`, regular image only).
+
 ## 2026-11-16 - GPU compositor: VirtualBox desktop after a resize
 
 Problem: in VirtualBox the M11 compositor (on Lavapipe) left a broken desktop after a display change: the wallpaper sheared with horizontal seams, white squares where the pointer and icons are, no Deskbar. With `gpu_compositor false` the same image was normal. It also happened on a fresh start, because the Guest Additions (`VBoxTray`) set the display to the window size after sign-in.
