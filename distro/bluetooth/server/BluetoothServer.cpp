@@ -607,6 +607,7 @@ void BluetoothServer::MessageReceived(BMessage* message)
 
 		case BT_MSG_R5_AUDIO_STREAMING:
 		case BT_MSG_R5_AUDIO_PAIRED:
+		case BT_MSG_R5_AUDIO_CONNECT:
 		{
 			// From bluetooth_audio in media_addon_server, a system service.
 			team_info info;
@@ -623,6 +624,13 @@ void BluetoothServer::MessageReceived(BMessage* message)
 					break;
 				}
 				fAudioTeam = streaming ? team : -1;
+				// An LE scan takes the shared radio's time as an inquiry
+				// does: it pauses too and comes back after the stream.
+				for (int32 i = 0; i < fLocalDevicesList.CountItems(); i++) {
+					LEManager* le = fLocalDevicesList.ItemAt(i)->LE();
+					if (le != NULL)
+						le->AudioChanged(streaming);
+				}
 				status = B_OK;
 				break;
 			}
@@ -633,6 +641,9 @@ void BluetoothServer::MessageReceived(BMessage* message)
 				break;
 			}
 			bool paired = false;
+			bool connected = false;
+			bool encrypted = false;
+			LocalDeviceImpl* radio = NULL;
 			for (int32 i = 0; !paired
 					&& i < fLocalDevicesList.CountItems(); i++) {
 				ServerRemoteDevice* rd
@@ -641,7 +652,34 @@ void BluetoothServer::MessageReceived(BMessage* message)
 				linkkey_t nullKey = LinkKeyUtils::NullKey();
 				paired = rd != NULL
 					&& !LinkKeyUtils::Compare(&rd->link_key, &nullKey);
+				if (paired) {
+					radio = fLocalDevicesList.ItemAt(i);
+					connected = rd->conn_state == RemoteDevice::CONNECTED;
+					encrypted = connected && rd->encryption_enabled != 0;
+				}
 			}
+
+			if (message->what == BT_MSG_R5_AUDIO_CONNECT) {
+				// Only a paired headset, and no pairing: the stored link
+				// key authenticates it, and the server turns encryption on
+				// as for every connection.
+				if (!paired || radio == NULL) {
+					status = B_NOT_ALLOWED;
+					break;
+				}
+				if (!connected && fRadioEnabled) {
+					BMessage request(BT_REQ_CREATE_CONN);
+					request.AddData("bdaddr", B_ANY_TYPE, address,
+						sizeof(bdaddr_t));
+					request.AddBool("r5:reconnect", true);
+					radio->CreateConnection(&request);
+				}
+				status = fRadioEnabled ? B_OK : B_NOT_ALLOWED;
+				break;
+			}
+
+			reply.AddBool("connected", connected);
+			reply.AddBool("encrypted", encrypted);
 			status = reply.AddBool("paired", paired);
 			break;
 		}
@@ -720,7 +758,7 @@ BluetoothServer::_RadioRequestAllowed(BMessage* message) const
 	// While bluetooth_audio streams, an inquiry would take the radio's time
 	// slots from the audio link and make it stutter: scans wait for the end
 	// of the stream (docs/BLUETOOTH.md, step 5).
-	if (fRadioEnabled && _AudioStreaming()) {
+	if (fRadioEnabled && AudioStreaming()) {
 		const void* raw;
 		ssize_t rawSize;
 		if (message->FindData("raw command", B_ANY_TYPE, &raw, &rawSize)
@@ -774,7 +812,7 @@ BluetoothServer::_RadioRequestAllowed(BMessage* message) const
 // Whether bluetooth_audio streams: it said so, and its team still lives (a
 // media_addon_server that crashed never says it stopped).
 bool
-BluetoothServer::_AudioStreaming() const
+BluetoothServer::AudioStreaming() const
 {
 	team_info info;
 	return fAudioTeam >= 0 && get_team_info(fAudioTeam, &info) == B_OK;

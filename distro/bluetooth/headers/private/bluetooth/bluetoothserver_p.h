@@ -70,8 +70,13 @@
 // team lives, the server refuses Inquiry and Periodic Inquiry, so a scan
 // does not take radio time from the audio. Reply: int32 "status".
 #define BT_MSG_R5_AUDIO_STREAMING       'r5aS'
-// data "bdaddr" (bdaddr_t). Reply: bool "paired" (a link key is stored).
+// data "bdaddr" (bdaddr_t). Reply: bool "paired" (a link key is stored),
+// bool "connected" and bool "encrypted" (the link is up and encrypted).
 #define BT_MSG_R5_AUDIO_PAIRED          'r5aP'
+// data "bdaddr": bring up the link to a paired headset (Create Connection,
+// no pairing; the stored key authenticates it, encryption follows). Reply:
+// int32 "status", B_NOT_ALLOWED for a device that is not paired.
+#define BT_MSG_R5_AUDIO_CONNECT         'r5aC'
 // SPDX-SnippetEnd
 
 

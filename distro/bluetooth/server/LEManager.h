@@ -81,6 +81,9 @@ public:
 	// when it advertises on LE with the same address (dual mode).
 			void				NoteClassic(const bdaddr_t& address);
 			void				RadioChanged(bool enabled);
+			// bluetooth_audio starts or stops a stream: the scan pauses
+			// meanwhile (docs/BLUETOOTH.md, step 5).
+			void				AudioChanged(bool streaming);
 
 	// From the fixed-channel sockets and the bluetooth_hid driver.
 	// The answer of a pairing window (kMsgLEUserAnswer), and the timer
