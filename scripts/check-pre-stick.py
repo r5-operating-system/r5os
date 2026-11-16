@@ -262,10 +262,10 @@ def check_m12_boots(commit: str) -> None:
         lines = [line for line in block.strip().splitlines() if line]
         boot = lines[0].split("next ", 1)[1]
         # after boot 4 the M11 note says done; the M12 note stays at 4
-        if boot == "4" and lines[1:] == ["(none)"]:
+        got = [line for line in lines[1:] if not line.startswith("boot ")]
+        if boot == "4" and got == ["(none)"]:
             boot = "done"
         want = M12_BOOTS.get(boot, "unknown")
-        got = [line for line in lines[1:] if not line.startswith("boot ")]
         if want is None:
             if got != ["(none)"]:
                 die(f"m12: after boot 4 a settings file stays: {got}")
