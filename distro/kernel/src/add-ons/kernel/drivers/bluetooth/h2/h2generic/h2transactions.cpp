@@ -16,6 +16,11 @@
 #include <string.h>
 
 #include "Errors.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include "h2command.h"
+// SPDX-SnippetEnd
 #include "h2debug.h"
 #include "h2generic.h"
 #include "h2upper.h"
@@ -76,8 +81,21 @@ event_complete(void* cookie, status_t status, void* data, size_t actual_len)
 	if (status != B_OK || actual_len == 0)
 		goto resubmit;
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// A late answer to a command that already timed out (h2command.h).
+	if (h2_command_event(bdev, (const uint8*)data, actual_len))
+		goto resubmit;
+	// SPDX-SnippetEnd
+
 	if (assembly_rx(bdev, BT_EVENT, data, actual_len) == B_OK) {
-		bdev->stat.successfulTX++;
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// A received event; this counted as sent.
+		bdev->stat.successfulRX++;
+		// SPDX-SnippetEnd
 	} else {
 		bdev->stat.errorRX++;
 	}

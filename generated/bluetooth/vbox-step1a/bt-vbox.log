@@ -1,0 +1,4 @@
+CALLED BMessenger* _RetrieveBluetoothMessenger()
+bt_server_smoke_test: 0 radios
+bt_server_smoke_test: ok (0 crashes)
+exit 0

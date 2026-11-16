@@ -7,14 +7,30 @@
 #   powershell -File scripts/run-vbox-r5.ps1
 #   powershell -File scripts/run-vbox-r5.ps1 -BridgeAdapter "Wi-Fi"
 #   powershell -File scripts/run-vbox-r5.ps1 -ForceConvert
+#   powershell -File scripts/run-vbox-r5.ps1 -RawImage /home/nickr/r5os/x/my.image
+#   powershell -File scripts/run-vbox-r5.ps1 -PassBluetooth
+#
+# -RawImage boots an own copy (a WSL path) instead of the jammed image, so a
+# jam of another session does not matter. -PassBluetooth gives the VM the
+# built-in MediaTek MT7922 radio of the 5625U (USB 0x13d3:0x3567) through a
+# USB filter; Windows has no Bluetooth while the VM runs. Without it the
+# filter is removed, so the radio is never passed by accident.
 param(
 	[string]$VmName = "R5OS",
 	[string]$BridgeAdapter = $env:R5_VBOX_BRIDGE,
 	[int]$MemoryMb = 2048,
 	[int]$Cpus = 2,
 	[switch]$NoClip,
-	[switch]$ForceConvert
+	[switch]$ForceConvert,
+	[string]$RawImage = "/home/nickr/r5os/haiku/generated.x86_64/r5-os.image",
+	[switch]$PassBluetooth
 )
+
+# The radio that -PassBluetooth hands to the VM, and the filter's name.
+$BluetoothVendor = "13d3"
+$BluetoothProduct = "3567"
+$BluetoothFilter = "R5 Bluetooth MT7922"
+$OwnImage = $RawImage -ne "/home/nickr/r5os/haiku/generated.x86_64/r5-os.image"
 
 # VBoxManage prints progress on stderr; Stop would treat that as fatal.
 $ErrorActionPreference = "Continue"
@@ -37,7 +53,7 @@ function Find-VBoxManage {
 }
 
 function Get-RawImagePath {
-	$wsl = wsl -e bash -lc "wslpath -w /home/nickr/r5os/haiku/generated.x86_64/r5-os.image 2>/dev/null"
+	$wsl = wsl -e bash -lc "wslpath -w '$RawImage' 2>/dev/null"
 	if ($LASTEXITCODE -eq 0 -and $wsl -and (Test-Path $wsl.Trim())) {
 		return $wsl.Trim()
 	}
@@ -123,7 +139,7 @@ if ($exists) {
 }
 
 # \\wsl.localhost LastWriteTime is often stale. Use the Linux mtime.
-$rawEpoch = wsl -e bash -lc "stat -c %Y /home/nickr/r5os/haiku/generated.x86_64/r5-os.image"
+$rawEpoch = wsl -e bash -lc "stat -c %Y '$RawImage'"
 $builtEpoch = $null
 if (Test-Path $builtStamp) {
 	$builtText = (Get-Content -Raw $builtStamp).Trim()
@@ -147,7 +163,10 @@ if (-not $ForceConvert -and (Test-Path $vdi) -and $rawEpoch -match '^\d+$') {
 if ($reuse) {
 	Write-Host "  reusing $vdi (raw not newer; -ForceConvert to rebuild)"
 } else {
-	Assert-WslIdle
+	# An own copy is not rewritten by a jam.
+	if (-not $OwnImage) {
+		Assert-WslIdle
+	}
 	if (Test-Path $vdi) {
 		& $vbox closemedium disk $vdi --delete 2>$null | Out-Null
 		Remove-Item -Force $vdi -ErrorAction SilentlyContinue
@@ -156,7 +175,7 @@ if ($reuse) {
 	# \\wsl.localhost on first power-on often hangs until the VM is reset.
 	Write-Host "  copying raw image to $localRaw"
 	$wslImg = (wsl -e wslpath -u "$localRaw").Trim()
-	wsl -e bash -lc "cp -f /home/nickr/r5os/haiku/generated.x86_64/r5-os.image '$wslImg'"
+	wsl -e bash -lc "cp -f '$RawImage' '$wslImg'"
 	if ($LASTEXITCODE -ne 0 -or -not (Test-Path $localRaw)) {
 		throw "copy raw image failed"
 	}
@@ -199,6 +218,28 @@ Write-Host "  bridge: $bridge"
 	--draganddrop disabled `
 	--uart1 "0x3F8" 4 `
 	--uartmode1 server "\\.\pipe\R5OS-clip"
+
+# Remove the Bluetooth filter first; add it again only when asked.
+$info = & $vbox showvminfo $VmName --machinereadable
+$indexes = @()
+foreach ($line in $info) {
+	if ($line -match '^USBFilterName(\d+)="(.*)"$' -and $Matches[2] -eq $BluetoothFilter) {
+		$indexes += [int]$Matches[1] - 1
+	}
+}
+foreach ($index in ($indexes | Sort-Object -Descending)) {
+	& $vbox usbfilter remove $index --target $VmName | Out-Null
+}
+if ($PassBluetooth) {
+	& $vbox modifyvm $VmName --usbxhci on | Out-Null
+	& $vbox usbfilter add 0 --target $VmName --name $BluetoothFilter `
+		--vendorid $BluetoothVendor --productid $BluetoothProduct | Out-Null
+	if ($LASTEXITCODE -ne 0) {
+		throw "usbfilter add failed"
+	}
+	Write-Host "  Bluetooth: MT7922 ($BluetoothVendor`:$BluetoothProduct) passed to the VM;"
+	Write-Host "  Windows has no Bluetooth until the VM is off."
+}
 
 Detach-IdeDisk $vbox $VmName
 & $vbox storageattach $VmName --storagectl IDE --port 0 --device 0 --type hdd --medium $vdi

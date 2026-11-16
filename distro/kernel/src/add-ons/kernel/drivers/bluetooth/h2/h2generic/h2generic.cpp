@@ -21,6 +21,11 @@
 
 #include "bluetooth/HCI/btHCI_transport.h"
 #include "h2cfg.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include "h2command.h"
+// SPDX-SnippetEnd
 #include "h2debug.h"
 #include "h2mediatek.h"
 #include "h2transactions.h"
@@ -50,6 +55,118 @@ static bt_usb_dev* bt_usb_devices[MAX_BT_GENERIC_USB_DEVICES];
 sem_id dev_table_sem = -1; // sem to synchronize access to device table
 
 status_t submit_nbuffer(hci_id hid, net_buffer* nbuf);
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// HCI command timeouts (h2command.h). One tracker per device slot, indexed
+// by bt_usb_dev::num. The watchdog thread never touches a bt_usb_dev: it
+// posts the timeout by HCI id, which the HCI module drops for a radio that
+// is gone.
+static h2_command_tracker sCommands[MAX_BT_GENERIC_USB_DEVICES];
+static hci_id sCommandRadio[MAX_BT_GENERIC_USB_DEVICES];
+static spinlock sCommandLock = B_SPINLOCK_INITIALIZER;
+static sem_id sCommandWake = -1;
+static thread_id sCommandThread = -1;
+static volatile bool sCommandQuit = false;
+
+// An HCI command: opcode, parameter length, at most 255 bytes of
+// parameters (Core 6.0, Vol 4, Part E, 5.4.1).
+static const size_t kMaxCommandSize = 3 + 255;
+
+
+static cpu_status
+command_lock()
+{
+	cpu_status state = disable_interrupts();
+	acquire_spinlock(&sCommandLock);
+	return state;
+}
+
+
+static void
+command_unlock(cpu_status state)
+{
+	release_spinlock(&sCommandLock);
+	restore_interrupts(state);
+}
+
+
+static void
+command_forget(int32 num)
+{
+	if (num < 0 || num >= MAX_BT_GENERIC_USB_DEVICES)
+		return;
+	cpu_status state = command_lock();
+	h2_command_reset(&sCommands[num]);
+	sCommandRadio[num] = -1;
+	command_unlock(state);
+}
+
+
+static status_t
+command_watchdog(void*)
+{
+	while (!sCommandQuit) {
+		bigtime_t next = -1;
+
+		for (int32 num = 0; num < MAX_BT_GENERIC_USB_DEVICES; num++) {
+			uint16 expired[H2_TRACKED_COMMANDS];
+			int count = 0;
+
+			cpu_status state = command_lock();
+			hci_id radio = sCommandRadio[num];
+			bigtime_t now = system_time();
+			while (count < H2_TRACKED_COMMANDS
+				&& h2_command_expired(&sCommands[num], now, &expired[count]))
+				count++;
+			bigtime_t deadline = h2_command_next_deadline(&sCommands[num]);
+			command_unlock(state);
+
+			if (deadline >= 0 && (next < 0 || deadline < next))
+				next = deadline;
+
+			for (int i = 0; i < count; i++) {
+				ERROR("%s: command %#06x got no answer in %" B_PRIdBIGTIME
+					" ms; reporting status %#04x\n", __func__, expired[i],
+					kH2CommandTimeout / 1000, kH2TimeoutStatus);
+				if (radio < 0 || btDevices == NULL)
+					continue;
+				uint8 event[H2_TIMEOUT_EVENT_SIZE];
+				h2_command_timeout_event(expired[i], event);
+				btDevices->PostTransportPacket(radio, BT_EVENT, event,
+					sizeof(event));
+			}
+		}
+
+		if (next < 0)
+			acquire_sem(sCommandWake);
+		else
+			acquire_sem_etc(sCommandWake, 1, B_ABSOLUTE_TIMEOUT, next);
+	}
+	return B_OK;
+}
+
+
+bool
+h2_command_event(bt_usb_dev* bdev, const uint8* data, size_t size)
+{
+	uint16 opcode;
+	if (bdev == NULL || bdev->num < 0 || bdev->num >= MAX_BT_GENERIC_USB_DEVICES
+		|| !h2_command_answer(data, size, &opcode))
+		return false;
+
+	cpu_status state = command_lock();
+	bool drop = h2_command_answered(&sCommands[bdev->num], opcode);
+	command_unlock(state);
+
+	if (drop) {
+		ERROR("%s: dropped the late answer for command %#06x\n", __func__,
+			opcode);
+	}
+	return drop;
+}
+// SPDX-SnippetEnd
 
 usb_support_descriptor supported_devices[] = {
 	// Generic Bluetooth USB device
@@ -529,9 +646,16 @@ submit_nbuffer(hci_id hid, net_buffer* nbuf)
 				return submit_tx_acl(bdev, nbuf);
 			break;
 
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			// A packet type this driver does not send is an error for the
+			// caller, not a reason to stop the machine.
 			default:
-				panic("submit_nbuffer: no protocol");
-			break;
+				ERROR("%s: no protocol %" B_PRIu32 "\n", __func__,
+					(uint32)nbuf->protocol);
+				return B_BAD_VALUE;
+			// SPDX-SnippetEnd
 
 		}
 	}
@@ -604,6 +728,12 @@ device_open(const char* name, uint32 flags, void **cookie)
 
 	list_init(&bdev->snetBufferRecycleTrash);
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	command_forget(bdev->num);
+	// SPDX-SnippetEnd
+
 	// Allocate set and register the HCI device
 	if (btDevices != NULL) {
 		bluetooth_device* ndev;
@@ -647,6 +777,13 @@ device_close(void* cookie)
 		panic("bad cookie");
 	// Completion callbacks must stop submitting receives before cancellation.
 	const bool wasRunning = TEST_AND_CLEAR(&bdev->state, RUNNING);
+
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// No timeout is reported for a radio that is being closed.
+	command_forget(bdev->num);
+	// SPDX-SnippetEnd
 
 	// Clean queues
 
@@ -748,26 +885,55 @@ device_control(void* cookie, uint32 msg, void* params, size_t size)
 
 	switch (msg) {
 		case ISSUE_BT_COMMAND: {
-			if (size == 0) {
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			// The size came from the caller and went straight to alloca(),
+			// a failed copy returned with bdev->lock still held, and a failed
+			// buffer fetch was not checked.
+			uint16 opcode;
+			uint8 command[kMaxCommandSize];
+			if (size < 3 || size > kMaxCommandSize) {
 				TRACE("%s: Invalid size control\n", __func__);
 				err = B_BAD_VALUE;
 				break;
 			}
 
-			void* _params = alloca(size);
-			if (user_memcpy(_params, params, size) != B_OK)
-				return B_BAD_ADDRESS;
+			if (user_memcpy(command, params, size) != B_OK) {
+				err = B_BAD_ADDRESS;
+				break;
+			}
+			h2_command_opcode(command, size, &opcode);
 
 			// TODO: Reuse from some TXcompleted queue
 			// snbuf = snb_create(size);
 			snbuf = snb_fetch(&bdev->snetBufferRecycleTrash, size);
-			snb_put(snbuf, _params, size);
+			if (snbuf == NULL) {
+				err = B_NO_MEMORY;
+				break;
+			}
+			snb_put(snbuf, command, size);
+
+			// Noted before it is sent: the answer can come before
+			// submit_tx_command() returns.
+			cpu_status state = command_lock();
+			h2_command_sent(&sCommands[bdev->num], opcode, system_time());
+			sCommandRadio[bdev->num] = bdev->hdev;
+			command_unlock(state);
 
 			err = submit_tx_command(bdev, snbuf);
-			if (err != B_OK)
+			if (err != B_OK) {
 				ERROR("%s: Queing failed at submit_tx_command()\n", __func__);
-			else
+				snb_park(&bdev->snetBufferRecycleTrash, snbuf);
+				state = command_lock();
+				h2_command_answered(&sCommands[bdev->num], opcode);
+				command_unlock(state);
+			} else {
 				TRACE("%s: command launched\n", __func__);
+				if (sCommandWake >= 0)
+					release_sem_etc(sCommandWake, 1, B_DO_NOT_RESCHEDULE);
+			}
+			// SPDX-SnippetEnd
 			break;
 		}
 
@@ -803,7 +969,12 @@ device_control(void* cookie, uint32 msg, void* params, size_t size)
 
 			bdev->state |= RUNNING;
 
-			ERROR("%s: Device online\n", __func__);
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			// The pass line of docs/BLUETOOTH.md, step 1a.
+			ERROR("controller ready (%s)\n", bdev->name);
+			// SPDX-SnippetEnd
 		break;
 
 		case GET_STATS:
@@ -929,6 +1100,23 @@ init_driver(void)
 		bt_usb_devices[j] = NULL;
 	}
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	for (j = 0; j < MAX_BT_GENERIC_USB_DEVICES; j++)
+		command_forget(j);
+	sCommandQuit = false;
+	sCommandWake = create_sem(0, "h2generic command timeouts");
+	if (sCommandWake >= 0) {
+		sCommandThread = spawn_kernel_thread(command_watchdog,
+			"h2generic command timeouts", B_NORMAL_PRIORITY, NULL);
+		if (sCommandThread >= 0)
+			resume_thread(sCommandThread);
+	}
+	if (sCommandWake < 0 || sCommandThread < 0)
+		ERROR("%s: no HCI command timeouts\n", __func__);
+	// SPDX-SnippetEnd
+
 	// Note: After here device_added and publish devices hooks are called
 	usb->register_driver(BLUETOOTH_DEVICE_DEVFS_NAME, supported_devices,
 		B_COUNT_OF(supported_devices), NULL);
@@ -979,6 +1167,22 @@ uninit_driver(void)
 	}
 
 	usb->uninstall_notify(BLUETOOTH_DEVICE_DEVFS_NAME);
+
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	sCommandQuit = true;
+	if (sCommandThread >= 0) {
+		release_sem(sCommandWake);
+		status_t result;
+		wait_for_thread(sCommandThread, &result);
+		sCommandThread = -1;
+	}
+	if (sCommandWake >= 0) {
+		delete_sem(sCommandWake);
+		sCommandWake = -1;
+	}
+	// SPDX-SnippetEnd
 
 	remove_debugger_command("bth2generic", &dump_driver);
 
