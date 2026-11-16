@@ -1723,6 +1723,53 @@ share_ids(int node)
 }
 
 
+/* VRAM full (5625U, 16 Nov 2026): a VRAM buffer is made in GTT, as Linux
+ * amdgpu_gem_create_ioctl() does; a DISCARDABLE one and a bad size still
+ * fail. The fallen-back buffer maps for the CPU and frees again. */
+static void
+vram_full_falls_back(amdgpu_device_handle dev)
+{
+	uint64_t saved = gVramUsed;
+	gVramUsed = HOST_VRAM_POOL;
+	struct amdgpu_bo_alloc_request request;
+	memset(&request, 0, sizeof(request));
+	request.alloc_size = 1024 * 1024;
+	request.phys_alignment = 4096;
+	request.preferred_heap = AMDGPU_GEM_DOMAIN_VRAM;
+	amdgpu_bo_handle bo = NULL;
+	CHECK(amdgpu_bo_alloc(dev, &request, &bo) == 0);
+	uint32_t handle = 0;
+	CHECK(bo != NULL && amdgpu_bo_export(bo, amdgpu_bo_handle_type_kms,
+		&handle) == 0);
+	CHECK(handle != 0 && gDomain[handle - 1] == R5_GPU_DOMAIN_GTT);
+	CHECK(gVramUsed == HOST_VRAM_POOL);
+	void *cpu = NULL;
+	CHECK(bo != NULL && amdgpu_bo_cpu_map(bo, &cpu) == 0 && cpu != NULL);
+	if (cpu != NULL) {
+		memset(cpu, 0x5a, 4096);
+		CHECK(amdgpu_bo_cpu_unmap(bo) == 0);
+	}
+	CHECK(bo != NULL && amdgpu_bo_free(bo) == 0);
+
+	/* VRAM and GTT both allowed, as RADV asks for some buffers. */
+	request.preferred_heap = AMDGPU_GEM_DOMAIN_VRAM | AMDGPU_GEM_DOMAIN_GTT;
+	bo = NULL;
+	CHECK(amdgpu_bo_alloc(dev, &request, &bo) == 0);
+	CHECK(bo != NULL && amdgpu_bo_free(bo) == 0);
+
+	request.preferred_heap = AMDGPU_GEM_DOMAIN_VRAM;
+	request.flags = AMDGPU_GEM_CREATE_DISCARDABLE;
+	bo = NULL;
+	CHECK(amdgpu_bo_alloc(dev, &request, &bo) != 0);
+	request.flags = 0;
+	request.alloc_size = HOST_MAX_BO + 4096;
+	bo = NULL;
+	CHECK(amdgpu_bo_alloc(dev, &request, &bo) != 0);
+	gVramUsed = saved;
+	printf("ok vram full falls back to gtt\n");
+}
+
+
 /* The same path through libdrm: amdgpu_bo_export gives the fd, and
  * amdgpu_bo_import takes the size from BO_IMPORT (fifth R5 patch), not
  * from lseek, which on a /dev/null fd would say 0. */
@@ -2082,6 +2129,7 @@ radv_replay(int fd)
 	}
 	share_ids(node);
 	share_libdrm(dev);
+	vram_full_falls_back(dev);
 	submit_zero(node);
 	binary_replay(node);
 

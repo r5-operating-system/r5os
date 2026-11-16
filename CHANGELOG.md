@@ -1,5 +1,18 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-16 - Graphics: a GPU buffer that no longer fits in VRAM goes to system memory (libdrm-2.4.124-3)
+
+Problem: on the 5625U (M12 measurement stick, boot 1, `generated/boot-5625u-1` and `-2` of the m12-gpu-draw worktree) app_server's Skia drawing turned off after a minute with `gpu draw off: insert failed`, after `radeon_hd: refuse BO_CREATE vram status 0x80000000` for buffers of 17 to 45 MB (Skia's 4x MSAA targets of a whole window). The R5 DRM library made every buffer that asks for VRAM in VRAM and nothing else. Linux does not: `amdgpu_gem_create_ioctl()` (v6.18 `amdgpu_gem.c`, lines 486-497) retries a VRAM-only request with `AMDGPU_GEM_DOMAIN_GTT` added, and `amdgpu_bo_create()` (`amdgpu_object.c`) lets a user buffer that allows only VRAM live in GTT too, unless it is `DISCARDABLE`. RADV counts on that: on an APU `radv_physical_device_init_mem_types()` reports 2/3 of visible VRAM plus GTT as its VRAM heap (341 MB here), more than the kernel's VRAM pool (248 MB).
+
+What changed:
+- `r5_gem_create()` in `distro/graphics/libdrm-r5/r5_translate.c`: when `BO_CREATE` for VRAM is refused with `ENOMEM` (`B_NO_MEMORY`), and the request is not `AMDGPU_GEM_CREATE_DISCARDABLE`, the same buffer is made in GTT. Any other refusal (a bad size, a bad domain) stays an error. With `gpu_debug` the library prints `kernel bo vram full, <n> bytes in gtt`; the kernel's own `refuse BO_CREATE vram` line is followed by a `bo domain 2` line for the same size.
+- Nothing in the kernel changed. Read for this: `BO_CREATE` makes GTT as a locked kernel area (no GTT limit but RAM), `VA_MAP` and `BO_MAP` handle a GTT buffer, sharing counts it as GTT, and the scanout buffer is its own call (`SCANOUT_BO`), not `GEM_CREATE`.
+- `libdrm-2.4.124-3`: `libdrm.so.2.124.0` rebuilt (the translation is in `libdrm.so`); `libdrm_amdgpu.so.1.124.0` and `amdgpu.ids` are byte-identical to `-2`. Pin, install, EGL vendor check and the download-folder clean-up name `-3`.
+
+Found and not changed here (kernel changes, each needs a boot): the GTT limit of `docs/GPU-ARCHITECTURE.md` ("GTT at most a quarter of system memory" per address space) is not in the kernel, so `BO_CREATE` for GTT is bounded only by RAM, and a fallen-back buffer is locked memory as every GTT buffer is. And the kernel reports the GTT size as the VRAM size (`r5_gpu.cpp`, `out.gtt_bytes = out.vram_bytes`, 256 MB), not from the hardware or RAM; Linux uses half of system RAM. It only changes the heap sizes RADV reports, not what fits (GTT is bounded by RAM). A change is a kernel change and needs a boot; left for its own step.
+
+Tested: host test `scripts/test-ac-drm.sh` against the fake kernel with a new case (`vram_full_falls_back`: VRAM full, a VRAM buffer is made in GTT, maps for the CPU and frees; VRAM plus GTT also works; `DISCARDABLE` and an oversize buffer still fail). With the old `r5_translate.c` the case fails 7 checks; with the new one `ok vram full falls back to gtt` and `ok libdrm ioctl`. `scripts/check-libdrm-symbols.py`: `ok libdrm symbols`. The cross build of libdrm (patches applied with `haiku.py`, `ninja` in `src-third/libdrm-2.4.124/build`) and the copy into `r5-sysroot/lib` (the old files kept in `r5-sysroot-backup-1116`). Not booted: RADV on the 5625U with this package has not run yet; QEMU has no render node, so it cannot show this path.
+
 ## 2026-11-16 - Bluetooth step 3b: the Bluetooth program and the Bluetooth item in Deskbar
 
 Problem: the Bluetooth panel was only a Settings page; Haiku's old Bluetooth preferences were still the program, and the only Deskbar item was the one `bluetooth_server` added by putting its own binary into Deskbar (`docs/BLUETOOTH.md`, step 3b).
