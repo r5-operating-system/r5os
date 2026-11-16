@@ -9,11 +9,18 @@ SubDir HAIKU_TOP src preferences r5bt ;
 
 UsePrivateHeaders app bluetooth ;
 
+# bluetooth_audio's choice file ("Use for sound"), shared with bt_audio.
+SEARCH_SOURCE += [ FDirName $(HAIKU_TOP) src add-ons media media-add-ons
+	bluetooth_audio ] ;
+SubDirHdrs [ FDirName $(HAIKU_TOP) src add-ons media media-add-ons
+	bluetooth_audio ] ;
+
 SharedLibrary [ MultiArchDefaultGristFiles libr5bt.so ] :
 	BluetoothController.cpp
 	BluetoothView.cpp
-	: be libbluetooth.so localestub libr5icons.so libr5ui.so libr5admin.so
-		[ TargetLibstdc++ ]
+	AudioSettings.cpp
+	: be media device libbluetooth.so localestub libr5icons.so libr5ui.so
+		libr5admin.so [ TargetLibstdc++ ]
 	;
 
 DoCatalogs libr5bt.so :

@@ -59,6 +59,9 @@ struct ServerRemoteDevice
 	bool				user_pairing = false;
 	// The page that asked for that pairing: it gets the result.
 	BMessenger			pair_reply;
+	// SDP runs on its own thread (BluetoothServer::R5DiscoverServices());
+	// while it does, that thread tells the profiles, not Encryption Change.
+	bool				sdp_running = false;
 	// SPDX-SnippetEnd
 	BMessage			services;
 };

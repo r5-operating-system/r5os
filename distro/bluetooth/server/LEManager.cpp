@@ -452,6 +452,22 @@ LEManager::_CommandDone(uint16 opcode, uint8 status, const uint8* data,
 			}
 			break;
 
+		case kOpLEClearAcceptList:
+		case kOpLEAddAcceptList:
+		case kOpLEClearResolvingList:
+		case kOpLEAddResolvingList:
+		case kOpLESetResolutionEnable:
+			// A refused list write is written again at the next connect,
+			// or a paired device stays unknown to the controller until the
+			// next reset.
+			if (status != BT_OK) {
+				syslog(LOG_NOTICE, "bluetooth_server: hci%" B_PRId32
+					" le list command %#06x refused (%#x), written again later",
+					fDevice->GetID(), opcode, status);
+				fAcceptListDirty = true;
+			}
+			break;
+
 		default:
 			if (status != BT_OK) {
 				syslog(LOG_NOTICE, "bluetooth_server: hci%" B_PRId32
@@ -718,6 +734,10 @@ LEManager::_ConnectionComplete(const uint8* data, size_t size, uint8 subevent)
 	link->usesReportIDs = false;
 	link->kernelID = -1;
 	link->resultPending = false;
+	link->batteryStart = 0;
+	link->batteryEnd = 0;
+	link->batteryHandle = 0;
+	link->battery = -1;
 	link->featuresPending = false;
 	fLinks.push_back(link);
 	if (link->pairRequested) {
@@ -1029,8 +1049,15 @@ LEManager::_Connect()
 	// nothing initiates.
 	if (fAcceptListDirty) {
 		fAcceptListDirty = false;
+		// The controller refuses the resolving list while it scans
+		// (7.8.38, 7.8.44, 0x0C): a scan pauses around the rewrite.
+		const bool resume = fPrivacy && fScanOn;
+		if (resume)
+			_SetScan(false);
 		_ResolvingListSetup();
 		_AcceptListSetup();
+		if (resume)
+			_SetScan(true);
 	}
 
 	if (fWantDirect) {
@@ -1752,11 +1779,14 @@ LEManager::AddPaired(BMessage& reply)
 	for (size_t i = 0; i < fBonds.size(); i++) {
 		const LEBond* bond = fBonds[i];
 		bool connected = false;
+		int32 battery = -1;
 		for (size_t j = 0; j < fLinks.size() && !connected; j++) {
 			const Link* link = fLinks[j];
 			connected = link->encrypted
 				&& (bdaddrUtils::Compare(link->address, bond->address)
 					|| bdaddrUtils::Compare(link->bond.address, bond->address));
+			if (connected)
+				battery = link->battery;
 		}
 		reply.AddData("bdaddr", B_ANY_TYPE, &bond->address,
 			sizeof(bond->address));
@@ -1765,6 +1795,7 @@ LEManager::AddPaired(BMessage& reply)
 		reply.AddBool("le", true);
 		reply.AddBool("hid", bond->hid);
 		reply.AddBool("connected", connected);
+		reply.AddInt32("battery", battery);
 	}
 }
 
