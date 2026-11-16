@@ -675,6 +675,42 @@ LocalDeviceImpl::HandleEvent(struct hci_event_header* event, size_t size)
 			size >= sizeof(*event) ? event->ecode : 0, size);
 		return;
 	}
+	// The remote host features the server asked for itself.
+	if (event->ecode == HCI_EVENT_REMOTE_EXTENDED_FEATURES
+		&& event->elen >= sizeof(struct hci_ev_remote_extended_features)) {
+		const struct hci_ev_remote_extended_features* features
+			= JumpEventHeader<struct hci_ev_remote_extended_features>(event);
+		const uint16 handle = B_LENDIAN_TO_HOST_INT16(features->handle)
+			& 0x0fff;
+		if (_TakeFeatureHandle(handle)) {
+			const uint64 bits = B_LENDIAN_TO_HOST_INT64(
+				features->extended_lmp_features);
+			syslog(LOG_INFO, "bluetooth_server: remote host features read"
+				" (%#x, page %u, ssp host %s)", features->status,
+				features->page_number,
+				features->status == BT_OK && features->page_number == 1
+					? ((bits & 1) != 0 ? "yes" : "no") : "unknown");
+			Authenticate(handle);
+			return;
+		}
+	}
+	// A refused Read Remote Extended Features: authenticate anyway.
+	if (event->ecode == HCI_EVENT_CMD_STATUS
+		&& event->elen >= sizeof(struct hci_ev_cmd_status)) {
+		const struct hci_ev_cmd_status* status
+			= JumpEventHeader<struct hci_ev_cmd_status>(event);
+		if (status->opcode == PACK_OPCODE(OGF_LINK_CONTROL, 0x001c)
+			&& status->status != BT_OK && !fFeatureHandles.empty()) {
+			const uint16 handle = fFeatureHandles.front();
+			fFeatureHandles.erase(fFeatureHandles.begin());
+			syslog(LOG_NOTICE, "bluetooth_server: remote host features not"
+				" read (%#x)", status->status);
+			Authenticate(handle);
+			return;
+		}
+		if (status->opcode == PACK_OPCODE(OGF_LINK_CONTROL, 0x001c))
+			return;
+	}
 	// LE events and the answers to LE commands belong to LEManager. An
 	// answer someone else also waits for (the kit asking the address
 	// while LEManager does) goes on to them as well.
@@ -2116,7 +2152,16 @@ LocalDeviceImpl::ConnectionComplete(struct hci_ev_conn_complete* event)
 		newrequest->AddInt16("eventExpected", HCI_EVENT_LINK_KEY_NOTIFY);
 		AddWantedEvent(newrequest);
 
-		Authenticate(event->handle);
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// First the remote's extended features, page 1 (its host's Secure
+		// Simple Pairing support), as BlueZ does; then authenticate. On
+		// the 5625U (MT7922) an Authentication Requested right after the
+		// connection ended in 0x37, "Simple Pairing Not Supported by
+		// Host", before any pairing step (first BLE stick).
+		_ReadRemoteHostFeatures(event->handle);
+		// SPDX-SnippetEnd
 
 		reply.what = BT_MSG_CONN_COMPLETED;
 	} else {
@@ -2183,6 +2228,11 @@ LocalDeviceImpl::PinCodeRequest(struct hci_ev_pin_code_req* event,
 	BMessage* request)
 {
 	TRACE_BT("LocalDeviceImpl: Opening PincodeWindow...");
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	syslog(LOG_INFO, "bluetooth_server: pin code request (legacy pairing)");
+	// SPDX-SnippetEnd
 	PincodeWindow* iPincode = new PincodeWindow(event->bdaddr, GetID());
 	iPincode->Show();
 }
@@ -2368,6 +2418,11 @@ LocalDeviceImpl::IOCapabilityRequest(struct hci_ev_io_capability_request* event,
 
 	TRACE_BT("LocalDeviceImpl: IO Capability Request from %s...\n",
 		bdaddrUtils::ToString(event->bdaddr).String());
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	syslog(LOG_INFO, "bluetooth_server: io capability request");
+	// SPDX-SnippetEnd
 
 	// TODO: this should be temporary, need to change this to HCI_IO_CAP_DISPLAY_YES_NO
 	// SPDX-SnippetBegin
@@ -2418,6 +2473,12 @@ LocalDeviceImpl::IOCapabilityResponse(struct hci_ev_io_capability_response* even
 	TRACE_BT("LocalDeviceImpl: %s for %s - Capability: 0x%02x, OOB: 0x%02x, Auth: 0x%02x\n",
 		__FUNCTION__, bdaddrUtils::ToString(event->bdaddr).String(), event->capability,
 		event->oob_data, event->authentication);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	syslog(LOG_INFO, "bluetooth_server: io capability of the device %#x"
+		" (auth %#x)", event->capability, event->authentication);
+	// SPDX-SnippetEnd
 }
 
 
@@ -2713,6 +2774,39 @@ LocalDeviceImpl::_WriteEventMask()
 		command->mask[i] = (uint8)(mask >> (8 * i));
 	_IssueSetupCommand(command.Data(), command.Size(),
 		PACK_OPCODE(OGF_CONTROL_BASEBAND, R5_OCF_SET_EVENT_MASK));
+}
+
+
+void
+LocalDeviceImpl::_ReadRemoteHostFeatures(uint16 handle)
+{
+	// Read Remote Extended Features (OGF 0x01, OCF 0x001C; Core 6.0,
+	// Vol 4, Part E, 7.1.22): handle, page 1.
+	uint8 command[3 + 3];
+	command[0] = 0x1c;
+	command[1] = 0x04;
+	command[2] = 3;
+	command[3] = handle & 0xff;
+	command[4] = (handle >> 8) & 0x0f;
+	command[5] = 1;
+	fFeatureHandles.push_back(handle);
+	if (R5IssueCommand(command, sizeof(command)) != B_OK) {
+		fFeatureHandles.pop_back();
+		Authenticate(handle);
+	}
+}
+
+
+bool
+LocalDeviceImpl::_TakeFeatureHandle(uint16 handle)
+{
+	for (size_t i = 0; i < fFeatureHandles.size(); i++) {
+		if (fFeatureHandles[i] == handle) {
+			fFeatureHandles.erase(fFeatureHandles.begin() + i);
+			return true;
+		}
+	}
+	return false;
 }
 
 

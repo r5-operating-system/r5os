@@ -37,16 +37,22 @@
 static const size_t kMaxSeen = 64;
 static const bigtime_t kReportInterval = 1000000;
 
-// Connection parameters (1.25 ms units, timeout 10 ms): an interval of
-// 7.5 to 15 ms for a mouse, no latency, a 5 s supervision timeout; the
-// device may ask for others afterwards. Scanning while connecting: 60 ms
-// interval, 30 ms window (0.625 ms units).
-static const uint16 kConnIntervalMin = 6;
-static const uint16 kConnIntervalMax = 12;
+// Connection parameters (1.25 ms units, timeout 10 ms): BlueZ's defaults,
+// an interval of 30 to 50 ms, no latency, a 420 ms supervision timeout.
+// A mouse asks for its own short interval right after it connected (the
+// first stick on the 5625U used 7.5 to 15 ms and every link to a
+// Designer Mouse failed with 0x3E). The scan: 60 ms interval, 30 ms window
+// for the list; while connecting the whole interval (0.625 ms units).
+static const uint16 kConnIntervalMin = 0x0018;
+static const uint16 kConnIntervalMax = 0x0028;
 static const uint16 kConnLatency = 0;
-static const uint16 kConnTimeout = 500;
+static const uint16 kConnTimeout = 0x002a;
 static const uint16 kScanInterval = 0x0060;
 static const uint16 kScanWindow = 0x0030;
+static const uint16 kConnectScanWindow = 0x0060;
+// How often a pairing connect is tried again after "Connection Failed to
+// be Established" (0x3E), which a device that is busy can cause.
+static const int kMaxConnectRetries = 2;
 
 static const char* kBondsFile = "le_paired_devices";
 
@@ -71,7 +77,8 @@ LEManager::LEManager(LocalDeviceImpl* device)
 	fWantDirect(false),
 	fDirectType(R5_BDADDR_LE_PUBLIC),
 	fRadioEnabled(true),
-	fAcceptListDirty(false)
+	fAcceptListDirty(false),
+	fConnectRetries(0)
 {
 	memset(fLMPFeatures, 0, sizeof(fLMPFeatures));
 	memset(fFeatures, 0, sizeof(fFeatures));
@@ -188,11 +195,8 @@ LEManager::_SetupStep(int step)
 		le_put16(length + 2, 2120);
 		_Issue(kOpLEWriteDataLength, length, sizeof(length));
 	}
-	if (le_has_feature(fFeatures, kFeature2MPHY)) {
-		// Prefer nothing: the controller may use 1M or 2M both ways.
-		const uint8 phy[3] = { 0x00, 0x03, 0x03 };
-		_Issue(kOpLESetDefaultPHY, phy, sizeof(phy));
-	}
+	// No PHY preference: the controller's default (1M) until a device
+	// asks for another, the least to go wrong while a link is made.
 
 	_ResolvingListSetup();
 	_AcceptListSetup();
@@ -553,6 +557,13 @@ LEManager::_ConnectionComplete(const uint8* data, size_t size, uint8 subevent)
 	}
 
 	const uint16 handle = (data[2] | (data[3] << 8)) & 0x0fff;
+	// Role, address type, interval, latency, timeout: no address.
+	const size_t times = subevent == 0x01 ? 12 : subevent == 0x0a ? 24 : 24;
+	syslog(LOG_INFO, "bluetooth_server: hci%" B_PRId32 " le link role %u"
+		" type %u interval %u latency %u timeout %u", fDevice->GetID(),
+		data[4], data[5], data[times] | (data[times + 1] << 8),
+		data[times + 2] | (data[times + 3] << 8),
+		data[times + 4] | (data[times + 5] << 8));
 	if (data[4] != 0x00) {
 		// We never advertise; a link where we are the peripheral is not
 		// ours.
@@ -621,8 +632,20 @@ LEManager::_Disconnected(uint16 handle, uint8 reason)
 		return;
 	syslog(LOG_INFO, "bluetooth_server: hci%" B_PRId32 " le link down (%#x)",
 		fDevice->GetID(), reason);
-	if (link->pairing && link->smpState != Link::kSMPDone)
+	// "Connection Failed to be Established": the device did not answer in
+	// the first connection events. A pairing connect is tried again.
+	const bool retry = reason == 0x3e && link->pairRequested
+		&& fConnectRetries < kMaxConnectRetries;
+	if (link->pairing && link->smpState != Link::kSMPDone && !retry)
 		syslog(LOG_NOTICE, "bluetooth_server: smp pairing failed (link lost)");
+	if (retry) {
+		fConnectRetries++;
+		fWantDirect = true;
+		fDirectAddress = link->address;
+		fDirectType = link->addressType;
+		syslog(LOG_INFO, "bluetooth_server: hci%" B_PRId32 " le connect"
+			" again (%d)", fDevice->GetID(), fConnectRetries);
+	}
 	_CloseLink(link, false);
 	_Connect();
 }
@@ -765,6 +788,15 @@ LEManager::Pair(const bdaddr_t& address)
 		return true;
 	}
 
+	// One pairing at a time: pressing Pair again while it runs does not
+	// start it over (the first stick logged 18 starts in 14 s).
+	Link* running = _FindLink(address);
+	if ((fWantDirect && bdaddrUtils::Compare(fDirectAddress, address))
+		|| (running != NULL && running->pairing
+			&& system_time() - running->smpStarted < 30000000))
+		return true;
+	fConnectRetries = 0;
+
 	// Pair means a new pairing: the old keys go.
 	for (size_t i = 0; i < fBonds.size(); i++) {
 		if (bdaddrUtils::Compare(fBonds[i]->address, address)) {
@@ -873,7 +905,7 @@ LEManager::_CreateConnection(const bdaddr_t* address, uint8 addressType)
 		command[9] = 0x01;
 		uint8* phy = command + 10;
 		le_put16(phy + 0, kScanInterval);
-		le_put16(phy + 2, kScanWindow);
+		le_put16(phy + 2, kConnectScanWindow);
 		le_put16(phy + 4, kConnIntervalMin);
 		le_put16(phy + 6, kConnIntervalMax);
 		le_put16(phy + 8, kConnLatency);
@@ -887,7 +919,7 @@ LEManager::_CreateConnection(const bdaddr_t* address, uint8 addressType)
 		// timeout, CE length min and max.
 		uint8 command[25];
 		le_put16(command + 0, kScanInterval);
-		le_put16(command + 2, kScanWindow);
+		le_put16(command + 2, kConnectScanWindow);
 		command[4] = filter;
 		command[5] = type;
 		memcpy(command + 6, &peer, 6);

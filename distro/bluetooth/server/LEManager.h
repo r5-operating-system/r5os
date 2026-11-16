@@ -211,6 +211,7 @@ private:
 			bool				fRadioEnabled;
 			bool				fAcceptListDirty;
 			std::vector<bdaddr_t> fClassic;
+			int					fConnectRetries;
 };
 
 

@@ -19,6 +19,7 @@
 // SPDX-License-Identifier: MIT
 #include <Messenger.h>
 #include "R5Pairing.h"
+#include <vector>
 // SPDX-SnippetEnd
 
 #include "HCIDelegate.h"
@@ -128,6 +129,10 @@ private:
 	BString				fPath;
 	LEManager*			fLE;
 	uint64				_EventMask() const;
+	// Remote host features before Authentication Requested.
+	std::vector<uint16> fFeatureHandles;
+	void				_ReadRemoteHostFeatures(uint16 handle);
+	bool				_TakeFeatureHandle(uint16 handle);
 
 	// Controller setup after a reset (SetupController()).
 	uint8				fFeatures[8];
