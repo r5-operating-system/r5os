@@ -77,8 +77,11 @@ struct skia_vulkan_device {
 class SkiaGpu {
 public:
 	// NULL with a reason when Graphite does not start.
+	// M13 step 3: samples, Skia's sample count for paths (4, or 1 with
+	// gpu_lavapipe_msaa 1 on Lavapipe)
 	static	SkiaGpu*			Create(const skia_vulkan_device& device,
-									bool forceFail, const char** _reason);
+									bool forceFail, int samples,
+									const char** _reason);
 								~SkiaGpu();
 
 	// "m158-707e33875f"

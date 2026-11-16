@@ -133,6 +133,13 @@ struct settings {
 	// gpu_draw_linear_edges: 0 the default (off), 1 true, 2 false
 	bool	drawClassic;
 	int		drawLinearEdges;
+	// M13 step 3, Lavapipe only, opt-in (0: Mesa's and Skia's defaults):
+	// gpu_lavapipe_msaa 1|4 (Skia's sample count for paths),
+	// gpu_lavapipe_threads <n> (LP_NUM_THREADS), gpu_lavapipe_vector
+	// 128|256 (LP_NATIVE_VECTOR_WIDTH)
+	int		lavapipeMsaa;
+	int		lavapipeThreads;
+	int		lavapipeVector;
 };
 
 
@@ -184,6 +191,16 @@ load_settings(settings& out)
 			out.drawLinearEdges = 1;
 		if (strncmp(line, "gpu_draw_linear_edges false", 27) == 0)
 			out.drawLinearEdges = 2;
+		int value;
+		if (sscanf(line, "gpu_lavapipe_msaa %d", &value) == 1
+			&& (value == 1 || value == 4))
+			out.lavapipeMsaa = value;
+		if (sscanf(line, "gpu_lavapipe_threads %d", &value) == 1
+			&& value >= 0 && value <= 64)
+			out.lavapipeThreads = value;
+		if (sscanf(line, "gpu_lavapipe_vector %d", &value) == 1
+			&& (value == 128 || value == 256))
+			out.lavapipeVector = value;
 	}
 	fclose(file);
 }
@@ -777,6 +794,21 @@ Compositor::Create(Desktop* desktop, HWInterface* screen)
 		return NULL;
 	compositor->fDebug = options.debug;
 	compositor->fForceFail = options.fail;
+	compositor->fLavapipeMsaa = options.lavapipeMsaa;
+	// M13 step 3: llvmpipe reads these when the driver starts; RADV does
+	// not look at them
+	if (options.lavapipeThreads > 0) {
+		char value[16];
+		snprintf(value, sizeof(value), "%d", options.lavapipeThreads);
+		setenv("LP_NUM_THREADS", value, 1);
+		log_line("lavapipe threads %d (setting)", options.lavapipeThreads);
+	}
+	if (options.lavapipeVector > 0) {
+		char value[16];
+		snprintf(value, sizeof(value), "%d", options.lavapipeVector);
+		setenv("LP_NATIVE_VECTOR_WIDTH", value, 1);
+		log_line("lavapipe vector width %d (setting)", options.lavapipeVector);
+	}
 	compositor->fWantScanout = options.scanout;
 	compositor->fZeroCopyOff = options.noZeroCopy ? 1 : 0;
 	if (options.noZeroCopy)
@@ -859,7 +891,11 @@ Compositor::_InitSkia(bool forceFail)
 	device.deviceExtensions = vk->extensions;
 	device.deviceExtensionCount = vk->extensionCount;
 	const char* reason = NULL;
-	fSkia = SkiaGpu::Create(device, forceFail, &reason);
+	// M13 step 3: gpu_lavapipe_msaa, on Lavapipe only
+	int samples = fOnLavapipe && fLavapipeMsaa > 0 ? fLavapipeMsaa : 4;
+	if (samples != 4)
+		log_line("lavapipe msaa %d (setting)", samples);
+	fSkia = SkiaGpu::Create(device, forceFail, samples, &reason);
 	if (fSkia == NULL) {
 		log_line("gpu draw off: %s", reason);
 		return;
@@ -3023,6 +3059,12 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 			// dragging (QEMU, "compose passes"), a copy is a row memcpy.
 			_RecordImageCopy(layer, part, frameInfo.buffer, rect.frameStride);
 			part.MakeEmpty();
+		} else if (layer != NULL && part.CountRects() > 0) {
+			// M13 step 3: a Painter window's plain part too, row by row
+			// from its buffer (vkCmdCopyBuffer), the same words
+			_RecordBufferCopy(layer, part, frameInfo.buffer,
+				rect.frameStride);
+			part.MakeEmpty();
 		}
 		for (int32 i = 0; i < part.CountRects(); i++) {
 			clipping_rect r = part.RectAtInt(i);
@@ -3430,6 +3472,59 @@ Compositor::_RecordImageCopy(const Layer* layer, const BRegion& region,
 	vk->vkCmdPipelineBarrier(vk->commands, VK_PIPELINE_STAGE_TRANSFER_BIT,
 		VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
 		0, 1, &after, 0, NULL, 1, &toRead);
+}
+
+
+/*!	M13 step 3: \a region (screen pixels inside the window's buffer)
+	copied row by row from the buffer into the frame with vkCmdCopyBuffer;
+	ordered with the compute passes before and after.
+*/
+void
+Compositor::_RecordBufferCopy(const Layer* layer, const BRegion& region,
+	VkBuffer_T* frame, uint32 frameStride)
+{
+	CompositorVulkan* vk = fVulkan;
+	uint32 count = 0;
+	for (int32 i = 0; i < region.CountRects(); i++) {
+		clipping_rect r = region.RectAtInt(i);
+		count += r.bottom - r.top + 1;
+	}
+	VkBufferCopy* copies = new(std::nothrow) VkBufferCopy[count];
+	if (copies == NULL)
+		return;
+	uint32 sourceStride = layer->buffer->Width();
+	uint32 n = 0;
+	for (int32 i = 0; i < region.CountRects(); i++) {
+		clipping_rect r = region.RectAtInt(i);
+		uint32 sourceX = r.left - layer->left;
+		for (int32 y = r.top; y <= r.bottom; y++) {
+			uint32 sourceY = y - layer->top;
+			copies[n].srcOffset = ((uint64)sourceY * sourceStride + sourceX) * 4;
+			copies[n].dstOffset = ((uint64)y * frameStride + r.left) * 4;
+			copies[n].size = (uint64)(r.right - r.left + 1) * 4;
+			n++;
+		}
+	}
+	VkMemoryBarrier before = {};
+	before.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+	before.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT
+		| VK_ACCESS_TRANSFER_WRITE_BIT;
+	before.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+	vk->vkCmdPipelineBarrier(vk->commands,
+		VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+		VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &before, 0, NULL, 0, NULL);
+	vk->vkCmdCopyBuffer(vk->commands, (VkBuffer)layer->buffer->VulkanBuffer(),
+		frame, n, copies);
+	delete[] copies;
+	VkMemoryBarrier after = {};
+	after.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+	after.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+	after.dstAccessMask = VK_ACCESS_SHADER_READ_BIT
+		| VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT
+		| VK_ACCESS_TRANSFER_WRITE_BIT;
+	vk->vkCmdPipelineBarrier(vk->commands, VK_PIPELINE_STAGE_TRANSFER_BIT,
+		VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+		0, 1, &after, 0, NULL, 0, NULL);
 }
 
 
