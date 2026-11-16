@@ -1,0 +1,4 @@
+From the serial log of the run (run-qemu-smoke.sh SMAP=1 printed these; the file was removed with the image copy):
+enable SMEP
+enable SMAP
+No panic, kernel debugger or vm_page_fault line.

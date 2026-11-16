@@ -103,6 +103,7 @@ Haiku's icon set has no power symbol, no circular arrow, no clock face for a sma
 | `R5_GLYPH_EYE` | 4 | An open eye (show the password) |
 | `R5_GLYPH_EYE_OFF` | 5 | The eye with a line through it (hide the password) |
 | `R5_GLYPH_LOG_OUT` | 6 | An open door frame with an arrow out to the right |
+| `R5_GLYPH_BLUETOOTH` | 7 | The Bluetooth rune: a stem with two arrow heads crossing it |
 
 The numbers are part of the contract, the same as `r5_icon`. A new glyph is added at the end of `enum r5_glyph`, with a row in this table.
 
@@ -113,6 +114,33 @@ The numbers are part of the contract, the same as `r5_icon`. A new glyph is adde
 ```cpp
 restart->SetFont(&font);
 r5_button_set_glyph(restart, R5_GLYPH_RESTART);
+```
+
+## Level glyphs
+
+A level glyph shows how full something is: a signal strength or a battery charge. Wi-Fi and Bluetooth draw it with the same call, so the two look alike. It has four steps. The filled steps are in the foreground color; the empty ones are a faint tint of it over the background, so it follows the text color and dark mode.
+
+| Glyph | Number | Picture |
+|---|---|---|
+| `R5_LEVEL_SIGNAL` | 1 | Four bars of rising height, left to right |
+| `R5_LEVEL_BATTERY` | 2 | A battery body with a cap on the right and four segments inside |
+
+| Style | Number | Look |
+|---|---|---|
+| `R5_LEVEL_STYLE_NORMAL` | 0 | Filled steps in the foreground color |
+| `R5_LEVEL_STYLE_DISABLED` | 1 | Greyed, for example while disconnected |
+| `R5_LEVEL_STYLE_OFF` | 2 | Outlines only |
+
+The numbers are part of the contract, the same as `r5_glyph`. A new level glyph or style is added at the end, with a row here.
+
+- `r5_level_glyph_draw(view, which, frame, level, foreground, background, style)` draws into a view, with `level` of the four steps filled; a level below 0 or above 4 is clamped. The view's state is the same afterwards.
+
+`DrawWiFiSignalBars()` in `<R5WiFiGlyphs.h>` calls it with `R5_LEVEL_SIGNAL`; its bars are the same pixels as before the move. `libr5wifi.so` and NetworkStatus link `libr5icons.so` for it.
+
+```cpp
+r5_level_glyph_draw(this, R5_LEVEL_BATTERY, frame, 3,
+	ui_color(B_LIST_ITEM_TEXT_COLOR), ui_color(B_LIST_BACKGROUND_COLOR),
+	R5_LEVEL_STYLE_NORMAL);
 ```
 
 The Settings application icon is the R5 wave pebble from About R5, with the preferences wrench (the last two shapes of Tracker's preferences-folder icon) drawn on it. `scripts/join-settings-icon.py` builds that HVIF into `Settings.rdef`. The Home row in the list uses the pebble alone. The wrench on a page icon is still drawn by Settings when the page is shown.

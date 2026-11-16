@@ -22,6 +22,49 @@ Tested (16 Nov 2026, Europe/Amsterdam):
 - QEMU (KVM, std VGA, Lavapipe), own image copy: a planted job changed the mode to 1280x800, 800x600 and 1024x768; each `screenmode` returned in 0 s, the periods were 13334 and 16666 us, and the screendumps are normal (`qemu-grid.png`).
 
 Not tested: dragging the VirtualBox window by hand (the size hints are what the window sends; the window's own follow-up hints were in the run). The stick check `m11_mode` itself has not run (it needs the 5625U boot 3); its `check` change only passed `sh -n`. RADV and the 5625U are unchanged by this in behaviour except that the period wait moved out of the compose slot. Every first compose after a mode change in VirtualBox still logs `compose late 100 ms` (Lavapipe on two virtual CPUs); not looked into. ARM64 and RISC-V 64 not built.
+## 2026-11-16 - Icons: one place for signal and battery symbols (Bluetooth step 2)
+
+Problem: Bluetooth needs the same signal symbol as Wi-Fi, and a battery symbol, but the Wi-Fi bars were an inline function in `R5WiFiGlyphs.h` that only Wi-Fi could use (`docs/BLUETOOTH.md`, step 2). Done overnight while the owner slept.
+
+What changed:
+- `libr5icons.so`: `r5_level_glyph_draw(view, which, frame, level, foreground, background, style)` with `R5_LEVEL_SIGNAL` (four rising bars) and `R5_LEVEL_BATTERY` (body, cap, four segments; the outline stays in the full color so an empty battery still shows), styles normal, disabled and outline. The signal geometry and colors are those of the old `DrawWiFiSignalBars()`.
+- New line glyph `R5_GLYPH_BLUETOOTH` (7), the rune, for the Bluetooth page of step 3a.
+- `DrawWiFiSignalBars()` calls `r5_level_glyph_draw()`. `libr5wifi.so` and NetworkStatus link `libr5icons.so`.
+- Bug: `r5_glyph_bitmap()` refused every glyph after `R5_GLYPH_LOG_OUT`, so a new glyph would have given NULL; the bound is now the last glyph.
+- `docs/ICONS.md` ("Level glyphs", the new glyph row) and `docs/LIBR5.md`.
+- `r5_level_glyph_test` (`/system/bin`, added by `apply-icons.py`): the old function, copied unchanged, and the new call drawn into bitmaps for 6,552 signal cases (13 widths from 4 to 40, 8 heights from 4 to 39, levels −1 to 5, three styles, three color pairs), compared byte for byte; the battery and the Bluetooth glyph must draw something.
+
+Deviation from the plan: the pass check is this test, not before-and-after screenshots. QEMU has no Wi-Fi adapter, so the list and Deskbar show no bars, and the desktop sits behind Sign in.
+
+Review: read twice. The second read found that two blank bitmaps compare equal, so a failed draw would have passed the test; it now fails when the old code drew nothing for a lit level. It also fixed an `int32`/`size_t` comparison in the test.
+
+Tested: built with `scripts/build-locked.sh` (`jam_exit=0`, `build_s=182`, no warnings in these files). QEMU (KVM), own copy of that image, one boot: `r5_level_glyph_test: ok (6576 cases)`, `exit 0` (`generated/bluetooth/qemu-step2/`).
+
+Not tested: the Wi-Fi list and the Deskbar replicant on a real adapter (5625U or X1); the battery and Bluetooth glyphs by eye. ARM64 and RISC-V 64 were not built or tested.
+## 2026-11-16 - Bluetooth step 1b: L2CAP in distro/, a safe signalling parser, connection details
+
+Problem: a remote Bluetooth device could hang or crash the L2CAP layer, and the kit and server had memory bugs. Step 1b of `docs/BLUETOOTH.md` copies `l2cap` into `distro/`, adds fixed channels, incoming accept and one additive `libbluetooth` method. Done overnight while the owner slept; choices are written down below and in the plan.
+
+What changed:
+- **L2CAP signalling** (`l2cap_signal.cpp`): the dispatcher checked a command's length before removing its 4 header bytes, so a command up to 4 bytes too long passed, `remove_header()` failed, the size stayed the same and the loop never ended (a remote could stall the kernel thread). `l2cap_parse.h` (no kernel dependencies) now decides per command: handle, reject as too short for its code (Command Reject, not understood), or stop the packet. A Connection or Disconnection Response with an unknown identifier dereferenced a NULL endpoint. Configuration options are copied out and walked within the command; a short value left the rest uninitialized, a failed `create()` was not checked, and a response with unknown options leaked its reject buffer. Command Reject read its data with the wrong length. The early returns leaked the buffer.
+- **L2CAP receive** (`l2cap.cpp`): the module owns the buffer (`acl.cpp` does not free it) but leaked it on every error, panicked on a signalling packet without a connection, and used the connectionless header unchecked.
+- **Fixed channels** (owner's plan said "add"; built differently, open to change): ATT `0x0004`, LE signalling `0x0005`, SMP `0x0006` and `0x0007` are received and dropped with a trace instead of `ECONNRESET` and a leak. No LE link exists before step 6 asks for LE events, and their socket interface is best designed with its user (GATT and SMP in `bluetooth_server`), so step 6 adds it. `docs/BLUETOOTH.md` says so.
+- **Incoming accept** already worked (bind, listen, accept). Bind now checks the whole PSM rule (odd, bit 8 clear; Core 6.0, Vol 3, Part A, 4.2). A child socket that got no channel stayed pending forever; it is aborted now, as TCP does.
+- **libbluetooth:** additive `status_t RemoteDevice::GetConnectionDetails(bt_connection_details*)` (state, transport, HCI link type, encryption, handle, radio; a `size` field so the struct can grow), answered by `BT_REQ_CONN_DETAILS` in `bluetooth_server`. `GetConnectionState()` sent no `hci_id`, so every answer was DISCONNECTED; it does now. `Connect()` let `GetProperty()` write 32 bits into a `uint16` and a `uint8` on the stack. `Connect()`, `CancelConnection()`, `Disconnect()` and `GetConnectionState()` dereferenced a NULL messenger or owning radio. `RemoteDevice.cpp`, `RemoteDevice.h` and `bluetoothserver_p.h` are now in `distro/bluetooth/`.
+- **Server** (found from compiler warnings of this build): `LoadRemoteDevices()` let `FindData()` write a pointer into the link key instead of copying it, so a paired device lost its key whenever the server restarted. `HandleAcquireLocalDevice()` wrote an 8-byte pointer into a 6-byte `bdaddr_t` on the stack. `CreateConnection()` used an unchecked address, added a known device to the list twice, read `record` uninitialized, and wrote a packed member through a pointer.
+- **Plan** (`docs/BLUETOOTH.md`): which HCI events each step needs. After a reset the Event Mask is bits 0 to 44 (Core 6.0, Vol 4, Part E, 7.3.1). Steps 1a to 3b and 5 need nothing more; step 4 needs the Secure Simple Pairing events (bits 48 to 53, 58, 59), so `bluetooth_server` sets the Event Mask in step 4; step 6 adds LE Meta (bit 61) and the LE Event Mask, as the owner chose.
+- **Tests:** `scripts/fuzz-bt.sh l2cap` walks random and well-formed signalling packets the way the dispatcher does. `bt_l2cap_abi_test` (`/system/bin`) binds and listens on PSM `0x11`, `0x13`, `0x19`, checks `EADDRINUSE` and `EINVAL`, and checks `GetConnectionState()` and `GetConnectionDetails()`. `run-qemu-smoke.sh` runs it and takes `SRC_IMAGE`.
+
+Manual SMAP review: no new user-memory access in the kernel; the L2CAP changes read only net_buffers (`read()`, header readers) and a kernel `malloc()` copy of the options. The kit and server changes are userland.
+
+Review: every change was read twice (owner, 16 Nov). The second read found that `bt_connection_details` sat inside `namespace Bluetooth` while the header imports only `RemoteDevice`, so the ABI test did not compile; the jam confirmed it, and the struct now sits outside the namespace like `bdaddr_t`.
+
+Tested:
+- `scripts/fuzz-bt.sh l2cap 60` in WSL: `l2cap_fuzz: 60s 0 crashes (6242198 rounds)`. With the option bound check removed in a copy, it stopped at once (`check failed: option value inside`).
+- Built with `scripts/build-locked.sh`, `jam jobs=12`: `jam_exit=0`, `build_s=179`, no warnings left in the Bluetooth sources.
+- QEMU, KVM, `-cpu host,+smap,+smep`, own copy of that image, one boot: `enable SMEP`, `enable SMAP`, no panic; `bluetooth_server: started, 0 radios`, `bt_server_smoke_test: ok (0 crashes)`, `bt_l2cap_abi_test: ok`. Logs: `generated/bluetooth/qemu-step1b/`, `generated/bluetooth/fuzz-l2cap.log`.
+
+Not tested: no radio, so no real L2CAP connection, no incoming connection from a device, no link key reload after pairing. ARM64 and RISC-V 64 were not built or tested.
 
 ## 2026-11-15 - Bluetooth step 1a: HCI command timeouts, safe reassembly, HCI fuzzer
 
