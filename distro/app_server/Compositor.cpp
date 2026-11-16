@@ -57,6 +57,7 @@
 
 #include <WindowPrivate.h>
 
+#include "compose_period.h"
 #include "compositor_shaders.h"
 
 
@@ -1486,17 +1487,18 @@ Compositor::_UpdatePeriod()
 	display_mode mode;
 	memset(&mode, 0, sizeof(mode));
 	fScreen->GetMode(&mode);
-	bigtime_t period = 0;
-	if (mode.timing.pixel_clock > 0 && mode.timing.h_total > 0
-		&& mode.timing.v_total > 0) {
-		period = (bigtime_t)mode.timing.h_total * mode.timing.v_total
-			* 1000 / mode.timing.pixel_clock;
-	}
+	// A timing that gives no display refresh counts as none (VirtualBox:
+	// pixel clock 60 read as kHz, a 15 s period that held every mode change
+	// and every frame; compose_period.h).
+	bigtime_t period = compose_period(mode.timing.pixel_clock,
+		mode.timing.h_total, mode.timing.v_total);
 	if (period == 0) {
 		static bool sLogged = false;
 		if (!sLogged) {
 			sLogged = true;
-			log_line("compose period unknown");
+			log_line("compose period unknown: pixel clock %" B_PRIu32
+				" kHz, total %u x %u", mode.timing.pixel_clock,
+				(unsigned)mode.timing.h_total, (unsigned)mode.timing.v_total);
 		}
 	}
 	fPeriod = period;
@@ -2136,6 +2138,15 @@ Compositor::_ComposeLoop()
 		if (status == B_TIMED_OUT && !animating)
 			continue;
 
+		// At most once per refresh period. The wait is outside the compose
+		// slot, so a mode change (SetMode takes the slot) never waits for
+		// it; the damage is taken after it, so nothing waits unseen.
+		if (fPeriod > 0) {
+			bigtime_t next = fLastCompose + fPeriod;
+			if (system_time() < next)
+				snooze_until(next, B_SYSTEM_TIMEBASE);
+		}
+
 		// One frame, in the compose slot: a pause waits for it to end.
 		BAutolock slot(fComposeSlot);
 		if (fPaused) {
@@ -2147,13 +2158,6 @@ Compositor::_ComposeLoop()
 			BAutolock _(fShareLock);
 			_ShareRetire();
 			continue;
-		}
-
-		// at most once per refresh period
-		if (fPeriod > 0) {
-			bigtime_t next = fLastCompose + fPeriod;
-			if (system_time() < next)
-				snooze_until(next, B_SYSTEM_TIMEBASE);
 		}
 
 		BRegion damage;
@@ -2184,6 +2188,9 @@ Compositor::_ComposeLoop()
 				fFailure = "window memory";
 				continue;
 			}
+			log_line("frame follows the screen %" B_PRIu32 "x%" B_PRIu32
+				", period %" B_PRId64 " us", fFrameWidth, fFrameHeight,
+				fPeriod);
 			damage.Set(BRect(0, 0, (float)fFrameWidth - 1,
 				(float)fFrameHeight - 1));
 		}

@@ -1,5 +1,28 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-16 - GPU compositor: VirtualBox desktop after a resize
+
+Problem: in VirtualBox the M11 compositor (on Lavapipe) left a broken desktop after a display change: the wallpaper sheared with horizontal seams, white squares where the pointer and icons are, no Deskbar. With `gpu_compositor false` the same image was normal. It also happened on a fresh start, because the Guest Additions (`VBoxTray`) set the display to the window size after sign-in.
+
+Cause (shown with logs, `generated/m11-vbox/README.md`): the compositor waits one refresh period between frames, from `pixel_clock`, `h_total` and `v_total` of the current mode. After `VBoxTray` sets a mode the vboxvideo mode has pixel clock 60 and totals equal to the visible size, which the formula reads as one frame per 15.5 s at 1437x649 and 29.5 s at 1920x922 (syslog `compose period unknown: pixel clock 60 kHz, total 1023 x 767`). The compose thread slept that period while it held the compose slot, and `SetMode` takes that slot first. Timed logs: `SetMode guard after 23423 ms`, then 15500, 15474, 29177 ms for the next requests; in the VirtualBox log the host followed a size hint after 5 to 30 s instead of about 20 ms. Meanwhile the screen kept the old mode's pixels, read by VirtualBox with the new line length (the shear). A frame dump showed app_server's own pitches were right at every step (back, front and frame width x 4), and the guest front buffer was right once a frame was presented. The second suspect (how the frame buffer of vboxvideo is mapped, stride or format) is ruled out by those dumps; the first (the compositor does not handle a mode change) was only true through this wait.
+
+What changed:
+- `distro/app_server/compositor/compose_period.h` (new, MIT): the period from the timing, and 0 (no period: compose as soon as damage arrives) when it is outside 1 ms to 50 ms (1000 Hz to 20 Hz). `Compositor::_UpdatePeriod()` uses it and logs the rejected timing once.
+- `Compositor::_ComposeLoop()`: the wait for the next period is now before the compose slot is taken, so a mode change never waits for it.
+- `Compositor`: one line per frame size change, `frame follows the screen <w>x<h>, period <us> us`.
+- `scripts/apply-app-server.py` copies the new header.
+- Tests: `scripts/test-compose-period.cpp` (host; real 60 and 144 Hz modes give their period, the VirtualBox timing and a missing timing give none, the 20 Hz bound). Stick check `m11_mode` in boot 3 (Lavapipe): changes the mode with `screenmode` and back, each change must return within 3 s, and the frame must follow twice.
+
+Mistake on the way: the first fix (repeat the whole picture 0.25, 1 and 3 s after a mode change) was built on the guess that VirtualBox missed the first full copy. It made the series worse, and the timed logs then showed the 15 s wait. It was removed before this commit; the patch is kept in `generated/m11-vbox/`.
+
+Tested (16 Nov 2026, Europe/Amsterdam):
+- `g++ -std=c++17 scripts/test-compose-period.cpp`: `ok compose period`.
+- Built with `scripts/build-locked.sh` (`mesa_exit=0`), image copied under the build lock.
+- VirtualBox 7.2, VM `R5OS-comp`, fresh VDI, default settings (compositor on Lavapipe, `no render node`): first-boot prompt, sign-in, then size hints 1437x649, 1920x923, 1280x720, 1601x899 and the window's own follow-up hints (it shrinks by one pixel per step). All eight screenshots normal (`generated/m11-vbox/fix-run/`); the host followed every hint within 10 to 55 ms. Before the fix the same series was broken (`series-grid.png`, `on-run4/`); with `gpu_compositor false` it was normal (`off-run-grid.png`).
+- QEMU (KVM, std VGA, Lavapipe), own image copy: a planted job changed the mode to 1280x800, 800x600 and 1024x768; each `screenmode` returned in 0 s, the periods were 13334 and 16666 us, and the screendumps are normal (`qemu-grid.png`).
+
+Not tested: dragging the VirtualBox window by hand (the size hints are what the window sends; the window's own follow-up hints were in the run). The stick check `m11_mode` itself has not run (it needs the 5625U boot 3); its `check` change only passed `sh -n`. RADV and the 5625U are unchanged by this in behaviour except that the period wait moved out of the compose slot. Every first compose after a mode change in VirtualBox still logs `compose late 100 ms` (Lavapipe on two virtual CPUs); not looked into. ARM64 and RISC-V 64 not built.
+
 ## 2026-11-15 - Bluetooth step 1a: HCI command timeouts, safe reassembly, HCI fuzzer
 
 Problem: a radio could stop the kernel, and a silent radio left programs waiting forever. `hci/bluetooth.cpp` `Assemble()` panicked on an event header split over two transfers and on every event that arrived in pieces, looped forever on an SCO packet (it consumed 0 bytes), and did not check the ACL buffer allocation. No HCI command had a timeout. Reading the code turned up more bugs in the same files (owner, 15 Nov: fix what you find).

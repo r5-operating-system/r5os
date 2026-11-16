@@ -535,6 +535,45 @@ m11_share() {
 	fi
 }
 
+# A mode change on Lavapipe: another mode and back. In VirtualBox the
+# compositor took its refresh period from a timing that gave 15 s and held
+# the compose slot that long, so SetMode waited and the screen showed the
+# old mode's pixels. Each change must return within 3 s and the frame must
+# follow it.
+m11_mode() {
+	: > "$keep/mode.txt"
+	: > "$keep/mode-syslog.txt"
+	if [ "$live" -eq 1 ]; then
+		from=$(syslog_count)
+		was=$(screenmode -s 2>/dev/null | head -n 1)
+		set -- $was
+		if [ "${1:-0}" = 1024 ]; then
+			other="800 600 32"
+		else
+			other="1024 768 32"
+		fi
+		echo "was: $was; other: $other" >> "$keep/mode.txt"
+		for m in "$other" "$was"; do
+			[ -n "$m" ] || continue
+			t0=$(date +%s)
+			screenmode -q $m >> "$keep/mode.txt" 2>&1
+			rc=$?
+			echo "mode $m exit $rc took $(( $(date +%s) - t0 )) s" >> "$keep/mode.txt"
+			sleep 5
+		done
+		syslog_since "$from" > "$keep/mode-syslog.txt"
+	fi
+	have '^mode .* exit 0 took' "$keep/mode.txt" "screenmode set another mode"
+	slow=$(awk '/^mode .* took/ && $(NF - 1) > 3' "$keep/mode.txt" 2>/dev/null)
+	if [ -s "$keep/mode.txt" ] && [ -z "$slow" ]; then
+		say 0 "each mode change returned within 3 s"
+	else
+		say 1 "each mode change returned within 3 s (${slow:-no run})"
+	fi
+	atleast 2 'app_server: frame follows the screen [0-9]+x[0-9]+' \
+		"$keep/mode-syslog.txt" "frame follows the screen x2 (mode change)"
+}
+
 # Zero-copy, then the copy path in the same boot. app_server reads the
 # switch at every 10 s report, so check waits for its line each time.
 m11_fps() {
@@ -649,6 +688,7 @@ m11_boot() {
 			"zero-copy off: lavapipe"
 		teapot_run teapot-lavapipe
 		teapot_report teapot-lavapipe lavapipe
+		m11_mode
 		;;
 	4)
 		have 'app_server: gpu compositor on radv' "$slog" "gpu compositor on radv"
