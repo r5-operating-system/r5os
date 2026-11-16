@@ -1261,12 +1261,24 @@ SkiaDrawingEngine::DrawString(const char* string, int32 length,
 		CpuTimer cpuTimer(this);
 		return DrawingEngine::DrawString(string, length, pt, delta);
 	}
-	// the pen position stays ServerFont's (decision 5)
-	BPoint penLocation = DrawStringDry(string, length, pt, delta);
-	Draw draw(this);
-	if (draw.IsDirty())
-		fSkia->DrawString(string, length, pt, delta, NULL);
-	return penLocation;
+	// The pen position stays ServerFont's (decision 5). M13 step 1: for
+	// unrotated text without a view transform, DrawStringDry() is the
+	// string's width, the x of the same GlyphLayoutEngine pass that the
+	// drawing does (font, delta and spacing alike), so a drawn string is
+	// laid out once. Otherwise, and when nothing is drawn, as before.
+	bool fast = fSkia->Font().Rotation() == 0.0f
+		&& fSkia->IsIdentityTransform();
+	double advance = HUGE_VAL;
+	{
+		Draw draw(this);
+		if (draw.IsDirty()) {
+			fSkia->DrawString(string, length, pt, delta, NULL,
+				fast ? &advance : NULL);
+		}
+	}
+	if (fast && advance != HUGE_VAL)
+		return BPoint(pt.x + (float)advance, pt.y);
+	return DrawStringDry(string, length, pt, delta);
 }
 
 

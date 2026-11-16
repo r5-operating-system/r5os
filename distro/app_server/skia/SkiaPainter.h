@@ -309,10 +309,14 @@ public:
 									BRegion& _touched);
 
 	// text (step 4); the pen position stays ServerFont's
+	// M13 step 1: _advance gets the layout's pen advance (the x of
+	// GlyphLayoutEngine's Finish()), so the caller needs no second layout
+	// for the pen position; untouched when nothing was laid out.
 			BRect				DrawString(const char* string, uint32 length,
 									BPoint baseLine,
 									const escapement_delta* delta,
-									const BPoint* offsets);
+									const BPoint* offsets,
+									double* _advance = NULL);
 
 private:
 			// what the R5 shader blends (SkiaPainter.cpp, _Composite())
