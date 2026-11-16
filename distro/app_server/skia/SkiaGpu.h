@@ -226,6 +226,8 @@ private:
 			uint64				fRunFence;
 			// one run on the GPU at a time
 			bool				fRunInFlight;
+			// M13 step 2: the pipeline cache's last store
+			bigtime_t			fPipelinesSynced;
 };
 
 

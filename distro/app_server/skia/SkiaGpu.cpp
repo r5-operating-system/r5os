@@ -8,22 +8,28 @@
 
 #include "SkiaGpu.h"
 
+#include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
 #include <syslog.h>
+#include <unistd.h>
+#include <sys/stat.h>
 
 #include <Autolock.h>
+#include <FindDirectory.h>
 
 #include <algorithm>
 #include <memory>
 #include <vector>
 
+#include "include/core/SkData.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkMilestone.h"
 #include "include/core/SkSurface.h"
 #include "include/gpu/graphite/Context.h"
 #include "include/gpu/graphite/ContextOptions.h"
 #include "include/gpu/graphite/GraphiteTypes.h"
+#include "include/gpu/graphite/PersistentPipelineStorage.h"
 #include "include/gpu/graphite/Recorder.h"
 #include "include/gpu/graphite/Recording.h"
 #include "include/gpu/graphite/BackendTexture.h"
@@ -91,6 +97,10 @@ smallest_local_heap(VkInstance instance, VkPhysicalDevice physical)
 // externally synchronized, so Graphite's queue calls (through get_proc) and
 // the compositor's (SkiaGpu::LockQueue()) take this lock.
 static BLocker sQueueLock("vulkan queue");
+
+// M13 step 2: the pipeline cache on disk
+static const bigtime_t kPipelineSyncInterval = 10000000;
+static const size_t kPipelineDataLargest = 32 * 1024 * 1024;
 static PFN_vkQueueSubmit sQueueSubmit;
 static PFN_vkQueueWaitIdle sQueueWaitIdle;
 static PFN_vkDeviceWaitIdle sDeviceWaitIdle;
@@ -232,10 +242,133 @@ SkiaGpu::UnlockQueue()
 }
 
 
+/*!	M13 step 2 (step 1's item, owner 16 Nov 2026): Graphite's Vulkan
+	pipeline cache on disk, so the warm-up after the first boot is short.
+	app_server runs as uid 0, so the file is in the system cache directory
+	(/boot/system/cache/app_server), not in a user's ~/config/cache. Its
+	header holds a key made of the Skia version, the device and the driver
+	(driverVersion and pipelineCacheUUID, which change with every Mesa
+	build), so a Mesa update throws it away. A file that is too short or
+	too long, or has another key, another size or a wrong checksum, is
+	ignored and replaced at the next store.
+*/
+class PipelineStorage : public skgpu::graphite::PersistentPipelineStorage {
+public:
+	PipelineStorage(const VkPhysicalDeviceProperties& properties)
+	{
+		snprintf(fKey, sizeof(fKey), "r5 skia %s vendor %#" B_PRIx32
+			" device %#" B_PRIx32 " driver %#" B_PRIx32 " %s uuid ",
+			R5_SKIA_VERSION, (uint32)properties.vendorID,
+			(uint32)properties.deviceID, (uint32)properties.driverVersion,
+			properties.deviceName);
+		size_t length = strlen(fKey);
+		for (uint32 i = 0; i < VK_UUID_SIZE && length + 3 < sizeof(fKey); i++) {
+			snprintf(fKey + length, sizeof(fKey) - length, "%02x",
+				properties.pipelineCacheUUID[i]);
+			length += 2;
+		}
+		fPath[0] = '\0';
+		char directory[B_PATH_NAME_LENGTH];
+		if (find_directory(B_SYSTEM_CACHE_DIRECTORY, -1, true, directory,
+				sizeof(directory)) == B_OK) {
+			strlcat(directory, "/app_server", sizeof(directory));
+			mkdir(directory, 0755);
+			snprintf(fPath, sizeof(fPath), "%s/skia-pipelines", directory);
+		}
+	}
+
+	sk_sp<SkData> load() override
+	{
+		if (fPath[0] == '\0')
+			return nullptr;
+		int fd = open(fPath, O_RDONLY);
+		if (fd < 0) {
+			syslog(LOG_INFO, "app_server: gpu draw pipeline cache none\n");
+			return nullptr;
+		}
+		struct stat st;
+		sk_sp<SkData> data;
+		if (fstat(fd, &st) == 0 && st.st_size > (off_t)sizeof(Header)
+			&& st.st_size <= (off_t)(sizeof(Header) + kLargest)) {
+			Header header;
+			size_t size = (size_t)st.st_size - sizeof(Header);
+			sk_sp<SkData> bytes = SkData::MakeUninitialized(size);
+			if (read(fd, &header, sizeof(header)) == (ssize_t)sizeof(header)
+				&& read(fd, bytes->writable_data(), size) == (ssize_t)size
+				&& memcmp(header.magic, kMagic, sizeof(header.magic)) == 0
+				&& strncmp(header.key, fKey, sizeof(header.key)) == 0
+				&& header.size == size
+				&& header.checksum == _Checksum(bytes->data(), size))
+				data = bytes;
+		}
+		close(fd);
+		syslog(LOG_INFO, "app_server: gpu draw pipeline cache %s\n",
+			data ? "loaded" : "ignored");
+		return data;
+	}
+
+	void store(const SkData& data) override
+	{
+		if (fPath[0] == '\0' || data.size() == 0 || data.size() > kLargest)
+			return;
+		Header header;
+		memset(&header, 0, sizeof(header));
+		memcpy(header.magic, kMagic, sizeof(header.magic));
+		strlcpy(header.key, fKey, sizeof(header.key));
+		header.size = data.size();
+		header.checksum = _Checksum(data.data(), data.size());
+		// a new file, renamed over the old one: a crash leaves the old
+		// file or the new one, never half of one
+		char temporary[B_PATH_NAME_LENGTH + 8];
+		snprintf(temporary, sizeof(temporary), "%s.new", fPath);
+		int fd = open(temporary, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+		if (fd < 0)
+			return;
+		bool ok = write(fd, &header, sizeof(header)) == (ssize_t)sizeof(header)
+			&& write(fd, data.data(), data.size()) == (ssize_t)data.size();
+		close(fd);
+		if (!ok || rename(temporary, fPath) != 0) {
+			unlink(temporary);
+			return;
+		}
+		syslog(LOG_INFO, "app_server: gpu draw pipeline cache stored %zu KB\n",
+			data.size() / 1024);
+	}
+
+private:
+	struct Header {
+		char		magic[8];
+		char		key[256];
+		uint64		size;
+		uint64		checksum;
+	};
+
+	static uint64 _Checksum(const void* data, size_t size)
+	{
+		// FNV-1a: finds a damaged file, not an attack (only uid 0 writes)
+		const uint8* bytes = (const uint8*)data;
+		uint64 hash = 0xcbf29ce484222325ull;
+		for (size_t i = 0; i < size; i++) {
+			hash ^= bytes[i];
+			hash *= 0x100000001b3ull;
+		}
+		return hash;
+	}
+
+	static const size_t	kLargest = 64 * 1024 * 1024;
+	static constexpr char kMagic[8] = {'R', '5', 'S', 'K', 'P', 'C', '1',
+		'\0'};
+			char				fKey[256];
+			char				fPath[B_PATH_NAME_LENGTH];
+};
+
+
 struct SkiaBackend {
 	skgpu::VulkanExtensions			extensions;
 	VkPhysicalDeviceFeatures2		features;
 	skgpu::VulkanBackendContext		backend;
+	// M13 step 2: outlives the context (ContextOptions)
+	std::unique_ptr<PipelineStorage> pipelines;
 };
 
 
@@ -299,7 +432,8 @@ SkiaGpu::SkiaGpu()
 	fSampleCount(0),
 	fQueueFamily(0),
 	fRunFence(0),
-	fRunInFlight(false)
+	fRunInFlight(false),
+	fPipelinesSynced(0)
 {
 	fDoneSem = create_sem(0, "skia done");
 }
@@ -318,6 +452,9 @@ SkiaGpu::DestroyContext()
 {
 	Shutdown();
 	BAutolock _(fLock);
+	// M13 step 2: what the session compiled, for the next boot
+	if (fContext != NULL)
+		((GraphiteContext*)fContext)->syncPipelineData(kPipelineDataLargest);
 	delete (GraphiteContext*)fContext;
 	fContext = NULL;
 	sLeftovers.clear();
@@ -455,6 +592,18 @@ SkiaGpu::Create(const skia_vulkan_device& device, bool forceFail,
 	syslog(LOG_INFO, "app_server: gpu draw budget heap %zu MB context %zu MB window "
 		"%zu MB\n", heap >> 20, options.fGpuBudgetInBytes >> 20,
 		gpu->fRecorderBudget >> 20);
+	// M13 step 2: the pipeline cache on disk
+	PFN_vkGetPhysicalDeviceProperties getProperties
+		= (PFN_vkGetPhysicalDeviceProperties)sGetInstanceProc(instance,
+			"vkGetPhysicalDeviceProperties");
+	if (getProperties != NULL) {
+		VkPhysicalDeviceProperties properties;
+		getProperties(physical, &properties);
+		backend->pipelines.reset(new(std::nothrow) PipelineStorage(
+			properties));
+		options.fPersistentPipelineStorage = backend->pipelines.get();
+	}
+
 	// Q3: curved shapes on the GPU with 4x MSAA, no CPU path atlas
 	options.fInternalMultisampleCount = SampleCount::k4;
 	options.fMinimumPathSizeForMSAA = 0;
@@ -958,6 +1107,13 @@ SkiaGpu::RunWork(const char** _reason)
 	if (!ok) {
 		for (size_t i = 0; i < items.size(); i++)
 			sLeftovers.push_back(std::move(items[i]));
+	}
+
+	// M13 step 2: new pipelines go to disk, at most every 10 s (Graphite
+	// returns at once when there are none)
+	if (ok && now - fPipelinesSynced > kPipelineSyncInterval) {
+		fPipelinesSynced = now;
+		context->syncPipelineData(kPipelineDataLargest);
 	}
 
 	atomic_set64(&fDone, ticket);
