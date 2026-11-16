@@ -754,7 +754,9 @@ m12_boot() {
 	2)
 		have 'app_server: gpu compositor on radv' "$slog" "gpu compositor on radv"
 		none 'app_server: gpu draw on' "$slog" "no gpu draw (Painter draws)"
-		m12_scenario 'draw cpu'
+		# Painter under the compositor reports "draw median" too; "draw
+		# cpu median" is only the CPU mode (compositor off, Safe mode).
+		m12_scenario draw
 		;;
 	esac
 	none 'app_server: gpu compositor off' "$slog" "no gpu compositor off"

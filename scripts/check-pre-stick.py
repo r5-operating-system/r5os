@@ -197,7 +197,7 @@ M12_LINES = (
      "distro/app_server/skia/SkiaOffscreen.cpp"),
     ("app_server: $1 median [0-9]+ us cpu [0-9]+ ms per 10 s", "draw median %",
      COMPOSITOR),
-    ("m12_scenario 'draw cpu'", "draw cpu median %", COMPOSITOR),
+    ("m12_scenario draw", "draw median %", COMPOSITOR),
     ("app_server: gpu compositor on lavapipe", "gpu compositor on lavapipe: %s",
      COMPOSITOR),
     ("draw-compare [0-9]+/[0-9]+ ok", "draw-compare %d/%d ok", DRAW_COMPARE),
