@@ -274,6 +274,57 @@ BluetoothState::Unarchive(const BMessage& archive)
 }
 
 
+void
+BluetoothState::UnarchivePaired(const BMessage& archive,
+	std::vector<BluetoothPairedDevice>& devices)
+{
+	devices.clear();
+	bdaddr_t address;
+	for (int32 i = 0; find_address(archive, "paired:address", i, address);
+			i++) {
+		BluetoothPairedDevice device;
+		device.info.address = address;
+		archive.FindString("paired:name", i, &device.info.name);
+		archive.FindUInt32("paired:class", i, &device.info.deviceClass);
+		archive.FindBool("paired:le", i, &device.lowEnergy);
+		archive.FindBool("paired:hid", i, &device.hid);
+		archive.FindBool("paired:connected", i, &device.connected);
+		// A dual-mode device paired both ways shows once, connected when
+		// either link is up.
+		bool merged = false;
+		for (size_t j = 0; j < devices.size() && !merged; j++) {
+			if (!bdaddrUtils::Compare(devices[j].info.address, address))
+				continue;
+			devices[j].connected = devices[j].connected || device.connected;
+			if (devices[j].info.name.IsEmpty())
+				devices[j].info.name = device.info.name;
+			merged = true;
+		}
+		if (!merged)
+			devices.push_back(device);
+	}
+}
+
+
+BluetoothPairedDevice::BluetoothPairedDevice()
+	:
+	lowEnergy(false),
+	hid(false),
+	connected(false)
+{
+}
+
+
+BString
+BluetoothPairedDevice::Kind() const
+{
+	BString kind = info.Kind();
+	if (kind.IsEmpty() && hid)
+		kind = B_TRANSLATE("Input device");
+	return kind;
+}
+
+
 const BluetoothRadioInfo*
 BluetoothState::CurrentRadio() const
 {
@@ -433,13 +484,15 @@ BluetoothController::BluetoothController(const BMessenger& target)
 	fScanTimeout(NULL),
 	fListener(NULL),
 	fLaunched(false),
-	fLaunchTime(0)
+	fLaunchTime(0),
+	fPaired(new BMessage)
 {
 }
 
 
 BluetoothController::~BluetoothController()
 {
+	delete fPaired;
 	delete fRunner;
 	delete fScanTimeout;
 
@@ -507,6 +560,45 @@ BluetoothController::MessageReceived(BMessage* message)
 			_Pair(message);
 			break;
 
+		case kMsgBluetoothDisconnect:
+			_DeviceRequest(message);
+			break;
+
+		case kMsgBluetoothForget:
+		{
+			const void* address;
+			ssize_t size;
+			BMessage result(kMsgBluetoothForgetResult);
+			result.AddString("name", message->GetString("name", ""));
+			bool forgotten = false;
+			BMessenger server(BLUETOOTH_SIGNATURE);
+			if (message->FindData("bdaddr", B_ANY_TYPE, &address, &size)
+					== B_OK && size == (ssize_t)sizeof(bdaddr_t)
+				&& server.IsValid()) {
+				BMessage request(BT_MSG_R5_FORGET);
+				request.AddData("bdaddr", B_ANY_TYPE, address, size);
+				BMessage reply;
+				if (server.SendMessage(&request, &reply, kServerTimeout,
+						kServerTimeout) == B_OK)
+					forgotten = reply.GetBool("forgotten", false);
+			}
+			result.AddBool("forgotten", forgotten);
+			fTarget.SendMessage(&result, (BHandler*)NULL, kServerTimeout);
+			// My devices loses it now, not at the next update.
+			_Update();
+			break;
+		}
+
+		case BT_MSG_R5_PAIR_RESULT:
+		{
+			BMessage result(kMsgBluetoothPairResult);
+			result.AddBool("paired", message->GetBool("paired", false));
+			result.AddString("name", message->GetString("name", ""));
+			fTarget.SendMessage(&result, (BHandler*)NULL, kServerTimeout);
+			_Update();
+			break;
+		}
+
 		case kMsgBluetoothSelectRadio:
 		{
 			int32 id;
@@ -570,6 +662,7 @@ BluetoothController::_Update()
 		fRadios.clear();
 		fState.radios.clear();
 		fState.radio = -1;
+		fPaired->MakeEmpty();
 		_StopScan();
 		_PostState();
 		return;
@@ -589,6 +682,7 @@ BluetoothController::_Update()
 	fState.service = BLUETOOTH_SERVICE_RUNNING;
 	fState.radioEnabled = enabled;
 	_ReadRadios(ids);
+	_ReadPaired();
 	if (!enabled && fState.scanning) {
 		_CancelScan();
 		_StopScan();
@@ -815,7 +909,8 @@ BluetoothController::_Pair(BMessage* message)
 	request.AddUInt16("clock_offset", 0);
 	request.AddUInt32("record", message->GetUInt32("class", 0));
 	// Not waiting: pairing takes as long as the person needs.
-	server.SendMessage(&request, (BHandler*)NULL, kServerTimeout);
+	// The answer (BT_MSG_R5_PAIR_RESULT) comes back to this looper.
+	server.SendMessage(&request, this, kServerTimeout);
 }
 
 
@@ -854,11 +949,61 @@ BluetoothController::_SetRadio(bool on)
 
 
 void
+BluetoothController::_ReadPaired()
+{
+	BMessenger server(BLUETOOTH_SIGNATURE);
+	BMessage request(BT_MSG_R5_GET_PAIRED);
+	BMessage reply;
+	if (!server.IsValid() || server.SendMessage(&request, &reply,
+			kServerTimeout, kServerTimeout) != B_OK) {
+		// Kept as it was: one slow answer does not empty My devices.
+		return;
+	}
+	if (reply.GetInt32("status", B_OK) != B_OK)
+		return;
+	*fPaired = reply;
+}
+
+
+void
+BluetoothController::_DeviceRequest(BMessage* message)
+{
+	const void* address;
+	ssize_t size;
+	BMessenger server(BLUETOOTH_SIGNATURE);
+	if (message->FindData("bdaddr", B_ANY_TYPE, &address, &size) != B_OK
+		|| size != (ssize_t)sizeof(bdaddr_t) || !server.IsValid())
+		return;
+	BMessage request(BT_MSG_R5_DISCONNECT);
+	request.AddData("bdaddr", B_ANY_TYPE, address, size);
+	BMessage reply;
+	server.SendMessage(&request, &reply, kServerTimeout, kServerTimeout);
+	_Update();
+}
+
+
+void
 BluetoothController::_PostState()
 {
 	BMessage state(kMsgBluetoothStateChanged);
 	if (fState.Archive(state) != B_OK)
 		return;
+
+	// My devices, from the last BT_MSG_R5_GET_PAIRED answer
+	const void* data;
+	ssize_t dataSize;
+	for (int32 i = 0; fPaired->FindData("bdaddr", B_ANY_TYPE, i, &data,
+			&dataSize) == B_OK; i++) {
+		if (dataSize != (ssize_t)sizeof(bdaddr_t))
+			continue;
+		state.AddData("paired:address", B_RAW_TYPE, data, dataSize);
+		state.AddString("paired:name", fPaired->GetString("name", i, ""));
+		state.AddUInt32("paired:class", fPaired->GetUInt32("class", i, 0));
+		state.AddBool("paired:le", fPaired->GetBool("le", i, false));
+		state.AddBool("paired:hid", fPaired->GetBool("hid", i, false));
+		state.AddBool("paired:connected",
+			fPaired->GetBool("connected", i, false));
+	}
 
 	ssize_t size = state.FlattenedSize();
 	std::vector<char> flat(size > 0 ? size : 0);

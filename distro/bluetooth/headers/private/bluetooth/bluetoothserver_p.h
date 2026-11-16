@@ -57,6 +57,38 @@
 #define BT_MSG_R5_GET_RADIO             'r5rG'
 // bool "enabled". Reply: int32 "status".
 #define BT_MSG_R5_SET_RADIO             'r5rS'
+// The end of a pairing started with Create Connection, sent to the
+// sender of that request: data "bdaddr", bool "paired", string "name".
+#define BT_MSG_R5_PAIR_RESULT           'r5pR'
+// Forget a paired device (its Classic link key or LE keys), and end its
+// link: data "bdaddr"; the reply has bool "forgotten".
+#define BT_MSG_R5_FORGET                'r5fG'
+// The paired devices of every radio, for My devices on the Bluetooth
+// page. Reply, once per device: data "bdaddr", string "name", uint32
+// "class" (the class of device; 0 for LE), bool "le", bool "hid" (LE
+// HID over GATT) and bool "connected". No keys.
+#define BT_MSG_R5_GET_PAIRED            'r5pG'
+// End the link to a device, and keep its keys: data "bdaddr". A paired
+// device that connects again (a mouse that is moved) comes back. Reply:
+// bool "disconnected".
+#define BT_MSG_R5_DISCONNECT            'r5dC'
+// SPDX-SnippetEnd
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// bluetooth_audio (docs/BLUETOOTH.md, step 5). Only from uid 0, the
+// media_addon_server. bool "streaming": while true, and while the sending
+// team lives, the server refuses Inquiry and Periodic Inquiry, so a scan
+// does not take radio time from the audio. Reply: int32 "status".
+#define BT_MSG_R5_AUDIO_STREAMING       'r5aS'
+// data "bdaddr" (bdaddr_t). Reply: bool "paired" (a link key is stored),
+// bool "connected" and bool "encrypted" (the link is up and encrypted).
+#define BT_MSG_R5_AUDIO_PAIRED          'r5aP'
+// data "bdaddr": bring up the link to a paired headset (Create Connection,
+// no pairing; the stored key authenticates it, encryption follows). Reply:
+// int32 "status", B_NOT_ALLOWED for a device that is not paired.
+#define BT_MSG_R5_AUDIO_CONNECT         'r5aC'
 // SPDX-SnippetEnd
 
 

@@ -42,9 +42,22 @@ static bool radio_sender_allowed(BMessage* message);
 #include <bluetooth/HCI/btHCI_command.h>
 #include <bluetooth/L2CAP/btL2CAP.h>
 #include <bluetooth/bluetooth.h>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <bluetooth/LinkKeyUtils.h>
+// SPDX-SnippetEnd
 
 #include "BluetoothServer.h"
 #include "Debug.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include "LEManager.h"
+#include "PasskeyWindow.h"
+
+#include <MessageRunner.h>
+// SPDX-SnippetEnd
 #include "DeskbarReplicant.h"
 #include "LocalDeviceImpl.h"
 #include "SDPServer.h"
@@ -98,7 +111,8 @@ BluetoothServer::BluetoothServer()
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
-	fRadioEnabled(true)
+	fRadioEnabled(true),
+	fAudioTeam(-1)
 	// SPDX-SnippetEnd
 {
 	// SPDX-SnippetBegin
@@ -119,6 +133,7 @@ BluetoothServer::BluetoothServer()
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
 	fHIDHost = new HIDHost();
+	fLEPulse = NULL;
 	// SPDX-SnippetEnd
 }
 
@@ -148,6 +163,9 @@ bool BluetoothServer::QuitRequested(void)
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
+	delete fLEPulse;
+	fLEPulse = NULL;
+	LEManager::StopChannels();
 	fHIDHost->Stop();
 	delete fHIDHost;
 	fHIDHost = NULL;
@@ -201,6 +219,13 @@ void BluetoothServer::ReadyToRun(void)
 	// Classic HID: listens on PSM 0x11 and 0x13 (logs when the driver is
 	// missing; Bluetooth works without it).
 	fHIDHost->Start();
+	// BLE: the ATT and SMP sockets, and LE keyboard lights (step 6).
+	fHIDHost->SetLEOutputHook(LEManager::HIDOutput, NULL);
+	LEManager::StartChannels();
+	// The SMP and ATT timeouts are checked every 5 s.
+	BMessage pulse(kMsgR5LEPulse);
+	fLEPulse = new(std::nothrow) BMessageRunner(be_app_messenger, &pulse,
+		5000000);
 	// SPDX-SnippetEnd
 
 	// SPDX-SnippetBegin
@@ -274,8 +299,10 @@ void BluetoothServer::MessageReceived(BMessage* message)
 			// SPDX-SnippetBegin
 			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 			// SPDX-License-Identifier: MIT
-			// Simple Pairing Mode and the Event Mask (step 4).
-			lDeviceImpl->SetupController();
+			// Simple Pairing Mode and the Event Mask (step 4), after an HCI
+			// Reset: a radio that comes from a warm boot (Windows, or the
+			// last R5 boot) keeps its settings and links otherwise.
+			lDeviceImpl->ResetController();
 			// SPDX-SnippetEnd
 
 			// SPDX-SnippetBegin
@@ -532,6 +559,22 @@ void BluetoothServer::MessageReceived(BMessage* message)
 		// SPDX-SnippetBegin
 		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 		// SPDX-License-Identifier: MIT
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// LE pairing windows answer here; only from this process
+		// (PasskeyWindow), never from another team.
+		case kMsgLEUserAnswer:
+			if (!message->IsSourceRemote())
+				LEManager::UserAnswer(message);
+			break;
+
+		case kMsgR5LEPulse:
+			if (!message->IsSourceRemote())
+				LEManager::Pulse();
+			break;
+		// SPDX-SnippetEnd
+
 		case BT_MSG_R5_GET_RADIO:
 			status = reply.AddBool("enabled", fRadioEnabled);
 			// The radios by hci_id, so a client acquires exactly the ones it
@@ -543,6 +586,60 @@ void BluetoothServer::MessageReceived(BMessage* message)
 					fLocalDevicesList.ItemAt(i)->GetID());
 			}
 			break;
+
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// Forget a paired device: like Pair, for every signed-in person.
+		case BT_MSG_R5_FORGET:
+		{
+			const void* data;
+			ssize_t size;
+			if (message->FindData("bdaddr", B_ANY_TYPE, &data, &size) != B_OK
+				|| size != (ssize_t)sizeof(bdaddr_t)) {
+				status = B_BAD_VALUE;
+				break;
+			}
+			bool forgotten = false;
+			for (int32 i = 0; i < fLocalDevicesList.CountItems(); i++) {
+				if (fLocalDevicesList.ItemAt(i)->R5Forget(
+						*(const bdaddr_t*)data))
+					forgotten = true;
+			}
+			reply.AddBool("forgotten", forgotten);
+			status = B_OK;
+			break;
+		}
+
+		// My devices on the Bluetooth page: names and states, no keys.
+		case BT_MSG_R5_GET_PAIRED:
+		{
+			for (int32 i = 0; i < fLocalDevicesList.CountItems(); i++)
+				fLocalDevicesList.ItemAt(i)->R5AddPaired(reply);
+			status = B_OK;
+			break;
+		}
+
+		case BT_MSG_R5_DISCONNECT:
+		{
+			const void* data;
+			ssize_t size;
+			if (message->FindData("bdaddr", B_ANY_TYPE, &data, &size) != B_OK
+				|| size != (ssize_t)sizeof(bdaddr_t)) {
+				status = B_BAD_VALUE;
+				break;
+			}
+			bool disconnected = false;
+			for (int32 i = 0; i < fLocalDevicesList.CountItems(); i++) {
+				if (fLocalDevicesList.ItemAt(i)->R5Disconnect(
+						*(const bdaddr_t*)data))
+					disconnected = true;
+			}
+			reply.AddBool("disconnected", disconnected);
+			status = B_OK;
+			break;
+		}
+		// SPDX-SnippetEnd
 
 		case BT_MSG_R5_SET_RADIO:
 		{
@@ -561,6 +658,85 @@ void BluetoothServer::MessageReceived(BMessage* message)
 			}
 			status = _SetRadioEnabled(enabled);
 			reply.AddBool("enabled", fRadioEnabled);
+			break;
+		}
+
+		case BT_MSG_R5_AUDIO_STREAMING:
+		case BT_MSG_R5_AUDIO_PAIRED:
+		case BT_MSG_R5_AUDIO_CONNECT:
+		{
+			// From bluetooth_audio in media_addon_server, a system service.
+			team_info info;
+			team_id team = message->ReturnAddress().Team();
+			if (team < 0 || get_team_info(team, &info) != B_OK
+				|| info.uid != 0) {
+				status = B_NOT_ALLOWED;
+				break;
+			}
+			if (message->what == BT_MSG_R5_AUDIO_STREAMING) {
+				bool streaming;
+				if (message->FindBool("streaming", &streaming) != B_OK) {
+					status = B_BAD_VALUE;
+					break;
+				}
+				fAudioTeam = streaming ? team : -1;
+				// An LE scan takes the shared radio's time as an inquiry
+				// does: it pauses too and comes back after the stream.
+				for (int32 i = 0; i < fLocalDevicesList.CountItems(); i++) {
+					LEManager* le = fLocalDevicesList.ItemAt(i)->LE();
+					if (le != NULL)
+						le->AudioChanged(streaming);
+				}
+				status = B_OK;
+				break;
+			}
+
+			const bdaddr_t* address;
+			if (!_FindAddress(message, &address)) {
+				status = B_BAD_VALUE;
+				break;
+			}
+			bool paired = false;
+			bool connected = false;
+			bool encrypted = false;
+			LocalDeviceImpl* radio = NULL;
+			for (int32 i = 0; !paired
+					&& i < fLocalDevicesList.CountItems(); i++) {
+				ServerRemoteDevice* rd
+					= fLocalDevicesList.ItemAt(i)->RemoteDeviceByAddr(
+						*address);
+				linkkey_t nullKey = LinkKeyUtils::NullKey();
+				paired = rd != NULL
+					&& !LinkKeyUtils::Compare(&rd->link_key, &nullKey);
+				if (paired) {
+					radio = fLocalDevicesList.ItemAt(i);
+					connected = rd->conn_state == RemoteDevice::CONNECTED;
+					encrypted = connected && rd->encryption_enabled != 0;
+				}
+			}
+
+			if (message->what == BT_MSG_R5_AUDIO_CONNECT) {
+				// Only a paired headset, and no pairing: the stored link
+				// key authenticates it, and the server turns encryption on
+				// as for every connection.
+				if (!paired || radio == NULL) {
+					status = B_NOT_ALLOWED;
+					break;
+				}
+				if (!connected && fRadioEnabled) {
+					BMessage request(BT_REQ_CREATE_CONN);
+					request.AddData("bdaddr", B_ANY_TYPE, address,
+						sizeof(bdaddr_t));
+					request.AddBool("r5:reconnect", true);
+					radio->CreateConnection(&request);
+				}
+				status = fRadioEnabled ? B_OK : B_NOT_ALLOWED;
+				break;
+			}
+
+			reply.AddBool("connected", connected);
+			reply.AddBool("encrypted", encrypted);
+			status = reply.AddBool("paired", paired);
 			break;
 		}
 
@@ -632,6 +808,30 @@ BluetoothServer::_FindAddress(BMessage* message, const bdaddr_t** _address)
 bool
 BluetoothServer::_RadioRequestAllowed(BMessage* message) const
 {
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// While bluetooth_audio streams, an inquiry would take the radio's time
+	// slots from the audio link and make it stutter: scans wait for the end
+	// of the stream (docs/BLUETOOTH.md, step 5).
+	if (fRadioEnabled && AudioStreaming()) {
+		const void* raw;
+		ssize_t rawSize;
+		if (message->FindData("raw command", B_ANY_TYPE, &raw, &rawSize)
+				== B_OK && raw != NULL
+			&& rawSize >= (ssize_t)sizeof(struct hci_command_header)) {
+			uint16 opcode = B_LENDIAN_TO_HOST_INT16(
+				((const struct hci_command_header*)raw)->opcode);
+			if (opcode == PACK_OPCODE(OGF_LINK_CONTROL, OCF_INQUIRY)
+				|| opcode == PACK_OPCODE(OGF_LINK_CONTROL, 0x0003)) {
+				syslog(LOG_INFO, "bluetooth_server: scan paused while audio "
+					"streams");
+				return false;
+			}
+		}
+	}
+	// SPDX-SnippetEnd
+
 	if (fRadioEnabled)
 		return true;
 
@@ -660,6 +860,20 @@ BluetoothServer::_RadioRequestAllowed(BMessage* message) const
 
 	return true;
 }
+
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// Whether bluetooth_audio streams: it said so, and its team still lives (a
+// media_addon_server that crashed never says it stopped).
+bool
+BluetoothServer::AudioStreaming() const
+{
+	team_info info;
+	return fAudioTeam >= 0 && get_team_info(fAudioTeam, &info) == B_OK;
+}
+// SPDX-SnippetEnd
 
 
 // Whether the sender of a radio switch request may change a machine
@@ -803,8 +1017,12 @@ BluetoothServer::_SetRadioEnabled(bool enabled)
 
 	// Off: nothing can find or page the radio. On: paired devices can page
 	// it again (0x02), it is still not visible to a scan (step 4).
-	for (int32 i = 0; i < fLocalDevicesList.CountItems(); i++)
+	for (int32 i = 0; i < fLocalDevicesList.CountItems(); i++) {
 		fLocalDevicesList.ItemAt(i)->WriteScanEnable(enabled ? 0x02 : 0x00);
+		// LE: off stops the scan and the links, on connects paired devices.
+		if (fLocalDevicesList.ItemAt(i)->LE() != NULL)
+			fLocalDevicesList.ItemAt(i)->LE()->RadioChanged(enabled);
+	}
 
 	syslog(LOG_INFO, "bluetooth_server: radio switch %s",
 		enabled ? "on" : "off");

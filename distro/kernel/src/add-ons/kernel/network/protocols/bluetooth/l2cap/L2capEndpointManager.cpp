@@ -7,6 +7,7 @@
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 #include "l2cap_parse.h"
+#include <R5BluetoothLE.h>
 #include <stdlib.h>
 // SPDX-SnippetEnd
 
@@ -20,6 +21,14 @@ L2capEndpointManager gL2capEndpointManager;
 L2capEndpointManager::L2capEndpointManager()
 	:
 	fNextChannelID(L2CAP_FIRST_CID)
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	,
+	fFixedATT(NULL),
+	fFixedSMP(NULL),
+	fNextLEChannelID(R5_L2CAP_LE_FIRST_CID)
+	// SPDX-SnippetEnd
 {
 	rw_lock_init(&fBoundEndpointsLock, "l2cap bound endpoints");
 	rw_lock_init(&fChannelEndpointsLock, "l2cap channel endpoints");
@@ -68,6 +77,20 @@ L2capEndpointManager::Unbind(L2capEndpoint* endpoint)
 {
 	WriteLocker _(fBoundEndpointsLock);
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	if (endpoint->fFixedChannel != 0) {
+		if (fFixedATT == endpoint)
+			fFixedATT = NULL;
+		if (fFixedSMP == endpoint)
+			fFixedSMP = NULL;
+		endpoint->fFixedChannel = 0;
+	} else if (endpoint->fLEBound) {
+		fLEBoundEndpoints.Remove(endpoint);
+		endpoint->fLEBound = false;
+	} else
+	// SPDX-SnippetEnd
 	fBoundEndpoints.Remove(endpoint);
 	(*endpoint->LocalAddress())->sa_len = 0;
 	gSocketModule->release_socket(endpoint->socket);

@@ -66,6 +66,17 @@ end)
 	# The same worktree may skip a file that is already equal, so keep the
 	# paths of its earlier applies that are still changed.
 	prev="$(cat "$STATE/owner" 2>/dev/null || true)"
+	# 16 Nov 2026: the applies copy with shutil.copy2, which keeps the
+	# source's modification time. When another worktree built here in
+	# between, its objects are newer than this worktree's older files, and
+	# jam kept them (libr5icons.so without r5_level_glyph_draw, so libr5wifi
+	# and libr5bt failed to link). After a change of owner every path this
+	# apply wrote gets the time of now, so jam builds it again. With the
+	# same owner nothing changes, so a build stays incremental.
+	if [ "$prev" != "$OWNER" ] && [ -s "$STATE/new" ]; then
+		tr '\n' '\0' < "$STATE/new" | xargs -0 -r touch -m -c --
+		echo "tree-owner: $(wc -l < "$STATE/new") paths touched after a change of owner" >&2
+	fi
 	if [ "$prev" = "$OWNER" ] && [ -f "$STATE/files" ]; then
 		cat "$STATE/files" >> "$STATE/new"
 	fi

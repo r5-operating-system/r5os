@@ -19,6 +19,7 @@
 // SPDX-License-Identifier: MIT
 #include <Messenger.h>
 #include "R5Pairing.h"
+#include <vector>
 // SPDX-SnippetEnd
 
 #include "HCIDelegate.h"
@@ -47,12 +48,20 @@ struct ServerRemoteDevice
 	// Pairing was asked for here (Create Connection from the Bluetooth
 	// page): only then is a Numeric Comparison or Just Works accepted.
 	bool				user_pairing = false;
+	// The page that asked for that pairing: it gets the result.
+	BMessenger			pair_reply;
 	// SPDX-SnippetEnd
 	BMessage			services;
 };
 
 typedef BObjectList<ServerRemoteDevice> RemoteDevicesList;
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+class LEManager;
+
+// SPDX-SnippetEnd
 class LocalDeviceImpl : public LocalDeviceHandler {
 
 private:
@@ -107,6 +116,10 @@ public:
 	// SPDX-License-Identifier: MIT
 	// The /dev/bluetooth path this radio was opened from.
 	const BString&		Path() const { return fPath; }
+	// Bluetooth Low Energy of this radio (LEManager, step 6), and the
+	// command path it uses.
+	LEManager*			LE() const { return fLE; }
+	status_t			R5IssueCommand(const void* command, size_t size);
 	// SPDX-SnippetEnd
 
 private:
@@ -116,6 +129,24 @@ private:
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
 	BString				fPath;
+	LEManager*			fLE;
+	uint64				_EventMask() const;
+public:
+	// HCI Reset, then SetupController() from its Command Complete.
+	void				ResetController();
+	// Forget a paired device (Classic and LE) and end its link.
+	bool				R5Forget(const bdaddr_t& address);
+	// BT_MSG_R5_GET_PAIRED and BT_MSG_R5_DISCONNECT (Classic and LE).
+	void				R5AddPaired(BMessage& reply);
+	bool				R5Disconnect(const bdaddr_t& address);
+private:
+	// Remote host features before Authentication Requested.
+	std::vector<uint16> fFeatureHandles;
+	// The last IO Capability Response (Numeric Comparison or not).
+	bdaddr_t			fRemoteIOAddress;
+	uint8				fRemoteIOCapability;
+	void				_ReadRemoteHostFeatures(uint16 handle);
+	bool				_TakeFeatureHandle(uint16 handle);
 
 	// Controller setup after a reset (SetupController()).
 	uint8				fFeatures[8];

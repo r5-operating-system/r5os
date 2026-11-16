@@ -296,6 +296,21 @@ def next_boot_dir():
                 tail = child.name[len("boot-5625u-"):]
                 if tail.isdigit():
                     highest = max(highest, int(tail))
+    # A sparse checkout leaves the archived boot folders that git tracks off
+    # the disk; a new boot must not land in one of them (16 Nov 2026: three
+    # Bluetooth boots overwrote archived M4 logs in boot-5625u-2 and -3).
+    try:
+        import subprocess
+        tracked = subprocess.run(["git", "-C", str(ROOT), "ls-files",
+            "generated"], capture_output=True, text=True, timeout=30).stdout
+    except (OSError, subprocess.SubprocessError):
+        tracked = ""
+    for line in tracked.splitlines():
+        parts = line.split("/")
+        if len(parts) > 1 and parts[1].startswith("boot-5625u-"):
+            tail = parts[1][len("boot-5625u-"):]
+            if tail.isdigit():
+                highest = max(highest, int(tail))
     return folder / ("boot-5625u-%u" % (highest + 1))
 
 

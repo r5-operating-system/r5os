@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: MIT
+# Copyright 2026 R5OS Contributors
+SubDir HAIKU_TOP src bin bt_audio_smoke_test ;
+
+UsePrivateHeaders bluetooth ;
+
+Application bt_audio_smoke_test :
+	bt_audio_smoke_test.cpp
+	: be media network [ TargetLibsupc++ ]
+	;

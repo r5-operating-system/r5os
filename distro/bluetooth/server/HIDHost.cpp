@@ -92,7 +92,9 @@ HIDHost::HIDHost()
 	fLock("bluetooth hid host"),
 	fControlNode(-1),
 	fOutputThread(-1),
-	fQuitting(false)
+	fQuitting(false),
+	fLEOutputHook(NULL),
+	fLEOutputCookie(NULL)
 {
 	for (int i = 0; i < 2; i++) {
 		fListenSockets[i] = -1;
@@ -524,7 +526,16 @@ HIDHost::_Output()
 
 		BAutolock locker(fLock);
 		Session* session = _FindByKernelIDLocked(output.id);
-		if (session == NULL || session->channel[1] < 0)
+		if (session == NULL) {
+			// Not a Classic device: an LE one (step 6), outside the lock.
+			LEOutputHook hook = fLEOutputHook;
+			void* cookie = fLEOutputCookie;
+			locker.Unlock();
+			if (hook != NULL)
+				hook(output.id, buffer + 1, output.length, cookie);
+			continue;
+		}
+		if (session->channel[1] < 0)
 			continue;
 		buffer[0] = kDataOutput;
 		send(session->channel[1], buffer, output.length + 1, 0);
@@ -648,4 +659,60 @@ HIDHost::_CloseLocked(Session* session)
 			session->channel[i] = -1;
 		}
 	}
+}
+
+
+// #pragma mark - BLE HID over GATT (step 6)
+
+
+int32
+HIDHost::CreateLEDevice(const uint8* descriptor, size_t length,
+	uint32* _handlers)
+{
+	if (fControlNode < 0 || descriptor == NULL || length == 0
+		|| length > R5_BTHID_MAX_DESCRIPTOR)
+		return -1;
+
+	r5_bthid_create create;
+	memset(&create, 0, sizeof(create));
+	create.descriptor = descriptor;
+	create.descriptor_length = length;
+	if (ioctl(fControlNode, R5_BTHID_CREATE, &create, sizeof(create)) != 0)
+		return -1;
+	if (_handlers != NULL)
+		*_handlers = create.handlers;
+	return create.id;
+}
+
+
+void
+HIDHost::LEInput(int32 id, const uint8* data, size_t length)
+{
+	if (fControlNode < 0 || id < 0 || length == 0
+		|| length > R5_BTHID_MAX_REPORT)
+		return;
+	r5_bthid_input input;
+	input.id = id;
+	input.length = length;
+	input.data = data;
+	ioctl(fControlNode, R5_BTHID_INPUT, &input, sizeof(input));
+}
+
+
+void
+HIDHost::DestroyLEDevice(int32 id)
+{
+	if (fControlNode < 0 || id < 0)
+		return;
+	ioctl(fControlNode, R5_BTHID_DESTROY, &id, sizeof(id));
+	syslog(LOG_INFO, "bluetooth_hid: ble device gone");
+}
+
+
+void
+HIDHost::SetLEOutputHook(LEOutputHook hook, void* cookie)
+{
+	BAutolock locker(fLock);
+	fLEOutputHook = hook;
+	fLEOutputCookie = cookie;
 }

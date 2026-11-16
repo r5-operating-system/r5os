@@ -19,6 +19,168 @@ Tested (QEMU, KVM, 12 cores, Lavapipe, `gpu_draw`, `gpu_debug`, `gpu_selftest`, 
 
 Not tested: RADV and the 5625U (no stick); whether RADV had the same input-attachment fault is not known. The new text colour in the scratch image is checked by the compare set only in the classic look; the new look was not looked at on a sheet. ARM64 and RISC-V 64 not built.
 
+## 2026-11-16 - Bluetooth: My devices with a device panel, the switch on the last line
+
+Problem: the Bluetooth page only showed what a scan found. A paired mouse or controller was not listed unless it was found again, there was no way to see whether it was connected, and Forget sat beside Pair in the scan list. The radio card and the switch box stood above the devices, though they are rarely used.
+
+What changed (owner's mockup, `generated/mockups/bluetooth-page.html`):
+- `bluetooth_server`: `BT_MSG_R5_GET_PAIRED` lists the paired devices of every radio (Classic with a link key, and LE bonds) with name, class, LE, HID and connected; no keys. `BT_MSG_R5_DISCONNECT` ends a link and keeps the keys.
+- libr5bt (additive): `BluetoothPairedDevice`, `BluetoothState::UnarchivePaired()`, `kMsgBluetoothDisconnect`. The controller reads the paired list on every 3-second update, and at once after Pair and Forget. `BluetoothState` keeps its size; the controller and view use reserved room.
+- The page: My devices (a list with Connected or Not connected, and a `BCard` panel with kind, status, Classic or Low Energy, address, Disconnect and Forget); Devices nearby without the paired devices, down to the last line; that line without a box: "Bluetooth on", the radio or a note. While Bluetooth is off both lists are faint. The summary card with the radio count is gone.
+
+Limits: no battery level (not read yet), no "Use for sound" or "Test buttons" in the panel yet. A disconnected LE mouse comes back when it is moved, by design (the accept list).
+
+Tested: built for x86_64; QEMU with SMAP, all Bluetooth tests ok, no panic; the page draws My devices, Devices nearby and the "Bluetooth on" line (no radio in QEMU, so the lists stay empty). Not on a stick.
+
+## 2026-11-16 - Bluetooth: Forget a paired device, see a controller's buttons, Pair on a paired device ends well
+
+Problem: stick 5 on the 5625U: the 8BitDo M30 and the Designer Mouse paired and published their devices (`joystick/bluetooth/0`, `input/mouse/bluetooth/0`), and no panic came. Three things were left. Haiku's Joysticks preferences said "The file '0' used by 'bluetooth/0' cannot be found" and Probe found nothing: they look for a gameport description file and never show a HID controller (USB or Bluetooth), so they cannot tell whether the M30 works. Pair on a device that already had a key said "did not work", because only Simple Pairing Complete ended a pairing well and a stored key does not send one. And there was no way to unpair.
+
+What changed:
+- `gamepad` (in `/bin`, regular image): a monitor like a MIDI monitor. It lists the controllers, opens the first through `BJoystick` as a game does, and prints each button and axis change until Ctrl+C (or for the seconds given).
+- `bluetooth_server`: Authentication Complete with a stored key ends a pairing started on the page as "Paired with …".
+- Forget, beside Pair on the Bluetooth page: `kMsgBluetoothForget` (libr5bt, additive) and `BT_MSG_R5_FORGET` in `bluetooth_server` remove the device's Classic link key or LE keys (le_paired_devices, accept list) and end its link; the status line says "… is forgotten. Pair it again to use it." or "… was not paired.". Like Pair, it needs no administrator lock. It works on a device in the scan list; a list of paired devices is not on the page yet.
+
+Tested: built for x86_64; QEMU with SMAP, all Bluetooth tests ok, no panic. Not on a stick (owner: no sticks for now). Open: the Sony headset paired on stick 5 but gave no audio, to be looked at separately.
+
+## 2026-11-16 - Bluetooth: no kernel panic when a BLE mouse is used after pairing
+
+Problem: stick 4 on the 5625U: the 8BitDo M30 and the Designer Mouse paired ("Paired with Designer Mouse" on the page), the mouse moved, and a few seconds later the kernel panicked: `PANIC: expected to be contiguous` in h2generic `nb_get_whole_buffer()` from `submit_tx_acl()`, `PostACL()` and the L2CAP send thread. The small LE signalling answers (here the Connection Parameter Update Response a mouse asks for after it connected) were built with 2 to 10 bytes of header room, so the L2CAP and ACL headers went into separate pieces, and the USB transport panics on a buffer in pieces. The syslog of that boot was lost with the panic; the backtrace came from a photo of the debugger.
+
+What changed: the LE signalling answers get 128 bytes of header room, as the Classic commands; `PostACL()` copies any frame in pieces into one buffer before it goes to the transport, so no path can panic there again.
+
+Tested: built for x86_64; QEMU with SMAP, all Bluetooth tests ok (also `bt_audio_smoke_test`), no panic. Not on a stick yet. Open from the same boot: the M30 paired but gave no input in Joysticks; its log was lost with the panic.
+
+## 2026-11-16 - Bluetooth audio: review of #4317 (reconnect, SDP, encrypted links, SBC endpoint, 44.1 kHz only)
+
+Problem: an outside read-only review of #4317 found these; each was checked against the code here first:
+- **Reconnect never worked.** The L2CAP socket only uses a link that is already up (`btCoreData` has no Create Connection), so reaching the chosen headset always failed with `ENETUNREACH`.
+- **SDP never answered.** `SDPServer` read requests and never replied, so a headset that looks first hung until its timeout.
+- **Address alone was trusted.** An incoming AVDTP channel was accepted on its address, without checking that the link was encrypted.
+- **AVRCP thread could hang.** It read without a timeout, and `shutdown()` does not wake an L2CAP `recv()`. `_EndSession()` also let go of its lock while the session still looked open.
+- **LE scans kept running** while audio streamed.
+- **Node values were not thread-safe**: volume and latency were written from A2DPSource's threads without atomics.
+- **`Start()` did not clean up** after a failure.
+- **Only the first sink endpoint was asked** for SBC. Headsets often list AAC, aptX or LDAC there.
+- **A smaller MTU ended the stream** (`EMSGSIZE`).
+- **AVRCP GetCapabilities with Events was refused.**
+- **A headset could choose 48 kHz**, because R5 offered every rate. The 44.1 kHz audio then played 9 % too fast, with gaps.
+- **Clock drift** made the ring jump ahead by up to 80 ms, which is audible.
+- **Control sends could block** the node's thread on a full AVCTP queue.
+
+What changed:
+- `bluetooth_server` (SPDX snippets):
+  - `BT_MSG_R5_AUDIO_CONNECT` (uid 0): Create Connection for a paired headset, Classic only, with no pairing window. The stored key authenticates it and encryption follows as for every link.
+  - `BT_MSG_R5_AUDIO_PAIRED` also answers connected and encrypted.
+  - `SDPRecords.h` (MIT, new): fixed records for A2DP Audio Source (AVDTP 1.3, PSM `0x19`), AVRCP Controller (category 2) and AVRCP Target. ServiceSearch, ServiceAttribute and ServiceSearchAttribute are answered, with continuation; anything else gets an empty list or an error. `SDPServer` answers every request.
+  - `LEManager::AudioChanged()` pauses and resumes the LE scan with the stream.
+- `bluetooth_audio`, all MIT:
+  - The link is brought up through the server and R5 waits up to 15 s for encryption.
+  - A connection is accepted only from a paired device on an encrypted link, waiting up to 5 s for encryption.
+  - Every free sink endpoint is asked in turn.
+  - Only 44.1 kHz is offered; a Set Configuration at another rate gets `0xC4`.
+  - The AVRCP thread reads with a 200 ms timeout and is joined by the thread that started it.
+  - `Start()` cleans up after a failure; without AVDTP it fails, without AVCTP it only logs.
+  - On `EMSGSIZE` the next packets carry fewer frames.
+  - Drift costs one sample per packet; a jump happens only after a stall over six times the target.
+  - AVRCP Events gets an empty list, and an unknown capability gets "invalid parameter".
+  - Control sends use `MSG_DONTWAIT`, and the node's volume and latency are atomic.
+- New fuzz target `sdp` in `scripts/fuzz-bt.sh`.
+
+Not changed: the encoder's speed (finding 3.2). It does about 2 million operations per second, less than 0.1 % of one core, so the checked encoder stays as it is.
+
+Limits: still no headset tried. The reconnect, the SDP records with a real headset, and encryption on the 5625U are not shown on hardware. Play and pause do not reach the playing program. A Classic inquiry that already runs when the stream starts is not stopped. ARM64 and RISC-V 64 were not built or tested.
+
+Tested: `scripts/build-locked.sh` jam_exit=0; `scripts/test-sbc.sh` ok; `fuzz-bt.sh sdp 10` (283 678 rounds) and `audio 10` 0 crashes, including the check that an SDP answer pieced together over its continuation states equals the answer in one piece and is well formed. Not run for this change: the QEMU smoke test (the owner tests it on the stick instead) and the 60 s fuzz runs.
+
+## 2026-11-16 - Bluetooth: LE packets with the right boundary flag, a reset at start, the link's features before pairing
+
+Problem: a third read-only review of the three stick boots on the 5625U (MT7922) found more below the pairing: every LE packet from the host started with Packet_Boundary 10, which is for BR/EDR only; the LE buffer length was never used (the radio id, 124, was taken as a table index of 8); R5 never sent HCI Reset, so a warm boot from Windows kept the radio's settings; SMP went out the moment an LE link came up, before the link layer's own feature exchange that BlueZ waits for; and two Classic ends (a refused Create Connection, a disconnection during pairing) still told nobody.
+
+What changed: PB 00 for LE starts in `PostACL()`; the LE buffer slot is the id minus `HCI_DEVICE_INDEX_OFFSET`; `bluetooth_server` resets a radio when it is added and then runs the setup; an LE link runs LE Read Remote Features first and pairs or encrypts when it completes (or is refused); the IO Capability Response is handled without a petition; the two Classic ends give the pairing result.
+
+Tested: built for x86_64; QEMU with SMAP, all Bluetooth tests ok, no panic. Not on a stick yet. ARM64 and RISC-V 64 not built or tested.
+## 2026-11-16 - Bluetooth: headphones and speakers (A2DP with R5's own SBC, AVRCP), step 5
+
+Problem: R5 had no Bluetooth audio. Step 5 of `docs/BLUETOOTH.md`: an A2DP source with a royalty-free SBC encoder written by R5 (no third-party codec, owner's choice), AVRCP play, pause and volume, an audio output choice per person, a real-time audio thread and no scans while it streams.
+
+What changed:
+- `distro/media/bluetooth_audio/` (MIT, new): `bluetooth_audio.media_addon` with one output, "Bluetooth audio" (buffer consumer, physical output, Volume parameter), float stereo at 44.1 kHz from the mixer. `sbc_encoder.cpp` from the A2DP 1.3.2 appendix B only, float analysis. `a2dp_proto.h`: AVDTP 1.3, the SBC element, the RTP media header, AVCTP and AVRCP, parse and build, plain C++ so the host fuzzer builds it. `A2DPSource.cpp`: signalling as initiator and acceptor on PSM `0x19`, media channel, AVRCP on `0x17`, the `B_REAL_TIME_PRIORITY` send thread. Choice of setting: joint stereo, 16 blocks, 8 subbands, Loudness, the highest bitpool the headset allows within A2DP's 512 kb/s and one 672-byte packet (86 if allowed, else the headset's maximum, usually 53); one retry at 53 if the headset refuses. Delay reporting goes into the node's latency (video sync). After 5 s of silence the stream is suspended.
+- Each person's headset in `~/config/settings/Media/bluetooth_audio`. The add-on (uid 0 in media_addon_server) reads the file of the account in `r5-desktop-session` and never writes it; the new command `bt_audio` writes it with `find_directory()`. With no choice, only a device bluetooth_server calls paired may connect.
+- `bluetooth_server` (SPDX snippets): `BT_MSG_R5_AUDIO_STREAMING` (Inquiry and Periodic Inquiry refused while the sending team lives) and `BT_MSG_R5_AUDIO_PAIRED`, both uid 0 only.
+- Mistake in the step brief, corrected: `bluetooth_server` did not listen on PSM `0x19`; the add-on listens itself, and `bt_l2cap_abi_test` accepts `0x19` held by bluetooth_audio.
+- Tests: `scripts/test-sbc.sh` (host, ASan and UBSan), fuzz target `audio` in `scripts/fuzz-bt.sh`, `bt_audio_smoke_test` in `run-qemu-smoke.sh`.
+
+Limits: no headset tried; Classic pairing on the 5625U (MT7922) was reworked in #4314 and is not yet confirmed with a headset, so the Sony WH-1000XM3 and XM4 lines of the pass rule stay open. No SDP record for A2DP Source or AVRCP (R5's `SDPServer` answers nothing yet), so absolute volume may not be offered by a headset that checks it. Play and pause on the headset start and suspend the stream; the playing program is not paused. No headset choice on the Bluetooth page yet (`bt_audio` only). The link's encryption is not checked before audio. Packets stay within the default L2CAP MTU of 672 bytes because the socket does not report the headset's. A scan already running when the stream starts is not stopped. ARM64 and RISC-V 64 were not built or tested.
+
+- `DefaultManager` (SPDX snippet): media_addon_server starts every physical output, so the Bluetooth node is live from boot; it is never taken as the default output only because it was found first, only when it was chosen in Media.
+
+Tested: `scripts/test-sbc.sh` passes. Table 4.7 lengths and bit rates, the header and CRC against a table CRC, a tone lands in its subband, and a decoder written from the same appendix reads every frame back: 59 dB SNR at bitpool 53 and 66 dB at bitpool 86, with the known SBC delay of 73 samples (8 subbands) and 37 (4 subbands). `scripts/fuzz-bt.sh audio 60`: 60 s, 12.5 million rounds, 0 crashes. `scripts/build-locked.sh`: jam_exit=0. QEMU with SMAP (`run-qemu-smoke.sh`, own copy, no radio): the add-on is listed as an audio output, `bt_l2cap_abi_test` sees PSM `0x19` held by bluetooth_audio, bluetooth_server answers both audio messages, and `bt_audio use`, show and `off` work; no SMAP or panic line. Mistake: `bt_audio_smoke_test` failed twice: it did not find the live node and could not start a second one. The node had not added `B_PHYSICAL_OUTPUT` to its own kinds, so the live node was not seen as an output (in Media either). After the fix the third run passed: media_addon_server runs one node, it listens on PSM `0x19` and `0x17`, and the Volume parameter reads back 42 %. The check "not the default output unless chosen" did not run: QEMU reported no audio output to compare with. No kernel code changed. After merging main (Low Energy, #4314): `build-locked.sh` jam_exit=0, the QEMU smoke run with SMAP passed every test (also `l2cap_coc_test` and `bt_smp_crypto_test`), `fuzz-bt.sh le 60` and `audio 60` 0 crashes.
+
+## 2026-11-16 - Bluetooth: the page says when pairing runs, works or fails; LE connects with the report's address type
+
+Problem: pressing Pair showed nothing: no progress, no result; an LE connect refused by the controller sent no notice either. A second read-only review of the three stick boots also found that the LE address type from the scan (0 to 3) was collapsed to public or random, and that the legacy fallback after extended commands is refused by specification (0x0C).
+
+What changed:
+- The Bluetooth page (`libr5bt.so`): after Pair the status line says "Pairing with …" and Pair is disabled; then "Paired with …" or "Pairing with … did not work." until the next scan. New notification for the target: `kMsgBluetoothPairResult` (additive; the view takes its two fields from its reserved room, so its size stays the same).
+- `bluetooth_server`: one result for every end of a pairing started on the page, Classic and LE (`BT_MSG_R5_PAIR_RESULT` to the page, plus the notification, with "notice sent/not sent" in the syslog), including a Classic connection that never came up and an LE connect the controller refused.
+- LE: Extended Create Connection gets the report's address type unchanged; one try, no legacy fallback; the pairing log line has the raw address type, the Flags AD and the primary PHY. Classic: the IO capability reply logs its three bytes.
+
+Tested: built for x86_64; QEMU with SMAP (Settings Bluetooth page open, all Bluetooth tests ok, no panic); `fuzz-bt.sh le`: 0 crashes. The status line, the results and the LE connect need the stick; not tested there.
+
+## 2026-11-16 - Bluetooth: Classic pairing answered with an IO capability BR/EDR has (third stick boot)
+
+Problem: on the third stick boot the radio refused our IO Capability Request Reply with 0x12 (Invalid HCI Command Parameters), and every Classic pairing ended in 0x37. We sent KeyboardDisplay (0x04), an LE-only value; BR/EDR takes 0x00 to 0x03 (Core 6.0, Vol 4, Part E, 7.1.29). This was in step 4 since it was written.
+
+What changed: `bluetooth_server` answers DisplayYesNo for BR/EDR, as BlueZ: a keyboard still gets Passkey Entry with the number shown here, a phone Numeric Comparison, a gamepad Just Works. The same boot: the outside diagnosis's changes (MediaTek low power setting, SSP and Secure Connections host bits) are in and logged clean; LE still ends in 0x3E (open, a second read-only review is asked); the legacy connect after extended commands is refused with 0x0C, as allowed.
+
+Tested: built for x86_64. Not on a stick yet.
+
+## 2026-11-16 - Bluetooth: first two stick boots of Low Energy, pairing windows and notifications
+
+Problem: the first two stick boots of PR #4314 on the 5625U (MT7922) showed the LE setup and scan working (`le event mask 0x1a5f`, extended scan; the Designer Mouse, the 8BitDo M30 and phones in the list), but no pairing: every LE link to the Designer Mouse dropped in the same second with `0x3E`, and the Classic M30 ended in `0x37` (Simple Pairing Not Supported by Host). Haiku's "Incoming Connection" window showed at every connection, also our own Pair, with a broken name.
+
+What changed:
+- Between boot 1 and 2: Classic reads Read Remote Extended Features page 1 before Authentication Requested (BlueZ's order); LE uses BlueZ's connection parameters (30 to 50 ms, 420 ms timeout, full scan window), no PHY preference, two retries after `0x3E`, Pair pressed again while one runs is ignored; more steps in the syslog. Boot 2: Classic now gets to the IO Capability Request and fails with `0x37` right after our reply; LE unchanged. The cause is being investigated in a separate read-only session (both failures open).
+- After boot 2: the "Incoming Connection" window is gone; the end of a pairing started here is a notification (`PairingNotice.cpp`, BNotification: "Paired with ..." or "Pairing with ... did not work"), Classic and LE. Numeric Comparison shows the six digits with Yes and No (Classic when the device has DisplayYesNo or KeyboardDisplay, LE Secure Connections); before, it was confirmed without showing them. LE Passkey Entry where the device shows the number has a window to type it (was refused). SMP and ATT procedures without an answer end after 30 s and close the link, checked every 5 s.
+
+Tested: built for x86_64 (`build-locked.sh`); QEMU smoke with SMAP (no radio). The windows, notifications and timeouts need a real device; not tested. ARM64 and RISC-V 64 not built or tested.
+
+## 2026-11-16 - Bluetooth steps 1c and 6: Low Energy links, LE Secure Connections pairing, BLE HID over GATT
+
+Problem: R5 had no Bluetooth Low Energy. The owner's Microsoft Modern mouse is BLE, so it could not be used; the owner chose BLE before audio (docs/BLUETOOTH.md, step 4, "Order after this step").
+
+What changed (on top of the step 4 fixes, PR #4311):
+- Kernel, step 1c: `btCoreData` (now in `distro/`) registers LE links from the LE Meta connection events and keeps the LE buffer length; `PostACL()` splits LE packets by it. `l2cap` serves the LE signalling channel (Connection Parameter Update, LE and enhanced credit-based connections, credits, reconfigure), fixed-channel sockets for ATT and SMP (uid 0, `<R5BluetoothLE.h>`), and credit-based channels with K-frame segmentation and reassembly (EATT's mode on PSM 0x27 included).
+- `bluetooth_server`, step 6 (`LEManager`): LE Meta in the Event Mask and the LE setup after every reset with only the supported bits; LE scan (extended or legacy) in the existing scan list; Pair makes an LE link and pairs over SMP (Secure Connections with ECDH P-256 through OpenSSL `libcrypto`, Just Works, Numeric Comparison, passkey shown here; legacy pairing for older devices); keys in `/boot/system/settings/bluetooth/le_paired_devices` (0600, never logged); paired devices come back through the controller's accept list; a GATT client finds the HID service and feeds the `bluetooth_hid` driver of step 4, so a BLE mouse or keyboard goes to input_server.
+- Fixed on the way, found in review (two passes: own and an independent one): a deadlock between the HCI receive thread (holds the device list lock while it delivers up) and any thread that sent while holding an L2CAP endpoint lock; this also hit Classic. L2CAP now sends through one send thread (`l2cap_tx.cpp`) that calls `PostACL()` without L2CAP locks. `AddConnection()` added a known connection to the list a second time; a packet was matched to the first link of its address instead of its own link, and a device on one link could close, reconfigure or feed a channel of another link (now refused); closing a socket bound but never used asked an identifier of a NULL connection; a full receive queue leaked a buffer; `_SendQueued()` wrote into a buffer `PostACL()` already owned; `htole32` was the 16-bit swap; a forged answer to a command we never send could take the identifier of a waiting connect(); SMP keys that arrive before the Encryption Change event were dropped; a dual-mode device found by the Classic inquiry now pairs Classic; the resolving list is written again after a new pairing; LE Command Complete answers that the kit also waits for (Read BD_ADDR) go to both.
+- Mistake during the work: the LE sockets were bound with a zero address, but Haiku's `BDADDR_ANY` is ff:ff:ff:ff:ff:ff, so the first QEMU run showed `le channels missing`; fixed.
+
+Limits: nothing ran with a real radio or LE device; the pass rule (`smp sc pairing ok`, a BLE mouse moving) is open. Numeric Comparison is confirmed without showing the number (as Classic, step 4), and the stored key does not record that; Passkey Entry where this computer must type the device's number is refused; no SMP timer (a stuck pairing may restart after 30 s); no ACL flow control by Number of Completed Packets (an existing gap, now more visible with credits); the HID report layout is read again on each connection; subrating not asked; bluetooth_server does not open EATT channels itself; the ISO endpoints of `h2generic` are not in this step; a device with both a BR/EDR and an LE link at once is sent to by address (`sendto`, `connect()`), which finds the first link.
+
+Tested: built for x86_64 with `scripts/build-locked.sh`; QEMU with SMAP (`run-qemu-smoke.sh`, own `BT_WORK`), no radio: `bt_smp_crypto_test: ok` (every SMP function against the sample data of Core 6.0, Vol 3, Part H, Appendix D; ECDH with the debug keys, a point off the curve refused), `l2cap_coc_test`, `bt_server_smoke_test`, `bt_l2cap_abi_test`, `bt_hid_driver_test`; `scripts/fuzz-bt.sh l2cap 60`, `le 60` and `hci 60`: 0 crashes. Manual SMAP review: no new user pointer in the kernel. ARM64 and RISC-V 64 not built or tested.
+## 2026-11-16 - Documentation: R5Book on disk, linked from the welcome page
+
+Problem: the R5Book (developer guide, `docs/r5book`) was only in the repository. The welcome page in WebPositive linked the Be Book and the Haiku Book, not the R5Book.
+
+What changed:
+- `scripts/apply-welcome.py` (called by `apply-overlay.sh`) copies `docs/r5book` to `data/r5/r5book` in the Haiku tree on every apply; the haiku package installs it in `/boot/system/documentation/r5book/`. So an R5Book change is in the next build without a second copy. The image copy has no Google Fonts link (the CSS falls back to the system font offline), the `LIBR5.md` and `ICONS.md` links go to GitHub, and the two pictures from outside `docs/r5book` (`r5-symbol.svg`, `people.svg`) are copied into its `img/`.
+- `distro/welcome/welcome_en.html` is Haiku's page from `haiku_welcome-2026_08_11-1`, unchanged except one list item "The R5Book" under "Getting to know the API" (SPDX snippet) and a note in the header. It is in the haiku package, a system package, so packagefs gives it precedence over the same file in `haiku_welcome` (`PackageNode::HasPrecedenceOver`). The rest of Haiku's welcome guide, its style, the other languages, the Quick Tour and the bug-report page stay as Haiku ships them.
+
+Limits: only the English page links the R5Book; the other languages are Haiku's. The page still names Haiku as the product and sends bug reports to Haiku's tracker: an R5 welcome guide was tried on `claude/r5-welcome` (not merged) and set aside to be done separately. The minimum image gets the R5Book too (same haiku package, about 0.5 MB). Not checked in WebPositive yet whether the R5Book's CSS (variables, grid) shows well.
+
+Tested: `scripts/build-locked.sh` (exit 0). `package list` of the built `haiku.hpkg` shows `documentation/r5book/` (the pages, `r5book.css`, `r5book.js`, `img/` with `r5-symbol.svg` and `people.svg`) and `documentation/welcome/welcome_en.html` with the R5Book link; no Google Fonts link is left in the extracted pages. Not booted: no QEMU or hardware test, so WebPositive showing the link and the R5Book is not proven.
+
+## 2026-11-16 - Build: after another worktree built in the shared tree, the next one's files are built again
+
+Problem: a build of `claude/vram-fallback` failed to link `libr5wifi.so`, `libr5bt.so` and `r5_level_glyph_test` (`undefined reference to r5_level_glyph_draw`), although the source in the tree had that function. The applies copy with `shutil.copy2`, which keeps the source file's modification time. A bluetooth worktree had built `R5Icons.o` in the shared tree at 10:53; the next apply put back the other worktree's `R5Icons.cpp` with its checkout time of 10:40. The object looked newer than the source, so jam kept it, and `libr5icons.so` came out without the function. Any file can be hit this way, also without a link error (an old object that still links).
+
+What changed: `scripts/tree-owner.sh end` gives every path this apply wrote the time of now when the previous apply came from another worktree. With the same owner nothing is touched, so a build stays incremental. New host test `scripts/test-tree-owner.sh`: two worktrees in a small git tree, the second one "builds" in between, then the first applies its older file again.
+
+Limits: after a change of owner every file of that worktree's apply is compiled again once (the price of not keeping an object of other sources). An object built before this change can still be stale in the tree until its worktree applies again after another owner; a clean rebuild of a target removes it.
+
+Tested: `scripts/test-tree-owner.sh` prints `ok tree owner` with the new script and fails with the old one (`B's object is newer than A's source`). The case that led to it: after `touch` of `distro/icons` the same build linked (`jam_exit=0`, comment on #4307). Not tested: a full build through `apply-overlay.sh` with this script.
+
 ## 2026-11-16 - Graphics: second review of the VRAM fallback (system-wide GTT limit, exports counted, span take, atomic log bits)
 
 Problem: two outside read-only reviews of #4307 (round 2 of the VRAM fallback) found these, each checked against the code here:

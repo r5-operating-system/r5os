@@ -24,6 +24,11 @@
 
 #include <btDebug.h>
 #include <btCoreData.h>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <R5BluetoothLE.h>
+// SPDX-SnippetEnd
 #include <btModules.h>
 #include <CodeHandler.h>
 #define KERNEL_LAND
@@ -340,6 +345,39 @@ PostCommand(hci_id hciId, net_buffer* buffer)
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// The frame itself when its bytes are one block, else a copy that is (the
+// frame is then freed). NULL when there is no memory; the frame is freed.
+static net_buffer*
+r5_contiguous_frame(net_buffer* frame)
+{
+	void* data;
+	if (gBufferModule->direct_access(frame, 0, frame->size, &data) == B_OK)
+		return frame;
+
+	const size_t size = frame->size;
+	net_buffer* copy = gBufferModule->create(0);
+	void* bytes = malloc(size);
+	if (copy == NULL || bytes == NULL
+		|| gBufferModule->read(frame, 0, bytes, size) != B_OK
+		|| gBufferModule->append(copy, bytes, size) != B_OK
+		|| gBufferModule->direct_access(copy, 0, size, &data) != B_OK) {
+		free(bytes);
+		if (copy != NULL)
+			gBufferModule->free(copy);
+		gBufferModule->free(frame);
+		return NULL;
+	}
+	free(bytes);
+	copy->type = frame->type;
+	gBufferModule->free(frame);
+	return copy;
+}
+// SPDX-SnippetEnd
+
+
 // PostACL
 status_t
 PostACL(hci_id hciId, net_buffer* buffer)
@@ -378,14 +416,36 @@ PostACL(hci_id hciId, net_buffer* buffer)
 		" bytes (flags 0x%" B_PRIx32 "):\n", __func__, device->index,
 		buffer->size, buffer->flags);
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// An LE link may have smaller buffers of its own (LE Read Buffer Size,
+	// read by bluetooth_server; btCoreData keeps it in the connection).
+	uint32 fragment = device->mtu;
+	HciConnection* connection = btCoreData != NULL
+		? btCoreData->ConnectionByHandle(handle, hciId) : NULL;
+	if (connection != NULL && connection->type == R5_HCI_LINK_LE
+		&& connection->mtu != 0 && connection->mtu < fragment)
+		fragment = connection->mtu;
+	// From host to controller an LE packet starts with Packet_Boundary
+	// 00 (first, not automatically flushable); 10 is BR/EDR only (Core 6.0,
+	// Vol 4, Part E, 5.4.2). Every LE start went out as 10.
+	if (connection != NULL && connection->type == R5_HCI_LINK_LE)
+		flag = 0x00;
+	// SPDX-SnippetEnd
+
 	// TODO: ATOMIC! any other thread should stop here
 	do {
 		// Divide packet if big enough
 		curr_frame = next_frame;
 
-		if (curr_frame->size > device->mtu) {
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		if (curr_frame->size > fragment) {
 			next_frame = curr_frame;
-			curr_frame = gBufferModule->split(next_frame, device->mtu);
+			curr_frame = gBufferModule->split(next_frame, fragment);
+		// SPDX-SnippetEnd
 			// SPDX-SnippetBegin
 			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 			// SPDX-License-Identifier: MIT
@@ -421,6 +481,20 @@ PostACL(hci_id hciId, net_buffer* buffer)
 				curr_frame->size - sizeof(struct hci_acl_header));
 			// SPDX-SnippetEnd
 		}
+
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// The USB transport sends a frame as one block and panics on one
+		// in pieces (h2generic, nb_get_whole_buffer()). A frame in pieces
+		// is copied into one buffer first, whoever built it.
+		curr_frame = r5_contiguous_frame(curr_frame);
+		if (curr_frame == NULL) {
+			if (next_frame != NULL)
+				gBufferModule->free(next_frame);
+			return B_NO_MEMORY;
+		}
+		// SPDX-SnippetEnd
 
 		// Send to driver
 		curr_frame->protocol = BT_ACL;

@@ -25,7 +25,12 @@
 #define R5_HCI_EVENT_USER_PASSKEY_NOTIFICATION	0x3B	// 7.7.48
 #define R5_HCI_EVENT_KEYPRESS_NOTIFICATION		0x3C	// 7.7.49
 
-// IO capability KeyboardDisplay (7.1.29), not in btHCI_event.h.
+// MITM Protection Required, Dedicated Bonding (7.1.29): a pairing the
+// person started on the Bluetooth page, as BlueZ asks it.
+#define R5_HCI_AUTH_REQ_MITM_DEDICATED_BOND	0x03
+
+// IO capability KeyboardDisplay: an LE (SMP) value only; BR/EDR takes
+// 0x00 to 0x03 (Vol 4, Part E, 7.1.29).
 #define R5_HCI_IO_CAP_KEYBOARD_DISPLAY		0x04
 
 // LMP feature "Secure Simple Pairing (Controller Support)", bit 51 of the
@@ -79,6 +84,12 @@ static inline uint64
 r5_event_mask(const uint8 features[8])
 {
 	uint64 mask = 0x00001FFFFFFFFFFFULL;
+	// As Linux: Encryption Key Refresh Complete (0x30), Link Supervision
+	// Timeout Changed (0x38) and Remote Host Supported Features
+	// Notification (0x3D).
+	mask |= 1ULL << 47;
+	mask |= 1ULL << 55;
+	mask |= 1ULL << 60;
 	if (features != NULL && (features[R5_LMP_FEATURES_SSP_OCTET]
 			& R5_LMP_FEATURES_SSP_BIT) != 0) {
 		for (int bit = 48; bit <= 53; bit++)

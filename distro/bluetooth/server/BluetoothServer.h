@@ -37,6 +37,7 @@
 // SPDX-License-Identifier: MIT
 // Private to the server: posted to itself at the end of ReadyToRun().
 static const uint32 kMsgReportStarted = 'r5bs';
+static const uint32 kMsgR5LEPulse = 'r5lp';
 
 // B_SYSTEM_SETTINGS_DIRECTORY/bluetooth: the radio switch and the pairing
 // keys, root's alone (mode 0700). create makes it and sets that mode.
@@ -112,6 +113,14 @@ public:
 	bool		RadioEnabled() const { return fRadioEnabled; }
 	// SPDX-SnippetEnd
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// bluetooth_audio streams (BT_MSG_R5_AUDIO_STREAMING) and its team
+	// lives: scans wait. LEManager asks this before it scans.
+	bool		AudioStreaming() const;
+	// SPDX-SnippetEnd
+
 private:
 
 	LocalDeviceImpl*	LocateDelegateFromMessage(BMessage* message);
@@ -138,6 +147,14 @@ private:
 	bool				fRadioEnabled;
 	// SPDX-SnippetEnd
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// The team of bluetooth_audio while it streams (BT_MSG_R5_AUDIO_STREAMING),
+	// -1 otherwise; scans are refused while that team lives.
+	team_id				fAudioTeam;
+	// SPDX-SnippetEnd
+
 	void 				ShowWindow(BWindow* pWindow);
 
 	void				_InstallDeskbarIcon();
@@ -160,6 +177,7 @@ private:
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
 	HIDHost*				fHIDHost;
+	class BMessageRunner*	fLEPulse;
 	// SPDX-SnippetEnd
 };
 

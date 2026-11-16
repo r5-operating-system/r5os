@@ -21,6 +21,8 @@
 #include "l2cap_parse.h"
 
 #include <stdlib.h>
+
+#include <R5BluetoothLE.h>
 // SPDX-SnippetEnd
 
 #include <btDebug.h>
@@ -231,6 +233,18 @@ l2cap_handle_configuration_req(HciConnection* conn, uint8 ident, net_buffer* buf
 			l2cap_command_reject::REJECTED_INVALID_CID, 0, 0, 0);
 		return B_ERROR;
 	}
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Only a channel of this link: a device on another link could close
+	// or reconfigure it by guessing its CID.
+	if (endpoint->Connection() != NULL && endpoint->Connection() != conn) {
+		gSocketModule->release_socket(endpoint->socket);
+		send_l2cap_command_reject(conn, ident,
+			l2cap_command_reject::REJECTED_INVALID_CID, 0, 0, 0);
+		return B_ERROR;
+	}
+	// SPDX-SnippetEnd
 
 	const uint16 flags = le16toh(command->flags);
 
@@ -337,6 +351,18 @@ l2cap_handle_disconnection_req(HciConnection* conn, uint8 ident, net_buffer* buf
 			l2cap_command_reject::REJECTED_INVALID_CID, 0, 0, 0);
 		return B_ERROR;
 	}
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Only a channel of this link: a device on another link could close
+	// or reconfigure it by guessing its CID.
+	if (endpoint->Connection() != NULL && endpoint->Connection() != conn) {
+		gSocketModule->release_socket(endpoint->socket);
+		send_l2cap_command_reject(conn, ident,
+			l2cap_command_reject::REJECTED_INVALID_CID, 0, 0, 0);
+		return B_ERROR;
+	}
+	// SPDX-SnippetEnd
 
 	const uint16 scid = le16toh(command->scid);
 
@@ -477,7 +503,14 @@ send_l2cap_command(HciConnection* conn, uint8 code, uint8 ident, net_buffer* com
 	} {
 		NetBufferPrepend<l2cap_basic_header> basicHeader(command);
 		basicHeader->length = htole16(command->size - sizeof(l2cap_basic_header));
-		basicHeader->dcid = htole16(L2CAP_SIGNALING_CID);
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// An LE link signals on its own channel (Core 6.0, Vol 3, Part A,
+		// 2.1).
+		basicHeader->dcid = htole16(conn->type == R5_HCI_LINK_LE
+			? R5_L2CAP_CID_LE_SIGNALING : L2CAP_SIGNALING_CID);
+		// SPDX-SnippetEnd
 	}
 	command->type = conn->handle;
 	// SPDX-SnippetBegin
@@ -485,7 +518,7 @@ send_l2cap_command(HciConnection* conn, uint8 code, uint8 ident, net_buffer* com
 	// SPDX-License-Identifier: MIT
 	// PostACL() owns the buffer, also on failure (it freed part of it on
 	// some errors, so freeing it here was a double free).
-	return btDevices->PostACL(conn->Hid, command);
+	return l2cap_post_acl(conn->Hid, command);
 	// SPDX-SnippetEnd
 }
 
@@ -599,6 +632,8 @@ l2cap_handle_signaling_command(HciConnection* connection, net_buffer* buffer)
 	// returns leaked the buffer. Now l2cap_parse_check() decides, and the
 	// buffer is always freed.
 	status_t result = B_OK;
+	// The LE signalling channel has its own commands (step 1c).
+	const bool le = connection->type == R5_HCI_LINK_LE;
 	while (buffer->size != 0) {
 		// Every round must consume at least the 4 header bytes; stop
 		// rather than spin when it does not (review of #4291).
@@ -621,8 +656,25 @@ l2cap_handle_signaling_command(HciConnection* connection, net_buffer* buffer)
 		// An answer takes its identifier, and with it the socket reference,
 		// before anything else, so a waiting connect() or shutdown() is also
 		// woken by an answer that turns out to be broken (review of #4291).
+		// A code this channel does not serve is not understood (and takes
+		// no identifier, so a forged answer cannot wake a waiter).
+		if (!l2cap_parse_code_allowed(code, le)) {
+			if (length > buffer->size) {
+				result = EMSGSIZE;
+				break;
+			}
+			send_l2cap_command_reject(connection, ident,
+				l2cap_command_reject::REJECTED_NOT_UNDERSTOOD, 0, 0, 0);
+			if (gBufferModule->remove_header(buffer, length) != B_OK) {
+				result = EMSGSIZE;
+				break;
+			}
+			continue;
+		}
+
+		// Not L2CAP_IS_SIGNAL_RSP(): 0x18 and 0x1a are answers too.
 		L2capEndpoint* endpoint = NULL;
-		if (L2CAP_IS_SIGNAL_RSP(code)) {
+		if (l2cap_parse_is_response(code)) {
 			endpoint = static_cast<L2capEndpoint*>(
 				l2cap_take_command_ident(connection, ident));
 		}
@@ -704,6 +756,16 @@ l2cap_handle_signaling_command(HciConnection* connection, net_buffer* buffer)
 			case L2CAP_INFORMATION_RSP:
 				l2cap_handle_info_rsp(endpoint, ident, buffer);
 				break;
+
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			case 0x12: case 0x13: case 0x14: case 0x15: case 0x16:
+			case 0x17: case 0x18: case 0x19: case 0x1a:
+				l2cap_handle_le_command(connection, code, ident, buffer,
+					length, endpoint);
+				break;
+			// SPDX-SnippetEnd
 
 			default:
 				ERROR("l2cap: unknown L2CAP signaling command, "

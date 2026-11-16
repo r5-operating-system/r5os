@@ -47,9 +47,11 @@
 				<tr><th>Declared in</th><td>&lt;R5Bluetooth.h&gt;</td></tr>
 				<tr><th>Derived from</th><td>BGroupView</td></tr>
 			</table>
-			<p>A summary card (a <code class="inline">BAppearanceKit::BCard</code>) with the Bluetooth glyph, the
-			number of radios and the radio in use; a box whose title is the Bluetooth switch, with a radio menu
-			when there is more than one radio; and the devices nearby, with Scan. It starts its own
+			<p>My devices: the paired devices, each Connected or Not connected, and beside them a panel (a
+			<code class="inline">BAppearanceKit::BCard</code>) for the one chosen, with its kind, status, Classic
+			or Low Energy, address, Disconnect and Forget. Under it the devices nearby, with Pair and Scan; a
+			paired device is not repeated there. The last line has no box: "Bluetooth on", the radio in use, and
+			a radio menu when there is more than one radio. It starts its own
 			<code class="inline">BluetoothController</code> when it is attached to a window and stops it when it
 			is detached.</p>
 			<figure class="stage">
@@ -123,6 +125,13 @@ BLayoutBuilder::Group&lt;&gt;(this, B_VERTICAL, 0)
 				is the name, or the kind, or the address. <code class="inline">SignalLevel()</code> gives 0 to 4 bars
 				for <code class="inline">r5_level_glyph_draw(R5_LEVEL_SIGNAL)</code>, 10 dB per bar from -90 dBm, or
 				-1.</p></div>
+			<div class="member"><div class="sig">struct BluetoothPairedDevice;<br>static void BluetoothState::UnarchivePaired(const BMessage&amp; archive, std::vector&lt;BluetoothPairedDevice&gt;&amp; devices);</div>
+				<p>A paired device: <code class="inline">info</code> (a <code class="inline">BluetoothDeviceInfo</code>),
+				<code class="inline">lowEnergy</code>, <code class="inline">hid</code> (LE HID over GATT) and
+				<code class="inline">connected</code>. They come in the same
+				<code class="inline">kMsgBluetoothStateChanged</code> message; read them with
+				<code class="inline">UnarchivePaired()</code>. bluetooth_server gives names and states, never
+				keys.</p></div>
 		</section>
 
 		<section class="entry" id="switch">
@@ -156,8 +165,71 @@ BLayoutBuilder::Group&lt;&gt;(this, B_VERTICAL, 0)
 			<p>Pairing asks for nothing with a controller or a mouse (Just Works). A keyboard shows a window with
 			a number to type on it. A pairing that the other device starts by itself is refused: pair from the
 			panel.</p>
-			<div class="note"><strong>Not yet.</strong> Bluetooth Low Energy devices (many modern mice) come with
-			a later step. Rumble, lights, touchpad and motion of game controllers are not supported.</div>
+			<div class="note"><strong>Not yet.</strong> Rumble, lights, touchpad and motion of game controllers
+			are not supported. Bluetooth Low Energy mice and keyboards: see Low Energy devices below.</div>
+
+		<section class="entry" id="le">
+			<div class="entry-header"><h2 class="plain">Low Energy devices</h2></div>
+			<p>A scan finds Classic and Low Energy devices together: while the Classic inquiry runs,
+			bluetooth_server also scans for LE (extended scanning where the radio has it). An LE device shows in
+			the same list once it has a name and can be connected to. Pair connects to it as the central and
+			pairs with LE Secure Connections (ECDH P-256), or with legacy pairing for an older device. A keyboard
+			that must type a number gets the same number window as a Classic keyboard; a device that shows a
+			number asks for it, or asks whether the two numbers match. A notification says when the pairing is
+			done, or that it did not work. The keys are kept by the
+			system for the whole computer, in <code class="inline">/boot/system/settings/bluetooth</code>, readable
+			by bluetooth_server only.</p>
+			<p>A mouse or keyboard with the HID service (HID over GATT) then becomes an input device like a USB
+			one: bluetooth_server reads its report map and hands its reports to the same bluetooth_hid driver as
+			Classic HID, so input_server needs nothing new. A paired device comes back by itself when it wakes
+			up.</p>
+			<div class="note"><strong>Tested.</strong> Built for x86_64; in QEMU, which has no radio, only the
+			socket interface and the pairing crypto (with the sample data of the Bluetooth specification) ran.
+			Not yet run with a real LE device.</div>
+		</section>
+
+		<section class="entry" id="le-l2cap">
+			<div class="entry-header"><h2>sockaddr_l2cap_le</h2><span class="kind">struct, &lt;R5BluetoothLE.h&gt; (private for now)</span></div>
+			<p>An L2CAP socket (<code class="inline">AF_BLUETOOTH</code>, <code class="inline">SOCK_SEQPACKET</code>,
+			<code class="inline">BLUETOOTH_PROTO_L2CAP</code>) that gets this address instead of
+			<code class="inline">sockaddr_l2cap</code> works on Low Energy links. Its extra fields are the channel,
+			the address type (public or random) and, for <code class="inline">connect()</code>, the mode.</p>
+			<div class="member"><div class="sig">connect(fd, &amp;address, sizeof(address)); // l2cap_psm, l2cap_mode</div>
+				<p>Opens an LE credit-based channel on a device that is already connected: mode
+				<code class="inline">R5_L2CAP_MODE_LE_CREDIT</code>, or <code class="inline">R5_L2CAP_MODE_ENHANCED_CREDIT</code>
+				(the mode EATT uses, PSM 0x27). One <code class="inline">send()</code> is one message; the system
+				splits it by the credits the device gives.</p></div>
+			<div class="member"><div class="sig">bind(); listen(); accept(); // l2cap_psm 1 to 0xFF</div>
+				<p>Waits for a device to open a channel on that LE PSM.</p></div>
+			<div class="member"><div class="sig">bind(); // l2cap_cid R5_L2CAP_CID_ATT or R5_L2CAP_CID_SMP</div>
+				<p>The fixed channels of every LE link. Only bluetooth_server may hold them; an application uses
+				GATT through it.</p></div>
+		</section>
+
+		<section class="entry" id="audio">
+			<div class="entry-header"><h2 class="plain">Headphones and speakers</h2><span class="kind">Media Kit</span></div>
+			<p>A Bluetooth headset is an ordinary audio output of the Media Kit, so a program needs nothing new:
+			it plays to the system mixer as always. The media add-on
+			<code class="inline">bluetooth_audio.media_addon</code> adds one output, "Bluetooth audio"
+			(<code class="inline">B_BUFFER_CONSUMER | B_PHYSICAL_OUTPUT</code>), that takes float stereo at
+			44.1 kHz from the mixer. Choose it as the audio output in Media. Its one parameter, Volume, is the
+			headset's own volume when the headset supports AVRCP absolute volume; the buttons on the headset
+			move it too.</p>
+			<p>The sound goes out as SBC, the codec every A2DP headset has, encoded by R5's own MIT encoder. R5
+			picks the best setting the headset accepts at 44.1 kHz, the rate every headset has: joint stereo, 16 blocks, 8 subbands and the highest
+			bitpool within A2DP's limit of 512 kb/s. The encoder works on the mixer's float samples directly. The
+			latency the node reports includes the delay the headset reports, so a video player keeps picture and
+			sound together. After 5 seconds of silence the stream pauses, so the headset can sleep; the next
+			sound starts it again.</p>
+			<p>Which headset is each person's own choice, in
+			<code class="inline">~/config/settings/Media/bluetooth_audio</code>. A program finds it with
+			<code class="inline">find_directory(B_USER_SETTINGS_DIRECTORY)</code>; the command
+			<code class="inline">bt_audio use XX:XX:XX:XX:XX:XX</code> sets it. With no choice, a paired headset
+			that connects plays. Either way the link must be encrypted. When sound starts, R5 connects to the chosen headset by itself.</p>
+			<div class="note"><strong>Not yet.</strong> Not tried with a real headset yet: that waits for Classic
+			pairing on the test laptop. Play and pause on the headset start and stop the sound, but do not yet
+			pause the program that plays. No choice of headset on the Bluetooth page yet, and no AAC, aptX or LE
+			Audio.</div>
 		</section>
 
 		<section class="entry" id="settings">
