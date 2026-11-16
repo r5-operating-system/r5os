@@ -499,7 +499,7 @@ The user answered the open questions:
 | Q7 Boot menu | Waits for a key, as Haiku; no countdown |
 | Q8 Marker in Safe mode | Removed only after a good Sign in in a normal start |
 | Q9 Network in Safe mode | None, as Haiku |
-| Q10 `BDirectWindow` | **Built for Lavapipe only, as an extra step in M12** (below) |
+| Q10 `BDirectWindow` | **Built for Lavapipe only, as an extra step in M12** (below). Owner, 16 Nov 2026: moved out of M12, to M13 or later; the direct-window pause stays until then |
 | Q11 Offscreen loss | Accepted as a written limit |
 
 **`BDirectWindow` on Lavapipe (Q10), the design on paper.** From part 9:
@@ -564,6 +564,8 @@ Written down so the next step and the review read the code with the same picture
 
 **The M12 deliverable is Skia drawing on by default, with or without a GPU** (RADV, or Lavapipe without one). Only Safe mode draws with Painter (step 6 and decision 10 already say so for the CPU mode). This replaces "`gpu_draw` stays opt-in until the stick" as the end state of M12; `gpu_draw` stays the test switch until the gate below and the stick pass.
 
+**Changed again (owner, 16 Nov 2026, after M12 stick 2):** Skia goes on by default after M13, not in M12. M13 removes the CPU read-back and does the speed work, then turns Skia on for RADV and Lavapipe together (on Lavapipe Skia is still slower than Painter). M12 closes on correctness: the compare set, no panic, `gpu_draw true` usable on RADV and Lavapipe. `gpu_draw` stays opt-in until then. The page-table reserve fix of this day is proven on the first M13 stick.
+
 **M12 now includes optimisation, with one gate:** on the 5625U (RADV), **no draw class is slower with Skia than with Painter**. A draw class is a class of part 5 (E, A1, A2, T, B1, B2, G), measured per operation with `r5-draw-compare --time` (median of 100, GPU against CPU) and in the scenario of decision 9 (`draw median` against `draw cpu median`). Lavapipe numbers are recorded, not gated (decision 9). Anything beyond the gate, such as 60 frames per second while dragging, scrolling or resizing, stays M13. The copy of the window images into the window buffers may move into M12 if the profile shows it is the cause of a class being slower; otherwise it stays M13 (Q4).
 
 **Order of work for the gate:** first profile which classes and which parts of the path cause the 43 ms scenario median on Lavapipe (and the same on the 5625U once it can run), report the top causes to the owner, and only then fix.
@@ -591,4 +593,4 @@ The design follows the M11 compositor. Its compute shaders (`distro/app_server/c
 - **Decision after the first sheet (16 Nov 2026, while the owner slept):** linear-light **edges are off by default**, and `gpu_draw_linear_edges true` turns them on. The sheet showed the known side effect: a 1-pixel dark line on a light background comes out lighter and uneven along a curve, because its partly covered pixels brighten much more than in an 8-bit mix. On Lavapipe the coverage pass also made fills and strokes about 30 times slower (40 µs to 1300–1650 µs per operation; the scenario median went from 2–4 ms to 7–12 ms). **Translucency stays linear by default**: it costs nothing extra and does not thin lines. The owner judges both on the sheet, which has a column for each.
 - **Text:** Skia's text gamma 1.2 with contrast 0.4 (Skia's default is 0.2), because light hinting made 9-point text pale on the first sheet. Skia draws the letters into the scratch image in their own colour and the R5 shader reads the coverage from the alpha, so Skia picks the contrast curve of that colour (before 16 Nov 2026 the direct text blender did this; the scratch text was white).
 
-Step order of M12 from here: 2 to 5 (compare set, engine, text, offscreen, fallback, measurement) → **5b** gamma-correct blending and better text → **5c** performance gate (profile, report, fix) → 6 Safe mode → 6b `BDirectWindow` on Lavapipe → 7 stick.
+Step order of M12 from here: 2 to 5 (compare set, engine, text, offscreen, fallback, measurement) → **5b** gamma-correct blending and better text → **5c** performance gate (profile, report, fix) → 6 Safe mode → 7 stick. Step 6b (`BDirectWindow` on Lavapipe) moved to M13 or later (owner, 16 Nov 2026).

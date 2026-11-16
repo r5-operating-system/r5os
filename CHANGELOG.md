@@ -1,5 +1,19 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-16 - Graphics (M12): VRAM kept for page tables, so Skia drawing stays on with a full VRAM
+
+Problem: on the 5625U, M12 stick 2 (`generated/boot-5625u-51`), boot 1 (Skia on RADV) turned the GPU drawing off after about 3.5 minutes (`app_server: gpu draw off: insert failed`, while WebPositive opened). Boot 3 (Lavapipe) passed. The kernel log shows the cause: `refuse BO_CREATE vram full` at 188 s, then at 213 s `page table pool full` and three refused `VA_MAP`s (`pte status 0x80000000`, `B_NO_MEMORY`) for GTT buffers of 21 MB, 4 MB and 2 MB. Stick 1 of the same day (`m12-stick-measure-2`, boot 1) has the same lines. The VRAM to GTT fallback of `libdrm-2.4.124-3` covers buffers, not page-table pages: those are taken from the same VRAM pool (`vm_page_alloc()` in `gfx9_k12.cpp`), so with the pool used up by buffers no new table page could be made. Earlier this day I read stick 1's boot 1 as a VRAM fallback problem only; that was incomplete.
+
+What changed:
+- `R5_VM_RESERVED_VRAM` (8 MiB, Linux `AMDGPU_VM_RESERVED_VRAM`, v6.18 `amdgpu_vm.h:149`, "How much VRAM be reserved for page tables") in `r5_vm.h`, with `r5_vram_keeps_tables()`. `r5_gfx9_alloc_user_vram()` refuses a new buffer from the unused end of the pool when it would leave less than that; the R5 DRM library then places it in GTT, as for a full VRAM. Buffers that reuse freed VRAM are not affected.
+- A file's address space holds up to 1024 table pages instead of 256 (the shared tree's size, `sVm`). Over all clients the stick asked for about 254 table pages (248 leaf tables plus 6 directory pages, counted from the `va map` lines), close to 256, so both limits are raised together. Only pages in use take VRAM.
+- `page table pool full` now prints `used <n> of <capacity>`, so the next stick shows which limit is hit, if any.
+- Host check in `scripts/test-r5-gpu.cpp` for `r5_vram_keeps_tables()`.
+
+Limits: the code runs only on a GC 9.3 GPU, so QEMU does not run it. Not tested on the 5625U yet. GET_INFO still reports the full VRAM size (Linux subtracts the 8 MiB in `AMDGPU_INFO_VRAM_GTT`); RADV may plan for 8 MiB more VRAM than it gets, and that is the case the GTT fallback handles.
+
+Tested: host check (`page table reserve`) passes; jam AMD64 (see the PR). `test-r5-gpu` still stops at its older `info lock` check, as before this change.
+
 ## 2026-11-16 - Graphics (M12): the Deskbar leaf, Skia's destination read removed, one queue lock
 
 Problem: with Skia drawing on Lavapipe (`gpu_draw true`) the Deskbar's R5 leaf was missing or showed other pixels (QEMU 1 boot in 8; the 5625U stick boot 3 also lost labels and icons). The first brief tied it to window buffers that start transparent; one boot per condition was not enough for that, and it is not the cause.

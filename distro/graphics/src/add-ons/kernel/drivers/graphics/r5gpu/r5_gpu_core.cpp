@@ -1487,7 +1487,8 @@ gpu_va_map_copied(gpu_client* client, const r5_gpu_va* copied)
 					in.map_bytes, in.flags);
 			}
 			if (!gpu_hw_map(gpu_vm(client), in.gpu_va + page, pte)) {
-				dprintf("radeon_hd: page table pool full\n");
+				dprintf("radeon_hd: page table pool full used %" B_PRIu32 " of %"
+					B_PRIu32 "\n", gpu_vm(client)->used, gpu_vm(client)->capacity);
 				gpu_va_clear(gpu_vm(client), in.gpu_va, page);
 				return gpu_refuse("VA_MAP", "pte", B_NO_MEMORY, in.handle,
 					bo->backing->domain, bo->backing->bytes, in.gpu_va + page, in.bo_offset,
@@ -1539,7 +1540,9 @@ gpu_va_map_copied(gpu_client* client, const r5_gpu_va* copied)
 							in.flags);
 					uint64 pte = gR5GpuOps.encode_pte(address, flags, 1);
 					if (!gpu_hw_map(gpu_vm(client), in.gpu_va + filled, pte)) {
-						dprintf("radeon_hd: page table pool full\n");
+						dprintf("radeon_hd: page table pool full used %" B_PRIu32
+							" of %" B_PRIu32 "\n", gpu_vm(client)->used,
+							gpu_vm(client)->capacity);
 						gpu_va_clear(gpu_vm(client), in.gpu_va, filled);
 						return gpu_refuse("VA_MAP", "pte", B_NO_MEMORY,
 							in.handle, bo->backing->domain, bo->backing->bytes,
@@ -2461,7 +2464,11 @@ gpu_file_root(gpu_client* client)
 	if (tree == NULL)
 		return B_NO_MEMORY;
 	memset(tree, 0, sizeof(*tree));
-	tree->pagesN = 256;
+	// 5625U stick of 16 Nov 2026: app_server's Skia drawing needed about
+	// 254 table pages, against 256 here. 1024 is the shared tree's size
+	// (gfx9_k12.cpp sVm). Only pages in use take VRAM, from the reserve
+	// R5_VM_RESERVED_VRAM.
+	tree->pagesN = 1024;
 	tree->pages = (r5_vm_page*)malloc(sizeof(r5_vm_page) * tree->pagesN);
 	if (tree->pages == NULL) {
 		free(tree);

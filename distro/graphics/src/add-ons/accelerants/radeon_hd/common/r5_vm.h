@@ -358,4 +358,27 @@ r5_file_count_drop(struct r5_file_count* count, int32_t pages)
 	return 1;
 }
 
+
+/* VRAM kept for page-table pages. v6.18 amdgpu_vm.h:149
+ * AMDGPU_VM_RESERVED_VRAM (8ULL << 20), "How much VRAM be reserved for
+ * page tables". Page-table pages come from the same VRAM pool as the
+ * buffers; a buffer that would eat into this is refused, and the R5 DRM
+ * library places it in GTT. 5625U stick of 16 Nov 2026: a full VRAM left
+ * no page for a new table and Skia drawing turned off. */
+#define R5_VM_RESERVED_VRAM		(8ull << 20)
+
+
+/* 1 when a new buffer of bytes from the unused end of the pool
+ * [cursor, end) still leaves R5_VM_RESERVED_VRAM for page tables. */
+static inline int
+r5_vram_keeps_tables(uint64_t cursor, uint64_t end, uint64_t bytes)
+{
+	if (cursor > end)
+		return 0;
+	uint64_t room = end - cursor;
+	if (room < R5_VM_RESERVED_VRAM)
+		return 0;
+	return bytes <= room - R5_VM_RESERVED_VRAM;
+}
+
 #endif
