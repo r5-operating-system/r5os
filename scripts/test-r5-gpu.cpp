@@ -451,6 +451,18 @@ main()
 				|| r5_gtt_fits(16ull * 4096ull, 4096ull, ~0ull))
 			return fail("gtt limit");
 	}
+	// Page-table reserve (5625U stick of 16 Nov 2026).
+	{
+		const uint64_t r = R5_VM_RESERVED_VRAM;
+		if (r != 8ull << 20
+				|| !r5_vram_keeps_tables(0, r + 4096, 4096)
+				|| r5_vram_keeps_tables(0, r + 4096, 8192)
+				|| r5_vram_keeps_tables(0, r - 4096, 0)
+				|| !r5_vram_keeps_tables(4096, 4096 + r, 0)
+				|| r5_vram_keeps_tables(8192, 4096, 0)
+				|| r5_vram_keeps_tables(0, ~0ull, ~0ull))
+			return fail("page table reserve");
+	}
 	{
 		r5_span full[2];
 		memset(full, 0, sizeof(full));

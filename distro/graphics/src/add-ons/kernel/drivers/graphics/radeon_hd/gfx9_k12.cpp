@@ -1415,6 +1415,13 @@ r5_gfx9_alloc_user_vram(uint64 bytes, uint64* offset)
 	// loss would repeat on every request. Ask for the row first.
 	if (!r5_span_has_room(sUserSpans, 64))
 		return B_NO_MEMORY;
+	// Page tables are bumped from the same pool (vm_page_alloc); keep
+	// R5_VM_RESERVED_VRAM for them, as Linux does.
+	radeon_shared_info* shared = sInfo != NULL ? sInfo->shared_info : NULL;
+	if (shared == NULL
+		|| !r5_vram_keeps_tables(shared->vram_pool_cursor,
+			shared->vram_pool_offset + shared->vram_pool_bytes, bytes))
+		return B_NO_MEMORY;
 	uint8* address = NULL;
 	uint64 bumped = 0;
 	status_t status = r5_gfx9_alloc_vram(bytes, 4096, &bumped, &address);
