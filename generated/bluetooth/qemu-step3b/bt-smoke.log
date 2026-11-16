@@ -1,0 +1,17 @@
+CALLED BMessenger* _RetrieveBluetoothMessenger()
+bt_server_smoke_test: 0 radios
+bt_server_smoke_test: radio switch ok (was on)
+bt_server_smoke_test: ok (0 crashes)
+exit 0
+CALLED Bluetooth::RemoteDevice::RemoteDevice(const BString&)
+CALLED BMessenger* _RetrieveBluetoothMessenger()
+CALLED Bluetooth::RemoteDevice::ConnectionState Bluetooth::RemoteDevice::GetConnectionState()
+CALLED virtual bdaddr_t Bluetooth::RemoteDevice::GetBluetoothAddress()
+CALLED status_t Bluetooth::RemoteDevice::GetConnectionDetails(bt_connection_details*)
+CALLED status_t Bluetooth::RemoteDevice::GetConnectionDetails(bt_connection_details*)
+CALLED status_t Bluetooth::RemoteDevice::GetConnectionDetails(bt_connection_details*)
+CALLED virtual Bluetooth::RemoteDevice::~RemoteDevice()
+bt_l2cap_abi_test: ok
+exit 0
+drwx------ 1 user root 2048 Nov 16 08:43 /boot/system/settings/bluetooth
+-rw------- 1 user root    9 Nov 16 08:43 /boot/system/settings/bluetooth/r5_radio

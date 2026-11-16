@@ -141,6 +141,10 @@ Each step is its own small pull request. It is built for AMD64 with `scripts/bui
 
 - **What:** a separate Bluetooth program built on `BluetoothView` from `libr5bt.so`, and a Deskbar replicant that talks through `BMessenger` and `BMessage` (no `load_add_on`) and uses `libr5icons.so`.
 - **Pass:** log line `deskbar_bt_replicant: attached via messenger` (no `load_add_on` of the server), and it works for both the administrator and a standard person.
+- **As built (16 Nov 2026):**
+  - The Bluetooth program (`distro/bluetooth/app`) replaces Haiku's Bluetooth preferences in the regular image (owner's choice): `BluetoothView` in a window, with a lock button for a person who is not an administrator (`r5_admin_query()`, `r5_admin_prompt_unlock()`, checked every 15 s). It keeps their signature `application/x-vnd.Haiku-BluetoothPrefs` and their `Bluetooth.rdef` (icon). The old list of paired devices and its pairing window are gone until step 4 brings pairing.
+  - The Deskbar item is `bluetooth_deskbar` (`distro/bluetooth/deskbar`, in `/system/servers`, regular image only), the AirPlay pattern: a user launch job (`distro/bluetooth/launch/bluetooth-deskbar`, `target desktop`, after Deskbar) adds the program's own small binary to Deskbar and quits. The item asks `bluetooth_server` with `BT_MSG_R5_GET_RADIO` every 5 s, asynchronously (the answer comes back to the view), draws `R5_GLYPH_BLUETOOTH` (faint without a radio or when off) glass-ready (no background of its own, `B_TRANSPARENT_BACKGROUND`; the glyph as an alpha bitmap with `B_OP_ALPHA` and `B_ALPHA_COMPOSITE`, as the R5Book "Window effects" asks, so a later glass Deskbar shows through), and its menu shows the state, turns Bluetooth on or off (enabled only with `r5_admin_change_allowed()`; the server checks again) and opens the program.
+  - `bluetooth_server` no longer adds itself to Deskbar (Deskbar loaded the whole server). `bluetooth_deskbar` removes that old item (`BluetoothServerReplicant`) from a session that still has it.
 
 ### Step 4 (PR 8): Classic HID (BR/EDR mouse and keyboard on PSM `0x11` and `0x13`) and SSP passkey
 

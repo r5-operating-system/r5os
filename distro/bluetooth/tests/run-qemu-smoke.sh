@@ -46,6 +46,16 @@ page=""
 if [ -n "$SETTINGS_PAGE" ]; then
 	page="/boot/system/preferences/Settings --page $SETTINGS_PAGE & sleep 30; ps > /boot/home/bt-ps.log 2>&1; "
 fi
+# DESKBAR=1 (step 3b) starts Deskbar and then bluetooth_deskbar, which adds
+# the Bluetooth item: the desktop is behind Sign in, so the user launch job
+# that does this in a session does not run here. PROGRAM=1 opens the
+# Bluetooth program.
+if [ "${DESKBAR:-0}" = 1 ]; then
+	page="/system/Deskbar & sleep 10; /system/servers/bluetooth_deskbar & sleep 10; $page"
+fi
+if [ "${PROGRAM:-0}" = 1 ]; then
+	page="/boot/system/preferences/Bluetooth & sleep 10; $page"
+fi
 cat > "$BT_WORK/bt-smoke.job" <<EOF
 job bt-smoke {
 	launch /bin/sh -c "sleep 60; ps > /boot/home/bt-ps0.log 2>&1; $page/bin/bt_server_smoke_test > /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; /bin/bt_l2cap_abi_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; ls -ld /boot/system/settings/bluetooth /boot/system/settings/bluetooth/* >> /boot/home/bt-smoke.log 2>&1; sleep 5; sync"
@@ -111,5 +121,5 @@ grep bluetooth_server "$BT_WORK/out-ps0.log" 2>/dev/null || echo "(bluetooth_ser
 echo "== bt-smoke.log"
 cat "$BT_WORK/out-smoke.log" 2>/dev/null || echo "(no log)"
 echo "== syslog (Bluetooth lines)"
-grep -aE 'bluetooth_server|bt_server_smoke_test|bt_l2cap_abi_test|DeviceManager|h2generic|l2cap|debug_server|crash' \
+grep -aE 'bluetooth_server|bluetooth_deskbar|deskbar_bt_replicant|bt_server_smoke_test|bt_l2cap_abi_test|DeviceManager|h2generic|l2cap|debug_server|crash' \
 	"$BT_WORK/out-syslog" 2>/dev/null || echo "(no lines)"
