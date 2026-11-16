@@ -229,6 +229,8 @@ private:
 			bool				fWantDirect;
 			bdaddr_t			fDirectAddress;
 			uint8				fDirectType;
+			bigtime_t			fDirectStarted;
+				// LE Create Connection has no timeout of its own
 
 			std::vector<Link*>	fLinks;
 			std::vector<LEBond*> fBonds;

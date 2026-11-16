@@ -236,6 +236,11 @@ A2DPSource::Start()
 		return error;
 	}
 	resume_thread(fManagerThread);
+	// One line, so a log tells "never started" from "started and idle".
+	bdaddr_t chosen;
+	syslog(LOG_INFO, "bluetooth_audio: listening, %s",
+		_ChosenDevice(&chosen) ? "a headset is chosen"
+			: "no headset chosen (a paired one is used)");
 	return B_OK;
 }
 
@@ -448,6 +453,40 @@ A2DPSource::_ChosenDevice(bdaddr_t* device)
 	if (bluetooth_audio_session_settings_path(path) != B_OK)
 		return false;
 	return bluetooth_audio_read_device(path, device) == B_OK;
+}
+
+
+// Without a bt_audio choice: the first paired Classic device whose class of
+// device is Audio/Video (major class 0x04), a connected one first. Nothing
+// else opened AVDTP after a headset paired, so it dropped the link and
+// stayed in pairing mode (stick 5).
+bool
+A2DPSource::_PairedHeadset(bdaddr_t* device)
+{
+	BMessenger server(BLUETOOTH_SIGNATURE);
+	BMessage request(BT_MSG_R5_GET_PAIRED);
+	BMessage reply;
+	if (server.SendMessage(&request, &reply, 2000000, 2000000) != B_OK)
+		return false;
+	bool found = false;
+	const void* data;
+	ssize_t size;
+	for (int32 i = 0; reply.FindData("bdaddr", B_ANY_TYPE, i, &data, &size)
+			== B_OK; i++) {
+		if (size != (ssize_t)sizeof(bdaddr_t) || reply.GetBool("le", i, true))
+			continue;
+		const uint32 deviceClass = reply.GetUInt32("class", i, 0);
+		if (((deviceClass >> 8) & 0x1f) != 0x04)
+			continue;
+		const bool connected = reply.GetBool("connected", i, false);
+		if (!found || connected) {
+			memcpy(device, data, sizeof(bdaddr_t));
+			found = true;
+			if (connected)
+				break;
+		}
+	}
+	return found;
 }
 
 
@@ -667,7 +706,7 @@ A2DPSource::_Manage()
 			bool connect = fPlaying
 				&& now - fLastSound.load() < kIdleSuspend
 				&& now - fLastAttempt >= kRetryInterval
-				&& _ChosenDevice(&device);
+				&& (_ChosenDevice(&device) || _PairedHeadset(&device));
 			fLock.Unlock();
 			if (!connect) {
 				acquire_sem_etc(fWake, 1, B_RELATIVE_TIMEOUT, kPollInterval);
@@ -692,7 +731,11 @@ A2DPSource::_Manage()
 			fTriedAllCapabilities = false;
 			fRetriedBitpool = false;
 			set_receive_timeout(fSignal, kPollInterval);
-			_SendCommand(kDiscover, NULL, 0);
+			// Without a sent Discover no answer and no timeout would come.
+			if (_SendCommand(kDiscover, NULL, 0) != B_OK) {
+				_EndSession(false, "the headset did not take the request");
+				continue;
+			}
 			fState = kDiscovering;
 			continue;
 		}
@@ -1405,6 +1448,7 @@ A2DPSource::_Stream()
 
 		float gain = fSoftwareGain;
 		size_t length = kMediaHeaderLength;
+		int framesWritten = 0;
 		for (int f = 0; f < framesPerPacket; f++) {
 			if (_ReadRing(stereo, frameSamples) < frameSamples)
 				underruns++;
@@ -1423,9 +1467,19 @@ A2DPSource::_Stream()
 			if (written == 0)
 				break;
 			length += written;
+			framesWritten++;
+		}
+		// The header counts the frames in the packet, not the frames asked
+		// for: an encoder that stopped early wrote fewer.
+		if (framesWritten == 0) {
+			// The encoder wrote nothing: the stream cannot go on.
+			fStreaming = false;
+			if (fWake >= 0)
+				release_sem(fWake);
+			break;
 		}
 		BuildMediaHeader(packet, sizeof(packet), sequence, timestamp, ssrc,
-			framesPerPacket);
+			framesWritten);
 
 		if (send(transport, packet, length, 0) < 0) {
 			int error = errno;
@@ -1435,8 +1489,8 @@ A2DPSource::_Stream()
 			if (error == EMSGSIZE && framesPerPacket > 1) {
 				// The lost audio still counts, so timing and RTP stay right.
 				sequence++;
-				timestamp += (uint32)(framesPerPacket * frameSamples);
-				sent += framesPerPacket * frameSamples;
+				timestamp += (uint32)(framesWritten * frameSamples);
+				sent += framesWritten * frameSamples;
 				framesPerPacket--;
 				syslog(LOG_INFO, "bluetooth_audio: %d frames per packet "
 					"(the headset's MTU is smaller)", framesPerPacket);
@@ -1452,8 +1506,8 @@ A2DPSource::_Stream()
 			}
 		}
 		sequence++;
-		timestamp += (uint32)(framesPerPacket * frameSamples);
-		sent += framesPerPacket * frameSamples;
+		timestamp += (uint32)(framesWritten * frameSamples);
+		sent += framesWritten * frameSamples;
 	}
 
 	if (underruns > 0) {

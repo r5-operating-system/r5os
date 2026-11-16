@@ -85,6 +85,7 @@ private:
 
 			bool				_Allowed(const bdaddr_t& address);
 			bool				_ChosenDevice(bdaddr_t* device);
+			bool				_PairedHeadset(bdaddr_t* device);
 			bool				_LinkState(const bdaddr_t& address,
 									bool* paired, bool* connected,
 									bool* encrypted);

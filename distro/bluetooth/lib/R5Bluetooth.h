@@ -203,6 +203,7 @@ private:
 			void				_PostState();
 			void				_ReadPaired();
 			void				_DeviceRequest(BMessage* message);
+			void				_PairFailed(const char* name);
 
 			BMessenger			fTarget;
 			BMessageRunner*		fRunner;
@@ -283,8 +284,9 @@ private:
 			int32				fPairing;
 			// My devices and the information panel (from the reserved room)
 			MyDevices*			fMine;
-			// room for later private state (libr5bt.so)
-			uint32				_reserved[3];
+			// room for later private state (libr5bt.so). With the padding
+			// before fMine the tail stays the 32 bytes of _reserved[8].
+			uint32				_reserved[2];
 };
 
 

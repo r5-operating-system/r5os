@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #include <sys/socket.h>
 
 #include <String.h>
@@ -140,17 +141,39 @@ SDPClient::RequestServiceRecords()
 			return B_ERROR;
 		}
 
-		reply.Seek(sizeof(sdp_pdu), SEEK_SET);
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// Every length comes from the remote device: checked against what
+		// arrived. An SDP Error Response is not parsed as records, and the
+		// continuation state is at most 16 bytes (Core 5.4, Vol 3, Part B,
+		// 4.3).
+		const size_t received = reply.BufferLength();
+		const uint8* bytes = (const uint8*)reply.Buffer();
+		if (received < sizeof(sdp_pdu) + 2 + 1
+			|| bytes[0] != SDP_PDU_SERVICE_SEARCH_ATTRIBUTE_RESPONSE) {
+			TRACE_BT("SDP: not an attribute response\n");
+			return B_ERROR;
+		}
+		size_t position = sizeof(sdp_pdu);
+		uint16 attrListsSize = (uint16)((bytes[position] << 8)
+			| bytes[position + 1]);
+		position += 2;
+		if (attrListsSize > received - position - 1) {
+			TRACE_BT("SDP: attribute lists longer than the reply\n");
+			return B_ERROR;
+		}
+		fullAttrLists.WriteExactly(bytes + position, attrListsSize);
+		position += attrListsSize;
 
-		uint16 attrListsSize;
-		reply.ReadExactly(&attrListsSize, sizeof(uint16));
-		attrListsSize = B_BENDIAN_TO_HOST_INT16(attrListsSize);
-
-		fullAttrLists.WriteExactly((uint8*)reply.Buffer() + reply.Position(), attrListsSize);
-		reply.Seek(attrListsSize, SEEK_CUR);
-
-		reply.ReadExactly(&contStateNumBytes, sizeof(uint8));
-		reply.ReadExactly(contStateData, contStateNumBytes);
+		contStateNumBytes = bytes[position++];
+		if (contStateNumBytes > 16
+			|| contStateNumBytes > received - position) {
+			TRACE_BT("SDP: bad continuation state\n");
+			return B_ERROR;
+		}
+		memcpy(contStateData, bytes + position, contStateNumBytes);
+		// SPDX-SnippetEnd
 
 		if (contStateNumBytes == 0)
 			break;
@@ -161,6 +184,13 @@ SDPClient::RequestServiceRecords()
 		return B_ERROR;
 	}
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// The records of this connection replace the earlier ones; they piled
+	// up and old ones were offered to the profiles again.
+	fRemoteDevice->services.MakeEmpty();
+	// SPDX-SnippetEnd
 	_ParseAttrLists(&fullAttrLists);
 	return B_OK;
 }

@@ -191,7 +191,17 @@ PostEvent(bluetooth_device* ndev, void* event, size_t size)
 			data = (struct hci_ev_disconnection_complete_reply*)
 				(outgoingEvent + 1);
 
-			RemoveConnection(data->handle, ndev->index);
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			// A short event, or a failed disconnection (the link stays up),
+			// does not remove the connection. The handle is 12 bits.
+			if (size < sizeof(hci_event_header) + 4 || outgoingEvent->elen < 4
+				|| data->status != 0)
+				break;
+			RemoveConnection(B_LENDIAN_TO_HOST_INT16(data->handle) & 0x0fff,
+				ndev->index);
+			// SPDX-SnippetEnd
 			TRACE("%s: unRegistered connection handle=%#x\n", __func__,
 				data->handle);
 			break;

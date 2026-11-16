@@ -628,6 +628,13 @@ BluetoothController::MessageReceived(BMessage* message)
 			break;
 
 		default:
+			// Only _Pair() sends a request with this looper as the reply
+			// target: an error reply is bluetooth_server refusing it.
+			if (message->IsReply()
+				&& message->GetInt32("status", B_OK) != B_OK) {
+				_PairFailed("");
+				break;
+			}
 			BLooper::MessageReceived(message);
 			break;
 	}
@@ -886,8 +893,10 @@ BluetoothController::_Pair(BMessage* message)
 	ssize_t size;
 	if (message->FindData("bdaddr", B_ANY_TYPE, (const void**)&address,
 			&size) != B_OK || size != (ssize_t)sizeof(bdaddr_t)
-		|| _FindRadio(fState.radio) == NULL || !fState.radioEnabled)
+		|| _FindRadio(fState.radio) == NULL || !fState.radioEnabled) {
+		_PairFailed(message->GetString("name", ""));
 		return;
+	}
 
 	if (fState.scanning) {
 		_CancelScan();
@@ -896,8 +905,10 @@ BluetoothController::_Pair(BMessage* message)
 	}
 
 	BMessenger server(BLUETOOTH_SIGNATURE);
-	if (!server.IsValid())
+	if (!server.IsValid()) {
+		_PairFailed(message->GetString("name", ""));
 		return;
+	}
 
 	BMessage request(BT_REQ_CREATE_CONN);
 	request.AddInt32("hci_id", fState.radio);
@@ -909,8 +920,22 @@ BluetoothController::_Pair(BMessage* message)
 	request.AddUInt16("clock_offset", 0);
 	request.AddUInt32("record", message->GetUInt32("class", 0));
 	// Not waiting: pairing takes as long as the person needs.
-	// The answer (BT_MSG_R5_PAIR_RESULT) comes back to this looper.
-	server.SendMessage(&request, this, kServerTimeout);
+	// The answer (BT_MSG_R5_PAIR_RESULT) comes back to this looper; a
+	// refusal comes back as a plain reply with an error status.
+	if (server.SendMessage(&request, this, kServerTimeout) != B_OK)
+		_PairFailed(message->GetString("name", ""));
+}
+
+
+// The page shows "Pairing…" until a kMsgBluetoothPairResult: every way a
+// pairing ends without one from the server sends this.
+void
+BluetoothController::_PairFailed(const char* name)
+{
+	BMessage result(kMsgBluetoothPairResult);
+	result.AddBool("paired", false);
+	result.AddString("name", name);
+	fTarget.SendMessage(&result, (BHandler*)NULL, kServerTimeout);
 }
 
 
