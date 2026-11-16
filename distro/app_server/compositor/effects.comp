@@ -14,6 +14,11 @@
 //             close animations (step 4b)
 //   5 slide:  the workspace switch, the old picture and the new side by side
 //
+// M13 step 2: with 0x10 in the mode, modes 3 and 4 read the window from its
+// image (binding 3) instead of the source buffer: a window that Skia draws.
+// Mode 3 reads texel by texel; mode 4 filters through the sampler
+// (VK_FILTER_LINEAR).
+//
 // Compiled by scripts/gen-compositor-shaders.sh.
 
 #version 450
@@ -31,6 +36,8 @@ layout(std430, set = 0, binding = 1) buffer Target {
 layout(std430, set = 0, binding = 2) readonly buffer Aux {
 	uint pixels[];
 } aux;
+
+layout(set = 0, binding = 3) uniform sampler2D image;
 
 layout(push_constant) uniform Effect {
 	uint mode;
@@ -72,11 +79,30 @@ pack(vec4 color)
 }
 
 
+bool
+fromImage()
+{
+	return (effect.mode & 0x10u) != 0u;
+}
+
+
+// the image's texel in the order of a buffer word (B, G, R, A)
+vec4
+imageTexel(ivec2 at)
+{
+	return texelFetch(image, at, 0).bgra;
+}
+
+
 vec4
 texel(int x, int y)
 {
 	x = clamp(x, 0, int(effect.sourceWidth) - 1);
 	y = clamp(y, 0, int(effect.sourceHeight) - 1);
+	if (fromImage()) {
+		return imageTexel(ivec2(int(effect.sourceX) + x,
+			int(effect.sourceY) + y));
+	}
 	return unpack(source.pixels[(effect.sourceY + uint(y))
 		* effect.sourceStride + effect.sourceX + uint(x)]);
 }
@@ -105,8 +131,9 @@ main()
 		return;
 	uint index = (effect.targetY + at.y) * effect.targetStride
 		+ effect.targetX + at.x;
+	uint mode = effect.mode & 0xfu;
 
-	if (effect.mode == 0u) {
+	if (mode == 0u) {
 		uint byteIndex = (effect.sourceY + at.y) * effect.sourceStride
 			+ effect.sourceX + at.x;
 		uint mask = (source.pixels[byteIndex >> 2] >> ((byteIndex & 3u) * 8u))
@@ -121,7 +148,7 @@ main()
 		return;
 	}
 
-	if (effect.mode == 1u) {
+	if (mode == 1u) {
 		// The centre of this pixel lies between four source texels.
 		vec2 centre = vec2(at + uvec2(effect.auxX, effect.auxY)) * 2.0 + 0.5;
 		float o = effect.offset;
@@ -134,7 +161,7 @@ main()
 		return;
 	}
 
-	if (effect.mode == 2u) {
+	if (mode == 2u) {
 		vec2 centre = (vec2(at + uvec2(effect.auxX, effect.auxY)) + 0.5)
 			* 0.5 - 0.5;
 		float o = effect.offset;
@@ -150,7 +177,7 @@ main()
 		return;
 	}
 
-	if (effect.mode == 4u) {
+	if (mode == 4u) {
 		// The output pixel, in the window buffer's coordinates, back to
 		// where it lies in the window before the scale.
 		vec2 size = vec2(float(effect.sourceWidth), float(effect.sourceHeight));
@@ -167,7 +194,12 @@ main()
 		}
 		if (!inside)
 			return;
-		vec4 window = sampleBilinear(from);
+		vec4 window;
+		if (fromImage()) {
+			// the sampler filters; texel centres are at i + 0.5
+			window = textureLod(image, (from + 0.5) / size, 0.0).bgra;
+		} else
+			window = sampleBilinear(from);
 		vec4 below = unpack(target.pixels[index]);
 		float alpha = float(effect.amount) / 255.0;
 		target.pixels[index] = pack(vec4(mix(below.rgb, window.rgb, alpha),
@@ -175,7 +207,7 @@ main()
 		return;
 	}
 
-	if (effect.mode == 5u) {
+	if (mode == 5u) {
 		// source: the old picture, aux: the new one, both with the
 		// target's stride; amount: how far the new one has come in.
 		int width = int(effect.width);
@@ -194,8 +226,10 @@ main()
 
 	// mode 3: glass. Outside the glass region every pixel is opaque, so
 	// this mode only runs inside it (decision 16).
-	vec4 pixel = unpack(source.pixels[(effect.sourceY + at.y)
-		* effect.sourceStride + effect.sourceX + at.x]);
+	vec4 pixel = fromImage()
+		? imageTexel(ivec2(effect.sourceX + at.x, effect.sourceY + at.y))
+		: unpack(source.pixels[(effect.sourceY + at.y)
+			* effect.sourceStride + effect.sourceX + at.x]);
 	vec4 blur = unpack(aux.pixels[(effect.auxY + at.y) * effect.auxStride
 		+ effect.auxX + at.x]);
 	float seeThrough = float(effect.amount & 0xffu) / 255.0;

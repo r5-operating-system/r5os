@@ -124,7 +124,9 @@ extend_by_stroke_width(BRect& rect, float penSize)
 }
 
 
-/*!	The window's image; what is drawn goes into the M11 window buffer. */
+/*!	The window's image. M13 step 2: the compositor samples it; nothing is
+	read back or copied into a window buffer.
+*/
 class SkiaDrawingEngine::WindowTarget : public SkiaTarget {
 public:
 	WindowTarget(SkiaGpu* gpu, Compositor* compositor,
@@ -132,100 +134,79 @@ public:
 		:
 		SkiaTarget(gpu),
 		fCompositor(compositor),
-		fInterface(windowInterface),
-		fBufferLeft(0),
-		fBufferTop(0)
+		fInterface(windowInterface)
 	{
+	}
+
+	virtual bool UsesSharedImage() const
+	{
+		return true;
 	}
 
 	// under the lock, from FrameBufferChanged()
 	void SetBuffer(WindowBuffer* buffer, int32 left, int32 top)
 	{
-		// 5625U stick, 16 Nov 2026 (boot 3): after a direct window paused
-		// the compositor, Deskbar showed a black square and Tracker lost
-		// icons; in QEMU the same pause showed Chart's stars in Deskbar.
-		// A window that gets another buffer (a new one, or one the
-		// compositor hands out again) finds that buffer's old pixels, and
-		// Deliver() copies only the damage. The image holds the whole
-		// window, so all of it goes into the new buffer at the next run.
+		// 5625U stick, 16 Nov 2026 (boot 3): a window that gets another
+		// buffer (a new one, or one the compositor hands out again) must
+		// show its whole image there. M13 step 2: the buffer shows the
+		// image from the next run on (Drawn()), so a run is asked for.
 		if (buffer != NULL && buffer != fBuffer.Get()) {
 			AddDamage(BRect(left, top, left + (int32)buffer->Width() - 1,
 				top + (int32)buffer->Height() - 1));
 			MarkDrawn();
 		}
 		fBuffer.SetTo(buffer);
-		fBufferLeft = left;
-		fBufferTop = top;
 	}
-
-	struct Delivery {
-		BReference<WindowBuffer>	buffer;
-		int32						left;
-		int32						top;
-	};
 
 	virtual void* PrepareDelivery()
 	{
-		Delivery* delivery = new(std::nothrow) Delivery;
-		if (delivery == NULL)
-			return NULL;
-		delivery->buffer = fBuffer;
-		delivery->left = fBufferLeft;
-		delivery->top = fBufferTop;
-		return delivery;
+		return NULL;
 	}
 
 	virtual void Deliver(void* cookie, const BRegion& screenDamage,
 		const clipping_rect& frame, const uint8* bits, uint32 bytesPerRow)
 	{
-		Delivery* delivery = (Delivery*)cookie;
-		if (delivery == NULL)
-			return;
+		// never called: this target reads nothing back
+	}
+
+	virtual void Drawn(void* cookie, const BRegion& screenDamage,
+		SkiaImage* image)
+	{
 		// The buffer the window has now: a slow run (seconds on Lavapipe)
-		// can end after the compositor gave the window another buffer,
-		// and pixels copied into the old one would never be shown.
+		// can end after the compositor gave the window another buffer.
 		BReference<WindowBuffer> current;
+		int32 left = 0;
+		int32 top = 0;
 		if (fInterface->LockParallelAccess()) {
 			current.SetTo(fInterface->Buffer());
-			delivery->left = fInterface->Left();
-			delivery->top = fInterface->Top();
+			left = fInterface->Left();
+			top = fInterface->Top();
 			fInterface->UnlockParallelAccess();
 		}
 		WindowBuffer* buffer = current.Get();
-		if (buffer != NULL) {
-			BRegion copy(screenDamage);
-			BRegion inside(BRect(delivery->left, delivery->top,
-				delivery->left + (int32)buffer->Width() - 1,
-				delivery->top + (int32)buffer->Height() - 1));
-			copy.IntersectWith(&inside);
-			uint8* to = (uint8*)buffer->Bits();
-			for (int32 i = 0; i < copy.CountRects(); i++) {
-				clipping_rect r = copy.RectAtInt(i);
-				for (int32 y = r.top; y <= r.bottom; y++) {
-					memcpy(to + (y - delivery->top) * buffer->BytesPerRow()
-							+ (r.left - delivery->left) * 4,
-						bits + (y - frame.top) * bytesPerRow
-							+ (r.left - frame.left) * 4,
-						(r.right - r.left + 1) * 4);
-				}
-			}
-			// only now the compose may read them
-			fCompositor->Damage(copy, fInterface);
-		}
-		delete delivery;
+		if (buffer == NULL)
+			return;
+		// An image of another size belongs to a buffer the window had
+		// before a resize; the new buffer keeps showing the old image
+		// (Compositor::ClippingChanged()) until its own image is drawn.
+		if (image != NULL && image->Width() == (int32)buffer->Width()
+			&& image->Height() == (int32)buffer->Height())
+			buffer->SetImage(image, 0, 0);
+		BRegion damage(screenDamage);
+		BRegion inside(BRect(left, top, left + (int32)buffer->Width() - 1,
+			top + (int32)buffer->Height() - 1));
+		damage.IntersectWith(&inside);
+		fCompositor->Damage(damage, fInterface);
 	}
 
 	virtual void DeliveryFailed(void* cookie)
 	{
-		delete (Delivery*)cookie;
 	}
 
 private:
 	Compositor*					fCompositor;
 	WindowHWInterface*			fInterface;
 	BReference<WindowBuffer>	fBuffer;
-	int32						fBufferLeft;
-	int32						fBufferTop;
 };
 
 
@@ -498,6 +479,8 @@ SkiaDrawingEngine::ReleaseBuffer()
 	if (fWindowInterface == NULL || fTarget == NULL || !fTarget->Lock())
 		return;
 	((WindowTarget*)fTarget)->SetBuffer(NULL, 0, 0);
+	// M13 step 2: the image is the window's memory now
+	fTarget->ReleaseSurface();
 	fTarget->Unlock();
 }
 

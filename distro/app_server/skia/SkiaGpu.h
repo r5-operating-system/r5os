@@ -19,9 +19,46 @@
 #include <Locker.h>
 #include <ObjectList.h>
 #include <OS.h>
+#include <Referenceable.h>
+
+#include <vector>
 
 
 class SkiaTarget;
+
+
+/*!	M13 step 2: a window's image, which Skia draws into and the compositor
+	samples (VK_FORMAT_B8G8R8A8_UNORM, Haiku's bytes). app_server makes and
+	frees the VkImage itself, so it does not depend on the Graphite context.
+	Between two runs it is in VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL.
+	Freed when the last reference goes: the target, Graphite (until its
+	work with the image is done), the window buffer it is shown in, and
+	every compose frame that samples it (until that frame's fence).
+*/
+class SkiaImage : public BReferenceable {
+public:
+	// VkImage, VkImageView
+			uint64				Image() const { return fImage; }
+			uint64				View() const { return fView; }
+			int32				Width() const { return fWidth; }
+			int32				Height() const { return fHeight; }
+	// skgpu::graphite::BackendTexture*
+			void*				Texture() const { return fTexture; }
+
+protected:
+	virtual						~SkiaImage();
+
+private:
+	friend class SkiaGpu;
+								SkiaImage();
+
+			uint64				fImage;
+			uint64				fView;
+			uint64				fMemory;
+			int32				fWidth;
+			int32				fHeight;
+			void*				fTexture;
+};
 
 
 struct skia_vulkan_device {
@@ -72,10 +109,13 @@ public:
 	// A target recorded something: the compose thread runs soon.
 			void				Wake();
 
-	// Draw thread only: snaps every target, inserts the recordings,
-	// submits, waits for the GPU and copies what was drawn into the window
-	// buffers and bitmaps. False with a reason on a lost device, a failed
-	// insert or submit, or the forced failure (gpu_draw_fail).
+	// Draw thread only: snaps every target, inserts the recordings and
+	// submits. M13 step 2: a window's image stays on the GPU; the submit
+	// signals a semaphore that the compose waits on, and the damage goes
+	// to the compositor without a CPU wait. Only targets that need the
+	// bytes in memory (offscreen bitmaps, r5-draw-compare) still wait for
+	// the GPU and get a read-back. False with a reason on a lost device, a
+	// failed insert or submit, or the forced failure (gpu_draw_fail).
 			bool				RunWork(const char** _reason);
 
 	// Any thread that holds no recorder lock and not the compose slot:
@@ -128,9 +168,28 @@ public:
 	// thread only.
 			void*				GraphiteHandle() const { return fContext; }
 
+	// M13 step 2: a new window image, under the target's lock; NULL when
+	// it cannot be made. Its contents are undefined until drawn.
+			SkiaImage*			NewImage(int32 width, int32 height);
+	// A GPU that does not finish (M11 "compose fence still busy"): no
+	// image is freed from now on, its memory stays.
+	static	void				KeepImageMemory();
+
+	// M13 step 2: the semaphores the runs signalled since the last call
+	// (VkSemaphore each), for the compose's submit to wait on. Call with
+	// LockQueue() held, around that vkQueueSubmit, so no run's submit
+	// lands between taking them and the wait. Give them back with
+	// ReturnSignals() after that submit's fence. After a failed submit
+	// they are not given back (the GPU drawing goes off).
+			void				TakeSignals(std::vector<uint64>& signals);
+			void				ReturnSignals(
+									const std::vector<uint64>& signals);
+
 private:
 								SkiaGpu();
 			void				_ReleaseWaiters();
+			uint64				_Signal();
+			void				_DestroySemaphores();
 
 			BLocker				fLock;
 				// taken before any recorder lock, never after
@@ -157,6 +216,13 @@ private:
 			BLocker				fStatsLock;
 			bigtime_t			fSamples[256];
 			int32				fSampleCount;
+
+			// M13 step 2, under the queue lock: unsignalled semaphores,
+			// and the signalled ones no compose waited on yet
+			std::vector<uint64>	fFreeSemaphores;
+			std::vector<uint64>	fSignalled;
+			uint32				fQueueFamily;
+			uint64				fRunFence;
 };
 
 
