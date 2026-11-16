@@ -25,6 +25,7 @@
 #include <syslog.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
+#include <sys/stat.h>
 
 #include <Autolock.h>
 #include <FindDirectory.h>
@@ -302,7 +303,12 @@ thread_cpu_time()
 	F(vkDestroyImageView) \
 	F(vkCreateSampler) \
 	F(vkDestroySampler) \
-	F(vkCmdCopyImageToBuffer)
+	F(vkCmdCopyImageToBuffer) \
+	F(vkCreateQueryPool) \
+	F(vkDestroyQueryPool) \
+	F(vkCmdResetQueryPool) \
+	F(vkCmdWriteTimestamp) \
+	F(vkGetQueryPoolResults)
 
 #define VK_DECLARE(name) PFN_##name name;
 
@@ -338,6 +344,10 @@ struct CompositorVulkan {
 	VkImage						blankImage;
 	VkDeviceMemory				blankMemory;
 	VkImageView					blankView;
+
+	// M13 step 2, gpu_debug: GPU timestamps between the compose's passes
+	VkQueryPool					timestamps;
+	float						timestampPeriod;
 
 	VkBuffer					frame;
 	VkDeviceMemory				frameMemory;
@@ -1105,6 +1115,21 @@ Compositor::_InitVulkan(bool radv, const char** _reason)
 	// buffers of an earlier device are not freed through this one
 	fGeneration++;
 
+	// M13 step 2 (owner, 16 Nov 2026): Mesa's own shader cache for
+	// app_server (uid 0) goes in the system cache directory, not in the
+	// administrator's ~/config/cache. Set before the driver loads; a
+	// value already in the environment (a developer's) stays.
+	{
+		char cache[B_PATH_NAME_LENGTH];
+		if (find_directory(B_SYSTEM_CACHE_DIRECTORY, -1, true, cache,
+				sizeof(cache)) == B_OK) {
+			strlcat(cache, "/app_server", sizeof(cache));
+			mkdir(cache, 0755);
+			strlcat(cache, "/mesa", sizeof(cache));
+			mkdir(cache, 0755);
+			setenv("MESA_SHADER_CACHE_DIR", cache, 0);
+		}
+	}
 	vk->library = dlopen("libvulkan.so.1", RTLD_NOW | RTLD_LOCAL);
 	if (vk->library == NULL)
 		vk->library = dlopen("libvulkan.so", RTLD_NOW | RTLD_LOCAL);
@@ -1155,6 +1180,7 @@ Compositor::_InitVulkan(bool radv, const char** _reason)
 		bool isCpu = properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU;
 		if (isCpu != radv) {
 			vk->physical = devices[i];
+			vk->timestampPeriod = properties.limits.timestampPeriod;
 			strlcpy(vk->deviceName, properties.deviceName,
 				sizeof(vk->deviceName));
 			break;
@@ -1497,6 +1523,18 @@ Compositor::_InitImages(const char** _reason)
 		return false;
 	}
 
+	if (fDebug && vk->timestampPeriod > 0) {
+		// M13 step 2: the compose time per pass (gpu_debug only); without
+		// it the frame has no timestamps
+		VkQueryPoolCreateInfo queryInfo = {};
+		queryInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+		queryInfo.queryType = VK_QUERY_TYPE_TIMESTAMP;
+		queryInfo.queryCount = kPassStamps;
+		if (vk->vkCreateQueryPool(vk->device, &queryInfo, NULL,
+				&vk->timestamps) != VK_SUCCESS)
+			vk->timestamps = VK_NULL_HANDLE;
+	}
+
 	VkCommandBufferBeginInfo begin = {};
 	begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 	begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
@@ -1600,6 +1638,8 @@ Compositor::_ExitVulkan()
 			vk->vkDestroyDescriptorSetLayout(vk->device, vk->effectsSetLayout,
 				NULL);
 		}
+		if (vk->timestamps != VK_NULL_HANDLE)
+			vk->vkDestroyQueryPool(vk->device, vk->timestamps, NULL);
 		if (vk->blankView != VK_NULL_HANDLE)
 			vk->vkDestroyImageView(vk->device, vk->blankView, NULL);
 		if (vk->blankImage != VK_NULL_HANDLE)
@@ -2885,6 +2925,14 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 	if (compare)
 		_RecordCompareCopies(layers, copies);
 
+	// M13 step 2, gpu_debug: a timestamp after each pass
+	fStampCount = 0;
+	if (vk->timestamps != VK_NULL_HANDLE) {
+		vk->vkCmdResetQueryPool(vk->commands, vk->timestamps, 0,
+			kPassStamps);
+		_Stamp(kPassCopy);
+	}
+
 	compose_rect rect;
 	memset(&rect, 0, sizeof(rect));
 	rect.frameStride = vk->scanActive ? vk->backPitch / 4 : fFrameWidth;
@@ -2929,11 +2977,15 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 		if (withEffects) {
 			// The blur reads what lies below, before this window's own
 			// shadow darkens it; then the shadow; then the window.
-			if (layer->blurRegion.CountRects() > 0)
+			_Stamp(kPassCopy);
+			if (layer->blurRegion.CountRects() > 0) {
 				_RecordBlur(layer, (uint64)frameInfo.buffer, rect.frameStride);
+				_Stamp(kPassBlur);
+			}
 			if (layer->shadow) {
 				_RecordShadow(layer, damage, (uint64)frameInfo.buffer,
 					rect.frameStride);
+				_Stamp(kPassShadow);
 			}
 			glassPart = layer->glassFixed;
 			glassPart.Include(&layer->glassAlpha);
@@ -2977,8 +3029,10 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 		}
 		if (withEffects && glassPart.CountRects() > 0) {
 			// next to the copy above, on other pixels: no barrier between
+			_Stamp(kPassCopy);
 			_RecordGlass(layer, glassPart, (uint64)frameInfo.buffer,
 				rect.frameStride);
+			_Stamp(kPassGlass);
 			vk->vkCmdBindPipeline(vk->commands,
 				VK_PIPELINE_BIND_POINT_COMPUTE, vk->pipeline);
 			// a shared view below is drawn over all of the window's part
@@ -3043,6 +3097,7 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 			rect.frameStride);
 		_RecordSlide((uint64)frameInfo.buffer, rect.frameStride);
 	}
+	_Stamp(fFrameAnimating ? kPassAnimation : kPassCopy);
 
 	// Decision 4: the damaged rows of the back buffer onto the scanout, in
 	// this submit, under this fence. Each pitch is its buffer's own.
@@ -3161,11 +3216,17 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 			break;
 		}
 		bigtime_t late = system_time() - started;
-		if (late >= kFenceLimit) {
+		// M13 (owner, 16 Nov 2026): Lavapipe is the CPU, not a GPU that
+		// can hang; a late frame there is a busy machine (QEMU: frames of
+		// more than 15 s right after Sign in turned the compositor off).
+		// It waits on, without a limit. RADV keeps the 15 s limit and the
+		// reset ladder.
+		if (late >= kFenceLimit && !fOnLavapipe) {
 			failure = "fence timeout";
 			break;
 		}
-		if (system_time() - fLateLogged >= 1000000) {
+		if (system_time() - fLateLogged
+				>= (late >= kFenceLimit ? 10000000 : 1000000)) {
 			fLateLogged = system_time();
 			log_line("compose late %" B_PRId64 " ms", late / 1000);
 		}
@@ -3194,6 +3255,7 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 		fSkia->ReturnSignals(fConsumedSignals);
 		fConsumedSignals.clear();
 	}
+	_TakeStamps();
 
 	if (compare) {
 		// The CPU cannot read an imported image; those parts are left out.
@@ -3283,6 +3345,42 @@ Compositor::_FreeCompareCopies(CompareCopies& copies)
 		vk->vkFreeMemory(vk->device, (VkDeviceMemory)copies[i].memory, NULL);
 	}
 	copies.clear();
+}
+
+
+//!	M13 step 2, gpu_debug: a timestamp; the time since the last one counts
+//!	for \a pass.
+void
+Compositor::_Stamp(int32 pass)
+{
+	CompositorVulkan* vk = fVulkan;
+	if (vk->timestamps == VK_NULL_HANDLE || fStampCount >= kPassStamps)
+		return;
+	vk->vkCmdWriteTimestamp(vk->commands,
+		VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, vk->timestamps, fStampCount);
+	fStampPass[fStampCount++] = pass;
+}
+
+
+//!	After the fence: the frame's timestamps into the per-pass sums.
+void
+Compositor::_TakeStamps()
+{
+	CompositorVulkan* vk = fVulkan;
+	if (vk->timestamps == VK_NULL_HANDLE || fStampCount < 2)
+		return;
+	uint64 values[kPassStamps];
+	if (vk->vkGetQueryPoolResults(vk->device, vk->timestamps, 0, fStampCount,
+			sizeof(values), values, sizeof(uint64), VK_QUERY_RESULT_64_BIT)
+			!= VK_SUCCESS)
+		return;
+	for (int32 i = 1; i < fStampCount; i++) {
+		if (values[i] < values[i - 1])
+			continue;
+		fPassTime[fStampPass[i]] += (bigtime_t)((values[i] - values[i - 1])
+			* (double)vk->timestampPeriod / 1000.0);
+	}
+	fPassFrames++;
 }
 
 
@@ -5362,6 +5460,19 @@ Compositor::_Report()
 	}
 	log_line("compose median %" B_PRId64 " us cpu %" B_PRId64
 		" ms per 10 s", median, (cpu - fCpuAtReport) / 1000);
+	// M13 step 2: where the compose's GPU time goes, per frame
+	if (fPassFrames > 0) {
+		log_line("compose passes us per frame copy %" B_PRId64 " blur %"
+			B_PRId64 " shadow %" B_PRId64 " glass %" B_PRId64 " animation %"
+			B_PRId64 " frames %" B_PRId32,
+			fPassTime[kPassCopy] / fPassFrames,
+			fPassTime[kPassBlur] / fPassFrames,
+			fPassTime[kPassShadow] / fPassFrames,
+			fPassTime[kPassGlass] / fPassFrames,
+			fPassTime[kPassAnimation] / fPassFrames, fPassFrames);
+	}
+	memset(fPassTime, 0, sizeof(fPassTime));
+	fPassFrames = 0;
 	// M11 stick: the whole app_server, for the FPS compare of zero-copy
 	// and the copy path. A standard account cannot read another uid's
 	// team usage, so app_server logs it itself.
