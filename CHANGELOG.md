@@ -1,5 +1,23 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-16 - Graphics: second review of the VRAM fallback (system-wide GTT limit, exports counted, span take, atomic log bits)
+
+Problem: two outside read-only reviews of #4307 (round 2 of the VRAM fallback) found these, each checked against the code here:
+- The per-file GTT limit left out a file's exports whose buffer was already freed (an export keeps the locked area until it is imported or runs out; up to 32 per file), buffers that are parked (freed while a job runs, owner NULL, up to 10 s on a hang), and several open files could together still lock all RAM.
+- `r5_span_take()` returned at the first free block too large to use when no row was left for its rest, and so missed an exact fit further on; the request then fell back to GTT without need.
+- `r5_log_allow()` updated the once bits and the error count without an atomic operation, and `gpu_rb()` calls it outside the GPU lock while `BO_CREATE` calls it inside.
+- `distro/gpu/COMPAT` still said `gtt_bytes` is the VRAM number; `docs/GPU-ARCHITECTURE.md` still said every `DISCARDABLE` request is refused. The last entry's "image build of this branch" was written while that build failed on a stale `R5Icons.o` in the shared tree; the build passed afterwards (comment on #4307).
+
+What changed:
+- Kernel, `BO_CREATE` for GTT: the file's own buffers plus its export-only GTT (`gpu_export_only()`, the VRAM count of M11 made per domain) stay under a quarter of system memory, and all GTT backings of all files together (parked and exported ones included) under half of it, as Linux keeps TTM (v6.18 `ttm_device.c`, `ttm_global_init()`, lines 90-91: `num_pages /= 2`). Over it: `refuse BO_CREATE gtt total`.
+- `r5_span_take()` (`r5_span.h`): with no row for the rest of a split it goes on to the next block, and writes the offset only on success.
+- `r5_log.h`: the error count and the once bits use `__atomic_fetch_add` and `__atomic_fetch_or`.
+- `COMPAT`, `GPU-ARCHITECTURE.md`: the GTT limits and the `DISCARDABLE` rule as they are now.
+
+Kept as it is, with the reason: an import counts in the importing file (app_server for the windows of other programs), as the VRAM count has since M11; the system-wide limit is what bounds the RAM, and a file limit is per file by the design (`GPU-ARCHITECTURE.md`, "Memory limits per address space"). RADV adds the reported VRAM window to the GTT size for its heaps; the last part of that does not fit once the pool is full, and the kernel refuses it rather than locking more.
+
+Tested: `scripts/test-r5-gpu.cpp` (its new checks run first): `ok gtt limit and span room`, now also the export-only and system-wide counts in `gpu_bo_fill()`, the exact fit after a split without a row, 32 error lines out of 40, and the once bits. The span checks of that program (behind older checks that no longer match the code) were copied into a separate program: they pass with the new `r5_span.h`; the new exact-fit case fails with the old one. `scripts/test-ac-drm.sh`: `ok vram full falls back to gtt`, `ok libdrm ioctl`. Not booted on the 5625U.
+
 ## 2026-11-16 - Graphics: a GPU buffer that no longer fits in VRAM goes to system memory, within a GTT limit (libdrm-2.4.124-3)
 
 Problem: on the 5625U (M12 measurement stick, boot 1, `generated/boot-5625u-1` and `-2` of the m12-gpu-draw worktree) app_server's Skia drawing turned off after a minute with `gpu draw off: insert failed`, after `radeon_hd: refuse BO_CREATE vram status 0x80000000` for buffers of 17 to 45 MB (Skia's 4x MSAA targets of a whole window). The R5 DRM library made every buffer that asks for VRAM in VRAM and nothing else. Linux does not: `amdgpu_gem_create_ioctl()` (v6.18 `amdgpu_gem.c`, lines 486-497) retries a VRAM-only request with `AMDGPU_GEM_DOMAIN_GTT` added, and `amdgpu_bo_create()` (`amdgpu_object.c`) lets a user buffer that allows only VRAM live in GTT too, unless it is `DISCARDABLE`. RADV counts on that: it names GTT with every VRAM request (`radv_amdgpu_bo.c`), and on an APU `radv_physical_device_init_mem_types()` reports 2/3 of visible VRAM plus GTT as its VRAM heap, more than the kernel's VRAM pool (248 MB).

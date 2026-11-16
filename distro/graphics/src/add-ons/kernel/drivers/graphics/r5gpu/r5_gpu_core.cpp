@@ -807,10 +807,13 @@ gpu_bo_create(gpu_client* client, void* buffer, size_t length)
 }
 
 
-/* M11 review: the VRAM this file still holds only through pending
- * exports (the buffer itself was freed), so the VRAM limit counts it. */
+/* M11 review: the memory of one domain this file still holds only through
+ * pending exports (the buffer itself was freed), so the file's limit
+ * counts it. VRAM since M11; GTT since the review of the VRAM fallback
+ * (16 Nov 2026): an export keeps the locked GTT area until it is imported
+ * or runs out, and 32 of them could pass the GTT limit. */
 static uint64
-gpu_export_only_vram(gpu_client* client)
+gpu_export_only(gpu_client* client, uint32 domain)
 {
 	uint64 bytes = 0;
 	for (uint32 i = 0; i < R5_SHARE_EXPORTS_PER_FILE; i++) {
@@ -818,7 +821,7 @@ gpu_export_only_vram(gpu_client* client)
 		if (!record->live || record->backing >= kMaxBo)
 			continue;
 		const gpu_backing* backing = &sBacking[record->backing];
-		if (!backing->live || backing->domain != R5_GPU_DOMAIN_VRAM)
+		if (!backing->live || backing->domain != domain)
 			continue;
 		bool slot = false;
 		for (uint32 n = 0; n < kMaxBo && !slot; n++) {
@@ -856,7 +859,7 @@ gpu_bo_fill(gpu_client* client, gpu_bo* bo, r5_gpu_bo* request, uint64 bytes)
 					&& sBo[i].backing->domain == R5_GPU_DOMAIN_VRAM)
 					held += sBo[i].backing->bytes;
 			}
-			held += gpu_export_only_vram(client);
+			held += gpu_export_only(client, R5_GPU_DOMAIN_VRAM);
 			if (!r5_vram_fits(limit, held, client->tree->vm.used, bytes))
 				return gpu_refuse_vram_full(bytes, in.flags);
 			}
@@ -878,8 +881,22 @@ gpu_bo_fill(gpu_client* client, gpu_bo* bo, r5_gpu_bo* request, uint64 bytes)
 					&& sBo[i].backing->domain == R5_GPU_DOMAIN_GTT)
 					held += sBo[i].backing->bytes;
 			}
+			held += gpu_export_only(client, R5_GPU_DOMAIN_GTT);
 			if (!r5_gtt_fits(limit, held, bytes))
 				return gpu_refuse("BO_CREATE", "gtt limit", B_NO_MEMORY, 0,
+					in.domain, bytes, 0, 0, 0, in.flags);
+			// Second review: the file limit misses buffers that are parked
+			// (freed while a job runs, owner NULL) and several open files
+			// could still lock all RAM. All GTT backings of all files stay
+			// under half of system memory, as Linux keeps TTM
+			// (v6.18 ttm_device.c, ttm_global_init(), num_pages /= 2).
+			uint64 total = 0;
+			for (uint32 i = 0; i < kMaxBo; i++) {
+				if (sBacking[i].live && sBacking[i].domain == R5_GPU_DOMAIN_GTT)
+					total += sBacking[i].bytes;
+			}
+			if (!r5_gtt_fits(limit * 2, total, bytes))
+				return gpu_refuse("BO_CREATE", "gtt total", B_NO_MEMORY, 0,
 					in.domain, bytes, 0, 0, 0, in.flags);
 		}
 		void* kernel = NULL;

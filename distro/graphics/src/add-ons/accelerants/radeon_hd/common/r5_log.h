@@ -35,10 +35,13 @@ r5_log_allow(int debugOn, int selftestOn, int kind, int* errors, int* onceBits,
 {
 	if (errors == 0 || onceBits == 0)
 		return 0;
+	/* Atomic: gpu_rb() calls this outside the GPU lock, other callers
+	 * inside it (review of the VRAM fallback, 16 Nov 2026). */
 	if (kind == R5_LOG_ERROR) {
-		if (*errors >= 32)
+		if (__atomic_fetch_add(errors, 1, __ATOMIC_RELAXED) >= 32) {
+			__atomic_fetch_sub(errors, 1, __ATOMIC_RELAXED);
 			return 0;
-		*errors += 1;
+		}
 		return 1;
 	}
 	if (kind == R5_LOG_DEBUG)
@@ -47,10 +50,8 @@ r5_log_allow(int debugOn, int selftestOn, int kind, int* errors, int* onceBits,
 		return selftestOn ? 1 : 0;
 	if (kind == R5_LOG_ONCE) {
 		int bit = 1 << (onceId & 31);
-		if ((*onceBits & bit) != 0)
-			return 0;
-		*onceBits |= bit;
-		return 1;
+		return (__atomic_fetch_or(onceBits, bit, __ATOMIC_RELAXED) & bit)
+			== 0 ? 1 : 0;
 	}
 	if (kind == R5_LOG_DUMP) {
 		static int dumpLines;
