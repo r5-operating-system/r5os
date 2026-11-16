@@ -42,7 +42,6 @@ BluetoothAudioNode::BluetoothAudioNode(BMediaAddOn* addOn, int32 internalID)
 	fVolumeChanged(0),
 	fLatency(0)
 {
-	memset(&fInput, 0, sizeof(fInput));
 }
 
 
@@ -203,7 +202,7 @@ BluetoothAudioNode::BufferReceived(BBuffer* buffer)
 	// Straight into the ring: A2DPSource sends it at the audio clock's pace,
 	// so the node does not wait for the performance time here.
 	if (fConnected && fSource != NULL
-		&& buffer->Header()->destination == (uint32)fInput.destination.id) {
+		&& buffer->Header()->destination == fInput.destination.id) {
 		size_t frames = buffer->SizeUsed() / (2 * sizeof(float));
 		fSource->Write((const float*)buffer->Data(), frames);
 	}
