@@ -157,6 +157,7 @@ private:
 			BString				_Name(const bdaddr_t& address);
 			void				_PairResult(Link* link, bool paired);
 			void				_DirectResult(bool paired);
+			void				_LinkReady(Link* link);
 			void				_SMPKeyDistribution(Link* link,
 									const uint8* pdu, size_t size);
 			void				_SMPEncrypted(Link* link);

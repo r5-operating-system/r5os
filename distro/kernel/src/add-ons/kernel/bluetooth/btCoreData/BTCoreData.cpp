@@ -55,6 +55,17 @@ ExistConnectionByHandle(uint16 handle, hci_id hid)
 static uint16 sLEBufferLength[R5_LE_MAX_RADIOS];
 
 
+// The slot of a radio: hci ids start at HCI_DEVICE_INDEX_OFFSET (0x7c,
+// "hci124"), so the id itself was always past the table and the LE
+// buffer length was never used. -1 for an id outside it.
+static int
+r5_le_slot(hci_id index)
+{
+	const int slot = (int)index - HCI_DEVICE_INDEX_OFFSET;
+	return slot >= 0 && slot < R5_LE_MAX_RADIOS ? slot : -1;
+}
+
+
 static void
 r5_le_command_complete(bluetooth_device* ndev, const uint8* data, size_t size)
 {
@@ -66,10 +77,10 @@ r5_le_command_complete(bluetooth_device* ndev, const uint8* data, size_t size)
 	const uint16 opcode = data[1] | (data[2] << 8);
 	if (opcode != 0x2002 && opcode != 0x2060)
 		return;
-	if (data[3] != BT_OK || ndev->index < 0
-		|| ndev->index >= R5_LE_MAX_RADIOS)
+	const int slot = r5_le_slot(ndev->index);
+	if (data[3] != BT_OK || slot < 0)
 		return;
-	sLEBufferLength[ndev->index] = data[4] | (data[5] << 8);
+	sLEBufferLength[slot] = data[4] | (data[5] << 8);
 }
 
 
@@ -116,8 +127,8 @@ r5_le_meta_event(bluetooth_device* ndev, const uint8* data, size_t size)
 
 	// PostACL() splits LE packets by this length (0: the radio's own).
 	conn->mtu = 0;
-	if (ndev->index >= 0 && ndev->index < R5_LE_MAX_RADIOS)
-		conn->mtu = sLEBufferLength[ndev->index];
+	if (r5_le_slot(ndev->index) >= 0)
+		conn->mtu = sLEBufferLength[r5_le_slot(ndev->index)];
 	TRACE("%s: LE link handle=%#x\n", __func__, handle);
 }
 // SPDX-SnippetEnd
