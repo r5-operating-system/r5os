@@ -148,7 +148,8 @@ public:
 		kTimeSnap = 0,		// snapping the recordings
 		kTimeInsert,		// Context::insertRecording()
 		kTimeSubmit,		// submit and wait for the GPU
-		kTimeDeliver,		// read-back into the window buffers
+		kTimeDeliver,		// M13 step 2: waiting for the run before, and
+							// the read-backs (bitmaps, r5-draw-compare)
 		kCountComposite,	// R5 shader passes (with a copy of the destination)
 		kCountDirect,		// draws with Skia's own blending
 		kCountCoverage,		// coverage images drawn for the R5 shader
@@ -223,6 +224,8 @@ private:
 			std::vector<uint64>	fSignalled;
 			uint32				fQueueFamily;
 			uint64				fRunFence;
+			// one run on the GPU at a time
+			bool				fRunInFlight;
 };
 
 

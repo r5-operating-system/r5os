@@ -298,7 +298,8 @@ SkiaGpu::SkiaGpu()
 	fStatsLock("skia stats"),
 	fSampleCount(0),
 	fQueueFamily(0),
-	fRunFence(0)
+	fRunFence(0),
+	fRunInFlight(false)
 {
 	fDoneSem = create_sem(0, "skia done");
 }
@@ -743,8 +744,33 @@ SkiaGpu::RunWork(const char** _reason)
 		return false;
 	}
 
-	// M13 step 2: no run waits for the GPU any more; finished work calls
-	// Graphite's release procs (the window images it let go of) here
+	// M13 step 2: one run on the GPU at a time. Without this wait the
+	// draw thread sent two to three times as many, smaller runs as the GPU
+	// could do (QEMU, Lavapipe: 143-177 runs per 10 s against 60 with
+	// SyncToCpu), and the composes waited behind them (frame 205 ms
+	// against 138 ms). Waiting here, before the snap, lets the windows'
+	// drawing gather into the next run while the GPU works, as before;
+	// the compose itself never waits on the CPU.
+	if (fRunInFlight) {
+		VkFence fence = (VkFence)fRunFence;
+		bigtime_t waitStart = system_time();
+		VkResult result;
+		do {
+			// a late GPU is not a failure (M11 decision 14)
+			result = sWaitForFences(sDevice, 1, &fence, VK_TRUE,
+				1000000000ull);
+		} while (result == VK_TIMEOUT);
+		fRunInFlight = false;
+		Profile(kTimeDeliver, system_time() - waitStart);
+		if (result != VK_SUCCESS) {
+			*_reason = "device lost";
+			atomic_set64(&fDone, ticket);
+			_ReleaseWaiters();
+			return false;
+		}
+	}
+	// finished work calls Graphite's release procs (the window images it
+	// let go of) here
 	context->checkAsyncWorkCompletion();
 
 	bigtime_t profileStart = system_time();
@@ -849,12 +875,13 @@ SkiaGpu::RunWork(const char** _reason)
 		SubmitInfo submit;
 		submit.fSync = SyncToCpu::kNo;
 		bigtime_t submitStart = system_time();
-		VkFence fence = readBack ? (VkFence)fRunFence : VK_NULL_HANDLE;
+		// the fence: the next run waits for it, a read-back right now
+		VkFence fence = (VkFence)fRunFence;
 		bool submitted;
 		{
 			BAutolock queueLock(sQueueLock);
 			submitted = context->submit(submit);
-			if (submitted && (shared || readBack)) {
+			if (submitted) {
 				VkSemaphore semaphore = shared
 					? (VkSemaphore)_Signal() : VK_NULL_HANDLE;
 				VkSubmitInfo batch = {};
@@ -870,8 +897,11 @@ SkiaGpu::RunWork(const char** _reason)
 					if (semaphore != VK_NULL_HANDLE)
 						sDestroySemaphore(sDevice, semaphore, NULL);
 					submitted = false;
-				} else if (semaphore != VK_NULL_HANDLE)
-					fSignalled.push_back((uint64)semaphore);
+				} else {
+					fRunInFlight = true;
+					if (semaphore != VK_NULL_HANDLE)
+						fSignalled.push_back((uint64)semaphore);
+				}
 			}
 		}
 		if (!submitted) {
@@ -880,7 +910,7 @@ SkiaGpu::RunWork(const char** _reason)
 		} else {
 			bigtime_t submitTime = system_time();
 			Profile(kTimeSubmit, submitTime - submitStart);
-			if (fence != VK_NULL_HANDLE) {
+			if (readBack) {
 				// a late GPU is not a failure (M11 decision 14)
 				VkResult result;
 				do {
@@ -891,6 +921,7 @@ SkiaGpu::RunWork(const char** _reason)
 					*_reason = "device lost";
 					ok = false;
 				}
+				fRunInFlight = false;
 			}
 			// read_done() copies into the bitmaps from here
 			context->checkAsyncWorkCompletion();
