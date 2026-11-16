@@ -175,6 +175,9 @@ L2capEndpoint::_ConnectLE(const sockaddr* _address)
 	}
 	if (fState == OPEN)
 		return B_OK;
+	// A Command Reject closes without giving the channel back.
+	if (fChannelID != L2CAP_NULL_CID)
+		gL2capEndpointManager.UnbindFromChannel(this);
 	return socket->error != B_OK && socket->error != ENOTCONN
 		? socket->error : ECONNREFUSED;
 }
@@ -714,7 +717,8 @@ l2cap_handle_le_command(HciConnection* conn, uint8 code, uint8 ident,
 				result = spawn_for(listener, conn, R5_L2CAP_MODE_LE_CREDIT,
 					values[1], values[2], values[3], values[4], &child);
 			}
-			const uint16 answer[] = { child != NULL ? child->ChannelID() : 0,
+			const uint16 dcid = child != NULL ? child->ChannelID() : 0;
+			const uint16 answer[] = { dcid,
 				kLEMTU, kLEMPS, kLECredits, result };
 			status_t status = send_le_values(conn, 0x15, ident, answer, 5);
 			if (child != NULL)
@@ -773,7 +777,8 @@ l2cap_handle_le_command(HciConnection* conn, uint8 code, uint8 ident,
 						R5_L2CAP_MODE_ENHANCED_CREDIT, values[4 + i], values[1],
 						values[2], values[3], &children[i]);
 				}
-				answer[4 + i] = children[i] != NULL ? children[i]->ChannelID() : 0;
+				answer[4 + i] = (uint16)(children[i] != NULL
+					? children[i]->ChannelID() : 0);
 				if (one != kLEResultSuccess && answer[3] == kLEResultSuccess)
 					answer[3] = one;
 			}

@@ -33,6 +33,7 @@
 #include <unistd.h>
 
 #include "PasskeyWindow.h"
+#include "LEManager.h"
 // SPDX-SnippetEnd
 
 
@@ -97,6 +98,7 @@ LocalDeviceImpl::LocalDeviceImpl(HCIDelegate* hd) : LocalDeviceHandler(hd)
 	fHasSSP = false;
 	memset(&fPasskeyAddress, 0, sizeof(fPasskeyAddress));
 	fPasskeyUsed = false;
+	fLE = new(std::nothrow) LEManager(this);
 	// SPDX-SnippetEnd
 	LoadRemoteDevices();
 }
@@ -105,6 +107,12 @@ LocalDeviceImpl::LocalDeviceImpl(HCIDelegate* hd) : LocalDeviceHandler(hd)
 LocalDeviceImpl::~LocalDeviceImpl()
 {
 	SaveRemoteDevices();
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	delete fLE;
+	fLE = NULL;
+	// SPDX-SnippetEnd
 }
 
 
@@ -667,6 +675,23 @@ LocalDeviceImpl::HandleEvent(struct hci_event_header* event, size_t size)
 			size >= sizeof(*event) ? event->ecode : 0, size);
 		return;
 	}
+	// LE events and the answers to LE commands belong to LEManager. An
+	// answer someone else also waits for (the kit asking the address
+	// while LEManager does) goes on to them as well.
+	if (fLE != NULL && fLE->HandleEvent(event, size)) {
+		bool shared = false;
+		if (event->ecode == HCI_EVENT_CMD_COMPLETE) {
+			shared = FindPetition(event->ecode, JumpEventHeader<
+				struct hci_ev_cmd_complete>(event)->opcode) != NULL;
+		} else if (event->ecode == HCI_EVENT_CMD_STATUS) {
+			const uint16 opcode = JumpEventHeader<
+				struct hci_ev_cmd_status>(event)->opcode;
+			shared = FindPetition(event->ecode, opcode) != NULL
+				|| FindPetition(HCI_EVENT_CMD_COMPLETE, opcode) != NULL;
+		}
+		if (!shared)
+			return;
+	}
 	// SPDX-SnippetEnd
 
 /*
@@ -1168,6 +1193,12 @@ LocalDeviceImpl::CommandComplete(struct hci_ev_cmd_complete* event,
 			BMessage* inquiry_request = FindPetition(HCI_EVENT_INQUIRY_COMPLETE);
 			if (inquiry_request != NULL)
 				ClearWantedEvent(inquiry_request);
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			if (fLE != NULL)
+				fLE->StopScan();
+			// SPDX-SnippetEnd
 
 			ClearWantedEvent(request);
 			break;
@@ -1246,8 +1277,11 @@ LocalDeviceImpl::CommandComplete(struct hci_ev_cmd_complete* event,
 			}
 			syslog(LOG_INFO, "bluetooth_server: hci%" B_PRId32 " event mask %#"
 				B_PRIx64 " (secure simple pairing %s)", GetID(),
-				r5_event_mask(fHasSSP ? fFeatures : NULL),
-				fHasSSP ? "on" : "not supported");
+				_EventMask(), fHasSSP ? "on" : "not supported");
+			// The LE part of the setup (step 6), after the Event Mask.
+			if (commandStatus == BT_OK && fLE != NULL
+				&& LEManager::Supported(fFeatures))
+				fLE->Setup(fFeatures);
 
 			// A reset leaves the radio unreachable (Scan Enable 0). A paired
 			// controller or keyboard pages the computer to come back after
@@ -1306,6 +1340,13 @@ LocalDeviceImpl::CommandStatus(struct hci_ev_cmd_status* event,
 			request->SendReply(&reply);
 			//printf("Sending reply... %ld\n", status);
 			// debug reply.PrintToStream();
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			// LE devices join the same scan list (step 6).
+			if (event->status == BT_OK && fLE != NULL)
+				fLE->StartScan(request->ReturnAddress());
+			// SPDX-SnippetEnd
 
 			ClearWantedEvent(request, HCI_EVENT_CMD_STATUS,
 				PACK_OPCODE(OGF_LINK_CONTROL, OCF_INQUIRY));
@@ -1629,6 +1670,12 @@ LocalDeviceImpl::InquiryComplete(uint8* status, BMessage* request)
 	BMessage reply(BT_MSG_INQUIRY_COMPLETED);
 
 	reply.AddUInt8("status", *status);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	if (fLE != NULL)
+		fLE->StopScan();
+	// SPDX-SnippetEnd
 
 	printf("%s: Sending reply...\n", __func__);
 	status_t stat = request->SendReply(&reply);
@@ -1763,6 +1810,9 @@ LocalDeviceImpl::CreateConnection(BMessage* message)
 		TRACE_BT("LocalDeviceImpl: Create Connection without an address\n");
 		return;
 	}
+	// A device the LE scan found pairs over LE (step 6).
+	if (fLE != NULL && fLE->Pair(*bdaddr))
+		return;
 	bool added = false;
 	// SPDX-SnippetEnd
 
@@ -2635,13 +2685,32 @@ LocalDeviceImpl::_WriteEventMask()
 {
 	// Only the bits this controller supports: the SSP events need its SSP
 	// feature, and Simple Pairing Mode must have been accepted.
-	uint64 mask = r5_event_mask(fHasSSP ? fFeatures : NULL);
+	uint64 mask = _EventMask();
 	BluetoothCommand<typed_command(r5_hci_cp_set_event_mask)>
 		command(OGF_CONTROL_BASEBAND, R5_OCF_SET_EVENT_MASK);
 	for (int i = 0; i < 8; i++)
 		command->mask[i] = (uint8)(mask >> (8 * i));
 	_IssueSetupCommand(command.Data(), command.Size(),
 		PACK_OPCODE(OGF_CONTROL_BASEBAND, R5_OCF_SET_EVENT_MASK));
+}
+
+
+uint64
+LocalDeviceImpl::_EventMask() const
+{
+	uint64 mask = r5_event_mask(fHasSSP ? fFeatures : NULL);
+	// LE Meta (0x3E, bit 61) only when the controller has LE (step 6).
+	if (LEManager::Supported(fFeatures))
+		mask |= 1ULL << 61;
+	return mask;
+}
+
+
+status_t
+LocalDeviceImpl::R5IssueCommand(const void* command, size_t size)
+{
+	return fHCIDelegate->IssueCommand((raw_command)command, size) == B_ERROR
+		? B_ERROR : B_OK;
 }
 
 

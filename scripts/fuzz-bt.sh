@@ -3,8 +3,9 @@
 # Copyright 2026 R5OS Contributors
 #
 # Host AddressSanitizer and UBSan fuzz for the Bluetooth kernel parsers
-# (docs/BLUETOOTH.md, steps 1a to 1c). Run it in WSL.
-# Usage: fuzz-bt.sh <target> [seconds]   (target: hci or l2cap; default 60 s)
+# (docs/BLUETOOTH.md, steps 1a to 1c), and the LE parsers of
+# bluetooth_server (step 6). Run it in WSL.
+# Usage: fuzz-bt.sh <target> [seconds]   (target: hci, l2cap or le; 60 s)
 # The log is generated/bluetooth/fuzz-<target>.log; its last line is
 # "<target>_fuzz: <seconds>s 0 crashes" when nothing failed.
 set -eu
@@ -13,7 +14,7 @@ target="${1:?usage: fuzz-bt.sh <target> [seconds]}"
 seconds="${2:-60}"
 K=distro/kernel/src/add-ons/kernel
 case "$target" in
-	hci|l2cap) ;;
+	hci|l2cap|le) ;;
 	*) echo "fuzz-bt: unknown target $target" >&2; exit 2 ;;
 esac
 out=/tmp/bt-fuzz-$$
@@ -23,6 +24,7 @@ g++ -std=c++17 -fsanitize=address,undefined -fno-sanitize-recover=all \
 	-I "$K/bluetooth/hci" \
 	-I "$K/drivers/bluetooth/h2/h2generic" \
 	-I "$K/network/protocols/bluetooth/l2cap" \
+	-I distro/bluetooth/server \
 	scripts/bt-fuzz.cpp -o "$out"
 mkdir -p generated/bluetooth
 log="generated/bluetooth/fuzz-$target.log"

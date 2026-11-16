@@ -6,7 +6,8 @@
 - bluetooth_server (distro/bluetooth/server) over src/servers/bluetooth,
 - libbluetooth RemoteDevice and the shared headers (distro/bluetooth/kit,
   distro/bluetooth/headers),
-- bt_server_smoke_test and bt_l2cap_abi_test (distro/bluetooth/tests) into
+- bt_server_smoke_test, bt_l2cap_abi_test, bt_hid_driver_test,
+  bt_l2cap_coc_test and bt_smp_crypto_test (distro/bluetooth/tests) into
   src/bin, with their Jam
   SubInclude and SYSTEM_BIN line in the regular image,
 - libr5bt.so (distro/bluetooth/lib) into src/preferences/r5bt and
@@ -128,6 +129,21 @@ def main() -> int:
         "SYSTEM_BIN += bt_l2cap_abi_test ;\n",
         "SYSTEM_BIN += bt_hid_driver_test ;\n",
         "bt_hid_driver_test image")
+    # Steps 1c and 6: the LE socket interface and the SMP crypto, no radio.
+    for test in ("bt_l2cap_coc_test", "bt_smp_crypto_test"):
+        copy_dir(SRC / "tests" / test, HAIKU / "src" / "bin" / test, test)
+    insert_once(HAIKU / "src" / "bin" / "Jamfile",
+        "SubInclude HAIKU_TOP src bin bt_hid_driver_test ;\n",
+        "SubInclude HAIKU_TOP src bin bt_l2cap_coc_test ;\n",
+        "bt_l2cap_coc_test jam")
+    insert_once(HAIKU / "src" / "bin" / "Jamfile",
+        "SubInclude HAIKU_TOP src bin bt_l2cap_coc_test ;\n",
+        "SubInclude HAIKU_TOP src bin bt_smp_crypto_test ;\n",
+        "bt_smp_crypto_test jam")
+    insert_once(HAIKU / "build" / "jam" / "images" / "definitions" / "regular",
+        "SYSTEM_BIN += bt_hid_driver_test ;\n",
+        "SYSTEM_BIN += bt_l2cap_coc_test bt_smp_crypto_test ;\n",
+        "bt_l2cap_coc_test image")
     # libr5bt.so (step 3a): the sources into src/preferences/r5bt, the
     # public header next to R5Icons.h and Card.h. It needs libbluetooth,
     # so it is in the regular image only, like the rest of Bluetooth.

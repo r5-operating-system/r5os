@@ -2,6 +2,17 @@ SubDir HAIKU_TOP src servers bluetooth ;
 
 UsePrivateHeaders shared bluetooth net ;
 
+# SPDX-SnippetBegin
+# SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+# LE Secure Connections: ECDH P-256 and AES-CMAC from OpenSSL libcrypto
+# (docs/BLUETOOTH.md, section 4, choice 3), as airplay_server uses it.
+local opensslRoot = [ FDirName $(HAIKU_TOP) generated.$(TARGET_PACKAGING_ARCH)
+	r5-openssl ] ;
+UseHeaders [ FDirName $(opensslRoot) include ] : true ;
+local opensslLib = [ FDirName $(opensslRoot) lib libcrypto.so.3 ] ;
+# SPDX-SnippetEnd
+
 AddResources bluetooth_server : bluetooth_server.rdef ;
 
 Application bluetooth_server
@@ -12,12 +23,16 @@ Application bluetooth_server
 	HCIControllerAccessor.cpp
 	HIDHost.cpp
 	HCITransportAccessor.cpp
+	LEManager.cpp
+	LEManagerGATT.cpp
+	LEManagerSMP.cpp
 	LocalDeviceHandler.cpp
 	LocalDeviceImpl.cpp
 	PasskeyWindow.cpp
 	SDPServer.cpp
 	SDPClient.cpp
-	: be network libbluetooth.so localestub
+	SMPCrypto.cpp
+	: be network libbluetooth.so localestub $(opensslLib)
 	[ TargetLibstdc++ ]
 ;
 

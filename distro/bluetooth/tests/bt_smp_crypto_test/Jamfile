@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: MIT
+# Copyright 2026 R5OS Contributors
+SubDir HAIKU_TOP src bin bt_smp_crypto_test ;
+
+local opensslRoot = [ FDirName $(HAIKU_TOP) generated.$(TARGET_PACKAGING_ARCH)
+	r5-openssl ] ;
+UseHeaders [ FDirName $(opensslRoot) include ] : true ;
+UseHeaders [ FDirName $(HAIKU_TOP) src servers bluetooth ] ;
+SEARCH_SOURCE += [ FDirName $(HAIKU_TOP) src servers bluetooth ] ;
+
+Application bt_smp_crypto_test :
+	bt_smp_crypto_test.cpp
+	SMPCrypto.cpp
+	: [ FDirName $(opensslRoot) lib libcrypto.so.3 ] [ TargetLibsupc++ ]
+	;

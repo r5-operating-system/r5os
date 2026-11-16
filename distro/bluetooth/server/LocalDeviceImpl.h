@@ -53,6 +53,12 @@ struct ServerRemoteDevice
 
 typedef BObjectList<ServerRemoteDevice> RemoteDevicesList;
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+class LEManager;
+
+// SPDX-SnippetEnd
 class LocalDeviceImpl : public LocalDeviceHandler {
 
 private:
@@ -107,6 +113,10 @@ public:
 	// SPDX-License-Identifier: MIT
 	// The /dev/bluetooth path this radio was opened from.
 	const BString&		Path() const { return fPath; }
+	// Bluetooth Low Energy of this radio (LEManager, step 6), and the
+	// command path it uses.
+	LEManager*			LE() const { return fLE; }
+	status_t			R5IssueCommand(const void* command, size_t size);
 	// SPDX-SnippetEnd
 
 private:
@@ -116,6 +126,8 @@ private:
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
 	BString				fPath;
+	LEManager*			fLE;
+	uint64				_EventMask() const;
 
 	// Controller setup after a reset (SetupController()).
 	uint8				fFeatures[8];

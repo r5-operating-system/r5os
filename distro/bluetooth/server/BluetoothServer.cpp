@@ -45,6 +45,11 @@ static bool radio_sender_allowed(BMessage* message);
 
 #include "BluetoothServer.h"
 #include "Debug.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include "LEManager.h"
+// SPDX-SnippetEnd
 #include "DeskbarReplicant.h"
 #include "LocalDeviceImpl.h"
 #include "SDPServer.h"
@@ -148,6 +153,7 @@ bool BluetoothServer::QuitRequested(void)
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
+	LEManager::StopChannels();
 	fHIDHost->Stop();
 	delete fHIDHost;
 	fHIDHost = NULL;
@@ -201,6 +207,9 @@ void BluetoothServer::ReadyToRun(void)
 	// Classic HID: listens on PSM 0x11 and 0x13 (logs when the driver is
 	// missing; Bluetooth works without it).
 	fHIDHost->Start();
+	// BLE: the ATT and SMP sockets, and LE keyboard lights (step 6).
+	fHIDHost->SetLEOutputHook(LEManager::HIDOutput, NULL);
+	LEManager::StartChannels();
 	// SPDX-SnippetEnd
 
 	// SPDX-SnippetBegin
@@ -803,8 +812,12 @@ BluetoothServer::_SetRadioEnabled(bool enabled)
 
 	// Off: nothing can find or page the radio. On: paired devices can page
 	// it again (0x02), it is still not visible to a scan (step 4).
-	for (int32 i = 0; i < fLocalDevicesList.CountItems(); i++)
+	for (int32 i = 0; i < fLocalDevicesList.CountItems(); i++) {
 		fLocalDevicesList.ItemAt(i)->WriteScanEnable(enabled ? 0x02 : 0x00);
+		// LE: off stops the scan and the links, on connects paired devices.
+		if (fLocalDevicesList.ItemAt(i)->LE() != NULL)
+			fLocalDevicesList.ItemAt(i)->LE()->RadioChanged(enabled);
+	}
 
 	syslog(LOG_INFO, "bluetooth_server: radio switch %s",
 		enabled ? "on" : "off");
