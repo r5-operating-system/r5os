@@ -401,6 +401,7 @@ SkiaTarget::DropGpu()
 	fRecorded = false;
 	fTextures.clear();
 	fTextureBytes = 0;
+	fGradients.clear();
 	if (fGpu != NULL && fRecorder != NULL)
 		fGpu->DeleteRecorder(fRecorder);
 	fRecorder = NULL;
@@ -464,6 +465,54 @@ SkiaTarget::FindTexture(const void* id, const uint8* bits, int32 length,
 		return texture.image;
 	}
 	return nullptr;
+}
+
+
+/*!	M13 step 1: FillRectVerticalGradient() and _GradientShader() made and
+	uploaded a new image of their colours on every draw. The colours are
+	still computed (cheap); the same colours reuse the uploaded image.
+	Compared byte for byte (a ramp is 1 KB, a column a few KB).
+*/
+sk_sp<SkImage>
+SkiaTarget::GradientImage(const SkBitmap& colors)
+{
+	static const size_t kGradientCount = 32;
+	static const size_t kGradientLargest = 64 * 1024;
+	const uint8* bits = (const uint8*)colors.getPixels();
+	size_t length = colors.computeByteSize();
+	if (bits == NULL || fRecorder == NULL)
+		return nullptr;
+	for (Gradient& gradient : fGradients) {
+		if (gradient.width == colors.width()
+			&& gradient.height == colors.height()
+			&& gradient.bits.size() == length
+			&& memcmp(gradient.bits.data(), bits, length) == 0) {
+			gradient.used = system_time();
+			return gradient.image;
+		}
+	}
+	sk_sp<SkImage> image = upload_texture(fRecorder, colors.asImage());
+	if (image == nullptr || length > kGradientLargest)
+		return image;
+	if (fGradients.size() >= kGradientCount) {
+		size_t oldest = 0;
+		for (size_t i = 1; i < fGradients.size(); i++) {
+			if (fGradients[i].used < fGradients[oldest].used)
+				oldest = i;
+		}
+		fGradients.erase(fGradients.begin() + oldest);
+	}
+	try {
+		Gradient gradient;
+		gradient.bits.assign(bits, bits + length);
+		gradient.width = colors.width();
+		gradient.height = colors.height();
+		gradient.image = image;
+		gradient.used = system_time();
+		fGradients.push_back(std::move(gradient));
+	} catch (...) {
+	}
+	return image;
 }
 
 
@@ -1816,8 +1865,7 @@ SkiaPainter::FillRect(const BRect& r, const BGradient* gradient)
 				}
 			}
 			column.setImmutable();
-			sk_sp<SkImage> image = upload_texture(
-				fTarget->Recorder(), column.asImage());
+			sk_sp<SkImage> image = fTarget->GradientImage(column);
 			if (image == nullptr)
 				return _Clipped(BRect(a, b));
 			SkMatrix at = SkMatrix::Translate((float)(int32)rect.left,
@@ -2421,8 +2469,7 @@ SkiaPainter::_GradientShader(const BGradient& gradient, bool* _ok)
 		out[3] = stop->color.alpha;
 	}
 	ramp.setImmutable();
-	sk_sp<SkImage> image = upload_texture(fTarget->Recorder(),
-		ramp.asImage());
+	sk_sp<SkImage> image = fTarget->GradientImage(ramp);
 	if (image == nullptr)
 		return nullptr;
 

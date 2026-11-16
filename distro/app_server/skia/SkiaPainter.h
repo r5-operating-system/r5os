@@ -27,6 +27,7 @@
 #include <memory>
 #include <vector>
 
+#include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkPath.h"
@@ -98,6 +99,11 @@ public:
 			sk_sp<SkImage>		FindTexture(const void* id, const uint8* bits,
 									int32 length, int32 width, int32 height,
 									int32 bytesPerRow, int32 space, bool raw);
+	// M13 step 1: the GPU image of a gradient's colours (the 256-entry
+	// ramp, or a vertical gradient's column), kept per target while the
+	// same colours come again; under the lock. NULL when it cannot be
+	// uploaded.
+			sk_sp<SkImage>		GradientImage(const SkBitmap& colors);
 			void				KeepTexture(const void* id, const uint8* bits,
 									int32 length, int32 width, int32 height,
 									int32 bytesPerRow, int32 space, bool raw,
@@ -196,6 +202,15 @@ protected:
 				bigtime_t			used;
 			};
 			std::vector<Texture>	fTextures;
+
+			struct Gradient {
+				std::vector<uint8>	bits;
+				int32				width;
+				int32				height;
+				sk_sp<SkImage>		image;
+				bigtime_t			used;
+			};
+			std::vector<Gradient>	fGradients;
 			size_t				fTextureBytes = 0;
 };
 
