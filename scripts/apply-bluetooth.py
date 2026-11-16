@@ -4,7 +4,10 @@
 """Bluetooth, from distro/bluetooth. Idempotent copy into the Haiku tree:
 
 - bluetooth_server (distro/bluetooth/server) over src/servers/bluetooth,
-- bt_server_smoke_test (distro/bluetooth/tests) into src/bin, with its Jam
+- libbluetooth RemoteDevice and the shared headers (distro/bluetooth/kit,
+  distro/bluetooth/headers),
+- bt_server_smoke_test and bt_l2cap_abi_test (distro/bluetooth/tests) into
+  src/bin, with their Jam
   SubInclude and SYSTEM_BIN line in the regular image.
 
 docs/BLUETOOTH.md is the plan."""
@@ -54,6 +57,14 @@ def main() -> int:
         raise SystemExit(f"missing {HAIKU}")
     copy_dir(SRC / "server", HAIKU / "src" / "servers" / "bluetooth",
         "bluetooth_server")
+    # libbluetooth: RemoteDevice (step 1b) and the headers it shares with
+    # the server. Only these files; the rest of the kit stays Haiku's.
+    copy_dir(SRC / "kit", HAIKU / "src" / "kits" / "bluetooth",
+        "libbluetooth")
+    copy_dir(SRC / "headers" / "os" / "bluetooth",
+        HAIKU / "headers" / "os" / "bluetooth", "bluetooth headers")
+    copy_dir(SRC / "headers" / "private" / "bluetooth",
+        HAIKU / "headers" / "private" / "bluetooth", "bluetooth private headers")
     copy_dir(SRC / "tests" / "bt_server_smoke_test",
         HAIKU / "src" / "bin" / "bt_server_smoke_test", "bt_server_smoke_test")
     insert_once(HAIKU / "src" / "bin" / "Jamfile",
@@ -64,6 +75,16 @@ def main() -> int:
         "SYSTEM_BIN += userguide quicktour welcome ;\n",
         "SYSTEM_BIN += bt_server_smoke_test ;\n",
         "bt_server_smoke_test image")
+    copy_dir(SRC / "tests" / "bt_l2cap_abi_test",
+        HAIKU / "src" / "bin" / "bt_l2cap_abi_test", "bt_l2cap_abi_test")
+    insert_once(HAIKU / "src" / "bin" / "Jamfile",
+        "SubInclude HAIKU_TOP src bin bt_server_smoke_test ;\n",
+        "SubInclude HAIKU_TOP src bin bt_l2cap_abi_test ;\n",
+        "bt_l2cap_abi_test jam")
+    insert_once(HAIKU / "build" / "jam" / "images" / "definitions" / "regular",
+        "SYSTEM_BIN += bt_server_smoke_test ;\n",
+        "SYSTEM_BIN += bt_l2cap_abi_test ;\n",
+        "bt_l2cap_abi_test image")
     return 0
 
 

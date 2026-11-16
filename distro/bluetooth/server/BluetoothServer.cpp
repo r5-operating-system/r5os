@@ -428,6 +428,36 @@ void BluetoothServer::MessageReceived(BMessage* message)
 		// SPDX-SnippetBegin
 		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 		// SPDX-License-Identifier: MIT
+		// RemoteDevice::GetConnectionDetails() (docs/BLUETOOTH.md, step 1b).
+		case BT_REQ_CONN_DETAILS:
+		{
+			status = B_BAD_VALUE;
+			LocalDeviceImpl* lDeviceImpl = LocateDelegateFromMessage(message);
+			const bdaddr_t* bdaddr;
+			if (lDeviceImpl != NULL && _FindAddress(message, &bdaddr)) {
+				ServerRemoteDevice* rd
+					= lDeviceImpl->RemoteDeviceByAddr(*bdaddr);
+				if (rd != NULL) {
+					reply.AddUInt8("conn state",
+						static_cast<uint8>(rd->conn_state));
+					reply.AddUInt8("link type", rd->link_type);
+					reply.AddBool("encrypted", rd->encryption_enabled != 0);
+					if (rd->conn_state == RemoteDevice::CONNECTED)
+						reply.AddUInt16("handle", rd->handle);
+					status = B_OK;
+				}
+			}
+			if (status != B_OK) {
+				reply.AddUInt8("conn state",
+					static_cast<uint8>(RemoteDevice::DISCONNECTED));
+			}
+		}
+		break;
+		// SPDX-SnippetEnd
+
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
 		case kMsgReportStarted:
 		{
 			syslog(LOG_INFO, "bluetooth_server: started, %" B_PRId32
@@ -570,7 +600,13 @@ BluetoothServer::HandleAcquireLocalDevice(BMessage* message, BMessage* reply)
 {
 	hci_id hid;
 	ssize_t size;
-	bdaddr_t bdaddr;
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// FindData() hands out a pointer; it was written into a 6-byte
+	// bdaddr_t on the stack.
+	const void* bdaddr;
+	// SPDX-SnippetEnd
 	LocalDeviceImpl* lDeviceImpl = NULL;
 	static int32 lastIndex = 0;
 
@@ -578,8 +614,8 @@ BluetoothServer::HandleAcquireLocalDevice(BMessage* message, BMessage* reply)
 		TRACE_BT("BluetoothServer: GetLocalDevice requested with id\n");
 		lDeviceImpl = LocateDelegateFromMessage(message);
 
-	} else if (message->FindData("bdaddr", B_ANY_TYPE,
-		(const void**)&bdaddr, &size) == B_OK) {
+	} else if (message->FindData("bdaddr", B_ANY_TYPE, &bdaddr, &size)
+			== B_OK) {
 
 		// Try to find out when the user specified the address
 		TRACE_BT("BluetoothServer: GetLocalDevice requested with bdaddr\n");
