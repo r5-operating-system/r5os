@@ -28,6 +28,7 @@ Application bluetooth_server
 	LEManagerSMP.cpp
 	LocalDeviceHandler.cpp
 	LocalDeviceImpl.cpp
+	PairingNotice.cpp
 	PasskeyWindow.cpp
 	SDPServer.cpp
 	SDPClient.cpp
@@ -40,5 +41,6 @@ DoCatalogs bluetooth_server :
 	x-vnd.Haiku-bluetooth_server
 	:
 	DeskbarReplicant.cpp
+	PairingNotice.cpp
 	PasskeyWindow.cpp
 ;

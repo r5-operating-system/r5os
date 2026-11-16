@@ -165,7 +165,9 @@ BLayoutBuilder::Group&lt;&gt;(this, B_VERTICAL, 0)
 			bluetooth_server also scans for LE (extended scanning where the radio has it). An LE device shows in
 			the same list once it has a name and can be connected to. Pair connects to it as the central and
 			pairs with LE Secure Connections (ECDH P-256), or with legacy pairing for an older device. A keyboard
-			that must type a number gets the same number window as a Classic keyboard. The keys are kept by the
+			that must type a number gets the same number window as a Classic keyboard; a device that shows a
+			number asks for it, or asks whether the two numbers match. A notification says when the pairing is
+			done, or that it did not work. The keys are kept by the
 			system for the whole computer, in <code class="inline">/boot/system/settings/bluetooth</code>, readable
 			by bluetooth_server only.</p>
 			<p>A mouse or keyboard with the HID service (HID over GATT) then becomes an input device like a USB

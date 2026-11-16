@@ -30,6 +30,8 @@
 
 #include "BluetoothServer.h"
 #include "LocalDeviceImpl.h"
+#include "PairingNotice.h"
+#include "PasskeyWindow.h"
 #include "le_parse.h"
 
 
@@ -587,6 +589,8 @@ LEManager::_ConnectionComplete(const uint8* data, size_t size, uint8 subevent)
 	link->smpState = Link::kSMPIdle;
 	link->pairing = false;
 	link->smpStarted = 0;
+	link->smpLast = 0;
+	link->attLast = 0;
 	link->secureConnections = false;
 	link->method = Link::kJustWorks;
 	link->keyPair.privateKey = NULL;
@@ -636,8 +640,15 @@ LEManager::_Disconnected(uint16 handle, uint8 reason)
 	// the first connection events. A pairing connect is tried again.
 	const bool retry = reason == 0x3e && link->pairRequested
 		&& fConnectRetries < kMaxConnectRetries;
-	if (link->pairing && link->smpState != Link::kSMPDone && !retry)
+	if (link->pairing && link->smpState != Link::kSMPDone && !retry) {
 		syslog(LOG_NOTICE, "bluetooth_server: smp pairing failed (link lost)");
+		if (link->pairRequested)
+			r5_pairing_notice(false, _Name(link->address));
+	} else if (link->pairRequested && !link->pairing && !retry
+		&& link->smpState == Link::kSMPIdle) {
+		// The link never got as far as pairing.
+		r5_pairing_notice(false, _Name(link->address));
+	}
 	if (retry) {
 		fConnectRetries++;
 		fWantDirect = true;
@@ -1353,6 +1364,7 @@ le_send_fixed(int index, uint16 cid, const bdaddr_t& address, uint8 type,
 void
 LEManager::_SMPSend(Link* link, const uint8* pdu, size_t size)
 {
+	link->smpLast = system_time();
 	le_send_fixed(1, R5_L2CAP_CID_SMP, link->address, link->addressType, pdu,
 		size);
 }
@@ -1363,4 +1375,134 @@ LEManager::_ATTSend(Link* link, const uint8* pdu, size_t size)
 {
 	le_send_fixed(0, R5_L2CAP_CID_ATT, link->address, link->addressType, pdu,
 		size);
+}
+
+
+// #pragma mark - pairing windows and timeouts
+
+
+BString
+LEManager::_Name(const bdaddr_t& address)
+{
+	Seen* seen = _FindSeen(address);
+	return seen != NULL ? seen->name : BString();
+}
+
+
+void
+LEManager::_SMPAskUser(Link* link, uint32 number, bool compare)
+{
+	// Numeric Comparison (yes or no) or Passkey Entry (the person types
+	// the number the device shows). The pairing waits; the SMP timeout
+	// still runs (Vol 3, Part H, 3.4).
+	PasskeyWindow* window = new(std::nothrow) PasskeyWindow(link->address,
+		fDevice->GetID(), _Name(link->address), number, compare, true);
+	if (window == NULL) {
+		_SMPFail(link, compare ? 0x0c : kSMPPasskeyEntryFailed);
+		return;
+	}
+	if (link->passkeyWindow.IsValid())
+		link->passkeyWindow.SendMessage(B_QUIT_REQUESTED);
+	link->passkeyWindow = BMessenger(window);
+	link->smpState = Link::kSMPWaitUser;
+	syslog(LOG_INFO, "bluetooth_server: smp %s shown",
+		compare ? "numeric comparison" : "passkey entry");
+	window->Show();
+}
+
+
+/*static*/ void
+LEManager::UserAnswer(BMessage* message)
+{
+	const void* data;
+	ssize_t size;
+	if (message->FindData("bdaddr", B_RAW_TYPE, &data, &size) != B_OK
+		|| size != (ssize_t)sizeof(bdaddr_t))
+		return;
+	const bdaddr_t& address = *(const bdaddr_t*)data;
+	const bool accept = message->GetBool("accept", false);
+	const uint32 passkey = message->GetUInt32("passkey", 0);
+
+	BAutolock managers(sManagersLock);
+	for (size_t i = 0; i < sManagers.size(); i++) {
+		LEManager* manager = sManagers[i];
+		BAutolock _(manager->fLock);
+		Link* link = manager->_FindLink(address);
+		if (link != NULL) {
+			manager->_UserAnswer(link, accept, passkey);
+			return;
+		}
+	}
+}
+
+
+void
+LEManager::_UserAnswer(Link* link, bool accept, uint32 passkey)
+{
+	if (link->smpState != Link::kSMPWaitUser)
+		return;
+	link->passkeyWindow = BMessenger();
+	link->smpLast = system_time();
+
+	const bool compare = link->method == Link::kNumericComparison;
+	if (!accept || passkey > 999999) {
+		// Numeric Comparison Failed (0x0C) or Passkey Entry Failed.
+		_SMPFail(link, compare ? 0x0c : kSMPPasskeyEntryFailed);
+		if (_FindBond(link->address) == NULL)
+			_CloseLink(link, true);
+		return;
+	}
+	if (compare) {
+		_SMPSendDHKeyCheck(link);
+		return;
+	}
+	link->passkey = passkey;
+	_SMPSendConfirm(link);
+}
+
+
+/*static*/ void
+LEManager::Pulse()
+{
+	BAutolock managers(sManagersLock);
+	for (size_t i = 0; i < sManagers.size(); i++) {
+		BAutolock _(sManagers[i]->fLock);
+		sManagers[i]->_Pulse();
+	}
+}
+
+
+void
+LEManager::_Pulse()
+{
+	// SMP and ATT both end a procedure that got no answer in 30 s, and the
+	// link with it (Vol 3, Part H, 3.4; Part F, 3.3.3).
+	const bigtime_t now = system_time();
+	const bigtime_t limit = 30000000;
+	std::vector<Link*> expired;
+	for (size_t i = 0; i < fLinks.size(); i++) {
+		Link* link = fLinks[i];
+		const bool smpWaits = link->pairing
+			&& link->smpState != Link::kSMPDone
+			&& link->smpState != Link::kSMPFailed && link->smpLast != 0
+			&& now - link->smpLast > limit;
+		const bool attWaits = link->requestPending && link->attLast != 0
+			&& now - link->attLast > limit;
+		if (smpWaits) {
+			syslog(LOG_NOTICE, "bluetooth_server: smp pairing timed out");
+			if (link->pairRequested)
+				r5_pairing_notice(false, _Name(link->address));
+			_SMPCleanup(link);
+			link->pairing = false;
+			link->smpState = Link::kSMPFailed;
+			expired.push_back(link);
+		} else if (attWaits) {
+			syslog(LOG_NOTICE, "bluetooth_server: gatt request timed out");
+			expired.push_back(link);
+		}
+	}
+	for (size_t i = 0; i < expired.size(); i++)
+		_CloseLink(expired[i], true);
+	if (!expired.empty())
+		_Connect();
 }

@@ -1,5 +1,15 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-16 - Bluetooth: first two stick boots of Low Energy, pairing windows and notifications
+
+Problem: the first two stick boots of PR #4314 on the 5625U (MT7922) showed the LE setup and scan working (`le event mask 0x1a5f`, extended scan; the Designer Mouse, the 8BitDo M30 and phones in the list), but no pairing: every LE link to the Designer Mouse dropped in the same second with `0x3E`, and the Classic M30 ended in `0x37` (Simple Pairing Not Supported by Host). Haiku's "Incoming Connection" window showed at every connection, also our own Pair, with a broken name.
+
+What changed:
+- Between boot 1 and 2: Classic reads Read Remote Extended Features page 1 before Authentication Requested (BlueZ's order); LE uses BlueZ's connection parameters (30 to 50 ms, 420 ms timeout, full scan window), no PHY preference, two retries after `0x3E`, Pair pressed again while one runs is ignored; more steps in the syslog. Boot 2: Classic now gets to the IO Capability Request and fails with `0x37` right after our reply; LE unchanged. The cause is being investigated in a separate read-only session (both failures open).
+- After boot 2: the "Incoming Connection" window is gone; the end of a pairing started here is a notification (`PairingNotice.cpp`, BNotification: "Paired with ..." or "Pairing with ... did not work"), Classic and LE. Numeric Comparison shows the six digits with Yes and No (Classic when the device has DisplayYesNo or KeyboardDisplay, LE Secure Connections); before, it was confirmed without showing them. LE Passkey Entry where the device shows the number has a window to type it (was refused). SMP and ATT procedures without an answer end after 30 s and close the link, checked every 5 s.
+
+Tested: built for x86_64 (`build-locked.sh`); QEMU smoke with SMAP (no radio). The windows, notifications and timeouts need a real device; not tested. ARM64 and RISC-V 64 not built or tested.
+
 ## 2026-11-16 - Bluetooth steps 1c and 6: Low Energy links, LE Secure Connections pairing, BLE HID over GATT
 
 Problem: R5 had no Bluetooth Low Energy. The owner's Microsoft Modern mouse is BLE, so it could not be used; the owner chose BLE before audio (docs/BLUETOOTH.md, step 4, "Order after this step").

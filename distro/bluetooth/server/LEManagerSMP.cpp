@@ -21,6 +21,7 @@
 #include <bluetooth/bdaddrUtils.h>
 
 #include "LocalDeviceImpl.h"
+#include "PairingNotice.h"
 #include "PasskeyWindow.h"
 #include "le_parse.h"
 
@@ -105,6 +106,8 @@ LEManager::_SMPFail(Link* link, uint8 reason)
 	if (link->smpState != Link::kSMPIdle && link->smpState != Link::kSMPDone)
 		_SMPSend(link, failed, sizeof(failed));
 	syslog(LOG_NOTICE, "bluetooth_server: smp pairing failed (%#x)", reason);
+	if (link->pairRequested)
+		r5_pairing_notice(false, _Name(link->address));
 	_SMPCleanup(link);
 	link->pairing = false;
 	link->smpState = Link::kSMPFailed;
@@ -116,6 +119,7 @@ LEManager::_SMPReceived(Link* link, const uint8* pdu, size_t size)
 {
 	if (size == 0)
 		return;
+	link->smpLast = system_time();
 	uint8 code = pdu[0];
 	const size_t expected = le_smp_pdu_length(code);
 	if (expected == 0) {
@@ -162,6 +166,8 @@ LEManager::_SMPReceived(Link* link, const uint8* pdu, size_t size)
 				break;
 			syslog(LOG_NOTICE, "bluetooth_server: smp pairing failed, the"
 				" device refused (%#x)", pdu[1]);
+			if (link->pairRequested)
+				r5_pairing_notice(false, _Name(link->address));
 			_SMPCleanup(link);
 			link->pairing = false;
 			link->smpState = Link::kSMPFailed;
@@ -243,19 +249,12 @@ LEManager::_SMPPairingResponse(Link* link, const uint8* pdu)
 	link->method = Link::kJustWorks;
 	if ((auth & kAuthMITM) != 0) {
 		switch (io) {
-			case 0x00:	// DisplayOnly: we would have to type its number
-				syslog(LOG_NOTICE, "bluetooth_server: smp pairing needs a"
-					" number typed here, which is not supported yet");
-				_SMPFail(link, kSMPAuthRequirements);
-				return;
+			case 0x00:	// DisplayOnly: the person types its number here
+				link->method = Link::kPasskeyEntry;
+				break;
 			case 0x01:	// DisplayYesNo
-				if (!link->secureConnections) {
-					syslog(LOG_NOTICE, "bluetooth_server: smp pairing needs"
-						" a number typed here, which is not supported yet");
-					_SMPFail(link, kSMPAuthRequirements);
-					return;
-				}
-				link->method = Link::kNumericComparison;
+				link->method = link->secureConnections
+					? Link::kNumericComparison : Link::kPasskeyEntry;
 				break;
 			case 0x02:	// KeyboardOnly: we show, it types
 				link->method = Link::kPasskeyDisplay;
@@ -293,8 +292,13 @@ LEManager::_SMPPairingResponse(Link* link, const uint8* pdu)
 		return;
 	}
 
-	// Legacy: TK is the passkey, or 0 for Just Works (2.3.5.5).
+	// Legacy: TK is the passkey, or 0 for Just Works (2.3.5.5). A
+	// passkey the device shows is asked first.
 	link->round = 0;
+	if (link->method == Link::kPasskeyEntry) {
+		_SMPAskUser(link, PasskeyWindow::kLEEntry, false);
+		return;
+	}
 	_SMPSendConfirm(link);
 }
 
@@ -324,6 +328,10 @@ LEManager::_SMPPublicKey(Link* link, const uint8* pdu)
 	}
 
 	link->round = 0;
+	if (link->method == Link::kPasskeyEntry) {
+		_SMPAskUser(link, PasskeyWindow::kLEEntry, false);
+		return;
+	}
 	if (link->method == Link::kPasskeyDisplay) {
 		_SMPSendConfirm(link);
 		return;
@@ -420,36 +428,48 @@ LEManager::_SMPRandom(Link* link, const uint8* pdu)
 	}
 
 	// Cb = f4(PKbx, PKax, Nb, z): z is 0, or the passkey bit.
-	const uint8 z = link->method == Link::kPasskeyDisplay
+	const uint8 z = link->UsesPasskey()
 		? (0x80 | ((link->passkey >> link->round) & 1)) : 0;
 	if (!smp_f4(link->peerPublic, link->keyPair.publicKey, link->peerNonce, z,
 			check) || memcmp(check, link->peerConfirm, 16) != 0) {
-		_SMPFail(link, link->method == Link::kPasskeyDisplay
+		_SMPFail(link, link->UsesPasskey()
 			? kSMPPasskeyEntryFailed : kSMPConfirmFailed);
 		return;
 	}
 
-	if (link->method == Link::kPasskeyDisplay && ++link->round < 20) {
+	if (link->UsesPasskey() && ++link->round < 20) {
 		_SMPSendConfirm(link);
 		return;
 	}
 
 	if (link->method == Link::kNumericComparison) {
-		// The six digits both sides should show. Pairing was started on
-		// the Bluetooth page, so it goes on, as for Classic (step 4); the
-		// number is not shown yet.
+		// The six digits both sides show; the person says whether they
+		// are the same (2.3.5.6.2).
 		uint32 value;
-		if (smp_g2(link->keyPair.publicKey, link->peerPublic, link->localNonce,
-				link->peerNonce, &value))
-			OPENSSL_cleanse(&value, sizeof(value));
-		syslog(LOG_NOTICE, "bluetooth_server: smp numeric comparison"
-			" confirmed without showing the number");
+		if (!smp_g2(link->keyPair.publicKey, link->peerPublic,
+				link->localNonce, link->peerNonce, &value)) {
+			_SMPFail(link, kSMPUnspecified);
+			return;
+		}
+		_SMPAskUser(link, value, true);
+		OPENSSL_cleanse(&value, sizeof(value));
+		return;
 	}
+
+	_SMPSendDHKeyCheck(link);
+}
+
+
+void
+LEManager::_SMPSendDHKeyCheck(Link* link)
+{
+	uint8 a[7], b[7];
+	_SMPAddresses(link, a, b);
 
 	// MacKey and LTK = f5(DHKey, Na, Nb, A, B); Ea = f6(MacKey, Na, Nb, r,
 	// IOcapA, A, B) (2.3.5.6.5).
 	uint8 r[16] = {};
-	if (link->method == Link::kPasskeyDisplay) {
+	if (link->UsesPasskey()) {
 		r[0] = link->passkey & 0xff;
 		r[1] = (link->passkey >> 8) & 0xff;
 		r[2] = (link->passkey >> 16) & 0xff;
@@ -477,7 +497,7 @@ LEManager::_SMPDHKeyCheck(Link* link, const uint8* pdu)
 	uint8 a[7], b[7];
 	_SMPAddresses(link, a, b);
 	uint8 r[16] = {};
-	if (link->method == Link::kPasskeyDisplay) {
+	if (link->UsesPasskey()) {
 		r[0] = link->passkey & 0xff;
 		r[1] = (link->passkey >> 8) & 0xff;
 		r[2] = (link->passkey >> 16) & 0xff;
@@ -592,6 +612,8 @@ LEManager::_SMPFinish(Link* link)
 	syslog(LOG_INFO, "bluetooth_server: smp %s pairing ok%s",
 		link->secureConnections ? "sc" : "legacy",
 		keep ? "" : " (no key to keep, not paired)");
+	if (link->pairRequested)
+		r5_pairing_notice(keep, _Name(link->address));
 
 	if (keep) {
 		// The link keeps its connection address: the kernel names its

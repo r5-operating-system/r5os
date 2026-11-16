@@ -82,6 +82,10 @@ public:
 			void				RadioChanged(bool enabled);
 
 	// From the fixed-channel sockets and the bluetooth_hid driver.
+	// The answer of a pairing window (kMsgLEUserAnswer), and the timer
+	// for the SMP and ATT timeouts (every few seconds).
+	static	void				UserAnswer(BMessage* message);
+	static	void				Pulse();
 	static	void				StartChannels();
 	static	void				StopChannels();
 	static	void				HIDOutput(int32 kernelID, const uint8* data,
@@ -143,6 +147,13 @@ private:
 			void				_SMPRandom(Link* link, const uint8* pdu);
 			void				_SMPDHKeyCheck(Link* link, const uint8* pdu);
 			void				_SMPSendConfirm(Link* link);
+			void				_SMPSendDHKeyCheck(Link* link);
+			void				_SMPAskUser(Link* link, uint32 number,
+									bool compare);
+			void				_UserAnswer(Link* link, bool accept,
+									uint32 passkey);
+			void				_Pulse();
+			BString				_Name(const bdaddr_t& address);
 			void				_SMPKeyDistribution(Link* link,
 									const uint8* pdu, size_t size);
 			void				_SMPEncrypted(Link* link);

@@ -34,6 +34,7 @@
 
 #include "PasskeyWindow.h"
 #include "LEManager.h"
+#include "PairingNotice.h"
 // SPDX-SnippetEnd
 
 
@@ -98,6 +99,8 @@ LocalDeviceImpl::LocalDeviceImpl(HCIDelegate* hd) : LocalDeviceHandler(hd)
 	fHasSSP = false;
 	memset(&fPasskeyAddress, 0, sizeof(fPasskeyAddress));
 	fPasskeyUsed = false;
+	memset(&fRemoteIOAddress, 0, sizeof(fRemoteIOAddress));
+	fRemoteIOCapability = 0x03;
 	fLE = new(std::nothrow) LEManager(this);
 	// SPDX-SnippetEnd
 	LoadRemoteDevices();
@@ -2124,14 +2127,11 @@ LocalDeviceImpl::ConnectionComplete(struct hci_ev_conn_complete* event)
 		// SPDX-SnippetBegin
 		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 		// SPDX-License-Identifier: MIT
-		// rd is NULL for a connection this radio did not know (review of
-		// #4286); the window then shows the address without a class.
-		uint8 noClass[3] = { 0, 0, 0 };
-		ConnectionIncoming* iConnection = new ConnectionIncoming(
-			new RemoteDevice(event->bdaddr,
-				rd != NULL ? rd->classOfDevice : noClass));
+		// Haiku's "Incoming Connection" window showed at every connection,
+		// also for a pairing started on the Bluetooth page, with a broken
+		// name. The end of a pairing is a notification now
+		// (PairingNotice.cpp).
 		// SPDX-SnippetEnd
-		iConnection->Show();
 
 		// SPDX-SnippetBegin
 		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
@@ -2478,6 +2478,8 @@ LocalDeviceImpl::IOCapabilityResponse(struct hci_ev_io_capability_response* even
 	// SPDX-License-Identifier: MIT
 	syslog(LOG_INFO, "bluetooth_server: io capability of the device %#x"
 		" (auth %#x)", event->capability, event->authentication);
+	fRemoteIOAddress = event->bdaddr;
+	fRemoteIOCapability = event->capability;
 	// SPDX-SnippetEnd
 }
 
@@ -2513,6 +2515,28 @@ LocalDeviceImpl::UserConfirmationRequest(struct hci_ev_user_confirmation_request
 	}
 	// SPDX-SnippetEnd
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Numeric Comparison when the device can show a number and answer
+	// (DisplayYesNo or KeyboardDisplay, Core 6.0, Vol 3, Part C, 5.2.2.6):
+	// the person compares the six digits and says yes or no. Otherwise it
+	// is Just Works, which has no number to show.
+	if (bdaddrUtils::Compare(fRemoteIOAddress, event->bdaddr)
+		&& (fRemoteIOCapability == 0x01 || fRemoteIOCapability == 0x04)) {
+		syslog(LOG_INFO, "bluetooth_server: numeric comparison shown");
+		_ClosePasskeyWindow();
+		fPasskeyAddress = event->bdaddr;
+		PasskeyWindow* window = new(std::nothrow) PasskeyWindow(
+			event->bdaddr, GetID(), _PeerName(event->bdaddr),
+			B_LENDIAN_TO_HOST_INT32(event->passkey) % 1000000, true, false);
+		if (window != NULL) {
+			fPasskeyWindow = BMessenger(window);
+			window->Show();
+			return;
+		}
+	}
+	// SPDX-SnippetEnd
 	command = buildUserConfirmReply(event->bdaddr, &size);
 
 
@@ -2548,8 +2572,12 @@ LocalDeviceImpl::SimplePairingComplete(struct hci_ev_simple_pairing_complete* ev
 	// One pairing asked for here allows one confirmation: a later pairing
 	// that the other side starts is refused again.
 	ServerRemoteDevice* paired = RemoteDeviceByAddr(event->bdaddr);
+	if (paired != NULL && paired->user_pairing)
+		r5_pairing_notice(event->status == BT_OK, paired->friendly_name);
 	if (paired != NULL)
 		paired->user_pairing = false;
+	if (bdaddrUtils::Compare(fPasskeyAddress, event->bdaddr))
+		_ClosePasskeyWindow();
 
 	syslog(event->status == BT_OK ? LOG_INFO : LOG_NOTICE,
 		"bluetooth_server: simple pairing %s (%#x)",
@@ -2608,6 +2636,16 @@ LocalDeviceImpl::AuthComplete(struct hci_ev_auth_complete* eventData, BMessage* 
 			handle, status);
 
 		ServerRemoteDevice* rd = RemoteDeviceByHandle(eventData->handle);
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// A pairing started here that ended before Simple Pairing
+		// Complete (refused, or the device did not answer).
+		if (rd != NULL && rd->user_pairing) {
+			r5_pairing_notice(false, rd->friendly_name);
+			rd->user_pairing = false;
+		}
+		// SPDX-SnippetEnd
 		if (rd != NULL) {
 			rd->link_key = LinkKeyUtils::NullKey();
 			BMessage disconnReq;

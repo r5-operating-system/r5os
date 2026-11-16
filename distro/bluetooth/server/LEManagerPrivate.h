@@ -115,6 +115,7 @@ struct LEManager::Link {
 		kSMPWaitConfirm,
 		kSMPWaitRandom,
 		kSMPWaitDHKeyCheck,
+		kSMPWaitUser,		// a window waits for the person
 		kSMPWaitEncryption,
 		kSMPWaitKeys,
 		kSMPDone,
@@ -122,11 +123,16 @@ struct LEManager::Link {
 	}			smpState;
 	bool		pairing;
 	bigtime_t	smpStarted;
+	bigtime_t	smpLast;		// last SMP PDU (30 s timeout)
+	bool		UsesPasskey() const
+					{ return method == kPasskeyDisplay
+						|| method == kPasskeyEntry; }
 	bool		secureConnections;
 	enum {
 		kJustWorks,
 		kNumericComparison,
-		kPasskeyDisplay			// we show it, the device types it
+		kPasskeyDisplay,		// we show it, the device types it
+		kPasskeyEntry			// the device shows it, the person types it
 	}			method;
 	uint8		preq[7];
 	uint8		pres[7];
@@ -149,6 +155,7 @@ struct LEManager::Link {
 	// ATT and GATT
 	uint16		mtu;
 	bool		requestPending;
+	bigtime_t	attLast;		// when the pending request went
 	int			gattStep;
 	uint16		serviceStart;
 	uint16		serviceEnd;

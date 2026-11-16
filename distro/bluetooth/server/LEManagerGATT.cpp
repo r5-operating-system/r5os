@@ -72,6 +72,7 @@ void
 LEManager::_ATTRequest(Link* link, const uint8* pdu, size_t size)
 {
 	link->requestPending = true;
+	link->attLast = system_time();
 	_ATTSend(link, pdu, size);
 }
 

@@ -131,6 +131,9 @@ private:
 	uint64				_EventMask() const;
 	// Remote host features before Authentication Requested.
 	std::vector<uint16> fFeatureHandles;
+	// The last IO Capability Response (Numeric Comparison or not).
+	bdaddr_t			fRemoteIOAddress;
+	uint8				fRemoteIOCapability;
 	void				_ReadRemoteHostFeatures(uint16 handle);
 	bool				_TakeFeatureHandle(uint16 handle);
 

@@ -49,6 +49,9 @@ static bool radio_sender_allowed(BMessage* message);
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 #include "LEManager.h"
+#include "PasskeyWindow.h"
+
+#include <MessageRunner.h>
 // SPDX-SnippetEnd
 #include "DeskbarReplicant.h"
 #include "LocalDeviceImpl.h"
@@ -124,6 +127,7 @@ BluetoothServer::BluetoothServer()
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
 	fHIDHost = new HIDHost();
+	fLEPulse = NULL;
 	// SPDX-SnippetEnd
 }
 
@@ -153,6 +157,8 @@ bool BluetoothServer::QuitRequested(void)
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
+	delete fLEPulse;
+	fLEPulse = NULL;
 	LEManager::StopChannels();
 	fHIDHost->Stop();
 	delete fHIDHost;
@@ -210,6 +216,10 @@ void BluetoothServer::ReadyToRun(void)
 	// BLE: the ATT and SMP sockets, and LE keyboard lights (step 6).
 	fHIDHost->SetLEOutputHook(LEManager::HIDOutput, NULL);
 	LEManager::StartChannels();
+	// The SMP and ATT timeouts are checked every 5 s.
+	BMessage pulse(kMsgR5LEPulse);
+	fLEPulse = new(std::nothrow) BMessageRunner(be_app_messenger, &pulse,
+		5000000);
 	// SPDX-SnippetEnd
 
 	// SPDX-SnippetBegin
@@ -541,6 +551,22 @@ void BluetoothServer::MessageReceived(BMessage* message)
 		// SPDX-SnippetBegin
 		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 		// SPDX-License-Identifier: MIT
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// LE pairing windows answer here; only from this process
+		// (PasskeyWindow), never from another team.
+		case kMsgLEUserAnswer:
+			if (!message->IsSourceRemote())
+				LEManager::UserAnswer(message);
+			break;
+
+		case kMsgR5LEPulse:
+			if (!message->IsSourceRemote())
+				LEManager::Pulse();
+			break;
+		// SPDX-SnippetEnd
+
 		case BT_MSG_R5_GET_RADIO:
 			status = reply.AddBool("enabled", fRadioEnabled);
 			// The radios by hci_id, so a client acquires exactly the ones it
