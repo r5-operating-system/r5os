@@ -26,6 +26,8 @@
 
 #include <bluetoothserver_p.h>
 
+#include <R5Admin.h>
+
 #include <new>
 #include <string.h>
 
@@ -948,8 +950,9 @@ BluetoothController::_SetRadio(bool on)
 		BMessage request(BT_MSG_R5_SET_RADIO);
 		request.AddBool("enabled", on);
 		BMessage reply;
-		status = server.SendMessage(&request, &reply, kServerTimeout,
-			kServerTimeout);
+		// The admin port: the server decides by the sender the kernel
+		// names (libr5admin.so).
+		status = r5_admin_send(server, &request, &reply, kServerTimeout);
 		if (status == B_OK) {
 			if (reply.what == B_NO_REPLY)
 				status = B_NOT_SUPPORTED;

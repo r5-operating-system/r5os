@@ -24,7 +24,10 @@
 #include <FindDirectory.h>
 
 class BMessage;
-static bool radio_sender_allowed(BMessage* message);
+#include <R5Admin.h>
+static bool radio_sender_allowed(const r5_admin_sender& sender);
+static void admin_request(BMessage* request, const r5_admin_sender& sender,
+	BMessage* reply, void* cookie);
 // SPDX-SnippetEnd
 #include <Deskbar.h>
 #include <Directory.h>
@@ -112,7 +115,8 @@ BluetoothServer::BluetoothServer()
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
 	fRadioEnabled(true),
-	fAudioTeam(-1)
+	fAudioTeam(-1),
+	fAdminPort(-1)
 	// SPDX-SnippetEnd
 {
 	// SPDX-SnippetBegin
@@ -141,6 +145,18 @@ BluetoothServer::BluetoothServer()
 bool BluetoothServer::QuitRequested(void)
 {
 	LocalDeviceImpl* lDeviceImpl = NULL;
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Its thread locks this looper: stopped before the looper goes.
+	if (fAdminPort >= 0) {
+		port_id adminPort = fAdminPort;
+		fAdminPort = -1;
+		Unlock();
+		r5_admin_port_stop(adminPort);
+		Lock();
+	}
+	// SPDX-SnippetEnd
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
@@ -212,6 +228,17 @@ void BluetoothServer::ReadyToRun(void)
 	status_t status = fSDPServer->Start();
 	if (status != B_OK)
 		TRACE_BT("BluetoothServer: Failed launching the SDP server thread\n");
+
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	if (r5_admin_port_start("bluetooth admin", admin_request, this,
+			&fAdminPort) != B_OK) {
+		fAdminPort = -1;
+		syslog(LOG_ERR, "bluetooth_server: no admin port, the radio switch "
+			"and audio cannot be used");
+	}
+	// SPDX-SnippetEnd
 
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
@@ -641,104 +668,24 @@ void BluetoothServer::MessageReceived(BMessage* message)
 		}
 		// SPDX-SnippetEnd
 
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// Decided by the sender: only on the admin port (R5AdminRequest()),
+		// where the kernel names it. Here the reply address is whatever the
+		// sender chose.
 		case BT_MSG_R5_SET_RADIO:
-		{
-			bool enabled;
-			if (message->FindBool("enabled", &enabled) != B_OK) {
-				status = B_BAD_VALUE;
-				break;
-			}
-			// Any program could send this; the page's lock is not enough.
-			if (!radio_sender_allowed(message)) {
-				syslog(LOG_NOTICE, "bluetooth_server: radio switch refused: "
-					"the sender is not an administrator");
-				status = B_NOT_ALLOWED;
-				reply.AddBool("enabled", fRadioEnabled);
-				break;
-			}
-			status = _SetRadioEnabled(enabled);
-			reply.AddBool("enabled", fRadioEnabled);
-			break;
-		}
-
 		case BT_MSG_R5_AUDIO_STREAMING:
 		case BT_MSG_R5_AUDIO_PAIRED:
 		case BT_MSG_R5_AUDIO_CONNECT:
-		{
-			// From bluetooth_audio in media_addon_server, a system service.
-			team_info info;
-			team_id team = message->ReturnAddress().Team();
-			if (team < 0 || get_team_info(team, &info) != B_OK
-				|| info.uid != 0) {
-				status = B_NOT_ALLOWED;
-				break;
-			}
-			if (message->what == BT_MSG_R5_AUDIO_STREAMING) {
-				bool streaming;
-				if (message->FindBool("streaming", &streaming) != B_OK) {
-					status = B_BAD_VALUE;
-					break;
-				}
-				fAudioTeam = streaming ? team : -1;
-				// An LE scan takes the shared radio's time as an inquiry
-				// does: it pauses too and comes back after the stream.
-				for (int32 i = 0; i < fLocalDevicesList.CountItems(); i++) {
-					LEManager* le = fLocalDevicesList.ItemAt(i)->LE();
-					if (le != NULL)
-						le->AudioChanged(streaming);
-				}
-				status = B_OK;
-				break;
-			}
-
-			const bdaddr_t* address;
-			if (!_FindAddress(message, &address)) {
-				status = B_BAD_VALUE;
-				break;
-			}
-			bool paired = false;
-			bool connected = false;
-			bool encrypted = false;
-			LocalDeviceImpl* radio = NULL;
-			for (int32 i = 0; !paired
-					&& i < fLocalDevicesList.CountItems(); i++) {
-				ServerRemoteDevice* rd
-					= fLocalDevicesList.ItemAt(i)->RemoteDeviceByAddr(
-						*address);
-				linkkey_t nullKey = LinkKeyUtils::NullKey();
-				paired = rd != NULL
-					&& !LinkKeyUtils::Compare(&rd->link_key, &nullKey);
-				if (paired) {
-					radio = fLocalDevicesList.ItemAt(i);
-					connected = rd->conn_state == RemoteDevice::CONNECTED;
-					encrypted = connected && rd->encryption_enabled != 0;
-				}
-			}
-
-			if (message->what == BT_MSG_R5_AUDIO_CONNECT) {
-				// Only a paired headset, and no pairing: the stored link
-				// key authenticates it, and the server turns encryption on
-				// as for every connection.
-				if (!paired || radio == NULL) {
-					status = B_NOT_ALLOWED;
-					break;
-				}
-				if (!connected && fRadioEnabled) {
-					BMessage request(BT_REQ_CREATE_CONN);
-					request.AddData("bdaddr", B_ANY_TYPE, address,
-						sizeof(bdaddr_t));
-					request.AddBool("r5:reconnect", true);
-					radio->CreateConnection(&request);
-				}
-				status = fRadioEnabled ? B_OK : B_NOT_ALLOWED;
-				break;
-			}
-
-			reply.AddBool("connected", connected);
-			reply.AddBool("encrypted", encrypted);
-			status = reply.AddBool("paired", paired);
+			status = B_NOT_ALLOWED;
+			reply.AddString("text", "Send this with r5_admin_send().");
 			break;
-		}
+
+		case R5_ADMIN_PORT_REQUEST:
+			r5_admin_port_reply(message, fAdminPort);
+			break;
+		// SPDX-SnippetEnd
 
 		case kMsgReportStarted:
 		{
@@ -896,22 +843,151 @@ BluetoothServer::AudioStreaming() const
 // SPDX-SnippetEnd
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// The admin port (libr5admin.so): the radio switch and bluetooth_audio's
+// requests, with the sender the kernel named.
+static void
+admin_request(BMessage* request, const r5_admin_sender& sender,
+	BMessage* reply, void* cookie)
+{
+	BluetoothServer* server = (BluetoothServer*)cookie;
+	if (!server->Lock())
+		return;
+	reply->AddInt32("status", server->R5AdminRequest(request, *reply,
+		sender));
+	server->Unlock();
+}
+
+
+status_t
+BluetoothServer::R5AdminRequest(BMessage* message, BMessage& reply,
+	const r5_admin_sender& sender)
+{
+	BAutolock locker(fDevicesLock);
+	status_t status = B_BAD_VALUE;
+	switch (message->what) {
+		case BT_MSG_R5_SET_RADIO:
+		{
+			bool enabled;
+			if (message->FindBool("enabled", &enabled) != B_OK) {
+				status = B_BAD_VALUE;
+				break;
+			}
+			// Any program could send this; the page's lock is not enough.
+			if (!radio_sender_allowed(sender)) {
+				syslog(LOG_NOTICE, "bluetooth_server: radio switch refused: "
+					"the sender is not an administrator");
+				status = B_NOT_ALLOWED;
+				reply.AddBool("enabled", fRadioEnabled);
+				break;
+			}
+			status = _SetRadioEnabled(enabled);
+			reply.AddBool("enabled", fRadioEnabled);
+			break;
+		}
+
+		case BT_MSG_R5_AUDIO_STREAMING:
+		case BT_MSG_R5_AUDIO_PAIRED:
+		case BT_MSG_R5_AUDIO_CONNECT:
+		{
+			// From bluetooth_audio in media_addon_server, a system service.
+			team_id team = sender.team;
+			if (sender.uid != 0) {
+				status = B_NOT_ALLOWED;
+				break;
+			}
+			if (message->what == BT_MSG_R5_AUDIO_STREAMING) {
+				bool streaming;
+				if (message->FindBool("streaming", &streaming) != B_OK) {
+					status = B_BAD_VALUE;
+					break;
+				}
+				fAudioTeam = streaming ? team : -1;
+				// An LE scan takes the shared radio's time as an inquiry
+				// does: it pauses too and comes back after the stream.
+				for (int32 i = 0; i < fLocalDevicesList.CountItems(); i++) {
+					LEManager* le = fLocalDevicesList.ItemAt(i)->LE();
+					if (le != NULL)
+						le->AudioChanged(streaming);
+				}
+				status = B_OK;
+				break;
+			}
+
+			const bdaddr_t* address;
+			if (!_FindAddress(message, &address)) {
+				status = B_BAD_VALUE;
+				break;
+			}
+			bool paired = false;
+			bool connected = false;
+			bool encrypted = false;
+			LocalDeviceImpl* radio = NULL;
+			for (int32 i = 0; !paired
+					&& i < fLocalDevicesList.CountItems(); i++) {
+				ServerRemoteDevice* rd
+					= fLocalDevicesList.ItemAt(i)->RemoteDeviceByAddr(
+						*address);
+				linkkey_t nullKey = LinkKeyUtils::NullKey();
+				paired = rd != NULL
+					&& !LinkKeyUtils::Compare(&rd->link_key, &nullKey);
+				if (paired) {
+					radio = fLocalDevicesList.ItemAt(i);
+					connected = rd->conn_state == RemoteDevice::CONNECTED;
+					encrypted = connected && rd->encryption_enabled != 0;
+				}
+			}
+
+			if (message->what == BT_MSG_R5_AUDIO_CONNECT) {
+				// Only a paired headset, and no pairing: the stored link
+				// key authenticates it, and the server turns encryption on
+				// as for every connection.
+				if (!paired || radio == NULL) {
+					status = B_NOT_ALLOWED;
+					break;
+				}
+				if (!connected && fRadioEnabled) {
+					BMessage request(BT_REQ_CREATE_CONN);
+					request.AddData("bdaddr", B_ANY_TYPE, address,
+						sizeof(bdaddr_t));
+					request.AddBool("r5:reconnect", true);
+					radio->CreateConnection(&request);
+				}
+				status = fRadioEnabled ? B_OK : B_NOT_ALLOWED;
+				break;
+			}
+
+			reply.AddBool("connected", connected);
+			reply.AddBool("encrypted", encrypted);
+			status = reply.AddBool("paired", paired);
+			break;
+		}
+
+		default:
+			break;
+	}
+	return status;
+}
+// SPDX-SnippetEnd
+
+
 // Whether the sender of a radio switch request may change a machine
 // setting: uid 0, a member of group "admin", or a team that Login gave a
 // grant (the administrator lock opened by a standard account). The same
 // rule as sender_may_change() in distro/users/AccountAdmin.cpp; Login keeps
 // its grants in /boot/system/settings/r5-machine-unlock, readable by all.
 static bool
-radio_sender_allowed(BMessage* message)
+radio_sender_allowed(const r5_admin_sender& sender)
 {
-	team_id team = message->ReturnAddress().Team();
-	team_info info;
-	if (team < 0 || get_team_info(team, &info) != B_OK)
-		return false;
-	if (info.uid == 0)
+	// The kernel named this sender (admin port): uid, team and the grant
+	// are its own, not a reply address it chose.
+	team_id team = sender.team;
+	if (sender.uid == 0)
 		return true;
 
-	struct passwd* account = getpwuid(info.uid);
+	struct passwd* account = getpwuid(sender.uid);
 	struct group* admin = getgrnam("admin");
 	if (account != NULL && account->pw_name != NULL && admin != NULL
 		&& admin->gr_mem != NULL) {

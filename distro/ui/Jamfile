@@ -42,5 +42,5 @@ SharedLibrary [ MultiArchDefaultGristFiles libr5ui.so ] :
 	AdminLock.cpp
 	DriverSettings.cpp
 	WindowEffects.cpp
-	: be libr5icons.so [ TargetLibstdc++ ]
+	: be libr5icons.so libr5admin.so [ TargetLibstdc++ ]
 	;

@@ -11,6 +11,11 @@
 #include <Locker.h>
 #include <ObjectList.h>
 #include <OS.h>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <R5Admin.h>
+// SPDX-SnippetEnd
 
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/HCI/btHCI.h>
@@ -119,6 +124,10 @@ public:
 	// bluetooth_audio streams (BT_MSG_R5_AUDIO_STREAMING) and its team
 	// lives: scans wait. LEManager asks this before it scans.
 	bool		AudioStreaming() const;
+	// The radio switch and bluetooth_audio's requests, from the admin port
+	// (libr5admin.so) with the sender the kernel named.
+	status_t	R5AdminRequest(BMessage* message, BMessage& reply,
+					const r5_admin_sender& sender);
 	// SPDX-SnippetEnd
 
 private:
@@ -153,6 +162,7 @@ private:
 	// The team of bluetooth_audio while it streams (BT_MSG_R5_AUDIO_STREAMING),
 	// -1 otherwise; scans are refused while that team lives.
 	team_id				fAudioTeam;
+	port_id				fAdminPort;
 	// SPDX-SnippetEnd
 
 	void 				ShowWindow(BWindow* pWindow);

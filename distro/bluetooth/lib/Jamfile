@@ -12,7 +12,7 @@ UsePrivateHeaders app bluetooth ;
 SharedLibrary [ MultiArchDefaultGristFiles libr5bt.so ] :
 	BluetoothController.cpp
 	BluetoothView.cpp
-	: be libbluetooth.so localestub libr5icons.so libr5ui.so
+	: be libbluetooth.so localestub libr5icons.so libr5ui.so libr5admin.so
 		[ TargetLibstdc++ ]
 	;
 
