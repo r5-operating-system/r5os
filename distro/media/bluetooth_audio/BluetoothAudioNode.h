@@ -11,6 +11,8 @@
 #define R5_BLUETOOTH_AUDIO_NODE_H
 
 
+#include <atomic>
+
 #include <BufferConsumer.h>
 #include <Controllable.h>
 #include <MediaEventLooper.h>
@@ -80,9 +82,11 @@ private:
 			media_input			fInput;
 			bool				fConnected;
 			A2DPSource*			fSource;
-			float				fVolume;		// percent
-			bigtime_t			fVolumeChanged;
-			bigtime_t			fLatency;
+			// Also written by A2DPSource's threads (RemoteVolumeChanged(),
+			// RemoteDelayChanged()).
+			std::atomic<float>	fVolume;		// percent
+			std::atomic<bigtime_t> fVolumeChanged;
+			std::atomic<bigtime_t> fLatency;
 };
 
 

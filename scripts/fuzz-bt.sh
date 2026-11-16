@@ -4,10 +4,10 @@
 #
 # Host AddressSanitizer and UBSan fuzz for the Bluetooth kernel parsers
 # (docs/BLUETOOTH.md, steps 1a to 1c), the LE parsers of bluetooth_server
-# (step 6), and the AVDTP, AVRCP and SBC code of bluetooth_audio (step 5).
-# Run it in WSL.
-# Usage: fuzz-bt.sh <target> [seconds]   (target: hci, l2cap, le or audio;
-# default 60 s)
+# (step 6), the AVDTP, AVRCP and SBC code of bluetooth_audio and the SDP
+# answers of bluetooth_server (step 5). Run it in WSL.
+# Usage: fuzz-bt.sh <target> [seconds]   (target: hci, l2cap, le, audio or
+# sdp; default 60 s)
 # The log is generated/bluetooth/fuzz-<target>.log; its last line is
 # "<target>_fuzz: <seconds>s 0 crashes" when nothing failed.
 set -eu
@@ -17,7 +17,7 @@ seconds="${2:-60}"
 K=distro/kernel/src/add-ons/kernel
 A=distro/media/bluetooth_audio
 case "$target" in
-	hci|l2cap|le|audio) ;;
+	hci|l2cap|le|audio|sdp) ;;
 	*) echo "fuzz-bt: unknown target $target" >&2; exit 2 ;;
 esac
 out=/tmp/bt-fuzz-$$
@@ -26,6 +26,8 @@ flags="-std=c++17 -fsanitize=address,undefined -fno-sanitize-recover=all
 if [ "$target" = audio ]; then
 	g++ $flags -I "$A" scripts/bt-audio-fuzz.cpp "$A/sbc_encoder.cpp" \
 		-o "$out" -lm
+elif [ "$target" = sdp ]; then
+	g++ $flags -I distro/bluetooth/server scripts/bt-sdp-fuzz.cpp -o "$out"
 else
 	g++ $flags \
 		-I scripts/bt-host \
@@ -38,7 +40,7 @@ fi
 mkdir -p generated/bluetooth
 log="generated/bluetooth/fuzz-$target.log"
 status=0
-if [ "$target" = audio ]; then
+if [ "$target" = audio ] || [ "$target" = sdp ]; then
 	"$out" "$seconds" > "$log" 2>&1 || status=$?
 else
 	"$out" "$target" "$seconds" > "$log" 2>&1 || status=$?

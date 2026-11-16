@@ -90,8 +90,14 @@ enum {
 	kErrorBadMediaTransportFormat = 0x23,
 	kErrorUnsupportedConfiguration = 0x29,
 	kErrorBadState = 0x31,
-	kErrorNotSupportedCodecType = 0xc2
+	kErrorNotSupportedCodecType = 0xc2,
+	kErrorNotSupportedSamplingFrequency = 0xc4
 };
+
+// The rate R5's node runs at and the only one it offers: the mixer
+// delivers it and R5 does not resample. A2DP 4.3.2: every SBC sink
+// supports 44.1 kHz.
+static const int kSourceRate = 44100;
 
 static const uint8_t kMediaTypeAudio = 0x00;
 static const uint8_t kCodecSBC = 0x00;
@@ -287,7 +293,8 @@ ParseCapabilities(const uint8_t* data, size_t size, SBCCapabilities* caps,
 
 
 // The capabilities of R5's SBC source endpoint (8.7.2): media transport,
-// every SBC setting, bitpool 2 to 250, and delay reporting.
+// SBC at kSourceRate with every other setting, bitpool 2 to 250, and delay
+// reporting.
 static inline size_t
 BuildSourceCapabilities(uint8_t* out, size_t size, bool delayReporting)
 {
@@ -301,8 +308,7 @@ BuildSourceCapabilities(uint8_t* out, size_t size, bool delayReporting)
 	out[i++] = 6;
 	out[i++] = kMediaTypeAudio << 4;
 	out[i++] = kCodecSBC;
-	out[i++] = kSBC16000 | kSBC32000 | kSBC44100 | kSBC48000 | kSBCMono
-		| kSBCDual | kSBCStereo | kSBCJoint;
+	out[i++] = kSBC44100 | kSBCMono | kSBCDual | kSBCStereo | kSBCJoint;
 	out[i++] = kSBCBlocks4 | kSBCBlocks8 | kSBCBlocks12 | kSBCBlocks16
 		| kSBCSubbands4 | kSBCSubbands8 | kSBCAllocSNR | kSBCAllocLoudness;
 	out[i++] = 2;
@@ -390,8 +396,8 @@ ConfigFromCapabilities(const SBCCapabilities& caps, sbc::Config* config)
 }
 
 
-// Chooses the best setting the headset supports: the mixer's rate when it
-// can (else 48 kHz, 44.1 kHz, ...), joint stereo, 16 blocks, 8 subbands,
+// Chooses the best setting the headset supports at the mixer's rate (no
+// other: R5 does not resample), joint stereo, 16 blocks, 8 subbands,
 // Loudness, and the highest bitpool within the headset's range, A2DP's bit
 // rate limit and one media packet.
 static inline bool
@@ -401,19 +407,13 @@ ChooseConfiguration(const SBCCapabilities& caps, int preferredRate,
 	if (!caps.sbc)
 		return false;
 
-	uint8_t frequency = 0;
-	uint8_t preferred = preferredRate == 48000 ? kSBC48000
-		: preferredRate == 44100 ? kSBC44100 : 0;
-	if (preferred != 0 && (caps.frequencies & preferred))
-		frequency = preferred;
-	else {
-		static const uint8_t kOrder[4] = { kSBC48000, kSBC44100, kSBC32000,
-			kSBC16000 };
-		for (int i = 0; i < 4 && frequency == 0; i++) {
-			if (caps.frequencies & kOrder[i])
-				frequency = kOrder[i];
-		}
-	}
+	// Only the rate the audio comes in: R5 does not resample.
+	uint8_t frequency = preferredRate == 48000 ? kSBC48000
+		: preferredRate == 44100 ? kSBC44100
+		: preferredRate == 32000 ? kSBC32000
+		: preferredRate == 16000 ? kSBC16000 : 0;
+	if ((caps.frequencies & frequency) == 0)
+		return false;
 	static const uint8_t kModes[4] = { kSBCJoint, kSBCStereo, kSBCDual,
 		kSBCMono };
 	uint8_t mode = 0;
@@ -530,6 +530,12 @@ enum {
 };
 
 static const uint32_t kBluetoothSIGCompanyID = 0x001958;
+
+// AVRCP error codes (6.15.3).
+enum {
+	kAVRCPErrorInvalidCommand = 0x00,
+	kAVRCPErrorInvalidParameter = 0x01
+};
 
 
 struct AVCTPHeader {
