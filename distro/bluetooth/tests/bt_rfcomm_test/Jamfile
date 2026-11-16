@@ -10,5 +10,6 @@ Application bt_rfcomm_test :
 	bt_rfcomm_test.cpp
 	RFCOMMMux.cpp
 	RFCOMMLink.cpp
+	HFPAgent.cpp
 	: be network [ TargetLibstdc++ ]
 	;

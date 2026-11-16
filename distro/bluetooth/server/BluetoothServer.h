@@ -120,6 +120,8 @@ public:
 	// SPDX-License-Identifier: MIT
 	// Classic HID (step 4); NULL until ReadyToRun().
 	HIDHost*	GetHIDHost() { return fHIDHost; }
+	// HFP Audio Gateway (step 7b); NULL after the server quits.
+	class HFPGateway* GetHFPGateway() { return fHFPGateway; }
 	// SPDX-SnippetEnd
 
     LocalDeviceImpl*    LocateLocalDeviceImpl(hci_id hid);
@@ -208,6 +210,7 @@ private:
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
 	HIDHost*				fHIDHost;
+	class HFPGateway*		fHFPGateway;
 	class BMessageRunner*	fLEPulse;
 	// SPDX-SnippetEnd
 };

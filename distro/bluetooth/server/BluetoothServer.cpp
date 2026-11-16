@@ -58,6 +58,7 @@ static void admin_request(BMessage* request, const r5_admin_sender& sender,
 // SPDX-License-Identifier: MIT
 #include "LEManager.h"
 #include "PasskeyWindow.h"
+#include "HFPGateway.h"
 #include "RFCOMMMux.h"
 
 #include <MessageRunner.h>
@@ -142,6 +143,7 @@ BluetoothServer::BluetoothServer()
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
 	fHIDHost = new HIDHost();
+	fHFPGateway = new HFPGateway();
 	fLEPulse = NULL;
 	// SPDX-SnippetEnd
 }
@@ -190,6 +192,9 @@ bool BluetoothServer::QuitRequested(void)
 	fHIDHost->Stop();
 	delete fHIDHost;
 	fHIDHost = NULL;
+	fHFPGateway->Stop();
+	delete fHFPGateway;
+	fHFPGateway = NULL;
 	// SPDX-SnippetEnd
 
 	delete fEventListener2;
@@ -1284,6 +1289,15 @@ BluetoothServer::NotifyServices(ServerRemoteDevice* rd)
 	else
 		TRACE_BT("SDP: Error could not notify the dedicated profile\n");
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Step 7b: a headset with a Hands-Free service gets an HFP session
+	// (R5 is the Audio Gateway), whatever profile the call above chose.
+	uint8 channel = R5RFCOMMChannel(rd->services, kR5ServiceHandsFree);
+	if (channel != 0 && fHFPGateway != NULL)
+		fHFPGateway->DeviceReady(rd->bdaddr, channel);
+	// SPDX-SnippetEnd
 }
 
 

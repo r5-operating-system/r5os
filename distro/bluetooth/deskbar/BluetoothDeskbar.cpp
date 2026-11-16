@@ -25,6 +25,7 @@
 #include <Path.h>
 #include <PopUpMenu.h>
 #include <Roster.h>
+#include <String.h>
 #include <View.h>
 
 #include <Bitmap.h>
@@ -57,6 +58,66 @@ static const uint32 kMsgToggle = 'btdT';
 static const uint32 kMsgOpen = 'btdO';
 
 static const bigtime_t kPollInterval = 5000000;
+
+
+// A connected device with its battery (step 7b: headsets over HFP; LE
+// devices with the Battery Service): the level glyph, then the name and
+// the percentage. Nothing happens on a click.
+class BatteryItem : public BMenuItem {
+public:
+	BatteryItem(const char* name, int32 percent)
+		:
+		BMenuItem("", NULL),
+		fPercent(percent)
+	{
+		BString label;
+		label.SetToFormat(B_TRANSLATE("%s: battery %d%%"), name,
+			(int)percent);
+		SetLabel(label.String());
+	}
+
+protected:
+	virtual void GetContentSize(float* _width, float* _height)
+	{
+		BMenuItem::GetContentSize(_width, _height);
+		*_width += _GlyphWidth() + _Gap();
+	}
+
+	virtual void DrawContent()
+	{
+		BMenu* menu = Menu();
+		BPoint where = ContentLocation();
+		font_height height;
+		menu->GetFontHeight(&height);
+		float lineHeight = ceilf(height.ascent + height.descent);
+		float glyphHeight = floorf(lineHeight * 0.6f);
+		float top = where.y + floorf((lineHeight - glyphHeight) / 2);
+		BRect glyph(where.x, top, where.x + _GlyphWidth() - 1,
+			top + glyphHeight - 1);
+		int32 level = (fPercent + 12) / 25;
+		r5_level_glyph_draw(menu, R5_LEVEL_BATTERY, glyph, level,
+			ui_color(B_MENU_ITEM_TEXT_COLOR),
+			ui_color(B_MENU_BACKGROUND_COLOR), R5_LEVEL_STYLE_NORMAL);
+		menu->MovePenTo(where.x + _GlyphWidth() + _Gap(),
+			where.y + ceilf(height.ascent));
+		menu->DrawString(Label());
+	}
+
+private:
+	float _GlyphWidth()
+	{
+		font_height height;
+		Menu()->GetFontHeight(&height);
+		return ceilf((height.ascent + height.descent) * 1.1f);
+	}
+
+	float _Gap()
+	{
+		return ceilf(be_plain_font->Size() * 0.5f);
+	}
+
+	int32	fPercent;
+};
 
 
 // The switch on bluetooth_server's admin port (libr5admin.so), on its own
@@ -207,7 +268,12 @@ public:
 				break;
 
 			default:
-				// bluetooth_server's answers have no code of their own.
+				// bluetooth_server's answers have no code of their own;
+				// only the radio answer has "enabled".
+				if (message->what == 0 && !message->HasBool("enabled")) {
+					fPaired = *message;
+					break;
+				}
 				if (message->what == 0 && message->HasBool("enabled")) {
 					int32 radios = 0;
 					int32 id;
@@ -238,6 +304,22 @@ public:
 		BMenuItem* statusItem = new BMenuItem(status, NULL);
 		statusItem->SetEnabled(false);
 		menu->AddItem(statusItem);
+
+		// From the last BT_MSG_R5_GET_PAIRED answer (_Poll()).
+		bool batteries = false;
+		const char* name;
+		for (int32 i = 0; fEnabled
+				&& fPaired.FindString("name", i, &name) == B_OK; i++) {
+			int32 battery = fPaired.GetInt32("battery", i, -1);
+			if (!fPaired.GetBool("connected", i, false) || battery < 0)
+				continue;
+			if (!batteries)
+				menu->AddSeparatorItem();
+			batteries = true;
+			menu->AddItem(new BatteryItem(name, battery));
+		}
+		if (batteries)
+			menu->AddSeparatorItem();
 
 		BMenuItem* toggle = new BMenuItem(fEnabled
 			? B_TRANSLATE("Turn Bluetooth off")
@@ -283,6 +365,8 @@ private:
 		// Asynchronous: the answer (or B_NO_REPLY) comes to MessageReceived.
 		if (server.SendMessage(&request, this, 0) != B_OK)
 			_SetState(false, fEnabled, fRadios);
+		BMessage paired(BT_MSG_R5_GET_PAIRED);
+		server.SendMessage(&paired, this, 0);
 	}
 
 	void _SetState(bool reached, bool enabled, int32 radios)
@@ -308,6 +392,7 @@ private:
 	BBitmap*		fGlyph;
 	rgb_color		fGlyphColor;
 	float			fGlyphSide;
+	BMessage		fPaired;
 };
 
 

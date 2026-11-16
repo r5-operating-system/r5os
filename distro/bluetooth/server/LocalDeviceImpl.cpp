@@ -33,6 +33,7 @@
 #include <unistd.h>
 
 #include "PasskeyWindow.h"
+#include "HFPGateway.h"
 #include "LEManager.h"
 #include "PairingNotice.h"
 // SPDX-SnippetEnd
@@ -3014,8 +3015,11 @@ LocalDeviceImpl::R5AddPaired(BMessage& reply)
 		reply.AddBool("hid", false);
 		reply.AddBool("connected",
 			rd->conn_state == RemoteDevice::CONNECTED);
-		// Classic devices report no battery level R5 reads yet.
-		reply.AddInt32("battery", -1);
+		// A headset sends its battery over HFP (step 7b).
+		HFPGateway* hfp = ((BluetoothServer*)be_app)->GetHFPGateway();
+		reply.AddInt32("battery", hfp != NULL
+			&& rd->conn_state == RemoteDevice::CONNECTED
+			? hfp->Battery(rd->bdaddr) : -1);
 	}
 	if (fLE != NULL)
 		fLE->AddPaired(reply);

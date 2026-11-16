@@ -12,7 +12,9 @@
  *    credits, DLC, MSC, data both ways, credit top-up, close; a refused
  *    DLC and a timeout;
  *  - two RFCOMMLink objects over ports, with their reader threads
- *    (Haiku only), and RFCOMMLink::Connect() with no radio.
+ *    (Haiku only), and RFCOMMLink::Connect() with no radio;
+ *  - the HFP Audio Gateway AT commands (step 7b, HFPAgent.cpp), alone
+ *    and, on Haiku, with a headset script over two links.
  * Built on the host too with -DR5_RFCOMM_HOST (without the RFCOMMLink
  * part).
  */
@@ -21,8 +23,10 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <string>
 #include <vector>
 
+#include "HFPAgent.h"
 #include "RFCOMMMux.h"
 
 #ifndef R5_RFCOMM_HOST
@@ -328,6 +332,87 @@ test_refused_and_timeout()
 }
 
 
+// #pragma mark - HFP Audio Gateway AT commands (step 7b)
+
+
+static std::string sAnswer;
+
+
+static bool
+ask(r5hfp::Agent& agent, const char* command, const char* expect)
+{
+	char out[r5hfp::kMaxAnswer];
+	size_t length = agent.Handle(command, strlen(command), out, sizeof(out));
+	sAnswer.assign(out, length);
+	return length > 0 && length == strlen(out)
+		&& sAnswer.find(expect) != std::string::npos;
+}
+
+
+static void
+test_hfp_agent()
+{
+	using namespace r5hfp;
+	// The service level connection of HFP 1.8, 4.2.1, as a headset with
+	// HF indicators sends it.
+	Agent agent;
+	report("hfp: BRSF answered with the AG features",
+		ask(agent, "AT+BRSF=959", "\r\n+BRSF: 1280\r\n\r\nOK\r\n")
+		&& agent.HandsFreeFeatures() == 959);
+	report("hfp: BAC taken", ask(agent, "AT+BAC=1,2", "\r\nOK\r\n"));
+	report("hfp: CIND=? lists battchg",
+		ask(agent, "AT+CIND=?", "(\"battchg\",(0-5))")
+		&& sAnswer.find("\r\nOK\r\n") != std::string::npos);
+	report("hfp: CIND? values", ask(agent, "AT+CIND?",
+		"\r\n+CIND: 0,0,0,0,5,0,5\r\n\r\nOK\r\n"));
+	report("hfp: no SLC before CMER", !agent.ServiceLevel());
+	report("hfp: CMER brings the SLC up",
+		ask(agent, "AT+CMER=3,0,0,1", "\r\nOK\r\n") && agent.ServiceLevel()
+		&& agent.TakeEvents() == kEventServiceLevel);
+	report("hfp: BIND", ask(agent, "AT+BIND=1,2", "\r\nOK\r\n")
+		&& ask(agent, "AT+BIND=?", "+BIND: (2)")
+		&& ask(agent, "AT+BIND?", "+BIND: 2,1"));
+	report("hfp: no battery yet", agent.Battery() == -1);
+	report("hfp: BIEV battery 80", ask(agent, "AT+BIEV=2,80", "OK")
+		&& agent.Battery() == 80 && agent.TakeEvents() == kEventBattery);
+	report("hfp: BIEV 101 refused", ask(agent, "AT+BIEV=2,101", "ERROR")
+		&& agent.Battery() == 80);
+	report("hfp: BIEV of indicator 1 refused",
+		ask(agent, "AT+BIEV=1,1", "ERROR"));
+
+	// The Apple way: battery 0 to 9 for 10 to 100 %.
+	report("hfp: XAPL", ask(agent, "AT+XAPL=054C-0D58-0100,10",
+		"\r\n+XAPL=iPhone,2\r\n\r\nOK\r\n"));
+	report("hfp: IPHONEACCEV battery 7 is 80 %",
+		ask(agent, "AT+IPHONEACCEV=2,1,7,2,0", "OK")
+		&& agent.Battery() == 80);
+	report("hfp: IPHONEACCEV battery 3 is 40 %",
+		ask(agent, "at+iphoneaccev=1,1,3", "OK") && agent.Battery() == 40);
+	report("hfp: IPHONEACCEV wrong count refused",
+		ask(agent, "AT+IPHONEACCEV=2,1,7", "ERROR"));
+	agent.TakeEvents();
+
+	report("hfp: VGS 9", ask(agent, "AT+VGS=9", "OK")
+		&& agent.SpeakerVolume() == 9 && agent.TakeEvents() == kEventVolume);
+	report("hfp: VGM 16 refused", ask(agent, "AT+VGM=16", "ERROR"));
+	report("hfp: answer button, no call", ask(agent, "ATA", "ERROR")
+		&& agent.TakeEvents() == kEventButton
+		&& strcmp(agent.LastButton(), "answer") == 0);
+	report("hfp: redial button", ask(agent, "AT+BLDN", "ERROR")
+		&& strcmp(agent.LastButton(), "redial") == 0);
+	report("hfp: voice button", ask(agent, "AT+BVRA=1", "ERROR")
+		&& strcmp(agent.LastButton(), "voice") == 0);
+	report("hfp: CLCC, CMEE, NREC taken", ask(agent, "AT+CLCC", "OK")
+		&& ask(agent, "AT+CMEE=1", "OK") && ask(agent, "AT+NREC=0", "OK"));
+	report("hfp: unknown command", ask(agent, "AT+FOO=1", "ERROR")
+		&& agent.Unknown() == 1);
+	report("hfp: not AT", ask(agent, "HELLO", "ERROR"));
+	report("hfp: numbers with spaces", ask(agent, "AT+BIEV= 2 , 55", "OK")
+		&& agent.Battery() == 55);
+	report("hfp: no buffer, no answer", agent.Handle("AT", 2, NULL, 0) == 0);
+}
+
+
 #ifndef R5_RFCOMM_HOST
 // #pragma mark - two links over ports
 
@@ -470,6 +555,115 @@ test_links()
 }
 
 
+// The loop of HFPGateway::_Run(), on a link the test made.
+struct Gateway {
+	RFCOMMLink*		link;
+	r5hfp::Agent	agent;
+	int				commands;
+};
+
+
+static status_t
+gateway_thread(void* data)
+{
+	Gateway* gateway = (Gateway*)data;
+	char line[256];
+	char answer[r5hfp::kMaxAnswer];
+	while (true) {
+		status_t status = gateway->link->ReadLine(line, sizeof(line),
+			1000000);
+		if (status == B_TIMED_OUT)
+			continue;
+		if (status != B_OK)
+			break;
+		gateway->commands++;
+		size_t length = gateway->agent.Handle(line, strlen(line), answer,
+			sizeof(answer));
+		if (length > 0
+			&& gateway->link->Send(answer, length, 1000000) != B_OK)
+			break;
+	}
+	return B_OK;
+}
+
+
+// The headset side: one command, then the answer lines up to OK or
+// ERROR. True when the answer has expect.
+static bool
+headset_ask(RFCOMMLink* link, const char* command, const char* expect)
+{
+	char line[128];
+	snprintf(line, sizeof(line), "%s\r", command);
+	if (link->Send(line, strlen(line), 1000000) != B_OK)
+		return false;
+	bool found = expect == NULL;
+	while (link->ReadLine(line, sizeof(line), 2000000) == B_OK) {
+		if (expect != NULL && strstr(line, expect) != NULL)
+			found = true;
+		if (strcmp(line, "OK") == 0 || strcmp(line, "ERROR") == 0)
+			return found;
+	}
+	return false;
+}
+
+
+static void
+test_hfp_over_links()
+{
+	port_id toHeadset = create_port(16, "hfp test a");
+	port_id toGateway = create_port(16, "hfp test b");
+	Accept headset = { new PortTransport(toGateway, toHeadset), NULL,
+		B_ERROR };
+	thread_id thread = spawn_thread(accept_thread, "hfp headset",
+		B_NORMAL_PRIORITY, &headset);
+	resume_thread(thread);
+	Gateway gateway;
+	gateway.link = NULL;
+	gateway.commands = 0;
+	status_t status = RFCOMMLink::Start(
+		new PortTransport(toHeadset, toGateway), true, 3, 5000000,
+		&gateway.link);
+	status_t result;
+	wait_for_thread(thread, &result);
+	report("hfp links: channel open", status == B_OK
+		&& headset.status == B_OK);
+	if (status != B_OK || headset.status != B_OK) {
+		delete gateway.link;
+		delete headset.link;
+		delete_port(toHeadset);
+		delete_port(toGateway);
+		return;
+	}
+	thread_id serving = spawn_thread(gateway_thread, "hfp gateway",
+		B_NORMAL_PRIORITY, &gateway);
+	resume_thread(serving);
+
+	RFCOMMLink* hf = headset.link;
+	bool slc = headset_ask(hf, "AT+BRSF=959", "+BRSF: 1280")
+		&& headset_ask(hf, "AT+CIND=?", "battchg")
+		&& headset_ask(hf, "AT+CIND?", "+CIND: 0,0,0,0,5,0,5")
+		&& headset_ask(hf, "AT+CMER=3,0,0,1", NULL)
+		&& headset_ask(hf, "AT+BIND=2", NULL)
+		&& headset_ask(hf, "AT+BIND=?", "+BIND: (2)")
+		&& headset_ask(hf, "AT+BIND?", "+BIND: 2,1");
+	report("hfp links: service level connection", slc);
+	report("hfp links: battery sent", headset_ask(hf, "AT+BIEV=2,80", NULL));
+	report("hfp links: a button gets ERROR",
+		headset_ask(hf, "AT+BLDN", "ERROR"));
+
+	// The headset leaves: the gateway loop ends.
+	hf->Close();
+	wait_for_thread(serving, &result);
+	report("hfp links: gateway saw SLC, battery 80, 9 commands",
+		gateway.agent.ServiceLevel() && gateway.agent.Battery() == 80
+		&& gateway.commands == 9);
+	delete gateway.link;
+	delete hf;
+	delete_port(toHeadset);
+	delete_port(toGateway);
+}
+
+
 static void
 test_connect_without_radio()
 {
@@ -499,8 +693,10 @@ main()
 	test_sdp();
 	test_loopback();
 	test_refused_and_timeout();
+	test_hfp_agent();
 #ifndef R5_RFCOMM_HOST
 	test_links();
+	test_hfp_over_links();
 	test_connect_without_radio();
 #endif
 	printf("bt_rfcomm_test: %d failed\n", sFailures);
