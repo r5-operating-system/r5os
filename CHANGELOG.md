@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-16 - Bluetooth: no kernel panic when a BLE mouse is used after pairing
+
+Problem: stick 4 on the 5625U: the 8BitDo M30 and the Designer Mouse paired ("Paired with Designer Mouse" on the page), the mouse moved, and a few seconds later the kernel panicked: `PANIC: expected to be contiguous` in h2generic `nb_get_whole_buffer()` from `submit_tx_acl()`, `PostACL()` and the L2CAP send thread. The small LE signalling answers (here the Connection Parameter Update Response a mouse asks for after it connected) were built with 2 to 10 bytes of header room, so the L2CAP and ACL headers went into separate pieces, and the USB transport panics on a buffer in pieces. The syslog of that boot was lost with the panic; the backtrace came from a photo of the debugger.
+
+What changed: the LE signalling answers get 128 bytes of header room, as the Classic commands; `PostACL()` copies any frame in pieces into one buffer before it goes to the transport, so no path can panic there again.
+
+Tested: built for x86_64; QEMU with SMAP, all Bluetooth tests ok (also `bt_audio_smoke_test`), no panic. Not on a stick yet. Open from the same boot: the M30 paired but gave no input in Joysticks; its log was lost with the panic.
+
 ## 2026-11-16 - Bluetooth audio: review of #4317 (reconnect, SDP, encrypted links, SBC endpoint, 44.1 kHz only)
 
 Problem: an outside read-only review of #4317 found these; each was checked against the code here first:

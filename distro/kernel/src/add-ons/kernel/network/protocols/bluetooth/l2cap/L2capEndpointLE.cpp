@@ -566,7 +566,12 @@ static status_t
 send_le_values(HciConnection* conn, uint8 code, uint8 ident,
 	const uint16* values, int count)
 {
-	net_buffer* buffer = gBufferModule->create(2 * count);
+	// Header room for the L2CAP and ACL headers that go in front, as the
+	// Classic commands have (l2cap_command.cpp). With 2 bytes each header
+	// went into a separate piece, and h2generic panicked on the
+	// non-contiguous buffer ("expected to be contiguous", the first LE
+	// Connection Parameter Update Response, 5625U stick 4).
+	net_buffer* buffer = gBufferModule->create(128);
 	if (buffer == NULL)
 		return ENOMEM;
 	for (int i = 0; i < count; i++) {
