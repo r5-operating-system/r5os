@@ -31,6 +31,15 @@ AddDirectoryToHaikuImage system non-packaged data launch ;
 AddFilesToHaikuImage system non-packaged data launch : $(r5BtLaunch) ;
 """
 
+USER_LAUNCH_BLOCK = """
+# The Bluetooth Deskbar item for every session (regular image only).
+local r5BtDeskbarLaunch = <r5-launch>bluetooth-deskbar ;
+SEARCH on $(r5BtDeskbarLaunch) = [ FDirName $(HAIKU_TOP) data launch r5 ] ;
+AddDirectoryToHaikuImage system non-packaged data user_launch ;
+AddFilesToHaikuImage system non-packaged data user_launch
+	: $(r5BtDeskbarLaunch) ;
+"""
+
 
 def copy_dir(source: pathlib.Path, dest: pathlib.Path, tag: str) -> None:
     if not source.is_dir():
@@ -142,6 +151,28 @@ def main() -> int:
         "AddFilesToHaikuImage home config settings : $(shortcutsSettingsFile) ;\n",
         LAUNCH_BLOCK,
         "bluetooth launch image")
+    # Step 3b: the Bluetooth program replaces Haiku's Bluetooth preferences
+    # (its Jamfile over theirs; their Bluetooth.rdef, signature and icon,
+    # stays), and the Deskbar item bluetooth_deskbar with its user launch job.
+    copy_files(SRC / "app", ("BluetoothApp.cpp", "Jamfile"),
+        HAIKU / "src" / "preferences" / "bluetooth", "Bluetooth program")
+    copy_files(SRC / "deskbar", ("BluetoothDeskbar.cpp", "BluetoothDeskbar.rdef",
+        "Jamfile"), HAIKU / "src" / "servers" / "bluetooth_deskbar",
+        "bluetooth_deskbar")
+    insert_once(HAIKU / "src" / "servers" / "Jamfile",
+        "SubInclude HAIKU_TOP src servers bluetooth ;\n",
+        "SubInclude HAIKU_TOP src servers bluetooth_deskbar ;\n",
+        "bluetooth_deskbar jam")
+    insert_once(HAIKU / "build" / "jam" / "images" / "definitions" / "regular",
+        "\tbluetooth_server\n",
+        "\tbluetooth_deskbar\n",
+        "bluetooth_deskbar image")
+    copy_files(SRC / "launch", ("bluetooth-deskbar",),
+        HAIKU / "data" / "launch" / "r5", "bluetooth_deskbar launch job")
+    insert_once(HAIKU / "build" / "jam" / "images" / "definitions" / "regular",
+        LAUNCH_BLOCK,
+        USER_LAUNCH_BLOCK,
+        "bluetooth_deskbar launch image")
     return 0
 
 

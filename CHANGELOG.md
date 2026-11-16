@@ -1,5 +1,20 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-16 - Bluetooth step 3b: the Bluetooth program and the Bluetooth item in Deskbar
+
+Problem: the Bluetooth panel was only a Settings page; Haiku's old Bluetooth preferences were still the program, and the only Deskbar item was the one `bluetooth_server` added by putting its own binary into Deskbar (`docs/BLUETOOTH.md`, step 3b).
+
+What changed:
+- **The Bluetooth program** (`distro/bluetooth/app`): `BluetoothView` in a window, sized to the panel, with the lock button for a person who is not an administrator (`r5_admin_query()`, `r5_admin_prompt_unlock()`, refreshed every 15 s). It replaces Haiku's Bluetooth preferences in the regular image (owner's choice) and keeps their signature and icon. Their list of paired devices and their pairing window are gone until step 4.
+- **The Deskbar item** `bluetooth_deskbar` (`distro/bluetooth/deskbar`, `/system/servers`, regular image only), the AirPlay pattern: a user launch job after Deskbar adds the program's own small binary and quits. The item asks `bluetooth_server` every 5 s with an asynchronous `BT_MSG_R5_GET_RADIO` (Deskbar never waits), logs `deskbar_bt_replicant: attached via messenger` on the first answer, and its menu shows the state, turns Bluetooth on or off (only with `r5_admin_change_allowed()`; the server checks again) and opens the program.
+- **Glass-ready** (owner's question): the item paints no background of its own (`B_TRANSPARENT_BACKGROUND`) and draws the glyph as an alpha bitmap with `B_OP_ALPHA` and `B_ALPHA_COMPOSITE`, the rule of the R5Book's "Window effects", so a later glass Deskbar shows through. Deskbar itself has no glass yet.
+- **`bluetooth_server`** no longer adds itself to Deskbar (Deskbar loaded the whole server, which `docs/BLUETOOTH.md` forbids); `bluetooth_deskbar` removes that old item (`BluetoothServerReplicant`) from a session that still has it.
+- `run-qemu-smoke.sh`: `DESKBAR=1` starts Deskbar and the item before Sign in, `PROGRAM=1` opens the program.
+
+Tested: built with `scripts/build-locked.sh` (`jam_exit=0`, no warnings in the new files). QEMU (KVM), own image copy, Deskbar and the item started by the test job (uid 0, before Sign in): `deskbar_bt_replicant: attached via messenger`; the item shows the faint Bluetooth glyph beside AirPlay; the program opens with the panel ("0 radios"); `bt_server_smoke_test: ok (0 crashes)`, `bt_l2cap_abi_test: ok`. Logs: `generated/bluetooth/qemu-step3b/`.
+
+Not tested: the user launch job in a real session after Sign in, the administrator and a standard person (the step's pass rule; VirtualBox), the menu and the lock button by hand, the item on glass (Deskbar has no glass yet), a real radio. ARM64 and RISC-V 64 were not built or tested.
+
 ## 2026-11-16 - Bluetooth: bluetooth_server is a system service from boot (uid 0)
 
 Problem: `bluetooth_server` had no launch job. The first program that needed it started it with `BRoster::Launch()`, so it ran as whoever that was; there was no Bluetooth before Sign in (a keyboard could not work there, step 4), and the switch and the pairing keys depended on that person's rights. Owner's choice after step 3a: run it as uid 0 (`docs/BLUETOOTH.md`, as built).

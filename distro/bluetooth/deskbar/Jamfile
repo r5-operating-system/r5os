@@ -1,0 +1,21 @@
+# SPDX-FileCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+#
+# bluetooth_deskbar: the Bluetooth item in Deskbar (docs/BLUETOOTH.md,
+# step 3b). Deskbar loads this small add-on, not bluetooth_server.
+
+SubDir HAIKU_TOP src servers bluetooth_deskbar ;
+
+UsePrivateHeaders bluetooth ;
+
+Application bluetooth_deskbar :
+	BluetoothDeskbar.cpp
+	: be libr5icons.so libr5ui.so localestub [ TargetLibstdc++ ]
+	: BluetoothDeskbar.rdef
+	;
+
+DoCatalogs bluetooth_deskbar :
+	x-vnd.R5OS-bluetooth-deskbar
+	:
+	BluetoothDeskbar.cpp
+	;

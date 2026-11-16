@@ -1,0 +1,23 @@
+# SPDX-FileCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+#
+# The Bluetooth program (docs/BLUETOOTH.md, step 3b). It replaces Haiku's
+# Bluetooth preferences: this Jamfile is copied over theirs in
+# src/preferences/bluetooth, and Bluetooth.rdef there (signature and icon)
+# is kept.
+
+SubDir HAIKU_TOP src preferences bluetooth ;
+
+UsePrivateHeaders bluetooth ;
+
+Application Bluetooth :
+	BluetoothApp.cpp
+	: be libr5bt.so libr5ui.so libr5icons.so localestub [ TargetLibstdc++ ]
+	: Bluetooth.rdef
+	;
+
+DoCatalogs Bluetooth :
+	x-vnd.Haiku-BluetoothPrefs
+	:
+	BluetoothApp.cpp
+	;

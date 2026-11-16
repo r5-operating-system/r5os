@@ -1062,18 +1062,17 @@ BluetoothServer::ShowWindow(BWindow* pWindow)
 void
 BluetoothServer::_InstallDeskbarIcon()
 {
-	app_info appInfo;
-	be_app->GetAppInfo(&appInfo);
-
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// This added the server's own binary to Deskbar, so Deskbar loaded the
+	// whole server as an add-on (docs/BLUETOOTH.md forbids that). The item
+	// is now bluetooth_deskbar, which only sends messages. An item that an
+	// older build left in Deskbar is removed.
 	BDeskbar deskbar;
-
-	if (deskbar.HasItem(kDeskbarItemName)) {
+	if (deskbar.IsRunning() && deskbar.HasItem(kDeskbarItemName))
 		_RemoveDeskbarIcon();
-	}
-
-	status_t res = deskbar.AddItem(&appInfo.ref);
-	if (res != B_OK)
-		TRACE_BT("Failed adding deskbar icon: %" B_PRId32 "\n", res);
+	// SPDX-SnippetEnd
 }
 
 
