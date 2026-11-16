@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<!--
+  SPDX-FileCopyrightText: 2026 R5OS Contributors
+  SPDX-License-Identifier: MIT
+-->
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Bluetooth Kit</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
+	<link rel="stylesheet" href="r5book.css" />
+</head>
+<body data-page="bluetooth">
+
+<div class="book">
+	<aside class="toc"></aside>
+
+	<main class="page">
+		<section class="page-hero">
+			<span class="kit-label">libr5bt.so</span>
+			<h1>The Bluetooth Kit</h1>
+			<p>R5's <code class="inline">libr5bt.so</code> is the Bluetooth panel and the controller behind it. The
+			Bluetooth page in Settings shows the panel as its page. A program can show it too, or use the
+			controller alone. It sits on top of Haiku's <code class="inline">libbluetooth</code> and
+			<code class="inline">bluetooth_server</code>, which stay as they are for Haiku programs. The code is
+			R5's own and MIT.</p>
+		</section>
+
+		<table class="facts">
+			<tr><th>Declared in</th><td>&lt;R5Bluetooth.h&gt;</td></tr>
+			<tr><th>Library</th><td>libr5bt.so (link be and libr5bt.so)</td></tr>
+			<tr><th>Source</th><td>distro/bluetooth/lib</td></tr>
+			<tr><th>Contract</th><td>docs/LIBR5.md</td></tr>
+		</table>
+
+		<div class="note"><strong>Nothing waits on a radio.</strong> All work with bluetooth_server and
+		libbluetooth happens on the controller's own thread. A window only sends messages and receives the
+		state. bluetooth_server is a system service from boot; if it is not running, the controller asks
+		launch_daemon once to start it.</div>
+
+		<section class="entry" id="view">
+			<div class="entry-header"><h2>BluetoothView</h2><span class="kind">class</span></div>
+			<table class="facts">
+				<tr><th>Declared in</th><td>&lt;R5Bluetooth.h&gt;</td></tr>
+				<tr><th>Derived from</th><td>BGroupView</td></tr>
+			</table>
+			<p>A summary card (a <code class="inline">BAppearanceKit::BCard</code>) with the Bluetooth glyph, the
+			number of radios and the radio in use; a box whose title is the Bluetooth switch, with a radio menu
+			when there is more than one radio; and the devices nearby, with Scan. It starts its own
+			<code class="inline">BluetoothController</code> when it is attached to a window and stops it when it
+			is detached.</p>
+			<figure class="stage">
+				<img src="img/bluetooth-page-qemu.png" alt="The Bluetooth page in Settings" />
+				<figcaption><span>The Bluetooth page in Settings, R5 in QEMU without a Bluetooth radio, 16 Nov 2026</span><span class="badge-shot">Screenshot</span></figcaption>
+			</figure>
+			<div class="member"><div class="sig">BluetoothView(bool settingsPage = false);</div>
+				<p><code class="inline">false</code>: with window insets, for a program's window.
+				<code class="inline">true</code>: without insets, for a Settings page.</p></div>
+			<div class="member"><div class="sig">void SetRadioSwitchAllowed(bool allowed);</div>
+				<p>The switch turns Bluetooth on or off for the whole computer. A program keeps it disabled while
+				the administrator lock (<code class="inline">r5_admin_change_allowed()</code>) is closed. Scanning
+				stays usable for everyone. On by default.</p></div>
+<pre><code>#include &lt;AdminLock.h&gt;
+#include &lt;R5Bluetooth.h&gt;
+
+BluetoothView* bluetooth = new BluetoothView(false);
+bluetooth-&gt;SetRadioSwitchAllowed(r5_admin_change_allowed());
+BLayoutBuilder::Group&lt;&gt;(this, B_VERTICAL, 0)
+	.Add(bluetooth);</code></pre>
+		</section>
+
+		<section class="entry" id="controller">
+			<div class="entry-header"><h2>BluetoothController</h2><span class="kind">class</span></div>
+			<table class="facts">
+				<tr><th>Declared in</th><td>&lt;R5Bluetooth.h&gt;</td></tr>
+				<tr><th>Derived from</th><td>BLooper</td></tr>
+			</table>
+			<p>Reads the radios and the switch from bluetooth_server every 3 seconds, scans when asked, and
+			reports.</p>
+			<div class="member"><div class="sig">BluetoothController(const BMessenger&amp; target);</div>
+				<p><code class="inline">target</code> receives the state.</p></div>
+			<div class="member"><div class="sig">status_t Start();</div>
+				<p>Runs the looper and sends the first state. Stop it by sending it <code class="inline">B_QUIT_REQUESTED</code>.
+				Do not <code class="inline">Lock()</code> it from a window: libbluetooth's own calls have no
+				timeout.</p></div>
+			<p>Send these to the controller:</p>
+			<table class="facts">
+				<tr><th>kMsgBluetoothScan</th><td>Look for devices nearby, about 13 seconds.</td></tr>
+				<tr><th>kMsgBluetoothCancelScan</th><td>Stop looking.</td></tr>
+				<tr><th>kMsgBluetoothSetRadio</th><td><code class="inline">"on"</code> (bool). System-wide: check the administrator lock first.</td></tr>
+				<tr><th>kMsgBluetoothSelectRadio</th><td><code class="inline">"hci_id"</code> (int32): use another radio.</td></tr>
+				<tr><th>kMsgBluetoothRefresh</th><td>Read and send the state again.</td></tr>
+			</table>
+			<p>The target receives these:</p>
+			<table class="facts">
+				<tr><th>kMsgBluetoothStateChanged</th><td>A <code class="inline">BluetoothState</code>; read it with <code class="inline">state.Unarchive(*message)</code>.</td></tr>
+				<tr><th>kMsgBluetoothRadioResult</th><td><code class="inline">"on"</code> and <code class="inline">"status"</code> (int32) after <code class="inline">kMsgBluetoothSetRadio</code>.</td></tr>
+			</table>
+		</section>
+
+		<section class="entry" id="state">
+			<div class="entry-header"><h2>BluetoothState</h2><span class="kind">struct</span></div>
+			<p><code class="inline">service</code> is <code class="inline">BLUETOOTH_SERVICE_STARTING</code>,
+			<code class="inline">RUNNING</code>, <code class="inline">FAILED</code> (it could not be started) or
+			<code class="inline">STOPPED</code> (it was running and is gone). <code class="inline">radioEnabled</code>
+			is the switch. <code class="inline">radios</code> lists one <code class="inline">BluetoothRadioInfo</code>
+			per radio (<code class="inline">id</code>, <code class="inline">name</code>,
+			<code class="inline">address</code>), and <code class="inline">radio</code> is the one in use, or -1.
+			<code class="inline">scanning</code> and <code class="inline">scanned</code> say whether a scan runs or
+			has finished, and <code class="inline">devices</code> lists what the last scan found.</p>
+			<div class="member"><div class="sig">struct BluetoothDeviceInfo;</div>
+				<p><code class="inline">address</code>, <code class="inline">name</code> (empty when the device
+				sent none), <code class="inline">deviceClass</code> (the 24-bit class of device) and
+				<code class="inline">rssi</code> (dBm, or 127 when not reported). <code class="inline">Kind()</code>
+				turns the class into "Phone", "Headphones", "Mouse" and the like. <code class="inline">DisplayName()</code>
+				is the name, or the kind, or the address. <code class="inline">SignalLevel()</code> gives 0 to 4 bars
+				for <code class="inline">r5_level_glyph_draw(R5_LEVEL_SIGNAL)</code>, 10 dB per bar from -90 dBm, or
+				-1.</p></div>
+		</section>
+
+		<section class="entry" id="switch">
+			<div class="entry-header"><h2 class="plain">The Bluetooth switch</h2></div>
+			<p>Bluetooth has no power-off command for the radio. When the switch is off, bluetooth_server writes
+			"no inquiry scan, no page scan" to every radio, so nothing can find this computer or connect to it,
+			and it refuses scans and connections, outgoing and incoming. It keeps the choice in
+			<code class="inline">B_SYSTEM_SETTINGS_DIRECTORY/bluetooth/r5_radio</code>, so it holds after a
+			restart. bluetooth_server is a system service that runs from boot; that folder is its own. Turning it on again allows scans and connections; it does not make the computer
+			visible.</p>
+		</section>
+
+		<section class="entry" id="remote">
+			<div class="entry-header"><h2>RemoteDevice</h2><span class="kind">Bluetooth Kit, one addition</span></div>
+			<div class="member"><div class="sig">int8 GetRSSI();</div>
+				<p>The signal strength from the inquiry that found the device, in dBm, or
+				<code class="inline">HCI_RSSI_INVALID</code> (127). R5 ships it in libbluetooth.so; the other calls
+				stay as they are.</p></div>
+		</section>
+
+		<section class="entry" id="settings">
+			<div class="entry-header"><h2 class="plain">Where people see it</h2></div>
+			<p>Settings, Devices, Bluetooth, the first page under Devices: the panel as a page, with its own icon
+			and the preferences wrench. Only the switch waits for the lock. The Bluetooth program shows the same panel in its own window, and the Bluetooth item in Deskbar opens it. It replaced Haiku's Bluetooth
+			preferences.</p>
+			<div class="note"><strong>Tested.</strong> Built for x86_64 and run in QEMU, which has no Bluetooth
+			radio, so the page shows 0 radios. Scanning has not run on a real radio yet.</div>
+		</section>
+	</main>
+</div>
+
+<script src="r5book.js"></script>
+</body>
+</html>

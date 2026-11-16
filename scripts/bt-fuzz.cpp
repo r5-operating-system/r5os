@@ -8,8 +8,11 @@
  * Targets:
  *	hci	the HCI reassembly (hci/hci_assemble.h) on random pieces of
  *		events, ACL and SCO packets, checking that every whole packet
- *		that goes in comes out once, unchanged; and the command
- *		timeout tracker (h2generic/h2command.h).
+ *		that goes in comes out once, unchanged; the command timeout
+ *		tracker and the event stream filter (h2generic/h2command.h).
+ *	l2cap	the L2CAP signalling checks (l2cap/l2cap_parse.h): random and
+ *		well-formed signalling packets walked the way the dispatcher
+ *		walks them, configuration options, PSM and fixed CID rules.
  * Prints "<target>_fuzz: <seconds>s 0 crashes" when it ends; ASan or UBSan
  * stop it with a report on a fault.
  */
@@ -24,6 +27,7 @@
 
 #include "hci_assemble.h"
 #include "h2command.h"
+#include "l2cap_parse.h"
 
 
 static uint64_t gState = 0x9e3779b97f4a7c15ULL;
@@ -60,6 +64,7 @@ struct HostOps {
 	std::vector<std::vector<uint8> > acl;
 	bool failCreate = false;
 	bool failAppend = false;
+	bool failRead = false;
 
 	Buffer Current(uint8 type) { return current[type]; }
 	void SetCurrent(uint8 type, Buffer buffer) { current[type] = buffer; }
@@ -83,7 +88,7 @@ struct HostOps {
 
 	bool Read(Buffer buffer, size_t offset, uint8* data, size_t size)
 	{
-		if (offset + size > buffer->size())
+		if (failRead || offset + size > buffer->size())
 			return false;
 		memcpy(data, buffer->data() + offset, size);
 		return true;
@@ -195,6 +200,7 @@ fuzz_reassembly_garbage()
 			chunk[i] = (uint8)next_word();
 		ops.failCreate = (next_word() % 16) == 0;
 		ops.failAppend = (next_word() % 16) == 0;
+		ops.failRead = (next_word() % 16) == 0;
 		uint8 type = (uint8)(next_word() % 6);
 		status_t status = hci_assemble(ops, type, chunk.data(), chunk.size());
 		if (type < HCI_ASSEMBLE_EVENT || type > HCI_ASSEMBLE_SCO)
@@ -219,8 +225,18 @@ fuzz_tracker_round()
 		uint16 opcode = (uint16)(1 + next_word() % 6);
 		switch (next_word() % 4) {
 			case 0:
-				h2_command_sent(&tracker, opcode, now);
+			{
+				uint16 dropped;
+				int slot = h2_command_sent(&tracker, opcode, now, &dropped);
+				check(slot >= 0 && slot < H2_TRACKED_COMMANDS, "slot");
+				if (next_word() % 8 == 0) {
+					// Not sent after all: only that slot is freed.
+					h2_command_unsent(&tracker, slot, opcode);
+					check(tracker.slots[slot].state == H2_COMMAND_FREE,
+						"unsent frees its slot");
+				}
 				break;
+			}
 			case 1:
 			{
 				// An answer event, well formed or not.
@@ -260,10 +276,12 @@ fuzz_tracker_round()
 	}
 
 	// Fixed cases: an answer in time passes; one after the timeout drops.
+	uint16 dropped;
 	h2_command_reset(&tracker);
-	h2_command_sent(&tracker, 0x0c03, 0);
+	h2_command_sent(&tracker, 0x0c03, 0, &dropped);
+	check(dropped == 0, "nothing dropped");
 	check(!h2_command_answered(&tracker, 0x0c03), "answer in time passes");
-	h2_command_sent(&tracker, 0x0c03, 0);
+	h2_command_sent(&tracker, 0x0c03, 0, &dropped);
 	uint16 expired;
 	check(h2_command_expired(&tracker, kH2CommandTimeout, &expired)
 		&& expired == 0x0c03, "times out at the deadline");
@@ -276,6 +294,242 @@ fuzz_tracker_round()
 	check(h2_command_answer(event, sizeof(event), &opcode) && opcode == 0x0c03,
 		"timeout event parses");
 	check(event[2] == kH2TimeoutStatus, "timeout status");
+
+	// A full tracker reports the command it gives up on; a failed send
+	// frees its own slot, not an older one of the same opcode.
+	h2_command_reset(&tracker);
+	for (int i = 0; i < H2_TRACKED_COMMANDS; i++) {
+		h2_command_sent(&tracker, (uint16)(0x1000 + i), i, &dropped);
+		check(dropped == 0, "room left");
+	}
+	h2_command_sent(&tracker, 0x2000, 100, &dropped);
+	check(dropped == 0x1000, "the oldest waiting command is reported");
+	h2_command_reset(&tracker);
+	int first = h2_command_sent(&tracker, 0x0c03, 0, &dropped);
+	int second = h2_command_sent(&tracker, 0x0c03, 1, &dropped);
+	h2_command_unsent(&tracker, second, 0x0c03);
+	check(tracker.slots[first].state == H2_COMMAND_WAITING
+		&& tracker.slots[second].state == H2_COMMAND_FREE,
+		"unsent keeps the earlier command");
+}
+
+
+// --- Event stream (h2command.h) -----------------------------------------
+
+
+// Events, some Command Complete or Command Status, cut at random places
+// and run together: the filter must pass every kept event unchanged and
+// judge each event once, from its first bytes.
+static void
+fuzz_event_stream_round()
+{
+	std::vector<std::vector<uint8> > events;
+	std::vector<uint8> stream;
+	std::vector<uint8> expected;
+	int count = 1 + next_word() % 8;
+	for (int i = 0; i < count; i++) {
+		std::vector<uint8> event;
+		uint8 kind = (uint8)(next_word() % 3);
+		size_t length = next_word() % 256;
+		if (kind == 0) {
+			event.push_back(H2_EVENT_COMMAND_COMPLETE);
+			if (length < 3)
+				length = 3;
+		} else if (kind == 1) {
+			event.push_back(H2_EVENT_COMMAND_STATUS);
+			if (length < 4)
+				length = 4;
+		} else
+			event.push_back((uint8)(0x10 + next_word() % 0x30));
+		event.push_back((uint8)length);
+		for (size_t j = 0; j < length; j++)
+			event.push_back((uint8)next_word());
+		events.push_back(event);
+		stream.insert(stream.end(), event.begin(), event.end());
+
+		uint16 opcode;
+		bool drop = h2_command_answer(event.data(), event.size(), &opcode)
+			&& (opcode & 1) != 0;
+		if (!drop)
+			expected.insert(expected.end(), event.begin(), event.end());
+	}
+
+	int judged = 0;
+	auto drop = [&judged](const uint8* head, size_t size) {
+		judged++;
+		check(size >= 2 && size <= H2_EVENT_HEAD_SIZE, "head size");
+		check(size == H2_EVENT_HEAD_SIZE || size == 2u + head[1],
+			"head is min(6, event)");
+		uint16 opcode;
+		return h2_command_answer_head(head, size, &opcode)
+			&& (opcode & 1) != 0;
+	};
+
+	h2_event_stream state;
+	h2_event_stream_reset(&state);
+	std::vector<uint8> out;
+	size_t offset = 0;
+	while (offset < stream.size()) {
+		size_t piece = 1 + next_word() % ((next_word() % 4) == 0 ? 7 : 300);
+		if (piece > stream.size() - offset)
+			piece = stream.size() - offset;
+		std::vector<uint8> chunk(stream.begin() + offset,
+			stream.begin() + offset + piece);
+		std::vector<uint8> buffer(piece + H2_EVENT_HEAD_SIZE);
+		size_t size = h2_event_stream_filter(&state, chunk.data(), chunk.size(),
+			buffer.data(), drop);
+		check(size <= buffer.size(), "out room");
+		out.insert(out.end(), buffer.begin(), buffer.begin() + size);
+		offset += piece;
+	}
+
+	check(judged == count, "each event judged once");
+	check(state.headSize == 0 && state.left == 0, "ends on a boundary");
+	check(out == expected, "kept events out as in");
+}
+
+
+// --- L2CAP signalling ---------------------------------------------------
+
+
+struct WalkedCommand {
+	uint8	code;
+	uint16	length;
+	int		check;
+	std::vector<std::vector<uint8> > options;
+	bool	malformed;
+};
+
+
+// Walks a signalling packet the way l2cap_handle_signaling_command() does.
+static std::vector<WalkedCommand>
+walk_signalling(const std::vector<uint8>& packet)
+{
+	std::vector<WalkedCommand> walked;
+	size_t position = 0;
+	int steps = 0;
+	while (position < packet.size()) {
+		check(++steps <= 70000, "walk ends");
+		if (packet.size() - position < L2CAP_PARSE_COMMAND_HEADER)
+			break;
+		const uint8* header = packet.data() + position;
+		WalkedCommand command;
+		command.code = header[0];
+		command.length = (uint16)(header[2] | (header[3] << 8));
+		command.malformed = false;
+		size_t remaining = packet.size() - position - L2CAP_PARSE_COMMAND_HEADER;
+		command.check = l2cap_parse_check(command.code, command.length,
+			remaining);
+		if (command.check == L2CAP_PARSE_TRUNCATED) {
+			check(command.length > remaining, "truncated means too long");
+			walked.push_back(command);
+			break;
+		}
+		const uint8* data = header + L2CAP_PARSE_COMMAND_HEADER;
+		if (command.check == L2CAP_PARSE_HANDLE) {
+			check(command.length >= l2cap_parse_min_length(command.code),
+				"handled commands are long enough");
+			// Configuration request and response carry options after 4
+			// and 6 bytes.
+			size_t optionsAt = command.code == 0x04 ? 4
+				: command.code == 0x05 ? 6 : 0;
+			if (optionsAt != 0 && command.length > optionsAt) {
+				// The kernel copies exactly this range out first.
+				std::vector<uint8> copy(data + optionsAt, data + command.length);
+				size_t offset = 0;
+				l2cap_parse_option option;
+				bool malformed;
+				while (l2cap_parse_next_option(copy.data(), copy.size(),
+						&offset, &option, &malformed)) {
+					check(option.value >= copy.data() && option.value
+						+ option.length <= copy.data() + copy.size(),
+						"option value inside");
+					check(offset <= copy.size(), "option offset");
+					command.options.push_back(std::vector<uint8>(option.value,
+						option.value + option.length));
+				}
+				command.malformed = malformed;
+			}
+		}
+		walked.push_back(command);
+		position += L2CAP_PARSE_COMMAND_HEADER + command.length;
+	}
+	return walked;
+}
+
+
+static void
+fuzz_l2cap_round()
+{
+	// Random bytes, kept as their own allocation so ASan sees overreads.
+	{
+		std::vector<uint8> packet(next_word() % 300);
+		for (size_t i = 0; i < packet.size(); i++)
+			packet[i] = (uint8)next_word();
+		// Mostly small codes and lengths, so the handled paths are reached.
+		for (size_t i = 0; i + 3 < packet.size(); i += 4 + next_word() % 9) {
+			packet[i] = (uint8)(next_word() % 13);
+			packet[i + 3] = 0;
+			packet[i + 2] = (uint8)(next_word() % 40);
+		}
+		walk_signalling(packet);
+	}
+
+	// Well-formed commands with options come back as they went in.
+	std::vector<uint8> packet;
+	std::vector<WalkedCommand> expected;
+	int count = 1 + next_word() % 4;
+	for (int i = 0; i < count; i++) {
+		WalkedCommand command;
+		command.code = (uint8)(1 + next_word() % 11);
+		command.malformed = false;
+		command.check = L2CAP_PARSE_HANDLE;
+		std::vector<uint8> data(l2cap_parse_min_length(command.code));
+		for (size_t j = 0; j < data.size(); j++)
+			data[j] = (uint8)next_word();
+		if (command.code == 0x04 || command.code == 0x05) {
+			int options = next_word() % 4;
+			for (int j = 0; j < options; j++) {
+				std::vector<uint8> value(next_word() % 24);
+				for (size_t k = 0; k < value.size(); k++)
+					value[k] = (uint8)next_word();
+				data.push_back((uint8)next_word());
+				data.push_back((uint8)value.size());
+				data.insert(data.end(), value.begin(), value.end());
+				command.options.push_back(value);
+			}
+		}
+		command.length = (uint16)data.size();
+		packet.push_back(command.code);
+		packet.push_back((uint8)next_word());
+		packet.push_back((uint8)(command.length & 0xff));
+		packet.push_back((uint8)(command.length >> 8));
+		packet.insert(packet.end(), data.begin(), data.end());
+		expected.push_back(command);
+	}
+	std::vector<WalkedCommand> walked = walk_signalling(packet);
+	check(walked.size() == expected.size(), "command count");
+	for (size_t i = 0; i < walked.size(); i++) {
+		check(walked[i].check == L2CAP_PARSE_HANDLE, "well-formed is handled");
+		check(walked[i].code == expected[i].code, "code");
+		check(walked[i].length == expected[i].length, "length");
+		check(!walked[i].malformed, "options well formed");
+		check(walked[i].options == expected[i].options, "options");
+	}
+
+	// The PSM and fixed channel rules.
+	uint16 psm = (uint16)next_word();
+	check(l2cap_parse_valid_psm(psm)
+		== (((psm & 1) != 0) && ((psm & 0x100) == 0)), "psm rule");
+	check(l2cap_parse_valid_psm(0x0011) && l2cap_parse_valid_psm(0x0013)
+		&& l2cap_parse_valid_psm(0x0019) && l2cap_parse_valid_psm(0x1001),
+		"hid and avdtp psm");
+	check(!l2cap_parse_valid_psm(0x0010) && !l2cap_parse_valid_psm(0x0101),
+		"bad psm");
+	check(l2cap_parse_is_fixed_channel(0x0004)
+		&& l2cap_parse_is_fixed_channel(0x0006)
+		&& !l2cap_parse_is_fixed_channel(0x0040)
+		&& !l2cap_parse_is_fixed_channel(0), "fixed channels");
 }
 
 
@@ -289,8 +543,10 @@ seconds_left(time_t start, int seconds)
 int
 main(int argc, char** argv)
 {
-	if (argc != 3 || strcmp(argv[1], "hci") != 0) {
-		fprintf(stderr, "usage: bt-fuzz hci <seconds>\n");
+	bool hci = argc == 3 && strcmp(argv[1], "hci") == 0;
+	bool l2cap = argc == 3 && strcmp(argv[1], "l2cap") == 0;
+	if (!hci && !l2cap) {
+		fprintf(stderr, "usage: bt-fuzz hci|l2cap <seconds>\n");
 		return 2;
 	}
 	int seconds = atoi(argv[2]);
@@ -298,9 +554,13 @@ main(int argc, char** argv)
 	uint64_t rounds = 0;
 
 	while (seconds_left(start, seconds)) {
-		fuzz_reassembly_round();
-		fuzz_reassembly_garbage();
-		fuzz_tracker_round();
+		if (hci) {
+			fuzz_reassembly_round();
+			fuzz_reassembly_garbage();
+			fuzz_tracker_round();
+			fuzz_event_stream_round();
+		} else
+			fuzz_l2cap_round();
 		rounds++;
 	}
 

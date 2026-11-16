@@ -1,0 +1,24 @@
+# SPDX-FileCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+#
+# libr5bt.so: the R5 Bluetooth Kit (<R5Bluetooth.h>), shared by the
+# Bluetooth page of Settings and, later, the Bluetooth program. It talks to
+# bluetooth_server through libbluetooth. docs/LIBR5.md, "Bluetooth".
+
+SubDir HAIKU_TOP src preferences r5bt ;
+
+UsePrivateHeaders app bluetooth ;
+
+SharedLibrary [ MultiArchDefaultGristFiles libr5bt.so ] :
+	BluetoothController.cpp
+	BluetoothView.cpp
+	: be libbluetooth.so localestub libr5icons.so libr5ui.so
+		[ TargetLibstdc++ ]
+	;
+
+DoCatalogs libr5bt.so :
+	x-vnd.R5OS-libr5bt
+	:
+	BluetoothController.cpp
+	BluetoothView.cpp
+	;

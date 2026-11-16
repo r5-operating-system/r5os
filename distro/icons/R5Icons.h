@@ -110,7 +110,8 @@ enum r5_glyph {
 	R5_GLYPH_CLOCK = 3,
 	R5_GLYPH_EYE = 4,
 	R5_GLYPH_EYE_OFF = 5,
-	R5_GLYPH_LOG_OUT = 6
+	R5_GLYPH_LOG_OUT = 6,
+	R5_GLYPH_BLUETOOTH = 7
 };
 
 // Draws the glyph inside `frame` of `view`, in `color`. The view's
@@ -127,6 +128,32 @@ BBitmap* r5_glyph_bitmap(r5_glyph which, float side, rgb_color color);
 // the button keeps its own width and height. Call it again after
 // B_COLORS_UPDATED so the glyph takes the new text color.
 status_t r5_button_set_glyph(BButton* button, r5_glyph which);
+
+// Level glyphs: a signal strength or a battery charge, drawn in code from a
+// level. The numbers are part of the call contract; add new ones at the
+// end. docs/ICONS.md describes them.
+enum r5_level_glyph {
+	R5_LEVEL_SIGNAL = 1,
+		// Four bars of rising height, left to right
+	R5_LEVEL_BATTERY = 2
+		// A battery body with a cap on the right, four segments inside
+};
+
+enum r5_level_style {
+	R5_LEVEL_STYLE_NORMAL = 0,
+	R5_LEVEL_STYLE_DISABLED = 1,
+		// Greyed, for example while disconnected
+	R5_LEVEL_STYLE_OFF = 2
+		// Outlines only
+};
+
+// Draws `which` inside `frame` of `view` with `level` of its four steps
+// filled (0 to 4; values outside are clamped), in `foreground`, with the
+// empty steps a faint tint of it over `background`. The view's drawing
+// state is the same afterwards.
+void r5_level_glyph_draw(BView* view, r5_level_glyph which, BRect frame,
+	int32 level, rgb_color foreground, rgb_color background,
+	r5_level_style style);
 
 
 #endif

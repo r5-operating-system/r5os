@@ -58,6 +58,30 @@ def apply_icons(haiku: pathlib.Path | None = None) -> None:
             icons_line + "SubInclude HAIKU_TOP src preferences settings ;\n",
             "r5icons jam",
         )
+    # r5_level_glyph_test (docs/BLUETOOTH.md, step 2): the signal bars draw
+    # the same pixels as before they moved into libr5icons.so.
+    test_dest = tree / "src" / "bin" / "r5_level_glyph_test"
+    test_dest.mkdir(parents=True, exist_ok=True)
+    for name in ("Jamfile", "r5_level_glyph_test.cpp"):
+        shutil.copy2(SRC / "test" / name, test_dest / name)
+    print("copied r5_level_glyph_test")
+    bin_jam = tree / "src" / "bin" / "Jamfile"
+    test_line = "SubInclude HAIKU_TOP src bin r5_level_glyph_test ;\n"
+    if test_line in bin_jam.read_text(encoding="utf-8"):
+        print("already src/bin/Jamfile (r5_level_glyph_test)")
+    else:
+        replace_once(bin_jam, "SubInclude HAIKU_TOP src bin writembr ;\n",
+            "SubInclude HAIKU_TOP src bin writembr ;\n" + test_line,
+            "r5_level_glyph_test jam")
+    regular = tree / "build" / "jam" / "images" / "definitions" / "regular"
+    bin_line = "SYSTEM_BIN += r5_level_glyph_test ;\n"
+    if bin_line in regular.read_text(encoding="utf-8"):
+        print("already regular (r5_level_glyph_test)")
+    else:
+        replace_once(regular, "SYSTEM_BIN += userguide quicktour welcome ;\n",
+            "SYSTEM_BIN += userguide quicktour welcome ;\n" + bin_line,
+            "r5_level_glyph_test image")
+
     lib_line = "\t\t\tlibpackage.so\n"
     lib_insert = "\t\t\tlibpackage.so\n\t\t\tlibr5icons.so\n"
     for profile in ("regular", "minimum"):

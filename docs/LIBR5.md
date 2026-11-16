@@ -12,9 +12,10 @@ The R5Book (`docs/r5book/index.html`) shows each part with a picture, what it is
 
 | Library | Header | Source | What it is |
 |---|---|---|---|
-| `libr5icons.so` | `<R5Icons.h>` | `distro/icons` | Icons and icon buttons. `docs/ICONS.md` |
+| `libr5icons.so` | `<R5Icons.h>` | `distro/icons` | Icons and icon buttons, line glyphs (`r5_glyph_draw()`) and level glyphs for signal and battery (`r5_level_glyph_draw()`). `docs/ICONS.md` |
 | `libr5ui.so` | `<R5UI.h>` | `distro/ui` | The screen picture, cards, the sidebar, the page heading, the administrator lock (`<AdminLock.h>`), and the window effects (`<WindowEffects.h>`). It links `libr5icons.so` because a locked sidebar row draws `R5_ICON_LOCKED` |
-| `libr5wifi.so` | `<R5WiFi.h>` | `distro/wifi/lib` | The Wi-Fi panel (`WiFiView`), the Wi-Fi state machine (`WiFiController`), the network list, and the Wi-Fi glyphs. From air/OS, MIT. Regular image only. See "Wi-Fi Kit" below |
+| `libr5wifi.so` | `<R5WiFi.h>` | `distro/wifi/lib` | The Wi-Fi panel (`WiFiView`), the Wi-Fi state machine (`WiFiController`), the network list, and the Wi-Fi glyphs. From air/OS, MIT. Regular image only. It links `libr5icons.so`, which draws the signal bars. See "Wi-Fi Kit" below |
+| `libr5bt.so` | `<R5Bluetooth.h>` | `distro/bluetooth/lib` | The Bluetooth panel (`BluetoothView`), its controller (`BluetoothController`) and state. R5's own, MIT. Regular image only, because it needs `libbluetooth.so`. It links `libr5icons.so` (the Bluetooth glyph and the signal bars) and `libr5ui.so` (`BCard`). See "Bluetooth Kit" below |
 
 `scripts/apply-icons.py` and `scripts/apply-r5ui.py` copy the sources into the Haiku tree, copy the header to `headers/os/interface/`, and add the library to the regular image and the minimum image. On a running system the files are `/system/lib/libr5icons.so` and `/system/lib/libr5ui.so`. The soname is the file name, with no version suffix, the same way `libbe.so` is named.
 
@@ -374,6 +375,18 @@ MyView::Draw(BRect)
 
 Link `libr5ui.so`. `r5-effects-test` (in `/system/bin`) is a small user of every call: `r5-effects-test shadow off`, `r5-effects-test strength glassy`, `r5-effects-test glass 30`.
 
+## Level glyphs
+
+`libr5icons.so`, `<R5Icons.h>`. The full contract with the pictures is in `docs/ICONS.md` ("Level glyphs"); the R5Book page is `docs/r5book/icons-kit.html#r5_level_glyph`.
+
+```
+void r5_level_glyph_draw(BView* view, r5_level_glyph which, BRect frame,
+	int32 level, rgb_color foreground, rgb_color background,
+	r5_level_style style);
+```
+
+`which` is `R5_LEVEL_SIGNAL` (1, four rising bars) or `R5_LEVEL_BATTERY` (2, a battery with four segments). `level` is how many of the four steps are filled; values outside 0 to 4 are clamped. The empty steps are a faint tint of `foreground` over `background`. `style` is `R5_LEVEL_STYLE_NORMAL` (0), `R5_LEVEL_STYLE_DISABLED` (1, greyed) or `R5_LEVEL_STYLE_OFF` (2, outlines only). The view's drawing state is the same afterwards. `DrawWiFiSignalBars()` uses it. The line glyph for Bluetooth is `R5_GLYPH_BLUETOOTH` (7) with `r5_glyph_draw()`.
+
 ## Wi-Fi Kit
 
 `libr5wifi.so`, headers in `headers/os/net/`: `<R5WiFi.h>` (`WiFiController`, `WiFiState`, `WiFiNetworkInfo`, `WiFiLinkDetails`, the message codes), `<R5WiFiView.h>` (`WiFiView`), `<R5WiFiListView.h>` (`NetworkListView`, `SignalView`), `<R5WiFiJoinOther.h>` (`JoinOtherWindow`), and the header-only `<R5WiFiGlyphs.h>`, `<R5WiFiIconPaths.h>` and `<R5WiFiNetworkList.h>`. The R5Book page is `docs/r5book/wifi-kit.html`.
@@ -386,6 +399,27 @@ The code is air/OS's WiFi preferences (MIT, jmgasper; `THIRD_PARTY_NOTICES.md`).
 | `WiFiController(target, component, scanInterval)`, `Start()` | The state machine on its own thread. Stop it with `B_QUIT_REQUESTED` |
 | `kMsgWiFiScan`, `kMsgWiFiJoin`, `kMsgWiFiLeave`, `kMsgWiFiForget`, `kMsgWiFiSetPower`, `kMsgWiFiSelectDevice`, `kMsgWiFiRefresh`, `kMsgWiFiSetScanInterval` | Requests to the controller. The fields are in the R5Book page |
 | `kMsgWiFiStateChanged`, `kMsgWiFiJoinResult` | What the target receives |
-| `DrawWiFiTrayIcon()`, `DrawWiFiSignalBars()`, `DrawWiFiLock()` | The arcs, header only. The Deskbar network icon uses them without loading the library into Deskbar |
+| `DrawWiFiTrayIcon()`, `DrawWiFiSignalBars()`, `DrawWiFiLock()` | Header only, so the Deskbar network icon uses them without loading `libr5wifi.so` into Deskbar. `DrawWiFiSignalBars()` calls `r5_level_glyph_draw()`, so a program that uses it links `libr5icons.so` |
 
 `BNetworkRoster::AddPersistentNetwork(const wireless_network&, const char* password)` is an addition to Haiku's `libbnetapi.so` (air/OS), not to this library; the one-argument call stays. `scripts/apply-wireless.py` copies the library, the WiFi program and the headers, and adds `libr5wifi.so` and WiFi to the regular image.
+
+## Bluetooth Kit
+
+`libr5bt.so`, header `<R5Bluetooth.h>` in `headers/os/interface/` (beside `R5Icons.h` and `Card.h`). The plan is `docs/BLUETOOTH.md` (step 3a). The R5Book page is `docs/r5book/bluetooth-kit.html`.
+
+The classes are top-level, like the Wi-Fi Kit, not in `namespace BAppearanceKit`. They sit on top of Haiku's `libbluetooth.so` and `bluetooth_server`, which Haiku programs keep using as they are. `BluetoothController` and `BluetoothView` have `_reserved[8]`. `BluetoothState` and the structures it holds are read with `Unarchive()`; fields and message names are only added at the end.
+
+| Call | What it does |
+|---|---|
+| `BluetoothView(bool settingsPage = false)` | The whole panel: a `BCard` summary with `R5_GLYPH_BLUETOOTH`, the number of radios ("0 radios", "1 radio") and the radio in use; a box whose title is the Bluetooth switch, with a radio menu when there is more than one radio; the devices nearby with Scan. Each device row draws `r5_level_glyph_draw(R5_LEVEL_SIGNAL)` when the radio reported a signal strength. It starts a `BluetoothController` when attached to a window and stops it when detached. `settingsPage` drops the window insets |
+| `BluetoothView::SetRadioSwitchAllowed(bool)` | The switch is system-wide. A program keeps it disabled while `r5_admin_change_allowed()` is false; the rest of the panel stays usable. On by default. The bold titles are named `"summary title"`, `"radio switch"` and `"devices title"`, so a host can give them its own bold font |
+| `BluetoothController(target)`, `Start()` | The controller on its own thread. It reads the switch and the radios by `hci_id` from `bluetooth_server` every 3 seconds, with a 2-second timeout, and acquires only radios it does not know yet (`LocalDevice::GetLocalDevice(hci_id)`). `bluetooth_server` is a system service (uid 0) that launch_daemon starts at boot and again after it stops. When it is not running the controller asks launch_daemon once to start its job (`BLaunchRoster::Start()`; `BRoster::Launch()` would start a second server as the person signed in) and reports `BLUETOOTH_SERVICE_STOPPED` while it is gone. Stop it with `B_QUIT_REQUESTED`: libbluetooth's own calls have no timeout, so a window must not `Lock()` it |
+| `kMsgBluetoothScan`, `kMsgBluetoothCancelScan`, `kMsgBluetoothSetRadio` (`"on"`), `kMsgBluetoothSelectRadio` (`"hci_id"`), `kMsgBluetoothRefresh` | Requests to the controller |
+| `kMsgBluetoothStateChanged`, `kMsgBluetoothRadioResult` (`"on"`, `"status"`) | What the target receives |
+| `BluetoothDeviceInfo::Kind()`, `DisplayName()`, `AddressString()`, `SignalLevel()` | The kind from the class of device (Bluetooth Assigned Numbers, "Class of Device"); the name, else the kind, else the address; `00:11:22:33:44:55`; 0 to 4 bars, 10 dB per bar from -90 dBm (one bar) to -60 dBm (four bars), R5's display choice, or -1 without a signal strength |
+
+A scan is an inquiry of 10 × 1.28 s, libbluetooth's default (`BT_DEFAULT_INQUIRY_TIME`), through `DiscoveryAgent::StartInquiry()` and a `DiscoveryListener`, as Haiku's Bluetooth preferences do. `LocalDevice` and `DiscoveryAgent` have private destructors in libbluetooth, so the controller acquires each radio once and keeps it; the `RemoteDevice` objects of a scan are deleted when the next scan starts or the controller stops. Every inquiry answer is reported, the repeats too (a message filter on the listener), so a device's signal bars follow its newest strength. Remote names are only what the device sent in the inquiry; the controller does not ask a device for its name.
+
+The switch: HCI has no power-off command for a radio. Off means that `bluetooth_server` writes Write Scan Enable `0x00` (no inquiry scan, no page scan) to every radio, refuses inquiry, periodic inquiry, Create Connection and Remote Name Request, refuses a Write Scan Enable that is not `0x00`, refuses `BT_REQ_CREATE_CONN`, and rejects incoming connection requests (Reject Connection Request, reason `0x0D`). The choice is in `B_SYSTEM_SETTINGS_DIRECTORY/bluetooth/r5_radio` (`radio on` or `radio off`, mode 0600), written by `bluetooth_server` through a temporary file and a rename, so it survives a restart. The server is a system service (uid 0, `distro/bluetooth/launch/bluetooth`, regular image only), so `/boot/system/settings/bluetooth` is root's alone, mode 0700; the pairing keys are there too (`paired_devices`, 0600), one set for everyone who signs in. On allows scans and connections again and does not change the scan mode. The server messages are `BT_MSG_R5_GET_RADIO` (the switch and the radios by `hci_id`) and `BT_MSG_R5_SET_RADIO` in `bluetoothserver_p.h`. The server carries out `BT_MSG_R5_SET_RADIO` only for a sender that may change a machine setting: uid 0, a member of group `admin`, or a team with a grant in Login's `/boot/system/settings/r5-machine-unlock` (the rule of `sender_may_change()`); otherwise it answers `B_NOT_ALLOWED`.
+
+`RemoteDevice::GetRSSI()` is an addition to Haiku's `libbluetooth.so` (R5, MIT snippet), not to this library. In the same change both `RemoteDevice` constructors set the signal strength to `HCI_RSSI_INVALID` and the name to incomplete; Haiku left them unset. `scripts/apply-bluetooth.py` copies the library and the header, and adds `libr5bt.so` to the regular image.

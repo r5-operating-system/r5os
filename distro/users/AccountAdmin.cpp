@@ -1151,7 +1151,6 @@ static const char* kUserRepoSettings =
 	"/boot/home/config/settings/Repositories_settings";
 static const char* kPackageRepos = "/boot/system/settings/package-repositories";
 
-
 static void
 forget_expired_grants()
 {

@@ -16,6 +16,11 @@
 #include <math.h>
 
 #include <R5WiFiIconPaths.h>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <R5Icons.h>
+// SPDX-SnippetEnd
 
 
 enum signal_glyph_style {
@@ -44,37 +49,19 @@ DrawWiFiSignalBars(BView* view, BRect frame, int32 bars,
 	rgb_color foreground, rgb_color background,
 	signal_glyph_style style = SIGNAL_GLYPH_NORMAL)
 {
-	const int32 kBars = 4;
-	float gap = std::max(1.0f, floorf(frame.Width() / 12));
-	float width = floorf((frame.Width() + 1 - gap * (kBars - 1)) / kBars);
-	if (width < 1)
-		width = 1;
-	float totalWidth = width * kBars + gap * (kBars - 1);
-	float left = floorf(frame.left + (frame.Width() + 1 - totalWidth) / 2);
-	float bottom = floorf(frame.bottom);
-	float height = frame.Height() + 1;
-
-	rgb_color filled = foreground;
-	rgb_color empty = WiFiGlyphTint(foreground, background, 0.25f);
-	if (style == SIGNAL_GLYPH_DISABLED) {
-		filled = WiFiGlyphTint(foreground, background, 0.45f);
-		empty = WiFiGlyphTint(foreground, background, 0.2f);
-	} else if (style == SIGNAL_GLYPH_OFF)
-		filled = empty = WiFiGlyphTint(foreground, background, 0.45f);
-
-	view->PushState();
-	view->SetDrawingMode(B_OP_COPY);
-	for (int32 i = 0; i < kBars; i++) {
-		float barHeight = std::max(2.0f, floorf(height * (i + 1) / kBars));
-		BRect bar(left, bottom - barHeight + 1, left + width - 1, bottom);
-		view->SetHighColor(i < bars ? filled : empty);
-		if (style == SIGNAL_GLYPH_OFF)
-			view->StrokeRect(bar);
-		else
-			view->FillRect(bar);
-		left += width + gap;
-	}
-	view->PopState();
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// The bars are drawn by libr5icons.so now (R5_LEVEL_SIGNAL), the same
+	// pixels, so Wi-Fi and Bluetooth share one signal symbol.
+	r5_level_style levelStyle = R5_LEVEL_STYLE_NORMAL;
+	if (style == SIGNAL_GLYPH_DISABLED)
+		levelStyle = R5_LEVEL_STYLE_DISABLED;
+	else if (style == SIGNAL_GLYPH_OFF)
+		levelStyle = R5_LEVEL_STYLE_OFF;
+	r5_level_glyph_draw(view, R5_LEVEL_SIGNAL, frame, bars, foreground,
+		background, levelStyle);
+	// SPDX-SnippetEnd
 }
 
 

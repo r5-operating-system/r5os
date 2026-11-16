@@ -67,7 +67,7 @@ Tracker, changelog and release files:
 | R5 Bluetooth Kit | `distro/bluetooth/lib/` (`libr5bt.so`, `<R5Bluetooth.h>`) | R5 (MIT) | Top-level classes, like `<R5WiFi.h>` (not in `namespace BAppearanceKit`): `BluetoothState`, `BluetoothDeviceInfo`, `BluetoothController`, `BluetoothView` (uses `BAppearanceKit::BCard` inside) |
 | Deskbar replicant | `distro/bluetooth/server/` (replicant) | R5 (MIT) | Talks to `bluetooth_server` only through `BMessenger` and `BMessage`. It never loads the server into Deskbar with `load_add_on` |
 
-`distro/bluetooth/`, `distro/media/bluetooth_audio/` and `distro/input/` do not exist yet.
+`distro/media/bluetooth_audio/` and `distro/input/` do not exist yet. `distro/bluetooth/` has the server, the kit additions, the tests and, since step 3a, `lib/` (`libr5bt.so`).
 
 **Settings page.** Under the `Devices` category (`distro/settings/SettingsWindow.cpp`), in alphabetical order, so Bluetooth is first under Devices. The icon comes from `module_icon()` with `r5_settings_apply_prefs_overlay()`. Checked: there is already a legacy item `bluetooth` under `devices` in `distro/settings/LegacyPages.cpp` (line 205) that opens the old Bluetooth program. Step 3a replaces that item with the real page, in the same place.
 
@@ -91,19 +91,25 @@ Each step is its own small pull request. It is built for AMD64 with `scripts/bui
   5. Fix the leaks in `DeviceManager::AddDevice()`, call `fDeviceManager->LoadState()`, and handle `B_ENTRY_REMOVED` → `BT_MSG_REMOVE_DEVICE`.
   6. `close(client)` in `SDPServer::_Run()`, and `>= 0` socket checks.
 - **Test:** a new small program `distro/bluetooth/tests/bt_server_smoke_test`. It sends `BT_REQ_CONN_STATE` and messages with an invalid `bdaddr` to `bluetooth_server`.
-- **Note (checked in the source):** `bluetooth_server` has no launch job in `data/launch`. It is in the regular image (`build/jam/images/definitions/regular`, line 160 in `haiku/`, line 189 after apply) and is started on request. The smoke test therefore starts it itself (through `BRoster`), and only then the log line appears.
+- **Note (checked in the source; changed after step 3a, see there):** `bluetooth_server` had no launch job in `data/launch`. It is in the regular image (`build/jam/images/definitions/regular`, line 160 in `haiku/`, line 189 after apply) and is started on request. The smoke test therefore starts it itself (through `BRoster`), and only then the log line appears.
 - **Pass:** QEMU boots, `bt_server_smoke_test` starts `bluetooth_server`, syslog has `bluetooth_server: started, 0 radios`, and the test prints `bt_server_smoke_test: ok (0 crashes)` (no crash on an unknown `bdaddr` or on `BT_REQ_CONN_STATE`).
 
 ### Step 1a (PR 2): `h2generic` HCI timeouts, safe reassembly, HCI fuzzer
 
 - **What:** in `distro/kernel/src/add-ons/kernel/drivers/bluetooth/h2/h2generic/`: a hard HCI command timeout. A command without a Command Complete or Command Status within 2 s (Linux `HCI_CMD_TIMEOUT`) gets a Command Status with error `0x1F` (Unspecified Error) for that opcode, the timeout is logged with the opcode, and a real answer that still comes later is dropped (`h2command.h`). In `distro/kernel/src/add-ons/kernel/bluetooth/hci/`: the packet reassembly moves to `hci_assemble.h`, without the `panic()` on a split event and without the endless loop on SCO.
-- **Not in this step (owner, 15 Nov 2026):** the Event Mask and the LE Event Mask. An HCI Reset from the kit (`LocalDevice::Reset()`) clears what a driver sets, so `bluetooth_server` sets both after every reset, in step 6.
+- **Not in this step (owner, 15 Nov 2026):** the Event Mask and the LE Event Mask. An HCI Reset from the kit (`LocalDevice::Reset()`) clears what a driver sets, so `bluetooth_server` sets them after every reset: the Event Mask in step 4, the LE Meta event and the LE Event Mask in step 6.
+- **Checked (16 Nov 2026), which events each step needs:** after a reset the Event Mask is `0x00001FFFFFFFFFFF`, bits 0 to 44 (Core 6.0, Vol 4, Part E, 7.3.1); bit *n* is event code *n* + 1. Steps 1a to 3b use only events in that default (command answers, inquiry results, connections). Steps 1b and 1c add LE fixed channels and CoC to `l2cap`, but no LE link exists before step 6 asks for LE events, so they are tested with the fuzzer and the ABI test only. Step 4 needs Secure Simple Pairing events that are not in the default: IO Capability Request and Response, User Confirmation Request, User Passkey Request, Remote OOB Data Request and Simple Pairing Complete (codes `0x31` to `0x36`, bits 48 to 53), User Passkey Notification and Keypress Notification (`0x3B`, `0x3C`, bits 58 and 59). `LocalDeviceImpl.cpp` already waits for some of them, so on a controller that keeps the default they never arrive. Step 5 needs nothing new. Step 6 needs LE Meta (`0x3E`, bit 61).
 - **Required checks:** manual SMAP review, a QEMU boot with SMAP, and `scripts/fuzz-bt.sh hci 60` in WSL (60 seconds of ASan and UBSan on the separately compiled HCI event and packet parser).
 - **Pass:** QEMU SMAP boot without kernel panic, log line `hci_fuzz: 60s 0 crashes`, and in VirtualBox with the passed-through radio: `h2generic: controller ready`.
 
 ### Step 1b (PR 3): `l2cap` into `distro/`, BLE fixed channels, incoming PSM, `libbluetooth`
 
 - **What:** copy `haiku/src/add-ons/kernel/network/protocols/bluetooth/l2cap/` to `distro/kernel/.../l2cap/`. Add BLE fixed channels (CID 4 ATT, CID 6 SMP) and incoming L2CAP accept (HID PSM `0x11` and `0x13`, AVDTP PSM `0x19`). Add one additive method to `RemoteDevice` in `libbluetooth`, without breaking `GetConnectionState()`.
+- **As built (16 Nov 2026, while the owner slept; open to change):**
+  - Incoming accept already worked (bind, listen, accept); `bt_l2cap_abi_test` checks it for `0x11`, `0x13` and `0x19`. Bind now checks the whole PSM rule (odd, bit 8 clear).
+  - The fixed channels (ATT `0x0004`, LE signalling `0x0005`, SMP `0x0006` and `0x0007`) are received and dropped with a trace, instead of `ECONNRESET` and a leaked buffer. Their socket interface is not built here: no LE link exists before step 6 asks for LE events, and the interface is easier to get right with its user, the GATT and SMP code in `bluetooth_server`. Step 6 adds it.
+  - The additive method is `status_t RemoteDevice::GetConnectionDetails(bt_connection_details*)`, answered by `BT_REQ_CONN_DETAILS` in `bluetooth_server`.
+  - The signalling checks are `l2cap_parse.h`, which `scripts/fuzz-bt.sh l2cap` runs on the host.
 - **Required checks:** manual SMAP review, a QEMU boot with SMAP, and `scripts/fuzz-bt.sh l2cap 60` in WSL (60 seconds of ASan and UBSan on the separately compiled L2CAP packet and signalling parser).
 - **Pass:** QEMU SMAP boot without kernel panic, `l2cap_fuzz: 60s 0 crashes`, and `bt_l2cap_abi_test: ok`.
 
@@ -111,25 +117,39 @@ Each step is its own small pull request. It is built for AMD64 with `scripts/bui
 
 - **What:** LE credit-based flow control (CoC) in `distro/kernel/.../l2cap/`, and recognition of the ISO USB endpoints in `h2generic`.
 - **Pass:** QEMU SMAP boot, `l2cap_fuzz: 60s 0 crashes`, and `l2cap_coc_test: ok`.
+- **Moved (16 Nov 2026, while the owner slept; open to change):** this step runs just before step 6, not after 1b. CoC and EATT run over the LE signalling channel of an LE link, and the ISO endpoints carry LE Audio (step 7); no LE link exists before step 6 asks for LE events, so nothing could use or test them earlier than the fuzzer. Built next to step 6, CoC shares the fixed-channel socket interface and gets a real LE link to test against.
 
 ### Step 2 (PR 5): "Icons - one place for signal and battery symbols" (`libr5icons` and Wi-Fi)
 
 - **What:** new line glyphs at the end of `enum r5_glyph`; a new call `r5_level_glyph_draw()` with `enum r5_level_glyph` (`R5_LEVEL_SIGNAL`, `R5_LEVEL_BATTERY`) in `libr5icons.so`; the description in `docs/ICONS.md` ("Line glyphs") and `docs/LIBR5.md`; and `DrawWiFiSignalBars` in `R5WiFiGlyphs.h` moved onto the new call.
 - **Pass:** a QEMU boot with a screenshot before and after: the Wi-Fi list and Deskbar look pixel-identical to before the change.
+- **As built (16 Nov 2026, while the owner slept; open to change):** the new line glyph is `R5_GLYPH_BLUETOOTH` (7). The pass check is `r5_level_glyph_test` instead of screenshots: QEMU has no Wi-Fi adapter, so its list and Deskbar show no bars, and the desktop sits behind Sign in. The test draws the old `DrawWiFiSignalBars()` and the new call into bitmaps for 6,552 signal cases (sizes, levels −1 to 5, three styles, three color pairs) and compares them byte for byte; a screenshot of a real adapter on the 5625U still has to confirm it.
 
 ### Step 3a (PR 6): `libr5bt.so` and Settings (Devices → Bluetooth)
 
 - **What:** `distro/bluetooth/lib/` (`libr5bt.so`, `<R5Bluetooth.h>`), the Bluetooth page in alphabetical order under Devices in Settings (with `r5_settings_apply_prefs_overlay()`), and `docs/LIBR5.md`, `docs/SETTINGS.md` and an R5Book chapter.
 - **Pass:** in QEMU and VirtualBox the page is first under Devices. It shows `0 radios` in QEMU and a real scan list in VirtualBox, without a `bluetooth_server` crash.
+- **As built (16 Nov 2026):**
+  - `<R5Bluetooth.h>` is installed in `headers/os/interface/`, beside `R5Icons.h` and `Card.h`, so `#include <R5Bluetooth.h>` needs no extra path. `libr5bt.so` is in the regular image only: it needs `libbluetooth.so`, and the minimum image ships no Bluetooth (section 1).
+  - The radio switch: HCI has no power off. Off writes Write Scan Enable `0x00` to every radio and makes `bluetooth_server` refuse inquiry, Create Connection and Remote Name Request and reject incoming connections; the choice is in `B_SYSTEM_SETTINGS_DIRECTORY/bluetooth/r5_radio`, written by the server, so it survives a restart. Chosen because it is small, honest (nothing can find, page or be paged), and needs no new kernel call. On does not make the computer visible; visibility belongs with pairing in step 4. `docs/LIBR5.md`, "Bluetooth Kit".
+  - Additive `RemoteDevice::GetRSSI()` for the signal bars; both `RemoteDevice` constructors now initialize the signal strength and the name flag.
+  - Pass checked in QEMU (`bt_server_smoke_test` now also turns the switch off and on). The VirtualBox scan list waits for real hardware and is not claimed.
+  - After review (16 Nov 2026): `bluetooth_server` has no launch job, so `BRoster::Launch` runs it as the person signed in, not uid 0. Its `/boot/system/settings/bluetooth` is therefore made writable by Login for group `admin` (and for everyone during a grant), like `network`, mode 0775 and files 0664, not uid 0 mode 0700 as section 4 says. The server checks the sender of the switch itself. The page is the add-on `settings_bluetooth`, so the minimum image's Settings does not need `libr5bt.so`. Running the server as uid 0 (a launch job) would bring back the 0700 rule; that is the owner's choice and also decides where pairing keys live (step 4).
+  - Owner's choice (16 Nov 2026): uid 0. `bluetooth_server` is a system service with a launch job (`distro/bluetooth/launch/bluetooth`, in `system/non-packaged/data/launch`, regular image only), from boot, so a Bluetooth keyboard can work at Sign in (step 4). `/boot/system/settings/bluetooth` is root's, mode 0700, with `r5_radio` and the pairing keys (`paired_devices`, 0600) for the whole computer, as section 4 says. Login no longer gives it group rights. The controller asks launch_daemon (`BLaunchRoster::Start()`) instead of `BRoster::Launch()`. The sender check stays. A Stop in Haiku's old Bluetooth program now only restarts the service.
 
 ### Step 3b (PR 7): a separate Bluetooth program and a message-based Deskbar replicant
 
 - **What:** a separate Bluetooth program built on `BluetoothView` from `libr5bt.so`, and a Deskbar replicant that talks through `BMessenger` and `BMessage` (no `load_add_on`) and uses `libr5icons.so`.
 - **Pass:** log line `deskbar_bt_replicant: attached via messenger` (no `load_add_on` of the server), and it works for both the administrator and a standard person.
+- **As built (16 Nov 2026):**
+  - The Bluetooth program (`distro/bluetooth/app`) replaces Haiku's Bluetooth preferences in the regular image (owner's choice): `BluetoothView` in a window, with a lock button for a person who is not an administrator (`r5_admin_query()`, `r5_admin_prompt_unlock()`, checked every 15 s). It keeps their signature `application/x-vnd.Haiku-BluetoothPrefs` and their `Bluetooth.rdef` (icon). The old list of paired devices and its pairing window are gone until step 4 brings pairing.
+  - The Deskbar item is `bluetooth_deskbar` (`distro/bluetooth/deskbar`, in `/system/servers`, regular image only), the AirPlay pattern: a user launch job (`distro/bluetooth/launch/bluetooth-deskbar`, `target desktop`, after Deskbar) adds the program's own small binary to Deskbar and quits. The item asks `bluetooth_server` with `BT_MSG_R5_GET_RADIO` every 5 s, asynchronously (the answer comes back to the view), draws `R5_GLYPH_BLUETOOTH` (faint without a radio or when off) glass-ready (no background of its own, `B_TRANSPARENT_BACKGROUND`; the glyph as an alpha bitmap with `B_OP_ALPHA` and `B_ALPHA_COMPOSITE`, as the R5Book "Window effects" asks, so a later glass Deskbar shows through), and its menu shows the state, turns Bluetooth on or off (enabled only with `r5_admin_change_allowed()`; the server checks again) and opens the program.
+  - `bluetooth_server` no longer adds itself to Deskbar (Deskbar loaded the whole server). `bluetooth_deskbar` removes that old item (`BluetoothServerReplicant`) from a session that still has it.
 
 ### Step 4 (PR 8): Classic HID (BR/EDR mouse and keyboard on PSM `0x11` and `0x13`) and SSP passkey
 
 - **What:**
+  - `bluetooth_server` sets the Event Mask after every HCI Reset: the default bits plus the Secure Simple Pairing events (bits 48 to 53, 58 and 59), with only the bits the controller supports. Without it the pairing events below never arrive (step 1a, "Checked").
   - Finish Secure Simple Pairing in `LocalDeviceImpl.cpp`. Checked: the `case` lines for IO capability, user confirmation (Numeric Comparison) and simple pairing complete are at lines 369–384. `HCI_EVENT_USER_PASSKEY_REQUEST` is expected at line 1795 but handled nowhere. This step adds `HCI_EVENT_USER_PASSKEY_REQUEST` and `HCI_EVENT_USER_PASSKEY_NOTIFICATION` (Passkey Entry, for keyboards).
   - Classic Bluetooth HID over BR/EDR L2CAP PSM `0x11` (control) and `0x13` (interrupt): mice and keyboards go to `input_server`, gamepads to `/dev/joystick/bluetooth/N`.
 - **Pass:** in VirtualBox with the passed-through radio: `bluetooth_server: ssp passkey ok` (keyboard pairing), `bluetooth_hid: br-edr hid ready`, and mouse and keyboard events arrive in `input_server`.
@@ -142,7 +162,7 @@ Each step is its own small pull request. It is built for AMD64 with `scripts/bui
 
 ### Step 6 (PR 10): BLE Secure Connections, extended advertising, BLE HID over GATT
 
-- **What:** the Event Mask (with the LE Meta event) and the LE Event Mask, set by `bluetooth_server` after every HCI Reset, with only the bits the controller supports (safe for Bluetooth 5.x and 6.0); LE Secure Connections (ECDH P-256 through `openssl3` `libcrypto`), extended advertising, 2M PHY and subrating in `bluetooth_server`, and BLE HID over GATT (`bluetooth_le_hid` to `input_server` or `/dev/joystick/bluetooth/N`, 7.5 ms interval, cached report layout).
+- **What:** the socket interface for the LE fixed channels (ATT, SMP; dropped since step 1b); the LE Meta event (bit 61) added to the Event Mask of step 4, and the LE Event Mask, set by `bluetooth_server` after every HCI Reset, with only the bits the controller supports (safe for Bluetooth 5.x and 6.0); LE Secure Connections (ECDH P-256 through `openssl3` `libcrypto`), extended advertising, 2M PHY and subrating in `bluetooth_server`, and BLE HID over GATT (`bluetooth_le_hid` to `input_server` or `/dev/joystick/bluetooth/N`, 7.5 ms interval, cached report layout).
 - **Test path:** VirtualBox USB passthrough and a second bundled 5625U stick.
 - **Pass:** `bluetooth_server: smp sc pairing ok`, and a BLE mouse and keyboard move smoothly in `input_server`.
 

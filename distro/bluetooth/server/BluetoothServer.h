@@ -32,6 +32,11 @@
 // SPDX-License-Identifier: MIT
 // Private to the server: posted to itself at the end of ReadyToRun().
 static const uint32 kMsgReportStarted = 'r5bs';
+
+// B_SYSTEM_SETTINGS_DIRECTORY/bluetooth: the radio switch and the pairing
+// keys, root's alone (mode 0700). create makes it and sets that mode.
+class BPath;
+status_t r5_bluetooth_settings_path(BPath& path, bool create);
 // SPDX-SnippetEnd
 
 typedef enum {
@@ -84,7 +89,16 @@ public:
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
-	void		DispatchToDevice(hci_id hid, struct hci_event_header* header);
+	void		DispatchToDevice(hci_id hid, struct hci_event_header* header,
+					size_t size);
+	// SPDX-SnippetEnd
+
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// The radio switch (BT_MSG_R5_SET_RADIO). Read under fDevicesLock, which
+	// both MessageReceived() and the port listener thread hold.
+	bool		RadioEnabled() const { return fRadioEnabled; }
 	// SPDX-SnippetEnd
 
 private:
@@ -100,6 +114,17 @@ private:
 	// Held by MessageReceived() and by the port listener thread
 	// (DispatchToDevice); guards the local devices and the watchers.
 	BLocker				fDevicesLock;
+	// SPDX-SnippetEnd
+
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	bool				_RadioRequestAllowed(BMessage* message) const;
+	void				_LoadRadioSetting();
+	status_t			_SaveRadioSetting() const;
+	status_t			_SetRadioEnabled(bool enabled);
+
+	bool				fRadioEnabled;
 	// SPDX-SnippetEnd
 
 	void 				ShowWindow(BWindow* pWindow);

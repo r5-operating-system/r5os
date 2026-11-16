@@ -9,6 +9,7 @@ The developer guide to what R5 adds to Haiku for programs: LibR5, the MIDI 2 and
 | `appearance-kit.html` | `libr5ui.so`: every `BAppearanceKit` class and the `R5UI.h` functions | `distro/ui/*.h`, `docs/LIBR5.md`, `docs/APPEARANCE-KIT.md` |
 | `midi2-kit.html` | MIDI 2.0 in `libmidi2.so` | `distro/media/headers/os/midi2`, `docs/MIDI2.md` |
 | `wifi-kit.html` | `libr5wifi.so`: the Wi-Fi panel, its state machine, the Wi-Fi glyphs; one `BNetworkRoster` addition | `distro/wifi/lib/*.h`, `docs/LIBR5.md` |
+| `bluetooth-kit.html` | `libr5bt.so`: the Bluetooth panel, its controller, the Bluetooth switch; one `RemoteDevice` addition | `distro/bluetooth/lib/R5Bluetooth.h`, `docs/LIBR5.md`, `docs/BLUETOOTH.md` |
 | `vulkan.html` | Vulkan in a `BView`: `VK_RFIVE_view_surface` | `distro/vulkan/include/vulkan/vulkan_r5.h`, `docs/VULKAN-WSI.md` |
 | `accounts.html` | Accounts, sessions, lock and log out; Sign in as an example, with screenshots in `img/` | `docs/MULTIUSER.md`, `distro/login` |
 | `settings-modules.html` | A page in Settings as an add-on: `SettingsModule`, `SettingsContext`, entry points | `distro/settings/SettingsModule.h`, `distro/settings/ModuleAPI.md` |

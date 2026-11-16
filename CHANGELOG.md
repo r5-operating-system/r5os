@@ -40,6 +40,184 @@ Tested in QEMU (KVM, Lavapipe, `gpu_draw true`, `gpu_debug true`), not finished:
   - Mistake: the dump numbers of two runs overlapped (100 apart for about 1000 dumps); now 10000 apart.
   - `gpu_draw` stays off by default: the compositor is on by default since 15 Nov, so turning `gpu_draw` on would move every machine to Skia before the 5625U gate has run.
 Not done: the other Appearance tabs and the hidden slider (Q13) are not checked on screen (no clicks in QEMU yet); Tracker, Terminal, Settings and About were first not checked on screenshots (the test script used wrong paths for Settings and Tracker; Terminal and About were behind WebPositive), the Appearance tabs and the hidden slider (Q13) are not checked on screen, `compose compare` with effects off not read in these runs, group 12 (decorator) and 13 (offscreen in the set), layers (`BView::BeginLayer` still draws with Painter through `BitmapDrawingEngine`: a gap), offscreen bitmaps in other colour spaces than 32 bits (Painter: a gap). RADV on the 5625U: not run. The commits are grouped by files per step; a single commit alone may not build.
+## 2026-11-16 - Graphics: a GPU buffer that no longer fits in VRAM goes to system memory (libdrm-2.4.124-3)
+
+Problem: on the 5625U (M12 measurement stick, boot 1, `generated/boot-5625u-1` and `-2` of the m12-gpu-draw worktree) app_server's Skia drawing turned off after a minute with `gpu draw off: insert failed`, after `radeon_hd: refuse BO_CREATE vram status 0x80000000` for buffers of 17 to 45 MB (Skia's 4x MSAA targets of a whole window). The R5 DRM library made every buffer that asks for VRAM in VRAM and nothing else. Linux does not: `amdgpu_gem_create_ioctl()` (v6.18 `amdgpu_gem.c`, lines 486-497) retries a VRAM-only request with `AMDGPU_GEM_DOMAIN_GTT` added, and `amdgpu_bo_create()` (`amdgpu_object.c`) lets a user buffer that allows only VRAM live in GTT too, unless it is `DISCARDABLE`. RADV counts on that: on an APU `radv_physical_device_init_mem_types()` reports 2/3 of visible VRAM plus GTT as its VRAM heap (341 MB here), more than the kernel's VRAM pool (248 MB).
+
+What changed:
+- `r5_gem_create()` in `distro/graphics/libdrm-r5/r5_translate.c`: when `BO_CREATE` for VRAM is refused with `ENOMEM` (`B_NO_MEMORY`), and the request is not `AMDGPU_GEM_CREATE_DISCARDABLE`, the same buffer is made in GTT. Any other refusal (a bad size, a bad domain) stays an error. With `gpu_debug` the library prints `kernel bo vram full, <n> bytes in gtt`; the kernel's own `refuse BO_CREATE vram` line is followed by a `bo domain 2` line for the same size.
+- Nothing in the kernel changed. Read for this: `BO_CREATE` makes GTT as a locked kernel area (no GTT limit but RAM), `VA_MAP` and `BO_MAP` handle a GTT buffer, sharing counts it as GTT, and the scanout buffer is its own call (`SCANOUT_BO`), not `GEM_CREATE`.
+- `libdrm-2.4.124-3`: `libdrm.so.2.124.0` rebuilt (the translation is in `libdrm.so`); `libdrm_amdgpu.so.1.124.0` and `amdgpu.ids` are byte-identical to `-2`. Pin, install, EGL vendor check and the download-folder clean-up name `-3`.
+
+Found and not changed here (kernel changes, each needs a boot): the GTT limit of `docs/GPU-ARCHITECTURE.md` ("GTT at most a quarter of system memory" per address space) is not in the kernel, so `BO_CREATE` for GTT is bounded only by RAM, and a fallen-back buffer is locked memory as every GTT buffer is. And the kernel reports the GTT size as the VRAM size (`r5_gpu.cpp`, `out.gtt_bytes = out.vram_bytes`, 256 MB), not from the hardware or RAM; Linux uses half of system RAM. It only changes the heap sizes RADV reports, not what fits (GTT is bounded by RAM). A change is a kernel change and needs a boot; left for its own step.
+
+Tested: host test `scripts/test-ac-drm.sh` against the fake kernel with a new case (`vram_full_falls_back`: VRAM full, a VRAM buffer is made in GTT, maps for the CPU and frees; VRAM plus GTT also works; `DISCARDABLE` and an oversize buffer still fail). With the old `r5_translate.c` the case fails 7 checks; with the new one `ok vram full falls back to gtt` and `ok libdrm ioctl`. `scripts/check-libdrm-symbols.py`: `ok libdrm symbols`. The cross build of libdrm (patches applied with `haiku.py`, `ninja` in `src-third/libdrm-2.4.124/build`) and the copy into `r5-sysroot/lib` (the old files kept in `r5-sysroot-backup-1116`). Not booted: RADV on the 5625U with this package has not run yet; QEMU has no render node, so it cannot show this path.
+
+## 2026-11-16 - Bluetooth step 3b: the Bluetooth program and the Bluetooth item in Deskbar
+
+Problem: the Bluetooth panel was only a Settings page; Haiku's old Bluetooth preferences were still the program, and the only Deskbar item was the one `bluetooth_server` added by putting its own binary into Deskbar (`docs/BLUETOOTH.md`, step 3b).
+
+What changed:
+- **The Bluetooth program** (`distro/bluetooth/app`): `BluetoothView` in a window, sized to the panel, with the lock button for a person who is not an administrator (`r5_admin_query()`, `r5_admin_prompt_unlock()`, refreshed every 15 s). It replaces Haiku's Bluetooth preferences in the regular image (owner's choice) and keeps their signature and icon. Their list of paired devices and their pairing window are gone until step 4.
+- **The Deskbar item** `bluetooth_deskbar` (`distro/bluetooth/deskbar`, `/system/servers`, regular image only), the AirPlay pattern: a user launch job after Deskbar adds the program's own small binary and quits. The item asks `bluetooth_server` every 5 s with an asynchronous `BT_MSG_R5_GET_RADIO` (Deskbar never waits), logs `deskbar_bt_replicant: attached via messenger` on the first answer, and its menu shows the state, turns Bluetooth on or off (only with `r5_admin_change_allowed()`; the server checks again) and opens the program.
+- **Glass-ready** (owner's question): the item paints no background of its own (`B_TRANSPARENT_BACKGROUND`) and draws the glyph as an alpha bitmap with `B_OP_ALPHA` and `B_ALPHA_COMPOSITE`, the rule of the R5Book's "Window effects", so a later glass Deskbar shows through. Deskbar itself has no glass yet.
+- **`bluetooth_server`** no longer adds itself to Deskbar (Deskbar loaded the whole server, which `docs/BLUETOOTH.md` forbids); `bluetooth_deskbar` removes that old item (`BluetoothServerReplicant`) from a session that still has it.
+- `run-qemu-smoke.sh`: `DESKBAR=1` starts Deskbar and the item before Sign in, `PROGRAM=1` opens the program.
+
+Tested: built with `scripts/build-locked.sh` (`jam_exit=0`, no warnings in the new files). QEMU (KVM), own image copy, Deskbar and the item started by the test job (uid 0, before Sign in): `deskbar_bt_replicant: attached via messenger`; the item shows the faint Bluetooth glyph beside AirPlay; the program opens with the panel ("0 radios"); `bt_server_smoke_test: ok (0 crashes)`, `bt_l2cap_abi_test: ok`. Logs: `generated/bluetooth/qemu-step3b/`.
+
+Not tested: the user launch job in a real session after Sign in, the administrator and a standard person (the step's pass rule; VirtualBox), the menu and the lock button by hand, the item on glass (Deskbar has no glass yet), a real radio. ARM64 and RISC-V 64 were not built or tested.
+
+## 2026-11-16 - Bluetooth: bluetooth_server is a system service from boot (uid 0)
+
+Problem: `bluetooth_server` had no launch job. The first program that needed it started it with `BRoster::Launch()`, so it ran as whoever that was; there was no Bluetooth before Sign in (a keyboard could not work there, step 4), and the switch and the pairing keys depended on that person's rights. Owner's choice after step 3a: run it as uid 0 (`docs/BLUETOOTH.md`, as built).
+
+What changed:
+- A launch job, `distro/bluetooth/launch/bluetooth` (`service x-vnd.Haiku-bluetooth_server`, `no_safemode`, `legacy`), installed in `system/non-packaged/data/launch` of the regular image only by `apply-bluetooth.py`. launch_daemon starts it at boot and again after it stops.
+- `/boot/system/settings/bluetooth` is root's alone, mode 0700 (`r5_bluetooth_settings_path()`; it also resets a folder an earlier build left 0775). `r5_radio` is 0600. The pairing keys moved there too (`paired_devices`, 0600), one set for the whole computer instead of the settings of whoever started the server. Keys in the old place are not moved: pairing does not work before step 4.
+- Login's group rights for that folder (added in step 3a) are removed again.
+- `BluetoothController` asks launch_daemon (`BLaunchRoster::Start()`) when the server is not running; `BRoster::Launch()` would start a second server as the person signed in.
+- The sender check of the switch stays. A Stop in Haiku's old Bluetooth program now only restarts the service.
+- `run-qemu-smoke.sh` logs whether `bluetooth_server` runs before the test starts anything, and the folder's rights.
+
+Tested: built with `scripts/build-locked.sh` (`jam_exit=0`, `build_s=227`, no warnings in the changed files). QEMU (KVM), own image copy: `bluetooth_server` runs before the test job starts anything (team 59, started at boot), `bluetooth_server: started, 0 radios`; the page shows it; `bt_server_smoke_test: radio switch ok`, `ok (0 crashes)`, `bt_l2cap_abi_test: ok`; `/boot/system/settings/bluetooth` is `drwx------` and `r5_radio` `-rw-------`, owner uid 0 (named `user` before the first Sign in). Logs: `generated/bluetooth/qemu-service/`.
+
+Not tested: a signed-in administrator or a standard account using the switch (the test job runs as uid 0; VirtualBox), a real radio, a keyboard at Sign in (step 4), and the minimum image. ARM64 and RISC-V 64 were not built or tested.
+
+## 2026-11-16 - USB 2.0 (EHCI): no unaligned pointer into a packed descriptor
+
+Problem: GCC warned `-Waddress-of-packed-member` in `EHCI::CreateDescriptor()` (`ehci.cpp`): `fStack->AllocateChunk(&result->buffer_log, ...)` passes the address of a member of the packed struct `ehci_qtd` as `void**`. The member is at offset 56 (8-aligned), so it is harmless on x86_64 today, but it would become an unaligned pointer on ARM64 if the struct layout ever moved. Seen in a Bluetooth build log; no Haiku ticket.
+
+What changed: `distro/kernel/src/add-ons/kernel/busses/usb/ehci.cpp` (already a copy, installed by `scripts/apply-kernel-bugs.py`) allocates into a local `void* bufferLog` and then assigns `result->buffer_log`. Marked as an R5 MIT snippet. No other place in the file takes the address of a packed member. No functional change.
+
+Tested (16 Nov 2026): built with `scripts/build-locked.sh` (`jam_exit=0`, `mesa_exit=0`); `ehci.o` was recompiled and the build log has no `address-of-packed-member` warning. QEMU (KVM) on an own copy of `r5-os.image`, with an EHCI controller carrying a USB keyboard, a USB tablet and a USB stick (480 Mb/s): `usb ehci: successfully started the controller`, the stick answered inquiry and capacity (`usb_disk` published `disk/usb/0/0/raw`), the first-boot window appeared, and two Down keys from the USB keyboard moved the language list from English to Esperanto.
+
+Not tested: real EHCI hardware, ARM64 (not built), large transfers to the stick (it had no file system).
+
+## 2026-11-16 - Bluetooth step 3a: libr5bt.so and the Bluetooth page in Settings
+
+Problem: Settings had only a launcher row for Haiku's old Bluetooth program, and there was no shared R5 Bluetooth code for a page, a program or a Deskbar item (`docs/BLUETOOTH.md`, step 3a).
+
+What changed:
+- **`libr5bt.so`** (`distro/bluetooth/lib`, MIT, header `<R5Bluetooth.h>` in `headers/os/interface/`): `BluetoothView` (a `BCard` summary with `R5_GLYPH_BLUETOOTH` and the radio count, a box whose title is the Bluetooth switch, the devices nearby with Scan and `r5_level_glyph_draw(R5_LEVEL_SIGNAL)` bars), `BluetoothController` (a `BLooper`; every server request has a 2-second timeout; it starts `bluetooth_server` once and does not restart it after it stops), `BluetoothState`, `BluetoothRadioInfo`, `BluetoothDeviceInfo`. The scan follows Haiku's InquiryPanel (`DiscoveryAgent::StartInquiry()`, a `DiscoveryListener`). Regular image only, because it needs `libbluetooth.so`.
+- **Settings:** Devices → Bluetooth ("Find Bluetooth devices nearby"), first under Devices by name, replacing the launcher row in `LegacyPages.cpp`. Only the switch waits for the lock: the page keeps `RequiresAdmin()` false and enables the switch on `kMsgRefreshPage` through `AdminChangeAllowed()`. Written down as an exception in `docs/SETTINGS.md`. The old Bluetooth program stays installed.
+- **The switch (`bluetooth_server`)**, choice made for the owner: HCI has no power off. Off writes Write Scan Enable `0x00` to every radio (also a radio added later), refuses inquiry, periodic inquiry, Create Connection, Remote Name Request, a non-zero Write Scan Enable and `BT_REQ_CREATE_CONN` (`B_NOT_ALLOWED`), and rejects incoming connection requests (reason `0x0D`). It is kept in `B_SYSTEM_SETTINGS_DIRECTORY/bluetooth/r5_radio`, written by the server through a temporary file and a rename. New messages `BT_MSG_R5_GET_RADIO` and `BT_MSG_R5_SET_RADIO`.
+- **libbluetooth:** additive `int8 RemoteDevice::GetRSSI()` (Haiku ticket [#1916](https://dev.haiku-os.org/ticket/1916) asks for this; left open until it is seen on a real radio). Bug, also in Haiku: both `RemoteDevice` constructors left `fRSSI` and `fFriendlyNameIsComplete` unset, so `GetFriendlyName()` could skip asking the device.
+- **Tests:** `bt_server_smoke_test` now turns the switch off, reads it back, checks that a connection is refused, and turns it on again. `run-qemu-smoke.sh` takes `SETTINGS_PAGE=<id>` (opens that page and logs whether Settings and `bluetooth_server` still run 30 s later) and `SHOTS="<s> ..."` (screendumps over its own monitor socket).
+- **Docs:** `docs/LIBR5.md` ("Bluetooth Kit"), `docs/SETTINGS.md` ("Bluetooth"), R5Book `docs/r5book/bluetooth-kit.html` with a QEMU screenshot, `docs/BLUETOOTH.md` (as built).
+
+Review: read twice. The first read moved the scan-off write after the radio is brought up (`Launch()`), restored the switch when a click arrives while it is locked, stopped re-sending an unchanged state every 3 seconds, and found that Settings would turn the page's bold titles plain (the page now gives them `r5_settings_bold_font()`). Checked and harmless: `bluetooth_server` hands out each radio to any number of callers (`Available()` is always true). The second read found the uninitialized `RemoteDevice` fields.
+
+Tested:
+- Built with `scripts/build-locked.sh` three times, last `jam_exit=0`, `build_s=194`, no warnings in the changed files.
+- QEMU (KVM), own copy of that image, page opened by a launch job: Bluetooth is the first item under Devices, the page shows "0 radios" (screenshot `docs/r5book/img/bluetooth-page-qemu.png`); 30 s later `Settings` and `bluetooth_server` both still run; syslog `bluetooth_server: started, 0 radios`, `radio switch off`, `radio switch on`; `bt_server_smoke_test: radio switch ok`, `ok (0 crashes)`; `bt_l2cap_abi_test: ok`. Logs: `generated/bluetooth/qemu-step3a/`.
+
+Not tested: a real radio (no scan list, no device found, no signal bars, no rejected incoming connection, radio name and address); the VirtualBox scan list waits for hardware. The gray switch under a closed lock (needs a standard account). Clicking the switch by hand. ARM64 and RISC-V 64 were not built or tested.
+
+Owner's review (16 Nov 2026), fixed in this PR:
+- **Mistake: the switch could not be saved after Sign in.** `bluetooth_server` has no launch job; `BRoster::Launch` runs it as the person signed in (uid ≥ 1000), and `/boot/system/settings` is root's, so `create_directory()` failed and the switch went back. The QEMU test hid this: its launch job ran as uid 0. Login's `refresh_machine_settings_access()` now treats `/boot/system/settings/bluetooth` like `network` (root, group `admin`, writable for the group, for everyone during a grant), and the server writes `r5_radio` as 0664. Not uid 0 mode 0700 as `docs/BLUETOOTH.md` section 4 says; that needs the server to run as uid 0, which is the owner's choice.
+- **The server did not check who sent `BT_MSG_R5_SET_RADIO`.** It now carries it out only for uid 0, a member of group `admin`, or a team with a grant in `/boot/system/settings/r5-machine-unlock` (the rule of Login's `sender_may_change()`), else `B_NOT_ALLOWED`.
+- **The Settings window could wait on libbluetooth.** The view stopped the controller with `Lock()` and `Quit()` on the window thread; `Lock()` waited while the controller was in a libbluetooth call without a timeout, and the destructor cancelled a scan with one. The view now sends `B_QUIT_REQUESTED`.
+- **The minimum image.** Settings linked `libr5bt.so`, which only the regular image has. The page is now the add-on `settings_bluetooth` (regular image only); Settings itself does not link it.
+- **Radios by `hci_id`.** The plain acquire hands radios out in turn: a known radio handed out again leaked a `LocalDevice`, and a radio replaced within one poll (same count) was missed. `BT_MSG_R5_GET_RADIO` now lists the `hci_id`s and the controller acquires only new ones.
+- **Signal bars.** `DiscoveryListener` reports only the first answer of an address; a repeat with a stronger signal kept one bar. A filter on the listener now reports every answer.
+
+Tested after the review: built with `scripts/build-locked.sh` (`jam_exit=0`, `build_s=247`, `settings_bluetooth` linked, no warnings in the changed files). QEMU (KVM), own image copy, page opened by a launch job: the add-on page is still first under Devices and shows "0 radios", Settings and `bluetooth_server` still run 30 s later, `bt_server_smoke_test: radio switch ok`, `ok (0 crashes)`. That launch job runs as uid 0, so it does not show the fix for a signed-in administrator, the refusal of a non-administrator sender, or Login's new directory rights: not tested. Neither are the minimum image, a radio replaced within one poll, or the window no longer waiting (no radio in QEMU).
+
+Limits: device names are only what a device sent in the inquiry. Found, not fixed (older than this change, needs the owner's choice): the minimum image has Settings but not `libr5wifi.so`, which Settings links, so the runtime loader cannot start Settings there (read from the image definition, not booted).
+
+## 2026-11-16 - Bluetooth: review fixes for steps 0 to 2 (#4286, #4288, #4291, #4292)
+
+Problem: two owner reviews of the merged Bluetooth steps found crashes, kernel use-after-free, leaks, hangs and secrets in the log.
+
+What changed:
+- **L2CAP signalling (`l2cap_signal.cpp`, `l2cap_internal.h`).** A command identifier holds a socket reference; who takes the identifier out of the table now owns it (`l2cap_take_command_ident()`, `l2cap_claim_command_ident()`), so the receive thread and a waiting thread never both release it. An answer takes its identifier before it is checked, so a too-short or truncated answer now wakes the waiting `connect()` or `shutdown()` (`_HandleBadResponse()`) instead of leaving it blocked with the identifier and reference leaked. A pending Connection Response and a configuration continuation keep the identifier for the next answer (before, the second answer was dropped and `connect()` hung). A Configuration Response with unknown or malformed options closes the channel and frees the identifier. A Configuration Request with an unknown option leaked its reject buffer. Command Reject read its data from the next command in the packet.
+- **The dispatcher loop.** The review said a zero-length command spins it. Read against `net_buffer.cpp`: every round removes the 4 header bytes first, so that input does not hang it, and it was not reproduced. The loop now stops anyway when a round consumes nothing.
+- **`L2capEndpoint`.** A failed or interrupted wait in `Connect()` and `Shutdown()` gives back its identifier and reference (unless an answer took them) and closes. A refused connection went on into configuration (a missing `return`). A Command Reject during configuration or disconnection left the waiter blocked. `L2capEndpointManager::Disconnected()` set the state without the endpoint lock and woke nobody; it now locks each endpoint outside the channel lock (`Connect()` takes them the other way round) and wakes it.
+- **`l2cap.cpp`, high.** `interface_address` points at a plain struct inside `HciConnection`; freeing a buffer with it set called `ReleaseReference()` on it. Every early free (fixed channels, unknown CID, wrong length) did that. It is now taken off first.
+- **HCI module (`bluetooth.cpp`, `hci_assemble.h`).** `PostCommand()`, `PostACL()` and `PostSCO()` keep the device list lock through the driver hook, so an unplug cannot delete the device in between. `PostACL()` now always owns the buffer (it freed part of it on some errors and its caller freed it again). `HciPacketHandler()` returns `B_OK` after dropping a bad packet: any other value ended the kernel receive thread for the rest of the boot. A failed header read no longer passes a header-only packet up.
+- **`h2generic` command timeouts (`h2command.h`, `h2generic.cpp`, `h2transactions.cpp`).** The answer check assumed one whole event per USB transfer. An event whose length is a multiple of the packet size has no short packet after it, so events share transfers and one can end in the next; then an answered command timed out anyway, or a late answer went up. The event stream is now followed across transfers (`h2_event_stream_filter()`), each event judged from its first bytes, a late answer removed whole. A failed send frees exactly its own slot (it freed the oldest slot of that opcode). A full tracker reports the command it gives up on at once.
+- **`bluetooth_server`.** Events are checked against what the port delivered, and the counted events (Inquiry Result, with RSSI, Extended, Return Link Keys, Number of Completed Packets) against their counts; a count of 255 read past the 260-byte buffer. `Disconnect()` and `CancelConnection()` crashed on a missing, short or unknown address; `ConnectionComplete()`, `DisconnectionComplete()` and `AuthComplete()` on an unknown device. Link keys and the pairing passkey are no longer logged. The paired-devices file (all link keys) was created 0644; it is now 0600, written through a rename, and saved on every new key instead of only when the radio goes away.
+- **Docs (#4292).** `docs/r5book/icons-kit.html` lists `R5_GLYPH_BLUETOOTH` and documents `r5_level_glyph_draw()`; `docs/LIBR5.md` has a "Level glyphs" section and says `DrawWiFiSignalBars()` needs `libr5icons.so`.
+
+Not done, needs the owner: the review asks to move the pairing keys to `/boot/system/settings/bluetooth/` (uid 0, mode 0700). `bluetooth_server` has no launch job, so `BRoster::Launch` runs it as the person signed in (read from the code, not tested), who cannot write there; the keys stay in that person's settings, now 0600. Two radios still share one key file.
+
+Manual SMAP review: no new user-memory access in the kernel. The new kernel code reads net_buffers, a kernel array and the HCI connection table; `user_memcpy` in the h2generic ioctl is unchanged.
+
+Tested:
+- `scripts/fuzz-bt.sh hci 60`: `hci_fuzz: 60s 0 crashes (106821 rounds)`; the target now also runs the event stream filter (random events cut and run together; every kept event out unchanged, each judged once) and the tracker's new slot calls. `scripts/fuzz-bt.sh l2cap 60`: `l2cap_fuzz: 60s 0 crashes (5203847 rounds)`.
+- Built with `scripts/build-locked.sh`: `jam_exit=0`, `build_s=208`, no warnings in the changed files.
+- QEMU, KVM, `-cpu host,+smap,+smep`, own image copy, one boot: `enable SMEP`, `enable SMAP`, no panic; `bluetooth_server: started, 0 radios`, `bt_server_smoke_test: ok (0 crashes)`, `bt_l2cap_abi_test: ok`.
+
+Not tested: everything that needs a radio or a remote device (L2CAP answers, connect timeouts, unplug during a send, split events from a real controller, pairing and the key file). ARM64 and RISC-V 64 were not built or tested.
+
+## 2026-11-16 - GPU compositor: VirtualBox desktop after a resize
+
+Problem: in VirtualBox the M11 compositor (on Lavapipe) left a broken desktop after a display change: the wallpaper sheared with horizontal seams, white squares where the pointer and icons are, no Deskbar. With `gpu_compositor false` the same image was normal. It also happened on a fresh start, because the Guest Additions (`VBoxTray`) set the display to the window size after sign-in.
+
+Cause (shown with logs, `generated/m11-vbox/README.md` in commit `15e9ff01d3`; the logs, screenshots and patch named in this entry are only in that commit, they were taken off `main` afterwards to keep the tree small): the compositor waits one refresh period between frames, from `pixel_clock`, `h_total` and `v_total` of the current mode. After `VBoxTray` sets a mode the vboxvideo mode has pixel clock 60 and totals equal to the visible size, which the formula reads as one frame per 15.5 s at 1437x649 and 29.5 s at 1920x922 (syslog `compose period unknown: pixel clock 60 kHz, total 1023 x 767`). The compose thread slept that period while it held the compose slot, and `SetMode` takes that slot first. Timed logs: `SetMode guard after 23423 ms`, then 15500, 15474, 29177 ms for the next requests; in the VirtualBox log the host followed a size hint after 5 to 30 s instead of about 20 ms. Meanwhile the screen kept the old mode's pixels, read by VirtualBox with the new line length (the shear). A frame dump showed app_server's own pitches were right at every step (back, front and frame width x 4), and the guest front buffer was right once a frame was presented. The second suspect (how the frame buffer of vboxvideo is mapped, stride or format) is ruled out by those dumps; the first (the compositor does not handle a mode change) was only true through this wait.
+
+What changed:
+- `distro/app_server/compositor/compose_period.h` (new, MIT): the period from the timing, and 0 (no period: compose as soon as damage arrives) when it is outside 1 ms to 50 ms (1000 Hz to 20 Hz). `Compositor::_UpdatePeriod()` uses it and logs the rejected timing once.
+- `Compositor::_ComposeLoop()`: the wait for the next period is now before the compose slot is taken, so a mode change never waits for it.
+- `Compositor`: one line per frame size change, `frame follows the screen <w>x<h>, period <us> us`.
+- `scripts/apply-app-server.py` copies the new header.
+- Tests: `scripts/test-compose-period.cpp` (host; real 60 and 144 Hz modes give their period, the VirtualBox timing and a missing timing give none, the 20 Hz bound). Stick check `m11_mode` in boot 3 (Lavapipe): changes the mode with `screenmode` and back, each change must return within 3 s, and the frame must follow twice.
+
+Mistake on the way: the first fix (repeat the whole picture 0.25, 1 and 3 s after a mode change) was built on the guess that VirtualBox missed the first full copy. It made the series worse, and the timed logs then showed the 15 s wait. It was removed before this commit; the patch is kept in `generated/m11-vbox/`.
+
+Tested (16 Nov 2026, Europe/Amsterdam):
+- `g++ -std=c++17 scripts/test-compose-period.cpp`: `ok compose period`.
+- Built with `scripts/build-locked.sh` (`mesa_exit=0`), image copied under the build lock.
+- VirtualBox 7.2, VM `R5OS-comp`, fresh VDI, default settings (compositor on Lavapipe, `no render node`): first-boot prompt, sign-in, then size hints 1437x649, 1920x923, 1280x720, 1601x899 and the window's own follow-up hints (it shrinks by one pixel per step). All eight screenshots normal (`generated/m11-vbox/fix-run/`); the host followed every hint within 10 to 55 ms. Before the fix the same series was broken (`series-grid.png`, `on-run4/`); with `gpu_compositor false` it was normal (`off-run-grid.png`).
+- QEMU (KVM, std VGA, Lavapipe), own image copy: a planted job changed the mode to 1280x800, 800x600 and 1024x768; each `screenmode` returned in 0 s, the periods were 13334 and 16666 us, and the screendumps are normal (`qemu-grid.png`).
+
+Tested later on 16 Nov by the owner: dragging the VirtualBox window by hand in `R5OS-comp` (the fix-run disk); the desktop stayed right during and after the drag.
+
+Not tested: the stick check `m11_mode` has not run (it needs the 5625U boot 3); its `check` change only passed `sh -n`. RADV and the 5625U are unchanged by this in behaviour except that the period wait moved out of the compose slot. Every first compose after a mode change in VirtualBox still logs `compose late 100 ms` (Lavapipe on two virtual CPUs); not looked into. ARM64 and RISC-V 64 not built.
+## 2026-11-16 - Icons: one place for signal and battery symbols (Bluetooth step 2)
+
+Problem: Bluetooth needs the same signal symbol as Wi-Fi, and a battery symbol, but the Wi-Fi bars were an inline function in `R5WiFiGlyphs.h` that only Wi-Fi could use (`docs/BLUETOOTH.md`, step 2). Done overnight while the owner slept.
+
+What changed:
+- `libr5icons.so`: `r5_level_glyph_draw(view, which, frame, level, foreground, background, style)` with `R5_LEVEL_SIGNAL` (four rising bars) and `R5_LEVEL_BATTERY` (body, cap, four segments; the outline stays in the full color so an empty battery still shows), styles normal, disabled and outline. The signal geometry and colors are those of the old `DrawWiFiSignalBars()`.
+- New line glyph `R5_GLYPH_BLUETOOTH` (7), the rune, for the Bluetooth page of step 3a.
+- `DrawWiFiSignalBars()` calls `r5_level_glyph_draw()`. `libr5wifi.so` and NetworkStatus link `libr5icons.so`.
+- Bug: `r5_glyph_bitmap()` refused every glyph after `R5_GLYPH_LOG_OUT`, so a new glyph would have given NULL; the bound is now the last glyph.
+- `docs/ICONS.md` ("Level glyphs", the new glyph row) and `docs/LIBR5.md`.
+- `r5_level_glyph_test` (`/system/bin`, added by `apply-icons.py`): the old function, copied unchanged, and the new call drawn into bitmaps for 6,552 signal cases (13 widths from 4 to 40, 8 heights from 4 to 39, levels −1 to 5, three styles, three color pairs), compared byte for byte; the battery and the Bluetooth glyph must draw something.
+
+Deviation from the plan: the pass check is this test, not before-and-after screenshots. QEMU has no Wi-Fi adapter, so the list and Deskbar show no bars, and the desktop sits behind Sign in.
+
+Review: read twice. The second read found that two blank bitmaps compare equal, so a failed draw would have passed the test; it now fails when the old code drew nothing for a lit level. It also fixed an `int32`/`size_t` comparison in the test.
+
+Tested: built with `scripts/build-locked.sh` (`jam_exit=0`, `build_s=182`, no warnings in these files). QEMU (KVM), own copy of that image, one boot: `r5_level_glyph_test: ok (6576 cases)`, `exit 0` (`generated/bluetooth/qemu-step2/`).
+
+Not tested: the Wi-Fi list and the Deskbar replicant on a real adapter (5625U or X1); the battery and Bluetooth glyphs by eye. ARM64 and RISC-V 64 were not built or tested.
+## 2026-11-16 - Bluetooth step 1b: L2CAP in distro/, a safe signalling parser, connection details
+
+Problem: a remote Bluetooth device could hang or crash the L2CAP layer, and the kit and server had memory bugs. Step 1b of `docs/BLUETOOTH.md` copies `l2cap` into `distro/`, adds fixed channels, incoming accept and one additive `libbluetooth` method. Done overnight while the owner slept; choices are written down below and in the plan.
+
+What changed:
+- **L2CAP signalling** (`l2cap_signal.cpp`): the dispatcher checked a command's length before removing its 4 header bytes, so a command up to 4 bytes too long passed, `remove_header()` failed, the size stayed the same and the loop never ended (a remote could stall the kernel thread). `l2cap_parse.h` (no kernel dependencies) now decides per command: handle, reject as too short for its code (Command Reject, not understood), or stop the packet. A Connection or Disconnection Response with an unknown identifier dereferenced a NULL endpoint. Configuration options are copied out and walked within the command; a short value left the rest uninitialized, a failed `create()` was not checked, and a response with unknown options leaked its reject buffer. Command Reject read its data with the wrong length. The early returns leaked the buffer.
+- **L2CAP receive** (`l2cap.cpp`): the module owns the buffer (`acl.cpp` does not free it) but leaked it on every error, panicked on a signalling packet without a connection, and used the connectionless header unchecked.
+- **Fixed channels** (owner's plan said "add"; built differently, open to change): ATT `0x0004`, LE signalling `0x0005`, SMP `0x0006` and `0x0007` are received and dropped with a trace instead of `ECONNRESET` and a leak. No LE link exists before step 6 asks for LE events, and their socket interface is best designed with its user (GATT and SMP in `bluetooth_server`), so step 6 adds it. `docs/BLUETOOTH.md` says so.
+- **Incoming accept** already worked (bind, listen, accept). Bind now checks the whole PSM rule (odd, bit 8 clear; Core 6.0, Vol 3, Part A, 4.2). A child socket that got no channel stayed pending forever; it is aborted now, as TCP does.
+- **libbluetooth:** additive `status_t RemoteDevice::GetConnectionDetails(bt_connection_details*)` (state, transport, HCI link type, encryption, handle, radio; a `size` field so the struct can grow), answered by `BT_REQ_CONN_DETAILS` in `bluetooth_server`. `GetConnectionState()` sent no `hci_id`, so every answer was DISCONNECTED; it does now. `Connect()` let `GetProperty()` write 32 bits into a `uint16` and a `uint8` on the stack. `Connect()`, `CancelConnection()`, `Disconnect()` and `GetConnectionState()` dereferenced a NULL messenger or owning radio. `RemoteDevice.cpp`, `RemoteDevice.h` and `bluetoothserver_p.h` are now in `distro/bluetooth/`.
+- **Server** (found from compiler warnings of this build): `LoadRemoteDevices()` let `FindData()` write a pointer into the link key instead of copying it, so a paired device lost its key whenever the server restarted. `HandleAcquireLocalDevice()` wrote an 8-byte pointer into a 6-byte `bdaddr_t` on the stack. `CreateConnection()` used an unchecked address, added a known device to the list twice, read `record` uninitialized, and wrote a packed member through a pointer.
+- **Plan** (`docs/BLUETOOTH.md`): which HCI events each step needs. After a reset the Event Mask is bits 0 to 44 (Core 6.0, Vol 4, Part E, 7.3.1). Steps 1a to 3b and 5 need nothing more; step 4 needs the Secure Simple Pairing events (bits 48 to 53, 58, 59), so `bluetooth_server` sets the Event Mask in step 4; step 6 adds LE Meta (bit 61) and the LE Event Mask, as the owner chose.
+- **Tests:** `scripts/fuzz-bt.sh l2cap` walks random and well-formed signalling packets the way the dispatcher does. `bt_l2cap_abi_test` (`/system/bin`) binds and listens on PSM `0x11`, `0x13`, `0x19`, checks `EADDRINUSE` and `EINVAL`, and checks `GetConnectionState()` and `GetConnectionDetails()`. `run-qemu-smoke.sh` runs it and takes `SRC_IMAGE`.
+
+Manual SMAP review: no new user-memory access in the kernel; the L2CAP changes read only net_buffers (`read()`, header readers) and a kernel `malloc()` copy of the options. The kit and server changes are userland.
+
+Review: every change was read twice (owner, 16 Nov). The second read found that `bt_connection_details` sat inside `namespace Bluetooth` while the header imports only `RemoteDevice`, so the ABI test did not compile; the jam confirmed it, and the struct now sits outside the namespace like `bdaddr_t`.
+
+Tested:
+- `scripts/fuzz-bt.sh l2cap 60` in WSL: `l2cap_fuzz: 60s 0 crashes (6242198 rounds)`. With the option bound check removed in a copy, it stopped at once (`check failed: option value inside`).
+- Built with `scripts/build-locked.sh`, `jam jobs=12`: `jam_exit=0`, `build_s=179`, no warnings left in the Bluetooth sources.
+- QEMU, KVM, `-cpu host,+smap,+smep`, own copy of that image, one boot: `enable SMEP`, `enable SMAP`, no panic; `bluetooth_server: started, 0 radios`, `bt_server_smoke_test: ok (0 crashes)`, `bt_l2cap_abi_test: ok`. Logs: `generated/bluetooth/qemu-step1b/`, `generated/bluetooth/fuzz-l2cap.log`.
+
+Not tested: no radio, so no real L2CAP connection, no incoming connection from a device, no link key reload after pairing. ARM64 and RISC-V 64 were not built or tested.
 
 ## 2026-11-15 - Bluetooth step 1a: HCI command timeouts, safe reassembly, HCI fuzzer
 

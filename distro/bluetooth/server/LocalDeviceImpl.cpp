@@ -22,7 +22,16 @@
 
 #include <FindDirectory.h>
 #include <stdio.h>
+#include <string.h>
 #include <new>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <File.h>
+#include <sys/stat.h>
+#include <syslog.h>
+#include <unistd.h>
+// SPDX-SnippetEnd
 
 
 #if 0
@@ -125,13 +134,39 @@ LocalDeviceImpl::SaveRemoteDevices()
 		devices.AddMessage("remote", &device);
 	}
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// The file holds every link key. It was created with the default mode
+	// (0644 under umask 022), readable by every account that can reach the
+	// directory (review of #4286). It is now 0600 before anything is
+	// written, and replaced through a rename so a crash never leaves half a
+	// file. Since the server is a system service (uid 0) the file is in its
+	// own 0700 directory, shared by everyone who signs in, not in the
+	// settings of whoever happened to start the server.
 	BPath path;
-	if (find_directory(B_USER_SETTINGS_DIRECTORY, &path) == B_OK) {
-		path.Append("Bluetooth_paired_devices");
-		BFile file(path.Path(), B_WRITE_ONLY | B_CREATE_FILE | B_ERASE_FILE);
-		if (file.InitCheck()==B_OK)
-			devices.Flatten(&file);
+	if (r5_bluetooth_settings_path(path, true) != B_OK)
+		return;
+	BPath temporary(path);
+	if (path.Append("paired_devices") != B_OK
+		|| temporary.Append("paired_devices.new") != B_OK)
+		return;
+
+	BFile file(temporary.Path(), B_WRITE_ONLY | B_CREATE_FILE | B_ERASE_FILE);
+	if (file.InitCheck() != B_OK
+		|| file.SetPermissions(S_IRUSR | S_IWUSR) != B_OK
+		|| devices.Flatten(&file) != B_OK) {
+		file.Unset();
+		unlink(temporary.Path());
+		return;
 	}
+	file.Sync();
+	file.Unset();
+	if (rename(temporary.Path(), path.Path()) != 0) {
+		unlink(temporary.Path());
+		return;
+	}
+	// SPDX-SnippetEnd
 }
 
 
@@ -140,12 +175,17 @@ LocalDeviceImpl::LoadRemoteDevices()
 {
 	BPath path;
 	BMessage devices;
-	if (find_directory(B_USER_SETTINGS_DIRECTORY, &path) == B_OK) {
-		path.Append("Bluetooth_paired_devices");
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// The same file as SaveRemoteDevices(), in the server's 0700 directory.
+	if (r5_bluetooth_settings_path(path, false) == B_OK
+		&& path.Append("paired_devices") == B_OK) {
 		BFile file(path.Path(), B_READ_ONLY);
 		if (file.InitCheck()==B_OK)
 			devices.Unflatten(&file);
 	}
+	// SPDX-SnippetEnd
 
 	BMessage device;
 	for (int32 i = 0; devices.FindMessage("remote", i, &device) == B_OK; i++) {
@@ -167,7 +207,18 @@ LocalDeviceImpl::LoadRemoteDevices()
 		device.FindUInt8("class_of_device", 0, &rd->classOfDevice[0]);
 		device.FindUInt8("class_of_device", 1, &rd->classOfDevice[1]);
 		device.FindUInt8("class_of_device", 2, &rd->classOfDevice[2]);
-		device.FindData("link key", B_ANY_TYPE, (const void**)&rd->link_key, &size);
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// FindData() hands out a pointer; it was written into the key itself,
+		// so every saved link key came back as garbage.
+		const void* key;
+		if (device.FindData("link key", B_ANY_TYPE, &key, &size) == B_OK
+			&& size == (ssize_t)sizeof(linkkey_t))
+			memcpy(&rd->link_key, key, sizeof(linkkey_t));
+		else
+			rd->link_key = LinkKeyUtils::NullKey();
+		// SPDX-SnippetEnd
 		device.FindUInt8("link type", &rd->link_type);
 		rd->conn_state = RemoteDevice::DISCONNECTED;
 
@@ -412,9 +463,70 @@ LocalDeviceImpl::HandleExpectedRequest(struct hci_event_header* event,
 }
 
 
-void
-LocalDeviceImpl::HandleEvent(struct hci_event_header* event)
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+/*static*/ bool
+LocalDeviceImpl::_EventFits(const struct hci_event_header* event, size_t size)
 {
+	if (event == NULL || size < sizeof(*event)
+		|| size - sizeof(*event) < event->elen)
+		return false;
+
+	// Events that carry a count of records (Core 6.0, Vol 4, Part E, 7.7):
+	// the count and every record must lie within the event.
+	const uint8* data = (const uint8*)(event + 1);
+	size_t recordSize;
+	switch (event->ecode) {
+		case HCI_EVENT_INQUIRY_RESULT:
+			// BD_ADDR, Page_Scan_Repetition_Mode, two reserved bytes,
+			// Class_Of_Device, Clock_Offset (7.7.2)
+			recordSize = 6 + 1 + 2 + 3 + 2;
+			break;
+		case HCI_EVENT_INQUIRY_RESULT_WITH_RSSI:
+			// BD_ADDR, Page_Scan_Repetition_Mode, reserved, Class_Of_Device,
+			// Clock_Offset, RSSI (7.7.33)
+			recordSize = 6 + 1 + 1 + 3 + 2 + 1;
+			break;
+		case HCI_EVENT_EXTENDED_INQUIRY_RESULT:
+			recordSize = sizeof(hci_ev_extended_inquiry_info);
+			break;
+		case HCI_EVENT_RETURN_LINK_KEYS:
+			// BD_ADDR, Link_Key (7.7.21)
+			recordSize = 6 + 16;
+			break;
+		case HCI_EVENT_NUM_COMP_PKTS:
+			// Connection_Handle, Num_Completed_Packets (7.7.19)
+			recordSize = 2 + 2;
+			break;
+		default:
+			return true;
+	}
+
+	if (event->elen < 1)
+		return false;
+	return 1 + (size_t)data[0] * recordSize <= event->elen;
+}
+// SPDX-SnippetEnd
+
+
+void
+LocalDeviceImpl::HandleEvent(struct hci_event_header* event, size_t size)
+{
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// The radio's own lengths and counts were trusted, so an Inquiry Result
+	// with 255 responses read 14 * 255 bytes from a 260-byte buffer (review
+	// of #4286). Skip an event that does not fit what was received.
+	if (!_EventFits(event, size)) {
+		syslog(LOG_WARNING, "bluetooth_server: dropped event %#x: %"
+			B_PRIuSIZE " bytes do not hold what it declares",
+			size >= sizeof(*event) ? event->ecode : 0, size);
+		return;
+	}
+	// SPDX-SnippetEnd
+
 /*
 	printf("### Incoming event: len = %d\n", event->elen);
 	for (int16 index = 0; index < event->elen + 2; index++) {
@@ -1309,6 +1421,25 @@ LocalDeviceImpl::ConnectionRequest(struct hci_ev_conn_request* event,
 		event->link_type, bdaddrUtils::ToString(event->bdaddr).String());
 
 	// TODO: add a possible request in the queue
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// The radio switch is off (BT_MSG_R5_SET_RADIO): turn the request down.
+	if (!((BluetoothServer*)be_app)->RadioEnabled()) {
+		command = buildRejectConnectionRequest(event->bdaddr, &size);
+		if (command == NULL)
+			return;
+		// buildRejectConnectionRequest() leaves the reason unset.
+		struct hci_cp_reject_conn_req* param = (struct hci_cp_reject_conn_req*)
+			((uint8*)command + sizeof(struct hci_command_header));
+		param->reason = BT_REJECTED_LIMITED_RESOURCES;
+		if (fHCIDelegate->IssueCommand(command, size) == B_ERROR)
+			TRACE_BT("LocalDeviceImpl: Command issued error for rejecting\n");
+		free(command);
+		return;
+	}
+	// SPDX-SnippetEnd
+
 	if (true) { // Check Preferences if we are to accept this connection
 
 		ServerRemoteDevice* serverRd;
@@ -1367,7 +1498,16 @@ LocalDeviceImpl::CreateConnection(BMessage* message)
 {
 	const bdaddr_t* bdaddr;
 	ssize_t addr_size;
-	message->FindData("bdaddr", B_ANY_TYPE, (const void**)&bdaddr, &addr_size);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	if (message->FindData("bdaddr", B_ANY_TYPE, (const void**)&bdaddr,
+			&addr_size) != B_OK || addr_size != (ssize_t)sizeof(bdaddr_t)) {
+		TRACE_BT("LocalDeviceImpl: Create Connection without an address\n");
+		return;
+	}
+	bool added = false;
+	// SPDX-SnippetEnd
 
 	TRACE_BT("LocalDeviceImpl: Create Connection to %s...\n",
 		bdaddrUtils::ToString(*bdaddr).String());
@@ -1379,13 +1519,22 @@ LocalDeviceImpl::CreateConnection(BMessage* message)
 		rdConn = new ServerRemoteDevice();
 		rdConn->bdaddr = *bdaddr;
 		rdConn->link_key = LinkKeyUtils::NullKey();
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		added = true;
+		// SPDX-SnippetEnd
 	}
 
 	message->FindString("name", &rdConn->friendly_name);
 	message->FindUInt8("pscan_rep_mode", &rdConn->pscan_rep_mode);
 	message->FindUInt16("clock_offset", &rdConn->clock_offset);
 
-	uint32 record;
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	uint32 record = 0;
+	// SPDX-SnippetEnd
 	message->FindUInt32("record", &record);
 	rdConn->classOfDevice[0] = (record & 0x000000FF);
 	rdConn->classOfDevice[1] = (record & 0x0000FF00) >> 8;
@@ -1394,14 +1543,26 @@ LocalDeviceImpl::CreateConnection(BMessage* message)
 	rdConn->conn_state = RemoteDevice::CONNECTING;
 	rdConn->link_type = HCI_ACL_CONN;
 
-	AddRemoteDevice(rdConn);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// A device that was already known was added a second time.
+	if (added)
+		AddRemoteDevice(rdConn);
+	// SPDX-SnippetEnd
 
 	BluetoothCommand<typed_command(hci_cp_create_conn)>
 		command(OGF_LINK_CONTROL, OCF_CREATE_CONN);
 
 	command->bdaddr = *bdaddr;
-	message->FindUInt16("packet type", &command->pkt_type);
-	command->pkt_type &= ACL_PTYPE_MASK;
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// pkt_type is a packed member: read into an aligned value first.
+	uint16 packetType = 0;
+	message->FindUInt16("packet type", &packetType);
+	command->pkt_type = packetType & ACL_PTYPE_MASK;
+	// SPDX-SnippetEnd
 	command->pscan_rep_mode = rdConn->pscan_rep_mode;
 	message->FindUInt8("pscan_mode", &command->pscan_mode); // Reserved in spec 2.1
 	command->clock_offset = rdConn->clock_offset;
@@ -1435,7 +1596,15 @@ LocalDeviceImpl::CancelConnection(BMessage* message)
 {
 	const bdaddr_t* bdaddr;
 	ssize_t addr_size;
-	message->FindData("bdaddr", B_ANY_TYPE, (const void**)&bdaddr, &addr_size);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// An unchecked FindData() left bdaddr unset (review of #4286).
+	if (message->FindData("bdaddr", B_ANY_TYPE, (const void**)&bdaddr,
+			&addr_size) != B_OK || bdaddr == NULL
+		|| addr_size != (ssize_t)sizeof(bdaddr_t))
+		return;
+	// SPDX-SnippetEnd
 
 	TRACE_BT("LocalDeviceImpl: Cancel Connection to %s...\n",
 		bdaddrUtils::ToString(*bdaddr).String());
@@ -1472,9 +1641,20 @@ LocalDeviceImpl::Disconnect(BMessage* message)
 
 	const bdaddr_t* bdaddr;
 	ssize_t addr_size;
-	message->FindData("bdaddr", B_ANY_TYPE, (const void**)&bdaddr, &addr_size);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// A missing or short address, or one this radio does not know, crashed
+	// the server (review of #4286).
+	if (message->FindData("bdaddr", B_ANY_TYPE, (const void**)&bdaddr,
+			&addr_size) != B_OK || bdaddr == NULL
+		|| addr_size != (ssize_t)sizeof(bdaddr_t))
+		return;
 
 	ServerRemoteDevice* rd = RemoteDeviceByAddr(*bdaddr);
+	if (rd == NULL)
+		return;
+	// SPDX-SnippetEnd
 	command->handle = rd->handle;
 	message->FindUInt8("reason", &command->reason);
 
@@ -1572,8 +1752,16 @@ LocalDeviceImpl::ConnectionComplete(struct hci_ev_conn_complete* event)
 		}
 
 		// TODO: Review, this rDevice is leaked
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// rd is NULL for a connection this radio did not know (review of
+		// #4286); the window then shows the address without a class.
+		uint8 noClass[3] = { 0, 0, 0 };
 		ConnectionIncoming* iConnection = new ConnectionIncoming(
-			new RemoteDevice(event->bdaddr, rd->classOfDevice));
+			new RemoteDevice(event->bdaddr,
+				rd != NULL ? rd->classOfDevice : noClass));
+		// SPDX-SnippetEnd
 		iConnection->Show();
 
 		TRACE_BT("LocalDeviceImpl: %s: Address %s handle=%#x type=%d encrypt=%d\n", __FUNCTION__,
@@ -1593,10 +1781,18 @@ LocalDeviceImpl::ConnectionComplete(struct hci_ev_conn_complete* event)
 		reply.what = BT_MSG_CONN_COMPLETED;
 	} else {
 		linkkey_t nullLinkKey = LinkKeyUtils::NullKey();
-		if (LinkKeyUtils::Compare(&rd->link_key, &nullLinkKey))
-			RemoveRemoteDevice(rd);
-		else
-			rd->conn_state = RemoteDevice::DISCONNECTED;
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// rd is NULL for an address this radio did not know (review of
+		// #4286).
+		if (rd != NULL) {
+			if (LinkKeyUtils::Compare(&rd->link_key, &nullLinkKey))
+				RemoveRemoteDevice(rd);
+			else
+				rd->conn_state = RemoteDevice::DISCONNECTED;
+		}
+		// SPDX-SnippetEnd
 
 		TRACE_BT("LocalDeviceImpl: %s: failed with error %s\n", __FUNCTION__,
 			BluetoothError(event->status));
@@ -1622,8 +1818,14 @@ LocalDeviceImpl::DisconnectionComplete(hci_ev_disconnection_complete_reply* even
 	if (rd != NULL)
 		reply.AddData("bdaddr", B_ANY_TYPE, &rd->bdaddr, sizeof(bdaddr_t));
 
-	if (event->status == BT_OK || event->status == BT_NO_CONNECTION)
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// rd is NULL for an unknown handle (review of #4286).
+	if (rd != NULL
+		&& (event->status == BT_OK || event->status == BT_NO_CONNECTION))
 		rd->conn_state = RemoteDevice::DISCONNECTED;
+	// SPDX-SnippetEnd
 
 
 	((BluetoothServer*)be_app)->NotifyWatchers(&reply);
@@ -1663,9 +1865,13 @@ void
 LocalDeviceImpl::LinkKeyNotify(hci_ev_link_key_notify* event,
 	BMessage* request)
 {
-	TRACE_BT("LocalDeviceImpl: %s: Address %s, key=%s, type=%d\n", __FUNCTION__,
-		bdaddrUtils::ToString(event->bdaddr).String(),
-		LinkKeyUtils::ToString(event->link_key).String(), event->key_type);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// The link key went to the log of the shipped server (review of #4286).
+	TRACE_BT("LocalDeviceImpl: %s: Address %s, type=%d\n", __FUNCTION__,
+		bdaddrUtils::ToString(event->bdaddr).String(), event->key_type);
+	// SPDX-SnippetEnd
 
 	if (request != NULL)
 		ClearWantedEvent(request);
@@ -1676,6 +1882,14 @@ LocalDeviceImpl::LinkKeyNotify(hci_ev_link_key_notify* event,
 
 	rd->link_key = event->link_key;
 	rd->link_type = event->key_type;
+
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Saved only when the radio went away, so an unclean shutdown lost
+	// every new pairing (review of #4291).
+	SaveRemoteDevices();
+	// SPDX-SnippetEnd
 }
 
 
@@ -1746,9 +1960,12 @@ LocalDeviceImpl::ReturnLinkKeys(struct hci_ev_return_link_keys* returnedKeys)
 
 	while (numKeys > 0) {
 
-		TRACE_BT("LocalDeviceImpl: Address=%s key=%s\n",
-			bdaddrUtils::ToString(linkKeys->bdaddr).String(),
-			LinkKeyUtils::ToString(linkKeys->link_key).String());
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		TRACE_BT("LocalDeviceImpl: Address=%s (key not logged)\n",
+			bdaddrUtils::ToString(linkKeys->bdaddr).String());
+		// SPDX-SnippetEnd
 
 		linkKeys++;
 		numKeys--;
@@ -1840,8 +2057,13 @@ LocalDeviceImpl::UserConfirmationRequest(struct hci_ev_user_confirmation_request
 	size_t size;
 	void* command;
 
-	TRACE_BT("LocalDeviceImpl: User Confirmation Request for %s (Passkey: %06" B_PRIu32 ")\n",
-		bdaddrUtils::ToString(event->bdaddr).String(), event->passkey);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// The passkey is not logged.
+	TRACE_BT("LocalDeviceImpl: User Confirmation Request for %s\n",
+		bdaddrUtils::ToString(event->bdaddr).String());
+	// SPDX-SnippetEnd
 
 	command = buildUserConfirmReply(event->bdaddr, &size);
 
@@ -1886,8 +2108,15 @@ LocalDeviceImpl::AuthComplete(struct hci_ev_auth_complete* eventData, BMessage* 
 		TRACE_BT("LocalDeviceImpl: Authentication Successful for handle %d\n", handle);
 		ServerRemoteDevice* rd = RemoteDeviceByHandle(eventData->handle);
 
-		SetConnEncryption(rd->handle, true);
-		((BluetoothServer*)be_app)->DiscoverServices(rd);
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// rd is NULL for an unknown handle (review of #4286).
+		if (rd != NULL) {
+			SetConnEncryption(rd->handle, true);
+			((BluetoothServer*)be_app)->DiscoverServices(rd);
+		}
+		// SPDX-SnippetEnd
 	} else {
 		TRACE_BT("LocalDeviceImpl: Authentication Failed for handle %d with status 0x%02x\n",
 			handle, status);
@@ -1968,3 +2197,20 @@ LocalDeviceImpl::ProcessSimpleRequest(BMessage* request)
 
 	return B_ERROR;
 }
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+status_t
+LocalDeviceImpl::WriteScanEnable(uint8 mode)
+{
+	size_t size;
+	void* command = buildWriteScan(mode, &size);
+	if (command == NULL)
+		return B_NO_MEMORY;
+
+	status_t status = fHCIDelegate->IssueCommand(command, size);
+	free(command);
+	return status == B_ERROR ? B_ERROR : B_OK;
+}
+// SPDX-SnippetEnd
