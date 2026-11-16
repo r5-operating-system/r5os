@@ -1,5 +1,15 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-16 - Graphics (M13 step 2 fix): a late Skia run no longer turns the compositor off at once
+
+Problem: after #4330, a second measurement pair (QEMU, Lavapipe, `gpu_draw true`) turned the compositor off with `fence timeout` in both runs of the new build. Two causes in step 2's own code: the damage of a Skia run went to the compositor right after the submit, so a compose was queued at once behind runs that take 11-15 s after Sign in and ran into its 15 s fence limit; and a pass without a compose waited up to 15 s on the CPU for the runs' semaphores and turned the compositor off when that ran out.
+
+What changed: the draw thread waits for its run's fence before it reports the damage (the compose still waits only on the GPU; nothing is read back). A pass without a compose no longer waits on the CPU; its semaphores go back to the pool after the next compose's fence.
+
+Tested: `scripts/build-locked.sh` jam_exit=0. Pairs of runs one right after the other (`scripts/qemu-m13-measure.py`, own image copies; load average 0.1-3.5, another session's Bluetooth QEMU with 2 CPUs ran during some runs). The old build (`main` with step 0) also turned the compositor off with `fence timeout` in 2 of 4 runs; in its good run of this evening: drag 212.9 ms (143 frames), scroll 164.3 ms (188 frames), resize 228.4 ms (33 frames), resize draw 8.0 s. The fixed build turned it off too in its one run (with the Bluetooth QEMU beside it); before the off the syslog of both builds stops for 40-50 s, so the guest stalls under Lavapipe. So `fence timeout` on Lavapipe under host load is older than step 2, and this fix is not proven by a measurement. No new numbers for the fixed build.
+
+Not tested: RADV and the 5625U. A quiet host for the measurement pair.
+
 ## 2026-11-16 - Graphics (M13 step 2): the compositor reads Skia's window images on the GPU, and the pipeline cache on disk
 
 Problem: with `gpu_draw true`, every Skia run stopped the CPU until the GPU was done (`SyncToCpu::kYes`), read the window image back into memory (`asyncRescaleAndReadPixels()`) and copied it with `memcpy` into a second canvas (`WindowTarget::Deliver()`, the `WindowBuffer`), which the compositor then read as a raw buffer. Step 2 of `docs/M13-PLAN.md`, done before step 1 (owner, 16 Nov 2026), together with step 1's disk pipeline cache.

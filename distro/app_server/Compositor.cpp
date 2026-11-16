@@ -3190,6 +3190,10 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 		fSamples[fSampleCount++] = took;
 	if (!signals.empty())
 		fSkia->ReturnSignals(signals);
+	if (!fConsumedSignals.empty()) {
+		fSkia->ReturnSignals(fConsumedSignals);
+		fConsumedSignals.clear();
+	}
 
 	if (compare) {
 		// The CPU cannot read an imported image; those parts are left out.
@@ -3308,21 +3312,22 @@ Compositor::_ConsumeSkiaSignals()
 		submit.waitSemaphoreCount = (uint32)waits.size();
 		submit.pWaitSemaphores = &waits[0];
 		submit.pWaitDstStageMask = &stages[0];
-		vk->vkResetFences(vk->device, 1, &vk->fence);
-		result = vk->vkQueueSubmit(vk->queue, 1, &submit, vk->fence);
+		result = vk->vkQueueSubmit(vk->queue, 1, &submit, VK_NULL_HANDLE);
 	}
 	SkiaGpu::UnlockQueue();
 	if (signals.empty())
 		return;
-	if (result == VK_SUCCESS) {
-		result = vk->vkWaitForFences(vk->device, 1, &vk->fence, VK_TRUE,
-			kFenceLimit * 1000);
+	if (result != VK_SUCCESS) {
+		if (fFailure == NULL)
+			fFailure = "submit";
+		return;
 	}
-	// a late GPU keeps them: the next compose's fence is the same one
-	if (result == VK_SUCCESS)
-		fSkia->ReturnSignals(signals);
-	else if (fFailure == NULL)
-		fFailure = result == VK_TIMEOUT ? "fence timeout" : "submit";
+	// No CPU wait: a Skia run can take seconds on Lavapipe, and a late GPU
+	// is not a failure (M11 decision 14; a 15 s wait here turned the
+	// compositor off in QEMU). The next compose's fence covers this batch,
+	// so they go back to the pool after it.
+	fConsumedSignals.insert(fConsumedSignals.end(), signals.begin(),
+		signals.end());
 }
 
 

@@ -157,6 +157,9 @@ private:
 			// M13 step 2: a pass without a compose still waits for the
 			// runs' semaphores, so they can be signalled again
 			void				_ConsumeSkiaSignals();
+			// waited for in an empty batch, back to the pool after the next
+			// compose's fence
+			std::vector<uint64>	fConsumedSignals;
 			// M12
 			void				_InitSkia(bool forceFail);
 	static	void				_SkiaWake(void* cookie);
