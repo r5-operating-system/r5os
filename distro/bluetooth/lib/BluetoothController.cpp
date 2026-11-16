@@ -503,6 +503,10 @@ BluetoothController::MessageReceived(BMessage* message)
 			break;
 		}
 
+		case kMsgBluetoothPair:
+			_Pair(message);
+			break;
+
 		case kMsgBluetoothSelectRadio:
 		{
 			int32 id;
@@ -774,6 +778,44 @@ BluetoothController::_DeviceFound(BMessage* message)
 	}
 	fState.devices.push_back(info);
 	_PostState();
+}
+
+
+void
+BluetoothController::_Pair(BMessage* message)
+{
+	// Create Connection makes bluetooth_server authenticate, which pairs a
+	// device without a key (Secure Simple Pairing). Haiku's
+	// RemoteDevice::Connect() sends the same request. A scan would keep the
+	// radio from paging, so it stops first.
+	const bdaddr_t* address;
+	ssize_t size;
+	if (message->FindData("bdaddr", B_ANY_TYPE, (const void**)&address,
+			&size) != B_OK || size != (ssize_t)sizeof(bdaddr_t)
+		|| _FindRadio(fState.radio) == NULL || !fState.radioEnabled)
+		return;
+
+	if (fState.scanning) {
+		_CancelScan();
+		_StopScan();
+		_PostState();
+	}
+
+	BMessenger server(BLUETOOTH_SIGNATURE);
+	if (!server.IsValid())
+		return;
+
+	BMessage request(BT_REQ_CREATE_CONN);
+	request.AddInt32("hci_id", fState.radio);
+	request.AddData("bdaddr", B_ANY_TYPE, address, sizeof(bdaddr_t));
+	request.AddString("name", message->GetString("name", ""));
+	// The scan does not keep these: R2 and no clock offset, the values
+	// BlueZ uses for a device it has no inquiry data for.
+	request.AddUInt8("pscan_rep_mode", 0x02);
+	request.AddUInt16("clock_offset", 0);
+	request.AddUInt32("record", message->GetUInt32("class", 0));
+	// Not waiting: pairing takes as long as the person needs.
+	server.SendMessage(&request, (BHandler*)NULL, kServerTimeout);
 }
 
 

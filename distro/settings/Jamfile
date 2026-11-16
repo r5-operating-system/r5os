@@ -58,7 +58,7 @@ Addon settings_fonts :
 	FontSelectionView.cpp
 	AntialiasingSettingsView.cpp
 	SettingsFont.cpp
-	: be shared localestub [ TargetLibstdc++ ]
+	: be shared localestub libr5ui.so [ TargetLibstdc++ ]
 	;
 
 Addon settings_look :

@@ -49,8 +49,12 @@ enum {
 	kMsgBluetoothCancelScan		= 'btCs',
 	kMsgBluetoothSetRadio		= 'btPw',
 		// bool "on". System-wide: callers check the administrator lock
-	kMsgBluetoothSelectRadio	= 'btSr'
+	kMsgBluetoothSelectRadio	= 'btSr',
 		// int32 "hci_id"
+	kMsgBluetoothPair			= 'btPa'
+		// data "bdaddr" (bdaddr_t), string "name", uint32 "class": pair
+		// with a device found by a scan (step 4). The result shows in the
+		// device's own connection and pairing events.
 };
 
 // Notifications sent to the controller's target
@@ -162,6 +166,7 @@ private:
 			void				_StopScan();
 			void				_DeviceFound(BMessage* message);
 			void				_SetRadio(bool on);
+			void				_Pair(BMessage* message);
 			void				_PostState();
 
 			BMessenger			fTarget;

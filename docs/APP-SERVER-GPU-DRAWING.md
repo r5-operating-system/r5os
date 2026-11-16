@@ -213,10 +213,19 @@ How a result is measured: `r5-draw-compare` (part 7) draws one operation with Pa
 | **B2** bitmap, bilinear | `DrawBitmap()` with `B_FILTER_BITMAP_BILINEAR` | exact where the bitmap is unscaled | 4 | 5 % | weights in float against AGG's 8-bit weights |
 | **G** gradient | the five types, on any shape | – | 3 | no limit | the same colour array; only the position (float against fixed point) can land one entry over |
 
+**The edge rule (owner, 15 Nov 2026, after the first runs of step 2; it replaces the "largest difference" and "share" columns for A1, A2, T and G).** The goal is not pixel parity with AGG: the GPU may, and should, look better. So:
+
+- **Interior:** an inner pixel (its 3×3 neighbours in Painter's image are equal) keeps the limit above: exact, and for G within 3.
+- **Edges** are judged on position, size and stroke width only (measured as decided on 16 Nov 2026, after a first version with sums per row proved unstable: a horizontal edge moved by a quarter pixel changed a whole row's sum). The ink of a pixel is how far it moved from the background (the largest channel), divided by the largest move in Painter's image, so a fully covered pixel counts 1. **Position:** every pixel with at least half ink in one image has one with at least half ink in the other within one pixel. **Size and stroke width:** the difference of the total ink divided by the number of edge pixels (ink between 0 and 1) is at most **0.2 px** (A1, A2, G) or **0.35 px** (T); a stroke 0.5 px wider fails it. **On a transparent background** AGG writes alpha 255 at every pixel it touches, so its edges become an opaque one-pixel rim of an invisible colour, while Skia's edges stay partly transparent, the better result; there only the interior (premultiplied) and the text metrics count, and the edges are judged on the opaque background.
+- **Text** may be rasterised differently, the metrics may not: the pen after `DrawString()` (the advance) is exactly equal in both engines, and the box of the ink (pixels at least half way from the background: left, top, right, bottom, which give the width, the height and the baseline) lies within 1 px. `r5-draw-compare` prints a `metrics` line per text operation.
+- **Bitmaps** (E, B1, B2) keep the rules above, strictly.
+- `r5-draw-compare` prints the edge result as `edge <n> px` on every line (99: the position check failed). 0.2 and 0.35 px are starting values, set by me on 16 Nov 2026 with the reason above; they change only by a decision of the owner.
+
 - An operation in several classes (a gradient inside a Bézier curve, a pattern in a transformed rectangle) is held to the looser of its classes for its edge pixels and to the stricter for its inner pixels.
 - Subpixel shapes and text keep their class; the difference is counted per channel, so a colour fringe that moved counts.
 - The same set also compares **Skia on RADV against Skia on Lavapipe**, in the same classes, so a driver difference shows up as a line of its own.
 - M11's `compose compare` stays as it is (exact, effects off).
+- **On a transparent background** (owner, 15 Nov 2026, after step 2): both images are compared **premultiplied**, each colour channel times the pixel's alpha (`(c * a + 127) / 255`), alpha as it is, with the same limits per class. A colour under alpha 0 is not seen there, as on screen. The tolerances do not change.
 - These are starting values. A failing operation is a gap and is reported; the numbers change only by a decision of the user, never to make a test pass.
 
 ## 6. Text, offscreen bitmaps and `Sync()`
@@ -536,3 +545,48 @@ Not designed here. The user wants it designed in step 1 or later, starting with 
 - **The look and feel settings need a redesign**, in the Settings window and in the separate Appearance program, for everything added since Haiku: the "Window effects" box (shadow, frosted glass, strength, animations, M11), the antialiasing choices after Q5, Q12 and Q13 (Skia's subpixel text, grey shapes, the hidden average weight slider), and later scaling. The shared sources are in `distro/settings/` (`LookAndFeelSettingsView.cpp`, `WindowEffectsBox.cpp`, `AntialiasingSettingsView.cpp`, `FontView.cpp`, `ColorsView.cpp`, `LookModule.cpp`, `FontsModule.cpp`).
 - **Seen while reading, to settle first:** `AGENTS.md` describes one Appearance page with the tabs Fonts, Colors, Look and feel and Antialiasing, while `docs/SETTINGS.md` describes two pages, Fonts and Look and Feel, with no tabs, Antialiasing and Colors as boxes. The two disagree. The redesign starts by asking the user which one holds; neither is changed here.
 - The fixed Settings layout in `AGENTS.md` stays as it is until the user approves the redesign.
+
+## Built in steps 2 to 5 (15 Nov 2026): what differs from the text above
+
+Written down so the next step and the review read the code with the same picture. Nothing here changes a decision of the user.
+
+- **The R5 blender is part of the R5 shader.** A Skia blender gets one source colour; Haiku's formulas need the colour, its alpha and the coverage (and the pattern bit). So every drawing that is not a plain colour fill draws one rectangle per clipping rectangle with one runtime shader (`distro/app_server/skia/SkiaShaders.h`) that reads a copy of the destination (`makeImageSnapshot`), Skia's coverage of the shape (drawn white into a scratch image), and the source, and writes Haiku's integer result with `kSrc`. This is the "two passes" of part 4, with the destination as an image instead of a blender's input. Part 4's "direct" way is not used yet: it is M13 work, where the compare set shows the same pixels.
+- **Solid fills** that Haiku writes straight into the buffer (`FillRect(rect, color)`, `StraightLine()`, `FillRectNoClipping()`) are a `kSrc` rectangle with a tiny runtime shader, because an `SkPaint` colour is premultiplied and would turn the colour of an alpha 0 pixel black.
+- **Image to buffer:** Graphite makes and owns the window images; after the compose thread has submitted, Graphite's own read-back (`asyncRescaleAndReadPixels`) brings the damaged frame back and a `memcpy` puts the damaged rectangles into the M11 window buffer. Only then is the damage reported to the compose. The plain `vkCmdCopyImageToBuffer` of part 4 would need app_server to own the images and their layouts; M13 can do that, or let the compose read the images (Q4).
+- **When a recording is snapped:** the compose thread snaps every target once per pass (`SkiaGpu::RunWork`), not at the end of each `ServerWindow` message batch, so no change in `ServerWindow`'s loop was needed. A window that draws between two passes is seen half drawn at most, as with Painter in M11.
+- **Painter's scaled bitmaps:** `B_OP_COPY` and the bilinear alpha overlay use Painter's own index and 8-bit weights in the shader (`DrawBitmapNearestNeighbor.h`, `DrawBitmapBilinear.h`), not Skia's sampling.
+- **Found while comparing:** `blend_line32()` (Painter's `B_OP_ALPHA` fills of whole runs) left the alpha byte of its temporary row unset and wrote stack memory into the destination's alpha. Fixed in Painter (`distro/app_server/drawing/drawing_support.h`, owner, 15 Nov 2026): it keeps the destination's alpha, and so does the GPU. On a transparent background the images are compared premultiplied (part 5).
+- **Gaps (decision 4: they block the GPU drawing, never drawn on the CPU on purpose, but still Painter today):** `BView::BeginLayer()` layers (`Layer.cpp` uses a `BitmapDrawingEngine`), offscreen bitmaps in colour spaces other than 32 bits, drag bitmaps as a read point. Group 12 (the decorator) and 13 (offscreen bitmaps) of the compare set are not built yet; the text check of part 5 (pen position, ink boxes) is not in the set.
+
+## Scope change (owner, 15 Nov 2026, during steps 2 to 5)
+
+**The M12 deliverable is Skia drawing on by default, with or without a GPU** (RADV, or Lavapipe without one). Only Safe mode draws with Painter (step 6 and decision 10 already say so for the CPU mode). This replaces "`gpu_draw` stays opt-in until the stick" as the end state of M12; `gpu_draw` stays the test switch until the gate below and the stick pass.
+
+**M12 now includes optimisation, with one gate:** on the 5625U (RADV), **no draw class is slower with Skia than with Painter**. A draw class is a class of part 5 (E, A1, A2, T, B1, B2, G), measured per operation with `r5-draw-compare --time` (median of 100, GPU against CPU) and in the scenario of decision 9 (`draw median` against `draw cpu median`). Lavapipe numbers are recorded, not gated (decision 9). Anything beyond the gate, such as 60 frames per second while dragging, scrolling or resizing, stays M13. The copy of the window images into the window buffers may move into M12 if the profile shows it is the cause of a class being slower; otherwise it stays M13 (Q4).
+
+**Order of work for the gate:** first profile which classes and which parts of the path cause the 43 ms scenario median on Lavapipe (and the same on the 5625U once it can run), report the top causes to the owner, and only then fix.
+
+## New step: gamma-correct blending and better text on the Skia path (owner, 15 Nov 2026)
+
+After the compare work (steps 2 to 5, with the edge rule of part 5) and before the performance gate:
+
+1. **Gamma-correct blending** of anti-aliased edges and alpha on the Skia path: coverage and alpha blending in linear light instead of on the 8-bit sRGB values Haiku blends today.
+2. **Better text:** light hinting (`SkFontHinting::kSlight`) and clean grayscale anti-aliasing, as the default look of text drawn by Skia.
+3. **What stays:** glyph metrics (advance, height, baseline) stay identical; the compare set's `metrics` lines keep checking that. The software path (Painter, Safe mode) keeps working and keeps its look.
+4. **On by default on the GPU path** (Skia, RADV or Lavapipe), with a setting to turn it off (proposed: `gpu_draw_classic true` in the radeon_hd settings for both, until the look and feel redesign gives it a place in Settings).
+5. **Judged by the owner on a side-by-side sheet:** AGG, Skia as built in steps 3 and 4, and Skia with this step, a few operations per class.
+6. **Compare set:** with this step on, the interior of a shape with alpha or anti-aliasing is no longer AGG's value; the compare runs with the setting off, and with it on only the metrics and the edge rule's position and size checks apply (a decision for the owner when the sheet is judged).
+
+### Design of the gamma-correct blending (16 Nov 2026, asked by the owner)
+
+The design follows the M11 compositor. Its compute shaders (`distro/app_server/compositor/*.comp`) unpack the 32-bit words to `vec4`, do their own arithmetic and pack again. There are no sRGB image formats, and the window buffers stay 8-bit sRGB. Step 5b keeps all of that: nothing changes in the window buffers, the read-back or the compositor. The linear light lives only in R5's own shader programs (`SkiaShaders.h`).
+
+- **The curve:** the sRGB curve (IEC 61966-2-1, `toLinear()` / `toSrgb()`), not a gamma 2.2 power.
+- **What is mixed in linear light:** every mix of a source colour into the destination with a weight below full. That covers the source alpha (`B_OP_ALPHA`, bitmaps with alpha, `blend_line32`) and the coverage of anti-aliased edges and pattern edges. A pixel with weight 0 or 255 is not touched by the curve, so a full-cover pixel stays Haiku's value exactly.
+- **Edges on the fast path:** a Skia blender does not see the coverage; Skia mixes it afterwards in 8-bit sRGB. So in the new look Skia only draws the coverage of the shape into the scratch image. A small shader (`kCoverageSkSL`) hands that coverage to the R5 blender as its source colour, the rectangle is drawn without Skia's anti-aliasing, and the blender mixes the edge itself. There is still no copy of the destination; the cost is the coverage pass, as for the composite path. The direct `kSrcOver` way and Skia's own anti-aliasing are used only by the classic look.
+- **What stays:** text keeps Skia's own text contrast and gamma, so it is not corrected twice. Gradients with anti-aliased edges keep Skia's 8-bit edge mix, because the blender's source is then the gradient's colour (a limit, written down). The classic look (`gpu_draw_classic true`, and the compare set) is unchanged.
+- **Cost:** measured with `r5-draw-compare --time --new-look` against the classic look (CHANGELOG). If the new look makes a class slower than Painter on the 5625U, the gate of step 5c decides whether that edge path goes back to Skia's own mix.
+- **Decision after the first sheet (16 Nov 2026, while the owner slept):** linear-light **edges are off by default**, and `gpu_draw_linear_edges true` turns them on. The sheet showed the known side effect: a 1-pixel dark line on a light background comes out lighter and uneven along a curve, because its partly covered pixels brighten much more than in an 8-bit mix. On Lavapipe the coverage pass also made fills and strokes about 30 times slower (40 µs to 1300–1650 µs per operation; the scenario median went from 2–4 ms to 7–12 ms). **Translucency stays linear by default**: it costs nothing extra and does not thin lines. The owner judges both on the sheet, which has a column for each.
+- **Text:** Skia's text gamma 1.2 with contrast 0.4 (Skia's default is 0.2), because light hinting made 9-point text pale on the first sheet. With the text blender Skia gets the real text colour, so it picks the right contrast curve.
+
+Step order of M12 from here: 2 to 5 (compare set, engine, text, offscreen, fallback, measurement) → **5b** gamma-correct blending and better text → **5c** performance gate (profile, report, fix) → 6 Safe mode → 6b `BDirectWindow` on Lavapipe → 7 stick.

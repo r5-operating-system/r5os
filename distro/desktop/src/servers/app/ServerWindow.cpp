@@ -87,6 +87,11 @@
 #include "ServerProtocol.h"
 #include "Window.h"
 #include "WorkspacesView.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include "SkiaOffscreen.h"
+// SPDX-SnippetEnd
 
 
 using std::nothrow;
@@ -1087,6 +1092,19 @@ ServerWindow::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 			// client and server queues are in sync (earlier, the client
 			// may have pushed drawing commands at the server and now it
 			// knows they have all been carried out)
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			// M12 (docs/APP-SERVER-GPU-DRAWING.md, part 6): an offscreen
+			// bitmap the GPU draws into has its pixels in memory first
+			// The window's lock is let go while waiting for the compose
+			// thread (review); only this thread deletes fWindow.
+			if (fWindow.IsSet() && fWindow->IsOffscreenWindow()) {
+				fDesktop->UnlockSingleWindow();
+				skia_offscreen_finish(fWindow->GetDrawingEngine());
+				fDesktop->LockSingleWindow();
+			}
+// SPDX-SnippetEnd
 			fLink.StartMessage(B_OK);
 			fLink.Flush();
 			break;

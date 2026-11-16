@@ -21,6 +21,13 @@
 # VulkanTeapot twice (zero-copy, then the copy path with
 # gpu_compositor_zero_copy false for that run only), about three minutes.
 #
+# M12 measurement stick (generated/gpu-m12/STICK-PLAN.md): gpu_draw true
+# without gpu_compositor true is M12 boot 1, with gpu_compositor_lavapipe
+# true boot 3; no gpu_draw and ~/m12/next saying 2 is boot 2 (Painter).
+# Files go to ~/m12/boot<k>/, where m12-measure and m12-scenario already
+# put theirs. M12 boot 4 is M11's boot 4. "check which" prints the stick,
+# the boot and its directory, for those two scripts.
+#
 # For the host tests: R5_HOME, R5_SYSLOG, R5_SYSTEM_SETTINGS and
 # R5_NODE_DIR, R5_USER_SETTINGS, R5_CACHE and R5_BIN move the paths,
 # CHECK_WAIT=0 does not wait, CHECK_LIVE=0 runs no program.
@@ -49,9 +56,23 @@ if [ ! -f "$settings" ]; then
 	settings=$sysset
 fi
 
-# Which boot is this? M11 first: its boot 4 also has gpu_hang_test 1.
+# Which boot is this? M12 first: its boots have no gpu_compositor line.
+# M11 next: its boot 4 also has gpu_hang_test 1.
 stick=m10
-if [ -f "$settings" ] && grep -q '^gpu_compositor true' "$settings"; then
+m12note=$home/m12/next
+if [ -f "$settings" ] && grep -q '^gpu_draw true' "$settings" \
+		&& ! grep -q '^gpu_compositor true' "$settings"; then
+	stick=m12
+	if grep -q '^gpu_compositor_lavapipe true' "$settings"; then
+		boot=3
+	else
+		boot=1
+	fi
+elif [ -f "$m12note" ] && [ "$(head -n 1 "$m12note" | tr -d ' \r')" = 2 ] \
+		&& ! { [ -f "$settings" ] && grep -q '^gpu_compositor true' "$settings"; }; then
+	stick=m12
+	boot=2
+elif [ -f "$settings" ] && grep -q '^gpu_compositor true' "$settings"; then
 	stick=m11
 	if grep -Eq '^gpu_hang_test[[:space:]]+1' "$settings"; then
 		boot=4
@@ -89,6 +110,14 @@ fi
 if [ "$stick" = m11 ]; then
 	m10=$home/m11
 	mkdir -p "$m10"
+fi
+if [ "$stick" = m12 ]; then
+	m10=$home/m12
+	mkdir -p "$m10"
+fi
+if [ "$1" = which ]; then
+	echo "$stick $boot $m10/boot$boot"
+	exit 0
 fi
 
 # This boot's syslog lines: after the last boot loader line.
@@ -704,7 +733,85 @@ m11_boot() {
 	esac
 }
 
-if [ "$stick" = m11 ]; then
+# --- M12 measurement stick (generated/gpu-m12/STICK-PLAN.md) ---
+
+# The medians of one kind of line, as one list: m12_medians <kind> <file>
+m12_medians() {
+	sed -n "s/.*app_server: $1 median \([0-9]*\) us cpu \([0-9]*\) ms.*/\1/p" "$2" \
+		2>/dev/null | tr '\n' ' '
+}
+
+m12_measure() {
+	for look in classic new; do
+		f=$keep/compare-$look.txt
+		have 'draw-compare [0-9]+/[0-9]+ ok' "$f" "compare set ran ($look look)"
+		line=$(grep -E 'draw-compare [0-9]+/[0-9]+ ok' "$f" 2>/dev/null | tail -n 1)
+		emit "INFO compare $look: ${line:-none}"
+		f=$keep/time-$look.txt
+		atleast 50 '^draw-time ' "$f" "draw-time lines ($look look)"
+		slower=$(awk '/^draw-time / && $4 + 0 > $7 + 0 { n++ } END { print n + 0 }' \
+			"$f" 2>/dev/null)
+		total=$(grep -c '^draw-time ' "$f" 2>/dev/null)
+		emit "INFO draw-time $look: ${slower:-0} of ${total:-0} operations slower on the GPU"
+		printf '%s compare %s slower %s of %s\n' "$look" "${line:-none}" \
+			"${slower:-0}" "${total:-0}" >> "$keep/measure.txt"
+	done
+}
+
+m12_scenario() {
+	f=$keep/scenario-syslog.txt
+	have 'scenario done' "$keep/scenario.txt" "m12-scenario finished"
+	atleast 3 "app_server: $1 median [0-9]+ us cpu [0-9]+ ms per 10 s" "$f" \
+		"$1 median x3 in the scenario"
+	med=$(m12_medians "$1" "$f")
+	cmp=$(m12_medians compose "$f")
+	emit "INFO scenario $1 medians (us): ${med:-none}"
+	emit "INFO scenario compose medians (us): ${cmp:-none}"
+	printf 'scenario %s %s compose %s\n' "$1" "${med:-none}" "${cmp:-none}" \
+		>> "$keep/measure.txt"
+}
+
+m12_boot() {
+	have 'decorator: r5 loaded' "$slog" "decorator: r5 loaded"
+	none 'gpu lost' "$slog" "no gpu lost"
+	none 'radeon_hd: gpu hang' "$slog" "no gpu hang"
+	case $boot in
+	1|3)
+		if [ "$boot" = 1 ]; then
+			have 'app_server: gpu compositor on radv' "$slog" "gpu compositor on radv"
+			have 'app_server: gpu draw on .*RADV' "$slog" "gpu draw on RADV"
+		else
+			have 'app_server: gpu compositor on lavapipe' "$slog" 				"gpu compositor on lavapipe"
+			have 'app_server: gpu draw on llvmpipe' "$slog" "gpu draw on llvmpipe"
+		fi
+		have 'app_server: gpu draw warm up [0-9]+ ms' "$slog" "gpu draw warm up"
+		emit "INFO $(grep -Eo 'gpu draw warm up [0-9]+ ms' "$slog" | head -n 1)"
+		have 'app_server: gpu draw budget heap [0-9]+ MB' "$slog" "gpu draw budget"
+		emit "INFO $(grep -Eo 'gpu draw budget heap .*' "$slog" | head -n 1)"
+		emit "INFO memory freed and retried: $(grep -c 'gpu draw memory freed' "$slog") times"
+		m12_measure
+		m12_scenario draw
+		extract_syslog
+		none 'app_server: gpu draw off' "$slog" "no gpu draw off"
+		;;
+	2)
+		have 'app_server: gpu compositor on radv' "$slog" "gpu compositor on radv"
+		none 'app_server: gpu draw on' "$slog" "no gpu draw (Painter draws)"
+		# Painter reports "draw cpu median" (Compositor.cpp, without
+		# Skia), also under the compositor: the 5625U stick of 16 Nov
+		# 2026 showed it; the "draw median" of the QEMU proof before it
+		# was a misreading, which made boot 2 FAIL.
+		m12_scenario 'draw cpu'
+		;;
+	esac
+	none 'app_server: gpu compositor off' "$slog" "no gpu compositor off"
+	manual "text in menus and Terminal sharp and readable: ____"
+	manual "anything odd on screen (blocks, stripes, wrong colours): ____"
+}
+
+if [ "$stick" = m12 ]; then
+	m12_boot
+elif [ "$stick" = m11 ]; then
 	m11_boot
 else
 case $boot in
