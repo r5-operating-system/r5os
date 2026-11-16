@@ -1,5 +1,18 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-16 - Bluetooth: My devices with a device panel, the switch on the last line
+
+Problem: the Bluetooth page only showed what a scan found. A paired mouse or controller was not listed unless it was found again, there was no way to see whether it was connected, and Forget sat beside Pair in the scan list. The radio card and the switch box stood above the devices, though they are rarely used.
+
+What changed (owner's mockup, `generated/mockups/bluetooth-page.html`):
+- `bluetooth_server`: `BT_MSG_R5_GET_PAIRED` lists the paired devices of every radio (Classic with a link key, and LE bonds) with name, class, LE, HID and connected; no keys. `BT_MSG_R5_DISCONNECT` ends a link and keeps the keys.
+- libr5bt (additive): `BluetoothPairedDevice`, `BluetoothState::UnarchivePaired()`, `kMsgBluetoothDisconnect`. The controller reads the paired list on every 3-second update, and at once after Pair and Forget. `BluetoothState` keeps its size; the controller and view use reserved room.
+- The page: My devices (a list with Connected or Not connected, and a `BCard` panel with kind, status, Classic or Low Energy, address, Disconnect and Forget); Devices nearby without the paired devices, down to the last line; that line without a box: "Bluetooth on", the radio or a note. While Bluetooth is off both lists are faint. The summary card with the radio count is gone.
+
+Limits: no battery level (not read yet), no "Use for sound" or "Test buttons" in the panel yet. A disconnected LE mouse comes back when it is moved, by design (the accept list).
+
+Tested: built for x86_64; QEMU with SMAP, all Bluetooth tests ok, no panic; the page draws My devices, Devices nearby and the "Bluetooth on" line (no radio in QEMU, so the lists stay empty). Not on a stick.
+
 ## 2026-11-16 - Bluetooth: Forget a paired device, see a controller's buttons, Pair on a paired device ends well
 
 Problem: stick 5 on the 5625U: the 8BitDo M30 and the Designer Mouse paired and published their devices (`joystick/bluetooth/0`, `input/mouse/bluetooth/0`), and no panic came. Three things were left. Haiku's Joysticks preferences said "The file '0' used by 'bluetooth/0' cannot be found" and Probe found nothing: they look for a gameport description file and never show a HID controller (USB or Bluetooth), so they cannot tell whether the M30 works. Pair on a device that already had a key said "did not work", because only Simple Pairing Complete ended a pairing well and a stored key does not send one. And there was no way to unpair.

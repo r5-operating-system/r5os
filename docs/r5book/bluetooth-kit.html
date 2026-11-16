@@ -47,9 +47,11 @@
 				<tr><th>Declared in</th><td>&lt;R5Bluetooth.h&gt;</td></tr>
 				<tr><th>Derived from</th><td>BGroupView</td></tr>
 			</table>
-			<p>A summary card (a <code class="inline">BAppearanceKit::BCard</code>) with the Bluetooth glyph, the
-			number of radios and the radio in use; a box whose title is the Bluetooth switch, with a radio menu
-			when there is more than one radio; and the devices nearby, with Scan. It starts its own
+			<p>My devices: the paired devices, each Connected or Not connected, and beside them a panel (a
+			<code class="inline">BAppearanceKit::BCard</code>) for the one chosen, with its kind, status, Classic
+			or Low Energy, address, Disconnect and Forget. Under it the devices nearby, with Pair and Scan; a
+			paired device is not repeated there. The last line has no box: "Bluetooth on", the radio in use, and
+			a radio menu when there is more than one radio. It starts its own
 			<code class="inline">BluetoothController</code> when it is attached to a window and stops it when it
 			is detached.</p>
 			<figure class="stage">
@@ -123,6 +125,13 @@ BLayoutBuilder::Group&lt;&gt;(this, B_VERTICAL, 0)
 				is the name, or the kind, or the address. <code class="inline">SignalLevel()</code> gives 0 to 4 bars
 				for <code class="inline">r5_level_glyph_draw(R5_LEVEL_SIGNAL)</code>, 10 dB per bar from -90 dBm, or
 				-1.</p></div>
+			<div class="member"><div class="sig">struct BluetoothPairedDevice;<br>static void BluetoothState::UnarchivePaired(const BMessage&amp; archive, std::vector&lt;BluetoothPairedDevice&gt;&amp; devices);</div>
+				<p>A paired device: <code class="inline">info</code> (a <code class="inline">BluetoothDeviceInfo</code>),
+				<code class="inline">lowEnergy</code>, <code class="inline">hid</code> (LE HID over GATT) and
+				<code class="inline">connected</code>. They come in the same
+				<code class="inline">kMsgBluetoothStateChanged</code> message; read them with
+				<code class="inline">UnarchivePaired()</code>. bluetooth_server gives names and states, never
+				keys.</p></div>
 		</section>
 
 		<section class="entry" id="switch">

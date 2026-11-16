@@ -2938,6 +2938,45 @@ LocalDeviceImpl::R5Forget(const bdaddr_t& address)
 
 
 void
+LocalDeviceImpl::R5AddPaired(BMessage& reply)
+{
+	linkkey_t nullKey = LinkKeyUtils::NullKey();
+	for (int32 i = 0; i < fRemoteDevicesList.CountItems(); i++) {
+		ServerRemoteDevice* rd = fRemoteDevicesList.ItemAt(i);
+		if (LinkKeyUtils::Compare(&rd->link_key, &nullKey))
+			continue;
+		uint32 deviceClass = rd->classOfDevice[0]
+			| (rd->classOfDevice[1] << 8) | (rd->classOfDevice[2] << 16);
+		reply.AddData("bdaddr", B_ANY_TYPE, &rd->bdaddr, sizeof(bdaddr_t));
+		reply.AddString("name", rd->friendly_name);
+		reply.AddUInt32("class", deviceClass);
+		reply.AddBool("le", false);
+		reply.AddBool("hid", false);
+		reply.AddBool("connected",
+			rd->conn_state == RemoteDevice::CONNECTED);
+	}
+	if (fLE != NULL)
+		fLE->AddPaired(reply);
+}
+
+
+bool
+LocalDeviceImpl::R5Disconnect(const bdaddr_t& address)
+{
+	bool disconnected = fLE != NULL && fLE->Disconnect(address);
+	ServerRemoteDevice* rd = RemoteDeviceByAddr(address);
+	if (rd != NULL && rd->conn_state == RemoteDevice::CONNECTED) {
+		BMessage disconnect;
+		disconnect.AddData("bdaddr", B_ANY_TYPE, &address, sizeof(address));
+		disconnect.AddUInt8("reason", 0x13);
+		Disconnect(&disconnect);
+		disconnected = true;
+	}
+	return disconnected;
+}
+
+
+void
 LocalDeviceImpl::ResetController()
 {
 	BluetoothCommand<> command(OGF_CONTROL_BASEBAND, OCF_RESET);

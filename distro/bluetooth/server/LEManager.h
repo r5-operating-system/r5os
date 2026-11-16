@@ -83,6 +83,10 @@ public:
 			void				RadioChanged(bool enabled);
 	// Removes the keys of a paired LE device and ends its link.
 			bool				Forget(const bdaddr_t& address);
+	// BT_MSG_R5_GET_PAIRED: one entry per bond, without keys.
+			void				AddPaired(BMessage& reply);
+	// Ends the link to a device; its bond stays.
+			bool				Disconnect(const bdaddr_t& address);
 			// bluetooth_audio starts or stops a stream: the scan pauses
 			// meanwhile (docs/BLUETOOTH.md, step 5).
 			void				AudioChanged(bool streaming);

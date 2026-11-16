@@ -2,10 +2,11 @@
  * SPDX-FileCopyrightText: 2026 R5OS Contributors
  * SPDX-License-Identifier: MIT
  *
- * BluetoothView (libr5bt.so): the radio, the radio switch, and the devices
- * nearby. The summary is a BAppearanceKit::BCard (docs/APPEARANCE-KIT.md);
- * the switch and the list stay on the panel. The Bluetooth glyph and the
- * signal bars come from libr5icons.so.
+ * BluetoothView (libr5bt.so): My devices (the paired devices, with an
+ * information panel for the one chosen), the devices nearby, and at the
+ * bottom the Bluetooth switch with the radio. The information panel is a
+ * BAppearanceKit::BCard (docs/APPEARANCE-KIT.md); the lists stay on the
+ * panel. The signal bars come from libr5icons.so.
  */
 
 
@@ -44,6 +45,8 @@ static const uint32 kMsgScanButton = 'btvB';
 static const uint32 kMsgPairButton = 'btvP';
 static const uint32 kMsgForgetButton = 'btvF';
 static const uint32 kMsgDeviceSelected = 'btvD';
+static const uint32 kMsgMineSelected = 'btvM';
+static const uint32 kMsgDisconnectButton = 'btvX';
 
 
 static BButton*
@@ -68,7 +71,13 @@ bold_font()
 }
 
 
-// #pragma mark - GlyphView
+// The second line of a row and the notes: the text color, a step fainter.
+static rgb_color
+faint_color(rgb_color text, rgb_color background)
+{
+	return tint_color(text, background.IsLight()
+		? B_LIGHTEN_1_TINT : B_DARKEN_1_TINT);
+}
 
 
 // Internal to libr5bt.so: Settings has a DeviceItem class of its own, and an
@@ -77,54 +86,12 @@ bold_font()
 namespace {
 
 
-/*!	R5_GLYPH_BLUETOOTH in the panel text color, faint while off. */
-class GlyphView : public BView {
-public:
-	GlyphView()
-		:
-		BView("bluetooth glyph", B_WILL_DRAW),
-		fActive(false)
-	{
-		float side = roundf(32.0f * font_scale());
-		SetExplicitSize(BSize(side, side));
-		SetViewColor(B_TRANSPARENT_COLOR);
-	}
-
-	virtual void AttachedToWindow()
-	{
-		BView::AttachedToWindow();
-		AdoptParentColors();
-	}
-
-	virtual void Draw(BRect updateRect)
-	{
-		(void)updateRect;
-		SetHighColor(LowColor());
-		FillRect(Bounds());
-		rgb_color color = ui_color(B_PANEL_TEXT_COLOR);
-		if (!fActive)
-			color = tint_color(LowColor(), B_DARKEN_2_TINT);
-		r5_glyph_draw(this, R5_GLYPH_BLUETOOTH, Bounds(), color);
-	}
-
-	void SetActive(bool active)
-	{
-		if (active == fActive)
-			return;
-		fActive = active;
-		Invalidate();
-	}
-
-private:
-	bool	fActive;
-};
-
-
 // #pragma mark - DeviceItem
 
 
 /*!	Two lines: the name, then the kind and the address. The signal bars
-	are at the right when the radio reported a signal strength.
+	are at the right when the radio reported a signal strength. A disabled
+	row (Bluetooth off) is drawn faint.
 */
 class DeviceItem : public BListItem {
 public:
@@ -139,7 +106,6 @@ public:
 
 	virtual void Update(BView* owner, const BFont* font)
 	{
-		(void)owner;
 		font_height height;
 		font->GetHeight(&height);
 		fLineHeight = ceilf(height.ascent + height.descent + height.leading);
@@ -154,6 +120,8 @@ public:
 			? B_LIST_SELECTED_BACKGROUND_COLOR : B_LIST_BACKGROUND_COLOR);
 		rgb_color text = ui_color(IsSelected()
 			? B_LIST_SELECTED_ITEM_TEXT_COLOR : B_LIST_ITEM_TEXT_COLOR);
+		if (!IsEnabled())
+			text = faint_color(faint_color(text, background), background);
 		owner->SetLowColor(background);
 		owner->FillRect(frame, B_SOLID_LOW);
 
@@ -180,8 +148,7 @@ public:
 			detail << fInfo.AddressString();
 		} else
 			detail = fInfo.AddressString();
-		owner->SetHighColor(tint_color(text, background.IsLight()
-			? B_LIGHTEN_1_TINT : B_DARKEN_1_TINT));
+		owner->SetHighColor(faint_color(text, background));
 		owner->TruncateString(&detail, B_TRUNCATE_END,
 			textRight - frame.left - inset);
 		owner->DrawString(detail.String(), BPoint(frame.left + inset,
@@ -200,7 +167,125 @@ private:
 };
 
 
+// #pragma mark - PairedItem
+
+
+/*!	A row of My devices: the name, then the kind; at the right a dot and
+	"Connected" or "Not connected".
+*/
+class PairedItem : public BListItem {
+public:
+	PairedItem(const BluetoothPairedDevice& device)
+		:
+		fDevice(device)
+	{
+	}
+
+	const BluetoothPairedDevice& Device() const { return fDevice; }
+	void SetDevice(const BluetoothPairedDevice& device) { fDevice = device; }
+
+	virtual void Update(BView* owner, const BFont* font)
+	{
+		font_height height;
+		font->GetHeight(&height);
+		fLineHeight = ceilf(height.ascent + height.descent + height.leading);
+		SetHeight(2 * fLineHeight + roundf(8 * font_scale()));
+		SetWidth(owner->Bounds().Width());
+	}
+
+	virtual void DrawItem(BView* owner, BRect frame, bool complete)
+	{
+		(void)complete;
+		rgb_color background = ui_color(IsSelected()
+			? B_LIST_SELECTED_BACKGROUND_COLOR : B_LIST_BACKGROUND_COLOR);
+		rgb_color text = ui_color(IsSelected()
+			? B_LIST_SELECTED_ITEM_TEXT_COLOR : B_LIST_ITEM_TEXT_COLOR);
+		if (!IsEnabled())
+			text = faint_color(faint_color(text, background), background);
+		owner->SetLowColor(background);
+		owner->FillRect(frame, B_SOLID_LOW);
+
+		float inset = roundf(6 * font_scale());
+		font_height height;
+		owner->GetFontHeight(&height);
+
+		// The state at the right, on the first line
+		BString state = fDevice.connected ? B_TRANSLATE("Connected")
+			: B_TRANSLATE("Not connected");
+		float stateWidth = owner->StringWidth(state.String());
+		float dot = roundf(height.ascent * 0.6f);
+		float stateLeft = frame.right - inset - stateWidth;
+		float baseline = frame.top + inset / 2 + height.ascent;
+		BRect dotFrame(stateLeft - inset / 2 - dot, baseline - dot,
+			stateLeft - inset / 2, baseline);
+		rgb_color dotColor = fDevice.connected && IsEnabled()
+			? ui_color(B_SUCCESS_COLOR) : faint_color(text, background);
+		owner->SetHighColor(dotColor);
+		owner->FillEllipse(dotFrame);
+		owner->SetHighColor(faint_color(text, background));
+		owner->DrawString(state.String(), BPoint(stateLeft, baseline));
+
+		float textRight = dotFrame.left - inset;
+		owner->SetHighColor(text);
+		BString name = fDevice.info.DisplayName();
+		owner->TruncateString(&name, B_TRUNCATE_END,
+			textRight - frame.left - inset);
+		owner->DrawString(name.String(), BPoint(frame.left + inset, baseline));
+
+		BString kind = fDevice.Kind();
+		if (kind.IsEmpty())
+			kind = B_TRANSLATE("Bluetooth device");
+		owner->SetHighColor(faint_color(text, background));
+		owner->TruncateString(&kind, B_TRUNCATE_END,
+			frame.right - frame.left - 2 * inset);
+		owner->DrawString(kind.String(), BPoint(frame.left + inset,
+			baseline + fLineHeight));
+	}
+
+private:
+	BluetoothPairedDevice	fDevice;
+	float					fLineHeight;
+};
+
+
 } // namespace
+
+
+// #pragma mark - MyDevices
+
+
+struct BluetoothView::MyDevices {
+	BListView*			list;
+	BStringView*		name;
+	BStringView*		kind;
+	BStringView*		statusLabel;
+	BStringView*		status;
+	BStringView*		connectionLabel;
+	BStringView*		connection;
+	BStringView*		addressLabel;
+	BStringView*		address;
+	BButton*			disconnect;
+	BButton*			forget;
+	std::vector<BluetoothPairedDevice> paired;
+};
+
+
+static bool
+same_paired(const std::vector<BluetoothPairedDevice>& a,
+	const std::vector<BluetoothPairedDevice>& b)
+{
+	if (a.size() != b.size())
+		return false;
+	for (size_t i = 0; i < a.size(); i++) {
+		if (!bdaddrUtils::Compare(a[i].info.address, b[i].info.address)
+			|| a[i].info.name != b[i].info.name
+			|| a[i].info.deviceClass != b[i].info.deviceClass
+			|| a[i].lowEnergy != b[i].lowEnergy || a[i].hid != b[i].hid
+			|| a[i].connected != b[i].connected)
+			return false;
+	}
+	return true;
+}
 
 
 // #pragma mark - BluetoothView
@@ -214,53 +299,84 @@ BluetoothView::BluetoothView(bool settingsPage)
 	fHasState(false),
 	fRadioFailed(false),
 	fController(NULL),
+	fSummaryIcon(NULL),
+	fSummaryTitle(NULL),
+	fSummaryDetail(NULL),
 	fPairStatus(new BString),
-	fPairing(0)
+	fPairing(0),
+	fMine(new MyDevices)
 {
 	BFont bold = bold_font();
+	const float scale = font_scale();
 
-	GlyphView* glyph = new GlyphView();
-	fSummaryIcon = glyph;
-	fSummaryTitle = new BStringView("summary title", "");
-	fSummaryTitle->SetFont(&bold);
-	fSummaryDetail = new BStringView("summary detail", "");
-	fSummaryTitle->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
-	fSummaryDetail->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
+	// My devices: the list, and the panel for the device chosen in it.
+	fMine->list = new BListView("my devices", B_SINGLE_SELECTION_LIST);
+	fMine->list->SetSelectionMessage(new BMessage(kMsgMineSelected));
+	BScrollView* mineScroller = new BScrollView("my devices scroll",
+		fMine->list, 0, false, true);
+	mineScroller->SetExplicitMinSize(BSize(B_SIZE_UNSET, roundf(140 * scale)));
 
-	BAppearanceKit::BCard* summary = new BAppearanceKit::BCard("summary",
-		BAppearanceKit::B_CARD_PANEL, B_HORIZONTAL);
-	BLayoutBuilder::Group<>(summary, B_HORIZONTAL)
+	fMine->name = new BStringView("device name", "");
+	fMine->name->SetFont(&bold);
+	fMine->kind = new BStringView("device kind", "");
+	fMine->statusLabel = new BStringView("status label", "");
+	fMine->status = new BStringView("status", "");
+	fMine->connectionLabel = new BStringView("connection label", "");
+	fMine->connection = new BStringView("connection", "");
+	fMine->addressLabel = new BStringView("address label", "");
+	fMine->address = new BStringView("address", "");
+	BStringView* texts[] = { fMine->name, fMine->kind, fMine->status,
+		fMine->connection, fMine->address };
+	for (size_t i = 0; i < sizeof(texts) / sizeof(texts[0]); i++)
+		texts[i]->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
+	fMine->disconnect = new BButton("disconnect", B_TRANSLATE("Disconnect"),
+		new BMessage(kMsgDisconnectButton));
+	fMine->forget = new BButton("forget", B_TRANSLATE("Forget"),
+		new BMessage(kMsgForgetButton));
+
+	BAppearanceKit::BCard* info = new BAppearanceKit::BCard("device info",
+		BAppearanceKit::B_CARD_PANEL, B_VERTICAL);
+	// As wide as its buttons need, at least a third of the page width at
+	// font size 12; the list takes the rest.
+	info->SetExplicitMinSize(BSize(roundf(250 * scale), B_SIZE_UNSET));
+	BLayoutBuilder::Group<>(info, B_VERTICAL, B_USE_SMALL_SPACING)
 		.SetInsets(B_USE_DEFAULT_SPACING)
-		.Add(glyph)
 		.AddGroup(B_VERTICAL, 0)
-			.Add(fSummaryTitle)
-			.Add(fSummaryDetail)
+			.Add(fMine->name)
+			.Add(fMine->kind)
 		.End()
-		.AddGlue();
+		.AddGrid(B_USE_DEFAULT_SPACING, 0)
+			.Add(fMine->statusLabel, 0, 0)
+			.Add(fMine->status, 1, 0)
+			.Add(fMine->connectionLabel, 0, 1)
+			.Add(fMine->connection, 1, 1)
+			.Add(fMine->addressLabel, 0, 2)
+			.Add(fMine->address, 1, 2)
+		.End()
+		.AddGlue()
+		.AddGroup(B_HORIZONTAL)
+			.AddGlue()
+			.Add(fMine->disconnect)
+			.Add(fMine->forget)
+		.End();
 
-	// The box title is the switch, like "Enable notifications".
-	fRadioSwitch = new BCheckBox("radio switch", B_TRANSLATE("Bluetooth"),
-		new BMessage(kMsgRadioSwitch));
-	fRadioSwitch->SetFont(&bold);
-	fRadioMenu = new BPopUpMenu(B_TRANSLATE("No radio"));
-	fRadioField = new BMenuField("radio", B_TRANSLATE("Radio:"), fRadioMenu);
-	fRadioNote = new BStringView("radio note", "");
-	fRadioNote->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
-
-	BBox* radioBox = new BBox("radio box");
-	radioBox->SetLabel(fRadioSwitch);
-	BGroupView* radioInner = new BGroupView(B_VERTICAL, B_USE_SMALL_SPACING);
-	BLayoutBuilder::Group<>(radioInner)
+	BStringView* mineTitle = new BStringView("my devices title",
+		B_TRANSLATE("My devices"));
+	mineTitle->SetFont(&bold);
+	BBox* mineBox = new BBox("my devices box");
+	mineBox->SetLabel(mineTitle);
+	BGroupView* mineInner = new BGroupView(B_HORIZONTAL);
+	BLayoutBuilder::Group<>(mineInner)
 		.SetInsets(B_USE_DEFAULT_SPACING)
-		.Add(fRadioField)
-		.Add(fRadioNote);
-	radioBox->AddChild(radioInner);
+		.Add(mineScroller, 10.0f)
+		.Add(info, 0.0f);
+	mineBox->AddChild(mineInner);
 
+	// Devices nearby: the scan. A paired device is under My devices.
 	fDeviceList = new BListView("devices", B_SINGLE_SELECTION_LIST);
 	BScrollView* scroller = new BScrollView("devices scroll", fDeviceList, 0,
 		false, true);
-	scroller->SetExplicitMinSize(BSize(B_SIZE_UNSET,
-		roundf(150 * font_scale())));
+	scroller->SetExplicitMinSize(BSize(B_SIZE_UNSET, roundf(90 * scale)));
 	fScanStatus = new BStringView("scan status", "");
 	fScanStatus->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
 	fScanButton = new BButton("scan", B_TRANSLATE("Scan"),
@@ -268,8 +384,6 @@ BluetoothView::BluetoothView(bool settingsPage)
 	fDeviceList->SetSelectionMessage(new BMessage(kMsgDeviceSelected));
 	BButton* pairButton = new BButton("pair", B_TRANSLATE("Pair"),
 		new BMessage(kMsgPairButton));
-	BButton* forgetButton = new BButton("forget", B_TRANSLATE("Forget"),
-		new BMessage(kMsgForgetButton));
 
 	BStringView* devicesTitle = new BStringView("devices title",
 		B_TRANSLATE("Devices nearby"));
@@ -284,21 +398,35 @@ BluetoothView::BluetoothView(bool settingsPage)
 		.AddGroup(B_HORIZONTAL)
 			.Add(fScanStatus)
 			.AddGlue()
-			.Add(forgetButton)
 			.Add(pairButton)
 			.Add(fScanButton)
 		.End();
 	devicesBox->AddChild(devicesInner);
 
-	// The list of devices takes the rest of the height, down to the bottom
-	// of the page (in Settings: as far down as the list of pages).
+	// The last line: the switch and the radio, without a box. Not used
+	// often, so it does not stand above the devices.
+	fRadioSwitch = new BCheckBox("radio switch", B_TRANSLATE("Bluetooth on"),
+		new BMessage(kMsgRadioSwitch));
+	fRadioMenu = new BPopUpMenu(B_TRANSLATE("No radio"));
+	fRadioField = new BMenuField("radio", NULL, fRadioMenu);
+	fRadioNote = new BStringView("radio note", "");
+	fRadioNote->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
+
+	// Devices nearby takes the rest of the height, down to the Bluetooth
+	// line (in Settings: as far down as the list of pages).
 	BLayoutBuilder::Group<>(this)
 		.SetInsets(settingsPage ? 0 : B_USE_WINDOW_SPACING)
-		.Add(summary)
-		.Add(radioBox)
-		.Add(devicesBox, 10.0f);
+		.Add(mineBox, 0.0f)
+		.Add(devicesBox, 10.0f)
+		.AddGroup(B_HORIZONTAL)
+			.Add(fRadioSwitch)
+			.Add(fRadioNote)
+			.AddGlue()
+			.Add(fRadioField)
+		.End();
 
 	_SetState(fState);
+	_UpdateMine();
 }
 
 
@@ -307,7 +435,10 @@ BluetoothView::~BluetoothView()
 	_StopController();
 	for (int32 i = fDeviceList->CountItems() - 1; i >= 0; i--)
 		delete fDeviceList->RemoveItem(i);
+	for (int32 i = fMine->list->CountItems() - 1; i >= 0; i--)
+		delete fMine->list->RemoveItem(i);
 	delete fPairStatus;
+	delete fMine;
 }
 
 
@@ -319,9 +450,16 @@ BluetoothView::AttachedToWindow()
 	fRadioSwitch->SetTarget(this);
 	fScanButton->SetTarget(this);
 	fDeviceList->SetTarget(this);
+	fMine->list->SetTarget(this);
+	fMine->disconnect->SetTarget(this);
+	fMine->forget->SetTarget(this);
 	if (BButton* pairButton = pair_button(this))
 		pairButton->SetTarget(this);
 	fRadioMenu->SetTargetForItems(this);
+
+	fRadioNote->SetHighColor(faint_color(ui_color(B_PANEL_TEXT_COLOR),
+		ui_color(B_PANEL_BACKGROUND_COLOR)));
+	fMine->kind->SetHighColor(fRadioNote->HighColor());
 
 	if (fController == NULL) {
 		fController = new(std::nothrow) BluetoothController(BMessenger(this));
@@ -350,8 +488,18 @@ BluetoothView::MessageReceived(BMessage* message)
 		case kMsgBluetoothStateChanged:
 		{
 			BluetoothState state;
-			if (state.Unarchive(*message) == B_OK)
-				_SetState(state);
+			if (state.Unarchive(*message) != B_OK)
+				break;
+			std::vector<BluetoothPairedDevice> paired;
+			BluetoothState::UnarchivePaired(*message, paired);
+			bool pairedChanged = !same_paired(paired, fMine->paired);
+			fMine->paired.swap(paired);
+			_SetState(state);
+			if (pairedChanged) {
+				_UpdateMine();
+				_UpdateDevices();
+				_UpdateControls();
+			}
 			break;
 		}
 
@@ -400,6 +548,10 @@ BluetoothView::MessageReceived(BMessage* message)
 			_UpdateControls();
 			break;
 
+		case kMsgMineSelected:
+			_UpdateInfo();
+			break;
+
 		case kMsgPairButton:
 		{
 			DeviceItem* item = dynamic_cast<DeviceItem*>(
@@ -424,16 +576,18 @@ BluetoothView::MessageReceived(BMessage* message)
 			break;
 		}
 
+		case kMsgDisconnectButton:
 		case kMsgForgetButton:
 		{
-			DeviceItem* item = dynamic_cast<DeviceItem*>(
-				fDeviceList->ItemAt(fDeviceList->CurrentSelection()));
+			PairedItem* item = dynamic_cast<PairedItem*>(
+				fMine->list->ItemAt(fMine->list->CurrentSelection()));
 			if (item == NULL)
 				break;
-			BMessage request(kMsgBluetoothForget);
-			request.AddData("bdaddr", B_ANY_TYPE, &item->Info().address,
-				sizeof(bdaddr_t));
-			request.AddString("name", item->Info().name);
+			BMessage request(message->what == kMsgForgetButton
+				? kMsgBluetoothForget : kMsgBluetoothDisconnect);
+			request.AddData("bdaddr", B_ANY_TYPE,
+				&item->Device().info.address, sizeof(bdaddr_t));
+			request.AddString("name", item->Device().info.name);
 			_SendToController(&request);
 			break;
 		}
@@ -506,6 +660,17 @@ BluetoothView::_SendToController(BMessage* message)
 }
 
 
+bool
+BluetoothView::_IsPaired(const bdaddr_t& address) const
+{
+	for (size_t i = 0; i < fMine->paired.size(); i++) {
+		if (bdaddrUtils::Compare(fMine->paired[i].info.address, address))
+			return true;
+	}
+	return false;
+}
+
+
 static bool
 same_devices(const std::vector<BluetoothDeviceInfo>& a,
 	const std::vector<BluetoothDeviceInfo>& b)
@@ -527,12 +692,16 @@ BluetoothView::_SetState(const BluetoothState& state)
 {
 	bool devicesChanged = !fHasState
 		|| !same_devices(state.devices, fState.devices);
+	bool enabledChanged = state.radioEnabled != fState.radioEnabled
+		|| state.service != fState.service;
 	fState = state;
 	fHasState = true;
 
 	_UpdateRadio();
 	if (devicesChanged)
 		_UpdateDevices();
+	if (enabledChanged)
+		_UpdateMine();
 	_UpdateControls();
 }
 
@@ -540,44 +709,36 @@ BluetoothView::_SetState(const BluetoothState& state)
 void
 BluetoothView::_UpdateRadio()
 {
-	BString title;
-	BString detail;
+	BString note;
 	const BluetoothRadioInfo* radio = fState.CurrentRadio();
 
 	switch (fState.service) {
 		case BLUETOOTH_SERVICE_STARTING:
-			title = B_TRANSLATE("Starting Bluetooth" B_UTF8_ELLIPSIS);
+			note = B_TRANSLATE("Starting Bluetooth" B_UTF8_ELLIPSIS);
 			break;
 		case BLUETOOTH_SERVICE_FAILED:
-			title = B_TRANSLATE("Bluetooth is not available");
-			detail = B_TRANSLATE("The Bluetooth service could not be "
-				"started.");
+			note = B_TRANSLATE("Bluetooth is not available: the service could "
+				"not be started.");
 			break;
 		case BLUETOOTH_SERVICE_STOPPED:
-			title = B_TRANSLATE("Bluetooth is not available");
-			detail = B_TRANSLATE("The Bluetooth service stopped.");
+			note = B_TRANSLATE("Bluetooth is not available: the service "
+				"stopped.");
 			break;
 		default:
-		{
-			// "0 radios" is also the pass line of docs/BLUETOOTH.md, step 3a.
-			static BStringFormat format(B_TRANSLATE(
-				"{0, plural, one{# radio} other{# radios}}"));
-			format.Format(title, (int32)fState.radios.size());
-			if (radio != NULL) {
-				detail = radio->name.IsEmpty()
+			if (fState.radios.empty())
+				note = B_TRANSLATE("No Bluetooth radio was found.");
+			else if (fRadioFailed)
+				note = B_TRANSLATE("Bluetooth could not be turned on or off.");
+			else if (!fRadioSwitchAllowed) {
+				note = B_TRANSLATE("Only an administrator can turn Bluetooth "
+					"on or off.");
+			} else if (fState.radios.size() == 1 && radio != NULL) {
+				note = radio->name.IsEmpty()
 					? BString(B_TRANSLATE("Bluetooth radio")) : radio->name;
-				detail << " \xC2\xB7 " << bdaddrUtils::ToString(radio->address);
-			} else if (fState.radios.empty())
-				detail = B_TRANSLATE("No Bluetooth radio was found.");
+			}
 			break;
-		}
 	}
-
-	fSummaryTitle->SetText(title.String());
-	fSummaryDetail->SetText(detail.String());
-	static_cast<GlyphView*>(fSummaryIcon)->SetActive(
-		fState.service == BLUETOOTH_SERVICE_RUNNING && fState.radioEnabled
-		&& radio != NULL);
+	fRadioNote->SetText(note.String());
 
 	// The radio menu, only when there is more than one radio.
 	bool rebuild = fRadioMenu->CountItems() != (int32)fState.radios.size();
@@ -612,24 +773,6 @@ BluetoothView::_UpdateRadio()
 			fRadioField->Show();
 	} else if (!fRadioField->IsHidden(fRadioField))
 		fRadioField->Hide();
-
-	BString note;
-	if (fState.service == BLUETOOTH_SERVICE_RUNNING) {
-		if (fRadioFailed) {
-			note = B_TRANSLATE("Bluetooth could not be turned on or off.");
-		} else if (!fRadioSwitchAllowed) {
-			note = B_TRANSLATE("Only an administrator can turn Bluetooth on "
-				"or off.");
-		} else if (!fState.radioEnabled) {
-			note = B_TRANSLATE("This computer does not look for devices and "
-				"does not accept connections.");
-		}
-	}
-	if (note.IsEmpty()) {
-		note = B_TRANSLATE("Turns Bluetooth on or off for everyone who uses "
-			"this computer.");
-	}
-	fRadioNote->SetText(note.String());
 }
 
 
@@ -642,22 +785,31 @@ BluetoothView::_UpdateDevices()
 	if (current != NULL)
 		selected = current->Info().AddressString();
 
+	// A device that is paired is under My devices, not here.
+	std::vector<BluetoothDeviceInfo> shown;
+	for (size_t i = 0; i < fState.devices.size(); i++) {
+		if (!_IsPaired(fState.devices[i].address))
+			shown.push_back(fState.devices[i]);
+	}
+	const bool enabled = fState.service == BLUETOOTH_SERVICE_RUNNING
+		&& fState.radioEnabled;
+
 	// Every scan answer brings a new list. The same devices in the same
 	// order are updated where they are; otherwise the list is filled again
 	// at the same scroll position. It emptied the list each time, which
 	// scrolled back to the top and lost a device selected further down.
-	bool sameOrder = fDeviceList->CountItems()
-		== (int32)fState.devices.size();
+	bool sameOrder = fDeviceList->CountItems() == (int32)shown.size();
 	for (int32 i = 0; sameOrder && i < fDeviceList->CountItems(); i++) {
 		DeviceItem* item = dynamic_cast<DeviceItem*>(fDeviceList->ItemAt(i));
 		sameOrder = item != NULL && item->Info().AddressString()
-			== fState.devices[i].AddressString();
+			== shown[i].AddressString();
 	}
 	if (sameOrder) {
 		for (int32 i = 0; i < fDeviceList->CountItems(); i++) {
 			DeviceItem* item = static_cast<DeviceItem*>(
 				fDeviceList->ItemAt(i));
-			item->SetInfo(fState.devices[i]);
+			item->SetInfo(shown[i]);
+			item->SetEnabled(enabled);
 			fDeviceList->InvalidateItem(i);
 		}
 		return;
@@ -668,14 +820,116 @@ BluetoothView::_UpdateDevices()
 	for (int32 i = fDeviceList->CountItems() - 1; i >= 0; i--)
 		delete fDeviceList->RemoveItem(i);
 
-	for (size_t i = 0; i < fState.devices.size(); i++) {
-		DeviceItem* item = new DeviceItem(fState.devices[i]);
+	for (size_t i = 0; i < shown.size(); i++) {
+		DeviceItem* item = new DeviceItem(shown[i]);
+		item->SetEnabled(enabled);
 		fDeviceList->AddItem(item);
 		if (!selected.IsEmpty() && item->Info().AddressString() == selected)
 			fDeviceList->Select(fDeviceList->CountItems() - 1);
 	}
 	fDeviceList->ScrollTo(0, top);
 	fDeviceList->SetSelectionMessage(new BMessage(kMsgDeviceSelected));
+}
+
+
+void
+BluetoothView::_UpdateMine()
+{
+	BListView* list = fMine->list;
+	const std::vector<BluetoothPairedDevice>& paired = fMine->paired;
+	const bool enabled = fState.service == BLUETOOTH_SERVICE_RUNNING
+		&& fState.radioEnabled;
+
+	BString selected;
+	PairedItem* current = dynamic_cast<PairedItem*>(
+		list->ItemAt(list->CurrentSelection()));
+	if (current != NULL)
+		selected = current->Device().info.AddressString();
+
+	// Updated in place when the same devices are in the same order, as in
+	// _UpdateDevices(): the selection and the scroll position stay.
+	bool sameOrder = list->CountItems() == (int32)paired.size();
+	for (int32 i = 0; sameOrder && i < list->CountItems(); i++) {
+		PairedItem* item = dynamic_cast<PairedItem*>(list->ItemAt(i));
+		sameOrder = item != NULL && item->Device().info.AddressString()
+			== paired[i].info.AddressString();
+	}
+	if (sameOrder) {
+		for (int32 i = 0; i < list->CountItems(); i++) {
+			PairedItem* item = static_cast<PairedItem*>(list->ItemAt(i));
+			item->SetDevice(paired[i]);
+			item->SetEnabled(enabled);
+			list->InvalidateItem(i);
+		}
+	} else {
+		const float top = list->Bounds().top;
+		list->SetSelectionMessage(NULL);
+		for (int32 i = list->CountItems() - 1; i >= 0; i--)
+			delete list->RemoveItem(i);
+		for (size_t i = 0; i < paired.size(); i++) {
+			PairedItem* item = new PairedItem(paired[i]);
+			item->SetEnabled(enabled);
+			list->AddItem(item);
+			if (!selected.IsEmpty()
+				&& item->Device().info.AddressString() == selected)
+				list->Select(list->CountItems() - 1);
+		}
+		// The first device is shown when nothing was chosen yet.
+		if (list->CurrentSelection() < 0 && list->CountItems() > 0)
+			list->Select(0);
+		list->ScrollTo(0, top);
+		list->SetSelectionMessage(new BMessage(kMsgMineSelected));
+	}
+	_UpdateInfo();
+}
+
+
+void
+BluetoothView::_UpdateInfo()
+{
+	PairedItem* item = dynamic_cast<PairedItem*>(
+		fMine->list->ItemAt(fMine->list->CurrentSelection()));
+	const bool running = fState.service == BLUETOOTH_SERVICE_RUNNING;
+
+	if (item == NULL) {
+		fMine->name->SetText(fMine->paired.empty()
+			? B_TRANSLATE("No paired devices") : "");
+		fMine->kind->SetText(fMine->paired.empty()
+			? B_TRANSLATE("Pair one under Devices nearby.")
+			: B_TRANSLATE("Choose a device."));
+		fMine->statusLabel->SetText("");
+		fMine->status->SetText("");
+		fMine->connectionLabel->SetText("");
+		fMine->connection->SetText("");
+		fMine->addressLabel->SetText("");
+		fMine->address->SetText("");
+		fMine->disconnect->SetEnabled(false);
+		fMine->forget->SetEnabled(false);
+		return;
+	}
+
+	const BluetoothPairedDevice& device = item->Device();
+	BString kind = device.Kind();
+	if (kind.IsEmpty())
+		kind = B_TRANSLATE("Bluetooth device");
+	fMine->name->SetText(device.info.DisplayName().String());
+	fMine->kind->SetText(kind.String());
+	fMine->statusLabel->SetText(B_TRANSLATE("Status:"));
+	if (running && !fState.radioEnabled)
+		fMine->status->SetText(B_TRANSLATE("Bluetooth is off"));
+	else {
+		fMine->status->SetText(device.connected ? B_TRANSLATE("Connected")
+			: B_TRANSLATE("Not connected"));
+	}
+	fMine->connectionLabel->SetText(B_TRANSLATE("Uses:"));
+	fMine->connection->SetText(device.lowEnergy
+		? B_TRANSLATE("Bluetooth Low Energy")
+		: B_TRANSLATE("Bluetooth Classic"));
+	fMine->addressLabel->SetText(B_TRANSLATE("Address:"));
+	fMine->address->SetText(device.info.AddressString().String());
+	fMine->disconnect->SetEnabled(running && fState.radioEnabled
+		&& device.connected);
+	fMine->forget->SetEnabled(running && fPairing == 0);
 }
 
 
@@ -698,10 +952,7 @@ BluetoothView::_UpdateControls()
 		pairButton->SetEnabled(running && fState.radioEnabled && radio != NULL
 			&& fDeviceList->CurrentSelection() >= 0 && fPairing == 0);
 	}
-	if (BButton* forgetButton = dynamic_cast<BButton*>(FindView("forget"))) {
-		forgetButton->SetEnabled(running && radio != NULL
-			&& fDeviceList->CurrentSelection() >= 0 && fPairing == 0);
-	}
+	_UpdateInfo();
 
 	BString status;
 	if (!running || radio == NULL)
@@ -712,9 +963,9 @@ BluetoothView::_UpdateControls()
 		status = B_TRANSLATE("Looking for devices" B_UTF8_ELLIPSIS);
 	else if (fState.scanned) {
 		static BStringFormat format(B_TRANSLATE("{0, plural, "
-			"=0{No devices found.} one{# device found.} "
-			"other{# devices found.}}"));
-		format.Format(status, (int32)fState.devices.size());
+			"=0{No new devices found.} one{# new device found.} "
+			"other{# new devices found.}}"));
+		format.Format(status, (int32)fDeviceList->CountItems());
 	} else {
 		status = B_TRANSLATE("Make sure the other device can be found, then "
 			"press Scan.");

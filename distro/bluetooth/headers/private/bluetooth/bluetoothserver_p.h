@@ -63,6 +63,15 @@
 // Forget a paired device (its Classic link key or LE keys), and end its
 // link: data "bdaddr"; the reply has bool "forgotten".
 #define BT_MSG_R5_FORGET                'r5fG'
+// The paired devices of every radio, for My devices on the Bluetooth
+// page. Reply, once per device: data "bdaddr", string "name", uint32
+// "class" (the class of device; 0 for LE), bool "le", bool "hid" (LE
+// HID over GATT) and bool "connected". No keys.
+#define BT_MSG_R5_GET_PAIRED            'r5pG'
+// End the link to a device, and keep its keys: data "bdaddr". A paired
+// device that connects again (a mouse that is moved) comes back. Reply:
+// bool "disconnected".
+#define BT_MSG_R5_DISCONNECT            'r5dC'
 // SPDX-SnippetEnd
 
 // SPDX-SnippetBegin

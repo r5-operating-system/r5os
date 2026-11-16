@@ -1725,3 +1725,43 @@ LEManager::Forget(const bdaddr_t& address)
 	}
 	return found;
 }
+
+
+void
+LEManager::AddPaired(BMessage& reply)
+{
+	BAutolock _(fLock);
+	for (size_t i = 0; i < fBonds.size(); i++) {
+		const LEBond* bond = fBonds[i];
+		bool connected = false;
+		for (size_t j = 0; j < fLinks.size() && !connected; j++) {
+			const Link* link = fLinks[j];
+			connected = link->encrypted
+				&& (bdaddrUtils::Compare(link->address, bond->address)
+					|| bdaddrUtils::Compare(link->bond.address, bond->address));
+		}
+		reply.AddData("bdaddr", B_ANY_TYPE, &bond->address,
+			sizeof(bond->address));
+		reply.AddString("name", bond->name);
+		reply.AddUInt32("class", 0);
+		reply.AddBool("le", true);
+		reply.AddBool("hid", bond->hid);
+		reply.AddBool("connected", connected);
+	}
+}
+
+
+bool
+LEManager::Disconnect(const bdaddr_t& address)
+{
+	BAutolock _(fLock);
+	for (size_t i = 0; i < fLinks.size(); i++) {
+		Link* link = fLinks[i];
+		if (bdaddrUtils::Compare(link->address, address)
+			|| bdaddrUtils::Compare(link->bond.address, address)) {
+			_CloseLink(link, true);
+			return true;
+		}
+	}
+	return false;
+}

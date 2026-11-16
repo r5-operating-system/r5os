@@ -36,10 +36,10 @@ public:
 		BLayoutBuilder::Group<>(this)
 			.Add(fView);
 
-		// The box titles and the summary title in the Settings bold face;
-		// r5_settings_apply_plain() keeps that face.
+		// The box titles and the name in the information panel in the
+		// Settings bold face; r5_settings_apply_plain() keeps that face.
 		static const char* const kBold[] = {
-			"summary title", "radio switch", "devices title"
+			"my devices title", "devices title", "device name"
 		};
 		for (size_t i = 0; i < sizeof(kBold) / sizeof(kBold[0]); i++) {
 			BView* view = fView->FindView(kBold[i]);
