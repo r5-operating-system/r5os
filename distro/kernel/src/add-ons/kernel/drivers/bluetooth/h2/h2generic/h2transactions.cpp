@@ -84,21 +84,23 @@ event_complete(void* cookie, status_t status, void* data, size_t actual_len)
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
-	// A late answer to a command that already timed out (h2command.h).
-	if (h2_command_event(bdev, (const uint8*)data, actual_len))
-		goto resubmit;
-	// SPDX-SnippetEnd
-
-	if (assembly_rx(bdev, BT_EVENT, data, actual_len) == B_OK) {
-		// SPDX-SnippetBegin
-		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
-		// SPDX-License-Identifier: MIT
-		// A received event; this counted as sent.
-		bdev->stat.successfulRX++;
-		// SPDX-SnippetEnd
-	} else {
-		bdev->stat.errorRX++;
+	// Late answers to commands that already timed out are taken out, event
+	// by event (h2command.h). What is left can be nothing: only a late
+	// answer, or the start of an event that the next transfer completes.
+	{
+		size_t size;
+		const uint8* events = h2_command_events(bdev, (const uint8*)data,
+			actual_len, &size);
+		if (size != 0) {
+			if (assembly_rx(bdev, BT_EVENT, (void*)events, size) == B_OK) {
+				// A received event; this counted as sent.
+				bdev->stat.successfulRX++;
+			} else {
+				bdev->stat.errorRX++;
+			}
+		}
 	}
+	// SPDX-SnippetEnd
 
 resubmit:
 
