@@ -72,6 +72,30 @@ static const bigtime_t kFenceLimit = 15000000;
 static const uint64 kFenceGraceNs = 5000000000ULL;
 static const uint64 kFenceStepNs = 100000000ULL;
 static const bigtime_t kReportInterval = 10000000;
+// M13 step 0: a frame within this time of the one before counts as motion
+// (dragging, scrolling, resizing), and damage within this time of a mouse
+// move counts as its answer.
+static const bigtime_t kFrameGap = 400000;
+static const bigtime_t kInputWindow = 400000;
+// The earliest mouse move that no damage has answered yet, or 0.
+static int64 sInputWhen = 0;
+
+
+static void
+sort_samples(bigtime_t* samples, int32 count)
+{
+	// insertion sort, as for the compose median: at most 1024 samples,
+	// once per report
+	for (int32 i = 1; i < count; i++) {
+		bigtime_t value = samples[i];
+		int32 j = i - 1;
+		while (j >= 0 && samples[j] > value) {
+			samples[j + 1] = samples[j];
+			j--;
+		}
+		samples[j + 1] = value;
+	}
+}
 
 
 static void
@@ -875,6 +899,10 @@ Compositor::Compositor(Desktop* desktop, HWInterface* screen)
 	fBudget(0),
 	fFrames(0),
 	fSampleCount(0),
+	fFrameCount(0),
+	fLastFrame(0),
+	fInputCount(0),
+	fFrameInput(0),
 	fReportStart(0),
 	fCpuAtReport(0),
 	fTeamCpuAtReport(0),
@@ -2148,6 +2176,10 @@ Compositor::Damage(const BRegion& region, WindowHWInterface* source)
 		return;
 	BAutolock _(fDamageLock);
 	fDamage.Include(&region);
+	// M13 step 0: the mouse move this damage answers, if it is recent
+	int64 input = atomic_get_and_set64(&sInputWhen, 0);
+	if (input != 0 && fFrameInput == 0 && system_time() - input < kInputWindow)
+		fFrameInput = input;
 	// M11 step 4: who changed it, for the kept blur of the glass
 	if (source != NULL)
 		source->ContentDamage().Include(&region);
@@ -2387,6 +2419,7 @@ Compositor::_ComposeLoop()
 
 		BRegion damage;
 		BRegion generic;
+		bigtime_t frameInput = 0;
 		{
 			// M11 step 4: with it, what each window changed itself
 			// (WindowHWInterface::ContentDamage) and what nobody did.
@@ -2395,6 +2428,8 @@ Compositor::_ComposeLoop()
 			fWakePending = false;
 			damage = fDamage;
 			fDamage.MakeEmpty();
+			frameInput = fFrameInput;
+			fFrameInput = 0;
 			generic = fGenericDamage;
 			fGenericDamage.MakeEmpty();
 			for (int32 i = 0; i < fEntries.CountItems(); i++) {
@@ -2520,8 +2555,30 @@ Compositor::_ComposeLoop()
 			// fFailure is set; the top of the loop handles it
 			continue;
 		}
+		// M13 step 0: this frame is on the screen
+		bigtime_t shown = system_time();
+		if (fLastFrame > 0 && shown - fLastFrame < kFrameGap
+			&& fFrameCount < (int32)(sizeof(fFrameSamples)
+				/ sizeof(fFrameSamples[0])))
+			fFrameSamples[fFrameCount++] = shown - fLastFrame;
+		fLastFrame = shown;
+		if (frameInput != 0 && fInputCount < (int32)(sizeof(fInputSamples)
+				/ sizeof(fInputSamples[0])))
+			fInputSamples[fInputCount++] = shown - frameInput;
 		Damage(retry);
 	}
+}
+
+
+/*static*/ void
+Compositor::NoteInput()
+{
+	// keep the earliest move not answered yet; one that no damage answered
+	// is replaced once it is too old to count
+	bigtime_t now = system_time();
+	int64 old = atomic_get64(&sInputWhen);
+	if (old == 0 || now - old >= kInputWindow)
+		atomic_test_and_set64(&sInputWhen, now, old);
 }
 
 
@@ -4931,6 +4988,21 @@ Compositor::_Report()
 			fPresentSamples[fPresentCount / 2],
 			fVulkan != NULL && fVulkan->scanActive ? "vulkan" : "cpu");
 		fPresentCount = 0;
+	}
+	// M13 step 0: only when something moved in these 10 s
+	if (fFrameCount > 0) {
+		sort_samples(fFrameSamples, fFrameCount);
+		log_line("frame interval median %" B_PRId64 " us p95 %" B_PRId64
+			" us frames %" B_PRId32, fFrameSamples[fFrameCount / 2],
+			fFrameSamples[fFrameCount * 95 / 100], fFrameCount);
+		fFrameCount = 0;
+	}
+	if (fInputCount > 0) {
+		sort_samples(fInputSamples, fInputCount);
+		log_line("input latency median %" B_PRId64 " us p95 %" B_PRId64
+			" us moves %" B_PRId32, fInputSamples[fInputCount / 2],
+			fInputSamples[fInputCount * 95 / 100], fInputCount);
+		fInputCount = 0;
 	}
 	log_line("window memory %" B_PRIu64 " MB", fWindowBytes / (1024 * 1024));
 
