@@ -209,14 +209,27 @@ HciPacketHandler(void* data, int32 code, size_t size)
 		__func__, size, deviceId);
 
 	if (bluetoothDevice != NULL) {
-		return Assemble(bluetoothDevice, Bluetooth::CodeHandler::Protocol(code),
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// Assemble() logs and drops a bad packet. Its status is not returned:
+		// PortListener ends the receive thread on anything but B_OK, and
+		// then the transport blocks on the full port (review of #4288).
+		Assemble(bluetoothDevice, Bluetooth::CodeHandler::Protocol(code),
 			data, size);
+		// SPDX-SnippetEnd
 	} else {
 		ERROR("%s: Device 0x%" B_PRIx32 " could not be matched\n", __func__,
 			deviceId);
 	}
 
-	return B_ERROR;
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// A packet for a radio that is gone (a command timeout posted after it
+	// was unplugged) is dropped, for the same reason.
+	return B_OK;
+	// SPDX-SnippetEnd
 }
 
 
@@ -309,6 +322,10 @@ PostCommand(hci_id hciId, net_buffer* buffer)
 	// SPDX-License-Identifier: MIT
 	if (buffer == NULL)
 		return B_BAD_VALUE;
+
+	// Held through the hook, so UnregisterDriver() cannot delete the device
+	// in between (review of #4288). The hooks do not take this lock.
+	RecursiveLocker locker(&sListLock);
 	// SPDX-SnippetEnd
 
 	bluetooth_device* device = FindDeviceByID(hciId);
@@ -336,6 +353,11 @@ PostACL(hci_id hciId, net_buffer* buffer)
 	// SPDX-License-Identifier: MIT
 	if (buffer == NULL)
 		return B_BAD_VALUE;
+
+	// PostACL() owns the buffer, also when it fails: after a split, part of
+	// it may already be sent, so a caller cannot free or resend it. Held
+	// through the hooks, as in PostCommand().
+	RecursiveLocker locker(&sListLock);
 	// SPDX-SnippetEnd
 
 	uint16 handle = buffer->type; // TODO: CodeHandler
@@ -344,6 +366,11 @@ PostACL(hci_id hciId, net_buffer* buffer)
 
 	if (device == NULL) {
 		ERROR("%s: No device 0x%" B_PRIx32 "\n", __func__, hciId);
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		gBufferModule->free(buffer);
+		// SPDX-SnippetEnd
 		return B_ERROR;
 	}
 
@@ -359,8 +386,14 @@ PostACL(hci_id hciId, net_buffer* buffer)
 		if (curr_frame->size > device->mtu) {
 			next_frame = curr_frame;
 			curr_frame = gBufferModule->split(next_frame, device->mtu);
-			if (curr_frame == NULL)
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			if (curr_frame == NULL) {
+				gBufferModule->free(next_frame);
 				return B_NO_MEMORY;
+			}
+			// SPDX-SnippetEnd
 		} else {
 			next_frame = NULL;
 		}
@@ -406,6 +439,13 @@ PostACL(hci_id hciId, net_buffer* buffer)
 status_t
 PostSCO(hci_id hciId, net_buffer* buffer)
 {
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	if (buffer == NULL)
+		return B_BAD_VALUE;
+	RecursiveLocker locker(&sListLock);
+	// SPDX-SnippetEnd
 	bluetooth_device* device = FindDeviceByID(hciId);
 
 	if (device == NULL) {

@@ -374,6 +374,18 @@ MyView::Draw(BRect)
 
 Link `libr5ui.so`. `r5-effects-test` (in `/system/bin`) is a small user of every call: `r5-effects-test shadow off`, `r5-effects-test strength glassy`, `r5-effects-test glass 30`.
 
+## Level glyphs
+
+`libr5icons.so`, `<R5Icons.h>`. The full contract with the pictures is in `docs/ICONS.md` ("Level glyphs"); the R5Book page is `docs/r5book/icons-kit.html#r5_level_glyph`.
+
+```
+void r5_level_glyph_draw(BView* view, r5_level_glyph which, BRect frame,
+	int32 level, rgb_color foreground, rgb_color background,
+	r5_level_style style);
+```
+
+`which` is `R5_LEVEL_SIGNAL` (1, four rising bars) or `R5_LEVEL_BATTERY` (2, a battery with four segments). `level` is how many of the four steps are filled; values outside 0 to 4 are clamped. The empty steps are a faint tint of `foreground` over `background`. `style` is `R5_LEVEL_STYLE_NORMAL` (0), `R5_LEVEL_STYLE_DISABLED` (1, greyed) or `R5_LEVEL_STYLE_OFF` (2, outlines only). The view's drawing state is the same afterwards. `DrawWiFiSignalBars()` uses it. The line glyph for Bluetooth is `R5_GLYPH_BLUETOOTH` (7) with `r5_glyph_draw()`.
+
 ## Wi-Fi Kit
 
 `libr5wifi.so`, headers in `headers/os/net/`: `<R5WiFi.h>` (`WiFiController`, `WiFiState`, `WiFiNetworkInfo`, `WiFiLinkDetails`, the message codes), `<R5WiFiView.h>` (`WiFiView`), `<R5WiFiListView.h>` (`NetworkListView`, `SignalView`), `<R5WiFiJoinOther.h>` (`JoinOtherWindow`), and the header-only `<R5WiFiGlyphs.h>`, `<R5WiFiIconPaths.h>` and `<R5WiFiNetworkList.h>`. The R5Book page is `docs/r5book/wifi-kit.html`.
@@ -386,7 +398,7 @@ The code is air/OS's WiFi preferences (MIT, jmgasper; `THIRD_PARTY_NOTICES.md`).
 | `WiFiController(target, component, scanInterval)`, `Start()` | The state machine on its own thread. Stop it with `B_QUIT_REQUESTED` |
 | `kMsgWiFiScan`, `kMsgWiFiJoin`, `kMsgWiFiLeave`, `kMsgWiFiForget`, `kMsgWiFiSetPower`, `kMsgWiFiSelectDevice`, `kMsgWiFiRefresh`, `kMsgWiFiSetScanInterval` | Requests to the controller. The fields are in the R5Book page |
 | `kMsgWiFiStateChanged`, `kMsgWiFiJoinResult` | What the target receives |
-| `DrawWiFiTrayIcon()`, `DrawWiFiSignalBars()`, `DrawWiFiLock()` | The arcs, header only. The Deskbar network icon uses them without loading the library into Deskbar |
+| `DrawWiFiTrayIcon()`, `DrawWiFiSignalBars()`, `DrawWiFiLock()` | Header only, so the Deskbar network icon uses them without loading `libr5wifi.so` into Deskbar. `DrawWiFiSignalBars()` calls `r5_level_glyph_draw()`, so a program that uses it links `libr5icons.so` |
 
 `BNetworkRoster::AddPersistentNetwork(const wireless_network&, const char* password)` is an addition to Haiku's `libbnetapi.so` (air/OS), not to this library; the one-argument call stays. `scripts/apply-wireless.py` copies the library, the WiFi program and the headers, and adds `libr5wifi.so` and WiFi to the regular image.
 

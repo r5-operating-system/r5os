@@ -59,6 +59,15 @@ public:
 							uint16 result, uint16* mtu, uint16* flush_timeout, l2cap_qos* flow);
 			void		_HandleDisconnectionReq(uint8 ident, uint16 scid);
 			void		_HandleDisconnectionRsp(uint8 ident, uint16 dcid, uint16 scid);
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			// An answer to our command that cannot be used (too short,
+			// truncated, unknown options): close and wake the waiter.
+			void		_HandleBadResponse(uint8 ident);
+			// HCI link gone (L2capEndpointManager::Disconnected()).
+			void		_HandleLinkLost();
+			// SPDX-SnippetEnd
 
 private:
 	inline bool

@@ -67,14 +67,15 @@ DispatchEvent(struct hci_event_header* header, int32 code, size_t size)
 	// changed on the application thread, so look up and use the device
 	// under the list lock (BluetoothServer::DispatchToDevice).
 	((BluetoothServer*)be_app)->DispatchToDevice(GET_PORTCODE_HID(code),
-		header);
+		header, size);
 
 	return B_OK;
 }
 
 
 void
-BluetoothServer::DispatchToDevice(hci_id hid, struct hci_event_header* header)
+BluetoothServer::DispatchToDevice(hci_id hid, struct hci_event_header* header,
+	size_t size)
 {
 	BAutolock locker(fDevicesLock);
 
@@ -85,7 +86,7 @@ BluetoothServer::DispatchToDevice(hci_id hid, struct hci_event_header* header)
 		return;
 	}
 
-	lDeviceImplementation->HandleEvent(header);
+	lDeviceImplementation->HandleEvent(header, size);
 }
 // SPDX-SnippetEnd
 
