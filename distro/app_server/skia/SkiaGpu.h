@@ -135,6 +135,8 @@ private:
 			void*				fBackend;
 			bool				fForceFail;
 			bool				fShutDown;
+			// 5625U stick, boot 1: the GPU's own memory sets the budgets
+			size_t				fRecorderBudget;
 			void				(*fWake)(void*);
 			void*				fWakeCookie;
 			// one wake until RunWork() starts

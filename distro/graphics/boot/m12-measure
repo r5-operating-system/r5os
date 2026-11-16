@@ -31,6 +31,15 @@ run() {
 	echo "exit $?" >> "$dir/$name.txt"
 	sync
 	grep -E '^draw-compare [0-9]+/[0-9]+ ok' "$dir/$name.txt"
+	# 5625U stick, boot 1: app_server had turned the GPU drawing off, and
+	# every run was refused at once. Say so, with app_server's reason.
+	if grep -q 'refused: cpu mode' "$dir/$name.txt"; then
+		syslog=$(finddir B_SYSTEM_LOG_DIRECTORY)/syslog
+		why=$(grep -E 'app_server: gpu (draw|compositor) off' "$syslog" | tail -n 1)
+		echo "m12-measure: FAIL the GPU drawing is off (${why:-no reason in the syslog})"
+		echo "m12-measure: go on with check and boot-next"
+		exit 1
+	fi
 }
 
 run compare-classic --dump

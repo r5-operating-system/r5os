@@ -10,6 +10,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <syslog.h>
 
 #include <Autolock.h>
 
@@ -44,6 +45,7 @@ using skgpu::graphite::ContextOptions;
 using skgpu::graphite::InsertRecordingInfo;
 using skgpu::graphite::InsertStatus;
 using skgpu::graphite::Recorder;
+using skgpu::graphite::RecorderOptions;
 using skgpu::graphite::Recording;
 using skgpu::graphite::SampleCount;
 using skgpu::graphite::SubmitInfo;
@@ -53,6 +55,30 @@ typedef skgpu::graphite::Context GraphiteContext;
 
 static PFN_vkGetInstanceProcAddr sGetInstanceProc;
 static PFN_vkGetDeviceProcAddr sGetDeviceProc;
+
+
+// The smallest device-local heap: VRAM on a GPU with its own memory or a
+// carve-out, the system memory on Lavapipe. 0 when there is none.
+static size_t
+smallest_local_heap(VkInstance instance, VkPhysicalDevice physical)
+{
+	PFN_vkGetPhysicalDeviceMemoryProperties getProperties
+		= (PFN_vkGetPhysicalDeviceMemoryProperties)sGetInstanceProc(instance,
+			"vkGetPhysicalDeviceMemoryProperties");
+	if (getProperties == NULL)
+		return 0;
+	VkPhysicalDeviceMemoryProperties properties;
+	getProperties(physical, &properties);
+	VkDeviceSize smallest = 0;
+	for (uint32_t i = 0; i < properties.memoryHeapCount; i++) {
+		const VkMemoryHeap& heap = properties.memoryHeaps[i];
+		if ((heap.flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) == 0)
+			continue;
+		if (smallest == 0 || heap.size < smallest)
+			smallest = heap.size;
+	}
+	return (size_t)smallest;
+}
 
 
 static PFN_vkVoidFunction
@@ -112,6 +138,7 @@ SkiaGpu::SkiaGpu()
 	fBackend(NULL),
 	fForceFail(false),
 	fShutDown(false),
+	fRecorderBudget(RecorderOptions::kDefaultRecorderBudget),
 	fWake(NULL),
 	fWakeCookie(NULL),
 	fWakeRequested(0),
@@ -213,6 +240,24 @@ SkiaGpu::Create(const skia_vulkan_device& device, bool forceFail,
 	}
 
 	ContextOptions options;
+	// 5625U stick, boot 1: Skia's budgets are 256 MB for the context and
+	// 256 MB for every recorder (one per window), more than the 256 MB of
+	// VRAM of a Renoir with the default carve-out; the kernel refused the
+	// next buffer and the drawing turned off ("insert failed"). The
+	// budgets follow the smallest device-local heap the GPU reports: a
+	// quarter for the context, a sixteenth for each window, never more
+	// than Skia's own defaults (so Lavapipe, whose heap is system memory,
+	// keeps them).
+	size_t heap = smallest_local_heap(instance, physical);
+	if (heap > 0) {
+		options.fGpuBudgetInBytes = std::min(heap / 4,
+			ContextOptions::kDefaultContextBudget);
+		gpu->fRecorderBudget = std::min(heap / 16,
+			RecorderOptions::kDefaultRecorderBudget);
+	}
+	syslog(LOG_INFO, "app_server: gpu draw budget heap %zu MB context %zu MB window "
+		"%zu MB\n", heap >> 20, options.fGpuBudgetInBytes >> 20,
+		gpu->fRecorderBudget >> 20);
 	// Q3: curved shapes on the GPU with 4x MSAA, no CPU path atlas
 	options.fInternalMultisampleCount = SampleCount::k4;
 	options.fMinimumPathSizeForMSAA = 0;
@@ -276,7 +321,10 @@ SkiaGpu::NewRecorder()
 	BAutolock _(fLock);
 	if (fShutDown || fContext == NULL)
 		return NULL;
-	std::unique_ptr<Recorder> recorder = ((GraphiteContext*)fContext)->makeRecorder();
+	RecorderOptions options;
+	options.fGpuBudgetInBytes = fRecorderBudget;
+	std::unique_ptr<Recorder> recorder
+		= ((GraphiteContext*)fContext)->makeRecorder(options);
 	return recorder.release();
 }
 
@@ -380,8 +428,16 @@ SkiaGpu::RunWork(const char** _reason)
 		InsertRecordingInfo info;
 		info.fRecording = items[i]->recording.get();
 		if (context->insertRecording(info) != InsertStatus::kSuccess) {
-			*_reason = "insert failed";
-			ok = false;
+			// 5625U stick, boot 1: first give back what the context keeps
+			// and try once more; only then is the drawing off
+			context->freeGpuResources();
+			bool again = context->insertRecording(info) == InsertStatus::kSuccess;
+			syslog(LOG_INFO, "app_server: gpu draw memory freed, insert %s\n",
+				again ? "ok" : "failed");
+			if (!again) {
+				*_reason = "insert failed";
+				ok = false;
+			}
 		}
 	}
 	bigtime_t profileInserted = system_time();
