@@ -788,7 +788,6 @@ m12_boot() {
 		emit "INFO $(grep -Eo 'gpu draw warm up [0-9]+ ms' "$slog" | head -n 1)"
 		have 'app_server: gpu draw budget heap [0-9]+ MB' "$slog" "gpu draw budget"
 		emit "INFO $(grep -Eo 'gpu draw budget heap .*' "$slog" | head -n 1)"
-		emit "INFO memory freed and retried: $(grep -c 'gpu draw memory freed' "$slog") times"
 		m12_measure
 		m12_scenario draw
 		extract_syslog

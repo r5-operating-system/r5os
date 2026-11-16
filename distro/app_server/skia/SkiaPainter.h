@@ -338,18 +338,6 @@ private:
 			void				_DrawTextLines(SkCanvas* canvas,
 									const class GlyphCollector& collector,
 									const SkPaint& ink);
-			// step 5c: an R5 blender special (SkiaShaders.h) straight into
-			// the target, colors the bitmap or nullptr
-			bool				_SpecialPaint(int special, int blendAlpha,
-									const rgb_color& high,
-									const sk_sp<SkShader>& colors,
-									SkPaint* paint) const;
-			bool				_BlenderPaint(bool forceSolidHigh,
-									const sk_sp<SkShader>& colors,
-									SkPaint* paint,
-									bool text = false,
-									const sk_sp<SkShader>& coverage
-										= nullptr) const;
 			int					_AlphaKind() const;
 			bool				_DirectColor(bool forceSolidHigh,
 									bool* _draw, SkColor* _color) const;

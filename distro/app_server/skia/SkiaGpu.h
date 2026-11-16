@@ -4,10 +4,10 @@
  *
  * M12 (docs/APP-SERVER-GPU-DRAWING.md, part 2): Skia's Graphite context on
  * the compositor's Vulkan device and queue. Every drawing engine records
- * on its own thread with a Recorder of its own; only the compose thread
- * inserts the recordings and submits them, so every vkQueueSubmit of
- * app_server stays on that one thread and the M11 lock order does not
- * change.
+ * on its own thread with a Recorder of its own; the draw thread
+ * (Compositor::_DrawLoop()) inserts the recordings and submits them. It
+ * shares the VkQueue with the compose thread, so every queue call of both
+ * takes one lock (LockQueue()).
  *
  * This header has no Skia and no Vulkan type, so Compositor.cpp (which
  * uses its own Vulkan headers) can include it.
@@ -49,6 +49,11 @@ public:
 
 	// The context of this desktop, for engines that are not a window's
 	// (alpha masks, offscreen bitmaps). Set by the compositor.
+	// Any thread: around every use of the compositor's VkQueue outside
+	// Skia (vkQueueSubmit, vkDeviceWaitIdle). Graphite's own queue calls
+	// take the same lock.
+	static	void				LockQueue();
+	static	void				UnlockQueue();
 	static	SkiaGpu*			Current();
 	static	void				SetCurrent(SkiaGpu* gpu);
 
@@ -67,7 +72,7 @@ public:
 	// A target recorded something: the compose thread runs soon.
 			void				Wake();
 
-	// Compose thread only: snaps every target, inserts the recordings,
+	// Draw thread only: snaps every target, inserts the recordings,
 	// submits, waits for the GPU and copies what was drawn into the window
 	// buffers and bitmaps. False with a reason on a lost device, a failed
 	// insert or submit, or the forced failure (gpu_draw_fail).
@@ -109,7 +114,6 @@ public:
 		kCountCoverage,		// coverage images drawn for the R5 shader
 		kCountUpload,		// textures made from CPU memory
 		kCountRuns,			// RunWork() calls with work
-		kCountBlender,		// draws with the R5 blender (no copy)
 		kProfileCount
 	};
 	static	void				Profile(int which, int64 value = 1);

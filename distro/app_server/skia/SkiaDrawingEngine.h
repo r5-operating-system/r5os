@@ -63,6 +63,8 @@ public:
 	virtual	void				FrameBufferChanged();
 
 	virtual	void				SetCopyToFrontEnabled(bool enable);
+	// The compositor took the window's buffer back (an off-screen window)
+			void				ReleaseBuffer();
 	virtual	void				CopyToFront(BRegion& region);
 
 	virtual	status_t			ReadBitmap(ServerBitmap* bitmap,

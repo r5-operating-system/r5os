@@ -13,8 +13,10 @@
 
 #include "SkiaDrawingEngine.h"
 
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+#include <syslog.h>
 
 #include <Autolock.h>
 #include <ObjectList.h>
@@ -139,6 +141,18 @@ public:
 	// under the lock, from FrameBufferChanged()
 	void SetBuffer(WindowBuffer* buffer, int32 left, int32 top)
 	{
+		// 5625U stick, 16 Nov 2026 (boot 3): after a direct window paused
+		// the compositor, Deskbar showed a black square and Tracker lost
+		// icons; in QEMU the same pause showed Chart's stars in Deskbar.
+		// A window that gets another buffer (a new one, or one the
+		// compositor hands out again) finds that buffer's old pixels, and
+		// Deliver() copies only the damage. The image holds the whole
+		// window, so all of it goes into the new buffer at the next run.
+		if (buffer != NULL && buffer != fBuffer.Get()) {
+			AddDamage(BRect(left, top, left + (int32)buffer->Width() - 1,
+				top + (int32)buffer->Height() - 1));
+			MarkDrawn();
+		}
 		fBuffer.SetTo(buffer);
 		fBufferLeft = left;
 		fBufferTop = top;
@@ -167,7 +181,17 @@ public:
 		Delivery* delivery = (Delivery*)cookie;
 		if (delivery == NULL)
 			return;
-		WindowBuffer* buffer = delivery->buffer.Get();
+		// The buffer the window has now: a slow run (seconds on Lavapipe)
+		// can end after the compositor gave the window another buffer,
+		// and pixels copied into the old one would never be shown.
+		BReference<WindowBuffer> current;
+		if (fInterface->LockParallelAccess()) {
+			current.SetTo(fInterface->Buffer());
+			delivery->left = fInterface->Left();
+			delivery->top = fInterface->Top();
+			fInterface->UnlockParallelAccess();
+		}
+		WindowBuffer* buffer = current.Get();
 		if (buffer != NULL) {
 			BRegion copy(screenDamage);
 			BRegion inside(BRect(delivery->left, delivery->top,
@@ -461,6 +485,19 @@ SkiaDrawingEngine::FrameBufferChanged()
 		}
 	}
 	fOnGpu = gpu;
+	fTarget->Unlock();
+}
+
+
+void
+SkiaDrawingEngine::ReleaseBuffer()
+{
+	// WindowHWInterface::SetBuffer(NULL) does not call
+	// FrameBufferChanged(), so the target let go of nothing and the
+	// compositor's eviction freed no memory for a Skia window
+	if (fWindowInterface == NULL || fTarget == NULL || !fTarget->Lock())
+		return;
+	((WindowTarget*)fTarget)->SetBuffer(NULL, 0, 0);
 	fTarget->Unlock();
 }
 
