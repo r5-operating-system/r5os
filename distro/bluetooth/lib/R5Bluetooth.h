@@ -69,7 +69,7 @@ enum bluetooth_service_state {
 	BLUETOOTH_SERVICE_FAILED = 2,
 		// It could not be started
 	BLUETOOTH_SERVICE_STOPPED = 3
-		// It was running and is gone; it is not started again on its own
+		// It was running and is gone (launch_daemon starts it again)
 };
 
 
@@ -129,8 +129,9 @@ struct BluetoothState {
 
 
 /*!	Does all bluetooth_server and libbluetooth work on its own thread, so a
-	window never waits on the server or a radio. It starts bluetooth_server
-	once when it is not running. Every request it sends itself has a
+	window never waits on the server or a radio. bluetooth_server is a system
+	service; when it is not running, the controller asks launch_daemon once
+	to start it. Every request it sends itself has a
 	timeout; libbluetooth's own calls (radio name, scan) have none and only
 	ever run on this thread.
 */

@@ -91,7 +91,7 @@ Each step is its own small pull request. It is built for AMD64 with `scripts/bui
   5. Fix the leaks in `DeviceManager::AddDevice()`, call `fDeviceManager->LoadState()`, and handle `B_ENTRY_REMOVED` → `BT_MSG_REMOVE_DEVICE`.
   6. `close(client)` in `SDPServer::_Run()`, and `>= 0` socket checks.
 - **Test:** a new small program `distro/bluetooth/tests/bt_server_smoke_test`. It sends `BT_REQ_CONN_STATE` and messages with an invalid `bdaddr` to `bluetooth_server`.
-- **Note (checked in the source):** `bluetooth_server` has no launch job in `data/launch`. It is in the regular image (`build/jam/images/definitions/regular`, line 160 in `haiku/`, line 189 after apply) and is started on request. The smoke test therefore starts it itself (through `BRoster`), and only then the log line appears.
+- **Note (checked in the source; changed after step 3a, see there):** `bluetooth_server` had no launch job in `data/launch`. It is in the regular image (`build/jam/images/definitions/regular`, line 160 in `haiku/`, line 189 after apply) and is started on request. The smoke test therefore starts it itself (through `BRoster`), and only then the log line appears.
 - **Pass:** QEMU boots, `bt_server_smoke_test` starts `bluetooth_server`, syslog has `bluetooth_server: started, 0 radios`, and the test prints `bt_server_smoke_test: ok (0 crashes)` (no crash on an unknown `bdaddr` or on `BT_REQ_CONN_STATE`).
 
 ### Step 1a (PR 2): `h2generic` HCI timeouts, safe reassembly, HCI fuzzer
@@ -135,6 +135,7 @@ Each step is its own small pull request. It is built for AMD64 with `scripts/bui
   - Additive `RemoteDevice::GetRSSI()` for the signal bars; both `RemoteDevice` constructors now initialize the signal strength and the name flag.
   - Pass checked in QEMU (`bt_server_smoke_test` now also turns the switch off and on). The VirtualBox scan list waits for real hardware and is not claimed.
   - After review (16 Nov 2026): `bluetooth_server` has no launch job, so `BRoster::Launch` runs it as the person signed in, not uid 0. Its `/boot/system/settings/bluetooth` is therefore made writable by Login for group `admin` (and for everyone during a grant), like `network`, mode 0775 and files 0664, not uid 0 mode 0700 as section 4 says. The server checks the sender of the switch itself. The page is the add-on `settings_bluetooth`, so the minimum image's Settings does not need `libr5bt.so`. Running the server as uid 0 (a launch job) would bring back the 0700 rule; that is the owner's choice and also decides where pairing keys live (step 4).
+  - Owner's choice (16 Nov 2026): uid 0. `bluetooth_server` is a system service with a launch job (`distro/bluetooth/launch/bluetooth`, in `system/non-packaged/data/launch`, regular image only), from boot, so a Bluetooth keyboard can work at Sign in (step 4). `/boot/system/settings/bluetooth` is root's, mode 0700, with `r5_radio` and the pairing keys (`paired_devices`, 0600) for the whole computer, as section 4 says. Login no longer gives it group rights. The controller asks launch_daemon (`BLaunchRoster::Start()`) instead of `BRoster::Launch()`. The sender check stays. A Stop in Haiku's old Bluetooth program now only restarts the service.
 
 ### Step 3b (PR 7): a separate Bluetooth program and a message-based Deskbar replicant
 

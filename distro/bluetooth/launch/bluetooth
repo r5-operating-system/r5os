@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+#
+# bluetooth_server as a system service (uid 0), from boot, regular image
+# only (docs/BLUETOOTH.md): a Bluetooth keyboard must work at Sign in, and
+# pairing keys and the radio switch live in /boot/system/settings/bluetooth,
+# mode 0700. launch_daemon starts it again if it quits.
+
+service x-vnd.Haiku-bluetooth_server {
+	launch /system/servers/bluetooth_server
+	no_safemode
+	legacy
+}

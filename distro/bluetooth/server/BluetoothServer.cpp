@@ -675,13 +675,34 @@ radio_sender_allowed(BMessage* message)
 }
 
 
-static status_t
-radio_setting_path(BPath& path)
+// The server's own settings: the radio switch and the pairing keys. It runs
+// as a system service (uid 0, distro/bluetooth/launch), so the directory is
+// root's alone, mode 0700 (docs/BLUETOOTH.md, section 4). An earlier build
+// had Login make it group-writable; create also puts that back.
+status_t
+r5_bluetooth_settings_path(BPath& path, bool create)
 {
 	status_t status = find_directory(B_SYSTEM_SETTINGS_DIRECTORY, &path);
 	if (status == B_OK)
 		status = path.Append("bluetooth");
-	return status;
+	if (status != B_OK || !create)
+		return status;
+
+	status = create_directory(path.Path(), 0700);
+	if (status != B_OK)
+		return status;
+	if (geteuid() == 0) {
+		chown(path.Path(), 0, 0);
+		chmod(path.Path(), 0700);
+	}
+	return B_OK;
+}
+
+
+static status_t
+radio_setting_path(BPath& path)
+{
+	return r5_bluetooth_settings_path(path, false);
 }
 
 
@@ -708,10 +729,7 @@ status_t
 BluetoothServer::_SaveRadioSetting() const
 {
 	BPath directory;
-	status_t status = radio_setting_path(directory);
-	if (status != B_OK)
-		return status;
-	status = create_directory(directory.Path(), 0755);
+	status_t status = r5_bluetooth_settings_path(directory, true);
 	if (status != B_OK)
 		return status;
 
@@ -726,9 +744,8 @@ BluetoothServer::_SaveRadioSetting() const
 	status = file.InitCheck();
 	if (status != B_OK)
 		return status;
-	// The next administrator may be another account in group admin
-	// (Login's refresh_machine_settings_access() sets the group).
-	file.SetPermissions(S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
+	// Only the server reads it; programs ask with BT_MSG_R5_GET_RADIO.
+	file.SetPermissions(S_IRUSR | S_IWUSR);
 	ssize_t written = file.Write(line, strlen(line));
 	if (written != (ssize_t)strlen(line))
 		return written < 0 ? (status_t)written : B_IO_ERROR;

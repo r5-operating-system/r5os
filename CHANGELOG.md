@@ -1,5 +1,21 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-16 - Bluetooth: bluetooth_server is a system service from boot (uid 0)
+
+Problem: `bluetooth_server` had no launch job. The first program that needed it started it with `BRoster::Launch()`, so it ran as whoever that was; there was no Bluetooth before Sign in (a keyboard could not work there, step 4), and the switch and the pairing keys depended on that person's rights. Owner's choice after step 3a: run it as uid 0 (`docs/BLUETOOTH.md`, as built).
+
+What changed:
+- A launch job, `distro/bluetooth/launch/bluetooth` (`service x-vnd.Haiku-bluetooth_server`, `no_safemode`, `legacy`), installed in `system/non-packaged/data/launch` of the regular image only by `apply-bluetooth.py`. launch_daemon starts it at boot and again after it stops.
+- `/boot/system/settings/bluetooth` is root's alone, mode 0700 (`r5_bluetooth_settings_path()`; it also resets a folder an earlier build left 0775). `r5_radio` is 0600. The pairing keys moved there too (`paired_devices`, 0600), one set for the whole computer instead of the settings of whoever started the server. Keys in the old place are not moved: pairing does not work before step 4.
+- Login's group rights for that folder (added in step 3a) are removed again.
+- `BluetoothController` asks launch_daemon (`BLaunchRoster::Start()`) when the server is not running; `BRoster::Launch()` would start a second server as the person signed in.
+- The sender check of the switch stays. A Stop in Haiku's old Bluetooth program now only restarts the service.
+- `run-qemu-smoke.sh` logs whether `bluetooth_server` runs before the test starts anything, and the folder's rights.
+
+Tested: built with `scripts/build-locked.sh` (`jam_exit=0`, `build_s=227`, no warnings in the changed files). QEMU (KVM), own image copy: `bluetooth_server` runs before the test job starts anything (team 59, started at boot), `bluetooth_server: started, 0 radios`; the page shows it; `bt_server_smoke_test: radio switch ok`, `ok (0 crashes)`, `bt_l2cap_abi_test: ok`; `/boot/system/settings/bluetooth` is `drwx------` and `r5_radio` `-rw-------`, owner uid 0 (named `user` before the first Sign in). Logs: `generated/bluetooth/qemu-service/`.
+
+Not tested: a signed-in administrator or a standard account using the switch (the test job runs as uid 0; VirtualBox), a real radio, a keyboard at Sign in (step 4), and the minimum image. ARM64 and RISC-V 64 were not built or tested.
+
 ## 2026-11-16 - USB 2.0 (EHCI): no unaligned pointer into a packed descriptor
 
 Problem: GCC warned `-Waddress-of-packed-member` in `EHCI::CreateDescriptor()` (`ehci.cpp`): `fStack->AllocateChunk(&result->buffer_log, ...)` passes the address of a member of the packed struct `ehci_qtd` as `void**`. The member is at offset 56 (8-aligned), so it is harmless on x86_64 today, but it would become an unaligned pointer on ARM64 if the struct layout ever moved. Seen in a Bluetooth build log; no Haiku ticket.

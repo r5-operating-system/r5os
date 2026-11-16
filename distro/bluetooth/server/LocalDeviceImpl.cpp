@@ -141,13 +141,15 @@ LocalDeviceImpl::SaveRemoteDevices()
 	// (0644 under umask 022), readable by every account that can reach the
 	// directory (review of #4286). It is now 0600 before anything is
 	// written, and replaced through a rename so a crash never leaves half a
-	// file.
+	// file. Since the server is a system service (uid 0) the file is in its
+	// own 0700 directory, shared by everyone who signs in, not in the
+	// settings of whoever happened to start the server.
 	BPath path;
-	if (find_directory(B_USER_SETTINGS_DIRECTORY, &path) != B_OK)
+	if (r5_bluetooth_settings_path(path, true) != B_OK)
 		return;
 	BPath temporary(path);
-	if (path.Append("Bluetooth_paired_devices") != B_OK
-		|| temporary.Append("Bluetooth_paired_devices.new") != B_OK)
+	if (path.Append("paired_devices") != B_OK
+		|| temporary.Append("paired_devices.new") != B_OK)
 		return;
 
 	BFile file(temporary.Path(), B_WRITE_ONLY | B_CREATE_FILE | B_ERASE_FILE);
@@ -173,12 +175,17 @@ LocalDeviceImpl::LoadRemoteDevices()
 {
 	BPath path;
 	BMessage devices;
-	if (find_directory(B_USER_SETTINGS_DIRECTORY, &path) == B_OK) {
-		path.Append("Bluetooth_paired_devices");
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// The same file as SaveRemoteDevices(), in the server's 0700 directory.
+	if (r5_bluetooth_settings_path(path, false) == B_OK
+		&& path.Append("paired_devices") == B_OK) {
 		BFile file(path.Path(), B_READ_ONLY);
 		if (file.InitCheck()==B_OK)
 			devices.Unflatten(&file);
 	}
+	// SPDX-SnippetEnd
 
 	BMessage device;
 	for (int32 i = 0; devices.FindMessage("remote", i, &device) == B_OK; i++) {

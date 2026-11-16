@@ -7,7 +7,7 @@
 
 SubDir HAIKU_TOP src preferences r5bt ;
 
-UsePrivateHeaders bluetooth ;
+UsePrivateHeaders app bluetooth ;
 
 SharedLibrary [ MultiArchDefaultGristFiles libr5bt.so ] :
 	BluetoothController.cpp
