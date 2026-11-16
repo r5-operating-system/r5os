@@ -11,8 +11,12 @@
 
 #include "PairingNotice.h"
 
+#include <syslog.h>
+
 #include <Catalog.h>
 #include <Notification.h>
+
+#include <bluetoothserver_p.h>
 
 
 #undef B_TRANSLATION_CONTEXT
@@ -20,7 +24,8 @@
 
 
 void
-r5_pairing_notice(bool paired, const BString& name)
+r5_pairing_result(bool paired, const BString& name, BMessenger* reply,
+	const bdaddr_t& address)
 {
 	BString device = name;
 	if (device.Length() == 0)
@@ -37,5 +42,19 @@ r5_pairing_notice(bool paired, const BString& name)
 	notification.SetTitle(B_TRANSLATE("Bluetooth"));
 	notification.SetContent(content);
 	notification.SetMessageID("r5-bluetooth-pairing");
-	notification.Send(5000000);
+	status_t status = notification.Send(5000000);
+	syslog(LOG_INFO, "bluetooth_server: pairing %s, notice %s (%#" B_PRIx32 ")",
+		paired ? "ok" : "failed", status == B_OK ? "sent" : "not sent",
+		status);
+
+	// The page that asked shows the same sentence in its status line.
+	if (reply != NULL && reply->IsValid()) {
+		BMessage result(BT_MSG_R5_PAIR_RESULT);
+		result.AddData("bdaddr", B_RAW_TYPE, &address, sizeof(address));
+		result.AddBool("paired", paired);
+		result.AddString("name", name);
+		reply->SendMessage(&result, (BHandler*)NULL, 1000000);
+	}
+	if (reply != NULL)
+		*reply = BMessenger();
 }

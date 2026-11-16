@@ -212,7 +212,9 @@ BluetoothView::BluetoothView(bool settingsPage)
 	fRadioSwitchAllowed(true),
 	fHasState(false),
 	fRadioFailed(false),
-	fController(NULL)
+	fController(NULL),
+	fPairStatus(new BString),
+	fPairing(0)
 {
 	BFont bold = bold_font();
 
@@ -301,6 +303,7 @@ BluetoothView::~BluetoothView()
 	_StopController();
 	for (int32 i = fDeviceList->CountItems() - 1; i >= 0; i--)
 		delete fDeviceList->RemoveItem(i);
+	delete fPairStatus;
 }
 
 
@@ -382,6 +385,7 @@ BluetoothView::MessageReceived(BMessage* message)
 
 		case kMsgScanButton:
 		{
+			fPairStatus->Truncate(0);
 			BMessage request(fState.scanning ? kMsgBluetoothCancelScan
 				: kMsgBluetoothScan);
 			_SendToController(&request);
@@ -404,6 +408,29 @@ BluetoothView::MessageReceived(BMessage* message)
 			request.AddString("name", item->Info().name);
 			request.AddUInt32("class", item->Info().deviceClass);
 			_SendToController(&request);
+
+			// Pairing… until the server says how it ended.
+			BString name = item->Info().name;
+			if (name.IsEmpty())
+				name = B_TRANSLATE("the device");
+			*fPairStatus = B_TRANSLATE("Pairing with %name%" B_UTF8_ELLIPSIS);
+			fPairStatus->ReplaceFirst("%name%", name);
+			fPairing = 1;
+			_UpdateControls();
+			break;
+		}
+
+		case kMsgBluetoothPairResult:
+		{
+			BString name = message->GetString("name", "");
+			if (name.IsEmpty())
+				name = B_TRANSLATE("the device");
+			*fPairStatus = message->GetBool("paired", false)
+				? B_TRANSLATE("Paired with %name%.")
+				: B_TRANSLATE("Pairing with %name% did not work.");
+			fPairStatus->ReplaceFirst("%name%", name);
+			fPairing = 0;
+			_UpdateControls();
 			break;
 		}
 
@@ -638,7 +665,7 @@ BluetoothView::_UpdateControls()
 	fScanButton->SetEnabled(running && fState.radioEnabled && radio != NULL);
 	if (BButton* pairButton = pair_button(this)) {
 		pairButton->SetEnabled(running && fState.radioEnabled && radio != NULL
-			&& fDeviceList->CurrentSelection() >= 0);
+			&& fDeviceList->CurrentSelection() >= 0 && fPairing == 0);
 	}
 
 	BString status;
@@ -657,5 +684,9 @@ BluetoothView::_UpdateControls()
 		status = B_TRANSLATE("Make sure the other device can be found, then "
 			"press Scan.");
 	}
+	// The pairing status replaces the device count until the next scan.
+	if (running && fState.radioEnabled && !fState.scanning
+		&& fPairStatus->Length() > 0)
+		status = *fPairStatus;
 	fScanStatus->SetText(status.String());
 }

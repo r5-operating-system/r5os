@@ -54,7 +54,8 @@ static const uint16 kScanWindow = 0x0030;
 static const uint16 kConnectScanWindow = 0x0060;
 // How often a pairing connect is tried again after "Connection Failed to
 // be Established" (0x3E), which a device that is busy can cause.
-static const int kMaxConnectRetries = 2;
+// None since the review of boot 3: one try, one line in the log.
+static const int kMaxConnectRetries = 0;
 
 static const char* kBondsFile = "le_paired_devices";
 
@@ -80,7 +81,8 @@ LEManager::LEManager(LocalDeviceImpl* device)
 	fDirectType(R5_BDADDR_LE_PUBLIC),
 	fRadioEnabled(true),
 	fAcceptListDirty(false),
-	fConnectRetries(0)
+	fConnectRetries(0),
+	fDirectResultPending(false)
 {
 	memset(fLMPFeatures, 0, sizeof(fLMPFeatures));
 	memset(fFeatures, 0, sizeof(fFeatures));
@@ -411,8 +413,10 @@ LEManager::_CommandDone(uint16 opcode, uint8 status, const uint8* data,
 			if (status != BT_OK) {
 				syslog(LOG_WARNING, "bluetooth_server: hci%" B_PRId32
 					" le connect refused (%#x)", fDevice->GetID(), status);
-				if (fInitiating == kDirect)
+				if (fInitiating == kDirect) {
 					fWantDirect = false;
+					_DirectResult(false);
+				}
 				fInitiating = kIdle;
 			}
 			break;
@@ -546,6 +550,9 @@ LEManager::_AdvertisingReport(const uint8* data, size_t size, bool extended)
 			seen->lastSent = 0;
 			seen->eventType = 0;
 			seen->extendedReport = false;
+			seen->hciAddressType = 0;
+			seen->flags = 0;
+			seen->primaryPhy = 1;
 			fSeen.push_back(seen);
 		}
 		seen->addressType = (report.address_type & 0x01) != 0
@@ -558,10 +565,16 @@ LEManager::_AdvertisingReport(const uint8* data, size_t size, bool extended)
 		}
 		if (report.connectable)
 			seen->connectable = true;
+		if (!report.scan_response) {
+			seen->hciAddressType = report.address_type;
+			seen->primaryPhy = report.primary_phy;
+		}
 
 		le_ad_info info;
 		memset(&info, 0, sizeof(info));
 		le_ad_parse(report.data, report.data_length, &info);
+		if (info.has_flags)
+			seen->flags = info.flags;
 		if (info.name[0] != '\0')
 			seen->name = info.name;
 		const uint32 classOfDevice = le_ad_class_of_device(&info);
@@ -613,8 +626,10 @@ LEManager::_ConnectionComplete(const uint8* data, size_t size, uint8 subevent)
 		if (status != 0x02 || !wasCancelling) {
 			syslog(LOG_NOTICE, "bluetooth_server: hci%" B_PRId32
 				" le connect failed (%#x)", fDevice->GetID(), status);
-			if (wasDirect)
+			if (wasDirect) {
 				fWantDirect = false;
+				_DirectResult(false);
+			}
 		}
 		_Connect();
 		return;
@@ -670,9 +685,15 @@ LEManager::_ConnectionComplete(const uint8* data, size_t size, uint8 subevent)
 	link->index = 0;
 	link->usesReportIDs = false;
 	link->kernelID = -1;
+	link->resultPending = false;
 	fLinks.push_back(link);
-	if (link->pairRequested)
+	if (link->pairRequested) {
 		fWantDirect = false;
+		link->pairReply = fDirectReply;
+		link->resultPending = fDirectResultPending;
+		fDirectReply = BMessenger();
+		fDirectResultPending = false;
+	}
 
 	syslog(LOG_INFO, "bluetooth_server: hci%" B_PRId32 " le link up%s",
 		fDevice->GetID(), link->pairRequested ? " (pairing)" : "");
@@ -704,18 +725,14 @@ LEManager::_Disconnected(uint16 handle, uint8 reason)
 		&& fConnectRetries < kMaxConnectRetries;
 	if (link->pairing && link->smpState != Link::kSMPDone && !retry) {
 		syslog(LOG_NOTICE, "bluetooth_server: smp pairing failed (link lost)");
-		if (link->pairRequested)
-			r5_pairing_notice(false, _Name(link->address));
-	} else if (link->pairRequested && !link->pairing && !retry
-		&& link->smpState == Link::kSMPIdle) {
-		// The link never got as far as pairing.
-		r5_pairing_notice(false, _Name(link->address));
 	}
+	if (!retry)
+		_PairResult(link, false);
 	if (retry) {
 		fConnectRetries++;
 		fWantDirect = true;
 		fDirectAddress = link->address;
-		fDirectType = link->addressType;
+		fDirectType = link->addressType == R5_BDADDR_LE_RANDOM ? 1 : 0;
 		syslog(LOG_INFO, "bluetooth_server: hci%" B_PRId32 " le connect"
 			" again (%d)", fDevice->GetID(), fConnectRetries);
 	}
@@ -844,7 +861,7 @@ LEManager::_SetScan(bool enable)
 
 
 bool
-LEManager::Pair(const bdaddr_t& address)
+LEManager::Pair(const bdaddr_t& address, const BMessenger& reply)
 {
 	BAutolock _(fLock);
 	Seen* seen = _FindSeen(address);
@@ -858,6 +875,8 @@ LEManager::Pair(const bdaddr_t& address)
 	if (!fRadioEnabled || !fReady) {
 		syslog(LOG_NOTICE, "bluetooth_server: hci%" B_PRId32
 			" le pairing not started (radio not ready)", fDevice->GetID());
+		BMessenger answer(reply);
+		r5_pairing_result(false, seen->name, &answer, address);
 		return true;
 	}
 
@@ -881,20 +900,27 @@ LEManager::Pair(const bdaddr_t& address)
 		}
 	}
 	syslog(LOG_INFO, "bluetooth_server: hci%" B_PRId32 " le pairing started"
-		" (advertising type %#x, %s, address type %u)", fDevice->GetID(),
-		seen->eventType, seen->extendedReport ? "extended" : "legacy",
-		seen->addressType);
+		" (advertising type %#x, %s report, address type %u, flags %#x,"
+		" primary phy %u)", fDevice->GetID(), seen->eventType,
+		seen->extendedReport ? "extended" : "legacy", seen->hciAddressType,
+		seen->flags, seen->primaryPhy);
 
 	Link* link = _FindLink(address);
 	if (link != NULL) {
 		link->pairRequested = true;
+		link->pairReply = reply;
+		link->resultPending = true;
 		_SMPStart(link);
 		return true;
 	}
 
 	fWantDirect = true;
 	fDirectAddress = address;
-	fDirectType = seen->addressType;
+	// The address type as the report gave it (0 to 3): a random identity
+	// address (3) must reach the controller as 3, not as plain random.
+	fDirectType = seen->hciAddressType;
+	fDirectReply = reply;
+	fDirectResultPending = true;
 	if (fInitiating == kAuto)
 		_CancelConnection();
 	else
@@ -962,7 +988,8 @@ void
 LEManager::_CreateConnection(const bdaddr_t* address, uint8 addressType)
 {
 	const uint8 filter = address == NULL ? 0x01 : 0x00;
-	uint8 type = addressType == R5_BDADDR_LE_RANDOM ? 0x01 : 0x00;
+	// Peer_Address_Type 0 to 3 (7.8.12, 7.8.66): what the report said.
+	uint8 type = addressType & 0x03;
 	bdaddr_t peer;
 	memset(&peer, 0, sizeof(peer));
 	if (address != NULL)
@@ -971,8 +998,9 @@ LEManager::_CreateConnection(const bdaddr_t* address, uint8 addressType)
 	// The last retry of a pairing connect goes the legacy way, in case the
 	// extended initiator is what fails (outside diagnosis of the first
 	// sticks); the controller may refuse it once extended commands ran.
-	const bool legacy = !fExtended
-		|| (address != NULL && fConnectRetries >= kMaxConnectRetries);
+	// Legacy only on a controller without extended advertising: after
+	// extended commands a legacy one is refused with 0x0C.
+	const bool legacy = !fExtended;
 	syslog(LOG_INFO, "bluetooth_server: hci%" B_PRId32 " le connect via %s",
 		fDevice->GetID(), legacy ? "legacy" : "extended");
 	if (!legacy) {
@@ -1132,6 +1160,8 @@ LEManager::_FindLink(const bdaddr_t& address)
 void
 LEManager::_CloseLink(Link* link, bool disconnect)
 {
+	// A pairing started here ends with this link at the latest.
+	_PairResult(link, false);
 	if (disconnect) {
 		// Remote User Terminated Connection.
 		const uint8 command[3] = { (uint8)(link->handle & 0xff),
@@ -1561,8 +1591,7 @@ LEManager::_Pulse()
 			&& now - link->attLast > limit;
 		if (smpWaits) {
 			syslog(LOG_NOTICE, "bluetooth_server: smp pairing timed out");
-			if (link->pairRequested)
-				r5_pairing_notice(false, _Name(link->address));
+			_PairResult(link, false);
 			_SMPCleanup(link);
 			link->pairing = false;
 			link->smpState = Link::kSMPFailed;
@@ -1576,4 +1605,26 @@ LEManager::_Pulse()
 		_CloseLink(expired[i], true);
 	if (!expired.empty())
 		_Connect();
+}
+
+
+void
+LEManager::_PairResult(Link* link, bool paired)
+{
+	if (!link->resultPending)
+		return;
+	link->resultPending = false;
+	r5_pairing_result(paired, _Name(link->address), &link->pairReply,
+		link->address);
+}
+
+
+void
+LEManager::_DirectResult(bool paired)
+{
+	if (!fDirectResultPending)
+		return;
+	fDirectResultPending = false;
+	r5_pairing_result(paired, _Name(fDirectAddress), &fDirectReply,
+		fDirectAddress);
 }

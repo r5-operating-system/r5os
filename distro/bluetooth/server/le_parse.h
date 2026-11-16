@@ -30,6 +30,8 @@ struct le_ad_info {
 	uint16	appearance;					// 0: none
 	bool	has_appearance;
 	bool	hid_service;				// 16-bit UUID 0x1812 listed
+	uint8	flags;					// the Flags AD (discoverable bits)
+	bool	has_flags;
 };
 
 
@@ -66,6 +68,12 @@ le_ad_parse(const uint8* data, size_t size, le_ad_info* info)
 				info->complete_name = type == 0x09;
 				break;
 			}
+			case 0x01:	// Flags
+				if (valueLength >= 1) {
+					info->flags = value[0];
+					info->has_flags = true;
+				}
+				break;
 			case 0x19:	// Appearance
 				if (valueLength >= 2) {
 					info->appearance = value[0] | (value[1] << 8);
@@ -112,6 +120,7 @@ struct le_adv_report {
 	uint8			address_type;	// 0 public, 1 random (+2: resolved)
 	const uint8*	address;		// 6 bytes, HCI order
 	uint16			event_type;		// as the report has it
+	uint8			primary_phy;	// 1 for a legacy report
 	bool			connectable;
 	bool			scan_response;
 	int8			rssi;
@@ -140,6 +149,7 @@ le_adv_report_next(const uint8* event, size_t size, bool extended,
 		// direct address type and address (6), data length, data.
 		const uint16 type = r[0] | (r[1] << 8);
 		report->event_type = type;
+		report->primary_phy = r[9];
 		report->connectable = (type & 0x0001) != 0;
 		report->scan_response = (type & 0x0008) != 0;
 		report->address_type = r[2];
@@ -151,6 +161,7 @@ le_adv_report_next(const uint8* event, size_t size, bool extended,
 		// Event type, address type, address (6), data length, data, RSSI.
 		const uint8 type = r[0];
 		report->event_type = type;
+		report->primary_phy = 1;
 		report->connectable = type == 0x00 || type == 0x01;
 		report->scan_response = type == 0x04;
 		report->address_type = r[1];

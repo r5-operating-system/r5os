@@ -106,8 +106,7 @@ LEManager::_SMPFail(Link* link, uint8 reason)
 	if (link->smpState != Link::kSMPIdle && link->smpState != Link::kSMPDone)
 		_SMPSend(link, failed, sizeof(failed));
 	syslog(LOG_NOTICE, "bluetooth_server: smp pairing failed (%#x)", reason);
-	if (link->pairRequested)
-		r5_pairing_notice(false, _Name(link->address));
+	_PairResult(link, false);
 	_SMPCleanup(link);
 	link->pairing = false;
 	link->smpState = Link::kSMPFailed;
@@ -166,8 +165,7 @@ LEManager::_SMPReceived(Link* link, const uint8* pdu, size_t size)
 				break;
 			syslog(LOG_NOTICE, "bluetooth_server: smp pairing failed, the"
 				" device refused (%#x)", pdu[1]);
-			if (link->pairRequested)
-				r5_pairing_notice(false, _Name(link->address));
+			_PairResult(link, false);
 			_SMPCleanup(link);
 			link->pairing = false;
 			link->smpState = Link::kSMPFailed;
@@ -612,8 +610,7 @@ LEManager::_SMPFinish(Link* link)
 	syslog(LOG_INFO, "bluetooth_server: smp %s pairing ok%s",
 		link->secureConnections ? "sc" : "legacy",
 		keep ? "" : " (no key to keep, not paired)");
-	if (link->pairRequested)
-		r5_pairing_notice(keep, _Name(link->address));
+	_PairResult(link, keep);
 
 	if (keep) {
 		// The link keeps its connection address: the kernel names its

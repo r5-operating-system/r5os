@@ -75,7 +75,8 @@ public:
 			void				StopScan();
 	// A Create Connection for a device the LE scan found pairs it here;
 	// false when the address is not one of them.
-			bool				Pair(const bdaddr_t& address);
+			bool				Pair(const bdaddr_t& address,
+									const BMessenger& reply);
 	// A device the Classic inquiry found: Pair uses Classic for it, also
 	// when it advertises on LE with the same address (dual mode).
 			void				NoteClassic(const bdaddr_t& address);
@@ -154,6 +155,8 @@ private:
 									uint32 passkey);
 			void				_Pulse();
 			BString				_Name(const bdaddr_t& address);
+			void				_PairResult(Link* link, bool paired);
+			void				_DirectResult(bool paired);
 			void				_SMPKeyDistribution(Link* link,
 									const uint8* pdu, size_t size);
 			void				_SMPEncrypted(Link* link);
@@ -223,6 +226,8 @@ private:
 			bool				fAcceptListDirty;
 			std::vector<bdaddr_t> fClassic;
 			int					fConnectRetries;
+			BMessenger			fDirectReply;
+			bool				fDirectResultPending;
 };
 
 

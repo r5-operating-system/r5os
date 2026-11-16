@@ -1882,7 +1882,7 @@ LocalDeviceImpl::CreateConnection(BMessage* message)
 		return;
 	}
 	// A device the LE scan found pairs over LE (step 6).
-	if (fLE != NULL && fLE->Pair(*bdaddr))
+	if (fLE != NULL && fLE->Pair(*bdaddr, message->ReturnAddress()))
 		return;
 	bool added = false;
 	// SPDX-SnippetEnd
@@ -1924,6 +1924,7 @@ LocalDeviceImpl::CreateConnection(BMessage* message)
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
 	rdConn->user_pairing = true;
+	rdConn->pair_reply = message->ReturnAddress();
 	// SPDX-SnippetEnd
 
 	// SPDX-SnippetBegin
@@ -2182,6 +2183,12 @@ LocalDeviceImpl::ConnectionComplete(struct hci_ev_conn_complete* event)
 		// SPDX-License-Identifier: MIT
 		// rd is NULL for an address this radio did not know (review of
 		// #4286).
+		if (rd != NULL && rd->user_pairing) {
+			// A pairing started here whose connection never came up.
+			rd->user_pairing = false;
+			r5_pairing_result(false, rd->friendly_name, &rd->pair_reply,
+				rd->bdaddr);
+		}
 		if (rd != NULL) {
 			if (LinkKeyUtils::Compare(&rd->link_key, &nullLinkKey))
 				RemoveRemoteDevice(rd);
@@ -2449,6 +2456,9 @@ LocalDeviceImpl::IOCapabilityRequest(struct hci_ev_io_capability_request* event,
 	command = buildIOCapabilityRequestReply(event->bdaddr,
 		HCI_IO_CAP_DISPLAY_YES_NO, HCI_OOB_DATA_NOT_PRESENT,
 		R5_HCI_AUTH_REQ_MITM_DEDICATED_BOND, &size);
+	syslog(LOG_INFO, "bluetooth_server: io capability reply %#x %#x %#x",
+		HCI_IO_CAP_DISPLAY_YES_NO, HCI_OOB_DATA_NOT_PRESENT,
+		R5_HCI_AUTH_REQ_MITM_DEDICATED_BOND);
 	if (command == NULL)
 		return;
 	// SPDX-SnippetEnd
@@ -2587,7 +2597,8 @@ LocalDeviceImpl::SimplePairingComplete(struct hci_ev_simple_pairing_complete* ev
 	// that the other side starts is refused again.
 	ServerRemoteDevice* paired = RemoteDeviceByAddr(event->bdaddr);
 	if (paired != NULL && paired->user_pairing)
-		r5_pairing_notice(event->status == BT_OK, paired->friendly_name);
+		r5_pairing_result(event->status == BT_OK, paired->friendly_name,
+			&paired->pair_reply, event->bdaddr);
 	if (paired != NULL)
 		paired->user_pairing = false;
 	if (bdaddrUtils::Compare(fPasskeyAddress, event->bdaddr))
@@ -2656,7 +2667,8 @@ LocalDeviceImpl::AuthComplete(struct hci_ev_auth_complete* eventData, BMessage* 
 		// A pairing started here that ended before Simple Pairing
 		// Complete (refused, or the device did not answer).
 		if (rd != NULL && rd->user_pairing) {
-			r5_pairing_notice(false, rd->friendly_name);
+			r5_pairing_result(false, rd->friendly_name, &rd->pair_reply,
+				rd->bdaddr);
 			rd->user_pairing = false;
 		}
 		// SPDX-SnippetEnd

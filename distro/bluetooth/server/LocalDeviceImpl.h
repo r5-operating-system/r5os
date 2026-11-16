@@ -48,6 +48,8 @@ struct ServerRemoteDevice
 	// Pairing was asked for here (Create Connection from the Bluetooth
 	// page): only then is a Numeric Comparison or Just Works accepted.
 	bool				user_pairing = false;
+	// The page that asked for that pairing: it gets the result.
+	BMessenger			pair_reply;
 	// SPDX-SnippetEnd
 	BMessage			services;
 };

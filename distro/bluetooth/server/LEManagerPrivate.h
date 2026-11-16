@@ -109,6 +109,8 @@ struct LEManager::Link {
 	uint8		addressType;	// R5_BDADDR_LE_*
 	bool		encrypted;
 	bool		pairRequested;	// made by Pair on the Bluetooth page
+	bool		resultPending;	// its result not yet told
+	BMessenger	pairReply;		// the page that asked
 
 	// SMP
 	enum {
@@ -191,6 +193,9 @@ struct LEManager::Seen {
 	bigtime_t	lastSent;
 	uint16		eventType;		// of the last advertisement
 	bool		extendedReport;
+	uint8		hciAddressType;	// 0 to 3, as the report has it
+	uint8		flags;			// Flags AD, 0 when none
+	uint8		primaryPhy;
 };
 
 

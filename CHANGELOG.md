@@ -1,5 +1,16 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-16 - Bluetooth: the page says when pairing runs, works or fails; LE connects with the report's address type
+
+Problem: pressing Pair showed nothing: no progress, no result; an LE connect refused by the controller sent no notice either. A second read-only review of the three stick boots also found that the LE address type from the scan (0 to 3) was collapsed to public or random, and that the legacy fallback after extended commands is refused by specification (0x0C).
+
+What changed:
+- The Bluetooth page (`libr5bt.so`): after Pair the status line says "Pairing with …" and Pair is disabled; then "Paired with …" or "Pairing with … did not work." until the next scan. New notification for the target: `kMsgBluetoothPairResult` (additive; the view takes its two fields from its reserved room, so its size stays the same).
+- `bluetooth_server`: one result for every end of a pairing started on the page, Classic and LE (`BT_MSG_R5_PAIR_RESULT` to the page, plus the notification, with "notice sent/not sent" in the syslog), including a Classic connection that never came up and an LE connect the controller refused.
+- LE: Extended Create Connection gets the report's address type unchanged; one try, no legacy fallback; the pairing log line has the raw address type, the Flags AD and the primary PHY. Classic: the IO capability reply logs its three bytes.
+
+Tested: built for x86_64; QEMU with SMAP (Settings Bluetooth page open, all Bluetooth tests ok, no panic); `fuzz-bt.sh le`: 0 crashes. The status line, the results and the LE connect need the stick; not tested there.
+
 ## 2026-11-16 - Bluetooth: Classic pairing answered with an IO capability BR/EDR has (third stick boot)
 
 Problem: on the third stick boot the radio refused our IO Capability Request Reply with 0x12 (Invalid HCI Command Parameters), and every Classic pairing ended in 0x37. We sent KeyboardDisplay (0x04), an LE-only value; BR/EDR takes 0x00 to 0x03 (Core 6.0, Vol 4, Part E, 7.1.29). This was in step 4 since it was written.
