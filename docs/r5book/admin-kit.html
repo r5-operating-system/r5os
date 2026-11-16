@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<!--
+  SPDX-FileCopyrightText: 2026 R5OS Contributors
+  SPDX-License-Identifier: MIT
+-->
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Admin Kit</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
+	<link rel="stylesheet" href="r5book.css" />
+</head>
+<body data-page="admin">
+
+<div class="book">
+	<aside class="toc"></aside>
+
+	<main class="page">
+		<section class="page-hero">
+			<span class="kit-label">libr5admin.so</span>
+			<h1>The Admin Kit</h1>
+			<p>Some requests change the machine: an account, the clock, a driver, the Bluetooth switch. The
+			service that carries them out runs as uid 0 and must know who asks. <code class="inline">libr5admin.so</code>
+			gives it a sender that the kernel names, so no program can pretend to be another one.</p>
+		</section>
+
+		<table class="facts">
+			<tr><th>Declared in</th><td>&lt;R5Admin.h&gt;</td></tr>
+			<tr><th>Library</th><td>libr5admin.so (link be and libr5admin.so), in the regular and the minimum image</td></tr>
+			<tr><th>Source</th><td>distro/admin</td></tr>
+			<tr><th>Used by</th><td>Login, bluetooth_server, libr5ui (the administrator lock), libr5bt, Users, bluetooth_audio</td></tr>
+			<tr><th>Contract</th><td>docs/LIBR5.md, "Admin requests"</td></tr>
+		</table>
+
+		<div class="note"><strong>Look here first.</strong> A new service that decides by its sender (an
+		administrator, uid 0, a program with an unlock grant) uses this kit. Do not decide by
+		<code class="inline">BMessage::ReturnAddress()</code> or <code class="inline">IsSourceRemote()</code>.</div>
+
+		<section class="entry" id="why">
+			<div class="entry-header"><h2 class="plain">Why not ReturnAddress()</h2></div>
+			<p>A <code class="inline">BMessage</code> carries a reply messenger, and the sender chooses it:
+			<code class="inline">SendMessage(message, replyTo)</code> puts any messenger there, also the one of
+			Login or of another uid 0 program. Its team says nothing about who sent the message. Until November
+			2026 Login and bluetooth_server decided by that team, so any program could act as an administrator.</p>
+			<p>The kernel records the uid, group and team of the program that wrote each message on a port, and
+			gives them to the port's reader (<code class="inline">get_port_message_info_etc()</code>). Nobody
+			can change those. The Admin Kit reads requests from a port of their own, with those values.</p>
+		</section>
+
+		<section class="entry" id="service">
+			<div class="entry-header"><h2>Service side</h2><span class="kind">functions</span></div>
+			<div class="member"><div class="sig">status_t r5_admin_port_start(const char* name, r5_admin_handler handler, void* cookie, port_id* port);</div>
+				<p>Creates the admin port and a thread that reads it. For every request it calls
+				<code class="inline">handler(request, sender, reply, cookie)</code> on that thread, one at a time,
+				and sends <code class="inline">reply</code> back. The handler locks what it touches, for most
+				services <code class="inline">be_app</code>.</p></div>
+			<div class="member"><div class="sig">struct r5_admin_sender { uid_t uid; gid_t gid; team_id team; };</div>
+				<p>The sender as the kernel saw it. Check the uid for uid 0 or the group admin, and use the team for
+				a grant.</p></div>
+			<div class="member"><div class="sig">bool r5_admin_port_reply(BMessage* message, port_id port);</div>
+				<p>In the service's <code class="inline">MessageReceived()</code>: answers
+				<code class="inline">R5_ADMIN_PORT_REQUEST</code> with the port, so clients can find it. Returns
+				false for any other message.</p></div>
+			<div class="member"><div class="sig">void r5_admin_port_stop(port_id port);</div>
+				<p>Deletes the port and waits for its thread. Call it without holding the lock the handler takes.</p></div>
+<pre><code>static void
+admin_request(BMessage* request, const r5_admin_sender&amp; sender,
+	BMessage* reply, void* cookie)
+{
+	MyServer* server = (MyServer*)cookie;
+	if (!server-&gt;Lock())
+		return;
+	bool allowed = sender.uid == 0;
+	reply-&gt;AddInt32("status", allowed ? server-&gt;Apply(request) : B_NOT_ALLOWED);
+	server-&gt;Unlock();
+}
+
+r5_admin_port_start("my admin", admin_request, this, &amp;fAdminPort);</code></pre>
+		</section>
+
+		<section class="entry" id="client">
+			<div class="entry-header"><h2>Client side</h2><span class="kind">function</span></div>
+			<div class="member"><div class="sig">status_t r5_admin_send(const BMessenger&amp; service, BMessage* request, BMessage* reply, bigtime_t timeout = 5000000);</div>
+				<p>Asks the service for its admin port, checks that the port belongs to the service's team (a port
+				with the same name made by another program gets nothing), sends the request and waits for the reply.
+				Use it instead of <code class="inline">BMessenger::SendMessage()</code> for every request that
+				changes something. A request may hold a password; the copy that was sent is cleared.</p></div>
+<pre><code>BMessage request(BT_MSG_R5_SET_RADIO);
+request.AddBool("enabled", false);
+BMessage reply;
+status_t status = r5_admin_send(BMessenger(BLUETOOTH_SIGNATURE), &amp;request, &amp;reply);</code></pre>
+		</section>
+
+		<section class="entry" id="services">
+			<div class="entry-header"><h2 class="plain">Where it is used</h2></div>
+			<p><strong>Login</strong> carries out account changes, the unlock and its grant, the clock and time zone,
+			and driver settings only on its admin port. Its normal messenger answers only the query (is this
+			program unlocked?). The administrator lock in <code class="inline">libr5ui.so</code> and Users send
+			through <code class="inline">r5_admin_send()</code>, so a grant belongs to the program that unlocked,
+			for example Settings and every page in it.</p>
+			<p><strong>bluetooth_server</strong> takes the Bluetooth switch and the requests of bluetooth_audio
+			only on its admin port. The switch needs an administrator or a grant; the audio requests need uid 0.</p>
+			<div class="note"><strong>Tested.</strong> Built for x86_64 and checked in QEMU: the Bluetooth smoke
+			test sets the switch through the admin port and checks that the normal messenger refuses it.</div>
+		</section>
+	</main>
+</div>
+
+<script src="r5book.js"></script>
+</body>
+</html>

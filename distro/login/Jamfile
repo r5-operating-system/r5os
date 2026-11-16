@@ -29,7 +29,8 @@ Application Login :
 	LoginView.cpp
 	SignInBackground.cpp
 	main.cpp
-	: be tracker translation libr5ui.so libr5icons.so shared package
+	: be tracker translation libr5ui.so libr5icons.so libr5admin.so shared
+		package
 		[ TargetLibstdc++ ] localestub
 	: Login.rdef
 ;

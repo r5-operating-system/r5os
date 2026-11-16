@@ -26,6 +26,7 @@
 #include <bluetooth/bdaddrUtils.h>
 #include <bluetooth/L2CAP/btL2CAP.h>
 #include <bluetoothserver_p.h>
+#include <R5Admin.h>
 
 #include "a2dp_proto.h"
 #include "AudioSettings.h"
@@ -499,7 +500,9 @@ A2DPSource::_LinkState(const bdaddr_t& address, bool* paired,
 	BMessage request(BT_MSG_R5_AUDIO_PAIRED);
 	request.AddData("bdaddr", B_ANY_TYPE, &address, sizeof(bdaddr_t));
 	BMessage reply;
-	if (server.SendMessage(&request, &reply, 2000000, 2000000) != B_OK)
+	// The admin port: the server checks that the sender is uid 0 as the
+	// kernel names it (libr5admin.so).
+	if (r5_admin_send(server, &request, &reply, 2000000) != B_OK)
 		return false;
 	reply.FindBool("paired", paired);
 	reply.FindBool("connected", connected);
@@ -559,8 +562,7 @@ A2DPSource::_Connect(const bdaddr_t& address, uint16 psm)
 				sizeof(bdaddr_t));
 			BMessage reply;
 			int32 status = B_ERROR;
-			if (server.SendMessage(&request, &reply, 2000000, 2000000)
-					!= B_OK
+			if (r5_admin_send(server, &request, &reply, 2000000) != B_OK
 				|| reply.FindInt32("status", &status) != B_OK
 				|| status != B_OK)
 				return -1;
@@ -601,11 +603,24 @@ A2DPSource::_Connect(const bdaddr_t& address, uint16 psm)
 void
 A2DPSource::_TellServer(bool streaming)
 {
+	// The audio thread must not wait for the server: a thread of its own
+	// sends it on the admin port.
+	thread_id thread = spawn_thread(_TellServerEntry, "bt audio tell",
+		B_NORMAL_PRIORITY, (void*)(addr_t)(streaming ? 1 : 0));
+	if (thread >= 0)
+		resume_thread(thread);
+}
+
+
+int32
+A2DPSource::_TellServerEntry(void* data)
+{
 	BMessenger server(BLUETOOTH_SIGNATURE);
 	BMessage message(BT_MSG_R5_AUDIO_STREAMING);
-	message.AddBool("streaming", streaming);
-	// No reply wanted: the audio thread must not wait for the server.
-	server.SendMessage(&message, (BHandler*)NULL, 500000);
+	message.AddBool("streaming", data != NULL);
+	BMessage reply;
+	r5_admin_send(server, &message, &reply, 2000000);
+	return B_OK;
 }
 
 

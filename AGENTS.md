@@ -58,6 +58,8 @@ Before UI work, read `docs/LIBR5.md`, `docs/APPEARANCE-KIT.md`, R5Book and one e
 
 - `libr5icons.so`, header `R5Icons.h`, source `distro/icons`. Icons. `docs/ICONS.md`.
 - `libr5ui.so`, headers `R5UI.h` and `Card.h`, source `distro/ui`. The screen picture, and the Appearance Kit classes (`BAppearanceKit::BCard`). `docs/LIBR5.md`. Which class to use for what: `docs/APPEARANCE-KIT.md`.
+- `libr5admin.so`, header `R5Admin.h`, source `distro/admin`. Admin requests: a request that a service carries out because of who sent it goes through `r5_admin_send()` to the service's admin port, where the kernel names the sender. Never decide by `BMessage::ReturnAddress()` or `IsSourceRemote()`. `docs/LIBR5.md`, "Admin requests"; R5Book `admin-kit.html`.
+- `libr5bt.so` (`R5Bluetooth.h`, `distro/bluetooth/lib`) and `libr5wifi.so` (`R5WiFi.h`, `distro/wifi/lib`): the Bluetooth and Wi-Fi Kits. `docs/LIBR5.md`.
 
 The regular image and the minimum image both install them in `/system/lib`. The soname has no version suffix.
 

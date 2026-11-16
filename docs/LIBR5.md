@@ -15,6 +15,7 @@ The R5Book (`docs/r5book/index.html`) shows each part with a picture, what it is
 | `libr5icons.so` | `<R5Icons.h>` | `distro/icons` | Icons and icon buttons, line glyphs (`r5_glyph_draw()`) and level glyphs for signal and battery (`r5_level_glyph_draw()`). `docs/ICONS.md` |
 | `libr5ui.so` | `<R5UI.h>` | `distro/ui` | The screen picture, cards, the sidebar, the page heading, the administrator lock (`<AdminLock.h>`), and the window effects (`<WindowEffects.h>`). It links `libr5icons.so` because a locked sidebar row draws `R5_ICON_LOCKED` |
 | `libr5wifi.so` | `<R5WiFi.h>` | `distro/wifi/lib` | The Wi-Fi panel (`WiFiView`), the Wi-Fi state machine (`WiFiController`), the network list, and the Wi-Fi glyphs. From air/OS, MIT. Regular image only. It links `libr5icons.so`, which draws the signal bars. See "Wi-Fi Kit" below |
+| `libr5admin.so` | `<R5Admin.h>` | `distro/admin` | Admin requests: a request that changes the machine goes to a service's own port, where the kernel names the sender (uid, group, team). Login, bluetooth_server, `libr5ui.so`, `libr5bt.so`, Users and bluetooth_audio use it. Both images. See "Admin requests" below |
 | `libr5bt.so` | `<R5Bluetooth.h>` | `distro/bluetooth/lib` | The Bluetooth panel (`BluetoothView`), its controller (`BluetoothController`) and state. R5's own, MIT. Regular image only, because it needs `libbluetooth.so`. It links `libr5icons.so` (the Bluetooth glyph and the signal bars) and `libr5ui.so` (`BCard`). See "Bluetooth Kit" below |
 
 `scripts/apply-icons.py` and `scripts/apply-r5ui.py` copy the sources into the Haiku tree, copy the header to `headers/os/interface/`, and add the library to the regular image and the minimum image. On a running system the files are `/system/lib/libr5icons.so` and `/system/lib/libr5ui.so`. The soname is the file name, with no version suffix, the same way `libbe.so` is named.
@@ -337,6 +338,24 @@ BLayoutBuilder::Group<>(this, B_HORIZONTAL)
 ```
 
 The message codes Login answers are in `distro/ui/AdminLockProtocol.h` (private) and `distro/users/AccountAdmin.h`, with the same values. A code that shipped does not change.
+
+Since November 2026 every one of these calls reaches Login through `r5_admin_send()` ("Admin requests" below). Login's normal messenger only answers `kMsgAdminQuery`; an unlock, a grant and every change are only taken on its admin port, so the grant belongs to the team the kernel names.
+
+## Admin requests
+
+`libr5admin.so`, header `<R5Admin.h>`, source `distro/admin`, MIT, in both images.
+
+**Look here first** for any request that a service carries out because of who sent it (an administrator, uid 0, a program with an unlock grant). Do not decide by `BMessage::ReturnAddress()` or `IsSourceRemote()`: the reply messenger is whatever the sender chose, also the messenger of Login or of another uid 0 program. Login and bluetooth_server decided that way until November 2026, so any program could act as an administrator. The kernel gives the uid, group and team of the writer of each port message (`get_port_message_info_etc()`), and nobody can change those.
+
+| Call | What it does |
+|---|---|
+| `r5_admin_port_start(name, handler, cookie, &port)` | Service: creates the admin port and its reading thread. For every request it calls `handler(request, sender, reply, cookie)` on that thread, one at a time, and sends `reply` back to the sender's reply port, only when that port belongs to the sender's team. The handler locks what it touches |
+| `r5_admin_sender` | `uid`, `gid`, `team` of the sender, from the kernel |
+| `r5_admin_port_reply(message, port)` | Service, in `MessageReceived()`: answers `R5_ADMIN_PORT_REQUEST` (`'r5AP'`) with int32 `"port"`. False for any other message |
+| `r5_admin_port_stop(port)` | Service: deletes the port and waits for its thread. Not while holding the lock the handler takes |
+| `r5_admin_send(service, request, reply, timeout)` | Client: asks `service` for its admin port, checks that the port belongs to the service's team, sends the request (at most 64 KB) and waits for the reply. The sent copy is cleared (it may hold a password) |
+
+Services: Login (accounts, unlock, relock, clock, time zone, driver blocking and driver settings; its normal messenger only answers the query) and bluetooth_server (`BT_MSG_R5_SET_RADIO`, administrator or grant; `BT_MSG_R5_AUDIO_*`, uid 0). The R5Book page is `docs/r5book/admin-kit.html`.
 
 ## Window effects
 

@@ -10,7 +10,8 @@ UsePrivateHeaders bluetooth ;
 
 Application bluetooth_deskbar :
 	BluetoothDeskbar.cpp
-	: be libr5icons.so libr5ui.so localestub [ TargetLibstdc++ ]
+	: be libr5icons.so libr5ui.so libr5admin.so localestub
+		[ TargetLibstdc++ ]
 	: BluetoothDeskbar.rdef
 	;
 

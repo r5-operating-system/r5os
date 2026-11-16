@@ -16,9 +16,11 @@
  */
 
 
+#include <pwd.h>
 #include <stdio.h>
 #include <string.h>
 #include <syslog.h>
+#include <unistd.h>
 
 #include <Application.h>
 #include <Entry.h>
@@ -33,6 +35,8 @@
 #include <bluetooth/bdaddrUtils.h>
 #include <bluetooth/bluetooth.h>
 #include <bluetoothserver_p.h>
+
+#include <R5Admin.h>
 
 
 static const bigtime_t kTimeout = 3000000;
@@ -225,9 +229,22 @@ main()
 			BMessage set(BT_MSG_R5_SET_RADIO);
 			set.AddBool("enabled", on);
 			BMessage setReply;
-			if (ask(server, set, setReply, "radio switch, set")
-				&& setReply.GetInt32("status", B_ERROR) != B_OK)
+			// The switch is only on the admin port (libr5admin.so).
+			if (r5_admin_send(server, &set, &setReply, kTimeout) != B_OK)
+				fail("radio switch, set: no answer on the admin port");
+			else if (setReply.GetInt32("status", B_ERROR) != B_OK)
 				fail("radio switch, set: not saved");
+			if (pass == 0) {
+				// The normal messenger refuses it: its reply address
+				// proves nothing.
+				BMessage plain(BT_MSG_R5_SET_RADIO);
+				plain.AddBool("enabled", true);
+				BMessage plainReply;
+				if (server.SendMessage(&plain, &plainReply, kTimeout,
+						kTimeout) == B_OK
+					&& plainReply.GetInt32("status", B_OK) != B_NOT_ALLOWED)
+					fail("radio switch: taken on the normal messenger");
+			}
 
 			BMessage get(BT_MSG_R5_GET_RADIO);
 			BMessage getReply;
@@ -251,9 +268,118 @@ main()
 			before ? "on" : "off");
 	}
 
+	// Login's admin port (libr5admin.so): a change on the normal messenger
+	// is refused, the admin port answers. An unlock with a wrong password
+	// gets "wrong password" or "no such account", not "not allowed".
+	// Only when Login runs: on a first boot FirstBootPrompt comes first,
+	// and a BMessenger for Login, which launch_daemon pre-registered,
+	// waits until it starts.
+	bool loginRuns = false;
+	int32 cookie = 0;
+	team_info loginInfo;
+	while (!loginRuns && get_next_team_info(&cookie, &loginInfo) == B_OK) {
+		const char* name = strrchr(loginInfo.args, '/');
+		name = name != NULL ? name + 1 : loginInfo.args;
+		loginRuns = strncmp(name, "Login", 5) == 0
+			&& (name[5] == 0 || name[5] == ' ');
+	}
+	BMessenger login;
+	if (loginRuns)
+		login = BMessenger("application/x-vnd.Haiku-Login");
+	if (!loginRuns) {
+		printf("bt_server_smoke_test: admin: Login does not run (first "
+			"boot), not tested\n");
+		syslog(LOG_INFO, "bt_server_smoke_test: admin: Login does not run, "
+			"not tested");
+	} else if (login.IsValid()) {
+		BMessage change('r5ad');	// kMsgAdminDelete
+		change.AddString("name", "nobody-r5-test");
+		BMessage changeReply;
+		if (login.SendMessage(&change, &changeReply, kTimeout, kTimeout)
+				!= B_OK
+			|| changeReply.GetInt32("error", B_OK) != B_NOT_ALLOWED)
+			fail("admin: Login took a change on its normal messenger");
+
+		syslog(LOG_INFO, "bt_server_smoke_test: admin: normal messenger done");
+		BMessage unlock('r5au');	// kMsgAdminUnlock
+		unlock.AddString("name", "user");
+		unlock.AddString("password", "not-the-password-r5-test");
+		BMessage unlockReply;
+		status_t status = r5_admin_send(login, &unlock, &unlockReply,
+			kTimeout);
+		syslog(LOG_INFO, "bt_server_smoke_test: admin: port answered %s",
+			strerror(status));
+		int32 code = unlockReply.GetInt32("error", B_OK);
+		if (status != B_OK)
+			fail("admin: no answer on Login's admin port");
+		else if (code == B_OK || code == B_NOT_ALLOWED)
+			fail("admin: Login's admin port gave a wrong answer");
+		else {
+			printf("bt_server_smoke_test: admin port ok\n");
+			syslog(LOG_INFO, "bt_server_smoke_test: admin port ok");
+		}
+	} else
+		fail("admin: no messenger for Login");
+
 	team_info info;
 	if (get_team_info(team, &info) != B_OK)
 		fail("bluetooth_server is gone");
+
+	// Last: the same requests as a standard person (uid 1000, not in group
+	// admin, no grant). Everything that changes something must be refused,
+	// also the old trick of naming Login itself as the reply address.
+	if (loginRuns && login.IsValid()) {
+		if (setgid(100) != 0 || setuid(1000) != 0 || getuid() != 1000)
+			fail("standard: could not become uid 1000");
+		else {
+			BMessage query('r5aq');	// kMsgAdminQuery
+			BMessage queryReply;
+			if (r5_admin_send(login, &query, &queryReply, kTimeout) != B_OK
+				|| queryReply.GetBool("admin", true)
+				|| queryReply.GetBool("unlocked", true))
+				fail("standard: Login says uid 1000 is an administrator");
+
+			BMessage add('r5aa');	// kMsgAdminAdd
+			add.AddString("name", "r5stdtest");
+			add.AddString("real", "R5 test");
+			add.AddString("password", "r5-test-password");
+			BMessage addReply;
+			if (r5_admin_send(login, &add, &addReply, kTimeout) != B_OK
+				|| addReply.GetInt32("error", B_OK) == B_OK)
+				fail("standard: Login added an account for uid 1000");
+
+			BMessage gmt('r5ag');	// kMsgAdminSetClockGmt
+			gmt.AddBool("gmt", true);
+			BMessage gmtReply;
+			if (r5_admin_send(login, &gmt, &gmtReply, kTimeout) != B_OK
+				|| gmtReply.GetInt32("error", B_OK) == B_OK)
+				fail("standard: Login changed the clock for uid 1000");
+
+			// The old trick: Login's own messenger as the reply address.
+			BMessage spoof('r5aa');
+			spoof.AddString("name", "r5spooftest");
+			spoof.AddString("real", "R5 test");
+			spoof.AddString("password", "r5-test-password");
+			login.SendMessage(&spoof, login, kTimeout);
+			snooze(2000000);
+			if (getpwnam("r5spooftest") != NULL
+				|| getpwnam("r5stdtest") != NULL)
+				fail("standard: an account was added for uid 1000");
+
+			BMessage radio(BT_MSG_R5_SET_RADIO);
+			radio.AddBool("enabled", true);
+			BMessage radioReply;
+			if (r5_admin_send(server, &radio, &radioReply, kTimeout) != B_OK
+				|| radioReply.GetInt32("status", B_OK) != B_NOT_ALLOWED)
+				fail("standard: the radio switch took uid 1000");
+
+			if (sFailures == 0) {
+				printf("bt_server_smoke_test: standard user refused ok\n");
+				syslog(LOG_INFO,
+					"bt_server_smoke_test: standard user refused ok");
+			}
+		}
+	}
 
 	if (sFailures != 0)
 		return 1;

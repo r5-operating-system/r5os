@@ -58,7 +58,7 @@ if [ "${PROGRAM:-0}" = 1 ]; then
 fi
 cat > "$BT_WORK/bt-smoke.job" <<EOF
 job bt-smoke {
-	launch /bin/sh -c "sleep 60; ps > /boot/home/bt-ps0.log 2>&1; $page/bin/bt_server_smoke_test > /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; /bin/bt_l2cap_abi_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; /bin/bt_hid_driver_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; /bin/bt_l2cap_coc_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; /bin/bt_smp_crypto_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; /bin/bt_audio_smoke_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; /bin/bt_audio use 00:11:22:33:44:55 >> /boot/home/bt-smoke.log 2>&1; /bin/bt_audio >> /boot/home/bt-smoke.log 2>&1; /bin/bt_audio off >> /boot/home/bt-smoke.log 2>&1; /bin/bt_audio >> /boot/home/bt-smoke.log 2>&1; ls -ld /boot/system/settings/bluetooth /boot/system/settings/bluetooth/* >> /boot/home/bt-smoke.log 2>&1; sleep 5; sync"
+	launch /bin/sh -c "(while true; do sleep 5; ps -a > /boot/home/bt-psa.log 2>&1; sync; done) & sleep 60; ps > /boot/home/bt-ps0.log 2>&1; sync; $page/bin/bt_server_smoke_test > /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_l2cap_abi_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_hid_driver_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_l2cap_coc_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_smp_crypto_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_audio_smoke_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_audio use 00:11:22:33:44:55 >> /boot/home/bt-smoke.log 2>&1; /bin/bt_audio >> /boot/home/bt-smoke.log 2>&1; /bin/bt_audio off >> /boot/home/bt-smoke.log 2>&1; /bin/bt_audio >> /boot/home/bt-smoke.log 2>&1; ls -ld /boot/system/settings/bluetooth /boot/system/settings/bluetooth/* >> /boot/home/bt-smoke.log 2>&1; sleep 5; sync"
 	on initial_volumes_mounted
 }
 EOF
@@ -67,6 +67,16 @@ mkdir -p myfs/system/settings/launch
 cp :$BT_WORK/bt-smoke.job myfs/system/settings/launch/bt-smoke
 quit
 EOT
+# LOGIN=1: skip the first-boot prompt (launch_daemon shows it while there
+# are no Locale settings), so Login starts and its admin port is tested.
+if [ "${LOGIN:-0}" = 1 ]; then
+	: > "$BT_WORK/locale-settings"
+	"$BFS" "$IMG" <<EOT
+mkdir -p myfs/home/config/settings
+cp :$BT_WORK/locale-settings "myfs/home/config/settings/Locale settings"
+quit
+EOT
+fi
 
 accel=tcg
 cpu=qemu64
@@ -101,6 +111,7 @@ rm -f "$BT_WORK/out-smoke.log" "$BT_WORK/out-ps.log" "$BT_WORK/out-ps0.log" "$BT
 cp myfs/home/bt-smoke.log :$BT_WORK/out-smoke.log
 cp myfs/home/bt-ps.log :$BT_WORK/out-ps.log
 cp myfs/home/bt-ps0.log :$BT_WORK/out-ps0.log
+cp myfs/home/bt-psa.log :$BT_WORK/out-psa.log
 cp myfs/system/var/log/syslog :$BT_WORK/out-syslog
 quit
 EOT

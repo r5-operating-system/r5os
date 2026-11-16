@@ -16,6 +16,24 @@ Tested: `scripts/build-locked.sh` jam_exit=0. One QEMU run (KVM, 6 virtual CPUs,
 
 Not tested: RADV and the 5625U (no stick). `m13-measure` is not in the `mesa_radv` package yet (with the next repack, for the first M13 stick). Scroll has no input latency, because the wheel moves no cursor. ARM64 and RISC-V 64 not built.
 
+## 2026-11-16 - Admin requests: the sender is the one the kernel names (libr5admin.so)
+
+Problem: Login (accounts, unlock grant, clock, time zone, driver blocking and driver settings) and bluetooth_server (the radio switch, bluetooth_audio's requests) decided by `BMessage::ReturnAddress().Team()`. That is the reply messenger the sender chose: any program, also a standard account's, could name Login's own team or another uid 0 team there and act as an administrator. Login's `sender_is_admin()` even took a message whose reply address was Login itself as local. Found by the stack review of #4322 (bluetooth_server) and then in Login's AccountAdmin.cpp; seen in the code, not exploited on R5.
+
+What changed:
+- New `libr5admin.so` (`distro/admin`, `<R5Admin.h>`, MIT, both images). A service reads admin requests from its own port; the kernel gives the uid, group and team of each port message (`get_port_message_info_etc()`). `r5_admin_send()` asks the service for that port, checks the port belongs to the service's team, sends, and waits with a timeout.
+- Login: an admin port; account changes, unlock, relock, clock, time zone and driver requests only there. The normal messenger answers only the query. Grants are for the team the kernel names.
+- Clients: libr5ui's administrator lock (Settings and every page in it, Time, Device Manager, Media and the other preferences), Users, libr5bt (Bluetooth switch), the Bluetooth Deskbar item, bluetooth_audio.
+- bluetooth_server: `BT_MSG_R5_SET_RADIO` and `BT_MSG_R5_AUDIO_*` only on its admin port (administrator or grant; uid 0 for audio).
+- Docs: `docs/LIBR5.md` ("Admin requests"), AGENTS.md (libr5admin beside libr5ui, libr5icons, libr5bt and libr5wifi: look there first), R5Book `admin-kit.html`.
+- Smoke test: sets the switch through the admin port and checks the normal messenger refuses it; checks Login refuses a change on its normal messenger and answers on its admin port (`LOGIN=1` skips the first-boot prompt so Login runs). The job syncs every 5 s and writes `ps -a`, so a hang leaves a trace.
+
+Mistakes on the way: the first QEMU runs hung in the new Login check. Not the admin calls: on a fresh image FirstBootPrompt runs instead of Login, and a BMessenger for the pre-registered Login waits until Login starts. The test now only talks to Login when its team runs.
+
+Limits: Deskbar's Lock and Log out messages to Login are not admin requests and stay on the normal messenger. The sign-in itself (kAttemptLogin) is unchanged.
+
+Tested: built for x86_64 (exit 0). QEMU with SMAP, first boot: all Bluetooth tests ok, Login check skipped. QEMU with SMAP and Login running (sign-in window shown): `admin port ok`, all Bluetooth tests ok, no panic. Not tested: unlocking in Settings by hand with a standard account, Users & Accounts changes, the 5625U.
+
 ## 2026-11-16 - Graphics (M12): VRAM kept for page tables, so Skia drawing stays on with a full VRAM
 
 Problem: on the 5625U, M12 stick 2 (`generated/boot-5625u-51`), boot 1 (Skia on RADV) turned the GPU drawing off after about 3.5 minutes (`app_server: gpu draw off: insert failed`, while WebPositive opened). Boot 3 (Lavapipe) passed. The kernel log shows the cause: `refuse BO_CREATE vram full` at 188 s, then at 213 s `page table pool full` and three refused `VA_MAP`s (`pte status 0x80000000`, `B_NO_MEMORY`) for GTT buffers of 21 MB, 4 MB and 2 MB. Stick 1 of the same day (`m12-stick-measure-2`, boot 1) has the same lines. The VRAM to GTT fallback of `libdrm-2.4.124-3` covers buffers, not page-table pages: those are taken from the same VRAM pool (`vm_page_alloc()` in `gfx9_k12.cpp`), so with the pool used up by buffers no new table page could be made. Earlier this day I read stick 1's boot 1 as a VRAM fallback problem only; that was incomplete.

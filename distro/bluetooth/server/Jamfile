@@ -33,7 +33,7 @@ Application bluetooth_server
 	SDPServer.cpp
 	SDPClient.cpp
 	SMPCrypto.cpp
-	: be network libbluetooth.so localestub $(opensslLib)
+	: be network libbluetooth.so libr5admin.so localestub $(opensslLib)
 	[ TargetLibstdc++ ]
 ;
 

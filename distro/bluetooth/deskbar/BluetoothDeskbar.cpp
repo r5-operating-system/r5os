@@ -40,6 +40,8 @@
 
 #include <bluetoothserver_p.h>
 
+#include <R5Admin.h>
+
 
 #undef B_TRANSLATION_CONTEXT
 #define B_TRANSLATION_CONTEXT "BluetoothDeskbar"
@@ -55,6 +57,19 @@ static const uint32 kMsgToggle = 'btdT';
 static const uint32 kMsgOpen = 'btdO';
 
 static const bigtime_t kPollInterval = 5000000;
+
+
+// The switch on bluetooth_server's admin port (libr5admin.so), on its own
+// thread so Deskbar does not wait. data: 1 for on.
+static status_t
+set_radio(void* data)
+{
+	BMessage request(BT_MSG_R5_SET_RADIO);
+	request.AddBool("enabled", data != NULL);
+	BMessage reply;
+	r5_admin_send(BMessenger(BLUETOOTH_SIGNATURE), &request, &reply, 2000000);
+	return B_OK;
+}
 
 
 static status_t
@@ -172,11 +187,14 @@ public:
 
 			case kMsgToggle:
 			{
-				BMessage request(BT_MSG_R5_SET_RADIO);
-				request.AddBool("enabled", !fEnabled);
-				// The answer comes back here; the server checks the sender
-				// (an administrator, or a grant).
-				BMessenger(BLUETOOTH_SIGNATURE).SendMessage(&request, this);
+				// On the server's admin port, where it checks the sender the
+				// kernel names (an administrator, or a grant). Its own
+				// thread: Deskbar does not wait; the next poll shows the
+				// new state.
+				thread_id thread = spawn_thread(set_radio, "bluetooth switch",
+					B_NORMAL_PRIORITY, (void*)(addr_t)(fEnabled ? 0 : 1));
+				if (thread >= 0)
+					resume_thread(thread);
 				break;
 			}
 

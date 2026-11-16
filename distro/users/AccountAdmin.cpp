@@ -329,11 +329,43 @@ admin_count()
 }
 
 
+// The sender the kernel named for the request being handled (Login's admin
+// port, libr5admin.so); unset for a request on the normal messenger.
+static bool sSenderVerified = false;
+static uid_t sSenderUid = (uid_t)-1;
+static team_id sSenderTeam = -1;
+
+
+void
+set_admin_sender(bool verified, uid_t uid, team_id team)
+{
+	sSenderVerified = verified;
+	sSenderUid = verified ? uid : (uid_t)-1;
+	sSenderTeam = verified ? team : -1;
+}
+
+
+// The sender's team: from the kernel, or (normal messenger, only for the
+// query) the reply address.
+static team_id
+sender_team(BMessage* request)
+{
+	if (sSenderVerified)
+		return sSenderTeam;
+	return request != NULL ? request->ReturnAddress().Team() : -1;
+}
+
+
 static bool
 sender_is_admin(BMessage* request)
 {
 	if (request == NULL)
 		return false;
+	if (sSenderVerified) {
+		if (sSenderUid == 0)
+			return true;
+		return is_admin_user(getpwuid(sSenderUid));
+	}
 	if (geteuid() == 0 && !request->IsSourceRemote())
 		return true;
 
@@ -1223,11 +1255,12 @@ forget_grant(team_id team)
 static bool
 sender_may_change(BMessage* request)
 {
+	// Only a request the kernel named a sender for changes anything.
+	if (!sSenderVerified || request == NULL)
+		return false;
 	if (sender_is_admin(request))
 		return true;
-	if (request == NULL)
-		return false;
-	return team_has_grant(request->ReturnAddress().Team());
+	return team_has_grant(sSenderTeam);
 }
 
 
@@ -1420,12 +1453,9 @@ refresh_machine_settings_access()
 static bool
 sender_uid(BMessage* request, uid_t& uid)
 {
-	if (request == NULL)
+	if (request == NULL || !sSenderVerified)
 		return false;
-	team_info info;
-	if (get_team_info(request->ReturnAddress().Team(), &info) != B_OK)
-		return false;
-	uid = info.uid;
+	uid = sSenderUid;
 	return true;
 }
 
@@ -1687,7 +1717,16 @@ handle_admin_message(BMessage* request, BMessage& reply)
 		return B_PERMISSION_DENIED;
 	}
 
-	team_id sender = request->ReturnAddress().Team();
+	team_id sender = sender_team(request);
+	// On the normal messenger only the query: everything else comes
+	// through Login's admin port (libr5admin.so), where the kernel names
+	// the sender.
+	if (!sSenderVerified && request->what != kMsgAdminQuery) {
+		reply.AddString("text", "This request must come through "
+			"r5_admin_send().");
+		reply.AddInt32("error", B_NOT_ALLOWED);
+		return B_NOT_ALLOWED;
+	}
 	BString error;
 	status_t status = B_OK;
 	switch (request->what) {
