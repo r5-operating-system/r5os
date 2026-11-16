@@ -284,7 +284,9 @@ void
 small_text(const painter& p, const char* text, float cx, float baseline)
 {
 	BFont font(be_bold_font);
-	font.SetSize(std::max(6.0f, p.Size(10)));
+	// Never smaller than three quarters of the plain font, so it stays
+	// readable when the picture is small.
+	font.SetSize(std::max(be_plain_font->Size() * 0.75f, p.Size(10)));
 	p.view->SetFont(&font);
 	float width = font.StringWidth(text);
 	p.view->SetHighColor(p.quiet);
