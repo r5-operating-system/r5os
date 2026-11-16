@@ -16,9 +16,11 @@
  */
 
 
+#include <pwd.h>
 #include <stdio.h>
 #include <string.h>
 #include <syslog.h>
+#include <unistd.h>
 
 #include <Application.h>
 #include <Entry.h>
@@ -322,6 +324,62 @@ main()
 	team_info info;
 	if (get_team_info(team, &info) != B_OK)
 		fail("bluetooth_server is gone");
+
+	// Last: the same requests as a standard person (uid 1000, not in group
+	// admin, no grant). Everything that changes something must be refused,
+	// also the old trick of naming Login itself as the reply address.
+	if (loginRuns && login.IsValid()) {
+		if (setgid(100) != 0 || setuid(1000) != 0 || getuid() != 1000)
+			fail("standard: could not become uid 1000");
+		else {
+			BMessage query('r5aq');	// kMsgAdminQuery
+			BMessage queryReply;
+			if (r5_admin_send(login, &query, &queryReply, kTimeout) != B_OK
+				|| queryReply.GetBool("admin", true)
+				|| queryReply.GetBool("unlocked", true))
+				fail("standard: Login says uid 1000 is an administrator");
+
+			BMessage add('r5aa');	// kMsgAdminAdd
+			add.AddString("name", "r5stdtest");
+			add.AddString("real", "R5 test");
+			add.AddString("password", "r5-test-password");
+			BMessage addReply;
+			if (r5_admin_send(login, &add, &addReply, kTimeout) != B_OK
+				|| addReply.GetInt32("error", B_OK) == B_OK)
+				fail("standard: Login added an account for uid 1000");
+
+			BMessage gmt('r5ag');	// kMsgAdminSetClockGmt
+			gmt.AddBool("gmt", true);
+			BMessage gmtReply;
+			if (r5_admin_send(login, &gmt, &gmtReply, kTimeout) != B_OK
+				|| gmtReply.GetInt32("error", B_OK) == B_OK)
+				fail("standard: Login changed the clock for uid 1000");
+
+			// The old trick: Login's own messenger as the reply address.
+			BMessage spoof('r5aa');
+			spoof.AddString("name", "r5spooftest");
+			spoof.AddString("real", "R5 test");
+			spoof.AddString("password", "r5-test-password");
+			login.SendMessage(&spoof, login, kTimeout);
+			snooze(2000000);
+			if (getpwnam("r5spooftest") != NULL
+				|| getpwnam("r5stdtest") != NULL)
+				fail("standard: an account was added for uid 1000");
+
+			BMessage radio(BT_MSG_R5_SET_RADIO);
+			radio.AddBool("enabled", true);
+			BMessage radioReply;
+			if (r5_admin_send(server, &radio, &radioReply, kTimeout) != B_OK
+				|| radioReply.GetInt32("status", B_OK) != B_NOT_ALLOWED)
+				fail("standard: the radio switch took uid 1000");
+
+			if (sFailures == 0) {
+				printf("bt_server_smoke_test: standard user refused ok\n");
+				syslog(LOG_INFO,
+					"bt_server_smoke_test: standard user refused ok");
+			}
+		}
+	}
 
 	if (sFailures != 0)
 		return 1;
