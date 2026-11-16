@@ -421,6 +421,21 @@ LEManager::_CommandDone(uint16 opcode, uint8 status, const uint8* data,
 			}
 			break;
 
+		case kOpLEReadRemoteFeatures:
+			// Refused: go on without it, for the link that waits.
+			if (status != BT_OK) {
+				syslog(LOG_NOTICE, "bluetooth_server: hci%" B_PRId32
+					" le remote features not read (%#x)", fDevice->GetID(),
+					status);
+				for (size_t i = 0; i < fLinks.size(); i++) {
+					if (fLinks[i]->featuresPending) {
+						_LinkReady(fLinks[i]);
+						break;
+					}
+				}
+			}
+			break;
+
 		case kOpLEEnableEncryption:
 			if (status != BT_OK) {
 				syslog(LOG_WARNING, "bluetooth_server: hci%" B_PRId32
@@ -472,6 +487,22 @@ LEManager::_LEMeta(const uint8* data, size_t size)
 		case 0x0d:
 			_AdvertisingReport(data + 1, size - 1, true);
 			break;
+
+		case 0x04:
+		{
+			// LE Read Remote Features Complete: status, handle (2),
+			// features (8).
+			if (size < 4)
+				break;
+			const uint16 handle = (data[2] | (data[3] << 8)) & 0x0fff;
+			Link* link = _FindLink(handle);
+			if (link == NULL || !link->featuresPending)
+				break;
+			syslog(LOG_INFO, "bluetooth_server: hci%" B_PRId32 " le remote"
+				" features read (%#x)", fDevice->GetID(), data[1]);
+			_LinkReady(link);
+			break;
+		}
 
 		case 0x05:
 		{
@@ -686,6 +717,7 @@ LEManager::_ConnectionComplete(const uint8* data, size_t size, uint8 subevent)
 	link->usesReportIDs = false;
 	link->kernelID = -1;
 	link->resultPending = false;
+	link->featuresPending = false;
 	fLinks.push_back(link);
 	if (link->pairRequested) {
 		fWantDirect = false;
@@ -698,16 +730,33 @@ LEManager::_ConnectionComplete(const uint8* data, size_t size, uint8 subevent)
 	syslog(LOG_INFO, "bluetooth_server: hci%" B_PRId32 " le link up%s",
 		fDevice->GetID(), link->pairRequested ? " (pairing)" : "");
 
+	if (!link->pairRequested && _FindBond(link->address) == NULL) {
+		// Only paired devices and the one being paired get a link.
+		_CloseLink(link, true);
+		_Connect();
+		return;
+	}
+
+	// First the link layer's own feature exchange, as BlueZ does: LE Read
+	// Remote Features, and pairing or encryption once it completed
+	// (7.8.21, subevent 0x04). SMP went out at once before.
+	link->featuresPending = true;
+	uint8 command[2];
+	le_put16(command, link->handle);
+	_Issue(kOpLEReadRemoteFeatures, command, sizeof(command));
+	_Connect();
+}
+
+
+void
+LEManager::_LinkReady(Link* link)
+{
+	link->featuresPending = false;
 	LEBond* bond = _FindBond(link->address);
 	if (link->pairRequested)
 		_SMPStart(link);
 	else if (bond != NULL)
 		_StartEncryption(link, bond->ltk, bond->ediv, bond->rand);
-	else {
-		// Only paired devices and the one being paired get a link.
-		_CloseLink(link, true);
-	}
-	_Connect();
 }
 
 

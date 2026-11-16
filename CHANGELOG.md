@@ -1,5 +1,12 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-16 - Bluetooth: LE packets with the right boundary flag, a reset at start, the link's features before pairing
+
+Problem: a third read-only review of the three stick boots on the 5625U (MT7922) found more below the pairing: every LE packet from the host started with Packet_Boundary 10, which is for BR/EDR only; the LE buffer length was never used (the radio id, 124, was taken as a table index of 8); R5 never sent HCI Reset, so a warm boot from Windows kept the radio's settings; SMP went out the moment an LE link came up, before the link layer's own feature exchange that BlueZ waits for; and two Classic ends (a refused Create Connection, a disconnection during pairing) still told nobody.
+
+What changed: PB 00 for LE starts in `PostACL()`; the LE buffer slot is the id minus `HCI_DEVICE_INDEX_OFFSET`; `bluetooth_server` resets a radio when it is added and then runs the setup; an LE link runs LE Read Remote Features first and pairs or encrypts when it completes (or is refused); the IO Capability Response is handled without a petition; the two Classic ends give the pairing result.
+
+Tested: built for x86_64; QEMU with SMAP, all Bluetooth tests ok, no panic. Not on a stick yet. ARM64 and RISC-V 64 not built or tested.
 ## 2026-11-16 - Bluetooth: headphones and speakers (A2DP with R5's own SBC, AVRCP), step 5
 
 Problem: R5 had no Bluetooth audio. Step 5 of `docs/BLUETOOTH.md`: an A2DP source with a royalty-free SBC encoder written by R5 (no third-party codec, owner's choice), AVRCP play, pause and volume, an audio output choice per person, a real-time audio thread and no scans while it streams.

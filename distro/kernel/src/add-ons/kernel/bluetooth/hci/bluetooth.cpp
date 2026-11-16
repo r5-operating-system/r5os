@@ -394,6 +394,11 @@ PostACL(hci_id hciId, net_buffer* buffer)
 	if (connection != NULL && connection->type == R5_HCI_LINK_LE
 		&& connection->mtu != 0 && connection->mtu < fragment)
 		fragment = connection->mtu;
+	// From host to controller an LE packet starts with Packet_Boundary
+	// 00 (first, not automatically flushable); 10 is BR/EDR only (Core 6.0,
+	// Vol 4, Part E, 5.4.2). Every LE start went out as 10.
+	if (connection != NULL && connection->type == R5_HCI_LINK_LE)
+		flag = 0x00;
 	// SPDX-SnippetEnd
 
 	// TODO: ATOMIC! any other thread should stop here

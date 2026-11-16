@@ -131,6 +131,10 @@ private:
 	BString				fPath;
 	LEManager*			fLE;
 	uint64				_EventMask() const;
+public:
+	// HCI Reset, then SetupController() from its Command Complete.
+	void				ResetController();
+private:
 	// Remote host features before Authentication Requested.
 	std::vector<uint16> fFeatureHandles;
 	// The last IO Capability Response (Numeric Comparison or not).
