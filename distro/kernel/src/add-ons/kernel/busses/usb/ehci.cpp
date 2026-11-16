@@ -2981,13 +2981,20 @@ EHCI::CreateDescriptor(size_t bufferSize, uint8 pid)
 		return result;
 	}
 
-	if (fStack->AllocateChunk(&result->buffer_log, &physicalAddress,
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// ehci_qtd is packed: do not pass the address of one of its members.
+	void *bufferLog;
+	if (fStack->AllocateChunk(&bufferLog, &physicalAddress,
 			bufferSize) != B_OK) {
 		TRACE_ERROR("unable to allocate qtd buffer\n");
 		fStack->FreeChunk(result, (phys_addr_t)result->this_phy,
 			sizeof(ehci_qtd));
 		return NULL;
 	}
+	result->buffer_log = bufferLog;
+	// SPDX-SnippetEnd
 
 	addr_t physicalBase = (addr_t)physicalAddress;
 	result->buffer_phy[0] = physicalBase;

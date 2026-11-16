@@ -1,5 +1,15 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-16 - USB 2.0 (EHCI): no unaligned pointer into a packed descriptor
+
+Problem: GCC warned `-Waddress-of-packed-member` in `EHCI::CreateDescriptor()` (`ehci.cpp`): `fStack->AllocateChunk(&result->buffer_log, ...)` passes the address of a member of the packed struct `ehci_qtd` as `void**`. The member is at offset 56 (8-aligned), so it is harmless on x86_64 today, but it would become an unaligned pointer on ARM64 if the struct layout ever moved. Seen in a Bluetooth build log; no Haiku ticket.
+
+What changed: `distro/kernel/src/add-ons/kernel/busses/usb/ehci.cpp` (already a copy, installed by `scripts/apply-kernel-bugs.py`) allocates into a local `void* bufferLog` and then assigns `result->buffer_log`. Marked as an R5 MIT snippet. No other place in the file takes the address of a packed member. No functional change.
+
+Tested (16 Nov 2026): built with `scripts/build-locked.sh` (`jam_exit=0`, `mesa_exit=0`); `ehci.o` was recompiled and the build log has no `address-of-packed-member` warning. QEMU (KVM) on an own copy of `r5-os.image`, with an EHCI controller carrying a USB keyboard, a USB tablet and a USB stick (480 Mb/s): `usb ehci: successfully started the controller`, the stick answered inquiry and capacity (`usb_disk` published `disk/usb/0/0/raw`), the first-boot window appeared, and two Down keys from the USB keyboard moved the language list from English to Esperanto.
+
+Not tested: real EHCI hardware, ARM64 (not built), large transfers to the stick (it had no file system).
+
 ## 2026-11-16 - GPU compositor: VirtualBox desktop after a resize
 
 Problem: in VirtualBox the M11 compositor (on Lavapipe) left a broken desktop after a display change: the wallpaper sheared with horizontal seams, white squares where the pointer and icons are, no Deskbar. With `gpu_compositor false` the same image was normal. It also happened on a fresh start, because the Guest Additions (`VBoxTray`) set the display to the window size after sign-in.
