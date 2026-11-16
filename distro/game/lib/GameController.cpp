@@ -172,8 +172,10 @@ private:
 
 	void _WatchDirectories()
 	{
-		// /dev/joystick itself, and the bus directories in it (usb,
+		// /dev, where /dev/joystick appears with the first controller after
+		// boot; /dev/joystick itself, and the bus directories in it (usb,
 		// bluetooth), which appear with their first device.
+		_Watch("/dev");
 		_Watch(kJoystickDirectory);
 		BDirectory directory(kJoystickDirectory);
 		BEntry entry;

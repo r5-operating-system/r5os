@@ -66,7 +66,7 @@ fi
 # SETTINGS_PAGE=gamecontrollers SECONDS_UP=170 SHOTS="140 160".
 gamepad=""
 if [ "${GAMEPAD:-0}" = 1 ]; then
-	page="/bin/hey Login set Frame of Window 0 to 'BRect(900,620,1340,1040)' > /boot/home/gc-hey.log 2>&1; $page"
+	page="/bin/hey Login set Frame of Window 'Sign in' to 'BRect(900,620,1340,1040)' > /boot/home/gc-hey.log 2>&1; $page"
 	gamepad="/bin/gamecontroller_test --hold 120 > /boot/home/gc-hold.log 2>&1 & "
 fi
 cat > "$BT_WORK/bt-smoke.job" <<EOF
