@@ -1,5 +1,15 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-16 - Build: after another worktree built in the shared tree, the next one's files are built again
+
+Problem: a build of `claude/vram-fallback` failed to link `libr5wifi.so`, `libr5bt.so` and `r5_level_glyph_test` (`undefined reference to r5_level_glyph_draw`), although the source in the tree had that function. The applies copy with `shutil.copy2`, which keeps the source file's modification time. A bluetooth worktree had built `R5Icons.o` in the shared tree at 10:53; the next apply put back the other worktree's `R5Icons.cpp` with its checkout time of 10:40. The object looked newer than the source, so jam kept it, and `libr5icons.so` came out without the function. Any file can be hit this way, also without a link error (an old object that still links).
+
+What changed: `scripts/tree-owner.sh end` gives every path this apply wrote the time of now when the previous apply came from another worktree. With the same owner nothing is touched, so a build stays incremental. New host test `scripts/test-tree-owner.sh`: two worktrees in a small git tree, the second one "builds" in between, then the first applies its older file again.
+
+Limits: after a change of owner every file of that worktree's apply is compiled again once (the price of not keeping an object of other sources). An object built before this change can still be stale in the tree until its worktree applies again after another owner; a clean rebuild of a target removes it.
+
+Tested: `scripts/test-tree-owner.sh` prints `ok tree owner` with the new script and fails with the old one (`B's object is newer than A's source`). The case that led to it: after `touch` of `distro/icons` the same build linked (`jam_exit=0`, comment on #4307). Not tested: a full build through `apply-overlay.sh` with this script.
+
 ## 2026-11-16 - Graphics: a GPU buffer that no longer fits in VRAM goes to system memory, within a GTT limit (libdrm-2.4.124-3)
 
 Problem: on the 5625U (M12 measurement stick, boot 1, `generated/boot-5625u-1` and `-2` of the m12-gpu-draw worktree) app_server's Skia drawing turned off after a minute with `gpu draw off: insert failed`, after `radeon_hd: refuse BO_CREATE vram status 0x80000000` for buffers of 17 to 45 MB (Skia's 4x MSAA targets of a whole window). The R5 DRM library made every buffer that asks for VRAM in VRAM and nothing else. Linux does not: `amdgpu_gem_create_ioctl()` (v6.18 `amdgpu_gem.c`, lines 486-497) retries a VRAM-only request with `AMDGPU_GEM_DOMAIN_GTT` added, and `amdgpu_bo_create()` (`amdgpu_object.c`) lets a user buffer that allows only VRAM live in GTT too, unless it is `DISCARDABLE`. RADV counts on that: it names GTT with every VRAM request (`radv_amdgpu_bo.c`), and on an APU `radv_physical_device_init_mem_types()` reports 2/3 of visible VRAM plus GTT as its VRAM heap, more than the kernel's VRAM pool (248 MB).
