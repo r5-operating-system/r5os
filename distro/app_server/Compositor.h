@@ -149,6 +149,7 @@ private:
 			// M12
 			void				_InitSkia(bool forceFail);
 	static	void				_SkiaWake(void* cookie);
+	static	status_t			_SkiaWarmUp(void* cookie);
 			void				_ExitVulkan();
 			WindowBuffer*		_AllocateBuffer(uint32 width, uint32 height);
 			void				_FreeBuffer(WindowBuffer* buffer,

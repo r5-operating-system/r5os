@@ -8,12 +8,20 @@
 
 #include "SkiaOffscreen.h"
 
+#include <stdio.h>
 #include <string.h>
+#include <syslog.h>
+
+#include <AutoDeleter.h>
 
 #include <Autolock.h>
 
 #include <map>
 
+#include <GradientLinear.h>
+
+#include "BitmapHWInterface.h"
+#include "DrawState.h"
 #include "ServerBitmap.h"
 
 #include "SkiaDrawingEngine.h"
@@ -80,6 +88,63 @@ public:
 private:
 	BReference<ServerBitmap>	fBitmap;
 };
+
+
+void
+skia_warm_up()
+{
+	bigtime_t start = system_time();
+	BReference<UtilityBitmap> bitmap(new(std::nothrow) UtilityBitmap(
+		BRect(0, 0, 63, 63), B_RGBA32, 0), true);
+	if (bitmap == NULL)
+		return;
+	BitmapHWInterface lock(bitmap);
+	lock.Initialize();
+	ObjectDeleter<DrawingEngine> engine(skia_offscreen_engine(&lock, bitmap,
+		IntRect(0, 0, 63, 63)));
+	if (!engine.IsSet())
+		return;
+	BReference<UtilityBitmap> image(new(std::nothrow) UtilityBitmap(
+		BRect(0, 0, 7, 7), B_RGBA32, 0), true);
+	BRegion clip(BRect(0, 0, 63, 63));
+	DrawState state;
+	BGradientLinear gradient(BPoint(0, 0), BPoint(0, 63));
+	gradient.AddColor((rgb_color){ 255, 0, 0, 255 }, 0);
+	gradient.AddColor((rgb_color){ 0, 0, 255, 128 }, 255);
+	static const drawing_mode kModes[] = { B_OP_COPY, B_OP_OVER, B_OP_ALPHA,
+		B_OP_ALPHA };
+	for (int pass = 0; pass < 2; pass++) {
+		// pass 0: an opaque image (Skia's own blending), 1: not opaque
+		static_cast<SkiaDrawingEngine*>(engine.Get())->SetOpaque(pass == 0);
+		for (int m = 0; m < 4; m++) {
+			engine->SetDrawState(&state);
+			engine->ConstrainClippingRegion(&clip);
+			engine->SetDrawingMode(kModes[m]);
+			engine->SetBlendingMode(B_PIXEL_ALPHA,
+				m == 3 ? B_ALPHA_COMPOSITE : B_ALPHA_OVERLAY);
+			engine->SetHighColor((rgb_color){ 20, 40, 60, 160 });
+			engine->FillRect(BRect(2, 2, 30, 30));
+			engine->DrawEllipse(BRect(3, 3, 40, 30), true);
+			engine->DrawEllipse(BRect(3, 3, 40, 30), false);
+			engine->DrawRoundRect(BRect(4, 4, 50, 40), 6, 6, true);
+			engine->StrokeLine(BPoint(1, 1), BPoint(60, 50));
+			BPoint points[3] = { BPoint(2, 60), BPoint(30, 2), BPoint(60, 60) };
+			engine->DrawPolygon(points, 3, BRect(2, 2, 60, 60), true, true);
+			engine->DrawString("Aa", 2, BPoint(4, 40));
+			engine->FillRect(BRect(0, 0, 63, 63), gradient);
+			if (image != NULL) {
+				engine->DrawBitmap(image, image->Bounds(), BRect(8, 8, 15, 15));
+				engine->DrawBitmap(image, image->Bounds(), BRect(8, 8, 31, 31),
+					B_FILTER_BITMAP_BILINEAR);
+			}
+		}
+		skia_offscreen_finish(engine.Get());
+	}
+	// as Compositor.cpp's log_line(): stderr and the syslog
+	bigtime_t took = (system_time() - start) / 1000;
+	fprintf(stderr, "app_server: gpu draw warm up %" B_PRId64 " ms\n", took);
+	syslog(LOG_INFO, "app_server: gpu draw warm up %" B_PRId64 " ms\n", took);
+}
 
 
 bool

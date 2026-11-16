@@ -62,6 +62,7 @@
 // M12 steps 2-5: the GPU draws the windows (gpu_draw true)
 #include "SkiaDrawingEngine.h"
 #include "SkiaGpu.h"
+#include "SkiaOffscreen.h"
 
 
 static const bigtime_t kFenceSlice = 100000;
@@ -102,6 +103,8 @@ struct settings {
 	// stick (decision 1); gpu_draw_fail is the test switch of decision 8.
 	bool	draw;
 	bool	drawFail;
+	// M12 step 5b: gpu_draw_classic true keeps the classic look
+	bool	drawClassic;
 };
 
 
@@ -147,6 +150,8 @@ load_settings(settings& out)
 			out.draw = false;
 		if (strncmp(line, "gpu_draw_fail true", 18) == 0)
 			out.drawFail = true;
+		if (strncmp(line, "gpu_draw_classic true", 21) == 0)
+			out.drawClassic = true;
 	}
 	fclose(file);
 }
@@ -694,6 +699,7 @@ Compositor::Create(Desktop* desktop, HWInterface* screen)
 	}
 
 	SkiaDrawingEngine::SetDebug(options.debug);
+	SkiaDrawingEngine::SetClassic(options.drawClassic);
 	if (options.draw)
 		compositor->_InitSkia(options.drawFail);
 
@@ -732,8 +738,21 @@ Compositor::_InitSkia(bool forceFail)
 	}
 	fSkia->SetWaker(&_SkiaWake, this);
 	SkiaGpu::SetCurrent(fSkia);
+	// step 5c: the pipelines compile now, not when the first window draws
+	thread_id warmUp = spawn_thread(&_SkiaWarmUp, "skia warm up",
+		B_LOW_PRIORITY, this);
+	if (warmUp >= 0)
+		resume_thread(warmUp);
 	SkiaDrawingEngine::SetDebug(fDebug);
 	log_line("gpu draw on %s skia %s", vk->deviceName, SkiaGpu::Version());
+}
+
+
+/*static*/ status_t
+Compositor::_SkiaWarmUp(void* cookie)
+{
+	skia_warm_up();
+	return B_OK;
 }
 
 
@@ -4760,9 +4779,10 @@ Compositor::_Report()
 			p[SkiaGpu::kTimeInsert] / runs, p[SkiaGpu::kTimeSubmit] / runs,
 			p[SkiaGpu::kTimeDeliver] / runs);
 		log_line("draw profile composite %" B_PRId64 " coverage %" B_PRId64
-			" direct %" B_PRId64 " upload %" B_PRId64,
+			" direct %" B_PRId64 " blender %" B_PRId64 " upload %" B_PRId64,
 			p[SkiaGpu::kCountComposite], p[SkiaGpu::kCountCoverage],
-			p[SkiaGpu::kCountDirect], p[SkiaGpu::kCountUpload]);
+			p[SkiaGpu::kCountDirect], p[SkiaGpu::kCountBlender],
+			p[SkiaGpu::kCountUpload]);
 	} else {
 		bigtime_t drawMedian = 0;
 		int32 drawCount = 0;

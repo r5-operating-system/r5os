@@ -25,11 +25,13 @@
 
 #include <functional>
 #include <memory>
+#include <vector>
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkPath.h"
 #include "include/core/SkRefCnt.h"
+#include "include/core/SkBlender.h"
 #include "include/core/SkShader.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkSurface.h"
@@ -77,6 +79,17 @@ public:
 	virtual	bool				UploadSource(const uint8** _bits,
 									uint32* _bytesPerRow) { return false; }
 			void				DropGpu();
+
+	// Step 5c: textures of bitmaps drawn into this target, kept while the
+	// bitmap's bytes stay the same (compared with a copy; a program may
+	// write a bitmap's memory at any time).
+			sk_sp<SkImage>		FindTexture(const void* id, const uint8* bits,
+									int32 length, int32 width, int32 height,
+									int32 bytesPerRow, int32 space, bool raw);
+			void				KeepTexture(const void* id, const uint8* bits,
+									int32 length, int32 width, int32 height,
+									int32 bytesPerRow, int32 space, bool raw,
+									const sk_sp<SkImage>& image);
 			bool				HasSurface() const
 									{ return fSurface != nullptr; }
 	// Every pixel has alpha 255 (a window without glass views, an opaque
@@ -141,11 +154,31 @@ protected:
 			bigtime_t			fFirstDraw;
 			bool				fUploadPending;
 	volatile bool				fOpaque;
+
+			struct Texture {
+				const void*			id;
+				int32				width;
+				int32				height;
+				int32				bytesPerRow;
+				int32				space;
+				bool				raw;
+				std::vector<uint8>	bits;
+				sk_sp<SkImage>		image;
+				bigtime_t			used;
+			};
+			std::vector<Texture>	fTextures;
+			size_t				fTextureBytes = 0;
 };
 
 
 class SkiaPainter {
 public:
+	// Step 5b: the classic look (AGG-like linear coverage, Haiku's hinting
+	// and subpixel choice) instead of light hinting and clean grayscale
+	// text. gpu_draw_classic true in the radeon_hd settings.
+	static	void				SetClassic(bool classic);
+	static	bool				Classic();
+
 								SkiaPainter();
 								~SkiaPainter();
 
@@ -268,6 +301,8 @@ private:
 				int					blendAlpha;
 				rgb_color			specialColor;
 				bool				lcd;
+				// text: Skia's text gamma, not the linear blend (step 5b)
+				bool				text = false;
 				// Painter's scaled bitmap sampling (1 nearest, 2 bilinear)
 				int					sampling;
 				float				destOrigin[2];
@@ -291,6 +326,19 @@ private:
 			void				_DrawTextLines(SkCanvas* canvas,
 									const class GlyphCollector& collector,
 									const SkPaint& ink);
+			// step 5c: an R5 blender special (SkiaShaders.h) straight into
+			// the target, colors the bitmap or nullptr
+			bool				_SpecialPaint(int special, int blendAlpha,
+									const rgb_color& high,
+									const sk_sp<SkShader>& colors,
+									SkPaint* paint) const;
+			bool				_BlenderPaint(bool forceSolidHigh,
+									const sk_sp<SkShader>& colors,
+									SkPaint* paint,
+									bool text = false,
+									const sk_sp<SkShader>& coverage
+										= nullptr) const;
+			int					_AlphaKind() const;
 			bool				_DirectColor(bool forceSolidHigh,
 									bool* _draw, SkColor* _color) const;
 			void				_DirectDraw(const SkIRect& bounds,

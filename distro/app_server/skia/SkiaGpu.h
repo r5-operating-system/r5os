@@ -109,6 +109,7 @@ public:
 		kCountCoverage,		// coverage images drawn for the R5 shader
 		kCountUpload,		// textures made from CPU memory
 		kCountRuns,			// RunWork() calls with work
+		kCountBlender,		// draws with the R5 blender (no copy)
 		kProfileCount
 	};
 	static	void				Profile(int which, int64 value = 1);

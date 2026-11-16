@@ -194,14 +194,15 @@ back_premultiplied(uint32 background)
 }
 
 
-/*!	The edge rule of part 5. The ink of a pixel is how far it moved from
-	the background (the largest channel), divided by the largest move in
-	Painter's image, so a fully covered pixel is 1. Summed per row, the ink
-	is the width of the shape in that row (or of its strokes); per column
-	its height. The result is the largest difference, in pixels, between
-	the two images, of a row's or a column's ink, or of its centre (for
-	rows and columns with at least one pixel of ink): position, size and
-	stroke width, not single pixel values.
+/*!	The edge rule of part 5 (owner, 15 Nov 2026; measured as decided on
+	16 Nov 2026). The ink of a pixel is how far it moved from the background
+	(the largest channel), divided by the largest move in Painter's image,
+	so a fully covered pixel is 1.
+	- Position: every pixel with at least half ink in one image has a pixel
+	  with at least half ink in the other within one pixel.
+	- Size and stroke width: the difference of the total ink, divided by the
+	  number of edge pixels (ink between 0 and 1), in pixels.
+	Returns that difference, or 99 when the position check fails.
 */
 static float
 edge_difference(const uint8* a, uint32 aRow, const uint8* g, uint32 gRow,
@@ -221,39 +222,41 @@ edge_difference(const uint8* a, uint32 aRow, const uint8* g, uint32 gRow,
 	}
 	if (maxMove == 0)
 		return 0;
-	std::vector<double> rowA(height, 0), rowG(height, 0);
-	std::vector<double> rowCA(height, 0), rowCG(height, 0);
-	std::vector<double> colA(width, 0), colG(width, 0);
-	std::vector<double> colCA(width, 0), colCG(width, 0);
+	std::vector<float> inkA(width * height), inkG(width * height);
+	double sumA = 0, sumG = 0;
+	int32 edges = 0;
 	for (int32 y = 0; y < height; y++) {
 		for (int32 x = 0; x < width; x++) {
-			double inkA = (double)move(a + y * aRow + x * 4) / maxMove;
-			double inkG = (double)move(g + y * gRow + x * 4) / maxMove;
-			rowA[y] += inkA;
-			rowG[y] += inkG;
-			rowCA[y] += inkA * x;
-			rowCG[y] += inkG * x;
-			colA[x] += inkA;
-			colG[x] += inkG;
-			colCA[x] += inkA * y;
-			colCG[x] += inkG * y;
+			float ia = min_c(1.0f, (float)move(a + y * aRow + x * 4) / maxMove);
+			float ig = min_c(1.0f, (float)move(g + y * gRow + x * 4) / maxMove);
+			inkA[y * width + x] = ia;
+			inkG[y * width + x] = ig;
+			sumA += ia;
+			sumG += ig;
+			if ((ia > 0 && ia < 1) || (ig > 0 && ig < 1))
+				edges++;
 		}
 	}
-	double worst = 0;
-	auto check = [&worst](const std::vector<double>& sumA,
-		const std::vector<double>& sumG, const std::vector<double>& centreA,
-		const std::vector<double>& centreG) {
-		for (size_t i = 0; i < sumA.size(); i++) {
-			worst = std::max(worst, fabs(sumA[i] - sumG[i]));
-			if (sumA[i] >= 1 && sumG[i] >= 1) {
-				worst = std::max(worst, fabs(centreA[i] / sumA[i]
-					- centreG[i] / sumG[i]));
+	auto near = [&](const std::vector<float>& other, int32 x, int32 y) {
+		for (int32 dy = -1; dy <= 1; dy++) {
+			for (int32 dx = -1; dx <= 1; dx++) {
+				int32 nx = x + dx, ny = y + dy;
+				if (nx >= 0 && ny >= 0 && nx < width && ny < height
+					&& other[ny * width + nx] >= 0.5f)
+					return true;
 			}
 		}
+		return false;
 	};
-	check(rowA, rowG, rowCA, rowCG);
-	check(colA, colG, colCA, colCG);
-	return (float)worst;
+	for (int32 y = 0; y < height; y++) {
+		for (int32 x = 0; x < width; x++) {
+			if (inkA[y * width + x] >= 0.5f && !near(inkG, x, y))
+				return 99;
+			if (inkG[y * width + x] >= 0.5f && !near(inkA, x, y))
+				return 99;
+		}
+	}
+	return (float)(fabs(sumA - sumG) / max_c(edges, 1));
 }
 
 
@@ -305,6 +308,14 @@ draw_compare(SkiaGpu* gpu, const draw_compare_request& request,
 		repeat = 1;
 
 	bool savedSubpixel = gSubpixelAntialiasing;
+	// step 5b: the compare holds Skia to AGG with the classic look; the
+	// new look is judged on the side-by-side sheet
+	bool savedClassic = SkiaPainter::Classic();
+	SkiaPainter::SetClassic(request.look == 0);
+	struct ClassicGuard {
+		bool saved;
+		~ClassicGuard() { SkiaPainter::SetClassic(saved); }
+	} classicGuard = { savedClassic };
 
 	// Painter, on a memory buffer
 	BitmapDrawingEngine painter(B_RGBA32);
@@ -362,16 +373,20 @@ draw_compare(SkiaGpu* gpu, const draw_compare_request& request,
 			result.gpuFailed = true;
 			return B_ERROR;
 		}
-		for (int32 i = 0; i < repeat; i++) {
+		// --time (step 5c): the drawing `repeat` times, then one read
+		// point, divided by `repeat`: the cost of the drawing, as a window
+		// draws many calls per compose, not one round trip per call
+		{
 			bigtime_t start = system_time();
-			gpuPen = play(&skia, picture, bounds, request.background);
+			for (int32 i = 0; i < repeat; i++)
+				gpuPen = play(&skia, picture, bounds, request.background);
 			if (target->Lock()) {
 				target->AddDamage(BRect(0, 0, width - 1, height - 1));
 				target->Unlock();
 			}
 			target->Reset();
 			status_t status = skia.Finish();
-			gpuTimes.push_back(system_time() - start);
+			gpuTimes.push_back((system_time() - start) / repeat);
 			if (status != B_OK || !target->Got()) {
 				gSubpixelAntialiasing = savedSubpixel;
 				result.gpuFailed = true;
@@ -507,9 +522,16 @@ draw_compare(SkiaGpu* gpu, const draw_compare_request& request,
 				// part 5 (owner, 15 Nov 2026): the interior keeps its
 				// limits; an edge is judged on its position, its size and
 				// the stroke width only, not on single pixel values
-				float limit = klass == kCompareText ? 1.0f : 0.5f;
-				result.edge = edge_difference(a, aRow, g, gRow, width,
-					height, back_premultiplied(request.background));
+				// on a transparent background AGG writes alpha 255 at every
+				// pixel it touches, so its edges are an opaque one-pixel rim
+				// of an invisible colour; Skia's edges are partly
+				// transparent, the better result. There the interior and the
+				// text metrics count; the edges are judged on the opaque
+				// background (owner's rule, decided 16 Nov 2026)
+				float limit = klass == kCompareText ? 0.35f : 0.2f;
+				bool clear = ((const uint8*)&request.background)[3] == 0;
+				result.edge = clear ? 0 : edge_difference(a, aRow, g, gRow,
+					width, height, back_premultiplied(request.background));
 				ok = ok && result.edge <= limit;
 				if (klass == kCompareText) {
 					// the letters may differ, the metrics may not: the pen

@@ -46,5 +46,10 @@ status_t		skia_offscreen_upload(DrawingEngine* engine);
 // Whether the GPU draws now.
 bool			skia_gpu_drawing();
 
+// Step 5c: draw the usual combinations once into a small bitmap, so their
+// pipelines are compiled before the first window needs them (a thread of
+// its own; it waits for the compose thread).
+void			skia_warm_up();
+
 
 #endif	// SKIA_OFFSCREEN_H

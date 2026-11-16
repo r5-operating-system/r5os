@@ -249,15 +249,21 @@ SkiaPainter::DrawString(const char* string, uint32 length, BPoint baseLine,
 	SkMatrix matrix = SkMatrix::MakeAll(m[0], m[2], m[4], m[1], m[3], m[5],
 		0, 0, 1);
 
-	// the Antialiasing tab of Appearance (GlobalSubpixelSettings.h)
-	bool subpixel = gSubpixelAntialiasing && fAntialiasText;
+	// the Antialiasing tab of Appearance (GlobalSubpixelSettings.h); step
+	// 5b by default: light hinting and clean grayscale anti-aliasing, the
+	// positions stay ServerFont's
+	bool classic = SkiaPainter::Classic();
+	bool subpixel = classic && gSubpixelAntialiasing && fAntialiasText;
 	SkFont font(typeface, fFont.Size());
 	font.setSubpixel(fSubpixelPrecise);
 	font.setEdging(!fAntialiasText ? SkFont::Edging::kAlias
 		: subpixel ? SkFont::Edging::kSubpixelAntiAlias
 		: SkFont::Edging::kAntiAlias);
-	font.setHinting(!fFont.Hinting() ? SkFontHinting::kNone
-		: subpixel ? SkFontHinting::kFull : SkFontHinting::kNormal);
+	if (classic) {
+		font.setHinting(!fFont.Hinting() ? SkFontHinting::kNone
+			: subpixel ? SkFontHinting::kFull : SkFontHinting::kNormal);
+	} else
+		font.setHinting(SkFontHinting::kSlight);
 	font.setEmbolden(fFont.FalseBoldWidth() > 0);
 
 	// one run per typeface: the font, or the fallback the glyph came from
@@ -338,6 +344,25 @@ SkiaPainter::DrawString(const char* string, uint32 length, BPoint baseLine,
 		return touched;
 	}
 
+	{
+		// step 5c: the R5 blender, the letters straight into the image
+		SkPaint ink;
+		if (_BlenderPaint(true, nullptr, &ink, true)) {
+			ink.setAntiAlias(fAntialiasText);
+			_DirectDraw(bounds, matrix, [&](SkCanvas* canvas) {
+				for (GlyphRun& run : runs) {
+					SkFont runFont(font);
+					runFont.setTypeface(run.typeface);
+					canvas->drawGlyphs(run.glyphs, run.positions,
+						SkPoint::Make(0, 0), runFont, ink);
+				}
+				if (lines)
+					_DrawTextLines(canvas, collector, ink);
+			});
+			return touched;
+		}
+	}
+
 	SkSurface* scratch = fTarget->Scratch(subpixel);
 	if (scratch == NULL)
 		return touched;
@@ -369,6 +394,7 @@ SkiaPainter::DrawString(const char* string, uint32 length, BPoint baseLine,
 	Source source;
 	source.forceSolidHigh = true;
 	source.lcd = subpixel;
+	source.text = true;
 	_Composite(bounds, coverage, source);
 	return touched;
 }

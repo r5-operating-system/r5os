@@ -40,6 +40,7 @@ struct draw_compare_request {
 	int32		subpixel;		// -1 leave, 0 grey, 1 subpixel
 	float		scale;			// "Scaling later" point 6, 1 normally
 	int32		dump;			// write both images to /boot/home/draw-compare
+	int32		look;			// 0 the classic look (the compare), 1 step 5b's
 };
 
 

@@ -3682,6 +3682,7 @@ ServerApp::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 			link.Read<float>(&request.scale);
 			link.Read<int32>(&repeat);
 			link.Read<int32>(&request.dump);
+			link.Read<int32>(&request.look);
 			// each picture with its nested ones (ClipToPicture())
 			BReference<ServerPicture> picture;
 			BReference<ServerPicture> scaled;

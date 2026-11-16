@@ -602,6 +602,10 @@ main(int argc, char** argv)
 	// --dump: app_server writes both images of each operation to
 	// /boot/home/draw-compare/<n>-painter.pam and <n>-gpu.pam
 	bool dumpImages = false;
+	// --new-look: Skia draws with the look of step 5b (light hinting, clean
+	// grayscale text) instead of the classic one; for the side-by-side
+	// sheet, the limits are not meant for it
+	bool newLook = false;
 	int32 dumpCount = (getpid() % 1000) * 100;
 	for (int i = 1; i < argc; i++) {
 		if (strcmp(argv[i], "--time") == 0)
@@ -612,6 +616,8 @@ main(int argc, char** argv)
 			only = argv[++i];
 		else if (strcmp(argv[i], "--dump") == 0)
 			dumpImages = true;
+		else if (strcmp(argv[i], "--new-look") == 0)
+			newLook = true;
 	}
 
 	BApplication app("application/x-vnd.r5-draw-compare");
@@ -654,6 +660,7 @@ main(int argc, char** argv)
 			link.Attach<float>(scale);
 			link.Attach<int32>(timing ? 100 : 1);
 			link.Attach<int32>(dumpImages ? ++dumpCount : 0);
+			link.Attach<int32>(newLook ? 1 : 0);
 			if (dumpImages)
 				printf("draw-compare dump %d %s\n", (int)dumpCount, name.c_str());
 			link.Attach(data.Buffer(), data.BufferLength());

@@ -93,6 +93,25 @@ upload_texture(skgpu::graphite::Recorder* recorder, sk_sp<SkImage> image)
 
 
 static sk_sp<SkRuntimeEffect>
+coverage_effect()
+{
+	static sk_sp<SkRuntimeEffect> sEffect;
+	static bool sTried = false;
+	if (!sTried) {
+		sTried = true;
+		SkRuntimeEffect::Result result = SkRuntimeEffect::MakeForShader(
+			SkString(kCoverageSkSL));
+		if (result.effect == nullptr) {
+			fprintf(stderr, "app_server: skia coverage shader: %s\n",
+				result.errorText.c_str());
+		}
+		sEffect = result.effect;
+	}
+	return sEffect;
+}
+
+
+static sk_sp<SkRuntimeEffect>
 blend_effect()
 {
 	static sk_sp<SkRuntimeEffect> sEffect;
@@ -103,6 +122,25 @@ blend_effect()
 			= SkRuntimeEffect::MakeForShader(SkString(kR5BlendSkSL));
 		if (!result.effect) {
 			fprintf(stderr, "app_server: r5 blend shader: %s\n",
+				result.errorText.c_str());
+		}
+		sEffect = result.effect;
+	}
+	return sEffect;
+}
+
+
+static sk_sp<SkRuntimeEffect>
+blender_effect()
+{
+	static sk_sp<SkRuntimeEffect> sEffect;
+	static bool sTried = false;
+	if (!sTried) {
+		sTried = true;
+		SkRuntimeEffect::Result result
+			= SkRuntimeEffect::MakeForBlender(SkString(kR5BlenderSkSL));
+		if (!result.effect) {
+			fprintf(stderr, "app_server: r5 blender: %s\n",
 				result.errorText.c_str());
 		}
 		sEffect = result.effect;
@@ -162,6 +200,37 @@ gradient_effect()
 }
 
 
+static bool sClassic = false;
+
+
+/*static*/ void
+SkiaPainter::SetClassic(bool classic)
+{
+	sClassic = classic;
+}
+
+
+/*static*/ bool
+SkiaPainter::Classic()
+{
+	return sClassic;
+}
+
+
+/*!	The text settings of an image: classic is linear coverage as AGG's;
+	otherwise Skia's own contrast and gamma for clean grayscale text.
+*/
+static SkSurfaceProps
+text_props()
+{
+	SkPixelGeometry geometry = gSubpixelOrderingRGB ? kRGB_H_SkPixelGeometry
+		: kBGR_H_SkPixelGeometry;
+	if (sClassic)
+		return SkSurfaceProps(0, geometry, 0, 1);
+	return SkSurfaceProps(0, geometry);
+}
+
+
 //	#pragma mark - SkiaTarget
 
 
@@ -215,10 +284,8 @@ SkiaTarget::SetSurface(int32 width, int32 height, int32 left, int32 top,
 		return true;
 	}
 
-	// linear coverage, as AGG, and the subpixel order of the Antialiasing
-	// tab for text drawn straight into the image
-	SkSurfaceProps props(0, gSubpixelOrderingRGB ? kRGB_H_SkPixelGeometry
-		: kBGR_H_SkPixelGeometry, 0, 1);
+	// the text settings (step 5b) for text drawn straight into the image
+	SkSurfaceProps props = text_props();
 	sk_sp<SkSurface> surface = SkSurfaces::RenderTarget(fRecorder,
 		target_info(width, height), skgpu::Mipmapped::kNo, &props);
 	if (surface == nullptr)
@@ -313,9 +380,77 @@ SkiaTarget::DropGpu()
 	fScratchLcd.reset();
 	fDamage.MakeEmpty();
 	fRecorded = false;
+	fTextures.clear();
+	fTextureBytes = 0;
 	if (fGpu != NULL && fRecorder != NULL)
 		fGpu->DeleteRecorder(fRecorder);
 	fRecorder = NULL;
+}
+
+
+static const size_t kTextureCount = 64;
+static const size_t kTextureBytes = 16 * 1024 * 1024;
+static const int32 kTextureLargest = 4 * 1024 * 1024;
+
+
+sk_sp<SkImage>
+SkiaTarget::FindTexture(const void* id, const uint8* bits, int32 length,
+	int32 width, int32 height, int32 bytesPerRow, int32 space, bool raw)
+{
+	for (Texture& texture : fTextures) {
+		if (texture.id != id || texture.width != width
+			|| texture.height != height || texture.bytesPerRow != bytesPerRow
+			|| texture.space != space || texture.raw != raw
+			|| (int32)texture.bits.size() != length)
+			continue;
+		if (memcmp(texture.bits.data(), bits, length) != 0)
+			return nullptr;
+		texture.used = system_time();
+		return texture.image;
+	}
+	return nullptr;
+}
+
+
+void
+SkiaTarget::KeepTexture(const void* id, const uint8* bits, int32 length,
+	int32 width, int32 height, int32 bytesPerRow, int32 space, bool raw,
+	const sk_sp<SkImage>& image)
+{
+	if (length <= 0 || length > kTextureLargest || image == nullptr)
+		return;
+	for (size_t i = 0; i < fTextures.size(); i++) {
+		if (fTextures[i].id == id && fTextures[i].raw == raw) {
+			fTextureBytes -= fTextures[i].bits.size();
+			fTextures.erase(fTextures.begin() + i);
+			break;
+		}
+	}
+	while (!fTextures.empty() && (fTextures.size() >= kTextureCount
+			|| fTextureBytes + length > kTextureBytes)) {
+		size_t oldest = 0;
+		for (size_t i = 1; i < fTextures.size(); i++) {
+			if (fTextures[i].used < fTextures[oldest].used)
+				oldest = i;
+		}
+		fTextureBytes -= fTextures[oldest].bits.size();
+		fTextures.erase(fTextures.begin() + oldest);
+	}
+	Texture texture;
+	texture.id = id;
+	texture.width = width;
+	texture.height = height;
+	texture.bytesPerRow = bytesPerRow;
+	texture.space = space;
+	texture.raw = raw;
+	try {
+		texture.bits.assign(bits, bits + length);
+		texture.image = image;
+		texture.used = system_time();
+		fTextureBytes += length;
+		fTextures.push_back(std::move(texture));
+	} catch (...) {
+	}
 }
 
 
@@ -327,9 +462,7 @@ SkiaTarget::Scratch(bool lcd)
 			fScratchLcd.reset();
 		if (fScratchLcd == nullptr && fRecorder != NULL && fWidth > 0) {
 			fScratchLcdRGB = gSubpixelOrderingRGB;
-			// linear coverage, as AGG: no text contrast, gamma 1
-			SkSurfaceProps props(0, gSubpixelOrderingRGB
-				? kRGB_H_SkPixelGeometry : kBGR_H_SkPixelGeometry, 0, 1);
+			SkSurfaceProps props = text_props();
 			fScratchLcd = SkSurfaces::RenderTarget(fRecorder,
 				target_info(fWidth, fHeight), skgpu::Mipmapped::kNo, &props);
 			if (fScratchLcd != nullptr) {
@@ -340,8 +473,7 @@ SkiaTarget::Scratch(bool lcd)
 		return fScratchLcd.get();
 	}
 	if (fScratch == nullptr && fRecorder != NULL && fWidth > 0) {
-		// linear coverage, as AGG: no text contrast, gamma 1
-		SkSurfaceProps props(0, kUnknown_SkPixelGeometry, 0, 1);
+		SkSurfaceProps props = text_props();
 		fScratch = SkSurfaces::RenderTarget(fRecorder,
 			target_info(fWidth, fHeight), skgpu::Mipmapped::kNo, &props);
 		if (fScratch != nullptr) {
@@ -760,32 +892,7 @@ SkiaPainter::_Composite(const SkIRect& _bounds, const sk_sp<SkImage>& coverage,
 		kR5SolidHigh);
 	bool solidLow = !source.forceSolidHigh && same_pattern(fPattern,
 		kR5SolidLow);
-	// PixelFormat::SetDrawingMode(): overlay and composite per alpha
-	// source; the other functions are AGG's comp ops (pixel alpha)
-	int alphaKind = 0;
-	switch (fAlphaFncMode) {
-		case B_ALPHA_OVERLAY:
-			alphaKind = fAlphaSrcMode == B_CONSTANT_ALPHA ? 0 : 2;
-			break;
-		case B_ALPHA_COMPOSITE:
-			alphaKind = fAlphaSrcMode == B_CONSTANT_ALPHA ? 1 : 3;
-			break;
-		case B_ALPHA_COMPOSITE_SOURCE_IN: alphaKind = 4; break;
-		case B_ALPHA_COMPOSITE_SOURCE_OUT: alphaKind = 5; break;
-		case B_ALPHA_COMPOSITE_SOURCE_ATOP: alphaKind = 6; break;
-		case B_ALPHA_COMPOSITE_DESTINATION_OVER: alphaKind = 7; break;
-		case B_ALPHA_COMPOSITE_DESTINATION_IN: alphaKind = 8; break;
-		case B_ALPHA_COMPOSITE_DESTINATION_OUT: alphaKind = 9; break;
-		case B_ALPHA_COMPOSITE_DESTINATION_ATOP: alphaKind = 10; break;
-		case B_ALPHA_COMPOSITE_XOR: alphaKind = 11; break;
-		case B_ALPHA_COMPOSITE_CLEAR: alphaKind = 12; break;
-		case B_ALPHA_COMPOSITE_DIFFERENCE: alphaKind = 13; break;
-		case B_ALPHA_COMPOSITE_LIGHTEN: alphaKind = 14; break;
-		case B_ALPHA_COMPOSITE_DARKEN: alphaKind = 15; break;
-		default:
-			alphaKind = 2;
-			break;
-	}
+	int alphaKind = _AlphaKind();
 
 	builder.uniform("mode") = (int)fDrawingMode;
 	builder.uniform("alphaKind") = alphaKind;
@@ -813,6 +920,8 @@ SkiaPainter::_Composite(const SkIRect& _bounds, const sk_sp<SkImage>& coverage,
 	builder.uniform("patOffset") = SkV2{ (float)(fPatternX & 7),
 		(float)(fPatternY & 7) };
 	builder.uniform("sampling") = source.sampling;
+	// step 5b; text keeps Skia's own text contrast and gamma instead
+	builder.uniform("linear") = !sClassic && !source.text ? 1 : 0;
 	builder.uniform("destOrigin") = SkV2{ source.destOrigin[0],
 		source.destOrigin[1] };
 	builder.uniform("srcSize") = SkV2{ source.srcSize[0], source.srcSize[1] };
@@ -967,6 +1076,127 @@ SkiaPainter::_DirectColor(bool forceSolidHigh, bool* _draw,
 }
 
 
+/*!	Step 5c: the R5 blender for this state, or nullptr when the drawing
+	needs the copy of the destination (an alpha mask, a pattern that is not
+	solid). colors: a gradient's colour per pixel; else the pattern's
+	colour as a shader that writes it as it is.
+*/
+bool
+SkiaPainter::_BlenderPaint(bool forceSolidHigh, const sk_sp<SkShader>& colors,
+	SkPaint* paint, bool text, const sk_sp<SkShader>& coverage) const
+{
+	// the coverage comes as src; a gradient's colours cannot come too
+	if (coverage != nullptr && colors != nullptr)
+		return false;
+	if (fHasAlphaMask)
+		return false;
+	bool solidHigh = forceSolidHigh || same_pattern(fPattern, kR5SolidHigh);
+	bool solidLow = !forceSolidHigh && same_pattern(fPattern, kR5SolidLow);
+	if (!solidHigh && !solidLow)
+		return false;
+	sk_sp<SkRuntimeEffect> effect = blender_effect();
+	if (effect == nullptr)
+		return false;
+	int alphaKind = _AlphaKind();
+	SkRuntimeBlendBuilder builder(effect);
+	builder.uniform("mode") = (int)fDrawingMode;
+	builder.uniform("alphaKind") = alphaKind;
+	builder.uniform("solid") = 1;
+	builder.uniform("solidLow") = solidLow ? 1 : 0;
+	builder.uniform("useColors") = colors != nullptr ? 1 : 0;
+	builder.uniform("high") = SkV4{ (float)fHighColor.red,
+		(float)fHighColor.green, (float)fHighColor.blue,
+		(float)fHighColor.alpha };
+	builder.uniform("low") = SkV4{ (float)fLowColor.red,
+		(float)fLowColor.green, (float)fLowColor.blue,
+		(float)fLowColor.alpha };
+	builder.uniform("linear") = !sClassic && !text ? 1 : 0;
+	builder.uniform("special") = 0;
+	builder.uniform("blendAlpha") = 0;
+	builder.uniform("magic") = SkV4{ 0, 0, 0, 0 };
+	builder.uniform("coverInSrc") = coverage != nullptr ? 1 : 0;
+	sk_sp<SkBlender> blender = builder.makeBlender();
+	if (blender == nullptr)
+		return false;
+	// the source: the gradient, the coverage, or any colour (the blender
+	// takes the pattern's colour from its uniforms)
+	paint->setShader(colors != nullptr ? colors : coverage != nullptr
+		? coverage : SkShaders::Color(SK_ColorWHITE));
+	paint->setBlender(blender);
+	paint->setAntiAlias(coverage == nullptr);
+	SkiaGpu::Profile(SkiaGpu::kCountBlender);
+	return true;
+}
+
+
+bool
+SkiaPainter::_SpecialPaint(int special, int blendAlpha, const rgb_color& high,
+	const sk_sp<SkShader>& colors, SkPaint* paint) const
+{
+	if (fHasAlphaMask)
+		return false;
+	sk_sp<SkRuntimeEffect> effect = blender_effect();
+	if (effect == nullptr)
+		return false;
+	SkRuntimeBlendBuilder builder(effect);
+	builder.uniform("mode") = (int)fDrawingMode;
+	builder.uniform("alphaKind") = _AlphaKind();
+	builder.uniform("solid") = 1;
+	builder.uniform("solidLow") = 0;
+	builder.uniform("useColors") = colors != nullptr ? 1 : 0;
+	builder.uniform("high") = SkV4{ (float)high.red, (float)high.green,
+		(float)high.blue, (float)high.alpha };
+	builder.uniform("low") = SkV4{ (float)fLowColor.red,
+		(float)fLowColor.green, (float)fLowColor.blue,
+		(float)fLowColor.alpha };
+	builder.uniform("linear") = !sClassic ? 1 : 0;
+	builder.uniform("special") = special;
+	builder.uniform("blendAlpha") = blendAlpha;
+	builder.uniform("coverInSrc") = 0;
+	const uint32 magicValue = B_TRANSPARENT_MAGIC_RGBA32;
+	const uint8* magic = (const uint8*)&magicValue;
+	builder.uniform("magic") = SkV4{ (float)magic[0], (float)magic[1],
+		(float)magic[2], (float)magic[3] };
+	sk_sp<SkBlender> blender = builder.makeBlender();
+	if (blender == nullptr)
+		return false;
+	paint->setShader(colors != nullptr ? colors
+		: SkShaders::Color(SK_ColorWHITE));
+	paint->setBlender(blender);
+	paint->setAntiAlias(false);
+	SkiaGpu::Profile(SkiaGpu::kCountBlender);
+	return true;
+}
+
+
+int
+SkiaPainter::_AlphaKind() const
+{
+	// PixelFormat::SetDrawingMode(): overlay and composite per alpha
+	// source; the other functions are AGG's comp ops (pixel alpha)
+	switch (fAlphaFncMode) {
+		case B_ALPHA_OVERLAY:
+			return fAlphaSrcMode == B_CONSTANT_ALPHA ? 0 : 2;
+		case B_ALPHA_COMPOSITE:
+			return fAlphaSrcMode == B_CONSTANT_ALPHA ? 1 : 3;
+		case B_ALPHA_COMPOSITE_SOURCE_IN: return 4;
+		case B_ALPHA_COMPOSITE_SOURCE_OUT: return 5;
+		case B_ALPHA_COMPOSITE_SOURCE_ATOP: return 6;
+		case B_ALPHA_COMPOSITE_DESTINATION_OVER: return 7;
+		case B_ALPHA_COMPOSITE_DESTINATION_IN: return 8;
+		case B_ALPHA_COMPOSITE_DESTINATION_OUT: return 9;
+		case B_ALPHA_COMPOSITE_DESTINATION_ATOP: return 10;
+		case B_ALPHA_COMPOSITE_XOR: return 11;
+		case B_ALPHA_COMPOSITE_CLEAR: return 12;
+		case B_ALPHA_COMPOSITE_DIFFERENCE: return 13;
+		case B_ALPHA_COMPOSITE_LIGHTEN: return 14;
+		case B_ALPHA_COMPOSITE_DARKEN: return 15;
+		default:
+			return 2;
+	}
+}
+
+
 /*!	Draws straight into the target, once per clipping rectangle inside
 	bounds (screen pixels), under matrix.
 */
@@ -1021,7 +1251,11 @@ SkiaPainter::_DrawCoverage(const SkRect& deviceBounds, const SkPath* path,
 
 	bool directDraw;
 	SkColor directColor;
-	if (gradient == NULL && _DirectColor(false, &directDraw, &directColor)) {
+	// step 5b: the new look mixes the edges in linear light, so Skia draws
+	// only the coverage there (below)
+	bool linearEdges = !sClassic;
+	if (!linearEdges && gradient == NULL
+		&& _DirectColor(false, &directDraw, &directColor)) {
 		if (directDraw) {
 			SkPaint paint;
 			if (shapePaint != NULL)
@@ -1038,6 +1272,28 @@ SkiaPainter::_DrawCoverage(const SkRect& deviceBounds, const SkPath* path,
 		}
 		return _Clipped(BRect(deviceBounds.fLeft, deviceBounds.fTop,
 			deviceBounds.fRight, deviceBounds.fBottom));
+	}
+
+	{
+		// step 5c: the R5 blender, without a copy of the destination
+		sk_sp<SkShader> colors;
+		bool ok = true;
+		if (gradient != NULL)
+			colors = _GradientShader(*gradient, &ok);
+		SkPaint paint;
+		if (shapePaint != NULL)
+			paint = *shapePaint;
+		if (ok && (!linearEdges || gradient != NULL)
+			&& _BlenderPaint(gradient != NULL, colors, &paint)) {
+			_DirectDraw(bounds, _Matrix(), [&](SkCanvas* canvas) {
+				if (rrect != NULL)
+					canvas->drawRRect(*rrect, paint);
+				else if (path != NULL)
+					canvas->drawPath(*path, paint);
+			});
+			return _Clipped(BRect(deviceBounds.fLeft, deviceBounds.fTop,
+				deviceBounds.fRight, deviceBounds.fBottom));
+		}
 	}
 
 	SkSurface* scratch = fTarget->Scratch();
@@ -1066,6 +1322,29 @@ SkiaPainter::_DrawCoverage(const SkRect& deviceBounds, const SkPath* path,
 		-fTarget->Left(), -fTarget->Top()));
 	if (coverage == nullptr)
 		return BRect(0, 0, -1, -1);
+
+	if (linearEdges && gradient == NULL) {
+		// step 5b: Skia's coverage is the source of the R5 blender, which
+		// mixes the edge in linear light; no copy of the destination
+		sk_sp<SkRuntimeEffect> effect = coverage_effect();
+		if (effect != nullptr) {
+			SkMatrix place = SkMatrix::Translate(bounds.fLeft, bounds.fTop);
+			SkRuntimeShaderBuilder builder(effect);
+			builder.child("coverImage") = coverage->makeShader(
+				SkTileMode::kDecal, SkTileMode::kDecal,
+				SkSamplingOptions(SkFilterMode::kNearest), &place);
+			sk_sp<SkShader> carrier = builder.makeShader();
+			SkPaint blend;
+			if (carrier != nullptr
+				&& _BlenderPaint(false, nullptr, &blend, false, carrier)) {
+				_DirectDraw(bounds, SkMatrix::I(), [&](SkCanvas* canvas) {
+					canvas->drawIRect(bounds, blend);
+				});
+				return _Clipped(BRect(deviceBounds.fLeft, deviceBounds.fTop,
+					deviceBounds.fRight, deviceBounds.fBottom));
+			}
+		}
+	}
 
 	Source source;
 	if (gradient != NULL) {
@@ -1506,13 +1785,21 @@ SkiaPainter::FillRect(const BRect& r, const BGradient* gradient)
 			if (low && fAlphaSrcMode == B_CONSTANT_ALPHA)
 				c.alpha = fHighColor.alpha;
 			BRect rect(a, b);
+			SkIRect bounds = SkIRect::MakeLTRB((int32)rect.left,
+				(int32)rect.top, (int32)rect.right + 1, (int32)rect.bottom + 1);
+			SkPaint paint;
+			if (_SpecialPaint(kSpecialBlendLine32, c.alpha, c, nullptr,
+					&paint)) {
+				_DirectDraw(bounds, SkMatrix::I(), [&](SkCanvas* canvas) {
+					canvas->drawIRect(bounds, paint);
+				});
+				return _Clipped(rect);
+			}
 			Source source;
 			source.special = kSpecialBlendLine32;
 			source.blendAlpha = c.alpha;
 			source.specialColor = c;
-			_Composite(SkIRect::MakeLTRB((int32)rect.left, (int32)rect.top,
-				(int32)rect.right + 1, (int32)rect.bottom + 1), nullptr,
-				source);
+			_Composite(bounds, nullptr, source);
 			return _Clipped(rect);
 		}
 	}
@@ -1597,14 +1884,17 @@ SkiaPainter::FillRect(const BRect& r, const BGradient* gradient)
 				return _Clipped(BRect(a, b));
 			SkMatrix at = SkMatrix::Translate((float)(int32)rect.left,
 				(float)(int32)rect.top);
-			Source source;
-			source.special = kSpecialCopy32;
-			source.colors = image->makeShader(SkTileMode::kClamp,
+			// the colours as they are: kSrc (step 5c, no destination copy)
+			SkPaint copy;
+			copy.setBlendMode(SkBlendMode::kSrc);
+			copy.setShader(image->makeShader(SkTileMode::kClamp,
 				SkTileMode::kClamp, SkSamplingOptions(SkFilterMode::kNearest),
-				&at);
-			_Composite(SkIRect::MakeLTRB((int32)rect.left, (int32)rect.top,
-				(int32)rect.right + 1, (int32)rect.bottom + 1), nullptr,
-				source);
+				&at));
+			SkIRect bounds = SkIRect::MakeLTRB((int32)rect.left,
+				(int32)rect.top, (int32)rect.right + 1, (int32)rect.bottom + 1);
+			_DirectDraw(bounds, SkMatrix::I(), [&](SkCanvas* canvas) {
+				canvas->drawIRect(bounds, copy);
+			});
 			return _Clipped(BRect(a, b));
 		}
 	}
@@ -1622,8 +1912,18 @@ SkiaPainter::FillRect(const BRect& r, const BGradient* gradient)
 			source.useColors = true;
 			source.forceSolidHigh = true;
 		}
-		_Composite(SkIRect::MakeLTRB((int32)a.x, (int32)a.y, (int32)b.x,
-			(int32)b.y), nullptr, source);
+		SkIRect bounds = SkIRect::MakeLTRB((int32)a.x, (int32)a.y,
+			(int32)b.x, (int32)b.y);
+		// step 5c: the R5 blender, without a copy of the destination
+		SkPaint paint;
+		if (_BlenderPaint(gradient != NULL, source.colors, &paint)) {
+			paint.setAntiAlias(false);
+			_DirectDraw(bounds, SkMatrix::I(), [&](SkCanvas* canvas) {
+				canvas->drawIRect(bounds, paint);
+			});
+			return _Clipped(BRect(a.x, a.y, b.x, b.y));
+		}
+		_Composite(bounds, nullptr, source);
 		return _Clipped(BRect(a.x, a.y, b.x, b.y));
 	}
 	SkPathBuilder builder;
@@ -1894,14 +2194,18 @@ SkiaPainter::DrawBitmap(const ServerBitmap* bitmap, BRect bitmapRect,
 	// BitmapPainter::_ConvertColorSpace()
 	int32 width = bitmap->Width();
 	int32 height = bitmap->Height();
-	SkBitmap pixels;
-	if (!pixels.tryAllocPixels(target_info(width, height)))
-		return touched;
 	bool raw = space == B_RGBA32
 		|| (space == B_RGB32 && (fDrawingMode == B_OP_COPY
 			|| fDrawingMode == B_OP_ALPHA))
 		|| (space == B_RGB32 && fDrawingMode == B_OP_OVER && !hasScale
 			&& fIdentityTransform && !fHasAlphaMask && !tile);
+	// step 5c: the texture of the same bytes, from an earlier drawing
+	sk_sp<SkImage> image = fTarget->FindTexture(bitmap, bitmap->Bits(),
+		bitmap->BitsLength(), width, height, bitmap->BytesPerRow(), space, raw);
+	if (image == nullptr) {
+	SkBitmap pixels;
+	if (!pixels.tryAllocPixels(target_info(width, height)))
+		return touched;
 	if (raw) {
 		const uint8* from = bitmap->Bits();
 		for (int32 y = 0; y < height; y++) {
@@ -1936,10 +2240,12 @@ SkiaPainter::DrawBitmap(const ServerBitmap* bitmap, BRect bitmapRect,
 		}
 	}
 	pixels.setImmutable();
-	sk_sp<SkImage> image = upload_texture(fTarget->Recorder(),
-		pixels.asImage());
+	image = upload_texture(fTarget->Recorder(), pixels.asImage());
 	if (image == nullptr)
 		return touched;
+	fTarget->KeepTexture(bitmap, bitmap->Bits(), bitmap->BitsLength(), width,
+		height, bitmap->BytesPerRow(), space, raw, image);
+	}
 
 	// bitmap pixel (sx, sy) covers screen [offset + s * scale, ...)
 	float offsetX = destinationRect.left - sourceRect.left * scaleX;
@@ -1984,6 +2290,15 @@ SkiaPainter::DrawBitmap(const ServerBitmap* bitmap, BRect bitmapRect,
 					&& fAlphaFncMode == B_ALPHA_OVERLAY))
 				source.special = kSpecialAlphaBlend;
 			if (source.special != kSpecialNone) {
+				// step 5c: the blender reads the destination itself
+				SkPaint paint;
+				if (_SpecialPaint(source.special, 0, fHighColor,
+						source.colors, &paint)) {
+					_DirectDraw(bounds, SkMatrix::I(), [&](SkCanvas* canvas) {
+						canvas->drawIRect(bounds, paint);
+					});
+					return touched;
+				}
 				_Composite(bounds, nullptr, source);
 				return touched;
 			}
@@ -1997,6 +2312,12 @@ SkiaPainter::DrawBitmap(const ServerBitmap* bitmap, BRect bitmapRect,
 				? (bilinear ? kSpecialRgbCopy : kSpecialCopy32)
 				: kSpecialAlphaOverlayRgb;
 			source.sampling = bilinear ? 2 : 1;
+			// DrawBitmapBilinear::Draw(): on x86_64 the low filter ratio
+			// variant for these scales in B_OP_COPY
+			if (bilinear && fDrawingMode == B_OP_COPY && scaleX == scaleY
+				&& (scaleX == 1.5 || scaleX == 2.0 || scaleX == 2.5
+					|| scaleX == 3.0))
+				source.sampling = 3;
 			source.destOrigin[0] = destinationRect.left;
 			source.destOrigin[1] = destinationRect.top;
 			source.srcSize[0] = sourceRect.IntegerWidth() + 1;
@@ -2011,6 +2332,14 @@ SkiaPainter::DrawBitmap(const ServerBitmap* bitmap, BRect bitmapRect,
 			return touched;
 		}
 		// DrawBitmapGeneric<Fill>: the mode's colour span, full coverage
+		SkPaint paint;
+		if (_BlenderPaint(false, source.colors, &paint)) {
+			paint.setAntiAlias(false);
+			_DirectDraw(bounds, SkMatrix::I(), [&](SkCanvas* canvas) {
+				canvas->drawIRect(bounds, paint);
+			});
+			return touched;
+		}
 		_Composite(bounds, nullptr, source);
 		return touched;
 	}

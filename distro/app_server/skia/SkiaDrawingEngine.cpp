@@ -334,6 +334,13 @@ SkiaDrawingEngine::_Init()
 
 
 /*static*/ void
+SkiaDrawingEngine::SetClassic(bool classic)
+{
+	SkiaPainter::SetClassic(classic);
+}
+
+
+/*static*/ void
 SkiaDrawingEngine::SetDebug(bool debug)
 {
 	sDebug = debug;

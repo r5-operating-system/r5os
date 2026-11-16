@@ -56,13 +56,18 @@ uniform float2 patOffset;
 // the bytes of B_TRANSPARENT_MAGIC_RGBA32 in memory (b, g, r, a)
 uniform float4 magic;
 // Painter's own scaled bitmap sampling (DrawBitmapNearestNeighbor.h,
-// DrawBitmapBilinear.h): 0 Skia's, 1 nearest, 2 bilinear. srcColors is
-// then the bitmap in texel coordinates.
+// DrawBitmapBilinear.h): 0 Skia's, 1 nearest, 2 bilinear (BilinearDefault),
+// 3 bilinear for scale 1.5, 2, 2.5 and 3 in B_OP_COPY
+// (BilinearLowFilterRatio, the variant x86_64 takes, since it has no SIMD
+// version). srcColors is then the bitmap in texel coordinates.
 uniform int sampling;
 uniform float2 destOrigin;
 uniform float2 srcSize;
 uniform float2 bscale;
 uniform float2 srcShift;
+// step 5b: translucency (source alpha) blended in linear light; 0 the
+// classic 8-bit blend of Haiku
+uniform int linear;
 
 
 int4 toI(half4 c) { return int4(float4(c) * 255.0 + 0.5); }
@@ -74,15 +79,36 @@ int imax(int a, int b) { return a > b ? a : b; }
 int3 blendRGB(int3 d, int3 s, int a) { return ((s - d) * a + d * 256) / 256; }
 int3 blend16RGB(int3 d, int3 s, int a) { return ((s - d) * a + d * 65536) / 65536; }
 
+// step 5b: mix in linear light with the sRGB curve (IEC 61966-2-1), as
+// the compositor's shaders do their own arithmetic on unpacked words; a in
+// 0..1. The window buffers stay 8-bit sRGB.
+float3 toLinear(int3 c) {
+	float3 v = float3(c) / 255.0;
+	return mix(v / 12.92, pow((v + 0.055) / 1.055, float3(2.4)),
+		step(float3(0.04045), v));
+}
+int3 toSrgb(float3 l) {
+	l = clamp(l, 0.0, 1.0);
+	float3 v = mix(l * 12.92, 1.055 * pow(l, float3(1.0 / 2.4)) - 0.055,
+		step(float3(0.0031308), l));
+	return int3(v * 255.0 + 0.5);
+}
+int3 linearRGB(int3 d, int3 s, float a) {
+	return toSrgb(mix(toLinear(d), toLinear(s), a));
+}
+int3 alphaRGB(int3 d, int3 s, int a) {
+	return linear != 0 ? linearRGB(d, s, float(a) / 255.0) : blendRGB(d, s, a);
+}
+
 int4 over(int4 d, int3 s, int cov) {
 	if (cov == 255)
 		return int4(s, 255);
-	return int4(blendRGB(d.rgb, s, cov), 255);
+	return int4(alphaRGB(d.rgb, s, cov), 255);
 }
 
 int4 composite(int4 d, int3 s, int a) {
 	if (d.a == 255)
-		return int4(blendRGB(d.rgb, s, a), 255);
+		return int4(alphaRGB(d.rgb, s, a), 255);
 	if (d.a == 0)
 		return int4(s, a);
 	int rest = 255 - a;
@@ -99,6 +125,8 @@ int4 alpha16(int4 d, int3 s, int a16, int compositeKind) {
 		return int4(s, 255);
 	if (compositeKind != 0)
 		return composite(d, s, a16 / 255);
+	if (linear != 0)
+		return int4(linearRGB(d.rgb, s, float(a16) / 65025.0), 255);
 	return int4(blend16RGB(d.rgb, s, a16), 255);
 }
 
@@ -238,38 +266,59 @@ int4 sampleNearest(float2 px) {
 
 // Painter: the corners of source and destination meet; 8-bit weights,
 // a weight of 255 takes the one pixel
+// The filter weights of DrawBitmapBilinear::Draw(): index and weight of
+// the left (top) texel, 255 a direct hit.
+float2 bilinearWeights(float i, float size, float scale) {
+	float f = i * (size - 1.0) / (size * scale - 1.0);
+	float n = floor(f);
+	return float2(n, float(255 - int((f - n) * 255.0)));
+}
+
+// Whether BilinearLowFilterRatio copies the whole texel, alpha included.
+bool bilinearDirectHit(float2 px) {
+	float2 i = px - destOrigin;
+	return sampling == 3
+		&& bilinearWeights(i.x, srcSize.x, bscale.x).y == 255.0
+		&& bilinearWeights(i.y, srcSize.y, bscale.y).y == 255.0;
+}
+
 int4 sampleBilinear(float2 px) {
 	float2 i = px - destOrigin;
-	float fx = i.x * (srcSize.x - 1.0) / (srcSize.x * bscale.x - 1.0);
-	float fy = i.y * (srcSize.y - 1.0) / (srcSize.y * bscale.y - 1.0);
-	float ix = floor(fx);
-	float iy = floor(fy);
-	int wl = 255 - int((fx - ix) * 255.0);
-	int wt = 255 - int((fy - iy) * 255.0);
-	float x = ix + srcShift.x;
-	float y = iy + srcShift.y;
+	float2 wx = bilinearWeights(i.x, srcSize.x, bscale.x);
+	float2 wy = bilinearWeights(i.y, srcSize.y, bscale.y);
+	int wl = int(wx.y);
+	int wt = int(wy.y);
+	int wr = 255 - wl;
+	int wb = 255 - wt;
+	float x = wx.x + srcShift.x;
+	float y = wy.x + srcShift.y;
 	int4 s00 = texel(x, y);
-	int4 c0 = s00;
-	int4 c1 = s00;
-	if (wt != 255) {
-		int4 s01 = texel(x, y + 1.0);
-		c0 = (s00 * wt + s01 * (255 - wt)) / 256;
+	// BilinearDefault: the last column and row of the bitmap (weight 255
+	// at its last texel), the corner, and a bitmap one row high
+	bool lastColumn = wl == 255 && wx.x >= srcSize.x - 1.0;
+	bool lastRow = wt == 255 && wy.x >= srcSize.y - 1.0;
+	if (sampling == 3) {
+		// BilinearLowFilterRatio: every direct hit is special
+		lastColumn = wl == 255;
+		lastRow = wt == 255;
 	}
-	if (wl == 255)
-		return c0;
-	int4 s10 = texel(x + 1.0, y);
-	c1 = s10;
-	if (wt != 255) {
-		int4 s11 = texel(x + 1.0, y + 1.0);
-		c1 = (s10 * wt + s11 * (255 - wt)) / 256;
-	}
-	return (c0 * wl + c1 * (255 - wl)) / 256;
+	if (lastColumn && lastRow)
+		return s00;
+	if (lastRow || srcSize.y <= 1.0)
+		return (s00 * wl + texel(x + 1.0, y) * wr) / 256;
+	if (lastColumn)
+		return (s00 * wt + texel(x, y + 1.0) * wb) / 256;
+	int4 top = s00 * wl + texel(x + 1.0, y) * wr;
+	int4 bottom = texel(x, y + 1.0) * wl + texel(x + 1.0, y + 1.0) * wr;
+	// (a * wTop + b * wBottom) >> 16 in uint32, without int overflow
+	return int4((float4(top) * float(wt) + float4(bottom) * float(wb))
+		/ 65536.0);
 }
 
 int4 source(float2 p) {
 	if (sampling == 1)
 		return sampleNearest(floor(p));
-	if (sampling == 2)
+	if (sampling >= 2)
 		return sampleBilinear(floor(p));
 	return toI(srcColors.eval(p));
 }
@@ -295,14 +344,14 @@ int4 blendPixel(int4 d, int cov, float2 p, float2 px) {
 			if (c.a == 255)
 				r = c;
 			else
-				r = int4(blendRGB(d.rgb, c.rgb, c.a), d.a);
+				r = int4(alphaRGB(d.rgb, c.rgb, c.a), d.a);
 		} else if (special == 6) {
-			r = int4(c.rgb, d.a);
+			r = bilinearDirectHit(floor(p)) ? c : int4(c.rgb, d.a);
 		} else if (special == 7) {
 			if (c.a == 255)
 				r = int4(c.rgb, d.a);
 			else
-				r = int4(blendRGB(d.rgb, c.rgb, c.a), d.a);
+				r = int4(alphaRGB(d.rgb, c.rgb, c.a), d.a);
 		} else if (special == 8) {
 			int a = blendAlpha;
 			int3 s = (H.rgb * a) / 256;
@@ -321,7 +370,7 @@ int4 blendPixel(int4 d, int cov, float2 p, float2 px) {
 			else if (cov == 255)
 				r = int4(col.rgb, 255);
 			else
-				r = int4(blendRGB(L.rgb, col.rgb, cov), 255);
+				r = int4(alphaRGB(L.rgb, col.rgb, cov), 255);
 		} else if (mode == 1) {
 			if (hi)
 				r = over(d, H.rgb, cov);
@@ -383,7 +432,7 @@ int4 blendPixel(int4 d, int cov, float2 p, float2 px) {
 		else if (cov == 255)
 			r = c;
 		else
-			r = int4(blendRGB(L.rgb, c.rgb, cov), 255);
+			r = int4(alphaRGB(L.rgb, c.rgb, cov), 255);
 	} else if (mode == 10 && alphaKind >= 4) {
 		r = compOp(alphaKind - 4, d, c, cov);
 	} else if (mode == 10) {
@@ -455,11 +504,356 @@ half4 main(float2 p) {
 )SKSL";
 
 
+/*!	The R5 blender (step 5c, 16 Nov 2026): the same formulas for a source
+	of one colour (or a colour per pixel from a gradient) drawn straight
+	into the target, with Skia's own coverage. At full coverage the result
+	is Haiku's exactly; at the edges Skia mixes with its coverage, which the
+	edge rule of part 5 allows. No copy of the destination, no coverage
+	image: Graphite reads the destination itself.
+*/
+static const char* kR5BlenderSkSL = R"SKSL(
+uniform int mode;
+uniform int alphaKind;
+uniform int solid;
+uniform int solidLow;
+uniform int useColors;
+uniform float4 high;
+uniform float4 low;
+uniform int linear;
+// step 5c: the specials of the R5 shader that need no texel coordinates
+// (2 copy32, 3 over32 magic, 4 copy-if-alpha, 5 alpha blend, 8
+// blend_line32); src is then the bitmap's texel or nothing
+uniform int special;
+uniform int blendAlpha;
+uniform float4 magic;
+// step 5b: src.r is Skia's coverage of the shape (kCoverageSkSL), drawn
+// without Skia's anti-aliasing, so the blender mixes the edge itself
+uniform int coverInSrc;
+
+int4 toI(half4 c) { return int4(float4(c) * 255.0 + 0.5); }
+half4 toH(int4 c) { return half4(float4(c) / 255.0); }
+
+int imin(int a, int b) { return a < b ? a : b; }
+int imax(int a, int b) { return a > b ? a : b; }
+
+int3 blendRGB(int3 d, int3 s, int a) { return ((s - d) * a + d * 256) / 256; }
+int3 blend16RGB(int3 d, int3 s, int a) { return ((s - d) * a + d * 65536) / 65536; }
+
+// step 5b: mix in linear light with the sRGB curve (IEC 61966-2-1), as
+// the compositor's shaders do their own arithmetic on unpacked words; a in
+// 0..1. The window buffers stay 8-bit sRGB.
+float3 toLinear(int3 c) {
+	float3 v = float3(c) / 255.0;
+	return mix(v / 12.92, pow((v + 0.055) / 1.055, float3(2.4)),
+		step(float3(0.04045), v));
+}
+int3 toSrgb(float3 l) {
+	l = clamp(l, 0.0, 1.0);
+	float3 v = mix(l * 12.92, 1.055 * pow(l, float3(1.0 / 2.4)) - 0.055,
+		step(float3(0.0031308), l));
+	return int3(v * 255.0 + 0.5);
+}
+int3 linearRGB(int3 d, int3 s, float a) {
+	return toSrgb(mix(toLinear(d), toLinear(s), a));
+}
+int3 alphaRGB(int3 d, int3 s, int a) {
+	return linear != 0 ? linearRGB(d, s, float(a) / 255.0) : blendRGB(d, s, a);
+}
+
+int4 over(int4 d, int3 s, int cov) {
+	if (cov == 255)
+		return int4(s, 255);
+	return int4(alphaRGB(d.rgb, s, cov), 255);
+}
+
+int4 composite(int4 d, int3 s, int a) {
+	if (d.a == 255)
+		return int4(alphaRGB(d.rgb, s, a), 255);
+	if (d.a == 0)
+		return int4(s, a);
+	int rest = 255 - a;
+	int temp = 65025 - rest * (255 - d.a);
+	int dstA = d.a * rest;
+	int srcA = 255 * a;
+	return int4((d.rgb * dstA + s * srcA) / temp, temp / 255);
+}
+
+int4 alpha16(int4 d, int3 s, int a16, int compositeKind) {
+	if (a16 == 0)
+		return d;
+	if (a16 == 65025)
+		return int4(s, 255);
+	if (compositeKind != 0)
+		return composite(d, s, a16 / 255);
+	if (linear != 0)
+		return int4(linearRGB(d.rgb, s, float(a16) / 65025.0), 255);
+	return int4(blend16RGB(d.rgb, s, a16), 255);
+}
+
+// AGG's comp_op_rgba_* (agg_pixfmt_rgba.h) as Painter's AggCompOpAdapter
+// applies them to Haiku's straight bytes; base_mask 255, base_shift 8,
+// AGG's own rounding kept (also dst_out's "+ base_shift")
+int4 scaleBy(int4 s, int cov) { return (s * cov + 255) / 256; }
+
+int4 compOp(int op, int4 d, int4 s, int cov) {
+	if (op == 0 || op == 1) {
+		// source in, source out
+		int da = op == 0 ? d.a : 255 - d.a;
+		int4 v = (s * da + 255) / 256;
+		if (cov < 255)
+			return (d * (255 - cov) + 255) / 256 + (v * cov + 255) / 256;
+		return v;
+	}
+	if (op == 2) {
+		// source atop
+		if (cov < 255)
+			s = scaleBy(s, cov);
+		int sa = 255 - s.a;
+		return int4((s.rgb * d.a + d.rgb * sa + 255) / 256, d.a);
+	}
+	if (op == 3) {
+		// destination over
+		if (cov < 255)
+			s = scaleBy(s, cov);
+		int d1a = 255 - d.a;
+		return int4(d.rgb + (s.rgb * d1a + 255) / 256,
+			s.a + d.a - (s.a * d.a + 255) / 256);
+	}
+	if (op == 4) {
+		// destination in
+		int sa = s.a;
+		if (cov < 255)
+			sa = 255 - (cov * (255 - sa) + 255) / 256;
+		return (d * sa + 255) / 256;
+	}
+	if (op == 5) {
+		// destination out
+		int sa = s.a;
+		if (cov < 255)
+			sa = (sa * cov + 255) / 256;
+		sa = 255 - sa;
+		return (d * sa + 8) / 256;
+	}
+	if (op == 6) {
+		// destination atop
+		int da = 255 - d.a;
+		if (cov < 255) {
+			int3 v = (d.rgb * s.a + s.rgb * da + 255) / 256;
+			int alpha = 255 - cov;
+			return int4((d.rgb * alpha + 255) / 256 + (v * cov + 255) / 256,
+				(d.a * alpha + 255) / 256 + (s.a * cov + 255) / 256);
+		}
+		return int4((d.rgb * s.a + s.rgb * da + 255) / 256, s.a);
+	}
+	if (op == 8) {
+		// clear
+		if (cov < 255)
+			return (d * (255 - cov) + 255) / 256;
+		return int4(0);
+	}
+	if (cov < 255)
+		s = scaleBy(s, cov);
+	if (s.a == 0)
+		return d;
+	if (op == 7) {
+		// xor
+		int s1a = 255 - s.a;
+		int d1a = 255 - d.a;
+		return int4((d.rgb * s1a + s.rgb * d1a + 255) / 256,
+			s.a + d.a - (s.a * d.a + 127) / 128);
+	}
+	int alpha = s.a + d.a - (s.a * d.a + 255) / 256;
+	if (op == 9) {
+		// difference
+		int3 m = int3(imin(s.r * d.a, d.r * s.a), imin(s.g * d.a, d.g * s.a),
+			imin(s.b * d.a, d.b * s.a));
+		return int4(s.rgb + d.rgb - (2 * m + 255) / 256, alpha);
+	}
+	// lighten (10) and darken (11)
+	int d1a = 255 - d.a;
+	int s1a = 255 - s.a;
+	int3 sd = s.rgb * d.a;
+	int3 ds = d.rgb * s.a;
+	int3 m = op == 10
+		? int3(imax(sd.r, ds.r), imax(sd.g, ds.g), imax(sd.b, ds.b))
+		: int3(imin(sd.r, ds.r), imin(sd.g, ds.g), imin(sd.b, ds.b));
+	return int4((m + s.rgb * d1a + d.rgb * s1a + 255) / 256, alpha);
+}
+
+int brightness(int3 c) { return (308 * c.r + 600 * c.g + 116 * c.b) / 1024; }
+
+int4 selectSwap(int4 d, int3 h, int3 l, int cov) {
+	if (d.rgb == h)
+		return over(d, l, cov);
+	if (d.rgb == l)
+		return over(d, h, cov);
+	return d;
+}
+
+int4 blendWith(int4 d, int cov, half4 src) {
+	int4 H = int4(high);
+	int4 L = int4(low);
+	int4 r = d;
+	bool hi = (solidLow == 0);
+	if (useColors == 0) {
+		int4 col = hi ? H : L;
+		int4 rend = solidLow != 0 ? L : H;
+		if (mode == 0) {
+			if (solid != 0)
+				r = over(d, rend.rgb, cov);
+			else if (cov == 255)
+				r = int4(col.rgb, 255);
+			else
+				r = int4(alphaRGB(L.rgb, col.rgb, cov), 255);
+		} else if (mode == 1) {
+			if (hi)
+				r = over(d, H.rgb, cov);
+		} else if (mode == 2) {
+			if (hi)
+				r = over(d, L.rgb, cov);
+		} else if (mode == 3) {
+			if (hi)
+				r = over(d, 255 - d.rgb, cov);
+		} else if (mode == 4) {
+			r = over(d, int3(imin(255, d.r + col.r), imin(255, d.g + col.g),
+				imin(255, d.b + col.b)), cov);
+		} else if (mode == 5) {
+			r = over(d, int3(imax(0, d.r - col.r), imax(0, d.g - col.g),
+				imax(0, d.b - col.b)), cov);
+		} else if (mode == 6) {
+			r = over(d, (d.rgb + col.rgb) / 2, cov);
+		} else if (mode == 7) {
+			if (brightness(col.rgb) < brightness(d.rgb))
+				r = over(d, col.rgb, cov);
+		} else if (mode == 8) {
+			if (brightness(col.rgb) > brightness(d.rgb))
+				r = over(d, col.rgb, cov);
+		} else if (mode == 9) {
+			if (hi)
+				r = selectSwap(d, H.rgb, L.rgb, cov);
+		} else if (mode == 10 && alphaKind >= 4) {
+			// AggCompOpAdapter: the pattern's colour at this pixel
+			r = compOp(alphaKind - 4, d, col, cov);
+		} else if (mode == 10) {
+			int3 c3 = solid != 0 ? rend.rgb : col.rgb;
+			int ca = solid != 0 ? rend.a : col.a;
+			if (alphaKind == 0 || alphaKind == 1) {
+				int a16 = H.a * cov;
+				if (solid != 0 && alphaKind == 0 && cov == 255 && a16 != 65025
+					&& a16 != 0) {
+					int a = a16 / 256;
+					r = int4((d.rgb * (255 - a)) / 256 + (c3 * a) / 256, d.a);
+				} else
+					r = alpha16(d, c3, a16, alphaKind);
+			} else {
+				int a16 = ca * cov;
+				if (solid != 0 && alphaKind == 2 && cov == 255 && a16 != 65025
+					&& a16 != 0) {
+					int a = a16 / 256;
+					r = int4((d.rgb * (255 - a)) / 256 + (c3 * a) / 256, d.a);
+				} else
+					r = alpha16(d, c3, a16, alphaKind == 3 ? 1 : 0);
+			}
+		}
+		return r;
+	}
+
+	// a colour per pixel: blend_color_hspan_*()
+	int4 c = toI(src);
+	if (mode == 0) {
+		if (solid != 0)
+			r = over(d, c.rgb, cov);
+		else if (cov == 255)
+			r = c;
+		else
+			r = int4(alphaRGB(L.rgb, c.rgb, cov), 255);
+	} else if (mode == 10 && alphaKind >= 4) {
+		r = compOp(alphaKind - 4, d, c, cov);
+	} else if (mode == 10) {
+		if (alphaKind == 0 || alphaKind == 1)
+			r = alpha16(d, c.rgb, (H.a * c.a * cov) / 255, alphaKind);
+		else
+			r = alpha16(d, c.rgb, c.a * cov, alphaKind == 3 ? 1 : 0);
+	} else if (c.a > 0) {
+		if (mode == 1)
+			r = over(d, c.rgb, cov);
+		else if (mode == 2)
+			r = over(d, L.rgb, cov);
+		else if (mode == 3)
+			r = over(d, 255 - d.rgb, cov);
+		else if (mode == 4)
+			r = over(d, int3(imin(255, d.r + c.r), imin(255, d.g + c.g),
+				imin(255, d.b + c.b)), cov);
+		else if (mode == 5)
+			r = over(d, int3(imax(0, d.r - c.r), imax(0, d.g - c.g),
+				imax(0, d.b - c.b)), cov);
+		else if (mode == 6)
+			r = over(d, (d.rgb + c.rgb) / 2, cov);
+		else if (mode == 7) {
+			if (brightness(c.rgb) < brightness(d.rgb))
+				r = over(d, c.rgb, cov);
+		} else if (mode == 8) {
+			if (brightness(c.rgb) > brightness(d.rgb))
+				r = over(d, c.rgb, cov);
+		} else if (mode == 9)
+			r = selectSwap(d, H.rgb, L.rgb, cov);
+	}
+	return r;
+}
+
+half4 main(half4 src, half4 dst) {
+	int4 d = toI(dst);
+	if (special != 0) {
+		int4 c = toI(src);
+		int4 r = d;
+		if (special == 2) {
+			r = c;
+		} else if (special == 3) {
+			if (c.bgra != int4(magic))
+				r = c;
+		} else if (special == 4) {
+			if (c.a != 0)
+				r = c;
+		} else if (special == 5) {
+			if (c.a == 255)
+				r = c;
+			else
+				r = int4(alphaRGB(d.rgb, c.rgb, c.a), d.a);
+		} else if (special == 8) {
+			int a = blendAlpha;
+			int3 s = (int4(high).rgb * a) / 256;
+			r = int4((d.rgb * (255 - a)) / 256 + s, d.a);
+		}
+		return toH(r);
+	}
+	if (coverInSrc != 0) {
+		// outside the shape the pixel stays exactly as it is
+		int cover = toI(src).r;
+		if (cover == 0)
+			return dst;
+		return toH(blendWith(d, cover, src));
+	}
+	return toH(blendWith(d, 255, src));
+}
+)SKSL";
+
+
 /*!	AGG's gradient functions as Painter uses them: the pixel centre through
 	the inverse gradient transform, the distance in 1/16 pixel
 	(gradient_subpixel_shift 4), the index into the 256 colours of
 	_MakeGradient().
 */
+// Step 5b: the coverage image (white on clear) as the source colour of
+// the R5 blender, in device coordinates.
+static const char* kCoverageSkSL = R"SKSL(
+uniform shader coverImage;
+
+half4 main(float2 p) {
+	return half4(coverImage.eval(p).a, 0.0, 0.0, 1.0);
+}
+)SKSL";
+
+
 static const char* kR5GradientSkSL = R"SKSL(
 uniform shader ramp;
 uniform int type;
