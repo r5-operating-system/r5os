@@ -244,9 +244,19 @@ public:
 
 	~Draw()
 	{
-		if (fLocked)
+		// M13 step 1: inside BeginUpdate()..EndUpdate() the run leaves the
+		// window's drawing alone (SkiaTarget::Held()), so a wake per draw
+		// call only makes runs for the other windows; EndUpdate()'s
+		// CopyToFront() wakes once for the whole update. Drawing outside an
+		// update, and an update held longer than 100 ms, wake as before,
+		// so the input latency stays.
+		bool held = false;
+		if (fLocked) {
+			held = fEngine->fTarget->Held(system_time());
 			fEngine->fTarget->Unlock();
-		fEngine->_Wake();
+		}
+		if (!held)
+			fEngine->_Wake();
 	}
 
 	bool IsDirty() const
