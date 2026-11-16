@@ -46,6 +46,12 @@ Game or program
 - Old programs: a controller under `/dev/joystick/` works in every `BJoystick` program (and in SDL games, which read through `BJoystick` on Haiku) with no change, because `BJoystick` scans the subfolders too (`JoystickTweaker.cpp`, `_ScanIncludingDisabled()`): a Bluetooth pad is `bluetooth/0`, a USB pad `usb/0`, when the driver speaks the same joystick protocol as `usb_hid` (`JoystickProtocolHandler`). Old programs see raw button and axis numbers in the controller's own order, and no plug or unplug messages; the named layout and `StartWatching()` are for programs that use `BGameController`.
 - Rule for option C: swapping buttons happens below `BJoystick`, in the driver path, so old programs get it too; never only in `BGameController`.
 - Settings → Devices → Game controllers (alphabetical, between Bluetooth and Keyboard): a `BCard` per controller with name, layout (Xbox or PlayStation labels) and battery (`R5_LEVEL_BATTERY`), and a live test drawn in the real layout. The same view later in a separate program, as with Bluetooth and Wi-Fi.
+- The picture is made automatically for every controller (owner, 16 Nov 2026), drawn in code like `r5_screen_draw()`: vector, scaled, dark mode, every part lighting up live.
+  - **Known controller** (in the mapping database): one general gamepad shape with the standard layout and the labels of its family, found from the vendor ID: Xbox (A B X Y), PlayStation (✕ ○ □ △), Nintendo (A and B swapped).
+  - **Unknown controller**: a layout built from what it reports: each pair of axes a stick (a circle with a dot), triggers as bars, buttons as round keys, a hat as a d-pad. So every controller gets a picture of its own, also a six-button pad like the 8BitDo M30.
+  - Not done: a drawing per model (the real DualSense or M30 shape): a lot of work per model and a trademark risk.
+  - The PlayStation symbols become line glyphs in `libr5icons.so`, added at the end of `enum r5_glyph` (`docs/ICONS.md`), so other programs can use them.
+  - About one session of work on top of the page.
 - The controller battery shows in the existing Bluetooth item in Deskbar, not in an item of its own.
 
 Not in option B (option C, later): swapping buttons for the whole system and per app, rumble, light bar, touchpad, motion sensor, buddy controller.
