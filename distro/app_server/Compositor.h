@@ -150,6 +150,12 @@ private:
 			void				_InitSkia(bool forceFail);
 	static	void				_SkiaWake(void* cookie);
 	static	status_t			_SkiaWarmUp(void* cookie);
+	// M12: Skia's runs on their own thread, so one slow run (seconds on
+	// Lavapipe while other programs use every core) does not stop the
+	// compose, the pointer and the windows that already have pixels
+	static	status_t			_DrawThread(void* data);
+			void				_DrawLoop();
+			void				_StopDrawThread();
 			void				_ExitVulkan();
 			WindowBuffer*		_AllocateBuffer(uint32 width, uint32 height);
 			void				_FreeBuffer(WindowBuffer* buffer,
@@ -335,6 +341,9 @@ private:
 			// CPU mode came from the drawing (decision 8).
 			SkiaGpu*			fSkia;
 			bool				fDrawFailure;
+			thread_id			fDrawThread;
+			sem_id				fDrawSem;
+			volatile bool		fDrawQuit;
 };
 
 

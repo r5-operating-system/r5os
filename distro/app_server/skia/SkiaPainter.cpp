@@ -401,8 +401,8 @@ SkiaTarget::DropGpu()
 
 
 static const size_t kTextureCount = 64;
-static const size_t kTextureBytes = 16 * 1024 * 1024;
-static const int32 kTextureLargest = 4 * 1024 * 1024;
+static const size_t kTextureBytes = 96 * 1024 * 1024;
+static const int32 kTextureLargest = 64 * 1024 * 1024;
 
 
 sk_sp<SkImage>
@@ -2240,7 +2240,7 @@ SkiaPainter::DrawBitmap(const ServerBitmap* bitmap, BRect bitmapRect,
 		extern void skia_trace(const char* format, ...);
 		uint32 hash = 2166136261u;
 		const uint8* b = bitmap->Bits();
-		for (int32 n = 0; n < bitmap->BitsLength(); n++)
+		for (uint32 n = 0; n < (uint32)bitmap->BitsLength(); n++)
 			hash = (hash ^ b[n]) * 16777619u;
 		skia_trace("bitmap %p target %p %ldx%ld space %d mode %d hash %08lx",
 			bitmap, fTarget, (long)bitmap->Width(), (long)bitmap->Height(),

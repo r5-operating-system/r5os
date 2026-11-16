@@ -746,6 +746,14 @@ Compositor::_InitSkia(bool forceFail)
 	}
 	fSkia->SetWaker(&_SkiaWake, this);
 	SkiaGpu::SetCurrent(fSkia);
+	fDrawSem = create_sem(0, "skia draw wake");
+	if (fDrawSem >= 0) {
+		fDrawThread = spawn_thread(_DrawThread, "skia draw",
+			B_DISPLAY_PRIORITY, this);
+		if (fDrawThread >= 0)
+			resume_thread(fDrawThread);
+	}
+	// without the thread the compose thread runs the work, as before
 	// step 5c: the pipelines compile now, not when the first window draws
 	thread_id warmUp = spawn_thread(&_SkiaWarmUp, "skia warm up",
 		B_LOW_PRIORITY, this);
@@ -770,7 +778,60 @@ Compositor::_SkiaWake(void* cookie)
 	// SkiaGpu wakes once per RunWork(); fWakePending is the damage's flag
 	// and may stay set while the loop runs without damage
 	Compositor* compositor = (Compositor*)cookie;
-	release_sem_etc(compositor->fWakeSem, 1, B_DO_NOT_RESCHEDULE);
+	if (compositor->fDrawThread >= 0)
+		release_sem_etc(compositor->fDrawSem, 1, B_DO_NOT_RESCHEDULE);
+	else
+		release_sem_etc(compositor->fWakeSem, 1, B_DO_NOT_RESCHEDULE);
+}
+
+
+/*static*/ status_t
+Compositor::_DrawThread(void* data)
+{
+	((Compositor*)data)->_DrawLoop();
+	return B_OK;
+}
+
+
+/*!	M12: runs what the windows drew (SkiaGpu::RunWork, the only thread
+	that submits Skia's work). Deliver() copies the pixels into the window
+	buffers and reports their damage, which wakes the compose. A failure
+	turns the GPU drawing off through the compose thread (decision 8).
+*/
+void
+Compositor::_DrawLoop()
+{
+	while (!fDrawQuit) {
+		// a wake may be missed while a run is busy; look again anyway
+		status_t status = acquire_sem_etc(fDrawSem, 1, B_RELATIVE_TIMEOUT,
+			100000);
+		if (status != B_OK && status != B_TIMED_OUT && status != B_INTERRUPTED)
+			break;
+		if (fDrawQuit || fSkia == NULL || fSkia->IsShutDown())
+			break;
+		const char* reason = NULL;
+		if (!fSkia->RunWork(&reason)) {
+			fDrawFailure = true;
+			if (fFailure == NULL)
+				fFailure = reason != NULL ? reason : "draw";
+			release_sem_etc(fWakeSem, 1, B_DO_NOT_RESCHEDULE);
+			break;
+		}
+	}
+}
+
+
+//!	Stops the draw thread; Skia is shut down or the compositor ends.
+void
+Compositor::_StopDrawThread()
+{
+	if (fDrawThread < 0)
+		return;
+	fDrawQuit = true;
+	release_sem(fDrawSem);
+	status_t result;
+	wait_for_thread(fDrawThread, &result);
+	fDrawThread = -1;
 }
 
 
@@ -847,7 +908,10 @@ Compositor::Compositor(Desktop* desktop, HWInterface* screen)
 	fFailure(NULL),
 	fGpuBusy(0),
 	fSkia(NULL),
-	fDrawFailure(false)
+	fDrawFailure(false),
+	fDrawThread(-1),
+	fDrawSem(-1),
+	fDrawQuit(false)
 {
 }
 
@@ -869,6 +933,9 @@ Compositor::~Compositor()
 		status_t result;
 		wait_for_thread(fThread, &result);
 	}
+	_StopDrawThread();
+	if (fDrawSem >= 0)
+		delete_sem(fDrawSem);
 	if (fWakeSem >= 0)
 		delete_sem(fWakeSem);
 	delete fLayers;
@@ -1252,8 +1319,10 @@ Compositor::_ExitVulkan()
 	if (vk->device != VK_NULL_HANDLE && vk->vkDeviceWaitIdle != NULL) {
 		vk->vkDeviceWaitIdle(vk->device);
 		// M12: Skia's context and every GPU image of it, before the device
-		if (fSkia != NULL)
+		if (fSkia != NULL) {
+			_StopDrawThread();
 			fSkia->DestroyContext();
+		}
 		_ScanoutFree(vk);
 		// M11 step 3b: the imports of shared views go with this device;
 		// the programs get a refusal at their next present. Step 5: the
@@ -1444,7 +1513,9 @@ Compositor::_AllocateBuffer(uint32 width, uint32 height)
 	// new buffer's pixels as the window's first image (SkiaTarget::
 	// SetSurface()), so the old pixels showed until the window drew
 	// (QEMU and the 5625U's boot 3, 16 Nov 2026). Transparent instead.
-	memset(bits, 0, (size_t)bytes);
+	// EXPERIMENT (leaf icon): opaque black instead of transparent
+	for (uint64 p = 0; p < bytes / 4; p++)
+		((uint32*)bits)[p] = 0xff000000;
 
 	WindowBuffer* windowBuffer = new(std::nothrow) WindowBuffer(this, bits,
 		width, height, (uint64)buffer, (uint64)memory, fGeneration);
@@ -2242,10 +2313,10 @@ Compositor::_ComposeLoop()
 			return;
 		}
 		_ShareRetireDone();
-		// M12: what the windows drew reaches their buffers before the
-		// compose reads them (SkiaGpu::RunWork, the only thread that
-		// submits). A failure turns the GPU drawing off (decision 8).
-		if (fSkia != NULL && !fSkia->IsShutDown()) {
+		// M12: Skia's work runs on the draw thread (_DrawLoop); only when
+		// that thread could not be made does the compose thread run it
+		// before the compose. A failure turns the GPU drawing off.
+		if (fDrawThread < 0 && fSkia != NULL && !fSkia->IsShutDown()) {
 			const char* drawReason = NULL;
 			if (!fSkia->RunWork(&drawReason)) {
 				fDrawFailure = true;
@@ -2265,8 +2336,14 @@ Compositor::_ComposeLoop()
 			// run, not now, or the old pixels show for a frame.
 			if (wasPaused && !fPaused && fSkia != NULL
 				&& !fSkia->IsShutDown()) {
-				release_sem_etc(fWakeSem, 1, B_DO_NOT_RESCHEDULE);
-				continue;
+				if (fDrawThread >= 0) {
+					// one run of the draw thread, at most 250 ms; a slower
+					// run does not keep the screen from coming back
+					fSkia->Finish(250000);
+				} else {
+					release_sem_etc(fWakeSem, 1, B_DO_NOT_RESCHEDULE);
+					continue;
+				}
 			}
 		}
 		if (fPaused) {
@@ -3008,8 +3085,10 @@ Compositor::_TurnOff(const char* reason)
 	}
 	// M12: every engine is on the screen now (Painter); the GPU images go
 	// before the device does. Decision 8: one line when the drawing failed.
-	if (fSkia != NULL)
+	if (fSkia != NULL) {
 		fSkia->Shutdown();
+		_StopDrawThread();
+	}
 	if (fDrawFailure)
 		log_line("gpu draw off: %s", reason);
 	else
