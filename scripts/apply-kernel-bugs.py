@@ -92,6 +92,9 @@ def install_kernel_sources() -> None:
         "src/add-ons/kernel/network/protocols/bluetooth/l2cap/L2capEndpoint.h",
         "src/add-ons/kernel/network/protocols/bluetooth/l2cap/L2capEndpointManager.cpp",
         "src/add-ons/kernel/network/protocols/bluetooth/l2cap/L2capEndpointManager.h",
+        "src/add-ons/kernel/network/protocols/bluetooth/l2cap/L2capEndpointLE.cpp",
+        # R5: LE links in btCoreData, docs/BLUETOOTH.md step 6
+        "src/add-ons/kernel/bluetooth/btCoreData/BTCoreData.cpp",
         "src/add-ons/kernel/network/protocols/bluetooth/l2cap/l2cap.cpp",
         "src/add-ons/kernel/network/protocols/bluetooth/l2cap/l2cap_command.cpp",
         "src/add-ons/kernel/network/protocols/bluetooth/l2cap/l2cap_command.h",

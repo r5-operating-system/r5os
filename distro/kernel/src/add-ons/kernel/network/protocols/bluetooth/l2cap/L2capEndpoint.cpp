@@ -15,6 +15,11 @@
 #include "SupportDefs.h"
 #include "l2cap_signal.h"
 #include <btDebug.h>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <R5BluetoothLE.h>
+// SPDX-SnippetEnd
 
 
 static l2cap_qos sDefaultQOS = {
@@ -49,6 +54,21 @@ L2capEndpoint::L2capEndpoint(net_socket* socket)
 	fConnection(NULL),
 	fChannelID(L2CAP_NULL_CID),
 	fDestinationChannelID(L2CAP_NULL_CID)
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	,
+	fFixedChannel(0),
+	fLEMode(0),
+	fLEBound(false),
+	fLETxCredits(0),
+	fLETxMPS(0),
+	fLETxSDU(NULL),
+	fLETxFirst(false),
+	fLETxSDULength(0),
+	fLERxCredits(0),
+	fLERxSDU(NULL)
+	// SPDX-SnippetEnd
 {
 	CALLED();
 
@@ -66,6 +86,11 @@ L2capEndpoint::L2capEndpoint(net_socket* socket)
 	fChannelConfig.link_timeout  = L2CAP_LINK_TIMEOUT_DEFAULT;
 
 	fConfigState = {};
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	fLERx = {};
+	// SPDX-SnippetEnd
 
 	gStackModule->init_fifo(&fReceiveQueue, "l2cap recv", L2CAP_MTU_MAXIMUM);
 	gStackModule->init_fifo(&fSendQueue, "l2cap send", L2CAP_MTU_MAXIMUM);
@@ -87,6 +112,14 @@ L2capEndpoint::~L2capEndpoint()
 	gStackModule->uninit_fifo(&fReceiveQueue);
 	gStackModule->uninit_fifo(&fSendQueue);
 	gStackModule->wait_for_timer(&fSendTimer);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	if (fLETxSDU != NULL)
+		gBufferModule->free(fLETxSDU);
+	if (fLERxSDU != NULL)
+		gBufferModule->free(fLERxSDU);
+	// SPDX-SnippetEnd
 }
 
 
@@ -131,6 +164,17 @@ L2capEndpoint::Shutdown()
 		locker.Unlock();
 		return Unbind();
 	}
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Bound but never listening or connected (a fixed-channel socket,
+	// or bind() without listen()): no channel to close. It went on to
+	// ask a command identifier of a NULL connection.
+	if (fState == BOUND) {
+		locker.Unlock();
+		return Unbind();
+	}
+	// SPDX-SnippetEnd
 
 	status_t status;
 	bigtime_t timeout;
@@ -206,6 +250,14 @@ L2capEndpoint::Bind(const struct sockaddr* _address)
 {
 	const sockaddr_l2cap* address
 		= reinterpret_cast<const sockaddr_l2cap*>(_address);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// An LE address first: the address module does not know its
+	// length and takes it for empty.
+	if (_address != NULL && _address->sa_len == sizeof(sockaddr_l2cap_le))
+		return _BindLE(_address);
+	// SPDX-SnippetEnd
 	if (AddressModule()->is_empty_address(_address, true))
 		return B_OK; // We don't need to bind to empty.
 	if (!AddressModule()->is_same_family(_address))
@@ -274,6 +326,12 @@ L2capEndpoint::Connect(const struct sockaddr* _address)
 {
 	const sockaddr_l2cap* address
 		= reinterpret_cast<const sockaddr_l2cap*>(_address);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	if (_address != NULL && _address->sa_len == sizeof(sockaddr_l2cap_le))
+		return _ConnectLE(_address);
+	// SPDX-SnippetEnd
 	if (!AddressModule()->is_same_family(_address))
 		return EAFNOSUPPORT;
 	if (address->l2cap_len != sizeof(struct sockaddr_l2cap))
@@ -419,6 +477,15 @@ L2capEndpoint::ReadData(size_t numBytes, uint32 flags, net_buffer** _buffer)
 	ssize_t bytes = gStackModule->fifo_dequeue_buffer(&fReceiveQueue, flags, timeout, _buffer);
 	if (bytes == B_WOULD_BLOCK && fState == CLOSED)
 		return ENOTCONN;
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// The reader made room: a credit-based channel gives credits again.
+	if (bytes >= 0 && fLEMode != 0) {
+		locker.Lock();
+		_LEReturnCredits();
+	}
+	// SPDX-SnippetEnd
 	return bytes;
 }
 
@@ -432,11 +499,26 @@ L2capEndpoint::SendData(net_buffer* buffer)
 	if (buffer == NULL)
 		return ENOBUFS;
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// A fixed channel sends each PDU to the link sendto() names.
+	if (fFixedChannel != 0)
+		return _SendFixed(buffer);
+	// SPDX-SnippetEnd
+
 	if (fState != OPEN)
 		return ENOTCONN;
 
 	if (buffer->size > fChannelConfig.outgoing_mtu)
 		return EMSGSIZE;
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// An SDU of a credit-based channel is 1 byte or more.
+	if (fLEMode != 0 && buffer->size == 0)
+		return EMSGSIZE;
+	// SPDX-SnippetEnd
 
 	status_t status = gStackModule->fifo_enqueue_buffer(&fSendQueue, buffer);
 	if (status != B_OK)
@@ -453,11 +535,26 @@ status_t
 L2capEndpoint::ReceiveData(net_buffer* buffer)
 {
 	CALLED();
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	if (fLEMode != 0)
+		return _ReceiveLECredit(buffer);
+	// SPDX-SnippetEnd
 	// FIXME: Check address specified in net_buffer!
 	status_t status = gStackModule->fifo_enqueue_buffer(&fReceiveQueue, buffer);
 
 	if (status == B_OK)
 		gSocketModule->notify(socket, B_SELECT_READ, Receivable());
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	else {
+		// The buffer is handed over (l2cap_receive_data() owns it);
+		// a full queue leaked it.
+		gBufferModule->free(buffer);
+	}
+	// SPDX-SnippetEnd
 
 	return status;
 }
@@ -484,6 +581,14 @@ L2capEndpoint::_SendQueued()
 
 	if (fState != OPEN)
 		return;
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	if (fLEMode != 0) {
+		_SendLECreditQueued();
+		return;
+	}
+	// SPDX-SnippetEnd
 
 	net_buffer* buffer;
 	while (gStackModule->fifo_dequeue_buffer(&fSendQueue, MSG_DONTWAIT, 0, &buffer) >= 0) {
@@ -497,6 +602,13 @@ L2capEndpoint::_SendQueued()
 		header->length = B_HOST_TO_LENDIAN_INT16(buffer->size - sizeof(l2cap_basic_header));
 		header->dcid = B_HOST_TO_LENDIAN_INT16(fDestinationChannelID);
 
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// Written back before the buffer goes: PostACL() owns it, and
+		// the destructor wrote into it afterwards.
+		header.Sync();
+		// SPDX-SnippetEnd
 		buffer->type = fConnection->handle;
 		btDevices->PostACL(fConnection->ndevice->index, buffer);
 	}
@@ -509,6 +621,13 @@ L2capEndpoint::Sendable()
 	CALLED();
 	MutexLocker locker(fLock);
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// A fixed-channel socket is never connected; it can always send.
+	if (fFixedChannel != 0)
+		return socket->send.buffer_size;
+	// SPDX-SnippetEnd
 	if (fState != OPEN) {
 		if (_IsEstablishing())
 			return 0;
@@ -959,5 +1078,12 @@ L2capEndpoint::_MarkClosed()
 	socket->error = ENOTCONN;
 	gSocketModule->notify(socket, B_SELECT_ERROR, ENOTCONN);
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Only a bound channel: an LE connect() that failed before it got
+	// one closes here too.
+	if (fChannelID != L2CAP_NULL_CID)
+	// SPDX-SnippetEnd
 	gL2capEndpointManager.UnbindFromChannel(this);
 }

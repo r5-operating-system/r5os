@@ -17,6 +17,8 @@
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 #include "l2cap_parse.h"
+
+#include <R5BluetoothLE.h>
 // SPDX-SnippetEnd
 #include "l2cap_signal.h"
 #include "L2capEndpoint.h"
@@ -318,12 +320,41 @@ l2cap_receive_data(net_buffer* buffer)
 			break;
 		}
 
+		case R5_L2CAP_CID_LE_SIGNALING:
+		case R5_L2CAP_CID_ATT:
+		case R5_L2CAP_CID_SMP:
+		{
+			// The LE fixed channels, only on an LE link (step 1c and 6 of
+			// docs/BLUETOOTH.md): signalling here, ATT and SMP to the one
+			// socket bluetooth_server bound for each, with the link's
+			// sockaddr_l2cap_le as the source.
+			struct HciConnection* connection = connection_for(buffer,
+				interfaceAddress);
+			if (connection == NULL || connection->type != R5_HCI_LINK_LE) {
+				gBufferModule->free(buffer);
+				return ENOTCONN;
+			}
+			if (dcid == R5_L2CAP_CID_LE_SIGNALING) {
+				status = l2cap_handle_signaling_command(connection, buffer);
+				break;
+			}
+
+			L2capEndpoint* endpoint = gL2capEndpointManager.GetForFixed(dcid);
+			if (endpoint == NULL) {
+				TRACE("%s: fixed channel %#x not bound, %" B_PRIu32 " bytes"
+					" dropped\n", __func__, dcid, buffer->size);
+				gBufferModule->free(buffer);
+				return B_OK;
+			}
+			status = endpoint->ReceiveData(buffer);
+			gSocketModule->release_socket(endpoint->socket);
+			break;
+		}
+
 		default:
 		{
-			// The LE and BR/EDR fixed channels (ATT 0x0004, LE signalling
-			// 0x0005, SMP 0x0006 and 0x0007) have no endpoint yet: no LE link
-			// exists before step 6 of docs/BLUETOOTH.md asks for LE events,
-			// and their socket interface is designed with its user there.
+			// The other fixed channels (BR/EDR SMP 0x0007 and the reserved
+			// ones) are not served.
 			if (l2cap_parse_is_fixed_channel(dcid)) {
 				TRACE("%s: fixed channel %#x not served, %" B_PRIu32 " bytes"
 					" dropped\n", __func__, dcid, buffer->size);
@@ -333,6 +364,14 @@ l2cap_receive_data(net_buffer* buffer)
 
 			L2capEndpoint* endpoint = gL2capEndpointManager.GetForChannel(dcid);
 			if (endpoint == NULL) {
+				gBufferModule->free(buffer);
+				return ECONNRESET;
+			}
+
+			// A credit-based channel takes frames only from its own link.
+			if (endpoint->IsLECredit() && endpoint->Connection()
+					!= connection_for(buffer, interfaceAddress)) {
+				gSocketModule->release_socket(endpoint->socket);
 				gBufferModule->free(buffer);
 				return ECONNRESET;
 			}

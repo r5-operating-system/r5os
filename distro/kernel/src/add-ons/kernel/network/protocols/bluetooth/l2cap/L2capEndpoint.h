@@ -17,6 +17,11 @@
 
 #include <bluetooth/L2CAP/btL2CAP.h>
 #include "l2cap_internal.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include "l2cap_parse.h"
+// SPDX-SnippetEnd
 
 
 class L2capEndpoint;
@@ -67,6 +72,42 @@ public:
 			void		_HandleBadResponse(uint8 ident);
 			// HCI link gone (L2capEndpointManager::Disconnected()).
 			void		_HandleLinkLost();
+
+			// Bluetooth Low Energy (docs/BLUETOOTH.md, steps 1c and 6;
+			// L2capEndpointLE.cpp). A fixed channel (ATT, SMP) or an LE
+			// credit-based channel; see <R5BluetoothLE.h>.
+			bool		IsLECredit() const { return fLEMode != 0; }
+			uint16		FixedChannel() const { return fFixedChannel; }
+			HciConnection* Connection() const { return fConnection; }
+			status_t	_BindLE(const sockaddr* address);
+			status_t	_ConnectLE(const sockaddr* address);
+			status_t	_SendFixed(net_buffer* buffer);
+			status_t	_ReceiveLECredit(net_buffer* buffer);
+			void		_SendLECreditQueued();
+			// On the listening endpoint: a pending child for an incoming
+			// channel, open once the answer is sent (_MarkEstablished()).
+			// Returns the result code of the answer (Part A, 4.23).
+			uint16		_SpawnLECredit(HciConnection* connection, uint8 mode,
+							uint16 scid, uint16 mtu, uint16 mps,
+							uint16 credits, L2capEndpoint** _child);
+			void		_FinishLECreditSpawn(bool accepted);
+			void		_HandleLECreditConnectionRsp(uint8 ident, uint16 dcid,
+							uint16 mtu, uint16 mps, uint16 credits,
+							uint16 result);
+			void		_HandleLECredits(uint16 credits);
+			// Checks (apply false) or applies a reconfiguration; returns
+			// the result code (4.28).
+			uint16		_HandleLEReconfigure(uint16 mtu, uint16 mps,
+							bool apply);
+			// Closes a credit-based channel after a protocol error, and
+			// gives the remote new credits while there is room.
+			void		_LEDisconnect();
+			void		_LEReturnCredits();
+			// Our side of a credit-based channel, for answers.
+			uint16		LEIncomingMTU() const
+							{ return fChannelConfig.incoming_mtu; }
+			uint16		LEIncomingMPS() const { return fLERx.mps; }
+			uint16		LEIncomingCredits() const { return fLERxCredits; }
 			// SPDX-SnippetEnd
 
 private:
@@ -128,6 +169,24 @@ private:
 		uint16		flush_timeout;
 		uint16		link_timeout;
 	} fChannelConfig;
+
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// LE: fFixedChannel is the CID of a fixed-channel socket; fLEMode is
+	// R5_L2CAP_MODE_* of a credit-based channel (0: neither, BR/EDR).
+	uint16			fFixedChannel;
+	uint8			fLEMode;
+	bool			fLEBound;		// in the LE PSM tree
+	uint16			fLETxCredits;
+	uint16			fLETxMPS;
+	net_buffer*		fLETxSDU;		// the rest of the SDU being sent
+	bool			fLETxFirst;		// its next frame is its first
+	uint16			fLETxSDULength;
+	uint16			fLERxCredits;	// what the remote may still send
+	l2cap_coc_rx	fLERx;
+	net_buffer*		fLERxSDU;		// the SDU being received
+	// SPDX-SnippetEnd
 };
 
 
