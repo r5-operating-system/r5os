@@ -57,14 +57,21 @@ if [ "${PROGRAM:-0}" = 1 ]; then
 	page="/boot/system/preferences/Bluetooth & sleep 10; $page"
 fi
 # GAMEPAD=1 (step 8, docs/GAME-CONTROLLERS.md): QEMU has no game
-# controller, so gamecontroller_test keeps a virtual one on bluetooth_hid
-# (DualSense IDs, Cross down) for 150 s before the Settings page opens.
+# controller, so after the tests gamecontroller_test keeps a virtual one on
+# bluetooth_hid (DualSense IDs, Cross down, L2 at 60 %, the left stick up
+# and left) until QEMU stops; an open Settings page shows it as it comes.
+# After the tests, because bt_hid_driver_test takes the first
+# joystick/bluetooth node. The Sign in window is moved to the lower right
+# corner (hey), so the screendumps show the page. Use with
+# SETTINGS_PAGE=gamecontrollers SECONDS_UP=170 SHOTS="140 160".
+gamepad=""
 if [ "${GAMEPAD:-0}" = 1 ]; then
-	page="/bin/gamecontroller_test --hold 150 > /boot/home/gc-hold.log 2>&1 & sleep 3; $page"
+	page="/bin/hey Login set Frame of Window 0 to 'BRect(900,620,1340,1040)' > /boot/home/gc-hey.log 2>&1; $page"
+	gamepad="/bin/gamecontroller_test --hold 120 > /boot/home/gc-hold.log 2>&1 & "
 fi
 cat > "$BT_WORK/bt-smoke.job" <<EOF
 job bt-smoke {
-	launch /bin/sh -c "(while true; do sleep 5; ps -a > /boot/home/bt-psa.log 2>&1; sync; done) & sleep 60; ps > /boot/home/bt-ps0.log 2>&1; sync; $page/bin/bt_server_smoke_test > /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_l2cap_abi_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_hid_driver_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_l2cap_coc_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_smp_crypto_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_audio_smoke_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_rfcomm_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/gamecontroller_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync;/bin/bt_audio use 00:11:22:33:44:55 >> /boot/home/bt-smoke.log 2>&1; /bin/bt_audio >> /boot/home/bt-smoke.log 2>&1; /bin/bt_audio off >> /boot/home/bt-smoke.log 2>&1; /bin/bt_audio >> /boot/home/bt-smoke.log 2>&1; ls -ld /boot/system/settings/bluetooth /boot/system/settings/bluetooth/* >> /boot/home/bt-smoke.log 2>&1; sleep 5; sync"
+	launch /bin/sh -c "(while true; do sleep 5; ps -a > /boot/home/bt-psa.log 2>&1; sync; done) & sleep 60; ps > /boot/home/bt-ps0.log 2>&1; sync; $page/bin/bt_server_smoke_test > /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_l2cap_abi_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_hid_driver_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_l2cap_coc_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_smp_crypto_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_audio_smoke_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_rfcomm_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/gamecontroller_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync;/bin/bt_audio use 00:11:22:33:44:55 >> /boot/home/bt-smoke.log 2>&1; /bin/bt_audio >> /boot/home/bt-smoke.log 2>&1; /bin/bt_audio off >> /boot/home/bt-smoke.log 2>&1; /bin/bt_audio >> /boot/home/bt-smoke.log 2>&1; ls -ld /boot/system/settings/bluetooth /boot/system/settings/bluetooth/* >> /boot/home/bt-smoke.log 2>&1; $gamepad sleep 5; sync"
 	on initial_volumes_mounted
 }
 EOF

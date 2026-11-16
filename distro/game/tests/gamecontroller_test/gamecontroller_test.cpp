@@ -494,6 +494,7 @@ hold(int seconds)
 		return fail("create the virtual controller");
 	printf("gamecontroller_test: holding a virtual controller for %d s\n",
 		seconds);
+	fflush(stdout);
 	thread_id feeder = spawn_thread(feed_thread, "feed", B_NORMAL_PRIORITY,
 		NULL);
 	resume_thread(feeder);
@@ -564,7 +565,8 @@ test_drawing()
 		// Count what is not the white background.
 		int32 lines = 0;
 		const uint8* bits = (const uint8*)bitmap.Bits();
-		for (int32 j = 0; j + 3 < bitmap.BitsLength(); j += 4) {
+		int32 length = bitmap.BitsLength();
+		for (int32 j = 0; j + 3 < length; j += 4) {
 			if (bits[j] < 200 || bits[j + 1] < 200 || bits[j + 2] < 200)
 				lines++;
 		}

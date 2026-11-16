@@ -246,7 +246,7 @@ key(const painter& p, float cx, float cy, float radius, bool pressed,
 
 	rgb_color color = pressed ? p.onLit : p.line;
 	if (label->glyph != 0) {
-		float side = p.Size(radius * 1.15f);
+		float side = p.Size(radius * 1.45f);
 		BPoint center = p.Map(cx, cy);
 		r5_glyph_draw(p.view, label->glyph, BRect(center.x - side / 2,
 			center.y - side / 2, center.x + side / 2, center.y + side / 2),

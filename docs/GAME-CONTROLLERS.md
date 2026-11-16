@@ -36,7 +36,7 @@ Game or program
 ```
 
 - `BJoystick` stays as it is, in the Device Kit beside `BSerialPort`, as in BeOS. Nothing goes into `libbe`.
-- `BGameController`, header `<GameController.h>`, its own MIT library (`libr5gamecontroller.so`, name open), like `libr5bt.so`:
+- `BGameController`, header `<GameController.h>`, its own MIT library, `libr5game.so` (owner, 16 Nov 2026), like `libr5bt.so`, in `/system/lib` of the regular and the minimum image:
   - `Open()` and `Update()` as in `BJoystick`, so a game reads the state each frame;
   - a fixed layout with names, not numbers (`B_CONTROLLER_BUTTON_A`, `..._LEFT_STICK`, `..._LEFT_TRIGGER`), the order of SDL's standard gamepad, so ported games match;
   - `Name()`, `VendorID()`, `ProductID()`, `BatteryLevel()`;
@@ -88,3 +88,16 @@ Earlier, 16 Nov 2026: not inside the Bluetooth steps (option B is for USB contro
 3. `BGameController` and its library, with `gamecontrollerdb.txt`, documented in `docs/LIBR5.md` and the R5Book.
 4. Settings → Devices → Game controllers, and the battery in the Bluetooth item in Deskbar.
 5. Test with the owner's 8BitDo M30 and PS5 DualSense: in QEMU over USB passthrough where possible, then on the stick of a Bluetooth step.
+
+## 6. As built (step 8, 17 Nov 2026, while the owner slept; open to change)
+
+The first part of option B: steps 1 to 4 of section 5 without the battery in Deskbar. Calls and limits are in `docs/LIBR5.md`, "Game Kit"; the page in `docs/SETTINGS.md`, "Game controllers".
+
+- **RenkuOS fixes.** `244bf43292` (libdevice, `distro/game/kit/Joystick.cpp`) and `823649eb6e` (hid_shared and `joystick_driver.h`) by atomozero, read from the RenkuOS repository and taken as they are. Both MIT, on Haiku files, signed off; credited in `THIRD_PARTY_NOTICES.md` and `docs/LICENSING.md`.
+- **Driver call.** `R5_JOYSTICK_GET_INFO` (`B_JOYSTICK_DRIVER_BASE + 82`) with `r5_joystick_info`: bus, vendor and product ID, version, battery, the HID usage of each axis, the product name. Answered by hid_shared for every driver that builds it: usb_hid (device descriptor and product string, read once when the device is added), bluetooth_hid (new `R5_BTHID_SET_INFO`, sent by bluetooth_server right after `R5_BTHID_CREATE` with the SDP Device ID record and the device's name), i2c_hid (its HID descriptor) and hyperv/hid (unknown). The battery is HID Battery Strength (page 0x06, usage 0x20) when the input report has it; the DualSense and the M30 do not report it that way, so their battery stays unknown until a per-controller report or the Bluetooth battery comes. A BLE controller (LE HID) gets no IDs yet: the PnP ID characteristic is not read.
+- **Library.** `libr5game.so` with `BGameController` and `BGameControllerView`, both images. The standard layout comes from the Windows (DirectInput) entries of the database, because they number buttons and axes the way hid_shared does once the axes are sorted by usage. That choice is checked against the DualSense's Windows entry and a virtual controller with the DualSense's report order, not against a real controller.
+- **Database.** SDL_GameControllerDB at commit `22de0d7ef9fe1e6f852a50a9403a7a48f9be30ad` (16 Nov 2026), unmodified, sha256 `97be227812c9ae6f7918aee5d1e7bc6dccbc944c25cf00c93c78d01baadd61f6`, with its `LICENSE`, in `/boot/system/non-packaged/data/game_controllers` of the regular image. To update: fetch both files from that repository at a new commit into `distro/game/data` and record the commit and hash here, in `THIRD_PARTY_NOTICES.md` and in `docs/LICENSING.md`.
+- **Glyphs.** `R5_GLYPH_CROSS` (8), `R5_GLYPH_CIRCLE` (9), `R5_GLYPH_SQUARE` (10) and `R5_GLYPH_TRIANGLE` (11) in `libr5icons.so` (`docs/ICONS.md`).
+- **Page.** Settings → Devices → Game controllers, the add-on `settings_gamecontrollers`, after the mockup in `docs/design/gamecontrollers-mockup/`. The Bluetooth page's "Test buttons…" opens it; its own test window is gone.
+- **Not in this step:** the controller battery in the Bluetooth item in Deskbar (a small follow-up after the HFP pull request #4333 is merged, which changes the same item); rumble, lights, touchpad, motion and swapping buttons (option C); the PnP ID of LE controllers; R5's own mapping entries.
+- **Tested:** see `CHANGELOG.md` (QEMU with a virtual controller). **Not tested:** a real controller (QEMU has no game controller and no USB passthrough here), the 8BitDo M30 and the DualSense, the Sega shape's C and Z with the M30, VirtualBox, ARM64 and RISC-V 64.

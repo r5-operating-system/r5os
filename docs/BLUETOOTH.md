@@ -263,6 +263,8 @@ Order (owner, 16 Nov 2026): first HFP (step 7), then game controllers (step 8, `
 
 The plan, the license check of `SDL_GameControllerDB` and the steps are in `docs/GAME-CONTROLLERS.md`. It starts after step 7b, in its own session: the RenkuOS joystick fixes, the vendor and product ID call in `usb_hid` and `bluetooth_hid`, `BGameController` with the mapping database, and Settings → Devices → Game controllers with the battery in the Bluetooth Deskbar item. The page's "Test buttons…" window from the Bluetooth page (#4328) becomes the live test of that page. Tested over USB in VirtualBox first, then on a stick, with the 8BitDo M30 and the DualSense.
 
+- **As built (17 Nov 2026):** `docs/GAME-CONTROLLERS.md`, section 6. bluetooth_server reads the SDP Device ID record (`0x0201` to `0x0205`, only a USB-IF vendor ID) of a HID device and sends it with the device's name to bluetooth_hid (`R5_BTHID_SET_INFO`, added at the end of the control enum), so `BGameController` finds a Bluetooth controller's layout. "Test buttons…" opens Settings → Devices → Game controllers. The controller battery in the Bluetooth Deskbar item is not done: it follows once #4333 (HFP), which changes the same item, is merged. Not tested with a real controller.
+
 #### Later, only when the owner asks
 
 - **LE Audio (LC3 and ISO):** a report on `liblc3` (Apache-2.0).

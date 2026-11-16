@@ -37,6 +37,8 @@
 #include <GameControllerView.h>
 #include <R5Icons.h>
 
+#include <math.h>
+
 #include <map>
 #include <string>
 #include <vector>
@@ -475,7 +477,6 @@ GameControllersPage::GameControllersPage(GameControllersModule* module,
 		"Open Bluetooth", new BMessage(kMsgOpenBluetooth));
 	bluetooth->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
 	bluetooth->SetLowUIColor(B_PANEL_BACKGROUND_COLOR);
-	bluetooth->SetTarget(this);
 
 	BGroupView* left = new BGroupView("controllers", B_VERTICAL,
 		roundf(8 * unit));
@@ -606,6 +607,10 @@ GameControllersPage::AttachedToWindow()
 {
 	BGroupView::AttachedToWindow();
 	fLabelsField->Menu()->SetTargetForItems(this);
+	LinkControl* bluetooth = dynamic_cast<LinkControl*>(
+		FindView("bluetooth link"));
+	if (bluetooth != NULL)
+		bluetooth->SetTarget(this);
 	BGameController::StartWatching(BMessenger(this));
 	// The battery of the chosen controller, now and then.
 	BMessage tick(kMsgBatteryTick);
