@@ -1,0 +1,73 @@
+# Game controllers on R5
+
+Plan and license check, 16 Nov 2026. Not on the roadmap until the owner says so (`docs/ROADMAP.md`). Bluetooth controllers depend on `docs/BLUETOOTH.md`, step 4 (classic HID) and step 6 (BLE).
+
+## 1. Why
+
+A game controller needs other settings than a mouse or a keyboard: a test, the button layout, the battery, later rumble and lights. Haiku has no good place for that: the old Joysticks preferences are deprecated with no replacement ([Haiku #17317](https://dev.haiku-os.org/ticket/17317)). And Haiku does not report a controller's USB vendor and product ID, so SDL games see every pad as a plain joystick, not as a "game controller" with A, B, X and Y. That second gap decides whether games just work.
+
+## 2. How others do it
+
+| System | What | Take for R5 |
+|---|---|---|
+| macOS (since Ventura) | System Settings → Game Controllers, shown only with a controller connected; swap buttons for the whole system and per app; Xbox or PlayStation layout | A page that appears with a controller; per-app swaps (later) |
+| iOS and iPadOS | Settings → General → Game Controller: the same, plus a "buddy controller" (two as one) and rumble on or off (from memory, not checked) | Buddy controller, rumble switch (later) |
+| Windows | `joy.cpl` only tests; the Xbox Accessories app swaps buttons, Xbox controllers only; Steam Input | The live test |
+| Android | Per game until now; Android 17 (beta) adds Settings → Game Controller, for Bluetooth under the device's details | Controller settings with the device |
+| Linux | Drivers per make (`hid-playstation`, `xpad`) split one controller into buttons, touchpad and motion, with rumble and lights in the kernel; the battery shows as a normal battery; every controller reports vendor and product ID, and SDL's GameControllerDB maps that to A, B, X, Y. KDE has a list and a live test (wobbly in Plasma 6.2: two interfaces counted buttons differently); GNOME has nothing | Standard layout from vendor and product ID; the controller battery in Deskbar; one controller, several functions |
+| FreeBSD | Drivers, no settings: `hgame(4)` (generic game controllers), `ps4dshock(4)` (DualShock 4, Vladimir Kondratyev, 2020), `xb360gp(4)` (wired Xbox 360); `ps5dsense(4)` (DualSense) is in review for 16.0, not shipped. BSD-2-Clause (from general knowledge, check per file) | The reference for option C (light bar, rumble, touchpad, motion of PlayStation controllers). Linux `hid-playstation` is GPL-2.0 and cannot go into MIT code; FreeBSD code keeps its own BSD header if taken |
+| OpenBSD | `ujoy(4)`, a plain USB joystick driver; ISC from general knowledge, not checked | — |
+| air/OS | Haiku's old Joysticks preferences only | — |
+| RenkuOS ([source](https://github.com/RenkuOS/Source)) | No controller settings. Two joystick fixes by atomozero: `244bf43292` (`libdevice` frees the data of a joystick opened before) and `823649eb6e` (`hid_shared` waits for the joystick update thread) | Take both fixes (MIT, Haiku files) |
+
+The Linux kernel, SDL and iOS lines come from general knowledge, not from a source read for this plan. Sources: [FreeBSD hgame(4)](https://cgit.freebsd.org/src/tree/share/man/man4/hgame.4), [FreeBSD ps4dshock(4)](https://kernelsources.org/source/xref/freebsd/share/man/man4/ps4dshock.4), [OWC on macOS Ventura](https://eshop.macsales.com/blog/84976-customize-your-control-with-enhanced-game-controller-support-in-macos-ventura/), [Xbox Accessories](https://xbox.com/accessories-app), [Google on Android](https://support.google.com/android/answer/17149243), [Digital Trends on Android 17](https://www.digitaltrends.com/gaming/android-17-brings-system-level-remapping-for-controllers-and-its-such-a-relief/), [KDE Game Controller](https://docs.kde.org/stable_kf6/en/plasma-desktop/kcontrol/joystick/), [KDE bug 494913](https://bugs.kde.org/show_bug.cgi?id=494913).
+
+## 3. Design (option B, advised; the owner decides)
+
+Options: A, a Settings page with a list and a live test; B, A plus vendor and product ID, a standard layout, Xbox or PlayStation labels and the battery; C, B plus swapping buttons, rumble, lights, touchpad, motion and a buddy controller. Advised: B, as its own step after Bluetooth step 6.
+
+```
+Game or program
+  ├─ BJoystick         (Device Kit, Haiku)  unchanged: old programs keep working
+  └─ BGameController   (new, R5, MIT)       A/B/X/Y, sticks, triggers, name, battery
+         │  uses BJoystick and one additive driver call for vendor and product ID
+         ▼
+/dev/joystick/usb/N   /dev/joystick/bluetooth/N   (usb_hid; bluetooth_hid from step 4)
+```
+
+- `BJoystick` stays as it is, in the Device Kit beside `BSerialPort`, as in BeOS. Nothing goes into `libbe`.
+- `BGameController`, header `<GameController.h>`, its own MIT library (`libr5gamecontroller.so`, name open), like `libr5bt.so`:
+  - `Open()` and `Update()` as in `BJoystick`, so a game reads the state each frame;
+  - a fixed layout with names, not numbers (`B_CONTROLLER_BUTTON_A`, `..._LEFT_STICK`, `..._LEFT_TRIGGER`), the order of SDL's standard gamepad, so ported games match;
+  - `Name()`, `VendorID()`, `ProductID()`, `BatteryLevel()`;
+  - `StartWatching(BMessenger)`: `B_GAME_CONTROLLER_ADDED` and `..._REMOVED` messages when a controller is plugged in or paired, the BeOS way, no polling;
+  - rumble and lights later, as calls added at the end (option C).
+- One additive call in the joystick driver interface (an R5 snippet) for vendor and product ID, filled by `usb_hid` and by `bluetooth_hid`.
+- Settings → Devices → Game controllers (alphabetical, between Bluetooth and Keyboard): a `BCard` per controller with name, layout (Xbox or PlayStation labels) and battery (`R5_LEVEL_BATTERY`), and a live test drawn in the real layout. The same view later in a separate program, as with Bluetooth and Wi-Fi.
+- The controller battery shows in the existing Bluetooth item in Deskbar, not in an item of its own.
+
+Not in option B (option C, later): swapping buttons for the whole system and per app, rumble, light bar, touchpad, motion sensor, buddy controller.
+
+## 4. License check: the controller mapping database
+
+`AGENTS.md` and `docs/LICENSING.md` ("Third-party code") ask for this before a component comes in.
+
+1. **Project and source.** SDL_GameControllerDB, https://github.com/mdqinc/SDL_GameControllerDB: the community file `gamecontrollerdb.txt` that maps a controller's ID to SDL's standard layout. SDL itself carries a built-in table, `src/joystick/SDL_gamepad_db.h`, https://github.com/libsdl-org/SDL.
+2. **License.** Both are the zlib license text, `Zlib` (no `-only` or `-or-later` variants exist for it). The GitHub sidebar of SDL_GameControllerDB labels it "Zlib license"; the text does not name itself. Checked 16 Nov 2026 from `LICENSE` of SDL_GameControllerDB and `LICENSE.txt` and the header of `SDL_gamepad_db.h` in SDL.
+3. **Copyright.** SDL_GameControllerDB `LICENSE`: "Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>". SDL `LICENSE.txt` and `SDL_gamepad_db.h`: "Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>". The database's README states no license for contributions; the entries are written by many people. They are mostly facts about hardware (IDs and which button is which), which is the same reasoning R5 used for the Roland cable table.
+4. **Dependencies.** None. It is a text file.
+5. **Integration.** Proposed: ship `gamecontrollerdb.txt` unmodified as a data file in the regular image (for example `/system/data/game_controllers/`), with its `LICENSE` beside it, and have `BGameController` read it at run time, as SDL does with `SDL_AddGamepadMappingsFromFile()`. R5's own additions or fixes go in a separate R5 file (MIT), never into the copy. No code from SDL is copied into R5.
+6. **Compatibility.** Zlib is permissive and sits with MIT, GPL-2.0 and GPL-3.0. No combination question.
+7. **Patents, trademarks, attribution, redistribution.** No patent text in any of the three files. Product names in the entries ("PS5 Controller") are names of the hardware, used to describe it. Conditions: do not misrepresent the origin; an altered version must be marked as altered; the notice may not be removed from a source distribution. Acknowledgement in documentation is not required, but R5 credits it anyway: a line in `THIRD_PARTY_NOTICES.md` and the inventory in `docs/LICENSING.md`, written when the file first ships. The README asks for no AI-generated content in issues or pull requests: R5 does not send AI-made changes to that project.
+8. **Source duties for a binary release.** None beyond keeping the notice with the file.
+9. **Lawyer.** Not needed for this file, in my reading; the owner decides.
+
+**Result:** the database may ship in R5, unmodified, with its `LICENSE`, credited in `THIRD_PARTY_NOTICES.md` when it ships.
+
+## 5. Steps (when the owner puts it on the roadmap)
+
+1. Take the RenkuOS joystick fixes `244bf43292` and `823649eb6e` (credit them in `THIRD_PARTY_NOTICES.md`).
+2. The additive driver call for vendor and product ID in `usb_hid` (and `bluetooth_hid` after step 4).
+3. `BGameController` and its library, with `gamecontrollerdb.txt`, documented in `docs/LIBR5.md` and the R5Book.
+4. Settings → Devices → Game controllers, and the battery in the Bluetooth item in Deskbar.
+5. Test with the owner's 8BitDo M30 and PS5 DualSense: in QEMU over USB passthrough where possible, then on the stick of a Bluetooth step.
