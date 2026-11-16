@@ -93,6 +93,10 @@ BLayoutBuilder::Group&lt;&gt;(this, B_VERTICAL, 0)
 				<tr><th>kMsgBluetoothSetRadio</th><td><code class="inline">"on"</code> (bool). System-wide: check the administrator lock first.</td></tr>
 				<tr><th>kMsgBluetoothSelectRadio</th><td><code class="inline">"hci_id"</code> (int32): use another radio.</td></tr>
 				<tr><th>kMsgBluetoothRefresh</th><td>Read and send the state again.</td></tr>
+				<tr><th>kMsgBluetoothPair</th><td><code class="inline">"bdaddr"</code> (bdaddr_t),
+					<code class="inline">"name"</code> and <code class="inline">"class"</code> (uint32) of a device
+					from the scan: stop the scan and pair with it. The panel's Pair button sends it. The result
+					shows in the device's own events; there is no reply message yet.</td></tr>
 			</table>
 			<p>The target receives these:</p>
 			<table class="facts">
@@ -127,8 +131,9 @@ BLayoutBuilder::Group&lt;&gt;(this, B_VERTICAL, 0)
 			"no inquiry scan, no page scan" to every radio, so nothing can find this computer or connect to it,
 			and it refuses scans and connections, outgoing and incoming. It keeps the choice in
 			<code class="inline">B_SYSTEM_SETTINGS_DIRECTORY/bluetooth/r5_radio</code>, so it holds after a
-			restart. bluetooth_server is a system service that runs from boot; that folder is its own. Turning it on again allows scans and connections; it does not make the computer
-			visible.</p>
+			restart. bluetooth_server is a system service that runs from boot; that folder is its own. Turning it on again allows scans and connections, and lets paired devices
+			connect again by themselves ("page scan" on), so a game controller comes back after sleep. It does
+			not make the computer visible to a scan of strangers.</p>
 		</section>
 
 		<section class="entry" id="remote">
@@ -138,6 +143,21 @@ BLayoutBuilder::Group&lt;&gt;(this, B_VERTICAL, 0)
 				<code class="inline">HCI_RSSI_INVALID</code> (127). R5 ships it in libbluetooth.so; the other calls
 				stay as they are.</p></div>
 		</section>
+
+		<section class="entry" id="hid">
+			<div class="entry-header"><h2 class="plain">Game controllers, mice and keyboards</h2></div>
+			<p>A paired Bluetooth HID device (Classic Bluetooth) behaves like the same device on USB, so a
+			program needs nothing new. A game controller appears under
+			<code class="inline">/dev/joystick/bluetooth/</code> and is found by
+			<code class="inline">BJoystick::CountDevices()</code> and the Joysticks panel, with the same
+			protocol as a USB controller; buttons keep their raw numbers. A mouse and a keyboard go to
+			input_server through its own add-ons. The driver behind it, bluetooth_hid, reuses Haiku's HID parser
+			from usb_hid; bluetooth_server holds the radio connection and passes the reports on.</p>
+			<p>Pairing asks for nothing with a controller or a mouse (Just Works). A keyboard shows a window with
+			a number to type on it. A pairing that the other device starts by itself is refused: pair from the
+			panel.</p>
+			<div class="note"><strong>Not yet.</strong> Rumble, lights, touchpad and motion of game controllers
+			are not supported. Bluetooth Low Energy mice and keyboards: see Low Energy devices below.</div>
 
 		<section class="entry" id="le">
 			<div class="entry-header"><h2 class="plain">Low Energy devices</h2></div>
@@ -180,8 +200,11 @@ BLayoutBuilder::Group&lt;&gt;(this, B_VERTICAL, 0)
 			<p>Settings, Devices, Bluetooth, the first page under Devices: the panel as a page, with its own icon
 			and the preferences wrench. Only the switch waits for the lock. The Bluetooth program shows the same panel in its own window, and the Bluetooth item in Deskbar opens it. It replaced Haiku's Bluetooth
 			preferences.</p>
-			<div class="note"><strong>Tested.</strong> Built for x86_64 and run in QEMU, which has no Bluetooth
-			radio, so the page shows 0 radios. Scanning has not run on a real radio yet.</div>
+			<div class="note"><strong>Tested.</strong> On a Ryzen 5 5625U with its built-in MediaTek radio, from
+			a USB stick: the radio starts, the scan lists nearby devices, the switch and the Deskbar item work,
+			and a connection to a game controller comes up. Pairing and controller input have not been
+			confirmed on hardware yet. In QEMU, which has no radio, a test feeds the driver a game controller
+			and a mouse and checks that BJoystick reads them.</div>
 		</section>
 	</main>
 </div>
