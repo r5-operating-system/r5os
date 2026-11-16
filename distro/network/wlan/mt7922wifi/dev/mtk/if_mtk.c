@@ -501,6 +501,14 @@ mtk_newstate(struct ieee80211vap* vap, enum ieee80211_state state, int arg)
 	switch (state) {
 		case IEEE80211_S_INIT:
 		case IEEE80211_S_SCAN:
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * A join is given MTK_JOIN_TIMEOUT seconds, then the stack goes back to scan.
+ */
+			sc->sc_joining = 0;
+			sc->sc_join_giveup = 0;
+/* SPDX-SnippetEnd */
 			if (old >= IEEE80211_S_AUTH)
 				mtk_join_teardown(sc);
 			break;
@@ -509,10 +517,27 @@ mtk_newstate(struct ieee80211vap* vap, enum ieee80211_state state, int arg)
 		case IEEE80211_S_ASSOC:
 			if (old == IEEE80211_S_RUN)
 				mtk_join_teardown(sc);
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ */
+			if (sc->sc_joining == 0) {
+				sc->sc_joining = 1;
+				sc->sc_join_at = ticks;
+				sc->sc_join_giveup = 0;
+			}
+/* SPDX-SnippetEnd */
 			error = mtk_join_prepare(sc, ni);
 			break;
 
 		case IEEE80211_S_RUN:
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ */
+			sc->sc_joining = 0;
+			sc->sc_join_giveup = 0;
+/* SPDX-SnippetEnd */
 			if (vap->iv_opmode == IEEE80211_M_STA)
 				error = mtk_join_finish(sc, ni);
 			break;
@@ -891,6 +916,25 @@ mtk_work(void* arg, int pending)
 			ieee80211_scan_done(vap);
 	}
 
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ */
+	/* A join that never reaches RUN is not left holding the stack. */
+	if (sc->sc_join_giveup != 0) {
+		struct ieee80211vap* vap = TAILQ_FIRST(&ic->ic_vaps);
+
+		sc->sc_join_giveup = 0;
+		sc->sc_joining = 0;
+		if (vap != NULL && (vap->iv_state == IEEE80211_S_AUTH
+				|| vap->iv_state == IEEE80211_S_ASSOC)) {
+			device_printf(sc->sc_dev, "join gave up after %d s;"
+				" not connected\n", MTK_JOIN_TIMEOUT);
+			ieee80211_new_state(vap, IEEE80211_S_SCAN, 0);
+		}
+	}
+/* SPDX-SnippetEnd */
+
 	if (sc->sc_want_scan != 0 && sc->sc_hwscanning == 0) {
 		sc->sc_want_scan = 0;
 		if (sc->sc_scanning != 0) {
@@ -932,6 +976,17 @@ mtk_tick(void* arg)
 		sc->sc_scan_done = 1;
 		taskqueue_enqueue(sc->sc_tq, &sc->sc_work);
 	}
+
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ */
+	if (sc->sc_joining != 0 && sc->sc_join_giveup == 0
+		&& (int)(ticks - sc->sc_join_at) > MTK_JOIN_TIMEOUT * hz) {
+		sc->sc_join_giveup = 1;
+		taskqueue_enqueue(sc->sc_tq, &sc->sc_work);
+	}
+/* SPDX-SnippetEnd */
 
 	callout_reset(&sc->sc_poll, hz / 100, mtk_tick, sc);
 }

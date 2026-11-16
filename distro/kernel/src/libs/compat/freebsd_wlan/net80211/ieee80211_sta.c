@@ -1250,6 +1250,15 @@ ieee80211_parse_csaparams(struct ieee80211vap *vap, uint8_t *frm,
 	KASSERT(vap->iv_state >= IEEE80211_S_RUN,
 	    ("state %s", ieee80211_state_name[vap->iv_state]));
 
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * A channel-switch element shorter than 3 bytes is dropped.
+ */
+	if (frm == NULL || frm[1] < 3)
+		return;
+/* SPDX-SnippetEnd */
+
 	if (csa->csa_mode > 1) {
 		IEEE80211_DISCARD_IE(vap,
 		    IEEE80211_MSG_ELEMID | IEEE80211_MSG_DOTH,

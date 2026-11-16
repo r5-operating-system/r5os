@@ -237,6 +237,12 @@ extern const uint8_t mtk_channels_5ghz[MTK_CHANNELS_5GHZ];
 #define MTK_STA_STATE_NONE		0
 #define MTK_STA_STATE_ASSOC		2
 #define MTK_HW_SCAN_TIMEOUT		15	/* seconds */
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ */
+#define MTK_JOIN_TIMEOUT		15	/* seconds, then not connected */
+/* SPDX-SnippetEnd */
 #define MTK_SCAN_REQUEST_SIZE		1186
 
 #define MTK_FILTER_ENABLE		(1u << 31)
@@ -373,6 +379,15 @@ struct mtk_softc {
 	int			sc_hwscanning;	/* a sweep is running */
 	int			sc_hwscan_at;	/* since when, in ticks */
 	uint8_t			sc_hwscan_seq;
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * A join that never finishes is given up after MTK_JOIN_TIMEOUT.
+ */
+	int			sc_joining;
+	int			sc_join_at;
+	int			sc_join_giveup;
+/* SPDX-SnippetEnd */
 
 	/* One command at a time. There is a single command buffer and a
 	 * single sequence number behind mtk_mcu_send, and two threads in it

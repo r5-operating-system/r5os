@@ -1,5 +1,24 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Wi-Fi step 1: a frame that does not fit is dropped, and a join that hangs gives up
+
+Problem: a short information element in a beacon was read past its end (FH, DS, channel switch, HT, VHT). `ieee80211_ies_init` turned a negative length into a huge allocation. `IEEE80211_VERIFY_LENGTH` compared a pointer difference with a `size_t`, so a frame shorter than its header looked long enough and was then read past its end. A join that never reached RUN had no limit. The scan sweep already stops after 15 seconds. The firmware reply wait stays 2 seconds.
+
+What changed:
+- Distro copies of the net80211 beacon, HT, VHT and element-init parsers, and the length check they share (`ieee80211_input.h`). A short element is dropped and counted by the existing discard stats. A length below 0 or above 4096, or a null buffer with a positive length, is refused. A beacon shorter than the fixed fields clears the scan record before returning, so a reused record does not keep a pointer into the previous frame. A channel-switch element shorter than 3 bytes is ignored.
+- The MT7921 driver gives a join 15 seconds (`MTK_JOIN_TIMEOUT`). It then logs `join gave up after 15 s; not connected` and goes back to scan. The new lines touch the driver softc only. No new copy of user memory.
+- Host fuzzer `scripts/fuzz-wifi.sh`. It compiles the real functions (a `distro/` copy wins over the Haiku tree) with AddressSanitizer and UBSan. Targets: ies, rsn, action, mtkrx.
+
+Tested: `scripts/build-locked.sh` jam_exit=0 (x86_64). Host, WSL, gcc with AddressSanitizer and UBSan:
+- `wifi_fuzz ies: 60s 0 crashes` (28,874,752 rounds)
+- `wifi_fuzz rsn: 60s 0 crashes` (62,419,968 rounds)
+- `wifi_fuzz action: 60s 0 crashes` (126,505,984 rounds)
+- `wifi_fuzz mtkrx: 60s 0 crashes` (66,747,392 rounds)
+
+QEMU (KVM, SMAP and SMEP, 2 CPUs, 2 GB, headless, 100 s) on an own copy of `r5-os.image` (`generated/wifi-qemu.sh`, not `scripts/run-qemu-r5.sh`): user space wrote `wifi-step1-booted`; the serial log has `enable SMAP` and `enable SMEP`; no panic and no `vm_page_fault`. The `kernel debugger` lines are the debugger extensions loading at boot. QEMU has no Wi-Fi device, so the syslog has no mt7922 line.
+
+Not tested: a WPA2 join and an hour without a panic (stick W1, later). ARM64 and RISC-V 64 not built. `mtk_tx.c` at air/OS `e3c4cc898` (`src/add-ons/kernel/drivers/network/wlan/mt7922wifi/dev/mtk/mtk_tx.c`) names no copyright holder; the file says only "Distributed under the terms of the MIT License." That line was left as it is.
+
 ## 2026-11-17 - Graphics (M13 step 1): five small app_server fixes for Skia drawing
 
 Problem: `docs/M13-PLAN.md` Priority 2: hot paths of the Skia drawing that cost CPU or uploads on every draw.
