@@ -1409,6 +1409,12 @@ r5_gfx9_alloc_user_vram(uint64 bytes, uint64* offset)
 	bytes = (bytes + 4095ull) & ~4095ull;
 	if (r5_span_take(sUserSpans, 64, bytes, offset))
 		return B_OK;
+	// Review of the VRAM fallback (16 Nov 2026): with every row in use,
+	// the block below was taken and then lost when r5_span_add() failed.
+	// The R5 DRM library now turns this refusal into a GTT buffer, so the
+	// loss would repeat on every request. Ask for the row first.
+	if (!r5_span_has_room(sUserSpans, 64))
+		return B_NO_MEMORY;
 	uint8* address = NULL;
 	uint64 bumped = 0;
 	status_t status = r5_gfx9_alloc_vram(bytes, 4096, &bumped, &address);

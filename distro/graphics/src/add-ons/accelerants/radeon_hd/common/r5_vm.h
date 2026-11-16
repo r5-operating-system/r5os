@@ -301,6 +301,20 @@ r5_vram_fits(uint64_t limit, uint64_t buffers, uint32_t pages, uint64_t add)
 }
 
 
+/* A file's GTT limit (docs/GPU-ARCHITECTURE.md, "Memory limits per
+ * address space": at most a quarter of system memory). GTT is locked
+ * RAM. 0 means it does not fit; the caller returns B_NO_MEMORY. */
+static inline int
+r5_gtt_fits(uint64_t limit, uint64_t buffers, uint64_t add)
+{
+	if (buffers > limit)
+		return 0;
+	if (add > limit - buffers)
+		return 0;
+	return 1;
+}
+
+
 /* A file tree stays until the client and every parked buffer in it
  * have dropped their reference. The counters return on the last drop. */
 struct r5_file_count {

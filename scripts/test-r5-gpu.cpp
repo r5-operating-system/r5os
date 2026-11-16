@@ -441,6 +441,28 @@ source_order(const char* path, const char** marks, int count)
 int
 main()
 {
+	// VRAM fallback review (16 Nov 2026): first, so the older source
+	// checks further down, which stop at their first mismatch, cannot
+	// keep these from running.
+	{
+		if (!r5_gtt_fits(16ull * 4096ull, 12ull * 4096ull, 4ull * 4096ull)
+				|| r5_gtt_fits(16ull * 4096ull, 12ull * 4096ull, 5ull * 4096ull)
+				|| r5_gtt_fits(16ull * 4096ull, 17ull * 4096ull, 0)
+				|| r5_gtt_fits(16ull * 4096ull, 4096ull, ~0ull))
+			return fail("gtt limit");
+	}
+	{
+		r5_span full[2];
+		memset(full, 0, sizeof(full));
+		if (!r5_span_has_room(full, 2))
+			return fail("span room empty");
+		if (!r5_span_add(full, 2, 0x1000, 0x1000)
+				|| !r5_span_add(full, 2, 0x2000, 0x1000))
+			return fail("span fill");
+		if (r5_span_has_room(full, 2) || r5_span_add(full, 2, 0x3000, 0x1000))
+			return fail("span room full");
+	}
+	printf("ok gtt limit and span room\n");
 	static_assert(R5_GPU_OP_BASE == 9999u + 0x5000u, "ioctl base");
 	static_assert(R5_GPU_GET_INFO == 30479u, "GET_INFO number");
 	static_assert(R5_GPU_BO_IMPORT == 30479u + 18u, "last v1 call");

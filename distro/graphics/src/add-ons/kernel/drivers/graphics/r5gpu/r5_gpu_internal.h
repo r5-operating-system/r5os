@@ -195,6 +195,9 @@ bool gpu_debug_enabled();
 bool gpu_submit_log_enabled();
 bool gpu_dump_begin();
 bool gpu_dump_line();
+// A file's GTT limit (a quarter of system memory), also what GET_INFO
+// reports as gtt_bytes. 0 when the system memory is unknown.
+uint64 gpu_gtt_limit();
 bool gpu_render_enabled();
 bool gpu_selftest_enabled();
 void gpu_lock();

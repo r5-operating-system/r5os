@@ -350,6 +350,8 @@ r5_amdgpu_info(int fd, struct drm_amdgpu_info *query)
 static uint32_t
 r5_domain(uint64_t domains)
 {
+	/* GDS, GWS and OA are no memory R5 has: refused (r5_gem_create()),
+	 * not silently GTT. GFX9 RADV does not ask for them. */
 	if ((domains & AMDGPU_GEM_DOMAIN_VRAM) != 0)
 		return R5_GPU_DOMAIN_VRAM;
 	return R5_GPU_DOMAIN_GTT;
@@ -369,12 +371,41 @@ r5_gem_create(int fd, union drm_amdgpu_gem_create *gem)
 	memset(&bo, 0, sizeof(bo));
 	bo.size = (uint32_t)sizeof(bo);
 	bo.version = 1;
+	if ((gem->in.domains & (AMDGPU_GEM_DOMAIN_GDS | AMDGPU_GEM_DOMAIN_GWS
+			| AMDGPU_GEM_DOMAIN_OA)) != 0)
+		return r5_fail(EINVAL);
 	bo.domain = r5_domain(gem->in.domains);
 	bo.bytes = gem->in.bo_size;
 	if ((gem->in.domain_flags & AMDGPU_GEM_CREATE_CPU_GTT_USWC) != 0)
 		bo.flags |= R5_GPU_BO_WC;
-	if (r5_call(fd, R5_GPU_BO_CREATE, &bo, sizeof(bo)) != 0)
-		return -1;
+	if (r5_call(fd, R5_GPU_BO_CREATE, &bo, sizeof(bo)) != 0) {
+		/* A buffer that asks for VRAM and no longer fits is made in GTT,
+		 * as Linux does (v6.18 amdgpu_gem.c, amdgpu_gem_create_ioctl(),
+		 * lines 486-497: initial_domain |= AMDGPU_GEM_DOMAIN_GTT, retry;
+		 * amdgpu_object.c, amdgpu_bo_create(): a user buffer that allows
+		 * only VRAM may also live in GTT, unless it is DISCARDABLE; a
+		 * request that names GTT itself may always live there, and RADV
+		 * names it with every VRAM request, radv_amdgpu_bo.c).
+		 * RADV relies on it: on an APU it reports 2/3 of VRAM plus GTT as
+		 * its VRAM heap (radv_physical_device_init_mem_types()), more
+		 * than the kernel's VRAM pool. 5625U, 16 Nov 2026: app_server's
+		 * Skia stopped on "refuse BO_CREATE vram". Only a refusal for
+		 * lack of memory falls back; a bad size or domain stays an
+		 * error. */
+		int err = errno;
+		if (err != ENOMEM || bo.domain != R5_GPU_DOMAIN_VRAM
+			|| ((gem->in.domain_flags & AMDGPU_GEM_CREATE_DISCARDABLE) != 0
+				&& (gem->in.domains & AMDGPU_GEM_DOMAIN_GTT) == 0))
+			return r5_fail(err);
+		bo.domain = R5_GPU_DOMAIN_GTT;
+		bo.handle = 0;
+		if (r5_call(fd, R5_GPU_BO_CREATE, &bo, sizeof(bo)) != 0)
+			return -1;
+		if (r5_debug_on()) {
+			fprintf(stderr, "kernel bo vram full, %llu bytes in gtt\n",
+				(unsigned long long)bo.bytes);
+		}
+	}
 	if (r5_debug_on()) {
 		fprintf(stderr, "kernel bo domain %u flags %08x bytes %llu\n",
 			bo.domain, bo.flags, (unsigned long long)bo.bytes);

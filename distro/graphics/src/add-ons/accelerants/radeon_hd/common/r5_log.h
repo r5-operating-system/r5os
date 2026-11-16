@@ -22,7 +22,10 @@ enum {
 };
 
 enum {
-	R5_ONCE_RB = 0
+	R5_ONCE_RB = 0,
+	/* VRAM full: the R5 DRM library makes the buffer in GTT, so it is
+	 * not an error event; printed once per boot. */
+	R5_ONCE_VRAM_FULL = 1
 };
 
 /* errors and onceBits are updated. Returns 1 when the line is printed. */
