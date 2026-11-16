@@ -11,6 +11,14 @@
 
 #include <Autolock.h>
 #include <Entry.h>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <errno.h>
+#include <string.h>
+#include <File.h>
+#include <FindDirectory.h>
+// SPDX-SnippetEnd
 #include <Deskbar.h>
 #include <Directory.h>
 #include <Message.h>
@@ -78,8 +86,20 @@ BluetoothServer::DispatchToDevice(hci_id hid, struct hci_event_header* header)
 BluetoothServer::BluetoothServer()
 	:
 	BApplication(BLUETOOTH_SIGNATURE),
-	fDevicesLock("bluetooth local devices")
+	fDevicesLock("bluetooth local devices"),
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	fRadioEnabled(true)
+	// SPDX-SnippetEnd
 {
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Before the first radio is added, so it is set up with the saved choice.
+	_LoadRadioSetting();
+	// SPDX-SnippetEnd
+
 	fDeviceManager = new DeviceManager();
 	fLocalDevicesList.MakeEmpty();
 	fWatchersList.MakeEmpty();
@@ -221,6 +241,15 @@ void BluetoothServer::MessageReceived(BMessage* message)
 			status = B_WOULD_BLOCK;
 			/* TODO: This should be by user request only! */
 			lDeviceImpl->Launch();
+
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			// The radio switch is off: once the radio is up, it stays
+			// invisible and does not answer pages either.
+			if (!fRadioEnabled)
+				lDeviceImpl->WriteScanEnable(0);
+			// SPDX-SnippetEnd
 		}
 		break;
 
@@ -283,6 +312,15 @@ void BluetoothServer::MessageReceived(BMessage* message)
 
 		case BT_REQ_CREATE_CONN:
 		{
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			if (!fRadioEnabled) {
+				status = B_NOT_ALLOWED;
+				break;
+			}
+			// SPDX-SnippetEnd
+
 			LocalDeviceImpl* lDeviceImpl = LocateDelegateFromMessage(message);
 			if (lDeviceImpl == NULL)
 				break;
@@ -458,6 +496,22 @@ void BluetoothServer::MessageReceived(BMessage* message)
 		// SPDX-SnippetBegin
 		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 		// SPDX-License-Identifier: MIT
+		case BT_MSG_R5_GET_RADIO:
+			status = reply.AddBool("enabled", fRadioEnabled);
+			break;
+
+		case BT_MSG_R5_SET_RADIO:
+		{
+			bool enabled;
+			if (message->FindBool("enabled", &enabled) != B_OK) {
+				status = B_BAD_VALUE;
+				break;
+			}
+			status = _SetRadioEnabled(enabled);
+			reply.AddBool("enabled", fRadioEnabled);
+			break;
+		}
+
 		case kMsgReportStarted:
 		{
 			syslog(LOG_INFO, "bluetooth_server: started, %" B_PRId32
@@ -517,6 +571,131 @@ BluetoothServer::_FindAddress(BMessage* message, const bdaddr_t** _address)
 
 	*_address = (const bdaddr_t*)data;
 	return true;
+}
+
+
+// The radio switch (BT_MSG_R5_SET_RADIO). HCI has no power off; while the
+// switch is off, every radio has inquiry scan and page scan off, and the
+// commands that scan or page are refused here.
+bool
+BluetoothServer::_RadioRequestAllowed(BMessage* message) const
+{
+	if (fRadioEnabled)
+		return true;
+
+	const void* data;
+	ssize_t size;
+	if (message->FindData("raw command", B_ANY_TYPE, &data, &size) != B_OK
+		|| data == NULL || size < (ssize_t)sizeof(struct hci_command_header))
+		return true;
+
+	const struct hci_command_header* header
+		= (const struct hci_command_header*)data;
+	switch (B_LENDIAN_TO_HOST_INT16(header->opcode)) {
+		case PACK_OPCODE(OGF_LINK_CONTROL, OCF_INQUIRY):
+		case PACK_OPCODE(OGF_LINK_CONTROL, 0x0003):
+			// Periodic Inquiry Mode (Core 6.0, Vol 4, Part E, 7.1.3)
+		case PACK_OPCODE(OGF_LINK_CONTROL, OCF_CREATE_CONN):
+		case PACK_OPCODE(OGF_LINK_CONTROL, OCF_REMOTE_NAME_REQUEST):
+			return false;
+
+		case PACK_OPCODE(OGF_CONTROL_BASEBAND, OCF_WRITE_SCAN_ENABLE):
+			// Only "no scans" may be written.
+			if (size < (ssize_t)(sizeof(struct hci_command_header) + 1))
+				return false;
+			return ((const uint8*)(header + 1))[0] == 0;
+	}
+
+	return true;
+}
+
+
+static status_t
+radio_setting_path(BPath& path)
+{
+	status_t status = find_directory(B_SYSTEM_SETTINGS_DIRECTORY, &path);
+	if (status == B_OK)
+		status = path.Append("bluetooth");
+	return status;
+}
+
+
+void
+BluetoothServer::_LoadRadioSetting()
+{
+	BPath path;
+	if (radio_setting_path(path) != B_OK || path.Append("r5_radio") != B_OK)
+		return;
+
+	BFile file(path.Path(), B_READ_ONLY);
+	char buffer[16] = {};
+	if (file.InitCheck() != B_OK
+		|| file.Read(buffer, sizeof(buffer) - 1) <= 0)
+		return;
+
+	fRadioEnabled = strncmp(buffer, "radio off", 9) != 0;
+	if (!fRadioEnabled)
+		syslog(LOG_INFO, "bluetooth_server: radio switch is off");
+}
+
+
+status_t
+BluetoothServer::_SaveRadioSetting() const
+{
+	BPath directory;
+	status_t status = radio_setting_path(directory);
+	if (status != B_OK)
+		return status;
+	status = create_directory(directory.Path(), 0755);
+	if (status != B_OK)
+		return status;
+
+	BPath path(directory);
+	BPath temporary(directory);
+	if (path.Append("r5_radio") != B_OK
+		|| temporary.Append("r5_radio.new") != B_OK)
+		return B_NO_MEMORY;
+
+	const char* line = fRadioEnabled ? "radio on\n" : "radio off\n";
+	BFile file(temporary.Path(), B_WRITE_ONLY | B_CREATE_FILE | B_ERASE_FILE);
+	status = file.InitCheck();
+	if (status != B_OK)
+		return status;
+	ssize_t written = file.Write(line, strlen(line));
+	if (written != (ssize_t)strlen(line))
+		return written < 0 ? (status_t)written : B_IO_ERROR;
+	file.Sync();
+	file.Unset();
+
+	if (rename(temporary.Path(), path.Path()) != 0)
+		return errno;
+	return B_OK;
+}
+
+
+status_t
+BluetoothServer::_SetRadioEnabled(bool enabled)
+{
+	if (enabled == fRadioEnabled)
+		return B_OK;
+
+	fRadioEnabled = enabled;
+	status_t status = _SaveRadioSetting();
+	if (status != B_OK) {
+		fRadioEnabled = !enabled;
+		syslog(LOG_ERR, "bluetooth_server: cannot save the radio switch: %s",
+			strerror(status));
+		return status;
+	}
+
+	if (!enabled) {
+		for (int32 i = 0; i < fLocalDevicesList.CountItems(); i++)
+			fLocalDevicesList.ItemAt(i)->WriteScanEnable(0);
+	}
+
+	syslog(LOG_INFO, "bluetooth_server: radio switch %s",
+		enabled ? "on" : "off");
+	return B_OK;
 }
 // SPDX-SnippetEnd
 
@@ -695,6 +874,13 @@ BluetoothServer::HandleSimpleRequest(BMessage* message, BMessage* reply)
 			return B_OK;
 		}
 	}
+
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	if (!_RadioRequestAllowed(message))
+		return B_NOT_ALLOWED;
+	// SPDX-SnippetEnd
 
 	// we are gonna need issue the command ...
 	if (lDeviceImpl->ProcessSimpleRequest(DetachCurrentMessage()) == B_OK)

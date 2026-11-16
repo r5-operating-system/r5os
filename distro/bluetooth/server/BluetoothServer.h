@@ -87,6 +87,14 @@ public:
 	void		DispatchToDevice(hci_id hid, struct hci_event_header* header);
 	// SPDX-SnippetEnd
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// The radio switch (BT_MSG_R5_SET_RADIO). Read under fDevicesLock, which
+	// both MessageReceived() and the port listener thread hold.
+	bool		RadioEnabled() const { return fRadioEnabled; }
+	// SPDX-SnippetEnd
+
 private:
 
 	LocalDeviceImpl*	LocateDelegateFromMessage(BMessage* message);
@@ -100,6 +108,17 @@ private:
 	// Held by MessageReceived() and by the port listener thread
 	// (DispatchToDevice); guards the local devices and the watchers.
 	BLocker				fDevicesLock;
+	// SPDX-SnippetEnd
+
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	bool				_RadioRequestAllowed(BMessage* message) const;
+	void				_LoadRadioSetting();
+	status_t			_SaveRadioSetting() const;
+	status_t			_SetRadioEnabled(bool enabled);
+
+	bool				fRadioEnabled;
 	// SPDX-SnippetEnd
 
 	void 				ShowWindow(BWindow* pWindow);

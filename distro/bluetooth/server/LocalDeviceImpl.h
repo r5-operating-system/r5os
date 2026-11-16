@@ -68,6 +68,14 @@ public:
 	void Disconnect(BMessage* message);
 	void SetConnEncryption(uint16 handle, bool encryption_enabled);
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Writes HCI Write Scan Enable without waiting for its answer (the
+	// radio switch, BT_MSG_R5_SET_RADIO).
+	status_t WriteScanEnable(uint8 mode);
+	// SPDX-SnippetEnd
+
 	ServerRemoteDevice*	RemoteDeviceByAddr(bdaddr_t bdaddr);
 	ServerRemoteDevice*	RemoteDeviceByHandle(uint16 handle);
 	void				AddRemoteDevice(ServerRemoteDevice* rd);
