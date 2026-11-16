@@ -1,0 +1,46 @@
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+#
+# M12 measurement stick (generated/gpu-m12/STICK-PLAN.md), boots 1 and 3:
+# the compare set in the classic and the new look, with the images
+# (app_server writes them to /boot/home/draw-compare; each run's numbers
+# are 10000 apart and listed in its compare file), then the time per
+# operation in both looks. Files go to ~/m12/boot<k>/, where check reads
+# them. Boot 2 draws with Painter only, so there is nothing to compare.
+
+set -- $(check which | tail -n 1)
+stick=$1
+boot=$2
+dir=$3
+if [ "$stick" != m12 ]; then
+	echo "m12-measure: FAIL this is not an M12 boot ($stick boot $boot)"
+	exit 1
+fi
+if [ "$boot" = 2 ]; then
+	echo "m12-measure: boot 2 draws with Painter; nothing to measure. Run m12-scenario."
+	exit 0
+fi
+mkdir -p "$dir"
+
+run() {
+	name=$1
+	shift
+	echo "m12-measure: $name ($(date +%T))"
+	r5-draw-compare "$@" > "$dir/$name.txt" 2>&1
+	echo "exit $?" >> "$dir/$name.txt"
+	sync
+	grep -E '^draw-compare [0-9]+/[0-9]+ ok' "$dir/$name.txt"
+}
+
+run compare-classic --dump
+run compare-new --dump --new-look
+run time-classic --time
+run time-new --time --new-look
+for look in classic new; do
+	n=$(awk '/^draw-time / && $4 + 0 > $7 + 0 { n++ } END { print n + 0 }' \
+		"$dir/time-$look.txt")
+	echo "m12-measure: $look look, $n operations slower on the GPU"
+done
+sync
+echo "m12-measure: done"
