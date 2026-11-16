@@ -1513,9 +1513,7 @@ Compositor::_AllocateBuffer(uint32 width, uint32 height)
 	// new buffer's pixels as the window's first image (SkiaTarget::
 	// SetSurface()), so the old pixels showed until the window drew
 	// (QEMU and the 5625U's boot 3, 16 Nov 2026). Transparent instead.
-	// EXPERIMENT (leaf icon): opaque black instead of transparent
-	for (uint64 p = 0; p < bytes / 4; p++)
-		((uint32*)bits)[p] = 0xff000000;
+	memset(bits, 0, (size_t)bytes);
 
 	WindowBuffer* windowBuffer = new(std::nothrow) WindowBuffer(this, bits,
 		width, height, (uint64)buffer, (uint64)memory, fGeneration);
