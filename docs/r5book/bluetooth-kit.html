@@ -38,8 +38,8 @@
 
 		<div class="note"><strong>Nothing waits on a radio.</strong> All work with bluetooth_server and
 		libbluetooth happens on the controller's own thread. A window only sends messages and receives the
-		state. The controller starts bluetooth_server once when it is not running, and does not start it
-		again after it stops.</div>
+		state. bluetooth_server is a system service from boot; if it is not running, the controller asks
+		launch_daemon once to start it.</div>
 
 		<section class="entry" id="view">
 			<div class="entry-header"><h2>BluetoothView</h2><span class="kind">class</span></div>
@@ -127,7 +127,7 @@ BLayoutBuilder::Group&lt;&gt;(this, B_VERTICAL, 0)
 			"no inquiry scan, no page scan" to every radio, so nothing can find this computer or connect to it,
 			and it refuses scans and connections, outgoing and incoming. It keeps the choice in
 			<code class="inline">B_SYSTEM_SETTINGS_DIRECTORY/bluetooth/r5_radio</code>, so it holds after a
-			restart. Turning it on again allows scans and connections; it does not make the computer
+			restart. bluetooth_server is a system service that runs from boot; that folder is its own. Turning it on again allows scans and connections; it does not make the computer
 			visible.</p>
 		</section>
 

@@ -32,6 +32,11 @@
 // SPDX-License-Identifier: MIT
 // Private to the server: posted to itself at the end of ReadyToRun().
 static const uint32 kMsgReportStarted = 'r5bs';
+
+// B_SYSTEM_SETTINGS_DIRECTORY/bluetooth: the radio switch and the pairing
+// keys, root's alone (mode 0700). create makes it and sets that mode.
+class BPath;
+status_t r5_bluetooth_settings_path(BPath& path, bool create);
 // SPDX-SnippetEnd
 
 typedef enum {

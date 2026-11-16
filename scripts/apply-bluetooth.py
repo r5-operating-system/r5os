@@ -23,6 +23,14 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 HAIKU = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else ROOT / "haiku")
 SRC = ROOT / "distro" / "bluetooth"
 
+LAUNCH_BLOCK = """
+# R5 bluetooth_server launch job (distro/bluetooth/launch, regular image only).
+local r5BtLaunch = <r5-launch>bluetooth ;
+SEARCH on $(r5BtLaunch) = [ FDirName $(HAIKU_TOP) data launch r5 ] ;
+AddDirectoryToHaikuImage system non-packaged data launch ;
+AddFilesToHaikuImage system non-packaged data launch : $(r5BtLaunch) ;
+"""
+
 
 def copy_dir(source: pathlib.Path, dest: pathlib.Path, tag: str) -> None:
     if not source.is_dir():
@@ -126,6 +134,14 @@ def main() -> int:
         "SYSTEM_ADD_ONS_SETTINGS += settings_look ;\n",
         "SYSTEM_ADD_ONS_SETTINGS += settings_bluetooth ;\n",
         "settings_bluetooth image")
+    # bluetooth_server as a system service from boot (uid 0), regular image
+    # only: launch_daemon also reads non-packaged/data/launch.
+    copy_files(SRC / "launch", ("bluetooth",),
+        HAIKU / "data" / "launch" / "r5", "bluetooth launch job")
+    insert_once(HAIKU / "build" / "jam" / "images" / "definitions" / "regular",
+        "AddFilesToHaikuImage home config settings : $(shortcutsSettingsFile) ;\n",
+        LAUNCH_BLOCK,
+        "bluetooth launch image")
     return 0
 
 

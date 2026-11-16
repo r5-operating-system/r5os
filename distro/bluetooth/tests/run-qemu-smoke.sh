@@ -48,7 +48,7 @@ if [ -n "$SETTINGS_PAGE" ]; then
 fi
 cat > "$BT_WORK/bt-smoke.job" <<EOF
 job bt-smoke {
-	launch /bin/sh -c "sleep 60; $page/bin/bt_server_smoke_test > /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; /bin/bt_l2cap_abi_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sleep 5; sync"
+	launch /bin/sh -c "sleep 60; ps > /boot/home/bt-ps0.log 2>&1; $page/bin/bt_server_smoke_test > /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; /bin/bt_l2cap_abi_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; ls -ld /boot/system/settings/bluetooth /boot/system/settings/bluetooth/* >> /boot/home/bt-smoke.log 2>&1; sleep 5; sync"
 	on initial_volumes_mounted
 }
 EOF
@@ -86,10 +86,11 @@ timeout "$SECONDS_UP" qemu-system-x86_64 -machine pc,accel=$accel -cpu $cpu \
 	-monitor unix:"$BT_WORK/monitor.sock",server,nowait </dev/null || true
 
 # bfs_shell's cat prints nothing here; copy the files out instead.
-rm -f "$BT_WORK/out-smoke.log" "$BT_WORK/out-ps.log" "$BT_WORK/out-syslog"
+rm -f "$BT_WORK/out-smoke.log" "$BT_WORK/out-ps.log" "$BT_WORK/out-ps0.log" "$BT_WORK/out-syslog"
 "$BFS" "$IMG" >/dev/null 2>&1 <<EOT
 cp myfs/home/bt-smoke.log :$BT_WORK/out-smoke.log
 cp myfs/home/bt-ps.log :$BT_WORK/out-ps.log
+cp myfs/home/bt-ps0.log :$BT_WORK/out-ps0.log
 cp myfs/system/var/log/syslog :$BT_WORK/out-syslog
 quit
 EOT
@@ -105,6 +106,8 @@ if [ "${SMAP:-0}" = 1 ]; then
 	echo "== serial (SMAP, panic)"
 	grep -aiE 'smap|smep|panic|kernel debugger|vm_page_fault' 		"$BT_WORK/serial.log" || echo "(no lines)"
 fi
+echo "== running before the test (the launch job)"
+grep bluetooth_server "$BT_WORK/out-ps0.log" 2>/dev/null || echo "(bluetooth_server not running)"
 echo "== bt-smoke.log"
 cat "$BT_WORK/out-smoke.log" 2>/dev/null || echo "(no log)"
 echo "== syslog (Bluetooth lines)"

@@ -13,6 +13,7 @@
 #include <Catalog.h>
 #include <MessageFilter.h>
 #include <MessageRunner.h>
+#include <LaunchRoster.h>
 #include <Roster.h>
 
 #include <bluetooth/bdaddrUtils.h>
@@ -32,6 +33,9 @@
 #undef B_TRANSLATION_CONTEXT
 #define B_TRANSLATION_CONTEXT "BluetoothController"
 
+
+// The launch job of bluetooth_server (distro/bluetooth/launch/bluetooth).
+static const char* kBluetoothJob = "x-vnd.Haiku-bluetooth_server";
 
 static const uint32 kMsgUpdate = 'btUp';
 static const uint32 kMsgScanTimeout = 'btTo';
@@ -545,7 +549,11 @@ BluetoothController::_Update()
 		} else if (!fLaunched) {
 			fLaunched = true;
 			fLaunchTime = system_time();
-			status_t status = be_roster->Launch(BLUETOOTH_SIGNATURE);
+			// Through launch_daemon, which starts the system service as
+			// uid 0 (distro/bluetooth/launch). BRoster::Launch() would start
+			// a second server as the person signed in, without the rights
+			// for its settings.
+			status_t status = BLaunchRoster().Start(kBluetoothJob);
 			fState.service = status == B_OK || status == B_ALREADY_RUNNING
 				? BLUETOOTH_SERVICE_STARTING : BLUETOOTH_SERVICE_FAILED;
 		} else if (fState.service == BLUETOOTH_SERVICE_STARTING
