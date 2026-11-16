@@ -35,11 +35,12 @@ AddFilesToHaikuImage system non-packaged data launch : $(r5BtLaunch) ;
 """
 
 USER_LAUNCH_BLOCK = """
-# The Bluetooth Deskbar item for every session (regular image only).
+# The Bluetooth Deskbar item for every session (regular image only). In the
+# system launch folder, like the AirPlay item in data/launch/user: R5 has no
+# session launch_daemon, so user_launch is never read (5625U, 16 Nov 2026).
 local r5BtDeskbarLaunch = <r5-launch>bluetooth-deskbar ;
 SEARCH on $(r5BtDeskbarLaunch) = [ FDirName $(HAIKU_TOP) data launch r5 ] ;
-AddDirectoryToHaikuImage system non-packaged data user_launch ;
-AddFilesToHaikuImage system non-packaged data user_launch
+AddFilesToHaikuImage system non-packaged data launch
 	: $(r5BtDeskbarLaunch) ;
 """
 

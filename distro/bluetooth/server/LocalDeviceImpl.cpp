@@ -669,6 +669,23 @@ LocalDeviceImpl::HandleEvent(struct hci_event_header* event, size_t size)
 				&eventIndexLocation);
 			if (request != NULL)
 				CommandStatus(commandStatus, request, eventIndexLocation);
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			else if (commandStatus->status != BT_OK) {
+				// A command that waits for Command Complete was refused with
+				// Command Status instead: unknown to this radio (Core 6.0,
+				// Vol 4, Part E, 4.5), or the 2 s timeout of h2generic. The
+				// one who asked waited forever (the kit has no timeout), and
+				// on the 5625U the Settings page hung on "Starting
+				// Bluetooth". Answer with the error.
+				request = FindPetition(HCI_EVENT_CMD_COMPLETE,
+					commandStatus->opcode, &eventIndexLocation);
+				if (request != NULL)
+					_RefuseRequest(request, commandStatus->opcode,
+						commandStatus->status);
+			}
+			// SPDX-SnippetEnd
 
 			break;
 		}
@@ -1193,6 +1210,13 @@ LocalDeviceImpl::CommandComplete(struct hci_ev_cmd_complete* event,
 
 		default:
 			TRACE_BT("LocalDeviceImpl: Command Complete not handled\n");
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			// Still answered, so a sender never waits forever.
+			_RefuseRequest(request, (uint16)opcodeExpected,
+				*(uint8*)(event + 1));
+			// SPDX-SnippetEnd
 			break;
 	}
 }
@@ -2513,6 +2537,25 @@ LocalDeviceImpl::_WriteEventMask()
 		command->mask[i] = (uint8)(mask >> (8 * i));
 	_IssueSetupCommand(command.Data(), command.Size(),
 		PACK_OPCODE(OGF_CONTROL_BASEBAND, R5_OCF_SET_EVENT_MASK));
+}
+
+
+void
+LocalDeviceImpl::_RefuseRequest(BMessage* request, uint16 opcode,
+	uint8 status)
+{
+	syslog(LOG_NOTICE, "bluetooth_server: hci%" B_PRId32 " command %#06x "
+		"answered with status %#x", GetID(), opcode, status);
+
+	bool own = request->HasBool("r5_setup");
+	if (!own) {
+		BMessage reply;
+		reply.AddUInt8("status", status == BT_OK ? BT_ERROR : status);
+		request->SendReply(&reply);
+	}
+	ClearWantedEvent(request);
+	if (own)
+		delete request;
 }
 
 
