@@ -134,6 +134,11 @@ private:
 public:
 	// HCI Reset, then SetupController() from its Command Complete.
 	void				ResetController();
+	// Forget a paired device (Classic and LE) and end its link.
+	bool				R5Forget(const bdaddr_t& address);
+	// BT_MSG_R5_GET_PAIRED and BT_MSG_R5_DISCONNECT (Classic and LE).
+	void				R5AddPaired(BMessage& reply);
+	bool				R5Disconnect(const bdaddr_t& address);
 private:
 	// Remote host features before Authentication Requested.
 	std::vector<uint16> fFeatureHandles;

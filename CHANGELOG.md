@@ -1,5 +1,29 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-16 - Bluetooth: My devices with a device panel, the switch on the last line
+
+Problem: the Bluetooth page only showed what a scan found. A paired mouse or controller was not listed unless it was found again, there was no way to see whether it was connected, and Forget sat beside Pair in the scan list. The radio card and the switch box stood above the devices, though they are rarely used.
+
+What changed (owner's mockup, `generated/mockups/bluetooth-page.html`):
+- `bluetooth_server`: `BT_MSG_R5_GET_PAIRED` lists the paired devices of every radio (Classic with a link key, and LE bonds) with name, class, LE, HID and connected; no keys. `BT_MSG_R5_DISCONNECT` ends a link and keeps the keys.
+- libr5bt (additive): `BluetoothPairedDevice`, `BluetoothState::UnarchivePaired()`, `kMsgBluetoothDisconnect`. The controller reads the paired list on every 3-second update, and at once after Pair and Forget. `BluetoothState` keeps its size; the controller and view use reserved room.
+- The page: My devices (a list with Connected or Not connected, and a `BCard` panel with kind, status, Classic or Low Energy, address, Disconnect and Forget); Devices nearby without the paired devices, down to the last line; that line without a box: "Bluetooth on", the radio or a note. While Bluetooth is off both lists are faint. The summary card with the radio count is gone.
+
+Limits: no battery level (not read yet), no "Use for sound" or "Test buttons" in the panel yet. A disconnected LE mouse comes back when it is moved, by design (the accept list).
+
+Tested: built for x86_64; QEMU with SMAP, all Bluetooth tests ok, no panic; the page draws My devices, Devices nearby and the "Bluetooth on" line (no radio in QEMU, so the lists stay empty). Not on a stick.
+
+## 2026-11-16 - Bluetooth: Forget a paired device, see a controller's buttons, Pair on a paired device ends well
+
+Problem: stick 5 on the 5625U: the 8BitDo M30 and the Designer Mouse paired and published their devices (`joystick/bluetooth/0`, `input/mouse/bluetooth/0`), and no panic came. Three things were left. Haiku's Joysticks preferences said "The file '0' used by 'bluetooth/0' cannot be found" and Probe found nothing: they look for a gameport description file and never show a HID controller (USB or Bluetooth), so they cannot tell whether the M30 works. Pair on a device that already had a key said "did not work", because only Simple Pairing Complete ended a pairing well and a stored key does not send one. And there was no way to unpair.
+
+What changed:
+- `gamepad` (in `/bin`, regular image): a monitor like a MIDI monitor. It lists the controllers, opens the first through `BJoystick` as a game does, and prints each button and axis change until Ctrl+C (or for the seconds given).
+- `bluetooth_server`: Authentication Complete with a stored key ends a pairing started on the page as "Paired with …".
+- Forget, beside Pair on the Bluetooth page: `kMsgBluetoothForget` (libr5bt, additive) and `BT_MSG_R5_FORGET` in `bluetooth_server` remove the device's Classic link key or LE keys (le_paired_devices, accept list) and end its link; the status line says "… is forgotten. Pair it again to use it." or "… was not paired.". Like Pair, it needs no administrator lock. It works on a device in the scan list; a list of paired devices is not on the page yet.
+
+Tested: built for x86_64; QEMU with SMAP, all Bluetooth tests ok, no panic. Not on a stick (owner: no sticks for now). Open: the Sony headset paired on stick 5 but gave no audio, to be looked at separately.
+
 ## 2026-11-16 - Bluetooth: no kernel panic when a BLE mouse is used after pairing
 
 Problem: stick 4 on the 5625U: the 8BitDo M30 and the Designer Mouse paired ("Paired with Designer Mouse" on the page), the mouse moved, and a few seconds later the kernel panicked: `PANIC: expected to be contiguous` in h2generic `nb_get_whole_buffer()` from `submit_tx_acl()`, `PostACL()` and the L2CAP send thread. The small LE signalling answers (here the Connection Parameter Update Response a mouse asks for after it connected) were built with 2 to 10 bytes of header room, so the L2CAP and ACL headers went into separate pieces, and the USB transport panics on a buffer in pieces. The syslog of that boot was lost with the panic; the backtrace came from a photo of the debugger.

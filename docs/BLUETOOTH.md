@@ -134,7 +134,7 @@ Each step is its own small pull request. It is built for AMD64 with `scripts/bui
 ### Step 3a (PR 6): `libr5bt.so` and Settings (Devices → Bluetooth)
 
 - **What:** `distro/bluetooth/lib/` (`libr5bt.so`, `<R5Bluetooth.h>`), the Bluetooth page in alphabetical order under Devices in Settings (with `r5_settings_apply_prefs_overlay()`), and `docs/LIBR5.md`, `docs/SETTINGS.md` and an R5Book chapter.
-- **Pass:** in QEMU and VirtualBox the page is first under Devices. It shows `0 radios` in QEMU and a real scan list in VirtualBox, without a `bluetooth_server` crash.
+- **Pass:** in QEMU and VirtualBox the page is first under Devices. It shows `0 radios` in QEMU (since 16 Nov 2026, with My devices: "No Bluetooth radio was found." on the last line) and a real scan list in VirtualBox, without a `bluetooth_server` crash.
 - **As built (16 Nov 2026):**
   - `<R5Bluetooth.h>` is installed in `headers/os/interface/`, beside `R5Icons.h` and `Card.h`, so `#include <R5Bluetooth.h>` needs no extra path. `libr5bt.so` is in the regular image only: it needs `libbluetooth.so`, and the minimum image ships no Bluetooth (section 1).
   - The radio switch: HCI has no power off. Off writes Write Scan Enable `0x00` to every radio and makes `bluetooth_server` refuse inquiry, Create Connection and Remote Name Request and reject incoming connections; the choice is in `B_SYSTEM_SETTINGS_DIRECTORY/bluetooth/r5_radio`, written by the server, so it survives a restart. Chosen because it is small, honest (nothing can find, page or be paged), and needs no new kernel call. On does not make the computer visible; visibility belongs with pairing in step 4. `docs/LIBR5.md`, "Bluetooth Kit".

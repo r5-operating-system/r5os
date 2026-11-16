@@ -142,10 +142,22 @@ def main() -> int:
         "SubInclude HAIKU_TOP src bin bt_l2cap_coc_test ;\n",
         "SubInclude HAIKU_TOP src bin bt_smp_crypto_test ;\n",
         "bt_smp_crypto_test jam")
+    # A game controller's buttons and axes through BJoystick (Haiku's
+    # Joysticks preferences do not show HID controllers).
+    copy_dir(SRC / "tests" / "gamepad", HAIKU / "src" / "bin" / "gamepad",
+        "gamepad")
+    insert_once(HAIKU / "src" / "bin" / "Jamfile",
+        "SubInclude HAIKU_TOP src bin bt_smp_crypto_test ;\n",
+        "SubInclude HAIKU_TOP src bin gamepad ;\n",
+        "gamepad jam")
     insert_once(HAIKU / "build" / "jam" / "images" / "definitions" / "regular",
         "SYSTEM_BIN += bt_hid_driver_test ;\n",
         "SYSTEM_BIN += bt_l2cap_coc_test bt_smp_crypto_test ;\n",
         "bt_l2cap_coc_test image")
+    insert_once(HAIKU / "build" / "jam" / "images" / "definitions" / "regular",
+        "SYSTEM_BIN += bt_l2cap_coc_test bt_smp_crypto_test ;\n",
+        "SYSTEM_BIN += gamepad ;\n",
+        "gamepad image")
     # libr5bt.so (step 3a): the sources into src/preferences/r5bt, the
     # public header next to R5Icons.h and Card.h. It needs libbluetooth,
     # so it is in the regular image only, like the rest of Bluetooth.

@@ -2704,6 +2704,15 @@ LocalDeviceImpl::AuthComplete(struct hci_ev_auth_complete* eventData, BMessage* 
 		// SPDX-License-Identifier: MIT
 		// rd is NULL for an unknown handle (review of #4286).
 		if (rd != NULL) {
+			// A Pair on a device that already had a key: the stored key
+			// authenticated it, and no Simple Pairing Complete follows, so
+			// this is where that pairing ends well (stick 5 said "did not
+			// work" for it).
+			if (rd->user_pairing) {
+				rd->user_pairing = false;
+				r5_pairing_result(true, rd->friendly_name, &rd->pair_reply,
+					rd->bdaddr);
+			}
 			SetConnEncryption(rd->handle, true);
 			((BluetoothServer*)be_app)->DiscoverServices(rd);
 		}
@@ -2896,6 +2905,74 @@ LocalDeviceImpl::_WriteEventMask()
 		command->mask[i] = (uint8)(mask >> (8 * i));
 	_IssueSetupCommand(command.Data(), command.Size(),
 		PACK_OPCODE(OGF_CONTROL_BASEBAND, R5_OCF_SET_EVENT_MASK));
+}
+
+
+bool
+LocalDeviceImpl::R5Forget(const bdaddr_t& address)
+{
+	bool forgotten = fLE != NULL && fLE->Forget(address);
+
+	ServerRemoteDevice* rd = RemoteDeviceByAddr(address);
+	if (rd != NULL) {
+		if (rd->conn_state == RemoteDevice::CONNECTED) {
+			BMessage disconnect;
+			disconnect.AddData("bdaddr", B_ANY_TYPE, &address, sizeof(address));
+			disconnect.AddUInt8("reason", 0x13);
+			Disconnect(&disconnect);
+		}
+		rd->link_key = LinkKeyUtils::NullKey();
+		rd->user_pairing = false;
+		// Out of the list and the saved file. The record itself stays: a
+		// disconnection that is still on its way may look it up.
+		RemoveRemoteDevice(rd);
+		SaveRemoteDevices();
+		forgotten = true;
+	}
+	if (forgotten) {
+		syslog(LOG_INFO, "bluetooth_server: hci%" B_PRId32 " a device was"
+			" forgotten", GetID());
+	}
+	return forgotten;
+}
+
+
+void
+LocalDeviceImpl::R5AddPaired(BMessage& reply)
+{
+	linkkey_t nullKey = LinkKeyUtils::NullKey();
+	for (int32 i = 0; i < fRemoteDevicesList.CountItems(); i++) {
+		ServerRemoteDevice* rd = fRemoteDevicesList.ItemAt(i);
+		if (LinkKeyUtils::Compare(&rd->link_key, &nullKey))
+			continue;
+		uint32 deviceClass = rd->classOfDevice[0]
+			| (rd->classOfDevice[1] << 8) | (rd->classOfDevice[2] << 16);
+		reply.AddData("bdaddr", B_ANY_TYPE, &rd->bdaddr, sizeof(bdaddr_t));
+		reply.AddString("name", rd->friendly_name);
+		reply.AddUInt32("class", deviceClass);
+		reply.AddBool("le", false);
+		reply.AddBool("hid", false);
+		reply.AddBool("connected",
+			rd->conn_state == RemoteDevice::CONNECTED);
+	}
+	if (fLE != NULL)
+		fLE->AddPaired(reply);
+}
+
+
+bool
+LocalDeviceImpl::R5Disconnect(const bdaddr_t& address)
+{
+	bool disconnected = fLE != NULL && fLE->Disconnect(address);
+	ServerRemoteDevice* rd = RemoteDeviceByAddr(address);
+	if (rd != NULL && rd->conn_state == RemoteDevice::CONNECTED) {
+		BMessage disconnect;
+		disconnect.AddData("bdaddr", B_ANY_TYPE, &address, sizeof(address));
+		disconnect.AddUInt8("reason", 0x13);
+		Disconnect(&disconnect);
+		disconnected = true;
+	}
+	return disconnected;
 }
 
 

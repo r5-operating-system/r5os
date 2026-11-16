@@ -587,6 +587,60 @@ void BluetoothServer::MessageReceived(BMessage* message)
 			}
 			break;
 
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// Forget a paired device: like Pair, for every signed-in person.
+		case BT_MSG_R5_FORGET:
+		{
+			const void* data;
+			ssize_t size;
+			if (message->FindData("bdaddr", B_ANY_TYPE, &data, &size) != B_OK
+				|| size != (ssize_t)sizeof(bdaddr_t)) {
+				status = B_BAD_VALUE;
+				break;
+			}
+			bool forgotten = false;
+			for (int32 i = 0; i < fLocalDevicesList.CountItems(); i++) {
+				if (fLocalDevicesList.ItemAt(i)->R5Forget(
+						*(const bdaddr_t*)data))
+					forgotten = true;
+			}
+			reply.AddBool("forgotten", forgotten);
+			status = B_OK;
+			break;
+		}
+
+		// My devices on the Bluetooth page: names and states, no keys.
+		case BT_MSG_R5_GET_PAIRED:
+		{
+			for (int32 i = 0; i < fLocalDevicesList.CountItems(); i++)
+				fLocalDevicesList.ItemAt(i)->R5AddPaired(reply);
+			status = B_OK;
+			break;
+		}
+
+		case BT_MSG_R5_DISCONNECT:
+		{
+			const void* data;
+			ssize_t size;
+			if (message->FindData("bdaddr", B_ANY_TYPE, &data, &size) != B_OK
+				|| size != (ssize_t)sizeof(bdaddr_t)) {
+				status = B_BAD_VALUE;
+				break;
+			}
+			bool disconnected = false;
+			for (int32 i = 0; i < fLocalDevicesList.CountItems(); i++) {
+				if (fLocalDevicesList.ItemAt(i)->R5Disconnect(
+						*(const bdaddr_t*)data))
+					disconnected = true;
+			}
+			reply.AddBool("disconnected", disconnected);
+			status = B_OK;
+			break;
+		}
+		// SPDX-SnippetEnd
+
 		case BT_MSG_R5_SET_RADIO:
 		{
 			bool enabled;

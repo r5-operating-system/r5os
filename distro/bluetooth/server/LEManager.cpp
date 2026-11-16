@@ -1693,3 +1693,75 @@ LEManager::_DirectResult(bool paired)
 	r5_pairing_result(paired, _Name(fDirectAddress), &fDirectReply,
 		fDirectAddress);
 }
+
+
+bool
+LEManager::Forget(const bdaddr_t& address)
+{
+	BAutolock _(fLock);
+	bool found = false;
+	for (size_t i = 0; i < fBonds.size(); i++) {
+		if (!bdaddrUtils::Compare(fBonds[i]->address, address))
+			continue;
+		memset(fBonds[i]->ltk, 0, sizeof(fBonds[i]->ltk));
+		memset(fBonds[i]->irk, 0, sizeof(fBonds[i]->irk));
+		delete fBonds[i];
+		fBonds.erase(fBonds.begin() + i);
+		_SaveBonds();
+		fAcceptListDirty = true;
+		found = true;
+		break;
+	}
+	Link* link = _FindLink(address);
+	if (link != NULL) {
+		_CloseLink(link, true);
+		found = true;
+	}
+	if (found) {
+		// The accept list is written again once nothing initiates.
+		if (fInitiating == kAuto)
+			_CancelConnection();
+		_Connect();
+	}
+	return found;
+}
+
+
+void
+LEManager::AddPaired(BMessage& reply)
+{
+	BAutolock _(fLock);
+	for (size_t i = 0; i < fBonds.size(); i++) {
+		const LEBond* bond = fBonds[i];
+		bool connected = false;
+		for (size_t j = 0; j < fLinks.size() && !connected; j++) {
+			const Link* link = fLinks[j];
+			connected = link->encrypted
+				&& (bdaddrUtils::Compare(link->address, bond->address)
+					|| bdaddrUtils::Compare(link->bond.address, bond->address));
+		}
+		reply.AddData("bdaddr", B_ANY_TYPE, &bond->address,
+			sizeof(bond->address));
+		reply.AddString("name", bond->name);
+		reply.AddUInt32("class", 0);
+		reply.AddBool("le", true);
+		reply.AddBool("hid", bond->hid);
+		reply.AddBool("connected", connected);
+	}
+}
+
+
+bool
+LEManager::Disconnect(const bdaddr_t& address)
+{
+	BAutolock _(fLock);
+	for (size_t i = 0; i < fLinks.size(); i++) {
+		Link* link = fLinks[i];
+		if (bdaddrUtils::Compare(link->address, address)
+			|| bdaddrUtils::Compare(link->bond.address, address)) {
+			_CloseLink(link, true);
+			return true;
+		}
+	}
+	return false;
+}

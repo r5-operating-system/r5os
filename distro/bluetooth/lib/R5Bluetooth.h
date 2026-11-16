@@ -51,10 +51,16 @@ enum {
 		// bool "on". System-wide: callers check the administrator lock
 	kMsgBluetoothSelectRadio	= 'btSr',
 		// int32 "hci_id"
-	kMsgBluetoothPair			= 'btPa'
+	kMsgBluetoothPair			= 'btPa',
 		// data "bdaddr" (bdaddr_t), string "name", uint32 "class": pair
 		// with a device found by a scan (step 4). The result shows in the
 		// device's own connection and pairing events.
+	kMsgBluetoothForget			= 'btFg',
+		// data "bdaddr", string "name": forget a paired device (its keys)
+		// and end its link; answered with kMsgBluetoothForgetResult
+	kMsgBluetoothDisconnect		= 'btDc'
+		// data "bdaddr": end the link to a paired device and keep its keys.
+		// The new state shows the result.
 };
 
 // Notifications sent to the controller's target
@@ -63,8 +69,10 @@ enum {
 		// A flattened BluetoothState
 	kMsgBluetoothRadioResult	= 'btRR',
 		// bool "on", int32 "status"
-	kMsgBluetoothPairResult		= 'btPR'
+	kMsgBluetoothPairResult		= 'btPR',
 		// bool "paired", string "name": the end of a kMsgBluetoothPair
+	kMsgBluetoothForgetResult	= 'btFR'
+		// bool "forgotten", string "name"
 };
 
 
@@ -111,6 +119,23 @@ struct BluetoothDeviceInfo {
 };
 
 
+// A paired device: one of My devices on the Bluetooth page.
+struct BluetoothPairedDevice {
+								BluetoothPairedDevice();
+
+			// What it is: the kind from the class of device, "Input device"
+			// for LE HID, or empty.
+			BString				Kind() const;
+
+			BluetoothDeviceInfo	info;
+				// rssi stays HCI_RSSI_INVALID
+			bool				lowEnergy;
+			bool				hid;
+				// LE HID over GATT
+			bool				connected;
+};
+
+
 struct BluetoothState {
 								BluetoothState();
 
@@ -131,6 +156,12 @@ struct BluetoothState {
 				// A scan finished since the controller started
 			std::vector<BluetoothDeviceInfo> devices;
 				// Found by the last scan, in the order they answered
+
+	// The paired devices travel in the same kMsgBluetoothStateChanged
+	// message ("paired:*" fields); the struct above keeps its size.
+	static	void				UnarchivePaired(const BMessage& archive,
+									std::vector<BluetoothPairedDevice>&
+										devices);
 };
 
 
@@ -170,6 +201,8 @@ private:
 			void				_SetRadio(bool on);
 			void				_Pair(BMessage* message);
 			void				_PostState();
+			void				_ReadPaired();
+			void				_DeviceRequest(BMessage* message);
 
 			BMessenger			fTarget;
 			BMessageRunner*		fRunner;
@@ -187,7 +220,10 @@ private:
 				// The last state sent, flattened: an unchanged state is not
 				// sent again
 
-			uint32				_reserved[8];
+			// The last BT_MSG_R5_GET_PAIRED answer (from the reserved room;
+			// the size of the class stays the same).
+			BMessage*			fPaired;
+			uint32				_reserved[6];
 };
 
 
@@ -215,8 +251,13 @@ private:
 			void				_UpdateDevices();
 			void				_UpdateControls();
 			void				_SendToController(BMessage* message);
+			void				_UpdateMine();
+			void				_UpdateInfo();
+			bool				_IsPaired(const bdaddr_t& address) const;
 
 private:
+			struct MyDevices;
+
 			bool				fSettingsPage;
 			bool				fRadioSwitchAllowed;
 			bool				fHasState;
@@ -240,8 +281,10 @@ private:
 			// size of the class stays the same).
 			BString*			fPairStatus;
 			int32				fPairing;
+			// My devices and the information panel (from the reserved room)
+			MyDevices*			fMine;
 			// room for later private state (libr5bt.so)
-			uint32				_reserved[5];
+			uint32				_reserved[3];
 };
 
 
