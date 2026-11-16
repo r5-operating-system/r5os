@@ -13,6 +13,13 @@
 
 #include "Debug.h"
 #include "SDPServer.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <sys/time.h>
+
+#include "SDPRecords.h"
+// SPDX-SnippetEnd
 
 
 SDPServer::SDPServer()
@@ -153,21 +160,32 @@ SDPServer::_Run()
 
 		TRACE_BT("SDP: Incoming connection... %d\n", client);
 
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// Every request is answered (SDPRecords.h): the A2DP source and
+		// AVRCP records, an empty list for anything else, an error for a
+		// broken request. The old loop read 29 bytes at a time and never
+		// answered, so a headset that looks first waited until its timeout
+		// (docs/BLUETOOTH.md, step 5). The other side closes the channel;
+		// a silent one is dropped after 30 s.
+		struct timeval timeout = { 30, 0 };
+		setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &timeout,
+			sizeof(timeout));
 		ssize_t receivedSize;
-
-		do {
-			receivedSize = recv(client, buffer, 29, 0);
-
-			if (receivedSize < 0) {
-				TRACE_BT("SDP: Error reading client socket\n");
-			} else {
-				TRACE_BT("SDP: Received from SDP client: %ld:\n", receivedSize);
-				for (int i = 0; i < receivedSize; i++)
-					TRACE_BT("SDP: %x:", buffer[i]);
-
-				TRACE_BT("\n");
-			}
-		} while (receivedSize > 0);
+		uint8 request[672];	// the default L2CAP MTU
+		uint8 answer[672];
+		while (!fIsShuttingDown) {
+			receivedSize = recv(client, request, sizeof(request), 0);
+			if (receivedSize <= 0)
+				break;
+			size_t length = r5sdp::HandleRequest(request, receivedSize,
+				answer, sizeof(answer));
+			if (length > 0 && send(client, answer, length, 0) < 0)
+				break;
+		}
+		(void)buffer;
+		// SPDX-SnippetEnd
 
 		// SPDX-SnippetBegin
 		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors

@@ -1,5 +1,47 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-16 - Bluetooth audio: review of #4317 (reconnect, SDP, encrypted links, SBC endpoint, 44.1 kHz only)
+
+Problem: an outside read-only review of #4317 found these; each was checked against the code here first:
+- **Reconnect never worked.** The L2CAP socket only uses a link that is already up (`btCoreData` has no Create Connection), so reaching the chosen headset always failed with `ENETUNREACH`.
+- **SDP never answered.** `SDPServer` read requests and never replied, so a headset that looks first hung until its timeout.
+- **Address alone was trusted.** An incoming AVDTP channel was accepted on its address, without checking that the link was encrypted.
+- **AVRCP thread could hang.** It read without a timeout, and `shutdown()` does not wake an L2CAP `recv()`. `_EndSession()` also let go of its lock while the session still looked open.
+- **LE scans kept running** while audio streamed.
+- **Node values were not thread-safe**: volume and latency were written from A2DPSource's threads without atomics.
+- **`Start()` did not clean up** after a failure.
+- **Only the first sink endpoint was asked** for SBC. Headsets often list AAC, aptX or LDAC there.
+- **A smaller MTU ended the stream** (`EMSGSIZE`).
+- **AVRCP GetCapabilities with Events was refused.**
+- **A headset could choose 48 kHz**, because R5 offered every rate. The 44.1 kHz audio then played 9 % too fast, with gaps.
+- **Clock drift** made the ring jump ahead by up to 80 ms, which is audible.
+- **Control sends could block** the node's thread on a full AVCTP queue.
+
+What changed:
+- `bluetooth_server` (SPDX snippets):
+  - `BT_MSG_R5_AUDIO_CONNECT` (uid 0): Create Connection for a paired headset, Classic only, with no pairing window. The stored key authenticates it and encryption follows as for every link.
+  - `BT_MSG_R5_AUDIO_PAIRED` also answers connected and encrypted.
+  - `SDPRecords.h` (MIT, new): fixed records for A2DP Audio Source (AVDTP 1.3, PSM `0x19`), AVRCP Controller (category 2) and AVRCP Target. ServiceSearch, ServiceAttribute and ServiceSearchAttribute are answered, with continuation; anything else gets an empty list or an error. `SDPServer` answers every request.
+  - `LEManager::AudioChanged()` pauses and resumes the LE scan with the stream.
+- `bluetooth_audio`, all MIT:
+  - The link is brought up through the server and R5 waits up to 15 s for encryption.
+  - A connection is accepted only from a paired device on an encrypted link, waiting up to 5 s for encryption.
+  - Every free sink endpoint is asked in turn.
+  - Only 44.1 kHz is offered; a Set Configuration at another rate gets `0xC4`.
+  - The AVRCP thread reads with a 200 ms timeout and is joined by the thread that started it.
+  - `Start()` cleans up after a failure; without AVDTP it fails, without AVCTP it only logs.
+  - On `EMSGSIZE` the next packets carry fewer frames.
+  - Drift costs one sample per packet; a jump happens only after a stall over six times the target.
+  - AVRCP Events gets an empty list, and an unknown capability gets "invalid parameter".
+  - Control sends use `MSG_DONTWAIT`, and the node's volume and latency are atomic.
+- New fuzz target `sdp` in `scripts/fuzz-bt.sh`.
+
+Not changed: the encoder's speed (finding 3.2). It does about 2 million operations per second, less than 0.1 % of one core, so the checked encoder stays as it is.
+
+Limits: still no headset tried. The reconnect, the SDP records with a real headset, and encryption on the 5625U are not shown on hardware. Play and pause do not reach the playing program. A Classic inquiry that already runs when the stream starts is not stopped. ARM64 and RISC-V 64 were not built or tested.
+
+Tested: `scripts/build-locked.sh` jam_exit=0; `scripts/test-sbc.sh` ok; `fuzz-bt.sh sdp 10` (283 678 rounds) and `audio 10` 0 crashes, including the check that an SDP answer pieced together over its continuation states equals the answer in one piece and is well formed. Not run for this change: the QEMU smoke test (the owner tests it on the stick instead) and the 60 s fuzz runs.
+
 ## 2026-11-16 - Bluetooth: LE packets with the right boundary flag, a reset at start, the link's features before pairing
 
 Problem: a third read-only review of the three stick boots on the 5625U (MT7922) found more below the pairing: every LE packet from the host started with Packet_Boundary 10, which is for BR/EDR only; the LE buffer length was never used (the radio id, 124, was taken as a table index of 8); R5 never sent HCI Reset, so a warm boot from Windows kept the radio's settings; SMP went out the moment an LE link came up, before the link layer's own feature exchange that BlueZ waits for; and two Classic ends (a refused Create Connection, a disconnection during pairing) still told nobody.

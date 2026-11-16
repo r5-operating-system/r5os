@@ -56,6 +56,13 @@ static const bigtime_t kIdleSuspend = 5000000;
 // A reported headset delay above this is not believed (AVDTP allows up to
 // 6.5 s; real headsets report 0.1 to 0.3 s).
 static const bigtime_t kMaxRemoteDelay = 500000;
+// A link to the chosen headset may take this long to come up and be
+// encrypted (page timeout 5 s, then authentication and encryption).
+static const bigtime_t kLinkWait = 15000000;
+// A headset that connects opens AVDTP right after the link, often before
+// encryption is on: R5 waits this long for it.
+static const bigtime_t kEncryptionWait = 5000000;
+static const bigtime_t kLinkPoll = 250000;
 
 // Audio kept between the mixer and the encoder. Packets leave this much
 // before their time, so a late wake-up of the sending thread never starves
@@ -105,6 +112,8 @@ A2DPSource::A2DPSource(Listener* listener, int rate)
 	fManagerThread(-1),
 	fStreamThread(-1),
 	fControlThread(-1),
+	fControlStop(false),
+	fControlDone(false),
 	fWake(-1),
 	fHasRemote(false),
 	fSignal(-1),
@@ -116,6 +125,8 @@ A2DPSource::A2DPSource(Listener* listener, int rate)
 	fState(kIdle),
 	fInitiator(false),
 	fRemoteSEID(0),
+	fCandidateCount(0),
+	fCandidateIndex(0),
 	fLabel(0),
 	fPendingLabel(0),
 	fPendingCommand(0),
@@ -175,9 +186,11 @@ A2DPSource::Start()
 	for (int i = 0; i < 2; i++) {
 		int fd = socket(PF_BLUETOOTH, SOCK_SEQPACKET, BLUETOOTH_PROTO_L2CAP);
 		if (fd < 0) {
+			status_t error = errno;
 			syslog(LOG_WARNING, "bluetooth_audio: no L2CAP (%s)",
-				strerror(errno));
-			return errno;
+				strerror(error));
+			Stop();
+			return error;
 		}
 		struct sockaddr_l2cap address;
 		memset(&address, 0, sizeof(address));
@@ -187,9 +200,16 @@ A2DPSource::Start()
 		address.l2cap_psm = B_HOST_TO_LENDIAN_INT16(psms[i]);
 		if (bind(fd, (struct sockaddr*)&address, sizeof(address)) < 0
 			|| listen(fd, 4) < 0) {
+			status_t error = errno;
 			syslog(LOG_WARNING, "bluetooth_audio: cannot listen on PSM %#x: "
-				"%s", psms[i], strerror(errno));
+				"%s", psms[i], strerror(error));
 			close(fd);
+			// Without AVDTP there is no audio; without AVCTP only the
+			// headset's buttons and volume are missing.
+			if (psms[i] == kPSMAVDTP) {
+				Stop();
+				return error;
+			}
 			continue;
 		}
 		fListenSockets[i] = fd;
@@ -210,8 +230,11 @@ A2DPSource::Start()
 
 	fManagerThread = spawn_thread(_ManagerEntry, "bt audio signalling",
 		B_URGENT_DISPLAY_PRIORITY, this);
-	if (fManagerThread < 0)
-		return fManagerThread;
+	if (fManagerThread < 0) {
+		status_t error = fManagerThread;
+		Stop();
+		return error;
+	}
 	resume_thread(fManagerThread);
 	return B_OK;
 }
@@ -429,27 +452,94 @@ A2DPSource::_ChosenDevice(bdaddr_t* device)
 
 
 bool
-A2DPSource::_Allowed(const bdaddr_t& address)
+A2DPSource::_LinkState(const bdaddr_t& address, bool* paired,
+	bool* connected, bool* encrypted)
 {
-	bdaddr_t chosen;
-	if (_ChosenDevice(&chosen))
-		return bdaddrUtils::Compare(chosen, address);
-
-	// No choice yet: a device paired on this computer may connect.
+	*paired = *connected = *encrypted = false;
 	BMessenger server(BLUETOOTH_SIGNATURE);
 	BMessage request(BT_MSG_R5_AUDIO_PAIRED);
 	request.AddData("bdaddr", B_ANY_TYPE, &address, sizeof(bdaddr_t));
 	BMessage reply;
 	if (server.SendMessage(&request, &reply, 2000000, 2000000) != B_OK)
 		return false;
-	bool paired = false;
-	return reply.FindBool("paired", &paired) == B_OK && paired;
+	reply.FindBool("paired", paired);
+	reply.FindBool("connected", connected);
+	reply.FindBool("encrypted", encrypted);
+	return true;
+}
+
+
+bool
+A2DPSource::_Allowed(const bdaddr_t& address)
+{
+	// The chosen headset, or without a choice any paired device; in both
+	// cases paired here and on an encrypted link, as HIDHost waits for
+	// Encryption Change. An address alone proves nothing.
+	bdaddr_t chosen;
+	if (_ChosenDevice(&chosen) && !bdaddrUtils::Compare(chosen, address))
+		return false;
+
+	bigtime_t until = system_time() + kEncryptionWait;
+	while (!fQuitting) {
+		bool paired;
+		bool connected;
+		bool encrypted;
+		if (!_LinkState(address, &paired, &connected, &encrypted) || !paired)
+			return false;
+		if (encrypted)
+			return true;
+		if (system_time() >= until)
+			return false;
+		snooze(kLinkPoll);
+	}
+	return false;
 }
 
 
 int
 A2DPSource::_Connect(const bdaddr_t& address, uint16 psm)
 {
+	// The L2CAP socket only uses a link that is up (btCoreData has no
+	// Create Connection of its own): bluetooth_server brings it up for a
+	// paired headset, and R5 waits until it is encrypted.
+	bool paired;
+	bool connected;
+	bool encrypted;
+	if (!_LinkState(address, &paired, &connected, &encrypted))
+		return -1;
+	if (!paired) {
+		syslog(LOG_NOTICE, "bluetooth_audio: the chosen headset is not "
+			"paired");
+		return -1;
+	}
+	if (!encrypted) {
+		if (!connected) {
+			BMessenger server(BLUETOOTH_SIGNATURE);
+			BMessage request(BT_MSG_R5_AUDIO_CONNECT);
+			request.AddData("bdaddr", B_ANY_TYPE, &address,
+				sizeof(bdaddr_t));
+			BMessage reply;
+			int32 status = B_ERROR;
+			if (server.SendMessage(&request, &reply, 2000000, 2000000)
+					!= B_OK
+				|| reply.FindInt32("status", &status) != B_OK
+				|| status != B_OK)
+				return -1;
+		}
+		bigtime_t until = system_time() + kLinkWait;
+		while (!encrypted) {
+			if (fQuitting || system_time() >= until) {
+				syslog(LOG_NOTICE, "bluetooth_audio: no encrypted link to "
+					"the headset (it is off or out of range)");
+				return -1;
+			}
+			snooze(kLinkPoll);
+			if (!_LinkState(address, &paired, &connected, &encrypted)
+				|| !paired)
+				return -1;
+		}
+	}
+
 	int fd = socket(PF_BLUETOOTH, SOCK_SEQPACKET, BLUETOOTH_PROTO_L2CAP);
 	if (fd < 0)
 		return -1;
@@ -521,6 +611,18 @@ A2DPSource::_Manage()
 			break;
 		}
 
+		// An AVRCP thread that ended because the headset closed AVCTP.
+		if (fControlDone) {
+			fControlLock.Lock();
+			thread_id done = fControlThread;
+			fControlThread = -1;
+			fControlDone = false;
+			fControlLock.Unlock();
+			status_t result;
+			if (done >= 0)
+				wait_for_thread(done, &result);
+		}
+
 		// Channels the listen threads accepted.
 		if (fPendingSignal >= 0 && fSignal < 0) {
 			fSignal = fPendingSignal;
@@ -546,6 +648,8 @@ A2DPSource::_Manage()
 			fControlLock.Lock();
 			if (fControl < 0 && fControlThread < 0) {
 				fControl = fPendingControl;
+				fControlStop = false;
+				fControlDone = false;
 				fControlThread = spawn_thread(_ControlEntry,
 					"bt audio avrcp", B_NORMAL_PRIORITY, this);
 				if (fControlThread >= 0)
@@ -798,6 +902,12 @@ A2DPSource::_HandleCommand(uint8 label, uint8 signal, const uint8* payload,
 				badCategory = kCategoryMediaCodec;
 				error = kErrorUnsupportedConfiguration;
 			}
+			// The mixer delivers fRate; R5 does not resample, and only
+			// offers that rate (BuildSourceCapabilities()).
+			if (error == 0 && sbc::SampleRate(config) != fRate) {
+				badCategory = kCategoryMediaCodec;
+				error = kErrorNotSupportedSamplingFrequency;
+			}
 			if (error != 0) {
 				reply[0] = badCategory;
 				reply[1] = error;
@@ -932,6 +1042,20 @@ A2DPSource::_HandleCommand(uint8 label, uint8 signal, const uint8* payload,
 
 
 void
+A2DPSource::_AskCapabilities()
+{
+	fRemoteSEID = fCandidates[fCandidateIndex];
+	uint8 seid = (uint8)(fRemoteSEID << 2);
+	fTriedAllCapabilities = true;
+	fRetriedBitpool = false;
+	if (_SendCommand(kGetAllCapabilities, &seid, 1) == B_OK)
+		fState = kGettingCapabilities;
+}
+
+
+// False when this endpoint has no SBC setting R5 can use (the caller tries
+// the next one); every other failure ends the session here.
+bool
 A2DPSource::_SendSetConfiguration()
 {
 	SBCCapabilities caps;
@@ -939,10 +1063,8 @@ A2DPSource::_SendSetConfiguration()
 	sbc::Config config;
 	if (ParseCapabilities(fSinkCapabilities, fSinkCapabilitiesLength, &caps,
 			&badCategory) != 0
-		|| !ChooseConfiguration(caps, fRate, &config)) {
-		_EndSession(false, "the headset offers no SBC setting R5 can use");
-		return;
-	}
+		|| !ChooseConfiguration(caps, fRate, &config))
+		return false;
 	if (fRetriedBitpool && config.bitpool > 53) {
 		// A headset that refused its own maximum: the A2DP high quality
 		// setting (table 4.7) instead.
@@ -957,12 +1079,13 @@ A2DPSource::_SendSetConfiguration()
 		config, delay);
 	if (length == 0) {
 		_EndSession(false, "internal");
-		return;
+		return true;
 	}
 	fConfig = config;
 	fDelayReporting = delay;
 	if (_SendCommand(kSetConfiguration, payload, 2 + length) == B_OK)
 		fState = kConfiguring;
+	return true;
 }
 
 
@@ -978,22 +1101,20 @@ A2DPSource::_HandleResponse(uint8 messageType, uint8 signal,
 			EndpointInfo endpoints[16];
 			int count = accepted
 				? ParseDiscover(payload, size, endpoints, 16) : -1;
-			fRemoteSEID = 0;
-			for (int i = 0; i < count; i++) {
+			// A headset often lists AAC, aptX or LDAC first and SBC on a
+			// later endpoint: each free audio sink is asked in turn.
+			fCandidateCount = 0;
+			fCandidateIndex = 0;
+			for (int i = 0; i < count && fCandidateCount < 16; i++) {
 				if (endpoints[i].sink && !endpoints[i].inUse
-					&& endpoints[i].mediaType == kMediaTypeAudio) {
-					fRemoteSEID = endpoints[i].seid;
-					break;
-				}
+					&& endpoints[i].mediaType == kMediaTypeAudio)
+					fCandidates[fCandidateCount++] = endpoints[i].seid;
 			}
-			if (fRemoteSEID == 0) {
+			if (fCandidateCount == 0) {
 				_EndSession(false, "no free audio sink on the headset");
 				return;
 			}
-			uint8 seid = (uint8)(fRemoteSEID << 2);
-			fTriedAllCapabilities = true;
-			if (_SendCommand(kGetAllCapabilities, &seid, 1) == B_OK)
-				fState = kGettingCapabilities;
+			_AskCapabilities();
 			return;
 		}
 
@@ -1006,6 +1127,10 @@ A2DPSource::_HandleResponse(uint8 messageType, uint8 signal,
 					_SendCommand(kGetCapabilities, &seid, 1);
 					return;
 				}
+				if (++fCandidateIndex < fCandidateCount) {
+					_AskCapabilities();
+					return;
+				}
 				_EndSession(false, "the headset refused its capabilities");
 				return;
 			}
@@ -1013,14 +1138,23 @@ A2DPSource::_HandleResponse(uint8 messageType, uint8 signal,
 				size = sizeof(fSinkCapabilities);
 			memcpy(fSinkCapabilities, payload, size);
 			fSinkCapabilitiesLength = size;
-			_SendSetConfiguration();
+			if (!_SendSetConfiguration()) {
+				if (++fCandidateIndex < fCandidateCount) {
+					_AskCapabilities();
+					return;
+				}
+				_EndSession(false,
+					"the headset offers no SBC setting R5 can use");
+			}
 			return;
 
 		case kSetConfiguration:
 			if (!accepted) {
 				if (!fRetriedBitpool && fConfig.bitpool > 53) {
 					fRetriedBitpool = true;
-					_SendSetConfiguration();
+					if (!_SendSetConfiguration())
+						_EndSession(false, "the headset refused the SBC "
+							"setting");
 					return;
 				}
 				_EndSession(false, "the headset refused the SBC setting");
@@ -1169,9 +1303,21 @@ A2DPSource::_EndSession(bool clean, const char* reason)
 		fSignal = -1;
 	}
 
+	// The session is over before fLock is let go below, so a listen thread
+	// that takes it meanwhile sees no session.
+	if (!clean && reason != NULL)
+		syslog(LOG_NOTICE, "bluetooth_audio: stream ended: %s", reason);
+	fState = kIdle;
+	fHasRemote = false;
+	fPendingCommand = 0;
+	fAbsoluteVolume = false;
+
+	// The AVRCP thread reads with a timeout and sees fControlStop within
+	// kPollInterval: shutdown() alone does not wake an L2CAP recv().
 	fControlLock.Lock();
 	int control = fControl;
 	thread_id controlThread = fControlThread;
+	fControlStop = true;
 	if (control >= 0)
 		shutdown(control, SHUT_RDWR);
 	fControlLock.Unlock();
@@ -1180,14 +1326,12 @@ A2DPSource::_EndSession(bool clean, const char* reason)
 		fLock.Unlock();
 		wait_for_thread(controlThread, &result);
 		fLock.Lock();
+		fControlLock.Lock();
+		if (fControlThread == controlThread)
+			fControlThread = -1;
+		fControlDone = false;
+		fControlLock.Unlock();
 	}
-
-	if (!clean && reason != NULL)
-		syslog(LOG_NOTICE, "bluetooth_audio: stream ended: %s", reason);
-	fState = kIdle;
-	fHasRemote = false;
-	fPendingCommand = 0;
-	fAbsoluteVolume = false;
 }
 
 
@@ -1250,11 +1394,14 @@ A2DPSource::_Stream()
 		// delay included, so that is what normally waits here.
 		size_t ringTarget = (size_t)((int64)rate
 			* (kRingLatency + fRemoteDelay.load()) / 1000000);
+		// A little too much (clock drift, about 50 ppm): one sample less
+		// per packet, which is not heard. Far too much (the thread did not
+		// run): back to the target at once.
 		size_t fill = _RingFill();
-		if (fill > ringTarget * 3) {
-			size_t skip = fill - ringTarget;
-			fRingRead.fetch_add(skip, std::memory_order_acq_rel);
-		}
+		if (fill > ringTarget * 6)
+			fRingRead.fetch_add(fill - ringTarget, std::memory_order_acq_rel);
+		else if (fill > ringTarget * 2)
+			fRingRead.fetch_add(1, std::memory_order_acq_rel);
 
 		float gain = fSoftwareGain;
 		size_t length = kMediaHeaderLength;
@@ -1282,6 +1429,19 @@ A2DPSource::_Stream()
 
 		if (send(transport, packet, length, 0) < 0) {
 			int error = errno;
+			// The headset asked for a smaller L2CAP MTU than 672 (the
+			// socket does not say): this packet is lost, the next ones
+			// carry fewer frames.
+			if (error == EMSGSIZE && framesPerPacket > 1) {
+				// The lost audio still counts, so timing and RTP stay right.
+				sequence++;
+				timestamp += (uint32)(framesPerPacket * frameSamples);
+				sent += framesPerPacket * frameSamples;
+				framesPerPacket--;
+				syslog(LOG_INFO, "bluetooth_audio: %d frames per packet "
+					"(the headset's MTU is smaller)", framesPerPacket);
+				continue;
+			}
 			// A full queue drops this packet; anything else ends the
 			// stream, and the signalling thread notices the loss.
 			if (error != ENOBUFS && error != EAGAIN && error != B_NO_MEMORY) {
@@ -1332,20 +1492,28 @@ A2DPSource::_Control()
 	fControlLock.Unlock();
 	_SendControl(message, length);
 
+	set_receive_timeout(fd, kPollInterval);
 	uint8 buffer[512];
-	while (!fQuitting) {
+	while (!fQuitting && !fControlStop) {
 		ssize_t received = recv(fd, buffer, sizeof(buffer), 0);
-		if (received <= 0)
+		if (received > 0) {
+			_HandleControl(buffer, received);
+			continue;
+		}
+		if (received == 0 || !is_timeout(errno))
 			break;
-		_HandleControl(buffer, received);
 	}
 
+	// Who started this thread waits for it: _EndSession(), or the manager
+	// when fControlDone says it ended by itself.
 	fControlLock.Lock();
 	close(fd);
 	fControl = -1;
-	fControlThread = -1;
 	fAbsoluteVolume = false;
+	fControlDone = true;
 	fControlLock.Unlock();
+	if (fWake >= 0)
+		release_sem(fWake);
 }
 
 
@@ -1356,7 +1524,7 @@ A2DPSource::_SendControl(const uint8* data, size_t size)
 		return;
 	BAutolock locker(fControlLock);
 	if (fControl >= 0)
-		send(fControl, data, size, 0);
+		send(fControl, data, size, MSG_DONTWAIT);
 }
 
 
@@ -1508,20 +1676,35 @@ A2DPSource::_HandleControl(const uint8* data, size_t size)
 		case kOpcodeVendorDependent:
 		{
 			VendorPDU pdu;
-			if (ParseVendor(frame, &pdu) && pdu.pdu == kPDUGetCapabilities
-				&& pdu.length >= 1
-				&& pdu.parameters[0] == kCapabilityCompanyID) {
-				uint8 parameters[5] = { kCapabilityCompanyID, 1,
-					(uint8)(kBluetoothSIGCompanyID >> 16),
-					(uint8)(kBluetoothSIGCompanyID >> 8),
-					(uint8)kBluetoothSIGCompanyID };
-				length = BuildVendor(reply, sizeof(reply), header.label, true,
-					kResponseStable, kPDUGetCapabilities, parameters, 5);
+			bool parsed = ParseVendor(frame, &pdu);
+			if (parsed && pdu.pdu == kPDUGetCapabilities && pdu.length >= 1) {
+				// AVRCP 1.6, 6.4.1: Company ID and Events are mandatory;
+				// R5 sends no notifications, so the event list is empty.
+				// Another capability ID is an invalid parameter.
+				if (pdu.parameters[0] == kCapabilityCompanyID) {
+					uint8 parameters[5] = { kCapabilityCompanyID, 1,
+						(uint8)(kBluetoothSIGCompanyID >> 16),
+						(uint8)(kBluetoothSIGCompanyID >> 8),
+						(uint8)kBluetoothSIGCompanyID };
+					length = BuildVendor(reply, sizeof(reply), header.label,
+						true, kResponseStable, kPDUGetCapabilities,
+						parameters, 5);
+				} else if (pdu.parameters[0] == kCapabilityEvents) {
+					uint8 parameters[2] = { kCapabilityEvents, 0 };
+					length = BuildVendor(reply, sizeof(reply), header.label,
+						true, kResponseStable, kPDUGetCapabilities,
+						parameters, 2);
+				} else {
+					uint8 error = kAVRCPErrorInvalidParameter;
+					length = BuildVendor(reply, sizeof(reply), header.label,
+						true, kResponseRejected, kPDUGetCapabilities, &error,
+						1);
+				}
 				break;
 			}
 			// R5 is no media player: no metadata, no notifications. A
 			// rejected command carries its PDU and an error (6.15.1).
-			uint8 error = 0x00;	// invalid command
+			uint8 error = kAVRCPErrorInvalidCommand;
 			length = BuildVendor(reply, sizeof(reply), header.label, true,
 				kResponseRejected, frame.operandLength >= 4
 					? frame.operands[3] : 0, &error, 1);

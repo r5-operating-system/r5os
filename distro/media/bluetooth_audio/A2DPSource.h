@@ -85,6 +85,9 @@ private:
 
 			bool				_Allowed(const bdaddr_t& address);
 			bool				_ChosenDevice(bdaddr_t* device);
+			bool				_LinkState(const bdaddr_t& address,
+									bool* paired, bool* connected,
+									bool* encrypted);
 			int					_Connect(const bdaddr_t& address, uint16 psm);
 
 			// Manager thread, fLock held.
@@ -99,7 +102,8 @@ private:
 			void				_SendReply(uint8 label, uint8 messageType,
 									uint8 signal, const uint8* payload,
 									size_t size);
-			void				_SendSetConfiguration();
+			bool				_SendSetConfiguration();
+			void				_AskCapabilities();
 			void				_StartStreaming();
 			void				_StopStreaming();
 			void				_CloseTransport();
@@ -127,6 +131,8 @@ private:
 			thread_id			fManagerThread;
 			thread_id			fStreamThread;
 			thread_id			fControlThread;
+			std::atomic<bool>	fControlStop;	// _EndSession() ends it
+			std::atomic<bool>	fControlDone;	// it ended by itself
 			sem_id				fWake;
 
 			// The session, under fLock.
@@ -142,6 +148,11 @@ private:
 			State				fState;
 			bool				fInitiator;
 			uint8				fRemoteSEID;
+			// The free audio sinks of the headset's Discover answer, in
+			// order; R5 asks each for SBC until one has it.
+			uint8				fCandidates[16];
+			int					fCandidateCount;
+			int					fCandidateIndex;
 			uint8				fLabel;
 			uint8				fPendingLabel;
 			uint8				fPendingCommand;

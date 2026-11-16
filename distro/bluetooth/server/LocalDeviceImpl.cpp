@@ -1921,8 +1921,12 @@ LocalDeviceImpl::CreateConnection(BMessage* message)
 		TRACE_BT("LocalDeviceImpl: Create Connection without an address\n");
 		return;
 	}
-	// A device the LE scan found pairs over LE (step 6).
-	if (fLE != NULL && fLE->Pair(*bdaddr, message->ReturnAddress()))
+	// A device the LE scan found pairs over LE (step 6). A reconnect of a
+	// paired Classic headset (bluetooth_audio, step 5) never does: a
+	// dual-mode headset is in the LE scan too.
+	bool reconnect = message->GetBool("r5:reconnect", false);
+	if (!reconnect && fLE != NULL
+		&& fLE->Pair(*bdaddr, message->ReturnAddress()))
 		return;
 	bool added = false;
 	// SPDX-SnippetEnd
@@ -1963,7 +1967,9 @@ LocalDeviceImpl::CreateConnection(BMessage* message)
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
-	rdConn->user_pairing = true;
+	// A reconnect is no pairing: no pairing window or notification, and a
+	// device that asks to pair again is refused as one started elsewhere.
+	rdConn->user_pairing = !reconnect;
 	rdConn->pair_reply = message->ReturnAddress();
 	// SPDX-SnippetEnd
 

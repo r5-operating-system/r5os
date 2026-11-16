@@ -227,7 +227,7 @@ BluetoothAudioNode::GetLatencyFor(const media_destination& forWhom,
 {
 	if (forWhom != fInput.destination)
 		return B_MEDIA_BAD_DESTINATION;
-	*latency = EventLatency() + fLatency;
+	*latency = EventLatency() + fLatency.load();
 	*timeSource = TimeSource()->ID();
 	return B_OK;
 }
@@ -274,12 +274,11 @@ void
 BluetoothAudioNode::_UpdateLatency()
 {
 	bigtime_t latency = fSource != NULL ? fSource->BufferLatency() : 0;
-	if (latency == fLatency)
+	if (fLatency.exchange(latency) == latency)
 		return;
-	fLatency = latency;
 	if (fConnected) {
 		SendLatencyChange(fInput.source, fInput.destination,
-			EventLatency() + fLatency);
+			EventLatency() + latency);
 	}
 }
 
@@ -295,9 +294,9 @@ BluetoothAudioNode::GetParameterValue(int32 id, bigtime_t* lastChange,
 		return B_BAD_VALUE;
 	if (*size < sizeof(float))
 		return B_NO_MEMORY;
-	*(float*)value = fVolume;
+	*(float*)value = fVolume.load();
 	*size = sizeof(float);
-	*lastChange = fVolumeChanged;
+	*lastChange = fVolumeChanged.load();
 	return B_OK;
 }
 
@@ -317,8 +316,8 @@ BluetoothAudioNode::SetParameterValue(int32 id, bigtime_t when,
 	fVolumeChanged = when;
 	if (fSource != NULL)
 		fSource->SetVolume(volume / 100.0f);
-	BroadcastNewParameterValue(when, kVolumeParameter, &fVolume,
-		sizeof(fVolume));
+	BroadcastNewParameterValue(when, kVolumeParameter, &volume,
+		sizeof(volume));
 }
 
 
@@ -328,10 +327,12 @@ BluetoothAudioNode::SetParameterValue(int32 id, bigtime_t when,
 void
 BluetoothAudioNode::RemoteVolumeChanged(float gain)
 {
-	fVolume = gain * 100.0f;
-	fVolumeChanged = TimeSource()->Now();
-	BroadcastNewParameterValue(fVolumeChanged, kVolumeParameter, &fVolume,
-		sizeof(fVolume));
+	float volume = gain * 100.0f;
+	bigtime_t when = TimeSource()->Now();
+	fVolume = volume;
+	fVolumeChanged = when;
+	BroadcastNewParameterValue(when, kVolumeParameter, &volume,
+		sizeof(volume));
 }
 
 

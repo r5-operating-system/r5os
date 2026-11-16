@@ -869,6 +869,11 @@ LEManager::_SetScan(bool enable)
 {
 	if (enable && (!fReady || !fRadioEnabled))
 		return;
+	// While audio streams, a scan would take the radio's time from it; the
+	// scan comes back with AudioChanged(false). AudioStreaming() also ends
+	// when the audio team is gone without saying so.
+	if (enable && ((BluetoothServer*)be_app)->AudioStreaming())
+		return;
 	if (enable == fScanOn)
 		return;
 	fScanOn = enable;
@@ -975,6 +980,17 @@ LEManager::Pair(const bdaddr_t& address, const BMessenger& reply)
 	else
 		_Connect();
 	return true;
+}
+
+
+void
+LEManager::AudioChanged(bool streaming)
+{
+	BAutolock _(fLock);
+	if (streaming)
+		_SetScan(false);
+	else if (fScanning)
+		_SetScan(true);
 }
 
 
