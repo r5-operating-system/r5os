@@ -124,6 +124,9 @@ private:
 							uint16 opcode);
 	void				_WriteSimplePairingMode();
 	void				_WriteEventMask();
+	// Answers a petition with this status and drops it (logged).
+	void				_RefuseRequest(BMessage* request, uint16 opcode,
+							uint8 status);
 
 	// Passkey Entry (Secure Simple Pairing): one pairing at a time.
 	BMessenger			fPasskeyWindow;

@@ -195,9 +195,18 @@ read_wmt(bt_usb_dev* bdev, uint8 expectedOp, uint8* outFlag)
 		}
 
 		if (buffer[3] != expectedOp) {
-			ERROR("%s: answer is for WMT %#x, we asked %#x\n", __func__,
-				buffer[3], expectedOp);
-			return B_IO_ERROR;
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			// A late answer to an earlier command (on the 5625U a patch
+			// answer, WMT 0x1, came while Bluetooth on, 0x6, was asked, and
+			// the radio was lost for that boot). Drop it and keep reading
+			// until the deadline.
+			ERROR("%s: dropped an answer for WMT %#x, we asked %#x\n",
+				__func__, buffer[3], expectedOp);
+			snooze(WMT_POLL_GAP);
+			continue;
+			// SPDX-SnippetEnd
 		}
 
 		*outFlag = buffer[6];

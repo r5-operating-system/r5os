@@ -308,6 +308,17 @@ LoginApp::TryLogin(BMessage* message)
 					_LaunchSessionApp("/system/bin/desklink",
 						"--add-volume");
 					_LaunchSessionApp("/system/servers/airplay_deskbar");
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+					// The Bluetooth item (regular image only). Its launch job
+					// under target desktop never ran: Sign in does not start
+					// that target (5625U, 16 Nov 2026).
+					if (access("/system/servers/bluetooth_deskbar", X_OK) == 0) {
+						_LaunchSessionApp(
+							"/system/servers/bluetooth_deskbar");
+					}
+// SPDX-SnippetEnd
 					_LaunchSessionApp("/system/servers/r5_vbox_clip");
 					_StartVirtualBoxGuest();
 					_LaunchSessionHooks();

@@ -801,10 +801,10 @@ BluetoothServer::_SetRadioEnabled(bool enabled)
 		return status;
 	}
 
-	if (!enabled) {
-		for (int32 i = 0; i < fLocalDevicesList.CountItems(); i++)
-			fLocalDevicesList.ItemAt(i)->WriteScanEnable(0);
-	}
+	// Off: nothing can find or page the radio. On: paired devices can page
+	// it again (0x02), it is still not visible to a scan (step 4).
+	for (int32 i = 0; i < fLocalDevicesList.CountItems(); i++)
+		fLocalDevicesList.ItemAt(i)->WriteScanEnable(enabled ? 0x02 : 0x00);
 
 	syslog(LOG_INFO, "bluetooth_server: radio switch %s",
 		enabled ? "on" : "off");
@@ -821,8 +821,14 @@ BluetoothServer::DiscoverServices(ServerRemoteDevice* rd)
 	sdpClient.Start();
 	if (sdpClient.RequestServiceRecords() == B_OK)
 		TRACE_BT("SDP: Service records loaded successfully\n");
-	else
+	else {
 		TRACE_BT("SDP: Error service records could not be loaded\n");
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		syslog(LOG_NOTICE, "bluetooth_server: service records not read");
+		// SPDX-SnippetEnd
+	}
 
 	// rd->services.PrintToStream();
 }
