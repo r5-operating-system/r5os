@@ -45,5 +45,19 @@
 #define BT_REQ_CONN_DETAILS             'rdCD'
 // SPDX-SnippetEnd
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// The radio switch of libr5bt.so (docs/BLUETOOTH.md, step 3a). HCI has no
+// power off, so "off" means: inquiry scan and page scan are written off on
+// every radio, and the server refuses scans and connections, outgoing and
+// incoming, until the switch is on again. The choice is kept in
+// bluetooth_server's settings file and survives a restart.
+// Reply: bool "enabled", and int32 "hci_id" once per radio.
+#define BT_MSG_R5_GET_RADIO             'r5rG'
+// bool "enabled". Reply: int32 "status".
+#define BT_MSG_R5_SET_RADIO             'r5rS'
+// SPDX-SnippetEnd
+
 
 #endif

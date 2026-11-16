@@ -1414,6 +1414,25 @@ LocalDeviceImpl::ConnectionRequest(struct hci_ev_conn_request* event,
 		event->link_type, bdaddrUtils::ToString(event->bdaddr).String());
 
 	// TODO: add a possible request in the queue
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// The radio switch is off (BT_MSG_R5_SET_RADIO): turn the request down.
+	if (!((BluetoothServer*)be_app)->RadioEnabled()) {
+		command = buildRejectConnectionRequest(event->bdaddr, &size);
+		if (command == NULL)
+			return;
+		// buildRejectConnectionRequest() leaves the reason unset.
+		struct hci_cp_reject_conn_req* param = (struct hci_cp_reject_conn_req*)
+			((uint8*)command + sizeof(struct hci_command_header));
+		param->reason = BT_REJECTED_LIMITED_RESOURCES;
+		if (fHCIDelegate->IssueCommand(command, size) == B_ERROR)
+			TRACE_BT("LocalDeviceImpl: Command issued error for rejecting\n");
+		free(command);
+		return;
+	}
+	// SPDX-SnippetEnd
+
 	if (true) { // Check Preferences if we are to accept this connection
 
 		ServerRemoteDevice* serverRd;
@@ -2171,3 +2190,20 @@ LocalDeviceImpl::ProcessSimpleRequest(BMessage* request)
 
 	return B_ERROR;
 }
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+status_t
+LocalDeviceImpl::WriteScanEnable(uint8 mode)
+{
+	size_t size;
+	void* command = buildWriteScan(mode, &size);
+	if (command == NULL)
+		return B_NO_MEMORY;
+
+	status_t status = fHCIDelegate->IssueCommand(command, size);
+	free(command);
+	return status == B_ERROR ? B_ERROR : B_OK;
+}
+// SPDX-SnippetEnd

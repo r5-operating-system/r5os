@@ -92,6 +92,9 @@ public:
 	// Additive: B_OK with "details" filled in, or an error (and state
 	// DISCONNECTED) for a device the server does not know.
 	status_t		GetConnectionDetails(bt_connection_details* details);
+	// Additive (step 3a): the signal strength in dBm from the inquiry that
+	// found the device, or HCI_RSSI_INVALID (127) when it was not reported.
+	int8			GetRSSI();
 	// SPDX-SnippetEnd
 	bool 			IsEncrypted(); /* Throwing */
 

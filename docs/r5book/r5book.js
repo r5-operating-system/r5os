@@ -61,6 +61,15 @@
 			["wifi-kit.html#roster", "BNetworkRoster", true],
 			["wifi-kit.html#settings", "Where people see it", true],
 		]},
+		{ title: "Bluetooth Kit", file: "bluetooth-kit.html", items: [
+			["bluetooth-kit.html", "Overview"],
+			["bluetooth-kit.html#view", "BluetoothView", true],
+			["bluetooth-kit.html#controller", "BluetoothController", true],
+			["bluetooth-kit.html#state", "BluetoothState", true],
+			["bluetooth-kit.html#switch", "The Bluetooth switch", true],
+			["bluetooth-kit.html#remote", "RemoteDevice", true],
+			["bluetooth-kit.html#settings", "Where people see it", true],
+		]},
 		{ title: "Vulkan", file: "vulkan.html", items: [
 			["vulkan.html", "Vulkan in a window"],
 			["vulkan.html#surface", "vkCreateViewSurfaceRFIVE", true],
@@ -138,6 +147,7 @@
 			<a href="appearance-kit.html" class="${page === "appearance" ? "active" : ""}">Appearance Kit</a>
 			<a href="midi2-kit.html" class="${page === "midi2" ? "active" : ""}">MIDI 2 Kit</a>
 			<a href="wifi-kit.html" class="${page === "wifi" ? "active" : ""}">Wi-Fi Kit</a>
+			<a href="bluetooth-kit.html" class="${page === "bluetooth" ? "active" : ""}">Bluetooth Kit</a>
 			<a href="vulkan.html" class="${page === "vulkan" ? "active" : ""}">Vulkan</a>
 			<a href="guidelines.html" class="${page === "guidelines" ? "active" : ""}">Guidelines</a>
 			<a href="https://github.com/r5-operating-system/r5os" class="nav-pill">GitHub</a>
