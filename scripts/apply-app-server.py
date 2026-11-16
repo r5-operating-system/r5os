@@ -34,6 +34,7 @@ def main() -> int:
             "WindowBuffer.h", "WindowHWInterface.cpp", "WindowHWInterface.h"):
         copy(name, local / name)
     copy("compositor/compositor_shaders.h", local / "compositor_shaders.h")
+    copy("compositor/compose_period.h", local / "compose_period.h")
     # blend_line32() keeps the destination's alpha (Haiku left it unset).
     copy("drawing/drawing_support.h",
         HAIKU / "src" / "servers" / "app" / "drawing" / "drawing_support.h")

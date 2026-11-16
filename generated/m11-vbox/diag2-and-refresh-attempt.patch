@@ -1,0 +1,257 @@
+diff --git a/distro/app_server/AccelerantHWInterface.cpp b/distro/app_server/AccelerantHWInterface.cpp
+index cf9571e472..3af674633a 100644
+--- a/distro/app_server/AccelerantHWInterface.cpp
++++ b/distro/app_server/AccelerantHWInterface.cpp
+@@ -571,8 +571,13 @@ AccelerantHWInterface::SetMode(const display_mode& mode)
+ 	// Review after M11: published and cleared with release and acquire
+ 	// (SetModeGuard), so this thread sees the whole locker.
+ 	BLocker* guard = __atomic_load_n(&fModeGuard, __ATOMIC_ACQUIRE);
++	bigtime_t diagStart = system_time();
++	syslog(LOG_INFO, "app_server: DIAG SetMode request %ux%u\n",
++		(unsigned)mode.virtual_width, (unsigned)mode.virtual_height);
+ 	if (guard != NULL)
+ 		guard->Lock();
++	syslog(LOG_INFO, "app_server: DIAG SetMode guard after %d ms\n",
++		(int)((system_time() - diagStart) / 1000));
+ 	struct GuardUnlock {
+ 		BLocker* guard;
+ 		~GuardUnlock()
+@@ -644,6 +649,8 @@ AccelerantHWInterface::SetMode(const display_mode& mode)
+ 		}
+ 	}
+ 
++	syslog(LOG_INFO, "app_server: DIAG SetMode driver done after %d ms\n",
++		(int)((system_time() - diagStart) / 1000));
+ 	fDisplayMode = newMode;
+ 	fInitialModeSwitch = false;
+ 
+diff --git a/distro/app_server/Compositor.cpp b/distro/app_server/Compositor.cpp
+index 086b436279..f661de7536 100644
+--- a/distro/app_server/Compositor.cpp
++++ b/distro/app_server/Compositor.cpp
+@@ -66,6 +66,13 @@ static const bigtime_t kFenceLimit = 15000000;
+ static const uint64 kFenceGraceNs = 5000000000ULL;
+ static const uint64 kFenceStepNs = 100000000ULL;
+ static const bigtime_t kReportInterval = 10000000;
++// After a mode change the whole picture goes to the screen again at these
++// times (_ModeRefresh). VirtualBox (vboxvideo, Lavapipe) kept showing the
++// old mode's pixels with the new line length when the only full copy
++// came right after SetMode; a later full copy shows the right picture.
++static const bigtime_t kModeRefresh[] = { 250000, 1000000, 3000000 };
++static const int32 kModeRefreshCount
++	= sizeof(kModeRefresh) / sizeof(kModeRefresh[0]);
+ 
+ 
+ static void
+@@ -728,6 +735,8 @@ Compositor::Compositor(Desktop* desktop, HWInterface* screen)
+ 	fTeamCpuAtReport(0),
+ 	fZeroCopyOff(0),
+ 	fLateLogged(0),
++	fModeChangedAt(0),
++	fModeRefreshStep(0),
+ 	fEffects(kWindowEffectShadow | kWindowEffectFrostedGlass
+ 		| kWindowEffectAnimations),
+ 	fStrength(kWindowEffectsBalanced),
+@@ -2099,6 +2108,15 @@ Compositor::_ComposeLoop()
+ 			if (wait == B_INFINITE_TIMEOUT || slice < wait)
+ 				wait = slice;
+ 		}
++		// the next repeat of the whole picture after a mode change
++		if (fModeChangedAt > 0) {
++			bigtime_t due = fModeChangedAt + kModeRefresh[fModeRefreshStep]
++				- system_time();
++			if (due < 1000)
++				due = 1000;
++			if (wait == B_INFINITE_TIMEOUT || due < wait)
++				wait = due;
++		}
+ 		status_t status = acquire_sem_etc(fWakeSem, 1, B_RELATIVE_TIMEOUT,
+ 			wait);
+ 		if (status != B_OK && status != B_TIMED_OUT)
+@@ -2132,6 +2150,9 @@ Compositor::_ComposeLoop()
+ 			_ShareRetire();
+ 			continue;
+ 		}
++		if (fModeChangedAt > 0 && system_time()
++				>= fModeChangedAt + kModeRefresh[fModeRefreshStep])
++			_ModeRefresh();
+ 		bool animating = _AnimationDamage(system_time());
+ 		if (status == B_TIMED_OUT && !animating)
+ 			continue;
+@@ -2184,6 +2205,10 @@ Compositor::_ComposeLoop()
+ 				fFailure = "window memory";
+ 				continue;
+ 			}
++			log_line("frame follows the screen %" B_PRIu32 "x%" B_PRIu32,
++				fFrameWidth, fFrameHeight);
++			fModeChangedAt = system_time();
++			fModeRefreshStep = 0;
+ 			damage.Set(BRect(0, 0, (float)fFrameWidth - 1,
+ 				(float)fFrameHeight - 1));
+ 		}
+@@ -2640,6 +2665,73 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
+ }
+ 
+ 
++/*!	The compose thread, after a mode change: the whole last frame goes to
++	the screen again, so a display that missed the first full copy after
++	SetMode gets one more (VirtualBox vboxvideo showed the old mode's
++	pixels with the new line length). Only the CPU copy: on the scanout
++	way the GPU writes the screen itself. With gpu_debug, the last repeat
++	compares the screen with the frame.
++*/
++void
++Compositor::_ModeRefresh()
++{
++	BAutolock slot(fComposeSlot);
++	int32 step = fModeRefreshStep;
++	if (++fModeRefreshStep >= kModeRefreshCount) {
++		fModeChangedAt = 0;
++		fModeRefreshStep = 0;
++	}
++	RenderingBuffer* back = fScreen->BackBuffer();
++	if (fPaused || fVulkan->scanActive || back == NULL
++		|| back->Width() != fFrameWidth || back->Height() != fFrameHeight)
++		return;
++	BRegion screen(BRect(0, 0, (float)fFrameWidth - 1,
++		(float)fFrameHeight - 1));
++	_Present(screen);
++	if (!fDebug || step != kModeRefreshCount - 1)
++		return;
++
++	// gpu_debug: the screen against the frame, colour channels only,
++	// without the software cursor, which is drawn on the screen only
++	if (!fScreen->LockExclusiveAccess())
++		return;
++	RenderingBuffer* front = fScreen->FrontBuffer();
++	clipping_rect cursor = { -1, -1, -2, -2 };
++	static_cast<AccelerantHWInterface*>(fScreen)->SoftwareCursorFrame(&cursor);
++	int32 badX = -1;
++	int32 badY = -1;
++	bool checked = front != NULL && front->Width() == fFrameWidth
++		&& front->Height() == fFrameHeight
++		&& (front->ColorSpace() == B_RGB32 || front->ColorSpace() == B_RGBA32);
++	for (uint32 y = 0; checked && badY < 0 && y < fFrameHeight; y++) {
++		const uint32* screenRow = (const uint32*)((const uint8*)front->Bits()
++			+ (size_t)y * front->BytesPerRow());
++		const uint32* frameRow = fVulkan->frameBits + (size_t)y * fFrameWidth;
++		for (uint32 x = 0; x < fFrameWidth; x++) {
++			if ((int32)x >= cursor.left && (int32)x <= cursor.right
++				&& (int32)y >= cursor.top && (int32)y <= cursor.bottom)
++				continue;
++			if (((screenRow[x] ^ frameRow[x]) & 0x00ffffff) != 0) {
++				badX = x;
++				badY = y;
++				break;
++			}
++		}
++	}
++	fScreen->UnlockExclusiveAccess();
++	if (!checked) {
++		log_line("mode refresh compare skipped");
++	} else if (badY >= 0) {
++		log_line("mode refresh compare MISMATCH %" B_PRIu32 "x%" B_PRIu32
++			" at %" B_PRId32 ",%" B_PRId32, fFrameWidth, fFrameHeight, badX,
++			badY);
++	} else {
++		log_line("mode refresh compare ok %" B_PRIu32 "x%" B_PRIu32,
++			fFrameWidth, fFrameHeight);
++	}
++}
++
++
+ /*!	Copies the composed damage into the screen's back buffer and lets the
+ 	screen interface put it on the front: the row copy, or the M8 DMA_DATA
+ 	copy when gpu_app_server is on. The cursor is drawn there, as before.
+diff --git a/distro/app_server/Compositor.h b/distro/app_server/Compositor.h
+index 4e76666724..3a9946f72a 100644
+--- a/distro/app_server/Compositor.h
++++ b/distro/app_server/Compositor.h
+@@ -213,6 +213,7 @@ private:
+ 			void				_Report();
+ 			void				_ReadZeroCopySwitch();
+ 			void				_UpdatePeriod();
++			void				_ModeRefresh();
+ 
+ private:
+ 			Desktop*			fDesktop;
+@@ -275,6 +276,10 @@ private:
+ 			// written at start and by _Report.
+ 			int32				fZeroCopyOff;
+ 			bigtime_t			fLateLogged;
++			// After a mode change: when it was, and which repeat of the
++			// whole picture comes next (_ModeRefresh). Compose thread only.
++			bigtime_t			fModeChangedAt;
++			int32				fModeRefreshStep;
+ 
+ 			// M11 step 4: written with all windows locked, read by the
+ 			// compose thread once per frame.
+diff --git a/distro/desktop/src/servers/app/Desktop.cpp b/distro/desktop/src/servers/app/Desktop.cpp
+index b19e6697fa..60027dfcbf 100644
+--- a/distro/desktop/src/servers/app/Desktop.cpp
++++ b/distro/desktop/src/servers/app/Desktop.cpp
+@@ -878,7 +878,12 @@ status_t
+ Desktop::SetScreenMode(int32 workspace, int32 id, const display_mode& mode,
+ 	bool makeDefault)
+ {
++	bigtime_t diagStart = system_time();
++	syslog(LOG_INFO, "app_server: DIAG SetScreenMode %ux%u\n",
++		(unsigned)mode.virtual_width, (unsigned)mode.virtual_height);
+ 	AutoWriteLocker _(fWindowLock);
++	syslog(LOG_INFO, "app_server: DIAG SetScreenMode window lock after %d ms\n",
++		(int)((system_time() - diagStart) / 1000));
+ 
+ 	if (workspace == B_CURRENT_WORKSPACE_INDEX)
+ 		workspace = fCurrentWorkspace;
+diff --git a/distro/graphics/boot/check b/distro/graphics/boot/check
+index 11ac755116..4a51744a85 100755
+--- a/distro/graphics/boot/check
++++ b/distro/graphics/boot/check
+@@ -535,6 +535,39 @@ m11_share() {
+ 	fi
+ }
+ 
++# A mode change on Lavapipe: another mode and back. VirtualBox showed the
++# old mode's pixels after one; the compositor now repeats the whole picture
++# after a mode change, and gpu_debug compares the screen with the frame.
++m11_mode() {
++	: > "$keep/mode.txt"
++	: > "$keep/mode-syslog.txt"
++	if [ "$live" -eq 1 ]; then
++		from=$(syslog_count)
++		was=$(screenmode -s 2>/dev/null | head -n 1)
++		set -- $was
++		if [ "${1:-0}" = 1024 ]; then
++			other="800 600 32"
++		else
++			other="1024 768 32"
++		fi
++		echo "was: $was; other: $other" >> "$keep/mode.txt"
++		screenmode -q $other >> "$keep/mode.txt" 2>&1
++		echo "exit $?" >> "$keep/mode.txt"
++		sleep 6
++		if [ -n "$was" ]; then
++			screenmode -q $was >> "$keep/mode.txt" 2>&1
++			echo "exit $?" >> "$keep/mode.txt"
++		fi
++		sleep 6
++		syslog_since "$from" > "$keep/mode-syslog.txt"
++	fi
++	atleast 2 'app_server: frame follows the screen [0-9]+x[0-9]+' \
++		"$keep/mode-syslog.txt" "frame follows the screen x2 (mode change)"
++	atleast 2 'app_server: mode refresh compare ok' "$keep/mode-syslog.txt" \
++		"mode refresh compare ok x2"
++	none 'mode refresh compare MISMATCH' "$slog" "never mode refresh compare MISMATCH"
++}
++
+ # Zero-copy, then the copy path in the same boot. app_server reads the
+ # switch at every 10 s report, so check waits for its line each time.
+ m11_fps() {
+@@ -649,6 +682,7 @@ m11_boot() {
+ 			"zero-copy off: lavapipe"
+ 		teapot_run teapot-lavapipe
+ 		teapot_report teapot-lavapipe lavapipe
++		m11_mode
+ 		;;
+ 	4)
+ 		have 'app_server: gpu compositor on radv' "$slog" "gpu compositor on radv"
