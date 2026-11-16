@@ -552,6 +552,22 @@ CopyDirectoryToPackage documentation
 	: [ FDirName $(HAIKU_TOP) docs apps diskusage ]
 	: diskusage ;
 
+# SPDX-SnippetBegin
+# SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+# R5: the R5Book from docs/r5book, and Haiku's welcome_en.html with a link
+# to it. The haiku package is a system package, so its welcome_en.html takes
+# precedence over the one in haiku_welcome; the rest of that package stays.
+# scripts/apply-welcome.py copies both to data/r5 on every apply, so an
+# R5Book change is in the next build.
+CopyDirectoryToPackage documentation
+	: [ FDirName $(HAIKU_TOP) data r5 welcome ]
+	: welcome ;
+CopyDirectoryToPackage documentation
+	: [ FDirName $(HAIKU_TOP) data r5 r5book ]
+	: r5book ;
+# SPDX-SnippetEnd
+
 
 # empty directory
 AddDirectoryToPackage data empty ;
