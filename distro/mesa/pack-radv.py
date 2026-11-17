@@ -63,7 +63,7 @@ def main() -> None:
     bindir.mkdir(exist_ok=True)
     for name in ("boot2.sh", "check.sh", "m8-run", "m8-boot2", "m8-show",
                  "boot-next", "check", "check-user", "m11-vulkan", "m11-scroll",
-                 "m12-measure", "m12-scenario"):
+                 "m12-measure", "m12-scenario", "m13-measure"):
         text = (boot / name).read_text(encoding="utf-8").replace("\r\n", "\n")
         (bindir / name).write_text(text, encoding="utf-8", newline="\n")
         (bindir / name).chmod(0o755)

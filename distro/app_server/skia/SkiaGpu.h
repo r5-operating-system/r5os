@@ -58,6 +58,8 @@ private:
 			int32				fWidth;
 			int32				fHeight;
 			void*				fTexture;
+			// the Skia device this image was made on (KeepImageMemory)
+			int32				fGeneration;
 };
 
 

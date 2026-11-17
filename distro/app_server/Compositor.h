@@ -154,12 +154,6 @@ private:
 			status_t			_InitVulkan(bool radv, const char** reason);
 			// M13 step 2: the sampler and the blank image
 			bool				_InitImages(const char** _reason);
-			// M13 step 2: a pass without a compose still waits for the
-			// runs' semaphores, so they can be signalled again
-			void				_ConsumeSkiaSignals();
-			// waited for in an empty batch, back to the pool after the next
-			// compose's fence
-			std::vector<uint64>	fConsumedSignals;
 			// M13 step 2, gpu_debug: the compose time per pass
 			enum {
 				kPassCopy = 0,
@@ -171,7 +165,7 @@ private:
 			};
 			static const int32	kPassStamps = 128;
 			void				_Stamp(int32 pass);
-			void				_RecordBufferCopy(const Layer* layer,
+			bool				_RecordBufferCopy(const Layer* layer,
 									const BRegion& region,
 									struct VkBuffer_T* frame,
 									uint32 frameStride);
@@ -179,7 +173,7 @@ private:
 			int32				fLavapipeMsaa = 0;
 			// gpu_compositor_cull false: no occlusion culling (test switch)
 			bool				fNoCull = false;
-			void				_RecordImageCopy(const Layer* layer,
+			bool				_RecordImageCopy(const Layer* layer,
 									const BRegion& region,
 									struct VkBuffer_T* frame,
 									uint32 frameStride);
