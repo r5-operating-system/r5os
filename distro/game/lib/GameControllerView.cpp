@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <GradientLinear.h>
 #include <InterfaceDefs.h>
 #include <LayoutUtils.h>
 #include <Shape.h>
@@ -269,7 +270,8 @@ control_bounds(const model_painter& m, int32 button, BRect& bounds)
 
 
 void
-fill_control(BView* view, const model_painter& m, const gc_control& control)
+fill_control(BView* view, const model_painter& m, const gc_control& control,
+	const BGradient& color)
 {
 	if (control.count < 3)
 		return;
@@ -277,7 +279,7 @@ fill_control(BView* view, const model_painter& m, const gc_control& control)
 	const int16* data = m.model->controlPoints + control.first * 2;
 	for (int32 k = 0; k < control.count; k++)
 		points[k] = m.Map(data[k * 2], data[k * 2 + 1]);
-	view->FillPolygon(&points[0], control.count);
+	view->FillPolygon(&points[0], control.count, color);
 }
 
 
@@ -708,8 +710,12 @@ BGameControllerView::Draw(BRect updateRect)
 		m.origin.y = roundf(bounds.top
 			+ (bounds.Height() - height * m.scale) / 2 + band * m.scale);
 
-		// What is pressed fills under the line.
-		SetHighColor(p.lit);
+		// What is pressed fills under the line. One-color gradients: app_server
+		// fills them with gray antialiasing, where a plain fill takes the
+		// subpixel setting of the fonts and gives thin lines colored edges.
+		BGradientLinear lit(BPoint(0, 0), BPoint(0, 1));
+		lit.AddColor(p.lit, 0);
+		lit.AddColor(p.lit, 255);
 		for (int32 i = 0; live && i < model->controlCount; i++) {
 			const gc_control& control = model->controls[i];
 			bool on;
@@ -722,7 +728,7 @@ BGameControllerView::Draw(BRect updateRect)
 			} else
 				on = DOWN(control.button);
 			if (on)
-				fill_control(this, m, control);
+				fill_control(this, m, control, lit);
 		}
 
 		// The line, in the text color; thicker when the picture is small.
@@ -734,7 +740,9 @@ BGameControllerView::Draw(BRect updateRect)
 		}
 		int32 rule = FillRule();
 		SetFillRule(B_EVEN_ODD);
-		SetHighColor(p.line);
+		BGradientLinear ink(BPoint(0, 0), BPoint(0, 1));
+		ink.AddColor(p.line, 0);
+		ink.AddColor(p.line, 255);
 		static const BPoint kBold[] = {
 			BPoint(0, 0), BPoint(0.45f, 0), BPoint(-0.45f, 0),
 			BPoint(0, 0.45f), BPoint(0, -0.45f)
@@ -743,7 +751,7 @@ BGameControllerView::Draw(BRect updateRect)
 		for (int32 pass = 0; pass < passes; pass++) {
 			MovePenTo(m.origin + kBold[pass]);
 			for (size_t i = 0; i < fPrivate->art.size(); i++)
-				FillShape(fPrivate->art[i]);
+				FillShape(fPrivate->art[i], ink);
 		}
 		MovePenTo(B_ORIGIN);
 		SetFillRule(rule);
