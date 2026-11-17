@@ -1,5 +1,20 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Bluetooth: a headset with an LE side pairs over Classic, and the Bluetooth window's list keeps its width
+
+Problem (stick 52, 5625U): the Sony WH-1000XM3 also advertises over LE as "LE_WH-1000XM3" (public address, Flags 0x2). That entry was paired over LE only (`le pairing started`, `smp sc pairing ok`, `gatt no hid service`): the page said Connected, but the headset kept blinking, and A2DP and HFP never came up because there was no Classic link. In the Bluetooth window opened from Deskbar, the device panel took the whole width and the My devices list was a strip.
+
+What changed:
+- `LEManager::Pair()`: a device whose LE advertisement has a public address and Flags without "BR/EDR Not Supported" (bit 2) is dual-mode and is paired over Classic (log: `le advert of a dual-mode device (flags <hex>): pairing over Classic`). An LE-only device sets that bit, so it still pairs over LE.
+- Such a device does not take its LE name; its Classic name is asked once the link is up (the Remote Name Request of #4346).
+- The My devices list has a minimum width of 200 (scaled), so the panel cannot squeeze it.
+
+Also seen on stick 52: the 8BitDo M30 over Bluetooth with its name, buttons and D-pad right (#4345, #4346), Settings closed without the debugger, and `link down (reason 0x13, the device ended it)` at the end.
+
+Limits: a device that leaves out "BR/EDR Not Supported" although it has no Classic side would now try Classic and fail (page timeout); R5 does not fall back to LE then. Not yet on a radio.
+
+Tested: see the pull request. ARM64 and RISC-V 64 not built or tested.
+
 ## 2026-11-17 - Bluetooth after stick 51: device names, HFP's SDP record, link-down lines, Test buttons and the page layout
 
 Problems (boot 51 on the 5625U, MT7922, WH-1000XM3, 8BitDo M30): devices showed their kind instead of their name in Devices nearby and My devices; HFP never started with the XM3 (pairing, encryption and SDP ran, but no `hands-free service` and no `hfp:` line); the headset dropped right after connecting with nothing in the syslog; "Test buttons…" did nothing; the device panel's buttons ran past the window's right edge and the page got a scroll bar.
