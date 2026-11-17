@@ -5,7 +5,7 @@
 # Host AddressSanitizer and UBSan fuzz for the Wi-Fi parsers
 # (docs/WIFI.md, step 1). Run it in WSL.
 # Usage: fuzz-wifi.sh <target> [seconds]
-#   target: ies, rsn, action, mtkrx
+#   target: ies, rsn, action, mtkrx, he
 # The log is generated/wifi/fuzz-<target>.log. Its last line is
 # "wifi_fuzz <target>: <seconds>s 0 crashes" when nothing failed.
 set -eu
@@ -13,7 +13,7 @@ cd "$(dirname "$0")/.."
 target="${1:?usage: fuzz-wifi.sh <target> [seconds]}"
 seconds="${2:-60}"
 case "$target" in
-	ies|rsn|action|mtkrx) ;;
+	ies|rsn|action|mtkrx|he) ;;
 	*) echo "fuzz-wifi: unknown target $target" >&2; exit 2 ;;
 esac
 HAIKU="${HAIKU:-/home/nickr/r5os/haiku}"
