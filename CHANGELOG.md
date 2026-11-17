@@ -1,5 +1,26 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Game controllers: set up your controller's buttons, a Layout menu, and no crash when Settings closes
+
+Problem (boot 51 on the 5625U, the 8BitDo M30 paired over Bluetooth, `2dc8:0651`, report descriptor 86 bytes): Settings crashed when it quit (Segment violation in `__dynamic_cast` from `BApplication::_WindowAt()` in `~BApplication`, with the thread "game controller watcher" still there). On the page's Sega picture the D-pad did nothing and a pressed button lit the wrong key.
+
+Cause of the crash: `libr5game.so` started one `BLooper` per team for `StartWatching()` and never quit it. Settings unloads its add-ons, and `libr5game.so` with them, in `~SettingsApp`, before `~BApplication` walks its loopers; the watcher's code was gone, so the cast on it crashed.
+
+Cause of the mapping: R5 took the database's Windows line for `2dc8:0651`, which is a USB line (GUID bus `03`; there is no Windows Bluetooth line). It puts the D-pad on DirectInput axes 0 and 2; R5 sorts the axes by usage, so axis 2 is Z, which a pad with only X and Y (and perhaps a hat) does not have. The Mac and Linux Bluetooth lines for the same IDs disagree with each other (A and B swapped; a hat on Linux, X and Y on the Mac). Which physical key of the M30 sends which HID button over Bluetooth is still not known: the 86 bytes are not in the log.
+
+What changed:
+- `libr5game.so`: the last `StopWatching()` quits the watcher; a static destructor quits one still running when the library is unloaded or the team exits; the watcher stops its node monitors. The page already called `StopWatching()` when it was detached; it now also closes its controller and the setup window there.
+- The mapping follows the HID descriptor first (`docs/LIBR5.md`, "Game Kit"): a Windows line for the controller's own bus first; buttons renumbered by HID usage (DirectInput counts the usages that exist, hid_shared numbers by usage with gaps); the D-pad on the controller's hat switch, or without one on X and Y when no stick reads them; a D-pad on buttons stays; sources the controller does not have are dropped. `r5_joystick_info` has a new last field, `button_usages[4]`, filled by hid_shared (an R5 snippet; the size field tells an older driver apart).
+- `BGameController`, calls added at the end: `LayoutFor()`, `SetLayout()`, `GetSavedMapping()`, `SetSavedMapping()`, `HasSavedMapping()`. `Open()` takes a saved setup, else a chosen layout (a fixed mapping in the HID order of that family's controllers), else the database. Stored in the existing `~/config/settings/game_controllers`. `BJoystick` programs see the same raw buttons as before. `ResetLabelStyles()` now removes only the label choices (it removed the whole file, which now also holds layouts and setups); same arguments and meaning.
+- Settings, Game controllers: the "Shapes R5 draws" strip is gone (owner). The Test box has "Layout" (Automatic, Xbox, PlayStation, Nintendo, Sega Genesis, and "Your own setup" while one is saved) above "Button labels", and "Set up buttons…", a small window that asks for each control in turn (face buttons, shoulders, triggers, sticks, the D-pad, Start, Select; for the Sega shape A B C X Y Z L R), with Skip and Cancel, and saves the setup per controller model. The vendor and product ID moved under the picture. Revert restores labels, layout and setup from when the page was opened; Defaults resets every label choice, as before, and removes the chosen controller's layout and setup. Subtitle: "Test your controllers and set up their buttons". The mockup follows.
+- `gamecontroller_test`: the bus choice, buttons by usage, the D-pad rules, the fixed layouts and the setup text; two synthetic pads with the M30's IDs on bluetooth_hid (X and Y plus a hat and 16 buttons; X and Y and 12 buttons, no hat), read through the M30's database line; a saved setup and a chosen layout on a made-up model. The M30's real descriptor is not used: it is not in the log, and I do not know it well enough to rebuild it.
+- `run-qemu-smoke.sh`: `QUIT_SETTINGS=1` resizes Settings to 910 by 560, then leaves the page for Information, quits Settings with `hey` and lists the processes.
+
+Mistake on the way: the first build put the vendor and product ID beside Layout; the QEMU screendump at 910 by 560 showed the Test box running past the page (no right border). They now sit under the picture.
+
+Tested: `scripts/build-locked.sh` jam_exit=0 (x86_64). QEMU (KVM, SMAP and SMEP, Login, an own image copy, `GAMEPAD=1 QUIT_SETTINGS=1 SETTINGS_PAGE=gamecontrollers`): `gamecontroller_test` ok: descriptor-first checks ok; 872 of 872 Windows entries parse; the DualSense virtual controller as before (Cross is A, the hat is down, R2 32703); "M30 hat pad: a mapping, family 4 (Sega), 1 hat, up 1, A 1"; "M30 axes pad: a mapping, 0 hats, left 1, up 0, B 1"; the saved setup (b3 is A, X is d-pad left), the Sega layout under it, and both removed again. The other Bluetooth tests of the script exit 0. No panic, no SMAP line. Screendumps: at 1030 by 610 the page with the DualSense card, the Test box with Layout "Automatic", Button labels "PlayStation (✕○□△)", "Set up buttons…", the PlayStation picture with Cross lit and L2 at 60 %; no Shapes strip. After the quit Settings is gone from the process list and the syslog has no debugger line. Second build (IDs under the picture, jam_exit=0) and the same QEMU run: the same test lines, `gamecontroller_test: ok`; at 910 by 560 the Test box keeps its right border inside the page, with the vendor and product ID under the hint; Settings quits without a debugger line; no panic, no SMAP line.
+
+Not tested: a real controller; the 8BitDo M30 and the DualSense on this build; which M30 key sends which button over Bluetooth; the setup window with a controller (QEMU sends no button presses to it; it was not opened in QEMU); dark mode; ARM64 and RISC-V 64 (not built).
 ## 2026-11-17 - Wi-Fi step 3: SAE frames and protected management, supplicant unchanged
 
 Problem: a WPA3 join needs SAE (authentication algorithm 3) and protected management frames (BIP-CMAC-128, the IGTK). The supplicant package that is built does not compile those in.
@@ -92,6 +113,7 @@ Tested (QEMU, KVM, 8 virtual CPUs, Lavapipe, 1280x800, `scripts/qemu-m13-measure
 - `compose compare ok` 6 times with effects off and a window drawing every 16 ms, no MISMATCH; `r5-draw-compare` 459/490, the same FAILs.
 
 Not tested: RADV and the 5625U (the stick of step 3). The resize numbers have 1-2 frames per run, too few to compare.
+
 ## 2026-11-17 - Bluetooth step 7c joined with HFP: the microphone opens the headset's voice link
 
 Problem: 7c (#4334) brought the voice path (h2generic, the decoder, the "Bluetooth headset microphone" input) but nothing opened a voice link, because the HFP side (#4333) was not on `main` yet. A voice link the headset opened itself went into the ACL code and marked the device as connecting.

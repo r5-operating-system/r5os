@@ -104,9 +104,16 @@ device_path(const char* deviceName)
 // #pragma mark - the watcher
 
 
-/*!	One looper per team, started by the first StartWatching(). It watches
-	/dev/joystick and its directories, and after every change compares the
-	device list with the one before, so a message is sent once per device.
+/*!	One looper per team, started by the first StartWatching() and quit by
+	the last StopWatching(). It watches /dev/joystick and its directories,
+	and after every change compares the device list with the one before, so
+	a message is sent once per device.
+
+	The looper's code is in this library: a looper left running when the
+	library is unloaded (Settings unloads its add-ons, and this library with
+	them, before ~BApplication walks its loopers) has no code left, and
+	the team crashes in BApplication::_WindowAt(). So the last StopWatching()
+	quits it, and the library's destructor below quits one that is left.
 */
 class GameControllerWatcher : public BLooper {
 public:
@@ -116,6 +123,16 @@ public:
 	{
 		fDevices = scan_devices();
 		_WatchDirectories();
+	}
+
+	virtual ~GameControllerWatcher()
+	{
+		stop_watching(this);
+	}
+
+	bool HasTargets() const
+	{
+		return !fTargets.empty();
 	}
 
 	virtual void MessageReceived(BMessage* message)
@@ -206,6 +223,36 @@ static BLocker sWatcherLock("game controller watcher lock");
 static GameControllerWatcher* sWatcher = NULL;
 
 
+// Called with sWatcherLock held. Quit() from another thread waits until
+// the looper's thread is gone.
+static void
+quit_watcher()
+{
+	if (sWatcher == NULL)
+		return;
+	GameControllerWatcher* watcher = sWatcher;
+	sWatcher = NULL;
+	if (watcher->Lock())
+		watcher->Quit();
+}
+
+
+/*!	Runs when the library is unloaded or the team exits: no looper of this
+	library may outlive its code.
+*/
+class WatcherCleanup {
+public:
+	~WatcherCleanup()
+	{
+		BAutolock locker(sWatcherLock);
+		quit_watcher();
+	}
+};
+
+
+static WatcherCleanup sWatcherCleanup;
+
+
 // #pragma mark - the label choice
 
 
@@ -256,6 +303,44 @@ labels_key(uint16 vendor, uint16 product)
 }
 
 
+// The same file holds the layout choice ("layout vvvv:pppp", int32) and a
+// mapping set up button by button ("mapping vvvv:pppp", string).
+static BString
+setting_key(const char* what, uint16 vendor, uint16 product)
+{
+	BString key;
+	key.SetToFormat("%s %04x:%04x", what, vendor, product);
+	return key;
+}
+
+
+static bool
+is_layout(int32 value)
+{
+	return value == B_GAME_CONTROLLER_FAMILY_XBOX
+		|| value == B_GAME_CONTROLLER_FAMILY_PLAYSTATION
+		|| value == B_GAME_CONTROLLER_FAMILY_NINTENDO
+		|| value == B_GAME_CONTROLLER_FAMILY_SEGA_GENESIS;
+}
+
+
+// Writes the file, or removes it when nothing is left in it.
+static status_t
+store_settings(const BMessage& settings)
+{
+	if (!settings.IsEmpty())
+		return write_labels(settings);
+	BPath path;
+	status_t status = labels_path(path);
+	if (status != B_OK)
+		return status;
+	BEntry entry(path.Path());
+	if (!entry.Exists())
+		return B_OK;
+	return entry.Remove();
+}
+
+
 // #pragma mark - BGameController
 
 
@@ -267,9 +352,11 @@ struct BGameController::Private {
 	int					infoFD;
 	r5_joystick_info	info;
 	bool				hasMapping;
+	bool				savedMapping;
 	controller_mapping	mapping;
 	game_controller_family family;
 	int32				order[kMaxAxes];
+	device_shape		shape;
 	raw_state			raw;
 	mapped_state		mapped;
 	std::vector<std::string> devices;
@@ -279,10 +366,12 @@ struct BGameController::Private {
 		open(false),
 		infoFD(-1),
 		hasMapping(false),
+		savedMapping(false),
 		family(B_GAME_CONTROLLER_FAMILY_UNKNOWN)
 	{
 		memset(&info, 0, sizeof(info));
 		info.battery = -1;
+		memset(&shape, 0, sizeof(shape));
 		memset(&mapping, 0, sizeof(mapping));
 		memset(&raw, 0, sizeof(raw));
 		memset(&mapped, 0, sizeof(mapped));
@@ -389,25 +478,70 @@ BGameController::Open(const char* deviceName)
 	// DirectInput's axis order: the axes sorted by HID usage.
 	int32 usageCount = std::min((int32)d.info.axis_count,
 		(int32)R5_JOYSTICK_MAX_AXIS_USAGES);
-	if (usageCount == d.raw.axisCount)
+	bool usagesKnown = usageCount == d.raw.axisCount;
+	if (usagesKnown)
 		axis_order(d.info.axis_usage, d.raw.axisCount, d.order);
 	else
 		axis_order(NULL, d.raw.axisCount, d.order);
 
-	d.hasMapping = d.info.vendor_id != 0
-		&& find_system_mapping(d.info.vendor_id, d.info.product_id,
-			d.mapping) == B_OK;
+	// What the HID descriptor says, in the numbering of raw_state.
+	device_shape& shape = d.shape;
+	memset(&shape, 0, sizeof(shape));
+	shape.axisCount = d.raw.axisCount;
+	for (int32 i = 0; i < d.raw.axisCount; i++)
+		shape.axisUsage[i] = usagesKnown ? d.info.axis_usage[d.order[i]] : 0;
+	shape.hatCount = d.raw.hatCount;
+	shape.buttonCount = d.raw.buttonCount;
+	if (d.info.size >= offsetof(r5_joystick_info, button_usages)
+			+ sizeof(d.info.button_usages)) {
+		for (int32 i = 0; i < R5_JOYSTICK_BUTTON_USAGE_WORDS; i++) {
+			shape.buttonUsages[i] = d.info.button_usages[i];
+			if (shape.buttonUsages[i] != 0)
+				shape.knowsButtons = true;
+		}
+	}
+
+	// The standard layout: the person's own setup, else the layout they
+	// chose, else the database, fitted to what the descriptor says.
+	uint16 vendor = d.info.vendor_id;
+	uint16 product = d.info.product_id;
+	controller_mapping database;
+	bool inDatabase = vendor != 0 && find_system_mapping(vendor, product,
+		d.info.bus, database) == B_OK;
+	game_controller_family layout = LayoutFor(vendor, product);
+	d.hasMapping = false;
+	d.savedMapping = false;
+	char saved[1024];
+	if (vendor != 0
+		&& GetSavedMapping(vendor, product, saved, sizeof(saved)) == B_OK
+		&& parse_pairs(saved, d.mapping)) {
+		axes_to_order(d.mapping, d.order, d.raw.axisCount);
+		d.hasMapping = true;
+		d.savedMapping = true;
+	} else if (layout != B_GAME_CONTROLLER_FAMILY_UNKNOWN
+		&& fixed_layout(layout, shape, d.mapping)) {
+		d.hasMapping = true;
+	} else if (inDatabase) {
+		d.mapping = database;
+		buttons_by_usage(d.mapping, shape);
+		fit_to_device(d.mapping, shape);
+		d.hasMapping = true;
+	}
 	if (!d.hasMapping)
 		memset(&d.mapping, 0, sizeof(d.mapping));
 
 	if (d.info.name[0] != '\0')
 		d.name = d.info.name;
-	else if (d.hasMapping && d.mapping.name[0] != '\0')
-		d.name = d.mapping.name;
+	else if (inDatabase && database.name[0] != '\0')
+		d.name = database.name;
 	else
 		d.name = "Game controller";
-	d.family = family_for(d.info.vendor_id, d.info.product_id,
-		d.hasMapping ? d.mapping.name : d.name.String(), d.hasMapping);
+	if (layout != B_GAME_CONTROLLER_FAMILY_UNKNOWN && d.hasMapping)
+		d.family = layout;
+	else {
+		d.family = family_for(vendor, product,
+			inDatabase ? database.name : d.name.String(), d.hasMapping);
+	}
 	d.deviceName = deviceName;
 	d.open = true;
 	memset(&d.mapped, 0, sizeof(d.mapped));
@@ -426,6 +560,7 @@ BGameController::Close()
 	fPrivate->infoFD = -1;
 	fPrivate->open = false;
 	fPrivate->hasMapping = false;
+	fPrivate->savedMapping = false;
 	memset(&fPrivate->raw, 0, sizeof(fPrivate->raw));
 	memset(&fPrivate->mapped, 0, sizeof(fPrivate->mapped));
 }
@@ -696,14 +831,21 @@ BGameController::SetLabelStyle(uint16 vendorID, uint16 productID,
 /*static*/ status_t
 BGameController::ResetLabelStyles()
 {
-	BPath path;
-	status_t status = labels_path(path);
-	if (status != B_OK)
-		return status;
-	BEntry entry(path.Path());
-	if (!entry.Exists())
-		return B_OK;
-	return entry.Remove();
+	// Only the label choices: the file also holds the layouts and the
+	// button setups. The file goes when nothing else is in it.
+	BMessage stored;
+	read_labels(stored);
+	char* name;
+	type_code type;
+	std::vector<BString> labels;
+	for (int32 i = 0; stored.GetInfo(B_ANY_TYPE, i, &name, &type) == B_OK;
+			i++) {
+		if (strncmp(name, "labels ", 7) == 0)
+			labels.push_back(name);
+	}
+	for (size_t i = 0; i < labels.size(); i++)
+		stored.RemoveName(labels[i].String());
+	return store_settings(stored);
 }
 
 
@@ -734,10 +876,94 @@ BGameController::StopWatching(BMessenger target)
 	if (sWatcher == NULL || !sWatcher->Lock())
 		return B_BAD_VALUE;
 	bool removed = sWatcher->Remove(target);
+	bool empty = !sWatcher->HasTargets();
 	sWatcher->Unlock();
-	// The looper stays for the next StartWatching(); its node monitors cost
-	// nothing while no directory changes.
+	// The last target gone: the looper goes too (see the watcher).
+	if (empty)
+		quit_watcher();
 	return removed ? B_OK : B_BAD_VALUE;
+}
+
+
+/*static*/ game_controller_family
+BGameController::LayoutFor(uint16 vendorID, uint16 productID)
+{
+	if (vendorID == 0)
+		return B_GAME_CONTROLLER_FAMILY_UNKNOWN;
+	BMessage stored;
+	read_labels(stored);
+	int32 value;
+	if (stored.FindInt32(setting_key("layout", vendorID, productID).String(),
+			&value) != B_OK || !is_layout(value))
+		return B_GAME_CONTROLLER_FAMILY_UNKNOWN;
+	return (game_controller_family)value;
+}
+
+
+/*static*/ status_t
+BGameController::SetLayout(uint16 vendorID, uint16 productID,
+	game_controller_family layout)
+{
+	if (vendorID == 0)
+		return B_BAD_VALUE;
+	if (layout != B_GAME_CONTROLLER_FAMILY_UNKNOWN && !is_layout(layout))
+		return B_BAD_VALUE;
+	BMessage stored;
+	read_labels(stored);
+	BString key = setting_key("layout", vendorID, productID);
+	stored.RemoveName(key.String());
+	if (layout != B_GAME_CONTROLLER_FAMILY_UNKNOWN)
+		stored.AddInt32(key.String(), layout);
+	return store_settings(stored);
+}
+
+
+/*static*/ status_t
+BGameController::GetSavedMapping(uint16 vendorID, uint16 productID,
+	char* mapping, size_t size)
+{
+	if (vendorID == 0 || mapping == NULL || size == 0)
+		return B_BAD_VALUE;
+	mapping[0] = '\0';
+	BMessage stored;
+	read_labels(stored);
+	const char* text;
+	if (stored.FindString(setting_key("mapping", vendorID, productID)
+			.String(), &text) != B_OK || text[0] == '\0')
+		return B_ENTRY_NOT_FOUND;
+	if (strlcpy(mapping, text, size) >= size)
+		return B_BUFFER_OVERFLOW;
+	return B_OK;
+}
+
+
+/*static*/ status_t
+BGameController::SetSavedMapping(uint16 vendorID, uint16 productID,
+	const char* mapping)
+{
+	if (vendorID == 0)
+		return B_BAD_VALUE;
+	bool remove = mapping == NULL || mapping[0] == '\0';
+	if (!remove) {
+		// Only what Open() can read back.
+		controller_mapping parsed;
+		if (strlen(mapping) >= 1024 || !parse_pairs(mapping, parsed))
+			return B_BAD_VALUE;
+	}
+	BMessage stored;
+	read_labels(stored);
+	BString key = setting_key("mapping", vendorID, productID);
+	stored.RemoveName(key.String());
+	if (!remove)
+		stored.AddString(key.String(), mapping);
+	return store_settings(stored);
+}
+
+
+bool
+BGameController::HasSavedMapping() const
+{
+	return IsOpen() && fPrivate->savedMapping;
 }
 
 
