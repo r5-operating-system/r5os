@@ -665,6 +665,8 @@ NetServer::_ConfigureResolver(BMessage& resolverConfiguration)
 // SPDX-License-Identifier: MIT
 	char servers[8][INET6_ADDRSTRLEN];
 	int32 nServers = 0;
+	char rememberedDomain[256];
+	rememberedDomain[0] = '\0';
 	bool staticOnly = false;
 
 	FILE* existing = fopen(path.Path(), "r");
@@ -695,6 +697,16 @@ NetServer::_ConfigureResolver(BMessage& resolverConfiguration)
 					strlcpy(servers[nServers], start, sizeof(servers[0]));
 					nServers++;
 				}
+			} else if (strncmp(line, "domain ", 7) == 0) {
+				char* start = line + 7;
+				size_t length = strlen(start);
+				while (length > 0 && (start[length - 1] == '\n'
+						|| start[length - 1] == '\r'
+						|| start[length - 1] == ' ')) {
+					start[--length] = '\0';
+				}
+				if (start[0] != '\0')
+					strlcpy(rememberedDomain, start, sizeof(rememberedDomain));
 // SPDX-SnippetEnd
 			}
 		}
@@ -738,8 +750,11 @@ NetServer::_ConfigureResolver(BMessage& resolverConfiguration)
 // SPDX-SnippetEnd
 
 	const char* domain;
-	if (resolverConfiguration.FindString("domain", &domain) == B_OK)
+	if (resolverConfiguration.FindString("domain", &domain) == B_OK
+		&& domain != NULL && domain[0] != '\0')
 		fprintf(file, "domain %s\n", domain);
+	else if (rememberedDomain[0] != '\0')
+		fprintf(file, "domain %s\n", rememberedDomain);
 
 	fprintf(file, "# End of automatic DHCP additions\n");
 

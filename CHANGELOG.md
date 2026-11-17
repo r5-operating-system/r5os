@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Network: DHCP keeps the resolv.conf domain line
+
+Problem: net_server rewrote `resolv.conf` from remembered nameservers and only wrote `domain` when DHCP sent one. An existing domain line disappeared.
+
+What changed: the previous `domain` line is kept when DHCP does not send a domain.
+
+Limits: QEMU usernet is not this test. No packet capture.
+
 ## 2026-11-17 - Settings: a failed Deskbar apply rolls back
 
 Problem: Desktop and Deskbar wrote each field as it succeeded. A later `SetLocation` failure left sort or icon size already changed.
