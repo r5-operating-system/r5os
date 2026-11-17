@@ -1,22 +1,22 @@
 item	class	area	path	prio	run_status	pr	notes
-r5:login-1	A	Login	distro/login/LoginApp.cpp	1	todo		LoginApp accepts logout/lock/login/halt/reboot from any team via BMessenger(Login)
+r5:login-1	A	Login	distro/login/LoginApp.cpp	1	pr	4368	LoginApp accepts logout/lock/login/halt/reboot from any team via BMessenger(Login)
 r5:login-2	A	Login	distro/login/LoginApp.cpp	1	todo		Logout only B_QUIT_REQUESTED and does not wait; prior-session apps can remain
 r5:media-1	C	usb_audio	distro/media/src/add-ons/kernel/drivers/audio/usb/Stream.cpp	1	needs-hardware		_TransferCallback: failed _QueueNextTransfer leaves fIsRunning true and stalls the 1s timeout
 r5:media-3	C	hda	distro/media/src/add-ons/kernel/drivers/audio/hda/hda_controller.cpp	1	needs-hardware		DigEn path reads widget->capabilities with no NULL check after get_widget
 r5:media-4	B	hda	distro/media/src/add-ons/kernel/drivers/audio/hda/hda_codec.cpp	1	todo		hda_audio_group_get_widget uses start+count < nodeID so the last node is OOB
-r5:multiuser-1	A	multi-user	distro/users/AccountAdmin.cpp	1	todo		refresh_machine_settings_access sets network/printers/repos 0777/0666 for the live grant
-r5:settings-1	A	Settings	distro/settings/VirtualMemoryModule.cpp	1	todo		VirtualMemoryModule::_Write erases then writes swap settings; a short write can leave an empty file
-r5:settings-2	A	Settings	distro/settings/NotificationsModule.cpp	1	todo		write_state() erases then Flatten of notifications; a failed Flatten can wipe the file
-r5:libr5ui-1	A	libr5ui	distro/ui/AdminLock.cpp	2	todo		BAdminLockBar::AcceptsInput only blocks BControl ancestors when locked
-r5:login-3	A	Login	distro/login/LoginApp.cpp	2	todo		TryLogin writes the session file then launches; launch failure leaves a stale session name
-r5:login-4	A	Login	distro/login/R5Desktop.cpp	2	todo		read_session_name falls back to /tmp/r5-desktop-session if the system file is missing
-r5:login-5	A	Login	distro/login/R5Desktop.cpp	2	todo		initgroups failure is logged then setresuid still drops, so admin groups can be missing
+r5:multiuser-1	A	multi-user	distro/users/AccountAdmin.cpp	1	pr	4369	refresh_machine_settings_access sets network/printers/repos 0777/0666 for the live grant
+r5:settings-1	A	Settings	distro/settings/VirtualMemoryModule.cpp	1	pr	4366	VirtualMemoryModule::_Write erases then writes swap settings; a short write can leave an empty file
+r5:settings-2	A	Settings	distro/settings/NotificationsModule.cpp	1	pr	4367	write_state() erases then Flatten of notifications; a failed Flatten can wipe the file
+r5:libr5ui-1	A	libr5ui	distro/ui/AdminLock.cpp	2	pr	4373	BAdminLockBar::AcceptsInput only blocks BControl ancestors when locked
+r5:login-3	A	Login	distro/login/LoginApp.cpp	2	pr	4370	TryLogin writes the session file then launches; launch failure leaves a stale session name
+r5:login-4	A	Login	distro/login/R5Desktop.cpp	2	pr	4371	read_session_name falls back to /tmp/r5-desktop-session if the system file is missing
+r5:login-5	A	Login	distro/login/R5Desktop.cpp	2	pr	4372	initgroups failure is logged then setresuid still drops, so admin groups can be missing
 r5:media-2	B	usb_webcam	distro/media/src/add-ons/media/media-add-ons/usb_webcam/addons/uvc/UVCCamDevice.cpp	2	todo		UVC error log always appends to /boot/home/uvc.log from uid 0; unbounded growth
 r5:media-7	C	usb_audio	distro/media/src/add-ons/kernel/drivers/audio/usb/Stream.cpp	2	needs-hardware		Stream::Start can leave a live ISO transfer with fIsRunning false if the second buffer queue fails
-r5:net-1	A	IPv6	distro/network/SLAACClient.cpp	2	todo		_ApplyAdvert still AddDefaultRoute when RA Router Lifetime is 0
+r5:net-1	A	IPv6	distro/network/SLAACClient.cpp	2	pr	4375	_ApplyAdvert still AddDefaultRoute when RA Router Lifetime is 0
 r5:net-2	A	net_server	distro/rest/src/servers/net/NetServer.cpp	2	todo		resolv.conf rewrite from remembered nameservers drops an existing domain line
 r5:settings-3	A	Settings	distro/settings/DisplayModule.cpp	2	todo		During the 12s keep-picture dialog a mode menu change can become the boot default via Settle(true)
-r5:settings-4	A	Settings	distro/settings/DisplayModule.cpp	2	todo		Window Revert while the keep dialog is up does not clear DisplayView::fConfirming
+r5:settings-4	A	Settings	distro/settings/DisplayModule.cpp	2	pr	4374	Window Revert while the keep dialog is up does not clear DisplayView::fConfirming
 r5:settings-5	A	Settings	distro/settings/SettingsWindow.cpp	2	todo		_DisableLocked only greys BControl; BScreenArrangement stays draggable when the lock is closed
 r5:settings-6	A	Settings	distro/settings/DeskbarModule.cpp	2	todo		DeskbarModule::_Apply commits each field as it succeeds; a later SetLocation failure leaves a half apply
 r5:zeroconf-1	A	zeroconf	distro/zeroconf/r5_mdns.c	2	todo		mdns_query never joins 224.0.0.251/ff02::fb; browse/getaddrinfo can miss replies
