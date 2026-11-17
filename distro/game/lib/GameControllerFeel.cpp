@@ -383,7 +383,9 @@ ControllerFeel::SetMotionEnabled(bool enabled)
 				_ReadSwitchCalibration();
 			uint8 on = 0x01;
 			status_t status = _SwitchSubcommand(0x40, &on, 1, NULL, 0, NULL);
-			if (status != B_OK)
+			// Sent but not answered in time: the sensors may well be on;
+			// the samples tell (B_ENTRY_NOT_FOUND until one comes).
+			if (status != B_OK && status != B_TIMED_OUT)
 				return status;
 		} else if (!enabled && fMotionEnabled) {
 			uint8 off = 0x00;

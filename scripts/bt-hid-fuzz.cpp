@@ -7,11 +7,14 @@
  * and UBSan by scripts/fuzz-bt.sh (target "hid"):
  * - the kernel side, hid_shared's R5HIDReports.h: the short report built
  *   from a PlayStation controller's full one, and the input report cache
- *   that R5_JOYSTICK_GET_REPORT reads, with reports of every length;
+ *   that R5_JOYSTICK_GET_REPORT reads, with reports of every length; and
+ *   (phase 2) the Switch simple report, battery and start, the Xbox
+ *   battery and the GIP packets;
  * - libr5game's GameControllerReports.cpp, which reads what a controller
  *   gives: its HID report descriptor (random bytes, and a PID descriptor
  *   with random bytes changed), the PID reports built from it, the PID
- *   Block Load answer, and the motion of an input report.
+ *   Block Load answer, the motion of an input report, and (phase 2) the
+ *   Switch SPI reply, IMU calibration and motion.
  * Every report lives in a heap buffer of exactly its length. Checked
  * besides "no fault": a built report fits the declared length and buffer.
  * Prints "hid_fuzz: <seconds>s 0 crashes" when it ends.
@@ -182,6 +185,73 @@ fuzz_report(size_t length)
 	motion_sample sample;
 	parse_playstation_motion((playstation_model)(next_word() % 5),
 		(next_word() & 1) != 0, report, length, sample);
+
+	// Phase 2, the kernel side: the Switch simple report, battery and
+	// start, the Xbox battery, and GIP packets.
+	if (length > 0 && (next_word() & 1)) {
+		static const uint8 kSwitchIDs[] = { 0x21, 0x30, 0x31, 0x3f, 0x81,
+			0x04, 0x20, 0x07, 0x02 };
+		report[0] = kSwitchIDs[next_word() % sizeof(kSwitchIDs)];
+	}
+	size_t simpleCapacity = next_word() % 16;
+	uint8* simple = (uint8*)malloc(simpleCapacity > 0 ? simpleCapacity : 1);
+	built = r5_hid_switch_simple_report(report, length, simple,
+		simpleCapacity);
+	if (built != 0 && (built != R5_HID_SWITCH_SIMPLE_SIZE
+			|| built > simpleCapacity))
+		fail("switch simple report length");
+	free(simple);
+	int32 battery = r5_hid_switch_battery(report, length);
+	if (battery < -1 || battery > 100)
+		fail("switch battery");
+	battery = r5_hid_xbox_battery(report, length);
+	if (battery < -1 || battery > 100)
+		fail("xbox battery");
+
+	static r5_hid_switch_init init;
+	if (next_word() % 64 == 0 || init.steps == 0) {
+		uint8 first[R5_HID_SWITCH_BT_OUTPUT];
+		r5_hid_switch_init_start(init, (next_word() & 1) != 0, first,
+			sizeof(first));
+	}
+	size_t sendCapacity = next_word() % 64;
+	uint8* send = (uint8*)malloc(sendCapacity > 0 ? sendCapacity : 1);
+	size_t sent = r5_hid_switch_init_input(init, report, length, send,
+		sendCapacity);
+	if (sent != 0 && (sent != R5_HID_SWITCH_BT_OUTPUT || sent > sendCapacity))
+		fail("switch start length");
+	free(send);
+
+	static r5_hid_gip_state gip;
+	static bool gipReady = false;
+	if (!gipReady || next_word() % 64 == 0) {
+		r5_hid_gip_init(gip, 0x045e, (next_word() & 1) ? 0x0b12 : 0x02ea);
+		gipReady = true;
+	}
+	r5_hid_gip_sends sends;
+	size_t gipCapacity = next_word() % 20;
+	uint8* gipOut = (uint8*)malloc(gipCapacity > 0 ? gipCapacity : 1);
+	built = r5_hid_gip_input(gip, report, length, gipOut, gipCapacity, sends);
+	if (built != 0 && (built != R5_HID_GIP_INPUT_SIZE || built > gipCapacity))
+		fail("gip report length");
+	if (sends.count > R5_HID_GIP_MAX_SENDS)
+		fail("gip sends");
+	for (uint32 i = 0; i < sends.count; i++) {
+		if (sends.length[i] == 0 || sends.length[i] > R5_HID_GIP_MAX_SEND)
+			fail("gip send length");
+	}
+	free(gipOut);
+
+	// Phase 2, libr5game: the Switch SPI reply, calibration and motion.
+	uint8 data[29];
+	parse_switch_spi_reply(report, length, next_word() & 0xffff,
+		(uint8)(next_word() % 30), data);
+	switch_imu_calibration calibration;
+	if (length >= 24)
+		switch_imu_from_factory(report, calibration);
+	else
+		switch_imu_nominal(calibration);
+	parse_switch_motion(calibration, report, length, sample);
 	free(report);
 }
 

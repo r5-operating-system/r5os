@@ -619,6 +619,9 @@ test_pid()
 }
 
 
+#include "feel_phase2_test.h"
+
+
 int
 main()
 {
@@ -631,6 +634,10 @@ main()
 	test_short_report();
 	test_cache();
 	test_pid();
+	test_switch_kernel();
+	test_switch_library();
+	test_xbox();
+	test_gip();
 
 	if (sFailures != 0) {
 		printf("feel_host_test: %d failure%s\n", sFailures,
