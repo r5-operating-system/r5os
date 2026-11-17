@@ -15,7 +15,8 @@
  *		walks them, configuration options, PSM and fixed CID rules; the
  *		LE codes and credit-based frames (step 1c).
  *	le	what bluetooth_server reads from an LE device (server/le_parse.h,
- *		step 6): advertising reports and data, SMP lengths, ATT responses.
+ *		step 6): advertising reports and data, SMP lengths, ATT responses;
+ *		and the scan lines it writes for them (server/scan_log.h).
  * Prints "<target>_fuzz: <seconds>s 0 crashes" when it ends; ASan or UBSan
  * stop it with a report on a fault.
  */
@@ -32,6 +33,7 @@
 #include "h2command.h"
 #include "l2cap_parse.h"
 #include "le_parse.h"
+#include "scan_log.h"
 
 #include <algorithm>
 
@@ -605,6 +607,47 @@ fuzz_l2cap_round()
 static void
 fuzz_le_round()
 {
+	// The scan lines (scan_log.h): one scan of a few addresses, so they
+	// repeat, and the 48-device limit is passed now and then.
+	static scan_log scanLog;
+	scan_log_reset(&scanLog);
+	const uint32 devices = 1 + next_word() % 80;
+	for (int answer = 0; answer < 200; answer++) {
+		uint8 address[6] = { (uint8)(next_word() % devices), 0, 0, 0, 0, 0 };
+		const bool listed = next_word() % 3 == 0;
+		const uint32 heard = scanLog.heard;
+		const bool line = scan_log_note(&scanLog, address, listed);
+		check(scanLog.count <= SCAN_LOG_MAX, "scan log size");
+		check(scanLog.listed <= scanLog.heard, "listed of heard");
+		check(!line || scanLog.heard == heard || scanLog.heard == heard + 1,
+			"one device per line");
+		// Heard again the same way: no second line.
+		check(!scan_log_note(&scanLog, address, listed),
+			"a repeat has no line");
+
+		char name[80];
+		const size_t length = next_word() % sizeof(name);
+		for (size_t i = 0; i < length; i++)
+			name[i] = (char)(1 + next_word() % 255);
+		name[length] = '\0';
+		char addressText[18];
+		char nameText[SCAN_LOG_NAME_MAX + 1];
+		scan_log_format(address, next_word() % 8 == 0 ? NULL : name,
+			addressText, nameText);
+		check(strlen(addressText) == 17, "masked address");
+		check(strncmp(addressText, "xx:xx:xx:xx:", 12) == 0, "masked");
+		check(strlen(nameText) <= SCAN_LOG_NAME_MAX, "name cut");
+		for (size_t i = 0; nameText[i] != '\0'; i++) {
+			check((uint8)nameText[i] >= 0x20 && nameText[i] != 0x7f
+				&& nameText[i] != '"', "printable name");
+		}
+		if (strlen(nameText) > 0 && strlen(nameText) < strlen(name)) {
+			// Not cut inside a UTF-8 sequence.
+			check(((uint8)name[strlen(nameText)] & 0xc0) != 0x80,
+				"cut on a boundary");
+		}
+	}
+
 	// Advertising reports, legacy and extended, mostly near-valid.
 	for (int extended = 0; extended < 2; extended++) {
 		std::vector<uint8> event(next_word() % 260);

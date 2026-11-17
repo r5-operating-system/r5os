@@ -19,6 +19,7 @@
 // SPDX-License-Identifier: MIT
 #include <Messenger.h>
 #include "R5Pairing.h"
+#include "scan_log.h"
 #include <vector>
 // SPDX-SnippetEnd
 
@@ -201,6 +202,13 @@ private:
 	void				_R5InquiryEnded();
 	void				_R5ConnectedWithoutName(ServerRemoteDevice* rd);
 	void				_R5PairingStarts();
+	// One line per Classic device a scan heard (scan_log.h), and the
+	// answers that came while no scan waited for them.
+	void				_R5LogInquiryReply(const BMessage& reply,
+							status_t sent);
+	void				_R5LogInquiryDropped(uint8 eventCode);
+	scan_log			fClassicLog = {};
+	uint32				fClassicDropped = 0;
 private:
 	// Remote host features before Authentication Requested.
 	std::vector<uint16> fFeatureHandles;

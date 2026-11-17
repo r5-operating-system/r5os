@@ -342,6 +342,18 @@ LocalDeviceImpl::HandleUnexpectedEvent(struct hci_event_header* event)
 				JumpEventHeader<struct hci_ev_hardware_error>(event));
 			break;
 
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// An inquiry answer that no scan request waits for (after a cancel,
+		// or when the request is gone): not sent to the list.
+		case HCI_EVENT_INQUIRY_RESULT:
+		case HCI_EVENT_INQUIRY_RESULT_WITH_RSSI:
+		case HCI_EVENT_EXTENDED_INQUIRY_RESULT:
+			_R5LogInquiryDropped(event->ecode);
+			break;
+		// SPDX-SnippetEnd
+
 		case HCI_EVENT_CONN_REQUEST:
 			ConnectionRequest(
 				JumpEventHeader<struct hci_ev_conn_request>(event), NULL);
@@ -1643,6 +1655,11 @@ LocalDeviceImpl::InquiryResult(uint8* numberOfResponses, BMessage* request)
 	status_t status = request->SendReply(&reply);
 	if (status < B_OK)
 		printf("%s: Error sending reply!\n", __func__);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	_R5LogInquiryReply(reply, status);
+	// SPDX-SnippetEnd
 }
 
 
@@ -1699,6 +1716,11 @@ LocalDeviceImpl::InquiryResultWithRSSI(uint8* numberOfResponses, BMessage* reque
 	status_t status = request->SendReply(&reply);
 	if (status < B_OK)
 		printf("%s: Error sending reply!\n", __func__);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	_R5LogInquiryReply(reply, status);
+	// SPDX-SnippetEnd
 }
 
 
@@ -1755,6 +1777,11 @@ LocalDeviceImpl::ExtendedInquiryResult(uint8* numberOfResponses, BMessage* reque
 	status_t status = request->SendReply(&reply);
 	if (status < B_OK)
 		printf("%s: Error sending reply!\n", __func__);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	_R5LogInquiryReply(reply, status);
+	// SPDX-SnippetEnd
 }
 
 

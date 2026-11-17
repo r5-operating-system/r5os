@@ -39,6 +39,8 @@
 static const size_t kMaxSeen = 64;
 static const bigtime_t kReportInterval = 1000000;
 
+static bool dual_mode_advert(uint8 addressType, uint8 flags);
+
 // Connection parameters (1.25 ms units, timeout 10 ms): BlueZ's defaults,
 // an interval of 30 to 50 ms, no latency, a 420 ms supervision timeout.
 // A mouse asks for its own short interval right after it connected (the
@@ -89,6 +91,7 @@ LEManager::LEManager(LocalDeviceImpl* device)
 	memset(&fLocalAddress, 0, sizeof(fLocalAddress));
 	memset(&fDirectAddress, 0, sizeof(fDirectAddress));
 	fDirectStarted = 0;
+	scan_log_reset(&fScanLog);
 	_LoadBonds();
 
 	BAutolock _(sManagersLock);
@@ -631,26 +634,61 @@ LEManager::_AdvertisingReport(const uint8* data, size_t size, bool extended)
 
 		// The scan list shows a device that can be connected to and has a
 		// name, at most once a second.
-		if (!fScanning || !fScanTarget.IsValid() || !seen->connectable
-			|| seen->name.Length() == 0 || now - seen->lastSent < kReportInterval)
+		if (!fScanning)
 			continue;
-		seen->lastSent = now;
+		const char* notListed = NULL;
+		if (!fScanTarget.IsValid())
+			notListed = "no list waits";
+		else if (!seen->connectable)
+			notListed = "not connectable";
+		else if (seen->name.Length() == 0)
+			notListed = "no name yet";
+		if (notListed == NULL && now - seen->lastSent < kReportInterval)
+			continue;
 
-		uint8 deviceClass[3] = { (uint8)(seen->classOfDevice & 0xff),
-			(uint8)((seen->classOfDevice >> 8) & 0xff),
-			(uint8)((seen->classOfDevice >> 16) & 0xff) };
-		BMessage reply(BT_MSG_INQUIRY_DEVICE);
-		reply.AddUInt8("count", 1);
-		reply.AddData("bdaddr", B_ANY_TYPE, &address, sizeof(bdaddr_t));
-		reply.AddData("dev_class", B_ANY_TYPE, deviceClass, 3);
-		reply.AddUInt8("page_repetition_mode", 0x02);
-		reply.AddUInt8("scan_period_mode", 0);
-		reply.AddUInt16("clock_offset", 0);
-		reply.AddInt8("rssi", seen->rssi);
-		reply.AddString("friendly_name", seen->name);
-		reply.AddBool("r5_le", true);
-		fScanTarget.SendMessage(&reply, (BHandler*)NULL, 0);
+		status_t sent = B_OK;
+		if (notListed == NULL) {
+			seen->lastSent = now;
+
+			uint8 deviceClass[3] = { (uint8)(seen->classOfDevice & 0xff),
+				(uint8)((seen->classOfDevice >> 8) & 0xff),
+				(uint8)((seen->classOfDevice >> 16) & 0xff) };
+			BMessage reply(BT_MSG_INQUIRY_DEVICE);
+			reply.AddUInt8("count", 1);
+			reply.AddData("bdaddr", B_ANY_TYPE, &address, sizeof(bdaddr_t));
+			reply.AddData("dev_class", B_ANY_TYPE, deviceClass, 3);
+			reply.AddUInt8("page_repetition_mode", 0x02);
+			reply.AddUInt8("scan_period_mode", 0);
+			reply.AddUInt16("clock_offset", 0);
+			reply.AddInt8("rssi", seen->rssi);
+			reply.AddString("friendly_name", seen->name);
+			reply.AddBool("r5_le", true);
+			sent = fScanTarget.SendMessage(&reply, (BHandler*)NULL, 0);
+			if (sent != B_OK)
+				notListed = "the list did not take it";
+		}
+		_LogHeard(*seen, notListed);
 	}
+}
+
+
+//!	A line for a device the scan heard: once, and once more when it is sent.
+void
+LEManager::_LogHeard(const Seen& seen, const char* notListed)
+{
+	if (!scan_log_note(&fScanLog, seen.address.b, notListed == NULL))
+		return;
+	char address[18];
+	char name[SCAN_LOG_NAME_MAX + 1];
+	scan_log_format(seen.address.b, seen.name.String(), address, name);
+	syslog(LOG_INFO, "bluetooth_server: hci%" B_PRId32 " scan heard le %s"
+		" (%s%s) \"%s\" rssi %d flags %#x class %#" B_PRIx32 ": %s%s",
+		fDevice->GetID(), address,
+		seen.addressType == R5_BDADDR_LE_RANDOM ? "random" : "public",
+		dual_mode_advert(seen.hciAddressType, seen.flags) ? ", dual-mode" : "",
+		name, (int)seen.rssi, seen.flags, seen.classOfDevice,
+		notListed == NULL ? "sent to the list" : "not sent: ",
+		notListed == NULL ? "" : notListed);
 }
 
 
@@ -869,6 +907,7 @@ LEManager::StartScan(const BMessenger& target)
 	BAutolock _(fLock);
 	fScanTarget = target;
 	fScanning = true;
+	scan_log_reset(&fScanLog);
 	for (size_t i = 0; i < fSeen.size(); i++)
 		fSeen[i]->lastSent = 0;
 	_SetScan(true);
@@ -879,6 +918,12 @@ void
 LEManager::StopScan()
 {
 	BAutolock _(fLock);
+	if (fScanning) {
+		syslog(LOG_INFO, "bluetooth_server: hci%" B_PRId32 " le scan heard"
+			" %" B_PRIu32 " devices, %" B_PRIu32 " sent to the list"
+			" (%" B_PRIu32 " answers past the logged ones)", fDevice->GetID(),
+			fScanLog.heard, fScanLog.listed, fScanLog.unlogged);
+	}
 	fScanning = false;
 	fScanTarget = BMessenger();
 	_SetScan(false);

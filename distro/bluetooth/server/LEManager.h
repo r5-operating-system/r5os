@@ -31,6 +31,7 @@
 #include <R5BluetoothLE.h>
 
 #include "SMPCrypto.h"
+#include "scan_log.h"
 
 
 class LocalDeviceImpl;
@@ -120,6 +121,8 @@ private:
 			void				_LEMeta(const uint8* data, size_t size);
 			void				_AdvertisingReport(const uint8* data,
 									size_t size, bool extended);
+			void				_LogHeard(const Seen& seen,
+									const char* notListed);
 			void				_ConnectionComplete(const uint8* data,
 									size_t size, uint8 subevent);
 			void				_Disconnected(uint16 handle, uint8 reason);
@@ -221,6 +224,8 @@ private:
 			bool				fScanning;
 			bool				fScanOn;			// as the radio has it
 			std::vector<Seen*>	fSeen;
+			// One line per device a scan heard (scan_log.h).
+			scan_log			fScanLog;
 
 			// Initiating: at most one LE Create Connection runs.
 			enum {
