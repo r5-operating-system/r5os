@@ -838,14 +838,14 @@ trac:8178	A	MediaPlayer	distro/rest/src/apps/mediaplayer/Controller.cpp	1	todo		
 trac:8744	A	MediaPlayer	distro/rest/src/apps/mediaplayer/Controller.cpp	1	todo		MediaPlayer created a corrupt playlist that loads but cannot be saved again.
 trac:11500	A	MediaPlayer	distro/rest/src/apps/mediaplayer/Controller.cpp	1	todo		MediaPlayer - make playlist more resilient to errors or corrupt files in the same directory
 trac:12068	A	MediaPlayer	distro/rest/src/apps/mediaplayer/Controller.cpp	1	todo		Media Player changes volume when the Window looses focus.
-trac:13078	A	MediaPlayer	distro/rest/src/apps/mediaplayer/Controller.cpp	1	todo		MediaPlayer crash when streaming URL entered
+trac:13078	A	MediaPlayer	distro/rest/src/apps/mediaplayer/NetworkStreamWin.cpp	1	parked		No null found on the stream-URL path
 trac:13196	A	MediaPlayer	distro/rest/src/apps/mediaplayer/Controller.cpp	1	todo		MediaPlayer gets confused if you have a corrupted mp3 file in your playlist...
 trac:13762	A	MediaPlayer	distro/rest/src/apps/mediaplayer/Controller.cpp	1	todo		Mediaplayer crash while attempting to play DVD.ISO
-trac:14483	A	MediaPlayer	distro/rest/src/apps/mediaplayer/Controller.cpp	1	todo		MediaPlayer Crash on ALT+V
-trac:15293	A	MediaPlayer	distro/rest/src/apps/mediaplayer/Controller.cpp	1	todo		MediaPlayer crashes in StreamBase::FrameRate
-trac:15791	A	MediaPlayer	distro/rest/src/apps/mediaplayer/Controller.cpp	1	todo		MediaPlayer crashes with MPEG4/ffmpeg video
-trac:17406	A	MediaPlayer	distro/rest/src/apps/mediaplayer/Controller.cpp	1	todo		MediaPlayer crash at conclusion of streamed mp3 audio podcast
-trac:19680	A	MediaPlayer	distro/rest/src/apps/mediaplayer/Controller.cpp	1	todo		[MediaPlayer] crashes in BHandler::Looper on quit
+trac:14483	A	MediaPlayer	distro/rest/src/apps/mediaplayer/MainWin.cpp	1	parked		Alt+V is the Video menu; no crash site in the key handler
+trac:15293	A	MediaPlayer	distro/rest/src/apps/mediaplayer/supplier/ProxyAudioSupplier.cpp	1	pr	4417	A video or audio rate of 0 no longer divides in the frame conversion
+trac:15791	A	MediaPlayer	distro/rest/src/apps/mediaplayer/Controller.cpp	1	parked		MPEG-4 crash is in the decoder, not in a null check here
+trac:17406	A	MediaPlayer	distro/rest/src/apps/mediaplayer/Controller.cpp	1	parked		End of a streamed mp3 has no separate crash site
+trac:19680	A	MediaPlayer	distro/rest/src/apps/mediaplayer/Controller.cpp	1	parked		BHandler::Looper only returns the looper; the quit use-after-free was not found
 trac:4865	A	MediaPlayer	distro/rest/src/apps/mediaplayer/Controller.cpp	2	todo		MediaPlayer slider stops before the end on small files.
 trac:6621	A	MediaPlayer	distro/rest/src/apps/mediaplayer/Controller.cpp	2	todo		media player volume control algorithm needs work
 trac:6656	A	MediaPlayer	distro/rest/src/apps/mediaplayer/Controller.cpp	2	todo		Overlay does not work anymore
