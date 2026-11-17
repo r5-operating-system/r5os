@@ -28,9 +28,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <fcntl.h>
 #include <syslog.h>
-#include <unistd.h>
 
 #include <Autolock.h>
 #include <ParameterWeb.h>
@@ -57,12 +55,6 @@ static void
 uvc_note(const char* line)
 {
 	syslog(LOG_INFO, "UVC: %s", line);
-	int fd = open("/boot/home/uvc.log", O_WRONLY | O_CREAT | O_APPEND, 0644);
-	if (fd < 0)
-		return;
-	write(fd, line, strlen(line));
-	write(fd, "\n", 1);
-	close(fd);
 }
 
 
