@@ -78,6 +78,10 @@ static const bigtime_t kReportInterval = 10000000;
 // move counts as its answer.
 static const bigtime_t kFrameGap = 400000;
 static const bigtime_t kInputWindow = 400000;
+// M13 step 4: while a window's footprint keeps changing (a resize), its
+// shadow mask is stretched from the one before; it is blurred again once the
+// footprint stayed the same for this long.
+static const bigtime_t kShadowSettle = 100000;
 // The earliest mouse move that no damage has answered yet, or 0.
 static int64 sInputWhen = 0;
 
@@ -529,6 +533,8 @@ struct Compositor::Entry : public BReferenceable {
 		maskReach(0),
 		maskSmall(false),
 		maskStrength(0),
+		maskStretched(false),
+		maskChanged(0),
 		glassLeft(0),
 		glassTop(0),
 		glassStrength(0),
@@ -569,6 +575,10 @@ struct Compositor::Entry : public BReferenceable {
 	bool				maskSmall;
 	int32				maskStrength;
 	BRegion				maskShape;		// footprint, window coordinates
+	// M13 step 4: the mask was stretched, not blurred, for maskShape; and
+	// when maskShape last changed
+	bool				maskStretched;
+	bigtime_t			maskChanged;
 
 	// The kept blur behind the glass: one full-size pixel per glass pixel,
 	// the rectangles of glassShape one after another.
@@ -1067,6 +1077,10 @@ Compositor::Compositor(Desktop* desktop, HWInterface* screen)
 	fOutOfMemory(false),
 	fPeriod(0),
 	fLastCompose(0),
+	fGridEpoch(0),
+	fGridPeriod(0),
+	fGridSlot(-1),
+	fShadowDue(0),
 	fFrameWidth(0),
 	fFrameHeight(0),
 	fScratch(NULL),
@@ -2695,6 +2709,13 @@ Compositor::_ComposeLoop()
 			if (wait == B_INFINITE_TIMEOUT || slice < wait)
 				wait = slice;
 		}
+		// M13 step 4: a stretched shadow mask is blurred again when its
+		// window stays the same, also without new damage
+		if (fShadowDue > 0 && !fPaused) {
+			bigtime_t until = max_c(fShadowDue - system_time(), 1);
+			if (wait == B_INFINITE_TIMEOUT || until < wait)
+				wait = until;
+		}
 		status_t status = acquire_sem_etc(fWakeSem, 1, B_RELATIVE_TIMEOUT,
 			wait);
 		if (status != B_OK && status != B_TIMED_OUT)
@@ -2759,15 +2780,30 @@ Compositor::_ComposeLoop()
 			continue;
 		}
 		bool animating = _AnimationDamage(system_time());
-		if (status == B_TIMED_OUT && !animating)
+		bool settling = _ShadowSettleDamage(system_time());
+		if (status == B_TIMED_OUT && !animating && !settling)
 			continue;
 
 		// At most once per refresh period. The wait is outside the compose
 		// slot, so a mode change (SetMode takes the slot) never waits for
 		// it; the damage is taken after it, so nothing waits unseen.
+		// M13 step 4: on a fixed grid of periods, so the time this thread
+		// spends before a compose no longer pushes every next frame later.
+		// A slot that already began and has not composed goes at once (as
+		// a frame after a pause did); a slot composes once at most.
+		int64 gridSlot = -1;
 		if (fPeriod > 0) {
-			bigtime_t next = fLastCompose + fPeriod;
-			if (system_time() < next)
+			bigtime_t now = system_time();
+			if (fGridPeriod != fPeriod || fGridEpoch == 0) {
+				fGridPeriod = fPeriod;
+				fGridEpoch = now;
+				fGridSlot = -1;
+			}
+			gridSlot = (now - fGridEpoch) / fGridPeriod;
+			if (gridSlot <= fGridSlot)
+				gridSlot = fGridSlot + 1;
+			bigtime_t next = fGridEpoch + gridSlot * fGridPeriod;
+			if (now < next)
 				snooze_until(next, B_SYSTEM_TIMEBASE);
 		}
 
@@ -2903,6 +2939,10 @@ Compositor::_ComposeLoop()
 		_ShareFrame(shares, retry);
 
 		fLastCompose = system_time();
+		// M13 step 4: this slot has composed (a frame without damage
+		// above leaves its slot free)
+		if (gridSlot >= 0)
+			fGridSlot = gridSlot;
 		if (!_Compose(damage, layers, shares, effects)) {
 			// M11 review: the job may still run. The buffers of this
 			// frame are freed after the device is idle or lost
@@ -3994,10 +4034,22 @@ Compositor::_EnsureShadowMask(Layer* layer)
 	int32 strength = fStrength;
 	BRegion local(layer->shape);
 	local.OffsetBy(-layer->left, -layer->top);
-	if (entry->mask.IsSet() && entry->mask->Generation() == fGeneration
+	bool same = entry->mask.IsSet() && entry->mask->Generation() == fGeneration
 		&& entry->maskSmall == layer->shadowSmall
-		&& entry->maskStrength == strength && entry->maskShape == local)
+		&& entry->maskStrength == strength;
+	bool changed = !same || !(entry->maskShape == local);
+	// M13 step 4: a footprint that changes again within kShadowSettle of its
+	// last change (a resize) gets the mask before it, stretched; it is
+	// blurred again once the footprint stayed the same that long.
+	bigtime_t now = system_time();
+	if (same && !changed) {
+		if (!entry->maskStretched || now - entry->maskChanged < kShadowSettle)
+			return true;
+	} else if (same && now - entry->maskChanged < kShadowSettle
+		&& _StretchShadowMask(layer, local)) {
+		entry->maskChanged = now;
 		return true;
+	}
 
 	window_shadow_geometry shadow = window_shadow_for(strength,
 		layer->shadowSmall);
@@ -4011,6 +4063,7 @@ Compositor::_EnsureShadowMask(Layer* layer)
 	if (buffer == NULL) {
 		free(line);
 		entry->mask.Unset();
+		entry->maskStretched = false;
 		if (!fEffectsLogged) {
 			fEffectsLogged = true;
 			log_line("shadow skipped: window memory");
@@ -4039,6 +4092,115 @@ Compositor::_EnsureShadowMask(Layer* layer)
 	entry->maskSmall = layer->shadowSmall;
 	entry->maskStrength = strength;
 	entry->maskShape = local;
+	// M13 step 4
+	entry->maskStretched = false;
+	if (changed)
+		entry->maskChanged = now;
+	return true;
+}
+
+
+/*!	M13 step 4: the mask for \a local made from the window's mask before it,
+	without a blur: the right and bottom 2 * reach of it (the blur around
+	those edges) move with the new size, the rest stays where it was, and a
+	larger window repeats the last column and row before them, which lie
+	inside the old window, away from its edges. Right for a rectangle; for
+	the tab and a small window close enough until the blur is made again.
+*/
+bool
+Compositor::_StretchShadowMask(Layer* layer, const BRegion& local)
+{
+	Entry* entry = layer->entry.Get();
+	window_shadow_geometry shadow = window_shadow_for(entry->maskStrength,
+		entry->maskSmall);
+	if (local.CountRects() == 0 || shadow.reach != entry->maskReach
+		|| entry->mask->Bits() == NULL)
+		return false;
+	clipping_rect frame = local.FrameInt();
+	if (frame.left < 0 || frame.top < 0)
+		return false;
+	int32 band = 2 * shadow.reach;
+	int32 width = frame.right + 1 + band;
+	int32 height = frame.bottom + 1 + band;
+	int32 oldWidth = entry->maskWidth;
+	int32 oldHeight = entry->maskHeight;
+	if (oldWidth <= band || oldHeight <= band)
+		return false;
+	uint64 bytes = (uint64)width * height;
+
+	// The GPU is idle between two composes, so a mask large enough is
+	// written again in place, from a copy; a larger one gets room to grow.
+	BReference<WindowBuffer> target = entry->mask;
+	const uint8* source = (const uint8*)entry->mask->Bits();
+	uint8* copy = NULL;
+	if (bytes <= target->Bytes()) {
+		uint64 oldBytes = (uint64)oldWidth * oldHeight;
+		copy = (uint8*)malloc(oldBytes);
+		if (copy == NULL)
+			return false;
+		memcpy(copy, source, oldBytes);
+		source = copy;
+	} else {
+		uint64 room = bytes + bytes / 4;
+		if (room > UINT32_MAX)
+			return false;
+		WindowBuffer* buffer = _AllocateBuffer((uint32)((room + 3) / 4), 1);
+		if (buffer == NULL)
+			return false;
+		target.SetTo(buffer, true);
+	}
+	uint8* bits = (uint8*)target->Bits();
+
+	int32 keepX = oldWidth - band;
+	int32 keepY = oldHeight - band;
+	int32 left = width - band;
+	int32 direct = min_c(left, keepX);
+	for (int32 y = 0; y < height; y++) {
+		int32 sourceY = y >= height - band
+			? y - (height - oldHeight) : min_c(y, keepY - 1);
+		const uint8* from = source + (uint64)sourceY * oldWidth;
+		uint8* to = bits + (uint64)y * width;
+		memcpy(to, from, direct);
+		if (left > direct)
+			memset(to + direct, from[keepX - 1], left - direct);
+		memcpy(to + left, from + keepX, band);
+	}
+	free(copy);
+
+	entry->mask = target;
+	entry->maskWidth = width;
+	entry->maskHeight = height;
+	entry->maskShape = local;
+	entry->maskStretched = true;
+	return true;
+}
+
+
+/*!	M13 step 4: once a stretched mask's window stayed the same for
+	kShadowSettle, its shadow is damaged, so the next frame blurs the mask
+	again even when nothing else changes. Says whether it damaged one.
+*/
+bool
+Compositor::_ShadowSettleDamage(bigtime_t now)
+{
+	if (fShadowDue == 0 || now < fShadowDue)
+		return false;
+	fShadowDue = 0;
+	BRegion area;
+	{
+		BAutolock _(fLayerLock);
+		for (int32 i = 0; i < fLayers->CountItems(); i++) {
+			Layer* source = fLayers->ItemAt(i);
+			Entry* entry = source->entry.Get();
+			if (entry != NULL && source->shadow && entry->mask.IsSet()
+				&& entry->maskStretched
+				&& now - entry->maskChanged >= kShadowSettle)
+				area.Include(&source->shadowArea);
+		}
+	}
+	if (area.CountRects() == 0)
+		return false;
+	Damage(area);
 	return true;
 }
 
@@ -4144,6 +4306,8 @@ Compositor::_PrepareEffects(BRegion& damage, const LayerList& layers,
 		}
 	}
 	bool scratch = _EnsureScratch();
+	// M13 step 4: set again below for each mask still stretched
+	fShadowDue = 0;
 
 	BRegion below(generic);
 	uint32 belowHash = 0;
@@ -4156,6 +4320,12 @@ Compositor::_PrepareEffects(BRegion& damage, const LayerList& layers,
 
 		if (layer->shadow && !_EnsureShadowMask(layer))
 			layer->shadow = false;
+		// M13 step 4: when the stretched mask is blurred again
+		if (layer->shadow && entry->maskStretched) {
+			bigtime_t due = entry->maskChanged + kShadowSettle;
+			if (fShadowDue == 0 || due < fShadowDue)
+				fShadowDue = due;
+		}
 
 		BRegion glass(layer->glassFixed);
 		glass.Include(&layer->glassAlpha);

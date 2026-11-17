@@ -93,6 +93,26 @@ private:
 void
 skia_warm_up()
 {
+	// M13 step 4: on Lavapipe the warm-up competed with the first real
+	// drawing (5625U stick 3: a run of 19.5 s, and the warm-up ran into two
+	// Finish() timeouts, 10160 ms). There it starts after the first run
+	// that drew a window, or after 30 s without one.
+	SkiaGpu* gpu = SkiaGpu::Current();
+	if (gpu != NULL && gpu->OnCpu()) {
+		bigtime_t waitStart = system_time();
+		while (system_time() - waitStart < 30000000) {
+			gpu = SkiaGpu::Current();
+			if (gpu == NULL || gpu->IsShutDown() || gpu->WindowRunDone())
+				break;
+			snooze(100000);
+		}
+		bigtime_t waited = (system_time() - waitStart) / 1000;
+		fprintf(stderr, "app_server: gpu draw warm up after %" B_PRId64
+			" ms (lavapipe)\n", waited);
+		syslog(LOG_INFO, "app_server: gpu draw warm up after %" B_PRId64
+			" ms (lavapipe)\n", waited);
+	}
+
 	bigtime_t start = system_time();
 	BReference<UtilityBitmap> bitmap(new(std::nothrow) UtilityBitmap(
 		BRect(0, 0, 63, 63), B_RGBA32, 0), true);
@@ -113,6 +133,8 @@ skia_warm_up()
 	gradient.AddColor((rgb_color){ 0, 0, 255, 128 }, 255);
 	static const drawing_mode kModes[] = { B_OP_COPY, B_OP_OVER, B_OP_ALPHA,
 		B_OP_ALPHA };
+	// M13 step 4: the first Finish() status that is not B_OK
+	status_t finishStatus = B_OK;
 	for (int pass = 0; pass < 2; pass++) {
 		// pass 0: an opaque image (Skia's own blending), 1: not opaque
 		static_cast<SkiaDrawingEngine*>(engine.Get())->SetOpaque(pass == 0);
@@ -138,12 +160,21 @@ skia_warm_up()
 					B_FILTER_BITMAP_BILINEAR);
 			}
 		}
-		skia_offscreen_finish(engine.Get());
+		status_t status = skia_offscreen_finish(engine.Get());
+		if (status != B_OK && finishStatus == B_OK)
+			finishStatus = status;
 	}
 	// as Compositor.cpp's log_line(): stderr and the syslog
 	bigtime_t took = (system_time() - start) / 1000;
 	fprintf(stderr, "app_server: gpu draw warm up %" B_PRId64 " ms\n", took);
 	syslog(LOG_INFO, "app_server: gpu draw warm up %" B_PRId64 " ms\n", took);
+	if (finishStatus != B_OK) {
+		// M13 step 4: a timeout is late, not failed (M11 decision 14)
+		fprintf(stderr, "app_server: gpu draw warm up status %s\n",
+			strerror(finishStatus));
+		syslog(LOG_INFO, "app_server: gpu draw warm up status %s\n",
+			strerror(finishStatus));
+	}
 }
 
 

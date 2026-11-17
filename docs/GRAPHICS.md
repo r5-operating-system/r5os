@@ -192,6 +192,17 @@ An addition after the reset; it changes no step above. Haiku's `system_shutdown(
 - `radeon_hd` registers one when `r5_gfx9_kernel_start` starts the GFX9 path, and removes it in `r5_gfx9_kernel_stop`. Without the GFX9 path (another GPU, `gpu false`, `gfx9_ring false`) there is no hook and nothing changes.
 - The hook, in the reverse of the start order, as Linux: the CP halt (`CP_ME_CNTL` bits 24, 26, 28; `CP_MEC_CNTL` bits 28, 30, the same writes as `r5_gfx9_kernel_stop`), the PSP ring stop (`r5_gfx9_psp_ring_stop`, the reset's), `IH_RB_CNTL` and `CP_INT_CNTL_RING0` = 0, then `VM_CONTEXT0_CNTL` back to the value from before the start and the VM 0 invalidate (as `r5_gfx9_kernel_stop`). Nothing is freed. Bus mastering stays on (Linux clears it only for kexec).
 - `radeon_hd: shutdown gpu stop reboot|power off, psp ring stop ok|timeout <hex>` on the serial line (the syslog is written before it).
+- M13 addition (17 Nov 2026, not booted): the caps lock still blinked after restarts from RADV boots on sticks 3 and 4. A comparison with Linux v6.12 for Renoir found three steps the hook did not do. `mp1_state` UNLOAD sends nothing on Renoir (`renoir_ppt.c` has no `set_mp1_state`), so it is not one of them. The hook now runs, in this order:
+  1. The CP halt.
+  2. The RLC halt (`r5_gfx9_rlc_halt`, from `gfx_v9_0_rlc_stop`): `RLC_CNTL` bit 0 off, then the serdes wait from the start.
+  3. DESTROY_TMR (`r5_gfx9_psp_tmr_destroy`, from `psp_suspend` → `psp_tmr_terminate`): command 0x7 on the GPCOM ring, only when SETUP_TMR landed and the ring is still up; `r5_gfx9_kernel_stop` forgets the ring (`r5_gfx9_psp_forget`). The PSP fence number now goes up on every submit, also one that timed out.
+  4. The PSP ring stop.
+  5. Interrupts off.
+  6. VM 0 back, then `VM_CONTEXT1..15_CNTL` = 0, as Linux (the saved copy of context 1 is taken after R5's VMID 1 setup, so it cannot be restored).
+  7. The VM 0 invalidate.
+  8. The GFXHUB GART off (from `gfxhub_v1_0_gart_disable`): `MC_VM_MX_L1_TLB_CNTL` bits 0 and 6 off, `VM_L2_CNTL` bit 0 off, `VM_L2_CNTL3` = 0.
+
+  A second line follows: `radeon_hd: shutdown rlc quiet|busy, tmr destroy ok|failed <hex>, gart off`. The reset after a hang is unchanged: it still sends no DESTROY_TMR.
 
 Not yet booted on the 5625U (17 Nov 2026). Proof: a restart and a power off from R5 without the caps lock blinking, and the next start's `GFX9 scratch 0xdeadbeef`.
 

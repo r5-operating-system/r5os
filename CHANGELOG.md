@@ -45,6 +45,50 @@ Tested: `scripts/test-game-feel.sh` (host, ASan and UBSan): `feel_host_test: ok`
 
 Not tested: any real controller. DualSense and DualShock 4 rumble, trigger effects and motion need the owner's DualSense on a stick. The click and vibration trigger parameters, the sensor axes' signs and the DualShock 4 switch to full reports without its calibration report are the likely fixes. No PID controller was tested. The usb_hid output, feature and cache paths did not run (no USB game controller in QEMU). The widget drawing check is open. ARM64 and RISC-V 64 were not built.
 
+## 2026-11-17 - Settings: virtual memory file is replaced, not erased
+
+Problem: Settings wrote `/boot/system/settings/kernel/drivers/virtual_memory` with `B_ERASE_FILE` and then `Write`. A crash or a short write left an empty or truncated swap file. The kernel reads that file on the next start.
+
+What changed: the page writes a `.tmp` file, `fsync`s it, and `rename`s it over the real path, the same way `r5_driver_settings_write` already does.
+
+Limits: the separate VirtualMemory program still erases then writes. A change still waits for the next start.
+
+Tested: the C++ was not compiled on this host (needs libbe). Jam on this branch is recorded on the pull request.
+
+## 2026-11-17 - Graphics (M13): step 4, resize on RADV at the refresh rate, stick 4 results
+
+Problem: on stick 3 a window resize took 25.8 to 30.9 ms per frame on RADV and Lavapipe. Every frame re-blurred the window shadow, Skia held its lock while it waited for the GPU, and each new window size made a new VkImage. `check` judged a frame count that also counted the pauses in the mouse motion.
+
+What changed:
+- Compositor: during a resize the shadow mask is stretched and only rebuilt after 100 ms of stable size; frames are on a fixed time grid.
+- Skia: `RunWork` waits for the fence without `fLock`. On Lavapipe the warm-up runs after the first real drawing, and a failed `Finish` status is logged. Window VkImages grow in 64-pixel steps and are reused when the size fits and the origin is unchanged.
+- Stick tools: frame median <= 1.02 x the refresh period and p95 <= 1.5 x the period for drag and resize. Scroll input is not judged. `m13-measure` writes to `~/m13/boot<k>/measure`. Boot 2 also gets `gpu_app_server true`. `mesa_radv-25.3.6-9` was repacked with those tools.
+- After stick 4: the frame count is shown but no longer judged. The compositor makes no frame while the mouse pauses, so stick 4 had 487 to 565 frames in the window with a 16.7 ms median. The next stick needs a tools repack (`pack-radv.py --tools-only`) for this.
+
+Tested on the 5625U, stick 4 (image `c7e3d042`, `pre-stick ok` at the stick branch `e3e11ed483`), logs `generated/boot-5625u-54`:
+- Boot 1 (RADV): warm-up 2326 ms. Drag 16.8 ms (p95 17.4), resize 16.7 ms (p95 26.1), was 25.8 to 30.4.
+- Boot 2 (RADV, `gpu_app_server`, `gpu_compositor_scanout`, `gfx9_wc_gtt`): warm-up 94 ms, `scanout through vulkan 1920x1080`. Resize 16.7 ms (p95 65.1).
+- Boot 3 (Lavapipe, 128-bit): drag 16.7 ms (compose 6.3). Resize 35.1 ms (p95 213, compose 16.1, draw 24.2), was 30.9. Warm-up `after 200 ms (lavapipe)`, then 10448 ms with `warm up status Operation timed out`.
+- Every boot: `check` PASS on no gpu lost and no gpu hang. No `gpu draw off`, fence timeout or `compose compare MISMATCH` in the logs.
+- The caps lock blinked after the restarts of boots 1 and 2 (RADV), not after boot 3 (owner). The shutdown stop is a separate change.
+
+Limits: Lavapipe resize is slower than on stick 3, and the Lavapipe warm-up still times out (the 5 s `Finish` while LLVM compiles). The owner wants only the window outline during a resize on Lavapipe; open question: Lavapipe only or a setting. VulkanTeapot still tears with the compositor on Lavapipe and the client on RADV (fix in `generated/m13/wsi-blit-fence.patch`, needs Mesa `-10`). QEMU `r5-draw-compare` 447/490 (was 448): `gradient-linear-roundrect/clear` "gpu failed", probably the same `Finish` timeout, not proven.
+## 2026-11-17 - Graphics (M13): the GPU stop at shutdown also stops the RLC, destroys the PSP TMR and turns the GART off
+
+Problem: after a restart from a RADV boot the 5625U's caps lock still blinked (3 long, 2 short, HP 3.2 memory), on sticks 3 and 4, but not after the Lavapipe boot. A comparison of Linux v6.12 `amdgpu_pci_shutdown` → `amdgpu_device_ip_suspend` for Renoir with `gfx9_shutdown_hook` found what the hook skipped. The suspect from the handover, `mp1_state` UNLOAD, sends nothing on Renoir: `renoir_ppt.c` has no `set_mp1_state` and no PrepareMp1ForUnload.
+
+What changed (the hook, in Linux order):
+- After the CP halt, the RLC halt of `gfx_v9_0_rlc_stop` (`RLC_CNTL` bit 0 off, the serdes wait from the start), `r5_gfx9_rlc_halt`.
+- Before the PSP ring stop, DESTROY_TMR (command 0x7, `psp_suspend` → `psp_tmr_terminate`) on the GPCOM ring, `r5_gfx9_psp_tmr_destroy`; only when SETUP_TMR landed and the ring is still up. The start keeps the ring, command and fence buffers for it; the PSP load itself is unchanged. `r5_gfx9_kernel_stop` forgets them (`r5_gfx9_psp_forget`). The PSP fence number now goes up on every submit, also a timed-out one.
+- After VM 0 is put back: `VM_CONTEXT1..15_CNTL` = 0, and after the VM 0 invalidate the GFXHUB L1 TLB, advanced driver model and L2 cache off (`gfxhub_v1_0_gart_disable`).
+- A second serial line: `radeon_hd: shutdown rlc quiet|busy, tmr destroy ok|failed <hex>, gart off`.
+- The contract in `docs/GRAPHICS.md` and the stop order in `AGENTS.md` (owner's go, 17 Nov).
+
+An independent review found three faults in the first draft, fixed before the commit: VMIDs 1 to 15 were "restored" from a copy taken after R5's own VMID 1 setup (now 0, as Linux); stale PSP pointers after a kernel-stage stop; a reused fence number after a timeout.
+
+Limits: the link between the TMR or the GART and the HP 3.2 code is inferred, not proven. The reset after a hang still sends no DESTROY_TMR. Not done: MMHUB GART off (not checked whether R5 programs MMHUB), clock-gating ungate.
+
+Tested: `scripts/build-locked.sh` (raw image) only; not booted. Proof needs the next stick: a restart and a power off without the caps lock blinking, the new serial line, and the next start's `GFX9 scratch 0xdeadbeef`.
 
 ## 2026-11-17 - Graphics (M13): stick 3 on the 5625U, RADV stays on
 
