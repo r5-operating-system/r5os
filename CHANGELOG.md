@@ -11,7 +11,7 @@ What changed (all only with `bt_voice true`; without it nothing changes):
 
 Limits: nothing tried on a radio. If the XM4 refuses mSBC with these settings, the link stays down (R5 does not fall back to CVSD after an mSBC codec choice). The headset hears silence (no speaker path).
 
-Tested: see the pull request. Host: `bt_rfcomm_test` (agent parts) 0 failed; `fuzz-bt.sh hfp` 60 s: 27.5 million lines, 0 crashes, with and without codec negotiation. ARM64 and RISC-V 64 not built or tested.
+Tested: `scripts/build-locked.sh` exit 0 (x86_64; the first build failed on a duplicate `case` from a line-numbered edit that also replaced a comment, fixed). QEMU (KVM, SMAP and SMEP, Login) on an own image copy: `bt_rfcomm_test` 0 failed, with `HFPGateway` over ports: the headset sends `AT+BAC=1,2`, R5 sends `+BCS: 2`, the headset confirms, an mSBC link is asked, and closed when the microphone is let go; `bt_voice_test` and `gamecontroller_test` ok; no SMAP fault or panic. Host: the agent parts 0 failed; `fuzz-bt.sh hfp` 60 s: 27.5 million lines, 0 crashes, with and without codec negotiation. Not tested: the HCI commands on a radio. ARM64 and RISC-V 64 not built or tested.
 
 ## 2026-11-17 - Game controllers (Bluetooth step 8, option B): a Settings page to see and test controllers, and named buttons for games
 
