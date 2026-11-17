@@ -22,6 +22,7 @@
 
 #include <PCI.h>
 #include <KernelExport.h>
+#include <r5_shutdown.h>
 #include <driver_settings.h>
 
 // The kernel exports this with C linkage. The private vm.h declaration
@@ -67,6 +68,7 @@ static uint32 sLastRing = 0;
 static uint8 sFirstRaw[4][32];
 static area_id sSystemArea = -1;
 static bool sGfx9Started = false;
+static bool sShutdownHooked = false;
 /* The boot choices, so a restart after a reset runs the same stages. */
 static struct {
 	bool	workload;
@@ -700,9 +702,54 @@ r5_gfx9_map_vram(uint64 offset, uint64 bytes, void** address)
 }
 
 
+/* GFX9 stop at shutdown (docs/GRAPHICS.md "GFX9 stop at shutdown on GC
+ * 9.3"), an addition after the reset: Haiku calls no driver before a
+ * restart, so the command processor, the PSP ring and the interrupts ran
+ * on into the firmware's start. Linux stops them in amdgpu_pci_shutdown
+ * (amdgpu_device_ip_suspend), in the reverse of the start order: GFX (the
+ * CP halt), PSP (ring stop), IH, then the GART. The same writes as
+ * r5_gfx9_kernel_stop and the reset's PSP ring stop; nothing is freed,
+ * the machine restarts or powers off next. */
+static void
+gfx9_shutdown_hook(bool reboot, void* cookie)
+{
+	(void)cookie;
+	if (sInfo == NULL || !sGfx9Started || sInfo->registers_area < 0
+		|| sInfo->registers == 0)
+		return;
+	uint32 me = gc_byte(mmCP_ME_CNTL);
+	uint32 mec = gc_byte(mmCP_MEC_CNTL);
+	kwrite(sInfo, me, kread(sInfo, me)
+		| (1u << 24) | (1u << 26) | (1u << 28));
+	kwrite(sInfo, mec, kread(sInfo, mec) | (1u << 30) | (1u << 28));
+	uint32 pspSeen = 0;
+	bool pspStopped = r5_gfx9_psp_ring_stop(&pspSeen);
+	sIhWbReady = false;
+	kwrite(sInfo, oss_byte(mmIH_RB_CNTL), 0);
+	kwrite(sInfo, gc_byte(mmCP_INT_CNTL_RING0), 0);
+	if (sVmCntlSavedValid)
+		kwrite(sInfo, gc_byte(mmVM_CONTEXT0_CNTL), sVmCntlSaved);
+	const uint32 eng = 17;
+	kwrite(sInfo, gc_byte(mmVM_INVALIDATE_ENG0_REQ + eng),
+		r5_gfx9_tlb_req(0, 0));
+	for (int i = 0; i < 1000; i++) {
+		if ((kread(sInfo, gc_byte(mmVM_INVALIDATE_ENG0_ACK + eng)) & 1u) != 0)
+			break;
+		snooze(10);
+	}
+	dprintf("radeon_hd: shutdown gpu stop %s, psp ring stop %s %08lx\n",
+		reboot ? "reboot" : "power off", pspStopped ? "ok" : "timeout",
+		(unsigned long)pspSeen);
+}
+
+
 void
 r5_gfx9_kernel_stop()
 {
+	if (sShutdownHooked) {
+		r5_unregister_shutdown_hook(gfx9_shutdown_hook, NULL);
+		sShutdownHooked = false;
+	}
 	if (sInfo != NULL && sInfo->registers_area >= 0 && sInfo->registers != 0) {
 		uint32 me = gc_byte(mmCP_ME_CNTL);
 		uint32 mec = gc_byte(mmCP_MEC_CNTL);
@@ -2173,6 +2220,9 @@ r5_gfx9_kernel_start(radeon_info& info)
 		return;
 	}
 	sGfx9Started = true;
+	if (!sShutdownHooked
+		&& r5_register_shutdown_hook(gfx9_shutdown_hook, NULL) == B_OK)
+		sShutdownHooked = true;
 	if (!map_pool(info)) {
 		report_checks(switchedOff, 1, 0);
 		return;
