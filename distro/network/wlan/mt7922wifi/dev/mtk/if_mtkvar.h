@@ -135,6 +135,7 @@
 
 /* Reading a frame off the air. */
 #define MTK_RXD_FIXED			24
+#define MTK_RX_TYPE_TXS			0
 #define MTK_RX_TYPE_NORMAL		2
 #define MTK_RX_TYPE_SENT		6
 #define MTK_RX_TYPE_EVENT		7
@@ -237,6 +238,12 @@ extern const uint8_t mtk_channels_5ghz[MTK_CHANNELS_5GHZ];
 #define MTK_STA_STATE_NONE		0
 #define MTK_STA_STATE_ASSOC		2
 #define MTK_HW_SCAN_TIMEOUT		15	/* seconds */
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ */
+#define MTK_JOIN_TIMEOUT		15	/* seconds, then not connected */
+/* SPDX-SnippetEnd */
 #define MTK_SCAN_REQUEST_SIZE		1186
 
 #define MTK_FILTER_ENABLE		(1u << 31)
@@ -373,6 +380,44 @@ struct mtk_softc {
 	int			sc_hwscanning;	/* a sweep is running */
 	int			sc_hwscan_at;	/* since when, in ticks */
 	uint8_t			sc_hwscan_seq;
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * A join that never finishes is given up after MTK_JOIN_TIMEOUT.
+ */
+	int			sc_joining;
+	int			sc_join_at;
+	int			sc_join_giveup;
+/* SPDX-SnippetEnd */
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * HT and VHT come from the card's capability event. They stay off unless
+ * the mt7922wifi settings say ht_vht.
+ */
+	int			sc_ht_vht;
+	uint8_t			sc_phy_ht;
+	uint8_t			sc_phy_vht;
+	uint8_t			sc_phy_bw;
+	uint8_t			sc_phy_rx_ldpc;
+	uint8_t			sc_phy_rx_stbc;
+	uint32_t		sc_tx_kbps;
+	uint8_t			sc_tx_mode;
+	uint8_t			sc_tx_mcs;
+	uint8_t			sc_tx_nss;
+	uint16_t		sc_tx_width;
+	int			(*sc_ampdu_rx_start)(struct ieee80211_node*,
+					struct ieee80211_rx_ampdu*, int, int, int);
+	void			(*sc_ampdu_rx_stop)(struct ieee80211_node*,
+					struct ieee80211_rx_ampdu*);
+	uint8_t			sc_ccmp[16];
+	uint8_t			sc_ccmp_len;
+	uint8_t			sc_igtk[16];
+	uint8_t			sc_igtk_id;
+	uint8_t			sc_igtk_len;
+	int			(*sc_key_set)(struct ieee80211vap*,
+					const struct ieee80211_key*);
+/* SPDX-SnippetEnd */
 
 	/* One command at a time. There is a single command buffer and a
 	 * single sequence number behind mtk_mcu_send, and two threads in it
@@ -531,6 +576,9 @@ int		mtk_sta_remove(struct mtk_softc*, uint16_t wcid,
 			const uint8_t* bssid);
 int		mtk_sta_update(struct mtk_softc*, struct ieee80211_node*,
 			uint16_t wcid, int state, int enable, int newly);
+int		mtk_sta_ba(struct mtk_softc*, uint16_t wcid, int tid,
+			int winsize, int ssn, int enable, int tx);
+int		mtk_sta_igtk(struct mtk_softc*);
 int		mtk_roc(struct mtk_softc*, struct ieee80211_channel*,
 			uint32_t milliseconds);
 int		mtk_roc_abort(struct mtk_softc*);

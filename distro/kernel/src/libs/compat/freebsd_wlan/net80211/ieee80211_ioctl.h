@@ -816,6 +816,41 @@ struct ieee80211_haiku_tx_rate {
 		/* channel width in MHz */
 	uint16 i_reserved;
 };
+
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * SAE is authentication algorithm 3. The body is the management frame
+ * body, including the 6-byte authentication header. The key index of an
+ * IGTK is 4 or 5, which does not fit the four group-key slots.
+ */
+#ifndef IEEE80211_AUTH_SAE
+#define IEEE80211_AUTH_SAE 6
+#endif
+#ifndef IEEE80211_AUTH_ALG_SAE
+#define IEEE80211_AUTH_ALG_SAE 3
+#endif
+#ifndef IEEE80211_C_MFP
+#define IEEE80211_C_MFP 0x00400000
+#endif
+#define IEEE80211_SAE_MAX 400
+#define IEEE80211_IOC_HAIKU_SAE_AUTH 0x6004
+struct ieee80211_haiku_sae_auth {
+	uint8_t i_mac[IEEE80211_ADDR_LEN];
+	uint16_t i_len;
+	uint8_t i_body[IEEE80211_SAE_MAX];
+};
+#define IEEE80211_IOC_HAIKU_IGTK 0x6005
+struct ieee80211_haiku_igtk {
+	uint8_t i_key[16];
+	uint8_t i_keyix;
+	uint8_t i_keylen;
+};
+int ieee80211_send_sae_auth(struct ieee80211vap *, const uint8_t *,
+	const uint8_t *, int);
+int ieee80211_take_sae_auth(struct ieee80211vap *, uint8_t *, uint8_t *,
+	uint16_t *);
+/* SPDX-SnippetEnd */
 #endif /* __HAIKU__ */
 
 /*

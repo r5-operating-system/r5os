@@ -175,6 +175,7 @@ enum {
 
 #define R5_JOYSTICK_NAME_LENGTH		64
 #define R5_JOYSTICK_MAX_AXIS_USAGES	32
+#define R5_JOYSTICK_BUTTON_USAGE_WORDS	4
 
 typedef struct _r5_joystick_info {
 	uint32	size;
@@ -191,6 +192,11 @@ typedef struct _r5_joystick_info {
 		   0x31 Y, 0x32 Z, 0x33 Rx, ...); 0 when unknown */
 	char	name[R5_JOYSTICK_NAME_LENGTH];
 		/* the product name, UTF-8, empty when the device has none */
+	uint32	button_usages[R5_JOYSTICK_BUTTON_USAGE_WORDS];
+		/* added after name (a shorter "size" back means an older driver):
+		   bit n % 32 of word n / 32 is set when HID Button usage n + 1 is
+		   in the report (usages 1 to 128), so a reader can tell the buttons
+		   that exist from the gaps in the read */
 } r5_joystick_info;
 /* SPDX-SnippetEnd */
 

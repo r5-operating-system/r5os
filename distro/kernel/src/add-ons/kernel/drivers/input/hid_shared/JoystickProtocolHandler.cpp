@@ -514,6 +514,15 @@ JoystickProtocolHandler::_GetInfo(void* buffer, size_t length)
 	info.axis_count = fAxisCount;
 	for (uint32 i = 0; i < axes; i++)
 		info.axis_usage[i] = fAxis[i] != NULL ? fAxis[i]->UsageID() : 0;
+	// Which Button usages exist: the read numbers a button by its usage
+	// (usage 1 is button 0) and leaves gaps where the report has none.
+	for (uint32 i = 0; i < fButtonCount; i++) {
+		uint32 usage = fButtons[i] != NULL ? fButtons[i]->UsageID() : 0;
+		if (usage >= 1 && usage <= R5_JOYSTICK_BUTTON_USAGE_WORDS * 32) {
+			info.button_usages[(usage - 1) / 32]
+				|= (uint32)1 << ((usage - 1) % 32);
+		}
+	}
 	locker.Unlock();
 
 	info.size = size;

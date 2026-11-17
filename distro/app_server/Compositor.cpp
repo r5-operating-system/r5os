@@ -25,6 +25,7 @@
 #include <syslog.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
+#include <sys/stat.h>
 
 #include <Autolock.h>
 #include <FindDirectory.h>
@@ -302,7 +303,12 @@ thread_cpu_time()
 	F(vkDestroyImageView) \
 	F(vkCreateSampler) \
 	F(vkDestroySampler) \
-	F(vkCmdCopyImageToBuffer)
+	F(vkCmdCopyImageToBuffer) \
+	F(vkCreateQueryPool) \
+	F(vkDestroyQueryPool) \
+	F(vkCmdResetQueryPool) \
+	F(vkCmdWriteTimestamp) \
+	F(vkGetQueryPoolResults)
 
 #define VK_DECLARE(name) PFN_##name name;
 
@@ -338,6 +344,10 @@ struct CompositorVulkan {
 	VkImage						blankImage;
 	VkDeviceMemory				blankMemory;
 	VkImageView					blankView;
+
+	// M13 step 2, gpu_debug: GPU timestamps between the compose's passes
+	VkQueryPool					timestamps;
+	float						timestampPeriod;
 
 	VkBuffer					frame;
 	VkDeviceMemory				frameMemory;
@@ -1105,6 +1115,21 @@ Compositor::_InitVulkan(bool radv, const char** _reason)
 	// buffers of an earlier device are not freed through this one
 	fGeneration++;
 
+	// M13 step 2 (owner, 16 Nov 2026): Mesa's own shader cache for
+	// app_server (uid 0) goes in the system cache directory, not in the
+	// administrator's ~/config/cache. Set before the driver loads; a
+	// value already in the environment (a developer's) stays.
+	{
+		char cache[B_PATH_NAME_LENGTH];
+		if (find_directory(B_SYSTEM_CACHE_DIRECTORY, -1, true, cache,
+				sizeof(cache)) == B_OK) {
+			strlcat(cache, "/app_server", sizeof(cache));
+			mkdir(cache, 0755);
+			strlcat(cache, "/mesa", sizeof(cache));
+			mkdir(cache, 0755);
+			setenv("MESA_SHADER_CACHE_DIR", cache, 0);
+		}
+	}
 	vk->library = dlopen("libvulkan.so.1", RTLD_NOW | RTLD_LOCAL);
 	if (vk->library == NULL)
 		vk->library = dlopen("libvulkan.so", RTLD_NOW | RTLD_LOCAL);
@@ -1155,6 +1180,7 @@ Compositor::_InitVulkan(bool radv, const char** _reason)
 		bool isCpu = properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU;
 		if (isCpu != radv) {
 			vk->physical = devices[i];
+			vk->timestampPeriod = properties.limits.timestampPeriod;
 			strlcpy(vk->deviceName, properties.deviceName,
 				sizeof(vk->deviceName));
 			break;
@@ -1497,6 +1523,18 @@ Compositor::_InitImages(const char** _reason)
 		return false;
 	}
 
+	if (fDebug && vk->timestampPeriod > 0) {
+		// M13 step 2: the compose time per pass (gpu_debug only); without
+		// it the frame has no timestamps
+		VkQueryPoolCreateInfo queryInfo = {};
+		queryInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+		queryInfo.queryType = VK_QUERY_TYPE_TIMESTAMP;
+		queryInfo.queryCount = kPassStamps;
+		if (vk->vkCreateQueryPool(vk->device, &queryInfo, NULL,
+				&vk->timestamps) != VK_SUCCESS)
+			vk->timestamps = VK_NULL_HANDLE;
+	}
+
 	VkCommandBufferBeginInfo begin = {};
 	begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 	begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
@@ -1600,6 +1638,8 @@ Compositor::_ExitVulkan()
 			vk->vkDestroyDescriptorSetLayout(vk->device, vk->effectsSetLayout,
 				NULL);
 		}
+		if (vk->timestamps != VK_NULL_HANDLE)
+			vk->vkDestroyQueryPool(vk->device, vk->timestamps, NULL);
 		if (vk->blankView != VK_NULL_HANDLE)
 			vk->vkDestroyImageView(vk->device, vk->blankView, NULL);
 		if (vk->blankImage != VK_NULL_HANDLE)
@@ -1643,7 +1683,10 @@ allocate_host_buffer(CompositorVulkan* vk, uint64 bytes, VkBuffer* _buffer,
 	VkBufferCreateInfo bufferInfo = {};
 	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 	bufferInfo.size = bytes;
-	bufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+	// M13: the frame is also a transfer target (the image copy), and the
+	// compare's copies are written by vkCmdCopyImageToBuffer
+	bufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
+		| VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	if (vk->vkCreateBuffer(vk->device, &bufferInfo, NULL, _buffer)
 			!= VK_SUCCESS)
@@ -2885,6 +2928,14 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 	if (compare)
 		_RecordCompareCopies(layers, copies);
 
+	// M13 step 2, gpu_debug: a timestamp after each pass
+	fStampCount = 0;
+	if (vk->timestamps != VK_NULL_HANDLE) {
+		vk->vkCmdResetQueryPool(vk->commands, vk->timestamps, 0,
+			kPassStamps);
+		_Stamp(kPassCopy);
+	}
+
 	compose_rect rect;
 	memset(&rect, 0, sizeof(rect));
 	rect.frameStride = vk->scanActive ? vk->backPitch / 4 : fFrameWidth;
@@ -2929,11 +2980,15 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 		if (withEffects) {
 			// The blur reads what lies below, before this window's own
 			// shadow darkens it; then the shadow; then the window.
-			if (layer->blurRegion.CountRects() > 0)
+			_Stamp(kPassCopy);
+			if (layer->blurRegion.CountRects() > 0) {
 				_RecordBlur(layer, (uint64)frameInfo.buffer, rect.frameStride);
+				_Stamp(kPassBlur);
+			}
 			if (layer->shadow) {
 				_RecordShadow(layer, damage, (uint64)frameInfo.buffer,
 					rect.frameStride);
+				_Stamp(kPassShadow);
 			}
 			glassPart = layer->glassFixed;
 			glassPart.Include(&layer->glassAlpha);
@@ -2960,6 +3015,15 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 		rect.fill = layer == NULL ? 1 : fromImage ? kComposeFromImage : 0;
 		rect.color = background;
 		rect.sourceStride = layer != NULL ? layer->buffer->Width() : 0;
+		if (fromImage && part.CountRects() > 0) {
+			// M13 (step 3's copy path, done with step 2): the plain part of
+			// a Skia window is a transfer copy from its image into the
+			// frame, the same bytes as the copy shader. On Lavapipe
+			// texelFetch in compose.comp cost 150-160 ms per frame while
+			// dragging (QEMU, "compose passes"), a copy is a row memcpy.
+			_RecordImageCopy(layer, part, frameInfo.buffer, rect.frameStride);
+			part.MakeEmpty();
+		}
 		for (int32 i = 0; i < part.CountRects(); i++) {
 			clipping_rect r = part.RectAtInt(i);
 			rect.frameX = r.left;
@@ -2977,8 +3041,10 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 		}
 		if (withEffects && glassPart.CountRects() > 0) {
 			// next to the copy above, on other pixels: no barrier between
+			_Stamp(kPassCopy);
 			_RecordGlass(layer, glassPart, (uint64)frameInfo.buffer,
 				rect.frameStride);
+			_Stamp(kPassGlass);
 			vk->vkCmdBindPipeline(vk->commands,
 				VK_PIPELINE_BIND_POINT_COMPUTE, vk->pipeline);
 			// a shared view below is drawn over all of the window's part
@@ -3043,6 +3109,7 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 			rect.frameStride);
 		_RecordSlide((uint64)frameInfo.buffer, rect.frameStride);
 	}
+	_Stamp(fFrameAnimating ? kPassAnimation : kPassCopy);
 
 	// Decision 4: the damaged rows of the back buffer onto the scanout, in
 	// this submit, under this fence. Each pitch is its buffer's own.
@@ -3161,11 +3228,17 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 			break;
 		}
 		bigtime_t late = system_time() - started;
-		if (late >= kFenceLimit) {
+		// M13 (owner, 16 Nov 2026): Lavapipe is the CPU, not a GPU that
+		// can hang; a late frame there is a busy machine (QEMU: frames of
+		// more than 15 s right after Sign in turned the compositor off).
+		// It waits on, without a limit. RADV keeps the 15 s limit and the
+		// reset ladder.
+		if (late >= kFenceLimit && !fOnLavapipe) {
 			failure = "fence timeout";
 			break;
 		}
-		if (system_time() - fLateLogged >= 1000000) {
+		if (system_time() - fLateLogged
+				>= (late >= kFenceLimit ? 10000000 : 1000000)) {
 			fLateLogged = system_time();
 			log_line("compose late %" B_PRId64 " ms", late / 1000);
 		}
@@ -3190,6 +3263,11 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 		fSamples[fSampleCount++] = took;
 	if (!signals.empty())
 		fSkia->ReturnSignals(signals);
+	if (!fConsumedSignals.empty()) {
+		fSkia->ReturnSignals(fConsumedSignals);
+		fConsumedSignals.clear();
+	}
+	_TakeStamps();
 
 	if (compare) {
 		// The CPU cannot read an imported image; those parts are left out.
@@ -3282,6 +3360,115 @@ Compositor::_FreeCompareCopies(CompareCopies& copies)
 }
 
 
+/*!	M13: \a region (screen pixels inside the window's image) copied from
+	the image into the frame with vkCmdCopyImageToBuffer. The image goes
+	to TRANSFER_SRC_OPTIMAL and back to the sampler's layout; the frame's
+	writes before and after are ordered with the compute passes.
+*/
+void
+Compositor::_RecordImageCopy(const Layer* layer, const BRegion& region,
+	VkBuffer_T* frame, uint32 frameStride)
+{
+	CompositorVulkan* vk = fVulkan;
+	SkiaImage* image = layer->image.Get();
+	int32 count = region.CountRects();
+	VkBufferImageCopy* copies = new(std::nothrow) VkBufferImageCopy[count];
+	if (copies == NULL)
+		return;
+	int32 sourceLeft = layer->SourceLeft();
+	int32 sourceTop = layer->SourceTop();
+	for (int32 i = 0; i < count; i++) {
+		clipping_rect r = region.RectAtInt(i);
+		VkBufferImageCopy& copy = copies[i];
+		memset(&copy, 0, sizeof(copy));
+		copy.bufferOffset = ((uint64)r.top * frameStride + r.left) * 4;
+		copy.bufferRowLength = frameStride;
+		copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		copy.imageSubresource.layerCount = 1;
+		copy.imageOffset.x = r.left - sourceLeft;
+		copy.imageOffset.y = r.top - sourceTop;
+		copy.imageExtent.width = r.right - r.left + 1;
+		copy.imageExtent.height = r.bottom - r.top + 1;
+		copy.imageExtent.depth = 1;
+	}
+
+	VkMemoryBarrier before = {};
+	before.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+	before.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT
+		| VK_ACCESS_TRANSFER_WRITE_BIT;
+	before.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+	VkImageMemoryBarrier toCopy = {};
+	toCopy.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	toCopy.srcAccessMask = 0;
+	toCopy.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+	toCopy.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	toCopy.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+	toCopy.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	toCopy.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	toCopy.image = (VkImage)image->Image();
+	toCopy.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	toCopy.subresourceRange.levelCount = 1;
+	toCopy.subresourceRange.layerCount = 1;
+	vk->vkCmdPipelineBarrier(vk->commands,
+		VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+		VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &before, 0, NULL, 1, &toCopy);
+	vk->vkCmdCopyImageToBuffer(vk->commands, (VkImage)image->Image(),
+		VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, frame, count, copies);
+	delete[] copies;
+
+	VkMemoryBarrier after = {};
+	after.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+	after.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+	after.dstAccessMask = VK_ACCESS_SHADER_READ_BIT
+		| VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT
+		| VK_ACCESS_TRANSFER_WRITE_BIT;
+	VkImageMemoryBarrier toRead = toCopy;
+	toRead.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+	toRead.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+	toRead.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+	toRead.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	vk->vkCmdPipelineBarrier(vk->commands, VK_PIPELINE_STAGE_TRANSFER_BIT,
+		VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+		0, 1, &after, 0, NULL, 1, &toRead);
+}
+
+
+//!	M13 step 2, gpu_debug: a timestamp; the time since the last one counts
+//!	for \a pass.
+void
+Compositor::_Stamp(int32 pass)
+{
+	CompositorVulkan* vk = fVulkan;
+	if (vk->timestamps == VK_NULL_HANDLE || fStampCount >= kPassStamps)
+		return;
+	vk->vkCmdWriteTimestamp(vk->commands,
+		VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, vk->timestamps, fStampCount);
+	fStampPass[fStampCount++] = pass;
+}
+
+
+//!	After the fence: the frame's timestamps into the per-pass sums.
+void
+Compositor::_TakeStamps()
+{
+	CompositorVulkan* vk = fVulkan;
+	if (vk->timestamps == VK_NULL_HANDLE || fStampCount < 2)
+		return;
+	uint64 values[kPassStamps];
+	if (vk->vkGetQueryPoolResults(vk->device, vk->timestamps, 0, fStampCount,
+			sizeof(values), values, sizeof(uint64), VK_QUERY_RESULT_64_BIT)
+			!= VK_SUCCESS)
+		return;
+	for (int32 i = 1; i < fStampCount; i++) {
+		if (values[i] < values[i - 1])
+			continue;
+		fPassTime[fStampPass[i]] += (bigtime_t)((values[i] - values[i - 1])
+			* (double)vk->timestampPeriod / 1000.0);
+	}
+	fPassFrames++;
+}
+
+
 /*!	M13 step 2: a pass that composes nothing (damage off screen, a pause)
 	still waits for the semaphores of the runs before it, so the runs can
 	signal them again. Between two composes, so the compose fence is free.
@@ -3308,21 +3495,22 @@ Compositor::_ConsumeSkiaSignals()
 		submit.waitSemaphoreCount = (uint32)waits.size();
 		submit.pWaitSemaphores = &waits[0];
 		submit.pWaitDstStageMask = &stages[0];
-		vk->vkResetFences(vk->device, 1, &vk->fence);
-		result = vk->vkQueueSubmit(vk->queue, 1, &submit, vk->fence);
+		result = vk->vkQueueSubmit(vk->queue, 1, &submit, VK_NULL_HANDLE);
 	}
 	SkiaGpu::UnlockQueue();
 	if (signals.empty())
 		return;
-	if (result == VK_SUCCESS) {
-		result = vk->vkWaitForFences(vk->device, 1, &vk->fence, VK_TRUE,
-			kFenceLimit * 1000);
+	if (result != VK_SUCCESS) {
+		if (fFailure == NULL)
+			fFailure = "submit";
+		return;
 	}
-	// a late GPU keeps them: the next compose's fence is the same one
-	if (result == VK_SUCCESS)
-		fSkia->ReturnSignals(signals);
-	else if (fFailure == NULL)
-		fFailure = result == VK_TIMEOUT ? "fence timeout" : "submit";
+	// No CPU wait: a Skia run can take seconds on Lavapipe, and a late GPU
+	// is not a failure (M11 decision 14; a 15 s wait here turned the
+	// compositor off in QEMU). The next compose's fence covers this batch,
+	// so they go back to the pool after it.
+	fConsumedSignals.insert(fConsumedSignals.end(), signals.begin(),
+		signals.end());
 }
 
 
@@ -4718,7 +4906,8 @@ Compositor::_ScanoutPrepare(RenderingBuffer* back)
 	else if (!import_own(vk, backToken,
 			(uint64)back->BytesPerRow() * back->Height(),
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
-				| VK_BUFFER_USAGE_TRANSFER_SRC_BIT, false, &vk->back,
+				| VK_BUFFER_USAGE_TRANSFER_SRC_BIT
+				| VK_BUFFER_USAGE_TRANSFER_DST_BIT, false, &vk->back,
 			&vk->backMemory)
 		|| !import_own(vk, scanToken, (uint64)scanPitch * back->Height(),
 			VK_BUFFER_USAGE_TRANSFER_DST_BIT, true, &vk->scanout,
@@ -5357,6 +5546,19 @@ Compositor::_Report()
 	}
 	log_line("compose median %" B_PRId64 " us cpu %" B_PRId64
 		" ms per 10 s", median, (cpu - fCpuAtReport) / 1000);
+	// M13 step 2: where the compose's GPU time goes, per frame
+	if (fPassFrames > 0) {
+		log_line("compose passes us per frame copy %" B_PRId64 " blur %"
+			B_PRId64 " shadow %" B_PRId64 " glass %" B_PRId64 " animation %"
+			B_PRId64 " frames %" B_PRId32,
+			fPassTime[kPassCopy] / fPassFrames,
+			fPassTime[kPassBlur] / fPassFrames,
+			fPassTime[kPassShadow] / fPassFrames,
+			fPassTime[kPassGlass] / fPassFrames,
+			fPassTime[kPassAnimation] / fPassFrames, fPassFrames);
+	}
+	memset(fPassTime, 0, sizeof(fPassTime));
+	fPassFrames = 0;
 	// M11 stick: the whole app_server, for the FPS compare of zero-copy
 	// and the copy path. A standard account cannot read another uid's
 	// team usage, so app_server logs it itself.

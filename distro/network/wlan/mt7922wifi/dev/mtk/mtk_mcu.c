@@ -690,8 +690,22 @@ mtk_read_capability(struct mtk_softc* sc)
 
 		if (tag == MTK_NIC_CAP_MAC_ADDR && size >= 6)
 			memcpy(sc->sc_macaddr, reply + at, 6);
-		else if (tag == MTK_NIC_CAP_PHY && size >= 12)
+		else if (tag == MTK_NIC_CAP_PHY && size >= 12) {
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * The PHY tag is the card's own report (mt76 mt7921/mcu.c, BSD-3-Clause-Clear).
+ * Byte 4 was already the stream count. The others are ht, vht, max
+ * bandwidth, LDPC and STBC.
+ */
+			sc->sc_phy_ht = reply[at + 0];
+			sc->sc_phy_vht = reply[at + 1];
+			sc->sc_phy_bw = reply[at + 3];
 			sc->sc_streams = reply[at + 4];
+			sc->sc_phy_rx_ldpc = reply[at + 7];
+			sc->sc_phy_rx_stbc = reply[at + 9];
+/* SPDX-SnippetEnd */
+		}
 
 		at += size;
 	}

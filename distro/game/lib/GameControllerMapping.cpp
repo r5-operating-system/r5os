@@ -146,7 +146,7 @@ target_is(const char* text, size_t length, const char* name)
 }
 
 
-static void
+static bool
 apply_pair(const char* key, size_t keyLength, const char* value,
 	size_t valueLength, controller_mapping& mapping)
 {
@@ -159,13 +159,13 @@ apply_pair(const char* key, size_t keyLength, const char* value,
 
 	mapping_source source;
 	if (!parse_source(value, valueLength, source))
-		return;
+		return false;
 
 	if (targetHalf == 0) {
 		for (int32 i = 0; i < B_CONTROLLER_BUTTON_COUNT; i++) {
 			if (target_is(key, keyLength, kButtonNames[i])) {
 				mapping.buttons[i] = source;
-				return;
+				return true;
 			}
 		}
 	}
@@ -178,9 +178,32 @@ apply_pair(const char* key, size_t keyLength, const char* value,
 			mapping.axes[i].negative = source;
 		else
 			mapping.axes[i].whole = source;
-		return;
+		return true;
 	}
 	// Other keys (crc, hint, sdk, misc2 and later) are not used.
+	return false;
+}
+
+
+// "target:source,target:source,..." up to the end of the line; how many
+// pairs were taken.
+static int32
+apply_pairs(const char* item, controller_mapping& mapping)
+{
+	int32 count = 0;
+	while (*item != '\0' && *item != '\n' && *item != '\r') {
+		const char* end = item;
+		while (*end != ',' && *end != '\0' && *end != '\n' && *end != '\r')
+			end++;
+		const char* colon = (const char*)memchr(item, ':', end - item);
+		if (colon != NULL && apply_pair(item, colon - item, colon + 1,
+				end - colon - 1, mapping))
+			count++;
+		if (*end != ',')
+			break;
+		item = end + 1;
+	}
+	return count;
 }
 
 
@@ -211,26 +234,21 @@ parse_line(const char* line, uint16 vendor, uint16 product,
 	memcpy(mapping.name, name, nameLength);
 	mapping.name[nameLength] = '\0';
 
-	const char* item = comma + 1;
-	while (*item != '\0' && *item != '\n' && *item != '\r') {
-		const char* end = item;
-		while (*end != ',' && *end != '\0' && *end != '\n' && *end != '\r')
-			end++;
-		const char* colon = (const char*)memchr(item, ':', end - item);
-		if (colon != NULL) {
-			apply_pair(item, colon - item, colon + 1, end - colon - 1,
-				mapping);
-		}
-		if (*end != ',')
-			break;
-		item = end + 1;
-	}
+	apply_pairs(comma + 1, mapping);
 	return true;
 }
 
 
 status_t
 find_mapping(const char* path, uint16 vendor, uint16 product,
+	controller_mapping& mapping)
+{
+	return find_mapping(path, vendor, product, 0, mapping);
+}
+
+
+status_t
+find_mapping(const char* path, uint16 vendor, uint16 product, uint16 bus,
 	controller_mapping& mapping)
 {
 	FILE* file = fopen(path, "r");
@@ -241,6 +259,7 @@ find_mapping(const char* path, uint16 vendor, uint16 product,
 	char line[2048];
 	bool skipping = false;
 	status_t status = B_ENTRY_NOT_FOUND;
+	controller_mapping found;
 	while (fgets(line, sizeof(line), file) != NULL) {
 		bool whole = strchr(line, '\n') != NULL || feof(file);
 		if (skipping) {
@@ -252,8 +271,17 @@ find_mapping(const char* path, uint16 vendor, uint16 product,
 			skipping = true;
 			continue;
 		}
-		if (parse_line(line, vendor, product, mapping)) {
+		if (!parse_line(line, vendor, product, found))
+			continue;
+		// The first line of any bus, unless one for this bus follows.
+		if (status != B_OK) {
+			mapping = found;
 			status = B_OK;
+		}
+		if (bus == 0)
+			break;
+		if (guid_bus(line) == bus) {
+			mapping = found;
 			break;
 		}
 	}
@@ -264,6 +292,14 @@ find_mapping(const char* path, uint16 vendor, uint16 product,
 
 status_t
 find_system_mapping(uint16 vendor, uint16 product,
+	controller_mapping& mapping)
+{
+	return find_system_mapping(vendor, product, 0, mapping);
+}
+
+
+status_t
+find_system_mapping(uint16 vendor, uint16 product, uint16 bus,
 	controller_mapping& mapping)
 {
 	// The image puts the files in system/non-packaged/data; a package
@@ -284,7 +320,8 @@ find_system_mapping(uint16 vendor, uint16 product,
 				continue;
 			path.Append("game_controllers");
 			path.Append(kFiles[f]);
-			if (find_mapping(path.Path(), vendor, product, mapping) == B_OK)
+			if (find_mapping(path.Path(), vendor, product, bus, mapping)
+					== B_OK)
 				return B_OK;
 		}
 	}
@@ -492,6 +529,407 @@ family_for(uint16 vendor, uint16 product, const char* name, bool hasMapping)
 	if (vendor == 0x057e)
 		return B_GAME_CONTROLLER_FAMILY_NINTENDO;
 	return B_GAME_CONTROLLER_FAMILY_XBOX;
+}
+
+
+// #pragma mark - what the HID descriptor says first
+
+
+uint16
+guid_bus(const char* guid)
+{
+	if (guid == NULL)
+		return 0;
+	int digits[4];
+	for (int i = 0; i < 4; i++) {
+		digits[i] = hex_value(guid[i]);
+		if (digits[i] < 0)
+			return 0;
+	}
+	// Little endian: "0300" is 0x0003.
+	return (uint16)((digits[0] << 4 | digits[1])
+		| (digits[2] << 4 | digits[3]) << 8);
+}
+
+
+static bool
+has_button_usage(const device_shape& shape, uint32 usage)
+{
+	if (!shape.knowsButtons)
+		return usage >= 1 && (int32)usage <= shape.buttonCount;
+	if (usage < 1 || usage > 128)
+		return false;
+	return (shape.buttonUsages[(usage - 1) / 32]
+		& ((uint32)1 << ((usage - 1) % 32))) != 0;
+}
+
+
+static int32
+axis_with_usage(const device_shape& shape, uint16 usage)
+{
+	for (int32 i = 0; i < shape.axisCount; i++) {
+		if (shape.axisUsage[i] == usage)
+			return i;
+	}
+	return -1;
+}
+
+
+static void
+renumber_button(mapping_source& source, const uint8* byUsage, int32 count)
+{
+	if (source.type != SOURCE_BUTTON)
+		return;
+	if (source.index >= count)
+		memset(&source, 0, sizeof(source));
+	else
+		source.index = byUsage[source.index];
+}
+
+
+void
+buttons_by_usage(controller_mapping& mapping, const device_shape& shape)
+{
+	if (!shape.knowsButtons)
+		return;
+	// DirectInput's button n is the n-th usage the report has.
+	uint8 byUsage[128];
+	int32 count = 0;
+	for (uint32 usage = 1; usage <= 128; usage++) {
+		if (has_button_usage(shape, usage))
+			byUsage[count++] = (uint8)(usage - 1);
+	}
+	for (int32 i = 0; i < B_CONTROLLER_BUTTON_COUNT; i++)
+		renumber_button(mapping.buttons[i], byUsage, count);
+	for (int32 i = 0; i < B_CONTROLLER_AXIS_COUNT; i++) {
+		renumber_button(mapping.axes[i].whole, byUsage, count);
+		renumber_button(mapping.axes[i].positive, byUsage, count);
+		renumber_button(mapping.axes[i].negative, byUsage, count);
+	}
+}
+
+
+static void
+fit_source(mapping_source& source, const device_shape& shape)
+{
+	bool keep = true;
+	switch (source.type) {
+		case SOURCE_BUTTON:
+			keep = has_button_usage(shape, source.index + 1);
+			break;
+		case SOURCE_AXIS:
+			keep = source.index < shape.axisCount;
+			break;
+		case SOURCE_HAT:
+			keep = source.index < shape.hatCount;
+			break;
+	}
+	if (!keep)
+		memset(&source, 0, sizeof(source));
+}
+
+
+static bool
+uses_axis(const mapping_source& source, int32 axis)
+{
+	return source.type == SOURCE_AXIS && source.index == axis;
+}
+
+
+// Whether anything but the d-pad reads that axis.
+static bool
+axis_in_use(const controller_mapping& mapping, int32 axis)
+{
+	for (int32 i = 0; i < B_CONTROLLER_BUTTON_COUNT; i++) {
+		if (i >= B_CONTROLLER_BUTTON_DPAD_UP
+			&& i <= B_CONTROLLER_BUTTON_DPAD_RIGHT)
+			continue;
+		if (uses_axis(mapping.buttons[i], axis))
+			return true;
+	}
+	for (int32 i = 0; i < B_CONTROLLER_AXIS_COUNT; i++) {
+		const axis_mapping& a = mapping.axes[i];
+		if (uses_axis(a.whole, axis) || uses_axis(a.positive, axis)
+			|| uses_axis(a.negative, axis))
+			return true;
+	}
+	return false;
+}
+
+
+static void
+set_hat(mapping_source& source, uint8 mask)
+{
+	memset(&source, 0, sizeof(source));
+	source.type = SOURCE_HAT;
+	source.hatMask = mask;
+}
+
+
+static void
+set_half_axis(mapping_source& source, int32 axis, int8 half)
+{
+	memset(&source, 0, sizeof(source));
+	source.type = SOURCE_AXIS;
+	source.index = (uint8)axis;
+	source.half = half;
+}
+
+
+static void
+set_button(mapping_source& source, int32 index)
+{
+	memset(&source, 0, sizeof(source));
+	if (index < 0)
+		return;
+	source.type = SOURCE_BUTTON;
+	source.index = (uint8)index;
+}
+
+
+static void
+set_axis(mapping_source& source, int32 axis)
+{
+	memset(&source, 0, sizeof(source));
+	if (axis < 0)
+		return;
+	source.type = SOURCE_AXIS;
+	source.index = (uint8)axis;
+}
+
+
+void
+fit_to_device(controller_mapping& mapping, const device_shape& shape)
+{
+	for (int32 i = 0; i < B_CONTROLLER_BUTTON_COUNT; i++)
+		fit_source(mapping.buttons[i], shape);
+	for (int32 i = 0; i < B_CONTROLLER_AXIS_COUNT; i++) {
+		fit_source(mapping.axes[i].whole, shape);
+		fit_source(mapping.axes[i].positive, shape);
+		fit_source(mapping.axes[i].negative, shape);
+	}
+
+	// A d-pad made of buttons is left as it is: a hat or a pair of axes
+	// can be read from the descriptor, which buttons are the d-pad cannot.
+	mapping_source* dpad = &mapping.buttons[B_CONTROLLER_BUTTON_DPAD_UP];
+	bool buttons = false;
+	for (int32 i = 0; i < 4; i++) {
+		if (dpad[i].type == SOURCE_BUTTON)
+			buttons = true;
+	}
+	if (buttons)
+		return;
+
+	if (shape.hatCount > 0) {
+		set_hat(mapping.buttons[B_CONTROLLER_BUTTON_DPAD_UP], 1);
+		set_hat(mapping.buttons[B_CONTROLLER_BUTTON_DPAD_RIGHT], 2);
+		set_hat(mapping.buttons[B_CONTROLLER_BUTTON_DPAD_DOWN], 4);
+		set_hat(mapping.buttons[B_CONTROLLER_BUTTON_DPAD_LEFT], 8);
+		return;
+	}
+
+	// No hat: a d-pad on X and Y, as many Bluetooth pads without sticks
+	// report it, when no stick reads them.
+	int32 x = axis_with_usage(shape, 0x30);
+	int32 y = axis_with_usage(shape, 0x31);
+	if (x < 0 || y < 0 || axis_in_use(mapping, x) || axis_in_use(mapping, y))
+		return;
+	set_half_axis(mapping.buttons[B_CONTROLLER_BUTTON_DPAD_LEFT], x, -1);
+	set_half_axis(mapping.buttons[B_CONTROLLER_BUTTON_DPAD_RIGHT], x, 1);
+	set_half_axis(mapping.buttons[B_CONTROLLER_BUTTON_DPAD_UP], y, -1);
+	set_half_axis(mapping.buttons[B_CONTROLLER_BUTTON_DPAD_DOWN], y, 1);
+}
+
+
+bool
+fixed_layout(game_controller_family family, const device_shape& shape,
+	controller_mapping& mapping)
+{
+	// Button numbers are HID usage - 1, in the order of the button enum
+	// (A B X Y back guide start leftstick rightstick leftshoulder
+	// rightshoulder), then the triggers as buttons when the controller has
+	// no free axes for them, then misc1 and the touchpad. -1: none.
+	struct layout {
+		int8	buttons[11];
+		int8	leftTrigger;
+		int8	rightTrigger;
+		int8	misc1;
+		int8	touchpad;
+		bool	sticks;
+	};
+	// Xbox and Nintendo: the order of the W3C standard gamepad, which most
+	// HID pads and the Switch Pro Controller follow (the Nintendo shape
+	// has the same places, only the labels differ). PlayStation: the
+	// DualShock 4 and DualSense (square, cross, circle, triangle).
+	// Sega Genesis: the 8BitDo M30 as the database's Windows lines number
+	// it (C and Z are the right and left shoulder, L and R the triggers).
+	static const layout kXbox = {
+		{ 0, 1, 2, 3, 8, 12, 9, 10, 11, 4, 5 }, 6, 7, -1, -1, true };
+	static const layout kPlayStation = {
+		{ 1, 2, 0, 3, 8, 12, 9, 10, 11, 4, 5 }, 6, 7, 14, 13, true };
+	static const layout kNintendo = {
+		{ 0, 1, 2, 3, 8, 12, 9, 10, 11, 4, 5 }, 6, 7, 13, -1, true };
+	static const layout kSega = {
+		{ 0, 1, 3, 4, 10, 2, 11, -1, -1, 8, 6 }, 9, 7, -1, -1, false };
+
+	const layout* chosen;
+	switch (family) {
+		case B_GAME_CONTROLLER_FAMILY_XBOX:
+			chosen = &kXbox;
+			break;
+		case B_GAME_CONTROLLER_FAMILY_PLAYSTATION:
+			chosen = &kPlayStation;
+			break;
+		case B_GAME_CONTROLLER_FAMILY_NINTENDO:
+			chosen = &kNintendo;
+			break;
+		case B_GAME_CONTROLLER_FAMILY_SEGA_GENESIS:
+			chosen = &kSega;
+			break;
+		default:
+			return false;
+	}
+
+	memset(&mapping, 0, sizeof(mapping));
+	for (int32 i = 0; i < 11; i++)
+		set_button(mapping.buttons[i], chosen->buttons[i]);
+	set_button(mapping.buttons[B_CONTROLLER_BUTTON_MISC1], chosen->misc1);
+	set_button(mapping.buttons[B_CONTROLLER_BUTTON_TOUCHPAD],
+		chosen->touchpad);
+	set_hat(mapping.buttons[B_CONTROLLER_BUTTON_DPAD_UP], 1);
+	set_hat(mapping.buttons[B_CONTROLLER_BUTTON_DPAD_RIGHT], 2);
+	set_hat(mapping.buttons[B_CONTROLLER_BUTTON_DPAD_DOWN], 4);
+	set_hat(mapping.buttons[B_CONTROLLER_BUTTON_DPAD_LEFT], 8);
+
+	// The sticks by usage: X and Y on the left; Z and Rz on the right, or
+	// Rx and Ry when there is no Z. The triggers on Rx and Ry when the
+	// right stick leaves them free, else on buttons.
+	int32 rx = axis_with_usage(shape, 0x33);
+	int32 ry = axis_with_usage(shape, 0x34);
+	bool triggerAxes = false;
+	if (chosen->sticks) {
+		set_axis(mapping.axes[B_CONTROLLER_AXIS_LEFT_X].whole,
+			axis_with_usage(shape, 0x30));
+		set_axis(mapping.axes[B_CONTROLLER_AXIS_LEFT_Y].whole,
+			axis_with_usage(shape, 0x31));
+		int32 z = axis_with_usage(shape, 0x32);
+		int32 rz = axis_with_usage(shape, 0x35);
+		if (z >= 0 && rz >= 0) {
+			set_axis(mapping.axes[B_CONTROLLER_AXIS_RIGHT_X].whole, z);
+			set_axis(mapping.axes[B_CONTROLLER_AXIS_RIGHT_Y].whole, rz);
+			triggerAxes = rx >= 0 && ry >= 0;
+		} else {
+			set_axis(mapping.axes[B_CONTROLLER_AXIS_RIGHT_X].whole, rx);
+			set_axis(mapping.axes[B_CONTROLLER_AXIS_RIGHT_Y].whole, ry);
+		}
+	}
+	if (triggerAxes) {
+		set_axis(mapping.axes[B_CONTROLLER_AXIS_LEFT_TRIGGER].whole, rx);
+		set_axis(mapping.axes[B_CONTROLLER_AXIS_RIGHT_TRIGGER].whole, ry);
+	} else {
+		set_button(mapping.axes[B_CONTROLLER_AXIS_LEFT_TRIGGER].whole,
+			chosen->leftTrigger);
+		set_button(mapping.axes[B_CONTROLLER_AXIS_RIGHT_TRIGGER].whole,
+			chosen->rightTrigger);
+	}
+
+	fit_to_device(mapping, shape);
+	return true;
+}
+
+
+bool
+parse_pairs(const char* text, controller_mapping& mapping)
+{
+	memset(&mapping, 0, sizeof(mapping));
+	if (text == NULL)
+		return false;
+	return apply_pairs(text, mapping) > 0;
+}
+
+
+static void
+source_to_order(mapping_source& source, const int32* order, int32 count)
+{
+	if (source.type != SOURCE_AXIS)
+		return;
+	for (int32 i = 0; i < count; i++) {
+		if (order[i] == source.index) {
+			source.index = (uint8)i;
+			return;
+		}
+	}
+	memset(&source, 0, sizeof(source));
+}
+
+
+void
+axes_to_order(controller_mapping& mapping, const int32* order, int32 count)
+{
+	for (int32 i = 0; i < B_CONTROLLER_BUTTON_COUNT; i++)
+		source_to_order(mapping.buttons[i], order, count);
+	for (int32 i = 0; i < B_CONTROLLER_AXIS_COUNT; i++) {
+		source_to_order(mapping.axes[i].whole, order, count);
+		source_to_order(mapping.axes[i].positive, order, count);
+		source_to_order(mapping.axes[i].negative, order, count);
+	}
+}
+
+
+static bool
+append_pair(char* text, size_t size, size_t& length, const char* prefix,
+	const char* key, const mapping_source& source)
+{
+	if (source.type == SOURCE_NONE)
+		return true;
+	char value[32];
+	switch (source.type) {
+		case SOURCE_BUTTON:
+			snprintf(value, sizeof(value), "b%u", source.index);
+			break;
+		case SOURCE_HAT:
+			snprintf(value, sizeof(value), "h%u.%u", source.index,
+				source.hatMask);
+			break;
+		default:
+			snprintf(value, sizeof(value), "%sa%u%s",
+				source.half > 0 ? "+" : (source.half < 0 ? "-" : ""),
+				source.index, source.invert ? "~" : "");
+			break;
+	}
+	int written = snprintf(text + length, size - length, "%s%s:%s,", prefix,
+		key, value);
+	if (written < 0 || (size_t)written >= size - length) {
+		text[length] = '\0';
+		return false;
+	}
+	length += written;
+	return true;
+}
+
+
+bool
+format_pairs(const controller_mapping& mapping, char* text, size_t size)
+{
+	if (text == NULL || size == 0)
+		return false;
+	text[0] = '\0';
+	size_t length = 0;
+	for (int32 i = 0; i < B_CONTROLLER_BUTTON_COUNT; i++) {
+		if (!append_pair(text, size, length, "", kButtonNames[i],
+				mapping.buttons[i]))
+			return false;
+	}
+	for (int32 i = 0; i < B_CONTROLLER_AXIS_COUNT; i++) {
+		const axis_mapping& a = mapping.axes[i];
+		if (!append_pair(text, size, length, "", kAxisNames[i], a.whole)
+			|| !append_pair(text, size, length, "+", kAxisNames[i],
+				a.positive)
+			|| !append_pair(text, size, length, "-", kAxisNames[i],
+				a.negative))
+			return false;
+	}
+	return true;
 }
 
 
