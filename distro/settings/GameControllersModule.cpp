@@ -593,6 +593,10 @@ private:
 		const setup_step& step = fSteps[fStep];
 		source caught;
 		memset(&caught, 0, sizeof(caught));
+		// An axis question looks at the axes first: an analog trigger
+		// often sets a button as well.
+		if (step.axis)
+			_CatchAxis(step, axes, caught);
 		for (int32 i = 0; i < 128 && caught.kind == 0; i++) {
 			if (buttons[i] && !fRestButtons[i]) {
 				caught.kind = 'b';
@@ -610,6 +614,26 @@ private:
 				caught.hatMask = hats[i] <= 8 ? kMasks[hats[i]] : 0;
 			}
 		}
+		if (!step.axis)
+			_CatchAxis(step, axes, caught);
+		if (caught.kind == 0)
+			return;
+		// A stick takes only an axis; a hat is never a trigger.
+		if (step.axis && step.target < B_CONTROLLER_AXIS_LEFT_TRIGGER
+			&& caught.kind != 'a')
+			return;
+		if (step.axis && caught.kind == 'h')
+			return;
+
+		_Store(step, caught);
+		fCaught = caught;
+		fWaitRelease = true;
+	}
+
+	// The first axis moved more than half way from where it rested.
+	void _CatchAxis(const setup_step& step, const int16* axes,
+		source& caught) const
+	{
 		for (int32 i = 0; i < 32 && caught.kind == 0; i++) {
 			int32 delta = (int32)axes[i] - fRestAxes[i];
 			if (abs(delta) < 16384)
@@ -633,18 +657,6 @@ private:
 			} else
 				caught.half = delta > 0 ? 1 : -1;
 		}
-		if (caught.kind == 0)
-			return;
-		// A stick takes only an axis; a hat is never a trigger.
-		if (step.axis && step.target < B_CONTROLLER_AXIS_LEFT_TRIGGER
-			&& caught.kind != 'a')
-			return;
-		if (step.axis && caught.kind == 'h')
-			return;
-
-		_Store(step, caught);
-		fCaught = caught;
-		fWaitRelease = true;
 	}
 
 	void _Store(const setup_step& step, const source& caught)
@@ -865,6 +877,9 @@ public:
 	virtual	status_t			ApplyDefaults(SettingsContext* context)
 								{
 									(void)context;
+									// Before anything changes, for Revert.
+									Remember(fSelectedVendor,
+										fSelectedProduct);
 									status_t status
 										= BGameController::ResetLabelStyles();
 									std::map<uint32, model_choice>::iterator
@@ -874,8 +889,6 @@ public:
 										i->second.labels
 											= B_GAME_CONTROLLER_LABELS_AUTOMATIC;
 									if (fSelectedVendor != 0) {
-										Remember(fSelectedVendor,
-											fSelectedProduct);
 										uint32 key = model_key(
 											fSelectedVendor,
 											fSelectedProduct);
@@ -1108,7 +1121,11 @@ GameControllersPage::GameControllersPage(GameControllersModule* module,
 	fSetupButton = new BButton("setup buttons", "Set up buttons\xe2\x80\xa6",
 		new BMessage(kMsgSetupButtons));
 
+	// Under the picture, not beside Layout: at the smallest window (910 by
+	// 560) the two do not fit in one row.
 	fIDs = new BStringView("controller ids", "");
+	fIDs->SetAlignment(B_ALIGN_CENTER);
+	fIDs->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
 	fIDs->SetHighColor(quiet_color(140));
 	fIDs->SetViewColor(network_box_fill());
 	fIDs->SetLowColor(network_box_fill());
@@ -1138,14 +1155,14 @@ GameControllersPage::GameControllersPage(GameControllersModule* module,
 			.Add(fLayoutField->CreateLabelLayoutItem(), 0, 0)
 			.Add(fLayoutField->CreateMenuBarLayoutItem(), 1, 0)
 			.Add(BSpaceLayoutItem::CreateGlue(), 2, 0)
-			.Add(fIDs, 3, 0)
 			.Add(fLabelsField->CreateLabelLayoutItem(), 0, 1)
 			.Add(fLabelsField->CreateMenuBarLayoutItem(), 1, 1)
 			.Add(BSpaceLayoutItem::CreateGlue(), 2, 1)
 			.Add(fSetupButton, 3, 1)
 		.End()
 		.Add(fTest, 1)
-		.Add(fTestHint);
+		.Add(fTestHint)
+		.Add(fIDs);
 	testBox->AddChild(test);
 
 	BLayoutBuilder::Group<>(this)

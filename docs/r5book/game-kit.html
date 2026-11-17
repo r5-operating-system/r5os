@@ -76,6 +76,21 @@
 				<code class="inline">B_GAME_CONTROLLER_REMOVED</code>, with the string
 				<code class="inline">"device"</code>, when a controller is plugged in, paired, unplugged or
 				turned off. No polling.</p></div>
+			<div class="member"><div class="sig">static game_controller_family LayoutFor(uint16 vendorID, uint16 productID);<br>static status_t SetLayout(uint16 vendorID, uint16 productID, game_controller_family layout);</div>
+				<p>The layout the person chose for a controller model in Settings: the shape, and a fixed
+				mapping in the order that family's own controllers report their buttons.
+				<code class="inline">B_GAME_CONTROLLER_FAMILY_UNKNOWN</code> means automatic: the mapping
+				database. Only Settings calls the setter.</p></div>
+			<div class="member"><div class="sig">static status_t GetSavedMapping(uint16 vendorID, uint16 productID, char* mapping, size_t size);<br>static status_t SetSavedMapping(uint16 vendorID, uint16 productID, const char* mapping);<br>bool HasSavedMapping() const;</div>
+				<p>A setup the person made button by button with <em>Set up buttons&hellip;</em> in Settings,
+				as text in SDL's mapping keys: <code class="inline">"a:b0,b:b1,dpup:h0.1,leftx:a0,"</code>.
+				Buttons and hats are numbered as the raw calls number them, axes in the order of
+				<code class="inline">RawAxisValue()</code>; <code class="inline">+</code> and
+				<code class="inline">-</code> take half an axis, <code class="inline">~</code> turns it round.
+				<code class="inline">NULL</code> or an empty string removes it. <code class="inline">Open()</code>
+				takes a saved setup first, then a chosen layout, then the database, so a change counts from the
+				next <code class="inline">Open()</code>. Programs that use <code class="inline">BJoystick</code>
+				still see the raw buttons.</p></div>
 		</section>
 
 		<section class="entry" id="example">
@@ -116,13 +131,14 @@ if (pad.CountDevices() &gt; 0 &amp;&amp; pad.GetDeviceName(0, name) == B_OK
 
 		<section class="entry" id="settings">
 			<div class="entry-header"><h2 class="plain">Where people see it</h2></div>
-			<p>Settings, Devices, Game controllers: a card per controller, the live test of the chosen one with
-			the button-label choice, and the shapes R5 draws. The Bluetooth page's <em>Test
-			buttons&hellip;</em> opens it.</p>
-			<div class="note"><strong>Not yet.</strong> Swapping buttons, rumble, lights, the touchpad and
-			motion. The battery shows only when the controller reports it in its input report (the HID Battery
-			Strength usage). Tested in QEMU with a virtual controller fed to the Bluetooth HID driver; not yet
-			with a real controller.</div>
+			<p>Settings, Devices, Game controllers: a card per controller, and the live test of the chosen one
+			with its layout, the button-label choice and <em>Set up buttons&hellip;</em>, a window that asks
+			the person to press each control in turn. The Bluetooth page's <em>Test buttons&hellip;</em> opens
+			it.</p>
+			<div class="note"><strong>Not yet.</strong> Swapping buttons for old programs, rumble, lights, the
+			touchpad and motion. The battery shows only when the controller reports it in its input report (the
+			HID Battery Strength usage). Tested in QEMU with virtual controllers fed to the Bluetooth HID
+			driver; not yet with a real controller.</div>
 		</section>
 	</main>
 </div>

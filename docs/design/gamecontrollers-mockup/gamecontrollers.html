@@ -139,7 +139,7 @@ a{color:#0070db}a:hover{color:#0f172a}
           <div style="flex: 1">
             <div style="font-size: 12px; font-weight: 600; color: #64748b">Devices</div>
             <div style="font-size: 22px; font-weight: 800; letter-spacing: -0.015em; line-height: 1.2">Game controllers</div>
-            <div style="font-size: 12.5px; color: #475569; margin-top: 2px">Test your controllers and choose their button labels</div>
+            <div style="font-size: 12.5px; color: #475569; margin-top: 2px">Test your controllers and set up their buttons</div>
           </div>
           <span style="position: relative; width: 48px; height: 48px"><img src="../settings-mockup/icons/devices.svg" alt="" width="48" height="48"><img src="../settings-mockup/icons/prefs-wrench.svg" alt="" width="48" height="48" style="position: absolute; left: 0; top: 0"></span>
         </div>
@@ -177,11 +177,18 @@ a{color:#0070db}a:hover{color:#0f172a}
             <!-- Live test of the selected controller -->
             <fieldset style="flex: 1; margin: 0; background: #e4e4e4; border: 1px solid #c4c4c4; padding: 8px 14px 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0">
               <legend style="padding: 0 4px; font-size: 12.5px; font-weight: 700">Test</legend>
-              <div style="display: flex; align-items: center; gap: 8px; font-size: 12px">
+              <!-- Layout: the shape and where the buttons are read from (Automatic,
+                   Xbox, PlayStation, Nintendo, Sega Genesis, "Your own setup").
+                   Button labels: only what is printed on the face buttons. -->
+              <div style="display: grid; grid-template-columns: auto auto 1fr auto; align-items: center; column-gap: 8px; row-gap: 6px; font-size: 12px">
+                <span style="font-weight: 600">Layout</span>
+                <span style="display: inline-flex; align-items: center; justify-content: space-between; gap: 6px; height: 24px; padding: 0 8px; background: #f4f4f4; border: 1px solid #8c8c8c; box-shadow: inset 1px 1px 0 #ffffff">Automatic<svg aria-hidden="true" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#334155" stroke-width="3"><path d="M6 9l6 6 6-6"></path></svg></span>
+                <span></span>
+                <span></span>
                 <span style="font-weight: 600">Button labels</span>
                 <span style="display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; background: #f4f4f4; border: 1px solid #8c8c8c; box-shadow: inset 1px 1px 0 #ffffff">PlayStation (✕ ○ □ △)<svg aria-hidden="true" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#334155" stroke-width="3"><path d="M6 9l6 6 6-6"></path></svg></span>
-                <span style="flex: 1"></span>
-                <span style="color: #64748b">Vendor 054C · Product 0CE6</span>
+                <span></span>
+                <button type="button" style="height: 26px; padding: 0 12px; background: #f4f4f4; border: 1px solid #8c8c8c; box-shadow: inset 1px 1px 0 #ffffff; font-family: inherit; font-size: 12px; color: #141414">Set up buttons…</button>
               </div>
               <svg role="img" aria-label="DualSense: Cross pressed, left stick pushed up and left, left trigger half down" width="100%" height="236" viewBox="-30 -26 460 270">
                 <!-- triggers and shoulders -->
@@ -206,18 +213,11 @@ a{color:#0070db}a:hover{color:#0f172a}
                 <circle class="key" cx="200" cy="140" r="6"></circle>
               </svg>
               <span style="font-size: 11.5px; color: #475569; text-align: center">Press a button or move a stick: it lights up here.</span>
+              <!-- Under the picture: beside Layout it does not fit at 910 by 560. -->
+              <span style="font-size: 11.5px; color: #64748b; text-align: center">Vendor 054C · Product 0CE6</span>
             </fieldset>
           </div>
 
-          <!-- What R5 draws for other controllers -->
-          <fieldset style="margin: 0; background: #e4e4e4; border: 1px solid #c4c4c4; padding: 6px 14px 8px; display: flex; gap: 10px; justify-content: space-between">
-            <legend style="padding: 0 4px; font-size: 12.5px; font-weight: 700">Shapes R5 draws</legend>
-            <div style="display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; color: #334155"><svg width="104" height="62" viewBox="0 0 400 240"><use href="#shape-playstation"></use></svg>PlayStation</div>
-            <div style="display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; color: #334155"><svg width="104" height="62" viewBox="0 0 400 240"><use href="#shape-xbox"></use></svg>Xbox</div>
-            <div style="display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; color: #334155"><svg width="104" height="62" viewBox="0 0 400 240"><use href="#shape-xbox"></use></svg>Nintendo (A and B swapped)</div>
-            <div style="display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; color: #334155"><svg width="104" height="62" viewBox="0 0 400 240"><use href="#shape-genesis"></use></svg>Sega Genesis</div>
-            <div style="display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; color: #334155"><svg width="104" height="62" viewBox="0 0 400 240"><use href="#shape-unknown"></use></svg>Unknown: from its axes and buttons</div>
-          </fieldset>
         </div>
 
         <div style="height: 34px; display: flex; align-items: center; gap: 6px">
