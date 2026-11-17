@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Bluetooth: the headset voice test passes every time
+
+Problem: in one of four QEMU smoke runs `bt_rfcomm_test` failed "voice: +BCS 2 answered, mSBC link asked". The cause is a race in the test, not in the gateway. The test waited only for the voice callback (`voiceCalls`), then checked `bcsSeen` too. The gateway sends the OK to the headset's `AT+BCS=2` and then asks for the voice link. The test's headset thread sets `bcsSeen` only after it has read that OK, so the main thread could see the call before `bcsSeen` was set. In the same way `HFPGateway::VoiceOpen()` turns true or false only after the callback returns. The gateway order (OK, then the link, then the flag) is correct, and `VoiceOpen()` is only used by this test. It was not a timeout.
+
+What changed: `bt_rfcomm_test` waits for the whole state (bcsSeen 2, the call, and `VoiceOpen()`; on close the second call and `VoiceOpen()` false) before it checks it. Same deadlines as before. No change to the server.
+
+Tested: AMD64 `scripts/build-locked.sh`, `jam_exit=0`. One QEMU smoke run (SMAP and SMEP enabled, LOGIN=1, own image copy) with a temporary loop of 50 voice rounds that judged each round both ways: the old check passed 47 of 50 (all three failures with `bcsSeen` still 0 while the link was already open), the new check 50 of 50; the close check passed 50 of 50 both ways. `bt_rfcomm_test: 0 failed`, every test in the smoke run exit 0, no panic. The loop was removed again before the PR; the PR build was not booted separately (it only lacks the loop). No parser changed, so no fuzz run.
+
 ## 2026-11-17 - Game controllers: no stray bar in a small Settings window
 
 Problem: at 910 by 560 a light bar, 3 px high, showed just above the controller strip on the Game controllers page, in the box colour (231) and exactly the width of the picture column. A whole-window redraw did not remove it.
@@ -13,6 +21,7 @@ What changed:
 Tested: AMD64 `scripts/build-locked.sh`, `jam_exit=0`; after the apply the tree's `src/servers/app/View.cpp` has the glass code (`fGlass`) and the new clipping once, the old size check zero times. QEMU (SMAP and SMEP enabled, LOGIN=1, own image copy): with a virtual DualSense at 910 by 560 no box-coloured row below the scroll area any more (checked pixel by pixel; the area still scrolls); at 1030 by 610 the page looks as before, with Trigger feedback and the vendor line visible and no scroll bar; the Display page at 1030 by 610 and the desktop background and window frames look as before. No panic in the serial logs.
 
 Limits: Haiku upstream was not checked for the same fix. The Sign in window covers the middle of the Display screendump, so the screen picture was not seen; the Deskbar and other apps were not looked at with this change, and not on real hardware. ARM64 and RISC-V 64 were not built.
+
 
 ## 2026-11-17 - Graphics (M13): step 4 on Lavapipe, outline resize and a warm-up that finishes
 
@@ -140,6 +149,7 @@ What changed: after that quit, Login waits three seconds, then `kill_team` on wh
 Limits: servers, daemons, and `B_BACKGROUND_APP` teams are still kept. No boot test of Log out.
 
 Tested: the C++ was not compiled on this host (needs libbe).
+
 
 ## 2026-11-17 - Game controllers: fits at 1030 by 610, Motion gray without a controller
 

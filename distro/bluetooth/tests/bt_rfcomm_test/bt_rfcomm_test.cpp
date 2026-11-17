@@ -895,15 +895,22 @@ test_gateway()
 			snooze(50000);
 		report("voice: headset sent its codecs", test.bacSent);
 		gateway.SetVoiceWanted(true);
+		// Three threads: the headset sets bcsSeen after the OK to its
+		// AT+BCS, the gateway sends that OK before it calls test_voice(),
+		// and VoiceOpen() turns true only after test_voice() returns. Wait
+		// for all three, not only for the call.
 		end = system_time() + 6000000;
-		while (test.voiceCalls < 1 && system_time() < end)
+		while ((test.bcsSeen != 2 || test.voiceCalls < 1
+				|| !gateway.VoiceOpen())
+			&& system_time() < end)
 			snooze(50000);
 		report("voice: +BCS 2 answered, mSBC link asked",
 			test.bcsSeen == 2 && test.voiceCalls == 1 && test.lastOpen
 			&& test.lastCodec == 2 && gateway.VoiceOpen());
 		gateway.SetVoiceWanted(false);
 		end = system_time() + 3000000;
-		while (test.voiceCalls < 2 && system_time() < end)
+		while ((test.voiceCalls < 2 || gateway.VoiceOpen())
+			&& system_time() < end)
 			snooze(50000);
 		report("voice: link closed when the microphone is let go",
 			test.voiceCalls == 2 && !test.lastOpen && !gateway.VoiceOpen());
