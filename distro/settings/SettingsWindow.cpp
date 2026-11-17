@@ -35,6 +35,7 @@
 #include <MessageRunner.h>
 #include <Mime.h>
 #include <PageHeader.h>
+#include <ScreenArrangement.h>
 #include <Path.h>
 #include <R5Icons.h>
 #include <Resources.h>
@@ -1311,6 +1312,14 @@ SettingsWindow::_RestoreLockedControls()
 			control->SetEnabled(true);
 	}
 	fLockedControls.MakeEmpty();
+	for (int32 i = 0; i < fLockedArrangements.CountItems(); i++) {
+		BAppearanceKit::BScreenArrangement* screens
+			= static_cast<BAppearanceKit::BScreenArrangement*>(
+				fLockedArrangements.ItemAt(i));
+		if (screens != NULL)
+			screens->SetEnabled(true);
+	}
+	fLockedArrangements.MakeEmpty();
 }
 
 
@@ -1324,6 +1333,13 @@ SettingsWindow::_DisableLocked(BView* view)
 		&& control->IsEnabled() && !fLockedControls.HasItem(control)) {
 		control->SetEnabled(false);
 		fLockedControls.AddItem(control);
+	}
+	BAppearanceKit::BScreenArrangement* screens
+		= dynamic_cast<BAppearanceKit::BScreenArrangement*>(view);
+	if (screens != NULL && screens->IsEnabled()
+		&& !fLockedArrangements.HasItem(screens)) {
+		screens->SetEnabled(false);
+		fLockedArrangements.AddItem(screens);
 	}
 	int32 count = view->CountChildren();
 	for (int32 i = 0; i < count; i++)

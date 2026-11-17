@@ -261,6 +261,12 @@ struct DefaultWindowBehaviour::DragState : MouseTrackingState {
 
 struct DefaultWindowBehaviour::ResizeState : MouseTrackingState {
 	BPoint fDelta;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// M13 step 4: outline only, decided when the resize starts
+	bool fOutline;
+// SPDX-SnippetEnd
 
 	ResizeState(DefaultWindowBehaviour& behavior, BPoint where,
 		bool activateOnMouseUp, bool minimizeCheckOnMouseUp)
@@ -268,6 +274,11 @@ struct DefaultWindowBehaviour::ResizeState : MouseTrackingState {
 		MouseTrackingState(behavior, where, activateOnMouseUp, minimizeCheckOnMouseUp)
 	{
 		fDelta = BPoint(0, 0);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		fOutline = fDesktop->OutlineResize(fWindow);
+// SPDX-SnippetEnd
 	}
 
 	virtual void EnterState(State* prevState)
@@ -276,7 +287,11 @@ struct DefaultWindowBehaviour::ResizeState : MouseTrackingState {
 
 	virtual void ExitState(State* nextState)
 	{
-		if ((fWindow->Flags() & B_OUTLINE_RESIZE) != 0) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		if (fOutline) {
+// SPDX-SnippetEnd
 			fDesktop->SetWindowOutlinesDelta(fWindow, BPoint(0, 0));
 			fDesktop->ResizeWindowBy(fWindow, fDelta.x, fDelta.y);
 		}
@@ -292,7 +307,11 @@ struct DefaultWindowBehaviour::ResizeState : MouseTrackingState {
 
 			BPoint oldRightBottom = fWindow->Frame().RightBottom();
 
-			if ((fWindow->Flags() & B_OUTLINE_RESIZE) != 0) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			if (fOutline) {
+// SPDX-SnippetEnd
 				fDelta = delta;
 				fDesktop->SetWindowOutlinesDelta(fWindow, delta);
 			} else
@@ -378,6 +397,13 @@ struct DefaultWindowBehaviour::SlideTabState : MouseTrackingState {
 
 struct DefaultWindowBehaviour::ResizeBorderState : MouseTrackingState {
 	BPoint fDelta;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// M13 step 4: outline only, decided in EnterState(); the outline sent
+	bool fOutline = false;
+	BPoint fOutlineSent;
+// SPDX-SnippetEnd
 
 	ResizeBorderState(DefaultWindowBehaviour& behavior, BPoint where,
 		Decorator::Region region)
@@ -465,16 +491,38 @@ struct DefaultWindowBehaviour::ResizeBorderState : MouseTrackingState {
 				fVertical = NONE;
 		}
 		fBehavior._SetResizeCursor(fHorizontal, fVertical);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		fOutline = fDesktop->OutlineResize(fWindow);
+// SPDX-SnippetEnd
 	}
 
 	virtual void ExitState(State* nextState)
 	{
 		fBehavior._ResetResizeCursor();
 
-		if (fWindow->Flags() & B_OUTLINE_RESIZE) {
-			fDesktop->SetWindowOutlinesDelta(fWindow, B_ORIGIN);
-			fDesktop->ResizeWindowBy(fWindow, fDelta.x, fDelta.y);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// M13 step 4: fDelta is the mouse motion since the start (the frame
+		// did not change while the outline was dragged). The window grows
+		// by it per edge, and moves for the left and the top edge by what
+		// it really grew (its size limits).
+		if (fOutline) {
+			fDesktop->SetWindowOutlinesDelta(fWindow, B_ORIGIN, false, false);
+			BRect before = fWindow->Frame();
+			fDesktop->ResizeWindowBy(fWindow, fDelta.x * fHorizontal,
+				fDelta.y * fVertical);
+			BRect after = fWindow->Frame();
+			float moveX = fHorizontal == LEFT
+				? before.Width() - after.Width() : 0;
+			float moveY = fVertical == TOP
+				? before.Height() - after.Height() : 0;
+			if (moveX != 0 || moveY != 0)
+				fDesktop->MoveWindowBy(fWindow, moveX, moveY);
 		}
+// SPDX-SnippetEnd
 	}
 
 	virtual void MouseMovedAction(BPoint& delta, bigtime_t now)
@@ -484,18 +532,34 @@ struct DefaultWindowBehaviour::ResizeBorderState : MouseTrackingState {
 		if (fVertical == NONE)
 			delta.y = 0;
 
-		if (delta.x == 0 && delta.y == 0)
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// M13 step 4: with the outline the delta is the motion since the
+		// start, so back at the start the outline goes back too
+		if (delta.x == 0 && delta.y == 0 && !fOutline)
 			return;
+// SPDX-SnippetEnd
 
 		// Resize first -- due to the window size limits this is not unlikely
 		// to turn out differently from what we request.
 		BPoint oldRightBottom = fWindow->Frame().RightBottom();
 
-		if (fWindow->Flags() & B_OUTLINE_RESIZE) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		if (fOutline) {
 			fDelta = delta;
-			fDesktop->SetWindowOutlinesDelta(fWindow, BPoint(
-				delta.x * fHorizontal, delta.y * fVertical));
+			// review: each call rebuilds the clipping of all windows, so
+			// only a new outline is sent
+			BPoint outline(delta.x * fHorizontal, delta.y * fVertical);
+			if (outline != fOutlineSent) {
+				fOutlineSent = outline;
+				fDesktop->SetWindowOutlinesDelta(fWindow, outline,
+					fHorizontal == LEFT, fVertical == TOP);
+			}
 		} else {
+// SPDX-SnippetEnd
 			fDesktop->ResizeWindowBy(fWindow, delta.x * fHorizontal,
 				delta.y * fVertical);
 		}

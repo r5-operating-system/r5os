@@ -503,6 +503,22 @@ Window::ResizeBy(int32 x, int32 y, BRegion* dirtyRegion, bool resizeStack)
 void
 Window::SetOutlinesDelta(BPoint delta, BRegion* dirtyRegion)
 {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	SetOutlinesDelta(delta, dirtyRegion, false, false);
+}
+
+
+/*!	M13 step 4: as SetOutlinesDelta(delta, dirtyRegion), and an outline that
+	grows to the left (\a left) or to the top (\a top) is moved by the same
+	amount, so the opposite edge stays where it is.
+*/
+void
+Window::SetOutlinesDelta(BPoint delta, BRegion* dirtyRegion, bool left,
+	bool top)
+{
+// SPDX-SnippetEnd
 	float wantWidth = fFrame.IntegerWidth() + delta.x;
 	float wantHeight = fFrame.IntegerHeight() + delta.y;
 
@@ -531,6 +547,21 @@ Window::SetOutlinesDelta(BPoint delta, BRegion* dirtyRegion)
 
 	if (decorator != NULL)
 		decorator->SetOutlinesDelta(delta, dirtyRegion);
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// the shift follows the limited delta; with a delta of 0 the outline is
+	// back where the window is
+	BPoint shift(left ? -delta.x : 0, top ? -delta.y : 0);
+	if (decorator != NULL && delta == B_ORIGIN) {
+		// review: laid out from the frame again, whatever moved it
+		decorator->ResetOutlines(dirtyRegion);
+		shift = B_ORIGIN;
+	} else if (decorator != NULL)
+		decorator->MoveOutlinesBy(shift - fOutlinesShift, dirtyRegion);
+	fOutlinesShift = decorator != NULL ? shift : B_ORIGIN;
+// SPDX-SnippetEnd
 
 	_UpdateContentRegion();
 }

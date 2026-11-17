@@ -1214,6 +1214,15 @@ DisplayView::_UpdateApply()
 		&& fModule->Selected().allWorkspaces
 			== fModule->Active().allWorkspaces;
 	fApply->SetEnabled(!same && !fConfirming);
+	bool menus = !fConfirming;
+	if (fResolutionField != NULL)
+		fResolutionField->SetEnabled(menus);
+	if (fColorsField != NULL)
+		fColorsField->SetEnabled(menus);
+	if (fRefreshField != NULL)
+		fRefreshField->SetEnabled(menus);
+	if (fScopeField != NULL)
+		fScopeField->SetEnabled(menus);
 }
 
 
@@ -1232,7 +1241,7 @@ DisplayView::ShowChoice(const DisplayChoice& choice, bool hardware)
 void
 DisplayView::_ReadMenus()
 {
-	if (fModule == NULL || fUpdating)
+	if (fModule == NULL || fUpdating || fConfirming)
 		return;
 	DisplayChoice choice = fModule->Selected();
 	BMenuItem* resolution = fResolutionMenu->FindMarked();
@@ -1301,6 +1310,8 @@ DisplayView::MessageReceived(BMessage* message)
 		case kMsgColors:
 		case kMsgRefresh:
 		case kMsgScope:
+			if (fConfirming)
+				break;
 			_ReadMenus();
 			break;
 		case kMsgColumns:

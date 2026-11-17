@@ -8,6 +8,133 @@ What changed: `bt_rfcomm_test` waits for the whole state (bcsSeen 2, the call, a
 
 Tested: AMD64 `scripts/build-locked.sh`, `jam_exit=0`. One QEMU smoke run (SMAP and SMEP enabled, LOGIN=1, own image copy) with a temporary loop of 50 voice rounds that judged each round both ways: the old check passed 47 of 50 (all three failures with `bcsSeen` still 0 while the link was already open), the new check 50 of 50; the close check passed 50 of 50 both ways. `bt_rfcomm_test: 0 failed`, every test in the smoke run exit 0, no panic. The loop was removed again before the PR; the PR build was not booted separately (it only lacks the loop). No parser changed, so no fuzz run.
 
+## 2026-11-17 - Graphics (M13): step 4 on Lavapipe, outline resize and a warm-up that finishes
+
+Problem: on stick 4 (5625U, boot 3, Lavapipe) a resize took 35.1 ms per frame (stick 3: 30.9), and the Skia warm-up ended after 10448 ms with `Operation timed out`. Waiting for the first window run (step 4) did not help: stick 3 had the same 10160 ms. The cost is the warm-up's own work: after it, two runs waited 9.1 s each for the GPU (`deliver 9137298`), Lavapipe compiling its shaders, against a 5 s `Finish` limit, twice. The resize: compose (20.4 to 16.1 ms) and draw (34.7 to 24.2 ms) both got faster, the frame slower; most likely the fixed time grid of step 4 (a late slot composes at once, next to Skia on the two Lavapipe threads). Inferred, not measured.
+
+What changed:
+- Owner's decision (17 Nov): on Lavapipe a resize shows only the window's outline, and the window is drawn at its new size when the mouse is released. No setting; RADV and the CPU mode resize live as before.
+  - Haiku's own outline resize (`B_OUTLINE_RESIZE`, `DefaultWindowBehaviour`) is used for every window when the compositor runs on Lavapipe (`Compositor::OutlineResize()`, asked once when a resize starts).
+  - Haiku's outline only grew to the right and the bottom, and its border resize ended wrong for the left and top edges. The outline now moves for those edges (`Decorator::MoveOutlinesBy()`, `Window::fOutlinesShift`), and the end resizes per edge and moves by what the window really grew.
+  - The compositor draws the outline over the window (`_RecordOutline()`: the shadow pass with a one-row mask of 255, no new shader). The window's buffer, shape and shadow stay its own, and nothing below redraws while the outline moves. The first version drew the outline into the window: every step made a new buffer and redrew the whole window (QEMU: draw 122 to 207 ms), and an outline to the right or bottom did not show.
+  - New non-virtual `Decorator` calls (`MoveOutlinesBy`, `GetFootprintWithoutOutline`, `GetOutlineRegion`, `ResetOutlines`); the decorator add-on ABI and class layout are unchanged.
+- The warm-up on Lavapipe is drawn in 8 parts, one `Finish` per drawing mode, each with a 30 s limit. A new line `gpu draw warm-up parts 8, longest N ms`.
+- Mesa's shader cache (in `/boot/system/cache/app_server/mesa` since step 2) works for Lavapipe on R5. It was never measured before: the next start reuses what the first one compiled.
+- `scripts/qemu-m13-measure.py`: `--again` starts the same image once more; ACPI power off instead of a kill, so the cache reaches the image; pictures during the resize and a left-edge drag. Two faults found and fixed: the resize grabbed 7 pixels inside the window (the scroll bar corner, no resize in QEMU at all), and the drag ended a third of a circle away, so the resize grabbed the desktop. QEMU resize numbers from before this change were no resize.
+
+Two independent reviews of the diff, fixed before the commit: a title or look change during the drag shifted the next outline (`ResetOutlines` lays it out again at the end); a window hidden during the drag kept its outline; a call per mouse event without a change; `--again` without an image; a false `compose compare MISMATCH` with an outline (the compare is skipped then); a whole-window compose on every outline step (now only the old and the new outline).
+
+Tested in QEMU only (Lavapipe 256-bit, 8 CPUs, `scripts/build-locked.sh` and `scripts/qemu-m13-measure.py`; built on `main` before #4388):
+- Warm-up, first start: 31.9 to 47.2 s in QEMU, longest part 18.3 to 25.1 s, no timeout. Second start (`--again`, same image): 3.4 and 5.7 s, longest part 1.7 and 2.4 s. Drag on the second start: 15.9 to 19.0 ms per frame (first start 18.5 to 23.8).
+- Resize with the outline (final build, first start): 19.8 ms per frame (p95 32.4), compose 18.8, draw 7.0. Pictures: the outline follows the bottom right corner and the left edge, and the window has its new size and place after the release. No `gpu draw off`, fence timeout or `MISMATCH`.
+
+Limits: not on the 5625U; that needs the next stick (with #4363). The first start after an install or a Mesa update pays the whole warm-up (Lavapipe compiles everything once); in QEMU a part took up to 25 s of the 30 s limit. The outline is darkened pixels, hard to see on a dark background. The top edge was not dragged in QEMU (the left edge uses the same code). Windows with `B_OUTLINE_RESIZE` now get this outline on RADV too.
+
+## 2026-11-17 - Network: mDNS browse keeps only the requested type
+
+Problem: `browse_cb` took every PTR, SRV and TXT in the packet. A browse for `_ipp._tcp` could pick up AirPlay or other services from additional records.
+
+What changed: PTR, SRV and TXT are ignored unless the name matches the requested type (with or without `.local`). A records are still matched by host.
+
+Limits: QEMU usernet is not multicast. Needs a LAN.
+
+Tested: the C++ was not compiled on this host (needs libbe).
+
+## 2026-11-17 - Network: IPv6 mDNS sends on a real interface
+
+Problem: `sendto` of ff02::fb used `sin6_scope_id` 0, so the packet often never left the host.
+
+What changed: the send and the IPv6 join use the same interface as link-local AAAA results (`mdns_link_scope()`), and `IPV6_MULTICAST_IF` is set when that index is known.
+
+Limits: several such interfaces pick the first. QEMU usernet is not multicast.
+
+Tested: the C++ was not compiled on this host (needs libbe).
+
+## 2026-11-17 - Network: link-local mDNS results carry a scope
+
+Problem: AAAA answers from mDNS were returned with `sin6_scope_id` 0, so a link-local address could not be used.
+
+What changed: a link-local result gets the first up, non-loopback interface that already has a link-local IPv6 address.
+
+Limits: several such interfaces pick the first. QEMU usernet is not this test.
+
+Tested: the C++ was not compiled on this host (needs libbe).
+
+## 2026-11-17 - Network: mDNS joins the multicast group
+
+Problem: `mdns_query` sent to 224.0.0.251 and ff02::fb but never joined those groups, so multicast replies could be missed.
+
+What changed: the IPv4 socket joins 224.0.0.251, the IPv6 socket joins ff02::fb. A failed join still sends the query.
+
+Limits: QEMU usernet is not multicast. Needs a LAN.
+
+## 2026-11-17 - Network: a missed .local name is not sent to DNS
+
+Problem: after mDNS missed a `.local` name, `getaddrinfo` fell through to unicast DNS, against RFC 6762.
+
+What changed: a `.local` lookup returns the mDNS error (or `EAI_NONAME`) and does not query DNS.
+
+Limits: QEMU usernet is not multicast. Needs a LAN.
+
+## 2026-11-17 - Settings: a page file is replaced, not erased
+
+Problem: `SettingsStorage::Write` erased the module file and then Flatten. A short write could leave an empty page file.
+
+What changed: Flatten goes to memory, then a temp file, `fsync`, and rename. Same pattern as notifications.
+
+Limits: no crash injected during write.
+
+## 2026-11-17 - Login: the session log is not world-readable
+
+Problem: `/tmp/r5-session.log` was created with `fopen("a")` and the umask. Session names were readable by every account.
+
+What changed: both log paths are opened `0600` and `fchmod`ed to 0600.
+
+Limits: a file that already exists with a looser mode is tightened on the next write. No boot test.
+
+## 2026-11-17 - Network: DHCP keeps the resolv.conf domain line
+
+Problem: net_server rewrote `resolv.conf` from remembered nameservers and only wrote `domain` when DHCP sent one. An existing domain line disappeared.
+
+What changed: the previous `domain` line is kept when DHCP does not send a domain.
+
+Limits: QEMU usernet is not this test. No packet capture.
+
+## 2026-11-17 - Settings: a failed Deskbar apply rolls back
+
+Problem: Desktop and Deskbar wrote each field as it succeeded. A later `SetLocation` failure left sort or icon size already changed.
+
+What changed: a failed `_Apply` puts the previous committed choices back.
+
+Limits: a restore that also fails leaves Deskbar where the first failure left it. No boot test.
+
+## 2026-11-17 - Settings: the lock also stops the screen picture
+
+Problem: a closed administrator lock greys `BControl` widgets. `BScreenArrangement` is a `BView`, so Display's screen picture stayed clickable.
+
+What changed: `BScreenArrangement::SetEnabled(false)` ignores mouse and keys. Settings calls that on a locked admin page. Additive; existing binaries still run.
+
+Limits: no boot test of the lock on Display.
+
+## 2026-11-17 - Settings: Display menus stay put during keep-picture
+
+Problem: during the 12-second keep-picture dialog the resolution menus still wrote `fSelected`. Keep then stored that later choice as the boot mode.
+
+What changed: those menus are ignored and disabled until the dialog ends. Workspace rows and columns still apply at once.
+
+Limits: no boot test of the 12-second dialog.
+
+## 2026-11-17 - Login: leftover apps leave with the session
+
+Problem: Logout sent `B_QUIT_REQUESTED` to user apps and did not wait. Tracker and Deskbar were waited on; Terminal and other session apps could stay up on the Sign in screen.
+
+What changed: after that quit, Login waits three seconds, then `kill_team` on what is left, then one more second.
+
+Limits: servers, daemons, and `B_BACKGROUND_APP` teams are still kept. No boot test of Log out.
+
+Tested: the C++ was not compiled on this host (needs libbe).
+
+
 ## 2026-11-17 - Game controllers: fits at 1030 by 610, Motion gray without a controller
 
 Problem: on the screendumps of the layout-A page (1) at 1030 by 610 with a controller the area above the strip still scrolled by about 15 px, hiding the last line of Trigger feedback and the vendor and product line; (2) without a controller the Motion bubble of the gray example stayed blue (the level, the bars and their labels drew as enabled); (3) at 910 by 560 a light bar showed in the bottom row next to the lock.
