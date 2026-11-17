@@ -115,18 +115,24 @@ if (pad.CountDevices() &gt; 0 &amp;&amp; pad.GetDeviceName(0, name) == B_OK
 				<tr><th>Declared in</th><td>&lt;GameControllerView.h&gt;</td></tr>
 				<tr><th>Derived from</th><td>BView</td></tr>
 			</table>
-			<p>A picture of a controller, drawn in code: vector, scaled to the view, in the system colors, so
-			dark mode works. While a controller is open the pressed buttons fill with the accent color, the dot
-			of a stick follows the stick and a trigger bar fills as far as it is pulled. Simplified shapes in
-			R5's thin-line style, no logos.</p>
+			<p>A picture of the controller's own model, chosen by its vendor and product ID: the line drawings
+			of the Gamepad Line Art Pack (CC0) for Xbox, PlayStation and Nintendo controllers, and R5's own
+			drawing in the same style for the Sega Genesis family (the 8BitDo M30). Vector, scaled to the view,
+			in the text color, so dark mode works; no logos. While a controller is open a pressed control fills
+			with the accent color under the line, a pressed stick fills its cap, a moved stick shows a ring in
+			the accent color off centre, and the analog triggers are two small caps over the shoulders that
+			fill as far as they are pulled, with their value beside them ("L2 60%"). A controller without a
+			mapping gets a picture built from what it reports.</p>
 			<div class="member"><div class="sig">status_t SetDevice(const char* deviceName);<br>BGameController* Controller();</div>
 				<p>Opens the controller and shows it live while the view is in a window; it reads the controller
 				about 60 times a second and draws only when something changed. <code class="inline">NULL</code>
 				closes it.</p></div>
 			<div class="member"><div class="sig">void SetFamily(game_controller_family family);<br>void SetLabels(game_controller_labels labels);</div>
-				<p>The still shape of a family, without a controller; and the labels on the face buttons
-				(<code class="inline">B_GAME_CONTROLLER_LABELS_AUTOMATIC</code>: the controller's own
-				choice).</p></div>
+				<p>The still picture of a family, without a controller (PlayStation: the DualSense, Xbox: the
+				Xbox Series controller, Nintendo: the Switch Pro Controller, Sega Genesis: the M30); and the
+				labels on the face buttons of a picture built from what a controller reports
+				(<code class="inline">B_GAME_CONTROLLER_LABELS_AUTOMATIC</code>: the controller's own choice).
+				A model's picture shows what is printed on that model.</p></div>
 		</section>
 
 		<section class="entry" id="settings">
