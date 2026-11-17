@@ -18,12 +18,17 @@
  *     B_GAME_CONTROLLER_ADDED and _REMOVED messages; two synthetic pads
  *     with the 8BitDo M30's IDs (2dc8:0651), one with a hat and one with
  *     the d-pad on X and Y; a saved setup and a chosen layout;
- *  4. with app_server: the four PlayStation glyphs and the five shapes of
- *     BGameControllerView draw something.
+ *  4. the controller pictures: the vendor and product table (sorted, the
+ *     models of known IDs, the vendor and family fallbacks) and the data
+ *     of every drawing (a control for every face button, the d-pad and
+ *     the shoulders, inside the drawing);
+ *  5. with app_server: the four PlayStation glyphs and the five still
+ *     pictures of BGameControllerView draw something.
  *
  * "gamecontroller_test --hold <seconds>" only keeps that virtual
- * controller, with Cross down, L2 at 60 % and the left stick up and left,
- * so the Settings page can be looked at in QEMU.
+ * controller, as the approved mockup: Cross, L1 and L3 down, the right
+ * stick up and right, L2 at 60 % and R2 at 15 %, so the Settings page can
+ * be looked at in QEMU.
  *
  * Prints "gamecontroller_test: ok" or the first failure; exit code 0 or 1.
  */
@@ -53,6 +58,7 @@
 #include <R5Icons.h>
 
 #include "GameControllerMapping.h"
+#include "GameControllerPictures.h"
 
 
 using namespace R5GameController;
@@ -903,8 +909,11 @@ hold(int seconds)
 	sControl = open("/dev/" R5_BTHID_CONTROL_NAME, O_RDWR);
 	if (sControl < 0)
 		return fail("open the bluetooth_hid control node (uid 0?)");
-	// As the mockup: Cross down, L2 at 60 %, the left stick up and left.
-	set_report(sPads[0], 0x40, 0x40, 0x80, 0x80, 8, 1 << 1, 153, 0x00);
+	// As the approved mockup: Cross (button 1), L1 (4) and L3 (10) down,
+	// the right stick (Z and Rz) up and right, L2 (Rx) at 60 % and R2 (Ry)
+	// at 15 %.
+	set_report(sPads[0], 0x80, 0x80, 0xe0, 0x20, 8,
+		(1 << 1) | (1 << 4) | (1 << 10), 153, 38);
 	sPads[0].id = create_pad("DualSense Wireless Controller");
 	if (sPads[0].id < 0)
 		return fail("create the virtual controller");
@@ -924,7 +933,127 @@ hold(int seconds)
 }
 
 
-// #pragma mark - 4. drawing
+// #pragma mark - 4. pictures
+
+
+static int
+test_pictures()
+{
+	int32 ids = CountPictureIDs();
+	CHECK(ids > 500, "picture ID table too short");
+	uint32 previous = 0;
+	for (int32 i = 0; i < ids; i++) {
+		const gc_model_id* id = PictureIDAt(i);
+		uint32 value = (uint32)id->vendor << 16 | id->product;
+		CHECK(i == 0 || value > previous, "picture IDs not sorted");
+		CHECK(PictureAt(id->model) != NULL, "picture ID without a model");
+		previous = value;
+	}
+
+	static const struct {
+		uint16					vendor;
+		uint16					product;
+		game_controller_family	family;
+		const char*				picture;
+	} kCases[] = {
+		{ 0x054c, 0x0ce6, B_GAME_CONTROLLER_FAMILY_PLAYSTATION, "dualsense" },
+		{ 0x054c, 0x0df2, B_GAME_CONTROLLER_FAMILY_PLAYSTATION,
+			"dualsense-edge" },
+		{ 0x054c, 0x09cc, B_GAME_CONTROLLER_FAMILY_PLAYSTATION,
+			"dualshock-4" },
+		{ 0x054c, 0xfff0, B_GAME_CONTROLLER_FAMILY_PLAYSTATION, "dualsense" },
+		{ 0x045e, 0x0b12, B_GAME_CONTROLLER_FAMILY_XBOX, "xbox-series" },
+		{ 0x045e, 0x0b00, B_GAME_CONTROLLER_FAMILY_XBOX, "xbox-elite-2" },
+		{ 0x045e, 0x02ea, B_GAME_CONTROLLER_FAMILY_XBOX, "xbox-one" },
+		{ 0x045e, 0xfff0, B_GAME_CONTROLLER_FAMILY_XBOX, "xbox-series" },
+		{ 0x057e, 0x2009, B_GAME_CONTROLLER_FAMILY_NINTENDO, "switch-pro" },
+		{ 0x057e, 0x2006, B_GAME_CONTROLLER_FAMILY_NINTENDO, "joy-con" },
+		{ 0x057e, 0x2066, B_GAME_CONTROLLER_FAMILY_NINTENDO, "joy-con-2" },
+		{ 0x057e, 0xfff0, B_GAME_CONTROLLER_FAMILY_NINTENDO, "switch-pro" },
+		{ 0x2dc8, 0x0651, B_GAME_CONTROLLER_FAMILY_SEGA_GENESIS,
+			"genesis-m30" },
+		// A chosen layout or another mapping: the family's own picture.
+		{ 0x2dc8, 0x0651, B_GAME_CONTROLLER_FAMILY_XBOX, "xbox-series" },
+		{ 0x054c, 0x0ce6, B_GAME_CONTROLLER_FAMILY_XBOX, "xbox-series" },
+		{ 0x1234, 0x5678, B_GAME_CONTROLLER_FAMILY_SEGA_GENESIS,
+			"genesis-m30" },
+		{ 0x1234, 0x5678, B_GAME_CONTROLLER_FAMILY_NINTENDO, "switch-pro" },
+	};
+	for (size_t i = 0; i < sizeof(kCases) / sizeof(kCases[0]); i++) {
+		const gc_model* model = PictureFor(kCases[i].vendor,
+			kCases[i].product, kCases[i].family);
+		if (model == NULL || strcmp(model->name, kCases[i].picture) != 0) {
+			printf("gamecontroller_test: %04x:%04x family %d gives %s, not "
+				"%s\n", kCases[i].vendor, kCases[i].product,
+				(int)kCases[i].family, model != NULL ? model->name : "none",
+				kCases[i].picture);
+			return fail("picture by ID");
+		}
+	}
+	CHECK(PictureFor(0x054c, 0x0ce6, B_GAME_CONTROLLER_FAMILY_UNKNOWN)
+		== NULL, "a picture without a mapping");
+
+	static const int32 kNeeded[] = {
+		B_CONTROLLER_BUTTON_A, B_CONTROLLER_BUTTON_B, B_CONTROLLER_BUTTON_X,
+		B_CONTROLLER_BUTTON_Y, B_CONTROLLER_BUTTON_START,
+		B_CONTROLLER_BUTTON_LEFT_SHOULDER, B_CONTROLLER_BUTTON_RIGHT_SHOULDER,
+		B_CONTROLLER_BUTTON_DPAD_UP, B_CONTROLLER_BUTTON_DPAD_DOWN,
+		B_CONTROLLER_BUTTON_DPAD_LEFT, B_CONTROLLER_BUTTON_DPAD_RIGHT
+	};
+	CHECK(CountPictures() == 10, "ten pictures");
+	for (int32 i = 0; i < CountPictures(); i++) {
+		const gc_model* model = PictureAt(i);
+		int32 points = 0;
+		int32 run = 0;
+		while (run < model->runCount) {
+			int32 subpaths = model->runs[run++];
+			CHECK(subpaths > 0 && run + subpaths <= model->runCount,
+				"picture runs");
+			for (int32 k = 0; k < subpaths; k++)
+				points += model->runs[run++];
+		}
+		CHECK(points > 1000, "picture has too few points");
+		for (int32 k = 0; k < points; k++) {
+			int16 x = model->points[k * 2];
+			int16 y = model->points[k * 2 + 1];
+			CHECK(x > -100 && x < model->width + 100 && y > -100
+				&& y < model->height + 100, "picture point outside");
+		}
+		for (size_t n = 0; n < sizeof(kNeeded) / sizeof(kNeeded[0]); n++) {
+			bool found = false;
+			for (int32 c = 0; c < model->controlCount; c++) {
+				const gc_control& control = model->controls[c];
+				if (control.button != kNeeded[n])
+					continue;
+				found = control.count >= 3;
+				for (int32 k = 0; k < control.count; k++) {
+					int16 x = model->controlPoints[(control.first + k) * 2];
+					int16 y
+						= model->controlPoints[(control.first + k) * 2 + 1];
+					CHECK(x >= -20 && x <= model->width + 20 && y >= -20
+						&& y <= model->height + 20, "control outside");
+				}
+			}
+			if (!found) {
+				printf("gamecontroller_test: %s has no control %d\n",
+					model->name, (int)kNeeded[n]);
+				return fail("picture control");
+			}
+		}
+		bool sticks = model->leftStick.radius > 0
+			&& model->rightStick.radius > 0;
+		CHECK(sticks
+			== (model->family != B_GAME_CONTROLLER_FAMILY_SEGA_GENESIS),
+			"picture sticks");
+		printf("gamecontroller_test: picture %s, %" B_PRId32 " points, %"
+			B_PRId32 " controls\n", model->name, points, model->controlCount);
+	}
+	printf("gamecontroller_test: pictures ok (%" B_PRId32 " IDs)\n", ids);
+	return 0;
+}
+
+
+// #pragma mark - 5. drawing
 
 
 static int32
@@ -1002,7 +1131,7 @@ main(int argc, char** argv)
 		return hold(atoi(argv[2]));
 
 	if (test_parser() != 0 || test_descriptor_first() != 0
-		|| test_database() != 0
+		|| test_database() != 0 || test_pictures() != 0
 		|| test_virtual_controller() != 0)
 		return 1;
 

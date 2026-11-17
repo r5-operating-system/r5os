@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>R5 game controller pictures</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* Proposal (owner, 17 Nov 2026: "realistic") for the controller pictures
+   of Settings > Devices > Game controllers (BGameControllerView): front
+   views with real proportions, curved grips, shoulder buttons over the top
+   edge, convex buttons and dished sticks with light and shade. Drawn for
+   R5, not traced, no logos. One control of each is shown pressed. */
+body { margin: 0; font-family: 'Manrope', system-ui, sans-serif; }
+.sheet { padding: 24px 28px; }
+.light { background: #ededed; color: #141414;
+	--shell1: #fbfcfd; --shell2: #d9dee6; --edge: #8a94a3;
+	--plate1: #3a3f48; --plate2: #1d2026; --pad1: #4a505b; --pad2: #2a2e35;
+	--key1: #ffffff; --key2: #cfd5de; --keyedge: #7d8796;
+	--dkey1: #4b515c; --dkey2: #23262d; --dkeyedge: #111317;
+	--well: #1c1f25; --cap1: #5a616d; --cap2: #23272e; --ink: #3c4553;
+	--inkd: #c9d0da; --shoulder1: #e9edf2; --shoulder2: #b8c0cc;
+	--lit1: #7cc0ff; --lit2: #0a6fe0; --card: #ffffff; --border: #c4c4c4;
+	--shadow: rgba(20, 30, 50, .28); }
+.dark { background: #232529; color: #e8e8e8;
+	--shell1: #4a4f58; --shell2: #2c3037; --edge: #14161a;
+	--plate1: #2a2d33; --plate2: #15171b; --pad1: #3a3e46; --pad2: #202328;
+	--key1: #5d636e; --key2: #353a42; --keyedge: #15171b;
+	--dkey1: #3b4049; --dkey2: #1a1c21; --dkeyedge: #0b0c0e;
+	--well: #0f1013; --cap1: #4c525d; --cap2: #1b1e23; --ink: #d4dae3;
+	--inkd: #c9d0da; --shoulder1: #3e434b; --shoulder2: #24272d;
+	--lit1: #8ccaff; --lit2: #1a7ff0; --card: #2c2f34; --border: #45494f;
+	--shadow: rgba(0, 0, 0, .55); }
+h1 { font-size: 20px; font-weight: 800; margin: 0 0 4px; }
+p.note { font-size: 12.5px; margin: 0 0 16px; opacity: .75; }
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.card { background: var(--card); border: 1px solid var(--border);
+	padding: 10px 12px 6px; }
+.card h2 { font-size: 13px; font-weight: 700; margin: 0 0 2px; }
+.card span { font-size: 11.5px; opacity: .7; }
+svg.pic { display: block; width: 100%; height: auto; }
+.shell { fill: url(#gShell); stroke: var(--edge); stroke-width: 1.2; }
+.plate { fill: url(#gPlate); }
+.pad { fill: url(#gPad); stroke: var(--dkeyedge); stroke-width: .8; }
+.shoulder { fill: url(#gShoulder); stroke: var(--edge); stroke-width: 1; }
+.key { fill: url(#gKey); stroke: var(--keyedge); stroke-width: .9; }
+.dkey { fill: url(#gDKey); stroke: var(--dkeyedge); stroke-width: .9; }
+.lit { fill: url(#gLit); stroke: #0756b8; stroke-width: 1; }
+.well { fill: var(--well); }
+.cap { fill: url(#gCap); }
+.capring { fill: none; stroke: rgba(255,255,255,.12); stroke-width: 1.5; }
+.ink { font: 700 11px 'Manrope', sans-serif; fill: var(--ink);
+	text-anchor: middle; dominant-baseline: central; }
+.inkd { fill: var(--inkd); }
+.inkw { fill: #ffffff; }
+.sym { fill: none; stroke: var(--ink); stroke-width: 1.6;
+	stroke-linejoin: round; stroke-linecap: round; }
+.symd { stroke: var(--inkd); }
+.symw { stroke: #ffffff; }
+.tiny { font: 600 8.5px 'Manrope', sans-serif; fill: var(--ink); opacity: .6;
+	text-anchor: middle; }
+.drop { filter: url(#fShadow); }
+</style>
+</head>
+<body>
+
+
+<script>
+// Front views. Shoulders first (they sit behind the top edge), then the
+// shell, the plates, and the controls.
+const pictures = [
+	["PlayStation", "DualSense-like: long grips, the touchpad at the top edge", `
+	<g class="drop">
+	<path class="shoulder" d="M46,24 C48,10 62,4 80,4 L98,6 L104,22 Z"/>
+	<path class="shoulder" d="M350,24 C348,10 334,4 316,4 L298,6 L292,22 Z"/>
+	<path class="shell" d="M54,24 C70,14 92,12 112,14 L284,14 C304,12 326,14 342,24 C370,44 388,82 393,124 C398,166 392,196 384,222 C376,250 368,272 352,278 C338,283 326,274 320,262 C310,240 304,214 296,196 C290,184 282,180 272,180 L124,180 C114,180 106,184 100,196 C92,214 86,240 76,262 C70,274 58,283 44,278 C28,272 20,250 12,222 C4,196 -2,166 3,124 C8,82 26,44 54,24 Z"/>
+	</g>
+	<path class="plate" d="M108,18 L288,18 L300,104 C306,134 302,160 290,178 L106,178 C94,160 90,134 96,104 Z"/>
+	<path class="pad" d="M120,16 L276,16 C282,16 285,20 284,26 L272,86 C271,92 266,96 260,96 L136,96 C130,96 125,92 124,86 L112,26 C111,20 114,16 120,16 Z"/>
+	<path d="M126,100 h144" stroke="#5aa8ff" stroke-width="1.5" opacity=".7"/>
+	<rect class="key" x="96" y="30" width="8" height="18" rx="4"/>
+	<rect class="key" x="292" y="30" width="8" height="18" rx="4"/>
+	<use href="#arrows" x="40" y="52" width="60" height="60"/>
+	<path class="lit" d="M63,55 h14 a2,2 0 0 1 2,2 v12 l-9,9 l-9,-9 v-12 a2,2 0 0 1 2,-2 z"/>
+	<circle class="key" cx="328" cy="50" r="12"/><path class="sym" d="M328,44 l5.5,9.5 h-11 z"/>
+	<circle class="key" cx="356" cy="78" r="12"/><circle class="sym" cx="356" cy="78" r="5.5"/>
+	<circle class="lit" cx="328" cy="106" r="12"/><path class="sym symw" d="M323.5,101.5 l9,9 m0,-9 l-9,9"/>
+	<circle class="key" cx="300" cy="78" r="12"/><rect class="sym" x="295" y="73" width="10" height="10"/>
+	<use href="#stick-lit" x="96" y="102" width="68" height="68"/>
+	<use href="#stick" x="232" y="102" width="68" height="68"/>
+	<rect class="dkey" x="187" y="153" width="22" height="7" rx="3.5"/>
+	<text class="tiny" x="75" y="0">L1 · L2</text><text class="tiny" x="321" y="0">R1 · R2</text>`, "-10 -10 416 300"],
+
+	["Xbox", "Compact and round: left stick high, right stick low", `
+	<g class="drop">
+	<path class="shoulder" d="M82,70 C92,48 124,40 156,44 L158,56 L88,76 Z"/>
+	<path class="shoulder" d="M318,70 C308,48 276,40 244,44 L242,56 L312,76 Z"/>
+	<path class="shell" d="M92,60 C122,44 160,42 200,50 C240,42 278,44 308,60 C344,78 366,108 374,146 C382,184 378,212 360,226 C340,242 314,236 298,216 C286,200 272,188 252,186 L148,186 C128,188 114,200 102,216 C86,236 60,242 40,226 C22,212 18,184 26,146 C34,108 56,78 92,60 Z"/>
+	</g>
+	<circle cx="200" cy="72" r="15" class="dkey"/>
+	<circle cx="200" cy="72" r="11" fill="none" stroke="rgba(255,255,255,.25)" stroke-width="1.2"/>
+	<circle class="dkey" cx="174" cy="104" r="6"/><circle class="dkey" cx="226" cy="104" r="6"/>
+	<rect class="dkey" x="195" y="112" width="10" height="6" rx="3"/>
+	<use href="#stick" x="74" y="64" width="64" height="64"/>
+	<use href="#cross" x="132" y="122" width="54" height="54"/>
+	<use href="#stick" x="216" y="122" width="58" height="58"/>
+	<circle class="dkey" cx="300" cy="74" r="11"/><text class="ink inkd" x="300" y="74" style="fill:#f2c94c">Y</text>
+	<circle class="dkey" cx="324" cy="98" r="11"/><text class="ink inkd" x="324" y="98" style="fill:#f0645a">B</text>
+	<circle class="lit" cx="300" cy="122" r="11"/><text class="ink inkw" x="300" y="122">A</text>
+	<circle class="dkey" cx="276" cy="98" r="11"/><text class="ink inkd" x="276" y="98" style="fill:#5aa8ff">X</text>
+	<text class="tiny" x="112" y="27">LB · LT</text><text class="tiny" x="288" y="27">RB · RT</text>`],
+
+	["Nintendo", "Pro-style: a flat top, straight grips, A right and B below", `
+	<g class="drop">
+	<path class="shoulder" d="M74,52 C80,34 110,28 146,30 L148,44 L78,56 Z"/>
+	<path class="shoulder" d="M326,52 C320,34 290,28 254,30 L252,44 L322,56 Z"/>
+	<path class="shell" style="fill:url(#gPlate);stroke:var(--dkeyedge)" d="M86,44 L314,44 C344,44 362,62 370,90 L390,192 C396,226 380,248 354,248 C334,248 322,234 312,214 L298,186 C292,174 282,168 268,168 L132,168 C118,168 108,174 102,186 L88,214 C78,234 66,248 46,248 C20,248 4,226 10,192 L30,90 C38,62 56,44 86,44 Z"/>
+	</g>
+	<use href="#stick" x="74" y="64" width="64" height="64"/>
+	<use href="#cross" x="132" y="122" width="54" height="54"/>
+	<use href="#stick" x="216" y="122" width="58" height="58"/>
+	<circle class="dkey" cx="300" cy="74" r="11"/><text class="ink inkd" x="300" y="74">X</text>
+	<circle class="lit" cx="324" cy="98" r="11"/><text class="ink inkw" x="324" y="98">A</text>
+	<circle class="dkey" cx="300" cy="122" r="11"/><text class="ink inkd" x="300" y="122">B</text>
+	<circle class="dkey" cx="276" cy="98" r="11"/><text class="ink inkd" x="276" y="98">Y</text>
+	<text class="ink inkd" x="172" y="70">−</text><text class="ink inkd" x="228" y="70">+</text>
+	<rect class="dkey" x="168" y="92" width="10" height="10" rx="2"/>
+	<circle class="dkey" cx="227" cy="97" r="6"/>
+	<text class="tiny" x="108" y="27">L · ZL</text><text class="tiny" x="292" y="27">R · ZR</text>`],
+
+	["Sega Genesis", "8BitDo M30 and alike: a round pad, six buttons in two rows", `
+	<g class="drop">
+	<path class="shoulder" d="M54,34 C56,26 64,22 74,22 L122,22 C126,22 128,26 128,34 Z"/>
+	<path class="shoulder" d="M346,34 C344,26 336,22 326,22 L278,22 C274,22 272,26 272,34 Z"/>
+	<path class="shell" style="fill:url(#gPlate);stroke:var(--dkeyedge)" d="M52,33 L348,33 C372,33 388,50 394,80 C402,118 404,170 396,200 C388,226 368,242 344,240 C320,238 300,226 280,214 C258,202 230,197 200,197 C170,197 142,202 120,214 C100,226 80,238 56,240 C32,242 12,226 4,200 C-4,170 -2,118 6,80 C12,50 28,33 52,33 Z"/>
+	</g>
+	<circle cx="94" cy="117" r="52" fill="rgba(255,255,255,.06)" stroke="rgba(0,0,0,.45)" stroke-width="1.2"/>
+	<use href="#cross-up" x="50" y="73" width="88" height="88"/>
+	<circle class="dkey" cx="255" cy="91" r="17"/><text class="ink inkd" x="255" y="91">X</text>
+	<circle class="dkey" cx="298" cy="91" r="17"/><text class="ink inkd" x="298" y="91">Y</text>
+	<circle class="dkey" cx="341" cy="91" r="17"/><text class="ink inkd" x="341" y="91">Z</text>
+	<circle class="lit" cx="255" cy="139" r="17"/><text class="ink inkw" x="255" y="139">A</text>
+	<circle class="dkey" cx="298" cy="139" r="17"/><text class="ink inkd" x="298" y="139">B</text>
+	<circle class="dkey" cx="341" cy="139" r="17"/><text class="ink inkd" x="341" y="139">C</text>
+	<rect class="dkey" x="178" y="172" width="44" height="11" rx="5.5"/>
+	<text class="tiny" x="200" y="194">START</text>
+	<text class="tiny" x="91" y="16">L</text><text class="tiny" x="309" y="16">R</text>`, "-10 4 420 250"],
+
+	["Unknown controller", "From what it reports: 2 sticks, a hat, 8 buttons, 2 triggers", `
+	<g class="drop">
+	<path class="shoulder" d="M74,58 C84,38 118,30 150,34 L152,48 L80,62 Z"/>
+	<path class="shoulder" d="M326,58 C316,38 282,30 250,34 L248,48 L320,62 Z"/>
+	<path class="shell" d="M96,46 C132,36 170,40 200,40 C230,40 268,36 304,46 C338,56 360,78 374,112 C390,150 396,192 386,216 C376,240 350,246 330,234 C312,222 298,200 284,186 C272,174 258,170 244,170 L156,170 C142,170 128,174 116,186 C102,200 88,222 70,234 C50,246 24,240 14,216 C4,192 10,150 26,112 C40,78 62,56 96,46 Z"/>
+	</g>
+	<rect x="64" y="14" width="64" height="8" rx="4" class="well" opacity=".35"/>
+	<rect x="64" y="14" width="38" height="8" rx="4" fill="url(#gLit)"/>
+	<rect x="272" y="14" width="64" height="8" rx="4" class="well" opacity=".35"/>
+	<use href="#cross" x="64" y="76" width="54" height="54"/>
+	<use href="#stick" x="126" y="122" width="58" height="58"/>
+	<use href="#stick" x="216" y="122" width="58" height="58"/>
+	<circle class="dkey" cx="270" cy="84" r="9"/><text class="ink inkd" x="270" y="84">1</text>
+	<circle class="lit" cx="294" cy="84" r="9"/><text class="ink inkw" x="294" y="84">2</text>
+	<circle class="dkey" cx="318" cy="84" r="9"/><text class="ink inkd" x="318" y="84">3</text>
+	<circle class="dkey" cx="342" cy="84" r="9"/><text class="ink inkd" x="342" y="84">4</text>
+	<circle class="dkey" cx="270" cy="108" r="9"/><text class="ink inkd" x="270" y="108">5</text>
+	<circle class="dkey" cx="294" cy="108" r="9"/><text class="ink inkd" x="294" y="108">6</text>
+	<circle class="dkey" cx="318" cy="108" r="9"/><text class="ink inkd" x="318" y="108">7</text>
+	<circle class="dkey" cx="342" cy="108" r="9"/><text class="ink inkd" x="342" y="108">8</text>`]
+];
+// Colors per theme, written into each picture's own gradients (SVG
+// gradients do not see the page's CSS variables).
+const palette = {
+	light: { shell: ["#fbfcfd", "#d6dce5"], edge: "#8a94a3",
+		plate: ["#3a3f48", "#1d2026"], pad: ["#4a505b", "#2a2e35"],
+		shoulder: ["#eef1f5", "#b4bcc8"], key: ["#ffffff", "#cdd3dc"],
+		dkey: ["#555b66", "#202329"], lit: ["#8cc8ff", "#0a6fe0"],
+		cap: ["#5d6470", "#202329"], well: "#1a1d22",
+		shadow: "rgba(20,30,50,.30)" },
+	dark: { shell: ["#565c66", "#2a2e35"], edge: "#111317",
+		plate: ["#2e3238", "#141619"], pad: ["#3d424a", "#1e2126"],
+		shoulder: ["#454a53", "#24272d"], key: ["#6a717c", "#363b43"],
+		dkey: ["#454b55", "#18191d"], lit: ["#9ad0ff", "#1a7ff0"],
+		cap: ["#535a65", "#17191d"], well: "#0c0d10",
+		shadow: "rgba(0,0,0,.6)" }
+};
+
+function defs(t, id) {
+	const p = palette[t];
+	const lin = (n, c) => `<linearGradient id="${n}${id}" x1="0" y1="0" x2="0" y2="1">
+		<stop offset="0" stop-color="${c[0]}"/><stop offset="1" stop-color="${c[1]}"/></linearGradient>`;
+	const rad = (n, c) => `<radialGradient id="${n}${id}" cx=".38" cy=".32" r=".8">
+		<stop offset="0" stop-color="${c[0]}"/><stop offset="1" stop-color="${c[1]}"/></radialGradient>`;
+	return `<defs>${lin("gShell", p.shell)}${lin("gPlate", p.plate)}
+		${lin("gPad", p.pad)}${lin("gShoulder", p.shoulder)}
+		${rad("gKey", p.key)}${rad("gDKey", p.dkey)}${rad("gLit", p.lit)}
+		<radialGradient id="gCap${id}" cx=".5" cy=".55" r=".55">
+		<stop offset="0" stop-color="${p.cap[1]}"/><stop offset=".72" stop-color="${p.cap[0]}"/>
+		<stop offset="1" stop-color="${p.cap[1]}"/></radialGradient>
+		<filter id="fShadow${id}" x="-10%" y="-10%" width="120%" height="135%">
+		<feDropShadow dx="0" dy="5" stdDeviation="5" flood-color="${p.shadow}"/></filter></defs>`;
+}
+
+// The reusable parts, drawn in place: a group at the part's centre,
+// scaled from a 60-unit box.
+const parts = {
+	stick: `<circle class="well" r="26"/><circle class="cap" r="19"/>
+		<circle class="capring" r="13"/>`,
+	"stick-lit": `<circle class="well" r="26"/><circle class="cap" cx="-7" cy="-7" r="19"/>
+		<circle cx="-7" cy="-7" r="19" fill="none" stroke="#3d9bff" stroke-width="2.5"/>
+		<circle class="capring" cx="-7" cy="-7" r="13"/>`,
+	arrows: `<path class="dkey" d="M-7,-27 h14 a2,2 0 0 1 2,2 v12 l-9,9 l-9,-9 v-12 a2,2 0 0 1 2,-2 z"/>
+		<path class="dkey" d="M-7,27 h14 a2,2 0 0 0 2,-2 v-12 l-9,-9 l-9,9 v12 a2,2 0 0 0 2,2 z"/>
+		<path class="dkey" d="M-27,-7 v14 a2,2 0 0 0 2,2 h12 l9,-9 l-9,-9 h-12 a2,2 0 0 0 -2,2 z"/>
+		<path class="dkey" d="M27,-7 v14 a2,2 0 0 1 -2,2 h-12 l-9,-9 l9,-9 h12 a2,2 0 0 1 2,2 z"/>`,
+	cross: `<circle r="27" class="well" opacity=".35"/>
+		<path class="dkey" d="M-8,-24 h16 v16 h16 v16 h-16 v16 h-16 v-16 h-16 v-16 h16 z"/>
+		<circle r="4" fill="rgba(0,0,0,.25)"/>`,
+	"cross-up": `<circle r="27" class="well" opacity=".35"/>
+		<path class="dkey" d="M-8,-24 h16 v16 h16 v16 h-16 v16 h-16 v-16 h-16 v-16 h16 z"/>
+		<path class="lit" d="M-8,-24 h16 v14 h-16 z"/>
+		<circle r="4" fill="rgba(0,0,0,.25)"/>`
+};
+
+function expand(inner, t, id) {
+	const p = palette[t];
+	return inner
+		.replace(/<use href="#([\w-]+)" x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="[\d.]+"\/>/g,
+			(m, name, x, y, w) => `<g transform="translate(${+x + w / 2},${+y + w / 2}) scale(${w / 60})">${parts[name]}</g>`)
+		.replace(/url\(#(g\w+|fShadow)\)/g, (m, n) => `url(#${n}${id})`)
+		.replace(/class="drop"/g, `filter="url(#fShadow${id})"`)
+		.replace(/var\(--dkeyedge\)/g, "#0b0c0e");
+}
+
+let serial = 0;
+for (const theme of ["light", "dark"]) {
+	const sheet = document.createElement("div");
+	sheet.className = "sheet " + theme;
+	sheet.innerHTML = `<h1>Controller pictures, line art (${theme})</h1>
+		<p class="note">Front views with real proportions in double thin lines, no fills or shading. One control of each is pressed (blue), as the live test lights it. Drawn for R5, no logos.</p>
+		<div class="grid">` + pictures.map(([name, sub, inner, box]) => {
+			const id = "-" + (serial++);
+			const p = palette[theme];
+			// The classes take this picture's gradients.
+			// Line art (owner, 17 Nov 2026): no fills, no shading. Every
+			// part is drawn twice: a wide stroke in the line colour, then a
+			// narrower one in the background colour on top, which leaves
+			// two thin parallel lines. Only a pressed control is filled.
+			const ink = theme === "dark" ? "#e9edf2" : "#1f2630";
+			const bg = theme === "dark" ? "#16181b" : "#ffffff";
+			const blue = "#2b8cff";
+			const parts = ".shell, .plate, .pad, .shoulder, .key, .dkey, .well, .cap, .capring";
+			const sel = (pass, list) => list.split(",").map(c => `#pic${id} .${pass} ${c.trim()}`).join(", ");
+			const style = `<style>
+				#pic${id} { background: ${bg}; }
+				${sel("p1", parts)} { fill: none; stroke: ${ink}; stroke-width: 4.4; stroke-linejoin: round; }
+				${sel("p2", parts)} { fill: none; stroke: ${bg}; stroke-width: 1.8; stroke-linejoin: round; }
+				#pic${id} .p1 .plate, #pic${id} .p1 .capring { stroke-width: 1.4; }
+				#pic${id} .p2 .plate, #pic${id} .p2 .capring { stroke: none; }
+				#pic${id} .p1 .well { stroke-width: 1.4; }
+				#pic${id} .p2 .well { stroke: none; }
+				#pic${id} .p1 .lit { fill: ${blue}; stroke: ${blue}; stroke-width: 4.4; }
+				#pic${id} .p2 .lit { fill: ${blue}; stroke: ${bg}; stroke-width: 1.4; }
+				#pic${id} .p1 text, #pic${id} .p1 .sym, #pic${id} .p1 .tiny { display: none; }
+				#pic${id} .ink, #pic${id} .inkd { fill: ${ink} !important; }
+				#pic${id} .inkw { fill: #ffffff !important; }
+				#pic${id} .sym { stroke: ${ink}; } #pic${id} .symw { stroke: #ffffff; }
+				#pic${id} .tiny { fill: ${ink}; }
+				#pic${id} [stroke="#5aa8ff"] { stroke: ${ink}; opacity: .5; }
+				#pic${id} circle[stroke="#3d9bff"] { stroke: ${blue}; }
+				#pic${id} .p1 circle[stroke="#3d9bff"] { display: none; }</style>`;
+			const drawn = expand(inner, theme, id)
+				.replace(/filter="url\(#fShadow[^)]*\)"/g, "")
+				.replace(/ style="fill:url\(#gPlate[^"]*"/g, "");
+			return `
+		<div class="card"><h2>${name}</h2><span>${sub}</span>
+		<svg class="pic" id="pic${id}" viewBox="${box || '-12 0 424 272'}">${style}<g class="p1">${drawn}</g><g class="p2">${drawn}</g></svg></div>`;
+		}).join("") + `</div>`;
+	document.body.appendChild(sheet);
+}
+</script>
+</body>
+</html>
