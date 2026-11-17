@@ -16,6 +16,32 @@ Limits: a controller whose reports have no Battery Strength shows no battery lin
 Tested: `scripts/build-locked.sh` and the QEMU Bluetooth smoke (SMAP=1, GAMEPAD=1, results below). `bt_hid_driver_test` creates a gamepad with a battery byte, checks -1 before the first report, 73 after one with no program reading, the same after a short report, -1 for a mouse, a kernel address and a short buffer refused, and 73 in `R5_JOYSTICK_GET_INFO` before any read.
 
 Not tested: a real controller over Bluetooth (QEMU has no radio, so the `BT_MSG_R5_GET_PAIRED` path with a paired, connected controller and the Deskbar menu did not run), ARM64 and RISC-V 64 (not built).
+## 2026-11-17 - Wi-Fi step 5: the standard and the rate on the page and in Deskbar
+
+Problem: the driver can report a transmit rate and, when HE is on, that the link is Wi-Fi 6, but the Wi-Fi page and the Deskbar menu only say that a network is connected.
+
+What changed:
+- `IEEE80211_IOC_HAIKU_LINK` (`0x6006`) is a new request. The transmit-rate struct is unchanged. The kernel copies it out with `copyout`. The driver fills the standard from the node (HE, then VHT, then HT) or from the last transmit mode, the width from that transmit or from the channel, and the stream count from the last transmit. The receive rate stays 0: the MT7921 path does not report one.
+- `WiFiLinkDetails` gains `standard`, `width`, `streams` and `rxKbps` at the end. `WiFiLinkLine()` builds `Wi-Fi 6 · 600 Mbit/s` from the receive rate when it is set, otherwise the transmit rate. The page appends that line to the existing status. The Deskbar menu adds it under "Connected to". `r5_wifi_link_line()` does the read and does not start a controller, so the Deskbar replicant links `libr5wifi.so` for that call.
+
+Tested: AMD64 `scripts/build-locked.sh`: `jam_exit=0`, `mesa_exit=0`. QEMU (KVM, SMAP and SMEP, 2 CPUs, 2 GB, headless, 150 s) on an own copy of `r5-os.image` (`generated/wifi-qemu.sh`). The serial log has `enable SMAP` and `enable SMEP`. No panic and no `vm_page_fault`. The `kernel debugger` lines are the debugger extensions loading. Settings stayed running (`/boot/system/preferences/Settings --page wifi`, pid 96, still in `ps`). User space wrote `wifi-step5-booted`. QEMU has no Wi-Fi adapter, so the syslog has no mt7922 line and the link line was not shown. The words on the page were not read.
+
+Not tested: a joined network, so the line itself has not been seen. ARM64 and RISC-V 64 not built. No What's new section.
+
+## 2026-11-17 - Wi-Fi step 4a: Wi-Fi 6 stays off until the settings ask
+
+Problem: the stack can join with Wi-Fi 4 and 5 when `ht_vht` is on, and it has no idea what an HE (802.11ax) element is. The MT7921 firmware wants those fields in the station record before it will use Wi-Fi 6.
+
+What changed:
+- HE Capabilities (extension 35) and HE Operation (extension 36) are parsed in `ieee80211_he.c` (MIT). A short element, a wrong id, or a length past the bytes the caller holds is ignored. The peer's MAC, PHY and MCS fields are stored on the node. The IE list keeps the same size: two spare slots now name those elements.
+- Modes `IEEE80211_MODE_HE_2GHZ` (14) and `IEEE80211_MODE_HE_5GHZ` (15) follow VHT. `IEEE80211_MODE_BYTES` stays 2. A channel that is already HT gains `IEEE80211_CHAN_HE` (`0x40000000`; `0x80000000` is already used by ifconfig) only when HE is on. No extra channel copies.
+- With `he` true and `ht_vht` true in `/boot/system/settings/kernel/drivers/mt7922wifi`, and only when the card's PHY tag byte 11 is set, the association request carries our HE Capabilities. That byte is the `he` field of `mt7921_phy_cap` (`mt7921/mcu.c`, BSD-3-Clause-Clear). Current mt76 does not read it. Assumed until a stick boot. The element is built from the streams, bandwidth, LDPC and STBC the card already reported. Absent settings leave HE off. `he` without `ht_vht` stays off.
+- The station record then carries `STA_REC_HE` (tag 14, 28 bytes) and `STA_REC_HE_V2` (tag `0x19`, 28 bytes), and the network record carries `UNI_BSS_INFO_HE_BASIC` (tag 5). The field order is `mt76_connac_mcu.h` (BSD-3-Clause-Clear). mt76 sends both station records for this card (`is_connac2`). The basic MCS map is ours; the station record's map is the access point's. 6 GHz is not in this step.
+- The host fuzzer target is `he`.
+
+Tested: `wifi_fuzz he: 60s 0 crashes` (62877696 rounds) and `wifi_fuzz ies: 60s 0 crashes` (22512640 rounds). `scripts/build-locked.sh` on AMD64: `jam_exit=0`, `mesa_exit=0`. `ieee80211_he.c`, `if_mtk.c` and `mtk_sta.c` compiled in that jam. An earlier compile of `ieee80211_he.c` failed because the network headers the other net80211 files include were missing; those includes are in this change. QEMU (KVM, SMAP and SMEP, 2 CPUs, 2 GB, headless, 150 s) on an own copy of `r5-os.image` (`generated/wifi-qemu.sh`, not `scripts/run-qemu-r5.sh`). The serial log has `enable SMAP` and `enable SMEP`. No panic and no `vm_page_fault`. The `kernel debugger` lines are the debugger extensions loading. Settings stayed running (`/boot/system/preferences/Settings --page wifi`, pid 129, still in `ps`). User space wrote `wifi-step4a-booted`. QEMU has no Wi-Fi adapter, so the syslog has no mt7922 line. The words on the page were not read.
+
+Not tested: a Wi-Fi 6 join, the page saying "Wi-Fi 6", and a download speed (stick W2). ARM64 and RISC-V 64 not built.
 
 ## 2026-11-17 - Graphics (M13 step 3, continued): 2 Lavapipe threads, occlusion culling, glass only where it shows, option E
 

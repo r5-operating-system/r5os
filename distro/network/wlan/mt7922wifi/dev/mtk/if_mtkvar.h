@@ -396,6 +396,10 @@ struct mtk_softc {
  * the mt7922wifi settings say ht_vht.
  */
 	int			sc_ht_vht;
+	int			sc_he;
+	uint8_t			sc_phy_he;
+	uint8_t			sc_he_phy0;
+	uint16_t		sc_he_tx_mcs;
 	uint8_t			sc_phy_ht;
 	uint8_t			sc_phy_vht;
 	uint8_t			sc_phy_bw;
