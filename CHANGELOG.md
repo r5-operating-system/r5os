@@ -1,5 +1,15 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Network: an RA with lifetime 0 is not a default router
+
+Problem: SLAAC still called `AddDefaultRoute` when the router advertisement had Router Lifetime 0. RFC 4861 forbids using that router as a default.
+
+What changed: lifetime 0 now removes the IPv6 default route and does not add one. Prefixes in the same RA are still applied.
+
+Limits: no packet capture. VirtualBox usernet is not this test.
+
+Tested: the C++ was not compiled on this host (needs libbe).
+
 ## 2026-11-17 - Settings: Revert closes the display keep-picture dialog
 
 Problem: window Revert during the 12-second keep-picture dialog called `Settle(false)` but left `DisplayView::fConfirming` set, so Apply stayed disabled and the alert stayed up.

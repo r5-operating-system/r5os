@@ -415,11 +415,14 @@ SLAACClient::_ApplyAdvert(const uint8* buffer, ssize_t bytes,
 			(managed || other) ? "should run" : "may be absent");
 	}
 
-	if (lifetime > 0 || addedAddress || (havePrefix && !fHaveDefaultRoute)) {
-		if (lifetime == 0) {
-			syslog(LOG_INFO, "slaac %s: RA lifetime 0, using advertiser "
-				"as default router\n", Device());
-		}
+	if (lifetime == 0) {
+		BNetworkInterface routeInterface(Device());
+		routeInterface.RemoveDefaultRoute(AF_INET6);
+		fHaveDefaultRoute = false;
+		syslog(LOG_INFO, "slaac %s: RA lifetime 0, default router forgotten\n",
+			Device());
+	} else if (lifetime > 0 || addedAddress
+			|| (havePrefix && !fHaveDefaultRoute)) {
 		if (_ApplyDefaultRoute(from, ifIndex) == B_OK)
 			fHaveDefaultRoute = true;
 	}
