@@ -3387,6 +3387,14 @@ BContainerWindow::NewAttributeMenuItem(const char* label, const char* name,
 	message->AddString("attr_name", name);
 	message->AddInt32("attr_type", type);
 	message->AddInt32("attr_hash", (int32)AttrHashString(name, (uint32)type));
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	if (width < 20)
+		width = 20;
+	else if (width > 600)
+		width = 600;
+	// SPDX-SnippetEnd
 	message->AddFloat("attr_width", width);
 	message->AddInt32("attr_align", align);
 	if (displayAs != NULL)
@@ -3581,7 +3589,18 @@ BContainerWindow::AddMimeMenu(const BMimeType& mimeType, bool isSuperType,
 		// submenus later on.
 		mimeMenu = new BMenu(label);
 		BFont font;
-		menu->GetFont(&font);
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		{
+			BLooper* looper = menu->Looper();
+			if (looper != NULL) {
+				AutoLock<BLooper> _(looper);
+				menu->GetFont(&font);
+			} else
+				menu->GetFont(&font);
+		}
+		// SPDX-SnippetEnd
 		mimeMenu->SetFont(&font);
 	}
 
@@ -3613,7 +3632,18 @@ BContainerWindow::AddMimeMenu(const BMimeType& mimeType, bool isSuperType,
 			// do a lazy allocation of the menu
 			mimeMenu = new BMenu(label);
 			BFont font;
-			menu->GetFont(&font);
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			{
+				BLooper* looper = menu->Looper();
+				if (looper != NULL) {
+					AutoLock<BLooper> _(looper);
+					menu->GetFont(&font);
+				} else
+					menu->GetFont(&font);
+			}
+			// SPDX-SnippetEnd
 			mimeMenu->SetFont(&font);
 		}
 		mimeMenu->AddItem(NewAttributeMenuItem(publicName, attrName, type,
