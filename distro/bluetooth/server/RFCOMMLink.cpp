@@ -106,6 +106,7 @@ RFCOMMLink::RFCOMMLink(RFCOMMTransport* transport, bool initiator)
 	fQuitting(false),
 	fGone(false),
 	fClosed(false),
+	fCancel(NULL),
 	fLineLength(0)
 {
 }
@@ -122,7 +123,7 @@ RFCOMMLink::~RFCOMMLink()
 
 status_t
 RFCOMMLink::Connect(const bdaddr_t& address, uint8 channel,
-	bigtime_t timeout, RFCOMMLink** _link)
+	bigtime_t timeout, RFCOMMLink** _link, volatile bool* cancel)
 {
 	if (_link == NULL || channel < r5rfcomm::kMinChannel
 		|| channel > r5rfcomm::kMaxChannel)
@@ -159,7 +160,7 @@ RFCOMMLink::Connect(const bdaddr_t& address, uint8 channel,
 		close(fd);
 		return B_NO_MEMORY;
 	}
-	status_t status = Start(transport, true, channel, timeout, _link);
+	status_t status = Start(transport, true, channel, timeout, _link, cancel);
 	if (status != B_OK) {
 		syslog(LOG_NOTICE, "bluetooth_server: RFCOMM: channel %u not "
 			"opened: %s", channel, strerror(status));
@@ -174,7 +175,7 @@ RFCOMMLink::Connect(const bdaddr_t& address, uint8 channel,
 
 status_t
 RFCOMMLink::Start(RFCOMMTransport* transport, bool initiator, uint8 channel,
-	bigtime_t timeout, RFCOMMLink** _link)
+	bigtime_t timeout, RFCOMMLink** _link, volatile bool* cancel)
 {
 	if (transport == NULL)
 		return B_BAD_VALUE;
@@ -191,6 +192,7 @@ RFCOMMLink::Start(RFCOMMTransport* transport, bool initiator, uint8 channel,
 		delete link;
 		return B_NO_MORE_SEMS;
 	}
+	link->fCancel = cancel;
 
 	bool started;
 	{
@@ -321,7 +323,7 @@ RFCOMMLink::Close()
 				fMux.Close(system_time());
 		}
 		bigtime_t end = system_time() + kCloseWait;
-		while (true) {
+		while (!_Cancelled()) {
 			{
 				BAutolock locker(fLock);
 				if (_Ended())
@@ -330,7 +332,7 @@ RFCOMMLink::Close()
 			bigtime_t remaining = end - system_time();
 			if (remaining <= 0
 				|| acquire_sem_etc(fChanged, 1, B_RELATIVE_TIMEOUT,
-					remaining) == B_BAD_SEM_ID)
+					remaining < kPoll ? remaining : kPoll) == B_BAD_SEM_ID)
 				break;
 		}
 	}
@@ -431,11 +433,14 @@ RFCOMMLink::_WaitOpen(bigtime_t timeout)
 					? Mux::kRemoteClosed : error);
 			}
 		}
+		if (_Cancelled())
+			return B_CANCELED;
 		bigtime_t remaining = end - system_time();
 		if (remaining <= 0)
 			return B_TIMED_OUT;
-		if (acquire_sem_etc(fChanged, 1, B_RELATIVE_TIMEOUT, remaining)
-				== B_BAD_SEM_ID)
+		// In steps, so a cancel is seen.
+		if (acquire_sem_etc(fChanged, 1, B_RELATIVE_TIMEOUT,
+				remaining < kPoll ? remaining : kPoll) == B_BAD_SEM_ID)
 			return B_ERROR;
 	}
 }

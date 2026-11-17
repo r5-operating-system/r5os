@@ -58,6 +58,7 @@ static void admin_request(BMessage* request, const r5_admin_sender& sender,
 // SPDX-License-Identifier: MIT
 #include "LEManager.h"
 #include "PasskeyWindow.h"
+#include "HFPGateway.h"
 #include "RFCOMMMux.h"
 
 #include <MessageRunner.h>
@@ -142,6 +143,11 @@ BluetoothServer::BluetoothServer()
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
 	fHIDHost = new HIDHost();
+	{
+		HFPGateway::Options options = HFPGateway::DefaultOptions();
+		options.connected = _R5DeviceConnected;
+		fHFPGateway = new HFPGateway(options);
+	}
 	fLEPulse = NULL;
 	// SPDX-SnippetEnd
 }
@@ -165,6 +171,8 @@ bool BluetoothServer::QuitRequested(void)
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
+	// HFP first, while the links are up: its sessions end at once (step 7b).
+	fHFPGateway->Stop();
 	fDevicesLock.Lock();
 	while ((lDeviceImpl = (LocalDeviceImpl*)
 		fLocalDevicesList.RemoveItemAt(0)) != NULL)
@@ -190,6 +198,8 @@ bool BluetoothServer::QuitRequested(void)
 	fHIDHost->Stop();
 	delete fHIDHost;
 	fHIDHost = NULL;
+	delete fHFPGateway;
+	fHFPGateway = NULL;
 	// SPDX-SnippetEnd
 
 	delete fEventListener2;
@@ -1270,6 +1280,21 @@ BluetoothServer::R5FindRFCOMMChannel(const bdaddr_t& address,
 	}
 	return B_NAME_NOT_FOUND;
 }
+
+
+bool
+BluetoothServer::_R5DeviceConnected(const bdaddr_t& address, void*)
+{
+	BluetoothServer* server = (BluetoothServer*)be_app;
+	BAutolock locker(server->fDevicesLock);
+	for (int32 i = 0; i < server->fLocalDevicesList.CountItems(); i++) {
+		ServerRemoteDevice* rd
+			= server->fLocalDevicesList.ItemAt(i)->RemoteDeviceByAddr(address);
+		if (rd != NULL && rd->conn_state == RemoteDevice::CONNECTED)
+			return true;
+	}
+	return false;
+}
 // SPDX-SnippetEnd
 
 
@@ -1284,6 +1309,15 @@ BluetoothServer::NotifyServices(ServerRemoteDevice* rd)
 	else
 		TRACE_BT("SDP: Error could not notify the dedicated profile\n");
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Step 7b: a headset with a Hands-Free service gets an HFP session
+	// (R5 is the Audio Gateway), whatever profile the call above chose.
+	uint8 channel = R5RFCOMMChannel(rd->services, kR5ServiceHandsFree);
+	if (channel != 0 && fHFPGateway != NULL)
+		fHFPGateway->DeviceReady(rd->bdaddr, channel);
+	// SPDX-SnippetEnd
 }
 
 

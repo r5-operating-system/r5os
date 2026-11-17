@@ -131,7 +131,8 @@ BLayoutBuilder::Group&lt;&gt;(this, B_VERTICAL, 0)
 			<div class="member"><div class="sig">struct BluetoothPairedDevice;<br>static void BluetoothState::UnarchivePaired(const BMessage&amp; archive, std::vector&lt;BluetoothPairedDevice&gt;&amp; devices);</div>
 				<p>A paired device: <code class="inline">info</code> (a <code class="inline">BluetoothDeviceInfo</code>),
 				<code class="inline">lowEnergy</code>, <code class="inline">hid</code> (LE HID over GATT),
-				<code class="inline">connected</code> and <code class="inline">battery</code> (percent, or -1),
+				<code class="inline">connected</code> and <code class="inline">battery</code> (percent, or -1; an LE
+				device with the Battery Service, or a Classic headset that sends it over HFP, while connected),
 				with <code class="inline">IsAudio()</code> and <code class="inline">IsGameController()</code> from
 				the class of device. They come in the same
 				<code class="inline">kMsgBluetoothStateChanged</code> message; read them with

@@ -1,5 +1,26 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-16 - Bluetooth step 7b: the headset's battery over HFP, its buttons and volume in the log
+
+Problem: a Classic headset like the Sony WH-1000XM4 sends its battery level only over HFP, so My devices showed no battery for it. Its call buttons and volume reached nothing.
+
+What changed:
+- `bluetooth_server` is the HFP Audio Gateway (`HFPAgent.cpp`, `HFPGateway.cpp`, R5's own MIT code from HFP 1.8 and Apple's accessory guidelines). For a paired, encrypted device whose SDP record has a Hands-Free service, it opens that RFCOMM channel 5 s after the link (after A2DP and HID) and answers the service level connection: BRSF, CIND, CMER, CHLD, BIND/BIEV (battery as HF indicator 2) and the Apple battery (XAPL, IPHONEACCEV). Buttons (answer, hang up, redial, voice, dial, headset) and volume (VGS, VGM) go to the syslog; there is no call, so the call buttons get ERROR.
+- `BT_MSG_R5_GET_PAIRED` "battery" carries the HFP battery of a connected headset, so My devices shows it. The Deskbar menu has a line per connected device with a battery, with the `R5_LEVEL_BATTERY` glyph (LE devices with the Battery Service too).
+- Tests: the AT commands in `bt_rfcomm_test` (alone, and as a headset script over two RFCOMM links); fuzz target `scripts/fuzz-bt.sh hfp`.
+- Fix from 7a: the RFCOMM files were also in the server's `DoCatalogs` list (a sed that matched twice); removed.
+- After two independent reviews of this step:
+  - Quitting no longer hangs on a headset that does not answer (it could take over a minute). `RFCOMMLink` takes a cancel flag, HFP stops before the radios go, and a `DeviceReady()` after `Stop()` adds nothing.
+  - One failed attempt no longer means no battery until the next reconnect: a session without an SLC tries again twice, 10 s apart, while the device still has its link, and a reconnect during an attempt asks for one more.
+  - Deskbar no longer shows an old battery when bluetooth_server is gone.
+  - The AG no longer advertises extended error codes it never sends (features `0x0400`). A bare `AT` gets `OK`. An Apple battery report with more than 3 pairs is taken.
+  - `bt_rfcomm_test` now drives `HFPGateway` itself (it copied its loop before).
+  - R5Book (`bluetooth-kit.html`) and `docs/LIBR5.md` say where the battery value comes from.
+
+Limits: no audio and no microphone (7c). No Audio Gateway SDP record and no RFCOMM server: R5 always starts HFP; a headset that wants to start it itself, or that checks the AG record first, may not talk. Volume is logged, not tied to the Media volume. Not tried with a headset.
+
+Tested: `scripts/build-locked.sh` exit 0 (x86_64). QEMU (KVM, SMAP and SMEP, Login, `DESKBAR=1`) on an own image copy: `bt_rfcomm_test` 0 failed, with the headset script over two links (SLC, battery 80, a button answered ERROR, 9 commands seen by the gateway loop); all other Bluetooth tests exit 0; the Deskbar item attaches with the new paired-device poll; no SMAP fault, panic or crash. After the review fixes, again (build exit 0, QEMU with SMAP, Login and Deskbar): `HFPGateway` itself over ports: SLC and battery 80, one session per device, a retry after a failed connect, no connect without a link, giving up after the retries, `Stop()` during the 30 s open wait took 0 ms; `bt_rfcomm_test` 0 failed; `fuzz-bt.sh hfp` 60 s: 24.0 million lines, 0 crashes. The battery menu line is not drawn in QEMU (no device). Host: the HFP and RFCOMM parts of `bt_rfcomm_test` with ASan and UBSan, 0 failures. `fuzz-bt.sh hfp` 60 s: 27.3 million lines, 0 crashes; `fuzz-bt.sh rfcomm` 60 s: 2.17 million rounds, 0 crashes. ARM64 and RISC-V 64 not built or tested.
+
 ## 2026-11-16 - Graphics (M13 step 2): the compositor reads Skia's window images on the GPU, and the pipeline cache on disk
 
 Problem: with `gpu_draw true`, every Skia run stopped the CPU until the GPU was done (`SyncToCpu::kYes`), read the window image back into memory (`asyncRescaleAndReadPixels()`) and copied it with `memcpy` into a second canvas (`WindowTarget::Deliver()`, the `WindowBuffer`), which the compositor then read as a raw buffer. Step 2 of `docs/M13-PLAN.md`, done before step 1 (owner, 16 Nov 2026), together with step 1's disk pipeline cache.
