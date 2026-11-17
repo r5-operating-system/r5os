@@ -448,7 +448,7 @@ id	r5_status	branch	commit	notes
 6875	open			
 6882	open			
 6883	open			
-6891	open			
+6891	fixed			Bluetooth HID is in: Classic HID (bluetooth_hid) and BLE GATT HID into the same driver. Not every HID device tried.
 6896	open			
 6920	open			
 6921	open			
@@ -930,7 +930,7 @@ id	r5_status	branch	commit	notes
 10158	open			
 10159	open			
 10160	open			
-10162	open			
+10162	fixed			R5 Wi-Fi joins the strongest saved network after boot and when Wi-Fi is turned on (mt7921/mt76 path).
 10169	open			
 10198	open			
 10200	open			
@@ -1513,7 +1513,7 @@ id	r5_status	branch	commit	notes
 13648	open			
 13651	open			
 13655	open			
-13659	open			
+13659	fixed			A2DP (SBC) plays when sound starts. HFP is in and opt-in. Not every headset tried on hardware.
 13664	open			
 13665	open			
 13666	open			
@@ -1593,7 +1593,7 @@ id	r5_status	branch	commit	notes
 14009	open			
 14022	open			
 14026	open			
-14033	open			
+14033	fixed			detect_zen_cpu_topology reads CPUID 0x8000001E. Stick 47 confirmed the SMT map on the 5625U.
 14036	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 14043	open			
 14052	open			
@@ -2715,7 +2715,7 @@ id	r5_status	branch	commit	notes
 17622	open			
 17623	open			
 17624	open			
-17625	open			
+17625	fixed			A successful join with Remember stores the network with net_server and uses it after a restart. Hidden networks are not part of this.
 17626	open			
 17627	open			
 17628	open			
