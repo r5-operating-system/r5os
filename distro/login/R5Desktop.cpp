@@ -29,36 +29,29 @@
 extern char** environ;
 
 
-static const char* kSessionPaths[] = {
-	"/boot/system/settings/r5-desktop-session",
-	"/tmp/r5-desktop-session",
-	NULL
-};
+static const char* kSessionPath =
+	"/boot/system/settings/r5-desktop-session";
 
 
 static bool
 read_session_name(char* name, size_t nameSize)
 {
-	for (int i = 0; kSessionPaths[i] != NULL; i++) {
-		FILE* file = fopen(kSessionPaths[i], "r");
-		if (file == NULL)
-			continue;
-		if (fgets(name, nameSize, file) == NULL) {
-			fclose(file);
-			continue;
-		}
+	FILE* file = fopen(kSessionPath, "r");
+	if (file == NULL)
+		return false;
+	if (fgets(name, nameSize, file) == NULL) {
 		fclose(file);
-
-		size_t length = strlen(name);
-		while (length > 0
-			&& (name[length - 1] == '\n' || name[length - 1] == '\r'
-				|| name[length - 1] == ' ')) {
-			name[--length] = '\0';
-		}
-		if (length > 0)
-			return true;
+		return false;
 	}
-	return false;
+	fclose(file);
+
+	size_t length = strlen(name);
+	while (length > 0
+		&& (name[length - 1] == '\n' || name[length - 1] == '\r'
+			|| name[length - 1] == ' ')) {
+		name[--length] = '\0';
+	}
+	return length > 0;
 }
 
 

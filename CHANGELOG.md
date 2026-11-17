@@ -45,6 +45,36 @@ Tested: `scripts/test-game-feel.sh` (host, ASan and UBSan): `feel_host_test: ok`
 
 Not tested: any real controller. DualSense and DualShock 4 rumble, trigger effects and motion need the owner's DualSense on a stick. The click and vibration trigger parameters, the sensor axes' signs and the DualShock 4 switch to full reports without its calibration report are the likely fixes. No PID controller was tested. The usb_hid output, feature and cache paths did not run (no USB game controller in QEMU). The widget drawing check is open. ARM64 and RISC-V 64 were not built.
 
+## 2026-11-17 - Login: r5-desktop reads only the system session file
+
+Problem: `r5-desktop` and Login fell back to `/tmp/r5-desktop-session` when the system file was missing. Anyone who could write `/tmp` could pick the session account.
+
+What changed: both read only `/boot/system/settings/r5-desktop-session`. `clear_desktop_session` still unlinks the old `/tmp` path so a leftover file is not a trap later.
+
+Limits: no boot test.
+
+Tested: the C++ was not compiled on this host (needs libbe).
+
+## 2026-11-17 - Login: a failed desktop start clears the session file
+
+Problem: Sign in wrote `r5-desktop-session` and then launched Tracker. If that launch failed, Sign in stayed on screen but the session file still named the account, so the next `r5-desktop` helper trusted it.
+
+What changed: `TryLogin` calls `clear_desktop_session()` when the session file was written and the desktop did not start.
+
+Limits: a helper that already started from the stale name is not killed.
+
+Tested: the C++ was not compiled on this host (needs libbe).
+
+## 2026-11-17 - Login: machine settings stay group-writable, not world-writable
+
+Problem: for the five-minute administrator grant, Login set network, printers, repos and the swap file to 0777/0666 so any local uid could write them.
+
+What changed: those paths are 0770/0660 owned by the granted team's uid and group `admin`. Without a uid they stay 0775/0664.
+
+Limits: only the first live grant's uid is used. Haiku has no ACL here.
+
+Tested: the C++ was not compiled on this host (needs libbe).
+
 ## 2026-11-17 - Login: halt, lock and sign-in only from this team
 
 Problem: Login accepted logout, lock, unlock, halt, reboot and sign-in from any team that sent a `BMessenger` to the Login application. The admin port already checked the sender.
