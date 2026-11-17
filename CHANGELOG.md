@@ -1,5 +1,15 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Login: r5-desktop reads only the system session file
+
+Problem: `r5-desktop` and Login fell back to `/tmp/r5-desktop-session` when the system file was missing. Anyone who could write `/tmp` could pick the session account.
+
+What changed: both read only `/boot/system/settings/r5-desktop-session`. `clear_desktop_session` still unlinks the old `/tmp` path so a leftover file is not a trap later.
+
+Limits: no boot test.
+
+Tested: the C++ was not compiled on this host (needs libbe).
+
 ## 2026-11-17 - Login: a failed desktop start clears the session file
 
 Problem: Sign in wrote `r5-desktop-session` and then launched Tracker. If that launch failed, Sign in stayed on screen but the session file still named the account, so the next `r5-desktop` helper trusted it.

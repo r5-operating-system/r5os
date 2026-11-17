@@ -757,24 +757,13 @@ LoginApp::_LaunchSessionHooks()
 status_t
 LoginApp::_SessionHome(BPath& path) const
 {
-	static const char* kPaths[] = {
-		"/boot/system/settings/r5-desktop-session",
-		"/tmp/r5-desktop-session",
-		NULL
-	};
-
 	char name[64];
 	name[0] = '\0';
-	for (int i = 0; kPaths[i] != NULL; i++) {
-		FILE* file = fopen(kPaths[i], "r");
-		if (file == NULL)
-			continue;
-		if (fgets(name, sizeof(name), file) == NULL) {
-			fclose(file);
-			continue;
-		}
+	FILE* file = fopen("/boot/system/settings/r5-desktop-session", "r");
+	if (file != NULL) {
+		if (fgets(name, sizeof(name), file) == NULL)
+			name[0] = '\0';
 		fclose(file);
-		break;
 	}
 
 	size_t length = strlen(name);
