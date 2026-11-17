@@ -1,5 +1,19 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Game controllers: no stray bar in a small Settings window
+
+Problem: at 910 by 560 a light bar, 3 px high, showed just above the controller strip on the Game controllers page, in the box colour (231) and exactly the width of the picture column. A whole-window redraw did not remove it.
+
+Cause: app_server (Haiku `View::_ScreenClipping()`) clipped a view to the visible part of its parents only when that part was narrower or lower than the frame of the view's own clipping. The own clipping of a group view is the spacing between its children. At 910 by 560 the area above the strip scrolls, so the picture column is taller than what shows; the frame of its own clipping (the gaps between the test, the hint and the vendor line) was not larger than the visible part, the check was skipped, and the 6 px gap between the hint and the vendor line was painted below the scroll area each time the column drew. In an earlier build the same gap landed in the bottom row beside the lock. #4373 (the lock and views that are not `BControl`) only changes input and is not involved.
+
+What changed:
+- app_server: in R5's existing copy `distro/desktop/src/servers/app/View.cpp` (the one with the glass snippets, applied by `scripts/apply-desktop-native.py`), `_ScreenClipping()` now always intersects with the visible bounds (SPDX snippet, MIT). A first version of this PR added a second copy, `distro/app_server/View.cpp`, which would have overwritten the glass code depending on the apply order; it is removed. This applies to every window: a view inside a scrolled or smaller parent no longer paints its background outside that parent.
+- Settings: `SettingsStorage.cpp` included `<MallocIO.h>`, which Haiku does not have (`BMallocIO` is in `<DataIO.h>`), so main did not build after the atomic-write change; it now includes `<DataIO.h>`.
+
+Tested: AMD64 `scripts/build-locked.sh`, `jam_exit=0`; after the apply the tree's `src/servers/app/View.cpp` has the glass code (`fGlass`) and the new clipping once, the old size check zero times. QEMU (SMAP and SMEP enabled, LOGIN=1, own image copy): with a virtual DualSense at 910 by 560 no box-coloured row below the scroll area any more (checked pixel by pixel; the area still scrolls); at 1030 by 610 the page looks as before, with Trigger feedback and the vendor line visible and no scroll bar; the Display page at 1030 by 610 and the desktop background and window frames look as before. No panic in the serial logs.
+
+Limits: Haiku upstream was not checked for the same fix. The Sign in window covers the middle of the Display screendump, so the screen picture was not seen; the Deskbar and other apps were not looked at with this change, and not on real hardware. ARM64 and RISC-V 64 were not built.
+
 ## 2026-11-17 - Graphics (M13): step 4 on Lavapipe, outline resize and a warm-up that finishes
 
 Problem: on stick 4 (5625U, boot 3, Lavapipe) a resize took 35.1 ms per frame (stick 3: 30.9), and the Skia warm-up ended after 10448 ms with `Operation timed out`. Waiting for the first window run (step 4) did not help: stick 3 had the same 10160 ms. The cost is the warm-up's own work: after it, two runs waited 9.1 s each for the GPU (`deliver 9137298`), Lavapipe compiling its shaders, against a 5 s `Finish` limit, twice. The resize: compose (20.4 to 16.1 ms) and draw (34.7 to 24.2 ms) both got faster, the frame slower; most likely the fixed time grid of step 4 (a late slot composes at once, next to Skia on the two Lavapipe threads). Inferred, not measured.
@@ -21,6 +35,7 @@ Tested in QEMU only (Lavapipe 256-bit, 8 CPUs, `scripts/build-locked.sh` and `sc
 - Resize with the outline (final build, first start): 19.8 ms per frame (p95 32.4), compose 18.8, draw 7.0. Pictures: the outline follows the bottom right corner and the left edge, and the window has its new size and place after the release. No `gpu draw off`, fence timeout or `MISMATCH`.
 
 Limits: not on the 5625U; that needs the next stick (with #4363). The first start after an install or a Mesa update pays the whole warm-up (Lavapipe compiles everything once); in QEMU a part took up to 25 s of the 30 s limit. The outline is darkened pixels, hard to see on a dark background. The top edge was not dragged in QEMU (the left edge uses the same code). Windows with `B_OUTLINE_RESIZE` now get this outline on RADV too.
+
 
 ## 2026-11-17 - Network: mDNS browse keeps only the requested type
 
@@ -138,7 +153,7 @@ What changed:
 
 Tested: AMD64 `scripts/build-locked.sh` twice, `jam_exit=0`. QEMU (SMAP and SMEP enabled, LOGIN=1, own image copy): with a virtual DualSense (GAMEPAD=1) at 1030 by 610 everything fits, no scroll bar, Trigger feedback and "Vendor 054C · Product 0CE6" visible (the first build still overflowed by about 3 px, hence the closer groups); without a controller (SIGNIN_AWAY=1) the Motion bubble, the bars and the labels are gray; at 910 by 560 the page lays out and scrolls as before. No panic, no SMAP or SMEP fault in the serial logs.
 
-Not fixed (3): at 910 by 560 a light strip, 3 to 6 px high, still shows below the area above the strip, in the colour and exactly the width of the picture column (in the first screendumps further down, beside the lock). It is not on the 1030 by 610 screendumps. Redrawing the whole window from `UpperArea::DoLayout()` did not remove it (tried in a QEMU run, then taken back), so it is not a missing redraw; the cause is not found. It needs this PR's picture column, so it most likely comes from this page (the self-scrolling `UpperArea` after the window gets smaller); origin/main without this PR was not built to compare.
+Fixed later (3): the light strip at 910 by 560 came from app_server clipping, not from this page; see "Game controllers: no stray bar in a small Settings window" above.
 
 ## 2026-11-17 - Game controllers: controllers in a strip at the bottom (layout A), and an example without a controller
 
