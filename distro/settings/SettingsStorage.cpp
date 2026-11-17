@@ -9,10 +9,15 @@
 #include <Directory.h>
 #include <File.h>
 #include <FindDirectory.h>
+#include <MallocIO.h>
 #include <Message.h>
 #include <Path.h>
 
+#include <errno.h>
+#include <fcntl.h>
+#include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 
 SettingsStorage::SettingsStorage()
@@ -91,9 +96,27 @@ SettingsStorage::Write(const char* moduleId, const BMessage& settings) const
 	if (status != B_OK)
 		return status;
 
-	BFile file(path, B_WRITE_ONLY | B_CREATE_FILE | B_ERASE_FILE);
-	status = file.InitCheck();
+	BMallocIO io;
+	status = settings.Flatten(&io);
 	if (status != B_OK)
 		return status;
-	return settings.Flatten(&file);
+
+	char tempPath[B_PATH_NAME_LENGTH];
+	if (snprintf(tempPath, sizeof(tempPath), "%s.tmp", path)
+			>= (int)sizeof(tempPath))
+		return B_NAME_TOO_LONG;
+	int fd = open(tempPath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	if (fd < 0)
+		return errno != 0 ? errno : B_ERROR;
+	ssize_t written = write(fd, io.Buffer(), io.BufferLength());
+	if (written != (ssize_t)io.BufferLength())
+		status = written < 0 && errno != 0 ? errno : B_ERROR;
+	else if (fsync(fd) != 0)
+		status = errno != 0 ? errno : B_ERROR;
+	close(fd);
+	if (status == B_OK && rename(tempPath, path) != 0)
+		status = errno != 0 ? errno : B_ERROR;
+	if (status != B_OK)
+		unlink(tempPath);
+	return status;
 }

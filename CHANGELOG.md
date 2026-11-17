@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Settings: a page file is replaced, not erased
+
+Problem: `SettingsStorage::Write` erased the module file and then Flatten. A short write could leave an empty page file.
+
+What changed: Flatten goes to memory, then a temp file, `fsync`, and rename. Same pattern as notifications.
+
+Limits: no crash injected during write.
+
 ## 2026-11-17 - Login: the session log is not world-readable
 
 Problem: `/tmp/r5-session.log` was created with `fopen("a")` and the umask. Session names were readable by every account.
