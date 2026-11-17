@@ -529,32 +529,69 @@ test_other_controller()
 }
 
 
-static int32
-painted(BView* view, BRect bounds, rgb_color background)
+// What a widget drew into a bitmap: the pixels that differ from the
+// background by more than kTolerance in a channel, and of those the ones
+// in the highlight colour (the bar's fill, the level's bubble).
+// An exact compare does not work: the antialiased lines in B_OP_ALPHA
+// move the pixels inside a ring or a track by one step (230 on a 231
+// panel in a screendump of the page), so every pixel inside the outline
+// counted as drawn.
+static const int32 kTolerance = 8;
+
+
+struct drawn_pixels {
+	int32	total;
+	int32	drawn;
+	int32	highlight;
+};
+
+
+static bool
+near_color(const uint8* pixel, rgb_color color)
 {
+	return abs(pixel[0] - color.blue) <= kTolerance
+		&& abs(pixel[1] - color.green) <= kTolerance
+		&& abs(pixel[2] - color.red) <= kTolerance;
+}
+
+
+static bool
+painted(BView* view, BRect bounds, rgb_color background, drawn_pixels& out)
+{
+	memset(&out, 0, sizeof(out));
 	BBitmap bitmap(bounds, B_BITMAP_ACCEPTS_VIEWS, B_RGBA32);
 	if (bitmap.InitCheck() != B_OK)
-		return -1;
+		return false;
 	view->ResizeTo(bounds.Width(), bounds.Height());
 	bitmap.AddChild(view);
 	if (!bitmap.Lock())
-		return -1;
+		return false;
 	view->SetLowColor(background);
 	view->SetViewColor(background);
+	view->SetDrawingMode(B_OP_COPY);
 	view->FillRect(bounds, B_SOLID_LOW);
 	view->Draw(bounds);
 	view->Sync();
-	int32 count = 0;
+	rgb_color highlight = ui_color(B_CONTROL_HIGHLIGHT_COLOR);
 	const uint8* bits = (const uint8*)bitmap.Bits();
-	int32 length = bitmap.BitsLength();
-	for (int32 i = 0; i + 3 < length; i += 4) {
-		if (bits[i] != background.blue || bits[i + 1] != background.green
-			|| bits[i + 2] != background.red)
-			count++;
+	int32 bytesPerRow = bitmap.BytesPerRow();
+	int32 width = bounds.IntegerWidth() + 1;
+	int32 height = bounds.IntegerHeight() + 1;
+	for (int32 y = 0; y < height; y++) {
+		const uint8* row = bits + y * bytesPerRow;
+		for (int32 x = 0; x < width; x++) {
+			const uint8* pixel = row + x * 4;
+			out.total++;
+			if (near_color(pixel, background))
+				continue;
+			out.drawn++;
+			if (near_color(pixel, highlight))
+				out.highlight++;
+		}
 	}
 	bitmap.RemoveChild(view);
 	bitmap.Unlock();
-	return count;
+	return true;
 }
 
 
@@ -562,29 +599,54 @@ static int
 test_drawing()
 {
 	rgb_color white = make_color(255, 255, 255);
+	rgb_color highlight = ui_color(B_CONTROL_HIGHLIGHT_COLOR);
+	CHECK(abs(highlight.red - 255) > kTolerance
+		|| abs(highlight.green - 255) > kTolerance
+		|| abs(highlight.blue - 255) > kTolerance,
+		"the highlight colour differs from the white background");
+
 	BAppearanceKit::BTiltLevel* level
 		= new BAppearanceKit::BTiltLevel("level");
 	level->SetValue(0.5f, -0.25f);
 	CHECK(level->X() == 0.5f && level->Y() == -0.25f, "level value");
 	level->SetValue(4, -9);
 	CHECK(level->X() == 1 && level->Y() == -1, "level clamps");
-	int32 pixels = painted(level, BRect(0, 0, 99, 99), white);
+	drawn_pixels tilt;
+	bool drew = painted(level, BRect(0, 0, 99, 99), white, tilt);
 	delete level;
-	CHECK(pixels > 200, "BTiltLevel draws too little");
+	CHECK(drew, "draw BTiltLevel into a bitmap");
 
 	// A fresh bar for each picture, as for the level.
 	BAppearanceKit::BAxisBar* bar = new BAppearanceKit::BAxisBar("bar");
 	bar->SetValue(-0.5f);
 	CHECK(bar->Value() == -0.5f, "bar value");
-	int32 half = painted(bar, BRect(0, 0, 199, 15), white);
+	drawn_pixels half;
+	drew = painted(bar, BRect(0, 0, 199, 15), white, half);
 	delete bar;
+	CHECK(drew, "draw BAxisBar at -0.5 into a bitmap");
 	bar = new BAppearanceKit::BAxisBar("bar");
 	bar->SetValue(0);
-	int32 none = painted(bar, BRect(0, 0, 199, 15), white);
+	drawn_pixels none;
+	drew = painted(bar, BRect(0, 0, 199, 15), white, none);
 	delete bar;
-	printf("gamecontroller_feel_test: level %" B_PRId32 ", bar at -0.5 %"
-		B_PRId32 ", bar at 0 %" B_PRId32 " pixels\n", pixels, half, none);
-	CHECK(half > none && none > 100, "BAxisBar fill");
+	CHECK(drew, "draw BAxisBar at 0 into a bitmap");
+	printf("gamecontroller_feel_test: drawn/highlight pixels: level %"
+		B_PRId32 "/%" B_PRId32 " of %" B_PRId32 ", bar at -0.5 %" B_PRId32
+		"/%" B_PRId32 ", bar at 0 %" B_PRId32 "/%" B_PRId32 " of %" B_PRId32
+		"
+", tilt.drawn, tilt.highlight, tilt.total, half.drawn,
+		half.highlight, none.drawn, none.highlight, none.total);
+
+	// The level: a ring, a cross and a bubble, not a filled disc.
+	CHECK(tilt.drawn > 200 && tilt.drawn < tilt.total / 2,
+		"BTiltLevel draws its ring, not a filled disc");
+	CHECK(tilt.highlight > 20, "BTiltLevel draws its bubble");
+	// The bar: the track and the tick in both; the fill only at -0.5,
+	// about a quarter of the track.
+	CHECK(none.drawn > 100 && none.drawn < none.total / 2,
+		"BAxisBar draws its track, not a filled bar");
+	CHECK(none.highlight == 0, "BAxisBar at 0 has no fill");
+	CHECK(half.highlight > 200, "BAxisBar at -0.5 has its fill");
 
 	BGameControllerMotionView* view
 		= new BGameControllerMotionView("motion");

@@ -64,6 +64,13 @@ if [ -n "$SETTINGS_PAGE" ]; then
 	if [ -n "${BT_TEST_BUTTONS:-}" ]; then
 		page="$page(sleep $((BT_TEST_BUTTONS - 30)); /bin/hey Settings 'btvT' of View 'bluetooth' of Window 0 >> /boot/home/bt-hey.log 2>&1) & "
 	fi
+	# PAGE_SCROLL=<s>: that many seconds after Settings opened, move the
+	# Sign in window off the page and scroll the page to its end (a mouse
+	# wheel message to the page scrollbar), so a screendump shows the groups
+	# below the fold. Use with BT_WINDOW="1030 610".
+	if [ -n "${PAGE_SCROLL:-}" ]; then
+		page="$page(sleep $((PAGE_SCROLL - 30)); /bin/hey Login set Frame of Window 'Sign in' to 'BRect(1070,670,1510,1090)' >> /boot/home/bt-hey.log 2>&1; /bin/hey Settings '_MWC' of View 'page-bar' of Window 0 with 'be:wheel_delta_y=float(40)' >> /boot/home/bt-hey.log 2>&1) & "
+	fi
 fi
 # DESKBAR=1 (step 3b) starts Deskbar and then bluetooth_deskbar, which adds
 # the Bluetooth item: the desktop is behind Sign in, so the user launch job
@@ -182,8 +189,8 @@ cat "$BT_WORK/out-smoke.log" 2>/dev/null || echo "(no log)"
 echo "== syslog (Bluetooth lines)"
 grep -aE 'bluetooth_server|bluetooth_deskbar|deskbar_bt_replicant|bt_server_smoke_test|bt_l2cap_abi_test|bt_hid_driver_test|l2cap_coc_test|bt_smp_crypto_test|bt_rfcomm_test|bt_voice_test|RFCOMM|gamecontroller|bluetooth_hid|bluetooth_audio|DeviceManager|h2generic|l2cap|debug_server|crash' \
 	"$BT_WORK/out-syslog" 2>/dev/null || echo "(no lines)"
-if [ -n "${BT_WINDOW:-}${BT_TEST_BUTTONS:-}" ]; then
-	echo "== hey (BT_WINDOW, BT_TEST_BUTTONS)"
+if [ -n "${BT_WINDOW:-}${BT_TEST_BUTTONS:-}${PAGE_SCROLL:-}" ]; then
+	echo "== hey (BT_WINDOW, BT_TEST_BUTTONS, PAGE_SCROLL)"
 	cat "$BT_WORK/out-hey.log" 2>/dev/null || echo "(no log)"
 fi
 if [ "${GAMEPAD:-0}" = 1 ]; then
