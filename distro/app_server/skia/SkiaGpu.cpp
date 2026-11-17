@@ -98,6 +98,7 @@ smallest_local_heap(VkInstance instance, VkPhysicalDevice physical)
 // the compositor's (SkiaGpu::LockQueue()) take this lock.
 static BLocker sQueueLock("vulkan queue");
 
+
 // M13 step 2: the pipeline cache on disk
 static const bigtime_t kPipelineSyncInterval = 10000000;
 static const size_t kPipelineDataLargest = 32 * 1024 * 1024;
@@ -189,7 +190,11 @@ static PFN_vkDestroyFence sDestroyFence;
 static PFN_vkResetFences sResetFences;
 static PFN_vkWaitForFences sWaitForFences;
 static VkPhysicalDeviceMemoryProperties sMemoryProperties;
-static int32 sKeepImageMemory = 0;
+// Review 17 Nov 2026: one flag kept every image of every later device too
+// (after a failed RADV start Lavapipe never freed a window image). Now a
+// device's images are kept only when that device's memory had to be kept.
+static int32 sImageGeneration = 0;
+static int32 sKeptGeneration = -1;
 
 
 SkiaImage::SkiaImage()
@@ -199,7 +204,8 @@ SkiaImage::SkiaImage()
 	fMemory(0),
 	fWidth(0),
 	fHeight(0),
-	fTexture(NULL)
+	fTexture(NULL),
+	fGeneration(atomic_get(&sImageGeneration))
 {
 }
 
@@ -210,7 +216,7 @@ SkiaImage::~SkiaImage()
 	// command buffer with the image finished, and the last compose frame
 	// that sampled it passed its fence.
 	delete (BackendTexture*)fTexture;
-	if (atomic_get(&sKeepImageMemory) != 0)
+	if (fGeneration <= atomic_get(&sKeptGeneration))
 		return;
 	if (fView != 0)
 		sDestroyImageView(sDevice, (VkImageView)fView, NULL);
@@ -224,7 +230,7 @@ SkiaImage::~SkiaImage()
 /*static*/ void
 SkiaGpu::KeepImageMemory()
 {
-	atomic_set(&sKeepImageMemory, 1);
+	atomic_set(&sKeptGeneration, atomic_get(&sImageGeneration));
 }
 
 
@@ -478,6 +484,8 @@ SkiaGpu::Version()
 SkiaGpu::Create(const skia_vulkan_device& device, bool forceFail,
 	int samples, const char** _reason)
 {
+	// a new device: its images are freed unless its own memory is kept
+	atomic_add(&sImageGeneration, 1);
 	SkiaGpu* gpu = new(std::nothrow) SkiaGpu;
 	SkiaBackend* backend = new(std::nothrow) SkiaBackend;
 	if (gpu == NULL || backend == NULL || gpu->fDoneSem < 0) {
@@ -1031,11 +1039,31 @@ SkiaGpu::RunWork(const char** _reason)
 		// the fence: the next run waits for it, a read-back right now
 		VkFence fence = (VkFence)fRunFence;
 		bool submitted;
+		const char* failure = NULL;
 		{
 			BAutolock queueLock(sQueueLock);
 			submitted = context->submit(submit);
+			if (!submitted)
+				failure = "submit failed: graphite";
 			if (submitted) {
-				VkSemaphore semaphore = shared
+				// 5625U stick, 17 Nov 2026: only the newest run's semaphore
+				// waits for a compose.
+				// - A pass without a compose used to wait for them in an
+				//   empty batch; RADV turns an empty submit with waits into
+				//   sync files (radv_amdgpu_cs_submit_zero), which the R5
+				//   DRM library has not, and the device was lost.
+				// - Then up to 8 waited in one compose, and with RADV's own
+				//   waits the kernel refused the CS (at most 8 waits, the
+				//   R5 GPU interface's kMaxList: B_BAD_VALUE).
+				// A run before this one is done on the GPU (each run waits
+				// for its fence below), so its semaphore is signalled and
+				// no submit waits for it: it is destroyed here, under the
+				// queue lock that TakeSignals() takes too.
+				for (size_t i = 0; i < fSignalled.size(); i++)
+					sDestroySemaphore(sDevice, (VkSemaphore)fSignalled[i], NULL);
+				fSignalled.clear();
+				bool signal = shared;
+				VkSemaphore semaphore = signal
 					? (VkSemaphore)_Signal() : VK_NULL_HANDLE;
 				VkSubmitInfo batch = {};
 				batch.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -1044,9 +1072,18 @@ SkiaGpu::RunWork(const char** _reason)
 				batch.pSignalSemaphores = &semaphore;
 				if (fence != VK_NULL_HANDLE)
 					sResetFences(sDevice, 1, &fence);
-				if ((shared && semaphore == VK_NULL_HANDLE)
-					|| sRawQueueSubmit(sQueue, 1, &batch, fence)
-						!= VK_SUCCESS) {
+				VkResult batchResult = VK_SUCCESS;
+				if (signal && semaphore == VK_NULL_HANDLE)
+					failure = "submit failed: no semaphore";
+				else if ((batchResult = sRawQueueSubmit(sQueue, 1, &batch,
+						fence)) != VK_SUCCESS)
+					failure = "submit failed: signal batch";
+				if (failure != NULL) {
+					// 5625U stick, 17 Nov 2026: say which and why
+					syslog(LOG_INFO, "app_server: gpu draw %s, result %d, "
+						"semaphores %zu free %zu signalled\n", failure,
+						(int)batchResult, fFreeSemaphores.size(),
+						fSignalled.size());
 					if (semaphore != VK_NULL_HANDLE)
 						sDestroySemaphore(sDevice, semaphore, NULL);
 					submitted = false;
@@ -1058,7 +1095,7 @@ SkiaGpu::RunWork(const char** _reason)
 			}
 		}
 		if (!submitted) {
-			*_reason = "submit failed";
+			*_reason = failure != NULL ? failure : "submit failed";
 			ok = false;
 		} else {
 			bigtime_t submitTime = system_time();
