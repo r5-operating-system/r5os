@@ -636,6 +636,8 @@ int32 Selected() const;</div><p>-1 when none is selected.</p></div>
 			<div class="member"><div class="sig">void SetDraggable(bool draggable);
 void SetModificationMessage(BMessage* message);</div><p>Dragging needs two screens or more. The message is adopted.</p></div>
 			<div class="member"><div class="sig">void SetCaption(const char* caption);</div><p>A line in the lower left; NULL hides it.</p></div>
+			<div class="member"><div class="sig">void SetEnabled(bool enabled);
+bool IsEnabled() const;</div><p>False ignores mouse and keys. Settings uses this when the administrator lock is closed.</p></div>
 		</section>
 
 		<!-- BSidebar -->

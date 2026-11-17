@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Settings: the lock also stops the screen picture
+
+Problem: a closed administrator lock greys `BControl` widgets. `BScreenArrangement` is a `BView`, so Display's screen picture stayed clickable.
+
+What changed: `BScreenArrangement::SetEnabled(false)` ignores mouse and keys. Settings calls that on a locked admin page. Additive; existing binaries still run.
+
+Limits: no boot test of the lock on Display.
+
 ## 2026-11-17 - Settings: Display menus stay put during keep-picture
 
 Problem: during the 12-second keep-picture dialog the resolution menus still wrote `fSelected`. Keep then stored that later choice as the boot mode.
