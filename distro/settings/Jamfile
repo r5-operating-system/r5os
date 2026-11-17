@@ -52,6 +52,17 @@ Addon settings_bluetooth :
 	: be shared localestub libr5bt.so [ TargetLibstdc++ ]
 	;
 
+# The Game controllers page (docs/GAME-CONTROLLERS.md, option B). An add-on
+# like the Bluetooth page, so Settings itself does not link libr5game.so.
+# It shares the filled box, its title and the link with Connections.
+Addon settings_gamecontrollers :
+	GameControllersModule.cpp
+	NetworkPage.cpp
+	SettingsFont.cpp
+	: be shared localestub libr5ui.so libr5icons.so libr5game.so
+		[ TargetLibstdc++ ]
+	;
+
 Addon settings_fonts :
 	FontsModule.cpp
 	FontView.cpp

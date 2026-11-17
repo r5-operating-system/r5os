@@ -1393,6 +1393,7 @@ module_icon(const char* moduleId)
 		{ "keyboard", "application/x-vnd.Haiku-Keymap" },
 		{ "mouse", "application/x-vnd.Haiku-Input" },
 		{ "bluetooth", "application/x-vnd.Haiku-BluetoothPrefs" },
+		{ "gamecontrollers", "application/x-vnd.Haiku-Devices" },
 		{ "printers", "application/x-vnd.Be-PRNT" },
 		{ "network", "application/x-vnd.Haiku-Network" },
 		{ "wifi", "application/x-vnd.Haiku-WiFi" },

@@ -395,6 +395,37 @@ glyph_paint(BView* view, r5_glyph which, BRect frame)
 			break;
 		}
 
+		// The four face button symbols of a PlayStation-style game
+		// controller (docs/GAME-CONTROLLERS.md): plain geometric shapes in
+		// the same pen, no logo.
+		case R5_GLYPH_CROSS:
+			glyph_line(view, space, 5, 5, 19, 19);
+			glyph_line(view, space, 19, 5, 5, 19);
+			break;
+
+		case R5_GLYPH_CIRCLE:
+			glyph_arc(view, space, 12, 12, 8, 0, 360);
+			break;
+
+		case R5_GLYPH_SQUARE:
+		{
+			BPoint points[4] = {
+				space.Map(5, 5), space.Map(19, 5), space.Map(19, 19),
+				space.Map(5, 19)
+			};
+			view->StrokePolygon(points, 4, true);
+			break;
+		}
+
+		case R5_GLYPH_TRIANGLE:
+		{
+			BPoint points[3] = {
+				space.Map(12, 4), space.Map(20.5f, 19), space.Map(3.5f, 19)
+			};
+			view->StrokePolygon(points, 3, true);
+			break;
+		}
+
 		default:
 			break;
 	}
@@ -422,7 +453,7 @@ r5_glyph_bitmap(r5_glyph which, float side, rgb_color color)
 {
 	int32 pixels = icon_pixels(side);
 	// The last glyph of enum r5_glyph; update it with every new glyph.
-	if (pixels < 1 || which < R5_GLYPH_POWER || which > R5_GLYPH_BLUETOOTH)
+	if (pixels < 1 || which < R5_GLYPH_POWER || which > R5_GLYPH_TRIANGLE)
 		return NULL;
 
 	BRect bounds(0, 0, pixels - 1, pixels - 1);

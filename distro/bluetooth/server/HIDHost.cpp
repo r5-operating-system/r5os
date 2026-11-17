@@ -51,6 +51,7 @@ struct HIDHost::Session {
 	size_t		descriptorLength;
 	int32		kernelID;
 	bool		connecting;
+	r5_bthid_info info;			// id unused here; vendor 0: none known
 
 	Session(const bdaddr_t& _address)
 		:
@@ -60,6 +61,7 @@ struct HIDHost::Session {
 		kernelID(-1),
 		connecting(false)
 	{
+		memset(&info, 0, sizeof(info));
 		for (int i = 0; i < 2; i++) {
 			channel[i] = -1;
 			reading[i] = false;
@@ -211,6 +213,25 @@ HIDHost::Stop()
 
 	close(fControlNode);
 	fControlNode = -1;
+}
+
+
+void
+HIDHost::SetDeviceInfo(const bdaddr_t& address, uint16 vendorID,
+	uint16 productID, uint16 version, const char* name)
+{
+	if (fControlNode < 0)
+		return;
+
+	BAutolock locker(fLock);
+	Session* session = _FindOrAddLocked(address);
+	if (session == NULL)
+		return;
+	session->info.vendor_id = vendorID;
+	session->info.product_id = productID;
+	session->info.version = version;
+	strlcpy(session->info.name, name != NULL ? name : "",
+		sizeof(session->info.name));
 }
 
 
@@ -594,6 +615,7 @@ HIDHost::_FindOrAddLocked(const bdaddr_t& address)
 			free(idle->descriptor);
 			idle->descriptor = NULL;
 			idle->descriptorLength = 0;
+			memset(&idle->info, 0, sizeof(idle->info));
 			idle->address = address;
 			return idle;
 		}
@@ -627,6 +649,11 @@ HIDHost::_TryStartLocked(Session* session)
 		return;
 	}
 	session->kernelID = create.id;
+	if (session->info.vendor_id != 0 || session->info.name[0] != '\0') {
+		r5_bthid_info info = session->info;
+		info.id = create.id;
+		ioctl(fControlNode, R5_BTHID_SET_INFO, &info, sizeof(info));
+	}
 
 	for (int i = 0; i < 2; i++) {
 		reader_args* args = new(std::nothrow) reader_args;
