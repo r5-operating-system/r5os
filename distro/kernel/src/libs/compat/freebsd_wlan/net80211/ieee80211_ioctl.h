@@ -858,6 +858,15 @@ struct ieee80211_haiku_link {
 	uint8 i_reserved;
 	uint32 i_rx_kbps;
 };
+/* What the access point offers, from its beacon: 6 with HE Capabilities,
+ * 5 with VHT, 4 with HT, 0 otherwise or when not associated. Separate from
+ * IEEE80211_IOC_HAIKU_LINK, which says what the link itself uses.
+ */
+#define IEEE80211_IOC_HAIKU_ROUTER 0x6007
+struct ieee80211_haiku_router {
+	uint32 i_standard;
+	uint32 i_reserved;
+};
 int ieee80211_send_sae_auth(struct ieee80211vap *, const uint8_t *,
 	const uint8_t *, int);
 int ieee80211_take_sae_auth(struct ieee80211vap *, uint8_t *, uint8_t *,

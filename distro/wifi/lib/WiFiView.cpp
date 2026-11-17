@@ -563,10 +563,36 @@ WiFiView::_UpdateCurrent()
 	fCurrentName->SetText(name);
 	fCurrentStatus->SetText(status);
 	fCurrentSignal->SetSignal(bars, enabled, animate);
-	if (current != NULL && current->inRange)
-		fCurrentSignal->SetToolTip(NetworkToolTip(*current));
-	else
+
+	/* What the router offers goes in the details, never in the status line,
+	 * which says what this link uses. The hint shows only when the router
+	 * offers a newer standard than the link uses.
+	 */
+	BString routerLine;
+	const BString& offered = fState.link.routerStandard;
+	if (fState.IsAssociated() && offered.Length() > 0) {
+		routerLine = B_TRANSLATE("Router: %standard%");
+		routerLine.ReplaceFirst("%standard%", offered);
+		const BString& used = fState.link.standard;
+		if (used.Length() == 0
+			|| used.ByteAt(used.Length() - 1)
+				< offered.ByteAt(offered.Length() - 1)) {
+			BString hint = B_TRANSLATE("Your router supports %standard%.");
+			hint.ReplaceFirst("%standard%", offered);
+			routerLine << "\n" << hint;
+		}
+	}
+
+	if (current != NULL && current->inRange) {
+		BString tip = NetworkToolTip(*current);
+		if (routerLine.Length() > 0)
+			tip << "\n" << routerLine;
+		fCurrentSignal->SetToolTip(tip.String());
+		fCurrentStatus->SetToolTip(tip.String());
+	} else {
 		fCurrentSignal->SetToolTip((const char*)NULL);
+		fCurrentStatus->SetToolTip((const char*)NULL);
+	}
 
 	fDisconnectButton->SetEnabled(fState.IsAssociated()
 		|| fState.state == WIFI_STATE_CONNECTING);

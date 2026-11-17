@@ -164,6 +164,7 @@ WiFiLinkDetails::Archive(BMessage& archive) const
 	archive.AddInt32("width", width);
 	archive.AddInt32("streams", streams);
 	archive.AddInt32("rx kbps", rxKbps);
+	archive.AddString("router standard", routerStandard);
 }
 
 
@@ -184,6 +185,7 @@ WiFiLinkDetails::Unarchive(const BMessage& archive)
 	width = archive.GetInt32("width", 0);
 	streams = archive.GetInt32("streams", 0);
 	rxKbps = archive.GetInt32("rx kbps", 0);
+	routerStandard = archive.GetString("router standard", "");
 }
 
 
@@ -314,6 +316,31 @@ ReadLink(BNetworkDevice& device, WiFiLinkDetails& link)
 	link.width = info.i_width;
 	link.streams = info.i_streams;
 	link.rxKbps = info.i_rx_kbps;
+}
+
+
+/*!	What the access point offers, from its beacon. Separate from ReadLink(),
+	which says what the link uses. An older stack leaves it empty.
+*/
+static void
+ReadRouter(BNetworkDevice& device, WiFiLinkDetails& link)
+{
+	struct ieee80211_haiku_router info;
+	memset(&info, 0, sizeof(info));
+	struct ieee80211req request;
+	memset(&request, 0, sizeof(request));
+	request.i_type = IEEE80211_IOC_HAIKU_ROUTER;
+	request.i_data = &info;
+	request.i_len = sizeof(info);
+	if (device.Control(SIOCG80211, &request) != B_OK)
+		return;
+
+	if (info.i_standard == 4)
+		link.routerStandard = "Wi-Fi 4";
+	else if (info.i_standard == 5)
+		link.routerStandard = "Wi-Fi 5";
+	else if (info.i_standard == 6)
+		link.routerStandard = "Wi-Fi 6";
 }
 
 
@@ -814,6 +841,7 @@ WiFiController::_Update(bool scanCompleted)
 		state.link.channel = ChannelForFrequency(state.link.frequency);
 		ReadTxRate(device, state.link);
 		ReadLink(device, state.link);
+		ReadRouter(device, state.link);
 	} else if (!associatedName.IsEmpty()) {
 		state.state = WIFI_STATE_CONNECTING;
 		state.current = associatedName;
