@@ -1,5 +1,15 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Settings: the lock also blocks views that are not BControl
+
+Problem: `BAdminLockBar::AcceptsInput` returned true for a view that was not a `BControl`. A screen picture stayed draggable while the machine lock was closed.
+
+What changed: a locked page now refuses that input unless the view is the lock bar, a scrollbar, or `SetExempt`. `BControl` widgets were already blocked.
+
+Limits: `_DisableTree` still only greys `BControl`. The filter is what stops the drag.
+
+Tested: the C++ was not compiled on this host (needs libbe).
+
 ## 2026-11-17 - Login: r5-desktop stops if initgroups fails
 
 Problem: `r5-desktop` logged an `initgroups` failure and still called `setresuid`. An administrator could run Tracker without group `admin` or `wheel`.
