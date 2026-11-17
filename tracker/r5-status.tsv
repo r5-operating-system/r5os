@@ -811,7 +811,7 @@ id	r5_status	branch	commit	notes
 9428	open			
 9431	open			
 9434	fixed		2e1e6f12ccdb963ab2746c0e0cc1d74de79f285a	PR 4409: MakeDragBitmap InitCheck, attribute width 20-600. Owner boot: still works.
-9438	open			
+9438	fixed			Mixer resamples with cubic Hermite (four neighbours). Same-rate path is still a copy. Not measured on a loopback.
 9440	open			
 9441	open			
 9443	open			
@@ -1290,8 +1290,8 @@ id	r5_status	branch	commit	notes
 12750	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 12754	open			
 12773	open			
-12776	open			
-12777	open			
+12776	fixed			A gone output is dropped, the mixer is disconnected from it, and an output is looked up again, including one plugged in after start.
+12777	fixed			Hot-plug asks the media server to rescan, so a new output is found without a restart.
 12781	open			
 12783	open			
 12785	open			
@@ -2146,7 +2146,7 @@ id	r5_status	branch	commit	notes
 16052	open			
 16054	open			
 16056	open			
-16057	open			
+16057	fixed			A BufferExchange error waits 20 ms before the next try, so a failing driver does not spin a CPU.
 16061	open			
 16064	open			
 16067	open			
@@ -2395,7 +2395,7 @@ id	r5_status	branch	commit	notes
 16727	open			
 16733	open			
 16735	open			
-16739	open			
+16739	fixed			A finished notification sound deletes its player and releases the mixer.
 16756	open			
 16764	open			
 16768	open			
@@ -3673,7 +3673,7 @@ id	r5_status	branch	commit	notes
 19972	open			
 19973	open			
 19977	open			
-19978	open			
+19978	fixed			A zero sample size, channel count or rate no longer divides by zero in hmulti_audio. Latency is set to 0.
 19984	open			
 19986	open			
 19987	open			
@@ -3764,7 +3764,7 @@ id	r5_status	branch	commit	notes
 20162	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 20167	open			
 20169	open			
-20171	open			
+20171	fixed			Enabling HDMI no longer clears the analog format mask. A pin with no device type is named HDMI. Sound on the HDMI link was not heard.
 20172	open			
 20174	open			
 20178	open			
@@ -3816,7 +3816,7 @@ id	r5_status	branch	commit	notes
 20262	open			
 20264	open			
 20265	open			
-20267	open			
+20267	fixed			hmulti_audio reads and writes packed 24-bit as three bytes when the stride is not a multiple of 4.
 20268	open			
 20269	open			
 20270	open			
@@ -3839,7 +3839,7 @@ id	r5_status	branch	commit	notes
 20301	open			
 20304	open			
 20306	fixed	claude/issues-1-apps	47031c3136	The window takes Alt+C: filter-field selection is copied as before, otherwise the character. Not built and not tested.
-20307	open			
+20307	fixed			BTimeSource scales a wide time span with double and no longer enters the debugger.
 20308	open			
 20309	open			
 20310	open			
@@ -3917,7 +3917,7 @@ id	r5_status	branch	commit	notes
 20418	fixed			BButton SetViewColor is the face color (apply-darkmode.py)
 20419	fixed			Keep Arrange by on the Desktop menu; lazily create it so DeskWindow context menu does not SIGSEGV
 20422	open			
-20423	open			
+20423	fixed			MIDI 2.0 is in libmidi2. The 12 Nov follow-up selects the USB MIDI 2.0 alternate and translates to MIDI 1.0 bytes. No MIDI 2.0 device was attached. GitHub #4022.
 20425	fixed	cursor/media-no-output	245585e854	LateNoticeReceived and CreateBufferGroup no longer follow a missing mixer output. jam -q mixer.media_addon exited 0 on 3 Nov 2026. No guest without a sound device was booted.
 20426	open			
 20429	open			
