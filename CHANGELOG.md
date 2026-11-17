@@ -9,7 +9,9 @@ Cause: app_server (Haiku `View::_ScreenClipping()`) clipped a view to the visibl
 What changed:
 - app_server: `distro/app_server/View.cpp` is a copy of Haiku `src/servers/app/View.cpp` (MIT header kept); `_ScreenClipping()` now always intersects with the visible bounds (SPDX snippet, MIT). `scripts/apply-app-server.py` copies it. This applies to every window: a view inside a scrolled or smaller parent no longer paints its background outside that parent.
 
-Limits: Haiku upstream was not checked for the same fix. ARM64 and RISC-V 64 were not built.
+Tested: AMD64 `scripts/build-locked.sh`, `jam_exit=0` (app_server rebuilt from the copy). QEMU (SMAP and SMEP enabled, LOGIN=1, virtual DualSense, own image copy): at 910 by 560 no box-coloured row below the scroll area any more (checked pixel by pixel; the area still scrolls); at 1030 by 610 the page looks as before, with Trigger feedback and the vendor line visible and no scroll bar. No panic in the serial logs.
+
+Limits: Haiku upstream was not checked for the same fix. Other pages and apps were not looked at with this change, and not on real hardware. ARM64 and RISC-V 64 were not built.
 
 ## 2026-11-17 - Game controllers: fits at 1030 by 610, Motion gray without a controller
 
