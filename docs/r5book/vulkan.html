@@ -27,6 +27,8 @@
 	<aside class="toc"></aside>
 
 	<main class="page">
+		<div class="breadcrumb"><a href="index.html">R5Book</a> &rsaquo; <a href="index.html#guides">Guides</a> &rsaquo; Vulkan in a window</div>
+
 		<section class="page-hero">
 			<span class="kit-label">VK_RFIVE_view_surface</span>
 			<h1>Vulkan in a window</h1>
@@ -34,6 +36,18 @@
 			<code class="inline">BWindow</code>. The window can be resized, moved between workspaces, minimised and
 			closed like any other. R5 has its own Vulkan extension for this, registered with Khronos.</p>
 		</section>
+
+		<nav class="on-this-page" aria-label="On this page">
+			<h3>What is in this page</h3>
+			<ul>
+				<li><a href="#path">How a frame reaches the screen</a> &mdash; Loader, ICD, WSI, and <code class="inline">BView</code>.</li>
+				<li><a href="#surface">vkCreateViewSurfaceRFIVE</a> &mdash; Creating a surface for a <code class="inline">BView</code>.</li>
+				<li><a href="#present">vkQueuePresentKHR</a> &mdash; How frames are presented.</li>
+				<li><a href="#modes">Present modes</a> &mdash; FIFO and Mailbox behavior.</li>
+				<li><a href="#fallback">GPU or software</a> &mdash; RADV vs. Lavapipe selection.</li>
+				<li><a href="#porting">Porting a program</a> &mdash; Adapting Vulkan apps to R5.</li>
+			</ul>
+		</nav>
 
 		<table class="facts">
 			<tr><th>Declared in</th><td>&lt;vulkan/vulkan_r5.h&gt; (define VK_USE_PLATFORM_VIEW_RFIVE first)</td></tr>

@@ -29,6 +29,8 @@
 	<aside class="toc"></aside>
 
 	<main class="page">
+		<div class="breadcrumb"><a href="index.html">R5Book</a> &rsaquo; <a href="index.html#guides">Guides</a> &rsaquo; Interface guidelines</div>
+
 		<section class="page-hero">
 			<span class="kit-label">Interface guidelines</span>
 			<h1>Making it look like R5</h1>
@@ -36,6 +38,19 @@
 			own, one main action, sharp icons, and changes that apply at once. These are the rules R5's own windows
 			follow.</p>
 		</section>
+
+		<nav class="on-this-page" aria-label="On this page">
+			<h3>What is in this page</h3>
+			<ul>
+				<li><a href="#forms">Forms</a> &mdash; Panel background and label alignment.</li>
+				<li><a href="#cards">Cards</a> &mdash; When to use <code class="inline">BCard</code>, <code class="inline">BActionCard</code>, and <code class="inline">BPageHeader</code>.</li>
+				<li><a href="#actions">Buttons</a> &mdash; One main <code class="inline">BAccentButton</code> and plain secondary buttons.</li>
+				<li><a href="#icons">Icons</a> &mdash; Pixel-sharp rendering and Settings wrench rules.</li>
+				<li><a href="#settings">Settings pages</a> &mdash; Instant apply, Revert, Defaults, and lock.</li>
+				<li><a href="#people">People and accounts</a> &mdash; User lists, lock behavior, and home folders.</li>
+				<li><a href="#words">Words</a> &mdash; Clear, plain UI copy.</li>
+			</ul>
+		</nav>
 
 		<section class="entry" id="forms">
 			<div class="entry-header"><h2 class="plain">Forms</h2></div>
@@ -77,16 +92,16 @@
 
 		<section class="entry" id="cards">
 			<div class="entry-header"><h2 class="plain">Cards</h2></div>
-			<p>A <a href="appearance-kit.html#BCard">BCard</a> holds something that stands on its own: a heading, a
+			<p>A <a href="appearance-cards.html#BCard">BCard</a> holds something that stands on its own: a heading, a
 			summary, an account. A form stays on the panel. A page of choices uses
-			<a href="appearance-kit.html#BActionCard">BActionCard</a>s; the top of a page uses a
-			<a href="appearance-kit.html#BPageHeader">BPageHeader</a>.</p>
+			<a href="appearance-cards.html#BActionCard">BActionCard</a>s; the top of a page uses a
+			<a href="appearance-settings.html#BPageHeader">BPageHeader</a>.</p>
 		</section>
 
 		<section class="entry" id="actions">
 			<div class="entry-header"><h2 class="plain">Buttons</h2></div>
 			<ul class="plain">
-				<li>One main action per window, as a <a href="appearance-kit.html#BAccentButton">BAccentButton</a>:
+				<li>One main action per window, as a <a href="appearance-controls.html#BAccentButton">BAccentButton</a>:
 				Sign in, Unlock, Install. Everything else is a plain <code class="inline">BButton</code>.</li>
 				<li>An icon button on a row of text buttons has their height: use
 				<a href="icons-kit.html#icon-buttons"><code>r5_button_set_icon()</code></a> with that height.</li>
@@ -110,7 +125,7 @@
 			<ul class="plain">
 				<li>Use Haiku's own icons. A glyph is only for a small symbol Haiku has no icon for.</li>
 				<li>Render an icon at the size it is shown, and draw it pixel for pixel. A stretched bitmap gets jagged
-				edges; <a href="appearance-kit.html#BIconView">BIconView</a> does it right.</li>
+				edges; <a href="appearance-controls.html#BIconView">BIconView</a> does it right.</li>
 				<li>The preferences wrench is only for the Settings application and the pages inside it.</li>
 			</ul>
 		</section>
@@ -131,7 +146,7 @@
 			<div class="entry-header"><h2 class="plain">People and accounts</h2></div>
 			<ul class="plain">
 				<li>A list of people is two lines: the name in bold, then the username and the role. Use
-				<a href="appearance-kit.html#BUserListItem">BUserListItem</a>.</li>
+				<a href="appearance-settings.html#BUserListItem">BUserListItem</a>.</li>
 				<li>The signed-in person can edit their own name, email, picture and password while the computer is
 				locked. The lock is for the computer and for other people.</li>
 				<li>Do not hardcode a home folder. Use <code class="inline">find_directory()</code> or

@@ -19,6 +19,8 @@
 	<aside class="toc"></aside>
 
 	<main class="page">
+		<div class="breadcrumb"><a href="index.html">R5Book</a> &rsaquo; <a href="index.html#kits">Kits</a> &rsaquo; Wi-Fi Kit</div>
+
 		<section class="page-hero">
 			<span class="kit-label">libr5wifi.so</span>
 			<h1>The Wi-Fi Kit</h1>
@@ -27,6 +29,20 @@
 			A program can show it too, or drive Wi-Fi without any of the panel. The code comes from air/OS and is
 			MIT.</p>
 		</section>
+
+		<nav class="on-this-page" aria-label="On this page">
+			<h3>What is in this page</h3>
+			<ul>
+				<li><a href="#view">WiFiView</a> &mdash; Embeddable Wi-Fi panel for Settings or apps.</li>
+				<li><a href="#controller">WiFiController</a> &mdash; Background controller for scanning and joining.</li>
+				<li><a href="#state">WiFiState</a> &mdash; Snapshot of adapter, scan results, and link state.</li>
+				<li><a href="#glyphs">Glyphs</a> &mdash; Wi-Fi signal arcs.</li>
+				<li><a href="#list">Scan results</a> &mdash; Network list and signal views.</li>
+				<li><a href="#roster">BNetworkRoster</a> &mdash; R5 additions on Haiku's roster.</li>
+				<li><a href="#link">The link</a> &mdash; Wi-Fi standard, channel width, streams, and rates.</li>
+				<li><a href="#settings">Where people see it</a> &mdash; Settings page and WiFi program.</li>
+			</ul>
+		</nav>
 
 		<table class="facts">
 			<tr><th>Declared in</th><td>&lt;R5WiFi.h&gt;, &lt;R5WiFiView.h&gt;, &lt;R5WiFiListView.h&gt;, &lt;R5WiFiJoinOther.h&gt;, &lt;R5WiFiGlyphs.h&gt;, &lt;R5WiFiNetworkList.h&gt;</td></tr>
@@ -174,8 +190,6 @@ BLayoutBuilder::Group&lt;&gt;(this, B_VERTICAL, 0)
 			<code class="inline">Settings --page wifi</code>, and the same line under the connected network.
 			Without a Wi-Fi adapter the icon stays the wired one and the page says there is no adapter. The
 			WiFi program stays installed.</p>
-			<div class="note"><strong>Tested.</strong> Built for x86_64 and booted in QEMU, which has no Wi-Fi
-			adapter. Joining a network has not run on R5 hardware yet.</div>
 		</section>
 	</main>
 </div>

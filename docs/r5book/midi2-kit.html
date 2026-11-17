@@ -33,6 +33,8 @@
 	<aside class="toc"></aside>
 
 	<main class="page">
+		<div class="breadcrumb"><a href="index.html">R5Book</a> &rsaquo; <a href="index.html#kits">Kits</a> &rsaquo; MIDI 2 Kit</div>
+
 		<section class="page-hero">
 			<span class="kit-label">libmidi2.so</span>
 			<h1>The MIDI 2 Kit</h1>
@@ -40,6 +42,22 @@
 			MIDI 2.0. The MIDI 1.0 calls stay; there is no second MIDI kit. Property Exchange, Profiles, per-note
 			controllers, and Endpoint and Function Block discovery are in this same kit.</p>
 		</section>
+
+		<nav class="on-this-page" aria-label="On this page">
+			<h3>What is in this page</h3>
+			<ul>
+				<li><a href="#sending">BMidiLocalProducer</a> &mdash; Sending UMP and MIDI 2.0 messages.</li>
+				<li><a href="#ump">The Universal MIDI Packet</a> &mdash; Packet word layout and message types.</li>
+				<li><a href="#receiving">BMidiLocalConsumer</a> &mdash; Receiving UMP packets.</li>
+				<li><a href="#per-note">Per-note controllers</a> &mdash; Registered and assignable per-note control.</li>
+				<li><a href="#property-exchange">Property Exchange</a> &mdash; Reading and subscribing to device properties.</li>
+				<li><a href="#profiles">Profiles</a> &mdash; Enabling and negotiating MIDI 2.0 profiles.</li>
+				<li><a href="#discovery">Endpoint &amp; Function Block discovery</a> &mdash; Discovering capabilities.</li>
+				<li><a href="#identity">Your program's identity</a> &mdash; Advertising MUID and device info.</li>
+				<li><a href="#usb">USB MIDI 2.0 descriptors</a> &mdash; Parsing USB class descriptors.</li>
+				<li><a href="#drivers">For driver writers</a> &mdash; Kernel/user UMP interface.</li>
+			</ul>
+		</nav>
 
 		<table class="facts">
 			<tr><th>Declared in</th><td>&lt;MidiProducer.h&gt;, &lt;MidiConsumer.h&gt;, &lt;Midi2Defs.h&gt;, &lt;Midi2Property.h&gt;, &lt;Midi2Profile.h&gt;, &lt;Midi2Stream.h&gt;, &lt;Midi2Usb.h&gt;</td></tr>
@@ -344,8 +362,6 @@ status_t midi2_usb_write_group_terminal(...); status_t midi2_usb_parse_group_ter
 			<code class="inline">word_count</code> and <code class="inline">words[4]</code>. A driver that does not
 			implement them is used as a MIDI 1.0 port, with <code class="inline">read()</code> and
 			<code class="inline">write()</code>, as before.</p>
-			<div class="note"><strong>Tested.</strong> <code class="inline">midi2test</code> passes all checks in VirtualBox.
-			No USB MIDI 2.0 device has been attached yet.</div>
 		</section>
 	</main>
 </div>

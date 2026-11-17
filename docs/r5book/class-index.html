@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<!--
+  SPDX-FileCopyrightText: 2026 R5OS Contributors
+  SPDX-License-Identifier: MIT
+-->
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Class &amp; call index — R5Book</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
+	<link rel="stylesheet" href="r5book.css" />
+</head>
+<body data-page="index-all">
+
+<div class="book">
+	<aside class="toc"></aside>
+
+	<main class="page">
+		<div class="breadcrumb"><a href="index.html">R5Book</a> &rsaquo; Reference &rsaquo; Class &amp; call index</div>
+
+		<section class="page-hero">
+			<span class="kit-label">Reference</span>
+			<h1>Class &amp; call index</h1>
+			<p>Every class, function, struct, enum, and guide in R5Book, sorted alphabetically.</p>
+		</section>
+
+		<div class="index-controls">
+			<input type="search" id="index-filter" placeholder="Filter by name, header, library…" aria-label="Filter index" />
+			<div class="index-letters" id="index-letters"></div>
+		</div>
+
+		<table class="spec" id="index-table">
+			<thead>
+				<tr><th>Name</th><th>Kind</th><th>Header</th><th>Library</th><th>Summary</th></tr>
+			</thead>
+			<tbody></tbody>
+		</table>
+	</main>
+</div>
+
+<script src="r5book.js"></script>
+<script>
+(function () {
+	const items = (window.R5_SEARCH_INDEX || []).slice().sort((a, b) =>
+		a.name.localeCompare(b.name, "en", { sensitivity: "base" })
+	);
+
+	const tbody = document.querySelector("#index-table tbody");
+	const lettersBox = document.getElementById("index-letters");
+	const filterInput = document.getElementById("index-filter");
+
+	const letters = [];
+	const seenLetters = new Set();
+	for (const item of items) {
+		const ch = item.name[0].toUpperCase();
+		if (!seenLetters.has(ch)) {
+			seenLetters.add(ch);
+			letters.push(ch);
+		}
+	}
+
+	lettersBox.innerHTML = letters.map((l) => `<a href="#letter-${l}">${l}</a>`).join("");
+
+	function render(query) {
+		const q = query.trim().toLowerCase();
+		const filtered = q
+			? items.filter((i) =>
+				i.name.toLowerCase().includes(q)
+				|| i.header.toLowerCase().includes(q)
+				|| i.lib.toLowerCase().includes(q)
+				|| i.desc.toLowerCase().includes(q)
+			)
+			: items;
+
+		const usedAnchors = new Set();
+		tbody.innerHTML = filtered.map((i) => {
+			const ch = i.name[0].toUpperCase();
+			let idAttr = "";
+			if (!q && !usedAnchors.has(ch)) {
+				usedAnchors.add(ch);
+				idAttr = ` id="letter-${ch}"`;
+			}
+			const hdr = i.header ? `<code>${i.header.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</code>` : "&mdash;";
+			const lib = i.lib ? `<code>${i.lib}</code>` : "&mdash;";
+			return `<tr${idAttr}>
+				<td><a href="${i.href}"><code>${i.name}</code></a></td>
+				<td>${i.kind}</td>
+				<td>${hdr}</td>
+				<td>${lib}</td>
+				<td>${i.desc}</td>
+			</tr>`;
+		}).join("");
+	}
+
+	render("");
+	filterInput.addEventListener("input", () => render(filterInput.value));
+})();
+</script>
+</body>
+</html>

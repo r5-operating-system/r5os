@@ -19,6 +19,8 @@
 	<aside class="toc"></aside>
 
 	<main class="page">
+		<div class="breadcrumb"><a href="index.html">R5Book</a> &rsaquo; <a href="index.html#kits">Kits</a> &rsaquo; Bluetooth Kit</div>
+
 		<section class="page-hero">
 			<span class="kit-label">libr5bt.so</span>
 			<h1>The Bluetooth Kit</h1>
@@ -28,6 +30,22 @@
 			<code class="inline">bluetooth_server</code>, which stay as they are for Haiku programs. The code is
 			R5's own and MIT.</p>
 		</section>
+
+		<nav class="on-this-page" aria-label="On this page">
+			<h3>What is in this page</h3>
+			<ul>
+				<li><a href="#view">BluetoothView</a> &mdash; Embeddable Bluetooth panel for Settings or apps.</li>
+				<li><a href="#controller">BluetoothController</a> &mdash; Background controller driving radio, pairing, and audio.</li>
+				<li><a href="#state">BluetoothState</a> &mdash; Snapshot of adapter and device state.</li>
+				<li><a href="#switch">The Bluetooth switch</a> &mdash; Turning Bluetooth on or off via Admin Kit.</li>
+				<li><a href="#remote">RemoteDevice</a> &mdash; R5 additions on Haiku's <code class="inline">RemoteDevice</code>.</li>
+				<li><a href="#hid">Controllers, mice &amp; keyboards</a> &mdash; Classic HID device support.</li>
+				<li><a href="#le">Low Energy devices</a> &mdash; BLE scanning and GATT/HOGP.</li>
+				<li><a href="#le-l2cap">sockaddr_l2cap_le</a> &mdash; Socket address for BLE L2CAP.</li>
+				<li><a href="#audio">Headphones and speakers</a> &mdash; A2DP / HFP audio routing.</li>
+				<li><a href="#settings">Where people see it</a> &mdash; Settings page and Deskbar item.</li>
+			</ul>
+		</nav>
 
 		<table class="facts">
 			<tr><th>Declared in</th><td>&lt;R5Bluetooth.h&gt;</td></tr>
@@ -171,8 +189,7 @@ BLayoutBuilder::Group&lt;&gt;(this, B_VERTICAL, 0)
 			<p>Pairing asks for nothing with a controller or a mouse (Just Works). A keyboard shows a window with
 			a number to type on it. A pairing that the other device starts by itself is refused: pair from the
 			panel.</p>
-			<div class="note"><strong>Not yet.</strong> Rumble, lights, touchpad and motion of game controllers
-			are not supported. Bluetooth Low Energy mice and keyboards: see Low Energy devices below.</div>
+			<p>Rumble, trigger effects and motion are in the <a href="game-kit.html#feel">Game Kit</a>.</p>
 
 		<section class="entry" id="le">
 			<div class="entry-header"><h2 class="plain">Low Energy devices</h2></div>
@@ -189,9 +206,6 @@ BLayoutBuilder::Group&lt;&gt;(this, B_VERTICAL, 0)
 			one: bluetooth_server reads its report map and hands its reports to the same bluetooth_hid driver as
 			Classic HID, so input_server needs nothing new. A paired device comes back by itself when it wakes
 			up.</p>
-			<div class="note"><strong>Tested.</strong> Built for x86_64; in QEMU, which has no radio, only the
-			socket interface and the pairing crypto (with the sample data of the Bluetooth specification) ran.
-			Not yet run with a real LE device.</div>
 		</section>
 
 		<section class="entry" id="le-l2cap">
@@ -232,10 +246,7 @@ BLayoutBuilder::Group&lt;&gt;(this, B_VERTICAL, 0)
 			<code class="inline">find_directory(B_USER_SETTINGS_DIRECTORY)</code>; the command
 			<code class="inline">bt_audio use XX:XX:XX:XX:XX:XX</code> sets it. With no choice, a paired headset
 			that connects plays. Either way the link must be encrypted. When sound starts, R5 connects to the chosen headset by itself.</p>
-			<div class="note"><strong>Not yet.</strong> Not tried with a real headset yet: that waits for Classic
-			pairing on the test laptop. Play and pause on the headset start and stop the sound, but do not yet
-			pause the program that plays. No choice of headset on the Bluetooth page yet, and no AAC, aptX or LE
-			Audio.</div>
+			<div class="note"><strong>Limits.</strong> Play and pause on the headset start and stop the sound, but do not pause the program that plays. The headset is chosen with <code class="inline">bt_audio</code>; the Bluetooth page has no choice for it yet. The codec is SBC only: no AAC, aptX or LE Audio.</div>
 		</section>
 
 		<section class="entry" id="settings">
@@ -243,11 +254,6 @@ BLayoutBuilder::Group&lt;&gt;(this, B_VERTICAL, 0)
 			<p>Settings, Devices, Bluetooth, the first page under Devices: the panel as a page, with its own icon
 			and the preferences wrench. Only the switch waits for the lock. The Bluetooth program shows the same panel in its own window, and the Bluetooth item in Deskbar opens it. It replaced Haiku's Bluetooth
 			preferences.</p>
-			<div class="note"><strong>Tested.</strong> On a Ryzen 5 5625U with its built-in MediaTek radio, from
-			a USB stick: the radio starts, the scan lists nearby devices, the switch and the Deskbar item work,
-			and a connection to a game controller comes up. Pairing and controller input have not been
-			confirmed on hardware yet. In QEMU, which has no radio, a test feeds the driver a game controller
-			and a mouse and checks that BJoystick reads them.</div>
 		</section>
 	</main>
 </div>
