@@ -10,7 +10,8 @@
  * An answer is stored in the device's record (and in the saved list for a
  * paired device), kept for the next scan, and sent to the page that
  * scanned. The kit's own Remote Name Request (RemoteDevice::
- * GetFriendlyName()) still gets its answer. No address or name is logged.
+ * GetFriendlyName()) still gets its answer. A name is logged only in the
+ * scan lines, with the address masked (scan_log.h).
  */
 
 
@@ -162,7 +163,14 @@ LocalDeviceImpl::_R5NameHeard(const bdaddr_t& address, const BString& name,
 	reply.AddString("friendly_name", name);
 	reply.AddBool("friendly_name_is_complete", true);
 	reply.AddBool("r5_name", true);
-	fNameTarget.SendMessage(&reply, (BHandler*)NULL, 0);
+	const status_t sent = fNameTarget.SendMessage(&reply, (BHandler*)NULL, 0);
+
+	char addressText[18];
+	char nameText[SCAN_LOG_NAME_MAX + 1];
+	scan_log_format(address.b, name.String(), addressText, nameText);
+	syslog(LOG_INFO, "bluetooth_server: hci%" B_PRId32 " name of classic %s"
+		" \"%s\": %s", GetID(), addressText, nameText,
+		sent == B_OK ? "sent to the list" : "not sent");
 }
 
 
@@ -230,12 +238,23 @@ LocalDeviceImpl::_R5InquiryStarted(const BMessenger& target)
 	_R5CancelName();
 	// This scan names again what waits for a name.
 	fNamesWanted.clear();
+	scan_log_reset(&fClassicLog);
+	fClassicDropped = 0;
 }
 
 
 void
 LocalDeviceImpl::_R5InquiryEnded()
 {
+	if (fNameInquiring) {
+		syslog(LOG_INFO, "bluetooth_server: hci%" B_PRId32 " inquiry heard"
+			" %" B_PRIu32 " classic devices, %" B_PRIu32 " sent to the list"
+			", %" B_PRIu32 " names to ask (%" B_PRIu32 " answers past the"
+			" logged ones, %" B_PRIu32 " with no scan waiting)", GetID(),
+			fClassicLog.heard, fClassicLog.listed,
+			(uint32)fNamesWanted.size(), fClassicLog.unlogged,
+			fClassicDropped);
+	}
 	fNameInquiring = false;
 	_R5AskNextName();
 }
@@ -359,4 +378,61 @@ LocalDeviceImpl::_R5NameEvent(const struct hci_event_header* event)
 		}
 	}
 	return false;
+}
+
+
+// #pragma mark - scan lines
+
+
+//!	An inquiry answer sent to the page that scans (sent: its SendReply()).
+void
+LocalDeviceImpl::_R5LogInquiryReply(const BMessage& reply, status_t sent)
+{
+	uint8 count = 0;
+	if (reply.FindUInt8("count", &count) != B_OK)
+		return;
+	for (uint8 i = 0; i < count; i++) {
+		const void* address;
+		ssize_t size;
+		if (reply.FindData("bdaddr", B_ANY_TYPE, i, &address, &size) != B_OK
+			|| size != (ssize_t)sizeof(bdaddr_t))
+			continue;
+		const uint8* bytes = ((const bdaddr_t*)address)->b;
+		if (!scan_log_note(&fClassicLog, bytes, sent == B_OK))
+			continue;
+
+		const char* name = NULL;
+		reply.FindString("friendly_name", i, &name);
+		int8 rssi = HCI_RSSI_INVALID;
+		reply.FindInt8("rssi", i, &rssi);
+		uint32 deviceClass = 0;
+		const void* classData;
+		if (reply.FindData("dev_class", B_ANY_TYPE, i, &classData, &size)
+				== B_OK && size == 3) {
+			const uint8* record = (const uint8*)classData;
+			deviceClass = record[0] | (record[1] << 8) | (record[2] << 16);
+		}
+		char addressText[18];
+		char nameText[SCAN_LOG_NAME_MAX + 1];
+		scan_log_format(bytes, name, addressText, nameText);
+		syslog(LOG_INFO, "bluetooth_server: hci%" B_PRId32 " scan heard"
+			" classic %s \"%s\"%s rssi %d class %#" B_PRIx32 ": %s",
+			GetID(), addressText, nameText,
+			nameText[0] == '\0' ? " (name asked after the scan)" : "",
+			(int)rssi, deviceClass,
+			sent == B_OK ? "sent to the list" : "not sent: the list did not"
+				" take it");
+	}
+}
+
+
+//!	An inquiry answer with no scan request waiting for it: dropped.
+void
+LocalDeviceImpl::_R5LogInquiryDropped(uint8 eventCode)
+{
+	if (fClassicDropped++ == 0) {
+		syslog(LOG_NOTICE, "bluetooth_server: hci%" B_PRId32 " classic"
+			" inquiry answer (event %#x) while no scan waits: not sent",
+			GetID(), eventCode);
+	}
 }
