@@ -9,6 +9,7 @@
 
 #include "GameControllerReports.h"
 
+#include <math.h>
 #include <string.h>
 
 
@@ -257,6 +258,318 @@ parse_playstation_motion(playstation_model model, bool bluetooth,
 		sample.acceleration[i] = read_int16(data + accel + 2 * i) / 8192.0f;
 	}
 	return true;
+}
+
+
+// #pragma mark - Nintendo Switch controllers
+
+
+static const uint16 kNintendo = 0x057e;
+
+
+switch_model
+switch_model_for(uint16 vendor, uint16 product)
+{
+	if (vendor != kNintendo)
+		return SWITCH_NONE;
+	switch (product) {
+		case 0x2009:
+			return SWITCH_PRO;
+		case 0x2006:
+			return SWITCH_JOYCON_LEFT;
+		case 0x2007:
+			return SWITCH_JOYCON_RIGHT;
+	}
+	return SWITCH_NONE;
+}
+
+
+uint8
+switch_amplitude_index(float amplitude)
+{
+	if (!(amplitude > 0))
+		return 0;
+	if (amplitude >= 1)
+		return 100;
+	float index;
+	if (amplitude > 0.23f)
+		index = log2f(amplitude * 8.7f) * 32;
+	else if (amplitude > 0.12f)
+		index = log2f(amplitude * 17) * 16;
+	else
+		index = amplitude / 0.12f * 16;
+	int rounded = (int)(index + 0.5f);
+	if (rounded < 1)
+		rounded = 1;
+	if (rounded > 100)
+		rounded = 100;
+	return (uint8)rounded;
+}
+
+
+void
+switch_rumble_encode(float strong, float weak, uint8 out[4])
+{
+	uint8 high = switch_amplitude_index(weak);
+	uint8 low = switch_amplitude_index(strong);
+	if (high == 0 && low == 0) {
+		out[0] = 0x00;
+		out[1] = 0x01;
+		out[2] = 0x40;
+		out[3] = 0x40;
+		return;
+	}
+	// High band: frequency 0x074 (nine bits), amplitude index * 2. Low
+	// band: frequency 0x3D, amplitude 0x40 + index / 2 with the odd half
+	// in the top bit of the frequency byte.
+	static const uint16 kHighFrequency = 0x0074;
+	static const uint8 kLowFrequency = 0x3d;
+	out[0] = (uint8)(kHighFrequency & 0xff);
+	out[1] = (uint8)(high * 2) | ((kHighFrequency >> 8) & 0x01);
+	out[2] = kLowFrequency | ((low & 1) != 0 ? 0x80 : 0);
+	out[3] = (uint8)(0x40 + low / 2);
+}
+
+
+static size_t
+switch_header(uint8 id, uint8 counter, float strong, float weak,
+	size_t length, uint8* out, size_t capacity)
+{
+	if (out == NULL || length < 10 || capacity < length)
+		return 0;
+	memset(out, 0, length);
+	out[0] = id;
+	out[1] = counter & 0x0f;
+	switch_rumble_encode(strong, weak, out + 2);
+	memcpy(out + 6, out + 2, 4);
+	return length;
+}
+
+
+size_t
+build_switch_rumble(uint8 counter, float strong, float weak, size_t length,
+	uint8* out, size_t capacity)
+{
+	return switch_header(0x10, counter, strong, weak, length, out, capacity);
+}
+
+
+size_t
+build_switch_subcommand(uint8 counter, float strong, float weak,
+	uint8 command, const uint8* args, size_t argLength, size_t length,
+	uint8* out, size_t capacity)
+{
+	if (length < 11 + argLength || (argLength > 0 && args == NULL))
+		return 0;
+	if (switch_header(0x01, counter, strong, weak, length, out, capacity)
+			== 0)
+		return 0;
+	out[10] = command;
+	if (argLength > 0)
+		memcpy(out + 11, args, argLength);
+	return length;
+}
+
+
+size_t
+build_switch_spi_read(uint8 counter, float strong, float weak,
+	uint32 address, uint8 size, size_t length, uint8* out, size_t capacity)
+{
+	if (size == 0 || size > 29)
+		return 0;
+	uint8 args[5] = { (uint8)address, (uint8)(address >> 8),
+		(uint8)(address >> 16), (uint8)(address >> 24), size };
+	return build_switch_subcommand(counter, strong, weak, 0x10, args,
+		sizeof(args), length, out, capacity);
+}
+
+
+bool
+parse_switch_spi_reply(const uint8* report, size_t length, uint32 address,
+	uint8 size, uint8* data)
+{
+	if (report == NULL || data == NULL || size == 0
+		|| length < 20 + (size_t)size)
+		return false;
+	if (report[0] != 0x21 || (report[13] & 0x80) == 0 || report[14] != 0x10)
+		return false;
+	uint32 read = report[15] | (report[16] << 8) | (report[17] << 16)
+		| ((uint32)report[18] << 24);
+	if (read != address || report[19] != size)
+		return false;
+	memcpy(data, report + 20, size);
+	return true;
+}
+
+
+void
+switch_imu_nominal(switch_imu_calibration& calibration)
+{
+	for (int i = 0; i < 3; i++) {
+		calibration.accelScale[i] = 1.0f / 4096.0f;
+		calibration.gyroScale[i] = 1.0f / 14.2842f;
+		calibration.gyroOffset[i] = 0;
+	}
+	calibration.factory = false;
+}
+
+
+static int16
+read_le16(const uint8* data)
+{
+	return (int16)(uint16)(data[0] | (data[1] << 8));
+}
+
+
+bool
+switch_imu_from_factory(const uint8 data[24],
+	switch_imu_calibration& calibration)
+{
+	switch_imu_nominal(calibration);
+	if (data == NULL)
+		return false;
+	switch_imu_calibration read;
+	for (int i = 0; i < 3; i++) {
+		int32 accelOrigin = read_le16(data + 2 * i);
+		int32 accelSensitivity = read_le16(data + 6 + 2 * i);
+		int32 gyroOrigin = read_le16(data + 12 + 2 * i);
+		int32 gyroSensitivity = read_le16(data + 18 + 2 * i);
+		// Flash never written reads 0xFFFF; a sensitivity has to lie well
+		// above its origin (nominal 16384 and 13371).
+		int32 accelRange = accelSensitivity - accelOrigin;
+		int32 gyroRange = gyroSensitivity - gyroOrigin;
+		if (accelRange < 1000 || gyroRange < 1000)
+			return false;
+		read.accelScale[i] = 4.0f / accelRange;
+		read.gyroScale[i] = 936.0f / gyroRange;
+		read.gyroOffset[i] = (int16)gyroOrigin;
+	}
+	read.factory = true;
+	calibration = read;
+	return true;
+}
+
+
+bool
+parse_switch_motion(const switch_imu_calibration& calibration,
+	const uint8* report, size_t length, motion_sample& sample)
+{
+	if (report == NULL || length < 1 + 12 + 36)
+		return false;
+	if (report[0] != 0x30 && report[0] != 0x31)
+		return false;
+	const uint8* first = report + 13;
+	if (read_le16(first) == 0 && read_le16(first + 2) == 0
+		&& read_le16(first + 4) == 0)
+		return false;
+		// the sensors are still off
+
+	const uint8* newest = first + 24;
+	float ax = read_le16(newest) * calibration.accelScale[0];
+	float ay = read_le16(newest + 2) * calibration.accelScale[1];
+	float az = read_le16(newest + 4) * calibration.accelScale[2];
+	float gx = (read_le16(newest + 6) - calibration.gyroOffset[0])
+		* calibration.gyroScale[0];
+	float gy = (read_le16(newest + 8) - calibration.gyroOffset[1])
+		* calibration.gyroScale[1];
+	float gz = (read_le16(newest + 10) - calibration.gyroOffset[2])
+		* calibration.gyroScale[2];
+	sample.acceleration[0] = -ay;
+	sample.acceleration[1] = az;
+	sample.acceleration[2] = -ax;
+	sample.rotation[0] = -gy;
+	sample.rotation[1] = gz;
+	sample.rotation[2] = -gx;
+	return true;
+}
+
+
+// #pragma mark - Xbox controllers
+
+
+static const uint16 kMicrosoft = 0x045e;
+
+
+xbox_model
+xbox_model_for(uint16 vendor, uint16 product, bool bluetooth, bool gip)
+{
+	if (gip)
+		return XBOX_GIP;
+	if (!bluetooth || vendor != kMicrosoft)
+		return XBOX_NONE;
+	switch (product) {
+		case 0x02e0:	// Xbox One S, first firmware
+		case 0x02fd:	// Xbox One S
+		case 0x0b05:	// Elite Series 2
+		case 0x0b0c:	// Adaptive Controller
+		case 0x0b13:	// Xbox Series X|S, Low Energy
+		case 0x0b20:	// Xbox One S, Low Energy
+		case 0x0b21:	// Adaptive Controller, Low Energy
+		case 0x0b22:	// Elite Series 2, Low Energy
+			return XBOX_BLUETOOTH;
+	}
+	return XBOX_NONE;
+}
+
+
+bool
+xbox_has_trigger_rumble(uint16 vendor)
+{
+	return vendor == kMicrosoft;
+}
+
+
+static uint8
+unit_to_percent(float value)
+{
+	if (!(value > 0))
+		return 0;
+	if (value >= 1)
+		return 100;
+	return (uint8)(value * 100 + 0.5f);
+}
+
+
+static void
+xbox_motors(float leftTrigger, float rightTrigger, float strong, float weak,
+	uint8* out)
+{
+	out[0] = 0x0f;	// all four motors
+	out[1] = unit_to_percent(leftTrigger);
+	out[2] = unit_to_percent(rightTrigger);
+	out[3] = unit_to_percent(strong);
+	out[4] = unit_to_percent(weak);
+	out[5] = 0xff;	// 2.55 s
+	out[6] = 0x00;	// no delay
+	out[7] = 0xeb;	// repeated
+}
+
+
+size_t
+build_xbox_bluetooth_rumble(float leftTrigger, float rightTrigger,
+	float strong, float weak, uint8* out, size_t capacity)
+{
+	if (out == NULL || capacity < kXboxBluetoothRumbleSize)
+		return 0;
+	out[0] = 0x03;
+	xbox_motors(leftTrigger, rightTrigger, strong, weak, out + 1);
+	return kXboxBluetoothRumbleSize;
+}
+
+
+size_t
+build_xbox_gip_rumble(uint8 sequence, float leftTrigger, float rightTrigger,
+	float strong, float weak, uint8* out, size_t capacity)
+{
+	if (out == NULL || capacity < kXboxGIPRumbleSize)
+		return 0;
+	out[0] = 0x09;
+	out[1] = 0x00;
+	out[2] = sequence;
+	out[3] = 0x09;
+	out[4] = 0x00;
+	xbox_motors(leftTrigger, rightTrigger, strong, weak, out + 5);
+	return kXboxGIPRumbleSize;
 }
 
 

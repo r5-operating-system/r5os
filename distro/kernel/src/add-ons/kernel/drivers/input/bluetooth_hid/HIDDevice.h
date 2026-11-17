@@ -140,6 +140,14 @@ private:
 			size_t				fDescriptorLength;
 			r5_hid_report_cache	fReportCache;
 			size_t				fShortReportSize;
+
+			// Phase 2: a Switch controller gets its first subcommands from
+			// here (R5HIDReports.h, r5_hid_switch_init), and the Pro
+			// Controller its simple report 0x3F built from each full one when
+			// its descriptor has that report with the expected size.
+			r5_hid_switch_init	fSwitchInit;
+			bool				fSwitchStarted;
+			bool				fSwitchSimple;
 };
 
 

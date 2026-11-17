@@ -777,6 +777,12 @@ LEManager::_ConnectionComplete(const uint8* data, size_t size, uint8 subevent)
 	link->batteryHandle = 0;
 	link->battery = -1;
 	link->featuresPending = false;
+	link->infoStart = 0;
+	link->infoEnd = 0;
+	link->pnpKnown = false;
+	link->pnpVendor = 0;
+	link->pnpProduct = 0;
+	link->pnpVersion = 0;
 	fLinks.push_back(link);
 	if (link->pairRequested) {
 		fWantDirect = false;

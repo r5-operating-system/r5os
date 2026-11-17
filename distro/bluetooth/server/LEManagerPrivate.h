@@ -188,6 +188,16 @@ struct LEManager::Link {
 	uint16		batteryEnd;
 	uint16		batteryHandle;
 	int16		battery;
+
+	// Device Information Service (DIS 1.1): its range and the PnP ID
+	// (vendor, product, version), handed to the driver for
+	// R5_JOYSTICK_GET_INFO (docs/GAME-CONTROLLERS.md, phase 2).
+	uint16		infoStart;
+	uint16		infoEnd;
+	bool		pnpKnown;
+	uint16		pnpVendor;
+	uint16		pnpProduct;
+	uint16		pnpVersion;
 };
 
 

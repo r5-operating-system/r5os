@@ -40,7 +40,8 @@ enum {
 	kGATTReportReferences,
 	kGATTNotifications,
 	kGATTReady,
-	kGATTBattery
+	kGATTBattery,
+	kGATTDeviceInfo
 };
 
 // UUIDs (Assigned Numbers, 3.4 to 3.8).
@@ -51,7 +52,9 @@ enum {
 	kUUIDReportReference	= 0x2908,
 	kUUIDHIDService			= 0x1812,
 	kUUIDBatteryService		= 0x180f,
+	kUUIDDeviceInformation	= 0x180a,
 	kUUIDBatteryLevel		= 0x2a19,
+	kUUIDPnPID				= 0x2a50,
 	kUUIDReportMap			= 0x2a4b,
 	kUUIDReport				= 0x2a4d,
 	kUUIDProtocolMode		= 0x2a4e
@@ -178,6 +181,9 @@ LEManager::_GATTStart(Link* link)
 	link->batteryStart = 0;
 	link->batteryEnd = 0;
 	link->batteryHandle = 0;
+	link->infoStart = 0;
+	link->infoEnd = 0;
+	link->pnpKnown = false;
 
 	link->gattStep = kGATTMTU;
 	uint8 request[3] = { 0x02, 0, 0 };
@@ -223,6 +229,10 @@ LEManager::_GATTStep(Link* link, const uint8* pdu, size_t size)
 				if (link->batteryStart == 0 && uuid == kUUIDBatteryService) {
 					link->batteryStart = entry.handle;
 					link->batteryEnd = entry.end;
+				}
+				if (link->infoStart == 0 && uuid == kUUIDDeviceInformation) {
+					link->infoStart = entry.handle;
+					link->infoEnd = entry.end;
 				}
 				if (entry.end > last)
 					last = entry.end;
@@ -327,6 +337,18 @@ LEManager::_GATTStep(Link* link, const uint8* pdu, size_t size)
 			link->next = 0;
 			break;
 
+		case kGATTDeviceInfo:
+			// Read By Type Response: length, handle, then the PnP ID:
+			// vendor ID source, vendor, product, version (DIS 1.1, 3.9).
+			if (!error && pdu[0] == 0x09 && size >= 11 && pdu[1] >= 9) {
+				link->pnpVendor = le16(pdu + 5);
+				link->pnpProduct = le16(pdu + 7);
+				link->pnpVersion = le16(pdu + 9);
+				link->pnpKnown = link->pnpVendor != 0;
+			}
+			link->next = 0;
+			break;
+
 		case kGATTNotifications:
 			if (error) {
 				syslog(LOG_NOTICE, "bluetooth_server: gatt notifications"
@@ -372,6 +394,20 @@ LEManager::_GATTNext(Link* link)
 			// fall through
 
 		case kGATTBattery:
+			// The PnP ID, once, when the device has the Device Information
+			// service: game controllers are told apart by it.
+			if (link->infoStart != 0) {
+				link->gattStep = kGATTDeviceInfo;
+				request[0] = 0x08;	// Read By Type
+				le_put16(request + 1, link->infoStart);
+				le_put16(request + 3, link->infoEnd);
+				le_put16(request + 5, kUUIDPnPID);
+				_ATTRequest(link, request, 7);
+				return;
+			}
+			// fall through
+
+		case kGATTDeviceInfo:
 			if (link->serviceStart == 0) {
 				syslog(LOG_NOTICE, "bluetooth_server: gatt no hid service");
 				link->gattStep = kGATTReady;
@@ -518,6 +554,10 @@ LEManager::_GATTReady(Link* link)
 		return;
 	}
 	link->kernelID = id;
+	if (link->pnpKnown) {
+		host->SetLEDeviceInfo(id, link->pnpVendor, link->pnpProduct,
+			link->pnpVersion, link->bond.name.String());
+	}
 	syslog(LOG_INFO, "bluetooth_hid: ble hid ready (%" B_PRIu32
 		" input device%s)", handlers, handlers == 1 ? "" : "s");
 

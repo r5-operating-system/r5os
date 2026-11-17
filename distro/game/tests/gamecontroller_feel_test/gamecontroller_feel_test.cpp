@@ -25,6 +25,10 @@
  *  6. BGameControllerView::PictureBitmap() and BCardStrip: its items, the
  *     selection by Select() and by the keys, the selection message, the
  *     archive, and the drawing with cards and empty.
+ *  7. phase 2: a virtual Switch Pro Controller (057e:2009): the driver's
+ *     start subcommands, B, the stick and the battery from full reports
+ *     only, HD rumble and motion; a virtual Xbox Wireless Controller
+ *     (045e:0b13): trigger rumble, the stop and the battery of report 0x04.
  *
  * bluetooth_server also takes reports from the output queue, so this test
  * starts waiting before it sends, and sends again (at most four times).
@@ -848,6 +852,409 @@ test_card_strip()
 }
 
 
+// #pragma mark - phase 2: a virtual Switch Pro Controller and Xbox controller
+
+
+// The Pro Controller over Bluetooth as R5 expects its descriptor: the
+// simple report 0x3F (16 buttons, a hat, X Y Rx Ry of 16 bits), and the
+// vendor reports 0x21 and 0x30 in, 0x01 and 0x10 out, 48 bytes each.
+static const uint8 kSwitchPro[] = {
+	0x05, 0x01, 0x09, 0x05, 0xa1, 0x01,
+	0x85, 0x3f,
+	0x05, 0x09, 0x19, 0x01, 0x29, 0x10, 0x15, 0x00, 0x25, 0x01,
+	0x75, 0x01, 0x95, 0x10, 0x81, 0x02,
+	0x05, 0x01, 0x09, 0x39, 0x15, 0x00, 0x25, 0x07, 0x75, 0x04, 0x95, 0x01,
+	0x81, 0x42, 0x81, 0x01,
+	0x09, 0x30, 0x09, 0x31, 0x09, 0x33, 0x09, 0x34, 0x15, 0x00,
+	0x27, 0xff, 0xff, 0x00, 0x00, 0x75, 0x10, 0x95, 0x04, 0x81, 0x02,
+	0x06, 0x00, 0xff, 0x15, 0x00, 0x26, 0xff, 0x00, 0x75, 0x08, 0x95, 0x30,
+	0x85, 0x21, 0x09, 0x21, 0x81, 0x02,
+	0x85, 0x30, 0x09, 0x30, 0x81, 0x02,
+	0x85, 0x01, 0x09, 0x01, 0x91, 0x02,
+	0x85, 0x10, 0x09, 0x10, 0x91, 0x02,
+	0xc0
+};
+
+// An Xbox Wireless Controller over Bluetooth, shortened: report 0x01 with
+// X Y Rx Ry, a hat and 16 buttons, the battery report 0x04, and the
+// rumble report 0x03 out (8 bytes).
+static const uint8 kXbox[] = {
+	0x05, 0x01, 0x09, 0x05, 0xa1, 0x01,
+	0x85, 0x01,
+	0x09, 0x30, 0x09, 0x31, 0x09, 0x33, 0x09, 0x34, 0x15, 0x00,
+	0x27, 0xff, 0xff, 0x00, 0x00, 0x75, 0x10, 0x95, 0x04, 0x81, 0x02,
+	0x09, 0x39, 0x15, 0x01, 0x25, 0x08, 0x75, 0x04, 0x95, 0x01, 0x81, 0x42,
+	0x81, 0x01,
+	0x05, 0x09, 0x19, 0x01, 0x29, 0x10, 0x15, 0x00, 0x25, 0x01,
+	0x75, 0x01, 0x95, 0x10, 0x81, 0x02,
+	0x06, 0x00, 0xff, 0x15, 0x00, 0x26, 0xff, 0x00, 0x75, 0x08,
+	0x85, 0x04, 0x09, 0x04, 0x95, 0x01, 0x81, 0x02,
+	0x85, 0x03, 0x09, 0x03, 0x95, 0x08, 0x91, 0x02,
+	0xc0
+};
+
+static const char* const kSwitchName = "Switch feel test";
+static const char* const kXboxName = "Xbox feel test";
+
+static int32 sOtherID = -1;
+static volatile bool sOtherFeeding = false;
+static uint8 sOtherReports[2][49];
+static uint32 sOtherLengths[2];
+
+
+static status_t
+other_feed_thread(void*)
+{
+	int which = 0;
+	while (sOtherFeeding) {
+		if (sOtherLengths[which] > 0) {
+			r5_bthid_input input = { sOtherID, sOtherLengths[which],
+				sOtherReports[which] };
+			ioctl(sControl, R5_BTHID_INPUT, &input, sizeof(input));
+		}
+		which ^= 1;
+		snooze(20000);
+	}
+	return B_OK;
+}
+
+
+static bool
+find_named(const char* wanted, BString& device)
+{
+	for (int i = 0; i < 40; i++) {
+		BGameController controller;
+		for (int32 j = 0; j < controller.CountDevices(); j++) {
+			char name[B_OS_NAME_LENGTH];
+			if (controller.GetDeviceName(j, name, sizeof(name)) != B_OK
+				|| strncmp(name, "bluetooth/", 10) != 0
+				|| controller.Open(name) != B_OK)
+				continue;
+			if (strcmp(controller.Name(), wanted) == 0) {
+				device = name;
+				return true;
+			}
+		}
+		snooze(50000);
+	}
+	return false;
+}
+
+
+static bool
+other_output(bool (*check)(const uint8*, uint32), bigtime_t timeout)
+{
+	bigtime_t end = system_time() + timeout;
+	while (system_time() < end) {
+		uint8 data[R5_BTHID_MAX_REPORT];
+		r5_bthid_output output;
+		memset(&output, 0, sizeof(output));
+		output.timeout = end - system_time();
+		if (output.timeout <= 0)
+			break;
+		output.data = data;
+		output.capacity = sizeof(data);
+		if (ioctl(sControl, R5_BTHID_GET_OUTPUT, &output, sizeof(output))
+				!= 0)
+			continue;
+		if (output.id == sOtherID && check(data, output.length))
+			return true;
+	}
+	return false;
+}
+
+
+static bool
+switch_rumble_on(const uint8* data, uint32 length)
+{
+	return data[0] == 0x01 && length == 49 && data[10] == 0x48
+		&& data[11] == 0x01;
+}
+
+
+static bool
+switch_full_mode(const uint8* data, uint32 length)
+{
+	return data[0] == 0x01 && length == 49 && data[10] == 0x03
+		&& data[11] == 0x30;
+}
+
+
+static bool
+switch_rumble(const uint8* data, uint32 length)
+{
+	static const uint8 kFull[8]
+		= { 0x74, 0xc8, 0x3d, 0x72, 0x74, 0xc8, 0x3d, 0x72 };
+	return data[0] == 0x10 && length == 49
+		&& memcmp(data + 2, kFull, 8) == 0;
+}
+
+
+static status_t
+send_switch_rumble(BGameController& c)
+{
+	return c.SetRumble(1, 1, 0);
+}
+
+
+static bool
+send_other_until(BGameController& controller,
+	status_t (*send)(BGameController&), bool (*check)(const uint8*, uint32))
+{
+	for (int i = 0; i < 4; i++) {
+		capture what = { check, 2500000, false };
+		// capture_thread reads for sPadID; this one for sOtherID.
+		struct other {
+			static status_t thread(void* data)
+			{
+				capture* what = (capture*)data;
+				what->found = other_output(what->check, what->timeout);
+				return B_OK;
+			}
+		};
+		thread_id reader = spawn_thread(other::thread, "capture",
+			B_NORMAL_PRIORITY, &what);
+		resume_thread(reader);
+		snooze(700000);
+		status_t sent = send(controller);
+		status_t result;
+		wait_for_thread(reader, &result);
+		if (sent != B_OK)
+			return false;
+		if (what.found)
+			return true;
+	}
+	return false;
+}
+
+
+static int
+create_other(const uint8* descriptor, size_t length, uint16 vendor,
+	uint16 product, const char* name)
+{
+	r5_bthid_create create;
+	memset(&create, 0, sizeof(create));
+	create.descriptor = descriptor;
+	create.descriptor_length = length;
+	CHECK(ioctl(sControl, R5_BTHID_CREATE, &create, sizeof(create)) == 0,
+		"create a virtual controller");
+	sOtherID = create.id;
+	r5_bthid_info info;
+	memset(&info, 0, sizeof(info));
+	info.id = sOtherID;
+	info.vendor_id = vendor;
+	info.product_id = product;
+	strlcpy(info.name, name, sizeof(info.name));
+	CHECK(ioctl(sControl, R5_BTHID_SET_INFO, &info, sizeof(info)) == 0,
+		"set its IDs");
+	return 0;
+}
+
+
+static void
+destroy_other(thread_id feeder)
+{
+	sOtherFeeding = false;
+	status_t status;
+	if (feeder >= 0)
+		wait_for_thread(feeder, &status);
+	ioctl(sControl, R5_BTHID_DESTROY, &sOtherID, sizeof(sOtherID));
+	sOtherID = -1;
+}
+
+
+/*!	The Switch Pro Controller over Bluetooth: the driver starts it with
+	subcommands (rumble on, then the full report mode after the reply), the
+	joystick gets B and the battery from full reports only, rumble reaches
+	the queue as HD rumble bytes, and motion comes from the full report at
+	the nominal scale (no calibration reply comes).
+*/
+static int
+test_switch()
+{
+	// Full report 0x30: B down (right byte 0x04), battery full, left stick
+	// to the left (X 0x100); IMU Z 4096 in all three samples.
+	uint8* full = sOtherReports[0];
+	memset(full, 0, 49);
+	full[0] = 0x30;
+	full[2] = 0x90;
+	full[3] = 0x04;
+	full[6] = 0x00;
+	full[7] = 0x81;
+	full[8] = 0x80;
+	full[9] = 0x00;
+	full[10] = 0x08;
+	full[11] = 0x80;
+	for (int i = 0; i < 3; i++)
+		put16(full + 13 + 12 * i + 4, 4096);
+	sOtherLengths[0] = 49;
+	sOtherLengths[1] = 0;
+
+	if (create_other(kSwitchPro, sizeof(kSwitchPro), 0x057e, 0x2009,
+			kSwitchName) != 0)
+		return 1;
+	sOtherFeeding = true;
+	thread_id feeder = spawn_thread(other_feed_thread, "feed switch",
+		B_NORMAL_PRIORITY, NULL);
+	resume_thread(feeder);
+
+	// Without a reply the driver sends "rumble on" again every 40 reports.
+	bool started = other_output(switch_rumble_on, 4000000);
+	// Its reply: the next step is the full report mode.
+	uint8* reply = sOtherReports[1];
+	memcpy(reply, full, 49);
+	reply[0] = 0x21;
+	reply[13] = 0x80;
+	reply[14] = 0x48;
+	sOtherLengths[1] = 49;
+	bool fullMode = started && other_output(switch_full_mode, 4000000);
+	sOtherLengths[1] = 0;
+	if (!started || !fullMode) {
+		destroy_other(feeder);
+		return fail(!started ? "the Switch start: no rumble on"
+			: "the Switch start: no full report mode after the reply");
+	}
+
+	BString device;
+	if (!find_named(kSwitchName, device)) {
+		destroy_other(feeder);
+		return fail("the virtual Switch Pro Controller is not listed");
+	}
+	int result = 0;
+	{
+		BGameController controller;
+		if (controller.Open(device) != B_OK)
+			result = fail("open the Switch Pro Controller");
+		else if (!controller.CanRumble() || !controller.HasMotion()
+			|| controller.HasTriggerRumble()
+			|| controller.HasTriggerEffects())
+			result = fail("the Switch Pro Controller's features");
+		if (result == 0) {
+			bool pressed = false;
+			for (int i = 0; i < 50 && !pressed; i++) {
+				snooze(40000);
+				pressed = controller.Update() == B_OK
+					&& controller.IsButtonDown(B_CONTROLLER_BUTTON_A)
+					&& controller.AxisValue(B_CONTROLLER_AXIS_LEFT_X)
+						< -16000;
+			}
+			if (!pressed)
+				result = fail("B and the left stick from the full report");
+			else if (controller.BatteryLevel() != 100)
+				result = fail("the Switch battery");
+		}
+		if (result == 0 && !send_other_until(controller, send_switch_rumble,
+				switch_rumble))
+			result = fail("the Switch rumble report");
+		if (result == 0) {
+			if (controller.SetMotionEnabled(true) != B_OK)
+				result = fail("the Switch motion on");
+			game_controller_motion motion;
+			bool moved = false;
+			for (int i = 0; result == 0 && i < 50 && !moved; i++) {
+				snooze(40000);
+				moved = controller.Update() == B_OK
+					&& controller.GetMotion(&motion) == B_OK;
+			}
+			if (result == 0 && (!moved || motion.acceleration[1] != 1
+					|| motion.acceleration[0] != 0))
+				result = fail("the Switch motion");
+		}
+		controller.StopRumble();
+	}
+	destroy_other(feeder);
+	if (result == 0)
+		printf("gamecontroller_feel_test: Switch Pro Controller ok\n");
+	return result;
+}
+
+
+static bool
+xbox_trigger_rumble(const uint8* data, uint32 length)
+{
+	return length == 9 && data[0] == 0x03 && data[1] == 0x0f
+		&& data[2] == 60 && data[3] == 30 && data[4] == 0 && data[5] == 0
+		&& data[6] == 0xff && data[8] == 0xeb;
+}
+
+
+static bool
+xbox_stopped(const uint8* data, uint32 length)
+{
+	return length == 9 && data[0] == 0x03 && data[2] == 0 && data[3] == 0
+		&& data[4] == 0 && data[5] == 0;
+}
+
+
+static status_t
+send_xbox_triggers(BGameController& c)
+{
+	return c.SetTriggerRumble(0.6f, 0.3f, 0);
+}
+
+
+/*!	An Xbox Wireless Controller over Bluetooth: rumble and trigger rumble
+	in report 0x03, and the battery of report 0x04.
+*/
+static int
+test_xbox()
+{
+	uint8* state = sOtherReports[0];
+	memset(state, 0, 49);
+	state[0] = 0x01;
+	sOtherLengths[0] = 1 + 8 + 1 + 2;
+	uint8* battery = sOtherReports[1];
+	memset(battery, 0, 49);
+	battery[0] = 0x04;
+	battery[1] = 0x02;
+	sOtherLengths[1] = 2;
+	if (create_other(kXbox, sizeof(kXbox), 0x045e, 0x0b13, kXboxName) != 0)
+		return 1;
+	sOtherFeeding = true;
+	thread_id feeder = spawn_thread(other_feed_thread, "feed xbox",
+		B_NORMAL_PRIORITY, NULL);
+	resume_thread(feeder);
+
+	BString device;
+	if (!find_named(kXboxName, device)) {
+		destroy_other(feeder);
+		return fail("the virtual Xbox controller is not listed");
+	}
+	int result = 0;
+	{
+		BGameController controller;
+		if (controller.Open(device) != B_OK)
+			result = fail("open the Xbox controller");
+		else if (!controller.CanRumble() || !controller.HasTriggerRumble()
+			|| controller.HasMotion() || controller.HasTriggerEffects())
+			result = fail("the Xbox controller's features");
+		if (result == 0) {
+			bool known = false;
+			for (int i = 0; i < 50 && !known; i++) {
+				snooze(40000);
+				controller.Update();
+				known = controller.BatteryLevel() == 70;
+			}
+			if (!known)
+				result = fail("the Xbox battery");
+		}
+		if (result == 0 && !send_other_until(controller, send_xbox_triggers,
+				xbox_trigger_rumble))
+			result = fail("the Xbox trigger rumble report");
+		if (result == 0 && !send_other_until(controller, send_stop,
+				xbox_stopped))
+			result = fail("the Xbox stop report");
+		if (result == 0 && controller.SetTriggerRumble(1, 1, -1)
+				!= B_BAD_VALUE)
+			result = fail("negative trigger rumble duration");
+	}
+	destroy_other(feeder);
+	if (result == 0)
+		printf("gamecontroller_feel_test: Xbox controller ok\n");
+	return result;
+}
+
+
 static int
 run()
 {
@@ -887,6 +1294,10 @@ run()
 			result = test_controller(device.String());
 		if (result == 0)
 			result = test_other_controller();
+		if (result == 0)
+			result = test_switch();
+		if (result == 0)
+			result = test_xbox();
 	}
 
 	sFeeding = false;

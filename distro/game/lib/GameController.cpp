@@ -510,7 +510,16 @@ BGameController::Open(const char* deviceName)
 	controller_mapping database;
 	bool inDatabase = vendor != 0 && find_system_mapping(vendor, product,
 		d.info.bus, database) == B_OK;
+	uint32 driverFlags = d.info.size >= offsetof(r5_joystick_info, flags)
+		+ sizeof(d.info.flags) ? d.info.flags : 0;
 	game_controller_family layout = LayoutFor(vendor, product);
+	// A driver that gives the controller in R5's own order (an Xbox
+	// controller over USB, phase 2): the fixed layout of its family, not
+	// the database, whose lines describe the Windows driver's order.
+	if (layout == B_GAME_CONTROLLER_FAMILY_UNKNOWN
+		&& (driverFlags & R5_JOYSTICK_FLAG_STANDARD_LAYOUT) != 0)
+		layout = vendor == 0x057e ? B_GAME_CONTROLLER_FAMILY_NINTENDO
+			: B_GAME_CONTROLLER_FAMILY_XBOX;
 	d.hasMapping = false;
 	d.savedMapping = false;
 	char saved[1024];
@@ -549,7 +558,7 @@ BGameController::Open(const char* deviceName)
 	memset(&d.mapped, 0, sizeof(d.mapped));
 
 	// Rumble, trigger effects and motion, through the same descriptor.
-	d.feel.Open(d.infoFD, vendor, product, d.info.bus);
+	d.feel.Open(d.infoFD, vendor, product, d.info.bus, driverFlags);
 	return B_OK;
 }
 
@@ -1051,6 +1060,25 @@ BGameController::GetMotion(game_controller_motion* motion) const
 	if (!IsOpen())
 		return B_NO_INIT;
 	return fPrivate->feel.GetMotion(motion);
+}
+
+
+bool
+BGameController::HasTriggerRumble() const
+{
+	return IsOpen() && fPrivate->feel.HasTriggerRumble();
+}
+
+
+status_t
+BGameController::SetTriggerRumble(float left, float right,
+	bigtime_t duration)
+{
+	if (!IsOpen())
+		return B_NO_INIT;
+	if (duration < 0)
+		return B_BAD_VALUE;
+	return fPrivate->feel.SetTriggerRumble(left, right, duration);
 }
 
 

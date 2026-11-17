@@ -41,10 +41,13 @@ HIDDevice::HIDDevice(int32 id, void* owner, const uint8* descriptor,
 	fBattery(-1),
 	fDescriptor(NULL),
 	fDescriptorLength(0),
-	fShortReportSize(0)
+	fShortReportSize(0),
+	fSwitchStarted(false),
+	fSwitchSimple(false)
 {
 	mutex_init(&fLock, DRIVER_NAME " device");
 	memset(&fInfo, 0, sizeof(fInfo));
+	memset(&fSwitchInit, 0, sizeof(fSwitchInit));
 	r5_hid_cache_init(fReportCache);
 
 	// Padded by 3 so that HIDReportItem can read 32 bits at a time, as in
@@ -100,6 +103,16 @@ HIDDevice::HIDDevice(int32 id, void* owner, const uint8* descriptor,
 		if (shortReport != NULL
 			&& shortReport->ReportSize() + 1 <= R5_BTHID_MAX_REPORT)
 			fShortReportSize = shortReport->ReportSize() + 1;
+	}
+
+	// The simple report 0x3F of a Switch Pro Controller, which it stops
+	// sending in the full report mode (R5HIDReports.h); only when it has
+	// the layout r5_hid_switch_simple_report() builds.
+	if (fParser.UsesReportIDs()) {
+		HIDReport* simple = fParser.FindReport(HID_REPORT_TYPE_INPUT,
+			R5_HID_SWITCH_SIMPLE_ID);
+		fSwitchSimple = simple != NULL
+			&& simple->ReportSize() + 1 == R5_HID_SWITCH_SIMPLE_SIZE;
 	}
 
 	fStatus = B_OK;
@@ -197,6 +210,40 @@ HIDDevice::Feed(const uint8* data, size_t length)
 	r5_hid_cache_store(fReportCache, data, length, fParser.UsesReportIDs(),
 		system_time());
 
+	// Phase 2: the battery of a Switch or Xbox controller is in a report
+	// of its own layout, not in a Battery Strength item; a Switch
+	// controller gets its next start subcommand after each reply.
+	uint16 vendor = fInfo.vendor_id;
+	uint16 product = fInfo.product_id;
+	bool nintendo = r5_hid_is_switch_pro(vendor, product)
+		|| r5_hid_is_joycon(vendor, product);
+	if (nintendo) {
+		int32 battery = r5_hid_switch_battery(data, length);
+		if (battery >= 0)
+			fBattery = battery;
+		if (fSwitchStarted) {
+			uint8 command[R5_HID_SWITCH_BT_OUTPUT];
+			size_t send = r5_hid_switch_init_input(fSwitchInit, data, length,
+				command, sizeof(command));
+			if (send > 0)
+				bthid_queue_output(fID, command, send);
+		}
+	} else if (r5_hid_is_xbox_bluetooth(vendor, product)) {
+		int32 battery = r5_hid_xbox_battery(data, length);
+		if (battery >= 0)
+			fBattery = battery;
+	}
+
+	// A Switch Pro Controller's full report: the joystick gets the simple
+	// report 0x3F with the same buttons and sticks.
+	uint8 simpleReport[R5_HID_SWITCH_SIMPLE_SIZE];
+	if (fSwitchSimple && r5_hid_is_switch_pro(vendor, product)
+		&& r5_hid_switch_simple_report(data, length, simpleReport,
+			sizeof(simpleReport)) > 0) {
+		data = simpleReport;
+		length = sizeof(simpleReport);
+	}
+
 	// A PlayStation controller's full report: the joystick gets the short
 	// report with the same buttons and axes (R5HIDReports.h).
 	uint8 shortReport[R5_BTHID_MAX_REPORT];
@@ -284,6 +331,19 @@ HIDDevice::SetInfo(const r5_bthid_info& info)
 	MutexLocker locker(fLock);
 	fInfo = info;
 	fInfo.name[sizeof(fInfo.name) - 1] = '\0';
+
+	// A Switch controller: rumble on, the Pro Controller in its full report
+	// mode, and the first player light (R5HIDReports.h); the rest follows
+	// its replies in Feed().
+	bool pro = r5_hid_is_switch_pro(fInfo.vendor_id, fInfo.product_id);
+	if (!fSwitchStarted && !fRemoved
+		&& (pro || r5_hid_is_joycon(fInfo.vendor_id, fInfo.product_id))) {
+		uint8 command[R5_HID_SWITCH_BT_OUTPUT];
+		size_t send = r5_hid_switch_init_start(fSwitchInit, pro, command,
+			sizeof(command));
+		if (send > 0 && bthid_queue_output(fID, command, send) == B_OK)
+			fSwitchStarted = true;
+	}
 }
 
 

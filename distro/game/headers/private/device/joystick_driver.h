@@ -197,7 +197,17 @@ typedef struct _r5_joystick_info {
 		   bit n % 32 of word n / 32 is set when HID Button usage n + 1 is
 		   in the report (usages 1 to 128), so a reader can tell the buttons
 		   that exist from the gaps in the read */
+	uint32	flags;
+		/* added after button_usages (phase 2 of docs/GAME-CONTROLLERS.md):
+		   R5_JOYSTICK_FLAG_* */
 } r5_joystick_info;
+
+/* the driver gives the buttons and axes in the order of libr5game's fixed
+   layout for the controller's family, not the controller's own order */
+#define R5_JOYSTICK_FLAG_STANDARD_LAYOUT	0x00000001
+/* an Xbox controller over USB (Gaming Input Protocol): its rumble packet
+   is output report 0x09 */
+#define R5_JOYSTICK_FLAG_GIP				0x00000002
 /* SPDX-SnippetEnd */
 
 /* SPDX-SnippetBegin */

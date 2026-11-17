@@ -779,6 +779,23 @@ HIDHost::DestroyLEDevice(int32 id)
 
 
 void
+HIDHost::SetLEDeviceInfo(int32 id, uint16 vendorID, uint16 productID,
+	uint16 version, const char* name)
+{
+	if (fControlNode < 0 || id < 0)
+		return;
+	r5_bthid_info info;
+	memset(&info, 0, sizeof(info));
+	info.id = id;
+	info.vendor_id = vendorID;
+	info.product_id = productID;
+	info.version = version;
+	strlcpy(info.name, name != NULL ? name : "", sizeof(info.name));
+	ioctl(fControlNode, R5_BTHID_SET_INFO, &info, sizeof(info));
+}
+
+
+void
 HIDHost::SetLEOutputHook(LEOutputHook hook, void* cookie)
 {
 	BAutolock locker(fLock);

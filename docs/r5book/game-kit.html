@@ -174,8 +174,11 @@ if (pad.CountDevices() &gt; 0 &amp;&amp; pad.GetDeviceName(0, name) == B_OK
 			<div class="entry-header"><h2 class="plain">Rumble, triggers and motion</h2><span class="kind">BGameController</span></div>
 			<p>Added at the end of <code class="inline">BGameController</code> (17 Nov 2026). For the DualSense,
 			the DualSense Edge and the DualShock 4, over USB and Bluetooth, and rumble on any controller with
-			HID force feedback (the USB HID PID page). Ask first with the <em>Can</em> and <em>Has</em> calls; a
-			call the controller cannot do returns <code class="inline">B_NOT_SUPPORTED</code>.</p>
+			HID force feedback (the USB HID PID page). Also for the Switch Pro Controller (USB and
+			Bluetooth: rumble and motion), the Joy-Cons (Bluetooth: rumble), and the Xbox controllers over
+			Bluetooth and over USB (rumble, and the motors in the triggers). Ask first with the <em>Can</em>
+			and <em>Has</em> calls; a call the controller cannot do returns
+			<code class="inline">B_NOT_SUPPORTED</code>.</p>
 			<div class="member"><div class="sig">bool CanRumble() const;<br>status_t SetRumble(float strong, float weak, bigtime_t duration);<br>status_t StopRumble();</div>
 				<p><code class="inline">strong</code> is the heavy, slow motor, <code class="inline">weak</code>
 				the light, fast one, each 0 to 1. It stops by itself after <code class="inline">duration</code>
@@ -192,7 +195,12 @@ if (pad.CountDevices() &gt; 0 &amp;&amp; pad.GetDeviceName(0, name) == B_OK
 				<p>Switch it on, call <code class="inline">Update()</code> every frame, then read the last sample:
 				<code class="inline">acceleration</code> in g (x right, y up, z toward the player),
 				<code class="inline">rotation</code> in degrees per second (pitch, yaw, roll) and the
-				<code class="inline">timestamp</code> of the report. Not calibrated per controller.</p></div>
+				<code class="inline">timestamp</code> of the report. A Switch Pro Controller uses its factory calibration when it gives one; the PlayStation controllers use a fixed scale.</p></div>
+			<div class="member"><div class="sig">bool HasTriggerRumble() const;<br>status_t SetTriggerRumble(float left, float right, bigtime_t duration);</div>
+				<p>The small motors in the triggers of Microsoft's Xbox controllers, each 0 to 1. They stop
+				by themselves after <code class="inline">duration</code> microseconds (0 keeps them until the next
+				call), and with <code class="inline">StopRumble()</code> and <code class="inline">Close()</code>.
+				Not the DualSense's adaptive triggers: those are <code class="inline">SetTriggerEffect()</code>.</p></div>
 <pre class="code">pad.SetRumble(1.0f, 0.3f, 250000);       <span class="c">// a quarter of a second</span>
 <span class="k">if</span> (pad.HasTriggerEffects())
 	pad.SetTriggerEffect(B_CONTROLLER_TRIGGER_RIGHT, B_TRIGGER_EFFECT_CLICK, 0.4f, 0.8f);
@@ -207,7 +215,13 @@ game_controller_motion motion;
 			report (with the CRC-32 Bluetooth needs) and sends it through a new joystick driver call; the
 			report layouts were read from SDL's drivers (zlib), facts only. A DualSense or DualShock 4 over
 			Bluetooth switches to its full reports after the first one; the driver keeps the buttons working
-			for every <code class="inline">BJoystick</code> program.</div>
+			for every <code class="inline">BJoystick</code> program. The same goes for a Switch Pro Controller in its full reports. An
+			Xbox controller over USB speaks Microsoft's Gaming Input Protocol, not HID; the USB driver turns
+			it into a joystick like the others.</div>
+			<div class="note"><strong>Limits.</strong> No motion on the Joy-Cons (their sensors come only in
+			a report mode that changes their buttons) or on Xbox controllers. No battery for Joy-Cons or for
+			Xbox controllers over USB. Not yet: Joy-Cons in the charging grip or as a pair, the Switch 2
+			controllers, the Elite paddles, Xbox 360 rumble, and Xbox accessories (chatpad, headset).</div>
 		</section>
 
 		<section class="entry" id="motion-view">
@@ -237,7 +251,7 @@ game_controller_motion motion;
 			the person to press each control in turn), and Rumble, Motion and Trigger feedback beside the
 			picture. Without a controller the page shows a gray example and a dashed card that opens the
 			Bluetooth page. The Bluetooth page's <em>Test buttons&hellip;</em> opens it.</p>
-			<div class="note"><strong>Limits.</strong> Swapping buttons for old programs, the lights and the touchpad are not there yet. Rumble, Motion and Trigger feedback show only for a controller that has them. The battery shows when the controller reports it in its input report (the HID Battery Strength usage).</div>
+			<div class="note"><strong>Limits.</strong> Swapping buttons for old programs, the lights and the touchpad are not there yet. Rumble, Motion and Trigger feedback show only for a controller that has them; an Xbox controller also gets a <em>Triggers</em> button under Rumble for the motors in its triggers. The battery shows when the controller reports it in its input report (the HID Battery Strength usage, or the own battery report of a Switch or Xbox controller over Bluetooth).</div>
 		</section>
 	</main>
 </div>

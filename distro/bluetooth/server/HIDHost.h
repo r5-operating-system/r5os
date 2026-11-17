@@ -59,6 +59,11 @@ public:
 			void				LEInput(int32 id, const uint8* data,
 									size_t length);
 			void				DestroyLEDevice(int32 id);
+	// The PnP ID of the Device Information service and the name, for
+	// R5_JOYSTICK_GET_INFO, as SetDeviceInfo() does for Classic.
+			void				SetLEDeviceInfo(int32 id, uint16 vendorID,
+									uint16 productID, uint16 version,
+									const char* name);
 			void				SetLEOutputHook(LEOutputHook hook,
 									void* cookie);
 

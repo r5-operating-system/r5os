@@ -138,7 +138,7 @@ The owner replaced the four simplified family shapes by a picture per controller
 The owner approved option C in two phases on 17 Nov 2026, with the Test box mockup in `docs/design/gamecontrollers-mockup/` (Rumble, Motion, Trigger feedback):
 
 - **Phase 1 (now):** the DualSense, the DualSense Edge and the DualShock 4, over USB and Bluetooth: rumble (both motors, a duration), trigger effects (DualSense and Edge: off, resistance, trigger click, vibration; start position and strength per trigger) and motion (accelerometer and gyroscope). And generic HID force feedback (USB HID PID, usage page `0x0F`) for rumble on every other controller whose report descriptor has it. The Settings page's Test box gets a group per feature, hidden when the controller lacks it; the 8BitDo M30 has neither rumble nor motion.
-- **Phase 2 (later):** the Switch Pro Controller and Xbox controllers over Bluetooth (their own rumble protocols); lights, the touchpad and swapping buttons for old programs stay later too.
+- **Phase 2 (built 17 Nov 2026, section 9):** the Switch Pro Controller and the Joy-Cons, Xbox controllers over Bluetooth, and (added the same day) Xbox controllers over USB (GIP); lights, the touchpad and swapping buttons for old programs stay later.
 
 ### Sources and licenses
 
@@ -155,3 +155,31 @@ The owner approved option C in two phases on 17 Nov 2026, with the Test box mock
 - **Tests**: `scripts/test-game-feel.sh` (host, ASan and UBSan): the exact bytes of every report, the CRC-32 against a second implementation and the check value of "123456789", the motion parser, the short report, the input cache, and the PID reports of a synthetic descriptor with the PID reports rumble needs. `scripts/fuzz-bt.sh hid`: the descriptor parser, the PID report builders, the Block Load answer, the motion parser, the short report and the cache, 60 s. `gamecontroller_feel_test` in QEMU: a virtual DualSense with report IDs on bluetooth_hid (the calls, what they refuse, the buttons and motion from full reports only, the exact output reports in the driver's queue, a timed stop, `Close()` freeing the triggers, the widgets drawing).
 - **Not tested**: any real controller. Rumble, trigger effects and motion of the DualSense and the DualShock 4 need the owner's DualSense on a stick; the trigger effect parameters of the click and vibration modes (`0x02`, `0x06`), the axes' signs and the DualShock 4 switching to full reports from an output report alone (SDL also reads its calibration report, which needs feature reports over Bluetooth) are the parts most likely to need a fix. No PID controller was tested, over USB or Bluetooth. The usb_hid path (interrupt OUT, `SET_REPORT`, `GET_REPORT`) did not run: QEMU has no USB game controller here.
 - **Part 2, the Test box** (after the controller pictures PR, same PR): Rumble, Motion and Trigger feedback groups under the picture on Settings → Game controllers, each hidden when the controller lacks it, and a tick on the L2 and R2 caps where a trigger effect starts (`BGameControllerView::SetTriggerMark()`, added at the end). Details in `docs/SETTINGS.md`, "Game controllers". The Switch Pro also has trigger caps (digital, 0 or 100 %), but trigger feedback stays DualSense only. Since layout A (17 Nov 2026) the groups sit beside the picture and the controllers are a card strip at the bottom; at 910 by 560 the groups go under the picture and the part above the strip scrolls.
+
+## 9. Option C, phase 2: Switch and Xbox controllers (17 Nov 2026)
+
+The owner asked for it on 17 Nov 2026 ("zet het er sowieso in") without owning any of these controllers; on the same day the owner added Xbox controllers over USB (GIP) to the same PR. RenkuOS and Haiku were checked first: neither has an Xbox One or Series USB driver (Haiku's usb_hid has a quirk only for the Xbox 360 pad), so it is written new.
+
+### Sources and licenses
+
+- SDL's `src/joystick/hidapi/SDL_hidapi_switch.c` and `SDL_hidapi_xboxone.c` at commit `4cc7adcaee482b63b4e1a0de77f52e200aa87b90` (read 17 Nov 2026; zlib, "Copyright (C) 1997-2026 Sam Lantinga"), and `SDL_joystick.c` and `usb_ids.h` for the product IDs: facts only (report and subcommand IDs, offsets, flags, the HD rumble frequency codes, the IMU calibration layout and the nominal scale, the GIP header, start packets and input layout, the Xbox rumble bytes). No SDL code or table is copied; the Switch amplitude steps are computed from the logarithmic steps SDL's table follows (the table SDL cites is dekuNukem's `rumble_data_table.md`). Cited in `R5HIDReports.h` and `GameControllerReports.h`; listed in `docs/LICENSING.md` and `THIRD_PARTY_NOTICES.md`.
+- Microsoft's description of the Gaming Input Protocol over USB ([MS-GIPUSB]) for the GIP header.
+- The Bluetooth Device Information Service 1.1 for the PnP ID.
+- Not read: Linux `hid-nintendo`, `hid-microsoft`, `xpad`, nor any other GPL driver.
+
+### As built
+
+Calls, bytes and limits per model are in `docs/LIBR5.md` ("Feel and motion, phase 2"); the page in `docs/SETTINGS.md` ("Game controllers").
+
+| Model | Buttons and sticks | Rumble | Motion | Trigger rumble | Battery |
+|---|---|---|---|---|---|
+| Switch Pro Controller, USB | usb_hid: R5 descriptor (simple report `0x3F`), the USB handshake and the start subcommands when it is added, each full report turned into `0x3F` | HD rumble `0x10` | Factory calibration, else nominal | — | — |
+| Switch Pro Controller, Bluetooth | its own `0x3F`; bluetooth_hid starts it (rumble on, full report mode, player light 1) and builds `0x3F` from each full report | HD rumble | Factory calibration, else nominal | — | yes, from the full reports |
+| Joy-Con left or right, Bluetooth | its own `0x3F` (bluetooth_hid sends rumble on and player light 1, no full report mode) | HD rumble | no | — | no |
+| Xbox over Bluetooth Classic and Low Energy | its own HID descriptor, as before; Low Energy controllers now have IDs (PnP ID) | `0x03` | no | yes | report `0x04` |
+| Xbox One and Series over USB (GIP) | usb_hid: R5 descriptor in the fixed Xbox order, power on and start, acknowledgements, guide button | GIP `0x09` | no | yes (Microsoft) | no |
+
+- **Why R5 descriptors.** The Switch Pro Controller's own USB descriptor does not describe the bytes it sends, and a GIP controller has no HID descriptor at all. usb_hid gives each an R5 one and turns their packets into it, so `BJoystick` programs see a joystick and libr5game a known layout. A GIP controller is flagged `R5_JOYSTICK_FLAG_STANDARD_LAYOUT`, so `BGameController` uses the fixed Xbox layout: the database's Windows lines for Xbox controllers describe Windows' order, which differs per product.
+- **Switch start over Bluetooth.** bluetooth_server feeds every report and waits on the driver, so the driver cannot wait for a reply; it sends one subcommand, then the next after each reply, sending a step again after 40 reports without one (three times, then the next).
+- **Trigger motors.** Xbox trigger rumble is a rumble, not an adaptive trigger: one new pair of calls, `HasTriggerRumble()` and `SetTriggerRumble()`, and a third button "Triggers" in the Rumble group of the page. Trigger feedback stays DualSense only.
+- **Tests:** host unit tests (`scripts/test-game-feel.sh`, `feel_phase2_test.h`: the exact bytes of every report built and parsed, the descriptors' sizes, the start sequence, IMU scaling), the fuzz target `hid` of `scripts/fuzz-bt.sh` (60 s), and `gamecontroller_feel_test` in QEMU with a virtual Switch Pro Controller and a virtual Xbox Wireless Controller on bluetooth_hid. Results and what is not tested: `CHANGELOG.md`.
