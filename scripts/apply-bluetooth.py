@@ -19,7 +19,10 @@
 - bluetooth_audio.media_addon (distro/media/bluetooth_audio), the bt_audio
   command and bt_audio_smoke_test, regular image only (step 5),
 - bt_rfcomm_test (distro/bluetooth/tests), regular image only (step 7a),
-- bt_voice_test (distro/bluetooth/tests), regular image only (step 7c).
+- bt_voice_test (distro/bluetooth/tests), regular image only (step 7c),
+- the Realtek RTL8761CU firmware and its licence (distro/firmware/realtek),
+  unmodified, into system/non-packaged/data/firmware/h2generic, regular
+  image only (docs/BLUETOOTH-2.md, step B0).
 
 docs/BLUETOOTH.md is the plan."""
 from __future__ import annotations
@@ -37,6 +40,22 @@ local r5BtLaunch = <r5-launch>bluetooth ;
 SEARCH on $(r5BtLaunch) = [ FDirName $(HAIKU_TOP) data launch r5 ] ;
 AddDirectoryToHaikuImage system non-packaged data launch ;
 AddFilesToHaikuImage system non-packaged data launch : $(r5BtLaunch) ;
+"""
+
+REALTEK_FIRMWARE = ("rtl8761cu_fw.bin", "rtl8761cu_config.bin",
+    "LICENCE.rtlwifi_firmware.txt")
+
+REALTEK_BLOCK = """
+# R5 Realtek RTL8761CU Bluetooth firmware (ASUS USB-BT600), from
+# linux-firmware, unmodified. h2generic reads it from non-packaged
+# data/firmware/h2generic (docs/BLUETOOTH-2.md, step B0).
+local r5RtkDir = [ FDirName $(HAIKU_TOP) data firmware realtek ] ;
+local r5RtkBt = <r5rtk>rtl8761cu_fw.bin <r5rtk>rtl8761cu_config.bin
+	<r5rtk>LICENCE.rtlwifi_firmware.txt ;
+SEARCH on $(r5RtkBt) = $(r5RtkDir) ;
+AddDirectoryToHaikuImage system non-packaged data firmware h2generic ;
+AddFilesToHaikuImage system non-packaged data firmware h2generic
+	: $(r5RtkBt) ;
 """
 
 
@@ -291,6 +310,19 @@ def main() -> int:
         "SYSTEM_BIN += bt_rfcomm_test ;\n",
         "SYSTEM_BIN += bt_voice_test ;\n",
         "bt_voice_test image")
+    # Step B0 of docs/BLUETOOTH-2.md: the Realtek firmware, byte for byte.
+    realtek = ROOT / "distro" / "firmware" / "realtek"
+    realtekDest = HAIKU / "data" / "firmware" / "realtek"
+    realtekDest.mkdir(parents=True, exist_ok=True)
+    for name in REALTEK_FIRMWARE:
+        source = realtek / name
+        if not source.is_file():
+            raise SystemExit(f"missing {source}")
+        (realtekDest / name).write_bytes(source.read_bytes())
+    print("copied Realtek firmware")
+    insert_once(HAIKU / "build" / "jam" / "images" / "definitions" / "regular",
+        "AddFilesToHaikuImage home config settings : $(shortcutsSettingsFile) ;\n",
+        REALTEK_BLOCK, "Realtek firmware image")
     return 0
 
 

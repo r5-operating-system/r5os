@@ -29,6 +29,11 @@
 // SPDX-SnippetEnd
 #include "h2debug.h"
 #include "h2mediatek.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include "h2realtek.h"
+// SPDX-SnippetEnd
 #include "h2transactions.h"
 #include "h2util.h"
 #include "snet_buffer.h"
@@ -635,6 +640,12 @@ device_removed(void* cookie)
 	if (!TEST_AND_CLEAR(&bdev->state, RUNNING))
 		ERROR("%s: wasnt running?\n", __func__);
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	realtek_forget(bdev);
+	// SPDX-SnippetEnd
+
 	TRACE("%s: Cancelling queues...\n", __func__);
 	if (bdev->intr_in_ep != NULL)
 		usb->cancel_queued_transfers(bdev->intr_in_ep->handle);
@@ -773,6 +784,20 @@ device_open(const char* name, uint32 flags, void **cookie)
 		TEST_AND_CLEAR(&bdev->state, RUNNING);
 		return setupStatus;
 	}
+
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Realtek radios need a patch from the host (docs/BLUETOOTH-2.md, B0).
+	// Others, and a MediaTek radio set up above, return at once.
+	setupStatus = realtek_setup(bdev);
+	if (setupStatus != B_OK) {
+		ERROR("%s: the Realtek radio could not be made ready: %s\n",
+			__func__, strerror(setupStatus));
+		TEST_AND_CLEAR(&bdev->state, RUNNING);
+		return setupStatus;
+	}
+	// SPDX-SnippetEnd
 
 	acquire_sem(bdev->lock);
 	// TX structures

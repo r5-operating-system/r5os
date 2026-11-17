@@ -1,5 +1,29 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Bluetooth: the ASUS USB-BT600 dongle starts in R5 (Bluetooth plan 2, step B0)
+
+Problem: the ASUS USB-BT600 (USB `0b05:1d70`, a Realtek RTL8761CU), the radio the owner bought for LE Audio and Auracast (`docs/BLUETOOTH-2.md`), needs a patch from the host. R5 had no Realtek loader, so `docs/BLUETOOTH.md` listed Realtek dongles as not working.
+
+What changed:
+- `h2generic`: a new Realtek loader, `h2realtek.cpp` with the parser `h2rtkfw.h` (R5, MIT), called in `device_open` right after `mediatek_setup()`. It only talks to USB vendor `0x0bda` or a USB ID in its table, and only patches when Read Local Version names Realtek. The firmware comes from the USB ID table (one entry: `0b05:1d70` → `rtl8761cu`, project id `0x33`) or else from the chip's report (FreeBSD's chip table). The file's project id is checked, the ROM version is read (`0xfc6d`), and the patch plus `_config.bin` are sent with `0xfc20` in 252-byte pieces. Written from FreeBSD `rtlbtfw` (BSD-2-Clause); its chip table and project ids are a marked BSD-2-Clause snippet. No Linux source read. A missing, wrong or refused firmware gives one `h2generic: realtek: ... It stays off.` line and that radio's open fails; MediaTek radios never get a Realtek command. After the patch the driver logs version, manufacturer, LMP features and the LE features with the ISO bits.
+- `h2mediatek.cpp`: `h2_firmware_load()` (MIT snippet), so both loaders read firmware the same way.
+- `bluetooth_server` (`LEManager.cpp`): one `hci<n> le features ...` line for every radio, with 2M, Coded, extended and periodic advertising, CIS central and peripheral, ISO broadcaster and synchronized receiver.
+- Firmware: `rtl8761cu_fw.bin` and `rtl8761cu_config.bin` from linux-firmware (commit `35e542439e`), unmodified, in `distro/firmware/realtek`, installed by `scripts/apply-bluetooth.py` at `system/non-packaged/data/firmware/h2generic` in the regular image. Licence `LICENCE.rtlwifi_firmware.txt`: binary redistribution without modification, with the notice; no reverse engineering (R5 reads only the file headers). `THIRD_PARTY_NOTICES.md`, `docs/LICENSING.md`, `LICENSES/LICENCE.rtlwifi_firmware.txt`, `LICENSES/rtlbtfw-BSD-2-Clause.txt`.
+- The question of the earlier research, a 252-byte patch in a 10 KB file: the file holds four patch entries (chip ids 0 to 3) that all point at the same 252 bytes at `0x30`; the rest up to the trailer is zeros. The patch's last four bytes are the file version, as `rtlbtfw` expects.
+- `scripts/run-vbox-r5.ps1 -PassDongle`: a USB filter for `0b05:1d70` on the xHCI, removed when the switch is not given.
+- `scripts/test-rtkfw.sh` (host test) and `scripts/fuzz-bt.sh rtkfw` (new fuzz target).
+
+Tested:
+- `scripts/test-rtkfw.sh`: ok (ASan, UBSan; the shipped files and hand-made damaged ones). `scripts/fuzz-bt.sh rtkfw 60`: 5.2 million files, 0 crashes.
+- AMD64 build with `scripts/build-locked.sh`: ok, no warnings in the new files. QEMU on an own image copy with `SMAP=1 LOGIN=1` (`run-qemu-smoke.sh`): SMAP on, no panic, all Bluetooth tests exit 0 (QEMU has no radio).
+- VirtualBox 7.2.22 with `-PassDongle`, the dongle in the owner's PC: first try R5 saw no radio, because Windows had bound its own BTHUSB driver to the dongle (code 31, failed) and VirtualBox never attached it (`VBox.log`: only the mouse). The second time the owner plugged the dongle in while R5 ran. Syslog: from ROM HCI `0x0e` revision `0x0e`, LMP subversion `0x8761`, ROM version 1; `rtl8761cu`, 263 bytes in 11 ms; after the patch HCI `0x0e` revision `0x7bf1`, LMP subversion `0x5762`, manufacturer `0x5d`; LMP features `0x877bfddbfeffffff`; LE features `0x0000008ef7fe77fd`: 2M yes, Coded no, extended and periodic advertising yes, CIS central and peripheral yes, ISO broadcaster and synchronized receiver yes. `bluetooth_server` set the radio up, the Bluetooth page showed it, and a scan heard 13 LE devices and one Classic device.
+
+Limits and not tested:
+- Not tested on the 5625U itself, and not with the MediaTek radio and the dongle at the same time (that needs a stick). The MediaTek path itself is unchanged.
+- Pairing and links over the dongle were not tried. `bluetooth_server` logged `secure connections host failed (0xc)` on the dongle; not looked into in this change.
+- RTBTCore (v2) files are refused for now. A chip that kept its patch through a warm restart is not detected; if it then refuses the download it stays off until it is unplugged.
+- In VirtualBox the dongle must be plugged in after the VM started, as long as Windows binds its BTHUSB driver to it.
+
 ## 2026-11-17 - Wi-Fi: sticks 51 and 52 on the 5625U, stick commands, join logging and a shutdown panic
 
 Sticks 51 and 52 (5625U, MT7961, WPA2 network "Skynet" on channel 40, FT-PSK/CCMP, owner's home).

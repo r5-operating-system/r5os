@@ -568,3 +568,14 @@ mediatek_setup(bt_usb_dev* bdev)
 
 	return B_OK;
 }
+
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+status_t
+h2_firmware_load(const char* name, uint8** _image, size_t* _size)
+{
+	return load_image(name, _image, _size);
+}
+// SPDX-SnippetEnd

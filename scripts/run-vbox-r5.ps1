@@ -9,12 +9,17 @@
 #   powershell -File scripts/run-vbox-r5.ps1 -ForceConvert
 #   powershell -File scripts/run-vbox-r5.ps1 -RawImage /home/nickr/r5os/x/my.image
 #   powershell -File scripts/run-vbox-r5.ps1 -PassBluetooth
+#   powershell -File scripts/run-vbox-r5.ps1 -PassDongle
 #
 # -RawImage boots an own copy (a WSL path) instead of the jammed image, so a
 # jam of another session does not matter. -PassBluetooth gives the VM the
 # built-in MediaTek MT7922 radio of the 5625U (USB 0x13d3:0x3567) through a
 # USB filter; Windows has no Bluetooth while the VM runs. Without it the
 # filter is removed, so the radio is never passed by accident.
+# -PassDongle does the same for the ASUS USB-BT600 dongle (a Realtek
+# RTL8761CU, USB 0x0b05:0x1d70; docs/BLUETOOTH-2.md, step B0). Both can be
+# given together. While Windows binds its own BTHUSB driver to the dongle,
+# VirtualBox only gets it when it is plugged in after the VM started.
 param(
 	[string]$VmName = "R5OS",
 	[string]$BridgeAdapter = $env:R5_VBOX_BRIDGE,
@@ -23,13 +28,17 @@ param(
 	[switch]$NoClip,
 	[switch]$ForceConvert,
 	[string]$RawImage = "/home/nickr/r5os/haiku/generated.x86_64/r5-os.image",
-	[switch]$PassBluetooth
+	[switch]$PassBluetooth,
+	[switch]$PassDongle
 )
 
 # The radio that -PassBluetooth hands to the VM, and the filter's name.
 $BluetoothVendor = "13d3"
 $BluetoothProduct = "3567"
 $BluetoothFilter = "R5 Bluetooth MT7922"
+$DongleVendor = "0b05"
+$DongleProduct = "1d70"
+$DongleFilter = "R5 Bluetooth USB-BT600"
 $OwnImage = $RawImage -ne "/home/nickr/r5os/haiku/generated.x86_64/r5-os.image"
 
 # VBoxManage prints progress on stderr; Stop would treat that as fatal.
@@ -219,11 +228,11 @@ Write-Host "  bridge: $bridge"
 	--uart1 "0x3F8" 4 `
 	--uartmode1 server "\\.\pipe\R5OS-clip"
 
-# Remove the Bluetooth filter first; add it again only when asked.
+# Remove the Bluetooth filters first; add them again only when asked.
 $info = & $vbox showvminfo $VmName --machinereadable
 $indexes = @()
 foreach ($line in $info) {
-	if ($line -match '^USBFilterName(\d+)="(.*)"$' -and $Matches[2] -eq $BluetoothFilter) {
+	if ($line -match '^USBFilterName(\d+)="(.*)"$' -and ($Matches[2] -eq $BluetoothFilter -or $Matches[2] -eq $DongleFilter)) {
 		$indexes += [int]$Matches[1] - 1
 	}
 }
@@ -239,6 +248,15 @@ if ($PassBluetooth) {
 	}
 	Write-Host "  Bluetooth: MT7922 ($BluetoothVendor`:$BluetoothProduct) passed to the VM;"
 	Write-Host "  Windows has no Bluetooth until the VM is off."
+}
+if ($PassDongle) {
+	& $vbox modifyvm $VmName --usbxhci on | Out-Null
+	& $vbox usbfilter add 0 --target $VmName --name $DongleFilter `
+		--vendorid $DongleVendor --productid $DongleProduct | Out-Null
+	if ($LASTEXITCODE -ne 0) {
+		throw "usbfilter add failed"
+	}
+	Write-Host "  Bluetooth: USB-BT600 ($DongleVendor`:$DongleProduct) passed to the VM."
 }
 
 Detach-IdeDisk $vbox $VmName

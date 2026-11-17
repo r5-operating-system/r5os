@@ -11,7 +11,8 @@ QEMU has no Bluetooth hardware. Before step 0 we check USB passthrough in Virtua
 - The Windows host has the Oracle VirtualBox Extension Pack 7.2.22 (`Usable: true` in `VBoxManage list extpacks`). The `R5OS` VM already has `xHCI USB: enabled`, with no USB filter yet.
 - Chosen: pass the built-in MT7922 of the 5625U to the VM (section 4, choice 4). The other options, for reference:
   - **CSR** (for example CSR8510 A10, `0x0a12:0x0001`, generic USB class `0xE0/0x01/0x01`): works in `h2generic` without extra firmware. Cheap CSR8510 clones often do not work, also not on Linux; buy one from a known brand.
-  - **Realtek** (`0x0bda`) and **Qualcomm** (`0x0cf3`): no firmware loader before step 7, so they do not work as a dongle.
+  - **Realtek** (`0x0bda`): `h2realtek.cpp` loads the patch for a chip it knows (`docs/BLUETOOTH-2.md`, step B0). Only the RTL8761CU of the ASUS USB-BT600 (`0x0b05:0x1d70`) has its firmware in the image.
+  - **Qualcomm** (`0x0cf3`): no firmware loader, so it does not work as a dongle.
   - **Intel** (`0x8087`): needs `bt_firmware` (see `h2generic.cpp`).
   - **MediaTek MT7922** (`0x13d3:0x3567` in the 5625U): `h2mediatek.cpp` is already in `distro/`. It is the built-in radio of the 5625U, which we also test bare metal from the USB stick. Passing it to VirtualBox takes Bluetooth away from Windows while the VM runs.
 - **5625U bare metal (MT7922):** USB sticks are costly, so hardware tests on the 5625U are bundled into one stick per few steps. The owner writes the stick with `scripts/write-stick.py`, after VirtualBox works first.
@@ -22,7 +23,7 @@ What is in `distro/` and what is only in `haiku/` (checked against `origin/main`
 
 - **Already in `distro/`:**
   - `distro/kernel/src/add-ons/kernel/bluetooth/hci/bluetooth.cpp`
-  - `distro/kernel/src/add-ons/kernel/drivers/bluetooth/h2/h2generic/`: `h2generic.cpp`, `h2mediatek.cpp`, `h2mediatek.h`, `h2transactions.cpp`, `Jamfile`. `scripts/apply-kernel-bugs.py` copies them into the Haiku tree. The MediaTek loader came from air/OS.
+  - `distro/kernel/src/add-ons/kernel/drivers/bluetooth/h2/h2generic/`: `h2generic.cpp`, `h2mediatek.cpp`, `h2mediatek.h`, `h2realtek.cpp`, `h2realtek.h`, `h2rtkfw.h`, `h2transactions.cpp`, `Jamfile`. `scripts/apply-kernel-bugs.py` copies them into the Haiku tree. The MediaTek loader came from air/OS; the Realtek loader is R5's own (step B0 of `docs/BLUETOOTH-2.md`).
 - **Only in `haiku/`** (copy into `distro/` first):
   - `haiku/src/servers/bluetooth/` (`BluetoothServer.cpp`, `DeviceManager.cpp`, `LocalDeviceImpl.cpp`, `SDPServer.cpp`, `DeskbarReplicant.cpp` and others) → `distro/bluetooth/server/`, at the start of step 0.
   - `haiku/src/add-ons/kernel/network/protocols/bluetooth/l2cap/` → `distro/kernel/src/add-ons/kernel/network/protocols/bluetooth/l2cap/`, at the start of step 1b.
@@ -290,7 +291,7 @@ The plan, the license check of `SDL_GameControllerDB` and the steps are in `docs
 
 - **LE Audio (LC3 and ISO):** a report on `liblc3` (Apache-2.0).
 - **A2DP AAC:** a report on the FDK-AAC license and AAC patents.
-- **More vendor firmware:** a report on the redistribution rights for Realtek (`0x0bda`) and Qualcomm (`0x0cf3`).
+- **More vendor firmware:** a report on the redistribution rights for Qualcomm (`0x0cf3`), and for Realtek chips other than the RTL8761CU (that one is done, `docs/BLUETOOTH-2.md` step B0).
 
 ## 4. The owner's choices
 
