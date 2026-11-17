@@ -261,13 +261,6 @@ public:
 			fBar->SetRange(0, 0);
 			set_shown(fBar, false);
 		}
-		// After the window got smaller (910 by 560) a strip of the picture
-		// column stayed on screen below this area, outside the page: draw
-		// the whole window again once the content has its new place.
-		BView* top = this;
-		while (top->Parent() != NULL)
-			top = top->Parent();
-		top->Invalidate();
 		fBusy = false;
 	}
 
