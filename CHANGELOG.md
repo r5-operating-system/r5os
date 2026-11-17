@@ -1,5 +1,19 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Game controllers: fits at 1030 by 610, Motion gray without a controller
+
+Problem: on the screendumps of the layout-A page (1) at 1030 by 610 with a controller the area above the strip still scrolled by about 15 px, hiding the last line of Trigger feedback and the vendor and product line; (2) without a controller the Motion bubble of the gray example stayed blue (the level, the bars and their labels drew as enabled); (3) at 910 by 560 a light bar showed in the bottom row next to the lock.
+
+What changed:
+- Appearance Kit (libr5ui): `BTiltLevel` and `BAxisBar` get `SetEnabled(bool)` and `IsEnabled()`, after the existing calls; `false` draws them gray, the bubble and the fill included. `Archive()` keeps a disabled state as `"r5:enabled"`. The tilt level's minimum is 4 line heights (was 5). Both classes are new in this PR, so nothing shipped changes.
+- libr5game: `BGameControllerMotionView::SetEnabled()` and `IsEnabled()` pass it on and gray the Tilt, Turn, Pitch, Roll and Yaw labels. The Pitch, Roll and Yaw rows use half item spacing.
+- Settings, Game controllers: Motion is disabled for the example without a controller. The test box is 6 instead of 8 at the top, the bottom and between the menus and the picture; the three groups are 2 apart instead of 5, and 4 instead of 6 at their bottom.
+- Docs: `docs/LIBR5.md`, `docs/APPEARANCE-KIT.md`, R5Book (`appearance-kit.html`, `game-kit.html`).
+
+Tested: AMD64 `scripts/build-locked.sh` twice, `jam_exit=0`. QEMU (SMAP and SMEP enabled, LOGIN=1, own image copy): with a virtual DualSense (GAMEPAD=1) at 1030 by 610 everything fits, no scroll bar, Trigger feedback and "Vendor 054C · Product 0CE6" visible (the first build still overflowed by about 3 px, hence the closer groups); without a controller (SIGNIN_AWAY=1) the Motion bubble, the bars and the labels are gray; at 910 by 560 the page lays out and scrolls as before. No panic, no SMAP or SMEP fault in the serial logs.
+
+Not fixed (3): at 910 by 560 a light strip, 3 to 6 px high, still shows below the area above the strip, in the colour and exactly the width of the picture column (in the first screendumps further down, beside the lock). It is not on the 1030 by 610 screendumps. Redrawing the whole window from `UpperArea::DoLayout()` did not remove it (tried in a QEMU run, then taken back), so it is not a missing redraw; the cause is not found. It needs this PR's picture column, so it most likely comes from this page (the self-scrolling `UpperArea` after the window gets smaller); origin/main without this PR was not built to compare.
+
 ## 2026-11-17 - Game controllers: controllers in a strip at the bottom (layout A), and an example without a controller
 
 Problem: the Game controllers page put the controllers in a column of cards at the left and Rumble, Motion and Trigger feedback under the picture, below the fold. The owner approved layout A on 17 Nov 2026 (`docs/design/gamecontrollers-mockup/strip-A-*.png`) and a page for when no controller is connected (`strip-empty-*.png`, without the line "Connect a controller to try this.").
