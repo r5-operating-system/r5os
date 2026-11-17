@@ -1441,7 +1441,7 @@ GameControllersPage::GameControllersPage(GameControllersModule* module,
 		.Add(fExample, 1)
 		.Add(fTestHint)
 		.Add(fIDs);
-	BGroupView* feelColumn = new BGroupView(B_VERTICAL, roundf(5 * unit));
+	BGroupView* feelColumn = new BGroupView(B_VERTICAL, roundf(2 * unit));
 	feelColumn->SetViewColor(network_box_fill());
 	BLayoutBuilder::Group<>(feelColumn)
 		.Add(fRumbleGroup)
@@ -1860,7 +1860,7 @@ GameControllersPage::_MakeFeelGroup(const char* name, const char* title,
 	content->SetViewColor(network_box_fill());
 	BLayoutBuilder::Group<>(content)
 		.SetInsets(roundf(10 * unit), roundf(2 * unit), roundf(10 * unit),
-			roundf(6 * unit));
+			roundf(4 * unit));
 	box->AddChild(content);
 	BStringView* label = new BStringView("group title", title);
 	label->SetFont(r5_settings_bold_font());
