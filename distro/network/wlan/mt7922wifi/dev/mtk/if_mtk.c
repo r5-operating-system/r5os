@@ -1352,11 +1352,18 @@ mtk_ioctl(struct ieee80211com* ic, u_long cmd, void* data)
 		memset(link, 0, sizeof(*link));
 		vap = TAILQ_FIRST(&ic->ic_vaps);
 		ni = vap != NULL ? vap->iv_bss : NULL;
-		if (ni != NULL && (ni->ni_flags & IEEE80211_NODE_HE) != 0)
+		/* net80211 marks the node from the access point's beacon, also
+		 * when this driver keeps the mode off. Only a mode that is on here
+		 * counts; else the rate the firmware reported decides.
+		 */
+		if (ni != NULL && mtk_he_on(sc)
+			&& (ni->ni_flags & IEEE80211_NODE_HE) != 0)
 			link->i_standard = 6;
-		else if (ni != NULL && (ni->ni_flags & IEEE80211_NODE_VHT) != 0)
+		else if (ni != NULL && mtk_ht_on(sc)
+			&& (ni->ni_flags & IEEE80211_NODE_VHT) != 0)
 			link->i_standard = 5;
-		else if (ni != NULL && (ni->ni_flags & IEEE80211_NODE_HT) != 0)
+		else if (ni != NULL && mtk_ht_on(sc)
+			&& (ni->ni_flags & IEEE80211_NODE_HT) != 0)
 			link->i_standard = 4;
 		else if (sc->sc_tx_mode == 4)
 			link->i_standard = 6;

@@ -147,7 +147,13 @@ BLayoutBuilder::Group&lt;&gt;(this, B_VERTICAL, 0)
 			<code class="inline">width</code> (MHz), <code class="inline">streams</code> and
 			<code class="inline">rxKbps</code>. They are read with <code class="inline">Unarchive()</code>,
 			so an older reader ignores them. <code class="inline">rxKbps</code> is 0 when the driver
-			does not report a receive rate; the MT7921 driver does not, yet.</p>
+			does not report a receive rate; the MT7921 driver does not, yet.
+			<code class="inline">standard</code> is what the link itself uses. A link without HT, VHT or HE
+			leaves it empty, even when the access point could do more.</p>
+			<p><code class="inline">routerStandard</code> is what the access point offers, read from its
+			beacon: <code class="inline">"Wi-Fi 4"</code>, <code class="inline">"Wi-Fi 5"</code>,
+			<code class="inline">"Wi-Fi 6"</code>, or empty. It can be newer than
+			<code class="inline">standard</code>. Show it as a detail, not as the speed of the connection.</p>
 			<div class="member"><div class="sig">BString WiFiLinkLine(const WiFiLinkDetails&amp; link);</div>
 				<p><code class="inline">"Wi-Fi 6 · 600 Mbit/s"</code>. The receive rate when the driver
 				has one, otherwise the transmit rate. Empty when both are unknown.</p></div>
@@ -161,7 +167,9 @@ BLayoutBuilder::Group&lt;&gt;(this, B_VERTICAL, 0)
 			<div class="entry-header"><h2 class="plain">Where people see it</h2></div>
 			<p>Settings, Network, Wi-Fi: the panel as a page, with its own icon and the preferences wrench. Under
 			the network name, a joined link adds <code class="inline">Wi-Fi 6 · 600 Mbit/s</code> when the
-			driver reports a standard or a rate. The Deskbar network icon shows the arcs on a computer with a
+			driver reports a standard or a rate. The tool tip of that network adds
+			<code class="inline">Router: Wi-Fi 6</code>, and <em>Your router supports Wi-Fi 6.</em> when the
+			link uses less. The Deskbar network icon shows the arcs on a computer with a
 			Wi-Fi adapter, and its menu has <em>Wi-Fi settings&hellip;</em>, which runs
 			<code class="inline">Settings --page wifi</code>, and the same line under the connected network.
 			Without a Wi-Fi adapter the icon stays the wired one and the page says there is no adapter. The

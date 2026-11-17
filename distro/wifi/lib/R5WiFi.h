@@ -117,6 +117,10 @@ struct WiFiLinkDetails {
 				// Spatial streams, 0 when unknown
 			int32				rxKbps;
 				// Last receive rate, 0 when the driver does not report it
+			BString				routerStandard;
+				// What the access point offers: "Wi-Fi 4", "Wi-Fi 5" or
+				// "Wi-Fi 6", from its beacon. Empty when unknown. Can be
+				// newer than standard, which is what the link uses
 };
 
 
