@@ -34,9 +34,9 @@ Problem: five Haiku Tracker crash tickets still followed from the R5 copies of P
 
 What changed: SelectPoses skips a missing pose; TryUpdatingBrokenLinks only watches models that still have a pose; MakeDragBitmap returns NULL if the bitmap did not initialise; attribute widths are clamped 20–600; attribute menus lock the looper before GetFont; ShowContextMenu takes the window lock.
 
-Limits: BShelf / ActivityMonitor replicant (#14880) is unchanged. NavMenu.cpp is still Haiku's copy, so ModelMenuItem::Highlight can still hit the looper assert. Not jammed, not booted.
+Limits: BShelf / ActivityMonitor replicant (#14880) is unchanged. NavMenu.cpp is still Haiku's copy, so ModelMenuItem::Highlight can still hit the looper assert.
 
-Tested: none.
+Tested: owner boot 17 Nov 2026 (Europe/Amsterdam); everything still works.
 
 ## 2026-11-17 - Bluetooth: the ASUS USB-BT600 dongle starts in R5 (Bluetooth plan 2, step B0)
 

@@ -4,21 +4,21 @@ Gegenereerd door `scripts/tracker-report.py`. Niet met de hand bewerken.
 
 | R5-status | Aantal |
 |---|---|
-| open | 3686 |
+| open | 3682 |
 | in-progress | 8 |
-| fixed | 133 |
+| fixed | 137 |
 | wontfix | 0 |
 | not-applicable | 109 |
 | **totaal in tracker** | **3936** |
 | open bij Haiku (laatste import) | 3936 |
 
-Nog open in R5OS: **2392** bugs, **1250** enhancements, rest overig (van 3694 open/bezig).
+Nog open in R5OS: **2388** bugs, **1250** enhancements, rest overig (van 3690 open/bezig).
 
 ## Type
 
 | Type | Aantal |
 |---|---|
-| bug | 2392 |
+| bug | 2388 |
 | enhancement | 1250 |
 | task | 52 |
 
@@ -26,7 +26,7 @@ Nog open in R5OS: **2392** bugs, **1250** enhancements, rest overig (van 3694 op
 
 | Priority | Aantal |
 |---|---|
-| normal | 3417 |
+| normal | 3413 |
 | low | 247 |
 | high | 28 |
 | critical | 1 |
@@ -36,8 +36,8 @@ Nog open in R5OS: **2392** bugs, **1250** enhancements, rest overig (van 3694 op
 
 | Milestone | Aantal |
 |---|---|
-| Unscheduled | 2927 |
-| R1 | 419 |
+| Unscheduled | 2925 |
+| R1 | 417 |
 | R1.1 | 296 |
 | R1/beta7 | 25 |
 | R2 | 16 |
@@ -47,7 +47,7 @@ Nog open in R5OS: **2392** bugs, **1250** enhancements, rest overig (van 3694 op
 
 | Component | Aantal |
 |---|---|
-| Applications/Tracker | 175 |
+| Applications/Tracker | 171 |
 | Servers/app_server | 161 |
 | Kits/Interface Kit | 153 |
 | System/Kernel | 150 |
@@ -117,9 +117,11 @@ Nog open in R5OS: **2392** bugs, **1250** enhancements, rest overig (van 3694 op
 | [#8772](https://dev.haiku-os.org/ticket/8772) | new | Applications/Tracker | [Tracker] columns move on second OpenWithWindow invocation |  |
 | [#9216](https://dev.haiku-os.org/ticket/9216) | assigned | Applications/Tracker | Clearing selection not possible with keyboard only |  |
 | [#9383](https://dev.haiku-os.org/ticket/9383) | assigned | Applications/Tracker | [Tracker] doesn't show a warning when renaming system folder in InfoWindow |  |
+| [#9434](https://dev.haiku-os.org/ticket/9434) | assigned | Applications/Tracker | [Tracker] wrong column display + crash in BBitmap::Lock() |  |
 | [#9974](https://dev.haiku-os.org/ticket/9974) | assigned | Applications/Tracker | [Tracker] add Ctrl+up/down shortcuts to be able to select first/last entrie on a laptop keyboard |  |
 | [#10208](https://dev.haiku-os.org/ticket/10208) | new | Partitioning Systems | Drivesetup creating partition size errors |  |
 | [#11029](https://dev.haiku-os.org/ticket/11029) | assigned | Applications/Tracker | [Tracker] selection is lost when opening parent directory |  |
+| [#11031](https://dev.haiku-os.org/ticket/11031) | assigned | Applications/Tracker | [Tracker] crashes in BPoseView::SelectPosesListMode |  |
 | [#11138](https://dev.haiku-os.org/ticket/11138) | assigned | Kits/Interface Kit | Alert _text field archived but never instantiated (easy) |  |
 | [#11176](https://dev.haiku-os.org/ticket/11176) | reopened | Applications/Tracker | [Tracker] status window displays Dec 13, 1901 as finish time |  |
 | [#11397](https://dev.haiku-os.org/ticket/11397) | assigned | Applications/Deskbar | Deskbar seems that doesn't follow color scheme based on "Appearance" colors |  |
@@ -134,6 +136,7 @@ Nog open in R5OS: **2392** bugs, **1250** enhancements, rest overig (van 3694 op
 | [#13596](https://dev.haiku-os.org/ticket/13596) | assigned | Applications/Terminal | [Terminal] doesn't linkify folders with plus sign | claude/issues-1-apps |
 | [#13680](https://dev.haiku-os.org/ticket/13680) | new | Kits/Interface Kit | BSlider missing message on second click |  |
 | [#13754](https://dev.haiku-os.org/ticket/13754) | new | Servers/input_server | Mouse + keyboard input non-functional after install |  |
+| [#14390](https://dev.haiku-os.org/ticket/14390) | assigned | Applications/Tracker | Tracker crash on context menu (Looper must be locked) |  |
 | [#14441](https://dev.haiku-os.org/ticket/14441) | new | Servers/mail_daemon | [mail_daemon] high CPU usage (POP3Protocol::SendCommand Bug! Had to flush 0 bytes:) | cursor/pop3-flush |
 | [#14485](https://dev.haiku-os.org/ticket/14485) | new | Applications/TextSearch | TextSearch crash | cursor/textsearch-line |
 | [#14846](https://dev.haiku-os.org/ticket/14846) | new | Applications/Deskbar | Deskbar display of weekday clipped |  |
@@ -162,10 +165,7 @@ Nog open in R5OS: **2392** bugs, **1250** enhancements, rest overig (van 3694 op
 | [#16573](https://dev.haiku-os.org/ticket/16573) | assigned | Kits/Package Kit | Un-activated packages after install |  |
 | [#16600](https://dev.haiku-os.org/ticket/16600) | new | Applications/MediaPlayer | Very Short WAV files crash MediaPlayer (divide error) | claude/issues-1-apps |
 | [#16618](https://dev.haiku-os.org/ticket/16618) | new | User Interface | HaikuControlLook: DrawMenuBarBackground Disabled Flag dont work |  |
-| [#16643](https://dev.haiku-os.org/ticket/16643) | new | Applications/Tracker | Tracker: when requesting to show file in a folder with a lot of files, list is not scrolled to selected file |  |
-| [#16678](https://dev.haiku-os.org/ticket/16678) | assigned | Applications/Tracker | Tracker: use same text color for header |  |
-| [#16726](https://dev.haiku-os.org/ticket/16726) | new | Applications/Tracker | Item count view in Tracker windows are now resizing |  |
-| … | | | *53 meer in r5-status.tsv* | |
+| … | | | *57 meer in r5-status.tsv* | |
 
 ## Nog open (eerste 80)
 
@@ -251,5 +251,5 @@ Nog open in R5OS: **2392** bugs, **1250** enhancements, rest overig (van 3694 op
 | [#2532](https://dev.haiku-os.org/ticket/2532) | assigned | Drivers/Graphics/NeoMagic | broken Video/Audio on Dell Latitude LS [NeoMagic chipset] |  |
 | [#2551](https://dev.haiku-os.org/ticket/2551) | assigned | Applications/Tracker | [Tracker]: Copy To shows wrong content of Desktop directory when selecting a bfs volume on a usb stick |  |
 | [#2615](https://dev.haiku-os.org/ticket/2615) | assigned | Kits/Interface Kit | Improved keyboard navigation with triggers |  |
-| … | | | *3606 meer in r5-status.tsv* | |
+| … | | | *3602 meer in r5-status.tsv* | |
 

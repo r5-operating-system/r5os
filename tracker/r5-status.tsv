@@ -810,7 +810,7 @@ id	r5_status	branch	commit	notes
 9419	open			
 9428	open			
 9431	open			
-9434	open			
+9434	fixed		2e1e6f12ccdb963ab2746c0e0cc1d74de79f285a	PR 4409: MakeDragBitmap InitCheck, attribute width 20-600. Owner boot: still works.
 9438	open			
 9440	open			
 9441	open			
@@ -1024,7 +1024,7 @@ id	r5_status	branch	commit	notes
 11028	open			
 11029	fixed			Opening the parent keeps that folder selected
 11030	open			
-11031	open			
+11031	fixed		2e1e6f12ccdb963ab2746c0e0cc1d74de79f285a	PR 4409: SelectPoses skips a NULL pose. Owner boot: still works.
 11032	open			
 11036	open			
 11037	open			
@@ -1653,7 +1653,7 @@ id	r5_status	branch	commit	notes
 14372	open			
 14376	open			
 14378	open			
-14390	open			
+14390	fixed		2e1e6f12ccdb963ab2746c0e0cc1d74de79f285a	PR 4409: GetFont under menu looper lock; ShowContextMenu takes the window lock. NavMenu.cpp still Haiku. Owner boot: still works.
 14391	open			
 14399	open			
 14407	open			
@@ -2799,7 +2799,7 @@ id	r5_status	branch	commit	notes
 17828	open			
 17832	open			
 17833	open			
-17837	open			
+17837	fixed		2e1e6f12ccdb963ab2746c0e0cc1d74de79f285a	PR 4409: TryUpdatingBrokenLinks only StopWatching a model that still has a pose. Owner boot: still works.
 17842	open			
 17849	open			
 17852	open			
