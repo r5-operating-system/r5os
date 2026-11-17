@@ -19,8 +19,16 @@ file=$(fd B_USER_SETTINGS_DIRECTORY "$home/config/settings")/kernel/drivers/mt79
 syslog=$(fd B_SYSTEM_LOG_DIRECTORY /boot/system/var/log)/syslog
 mkdir -p "$dir"
 
+# The note wins; without one the settings file says which boot this is
+# (a planted stick starts at boot 2 without a note).
 boot=1
-[ -f "$dir/next" ] && boot=$(cat "$dir/next")
+if [ -f "$dir/next" ]; then
+	boot=$(cat "$dir/next")
+elif [ -f "$file" ] && grep -q '^he true' "$file"; then
+	boot=3
+elif [ -f "$file" ] && grep -q '^ht_vht true' "$file"; then
+	boot=2
+fi
 out=$dir/boot$boot
 n=2
 while [ -e "$out" ]; do
@@ -29,14 +37,18 @@ while [ -e "$out" ]; do
 done
 mkdir -p "$out"
 
-# This boot's driver lines: from the last firmware line on.
-last=$(grep -n 'firmware WIFI_' "$syslog" | tail -n 1 | cut -d: -f1)
+# This boot's driver lines: from the last firmware line on. The syslog can
+# move to syslog.1 during a boot (stick 51, boot 3), so both are read.
+all=$out/syslog-both.txt
+cat "$syslog.1" "$syslog" > "$all" 2>/dev/null
+last=$(grep -n 'firmware WIFI_' "$all" | tail -n 1 | cut -d: -f1)
 if [ -n "$last" ]; then
-	tail -n +"$last" "$syslog" > "$out/syslog-boot.txt"
+	tail -n +"$last" "$all" > "$out/syslog-boot.txt"
 else
 	cp "$syslog" "$out/syslog-boot.txt"
 fi
-grep -E 'mt7922|mtk|ht/vht|he on|he off|firmware|wlan|net80211|wpa_supplicant' \
+rm -f "$all"
+grep -E 'mt7922|mtk|ht/vht|he on|he off|firmware|wlan|net80211|wpa_supplicant|join:' \
 	"$out/syslog-boot.txt" > "$out/syslog-wifi.txt"
 ifconfig > "$out/ifconfig.txt" 2>&1
 if [ -f "$file" ]; then
@@ -90,6 +102,12 @@ if has 'KERNEL PANIC\|vm_page_fault\|PANIC:'; then
 	result FAIL "panic or vm_page_fault in the syslog"
 else
 	result PASS "no panic, no vm_page_fault"
+fi
+
+refuse 'firmware was not ready for' "the join was not stopped by the driver" \
+	"$(grep 'firmware was not ready for' "$out/syslog-boot.txt" | tail -n 1)"
+if has 'join:'; then
+	result INFO "$(grep 'join:' "$out/syslog-boot.txt" | tail -n 1)"
 fi
 
 case "$boot" in

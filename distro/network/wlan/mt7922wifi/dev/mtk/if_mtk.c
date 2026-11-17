@@ -547,12 +547,37 @@ mtk_join_prepare(struct mtk_softc* sc, struct ieee80211_node* ni)
 {
 	int error;
 
-	if (ni == NULL || ni->ni_chan == NULL
-			|| ni->ni_chan == IEEE80211_CHAN_ANYC)
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * Stick 51: with ht_vht on, the join stopped here with EINVAL and no line
+ * said why. Each stop now says it.
+ */
+	if (ni == NULL) {
+		device_printf(sc->sc_dev, "join: no node for the network\n");
 		return EINVAL;
+	}
+	if (ni->ni_chan == NULL || ni->ni_chan == IEEE80211_CHAN_ANYC) {
+		struct ieee80211_channel* bss = sc->sc_ic.ic_bsschan;
 
-	if (mtk_ensure_owned(sc) != 0)
+		device_printf(sc->sc_dev, "join: the node has no channel (%s);"
+			" network channel %u, flags %#x\n",
+			ni->ni_chan == NULL ? "none" : "any",
+			bss != NULL && bss != IEEE80211_CHAN_ANYC
+				? ieee80211_chan2ieee(&sc->sc_ic, bss) : 0,
+			bss != NULL && bss != IEEE80211_CHAN_ANYC ? bss->ic_flags : 0);
+		return EINVAL;
+	}
+	device_printf(sc->sc_dev, "join: channel %u, flags %#x, node flags %#x\n",
+		ieee80211_chan2ieee(&sc->sc_ic, ni->ni_chan), ni->ni_chan->ic_flags,
+		ni->ni_flags);
+/* SPDX-SnippetEnd */
+
+	if (mtk_ensure_owned(sc) != 0) {
+		/* R5 (MIT): say it, as the other stops in the join do. */
+		device_printf(sc->sc_dev, "join: the driver does not own the card\n");
 		return EIO;
+	}
 	mtk_keep_awake(sc);
 
 	if (sc->sc_hwscanning != 0) {
@@ -740,10 +765,16 @@ static void
 mtk_ampdu_rx_stop(struct ieee80211_node* ni, struct ieee80211_rx_ampdu* rap)
 {
 	struct mtk_softc* sc = ni->ni_ic->ic_softc;
+	/* The stack stops every TID when a node is cleaned up, also when no
+	 * session ever ran, and before the station exists in the firmware (stick
+	 * 51: 16 refused commands per join). Only a running session is told.
+	 */
+	int running = rap != NULL
+		&& (rap->rxa_flags & IEEE80211_AGGR_RUNNING) != 0;
 
 	if (sc->sc_ampdu_rx_stop != NULL)
 		sc->sc_ampdu_rx_stop(ni, rap);
-	if (sc->sc_ht_vht != 0 && rap != NULL) {
+	if (sc->sc_ht_vht != 0 && running && sc->sc_ap_added) {
 		int tid = (int)(rap - ni->ni_rx_ampdu);
 
 		if (tid >= 0 && tid < IEEE80211_TID_SIZE)

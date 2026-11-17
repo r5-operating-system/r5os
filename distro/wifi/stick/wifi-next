@@ -24,14 +24,24 @@ file=$(fd B_USER_SETTINGS_DIRECTORY "$home/config/settings")/kernel/drivers/mt79
 sysfile=$(fd B_SYSTEM_SETTINGS_DIRECTORY /boot/system/settings)/kernel/drivers/mt7922wifi
 mkdir -p "$dir" "$(dirname "$file")"
 
+# The note wins; without one the settings file says which boot ran.
 cur=1
-[ -f "$dir/next" ] && cur=$(cat "$dir/next")
+if [ -f "$dir/next" ]; then
+	cur=$(cat "$dir/next")
+elif [ -f "$file" ] && grep -q '^he true' "$file"; then
+	cur=3
+elif [ -f "$file" ] && grep -q '^ht_vht true' "$file"; then
+	cur=2
+fi
 if [ -n "$1" ]; then
 	next=$1
 else
 	next=$((cur + 1))
 fi
 
+# A planted file belongs to root; the directory is the user's, so the file
+# is removed and written again.
+rm -f "$file"
 case "$next" in
 	1)
 		rm -f "$file"
