@@ -330,7 +330,10 @@ BluetoothView::BluetoothView(bool settingsPage)
 	fMine->list->SetSelectionMessage(new BMessage(kMsgMineSelected));
 	BScrollView* mineScroller = new BScrollView("my devices scroll",
 		fMine->list, 0, false, true);
-	mineScroller->SetExplicitMinSize(BSize(B_SIZE_UNSET, roundf(140 * scale)));
+	// A width of its own: in the narrow Bluetooth window the panel took
+	// all of it and the list was a strip (stick 52).
+	mineScroller->SetExplicitMinSize(BSize(roundf(200 * scale),
+		roundf(140 * scale)));
 
 	fMine->name = new BStringView("device name", "");
 	fMine->name->SetFont(&bold);

@@ -935,6 +935,23 @@ LEManager::_SetScan(bool enable)
 }
 
 
+// A public address, and Flags without "BR/EDR Not Supported" (bit 2).
+static bool
+dual_mode_advert(uint8 addressType, uint8 flags)
+{
+	return addressType == 0 && flags != 0 && (flags & 0x04) == 0;
+}
+
+
+bool
+LEManager::DualModeAdvert(const bdaddr_t& address)
+{
+	BAutolock _(fLock);
+	Seen* seen = _FindSeen(address);
+	return seen != NULL && dual_mode_advert(seen->hciAddressType, seen->flags);
+}
+
+
 bool
 LEManager::Pair(const bdaddr_t& address, const BMessenger& reply)
 {
@@ -945,6 +962,18 @@ LEManager::Pair(const bdaddr_t& address, const BMessenger& reply)
 	for (size_t i = 0; i < fClassic.size(); i++) {
 		if (bdaddrUtils::Compare(fClassic[i], address))
 			return false;
+	}
+	// A dual-mode device: a public address, and Flags that do not say "BR/EDR
+	// Not Supported" (bit 2; an LE-only device sets it, Core Supplement,
+	// Part A, 1.3). Classic gives it its profiles (A2DP, HFP); its LE side
+	// is for a vendor app. Stick 52: the Sony WH-1000XM3 advertises
+	// "LE_WH-1000XM3" with flags 0x2, was paired over LE only, and its
+	// sound and HFP never came up.
+	if (dual_mode_advert(seen->hciAddressType, seen->flags)) {
+		syslog(LOG_INFO, "bluetooth_server: hci%" B_PRId32 " le advert of a"
+			" dual-mode device (flags %#x): pairing over Classic",
+			fDevice->GetID(), seen->flags);
+		return false;
 	}
 
 	if (!fRadioEnabled || !fReady) {
