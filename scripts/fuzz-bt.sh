@@ -6,10 +6,11 @@
 # (docs/BLUETOOTH.md, steps 1a to 1c), the LE parsers of bluetooth_server
 # (step 6), the AVDTP, AVRCP and SBC code of bluetooth_audio and the SDP
 # answers of bluetooth_server (step 5), its RFCOMM frames and mux
-# (step 7a), and the SCO packet path of the voice link (step 7c: h2generic's
-# h2sco.h, the mSBC deframer and the SBC decoder). Run it in WSL.
+# (step 7a), its HFP AT commands (step 7b), and the SCO packet path of the
+# voice link (step 7c: h2generic's h2sco.h, the mSBC deframer and the SBC
+# decoder). Run it in WSL.
 # Usage: fuzz-bt.sh <target> [seconds]   (target: hci, l2cap, le, audio,
-# sdp, rfcomm or sco; default 60 s)
+# sdp, rfcomm, hfp or sco; default 60 s)
 # The log is generated/bluetooth/fuzz-<target>.log; its last line is
 # "<target>_fuzz: <seconds>s 0 crashes" when nothing failed.
 set -eu
@@ -19,7 +20,7 @@ seconds="${2:-60}"
 K=distro/kernel/src/add-ons/kernel
 A=distro/media/bluetooth_audio
 case "$target" in
-	hci|l2cap|le|audio|sdp|rfcomm|sco) ;;
+	hci|l2cap|le|audio|sdp|rfcomm|hfp|sco) ;;
 	*) echo "fuzz-bt: unknown target $target" >&2; exit 2 ;;
 esac
 out=/tmp/bt-fuzz-$$
@@ -37,6 +38,9 @@ elif [ "$target" = sco ]; then
 elif [ "$target" = rfcomm ]; then
 	g++ $flags -I distro/bluetooth/server scripts/bt-rfcomm-fuzz.cpp \
 		distro/bluetooth/server/RFCOMMMux.cpp -o "$out"
+elif [ "$target" = hfp ]; then
+	g++ $flags -I distro/bluetooth/server scripts/bt-hfp-fuzz.cpp \
+		distro/bluetooth/server/HFPAgent.cpp -o "$out"
 else
 	g++ $flags \
 		-I scripts/bt-host \
@@ -50,7 +54,7 @@ mkdir -p generated/bluetooth
 log="generated/bluetooth/fuzz-$target.log"
 status=0
 if [ "$target" = audio ] || [ "$target" = sdp ] || [ "$target" = rfcomm ] \
-	|| [ "$target" = sco ]; then
+	|| [ "$target" = hfp ] || [ "$target" = sco ]; then
 	"$out" "$seconds" > "$log" 2>&1 || status=$?
 else
 	"$out" "$target" "$seconds" > "$log" 2>&1 || status=$?
