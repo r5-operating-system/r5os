@@ -27,7 +27,8 @@ r5:zeroconf-4	A	zeroconf	distro/zeroconf/r5_mdns.c	2	pr	4391	browse_cb does not 
 r5:zeroconf-5	A	zeroconf	distro/zeroconf/r5_mdns.c	2	pr	4387	make_ai6 builds AAAA addrinfo with sin6_scope_id 0 so link-local results are unusable
 r5:login-6	A	Login	distro/login/SessionLog.h	3	pr	4383	/tmp/r5-session.log is appended with fopen(a) and no chmod; session names are world-readable
 r5:media-5	A	Media	distro/media/src/preferences/media/MediaViews.cpp	3	pr	4394	fHasUsbAudio is set only in the AudioSettingsView ctor; hotplug stays grey until reopen
-r5:zeroconf-6	A	AirPlay	distro/zeroconf/MdnsService.cpp	3	todo		mDNS advertises AirPlay features 0x5A7FFFF7,0x1E but /info returns 0x4A7FFFF7
+r5:zeroconf-6	A	AirPlay	distro/zeroconf/MdnsService.cpp	3	pr	4395	mDNS advertises AirPlay features 0x5A7FFFF7,0x1E but /info returns 0x4A7FFFF7
+
 trac:7841	A	Tracker	distro/desktop/src/kits/tracker/Tracker.cpp	1	todo		Change icon for open folders in tracker spacial mode
 trac:9434	A	Tracker	distro/desktop/src/kits/tracker/Tracker.cpp	1	todo		[Tracker] wrong column display + crash in BBitmap::Lock()
 trac:11031	A	Tracker	distro/desktop/src/kits/tracker/Tracker.cpp	1	todo		[Tracker] crashes in BPoseView::SelectPosesListMode

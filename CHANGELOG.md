@@ -1,5 +1,15 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Network: AirPlay mDNS features match /info
+
+Problem: `_airplay._tcp` advertised `features=0x5A7FFFF7,0x1E` while GET `/info` returned `0x4A7FFFF7`. Clients that trust the TXT then see a different set on the HTTP reply. The extra bit and `0x1E` are AirPlay 2; this receiver is AirPlay 1.
+
+What changed: the TXT uses `features=0x4A7FFFF7,0x0`, the same 32-bit value as `/info`.
+
+Limits: QEMU usernet is not a LAN. Pairing and AirPlay 2 are still not implemented.
+
+Tested: none on a real network.
+
 ## 2026-11-17 - Media: USB layout menu follows a plugged-in card
 
 Problem: `fHasUsbAudio` was only set in the Audio settings constructor. A USB audio device that appeared later left the channel-layout menu grey until the window was reopened.
@@ -74,6 +84,7 @@ Tested in QEMU only (Lavapipe 256-bit, 8 CPUs, `scripts/build-locked.sh` and `sc
 - Resize with the outline (final build, first start): 19.8 ms per frame (p95 32.4), compose 18.8, draw 7.0. Pictures: the outline follows the bottom right corner and the left edge, and the window has its new size and place after the release. No `gpu draw off`, fence timeout or `MISMATCH`.
 
 Limits: not on the 5625U; that needs the next stick (with #4363). The first start after an install or a Mesa update pays the whole warm-up (Lavapipe compiles everything once); in QEMU a part took up to 25 s of the 30 s limit. The outline is darkened pixels, hard to see on a dark background. The top edge was not dragged in QEMU (the left edge uses the same code). Windows with `B_OUTLINE_RESIZE` now get this outline on RADV too.
+
 
 ## 2026-11-17 - Network: mDNS browse keeps only the requested type
 
