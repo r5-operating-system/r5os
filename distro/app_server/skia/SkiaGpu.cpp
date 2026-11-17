@@ -190,7 +190,11 @@ static PFN_vkDestroyFence sDestroyFence;
 static PFN_vkResetFences sResetFences;
 static PFN_vkWaitForFences sWaitForFences;
 static VkPhysicalDeviceMemoryProperties sMemoryProperties;
-static int32 sKeepImageMemory = 0;
+// Review 17 Nov 2026: one flag kept every image of every later device too
+// (after a failed RADV start Lavapipe never freed a window image). Now a
+// device's images are kept only when that device's memory had to be kept.
+static int32 sImageGeneration = 0;
+static int32 sKeptGeneration = -1;
 
 
 SkiaImage::SkiaImage()
@@ -200,7 +204,8 @@ SkiaImage::SkiaImage()
 	fMemory(0),
 	fWidth(0),
 	fHeight(0),
-	fTexture(NULL)
+	fTexture(NULL),
+	fGeneration(atomic_get(&sImageGeneration))
 {
 }
 
@@ -211,7 +216,7 @@ SkiaImage::~SkiaImage()
 	// command buffer with the image finished, and the last compose frame
 	// that sampled it passed its fence.
 	delete (BackendTexture*)fTexture;
-	if (atomic_get(&sKeepImageMemory) != 0)
+	if (fGeneration <= atomic_get(&sKeptGeneration))
 		return;
 	if (fView != 0)
 		sDestroyImageView(sDevice, (VkImageView)fView, NULL);
@@ -225,7 +230,7 @@ SkiaImage::~SkiaImage()
 /*static*/ void
 SkiaGpu::KeepImageMemory()
 {
-	atomic_set(&sKeepImageMemory, 1);
+	atomic_set(&sKeptGeneration, atomic_get(&sImageGeneration));
 }
 
 
@@ -479,6 +484,8 @@ SkiaGpu::Version()
 SkiaGpu::Create(const skia_vulkan_device& device, bool forceFail,
 	int samples, const char** _reason)
 {
+	// a new device: its images are freed unless its own memory is kept
+	atomic_add(&sImageGeneration, 1);
 	SkiaGpu* gpu = new(std::nothrow) SkiaGpu;
 	SkiaBackend* backend = new(std::nothrow) SkiaBackend;
 	if (gpu == NULL || backend == NULL || gpu->fDoneSem < 0) {

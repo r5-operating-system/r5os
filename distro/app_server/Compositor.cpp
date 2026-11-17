@@ -579,6 +579,9 @@ struct Compositor::Entry : public BReferenceable {
 	int32				glassStrength;
 	uint32				glassBelow;		// which windows lay below
 	bool				glassValid;
+	// review 17 Nov 2026: glass left unblurred while it was hidden; it is
+	// blurred when it shows, even without damage from below
+	BRegion				glassStale;
 
 	// M11 step 4b, under fAnimLock: the open animation
 	bool				animOpen;
@@ -2991,6 +2994,19 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 	begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 	begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 	vk->vkBeginCommandBuffer(vk->commands, &begin);
+	// Review 17 Nov 2026: a semaphore wait makes Skia's writes visible to
+	// its own batch only. Every write submitted before this frame on the
+	// queue (Skia's runs, which compose need not wait for) is visible to
+	// its reads; RADV's flush at the start of a submit did this so far.
+	VkMemoryBarrier fromBefore = {};
+	fromBefore.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+	fromBefore.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
+	fromBefore.dstAccessMask = VK_ACCESS_SHADER_READ_BIT
+		| VK_ACCESS_TRANSFER_READ_BIT;
+	vk->vkCmdPipelineBarrier(vk->commands,
+		VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+		VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+		0, 1, &fromBefore, 0, NULL, 0, NULL);
 	vk->vkCmdBindPipeline(vk->commands, VK_PIPELINE_BIND_POINT_COMPUTE,
 		vk->pipeline);
 
@@ -3152,14 +3168,15 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 			// frame, the same bytes as the copy shader. On Lavapipe
 			// texelFetch in compose.comp cost 150-160 ms per frame while
 			// dragging (QEMU, "compose passes"), a copy is a row memcpy.
-			_RecordImageCopy(layer, part, frameInfo.buffer, rect.frameStride);
-			copied = true;
+			// review 17 Nov 2026: without memory for the list the shader
+			// below copies the part
+			copied = _RecordImageCopy(layer, part, frameInfo.buffer,
+				rect.frameStride);
 		} else if (layer != NULL && part.CountRects() > 0) {
 			// M13 step 3: a Painter window's plain part too, row by row
 			// from its buffer (vkCmdCopyBuffer), the same words
-			_RecordBufferCopy(layer, part, frameInfo.buffer,
+			copied = _RecordBufferCopy(layer, part, frameInfo.buffer,
 				rect.frameStride);
-			copied = true;
 		}
 		// 5625U stick, 17 Nov 2026: part stays as it is; the window's
 		// shared views below are drawn inside it (part was emptied after
@@ -3506,7 +3523,7 @@ Compositor::_FreeCompareCopies(CompareCopies& copies)
 	to TRANSFER_SRC_OPTIMAL and back to the sampler's layout; the frame's
 	writes before and after are ordered with the compute passes.
 */
-void
+bool
 Compositor::_RecordImageCopy(const Layer* layer, const BRegion& region,
 	VkBuffer_T* frame, uint32 frameStride)
 {
@@ -3515,7 +3532,7 @@ Compositor::_RecordImageCopy(const Layer* layer, const BRegion& region,
 	int32 count = region.CountRects();
 	VkBufferImageCopy* copies = new(std::nothrow) VkBufferImageCopy[count];
 	if (copies == NULL)
-		return;
+		return false;
 	int32 sourceLeft = layer->SourceLeft();
 	int32 sourceTop = layer->SourceTop();
 	for (int32 i = 0; i < count; i++) {
@@ -3576,6 +3593,7 @@ Compositor::_RecordImageCopy(const Layer* layer, const BRegion& region,
 	vk->vkCmdPipelineBarrier(vk->commands, VK_PIPELINE_STAGE_TRANSFER_BIT,
 		VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
 		0, 1, &after, 0, NULL, 1, &toRead);
+	return true;
 }
 
 
@@ -3583,7 +3601,7 @@ Compositor::_RecordImageCopy(const Layer* layer, const BRegion& region,
 	copied row by row from the buffer into the frame with vkCmdCopyBuffer;
 	ordered with the compute passes before and after.
 */
-void
+bool
 Compositor::_RecordBufferCopy(const Layer* layer, const BRegion& region,
 	VkBuffer_T* frame, uint32 frameStride)
 {
@@ -3595,7 +3613,7 @@ Compositor::_RecordBufferCopy(const Layer* layer, const BRegion& region,
 	}
 	VkBufferCopy* copies = new(std::nothrow) VkBufferCopy[count];
 	if (copies == NULL)
-		return;
+		return false;
 	uint32 sourceStride = layer->buffer->Width();
 	uint32 n = 0;
 	for (int32 i = 0; i < region.CountRects(); i++) {
@@ -3632,6 +3650,7 @@ Compositor::_RecordBufferCopy(const Layer* layer, const BRegion& region,
 	vk->vkCmdPipelineBarrier(vk->commands, VK_PIPELINE_STAGE_TRANSFER_BIT,
 		VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
 		0, 1, &after, 0, NULL, 0, NULL);
+	return true;
 }
 
 
@@ -4156,11 +4175,17 @@ Compositor::_PrepareEffects(BRegion& damage, const LayerList& layers,
 					layer->glassFixed.MakeEmpty();
 					layer->glassAlpha.MakeEmpty();
 				}
+				entry->glassStale.MakeEmpty();
 			} else {
 				layer->blurRegion = grow_region(below, glassGeometry.reach);
+				layer->blurRegion.Include(&entry->glassStale);
 				layer->blurRegion.IntersectWith(&glass);
 			}
+			BRegion skipped(layer->blurRegion);
+			skipped.IntersectWith(&hidden[i]);
 			layer->blurRegion.Exclude(&hidden[i]);
+			entry->glassStale.Include(&skipped);
+			entry->glassStale.Exclude(&layer->blurRegion);
 			// The blur is made per glass rectangle, for the box around
 			// what is new in it; its input must be composed fresh.
 			for (int32 g = 0; g < glass.CountRects()
