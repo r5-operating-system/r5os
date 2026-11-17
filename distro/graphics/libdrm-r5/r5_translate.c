@@ -39,9 +39,12 @@
 #define R5_IOC_NR(request) ((unsigned)(request) & 0xffu)
 
 static unsigned char sUnknownSeen[32];
-static const char *sIoctlName;
-static unsigned long sIoctlRequest;
-static char sIoctlDetail[192];
+/* M13 step 1: per thread. RADV and Zink call ioctls from more than one
+ * thread; one global buffer mixed their details and was written while
+ * another thread printed it. */
+static __thread const char *sIoctlName;
+static __thread unsigned long sIoctlRequest;
+static __thread char sIoctlDetail[192];
 
 
 static int
@@ -83,6 +86,16 @@ r5_debug_on(void)
 	return cached;
 }
 #endif
+
+
+/* M13 step 1: the detail of an ioctl is only formatted with gpu_debug,
+ * where every call is printed; production ioctls no longer pay for an
+ * snprintf. A failed ioctl without gpu_debug is printed without it. */
+#define R5_DETAIL(...) \
+	do { \
+		if (r5_debug_on()) \
+			snprintf(sIoctlDetail, sizeof(sIoctlDetail), __VA_ARGS__); \
+	} while (0)
 
 
 static int
@@ -247,10 +260,10 @@ r5_amdgpu_info(int fd, struct drm_amdgpu_info *query)
 	if (r5_info(fd, &info, &amd) != 0)
 		return -1;
 	if (query->query == AMDGPU_INFO_SENSOR || query->query == AMDGPU_INFO_VIDEO_CAPS)
-		snprintf(sIoctlDetail, sizeof(sIoctlDetail), "query %#x type %#x",
+		R5_DETAIL("query %#x type %#x",
 			query->query, query->sensor_info.type);
 	else
-		snprintf(sIoctlDetail, sizeof(sIoctlDetail), "query %#x", query->query);
+		R5_DETAIL("query %#x", query->query);
 	out = (void *)(uintptr_t)query->return_pointer;
 	if (query->query == AMDGPU_INFO_ACCEL_WORKING) {
 		uint32_t working = (info.capabilities & R5_GPU_CAP_RENDER) ? 1u : 0u;
@@ -361,7 +374,7 @@ r5_domain(uint64_t domains)
 static int
 r5_gem_create(int fd, union drm_amdgpu_gem_create *gem)
 {
-	snprintf(sIoctlDetail, sizeof(sIoctlDetail),
+	R5_DETAIL(
 		"domains %#llx flags %#llx size %llu align %llu",
 		(unsigned long long)gem->in.domains,
 		(unsigned long long)gem->in.domain_flags,
@@ -575,7 +588,7 @@ r5_prime_export(int fd, struct drm_prime_handle *prime)
 	call.version = 1;
 	call.handle = prime->handle;
 	call.target = R5_GPU_SHARE_COMPOSITOR;
-	snprintf(sIoctlDetail, sizeof(sIoctlDetail), "export handle %u",
+	R5_DETAIL("export handle %u",
 		prime->handle);
 	if (r5_call(fd, R5_GPU_BO_EXPORT, &call, sizeof(call)) != 0)
 		return -1;
@@ -618,14 +631,14 @@ r5_prime_import(int fd, struct drm_prime_handle *prime)
 	row = r5_share_fd_find(prime->fd);
 	if (row == NULL || row->state != R5_FD_IMPORT) {
 		pthread_mutex_unlock(&sShareLock);
-		snprintf(sIoctlDetail, sizeof(sIoctlDetail), "import fd %d unknown",
+		R5_DETAIL("import fd %d unknown",
 			prime->fd);
 		return r5_fail(EINVAL);
 	}
 	memcpy(call.token, row->token, sizeof(call.token));
 	call.client_team = row->client_team;
 	pthread_mutex_unlock(&sShareLock);
-	snprintf(sIoctlDetail, sizeof(sIoctlDetail), "import fd %d", prime->fd);
+	R5_DETAIL("import fd %d", prime->fd);
 	if (r5_call(fd, R5_GPU_BO_IMPORT, &call, sizeof(call)) != 0)
 		return -1;
 	pthread_mutex_lock(&sShareLock);
@@ -983,7 +996,7 @@ r5_gem_va(int fd, struct drm_amdgpu_gem_va *va)
 	call.bo_offset = va->offset_in_bo;
 	call.map_bytes = va->map_size;
 	call.flags = r5_va_flags(va->flags);
-	snprintf(sIoctlDetail, sizeof(sIoctlDetail),
+	R5_DETAIL(
 		"operation %u va %#llx size %llu flags %#x", va->operation,
 		(unsigned long long)va->va_address,
 		(unsigned long long)va->map_size, va->flags);
