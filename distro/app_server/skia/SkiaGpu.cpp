@@ -205,13 +205,22 @@ SkiaImage::SkiaImage()
 	fWidth(0),
 	fHeight(0),
 	fTexture(NULL),
-	fGeneration(atomic_get(&sImageGeneration))
+	fGeneration(atomic_get(&sImageGeneration)),
+	fAllocatedWidth(0),
+	fAllocatedHeight(0),
+	fBacking(NULL)
 {
 }
 
 
 SkiaImage::~SkiaImage()
 {
+	// M13 step 4: an image on another one's VkImage frees nothing itself;
+	// the owner goes with its last reference
+	if (fBacking != NULL) {
+		fBacking->ReleaseReference();
+		return;
+	}
 	// Every user is done: Graphite called the release proc after its last
 	// command buffer with the image finished, and the last compose frame
 	// that sampled it passed its fence.
@@ -408,7 +417,8 @@ read_done(SkImage::ReadPixelsContext context,
 {
 	WorkItem* item = (WorkItem*)context;
 	item->read = true;
-	if (!result || result->count() < 1)
+	// M13 step 4: NULL when the target was removed during the run
+	if (item->target == NULL || !result || result->count() < 1)
 		return;
 	item->target->Deliver(item->cookie, item->damage, item->frame,
 		(const uint8*)result->data(0), (uint32)result->rowBytes(0));
@@ -420,6 +430,10 @@ SkiaGpu::SkiaGpu()
 	:
 	fLock("skia gpu"),
 	fTargets(20),
+	fInFlight(NULL),
+	fWaitingUnlocked(false),
+	fOnCpu(false),
+	fWindowRunDone(0),
 	fContext(NULL),
 	fBackend(NULL),
 	fForceFail(false),
@@ -458,6 +472,14 @@ SkiaGpu::DestroyContext()
 {
 	Shutdown();
 	BAutolock _(fLock);
+	// M13 step 4: RunWork() may wait for its fence without the lock; the
+	// fence and the context stay until it is back (the compositor stops
+	// the draw thread first, so this does not wait in practice)
+	while (fWaitingUnlocked) {
+		fLock.Unlock();
+		snooze(1000);
+		fLock.Lock();
+	}
 	// M13 step 2: what the session compiled, for the next boot
 	if (fContext != NULL)
 		((GraphiteContext*)fContext)->syncPipelineData(kPipelineDataLargest);
@@ -607,6 +629,9 @@ SkiaGpu::Create(const skia_vulkan_device& device, bool forceFail,
 	if (getProperties != NULL) {
 		VkPhysicalDeviceProperties properties;
 		getProperties(physical, &properties);
+		// M13 step 4: Lavapipe is the CPU device (as the compositor's
+		// device choice)
+		gpu->fOnCpu = properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU;
 		backend->pipelines.reset(new(std::nothrow) PipelineStorage(
 			properties));
 		options.fPersistentPipelineStorage = backend->pipelines.get();
@@ -703,7 +728,16 @@ allocate_image_memory(const VkMemoryRequirements& requirements)
 SkiaImage*
 SkiaGpu::NewImage(int32 width, int32 height)
 {
-	if (fShutDown || width <= 0 || height <= 0)
+	return NewImage(width, height, width, height);
+}
+
+
+SkiaImage*
+SkiaGpu::NewImage(int32 width, int32 height, int32 allocatedWidth,
+	int32 allocatedHeight)
+{
+	if (fShutDown || width <= 0 || height <= 0 || allocatedWidth < width
+		|| allocatedHeight < height)
 		return NULL;
 	const VkImageUsageFlags usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
 		| VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT
@@ -713,8 +747,9 @@ SkiaGpu::NewImage(int32 width, int32 height)
 	info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 	info.imageType = VK_IMAGE_TYPE_2D;
 	info.format = VK_FORMAT_B8G8R8A8_UNORM;
-	info.extent.width = (uint32)width;
-	info.extent.height = (uint32)height;
+	// M13 step 4: the VkImage may be larger than the window
+	info.extent.width = (uint32)allocatedWidth;
+	info.extent.height = (uint32)allocatedHeight;
 	info.extent.depth = 1;
 	info.mipLevels = 1;
 	info.arrayLayers = 1;
@@ -760,7 +795,7 @@ SkiaGpu::NewImage(int32 width, int32 height)
 	alloc.fSize = requirements.size;
 	BackendTexture* texture = new(std::nothrow) BackendTexture(
 		skgpu::graphite::BackendTextures::MakeVulkan(
-			SkISize::Make(width, height), textureInfo,
+			SkISize::Make(allocatedWidth, allocatedHeight), textureInfo,
 			VK_IMAGE_LAYOUT_UNDEFINED, fQueueFamily, image, alloc));
 	SkiaImage* result = new(std::nothrow) SkiaImage;
 	if (texture == NULL || result == NULL || !texture->isValid()) {
@@ -776,7 +811,44 @@ SkiaGpu::NewImage(int32 width, int32 height)
 	result->fMemory = (uint64)memory;
 	result->fWidth = width;
 	result->fHeight = height;
+	result->fAllocatedWidth = allocatedWidth;
+	result->fAllocatedHeight = allocatedHeight;
 	result->fTexture = texture;
+	return result;
+}
+
+
+/*!	M13 step 4: a resize within the VkImage of \a backing makes no Vulkan
+	object (5625U stick 3: a new VkImage and its memory per size took a
+	run from 47 us to 3.3 ms while a window was resized). The new image is
+	another SkiaImage, so whoever still holds the old one (a window buffer
+	until the next Drawn(), a compose frame until its fence) keeps the old
+	size; both show the same VkImage, from pixel (0, 0).
+*/
+SkiaImage*
+SkiaGpu::ShareImage(SkiaImage* backing, int32 width, int32 height)
+{
+	if (backing == NULL || fShutDown || width <= 0 || height <= 0)
+		return NULL;
+	SkiaImage* owner = backing->fBacking != NULL ? backing->fBacking
+		: backing;
+	if (width > owner->fAllocatedWidth || height > owner->fAllocatedHeight
+		|| owner->fGeneration != atomic_get(&sImageGeneration))
+		return NULL;
+	SkiaImage* result = new(std::nothrow) SkiaImage;
+	if (result == NULL)
+		return NULL;
+	owner->AcquireReference();
+	result->fBacking = owner;
+	result->fImage = owner->fImage;
+	result->fView = owner->fView;
+	result->fMemory = owner->fMemory;
+	result->fTexture = owner->fTexture;
+	result->fGeneration = owner->fGeneration;
+	result->fWidth = width;
+	result->fHeight = height;
+	result->fAllocatedWidth = owner->fAllocatedWidth;
+	result->fAllocatedHeight = owner->fAllocatedHeight;
 	return result;
 }
 
@@ -871,6 +943,25 @@ SkiaGpu::RemoveTarget(SkiaTarget* target)
 {
 	BAutolock _(fLock);
 	fTargets.RemoveItem(target);
+	// M13 step 4: a run that waits for its fence without the lock does not
+	// touch this target afterwards (it is deleted after this call); its
+	// surface goes under the target's lock, before its recorder does
+	if (fInFlight != NULL) {
+		std::vector<std::unique_ptr<WorkItem>>& items
+			= *(std::vector<std::unique_ptr<WorkItem>>*)fInFlight;
+		for (size_t i = 0; i < items.size(); i++) {
+			WorkItem* item = items[i].get();
+			if (item->target != target)
+				continue;
+			// the target is going away: its surface goes before its
+			// recorder, also when its lock cannot be had
+			bool locked = target->Lock();
+			item->surface.reset();
+			if (locked)
+				target->Unlock();
+			item->target = NULL;
+		}
+	}
 }
 
 
@@ -1107,19 +1198,39 @@ SkiaGpu::RunWork(const char** _reason)
 			// itself still waits only on the GPU (the semaphores); nothing
 			// is read back.
 			{
+				// M13 step 4: the wait is without fLock (5625U stick 3, on
+				// Lavapipe: one run's fence took 19.5 s at the first boot,
+				// and Sign in's window waited for it in NewRecorder() and
+				// AddTarget()). Everything shared was changed under the
+				// lock before this; RemoveTarget() and Shutdown() find the
+				// items in fInFlight and let go of their targets there.
+				// The draw thread is the only one in RunWork(), and no
+				// queue lock is held, so neither lock waits for the GPU.
+				bool unlock = fLock.CountLocks() == 1;
+				if (unlock) {
+					fInFlight = &items;
+					fWaitingUnlocked = true;
+					fLock.Unlock();
+				}
 				// a late GPU is not a failure (M11 decision 14)
 				VkResult result;
 				do {
 					result = sWaitForFences(sDevice, 1, &fence, VK_TRUE,
 						1000000000ull);
 				} while (result == VK_TIMEOUT);
+				if (unlock) {
+					fLock.Lock();
+					fInFlight = NULL;
+					fWaitingUnlocked = false;
+				}
 				if (result != VK_SUCCESS) {
 					*_reason = "device lost";
 					ok = false;
 				}
 				fRunInFlight = false;
 			}
-			// read_done() copies into the bitmaps from here
+			// read_done() copies into the bitmaps from here (DestroyContext()
+			// waits for fWaitingUnlocked, so the context is still there)
 			context->checkAsyncWorkCompletion();
 			Profile(kTimeDeliver, system_time() - submitTime);
 		}
@@ -1130,9 +1241,17 @@ SkiaGpu::RunWork(const char** _reason)
 	}
 
 	bigtime_t now = system_time();
+	bool windowDrawn = false;
 	for (size_t i = 0; i < items.size(); i++) {
 		WorkItem* item = items[i].get();
-		if (item->image.IsSet() && ok) {
+		if (item->image.IsSet())
+			windowDrawn = true;
+		// M13 step 4: removed while the run waited for its fence (the
+		// targets' cookies hold nothing that must be released); after a
+		// Shutdown() during that wait no target gets a damage any more
+		if (item->target == NULL)
+			continue;
+		if (item->image.IsSet() && ok && !fShutDown) {
 			// the semaphore is signalled first, then the damage goes out:
 			// the compose that takes it waits for this run on the GPU
 			item->target->Drawn(item->cookie, item->damage,
@@ -1163,7 +1282,12 @@ SkiaGpu::RunWork(const char** _reason)
 		context->syncPipelineData(kPipelineDataLargest);
 	}
 
-	atomic_set64(&fDone, ticket);
+	// M13 step 4: the warm-up on Lavapipe starts after this
+	if (windowDrawn)
+		atomic_set(&fWindowRunDone, 1);
+	// M13 step 4: a Shutdown() during the fence wait set every ticket done
+	if (!fShutDown)
+		atomic_set64(&fDone, ticket);
 	_ReleaseWaiters();
 	return ok;
 }
@@ -1211,6 +1335,19 @@ SkiaGpu::Shutdown()
 	BAutolock _(fLock);
 	if (fShutDown)
 		return;
+	// M13 step 4: a run that waits for its fence without the lock holds
+	// surfaces of the targets; they go before the recorders do
+	if (fInFlight != NULL) {
+		std::vector<std::unique_ptr<WorkItem>>& items
+			= *(std::vector<std::unique_ptr<WorkItem>>*)fInFlight;
+		for (size_t i = 0; i < items.size(); i++) {
+			SkiaTarget* target = items[i]->target;
+			if (target != NULL && target->Lock()) {
+				items[i]->surface.reset();
+				target->Unlock();
+			}
+		}
+	}
 	for (int32 i = 0; i < fTargets.CountItems(); i++) {
 		SkiaTarget* target = fTargets.ItemAt(i);
 		if (target->Lock()) {
@@ -1220,6 +1357,8 @@ SkiaGpu::Shutdown()
 	}
 	fShutDown = true;
 	atomic_set64(&fDone, atomic_get64(&fTicket));
+	// M13 step 4: the warm-up waits for nothing any more
+	atomic_set(&fWindowRunDone, 1);
 	_ReleaseWaiters();
 }
 

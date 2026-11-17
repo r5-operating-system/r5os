@@ -226,6 +226,11 @@ release_image(void* context)
 }
 
 
+// M13 step 4: a resized window's VkImage grows in steps of this many
+// pixels (SkiaTarget::SetSurface())
+static const int32 kImageStep = 64;
+
+
 SkiaTarget::SkiaTarget(SkiaGpu* gpu)
 	:
 	fGpu(gpu),
@@ -281,12 +286,54 @@ SkiaTarget::SetSurface(int32 width, int32 height, int32 left, int32 top,
 	SkSurfaceProps props = text_props();
 	sk_sp<SkSurface> surface;
 	BReference<SkiaImage> image;
-	if (UsesSharedImage()) {
+	// M13 step 4: the window keeps its VkImage and surface
+	bool reused = false;
+	if (UsesSharedImage() && fSurface != nullptr && fImage.IsSet()
+		&& fGpu != NULL && width <= fImage->AllocatedWidth()
+		&& height <= fImage->AllocatedHeight()
+		&& fImage->AllocatedWidth() - width < 2 * kImageStep
+		&& fImage->AllocatedHeight() - height < 2 * kImageStep
+		// only when the origin stays: a moved origin redraws the whole
+		// image, which the compositor may still be reading for the old size
+		&& initialBits == NULL && left == fLeft && top == fTop) {
+		// M13 step 4 (5625U stick 3: a new VkImage per size took a run
+		// from 47 us to 3.3 ms during a resize): a size that still fits
+		// in the VkImage, with at most two steps to spare, gets a new
+		// SkiaImage of that size on the same VkImage, and the surface
+		// (which wraps all of the VkImage) stays
+		image.SetTo(fGpu->ShareImage(fImage.Get(), width, height), true);
+		if (image.IsSet()) {
+			surface = fSurface;
+			reused = true;
+		}
+	}
+	if (reused) {
+		// the image's pixels stay where the window's origin stays
+	} else if (UsesSharedImage()) {
 		// M13 step 2: an image the compositor samples. Graphite keeps a
 		// reference until its last work with it is done (the release
 		// proc, also called when the wrap fails).
-		image.SetTo(fGpu != NULL ? fGpu->NewImage(width, height) : NULL,
-			true);
+		// M13 step 4: a resize (the window had an image) makes the VkImage
+		// larger, up to the next 64-pixel step, so the next sizes fit.
+		// The compositor counts the window's own size in its window
+		// memory; a window that was never resized has no spare pixels.
+		int32 allocatedWidth = width;
+		int32 allocatedHeight = height;
+		if (fImage.IsSet()) {
+			allocatedWidth = (width + kImageStep - 1) / kImageStep
+				* kImageStep;
+			allocatedHeight = (height + kImageStep - 1) / kImageStep
+				* kImageStep;
+		}
+		if (fGpu != NULL) {
+			image.SetTo(fGpu->NewImage(width, height, allocatedWidth,
+				allocatedHeight), true);
+			if (!image.IsSet() && (allocatedWidth != width
+					|| allocatedHeight != height)) {
+				// the larger image may be over the device's limit
+				image.SetTo(fGpu->NewImage(width, height), true);
+			}
+		}
 		if (!image.IsSet())
 			return false;
 		image->AcquireReference();
@@ -302,19 +349,43 @@ SkiaTarget::SetSurface(int32 width, int32 height, int32 left, int32 top,
 		return false;
 
 	SkCanvas* canvas = surface->getCanvas();
-	if (image.IsSet() && initialBits == NULL) {
-		// a new image has no defined pixels: transparent, as the
-		// compositor's new buffers are
-		canvas->clear(SK_ColorTRANSPARENT);
-	}
-	if (initialBits != NULL) {
-		SkPixmap pixmap(target_info(width, height), initialBits, bytesPerRow);
-		surface->writePixels(pixmap, 0, 0);
-	}
-	if (fSurface != nullptr) {
+	// M13 step 4: the reused surface still has the old origin's matrix
+	canvas->resetMatrix();
+	if (reused && initialBits == NULL && left == fLeft && top == fTop) {
+		// M13 step 4: the pixels stay in place; only what the old size
+		// did not cover is set, transparent as a new image (the pixels
+		// beyond the window's size are never shown)
+		SkPaint clear;
+		clear.setBlendMode(SkBlendMode::kSrc);
+		clear.setColor(SK_ColorTRANSPARENT);
+		if (width > fWidth) {
+			canvas->drawIRect(SkIRect::MakeLTRB(fWidth, 0, width, height),
+				clear);
+		}
+		if (height > fHeight) {
+			canvas->drawIRect(SkIRect::MakeLTRB(0, fHeight,
+				min_c(width, fWidth), height), clear);
+		}
+	} else {
 		// keep what was drawn where the old and the new image overlap on
-		// screen, as the compositor does with the buffers
-		sk_sp<SkImage> old = fSurface->makeImageSnapshot();
+		// screen, as the compositor does with the buffers. M13 step 4: the
+		// old window's size only; Graphite's snapshot is a copy, so it is
+		// taken before a reused surface is cleared and drawn into.
+		sk_sp<SkImage> old;
+		if (fSurface != nullptr && fWidth > 0 && fHeight > 0) {
+			old = fSurface->makeImageSnapshot(SkIRect::MakeWH(fWidth,
+				fHeight));
+		}
+		if (image.IsSet() && initialBits == NULL) {
+			// a new image has no defined pixels: transparent, as the
+			// compositor's new buffers are
+			canvas->clear(SK_ColorTRANSPARENT);
+		}
+		if (initialBits != NULL) {
+			SkPixmap pixmap(target_info(width, height), initialBits,
+				bytesPerRow);
+			surface->writePixels(pixmap, 0, 0);
+		}
 		if (old != nullptr) {
 			SkPaint copy;
 			copy.setBlendMode(SkBlendMode::kSrc);
