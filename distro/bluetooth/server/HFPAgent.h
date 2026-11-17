@@ -28,6 +28,13 @@ namespace r5hfp {
 // voice path before 7c), and no extended error codes: failures are a plain
 // ERROR, so +CME ERROR is never owed after AT+CMEE.
 static const uint32_t kGatewayFeatures = 0x0400;
+// With the voice path on (bt_voice, step 7c) the AG adds codec
+// negotiation (bit 9), so a headset can ask for mSBC.
+static const uint32_t kGatewayCodecNegotiation = 0x0200;
+// The HF feature bit for codec negotiation (HFP 1.8, 4.34.1).
+static const uint32_t kHandsFreeCodecNegotiation = 0x0080;
+// The codec list of AT+BAC, kept as sent ("1,2").
+static const size_t kMaxCodecList = 32;
 // HF indicator 2 is the battery level, 0 to 100 (Bluetooth Assigned
 // Numbers, HFP HF indicators).
 static const int kIndicatorBattery = 2;
@@ -39,13 +46,17 @@ enum {
 	kEventServiceLevel	= 0x01,		// the SLC is up (AT+CMER answered)
 	kEventBattery		= 0x02,
 	kEventButton		= 0x04,
-	kEventVolume		= 0x08
+	kEventVolume		= 0x08,
+	kEventCodec			= 0x10,		// AT+BCS confirmed a codec
+	kEventCodecRequest	= 0x20		// AT+BCC: the headset wants voice
 };
 
 
 class Agent {
 public:
-						Agent();
+	// codecNegotiation: the voice path is on, so +BRSF has bit 9 and
+	// AT+BAC, AT+BCS and AT+BCC are taken.
+						Agent(bool codecNegotiation = false);
 
 	// One AT command line from the Hands-Free unit, without its CR.
 	// Writes the AG's answer (each line in CR LF, as HFP 1.8, 4.33.1
@@ -67,6 +78,12 @@ public:
 	// "hang up", "redial", "voice", "dial" or "headset".
 			const char*	LastButton() const { return fButton; }
 			uint32_t	Unknown() const { return fUnknown; }
+	// Both sides negotiate codecs and the headset sent its AT+BAC list.
+			bool		CanNegotiateCodecs() const;
+	// The AT+BAC list as sent ("1,2"), empty before one came.
+			const char*	CodecList() const { return fCodecs; }
+	// The codec of the last AT+BCS, 0 before one came.
+			int			ConfirmedCodec() const { return fConfirmedCodec; }
 
 private:
 			bool		fServiceLevel;
@@ -78,6 +95,9 @@ private:
 			uint32_t	fEvents;
 			const char*	fButton;
 			uint32_t	fUnknown;
+			bool		fCodecNegotiation;
+			char		fCodecs[kMaxCodecList + 1];
+			int			fConfirmedCodec;
 };
 
 

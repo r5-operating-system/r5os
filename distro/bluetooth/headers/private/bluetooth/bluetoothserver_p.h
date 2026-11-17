@@ -91,6 +91,11 @@
 // no pairing; the stored key authenticates it, encryption follows). Reply:
 // int32 "status", B_NOT_ALLOWED for a device that is not paired.
 #define BT_MSG_R5_AUDIO_CONNECT         'r5aC'
+// Step 7c: bool "on": a program records from the headset microphone
+// (bluetooth_audio's input node is connected), so the HFP session opens
+// the voice link; false closes it. Only with bt_voice. Reply: int32
+// "status".
+#define BT_MSG_R5_AUDIO_VOICE           'r5aV'
 // SPDX-SnippetEnd
 
 

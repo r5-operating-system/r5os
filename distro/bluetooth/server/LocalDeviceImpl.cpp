@@ -102,6 +102,14 @@ LocalDeviceImpl::LocalDeviceImpl(HCIDelegate* hd) : LocalDeviceHandler(hd)
 	fPasskeyUsed = false;
 	memset(&fRemoteIOAddress, 0, sizeof(fRemoteIOAddress));
 	fRemoteIOCapability = 0x03;
+	memset(&fVoiceAddress, 0, sizeof(fVoiceAddress));
+	fVoiceWanted = false;
+	fVoicePending = false;
+	fVoiceCodec = 0;
+	fVoiceCount = 0;
+	fVoiceIndex = 0;
+	fVoiceHandle = 0xffff;
+	fVoiceAcl = 0xffff;
 	fLE = new(std::nothrow) LEManager(this);
 	// SPDX-SnippetEnd
 	LoadRemoteDevices();
@@ -716,6 +724,11 @@ LocalDeviceImpl::HandleEvent(struct hci_event_header* event, size_t size)
 				" %#x", data[3]);
 		}
 	}
+	// Step 7c: the voice link's events (a voice connection request, its
+	// completion, its disconnection, a refused setup) never reach the ACL
+	// code below, which took a voice request for a new ACL link.
+	if (_R5VoiceEvent(event))
+		return;
 	// The remote host features the server asked for itself.
 	if (event->ecode == HCI_EVENT_REMOTE_EXTENDED_FEATURES
 		&& event->elen >= sizeof(struct hci_ev_remote_extended_features)) {

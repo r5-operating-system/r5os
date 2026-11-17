@@ -55,7 +55,7 @@ static const char* const kCommands[] = {
 	"AT+BIND=", "AT+BIND=?", "AT+BIND?", "AT+BIEV=", "AT+XAPL=",
 	"AT+IPHONEACCEV=", "AT+VGS=", "AT+VGM=", "AT+CKPD=", "ATA", "AT+CHUP",
 	"AT+BLDN", "AT+BVRA=", "ATD", "AT+NREC=", "AT+CMEE=", "AT+COPS?",
-	"AT+CLCC", "AT", "at+biev=", ""
+	"AT+CLCC", "AT", "at+biev=", "AT+BAC=", "AT+BCS=", "AT+BCC", ""
 };
 
 
@@ -118,7 +118,7 @@ main(int argc, char** argv)
 	unsigned long lines = 0;
 	unsigned long batteries = 0;
 	while (time(NULL) < end) {
-		Agent agent;
+		Agent agent((next_word() & 1) != 0);
 		int count = 1 + next_word() % 40;
 		for (int i = 0; i < count; i++) {
 			std::string line = random_line();

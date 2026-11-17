@@ -1,5 +1,18 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Bluetooth step 7c joined with HFP: the microphone opens the headset's voice link
+
+Problem: 7c (#4334) brought the voice path (h2generic, the decoder, the "Bluetooth headset microphone" input) but nothing opened a voice link, because the HFP side (#4333) was not on `main` yet. A voice link the headset opened itself went into the ACL code and marked the device as connecting.
+
+What changed (all only with `bt_voice true`; without it nothing changes):
+- bluetooth_server reads `bt_voice` once at start. The HFP agent then offers codec negotiation (`+BRSF` bit 9), keeps `AT+BAC`, takes `AT+BCS` and `AT+BCC`.
+- The microphone node tells bluetooth_server when a program connects to it and when it lets go (`BT_MSG_R5_AUDIO_VOICE`, admin port, uid 0). The HFP session then sends `+BCS` (mSBC when both sides have it), waits for `AT+BCS`, and asks for the voice link with the HFP 1.8 settings in turn (T2, T1 for mSBC; S4, S3, S1, D1 for CVSD). It closes the link when the microphone is let go or the session ends.
+- `LocalDeviceVoice.cpp`: Setup Synchronous Connection, the next setting after a refused or failed one, Accept Synchronous Connection Request for a link the headset opens while R5 wants one, Reject Synchronous Connection Request otherwise (also without `bt_voice`: a voice request no longer reaches the ACL code), and the end of the link.
+
+Limits: nothing tried on a radio. If the XM4 refuses mSBC with these settings, the link stays down (R5 does not fall back to CVSD after an mSBC codec choice). The headset hears silence (no speaker path).
+
+Tested: `scripts/build-locked.sh` exit 0 (x86_64; the first build failed on a duplicate `case` from a line-numbered edit that also replaced a comment, fixed). QEMU (KVM, SMAP and SMEP, Login) on an own image copy: `bt_rfcomm_test` 0 failed, with `HFPGateway` over ports: the headset sends `AT+BAC=1,2`, R5 sends `+BCS: 2`, the headset confirms, an mSBC link is asked, and closed when the microphone is let go; `bt_voice_test` and `gamecontroller_test` ok; no SMAP fault or panic. Host: the agent parts 0 failed; `fuzz-bt.sh hfp` 60 s: 27.5 million lines, 0 crashes, with and without codec negotiation. Not tested: the HCI commands on a radio. ARM64 and RISC-V 64 not built or tested.
+
 ## 2026-11-17 - Game controllers (Bluetooth step 8, option B): a Settings page to see and test controllers, and named buttons for games
 
 Problem: Haiku has no place to see or test a game controller (the old Joysticks preferences do not show HID controllers), and it does not tell a program a controller's vendor and product ID, so every pad is a plain joystick with numbered buttons and no "A, B, X, Y". Plan and license check: `docs/GAME-CONTROLLERS.md`; owner decisions of 16 Nov 2026 (library name `libr5game.so`, branch from `main`, the mockup).

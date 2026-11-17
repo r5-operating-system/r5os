@@ -417,6 +417,29 @@ test_hfp_agent()
 		ask(agent, "AT+IPHONEACCEV=4,2,0,3,0,1,5,4,1", "OK")
 		&& agent.Battery() == 60);
 	report("hfp: no buffer, no answer", agent.Handle("AT", 2, NULL, 0) == 0);
+	report("hfp: BCC refused without the voice path",
+		ask(agent, "AT+BCC", "ERROR"));
+
+	// Step 7c: codec negotiation (HFP 1.8, 4.11.3), only with bt_voice.
+	Agent voice(true);
+	report("hfp voice: BRSF adds codec negotiation",
+		ask(voice, "AT+BRSF=959", "+BRSF: 1536"));
+	report("hfp voice: no codecs before BAC", !voice.CanNegotiateCodecs());
+	report("hfp voice: BAC kept", ask(voice, "AT+BAC=1,2", "OK")
+		&& strcmp(voice.CodecList(), "1,2") == 0
+		&& voice.CanNegotiateCodecs());
+	report("hfp voice: BCS confirms", ask(voice, "AT+BCS=2", "OK")
+		&& voice.ConfirmedCodec() == 2
+		&& voice.TakeEvents() == kEventCodec);
+	report("hfp voice: BCC asks for voice", ask(voice, "AT+BCC", "OK")
+		&& voice.TakeEvents() == kEventCodecRequest);
+	report("hfp voice: BCS 0 refused", ask(voice, "AT+BCS=0", "ERROR"));
+	report("hfp voice: BAC with letters refused",
+		ask(voice, "AT+BAC=1,X", "ERROR"));
+	Agent old(true);
+	report("hfp voice: a headset without codec negotiation",
+		ask(old, "AT+BRSF=31", "OK") && ask(old, "AT+BAC=1", "OK")
+		&& !old.CanNegotiateCodecs());
 }
 
 
@@ -594,6 +617,13 @@ struct HeadsetTest {
 	thread_id		headset;
 	port_id			ports[2];
 	PortTransport*	headsetTransport;
+	// Step 7c: the headset sends AT+BAC and answers +BCS.
+	bool			voiceScript;
+	volatile bool	bacSent;
+	volatile int	bcsSeen;
+	volatile int32	voiceCalls;
+	volatile int	lastCodec;
+	volatile bool	lastOpen;
 };
 
 
@@ -605,7 +635,10 @@ headset_thread(void* data)
 	if (RFCOMMLink::Start(test->headsetTransport, false, 3, 5000000, &hf)
 			!= B_OK)
 		return B_ERROR;
-	test->scriptOk = headset_ask(hf, "AT+BRSF=959", "+BRSF: 1024")
+	// 959 has HF indicators (bit 8) and codec negotiation (bit 7); the AG
+	// adds bit 9 only with the voice path on.
+	test->scriptOk = headset_ask(hf, "AT+BRSF=959",
+			test->voiceScript ? "+BRSF: 1536" : "+BRSF: 1024")
 		&& headset_ask(hf, "AT+CIND=?", "battchg")
 		&& headset_ask(hf, "AT+CIND?", "+CIND: 0,0,0,0,5,0,5")
 		&& headset_ask(hf, "AT+CMER=3,0,0,1", NULL)
@@ -613,9 +646,39 @@ headset_thread(void* data)
 		&& headset_ask(hf, "AT+BIEV=2,80", NULL)
 		&& headset_ask(hf, "AT", NULL)
 		&& headset_ask(hf, "AT+BLDN", "ERROR");
+	if (test->scriptOk && test->voiceScript
+		&& headset_ask(hf, "AT+BAC=1,2", NULL)) {
+		test->bacSent = true;
+		// Wait for the AG's +BCS, then confirm that codec.
+		char line[64];
+		bigtime_t end = system_time() + 8000000;
+		while (system_time() < end && !test->closeNow) {
+			if (hf->ReadLine(line, sizeof(line), 500000) != B_OK)
+				continue;
+			int codec;
+			if (sscanf(line, "+BCS: %d", &codec) == 1) {
+				char confirm[32];
+				snprintf(confirm, sizeof(confirm), "AT+BCS=%d", codec);
+				if (headset_ask(hf, confirm, NULL))
+					test->bcsSeen = codec;
+				break;
+			}
+		}
+	}
 	while (!test->closeNow)
 		snooze(50000);
 	delete hf;
+	return B_OK;
+}
+
+
+static status_t
+test_voice(const bdaddr_t&, int codec, bool open, void* cookie)
+{
+	HeadsetTest* test = (HeadsetTest*)cookie;
+	test->lastCodec = codec;
+	test->lastOpen = open;
+	test->voiceCalls++;
 	return B_OK;
 }
 
@@ -661,6 +724,12 @@ init_headset_test(HeadsetTest& test, HFPGateway::Options& options)
 	test.headset = -1;
 	test.ports[0] = test.ports[1] = -1;
 	test.headsetTransport = NULL;
+	test.voiceScript = false;
+	test.bacSent = false;
+	test.bcsSeen = 0;
+	test.voiceCalls = 0;
+	test.lastCodec = 0;
+	test.lastOpen = false;
 	options = HFPGateway::DefaultOptions();
 	options.connect = test_connector;
 	options.connected = test_connected;
@@ -807,6 +876,38 @@ test_gateway()
 		gateway.DeviceReady(address, 3);
 		report("gateway: nothing starts after Stop()",
 			gateway.CountSessions() == 0);
+		finish_headset_test(test);
+	}
+
+	{
+		// Step 7c: the microphone opens the voice link after +BCS and
+		// AT+BCS, and closes it again.
+		HeadsetTest test;
+		HFPGateway::Options options;
+		init_headset_test(test, options);
+		test.voiceScript = true;
+		options.voice = test_voice;
+		options.codecNegotiation = true;
+		HFPGateway gateway(options);
+		gateway.DeviceReady(address, 3);
+		bigtime_t end = system_time() + 5000000;
+		while (!test.bacSent && system_time() < end)
+			snooze(50000);
+		report("voice: headset sent its codecs", test.bacSent);
+		gateway.SetVoiceWanted(true);
+		end = system_time() + 6000000;
+		while (test.voiceCalls < 1 && system_time() < end)
+			snooze(50000);
+		report("voice: +BCS 2 answered, mSBC link asked",
+			test.bcsSeen == 2 && test.voiceCalls == 1 && test.lastOpen
+			&& test.lastCodec == 2 && gateway.VoiceOpen());
+		gateway.SetVoiceWanted(false);
+		end = system_time() + 3000000;
+		while (test.voiceCalls < 2 && system_time() < end)
+			snooze(50000);
+		report("voice: link closed when the microphone is let go",
+			test.voiceCalls == 2 && !test.lastOpen && !gateway.VoiceOpen());
+		gateway.Stop();
 		finish_headset_test(test);
 	}
 }
