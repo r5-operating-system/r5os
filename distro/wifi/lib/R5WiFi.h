@@ -140,8 +140,8 @@ WiFiLinkLine(const WiFiLinkDetails& link)
 }
 
 
-/*!	The same line, read from the first wireless adapter. B_ERROR when there
-	is no adapter or the driver reports neither a standard nor a rate.
+/*!	The same line, read from the associated wireless adapter. B_ERROR when
+	none is associated or the driver reports neither a standard nor a rate.
 	Does not start a WiFiController.
 */
 status_t r5_wifi_link_line(BString& line);

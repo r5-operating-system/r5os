@@ -73,6 +73,9 @@
 #define PHY_MODE_A			(1 << 0)
 #define PHY_MODE_B			(1 << 1)
 #define PHY_MODE_G			(1 << 2)
+#define PHY_MODE_GN			(1 << 3)
+#define PHY_MODE_AN			(1 << 4)
+#define PHY_MODE_AC			(1 << 5)
 #define PHY_TYPE_BIT_HR_DSSS		(1 << 0)
 #define PHY_TYPE_BIT_ERP		(1 << 1)
 #define PHY_TYPE_BIT_OFDM		(1 << 3)
@@ -403,9 +406,22 @@ mtk_bss_update(struct mtk_softc* sc, struct ieee80211_node* ni, int enable)
 	{
 		uint16_t phytype = five ? PHY_TYPE_BIT_OFDM
 			: (PHY_TYPE_BIT_HR_DSSS | PHY_TYPE_BIT_ERP);
-		int he = sc->sc_he != 0 && ni != NULL
+		/* Same gates as the station record. he without ht_vht stays off. */
+		int ht = sc->sc_ht_vht != 0 && ni != NULL
+			&& (ni->ni_flags & IEEE80211_NODE_HT) != 0;
+		int vht = sc->sc_ht_vht != 0 && five && ni != NULL
+			&& (ni->ni_flags & IEEE80211_NODE_VHT) != 0;
+		int he = sc->sc_he != 0 && sc->sc_ht_vht != 0 && ni != NULL
 			&& (ni->ni_flags & IEEE80211_NODE_HE) != 0;
 
+		if (ht) {
+			bss[29] |= five ? PHY_MODE_AN : PHY_MODE_GN;
+			phytype |= PHY_TYPE_BIT_HT;
+		}
+		if (vht) {
+			bss[29] |= PHY_MODE_AC;
+			phytype |= PHY_TYPE_BIT_VHT;
+		}
 		if (he) {
 			bss[29] |= five ? PHY_MODE_AX_5G : PHY_MODE_AX_24G;
 			phytype |= PHY_TYPE_BIT_HE;
@@ -427,7 +443,7 @@ mtk_bss_update(struct mtk_softc* sc, struct ieee80211_node* ni, int enable)
 		if (error != 0) {
 			device_printf(sc->sc_dev, "network channel %u: %d\n",
 				ieee80211_chan2ieee(&sc->sc_ic, channel), error);
-		} else if (sc->sc_he != 0 && ni != NULL
+		} else if (sc->sc_he != 0 && sc->sc_ht_vht != 0 && ni != NULL
 			&& (ni->ni_flags & IEEE80211_NODE_HE) != 0) {
 			error = mtk_bss_he(sc, ni);
 			if (error != 0)
@@ -523,9 +539,9 @@ mtk_sec_key(uint8_t* key, uint8_t cipher, uint8_t id, const uint8_t* bytes)
 {
 	memset(key, 0, 36);
 	key[0] = cipher;
-	key[1] = 16;
+	key[1] = 36;			/* this record, mt76 cipher_len */
 	key[2] = id;
-	key[3] = 16;
+	key[3] = 16;			/* the key itself */
 	memcpy(key + 4, bytes, 16);
 }
 
@@ -643,7 +659,8 @@ mtk_sta_update(struct mtk_softc* sc, struct ieee80211_node* ni,
 				m[at + 6] |= PHY_TYPE_BIT_HT;
 			if (sc->sc_ht_vht != 0 && (ni->ni_flags & IEEE80211_NODE_VHT) != 0)
 				m[at + 6] |= PHY_TYPE_BIT_VHT;
-			if (sc->sc_he != 0 && (ni->ni_flags & IEEE80211_NODE_HE) != 0)
+			if (sc->sc_he != 0 && sc->sc_ht_vht != 0
+				&& (ni->ni_flags & IEEE80211_NODE_HE) != 0)
 				m[at + 6] |= PHY_TYPE_BIT_HE;
 /* SPDX-SnippetEnd */
 			m[at + 9] = (uint8_t)(2 * dbm + 220);	/* rcpi */
