@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Network: a missed .local name is not sent to DNS
+
+Problem: after mDNS missed a `.local` name, `getaddrinfo` fell through to unicast DNS, against RFC 6762.
+
+What changed: a `.local` lookup returns the mDNS error (or `EAI_NONAME`) and does not query DNS.
+
+Limits: QEMU usernet is not multicast. Needs a LAN.
+
 ## 2026-11-17 - Settings: a page file is replaced, not erased
 
 Problem: `SettingsStorage::Write` erased the module file and then Flatten. A short write could leave an empty page file.
