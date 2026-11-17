@@ -3,7 +3,7 @@ r5:login-1	A	Login	distro/login/LoginApp.cpp	1	pr	4368	LoginApp accepts logout/l
 r5:login-2	A	Login	distro/login/LoginApp.cpp	1	pr	4377	Logout only B_QUIT_REQUESTED and does not wait; prior-session apps can remain
 r5:media-1	C	usb_audio	distro/media/src/add-ons/kernel/drivers/audio/usb/Stream.cpp	1	needs-hardware		_TransferCallback: failed _QueueNextTransfer leaves fIsRunning true and stalls the 1s timeout
 r5:media-3	C	hda	distro/media/src/add-ons/kernel/drivers/audio/hda/hda_controller.cpp	1	needs-hardware		DigEn path reads widget->capabilities with no NULL check after get_widget
-r5:media-4	B	hda	distro/media/src/add-ons/kernel/drivers/audio/hda/hda_codec.cpp	1	todo		hda_audio_group_get_widget uses start+count < nodeID so the last node is OOB
+r5:media-4	B	hda	distro/media/src/add-ons/kernel/drivers/audio/hda/hda_codec.cpp	1	pr	4392	hda_audio_group_get_widget uses start+count < nodeID so the last node is OOB
 r5:multiuser-1	A	multi-user	distro/users/AccountAdmin.cpp	1	pr	4369	refresh_machine_settings_access sets network/printers/repos 0777/0666 for the live grant
 r5:settings-1	A	Settings	distro/settings/VirtualMemoryModule.cpp	1	pr	4366	VirtualMemoryModule::_Write erases then writes swap settings; a short write can leave an empty file
 r5:settings-2	A	Settings	distro/settings/NotificationsModule.cpp	1	pr	4367	write_state() erases then Flatten of notifications; a failed Flatten can wipe the file
