@@ -1,5 +1,15 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Login: leftover apps leave with the session
+
+Problem: Logout sent `B_QUIT_REQUESTED` to user apps and did not wait. Tracker and Deskbar were waited on; Terminal and other session apps could stay up on the Sign in screen.
+
+What changed: after that quit, Login waits three seconds, then `kill_team` on what is left, then one more second.
+
+Limits: servers, daemons, and `B_BACKGROUND_APP` teams are still kept. No boot test of Log out.
+
+Tested: the C++ was not compiled on this host (needs libbe).
+
 ## 2026-11-17 - Game controllers: fits at 1030 by 610, Motion gray without a controller
 
 Problem: on the screendumps of the layout-A page (1) at 1030 by 610 with a controller the area above the strip still scrolled by about 15 px, hiding the last line of Trigger feedback and the vendor and product line; (2) without a controller the Motion bubble of the gray example stayed blue (the level, the bars and their labels drew as enabled); (3) at 910 by 560 a light bar showed in the bottom row next to the lock.

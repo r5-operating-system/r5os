@@ -909,6 +909,58 @@ LoginApp::_QuitUserApps()
 			continue;
 		BMessenger(NULL, team).SendMessage(B_QUIT_REQUESTED);
 	}
+
+	const bigtime_t deadline = system_time() + 3000000LL;
+	for (;;) {
+		BList leftover;
+		BList live;
+		be_roster->GetAppList(&live);
+		for (int32 i = 0; i < live.CountItems(); i++) {
+			team_id team = (team_id)(addr_t)live.ItemAt(i);
+			app_info info;
+			if (be_roster->GetRunningAppInfo(team, &info) != B_OK)
+				continue;
+			if (keep_team(info, self))
+				continue;
+			leftover.AddItem((void*)(addr_t)team);
+		}
+		if (leftover.IsEmpty())
+			return;
+		if (system_time() < deadline) {
+			snooze(100000);
+			continue;
+		}
+		for (int32 i = 0; i < leftover.CountItems(); i++) {
+			team_id team = (team_id)(addr_t)leftover.ItemAt(i);
+			app_info info;
+			const char* name = "app";
+			if (be_roster->GetRunningAppInfo(team, &info) == B_OK
+				&& info.signature[0] != '\0')
+				name = info.signature;
+			r5_session_log("killing leftover %s team %d", name, (int)team);
+			kill_team(team);
+		}
+		const bigtime_t killDeadline = system_time() + 1000000LL;
+		while (system_time() < killDeadline) {
+			BList still;
+			be_roster->GetAppList(&still);
+			bool remain = false;
+			for (int32 i = 0; i < still.CountItems(); i++) {
+				team_id team = (team_id)(addr_t)still.ItemAt(i);
+				app_info info;
+				if (be_roster->GetRunningAppInfo(team, &info) != B_OK)
+					continue;
+				if (keep_team(info, self))
+					continue;
+				remain = true;
+				break;
+			}
+			if (!remain)
+				return;
+			snooze(100000);
+		}
+		return;
+	}
 }
 
 
