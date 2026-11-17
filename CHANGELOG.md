@@ -8,10 +8,11 @@ Cause: app_server (Haiku `View::_ScreenClipping()`) clipped a view to the visibl
 
 What changed:
 - app_server: in R5's existing copy `distro/desktop/src/servers/app/View.cpp` (the one with the glass snippets, applied by `scripts/apply-desktop-native.py`), `_ScreenClipping()` now always intersects with the visible bounds (SPDX snippet, MIT). A first version of this PR added a second copy, `distro/app_server/View.cpp`, which would have overwritten the glass code depending on the apply order; it is removed. This applies to every window: a view inside a scrolled or smaller parent no longer paints its background outside that parent.
+- Settings: `SettingsStorage.cpp` included `<MallocIO.h>`, which Haiku does not have (`BMallocIO` is in `<DataIO.h>`), so main did not build after the atomic-write change; it now includes `<DataIO.h>`.
 
-Tested: AMD64 `scripts/build-locked.sh`, `jam_exit=0` (app_server rebuilt from the copy). QEMU (SMAP and SMEP enabled, LOGIN=1, virtual DualSense, own image copy): at 910 by 560 no box-coloured row below the scroll area any more (checked pixel by pixel; the area still scrolls); at 1030 by 610 the page looks as before, with Trigger feedback and the vendor line visible and no scroll bar. No panic in the serial logs.
+Tested: AMD64 `scripts/build-locked.sh`, `jam_exit=0`; after the apply the tree's `src/servers/app/View.cpp` has the glass code (`fGlass`) and the new clipping once, the old size check zero times. QEMU (SMAP and SMEP enabled, LOGIN=1, own image copy): with a virtual DualSense at 910 by 560 no box-coloured row below the scroll area any more (checked pixel by pixel; the area still scrolls); at 1030 by 610 the page looks as before, with Trigger feedback and the vendor line visible and no scroll bar; the Display page at 1030 by 610 and the desktop background and window frames look as before. No panic in the serial logs.
 
-Limits: Haiku upstream was not checked for the same fix. Other pages and apps were not looked at with this change, and not on real hardware. ARM64 and RISC-V 64 were not built.
+Limits: Haiku upstream was not checked for the same fix. The Sign in window covers the middle of the Display screendump, so the screen picture was not seen; the Deskbar and other apps were not looked at with this change, and not on real hardware. ARM64 and RISC-V 64 were not built.
 
 ## 2026-11-17 - Network: link-local mDNS results carry a scope
 
