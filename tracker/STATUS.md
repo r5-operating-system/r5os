@@ -4,21 +4,21 @@ Gegenereerd door `scripts/tracker-report.py`. Niet met de hand bewerken.
 
 | R5-status | Aantal |
 |---|---|
-| open | 3667 |
+| open | 3664 |
 | in-progress | 8 |
-| fixed | 152 |
+| fixed | 155 |
 | wontfix | 0 |
 | not-applicable | 109 |
 | **totaal in tracker** | **3936** |
 | open bij Haiku (laatste import) | 3936 |
 
-Nog open in R5OS: **2379** bugs, **1244** enhancements, rest overig (van 3675 open/bezig).
+Nog open in R5OS: **2376** bugs, **1244** enhancements, rest overig (van 3672 open/bezig).
 
 ## Type
 
 | Type | Aantal |
 |---|---|
-| bug | 2379 |
+| bug | 2376 |
 | enhancement | 1244 |
 | task | 52 |
 
@@ -26,7 +26,7 @@ Nog open in R5OS: **2379** bugs, **1244** enhancements, rest overig (van 3675 op
 
 | Priority | Aantal |
 |---|---|
-| normal | 3398 |
+| normal | 3395 |
 | low | 247 |
 | high | 28 |
 | critical | 1 |
@@ -36,8 +36,8 @@ Nog open in R5OS: **2379** bugs, **1244** enhancements, rest overig (van 3675 op
 
 | Milestone | Aantal |
 |---|---|
-| Unscheduled | 2912 |
-| R1 | 415 |
+| Unscheduled | 2910 |
+| R1 | 414 |
 | R1.1 | 296 |
 | R1/beta7 | 25 |
 | R2 | 16 |
@@ -47,13 +47,13 @@ Nog open in R5OS: **2379** bugs, **1244** enhancements, rest overig (van 3675 op
 
 | Component | Aantal |
 |---|---|
-| Applications/Tracker | 171 |
+| Applications/Tracker | 170 |
 | Servers/app_server | 161 |
 | Kits/Interface Kit | 153 |
 | System/Kernel | 149 |
 | Applications/WebPositive | 131 |
 | Kits/Web Kit | 126 |
-| Applications/MediaPlayer | 94 |
+| Applications/MediaPlayer | 93 |
 | - General | 86 |
 | User Interface | 85 |
 | Drivers/Graphics/radeon_hd | 77 |
@@ -62,7 +62,7 @@ Nog open in R5OS: **2379** bugs, **1244** enhancements, rest overig (van 3675 op
 | Applications/Command Line Tools | 52 |
 | Applications/Debugger | 45 |
 | System/POSIX | 43 |
-| Applications/Deskbar | 42 |
+| Applications/Deskbar | 41 |
 | Kits/Package Kit | 40 |
 | Documentation | 38 |
 | Applications/Icon-O-Matic | 37 |
@@ -107,6 +107,7 @@ Nog open in R5OS: **2379** bugs, **1244** enhancements, rest overig (van 3675 op
 | [#5000](https://dev.haiku-os.org/ticket/5000) | assigned | Applications/Deskbar | Additional Deskbar click behaviour |  |
 | [#5338](https://dev.haiku-os.org/ticket/5338) | assigned | Applications/Tracker | Long name not fit in Tracker status window |  |
 | [#5930](https://dev.haiku-os.org/ticket/5930) | assigned | Applications/Tracker | Add "Favorites" to standard Tracker Menu |  |
+| [#6846](https://dev.haiku-os.org/ticket/6846) | assigned | Applications/Deskbar | [Deskbar] crashed in BView::Window while closing apps using VDG |  |
 | [#6873](https://dev.haiku-os.org/ticket/6873) | new | Kits/Interface Kit | [Interface Kit] wrongly enabled scrollbar arrow |  |
 | [#6891](https://dev.haiku-os.org/ticket/6891) | assigned | Network & Internet/Bluetooth | Implement Bluetooth HID support |  |
 | [#7328](https://dev.haiku-os.org/ticket/7328) | assigned | Applications/Deskbar | Deskbar - Empty Recent applications expands outside of screen |  |
@@ -132,6 +133,7 @@ Nog open in R5OS: **2379** bugs, **1244** enhancements, rest overig (van 3675 op
 | [#11495](https://dev.haiku-os.org/ticket/11495) | assigned | Applications/Tracker | The content of submenu "Add-ons" doesn't update automatically |  |
 | [#11625](https://dev.haiku-os.org/ticket/11625) | assigned | Kits/Interface Kit | BBox with layout cuts title at big font sizes |  |
 | [#11735](https://dev.haiku-os.org/ticket/11735) | assigned | Kits/Interface Kit | [BTextControl] Sends a Modification Message when the text is set with a SetText() |  |
+| [#12050](https://dev.haiku-os.org/ticket/12050) | new | Applications/Tracker | Tracker deadlock between FS unmount and DoPeriodicUpdate |  |
 | [#12335](https://dev.haiku-os.org/ticket/12335) | assigned | Applications/Tracker | Replace dialog doesn't use preferred date/time format |  |
 | [#12776](https://dev.haiku-os.org/ticket/12776) | assigned | Servers/media_server | media_server can't properly disconnect/reconnect from outputs |  |
 | [#12777](https://dev.haiku-os.org/ticket/12777) | assigned | Servers/media_server | media_server doesn't find new outputs until after a restart |  |
@@ -149,6 +151,7 @@ Nog open in R5OS: **2379** bugs, **1244** enhancements, rest overig (van 3675 op
 | [#14846](https://dev.haiku-os.org/ticket/14846) | new | Applications/Deskbar | Deskbar display of weekday clipped |  |
 | [#14900](https://dev.haiku-os.org/ticket/14900) | new | Applications/Tracker | Revert secondary sort order when shift-click |  |
 | [#14991](https://dev.haiku-os.org/ticket/14991) | new | User Interface | Several apps don't obey changing system colors on the fly |  |
+| [#15293](https://dev.haiku-os.org/ticket/15293) | new | Applications/MediaPlayer | MediaPlayer crashes in StreamBase::FrameRate |  |
 | [#15432](https://dev.haiku-os.org/ticket/15432) | new | System/runtime_loader | runtime_loader doesn't support R_X86_64_TPOFF64 relocation | cursor/tls-initial-exec-477a |
 | [#15444](https://dev.haiku-os.org/ticket/15444) | new | Applications/Tracker | [tracker] List view name size column directly affects icon mode |  |
 | [#15527](https://dev.haiku-os.org/ticket/15527) | new | Applications/Tracker | 'system' directory is available as a translateable string, but it does not apply |  |
@@ -162,10 +165,7 @@ Nog open in R5OS: **2379** bugs, **1244** enhancements, rest overig (van 3675 op
 | [#16057](https://dev.haiku-os.org/ticket/16057) | new | Servers/media_addon_server | "multi_audio audio output" occupies whole CPU indefinitely |  |
 | [#16103](https://dev.haiku-os.org/ticket/16103) | new | Preferences/Printers | [Printers] Make default changes "No pending jobs" text | claude/issues-2-prefs |
 | [#16114](https://dev.haiku-os.org/ticket/16114) | new | Applications/Expander | Expander doesn't give feedback on missing command | claude/issues-1-apps |
-| [#16116](https://dev.haiku-os.org/ticket/16116) | new | User Interface | Change standard icon size for Desktop to 48x48 |  |
-| [#16144](https://dev.haiku-os.org/ticket/16144) | assigned | Applications/Deskbar | ESC doesn't always close Deskbar menu |  |
-| [#16185](https://dev.haiku-os.org/ticket/16185) | new | Applications/Tracker | [Tracker] Status window is too small with large fonts |  |
-| … | | | *72 meer in r5-status.tsv* | |
+| … | | | *75 meer in r5-status.tsv* | |
 
 ## Nog open (eerste 80)
 
@@ -251,5 +251,5 @@ Nog open in R5OS: **2379** bugs, **1244** enhancements, rest overig (van 3675 op
 | [#2532](https://dev.haiku-os.org/ticket/2532) | assigned | Drivers/Graphics/NeoMagic | broken Video/Audio on Dell Latitude LS [NeoMagic chipset] |  |
 | [#2551](https://dev.haiku-os.org/ticket/2551) | assigned | Applications/Tracker | [Tracker]: Copy To shows wrong content of Desktop directory when selecting a bfs volume on a usb stick |  |
 | [#2615](https://dev.haiku-os.org/ticket/2615) | assigned | Kits/Interface Kit | Improved keyboard navigation with triggers |  |
-| … | | | *3587 meer in r5-status.tsv* | |
+| … | | | *3584 meer in r5-status.tsv* | |
 

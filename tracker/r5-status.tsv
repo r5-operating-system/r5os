@@ -439,7 +439,7 @@ id	r5_status	branch	commit	notes
 6826	open			
 6829	open			
 6830	open			
-6846	open			
+6846	fixed			Deskbar window watcher locks the window only when the menu is still attached. Merged in #4416.
 6847	open			
 6852	open			
 6856	open			
@@ -1174,7 +1174,7 @@ id	r5_status	branch	commit	notes
 12016	open			
 12021	open			
 12049	open			
-12050	open			
+12050	fixed			Volume space-bar pulse drops the list lock before it locks the window. Merged in #4415.
 12058	open			
 12060	open			
 12068	open			
@@ -1875,7 +1875,7 @@ id	r5_status	branch	commit	notes
 15255	open			
 15257	open			
 15290	open			
-15293	open			
+15293	fixed			A video rate of 0 uses 25 and an audio rate of 0 returns frame 0. Merged in #4417.
 15295	open			
 15296	open			
 15298	open			
