@@ -137,6 +137,8 @@ Each step is its own small pull request, built for AMD64 with `scripts/build-loc
 
 ### B8: the smaller Bluetooth 6.0 parts
 
+**Waits for a radio that has them.** The ASUS USB-BT600 has none of these features (section 6, choice 3). B8 starts only once a radio reports them in its feature bits.
+
 - On the dongle, only what the controller reports in its feature bits:
   - Decision-Based Advertising Filtering;
   - Monitoring Advertisers;
@@ -150,7 +152,12 @@ Each step is its own small pull request, built for AMD64 with `scripts/build-loc
 
 1. **Scope (owner, 17 Nov 2026):** LE Audio, Auracast and the smaller 6.0 parts. Not Channel Sounding.
 2. **LC3 (owner, 17 Nov 2026):** liblc3 as a separate library (`Apache-2.0`, own recipe), not an own codec.
-3. **Hardware (owner, 17 Nov 2026):** one Bluetooth 6.0 USB dongle for testing (candidates TP-Link UB6A and ASUS USB-BT600, which lists LC3). The chip is checked before buying (step B0); a 6.0 label does not mean LE Audio or ISO support.
+3. **Hardware (owner, 17 Nov 2026):** the owner ordered one ASUS USB-BT600. According to Argenox (argenox.com, "The curious case of the Bluetooth 6.0 dongle", 8 Sep 2026), it:
+   - reports HCI version 0x0E (Core 6.0), with an "almost certainly Realtek" chip;
+   - supports CIS central and peripheral, ISO broadcaster and synchronized receiver, extended and periodic advertising, and the 2M and Coded PHY;
+   - does not support Channel Sounding, DBAF, Monitoring Advertisers, the LL extended feature set, the ISOAL enhancement or Frame Space Update.
+
+   So it covers B1 to B7, but not B8. Step B0 still reads its USB ID, firmware and feature bits on R5.
 4. **The name (owner, 17 Nov 2026):** work it out in this plan (section 3). Until then, no Bluetooth version claim in the README or on the website.
 5. **Order (open):** B0 → B1 → B2 → B3 → B4 → B5 → B6 → B7 → B8. Auracast listening (B6) could come before B4. *Recommendation: keep this order.* Unicast earbuds are what most people own. B6 reuses B2 and B3 either way.
 
@@ -158,4 +165,4 @@ Each step is its own small pull request, built for AMD64 with `scripts/build-loc
 
 - The liblc3 qualification (QDID 194161) and the royalty-free claim for LC3 come from Google's README and from secondary sources.
 - The SIG fees and trademark rules come from bluetooth.com pages as found on 17 Nov 2026.
-- No dongle has been bought or tested. Whether the 5625U radio supports ISO is unknown until B0.
+- The ASUS USB-BT600's features come from one article (Argenox); R5 has not read them yet. Whether the 5625U radio supports ISO is unknown until B0.
