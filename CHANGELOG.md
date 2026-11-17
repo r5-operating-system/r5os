@@ -21,6 +21,65 @@ Mistake on the way: the first build put the vendor and product ID beside Layout;
 Tested: `scripts/build-locked.sh` jam_exit=0 (x86_64). QEMU (KVM, SMAP and SMEP, Login, an own image copy, `GAMEPAD=1 QUIT_SETTINGS=1 SETTINGS_PAGE=gamecontrollers`): `gamecontroller_test` ok: descriptor-first checks ok; 872 of 872 Windows entries parse; the DualSense virtual controller as before (Cross is A, the hat is down, R2 32703); "M30 hat pad: a mapping, family 4 (Sega), 1 hat, up 1, A 1"; "M30 axes pad: a mapping, 0 hats, left 1, up 0, B 1"; the saved setup (b3 is A, X is d-pad left), the Sega layout under it, and both removed again. The other Bluetooth tests of the script exit 0. No panic, no SMAP line. Screendumps: at 1030 by 610 the page with the DualSense card, the Test box with Layout "Automatic", Button labels "PlayStation (✕○□△)", "Set up buttons…", the PlayStation picture with Cross lit and L2 at 60 %; no Shapes strip. After the quit Settings is gone from the process list and the syslog has no debugger line. Second build (IDs under the picture, jam_exit=0) and the same QEMU run: the same test lines, `gamecontroller_test: ok`; at 910 by 560 the Test box keeps its right border inside the page, with the vendor and product ID under the hint; Settings quits without a debugger line; no panic, no SMAP line.
 
 Not tested: a real controller; the 8BitDo M30 and the DualSense on this build; which M30 key sends which button over Bluetooth; the setup window with a controller (QEMU sends no button presses to it; it was not opened in QEMU); dark mode; ARM64 and RISC-V 64 (not built).
+## 2026-11-17 - Wi-Fi step 3: SAE frames and protected management, supplicant unchanged
+
+Problem: a WPA3 join needs SAE (authentication algorithm 3) and protected management frames (BIP-CMAC-128, the IGTK). The supplicant package that is built does not compile those in.
+
+What changed:
+- The recipe sub-task stops. HaikuPorts `wpa_supplicant-2.11.haiku.1.recipe` (revision 1 `7bb9e50ac5` and revision 2 `a3ac62e9d5`) builds git `bdf3144ad606b226aca6f8fae103e671e4655138` and uses the committed `wpa_supplicant/.config`, not `defconfig`. PMF is off: `.config` line 297 is `#CONFIG_IEEE80211W=y`. SAE is off: `.config` has no `CONFIG_SAE` line, and `Makefile` lines 265-274 set `CONFIG_SAE=y` only inside `ifdef CONFIG_MESH`, while `.config` line 576 is `#CONFIG_MESH=y`. OWE is off: `.config` line 590 is `#CONFIG_OWE=y`. `defconfig` does contain `CONFIG_SAE=y`; that file is not what this package builds. `driver_bsd.c` has no SAE authenticate path. WPA3 needs an own wpa_supplicant recipe (choice 3b). No recipe was written.
+- The kernel accepts SAE frames. Algorithm 3 is stored for the supplicant and does not move the station to associate. A received frame with status 0 and sequence 2 logs `sae: authenticated` and nothing of the frame body. Sending is `IEEE80211_IOC_HAIKU_SAE_AUTH` (0x6004): the ioctl copies the body in, checks algorithm 3 and a length of 6 to 400, and transmits it. The same request reads the last body back out. While the mode is SAE, entering authentication does not send an open authentication frame. A later join from that state asks for association. The mode value is 6, added beside the existing authentication modes. The body is not logged.
+- An RSN element that lists SAE (suite 8, or FT over SAE, suite 9) is reported as SAE, including when PSK is listed as well. An unknown suite still falls through to PSK.
+- BIP-CMAC-128 is an R5 cipher module (`ieee80211_crypto_bip.c`, MIT). It uses the AES already in the tree. The MIC is the first 8 bytes of AES-CMAC over the masked frame control, the three addresses, the body, and the MMIE with a zero MIC. The com advertises `IEEE80211_C_MFP` (bit `0x00400000`, previously unused).
+- An IGTK uses key index 4 or 5, which does not fit the four group-key slots. The existing set-key request (`IEEE80211_IOC_WPAKEY`) for BIP-CMAC-128 at those indexes copies the key in the kernel and hands that copy to the driver. It is not stored in the group-key array. The driver sends `STA_REC_KEY_V2`: the remembered pairwise CCMP key in the first slot when it has one, and BIP-CMAC-128 (cipher id 10) in the other. The key bytes are not logged. After the firmware accepts the update the driver logs `pmf: on`. mt76 has no separate PMF bit in the station record (`mt76_connac_mcu.c` and `mt7921/mcu.c`, SPDX BSD-3-Clause-Clear, searched for a PMF field; the key path is the signal). The host cipher is registered. Index 4 is not installed in a slot, so the host does not yet build the MMIE for that index. The cipher id and the 36-byte key layout are taken from mt76 and are assumed until a stick boot.
+- The Network Kit gains `B_NETWORK_AUTHENTICATION_WPA3` (5), `B_KEY_MODE_SAE` (`0x0400`) and `B_KEY_MODE_OWE` (`0x0800`). `wireless_network` is unchanged. The Wi-Fi page does not say "WPA3" in this step.
+- User pointers stay in the ioctl. The driver only sees kernel copies. 0x6005 is the driver's command for that kernel copy. A user request with that number is rejected and is not passed to the driver. The next free kit request is 0x6006.
+
+Tested: `scripts/build-locked.sh` jam_exit=0 (x86_64). The translator errors (avif, jpeg, png, tiff, webp, icns, jasper) are the same pre-existing ones. Host, WSL, gcc with AddressSanitizer and UBSan: `wifi_fuzz rsn: 60s 0 crashes` (54,100,992 rounds). The other fuzz targets were not re-run; this step changes the RSN parser.
+
+QEMU (KVM, SMAP and SMEP, 2 CPUs, 2 GB, headless, 150 s) on an own copy of `r5-os.image`. The serial log has `enable SMAP` and `enable SMEP`. No panic and no `vm_page_fault`. The `kernel debugger` lines are the debugger extensions loading. Settings stayed running (`/boot/system/preferences/Settings --page wifi`, pid 94, still in `ps` after 8 seconds). User space wrote `wifi-step3-booted`. QEMU has no Wi-Fi adapter, so the syslog has no mt7922 line, no `sae: authenticated` and no `pmf: on`. The words on the page were not read.
+
+Not tested: a WPA3-only join, a WPA2 join on the same boot, and the two syslog lines on hardware (stick W2). The pairwise-key slot and the BIP cipher id in the firmware message are assumed. ARM64 and RISC-V 64 not built.
+
+## 2026-11-17 - Wi-Fi step 2: Wi-Fi 4 and 5 stay off until the settings ask
+
+Problem: the MT7921 could only offer 802.11a/b/g. The card reports HT and VHT in its capability event, and the firmware does not reorder A-MPDU by itself. The Wi-Fi page already asks the driver for the last transmit rate (`IEEE80211_IOC_HAIKU_TX_RATE`, 0x6003) and the driver dropped those status records.
+
+What changed:
+- The driver reads the PHY tag it already fetched (ht, vht, max bandwidth, streams, LDPC, STBC). `max_bw` is taken as 0, 1, 2, 3 for 20, 40, 80 and 160 MHz. That mapping is assumed from the byte order in the event; a stick boot can correct it.
+- With `ht_vht` true in `/boot/system/settings/kernel/drivers/mt7922wifi` (absent means false, same rule as the other keys in that file), and only when the card said it has HT, the channel list gains 11n and, on 5 GHz when the card said VHT, 11ac. 40 MHz and 80 MHz follow the reported bandwidth. The capability bits are translated from that event. This tree has no `IEEE80211_C_TX_AMPDU`; HT operation and transmit A-MPDU are `IEEE80211_HTC_HT` and `IEEE80211_HTC_AMPDU`.
+- The station record gains HT and VHT only when the setting is on and the station is that kind of station. Rate control stays in the firmware.
+- A-MPDU reorder stays net80211's. mt76 does not leave it to the firmware: `mt7921_ampdu_action` on receive start calls both `mt76_rx_aggr_start` and `mt7921_mcu_uni_rx_ba` (`mt7921/main.c` lines 966 and 968, SPDX BSD-3-Clause-Clear). After the stack has installed its own reorder, the driver tells the firmware about the session (`STA_REC_BA`).
+- Transmit status (packet type 0), which the driver used to drop, is parsed. The last acknowledged rate is what the kit's existing 0x6003 request shows. The driver fills a kernel struct; the ioctl copies it out. No new copy of a user pointer in the driver. Until a status record arrives the rate stays 0 and the kit ignores it.
+- Default tonight is off. No settings file is shipped.
+
+Tested: `scripts/build-locked.sh` jam_exit=0 (x86_64), twice; the second run is the image that was booted, after another session had used the shared tree. Host, WSL, gcc with AddressSanitizer and UBSan, the step 1 targets again:
+- `wifi_fuzz ies: 60s 0 crashes` (34,231,296 rounds)
+- `wifi_fuzz rsn: 60s 0 crashes` (95,547,392 rounds)
+- `wifi_fuzz action: 60s 0 crashes` (185,840,640 rounds)
+- `wifi_fuzz mtkrx: 60s 0 crashes` (69,677,056 rounds)
+
+QEMU (KVM, SMAP and SMEP, 2 CPUs, 2 GB, headless, 150 s) on an own copy of `r5-os.image`. The serial log has `enable SMAP` and `enable SMEP`. No panic and no `vm_page_fault`. The `kernel debugger` lines are the debugger extensions loading. Settings stayed running (`/boot/system/preferences/Settings --page wifi`, still in `ps` after 8 seconds). QEMU has no Wi-Fi adapter, so the syslog has no mt7922 line and the page has nothing to join. The words on the page were not read.
+
+Not tested: a WPA2 join, an hour without a panic, and a download with HT/VHT off and on (stick W1). ARM64 and RISC-V 64 not built. `mtk_tx.c` still names no copyright holder. The first boot looked for Settings under `apps`; it lives under `preferences`.
+
+## 2026-11-17 - Wi-Fi step 1: a frame that does not fit is dropped, and a join that hangs gives up
+
+Problem: a short information element in a beacon was read past its end (FH, DS, channel switch, HT, VHT). `ieee80211_ies_init` turned a negative length into a huge allocation. `IEEE80211_VERIFY_LENGTH` compared a pointer difference with a `size_t`, so a frame shorter than its header looked long enough and was then read past its end. A join that never reached RUN had no limit. The scan sweep already stops after 15 seconds. The firmware reply wait stays 2 seconds.
+
+What changed:
+- Distro copies of the net80211 beacon, HT, VHT and element-init parsers, and the length check they share (`ieee80211_input.h`). A short element is dropped and counted by the existing discard stats. A length below 0 or above 4096, or a null buffer with a positive length, is refused. A beacon shorter than the fixed fields clears the scan record before returning, so a reused record does not keep a pointer into the previous frame. A channel-switch element shorter than 3 bytes is ignored.
+- The MT7921 driver gives a join 15 seconds (`MTK_JOIN_TIMEOUT`). It then logs `join gave up after 15 s; not connected` and goes back to scan. The new lines touch the driver softc only. No new copy of user memory.
+- Host fuzzer `scripts/fuzz-wifi.sh`. It compiles the real functions (a `distro/` copy wins over the Haiku tree) with AddressSanitizer and UBSan. Targets: ies, rsn, action, mtkrx.
+
+Tested: `scripts/build-locked.sh` jam_exit=0 (x86_64). Host, WSL, gcc with AddressSanitizer and UBSan:
+- `wifi_fuzz ies: 60s 0 crashes` (28,874,752 rounds)
+- `wifi_fuzz rsn: 60s 0 crashes` (62,419,968 rounds)
+- `wifi_fuzz action: 60s 0 crashes` (126,505,984 rounds)
+- `wifi_fuzz mtkrx: 60s 0 crashes` (66,747,392 rounds)
+
+QEMU (KVM, SMAP and SMEP, 2 CPUs, 2 GB, headless, 100 s) on an own copy of `r5-os.image` (`generated/wifi-qemu.sh`, not `scripts/run-qemu-r5.sh`): user space wrote `wifi-step1-booted`; the serial log has `enable SMAP` and `enable SMEP`; no panic and no `vm_page_fault`. The `kernel debugger` lines are the debugger extensions loading at boot. QEMU has no Wi-Fi device, so the syslog has no mt7922 line.
+
+Not tested: a WPA2 join and an hour without a panic (stick W1, later). ARM64 and RISC-V 64 not built. `mtk_tx.c` at air/OS `e3c4cc898` (`src/add-ons/kernel/drivers/network/wlan/mt7922wifi/dev/mtk/mtk_tx.c`) names no copyright holder; the file says only "Distributed under the terms of the MIT License." That line was left as it is.
 
 ## 2026-11-17 - Graphics (M13 step 1): five small app_server fixes for Skia drawing
 
