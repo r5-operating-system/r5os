@@ -139,12 +139,33 @@ BLayoutBuilder::Group&lt;&gt;(this, B_VERTICAL, 0)
 				networks ends.</p></div>
 		</section>
 
+		<section class="entry" id="link">
+			<div class="entry-header"><h2>The link</h2><span class="kind">WiFiLinkDetails</span></div>
+			<p>While associated, <code class="inline">WiFiState.link</code> also carries
+			<code class="inline">standard</code> (<code class="inline">"Wi-Fi 4"</code>,
+			<code class="inline">"Wi-Fi 5"</code> or <code class="inline">"Wi-Fi 6"</code>),
+			<code class="inline">width</code> (MHz), <code class="inline">streams</code> and
+			<code class="inline">rxKbps</code>. They are read with <code class="inline">Unarchive()</code>,
+			so an older reader ignores them. <code class="inline">rxKbps</code> is 0 when the driver
+			does not report a receive rate; the MT7921 driver does not, yet.</p>
+			<div class="member"><div class="sig">BString WiFiLinkLine(const WiFiLinkDetails&amp; link);</div>
+				<p><code class="inline">"Wi-Fi 6 · 600 Mbit/s"</code>. The receive rate when the driver
+				has one, otherwise the transmit rate. Empty when both are unknown.</p></div>
+			<div class="member"><div class="sig">status_t r5_wifi_link_line(BString&amp; line);</div>
+				<p>The same line from the associated wireless adapter, without starting a controller.
+				The Deskbar network menu shows it under the connected network. <code class="inline">B_ERROR</code>
+				when there is no adapter or nothing to show.</p></div>
+		</section>
+
 		<section class="entry" id="settings">
 			<div class="entry-header"><h2 class="plain">Where people see it</h2></div>
-			<p>Settings, Network, Wi-Fi: the panel as a page, with its own icon and the preferences wrench. The
-			Deskbar network icon shows the arcs on a computer with a Wi-Fi adapter, and its menu has
-			<em>Wi-Fi settings&hellip;</em>, which runs <code class="inline">Settings --page wifi</code>. Without a
-			Wi-Fi adapter the icon stays the wired one. The WiFi program stays installed.</p>
+			<p>Settings, Network, Wi-Fi: the panel as a page, with its own icon and the preferences wrench. Under
+			the network name, a joined link adds <code class="inline">Wi-Fi 6 · 600 Mbit/s</code> when the
+			driver reports a standard or a rate. The Deskbar network icon shows the arcs on a computer with a
+			Wi-Fi adapter, and its menu has <em>Wi-Fi settings&hellip;</em>, which runs
+			<code class="inline">Settings --page wifi</code>, and the same line under the connected network.
+			Without a Wi-Fi adapter the icon stays the wired one and the page says there is no adapter. The
+			WiFi program stays installed.</p>
 			<div class="note"><strong>Tested.</strong> Built for x86_64 and booted in QEMU, which has no Wi-Fi
 			adapter. Joining a network has not run on R5 hardware yet.</div>
 		</section>

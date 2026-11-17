@@ -298,6 +298,14 @@ ieee80211_vht_updateparams(struct ieee80211_node *ni,
 
 	//printf("%s: called\n", __func__);
 
+	if (vhtcap_ie == NULL
+	    || vhtcap_ie[1] < sizeof(struct ieee80211_vht_cap)
+	    || vhtop_ie == NULL
+	    || vhtop_ie[1] < sizeof(struct ieee80211_vht_operation)) {
+		ieee80211_vht_node_cleanup(ni);
+		return (EINVAL);
+	}
+
 	ieee80211_parse_vhtcap(ni, vhtcap_ie);
 	ieee80211_parse_vhtopmode(ni, vhtop_ie);
 	return (0);

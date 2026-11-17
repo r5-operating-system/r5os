@@ -35,6 +35,7 @@
 #include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_ratectl.h>
 #include <net80211/ieee80211_scan.h>
+#include <net80211/ieee80211_he.h>
 
 #include "if_mtkvar.h"
 
@@ -369,6 +370,13 @@ mtk_ht_on(const struct mtk_softc* sc)
 }
 
 
+static int
+mtk_he_on(const struct mtk_softc* sc)
+{
+	return mtk_ht_on(sc) && sc->sc_he != 0 && sc->sc_phy_he != 0;
+}
+
+
 static void
 mtk_getradiocaps(struct ieee80211com* ic, int maxchans, int* nchans,
 	struct ieee80211_channel chans[])
@@ -423,6 +431,14 @@ mtk_vht_mcs_map(int streams)
 }
 
 
+/* The same two bits per stream. For HE, 2 means MCS 0-11. */
+static uint16_t
+mtk_he_mcs_map(int streams)
+{
+	return mtk_vht_mcs_map(streams);
+}
+
+
 static void
 mtk_apply_phy(struct mtk_softc* sc)
 {
@@ -459,6 +475,45 @@ mtk_apply_phy(struct mtk_softc* sc)
 
 	ic->ic_nchans = 0;
 	mtk_getradiocaps(ic, IEEE80211_CHAN_MAX, &ic->ic_nchans, ic->ic_channels);
+
+	ieee80211_he_clear(ic);
+	sc->sc_he_phy0 = 0;
+	sc->sc_he_tx_mcs = 0xffff;
+	if (mtk_he_on(sc)) {
+		uint8_t mac[6];
+		uint8_t phy[11];
+		uint16_t map = mtk_he_mcs_map(sc->sc_streams);
+		int i;
+
+		memset(mac, 0, sizeof(mac));
+		memset(phy, 0, sizeof(phy));
+		mac[0] = IEEE80211_HE_MAC_CAP0_HTC_HE;
+		phy[0] = IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_RU_MAPPING_IN_2G
+			| IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_RU_MAPPING_IN_5G;
+		if (sc->sc_phy_bw >= 1)
+			phy[0] |= IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_40MHZ_IN_2G;
+		if (sc->sc_phy_bw >= 2)
+			phy[0] |= IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_40MHZ_80MHZ_IN_5G;
+		if (sc->sc_phy_bw >= 3)
+			phy[0] |= IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_160MHZ_IN_5G;
+		if (sc->sc_phy_rx_ldpc != 0)
+			phy[1] |= IEEE80211_HE_PHY_CAP1_LDPC_CODING_IN_PAYLOAD;
+		if (sc->sc_phy_rx_stbc != 0)
+			phy[2] |= IEEE80211_HE_PHY_CAP2_STBC_RX_UNDER_80MHZ;
+		sc->sc_he_phy0 = phy[0];
+		sc->sc_he_tx_mcs = map;
+		ieee80211_he_set(ic, mac, phy, map, map);
+		for (i = 0; i < ic->ic_nchans; i++) {
+			if ((ic->ic_channels[i].ic_flags & IEEE80211_CHAN_HT) != 0)
+				ic->ic_channels[i].ic_flags |= IEEE80211_CHAN_HE;
+		}
+		setbit(ic->ic_modecaps, IEEE80211_MODE_HE_2GHZ);
+		setbit(ic->ic_modecaps, IEEE80211_MODE_HE_5GHZ);
+		device_printf(sc->sc_dev, "he on, %d streams\n", sc->sc_streams);
+	} else if (sc->sc_he != 0 && sc->sc_ht_vht == 0)
+		device_printf(sc->sc_dev, "he off until ht_vht is on\n");
+	else if (sc->sc_he != 0)
+		device_printf(sc->sc_dev, "he off, the card did not report it\n");
 }
 /* SPDX-SnippetEnd */
 
@@ -1286,6 +1341,48 @@ mtk_ioctl(struct ieee80211com* ic, u_long cmd, void* data)
 		return mtk_sta_igtk(sc);
 	}
 
+	if (cmd == IEEE80211_IOC_HAIKU_LINK) {
+		struct ieee80211_haiku_link* link = data;
+		struct ieee80211vap* vap;
+		struct ieee80211_node* ni;
+		struct ieee80211_channel* channel;
+
+		if (link == NULL)
+			return EINVAL;
+		memset(link, 0, sizeof(*link));
+		vap = TAILQ_FIRST(&ic->ic_vaps);
+		ni = vap != NULL ? vap->iv_bss : NULL;
+		if (ni != NULL && (ni->ni_flags & IEEE80211_NODE_HE) != 0)
+			link->i_standard = 6;
+		else if (ni != NULL && (ni->ni_flags & IEEE80211_NODE_VHT) != 0)
+			link->i_standard = 5;
+		else if (ni != NULL && (ni->ni_flags & IEEE80211_NODE_HT) != 0)
+			link->i_standard = 4;
+		else if (sc->sc_tx_mode == 4)
+			link->i_standard = 6;
+		else if (sc->sc_tx_mode == 3)
+			link->i_standard = 5;
+		else if (sc->sc_tx_mode == 2)
+			link->i_standard = 4;
+		link->i_width = sc->sc_tx_width;
+		channel = ni != NULL ? ni->ni_chan : NULL;
+		if (link->i_width == 0 && channel != NULL
+			&& channel != IEEE80211_CHAN_ANYC) {
+			if (IEEE80211_IS_CHAN_VHT160(channel))
+				link->i_width = 160;
+			else if (IEEE80211_IS_CHAN_VHT80(channel))
+				link->i_width = 80;
+			else if (IEEE80211_IS_CHAN_HT40(channel)
+				|| IEEE80211_IS_CHAN_VHT40(channel))
+				link->i_width = 40;
+			else if ((channel->ic_flags & IEEE80211_CHAN_HT) != 0
+				|| (channel->ic_flags & IEEE80211_CHAN_VHT) != 0)
+				link->i_width = 20;
+		}
+		link->i_streams = sc->sc_tx_nss;
+		return 0;
+	}
+
 	if (cmd != IEEE80211_IOC_HAIKU_TX_RATE || rate == NULL)
 		return ENOTTY;
 
@@ -1357,15 +1454,18 @@ mtk_attach(device_t dev)
 	}
 
 	sc->sc_ht_vht = 0;
+	sc->sc_he = 0;
 	{
 		void* settings = load_driver_settings("mt7922wifi");
 
 		if (settings != NULL) {
 			sc->sc_debug = get_driver_boolean_parameter(settings, "debug",
 				false, true);
-			/* Absent leaves HT and VHT off. */
+			/* Absent leaves HT, VHT and HE off. */
 			sc->sc_ht_vht = get_driver_boolean_parameter(settings,
 				"ht_vht", false, true) ? 1 : 0;
+			sc->sc_he = get_driver_boolean_parameter(settings,
+				"he", false, true) ? 1 : 0;
 			unload_driver_settings(settings);
 		}
 	}

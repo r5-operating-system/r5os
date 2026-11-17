@@ -73,11 +73,20 @@
 #define PHY_MODE_A			(1 << 0)
 #define PHY_MODE_B			(1 << 1)
 #define PHY_MODE_G			(1 << 2)
+#define PHY_MODE_GN			(1 << 3)
+#define PHY_MODE_AN			(1 << 4)
+#define PHY_MODE_AC			(1 << 5)
 #define PHY_TYPE_BIT_HR_DSSS		(1 << 0)
 #define PHY_TYPE_BIT_ERP		(1 << 1)
 #define PHY_TYPE_BIT_OFDM		(1 << 3)
 #define PHY_TYPE_BIT_HT			(1 << 4)
 #define PHY_TYPE_BIT_VHT		(1 << 5)
+#define PHY_TYPE_BIT_HE			(1 << 6)
+#define PHY_MODE_AX_24G			(1 << 6)
+#define PHY_MODE_AX_5G			(1 << 7)
+#define STA_REC_HE			14
+#define STA_REC_HE_V2			0x19
+#define UNI_BSS_INFO_HE_BASIC		5
 
 #define ROC_REQ_JOIN			0
 
@@ -218,6 +227,146 @@ mtk_bss_channel(struct mtk_softc* sc, struct ieee80211_channel* channel)
 }
 
 
+/* A contiguous bit field, shifted down. mask is the bits that hold it. */
+static uint8_t
+mtk_he_bits(uint8_t value, uint8_t mask)
+{
+	if (mask == 0)
+		return 0;
+	while ((mask & 1) == 0) {
+		mask >>= 1;
+		value >>= 1;
+	}
+	return (uint8_t)(value & mask);
+}
+
+
+/* STA_REC_HE (28 bytes) and STA_REC_HE_V2 (28 bytes). Field order is
+ * mt76_connac_mcu.h (BSD-3-Clause-Clear). The bits of the first word are
+ * the ones mt76_connac_mcu_sta_he_tlv sets from the same element.
+ */
+static size_t
+mtk_put_he(uint8_t* m, size_t at, size_t room, uint16_t* tlvs,
+	struct ieee80211_node* ni)
+{
+	const uint8_t* mac = ni->ni_he_mac;
+	const uint8_t* phy = ni->ni_he_phy;
+	uint32_t cap = 0;
+	uint16_t mcs160 = 0xffff;
+
+	if (at + 56 > room)
+		return at;
+
+	if ((mac[0] & IEEE80211_HE_MAC_CAP0_HTC_HE) != 0)
+		cap |= 1u << 0;
+	if ((mac[4] & IEEE80211_HE_MAC_CAP4_BQR) != 0)
+		cap |= 1u << 1;
+	if ((mac[2] & IEEE80211_HE_MAC_CAP2_BSR) != 0)
+		cap |= 1u << 2;
+	if ((mac[3] & IEEE80211_HE_MAC_CAP3_OMI_CONTROL) != 0)
+		cap |= 1u << 3;
+	if ((mac[4] & IEEE80211_HE_MAC_CAP4_AMSDU_IN_AMPDU) != 0)
+		cap |= 1u << 4;
+	if ((phy[1] & IEEE80211_HE_PHY_CAP1_LDPC_CODING_IN_PAYLOAD) != 0)
+		cap |= 1u << 6;
+	if ((phy[9] & IEEE80211_HE_PHY_CAP9_NON_TRIGGERED_CQI_FEEDBACK) != 0)
+		cap |= 1u << 7;
+	if ((phy[6] & IEEE80211_HE_PHY_CAP6_PARTIAL_BW_EXT_RANGE) != 0)
+		cap |= 1u << 8;
+	if ((phy[2] & IEEE80211_HE_PHY_CAP2_STBC_TX_UNDER_80MHZ) != 0)
+		cap |= 1u << 9;
+	if ((phy[2] & IEEE80211_HE_PHY_CAP2_STBC_RX_UNDER_80MHZ) != 0)
+		cap |= 1u << 10;
+	if ((phy[7] & IEEE80211_HE_PHY_CAP7_STBC_TX_ABOVE_80MHZ) != 0)
+		cap |= 1u << 11;
+	if ((phy[7] & IEEE80211_HE_PHY_CAP7_STBC_RX_ABOVE_80MHZ) != 0)
+		cap |= 1u << 12;
+	if ((phy[1] & IEEE80211_HE_PHY_CAP1_HE_LTF_AND_GI_FOR_HE_PPDUS_0_8US) != 0)
+		cap |= 1u << 13;
+	if ((phy[7] & IEEE80211_HE_PHY_CAP7_HE_SU_MU_PPDU_4XLTF_AND_08_US_GI) != 0)
+		cap |= 1u << 14;
+	if ((phy[8] & IEEE80211_HE_PHY_CAP8_HE_ER_SU_1XLTF_AND_08_US_GI) != 0)
+		cap |= 1u << 15;
+	if ((phy[8] & IEEE80211_HE_PHY_CAP8_HE_ER_SU_PPDU_4XLTF_AND_08_US_GI) != 0)
+		cap |= 1u << 16;
+	if ((phy[2] & IEEE80211_HE_PHY_CAP2_NDP_4x_LTF_AND_3_2US) != 0)
+		cap |= 1u << 17;
+	if ((phy[0] & (IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_RU_MAPPING_IN_2G
+		| IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_RU_MAPPING_IN_5G)) != 0)
+		cap |= 1u << 18;
+	if ((phy[9] & IEEE80211_HE_PHY_CAP9_TX_1024_QAM_LESS_THAN_242_TONE_RU) != 0)
+		cap |= 1u << 19;
+	if ((phy[9] & IEEE80211_HE_PHY_CAP9_RX_1024_QAM_LESS_THAN_242_TONE_RU) != 0)
+		cap |= 1u << 20;
+
+	if ((phy[0] & IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_160MHZ_IN_5G) != 0)
+		mcs160 = ni->ni_he_rx_mcs160;
+
+	put16(m + at, STA_REC_HE);
+	put16(m + at + 2, 28);
+	put32(m + at + 4, cap);
+	m[at + 8] = mtk_he_bits(mac[1], IEEE80211_HE_MAC_CAP1_TF_MAC_PAD_DUR_MASK);
+	m[at + 9] = mtk_he_bits(mac[3], IEEE80211_HE_MAC_CAP3_MAX_AMPDU_LEN_EXP_MASK);
+	m[at + 10] = mtk_he_bits(phy[0], IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_MASK);
+	m[at + 11] = mtk_he_bits(phy[1], IEEE80211_HE_PHY_CAP1_DEVICE_CLASS_A);
+	m[at + 12] = mtk_he_bits(phy[3], IEEE80211_HE_PHY_CAP3_DCM_MAX_CONST_TX_MASK);
+	m[at + 13] = mtk_he_bits(phy[3], IEEE80211_HE_PHY_CAP3_DCM_MAX_TX_NSS_2);
+	m[at + 14] = mtk_he_bits(phy[3], IEEE80211_HE_PHY_CAP3_DCM_MAX_CONST_RX_MASK);
+	m[at + 15] = mtk_he_bits(phy[3], IEEE80211_HE_PHY_CAP3_DCM_MAX_RX_NSS_2);
+	m[at + 16] = mtk_he_bits(phy[8], IEEE80211_HE_PHY_CAP8_DCM_MAX_RU_MASK);
+	m[at + 17] = mtk_he_bits(phy[1], IEEE80211_HE_PHY_CAP1_PREAMBLE_PUNC_RX_MASK);
+	m[at + 18] = 2;				/* packet extension, 16 us */
+	put16(m + at + 20, ni->ni_he_rx_mcs80);
+	put16(m + at + 22, mcs160);
+	put16(m + at + 24, 0xffff);		/* 80+80, not used */
+	at += 28;
+	(*tlvs)++;
+
+	put16(m + at, STA_REC_HE_V2);
+	put16(m + at + 2, 28);
+	memcpy(m + at + 4, mac, 6);
+	memcpy(m + at + 10, phy, 11);
+	m[at + 21] = 2;
+	put16(m + at + 22, ni->ni_he_rx_mcs80);
+	put16(m + at + 24, mcs160);
+	put16(m + at + 26, 0xffff);
+	at += 28;
+	(*tlvs)++;
+	return at;
+}
+
+
+/* UNI_BSS_INFO_HE_BASIC, 16 bytes. Defaults are mt76's 4 and 1023 when the
+ * beacon had no HE Operation. The MCS map is ours, from the card's streams.
+ */
+static int
+mtk_bss_he(struct mtk_softc* sc, struct ieee80211_node* ni)
+{
+	uint8_t m[20];
+	uint16_t rts = 1023;
+	uint8_t pe = 4;
+	uint16_t mcs160 = 0xffff;
+
+	memset(m, 0, sizeof(m));
+	m[0] = 0;
+	put16(m + 4, UNI_BSS_INFO_HE_BASIC);
+	put16(m + 6, 16);
+	if (ni->ni_he_op_ok != 0) {
+		pe = ni->ni_he_pe;
+		rts = ni->ni_he_rts;
+	}
+	put16(m + 8, rts);
+	m[10] = pe;
+	m[11] = ni->ni_he_er_su;
+	put16(m + 12, sc->sc_he_tx_mcs);
+	if ((sc->sc_he_phy0 & IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_160MHZ_IN_5G) != 0)
+		mcs160 = sc->sc_he_tx_mcs;
+	put16(m + 14, mcs160);
+	put16(m + 16, 0xffff);
+	return mtk_mcu_send_uni(sc, UNI_BSS_INFO_UPDATE, m, sizeof(m), 1);
+}
+
+
 /* The network we have joined (mt76_connac_mcu_uni_add_bss): who it is, how
  * often it beacons, whether it does QoS, and then its channel. Sent when the
  * association has been accepted.
@@ -254,9 +403,32 @@ mtk_bss_update(struct mtk_softc* sc, struct ieee80211_node* ni, int enable)
 		bss[28] = ni->ni_dtim_period != 0 ? ni->ni_dtim_period : 1;
 	}
 	bss[29] = five ? PHY_MODE_A : (PHY_MODE_B | PHY_MODE_G);
+	{
+		uint16_t phytype = five ? PHY_TYPE_BIT_OFDM
+			: (PHY_TYPE_BIT_HR_DSSS | PHY_TYPE_BIT_ERP);
+		/* Same gates as the station record. he without ht_vht stays off. */
+		int ht = sc->sc_ht_vht != 0 && ni != NULL
+			&& (ni->ni_flags & IEEE80211_NODE_HT) != 0;
+		int vht = sc->sc_ht_vht != 0 && five && ni != NULL
+			&& (ni->ni_flags & IEEE80211_NODE_VHT) != 0;
+		int he = sc->sc_he != 0 && sc->sc_ht_vht != 0 && ni != NULL
+			&& (ni->ni_flags & IEEE80211_NODE_HE) != 0;
+
+		if (ht) {
+			bss[29] |= five ? PHY_MODE_AN : PHY_MODE_GN;
+			phytype |= PHY_TYPE_BIT_HT;
+		}
+		if (vht) {
+			bss[29] |= PHY_MODE_AC;
+			phytype |= PHY_TYPE_BIT_VHT;
+		}
+		if (he) {
+			bss[29] |= five ? PHY_MODE_AX_5G : PHY_MODE_AX_24G;
+			phytype |= PHY_TYPE_BIT_HE;
+		}
+		put16(bss + 32, phytype);
+	}
 	put16(bss + 30, MTK_WCID_OWN);		/* sta_idx */
-	put16(bss + 32, five ? PHY_TYPE_BIT_OFDM
-		: (PHY_TYPE_BIT_HR_DSSS | PHY_TYPE_BIT_ERP));
 
 	put16(bss + 36, UNI_BSS_INFO_QBSS);
 	put16(bss + 38, 8);
@@ -271,6 +443,11 @@ mtk_bss_update(struct mtk_softc* sc, struct ieee80211_node* ni, int enable)
 		if (error != 0) {
 			device_printf(sc->sc_dev, "network channel %u: %d\n",
 				ieee80211_chan2ieee(&sc->sc_ic, channel), error);
+		} else if (sc->sc_he != 0 && sc->sc_ht_vht != 0 && ni != NULL
+			&& (ni->ni_flags & IEEE80211_NODE_HE) != 0) {
+			error = mtk_bss_he(sc, ni);
+			if (error != 0)
+				device_printf(sc->sc_dev, "network he: %d\n", error);
 		}
 	}
 
@@ -362,9 +539,9 @@ mtk_sec_key(uint8_t* key, uint8_t cipher, uint8_t id, const uint8_t* bytes)
 {
 	memset(key, 0, 36);
 	key[0] = cipher;
-	key[1] = 16;
+	key[1] = 36;			/* this record, mt76 cipher_len */
 	key[2] = id;
-	key[3] = 16;
+	key[3] = 16;			/* the key itself */
 	memcpy(key + 4, bytes, 16);
 }
 
@@ -421,7 +598,7 @@ mtk_sta_update(struct mtk_softc* sc, struct ieee80211_node* ni,
 {
 	struct ieee80211com* ic = &sc->sc_ic;
 	struct ieee80211vap* vap = TAILQ_FIRST(&ic->ic_vaps);
-	uint8_t m[192];
+	uint8_t m[256];
 	size_t at, wtbl, header, nested;
 	uint16_t tlvs = 0, wtlvs = 0;
 	const uint8_t* bssid;
@@ -482,6 +659,9 @@ mtk_sta_update(struct mtk_softc* sc, struct ieee80211_node* ni,
 				m[at + 6] |= PHY_TYPE_BIT_HT;
 			if (sc->sc_ht_vht != 0 && (ni->ni_flags & IEEE80211_NODE_VHT) != 0)
 				m[at + 6] |= PHY_TYPE_BIT_VHT;
+			if (sc->sc_he != 0 && sc->sc_ht_vht != 0
+				&& (ni->ni_flags & IEEE80211_NODE_HE) != 0)
+				m[at + 6] |= PHY_TYPE_BIT_HE;
 /* SPDX-SnippetEnd */
 			m[at + 9] = (uint8_t)(2 * dbm + 220);	/* rcpi */
 			at += 12;
@@ -509,6 +689,10 @@ mtk_sta_update(struct mtk_softc* sc, struct ieee80211_node* ni,
 				at += 16;
 				tlvs++;
 			}
+			if (sc->sc_he != 0 && sc->sc_ht_vht != 0
+				&& (ni->ni_flags & IEEE80211_NODE_HE) != 0
+				&& ni->ni_he_cap_ok != 0)
+				at = mtk_put_he(m, at, sizeof(m), &tlvs, ni);
 /* SPDX-SnippetEnd */
 
 			put16(m + at, STA_REC_RA);

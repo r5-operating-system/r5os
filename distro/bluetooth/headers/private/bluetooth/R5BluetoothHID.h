@@ -39,7 +39,12 @@ enum {
 	// r5_bthid_info: vendor and product ID and the name of a device, for
 	// R5_JOYSTICK_GET_INFO (docs/GAME-CONTROLLERS.md, step 8). Sent right
 	// after R5_BTHID_CREATE when the SDP Device ID record has them.
-	R5_BTHID_SET_INFO
+	R5_BTHID_SET_INFO,
+	// r5_bthid_battery: the Battery Strength of a device (HID Generic
+	// Device Controls page 0x06, usage 0x20) from its last input report
+	// that had it, for "battery" in BT_MSG_R5_GET_PAIRED. Taken from every
+	// report fed, also while no program reads the joystick.
+	R5_BTHID_GET_BATTERY
 };
 
 struct r5_bthid_create {
@@ -70,6 +75,11 @@ struct r5_bthid_info {
 	uint16			version;			// 0x0203
 	uint16			_reserved;
 	char			name[64];			// the device's name, UTF-8
+};
+
+struct r5_bthid_battery {
+	int32			id;					// in
+	int32			battery;			// out: percent, -1 when not reported
 };
 
 

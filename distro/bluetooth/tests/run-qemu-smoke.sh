@@ -77,8 +77,8 @@ if [ "${PROGRAM:-0}" = 1 ]; then
 fi
 # GAMEPAD=1 (step 8, docs/GAME-CONTROLLERS.md): QEMU has no game
 # controller, so after the tests gamecontroller_test keeps a virtual one on
-# bluetooth_hid (DualSense IDs, Cross down, L2 at 60 %, the left stick up
-# and left) until QEMU stops; an open Settings page shows it as it comes.
+# bluetooth_hid (DualSense IDs; Cross, L1 and L3 down, the right stick up
+# and right, L2 at 60 %, R2 at 15 %) until QEMU stops; an open Settings page shows it as it comes.
 # After the tests, because bt_hid_driver_test takes the first
 # joystick/bluetooth node. The Sign in window is moved to the lower right
 # corner (hey), so the screendumps show the page. Use with

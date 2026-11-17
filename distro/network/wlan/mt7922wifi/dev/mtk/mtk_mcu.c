@@ -685,7 +685,8 @@ mtk_read_capability(struct mtk_softc* sc)
 		uint32_t size = mtk_le32(reply + at + 4);
 
 		at += 8;
-		if (at + size > length)
+		/* size is untrusted. A uint32 sum wraps and then looks in range. */
+		if (at > length || size > length - at)
 			break;
 
 		if (tag == MTK_NIC_CAP_MAC_ADDR && size >= 6)
@@ -704,6 +705,10 @@ mtk_read_capability(struct mtk_softc* sc)
 			sc->sc_streams = reply[at + 4];
 			sc->sc_phy_rx_ldpc = reply[at + 7];
 			sc->sc_phy_rx_stbc = reply[at + 9];
+			/* Byte 11 is the he field of mt7921_phy_cap. The current
+			 * mt76 parser does not read it. Assumed until a stick boot.
+			 */
+			sc->sc_phy_he = reply[at + 11];
 /* SPDX-SnippetEnd */
 		}
 

@@ -62,6 +62,7 @@
 #include <net80211/ieee80211_ratectl.h>
 #include <net80211/ieee80211_sta.h>
 #include <net80211/ieee80211_vht.h>
+#include <net80211/ieee80211_he.h>
 
 /* SPDX-SnippetBegin
  * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
@@ -1450,6 +1451,7 @@ sta_recv_mgmt(struct ieee80211_node *ni, struct mbuf *m0, int subtype,
 	uint8_t *frm, *efrm;
 	uint8_t *rates, *xrates, *wme, *htcap, *htinfo;
 	uint8_t *vhtcap, *vhtopmode;
+	uint8_t *hecap, *heop;
 	uint8_t rate;
 	uint8_t qosinfo;
 
@@ -1845,6 +1847,7 @@ sta_recv_mgmt(struct ieee80211_node *ni, struct mbuf *m0, int subtype,
 
 		rates = xrates = wme = htcap = htinfo = NULL;
 		vhtcap = vhtopmode = NULL;
+		hecap = heop = NULL;
 		while (efrm - frm > 1) {
 			IEEE80211_VERIFY_LENGTH(efrm - frm, frm[1] + 2, return);
 			switch (*frm) {
@@ -1884,6 +1887,17 @@ sta_recv_mgmt(struct ieee80211_node *ni, struct mbuf *m0, int subtype,
 			case IEEE80211_ELEMID_VHT_OPMODE:
 				vhtopmode = frm;
 				break;
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ */
+			case IEEE80211_ELEMID_EXTFIELD:
+				if (frm[1] >= 1 && frm[2] == IEEE80211_ELEMID_EXT_HE_CAPA)
+					hecap = frm;
+				else if (frm[1] >= 1 && frm[2] == IEEE80211_ELEMID_EXT_HE_OPER)
+					heop = frm;
+				break;
+/* SPDX-SnippetEnd */
 			}
 			frm += frm[1] + 2;
 		}
@@ -1928,6 +1942,9 @@ sta_recv_mgmt(struct ieee80211_node *ni, struct mbuf *m0, int subtype,
 		    (vap->iv_flags_ht & IEEE80211_FHT_HT)) {
 			ieee80211_ht_node_init(ni);
 			ieee80211_ht_updateparams(ni, htcap, htinfo);
+			/* A short element clears the flag and must not be read again. */
+			if ((ni->ni_flags & IEEE80211_NODE_HT) == 0)
+				goto assoc_ht_done;
 
 			if ((vhtcap != NULL) && (vhtopmode != NULL) &
 			    (vap->iv_vht_flags & IEEE80211_FVHT_VHT)) {
@@ -1942,9 +1959,14 @@ sta_recv_mgmt(struct ieee80211_node *ni, struct mbuf *m0, int subtype,
 				} else {
 					ieee80211_vht_node_init(ni);
 					ieee80211_vht_updateparams(ni, vhtcap, vhtopmode);
-					ieee80211_setup_vht_rates(ni);
+					if ((ni->ni_flags & IEEE80211_NODE_VHT) != 0)
+						ieee80211_setup_vht_rates(ni);
 				}
 			}
+			if (hecap != NULL)
+				ieee80211_parse_hecap(ni, hecap, 2 + hecap[1]);
+			if (heop != NULL)
+				ieee80211_parse_heop(ni, heop, 2 + heop[1]);
 
 			ieee80211_ht_updateparams_final(ni, htcap, htinfo);
 			ieee80211_setup_htrates(ni, htcap,
@@ -1953,6 +1975,8 @@ sta_recv_mgmt(struct ieee80211_node *ni, struct mbuf *m0, int subtype,
 
 			ieee80211_node_setuptxparms(ni);
 			ieee80211_ratectl_node_init(ni);
+assoc_ht_done:
+			;
 		}
 
 		/*
@@ -2167,6 +2191,9 @@ ieee80211_send_sae_auth(struct ieee80211vap *vap, const uint8_t *mac,
 		return ENOMEM;
 	}
 	memcpy(frm, body, len);
+	/* getmgtframe leaves the length at 0. The header is added later. */
+	m->m_len = len;
+	m->m_pkthdr.len = len;
 	memset(&params, 0, sizeof(params));
 	params.ibp_pri = WME_AC_VO;
 	return ieee80211_mgmt_output(ni, m, IEEE80211_FC0_SUBTYPE_AUTH,

@@ -89,6 +89,10 @@ def install_kernel_sources() -> None:
         "src/libs/compat/freebsd_wlan/net80211/ieee80211_input.h",
         "src/libs/compat/freebsd_wlan/net80211/ieee80211_node.c",
         "src/libs/compat/freebsd_wlan/net80211/ieee80211_vht.c",
+        "src/libs/compat/freebsd_wlan/net80211/ieee80211_he.c",
+        "src/libs/compat/freebsd_wlan/net80211/ieee80211_he.h",
+        "src/libs/compat/freebsd_wlan/net80211/ieee80211_node.h",
+        "src/libs/compat/freebsd_wlan/net80211/_ieee80211.h",
         # air/OS: MediaTek Bluetooth firmware loader in h2generic
         "src/add-ons/kernel/bluetooth/hci/bluetooth.cpp",
         "src/add-ons/kernel/bluetooth/hci/hci_assemble.h",

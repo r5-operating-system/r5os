@@ -139,7 +139,10 @@ WiFiLinkDetails::WiFiLinkDetails()
 	channel(0),
 	frequency(0),
 	dBm(0),
-	txKbps(0)
+	txKbps(0),
+	width(0),
+	streams(0),
+	rxKbps(0)
 {
 }
 
@@ -157,6 +160,10 @@ WiFiLinkDetails::Archive(BMessage& archive) const
 	archive.AddInt32("dbm", dBm);
 	archive.AddInt32("tx kbps", txKbps);
 	archive.AddString("tx details", txDetails);
+	archive.AddString("standard", standard);
+	archive.AddInt32("width", width);
+	archive.AddInt32("streams", streams);
+	archive.AddInt32("rx kbps", rxKbps);
 }
 
 
@@ -173,6 +180,10 @@ WiFiLinkDetails::Unarchive(const BMessage& archive)
 	dBm = archive.GetInt32("dbm", 0);
 	txKbps = archive.GetInt32("tx kbps", 0);
 	txDetails = archive.GetString("tx details", "");
+	standard = archive.GetString("standard", "");
+	width = archive.GetInt32("width", 0);
+	streams = archive.GetInt32("streams", 0);
+	rxKbps = archive.GetInt32("rx kbps", 0);
 }
 
 
@@ -275,6 +286,63 @@ ReadTxRate(BNetworkDevice& device, WiFiLinkDetails& link)
 			details << ", " << (int32)rate.i_width << " MHz";
 		link.txDetails = details;
 	}
+}
+
+
+/*!	The standard, width, streams and receive rate. A driver that does not
+	know the request leaves the fields empty.
+*/
+static void
+ReadLink(BNetworkDevice& device, WiFiLinkDetails& link)
+{
+	struct ieee80211_haiku_link info;
+	memset(&info, 0, sizeof(info));
+	struct ieee80211req request;
+	memset(&request, 0, sizeof(request));
+	request.i_type = IEEE80211_IOC_HAIKU_LINK;
+	request.i_data = &info;
+	request.i_len = sizeof(info);
+	if (device.Control(SIOCG80211, &request) != B_OK)
+		return;
+
+	if (info.i_standard == 4)
+		link.standard = "Wi-Fi 4";
+	else if (info.i_standard == 5)
+		link.standard = "Wi-Fi 5";
+	else if (info.i_standard == 6)
+		link.standard = "Wi-Fi 6";
+	link.width = info.i_width;
+	link.streams = info.i_streams;
+	link.rxKbps = info.i_rx_kbps;
+}
+
+
+status_t
+r5_wifi_link_line(BString& line)
+{
+	line.Truncate(0);
+	BNetworkRoster& roster = BNetworkRoster::Default();
+	BNetworkInterface interface;
+	uint32 cookie = 0;
+	while (roster.GetNextInterface(&cookie, interface) == B_OK) {
+		if ((interface.Flags() & IFF_LOOPBACK) != 0)
+			continue;
+		BNetworkDevice device(interface.Name());
+		if (!device.IsWireless())
+			continue;
+		/* The same adapter the menu's "Connected to" line names. */
+		uint32 associated = 0;
+		wireless_network network;
+		if (device.GetNextAssociatedNetwork(associated, network) != B_OK
+			|| network.name[0] == '\0')
+			continue;
+		WiFiLinkDetails link;
+		ReadTxRate(device, link);
+		ReadLink(device, link);
+		line = WiFiLinkLine(link);
+		return line.Length() > 0 ? B_OK : B_ERROR;
+	}
+	return B_ERROR;
 }
 
 
@@ -745,6 +813,7 @@ WiFiController::_Update(bool scanCompleted)
 		state.link.frequency = FrequencyForBSSID(device, bssid);
 		state.link.channel = ChannelForFrequency(state.link.frequency);
 		ReadTxRate(device, state.link);
+		ReadLink(device, state.link);
 	} else if (!associatedName.IsEmpty()) {
 		state.state = WIFI_STATE_CONNECTING;
 		state.current = associatedName;

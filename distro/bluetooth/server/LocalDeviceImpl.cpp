@@ -3114,11 +3114,19 @@ LocalDeviceImpl::R5AddPaired(BMessage& reply)
 		reply.AddBool("hid", false);
 		reply.AddBool("connected",
 			rd->conn_state == RemoteDevice::CONNECTED);
-		// A headset sends its battery over HFP (step 7b).
-		HFPGateway* hfp = ((BluetoothServer*)be_app)->GetHFPGateway();
-		reply.AddInt32("battery", hfp != NULL
-			&& rd->conn_state == RemoteDevice::CONNECTED
-			? hfp->Battery(rd->bdaddr) : -1);
+		// A headset sends its battery over HFP (step 7b); a game controller
+		// in its HID input reports (Battery Strength, bluetooth_hid).
+		int32 battery = -1;
+		if (rd->conn_state == RemoteDevice::CONNECTED) {
+			BluetoothServer* server = (BluetoothServer*)be_app;
+			HFPGateway* hfp = server->GetHFPGateway();
+			if (hfp != NULL)
+				battery = hfp->Battery(rd->bdaddr);
+			HIDHost* hid = server->GetHIDHost();
+			if (battery < 0 && hid != NULL)
+				battery = hid->Battery(rd->bdaddr);
+		}
+		reply.AddInt32("battery", battery);
 	}
 	if (fLE != NULL)
 		fLE->AddPaired(reply);
