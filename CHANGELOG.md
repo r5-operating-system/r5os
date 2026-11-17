@@ -13,7 +13,7 @@ Not seen: the `shutdown rlc ..., tmr destroy ..., gart off` line is printed afte
 
 Limits: Mesa not rebuilt, package not made, nothing booted. The present now waits for the GPU on RADV without a shared image, so VulkanTeapot's frame rate on that path may drop; measure it on the stick. A frame over 1 s on that path ends the swapchain. ARM64 and RISC-V 64 not built.
 
-Tested: `git apply --check` of the patch on `origin/main`; `py scripts/check-pre-stick.py --paper` (below, in the commit).
+Tested: `git apply --check` of the patch on `origin/main`; `sh -n` of `check`, `boot-next` and `m13-measure`; `py scripts/check-pre-stick.py --paper` at `331843fef0`: `m13 lines 9 have a source`, `m13 boot 1/2/3/4/done settings ok`, M11 and M12 walks unchanged, `pre-stick paper ok`.
 
 ## 2026-11-17 - Game controllers: Switch Pro, Joy-Con and Xbox controllers rumble and move too (option C, phase 2)
 
