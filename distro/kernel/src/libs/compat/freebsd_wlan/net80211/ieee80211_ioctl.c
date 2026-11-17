@@ -1234,6 +1234,20 @@ ieee80211_ioctl_get80211(struct ieee80211vap *vap, u_long cmd,
 			error = copyout(&rate, ireq->i_data, sizeof(rate));
 		break;
 	}
+	case IEEE80211_IOC_HAIKU_SAE_AUTH: {
+		struct ieee80211_haiku_sae_auth sae;
+
+		if (ireq->i_len < (int)sizeof(sae) || ireq->i_data == NULL) {
+			error = EINVAL;
+			break;
+		}
+		memset(&sae, 0, sizeof(sae));
+		error = ieee80211_take_sae_auth(vap, sae.i_mac, sae.i_body,
+		    &sae.i_len);
+		if (error == 0)
+			error = copyout(&sae, ireq->i_data, sizeof(sae));
+		break;
+	}
 /* SPDX-SnippetEnd */
 	default:
 		error = ieee80211_ioctl_getdefault(vap, ireq);
@@ -1260,6 +1274,29 @@ ieee80211_ioctl_setkey(struct ieee80211vap *vap, struct ieee80211req *ireq)
 	/* NB: this also checks ik->ik_keylen > sizeof(wk->wk_key) */
 	if (ik.ik_keylen > sizeof(ik.ik_keydata))
 		return E2BIG;
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * An IGTK uses key index 4 or 5. Those indexes do not fit the four
+ * group-key slots. The driver is given a kernel copy and the bytes are
+ * not written to the log.
+ */
+	if (ik.ik_type == IEEE80211_CIPHER_BIP_CMAC_128 && ik.ik_keylen == 16
+	    && (ik.ik_keyix == 4 || ik.ik_keyix == 5)) {
+		struct ieee80211_haiku_igtk g;
+
+		if (vap->iv_ic->ic_ioctl == NULL)
+			return ENOTTY;
+		memset(&g, 0, sizeof(g));
+		memcpy(g.i_key, ik.ik_keydata, 16);
+		g.i_keyix = (uint8_t)ik.ik_keyix;
+		g.i_keylen = 16;
+		error = vap->iv_ic->ic_ioctl(vap->iv_ic,
+		    IEEE80211_IOC_HAIKU_IGTK, &g);
+		memset(&g, 0, sizeof(g));
+		return error;
+	}
+/* SPDX-SnippetEnd */
 	kid = ik.ik_keyix;
 	if (kid == IEEE80211_KEYIX_NONE) {
 		/* XXX unicast keys currently must be tx/rx */
@@ -3076,6 +3113,24 @@ ieee80211_ioctl_set80211(struct ieee80211vap *vap, u_long cmd, struct ieee80211r
 	case IEEE80211_IOC_MLME:
 		error = ieee80211_ioctl_setmlme(vap, ireq);
 		break;
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * The frame body is copied in before it is sent. It is not logged.
+ */
+	case IEEE80211_IOC_HAIKU_SAE_AUTH: {
+		struct ieee80211_haiku_sae_auth sae;
+
+		if (ireq->i_len < (int)sizeof(sae) || ireq->i_data == NULL)
+			return EINVAL;
+		error = copyin(ireq->i_data, &sae, sizeof(sae));
+		if (error != 0)
+			break;
+		error = ieee80211_send_sae_auth(vap, sae.i_mac, sae.i_body,
+		    sae.i_len);
+		break;
+	}
+/* SPDX-SnippetEnd */
 	case IEEE80211_IOC_COUNTERMEASURES:
 		if (ireq->i_val) {
 			if ((vap->iv_flags & IEEE80211_F_WPA) == 0)

@@ -347,6 +347,67 @@ mtk_sta_ba(struct mtk_softc* sc, uint16_t wcid, int tid, int winsize,
 		enable ? "on" : "off", error);
 	return error;
 }
+
+
+/* The integrity key follows the pairwise key. mt76 writes the pairwise
+ * cipher in the first slot and BIP-CMAC-128 in the second. There is no
+ * separate protected-management bit in that station record.
+ */
+#define STA_REC_KEY_V2			17
+#define MTK_CIPHER_AES_CCMP		5
+#define MTK_CIPHER_BIP_CMAC_128		10
+
+static void
+mtk_sec_key(uint8_t* key, uint8_t cipher, uint8_t id, const uint8_t* bytes)
+{
+	memset(key, 0, 36);
+	key[0] = cipher;
+	key[1] = 16;
+	key[2] = id;
+	key[3] = 16;
+	memcpy(key + 4, bytes, 16);
+}
+
+int
+mtk_sta_igtk(struct mtk_softc* sc)
+{
+	uint8_t m[128];
+	int n = 1;
+	int tlv;
+	int error;
+
+	if (sc->sc_igtk_len != 16)
+		return EINVAL;
+
+	if (sc->sc_ccmp_len == 16)
+		n = 2;
+	tlv = 8 + n * 36;
+	memset(m, 0, sizeof(m));
+	m[0] = 0;
+	m[1] = MTK_WCID_AP & 0xff;
+	put16(m + 2, 1);
+	m[4] = 1;
+	m[6] = MTK_WCID_AP >> 8;
+	put16(m + 8, STA_REC_KEY_V2);
+	put16(m + 10, (uint16_t)tlv);
+	m[12] = 1;
+	m[13] = (uint8_t)n;
+	if (n == 2) {
+		mtk_sec_key(m + 16, MTK_CIPHER_AES_CCMP, 0, sc->sc_ccmp);
+		mtk_sec_key(m + 52, MTK_CIPHER_BIP_CMAC_128, sc->sc_igtk_id,
+			sc->sc_igtk);
+	} else
+		mtk_sec_key(m + 16, MTK_CIPHER_BIP_CMAC_128, sc->sc_igtk_id,
+			sc->sc_igtk);
+
+	error = mtk_mcu_send_uni(sc, UNI_STA_REC_UPDATE, m, 8 + tlv, 1);
+	memset(m, 0, sizeof(m));
+	if (error == 0)
+		device_printf(sc->sc_dev, "pmf: on\n");
+	else
+		device_printf(sc->sc_dev, "igtk: sent: %d\n", error);
+	return error;
+}
 /* SPDX-SnippetEnd */
 
 

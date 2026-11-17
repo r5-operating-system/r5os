@@ -915,6 +915,17 @@ ieee80211_sta_join1(struct ieee80211_node *selbs)
 		if (canreassoc) {
 			/* Reassociate */
 			ieee80211_new_state(vap, IEEE80211_S_ASSOC, 1);
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * A second join while SAE authentication is already underway asks for
+ * the association. The first join only entered AUTH, without an open
+ * authentication frame.
+ */
+		} else if (selbs->ni_authmode == IEEE80211_AUTH_SAE
+		    && vap->iv_state == IEEE80211_S_AUTH) {
+			ieee80211_new_state(vap, IEEE80211_S_ASSOC, 0);
+/* SPDX-SnippetEnd */
 		} else {
 			/*
 			 * Act as if we received a DEAUTH frame in case we
