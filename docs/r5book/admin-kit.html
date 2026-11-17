@@ -115,8 +115,6 @@ status_t status = r5_admin_send(BMessenger(BLUETOOTH_SIGNATURE), &amp;request, &
 			for example Settings and every page in it.</p>
 			<p><strong>bluetooth_server</strong> takes the Bluetooth switch and the requests of bluetooth_audio
 			only on its admin port. The switch needs an administrator or a grant; the audio requests need uid 0.</p>
-			<div class="note"><strong>Tested.</strong> Built for x86_64 and checked in QEMU: the Bluetooth smoke
-			test sets the switch through the admin port and checks that the normal messenger refuses it.</div>
 		</section>
 	</main>
 </div>

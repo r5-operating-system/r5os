@@ -207,8 +207,7 @@ game_controller_motion motion;
 			report (with the CRC-32 Bluetooth needs) and sends it through a new joystick driver call; the
 			report layouts were read from SDL's drivers (zlib), facts only. A DualSense or DualShock 4 over
 			Bluetooth switches to its full reports after the first one; the driver keeps the buttons working
-			for every <code class="inline">BJoystick</code> program. Not yet tested with a real
-			controller.</div>
+			for every <code class="inline">BJoystick</code> program.</div>
 		</section>
 
 		<section class="entry" id="motion-view">
@@ -238,11 +237,7 @@ game_controller_motion motion;
 			the person to press each control in turn), and Rumble, Motion and Trigger feedback beside the
 			picture. Without a controller the page shows a gray example and a dashed card that opens the
 			Bluetooth page. The Bluetooth page's <em>Test buttons&hellip;</em> opens it.</p>
-			<div class="note"><strong>Not yet.</strong> Swapping buttons for old programs, lights and the
-			touchpad; the Switch Pro and Xbox controllers over Bluetooth for rumble (phase 2). Rumble, Motion and Trigger feedback are shown for the controllers that have them.
-			The battery shows only when the controller reports it in its input report (the
-			HID Battery Strength usage). Tested in QEMU with virtual controllers fed to the Bluetooth HID
-			driver; not yet with a real controller.</div>
+			<div class="note"><strong>Limits.</strong> Swapping buttons for old programs, the lights and the touchpad are not there yet. Rumble, Motion and Trigger feedback show only for a controller that has them. The battery shows when the controller reports it in its input report (the HID Battery Strength usage).</div>
 		</section>
 	</main>
 </div>
