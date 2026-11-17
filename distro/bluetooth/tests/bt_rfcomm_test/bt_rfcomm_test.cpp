@@ -12,7 +12,11 @@
  *    credits, DLC, MSC, data both ways, credit top-up, close; a refused
  *    DLC and a timeout;
  *  - two RFCOMMLink objects over ports, with their reader threads
- *    (Haiku only), and RFCOMMLink::Connect() with no radio.
+ *    (Haiku only), and RFCOMMLink::Connect() with no radio;
+ *  - the HFP Audio Gateway AT commands (step 7b, HFPAgent.cpp), alone
+ *    and, on Haiku, HFPGateway itself with a scripted headset over ports:
+ *    SLC and battery, one session per device, retry, no connect without
+ *    a link, giving up, and Stop() during the open wait.
  * Built on the host too with -DR5_RFCOMM_HOST (without the RFCOMMLink
  * part).
  */
@@ -21,13 +25,16 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <string>
 #include <vector>
 
+#include "HFPAgent.h"
 #include "RFCOMMMux.h"
 
 #ifndef R5_RFCOMM_HOST
 #	include <OS.h>
 #	include "RFCOMMLink.h"
+#	include "HFPGateway.h"
 #endif
 
 
@@ -328,6 +335,114 @@ test_refused_and_timeout()
 }
 
 
+// #pragma mark - HFP Audio Gateway AT commands (step 7b)
+
+
+static std::string sAnswer;
+
+
+static bool
+ask(r5hfp::Agent& agent, const char* command, const char* expect)
+{
+	char out[r5hfp::kMaxAnswer];
+	size_t length = agent.Handle(command, strlen(command), out, sizeof(out));
+	sAnswer.assign(out, length);
+	return length > 0 && length == strlen(out)
+		&& sAnswer.find(expect) != std::string::npos;
+}
+
+
+static void
+test_hfp_agent()
+{
+	using namespace r5hfp;
+	// The service level connection of HFP 1.8, 4.2.1, as a headset with
+	// HF indicators sends it.
+	Agent agent;
+	report("hfp: BRSF answered with the AG features",
+		ask(agent, "AT+BRSF=959", "\r\n+BRSF: 1024\r\n\r\nOK\r\n")
+		&& agent.HandsFreeFeatures() == 959);
+	report("hfp: BAC taken", ask(agent, "AT+BAC=1,2", "\r\nOK\r\n"));
+	report("hfp: CIND=? lists battchg",
+		ask(agent, "AT+CIND=?", "(\"battchg\",(0-5))")
+		&& sAnswer.find("\r\nOK\r\n") != std::string::npos);
+	report("hfp: CIND? values", ask(agent, "AT+CIND?",
+		"\r\n+CIND: 0,0,0,0,5,0,5\r\n\r\nOK\r\n"));
+	report("hfp: no SLC before CMER", !agent.ServiceLevel());
+	report("hfp: CMER brings the SLC up",
+		ask(agent, "AT+CMER=3,0,0,1", "\r\nOK\r\n") && agent.ServiceLevel()
+		&& agent.TakeEvents() == kEventServiceLevel);
+	report("hfp: BIND", ask(agent, "AT+BIND=1,2", "\r\nOK\r\n")
+		&& ask(agent, "AT+BIND=?", "+BIND: (2)")
+		&& ask(agent, "AT+BIND?", "+BIND: 2,1"));
+	report("hfp: no battery yet", agent.Battery() == -1);
+	report("hfp: BIEV battery 80", ask(agent, "AT+BIEV=2,80", "OK")
+		&& agent.Battery() == 80 && agent.TakeEvents() == kEventBattery);
+	report("hfp: BIEV 101 refused", ask(agent, "AT+BIEV=2,101", "ERROR")
+		&& agent.Battery() == 80);
+	report("hfp: BIEV of indicator 1 refused",
+		ask(agent, "AT+BIEV=1,1", "ERROR"));
+
+	// The Apple way: battery 0 to 9 for 10 to 100 %.
+	report("hfp: XAPL", ask(agent, "AT+XAPL=054C-0D58-0100,10",
+		"\r\n+XAPL=iPhone,2\r\n\r\nOK\r\n"));
+	report("hfp: IPHONEACCEV battery 7 is 80 %",
+		ask(agent, "AT+IPHONEACCEV=2,1,7,2,0", "OK")
+		&& agent.Battery() == 80);
+	report("hfp: IPHONEACCEV battery 3 is 40 %",
+		ask(agent, "at+iphoneaccev=1,1,3", "OK") && agent.Battery() == 40);
+	report("hfp: IPHONEACCEV wrong count refused",
+		ask(agent, "AT+IPHONEACCEV=2,1,7", "ERROR"));
+	agent.TakeEvents();
+
+	report("hfp: VGS 9", ask(agent, "AT+VGS=9", "OK")
+		&& agent.SpeakerVolume() == 9 && agent.TakeEvents() == kEventVolume);
+	report("hfp: VGM 16 refused", ask(agent, "AT+VGM=16", "ERROR"));
+	report("hfp: answer button, no call", ask(agent, "ATA", "ERROR")
+		&& agent.TakeEvents() == kEventButton
+		&& strcmp(agent.LastButton(), "answer") == 0);
+	report("hfp: redial button", ask(agent, "AT+BLDN", "ERROR")
+		&& strcmp(agent.LastButton(), "redial") == 0);
+	report("hfp: voice button", ask(agent, "AT+BVRA=1", "ERROR")
+		&& strcmp(agent.LastButton(), "voice") == 0);
+	report("hfp: CLCC, CMEE, NREC taken", ask(agent, "AT+CLCC", "OK")
+		&& ask(agent, "AT+CMEE=1", "OK") && ask(agent, "AT+NREC=0", "OK"));
+	report("hfp: unknown command", ask(agent, "AT+FOO=1", "ERROR")
+		&& agent.Unknown() == 1);
+	report("hfp: not AT", ask(agent, "HELLO", "ERROR"));
+	report("hfp: numbers with spaces", ask(agent, "AT+BIEV= 2 , 55", "OK")
+		&& agent.Battery() == 55);
+	report("hfp: bare AT is OK", ask(agent, "AT", "OK"));
+	report("hfp: IPHONEACCEV with 4 pairs",
+		ask(agent, "AT+IPHONEACCEV=4,2,0,3,0,1,5,4,1", "OK")
+		&& agent.Battery() == 60);
+	report("hfp: no buffer, no answer", agent.Handle("AT", 2, NULL, 0) == 0);
+	report("hfp: BCC refused without the voice path",
+		ask(agent, "AT+BCC", "ERROR"));
+
+	// Step 7c: codec negotiation (HFP 1.8, 4.11.3), only with bt_voice.
+	Agent voice(true);
+	report("hfp voice: BRSF adds codec negotiation",
+		ask(voice, "AT+BRSF=959", "+BRSF: 1536"));
+	report("hfp voice: no codecs before BAC", !voice.CanNegotiateCodecs());
+	report("hfp voice: BAC kept", ask(voice, "AT+BAC=1,2", "OK")
+		&& strcmp(voice.CodecList(), "1,2") == 0
+		&& voice.CanNegotiateCodecs());
+	report("hfp voice: BCS confirms", ask(voice, "AT+BCS=2", "OK")
+		&& voice.ConfirmedCodec() == 2
+		&& voice.TakeEvents() == kEventCodec);
+	report("hfp voice: BCC asks for voice", ask(voice, "AT+BCC", "OK")
+		&& voice.TakeEvents() == kEventCodecRequest);
+	report("hfp voice: BCS 0 refused", ask(voice, "AT+BCS=0", "ERROR"));
+	report("hfp voice: BAC with letters refused",
+		ask(voice, "AT+BAC=1,X", "ERROR"));
+	Agent old(true);
+	report("hfp voice: a headset without codec negotiation",
+		ask(old, "AT+BRSF=31", "OK") && ask(old, "AT+BAC=1", "OK")
+		&& !old.CanNegotiateCodecs());
+}
+
+
 #ifndef R5_RFCOMM_HOST
 // #pragma mark - two links over ports
 
@@ -470,6 +585,334 @@ test_links()
 }
 
 
+// The headset side: one command, then the answer lines up to OK or
+// ERROR. True when the answer has expect.
+static bool
+headset_ask(RFCOMMLink* link, const char* command, const char* expect)
+{
+	char line[128];
+	snprintf(line, sizeof(line), "%s\r", command);
+	if (link->Send(line, strlen(line), 1000000) != B_OK)
+		return false;
+	bool found = expect == NULL;
+	while (link->ReadLine(line, sizeof(line), 2000000) == B_OK) {
+		if (expect != NULL && strstr(line, expect) != NULL)
+			found = true;
+		if (strcmp(line, "OK") == 0 || strcmp(line, "ERROR") == 0)
+			return found;
+	}
+	return false;
+}
+
+
+// HFPGateway itself, with a connector that puts a scripted headset on
+// the other end of two ports instead of an L2CAP socket.
+struct HeadsetTest {
+	int32			calls;
+	int32			failFirst;		// these connects fail
+	bool			connected;		// what the connected check says
+	bool			answer;			// a headset answers on the ports
+	volatile bool	closeNow;
+	bool			scriptOk;
+	thread_id		headset;
+	port_id			ports[2];
+	PortTransport*	headsetTransport;
+	// Step 7c: the headset sends AT+BAC and answers +BCS.
+	bool			voiceScript;
+	volatile bool	bacSent;
+	volatile int	bcsSeen;
+	volatile int32	voiceCalls;
+	volatile int	lastCodec;
+	volatile bool	lastOpen;
+};
+
+
+static status_t
+headset_thread(void* data)
+{
+	HeadsetTest* test = (HeadsetTest*)data;
+	RFCOMMLink* hf = NULL;
+	if (RFCOMMLink::Start(test->headsetTransport, false, 3, 5000000, &hf)
+			!= B_OK)
+		return B_ERROR;
+	// 959 has HF indicators (bit 8) and codec negotiation (bit 7); the AG
+	// adds bit 9 only with the voice path on.
+	test->scriptOk = headset_ask(hf, "AT+BRSF=959",
+			test->voiceScript ? "+BRSF: 1536" : "+BRSF: 1024")
+		&& headset_ask(hf, "AT+CIND=?", "battchg")
+		&& headset_ask(hf, "AT+CIND?", "+CIND: 0,0,0,0,5,0,5")
+		&& headset_ask(hf, "AT+CMER=3,0,0,1", NULL)
+		&& headset_ask(hf, "AT+BIND=2", NULL)
+		&& headset_ask(hf, "AT+BIEV=2,80", NULL)
+		&& headset_ask(hf, "AT", NULL)
+		&& headset_ask(hf, "AT+BLDN", "ERROR");
+	if (test->scriptOk && test->voiceScript
+		&& headset_ask(hf, "AT+BAC=1,2", NULL)) {
+		test->bacSent = true;
+		// Wait for the AG's +BCS, then confirm that codec.
+		char line[64];
+		bigtime_t end = system_time() + 8000000;
+		while (system_time() < end && !test->closeNow) {
+			if (hf->ReadLine(line, sizeof(line), 500000) != B_OK)
+				continue;
+			int codec;
+			if (sscanf(line, "+BCS: %d", &codec) == 1) {
+				char confirm[32];
+				snprintf(confirm, sizeof(confirm), "AT+BCS=%d", codec);
+				if (headset_ask(hf, confirm, NULL))
+					test->bcsSeen = codec;
+				break;
+			}
+		}
+	}
+	while (!test->closeNow)
+		snooze(50000);
+	delete hf;
+	return B_OK;
+}
+
+
+static status_t
+test_voice(const bdaddr_t&, int codec, bool open, void* cookie)
+{
+	HeadsetTest* test = (HeadsetTest*)cookie;
+	test->lastCodec = codec;
+	test->lastOpen = open;
+	test->voiceCalls++;
+	return B_OK;
+}
+
+
+static status_t
+test_connector(const bdaddr_t&, uint8 channel, bigtime_t timeout,
+	volatile bool* cancel, RFCOMMLink** _link, void* cookie)
+{
+	HeadsetTest* test = (HeadsetTest*)cookie;
+	test->calls++;
+	if (test->calls <= test->failFirst)
+		return B_ERROR;
+	test->ports[0] = create_port(16, "hfp gateway test a");
+	test->ports[1] = create_port(16, "hfp gateway test b");
+	if (test->answer) {
+		test->headsetTransport = new PortTransport(test->ports[1],
+			test->ports[0]);
+		test->headset = spawn_thread(headset_thread, "hfp headset",
+			B_NORMAL_PRIORITY, test);
+		resume_thread(test->headset);
+	}
+	return RFCOMMLink::Start(new PortTransport(test->ports[0],
+		test->ports[1]), true, channel, timeout, _link, cancel);
+}
+
+
+static bool
+test_connected(const bdaddr_t&, void* cookie)
+{
+	return ((HeadsetTest*)cookie)->connected;
+}
+
+
+static void
+init_headset_test(HeadsetTest& test, HFPGateway::Options& options)
+{
+	test.calls = 0;
+	test.failFirst = 0;
+	test.connected = true;
+	test.answer = true;
+	test.closeNow = false;
+	test.scriptOk = false;
+	test.headset = -1;
+	test.ports[0] = test.ports[1] = -1;
+	test.headsetTransport = NULL;
+	test.voiceScript = false;
+	test.bacSent = false;
+	test.bcsSeen = 0;
+	test.voiceCalls = 0;
+	test.lastCodec = 0;
+	test.lastOpen = false;
+	options = HFPGateway::DefaultOptions();
+	options.connect = test_connector;
+	options.connected = test_connected;
+	options.cookie = &test;
+	options.connectDelay = 0;
+	options.retryDelay = 200000;
+	options.retries = 2;
+	options.serviceLevelTimeout = 2000000;
+}
+
+
+static void
+finish_headset_test(HeadsetTest& test)
+{
+	test.closeNow = true;
+	if (test.headset >= 0) {
+		status_t result;
+		wait_for_thread(test.headset, &result);
+	}
+	for (int i = 0; i < 2; i++) {
+		if (test.ports[i] >= 0)
+			delete_port(test.ports[i]);
+	}
+}
+
+
+// Waits up to timeout for the gateway's battery of address to be value.
+static bool
+wait_battery(HFPGateway& gateway, const bdaddr_t& address, int32 value,
+	bigtime_t timeout)
+{
+	bigtime_t end = system_time() + timeout;
+	while (system_time() < end) {
+		if (gateway.Battery(address) == value)
+			return true;
+		snooze(50000);
+	}
+	return false;
+}
+
+
+static bool
+wait_sessions(HFPGateway& gateway, int32 count, bigtime_t timeout)
+{
+	bigtime_t end = system_time() + timeout;
+	while (system_time() < end) {
+		if (gateway.CountSessions() == count)
+			return true;
+		snooze(50000);
+	}
+	return false;
+}
+
+
+static void
+test_gateway()
+{
+	bdaddr_t address;
+	memset(&address, 0x5a, sizeof(address));
+	bdaddr_t other;
+	memset(&other, 0x33, sizeof(other));
+
+	{
+		HeadsetTest test;
+		HFPGateway::Options options;
+		init_headset_test(test, options);
+		HFPGateway gateway(options);
+		gateway.DeviceReady(address, 3);
+		gateway.DeviceReady(address, 3);
+		report("gateway: one session per device",
+			gateway.CountSessions() == 1);
+		report("gateway: battery 80 arrives",
+			wait_battery(gateway, address, 80, 5000000));
+		report("gateway: headset script answered", test.scriptOk);
+		report("gateway: no battery for another device",
+			gateway.Battery(other) == -1);
+		// The headset leaves after its SLC: no retry.
+		test.closeNow = true;
+		report("gateway: session ends with the headset",
+			wait_sessions(gateway, 0, 3000000));
+		report("gateway: battery gone with it",
+			gateway.Battery(address) == -1 && test.calls == 1);
+		gateway.Stop();
+		finish_headset_test(test);
+	}
+
+	{
+		HeadsetTest test;
+		HFPGateway::Options options;
+		init_headset_test(test, options);
+		test.failFirst = 1;
+		HFPGateway gateway(options);
+		gateway.DeviceReady(address, 3);
+		report("gateway: tries again after a failed connect",
+			wait_battery(gateway, address, 80, 5000000) && test.calls == 2);
+		gateway.Stop();
+		finish_headset_test(test);
+	}
+
+	{
+		HeadsetTest test;
+		HFPGateway::Options options;
+		init_headset_test(test, options);
+		test.connected = false;
+		HFPGateway gateway(options);
+		gateway.DeviceReady(address, 3);
+		report("gateway: no connect without a link",
+			wait_sessions(gateway, 0, 2000000) && test.calls == 0);
+		gateway.Stop();
+		finish_headset_test(test);
+	}
+
+	{
+		HeadsetTest test;
+		HFPGateway::Options options;
+		init_headset_test(test, options);
+		test.answer = false;
+		test.failFirst = 3;
+		HFPGateway gateway(options);
+		gateway.DeviceReady(address, 3);
+		report("gateway: gives up after the retries",
+			wait_sessions(gateway, 0, 3000000) && test.calls == 3);
+		gateway.Stop();
+		finish_headset_test(test);
+	}
+
+	{
+		// Nobody answers: the gateway waits for the DLC (30 s) when the
+		// server quits.
+		HeadsetTest test;
+		HFPGateway::Options options;
+		init_headset_test(test, options);
+		test.answer = false;
+		HFPGateway gateway(options);
+		gateway.DeviceReady(address, 3);
+		snooze(500000);
+		bigtime_t start = system_time();
+		gateway.Stop();
+		bigtime_t took = system_time() - start;
+		printf("gateway: Stop() during the open wait took %" B_PRId64
+			" ms\n", took / 1000);
+		report("gateway: Stop() during the open wait is quick",
+			took < 2000000 && test.calls == 1);
+		gateway.DeviceReady(address, 3);
+		report("gateway: nothing starts after Stop()",
+			gateway.CountSessions() == 0);
+		finish_headset_test(test);
+	}
+
+	{
+		// Step 7c: the microphone opens the voice link after +BCS and
+		// AT+BCS, and closes it again.
+		HeadsetTest test;
+		HFPGateway::Options options;
+		init_headset_test(test, options);
+		test.voiceScript = true;
+		options.voice = test_voice;
+		options.codecNegotiation = true;
+		HFPGateway gateway(options);
+		gateway.DeviceReady(address, 3);
+		bigtime_t end = system_time() + 5000000;
+		while (!test.bacSent && system_time() < end)
+			snooze(50000);
+		report("voice: headset sent its codecs", test.bacSent);
+		gateway.SetVoiceWanted(true);
+		end = system_time() + 6000000;
+		while (test.voiceCalls < 1 && system_time() < end)
+			snooze(50000);
+		report("voice: +BCS 2 answered, mSBC link asked",
+			test.bcsSeen == 2 && test.voiceCalls == 1 && test.lastOpen
+			&& test.lastCodec == 2 && gateway.VoiceOpen());
+		gateway.SetVoiceWanted(false);
+		end = system_time() + 3000000;
+		while (test.voiceCalls < 2 && system_time() < end)
+			snooze(50000);
+		report("voice: link closed when the microphone is let go",
+			test.voiceCalls == 2 && !test.lastOpen && !gateway.VoiceOpen());
+		gateway.Stop();
+		finish_headset_test(test);
+	}
+}
+
+
 static void
 test_connect_without_radio()
 {
@@ -499,8 +942,10 @@ main()
 	test_sdp();
 	test_loopback();
 	test_refused_and_timeout();
+	test_hfp_agent();
 #ifndef R5_RFCOMM_HOST
 	test_links();
+	test_gateway();
 	test_connect_without_radio();
 #endif
 	printf("bt_rfcomm_test: %d failed\n", sFailures);

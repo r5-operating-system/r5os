@@ -18,7 +18,8 @@
   regular image,
 - bluetooth_audio.media_addon (distro/media/bluetooth_audio), the bt_audio
   command and bt_audio_smoke_test, regular image only (step 5),
-- bt_rfcomm_test (distro/bluetooth/tests), regular image only (step 7a).
+- bt_rfcomm_test (distro/bluetooth/tests), regular image only (step 7a),
+- bt_voice_test (distro/bluetooth/tests), regular image only (step 7c).
 
 docs/BLUETOOTH.md is the plan."""
 from __future__ import annotations
@@ -232,7 +233,9 @@ def main() -> int:
     audio = ROOT / "distro" / "media" / "bluetooth_audio"
     copy_files(audio, ("A2DPSource.cpp", "A2DPSource.h", "AudioSettings.cpp",
         "AudioSettings.h", "BluetoothAudioAddOn.cpp", "BluetoothAudioNode.cpp",
-        "BluetoothAudioNode.h", "Jamfile", "a2dp_proto.h", "sbc_encoder.cpp",
+        "BluetoothAudioNode.h", "BluetoothMicNode.cpp", "BluetoothMicNode.h",
+        "Jamfile", "VoiceSource.cpp", "VoiceSource.h", "a2dp_proto.h",
+        "msbc.h", "sbc_decoder.cpp", "sbc_decoder.h", "sbc_encoder.cpp",
         "sbc_encoder.h"), HAIKU / "src" / "add-ons" / "media" / "media-add-ons"
         / "bluetooth_audio", "bluetooth_audio")
     insert_once(HAIKU / "src" / "add-ons" / "media" / "media-add-ons"
@@ -276,6 +279,18 @@ def main() -> int:
         "SYSTEM_BIN += bt_audio_smoke_test ;\n",
         "SYSTEM_BIN += bt_rfcomm_test ;\n",
         "bt_rfcomm_test image")
+    # Step 7c: the voice path without a radio (mSBC and SBC decode, the
+    # kernel's SCO parsers, the HCI voice commands, the microphone node).
+    copy_dir(SRC / "tests" / "bt_voice_test",
+        HAIKU / "src" / "bin" / "bt_voice_test", "bt_voice_test")
+    insert_once(HAIKU / "src" / "bin" / "Jamfile",
+        "SubInclude HAIKU_TOP src bin bt_rfcomm_test ;\n",
+        "SubInclude HAIKU_TOP src bin bt_voice_test ;\n",
+        "bt_voice_test jam")
+    insert_once(HAIKU / "build" / "jam" / "images" / "definitions" / "regular",
+        "SYSTEM_BIN += bt_rfcomm_test ;\n",
+        "SYSTEM_BIN += bt_voice_test ;\n",
+        "bt_voice_test image")
     return 0
 
 

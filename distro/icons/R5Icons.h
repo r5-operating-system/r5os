@@ -111,7 +111,12 @@ enum r5_glyph {
 	R5_GLYPH_EYE = 4,
 	R5_GLYPH_EYE_OFF = 5,
 	R5_GLYPH_LOG_OUT = 6,
-	R5_GLYPH_BLUETOOTH = 7
+	R5_GLYPH_BLUETOOTH = 7,
+	// The face button symbols of a PlayStation-style game controller.
+	R5_GLYPH_CROSS = 8,
+	R5_GLYPH_CIRCLE = 9,
+	R5_GLYPH_SQUARE = 10,
+	R5_GLYPH_TRIANGLE = 11
 };
 
 // Draws the glyph inside `frame` of `view`, in `color`. The view's

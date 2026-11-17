@@ -332,6 +332,37 @@ SDPClient::_NotifyHIDProfile(BMessage* attrList)
 	HIDHost* host = ((BluetoothServer*)be_app)->GetHIDHost();
 	if (host == NULL)
 		return B_NO_INIT;
+
+	// Step 8 (docs/GAME-CONTROLLERS.md): the vendor and product ID of the
+	// Device ID record (PnP Information, attributes 0x0201 to 0x0203), so a
+	// game controller gets its standard layout, and the device's name.
+	// Only a USB-IF vendor ID (VendorIDSource 0x0205 = 2) is the one the
+	// mapping database knows; a Bluetooth SIG company ID is not.
+	uint16 vendorID = 0;
+	uint16 productID = 0;
+	uint16 version = 0;
+	BMessage record;
+	for (int32 i = 0; fRemoteDevice->services.FindMessage("service", i,
+			&record) == B_OK; i++) {
+		uint16 source = 0;
+		if (record.FindUInt16("0x0205", &source) != B_OK || source != 2
+			|| record.FindUInt16("0x0201", &vendorID) != B_OK
+			|| record.FindUInt16("0x0202", &productID) != B_OK) {
+			vendorID = productID = 0;
+			continue;
+		}
+		if (record.FindUInt16("0x0203", &version) != B_OK)
+			version = 0;
+		break;
+	}
+	const char* name = fRemoteDevice->friendly_name.String();
+	if (vendorID != 0 || name[0] != '\0') {
+		syslog(LOG_INFO, "bluetooth_hid: device id %04x:%04x", vendorID,
+			productID);
+		host->SetDeviceInfo(fRemoteDevice->bdaddr, vendorID, productID,
+			version, name);
+	}
+
 	host->DeviceReady(fRemoteDevice->bdaddr, descriptor, length);
 	return B_OK;
 	// SPDX-SnippetEnd

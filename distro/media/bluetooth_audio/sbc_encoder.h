@@ -78,6 +78,9 @@ uint8_t		CRC8(const uint8_t* data, size_t bits);
 void		AllocateBits(const Config& config,
 				const uint8_t scaleFactors[kMaxChannels][kMaxSubbands],
 				uint8_t bits[kMaxChannels][kMaxSubbands]);
+// Tap n (0 .. 10 * subbands - 1) of the prototype filter of 12.6.1, without
+// the folding sign; the decoder (sbc_decoder.h) builds its window from it.
+double		PrototypeTap(int subbands, int n);
 
 
 class Encoder {
@@ -85,6 +88,10 @@ public:
 								Encoder();
 
 			bool				Init(const Config& config);
+			// mSBC of HFP 1.8, appendix A (step 7c): the fixed configuration
+			// of sbc_decoder.h, sync word 0xad and two reserved zero bytes
+			// in the header. The CRC covers those bytes as they are sent.
+			bool				InitMSBC();
 			const Config&		GetConfig() const { return fConfig; }
 
 			// Samples per channel in one frame (blocks * subbands).
@@ -102,8 +109,11 @@ public:
 			size_t				EncodeSilence(uint8_t* out, size_t size);
 
 private:
+			bool				_Setup(const Config& config);
+
 			Config				fConfig;
 			int					fChannels;
+			bool				fMSBC;
 			// Analysis history X[] of 12.6.1, 10 * subbands per channel.
 			float				fHistory[kMaxChannels][10 * kMaxSubbands];
 			// Window C[] (prototype with the folding sign) and cosine
