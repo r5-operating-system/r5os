@@ -34,6 +34,15 @@
 # with M11's settings and note, so check and boot-next treat it as M11
 # (the hang while composed, never re-run after the fix in 6829434c46).
 #
+# M13 stick (generated/m13/STICK-PLAN.md): "boot-next m13" starts it, and
+# a settings file with a gpu_m13_boot line continues it: 1, 2, 3, then no
+# settings file. Every boot has gpu_draw, gpu_debug and gpu_selftest true.
+# Boot 1 is Skia on RADV with every other switch at its default (step 2 on
+# RADV, #4324), boot 2 adds the step 3 hardware switches
+# (gpu_compositor_scanout, gfx9_wc_gtt), boot 3 is Skia on Lavapipe with a
+# 128-bit vector width. The note is ~/m13/next. gpu_m13_boot is only the
+# marker; nothing reads it but check and this script.
+#
 # For the host tests: R5_HOME and R5_USER_SETTINGS move the paths, BOOT_NEXT_YES=0 never
 # restarts.
 
@@ -53,7 +62,13 @@ mkdir -p "$m10"
 stick=m10
 start11=0
 m12note=$home/m12/next
-if [ "$1" = m12 ]; then
+if [ "$1" = m13 ]; then
+	stick=m13
+	start11=1
+	set -- 1
+elif [ -f "$file" ] && grep -q '^gpu_m13_boot' "$file"; then
+	stick=m13
+elif [ "$1" = m12 ]; then
 	stick=m12
 	start11=1
 	set -- 1
@@ -78,6 +93,10 @@ if [ "$stick" = m12 ]; then
 	m10=$home/m12
 	mkdir -p "$m10"
 fi
+if [ "$stick" = m13 ]; then
+	m10=$home/m13
+	mkdir -p "$m10"
+fi
 
 # The boot that just ran: the note, else no note means boot 1.
 cur=1
@@ -85,7 +104,21 @@ if [ -f "$m10/next" ]; then
 	cur=$(head -n 1 "$m10/next" | tr -d ' \r')
 fi
 
-if [ "$stick" = m12 ]; then
+if [ "$stick" = m13 ]; then
+	if [ -n "$1" ]; then
+		next=$1
+	else
+		case $cur in
+		1) next=2 ;;
+		2) next=3 ;;
+		3) next=done ;;
+		*)
+			echo "FAIL no M13 boot follows $cur; run boot-next <1|2|3|done>"
+			exit 1
+			;;
+		esac
+	fi
+elif [ "$stick" = m12 ]; then
 	if [ -n "$1" ]; then
 		next=$1
 	else
@@ -145,7 +178,28 @@ gpu_debug true
 gpu_selftest true"
 m12="gpu_debug true
 gpu_selftest true"
-if [ "$stick" = m12 ]; then
+m13="gpu_draw true
+gpu_debug true
+gpu_selftest true"
+if [ "$stick" = m13 ]; then
+	case $next in
+	1) lines="$m13
+gpu_m13_boot 1" ;;
+	2) lines="$m13
+gpu_compositor_scanout true
+gfx9_wc_gtt true
+gpu_m13_boot 2" ;;
+	3) lines="$m13
+gpu_compositor_lavapipe true
+gpu_lavapipe_vector 128
+gpu_m13_boot 3" ;;
+	done) lines= ;;
+	*)
+		echo "FAIL unknown M13 boot $next (1, 2, 3 or done)"
+		exit 1
+		;;
+	esac
+elif [ "$stick" = m12 ]; then
 	case $next in
 	1) lines="gpu_draw true
 $m12" ;;

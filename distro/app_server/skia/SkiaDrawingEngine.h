@@ -167,6 +167,8 @@ public:
 	static	void				SetDebug(bool debug);
 	// Step 5b: gpu_draw_classic (SkiaPainter::SetClassic()).
 	static	void				SetClassic(bool classic);
+	// M13, option E (SkiaPainter::SetHardwareBlend())
+	static	void				SetHardwareBlend(bool on);
 	// Step 5b: SkiaPainter::SetLinearEdges().
 	static	void				SetLinearEdges(bool linear);
 	// Decision 9: Painter's drawing sessions (the CPU path), closed by the

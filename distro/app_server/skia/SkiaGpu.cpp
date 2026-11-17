@@ -476,7 +476,7 @@ SkiaGpu::Version()
 
 /*static*/ SkiaGpu*
 SkiaGpu::Create(const skia_vulkan_device& device, bool forceFail,
-	const char** _reason)
+	int samples, const char** _reason)
 {
 	SkiaGpu* gpu = new(std::nothrow) SkiaGpu;
 	SkiaBackend* backend = new(std::nothrow) SkiaBackend;
@@ -605,7 +605,11 @@ SkiaGpu::Create(const skia_vulkan_device& device, bool forceFail,
 	}
 
 	// Q3: curved shapes on the GPU with 4x MSAA, no CPU path atlas
-	options.fInternalMultisampleCount = SampleCount::k4;
+	// M13 step 3: gpu_lavapipe_msaa 1 on Lavapipe: no MSAA, Skia's own
+	// coverage for paths (4x MSAA is four times the software
+	// rasterisation there)
+	options.fInternalMultisampleCount = samples == 1 ? SampleCount::k1
+		: SampleCount::k4;
 	options.fMinimumPathSizeForMSAA = 0;
 	std::unique_ptr<GraphiteContext> graphite = ContextFactory::MakeVulkan(context,
 		options);

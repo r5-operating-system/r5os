@@ -221,6 +221,9 @@ public:
 	// and subpixel choice) instead of light hinting and clean grayscale
 	// text. gpu_draw_classic true in the radeon_hd settings.
 	static	void				SetClassic(bool classic);
+	// M13, option E: gpu_draw_hardware_blend false keeps the R5 shader
+	// (with the copy of the destination) for bitmaps too; a test switch
+	static	void				SetHardwareBlend(bool on);
 	static	bool				Classic();
 	// Step 5b: anti-aliased edges mixed in linear light (a coverage pass
 	// per shape). Off by default: thin dark lines on a light background

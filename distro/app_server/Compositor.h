@@ -171,6 +171,14 @@ private:
 			};
 			static const int32	kPassStamps = 128;
 			void				_Stamp(int32 pass);
+			void				_RecordBufferCopy(const Layer* layer,
+									const BRegion& region,
+									struct VkBuffer_T* frame,
+									uint32 frameStride);
+			// M13 step 3: gpu_lavapipe_msaa (0: the default, 4)
+			int32				fLavapipeMsaa = 0;
+			// gpu_compositor_cull false: no occlusion culling (test switch)
+			bool				fNoCull = false;
 			void				_RecordImageCopy(const Layer* layer,
 									const BRegion& region,
 									struct VkBuffer_T* frame,

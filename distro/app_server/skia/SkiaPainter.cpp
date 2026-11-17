@@ -181,6 +181,16 @@ SkiaPainter::SetClassic(bool classic)
 }
 
 
+static bool sHardwareBlend = true;
+
+
+/*static*/ void
+SkiaPainter::SetHardwareBlend(bool on)
+{
+	sHardwareBlend = on;
+}
+
+
 /*static*/ bool
 SkiaPainter::Classic()
 {
@@ -2107,6 +2117,10 @@ SkiaPainter::CopyRegion(const BRegion& region, int32 xOffset, int32 yOffset,
 //	#pragma mark - bitmaps
 
 
+// M13, option E: defined with the gradients below
+static sk_sp<SkRuntimeEffect> bitmap_over_effect();
+
+
 /*!	Painter::DrawBitmap() and Painter::BitmapPainter: the same colour-space
 	conversion on the CPU (BitmapPainter::_ConvertColorSpace(), it is data,
 	not drawing), one upload, and the drawing on the GPU with the variant
@@ -2266,6 +2280,34 @@ SkiaPainter::DrawBitmap(const ServerBitmap* bitmap, BRect bitmapRect,
 					&& fAlphaSrcMode == B_PIXEL_ALPHA
 					&& fAlphaFncMode == B_ALPHA_OVERLAY))
 				source.special = kSpecialAlphaBlend;
+			// M13 (option E of docs/M13-PLAN.md): on an opaque image in the
+			// new look these three are the hardware's own blend over the
+			// bitmap made premultiplied, with no copy of the destination.
+			// B_OP_OVER on B_CMAP8 (alpha 0 or 255) writes a pixel whole
+			// or not at all; B_OP_ALPHA and B_OP_OVER with an alpha channel
+			// round in floating point (a step of 1 at most). B_OP_OVER on
+			// B_RGB32 (the magic colour) keeps the R5 shader: done this way
+			// it failed bitmap-rgb32-over/opaque in the new-look compare
+			// (QEMU, 17 Nov 2026). The classic look, where the compare set
+			// runs, keeps the R5 shader.
+			if (sHardwareBlend && fTarget->IsOpaque() && !SkiaPainter::Classic()
+				&& (source.special == kSpecialAlphaBlend
+					|| source.special == kSpecialCopyIfAlpha)) {
+				sk_sp<SkRuntimeEffect> effect = bitmap_over_effect();
+				if (effect != nullptr) {
+					SkRuntimeShaderBuilder builder(effect);
+					builder.child("image") = source.colors;
+					builder.uniform("mode") = source.special == kSpecialAlphaBlend
+						? 0 : source.special == kSpecialOver32Magic ? 1 : 2;
+					SkPaint over;
+					over.setBlendMode(SkBlendMode::kSrcOver);
+					over.setShader(builder.makeShader());
+					_DirectDraw(bounds, SkMatrix::I(), [&](SkCanvas* canvas) {
+						canvas->drawRect(dest, over);
+					});
+					return touched;
+				}
+			}
 			if (source.special != kSpecialNone) {
 				_Composite(bounds, nullptr, source);
 				return touched;
@@ -2344,6 +2386,35 @@ SkiaPainter::DrawBitmap(const ServerBitmap* bitmap, BRect bitmapRect,
 /*!	Painter::_RasterizePath(path, gradient): AGG's gradient function for
 	the type, on the 256 colours of Painter::_MakeGradient(array, gradient).
 */
+/*!	M13, option E: Haiku's straight-alpha bitmap made premultiplied for the
+	hardware's kSrcOver. mode 0: the alpha channel; 1: B_RGB32, the magic
+	colour (B_TRANSPARENT_MAGIC_RGBA32 as bytes B 0x77, G 0x74, R 0x74,
+	A 0x77) is transparent and every other pixel opaque; 2: alpha 0 is
+	transparent and every other alpha opaque (B_CMAP8, converted).
+*/
+static sk_sp<SkRuntimeEffect>
+bitmap_over_effect()
+{
+	static sk_sp<SkRuntimeEffect> sEffect = SkRuntimeEffect::MakeForShader(
+		SkString(
+			"uniform shader image;\n"
+			"uniform int mode;\n"
+			"half4 main(float2 p) {\n"
+			"  half4 c = image.eval(p);\n"
+			"  if (mode == 1) {\n"
+			"    half3 d = abs(c.rgb - half3(116.0, 116.0, 119.0) / 255.0);\n"
+			"    bool magic = max(max(d.r, d.g), d.b) < 0.5 / 255.0\n"
+			"      && abs(c.a - 119.0 / 255.0) < 0.5 / 255.0;\n"
+			"    return magic ? half4(0) : half4(c.rgb, 1);\n"
+			"  }\n"
+			"  if (mode == 2)\n"
+			"    return c.a > 0.0 ? half4(c.rgb, 1) : half4(0);\n"
+			"  return half4(c.rgb * c.a, c.a);\n"
+			"}\n")).effect;
+	return sEffect;
+}
+
+
 sk_sp<SkShader>
 SkiaPainter::_GradientShader(const BGradient& gradient, bool* _ok)
 {
