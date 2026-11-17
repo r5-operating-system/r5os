@@ -136,7 +136,8 @@ struct settings {
 	int		drawLinearEdges;
 	// M13 step 3, Lavapipe only, opt-in (0: Mesa's and Skia's defaults):
 	// gpu_lavapipe_msaa 1|4 (Skia's sample count for paths),
-	// gpu_lavapipe_threads <n> (LP_NUM_THREADS), gpu_lavapipe_vector
+	// gpu_lavapipe_threads <n> (LP_NUM_THREADS; -1 without the line: 2,
+	// 0: Mesa's own count), gpu_lavapipe_vector
 	// 128|256 (LP_NATIVE_VECTOR_WIDTH)
 	int		lavapipeMsaa;
 	bool	noCull;
@@ -152,6 +153,8 @@ static void
 load_settings(settings& out)
 {
 	memset(&out, 0, sizeof(out));
+	// M13: no gpu_lavapipe_threads line: the R5 default (2)
+	out.lavapipeThreads = -1;
 	// On by default (user, 15 Nov 2026): RADV when the GPU passed its
 	// checks, Lavapipe otherwise. gpu_compositor false is the opt-out.
 	out.want = true;
@@ -807,11 +810,20 @@ Compositor::Create(Desktop* desktop, HWInterface* screen)
 		log_line("compose culling off (setting)");
 	// M13 step 3: llvmpipe reads these when the driver starts; RADV does
 	// not look at them
+	// M13 (owner, 17 Nov 2026): 2 threads by default. QEMU (8 virtual
+	// CPUs, the Painter desktop): drag 18.5 ms per frame with 2, 57 ms
+	// with 4, about 170 ms with Mesa's one per CPU; Lavapipe's threads and
+	// app_server's own crowded each other out. gpu_lavapipe_threads <n>
+	// sets another count, 0 Mesa's own; an LP_NUM_THREADS already in the
+	// environment (a developer's) stays.
 	if (options.lavapipeThreads > 0) {
 		char value[16];
 		snprintf(value, sizeof(value), "%d", options.lavapipeThreads);
 		setenv("LP_NUM_THREADS", value, 1);
 		log_line("lavapipe threads %d (setting)", options.lavapipeThreads);
+	} else if (options.lavapipeThreads < 0
+		&& setenv("LP_NUM_THREADS", "2", 0) == 0) {
+		log_line("lavapipe threads %s (default)", getenv("LP_NUM_THREADS"));
 	}
 	if (options.lavapipeVector > 0) {
 		char value[16];
