@@ -353,24 +353,114 @@ mtk_release_ownership(struct mtk_softc* sc)
  * Which of them may actually be used is decided above this driver. The part
  * sweeps them all in one go and says on each frame which channel it heard
  * it on, so there is no longer any reason to keep the list short.
+ *
+ * HT and VHT are added only when the settings say so and the card's own
+ * capability event said it has them. max_bw is 0, 1, 2, 3 for 20, 40, 80
+ * and 160 MHz, the order of that byte in the event.
  */
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ */
+static int
+mtk_ht_on(const struct mtk_softc* sc)
+{
+	return sc->sc_ht_vht != 0 && sc->sc_phy_ht != 0;
+}
+
+
 static void
 mtk_getradiocaps(struct ieee80211com* ic, int maxchans, int* nchans,
 	struct ieee80211_channel chans[])
 {
+	struct mtk_softc* sc = ic->ic_softc;
 	uint8_t bands[IEEE80211_MODE_BYTES];
+	int flags = 0;
 
 	memset(bands, 0, sizeof(bands));
 	setbit(bands, IEEE80211_MODE_11B);
 	setbit(bands, IEEE80211_MODE_11G);
+	if (mtk_ht_on(sc)) {
+		setbit(bands, IEEE80211_MODE_11NG);
+		if (sc->sc_phy_bw >= 1)
+			flags = NET80211_CBW_FLAG_HT40;
+	}
 	ieee80211_add_channel_list_2ghz(chans, maxchans, nchans,
-		mtk_channels_2ghz, MTK_CHANNELS_2GHZ, bands, 0);
+		mtk_channels_2ghz, MTK_CHANNELS_2GHZ, bands, flags);
 
 	memset(bands, 0, sizeof(bands));
 	setbit(bands, IEEE80211_MODE_11A);
+	flags = 0;
+	if (mtk_ht_on(sc)) {
+		setbit(bands, IEEE80211_MODE_11NA);
+		if (sc->sc_phy_bw >= 1)
+			flags = NET80211_CBW_FLAG_HT40;
+		if (sc->sc_phy_vht != 0) {
+			setbit(bands, IEEE80211_MODE_VHT_5GHZ);
+			if (sc->sc_phy_bw >= 2)
+				flags |= NET80211_CBW_FLAG_VHT80;
+		}
+	}
 	ieee80211_add_channel_list_5ghz(chans, maxchans, nchans,
-		mtk_channels_5ghz, MTK_CHANNELS_5GHZ, bands, 0);
+		mtk_channels_5ghz, MTK_CHANNELS_5GHZ, bands, flags);
 }
+
+
+/* Two bits per stream: 2 means MCS 0-9, 3 means the stream is absent. */
+static uint16_t
+mtk_vht_mcs_map(int streams)
+{
+	uint16_t map = 0xffff;
+	int i;
+
+	if (streams < 1)
+		streams = 1;
+	if (streams > 8)
+		streams = 8;
+	for (i = 0; i < streams; i++)
+		map = (uint16_t)((map & ~(3u << (2 * i))) | (2u << (2 * i)));
+	return map;
+}
+
+
+static void
+mtk_apply_phy(struct mtk_softc* sc)
+{
+	struct ieee80211com* ic = &sc->sc_ic;
+
+	ic->ic_htcaps = 0;
+	memset(&ic->ic_vht_cap, 0, sizeof(ic->ic_vht_cap));
+	if (mtk_ht_on(sc)) {
+		ic->ic_htcaps = IEEE80211_HTCAP_SHORTGI20
+			| IEEE80211_HTC_HT
+			| IEEE80211_HTC_AMPDU;
+		if (sc->sc_phy_bw >= 1) {
+			ic->ic_htcaps |= IEEE80211_HTCAP_CHWIDTH40
+				| IEEE80211_HTCAP_SHORTGI40;
+		}
+		if (sc->sc_phy_rx_ldpc != 0)
+			ic->ic_htcaps |= IEEE80211_HTCAP_LDPC | IEEE80211_HTC_TXLDPC;
+		if (sc->sc_phy_rx_stbc != 0)
+			ic->ic_htcaps |= IEEE80211_HTCAP_RXSTBC_1STREAM;
+		if (sc->sc_phy_vht != 0) {
+			if (sc->sc_phy_bw >= 2)
+				ic->ic_vht_cap.vht_cap_info |= IEEE80211_VHTCAP_SHORT_GI_80;
+			if (sc->sc_phy_rx_ldpc != 0)
+				ic->ic_vht_cap.vht_cap_info |= IEEE80211_VHTCAP_RXLDPC;
+			if (sc->sc_phy_rx_stbc != 0)
+				ic->ic_vht_cap.vht_cap_info |= IEEE80211_VHTCAP_RXSTBC_1;
+			ic->ic_vht_cap.supp_mcs.rx_mcs_map = mtk_vht_mcs_map(sc->sc_streams);
+			ic->ic_vht_cap.supp_mcs.tx_mcs_map = ic->ic_vht_cap.supp_mcs.rx_mcs_map;
+		}
+		device_printf(sc->sc_dev, "ht/vht on, %d streams, bandwidth step %d\n",
+			sc->sc_streams, sc->sc_phy_bw);
+	} else
+		device_printf(sc->sc_dev, "ht/vht off\n");
+
+	ic->ic_nchans = 0;
+	mtk_getradiocaps(ic, IEEE80211_CHAN_MAX, &ic->ic_nchans, ic->ic_channels);
+}
+/* SPDX-SnippetEnd */
 
 
 /* Tell the firmware the access point is gone: its station entry and the
@@ -566,6 +656,48 @@ mtk_newstate(struct ieee80211vap* vap, enum ieee80211_state state, int arg)
 }
 
 
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * mt76 keeps its own reorder buffer and also tells the firmware
+ * (mt7921_ampdu_action, mt7921/main.c, BSD-3-Clause-Clear). The reorder
+ * here is net80211's. The wrapper only forwards the session.
+ */
+static int
+mtk_ampdu_rx_start(struct ieee80211_node* ni, struct ieee80211_rx_ampdu* rap,
+	int baparamset, int batimeout, int baseqctl)
+{
+	struct mtk_softc* sc = ni->ni_ic->ic_softc;
+	int error = 0;
+	int tid = (baparamset & IEEE80211_BAPS_TID) >> IEEE80211_BAPS_TID_S;
+	int winsize = (baparamset & IEEE80211_BAPS_BUFSIZ) >> IEEE80211_BAPS_BUFSIZ_S;
+
+	if (sc->sc_ampdu_rx_start != NULL)
+		error = sc->sc_ampdu_rx_start(ni, rap, baparamset, batimeout,
+			baseqctl);
+	if (error == 0 && sc->sc_ht_vht != 0)
+		mtk_sta_ba(sc, MTK_WCID_AP, tid, winsize, baseqctl, 1, 0);
+	return error;
+}
+
+
+static void
+mtk_ampdu_rx_stop(struct ieee80211_node* ni, struct ieee80211_rx_ampdu* rap)
+{
+	struct mtk_softc* sc = ni->ni_ic->ic_softc;
+
+	if (sc->sc_ampdu_rx_stop != NULL)
+		sc->sc_ampdu_rx_stop(ni, rap);
+	if (sc->sc_ht_vht != 0 && rap != NULL) {
+		int tid = (int)(rap - ni->ni_rx_ampdu);
+
+		if (tid >= 0 && tid < IEEE80211_TID_SIZE)
+			mtk_sta_ba(sc, MTK_WCID_AP, tid, 0, 0, 0, 0);
+	}
+}
+/* SPDX-SnippetEnd */
+
+
 static struct ieee80211vap*
 mtk_vap_create(struct ieee80211com* ic, const char name[IFNAMSIZ], int unit,
 	enum ieee80211_opmode opmode, int flags,
@@ -613,6 +745,18 @@ mtk_vap_create(struct ieee80211com* ic, const char name[IFNAMSIZ], int unit,
 	ieee80211_vap_attach(vap, ieee80211_media_change, ieee80211_media_status,
 		mac);
 	ic->ic_opmode = opmode;
+
+	/* The stack's own reorder stays in place. These wrappers only tell
+	 * the firmware about the block-ack session the stack just opened.
+	 */
+	if (ic->ic_ampdu_rx_start != mtk_ampdu_rx_start) {
+		((struct mtk_softc*)ic->ic_softc)->sc_ampdu_rx_start
+			= ic->ic_ampdu_rx_start;
+		((struct mtk_softc*)ic->ic_softc)->sc_ampdu_rx_stop
+			= ic->ic_ampdu_rx_stop;
+		ic->ic_ampdu_rx_start = mtk_ampdu_rx_start;
+		ic->ic_ampdu_rx_stop = mtk_ampdu_rx_stop;
+	}
 
 	return vap;
 }
@@ -1087,6 +1231,31 @@ mtk_probe(device_t dev)
 }
 
 
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ */
+static int
+mtk_ioctl(struct ieee80211com* ic, u_long cmd, void* data)
+{
+	struct mtk_softc* sc = ic->ic_softc;
+	struct ieee80211_haiku_tx_rate* rate = data;
+
+	if (cmd != IEEE80211_IOC_HAIKU_TX_RATE || rate == NULL)
+		return ENOTTY;
+
+	memset(rate, 0, sizeof(*rate));
+	rate->i_kbps = sc->sc_tx_kbps;
+	rate->i_mode = sc->sc_tx_mode;
+	rate->i_mcs = sc->sc_tx_mcs;
+	rate->i_nss = sc->sc_tx_nss;
+	rate->i_width = sc->sc_tx_width;
+	rate->i_guard_interval = sc->sc_tx_kbps != 0 ? 8 : 0;
+	return 0;
+}
+/* SPDX-SnippetEnd */
+
+
 static int
 mtk_attach(device_t dev)
 {
@@ -1142,12 +1311,16 @@ mtk_attach(device_t dev)
 		goto fail;
 	}
 
+	sc->sc_ht_vht = 0;
 	{
 		void* settings = load_driver_settings("mt7922wifi");
 
 		if (settings != NULL) {
 			sc->sc_debug = get_driver_boolean_parameter(settings, "debug",
 				false, true);
+			/* Absent leaves HT and VHT off. */
+			sc->sc_ht_vht = get_driver_boolean_parameter(settings,
+				"ht_vht", false, true) ? 1 : 0;
 			unload_driver_settings(settings);
 		}
 	}
@@ -1218,6 +1391,7 @@ mtk_attach(device_t dev)
 	ic->ic_parent = mtk_parent;
 	ic->ic_vap_create = mtk_vap_create;
 	ic->ic_vap_delete = mtk_vap_delete;
+	ic->ic_ioctl = mtk_ioctl;
 
 	error = mtk_dma_setup(sc);
 	if (error != 0)
@@ -1226,6 +1400,8 @@ mtk_attach(device_t dev)
 	error = mtk_firmware_start(sc);
 	if (error != 0)
 		goto fail;
+
+	mtk_apply_phy(sc);
 
 	error = mtk_radio_init(sc);
 	if (error != 0)

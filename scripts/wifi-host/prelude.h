@@ -521,6 +521,7 @@ static inline void ieee80211_csa_completeswitch(struct ieee80211com* ic)
 #define MTK_RSSI 40
 #define MTK_NOISE_FLOOR (-95)
 #define MTK_RX_TYPE_NORMAL 2
+#define MTK_RX_TYPE_TXS 0
 #define MTK_RX_TYPE_SENT 6
 #define MTK_RX_TYPE_EVENT 7
 #define MTK_RX_TYPE_NORMAL_MCU 8
@@ -586,6 +587,11 @@ struct mtk_softc {
 	uint32_t sc_sent;
 	uint32_t sc_txstale;
 	uint32_t sc_txfull;
+	uint32_t sc_tx_kbps;
+	uint8_t sc_tx_mode;
+	uint8_t sc_tx_mcs;
+	uint8_t sc_tx_nss;
+	uint16_t sc_tx_width;
 };
 
 #define MTK_DEBUG(sc, ...) do {} while (0)

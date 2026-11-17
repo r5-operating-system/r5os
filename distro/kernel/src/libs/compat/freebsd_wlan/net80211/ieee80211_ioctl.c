@@ -1212,6 +1212,29 @@ ieee80211_ioctl_get80211(struct ieee80211vap *vap, u_long cmd,
 	case IEEE80211_IOC_VHTCONF:
 		ireq->i_val = vap->iv_vht_flags & IEEE80211_FVHT_MASK;
 		break;
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * The driver fills a kernel copy. i_data stays a user address.
+ */
+	case IEEE80211_IOC_HAIKU_TX_RATE: {
+		struct ieee80211_haiku_tx_rate rate;
+
+		if (ireq->i_len < (int)sizeof(rate) || ireq->i_data == NULL) {
+			error = EINVAL;
+			break;
+		}
+		memset(&rate, 0, sizeof(rate));
+		if (vap->iv_ic->ic_ioctl == NULL)
+			error = ENOTTY;
+		else
+			error = vap->iv_ic->ic_ioctl(vap->iv_ic,
+				IEEE80211_IOC_HAIKU_TX_RATE, &rate);
+		if (error == 0)
+			error = copyout(&rate, ireq->i_data, sizeof(rate));
+		break;
+	}
+/* SPDX-SnippetEnd */
 	default:
 		error = ieee80211_ioctl_getdefault(vap, ireq);
 		break;

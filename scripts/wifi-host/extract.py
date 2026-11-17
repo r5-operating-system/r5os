@@ -103,6 +103,10 @@ def main():
         ],
         "mtkrx": [
             (mtk, "mtk_rd32("),
+            (mtk, "mtk_legacy_kbps("),
+            (mtk, "mtk_ht_kbps("),
+            (mtk, "mtk_vht_kbps("),
+            (mtk, "mtk_note_txs("),
             (mtk, "mtk_receive_frame("),
         ],
     }
