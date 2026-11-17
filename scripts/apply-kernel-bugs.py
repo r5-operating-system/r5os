@@ -78,6 +78,9 @@ def install_kernel_sources() -> None:
         "src/libs/compat/freebsd_wlan/net80211/ieee80211_scan_sw.c",
         "src/libs/compat/freebsd_wlan/net80211/ieee80211_sta.c",
         # R5: Wi-Fi parsers drop a frame that does not fit (docs/WIFI.md step 1)
+        "src/libs/compat/freebsd_wlan/net80211/ieee80211_hostap.c",
+        "src/libs/compat/freebsd_wlan/net80211/ieee80211_crypto_bip.c",
+        "src/libs/compat/freebsd_wlan/net80211/Jamfile",
         "src/libs/compat/freebsd_wlan/net80211/ieee80211_ht.c",
         "src/libs/compat/freebsd_wlan/net80211/ieee80211_input.c",
         "src/libs/compat/freebsd_wlan/net80211/ieee80211_input.h",

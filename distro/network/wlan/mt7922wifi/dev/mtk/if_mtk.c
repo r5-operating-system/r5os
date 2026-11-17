@@ -698,6 +698,31 @@ mtk_ampdu_rx_stop(struct ieee80211_node* ni, struct ieee80211_rx_ampdu* rap)
 /* SPDX-SnippetEnd */
 
 
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * Remember a pairwise CCMP key so an IGTK update can send it beside the
+ * integrity key. The bytes are not written to the log. Returning the
+ * previous result leaves encryption in the stack.
+ */
+static int
+mtk_key_set(struct ieee80211vap* vap, const struct ieee80211_key* key)
+{
+	struct mtk_softc* sc = vap->iv_ic->ic_softc;
+
+	if (key != NULL && key->wk_cipher != NULL
+		&& key->wk_cipher->ic_cipher == IEEE80211_CIPHER_AES_CCM
+		&& key->wk_keylen == 16) {
+		memcpy(sc->sc_ccmp, key->wk_key, 16);
+		sc->sc_ccmp_len = 16;
+	}
+	if (sc->sc_key_set == NULL || sc->sc_key_set == mtk_key_set)
+		return 1;
+	return sc->sc_key_set(vap, key);
+}
+/* SPDX-SnippetEnd */
+
+
 static struct ieee80211vap*
 mtk_vap_create(struct ieee80211com* ic, const char name[IFNAMSIZ], int unit,
 	enum ieee80211_opmode opmode, int flags,
@@ -745,6 +770,14 @@ mtk_vap_create(struct ieee80211com* ic, const char name[IFNAMSIZ], int unit,
 	ieee80211_vap_attach(vap, ieee80211_media_change, ieee80211_media_status,
 		mac);
 	ic->ic_opmode = opmode;
+
+	/* SPDX-SnippetBegin
+	 * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	 * SPDX-License-Identifier: MIT
+	 */
+	((struct mtk_softc*)ic->ic_softc)->sc_key_set = vap->iv_key_set;
+	vap->iv_key_set = mtk_key_set;
+	/* SPDX-SnippetEnd */
 
 	/* The stack's own reorder stays in place. These wrappers only tell
 	 * the firmware about the block-ack session the stack just opened.
@@ -1241,6 +1274,18 @@ mtk_ioctl(struct ieee80211com* ic, u_long cmd, void* data)
 	struct mtk_softc* sc = ic->ic_softc;
 	struct ieee80211_haiku_tx_rate* rate = data;
 
+	if (cmd == IEEE80211_IOC_HAIKU_IGTK) {
+		const struct ieee80211_haiku_igtk* g = data;
+
+		if (g == NULL || g->i_keylen != 16
+			|| (g->i_keyix != 4 && g->i_keyix != 5))
+			return EINVAL;
+		memcpy(sc->sc_igtk, g->i_key, 16);
+		sc->sc_igtk_id = g->i_keyix;
+		sc->sc_igtk_len = 16;
+		return mtk_sta_igtk(sc);
+	}
+
 	if (cmd != IEEE80211_IOC_HAIKU_TX_RATE || rate == NULL)
 		return ENOTTY;
 
@@ -1370,7 +1415,8 @@ mtk_attach(device_t dev)
 		| IEEE80211_C_SHPREAMBLE
 		| IEEE80211_C_SHSLOT
 		| IEEE80211_C_WPA
-		| IEEE80211_C_WME;
+		| IEEE80211_C_WME
+		| IEEE80211_C_MFP;
 
 	IEEE80211_ADDR_COPY(ic->ic_macaddr, sc->sc_macaddr);
 

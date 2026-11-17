@@ -410,6 +410,13 @@ struct mtk_softc {
 					struct ieee80211_rx_ampdu*, int, int, int);
 	void			(*sc_ampdu_rx_stop)(struct ieee80211_node*,
 					struct ieee80211_rx_ampdu*);
+	uint8_t			sc_ccmp[16];
+	uint8_t			sc_ccmp_len;
+	uint8_t			sc_igtk[16];
+	uint8_t			sc_igtk_id;
+	uint8_t			sc_igtk_len;
+	int			(*sc_key_set)(struct ieee80211vap*,
+					const struct ieee80211_key*);
 /* SPDX-SnippetEnd */
 
 	/* One command at a time. There is a single command buffer and a
@@ -571,6 +578,7 @@ int		mtk_sta_update(struct mtk_softc*, struct ieee80211_node*,
 			uint16_t wcid, int state, int enable, int newly);
 int		mtk_sta_ba(struct mtk_softc*, uint16_t wcid, int tid,
 			int winsize, int ssn, int enable, int tx);
+int		mtk_sta_igtk(struct mtk_softc*);
 int		mtk_roc(struct mtk_softc*, struct ieee80211_channel*,
 			uint32_t milliseconds);
 int		mtk_roc_abort(struct mtk_softc*);

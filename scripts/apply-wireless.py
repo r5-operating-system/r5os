@@ -95,6 +95,7 @@ def copy_sources() -> None:
 
     netapi = ROOT / "distro/network/netapi"
     copy(netapi / "NetworkRoster.h", HAIKU / "headers/os/net/NetworkRoster.h")
+    copy(netapi / "NetworkDevice.h", HAIKU / "headers/os/net/NetworkDevice.h")
     copy(netapi / "NetworkRoster.cpp",
         HAIKU / "src/kits/network/libnetapi/NetworkRoster.cpp")
     print("copied NetworkRoster")
