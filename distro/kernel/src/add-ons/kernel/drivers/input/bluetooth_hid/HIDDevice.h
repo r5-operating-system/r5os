@@ -19,6 +19,7 @@
 #include "HIDParser.h"
 
 
+class HIDReportItem;
 class ProtocolHandler;
 
 
@@ -66,8 +67,18 @@ public:
 			void				SetInfo(const r5_bthid_info& info);
 			void				GetJoystickInfo(r5_joystick_info& info) const;
 
+			// R5_BTHID_GET_BATTERY: the Battery Strength (Generic Device
+			// Controls page 0x06, usage 0x20) of the last input report that
+			// had it, 0 to 100; -1 when the descriptor has none or no such
+			// report came yet.
+			int32				Battery() const;
+
 private:
 			void				_Deliver(const uint8* data, size_t length);
+			void				_FindBattery(const uint8* descriptor,
+									size_t descriptorLength);
+			void				_UpdateBattery(const uint8* data,
+									size_t length);
 
 	// Reports that came while no reader waited; the oldest is dropped
 	// when it is full.
@@ -99,6 +110,14 @@ private:
 			ProtocolHandler*	fProtocolHandlerList;
 
 			r5_bthid_info		fInfo;
+
+			// A second parser of the same descriptor, only for the battery:
+			// it is fed every report, so it never touches the reports and
+			// items the protocol handlers read (fParser).
+			HIDParser*			fBatteryParser;
+			HIDReportItem*		fBatteryItem;
+			uint8*				fBatteryBuffer;
+			int32				fBattery;
 };
 
 

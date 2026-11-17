@@ -37,6 +37,11 @@ public:
 									uint16 vendorID, uint16 productID,
 									uint16 version, const char* name);
 
+	// The battery of a connected Classic HID device in percent, from the
+	// Battery Strength of its input reports (R5_BTHID_GET_BATTERY); -1
+	// when it is not connected or its reports have none.
+			int32				Battery(const bdaddr_t& address);
+
 	// The SDP HIDDescriptorList (attribute 0x0206, without its outer
 	// sequence header, as SDPDataIO keeps it): the first report
 	// descriptor. Bounds-checked; returns false on anything malformed.

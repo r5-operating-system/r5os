@@ -707,6 +707,30 @@ HIDHost::_CloseLocked(Session* session)
 }
 
 
+int32
+HIDHost::Battery(const bdaddr_t& address)
+{
+	int32 id;
+	{
+		BAutolock locker(fLock);
+		Session* session = _FindLocked(address);
+		id = session != NULL ? session->kernelID : -1;
+	}
+	if (fControlNode < 0 || id < 0)
+		return -1;
+
+	// Only the driver lock: no wait for the device.
+	r5_bthid_battery battery;
+	battery.id = id;
+	battery.battery = -1;
+	if (ioctl(fControlNode, R5_BTHID_GET_BATTERY, &battery,
+			sizeof(battery)) != 0
+		|| battery.battery < 0 || battery.battery > 100)
+		return -1;
+	return battery.battery;
+}
+
+
 // #pragma mark - BLE HID over GATT (step 6)
 
 

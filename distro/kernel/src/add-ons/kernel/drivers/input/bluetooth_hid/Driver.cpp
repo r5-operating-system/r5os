@@ -294,6 +294,29 @@ set_info(device_cookie* owner, void* userBuffer, size_t length)
 
 
 static status_t
+get_battery(device_cookie* owner, void* userBuffer, size_t length)
+{
+	r5_bthid_battery request;
+	if (length < sizeof(request) || !IS_USER_ADDRESS(userBuffer)
+		|| user_memcpy(&request, userBuffer, sizeof(request)) != B_OK)
+		return B_BAD_ADDRESS;
+	if (request.id < 0 || request.id >= R5_BTHID_MAX_DEVICES)
+		return B_BAD_VALUE;
+
+	MutexLocker locker(sDriverLock);
+	HIDDevice* device = sDevices[request.id];
+	if (device == NULL || device->Owner() != owner)
+		return B_ENTRY_NOT_FOUND;
+	request.battery = device->Battery();
+	locker.Unlock();
+
+	if (user_memcpy(userBuffer, &request, sizeof(request)) != B_OK)
+		return B_BAD_ADDRESS;
+	return B_OK;
+}
+
+
+static status_t
 get_output(void* userBuffer, size_t length)
 {
 	r5_bthid_output request;
@@ -427,6 +450,8 @@ bluetooth_hid_control(void* _cookie, uint32 op, void* buffer, size_t length)
 			return get_output(buffer, length);
 		case R5_BTHID_SET_INFO:
 			return set_info(cookie, buffer, length);
+		case R5_BTHID_GET_BATTERY:
+			return get_battery(cookie, buffer, length);
 	}
 	return B_DEV_INVALID_IOCTL;
 }
