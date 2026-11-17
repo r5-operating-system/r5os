@@ -1,6 +1,6 @@
 id	r5_status	branch	commit	notes
 344	open			
-570	open			
+570	not-applicable			NetPositive is not shipped; WebPositive is the browser
 605	open			
 804	open			
 808	open			
@@ -18,7 +18,7 @@ id	r5_status	branch	commit	notes
 1036	open			
 1041	open			
 1042	in-progress	cursor/airplay-receiver		IPv4 mDNS plus IPv6 ff02::fb per NIC (sin6_scope_id). AirPlay 1 RAOP + AirPlay 2 advertisement; pairing/PTP not implemented.
-1048	open			
+1048	not-applicable			architecture R5 does not target (32-bit x86/PPC/SPARC/m68k/ARM32)
 1059	open			
 1070	open			
 1071	open			
@@ -66,7 +66,7 @@ id	r5_status	branch	commit	notes
 1993	open			
 1994	open			
 2044	open			
-2045	open			
+2045	not-applicable			NetPositive is not shipped; WebPositive is the browser
 2055	open			
 2103	open			
 2120	open			
@@ -188,7 +188,7 @@ id	r5_status	branch	commit	notes
 4122	open			
 4135	open			
 4154	fixed			A second Find renames the query file from the current text so the result window title changes
-4165	open			
+4165	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 4167	open			
 4178	open			
 4181	open			
@@ -212,7 +212,7 @@ id	r5_status	branch	commit	notes
 4356	open			
 4359	open			
 4381	open			
-4385	open			
+4385	not-applicable			Open Firmware / PowerPC; not an R5 target
 4389	open			
 4397	open			
 4412	open			
@@ -262,11 +262,11 @@ id	r5_status	branch	commit	notes
 4947	open			
 4955	open			
 4973	open			
-4981	open			
-4982	open			
-4986	open			
-4990	open			
-4991	open			
+4981	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
+4982	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
+4986	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
+4990	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
+4991	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 5000	fixed			overlay scripts/apply-desktop-enh.py
 5016	open			
 5025	open			
@@ -288,7 +288,7 @@ id	r5_status	branch	commit	notes
 5147	open			
 5148	open			
 5156	open			
-5160	open			
+5160	not-applicable			architecture R5 does not target (32-bit x86/PPC/SPARC/m68k/ARM32)
 5161	open			
 5171	open			
 5179	open			
@@ -320,7 +320,7 @@ id	r5_status	branch	commit	notes
 5513	open			
 5543	open			
 5572	open			
-5579	open			
+5579	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 5581	open			
 5583	open			
 5593	open			
@@ -359,7 +359,7 @@ id	r5_status	branch	commit	notes
 6049	open			
 6056	open			
 6065	open			
-6071	open			
+6071	not-applicable			architecture R5 does not target (32-bit x86/PPC/SPARC/m68k/ARM32)
 6072	open			
 6088	open			
 6091	open			
@@ -368,7 +368,7 @@ id	r5_status	branch	commit	notes
 6129	open			
 6136	open			
 6151	open			
-6164	open			
+6164	not-applicable			architecture R5 does not target (32-bit x86/PPC/SPARC/m68k/ARM32)
 6180	open			
 6187	open			
 6199	open			
@@ -378,7 +378,7 @@ id	r5_status	branch	commit	notes
 6209	open			
 6221	open			
 6246	open			
-6247	open			
+6247	not-applicable			architecture R5 does not target (32-bit x86/PPC/SPARC/m68k/ARM32)
 6267	open			
 6287	open			
 6296	open			
@@ -825,7 +825,7 @@ id	r5_status	branch	commit	notes
 9477	open			
 9478	open			
 9480	open			
-9484	open			
+9484	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 9496	open			
 9498	open			
 9500	open			
@@ -842,7 +842,7 @@ id	r5_status	branch	commit	notes
 9546	open			
 9562	open			
 9563	open			
-9566	open			
+9566	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 9576	open			
 9579	open			
 9581	open			
@@ -878,7 +878,7 @@ id	r5_status	branch	commit	notes
 9773	open			
 9781	open			
 9812	open			
-9817	open			
+9817	not-applicable			architecture R5 does not target (32-bit x86/PPC/SPARC/m68k/ARM32)
 9835	open			
 9845	open			
 9859	open			
@@ -937,7 +937,7 @@ id	r5_status	branch	commit	notes
 10208	fixed			apply-high-bugs.py
 10216	open			
 10234	open			
-10240	open			
+10240	not-applicable			architecture R5 does not target (32-bit x86/PPC/SPARC/m68k/ARM32)
 10267	open			
 10269	open			
 10290	open			
@@ -1167,7 +1167,7 @@ id	r5_status	branch	commit	notes
 11975	open			
 11987	open			
 11988	open			
-11998	open			
+11998	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 12001	open			
 12010	open			
 12011	open			
@@ -1231,7 +1231,7 @@ id	r5_status	branch	commit	notes
 12379	open			
 12383	open			
 12401	open			
-12402	open			
+12402	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 12412	open			
 12417	open			
 12433	open			
@@ -1287,7 +1287,7 @@ id	r5_status	branch	commit	notes
 12702	open			
 12733	open			
 12738	open			
-12750	open			
+12750	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 12754	open			
 12773	open			
 12776	open			
@@ -1347,7 +1347,7 @@ id	r5_status	branch	commit	notes
 13022	open			
 13024	open			
 13027	open			
-13029	open			
+13029	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 13032	open			
 13033	open			
 13035	open			
@@ -1395,7 +1395,7 @@ id	r5_status	branch	commit	notes
 13193	open			
 13196	open			
 13200	open			
-13202	open			
+13202	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 13203	open			
 13206	open			
 13209	open			
@@ -1410,7 +1410,7 @@ id	r5_status	branch	commit	notes
 13239	open			
 13245	open			
 13246	open			
-13247	open			
+13247	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 13256	open			
 13259	open			
 13269	open			
@@ -1442,7 +1442,7 @@ id	r5_status	branch	commit	notes
 13409	open			
 13411	open			
 13414	open			
-13416	open			
+13416	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 13423	open			
 13430	open			
 13431	fixed			Menus keep a margin from the screen edge
@@ -1498,7 +1498,7 @@ id	r5_status	branch	commit	notes
 13570	open			
 13572	open			
 13579	open			
-13582	open			
+13582	not-applicable			architecture R5 does not target (32-bit x86/PPC/SPARC/m68k/ARM32)
 13584	open			
 13591	open			
 13596	fixed	claude/issues-1-apps	47031c3136	The link check for file names uses its own word characters with +; selection is unchanged. Not built and not tested.
@@ -1583,9 +1583,9 @@ id	r5_status	branch	commit	notes
 13962	open			
 13964	open			
 13967	open			
-13971	open			
+13971	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 13973	open			
-13979	open			
+13979	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 13982	open			
 13986	open			
 13991	open			
@@ -1594,7 +1594,7 @@ id	r5_status	branch	commit	notes
 14022	open			
 14026	open			
 14033	open			
-14036	open			
+14036	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 14043	open			
 14052	open			
 14056	open			
@@ -1603,7 +1603,7 @@ id	r5_status	branch	commit	notes
 14082	open			
 14084	open			
 14090	open			
-14097	open			
+14097	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 14102	open			
 14109	open			
 14111	open			
@@ -1613,7 +1613,7 @@ id	r5_status	branch	commit	notes
 14136	open			
 14150	open			
 14158	open			
-14161	open			
+14161	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 14165	open			
 14176	open			
 14180	open			
@@ -1648,7 +1648,7 @@ id	r5_status	branch	commit	notes
 14350	open			
 14356	open			
 14366	open			
-14370	open			
+14370	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 14371	open			
 14372	open			
 14376	open			
@@ -1666,7 +1666,7 @@ id	r5_status	branch	commit	notes
 14428	open			
 14431	open			
 14432	open			
-14434	open			
+14434	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 14438	open			
 14441	fixed	cursor/pop3-flush	65bb4b1a13	SendCommand stops flushing when Read returns 0, so a closed POP3 socket does not spin. jam -q POP3 exited 0 on 3 Nov 2026. No POP3 server was contacted.
 14442	open			
@@ -1766,8 +1766,8 @@ id	r5_status	branch	commit	notes
 14863	open			
 14869	open			
 14876	open			
-14878	open			
-14879	open			
+14878	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
+14879	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 14880	open			
 14886	open			
 14889	open			
@@ -1798,10 +1798,10 @@ id	r5_status	branch	commit	notes
 14979	open			
 14981	open			
 14984	open			
-14985	open			
+14985	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 14991	fixed			Tracker (not every app) reapplies system colors live
 14998	open			
-15002	open			
+15002	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 15003	open			
 15006	open			
 15007	open			
@@ -1847,7 +1847,7 @@ id	r5_status	branch	commit	notes
 15152	open			
 15159	open			
 15160	open			
-15164	open			
+15164	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 15168	open			
 15170	open			
 15174	open			
@@ -1858,7 +1858,7 @@ id	r5_status	branch	commit	notes
 15184	open			
 15194	open			
 15196	open			
-15197	open			
+15197	not-applicable			architecture R5 does not target (32-bit x86/PPC/SPARC/m68k/ARM32)
 15203	open			
 15205	open			
 15216	open			
@@ -1950,8 +1950,8 @@ id	r5_status	branch	commit	notes
 15541	fixed			Tracker reapplies document colors on B_COLORS_UPDATED
 15545	open			
 15546	open			
-15552	open			
-15553	open			
+15552	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
+15553	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 15555	open			
 15560	open			
 15567	open			
@@ -2037,7 +2037,7 @@ id	r5_status	branch	commit	notes
 15774	open			
 15776	open			
 15778	open			
-15779	open			
+15779	not-applicable			NetPositive is not shipped; WebPositive is the browser
 15783	open			
 15788	open			
 15790	open			
@@ -2076,7 +2076,7 @@ id	r5_status	branch	commit	notes
 15864	open			
 15867	open			
 15869	open			
-15871	open			
+15871	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 15877	open			
 15881	open			
 15883	open			
@@ -2098,7 +2098,7 @@ id	r5_status	branch	commit	notes
 15928	open			
 15931	open			
 15932	open			
-15935	open			
+15935	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 15937	open			
 15938	open			
 15939	open			
@@ -2120,14 +2120,14 @@ id	r5_status	branch	commit	notes
 15981	open			
 15987	open			
 15989	open			
-15993	open			
+15993	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 15997	open			
 15998	open			
 16002	fixed	claude/issues-2-prefs	82184968c2	The three standard menu links go through B_TRANSLATE; Dutch catalog lines not added yet. Not built and not tested.
 16004	open			
 16005	open			
 16007	open			
-16009	open			
+16009	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 16011	open			
 16013	open			
 16014	open			
@@ -2226,7 +2226,7 @@ id	r5_status	branch	commit	notes
 16244	open			
 16245	fixed			overlay scripts/apply-desktop-enh.py
 16247	open			
-16249	open			
+16249	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 16251	open			
 16252	open			
 16253	open			
@@ -2240,7 +2240,7 @@ id	r5_status	branch	commit	notes
 16269	open			
 16270	open			
 16271	open			
-16278	open			
+16278	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 16279	open			
 16281	open			
 16284	open			
@@ -2250,7 +2250,7 @@ id	r5_status	branch	commit	notes
 16305	open			
 16311	open			
 16312	open			
-16313	open			
+16313	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 16315	open			
 16316	open			
 16318	in-progress	cursor/zeroconf-1042		AirPrint PWG-raster driver + IPP image/pwg-raster. No URF/job status yet.
@@ -2324,7 +2324,7 @@ id	r5_status	branch	commit	notes
 16509	open			
 16511	open			
 16513	open			
-16515	open			
+16515	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 16521	open			
 16522	open			
 16526	open			
@@ -2378,7 +2378,7 @@ id	r5_status	branch	commit	notes
 16664	open			
 16667	open			
 16674	open			
-16675	open			
+16675	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 16677	open			
 16678	fixed			Column headers use document text color
 16681	open			
@@ -2458,7 +2458,7 @@ id	r5_status	branch	commit	notes
 16911	open			
 16912	open			
 16913	open			
-16914	open			
+16914	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 16921	open			
 16923	open			
 16925	open			
@@ -2466,7 +2466,7 @@ id	r5_status	branch	commit	notes
 16933	open			
 16938	open			
 16939	open			
-16940	open			
+16940	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 16947	open			
 16950	open			
 16952	open			
@@ -2516,7 +2516,7 @@ id	r5_status	branch	commit	notes
 17080	open			
 17085	open			
 17086	open			
-17089	open			
+17089	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 17090	open			
 17096	open			
 17099	open			
@@ -2524,7 +2524,7 @@ id	r5_status	branch	commit	notes
 17103	open			
 17105	open			
 17110	open			
-17111	open			
+17111	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 17112	open			
 17115	open			
 17116	open			
@@ -2532,7 +2532,7 @@ id	r5_status	branch	commit	notes
 17119	open			
 17120	open			
 17130	open			
-17133	open			
+17133	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 17135	open			
 17137	open			
 17139	open			
@@ -2548,7 +2548,7 @@ id	r5_status	branch	commit	notes
 17183	open			
 17184	open			
 17187	open			
-17192	open			
+17192	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 17194	open			
 17195	open			
 17196	open			
@@ -2576,17 +2576,17 @@ id	r5_status	branch	commit	notes
 17270	open			
 17273	open			
 17277	open			
-17278	open			
+17278	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 17279	open			
 17284	open			
 17285	open			
 17286	open			
 17288	open			
-17293	open			
-17294	open			
+17293	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
+17294	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 17296	open			
 17300	open			
-17301	open			
+17301	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 17304	open			
 17312	open			
 17317	fixed	claude/game-controllers-fixes	c5bd328319	Settings > Devices > Game controllers lists HID game controllers (USB and Bluetooth) with a live test, a Layout menu and Set up buttons (#4335, #4345). 8BitDo M30 tested on the 5625U (stick 52, 17 Nov 2026) over Bluetooth (name, buttons, D-pad) and over USB, by the owner. The old Joysticks preferences are unchanged.
@@ -2599,8 +2599,8 @@ id	r5_status	branch	commit	notes
 17330	open			
 17331	open			
 17332	open			
-17338	open			
-17340	open			
+17338	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
+17340	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 17342	open			
 17343	open			
 17348	open			
@@ -2656,7 +2656,7 @@ id	r5_status	branch	commit	notes
 17488	open			
 17492	open			
 17493	open			
-17494	open			
+17494	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 17495	open			
 17497	open			
 17498	open			
@@ -2695,13 +2695,13 @@ id	r5_status	branch	commit	notes
 17578	open			
 17581	open			
 17582	open			
-17584	open			
+17584	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 17585	open			
 17587	open			
 17588	open			
 17589	open			
 17590	open			
-17592	open			
+17592	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 17596	open			
 17599	open			
 17603	open			
@@ -2752,7 +2752,7 @@ id	r5_status	branch	commit	notes
 17713	open			
 17715	open			
 17717	open			
-17720	open			
+17720	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 17721	open			
 17722	open			
 17724	open			
@@ -2824,7 +2824,7 @@ id	r5_status	branch	commit	notes
 17926	open			
 17927	open			
 17929	open			
-17931	open			
+17931	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 17934	open			
 17937	open			
 17938	open			
@@ -2945,7 +2945,7 @@ id	r5_status	branch	commit	notes
 18260	open			
 18263	open			
 18267	open			
-18268	open			
+18268	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 18270	open			
 18272	open			
 18273	open			
@@ -3077,7 +3077,7 @@ id	r5_status	branch	commit	notes
 18553	open			
 18555	open			
 18556	open			
-18564	open			
+18564	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 18566	open			
 18567	open			
 18570	open			
@@ -3091,7 +3091,7 @@ id	r5_status	branch	commit	notes
 18592	open			
 18593	open			
 18594	open			
-18597	open			
+18597	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 18600	open			
 18602	open			
 18604	open			
@@ -3105,7 +3105,7 @@ id	r5_status	branch	commit	notes
 18622	open			
 18623	open			
 18625	open			
-18628	open			
+18628	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 18631	open			
 18633	open			
 18634	open			
@@ -3203,8 +3203,8 @@ id	r5_status	branch	commit	notes
 18854	open			
 18855	open			
 18856	open			
-18862	open			
-18863	open			
+18862	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
+18863	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 18866	open			
 18869	fixed	claude/issues-1-apps	47031c3136	The zoom button fits the window to the image; full screen stays on the View menu, toolbar and Enter. Not built and not tested.
 18870	open			
@@ -3221,7 +3221,7 @@ id	r5_status	branch	commit	notes
 18912	open			
 18913	open			
 18914	open			
-18916	open			
+18916	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 18920	open			
 18924	open			
 18930	open			
@@ -3230,7 +3230,7 @@ id	r5_status	branch	commit	notes
 18939	open			
 18940	open			
 18941	open			
-18945	open			
+18945	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 18946	open			
 18947	open			
 18950	open			
@@ -3264,7 +3264,7 @@ id	r5_status	branch	commit	notes
 19025	open			
 19026	open			
 19027	open			
-19029	open			
+19029	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 19030	open			
 19033	open			
 19034	open			
@@ -3286,10 +3286,10 @@ id	r5_status	branch	commit	notes
 19084	fixed			Column-resize guide contrasts on dark backgrounds
 19094	open			
 19096	open			
-19097	open			
+19097	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 19098	open			
 19099	open			
-19106	open			
+19106	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 19108	open			
 19109	open			
 19110	open			
@@ -3306,7 +3306,7 @@ id	r5_status	branch	commit	notes
 19131	open			
 19133	open			
 19134	open			
-19135	open			
+19135	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 19139	open			
 19140	open			
 19142	open			
@@ -3330,11 +3330,11 @@ id	r5_status	branch	commit	notes
 19189	open			
 19190	open			
 19198	open			
-19203	open			
+19203	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 19208	open			
-19209	open			
+19209	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 19211	open			
-19216	open			
+19216	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 19221	open			
 19223	open			
 19227	open			
@@ -3371,7 +3371,7 @@ id	r5_status	branch	commit	notes
 19306	open			
 19307	open			
 19308	open			
-19311	open			
+19311	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 19312	open			
 19313	open			
 19314	open			
@@ -3381,8 +3381,8 @@ id	r5_status	branch	commit	notes
 19320	open			
 19323	open			
 19326	open			
-19328	open			
-19329	open			
+19328	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
+19329	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 19330	open			
 19331	open			
 19332	open			
@@ -3406,7 +3406,7 @@ id	r5_status	branch	commit	notes
 19369	open			
 19370	open			
 19371	open			
-19376	open			
+19376	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 19377	open			
 19378	open			
 19380	open			
@@ -3445,11 +3445,11 @@ id	r5_status	branch	commit	notes
 19453	open			
 19455	open			
 19461	open			
-19462	open			
+19462	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 19463	open			
 19464	open			
 19465	open			
-19466	open			
+19466	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 19468	open			
 19470	open			
 19472	fixed	main	5440628b7e	EHCI drops the isochronous lock before the audio callback. Guest USB audio test reported good 3 Nov 2026 11:49 Europe/Amsterdam. PR #4072.
@@ -3462,7 +3462,7 @@ id	r5_status	branch	commit	notes
 19482	open			
 19484	open			
 19485	open			
-19486	open			
+19486	not-applicable			architecture R5 does not target (32-bit x86/PPC/SPARC/m68k/ARM32)
 19487	open			
 19488	open			
 19489	open			
@@ -3477,7 +3477,7 @@ id	r5_status	branch	commit	notes
 19504	open			
 19511	open			
 19513	open			
-19515	open			
+19515	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 19518	open			
 19519	open			
 19520	fixed			Open With remembers its frame
@@ -3485,8 +3485,8 @@ id	r5_status	branch	commit	notes
 19527	open			
 19529	open			
 19531	open			
-19532	open			
-19538	open			
+19532	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
+19538	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 19543	open			
 19544	open			
 19546	fixed			Find starts in the open folder
@@ -3582,7 +3582,7 @@ id	r5_status	branch	commit	notes
 19785	open			
 19786	open			
 19787	open			
-19788	open			
+19788	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 19789	open			
 19791	open			
 19795	open			
@@ -3601,7 +3601,7 @@ id	r5_status	branch	commit	notes
 19822	open			
 19823	open			
 19824	open			
-19825	open			
+19825	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 19827	open			
 19828	open			
 19829	open			
@@ -3680,7 +3680,7 @@ id	r5_status	branch	commit	notes
 19990	open			
 19991	open			
 19995	open			
-19996	open			
+19996	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 19998	open			
 19999	open			
 20002	open			
@@ -3701,7 +3701,7 @@ id	r5_status	branch	commit	notes
 20024	open			
 20025	open			
 20027	open			
-20029	open			
+20029	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 20030	open			
 20031	open			
 20033	open			
@@ -3714,7 +3714,7 @@ id	r5_status	branch	commit	notes
 20051	open			
 20053	open			
 20054	open			
-20056	open			
+20056	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 20058	open			
 20059	open			
 20061	open			
@@ -3756,12 +3756,12 @@ id	r5_status	branch	commit	notes
 20149	fixed	main	5440628b7e	xHCI resets a halted endpoint after babble or stall. Guest USB audio test reported good 3 Nov 2026 11:49 Europe/Amsterdam. PR #4072.
 20150	open			
 20151	open			
-20152	open			
-20153	open			
+20152	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
+20153	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 20155	open			
 20157	open			
 20159	open			
-20162	open			
+20162	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 20167	open			
 20169	open			
 20171	open			
@@ -3771,10 +3771,10 @@ id	r5_status	branch	commit	notes
 20179	open			
 20180	open			
 20183	open			
-20184	open			
+20184	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 20186	open			
 20187	open			
-20188	open			
+20188	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 20189	open			
 20190	open			
 20192	open			
@@ -3803,7 +3803,7 @@ id	r5_status	branch	commit	notes
 20237	open			
 20238	open			
 20241	open			
-20242	open			
+20242	not-applicable			architecture R5 does not target (32-bit x86/PPC/SPARC/m68k/ARM32)
 20243	open			
 20245	open			
 20246	open			
@@ -3877,8 +3877,8 @@ id	r5_status	branch	commit	notes
 20355	open			
 20356	open			
 20357	open			
-20359	open			
-20361	open			
+20359	not-applicable			architecture R5 does not target (32-bit x86/PPC/SPARC/m68k/ARM32)
+20361	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 20362	open			
 20363	fixed			Do not pile leftover desktop icons at 0,0
 20364	open			
@@ -3929,9 +3929,9 @@ id	r5_status	branch	commit	notes
 20439	open			
 20440	fixed	cursor/mail-ut-date	719de92c32	A trailing UT zone is rewritten to GMT before parsedate. jam -q libmail.so exited 0 on 3 Nov 2026. The date string was not parsed in a running mail daemon.
 20442	open			
-20443	open			
+20443	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 20444	open			
 20445	open			
 20446	open			
 20447	open			
-20448	open			
+20448	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
