@@ -106,6 +106,10 @@ public:
 			void				SetEffects(uint32 effects, int32 strength);
 	// Whether a glass view's background is drawn with alpha 0 now.
 			bool				GlassActive() const;
+	// M13 step 4 (owner, 17 Nov 2026): on Lavapipe a resize shows only the
+	// window's outline, and the window is drawn at its new size at the end.
+			bool				OutlineResize() const
+									{ return IsActive() && fOnLavapipe; }
 
 	// M12: Skia's context while the GPU draws (gpu_draw), else NULL.
 			SkiaGpu*			Skia() const { return fSkia; }
@@ -229,6 +233,10 @@ private:
 			void				_RecordGlass(Layer* layer,
 									const BRegion& damage, uint64 frame,
 									uint32 frameStride);
+			// M13 step 4: the outline of a resize on Lavapipe
+			bool				_RecordOutline(Layer* layer,
+									const BRegion& damage, uint64 frame,
+									uint32 frameStride);
 			void				_DropEffects();
 			// M11 step 4b
 			bool				_AnimationDamage(bigtime_t now);
@@ -298,6 +306,8 @@ private:
 			int32				fPresentCount;
 			bool				fRestarted;
 			uint32				fGeneration;
+			// M13 step 4: one row of 255 for _RecordOutline()
+			BReference<WindowBuffer>	fOutlineMask;
 
 			BLocker				fEntryLock;
 			BObjectList<Entry, false> fEntries;

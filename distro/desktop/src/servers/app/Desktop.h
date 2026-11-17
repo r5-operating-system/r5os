@@ -209,6 +209,17 @@ public:
 									float y);
 			void				SetWindowOutlinesDelta(Window* window,
 									BPoint delta);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			// M13 step 4: an outline that grows to the left or to the top
+			void				SetWindowOutlinesDelta(Window* window,
+									BPoint delta, bool left, bool top);
+			// M13 step 4: whether a resize of this window shows only its
+			// outline (its B_OUTLINE_RESIZE flag, or the compositor on
+			// Lavapipe)
+			bool				OutlineResize(Window* window);
+// SPDX-SnippetEnd
 			bool				SetWindowTabLocation(Window* window,
 									float location, bool isShifting);
 			bool				SetWindowDecoratorSettings(Window* window,

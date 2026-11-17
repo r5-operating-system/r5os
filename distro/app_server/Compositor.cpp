@@ -746,6 +746,9 @@ struct Compositor::Layer {
 	bool						shadow;
 	bool						shadowSmall;
 	BRegion						shadowArea;
+	// M13 step 4: the outline of a resize on Lavapipe (screen coordinates),
+	// drawn over the window by _RecordOutline(); not part of shape
+	BRegion						outline;
 	BRegion						glassFixed;
 	BRegion						glassAlpha;
 
@@ -1158,6 +1161,8 @@ Compositor::~Compositor()
 	delete fLayers;
 	delete fFrameGhosts;
 	fGhosts.MakeEmpty();
+	// M13 step 4: freed while the device is still there
+	fOutlineMask.Unset();
 	_ExitVulkan();
 	free(fScratch);
 	if (fFenceFd >= 0)
@@ -2243,6 +2248,17 @@ Compositor::ClippingChanged()
 
 		BRegion full;
 		window->GetFullRegion(&full);
+		// M13 step 4 (owner, 17 Nov 2026): the outline of a resize on
+		// Lavapipe is not the window's: its buffer and shape stay the
+		// window's own, so nothing is reallocated or redrawn while the
+		// outline moves; _RecordOutline() draws it over the window
+		BRegion outline;
+		::Decorator* outlined = window->Decorator();
+		if (outlined != NULL && outlined->IsOutlineResizing()) {
+			outlined->GetOutlineRegion(&outline);
+			outlined->GetFootprintWithoutOutline(&full);
+			full.Include(window->Frame());
+		}
 		if (!full.Frame().IsValid())
 			continue;
 		clipping_rect bounds = full.FrameInt();
@@ -2328,6 +2344,7 @@ Compositor::ClippingChanged()
 		layer->left = bounds.left;
 		layer->top = bounds.top;
 		layer->shape = full;
+		layer->outline = outline;
 
 		// M11 step 4: the shadow and the glass of this window, from its
 		// decorator's hooks (decision 10) and the glass views.
@@ -2451,14 +2468,23 @@ Compositor::ClippingChanged()
 			&& before->shadowSmall == after->shadowSmall
 			&& before->shadowArea == after->shadowArea
 			&& before->glassFixed == after->glassFixed
-			&& before->glassAlpha == after->glassAlpha)
+			&& before->glassAlpha == after->glassAlpha) {
+			// M13 step 4 (review): a step of the outline alone damages
+			// where it was and where it is, not the window
+			if (!(before->outline == after->outline)) {
+				damage.Include(&before->outline);
+				damage.Include(&after->outline);
+			}
 			continue;
+		}
 		for (int32 side = 0; side < 2; side++) {
 			Layer* layer = side == 0 ? before : after;
 			if (layer == NULL)
 				continue;
 			BRegion area(layer->shape);
 			area.Include(&layer->shadowArea);
+			// M13 step 4: where the outline was and where it is
+			area.Include(&layer->outline);
 			bool stays = false;
 			for (int32 j = 0; !stays && j < layers->CountItems(); j++)
 				stays = layers->ItemAt(j)->entry.Get() == layer->entry.Get();
@@ -2889,6 +2915,7 @@ Compositor::_ComposeLoop()
 				copy->shadow = source->shadow;
 				copy->shadowSmall = source->shadowSmall;
 				copy->shadowArea = source->shadowArea;
+				copy->outline = source->outline;
 				copy->glassFixed = source->glassFixed;
 				copy->glassAlpha = source->glassAlpha;
 				copy->animatable = source->animatable;
@@ -3019,6 +3046,11 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 	// frame without them.
 	bool compare = fDebug && fFrames % 100 == 1 && !effects
 		&& !fFrameAnimating;
+	// M13 step 4 (review): nor the outline of a resize on Lavapipe
+	for (int32 i = 0; compare && i < layers.CountItems(); i++) {
+		if (layers.ItemAt(i)->outline.CountRects() > 0)
+			compare = false;
+	}
 	uint32 background = fBackground;
 
 	// A compare frame keeps the windows from drawing until the CPU copy
@@ -3160,7 +3192,10 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 			part.IntersectWith(&layer->shape);
 			bool shadowHit = withEffects && layer->shadow
 				&& damage.Intersects(layer->shadowArea.Frame());
-			if (part.CountRects() == 0 && !shadowHit)
+			// M13 step 4: an outline outside the window is drawn too
+			bool outlineHit = layer->outline.CountRects() > 0
+				&& damage.Intersects(layer->outline.Frame());
+			if (part.CountRects() == 0 && !shadowHit && !outlineHit)
 				continue;
 		}
 		if (withEffects) {
@@ -3291,6 +3326,15 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 				VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
 				VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &between, 0, NULL,
 				0, NULL);
+		}
+
+		// M13 step 4: the outline of a resize on Lavapipe, over the window
+		// and its shared views, under the next window
+		if (layer != NULL && layer->outline.CountRects() > 0
+			&& _RecordOutline(layer, damage, (uint64)frameInfo.buffer,
+				rect.frameStride)) {
+			vk->vkCmdBindPipeline(vk->commands,
+				VK_PIPELINE_BIND_POINT_COMPUTE, vk->pipeline);
 		}
 	}
 
@@ -4607,6 +4651,60 @@ Compositor::_RecordShadow(Layer* layer, const BRegion& damage, uint64 frame,
 }
 
 
+/*!	M13 step 4 (owner, 17 Nov 2026): the outline of a resize on Lavapipe,
+	where the damage is. The shadow pass with a mask of one row of 255 and
+	a row stride of 0 darkens the outline's pixels; no shader of its own.
+	False when nothing was recorded (the caller binds the compose pipeline
+	again otherwise).
+*/
+bool
+Compositor::_RecordOutline(Layer* layer, const BRegion& damage, uint64 frame,
+	uint32 frameStride)
+{
+	// one row of the mask; wider than any screen this compositor runs on
+	static const uint32 kOutlineMaskWidth = 16384;
+	// how dark: 160 of 255, about the shadow's darkest
+	static const uint32 kOutlineAmount = 160;
+
+	CompositorVulkan* vk = fVulkan;
+	BRegion part(damage);
+	part.IntersectWith(&layer->outline);
+	if (part.CountRects() == 0)
+		return false;
+	if (!fOutlineMask.IsSet() || fOutlineMask->Generation() != fGeneration) {
+		fOutlineMask.Unset();
+		WindowBuffer* mask = _AllocateBuffer(kOutlineMaskWidth / 4, 1, true);
+		if (mask == NULL)
+			return false;
+		memset(mask->Bits(), 255, mask->Bytes());
+		fOutlineMask.SetTo(mask, true);
+	}
+
+	vk->vkCmdBindPipeline(vk->commands, VK_PIPELINE_BIND_POINT_COMPUTE,
+		vk->effectsPipeline);
+	push_effect_buffers(vk, (VkBuffer)fOutlineMask->VulkanBuffer(),
+		(VkBuffer)frame, (VkBuffer)frame);
+	effect_rect effect;
+	memset(&effect, 0, sizeof(effect));
+	effect.mode = kEffectShadow;
+	effect.targetStride = frameStride;
+	effect.sourceStride = 0;
+	effect.amount = kOutlineAmount;
+	for (int32 i = 0; i < part.CountRects(); i++) {
+		clipping_rect r = part.RectAtInt(i);
+		if (r.right - r.left + 1 > (int32)kOutlineMaskWidth)
+			r.right = r.left + kOutlineMaskWidth - 1;
+		effect.width = r.right - r.left + 1;
+		effect.height = r.bottom - r.top + 1;
+		effect.targetX = r.left;
+		effect.targetY = r.top;
+		dispatch_effect(vk, effect);
+	}
+	effect_barrier(vk);
+	return true;
+}
+
+
 //!	The window's glass pixels over its kept blur, where the damage is.
 void
 Compositor::_RecordGlass(Layer* layer, const BRegion& damage, uint64 frame,
@@ -4673,6 +4771,8 @@ void
 Compositor::_DropEffects()
 {
 	BAutolock _(fEntryLock);
+	// M13 step 4: before the device goes, as the masks below
+	fOutlineMask.Unset();
 	for (int32 i = 0; i < fEntries.CountItems(); i++) {
 		Entry* entry = fEntries.ItemAt(i);
 		entry->mask.Unset();

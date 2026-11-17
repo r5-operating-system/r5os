@@ -1825,18 +1825,71 @@ Desktop::ResizeWindowBy(Window* window, float x, float y)
 void
 Desktop::SetWindowOutlinesDelta(Window* window, BPoint delta)
 {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	SetWindowOutlinesDelta(window, delta, false, false);
+}
+
+
+/*!	M13 step 4: whether a resize of \a window shows only its outline: its
+	own B_OUTLINE_RESIZE flag, or the compositor on Lavapipe (owner, 17 Nov
+	2026). Asked once when a resize starts.
+*/
+bool
+Desktop::OutlineResize(Window* window)
+{
+	if ((window->Flags() & B_OUTLINE_RESIZE) != 0)
+		return true;
+	// two flags of the compositor, read without a lock: the mouse event
+	// that starts the resize may already hold fWindowLock
+	return fCompositor != NULL && fCompositor->OutlineResize()
+		&& window->Decorator() != NULL;
+}
+
+
+//!	M13 step 4: as above; \a left and \a top: the outline grows that way.
+void
+Desktop::SetWindowOutlinesDelta(Window* window, BPoint delta, bool left,
+	bool top)
+{
+// SPDX-SnippetEnd
 	AutoWriteLocker _(fWindowLock);
 
-	if (!window->IsVisible())
+	if (!window->IsVisible()) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// review: a window hidden during the drag still ends its outline,
+		// so it does not show again with one
+		if (delta == B_ORIGIN) {
+			BRegion ignored;
+			window->SetOutlinesDelta(delta, &ignored, false, false);
+		}
+// SPDX-SnippetEnd
 		return;
+	}
 
 	BRegion newDirtyRegion;
-	window->SetOutlinesDelta(delta, &newDirtyRegion);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	window->SetOutlinesDelta(delta, &newDirtyRegion, left, top);
+// SPDX-SnippetEnd
 
 	BRegion background;
 	_RebuildClippingForAllWindows(background);
 
-	MarkDirty(newDirtyRegion);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// M13 step 4: in the GPU mode the compositor draws the outline and has
+	// every window's pixels under it (the clipping rebuild told it what
+	// changed). A redraw there made the windows below, the desktop's too,
+	// draw their strips on every step (QEMU on Lavapipe: draw 207 ms).
+	if (fCompositor == NULL || !fCompositor->IsActive())
+		MarkDirty(newDirtyRegion);
+// SPDX-SnippetEnd
 	_SetBackground(background);
 }
 

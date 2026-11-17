@@ -408,11 +408,11 @@ SkiaDrawingEngine::_Wake()
 
 
 status_t
-SkiaDrawingEngine::Finish()
+SkiaDrawingEngine::Finish(bigtime_t timeout)
 {
 	if (!fOnGpu || fGpu == NULL)
 		return B_OK;
-	return fGpu->Finish();
+	return fGpu->Finish(timeout);
 }
 
 

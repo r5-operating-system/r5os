@@ -1296,4 +1296,84 @@ Decorator::InputMarginContains(BPoint where)
 }
 
 
+/*!	M13 step 4: moves the outline (not the window) by \a offset. An outline
+	drag on the left or the top edge grows the outline with
+	SetOutlinesDelta() and moves it by the same amount the other way, so
+	the opposite edge stays where it is. \a dirty gets where the outline
+	was and where it is now.
+*/
+void
+Decorator::MoveOutlinesBy(BPoint offset, BRegion* dirty)
+{
+	if (offset.x == 0 && offset.y == 0)
+		return;
+
+	AutoWriteLocker _(fLocker);
+
+	if (dirty != NULL) {
+		dirty->Include(fLeftOutlineBorder);
+		dirty->Include(fRightOutlineBorder);
+		dirty->Include(fTopOutlineBorder);
+		dirty->Include(fBottomOutlineBorder);
+	}
+	_MoveOutlineBy(offset);
+	if (dirty != NULL) {
+		dirty->Include(fLeftOutlineBorder);
+		dirty->Include(fRightOutlineBorder);
+		dirty->Include(fTopOutlineBorder);
+		dirty->Include(fBottomOutlineBorder);
+	}
+	_InvalidateFootprint();
+}
+
+
+/*!	M13 step 4: the footprint without the outline: on Lavapipe the
+	compositor keeps the window's buffer, shape and shadow at this while
+	the outline is dragged.
+*/
+void
+Decorator::GetFootprintWithoutOutline(BRegion* region)
+{
+	AutoReadLocker _(fLocker);
+
+	region->MakeEmpty();
+	_GetFootprint(region);
+}
+
+
+/*!	M13 step 4: the outline alone, while it is shown; the compositor draws
+	it over the window on Lavapipe.
+*/
+void
+Decorator::GetOutlineRegion(BRegion* region)
+{
+	AutoReadLocker _(fLocker);
+
+	region->MakeEmpty();
+	if (IsOutlineResizing())
+		_GetOutlineFootprint(region);
+}
+
+
+/*!	M13 step 4: the end of an outline drag. _DoOutlineLayout() lays the
+	outline out from the frame again, so a layout during the drag (a new
+	title, look or font) that kept the delta does not shift the next drag.
+*/
+void
+Decorator::ResetOutlines(BRegion* dirty)
+{
+	AutoWriteLocker _(fLocker);
+
+	if (dirty != NULL) {
+		dirty->Include(fLeftOutlineBorder);
+		dirty->Include(fRightOutlineBorder);
+		dirty->Include(fTopOutlineBorder);
+		dirty->Include(fBottomOutlineBorder);
+	}
+	fOutlinesDelta = B_ORIGIN;
+	_DoOutlineLayout();
+	_InvalidateFootprint();
+}
+
+
 // SPDX-SnippetEnd
