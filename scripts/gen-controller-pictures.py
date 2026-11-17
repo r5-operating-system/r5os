@@ -29,9 +29,12 @@ writes a picture of every model with all controls lit, to check them.
 
 Run with Python 3 and Pillow (no other module):
   python3 scripts/gen-controller-pictures.py [--check DIR] [--sdl FILE]
---sdl defaults to generated/sdl/controller_list.h; the commit is recorded
-in SDL_SOURCE below. The output is checked in; run again only when a
-drawing, a place or the SDL list changes.
+--sdl defaults to generated/sdl/controller_list.h, not in git: fetch it
+at the commit recorded in SDL_SOURCE below (raw.githubusercontent.com/
+libsdl-org/SDL/<commit>/src/joystick/controller_list.h) and update
+SDL_SOURCE when the commit changes. The output is checked in; run again
+only when a drawing, a place or the SDL list changes. It takes about a
+minute (the flood fills are plain Python).
 """
 
 import math
