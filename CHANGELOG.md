@@ -1,5 +1,15 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Login: machine settings stay group-writable, not world-writable
+
+Problem: for the five-minute administrator grant, Login set network, printers, repos and the swap file to 0777/0666 so any local uid could write them.
+
+What changed: those paths are 0770/0660 owned by the granted team's uid and group `admin`. Without a uid they stay 0775/0664.
+
+Limits: only the first live grant's uid is used. Haiku has no ACL here.
+
+Tested: the C++ was not compiled on this host (needs libbe).
+
 ## 2026-11-17 - Login: halt, lock and sign-in only from this team
 
 Problem: Login accepted logout, lock, unlock, halt, reboot and sign-in from any team that sent a `BMessenger` to the Login application. The admin port already checked the sender.
