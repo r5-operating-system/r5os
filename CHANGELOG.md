@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - MediaPlayer: a clip with no frame rate no longer divides by zero
+
+Problem: turning a video frame into an audio frame divided by `fVideoFrameRate`. A clip that reports 0 crashed there. `StreamBase` is gone; this is the same conversion (Haiku #15293).
+
+Changed: a video rate of 0 or less uses 25, the same stand-in `Controller` already uses. An audio rate of 0 or less returns frame 0.
+
+Limits: a stream URL (#13078), Alt+V (#14483), an MPEG-4 file (#15791), the end of a streamed mp3 (#17406) and quit (#19680) are not this division. Not jammed and not booted.
+
 ## 2026-11-17 - app_server: the boot picture stays until the first screen is built (start splash)
 
 Problem (owner, M13 stick 5 boot 3): on a first start on Lavapipe, Skia's warm-up compiles shaders for about 33 s (5625U) to 47 s (QEMU), and Sign in appeared in pieces. In QEMU the Try R5 window did the same (black rectangles, then its contents). Outside M13; Skia on by default (M13 step 5) is not part of this.
