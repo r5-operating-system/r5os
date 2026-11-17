@@ -380,8 +380,11 @@ LoginApp::TryLogin(BMessage* message)
 		status = ValidateLogin(login, password);
 		if (status == B_OK) {
 			status = migrate_admin_off_root();
-			if (status == B_OK)
+			bool wroteSession = false;
+			if (status == B_OK) {
 				status = write_desktop_session(login);
+				wroteSession = status == B_OK;
+			}
 			if (status == B_OK) {
 				r5_session_log("sign-in %s", login);
 				_EnableDesktopJobs();
@@ -422,6 +425,8 @@ LoginApp::TryLogin(BMessage* message)
 			}
 			if (status == B_OK)
 				_HideLogin();
+			else if (wroteSession)
+				clear_desktop_session();
 		}
 	}
 

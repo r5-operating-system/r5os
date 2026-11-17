@@ -1,5 +1,15 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Login: a failed desktop start clears the session file
+
+Problem: Sign in wrote `r5-desktop-session` and then launched Tracker. If that launch failed, Sign in stayed on screen but the session file still named the account, so the next `r5-desktop` helper trusted it.
+
+What changed: `TryLogin` calls `clear_desktop_session()` when the session file was written and the desktop did not start.
+
+Limits: a helper that already started from the stale name is not killed.
+
+Tested: the C++ was not compiled on this host (needs libbe).
+
 ## 2026-11-17 - Login: machine settings stay group-writable, not world-writable
 
 Problem: for the five-minute administrator grant, Login set network, printers, repos and the swap file to 0777/0666 so any local uid could write them.
