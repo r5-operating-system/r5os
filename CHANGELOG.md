@@ -1,5 +1,15 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Graphics (M13 step 1): the R5 DRM library formats ioctl details only with gpu_debug (libdrm-2.4.124-4)
+
+Problem: `r5_translate.c` formatted a detail string (`snprintf`) into one global buffer for every production ioctl (`GEM_CREATE`, `GEM_VA`, `INFO`, `PRIME` export and import), only to print it with `gpu_debug` or after a failure. The buffer, the ioctl name and the request were shared by all threads, and RADV and Zink call ioctls from several, so one thread's details could be printed with another's call.
+
+What changed: the formatting happens only with `gpu_debug` (`R5_DETAIL`, behind `r5_debug_on()`); a failed ioctl without `gpu_debug` is printed without the detail. The name, request and detail are per thread (`__thread`). `libdrm-2.4.124-4`: `libdrm.so.2.124.0` rebuilt; `libdrm_amdgpu.so.1.124.0` and `amdgpu.ids` unchanged; pin, install, EGL vendor check and `distro/gpu/COMPAT` name `-4`, and `-3` stays in the download folder.
+
+Tested: host test (`test-ac-drm.sh` against this branch): `ok vram full falls back to gtt`, `ok ac drm family RV`, `ok libdrm ioctl`. `ok libdrm symbols`. The new library is a Haiku x86_64 ELF with a `.tbss` section. `scripts/build-locked.sh`: jam_exit=0, `ok package paths`, `ok egl vendor`, mesa_exit=0. After the build the shared tree's HaikuPorts pin was set back to `-3`, so other branches keep building until this is in `main` (the mistake of `-3`, recorded below, not repeated).
+
+Not tested: RADV and the 5625U (QEMU has no RADV; Lavapipe does not use libdrm). The speed gain is one `snprintf` per ioctl and is not measurable in QEMU.
+
 ## 2026-11-16 - Graphics (M13 step 2): the compositor reads Skia's window images on the GPU, and the pipeline cache on disk
 
 Problem: with `gpu_draw true`, every Skia run stopped the CPU until the GPU was done (`SyncToCpu::kYes`), read the window image back into memory (`asyncRescaleAndReadPixels()`) and copied it with `memcpy` into a second canvas (`WindowTarget::Deliver()`, the `WindowBuffer`), which the compositor then read as a raw buffer. Step 2 of `docs/M13-PLAN.md`, done before step 1 (owner, 16 Nov 2026), together with step 1's disk pipeline cache.
