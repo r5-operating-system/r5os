@@ -37,6 +37,7 @@
 #include "include/core/SkSurface.h"
 
 #include "ServerFont.h"
+#include "SkiaGpu.h"
 
 
 class AlphaMask;
@@ -79,6 +80,17 @@ public:
 	virtual	bool				UploadSource(const uint8** _bits,
 									uint32* _bytesPerRow) { return false; }
 			void				DropGpu();
+	// M13 step 2: under the lock, the compositor took the window's buffer
+	// back (an off-screen window): the image goes too, so its memory is
+	// freed; the next SetSurface() makes a new one.
+			void				ReleaseSurface();
+
+	// M13 step 2: a window's target draws into an image of its own that
+	// the compositor samples (SkiaGpu::NewImage()); the others into one
+	// of Graphite's, read back into memory.
+	virtual	bool				UsesSharedImage() const { return false; }
+	// Under the lock: the image the surface draws into, or NULL.
+			SkiaImage*			SharedImage() const { return fImage.Get(); }
 
 	// Step 5c: textures of bitmaps drawn into this target, kept while the
 	// bitmap's bytes stay the same (compared with a copy; a program may
@@ -142,12 +154,20 @@ public:
 									const uint8* bits, uint32 bytesPerRow)
 									= 0;
 	virtual	void				DeliveryFailed(void* cookie) = 0;
+	// M13 step 2, for UsesSharedImage(): instead of Deliver(), after the
+	// run's submit, without the target lock. image is the one the snap
+	// drew into; it is ready for the compose's sampler. Must also release
+	// the cookie.
+	virtual	void				Drawn(void* cookie,
+									const BRegion& screenDamage,
+									SkiaImage* image) {}
 
 protected:
 			SkiaGpu*			fGpu;
 			BLocker				fLock;
 			skgpu::graphite::Recorder* fRecorder;
 			sk_sp<SkSurface>	fSurface;
+			BReference<SkiaImage> fImage;
 			sk_sp<SkSurface>	fScratch;
 			sk_sp<SkSurface>	fScratchLcd;
 			bool				fScratchLcdRGB;

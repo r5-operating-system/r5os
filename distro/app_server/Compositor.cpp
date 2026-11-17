@@ -293,7 +293,16 @@ thread_cpu_time()
 	F(vkWaitForFences) \
 	F(vkQueueSubmit) \
 	F(vkDeviceWaitIdle) \
-	F(vkCmdCopyBuffer)
+	F(vkCmdCopyBuffer) \
+	F(vkCreateImage) \
+	F(vkDestroyImage) \
+	F(vkGetImageMemoryRequirements) \
+	F(vkBindImageMemory) \
+	F(vkCreateImageView) \
+	F(vkDestroyImageView) \
+	F(vkCreateSampler) \
+	F(vkDestroySampler) \
+	F(vkCmdCopyImageToBuffer)
 
 #define VK_DECLARE(name) PFN_##name name;
 
@@ -322,6 +331,13 @@ struct CompositorVulkan {
 	VkCommandPool				commandPool;
 	VkCommandBuffer				commands;
 	VkFence						fence;
+
+	// M13 step 2: the sampler for the window images (VK_FILTER_LINEAR),
+	// and a 1x1 image for the binding when a pass reads a buffer
+	VkSampler					sampler;
+	VkImage						blankImage;
+	VkDeviceMemory				blankMemory;
+	VkImageView					blankView;
 
 	VkBuffer					frame;
 	VkDeviceMemory				frameMemory;
@@ -413,9 +429,47 @@ struct compose_rect {
 	uint32	frameStride;
 	uint32	width;
 	uint32	height;
-	uint32	fill;
+	uint32	fill;		// 1: the colour, 2: from the image (M13 step 2)
 	uint32	color;
 };
+
+static const uint32 kComposeFromImage = 2;
+// M13 step 2: effects.comp reads the window from its image
+static const uint32 kEffectFromImage = 0x10;
+
+
+//!	Pushes the two buffers of compose.comp and the image (M13 step 2; the
+//!	blank one when \a image is VK_NULL_HANDLE).
+static void
+push_compose_buffers(CompositorVulkan* vk, VkBuffer source, VkBuffer frame,
+	VkImageView image = VK_NULL_HANDLE)
+{
+	VkDescriptorBufferInfo infos[2] = {};
+	infos[0].buffer = source;
+	infos[0].range = VK_WHOLE_SIZE;
+	infos[1].buffer = frame;
+	infos[1].range = VK_WHOLE_SIZE;
+	VkDescriptorImageInfo imageInfo = {};
+	imageInfo.sampler = vk->sampler;
+	imageInfo.imageView = image != VK_NULL_HANDLE ? image : vk->blankView;
+	imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	VkWriteDescriptorSet writes[3] = {};
+	for (int i = 0; i < 3; i++) {
+		writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		writes[i].dstBinding = i;
+		writes[i].descriptorCount = 1;
+		if (i < 2) {
+			writes[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+			writes[i].pBufferInfo = &infos[i];
+		} else {
+			writes[i].descriptorType
+				= VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			writes[i].pImageInfo = &imageInfo;
+		}
+	}
+	vk->vkCmdPushDescriptorSetKHR(vk->commands,
+		VK_PIPELINE_BIND_POINT_COMPUTE, vk->pipelineLayout, 0, 3, writes);
+}
 
 
 //	#pragma mark - Entry and Layer
@@ -590,6 +644,8 @@ struct Compositor::Layer {
 		animatable(false),
 		visible(-1)
 	{
+		imageX = 0;
+		imageY = 0;
 	}
 
 	bool HasEffects() const
@@ -603,6 +659,36 @@ struct Compositor::Layer {
 	int32						left;
 	int32						top;
 	BRegion						shape;
+
+	// M13 step 2, per frame: the image of a window that Skia draws, and
+	// where its pixel (0, 0) lies in the buffer; held until the fence
+	BReference<SkiaImage>		image;
+	int32						imageX;
+	int32						imageY;
+
+	//! The screen rectangle the window's pixels come from.
+	BRect PixelRect() const
+	{
+		if (image.IsSet()) {
+			return BRect((float)(left + imageX), (float)(top + imageY),
+				(float)(left + imageX + image->Width() - 1),
+				(float)(top + imageY + image->Height() - 1));
+		}
+		return BRect((float)left, (float)top,
+			(float)left + buffer->Width() - 1,
+			(float)top + buffer->Height() - 1);
+	}
+
+	//! Pixels to show: an image, or a buffer with memory.
+	bool HasPixels() const
+	{
+		return image.IsSet()
+			|| (buffer.IsSet() && buffer->VulkanBuffer() != 0);
+	}
+
+	//! Screen to source coordinates.
+	int32 SourceLeft() const { return image.IsSet() ? left + imageX : left; }
+	int32 SourceTop() const { return image.IsSet() ? top + imageY : top; }
 
 	// M11 step 4, from the clipping rebuild: where the shadow falls
 	// (outside the footprint, inside the decorator's extent), and the
@@ -1218,17 +1304,19 @@ Compositor::_InitVulkan(bool radv, const char** _reason)
 		return B_ERROR;
 	}
 
-	VkDescriptorSetLayoutBinding bindings[2] = {};
-	for (int i = 0; i < 2; i++) {
+	// M13 step 2: two storage buffers and the window's image
+	VkDescriptorSetLayoutBinding bindings[3] = {};
+	for (int i = 0; i < 3; i++) {
 		bindings[i].binding = i;
-		bindings[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		bindings[i].descriptorType = i < 2 ? VK_DESCRIPTOR_TYPE_STORAGE_BUFFER
+			: VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		bindings[i].descriptorCount = 1;
 		bindings[i].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 	}
 	VkDescriptorSetLayoutCreateInfo setInfo = {};
 	setInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 	setInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
-	setInfo.bindingCount = 2;
+	setInfo.bindingCount = 3;
 	setInfo.pBindings = bindings;
 	VkPushConstantRange range = {};
 	range.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
@@ -1272,14 +1360,17 @@ Compositor::_InitVulkan(bool radv, const char** _reason)
 		*_reason = "effects shader";
 		return B_ERROR;
 	}
-	VkDescriptorSetLayoutBinding effectBindings[3] = {};
-	for (int i = 0; i < 3; i++) {
+	// M13 step 2: and the window's image
+	VkDescriptorSetLayoutBinding effectBindings[4] = {};
+	for (int i = 0; i < 4; i++) {
 		effectBindings[i].binding = i;
-		effectBindings[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		effectBindings[i].descriptorType = i < 3
+			? VK_DESCRIPTOR_TYPE_STORAGE_BUFFER
+			: VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		effectBindings[i].descriptorCount = 1;
 		effectBindings[i].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 	}
-	setInfo.bindingCount = 3;
+	setInfo.bindingCount = 4;
 	setInfo.pBindings = effectBindings;
 	range.size = sizeof(effect_rect);
 	layoutInfo.pSetLayouts = &vk->effectsSetLayout;
@@ -1323,7 +1414,121 @@ Compositor::_InitVulkan(bool radv, const char** _reason)
 		*_reason = "command buffer";
 		return B_ERROR;
 	}
+	if (!_InitImages(_reason))
+		return B_ERROR;
 	return B_OK;
+}
+
+
+/*!	M13 step 2: the sampler of the window images, and the 1x1 image bound
+	when a pass reads a buffer, made ready for the sampler once.
+*/
+bool
+Compositor::_InitImages(const char** _reason)
+{
+	CompositorVulkan* vk = fVulkan;
+	VkSamplerCreateInfo samplerInfo = {};
+	samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+	samplerInfo.magFilter = VK_FILTER_LINEAR;
+	samplerInfo.minFilter = VK_FILTER_LINEAR;
+	samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+	samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+	samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+	samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+	if (vk->vkCreateSampler(vk->device, &samplerInfo, NULL, &vk->sampler)
+			!= VK_SUCCESS) {
+		*_reason = "sampler";
+		return false;
+	}
+
+	VkImageCreateInfo imageInfo = {};
+	imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+	imageInfo.imageType = VK_IMAGE_TYPE_2D;
+	imageInfo.format = VK_FORMAT_B8G8R8A8_UNORM;
+	imageInfo.extent.width = 1;
+	imageInfo.extent.height = 1;
+	imageInfo.extent.depth = 1;
+	imageInfo.mipLevels = 1;
+	imageInfo.arrayLayers = 1;
+	imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+	imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+	imageInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+	imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	if (vk->vkCreateImage(vk->device, &imageInfo, NULL, &vk->blankImage)
+			!= VK_SUCCESS) {
+		*_reason = "blank image";
+		return false;
+	}
+	VkMemoryRequirements requirements;
+	vk->vkGetImageMemoryRequirements(vk->device, vk->blankImage,
+		&requirements);
+	VkPhysicalDeviceMemoryProperties memory;
+	vk->vkGetPhysicalDeviceMemoryProperties(vk->physical, &memory);
+	bool bound = false;
+	for (uint32 i = 0; i < memory.memoryTypeCount && !bound; i++) {
+		if ((requirements.memoryTypeBits & (1u << i)) == 0)
+			continue;
+		VkMemoryAllocateInfo allocateInfo = {};
+		allocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		allocateInfo.allocationSize = requirements.size;
+		allocateInfo.memoryTypeIndex = i;
+		if (vk->vkAllocateMemory(vk->device, &allocateInfo, NULL,
+				&vk->blankMemory) != VK_SUCCESS)
+			continue;
+		bound = vk->vkBindImageMemory(vk->device, vk->blankImage,
+			vk->blankMemory, 0) == VK_SUCCESS;
+		if (!bound) {
+			vk->vkFreeMemory(vk->device, vk->blankMemory, NULL);
+			vk->blankMemory = VK_NULL_HANDLE;
+		}
+	}
+	VkImageViewCreateInfo viewInfo = {};
+	viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	viewInfo.image = vk->blankImage;
+	viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+	viewInfo.format = imageInfo.format;
+	viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	viewInfo.subresourceRange.levelCount = 1;
+	viewInfo.subresourceRange.layerCount = 1;
+	if (!bound || vk->vkCreateImageView(vk->device, &viewInfo, NULL,
+			&vk->blankView) != VK_SUCCESS) {
+		*_reason = "blank image";
+		return false;
+	}
+
+	VkCommandBufferBeginInfo begin = {};
+	begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+	vk->vkBeginCommandBuffer(vk->commands, &begin);
+	VkImageMemoryBarrier toRead = {};
+	toRead.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	toRead.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+	toRead.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	toRead.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	toRead.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	toRead.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	toRead.image = vk->blankImage;
+	toRead.subresourceRange = viewInfo.subresourceRange;
+	vk->vkCmdPipelineBarrier(vk->commands, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+		VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, NULL, 0, NULL, 1,
+		&toRead);
+	vk->vkEndCommandBuffer(vk->commands);
+	VkSubmitInfo submit = {};
+	submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submit.commandBufferCount = 1;
+	submit.pCommandBuffers = &vk->commands;
+	vk->vkResetFences(vk->device, 1, &vk->fence);
+	SkiaGpu::LockQueue();
+	VkResult result = vk->vkQueueSubmit(vk->queue, 1, &submit, vk->fence);
+	SkiaGpu::UnlockQueue();
+	if (result != VK_SUCCESS
+		|| vk->vkWaitForFences(vk->device, 1, &vk->fence, VK_TRUE,
+			kFenceLimit * 1000) != VK_SUCCESS) {
+		*_reason = "blank image";
+		return false;
+	}
+	return true;
 }
 
 
@@ -1395,6 +1600,14 @@ Compositor::_ExitVulkan()
 			vk->vkDestroyDescriptorSetLayout(vk->device, vk->effectsSetLayout,
 				NULL);
 		}
+		if (vk->blankView != VK_NULL_HANDLE)
+			vk->vkDestroyImageView(vk->device, vk->blankView, NULL);
+		if (vk->blankImage != VK_NULL_HANDLE)
+			vk->vkDestroyImage(vk->device, vk->blankImage, NULL);
+		if (vk->blankMemory != VK_NULL_HANDLE)
+			vk->vkFreeMemory(vk->device, vk->blankMemory, NULL);
+		if (vk->sampler != VK_NULL_HANDLE)
+			vk->vkDestroySampler(vk->device, vk->sampler, NULL);
 		if (vk->fence != VK_NULL_HANDLE)
 			vk->vkDestroyFence(vk->device, vk->fence, NULL);
 		if (vk->commandPool != VK_NULL_HANDLE)
@@ -1406,6 +1619,9 @@ Compositor::_ExitVulkan()
 		if (vk->setLayout != VK_NULL_HANDLE)
 			vk->vkDestroyDescriptorSetLayout(vk->device, vk->setLayout, NULL);
 	}
+	// M13 step 2: a window image still held (a closing window's fade)
+	// must not reach a destroyed device
+	SkiaGpu::KeepImageMemory();
 	if (vk->device != VK_NULL_HANDLE && vk->vkDestroyDevice != NULL)
 		vk->vkDestroyDevice(vk->device, NULL);
 	if (vk->instance != VK_NULL_HANDLE && vk->vkDestroyInstance != NULL)
@@ -1525,13 +1741,23 @@ log_write_test(CompositorVulkan* vk, uint64 bytes)
 
 
 WindowBuffer*
-Compositor::_AllocateBuffer(uint32 width, uint32 height)
+Compositor::_AllocateBuffer(uint32 width, uint32 height, bool withMemory)
 {
 	if (fVulkan == NULL || width == 0 || height == 0)
 		return NULL;
 	uint64 bytes = (uint64)width * height * 4;
 	if (fWindowBytes + bytes > fBudget)
 		return NULL;
+	if (!withMemory) {
+		// M13 step 2: a window that Skia draws; its image (made by the
+		// engine, SkiaTarget::SetSurface()) is what counts in the window
+		// memory, with the same size
+		WindowBuffer* windowBuffer = new(std::nothrow) WindowBuffer(this,
+			NULL, width, height, 0, 0, fGeneration);
+		if (windowBuffer != NULL)
+			atomic_add64((int64*)&fWindowBytes, bytes);
+		return windowBuffer;
+	}
 
 	VkBuffer buffer;
 	VkDeviceMemory memory;
@@ -1579,7 +1805,8 @@ Compositor::_FreeBuffer(WindowBuffer* buffer, uint64 vulkanBuffer,
 	if (atomic_get(&fGpuBusy) != 0)
 		return;
 	atomic_add64((int64*)&fWindowBytes, -(int64)buffer->Bytes());
-	if (fVulkan == NULL || buffer->Generation() != fGeneration)
+	if (fVulkan == NULL || buffer->Generation() != fGeneration
+		|| vulkanBuffer == 0)
 		return;
 	fVulkan->vkDestroyBuffer(fVulkan->device, (VkBuffer)vulkanBuffer, NULL);
 	fVulkan->vkFreeMemory(fVulkan->device, (VkDeviceMemory)vulkanMemory,
@@ -1596,9 +1823,9 @@ Compositor::_FreeBuffer(WindowBuffer* buffer, uint64 vulkanBuffer,
 */
 WindowBuffer*
 Compositor::_AllocateOrMakeRoom(uint32 width, uint32 height,
-	const Entry* keep)
+	const Entry* keep, bool memory)
 {
-	WindowBuffer* buffer = _AllocateBuffer(width, height);
+	WindowBuffer* buffer = _AllocateBuffer(width, height, memory);
 	int32 workspace = fDesktop->CurrentWorkspace();
 	while (buffer == NULL) {
 		Entry* oldest = NULL;
@@ -1647,7 +1874,7 @@ Compositor::_AllocateOrMakeRoom(uint32 width, uint32 height,
 			}
 		}
 		Damage(faded);
-		buffer = _AllocateBuffer(width, height);
+		buffer = _AllocateBuffer(width, height, memory);
 	}
 	return buffer;
 }
@@ -1892,8 +2119,13 @@ Compositor::ClippingChanged()
 		bool wasOnScreen = entry->lastShown >= previousPass;
 		if (buffer == NULL || buffer->Width() != width
 			|| buffer->Height() != height) {
+			// M13 step 2: a window that Skia draws gets no memory; the
+			// compositor samples its image
+			bool skiaWindow = fSkia != NULL && !fSkia->IsShutDown()
+				&& dynamic_cast<SkiaDrawingEngine*>(
+					window->GetDrawingEngine()) != NULL;
 			WindowBuffer* newBuffer = _AllocateOrMakeRoom(width, height,
-				entry);
+				entry, !skiaWindow);
 			if (newBuffer == NULL) {
 				fEntryLock.Unlock();
 				delete layers;
@@ -1917,6 +2149,19 @@ Compositor::ClippingChanged()
 					iface->Left() + (int32)buffer->Width() - 1);
 				int32 bottom = min_c(bounds.bottom,
 					iface->Top() + (int32)buffer->Height() - 1);
+				if (newBuffer->Bits() == NULL || buffer->Bits() == NULL)
+					bottom = top - 1;
+				// M13 step 2: the new buffer shows the old image, at its
+				// place on screen, until the window's new one is drawn
+				int32 imageX;
+				int32 imageY;
+				SkiaImage* image = buffer->AcquireImage(&imageX, &imageY);
+				if (image != NULL) {
+					newBuffer->SetImage(image,
+						iface->Left() + imageX - bounds.left,
+						iface->Top() + imageY - bounds.top);
+					image->ReleaseReference();
+				}
 				for (int32 y = top; y <= bottom && left <= right; y++) {
 					memcpy((uint8*)newBuffer->Bits()
 							+ (y - bounds.top) * newBuffer->BytesPerRow()
@@ -2379,6 +2624,7 @@ Compositor::_ComposeLoop()
 			}
 		}
 		if (fPaused) {
+			_ConsumeSkiaSignals();
 			// M11 review: no frame runs while paused, but a program whose
 			// window app_server ended still waits for its images. The
 			// last frame waited for its fence, so none is read. Third
@@ -2465,6 +2711,7 @@ Compositor::_ComposeLoop()
 		if (damage.CountRects() == 0) {
 			// Fourth review: the wake of an ended share has no damage when
 			// its view is hidden; what ended is still freed and given back.
+			_ConsumeSkiaSignals();
 			BAutolock _(fShareLock);
 			_ShareRetire();
 			continue;
@@ -2489,6 +2736,12 @@ Compositor::_ComposeLoop()
 				copy->glassFixed = source->glassFixed;
 				copy->glassAlpha = source->glassAlpha;
 				copy->animatable = source->animatable;
+				// M13 step 2: the image this frame samples, kept until its
+				// fence even when the window shows a newer one meanwhile
+				if (copy->buffer.IsSet()) {
+					copy->image.SetTo(copy->buffer->AcquireImage(
+						&copy->imageX, &copy->imageY), true);
+				}
 				layers.AddItem(copy);
 			}
 		}
@@ -2549,6 +2802,7 @@ Compositor::_ComposeLoop()
 				}
 				if (waited != VK_SUCCESS) {
 					atomic_set(&fGpuBusy, 1);
+					SkiaGpu::KeepImageMemory();
 					log_line("compose fence still busy: window memory kept");
 				}
 			}
@@ -2624,6 +2878,13 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 	frameInfo.buffer = vk->scanActive ? vk->back : vk->frame;
 	frameInfo.range = VK_WHOLE_SIZE;
 
+	// M13 step 2: the compare reads a window that Skia draws from a copy
+	// of its image, made in this command buffer before the compose reads
+	// the same image: the one read-back left besides screenshots.
+	CompareCopies copies;
+	if (compare)
+		_RecordCompareCopies(layers, copies);
+
 	compose_rect rect;
 	memset(&rect, 0, sizeof(rect));
 	rect.frameStride = vk->scanActive ? vk->backPitch / 4 : fFrameWidth;
@@ -2642,14 +2903,12 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 		// M11 step 4: a window with a shadow or glass. Without one, this
 		// loop is step 2's copy.
 		bool withEffects = effects && layer != NULL && layer->HasEffects()
-			&& layer->buffer.IsSet();
+			&& layer->HasPixels();
 		BRegion glassPart;
-		if (layer != NULL && layer->visible >= 0 && layer->buffer.IsSet()) {
+		if (layer != NULL && layer->visible >= 0 && layer->HasPixels()) {
 			// M11 step 4b: opening, scaled and faded, without its effects
-			_RecordWindowAnimation(layer->buffer->VulkanBuffer(),
-				layer->buffer->Width(), layer->buffer->Height(), layer->left,
-				layer->top, layer->shape, layer->visible, damage,
-				(uint64)frameInfo.buffer, rect.frameStride);
+			_RecordWindowAnimation(layer, damage, (uint64)frameInfo.buffer,
+				rect.frameStride);
 			vk->vkCmdPipelineBarrier(vk->commands,
 				VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
 				VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &between, 0, NULL,
@@ -2659,7 +2918,7 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 			continue;
 		}
 		if (layer != NULL) {
-			if (!layer->buffer.IsSet())
+			if (!layer->HasPixels())
 				continue;
 			part.IntersectWith(&layer->shape);
 			bool shadowHit = withEffects && layer->shadow
@@ -2684,22 +2943,21 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 				VK_PIPELINE_BIND_POINT_COMPUTE, vk->pipeline);
 		}
 
-		VkDescriptorBufferInfo sourceInfo = frameInfo;
-		if (layer != NULL)
-			sourceInfo.buffer = (VkBuffer)layer->buffer->VulkanBuffer();
-		VkWriteDescriptorSet writes[2] = {};
-		for (int i = 0; i < 2; i++) {
-			writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			writes[i].dstBinding = i;
-			writes[i].descriptorCount = 1;
-			writes[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		// M13 step 2: a window that Skia draws is read from its image; a
+		// part its image does not reach (a resize not drawn yet) keeps
+		// what lies below
+		bool fromImage = layer != NULL && layer->image.IsSet();
+		VkBuffer source = frameInfo.buffer;
+		if (layer != NULL && !fromImage)
+			source = (VkBuffer)layer->buffer->VulkanBuffer();
+		push_compose_buffers(vk, source, frameInfo.buffer,
+			fromImage ? (VkImageView)layer->image->View() : VK_NULL_HANDLE);
+		if (fromImage) {
+			BRegion pixels(layer->PixelRect());
+			part.IntersectWith(&pixels);
 		}
-		writes[0].pBufferInfo = &sourceInfo;
-		writes[1].pBufferInfo = &frameInfo;
-		vk->vkCmdPushDescriptorSetKHR(vk->commands,
-			VK_PIPELINE_BIND_POINT_COMPUTE, vk->pipelineLayout, 0, 2, writes);
 
-		rect.fill = layer == NULL ? 1 : 0;
+		rect.fill = layer == NULL ? 1 : fromImage ? kComposeFromImage : 0;
 		rect.color = background;
 		rect.sourceStride = layer != NULL ? layer->buffer->Width() : 0;
 		for (int32 i = 0; i < part.CountRects(); i++) {
@@ -2709,8 +2967,8 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 			rect.width = r.right - r.left + 1;
 			rect.height = r.bottom - r.top + 1;
 			if (layer != NULL) {
-				rect.sourceX = r.left - layer->left;
-				rect.sourceY = r.top - layer->top;
+				rect.sourceX = r.left - layer->SourceLeft();
+				rect.sourceY = r.top - layer->SourceTop();
 			}
 			vk->vkCmdPushConstants(vk->commands, vk->pipelineLayout,
 				VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(rect), &rect);
@@ -2746,13 +3004,7 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 			view.IntersectWith(&image);
 			if (view.CountRects() == 0)
 				continue;
-			VkDescriptorBufferInfo shareInfo = frameInfo;
-			shareInfo.buffer = draw->buffer;
-			writes[0].pBufferInfo = &shareInfo;
-			writes[1].pBufferInfo = &frameInfo;
-			vk->vkCmdPushDescriptorSetKHR(vk->commands,
-				VK_PIPELINE_BIND_POINT_COMPUTE, vk->pipelineLayout, 0, 2,
-				writes);
+			push_compose_buffers(vk, draw->buffer, frameInfo.buffer);
 			rect.fill = 0;
 			rect.sourceStride = draw->pitch / 4;
 			for (int32 i = 0; i < view.CountRects(); i++) {
@@ -2779,10 +3031,8 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 	for (int32 i = 0; fFrameGhosts != NULL && i < fFrameGhosts->CountItems();
 			i++) {
 		Layer* ghost = fFrameGhosts->ItemAt(i);
-		_RecordWindowAnimation(ghost->buffer->VulkanBuffer(),
-			ghost->buffer->Width(), ghost->buffer->Height(), ghost->left,
-			ghost->top, ghost->shape, ghost->visible, damage,
-			(uint64)frameInfo.buffer, rect.frameStride);
+		_RecordWindowAnimation(ghost, damage, (uint64)frameInfo.buffer,
+			rect.frameStride);
 		vk->vkCmdPipelineBarrier(vk->commands,
 			VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
 			VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &between, 0, NULL, 0,
@@ -2855,6 +3105,13 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 	vk->vkCmdPipelineBarrier(vk->commands,
 		VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
 		VK_PIPELINE_STAGE_HOST_BIT, 0, 1, &toHost, 0, NULL, 0, NULL);
+	// M13 step 2: Skia's next run draws into images this frame reads.
+	// Graphite's barrier out of the sampler's layout waits for its own
+	// shader stages only, so everything after this frame waits for its
+	// reads here.
+	vk->vkCmdPipelineBarrier(vk->commands,
+		VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+		VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, NULL, 0, NULL, 0, NULL);
 	vk->vkEndCommandBuffer(vk->commands);
 
 	VkSubmitInfo submit = {};
@@ -2863,7 +3120,23 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 	submit.pCommandBuffers = &vk->commands;
 	vk->vkResetFences(vk->device, 1, &vk->fence);
 	bigtime_t started = system_time();
+	// M13 step 2 (replaces SyncToCpu::kYes): the frame waits on the GPU for
+	// every Skia run submitted before it. Taken under the queue lock, so
+	// no run's submit lands between taking the semaphores and this one.
+	std::vector<uint64> signals;
+	std::vector<VkSemaphore> waits;
+	std::vector<VkPipelineStageFlags> waitStages;
 	SkiaGpu::LockQueue();
+	if (fSkia != NULL && !fSkia->IsShutDown())
+		fSkia->TakeSignals(signals);
+	for (size_t i = 0; i < signals.size(); i++) {
+		waits.push_back((VkSemaphore)signals[i]);
+		waitStages.push_back(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
+			| VK_PIPELINE_STAGE_TRANSFER_BIT);
+	}
+	submit.waitSemaphoreCount = (uint32)waits.size();
+	submit.pWaitSemaphores = waits.empty() ? NULL : &waits[0];
+	submit.pWaitDstStageMask = waitStages.empty() ? NULL : &waitStages[0];
 	VkResult result = vk->vkQueueSubmit(vk->queue, 1, &submit, vk->fence);
 	SkiaGpu::UnlockQueue();
 	bool forced = fForceFail;
@@ -2898,6 +3171,8 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 		}
 	}
 	if (failure != NULL) {
+		// M13 step 2: the semaphores and the compare copies stay; the GPU
+		// may still use them, and the GPU drawing goes off now
 		if (exclusive)
 			fScreen->UnlockExclusiveAccess();
 		if (compare) {
@@ -2913,21 +3188,141 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 	bigtime_t took = system_time() - started;
 	if (fSampleCount < (int32)(sizeof(fSamples) / sizeof(fSamples[0])))
 		fSamples[fSampleCount++] = took;
+	if (!signals.empty())
+		fSkia->ReturnSignals(signals);
 
 	if (compare) {
 		// The CPU cannot read an imported image; those parts are left out.
 		BRegion shared;
 		for (int32 s = 0; s < shares.CountItems(); s++)
 			shared.Include(&shares.ItemAt(s)->shape);
-		_Compare(damage, layers, background, shared);
+		_Compare(damage, layers, background, shared, copies);
 		for (int32 i = 0; i < layers.CountItems(); i++)
 			layers.ItemAt(i)->entry->iface->UnlockExclusiveAccess();
 	}
+	_FreeCompareCopies(copies);
 
 	_Present(damage);
 	if (exclusive)
 		fScreen->UnlockExclusiveAccess();
 	return true;
+}
+
+
+/*!	M13 step 2, a compare frame: each window image into host memory, in the
+	frame's command buffer, before the compose reads it. The image goes
+	back to the sampler's layout after the copy.
+*/
+void
+Compositor::_RecordCompareCopies(const LayerList& layers,
+	CompareCopies& copies)
+{
+	CompositorVulkan* vk = fVulkan;
+	for (int32 l = 0; l < layers.CountItems(); l++) {
+		Layer* layer = layers.ItemAt(l);
+		if (!layer->image.IsSet())
+			continue;
+		SkiaImage* image = layer->image.Get();
+		CompareCopy copy;
+		copy.layer = layer;
+		VkBuffer buffer;
+		VkDeviceMemory memory;
+		if (!allocate_host_buffer(vk,
+				(uint64)image->Width() * image->Height() * 4, &buffer,
+				&memory, &copy.bits))
+			continue;
+		copy.buffer = (uint64)buffer;
+		copy.memory = (uint64)memory;
+		VkImageMemoryBarrier barrier = {};
+		barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		barrier.srcAccessMask = 0;
+		barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+		barrier.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+		barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		barrier.image = (VkImage)image->Image();
+		barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		barrier.subresourceRange.levelCount = 1;
+		barrier.subresourceRange.layerCount = 1;
+		vk->vkCmdPipelineBarrier(vk->commands,
+			VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
+				| VK_PIPELINE_STAGE_TRANSFER_BIT,
+			VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &barrier);
+		VkBufferImageCopy region = {};
+		region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		region.imageSubresource.layerCount = 1;
+		region.imageExtent.width = image->Width();
+		region.imageExtent.height = image->Height();
+		region.imageExtent.depth = 1;
+		vk->vkCmdCopyImageToBuffer(vk->commands, (VkImage)image->Image(),
+			VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, buffer, 1, &region);
+		barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+		barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+		barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		vk->vkCmdPipelineBarrier(vk->commands, VK_PIPELINE_STAGE_TRANSFER_BIT,
+			VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, NULL, 0, NULL, 1,
+			&barrier);
+		copies.push_back(copy);
+	}
+}
+
+
+//!	After the fence (or with the GPU idle): the compare copies go.
+void
+Compositor::_FreeCompareCopies(CompareCopies& copies)
+{
+	CompositorVulkan* vk = fVulkan;
+	for (size_t i = 0; i < copies.size(); i++) {
+		vk->vkDestroyBuffer(vk->device, (VkBuffer)copies[i].buffer, NULL);
+		vk->vkFreeMemory(vk->device, (VkDeviceMemory)copies[i].memory, NULL);
+	}
+	copies.clear();
+}
+
+
+/*!	M13 step 2: a pass that composes nothing (damage off screen, a pause)
+	still waits for the semaphores of the runs before it, so the runs can
+	signal them again. Between two composes, so the compose fence is free.
+*/
+void
+Compositor::_ConsumeSkiaSignals()
+{
+	CompositorVulkan* vk = fVulkan;
+	if (fSkia == NULL || fSkia->IsShutDown() || vk == NULL)
+		return;
+	std::vector<uint64> signals;
+	std::vector<VkSemaphore> waits;
+	std::vector<VkPipelineStageFlags> stages;
+	VkResult result = VK_SUCCESS;
+	SkiaGpu::LockQueue();
+	fSkia->TakeSignals(signals);
+	if (!signals.empty()) {
+		for (size_t i = 0; i < signals.size(); i++) {
+			waits.push_back((VkSemaphore)signals[i]);
+			stages.push_back(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
+		}
+		VkSubmitInfo submit = {};
+		submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		submit.waitSemaphoreCount = (uint32)waits.size();
+		submit.pWaitSemaphores = &waits[0];
+		submit.pWaitDstStageMask = &stages[0];
+		vk->vkResetFences(vk->device, 1, &vk->fence);
+		result = vk->vkQueueSubmit(vk->queue, 1, &submit, vk->fence);
+	}
+	SkiaGpu::UnlockQueue();
+	if (signals.empty())
+		return;
+	if (result == VK_SUCCESS) {
+		result = vk->vkWaitForFences(vk->device, 1, &vk->fence, VK_TRUE,
+			kFenceLimit * 1000);
+	}
+	// a late GPU keeps them: the next compose's fence is the same one
+	if (result == VK_SUCCESS)
+		fSkia->ReturnSignals(signals);
+	else if (fFailure == NULL)
+		fFailure = result == VK_TIMEOUT ? "fence timeout" : "submit";
 }
 
 
@@ -2981,7 +3376,7 @@ Compositor::_Present(const BRegion& damage)
 */
 bool
 Compositor::_Compare(const BRegion& damage, const LayerList& layers,
-	uint32 background, const BRegion& shared)
+	uint32 background, const BRegion& shared, const CompareCopies& copies)
 {
 	if (fScratch == NULL)
 		return false;
@@ -3003,18 +3398,33 @@ Compositor::_Compare(const BRegion& damage, const LayerList& layers,
 	}
 	for (int32 l = 0; l < layers.CountItems(); l++) {
 		Layer* layer = layers.ItemAt(l);
-		if (!layer->buffer.IsSet())
+		if (!layer->HasPixels())
 			continue;
 		BRegion part(damage);
 		part.IntersectWith(&layer->shape);
 		const uint32* source = (const uint32*)layer->buffer->Bits();
 		uint32 sourceStride = layer->buffer->Width();
+		if (layer->image.IsSet()) {
+			// M13 step 2: the copy of its image made in this frame
+			source = NULL;
+			for (size_t c = 0; c < copies.size(); c++) {
+				if (copies[c].layer == layer)
+					source = (const uint32*)copies[c].bits;
+			}
+			if (source == NULL)
+				return false;
+			sourceStride = layer->image->Width();
+			BRegion pixels(layer->PixelRect());
+			part.IntersectWith(&pixels);
+		}
+		int32 sourceLeft = layer->SourceLeft();
+		int32 sourceTop = layer->SourceTop();
 		for (int32 i = 0; i < part.CountRects(); i++) {
 			clipping_rect r = part.RectAtInt(i);
 			for (int32 y = r.top; y <= r.bottom; y++) {
 				memcpy(fScratch + y * stride + r.left,
-					source + (y - layer->top) * sourceStride
-						+ (r.left - layer->left),
+					source + (y - sourceTop) * sourceStride
+						+ (r.left - sourceLeft),
 					(r.right - r.left + 1) * 4);
 			}
 		}
@@ -3412,26 +3822,37 @@ Compositor::_PrepareEffects(BRegion& damage, const LayerList& layers,
 }
 
 
-//!	Pushes the three buffers of effects.comp.
+//!	Pushes the three buffers of effects.comp, and the image (M13 step 2;
+//!	the blank one when \a image is VK_NULL_HANDLE).
 static void
 push_effect_buffers(CompositorVulkan* vk, VkBuffer source, VkBuffer target,
-	VkBuffer aux)
+	VkBuffer aux, VkImageView image = VK_NULL_HANDLE)
 {
 	VkDescriptorBufferInfo infos[3] = {};
 	infos[0].buffer = source;
 	infos[1].buffer = target;
 	infos[2].buffer = aux;
-	VkWriteDescriptorSet writes[3] = {};
-	for (int i = 0; i < 3; i++) {
-		infos[i].range = VK_WHOLE_SIZE;
+	VkDescriptorImageInfo imageInfo = {};
+	imageInfo.sampler = vk->sampler;
+	imageInfo.imageView = image != VK_NULL_HANDLE ? image : vk->blankView;
+	imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	VkWriteDescriptorSet writes[4] = {};
+	for (int i = 0; i < 4; i++) {
 		writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		writes[i].dstBinding = i;
 		writes[i].descriptorCount = 1;
-		writes[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-		writes[i].pBufferInfo = &infos[i];
+		if (i < 3) {
+			infos[i].range = VK_WHOLE_SIZE;
+			writes[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+			writes[i].pBufferInfo = &infos[i];
+		} else {
+			writes[i].descriptorType
+				= VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			writes[i].pImageInfo = &imageInfo;
+		}
 	}
 	vk->vkCmdPushDescriptorSetKHR(vk->commands,
-		VK_PIPELINE_BIND_POINT_COMPUTE, vk->effectsPipelineLayout, 0, 3,
+		VK_PIPELINE_BIND_POINT_COMPUTE, vk->effectsPipelineLayout, 0, 4,
 		writes);
 }
 
@@ -3636,13 +4057,18 @@ Compositor::_RecordGlass(Layer* layer, const BRegion& damage, uint64 frame,
 	window_glass_geometry geometry = window_glass_for(entry->glassStrength);
 	vk->vkCmdBindPipeline(vk->commands, VK_PIPELINE_BIND_POINT_COMPUTE,
 		vk->effectsPipeline);
-	push_effect_buffers(vk, (VkBuffer)layer->buffer->VulkanBuffer(),
-		(VkBuffer)frame, (VkBuffer)entry->glass->VulkanBuffer());
+	// M13 step 2: a window that Skia draws is read from its image
+	bool fromImage = layer->image.IsSet();
+	push_effect_buffers(vk, fromImage
+			? (VkBuffer)frame : (VkBuffer)layer->buffer->VulkanBuffer(),
+		(VkBuffer)frame, (VkBuffer)entry->glass->VulkanBuffer(),
+		fromImage ? (VkImageView)layer->image->View() : VK_NULL_HANDLE);
 	effect_rect effect;
 	memset(&effect, 0, sizeof(effect));
-	effect.mode = kEffectGlass;
+	effect.mode = kEffectGlass | (fromImage ? kEffectFromImage : 0);
 	effect.targetStride = frameStride;
 	effect.sourceStride = layer->buffer->Width();
+	BRegion pixels(layer->PixelRect());
 
 	uint32 cacheOffset = 0;
 	const BRegion& glass = entry->glassShape;
@@ -3658,6 +4084,7 @@ Compositor::_RecordGlass(Layer* layer, const BRegion& damage, uint64 frame,
 				part.IntersectWith(&layer->glassFixed);
 			else
 				part.IntersectWith(&layer->glassAlpha);
+			part.IntersectWith(&pixels);
 			effect.amount = geometry.seeThrough
 				| (kind == 0 ? kEffectFixedGlass : 0);
 			effect.auxStride = areaWidth;
@@ -3667,8 +4094,8 @@ Compositor::_RecordGlass(Layer* layer, const BRegion& damage, uint64 frame,
 				effect.height = r.bottom - r.top + 1;
 				effect.targetX = r.left;
 				effect.targetY = r.top;
-				effect.sourceX = r.left - layer->left;
-				effect.sourceY = r.top - layer->top;
+				effect.sourceX = r.left - layer->SourceLeft();
+				effect.sourceY = r.top - layer->SourceTop();
 				effect.auxX = cacheOffset + (r.left - area.left);
 				effect.auxY = r.top - area.top;
 				dispatch_effect(vk, effect);
@@ -3798,6 +4225,10 @@ Compositor::_AnimationFrame(LayerList& layers, bigtime_t now)
 			layer->top = ghost->top;
 			layer->shape = ghost->shape;
 			layer->visible = ghost->visible;
+			if (layer->buffer.IsSet()) {
+				layer->image.SetTo(layer->buffer->AcquireImage(
+					&layer->imageX, &layer->imageY), true);
+			}
 			ghosts->AddItem(layer);
 			fFrameAnimating = true;
 		}
@@ -3822,13 +4253,23 @@ Compositor::_AnimationFrame(LayerList& layers, bigtime_t now)
 	from 0 to 1), where the damage is. Only its footprint is drawn.
 */
 void
-Compositor::_RecordWindowAnimation(uint64 buffer, uint32 width,
-	uint32 height, int32 left, int32 top, const BRegion& shape, float visible,
+Compositor::_RecordWindowAnimation(const Layer* layer,
 	const BRegion& damage, uint64 frame, uint32 frameStride)
 {
 	CompositorVulkan* vk = fVulkan;
-	if (visible <= 0.0f)
+	float visible = layer->visible;
+	if (visible <= 0.0f || !layer->HasPixels())
 		return;
+	// M13 step 2: a window that Skia draws is read from its image, which
+	// may be the one before a resize (another size and place)
+	bool fromImage = layer->image.IsSet();
+	uint64 buffer = fromImage ? frame : layer->buffer->VulkanBuffer();
+	uint32 width = fromImage ? layer->image->Width() : layer->buffer->Width();
+	uint32 height = fromImage
+		? layer->image->Height() : layer->buffer->Height();
+	int32 left = layer->SourceLeft();
+	int32 top = layer->SourceTop();
+	const BRegion& shape = layer->shape;
 	BRegion part(damage);
 	BRegion bounds(BRect((float)left, (float)top,
 		(float)left + width - 1, (float)top + height - 1));
@@ -3839,10 +4280,11 @@ Compositor::_RecordWindowAnimation(uint64 buffer, uint32 width,
 	vk->vkCmdBindPipeline(vk->commands, VK_PIPELINE_BIND_POINT_COMPUTE,
 		vk->effectsPipeline);
 	push_effect_buffers(vk, (VkBuffer)buffer, (VkBuffer)frame,
-		(VkBuffer)frame);
+		(VkBuffer)frame,
+		fromImage ? (VkImageView)layer->image->View() : VK_NULL_HANDLE);
 	effect_rect effect;
 	memset(&effect, 0, sizeof(effect));
-	effect.mode = kEffectWindow;
+	effect.mode = kEffectWindow | (fromImage ? kEffectFromImage : 0);
 	effect.targetStride = frameStride;
 	effect.sourceStride = width;
 	effect.sourceWidth = width;
@@ -3922,21 +4364,7 @@ Compositor::_RecordSlideCopy(uint64 from, uint64 to, uint32 frameStride)
 	CompositorVulkan* vk = fVulkan;
 	vk->vkCmdBindPipeline(vk->commands, VK_PIPELINE_BIND_POINT_COMPUTE,
 		vk->pipeline);
-	VkDescriptorBufferInfo infos[2] = {};
-	infos[0].buffer = (VkBuffer)from;
-	infos[0].range = VK_WHOLE_SIZE;
-	infos[1].buffer = (VkBuffer)to;
-	infos[1].range = VK_WHOLE_SIZE;
-	VkWriteDescriptorSet writes[2] = {};
-	for (int i = 0; i < 2; i++) {
-		writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		writes[i].dstBinding = i;
-		writes[i].descriptorCount = 1;
-		writes[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-		writes[i].pBufferInfo = &infos[i];
-	}
-	vk->vkCmdPushDescriptorSetKHR(vk->commands,
-		VK_PIPELINE_BIND_POINT_COMPUTE, vk->pipelineLayout, 0, 2, writes);
+	push_compose_buffers(vk, (VkBuffer)from, (VkBuffer)to);
 	compose_rect rect;
 	memset(&rect, 0, sizeof(rect));
 	rect.sourceStride = frameStride;
