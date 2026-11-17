@@ -23,8 +23,8 @@
  *  5. with app_server: BTiltLevel, BAxisBar and BGameControllerMotionView
  *     draw something.
  *
- * bluetooth_server also takes reports from the output queue, so a report
- * is sent again until this test sees it (at most six times).
+ * bluetooth_server also takes reports from the output queue, so this test
+ * starts waiting before it sends, and sends again (at most four times).
  * Prints "gamecontroller_feel_test: ok" or the first failure.
  */
 
@@ -153,7 +153,10 @@ read_output(bool (*check)(const uint8*, uint32), bigtime_t timeout)
 		uint8 data[R5_BTHID_MAX_REPORT];
 		r5_bthid_output output;
 		memset(&output, 0, sizeof(output));
-		output.timeout = 100000;
+		// One long wait: the waiter that came first gets the report.
+		output.timeout = end - system_time();
+		if (output.timeout <= 0)
+			break;
 		output.data = data;
 		output.capacity = sizeof(data);
 		if (ioctl(sControl, R5_BTHID_GET_OUTPUT, &output, sizeof(output))
@@ -332,14 +335,42 @@ test_driver(const char* device)
 }
 
 
+struct capture {
+	bool		(*check)(const uint8*, uint32);
+	bigtime_t	timeout;
+	bool		found;
+};
+
+
+static status_t
+capture_thread(void* data)
+{
+	capture* what = (capture*)data;
+	what->found = read_output(what->check, what->timeout);
+	return B_OK;
+}
+
+
+/*!	bluetooth_server waits on the same queue, with a 500 ms timeout. A
+	reader that starts waiting first, and is then left 700 ms so the server
+	times out and waits again behind it, gets the next report.
+*/
 static bool
 send_until(BGameController& controller, status_t (*send)(BGameController&),
 	bool (*check)(const uint8*, uint32))
 {
-	for (int i = 0; i < 6; i++) {
-		if (send(controller) != B_OK)
+	for (int i = 0; i < 4; i++) {
+		capture what = { check, 2500000, false };
+		thread_id reader = spawn_thread(capture_thread, "capture",
+			B_NORMAL_PRIORITY, &what);
+		resume_thread(reader);
+		snooze(700000);
+		status_t sent = send(controller);
+		status_t result;
+		wait_for_thread(reader, &result);
+		if (sent != B_OK)
 			return false;
-		if (read_output(check, 400000))
+		if (what.found)
 			return true;
 	}
 	return false;
@@ -365,6 +396,20 @@ static status_t
 send_stop(BGameController& c)
 {
 	return c.StopRumble();
+}
+
+
+static status_t
+send_timed(BGameController& c)
+{
+	return c.SetRumble(0.3f, 0.3f, 1500000);
+}
+
+
+static bool
+timed_report(const uint8* data, uint32 length)
+{
+	return valid_report(data, length) && data[5] == 77 && data[6] == 77;
 }
 
 
@@ -423,20 +468,28 @@ test_controller(const char* device)
 	CHECK(controller.SetTriggerEffect((game_controller_trigger)7,
 		B_TRIGGER_EFFECT_OFF, 0, 0) == B_BAD_VALUE, "unknown trigger");
 
-	// A timed rumble stops by itself.
+	// A timed rumble stops by itself: 1.5 s, so this reader is back in
+	// front of bluetooth_server when the stop comes.
 	bool stoppedItself = false;
-	for (int i = 0; i < 6 && !stoppedItself; i++) {
-		CHECK(controller.SetRumble(0.3f, 0.3f, 150000) == B_OK,
-			"timed rumble");
-		stoppedItself = read_output(stopped_report, 800000);
+	for (int i = 0; i < 4 && !stoppedItself; i++) {
+		CHECK(send_until(controller, send_timed, timed_report),
+			"timed rumble report");
+		stoppedItself = read_output(stopped_report, 3000000);
 	}
 	CHECK(stoppedItself, "a timed rumble did not stop");
 
 	// Close() frees the triggers.
 	bool freed = false;
-	for (int i = 0; i < 6 && !freed; i++) {
+	for (int i = 0; i < 4 && !freed; i++) {
+		capture what = { freed_report, 2500000, false };
+		thread_id reader = spawn_thread(capture_thread, "capture",
+			B_NORMAL_PRIORITY, &what);
+		resume_thread(reader);
+		snooze(700000);
 		controller.Close();
-		freed = read_output(freed_report, 400000);
+		status_t result;
+		wait_for_thread(reader, &result);
+		freed = what.found;
 		if (!freed) {
 			CHECK(controller.Open(device) == B_OK, "open again");
 			CHECK(send_trigger(controller) == B_OK, "trigger again");

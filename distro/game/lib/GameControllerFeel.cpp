@@ -134,19 +134,22 @@ ControllerFeel::Close()
 	{
 		BAutolock locker(fLock);
 		if (fFD >= 0) {
-			// Nothing keeps rumbling or pushing back after the program.
+			// Nothing keeps rumbling or pushing back after the program:
+			// on a PlayStation controller one report with the motors off
+			// and both triggers free.
 			fStopAt = 0;
-			_StopLocked();
-			if (fModel == PLAYSTATION_DUALSENSE
-				|| fModel == PLAYSTATION_DUALSENSE_EDGE) {
+			if (fModel != PLAYSTATION_NONE) {
 				if (fEffectsSent) {
+					fEffects.strong = 0;
+					fEffects.weak = 0;
 					dualsense_trigger_effect(TRIGGER_EFFECT_OFF, 0, 0,
 						fEffects.leftTrigger);
 					dualsense_trigger_effect(TRIGGER_EFFECT_OFF, 0, 0,
 						fEffects.rightTrigger);
 					_SendPlayStation();
 				}
-			}
+			} else
+				_StopLocked();
 		}
 		fQuit = true;
 		thread = fStopThread;
