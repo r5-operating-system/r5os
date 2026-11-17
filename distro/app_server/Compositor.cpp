@@ -138,6 +138,7 @@ struct settings {
 	// gpu_lavapipe_threads <n> (LP_NUM_THREADS), gpu_lavapipe_vector
 	// 128|256 (LP_NATIVE_VECTOR_WIDTH)
 	int		lavapipeMsaa;
+	bool	noCull;
 	int		lavapipeThreads;
 	int		lavapipeVector;
 };
@@ -175,6 +176,9 @@ load_settings(settings& out)
 			out.fail = true;
 		if (strncmp(line, "gpu_debug true", 14) == 0)
 			out.debug = true;
+		// M13 step 3: a test switch for the occlusion culling
+		if (strncmp(line, "gpu_compositor_cull false", 25) == 0)
+			out.noCull = true;
 		if (strncmp(line, "gpu_compositor_scanout true", 27) == 0)
 			out.scanout = true;
 		if (strncmp(line, "gpu_compositor_zero_copy false", 30) == 0)
@@ -795,6 +799,9 @@ Compositor::Create(Desktop* desktop, HWInterface* screen)
 	compositor->fDebug = options.debug;
 	compositor->fForceFail = options.fail;
 	compositor->fLavapipeMsaa = options.lavapipeMsaa;
+	compositor->fNoCull = options.noCull;
+	if (options.noCull)
+		log_line("compose culling off (setting)");
 	// M13 step 3: llvmpipe reads these when the driver starts; RADV does
 	// not look at them
 	if (options.lavapipeThreads > 0) {
@@ -2921,6 +2928,12 @@ Compositor::NoteInput()
 */
 static BRegion grow_region(const BRegion& region, int32 by);
 
+// M13 step 3, gpu_debug: what the compose records, summed per 10 s
+static int64 sComposeDispatches = 0;
+static int64 sComposeRegions = 0;
+static int64 sComposeCopied = 0;
+static int64 sComposeFrames = 0;
+
 
 bool
 Compositor::_Compose(const BRegion& damage, const LayerList& layers,
@@ -2994,10 +3007,10 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 	// opening window's rectangle, a closing window's fade. No culling
 	// during the workspace slide. The frame is the same pixels.
 	std::vector<BRegion> covered(layers.CountItems() + 1);
-	if (!slide) {
+	if (!slide && !fNoCull) {
 		BRegion over;
 		BRegion read;
-		int32 reach = window_glass_for(fStrength).reach;
+		int32 reach = window_glass_for(_GlassStrength()).reach;
 		for (int32 i = 0; fFrameGhosts != NULL
 				&& i < fFrameGhosts->CountItems(); i++) {
 			Layer* ghost = fFrameGhosts->ItemAt(i);
@@ -3130,6 +3143,8 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 				VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(rect), &rect);
 			vk->vkCmdDispatch(vk->commands, (rect.width + 15) / 16,
 				(rect.height + 15) / 16, 1);
+			sComposeDispatches++;
+			sComposeCopied += (int64)rect.width * rect.height;
 		}
 		if (withEffects && glassPart.CountRects() > 0) {
 			// next to the copy above, on other pixels: no barrier between
@@ -3177,6 +3192,8 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 					VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(rect), &rect);
 				vk->vkCmdDispatch(vk->commands, (rect.width + 15) / 16,
 					(rect.height + 15) / 16, 1);
+				sComposeDispatches++;
+				sComposeCopied += (int64)rect.width * rect.height;
 			}
 			vk->vkCmdPipelineBarrier(vk->commands,
 				VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
@@ -3360,6 +3377,7 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 		fConsumedSignals.clear();
 	}
 	_TakeStamps();
+	sComposeFrames++;
 
 	if (compare) {
 		// The CPU cannot read an imported image; those parts are left out.
@@ -3506,6 +3524,11 @@ Compositor::_RecordImageCopy(const Layer* layer, const BRegion& region,
 		VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &before, 0, NULL, 1, &toCopy);
 	vk->vkCmdCopyImageToBuffer(vk->commands, (VkImage)image->Image(),
 		VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, frame, count, copies);
+	sComposeRegions += count;
+	for (int32 i = 0; i < count; i++) {
+		sComposeCopied += (int64)copies[i].imageExtent.width
+			* copies[i].imageExtent.height;
+	}
 	delete[] copies;
 
 	VkMemoryBarrier after = {};
@@ -3565,6 +3588,9 @@ Compositor::_RecordBufferCopy(const Layer* layer, const BRegion& region,
 		VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &before, 0, NULL, 0, NULL);
 	vk->vkCmdCopyBuffer(vk->commands, (VkBuffer)layer->buffer->VulkanBuffer(),
 		frame, n, copies);
+	sComposeRegions += n;
+	for (uint32 i = 0; i < n; i++)
+		sComposeCopied += (int64)copies[i].size / 4;
 	delete[] copies;
 	VkMemoryBarrier after = {};
 	after.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
@@ -3575,6 +3601,18 @@ Compositor::_RecordBufferCopy(const Layer* layer, const BRegion& region,
 	vk->vkCmdPipelineBarrier(vk->commands, VK_PIPELINE_STAGE_TRANSFER_BIT,
 		VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
 		0, 1, &after, 0, NULL, 0, NULL);
+}
+
+
+/*!	M13 (owner, 17 Nov 2026): on Lavapipe the frosted glass uses the
+	lightest step ("quiet": a 4 px blur instead of balanced's 9 px), so
+	the blur, the largest pass while dragging there, costs less. The
+	shadows keep the chosen strength. RADV uses the chosen strength.
+*/
+int32
+Compositor::_GlassStrength() const
+{
+	return fOnLavapipe ? (int32)kWindowEffectsQuiet : fStrength;
 }
 
 
@@ -4041,7 +4079,7 @@ Compositor::_EnsureGlassCache(Layer* layer, const BRegion& glass)
 	entry->glassShape = glass;
 	entry->glassLeft = layer->left;
 	entry->glassTop = layer->top;
-	entry->glassStrength = fStrength;
+	entry->glassStrength = _GlassStrength();
 	entry->glassBelow = layer->belowHash;
 	entry->glassValid = true;
 	return true;
@@ -4089,8 +4127,29 @@ Compositor::_PrepareEffects(BRegion& damage, const LayerList& layers,
 {
 	BRegion screen(BRect(0, 0, (float)fFrameWidth - 1,
 		(float)fFrameHeight - 1));
-	int32 strength = fStrength;
+	int32 strength = _GlassStrength();
 	window_glass_geometry glassGeometry = window_glass_for(strength);
+
+	// M13 (owner, 17 Nov 2026): the blur is made only for the glass that
+	// shows; what the windows above cover with their plain pixels is left
+	// out. The kept blur there is made again when it shows, because that
+	// is damage below the glass.
+	std::vector<BRegion> hidden(layers.CountItems());
+	{
+		BRegion over;
+		for (int32 i = layers.CountItems() - 1; i >= 0; i--) {
+			hidden[i] = over;
+			Layer* upper = layers.ItemAt(i);
+			if (!upper->HasPixels() || upper->visible >= 0)
+				continue;
+			BRegion plain(upper->shape);
+			BRegion pixels(upper->PixelRect());
+			plain.IntersectWith(&pixels);
+			plain.Exclude(&upper->glassFixed);
+			plain.Exclude(&upper->glassAlpha);
+			over.Include(&plain);
+		}
+	}
 	bool scratch = _EnsureScratch();
 
 	BRegion below(generic);
@@ -4127,6 +4186,7 @@ Compositor::_PrepareEffects(BRegion& damage, const LayerList& layers,
 				layer->blurRegion = grow_region(below, glassGeometry.reach);
 				layer->blurRegion.IntersectWith(&glass);
 			}
+			layer->blurRegion.Exclude(&hidden[i]);
 			// The blur is made per glass rectangle, for the box around
 			// what is new in it; its input must be composed fresh.
 			for (int32 g = 0; g < glass.CountRects()
@@ -5704,6 +5764,17 @@ Compositor::_Report()
 	}
 	memset(fPassTime, 0, sizeof(fPassTime));
 	fPassFrames = 0;
+	if (sComposeFrames > 0) {
+		log_line("compose work per frame dispatches %" B_PRId64 " regions %"
+			B_PRId64 " pixels %" B_PRId64 " frames %" B_PRId64,
+			sComposeDispatches / sComposeFrames,
+			sComposeRegions / sComposeFrames, sComposeCopied / sComposeFrames,
+			sComposeFrames);
+	}
+	sComposeDispatches = 0;
+	sComposeRegions = 0;
+	sComposeCopied = 0;
+	sComposeFrames = 0;
 	// M11 stick: the whole app_server, for the FPS compare of zero-copy
 	// and the copy path. A standard account cannot read another uid's
 	// team usage, so app_server logs it itself.
