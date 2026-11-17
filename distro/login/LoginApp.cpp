@@ -251,7 +251,56 @@ LoginApp::MessageReceived(BMessage* message)
 
 	switch (message->what) {
 		case kAttemptLogin:
-			TryLogin(message);
+		case kLogoutAction:
+		case kLockAction:
+		case kUnlockAction:
+		case kRebootAction:
+		case kHaltAction:
+		case kSuspendAction:
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			// The login window is this team. A BMessenger(Login) from any
+			// other team used to halt, lock, or sign in.
+			if (message->IsSourceRemote())
+				break;
+			// SPDX-SnippetEnd
+			if (message->what == kAttemptLogin) {
+				TryLogin(message);
+				break;
+			}
+			if (message->what == kLogoutAction) {
+				Logout();
+				break;
+			}
+			if (message->what == kLockAction) {
+				Lock();
+				break;
+			}
+			if (message->what == kUnlockAction) {
+				Unlock(message);
+				break;
+			}
+			if (message->what == kSuspendAction) {
+				BAlert* alert = new BAlert("Error",
+					"Sleep is not available yet.", "OK");
+				alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
+				alert->Go();
+				break;
+			}
+			reboot = message->what == kRebootAction;
+			{
+				BRoster roster;
+				BRoster::Private rosterPrivate(roster);
+				status_t error = rosterPrivate.ShutDown(reboot, false, false);
+				if (error < B_OK) {
+					BString msg("Could not shut down: ");
+					msg << strerror(error);
+					BAlert* alert = new BAlert("Error", msg.String(), "OK");
+					alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
+					alert->Go();
+				}
+			}
 			break;
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
@@ -297,40 +346,6 @@ LoginApp::MessageReceived(BMessage* message)
 			break;
 		}
 // SPDX-SnippetEnd
-		case kLogoutAction:
-			Logout();
-			break;
-		case kLockAction:
-			Lock();
-			break;
-		case kUnlockAction:
-			Unlock(message);
-			break;
-		case kRebootAction:
-			reboot = true;
-			// FALLTHROUGH
-		case kHaltAction:
-		{
-			BRoster roster;
-			BRoster::Private rosterPrivate(roster);
-			status_t error = rosterPrivate.ShutDown(reboot, false, false);
-			if (error < B_OK) {
-				BString msg("Could not shut down: ");
-				msg << strerror(error);
-				BAlert* alert = new BAlert("Error", msg.String(), "OK");
-				alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
-				alert->Go();
-			}
-			break;
-		}
-		case kSuspendAction:
-		{
-			BAlert* alert = new BAlert("Error", "Sleep is not available yet.",
-				"OK");
-			alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
-			alert->Go();
-			break;
-		}
 		default:
 			BApplication::MessageReceived(message);
 			break;

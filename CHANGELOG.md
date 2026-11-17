@@ -45,6 +45,16 @@ Tested: `scripts/test-game-feel.sh` (host, ASan and UBSan): `feel_host_test: ok`
 
 Not tested: any real controller. DualSense and DualShock 4 rumble, trigger effects and motion need the owner's DualSense on a stick. The click and vibration trigger parameters, the sensor axes' signs and the DualShock 4 switch to full reports without its calibration report are the likely fixes. No PID controller was tested. The usb_hid output, feature and cache paths did not run (no USB game controller in QEMU). The widget drawing check is open. ARM64 and RISC-V 64 were not built.
 
+## 2026-11-17 - Login: halt, lock and sign-in only from this team
+
+Problem: Login accepted logout, lock, unlock, halt, reboot and sign-in from any team that sent a `BMessenger` to the Login application. The admin port already checked the sender.
+
+What changed: those actions return without running when `BMessage::IsSourceRemote()` is true. The Sign in window is the same team.
+
+Limits: a local add-on in the Login team can still send them. Not proven on a running desktop.
+
+Tested: the C++ was not compiled on this host (needs libbe).
+
 ## 2026-11-17 - Settings: notifications file is replaced, not erased
 
 Problem: the Notifications page flattened the live `~/config/settings/system/notifications` file after `B_ERASE_FILE`. A failed Flatten left the notification server with an empty file.
@@ -64,7 +74,6 @@ What changed: the page writes a `.tmp` file, `fsync`s it, and `rename`s it over 
 Limits: the separate VirtualMemory program still erases then writes. A change still waits for the next start.
 
 Tested: the C++ was not compiled on this host (needs libbe). Jam on this branch is recorded on the pull request.
-
 ## 2026-11-17 - Graphics (M13): step 4, resize on RADV at the refresh rate, stick 4 results
 
 Problem: on stick 3 a window resize took 25.8 to 30.9 ms per frame on RADV and Lavapipe. Every frame re-blurred the window shadow, Skia held its lock while it waited for the GPU, and each new window size made a new VkImage. `check` judged a frame count that also counted the pauses in the mouse motion.
