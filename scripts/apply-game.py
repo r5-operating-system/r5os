@@ -80,6 +80,7 @@ def main() -> int:
     kernel_files = [
         "src/add-ons/kernel/drivers/input/hid_shared/JoystickProtocolHandler.cpp",
         "src/add-ons/kernel/drivers/input/hid_shared/JoystickProtocolHandler.h",
+        "src/add-ons/kernel/drivers/input/hid_shared/R5HIDReports.h",
         "src/add-ons/kernel/drivers/input/usb_hid/HIDDevice.cpp",
         "src/add-ons/kernel/drivers/input/usb_hid/HIDDevice.h",
         "src/add-ons/kernel/drivers/input/hyperv/hid/HIDDevice.h",
@@ -98,10 +99,14 @@ def main() -> int:
         "GameController.cpp", "GameControllerMapping.cpp",
         "GameControllerMapping.h", "GameControllerPictures.cpp",
         "GameControllerPictures.h", "GameControllerPictureData.h",
-        "GameControllerView.cpp", "Jamfile")],
+        "GameControllerView.cpp", "Jamfile",
+        "GameControllerReports.cpp", "GameControllerReports.h",
+        "GameControllerMotionView.cpp", "GameControllerFeel.cpp",
+        "GameControllerFeel.h")],
         "libr5game")
     install_all([(GAME / "lib" / name, HAIKU / "headers/os/device" / name)
-        for name in ("GameController.h", "GameControllerView.h")],
+        for name in ("GameController.h", "GameControllerView.h",
+            "GameControllerMotionView.h")],
         "libr5game header")
     insert_once(HAIKU / "src/preferences/Jamfile",
         "SubInclude HAIKU_TOP src preferences r5ui ;\n",
@@ -140,6 +145,21 @@ def main() -> int:
         "SYSTEM_BIN += gamepad ;\n",
         "SYSTEM_BIN += gamecontroller_test ;\n",
         "gamecontroller_test image")
+
+    # Rumble, trigger effects and motion (option C phase 1): their test.
+    feel = HAIKU / "src/bin/gamecontroller_feel_test"
+    install_all([(GAME / "tests/gamecontroller_feel_test" / name,
+            feel / name)
+        for name in ("gamecontroller_feel_test.cpp", "Jamfile")],
+        "gamecontroller_feel_test")
+    insert_once(HAIKU / "src/bin/Jamfile",
+        "SubInclude HAIKU_TOP src bin gamecontroller_test ;\n",
+        "SubInclude HAIKU_TOP src bin gamecontroller_feel_test ;\n",
+        "gamecontroller_feel_test jam")
+    insert_once(HAIKU / "build/jam/images/definitions/regular",
+        "SYSTEM_BIN += gamecontroller_test ;\n",
+        "SYSTEM_BIN += gamecontroller_feel_test ;\n",
+        "gamecontroller_feel_test image")
     return 0
 
 

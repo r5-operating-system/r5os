@@ -200,6 +200,59 @@ typedef struct _r5_joystick_info {
 } r5_joystick_info;
 /* SPDX-SnippetEnd */
 
+/* SPDX-SnippetBegin */
+/* SPDX-SnippetCopyrightText: 2026 R5OS Contributors */
+/* SPDX-License-Identifier: MIT */
+/* R5: reports to and from a game controller, and its report descriptor,
+ * for rumble, trigger effects, motion and HID PID force feedback in
+ * libr5game (docs/GAME-CONTROLLERS.md, option C phase 1). Additive calls,
+ * answered by hid_shared for usb_hid and bluetooth_hid; i2c_hid and
+ * hyperv/hid answer B_NOT_SUPPORTED. A report is only accepted when the
+ * report descriptor declares it with that type and ID, and never longer
+ * than declared. */
+#define R5_JOYSTICK_SEND_REPORT		(B_JOYSTICK_DRIVER_BASE + 83)
+	/* arg -> ptr to r5_joystick_report: an output or feature report */
+#define R5_JOYSTICK_GET_REPORT		(B_JOYSTICK_DRIVER_BASE + 84)
+	/* arg -> ptr to r5_joystick_report: the last input report with that
+	   ID as it came (its first R5_JOYSTICK_CACHED_REPORT bytes; usb_hid
+	   only sees reports while the joystick is open), or a feature report
+	   read from the device (usb_hid only) */
+#define R5_JOYSTICK_GET_DESCRIPTOR	(B_JOYSTICK_DRIVER_BASE + 85)
+	/* arg -> ptr to r5_joystick_descriptor */
+
+enum {
+	/* the report types of HID 1.11, 7.2.1 */
+	R5_JOYSTICK_REPORT_INPUT = 1,
+	R5_JOYSTICK_REPORT_OUTPUT = 2,
+	R5_JOYSTICK_REPORT_FEATURE = 3
+};
+
+#define R5_JOYSTICK_MAX_REPORT		512
+#define R5_JOYSTICK_CACHED_REPORT	128
+#define R5_JOYSTICK_MAX_DESCRIPTOR	4096
+
+typedef struct _r5_joystick_report {
+	uint32		type;		/* R5_JOYSTICK_REPORT_* */
+	uint32		id;			/* the report ID, 0 when the device uses none */
+	uint32		length;
+		/* send: the bytes at data (a shorter report is padded with zeros
+		   to the declared size); get: in, the capacity of data; out, the
+		   bytes written */
+	uint32		_reserved;
+	bigtime_t	timestamp;	/* get, input: system_time() when it came */
+	void*		data;
+		/* with report IDs the first byte is the ID, as on the wire */
+} r5_joystick_report;
+
+typedef struct _r5_joystick_descriptor {
+	uint32		length;
+		/* in: the capacity of data; out: the length of the descriptor
+		   (B_BUFFER_OVERFLOW when it did not fit; data has its start) */
+	uint32		_reserved;
+	void*		data;
+} r5_joystick_descriptor;
+/* SPDX-SnippetEnd */
+
 /* Speed compensation is not generally necessary, because the joystick */
 /* driver is measuring using real time, not just # cycles. "0" means the */
 /* default, center value. + typically returns higher values; - returns lower */

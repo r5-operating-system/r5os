@@ -55,7 +55,7 @@ if [ -n "$SETTINGS_PAGE" ]; then
 	page="$preview/boot/system/preferences/Settings --page $SETTINGS_PAGE & sleep 30; ps > /boot/home/bt-ps.log 2>&1; "
 	if [ -n "${BT_WINDOW:-}" ]; then
 		set -- $BT_WINDOW
-		page="$page/bin/hey Settings set Frame of Window 0 to 'BRect(20,40,$((20 + $1)),$((40 + $2)))' > /boot/home/bt-hey.log 2>&1; "
+		page="$page/bin/hey Settings set Frame of Window 0 to 'BRect(20,40,$((20 + $1)),$((40 + $2)))' >> /boot/home/bt-hey.log 2>&1; "
 	fi
 	# BT_TEST_BUTTONS=<s>: that many seconds after Settings opened, send the
 	# page the message of its "Test buttons…" button (with BT_PREVIEW=1 the
@@ -63,6 +63,11 @@ if [ -n "$SETTINGS_PAGE" ]; then
 	# controllers.
 	if [ -n "${BT_TEST_BUTTONS:-}" ]; then
 		page="$page(sleep $((BT_TEST_BUTTONS - 30)); /bin/hey Settings 'btvT' of View 'bluetooth' of Window 0 >> /boot/home/bt-hey.log 2>&1) & "
+	fi
+	# SIGNIN_AWAY=1: move the Sign in window to the lower right corner
+	# (hey), so a screendump shows the page also without GAMEPAD=1.
+	if [ "${SIGNIN_AWAY:-0}" = 1 ]; then
+		page="/bin/hey Login set Frame of Window 'Sign in' to 'BRect(900,620,1340,1040)' >> /boot/home/bt-hey.log 2>&1; $page"
 	fi
 fi
 # DESKBAR=1 (step 3b) starts Deskbar and then bluetooth_deskbar, which adds
@@ -100,7 +105,7 @@ if [ "${QUIT_SETTINGS:-0}" = 1 ]; then
 fi
 cat > "$BT_WORK/bt-smoke.job" <<EOF
 job bt-smoke {
-	launch /bin/sh -c "(while true; do sleep 5; ps -a > /boot/home/bt-psa.log 2>&1; sync; done) & sleep 60; ps > /boot/home/bt-ps0.log 2>&1; sync; $page/bin/bt_server_smoke_test > /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_l2cap_abi_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_hid_driver_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_l2cap_coc_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_smp_crypto_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_audio_smoke_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_rfcomm_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_voice_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/gamecontroller_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync;/bin/bt_audio use 00:11:22:33:44:55 >> /boot/home/bt-smoke.log 2>&1; /bin/bt_audio >> /boot/home/bt-smoke.log 2>&1; /bin/bt_audio off >> /boot/home/bt-smoke.log 2>&1; /bin/bt_audio >> /boot/home/bt-smoke.log 2>&1; ls -ld /boot/system/settings/bluetooth /boot/system/settings/bluetooth/* >> /boot/home/bt-smoke.log 2>&1; $gamepad $after sleep 5; sync"
+	launch /bin/sh -c "(while true; do sleep 5; ps -a > /boot/home/bt-psa.log 2>&1; sync; done) & sleep 60; ps > /boot/home/bt-ps0.log 2>&1; sync; $page/bin/bt_server_smoke_test > /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_l2cap_abi_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_hid_driver_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_l2cap_coc_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_smp_crypto_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_audio_smoke_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_rfcomm_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_voice_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/gamecontroller_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/gamecontroller_feel_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync;/bin/bt_audio use 00:11:22:33:44:55 >> /boot/home/bt-smoke.log 2>&1; /bin/bt_audio >> /boot/home/bt-smoke.log 2>&1; /bin/bt_audio off >> /boot/home/bt-smoke.log 2>&1; /bin/bt_audio >> /boot/home/bt-smoke.log 2>&1; ls -ld /boot/system/settings/bluetooth /boot/system/settings/bluetooth/* >> /boot/home/bt-smoke.log 2>&1; $gamepad $after sleep 5; sync"
 	on initial_volumes_mounted
 }
 EOF
@@ -182,8 +187,8 @@ cat "$BT_WORK/out-smoke.log" 2>/dev/null || echo "(no log)"
 echo "== syslog (Bluetooth lines)"
 grep -aE 'bluetooth_server|bluetooth_deskbar|deskbar_bt_replicant|bt_server_smoke_test|bt_l2cap_abi_test|bt_hid_driver_test|l2cap_coc_test|bt_smp_crypto_test|bt_rfcomm_test|bt_voice_test|RFCOMM|gamecontroller|bluetooth_hid|bluetooth_audio|DeviceManager|h2generic|l2cap|debug_server|crash' \
 	"$BT_WORK/out-syslog" 2>/dev/null || echo "(no lines)"
-if [ -n "${BT_WINDOW:-}${BT_TEST_BUTTONS:-}" ]; then
-	echo "== hey (BT_WINDOW, BT_TEST_BUTTONS)"
+if [ -n "${BT_WINDOW:-}${BT_TEST_BUTTONS:-}${SIGNIN_AWAY:-}" ]; then
+	echo "== hey (BT_WINDOW, BT_TEST_BUTTONS, SIGNIN_AWAY)"
 	cat "$BT_WORK/out-hey.log" 2>/dev/null || echo "(no log)"
 fi
 if [ "${GAMEPAD:-0}" = 1 ]; then

@@ -38,6 +38,7 @@
 #include <string>
 #include <vector>
 
+#include "GameControllerFeel.h"
 #include "GameControllerMapping.h"
 
 
@@ -360,6 +361,7 @@ struct BGameController::Private {
 	raw_state			raw;
 	mapped_state		mapped;
 	std::vector<std::string> devices;
+	ControllerFeel		feel;
 
 	Private()
 		:
@@ -545,6 +547,9 @@ BGameController::Open(const char* deviceName)
 	d.deviceName = deviceName;
 	d.open = true;
 	memset(&d.mapped, 0, sizeof(d.mapped));
+
+	// Rumble, trigger effects and motion, through the same descriptor.
+	d.feel.Open(d.infoFD, vendor, product, d.info.bus);
 	return B_OK;
 }
 
@@ -554,6 +559,8 @@ BGameController::Close()
 {
 	if (fPrivate == NULL || !fPrivate->open)
 		return;
+	// Stops the rumble and frees the triggers while the node is open.
+	fPrivate->feel.Close();
 	fPrivate->joystick.Close();
 	if (fPrivate->infoFD >= 0)
 		close(fPrivate->infoFD);
@@ -599,6 +606,7 @@ BGameController::Update()
 
 	if (d.hasMapping)
 		map_state(d.mapping, d.raw, d.mapped);
+	d.feel.Update();
 	return B_OK;
 }
 
@@ -964,6 +972,85 @@ bool
 BGameController::HasSavedMapping() const
 {
 	return IsOpen() && fPrivate->savedMapping;
+}
+
+
+// #pragma mark - feel and motion (ControllerFeel, GameControllerFeel.cpp)
+
+
+bool
+BGameController::CanRumble() const
+{
+	return IsOpen() && fPrivate->feel.CanRumble();
+}
+
+
+status_t
+BGameController::SetRumble(float strong, float weak, bigtime_t duration)
+{
+	if (!IsOpen())
+		return B_NO_INIT;
+	if (duration < 0)
+		return B_BAD_VALUE;
+	return fPrivate->feel.SetRumble(strong, weak, duration);
+}
+
+
+status_t
+BGameController::StopRumble()
+{
+	if (!IsOpen())
+		return B_NO_INIT;
+	return fPrivate->feel.StopRumble();
+}
+
+
+bool
+BGameController::HasTriggerEffects() const
+{
+	return IsOpen() && fPrivate->feel.HasTriggerEffects();
+}
+
+
+status_t
+BGameController::SetTriggerEffect(game_controller_trigger trigger,
+	game_controller_trigger_effect effect, float start, float strength)
+{
+	if (!IsOpen())
+		return B_NO_INIT;
+	return fPrivate->feel.SetTriggerEffect(trigger, effect, start, strength);
+}
+
+
+bool
+BGameController::HasMotion() const
+{
+	return IsOpen() && fPrivate->feel.HasMotion();
+}
+
+
+status_t
+BGameController::SetMotionEnabled(bool enabled)
+{
+	if (!IsOpen())
+		return B_NO_INIT;
+	return fPrivate->feel.SetMotionEnabled(enabled);
+}
+
+
+bool
+BGameController::IsMotionEnabled() const
+{
+	return IsOpen() && fPrivate->feel.IsMotionEnabled();
+}
+
+
+status_t
+BGameController::GetMotion(game_controller_motion* motion) const
+{
+	if (!IsOpen())
+		return B_NO_INIT;
+	return fPrivate->feel.GetMotion(motion);
 }
 
 

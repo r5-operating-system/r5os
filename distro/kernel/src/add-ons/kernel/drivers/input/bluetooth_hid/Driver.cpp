@@ -39,12 +39,13 @@ struct device_cookie {
 };
 
 
-// An output report waiting for bluetooth_server. Keyboard lights are one
-// or two bytes; larger output reports are not sent.
+// An output report waiting for bluetooth_server: keyboard lights (one or
+// two bytes), and game controller reports from R5_JOYSTICK_SEND_REPORT
+// (78 bytes on a DualSense or DualShock 4), up to R5_BTHID_MAX_REPORT.
 struct output_entry {
 	int32	id;
 	size_t	length;
-	uint8	data[64];
+	uint8	data[R5_BTHID_MAX_REPORT];
 };
 
 static const int32 kOutputQueueLength = 16;

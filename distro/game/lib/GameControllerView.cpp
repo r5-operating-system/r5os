@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <Bitmap.h>
 #include <GradientLinear.h>
 #include <InterfaceDefs.h>
 #include <LayoutUtils.h>
@@ -347,10 +348,11 @@ stick_ring(BView* view, const model_painter& m, const gc_stick& stick,
 
 
 // An analog trigger: a small cap over the shoulder, filled from the
-// bottom by how far it is pulled, with "L2 60%" beside it.
+// bottom by how far it is pulled, with "L2 60%" beside it. mark, 0 to 1,
+// is a tick where a trigger effect starts (SetTriggerMark()); below 0 none.
 void
 trigger_cap(BView* view, const painter& p, const model_painter& m,
-	BRect shoulder, const char* name, int16 value, bool left)
+	BRect shoulder, const char* name, int16 value, bool left, float mark)
 {
 	float width = m.model->width * m.scale;
 	float capWidth = kCapWidth * width;
@@ -376,6 +378,12 @@ trigger_cap(BView* view, const painter& p, const model_painter& m,
 	view->SetHighColor(p.line);
 	view->SetPenSize(std::max(1.5f, capWidth * 0.08f));
 	view->StrokeRoundRect(cap, radius, radius);
+	if (mark >= 0) {
+		float y = cap.bottom - cap.Height() * std::min(1.0f, mark);
+		float reach = capWidth * 0.2f;
+		view->StrokeLine(BPoint(cap.left - reach, y),
+			BPoint(cap.right + reach, y));
+	}
 
 	char text[32];
 	snprintf(text, sizeof(text), "%s %d%%", name,
@@ -410,6 +418,7 @@ struct BGameControllerView::Private {
 	std::vector<BShape*>	art;
 	const gc_model*			artModel;
 	float					artScale;
+	float					triggerMark[2];
 
 	Private()
 		:
@@ -420,6 +429,8 @@ struct BGameControllerView::Private {
 		artModel(NULL),
 		artScale(0)
 	{
+		triggerMark[0] = -1;
+		triggerMark[1] = -1;
 		memset(&state, 0, sizeof(state));
 		state.battery = -1;
 	}
@@ -525,6 +536,121 @@ BGameControllerView::SetLabels(game_controller_labels labels)
 		return;
 	fPrivate->labels = labels;
 	Invalidate();
+}
+
+
+void
+BGameControllerView::SetTriggerMark(game_controller_trigger trigger,
+	float position)
+{
+	if (fPrivate == NULL || trigger < B_CONTROLLER_TRIGGER_LEFT
+		|| trigger > B_CONTROLLER_TRIGGER_RIGHT)
+		return;
+	if (position > 1)
+		position = 1;
+	if (!(position >= 0))
+		position = -1;
+	if (fPrivate->triggerMark[trigger] == position)
+		return;
+	fPrivate->triggerMark[trigger] = position;
+	Invalidate();
+}
+
+
+/*static*/ BBitmap*
+BGameControllerView::PictureBitmap(uint16 vendorID, uint16 productID,
+	game_controller_family family, float width, float height,
+	rgb_color lineColor)
+{
+	// Not NaN, at least one pixel, and not a picture of gigabytes.
+	if (!(width >= 1 && height >= 1 && width <= 4096 && height <= 4096))
+		return NULL;
+	BRect frame(0, 0, ceilf(width) - 1, ceilf(height) - 1);
+	BBitmap* bitmap = new(std::nothrow) BBitmap(frame,
+		B_BITMAP_ACCEPTS_VIEWS, B_RGBA32);
+	if (bitmap == NULL || bitmap->InitCheck() != B_OK) {
+		delete bitmap;
+		return NULL;
+	}
+	memset(bitmap->Bits(), 0, bitmap->BitsLength());
+	BView* view = new(std::nothrow) BView(frame, "picture", B_FOLLOW_NONE,
+		B_WILL_DRAW | B_SUBPIXEL_PRECISE);
+	if (view == NULL) {
+		delete bitmap;
+		return NULL;
+	}
+	bitmap->AddChild(view);
+	if (!bitmap->Lock()) {
+		delete bitmap;
+		return NULL;
+	}
+
+	// Drawn onto transparent pixels: the composite mode builds the alpha.
+	view->SetDrawingMode(B_OP_ALPHA);
+	view->SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_COMPOSITE);
+	view->SetLineMode(B_ROUND_CAP, B_ROUND_JOIN);
+	view->SetHighColor(lineColor);
+	BRect bounds = view->Bounds();
+	const gc_model* model = PictureFor(vendorID, productID, family);
+	if (model != NULL) {
+		model_painter m;
+		m.model = model;
+		m.scale = std::min(bounds.Width() / model->width,
+			bounds.Height() / model->height);
+		m.origin.x = roundf((bounds.Width() - model->width * m.scale) / 2);
+		m.origin.y = roundf((bounds.Height() - model->height * m.scale) / 2);
+		std::vector<BShape*> art;
+		build_art(model, m.scale, art);
+		view->SetFillRule(B_EVEN_ODD);
+		// Small: the line a little bolder, as in the view.
+		static const BPoint kBold[] = {
+			BPoint(0, 0), BPoint(0.45f, 0), BPoint(-0.45f, 0),
+			BPoint(0, 0.45f), BPoint(0, -0.45f)
+		};
+		int32 passes = model->width * m.scale < kBoldWidth ? 5 : 1;
+		for (int32 pass = 0; pass < passes; pass++) {
+			view->MovePenTo(m.origin + kBold[pass]);
+			for (size_t i = 0; i < art.size(); i++)
+				view->FillShape(art[i]);
+		}
+		view->MovePenTo(B_ORIGIN);
+		for (size_t i = 0; i < art.size(); i++)
+			delete art[i];
+		// The printed labels, when they are large enough to read.
+		for (int32 i = 0; i < model->textCount; i++) {
+			if (model->texts[i].size * m.scale >= 6)
+				model_text(view, m, model->texts[i], lineColor);
+		}
+	} else {
+		// No model: the body of the picture built from a report.
+		painter p;
+		p.view = view;
+		p.scale = std::min(bounds.Width() / kShapeBox.Width(),
+			bounds.Height() / kShapeBox.Height());
+		p.origin.x = (bounds.Width() - kShapeBox.Width() * p.scale) / 2
+			- kShapeBox.left * p.scale;
+		p.origin.y = (bounds.Height() - kShapeBox.Height() * p.scale) / 2
+			- kShapeBox.top * p.scale;
+		BRect body = p.MapRect(10, 44, 380, 170);
+		float radius = p.Size(26);
+		view->SetPenSize(std::max(1.0f, p.Size(4)));
+		view->StrokeRoundRect(body.InsetByCopy(1, 1), radius, radius);
+		view->SetPenSize(1);
+	}
+	view->Sync();
+	bitmap->RemoveChild(view);
+	bitmap->Unlock();
+	delete view;
+
+	// A plain copy: the caller may keep it, without the bitmap's own
+	// window in app_server.
+	BBitmap* picture = new(std::nothrow) BBitmap(bitmap);
+	delete bitmap;
+	if (picture != NULL && picture->InitCheck() != B_OK) {
+		delete picture;
+		picture = NULL;
+	}
+	return picture;
 }
 
 
@@ -770,13 +896,15 @@ BGameControllerView::Draw(BRect updateRect)
 		if (leftTrigger
 			&& control_bounds(m, B_CONTROLLER_BUTTON_LEFT_SHOULDER, shoulder)) {
 			trigger_cap(this, p, m, shoulder, model->leftCap,
-				s.axes[B_CONTROLLER_AXIS_LEFT_TRIGGER], true);
+				s.axes[B_CONTROLLER_AXIS_LEFT_TRIGGER], true,
+				fPrivate->triggerMark[B_CONTROLLER_TRIGGER_LEFT]);
 		}
 		if (rightTrigger
 			&& control_bounds(m, B_CONTROLLER_BUTTON_RIGHT_SHOULDER,
 				shoulder)) {
 			trigger_cap(this, p, m, shoulder, model->rightCap,
-				s.axes[B_CONTROLLER_AXIS_RIGHT_TRIGGER], false);
+				s.axes[B_CONTROLLER_AXIS_RIGHT_TRIGGER], false,
+				fPrivate->triggerMark[B_CONTROLLER_TRIGGER_RIGHT]);
 		}
 		return;
 	}

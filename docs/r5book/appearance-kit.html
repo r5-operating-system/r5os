@@ -295,6 +295,39 @@ BLayoutBuilder::Group&lt;&gt;(bottomRow, B_HORIZONTAL)
 	r5_admin_prompt_unlock(BMessenger(<span class="k">this</span>));	<span class="c">// kMsgAdminLockChanged follows</span></pre>
 		</section>
 
+		<!-- BAxisBar -->
+		<section class="entry" id="BAxisBar">
+			<div class="entry-header"><h2>BAxisBar</h2><span class="kind">class</span></div>
+			<table class="facts">
+				<tr><th>Declared in</th><td>&lt;AxisBar.h&gt;</td></tr>
+				<tr><th>Derived from</th><td>BView</td></tr>
+				<tr><th>First user</th><td>BGameControllerMotionView (Pitch, Roll, Yaw)</td></tr>
+			</table>
+			<p>A rounded bar for a value from -1 to 1 that fills from the middle in the accent colour: to the
+			right for a positive value, to the left for a negative one, with a tick at 0. For a value with a
+			centre, such as a turn rate or a stick axis. It only shows the value: a value the user drags is a
+			<code class="inline">BSlider</code>, progress is a <code class="inline">BStatusBar</code>. The lines
+			come from the panel text colour, so it follows dark mode. One line height high.</p>
+
+			<figure class="stage">
+				<div class="shot sys" style="flex-direction:column;gap:10px;align-items:stretch;width:280px">
+					<svg width="240" height="14" viewBox="0 0 240 14" aria-hidden="true"><rect x="0.5" y="1.5" width="239" height="11" rx="5.5" fill="none" stroke="#555"/><rect x="120" y="3.5" width="48" height="7" rx="3.5" fill="#3296ff"/><line x1="120.5" y1="0" x2="120.5" y2="14" stroke="#999"/></svg>
+					<svg width="240" height="14" viewBox="0 0 240 14" aria-hidden="true"><rect x="0.5" y="1.5" width="239" height="11" rx="5.5" fill="none" stroke="#555"/><rect x="100" y="3.5" width="20" height="7" rx="3.5" fill="#3296ff"/><line x1="120.5" y1="0" x2="120.5" y2="14" stroke="#999"/></svg>
+				</div>
+				<figcaption><span>0.4 and -0.17</span><span class="badge-mockup">Mockup</span></figcaption>
+			</figure>
+
+			<div class="member"><div class="sig">BAxisBar(const char* name);</div></div>
+			<div class="member"><div class="sig">void SetValue(float value);
+float Value() const;</div><p>Clamped to -1 to 1; NaN is 0. It redraws only when the value changed.</p></div>
+			<div class="member"><div class="sig">void SetEnabled(bool enabled);
+bool IsEnabled() const;</div><p>False draws the bar gray, the fill included, as a disabled control. True at first.</p></div>
+<pre class="code">#include &lt;AxisBar.h&gt;
+
+BAppearanceKit::BAxisBar* pitch = <span class="k">new</span> BAppearanceKit::BAxisBar(<span class="s">"pitch"</span>);
+pitch-&gt;SetValue(motion.rotation[0] / 360);</pre>
+		</section>
+
 		<!-- BCard -->
 		<section class="entry" id="BCard">
 			<div class="entry-header"><h2>BCard</h2><span class="kind">class</span></div>
@@ -343,6 +376,111 @@ BAppearanceKit::BCard* card = <span class="k">new</span> BAppearanceKit::BCard(<
 BLayoutBuilder::Group&lt;&gt;((BGroupLayout*)card-&gt;GetLayout())
 	.Add(<span class="k">new</span> BStringView(<span class="s">"title"</span>, <span class="s">"Processors"</span>))
 	.Add(<span class="k">new</span> BStringView(<span class="s">"value"</span>, <span class="s">"2"</span>));</pre>
+		</section>
+
+		<!-- BCardStrip -->
+		<section class="entry" id="BCardStrip">
+			<div class="entry-header"><h2>BCardStrip</h2><span class="kind">class</span></div>
+			<table class="facts">
+				<tr><th>Declared in</th><td>&lt;CardStrip.h&gt;</td></tr>
+				<tr><th>Derived from</th><td>BView, BInvoker</td></tr>
+				<tr><th>First user</th><td>Settings, Game controllers (one card per controller)</td></tr>
+			</table>
+			<p>A horizontal row of cards of which one is chosen. Each card is a
+			<a href="#BCardStripItem">BCardStripItem</a>: a picture, a bold title and one quieter subtitle line. A
+			click or the left and right arrow keys choose a card; the strip then sends its message with
+			<code class="inline">"index"</code> to its target. When the cards do not fit, it scrolls sideways
+			(mouse wheel, the arrows at its ends, the keys). With no card it shows one dashed card with a text
+			and, if set, a button. Drawn with the UI colours, so it follows dark mode; sizes follow the plain
+			font.</p>
+
+			<figure class="stage">
+				<div class="shot sys" style="flex-direction:column;gap:12px;align-items:stretch">
+					<div style="display:flex;gap:8px;padding:8px;background:#fff;border:1px solid var(--sys-border);width:560px">
+						<div style="flex:0 0 172px;display:flex;align-items:center;gap:10px;padding:5px 6px;border:2px solid var(--sys-accent);border-radius:3px;background:#e8f2ff">
+							<svg width="56" height="38" viewBox="0 0 56 38" aria-hidden="true"><path d="M8 10 Q14 4 22 7 L34 7 Q42 4 48 10 Q54 22 52 32 Q48 36 44 30 L38 24 L18 24 L12 30 Q8 36 4 32 Q2 22 8 10Z" fill="none" stroke="#333" stroke-width="1.6"/><circle cx="20" cy="18" r="3.5" fill="none" stroke="#333"/><circle cx="36" cy="18" r="3.5" fill="none" stroke="#333"/></svg>
+							<div><div style="font-weight:700;font-size:12.5px">DualSense Wirel&hellip;</div><div style="font-size:11px;color:var(--sys-muted)">Bluetooth &middot; 80 %</div></div>
+						</div>
+						<div style="flex:0 0 172px;display:flex;align-items:center;gap:10px;padding:5px 6px;border:1px solid var(--sys-border);border-radius:3px">
+							<svg width="56" height="38" viewBox="0 0 56 38" aria-hidden="true"><rect x="3" y="9" width="50" height="22" rx="10" fill="none" stroke="#333" stroke-width="1.6"/><circle cx="16" cy="20" r="4" fill="none" stroke="#333"/><circle cx="40" cy="20" r="2" fill="none" stroke="#333"/><circle cx="45" cy="17" r="2" fill="none" stroke="#333"/></svg>
+							<div><div style="font-weight:700;font-size:12.5px">8BitDo M30</div><div style="font-size:11px;color:var(--sys-muted)">USB</div></div>
+						</div>
+						<div style="flex:0 0 172px;display:flex;align-items:center;gap:10px;padding:5px 6px;border:1px solid var(--sys-border);border-radius:3px">
+							<svg width="56" height="38" viewBox="0 0 56 38" aria-hidden="true"><path d="M10 9 Q28 5 46 9 Q54 22 50 32 Q46 35 42 30 L36 25 L20 25 L14 30 Q10 35 6 32 Q2 22 10 9Z" fill="none" stroke="#333" stroke-width="1.6"/><circle cx="17" cy="16" r="3.5" fill="none" stroke="#333"/><circle cx="34" cy="21" r="3.5" fill="none" stroke="#333"/></svg>
+							<div><div style="font-weight:700;font-size:12.5px">Xbox Wireless C&hellip;</div><div style="font-size:11px;color:var(--sys-muted)">Bluetooth &middot; 40 %</div></div>
+						</div>
+					</div>
+					<div style="padding:8px;background:#fff;border:1px solid var(--sys-border);width:560px">
+						<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border:1px dashed #999">
+							<div><div style="font-weight:700;font-size:12.5px">No controller</div><div style="font-size:11px;color:var(--sys-muted)">Plug one in with USB, or pair one in Bluetooth.</div></div>
+							<span class="sys-button">Open Bluetooth&hellip;</span>
+						</div>
+					</div>
+				</div>
+				<figcaption><span>Three cards, the first chosen; below it the empty strip</span><span class="badge-mockup">Mockup</span></figcaption>
+			</figure>
+
+			<div class="use-grid">
+				<div class="use-box yes"><h4>Use it for</h4><p>Choosing one of a few things that each have a picture: game controllers, Bluetooth devices, sound outputs.</p></div>
+				<div class="use-box no"><h4>Not for</h4><p>A long list read row by row: that is <code class="inline">BListView</code> or <code class="inline">BSidebar</code>. A card with controls in it: that is <code class="inline">BCard</code>. One card the user clicks: that is <code class="inline">BActionCard</code>.</p></div>
+			</div>
+
+			<div class="member"><div class="sig">BCardStrip(const char* name, BMessage* selectionMessage = NULL);</div>
+				<p>The strip owns the message. Its target is the window unless <code class="inline">SetTarget()</code> says otherwise.</p></div>
+			<div class="member"><div class="sig">bool AddItem(BCardStripItem* item);
+bool AddItem(BCardStripItem* item, int32 index);
+BCardStripItem* RemoveItem(int32 index);
+void MakeEmpty();
+int32 CountItems() const;
+BCardStripItem* ItemAt(int32 index) const;
+int32 IndexOf(const BCardStripItem* item) const;
+void InvalidateItem(int32 index);</div>
+				<p>The strip owns an added item and deletes it; an item belongs to one strip. The caller owns a removed item. The chosen card stays chosen when a card before it comes or goes.</p></div>
+			<div class="member"><div class="sig">void Select(int32 index);
+int32 CurrentSelection() const;
+void ScrollToSelection();</div>
+				<p>Chooses a card without sending the message; -1 chooses none. The mouse and the keys send it, once per change.</p></div>
+			<div class="member"><div class="sig">BSize PictureSize() const;</div>
+				<p>The size a card shows its picture at, for the current font size. Render pictures at this size.</p></div>
+			<div class="member"><div class="sig">void SetEmptyText(const char* title, const char* subtitle);
+void SetEmptyAction(const char* label, BMessage* message);</div>
+				<p>The dashed card while the strip is empty, and a button on it whose message goes to the strip's target. A <code class="inline">NULL</code> label removes the button.</p></div>
+<pre class="code"><span class="k">#include</span> <span class="s">&lt;CardStrip.h&gt;</span>
+
+BAppearanceKit::BCardStrip* strip = <span class="k">new</span> BAppearanceKit::BCardStrip(<span class="s">"controllers"</span>,
+	<span class="k">new</span> BMessage(kMsgChosen));
+strip-&gt;SetEmptyText(<span class="s">"No controller"</span>, <span class="s">"Plug one in with USB, or pair one in Bluetooth."</span>);
+strip-&gt;SetEmptyAction(<span class="s">"Open Bluetooth&hellip;"</span>, <span class="k">new</span> BMessage(kMsgBluetooth));
+
+BSize size = strip-&gt;PictureSize();
+BBitmap* picture = BGameControllerView::PictureBitmap(vendor, product, family,
+	size.width, size.height, ui_color(B_DOCUMENT_TEXT_COLOR));
+strip-&gt;AddItem(<span class="k">new</span> BAppearanceKit::BCardStripItem(<span class="s">"DualSense Wireless Controller"</span>,
+	<span class="s">"Bluetooth &middot; 80 %"</span>, picture));
+<span class="k">delete</span> picture;
+
+<span class="c">// In MessageReceived(): message-&gt;FindInt32("index", &amp;index)</span></pre>
+		</section>
+
+		<!-- BCardStripItem -->
+		<section class="entry" id="BCardStripItem">
+			<div class="entry-header"><h2>BCardStripItem</h2><span class="kind">class</span></div>
+			<table class="facts">
+				<tr><th>Declared in</th><td>&lt;CardStripItem.h&gt;</td></tr>
+				<tr><th>Derived from</th><td>BArchivable</td></tr>
+				<tr><th>First user</th><td>Settings, Game controllers</td></tr>
+			</table>
+			<p>One card of a <a href="#BCardStrip">BCardStrip</a>: a picture, a title and one subtitle line. Not a
+			view: the strip draws it. The picture is copied; the item does not load one. A change redraws the
+			card.</p>
+			<div class="member"><div class="sig">BCardStripItem(const char* title, const char* subtitle = NULL, const BBitmap* picture = NULL);</div></div>
+			<div class="member"><div class="sig">void SetTitle(const char* title);
+void SetSubtitle(const char* subtitle);
+void SetPicture(const BBitmap* picture);
+const char* Title() const;
+const char* Subtitle() const;
+const BBitmap* Picture() const;</div>
+				<p><code class="inline">SetPicture()</code> copies the bitmap; <code class="inline">NULL</code> removes it. Best at <code class="inline">BCardStrip::PictureSize()</code>; a larger one is scaled down in shape.</p></div>
 		</section>
 
 		<!-- BIconView -->
@@ -578,6 +716,38 @@ const char* Id() const;</div></div>
 <pre class="code">BAppearanceKit::BSidebarItem* home = <span class="k">new</span> BAppearanceKit::BSidebarItem(
 	<span class="s">"Home"</span>, <span class="s">"home"</span>, pebble);
 home-&gt;SetEmphasized(<span class="k">true</span>);</pre>
+		</section>
+
+		<!-- BTiltLevel -->
+		<section class="entry" id="BTiltLevel">
+			<div class="entry-header"><h2>BTiltLevel</h2><span class="kind">class</span></div>
+			<table class="facts">
+				<tr><th>Declared in</th><td>&lt;TiltLevel.h&gt;</td></tr>
+				<tr><th>Derived from</th><td>BView</td></tr>
+				<tr><th>First user</th><td>BGameControllerMotionView (the Tilt of a game controller)</td></tr>
+			</table>
+			<p>A spirit level seen from above: a circle with a cross and a small centre ring, and a bubble in the
+			accent colour. x and y run from -1 to 1, left to right and top to bottom; the bubble stays inside
+			the circle. For a two-axis value around a centre: a tilt, a balance, a stick position. It only shows
+			the value. Square, 4 to 10 line heights; dark mode as <code class="inline">BAxisBar</code>.</p>
+
+			<figure class="stage">
+				<div class="shot sys">
+					<svg width="116" height="116" viewBox="0 0 116 116" aria-hidden="true"><line x1="2" y1="58" x2="114" y2="58" stroke="#999"/><line x1="58" y1="2" x2="58" y2="114" stroke="#999"/><circle cx="58" cy="58" r="17" fill="none" stroke="#999"/><circle cx="82" cy="45" r="10" fill="#3296ff"/><circle cx="58" cy="58" r="56" fill="none" stroke="#555" stroke-width="2"/></svg>
+				</div>
+				<figcaption><span>x 0.5, y -0.3</span><span class="badge-mockup">Mockup</span></figcaption>
+			</figure>
+
+			<div class="member"><div class="sig">BTiltLevel(const char* name);</div></div>
+			<div class="member"><div class="sig">void SetValue(float x, float y);
+float X() const;
+float Y() const;</div><p>Each clamped to -1 to 1; NaN is 0. It redraws only when the value changed.</p></div>
+			<div class="member"><div class="sig">void SetEnabled(bool enabled);
+bool IsEnabled() const;</div><p>False draws the level gray, the bubble included, as a disabled control. True at first.</p></div>
+<pre class="code">#include &lt;TiltLevel.h&gt;
+
+BAppearanceKit::BTiltLevel* level = <span class="k">new</span> BAppearanceKit::BTiltLevel(<span class="s">"tilt"</span>);
+level-&gt;SetValue(motion.acceleration[0], motion.acceleration[2]);</pre>
 		</section>
 
 		<!-- BUserCard -->
