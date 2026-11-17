@@ -1329,8 +1329,15 @@ BluetoothServer::_R5DeviceConnected(const bdaddr_t& address, void*)
 bool
 BluetoothServer::_R5VoiceEnabled()
 {
-	// The same file and line the h2generic driver reads (step 7c).
-	void* settings = load_driver_settings("h2generic");
+	// The same file and line the h2generic driver reads (step 7c). By
+	// path: a bare name would follow this service's home folder, while
+	// the kernel reads the boot volume's settings.
+	void* settings = load_driver_settings(
+		"/boot/home/config/settings/kernel/drivers/h2generic");
+	if (settings == NULL) {
+		settings = load_driver_settings(
+			"/boot/system/settings/kernel/drivers/h2generic");
+	}
 	bool enabled = get_driver_boolean_parameter(settings, "bt_voice", false,
 		true);
 	unload_driver_settings(settings);
