@@ -1,3 +1,6 @@
+R5 2026.1-dev Build 10065 - Game controllers in Settings
+Settings has a Game controllers page under Devices. Every controller you plug in with USB or pair over Bluetooth shows as a card at the bottom, and the page shows a picture of your own model, such as a PlayStation, Xbox or Nintendo controller or an 8BitDo M30. Buttons, sticks and triggers light up on the picture as you use them. Set up buttons fixes a controller whose buttons are mixed up. On a DualSense or DualShock 4 you can try the rumble, see the controller tilt and turn, and on a DualSense feel the trigger effects. A controller's battery shows in the Bluetooth menu of the Deskbar. With no controller connected, the page shows a gray example and a shortcut to Bluetooth.
+
 R5 2026.1-dev Build 10064 - The desktop on the graphics chip, now on by default
 The desktop is now put together on the graphics chip by default, with soft shadows, frosted glass and the animations. On the Ryzen 5 5625U the chip does the work; on other computers, and in a virtual machine, the same desktop is drawn in software, which uses more processor time. To get the classic desktop back, choose Safe mode in the boot menu.
 
