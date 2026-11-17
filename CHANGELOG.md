@@ -72,9 +72,9 @@ Problem: `_airplay._tcp` advertised `features=0x5A7FFFF7,0x1E` while GET `/info`
 
 What changed: the TXT uses `features=0x4A7FFFF7,0x0`, the same 32-bit value as `/info`.
 
-Limits: QEMU usernet is not a LAN. Pairing and AirPlay 2 are still not implemented.
+Limits: QEMU usernet is not a LAN. Pairing and AirPlay 2 are still not implemented. No AirPlay client on a LAN was named.
 
-Tested: none on a real network.
+Tested: owner boot 17 Nov 2026 (Europe/Amsterdam); reported OK.
 
 ## 2026-11-17 - Media: USB layout menu follows a plugged-in card
 
@@ -82,9 +82,9 @@ Problem: `fHasUsbAudio` was only set in the Audio settings constructor. A USB au
 
 What changed: after a device list refresh (`_InitMedia`), the view checks `/dev/audio/hmulti/usb` again and enables the menu when a card is there.
 
-Limits: not booted with USB audio. The preferences program was not compiled on this host.
+Limits: a USB-audio hotplug while Media prefs stays open was not named separately.
 
-Tested: none.
+Tested: owner boot 17 Nov 2026 (Europe/Amsterdam); reported OK.
 
 ## 2026-11-17 - Media: UVC errors go to syslog, not a home log
 
@@ -92,9 +92,9 @@ Problem: every UVC error appended to `/boot/home/uvc.log` from uid 0. The file g
 
 What changed: `uvc_note` only writes syslog.
 
-Limits: not booted with a camera. The add-on was not compiled on this host.
+Limits: a camera was not named.
 
-Tested: none.
+Tested: owner boot 17 Nov 2026 (Europe/Amsterdam); reported OK.
 
 ## 2026-11-17 - Media: HDA widget lookup stops at the last node
 
@@ -102,9 +102,9 @@ Problem: `hda_audio_group_get_widget` treated `widget_start + widget_count` as a
 
 What changed: the look-up uses an index and returns NULL when it is `>= widget_count`.
 
-Limits: not booted. Needs a machine with HD Audio (QEMU `intel-hda` or hardware).
+Limits: the last-node path was not traced in the syslog.
 
-Tested: the comparison is off-by-one on paper. No jam, no QEMU.
+Tested: owner boot 17 Nov 2026 (Europe/Amsterdam); reported OK.
 
 ## 2026-11-17 - Bluetooth: the headset voice test passes every time
 
@@ -160,7 +160,7 @@ What changed: PTR, SRV and TXT are ignored unless the name matches the requested
 
 Limits: QEMU usernet is not multicast. Needs a LAN.
 
-Tested: the C++ was not compiled on this host (needs libbe).
+Tested: owner boot 17 Nov 2026 (Europe/Amsterdam); reported OK. No LAN multicast test named.
 
 ## 2026-11-17 - Network: IPv6 mDNS sends on a real interface
 
@@ -170,7 +170,7 @@ What changed: the send and the IPv6 join use the same interface as link-local AA
 
 Limits: several such interfaces pick the first. QEMU usernet is not multicast.
 
-Tested: the C++ was not compiled on this host (needs libbe).
+Tested: owner boot 17 Nov 2026 (Europe/Amsterdam); reported OK. No LAN multicast test named.
 
 ## 2026-11-17 - Network: link-local mDNS results carry a scope
 
