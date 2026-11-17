@@ -397,6 +397,16 @@ MyWindow::MyWindow()
 }
 ```
 
+## The start splash (owner, 17 Nov 2026)
+
+On a first start on Lavapipe, Skia's warm-up compiles shaders for 30 to 47 s, and the first screen (the Try R5 window or Sign in) used to appear in pieces. The compositor now keeps the boot picture on the screen until that screen is built.
+
+- **The picture:** `AccelerantHWInterface::SetMode()` copies the screen as the boot loader left it, before the first mode switch (VESA in QEMU clears it), and puts it back on the new screen at once, so nothing black shows in between. `Compositor::Create()` takes that copy (`TakeBootPicture()`) and cuts out the text, the wave pebble and the icon row. Their places follow the boot loader's own formulas (`video_splash.h`), so they keep their size on another resolution. The R5 artwork (GPL-3.0-or-later) is not compiled into app_server; only the pixels on the screen are used. No boot picture (a white screen with the dark logo text) means no splash, as before.
+- **The animation:** the icon row fades out in 0.3 s, then the pebble pulses (1.6 s, down to 55 %). Both are drawn like an opening window (`_RecordWindowAnimation()`, the effects pipeline from `_InitVulkan()`), on white. No Skia pipeline is used, so the warm-up does not slow it down. The windows draw unseen meanwhile.
+- **When it ends:** a window with a frame ended an update with none left (`Window::EndUpdate()` calls `Compositor::WindowDrawn()`); Skia finished everything recorded up to that drawing (`SkiaGpu::AskTicket()` / `TicketDone()`, one ticket at a time); every window has pixels; and no window's pixels changed for 0.3 s. Then the whole screen is composed at once. At the latest after 60 s.
+- **Only at app_server's start.** Log out and later Sign in screens have no splash. The CPU mode has none.
+- **Log lines:** `app_server: start splash on`, `app_server: start splash off: <reason>`, `app_server: start splash <ms> ms (drawn|time)`, and `app_server: start splash from <w>x<h> to <w>x<h>` when the mode changed.
+
 ## Settings
 
 - **Shadow** and **Frosted glass** are two checkboxes in a new "Window effects" box on the Look and feel tab of the Appearance page in Settings, and the same two in the separate Appearance program. Each works on its own. Both call `set_window_effects()`.

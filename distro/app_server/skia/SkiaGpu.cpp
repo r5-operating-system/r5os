@@ -1329,6 +1329,22 @@ SkiaGpu::Finish(bigtime_t timeout)
 }
 
 
+int64
+SkiaGpu::AskTicket()
+{
+	int64 ticket = atomic_add64(&fTicket, 1) + 1;
+	Wake();
+	return ticket;
+}
+
+
+bool
+SkiaGpu::TicketDone(int64 ticket)
+{
+	return fShutDown || atomic_get64(&fDone) >= ticket;
+}
+
+
 void
 SkiaGpu::Shutdown()
 {

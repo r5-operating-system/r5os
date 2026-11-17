@@ -2184,6 +2184,16 @@ Window::EndUpdate()
 		_SendUpdateMessage();
 	} else {
 		fUpdateRequested = false;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// Start splash: a window with a frame (Sign in, the Try R5 window)
+		// drew everything it was asked to
+		Compositor* compositor = fDesktop != NULL
+			? fDesktop->GetCompositor() : NULL;
+		if (compositor != NULL && Decorator() != NULL)
+			compositor->WindowDrawn();
+// SPDX-SnippetEnd
 	}
 }
 

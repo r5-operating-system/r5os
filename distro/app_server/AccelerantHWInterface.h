@@ -100,6 +100,11 @@ public:
 			void				SetModeGuard(BLocker* guard)
 									{ __atomic_store_n(&fModeGuard, guard,
 										__ATOMIC_RELEASE); }
+	// Start splash (owner, 17 Nov 2026): the screen as the boot loader
+	// left it, copied before the first mode switch (VESA in QEMU clears
+	// it). The caller frees the pixels; false when there is none.
+			bool				TakeBootPicture(uint32** _bits,
+										int32* _width, int32* _height);
 // SPDX-SnippetEnd
 
 protected:
@@ -190,6 +195,11 @@ private:
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 			BLocker*			fModeGuard;
+			void				_CopyBootPicture();
+			void				_ShowBootPicture();
+			uint32*				fBootPicture;
+			int32				fBootWidth;
+			int32				fBootHeight;
 // SPDX-SnippetEnd
 
 	mutable	fill_rect_params*	fRectParams;

@@ -111,6 +111,11 @@ public:
 			bool				OutlineResize() const
 									{ return IsActive() && fOnLavapipe; }
 
+	// Start splash (owner, 17 Nov 2026): Window::EndUpdate of a window with
+	// a frame that has no update left. While the boot picture is held, the
+	// hold ends once everything recorded up to now is drawn.
+			void				WindowDrawn();
+
 	// M12: Skia's context while the GPU draws (gpu_draw), else NULL.
 			SkiaGpu*			Skia() const { return fSkia; }
 			bool				DebugEnabled() const { return fDebug; }
@@ -288,6 +293,15 @@ private:
 			void				_Report();
 			void				_ReadZeroCopySwitch();
 			void				_UpdatePeriod();
+			// Start splash: the boot picture is copied from the screen at
+			// start, then drawn by the compose until the first window with
+			// a frame is drawn
+			bool				_CaptureSplash(const char** _reason);
+			void				_SplashLayers(LayerList& layers,
+										bigtime_t now);
+			bool				_SplashDone(const LayerList& layers,
+										bigtime_t now, const char** _reason);
+			void				_EndSplash();
 
 private:
 			Desktop*			fDesktop;
@@ -423,6 +437,26 @@ private:
 			thread_id			fDrawThread;
 			sem_id				fDrawSem;
 			volatile bool		fDrawQuit;
+
+			// Start splash. fSplashHolding is cleared by the compose thread
+			// only; fSplashAsked is set by WindowDrawn() from any thread.
+	volatile bool				fSplashHolding;
+			int32				fSplashAsked;
+			int32				fSplashRenew;
+			int64				fSplashTicket;
+			bigtime_t			fSplashStart;
+			// the last frame in which a window changed (compose thread)
+			bigtime_t			fSplashChanged;
+			bool				fFrameSplash;
+			BRect				fSplashArea;
+			BReference<WindowBuffer>	fSplashText;
+			BReference<WindowBuffer>	fSplashPebble;
+			BReference<WindowBuffer>	fSplashIcons;
+			int32				fSplashTextLeft;
+			int32				fSplashPebbleLeft;
+			int32				fSplashLogoTop;
+			int32				fSplashIconsLeft;
+			int32				fSplashIconsTop;
 };
 
 

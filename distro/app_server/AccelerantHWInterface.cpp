@@ -167,6 +167,9 @@ AccelerantHWInterface::AccelerantHWInterface()
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 	fModeGuard(NULL),
+	fBootPicture(NULL),
+	fBootWidth(0),
+	fBootHeight(0),
 // SPDX-SnippetEnd
 
 	fRectParams(new (nothrow) fill_rect_params[kDefaultParamsCount]),
@@ -191,6 +194,11 @@ AccelerantHWInterface::~AccelerantHWInterface()
 	delete[] fBlitParams;
 
 	delete[] fModeList;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	free(fBootPicture);
+// SPDX-SnippetEnd
 }
 
 
@@ -607,6 +615,15 @@ AccelerantHWInterface::SetMode(const display_mode& mode)
 
 	display_mode newMode = mode;
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// start splash: before the first switch changes the screen
+	bool r5InitialSwitch = fInitialModeSwitch;
+	if (r5InitialSwitch)
+		_CopyBootPicture();
+// SPDX-SnippetEnd
+
 	status_t status = B_ERROR;
 	if (!use_fail_safe_video_mode() || !fInitialModeSwitch)
 		status = fAccSetDisplayMode(&newMode);
@@ -669,6 +686,16 @@ AccelerantHWInterface::SetMode(const display_mode& mode)
 #endif
 
 	_UpdateHooksAfterModeChange();
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// start splash: the switch cleared the screen (VESA in QEMU); the boot
+	// picture is back at once, so nothing black shows until the compositor
+	// draws it
+	if (r5InitialSwitch)
+		_ShowBootPicture();
+// SPDX-SnippetEnd
 
 	// update backbuffer if necessary
 // SPDX-SnippetBegin
@@ -1482,6 +1509,87 @@ AccelerantHWInterface::SoftwareCursorFrame(clipping_rect* frame)
 	frame->top = cursor.top;
 	frame->right = cursor.right;
 	frame->bottom = cursor.bottom;
+	return true;
+}
+
+
+/*!	The screen as the boot loader left it (the boot splash), before the
+	first mode switch. Only a 32-bit screen; anything else has no picture.
+*/
+void
+AccelerantHWInterface::_CopyBootPicture()
+{
+	display_mode current;
+	frame_buffer_config config;
+	if (fAccGetDisplayMode == NULL || fAccGetFrameBufferConfig == NULL
+		|| fAccGetDisplayMode(&current) != B_OK
+		|| fAccGetFrameBufferConfig(&config) != B_OK
+		|| config.frame_buffer == NULL
+		|| (current.space != B_RGB32 && current.space != B_RGBA32))
+		return;
+	int32 width = current.virtual_width;
+	int32 height = current.virtual_height;
+	if (width <= 0 || height <= 0
+		|| config.bytes_per_row < (uint32)width * 4)
+		return;
+	uint32* bits = (uint32*)malloc((size_t)width * height * 4);
+	if (bits == NULL)
+		return;
+	for (int32 y = 0; y < height; y++) {
+		memcpy(bits + (size_t)y * width,
+			(uint8*)config.frame_buffer + (size_t)y * config.bytes_per_row,
+			(size_t)width * 4);
+	}
+	free(fBootPicture);
+	fBootPicture = bits;
+	fBootWidth = width;
+	fBootHeight = height;
+}
+
+
+/*!	After the first mode switch: the boot picture on the new screen, on
+	white and centred as the boot loader centres it.
+*/
+void
+AccelerantHWInterface::_ShowBootPicture()
+{
+	if (fBootPicture == NULL || !fFrontBuffer.IsSet()
+		|| fFrontBuffer->Bits() == NULL
+		|| (fFrontBuffer->ColorSpace() != B_RGB32
+			&& fFrontBuffer->ColorSpace() != B_RGBA32))
+		return;
+	int32 width = (int32)fFrontBuffer->Width();
+	int32 height = (int32)fFrontBuffer->Height();
+	uint32 bytesPerRow = fFrontBuffer->BytesPerRow();
+	uint8* bits = (uint8*)fFrontBuffer->Bits();
+	int32 offsetX = (width - fBootWidth) / 2;
+	int32 offsetY = (height - fBootHeight) / 2;
+	for (int32 y = 0; y < height; y++) {
+		uint32* row = (uint32*)(bits + (size_t)y * bytesPerRow);
+		int32 sourceY = y - offsetY;
+		for (int32 x = 0; x < width; x++) {
+			int32 sourceX = x - offsetX;
+			if (sourceY >= 0 && sourceY < fBootHeight && sourceX >= 0
+				&& sourceX < fBootWidth) {
+				row[x] = fBootPicture[(size_t)sourceY * fBootWidth + sourceX];
+			} else
+				row[x] = 0xffffffff;
+		}
+	}
+}
+
+
+bool
+AccelerantHWInterface::TakeBootPicture(uint32** _bits, int32* _width,
+	int32* _height)
+{
+	AutoWriteLocker _(this);
+	if (fBootPicture == NULL)
+		return false;
+	*_bits = fBootPicture;
+	*_width = fBootWidth;
+	*_height = fBootHeight;
+	fBootPicture = NULL;
 	return true;
 }
 // SPDX-SnippetEnd
