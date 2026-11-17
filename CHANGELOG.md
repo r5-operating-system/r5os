@@ -22,6 +22,12 @@ Page layout: the panel had an explicit minimum width of 250 pixels, narrower tha
 
 Test aids: `R5_BLUETOOTH_PREVIEW=1` (test only, read by libr5bt) adds one made-up connected game controller (address from the documentation range) to My devices. `run-qemu-smoke.sh`: `BT_PREVIEW=1`, `BT_WINDOW="<w> <h>"` and `BT_TEST_BUTTONS=<s>` (sends the button's message with hey).
 
+Mistake on the way: the first layout put "Test buttons…" on a line of its own; the page then fit its width but kept a scroll bar at the default size, and the next one (all buttons on one line) was cut at the right until the explicit 250-pixel minimum of the panel was removed.
+
+Tested: `scripts/build-locked.sh` exit 0 (x86_64), also after merging `main` with #4345. `scripts/fuzz-bt.sh sdp` 60 s, 0 crashes (the made-up five-record answer: 5 records, classes `0x1000 0x110b 0x110e 0x111e 0`, Hands-Free channel 3 through `r5rfcomm::FindChannel()`, in pieces of 1 to 1000 bytes; then damaged copies). QEMU (KVM, SMAP and SMEP, Login) on an own image copy with `BT_PREVIEW=1`: all smoke tests `exit 0`; screendumps at 1030 by 610 show My devices with the panel, Test buttons…, Disconnect and Forget inside the window, Devices nearby and the Bluetooth line, and no scroll bar; at 910 by 560 the buttons stay inside the window and the page scrolls vertically (allowed: it is taller than the area there). `BT_TEST_BUTTONS=75`: Settings shows Devices → Game controllers afterwards.
+
+Not tested: nothing on a radio (QEMU has none): Write Inquiry Mode, Remote Name Request, the Hands-Free search, the link-down line and the names on the page are not seen working; the XM3 and the M30 are untested. ARM64 and RISC-V not built.
+
 ## 2026-11-17 - Game controllers: set up your controller's buttons, a Layout menu, and no crash when Settings closes
 
 Problem (boot 51 on the 5625U, the 8BitDo M30 paired over Bluetooth, `2dc8:0651`, report descriptor 86 bytes): Settings crashed when it quit (Segment violation in `__dynamic_cast` from `BApplication::_WindowAt()` in `~BApplication`, with the thread "game controller watcher" still there). On the page's Sega picture the D-pad did nothing and a pressed button lit the wrong key.
