@@ -42,6 +42,8 @@ WANTED = (
     ("common/var/log/syslog.1", "syslog.1"),
     ("system/settings/kernel/drivers/radeon_hd", "radeon_hd"),
     ("home/config/settings/kernel/drivers/radeon_hd", "radeon_hd-home"),
+    ("home/config/settings/kernel/drivers/mt7922wifi", "mt7922wifi-home"),
+    ("system/settings/kernel/drivers/mt7922wifi", "mt7922wifi"),
     # Deskbar's add-on list (TReplicantTray). The M10 stick crashed in it.
     ("home/config/settings/deskbar/replicants", "deskbar-replicants"),
     # The self-test's window and WSI files, also when check never ran.
@@ -350,9 +352,9 @@ def copy_m10(bfs, dest):
     """The M10 stick tools keep their files in ~/m10, and the standard
     account's in its own home (check-user). The M11 stick uses ~/m11,
     the M12 stick ~/m12, the M13 stick ~/m13 and the compare images in
-    ~/draw-compare."""
+    ~/draw-compare, the Wi-Fi stick ~/wifi-stick."""
     users = bfs.walk("home/users")
-    for stick in ("m10", "m11", "m12", "m13", "draw-compare"):
+    for stick in ("m10", "m11", "m12", "m13", "draw-compare", "wifi-stick"):
         total = copy_tree(bfs, "home/%s" % stick, dest / stick)
         if users is not None and (bfs.mode(users) & 0o170000) == 0o040000:
             for name, _block in bfs.list_dir(users):
