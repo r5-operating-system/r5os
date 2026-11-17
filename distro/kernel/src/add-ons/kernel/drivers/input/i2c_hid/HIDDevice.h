@@ -12,6 +12,12 @@
 #include "HIDParser.h"
 #include "I2CHIDProtocol.h"
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <joystick_driver.h>
+// SPDX-SnippetEnd
+
 
 class InputReadyLine;
 class ProtocolHandler;
@@ -40,6 +46,20 @@ public:
 
 			HIDParser &			Parser() { return fParser; }
 			ProtocolHandler *	ProtocolHandlerAt(uint32 index) const;
+
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			// R5_JOYSTICK_GET_INFO, called by hid_shared: the IDs of the
+			// I2C HID descriptor. There is no product name on this bus.
+			void				GetJoystickInfo(r5_joystick_info& info) const
+								{
+									info.bus = R5_JOYSTICK_BUS_I2C;
+									info.vendor_id = fDescriptor.wVendorID;
+									info.product_id = fDescriptor.wProductID;
+									info.version = fDescriptor.wVersionID;
+								}
+			// SPDX-SnippetEnd
 
 private:
 #if 0

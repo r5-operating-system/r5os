@@ -80,6 +80,13 @@
 			["bluetooth-kit.html#le-l2cap", "sockaddr_l2cap_le", true],
 			["bluetooth-kit.html#settings", "Where people see it", true],
 		]},
+		{ title: "Game Kit", file: "game-kit.html", items: [
+			["game-kit.html", "Overview"],
+			["game-kit.html#controller", "BGameController", true],
+			["game-kit.html#example", "Example", true],
+			["game-kit.html#view", "BGameControllerView", true],
+			["game-kit.html#settings", "Where people see it", true],
+		]},
 		{ title: "Vulkan", file: "vulkan.html", items: [
 			["vulkan.html", "Vulkan in a window"],
 			["vulkan.html#surface", "vkCreateViewSurfaceRFIVE", true],
@@ -158,6 +165,7 @@
 			<a href="midi2-kit.html" class="${page === "midi2" ? "active" : ""}">MIDI 2 Kit</a>
 			<a href="wifi-kit.html" class="${page === "wifi" ? "active" : ""}">Wi-Fi Kit</a>
 			<a href="bluetooth-kit.html" class="${page === "bluetooth" ? "active" : ""}">Bluetooth Kit</a>
+			<a href="game-kit.html" class="${page === "game" ? "active" : ""}">Game Kit</a>
 			<a href="vulkan.html" class="${page === "vulkan" ? "active" : ""}">Vulkan</a>
 			<a href="guidelines.html" class="${page === "guidelines" ? "active" : ""}">Guidelines</a>
 			<a href="https://github.com/r5-operating-system/r5os" class="nav-pill">GitHub</a>

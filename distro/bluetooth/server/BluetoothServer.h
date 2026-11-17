@@ -114,12 +114,22 @@ public:
 					uint16 serviceClass);
 	status_t	R5FindRFCOMMChannel(const bdaddr_t& address,
 					uint16 serviceClass, uint8* _channel);
+	// Step 7b: whether a Classic device has its link, for HFPGateway
+	// (takes fDevicesLock).
+	static bool	_R5DeviceConnected(const bdaddr_t& address, void* cookie);
+	// Step 7c: the voice path is on (bt_voice in the h2generic driver
+	// settings, read once), and the HFPGateway voice callback.
+	static bool	_R5VoiceEnabled();
+	static status_t _R5Voice(const bdaddr_t& address, int codec, bool open,
+					void* cookie);
 	// SPDX-SnippetEnd
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
 	// Classic HID (step 4); NULL until ReadyToRun().
 	HIDHost*	GetHIDHost() { return fHIDHost; }
+	// HFP Audio Gateway (step 7b); NULL after the server quits.
+	class HFPGateway* GetHFPGateway() { return fHFPGateway; }
 	// SPDX-SnippetEnd
 
     LocalDeviceImpl*    LocateLocalDeviceImpl(hci_id hid);
@@ -208,6 +218,7 @@ private:
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
 	HIDHost*				fHIDHost;
+	class HFPGateway*		fHFPGateway;
 	class BMessageRunner*	fLEPulse;
 	// SPDX-SnippetEnd
 };

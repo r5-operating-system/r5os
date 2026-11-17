@@ -606,8 +606,11 @@ DefaultManager::_FindPhysical(volatile media_node_id *id, uint32 default_type,
 		// too (docs/BLUETOOTH.md, step 5). It is the default output only
 		// when someone chose it in Media, never the first one found: the
 		// sound would go to a headset that may not be there.
-		bool chosenOnly = isAudio && !isInput
-			&& strcmp(info[i].name, "Bluetooth audio") == 0;
+		// The headset microphone (step 7c) likewise as the default input.
+		bool chosenOnly = isAudio && ((!isInput
+				&& strcmp(info[i].name, "Bluetooth audio") == 0)
+			|| (isInput && strcmp(info[i].name,
+				"Bluetooth headset microphone") == 0));
 		if (firstReal < 0 && !chosenOnly)
 			firstReal = i;
 

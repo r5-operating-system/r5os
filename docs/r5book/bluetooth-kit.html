@@ -51,8 +51,8 @@
 			<code class="inline">BAppearanceKit::BCard</code>) for the one chosen, with its kind, status, Classic
 			or Low Energy, address, the battery level when the device reports it, Disconnect and Forget. A
 			headset adds <em>Use for sound</em> (its sound choice and the Media output in one click); a game
-			controller adds <em>Test buttons&hellip;</em>, a window that shows its buttons, sticks and D-pad
-			live. Under it the devices nearby, with Pair and Scan; a
+			controller adds <em>Test buttons&hellip;</em>, which opens Settings, Game controllers (the
+			<a href="game-kit.html">Game Kit</a>) with its live picture. Under it the devices nearby, with Pair and Scan; a
 			paired device is not repeated there. The last line has no box: "Bluetooth on", the radio in use, and
 			a radio menu when there is more than one radio. It starts its own
 			<code class="inline">BluetoothController</code> when it is attached to a window and stops it when it
@@ -131,7 +131,8 @@ BLayoutBuilder::Group&lt;&gt;(this, B_VERTICAL, 0)
 			<div class="member"><div class="sig">struct BluetoothPairedDevice;<br>static void BluetoothState::UnarchivePaired(const BMessage&amp; archive, std::vector&lt;BluetoothPairedDevice&gt;&amp; devices);</div>
 				<p>A paired device: <code class="inline">info</code> (a <code class="inline">BluetoothDeviceInfo</code>),
 				<code class="inline">lowEnergy</code>, <code class="inline">hid</code> (LE HID over GATT),
-				<code class="inline">connected</code> and <code class="inline">battery</code> (percent, or -1),
+				<code class="inline">connected</code> and <code class="inline">battery</code> (percent, or -1; an LE
+				device with the Battery Service, or a Classic headset that sends it over HFP, while connected),
 				with <code class="inline">IsAudio()</code> and <code class="inline">IsGameController()</code> from
 				the class of device. They come in the same
 				<code class="inline">kMsgBluetoothStateChanged</code> message; read them with

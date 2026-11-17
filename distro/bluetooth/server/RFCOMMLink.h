@@ -44,15 +44,22 @@ public:
 	// channel (1 to 30, from the device's SDP record). Waits at most
 	// timeout microseconds; the link then belongs to the caller, who
 	// deletes it (which closes it).
+	// cancel, when not NULL, is a flag of the caller that stays valid as
+	// long as the link: once it is true, a wait for the DLC ends within
+	// 250 ms with B_CANCELED, and Close() sends DISC without waiting for
+	// the answers (for a server that quits). The L2CAP connect itself
+	// waits for the kernel's own timeout.
 	static	status_t			Connect(const bdaddr_t& address,
 									uint8 channel, bigtime_t timeout,
-									RFCOMMLink** _link);
+									RFCOMMLink** _link,
+									volatile bool* cancel = NULL);
 
 	// The same over another transport, which the link then owns. The
 	// responder side (listen) exists for the loopback test.
 	static	status_t			Start(RFCOMMTransport* transport,
 									bool initiator, uint8 channel,
-									bigtime_t timeout, RFCOMMLink** _link);
+									bigtime_t timeout, RFCOMMLink** _link,
+									volatile bool* cancel = NULL);
 
 								~RFCOMMLink();
 
@@ -84,6 +91,8 @@ private:
 			void				_Read();
 			status_t			_WaitOpen(bigtime_t timeout);
 			bool				_Ended() const;
+			bool				_Cancelled() const
+									{ return fCancel != NULL && *fCancel; }
 			void				_Changed();
 
 			RFCOMMTransport*	fTransport;
@@ -94,6 +103,7 @@ private:
 	volatile bool				fQuitting;
 			bool				fGone;		// the transport ended
 			bool				fClosed;
+	volatile bool*				fCancel;
 			uint8				fLine[r5rfcomm::kReceiveBuffer];
 			size_t				fLineLength;
 };

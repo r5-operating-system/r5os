@@ -36,6 +36,7 @@ HIDDevice::HIDDevice(int32 id, void* owner, const uint8* descriptor,
 	fProtocolHandlerList(NULL)
 {
 	mutex_init(&fLock, DRIVER_NAME " device");
+	memset(&fInfo, 0, sizeof(fInfo));
 
 	// Padded by 3 so that HIDReportItem can read 32 bits at a time, as in
 	// usb_hid.
@@ -222,4 +223,25 @@ HIDDevice::ProtocolHandlerAt(uint32 index) const
 	}
 
 	return NULL;
+}
+
+
+void
+HIDDevice::SetInfo(const r5_bthid_info& info)
+{
+	MutexLocker locker(fLock);
+	fInfo = info;
+	fInfo.name[sizeof(fInfo.name) - 1] = '\0';
+}
+
+
+void
+HIDDevice::GetJoystickInfo(r5_joystick_info& info) const
+{
+	MutexLocker locker(const_cast<mutex*>(&fLock));
+	info.bus = R5_JOYSTICK_BUS_BLUETOOTH;
+	info.vendor_id = fInfo.vendor_id;
+	info.product_id = fInfo.product_id;
+	info.version = fInfo.version;
+	strlcpy(info.name, fInfo.name, sizeof(info.name));
 }
