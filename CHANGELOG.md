@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Login: the session log is not world-readable
+
+Problem: `/tmp/r5-session.log` was created with `fopen("a")` and the umask. Session names were readable by every account.
+
+What changed: both log paths are opened `0600` and `fchmod`ed to 0600.
+
+Limits: a file that already exists with a looser mode is tightened on the next write. No boot test.
+
 ## 2026-11-17 - Network: DHCP keeps the resolv.conf domain line
 
 Problem: net_server rewrote `resolv.conf` from remembered nameservers and only wrote `domain` when DHCP sent one. An existing domain line disappeared.
