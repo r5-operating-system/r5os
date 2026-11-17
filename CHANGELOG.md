@@ -1,5 +1,22 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Graphics (M13): the GPU stop at shutdown also stops the RLC, destroys the PSP TMR and turns the GART off
+
+Problem: after a restart from a RADV boot the 5625U's caps lock still blinked (3 long, 2 short, HP 3.2 memory), on sticks 3 and 4, but not after the Lavapipe boot. A comparison of Linux v6.12 `amdgpu_pci_shutdown` → `amdgpu_device_ip_suspend` for Renoir with `gfx9_shutdown_hook` found what the hook skipped. The suspect from the handover, `mp1_state` UNLOAD, sends nothing on Renoir: `renoir_ppt.c` has no `set_mp1_state` and no PrepareMp1ForUnload.
+
+What changed (the hook, in Linux order):
+- After the CP halt, the RLC halt of `gfx_v9_0_rlc_stop` (`RLC_CNTL` bit 0 off, the serdes wait from the start), `r5_gfx9_rlc_halt`.
+- Before the PSP ring stop, DESTROY_TMR (command 0x7, `psp_suspend` → `psp_tmr_terminate`) on the GPCOM ring, `r5_gfx9_psp_tmr_destroy`; only when SETUP_TMR landed and the ring is still up. The start keeps the ring, command and fence buffers for it; the PSP load itself is unchanged. `r5_gfx9_kernel_stop` forgets them (`r5_gfx9_psp_forget`). The PSP fence number now goes up on every submit, also a timed-out one.
+- After VM 0 is put back: `VM_CONTEXT1..15_CNTL` = 0, and after the VM 0 invalidate the GFXHUB L1 TLB, advanced driver model and L2 cache off (`gfxhub_v1_0_gart_disable`).
+- A second serial line: `radeon_hd: shutdown rlc quiet|busy, tmr destroy ok|failed <hex>, gart off`.
+- The contract in `docs/GRAPHICS.md` and the stop order in `AGENTS.md` (owner's go, 17 Nov).
+
+An independent review found three faults in the first draft, fixed before the commit: VMIDs 1 to 15 were "restored" from a copy taken after R5's own VMID 1 setup (now 0, as Linux); stale PSP pointers after a kernel-stage stop; a reused fence number after a timeout.
+
+Limits: the link between the TMR or the GART and the HP 3.2 code is inferred, not proven. The reset after a hang still sends no DESTROY_TMR. Not done: MMHUB GART off (not checked whether R5 programs MMHUB), clock-gating ungate.
+
+Tested: `scripts/build-locked.sh` (raw image) only; not booted. Proof needs the next stick: a restart and a power off without the caps lock blinking, the new serial line, and the next start's `GFX9 scratch 0xdeadbeef`.
+
 ## 2026-11-17 - Graphics (M13): stick 3 on the 5625U, RADV stays on
 
 Problem: sticks 1 and 2 of M13 lost the GPU drawing on RADV (an empty submit with waits, then too many waits in one CS). Before stick 3 an independent review of the whole M13 diff found four more faults, fixed in one round: window images were never freed after a failed RADV start; glass hidden under a window kept an old blur when it showed; without memory for a copy list a window part stayed old; and a compose relied on RADV's flush for Skia's earlier writes (now a barrier at the start of each compose). The semaphore wait that is a no-op in the R5 DRM library (point 0) is left: the barrier orders it on the one queue.
