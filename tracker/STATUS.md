@@ -4,21 +4,21 @@ Gegenereerd door `scripts/tracker-report.py`. Niet met de hand bewerken.
 
 | R5-status | Aantal |
 |---|---|
-| open | 3796 |
+| open | 3795 |
 | in-progress | 8 |
-| fixed | 132 |
+| fixed | 133 |
 | wontfix | 0 |
 | not-applicable | 0 |
 | **totaal in tracker** | **3936** |
 | open bij Haiku (laatste import) | 3936 |
 
-Nog open in R5OS: **2456** bugs, **1288** enhancements, rest overig (van 3804 open/bezig).
+Nog open in R5OS: **2455** bugs, **1288** enhancements, rest overig (van 3803 open/bezig).
 
 ## Type
 
 | Type | Aantal |
 |---|---|
-| bug | 2456 |
+| bug | 2455 |
 | enhancement | 1288 |
 | task | 60 |
 
@@ -27,7 +27,7 @@ Nog open in R5OS: **2456** bugs, **1288** enhancements, rest overig (van 3804 op
 | Priority | Aantal |
 |---|---|
 | normal | 3510 |
-| low | 258 |
+| low | 257 |
 | high | 34 |
 | critical | 1 |
 | blocker | 1 |
@@ -36,7 +36,7 @@ Nog open in R5OS: **2456** bugs, **1288** enhancements, rest overig (van 3804 op
 
 | Milestone | Aantal |
 |---|---|
-| Unscheduled | 3016 |
+| Unscheduled | 3015 |
 | R1 | 419 |
 | R1.1 | 298 |
 | — | 29 |
@@ -165,7 +165,7 @@ Nog open in R5OS: **2456** bugs, **1288** enhancements, rest overig (van 3804 op
 | [#16643](https://dev.haiku-os.org/ticket/16643) | new | Applications/Tracker | Tracker: when requesting to show file in a folder with a lot of files, list is not scrolled to selected file |  |
 | [#16678](https://dev.haiku-os.org/ticket/16678) | assigned | Applications/Tracker | Tracker: use same text color for header |  |
 | [#16726](https://dev.haiku-os.org/ticket/16726) | new | Applications/Tracker | Item count view in Tracker windows are now resizing |  |
-| … | | | *52 meer in r5-status.tsv* | |
+| … | | | *53 meer in r5-status.tsv* | |
 
 ## Nog open (eerste 80)
 
@@ -251,5 +251,5 @@ Nog open in R5OS: **2456** bugs, **1288** enhancements, rest overig (van 3804 op
 | [#2490](https://dev.haiku-os.org/ticket/2490) | new | File Systems/BFS | File version as on VMS (DEC VAX) |  |
 | [#2499](https://dev.haiku-os.org/ticket/2499) | assigned | Kits/Interface Kit | [Keymap] shortcuts don't work with some keymaps |  |
 | [#2505](https://dev.haiku-os.org/ticket/2505) | reopened | Network & Internet/Bluetooth | bluetooth_server provokes vm_page_fault in h2generic |  |
-| … | | | *3716 meer in r5-status.tsv* | |
+| … | | | *3715 meer in r5-status.tsv* | |
 
