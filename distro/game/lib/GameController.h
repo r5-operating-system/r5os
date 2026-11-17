@@ -157,6 +157,33 @@ public:
 	static	status_t			StartWatching(BMessenger target);
 	static	status_t			StopWatching(BMessenger target);
 
+	// The person's own setup per controller model, in the same settings
+	// file as the label choice (added after step 8; docs/LIBR5.md). The
+	// standard layout of an open controller comes from, in this order: a
+	// saved mapping, a chosen layout, the mapping database. Open() reads
+	// them, so a change counts from the next Open(). BJoystick programs
+	// see the raw buttons as before.
+
+	// The layout chosen in Settings: the shape, and a fixed mapping in the
+	// HID order of that family's controllers. UNKNOWN: automatic (the
+	// database and the shape it gives).
+	static	game_controller_family LayoutFor(uint16 vendorID,
+									uint16 productID);
+	static	status_t			SetLayout(uint16 vendorID, uint16 productID,
+									game_controller_family layout);
+
+	// A mapping set up button by button: "a:b0,b:b1,dpup:h0.1,leftx:a0,
+	// +righttrigger:a4,..." (SDL's mapping keys; buttons and hats as the
+	// raw calls above number them, axes in the order of RawAxisValue()).
+	// NULL or "" removes it. B_ENTRY_NOT_FOUND when none is saved.
+	static	status_t			GetSavedMapping(uint16 vendorID,
+									uint16 productID, char* mapping,
+									size_t size);
+	static	status_t			SetSavedMapping(uint16 vendorID,
+									uint16 productID, const char* mapping);
+			bool				HasSavedMapping() const;
+									// the open controller uses one
+
 private:
 			struct Private;
 

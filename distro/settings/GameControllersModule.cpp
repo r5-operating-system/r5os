@@ -4,13 +4,14 @@
  *
  * Settings, Devices, Game controllers (docs/GAME-CONTROLLERS.md, option B;
  * the picture is docs/design/gamecontrollers-mockup). One card per
- * controller, the live test of the chosen one with its button labels, and
- * the shapes R5 draws. The pictures are BGameControllerView from
- * libr5game.so. The label choice is stored per controller model by
- * BGameController::SetLabelStyle() as soon as it changes; Revert puts back
- * the choices from when the page was opened, Defaults gives every
- * controller its own labels again. No administrator is needed: the choice
- * is the person's own.
+ * controller, and the live test of the chosen one with its layout, its
+ * button labels and Set up buttons… (a window that asks for each control
+ * in turn). The pictures are BGameControllerView from libr5game.so. Every
+ * choice is stored per controller model by BGameController as soon as it
+ * changes; Revert puts back the choices from when the page was opened,
+ * Defaults gives every controller its own labels again and removes the
+ * chosen controller's layout and button setup. No administrator is needed:
+ * the choice is the person's own.
  */
 
 
@@ -20,6 +21,7 @@
 #include "SettingsModule.h"
 
 #include <Box.h>
+#include <Button.h>
 #include <Card.h>
 #include <GroupView.h>
 #include <LayoutBuilder.h>
@@ -38,6 +40,7 @@
 #include <R5Icons.h>
 
 #include <math.h>
+#include <stdlib.h>
 
 #include <map>
 #include <string>
@@ -249,6 +252,455 @@ private:
 };
 
 
+// #pragma mark - names of the standard layout
+
+
+// SDL's mapping keys, the form BGameController::SetSavedMapping() takes.
+static const char* const kButtonKeys[B_CONTROLLER_BUTTON_COUNT] = {
+	"a", "b", "x", "y", "back", "guide", "start", "leftstick", "rightstick",
+	"leftshoulder", "rightshoulder", "dpup", "dpdown", "dpleft", "dpright",
+	"misc1", "paddle1", "paddle2", "paddle3", "paddle4", "touchpad"
+};
+
+static const char* const kAxisKeys[B_CONTROLLER_AXIS_COUNT] = {
+	"leftx", "lefty", "rightx", "righty", "lefttrigger", "righttrigger"
+};
+
+
+// One question of Set up buttons…: a button of the standard layout, or an
+// axis (a stick pushed right or down, a trigger pulled).
+struct setup_step {
+	bool		axis;
+	int32		target;		// game_controller_button or _axis
+	BString		prompt;
+};
+
+
+static const char*
+face_name(game_controller_family family, game_controller_labels labels,
+	game_controller_button button)
+{
+	static const char* const kXbox[4] = { "A", "B", "X", "Y" };
+	static const char* const kPlayStation[4]
+		= { "Cross (\xe2\x9c\x95)", "Circle (\xe2\x97\x8b)",
+			"Square (\xe2\x96\xa1)", "Triangle (\xe2\x96\xb3)" };
+	// The Nintendo shape has A and B, and X and Y, the other way round.
+	static const char* const kNintendo[4] = { "B", "A", "Y", "X" };
+	if (family == B_GAME_CONTROLLER_FAMILY_NINTENDO)
+		return kNintendo[button];
+	if (labels == B_GAME_CONTROLLER_LABELS_PLAYSTATION)
+		return kPlayStation[button];
+	return kXbox[button];
+}
+
+
+static std::vector<setup_step>
+setup_steps(game_controller_family family, game_controller_labels labels)
+{
+	std::vector<setup_step> steps;
+	setup_step step;
+	step.axis = false;
+
+	static const char* const kPlace[4] = { "the lower", "the right",
+		"the left", "the upper" };
+
+	if (family == B_GAME_CONTROLLER_FAMILY_SEGA_GENESIS) {
+		// As the picture draws it: X Y Z over A B C; C and Z are the
+		// shoulders of the standard layout, L and R its triggers.
+		struct sega_key {
+			bool		axis;
+			int32		target;
+			const char*	name;
+		};
+		static const sega_key kKeys[] = {
+			{ false, B_CONTROLLER_BUTTON_A, "A" },
+			{ false, B_CONTROLLER_BUTTON_B, "B" },
+			{ false, B_CONTROLLER_BUTTON_RIGHT_SHOULDER, "C" },
+			{ false, B_CONTROLLER_BUTTON_X, "X" },
+			{ false, B_CONTROLLER_BUTTON_Y, "Y" },
+			{ false, B_CONTROLLER_BUTTON_LEFT_SHOULDER, "Z" },
+			{ true, B_CONTROLLER_AXIS_LEFT_TRIGGER, "L" },
+			{ true, B_CONTROLLER_AXIS_RIGHT_TRIGGER, "R" }
+		};
+		for (size_t i = 0; i < sizeof(kKeys) / sizeof(kKeys[0]); i++) {
+			step.axis = kKeys[i].axis;
+			step.target = kKeys[i].target;
+			step.prompt.SetToFormat("Press %s", kKeys[i].name);
+			steps.push_back(step);
+		}
+	} else {
+		for (int32 i = 0; i < 4; i++) {
+			step.axis = false;
+			step.target = B_CONTROLLER_BUTTON_A + i;
+			step.prompt.SetToFormat("Press %s, %s face button",
+				face_name(family, labels, (game_controller_button)i),
+				kPlace[i]);
+			steps.push_back(step);
+		}
+		bool playstation = labels == B_GAME_CONTROLLER_LABELS_PLAYSTATION
+			&& family != B_GAME_CONTROLLER_FAMILY_NINTENDO;
+		bool nintendo = family == B_GAME_CONTROLLER_FAMILY_NINTENDO;
+		const char* names[4];
+		if (playstation) {
+			names[0] = "L1"; names[1] = "R1"; names[2] = "L2"; names[3] = "R2";
+		} else if (nintendo) {
+			names[0] = "L"; names[1] = "R"; names[2] = "ZL"; names[3] = "ZR";
+		} else {
+			names[0] = "LB"; names[1] = "RB"; names[2] = "LT"; names[3] = "RT";
+		}
+		step.axis = false;
+		step.target = B_CONTROLLER_BUTTON_LEFT_SHOULDER;
+		step.prompt.SetToFormat("Press %s, the left shoulder button",
+			names[0]);
+		steps.push_back(step);
+		step.target = B_CONTROLLER_BUTTON_RIGHT_SHOULDER;
+		step.prompt.SetToFormat("Press %s, the right shoulder button",
+			names[1]);
+		steps.push_back(step);
+		step.axis = true;
+		step.target = B_CONTROLLER_AXIS_LEFT_TRIGGER;
+		step.prompt.SetToFormat("Pull %s, the left trigger", names[2]);
+		steps.push_back(step);
+		step.target = B_CONTROLLER_AXIS_RIGHT_TRIGGER;
+		step.prompt.SetToFormat("Pull %s, the right trigger", names[3]);
+		steps.push_back(step);
+		step.target = B_CONTROLLER_AXIS_LEFT_X;
+		step.prompt = "Push the left stick to the right";
+		steps.push_back(step);
+		step.target = B_CONTROLLER_AXIS_LEFT_Y;
+		step.prompt = "Push the left stick down";
+		steps.push_back(step);
+		step.target = B_CONTROLLER_AXIS_RIGHT_X;
+		step.prompt = "Push the right stick to the right";
+		steps.push_back(step);
+		step.target = B_CONTROLLER_AXIS_RIGHT_Y;
+		step.prompt = "Push the right stick down";
+		steps.push_back(step);
+		step.axis = false;
+		step.target = B_CONTROLLER_BUTTON_LEFT_STICK;
+		step.prompt = "Press the left stick in";
+		steps.push_back(step);
+		step.target = B_CONTROLLER_BUTTON_RIGHT_STICK;
+		step.prompt = "Press the right stick in";
+		steps.push_back(step);
+	}
+
+	step.axis = false;
+	static const struct {
+		int32		target;
+		const char*	prompt;
+	} kRest[] = {
+		{ B_CONTROLLER_BUTTON_DPAD_UP, "Press the d-pad up" },
+		{ B_CONTROLLER_BUTTON_DPAD_DOWN, "Press the d-pad down" },
+		{ B_CONTROLLER_BUTTON_DPAD_LEFT, "Press the d-pad to the left" },
+		{ B_CONTROLLER_BUTTON_DPAD_RIGHT, "Press the d-pad to the right" },
+		{ B_CONTROLLER_BUTTON_START, "Press Start" },
+		{ B_CONTROLLER_BUTTON_BACK, "Press Select" }
+	};
+	for (size_t i = 0; i < sizeof(kRest) / sizeof(kRest[0]); i++) {
+		step.target = kRest[i].target;
+		step.prompt = kRest[i].prompt;
+		steps.push_back(step);
+	}
+	return steps;
+}
+
+
+// #pragma mark - ButtonSetupWindow
+
+
+static const uint32 kMsgSetupPoll = 'gcSp';
+static const uint32 kMsgSetupSkip = 'gcSk';
+static const uint32 kMsgSetupDone = 'gcSd';
+
+
+/*!	Set up buttons…: asks for one control after the other and notes what
+	the controller sends for it (a raw button, a hat direction, an axis).
+	At the end it sends kMsgSetupDone with the mapping text to the page,
+	which saves it. Cancel saves nothing.
+*/
+class ButtonSetupWindow : public BWindow {
+public:
+	ButtonSetupWindow(BWindow* parent, BMessenger page, const char* device,
+		game_controller_family family, game_controller_labels labels)
+		:
+		BWindow(BRect(0, 0, 10, 10), "Set up buttons",
+			B_TITLED_WINDOW_LOOK, B_MODAL_SUBSET_WINDOW_FEEL,
+			B_NOT_ZOOMABLE | B_NOT_RESIZABLE | B_AUTO_UPDATE_SIZE_LIMITS
+				| B_ASYNCHRONOUS_CONTROLS | B_CLOSE_ON_ESCAPE),
+		fPage(page),
+		fSteps(setup_steps(family, labels)),
+		fStep(0),
+		fWaitRelease(false),
+		fSettle(0),
+		fRunner(NULL)
+	{
+		memset(&fCaught, 0, sizeof(fCaught));
+		if (parent != NULL)
+			AddToSubset(parent);
+		fController.Open(device);
+
+		float unit = network_unit();
+		BStringView* name = new BStringView("controller",
+			fController.Name());
+		name->SetFont(r5_settings_bold_font());
+		fPrompt = new BStringView("prompt", "");
+		BFont big(be_bold_font);
+		big.SetSize(be_bold_font->Size() * 1.35f);
+		fPrompt->SetFont(&big);
+		fPrompt->SetExplicitMinSize(BSize(roundf(380 * unit), B_SIZE_UNSET));
+		fProgress = new BStringView("progress", "");
+		fProgress->SetHighColor(quiet_color(140));
+		BStringView* hint = new BStringView("hint",
+			"Skip a control your controller does not have.");
+		hint->SetHighColor(quiet_color(140));
+
+		BButton* skip = new BButton("skip", "Skip",
+			new BMessage(kMsgSetupSkip));
+		BButton* cancel = new BButton("cancel", "Cancel",
+			new BMessage(B_QUIT_REQUESTED));
+
+		BLayoutBuilder::Group<>(this, B_VERTICAL, roundf(8 * unit))
+			.SetInsets(B_USE_WINDOW_SPACING)
+			.Add(name)
+			.Add(fPrompt)
+			.Add(fProgress)
+			.Add(hint)
+			.AddStrut(roundf(6 * unit))
+			.AddGroup(B_HORIZONTAL)
+				.AddGlue()
+				.Add(cancel)
+				.Add(skip)
+			.End();
+
+		if (parent != NULL)
+			CenterIn(parent->Frame());
+		else
+			CenterOnScreen();
+		_StartStep();
+		BMessage poll(kMsgSetupPoll);
+		fRunner = new BMessageRunner(BMessenger(this), &poll, 16000);
+	}
+
+	virtual ~ButtonSetupWindow()
+	{
+		delete fRunner;
+	}
+
+	virtual void MessageReceived(BMessage* message)
+	{
+		switch (message->what) {
+			case kMsgSetupPoll:
+				_Poll();
+				break;
+			case kMsgSetupSkip:
+				_Next();
+				break;
+			default:
+				BWindow::MessageReceived(message);
+				break;
+		}
+	}
+
+private:
+	struct source {
+		char	kind;		// 'b', 'h', 'a'; 0 none
+		int32	index;
+		uint8	hatMask;
+		int8	half;		// axis: +1, -1, 0 whole
+		bool	invert;
+	};
+
+	void _Read(bool* buttons, uint8* hats, int16* axes)
+	{
+		for (int32 i = 0; i < fController.CountRawButtons() && i < 128; i++)
+			buttons[i] = fController.IsRawButtonDown(i);
+		for (int32 i = 0; i < fController.CountRawHats() && i < 8; i++)
+			hats[i] = fController.RawHatValue(i);
+		for (int32 i = 0; i < fController.CountRawAxes() && i < 32; i++)
+			axes[i] = fController.RawAxisValue(i);
+	}
+
+	void _StartStep()
+	{
+		if (fStep >= fSteps.size()) {
+			_Finish();
+			return;
+		}
+		fPrompt->SetText(fSteps[fStep].prompt.String());
+		BString progress;
+		progress.SetToFormat("Step %" B_PRIuSIZE " of %" B_PRIuSIZE,
+			fStep + 1, fSteps.size());
+		fProgress->SetText(progress.String());
+		// Rest values: what the controller sends while nothing is pressed,
+		// taken over the first polls of the step (the first read after
+		// Open() can still be all zeros).
+		fSettle = 10;
+		memset(fRestButtons, 0, sizeof(fRestButtons));
+		memset(fRestHats, 0, sizeof(fRestHats));
+		memset(fRestAxes, 0, sizeof(fRestAxes));
+		if (fController.IsOpen() && fController.Update() == B_OK)
+			_Read(fRestButtons, fRestHats, fRestAxes);
+	}
+
+	void _Next()
+	{
+		fStep++;
+		fWaitRelease = false;
+		_StartStep();
+	}
+
+	bool _Released(const bool* buttons, const uint8* hats,
+		const int16* axes) const
+	{
+		switch (fCaught.kind) {
+			case 'b':
+				return !buttons[fCaught.index];
+			case 'h':
+				return hats[fCaught.index] == 0;
+			case 'a':
+				return abs(axes[fCaught.index] - fRestAxes[fCaught.index])
+					< 8192;
+		}
+		return true;
+	}
+
+	void _Poll()
+	{
+		if (!fController.IsOpen() || fController.Update() != B_OK)
+			return;
+		bool buttons[128];
+		uint8 hats[8];
+		int16 axes[32];
+		memset(buttons, 0, sizeof(buttons));
+		memset(hats, 0, sizeof(hats));
+		memset(axes, 0, sizeof(axes));
+		_Read(buttons, hats, axes);
+
+		if (fSettle > 0) {
+			_Read(fRestButtons, fRestHats, fRestAxes);
+			fSettle--;
+			return;
+		}
+		if (fWaitRelease) {
+			if (_Released(buttons, hats, axes))
+				_Next();
+			return;
+		}
+		if (fStep >= fSteps.size())
+			return;
+
+		const setup_step& step = fSteps[fStep];
+		source caught;
+		memset(&caught, 0, sizeof(caught));
+		for (int32 i = 0; i < 128 && caught.kind == 0; i++) {
+			if (buttons[i] && !fRestButtons[i]) {
+				caught.kind = 'b';
+				caught.index = i;
+			}
+		}
+		for (int32 i = 0; i < 8 && caught.kind == 0; i++) {
+			// Only a straight direction: 1 up, 3 right, 5 down, 7 left.
+			if (hats[i] != fRestHats[i] && hats[i] != 0
+				&& (hats[i] & 1) != 0) {
+				static const uint8 kMasks[9]
+					= { 0, 1, 3, 2, 6, 4, 12, 8, 9 };
+				caught.kind = 'h';
+				caught.index = i;
+				caught.hatMask = hats[i] <= 8 ? kMasks[hats[i]] : 0;
+			}
+		}
+		for (int32 i = 0; i < 32 && caught.kind == 0; i++) {
+			int32 delta = (int32)axes[i] - fRestAxes[i];
+			if (abs(delta) < 16384)
+				continue;
+			caught.kind = 'a';
+			caught.index = i;
+			if (step.axis && (step.target == B_CONTROLLER_AXIS_LEFT_TRIGGER
+					|| step.target == B_CONTROLLER_AXIS_RIGHT_TRIGGER)) {
+				// A trigger that rests at one end is the whole axis; one
+				// that rests in the middle is the half it moves into.
+				if (fRestAxes[i] < -16384)
+					caught.half = 0;
+				else if (fRestAxes[i] > 16384) {
+					caught.half = 0;
+					caught.invert = true;
+				} else
+					caught.half = delta > 0 ? 1 : -1;
+			} else if (step.axis) {
+				// Pushed right or down: the positive end.
+				caught.invert = delta < 0;
+			} else
+				caught.half = delta > 0 ? 1 : -1;
+		}
+		if (caught.kind == 0)
+			return;
+		// A stick takes only an axis; a hat is never a trigger.
+		if (step.axis && step.target < B_CONTROLLER_AXIS_LEFT_TRIGGER
+			&& caught.kind != 'a')
+			return;
+		if (step.axis && caught.kind == 'h')
+			return;
+
+		_Store(step, caught);
+		fCaught = caught;
+		fWaitRelease = true;
+	}
+
+	void _Store(const setup_step& step, const source& caught)
+	{
+		BString value;
+		switch (caught.kind) {
+			case 'b':
+				value.SetToFormat("b%" B_PRId32, caught.index);
+				break;
+			case 'h':
+				value.SetToFormat("h%" B_PRId32 ".%u", caught.index,
+					caught.hatMask);
+				break;
+			default:
+				value.SetToFormat("%sa%" B_PRId32 "%s",
+					caught.half > 0 ? "+" : (caught.half < 0 ? "-" : ""),
+					caught.index, caught.invert ? "~" : "");
+				break;
+		}
+		BString pair;
+		pair << (step.axis ? kAxisKeys[step.target]
+			: kButtonKeys[step.target]) << ":" << value << ",";
+		fMappingText << pair;
+	}
+
+	void _Finish()
+	{
+		delete fRunner;
+		fRunner = NULL;
+		if (fMappingText.Length() > 0) {
+			BMessage done(kMsgSetupDone);
+			done.AddString("mapping", fMappingText);
+			done.AddInt32("vendor", fController.VendorID());
+			done.AddInt32("product", fController.ProductID());
+			fPage.SendMessage(&done);
+		}
+		PostMessage(B_QUIT_REQUESTED);
+	}
+
+	BMessenger			fPage;
+	BGameController		fController;
+	std::vector<setup_step> fSteps;
+	size_t				fStep;
+	bool				fWaitRelease;
+	int32				fSettle;
+	source				fCaught;
+	BMessageRunner*		fRunner;
+	BStringView*		fPrompt;
+	BStringView*		fProgress;
+	BString				fMappingText;
+	bool				fRestButtons[128];
+	uint8				fRestHats[8];
+	int16				fRestAxes[32];
+};
+
+
 // #pragma mark - GameControllersPage
 
 
@@ -267,12 +719,13 @@ public:
 	virtual	void				MessageReceived(BMessage* message);
 
 			void				Refresh();
-									// the label choice changed elsewhere
+									// a choice changed elsewhere
 
 private:
 			void				_Rebuild();
 			void				_Select(const char* device);
 			void				_UpdateTest();
+			void				_CloseSetup();
 			ControllerCard*		_SelectedCard() const;
 
 			GameControllersModule* fModule;
@@ -282,24 +735,65 @@ private:
 			std::vector<ControllerCard*> fCardList;
 			BString				fSelected;
 
+			BMenuField*			fLayoutField;
+			BMenuItem*			fLayoutItems[5];
+			BMenuItem*			fOwnSetupItem;
 			BMenuField*			fLabelsField;
 			BMenuItem*			fXboxItem;
 			BMenuItem*			fPlayStationItem;
+			BButton*			fSetupButton;
 			BStringView*		fIDs;
 			BGameControllerView* fTest;
 			BStringView*		fTestHint;
 			BMessageRunner*		fBatteryRunner;
+			BMessenger			fSetup;
 };
 
 
 // #pragma mark - GameControllersModule
 
 
+// What is stored for one controller model.
+struct model_choice {
+	game_controller_labels	labels;
+	game_controller_family	layout;
+	BString					mapping;
+
+	bool operator==(const model_choice& other) const
+	{
+		return labels == other.labels && layout == other.layout
+			&& mapping == other.mapping;
+	}
+
+	bool operator!=(const model_choice& other) const
+	{
+		return !(*this == other);
+	}
+};
+
+
+static model_choice
+read_choice(uint16 vendor, uint16 product)
+{
+	model_choice choice;
+	choice.labels = BGameController::LabelStyleFor(vendor, product);
+	choice.layout = BGameController::LayoutFor(vendor, product);
+	char mapping[1024];
+	if (BGameController::GetSavedMapping(vendor, product, mapping,
+			sizeof(mapping)) == B_OK)
+		choice.mapping = mapping;
+	return choice;
+}
+
+
 class GameControllersModule : public SettingsModule {
 public:
 								GameControllersModule()
 									:
-									fPage(NULL)
+									fContext(NULL),
+									fPage(NULL),
+									fSelectedVendor(0),
+									fSelectedProduct(0)
 								{
 								}
 
@@ -309,11 +803,12 @@ public:
 	virtual	const char*			Category() const { return "devices"; }
 	virtual	const char*			Description() const
 									{ return "Test your controllers and "
-										"choose their button labels"; }
+										"set up their buttons"; }
 	virtual	const char*			Keywords() const
 									{ return "game controller gamepad "
 										"joystick joypad test buttons "
-										"playstation xbox nintendo"; }
+										"layout mapping setup "
+										"playstation xbox nintendo sega"; }
 
 	virtual	BView*				CreateView(SettingsContext* context,
 									BRect frame)
@@ -333,23 +828,23 @@ public:
 									return B_OK;
 								}
 
-	// The page writes each choice itself (SetLabels()); the window calls
-	// this after the change.
+	// The page writes each choice itself; the window calls this after the
+	// change.
 	virtual	status_t			SaveSettings(SettingsContext* context)
 									{ (void)context; return B_OK; }
 
+	// Every controller model seen on the page gets the labels, layout and
+	// button setup it had when the page was opened.
 	virtual	status_t			RevertSettings(SettingsContext* context)
 								{
 									(void)context;
 									status_t result = B_OK;
-									std::map<uint32,
-										game_controller_labels>::iterator i;
+									std::map<uint32, model_choice>::iterator
+										i;
 									for (i = fOriginal.begin();
 											i != fOriginal.end(); i++) {
-										status_t status
-											= BGameController::SetLabelStyle(
-												i->first >> 16,
-												i->first & 0xffff, i->second);
+										status_t status = _Write(i->first,
+											i->second);
 										if (status != B_OK)
 											result = status;
 									}
@@ -365,19 +860,33 @@ public:
 
 	virtual	bool				CanApplyDefaults() const { return true; }
 
+	// Every controller its own labels again, as before; the chosen
+	// controller also loses its layout choice and its button setup.
 	virtual	status_t			ApplyDefaults(SettingsContext* context)
 								{
 									(void)context;
 									status_t status
 										= BGameController::ResetLabelStyles();
-									std::map<uint32,
-										game_controller_labels>::iterator i;
+									std::map<uint32, model_choice>::iterator
+										i;
 									for (i = fCurrent.begin();
 											i != fCurrent.end(); i++)
-										i->second
+										i->second.labels
 											= B_GAME_CONTROLLER_LABELS_AUTOMATIC;
-									// A model first changed by Defaults
-									// can be reverted as well.
+									if (fSelectedVendor != 0) {
+										Remember(fSelectedVendor,
+											fSelectedProduct);
+										uint32 key = model_key(
+											fSelectedVendor,
+											fSelectedProduct);
+										model_choice& now = fCurrent[key];
+										now.layout
+											= B_GAME_CONTROLLER_FAMILY_UNKNOWN;
+										now.mapping = "";
+										status_t written = _Write(key, now);
+										if (status == B_OK)
+											status = written;
+									}
 									_RefreshPage();
 									return status;
 								}
@@ -385,25 +894,49 @@ public:
 			status_t			SetLabels(uint16 vendor, uint16 product,
 									game_controller_labels labels)
 								{
+									Remember(vendor, product);
 									uint32 key = model_key(vendor, product);
-									if (fOriginal.find(key)
-											== fOriginal.end()) {
-										fOriginal[key]
-											= BGameController::LabelStyleFor(
-												vendor, product);
-									}
 									status_t status
 										= BGameController::SetLabelStyle(
 											vendor, product, labels);
 									if (status == B_OK)
-										fCurrent[key] = labels;
-									if (fContext != NULL)
-										fContext->NotifyChanged(Identifier());
+										fCurrent[key].labels = labels;
+									_Changed();
 									return status;
 								}
 
-			// A controller on the page: Revert puts its choice back to
-			// what it was when the page was opened.
+			// A layout from the menu replaces a button setup.
+			status_t			SetLayout(uint16 vendor, uint16 product,
+									game_controller_family layout)
+								{
+									Remember(vendor, product);
+									uint32 key = model_key(vendor, product);
+									model_choice now = fCurrent[key];
+									now.layout = layout;
+									now.mapping = "";
+									status_t status = _Write(key, now);
+									fCurrent[key] = read_choice(vendor,
+										product);
+									_Changed();
+									return status;
+								}
+
+			status_t			SetMapping(uint16 vendor, uint16 product,
+									const char* mapping)
+								{
+									Remember(vendor, product);
+									uint32 key = model_key(vendor, product);
+									status_t status
+										= BGameController::SetSavedMapping(
+											vendor, product, mapping);
+									fCurrent[key] = read_choice(vendor,
+										product);
+									_Changed();
+									return status;
+								}
+
+			// A controller on the page: Revert puts its choices back to
+			// what they were when the page was opened.
 			void				Remember(uint16 vendor, uint16 product)
 								{
 									if (vendor == 0)
@@ -412,11 +945,16 @@ public:
 									if (fOriginal.find(key)
 											!= fOriginal.end())
 										return;
-									game_controller_labels labels
-										= BGameController::LabelStyleFor(
-											vendor, product);
-									fOriginal[key] = labels;
-									fCurrent[key] = labels;
+									model_choice choice = read_choice(vendor,
+										product);
+									fOriginal[key] = choice;
+									fCurrent[key] = choice;
+								}
+
+			void				SetSelected(uint16 vendor, uint16 product)
+								{
+									fSelectedVendor = vendor;
+									fSelectedProduct = product;
 								}
 
 			void				PageGone(GameControllersPage* page)
@@ -426,6 +964,34 @@ public:
 								}
 
 private:
+			status_t			_Write(uint32 key, const model_choice& choice)
+								{
+									uint16 vendor = key >> 16;
+									uint16 product = key & 0xffff;
+									status_t result = B_OK;
+									status_t status
+										= BGameController::SetLabelStyle(
+											vendor, product, choice.labels);
+									if (status != B_OK)
+										result = status;
+									status = BGameController::SetLayout(
+										vendor, product, choice.layout);
+									if (status != B_OK)
+										result = status;
+									status = BGameController::SetSavedMapping(
+										vendor, product,
+										choice.mapping.String());
+									if (status != B_OK)
+										result = status;
+									return result;
+								}
+
+			void				_Changed()
+								{
+									if (fContext != NULL)
+										fContext->NotifyChanged(Identifier());
+								}
+
 			void				_RefreshPage()
 								{
 									if (fPage != NULL && fPage->LockLooper()) {
@@ -434,14 +1000,32 @@ private:
 									}
 								}
 
-			SettingsContext*	fContext = NULL;
+			SettingsContext*	fContext;
 			GameControllersPage* fPage;
-			std::map<uint32, game_controller_labels> fOriginal;
-			std::map<uint32, game_controller_labels> fCurrent;
+			uint16				fSelectedVendor;
+			uint16				fSelectedProduct;
+			std::map<uint32, model_choice> fOriginal;
+			std::map<uint32, model_choice> fCurrent;
 };
 
 
 // #pragma mark - GameControllersPage
+
+
+static const uint32 kMsgLayoutChosen = 'gcLa';
+static const uint32 kMsgSetupButtons = 'gcSb';
+
+
+static const struct {
+	game_controller_family	family;
+	const char*				label;
+} kLayouts[5] = {
+	{ B_GAME_CONTROLLER_FAMILY_UNKNOWN, "Automatic" },
+	{ B_GAME_CONTROLLER_FAMILY_XBOX, "Xbox" },
+	{ B_GAME_CONTROLLER_FAMILY_PLAYSTATION, "PlayStation" },
+	{ B_GAME_CONTROLLER_FAMILY_NINTENDO, "Nintendo" },
+	{ B_GAME_CONTROLLER_FAMILY_SEGA_GENESIS, "Sega Genesis" }
+};
 
 
 GameControllersPage::GameControllersPage(GameControllersModule* module,
@@ -488,7 +1072,24 @@ GameControllersPage::GameControllersPage(GameControllersModule* module,
 		.Add(hint)
 		.Add(bluetooth);
 
-	// The live test.
+	// The layout: where the buttons are and how they are read. A fixed
+	// layout, or the person's own setup, comes before the database.
+	BPopUpMenu* layoutMenu = new BPopUpMenu("layout");
+	for (int32 i = 0; i < 5; i++) {
+		BMessage* message = new BMessage(kMsgLayoutChosen);
+		message->AddInt32("layout", kLayouts[i].family);
+		fLayoutItems[i] = new BMenuItem(kLayouts[i].label, message);
+		layoutMenu->AddItem(fLayoutItems[i]);
+	}
+	layoutMenu->AddSeparatorItem();
+	fOwnSetupItem = new BMenuItem("Your own setup", NULL);
+	fOwnSetupItem->SetEnabled(false);
+	layoutMenu->AddItem(fOwnSetupItem);
+	fLayoutField = new BMenuField("layout field", "Layout", layoutMenu);
+	fLayoutField->SetViewColor(network_box_fill());
+	fLayoutField->SetLowColor(network_box_fill());
+
+	// The labels: what is printed on the face buttons.
 	BPopUpMenu* menu = new BPopUpMenu("labels");
 	BMessage* xbox = new BMessage(kMsgLabelsChosen);
 	xbox->AddInt32("labels", B_GAME_CONTROLLER_LABELS_XBOX);
@@ -503,6 +1104,9 @@ GameControllersPage::GameControllersPage(GameControllersModule* module,
 	fLabelsField = new BMenuField("labels field", "Button labels", menu);
 	fLabelsField->SetViewColor(network_box_fill());
 	fLabelsField->SetLowColor(network_box_fill());
+
+	fSetupButton = new BButton("setup buttons", "Set up buttons\xe2\x80\xa6",
+		new BMessage(kMsgSetupButtons));
 
 	fIDs = new BStringView("controller ids", "");
 	fIDs->SetHighColor(quiet_color(140));
@@ -530,66 +1134,25 @@ GameControllersPage::GameControllersPage(GameControllersModule* module,
 	BLayoutBuilder::Group<>(test)
 		.SetInsets(roundf(14 * unit), roundf(8 * unit), roundf(14 * unit),
 			roundf(12 * unit))
-		.AddGroup(B_HORIZONTAL, roundf(8 * unit))
-			.Add(fLabelsField)
-			.AddGlue()
-			.Add(fIDs)
+		.AddGrid(roundf(8 * unit), roundf(6 * unit))
+			.Add(fLayoutField->CreateLabelLayoutItem(), 0, 0)
+			.Add(fLayoutField->CreateMenuBarLayoutItem(), 1, 0)
+			.Add(BSpaceLayoutItem::CreateGlue(), 2, 0)
+			.Add(fIDs, 3, 0)
+			.Add(fLabelsField->CreateLabelLayoutItem(), 0, 1)
+			.Add(fLabelsField->CreateMenuBarLayoutItem(), 1, 1)
+			.Add(BSpaceLayoutItem::CreateGlue(), 2, 1)
+			.Add(fSetupButton, 3, 1)
 		.End()
 		.Add(fTest, 1)
 		.Add(fTestHint);
 	testBox->AddChild(test);
 
-	// The shapes R5 draws, as small still pictures.
-	FilledBox* shapesBox = new FilledBox("shapes box");
-	shapesBox->SetLabel(new BoxTitle("Shapes R5 draws"));
-	BGroupView* shapes = new BGroupView(B_HORIZONTAL, roundf(10 * unit));
-	shapes->SetViewColor(network_box_fill());
-	struct shape_row {
-		game_controller_family	family;
-		const char*				caption;
-	};
-	static const shape_row kShapes[] = {
-		{ B_GAME_CONTROLLER_FAMILY_PLAYSTATION, "PlayStation" },
-		{ B_GAME_CONTROLLER_FAMILY_XBOX, "Xbox" },
-		{ B_GAME_CONTROLLER_FAMILY_NINTENDO, "Nintendo (A and B swapped)" },
-		{ B_GAME_CONTROLLER_FAMILY_SEGA_GENESIS, "Sega Genesis" },
-		{ B_GAME_CONTROLLER_FAMILY_UNKNOWN,
-			"Unknown: from its axes and buttons" }
-	};
-	BLayoutBuilder::Group<> shapesBuilder(shapes);
-	shapesBuilder.SetInsets(roundf(14 * unit), roundf(6 * unit),
-		roundf(14 * unit), roundf(8 * unit));
-	for (size_t i = 0; i < sizeof(kShapes) / sizeof(kShapes[0]); i++) {
-		BGameControllerView* picture = new BGameControllerView("shape");
-		picture->SetFamily(kShapes[i].family);
-		picture->SetViewColor(network_box_fill());
-		picture->SetLowColor(network_box_fill());
-		picture->SetExplicitMinSize(BSize(roundf(104 * unit),
-			roundf(62 * unit)));
-		picture->SetExplicitMaxSize(BSize(roundf(104 * unit),
-			roundf(62 * unit)));
-		BStringView* caption = new BStringView("caption", kShapes[i].caption);
-		BFont captionFont(be_plain_font);
-		captionFont.SetSize(be_plain_font->Size() * 0.85f);
-		caption->SetFont(&captionFont);
-		caption->SetAlignment(B_ALIGN_CENTER);
-		caption->SetViewColor(network_box_fill());
-		caption->SetLowColor(network_box_fill());
-		caption->SetHighColor(quiet_color(190));
-		shapesBuilder
-			.AddGroup(B_VERTICAL, roundf(2 * unit))
-				.Add(picture)
-				.Add(caption)
-			.End();
-	}
-	shapesBox->AddChild(shapes);
-
 	BLayoutBuilder::Group<>(this)
 		.AddGroup(B_HORIZONTAL, roundf(12 * unit), 1)
 			.Add(left)
 			.Add(testBox, 1)
-		.End()
-		.Add(shapesBox);
+		.End();
 
 	_Rebuild();
 }
@@ -597,6 +1160,7 @@ GameControllersPage::GameControllersPage(GameControllersModule* module,
 
 GameControllersPage::~GameControllersPage()
 {
+	_CloseSetup();
 	if (fModule != NULL)
 		fModule->PageGone(this);
 }
@@ -606,7 +1170,9 @@ void
 GameControllersPage::AttachedToWindow()
 {
 	BGroupView::AttachedToWindow();
+	fLayoutField->Menu()->SetTargetForItems(this);
 	fLabelsField->Menu()->SetTargetForItems(this);
+	fSetupButton->SetTarget(this);
 	LinkControl* bluetooth = dynamic_cast<LinkControl*>(
 		FindView("bluetooth link"));
 	if (bluetooth != NULL)
@@ -623,10 +1189,28 @@ GameControllersPage::AttachedToWindow()
 void
 GameControllersPage::DetachedFromWindow()
 {
+	// Nothing of libr5game.so and of this add-on may keep running once the
+	// page is gone: Settings unloads both (CHANGELOG.md, 17 Nov 2026).
+	_CloseSetup();
 	BGameController::StopWatching(BMessenger(this));
 	delete fBatteryRunner;
 	fBatteryRunner = NULL;
+	fTest->SetDevice(NULL);
 	BGroupView::DetachedFromWindow();
+}
+
+
+void
+GameControllersPage::_CloseSetup()
+{
+	// The setup window's code is in this add-on: it goes before the page.
+	BLooper* looper = NULL;
+	if (fSetup.IsValid() && fSetup.LockTarget()) {
+		fSetup.Target(&looper);
+		if (looper != NULL)
+			looper->Quit();
+	}
+	fSetup = BMessenger();
 }
 
 
@@ -644,6 +1228,19 @@ GameControllersPage::MessageReceived(BMessage* message)
 			const char* device;
 			if (message->FindString("device", &device) == B_OK)
 				_Select(device);
+			break;
+		}
+
+		case kMsgLayoutChosen:
+		{
+			int32 layout;
+			BGameController* controller = fTest->Controller();
+			if (controller == NULL || controller->VendorID() == 0
+				|| message->FindInt32("layout", &layout) != B_OK)
+				break;
+			fModule->SetLayout(controller->VendorID(),
+				controller->ProductID(), (game_controller_family)layout);
+			_Rebuild();
 			break;
 		}
 
@@ -665,6 +1262,36 @@ GameControllersPage::MessageReceived(BMessage* message)
 				controller->ProductID(),
 				choice == own ? B_GAME_CONTROLLER_LABELS_AUTOMATIC : choice);
 			_UpdateTest();
+			break;
+		}
+
+		case kMsgSetupButtons:
+		{
+			BGameController* controller = fTest->Controller();
+			if (controller == NULL || controller->VendorID() == 0
+				|| fSetup.IsValid())
+				break;
+			ButtonSetupWindow* window = new ButtonSetupWindow(Window(),
+				BMessenger(this), fSelected.String(), controller->Family(),
+				controller->LabelStyle());
+			fSetup = BMessenger(window);
+			window->Show();
+			break;
+		}
+
+		case kMsgSetupDone:
+		{
+			const char* mapping;
+			int32 vendor;
+			int32 product;
+			if (message->FindString("mapping", &mapping) == B_OK
+				&& message->FindInt32("vendor", &vendor) == B_OK
+				&& message->FindInt32("product", &product) == B_OK
+				&& vendor != 0) {
+				fModule->SetMapping((uint16)vendor, (uint16)product,
+					mapping);
+				_Rebuild();
+			}
 			break;
 		}
 
@@ -691,7 +1318,8 @@ GameControllersPage::MessageReceived(BMessage* message)
 void
 GameControllersPage::Refresh()
 {
-	_UpdateTest();
+	// Revert or Defaults changed what Open() reads: open everything again.
+	_Rebuild();
 }
 
 
@@ -758,6 +1386,11 @@ GameControllersPage::_Select(const char* device)
 	fTest->SetDevice(fSelected.Length() > 0 ? fSelected.String() : NULL);
 	if (fTest->Controller() == NULL)
 		fTest->SetFamily(B_GAME_CONTROLLER_FAMILY_UNKNOWN);
+	BGameController* controller = fTest->Controller();
+	if (controller != NULL)
+		fModule->SetSelected(controller->VendorID(), controller->ProductID());
+	else
+		fModule->SetSelected(0, 0);
 	_UpdateTest();
 }
 
@@ -778,8 +1411,11 @@ GameControllersPage::_UpdateTest()
 {
 	BGameController* controller = fTest->Controller();
 	if (controller == NULL) {
+		fLayoutField->SetEnabled(false);
+		fLayoutItems[0]->SetMarked(true);
 		fLabelsField->SetEnabled(false);
 		fXboxItem->SetMarked(true);
+		fSetupButton->SetEnabled(false);
 		fIDs->SetText("");
 		fTestHint->SetText(fCardList.empty()
 			? "Plug in a controller or pair one to test it here."
@@ -791,9 +1427,23 @@ GameControllersPage::_UpdateTest()
 	if (card != NULL)
 		card->SetBattery(controller->BatteryLevel());
 
+	// A choice is stored per model, so it needs the vendor and product ID.
+	bool known = controller->VendorID() != 0;
+	fLayoutField->SetEnabled(known);
+	fSetupButton->SetEnabled(known);
+	if (controller->HasSavedMapping())
+		fOwnSetupItem->SetMarked(true);
+	else {
+		game_controller_family layout = BGameController::LayoutFor(
+			controller->VendorID(), controller->ProductID());
+		for (int32 i = 0; i < 5; i++) {
+			if (kLayouts[i].family == layout)
+				fLayoutItems[i]->SetMarked(true);
+		}
+	}
+
 	game_controller_family family = controller->Family();
-	bool choosable = controller->VendorID() != 0
-		&& family != B_GAME_CONTROLLER_FAMILY_SEGA_GENESIS
+	bool choosable = known && family != B_GAME_CONTROLLER_FAMILY_SEGA_GENESIS
 		&& family != B_GAME_CONTROLLER_FAMILY_UNKNOWN;
 	fLabelsField->SetEnabled(choosable);
 	game_controller_labels labels = controller->LabelStyle();
@@ -803,14 +1453,16 @@ GameControllersPage::_UpdateTest()
 		fXboxItem->SetMarked(true);
 	fTest->SetLabels(labels);
 
-	if (controller->VendorID() != 0) {
+	if (known) {
 		BString ids;
 		ids.SetToFormat("Vendor %04X \xc2\xb7 Product %04X",
 			controller->VendorID(), controller->ProductID());
 		fIDs->SetText(ids.String());
 	} else
 		fIDs->SetText("");
-	fTestHint->SetText("Press a button or move a stick: it lights up here.");
+	fTestHint->SetText(controller->HasMapping()
+		? "Press a button or move a stick: it lights up here."
+		: "Choose a layout, or set up the buttons one by one.");
 }
 
 
