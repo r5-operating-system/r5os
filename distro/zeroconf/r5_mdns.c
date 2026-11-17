@@ -8,6 +8,8 @@
 #include <arpa/inet.h>
 #include <ctype.h>
 #include <errno.h>
+#include <ifaddrs.h>
+#include <net/if.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <poll.h>
@@ -58,6 +60,63 @@ int
 r5_mdns_name_is_local(const char* hostname)
 {
 	return ends_with_local(hostname);
+}
+
+
+static void
+join_mdns4(int sock)
+{
+	struct ip_mreq mreq;
+	int reuse = 1;
+
+	setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+	memset(&mreq, 0, sizeof(mreq));
+	if (inet_pton(AF_INET, MDNS_ADDR, &mreq.imr_multiaddr) != 1)
+		return;
+	mreq.imr_interface.s_addr = htonl(INADDR_ANY);
+	setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq));
+}
+
+
+static void
+join_mdns6(int sock)
+{
+	struct ipv6_mreq mreq;
+	int reuse = 1;
+
+	setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+	memset(&mreq, 0, sizeof(mreq));
+	if (inet_pton(AF_INET6, MDNS_ADDR6, &mreq.ipv6mr_multiaddr) != 1)
+		return;
+	mreq.ipv6mr_interface = 0;
+	setsockopt(sock, IPPROTO_IPV6, IPV6_JOIN_GROUP, &mreq, sizeof(mreq));
+}
+
+
+static uint32_t
+mdns_link_scope(void)
+{
+	struct ifaddrs* ifa;
+	struct ifaddrs* p;
+	uint32_t scope = 0;
+
+	if (getifaddrs(&ifa) != 0)
+		return 0;
+	for (p = ifa; p != NULL; p = p->ifa_next) {
+		struct sockaddr_in6* addr;
+		if (p->ifa_addr == NULL || p->ifa_addr->sa_family != AF_INET6)
+			continue;
+		if ((p->ifa_flags & IFF_LOOPBACK) != 0 || (p->ifa_flags & IFF_UP) == 0)
+			continue;
+		addr = (struct sockaddr_in6*)p->ifa_addr;
+		if (!IN6_IS_ADDR_LINKLOCAL(&addr->sin6_addr))
+			continue;
+		scope = if_nametoindex(p->ifa_name);
+		if (scope != 0)
+			break;
+	}
+	freeifaddrs(ifa);
+	return scope;
 }
 
 
@@ -224,6 +283,7 @@ mdns_query(const char* name, uint16_t type, uint8_t* replies, size_t replyCap,
 	sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 	if (sock < 0)
 		return 0;
+	join_mdns4(sock);
 
 	memset(&dest, 0, sizeof(dest));
 	dest.sin_len = sizeof(dest);
@@ -249,6 +309,7 @@ mdns_query(const char* name, uint16_t type, uint8_t* replies, size_t replyCap,
 		dest6.sin6_port = htons(MDNS_PORT);
 		inet_pton(AF_INET6, MDNS_ADDR6, &dest6.sin6_addr);
 		setsockopt(sock6, IPPROTO_IPV6, IPV6_V6ONLY, &only, sizeof(only));
+		join_mdns6(sock6);
 		sendto(sock6, query, qlen, 0, (struct sockaddr*)&dest6, sizeof(dest6));
 	}
 
@@ -392,6 +453,8 @@ make_ai6(const struct addrinfo* pai, const struct in6_addr* addr)
 	sin6->sin6_len = sizeof(*sin6);
 	sin6->sin6_family = AF_INET6;
 	sin6->sin6_addr = *addr;
+	if (IN6_IS_ADDR_LINKLOCAL(addr))
+		sin6->sin6_scope_id = mdns_link_scope();
 
 	if (pai != NULL) {
 		ai->ai_flags = pai->ai_flags;

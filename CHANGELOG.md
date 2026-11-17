@@ -13,6 +13,24 @@ Tested: AMD64 `scripts/build-locked.sh`, `jam_exit=0` (app_server rebuilt from t
 
 Limits: Haiku upstream was not checked for the same fix. Other pages and apps were not looked at with this change, and not on real hardware. ARM64 and RISC-V 64 were not built.
 
+## 2026-11-17 - Network: link-local mDNS results carry a scope
+
+Problem: AAAA answers from mDNS were returned with `sin6_scope_id` 0, so a link-local address could not be used.
+
+What changed: a link-local result gets the first up, non-loopback interface that already has a link-local IPv6 address.
+
+Limits: several such interfaces pick the first. QEMU usernet is not this test.
+
+Tested: the C++ was not compiled on this host (needs libbe).
+
+## 2026-11-17 - Network: mDNS joins the multicast group
+
+Problem: `mdns_query` sent to 224.0.0.251 and ff02::fb but never joined those groups, so multicast replies could be missed.
+
+What changed: the IPv4 socket joins 224.0.0.251, the IPv6 socket joins ff02::fb. A failed join still sends the query.
+
+Limits: QEMU usernet is not multicast. Needs a LAN.
+
 ## 2026-11-17 - Network: a missed .local name is not sent to DNS
 
 Problem: after mDNS missed a `.local` name, `getaddrinfo` fell through to unicast DNS, against RFC 6762.
@@ -76,7 +94,6 @@ Problem: Logout sent `B_QUIT_REQUESTED` to user apps and did not wait. Tracker a
 What changed: after that quit, Login waits three seconds, then `kill_team` on what is left, then one more second.
 
 Limits: servers, daemons, and `B_BACKGROUND_APP` teams are still kept. No boot test of Log out.
-
 
 Tested: the C++ was not compiled on this host (needs libbe).
 
