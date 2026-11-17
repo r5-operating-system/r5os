@@ -1,5 +1,14 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Graphics (M13): stick 3 on the 5625U, RADV stays on
+
+Problem: sticks 1 and 2 of M13 lost the GPU drawing on RADV (an empty submit with waits, then too many waits in one CS). Before stick 3 an independent review of the whole M13 diff found four more faults, fixed in one round: window images were never freed after a failed RADV start; glass hidden under a window kept an old blur when it showed; without memory for a copy list a window part stayed old; and a compose relied on RADV's flush for Skia's earlier writes (now a barrier at the start of each compose). The semaphore wait that is a no-op in the R5 DRM library (point 0) is left: the barrier orders it on the one queue.
+
+Tested on the 5625U, image `9d8e786f`, branch `claude/m13-stick` `a18507be3e`, logs `generated/boot-5625u-53`:
+- Boots 1 and 2 (RADV): no `gpu draw off`, no fence timeout, no device lost; VulkanTeapot, vkcube and the WSI clear ok. Warm-up 2292 ms (pipeline cache none, then stored 531 KB), boot 2 136 ms (loaded). Drag 16.9 ms per frame (compose 1.6, draw 1.1), scroll 16.9 ms, resize 25.8 and 30.4 ms. The owner: scrolling felt fine, the rest felt like Haiku; fonts (Tracker, windows) could be better.
+- Boot 3 (Lavapipe, 128-bit): drag 16.7 ms (compose 4.9), resize 30.9 ms (compose 20.4). Warm-up 10160 ms, as on the M12 stick (10163): two `Finish()` waits of 5 s while LLVM compiles; Login comes up late. VulkanTeapot (on RADV) tears, because zero-copy is off with the compositor on Lavapipe.
+- Open: `check` marks the numbers FAIL at a 16.7 ms target against a 16.67 ms refresh (too strict); scroll p95 ~190 ms is the Terminal's bursts (felt smooth); `scanout through vulkan off: back buffer not on the gpu` on boot 2; the caps lock blinked once (3 long, 2 short, after boot 1's restart), not after boot 2's restart or boot 3's power off, with the GPU stop of #4355 in the image.
+
 ## 2026-11-17 - Graphics: the GPU is stopped before a restart or power off
 
 Problem: after a restart from R5 the 5625U's caps lock blinked. Haiku's shutdown calls no driver, so the GPU's command processor, PSP ring and interrupts ran on into the firmware's start. Linux stops them at shutdown (`amdgpu_pci_shutdown`).
