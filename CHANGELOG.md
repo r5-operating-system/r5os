@@ -1,5 +1,62 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Wi-Fi: SAE length, channel lookup, short HT elements
+
+Problem: a review of the station path found three mistakes that matter once SAE or `he` is used, and two on the menu. An SAE authentication frame was copied into an mbuf whose length stayed 0, so only the 24-byte header was sent. `IEEE80211_CHAN_HE` was part of the channel-match mask, so after the mark was set an HT lookup no longer found that channel. A short HT or VHT element was still cast to the full structure. The Deskbar join waited on Deskbar's own thread for the password. The rate line could name a different adapter than "Connected to".
+
+What changed:
+- The SAE body length is set on the mbuf before the header is prepended.
+- `IEEE80211_CHAN_HE` stays a mark on the HT or VHT entry and is no longer part of `IEEE80211_CHAN_ALL`.
+- A short HT or VHT element is dropped. The HT or VHT flag set just before the parse is cleared, and the rate setup is not run. A short standard HT element also clears a leftover vendor mark.
+- Joining from the Deskbar menu asks for the password on its own thread.
+- The rate line is taken from the associated adapter, the same one as the network name.
+
+Limits: SAE still has no supplicant. HE is still off until `he` and `ht_vht` are both set. The password window is still modal for Deskbar's windows. `WiFiLinkDetails` grew at the end, which moves `networks` inside `WiFiState` for a program built against the previous header; the image builds both together, and the message fields are named.
+
+Tested: not built and not booted in this pass.
+
+## 2026-11-17 - Wi-Fi: key slot size, BSS mode, capability length
+
+Problem: a review of the MT7921 station and network records found four mistakes. The integrity-key record told the firmware each key slot was 16 bytes, so a second key was read from the middle of the first. The network record stayed a legacy mode when `ht_vht` was on, and it could say Wi-Fi 6 when `he` was on without `ht_vht`. A capability reply whose length wrapped a 32-bit sum was treated as inside the buffer. A transmit-status mode above the HT or HE range was stored as a rate.
+
+What changed:
+- `cipher_len` is 36, the size of one key slot, matching mt76 `sec_key`. `key_len` stays 16.
+- The network record now sets GN or AN, and AC on 5 GHz, when `ht_vht` is on and the station is that kind. Wi-Fi 6 on that record, and the HE bit on the station PHY byte, require `he` and `ht_vht` together, the same gate as the HE station records.
+- The capability walk rejects a tag whose size does not fit in the bytes still left.
+- HT MCS above 31 is ignored. Only modes 8 to 11 are stored as HE. Any other unknown mode is ignored.
+
+Limits: still off unless the settings say `ht_vht` or `he`. The receive rate is still not reported. No stick boot, so the firmware has not accepted the 36-byte slot or the extra mode bits.
+
+Tested: compared with mt76 `sec_key` (`cipher_len = sizeof(sec_key)`) and `mt76_connac_get_phy_mode`. Not built and not booted in this pass.
+## 2026-11-17 - Game controllers: the picture of your own controller model
+
+Problem: the Game controllers page drew one of four simplified family shapes (PlayStation, Xbox, Nintendo, Sega Genesis), so a DualShock 4, a DualSense and a DualSense Edge, or an Xbox One and an Elite, all looked the same and not much like the real thing; triggers were bars above the picture and a stick was a ring with a dot. The owner chose a picture per model by vendor and product ID from the CC0 Gamepad Line Art Pack, R5's own drawing for the Sega Genesis family, trigger caps (variant A) and lit sticks (17 Nov 2026, `docs/design/gamecontrollers-mockup/lineart-*.png`, `triggers-*.png` part 1, `triggers2-*.png` part A).
+
+What changed:
+- `distro/game/art/gamepad-line-art-pack`: the pack by gidedin (CC0 1.0), SVGs, `LICENSE.txt` and `README.md` unmodified. `distro/game/art/r5/genesis-m30.svg`: R5's Genesis / Mega Drive 2 / 8BitDo M30 drawing (MIT) in the same line style.
+- `scripts/gen-controller-pictures.py` (Pillow only) writes `distro/game/lib/GameControllerPictureData.h`: each drawing as filled outlines (flattened, simplified to 0.375 viewBox units, even-odd per path; the M30's and the DualSense guide button's strokes turned into outlines, the M30's letters kept as text for the bold UI font), the outline of each control (a button's own outer edge, or a flood fill from a point inside for shoulders, touchpads and d-pad arms, widened to run under the line), the stick caps and their travel, and the ID table: 601 IDs from SDL's `controller_list.h` (commit `b2de7a19ad3c`, facts only) and the Sega Genesis style entries of the shipped SDL_GameControllerDB. About 2000 to 3900 points per drawing, 400 KB of source.
+- `GameControllerPictures.cpp` (private to `libr5game.so` and its test): the model for a vendor and product ID; an unknown product of Sony, Microsoft or Nintendo gets the DualSense, Xbox Series or Switch Pro; a model of another family than the controller's (a chosen layout) gives way to the family's picture. No public call changed.
+- `BGameControllerView` draws the model's picture in the text color (five passes a fraction of a pixel apart below 250 pixels wide, as the pack's bold drawings), a pressed control filled `B_STATUS_BAR_COLOR` under the line, a pressed stick's cap filled, a ring around a moved stick's cap moved the way it points, and two trigger caps over the shoulders with "L2 60%" and "R2 15%" beside them (LT/RT, ZL/ZR per model; none for the M30 and the Joy-Cons). The M30's C and Z light for the shoulders and L and R for the triggers, as the database maps them. A controller without a mapping keeps the picture built from what it reports. The old family shapes are gone from the code.
+- Lines and lit parts are filled with one-color gradients: app_server fills a plain shape with the font subpixel setting, and the first screendump showed red and blue edges on the thin lines.
+- `gamecontroller_test`: the ID table is sorted, 17 ID and family cases give the expected picture, no picture without a mapping, every drawing has its face buttons, Start, d-pad and shoulders inside the drawing, sticks except on the M30. `--hold` now presses Cross, L1 and L3, moves the right stick up and right, and holds L2 at 60 % and R2 at 15 %, as the approved mockup.
+- Docs: `docs/GAME-CONTROLLERS.md` section 7 (decision, component report, as built), `docs/LIBR5.md` and the R5Book Game Kit page, `THIRD_PARTY_NOTICES.md`, `docs/LICENSING.md`, the mockup README with the approved PNGs.
+
+Mistakes on the way: the first flood fill limit (8 % of the picture) rejected the DualShock 4 touchpad, which is larger; it is 15 % now. The first image showed colored line edges (see above).
+
+Limits: the control places are measured from the drawings and checked on rendered check pictures, not with real controllers. The pictures show what is printed on the model; Button labels changes only what games get and the built picture. Saturn, SN30, SF30 and Steam controllers get their family's picture. The Switch Pro's ZL and ZR are digital, so their caps show 0 or 100 %. The Elite's and Edge's back paddles and the Edge's Fn buttons are not lit (not in a front view).
+
+Tested: `scripts/build-locked.sh` twice, jam_exit=0 (x86_64). QEMU (KVM, SMAP and SMEP, Login, an own image copy, `GAMEPAD=1 SETTINGS_PAGE=gamecontrollers SHOTS="140 160"`), both builds: `gamecontroller_test: ok`, "pictures ok (601 IDs)", each of the ten drawings with its point and control count (2020 points and 16 controls for the Xbox Series up to 3924 and 17 for the DualSense Edge), the virtual DualSense and the two M30 pads as before, the five still pictures draw (1490 to 5098 line pixels), the other Bluetooth tests exit 0, no panic, no SMAP line. The screendump at 160 s (second build) shows the page with the DualSense picture: Cross, L1 and the left stick's cap lit, a blue ring around the right stick moved up and right, the L2 cap filled to 60 % with "L2 60%" left of it and the R2 cap at 15 % with "R2 15%" right of it, gray line edges. Light mode, font size 12, the window at 1030 by 610 only. The other nine drawings were checked on the generator's check pictures (every control lit, sticks pushed, caps drawn), not in QEMU.
+
+Not tested: a real controller (QEMU has no game controller; the DualSense, the 8BitDo M30 and any Xbox or Nintendo controller), dark mode in QEMU (the check pictures are light only), ARM64 and RISC-V 64 (not built).
+
+## 2026-11-17 - Graphics: the GPU is stopped before a restart or power off
+
+Problem: after a restart from R5 the 5625U's caps lock blinked. Haiku's shutdown calls no driver, so the GPU's command processor, PSP ring and interrupts ran on into the firmware's start. Linux stops them at shutdown (`amdgpu_pci_shutdown`).
+
+What changed: the kernel has R5 shutdown hooks (`r5_shutdown.h`, `shutdown.cpp` in `distro/kernel`, copied by `apply-kernel-bugs.py`), called after `sync()`. `radeon_hd` registers one with the GFX9 path: CP halt, PSP ring stop, interrupts off, VM 0 back, as `docs/GRAPHICS.md` "GFX9 stop at shutdown on GC 9.3". An addition after the reset contract; no fixed step changed.
+
+Limits: not built or booted yet. Whether the blinking was this cause is not proven; the HP blink count was not read.
+
 ## 2026-11-17 - Bluetooth: a game controller's battery in the Deskbar menu
 
 Problem: `docs/GAME-CONTROLLERS.md` puts the controller battery in the existing Bluetooth item in Deskbar. That item shows a battery line for each connected device whose `BT_MSG_R5_GET_PAIRED` entry has "battery" >= 0, but that value came only from HFP (headsets) and the LE Battery Service. A Classic HID controller's HID Battery Strength, which hid_shared reported in `R5_JOYSTICK_GET_INFO`, never reached it, and hid_shared took it only when a program read the joystick.

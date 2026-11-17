@@ -330,6 +330,12 @@ r5_wifi_link_line(BString& line)
 		BNetworkDevice device(interface.Name());
 		if (!device.IsWireless())
 			continue;
+		/* The same adapter the menu's "Connected to" line names. */
+		uint32 associated = 0;
+		wireless_network network;
+		if (device.GetNextAssociatedNetwork(associated, network) != B_OK
+			|| network.name[0] == '\0')
+			continue;
 		WiFiLinkDetails link;
 		ReadTxRate(device, link);
 		ReadLink(device, link);

@@ -97,7 +97,9 @@ def main() -> int:
     lib = HAIKU / "src/preferences/r5game"
     install_all([(GAME / "lib" / name, lib / name) for name in (
         "GameController.cpp", "GameControllerMapping.cpp",
-        "GameControllerMapping.h", "GameControllerView.cpp", "Jamfile",
+        "GameControllerMapping.h", "GameControllerPictures.cpp",
+        "GameControllerPictures.h", "GameControllerPictureData.h",
+        "GameControllerView.cpp", "Jamfile",
         "GameControllerReports.cpp", "GameControllerReports.h",
         "GameControllerMotionView.cpp", "GameControllerFeel.cpp",
         "GameControllerFeel.h")],

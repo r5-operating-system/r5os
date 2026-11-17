@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="20 80 1420 760">
+<!-- SPDX-FileCopyrightText: 2026 R5OS Contributors -->
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Genesis / Mega Drive 2 / 8BitDo M30 style, drawn for R5 in the line
+     style of the Gamepad Line Art Pack: one colour, round joins, a main
+     line and thinner detail lines, double rings, bold letters. -->
+<style>
+.m { fill: none; stroke: #1f2630; stroke-width: 8; stroke-linejoin: round; stroke-linecap: round; }
+.d { fill: none; stroke: #1f2630; stroke-width: 5; stroke-linejoin: round; stroke-linecap: round; }
+.t { fill: #1f2630; font: 800 58px 'DejaVu Sans', sans-serif; text-anchor: middle; dominant-baseline: central; }
+.s { fill: #1f2630; font: 800 30px 'DejaVu Sans', sans-serif; text-anchor: middle; dominant-baseline: central; }
+</style>
+<!-- shoulder buttons over the top edge -->
+<path class="m" d="M232,190 C250,146 306,124 384,122 L452,124 C474,126 486,144 488,186"/>
+<path class="d" d="M262,170 C286,150 330,140 384,140 L456,142"/>
+<text class="s" x="372" y="166">L</text>
+<path class="m" d="M1228,190 C1210,146 1154,124 1076,122 L1008,124 C986,126 974,144 972,186"/>
+<path class="d" d="M1198,170 C1174,150 1130,140 1076,140 L1004,142"/>
+<text class="s" x="1088" y="166">R</text>
+<!-- the shell: a flat top, bulging sides, a broad arch between the grips -->
+<path class="m" d="M262,186 L1198,186 C1290,186 1352,248 1382,338 C1416,446 1420,586 1390,676 C1360,764 1290,812 1210,802 C1130,794 1080,752 1020,714 C960,680 860,664 730,664 C600,664 500,680 440,714 C380,752 330,794 250,802 C170,812 100,764 70,676 C40,586 44,446 78,338 C108,248 170,186 262,186 Z"/>
+<!-- the seam along the top face, and the grip seams -->
+<path class="d" d="M300,222 L1160,222"/>
+<path class="d" d="M120,600 C150,690 200,740 262,752"/>
+<path class="d" d="M1340,600 C1310,690 1260,740 1198,752"/>
+<!-- the D-pad in its round bed -->
+<circle class="m" cx="372" cy="440" r="172"/>
+<circle class="d" cx="372" cy="440" r="150"/>
+<path class="m" d="M332,312 h80 a10,10 0 0 1 10,10 v68 h68 a10,10 0 0 1 10,10 v80 a10,10 0 0 1 -10,10 h-68 v68 a10,10 0 0 1 -10,10 h-80 a10,10 0 0 1 -10,-10 v-68 h-68 a10,10 0 0 1 -10,-10 v-80 a10,10 0 0 1 10,-10 h68 v-68 a10,10 0 0 1 10,-10 z"/>
+<circle class="d" cx="372" cy="440" r="20"/>
+<path class="d" d="M372,338 l-16,22 h32 z M372,542 l-16,-22 h32 z M270,440 l22,-16 v32 z M474,440 l-22,-16 v32 z"/>
+<!-- six buttons in two rows, the lower row larger, both rising to the right -->
+<g>
+<circle class="m" cx="952" cy="384" r="50"/><circle class="d" cx="952" cy="384" r="38"/><text class="t" x="952" y="386">X</text>
+<circle class="m" cx="1086" cy="362" r="50"/><circle class="d" cx="1086" cy="362" r="38"/><text class="t" x="1086" y="364">Y</text>
+<circle class="m" cx="1220" cy="340" r="50"/><circle class="d" cx="1220" cy="340" r="38"/><text class="t" x="1220" y="342">Z</text>
+<circle class="m" cx="930" cy="530" r="58"/><circle class="d" cx="930" cy="530" r="45"/><text class="t" x="930" y="532">A</text>
+<circle class="m" cx="1070" cy="506" r="58"/><circle class="d" cx="1070" cy="506" r="45"/><text class="t" x="1070" y="508">B</text>
+<circle class="m" cx="1210" cy="482" r="58"/><circle class="d" cx="1210" cy="482" r="45"/><text class="t" x="1210" y="484">C</text>
+</g>
+<!-- select, home, start -->
+<circle class="m" cx="640" cy="440" r="26"/><path class="d" d="M628,440 h24"/>
+<circle class="m" cx="820" cy="440" r="26"/>
+<path class="d" d="M820,452 c-14,-10 -18,-16 -18,-22 a8,8 0 0 1 18,-4 a8,8 0 0 1 18,4 c0,6 -4,12 -18,22 z"/>
+<rect class="m" x="672" y="540" width="116" height="40" rx="20"/>
+<text class="s" x="730" y="610" style="font-size:24px">START</text>
+<!-- four player lights -->
+<g class="d"><circle cx="700" cy="300" r="7"/><circle cx="720" cy="300" r="7"/><circle cx="740" cy="300" r="7"/><circle cx="760" cy="300" r="7"/></g>
+</svg>

@@ -1942,6 +1942,9 @@ sta_recv_mgmt(struct ieee80211_node *ni, struct mbuf *m0, int subtype,
 		    (vap->iv_flags_ht & IEEE80211_FHT_HT)) {
 			ieee80211_ht_node_init(ni);
 			ieee80211_ht_updateparams(ni, htcap, htinfo);
+			/* A short element clears the flag and must not be read again. */
+			if ((ni->ni_flags & IEEE80211_NODE_HT) == 0)
+				goto assoc_ht_done;
 
 			if ((vhtcap != NULL) && (vhtopmode != NULL) &
 			    (vap->iv_vht_flags & IEEE80211_FVHT_VHT)) {
@@ -1956,7 +1959,8 @@ sta_recv_mgmt(struct ieee80211_node *ni, struct mbuf *m0, int subtype,
 				} else {
 					ieee80211_vht_node_init(ni);
 					ieee80211_vht_updateparams(ni, vhtcap, vhtopmode);
-					ieee80211_setup_vht_rates(ni);
+					if ((ni->ni_flags & IEEE80211_NODE_VHT) != 0)
+						ieee80211_setup_vht_rates(ni);
 				}
 			}
 			if (hecap != NULL)
@@ -1971,6 +1975,8 @@ sta_recv_mgmt(struct ieee80211_node *ni, struct mbuf *m0, int subtype,
 
 			ieee80211_node_setuptxparms(ni);
 			ieee80211_ratectl_node_init(ni);
+assoc_ht_done:
+			;
 		}
 
 		/*
@@ -2185,6 +2191,9 @@ ieee80211_send_sae_auth(struct ieee80211vap *vap, const uint8_t *mac,
 		return ENOMEM;
 	}
 	memcpy(frm, body, len);
+	/* getmgtframe leaves the length at 0. The header is added later. */
+	m->m_len = len;
+	m->m_pkthdr.len = len;
 	memset(&params, 0, sizeof(params));
 	params.ibp_pri = WME_AC_VO;
 	return ieee80211_mgmt_output(ni, m, IEEE80211_FC0_SUBTYPE_AUTH,

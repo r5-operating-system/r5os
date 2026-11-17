@@ -347,21 +347,26 @@ mtk_note_txs(struct mtk_softc* sc, const uint8_t* data, size_t got)
 		width = 20 << ((word >> 29) & 0x3);
 		if (mode == 2 || mode == 3) {
 			index = rate & 0x3f;
+			/* HT MCS stops at 31 (four streams). */
+			if (index > 31)
+				continue;
 			nss = index / 8 + 1;
 			index %= 8;
 			kit = 2;
 			kbps = mtk_ht_kbps((int)index, width) * nss;
-		} else if (mode == 4 || mode >= 8) {
+		} else if (mode == 4 || (mode >= 8 && mode <= 11)) {
 			index = rate & 0xf;
 			nss = ((rate >> 10) & 0x7) + 1;
+			/* 4 is VHT. 8 through 11 are the HE modes. */
 			kit = mode >= 8 ? 4 : 3;
 			kbps = mtk_vht_kbps((int)index, width) * nss;
-		} else {
+		} else if (mode <= 1) {
 			index = rate & 0x3f;
 			nss = 1;
 			kit = 1;
 			kbps = mtk_legacy_kbps((int)mode, (int)index);
-		}
+		} else
+			continue;
 		if (kbps == 0 || nss == 0 || nss > 8)
 			continue;
 

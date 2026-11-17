@@ -61,6 +61,8 @@
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 #include "WiFiWindow.h"
+#include <new>
+#include <OS.h>
 #include <R5WiFi.h>
 #include <R5WiFiGlyphs.h>
 #include <R5WiFiNetworkList.h>
@@ -85,6 +87,41 @@ extern "C" _EXPORT BView *instantiate_deskbar_item(float maxWidth, float maxHeig
 const uint32 kMsgShowConfiguration = 'shcf';
 const uint32 kMsgOpenNetworkPreferences = 'onwp';
 const uint32 kMsgJoinNetwork = 'join';
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+struct DeskbarJoin {
+	BString			device;
+	BString			name;
+	wireless_network	network;
+};
+
+static status_t
+deskbar_join(void* arg)
+{
+	DeskbarJoin* join = static_cast<DeskbarJoin*>(arg);
+	BString password;
+	status_t status = B_OK;
+
+	if (join->network.authentication_mode != B_NETWORK_AUTHENTICATION_NONE)
+		status = r5_wifi_ask_password(join->name.String(), password);
+	if (status == B_OK) {
+		status = r5_wifi_join_and_remember(join->device.String(),
+			join->network, password.String());
+	}
+	if (status != B_OK) {
+		BString text = B_TRANSLATE("Could not join wireless network:\n");
+		text << strerror(status);
+		BAlert* alert = new BAlert(join->name.String(), text.String(),
+			B_TRANSLATE("OK"), NULL, NULL, B_WIDTH_AS_USUAL, B_STOP_ALERT);
+		alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
+		alert->Go(NULL);
+	}
+	delete join;
+	return B_OK;
+}
+// SPDX-SnippetEnd
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
@@ -312,25 +349,20 @@ NetworkStatusView::MessageReceived(BMessage* message)
 					network.authentication_mode
 						= B_NETWORK_AUTHENTICATION_WPA2;
 				}
-				BString password;
-				if (network.authentication_mode
-						!= B_NETWORK_AUTHENTICATION_NONE) {
-					if (r5_wifi_ask_password(name, password) != B_OK)
-						break;
+				DeskbarJoin* join = new(std::nothrow) DeskbarJoin;
+				if (join == NULL)
+					break;
+				join->device = deviceName;
+				join->name = name;
+				join->network = network;
+				thread_id thread = spawn_thread(deskbar_join, "wifi join",
+					B_NORMAL_PRIORITY, join);
+				if (thread < 0) {
+					delete join;
+					break;
 				}
-				status_t status = r5_wifi_join_and_remember(deviceName,
-					network, password.String());
+				resume_thread(thread);
 // SPDX-SnippetEnd
-				if (status != B_OK) {
-					BString text
-						= B_TRANSLATE("Could not join wireless network:\n");
-					text << strerror(status);
-					BAlert* alert = new BAlert(name, text.String(),
-						B_TRANSLATE("OK"), NULL, NULL, B_WIDTH_AS_USUAL,
-						B_STOP_ALERT);
-					alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
-					alert->Go(NULL);
-				}
 			}
 			break;
 		}

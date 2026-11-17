@@ -244,11 +244,19 @@ struct ieee80211_channel {
 #define	IEEE80211_CHAN_ST \
 	(IEEE80211_CHAN_108A | IEEE80211_CHAN_STURBO)
 
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * CHAN_HE is a mark on an existing HT or VHT entry, not its own channel.
+ * find_channel compares against this mask. Including HE here makes an
+ * HT lookup miss the entry once the mark is set.
+ */
+/* SPDX-SnippetEnd */
 #define	IEEE80211_CHAN_ALL \
 	(IEEE80211_CHAN_2GHZ | IEEE80211_CHAN_5GHZ | IEEE80211_CHAN_GFSK | \
 	 IEEE80211_CHAN_CCK | IEEE80211_CHAN_OFDM | IEEE80211_CHAN_DYN | \
 	 IEEE80211_CHAN_HALF | IEEE80211_CHAN_QUARTER | \
-	 IEEE80211_CHAN_HT | IEEE80211_CHAN_VHT | IEEE80211_CHAN_HE)
+	 IEEE80211_CHAN_HT | IEEE80211_CHAN_VHT)
 #define	IEEE80211_CHAN_ALLTURBO \
 	(IEEE80211_CHAN_ALL | IEEE80211_CHAN_TURBO | IEEE80211_CHAN_STURBO)
 
