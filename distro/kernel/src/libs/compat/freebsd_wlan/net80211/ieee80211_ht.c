@@ -1664,6 +1664,24 @@ ieee80211_ht_timeout(struct ieee80211vap *vap)
 	}
 }
 
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * body is the standard element without its id and length. A vendor
+ * element has four extra bytes in front of that.
+ */
+static int
+ht_ie_fits(const uint8_t *ie, int body)
+{
+	int extra;
+
+	if (ie == NULL)
+		return 0;
+	extra = ie[0] == IEEE80211_ELEMID_VENDOR ? 4 : 0;
+	return ie[1] >= extra + body;
+}
+/* SPDX-SnippetEnd */
+
 /*
  * Process an 802.11n HT capabilities ie.
  */
@@ -1674,11 +1692,12 @@ ieee80211_parse_htcap(struct ieee80211_node *ni, const uint8_t *ie)
  * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
  * SPDX-License-Identifier: MIT
  * ies_expand does not check the element length. A short one is dropped.
+ * A short standard element clears a vendor mark left by an earlier frame.
  */
-	if (ie == NULL || ie[1] < sizeof(struct ieee80211_ie_htcap) - 2)
+	if (ie == NULL)
 		return;
 	if (ie[0] == IEEE80211_ELEMID_VENDOR) {
-		if (ie[1] < 4 + sizeof(struct ieee80211_ie_htcap) - 2)
+		if (!ht_ie_fits(ie, sizeof(struct ieee80211_ie_htcap) - 2))
 			return;
 		/*
 		 * Station used Vendor OUI ie to associate;
@@ -1687,8 +1706,11 @@ ieee80211_parse_htcap(struct ieee80211_node *ni, const uint8_t *ie)
 		 */
 		ni->ni_flags |= IEEE80211_NODE_HTCOMPAT;
 		ie += 4;
-	} else
+	} else {
 		ni->ni_flags &= ~IEEE80211_NODE_HTCOMPAT;
+		if (!ht_ie_fits(ie, sizeof(struct ieee80211_ie_htcap) - 2))
+			return;
+	}
 /* SPDX-SnippetEnd */
 
 	ni->ni_htcap = le16dec(ie +
@@ -1926,6 +1948,13 @@ ieee80211_ht_updateparams(struct ieee80211_node *ni,
 	struct ieee80211vap *vap = ni->ni_vap;
 	const struct ieee80211_ie_htinfo *htinfo;
 
+	if (!ht_ie_fits(htcapie, sizeof(struct ieee80211_ie_htcap) - 2)
+	    || !ht_ie_fits(htinfoie, sizeof(struct ieee80211_ie_htinfo) - 2)) {
+		if (ni->ni_flags & IEEE80211_NODE_HT)
+			ieee80211_ht_node_cleanup(ni);
+		return;
+	}
+
 	ieee80211_parse_htcap(ni, htcapie);
 	if (vap->iv_htcaps & IEEE80211_HTC_SMPS)
 		htcap_update_mimo_ps(ni);
@@ -2112,6 +2141,10 @@ ieee80211_ht_updateparams_final(struct ieee80211_node *ni,
 	int htflags, vhtflags;
 	int ret = 0;
 
+	if (!ht_ie_fits(htinfoie, sizeof(struct ieee80211_ie_htinfo) - 2))
+		return 0;
+	if (htinfoie[0] == IEEE80211_ELEMID_VENDOR)
+		htinfoie += 4;
 	htinfo = (const struct ieee80211_ie_htinfo *) htinfoie;
 
 	htflags = (vap->iv_flags_ht & IEEE80211_FHT_HT) ?
@@ -2215,6 +2248,9 @@ ieee80211_setup_htrates(struct ieee80211_node *ni, const uint8_t *ie, int flags)
 
 	rs = &ni->ni_htrates;
 	memset(rs, 0, sizeof(*rs));
+	if (ie != NULL &&
+	    !ht_ie_fits(ie, sizeof(struct ieee80211_ie_htcap) - 2))
+		ie = NULL;
 	if (ie != NULL) {
 		if (ie[0] == IEEE80211_ELEMID_VENDOR)
 			ie += 4;
@@ -2254,6 +2290,8 @@ ieee80211_setup_basic_htrates(struct ieee80211_node *ni, const uint8_t *ie)
 	struct ieee80211_htrateset *rs;
 	int i, j;
 
+	if (!ht_ie_fits(ie, sizeof(struct ieee80211_ie_htinfo) - 2))
+		return;
 	if (ie[0] == IEEE80211_ELEMID_VENDOR)
 		ie += 4;
 	htinfo = (const struct ieee80211_ie_htinfo *) ie;

@@ -1,5 +1,20 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Wi-Fi: SAE length, channel lookup, short HT elements
+
+Problem: a review of the station path found three mistakes that matter once SAE or `he` is used, and two on the menu. An SAE authentication frame was copied into an mbuf whose length stayed 0, so only the 24-byte header was sent. `IEEE80211_CHAN_HE` was part of the channel-match mask, so after the mark was set an HT lookup no longer found that channel. A short HT or VHT element was still cast to the full structure. The Deskbar join waited on Deskbar's own thread for the password. The rate line could name a different adapter than "Connected to".
+
+What changed:
+- The SAE body length is set on the mbuf before the header is prepended.
+- `IEEE80211_CHAN_HE` stays a mark on the HT or VHT entry and is no longer part of `IEEE80211_CHAN_ALL`.
+- A short HT or VHT element is dropped. The HT or VHT flag set just before the parse is cleared, and the rate setup is not run. A short standard HT element also clears a leftover vendor mark.
+- Joining from the Deskbar menu asks for the password on its own thread.
+- The rate line is taken from the associated adapter, the same one as the network name.
+
+Limits: SAE still has no supplicant. HE is still off until `he` and `ht_vht` are both set. The password window is still modal for Deskbar's windows. `WiFiLinkDetails` grew at the end, which moves `networks` inside `WiFiState` for a program built against the previous header; the image builds both together, and the message fields are named.
+
+Tested: not built and not booted in this pass.
+
 ## 2026-11-17 - Wi-Fi: key slot size, BSS mode, capability length
 
 Problem: a review of the MT7921 station and network records found four mistakes. The integrity-key record told the firmware each key slot was 16 bytes, so a second key was read from the middle of the first. The network record stayed a legacy mode when `ht_vht` was on, and it could say Wi-Fi 6 when `he` was on without `ht_vht`. A capability reply whose length wrapped a 32-bit sum was treated as inside the buffer. A transmit-status mode above the HT or HE range was stored as a rate.
