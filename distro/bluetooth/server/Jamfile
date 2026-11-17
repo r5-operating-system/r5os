@@ -29,6 +29,7 @@ Application bluetooth_server
 	LocalDeviceHandler.cpp
 	LocalDeviceImpl.cpp
 	LocalDeviceVoice.cpp
+	LocalDeviceNames.cpp
 	PairingNotice.cpp
 	PasskeyWindow.cpp
 	HFPAgent.cpp

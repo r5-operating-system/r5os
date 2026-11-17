@@ -36,6 +36,9 @@
 #include "HFPGateway.h"
 #include "LEManager.h"
 #include "PairingNotice.h"
+
+// Write Inquiry Mode (Core 5.4, Vol 4, Part E, 7.3.50).
+static const uint16 kOpWriteInquiryMode = 0x0c45;
 // SPDX-SnippetEnd
 
 
@@ -729,6 +732,9 @@ LocalDeviceImpl::HandleEvent(struct hci_event_header* event, size_t size)
 	// code below, which took a voice request for a new ACL link.
 	if (_R5VoiceEvent(event))
 		return;
+	// The server's own Remote Name Requests (LocalDeviceNames.cpp).
+	if (_R5NameEvent(event))
+		return;
 	// The remote host features the server asked for itself.
 	if (event->ecode == HCI_EVENT_REMOTE_EXTENDED_FEATURES
 		&& event->elen >= sizeof(struct hci_ev_remote_extended_features)) {
@@ -1288,6 +1294,7 @@ LocalDeviceImpl::CommandComplete(struct hci_ev_cmd_complete* event,
 			// SPDX-License-Identifier: MIT
 			if (fLE != NULL)
 				fLE->StopScan();
+			_R5InquiryEnded();
 			// SPDX-SnippetEnd
 
 			ClearWantedEvent(request);
@@ -1310,6 +1317,7 @@ LocalDeviceImpl::CommandComplete(struct hci_ev_cmd_complete* event,
 		// SPDX-License-Identifier: MIT
 		case PACK_OPCODE(OGF_LINK_CONTROL, R5_OCF_USER_PASSKEY_REPLY):
 		case PACK_OPCODE(OGF_LINK_CONTROL, R5_OCF_USER_PASSKEY_NEG_REPLY):
+		case kOpWriteInquiryMode:
 		// SPDX-SnippetEnd
 		{
 			reply.AddUInt8("status", *(uint8*)(event + 1));
@@ -1391,6 +1399,23 @@ LocalDeviceImpl::CommandComplete(struct hci_ev_cmd_complete* event,
 					free(command);
 				}
 			}
+
+			// Names and signal strength in the scan's answers: Extended
+			// Inquiry Result where the controller has it (LMP feature
+			// byte 6, bit 0), otherwise Inquiry Result with RSSI (byte 3,
+			// bit 6). R5 never wrote it, and after a reset the mode is the
+			// standard one, with neither (Core 5.4, Vol 4, Part E,
+			// 7.3.50; Vol 2, Part C, 3.3).
+			const uint8 mode = (fFeatures[6] & 0x01) != 0 ? 2
+				: (fFeatures[3] & 0x40) != 0 ? 1 : 0;
+			if (mode != 0) {
+				uint8 command[4] = { (uint8)kOpWriteInquiryMode,
+					(uint8)(kOpWriteInquiryMode >> 8), 1, mode };
+				_IssueSetupCommand(command, sizeof(command),
+					kOpWriteInquiryMode);
+				syslog(LOG_INFO, "bluetooth_server: hci%" B_PRId32 " inquiry"
+					" mode %s", GetID(), mode == 2 ? "extended" : "rssi");
+			}
 			break;
 		}
 		// SPDX-SnippetEnd
@@ -1441,6 +1466,9 @@ LocalDeviceImpl::CommandStatus(struct hci_ev_cmd_status* event,
 			// LE devices join the same scan list (step 6).
 			if (event->status == BT_OK && fLE != NULL)
 				fLE->StartScan(request->ReturnAddress());
+			// Names wait until the scan ends (LocalDeviceNames.cpp).
+			if (event->status == BT_OK)
+				_R5InquiryStarted(request->ReturnAddress());
 			// SPDX-SnippetEnd
 
 			ClearWantedEvent(request, HCI_EVENT_CMD_STATUS,
@@ -1599,6 +1627,16 @@ LocalDeviceImpl::InquiryResult(uint8* numberOfResponses, BMessage* request)
 		reply.AddUInt8("scan_period_mode", scan_period_mode_array[i]);
 		reply.AddUInt8("scan_mode", scan_mode_array[i]);
 		reply.AddUInt16("clock_offset", clock_offset_array[i]);
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// A standard answer has no name: a known one, or it is asked for
+		// after the scan.
+		_R5AddInquiryName(reply, bdaddr_array[i],
+			page_repetition_mode_array[i],
+			B_LENDIAN_TO_HOST_INT16(clock_offset_array[i]),
+			&dev_class_array[i * 3]);
+		// SPDX-SnippetEnd
 	}
 
 	printf("%s: Sending reply...\n", __func__);
@@ -1647,6 +1685,14 @@ LocalDeviceImpl::InquiryResultWithRSSI(uint8* numberOfResponses, BMessage* reque
 		reply.AddUInt8("scan_period_mode", scan_period_mode_array[i]);
 		reply.AddUInt16("clock_offset", clock_offset_array[i]);
 		reply.AddInt8("rssi", rssi_array[i]);
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		_R5AddInquiryName(reply, bdaddr_array[i],
+			page_repetition_mode_array[i],
+			B_LENDIAN_TO_HOST_INT16(clock_offset_array[i]),
+			&dev_class_array[i * 3]);
+		// SPDX-SnippetEnd
 	}
 
 	printf("%s: Sending reply...\n", __func__);
@@ -1689,6 +1735,21 @@ LocalDeviceImpl::ExtendedInquiryResult(uint8* numberOfResponses, BMessage* reque
 	reply.AddInt8("rssi", info->rssi);
 
 	ParseEIR(info->eir, reply);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// An answer without a name in its EIR: a known one, or it is asked for
+	// after the scan.
+	BString eirName;
+	if (reply.FindString("friendly_name", &eirName) == B_OK
+		&& eirName.Length() > 0)
+		_R5NameHeard(info->bdaddr, eirName, NULL, false);
+	else {
+		reply.RemoveName("friendly_name");
+		_R5AddInquiryName(reply, info->bdaddr, info->page_repetition_mode,
+			B_LENDIAN_TO_HOST_INT16(info->clock_offset), info->dev_class);
+	}
+	// SPDX-SnippetEnd
 
 	printf("%s: Sending reply...\n", __func__);
 	status_t status = request->SendReply(&reply);
@@ -1814,6 +1875,7 @@ LocalDeviceImpl::InquiryComplete(uint8* status, BMessage* request)
 	// SPDX-License-Identifier: MIT
 	if (fLE != NULL)
 		fLE->StopScan();
+	_R5InquiryEnded();
 	// SPDX-SnippetEnd
 
 	printf("%s: Sending reply...\n", __func__);
@@ -1969,6 +2031,9 @@ LocalDeviceImpl::CreateConnection(BMessage* message)
 		&& fLE->Pair(*bdaddr, message->ReturnAddress()))
 		return;
 	bool added = false;
+	// The page pairs now: a Remote Name Request would take its paging.
+	if (!reconnect)
+		_R5PairingStarts();
 	// SPDX-SnippetEnd
 
 	TRACE_BT("LocalDeviceImpl: Create Connection to %s...\n",
@@ -2243,6 +2308,9 @@ LocalDeviceImpl::ConnectionComplete(struct hci_ev_conn_complete* event)
 		// The steps of connecting and pairing, without addresses or keys,
 		// so a stick boot shows how far it got.
 		syslog(LOG_INFO, "bluetooth_server: connection up");
+		// A device whose name the server does not know yet is asked for
+		// it on this link (LocalDeviceNames.cpp).
+		_R5ConnectedWithoutName(rd);
 		// SPDX-SnippetEnd
 		TRACE_BT("LocalDeviceImpl: %s: Address %s handle=%#x type=%d encrypt=%d\n", __FUNCTION__,
 				bdaddrUtils::ToString(event->bdaddr).String(), event->handle,
@@ -2322,6 +2390,17 @@ LocalDeviceImpl::DisconnectionComplete(hci_ev_disconnection_complete_reply* even
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
+	// Who ended a link, without its address (stick 51: a headset that
+	// connected and dropped at once left no trace). Core 5.4, Vol 1,
+	// Part F: 0x08 timeout, 0x13 the device ended it, 0x16 this computer
+	// did.
+	const char* who = event->reason == 0x13 || event->reason == 0x14
+			|| event->reason == 0x15 ? "the device ended it"
+		: event->reason == 0x16 ? "this computer ended it"
+		: event->reason == 0x08 ? "timeout" : "other";
+	syslog(LOG_INFO, "bluetooth_server: link down (reason %#x, %s, status "
+		"%#x%s)", event->reason, who, event->status,
+		rd == NULL ? ", unknown link" : "");
 	// rd is NULL for an unknown handle (review of #4286).
 	if (rd != NULL
 		&& (event->status == BT_OK || event->status == BT_NO_CONNECTION)) {

@@ -12,6 +12,7 @@
 
 #include <R5Bluetooth.h>
 
+#include <Application.h>
 #include <Box.h>
 #include <Button.h>
 #include <Catalog.h>
@@ -36,6 +37,7 @@
 
 #include <new>
 #include <string.h>
+#include <strings.h>
 
 
 #undef B_TRANSLATION_CONTEXT
@@ -378,11 +380,16 @@ BluetoothView::BluetoothView(bool settingsPage)
 			.Add(fMine->batteryLabel, 0, 3)
 			.Add(fMine->battery, 1, 3)
 		.End()
-		// Only for a headset, or only for a game controller.
-		.Add(fMine->useForSound)
+		// Only for a headset, or only for a game controller: one line for
+		// either. "Test buttons…" was the third button in the row below,
+		// which then ran past the window's right edge (stick 51).
+		.AddGroup(B_HORIZONTAL)
+			.Add(fMine->useForSound)
+			.Add(fMine->testButtons)
+			.AddGlue()
+		.End()
 		.AddGlue()
 		.AddGroup(B_HORIZONTAL)
-			.Add(fMine->testButtons)
 			.AddGlue()
 			.Add(fMine->disconnect)
 			.Add(fMine->forget)
@@ -611,8 +618,24 @@ BluetoothView::MessageReceived(BMessage* message)
 			// The live test is the Game controllers page of Settings
 			// (docs/GAME-CONTROLLERS.md, step 8), which also runs when
 			// Settings is open already.
+			// BRoster::Launch() refuses a launch of the calling team itself
+			// (B_BAD_VALUE, nothing sent), so on this page inside Settings
+			// the button did nothing (stick 51). There the same "--page"
+			// arguments go to Settings directly, as B_ARGV_RECEIVED.
+			static const char* kSettings = "application/x-vnd.R5OS-Settings";
+			app_info info;
+			if (be_app != NULL && be_app->GetAppInfo(&info) == B_OK
+				&& strcasecmp(info.signature, kSettings) == 0) {
+				BMessage argv(B_ARGV_RECEIVED);
+				argv.AddInt32("argc", 3);
+				argv.AddString("argv", "Settings");
+				argv.AddString("argv", "--page");
+				argv.AddString("argv", "gamecontrollers");
+				be_app->PostMessage(&argv);
+				break;
+			}
 			const char* args[] = { "--page", "gamecontrollers", NULL };
-			be_roster->Launch("application/x-vnd.R5OS-Settings", 2, args);
+			be_roster->Launch(kSettings, 2, args);
 			break;
 		}
 

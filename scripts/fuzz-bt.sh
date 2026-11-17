@@ -30,7 +30,8 @@ if [ "$target" = audio ]; then
 	g++ $flags -I "$A" scripts/bt-audio-fuzz.cpp "$A/sbc_encoder.cpp" \
 		-o "$out" -lm
 elif [ "$target" = sdp ]; then
-	g++ $flags -I distro/bluetooth/server scripts/bt-sdp-fuzz.cpp -o "$out"
+	g++ $flags -I distro/bluetooth/server scripts/bt-sdp-fuzz.cpp \
+		distro/bluetooth/server/RFCOMMMux.cpp -o "$out"
 elif [ "$target" = sco ]; then
 	g++ $flags -I scripts/bt-host -I "$K/drivers/bluetooth/h2/h2generic" \
 		-I "$A" scripts/bt-sco-fuzz.cpp "$A/sbc_encoder.cpp" \

@@ -622,8 +622,12 @@ void BluetoothServer::MessageReceived(BMessage* message)
 			break;
 
 		case kMsgR5LEPulse:
-			if (!message->IsSourceRemote())
+			if (!message->IsSourceRemote()) {
 				LEManager::Pulse();
+				// A Remote Name Request without an answer in time.
+				for (int32 i = 0; i < fLocalDevicesList.CountItems(); i++)
+					fLocalDevicesList.ItemAt(i)->R5NamePulse();
+			}
 			break;
 		// SPDX-SnippetEnd
 
@@ -1198,6 +1202,8 @@ BluetoothServer::DiscoverServices(ServerRemoteDevice* rd)
 struct r5_sdp_args {
 	hci_id		hid;
 	bdaddr_t	address;
+	BString		name;
+	uint8		deviceClass[3];
 };
 
 
@@ -1209,6 +1215,11 @@ BluetoothServer::R5DiscoverServices(hci_id hid, ServerRemoteDevice* rd)
 		return;
 	args->hid = hid;
 	args->address = rd->bdaddr;
+	// The probe record lacked them: the device's name never reached
+	// bluetooth_hid (the Game controllers page showed "Game controller"
+	// for the 8BitDo M30), and SDP could not tell a headset by its class.
+	args->name = rd->friendly_name;
+	memcpy(args->deviceClass, rd->classOfDevice, sizeof(args->deviceClass));
 	thread_id thread = spawn_thread(_SDPThread, "bluetooth sdp",
 		B_NORMAL_PRIORITY, args);
 	if (thread < 0) {
@@ -1229,6 +1240,9 @@ BluetoothServer::_SDPThread(void* data)
 	// unpaired device that left) by the time the device answered.
 	ServerRemoteDevice probe;
 	probe.bdaddr = args->address;
+	probe.friendly_name = args->name;
+	memcpy(probe.classOfDevice, args->deviceClass,
+		sizeof(probe.classOfDevice));
 	bool read;
 	{
 		SDPClient client(&probe);
@@ -1243,6 +1257,12 @@ BluetoothServer::_SDPThread(void* data)
 		if (channel != 0) {
 			syslog(LOG_INFO, "bluetooth_server: hands-free service on "
 				"RFCOMM channel %u", channel);
+		} else if ((probe.classOfDevice[1] & 0x1f) == 4
+			|| (probe.classOfDevice[0] | probe.classOfDevice[1]
+				| probe.classOfDevice[2]) == 0) {
+			// An audio device (or one of unknown class) without one: HFP
+			// does not start for it.
+			syslog(LOG_INFO, "bluetooth_server: hfp: no hands-free record");
 		}
 	}
 
