@@ -11,7 +11,7 @@ r5:libr5ui-1	A	libr5ui	distro/ui/AdminLock.cpp	2	pr	4373	BAdminLockBar::AcceptsI
 r5:login-3	A	Login	distro/login/LoginApp.cpp	2	pr	4370	TryLogin writes the session file then launches; launch failure leaves a stale session name
 r5:login-4	A	Login	distro/login/R5Desktop.cpp	2	pr	4371	read_session_name falls back to /tmp/r5-desktop-session if the system file is missing
 r5:login-5	A	Login	distro/login/R5Desktop.cpp	2	pr	4372	initgroups failure is logged then setresuid still drops, so admin groups can be missing
-r5:media-2	B	usb_webcam	distro/media/src/add-ons/media/media-add-ons/usb_webcam/addons/uvc/UVCCamDevice.cpp	2	todo		UVC error log always appends to /boot/home/uvc.log from uid 0; unbounded growth
+r5:media-2	B	usb_webcam	distro/media/src/add-ons/media/media-add-ons/usb_webcam/addons/uvc/UVCCamDevice.cpp	2	pr	4393	UVC error log always appends to /boot/home/uvc.log from uid 0; unbounded growth
 r5:media-7	C	usb_audio	distro/media/src/add-ons/kernel/drivers/audio/usb/Stream.cpp	2	needs-hardware		Stream::Start can leave a live ISO transfer with fIsRunning false if the second buffer queue fails
 r5:net-1	A	IPv6	distro/network/SLAACClient.cpp	2	pr	4375	_ApplyAdvert still AddDefaultRoute when RA Router Lifetime is 0
 r5:net-2	A	net_server	distro/rest/src/servers/net/NetServer.cpp	2	pr	4382	resolv.conf rewrite from remembered nameservers drops an existing domain line

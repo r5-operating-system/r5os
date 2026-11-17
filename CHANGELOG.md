@@ -1,5 +1,15 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Media: UVC errors go to syslog, not a home log
+
+Problem: every UVC error appended to `/boot/home/uvc.log` from uid 0. The file grew without bound and sat in the administrator home.
+
+What changed: `uvc_note` only writes syslog.
+
+Limits: not booted with a camera. The add-on was not compiled on this host.
+
+Tested: none.
+
 ## 2026-11-17 - Media: HDA widget lookup stops at the last node
 
 Problem: `hda_audio_group_get_widget` treated `widget_start + widget_count` as a valid node id. That index is one past the allocated array, so a look-up of the last codec node could read off the end.
