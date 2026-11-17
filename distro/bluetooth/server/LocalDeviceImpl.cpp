@@ -722,6 +722,16 @@ LocalDeviceImpl::HandleEvent(struct hci_event_header* event, size_t size)
 	// The radio's own lengths and counts were trusted, so an Inquiry Result
 	// with 255 responses read 14 * 255 bytes from a 260-byte buffer (review
 	// of #4286). Skip an event that does not fit what was received.
+	// Every inquiry answer the radio sends, counted before it is checked
+	// or parsed, so the scan's last line shows where answers stop.
+	if (size >= sizeof(*event)) {
+		if (event->ecode == HCI_EVENT_INQUIRY_RESULT)
+			fInquiryEvents[0]++;
+		else if (event->ecode == HCI_EVENT_INQUIRY_RESULT_WITH_RSSI)
+			fInquiryEvents[1]++;
+		else if (event->ecode == HCI_EVENT_EXTENDED_INQUIRY_RESULT)
+			fInquiryEvents[2]++;
+	}
 	if (!_EventFits(event, size)) {
 		syslog(LOG_WARNING, "bluetooth_server: dropped event %#x: %"
 			B_PRIuSIZE " bytes do not hold what it declares",
@@ -1418,8 +1428,9 @@ LocalDeviceImpl::CommandComplete(struct hci_ev_cmd_complete* event,
 			// bit 6). R5 never wrote it, and after a reset the mode is the
 			// standard one, with neither (Core 5.4, Vol 4, Part E,
 			// 7.3.50; Vol 2, Part C, 3.3).
-			const uint8 mode = (fFeatures[6] & 0x01) != 0 ? 2
-				: (fFeatures[3] & 0x40) != 0 ? 1 : 0;
+			// The answers of that mode are in the event mask
+			// (_EventMask(), scan_log.h).
+			const uint8 mode = scan_inquiry_mode(fFeatures);
 			if (mode != 0) {
 				uint8 command[4] = { (uint8)kOpWriteInquiryMode,
 					(uint8)(kOpWriteInquiryMode >> 8), 1, mode };
@@ -1475,6 +1486,8 @@ LocalDeviceImpl::CommandStatus(struct hci_ev_cmd_status* event,
 			// SPDX-SnippetBegin
 			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 			// SPDX-License-Identifier: MIT
+			syslog(LOG_INFO, "bluetooth_server: hci%" B_PRId32 " inquiry"
+				" command status %#x", GetID(), event->status);
 			// LE devices join the same scan list (step 6).
 			if (event->status == BT_OK && fLE != NULL)
 				fLE->StartScan(request->ReturnAddress());
@@ -1900,6 +1913,8 @@ LocalDeviceImpl::InquiryComplete(uint8* status, BMessage* request)
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
+	syslog(LOG_INFO, "bluetooth_server: hci%" B_PRId32 " inquiry complete,"
+		" status %#x", GetID(), *status);
 	if (fLE != NULL)
 		fLE->StopScan();
 	_R5InquiryEnded();
@@ -3225,6 +3240,10 @@ LocalDeviceImpl::_EventMask() const
 	// LE Meta (0x3E, bit 61) only when the controller has LE (step 6).
 	if (LEManager::Supported(fFeatures))
 		mask |= 1ULL << 61;
+	// The answers of the inquiry mode written after it: Extended Inquiry
+	// Result (bit 46) was never in the mask, so in extended mode the
+	// controller dropped every answer with EIR data (stick 54).
+	mask |= scan_inquiry_event_bits(scan_inquiry_mode(fFeatures));
 	return mask;
 }
 

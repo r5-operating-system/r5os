@@ -603,10 +603,45 @@ fuzz_l2cap_round()
 }
 
 
+// The inquiry mode and the event mask bits its answers need (scan_log.h):
+// stick 54 wrote extended mode without the Extended Inquiry Result bit.
+static void
+check_inquiry_mode(const uint8 features[8])
+{
+	const uint8 mode = scan_inquiry_mode(features);
+	const uint64_t bits = scan_inquiry_event_bits(mode);
+	check(mode <= 2, "inquiry mode");
+	check(mode != 2 || (features[6] & 0x01) != 0, "extended needs EIR");
+	check(mode != 1 || (features[3] & 0x40) != 0, "rssi needs RSSI");
+	// Every answer event the mode can send is in the mask: standard (0x02)
+	// always, with RSSI (0x22) in modes 1 and 2, extended (0x2F) in mode 2.
+	check((bits & (1ULL << 1)) != 0, "inquiry result bit");
+	check(mode < 1 || (bits & (1ULL << 33)) != 0, "rssi result bit");
+	check(mode < 2 || (bits & (1ULL << 46)) != 0, "extended result bit");
+	// Nothing outside those three.
+	check((bits & ~((1ULL << 1) | (1ULL << 33) | (1ULL << 46))) == 0,
+		"only answer bits");
+}
+
+
 // Step 6: what bluetooth_server reads from an LE device (le_parse.h).
 static void
 fuzz_le_round()
 {
+	{
+		// Made-up LMP features with EIR (octet 6, bit 0) and RSSI (octet
+		// 3, bit 6), like a controller that logs "inquiry mode extended".
+		static const uint8 kExtended[8] = { 0xff, 0xfe, 0x8f, 0xfe, 0xd8,
+			0x3f, 0x5b, 0x87 };
+		check(scan_inquiry_mode(kExtended) == 2, "extended mode");
+		check((scan_inquiry_event_bits(2) & (1ULL << 46)) != 0,
+			"extended result bit set");
+		uint8 features[8];
+		for (int i = 0; i < 8; i++)
+			features[i] = (uint8)next_word();
+		check_inquiry_mode(features);
+	}
+
 	// The scan lines (scan_log.h): one scan of a few addresses, so they
 	// repeat, and the 48-device limit is passed now and then.
 	static scan_log scanLog;

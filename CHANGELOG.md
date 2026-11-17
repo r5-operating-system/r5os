@@ -1,4 +1,3 @@
-# R5OS changelog (lokaal)
 
 ## 2026-11-17 - Wi-Fi: the page says what the link uses, and the router's standard apart
 

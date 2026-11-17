@@ -240,6 +240,7 @@ LocalDeviceImpl::_R5InquiryStarted(const BMessenger& target)
 	fNamesWanted.clear();
 	scan_log_reset(&fClassicLog);
 	fClassicDropped = 0;
+	memset(fInquiryEvents, 0, sizeof(fInquiryEvents));
 }
 
 
@@ -250,10 +251,13 @@ LocalDeviceImpl::_R5InquiryEnded()
 		syslog(LOG_INFO, "bluetooth_server: hci%" B_PRId32 " inquiry heard"
 			" %" B_PRIu32 " classic devices, %" B_PRIu32 " sent to the list"
 			", %" B_PRIu32 " names to ask (%" B_PRIu32 " answers past the"
-			" logged ones, %" B_PRIu32 " with no scan waiting)", GetID(),
+			" logged ones, %" B_PRIu32 " with no scan waiting; events from"
+			" the radio: %" B_PRIu32 " standard, %" B_PRIu32 " with rssi, %"
+			B_PRIu32 " extended)", GetID(),
 			fClassicLog.heard, fClassicLog.listed,
 			(uint32)fNamesWanted.size(), fClassicLog.unlogged,
-			fClassicDropped);
+			fClassicDropped, fInquiryEvents[0], fInquiryEvents[1],
+			fInquiryEvents[2]);
 	}
 	fNameInquiring = false;
 	_R5AskNextName();

@@ -209,6 +209,9 @@ private:
 	void				_R5LogInquiryDropped(uint8 eventCode);
 	scan_log			fClassicLog = {};
 	uint32				fClassicDropped = 0;
+	// Inquiry Result, with RSSI and Extended events of this scan, counted
+	// as they arrive (before any check).
+	uint32				fInquiryEvents[3] = {};
 private:
 	// Remote host features before Authentication Requested.
 	std::vector<uint16> fFeatureHandles;
