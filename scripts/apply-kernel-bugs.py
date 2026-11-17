@@ -85,7 +85,10 @@ def install_kernel_sources() -> None:
         "src/add-ons/kernel/drivers/bluetooth/h2/h2generic/h2generic.cpp",
         "src/add-ons/kernel/drivers/bluetooth/h2/h2generic/h2mediatek.cpp",
         "src/add-ons/kernel/drivers/bluetooth/h2/h2generic/h2mediatek.h",
+        "src/add-ons/kernel/drivers/bluetooth/h2/h2generic/h2sco.h",
         "src/add-ons/kernel/drivers/bluetooth/h2/h2generic/h2transactions.cpp",
+        "src/add-ons/kernel/drivers/bluetooth/h2/h2generic/h2voice.cpp",
+        "src/add-ons/kernel/drivers/bluetooth/h2/h2generic/h2voice.h",
         # R5: L2CAP, docs/BLUETOOTH.md step 1b
         "src/add-ons/kernel/network/protocols/bluetooth/l2cap/Jamfile",
         "src/add-ons/kernel/network/protocols/bluetooth/l2cap/L2capEndpoint.cpp",
