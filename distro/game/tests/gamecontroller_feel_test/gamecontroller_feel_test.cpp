@@ -572,13 +572,18 @@ test_drawing()
 	delete level;
 	CHECK(pixels > 200, "BTiltLevel draws too little");
 
+	// A fresh bar for each picture, as for the level.
 	BAppearanceKit::BAxisBar* bar = new BAppearanceKit::BAxisBar("bar");
 	bar->SetValue(-0.5f);
 	CHECK(bar->Value() == -0.5f, "bar value");
-	int32 half = painted(bar, BRect(0, 0, 199, 13), white);
-	bar->SetValue(0);
-	int32 none = painted(bar, BRect(0, 0, 199, 13), white);
+	int32 half = painted(bar, BRect(0, 0, 199, 15), white);
 	delete bar;
+	bar = new BAppearanceKit::BAxisBar("bar");
+	bar->SetValue(0);
+	int32 none = painted(bar, BRect(0, 0, 199, 15), white);
+	delete bar;
+	printf("gamecontroller_feel_test: level %" B_PRId32 ", bar at -0.5 %"
+		B_PRId32 ", bar at 0 %" B_PRId32 " pixels\n", pixels, half, none);
 	CHECK(half > none && none > 100, "BAxisBar fill");
 
 	BGameControllerMotionView* view
