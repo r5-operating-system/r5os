@@ -86,6 +86,7 @@ private:
 			BButton*			fLock;
 			BMessageRunner*		fLockRunner;
 			BList				fLockedControls;
+			BList				fLockedArrangements;
 			bool				fLockAdmin;
 			bool				fLockOpen;
 			float				fLockButtonHeight;

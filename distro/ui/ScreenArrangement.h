@@ -83,6 +83,8 @@ public:
 			void				SetCaption(const char* caption);
 			const char*			Caption() const;
 									// NULL when there is none
+			void				SetEnabled(bool enabled);
+			bool				IsEnabled() const;
 
 private:
 			struct Data;
