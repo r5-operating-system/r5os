@@ -45,6 +45,26 @@ Tested: `scripts/test-game-feel.sh` (host, ASan and UBSan): `feel_host_test: ok`
 
 Not tested: any real controller. DualSense and DualShock 4 rumble, trigger effects and motion need the owner's DualSense on a stick. The click and vibration trigger parameters, the sensor axes' signs and the DualShock 4 switch to full reports without its calibration report are the likely fixes. No PID controller was tested. The usb_hid output, feature and cache paths did not run (no USB game controller in QEMU). The widget drawing check is open. ARM64 and RISC-V 64 were not built.
 
+## 2026-11-17 - Settings: the lock also blocks views that are not BControl
+
+Problem: `BAdminLockBar::AcceptsInput` returned true for a view that was not a `BControl`. A screen picture stayed draggable while the machine lock was closed.
+
+What changed: a locked page now refuses that input unless the view is the lock bar, a scrollbar, or `SetExempt`. `BControl` widgets were already blocked.
+
+Limits: `_DisableTree` still only greys `BControl`. The filter is what stops the drag.
+
+Tested: the C++ was not compiled on this host (needs libbe).
+
+## 2026-11-17 - Login: r5-desktop stops if initgroups fails
+
+Problem: `r5-desktop` logged an `initgroups` failure and still called `setresuid`. An administrator could run Tracker without group `admin` or `wheel`.
+
+What changed: the helper exits with status 1 after that log, the same as a failed `setresgid`.
+
+Limits: no boot test.
+
+Tested: the C++ was not compiled on this host (needs libbe).
+
 ## 2026-11-17 - Login: r5-desktop reads only the system session file
 
 Problem: `r5-desktop` and Login fell back to `/tmp/r5-desktop-session` when the system file was missing. Anyone who could write `/tmp` could pick the session account.
@@ -104,6 +124,7 @@ What changed: the page writes a `.tmp` file, `fsync`s it, and `rename`s it over 
 Limits: the separate VirtualMemory program still erases then writes. A change still waits for the next start.
 
 Tested: the C++ was not compiled on this host (needs libbe). Jam on this branch is recorded on the pull request.
+
 ## 2026-11-17 - Graphics (M13): step 4, resize on RADV at the refresh rate, stick 4 results
 
 Problem: on stick 3 a window resize took 25.8 to 30.9 ms per frame on RADV and Lavapipe. Every frame re-blurred the window shadow, Skia held its lock while it waited for the GPU, and each new window size made a new VkImage. `check` judged a frame count that also counted the pauses in the mouse motion.

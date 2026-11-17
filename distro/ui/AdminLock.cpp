@@ -385,7 +385,7 @@ BAdminLockBar::AcceptsInput(BHandler* target) const
 		if (dynamic_cast<BControl*>(item) != NULL)
 			return false;
 	}
-	return true;
+	return false;
 }
 
 
