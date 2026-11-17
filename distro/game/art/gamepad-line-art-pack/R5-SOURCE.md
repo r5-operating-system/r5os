@@ -5,4 +5,6 @@
 - Licence: CC0 1.0 (LICENSE.txt, unmodified). No trademark rights; no logos in the drawings.
 - Kept here: LICENSE.txt, README.md and the SVGs (regular and bold), unmodified. The PNGs are not kept.
 - Use: the controller pictures of Settings > Devices > Game controllers, chosen by vendor and
-  product ID (owner's decision, 17 Nov 2026). Not built yet: this commit only keeps the files.
+  product ID (owner's decision, 17 Nov 2026). `scripts/gen-controller-pictures.py` converts the
+  regular SVGs into `distro/game/lib/GameControllerPictureData.h`; the bold ones are kept for reference
+  (the view draws the regular line thicker when small). `docs/GAME-CONTROLLERS.md`, section 7.
