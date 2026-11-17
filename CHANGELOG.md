@@ -1,5 +1,15 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Login: r5-desktop stops if initgroups fails
+
+Problem: `r5-desktop` logged an `initgroups` failure and still called `setresuid`. An administrator could run Tracker without group `admin` or `wheel`.
+
+What changed: the helper exits with status 1 after that log, the same as a failed `setresgid`.
+
+Limits: no boot test.
+
+Tested: the C++ was not compiled on this host (needs libbe).
+
 ## 2026-11-17 - Login: r5-desktop reads only the system session file
 
 Problem: `r5-desktop` and Login fell back to `/tmp/r5-desktop-session` when the system file was missing. Anyone who could write `/tmp` could pick the session account.
@@ -59,6 +69,7 @@ What changed: the page writes a `.tmp` file, `fsync`s it, and `rename`s it over 
 Limits: the separate VirtualMemory program still erases then writes. A change still waits for the next start.
 
 Tested: the C++ was not compiled on this host (needs libbe). Jam on this branch is recorded on the pull request.
+
 ## 2026-11-17 - Graphics (M13): step 4, resize on RADV at the refresh rate, stick 4 results
 
 Problem: on stick 3 a window resize took 25.8 to 30.9 ms per frame on RADV and Lavapipe. Every frame re-blurred the window shadow, Skia held its lock while it waited for the GPU, and each new window size made a new VkImage. `check` judged a frame count that also counted the pauses in the mouse motion.
