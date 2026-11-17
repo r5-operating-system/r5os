@@ -132,6 +132,7 @@ struct settings {
 	// M12 step 5b: gpu_draw_classic true keeps the classic look;
 	// gpu_draw_linear_edges: 0 the default (off), 1 true, 2 false
 	bool	drawClassic;
+	bool	noHardwareBlend;
 	int		drawLinearEdges;
 	// M13 step 3, Lavapipe only, opt-in (0: Mesa's and Skia's defaults):
 	// gpu_lavapipe_msaa 1|4 (Skia's sample count for paths),
@@ -191,6 +192,8 @@ load_settings(settings& out)
 			out.drawFail = true;
 		if (strncmp(line, "gpu_draw_classic true", 21) == 0)
 			out.drawClassic = true;
+		if (strncmp(line, "gpu_draw_hardware_blend false", 29) == 0)
+			out.noHardwareBlend = true;
 		if (strncmp(line, "gpu_draw_linear_edges true", 26) == 0)
 			out.drawLinearEdges = 1;
 		if (strncmp(line, "gpu_draw_linear_edges false", 27) == 0)
@@ -866,6 +869,9 @@ Compositor::Create(Desktop* desktop, HWInterface* screen)
 
 	SkiaDrawingEngine::SetDebug(options.debug);
 	SkiaDrawingEngine::SetClassic(options.drawClassic);
+	SkiaDrawingEngine::SetHardwareBlend(!options.noHardwareBlend);
+	if (options.noHardwareBlend)
+		log_line("gpu draw hardware blend off (setting)");
 	SkiaDrawingEngine::SetLinearEdges(options.drawLinearEdges == 1);
 	if (options.draw)
 		compositor->_InitSkia(options.drawFail);

@@ -356,6 +356,13 @@ SkiaDrawingEngine::SetClassic(bool classic)
 
 
 /*static*/ void
+SkiaDrawingEngine::SetHardwareBlend(bool on)
+{
+	SkiaPainter::SetHardwareBlend(on);
+}
+
+
+/*static*/ void
 SkiaDrawingEngine::SetLinearEdges(bool linear)
 {
 	SkiaPainter::SetLinearEdges(linear);
