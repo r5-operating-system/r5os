@@ -255,6 +255,9 @@ M13_STRINGS = {
                                  b"gpu draw hardware blend off",
                                  b"gpu draw pipeline cache %s",
                                  b"compose passes us per frame"),
+    # the GPU stop before a restart or power off (PR #4355)
+    "haiku/add-ons/kernel/drivers/dev/graphics/radeon_hd": (b"shutdown gpu stop",
+                                                            b"r5_register_shutdown_hook"),
 }
 
 
