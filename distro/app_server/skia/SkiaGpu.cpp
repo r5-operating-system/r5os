@@ -98,9 +98,6 @@ smallest_local_heap(VkInstance instance, VkPhysicalDevice physical)
 // the compositor's (SkiaGpu::LockQueue()) take this lock.
 static BLocker sQueueLock("vulkan queue");
 
-// M13: signalled semaphores that wait for a compose, at most (each one is a
-// sync object of the R5 GPU interface, 128 per program)
-static const size_t kMaxSignalled = 8;
 
 // M13 step 2: the pipeline cache on disk
 static const bigtime_t kPipelineSyncInterval = 10000000;
@@ -1042,15 +1039,23 @@ SkiaGpu::RunWork(const char** _reason)
 			if (!submitted)
 				failure = "submit failed: graphite";
 			if (submitted) {
-				// 5625U stick, 17 Nov 2026: at most kMaxSignalled wait for
-				// a compose. A pass without a compose used to wait for them
-				// in an empty batch; RADV turns an empty submit with waits
-				// into sync files (radv_amdgpu_cs_submit_zero), which the
-				// R5 DRM library has not, and the device was lost. Now they
-				// wait for the next compose, and a run beyond the limit
-				// signals none: it is done on the GPU before its damage
-				// goes out anyway (the run's fence, below).
-				bool signal = shared && fSignalled.size() < kMaxSignalled;
+				// 5625U stick, 17 Nov 2026: only the newest run's semaphore
+				// waits for a compose.
+				// - A pass without a compose used to wait for them in an
+				//   empty batch; RADV turns an empty submit with waits into
+				//   sync files (radv_amdgpu_cs_submit_zero), which the R5
+				//   DRM library has not, and the device was lost.
+				// - Then up to 8 waited in one compose, and with RADV's own
+				//   waits the kernel refused the CS (at most 8 waits, the
+				//   R5 GPU interface's kMaxList: B_BAD_VALUE).
+				// A run before this one is done on the GPU (each run waits
+				// for its fence below), so its semaphore is signalled and
+				// no submit waits for it: it is destroyed here, under the
+				// queue lock that TakeSignals() takes too.
+				for (size_t i = 0; i < fSignalled.size(); i++)
+					sDestroySemaphore(sDevice, (VkSemaphore)fSignalled[i], NULL);
+				fSignalled.clear();
+				bool signal = shared;
 				VkSemaphore semaphore = signal
 					? (VkSemaphore)_Signal() : VK_NULL_HANDLE;
 				VkSubmitInfo batch = {};
