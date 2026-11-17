@@ -1,5 +1,22 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Bluetooth: a game controller's battery in the Deskbar menu
+
+Problem: `docs/GAME-CONTROLLERS.md` puts the controller battery in the existing Bluetooth item in Deskbar. That item shows a battery line for each connected device whose `BT_MSG_R5_GET_PAIRED` entry has "battery" >= 0, but that value came only from HFP (headsets) and the LE Battery Service. A Classic HID controller's HID Battery Strength, which hid_shared reported in `R5_JOYSTICK_GET_INFO`, never reached it, and hid_shared took it only when a program read the joystick.
+
+What changed:
+- bluetooth_hid takes Battery Strength (Generic Device Controls page 0x06, usage 0x20) from every input report it is fed, with a second `HIDParser` of the same descriptor (only for a descriptor that has it), so the reports and items the protocol handlers read are not touched. A report too short for its battery byte keeps the last value.
+- New additive call `R5_BTHID_GET_BATTERY` (`r5_bthid_battery`, appended to the enum in `<R5BluetoothHID.h>`) on the control node: uid 0, the device's owner only, `IS_USER_ADDRESS` + `user_memcpy` in and out, the caller's length checked.
+- bluetooth_server (`HIDHost::Battery()`) fills "battery" in `BT_MSG_R5_GET_PAIRED` for a connected Classic HID device when HFP has none. Deskbar, My devices and Game controllers agree; Deskbar opens no joystick device and needs no change. The ioctl takes only the driver lock, so the reply does not wait for the device.
+- hid_shared's `R5_JOYSTICK_GET_INFO` keeps a battery the transport already knows (bluetooth_hid now passes it), so `BGameController::BatteryLevel()` has it before the first read; usb_hid, i2c_hid and hyperv/hid are unchanged (they leave it at -1).
+- Chosen over reading the joystick in the Deskbar item: Deskbar would have opened every joystick node (and needed libr5game or the driver header) for something the server already knows, and the menu and My devices would have differed.
+
+Limits: a controller whose reports have no Battery Strength shows no battery line. The DualSense and the 8BitDo M30 most likely report none in that standard way (not checked); a per-controller battery report is not read. BLE HID controllers keep the Battery Service value. No fuzz target was added: the new parsing is hid_shared's existing `HIDReportItem::Extract()` on a zero-padded copy of a report the driver already bounds.
+
+Tested: `scripts/build-locked.sh` and the QEMU Bluetooth smoke (SMAP=1, GAMEPAD=1, results below). `bt_hid_driver_test` creates a gamepad with a battery byte, checks -1 before the first report, 73 after one with no program reading, the same after a short report, -1 for a mouse, a kernel address and a short buffer refused, and 73 in `R5_JOYSTICK_GET_INFO` before any read.
+
+Not tested: a real controller over Bluetooth (QEMU has no radio, so the `BT_MSG_R5_GET_PAIRED` path with a paired, connected controller and the Deskbar menu did not run), ARM64 and RISC-V 64 (not built).
+
 ## 2026-11-17 - Graphics (M13 step 3, continued): 2 Lavapipe threads, occlusion culling, glass only where it shows, option E
 
 Problem: after the transfer copy, the compose on Lavapipe still took 140-190 ms per frame while dragging (QEMU), with the copy and the blur the largest passes.
