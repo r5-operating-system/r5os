@@ -22,6 +22,39 @@ Tested: `scripts/build-locked.sh` jam_exit=0 (x86_64). QEMU (KVM, SMAP and SMEP,
 
 Not tested: a real controller; the 8BitDo M30 and the DualSense on this build; which M30 key sends which button over Bluetooth; the setup window with a controller (QEMU sends no button presses to it; it was not opened in QEMU); dark mode; ARM64 and RISC-V 64 (not built).
 
+## 2026-11-17 - Graphics (M13 step 1): five small app_server fixes for Skia drawing
+
+Problem: `docs/M13-PLAN.md` Priority 2: hot paths of the Skia drawing that cost CPU or uploads on every draw.
+
+What changed (one commit each): bitmap textures are checked by a fast 64-bit hash of all bytes instead of a full copy and `memcmp` (`FindTexture`; no flag, because a program writes its `BBitmap` at any time); a drawn, unrotated string without a view transform is laid out once (the pen position is the width of the drawing's own pass); an opaque solid fill uses `SkPaint::setColor()` instead of a runtime shader; gradients reuse their uploaded colours (32 per target, compared byte for byte); no wake of the draw thread per draw call inside `BeginUpdate()..EndUpdate()` (drawing outside an update, and an update held over 100 ms, still wake at once).
+
+Tested (QEMU, KVM, 8 virtual CPUs, Lavapipe, `gpu_draw true`, `scripts/qemu-m13-measure.py` on own image copies, base and this branch alternated: base, step 1, base, step 1). Host load: load average about 2 (only these runs, no other QEMU or jam). `scripts/build-locked.sh` jam_exit=0.
+- Base (`claude/m13-step2-fix`): drag 161.4 / 166.8 ms (121 / 122 frames), scroll 182.8 / 142.4 ms (111 / 135 frames), draw while dragging 97.8 / 101.4 ms.
+- Step 1: drag 163.4 / 160.7 ms (126 / 190 frames), scroll 143.4 / 147.6 ms (140 / 136 frames), draw while dragging 92.4 / 107.5 ms.
+- No `compositor off`, no `gpu draw off`. The difference is within the spread of the base runs: on Lavapipe the frame is bound by the GPU work (compose passes: copy about 55 ms, blur 55 ms, shadow 21 ms, glass 18 ms per frame), which these CPU-side fixes do not change. An earlier measurement per commit (17 Nov, 00:00-01:00) ran beside another session's jam (load 3-9) and is not used.
+
+Not tested: RADV and the 5625U, where the CPU side weighs more (first M13 stick). The 36 MB wallpaper case of the hash is not in the QEMU scenario.
+
+## 2026-11-17 - Graphics (M13 step 2 fix): no compositor off on Lavapipe, a copy instead of texelFetch, Mesa's cache, compose time per pass
+
+Problem: after #4330 the compositor turned itself off with `fence timeout` on Lavapipe (QEMU, `gpu_draw true`). Two causes were in step 2's own code: the damage of a Skia run went out right after the submit, so a compose was queued behind runs of 11-15 s after Sign in and hit its 15 s limit; and a pass without a compose waited up to 15 s on the CPU for the runs' semaphores. The old build (main with step 0) also turned it off, in 2 of 5 runs, so the limit itself did not fit Lavapipe. And with the images, the plain copy of a Skia window (`texelFetch` in `compose.comp`) cost 150-163 ms per frame while dragging on Lavapipe.
+
+What changed:
+- The draw thread waits for its run's fence before it reports the damage; the compose still waits only on the GPU (the semaphores), nothing is read back. A pass without a compose no longer waits on the CPU; its semaphores go back after the next compose's fence.
+- No fence limit on Lavapipe (owner, 16 Nov 2026): Lavapipe is the CPU, not a GPU that can hang, so a late frame waits on (logged every 10 s after 15 s). RADV keeps the 15 s limit and the reset ladder.
+- The plain part of a Skia window is copied from its image into the frame with `vkCmdCopyImageToBuffer` (the image goes to `TRANSFER_SRC_OPTIMAL` and back), the same bytes as the copy shader. This is step 3's copy fast path, for Skia windows only; Painter windows keep the copy shader. The host buffers and the scanout back buffer are also transfer targets now (the compare copies of step 2 wrote into a buffer without `TRANSFER_DST`, which Lavapipe let pass).
+- `MESA_SHADER_CACHE_DIR` for app_server (uid 0) is `/boot/system/cache/app_server/mesa`, set before the driver loads, unless the environment has one (owner, 16 Nov 2026). It was `/boot/home/config/cache/mesa_shader_cache`, root-owned inside the administrator's home. The Mesa recipe is unchanged.
+- With `gpu_debug`: GPU timestamps between the compose's passes, one line per 10 s, `compose passes us per frame copy <n> blur <n> shadow <n> glass <n> animation <n> frames <n>`.
+
+Tested (QEMU, KVM, 8 virtual CPUs, Lavapipe, 1280x800, `scripts/qemu-m13-measure.py` on own image copies, before and after one right after the other). Host load: load average about 2 during both runs (another session's 2-CPU QEMU ran part of the time); a jam of another session ran during the second boot.
+- Before (main with step 0): warm-up 10.5 s; drag frame 175.1 ms (p95 270.0, 110 frames), input 338.5 ms, draw 248.4 ms; scroll 169.8 ms (p95 327.4, 121 frames), draw 303.9 ms; resize 2 frames, draw 5.7 s.
+- After: warm-up 11.6 s; drag frame 171.1 ms (p95 199.5, 120 frames), input 339.3 ms, draw 98.0 ms; scroll 167.3 ms (p95 307.5, 172 frames), draw 157.3 ms; resize 1 frame, draw 13.1 s. Compose passes while dragging: copy about 50 ms, blur 18-25 ms, shadow 10-14 ms, glass 8-12 ms per frame (before the copy path: copy 150-163, blur 63-66, shadow 25, glass 19-20 ms). Glass does not dominate a drag; the copy and the blur do.
+- No `compositor off` and no `gpu draw off` in the before or after runs of this pair (an earlier pair of this evening, before the fence fix, had the old build off 2 times and the new one 2 times).
+- Warm-up on the second boot of the same image (Mesa's cache in the system cache directory now): 4.9 s in the earlier pair, 10.3 s in this pair (with another session's jam beside it), against 11.6 s on the first boot. Skia's pipeline cache holds only the Vulkan header on Lavapipe (312 bytes, `stored 0 KB`): the gain is Mesa's own shader cache.
+- `compose compare ok` 6 times with effects off and a window drawing every 16 ms, no MISMATCH; `r5-draw-compare` 459/490, the same FAILs.
+
+Not tested: RADV and the 5625U (the stick of step 3). The resize numbers have 1-2 frames per run, too few to compare.
+
 ## 2026-11-17 - Bluetooth step 7c joined with HFP: the microphone opens the headset's voice link
 
 Problem: 7c (#4334) brought the voice path (h2generic, the decoder, the "Bluetooth headset microphone" input) but nothing opened a voice link, because the HFP side (#4333) was not on `main` yet. A voice link the headset opened itself went into the ACL code and marked the device as connecting.

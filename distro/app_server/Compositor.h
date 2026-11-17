@@ -157,6 +157,29 @@ private:
 			// M13 step 2: a pass without a compose still waits for the
 			// runs' semaphores, so they can be signalled again
 			void				_ConsumeSkiaSignals();
+			// waited for in an empty batch, back to the pool after the next
+			// compose's fence
+			std::vector<uint64>	fConsumedSignals;
+			// M13 step 2, gpu_debug: the compose time per pass
+			enum {
+				kPassCopy = 0,
+				kPassBlur,
+				kPassShadow,
+				kPassGlass,
+				kPassAnimation,
+				kPassCount
+			};
+			static const int32	kPassStamps = 128;
+			void				_Stamp(int32 pass);
+			void				_RecordImageCopy(const Layer* layer,
+									const BRegion& region,
+									struct VkBuffer_T* frame,
+									uint32 frameStride);
+			void				_TakeStamps();
+			int32				fStampCount = 0;
+			int32				fStampPass[kPassStamps];
+			bigtime_t			fPassTime[kPassCount] = {};
+			int32				fPassFrames = 0;
 			// M12
 			void				_InitSkia(bool forceFail);
 	static	void				_SkiaWake(void* cookie);

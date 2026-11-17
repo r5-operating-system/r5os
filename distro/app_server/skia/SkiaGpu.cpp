@@ -1059,7 +1059,13 @@ SkiaGpu::RunWork(const char** _reason)
 		} else {
 			bigtime_t submitTime = system_time();
 			Profile(kTimeSubmit, submitTime - submitStart);
-			if (readBack) {
+			// The damage goes out only when the run is done on the GPU: on
+			// Lavapipe a run after Sign in takes 11-15 s, and a compose
+			// queued behind it at once ran into its 15 s fence limit and
+			// turned the compositor off (QEMU, 2 of 2 boots). The compose
+			// itself still waits only on the GPU (the semaphores); nothing
+			// is read back.
+			{
 				// a late GPU is not a failure (M11 decision 14)
 				VkResult result;
 				do {
