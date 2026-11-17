@@ -380,6 +380,7 @@ public:
 
 private:
 			status_t			_Apply(const DeskbarChoices& target);
+			status_t			_ApplyChoices(const DeskbarChoices& target);
 			void				_Push();
 
 			DeskbarView*		fView;
@@ -1024,6 +1025,17 @@ DeskbarModule::LoadSettings(SettingsContext* context)
 
 status_t
 DeskbarModule::_Apply(const DeskbarChoices& target)
+{
+	DeskbarChoices previous = fCommitted;
+	status_t status = _ApplyChoices(target);
+	if (status != B_OK && !choices_equal(fCommitted, previous))
+		_ApplyChoices(previous);
+	return status;
+}
+
+
+status_t
+DeskbarModule::_ApplyChoices(const DeskbarChoices& target)
 {
 	BDeskbar bar;
 	if (!bar.IsRunning())

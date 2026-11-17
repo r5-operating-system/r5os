@@ -58,6 +58,7 @@ struct BScreenArrangement::Data {
 	std::vector<TileCopy>	tiles;
 	int32					selected;
 	bool					draggable;
+	bool					enabled;
 	BString					caption;
 	BMessage*				modification;
 	bool					dragging;
@@ -131,6 +132,9 @@ BScreenArrangement::BScreenArrangement(BMessage* archive)
 	bool draggable = false;
 	if (archive->FindBool("r5:draggable", &draggable) == B_OK)
 		fData->draggable = draggable;
+	bool enabled = true;
+	if (archive->FindBool("r5:enabled", &enabled) == B_OK)
+		fData->enabled = enabled;
 	int32 selected = -1;
 	if (archive->FindInt32("r5:selected", &selected) == B_OK)
 		fData->selected = selected;
@@ -189,6 +193,8 @@ BScreenArrangement::Archive(BMessage* archive, bool deep) const
 	if (status == B_OK)
 		status = archive->AddBool("r5:draggable", fData->draggable);
 	if (status == B_OK)
+		status = archive->AddBool("r5:enabled", fData->enabled);
+	if (status == B_OK)
 		status = archive->AddInt32("r5:selected", fData->selected);
 	for (uint32 index = 0; status == B_OK && index < fData->tiles.size();
 			index++) {
@@ -217,6 +223,7 @@ BScreenArrangement::_Init()
 		return;
 	fData->selected = -1;
 	fData->draggable = false;
+	fData->enabled = true;
 	fData->modification = NULL;
 	fData->dragging = false;
 	fData->dragIndex = -1;
@@ -323,6 +330,25 @@ bool
 BScreenArrangement::IsDraggable() const
 {
 	return fData != NULL && fData->draggable;
+}
+
+
+void
+BScreenArrangement::SetEnabled(bool enabled)
+{
+	if (fData == NULL || fData->enabled == enabled)
+		return;
+	fData->enabled = enabled;
+	if (!enabled)
+		fData->dragging = false;
+	Invalidate();
+}
+
+
+bool
+BScreenArrangement::IsEnabled() const
+{
+	return fData != NULL && fData->enabled;
 }
 
 
@@ -615,9 +641,9 @@ BScreenArrangement::_SelectIndex(int32 index, bool invoke)
 void
 BScreenArrangement::MouseDown(BPoint where)
 {
-	MakeFocus(true);
-	if (fData == NULL)
+	if (fData == NULL || !fData->enabled)
 		return;
+	MakeFocus(true);
 	if (!fData->placed)
 		_Place();
 	int32 index = _IndexAt(where);
@@ -756,7 +782,7 @@ BScreenArrangement::_Neighbor(int32 index, int32 dx, int32 dy) const
 void
 BScreenArrangement::KeyDown(const char* bytes, int32 numBytes)
 {
-	if (fData == NULL || numBytes < 1) {
+	if (fData == NULL || !fData->enabled || numBytes < 1) {
 		BView::KeyDown(bytes, numBytes);
 		return;
 	}

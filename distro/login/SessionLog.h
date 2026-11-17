@@ -7,9 +7,11 @@
 
 
 #include <errno.h>
+#include <fcntl.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <OS.h>
@@ -30,9 +32,15 @@ r5_session_log(const char* format, ...)
 		NULL
 	};
 	for (int i = 0; kPaths[i] != NULL; i++) {
-		FILE* file = fopen(kPaths[i], "a");
-		if (file == NULL)
+		int fd = open(kPaths[i], O_WRONLY | O_CREAT | O_APPEND, 0600);
+		if (fd < 0)
 			continue;
+		fchmod(fd, 0600);
+		FILE* file = fdopen(fd, "a");
+		if (file == NULL) {
+			close(fd);
+			continue;
+		}
 		fprintf(file, "%lld uid=%d euid=%d %s\n",
 			(long long)system_time(), (int)getuid(), (int)geteuid(), line);
 		fclose(file);

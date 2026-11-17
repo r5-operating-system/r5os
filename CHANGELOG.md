@@ -13,6 +13,73 @@ Tested: AMD64 `scripts/build-locked.sh`, `jam_exit=0` (app_server rebuilt from t
 
 Limits: Haiku upstream was not checked for the same fix. Other pages and apps were not looked at with this change, and not on real hardware. ARM64 and RISC-V 64 were not built.
 
+## 2026-11-17 - Network: a missed .local name is not sent to DNS
+
+Problem: after mDNS missed a `.local` name, `getaddrinfo` fell through to unicast DNS, against RFC 6762.
+
+What changed: a `.local` lookup returns the mDNS error (or `EAI_NONAME`) and does not query DNS.
+
+Limits: QEMU usernet is not multicast. Needs a LAN.
+
+## 2026-11-17 - Settings: a page file is replaced, not erased
+
+Problem: `SettingsStorage::Write` erased the module file and then Flatten. A short write could leave an empty page file.
+
+What changed: Flatten goes to memory, then a temp file, `fsync`, and rename. Same pattern as notifications.
+
+Limits: no crash injected during write.
+
+## 2026-11-17 - Login: the session log is not world-readable
+
+Problem: `/tmp/r5-session.log` was created with `fopen("a")` and the umask. Session names were readable by every account.
+
+What changed: both log paths are opened `0600` and `fchmod`ed to 0600.
+
+Limits: a file that already exists with a looser mode is tightened on the next write. No boot test.
+
+## 2026-11-17 - Network: DHCP keeps the resolv.conf domain line
+
+Problem: net_server rewrote `resolv.conf` from remembered nameservers and only wrote `domain` when DHCP sent one. An existing domain line disappeared.
+
+What changed: the previous `domain` line is kept when DHCP does not send a domain.
+
+Limits: QEMU usernet is not this test. No packet capture.
+
+## 2026-11-17 - Settings: a failed Deskbar apply rolls back
+
+Problem: Desktop and Deskbar wrote each field as it succeeded. A later `SetLocation` failure left sort or icon size already changed.
+
+What changed: a failed `_Apply` puts the previous committed choices back.
+
+Limits: a restore that also fails leaves Deskbar where the first failure left it. No boot test.
+
+## 2026-11-17 - Settings: the lock also stops the screen picture
+
+Problem: a closed administrator lock greys `BControl` widgets. `BScreenArrangement` is a `BView`, so Display's screen picture stayed clickable.
+
+What changed: `BScreenArrangement::SetEnabled(false)` ignores mouse and keys. Settings calls that on a locked admin page. Additive; existing binaries still run.
+
+Limits: no boot test of the lock on Display.
+
+## 2026-11-17 - Settings: Display menus stay put during keep-picture
+
+Problem: during the 12-second keep-picture dialog the resolution menus still wrote `fSelected`. Keep then stored that later choice as the boot mode.
+
+What changed: those menus are ignored and disabled until the dialog ends. Workspace rows and columns still apply at once.
+
+Limits: no boot test of the 12-second dialog.
+
+## 2026-11-17 - Login: leftover apps leave with the session
+
+Problem: Logout sent `B_QUIT_REQUESTED` to user apps and did not wait. Tracker and Deskbar were waited on; Terminal and other session apps could stay up on the Sign in screen.
+
+What changed: after that quit, Login waits three seconds, then `kill_team` on what is left, then one more second.
+
+Limits: servers, daemons, and `B_BACKGROUND_APP` teams are still kept. No boot test of Log out.
+
+
+Tested: the C++ was not compiled on this host (needs libbe).
+
 ## 2026-11-17 - Game controllers: fits at 1030 by 610, Motion gray without a controller
 
 Problem: on the screendumps of the layout-A page (1) at 1030 by 610 with a controller the area above the strip still scrolled by about 15 px, hiding the last line of Trigger feedback and the vendor and product line; (2) without a controller the Motion bubble of the gray example stayed blue (the level, the bars and their labels drew as enabled); (3) at 910 by 560 a light bar showed in the bottom row next to the lock.
