@@ -352,8 +352,14 @@ BluetoothView::BluetoothView(bool settingsPage)
 	memset(&fMine->soundAddress, 0, sizeof(fMine->soundAddress));
 	BStringView* texts[] = { fMine->name, fMine->kind, fMine->status,
 		fMine->connection, fMine->address, fMine->battery };
-	for (size_t i = 0; i < sizeof(texts) / sizeof(texts[0]); i++)
+	for (size_t i = 0; i < sizeof(texts) / sizeof(texts[0]); i++) {
 		texts[i]->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
+		// A long device name (up to 248 bytes) is cut with an ellipsis:
+		// as its full width it made the page wider than the window.
+		texts[i]->SetTruncation(B_TRUNCATE_END);
+		texts[i]->SetExplicitMinSize(BSize(roundf(60 * scale),
+			B_SIZE_UNSET));
+	}
 	fMine->disconnect = new BButton("disconnect", B_TRANSLATE("Disconnect"),
 		new BMessage(kMsgDisconnectButton));
 	fMine->forget = new BButton("forget", B_TRANSLATE("Forget"),
@@ -380,16 +386,14 @@ BluetoothView::BluetoothView(bool settingsPage)
 			.Add(fMine->batteryLabel, 0, 3)
 			.Add(fMine->battery, 1, 3)
 		.End()
-		// Only for a headset, or only for a game controller: one line for
-		// either. "Test buttons…" was the third button in the row below,
-		// which then ran past the window's right edge (stick 51).
+		.AddGlue()
+		// "Use for sound" only for a headset, "Test buttons…" only for a
+		// game controller. One line, so the page fits the window's height
+		// at its default size with a device chosen (stick 51 had a scroll
+		// bar there).
 		.AddGroup(B_HORIZONTAL)
 			.Add(fMine->useForSound)
 			.Add(fMine->testButtons)
-			.AddGlue()
-		.End()
-		.AddGlue()
-		.AddGroup(B_HORIZONTAL)
 			.AddGlue()
 			.Add(fMine->disconnect)
 			.Add(fMine->forget)
@@ -411,9 +415,13 @@ BluetoothView::BluetoothView(bool settingsPage)
 	fDeviceList = new BListView("devices", B_SINGLE_SELECTION_LIST);
 	BScrollView* scroller = new BScrollView("devices scroll", fDeviceList, 0,
 		false, true);
-	scroller->SetExplicitMinSize(BSize(B_SIZE_UNSET, roundf(90 * scale)));
+	// At least three rows; it takes the rest of the page's height.
+	scroller->SetExplicitMinSize(BSize(B_SIZE_UNSET, roundf(60 * scale)));
 	fScanStatus = new BStringView("scan status", "");
 	fScanStatus->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
+	// The hint and the pairing result are cut, not the page made wider.
+	fScanStatus->SetTruncation(B_TRUNCATE_END);
+	fScanStatus->SetExplicitMinSize(BSize(roundf(60 * scale), B_SIZE_UNSET));
 	fScanButton = new BButton("scan", B_TRANSLATE("Scan"),
 		new BMessage(kMsgScanButton));
 	fDeviceList->SetSelectionMessage(new BMessage(kMsgDeviceSelected));
@@ -446,6 +454,8 @@ BluetoothView::BluetoothView(bool settingsPage)
 	fRadioField = new BMenuField("radio", NULL, fRadioMenu);
 	fRadioNote = new BStringView("radio note", "");
 	fRadioNote->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
+	fRadioNote->SetTruncation(B_TRUNCATE_END);
+	fRadioNote->SetExplicitMinSize(BSize(roundf(60 * scale), B_SIZE_UNSET));
 
 	// Devices nearby takes the rest of the height, down to the Bluetooth
 	// line (in Settings: as far down as the list of pages).

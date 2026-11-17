@@ -43,8 +43,27 @@ fi
 SETTINGS_PAGE=${SETTINGS_PAGE:-}
 SHOTS=${SHOTS:-}
 page=""
+# BT_PREVIEW=1 starts that Settings with R5_BLUETOOTH_PREVIEW=1: the
+# Bluetooth page then shows one made-up connected game controller under My
+# devices (libr5bt, test only), so its layout can be seen without a radio.
+# BT_WINDOW="<w> <h>" sets the Settings window to that size first (hey).
+preview=""
+if [ "${BT_PREVIEW:-0}" = 1 ]; then
+	preview="R5_BLUETOOTH_PREVIEW=1 "
+fi
 if [ -n "$SETTINGS_PAGE" ]; then
-	page="/boot/system/preferences/Settings --page $SETTINGS_PAGE & sleep 30; ps > /boot/home/bt-ps.log 2>&1; "
+	page="$preview/boot/system/preferences/Settings --page $SETTINGS_PAGE & sleep 30; ps > /boot/home/bt-ps.log 2>&1; "
+	if [ -n "${BT_WINDOW:-}" ]; then
+		set -- $BT_WINDOW
+		page="$page/bin/hey Settings set Frame of Window 0 to 'BRect(20,40,$((20 + $1)),$((40 + $2)))' > /boot/home/bt-hey.log 2>&1; "
+	fi
+	# BT_TEST_BUTTONS=<s>: that many seconds after Settings opened, send the
+	# page the message of its "Test buttons…" button (with BT_PREVIEW=1 the
+	# made-up controller is chosen); Settings should then show Game
+	# controllers.
+	if [ -n "${BT_TEST_BUTTONS:-}" ]; then
+		page="$page(sleep $((BT_TEST_BUTTONS - 30)); /bin/hey Settings 'btvT' of View 'bluetooth' of Window 0 >> /boot/home/bt-hey.log 2>&1) & "
+	fi
 fi
 # DESKBAR=1 (step 3b) starts Deskbar and then bluetooth_deskbar, which adds
 # the Bluetooth item: the desktop is behind Sign in, so the user launch job
@@ -119,7 +138,8 @@ timeout "$SECONDS_UP" qemu-system-x86_64 -machine pc,accel=$accel -cpu $cpu \
 	-monitor unix:"$BT_WORK/monitor.sock",server,nowait </dev/null || true
 
 # bfs_shell's cat prints nothing here; copy the files out instead.
-rm -f "$BT_WORK/out-smoke.log" "$BT_WORK/out-ps.log" "$BT_WORK/out-ps0.log" "$BT_WORK/out-syslog"
+rm -f "$BT_WORK/out-smoke.log" "$BT_WORK/out-ps.log" "$BT_WORK/out-ps0.log" "$BT_WORK/out-syslog" \
+	"$BT_WORK/out-hey.log"
 "$BFS" "$IMG" >/dev/null 2>&1 <<EOT
 cp myfs/home/bt-smoke.log :$BT_WORK/out-smoke.log
 cp myfs/home/bt-ps.log :$BT_WORK/out-ps.log
@@ -127,6 +147,7 @@ cp myfs/home/bt-ps0.log :$BT_WORK/out-ps0.log
 cp myfs/home/bt-psa.log :$BT_WORK/out-psa.log
 cp myfs/system/var/log/syslog :$BT_WORK/out-syslog
 cp myfs/home/gc-hold.log :$BT_WORK/out-gc-hold.log
+cp myfs/home/bt-hey.log :$BT_WORK/out-hey.log
 quit
 EOT
 for f in "$BT_WORK"/shot-*.ppm; do
@@ -148,6 +169,10 @@ cat "$BT_WORK/out-smoke.log" 2>/dev/null || echo "(no log)"
 echo "== syslog (Bluetooth lines)"
 grep -aE 'bluetooth_server|bluetooth_deskbar|deskbar_bt_replicant|bt_server_smoke_test|bt_l2cap_abi_test|bt_hid_driver_test|l2cap_coc_test|bt_smp_crypto_test|bt_rfcomm_test|bt_voice_test|RFCOMM|gamecontroller|bluetooth_hid|bluetooth_audio|DeviceManager|h2generic|l2cap|debug_server|crash' \
 	"$BT_WORK/out-syslog" 2>/dev/null || echo "(no lines)"
+if [ -n "${BT_WINDOW:-}${BT_TEST_BUTTONS:-}" ]; then
+	echo "== hey (BT_WINDOW, BT_TEST_BUTTONS)"
+	cat "$BT_WORK/out-hey.log" 2>/dev/null || echo "(no log)"
+fi
 if [ "${GAMEPAD:-0}" = 1 ]; then
 	echo "== gamecontroller_test --hold"
 	cat "$BT_WORK/out-gc-hold.log" 2>/dev/null || echo "(no log)"
