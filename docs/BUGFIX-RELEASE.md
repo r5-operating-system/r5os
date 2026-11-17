@@ -50,18 +50,24 @@ Class X, the areas a run never fixes (owner, 17 Nov 2026):
   - the Settings window layout;
   - the MMU and the scheduler;
   - anything that changes an ABI.
-- **Work in progress (M13, game controllers):**
+- **Work in progress (M13, Bluetooth plan 2, Wi-Fi):**
   - **app_server:** the whole server, including the compositor, Painter, the GPU drawing (Skia), decorators and the accelerants.
   - **GPU:**
     - `radeon_hd`, the R5 GPU interface and the R5 DRM library;
     - Mesa, RADV, Zink, llvmpipe and Lavapipe;
     - OpenGL and Vulkan, and `BGLView` / `BDirectWindow`.
+  - **Bluetooth:**
+    - the kernel `bluetooth` modules and `h2generic`;
+    - `bluetooth_server`, the Bluetooth Kit, Bluetooth audio, and the Bluetooth page and Deskbar item.
+  - **Wi-Fi and wireless:**
+    - net80211 (FreeBSD and OpenBSD) and every `wlan` driver;
+    - `wpa_supplicant`, the Wi-Fi Kit, and the Wi-Fi pages and program.
   - **Game Kit and controllers:**
     - `libr5game.so` (`BGameController`, `BGameControllerView`) and the mapping database;
     - the joystick drivers (`usb_hid`, `bluetooth_hid`, `i2c_hid` joystick parts), `BJoystick`;
     - the Game controllers page in Settings, the controller battery in Deskbar.
 
-The owner takes an area off this list when its work is done. Bluetooth and Wi-Fi came off on 17 Nov 2026. A fix there is class B or C. It must not overlap an open PR of Bluetooth plan 2 or the Wi-Fi plan: check the open PRs before starting, and skip the item as `parked` if one touches the same file.
+The owner takes an area off this list when its work is done.
 
 Not in this release: tickets for architectures R5 does not target (32-bit x86, PowerPC, SPARC, m68k, ARM32), except to keep the tree building.
 
@@ -96,7 +102,6 @@ Not in this release: tickets for architectures R5 does not target (32-bit x86, P
   - Which class, which path, which priority?
 - A ticket whose code is gone, or that R5 already fixed, gets `not-applicable` or `fixed` in `r5-status.tsv`, with the reason in the notes.
 - In the same phase, one read-only review per R5 area. Each finding becomes an `r5:` line in the queue:
-  - Bluetooth and Wi-Fi;
   - Settings and `libr5ui`;
   - multi-user and Login;
   - zeroconf and networking;
@@ -162,7 +167,7 @@ The loop:
 7. Every 10 items, and at the end: commit the queue file in its own PR `Tracker - bug-fix run <date>: queue status`.
 
 Never:
-- change a file in a class X area (section 3): app_server, GPU, the Game Kit and controllers, and the areas the owner keeps. This also holds when a fix elsewhere would need it; the item then becomes `needs-owner`;
+- change a file in a class X area (section 3): app_server, GPU, Bluetooth, Wi-Fi, the Game Kit and controllers, and the areas the owner keeps. This also holds when a fix elsewhere would need it; the item then becomes `needs-owner`;
 - merge, write a stick, or change `distro/VERSION`, `distro/BUILD` or `distro/WHATSNEW`;
 - stack PRs; each fix starts from `origin/main`;
 - turn off a check, a test or SMAP to make something pass;
