@@ -33,7 +33,7 @@ OFFSET = "6291456"
 
 PACKAGES = (
     "mesa_lavapipe-25.3.6-5-x86_64.hpkg",
-    "mesa_radv-25.3.6-9-x86_64.hpkg",
+    "mesa_radv-25.3.6-10-x86_64.hpkg",
     "vulkan_loader-1.4.367-4-x86_64.hpkg",
     "vulkan_tools-1.4.367-2-x86_64.hpkg",
     "vulkanteapot-1.0.0-5-x86_64.hpkg",
@@ -236,6 +236,11 @@ M13_LINES = (
     ("m13-measure: per motion", "per motion, the worst 10 s window",
      "distro/graphics/boot/m13-measure"),
     ("app_server: gpu compositor off", "gpu compositor off: %s", COMPOSITOR),
+    # M13 step 4 (#4396): the Lavapipe warm-up in parts, boots 3 and 4
+    ("app_server: gpu draw warm-up parts 8", "gpu draw warm-up parts %",
+     "distro/app_server/skia/SkiaOffscreen.cpp"),
+    ("app_server: gpu draw warm up status", "gpu draw warm up status %s",
+     "distro/app_server/skia/SkiaOffscreen.cpp"),
 )
 M13_BASE = ["gpu_draw true", "gpu_debug true", "gpu_selftest true"]
 M13_BOOTS = {
@@ -244,6 +249,9 @@ M13_BOOTS = {
                      "gfx9_wc_gtt true", "gpu_m13_boot 2"],
     "3": M13_BASE + ["gpu_compositor_lavapipe true", "gpu_lavapipe_vector 128",
                      "gpu_m13_boot 3"],
+    # the second Lavapipe start: Mesa's shader cache from boot 3
+    "4": M13_BASE + ["gpu_compositor_lavapipe true", "gpu_lavapipe_vector 128",
+                     "gpu_m13_boot 4"],
     "done": None,
 }
 
@@ -254,10 +262,14 @@ M13_STRINGS = {
                                  b"compose work per frame",
                                  b"gpu draw hardware blend off",
                                  b"gpu draw pipeline cache %s",
-                                 b"compose passes us per frame"),
+                                 b"compose passes us per frame",
+                                 # M13 step 4 (#4396)
+                                 b"gpu draw warm-up parts %"),
     # the GPU stop before a restart or power off (PR #4355)
     "haiku/add-ons/kernel/drivers/dev/graphics/radeon_hd": (b"shutdown gpu stop",
-                                                            b"r5_register_shutdown_hook"),
+                                                            b"r5_register_shutdown_hook",
+                                                            # #4363
+                                                            b"tmr destroy"),
 }
 
 
@@ -272,13 +284,13 @@ def check_m13_sources(commit: str) -> None:
 
 
 def check_m13_boots(commit: str) -> None:
-    """The M13 order 1, 2, 3, done, in a sandbox in WSL."""
+    """The M13 order 1, 2, 3, 4, done, in a sandbox in WSL."""
     stage = ROOT / "generated" / "_pre-stick-m13"
     stage.mkdir(parents=True, exist_ok=True)
     for name in ("boot-next", "check"):
         data = blob(commit, f"distro/graphics/boot/{name}").replace(b"\r\n", b"\n")
         (stage / name).write_bytes(data)
-    steps = ["m13", "", "", ""]
+    steps = ["m13", "", "", "", ""]
     script = ["#!/bin/sh", "set -u", "T=/tmp/r5-pre-stick-m13", "rm -rf $T",
               "mkdir -p $T/home $T/us $T/ss $T/cache",
               "echo 'selftest done' > $T/cache/r5-gpu-selftest.txt",
@@ -304,7 +316,7 @@ def check_m13_boots(commit: str) -> None:
         want = M13_BOOTS.get(boot, "unknown")
         if want is None:
             if got != ["(none)"]:
-                die(f"m13: after boot 3 a settings file stays: {got}")
+                die(f"m13: after boot 4 a settings file stays: {got}")
         elif got != want:
             die(f"m13 boot {boot}: boot-next wrote {got}, want {want}")
         else:
@@ -553,7 +565,7 @@ def extract(iso_wsl: str, out: str) -> None:
         f"'{BFS}' --start-offset {OFFSET} '{iso_wsl}' <<EOF\n"
         + "\n".join(gets) + "\nquit\nEOF\n"
         f"'{PKG}' extract -C {out}/haiku {out}/{HAIKU_PKG}\n"
-        f"'{PKG}' extract -C {out}/radv {out}/mesa_radv-25.3.6-9-x86_64.hpkg\n"
+        f"'{PKG}' extract -C {out}/radv {out}/mesa_radv-25.3.6-10-x86_64.hpkg\n"
         f"'{PKG}' extract -C {out}/teapot {out}/vulkanteapot-1.0.0-5-x86_64.hpkg\n"
         f"'{PKG}' extract -C {out}/tools {out}/vulkan_tools-1.4.367-2-x86_64.hpkg\n"
         f"test -s {out}/haiku/bin/r5-gpu-selftest\n"

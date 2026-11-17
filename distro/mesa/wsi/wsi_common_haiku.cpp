@@ -836,6 +836,25 @@ r5_queue_present(struct wsi_swapchain *wsi_chain, uint32_t image_index,
 		}
 	}
 
+	/*
+	 * Without a separate blit queue (RADV with no SDMA queue, or
+	 * RADV_DEBUG=nodmablit) the blit runs on the program's own queue in the
+	 * submit that signals the per-image fence. Mesa waits that fence only
+	 * for a software device, so wait for it here, bounded to one second,
+	 * before reading the host-visible buffer.
+	 */
+	if (chain->base.blit.type == WSI_SWAPCHAIN_BUFFER_BLIT
+		&& chain->base.blit.queue == NULL && !chain->base.wsi->sw
+		&& chain->base.fences[image_index] != VK_NULL_HANDLE) {
+		VkResult waited = chain->base.wsi->WaitForFences(chain->base.device,
+			1, &chain->base.fences[image_index], VK_TRUE, 1000000000ull);
+		if (waited != VK_SUCCESS) {
+			r5_release_image(chain, image_index);
+			pthread_mutex_unlock(&chain->present_mu);
+			return waited == VK_TIMEOUT ? VK_ERROR_DEVICE_LOST : waited;
+		}
+	}
+
 	r5_copy_rows(&image->base, image->bitmap, chain->width, chain->height);
 
 	BWindow *window = NULL;
