@@ -1372,7 +1372,7 @@ GameControllersPage::GameControllersPage(GameControllersModule* module,
 	BStringView* effectLabel = new BStringView("effect label", "Effect");
 	effectLabel->SetFont(&boldFont);
 	BStringView* effectWhere = new BStringView("effect where",
-		"on L2 and R2");
+		"pull L2 or R2 to feel it");
 	effectWhere->SetHighColor(quietText);
 	fStartSlider = new BSlider("starts at", NULL,
 		new BMessage(kMsgTriggerChanged), 0, 100, B_HORIZONTAL);
@@ -1395,9 +1395,6 @@ GameControllersPage::GameControllersPage(GameControllersModule* module,
 	float valueWidth = ceilf(boldFont.StringWidth("100 %"));
 	fStartValue->SetExplicitMinSize(BSize(valueWidth, B_SIZE_UNSET));
 	fStrengthValue->SetExplicitMinSize(BSize(valueWidth, B_SIZE_UNSET));
-	BStringView* triggerHint = new BStringView("trigger hint",
-		"Pull L2 or R2 to feel it.");
-	triggerHint->SetHighColor(quietText);
 	fTriggerGroup = _MakeFeelGroup("trigger group", "Trigger feedback",
 		&content);
 	BLayoutBuilder::Group<>(content)
@@ -1414,12 +1411,11 @@ GameControllersPage::GameControllersPage(GameControllersModule* module,
 			.Add(strengthLabel, 0, 2)
 			.Add(fStrengthSlider, 1, 2)
 			.Add(fStrengthValue, 2, 2)
-		.End()
-		.Add(triggerHint);
+		.End();
 
 	BView* feelViews[] = { fWaves, fMotion, fEffectField, effectLabel,
 		effectWhere, fStartSlider, fStrengthSlider, startLabel,
-		strengthLabel, fStartValue, fStrengthValue, triggerHint,
+		strengthLabel, fStartValue, fStrengthValue,
 		rumbleHint };
 	for (size_t i = 0; i < sizeof(feelViews) / sizeof(feelViews[0]); i++) {
 		feelViews[i]->SetViewColor(network_box_fill());
@@ -1427,7 +1423,7 @@ GameControllersPage::GameControllersPage(GameControllersModule* module,
 	}
 
 	BView* quietViews[] = { rumbleHint, effectLabel, effectWhere, startLabel,
-		strengthLabel, fStartValue, fStrengthValue, triggerHint };
+		strengthLabel, fStartValue, fStrengthValue };
 	for (size_t i = 0; i < sizeof(quietViews) / sizeof(quietViews[0]); i++)
 		_AddQuiet(static_cast<BStringView*>(quietViews[i]));
 
@@ -1445,7 +1441,7 @@ GameControllersPage::GameControllersPage(GameControllersModule* module,
 		.Add(fExample, 1)
 		.Add(fTestHint)
 		.Add(fIDs);
-	BGroupView* feelColumn = new BGroupView(B_VERTICAL, roundf(8 * unit));
+	BGroupView* feelColumn = new BGroupView(B_VERTICAL, roundf(5 * unit));
 	feelColumn->SetViewColor(network_box_fill());
 	BLayoutBuilder::Group<>(feelColumn)
 		.Add(fRumbleGroup)
@@ -1461,8 +1457,8 @@ GameControllersPage::GameControllersPage(GameControllersModule* module,
 	BGroupView* test = new BGroupView(B_VERTICAL, roundf(8 * unit));
 	test->SetViewColor(network_box_fill());
 	BLayoutBuilder::Group<>(test)
-		.SetInsets(roundf(14 * unit), roundf(10 * unit), roundf(14 * unit),
-			roundf(10 * unit))
+		.SetInsets(roundf(14 * unit), roundf(8 * unit), roundf(14 * unit),
+			roundf(8 * unit))
 		.AddGroup(B_HORIZONTAL, roundf(8 * unit))
 			.Add(fLayoutField->CreateLabelLayoutItem())
 			.Add(fLayoutField->CreateMenuBarLayoutItem())
@@ -1860,8 +1856,8 @@ GameControllersPage::_MakeFeelGroup(const char* name, const char* title,
 	BGroupView* content = new BGroupView(B_VERTICAL, roundf(6 * unit));
 	content->SetViewColor(network_box_fill());
 	BLayoutBuilder::Group<>(content)
-		.SetInsets(roundf(10 * unit), roundf(4 * unit), roundf(10 * unit),
-			roundf(8 * unit));
+		.SetInsets(roundf(10 * unit), roundf(2 * unit), roundf(10 * unit),
+			roundf(6 * unit));
 	box->AddChild(content);
 	BStringView* label = new BStringView("group title", title);
 	label->SetFont(r5_settings_bold_font());
