@@ -37,6 +37,8 @@ int ieee80211_parse_rsn(struct ieee80211vap*, const uint8_t*,
 	struct ieee80211_rsnparms*, const struct ieee80211_frame*);
 int ieee80211_parse_action(struct ieee80211_node*, struct mbuf*);
 void mtk_receive_frame(struct mtk_softc*, const uint8_t*, size_t, int, int);
+void ieee80211_parse_hecap(struct ieee80211_node*, const uint8_t*, int);
+void ieee80211_parse_heop(struct ieee80211_node*, const uint8_t*, int);
 
 __attribute__((weak)) int
 ieee80211_ies_init(struct ieee80211_ies* ies, const uint8_t* data, int len)
@@ -94,6 +96,12 @@ __attribute__((weak)) void
 mtk_receive_frame(struct mtk_softc* sc, const uint8_t* data, size_t got,
 	int which, int slot)
 { (void)sc; (void)data; (void)got; (void)which; (void)slot; abort(); }
+__attribute__((weak)) void
+ieee80211_parse_hecap(struct ieee80211_node* ni, const uint8_t* ie, int avail)
+{ (void)ni; (void)ie; (void)avail; abort(); }
+__attribute__((weak)) void
+ieee80211_parse_heop(struct ieee80211_node* ni, const uint8_t* ie, int avail)
+{ (void)ni; (void)ie; (void)avail; abort(); }
 
 static uint64_t gState = 0x9e3779b97f4a7c15ULL;
 
@@ -252,6 +260,29 @@ fuzz_action(void)
 
 
 static void
+fuzz_he(void)
+{
+	struct ieee80211com ic;
+	struct ieee80211vap vap;
+	struct ieee80211_node ni;
+	struct ieee80211_channel chan;
+	uint8_t* buf;
+	int n;
+
+	setup(&ic, &vap, &ni, &chan);
+	buf = malloc(300);
+	fill(buf, 300);
+	n = (int)(next_word() % 300);
+	ieee80211_parse_hecap(&ni, buf, n);
+	ieee80211_parse_heop(&ni, buf, n);
+	ieee80211_parse_hecap(&ni, NULL, 10);
+	ieee80211_parse_heop(&ni, buf, 0);
+	ieee80211_parse_hecap(&ni, buf, 1);
+	free(buf);
+}
+
+
+static void
 fuzz_mtkrx(void)
 {
 	struct mtk_softc sc;
@@ -296,6 +327,8 @@ main(int argc, char** argv)
 			fuzz_action();
 		else if (strcmp(target, "mtkrx") == 0)
 			fuzz_mtkrx();
+		else if (strcmp(target, "he") == 0)
+			fuzz_he();
 		else {
 			fprintf(stderr, "wifi-fuzz: unknown target %s\n", target);
 			return 2;

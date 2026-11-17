@@ -96,8 +96,13 @@ enum {
 	IEEE80211_ELEMID_VHT_CAP = 191,
 	IEEE80211_ELEMID_VHT_OPMODE = 192,
 	IEEE80211_ELEMID_VHT_PWR_ENV = 195,
-	IEEE80211_ELEMID_VENDOR = 221
+	IEEE80211_ELEMID_VENDOR = 221,
+	IEEE80211_ELEMID_EXTFIELD = 255
 };
+
+#define IEEE80211_ELEMID_EXT_HE_CAPA 35
+#define IEEE80211_ELEMID_EXT_HE_OPER 36
+#define IEEE80211_NODE_HE 0x800000
 
 #define IEEE80211_RATE_MAXSIZE 15
 #define IEEE80211_NWID_LEN 32
@@ -389,7 +394,9 @@ struct ieee80211_ies {
 	uint8_t* vhtpwrenv_ie;
 	uint8_t* apchanrep_ie;
 	uint8_t* bssload_ie;
-	uint8_t* spare[4];
+	uint8_t* hecap_ie;
+	uint8_t* heop_ie;
+	uint8_t* spare[2];
 	uint8_t* data;
 	int len;
 };
@@ -411,6 +418,18 @@ struct ieee80211_node {
 	uint32_t ni_vhtcap;
 	struct ieee80211_vht_mcs_info ni_vht_mcsinfo;
 	uint8_t ni_uapsd;
+	uint8_t ni_he_mac[6];
+	uint8_t ni_he_phy[11];
+	uint16_t ni_he_rx_mcs80;
+	uint16_t ni_he_tx_mcs80;
+	uint16_t ni_he_rx_mcs160;
+	uint16_t ni_he_tx_mcs160;
+	uint8_t ni_he_pe;
+	uint16_t ni_he_rts;
+	uint8_t ni_he_bss_color;
+	uint8_t ni_he_er_su;
+	uint8_t ni_he_cap_ok;
+	uint8_t ni_he_op_ok;
 };
 
 struct ieee80211_rsnparms {

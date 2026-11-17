@@ -704,6 +704,10 @@ mtk_read_capability(struct mtk_softc* sc)
 			sc->sc_streams = reply[at + 4];
 			sc->sc_phy_rx_ldpc = reply[at + 7];
 			sc->sc_phy_rx_stbc = reply[at + 9];
+			/* Byte 11 is the he field of mt7921_phy_cap. The current
+			 * mt76 parser does not read it. Assumed until a stick boot.
+			 */
+			sc->sc_phy_he = reply[at + 11];
 /* SPDX-SnippetEnd */
 		}
 

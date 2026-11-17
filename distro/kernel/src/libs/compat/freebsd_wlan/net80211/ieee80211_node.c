@@ -54,6 +54,7 @@
 #include <net80211/ieee80211_mesh.h>
 #include <net80211/ieee80211_ratectl.h>
 #include <net80211/ieee80211_vht.h>
+#include <net80211/ieee80211_he.h>
 
 #include <net/bpf.h>
 
@@ -1004,6 +1005,7 @@ ieee80211_sta_join(struct ieee80211vap *vap, struct ieee80211_channel *chan,
 			ieee80211_parse_vhtcap(ni, ni->ni_ies.vhtcap_ie);
 		if (ni->ni_ies.vhtopmode_ie != NULL)
 			ieee80211_parse_vhtopmode(ni, ni->ni_ies.vhtopmode_ie);
+		ieee80211_he_update(ni);
 
 		/* XXX parse BSSLOAD IE */
 		/* XXX parse TXPWRENV IE */
@@ -1236,6 +1238,17 @@ ieee80211_ies_expand(struct ieee80211_ies *ies)
 		case IEEE80211_ELEMID_VHT_PWR_ENV:
 			ies->vhtpwrenv_ie = ie;
 			break;
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ */
+		case IEEE80211_ELEMID_EXTFIELD:
+			if (ie[1] >= 1 && ie[2] == IEEE80211_ELEMID_EXT_HE_CAPA)
+				ies->hecap_ie = ie;
+			else if (ie[1] >= 1 && ie[2] == IEEE80211_ELEMID_EXT_HE_OPER)
+				ies->heop_ie = ie;
+			break;
+/* SPDX-SnippetEnd */
 		case IEEE80211_ELEMID_BSSLOAD:
 			ies->bssload_ie = ie;
 			break;
@@ -1859,6 +1872,7 @@ ieee80211_init_neighbor(struct ieee80211_node *ni,
 			ieee80211_parse_vhtcap(ni, ni->ni_ies.vhtcap_ie);
 		if (ni->ni_ies.vhtopmode_ie != NULL)
 			ieee80211_parse_vhtopmode(ni, ni->ni_ies.vhtopmode_ie);
+		ieee80211_he_update(ni);
 
 		if ((ni->ni_ies.htcap_ie != NULL) &&
 		    (ni->ni_ies.htinfo_ie != NULL) &&

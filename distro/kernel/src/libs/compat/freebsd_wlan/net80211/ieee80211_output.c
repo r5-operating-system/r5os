@@ -50,6 +50,7 @@
 #include <net/if_vlan_var.h>
 
 #include <net80211/ieee80211_var.h>
+#include <net80211/ieee80211_he.h>
 #include <net80211/ieee80211_regdomain.h>
 #ifdef IEEE80211_SUPPORT_SUPERG
 #include <net80211/ieee80211_superg.h>
@@ -2881,6 +2882,7 @@ ieee80211_send_mgmt(struct ieee80211_node *ni, int type, int arg)
 		       + sizeof(struct ieee80211_ie_htcap)
 		       + 2 + sizeof(struct ieee80211_vht_cap)
 		       + 4 + sizeof(struct ieee80211_ie_htcap)
+		       + 32 /* HE Capabilities */
 #ifdef IEEE80211_SUPPORT_SUPERG
 		       + sizeof(struct ieee80211_ath_ie)
 #endif
@@ -2951,6 +2953,14 @@ ieee80211_send_mgmt(struct ieee80211_node *ni, int type, int arg)
 		    ni->ni_ies.vhtcap_ie[0] == IEEE80211_ELEMID_VHT_CAP) {
 			frm = ieee80211_add_vhtcap(frm, ni);
 		}
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ */
+		if (ieee80211_he_is_on(ic) &&
+		    (ni->ni_flags & IEEE80211_NODE_HE) != 0)
+			frm = ieee80211_add_hecap(frm, ni);
+/* SPDX-SnippetEnd */
 
 		frm = ieee80211_add_wpa(frm, vap);
 		if ((vap->iv_flags & IEEE80211_F_WME) &&
