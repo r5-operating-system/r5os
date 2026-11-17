@@ -10,6 +10,9 @@ Addon bluetooth_audio.media_addon :
 	AudioSettings.cpp
 	BluetoothAudioAddOn.cpp
 	BluetoothAudioNode.cpp
+	BluetoothMicNode.cpp
+	sbc_decoder.cpp
 	sbc_encoder.cpp
+	VoiceSource.cpp
 	: be media network libr5admin.so [ TargetLibstdc++ ]
 ;

@@ -20,6 +20,7 @@
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 #include "h2command.h"
+#include "h2voice.h"
 // SPDX-SnippetEnd
 #include "h2debug.h"
 #include "h2generic.h"
@@ -92,6 +93,10 @@ event_complete(void* cookie, status_t status, void* data, size_t actual_len)
 		const uint8* events = h2_command_events(bdev, (const uint8*)data,
 			actual_len, &size);
 		if (size != 0) {
+			// Step 7c: a voice link that comes or goes (only with bt_voice;
+			// it only reads the bytes).
+			if (h2_voice_enabled())
+				h2_voice_event_bytes(bdev, events, size);
 			if (assembly_rx(bdev, BT_EVENT, (void*)events, size) == B_OK) {
 				// A received event; this counted as sent.
 				bdev->stat.successfulRX++;

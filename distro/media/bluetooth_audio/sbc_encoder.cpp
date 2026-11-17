@@ -321,12 +321,24 @@ AllocateBits(const Config& config,
 }
 
 
+double
+PrototypeTap(int subbands, int n)
+{
+	const int taps = 10 * subbands;
+	if ((subbands != 4 && subbands != 8) || n < 0 || n >= taps)
+		return 0.0;
+	const double* proto = subbands == 4 ? kProto4 : kProto8;
+	return n <= taps / 2 ? proto[n] : proto[taps - n];
+}
+
+
 // #pragma mark - Encoder
 
 
 Encoder::Encoder()
 	:
-	fChannels(0)
+	fChannels(0),
+	fMSBC(false)
 {
 	memset(&fConfig, 0, sizeof(fConfig));
 	memset(fHistory, 0, sizeof(fHistory));
@@ -340,16 +352,39 @@ Encoder::Init(const Config& config)
 {
 	if (!ValidConfig(config))
 		return false;
+	fMSBC = false;
+	return _Setup(config);
+}
 
+
+bool
+Encoder::InitMSBC()
+{
+	// 15 blocks are not one of the A2DP block counts that ValidConfig()
+	// checks; everything else of the fixed configuration is.
+	Config config;
+	config.frequency = kFrequency16000;
+	config.blocks = 15;
+	config.mode = kModeMono;
+	config.allocation = kAllocationLoudness;
+	config.subbands = 8;
+	config.bitpool = 26;
+	fMSBC = true;
+	return _Setup(config);
+}
+
+
+bool
+Encoder::_Setup(const Config& config)
+{
 	fConfig = config;
 	fChannels = Channels(config);
 	memset(fHistory, 0, sizeof(fHistory));
 
 	const int M = config.subbands;
-	const double* proto = M == 4 ? kProto4 : kProto8;
 	const int taps = 10 * M;
 	for (int n = 0; n < taps; n++) {
-		double h = n <= taps / 2 ? proto[n] : proto[taps - n];
+		double h = PrototypeTap(M, n);
 		// 12.6.1 sums Z[] in groups of 2 * M taps into Y[] before the
 		// cosine matrix. The matrix row for the tap n + 2Mj is the row for
 		// n times cos((i + 0.5) * 2j * pi) ... = (-1)^j, so every odd group
@@ -479,12 +514,19 @@ Encoder::Encode(const float* samples, uint8_t* out, size_t size)
 
 	// Frame header (12.5).
 	memset(out, 0, length);
-	out[0] = kSyncWord;
-	int blocksCode = B / 4 - 1;
-	out[1] = (uint8_t)((fConfig.frequency << 6) | (blocksCode << 4)
-		| (fConfig.mode << 2) | (fConfig.allocation << 1)
-		| (M == 8 ? 1 : 0));
-	out[2] = (uint8_t)fConfig.bitpool;
+	if (fMSBC) {
+		// HFP 1.8, A.1: the sync word, then two reserved bytes.
+		out[0] = 0xad;
+		out[1] = 0;
+		out[2] = 0;
+	} else {
+		out[0] = kSyncWord;
+		int blocksCode = B / 4 - 1;
+		out[1] = (uint8_t)((fConfig.frequency << 6) | (blocksCode << 4)
+			| (fConfig.mode << 2) | (fConfig.allocation << 1)
+			| (M == 8 ? 1 : 0));
+		out[2] = (uint8_t)fConfig.bitpool;
+	}
 
 	BitWriter writer(out, 4);
 	if (fConfig.mode == kModeJointStereo) {

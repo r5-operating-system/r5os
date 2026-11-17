@@ -9,5 +9,6 @@ KernelAddon h2generic :
 	h2transactions.cpp
 	h2upper.cpp
 	h2util.cpp
+	h2voice.cpp
 	snet_buffer.cpp
 	;

@@ -25,6 +25,7 @@
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 #include "h2command.h"
+#include "h2voice.h"
 // SPDX-SnippetEnd
 #include "h2debug.h"
 #include "h2mediatek.h"
@@ -48,7 +49,13 @@ struct net_buffer_module_info* nb = NULL;
 struct bluetooth_core_data_module_info* btCoreData = NULL;
 
 // Driver Global data
-static char* publish_names[MAX_BT_GENERIC_USB_DEVICES];
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// A radio, its voice node (step 7c, only with bt_voice) and the final NULL.
+#define MAX_PUBLISHED_NAMES (2 * MAX_BT_GENERIC_USB_DEVICES + 1)
+static char* publish_names[MAX_PUBLISHED_NAMES];
+// SPDX-SnippetEnd
 
 int32 dev_count = 0; // number of connected devices
 static bt_usb_dev* bt_usb_devices[MAX_BT_GENERIC_USB_DEVICES];
@@ -455,6 +462,21 @@ device_added(usb_device dev, void** cookie)
 		goto bail;
 	}
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// With bt_voice (h2voice.h) the isochronous interface stays at setting
+	// 0, which takes no bandwidth, until a voice link needs another one.
+	if (h2_voice_enabled()) {
+		if (config->interface_count > 1 && config->interface[1].alt_count > 0
+			&& usb->set_alt_interface(new_bt_dev->dev,
+				&config->interface[1].alt[0]) != B_OK) {
+			ERROR("%s: set_alt_interface() error on interface 1, alt 0.\n",
+				__func__);
+		}
+		new_bt_dev->driver_info |= BT_SCO_NOT_WORKING;
+	} else
+	// SPDX-SnippetEnd
 	// TODO: Do this only when sco is needed
 	if (config->interface_count > 1 && config->interface[1].alt_count > 5) {
 		interface = &config->interface[1].alt[5];
@@ -797,6 +819,12 @@ device_open(const char* name, uint32 flags, void **cookie)
 
 	bdev->hdev = hdev;
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	h2_voice_device_open(bdev);
+	// SPDX-SnippetEnd
+
 	*cookie = bdev;
 	release_sem(bdev->lock);
 
@@ -827,6 +855,8 @@ device_close(void* cookie)
 	// SPDX-License-Identifier: MIT
 	// No timeout is reported for a radio that is being closed.
 	command_forget(bdev->num);
+	// The voice transfers stop before the queues below are cancelled.
+	h2_voice_device_close(bdev);
 	// SPDX-SnippetEnd
 
 	// Clean queues
@@ -1174,6 +1204,8 @@ init_driver(void)
 	}
 	if (sCommandWake < 0 || sCommandThread < 0)
 		ERROR("%s: no HCI command timeouts\n", __func__);
+	// Voice (step 7c) is off unless the driver settings say bt_voice true.
+	h2_voice_init();
 	// SPDX-SnippetEnd
 
 	// Note: After here device_added and publish devices hooks are called
@@ -1211,10 +1243,16 @@ uninit_driver(void)
 
 	int32 j;
 
-	for (j = 0; j < MAX_BT_GENERIC_USB_DEVICES; j++) {
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	for (j = 0; j < MAX_PUBLISHED_NAMES; j++) {
+		free(publish_names[j]);
+		publish_names[j] = NULL;
+	}
+	// SPDX-SnippetEnd
 
-		if (publish_names[j] != NULL)
-			free(publish_names[j]);
+	for (j = 0; j < MAX_BT_GENERIC_USB_DEVICES; j++) {
 
 		if (bt_usb_devices[j] != NULL) {
 			//	if (connected_dev != NULL) {
@@ -1230,6 +1268,7 @@ uninit_driver(void)
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
+	h2_voice_uninit();
 	sCommandQuit = true;
 	if (sCommandThread >= 0) {
 		release_sem(sCommandWake);
@@ -1263,12 +1302,14 @@ publish_devices(void)
 
 	char* str;
 
-	for (j = 0; j < MAX_BT_GENERIC_USB_DEVICES; j++) {
-		if (publish_names[j]) {
-			free(publish_names[j]);
-			publish_names[j] = NULL;
-		}
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	for (j = 0; j < MAX_PUBLISHED_NAMES; j++) {
+		free(publish_names[j]);
+		publish_names[j] = NULL;
 	}
+	// SPDX-SnippetEnd
 
 	acquire_sem(dev_table_sem);
 	for (j = 0; j < MAX_BT_GENERIC_USB_DEVICES; j++) {
@@ -1278,6 +1319,14 @@ publish_devices(void)
 				publish_names[i++] = str;
 				TRACE("%s: publishing %s\n", __func__, bt_usb_devices[j]->name);
 			}
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			// NULL while voice is off: nothing more is published then.
+			str = h2_voice_node_name(j);
+			if (str != NULL)
+				publish_names[i++] = str;
+			// SPDX-SnippetEnd
 		}
 	}
 	release_sem_etc(dev_table_sem, 1, B_DO_NOT_RESCHEDULE);
@@ -1318,6 +1367,14 @@ device_hooks*
 find_device(const char* name)
 {
 	CALLED();
+
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	device_hooks* voiceHooks = h2_voice_find_device(name);
+	if (voiceHooks != NULL)
+		return voiceHooks;
+	// SPDX-SnippetEnd
 
 	return &hooks;
 }

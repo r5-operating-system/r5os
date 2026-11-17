@@ -1,5 +1,24 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Bluetooth step 7c: a headset's microphone as a sound input (off until tested)
+
+Problem: a headset's microphone works only over a SCO or eSCO voice link, and `h2generic` never ran the isochronous USB transfers that carry it (`BT_SCO_NOT_WORKING`; on the MT7922 a standing isochronous transfer once starved the HCI events). There was no SBC decoder for mSBC and no audio input for a headset.
+
+What changed (docs/BLUETOOTH.md, step 7c, "As built"):
+- Owner decision (16 Nov 2026): off by default. Only `bt_voice true` in `/boot/home/config/settings/kernel/drivers/h2generic` turns it on; the image ships no such file. With it off, the driver does what it did: no voice node, no extra thread, the event path only tests a flag, the attach still selects interface 1, alternate setting 5, and no isochronous transfer is queued.
+- `h2generic` (`h2voice.cpp`, `h2voice.h`, `h2sco.h`, snippets in `h2generic.cpp` and `h2transactions.cpp`): with `bt_voice`, interface 1 rests at alternate setting 0; Synchronous Connection Complete (SCO or eSCO, status 0) starts isochronous transfers on the smallest alternate setting that holds the link (9 bytes per frame for transparent mSBC, 17 for 16-bit CVSD PCM), Disconnection Complete of that handle or closing the radio stops them. The isochronous packets become whole HCI SCO packets, every length checked; `/dev/bluetooth/voice/<n>` (uid 0, one opener, `<R5BluetoothVoice.h>`) reads and writes them. The old Haiku `sco_rx_complete()` stays unused: its buffer pool gives every transfer the same buffer.
+- `bluetooth_audio`: an SBC decoder (`sbc_decoder.cpp`, MIT, from A2DP appendix B; SBC and mSBC), `Encoder::InitMSBC()`, the H2 framing of HFP 1.8 appendix A (`msbc.h`), and the input "Bluetooth headset microphone" (16 kHz mono float; CVSD's 8 kHz PCM is doubled). It sends silence back on the link and silence to the program while there is no link. Media's `DefaultManager` does not make it the default input by itself.
+- `bluetooth_server/VoiceLink.h` (header only): codec choice after AT+BAC, the HFP 1.8 settings T2, T1, S4, S3, S1, D1, and the bytes of Setup and Accept Synchronous Connection. Not called yet: 7b (#4333) is not on `main`. What joins there is in docs/BLUETOOTH.md.
+- Tests: `bt_voice_test` in the regular image and in `run-qemu-smoke.sh`, `scripts/test-voice.sh` (host), `scripts/fuzz-bt.sh sco` (new target, `scripts/bt-sco-fuzz.cpp`).
+
+Limits: nothing ran on a radio. No voice link is opened until the HFP side joins. The isochronous path never ran, so whether the MT7922 keeps its events with a voice link up is still open. One voice link per radio, no packet loss concealment, no speaker path (the headset hears silence). The mSBC CRC is computed over the two reserved header bytes as sent; to be confirmed with a headset. ARM64 and RISC-V 64 were not built or tested.
+
+Tested (17 Nov 2026):
+- `scripts/build-locked.sh` (AMD64): jam_exit=0.
+- QEMU (KVM, SMAP and SMEP, `run-qemu-smoke.sh` on an own image copy, `LOGIN=1`): every test exit 0, `bt_voice_test: ok` (mSBC round trip 43.8 dB, gain 0.995; SBC 44.1 kHz joint stereo 65.5 dB; the microphone listed as an input and running in media_addon_server with one 16 kHz mono float output; no voice node), `bt_audio_smoke_test: ok`; no SMAP fault, no panic. A second boot of a copy with `bt_voice true` planted: `h2generic: voice enabled (bt_voice)`, the same tests pass, no fault. QEMU has no radio, so neither boot ran a voice link or an isochronous transfer.
+- Host (WSL, ASan and UBSan): `scripts/test-voice.sh` ok, `scripts/test-sbc.sh` ok (the encoder change keeps the A2DP results), `scripts/fuzz-bt.sh sco 60` (375600 rounds), `audio 60` and `hci 60`: 0 crashes.
+
+Not tested: anything with a radio (no VirtualBox, no 5625U stick, no headset); ARM64 and RISC-V 64 not built.
 ## 2026-11-16 - Bluetooth step 7b: the headset's battery over HFP, its buttons and volume in the log
 
 Problem: a Classic headset like the Sony WH-1000XM4 sends its battery level only over HFP, so My devices showed no battery for it. Its call buttons and volume reached nothing.
