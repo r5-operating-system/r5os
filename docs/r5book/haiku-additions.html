@@ -19,12 +19,26 @@
 	<aside class="toc"></aside>
 
 	<main class="page">
+		<div class="breadcrumb"><a href="index.html">R5Book</a> &rsaquo; <a href="index.html#reference">Reference</a> &rsaquo; Additions to Haiku kits</div>
+
 		<section class="page-hero">
 			<span class="kit-label">Haiku kits</span>
 			<h1>Additions to Haiku kits</h1>
 			<p>Public calls R5 added to classes that Haiku already has. The rest of each class is as the Haiku Book
 			describes it. A program that uses one of these calls runs on R5, not on Haiku.</p>
 		</section>
+
+		<nav class="on-this-page" aria-label="On this page">
+			<h3>What is in this page</h3>
+			<ul>
+				<li><a href="#BFormattingConventions">BFormattingConventions::CoerceFormatForClock()</a> &mdash; 12/24-hour pattern coercion.</li>
+				<li><a href="#BLocaleRoster">BLocaleRoster::ApplySettings()</a> &mdash; Applying locale changes at once.</li>
+				<li><a href="#BUSBEndpoint">BUSBEndpoint</a> &mdash; Isochronous USB stream transfers.</li>
+				<li><a href="#decorator">Decorator hooks</a> &mdash; R5 decorator ABI version and window hooks.</li>
+				<li><a href="#wheel-phase">input_wheel_phase</a> &mdash; Touchpad scroll phase on wheel messages.</li>
+				<li><a href="#usb-speed">B_USB_IOCTL_GET_DEVICE_SPEED</a> &mdash; Querying negotiated USB speed.</li>
+			</ul>
+		</nav>
 
 		<div class="note"><strong>Check before you call.</strong> These calls are not in Haiku. A program that should
 		also run on Haiku keeps its own fallback, or builds this part only for R5.</div>

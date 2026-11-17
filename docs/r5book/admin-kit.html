@@ -19,6 +19,8 @@
 	<aside class="toc"></aside>
 
 	<main class="page">
+		<div class="breadcrumb"><a href="index.html">R5Book</a> &rsaquo; <a href="index.html#kits">Kits</a> &rsaquo; Admin Kit</div>
+
 		<section class="page-hero">
 			<span class="kit-label">libr5admin.so</span>
 			<h1>The Admin Kit</h1>
@@ -26,6 +28,16 @@
 			service that carries them out runs as uid 0 and must know who asks. <code class="inline">libr5admin.so</code>
 			gives it a sender that the kernel names, so no program can pretend to be another one.</p>
 		</section>
+
+		<nav class="on-this-page" aria-label="On this page">
+			<h3>What is in this page</h3>
+			<ul>
+				<li><a href="#why">Why not ReturnAddress()</a> &mdash; Why reply messengers cannot prove who sent a message.</li>
+				<li><a href="#service">Service side</a> &mdash; Opening an admin port and checking the sender's uid/team.</li>
+				<li><a href="#client">Client side</a> &mdash; Sending a request with <code class="inline">r5_admin_send()</code>.</li>
+				<li><a href="#services">Where it is used</a> &mdash; Login, <code class="inline">bluetooth_server</code>, and <code class="inline">libr5ui.so</code>.</li>
+			</ul>
+		</nav>
 
 		<table class="facts">
 			<tr><th>Declared in</th><td>&lt;R5Admin.h&gt;</td></tr>

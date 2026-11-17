@@ -19,6 +19,8 @@
 	<aside class="toc"></aside>
 
 	<main class="page">
+		<div class="breadcrumb"><a href="index.html">R5Book</a> &rsaquo; <a href="index.html#kits">Kits</a> &rsaquo; Game Kit</div>
+
 		<section class="page-hero">
 			<span class="kit-label">libr5game.so</span>
 			<h1>The Game Kit</h1>
@@ -29,6 +31,19 @@
 			<code class="inline">BJoystick</code> keeps working and sees the controller's own button
 			numbers. The code is R5's own and MIT.</p>
 		</section>
+
+		<nav class="on-this-page" aria-label="On this page">
+			<h3>What is in this page</h3>
+			<ul>
+				<li><a href="#controller">BGameController</a> &mdash; Named buttons, sticks, battery, and plug messages.</li>
+				<li><a href="#example">Example</a> &mdash; Opening and polling a controller.</li>
+				<li><a href="#view">BGameControllerView</a> &mdash; Live picture of a controller with pressed inputs.</li>
+				<li><a href="#picture-bitmap">PictureBitmap()</a> &mdash; Rendering a controller outline bitmap.</li>
+				<li><a href="#feel">Rumble, triggers &amp; motion</a> &mdash; Force feedback, adaptive triggers, and gyro/accel.</li>
+				<li><a href="#motion-view">BGameControllerMotionView</a> &mdash; Live tilt and turn-rate bars.</li>
+				<li><a href="#settings">Where people see it</a> &mdash; Game controllers page in Settings.</li>
+			</ul>
+		</nav>
 
 		<table class="facts">
 			<tr><th>Declared in</th><td>&lt;GameController.h&gt;, &lt;GameControllerView.h&gt;</td></tr>
@@ -147,7 +162,7 @@ if (pad.CountDevices() &gt; 0 &amp;&amp; pad.GetDeviceName(0, name) == B_OK
 				and centred. Without a model and with <code class="inline">B_GAME_CONTROLLER_FAMILY_UNKNOWN</code> a
 				plain outline. The caller owns the bitmap; <code class="inline">NULL</code> for an empty size. It
 				needs a <code class="inline">BApplication</code>, because app_server draws it. Settings uses it for the
-				cards of its <a href="appearance-kit.html#BCardStrip">BCardStrip</a> and for the gray example when no
+				cards of its <a href="appearance-cards.html#BCardStrip">BCardStrip</a> and for the gray example when no
 				controller is connected.</p></div>
 <pre class="code">BBitmap* picture = BGameControllerView::PictureBitmap(pad.VendorID(), pad.ProductID(),
 	pad.Family(), 56, 38, ui_color(B_DOCUMENT_TEXT_COLOR));
@@ -202,8 +217,8 @@ game_controller_motion motion;
 				<tr><th>Declared in</th><td>&lt;GameControllerMotionView.h&gt;</td></tr>
 				<tr><th>Derived from</th><td>BView</td></tr>
 			</table>
-			<p>The motion of a controller: a <a href="appearance-kit.html#BTiltLevel">BTiltLevel</a> for the tilt
-			and three <a href="appearance-kit.html#BAxisBar">BAxisBar</a>s for the turn, labelled Pitch, Roll
+			<p>The motion of a controller: a <a href="appearance-controls.html#BTiltLevel">BTiltLevel</a> for the tilt
+			and three <a href="appearance-controls.html#BAxisBar">BAxisBar</a>s for the turn, labelled Pitch, Roll
 			and Yaw. The program reads the controller; the view only shows.</p>
 			<div class="member"><div class="sig">void SetMotion(const game_controller_motion&amp; motion);<br>void Reset();<br>void SetTurnRange(float degreesPerSecond);</div>
 				<p>A sample: the level from the acceleration's x and z, the bars full at the turn range (360
@@ -217,7 +232,7 @@ game_controller_motion motion;
 		<section class="entry" id="settings">
 			<div class="entry-header"><h2 class="plain">Where people see it</h2></div>
 			<p>Settings, Devices, Game controllers: the controllers in a
-			<a href="appearance-kit.html#BCardStrip">BCardStrip</a> at the bottom, one card each with a small
+			<a href="appearance-cards.html#BCardStrip">BCardStrip</a> at the bottom, one card each with a small
 			picture from <code class="inline">PictureBitmap()</code>; above it the live test of the chosen one
 			with its layout, the button-label choice and <em>Set up buttons&hellip;</em> (a window that asks
 			the person to press each control in turn), and Rumble, Motion and Trigger feedback beside the

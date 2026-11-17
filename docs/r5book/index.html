@@ -20,49 +20,43 @@
 
 	<main class="page">
 		<section class="page-hero">
-			<span class="kit-label">R5Book</span>
+			<span class="kit-label">Start here</span>
 			<h1>Building on LibR5</h1>
-			<p>The R5Book describes the libraries R5 adds next to <code class="inline">libbe</code>: what each part
-			looks like, what it is for, and how to call it. It follows the Be Book: one entry per class, with
-			where it is declared, what it derives from, and its member functions.</p>
+			<p>R5Book is the developer guide to what R5 Operating System adds next to <code class="inline">libbe</code>:
+			the LibR5 libraries, guides for building R5 apps and Settings pages, and additions to Haiku kits.
+			It follows the Be Book layout: one entry per class, with where it is declared, what it derives from,
+			and its member functions.</p>
 		</section>
+
+		<nav class="on-this-page" aria-label="On this page">
+			<h3>What is in this page</h3>
+			<ul>
+				<li><a href="#kits">Kits</a> &mdash; One page per library, alphabetical.</li>
+				<li><a href="#guides">Guides</a> &mdash; Settings modules, accounts, Vulkan, and UI guidelines.</li>
+				<li><a href="#reference">Reference</a> &mdash; Additions to Haiku kits and the full class &amp; call index.</li>
+				<li><a href="#linking">Linking a program</a> &mdash; Headers, libraries, and Jamfile rules.</li>
+				<li><a href="#rules">Rules for LibR5</a> &mdash; Additive ABI, MIT license, sharp icons, system colors.</li>
+			</ul>
+		</nav>
 
 		<div class="note"><strong>Pictures.</strong> Most pictures in this edition are HTML mockups, drawn with
 		the R5 system colors and sizes at the 12 point system font. Sign in, the lock screen and the Wi-Fi page
 		are already screenshots taken from R5; the mockups will be replaced the same way. Each picture says
 		which one it is.</div>
 
-		<h3>The kits</h3>
+		<h3 id="kits">Kits</h3>
 		<div class="kit-grid">
-			<a class="kit-card" href="icons-kit.html">
-				<span class="mono">libr5icons.so &middot; &lt;R5Icons.h&gt;</span>
-				<h3>Icons Kit</h3>
-				<p>Haiku's own icons as bitmaps, icon buttons that match a text button, and line glyphs such
-				as power, restart and the password eye, drawn in the text color.</p>
+			<a class="kit-card" href="admin-kit.html">
+				<span class="mono">libr5admin.so &middot; &lt;R5Admin.h&gt;</span>
+				<h3>Admin Kit</h3>
+				<p>Requests that change the machine, with a sender the kernel names. Look here first for any
+				service that decides by who asks.</p>
 			</a>
 			<a class="kit-card" href="appearance-kit.html">
 				<span class="mono">libr5ui.so &middot; namespace BAppearanceKit</span>
 				<h3>Appearance Kit</h3>
 				<p>Cards, page headings, the Settings sidebar, the screen picture, account cards and lists,
 				the password field, the accent button, and the icon view.</p>
-			</a>
-			<a class="kit-card" href="midi2-kit.html">
-				<span class="mono">libmidi2.so &middot; &lt;Midi2Defs.h&gt;</span>
-				<h3>MIDI 2 Kit</h3>
-				<p>MIDI 2.0 in Haiku's own MIDI kit: the Universal MIDI Packet, 16-bit velocities and 32-bit
-				controllers, Property Exchange, Profiles and endpoint discovery.</p>
-			</a>
-			<a class="kit-card" href="wifi-kit.html">
-				<span class="mono">libr5wifi.so &middot; &lt;R5WiFi.h&gt;</span>
-				<h3>Wi-Fi Kit</h3>
-				<p>The Wi-Fi panel of Settings and the WiFi program, the state machine behind it, and the
-				Wi-Fi arcs, for any program that wants to show or drive Wi-Fi.</p>
-			</a>
-			<a class="kit-card" href="admin-kit.html">
-				<span class="mono">libr5admin.so &middot; &lt;R5Admin.h&gt;</span>
-				<h3>Admin Kit</h3>
-				<p>Requests that change the machine, with a sender the kernel names. Look here first for any
-				service that decides by who asks.</p>
 			</a>
 			<a class="kit-card" href="bluetooth-kit.html">
 				<span class="mono">libr5bt.so &middot; &lt;R5Bluetooth.h&gt;</span>
@@ -76,11 +70,33 @@
 				<p>Game controllers with named buttons and sticks, their battery and button labels, plug
 				and unplug messages, and a live picture of the controller.</p>
 			</a>
-			<a class="kit-card" href="vulkan.html">
-				<span class="mono">VK_RFIVE_view_surface &middot; &lt;vulkan/vulkan_r5.h&gt;</span>
-				<h3>Vulkan in a window</h3>
-				<p>Draw with Vulkan into an ordinary BView, on the GPU or in software, with R5's own
-				extension, registered with Khronos.</p>
+			<a class="kit-card" href="icons-kit.html">
+				<span class="mono">libr5icons.so &middot; &lt;R5Icons.h&gt;</span>
+				<h3>Icons Kit</h3>
+				<p>Haiku's own icons as bitmaps, icon buttons that match a text button, and line glyphs such
+				as power, restart and the password eye, drawn in the text color.</p>
+			</a>
+			<a class="kit-card" href="midi2-kit.html">
+				<span class="mono">libmidi2.so &middot; &lt;Midi2Defs.h&gt;</span>
+				<h3>MIDI 2 Kit</h3>
+				<p>MIDI 2.0 in Haiku's own MIDI kit: the Universal MIDI Packet, 16-bit velocities and 32-bit
+				controllers, Property Exchange, Profiles and endpoint discovery.</p>
+			</a>
+			<a class="kit-card" href="wifi-kit.html">
+				<span class="mono">libr5wifi.so &middot; &lt;R5WiFi.h&gt;</span>
+				<h3>Wi-Fi Kit</h3>
+				<p>The Wi-Fi panel of Settings and the WiFi program, the state machine behind it, and the
+				Wi-Fi arcs, for any program that wants to show or drive Wi-Fi.</p>
+			</a>
+		</div>
+
+		<h3 id="guides">Guides</h3>
+		<div class="kit-grid">
+			<a class="kit-card" href="settings-modules.html">
+				<span class="mono">SettingsModule.h &middot; Add-on</span>
+				<h3>Settings modules</h3>
+				<p>Add your own page to Settings as an add-on: its place in the list, its view, and values
+				that apply at once, with Revert, Defaults and the administrator lock.</p>
 			</a>
 			<a class="kit-card" href="accounts.html">
 				<span class="mono">find_directory() &middot; Login</span>
@@ -88,23 +104,33 @@
 				<p>Who your program runs as, where its settings go, locking and logging out, and Sign in as a
 				worked example built from LibR5.</p>
 			</a>
-			<a class="kit-card" href="settings-modules.html">
-				<span class="mono">SettingsModule.h &middot; Addon</span>
-				<h3>Settings modules</h3>
-				<p>Add your own page to Settings as an add-on: its place in the list, its view, and values
-				that apply at once, with Revert, Defaults and the administrator lock.</p>
-			</a>
-			<a class="kit-card" href="haiku-additions.html">
-				<span class="mono">libbe.so &middot; libdevice.so &middot; decorators</span>
-				<h3>Additions to Haiku kits</h3>
-				<p>Public calls R5 added to classes Haiku already has: the clock choice, locale changes, USB
-				streams, touchpad scroll phase, USB speed, and the decorator hooks.</p>
+			<a class="kit-card" href="vulkan.html">
+				<span class="mono">VK_RFIVE_view_surface &middot; &lt;vulkan/vulkan_r5.h&gt;</span>
+				<h3>Vulkan in a window</h3>
+				<p>Draw with Vulkan into an ordinary BView, on the GPU or in software, with R5's own
+				extension, registered with Khronos.</p>
 			</a>
 			<a class="kit-card" href="guidelines.html">
 				<span class="mono">docs/STYLE.md</span>
 				<h3>Interface guidelines</h3>
 				<p>How an R5 window is put together: forms, cards, one main action, sharp icons, settings
 				that apply at once, and the words to use.</p>
+			</a>
+		</div>
+
+		<h3 id="reference">Reference</h3>
+		<div class="kit-grid">
+			<a class="kit-card" href="haiku-additions.html">
+				<span class="mono">libbe.so &middot; libdevice.so &middot; decorators</span>
+				<h3>Additions to Haiku kits</h3>
+				<p>Public calls R5 added to classes Haiku already has: the clock choice, locale changes, USB
+				streams, touchpad scroll phase, USB speed, and the decorator hooks.</p>
+			</a>
+			<a class="kit-card" href="class-index.html">
+				<span class="mono">A &ndash; Z &middot; all libraries</span>
+				<h3>Class &amp; call index</h3>
+				<p>Alphabetical index of every class, function, struct, and constant in R5Book, with its
+				header and library.</p>
 			</a>
 		</div>
 
@@ -119,11 +145,16 @@
 			<div class="entry-header"><h2 class="plain">Linking a program</h2></div>
 			<table class="spec">
 				<tr><th>Library</th><th>Header</th><th>Source</th><th>On a running system</th></tr>
-				<tr><td><code>libr5icons.so</code></td><td><code>&lt;R5Icons.h&gt;</code></td><td><code>distro/icons</code></td><td><code>/system/lib/libr5icons.so</code></td></tr>
+				<tr><td><code>libr5admin.so</code></td><td><code>&lt;R5Admin.h&gt;</code></td><td><code>distro/admin</code></td><td><code>/system/lib/libr5admin.so</code></td></tr>
 				<tr><td><code>libr5ui.so</code></td><td><code>&lt;R5UI.h&gt;</code>, one header per class</td><td><code>distro/ui</code></td><td><code>/system/lib/libr5ui.so</code></td></tr>
+				<tr><td><code>libr5bt.so</code></td><td><code>&lt;R5Bluetooth.h&gt;</code></td><td><code>distro/bluetooth/lib</code></td><td><code>/system/lib/libr5bt.so</code></td></tr>
+				<tr><td><code>libr5game.so</code></td><td><code>&lt;GameController.h&gt;</code>, <code>&lt;GameControllerView.h&gt;</code></td><td><code>distro/game</code></td><td><code>/system/lib/libr5game.so</code></td></tr>
+				<tr><td><code>libr5icons.so</code></td><td><code>&lt;R5Icons.h&gt;</code></td><td><code>distro/icons</code></td><td><code>/system/lib/libr5icons.so</code></td></tr>
+				<tr><td><code>libmidi2.so</code></td><td><code>&lt;Midi2Defs.h&gt;</code></td><td><code>distro/media/headers/os/midi2</code></td><td><code>/system/lib/libmidi2.so</code></td></tr>
+				<tr><td><code>libr5wifi.so</code></td><td><code>&lt;R5WiFi.h&gt;</code></td><td><code>distro/wifi/lib</code></td><td><code>/system/lib/libr5wifi.so</code></td></tr>
 			</table>
-			<p>Both are in the regular image and in the minimum image. The soname is the file name, without a
-			version suffix, the same way <code class="inline">libbe.so</code> is named.
+			<p>All LibR5 libraries are in both the regular image and the minimum image. The soname is the file name,
+			without a version suffix, the same way <code class="inline">libbe.so</code> is named.
 			<code class="inline">libr5ui.so</code> links <code class="inline">libr5icons.so</code>.</p>
 <pre class="code"><span class="c"># Jamfile</span>
 Application Example :
@@ -144,7 +175,7 @@ Application Example :
 				one of these libraries, with its entry in this book and in <code class="inline">docs/LIBR5.md</code>
 				in the same change.</li>
 				<li><strong>Sharp.</strong> An icon is rendered at the size it is shown and drawn pixel for pixel.
-				Stretching a bitmap by even one pixel makes its edges jagged; use <a href="appearance-kit.html#BIconView">BIconView</a>.</li>
+				Stretching a bitmap by even one pixel makes its edges jagged; use <a href="appearance-controls.html#BIconView">BIconView</a>.</li>
 				<li><strong>System colors.</strong> Every color comes from <code class="inline">ui_color()</code>,
 				so a part follows the user's colors and dark mode.</li>
 			</ul>

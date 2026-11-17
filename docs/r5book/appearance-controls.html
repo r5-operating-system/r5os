@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<!--
+  SPDX-FileCopyrightText: 2026 R5OS Contributors
+  SPDX-License-Identifier: MIT
+-->
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Controls &amp; views — Appearance Kit — R5Book</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
+	<link rel="stylesheet" href="r5book.css" />
+	<style>
+		.m-desk { width: 420px; height: 160px; background: #f3f6fb; border: 1px solid #dbe3ef; border-radius: 6px; position: relative; }
+		.m-screen { position: absolute; background: #2b2b2b; border-radius: 5px; padding: 5px; }
+		.m-screen .glass { width: 100%; height: 100%; background: #336698; border-radius: 2px; position: relative; }
+		.m-screen .deskbar { position: absolute; top: 3px; right: 3px; width: 18px; height: 7px; background: #e6e6e6; }
+		.m-screen .num { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 22px; height: 22px; border-radius: 50%; background: #fff; color: #000; font-weight: 700; font-size: 11px; display: flex; align-items: center; justify-content: center; }
+		.m-screen.selected { box-shadow: 0 0 0 2px #f3f6fb, 0 0 0 5px var(--sys-accent); }
+		.m-screen .name { position: absolute; bottom: -18px; left: 0; right: 0; text-align: center; font-size: 10px; color: #333; }
+		.m-stack { display: flex; flex-direction: column; gap: 12px; width: 380px; }
+		.m-label { font-weight: 700; font-size: 12px; color: #444; margin-bottom: 3px; }
+		.m-dots { letter-spacing: 2px; font-size: 16px; }
+		.m-bad { image-rendering: pixelated; }
+	</style>
+</head>
+<body data-page="appearance">
+
+<div class="book">
+	<aside class="toc"></aside>
+
+	<main class="page">
+		<div class="breadcrumb"><a href="index.html">R5Book</a> &rsaquo; <a href="appearance-kit.html">Appearance Kit</a> &rsaquo; Controls &amp; views</div>
+
+		<section class="page-hero">
+			<span class="kit-label">libr5ui.so &middot; namespace BAppearanceKit</span>
+			<h1>Controls &amp; views</h1>
+			<p>Buttons, password fields, pixel-sharp icons, screen placement, and live input meters.</p>
+		</section>
+
+		<nav class="on-this-page" aria-label="On this page">
+			<h3>What is in this page</h3>
+			<ul>
+				<li><a href="#BAccentButton">BAccentButton</a> &mdash; Primary action button in the selection accent color.</li>
+				<li><a href="#BAxisBar">BAxisBar</a> &mdash; Center-zero bar for a value from -1 to 1.</li>
+				<li><a href="#BIconView">BIconView</a> &mdash; Displays a bitmap icon at its exact pixel size.</li>
+				<li><a href="#BPasswordControl">BPasswordControl</a> &mdash; Password field with a show/hide eye glyph.</li>
+				<li><a href="#BScreenArrangement">BScreenArrangement</a> &mdash; Interactive monitor layout preview.</li>
+				<li><a href="#BTiltLevel">BTiltLevel</a> &mdash; Two-axis bubble level indicator.</li>
+			</ul>
+		</nav>
+
+		<!-- BAccentButton -->
+		<section class="entry" id="BAccentButton">
+			<div class="entry-header"><h2>BAccentButton</h2><span class="kind">class</span></div>
+			<table class="facts">
+				<tr><th>Declared in</th><td>&lt;AccentButton.h&gt;</td></tr>
+				<tr><th>Library</th><td>libr5ui.so</td></tr>
+				<tr><th>Derived from</th><td>BButton</td></tr>
+				<tr><th>First user</th><td>Sign in, Unlock on the lock screen</td></tr>
+			</table>
+			<p><code class="inline">BAccentButton</code> is the one main action of a window, filled with the selection blue and a bold label one step larger than body text.</p>
+			<p>It is a <code class="inline">BButton</code>: the message, the target, <code class="inline">MakeDefault()</code>, and Enter work as usual. It is as wide as its label; for the full row, set an explicit maximum width of <code class="inline">B_SIZE_UNLIMITED</code>.</p>
+
+			<figure class="stage">
+				<div class="shot sys" style="flex-direction:column;align-items:stretch;width:380px">
+					<div class="sys-accent-button">Sign in</div>
+					<div style="display:flex;gap:8px">
+						<div class="sys-accent-button hover" style="flex:1">Hover</div>
+						<div class="sys-accent-button pressed" style="flex:1">Pressed</div>
+						<div class="sys-accent-button disabled" style="flex:1">Disabled</div>
+					</div>
+				</div>
+				<figcaption><span>Full width, and its states</span><span class="badge-mockup">Mockup</span></figcaption>
+			</figure>
+
+			<div class="use-grid">
+				<div class="use-box yes"><h4>Use it for</h4><p>The single action the window is for: Sign in, Unlock, Install.</p></div>
+				<div class="use-box no"><h4>Not for</h4><p>Every button on a row. Restart, Cancel and the like stay plain <code class="inline">BButton</code>s.</p></div>
+			</div>
+
+			<div class="member"><div class="sig">BAccentButton(const char* name, const char* label, BMessage* message = NULL);</div>
+				<p>38 pixels high at a 12 point font. The label is white on a dark accent and black on a light one.</p></div>
+
+<pre class="code">BAppearanceKit::BAccentButton* signIn = <span class="k">new</span> BAppearanceKit::BAccentButton(
+	<span class="s">"signin"</span>, <span class="s">"Sign in"</span>, <span class="k">new</span> BMessage(kAttemptLogin));
+signIn-&gt;SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
+window-&gt;SetDefaultButton(signIn);</pre>
+
+			<div class="see-also">
+				<strong>See also</strong>
+				<a href="#BPasswordControl">BPasswordControl</a>
+				<a href="guidelines.html#actions">Interface guidelines: Buttons</a>
+				<a href="accounts.html#example">Example: Sign in</a>
+			</div>
+		</section>
+
+		<!-- BAxisBar -->
+		<section class="entry" id="BAxisBar">
+			<div class="entry-header"><h2>BAxisBar</h2><span class="kind">class</span></div>
+			<table class="facts">
+				<tr><th>Declared in</th><td>&lt;AxisBar.h&gt;</td></tr>
+				<tr><th>Library</th><td>libr5ui.so</td></tr>
+				<tr><th>Derived from</th><td>BView</td></tr>
+				<tr><th>First user</th><td>BGameControllerMotionView (Pitch, Roll, Yaw)</td></tr>
+			</table>
+			<p><code class="inline">BAxisBar</code> is a rounded bar for a value from -1 to 1 that fills from the middle in the accent color: to the right for positive values, to the left for negative ones, with a tick at 0.</p>
+			<p>Use it for a value with a center, such as a turn rate or a stick axis. It only shows the value: a value the user drags is a <code class="inline">BSlider</code>, and progress is a <code class="inline">BStatusBar</code>. The lines come from the panel text color so it follows dark mode, and its height is one line height.</p>
+
+			<figure class="stage">
+				<div class="shot sys" style="flex-direction:column;gap:10px;align-items:stretch;width:280px">
+					<svg width="240" height="14" viewBox="0 0 240 14" aria-hidden="true"><rect x="0.5" y="1.5" width="239" height="11" rx="5.5" fill="none" stroke="#555"/><rect x="120" y="3.5" width="48" height="7" rx="3.5" fill="#3296ff"/><line x1="120.5" y1="0" x2="120.5" y2="14" stroke="#999"/></svg>
+					<svg width="240" height="14" viewBox="0 0 240 14" aria-hidden="true"><rect x="0.5" y="1.5" width="239" height="11" rx="5.5" fill="none" stroke="#555"/><rect x="100" y="3.5" width="20" height="7" rx="3.5" fill="#3296ff"/><line x1="120.5" y1="0" x2="120.5" y2="14" stroke="#999"/></svg>
+				</div>
+				<figcaption><span>0.4 and -0.17</span><span class="badge-mockup">Mockup</span></figcaption>
+			</figure>
+
+			<div class="member"><div class="sig">BAxisBar(const char* name);</div></div>
+			<div class="member"><div class="sig">void SetValue(float value);
+float Value() const;</div><p>Clamped to -1 to 1; NaN is 0. It redraws only when the value changed.</p></div>
+			<div class="member"><div class="sig">void SetEnabled(bool enabled);
+bool IsEnabled() const;</div><p>False draws the bar gray, the fill included, as a disabled control. True at first.</p></div>
+<pre class="code">#include &lt;AxisBar.h&gt;
+
+BAppearanceKit::BAxisBar* pitch = <span class="k">new</span> BAppearanceKit::BAxisBar(<span class="s">"pitch"</span>);
+pitch-&gt;SetValue(motion.rotation[0] / 360);</pre>
+
+			<div class="see-also">
+				<strong>See also</strong>
+				<a href="#BTiltLevel">BTiltLevel</a>
+				<a href="game-kit.html#motion-view">BGameControllerMotionView</a>
+			</div>
+		</section>
+
+		<!-- BIconView -->
+		<section class="entry" id="BIconView">
+			<div class="entry-header"><h2>BIconView</h2><span class="kind">class</span></div>
+			<table class="facts">
+				<tr><th>Declared in</th><td>&lt;R5IconView.h&gt;</td></tr>
+				<tr><th>Library</th><td>libr5ui.so</td></tr>
+				<tr><th>Derived from</th><td>BView</td></tr>
+				<tr><th>First user</th><td>Sign in, for the pebble and the clock</td></tr>
+			</table>
+			<p><code class="inline">BIconView</code> shows one icon at its own pixel size. The view is exactly as large as the bitmap and never scales it.</p>
+			<p>The header is <code class="inline">R5IconView.h</code> because Haiku already has a private <code class="inline">IconView.h</code>.</p>
+
+			<figure class="stage">
+				<div class="shot">
+					<span style="display:flex;flex-direction:column;align-items:center;gap:8px"><img src="../../distro/artwork/r5-symbol.svg" width="44" height="44" alt="" /><span style="font-size:11px;color:#059669;font-weight:700">Rendered at 44, drawn at 44</span></span>
+					<span style="display:flex;flex-direction:column;align-items:center;gap:8px"><canvas class="m-bad" id="stretched" width="44" height="44"></canvas><span style="font-size:11px;color:var(--redline);font-weight:700">Rendered at 40, stretched to 44</span></span>
+				</div>
+				<figcaption><span>Why it exists: a stretched bitmap gets jagged edges</span><span class="badge-mockup">Mockup</span></figcaption>
+			</figure>
+
+			<div class="member"><div class="sig">BIconView(const char* name, const BBitmap* icon = NULL);</div></div>
+			<div class="member"><div class="sig">void SetIcon(const BBitmap* icon);
+const BBitmap* Icon() const;</div><p>The view keeps a copy and changes size with it.</p></div>
+
+<pre class="code">BBitmap* pebble = r5_vector_icon_bitmap(kR5Pebble, <span class="k">sizeof</span>(kR5Pebble), 44);
+BAppearanceKit::BIconView* logo = <span class="k">new</span> BAppearanceKit::BIconView(<span class="s">"logo"</span>, pebble);
+<span class="k">delete</span> pebble;</pre>
+
+			<div class="see-also">
+				<strong>See also</strong>
+				<a href="icons-kit.html#icon-bitmaps">Icons Kit: Icon bitmaps</a>
+				<a href="guidelines.html#icons">Interface guidelines: Icons</a>
+			</div>
+		</section>
+
+		<!-- BPasswordControl -->
+		<section class="entry" id="BPasswordControl">
+			<div class="entry-header"><h2>BPasswordControl</h2><span class="kind">class</span></div>
+			<table class="facts">
+				<tr><th>Declared in</th><td>&lt;PasswordControl.h&gt;</td></tr>
+				<tr><th>Library</th><td>libr5ui.so</td></tr>
+				<tr><th>Derived from</th><td>BControl</td></tr>
+				<tr><th>First user</th><td>Sign in and the lock screen</td></tr>
+			</table>
+			<p><code class="inline">BPasswordControl</code> is a password field with the eye glyph inside it. The open eye shows the password; the crossed-out eye hides it again.</p>
+			<p>Enter invokes the control's message, or the window's default button. The password is never archived.</p>
+
+			<figure class="stage">
+				<div class="shot sys">
+					<div class="m-stack">
+						<div><div class="m-label">Password</div><div class="sys-field"><span class="placeholder">Enter password</span><svg data-glyph="eye" stroke="#7a7a7a"></svg></div></div>
+						<div><div class="sys-field focus"><span class="text m-dots">&bull;&bull;&bull;</span><svg data-glyph="eye" stroke="#7a7a7a"></svg></div></div>
+						<div><div class="sys-field focus"><span class="text">abc</span><svg data-glyph="eye-off" stroke="#7a7a7a"></svg></div></div>
+					</div>
+				</div>
+				<figcaption><span>Empty with its placeholder, typed with focus, and shown with the eye</span><span class="badge-mockup">Mockup &middot; after the QEMU screenshots</span></figcaption>
+			</figure>
+
+			<div class="member"><div class="sig">BPasswordControl(const char* name, const char* label, const char* text = NULL,
+	BMessage* message = NULL);</div></div>
+			<div class="member"><div class="sig">const char* Text() const;
+void SetText(const char* text);
+BTextView* TextView() const;</div><p>Clear the field after every attempt with <code class="inline">SetText("")</code>.</p></div>
+			<div class="member"><div class="sig">void SetPasswordRevealed(bool revealed);
+bool IsPasswordRevealed() const;</div><p>The same as a click on the eye.</p></div>
+			<div class="member"><div class="sig">void SetPlaceholder(const char* text);
+const char* Placeholder() const;</div><p>Gray text while the field is empty.</p></div>
+
+<pre class="code">BAppearanceKit::BPasswordControl* password = <span class="k">new</span> BAppearanceKit::BPasswordControl(
+	<span class="s">"password"</span>, <span class="s">""</span>, <span class="s">""</span>, <span class="k">new</span> BMessage(kAttemptLogin));
+password-&gt;SetPlaceholder(<span class="s">"Enter password"</span>);</pre>
+
+			<div class="see-also">
+				<strong>See also</strong>
+				<a href="#BAccentButton">BAccentButton</a>
+				<a href="icons-kit.html#r5_glyph">r5_glyph (R5_GLYPH_EYE)</a>
+				<a href="accounts.html#example">Example: Sign in</a>
+			</div>
+		</section>
+
+		<!-- BScreenArrangement -->
+		<section class="entry" id="BScreenArrangement">
+			<div class="entry-header"><h2>BScreenArrangement</h2><span class="kind">class</span></div>
+			<table class="facts">
+				<tr><th>Declared in</th><td>&lt;ScreenArrangement.h&gt;</td></tr>
+				<tr><th>Library</th><td>libr5ui.so</td></tr>
+				<tr><th>Derived from</th><td>BView, BInvoker</td></tr>
+				<tr><th>First user</th><td>Display; Desktop and Deskbar next</td></tr>
+			</table>
+			<p><code class="inline">BScreenArrangement</code> shows one or more screens in their places on the desk, each drawn with <a href="appearance-effects.html#functions"><code class="inline">r5_screen_draw()</code></a>.</p>
+			<p>A click, Space, or Enter sends the selection message with <code class="inline">int32 "be:screen"</code>. With dragging on, a released screen snaps against its neighbor and the modification message is sent. The view does not change the screens itself.</p>
+
+			<figure class="stage">
+				<div class="shot sys">
+					<div class="m-desk">
+						<div class="m-screen selected" style="left:70px;top:28px;width:150px;height:96px"><div class="glass"><span class="deskbar"></span><span class="num">1</span></div><div class="name">Built-in display</div></div>
+						<div class="m-screen" style="left:226px;top:44px;width:120px;height:76px"><div class="glass"><span class="num">2</span></div><div class="name">DELL U2419H</div></div>
+					</div>
+				</div>
+				<figcaption><span>Two screens, the first selected and holding the Deskbar</span><span class="badge-mockup">Mockup</span></figcaption>
+			</figure>
+
+<pre class="code"><span class="k">struct</span> screen_tile {
+	int32		id;			<span class="c">// the caller's id for this screen</span>
+	BRect		frame;		<span class="c">// in desktop coordinates</span>
+	<span class="k">const char</span>*	name;		<span class="c">// copied by SetScreens()</span>
+	<span class="k">bool</span>		main;		<span class="c">// the Deskbar is on this screen</span>
+	<span class="k">bool</span>		enabled;	<span class="c">// false draws it dimmed</span>
+};</pre>
+
+			<div class="member"><div class="sig">BScreenArrangement(const char* name, BMessage* selectionMessage);</div></div>
+			<div class="member"><div class="sig">status_t SetScreens(const screen_tile* tiles, int32 count);
+int32 CountScreens() const;
+bool ScreenAt(int32 index, screen_tile* tile) const;</div>
+				<p>The tiles are copied. One screen is centered and keeps its shape; several are scaled together
+				so the gaps stay.</p></div>
+			<div class="member"><div class="sig">void SetSelected(int32 id);
+int32 Selected() const;</div><p>-1 when none is selected.</p></div>
+			<div class="member"><div class="sig">void SetDraggable(bool draggable);
+void SetModificationMessage(BMessage* message);</div><p>Dragging needs two screens or more. The message is adopted.</p></div>
+			<div class="member"><div class="sig">void SetCaption(const char* caption);</div><p>A line in the lower left; NULL hides it.</p></div>
+			<div class="member"><div class="sig">void SetEnabled(bool enabled);
+bool IsEnabled() const;</div><p>False ignores mouse and keys. Settings uses this when the administrator lock is closed.</p></div>
+
+			<div class="see-also">
+				<strong>See also</strong>
+				<a href="appearance-effects.html#functions">r5_screen_draw()</a>
+				<a href="appearance-settings.html#BAdminLockBar">BAdminLockBar</a>
+			</div>
+		</section>
+
+		<!-- BTiltLevel -->
+		<section class="entry" id="BTiltLevel">
+			<div class="entry-header"><h2>BTiltLevel</h2><span class="kind">class</span></div>
+			<table class="facts">
+				<tr><th>Declared in</th><td>&lt;TiltLevel.h&gt;</td></tr>
+				<tr><th>Library</th><td>libr5ui.so</td></tr>
+				<tr><th>Derived from</th><td>BView</td></tr>
+				<tr><th>First user</th><td>BGameControllerMotionView (the Tilt of a game controller)</td></tr>
+			</table>
+			<p><code class="inline">BTiltLevel</code> is a spirit level seen from above: a circle with a cross, a small center ring, and a bubble in the accent color. <code class="inline">x</code> and <code class="inline">y</code> run from -1 to 1, left to right and top to bottom, and the bubble stays inside the circle.</p>
+			<p>Use it for a two-axis value around a center, such as tilt, balance, or stick position. It only shows the value, is square (4 to 10 line heights), and follows dark mode like <a href="#BAxisBar">BAxisBar</a>.</p>
+
+			<figure class="stage">
+				<div class="shot sys">
+					<svg width="116" height="116" viewBox="0 0 116 116" aria-hidden="true"><line x1="2" y1="58" x2="114" y2="58" stroke="#999"/><line x1="58" y1="2" x2="58" y2="114" stroke="#999"/><circle cx="58" cy="58" r="17" fill="none" stroke="#999"/><circle cx="82" cy="45" r="10" fill="#3296ff"/><circle cx="58" cy="58" r="56" fill="none" stroke="#555" stroke-width="2"/></svg>
+				</div>
+				<figcaption><span>x 0.5, y -0.3</span><span class="badge-mockup">Mockup</span></figcaption>
+			</figure>
+
+			<div class="member"><div class="sig">BTiltLevel(const char* name);</div></div>
+			<div class="member"><div class="sig">void SetValue(float x, float y);
+float X() const;
+float Y() const;</div><p>Each clamped to -1 to 1; NaN is 0. It redraws only when the value changed.</p></div>
+			<div class="member"><div class="sig">void SetEnabled(bool enabled);
+bool IsEnabled() const;</div><p>False draws the level gray, the bubble included, as a disabled control. True at first.</p></div>
+<pre class="code">#include &lt;TiltLevel.h&gt;
+
+BAppearanceKit::BTiltLevel* level = <span class="k">new</span> BAppearanceKit::BTiltLevel(<span class="s">"tilt"</span>);
+level-&gt;SetValue(motion.acceleration[0], motion.acceleration[2]);</pre>
+
+			<div class="see-also">
+				<strong>See also</strong>
+				<a href="#BAxisBar">BAxisBar</a>
+				<a href="game-kit.html#motion-view">BGameControllerMotionView</a>
+			</div>
+		</section>
+	</main>
+</div>
+
+<script src="r5book.js"></script>
+<script>
+	// The "stretched" pebble: render small, then scale up without smoothing.
+	(function () {
+		const canvas = document.getElementById("stretched");
+		const image = new Image();
+		image.onload = function () {
+			const small = document.createElement("canvas");
+			small.width = small.height = 40;
+			small.getContext("2d").drawImage(image, 0, 0, 40, 40);
+			const context = canvas.getContext("2d");
+			context.imageSmoothingEnabled = false;
+			context.drawImage(small, 0, 0, 40, 40, 0, 0, 44, 44);
+		};
+		image.src = "../../distro/artwork/r5-symbol.svg";
+	})();
+</script>
+</body>
+</html>

@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<!--
+  SPDX-FileCopyrightText: 2026 R5OS Contributors
+  SPDX-License-Identifier: MIT
+-->
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Settings &amp; accounts — Appearance Kit — R5Book</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
+	<link rel="stylesheet" href="r5book.css" />
+	<style>
+		.pebble { display: block; }
+		.people { display: block; }
+		.m-sub { font-size: 12.5px; color: var(--sys-muted); }
+		.m-pagehead { display: flex; align-items: center; gap: 12px; padding: 14px 16px; width: 440px; }
+		.m-pagehead .lines { flex: 1; }
+		.m-eyebrow { font-size: 11px; font-weight: 600; color: #666; }
+		.m-pagetitle { font-size: 20px; font-weight: 700; line-height: 1.2; }
+		.m-sidebar { width: 200px; background: #fff; border: 1px solid var(--sys-border); padding: 6px 0; font-size: 12.5px; }
+		.m-row { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; margin: 0 6px; border-radius: 4px; }
+		.m-row .count { margin-left: auto; color: #64748b; font-size: 11px; }
+		.m-row.child { height: 28px; padding-left: 36px; font-weight: 400; }
+		.m-row.selected { background: var(--sys-accent); color: #fff; font-weight: 700; }
+		.m-row.cat { font-weight: 600; }
+		.m-sep { height: 1px; background: #c8c8c8; margin: 6px 12px; }
+		.m-open { background: #eef2fa; border-radius: 3px; margin: 2px 6px; padding: 2px 0; }
+		.m-open .m-row { margin: 0; }
+		.m-lock { margin-left: auto; opacity: 0.6; }
+		.m-usercard { display: flex; align-items: center; gap: 10px; padding: 8px 10px; width: 200px; height: 54px; border-radius: 5px; border: 1px solid var(--sys-border); background: #fbfbfb; }
+		.m-usercard.selected { background: #fff; border-color: var(--sys-accent); box-shadow: inset 0 0 0 1px rgba(50, 150, 255, 0.24); }
+		.m-name { font-weight: 700; font-size: 13px; }
+		.m-role { font-size: 11px; color: var(--sys-soft); }
+		.m-role.admin { color: var(--sys-accent); font-weight: 700; }
+		.m-list { width: 400px; background: #fff; border: 1px solid var(--sys-border); }
+		.m-li { display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 12px; border-bottom: 1px solid #ececec; }
+		.m-li.selected { background: #e9f4ff; box-shadow: inset 3px 0 0 var(--sys-accent); }
+		.m-li .m-name { font-size: 12.5px; }
+	</style>
+</head>
+<body data-page="appearance">
+
+<div class="book">
+	<aside class="toc"></aside>
+
+	<main class="page">
+		<div class="breadcrumb"><a href="index.html">R5Book</a> &rsaquo; <a href="appearance-kit.html">Appearance Kit</a> &rsaquo; Settings &amp; accounts</div>
+
+		<section class="page-hero">
+			<span class="kit-label">libr5ui.so &middot; namespace BAppearanceKit</span>
+			<h1>Settings &amp; accounts</h1>
+			<p>Navigation, headers, administrator lock controls, and user account views.</p>
+		</section>
+
+		<nav class="on-this-page" aria-label="On this page">
+			<h3>What is in this page</h3>
+			<ul>
+				<li><a href="#BAdminLockBar">BAdminLockBar</a> &mdash; Administrator lock bar and privilege helpers.</li>
+				<li><a href="#BPageHeader">BPageHeader</a> &mdash; Heading card with eyebrow, title, subtitle, and icon.</li>
+				<li><a href="#BSidebar">BSidebar</a> &mdash; Collapsible category list with search filter.</li>
+				<li><a href="#BSidebarItem">BSidebarItem</a> &mdash; One row inside a <code class="inline">BSidebar</code>.</li>
+				<li><a href="#BUserCard">BUserCard</a> &mdash; Compact selectable account card.</li>
+				<li><a href="#BUserListItem">BUserListItem</a> &mdash; Two-line account row for a <code class="inline">BListView</code>.</li>
+			</ul>
+		</nav>
+
+		<!-- BAdminLockBar -->
+		<section class="entry" id="BAdminLockBar">
+			<div class="entry-header"><h2>BAdminLockBar</h2><span class="kind">class</span></div>
+			<table class="facts">
+				<tr><th>Declared in</th><td>&lt;AdminLock.h&gt;</td></tr>
+				<tr><th>Library</th><td>libr5ui.so</td></tr>
+				<tr><th>Derived from</th><td>BGroupView</td></tr>
+				<tr><th>First user</th><td>Time, Screen, Network, Printers, Repositories, VirtualMemory, Users, Settings; Device Manager; Media (the calls, not the bar)</td></tr>
+			</table>
+			<p><code class="inline">BAdminLockBar</code> is the lock for machine settings. A program runs as the signed-in person; a change that needs an administrator goes to Sign in (Login), which checks the grant and makes the change.</p>
+			<p>The bar shows a label and an Unlock button. While locked, views in its window are gray; an administrator starts unlocked, and one unlock opens the program for five minutes. <code class="inline">AdminLockBar</code> is a typedef for this class, the name the preferences have always used.</p>
+			<p>It was compiled into each preference under GPL-3.0-or-later. Since November 2026 it is part of <code class="inline">libr5ui.so</code> and MIT, so any program can link it. Login, the side that checks the password, stays GPL and is reached only by messages.</p>
+
+			<figure class="stage">
+				<div class="shot sys" style="flex-direction:column;align-items:stretch;width:380px">
+					<div style="display:flex;align-items:center;gap:8px">
+						<span class="sys-button">Revert</span>
+						<span style="flex:1"></span>
+						<span>Locked</span>
+						<span class="sys-button">Unlock&hellip;</span>
+					</div>
+				</div>
+				<figcaption><span>At the right of a preference's bottom row</span><span class="badge-mockup">Mockup</span></figcaption>
+			</figure>
+
+			<div class="use-grid">
+				<div class="use-box yes"><h4>Use it for</h4><p>A window that changes the whole computer: the clock, the screen mode, network, printers, drivers.</p></div>
+				<div class="use-box no"><h4>Not for</h4><p>The person's own settings. Those need no administrator and stay unlocked.</p></div>
+			</div>
+
+			<div class="member"><div class="sig">BAdminLockBar();</div>
+				<p>Put it in the window's bottom row. It asks Login when it is attached and watches the grant.</p></div>
+			<div class="member"><div class="sig">void SetExempt(BView* view, bool exempt);</div>
+				<p>Keeps one view usable while the lock is closed, for example the person's own account card in Users.</p></div>
+			<div class="member"><div class="sig">bool AcceptsInput(BHandler* target) const;</div>
+				<p>Whether a click or key for <code class="inline">target</code> goes through now.</p></div>
+			<div class="member"><div class="sig">status_t r5_admin_query(bool&amp; administrator, bool&amp; unlocked);
+bool r5_admin_change_allowed();</div>
+				<p>Asks Login. <code class="inline">unlocked</code> is true for an administrator or while a grant runs.
+				Both are false when Login cannot be asked.</p></div>
+			<div class="member"><div class="sig">void r5_admin_prompt_unlock(BMessenger target);
+status_t r5_admin_unlock(const char* name, const char* password, BString&amp; error);
+status_t r5_admin_relock();</div>
+				<p>The unlock window, the same without a window, and ending the grant. On success the window sends
+				<code class="inline">kMsgAdminLockChanged</code> to <code class="inline">target</code>. The password is
+				not logged.</p></div>
+			<div class="member"><div class="sig">status_t r5_admin_set_clock(unsigned long seconds);
+status_t r5_admin_set_timezone(int32 offset, const char* name);
+status_t r5_admin_set_clock_gmt(bool gmt);</div>
+				<p>The clock and the time zone, for Time and Settings.</p></div>
+			<div class="member"><div class="sig">status_t r5_admin_set_driver_blocked(const char* driver, bool blocked, BString&amp; error);</div>
+				<p>Turns a packaged driver under <code class="inline">/boot/system/add-ons/kernel/</code> off or on for
+				the next start. Login refuses drivers the system needs to start. Device Manager uses it.</p></div>
+			<div class="member"><div class="sig">bool r5_driver_settings_writable();
+status_t r5_driver_settings_read(const char* fileName, const char* key, BString&amp; value);
+status_t r5_driver_settings_write(const char* fileName, const char* const* keys, int32 keyCount,
+	const char* lines, bool replaceFile);</div>
+				<p>Driver settings: the files a driver reads with <code class="inline">load_driver_settings()</code>.
+				The kernel reads them from the administrator's <code class="inline">config/settings/kernel/drivers</code>,
+				not from the signed-in person's home, so these calls always use that folder. <code class="inline">writable</code>
+				says whether this program may write there itself. <code class="inline">read</code> gives the text after
+				<code class="inline">key</code> on its line, or <code class="inline">B_NAME_NOT_FOUND</code>.
+				<code class="inline">write</code> replaces the lines that start with one of <code class="inline">keys</code>
+				by <code class="inline">lines</code> and keeps the rest; with <code class="inline">replaceFile</code> the
+				file is only <code class="inline">lines</code>. It writes a temporary file and renames it, so a crash never
+				leaves an empty file. <code class="inline">fileName</code> is a name in that folder, without a slash.</p></div>
+			<div class="member"><div class="sig">status_t r5_admin_set_driver_setting(const char* fileName, const char* const* keys,
+	int32 keyCount, const char* lines, bool replaceFile, BString&amp; error);</div>
+				<p>The same write through Login, for a standard account with a grant. Login accepts only the
+				settings it knows, today those of Media: the buffer size (<code class="inline">play_buffer_frames</code>,
+				<code class="inline">record_buffer_frames</code>) in <code class="inline">hda.settings</code> and
+				<code class="inline">usb_audio</code>, the USB channel layout, and virtual surround. Anything else is
+				refused.</p></div>
+
+<pre class="code"><span class="k">static const char*</span> kKeys[] = { <span class="s">"channel_layout"</span> };
+BString error;
+status_t status;
+<span class="k">if</span> (r5_driver_settings_writable()) {
+	status = r5_driver_settings_write(<span class="s">"usb_audio"</span>, kKeys, 1,
+		<span class="s">"channel_layout 6\n"</span>, <span class="k">false</span>);
+} <span class="k">else</span> {
+	<span class="c">// Gray until r5_admin_change_allowed(); then Login writes it.</span>
+	status = r5_admin_set_driver_setting(<span class="s">"usb_audio"</span>, kKeys, 1,
+		<span class="s">"channel_layout 6\n"</span>, <span class="k">false</span>, error);
+}</pre>
+
+<pre class="code"><span class="k">#include</span> <span class="s">&lt;AdminLock.h&gt;</span>
+
+BLayoutBuilder::Group&lt;&gt;(bottomRow, B_HORIZONTAL)
+	.Add(fRevertButton)
+	.AddGlue()
+	.Add(<span class="k">new</span> BAppearanceKit::BAdminLockBar());
+
+<span class="k">bool</span> administrator, unlocked;
+<span class="k">if</span> (r5_admin_query(administrator, unlocked) == B_OK &amp;&amp; !unlocked)
+	r5_admin_prompt_unlock(BMessenger(<span class="k">this</span>));	<span class="c">// kMsgAdminLockChanged follows</span></pre>
+
+			<div class="see-also">
+				<strong>See also</strong>
+				<a href="admin-kit.html">Admin Kit</a>
+				<a href="accounts.html#admin">Accounts: Administrator changes</a>
+				<a href="settings-modules.html#admin">Settings modules: The lock</a>
+			</div>
+		</section>
+
+		<!-- BPageHeader -->
+		<section class="entry" id="BPageHeader">
+			<div class="entry-header"><h2>BPageHeader</h2><span class="kind">class</span></div>
+			<table class="facts">
+				<tr><th>Declared in</th><td>&lt;PageHeader.h&gt;</td></tr>
+				<tr><th>Library</th><td>libr5ui.so</td></tr>
+				<tr><th>Derived from</th><td>BCard</td></tr>
+				<tr><th>First user</th><td>Settings; Users &amp; Accounts is the second</td></tr>
+			</table>
+			<p><code class="inline">BPageHeader</code> is the heading card at the top of a page: a small category line (the eyebrow), the title, a description, and an icon on the right. It draws itself and has no child views.</p>
+
+			<figure class="stage">
+				<div class="shot sys">
+					<div class="sys-panel">
+						<div class="sys-card m-pagehead">
+							<div class="lines">
+								<div class="m-eyebrow">System</div>
+								<div class="m-pagetitle">Notifications</div>
+								<div class="m-sub">Manage alerts and notifications</div>
+							</div>
+							<span class="hvif" style="width:40px;height:40px">page<br>icon</span>
+						</div>
+					</div>
+				</div>
+				<figcaption><span>Eyebrow, title, subtitle and the page icon</span><span class="badge-mockup">Mockup</span></figcaption>
+			</figure>
+
+			<div class="member"><div class="sig">BPageHeader(const char* name);</div></div>
+			<div class="member"><div class="sig">void SetEyebrow(const char* text);
+void SetTitle(const char* text);
+void SetSubtitle(const char* text);
+void SetIcon(const BBitmap* icon);</div>
+				<p>An empty eyebrow hides that line without leaving a gap. The title is bold, 8 points above the
+				bold font; the subtitle is plain at 70 percent text color. Each line ends with an ellipsis when it
+				does not fit. The icon is <code class="inline">ComposeIconSize(40)</code>; draw any wrench on it
+				before <code class="inline">SetIcon()</code>, which keeps a copy.</p></div>
+
+<pre class="code">BAppearanceKit::BPageHeader* heading = <span class="k">new</span> BAppearanceKit::BPageHeader(<span class="s">"heading"</span>);
+heading-&gt;SetEyebrow(<span class="s">"System"</span>);
+heading-&gt;SetTitle(<span class="s">"Notifications"</span>);
+heading-&gt;SetSubtitle(<span class="s">"Manage alerts and notifications"</span>);
+heading-&gt;SetIcon(icon);</pre>
+
+			<div class="see-also">
+				<strong>See also</strong>
+				<a href="appearance-cards.html#BCard">BCard</a>
+				<a href="settings-modules.html">Settings modules</a>
+			</div>
+		</section>
+
+		<!-- BSidebar -->
+		<section class="entry" id="BSidebar">
+			<div class="entry-header"><h2>BSidebar</h2><span class="kind">class</span></div>
+			<table class="facts">
+				<tr><th>Declared in</th><td>&lt;Sidebar.h&gt;</td></tr>
+				<tr><th>Library</th><td>libr5ui.so</td></tr>
+				<tr><th>Derived from</th><td>BOutlineListView</td></tr>
+				<tr><th>First user</th><td>Settings, beside the page</td></tr>
+			</table>
+			<p><code class="inline">BSidebar</code> is a list of categories that fold, with one category open at a time, and a filter for search. The rows are <a href="#BSidebarItem">BSidebarItem</a>s: categories at the top level, pages under them with <code class="inline">AddUnder()</code>. Wrap it in a <code class="inline">BScrollView</code>.</p>
+
+			<figure class="stage">
+				<div class="shot sys">
+					<div class="m-sidebar">
+						<div class="m-row" style="font-weight:700"><img class="pebble" src="../../distro/artwork/r5-symbol.svg" width="20" height="20" alt="" />Home</div>
+						<div class="m-sep"></div>
+						<div class="m-row cat"><span class="hvif" style="width:20px;height:20px;font-size:6px">icon</span>Personalization<span class="count">4</span></div>
+						<div class="m-open">
+							<div class="m-row cat"><span class="hvif" style="width:20px;height:20px;font-size:6px">icon</span>System<span class="count">&#9662;</span></div>
+							<div class="m-row child">Display<svg class="m-lock" width="12" height="12" viewBox="0 0 12 12"><rect x="2" y="5" width="8" height="6" rx="1" fill="#8a6d1d"/><path d="M4 5 V3.5 a2 2 0 0 1 4 0 V5" stroke="#8a6d1d" fill="none"/></svg></div>
+							<div class="m-row child selected">Information</div>
+							<div class="m-row child">Notifications</div>
+							<div class="m-row child">Virtual memory</div>
+						</div>
+						<div class="m-row cat"><span class="hvif" style="width:20px;height:20px;font-size:6px">icon</span>Network<span class="count">3</span></div>
+					</div>
+				</div>
+				<figcaption><span>Home, a folded category with its count, the open category with a selected page and a locked page</span><span class="badge-mockup">Mockup</span></figcaption>
+			</figure>
+
+			<div class="member"><div class="sig">BSidebar(const char* name);</div></div>
+			<div class="member"><div class="sig">void SetSingleExpand(bool single);
+bool IsSingleExpand() const;
+void ExpandOnly(BSidebarItem* section);</div>
+				<p>One category unfolds at a time by default. <code class="inline">ExpandOnly(NULL)</code> folds them all.</p></div>
+			<div class="member"><div class="sig">BSidebarItem* ItemForId(const char* id) const;
+bool SelectId(const char* id);</div>
+				<p><code class="inline">SelectId()</code> unfolds the parent, selects the row and scrolls it into view.
+				It returns false when the id is missing.</p></div>
+			<div class="member"><div class="sig">void SetFilter(const char* text);
+const char* Filter() const;</div>
+				<p>Hides pages whose label and keywords do not contain the text, ignoring case, and unfolds every
+				category that still has a match. An empty filter puts every row back. Rows are hidden, not deleted.</p></div>
+			<div class="member"><div class="sig">void SetFooter(const char* text);</div><p>A panel at the bottom of the list.</p></div>
+			<p>Up and Down move and skip a separator, Right unfolds, Left folds, Enter posts the selection message.</p>
+
+<pre class="code">BAppearanceKit::BSidebar* list = <span class="k">new</span> BAppearanceKit::BSidebar(<span class="s">"sidebar"</span>);
+list-&gt;AddItem(home);
+list-&gt;AddItem(system);
+list-&gt;AddUnder(display, system);
+list-&gt;SetFilter(<span class="s">"display"</span>);</pre>
+
+			<div class="see-also">
+				<strong>See also</strong>
+				<a href="#BSidebarItem">BSidebarItem</a>
+				<a href="appearance-cards.html#BCardStrip">BCardStrip</a>
+			</div>
+		</section>
+
+		<!-- BSidebarItem -->
+		<section class="entry" id="BSidebarItem">
+			<div class="entry-header"><h2>BSidebarItem</h2><span class="kind">class</span></div>
+			<table class="facts">
+				<tr><th>Declared in</th><td>&lt;SidebarItem.h&gt;</td></tr>
+				<tr><th>Library</th><td>libr5ui.so</td></tr>
+				<tr><th>Derived from</th><td>BListItem</td></tr>
+			</table>
+			<p>One row of a <a href="#BSidebar">BSidebar</a>: Home, a category, or a page. An empty label and an empty id make a separator, which cannot be selected.</p>
+			<p>Only a top-level row draws its icon; a page's text starts where the category name starts. The selection is a rounded rectangle in the selection blue with the text in the list background color.</p>
+
+			<div class="member"><div class="sig">BSidebarItem(const char* label, const char* id, const BBitmap* icon = NULL);</div></div>
+			<div class="member"><div class="sig">void SetCount(int32 count);</div><p>Drawn on the right of a folded category.</p></div>
+			<div class="member"><div class="sig">void SetBadge(sidebar_badge badge);</div><p><code class="inline">B_SIDEBAR_BADGE_LOCKED</code> draws the small closed lock on a page that needs an administrator.</p></div>
+			<div class="member"><div class="sig">void SetEmphasized(bool bold);</div><p>A bold row, such as Home. It stays visible while a filter is active.</p></div>
+			<div class="member"><div class="sig">void SetKeywords(const char* keywords);</div><p>Extra words the filter matches, beyond the label.</p></div>
+			<div class="member"><div class="sig">void SetIcon(const BBitmap* icon);
+const char* Label() const;
+const char* Id() const;</div></div>
+
+<pre class="code">BAppearanceKit::BSidebarItem* home = <span class="k">new</span> BAppearanceKit::BSidebarItem(
+	<span class="s">"Home"</span>, <span class="s">"home"</span>, pebble);
+home-&gt;SetEmphasized(<span class="k">true</span>);</pre>
+
+			<div class="see-also">
+				<strong>See also</strong>
+				<a href="#BSidebar">BSidebar</a>
+			</div>
+		</section>
+
+		<!-- BUserCard -->
+		<section class="entry" id="BUserCard">
+			<div class="entry-header"><h2>BUserCard</h2><span class="kind">class</span></div>
+			<table class="facts">
+				<tr><th>Declared in</th><td>&lt;UserCard.h&gt;</td></tr>
+				<tr><th>Library</th><td>libr5ui.so</td></tr>
+				<tr><th>Derived from</th><td>BControl</td></tr>
+				<tr><th>First user</th><td>Sign in, for two to four accounts</td></tr>
+			</table>
+			<p><code class="inline">BUserCard</code> is a compact account card showing the account picture, display name, and role. It sends its message when clicked, or with Space or Enter.</p>
+			<p>The selected card has a blue border. An administrator's role is bold and blue, and the picture of anyone else is gray.</p>
+
+			<figure class="stage">
+				<div class="shot sys">
+					<div class="sys-panel" style="display:flex;gap:8px">
+						<div class="m-usercard selected">
+							<div class="sys-avatar" style="width:38px;height:38px"><img class="people" src="../design/login-mockup/icons/people.svg" width="30" height="30" alt="" /></div>
+							<div><div class="m-name">User</div><div class="m-role admin">Administrator</div></div>
+						</div>
+						<div class="m-usercard">
+							<div class="sys-avatar muted" style="width:38px;height:38px"><img class="people" src="../design/login-mockup/icons/people.svg" width="30" height="30" alt="" /></div>
+							<div><div class="m-name">Guest</div><div class="m-role">Standard</div></div>
+						</div>
+					</div>
+				</div>
+				<figcaption><span>Selected administrator, and a standard account</span><span class="badge-mockup">Mockup &middot; after the QEMU screenshot of Sign in</span></figcaption>
+			</figure>
+
+			<div class="member"><div class="sig">BUserCard(const char* name, const char* login, const char* displayName,
+	const char* role, const BBitmap* avatar = NULL, BMessage* message = NULL);</div>
+				<p>Render the avatar at <a href="appearance-effects.html#functions"><code class="inline">r5_avatar_icon_side()</code></a> of the card's picture size
+				so it is drawn pixel for pixel.</p></div>
+			<div class="member"><div class="sig">void SetSelected(bool selected);
+bool IsSelected() const;</div></div>
+			<div class="member"><div class="sig">void SetDisplayName(const char* displayName);
+void SetRole(const char* role);
+void SetAvatar(const BBitmap* avatar);</div></div>
+
+			<div class="see-also">
+				<strong>See also</strong>
+				<a href="#BUserListItem">BUserListItem</a>
+				<a href="appearance-effects.html#functions">r5_avatar_draw()</a>
+				<a href="accounts.html#example">Example: Sign in</a>
+			</div>
+		</section>
+
+		<!-- BUserListItem -->
+		<section class="entry" id="BUserListItem">
+			<div class="entry-header"><h2>BUserListItem</h2><span class="kind">class</span></div>
+			<table class="facts">
+				<tr><th>Declared in</th><td>&lt;UserListItem.h&gt;</td></tr>
+				<tr><th>Library</th><td>libr5ui.so</td></tr>
+				<tr><th>Derived from</th><td>BListItem</td></tr>
+				<tr><th>First user</th><td>Sign in, for five accounts or more</td></tr>
+			</table>
+			<p><code class="inline">BUserListItem</code> is a two-line account row for a <code class="inline">BListView</code>: the picture, the name in bold, and <code class="inline">@login &middot; role</code> below it.</p>
+			<p>Only the role is blue, and only for an administrator. The selected row is light blue with a bar on the left.</p>
+
+			<figure class="stage">
+				<div class="shot sys">
+					<div class="m-list">
+						<div class="m-li selected"><div class="sys-avatar" style="width:32px;height:32px"><img class="people" src="../design/login-mockup/icons/people.svg" width="25" height="25" alt="" /></div><div><div class="m-name">User</div><div class="m-role">@user &middot; <span class="admin m-role">Administrator</span></div></div></div>
+						<div class="m-li"><div class="sys-avatar muted" style="width:32px;height:32px"><img class="people" src="../design/login-mockup/icons/people.svg" width="25" height="25" alt="" /></div><div><div class="m-name">Nicky</div><div class="m-role">@nicky &middot; Standard</div></div></div>
+						<div class="m-li"><div class="sys-avatar muted" style="width:32px;height:32px"><img class="people" src="../design/login-mockup/icons/people.svg" width="25" height="25" alt="" /></div><div><div class="m-name">Alex</div><div class="m-role">@alex &middot; Standard</div></div></div>
+					</div>
+				</div>
+				<figcaption><span>A selected administrator and two standard accounts</span><span class="badge-mockup">Mockup &middot; after the QEMU screenshot of Sign in</span></figcaption>
+			</figure>
+
+			<div class="member"><div class="sig">BUserListItem(const char* login, const char* displayName, const char* role,
+	const BBitmap* avatar = NULL);</div><p>The row is 46 pixels high at a 12 point font.</p></div>
+			<div class="member"><div class="sig">const char* Login() const;
+const char* DisplayName() const;
+const char* Role() const;</div></div>
+
+			<div class="see-also">
+				<strong>See also</strong>
+				<a href="#BUserCard">BUserCard</a>
+				<a href="appearance-effects.html#functions">r5_avatar_draw()</a>
+				<a href="guidelines.html#people">Interface guidelines: People and accounts</a>
+			</div>
+		</section>
+	</main>
+</div>
+
+<script src="r5book.js"></script>
+</body>
+</html>

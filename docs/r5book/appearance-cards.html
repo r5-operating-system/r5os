@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<!--
+  SPDX-FileCopyrightText: 2026 R5OS Contributors
+  SPDX-License-Identifier: MIT
+-->
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Cards &amp; layout — Appearance Kit — R5Book</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
+	<link rel="stylesheet" href="r5book.css" />
+	<style>
+		.pebble { display: block; }
+		.m-header { display: flex; align-items: center; gap: 14px; padding: 14px 16px; width: 380px; }
+		.m-title { font-size: 18px; font-weight: 800; }
+		.m-sub { font-size: 12.5px; color: var(--sys-muted); }
+		.m-action { width: 280px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+		.m-action.hover { background: #f6faff; border-color: var(--sys-accent); box-shadow: inset 0 0 0 1px rgba(50, 150, 255, 0.28); }
+		.m-action .t { font-weight: 700; font-size: 13px; }
+		.m-action .s { color: var(--sys-muted); font-size: 12px; }
+		.m-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+		.m-tag { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #e3ebf4; color: #2f4d70; }
+	</style>
+</head>
+<body data-page="appearance">
+
+<div class="book">
+	<aside class="toc"></aside>
+
+	<main class="page">
+		<div class="breadcrumb"><a href="index.html">R5Book</a> &rsaquo; <a href="appearance-kit.html">Appearance Kit</a> &rsaquo; Cards &amp; layout</div>
+
+		<section class="page-hero">
+			<span class="kit-label">libr5ui.so &middot; namespace BAppearanceKit</span>
+			<h1>Cards &amp; layout</h1>
+			<p>Containers and selectable card rows for R5 windows and Settings pages.</p>
+		</section>
+
+		<nav class="on-this-page" aria-label="On this page">
+			<h3>What is in this page</h3>
+			<ul>
+				<li><a href="#BActionCard">BActionCard</a> &mdash; A single clickable card with a title, subtitle, and tags.</li>
+				<li><a href="#BCard">BCard</a> &mdash; A framed card container that holds child controls.</li>
+				<li><a href="#BCardStrip">BCardStrip</a> &mdash; A horizontal row of selectable picture cards.</li>
+				<li><a href="#BCardStripItem">BCardStripItem</a> &mdash; One card item inside a <code class="inline">BCardStrip</code>.</li>
+			</ul>
+		</nav>
+
+		<!-- BActionCard -->
+		<section class="entry" id="BActionCard">
+			<div class="entry-header"><h2>BActionCard</h2><span class="kind">class</span></div>
+			<table class="facts">
+				<tr><th>Declared in</th><td>&lt;ActionCard.h&gt;</td></tr>
+				<tr><th>Library</th><td>libr5ui.so</td></tr>
+				<tr><th>Derived from</th><td>BCard, BInvoker</td></tr>
+				<tr><th>First user</th><td>Settings home; R5 Hub and Store next</td></tr>
+			</table>
+			<p><code class="inline">BActionCard</code> is a clickable card with an icon, a title, a summary of up to two lines, and small tags.</p>
+			<p>It tracks pointer hover, pressed state, and keyboard focus. Clicking the card or pressing Space or Enter calls <code class="inline">Invoke()</code>; clicking a tag sends the tag message.</p>
+
+			<figure class="stage">
+				<div class="shot sys">
+					<div class="sys-panel" style="display:flex;gap:12px">
+						<div class="sys-card m-action">
+							<span class="hvif" style="width:40px;height:40px">icon</span>
+							<div class="t">System</div>
+							<div class="s">Display, sound, notifications, virtual memory, and this computer.</div>
+							<div class="m-tags"><span class="m-tag">Display</span><span class="m-tag">Sound</span><span class="m-tag">Notifications</span></div>
+						</div>
+						<div class="sys-card m-action hover">
+							<span class="hvif" style="width:40px;height:40px">icon</span>
+							<div class="t">Personalization</div>
+							<div class="s">Appearance, wallpaper, Desktop and Deskbar.</div>
+							<div class="m-tags"><span class="m-tag">Appearance</span><span class="m-tag">Wallpaper</span></div>
+						</div>
+					</div>
+				</div>
+				<figcaption><span>At rest, and under the pointer</span><span class="badge-mockup">Mockup</span></figcaption>
+			</figure>
+
+			<div class="use-grid">
+				<div class="use-box yes"><h4>Use it for</h4><p>A start page of choices: Settings home, the R5 Hub and Store front page.</p></div>
+				<div class="use-box no"><h4>Not for</h4><p>A form with child views (use <a href="#BCard">BCard</a>) or a row of selectable items (<a href="#BCardStrip">BCardStrip</a>).</p></div>
+			</div>
+
+			<div class="member"><div class="sig">BActionCard(const char* name, BMessage* message);</div>
+				<p>The message is sent by <code class="inline">Invoke()</code>. Without a target, the window is the target.</p></div>
+			<div class="member"><div class="sig">void SetIcon(const BBitmap* icon);
+void SetTitle(const char* title);
+void SetSummary(const char* summary);</div><p>The summary wraps to two lines; the second ends with an ellipsis.</p></div>
+			<div class="member"><div class="sig">int32 AddTag(const char* label);
+void RemoveAllTags();
+int32 CountTags() const;
+void SetTagColor(rgb_color tint);
+void SetTagMessage(BMessage* message);</div>
+				<p>A click on a tag sends the tag message with <code class="inline">int32 "be:tag"</code> and
+				<code class="inline">"be:label"</code>.</p></div>
+			<div class="member"><div class="sig">void SetHighlighted(bool on);</div><p>Draws the card as if the pointer were on it, for example for a search match.</p></div>
+
+<pre class="code">BAppearanceKit::BActionCard* card = <span class="k">new</span> BAppearanceKit::BActionCard(
+	<span class="s">"system"</span>, <span class="k">new</span> BMessage(<span class="s">'open'</span>));
+card-&gt;SetTitle(<span class="s">"System"</span>);
+card-&gt;SetSummary(<span class="s">"Display, sound, notifications, virtual memory, and this computer."</span>);
+card-&gt;SetIcon(icon);
+card-&gt;AddTag(<span class="s">"Display"</span>);</pre>
+
+			<div class="see-also">
+				<strong>See also</strong>
+				<a href="#BCard">BCard</a>
+				<a href="#BCardStrip">BCardStrip</a>
+				<a href="guidelines.html#cards">Interface guidelines: Cards</a>
+			</div>
+		</section>
+
+		<!-- BCard -->
+		<section class="entry" id="BCard">
+			<div class="entry-header"><h2>BCard</h2><span class="kind">class</span></div>
+			<table class="facts">
+				<tr><th>Declared in</th><td>&lt;Card.h&gt;</td></tr>
+				<tr><th>Library</th><td>libr5ui.so</td></tr>
+				<tr><th>Derived from</th><td>BView</td></tr>
+				<tr><th>First user</th><td>About R5</td></tr>
+			</table>
+			<p><code class="inline">BCard</code> is a rounded area with a group layout inside it, for a heading or summary that stands on its own.</p>
+			<p>Children are added through <code class="inline">GetLayout()</code>, as with a <code class="inline">BGroupView</code>. A child that adopts its parent's colors, such as a <code class="inline">BStringView</code>, gets the card's face.</p>
+
+			<figure class="stage">
+				<div class="shot sys">
+					<div class="sys-panel" style="display:flex;flex-direction:column;gap:12px">
+						<div class="sys-card m-header">
+							<img class="pebble" src="../../distro/artwork/r5-symbol.svg" width="44" height="44" alt="" />
+							<div><div class="m-title">Welcome to R5</div><div class="m-sub">Sign in to start your session</div></div>
+						</div>
+						<div class="sys-card panel-style" style="padding:12px 16px;width:380px">
+							<div class="sys-bold">Processors</div><div>2 &times; AMD Ryzen 5 5625U</div>
+						</div>
+					</div>
+				</div>
+				<figcaption><span><code>B_CARD_DOCUMENT</code> above, <code>B_CARD_PANEL</code> below</span><span class="badge-mockup">Mockup</span></figcaption>
+			</figure>
+
+			<div class="use-grid">
+				<div class="use-box yes"><h4>Use it for</h4><p>A heading or summary in its own area: the About heading, the system information, an account summary, the Sign in header.</p></div>
+				<div class="use-box no"><h4>Not for</h4><p>A form the user fills in (stays on the panel), or a stack of pages (use Haiku's <code class="inline">BCardView</code>).</p></div>
+			</div>
+
+			<div class="member"><div class="sig">BCard(const char* name, card_style style = B_CARD_DOCUMENT, orientation orientation = B_VERTICAL);</div>
+				<p><code class="inline">B_CARD_DOCUMENT</code> fills with the document background,
+				<code class="inline">B_CARD_PANEL</code> with the panel color one step darker. The border is one
+				pixel, the corner radius a quarter of the plain font size, the inner margin
+				<code class="inline">B_USE_BIG_SPACING</code>.</p></div>
+			<div class="member"><div class="sig">void SetStyle(card_style style);
+card_style Style() const;</div><p>Changes the fill and the color children adopt.</p></div>
+
+<pre class="code"><span class="k">#include</span> <span class="s">&lt;Card.h&gt;</span>
+
+BAppearanceKit::BCard* card = <span class="k">new</span> BAppearanceKit::BCard(<span class="s">"info"</span>,
+	BAppearanceKit::B_CARD_PANEL);
+BLayoutBuilder::Group&lt;&gt;((BGroupLayout*)card-&gt;GetLayout())
+	.Add(<span class="k">new</span> BStringView(<span class="s">"title"</span>, <span class="s">"Processors"</span>))
+	.Add(<span class="k">new</span> BStringView(<span class="s">"value"</span>, <span class="s">"2"</span>));</pre>
+
+			<div class="see-also">
+				<strong>See also</strong>
+				<a href="#BActionCard">BActionCard</a>
+				<a href="appearance-settings.html#BPageHeader">BPageHeader</a>
+				<a href="guidelines.html#cards">Interface guidelines: Cards</a>
+			</div>
+		</section>
+
+		<!-- BCardStrip -->
+		<section class="entry" id="BCardStrip">
+			<div class="entry-header"><h2>BCardStrip</h2><span class="kind">class</span></div>
+			<table class="facts">
+				<tr><th>Declared in</th><td>&lt;CardStrip.h&gt;</td></tr>
+				<tr><th>Library</th><td>libr5ui.so</td></tr>
+				<tr><th>Derived from</th><td>BView, BInvoker</td></tr>
+				<tr><th>First user</th><td>Settings, Game controllers (one card per controller)</td></tr>
+			</table>
+			<p><code class="inline">BCardStrip</code> shows a horizontal row of cards where the user picks one item. Each card is a <a href="#BCardStripItem">BCardStripItem</a> with a picture, a bold title, and one subtitle line.</p>
+			<p>Clicking a card or pressing the Left and Right arrow keys selects it and sends the strip's message with an <code class="inline">"index"</code> field. When the cards do not fit, the strip scrolls sideways with the mouse wheel, end arrows, or arrow keys.</p>
+			<p>When the strip has no items, it shows one dashed placeholder card with a title, a subtitle, and an optional action button. Colors come from <code class="inline">ui_color()</code> so it follows dark mode, and sizes scale with the plain font.</p>
+
+			<figure class="stage">
+				<div class="shot sys" style="flex-direction:column;gap:12px;align-items:stretch">
+					<div style="display:flex;gap:8px;padding:8px;background:#fff;border:1px solid var(--sys-border);width:560px">
+						<div style="flex:0 0 172px;display:flex;align-items:center;gap:10px;padding:5px 6px;border:2px solid var(--sys-accent);border-radius:3px;background:#e8f2ff">
+							<svg width="56" height="38" viewBox="0 0 56 38" aria-hidden="true"><path d="M8 10 Q14 4 22 7 L34 7 Q42 4 48 10 Q54 22 52 32 Q48 36 44 30 L38 24 L18 24 L12 30 Q8 36 4 32 Q2 22 8 10Z" fill="none" stroke="#333" stroke-width="1.6"/><circle cx="20" cy="18" r="3.5" fill="none" stroke="#333"/><circle cx="36" cy="18" r="3.5" fill="none" stroke="#333"/></svg>
+							<div><div style="font-weight:700;font-size:12.5px">DualSense Wirel&hellip;</div><div style="font-size:11px;color:var(--sys-muted)">Bluetooth &middot; 80 %</div></div>
+						</div>
+						<div style="flex:0 0 172px;display:flex;align-items:center;gap:10px;padding:5px 6px;border:1px solid var(--sys-border);border-radius:3px">
+							<svg width="56" height="38" viewBox="0 0 56 38" aria-hidden="true"><rect x="3" y="9" width="50" height="22" rx="10" fill="none" stroke="#333" stroke-width="1.6"/><circle cx="16" cy="20" r="4" fill="none" stroke="#333"/><circle cx="40" cy="20" r="2" fill="none" stroke="#333"/><circle cx="45" cy="17" r="2" fill="none" stroke="#333"/></svg>
+							<div><div style="font-weight:700;font-size:12.5px">8BitDo M30</div><div style="font-size:11px;color:var(--sys-muted)">USB</div></div>
+						</div>
+						<div style="flex:0 0 172px;display:flex;align-items:center;gap:10px;padding:5px 6px;border:1px solid var(--sys-border);border-radius:3px">
+							<svg width="56" height="38" viewBox="0 0 56 38" aria-hidden="true"><path d="M10 9 Q28 5 46 9 Q54 22 50 32 Q46 35 42 30 L36 25 L20 25 L14 30 Q10 35 6 32 Q2 22 10 9Z" fill="none" stroke="#333" stroke-width="1.6"/><circle cx="17" cy="16" r="3.5" fill="none" stroke="#333"/><circle cx="34" cy="21" r="3.5" fill="none" stroke="#333"/></svg>
+							<div><div style="font-weight:700;font-size:12.5px">Xbox Wireless C&hellip;</div><div style="font-size:11px;color:var(--sys-muted)">Bluetooth &middot; 40 %</div></div>
+						</div>
+					</div>
+					<div style="padding:8px;background:#fff;border:1px solid var(--sys-border);width:560px">
+						<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border:1px dashed #999">
+							<div><div style="font-weight:700;font-size:12.5px">No controller</div><div style="font-size:11px;color:var(--sys-muted)">Plug one in with USB, or pair one in Bluetooth.</div></div>
+							<span class="sys-button">Open Bluetooth&hellip;</span>
+						</div>
+					</div>
+				</div>
+				<figcaption><span>Three cards, the first chosen; below it the empty strip</span><span class="badge-mockup">Mockup</span></figcaption>
+			</figure>
+
+			<div class="use-grid">
+				<div class="use-box yes"><h4>Use it for</h4><p>Choosing one of a few items that each have a picture: game controllers, Bluetooth devices, sound outputs.</p></div>
+				<div class="use-box no"><h4>Not for</h4><p>A long row-by-row list (use <code class="inline">BListView</code> or <a href="appearance-settings.html#BSidebar">BSidebar</a>), a container with controls (<a href="#BCard">BCard</a>), or a single clickable card (<a href="#BActionCard">BActionCard</a>).</p></div>
+			</div>
+
+			<div class="member"><div class="sig">BCardStrip(const char* name, BMessage* selectionMessage = NULL);</div>
+				<p>The strip owns the message. Its target is the window unless <code class="inline">SetTarget()</code> says otherwise.</p></div>
+			<div class="member"><div class="sig">bool AddItem(BCardStripItem* item);
+bool AddItem(BCardStripItem* item, int32 index);
+BCardStripItem* RemoveItem(int32 index);
+void MakeEmpty();
+int32 CountItems() const;
+BCardStripItem* ItemAt(int32 index) const;
+int32 IndexOf(const BCardStripItem* item) const;
+void InvalidateItem(int32 index);</div>
+				<p>The strip owns an added item and deletes it; an item belongs to one strip. The caller owns a removed item. The chosen card stays chosen when a card before it comes or goes.</p></div>
+			<div class="member"><div class="sig">void Select(int32 index);
+int32 CurrentSelection() const;
+void ScrollToSelection();</div>
+				<p>Chooses a card without sending the message; -1 chooses none. The mouse and the keys send it, once per change.</p></div>
+			<div class="member"><div class="sig">BSize PictureSize() const;</div>
+				<p>The size a card shows its picture at, for the current font size. Render pictures at this size.</p></div>
+			<div class="member"><div class="sig">void SetEmptyText(const char* title, const char* subtitle);
+void SetEmptyAction(const char* label, BMessage* message);</div>
+				<p>The dashed card while the strip is empty, and a button on it whose message goes to the strip's target. A <code class="inline">NULL</code> label removes the button.</p></div>
+
+<pre class="code"><span class="k">#include</span> <span class="s">&lt;CardStrip.h&gt;</span>
+
+BAppearanceKit::BCardStrip* strip = <span class="k">new</span> BAppearanceKit::BCardStrip(<span class="s">"controllers"</span>,
+	<span class="k">new</span> BMessage(kMsgChosen));
+strip-&gt;SetEmptyText(<span class="s">"No controller"</span>, <span class="s">"Plug one in with USB, or pair one in Bluetooth."</span>);
+strip-&gt;SetEmptyAction(<span class="s">"Open Bluetooth&hellip;"</span>, <span class="k">new</span> BMessage(kMsgBluetooth));
+
+BSize size = strip-&gt;PictureSize();
+BBitmap* picture = BGameControllerView::PictureBitmap(vendor, product, family,
+	size.width, size.height, ui_color(B_DOCUMENT_TEXT_COLOR));
+strip-&gt;AddItem(<span class="k">new</span> BAppearanceKit::BCardStripItem(<span class="s">"DualSense Wireless Controller"</span>,
+	<span class="s">"Bluetooth &middot; 80 %"</span>, picture));
+<span class="k">delete</span> picture;
+
+<span class="c">// In MessageReceived(): message-&gt;FindInt32("index", &amp;index)</span></pre>
+
+			<div class="see-also">
+				<strong>See also</strong>
+				<a href="#BCardStripItem">BCardStripItem</a>
+				<a href="#BCard">BCard</a>
+				<a href="#BActionCard">BActionCard</a>
+				<a href="game-kit.html#picture-bitmap">BGameControllerView::PictureBitmap()</a>
+			</div>
+		</section>
+
+		<!-- BCardStripItem -->
+		<section class="entry" id="BCardStripItem">
+			<div class="entry-header"><h2>BCardStripItem</h2><span class="kind">class</span></div>
+			<table class="facts">
+				<tr><th>Declared in</th><td>&lt;CardStripItem.h&gt;</td></tr>
+				<tr><th>Library</th><td>libr5ui.so</td></tr>
+				<tr><th>Derived from</th><td>BArchivable</td></tr>
+				<tr><th>First user</th><td>Settings, Game controllers</td></tr>
+			</table>
+			<p>One card of a <a href="#BCardStrip">BCardStrip</a>: a picture, a title, and one subtitle line.</p>
+			<p>It is not a view: the strip draws it. The picture is copied; the item does not load one. A change redraws the card.</p>
+			<div class="member"><div class="sig">BCardStripItem(const char* title, const char* subtitle = NULL, const BBitmap* picture = NULL);</div></div>
+			<div class="member"><div class="sig">void SetTitle(const char* title);
+void SetSubtitle(const char* subtitle);
+void SetPicture(const BBitmap* picture);
+const char* Title() const;
+const char* Subtitle() const;
+const BBitmap* Picture() const;</div>
+				<p><code class="inline">SetPicture()</code> copies the bitmap; <code class="inline">NULL</code> removes it. Best at <a href="#BCardStrip"><code class="inline">BCardStrip::PictureSize()</code></a>; a larger one is scaled down in shape.</p></div>
+
+			<div class="see-also">
+				<strong>See also</strong>
+				<a href="#BCardStrip">BCardStrip</a>
+			</div>
+		</section>
+	</main>
+</div>
+
+<script src="r5book.js"></script>
+</body>
+</html>
