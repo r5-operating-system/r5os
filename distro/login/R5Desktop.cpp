@@ -181,8 +181,11 @@ main(int argc, char** argv)
 		syslog(LOG_ERR, "r5-desktop: setresgid: %s", strerror(errno));
 		return 1;
 	}
-	if (initgroups(pwd->pw_name, pwd->pw_gid) != 0)
+	if (initgroups(pwd->pw_name, pwd->pw_gid) != 0) {
 		r5_session_log("initgroups: %s", strerror(errno));
+		syslog(LOG_ERR, "r5-desktop: initgroups: %s", strerror(errno));
+		return 1;
+	}
 	if (setresuid(pwd->pw_uid, pwd->pw_uid, pwd->pw_uid) != 0
 		|| geteuid() == 0) {
 		r5_session_log("setresuid: %s euid=%d", strerror(errno),
