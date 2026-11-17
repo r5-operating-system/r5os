@@ -221,6 +221,85 @@ M12_STRINGS = {
 }
 
 
+# M13 stick (generated/m13/STICK-PLAN.md): every check line has a source
+# that prints it, and boot-next writes these settings per boot.
+M13_LINES = (
+    ("app_server: lavapipe vector width 128", "lavapipe vector width %d (setting)",
+     COMPOSITOR),
+    ("app_server: scanout through vulkan [0-9]", "scanout through vulkan %", COMPOSITOR),
+    ("gpu draw pipeline cache [a-z]+", "gpu draw pipeline cache %s",
+     "distro/app_server/skia/SkiaGpu.cpp"),
+    ("page table pool full", "page table pool full used",
+     "distro/graphics/src/add-ons/kernel/drivers/graphics/r5gpu/r5_gpu_core.cpp"),
+    ("compose compare MISMATCH", "compose compare MISMATCH", COMPOSITOR),
+    ("m13-measure: per motion", "per motion, the worst 10 s window",
+     "distro/graphics/boot/m13-measure"),
+    ("app_server: gpu compositor off", "gpu compositor off: %s", COMPOSITOR),
+)
+M13_BASE = ["gpu_draw true", "gpu_debug true", "gpu_selftest true"]
+M13_BOOTS = {
+    "1": M13_BASE + ["gpu_m13_boot 1"],
+    "2": M13_BASE + ["gpu_compositor_scanout true", "gfx9_wc_gtt true",
+                     "gpu_m13_boot 2"],
+    "3": M13_BASE + ["gpu_compositor_lavapipe true", "gpu_lavapipe_vector 128",
+                     "gpu_m13_boot 3"],
+    "done": None,
+}
+
+
+def check_m13_sources(commit: str) -> None:
+    check = blob(commit, "distro/graphics/boot/check").decode("utf-8")
+    for pattern, text, path in M13_LINES:
+        if pattern not in check:
+            die(f"check has no M13 line {pattern!r}")
+        if text.encode() not in blob(commit, path):
+            die(f"{path} at {commit} does not print {text!r} (check: {pattern!r})")
+    print(f"m13 lines {len(M13_LINES)} have a source at {commit}")
+
+
+def check_m13_boots(commit: str) -> None:
+    """The M13 order 1, 2, 3, done, in a sandbox in WSL."""
+    stage = ROOT / "generated" / "_pre-stick-m13"
+    stage.mkdir(parents=True, exist_ok=True)
+    for name in ("boot-next", "check"):
+        data = blob(commit, f"distro/graphics/boot/{name}").replace(b"\r\n", b"\n")
+        (stage / name).write_bytes(data)
+    steps = ["m13", "", "", ""]
+    script = ["#!/bin/sh", "set -u", "T=/tmp/r5-pre-stick-m13", "rm -rf $T",
+              "mkdir -p $T/home $T/us $T/ss $T/cache",
+              "echo 'selftest done' > $T/cache/r5-gpu-selftest.txt",
+              "echo x > $T/syslog",
+              "export R5_HOME=$T/home R5_USER_SETTINGS=$T/us R5_SYSTEM_SETTINGS=$T/ss",
+              "export R5_SYSLOG=$T/syslog R5_CACHE=$T/cache CHECK_WAIT=0 CHECK_LIVE=0",
+              "export BOOT_NEXT_YES=0", 'D="$(dirname "$0")"']
+    for i, arg in enumerate(steps):
+        script.append(f'sh "$D/boot-next" {arg} > /dev/null || echo "step {i} boot-next failed"')
+        script.append(f'echo "== step {i} next $(cat $T/home/m13/next)"')
+        script.append("cat $T/us/kernel/drivers/radeon_hd 2>/dev/null || echo '(none)'")
+        script.append(f'sh "$D/check" 2>/dev/null | grep "^boot " || true')
+    (stage / "run.sh").write_text("\n".join(script) + "\n", encoding="utf-8", newline="\n")
+    path = wsl(f"wslpath -u '{stage / 'run.sh'}'").strip()
+    out = wsl(f"sh '{path}'")
+    blocks = out.split("== step ")[1:]
+    if len(blocks) != len(steps):
+        die(f"m13 boot-next sandbox: {out}")
+    for block in blocks:
+        lines = [line for line in block.strip().splitlines() if line]
+        boot = lines[0].split("next ", 1)[1]
+        got = [line for line in lines[1:] if not line.startswith("boot ")]
+        want = M13_BOOTS.get(boot, "unknown")
+        if want is None:
+            if got != ["(none)"]:
+                die(f"m13: after boot 3 a settings file stays: {got}")
+        elif got != want:
+            die(f"m13 boot {boot}: boot-next wrote {got}, want {want}")
+        else:
+            seen = [line for line in lines if line.startswith("boot ")]
+            if seen != [f"boot {boot} (m13)"]:
+                die(f"m13 boot {boot}: check says {seen}")
+        print(f"m13 boot {boot} settings ok")
+
+
 def check_m12_sources(commit: str) -> None:
     check = blob(commit, "distro/graphics/boot/check").decode("utf-8")
     for pattern, text, path in M12_LINES:
@@ -580,6 +659,8 @@ def main() -> int:
     check_m11_boots(commit)
     check_m12_sources(commit)
     check_m12_boots(commit)
+    check_m13_sources(commit)
+    check_m13_boots(commit)
     if sys.argv[1] == "--paper":
         # M11: the lines and the settings per boot, before an image exists.
         print(f"pre-stick paper ok {commit}")

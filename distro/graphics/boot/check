@@ -60,7 +60,12 @@ fi
 # M11 next: its boot 4 also has gpu_hang_test 1.
 stick=m10
 m12note=$home/m12/next
-if [ -f "$settings" ] && grep -q '^gpu_draw true' "$settings" \
+if [ -f "$settings" ] && grep -Eq '^gpu_m13_boot[[:space:]]+[123]' "$settings"; then
+	# M13 stick (generated/m13/STICK-PLAN.md): the marker names the boot
+	stick=m13
+	boot=$(sed -n 's/^gpu_m13_boot[[:space:]]*\([123]\).*/\1/p' "$settings" \
+		| head -n 1)
+elif [ -f "$settings" ] && grep -q '^gpu_draw true' "$settings" \
 		&& ! grep -q '^gpu_compositor true' "$settings"; then
 	stick=m12
 	if grep -q '^gpu_compositor_lavapipe true' "$settings"; then
@@ -113,6 +118,10 @@ if [ "$stick" = m11 ]; then
 fi
 if [ "$stick" = m12 ]; then
 	m10=$home/m12
+	mkdir -p "$m10"
+fi
+if [ "$stick" = m13 ]; then
+	m10=$home/m13
 	mkdir -p "$m10"
 fi
 if [ "$1" = which ]; then
@@ -808,7 +817,57 @@ m12_boot() {
 	manual "anything odd on screen (blocks, stripes, wrong colours): ____"
 }
 
-if [ "$stick" = m12 ]; then
+# --- M13 stick (generated/m13/STICK-PLAN.md) ---
+
+# m13-measure ran into ~/m13/boot<k>/measure (the card says so)
+m13_measure() {
+	f=$m10/boot$boot/measure/numbers.txt
+	have 'm13-measure: per motion' "$f" "m13-measure numbers (drag, scroll, resize)"
+	grep -E '^  (drag|scroll|resize) ' "$f" 2>/dev/null | while read -r line; do
+		emit "INFO $line"
+	done
+	[ -f "$f" ] && cp "$f" "$keep/m13-numbers.txt"
+}
+
+m13_boot() {
+	have 'decorator: r5 loaded' "$slog" "decorator: r5 loaded"
+	none 'gpu lost' "$slog" "no gpu lost"
+	none 'radeon_hd: gpu hang' "$slog" "no gpu hang"
+	if [ "$boot" = 3 ]; then
+		have 'app_server: gpu compositor on lavapipe' "$slog" \
+			"gpu compositor on lavapipe"
+		have 'app_server: gpu draw on llvmpipe' "$slog" "gpu draw on llvmpipe"
+		have 'app_server: lavapipe vector width 128' "$slog" \
+			"lavapipe vector width 128 (setting)"
+	else
+		have 'app_server: gpu compositor on radv' "$slog" "gpu compositor on radv"
+		have 'app_server: gpu draw on .*RADV' "$slog" "gpu draw on RADV"
+		# PR #4324: the page-table reserve holds for the whole scenario
+		none 'page table pool full' "$slog" "no page table pool full"
+	fi
+	if [ "$boot" = 2 ]; then
+		have 'app_server: scanout through vulkan [0-9]' "$slog" \
+			"scanout through vulkan (gpu_compositor_scanout)"
+		emit "INFO $(grep -Eo 'radeon_hd: bo domain 2 .*snooped 0' "$slog" \
+			| head -n 1)"
+	fi
+	have 'app_server: gpu draw warm up [0-9]+ ms' "$slog" "gpu draw warm up"
+	emit "INFO $(grep -Eo 'gpu draw warm up [0-9]+ ms' "$slog" | head -n 1)"
+	emit "INFO $(grep -Eo 'gpu draw pipeline cache [a-z]+' "$slog" | head -n 1)"
+	emit "INFO $(grep -Eo 'gpu draw budget heap .*' "$slog" | head -n 1)"
+	none 'compose compare MISMATCH' "$slog" "no compose compare MISMATCH"
+	m13_measure
+	extract_syslog
+	none 'app_server: gpu draw off' "$slog" "no gpu draw off"
+	none 'app_server: gpu compositor off' "$slog" "no gpu compositor off"
+	manual "text in menus and Terminal sharp and readable: ____"
+	manual "dragging, scrolling and resizing felt (smooth, jumps, stalls): ____"
+	manual "anything odd on screen (blocks, stripes, wrong colours): ____"
+}
+
+if [ "$stick" = m13 ]; then
+	m13_boot
+elif [ "$stick" = m12 ]; then
 	m12_boot
 elif [ "$stick" = m11 ]; then
 	m11_boot
