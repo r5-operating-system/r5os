@@ -1251,6 +1251,27 @@ ieee80211_ioctl_get80211(struct ieee80211vap *vap, u_long cmd,
 			error = copyout(&link, ireq->i_data, sizeof(link));
 		break;
 	}
+	case IEEE80211_IOC_HAIKU_ROUTER: {
+		struct ieee80211_haiku_router router;
+		struct ieee80211_node *bss = vap->iv_bss;
+
+		if (ireq->i_len < (int)sizeof(router) || ireq->i_data == NULL) {
+			error = EINVAL;
+			break;
+		}
+		memset(&router, 0, sizeof(router));
+		if (bss != NULL && (vap->iv_state == IEEE80211_S_RUN
+		    || vap->iv_state == IEEE80211_S_SLEEP)) {
+			if (bss->ni_ies.hecap_ie != NULL)
+				router.i_standard = 6;
+			else if (bss->ni_ies.vhtcap_ie != NULL)
+				router.i_standard = 5;
+			else if (bss->ni_ies.htcap_ie != NULL)
+				router.i_standard = 4;
+		}
+		error = copyout(&router, ireq->i_data, sizeof(router));
+		break;
+	}
 	case IEEE80211_IOC_HAIKU_SAE_AUTH: {
 		struct ieee80211_haiku_sae_auth sae;
 

@@ -1,5 +1,16 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Wi-Fi: the page says what the link uses, and the router's standard apart
+
+Problem (owner, 5625U with the MT7921, a Wi-Fi 6 router, no `mt7922wifi` settings file): the Wi-Fi page and Deskbar said "Wi-Fi 6", but a download measured about 16 Mbit/s. Without the settings file `ht_vht` and `he` are off, so the link runs 802.11a/g (at most 54 Mbit/s). net80211 sets `IEEE80211_NODE_HE` on the access point's node from its beacon (`ieee80211_he_update()` in `ieee80211_node.c`), also when the driver keeps HE off, and `mtk_ioctl()` (`IEEE80211_IOC_HAIKU_LINK`) reported the node flags as the link's standard.
+
+What changed:
+- `if_mtk.c`: the link's standard counts a node's HE, VHT or HT flag only when `mtk_he_on()` or `mtk_ht_on()` says that mode is on; otherwise the rate the firmware reported decides, as before. A legacy link reports no standard, so the page and Deskbar show only the rate.
+- New request `IEEE80211_IOC_HAIKU_ROUTER` (`0x6007`, `struct ieee80211_haiku_router`) in R5's `ieee80211_ioctl.h`, answered by net80211 itself from the access point's captured HE, VHT and HT capability elements. It is a new request, so the shipped `IEEE80211_IOC_HAIKU_LINK` struct stays as it is.
+- Wi-Fi Kit: `WiFiLinkDetails::routerStandard`, added at the end, message field `"router standard"`. `WiFiView` puts "Router: Wi-Fi 6" in the tool tip of the current network, and "Your router supports Wi-Fi 6." when the link uses less. The status line and the Deskbar line show only what the link uses.
+
+Limits: not tried on hardware. VirtualBox and QEMU have no Wi-Fi adapter; the next stick with the Wi-Fi boots (W-Boot1 to 3) shows it. The hint compares the last digit of the two strings. WPA3 still needs a `wpa_supplicant` with SAE; this change does not touch it.
+
 ## 2026-11-17 - Bluetooth: a syslog line per device a scan hears
 
 Problem (stick 53, build 10065, 5625U with the MediaTek MT7961): in Settings > Bluetooth the first scan found nothing and the second only a few devices without a name; the Sony WH-1000XM3 and the 8BitDo M30, both in pairing mode, were not found. On stick 52 the same morning both were found and paired. The syslog of both sticks has the same server start and a full "le scan on/off" (13 s) per scan, but no line per device, so it could not tell whether the radio heard nothing or the page did not show it.
