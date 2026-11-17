@@ -145,6 +145,11 @@ public:
 	// (M11 decision 14: late is not a failure), B_ERROR once the GPU
 	// drawing is off.
 			status_t			Finish(bigtime_t timeout = 5000000);
+	// Start splash, compose thread: Finish() without the wait. The ticket
+	// is done once the run that covers everything recorded before the
+	// call has finished (or the GPU drawing is off).
+			int64				AskTicket();
+			bool				TicketDone(int64 ticket);
 
 	// Compose thread: the GPU drawing is off; every target lets go of its
 	// GPU objects and waiters are released. Before the device goes.

@@ -16,6 +16,7 @@
 
 #include <dlfcn.h>
 #include <fcntl.h>
+#include <math.h>
 #include <new>
 #include <stdarg.h>
 #include <stdint.h>
@@ -919,6 +920,17 @@ Compositor::Create(Desktop* desktop, HWInterface* screen)
 	if (options.draw)
 		compositor->_InitSkia(options.drawFail);
 
+	// Start splash (owner, 17 Nov 2026): the boot picture stays until the
+	// first window with a frame is drawn, so Sign in never shows half
+	// built while Lavapipe compiles its shaders
+	const char* splashReason = NULL;
+	if (compositor->_CaptureSplash(&splashReason)) {
+		compositor->fSplashStart = system_time();
+		compositor->fSplashHolding = true;
+		log_line("start splash on");
+	} else
+		log_line("start splash off: %s", splashReason);
+
 	if (compositor->_Init() != B_OK) {
 		delete compositor;
 		return NULL;
@@ -1131,7 +1143,19 @@ Compositor::Compositor(Desktop* desktop, HWInterface* screen)
 	fDrawFailure(false),
 	fDrawThread(-1),
 	fDrawSem(-1),
-	fDrawQuit(false)
+	fDrawQuit(false),
+	fSplashHolding(false),
+	fSplashAsked(0),
+	fSplashRenew(0),
+	fSplashTicket(0),
+	fSplashStart(0),
+	fSplashChanged(0),
+	fFrameSplash(false),
+	fSplashTextLeft(0),
+	fSplashPebbleLeft(0),
+	fSplashLogoTop(0),
+	fSplashIconsLeft(0),
+	fSplashIconsTop(0)
 {
 }
 
@@ -1163,6 +1187,7 @@ Compositor::~Compositor()
 	fGhosts.MakeEmpty();
 	// M13 step 4: freed while the device is still there
 	fOutlineMask.Unset();
+	_EndSplash();
 	_ExitVulkan();
 	free(fScratch);
 	if (fFenceFd >= 0)
@@ -2730,7 +2755,7 @@ Compositor::_ComposeLoop()
 		// damage (a hidden window).
 		bigtime_t wait = fDebug ? kReportInterval : B_INFINITE_TIMEOUT;
 		// M11 step 4b: an animation composes every refresh period
-		if (fShareRetiring || fAnimationsRunning) {
+		if (fShareRetiring || fAnimationsRunning || fSplashHolding) {
 			bigtime_t slice = fPeriod > 0 ? fPeriod : 16667;
 			if (wait == B_INFINITE_TIMEOUT || slice < wait)
 				wait = slice;
@@ -2807,7 +2832,8 @@ Compositor::_ComposeLoop()
 		}
 		bool animating = _AnimationDamage(system_time());
 		bool settling = _ShadowSettleDamage(system_time());
-		if (status == B_TIMED_OUT && !animating && !settling)
+		if (status == B_TIMED_OUT && !animating && !settling
+			&& !fSplashHolding)
 			continue;
 
 		// At most once per refresh period. The wait is outside the compose
@@ -2890,6 +2916,19 @@ Compositor::_ComposeLoop()
 				(float)fFrameHeight - 1));
 		BRegion screen(BRect(0, 0, (float)fFrameWidth - 1,
 			(float)fFrameHeight - 1));
+		// Start splash: the windows draw unseen; each frame redraws the
+		// picture where it moves
+		bool splash = fSplashHolding;
+		if (splash) {
+			// a window's new pixels: the screen counts as built only after
+			// a quiet spell
+			if (damage.CountRects() > 0)
+				fSplashChanged = system_time();
+			BRegion area(fSplashArea);
+			if (fFrames == 0)
+				area = screen;
+			damage = area;
+		}
 		damage.IntersectWith(&screen);
 		if (damage.CountRects() == 0) {
 			// Fourth review: the wake of an ended share has no damage when
@@ -2952,6 +2991,45 @@ Compositor::_ComposeLoop()
 		}
 		// M11 step 4b: where each animation is in this frame
 		_AnimationFrame(layers, system_time());
+
+		if (splash) {
+			const char* reason = NULL;
+			if (_SplashDone(layers, system_time(), &reason)) {
+				log_line("start splash %" B_PRId64 " ms (%s)",
+					(system_time() - fSplashStart) / 1000, reason);
+				splash = false;
+				_EndSplash();
+				// the windows were never shown: all of the screen, and
+				// the glass blurred again everywhere
+				damage = screen;
+				generic = screen;
+			}
+		}
+		if (splash) {
+			// the picture instead of the windows; their animations and
+			// closing windows go on unseen
+			LayerList pictures(3);
+			_SplashLayers(pictures, system_time());
+			LayerList* ghosts = fFrameGhosts;
+			fFrameGhosts = NULL;
+			bool slideFrame = fFrameSlide;
+			fFrameSlide = false;
+			fFrameSplash = true;
+			ShareDrawList noShares(1);
+			fLastCompose = system_time();
+			if (gridSlot >= 0)
+				fGridSlot = gridSlot;
+			bool ok = _Compose(damage, pictures, noShares, false);
+			fFrameSplash = false;
+			fFrameSlide = slideFrame;
+			fFrameGhosts = ghosts;
+			if (!ok) {
+				slot.Unlock();
+				continue;
+			}
+			fLastFrame = system_time();
+			continue;
+		}
 
 		// M11 step 4: the shadow masks and the kept blur, and the damage
 		// grown where the blur needs fresh input. Without an effect on
@@ -3045,13 +3123,14 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 	// M11 step 4: the CPU compare knows no effects; it runs only on a
 	// frame without them.
 	bool compare = fDebug && fFrames % 100 == 1 && !effects
-		&& !fFrameAnimating;
+		&& !fFrameAnimating && !fFrameSplash;
 	// M13 step 4 (review): nor the outline of a resize on Lavapipe
 	for (int32 i = 0; compare && i < layers.CountItems(); i++) {
 		if (layers.ItemAt(i)->outline.CountRects() > 0)
 			compare = false;
 	}
-	uint32 background = fBackground;
+	// start splash: the boot picture's white
+	uint32 background = fFrameSplash ? 0xffffffff : fBackground;
 
 	// A compare frame keeps the windows from drawing until the CPU copy
 	// is done, so both read the same pixels. The window lock is never
@@ -4773,6 +4852,7 @@ Compositor::_DropEffects()
 	BAutolock _(fEntryLock);
 	// M13 step 4: before the device goes, as the masks below
 	fOutlineMask.Unset();
+	_EndSplash();
 	for (int32 i = 0; i < fEntries.CountItems(); i++) {
 		Entry* entry = fEntries.ItemAt(i);
 		entry->mask.Unset();
@@ -4787,6 +4867,307 @@ Compositor::_DropEffects()
 	fAnimationsRunning = false;
 	delete fFrameGhosts;
 	fFrameGhosts = NULL;
+}
+
+
+//	#pragma mark - start splash
+
+
+// The boot picture (src/system/boot/platform/generic/video_splash.cpp, the
+// R5 copy in distro/boot): the logo and the icon row as the boot loader
+// places them (headers/private/kernel/boot/platform/generic/video_splash.h,
+// sizes and placement from images-sans-tm.h, which app_server does not
+// include: its pictures are GPL-3.0-or-later). The pixels come from the
+// screen itself, not from that header.
+static const int32 kSplashLogoWidth = 372;
+static const int32 kSplashLogoHeight = 96;
+static const int32 kSplashIconsWidth = 308;
+static const int32 kSplashIconsHalfHeight = 40;
+static const int32 kSplashPlacement = 50;
+// The wave pebble inside the logo: 58 pixels at x 22, with its shadow
+// (scripts/generate-r5-artwork.py, render_boot_splash()); the text starts
+// at x 94
+static const int32 kSplashPebbleLeft = 10;
+static const int32 kSplashPebbleRight = 92;
+// The icon row fades out, then the pebble pulses (owner, 17 Nov 2026)
+static const bigtime_t kSplashFade = 300000;
+static const bigtime_t kSplashPulse = 1600000;
+static const float kSplashPulseLowest = 0.55f;
+// Built: nothing changed for this long after everything was drawn
+static const bigtime_t kSplashQuiet = 300000;
+// Never longer than this: longer than the longest first start measured
+// on Lavapipe in QEMU (warm-up 47.2 s, CHANGELOG M13 step 4)
+static const bigtime_t kSplashLongest = 60000000;
+
+
+static inline uint32
+splash_pixel(const uint8* bits, uint32 bytesPerRow, int32 x, int32 y)
+{
+	return ((const uint32*)(bits + (size_t)y * bytesPerRow))[x] & 0x00ffffff;
+}
+
+
+//!	Any thread, from Window::EndUpdate().
+void
+Compositor::WindowDrawn()
+{
+	if (!fSplashHolding)
+		return;
+	// the first one starts the wait; a later one (the window drew again)
+	// makes it wait for that drawing too
+	if (atomic_get_and_set(&fSplashAsked, 1) != 0)
+		atomic_set(&fSplashRenew, 1);
+	if (fWakeSem >= 0)
+		release_sem_etc(fWakeSem, 1, B_DO_NOT_RESCHEDULE);
+}
+
+
+/*!	Create(), before the compose thread: copies the boot picture into
+	three buffers (the text, the pebble, the icon row). The picture is the
+	screen as the boot loader left it, copied before app_server's first
+	mode switch (AccelerantHWInterface::TakeBootPicture()), or else the
+	screen now. Its parts go where the boot loader would put them on this
+	screen, so they keep their size when the mode changed. False when
+	there is no boot picture (safe mode's picture, a restarted app_server):
+	then there is no splash, as before.
+*/
+bool
+Compositor::_CaptureSplash(const char** _reason)
+{
+	RenderingBuffer* front = fScreen->FrontBuffer();
+	if (front == NULL) {
+		*_reason = "no screen";
+		return false;
+	}
+	int32 width = (int32)front->Width();
+	int32 height = (int32)front->Height();
+
+	// the source: the boot picture, or the screen
+	uint32* boot = NULL;
+	int32 sourceWidth = 0;
+	int32 sourceHeight = 0;
+	const uint8* bits;
+	uint32 bytesPerRow;
+	AccelerantHWInterface* accelerant
+		= dynamic_cast<AccelerantHWInterface*>(fScreen);
+	if (accelerant != NULL
+		&& accelerant->TakeBootPicture(&boot, &sourceWidth, &sourceHeight)) {
+		bits = (const uint8*)boot;
+		bytesPerRow = (uint32)sourceWidth * 4;
+	} else {
+		if (front->Bits() == NULL || (front->ColorSpace() != B_RGB32
+				&& front->ColorSpace() != B_RGBA32)) {
+			*_reason = "no boot picture";
+			return false;
+		}
+		bits = (const uint8*)front->Bits();
+		bytesPerRow = front->BytesPerRow();
+		sourceWidth = width;
+		sourceHeight = height;
+	}
+	struct FreeBoot {
+		uint32* bits;
+		~FreeBoot() { free(bits); }
+	} freeBoot = { boot };
+
+	int32 block = kSplashLogoHeight + kSplashIconsHalfHeight;
+	if (width < kSplashLogoWidth || height < block
+		|| sourceWidth < kSplashLogoWidth || sourceHeight < block) {
+		*_reason = "screen too small";
+		return false;
+	}
+
+	// video_splash.h: compute_splash_logo_placement() and
+	// compute_splash_icons_placement(), in the source and on the screen
+	int32 logoLeft = (sourceWidth - kSplashLogoWidth) * kSplashPlacement
+		/ 100;
+	int32 logoTop = (sourceHeight - block) * kSplashPlacement / 100;
+	int32 iconsLeft = (sourceWidth - kSplashIconsWidth) * kSplashPlacement
+		/ 100;
+	int32 iconsTop = kSplashLogoHeight + (sourceHeight - block)
+		* kSplashPlacement / 100;
+	int32 shiftX = (width - kSplashLogoWidth) * kSplashPlacement / 100
+		- logoLeft;
+	int32 shiftY = (height - block) * kSplashPlacement / 100 - logoTop;
+	int32 iconsShiftX = (width - kSplashIconsWidth) * kSplashPlacement / 100
+		- iconsLeft;
+
+	// the boot loader fills the screen with white; the logo's text is dark
+	if (splash_pixel(bits, bytesPerRow, 0, 0) != 0xffffff
+		|| splash_pixel(bits, bytesPerRow, sourceWidth - 1, 0) != 0xffffff
+		|| splash_pixel(bits, bytesPerRow, 0, sourceHeight - 1) != 0xffffff
+		|| splash_pixel(bits, bytesPerRow, sourceWidth - 1,
+			sourceHeight - 1) != 0xffffff) {
+		*_reason = "no boot picture";
+		return false;
+	}
+	int32 dark = 0;
+	for (int32 y = logoTop; y < logoTop + kSplashLogoHeight; y++) {
+		for (int32 x = logoLeft + kSplashPebbleRight;
+				x < logoLeft + kSplashLogoWidth; x++) {
+			uint32 pixel = splash_pixel(bits, bytesPerRow, x, y);
+			if ((pixel & 0xff) + ((pixel >> 8) & 0xff)
+					+ ((pixel >> 16) & 0xff) < 300)
+				dark++;
+		}
+	}
+	if (dark < 100) {
+		*_reason = "no boot picture";
+		return false;
+	}
+
+	struct {
+		BReference<WindowBuffer>*	buffer;
+		int32						left;
+		int32						top;
+		int32						width;
+		int32						height;
+	} parts[3] = {
+		{ &fSplashText, logoLeft + kSplashPebbleRight, logoTop,
+			kSplashLogoWidth - kSplashPebbleRight, kSplashLogoHeight },
+		{ &fSplashPebble, logoLeft + kSplashPebbleLeft, logoTop,
+			kSplashPebbleRight - kSplashPebbleLeft, kSplashLogoHeight },
+		{ &fSplashIcons, iconsLeft, iconsTop, kSplashIconsWidth,
+			min_c(kSplashIconsHalfHeight, sourceHeight - iconsTop) }
+	};
+	for (int32 i = 0; i < 3; i++) {
+		WindowBuffer* buffer = _AllocateBuffer(parts[i].width,
+			parts[i].height, true);
+		if (buffer == NULL) {
+			_EndSplash();
+			*_reason = "window memory";
+			return false;
+		}
+		parts[i].buffer->SetTo(buffer, true);
+		uint32* target = (uint32*)buffer->Bits();
+		for (int32 y = 0; y < parts[i].height; y++) {
+			for (int32 x = 0; x < parts[i].width; x++) {
+				target[y * parts[i].width + x] = splash_pixel(bits,
+					bytesPerRow, parts[i].left + x, parts[i].top + y)
+					| 0xff000000;
+			}
+		}
+	}
+
+	fSplashTextLeft = parts[0].left + shiftX;
+	fSplashPebbleLeft = parts[1].left + shiftX;
+	fSplashLogoTop = logoTop + shiftY;
+	fSplashIconsLeft = iconsLeft + iconsShiftX;
+	fSplashIconsTop = iconsTop + shiftY;
+	fSplashArea = BRect((float)(logoLeft + shiftX), (float)fSplashLogoTop,
+		(float)(logoLeft + shiftX + kSplashLogoWidth - 1),
+		(float)(fSplashLogoTop + kSplashLogoHeight - 1));
+	fSplashArea = fSplashArea | BRect((float)fSplashIconsLeft,
+		(float)fSplashIconsTop,
+		(float)(fSplashIconsLeft + kSplashIconsWidth - 1),
+		(float)(fSplashIconsTop + parts[2].height - 1));
+	if (boot != NULL && (sourceWidth != width || sourceHeight != height)) {
+		log_line("start splash from %" B_PRId32 "x%" B_PRId32
+			" to %" B_PRId32 "x%" B_PRId32, sourceWidth, sourceHeight,
+			width, height);
+	}
+	return true;
+}
+
+
+/*!	Compose thread: the picture of this frame, as layers that the compose
+	draws on white. The text stays; the icon row and the pebble are drawn
+	as an opening window is (scaled about the centre and faded,
+	_RecordWindowAnimation()), so no pipeline is new and none is Skia's.
+*/
+void
+Compositor::_SplashLayers(LayerList& layers, bigtime_t now)
+{
+	bigtime_t since = now - fSplashStart;
+
+	float icons = 1.0f - (float)since / kSplashFade;
+	if (icons < 0.0f)
+		icons = 0.0f;
+	float pebble = -1.0f;
+	if (since > kSplashFade) {
+		float phase = (float)((since - kSplashFade) % kSplashPulse)
+			/ kSplashPulse;
+		float middle = (1.0f + kSplashPulseLowest) / 2;
+		pebble = middle + (1.0f - middle) * cosf(phase * 2.0f * (float)M_PI);
+	}
+
+	struct {
+		BReference<WindowBuffer>*	buffer;
+		int32						left;
+		int32						top;
+		float						visible;
+	} parts[3] = {
+		{ &fSplashText, fSplashTextLeft, fSplashLogoTop, -1.0f },
+		{ &fSplashPebble, fSplashPebbleLeft, fSplashLogoTop, pebble },
+		{ &fSplashIcons, fSplashIconsLeft, fSplashIconsTop, icons }
+	};
+	for (int32 i = 0; i < 3; i++) {
+		// a faded-out part is not drawn; the white is
+		if (!parts[i].buffer->IsSet() || parts[i].visible == 0.0f)
+			continue;
+		Layer* layer = new(std::nothrow) Layer;
+		if (layer == NULL)
+			continue;
+		WindowBuffer* buffer = parts[i].buffer->Get();
+		layer->buffer.SetTo(buffer);
+		layer->left = parts[i].left;
+		layer->top = parts[i].top;
+		layer->shape.Set(BRect((float)layer->left, (float)layer->top,
+			(float)(layer->left + buffer->Width() - 1),
+			(float)(layer->top + buffer->Height() - 1)));
+		layer->visible = parts[i].visible;
+		layers.AddItem(layer);
+	}
+}
+
+
+/*!	Compose thread: whether the screen behind the picture is built. A
+	window with a frame drew all it was asked to (WindowDrawn()); Skia has
+	drawn everything recorded up to its last such drawing; every window
+	has pixels; and no window's pixels changed for kSplashQuiet. Or
+	kSplashLongest passed.
+*/
+bool
+Compositor::_SplashDone(const LayerList& layers, bigtime_t now,
+	const char** _reason)
+{
+	if (now - fSplashStart >= kSplashLongest) {
+		*_reason = "time";
+		return true;
+	}
+	if (atomic_get(&fSplashAsked) == 0)
+		return false;
+	if (fSkia != NULL && !fSkia->IsShutDown()) {
+		// one ticket at a time, so drawing again while Lavapipe is slow
+		// does not move the goal on each frame
+		if (fSplashTicket == 0
+			|| (fSkia->TicketDone(fSplashTicket)
+				&& atomic_get_and_set(&fSplashRenew, 0) != 0)) {
+			fSplashTicket = fSkia->AskTicket();
+		}
+		if (!fSkia->TicketDone(fSplashTicket))
+			return false;
+	} else
+		atomic_set(&fSplashRenew, 0);
+	for (int32 i = 0; i < layers.CountItems(); i++) {
+		if (!layers.ItemAt(i)->HasPixels())
+			return false;
+	}
+	if (now - fSplashChanged < kSplashQuiet)
+		return false;
+	*_reason = "drawn";
+	return true;
+}
+
+
+//!	The picture's buffers go (the hold ended, the CPU mode, the end).
+void
+Compositor::_EndSplash()
+{
+	fSplashHolding = false;
+	fSplashText.Unset();
+	fSplashPebble.Unset();
+	fSplashIcons.Unset();
 }
 
 

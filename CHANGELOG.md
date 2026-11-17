@@ -1,5 +1,24 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - app_server: the boot picture stays until the first screen is built (start splash)
+
+Problem (owner, M13 stick 5 boot 3): on a first start on Lavapipe, Skia's warm-up compiles shaders for about 33 s (5625U) to 47 s (QEMU), and Sign in appeared in pieces. In QEMU the Try R5 window did the same (black rectangles, then its contents). Outside M13; Skia on by default (M13 step 5) is not part of this.
+
+What changed (owner's choice: the boot picture continues, the icon row fades, the wave pebble pulses):
+- `AccelerantHWInterface::SetMode()`: before the first mode switch it copies the screen as the boot loader left it, and right after the switch puts it back, so no black screen shows (VESA in QEMU clears the screen at that switch; the first QEMU build had a black pause, owner).
+- `Compositor`: takes that copy (`TakeBootPicture()`), checks it is the boot picture (white corners, dark logo text) and cuts out the text, the pebble and the icon row, placed by the boot loader's own formulas (`video_splash.h`). While it holds, each frame draws them on white with the existing effects pipeline (`_RecordWindowAnimation()`, as an opening window): the icons fade in 0.3 s, then the pebble pulses (1.6 s, down to 55 %). No Skia pipeline, no new shader. The windows draw unseen.
+- It ends when a window with a frame ended its last update (`Window::EndUpdate()` → `Compositor::WindowDrawn()`), Skia finished everything recorded up to that drawing (`SkiaGpu::AskTicket()` / `TicketDone()`, one ticket at a time), every window has pixels, and no window's pixels changed for 0.3 s (owner: only when the screen is fully built). At the latest after 60 s. Only at app_server's start; not after Log out; not in the CPU mode.
+- The R5 artwork (GPL-3.0-or-later) is not compiled into app_server; only the pixels on the screen are used. Log lines: `start splash on`, `start splash off: <reason>`, `start splash <ms> ms (drawn|time)`. `docs/APP-SERVER-COMPOSITOR.md`, "The start splash".
+
+Mistake on the way: the first build took the picture from the screen in `Compositor::Create()`; in QEMU the mode switch had already cleared it (`start splash off: no boot picture`). Now it is copied before that switch.
+
+Tested in QEMU (KVM, 8 CPUs, 1280x800, Lavapipe forced, gpu_draw true, own image copy, window shown to the owner):
+- First start: `start splash on`, `start splash 33658 ms (drawn)`, warm-up 46715 ms. The Try R5 window appeared whole. Owner: "yessss" after the black pause was fixed (that run's syslog lost its last lines at the power off).
+- Second start on that image: `start splash 17037 ms (drawn)`, warm-up 16401 ms (the first start was powered off before its warm-up ended, so Mesa's cache was not full).
+- Third start: `start splash 3104 ms (drawn)`, warm-up 3750 ms.
+
+Limits: not booted on the 5625U and not on RADV (QEMU has no RADV); there radeon_hd keeps the boot scanout, so the copy should be the same picture. The splash ends after the warm-up's part that the first window waits for, so on Lavapipe a later start still shows it for about 3 s. In the CPU mode the boot copy (width × height × 4 bytes) stays in memory until app_server ends. ARM64 and RISC-V 64 not built.
+
 ## 2026-11-17 - Graphics (M13): VulkanTeapot on RADV no longer tears under a Lavapipe compositor (mesa_radv -10), and stick 5 on paper
 
 Problem (owner, stick 4): VulkanTeapot tears when the compositor runs on Lavapipe and the program on RADV. Cause, from the Mesa 25.3.6 source: on R5 RADV has no separate blit queue (`radv_wsi_get_prime_blit_queue` is under `#ifndef VK_USE_PLATFORM_VIEW_RFIVE`), so `blit.queue` is NULL and the copy into the host-visible buffer runs in the program's own submit, which signals the per-image fence. Mesa's `wsi_common_queue_present` waits that fence only for a software device (`wsi->sw`). `r5_queue_present` then read the buffer before the GPU had finished writing it. The existing `QueueWaitIdle` branch (for a blit queue) never runs on R5; left as it is.
