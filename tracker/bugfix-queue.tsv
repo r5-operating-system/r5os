@@ -842,7 +842,7 @@ trac:13078	A	MediaPlayer	distro/rest/src/apps/mediaplayer/NetworkStreamWin.cpp	1
 trac:13196	A	MediaPlayer	distro/rest/src/apps/mediaplayer/Controller.cpp	1	todo		MediaPlayer gets confused if you have a corrupted mp3 file in your playlist...
 trac:13762	A	MediaPlayer	distro/rest/src/apps/mediaplayer/Controller.cpp	1	todo		Mediaplayer crash while attempting to play DVD.ISO
 trac:14483	A	MediaPlayer	distro/rest/src/apps/mediaplayer/MainWin.cpp	1	parked		Alt+V is the Video menu; no crash site in the key handler
-trac:15293	A	MediaPlayer	distro/rest/src/apps/mediaplayer/supplier/ProxyAudioSupplier.cpp	1	pr		A video or audio rate of 0 no longer divides in the frame conversion
+trac:15293	A	MediaPlayer	distro/rest/src/apps/mediaplayer/supplier/ProxyAudioSupplier.cpp	1	pr	4417	A video or audio rate of 0 no longer divides in the frame conversion
 trac:15791	A	MediaPlayer	distro/rest/src/apps/mediaplayer/Controller.cpp	1	parked		MPEG-4 crash is in the decoder, not in a null check here
 trac:17406	A	MediaPlayer	distro/rest/src/apps/mediaplayer/Controller.cpp	1	parked		End of a streamed mp3 has no separate crash site
 trac:19680	A	MediaPlayer	distro/rest/src/apps/mediaplayer/Controller.cpp	1	parked		BHandler::Looper only returns the looper; the quit use-after-free was not found
