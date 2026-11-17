@@ -115,6 +115,64 @@ game_controller_family family_for(uint16 vendor, uint16 product,
 				const char* name, bool hasMapping);
 
 
+// #pragma mark - what the HID descriptor says first
+
+
+// What the driver reports about a controller, in the numbering of
+// raw_state: axes in DirectInput order (axis_order()), buttons by HID
+// usage (usage 1 is button 0, as hid_shared reads them).
+struct device_shape {
+	int32	axisCount;
+	uint16	axisUsage[kMaxAxes];	// HID usage of axis n, 0 unknown
+	int32	hatCount;
+	int32	buttonCount;			// the highest button usage
+	bool	knowsButtons;			// buttonUsages is filled in
+	uint32	buttonUsages[4];		// bit n: usage n + 1 exists
+};
+
+// The GUID's bus (0x03 USB, 0x05 Bluetooth), 0 when it does not parse.
+uint16		guid_bus(const char* guid);
+
+// As find_mapping(), but a line for the same bus comes first: a controller
+// can report other buttons over Bluetooth than over a cable. bus 0: any.
+status_t	find_mapping(const char* path, uint16 vendor, uint16 product,
+				uint16 bus, controller_mapping& mapping);
+status_t	find_system_mapping(uint16 vendor, uint16 product, uint16 bus,
+				controller_mapping& mapping);
+
+// A database mapping counts buttons the DirectInput way: button n is the
+// n-th button usage the report has. hid_shared numbers them by usage, with
+// gaps. This renumbers the buttons of a database mapping by usage; without
+// knowsButtons nothing changes (no gaps assumed).
+void		buttons_by_usage(controller_mapping& mapping,
+				const device_shape& shape);
+
+// Fits a mapping to the controller: sources it does not have are dropped,
+// and the d-pad is what the descriptor says: its hat switch when it has
+// one, else the X and Y axes when no stick uses them.
+void		fit_to_device(controller_mapping& mapping,
+				const device_shape& shape);
+
+// A fixed layout of the Layout menu, in the HID order the family's own
+// controllers report (docs/GAME-CONTROLLERS.md, "As built"), fitted to the
+// controller. False for UNKNOWN.
+bool		fixed_layout(game_controller_family family,
+				const device_shape& shape, controller_mapping& mapping);
+
+// The pairs of a mapping without GUID and name ("a:b0,b:b1,dpup:h0.1,
+// leftx:a0,..."), the form a saved setup is stored in. Its axis numbers
+// are the driver's order; order (axis_order()) turns them into
+// DirectInput order. False when nothing parses.
+bool		parse_pairs(const char* text, controller_mapping& mapping);
+void		axes_to_order(controller_mapping& mapping, const int32* order,
+				int32 count);
+
+// The other way round, for a mapping whose axes are in the driver's order.
+// The text is cut at size; false when it did not fit.
+bool		format_pairs(const controller_mapping& mapping, char* text,
+				size_t size);
+
+
 }	// namespace R5GameController
 
 

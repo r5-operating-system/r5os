@@ -63,6 +63,18 @@
 #include <net80211/ieee80211_sta.h>
 #include <net80211/ieee80211_vht.h>
 
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * One station. The last SAE body is kept for the supplicant. The length
+ * is written after the body so a reader does not take a new length with
+ * the previous body.
+ */
+static uint8_t sae_mac[IEEE80211_ADDR_LEN];
+static uint8_t sae_body[IEEE80211_SAE_MAX];
+static uint16_t sae_len;
+/* SPDX-SnippetEnd */
+
 static	void sta_vattach(struct ieee80211vap *);
 static	void sta_beacon_miss(struct ieee80211vap *);
 static	int sta_newstate(struct ieee80211vap *, enum ieee80211_state, int);
@@ -338,8 +350,16 @@ sta_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 		switch (ostate) {
 		case IEEE80211_S_INIT:
 		case IEEE80211_S_SCAN:
-			IEEE80211_SEND_MGMT(ni,
-			    IEEE80211_FC0_SUBTYPE_AUTH, 1);
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * SAE does not send an open authentication frame. The supplicant sends
+ * the SAE frames itself.
+ */
+			if (ni->ni_authmode != IEEE80211_AUTH_SAE)
+				IEEE80211_SEND_MGMT(ni,
+				    IEEE80211_FC0_SUBTYPE_AUTH, 1);
+/* SPDX-SnippetEnd */
 			break;
 		case IEEE80211_S_AUTH:
 		case IEEE80211_S_ASSOC:
@@ -1250,6 +1270,15 @@ ieee80211_parse_csaparams(struct ieee80211vap *vap, uint8_t *frm,
 	KASSERT(vap->iv_state >= IEEE80211_S_RUN,
 	    ("state %s", ieee80211_state_name[vap->iv_state]));
 
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * A channel-switch element shorter than 3 bytes is dropped.
+ */
+	if (frm == NULL || frm[1] < 3)
+		return;
+/* SPDX-SnippetEnd */
+
 	if (csa->csa_mode > 1) {
 		IEEE80211_DISCARD_IE(vap,
 		    IEEE80211_MSG_ELEMID | IEEE80211_MSG_DOTH,
@@ -1749,6 +1778,25 @@ sta_recv_mgmt(struct ieee80211_node *ni, struct mbuf *m0, int subtype,
 			    seq, status);
 		else if (algo == IEEE80211_AUTH_ALG_OPEN)
 			sta_auth_open(ni, wh, rssi, nf, seq, status);
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * Algorithm 3 is SAE. Keep the body for the supplicant and stay in
+ * this state. The body is not written to the log.
+ */
+		else if (algo == IEEE80211_AUTH_ALG_SAE) {
+			int n = efrm - frm;
+
+			if (n >= 6 && n <= IEEE80211_SAE_MAX) {
+				memcpy(sae_body, frm, n);
+				IEEE80211_ADDR_COPY(sae_mac, wh->i_addr2);
+				sae_len = (uint16_t)n;
+				if (status == 0 && seq == 2)
+					printf("sae: authenticated\n");
+			}
+			return;
+		}
+/* SPDX-SnippetEnd */
 		else {
 			IEEE80211_DISCARD(vap, IEEE80211_MSG_ANY,
 			    wh, "auth", "unsupported alg %d", algo);
@@ -2080,3 +2128,65 @@ sta_recv_ctl(struct ieee80211_node *ni, struct mbuf *m, int subtype)
 		break;
 	}
 }
+
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ */
+int
+ieee80211_send_sae_auth(struct ieee80211vap *vap, const uint8_t *mac,
+	const uint8_t *body, int len)
+{
+	struct ieee80211_node *ni;
+	struct ieee80211com *ic;
+	struct mbuf *m;
+	struct ieee80211_bpf_params params;
+	uint8_t *frm;
+	uint16_t algo;
+
+	if (vap == NULL || vap->iv_bss == NULL || mac == NULL || body == NULL)
+		return EINVAL;
+	if (len < 6 || len > IEEE80211_SAE_MAX)
+		return EINVAL;
+	algo = (uint16_t)body[0] | ((uint16_t)body[1] << 8);
+	if (algo != IEEE80211_AUTH_ALG_SAE)
+		return EINVAL;
+
+	ni = vap->iv_bss;
+	if (!IEEE80211_ADDR_EQ(ni->ni_macaddr, mac)
+	    && !IEEE80211_ADDR_EQ(ni->ni_bssid, mac))
+		return EADDRNOTAVAIL;
+	ni->ni_authmode = IEEE80211_AUTH_SAE;
+
+	ic = vap->iv_ic;
+	ieee80211_ref_node(ni);
+	m = ieee80211_getmgtframe(&frm,
+	    ic->ic_headroom + sizeof(struct ieee80211_frame), len);
+	if (m == NULL) {
+		ieee80211_free_node(ni);
+		return ENOMEM;
+	}
+	memcpy(frm, body, len);
+	memset(&params, 0, sizeof(params));
+	params.ibp_pri = WME_AC_VO;
+	return ieee80211_mgmt_output(ni, m, IEEE80211_FC0_SUBTYPE_AUTH,
+	    &params);
+}
+
+int
+ieee80211_take_sae_auth(struct ieee80211vap *vap, uint8_t *mac,
+	uint8_t *body, uint16_t *outlen)
+{
+	uint16_t n;
+
+	if (vap == NULL || mac == NULL || body == NULL || outlen == NULL)
+		return EINVAL;
+	n = sae_len;
+	if (n < 6 || n > IEEE80211_SAE_MAX)
+		return ENOENT;
+	memcpy(mac, sae_mac, IEEE80211_ADDR_LEN);
+	memcpy(body, sae_body, n);
+	*outlen = n;
+	return 0;
+}
+/* SPDX-SnippetEnd */

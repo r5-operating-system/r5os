@@ -35,6 +35,116 @@ Tested (QEMU, KVM, 8 virtual CPUs, Lavapipe, own image copies, one run after the
 - `py scripts/check-pre-stick.py --paper`: M11, M12 and M13 walks ok (`m13 lines 7 have a source`, `m13 boot 1/2/3/done settings ok`).
 
 Not tested: RADV and the 5625U, `gpu_lavapipe_threads` and `gpu_lavapipe_vector` (the vector width is only measurable on the 5625U: boot 3 of the stick). The stick is not built or written.
+
+## 2026-11-17 - Bluetooth after stick 51: device names, HFP's SDP record, link-down lines, Test buttons and the page layout
+
+Problems (boot 51 on the 5625U, MT7922, WH-1000XM3, 8BitDo M30): devices showed their kind instead of their name in Devices nearby and My devices; HFP never started with the XM3 (pairing, encryption and SDP ran, but no `hands-free service` and no `hfp:` line); the headset dropped right after connecting with nothing in the syslog; "Test buttons…" did nothing; the device panel's buttons ran past the window's right edge and the page got a scroll bar.
+
+Names, what was found:
+- Regression, found by reading the code: `_SDPThread()` reads SDP into a probe record of its own (#4328, `1a25a5f09a`) that had only the address. #4335 (`881de0451f`) then sends `fRemoteDevice->friendly_name` of that record to bluetooth_hid (`R5_BTHID_SET_INFO`), so the name was always empty there and the Game controllers page fell back to "Game controller". Each change was fine on its own; together they lost the name. The probe now carries the device's name and class.
+- For the Bluetooth page itself no change between boot 52 of 16 Nov and boot 51 touches the path from the scan to the pair request and My devices; both boots run the same controller setup. What the code shows: R5 never wrote Write Inquiry Mode, so after the HCI Reset at start the MT7922 answers in standard mode, which carries no name (and no signal strength); names came only from LE advertising. Not proven on hardware why the names showed on 16 Nov.
+- Fix: after the reset, Write Inquiry Mode (extended inquiry result where the controller has it, else with RSSI), logged as `inquiry mode extended|rssi`. A Classic device that answers without a name, or connects without a known one, is asked with Remote Name Request after the scan, one at a time, 12 s each (`LocalDeviceNames.cpp`, MIT). The name goes into the record (and the saved list when paired), is kept for the next scan, and goes to the page, which now takes a late name for a device it lists. Pair cancels a name request on its way. No name or address is logged.
+
+HFP and SDP:
+- The SDP answer was read with Haiku's `SDPDataIO` in one pass; a Nil (it did not step over it), a URL or a 128-bit integer put it out of step, which dropped that record and every record after it. R5's own parser (`SDPParse.h`, MIT, from Core 5.4 Vol 3 Part B) steps over each element by its length; attributes are stored as before. Which element the XM3 sends is not known; this is the likely cause, not a proven one.
+- When an audio device's browse brings no Hands-Free channel, a Service Search Attribute Request for `0x111E` with `0x0001`, `0x0004`, `0x0009` and `0x0311` follows (continuation states followed, at most 64 pieces).
+- One line per answer: `sdp: <n> records: 0x1000 0x110b ...`, `sdp: hands-free search, <n> records: ...`, and `hfp: no hands-free record` for an audio device without one.
+
+Link down: `bluetooth_server: link down (reason 0x13, the device ended it, status 0x0)` for every Classic link that ends (no address). The drop of the XM3 is most likely the headset leaving when no profile came up; HFP should now start 5 s after the link. Not confirmed.
+
+Test buttons: `BRoster::Launch()` refuses to launch the caller's own team (`B_BAD_VALUE`, nothing sent), and the page runs inside Settings. Inside Settings the button now posts the same `--page gamecontrollers` arguments to Settings as `B_ARGV_RECEIVED`; the separate Bluetooth program still uses `Launch()`.
+
+Page layout: the panel had an explicit minimum width of 250 pixels, narrower than its three buttons, so they were cut at the right. The panel is now as wide as its button line; "Use for sound" or "Test buttons…" share that line with Disconnect and Forget, so the page fits the default window height. Long texts (a device name can be 248 bytes, the scan hint, the radio note) are cut with an ellipsis instead of widening the page. Devices nearby has a minimum of three rows.
+
+Test aids: `R5_BLUETOOTH_PREVIEW=1` (test only, read by libr5bt) adds one made-up connected game controller (address from the documentation range) to My devices. `run-qemu-smoke.sh`: `BT_PREVIEW=1`, `BT_WINDOW="<w> <h>"` and `BT_TEST_BUTTONS=<s>` (sends the button's message with hey).
+
+Mistake on the way: the first layout put "Test buttons…" on a line of its own; the page then fit its width but kept a scroll bar at the default size, and the next one (all buttons on one line) was cut at the right until the explicit 250-pixel minimum of the panel was removed.
+
+Tested: `scripts/build-locked.sh` exit 0 (x86_64), also after merging `main` with #4345. `scripts/fuzz-bt.sh sdp` 60 s, 0 crashes (the made-up five-record answer: 5 records, classes `0x1000 0x110b 0x110e 0x111e 0`, Hands-Free channel 3 through `r5rfcomm::FindChannel()`, in pieces of 1 to 1000 bytes; then damaged copies). QEMU (KVM, SMAP and SMEP, Login) on an own image copy with `BT_PREVIEW=1`: all smoke tests `exit 0`; screendumps at 1030 by 610 show My devices with the panel, Test buttons…, Disconnect and Forget inside the window, Devices nearby and the Bluetooth line, and no scroll bar; at 910 by 560 the buttons stay inside the window and the page scrolls vertically (allowed: it is taller than the area there). `BT_TEST_BUTTONS=75`: Settings shows Devices → Game controllers afterwards.
+
+Not tested: nothing on a radio (QEMU has none): Write Inquiry Mode, Remote Name Request, the Hands-Free search, the link-down line and the names on the page are not seen working; the XM3 and the M30 are untested. ARM64 and RISC-V not built.
+
+## 2026-11-17 - Game controllers: set up your controller's buttons, a Layout menu, and no crash when Settings closes
+
+Problem (boot 51 on the 5625U, the 8BitDo M30 paired over Bluetooth, `2dc8:0651`, report descriptor 86 bytes): Settings crashed when it quit (Segment violation in `__dynamic_cast` from `BApplication::_WindowAt()` in `~BApplication`, with the thread "game controller watcher" still there). On the page's Sega picture the D-pad did nothing and a pressed button lit the wrong key.
+
+Cause of the crash: `libr5game.so` started one `BLooper` per team for `StartWatching()` and never quit it. Settings unloads its add-ons, and `libr5game.so` with them, in `~SettingsApp`, before `~BApplication` walks its loopers; the watcher's code was gone, so the cast on it crashed.
+
+Cause of the mapping: R5 took the database's Windows line for `2dc8:0651`, which is a USB line (GUID bus `03`; there is no Windows Bluetooth line). It puts the D-pad on DirectInput axes 0 and 2; R5 sorts the axes by usage, so axis 2 is Z, which a pad with only X and Y (and perhaps a hat) does not have. The Mac and Linux Bluetooth lines for the same IDs disagree with each other (A and B swapped; a hat on Linux, X and Y on the Mac). Which physical key of the M30 sends which HID button over Bluetooth is still not known: the 86 bytes are not in the log.
+
+What changed:
+- `libr5game.so`: the last `StopWatching()` quits the watcher; a static destructor quits one still running when the library is unloaded or the team exits; the watcher stops its node monitors. The page already called `StopWatching()` when it was detached; it now also closes its controller and the setup window there.
+- The mapping follows the HID descriptor first (`docs/LIBR5.md`, "Game Kit"): a Windows line for the controller's own bus first; buttons renumbered by HID usage (DirectInput counts the usages that exist, hid_shared numbers by usage with gaps); the D-pad on the controller's hat switch, or without one on X and Y when no stick reads them; a D-pad on buttons stays; sources the controller does not have are dropped. `r5_joystick_info` has a new last field, `button_usages[4]`, filled by hid_shared (an R5 snippet; the size field tells an older driver apart).
+- `BGameController`, calls added at the end: `LayoutFor()`, `SetLayout()`, `GetSavedMapping()`, `SetSavedMapping()`, `HasSavedMapping()`. `Open()` takes a saved setup, else a chosen layout (a fixed mapping in the HID order of that family's controllers), else the database. Stored in the existing `~/config/settings/game_controllers`. `BJoystick` programs see the same raw buttons as before. `ResetLabelStyles()` now removes only the label choices (it removed the whole file, which now also holds layouts and setups); same arguments and meaning.
+- Settings, Game controllers: the "Shapes R5 draws" strip is gone (owner). The Test box has "Layout" (Automatic, Xbox, PlayStation, Nintendo, Sega Genesis, and "Your own setup" while one is saved) above "Button labels", and "Set up buttons…", a small window that asks for each control in turn (face buttons, shoulders, triggers, sticks, the D-pad, Start, Select; for the Sega shape A B C X Y Z L R), with Skip and Cancel, and saves the setup per controller model. The vendor and product ID moved under the picture. Revert restores labels, layout and setup from when the page was opened; Defaults resets every label choice, as before, and removes the chosen controller's layout and setup. Subtitle: "Test your controllers and set up their buttons". The mockup follows.
+- `gamecontroller_test`: the bus choice, buttons by usage, the D-pad rules, the fixed layouts and the setup text; two synthetic pads with the M30's IDs on bluetooth_hid (X and Y plus a hat and 16 buttons; X and Y and 12 buttons, no hat), read through the M30's database line; a saved setup and a chosen layout on a made-up model. The M30's real descriptor is not used: it is not in the log, and I do not know it well enough to rebuild it.
+- `run-qemu-smoke.sh`: `QUIT_SETTINGS=1` resizes Settings to 910 by 560, then leaves the page for Information, quits Settings with `hey` and lists the processes.
+
+Mistake on the way: the first build put the vendor and product ID beside Layout; the QEMU screendump at 910 by 560 showed the Test box running past the page (no right border). They now sit under the picture.
+
+Tested: `scripts/build-locked.sh` jam_exit=0 (x86_64). QEMU (KVM, SMAP and SMEP, Login, an own image copy, `GAMEPAD=1 QUIT_SETTINGS=1 SETTINGS_PAGE=gamecontrollers`): `gamecontroller_test` ok: descriptor-first checks ok; 872 of 872 Windows entries parse; the DualSense virtual controller as before (Cross is A, the hat is down, R2 32703); "M30 hat pad: a mapping, family 4 (Sega), 1 hat, up 1, A 1"; "M30 axes pad: a mapping, 0 hats, left 1, up 0, B 1"; the saved setup (b3 is A, X is d-pad left), the Sega layout under it, and both removed again. The other Bluetooth tests of the script exit 0. No panic, no SMAP line. Screendumps: at 1030 by 610 the page with the DualSense card, the Test box with Layout "Automatic", Button labels "PlayStation (✕○□△)", "Set up buttons…", the PlayStation picture with Cross lit and L2 at 60 %; no Shapes strip. After the quit Settings is gone from the process list and the syslog has no debugger line. Second build (IDs under the picture, jam_exit=0) and the same QEMU run: the same test lines, `gamecontroller_test: ok`; at 910 by 560 the Test box keeps its right border inside the page, with the vendor and product ID under the hint; Settings quits without a debugger line; no panic, no SMAP line.
+
+Not tested: a real controller; the 8BitDo M30 and the DualSense on this build; which M30 key sends which button over Bluetooth; the setup window with a controller (QEMU sends no button presses to it; it was not opened in QEMU); dark mode; ARM64 and RISC-V 64 (not built).
+## 2026-11-17 - Wi-Fi step 3: SAE frames and protected management, supplicant unchanged
+
+Problem: a WPA3 join needs SAE (authentication algorithm 3) and protected management frames (BIP-CMAC-128, the IGTK). The supplicant package that is built does not compile those in.
+
+What changed:
+- The recipe sub-task stops. HaikuPorts `wpa_supplicant-2.11.haiku.1.recipe` (revision 1 `7bb9e50ac5` and revision 2 `a3ac62e9d5`) builds git `bdf3144ad606b226aca6f8fae103e671e4655138` and uses the committed `wpa_supplicant/.config`, not `defconfig`. PMF is off: `.config` line 297 is `#CONFIG_IEEE80211W=y`. SAE is off: `.config` has no `CONFIG_SAE` line, and `Makefile` lines 265-274 set `CONFIG_SAE=y` only inside `ifdef CONFIG_MESH`, while `.config` line 576 is `#CONFIG_MESH=y`. OWE is off: `.config` line 590 is `#CONFIG_OWE=y`. `defconfig` does contain `CONFIG_SAE=y`; that file is not what this package builds. `driver_bsd.c` has no SAE authenticate path. WPA3 needs an own wpa_supplicant recipe (choice 3b). No recipe was written.
+- The kernel accepts SAE frames. Algorithm 3 is stored for the supplicant and does not move the station to associate. A received frame with status 0 and sequence 2 logs `sae: authenticated` and nothing of the frame body. Sending is `IEEE80211_IOC_HAIKU_SAE_AUTH` (0x6004): the ioctl copies the body in, checks algorithm 3 and a length of 6 to 400, and transmits it. The same request reads the last body back out. While the mode is SAE, entering authentication does not send an open authentication frame. A later join from that state asks for association. The mode value is 6, added beside the existing authentication modes. The body is not logged.
+- An RSN element that lists SAE (suite 8, or FT over SAE, suite 9) is reported as SAE, including when PSK is listed as well. An unknown suite still falls through to PSK.
+- BIP-CMAC-128 is an R5 cipher module (`ieee80211_crypto_bip.c`, MIT). It uses the AES already in the tree. The MIC is the first 8 bytes of AES-CMAC over the masked frame control, the three addresses, the body, and the MMIE with a zero MIC. The com advertises `IEEE80211_C_MFP` (bit `0x00400000`, previously unused).
+- An IGTK uses key index 4 or 5, which does not fit the four group-key slots. The existing set-key request (`IEEE80211_IOC_WPAKEY`) for BIP-CMAC-128 at those indexes copies the key in the kernel and hands that copy to the driver. It is not stored in the group-key array. The driver sends `STA_REC_KEY_V2`: the remembered pairwise CCMP key in the first slot when it has one, and BIP-CMAC-128 (cipher id 10) in the other. The key bytes are not logged. After the firmware accepts the update the driver logs `pmf: on`. mt76 has no separate PMF bit in the station record (`mt76_connac_mcu.c` and `mt7921/mcu.c`, SPDX BSD-3-Clause-Clear, searched for a PMF field; the key path is the signal). The host cipher is registered. Index 4 is not installed in a slot, so the host does not yet build the MMIE for that index. The cipher id and the 36-byte key layout are taken from mt76 and are assumed until a stick boot.
+- The Network Kit gains `B_NETWORK_AUTHENTICATION_WPA3` (5), `B_KEY_MODE_SAE` (`0x0400`) and `B_KEY_MODE_OWE` (`0x0800`). `wireless_network` is unchanged. The Wi-Fi page does not say "WPA3" in this step.
+- User pointers stay in the ioctl. The driver only sees kernel copies. 0x6005 is the driver's command for that kernel copy. A user request with that number is rejected and is not passed to the driver. The next free kit request is 0x6006.
+
+Tested: `scripts/build-locked.sh` jam_exit=0 (x86_64). The translator errors (avif, jpeg, png, tiff, webp, icns, jasper) are the same pre-existing ones. Host, WSL, gcc with AddressSanitizer and UBSan: `wifi_fuzz rsn: 60s 0 crashes` (54,100,992 rounds). The other fuzz targets were not re-run; this step changes the RSN parser.
+
+QEMU (KVM, SMAP and SMEP, 2 CPUs, 2 GB, headless, 150 s) on an own copy of `r5-os.image`. The serial log has `enable SMAP` and `enable SMEP`. No panic and no `vm_page_fault`. The `kernel debugger` lines are the debugger extensions loading. Settings stayed running (`/boot/system/preferences/Settings --page wifi`, pid 94, still in `ps` after 8 seconds). User space wrote `wifi-step3-booted`. QEMU has no Wi-Fi adapter, so the syslog has no mt7922 line, no `sae: authenticated` and no `pmf: on`. The words on the page were not read.
+
+Not tested: a WPA3-only join, a WPA2 join on the same boot, and the two syslog lines on hardware (stick W2). The pairwise-key slot and the BIP cipher id in the firmware message are assumed. ARM64 and RISC-V 64 not built.
+
+## 2026-11-17 - Wi-Fi step 2: Wi-Fi 4 and 5 stay off until the settings ask
+
+Problem: the MT7921 could only offer 802.11a/b/g. The card reports HT and VHT in its capability event, and the firmware does not reorder A-MPDU by itself. The Wi-Fi page already asks the driver for the last transmit rate (`IEEE80211_IOC_HAIKU_TX_RATE`, 0x6003) and the driver dropped those status records.
+
+What changed:
+- The driver reads the PHY tag it already fetched (ht, vht, max bandwidth, streams, LDPC, STBC). `max_bw` is taken as 0, 1, 2, 3 for 20, 40, 80 and 160 MHz. That mapping is assumed from the byte order in the event; a stick boot can correct it.
+- With `ht_vht` true in `/boot/system/settings/kernel/drivers/mt7922wifi` (absent means false, same rule as the other keys in that file), and only when the card said it has HT, the channel list gains 11n and, on 5 GHz when the card said VHT, 11ac. 40 MHz and 80 MHz follow the reported bandwidth. The capability bits are translated from that event. This tree has no `IEEE80211_C_TX_AMPDU`; HT operation and transmit A-MPDU are `IEEE80211_HTC_HT` and `IEEE80211_HTC_AMPDU`.
+- The station record gains HT and VHT only when the setting is on and the station is that kind of station. Rate control stays in the firmware.
+- A-MPDU reorder stays net80211's. mt76 does not leave it to the firmware: `mt7921_ampdu_action` on receive start calls both `mt76_rx_aggr_start` and `mt7921_mcu_uni_rx_ba` (`mt7921/main.c` lines 966 and 968, SPDX BSD-3-Clause-Clear). After the stack has installed its own reorder, the driver tells the firmware about the session (`STA_REC_BA`).
+- Transmit status (packet type 0), which the driver used to drop, is parsed. The last acknowledged rate is what the kit's existing 0x6003 request shows. The driver fills a kernel struct; the ioctl copies it out. No new copy of a user pointer in the driver. Until a status record arrives the rate stays 0 and the kit ignores it.
+- Default tonight is off. No settings file is shipped.
+
+Tested: `scripts/build-locked.sh` jam_exit=0 (x86_64), twice; the second run is the image that was booted, after another session had used the shared tree. Host, WSL, gcc with AddressSanitizer and UBSan, the step 1 targets again:
+- `wifi_fuzz ies: 60s 0 crashes` (34,231,296 rounds)
+- `wifi_fuzz rsn: 60s 0 crashes` (95,547,392 rounds)
+- `wifi_fuzz action: 60s 0 crashes` (185,840,640 rounds)
+- `wifi_fuzz mtkrx: 60s 0 crashes` (69,677,056 rounds)
+
+QEMU (KVM, SMAP and SMEP, 2 CPUs, 2 GB, headless, 150 s) on an own copy of `r5-os.image`. The serial log has `enable SMAP` and `enable SMEP`. No panic and no `vm_page_fault`. The `kernel debugger` lines are the debugger extensions loading. Settings stayed running (`/boot/system/preferences/Settings --page wifi`, still in `ps` after 8 seconds). QEMU has no Wi-Fi adapter, so the syslog has no mt7922 line and the page has nothing to join. The words on the page were not read.
+
+Not tested: a WPA2 join, an hour without a panic, and a download with HT/VHT off and on (stick W1). ARM64 and RISC-V 64 not built. `mtk_tx.c` still names no copyright holder. The first boot looked for Settings under `apps`; it lives under `preferences`.
+
+## 2026-11-17 - Wi-Fi step 1: a frame that does not fit is dropped, and a join that hangs gives up
+
+Problem: a short information element in a beacon was read past its end (FH, DS, channel switch, HT, VHT). `ieee80211_ies_init` turned a negative length into a huge allocation. `IEEE80211_VERIFY_LENGTH` compared a pointer difference with a `size_t`, so a frame shorter than its header looked long enough and was then read past its end. A join that never reached RUN had no limit. The scan sweep already stops after 15 seconds. The firmware reply wait stays 2 seconds.
+
+What changed:
+- Distro copies of the net80211 beacon, HT, VHT and element-init parsers, and the length check they share (`ieee80211_input.h`). A short element is dropped and counted by the existing discard stats. A length below 0 or above 4096, or a null buffer with a positive length, is refused. A beacon shorter than the fixed fields clears the scan record before returning, so a reused record does not keep a pointer into the previous frame. A channel-switch element shorter than 3 bytes is ignored.
+- The MT7921 driver gives a join 15 seconds (`MTK_JOIN_TIMEOUT`). It then logs `join gave up after 15 s; not connected` and goes back to scan. The new lines touch the driver softc only. No new copy of user memory.
+- Host fuzzer `scripts/fuzz-wifi.sh`. It compiles the real functions (a `distro/` copy wins over the Haiku tree) with AddressSanitizer and UBSan. Targets: ies, rsn, action, mtkrx.
+
+Tested: `scripts/build-locked.sh` jam_exit=0 (x86_64). Host, WSL, gcc with AddressSanitizer and UBSan:
+- `wifi_fuzz ies: 60s 0 crashes` (28,874,752 rounds)
+- `wifi_fuzz rsn: 60s 0 crashes` (62,419,968 rounds)
+- `wifi_fuzz action: 60s 0 crashes` (126,505,984 rounds)
+- `wifi_fuzz mtkrx: 60s 0 crashes` (66,747,392 rounds)
+
+QEMU (KVM, SMAP and SMEP, 2 CPUs, 2 GB, headless, 100 s) on an own copy of `r5-os.image` (`generated/wifi-qemu.sh`, not `scripts/run-qemu-r5.sh`): user space wrote `wifi-step1-booted`; the serial log has `enable SMAP` and `enable SMEP`; no panic and no `vm_page_fault`. The `kernel debugger` lines are the debugger extensions loading at boot. QEMU has no Wi-Fi device, so the syslog has no mt7922 line.
+
+Not tested: a WPA2 join and an hour without a panic (stick W1, later). ARM64 and RISC-V 64 not built. `mtk_tx.c` at air/OS `e3c4cc898` (`src/add-ons/kernel/drivers/network/wlan/mt7922wifi/dev/mtk/mtk_tx.c`) names no copyright holder; the file says only "Distributed under the terms of the MIT License." That line was left as it is.
+
 ## 2026-11-17 - Graphics (M13 step 1): five small app_server fixes for Skia drawing
 
 Problem: `docs/M13-PLAN.md` Priority 2: hot paths of the Skia drawing that cost CPU or uploads on every draw.
@@ -67,6 +177,7 @@ Tested (QEMU, KVM, 8 virtual CPUs, Lavapipe, 1280x800, `scripts/qemu-m13-measure
 - `compose compare ok` 6 times with effects off and a window drawing every 16 ms, no MISMATCH; `r5-draw-compare` 459/490, the same FAILs.
 
 Not tested: RADV and the 5625U (the stick of step 3). The resize numbers have 1-2 frames per run, too few to compare.
+
 ## 2026-11-17 - Bluetooth step 7c joined with HFP: the microphone opens the headset's voice link
 
 Problem: 7c (#4334) brought the voice path (h2generic, the decoder, the "Bluetooth headset microphone" input) but nothing opened a voice link, because the HFP side (#4333) was not on `main` yet. A voice link the headset opened itself went into the ACL code and marked the device as connecting.

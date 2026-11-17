@@ -43,8 +43,27 @@ fi
 SETTINGS_PAGE=${SETTINGS_PAGE:-}
 SHOTS=${SHOTS:-}
 page=""
+# BT_PREVIEW=1 starts that Settings with R5_BLUETOOTH_PREVIEW=1: the
+# Bluetooth page then shows one made-up connected game controller under My
+# devices (libr5bt, test only), so its layout can be seen without a radio.
+# BT_WINDOW="<w> <h>" sets the Settings window to that size first (hey).
+preview=""
+if [ "${BT_PREVIEW:-0}" = 1 ]; then
+	preview="R5_BLUETOOTH_PREVIEW=1 "
+fi
 if [ -n "$SETTINGS_PAGE" ]; then
-	page="/boot/system/preferences/Settings --page $SETTINGS_PAGE & sleep 30; ps > /boot/home/bt-ps.log 2>&1; "
+	page="$preview/boot/system/preferences/Settings --page $SETTINGS_PAGE & sleep 30; ps > /boot/home/bt-ps.log 2>&1; "
+	if [ -n "${BT_WINDOW:-}" ]; then
+		set -- $BT_WINDOW
+		page="$page/bin/hey Settings set Frame of Window 0 to 'BRect(20,40,$((20 + $1)),$((40 + $2)))' > /boot/home/bt-hey.log 2>&1; "
+	fi
+	# BT_TEST_BUTTONS=<s>: that many seconds after Settings opened, send the
+	# page the message of its "Test buttons…" button (with BT_PREVIEW=1 the
+	# made-up controller is chosen); Settings should then show Game
+	# controllers.
+	if [ -n "${BT_TEST_BUTTONS:-}" ]; then
+		page="$page(sleep $((BT_TEST_BUTTONS - 30)); /bin/hey Settings 'btvT' of View 'bluetooth' of Window 0 >> /boot/home/bt-hey.log 2>&1) & "
+	fi
 fi
 # DESKBAR=1 (step 3b) starts Deskbar and then bluetooth_deskbar, which adds
 # the Bluetooth item: the desktop is behind Sign in, so the user launch job
@@ -69,9 +88,19 @@ if [ "${GAMEPAD:-0}" = 1 ]; then
 	page="/bin/hey Login set Frame of Window 'Sign in' to 'BRect(900,620,1340,1040)' > /boot/home/gc-hey.log 2>&1; $page"
 	gamepad="/bin/gamecontroller_test --hold 120 > /boot/home/gc-hold.log 2>&1 & "
 fi
+# QUIT_SETTINGS=1 (with GAMEPAD=1): 30 s after the virtual controller comes,
+# the Settings window gets its smallest size (910 by 560) for a screendump;
+# 30 s later Settings leaves the page for Information and is quit, and the
+# processes are listed, so a crash at quit (the game controller watcher,
+# CHANGELOG.md 17 Nov 2026) shows as a debugger line in the syslog and as a
+# Settings still in that list.
+after=""
+if [ "${QUIT_SETTINGS:-0}" = 1 ]; then
+	after="sleep 30; /bin/hey Settings set Frame of Window 0 to 'BRect(40,40,950,600)' > /boot/home/gc-small.log 2>&1; sleep 30; /boot/system/preferences/Settings --page information & sleep 10; /bin/hey Settings quit > /boot/home/gc-quit.log 2>&1; sleep 10; ps > /boot/home/gc-quit-ps.log 2>&1; sync; "
+fi
 cat > "$BT_WORK/bt-smoke.job" <<EOF
 job bt-smoke {
-	launch /bin/sh -c "(while true; do sleep 5; ps -a > /boot/home/bt-psa.log 2>&1; sync; done) & sleep 60; ps > /boot/home/bt-ps0.log 2>&1; sync; $page/bin/bt_server_smoke_test > /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_l2cap_abi_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_hid_driver_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_l2cap_coc_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_smp_crypto_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_audio_smoke_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_rfcomm_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_voice_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/gamecontroller_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync;/bin/bt_audio use 00:11:22:33:44:55 >> /boot/home/bt-smoke.log 2>&1; /bin/bt_audio >> /boot/home/bt-smoke.log 2>&1; /bin/bt_audio off >> /boot/home/bt-smoke.log 2>&1; /bin/bt_audio >> /boot/home/bt-smoke.log 2>&1; ls -ld /boot/system/settings/bluetooth /boot/system/settings/bluetooth/* >> /boot/home/bt-smoke.log 2>&1; $gamepad sleep 5; sync"
+	launch /bin/sh -c "(while true; do sleep 5; ps -a > /boot/home/bt-psa.log 2>&1; sync; done) & sleep 60; ps > /boot/home/bt-ps0.log 2>&1; sync; $page/bin/bt_server_smoke_test > /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_l2cap_abi_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_hid_driver_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_l2cap_coc_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_smp_crypto_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_audio_smoke_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_rfcomm_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/bt_voice_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync; /bin/gamecontroller_test >> /boot/home/bt-smoke.log 2>&1; echo exit \$? >> /boot/home/bt-smoke.log; sync;/bin/bt_audio use 00:11:22:33:44:55 >> /boot/home/bt-smoke.log 2>&1; /bin/bt_audio >> /boot/home/bt-smoke.log 2>&1; /bin/bt_audio off >> /boot/home/bt-smoke.log 2>&1; /bin/bt_audio >> /boot/home/bt-smoke.log 2>&1; ls -ld /boot/system/settings/bluetooth /boot/system/settings/bluetooth/* >> /boot/home/bt-smoke.log 2>&1; $gamepad $after sleep 5; sync"
 	on initial_volumes_mounted
 }
 EOF
@@ -119,7 +148,8 @@ timeout "$SECONDS_UP" qemu-system-x86_64 -machine pc,accel=$accel -cpu $cpu \
 	-monitor unix:"$BT_WORK/monitor.sock",server,nowait </dev/null || true
 
 # bfs_shell's cat prints nothing here; copy the files out instead.
-rm -f "$BT_WORK/out-smoke.log" "$BT_WORK/out-ps.log" "$BT_WORK/out-ps0.log" "$BT_WORK/out-syslog"
+rm -f "$BT_WORK/out-smoke.log" "$BT_WORK/out-ps.log" "$BT_WORK/out-ps0.log" "$BT_WORK/out-syslog" \
+	"$BT_WORK/out-hey.log"
 "$BFS" "$IMG" >/dev/null 2>&1 <<EOT
 cp myfs/home/bt-smoke.log :$BT_WORK/out-smoke.log
 cp myfs/home/bt-ps.log :$BT_WORK/out-ps.log
@@ -127,6 +157,10 @@ cp myfs/home/bt-ps0.log :$BT_WORK/out-ps0.log
 cp myfs/home/bt-psa.log :$BT_WORK/out-psa.log
 cp myfs/system/var/log/syslog :$BT_WORK/out-syslog
 cp myfs/home/gc-hold.log :$BT_WORK/out-gc-hold.log
+cp myfs/home/bt-hey.log :$BT_WORK/out-hey.log
+cp myfs/home/gc-small.log :$BT_WORK/out-gc-small.log
+cp myfs/home/gc-quit.log :$BT_WORK/out-gc-quit.log
+cp myfs/home/gc-quit-ps.log :$BT_WORK/out-gc-quit-ps.log
 quit
 EOT
 for f in "$BT_WORK"/shot-*.ppm; do
@@ -148,7 +182,21 @@ cat "$BT_WORK/out-smoke.log" 2>/dev/null || echo "(no log)"
 echo "== syslog (Bluetooth lines)"
 grep -aE 'bluetooth_server|bluetooth_deskbar|deskbar_bt_replicant|bt_server_smoke_test|bt_l2cap_abi_test|bt_hid_driver_test|l2cap_coc_test|bt_smp_crypto_test|bt_rfcomm_test|bt_voice_test|RFCOMM|gamecontroller|bluetooth_hid|bluetooth_audio|DeviceManager|h2generic|l2cap|debug_server|crash' \
 	"$BT_WORK/out-syslog" 2>/dev/null || echo "(no lines)"
+if [ -n "${BT_WINDOW:-}${BT_TEST_BUTTONS:-}" ]; then
+	echo "== hey (BT_WINDOW, BT_TEST_BUTTONS)"
+	cat "$BT_WORK/out-hey.log" 2>/dev/null || echo "(no log)"
+fi
 if [ "${GAMEPAD:-0}" = 1 ]; then
 	echo "== gamecontroller_test --hold"
 	cat "$BT_WORK/out-gc-hold.log" 2>/dev/null || echo "(no log)"
+fi
+if [ "${QUIT_SETTINGS:-0}" = 1 ]; then
+	echo "== Settings smallest size (hey)"
+	cat "$BT_WORK/out-gc-small.log" 2>/dev/null || echo "(no log)"
+	echo "== Settings quit (hey)"
+	cat "$BT_WORK/out-gc-quit.log" 2>/dev/null || echo "(no log)"
+	echo "== still running after the quit"
+	grep -E 'Settings|debug_server' "$BT_WORK/out-gc-quit-ps.log" 2>/dev/null || echo "(no Settings)"
+	echo "== debugger lines in the syslog"
+	grep -aE 'entered the debugger|Segment violation|__dynamic_cast' "$BT_WORK/out-syslog" 2>/dev/null || echo "(none)"
 fi

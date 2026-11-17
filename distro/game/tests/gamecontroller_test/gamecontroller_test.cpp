@@ -5,14 +5,19 @@
  * gamecontroller_test: libr5game.so without a real controller
  * (docs/GAME-CONTROLLERS.md).
  *
- *  1. the mapping parser, the axis order and the hat directions;
+ *  1. the mapping parser, the axis order and the hat directions; and what
+ *     the HID descriptor decides first: the line for the same bus, the
+ *     buttons by usage, the d-pad on the hat or on X and Y, the fixed
+ *     layouts and a saved setup's text;
  *  2. the installed SDL_GameControllerDB: the DualSense and the 8BitDo M30
  *     are found, and every Windows vendor and product entry parses;
  *  3. as uid 0, with the bluetooth_hid driver (regular image): a virtual
  *     controller with the DualSense's IDs and report layout, fed the way
  *     bluetooth_server feeds a real one, read through BGameController
  *     (R5_JOYSTICK_GET_INFO, the mapping, the standard layout), and the
- *     B_GAME_CONTROLLER_ADDED and _REMOVED messages;
+ *     B_GAME_CONTROLLER_ADDED and _REMOVED messages; two synthetic pads
+ *     with the 8BitDo M30's IDs (2dc8:0651), one with a hat and one with
+ *     the d-pad on X and Y; a saved setup and a chosen layout;
  *  4. with app_server: the four PlayStation glyphs and the five shapes of
  *     BGameControllerView draw something.
  *
@@ -177,6 +182,181 @@ test_parser()
 }
 
 
+// #pragma mark - 1b. what the HID descriptor says first
+
+
+static bool
+same_mapping(const controller_mapping& a, const controller_mapping& b)
+{
+	return memcmp(a.buttons, b.buttons, sizeof(a.buttons)) == 0
+		&& memcmp(a.axes, b.axes, sizeof(a.axes)) == 0;
+}
+
+
+static bool
+is_half(const mapping_source& source, uint8 index, int8 half)
+{
+	return source.type == SOURCE_AXIS && source.index == index
+		&& source.half == half;
+}
+
+
+// The 8BitDo M30's Windows line for 2dc8:0651 (a USB entry: no Bluetooth
+// line exists), the one the 17 Nov boot on the 5625U used.
+static const char* kM30Line
+	= "03000000c82d00005106000000000000,8BitDo M30,a:b0,b:b1,back:b10,"
+	"dpdown:+a2,dpleft:-a0,dpright:+a0,dpup:-a2,guide:b2,leftshoulder:b8,"
+	"lefttrigger:b9,rightshoulder:b6,righttrigger:b7,start:b11,x:b3,y:b4,"
+	"platform:Windows,\n";
+
+
+static int
+test_descriptor_first()
+{
+	CHECK(guid_bus("030000004c050000e60c000000000000") == 0x03, "USB bus");
+	CHECK(guid_bus("050000004c050000e60c000000000000") == 0x05,
+		"Bluetooth bus");
+
+	// A line for the same bus comes first.
+	BPath path;
+	CHECK(find_directory(B_SYSTEM_TEMP_DIRECTORY, &path) == B_OK, "temp");
+	path.Append("gamecontroller_test.txt");
+	FILE* file = fopen(path.Path(), "w");
+	CHECK(file != NULL, "temp file");
+	fputs("03000000341200007856000000000000,Cable,a:b0,platform:Windows,\n"
+		"05000000341200007856000000000000,Radio,a:b5,platform:Windows,\n",
+		file);
+	fclose(file);
+	controller_mapping m;
+	CHECK(find_mapping(path.Path(), 0x1234, 0x5678, 0x05, m) == B_OK
+		&& m.buttons[B_CONTROLLER_BUTTON_A].index == 5, "Bluetooth line");
+	CHECK(find_mapping(path.Path(), 0x1234, 0x5678, 0x03, m) == B_OK
+		&& m.buttons[B_CONTROLLER_BUTTON_A].index == 0, "USB line");
+	CHECK(find_mapping(path.Path(), 0x1234, 0x5678, 0x18, m) == B_OK
+		&& strcmp(m.name, "Cable") == 0, "any bus: the first line");
+	unlink(path.Path());
+
+	// Button usages 1 to 4 and 9 to 12: DirectInput's b4 is usage 9, the
+	// raw button 8.
+	device_shape shape;
+	memset(&shape, 0, sizeof(shape));
+	shape.buttonCount = 12;
+	shape.knowsButtons = true;
+	shape.buttonUsages[0] = 0x00f | 0xf00;
+	CHECK(parse_pairs("a:b0,b:b4,x:b7,y:b8,", m), "pairs");
+	buttons_by_usage(m, shape);
+	CHECK(m.buttons[B_CONTROLLER_BUTTON_A].index == 0
+		&& m.buttons[B_CONTROLLER_BUTTON_B].index == 8
+		&& m.buttons[B_CONTROLLER_BUTTON_X].index == 11
+		&& m.buttons[B_CONTROLLER_BUTTON_Y].type == SOURCE_NONE,
+		"buttons by usage");
+
+	// The M30 line on a controller with X, Y and a hat: the d-pad is the
+	// hat, not Z (which it does not have).
+	memset(&shape, 0, sizeof(shape));
+	shape.axisCount = 2;
+	shape.axisUsage[0] = 0x30;
+	shape.axisUsage[1] = 0x31;
+	shape.hatCount = 1;
+	shape.buttonCount = 16;
+	CHECK(parse_line(kM30Line, 0x2dc8, 0x0651, m), "M30 line");
+	fit_to_device(m, shape);
+	CHECK(m.buttons[B_CONTROLLER_BUTTON_DPAD_UP].type == SOURCE_HAT
+		&& m.buttons[B_CONTROLLER_BUTTON_DPAD_UP].hatMask == 1
+		&& m.buttons[B_CONTROLLER_BUTTON_DPAD_LEFT].hatMask == 8,
+		"d-pad on the hat");
+	CHECK(m.buttons[B_CONTROLLER_BUTTON_A].index == 0
+		&& m.buttons[B_CONTROLLER_BUTTON_START].index == 11, "M30 buttons");
+
+	// The same without a hat: the d-pad is X and Y.
+	shape.hatCount = 0;
+	CHECK(parse_line(kM30Line, 0x2dc8, 0x0651, m), "M30 line again");
+	fit_to_device(m, shape);
+	CHECK(is_half(m.buttons[B_CONTROLLER_BUTTON_DPAD_LEFT], 0, -1)
+		&& is_half(m.buttons[B_CONTROLLER_BUTTON_DPAD_RIGHT], 0, 1)
+		&& is_half(m.buttons[B_CONTROLLER_BUTTON_DPAD_UP], 1, -1)
+		&& is_half(m.buttons[B_CONTROLLER_BUTTON_DPAD_DOWN], 1, 1),
+		"d-pad on X and Y");
+	raw_state raw;
+	memset(&raw, 0, sizeof(raw));
+	raw.axisCount = 2;
+	raw.axes[0] = -32768;
+	raw.axes[1] = 32767;
+	raw.buttonCount = 16;
+	mapped_state out;
+	map_state(m, raw, out);
+	CHECK(out.buttons == ((1 << B_CONTROLLER_BUTTON_DPAD_LEFT)
+		| (1 << B_CONTROLLER_BUTTON_DPAD_DOWN)), "left and down");
+
+	// X and Y read by a stick are not taken for the d-pad.
+	CHECK(parse_pairs("leftx:a0,lefty:a1,dpup:h0.1,dpdown:h0.4,", m),
+		"stick pairs");
+	fit_to_device(m, shape);
+	CHECK(m.buttons[B_CONTROLLER_BUTTON_DPAD_UP].type == SOURCE_NONE
+		&& m.axes[B_CONTROLLER_AXIS_LEFT_X].whole.type == SOURCE_AXIS,
+		"stick axes kept, no d-pad");
+
+	// A d-pad on buttons stays.
+	CHECK(parse_pairs("dpup:b11,dpdown:b12,", m), "button d-pad");
+	shape.hatCount = 1;
+	fit_to_device(m, shape);
+	CHECK(m.buttons[B_CONTROLLER_BUTTON_DPAD_UP].type == SOURCE_BUTTON,
+		"button d-pad kept");
+
+	// Fixed layouts. Sega Genesis on the M30's shape without a hat.
+	shape.hatCount = 0;
+	CHECK(fixed_layout(B_GAME_CONTROLLER_FAMILY_SEGA_GENESIS, shape, m),
+		"Sega layout");
+	CHECK(m.buttons[B_CONTROLLER_BUTTON_A].index == 0
+		&& m.buttons[B_CONTROLLER_BUTTON_X].index == 3
+		&& m.buttons[B_CONTROLLER_BUTTON_LEFT_SHOULDER].index == 8
+		&& m.buttons[B_CONTROLLER_BUTTON_RIGHT_SHOULDER].index == 6
+		&& is_half(m.buttons[B_CONTROLLER_BUTTON_DPAD_UP], 1, -1)
+		&& !mapping_has_axis(m, B_CONTROLLER_AXIS_LEFT_X), "Sega buttons");
+	CHECK(!fixed_layout(B_GAME_CONTROLLER_FAMILY_UNKNOWN, shape, m),
+		"no fixed layout for Unknown");
+
+	// PlayStation on the DualSense's axes (DirectInput order X Y Z Rx Ry
+	// Rz) and hat: the right stick on Z and Rz, the triggers on Rx and Ry.
+	static const uint16 kDualSense[6] = { 0x30, 0x31, 0x32, 0x33, 0x34, 0x35 };
+	memset(&shape, 0, sizeof(shape));
+	shape.axisCount = 6;
+	memcpy(shape.axisUsage, kDualSense, sizeof(kDualSense));
+	shape.hatCount = 1;
+	shape.buttonCount = 14;
+	CHECK(fixed_layout(B_GAME_CONTROLLER_FAMILY_PLAYSTATION, shape, m),
+		"PlayStation layout");
+	CHECK(m.buttons[B_CONTROLLER_BUTTON_A].index == 1
+		&& m.buttons[B_CONTROLLER_BUTTON_X].index == 0
+		&& m.axes[B_CONTROLLER_AXIS_RIGHT_X].whole.index == 2
+		&& m.axes[B_CONTROLLER_AXIS_RIGHT_Y].whole.index == 5
+		&& m.axes[B_CONTROLLER_AXIS_LEFT_TRIGGER].whole.index == 3
+		&& m.axes[B_CONTROLLER_AXIS_LEFT_TRIGGER].whole.type == SOURCE_AXIS
+		&& m.buttons[B_CONTROLLER_BUTTON_DPAD_DOWN].type == SOURCE_HAT
+		&& m.buttons[B_CONTROLLER_BUTTON_MISC1].type == SOURCE_NONE,
+		"PlayStation sources");
+
+	// A saved setup: written, read back, and its axes (the driver's
+	// order) put in DirectInput order.
+	char text[512];
+	CHECK(format_pairs(m, text, sizeof(text)), "format");
+	controller_mapping back;
+	CHECK(parse_pairs(text, back) && same_mapping(m, back), "round trip");
+	CHECK(!format_pairs(m, text, 20), "too small accepted");
+	CHECK(parse_pairs("leftx:a3,+righttrigger:a4~,", back), "saved axes");
+	int32 order[6] = { 0, 1, 2, 4, 5, 3 };
+	axes_to_order(back, order, 6);
+	CHECK(back.axes[B_CONTROLLER_AXIS_LEFT_X].whole.index == 5
+		&& back.axes[B_CONTROLLER_AXIS_RIGHT_TRIGGER].positive.index == 3
+		&& back.axes[B_CONTROLLER_AXIS_RIGHT_TRIGGER].positive.invert,
+		"driver order to DirectInput order");
+	CHECK(!parse_pairs("nonsense", back), "nonsense parses");
+
+	printf("gamecontroller_test: descriptor first ok\n");
+	return 0;
+}
+
+
 // #pragma mark - 2. the database
 
 
@@ -240,27 +420,83 @@ static const uint8 kPad[] = {
 	0xC0
 };
 
+// Synthetic pads in the 8BitDo M30's place (2dc8:0651; its own 86 bytes are
+// not in the boot log): X and Y, then either a hat (null state) and 16
+// buttons, or no hat and 12 buttons, as Bluetooth pads without sticks
+// report a d-pad one way or the other.
+static const uint8 kHatPad[] = {
+	0x05, 0x01, 0x09, 0x05, 0xA1, 0x01,
+	0x09, 0x30, 0x09, 0x31,
+	0x15, 0x00, 0x26, 0xFF, 0x00, 0x75, 0x08, 0x95, 0x02, 0x81, 0x02,
+	0x09, 0x39, 0x15, 0x00, 0x25, 0x07, 0x75, 0x04, 0x95, 0x01, 0x81, 0x42,
+	0x75, 0x04, 0x95, 0x01, 0x81, 0x03,
+	0x05, 0x09, 0x19, 0x01, 0x29, 0x10, 0x15, 0x00, 0x25, 0x01,
+	0x75, 0x01, 0x95, 0x10, 0x81, 0x02,
+	0xC0
+};
+
+static const uint8 kAxisPad[] = {
+	0x05, 0x01, 0x09, 0x05, 0xA1, 0x01,
+	0x09, 0x30, 0x09, 0x31,
+	0x15, 0x00, 0x26, 0xFF, 0x00, 0x75, 0x08, 0x95, 0x02, 0x81, 0x02,
+	0x05, 0x09, 0x19, 0x01, 0x29, 0x0C, 0x15, 0x00, 0x25, 0x01,
+	0x75, 0x01, 0x95, 0x0C, 0x81, 0x02,
+	0x75, 0x04, 0x95, 0x01, 0x81, 0x03,
+	0xC0
+};
+
+
+struct test_pad {
+	int32	id;
+	uint8	report[16];
+	uint32	length;
+};
+
 static int sControl = -1;
 static volatile bool sFeeding = true;
-static uint8 sReport[9];
-static int32 sPadID = -1;
+static test_pad sPads[3] = { { -1 }, { -1 }, { -1 } };
 // Not the name of --hold, which may run at the same time.
 static const char* const kTestName = "DualSense test controller";
 
 
 static void
-set_report(uint8 x, uint8 y, uint8 z, uint8 rz, uint8 hat, uint16 buttons,
-	uint8 rx, uint8 ry)
+set_report(test_pad& pad, uint8 x, uint8 y, uint8 z, uint8 rz, uint8 hat,
+	uint16 buttons, uint8 rx, uint8 ry)
 {
-	sReport[0] = x;
-	sReport[1] = y;
-	sReport[2] = z;
-	sReport[3] = rz;
-	sReport[4] = (hat & 0x0f) | (uint8)((buttons & 0x0f) << 4);
-	sReport[5] = (uint8)(buttons >> 4);
-	sReport[6] = (uint8)((buttons >> 12) & 0x03);
-	sReport[7] = rx;
-	sReport[8] = ry;
+	pad.report[0] = x;
+	pad.report[1] = y;
+	pad.report[2] = z;
+	pad.report[3] = rz;
+	pad.report[4] = (hat & 0x0f) | (uint8)((buttons & 0x0f) << 4);
+	pad.report[5] = (uint8)(buttons >> 4);
+	pad.report[6] = (uint8)((buttons >> 12) & 0x03);
+	pad.report[7] = rx;
+	pad.report[8] = ry;
+	pad.length = 9;
+}
+
+
+// hat: 0 up ... 7 up and left, 8 centered (the null state).
+static void
+set_hat_report(test_pad& pad, uint8 x, uint8 y, uint8 hat, uint16 buttons)
+{
+	pad.report[0] = x;
+	pad.report[1] = y;
+	pad.report[2] = hat & 0x0f;
+	pad.report[3] = (uint8)buttons;
+	pad.report[4] = (uint8)(buttons >> 8);
+	pad.length = 5;
+}
+
+
+static void
+set_axis_report(test_pad& pad, uint8 x, uint8 y, uint16 buttons)
+{
+	pad.report[0] = x;
+	pad.report[1] = y;
+	pad.report[2] = (uint8)buttons;
+	pad.report[3] = (uint8)((buttons >> 8) & 0x0f);
+	pad.length = 4;
 }
 
 
@@ -268,8 +504,13 @@ static status_t
 feed_thread(void*)
 {
 	while (sFeeding) {
-		r5_bthid_input input = { sPadID, sizeof(sReport), sReport };
-		ioctl(sControl, R5_BTHID_INPUT, &input, sizeof(input));
+		for (int i = 0; i < 3; i++) {
+			if (sPads[i].id < 0)
+				continue;
+			r5_bthid_input input = { sPads[i].id, sPads[i].length,
+				sPads[i].report };
+			ioctl(sControl, R5_BTHID_INPUT, &input, sizeof(input));
+		}
 		snooze(20000);
 	}
 	return B_OK;
@@ -277,20 +518,21 @@ feed_thread(void*)
 
 
 static int32
-create_pad(const char* name)
+create_pad(const char* name, const uint8* descriptor, uint32 length,
+	uint16 vendor, uint16 product)
 {
 	r5_bthid_create request;
 	memset(&request, 0, sizeof(request));
-	request.descriptor = kPad;
-	request.descriptor_length = sizeof(kPad);
+	request.descriptor = descriptor;
+	request.descriptor_length = length;
 	if (ioctl(sControl, R5_BTHID_CREATE, &request, sizeof(request)) != 0)
 		return -1;
 
 	r5_bthid_info info;
 	memset(&info, 0, sizeof(info));
 	info.id = request.id;
-	info.vendor_id = 0x054c;
-	info.product_id = 0x0ce6;
+	info.vendor_id = vendor;
+	info.product_id = product;
 	strlcpy(info.name, name, sizeof(info.name));
 	if (ioctl(sControl, R5_BTHID_SET_INFO, &info, sizeof(info)) != 0) {
 		ioctl(sControl, R5_BTHID_DESTROY, &request.id, sizeof(request.id));
@@ -300,8 +542,26 @@ create_pad(const char* name)
 }
 
 
+static int32
+create_pad(const char* name)
+{
+	return create_pad(name, kPad, sizeof(kPad), 0x054c, 0x0ce6);
+}
+
+
+static void
+destroy_pad(test_pad& pad)
+{
+	if (pad.id < 0)
+		return;
+	int32 id = pad.id;
+	pad.id = -1;
+	ioctl(sControl, R5_BTHID_DESTROY, &id, sizeof(id));
+}
+
+
 static bool
-find_pad(BString& device)
+find_pad(const char* wanted, BString& device)
 {
 	for (int i = 0; i < 40; i++) {
 		BGameController controller;
@@ -311,7 +571,7 @@ find_pad(BString& device)
 				|| strncmp(name, "bluetooth/", 10) != 0
 				|| controller.Open(name) != B_OK)
 				continue;
-			if (strcmp(controller.Name(), kTestName) == 0) {
+			if (strcmp(controller.Name(), wanted) == 0) {
 				device = name;
 				return true;
 			}
@@ -319,6 +579,157 @@ find_pad(BString& device)
 		snooze(50000);
 	}
 	return false;
+}
+
+
+static bool
+find_pad(BString& device)
+{
+	return find_pad(kTestName, device);
+}
+
+
+// Opens the pad called name and waits until condition() holds, at most
+// two seconds.
+static bool
+wait_for(const char* name, BGameController& controller,
+	bool (*condition)(BGameController&))
+{
+	BString device;
+	if (!find_pad(name, device) || controller.Open(device.String()) != B_OK)
+		return false;
+	for (int i = 0; i < 50; i++) {
+		snooze(40000);
+		if (controller.Update() == B_OK && condition(controller))
+			return true;
+	}
+	return false;
+}
+
+
+static bool
+up_and_a(BGameController& c)
+{
+	return c.IsButtonDown(B_CONTROLLER_BUTTON_DPAD_UP)
+		&& c.IsButtonDown(B_CONTROLLER_BUTTON_A);
+}
+
+
+static bool
+left_and_b(BGameController& c)
+{
+	return c.IsButtonDown(B_CONTROLLER_BUTTON_DPAD_LEFT)
+		&& c.IsButtonDown(B_CONTROLLER_BUTTON_B);
+}
+
+
+static bool
+saved_a_and_left(BGameController& c)
+{
+	return c.IsButtonDown(B_CONTROLLER_BUTTON_A)
+		&& c.IsButtonDown(B_CONTROLLER_BUTTON_DPAD_LEFT);
+}
+
+
+/*!	The two M30-like pads read through the database line for 2dc8:0651
+	(a d-pad on the hat, and one on X and Y), then a saved setup and a
+	chosen layout on a made-up model, removed again afterwards.
+*/
+static int
+test_m30_pads()
+{
+	// The hat at "up" (0), button usage 1 down: d-pad up and A.
+	set_hat_report(sPads[1], 0x80, 0x80, 0, 1 << 0);
+	sPads[1].id = create_pad("M30 hat test", kHatPad, sizeof(kHatPad),
+		0x2dc8, 0x0651);
+	// X at the left end, button usage 2 down: d-pad left and B.
+	set_axis_report(sPads[2], 0x00, 0x80, 1 << 1);
+	sPads[2].id = create_pad("M30 axes test", kAxisPad, sizeof(kAxisPad),
+		0x2dc8, 0x0651);
+	CHECK(sPads[1].id >= 0 && sPads[2].id >= 0, "create the M30 pads");
+
+	BGameController hat;
+	bool hatOk = wait_for("M30 hat test", hat, up_and_a);
+	printf("gamecontroller_test: M30 hat pad: %s mapping, family %d, "
+		"%" B_PRId32 " hats, up %d, A %d\n", hat.HasMapping() ? "a" : "no",
+		hat.Family(), hat.CountRawHats(),
+		hat.IsButtonDown(B_CONTROLLER_BUTTON_DPAD_UP),
+		hat.IsButtonDown(B_CONTROLLER_BUTTON_A));
+	CHECK(hatOk, "M30 hat pad: the hat is not d-pad up, or b0 not A");
+	CHECK(hat.Family() == B_GAME_CONTROLLER_FAMILY_SEGA_GENESIS,
+		"M30 hat pad: Sega shape");
+	hat.Close();
+
+	BGameController axes;
+	bool axesOk = wait_for("M30 axes test", axes, left_and_b);
+	printf("gamecontroller_test: M30 axes pad: %s mapping, %" B_PRId32
+		" hats, left %d, up %d, B %d\n", axes.HasMapping() ? "a" : "no",
+		axes.CountRawHats(), axes.IsButtonDown(B_CONTROLLER_BUTTON_DPAD_LEFT),
+		axes.IsButtonDown(B_CONTROLLER_BUTTON_DPAD_UP),
+		axes.IsButtonDown(B_CONTROLLER_BUTTON_B));
+	CHECK(axesOk, "M30 axes pad: X is not d-pad left, or b1 not B");
+	CHECK(!axes.IsButtonDown(B_CONTROLLER_BUTTON_DPAD_UP)
+		&& !axes.IsButtonDown(B_CONTROLLER_BUTTON_DPAD_DOWN),
+		"M30 axes pad: Y at rest pressed");
+	axes.Close();
+	destroy_pad(sPads[1]);
+	destroy_pad(sPads[2]);
+
+	// A made-up model with no database line: no mapping, then a saved
+	// setup, then a chosen layout under it, then the layout alone.
+	set_axis_report(sPads[2], 0x00, 0x80, 1 << 3);
+	sPads[2].id = create_pad("Setup test", kAxisPad, sizeof(kAxisPad),
+		0x1234, 0x5678);
+	CHECK(sPads[2].id >= 0, "create the setup pad");
+	BGameController::SetSavedMapping(0x1234, 0x5678, NULL);
+	BGameController::SetLayout(0x1234, 0x5678,
+		B_GAME_CONTROLLER_FAMILY_UNKNOWN);
+	BString device;
+	BGameController pad;
+	CHECK(find_pad("Setup test", device) && pad.Open(device.String()) == B_OK,
+		"open the setup pad");
+	CHECK(!pad.HasMapping() && !pad.HasSavedMapping(), "made-up mapping");
+	pad.Close();
+
+	CHECK(BGameController::SetSavedMapping(0x1234, 0x5678, "nonsense")
+		== B_BAD_VALUE, "nonsense saved");
+	CHECK(BGameController::SetSavedMapping(0x1234, 0x5678,
+		"a:b3,dpleft:-a0,dpright:+a0,") == B_OK, "save a setup");
+	char text[256];
+	CHECK(BGameController::GetSavedMapping(0x1234, 0x5678, text,
+		sizeof(text)) == B_OK && strcmp(text, "a:b3,dpleft:-a0,dpright:+a0,")
+		== 0, "read the setup back");
+	CHECK(BGameController::SetLayout(0x1234, 0x5678,
+		B_GAME_CONTROLLER_FAMILY_SEGA_GENESIS) == B_OK, "choose a layout");
+	CHECK(wait_for("Setup test", pad, saved_a_and_left),
+		"saved setup: b3 is not A, or X not d-pad left");
+	CHECK(pad.HasSavedMapping()
+		&& pad.Family() == B_GAME_CONTROLLER_FAMILY_SEGA_GENESIS,
+		"saved setup with the Sega shape");
+	pad.Close();
+
+	// Without the setup, the Sega layout: b3 is X.
+	BGameController::SetSavedMapping(0x1234, 0x5678, "");
+	CHECK(BGameController::GetSavedMapping(0x1234, 0x5678, text,
+		sizeof(text)) == B_ENTRY_NOT_FOUND, "setup removed");
+	CHECK(find_pad("Setup test", device) && pad.Open(device.String()) == B_OK,
+		"open the setup pad again");
+	bool x = false;
+	for (int i = 0; i < 50 && !x; i++) {
+		snooze(40000);
+		x = pad.Update() == B_OK && pad.IsButtonDown(B_CONTROLLER_BUTTON_X)
+			&& pad.IsButtonDown(B_CONTROLLER_BUTTON_DPAD_LEFT);
+	}
+	CHECK(x && pad.HasMapping() && !pad.HasSavedMapping(),
+		"Sega layout: b3 is not X, or X not d-pad left");
+	pad.Close();
+	BGameController::SetLayout(0x1234, 0x5678,
+		B_GAME_CONTROLLER_FAMILY_UNKNOWN);
+	CHECK(BGameController::LayoutFor(0x1234, 0x5678)
+		== B_GAME_CONTROLLER_FAMILY_UNKNOWN, "layout removed");
+	destroy_pad(sPads[2]);
+	printf("gamecontroller_test: M30 pads and the setup ok\n");
+	return 0;
 }
 
 
@@ -371,9 +782,9 @@ test_virtual_controller()
 
 	// Cross (button 2) down, the hat at "down" (HID 4), R2 (Ry) full, the
 	// right stick (Z) to the right; L2 (Rx) at rest.
-	set_report(0x80, 0x80, 0xff, 0x80, 4, 1 << 1, 0x00, 0xff);
-	sPadID = create_pad(kTestName);
-	CHECK(sPadID >= 0, "create the virtual controller");
+	set_report(sPads[0], 0x80, 0x80, 0xff, 0x80, 4, 1 << 1, 0x00, 0xff);
+	sPads[0].id = create_pad(kTestName);
+	CHECK(sPads[0].id >= 0, "create the virtual controller");
 	thread_id feeder = spawn_thread(feed_thread, "feed", B_NORMAL_PRIORITY,
 		NULL);
 	resume_thread(feeder);
@@ -469,10 +880,15 @@ test_virtual_controller()
 		receiver->Quit();
 	}
 
+	// The M30-like pads and a saved setup, while the feeder runs.
+	if (result == 0)
+		result = test_m30_pads();
+
 	sFeeding = false;
 	status_t status;
 	wait_for_thread(feeder, &status);
-	ioctl(sControl, R5_BTHID_DESTROY, &sPadID, sizeof(sPadID));
+	for (int i = 0; i < 3; i++)
+		destroy_pad(sPads[i]);
 	close(sControl);
 	sControl = -1;
 	if (result == 0)
@@ -488,9 +904,9 @@ hold(int seconds)
 	if (sControl < 0)
 		return fail("open the bluetooth_hid control node (uid 0?)");
 	// As the mockup: Cross down, L2 at 60 %, the left stick up and left.
-	set_report(0x40, 0x40, 0x80, 0x80, 8, 1 << 1, 153, 0x00);
-	sPadID = create_pad("DualSense Wireless Controller");
-	if (sPadID < 0)
+	set_report(sPads[0], 0x40, 0x40, 0x80, 0x80, 8, 1 << 1, 153, 0x00);
+	sPads[0].id = create_pad("DualSense Wireless Controller");
+	if (sPads[0].id < 0)
 		return fail("create the virtual controller");
 	printf("gamecontroller_test: holding a virtual controller for %d s\n",
 		seconds);
@@ -502,7 +918,7 @@ hold(int seconds)
 	sFeeding = false;
 	status_t status;
 	wait_for_thread(feeder, &status);
-	ioctl(sControl, R5_BTHID_DESTROY, &sPadID, sizeof(sPadID));
+	destroy_pad(sPads[0]);
 	close(sControl);
 	return 0;
 }
@@ -585,7 +1001,8 @@ main(int argc, char** argv)
 	if (argc == 3 && strcmp(argv[1], "--hold") == 0)
 		return hold(atoi(argv[2]));
 
-	if (test_parser() != 0 || test_database() != 0
+	if (test_parser() != 0 || test_descriptor_first() != 0
+		|| test_database() != 0
 		|| test_virtual_controller() != 0)
 		return 1;
 
