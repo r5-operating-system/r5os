@@ -546,6 +546,11 @@ MediaWindow::_InitMedia(bool first)
 	_UpdateListViewMinWidth();
 
 	_ShowDefaults();
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	fAudioView->RefreshUsbLayout();
+	// SPDX-SnippetEnd
 
 	if (first)
 		fListView->Select(fListView->IndexOf(mixer));
