@@ -1,6 +1,6 @@
 item	class	area	path	prio	run_status	pr	notes
 r5:login-1	A	Login	distro/login/LoginApp.cpp	1	pr	4368	LoginApp accepts logout/lock/login/halt/reboot from any team via BMessenger(Login)
-r5:login-2	A	Login	distro/login/LoginApp.cpp	1	todo		Logout only B_QUIT_REQUESTED and does not wait; prior-session apps can remain
+r5:login-2	A	Login	distro/login/LoginApp.cpp	1	pr	4377	Logout only B_QUIT_REQUESTED and does not wait; prior-session apps can remain
 r5:media-1	C	usb_audio	distro/media/src/add-ons/kernel/drivers/audio/usb/Stream.cpp	1	needs-hardware		_TransferCallback: failed _QueueNextTransfer leaves fIsRunning true and stalls the 1s timeout
 r5:media-3	C	hda	distro/media/src/add-ons/kernel/drivers/audio/hda/hda_controller.cpp	1	needs-hardware		DigEn path reads widget->capabilities with no NULL check after get_widget
 r5:media-4	B	hda	distro/media/src/add-ons/kernel/drivers/audio/hda/hda_codec.cpp	1	todo		hda_audio_group_get_widget uses start+count < nodeID so the last node is OOB
@@ -14,17 +14,18 @@ r5:login-5	A	Login	distro/login/R5Desktop.cpp	2	pr	4372	initgroups failure is lo
 r5:media-2	B	usb_webcam	distro/media/src/add-ons/media/media-add-ons/usb_webcam/addons/uvc/UVCCamDevice.cpp	2	todo		UVC error log always appends to /boot/home/uvc.log from uid 0; unbounded growth
 r5:media-7	C	usb_audio	distro/media/src/add-ons/kernel/drivers/audio/usb/Stream.cpp	2	needs-hardware		Stream::Start can leave a live ISO transfer with fIsRunning false if the second buffer queue fails
 r5:net-1	A	IPv6	distro/network/SLAACClient.cpp	2	pr	4375	_ApplyAdvert still AddDefaultRoute when RA Router Lifetime is 0
-r5:net-2	A	net_server	distro/rest/src/servers/net/NetServer.cpp	2	todo		resolv.conf rewrite from remembered nameservers drops an existing domain line
-r5:settings-3	A	Settings	distro/settings/DisplayModule.cpp	2	todo		During the 12s keep-picture dialog a mode menu change can become the boot default via Settle(true)
+r5:net-2	A	net_server	distro/rest/src/servers/net/NetServer.cpp	2	pr	4382	resolv.conf rewrite from remembered nameservers drops an existing domain line
+r5:settings-3	A	Settings	distro/settings/DisplayModule.cpp	2	pr	4378	During the 12s keep-picture dialog a mode menu change can become the boot default via Settle(true)
 r5:settings-4	A	Settings	distro/settings/DisplayModule.cpp	2	pr	4374	Window Revert while the keep dialog is up does not clear DisplayView::fConfirming
-r5:settings-5	A	Settings	distro/settings/SettingsWindow.cpp	2	todo		_DisableLocked only greys BControl; BScreenArrangement stays draggable when the lock is closed
-r5:settings-6	A	Settings	distro/settings/DeskbarModule.cpp	2	todo		DeskbarModule::_Apply commits each field as it succeeds; a later SetLocation failure leaves a half apply
-r5:zeroconf-1	A	zeroconf	distro/zeroconf/r5_mdns.c	2	todo		mdns_query never joins 224.0.0.251/ff02::fb; browse/getaddrinfo can miss replies
+r5:settings-5	A	Settings	distro/settings/SettingsWindow.cpp	2	pr	4379	_DisableLocked only greys BControl; BScreenArrangement stays draggable when the lock is closed
+r5:settings-6	A	Settings	distro/settings/DeskbarModule.cpp	2	pr	4380	DeskbarModule::_Apply commits each field as it succeeds; a later SetLocation failure leaves a half apply
+r5:settings-7	A	Settings	distro/settings/SettingsStorage.cpp	2	pr	4384	SettingsStorage::Write erases then Flatten; a short write can leave an empty page file
+r5:zeroconf-1	A	zeroconf	distro/zeroconf/r5_mdns.c	2	pr	4386	mdns_query never joins 224.0.0.251/ff02::fb; browse/getaddrinfo can miss replies
 r5:zeroconf-2	A	zeroconf	distro/zeroconf/r5_mdns.c	2	todo		IPv6 mDNS sendto(ff02::fb) leaves sin6_scope_id 0
-r5:zeroconf-3	A	zeroconf	distro/rest/src/system/libnetwork/netresolv/net/getaddrinfo.c	2	todo		After a .local mDNS miss getaddrinfo falls through to unicast DNS (RFC 6762)
+r5:zeroconf-3	A	zeroconf	distro/rest/src/system/libnetwork/netresolv/net/getaddrinfo.c	2	pr	4385	After a .local mDNS miss getaddrinfo falls through to unicast DNS (RFC 6762)
 r5:zeroconf-4	A	zeroconf	distro/zeroconf/r5_mdns.c	2	todo		browse_cb does not filter PTR/SRV/TXT by the requested type
-r5:zeroconf-5	A	zeroconf	distro/zeroconf/r5_mdns.c	2	todo		make_ai6 builds AAAA addrinfo with sin6_scope_id 0 so link-local results are unusable
-r5:login-6	A	Login	distro/login/SessionLog.h	3	todo		/tmp/r5-session.log is appended with fopen(a) and no chmod; session names are world-readable
+r5:zeroconf-5	A	zeroconf	distro/zeroconf/r5_mdns.c	2	pr	4387	make_ai6 builds AAAA addrinfo with sin6_scope_id 0 so link-local results are unusable
+r5:login-6	A	Login	distro/login/SessionLog.h	3	pr	4383	/tmp/r5-session.log is appended with fopen(a) and no chmod; session names are world-readable
 r5:media-5	A	Media	distro/media/src/preferences/media/MediaViews.cpp	3	todo		fHasUsbAudio is set only in the AudioSettingsView ctor; hotplug stays grey until reopen
 r5:zeroconf-6	A	AirPlay	distro/zeroconf/MdnsService.cpp	3	todo		mDNS advertises AirPlay features 0x5A7FFFF7,0x1E but /info returns 0x4A7FFFF7
 trac:7841	A	Tracker	distro/desktop/src/kits/tracker/Tracker.cpp	1	todo		Change icon for open folders in tracker spacial mode
