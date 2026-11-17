@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Settings: Display menus stay put during keep-picture
+
+Problem: during the 12-second keep-picture dialog the resolution menus still wrote `fSelected`. Keep then stored that later choice as the boot mode.
+
+What changed: those menus are ignored and disabled until the dialog ends. Workspace rows and columns still apply at once.
+
+Limits: no boot test of the 12-second dialog.
+
 ## 2026-11-17 - Login: leftover apps leave with the session
 
 Problem: Logout sent `B_QUIT_REQUESTED` to user apps and did not wait. Tracker and Deskbar were waited on; Terminal and other session apps could stay up on the Sign in screen.
@@ -7,6 +15,7 @@ Problem: Logout sent `B_QUIT_REQUESTED` to user apps and did not wait. Tracker a
 What changed: after that quit, Login waits three seconds, then `kill_team` on what is left, then one more second.
 
 Limits: servers, daemons, and `B_BACKGROUND_APP` teams are still kept. No boot test of Log out.
+
 
 Tested: the C++ was not compiled on this host (needs libbe).
 
