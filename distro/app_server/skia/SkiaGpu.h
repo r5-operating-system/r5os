@@ -44,6 +44,14 @@ public:
 			int32				Height() const { return fHeight; }
 	// skgpu::graphite::BackendTexture*
 			void*				Texture() const { return fTexture; }
+	// M13 step 4: the VkImage's own size. Width() and Height() are the
+	// window's size, which the compositor reads and samples from pixel
+	// (0, 0); after a resize the VkImage may be larger, by up to two
+	// 64-pixel steps (SkiaGpu::NewImage(), SkiaGpu::ShareImage()).
+			int32				AllocatedWidth() const
+									{ return fAllocatedWidth; }
+			int32				AllocatedHeight() const
+									{ return fAllocatedHeight; }
 
 protected:
 	virtual						~SkiaImage();
@@ -60,6 +68,12 @@ private:
 			void*				fTexture;
 			// the Skia device this image was made on (KeepImageMemory)
 			int32				fGeneration;
+			// M13 step 4: the size of the VkImage, and the image whose
+			// VkImage, view and texture this one shows at another window
+			// size (NULL: this one owns them)
+			int32				fAllocatedWidth;
+			int32				fAllocatedHeight;
+			SkiaImage*			fBacking;
 };
 
 
@@ -121,6 +135,8 @@ public:
 	// bytes in memory (offscreen bitmaps, r5-draw-compare) still wait for
 	// the GPU and get a read-back. False with a reason on a lost device, a
 	// failed insert or submit, or the forced failure (gpu_draw_fail).
+	// M13 step 4: the wait for the run's fence is without fLock, so new
+	// recorders and targets do not wait for the GPU.
 			bool				RunWork(const char** _reason);
 
 	// Any thread that holds no recorder lock and not the compose slot:
@@ -134,6 +150,12 @@ public:
 	// GPU objects and waiters are released. Before the device goes.
 			void				Shutdown();
 			bool				IsShutDown() const { return fShutDown; }
+	// M13 step 4: the device is a CPU (Lavapipe); a run that drew a
+	// window has finished (the warm-up waits for that on Lavapipe).
+			bool				OnCpu() const { return fOnCpu; }
+			bool				WindowRunDone()
+									{ return atomic_get(&fWindowRunDone)
+										!= 0; }
 	// Shutdown(), then the Graphite context and its allocator go; before
 	// the Vulkan device is destroyed. The object itself stays, so engines
 	// of windows that close later can still remove their targets.
@@ -177,6 +199,17 @@ public:
 	// M13 step 2: a new window image, under the target's lock; NULL when
 	// it cannot be made. Its contents are undefined until drawn.
 			SkiaImage*			NewImage(int32 width, int32 height);
+	// M13 step 4: the same on a VkImage of allocatedWidth by
+	// allocatedHeight (at least width by height), for a window that is
+	// being resized.
+			SkiaImage*			NewImage(int32 width, int32 height,
+									int32 allocatedWidth,
+									int32 allocatedHeight);
+	// M13 step 4: an image of width by height on the VkImage of backing
+	// (no new Vulkan object), or NULL when that size does not fit. It
+	// keeps a reference to the image that owns the VkImage.
+			SkiaImage*			ShareImage(SkiaImage* backing, int32 width,
+									int32 height);
 	// A GPU that does not finish (M11 "compose fence still busy"): no
 	// image is freed from now on, its memory stays.
 	static	void				KeepImageMemory();
@@ -200,6 +233,14 @@ private:
 			BLocker				fLock;
 				// taken before any recorder lock, never after
 			BObjectList<SkiaTarget, false> fTargets;
+			// M13 step 4, under fLock: the items of the run whose fence
+			// RunWork() waits for without fLock (its WorkItem list), NULL
+			// otherwise; RemoveTarget() and Shutdown() let go of their
+			// targets in it. fWaitingUnlocked: that wait is going on.
+			void*				fInFlight;
+			bool				fWaitingUnlocked;
+			bool				fOnCpu;
+			int32				fWindowRunDone;
 			void*				fContext;
 			void*				fBackend;
 			bool				fForceFail;

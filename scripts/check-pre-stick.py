@@ -240,8 +240,8 @@ M13_LINES = (
 M13_BASE = ["gpu_draw true", "gpu_debug true", "gpu_selftest true"]
 M13_BOOTS = {
     "1": M13_BASE + ["gpu_m13_boot 1"],
-    "2": M13_BASE + ["gpu_compositor_scanout true", "gfx9_wc_gtt true",
-                     "gpu_m13_boot 2"],
+    "2": M13_BASE + ["gpu_app_server true", "gpu_compositor_scanout true",
+                     "gfx9_wc_gtt true", "gpu_m13_boot 2"],
     "3": M13_BASE + ["gpu_compositor_lavapipe true", "gpu_lavapipe_vector 128",
                      "gpu_m13_boot 3"],
     "done": None,

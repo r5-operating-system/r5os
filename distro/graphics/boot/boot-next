@@ -39,7 +39,8 @@
 # settings file. Every boot has gpu_draw, gpu_debug and gpu_selftest true.
 # Boot 1 is Skia on RADV with every other switch at its default (step 2 on
 # RADV, #4324), boot 2 adds the step 3 hardware switches
-# (gpu_compositor_scanout, gfx9_wc_gtt), boot 3 is Skia on Lavapipe with a
+# (gpu_compositor_scanout, gfx9_wc_gtt) and gpu_app_server, which scanout
+# needs for a back buffer on the GPU; boot 3 is Skia on Lavapipe with a
 # 128-bit vector width. The note is ~/m13/next. gpu_m13_boot is only the
 # marker; nothing reads it but check and this script.
 #
@@ -186,6 +187,7 @@ if [ "$stick" = m13 ]; then
 	1) lines="$m13
 gpu_m13_boot 1" ;;
 	2) lines="$m13
+gpu_app_server true
 gpu_compositor_scanout true
 gfx9_wc_gtt true
 gpu_m13_boot 2" ;;

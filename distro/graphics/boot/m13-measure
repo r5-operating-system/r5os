@@ -9,7 +9,9 @@
 #   m13-measure [dir]          three motions of 30 s each (drag, scroll,
 #                              resize), done by hand or driven from QEMU,
 #                              then the numbers. Files go to dir (default
-#                              ~/m13/<date>-<time>).
+#                              ~/m13/boot<k>/measure when the settings have
+#                              the M13 marker gpu_m13_boot <k>, where check
+#                              looks; else ~/m13/<date>-<time>).
 #   m13-measure numbers <dir>  only the numbers, from <dir>/scenario.txt and
 #                              <dir>/syslog.txt; runs on Linux too, for
 #                              the logs of a stick.
@@ -18,8 +20,15 @@
 # than 400 ms apart), from a mouse move to the frame that answers it
 # (input latency; the wheel moves no cursor, so scroll has none), the
 # compose median and the draw median. Once: the warm-up of the drawing.
-# Targets: at most 16.7 ms per frame on RADV; on Lavapipe about 8 ms per
-# full frame (the compose median is any damage, not only full frames).
+# A 10 s window counts only with at least 20 frames (or 20 moves for the
+# input): one cursor move kept for up to 400 ms and answered by the next
+# scroll repaint is not an input latency.
+# Targets, against the refresh period P from the syslog (16667 us when
+# not seen): frame median <= 1.02 P; p95 <= 1.5 P for drag and resize.
+# The frame count is shown, not judged: the compositor makes no frame
+# while the mouse pauses inside the motion (stick 4: 487 to 565 frames in
+# the window with a 16.7 ms median). On Lavapipe about 8 ms per full
+# frame (the compose median is any damage, not only full frames).
 #
 # Each step start is also written to /dev/dprintf (the serial port), so a
 # QEMU driver on the host can follow the steps.
@@ -89,7 +98,9 @@ numbers() {
 			off = v
 		if ((v = after("app_server: gpu draw warm up ")) != "") {
 			split(v, w, " ")
-			warm = w[1]
+			# not the "after N ms (lavapipe)" or "status" lines
+			if (w[1] ~ /^[0-9]+$/)
+				warm = w[1]
 		}
 		if ((v = after(", period ")) != "") {
 			split(v, w, " ")
@@ -100,14 +111,19 @@ numbers() {
 			next
 		if ((v = after("app_server: frame interval median ")) != "") {
 			split(v, w, " ")
-			worst(fmed, k, w[1])
-			worst(fp95, k, w[4])
 			frames[k] += w[7]
+			# a window with a few frames says nothing about the motion
+			if (w[7] + 0 >= 20) {
+				worst(fmed, k, w[1])
+				worst(fp95, k, w[4])
+			}
 		} else if ((v = after("app_server: input latency median ")) != "") {
 			split(v, w, " ")
-			worst(imed, k, w[1])
-			worst(ip95, k, w[4])
 			moves[k] += w[7]
+			if (w[7] + 0 >= 20) {
+				worst(imed, k, w[1])
+				worst(ip95, k, w[4])
+			}
 		} else if ((v = after("app_server: compose median ")) != "") {
 			split(v, w, " ")
 			worst(cmed, k, w[1])
@@ -141,7 +157,9 @@ numbers() {
 					", " frames[k] " frames)"
 			else
 				line = line " frame none"
-			if (k in imed)
+			if (name[k] == "scroll")
+				line = line "  input -"
+			else if (k in imed)
 				line = line "  input " ms(imed[k]) " (p95 " ms(ip95[k]) ")"
 			else
 				line = line "  input none"
@@ -152,13 +170,21 @@ numbers() {
 				line = line "  compose late x" late[k]
 			print line
 		}
+		p = (period != "" ? period + 0 : 16667)
 		for (k = 1; k <= n; k++) {
+			why = ""
+			if (k in fmed) {
+				if (fmed[k] + 0 > 1.02 * p)
+					why = why ", median " ms(fmed[k])
+				if (name[k] != "scroll" && fp95[k] + 0 > 1.5 * p)
+					why = why ", p95 " ms(fp95[k])
+			}
 			if (!(k in fmed))
-				fr = fr " " name[k] " no frames;"
-			else if (fmed[k] <= 16700)
-				fr = fr " " name[k] " met;"
+				fr = fr " " name[k] " no window of 20 frames;"
+			else if (why != "")
+				fr = fr " " name[k] " not met (" substr(why, 3) ");"
 			else
-				fr = fr " " name[k] " not met (" ms(fmed[k]) ");"
+				fr = fr " " name[k] " met;"
 			if (!(k in cmed))
 				co = co " " name[k] " none;"
 			else if (cmed[k] <= 8000)
@@ -166,8 +192,9 @@ numbers() {
 			else
 				co = co " " name[k] " not met (" ms(cmed[k]) ");"
 		}
-		print "m13-measure: target frame <= 16.7 ms" \
-			(radv ? " (RADV):" : ":") fr
+		print "m13-measure: target frame median <= " ms(1.02 * p) \
+			" ms, p95 <= " ms(1.5 * p) \
+			" ms (drag, resize)" (radv ? " (RADV):" : ":") fr
 		if (!radv)
 			print "m13-measure: target compose <= 8 ms (Lavapipe):" co
 	}
@@ -179,7 +206,25 @@ if [ "${1:-}" = numbers ]; then
 	exit $?
 fi
 
-dir=${1:-$HOME/m13/$(date +%Y%m%d-%H%M%S)}
+# On the M13 stick (the marker boot-next writes): ~/m13/boot<k>/measure,
+# where check looks. Otherwise a folder per run.
+home=${R5_HOME:-$(finddir B_USER_DIRECTORY 2> /dev/null || echo "$HOME")}
+radeon=${R5_USER_SETTINGS:-$(finddir B_USER_SETTINGS_DIRECTORY 2> /dev/null \
+	|| echo "$home/config/settings")}/kernel/drivers/radeon_hd
+if [ ! -f "$radeon" ]; then
+	radeon=${R5_SYSTEM_SETTINGS:-$(finddir B_SYSTEM_SETTINGS_DIRECTORY \
+		2> /dev/null || echo /boot/system/settings)}/kernel/drivers/radeon_hd
+fi
+boot=
+if [ -f "$radeon" ]; then
+	boot=$(sed -n 's/^gpu_m13_boot[[:space:]]*\([123]\).*/\1/p' "$radeon" \
+		| head -n 1)
+fi
+if [ -n "$boot" ]; then
+	dir=${1:-$home/m13/boot$boot/measure}
+else
+	dir=${1:-$home/m13/$(date +%Y%m%d-%H%M%S)}
+fi
 mkdir -p "$dir"
 log=$dir/scenario.txt
 : > "$log"
@@ -219,7 +264,7 @@ say "start $(date +%T)"
 # numbers are not the motion's. Wait for the warm-up line, at most 120 s.
 if grep -q 'app_server: gpu draw on' "$syslog"; then
 	n=0
-	while [ "$n" -lt 120 ] && ! grep -q 'app_server: gpu draw warm up' "$syslog"
+	while [ "$n" -lt 120 ] && ! grep -Eq 'app_server: gpu draw warm up [0-9]+ ms' "$syslog"
 	do
 		sleep 2
 		n=$((n + 2))

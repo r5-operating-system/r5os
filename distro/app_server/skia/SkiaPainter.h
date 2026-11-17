@@ -67,6 +67,8 @@ public:
 	// Under the lock. A new size makes a new image: the pixels of the
 	// old one that overlap on screen are copied on the GPU, the rest is
 	// set from initialBits (the buffer's current bytes, may be NULL).
+	// M13 step 4: a window's new size that fits in its VkImage keeps that
+	// VkImage and the surface, with a new SkiaImage of the new size.
 			bool				SetSurface(int32 width, int32 height,
 									int32 left, int32 top,
 									const uint8* initialBits,

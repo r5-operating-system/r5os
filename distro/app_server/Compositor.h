@@ -214,6 +214,10 @@ private:
 									const LayerList& layers,
 									const BRegion& generic);
 			bool				_EnsureShadowMask(Layer* layer);
+			// M13 step 4
+			bool				_StretchShadowMask(Layer* layer,
+										const BRegion& local);
+			bool				_ShadowSettleDamage(bigtime_t now);
 			bool				_EnsureGlassCache(Layer* layer,
 									const BRegion& glass);
 			bool				_EnsureScratch();
@@ -322,6 +326,14 @@ private:
 
 			bigtime_t			fPeriod;
 			bigtime_t			fLastCompose;
+			// M13 step 4: the frames keep to a grid of fGridPeriod from
+			// fGridEpoch; fGridSlot is the last slot that composed
+			bigtime_t			fGridEpoch;
+			bigtime_t			fGridPeriod;
+			int64				fGridSlot;
+			// M13 step 4: when the first stretched shadow mask is blurred
+			// again, or 0 (compose thread)
+			bigtime_t			fShadowDue;
 			uint32				fFrameWidth;
 			uint32				fFrameHeight;
 			uint32*				fScratch;
