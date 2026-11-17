@@ -65,11 +65,15 @@ if [ -n "$SETTINGS_PAGE" ]; then
 		page="$page(sleep $((BT_TEST_BUTTONS - 30)); /bin/hey Settings 'btvT' of View 'bluetooth' of Window 0 >> /boot/home/bt-hey.log 2>&1) & "
 	fi
 	# PAGE_SCROLL=<s>: that many seconds after Settings opened, move the
-	# Sign in window off the page and scroll the page to its end (a mouse
-	# wheel message to the page scrollbar), so a screendump shows the groups
-	# below the fold. Use with BT_WINDOW="1030 610".
+	# Sign in window off the page and scroll the page to its end, so a
+	# screendump shows the groups below the fold. A wheel message sent with
+	# hey goes to the view under the mouse, not to the scrollbar; so the
+	# page scrollbar gets B_VALUE_CHANGED with a value past its end (it keeps
+	# its maximum), and two window resizes lay the page out at that value.
+	# The window ends at BT_WINDOW (default 1030 by 610) at 20,40.
 	if [ -n "${PAGE_SCROLL:-}" ]; then
-		page="$page(sleep $((PAGE_SCROLL - 30)); /bin/hey Login set Frame of Window 'Sign in' to 'BRect(1070,670,1510,1090)' >> /boot/home/bt-hey.log 2>&1; /bin/hey Settings '_MWC' of View 'page-bar' of Window 0 with 'be:wheel_delta_y=float(40)' >> /boot/home/bt-hey.log 2>&1) & "
+		set -- ${BT_WINDOW:-1030 610}
+		page="$page(sleep $((PAGE_SCROLL - 30)); /bin/hey Login set Frame of Window 'Sign in' to 'BRect(1070,670,1510,1090)' >> /boot/home/bt-hey.log 2>&1; /bin/hey Settings '_VCH' of View 'page-bar' of Window 0 with 'value=int32(100000)' >> /boot/home/bt-hey.log 2>&1; /bin/hey Settings set Frame of Window 0 to 'BRect(20,40,$((19 + $1)),$((39 + $2)))' >> /boot/home/bt-hey.log 2>&1; /bin/hey Settings set Frame of Window 0 to 'BRect(20,40,$((20 + $1)),$((40 + $2)))' >> /boot/home/bt-hey.log 2>&1) & "
 	fi
 fi
 # DESKBAR=1 (step 3b) starts Deskbar and then bluetooth_deskbar, which adds
