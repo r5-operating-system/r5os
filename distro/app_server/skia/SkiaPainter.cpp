@@ -2117,6 +2117,10 @@ SkiaPainter::CopyRegion(const BRegion& region, int32 xOffset, int32 yOffset,
 //	#pragma mark - bitmaps
 
 
+// M13, option E: defined with the gradients below
+static sk_sp<SkRuntimeEffect> bitmap_over_effect();
+
+
 /*!	Painter::DrawBitmap() and Painter::BitmapPainter: the same colour-space
 	conversion on the CPU (BitmapPainter::_ConvertColorSpace(), it is data,
 	not drawing), one upload, and the drawing on the GPU with the variant
