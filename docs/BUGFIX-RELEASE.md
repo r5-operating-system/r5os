@@ -6,9 +6,9 @@ This is the plan for a bug-fix release of R5 Operating System, after M13, Blueto
 2. Bugs in R5's own code.
 3. Haiku coding style, and speed in the code where a measurement shows a gain.
 
-The work is done in runs that go without supervision. One agent takes ticket after ticket from a queue, opens one pull request per ticket, and stops on its own. The owner reviews and merges afterwards.
+The work is done in runs that go without supervision. One agent takes items from a queue, opens pull requests, and stops on its own. The owner reviews and merges afterwards.
 
-Written 17 Nov 2026. Nothing in this document is built yet.
+Written 17 Nov 2026. Bundling (section 6) decided the same day, after two one-item trials: sequential merges fought over `CHANGELOG.md`, and two mDNS items in `r5_mdns.c` conflicted.
 
 ## 1. What is there to start from
 
@@ -146,10 +146,10 @@ Read `AGENTS.md` first and follow it, then this document. Work in your own workt
 
 The loop:
 
-1. Take the first `todo` line in `tracker/bugfix-queue.tsv` with class A or B, the highest priority first. Set it to `working`.
-2. Read the code and check that the bug still exists.
-   - If it does not: set `not-applicable` (or `fixed`) with the reason, and go to 1.
-3. Make a branch from `origin/main`: `claude/fix-<item>`. Make the smallest fix, following section 2.
+1. Take the first `todo` line in `tracker/bugfix-queue.tsv` with class A or B, the highest priority first. Look at the next `todo` lines of the same class. Bundle them into this PR when they share a file, a function, or one user-visible behaviour. Do not bundle class A with B or C, Settings UI with LAN/zeroconf, or two unrelated crashes. Set each taken line to `working`.
+2. Read the code and check that each bug still exists.
+   - If it does not: set `not-applicable` (or `fixed`) with the reason. Drop it from the bundle. If none remain, go to 1.
+3. Make a branch from `origin/main`: `claude/fix-<item>` for one item, or `claude/fix-<first-item>` when several share a PR (example: `claude/fix-r5-zeroconf-2` for `zeroconf-2` and `zeroconf-4`). Make the smallest fix, following section 2.
    - Add a test where one can be written: a host test, a fuzz target, or a check in an existing test.
    - No drive-by refactor, no reformat.
 4. Prove it:
@@ -157,11 +157,11 @@ The loop:
    - class B: also one QEMU boot with SMAP on, on its own copy of the image, and a hand review of every user copy (`user_memcpy()`).
    - Fuzz targets: 60 s each.
 5. If it passes:
-   - add a `CHANGELOG.md` line (problem, change, ticket, limits, how it was tested);
+   - add a `CHANGELOG.md` section (problem, change, ticket, limits, how it was tested). One section when the user sees one change; one section per item when they do not;
    - push by explicit ref; open one PR to `main`, titled "Area - what the user gets", with Changed / Tested / Not proven / Documentation;
    - write a comment on the GitHub issue (build, limits, how it was tested), and leave the issue open until the merge;
-   - set `run_status` to `pr`.
-6. If it does not pass within **45 minutes**, or the fix touches a class X area:
+   - set `run_status` to `pr` on every item in the bundle, same PR number.
+6. If it does not pass within **45 minutes per item** in the bundle, or the fix touches a class X area:
    - `parked` or `needs-owner`, with what was found;
    - discard the branch, and go to 1.
 7. Every 10 items, and at the end: commit the queue file in its own PR `Tracker - bug-fix run <date>: queue status`.
@@ -169,7 +169,7 @@ The loop:
 Never:
 - change a file in a class X area (section 3): app_server, GPU, Bluetooth, Wi-Fi, the Game Kit and controllers, and the areas the owner keeps. This also holds when a fix elsewhere would need it; the item then becomes `needs-owner`;
 - merge, write a stick, or change `distro/VERSION`, `distro/BUILD` or `distro/WHATSNEW`;
-- stack PRs; each fix starts from `origin/main`;
+- stack PRs; each PR starts from `origin/main`;
 - turn off a check, a test or SMAP to make something pass;
 - claim a test that did not run.
 
@@ -187,5 +187,5 @@ The owner cannot read 15 PRs line by line after every run. After each run, one r
 ## 8. Open choices for the owner
 
 1. **Runs in Cursor or in Claude sessions.** Whether Cursor keeps one agent going for six hours depends on Cursor's own limits, which this plan does not know. The queue makes a run resumable either way: a new run simply takes the next `todo` line.
-2. **One PR per ticket, or small batches per component.** Recommendation: one per ticket. A bad fix then blocks nothing else, and a review stays small.
+2. **One PR per ticket, or small batches per component.** Decided 17 Nov 2026: bundle when they share a file, a function, or one user-visible behaviour (section 6). One item still gets its own PR when it does not. A review stays one area. Do not go back and squash PRs that already landed.
 3. **When phase 0 runs.** It is read-only and can run before M13, Bluetooth plan 2 and Wi-Fi 6 are finished. Recommendation: run it then, so the queue is ready when the release starts.

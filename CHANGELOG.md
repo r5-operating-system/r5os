@@ -14,6 +14,26 @@ Tested: AMD64 `scripts/build-locked.sh`, `jam_exit=0`; after the apply the tree'
 
 Limits: Haiku upstream was not checked for the same fix. The Sign in window covers the middle of the Display screendump, so the screen picture was not seen; the Deskbar and other apps were not looked at with this change, and not on real hardware. ARM64 and RISC-V 64 were not built.
 
+## 2026-11-17 - Network: mDNS browse keeps only the requested type
+
+Problem: `browse_cb` took every PTR, SRV and TXT in the packet. A browse for `_ipp._tcp` could pick up AirPlay or other services from additional records.
+
+What changed: PTR, SRV and TXT are ignored unless the name matches the requested type (with or without `.local`). A records are still matched by host.
+
+Limits: QEMU usernet is not multicast. Needs a LAN.
+
+Tested: the C++ was not compiled on this host (needs libbe).
+
+## 2026-11-17 - Network: IPv6 mDNS sends on a real interface
+
+Problem: `sendto` of ff02::fb used `sin6_scope_id` 0, so the packet often never left the host.
+
+What changed: the send and the IPv6 join use the same interface as link-local AAAA results (`mdns_link_scope()`), and `IPV6_MULTICAST_IF` is set when that index is known.
+
+Limits: several such interfaces pick the first. QEMU usernet is not multicast.
+
+Tested: the C++ was not compiled on this host (needs libbe).
+
 ## 2026-11-17 - Network: link-local mDNS results carry a scope
 
 Problem: AAAA answers from mDNS were returned with `sin6_scope_id` 0, so a link-local address could not be used.

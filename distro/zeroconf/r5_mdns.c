@@ -79,7 +79,7 @@ join_mdns4(int sock)
 
 
 static void
-join_mdns6(int sock)
+join_mdns6(int sock, uint32_t scope)
 {
 	struct ipv6_mreq mreq;
 	int reuse = 1;
@@ -88,8 +88,11 @@ join_mdns6(int sock)
 	memset(&mreq, 0, sizeof(mreq));
 	if (inet_pton(AF_INET6, MDNS_ADDR6, &mreq.ipv6mr_multiaddr) != 1)
 		return;
-	mreq.ipv6mr_interface = 0;
+	mreq.ipv6mr_interface = scope;
 	setsockopt(sock, IPPROTO_IPV6, IPV6_JOIN_GROUP, &mreq, sizeof(mreq));
+	if (scope != 0)
+		setsockopt(sock, IPPROTO_IPV6, IPV6_MULTICAST_IF, &scope,
+			sizeof(scope));
 }
 
 
@@ -303,13 +306,15 @@ mdns_query(const char* name, uint16_t type, uint8_t* replies, size_t replyCap,
 	if (sock6 >= 0) {
 		struct sockaddr_in6 dest6;
 		int only = 1;
+		uint32_t scope = mdns_link_scope();
 		memset(&dest6, 0, sizeof(dest6));
 		dest6.sin6_len = sizeof(dest6);
 		dest6.sin6_family = AF_INET6;
 		dest6.sin6_port = htons(MDNS_PORT);
+		dest6.sin6_scope_id = scope;
 		inet_pton(AF_INET6, MDNS_ADDR6, &dest6.sin6_addr);
 		setsockopt(sock6, IPPROTO_IPV6, IPV6_V6ONLY, &only, sizeof(only));
-		join_mdns6(sock6);
+		join_mdns6(sock6, scope);
 		sendto(sock6, query, qlen, 0, (struct sockaddr*)&dest6, sizeof(dest6));
 	}
 
@@ -665,6 +670,39 @@ instance_from_ptr(const char* fqdn, char* name, size_t nameCap, char* type,
 }
 
 
+static void
+strip_local_suffix(char* name)
+{
+	size_t n;
+
+	if (name == NULL)
+		return;
+	n = strlen(name);
+	while (n > 0 && name[n - 1] == '.')
+		name[--n] = '\0';
+	if (n >= 6 && strcasecmp(name + n - 6, ".local") == 0)
+		name[n - 6] = '\0';
+}
+
+
+static int
+service_type_ok(const char* got, const char* want)
+{
+	char a[256];
+	char b[256];
+
+	if (want == NULL || want[0] == '\0')
+		return 1;
+	if (got == NULL || got[0] == '\0')
+		return 0;
+	strlcpy(a, got, sizeof(a));
+	strlcpy(b, want, sizeof(b));
+	strip_local_suffix(a);
+	strip_local_suffix(b);
+	return strcasecmp(a, b) == 0;
+}
+
+
 static r5_mdns_service*
 find_or_add(struct browse_state* st, const char* instance)
 {
@@ -700,6 +738,8 @@ browse_cb(const uint8_t* msg, size_t len, size_t nameOff, uint16_t type,
 
 	if (type == DNS_TYPE_PTR) {
 		char target[256];
+		if (!service_type_ok(owner, st->wantType))
+			return 0;
 		if (decode_dns_name(msg, len, (size_t)(rdata - msg), target,
 				sizeof(target)) != 0)
 			return 0;
@@ -708,7 +748,13 @@ browse_cb(const uint8_t* msg, size_t len, size_t nameOff, uint16_t type,
 	}
 
 	if (type == DNS_TYPE_SRV && rdlength >= 6) {
+		char name[64];
+		char svcType[64];
 		char target[256];
+		instance_from_ptr(owner, name, sizeof(name), svcType, sizeof(svcType));
+		(void)name;
+		if (!service_type_ok(svcType, st->wantType))
+			return 0;
 		svc = find_or_add(st, owner);
 		if (svc == NULL)
 			return 0;
@@ -720,7 +766,13 @@ browse_cb(const uint8_t* msg, size_t len, size_t nameOff, uint16_t type,
 	}
 
 	if (type == DNS_TYPE_TXT) {
+		char name[64];
+		char svcType[64];
 		char rp[128];
+		instance_from_ptr(owner, name, sizeof(name), svcType, sizeof(svcType));
+		(void)name;
+		if (!service_type_ok(svcType, st->wantType))
+			return 0;
 		svc = find_or_add(st, owner);
 		if (svc == NULL)
 			return 0;
