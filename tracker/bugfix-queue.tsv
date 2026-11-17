@@ -756,11 +756,11 @@ trac:18301	A	runtime_loader	distro/rest/src/system/runtime_loader/runtime_loader
 trac:3576	A	runtime_loader	distro/rest/src/system/runtime_loader/runtime_loader.cpp	3	todo		runtime_loader : display which file triggered R5 compatibility mode in syslog
 trac:8520	A	runtime_loader	distro/rest/src/system/runtime_loader/runtime_loader.cpp	3	todo		runtime loader should check elf headers for things like architecture.
 trac:13294	A	runtime_loader	distro/rest/src/system/runtime_loader/runtime_loader.cpp	3	todo		Static TLS model is not supported
-trac:6846	A	Deskbar	distro/desktop/src/apps/deskbar/DeskbarMenu.cpp	1	todo		[Deskbar] crashed in BView::Window while closing apps using VDG
-trac:8166	A	Deskbar	distro/desktop/src/apps/deskbar/DeskbarMenu.cpp	1	todo		Deskbar crashes when a replicant wider than 129px is being added to it in vertical mode
-trac:11510	A	Deskbar	distro/desktop/src/apps/deskbar/DeskbarMenu.cpp	1	todo		[Deskbar] crashes in BMenuItem::Frame(BMenuItem)
-trac:11511	A	Deskbar	distro/desktop/src/apps/deskbar/DeskbarMenu.cpp	1	todo		[Deskbar] crashes in BMenu::_SetStickyMode
-trac:14026	A	Deskbar	distro/desktop/src/apps/deskbar/DeskbarMenu.cpp	1	todo		Deskbar crash
+trac:6846	A	Deskbar	distro/desktop/src/apps/deskbar/ExpandoMenuBar.cpp	1	pr	4416	Window watcher locks the window only when the menu is still attached
+trac:8166	A	Deskbar	distro/desktop/src/apps/deskbar/StatusView.cpp	1	parked		LocationForReplicant already stops on an empty row; a crash on a wide replicant was not found
+trac:11510	A	Deskbar	distro/desktop/src/kits/interface/MenuItem.cpp	1	parked		BMenuItem::Frame only returns fBounds; the crash is a deleted item, not found here
+trac:11511	A	Deskbar	distro/desktop/src/kits/interface/Menu.cpp	1	parked		_SetStickyMode already checks fSuper; a dangling menu was not found
+trac:14026	A	Deskbar	distro/desktop/src/apps/deskbar/DeskbarMenu.cpp	1	parked		No stack on this Deskbar crash
 trac:15883	A	Deskbar	distro/desktop/src/apps/deskbar/DeskbarMenu.cpp	1	todo		Tray overflow is possible in Mini Mode
 trac:4062	A	Deskbar	distro/desktop/src/apps/deskbar/DeskbarMenu.cpp	2	todo		Switcher does not always switch workspaces when a Tracker window is selected in the list
 trac:5583	A	Deskbar	distro/desktop/src/apps/deskbar/DeskbarMenu.cpp	2	todo		[Deskbar] stops responding when you right click some replicants

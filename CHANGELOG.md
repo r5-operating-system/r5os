@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Deskbar: the window watcher no longer calls a missing window
+
+Problem: the thread that watches open windows called `Window()->LockWithTimeout()` on the team menu. While the Deskbar is closing, that menu is already detached, so `Window()` is NULL and the call crashed (Haiku #6846).
+
+Changed: the watcher locks the window only when there is one.
+
+Limits: a replicant wider than 129 px (#8166) already stops on an empty row instead of looping. #11510, #11511 and #14026 have no crash site in the current menu code. Not jammed and not booted.
+
 ## 2026-11-17 - Tracker: unmounting a volume no longer deadlocks the space bar
 
 Problem: the pulse that redraws a volume space bar held its list lock and then locked the window. Unmount runs on that window and takes the same list lock from the pose destructor. Each side waits for the other (Haiku #12050).
