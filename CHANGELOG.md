@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Network: mDNS joins the multicast group
+
+Problem: `mdns_query` sent to 224.0.0.251 and ff02::fb but never joined those groups, so multicast replies could be missed.
+
+What changed: the IPv4 socket joins 224.0.0.251, the IPv6 socket joins ff02::fb. A failed join still sends the query.
+
+Limits: QEMU usernet is not multicast. Needs a LAN.
+
 ## 2026-11-17 - Network: a missed .local name is not sent to DNS
 
 Problem: after mDNS missed a `.local` name, `getaddrinfo` fell through to unicast DNS, against RFC 6762.
@@ -63,7 +71,6 @@ Problem: Logout sent `B_QUIT_REQUESTED` to user apps and did not wait. Tracker a
 What changed: after that quit, Login waits three seconds, then `kill_team` on what is left, then one more second.
 
 Limits: servers, daemons, and `B_BACKGROUND_APP` teams are still kept. No boot test of Log out.
-
 
 Tested: the C++ was not compiled on this host (needs libbe).
 
