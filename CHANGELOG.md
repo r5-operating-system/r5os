@@ -1,5 +1,11 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Build 10065: What's new for game controllers
+
+What changed: `distro/BUILD` 10064 -> 10065 and a What's new section for the Game controllers page (Bluetooth steps 7a-8, #4356 pictures by model, #4360 rumble, trigger effects, motion, HID PID, layout A, #4388 the clipping fix, #4381 the RFCOMM test race). Headset voice stays opt-in and is not mentioned.
+
+Limits: rumble, trigger effects and motion were only tested in QEMU (no real controller); this build is the stick for that test.
+
 ## 2026-11-17 - Network: AirPlay mDNS features match /info
 
 Problem: `_airplay._tcp` advertised `features=0x5A7FFFF7,0x1E` while GET `/info` returned `0x4A7FFFF7`. Clients that trust the TXT then see a different set on the HTTP reply. The extra bit and `0x1E` are AirPlay 2; this receiver is AirPlay 1.
