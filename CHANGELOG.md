@@ -35,6 +35,30 @@ Tested (QEMU, KVM, 8 virtual CPUs, Lavapipe, own image copies, one run after the
 - `py scripts/check-pre-stick.py --paper`: M11, M12 and M13 walks ok (`m13 lines 7 have a source`, `m13 boot 1/2/3/done settings ok`).
 
 Not tested: RADV and the 5625U, `gpu_lavapipe_threads` and `gpu_lavapipe_vector` (the vector width is only measurable on the 5625U: boot 3 of the stick). The stick is not built or written.
+## 2026-11-17 - Graphics (M13 step 1): the R5 DRM library formats ioctl details only with gpu_debug (libdrm-2.4.124-4)
+
+Problem: `r5_translate.c` formatted a detail string (`snprintf`) into one global buffer for every production ioctl (`GEM_CREATE`, `GEM_VA`, `INFO`, `PRIME` export and import), only to print it with `gpu_debug` or after a failure. The buffer, the ioctl name and the request were shared by all threads, and RADV and Zink call ioctls from several, so one thread's details could be printed with another's call.
+
+What changed: the formatting happens only with `gpu_debug` (`R5_DETAIL`, behind `r5_debug_on()`); a failed ioctl without `gpu_debug` is printed without the detail. The name, request and detail are per thread (`__thread`). `libdrm-2.4.124-4`: `libdrm.so.2.124.0` rebuilt; `libdrm_amdgpu.so.1.124.0` and `amdgpu.ids` unchanged; pin, install, EGL vendor check and `distro/gpu/COMPAT` name `-4`, and `-3` stays in the download folder.
+
+Tested: host test (`test-ac-drm.sh` against this branch): `ok vram full falls back to gtt`, `ok ac drm family RV`, `ok libdrm ioctl`. `ok libdrm symbols`. The new library is a Haiku x86_64 ELF with a `.tbss` section. `scripts/build-locked.sh`: jam_exit=0, `ok package paths`, `ok egl vendor`, mesa_exit=0. After the build the shared tree's HaikuPorts pin was set back to `-3`, so other branches keep building until this is in `main` (the mistake of `-3`, recorded below, not repeated).
+
+Not tested: RADV and the 5625U (QEMU has no RADV; Lavapipe does not use libdrm). The speed gain is one `snprintf` per ioctl and is not measurable in QEMU.
+
+## 2026-11-17 - Bluetooth: a headset with an LE side pairs over Classic, and the Bluetooth window's list keeps its width
+
+Problem (stick 52, 5625U): the Sony WH-1000XM3 also advertises over LE as "LE_WH-1000XM3" (public address, Flags 0x2). That entry was paired over LE only (`le pairing started`, `smp sc pairing ok`, `gatt no hid service`): the page said Connected, but the headset kept blinking, and A2DP and HFP never came up because there was no Classic link. In the Bluetooth window opened from Deskbar, the device panel took the whole width and the My devices list was a strip.
+
+What changed:
+- `LEManager::Pair()`: a device whose LE advertisement has a public address and Flags without "BR/EDR Not Supported" (bit 2) is dual-mode and is paired over Classic (log: `le advert of a dual-mode device (flags <hex>): pairing over Classic`). An LE-only device sets that bit, so it still pairs over LE.
+- Such a device does not take its LE name; its Classic name is asked once the link is up (the Remote Name Request of #4346).
+- The My devices list has a minimum width of 200 (scaled), so the panel cannot squeeze it.
+
+Also seen on stick 52: the 8BitDo M30 over Bluetooth with its name, buttons and D-pad right (#4345, #4346), Settings closed without the debugger, and `link down (reason 0x13, the device ended it)` at the end.
+
+Limits: a device that leaves out "BR/EDR Not Supported" although it has no Classic side would now try Classic and fail (page timeout); R5 does not fall back to LE then. Not yet on a radio.
+
+Tested: see the pull request. ARM64 and RISC-V 64 not built or tested.
 
 ## 2026-11-17 - Bluetooth after stick 51: device names, HFP's SDP record, link-down lines, Test buttons and the page layout
 

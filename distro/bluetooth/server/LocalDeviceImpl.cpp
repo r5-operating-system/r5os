@@ -2053,7 +2053,14 @@ LocalDeviceImpl::CreateConnection(BMessage* message)
 		// SPDX-SnippetEnd
 	}
 
-	message->FindString("name", &rdConn->friendly_name);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// A dual-mode device chosen from its LE advertisement has that side's
+	// name ("LE_WH-1000XM3"); its Classic name is asked once the link is up.
+	if (fLE == NULL || !fLE->DualModeAdvert(*bdaddr))
+	// SPDX-SnippetEnd
+		message->FindString("name", &rdConn->friendly_name);
 	message->FindUInt8("pscan_rep_mode", &rdConn->pscan_rep_mode);
 	message->FindUInt16("clock_offset", &rdConn->clock_offset);
 
