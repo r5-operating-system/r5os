@@ -13,7 +13,9 @@ Not seen: the `shutdown rlc ..., tmr destroy ..., gart off` line is printed afte
 
 Built: `distro/mesa/build-radv.sh` under the build lock, exit 0; `check-libdrm-symbols.py`: `ok libdrm symbols`. `mesa_radv-25.3.6-10`: version `25.3.6-10`, `libvulkan_radeon.so` differs from `-9`'s, no `/home/nickr` in it, the tools have boot 4. The script also repacks `mesa_lavapipe-25.3.6-5` and `mesa-25.3.6-5`; those were put back to the committed files, so a package name keeps its contents.
 
-Limits: no image built, nothing booted. The present now waits for the GPU on RADV without a shared image, so VulkanTeapot's frame rate on that path may drop; measure it on the stick. A frame over 1 s on that path ends the swapchain. ARM64 and RISC-V 64 not built.
+Stick 5 written 17 Nov 21:38 at `56e06d7b7e`: `build-locked.sh` (`jam_exit=0`, `mesa_packages_ok`), `@r5-anyboot`, boot 1 planted, `check-pre-stick.py` on the image `pre-stick ok`, `write-stick.py` exit 0, stick sha256 `dd5c7931…` matches the image, all under one held build lock.
+
+Limits: nothing booted yet. The present now waits for the GPU on RADV without a shared image, so VulkanTeapot's frame rate on that path may drop; measure it on the stick. A frame over 1 s on that path ends the swapchain. ARM64 and RISC-V 64 not built.
 
 Tested: `git apply --check` of the patch on `origin/main`; `sh -n` of `check`, `boot-next` and `m13-measure`; `py scripts/check-pre-stick.py --paper` at `331843fef0`: `m13 lines 9 have a source`, `m13 boot 1/2/3/4/done settings ok`, M11 and M12 walks unchanged, `pre-stick paper ok`.
 
