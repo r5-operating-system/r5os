@@ -97,8 +97,14 @@ skia_warm_up()
 	// drawing (5625U stick 3: a run of 19.5 s, and the warm-up ran into two
 	// Finish() timeouts, 10160 ms). There it starts after the first run
 	// that drew a window, or after 30 s without one.
+	// After stick 4 (10448 ms, the same two timeouts): the cost is the
+	// warm-up's own work, Lavapipe compiling its shaders while it runs
+	// (two runs of 9.1 s each on the GPU). So on Lavapipe it is drawn in
+	// parts, one Finish() per drawing mode, each waiting up to 30 s: a
+	// window's drawing waits for one part at most, not for all of it.
 	SkiaGpu* gpu = SkiaGpu::Current();
-	if (gpu != NULL && gpu->OnCpu()) {
+	bool inParts = gpu != NULL && gpu->OnCpu();
+	if (inParts) {
 		bigtime_t waitStart = system_time();
 		while (system_time() - waitStart < 30000000) {
 			gpu = SkiaGpu::Current();
@@ -135,6 +141,9 @@ skia_warm_up()
 		B_OP_ALPHA };
 	// M13 step 4: the first Finish() status that is not B_OK
 	status_t finishStatus = B_OK;
+	const bigtime_t kPartTimeout = 30000000;
+	int32 parts = 0;
+	bigtime_t longestPart = 0;
 	for (int pass = 0; pass < 2; pass++) {
 		// pass 0: an opaque image (Skia's own blending), 1: not opaque
 		static_cast<SkiaDrawingEngine*>(engine.Get())->SetOpaque(pass == 0);
@@ -159,6 +168,15 @@ skia_warm_up()
 				engine->DrawBitmap(image, image->Bounds(), BRect(8, 8, 31, 31),
 					B_FILTER_BITMAP_BILINEAR);
 			}
+			if (inParts) {
+				bigtime_t partStart = system_time();
+				status_t status = static_cast<SkiaDrawingEngine*>(
+					engine.Get())->Finish(kPartTimeout);
+				longestPart = max_c(longestPart, system_time() - partStart);
+				parts++;
+				if (status != B_OK && finishStatus == B_OK)
+					finishStatus = status;
+			}
 		}
 		status_t status = skia_offscreen_finish(engine.Get());
 		if (status != B_OK && finishStatus == B_OK)
@@ -168,6 +186,13 @@ skia_warm_up()
 	bigtime_t took = (system_time() - start) / 1000;
 	fprintf(stderr, "app_server: gpu draw warm up %" B_PRId64 " ms\n", took);
 	syslog(LOG_INFO, "app_server: gpu draw warm up %" B_PRId64 " ms\n", took);
+	if (inParts) {
+		// "warm-up", so the checks that read the line above skip this one
+		fprintf(stderr, "app_server: gpu draw warm-up parts %" B_PRId32
+			", longest %" B_PRId64 " ms\n", parts, longestPart / 1000);
+		syslog(LOG_INFO, "app_server: gpu draw warm-up parts %" B_PRId32
+			", longest %" B_PRId64 " ms\n", parts, longestPart / 1000);
+	}
 	if (finishStatus != B_OK) {
 		// M13 step 4: a timeout is late, not failed (M11 decision 14)
 		fprintf(stderr, "app_server: gpu draw warm up status %s\n",

@@ -1,5 +1,27 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Graphics (M13): step 4 on Lavapipe, outline resize and a warm-up that finishes
+
+Problem: on stick 4 (5625U, boot 3, Lavapipe) a resize took 35.1 ms per frame (stick 3: 30.9), and the Skia warm-up ended after 10448 ms with `Operation timed out`. Waiting for the first window run (step 4) did not help: stick 3 had the same 10160 ms. The cost is the warm-up's own work: after it, two runs waited 9.1 s each for the GPU (`deliver 9137298`), Lavapipe compiling its shaders, against a 5 s `Finish` limit, twice. The resize: compose (20.4 to 16.1 ms) and draw (34.7 to 24.2 ms) both got faster, the frame slower; most likely the fixed time grid of step 4 (a late slot composes at once, next to Skia on the two Lavapipe threads). Inferred, not measured.
+
+What changed:
+- Owner's decision (17 Nov): on Lavapipe a resize shows only the window's outline, and the window is drawn at its new size when the mouse is released. No setting; RADV and the CPU mode resize live as before.
+  - Haiku's own outline resize (`B_OUTLINE_RESIZE`, `DefaultWindowBehaviour`) is used for every window when the compositor runs on Lavapipe (`Compositor::OutlineResize()`, asked once when a resize starts).
+  - Haiku's outline only grew to the right and the bottom, and its border resize ended wrong for the left and top edges. The outline now moves for those edges (`Decorator::MoveOutlinesBy()`, `Window::fOutlinesShift`), and the end resizes per edge and moves by what the window really grew.
+  - The compositor draws the outline over the window (`_RecordOutline()`: the shadow pass with a one-row mask of 255, no new shader). The window's buffer, shape and shadow stay its own, and nothing below redraws while the outline moves. The first version drew the outline into the window: every step made a new buffer and redrew the whole window (QEMU: draw 122 to 207 ms), and an outline to the right or bottom did not show.
+  - New non-virtual `Decorator` calls (`MoveOutlinesBy`, `GetFootprintWithoutOutline`, `GetOutlineRegion`, `ResetOutlines`); the decorator add-on ABI and class layout are unchanged.
+- The warm-up on Lavapipe is drawn in 8 parts, one `Finish` per drawing mode, each with a 30 s limit. A new line `gpu draw warm-up parts 8, longest N ms`.
+- Mesa's shader cache (in `/boot/system/cache/app_server/mesa` since step 2) works for Lavapipe on R5. It was never measured before: the next start reuses what the first one compiled.
+- `scripts/qemu-m13-measure.py`: `--again` starts the same image once more; ACPI power off instead of a kill, so the cache reaches the image; pictures during the resize and a left-edge drag. Two faults found and fixed: the resize grabbed 7 pixels inside the window (the scroll bar corner, no resize in QEMU at all), and the drag ended a third of a circle away, so the resize grabbed the desktop. QEMU resize numbers from before this change were no resize.
+
+Two independent reviews of the diff, fixed before the commit: a title or look change during the drag shifted the next outline (`ResetOutlines` lays it out again at the end); a window hidden during the drag kept its outline; a call per mouse event without a change; `--again` without an image; a false `compose compare MISMATCH` with an outline (the compare is skipped then); a whole-window compose on every outline step (now only the old and the new outline).
+
+Tested in QEMU only (Lavapipe 256-bit, 8 CPUs, `scripts/build-locked.sh` and `scripts/qemu-m13-measure.py`; built on `main` before #4388):
+- Warm-up, first start: 31.9 to 47.2 s in QEMU, longest part 18.3 to 25.1 s, no timeout. Second start (`--again`, same image): 3.4 and 5.7 s, longest part 1.7 and 2.4 s. Drag on the second start: 15.9 to 19.0 ms per frame (first start 18.5 to 23.8).
+- Resize with the outline (final build, first start): 19.8 ms per frame (p95 32.4), compose 18.8, draw 7.0. Pictures: the outline follows the bottom right corner and the left edge, and the window has its new size and place after the release. No `gpu draw off`, fence timeout or `MISMATCH`.
+
+Limits: not on the 5625U; that needs the next stick (with #4363). The first start after an install or a Mesa update pays the whole warm-up (Lavapipe compiles everything once); in QEMU a part took up to 25 s of the 30 s limit. The outline is darkened pixels, hard to see on a dark background. The top edge was not dragged in QEMU (the left edge uses the same code). Windows with `B_OUTLINE_RESIZE` now get this outline on RADV too.
+
 ## 2026-11-17 - Network: mDNS browse keeps only the requested type
 
 Problem: `browse_cb` took every PTR, SRV and TXT in the packet. A browse for `_ipp._tcp` could pick up AirPlay or other services from additional records.

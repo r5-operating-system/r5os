@@ -314,6 +314,17 @@ public:
 	virtual	void				GetInputMargin(BRect* margin);
 
 			bool				InputMarginContains(BPoint where);
+
+	// M13 step 4: an outline that grows to the left or to the top moves
+	// by the same amount; the footprint of the window itself while its
+	// outline is shown. Not virtual, so the add-on ABI stays the same.
+			void				MoveOutlinesBy(BPoint offset, BRegion* dirty);
+			void				GetFootprintWithoutOutline(BRegion* region);
+	// The outline alone (the compositor draws it on Lavapipe).
+			void				GetOutlineRegion(BRegion* region);
+	// The outline back at the window, laid out from its frame again (a
+	// title or look change during the drag moved it off).
+			void				ResetOutlines(BRegion* dirty);
 // SPDX-SnippetEnd
 
 protected:

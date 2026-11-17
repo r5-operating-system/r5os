@@ -146,6 +146,14 @@ public:
 									bool resizeStack = true);
 			void				SetOutlinesDelta(BPoint delta,
 									BRegion* dirtyRegion);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			// M13 step 4: the outline grows to the left or to the top
+			void				SetOutlinesDelta(BPoint delta,
+									BRegion* dirtyRegion, bool left,
+									bool top);
+// SPDX-SnippetEnd
 
 			void				ScrollViewBy(View* view, int32 dx, int32 dy);
 
@@ -377,6 +385,8 @@ protected:
 			BRegion				fDrawableClipped;
 			BRegion				fDrawableContentClipped;
 			bool				fDrawableWarned;
+			// M13 step 4: how far the outline was moved to the left and up
+			BPoint				fOutlinesShift;
 // SPDX-SnippetEnd
 
 			// Our part of the "global" dirty region (what needs to be redrawn).
