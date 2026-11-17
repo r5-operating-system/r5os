@@ -397,6 +397,13 @@ struct mtk_softc {
  */
 	int			sc_ht_vht;
 	int			sc_he;
+	/* R5 (MIT), stick 52: a net80211 task wrote to the card after its
+	 * registers were released. sc_detaching stops new hardware work in the
+	 * stack's tasks; sc_gone stops every register access once the
+	 * register window is released.
+	 */
+	volatile int		sc_detaching;
+	volatile int		sc_gone;
 	uint8_t			sc_phy_he;
 	uint8_t			sc_he_phy0;
 	uint16_t		sc_he_tx_mcs;

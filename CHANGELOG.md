@@ -24,6 +24,23 @@ Limits and not tested:
 - RTBTCore (v2) files are refused for now. A chip that kept its patch through a warm restart is not detected; if it then refuses the download it stays off until it is unplugged.
 - In VirtualBox the dongle must be plugged in after the VM started, as long as Windows binds its BTHUSB driver to it.
 
+## 2026-11-17 - Wi-Fi: sticks 51 and 52 on the 5625U, stick commands, join logging and a shutdown panic
+
+Sticks 51 and 52 (5625U, MT7961, WPA2 network "Skynet" on channel 40, FT-PSK/CCMP, owner's home).
+
+- Stick 51: boot 1 (no `mt7922wifi` file) joined over 802.11a; `wifi-check` 5 PASS. Boots 2 and 3 (`ht_vht true`, then also `he true`): `ht/vht on, 2 streams, bandwidth step 2`, and on boot 3 `he on, 2 streams` (the card reports HE). Neither joined. Every join sent 16 block-ack-off commands that the firmware refused (`status 0x10003`), then `the firmware was not ready for AUTH: -2147483643` (EINVAL) with no line saying why. The page asked for the password again, and so did Haiku's own `net_server` dialog. The password was right.
+- Stick 52 (boot 2 planted, with the changes below): no refused commands; the driver no longer stops the join (`join: channel 40, flags 0x40140, node flags 0xaf8c40`, six times); the join still failed, with the same password dialogs. Restarting with `wifi-next` panicked in KDL: `vm_page_fault` in `mtk_write` on thread `ic_taskq`, after `msi_free_vectors` (the driver's detach).
+
+What changed:
+- `wifi-next` and `wifi-check` (`distro/wifi/stick`, in `/boot/system/non-packaged/bin` of the regular image through `apply-wireless.py`): write the settings for the next boot and restart; PASS or FAIL per driver line, files in `~/wifi-stick`. `wifi-check` reads `syslog.1` too, and takes the boot from the settings file when there is no note. `read-stick-logs.py` copies `~/wifi-stick` and both `mt7922wifi` files. `scripts/plant-wifi-stick.sh` plants the boot 2 settings and a 4 MiB syslog into a stick image only.
+- `mtk_ampdu_rx_stop()` tells the firmware only about a session that was running (`IEEE80211_AGGR_RUNNING`) on an added station.
+- `mtk_join_prepare()` logs each stop (no node, no channel, card not owned) and the channel, its flags and the node flags of every join.
+- Shutdown: `sc_detaching` is set first in `mtk_detach()`; `mtk_newstate()` and `mtk_parent()` then leave the card alone. `sc_gone` is set just before the register window is released, and `mtk_raw_read()`/`mtk_raw_write()` do nothing after it. The stack walks its vaps to INIT on `ic_taskq` during `ieee80211_ifdetach()`, and that work reached the card after its registers were gone.
+
+Tested: `scripts/build-locked.sh` (`jam_exit=0`, `mesa_exit=0`, `if_mtk.o` built). QEMU (KVM, `-cpu host,+smap`, a copy of `r5-os.image`, 120 s): `enable SMAP`, boots to `net_server`, no panic. QEMU has no Wi-Fi adapter, so neither the join nor the detach path ran.
+
+Not proven: the shutdown fix on the 5625U (no stick for it yet). Why the access point does not accept the join with HT/VHT on: the auth and association frames are only logged with `debug true`. The width is a guess (the driver's `bandwidth step 2` against the AP's 40 MHz on channel 40), not checked. The second password dialog (Haiku's `net_server` "Connect to a WiFi network") is separate UI work.
+
 ## 2026-11-17 - Game controllers: Switch Pro, Joy-Con and Xbox controllers rumble and move too (option C, phase 2)
 
 Problem: phase 1 gave rumble, trigger effects and motion only to the PlayStation controllers and to HID PID force feedback. The owner asked for the Switch Pro Controller and the Xbox controllers over Bluetooth anyway ("zet het er sowieso in"), and the same day for Xbox One and Series controllers over USB (GIP), without having any of them. Haiku has no Xbox One or Series USB driver (only an Xbox 360 quirk in usb_hid); RenkuOS has none either (its kernel driver tree checked, no xbox, gip or 045e driver), so the GIP part is written new. A Switch Pro Controller over USB sent nothing before its handshake, and its own report descriptor does not describe its reports; a GIP controller is not HID at all; an Xbox controller with Low Energy firmware had no vendor and product ID on R5 (the PnP ID was not read).
