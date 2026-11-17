@@ -656,6 +656,18 @@ static const uint32 kPspCmdBytes = 1024;
 static const uint32 kPspTmrBytes = 4u * 1024u * 1024u;
 static_assert(kPspTmrBytes == 4u * 1024u * 1024u, "GFX9 ring contract: TMR");
 
+/* M13 stop at shutdown: the GPCOM ring the PSP load made, kept so the
+ * shutdown hook can send DESTROY_TMR (r5_gfx9_psp_tmr_destroy). Only
+ * written beside the load; the load itself is unchanged. */
+static uint8* sPspRingAddress = NULL;
+static uint8* sPspCmdAddress = NULL;
+static uint8* sPspFenceAddress = NULL;
+static uint64 sPspCmdGpu = 0;
+static uint64 sPspFenceGpu = 0;
+static uint32 sPspFenceLast = 0;
+static bool sPspRingLive = false;
+static bool sPspTmrSet = false;
+
 
 static uint32
 radeon_psp_byte(uint32 index)
@@ -686,6 +698,7 @@ r5_gfx9_psp_ring_stop(uint32* _seen)
 			*_seen = 0;
 		return false;
 	}
+	sPspRingLive = false;
 	const uint32 command = radeon_psp_byte(0x80);
 	Write32(OUT, command, 0x00030000);
 	snooze(20000);
@@ -829,6 +842,7 @@ radeon_psp_submit(uint8* ringAddress, uint8* cmdAddress, uint8* fenceAddress,
 	if (next >= (kPspRingBytes / 4))
 		next = 0;
 	Write32(OUT, writePtr, next);
+	sPspFenceLast = fenceValue;
 
 	uint32 fenceSeen = 0;
 	bool landed = false;
@@ -1048,6 +1062,14 @@ radeon_psp_load_engines(uint32 location, uint32 fbOffset)
 	}
 	ERROR("%s: R5 radeon_hd: PSP GPCOM ring ready 0x%" B_PRIx32 "\n",
 		__func__, seen);
+	sPspRingAddress = ringAddress;
+	sPspCmdAddress = cmdAddress;
+	sPspFenceAddress = fenceAddress;
+	sPspCmdGpu = cmdGpu;
+	sPspFenceGpu = fenceGpu;
+	sPspFenceLast = 0;
+	sPspTmrSet = false;
+	sPspRingLive = true;
 
 	uint32 fenceValue = 1;
 	// psp_tmr_load runs before any LOAD_IP_FW. buf_phy_addr is the MC
@@ -1089,6 +1111,7 @@ radeon_psp_load_engines(uint32 location, uint32 fbOffset)
 			tmrStatus, tmrFence);
 		if (sent != B_OK)
 			return sent;
+		sPspTmrSet = true;
 		fenceValue++;
 	}
 
@@ -4400,4 +4423,77 @@ r5_gfx9_after_restart(void)
 		cpu = sRadeonGfx9Ring.fenceAddress + kR5UserFenceOffset;
 	*(volatile uint64*)cpu = sUserSequence;
 	memset(&sRingCtx, 0, sizeof(sRingCtx));
+}
+
+
+/* M13 stop at shutdown. Linux v6.12 gfx_v9_0_hw_fini() halts the CP,
+ * then gfx_v9_0_rlc_stop(): RLC_ENABLE_F32 off and the serdes wait
+ * (gfx_v9_0_wait_for_rlc_serdes). The wait is the one in
+ * radeon_gfx9_rlc_start, on the current GRBM index. The gui-idle
+ * interrupt is CP_INT_CNTL_RING0, which the hook clears. */
+bool
+r5_gfx9_rlc_halt()
+{
+	if (sHost == NULL)
+		return false;
+	const uint32 cntl = radeon_gfx9_byte(kGfx9Seg1, mmRLC_CNTL);
+	const uint32 cuBusy = radeon_gfx9_byte(kGfx9Seg1, mmRLC_SERDES_CU_MASTER_BUSY);
+	const uint32 noncuBusy = radeon_gfx9_byte(kGfx9Seg1, mmRLC_SERDES_NONCU_MASTER_BUSY);
+	const uint32 noncuMask = 0x0000ffffu | 0x00010000u | 0x00040000u
+		| 0x00080000u;
+	if (!radeon_mmio_fits(noncuBusy) || !radeon_mmio_fits(cntl))
+		return false;
+	Write32(OUT, cntl, Read32(OUT, cntl) & ~1u);
+	for (int wait = 0; wait < 100; wait++) {
+		if (Read32(OUT, cuBusy) == 0
+			&& (Read32(OUT, noncuBusy) & noncuMask) == 0)
+			return true;
+		snooze(1000);
+	}
+	return false;
+}
+
+
+/* M13 stop at shutdown. Linux v6.12 psp_suspend() sends
+ * GFX_CMD_ID_DESTROY_TMR (0x00000007, psp_gfx_if.h) through
+ * psp_tmr_terminate() before psp_ring_stop(); the command has no
+ * payload. Sent only when SETUP_TMR landed on a GPCOM ring that is still
+ * up. True when the fence landed and the PSP status is 0. */
+bool
+r5_gfx9_psp_tmr_destroy(uint32* _status)
+{
+	uint32 status = 0;
+	uint32 fenceSeen = 0;
+	if (_status != NULL)
+		*_status = 0;
+	if (sHost == NULL || !sPspRingLive || !sPspTmrSet
+		|| sPspRingAddress == NULL || sPspCmdAddress == NULL
+		|| sPspFenceAddress == NULL)
+		return false;
+	memset(sPspCmdAddress, 0, kPspCmdBytes);
+	radeon_psp_store32(sPspCmdAddress + 0, kPspCmdBytes);
+	radeon_psp_store32(sPspCmdAddress + 4, 1);
+	radeon_psp_store32(sPspCmdAddress + 8, 7);
+	status_t sent = radeon_psp_submit(sPspRingAddress, sPspCmdAddress,
+		sPspFenceAddress, radeon_psp_byte(0x83), sPspCmdGpu, sPspFenceGpu,
+		sPspFenceLast + 1, &status, &fenceSeen);
+	if (_status != NULL)
+		*_status = sent == B_OK ? status : fenceSeen;
+	if (sent != B_OK)
+		return false;
+	sPspTmrSet = false;
+	return status == 0;
+}
+
+
+/* The kernel stage stops and its memory window goes away: the saved
+ * GPCOM ring is no longer there for DESTROY_TMR. */
+void
+r5_gfx9_psp_forget()
+{
+	sPspRingLive = false;
+	sPspTmrSet = false;
+	sPspRingAddress = NULL;
+	sPspCmdAddress = NULL;
+	sPspFenceAddress = NULL;
 }

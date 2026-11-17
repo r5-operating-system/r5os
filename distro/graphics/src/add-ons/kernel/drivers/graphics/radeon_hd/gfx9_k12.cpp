@@ -722,6 +722,11 @@ gfx9_shutdown_hook(bool reboot, void* cookie)
 	kwrite(sInfo, me, kread(sInfo, me)
 		| (1u << 24) | (1u << 26) | (1u << 28));
 	kwrite(sInfo, mec, kread(sInfo, mec) | (1u << 30) | (1u << 28));
+	/* M13: gfx_v9_0_hw_fini stops the RLC after the CP, and psp_suspend
+	 * destroys the TMR before the ring stop. */
+	bool rlcQuiet = r5_gfx9_rlc_halt();
+	uint32 tmrStatus = 0;
+	bool tmrDestroyed = r5_gfx9_psp_tmr_destroy(&tmrStatus);
 	uint32 pspSeen = 0;
 	bool pspStopped = r5_gfx9_psp_ring_stop(&pspSeen);
 	sIhWbReady = false;
@@ -729,6 +734,11 @@ gfx9_shutdown_hook(bool reboot, void* cookie)
 	kwrite(sInfo, gc_byte(mmCP_INT_CNTL_RING0), 0);
 	if (sVmCntlSavedValid)
 		kwrite(sInfo, gc_byte(mmVM_CONTEXT0_CNTL), sVmCntlSaved);
+	/* M13: contexts 1 to 15 off, as gfxhub_v1_0_gart_disable (Linux
+	 * v6.12 gfxhub_v1_0.c). No restore: the saved copy of context 1 is
+	 * taken after the VMID 1 setup and holds R5's own values. */
+	for (uint32 i = 0; i <= 14u; i++)
+		kwrite(sInfo, gc_byte(mmVM_CONTEXT1_CNTL + i * R5_GC9_CTX_DISTANCE), 0);
 	const uint32 eng = 17;
 	kwrite(sInfo, gc_byte(mmVM_INVALIDATE_ENG0_REQ + eng),
 		r5_gfx9_tlb_req(0, 0));
@@ -737,9 +747,21 @@ gfx9_shutdown_hook(bool reboot, void* cookie)
 			break;
 		snooze(10);
 	}
+	/* M13: gfxhub_v1_0_gart_disable (Linux v6.12 gfxhub_v1_0.c): L1 TLB
+	 * and the advanced driver model off (MC_VM_MX_L1_TLB_CNTL bits 0
+	 * and 6), the L2 cache off (VM_L2_CNTL bit 0), VM_L2_CNTL3 0. After
+	 * the invalidate, so that step is unchanged. */
+	uint32 l1 = gc_byte(mmMC_VM_MX_L1_TLB_CNTL);
+	kwrite(sInfo, l1, kread(sInfo, l1) & ~((1u << 0) | (1u << 6)));
+	uint32 l2 = gc_byte(mmVM_L2_CNTL);
+	kwrite(sInfo, l2, kread(sInfo, l2) & ~1u);
+	kwrite(sInfo, gc_byte(mmVM_L2_CNTL3), 0);
 	dprintf("radeon_hd: shutdown gpu stop %s, psp ring stop %s %08lx\n",
 		reboot ? "reboot" : "power off", pspStopped ? "ok" : "timeout",
 		(unsigned long)pspSeen);
+	dprintf("radeon_hd: shutdown rlc %s, tmr destroy %s %08lx, gart off\n",
+		rlcQuiet ? "quiet" : "busy", tmrDestroyed ? "ok" : "failed",
+		(unsigned long)tmrStatus);
 }
 
 
@@ -750,6 +772,7 @@ r5_gfx9_kernel_stop()
 		r5_unregister_shutdown_hook(gfx9_shutdown_hook, NULL);
 		sShutdownHooked = false;
 	}
+	r5_gfx9_psp_forget();
 	if (sInfo != NULL && sInfo->registers_area >= 0 && sInfo->registers != 0) {
 		uint32 me = gc_byte(mmCP_ME_CNTL);
 		uint32 mec = gc_byte(mmCP_MEC_CNTL);
