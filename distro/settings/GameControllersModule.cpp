@@ -3,19 +3,22 @@
  * SPDX-License-Identifier: MIT
  *
  * Settings, Devices, Game controllers (docs/GAME-CONTROLLERS.md, option B;
- * the picture is docs/design/gamecontrollers-mockup). One card per
- * controller, and the live test of the chosen one with its layout, its
- * button labels and Set up buttons… (a window that asks for each control
- * in turn). The pictures are BGameControllerView from libr5game.so. Every
+ * the picture is docs/design/gamecontrollers-mockup, layout A). The
+ * controllers are a BCardStrip at the bottom of the page, one card each;
+ * above it the live test of the chosen one with its layout, its button
+ * labels and Set up buttons… (a window that asks for each control in
+ * turn). The pictures are BGameControllerView from libr5game.so. Without a
+ * controller the page shows a gray example and a dashed card. Every
  * choice is stored per controller model by BGameController as soon as it
  * changes; Revert puts back the choices from when the page was opened,
  * Defaults gives every controller its own labels again and removes the
  * chosen controller's layout and button setup. No administrator is needed:
  * the choice is the person's own.
  *
- * The Test box also has Rumble, Motion and Trigger feedback (option C,
- * phase 1, after feedback-*.png in the mockup), each shown only when the
- * chosen controller has it. Nothing of it is stored: Close() stops the
+ * Beside the picture (under it in a narrow window) are Rumble, Motion and
+ * Trigger feedback (option C, phase 1, after feedback-*.png in the
+ * mockup), each shown only when the chosen controller has it, and all
+ * three gray without a controller. Nothing of it is stored: Close() stops the
  * rumble and frees the triggers when another controller is chosen or the
  * page goes.
  */
@@ -26,15 +29,17 @@
 #include "SettingsMessages.h"
 #include "SettingsModule.h"
 
+#include <Bitmap.h>
 #include <Box.h>
 #include <Button.h>
-#include <Card.h>
+#include <CardStrip.h>
 #include <GroupView.h>
 #include <LayoutBuilder.h>
 #include <MenuField.h>
 #include <MenuItem.h>
 #include <MessageRunner.h>
 #include <PopUpMenu.h>
+#include <ScrollBar.h>
 #include <Slider.h>
 #include <SpaceLayoutItem.h>
 #include <String.h>
@@ -66,6 +71,15 @@ static const uint32 kMsgFeelTick = 'gcFt';
 static const uint32 kMsgTriggerChanged = 'gcTr';
 
 
+// A text on the page that turns gray without a controller, and how to
+// give it its own colour back.
+struct quiet_text {
+	BStringView*	view;
+	rgb_color		color;
+	bool			panelText;	// it follows B_PANEL_TEXT_COLOR
+};
+
+
 struct controller_entry {
 	BString		device;
 	BString		name;
@@ -93,24 +107,6 @@ quiet_color(uint8 amount)
 
 
 static const char*
-family_layout_text(game_controller_family family)
-{
-	switch (family) {
-		case B_GAME_CONTROLLER_FAMILY_PLAYSTATION:
-			return "PlayStation layout";
-		case B_GAME_CONTROLLER_FAMILY_XBOX:
-			return "Xbox layout";
-		case B_GAME_CONTROLLER_FAMILY_NINTENDO:
-			return "Nintendo layout";
-		case B_GAME_CONTROLLER_FAMILY_SEGA_GENESIS:
-			return "Sega Genesis layout";
-		default:
-			return "built from what it reports";
-	}
-}
-
-
-static const char*
 connection_text(game_controller_connection connection)
 {
 	switch (connection) {
@@ -124,52 +120,82 @@ connection_text(game_controller_connection connection)
 }
 
 
-// #pragma mark - ControllerCard
+// The second line of a controller's card: how it is connected, and the
+// battery when the controller reports it.
+static BString
+card_subtitle(const controller_entry& entry)
+{
+	BString text(connection_text(entry.connection));
+	if (entry.battery >= 0)
+		text << " \xc2\xb7 " << entry.battery << " %";
+	return text;
+}
 
 
-/*!	One controller: its name, how it is connected and which layout it
-	has, and the battery when the controller reports it. Drawn in one view
-	so a click anywhere on the card chooses it.
-*/
-class ControllerCard : public BAppearanceKit::BCard {
+static void
+set_shown(BView* view, bool shown)
+{
+	if (shown && view->IsHidden(view))
+		view->Show();
+	else if (!shown && !view->IsHidden(view))
+		view->Hide();
+}
+
+
+// #pragma mark - UpperArea
+
+
+class UpperArea;
+
+
+class UpperBar : public BScrollBar {
 public:
-	ControllerCard(const controller_entry& entry, BHandler* target)
+	UpperBar(UpperArea* owner);
+
+	virtual void ValueChanged(float newValue);
+
+private:
+	UpperArea*	fOwner;
+};
+
+
+/*!	The page above the card strip. It scrolls by itself, so the strip
+	stays at the bottom of the page; the window's own page scroller
+	(SettingsWindow.cpp) would move the strip with it. Where the picture
+	and the feel groups do not fit side by side, the groups go under the
+	picture (fSplit turns vertical) and the area scrolls.
+*/
+class UpperArea : public BView {
+public:
+	UpperArea(BView* content, BGroupLayout* split, BView* first,
+		BView* second)
 		:
-		BAppearanceKit::BCard("controller card",
-			BAppearanceKit::B_CARD_DOCUMENT, B_VERTICAL),
-		fEntry(entry),
-		fTarget(target),
-		fSelected(false)
+		BView("upper area", B_WILL_DRAW | B_FRAME_EVENTS),
+		fContent(content),
+		fSplit(split),
+		fFirst(first),
+		fSecond(second),
+		fBar(NULL),
+		fBusy(false)
 	{
+		SetFlags(Flags() | B_SUPPORTS_LAYOUT);
+		SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
+		AddChild(fContent);
+		fBar = new UpperBar(this);
+		AddChild(fBar);
+		fBar->Hide();
 	}
 
-	const controller_entry& Entry() const { return fEntry; }
-
-	void SetBattery(int32 battery)
-	{
-		if (fEntry.battery == battery)
-			return;
-		fEntry.battery = battery;
-		Invalidate();
-	}
-
-	void SetSelected(bool selected)
-	{
-		if (fSelected == selected)
-			return;
-		fSelected = selected;
-		Invalidate();
-	}
-
+	// Small, so the window never scrolls the page itself.
 	virtual BSize MinSize()
 	{
-		float unit = be_plain_font->Size() / 13.0f;
-		return BSize(roundf(200 * unit), _Height());
+		float unit = network_unit();
+		return BSize(roundf(280 * unit), roundf(80 * unit));
 	}
 
 	virtual BSize MaxSize()
 	{
-		return BSize(B_SIZE_UNLIMITED, _Height());
+		return BSize(B_SIZE_UNLIMITED, B_SIZE_UNLIMITED);
 	}
 
 	virtual BSize PreferredSize()
@@ -177,91 +203,179 @@ public:
 		return MinSize();
 	}
 
-	virtual void MouseDown(BPoint where)
+	void ScrollToValue(float value)
 	{
-		(void)where;
-		BMessage message(kMsgSelectController);
-		message.AddString("device", fEntry.device);
-		BMessenger(fTarget).SendMessage(&message);
+		if (!fBusy)
+			fContent->MoveTo(0, -value);
+	}
+
+	virtual void MessageReceived(BMessage* message)
+	{
+		if (message->what == B_MOUSE_WHEEL_CHANGED && !fBar->IsHidden()) {
+			float delta = 0;
+			message->FindFloat("be:wheel_delta_y", &delta);
+			fBar->SetValue(fBar->Value()
+				+ delta * roundf(40 * network_unit()));
+			return;
+		}
+		BView::MessageReceived(message);
+	}
+
+	virtual void DoLayout()
+	{
+		if (fBusy)
+			return;
+		fBusy = true;
+		float width = Bounds().Width();
+		float height = Bounds().Height();
+		float barWidth = fBar->PreferredSize().width;
+		float contentWidth = width;
+		_Arrange(contentWidth);
+		float contentHeight = _ContentHeight();
+		bool overflow = contentHeight > height + 1.0f;
+		if (overflow) {
+			contentWidth = std::max(0.0f, width - barWidth - 1.0f);
+			_Arrange(contentWidth);
+			contentHeight = _ContentHeight();
+			overflow = contentHeight > height + 1.0f;
+		}
+		if (!overflow)
+			contentHeight = height;
+
+		float maxValue = overflow ? contentHeight - height : 0;
+		float value = std::max(0.0f, std::min(fBar->Value(), maxValue));
+		fContent->MoveTo(0, -value);
+		fContent->ResizeTo(contentWidth, contentHeight);
+		fContent->InvalidateLayout(true);
+		fContent->Layout(true);
+		if (overflow) {
+			set_shown(fBar, true);
+			fBar->MoveTo(width - barWidth, 0);
+			fBar->ResizeTo(barWidth, height);
+			fBar->SetRange(0, maxValue);
+			fBar->SetSteps(roundf(20 * network_unit()), height);
+			fBar->SetProportion(height / contentHeight);
+			if (fBar->Value() != value)
+				fBar->SetValue(value);
+		} else {
+			fBar->SetRange(0, 0);
+			set_shown(fBar, false);
+		}
+		fBusy = false;
+	}
+
+private:
+	// Side by side when the picture at its smallest and the groups as
+	// they like to be fit, else one above the other.
+	void _Arrange(float width)
+	{
+		float unit = network_unit();
+		float need = fFirst->MinSize().width
+			+ fSecond->PreferredSize().width + fSplit->Spacing()
+			+ roundf(36 * unit);
+		orientation wanted = width >= need ? B_HORIZONTAL : B_VERTICAL;
+		if (fSplit->Orientation() != wanted)
+			fSplit->SetOrientation(wanted);
+	}
+
+	// The height the content needs at least: where it fits, the layout
+	// shares out the rest.
+	float _ContentHeight()
+	{
+		fContent->InvalidateLayout(true);
+		return fContent->MinSize().height;
+	}
+
+	BView*			fContent;
+	BGroupLayout*	fSplit;
+	BView*			fFirst;
+	BView*			fSecond;
+	UpperBar*		fBar;
+	bool			fBusy;
+};
+
+
+UpperBar::UpperBar(UpperArea* owner)
+	:
+	BScrollBar(BRect(0, 0, 14, 14), "upper bar", NULL, 0, 0, B_VERTICAL),
+	fOwner(owner)
+{
+}
+
+
+void
+UpperBar::ValueChanged(float newValue)
+{
+	if (fOwner != NULL)
+		fOwner->ScrollToValue(newValue);
+	SetValue(newValue);
+}
+
+
+// #pragma mark - ExamplePicture
+
+
+/*!	Without a controller: the Xbox Series shape in gray, nothing lit, as an
+	example of what the test shows (BGameControllerView::PictureBitmap()).
+*/
+class ExamplePicture : public BView {
+public:
+	ExamplePicture()
+		:
+		BView("example picture", B_WILL_DRAW | B_FULL_UPDATE_ON_RESIZE),
+		fBitmap(NULL)
+	{
+		float unit = network_unit();
+		SetExplicitMinSize(BSize(roundf(300 * unit), roundf(170 * unit)));
+		SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNLIMITED));
+	}
+
+	virtual ~ExamplePicture()
+	{
+		delete fBitmap;
+	}
+
+	virtual void MessageReceived(BMessage* message)
+	{
+		if (message->what == B_COLORS_UPDATED) {
+			delete fBitmap;
+			fBitmap = NULL;
+			Invalidate();
+		}
+		BView::MessageReceived(message);
 	}
 
 	virtual void Draw(BRect updateRect)
 	{
-		BAppearanceKit::BCard::Draw(updateRect);
+		(void)updateRect;
 		BRect bounds = Bounds();
-		float unit = be_plain_font->Size() / 13.0f;
-		if (fSelected) {
-			SetHighColor(ui_color(B_STATUS_BAR_COLOR));
-			SetPenSize(2);
-			float radius = be_plain_font->Size() * 0.25f;
-			StrokeRoundRect(bounds.InsetByCopy(1, 1), radius, radius);
-			SetPenSize(1);
+		// The live picture keeps a band above the drawing for the trigger
+		// caps; the example keeps the same place.
+		BRect area = bounds.InsetByCopy(roundf(bounds.Width() * 0.04f),
+			roundf(bounds.Height() * 0.06f));
+		area.top += roundf(bounds.Height() * 0.06f);
+		if (!area.IsValid())
+			return;
+		if (fBitmap == NULL
+			|| fBitmap->Bounds().IntegerWidth() != area.IntegerWidth()
+			|| fBitmap->Bounds().IntegerHeight() != area.IntegerHeight()) {
+			delete fBitmap;
+			rgb_color line = mix_color(ViewColor(),
+				ui_color(B_PANEL_TEXT_COLOR), 100);
+			fBitmap = BGameControllerView::PictureBitmap(0, 0,
+				B_GAME_CONTROLLER_FAMILY_XBOX, area.IntegerWidth() + 1,
+				area.IntegerHeight() + 1, line);
 		}
-
-		float x = roundf(11 * unit);
-		float y = roundf(9 * unit);
-		const BFont* bold = r5_settings_bold_font();
-		font_height height;
-		bold->GetHeight(&height);
-		SetFont(bold);
-		SetHighColor(ui_color(B_DOCUMENT_TEXT_COLOR));
-		y += ceilf(height.ascent);
-		BString name(fEntry.name);
-		bold->TruncateString(&name, B_TRUNCATE_END, bounds.Width() - 2 * x);
-		DrawString(name.String(), BPoint(x, y));
-		y += ceilf(height.descent) + roundf(3 * unit);
-
-		BFont small(r5_settings_plain_font());
-		small.SetSize(small.Size() * 0.88f);
-		small.GetHeight(&height);
-		SetFont(&small);
-		SetHighColor(quiet_color(140));
-		BString detail(connection_text(fEntry.connection));
-		detail << " \xc2\xb7 " << family_layout_text(fEntry.family);
-		small.TruncateString(&detail, B_TRUNCATE_END,
-			bounds.Width() - 2 * x);
-		y += ceilf(height.ascent);
-		DrawString(detail.String(), BPoint(x, y));
-		y += ceilf(height.descent) + roundf(4 * unit);
-
-		y += ceilf(height.ascent);
-		if (fEntry.battery >= 0) {
-			float glyphHeight = roundf(12 * unit);
-			BRect glyph(x, y - ceilf(height.ascent) + 1, x + glyphHeight * 2,
-				y - ceilf(height.ascent) + glyphHeight);
-			rgb_color text = quiet_color(190);
-			r5_level_glyph_draw(this, R5_LEVEL_BATTERY, glyph,
-				(fEntry.battery + 12) / 25, text, ViewColor(),
-				R5_LEVEL_STYLE_NORMAL);
-			BString battery;
-			battery.SetToFormat("Battery %" B_PRId32 " %%", fEntry.battery);
-			SetHighColor(text);
-			DrawString(battery.String(),
-				BPoint(glyph.right + roundf(6 * unit), y));
-		} else {
-			SetHighColor(quiet_color(110));
-			DrawString("No battery reported", BPoint(x, y));
-		}
+		if (fBitmap == NULL)
+			return;
+		SetDrawingMode(B_OP_ALPHA);
+		SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_OVERLAY);
+		DrawBitmap(fBitmap, area.LeftTop());
+		SetDrawingMode(B_OP_COPY);
 	}
 
 private:
-	float _Height()
-	{
-		float unit = be_plain_font->Size() / 13.0f;
-		font_height bold;
-		r5_settings_bold_font()->GetHeight(&bold);
-		BFont small(r5_settings_plain_font());
-		small.SetSize(small.Size() * 0.88f);
-		font_height plain;
-		small.GetHeight(&plain);
-		return ceilf(bold.ascent + bold.descent)
-			+ 2 * ceilf(plain.ascent + plain.descent)
-			+ roundf((9 + 3 + 4 + 10) * unit);
-	}
-
-	controller_entry	fEntry;
-	BHandler*			fTarget;
-	bool				fSelected;
+	BBitmap*	fBitmap;
 };
 
 
@@ -801,19 +915,24 @@ private:
 			void				_Select(const char* device);
 			void				_UpdateTest();
 			void				_CloseSetup();
-			ControllerCard*		_SelectedCard() const;
+			int32				_SelectedIndex() const;
+			void				_UpdateBattery(int32 battery);
+			void				_UpdatePictures();
 			void				_UpdateFeel();
 			void				_ApplyTrigger();
 			BView*				_MakeFeelGroup(const char* name,
 									const char* title,
 									BGroupView** content);
+			void				_AddQuiet(BStringView* view);
 
 			GameControllersModule* fModule;
 			SettingsContext*	fContext;
-			BGroupView*			fCards;
-			BStringView*		fEmpty;
-			std::vector<ControllerCard*> fCardList;
+			BAppearanceKit::BCardStrip* fStrip;
+			std::vector<controller_entry> fEntries;
 			BString				fSelected;
+			ExamplePicture*		fExample;
+			// Text that turns gray without a controller, with its colour.
+			std::vector<quiet_text> fQuiet;
 
 			BMenuField*			fLayoutField;
 			BMenuItem*			fLayoutItems[5];
@@ -1138,39 +1257,14 @@ GameControllersPage::GameControllersPage(GameControllersModule* module,
 {
 	float unit = network_unit();
 
-	fCards = new BGroupView("cards", B_VERTICAL, roundf(8 * unit));
-	fEmpty = new BStringView("no controller",
-		"No game controller is connected.");
-	fEmpty->SetHighColor(quiet_color(140));
-
-	BTextView* hint = new BTextView("plug in hint");
-	hint->MakeEditable(false);
-	hint->MakeSelectable(false);
-	hint->SetStylable(true);
-	hint->SetInsets(0, 0, 0, 0);
-	hint->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
-	hint->SetLowUIColor(B_PANEL_BACKGROUND_COLOR);
-	BFont small(be_plain_font);
-	small.SetSize(be_plain_font->Size() * 0.9f);
-	rgb_color quiet = quiet_color(140);
-	hint->SetFontAndColor(&small, B_FONT_ALL, &quiet);
-	hint->SetText("A new controller shows up here when you plug it in, or "
-		"when you pair it on the Bluetooth page.");
-	hint->SetExplicitMinSize(BSize(roundf(200 * unit), roundf(48 * unit)));
-	LinkControl* bluetooth = new LinkControl("bluetooth link",
-		"Open Bluetooth", new BMessage(kMsgOpenBluetooth));
-	bluetooth->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
-	bluetooth->SetLowUIColor(B_PANEL_BACKGROUND_COLOR);
-
-	BGroupView* left = new BGroupView("controllers", B_VERTICAL,
-		roundf(8 * unit));
-	left->SetExplicitMinSize(BSize(roundf(236 * unit), B_SIZE_UNSET));
-	left->SetExplicitMaxSize(BSize(roundf(236 * unit), B_SIZE_UNLIMITED));
-	BLayoutBuilder::Group<>(left)
-		.Add(fCards)
-		.AddGlue()
-		.Add(hint)
-		.Add(bluetooth);
+	// The controllers: a card each, in a strip at the bottom. Without one,
+	// a dashed card that leads to Bluetooth.
+	fStrip = new BAppearanceKit::BCardStrip("controllers",
+		new BMessage(kMsgSelectController));
+	fStrip->SetEmptyText("No controller",
+		"Plug one in with USB, or pair one in Bluetooth.");
+	fStrip->SetEmptyAction("Open Bluetooth\xe2\x80\xa6",
+		new BMessage(kMsgOpenBluetooth));
 
 	// The layout: where the buttons are and how they are read. A fixed
 	// layout, or the person's own setup, comes before the database.
@@ -1193,12 +1287,12 @@ GameControllersPage::GameControllersPage(GameControllersModule* module,
 	BPopUpMenu* menu = new BPopUpMenu("labels");
 	BMessage* xbox = new BMessage(kMsgLabelsChosen);
 	xbox->AddInt32("labels", B_GAME_CONTROLLER_LABELS_XBOX);
-	fXboxItem = new BMenuItem("Xbox (A B X Y)", xbox);
+	fXboxItem = new BMenuItem("Xbox", xbox);
 	BMessage* playstation = new BMessage(kMsgLabelsChosen);
 	playstation->AddInt32("labels", B_GAME_CONTROLLER_LABELS_PLAYSTATION);
-	fPlayStationItem = new BMenuItem(
-		"PlayStation (\xe2\x9c\x95 \xe2\x97\x8b \xe2\x96\xa1 \xe2\x96\xb3)",
-		playstation);
+	// Short, as in the mockup: the menus, Set up buttons and the gap
+	// between them fit one row at the smallest window.
+	fPlayStationItem = new BMenuItem("PlayStation", playstation);
 	menu->AddItem(fXboxItem);
 	menu->AddItem(fPlayStationItem);
 	fLabelsField = new BMenuField("labels field", "Button labels", menu);
@@ -1332,35 +1426,63 @@ GameControllersPage::GameControllersPage(GameControllersModule* module,
 		feelViews[i]->SetLowColor(network_box_fill());
 	}
 
+	BView* quietViews[] = { rumbleHint, effectLabel, effectWhere, startLabel,
+		strengthLabel, fStartValue, fStrengthValue, triggerHint };
+	for (size_t i = 0; i < sizeof(quietViews) / sizeof(quietViews[0]); i++)
+		_AddQuiet(static_cast<BStringView*>(quietViews[i]));
+
+	fExample = new ExamplePicture();
+	fExample->SetViewColor(network_box_fill());
+	fExample->SetLowColor(network_box_fill());
+
+	// Layout A of the mockup: the menus in one row, the picture at the
+	// left, Rumble, Motion and Trigger feedback at the right. UpperArea
+	// puts the groups under the picture where they do not fit beside it.
+	BGroupView* pictureColumn = new BGroupView(B_VERTICAL, roundf(6 * unit));
+	pictureColumn->SetViewColor(network_box_fill());
+	BLayoutBuilder::Group<>(pictureColumn)
+		.Add(fTest, 1)
+		.Add(fExample, 1)
+		.Add(fTestHint)
+		.Add(fIDs);
+	BGroupView* feelColumn = new BGroupView(B_VERTICAL, roundf(8 * unit));
+	feelColumn->SetViewColor(network_box_fill());
+	BLayoutBuilder::Group<>(feelColumn)
+		.Add(fRumbleGroup)
+		.Add(fMotionGroup)
+		.Add(fTriggerGroup)
+		.AddGlue();
+	BGroupView* split = new BGroupView(B_HORIZONTAL, roundf(14 * unit));
+	split->SetViewColor(network_box_fill());
+	split->GroupLayout()->AddView(pictureColumn, 3);
+	split->GroupLayout()->AddView(feelColumn, 2);
+
 	FilledBox* testBox = new FilledBox("test box");
-	testBox->SetLabel(new BoxTitle("Test"));
 	BGroupView* test = new BGroupView(B_VERTICAL, roundf(8 * unit));
 	test->SetViewColor(network_box_fill());
 	BLayoutBuilder::Group<>(test)
-		.SetInsets(roundf(14 * unit), roundf(8 * unit), roundf(14 * unit),
-			roundf(12 * unit))
-		.AddGrid(roundf(8 * unit), roundf(6 * unit))
-			.Add(fLayoutField->CreateLabelLayoutItem(), 0, 0)
-			.Add(fLayoutField->CreateMenuBarLayoutItem(), 1, 0)
-			.Add(BSpaceLayoutItem::CreateGlue(), 2, 0)
-			.Add(fLabelsField->CreateLabelLayoutItem(), 0, 1)
-			.Add(fLabelsField->CreateMenuBarLayoutItem(), 1, 1)
-			.Add(BSpaceLayoutItem::CreateGlue(), 2, 1)
-			.Add(fSetupButton, 3, 1)
+		.SetInsets(roundf(14 * unit), roundf(10 * unit), roundf(14 * unit),
+			roundf(10 * unit))
+		.AddGroup(B_HORIZONTAL, roundf(8 * unit))
+			.Add(fLayoutField->CreateLabelLayoutItem())
+			.Add(fLayoutField->CreateMenuBarLayoutItem())
+			.AddStrut(roundf(6 * unit))
+			.Add(fLabelsField->CreateLabelLayoutItem())
+			.Add(fLabelsField->CreateMenuBarLayoutItem())
+			.AddGlue()
+			.Add(fSetupButton)
 		.End()
-		.Add(fTest, 1)
-		.Add(fTestHint)
-		.Add(fIDs)
-		.Add(fRumbleGroup)
-		.Add(fMotionGroup)
-		.Add(fTriggerGroup);
+		.Add(split, 1);
 	testBox->AddChild(test);
 
+	UpperArea* upper = new UpperArea(testBox, split->GroupLayout(),
+		pictureColumn, feelColumn);
+
+	// The strip stays at the bottom, as wide as the page.
+	GroupLayout()->SetSpacing(roundf(8 * unit));
 	BLayoutBuilder::Group<>(this)
-		.AddGroup(B_HORIZONTAL, roundf(12 * unit), 1)
-			.Add(left)
-			.Add(testBox, 1)
-		.End();
+		.Add(upper, 1)
+		.Add(fStrip);
 
 	_Rebuild();
 }
@@ -1388,10 +1510,7 @@ GameControllersPage::AttachedToWindow()
 	fStrengthSlider->SetTarget(this);
 	BMessage feelTick(kMsgFeelTick);
 	fFeelRunner = new BMessageRunner(BMessenger(this), &feelTick, 33000);
-	LinkControl* bluetooth = dynamic_cast<LinkControl*>(
-		FindView("bluetooth link"));
-	if (bluetooth != NULL)
-		bluetooth->SetTarget(this);
+	fStrip->SetTarget(this);
 	BGameController::StartWatching(BMessenger(this));
 	// The battery of the chosen controller, now and then.
 	BMessage tick(kMsgBatteryTick);
@@ -1442,11 +1561,18 @@ GameControllersPage::MessageReceived(BMessage* message)
 
 		case kMsgSelectController:
 		{
-			const char* device;
-			if (message->FindString("device", &device) == B_OK)
-				_Select(device);
+			int32 index;
+			if (message->FindInt32("index", &index) == B_OK && index >= 0
+				&& index < (int32)fEntries.size())
+				_Select(fEntries[index].device.String());
 			break;
 		}
+
+		case B_COLORS_UPDATED:
+			// The card pictures are drawn in the text colour.
+			_UpdatePictures();
+			BGroupView::MessageReceived(message);
+			break;
 
 		case kMsgLayoutChosen:
 		{
@@ -1513,12 +1639,9 @@ GameControllersPage::MessageReceived(BMessage* message)
 		}
 
 		case kMsgBatteryTick:
-		{
-			ControllerCard* card = _SelectedCard();
-			if (card != NULL && fTest->Controller() != NULL)
-				card->SetBattery(fTest->Controller()->BatteryLevel());
+			if (fTest->Controller() != NULL)
+				_UpdateBattery(fTest->Controller()->BatteryLevel());
 			break;
-		}
 
 		case kMsgRumble:
 		{
@@ -1585,13 +1708,8 @@ GameControllersPage::_Rebuild()
 	BString keep = fSelected;
 	fTest->SetDevice(NULL);
 
-	for (size_t i = 0; i < fCardList.size(); i++) {
-		fCardList[i]->RemoveSelf();
-		delete fCardList[i];
-	}
-	fCardList.clear();
-	if (fEmpty->Parent() != NULL)
-		fEmpty->RemoveSelf();
+	fStrip->MakeEmpty();
+	fEntries.clear();
 
 	BGameController probe;
 	probe.RescanDevices();
@@ -1612,22 +1730,41 @@ GameControllersPage::_Rebuild()
 		entry.battery = controller.BatteryLevel();
 		controller.Close();
 		fModule->Remember(entry.vendor, entry.product);
-		ControllerCard* card = new ControllerCard(entry, this);
-		fCardList.push_back(card);
-		fCards->GroupLayout()->AddView(card);
+		fEntries.push_back(entry);
+		fStrip->AddItem(new BAppearanceKit::BCardStripItem(entry.name,
+			card_subtitle(entry)));
 	}
-	if (fCardList.empty())
-		fCards->GroupLayout()->AddView(fEmpty);
+	_UpdatePictures();
 
 	bool found = false;
-	for (size_t i = 0; i < fCardList.size(); i++) {
-		if (fCardList[i]->Entry().device == keep)
+	for (size_t i = 0; i < fEntries.size(); i++) {
+		if (fEntries[i].device == keep)
 			found = true;
 	}
 	if (!found)
-		keep = fCardList.empty() ? "" : fCardList[0]->Entry().device;
+		keep = fEntries.empty() ? "" : fEntries[0].device;
 	fSelected = "";
 	_Select(keep.String());
+}
+
+
+// Each card's picture: the controller's model, small, in the text colour.
+void
+GameControllersPage::_UpdatePictures()
+{
+	BSize size = fStrip->PictureSize();
+	rgb_color line = mix_color(ui_color(B_DOCUMENT_BACKGROUND_COLOR),
+		ui_color(B_DOCUMENT_TEXT_COLOR), 190);
+	for (size_t i = 0; i < fEntries.size(); i++) {
+		BAppearanceKit::BCardStripItem* item = fStrip->ItemAt(i);
+		if (item == NULL)
+			continue;
+		BBitmap* picture = BGameControllerView::PictureBitmap(
+			fEntries[i].vendor, fEntries[i].product, fEntries[i].family,
+			size.width, size.height, line);
+		item->SetPicture(picture);
+		delete picture;
+	}
 }
 
 
@@ -1635,8 +1772,7 @@ void
 GameControllersPage::_Select(const char* device)
 {
 	fSelected = device != NULL ? device : "";
-	for (size_t i = 0; i < fCardList.size(); i++)
-		fCardList[i]->SetSelected(fCardList[i]->Entry().device == fSelected);
+	fStrip->Select(_SelectedIndex());
 	fTest->SetDevice(fSelected.Length() > 0 ? fSelected.String() : NULL);
 	if (fTest->Controller() == NULL)
 		fTest->SetFamily(B_GAME_CONTROLLER_FAMILY_UNKNOWN);
@@ -1661,6 +1797,8 @@ GameControllersPage::_UpdateFeel()
 	bool rumble = controller != NULL && controller->CanRumble();
 	bool motion = controller != NULL && controller->HasMotion();
 	bool triggers = controller != NULL && controller->HasTriggerEffects();
+	// No controller: all three, gray, as an example.
+	bool example = fEntries.empty();
 
 	fRumbleUntil = 0;
 	fWaves->SetActive(false);
@@ -1671,14 +1809,40 @@ GameControllersPage::_UpdateFeel()
 	fTest->SetTriggerMark(B_CONTROLLER_TRIGGER_LEFT, -1);
 	fTest->SetTriggerMark(B_CONTROLLER_TRIGGER_RIGHT, -1);
 
-	BView* groups[3] = { fRumbleGroup, fMotionGroup, fTriggerGroup };
-	bool shown[3] = { rumble, motion, triggers };
-	for (int i = 0; i < 3; i++) {
-		if (shown[i] && groups[i]->IsHidden(groups[i]))
-			groups[i]->Show();
-		else if (!shown[i] && !groups[i]->IsHidden(groups[i]))
-			groups[i]->Hide();
+	fLightButton->SetEnabled(rumble);
+	fStrongButton->SetEnabled(rumble);
+	fEffectField->SetEnabled(triggers);
+	fStartSlider->SetEnabled(triggers);
+	fStrengthSlider->SetEnabled(triggers);
+	rgb_color gray = mix_color(network_box_fill(),
+		ui_color(B_PANEL_TEXT_COLOR), 100);
+	for (size_t i = 0; i < fQuiet.size(); i++) {
+		quiet_text& text = fQuiet[i];
+		if (example)
+			text.view->SetHighColor(gray);
+		else if (text.panelText)
+			text.view->SetHighUIColor(B_PANEL_TEXT_COLOR);
+		else
+			text.view->SetHighColor(text.color);
+		text.view->Invalidate();
 	}
+
+	BView* groups[3] = { fRumbleGroup, fMotionGroup, fTriggerGroup };
+	bool shown[3] = { rumble || example, motion || example,
+		triggers || example };
+	for (int i = 0; i < 3; i++)
+		set_shown(groups[i], shown[i]);
+}
+
+
+void
+GameControllersPage::_AddQuiet(BStringView* view)
+{
+	quiet_text text;
+	text.view = view;
+	text.color = view->HighColor();
+	text.panelText = view->HasDefaultColors();
+	fQuiet.push_back(text);
 }
 
 
@@ -1704,6 +1868,7 @@ GameControllersPage::_MakeFeelGroup(const char* name, const char* title,
 	label->SetViewColor(network_box_fill());
 	label->SetLowColor(network_box_fill());
 	box->SetLabel(label);
+	_AddQuiet(label);
 	*_content = content;
 	return box;
 }
@@ -1740,14 +1905,28 @@ GameControllersPage::_ApplyTrigger()
 }
 
 
-ControllerCard*
-GameControllersPage::_SelectedCard() const
+int32
+GameControllersPage::_SelectedIndex() const
 {
-	for (size_t i = 0; i < fCardList.size(); i++) {
-		if (fCardList[i]->Entry().device == fSelected)
-			return fCardList[i];
+	for (size_t i = 0; i < fEntries.size(); i++) {
+		if (fEntries[i].device == fSelected)
+			return (int32)i;
 	}
-	return NULL;
+	return -1;
+}
+
+
+// The battery on the chosen controller's card.
+void
+GameControllersPage::_UpdateBattery(int32 battery)
+{
+	int32 index = _SelectedIndex();
+	if (index < 0 || fEntries[index].battery == battery)
+		return;
+	fEntries[index].battery = battery;
+	BAppearanceKit::BCardStripItem* item = fStrip->ItemAt(index);
+	if (item != NULL)
+		item->SetSubtitle(card_subtitle(fEntries[index]));
 }
 
 
@@ -1755,6 +1934,10 @@ void
 GameControllersPage::_UpdateTest()
 {
 	BGameController* controller = fTest->Controller();
+	bool example = fEntries.empty();
+	set_shown(fTest, !example);
+	set_shown(fExample, example);
+	set_shown(fTestHint, !example);
 	if (controller == NULL) {
 		fLayoutField->SetEnabled(false);
 		fLayoutItems[0]->SetMarked(true);
@@ -1762,15 +1945,11 @@ GameControllersPage::_UpdateTest()
 		fXboxItem->SetMarked(true);
 		fSetupButton->SetEnabled(false);
 		fIDs->SetText("");
-		fTestHint->SetText(fCardList.empty()
-			? "Plug in a controller or pair one to test it here."
-			: "This controller cannot be opened.");
+		fTestHint->SetText("This controller cannot be opened.");
 		return;
 	}
 
-	ControllerCard* card = _SelectedCard();
-	if (card != NULL)
-		card->SetBattery(controller->BatteryLevel());
+	_UpdateBattery(controller->BatteryLevel());
 
 	// A choice is stored per model, so it needs the vendor and product ID.
 	bool known = controller->VendorID() != 0;

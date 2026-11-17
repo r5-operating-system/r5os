@@ -21,7 +21,10 @@
  *     queue as the exact 78-byte Bluetooth report with its CRC-32; a timed
  *     rumble must stop by itself; Close() frees the triggers;
  *  5. with app_server: BTiltLevel, BAxisBar and BGameControllerMotionView
- *     draw something.
+ *     draw something;
+ *  6. BGameControllerView::PictureBitmap() and BCardStrip: its items, the
+ *     selection by Select() and by the keys, the selection message, the
+ *     archive, and the drawing with cards and empty.
  *
  * bluetooth_server also takes reports from the output queue, so this test
  * starts waiting before it sends, and sends again (at most four times).
@@ -40,6 +43,8 @@
 #include <Application.h>
 #include <AxisBar.h>
 #include <Bitmap.h>
+#include <CardStrip.h>
+#include <Looper.h>
 #include <OS.h>
 #include <String.h>
 #include <TiltLevel.h>
@@ -47,6 +52,7 @@
 
 #include <GameController.h>
 #include <GameControllerMotionView.h>
+#include <GameControllerView.h>
 #include <R5BluetoothHID.h>
 #include <joystick_driver.h>
 
@@ -668,6 +674,180 @@ test_drawing()
 }
 
 
+// The strip's selection message, counted in a looper of its own.
+class SelectionCounter : public BLooper {
+public:
+	SelectionCounter()
+		:
+		BLooper("selection counter"),
+		fCount(0),
+		fLast(-2)
+	{
+	}
+
+	virtual void MessageReceived(BMessage* message)
+	{
+		if (message->what == 'csel') {
+			int32 index = -2;
+			message->FindInt32("index", &index);
+			fLast = index;
+			atomic_add(&fCount, 1);
+			return;
+		}
+		BLooper::MessageReceived(message);
+	}
+
+	int32 Count() { return atomic_get(&fCount); }
+	int32 Last() { return fLast; }
+
+private:
+	int32	fCount;
+	int32	fLast;
+};
+
+
+static bool
+wait_count(SelectionCounter* counter, int32 count)
+{
+	for (int32 i = 0; i < 100 && counter->Count() < count; i++)
+		snooze(10000);
+	return counter->Count() == count;
+}
+
+
+static int
+test_card_strip()
+{
+	// BGameControllerView::PictureBitmap(): the card picture of a model.
+	rgb_color ink = make_color(40, 40, 40);
+	BBitmap* picture = BGameControllerView::PictureBitmap(0x054c, 0x0ce6,
+		B_GAME_CONTROLLER_FAMILY_PLAYSTATION, 56, 38, ink);
+	CHECK(picture != NULL && picture->IsValid(), "PictureBitmap of a model");
+	CHECK(picture->Bounds().IntegerWidth() == 55
+		&& picture->Bounds().IntegerHeight() == 37
+		&& picture->ColorSpace() == B_RGBA32, "PictureBitmap size and space");
+	int32 opaque = 0;
+	int32 clear = 0;
+	const uint8* bits = (const uint8*)picture->Bits();
+	for (int32 y = 0; y < 38; y++) {
+		for (int32 x = 0; x < 56; x++) {
+			uint8 alpha = bits[y * picture->BytesPerRow() + x * 4 + 3];
+			if (alpha > 128)
+				opaque++;
+			else if (alpha == 0)
+				clear++;
+		}
+	}
+	delete picture;
+	printf("gamecontroller_feel_test: picture bitmap %" B_PRId32 " line, %"
+		B_PRId32 " clear of %d\n", opaque, clear, 56 * 38);
+	CHECK(opaque > 60 && clear > 56 * 38 / 2,
+		"PictureBitmap draws the line on a transparent background");
+	picture = BGameControllerView::PictureBitmap(0, 0,
+		B_GAME_CONTROLLER_FAMILY_UNKNOWN, 56, 38, ink);
+	CHECK(picture != NULL, "PictureBitmap without a model");
+	delete picture;
+	CHECK(BGameControllerView::PictureBitmap(0, 0,
+		B_GAME_CONTROLLER_FAMILY_XBOX, 0, 38, ink) == NULL,
+		"PictureBitmap refuses an empty size");
+
+	// BCardStrip: items, selection, keys and the selection message.
+	SelectionCounter* counter = new SelectionCounter();
+	counter->Run();
+	BAppearanceKit::BCardStrip* strip = new BAppearanceKit::BCardStrip(
+		"strip", new BMessage('csel'));
+	strip->SetTarget(counter);
+	strip->SetEmptyText("No controller", "Plug one in.");
+	strip->SetEmptyAction("Open\xe2\x80\xa6", new BMessage('open'));
+	CHECK(strip->CountItems() == 0 && strip->CurrentSelection() == -1,
+		"an empty strip");
+	BSize pictureSize = strip->PictureSize();
+	CHECK(pictureSize.width > 20 && pictureSize.height > 10,
+		"strip picture size");
+	BBitmap card(BRect(0, 0, pictureSize.width - 1, pictureSize.height - 1),
+		B_RGBA32);
+	BAppearanceKit::BCardStripItem* first
+		= new BAppearanceKit::BCardStripItem("One", "USB", &card);
+	CHECK(first->Picture() != NULL && first->Picture() != &card,
+		"an item copies its picture");
+	CHECK(strip->AddItem(first), "add an item");
+	CHECK(!strip->AddItem(first), "an item belongs to one strip");
+	CHECK(strip->AddItem(new BAppearanceKit::BCardStripItem("Two")),
+		"add a second item");
+	CHECK(strip->AddItem(new BAppearanceKit::BCardStripItem("Zero"), 0),
+		"insert an item");
+	CHECK(strip->CountItems() == 3 && strip->IndexOf(first) == 1
+		&& strcmp(strip->ItemAt(0)->Title(), "Zero") == 0,
+		"the order of the items");
+
+	// Select() sends nothing; the keys do, once per change.
+	strip->Select(1);
+	CHECK(strip->CurrentSelection() == 1, "Select()");
+	strip->Select(7);
+	CHECK(strip->CurrentSelection() == -1, "Select() out of range");
+	strip->Select(1);
+	char key = B_RIGHT_ARROW;
+	strip->KeyDown(&key, 1);
+	CHECK(strip->CurrentSelection() == 2, "right arrow");
+	CHECK(wait_count(counter, 1) && counter->Last() == 2,
+		"right arrow sends the index");
+	strip->KeyDown(&key, 1);
+	CHECK(strip->CurrentSelection() == 2, "right arrow stops at the end");
+	key = B_HOME;
+	strip->KeyDown(&key, 1);
+	CHECK(strip->CurrentSelection() == 0
+		&& wait_count(counter, 2) && counter->Last() == 0, "Home");
+	key = B_LEFT_ARROW;
+	strip->KeyDown(&key, 1);
+	key = B_END;
+	strip->KeyDown(&key, 1);
+	CHECK(strip->CurrentSelection() == 2
+		&& wait_count(counter, 3) && counter->Last() == 2,
+		"left arrow at the start sends nothing; End");
+
+	// Removing keeps the selection on the same item.
+	BAppearanceKit::BCardStripItem* removed = strip->RemoveItem(0);
+	CHECK(removed != NULL && strip->CurrentSelection() == 1,
+		"remove before the selection");
+	delete removed;
+	removed = strip->RemoveItem(1);
+	CHECK(removed != NULL && strip->CurrentSelection() == -1,
+		"remove the selection");
+	delete removed;
+
+	// Archive and back.
+	BMessage archive;
+	CHECK(strip->Archive(&archive) == B_OK, "archive the strip");
+	BArchivable* object = BAppearanceKit::BCardStrip::Instantiate(&archive);
+	BAppearanceKit::BCardStrip* copy
+		= dynamic_cast<BAppearanceKit::BCardStrip*>(object);
+	CHECK(copy != NULL && copy->CountItems() == 1
+		&& strcmp(copy->ItemAt(0)->Title(), "One") == 0
+		&& copy->ItemAt(0)->Picture() != NULL, "the strip from its archive");
+	delete object;
+
+	// Drawn: the cards, then the empty card.
+	rgb_color background = ui_color(B_DOCUMENT_BACKGROUND_COLOR);
+	drawn_pixels cards;
+	bool drew = painted(strip, BRect(0, 0, 499, 79), background, cards);
+	CHECK(drew && cards.drawn > 100, "draw the strip with a card");
+	strip->MakeEmpty();
+	CHECK(strip->CountItems() == 0, "MakeEmpty()");
+	drawn_pixels empty;
+	drew = painted(strip, BRect(0, 0, 499, 79), background, empty);
+	CHECK(drew && empty.drawn > 100, "draw the empty strip");
+	printf("gamecontroller_feel_test: strip drawn pixels: card %" B_PRId32
+		", empty %" B_PRId32 " of %" B_PRId32 "\n", cards.drawn, empty.drawn,
+		cards.total);
+	delete strip;
+
+	counter->Lock();
+	counter->Quit();
+	printf("gamecontroller_feel_test: card strip ok\n");
+	return 0;
+}
+
+
 static int
 run()
 {
@@ -726,6 +906,8 @@ main()
 
 	BApplication app("application/x-vnd.R5OS-gamecontroller-feel-test");
 	if (test_drawing() != 0)
+		return 1;
+	if (test_card_strip() != 0)
 		return 1;
 
 	printf("gamecontroller_feel_test: ok\n");

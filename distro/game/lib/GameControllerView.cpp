@@ -641,7 +641,16 @@ BGameControllerView::PictureBitmap(uint16 vendorID, uint16 productID,
 	bitmap->RemoveChild(view);
 	bitmap->Unlock();
 	delete view;
-	return bitmap;
+
+	// A plain copy: the caller may keep it, without the bitmap's own
+	// window in app_server.
+	BBitmap* picture = new(std::nothrow) BBitmap(bitmap);
+	delete bitmap;
+	if (picture != NULL && picture->InitCheck() != B_OK) {
+		delete picture;
+		picture = NULL;
+	}
+	return picture;
 }
 
 
