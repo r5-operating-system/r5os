@@ -9,6 +9,8 @@ What changed:
 - New request `IEEE80211_IOC_HAIKU_ROUTER` (`0x6007`, `struct ieee80211_haiku_router`) in R5's `ieee80211_ioctl.h`, answered by net80211 itself from the access point's captured HE, VHT and HT capability elements. It is a new request, so the shipped `IEEE80211_IOC_HAIKU_LINK` struct stays as it is.
 - Wi-Fi Kit: `WiFiLinkDetails::routerStandard`, added at the end, message field `"router standard"`. `WiFiView` puts "Router: Wi-Fi 6" in the tool tip of the current network, and "Your router supports Wi-Fi 6." when the link uses less. The status line and the Deskbar line show only what the link uses.
 
+Tested: `scripts/build-locked.sh` (`jam_exit=0`, `mesa_exit=0`; `if_mtk.o`, `ieee80211_ioctl.o`, `WiFiController.o` and `WiFiView.o` compiled). QEMU (KVM, `-cpu host,+smap`, a copy of the new `r5-os.image`, 120 s, headless): the serial log has `enable SMAP` and reaches `R5 net_server: NetServer from distro`, no panic and no `vm_page_fault`. QEMU has no Wi-Fi adapter, so the new request and the tool tip did not run.
+
 Limits: not tried on hardware. VirtualBox and QEMU have no Wi-Fi adapter; the next stick with the Wi-Fi boots (W-Boot1 to 3) shows it. The hint compares the last digit of the two strings. WPA3 still needs a `wpa_supplicant` with SAE; this change does not touch it.
 
 ## 2026-11-17 - Bluetooth: a syslog line per device a scan hears
