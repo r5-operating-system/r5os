@@ -43,9 +43,6 @@ def main() -> int:
         copy("skia/" + name, local / name)
     app = HAIKU / "src" / "servers" / "app"
     copy("app_server-Jamfile", app / "Jamfile")
-    # A view is always clipped to its visible part (the gap between two
-    # children drew outside a scrolled parent).
-    copy("View.cpp", app / "View.cpp")
     # SkiaDrawingEngine needs to know which HWInterface it is bound to.
     copy("drawing/DrawingEngine.h", app / "drawing" / "DrawingEngine.h")
     copy("compositor/compose_period.h", local / "compose_period.h")

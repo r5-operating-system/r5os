@@ -1511,12 +1511,18 @@ View::_ScreenClipping(const BRegion* windowContentClipping, bool force) const
 		// the parent, the local clipping does not account for this
 		IntRect clippedBounds = Bounds();
 		ConvertToVisibleInTopView(&clippedBounds);
-		if (clippedBounds.Width() < fScreenClipping.Frame().Width()
-			|| clippedBounds.Height() < fScreenClipping.Frame().Height()) {
-			BRegion temp;
-			temp.Set((clipping_rect)clippedBounds);
-			fScreenClipping.IntersectWith(&temp);
-		}
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// Always clip to the visible bounds. Haiku only did so when they
+		// were narrower or lower than the frame of the local clipping, so
+		// the gap between two children (a group view's spacing) still drew
+		// outside a parent that showed only part of the view, as in a
+		// scrolled area.
+		BRegion temp;
+		temp.Set((clipping_rect)clippedBounds);
+		fScreenClipping.IntersectWith(&temp);
+// SPDX-SnippetEnd
 
 		fScreenClipping.IntersectWith(windowContentClipping);
 		fScreenClippingValid = true;
