@@ -1,5 +1,22 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Graphics (M13 step 3, code): Painter windows copied by transfer, Lavapipe settings, the M13 stick on paper
+
+Problem: step 3 of `docs/M13-PLAN.md`, code only (owner, 16 Nov 2026): the copy fast path, the Lavapipe switches, and one stick plan for RADV and Lavapipe, walked on paper.
+
+What changed:
+- The plain part of a Painter window (the default desktop, `gpu_draw` off, and Safe mode's compositor) is copied row by row from its buffer into the frame with `vkCmdCopyBuffer`, as a Skia window's is from its image (#4332). The same words as the copy shader.
+- Opt-in Lavapipe settings in the radeon_hd settings, logged when set: `gpu_lavapipe_msaa 1|4` (Skia's sample count for paths, only on Lavapipe), `gpu_lavapipe_threads <n>` (`LP_NUM_THREADS`), `gpu_lavapipe_vector 128|256` (`LP_NATIVE_VECTOR_WIDTH`). Without them nothing changes.
+- The M13 stick mode: `boot-next m13` (boots 1, 2, 3, then no settings file; a `gpu_m13_boot` line marks the boot), its `check` (device lines, no `page table pool full` on RADV, `scanout through vulkan` in boot 2, the Lavapipe setting in boot 3, warm-up and pipeline cache, no compose compare MISMATCH, the m13-measure numbers, no `gpu draw off`, no `compositor off`), and `check-pre-stick.py --paper` for it. The plan and the card: `generated/m13/STICK-PLAN.md`.
+- Not changed: `gpu_compositor_scanout` and `gfx9_wc_gtt` already exist and are only switched on by the stick's boot 2; the GPU page-table entry of a write-combined buffer stays snooped (GFX9 contract). The userland EOP fence check is not built: design in `docs/M13-PLAN.md` (a new additive call, a read-only clone per team), because it is a kernel change that QEMU cannot run.
+
+Tested (QEMU, KVM, 8 virtual CPUs, Lavapipe, own image copies, one run after the other; host load about 2, no other QEMU or jam). `scripts/build-locked.sh` jam_exit=0.
+- Painter under the compositor (`gpu_debug`, no `gpu_draw`), base (#4332) against this branch: drag 181.1 to 147.4 ms (111 to 137 frames), scroll 141.0 to 100.1 ms (143 to 197 frames), resize 46.2 to 37.3 ms; compose passes: copy 88 to 48 ms per frame.
+- `gpu_lavapipe_msaa 1` (Skia on Lavapipe): drag 158.2 ms (125 frames) against 160.7-166.8 ms with 4x; no clear gain. `r5-draw-compare` 458/490 against 459/490: two new FAILs (`stroke-roundrect-pen3/clear`, `stroke-shape-pen1/opaque`), one fewer (`stroke-shape-pen3/opaque`). It is outside the compare set's tolerances, so it stays an opt-in test switch and is not recommended. `compose compare ok` 7 times with it.
+- `py scripts/check-pre-stick.py --paper`: M11, M12 and M13 walks ok (`m13 lines 7 have a source`, `m13 boot 1/2/3/done settings ok`).
+
+Not tested: RADV and the 5625U, `gpu_lavapipe_threads` and `gpu_lavapipe_vector` (the vector width is only measurable on the 5625U: boot 3 of the stick). The stick is not built or written.
+
 ## 2026-11-17 - Graphics (M13 step 2 fix): no compositor off on Lavapipe, a copy instead of texelFetch, Mesa's cache, compose time per pass
 
 Problem: after #4330 the compositor turned itself off with `fence timeout` on Lavapipe (QEMU, `gpu_draw true`). Two causes were in step 2's own code: the damage of a Skia run went out right after the submit, so a compose was queued behind runs of 11-15 s after Sign in and hit its 15 s limit; and a pass without a compose waited up to 15 s on the CPU for the runs' semaphores. The old build (main with step 0) also turned it off, in 2 of 5 runs, so the limit itself did not fit Lavapipe. And with the images, the plain copy of a Skia window (`texelFetch` in `compose.comp`) cost 150-163 ms per frame while dragging on Lavapipe.
