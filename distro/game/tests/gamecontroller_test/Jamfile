@@ -11,5 +11,6 @@ SEARCH_SOURCE += [ FDirName $(HAIKU_TOP) src preferences r5game ] ;
 Application gamecontroller_test :
 	gamecontroller_test.cpp
 	GameControllerMapping.cpp
+	GameControllerPictures.cpp
 	: be libr5game.so libr5icons.so [ TargetLibstdc++ ]
 	;

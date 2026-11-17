@@ -2,13 +2,16 @@
  * SPDX-FileCopyrightText: 2026 R5OS Contributors
  * SPDX-License-Identifier: MIT
  *
- * The controller picture of docs/GAME-CONTROLLERS.md: four family shapes
- * (PlayStation, Xbox, Nintendo, Sega Genesis) and, for a controller
- * without a mapping, a picture built from what it reports. Simplified
- * silhouettes in R5's thin-line style, drawn for R5 from the owner-approved
- * mockup (docs/design/gamecontrollers-mockup), no logos. Everything is
- * drawn with polygons, ellipses and round rectangles: a stroked BShape is
- * not drawn on every app_server path (R5Icons.cpp).
+ * The controller picture of docs/GAME-CONTROLLERS.md. A known controller
+ * gets the drawing of its model, chosen by vendor and product ID
+ * (GameControllerPictures.h): the nine drawings of the Gamepad Line Art
+ * Pack (CC0, by gidedin) and R5's own Genesis / M30 drawing, filled in the
+ * text color, so dark mode follows. A pressed control fills blue under the
+ * line, a moved stick shows a blue ring off centre, and the analog
+ * triggers are small caps over the shoulders. A controller without a
+ * mapping gets a picture built from what it reports. The drawings are
+ * filled outlines: a stroked BShape is not drawn on every app_server path
+ * (R5Icons.cpp), so the generator turns strokes into outlines.
  */
 
 
@@ -22,11 +25,14 @@
 
 #include <InterfaceDefs.h>
 #include <LayoutUtils.h>
+#include <Shape.h>
 #include <MessageRunner.h>
 #include <Messenger.h>
 #include <Window.h>
 
 #include <R5Icons.h>
+
+#include "GameControllerPictures.h"
 
 #include <algorithm>
 #include <vector>
@@ -35,10 +41,21 @@
 static const uint32 kMsgPoll = 'gcvP';
 static const bigtime_t kPollInterval = 16000;
 
-// The picture's own coordinates (the mockup's viewBox). A live picture
-// has room for the triggers above the body.
+// The picture's own coordinates for a controller without a mapping.
 static const BRect kLiveBox(-30, -26, 430, 244);
 static const BRect kShapeBox(0, 36, 400, 236);
+
+// The drawings: the trigger caps and the band above the picture for them,
+// as parts of the drawing's width (the approved mockup: 34 by 40 pixels on
+// a picture 580 pixels wide). Below kBoldWidth pixels the line is drawn
+// thicker, as the pack's bold drawings are.
+static const float kCapWidth = 0.0586f;
+static const float kCapHeight = 0.069f;
+static const float kCapGap = 0.03f;
+static const float kCapBand = 0.12f;
+static const float kBoldWidth = 250;
+
+using namespace R5GameController;
 
 
 namespace {
@@ -94,92 +111,6 @@ struct painter {
 		return v * scale;
 	}
 };
-
-
-// A path flattened into points, for FillPolygon() and StrokePolygon().
-class Outline {
-public:
-	void Move(float x, float y)
-	{
-		fPoints.clear();
-		fPoints.push_back(BPoint(x, y));
-	}
-
-	void Line(float x, float y)
-	{
-		fPoints.push_back(BPoint(x, y));
-	}
-
-	void Curve(float x1, float y1, float x2, float y2, float x, float y)
-	{
-		BPoint p0 = fPoints.back();
-		const int kSteps = 14;
-		for (int i = 1; i <= kSteps; i++) {
-			float t = (float)i / kSteps;
-			float u = 1 - t;
-			float a = u * u * u;
-			float b = 3 * u * u * t;
-			float c = 3 * u * t * t;
-			float d = t * t * t;
-			fPoints.push_back(BPoint(a * p0.x + b * x1 + c * x2 + d * x,
-				a * p0.y + b * y1 + c * y2 + d * y));
-		}
-	}
-
-	void Draw(const painter& p, rgb_color fill, rgb_color stroke,
-		float pen) const
-	{
-		std::vector<BPoint> mapped;
-		for (size_t i = 0; i < fPoints.size(); i++)
-			mapped.push_back(p.Map(fPoints[i].x, fPoints[i].y));
-		p.view->SetHighColor(fill);
-		p.view->FillPolygon(&mapped[0], mapped.size());
-		p.view->SetHighColor(stroke);
-		p.view->SetPenSize(std::max(1.0f, p.Size(pen)));
-		p.view->StrokePolygon(&mapped[0], mapped.size(), true);
-	}
-
-private:
-	std::vector<BPoint>	fPoints;
-};
-
-
-void
-grip_body(const painter& p)
-{
-	Outline o;
-	o.Move(90, 40);
-	o.Line(310, 40);
-	o.Curve(350, 40, 372, 60, 383, 100);
-	o.Line(397, 168);
-	o.Curve(405, 208, 382, 232, 352, 226);
-	o.Curve(330, 221, 317, 203, 304, 182);
-	o.Line(284, 152);
-	o.Line(116, 152);
-	o.Line(96, 182);
-	o.Curve(83, 203, 70, 221, 48, 226);
-	o.Curve(18, 232, -5, 208, 3, 168);
-	o.Line(17, 100);
-	o.Curve(28, 60, 50, 40, 90, 40);
-	o.Draw(p, p.body, p.line, 2);
-}
-
-
-void
-genesis_body(const painter& p)
-{
-	Outline o;
-	o.Move(70, 48);
-	o.Line(330, 48);
-	o.Curve(376, 48, 396, 92, 396, 128);
-	o.Curve(396, 178, 364, 206, 322, 206);
-	o.Curve(292, 206, 276, 186, 252, 186);
-	o.Line(148, 186);
-	o.Curve(124, 186, 108, 206, 78, 206);
-	o.Curve(36, 206, 4, 178, 4, 128);
-	o.Curve(4, 92, 24, 48, 70, 48);
-	o.Draw(p, p.body, p.line, 2);
-}
 
 
 void
@@ -266,35 +197,6 @@ key(const painter& p, float cx, float cy, float radius, bool pressed,
 }
 
 
-void
-pill(const painter& p, float x, float y, float width, float height,
-	bool pressed)
-{
-	BRect r = p.MapRect(x, y, width, height);
-	float radius = std::min(r.Width(), r.Height()) / 2;
-	p.view->SetHighColor(pressed ? p.lit : p.key);
-	p.view->FillRoundRect(r, radius, radius);
-	p.view->SetHighColor(pressed ? p.litLine : p.line);
-	p.view->SetPenSize(std::max(1.0f, p.Size(1.6f)));
-	p.view->StrokeRoundRect(r, radius, radius);
-}
-
-
-void
-small_text(const painter& p, const char* text, float cx, float baseline)
-{
-	BFont font(be_bold_font);
-	// Never smaller than three quarters of the plain font, so it stays
-	// readable when the picture is small.
-	font.SetSize(std::max(be_plain_font->Size() * 0.75f, p.Size(10)));
-	p.view->SetFont(&font);
-	float width = font.StringWidth(text);
-	p.view->SetHighColor(p.quiet);
-	BPoint at = p.Map(cx, baseline);
-	p.view->DrawString(text, BPoint(at.x - width / 2, at.y));
-}
-
-
 /*!	A stick: a ring with a dot that follows it. The ring fills when the
 	stick is pressed in; the dot lights up once it leaves the middle.
 */
@@ -324,44 +226,169 @@ stick(const painter& p, float cx, float cy, float radius, int16 x, int16 y,
 }
 
 
-// A trigger: a bar that fills as far as it is pulled, with its name and,
-// while pulled, how far.
-void
-trigger(const painter& p, float x, float y, const char* name, int16 value)
-{
-	BRect r = p.MapRect(x, y, 70, 10);
-	float radius = p.Size(3);
-	if (value > 0) {
-		BRect fill = r;
-		fill.right = fill.left + r.Width() * value / 32767.0f;
-		p.view->SetHighColor(p.lit);
-		p.view->FillRoundRect(fill, radius, radius);
-	}
-	p.view->SetHighColor(p.line);
-	p.view->SetPenSize(std::max(1.0f, p.Size(2)));
-	p.view->StrokeRoundRect(r, radius, radius);
+// #pragma mark - the drawings
 
-	char text[32];
-	if (value > 300)
-		snprintf(text, sizeof(text), "%s \xc2\xb7 %d %%", name,
-			(int)(value * 100.0f / 32767 + 0.5f));
-	else
-		snprintf(text, sizeof(text), "%s", name);
-	small_text(p, text, x + 35, y + 24);
+
+// A drawing in view coordinates: data units (a quarter of a viewBox unit)
+// times scale, from origin.
+struct model_painter {
+	const gc_model*	model;
+	BPoint			origin;
+	float			scale;
+
+	BPoint Map(float x, float y) const
+	{
+		return BPoint(origin.x + x * scale, origin.y + y * scale);
+	}
+};
+
+
+// The outline of a control, in view coordinates.
+bool
+control_bounds(const model_painter& m, int32 button, BRect& bounds)
+{
+	const gc_model* model = m.model;
+	for (int32 i = 0; i < model->controlCount; i++) {
+		const gc_control& control = model->controls[i];
+		if (control.button != button || control.count == 0)
+			continue;
+		const int16* points = model->controlPoints + control.first * 2;
+		BPoint first = m.Map(points[0], points[1]);
+		bounds.Set(first.x, first.y, first.x, first.y);
+		for (int32 k = 1; k < control.count; k++) {
+			BPoint point = m.Map(points[k * 2], points[k * 2 + 1]);
+			bounds.left = std::min(bounds.left, point.x);
+			bounds.right = std::max(bounds.right, point.x);
+			bounds.top = std::min(bounds.top, point.y);
+			bounds.bottom = std::max(bounds.bottom, point.y);
+		}
+		return true;
+	}
+	return false;
 }
 
 
 void
-shoulder(const painter& p, float x, float y, const char* name, bool pressed)
+fill_control(BView* view, const model_painter& m, const gc_control& control)
 {
-	BRect r = p.MapRect(x, y, 56, 12);
-	float radius = p.Size(5);
-	p.view->SetHighColor(pressed ? p.lit : p.key);
-	p.view->FillRoundRect(r, radius, radius);
-	p.view->SetHighColor(pressed ? p.litLine : p.line);
-	p.view->SetPenSize(std::max(1.0f, p.Size(1.6f)));
-	p.view->StrokeRoundRect(r, radius, radius);
-	small_text(p, name, x + 28, y - 4);
+	if (control.count < 3)
+		return;
+	std::vector<BPoint> points(control.count);
+	const int16* data = m.model->controlPoints + control.first * 2;
+	for (int32 k = 0; k < control.count; k++)
+		points[k] = m.Map(data[k * 2], data[k * 2 + 1]);
+	view->FillPolygon(&points[0], control.count);
+}
+
+
+// The drawing as one shape per path, from the drawing's corner at this
+// scale; FillShape() draws a shape at the pen location.
+void
+build_art(const gc_model* model, float scale, std::vector<BShape*>& shapes)
+{
+	const int16* data = model->points;
+	int32 run = 0;
+	while (run < model->runCount) {
+		int32 subpaths = model->runs[run++];
+		BShape* shape = new(std::nothrow) BShape;
+		for (int32 i = 0; i < subpaths && run < model->runCount; i++) {
+			int32 count = model->runs[run++];
+			for (int32 k = 0; k < count; k++, data += 2) {
+				if (shape == NULL)
+					continue;
+				BPoint point(data[0] * scale, data[1] * scale);
+				if (k == 0)
+					shape->MoveTo(point);
+				else
+					shape->LineTo(point);
+			}
+			if (shape != NULL)
+				shape->Close();
+		}
+		if (shape != NULL)
+			shapes.push_back(shape);
+	}
+}
+
+
+void
+model_text(BView* view, const model_painter& m, const gc_text& text,
+	rgb_color color)
+{
+	BFont font(be_bold_font);
+	font.SetSize(std::max(5.0f, text.size * m.scale));
+	view->SetFont(&font);
+	font_height height;
+	font.GetHeight(&height);
+	BPoint center = m.Map(text.x, text.y);
+	float width = font.StringWidth(text.text);
+	view->SetHighColor(color);
+	view->DrawString(text.text, BPoint(center.x - width / 2,
+		center.y + (height.ascent - height.descent) / 2));
+}
+
+
+// A moved stick: a ring around the cap, moved the way the stick points.
+void
+stick_ring(BView* view, const model_painter& m, const gc_stick& stick,
+	int16 x, int16 y, rgb_color color)
+{
+	if (stick.radius == 0 || (abs(x) <= 6000 && abs(y) <= 6000))
+		return;
+	BPoint center = m.Map(stick.x + stick.travel * x / 32768.0f,
+		stick.y + stick.travel * y / 32768.0f);
+	float radius = stick.radius * m.scale;
+	view->SetHighColor(color);
+	view->SetPenSize(std::max(1.5f, 0.006f * m.model->width * m.scale));
+	view->StrokeEllipse(center, radius, radius);
+}
+
+
+// An analog trigger: a small cap over the shoulder, filled from the
+// bottom by how far it is pulled, with "L2 60%" beside it.
+void
+trigger_cap(BView* view, const painter& p, const model_painter& m,
+	BRect shoulder, const char* name, int16 value, bool left)
+{
+	float width = m.model->width * m.scale;
+	float capWidth = kCapWidth * width;
+	float capHeight = kCapHeight * width;
+	float center = (shoulder.left + shoulder.right) / 2;
+	float bottom = shoulder.top - kCapGap * width;
+	BRect cap(center - capWidth / 2, bottom - capHeight,
+		center + capWidth / 2, bottom);
+	float radius = capWidth * 0.3f;
+
+	view->SetHighColor(p.key);
+	view->FillRoundRect(cap, radius, radius);
+	float fraction = std::min(1.0f, std::max(0.0f, value / 32767.0f));
+	if (fraction > 0) {
+		BRect fill = cap;
+		fill.top = cap.bottom - cap.Height() * fraction;
+		view->PushState();
+		view->ClipToRect(fill);
+		view->SetHighColor(p.lit);
+		view->FillRoundRect(cap, radius, radius);
+		view->PopState();
+	}
+	view->SetHighColor(p.line);
+	view->SetPenSize(std::max(1.5f, capWidth * 0.08f));
+	view->StrokeRoundRect(cap, radius, radius);
+
+	char text[32];
+	snprintf(text, sizeof(text), "%s %d%%", name,
+		(int)(fraction * 100 + 0.5f));
+	BFont font(be_bold_font);
+	font.SetSize(std::max(be_plain_font->Size() * 0.75f, capWidth * 0.33f));
+	view->SetFont(&font);
+	font_height height;
+	font.GetHeight(&height);
+	float textWidth = font.StringWidth(text);
+	float gap = capWidth * 0.25f;
+	float baseline = (cap.top + cap.bottom) / 2
+		+ (height.ascent - height.descent) / 2;
+	view->DrawString(text, BPoint(left ? cap.left - gap - textWidth
+		: cap.right + gap, baseline));
 }
 
 
@@ -377,16 +404,36 @@ struct BGameControllerView::Private {
 	game_controller_labels	labels;
 	BMessageRunner*			runner;
 	picture_state			state;
+	// The drawing as shapes, for artModel at artScale.
+	std::vector<BShape*>	art;
+	const gc_model*			artModel;
+	float					artScale;
 
 	Private()
 		:
 		controller(NULL),
 		family(B_GAME_CONTROLLER_FAMILY_XBOX),
 		labels(B_GAME_CONTROLLER_LABELS_AUTOMATIC),
-		runner(NULL)
+		runner(NULL),
+		artModel(NULL),
+		artScale(0)
 	{
 		memset(&state, 0, sizeof(state));
 		state.battery = -1;
+	}
+
+	~Private()
+	{
+		ClearArt();
+	}
+
+	void ClearArt()
+	{
+		for (size_t i = 0; i < art.size(); i++)
+			delete art[i];
+		art.clear();
+		artModel = NULL;
+		artScale = 0;
 	}
 };
 
@@ -637,66 +684,97 @@ BGameControllerView::Draw(BRect updateRect)
 	SetHighColor(p.background);
 	FillRect(bounds);
 
-	game_controller_labels labels = fPrivate->labels;
-	if (labels == B_GAME_CONTROLLER_LABELS_AUTOMATIC)
-		labels = live ? controller->LabelStyle()
-			: (family == B_GAME_CONTROLLER_FAMILY_PLAYSTATION
-				? B_GAME_CONTROLLER_LABELS_PLAYSTATION
-				: B_GAME_CONTROLLER_LABELS_XBOX);
-	bool playstation = labels == B_GAME_CONTROLLER_LABELS_PLAYSTATION;
-	bool nintendo = family == B_GAME_CONTROLLER_FAMILY_NINTENDO;
-
 	uint32 b = s.buttons;
 #define DOWN(button) (live && (b & ((uint32)1 << (button))) != 0)
-	uint8 dpadMask = 0;
-	if (DOWN(B_CONTROLLER_BUTTON_DPAD_UP))
-		dpadMask |= 1;
-	if (DOWN(B_CONTROLLER_BUTTON_DPAD_RIGHT))
-		dpadMask |= 2;
-	if (DOWN(B_CONTROLLER_BUTTON_DPAD_DOWN))
-		dpadMask |= 4;
-	if (DOWN(B_CONTROLLER_BUTTON_DPAD_LEFT))
-		dpadMask |= 8;
 
-	float faceRadius = live ? 12 : 10;
+	const gc_model* model = live
+		? PictureFor(controller->VendorID(), controller->ProductID(), family)
+		: PictureForFamily(family);
+	if (model != NULL) {
+		// The drawing of the model, centred, with a band above it for the
+		// trigger caps when the controller has analog triggers.
+		bool leftTrigger = live && model->leftCap != NULL
+			&& controller->HasAxis(B_CONTROLLER_AXIS_LEFT_TRIGGER);
+		bool rightTrigger = live && model->rightCap != NULL
+			&& controller->HasAxis(B_CONTROLLER_AXIS_RIGHT_TRIGGER);
+		float width = model->width;
+		float band = leftTrigger || rightTrigger ? kCapBand * width : 0;
+		float height = model->height + band;
+		model_painter m;
+		m.model = model;
+		m.scale = std::min(bounds.Width() / width, bounds.Height() / height);
+		m.origin.x = roundf(bounds.left
+			+ (bounds.Width() - width * m.scale) / 2);
+		m.origin.y = roundf(bounds.top
+			+ (bounds.Height() - height * m.scale) / 2 + band * m.scale);
 
-	if (family == B_GAME_CONTROLLER_FAMILY_SEGA_GENESIS) {
-		if (live && controller->HasAxis(B_CONTROLLER_AXIS_LEFT_TRIGGER)) {
-			shoulder(p, 64, 30, "L",
-				s.axes[B_CONTROLLER_AXIS_LEFT_TRIGGER] > 16384);
+		// What is pressed fills under the line.
+		SetHighColor(p.lit);
+		for (int32 i = 0; live && i < model->controlCount; i++) {
+			const gc_control& control = model->controls[i];
+			bool on;
+			if (control.button == PICTURE_LEFT_TRIGGER) {
+				on = controller->HasAxis(B_CONTROLLER_AXIS_LEFT_TRIGGER)
+					&& s.axes[B_CONTROLLER_AXIS_LEFT_TRIGGER] > 16384;
+			} else if (control.button == PICTURE_RIGHT_TRIGGER) {
+				on = controller->HasAxis(B_CONTROLLER_AXIS_RIGHT_TRIGGER)
+					&& s.axes[B_CONTROLLER_AXIS_RIGHT_TRIGGER] > 16384;
+			} else
+				on = DOWN(control.button);
+			if (on)
+				fill_control(this, m, control);
 		}
-		if (live && controller->HasAxis(B_CONTROLLER_AXIS_RIGHT_TRIGGER)) {
-			shoulder(p, 280, 30, "R",
-				s.axes[B_CONTROLLER_AXIS_RIGHT_TRIGGER] > 16384);
+
+		// The line, in the text color; thicker when the picture is small.
+		if (fPrivate->artModel != model || fPrivate->artScale != m.scale) {
+			fPrivate->ClearArt();
+			build_art(model, m.scale, fPrivate->art);
+			fPrivate->artModel = model;
+			fPrivate->artScale = m.scale;
 		}
-		genesis_body(p);
-		dpad(p, 92, 124, 30, 24, 8, dpadMask);
-		// X Y Z over A B C. C and Z are the shoulders of the standard
-		// layout, where the database puts them.
-		static const face_label kX = { "X", (r5_glyph)0 };
-		static const face_label kY = { "Y", (r5_glyph)0 };
-		static const face_label kZ = { "Z", (r5_glyph)0 };
-		static const face_label kA = { "A", (r5_glyph)0 };
-		static const face_label kB = { "B", (r5_glyph)0 };
-		static const face_label kC = { "C", (r5_glyph)0 };
-		float r = live ? 12 : 11;
-		key(p, 266, 104, r, DOWN(B_CONTROLLER_BUTTON_X), live ? &kX : NULL,
-			13);
-		key(p, 300, 96, r, DOWN(B_CONTROLLER_BUTTON_Y), live ? &kY : NULL,
-			13);
-		key(p, 334, 88, r, DOWN(B_CONTROLLER_BUTTON_LEFT_SHOULDER),
-			live ? &kZ : NULL, 13);
-		key(p, 266, 140, r, DOWN(B_CONTROLLER_BUTTON_A), live ? &kA : NULL,
-			13);
-		key(p, 300, 132, r, DOWN(B_CONTROLLER_BUTTON_B), live ? &kB : NULL,
-			13);
-		key(p, 334, 124, r, DOWN(B_CONTROLLER_BUTTON_RIGHT_SHOULDER),
-			live ? &kC : NULL, 13);
-		pill(p, 186, 120, 28, 10, DOWN(B_CONTROLLER_BUTTON_START));
+		int32 rule = FillRule();
+		SetFillRule(B_EVEN_ODD);
+		SetHighColor(p.line);
+		static const BPoint kBold[] = {
+			BPoint(0, 0), BPoint(0.45f, 0), BPoint(-0.45f, 0),
+			BPoint(0, 0.45f), BPoint(0, -0.45f)
+		};
+		int32 passes = width * m.scale < kBoldWidth ? 5 : 1;
+		for (int32 pass = 0; pass < passes; pass++) {
+			MovePenTo(m.origin + kBold[pass]);
+			for (size_t i = 0; i < fPrivate->art.size(); i++)
+				FillShape(fPrivate->art[i]);
+		}
+		MovePenTo(B_ORIGIN);
+		SetFillRule(rule);
+		for (int32 i = 0; i < model->textCount; i++)
+			model_text(this, m, model->texts[i], p.line);
+
+		if (live) {
+			stick_ring(this, m, model->leftStick,
+				s.axes[B_CONTROLLER_AXIS_LEFT_X],
+				s.axes[B_CONTROLLER_AXIS_LEFT_Y], p.lit);
+			stick_ring(this, m, model->rightStick,
+				s.axes[B_CONTROLLER_AXIS_RIGHT_X],
+				s.axes[B_CONTROLLER_AXIS_RIGHT_Y], p.lit);
+		}
+		BRect shoulder;
+		if (leftTrigger
+			&& control_bounds(m, B_CONTROLLER_BUTTON_LEFT_SHOULDER, shoulder)) {
+			trigger_cap(this, p, m, shoulder, model->leftCap,
+				s.axes[B_CONTROLLER_AXIS_LEFT_TRIGGER], true);
+		}
+		if (rightTrigger
+			&& control_bounds(m, B_CONTROLLER_BUTTON_RIGHT_SHOULDER,
+				shoulder)) {
+			trigger_cap(this, p, m, shoulder, model->rightCap,
+				s.axes[B_CONTROLLER_AXIS_RIGHT_TRIGGER], false);
+		}
 		return;
 	}
 
-	if (family == B_GAME_CONTROLLER_FAMILY_UNKNOWN) {
+	// No mapping: a picture built from what the controller reports.
+	{
 		box_body(p);
 		// Built from what the controller reports: a hat as a d-pad, two
 		// pairs of axes as sticks, the other axes as bars, the buttons as
@@ -752,97 +830,6 @@ BGameControllerView::Draw(BRect updateRect)
 		return;
 	}
 
-	// The grip shapes: PlayStation, Xbox and Nintendo.
-	if (live) {
-		const char* names[4];
-		if (playstation) {
-			names[0] = "L1"; names[1] = "R1"; names[2] = "L2"; names[3] = "R2";
-		} else if (nintendo) {
-			names[0] = "L"; names[1] = "R"; names[2] = "ZL"; names[3] = "ZR";
-		} else {
-			names[0] = "LB"; names[1] = "RB"; names[2] = "LT"; names[3] = "RT";
-		}
-		if (controller->HasAxis(B_CONTROLLER_AXIS_LEFT_TRIGGER))
-			trigger(p, -24, -20, names[2],
-				s.axes[B_CONTROLLER_AXIS_LEFT_TRIGGER]);
-		if (controller->HasAxis(B_CONTROLLER_AXIS_RIGHT_TRIGGER))
-			trigger(p, 354, -20, names[3],
-				s.axes[B_CONTROLLER_AXIS_RIGHT_TRIGGER]);
-		if (controller->HasButton(B_CONTROLLER_BUTTON_LEFT_SHOULDER))
-			shoulder(p, 60, 22, names[0],
-				DOWN(B_CONTROLLER_BUTTON_LEFT_SHOULDER));
-		if (controller->HasButton(B_CONTROLLER_BUTTON_RIGHT_SHOULDER))
-			shoulder(p, 284, 22, names[1],
-				DOWN(B_CONTROLLER_BUTTON_RIGHT_SHOULDER));
-	}
-	grip_body(p);
-
-	bool psShape = family == B_GAME_CONTROLLER_FAMILY_PLAYSTATION;
-	if (psShape) {
-		// Touchpad, d-pad high on the left, both sticks low.
-		BRect pad = p.MapRect(160, 52, 80, 48);
-		bool touch = DOWN(B_CONTROLLER_BUTTON_TOUCHPAD);
-		if (touch) {
-			SetHighColor(p.lit);
-			FillRoundRect(pad, p.Size(6), p.Size(6));
-		}
-		SetHighColor(p.line);
-		SetPenSize(std::max(1.0f, p.Size(2)));
-		StrokeRoundRect(pad, p.Size(6), p.Size(6));
-		dpad(p, 112, 89, 27, 21, 7, dpadMask);
-		stick(p, 152, 140, 22, s.axes[B_CONTROLLER_AXIS_LEFT_X],
-			s.axes[B_CONTROLLER_AXIS_LEFT_Y],
-			DOWN(B_CONTROLLER_BUTTON_LEFT_STICK), live);
-		stick(p, 248, 140, 22, s.axes[B_CONTROLLER_AXIS_RIGHT_X],
-			s.axes[B_CONTROLLER_AXIS_RIGHT_Y],
-			DOWN(B_CONTROLLER_BUTTON_RIGHT_STICK), live);
-		if (live) {
-			pill(p, 140, 54, 12, 8, DOWN(B_CONTROLLER_BUTTON_BACK));
-			pill(p, 248, 54, 12, 8, DOWN(B_CONTROLLER_BUTTON_START));
-			key(p, 200, 140, 6, DOWN(B_CONTROLLER_BUTTON_GUIDE), NULL, 0);
-		}
-	} else {
-		// Xbox and Nintendo: the left stick high, the d-pad and the right
-		// stick low.
-		stick(p, 95, 88, 22, s.axes[B_CONTROLLER_AXIS_LEFT_X],
-			s.axes[B_CONTROLLER_AXIS_LEFT_Y],
-			DOWN(B_CONTROLLER_BUTTON_LEFT_STICK), live);
-		dpad(p, 158.5f, 136.5f, 24.5f, 19.5f, 6.5f, dpadMask);
-		stick(p, 248, 140, 22, s.axes[B_CONTROLLER_AXIS_RIGHT_X],
-			s.axes[B_CONTROLLER_AXIS_RIGHT_Y],
-			DOWN(B_CONTROLLER_BUTTON_RIGHT_STICK), live);
-		if (live) {
-			pill(p, 170, 98, 16, 8, DOWN(B_CONTROLLER_BUTTON_BACK));
-			pill(p, 214, 98, 16, 8, DOWN(B_CONTROLLER_BUTTON_START));
-		}
-		key(p, 200, 70, 9, DOWN(B_CONTROLLER_BUTTON_GUIDE), NULL, 0);
-	}
-
-	// The face buttons by place: A low, B right, X left, Y high. The
-	// Nintendo shape has A and B (and X and Y) the other way round.
-	face_label south = { "A", (r5_glyph)0 };
-	face_label east = { "B", (r5_glyph)0 };
-	face_label west = { "X", (r5_glyph)0 };
-	face_label north = { "Y", (r5_glyph)0 };
-	if (playstation) {
-		south.glyph = R5_GLYPH_CROSS;
-		east.glyph = R5_GLYPH_CIRCLE;
-		west.glyph = R5_GLYPH_SQUARE;
-		north.glyph = R5_GLYPH_TRIANGLE;
-	} else if (nintendo) {
-		south.text = "B";
-		east.text = "A";
-		west.text = "Y";
-		north.text = "X";
-	}
-	key(p, 315, 64, faceRadius, DOWN(B_CONTROLLER_BUTTON_Y),
-		live ? &north : NULL, 13);
-	key(p, 341, 90, faceRadius, DOWN(B_CONTROLLER_BUTTON_B),
-		live ? &east : NULL, 13);
-	key(p, 315, 116, faceRadius, DOWN(B_CONTROLLER_BUTTON_A),
-		live ? &south : NULL, 13);
-	key(p, 289, 90, faceRadius, DOWN(B_CONTROLLER_BUTTON_X),
-		live ? &west : NULL, 13);
 #undef DOWN
 }
 
