@@ -41,7 +41,33 @@ Written 17 Nov 2026. Nothing in this document is built yet.
 | **A** | Applications, kits, servers in userland, the build, documentation | `build-locked.sh` passes, plus a unit test or host test where one can be written | Yes |
 | **B** | Kernel, drivers, file systems, boot loader | As A, plus one short QEMU boot with SMAP on (starts, no panic, the one thing that changed), and a manual SMAP review | Yes |
 | **C** | Needs real hardware (a GPU, Wi-Fi, Bluetooth, sound, a laptop) | A stick boot | No: the fix may be written, but stays a draft PR marked "needs hardware" |
-| **X** | Areas the owner keeps: the GFX9 ring and everything under "GFX9 ring" in `AGENTS.md`, the Settings window layout, MMU, scheduler, and anything that changes an ABI | — | No: only the status `needs-owner`, with what was found |
+| **X** | Areas the owner keeps, and areas with work in progress (the list below) | — | No: only the status `needs-owner`, with what was found. No branch, no fix |
+
+Class X, the areas a run never fixes (owner, 17 Nov 2026):
+
+- **Kept by the owner:**
+  - the GFX9 ring and everything under "GFX9 ring" in `AGENTS.md`;
+  - the Settings window layout;
+  - the MMU and the scheduler;
+  - anything that changes an ABI.
+- **Work in progress (M13, Bluetooth plan 2, Wi-Fi):**
+  - **app_server:** the whole server, including the compositor, Painter, the GPU drawing (Skia), decorators and the accelerants.
+  - **GPU:**
+    - `radeon_hd`, the R5 GPU interface and the R5 DRM library;
+    - Mesa, RADV, Zink, llvmpipe and Lavapipe;
+    - OpenGL and Vulkan, and `BGLView` / `BDirectWindow`.
+  - **Bluetooth:**
+    - the kernel `bluetooth` modules and `h2generic`;
+    - `bluetooth_server`, the Bluetooth Kit, Bluetooth audio, and the Bluetooth page and Deskbar item.
+  - **Wi-Fi and wireless:**
+    - net80211 (FreeBSD and OpenBSD) and every `wlan` driver;
+    - `wpa_supplicant`, the Wi-Fi Kit, and the Wi-Fi pages and program.
+  - **Game Kit and controllers:**
+    - `libr5game.so` (`BGameController`, `BGameControllerView`) and the mapping database;
+    - the joystick drivers (`usb_hid`, `bluetooth_hid`, `i2c_hid` joystick parts), `BJoystick`;
+    - the Game controllers page in Settings, the controller battery in Deskbar.
+
+The owner takes an area off this list when its work is done.
 
 Not in this release: tickets for architectures R5 does not target (32-bit x86, PowerPC, SPARC, m68k, ARM32), except to keep the tree building.
 
@@ -67,7 +93,8 @@ Not in this release: tickets for architectures R5 does not target (32-bit x86, P
 ### Phase 0: triage (unattended, read-only)
 
 - Every `open` Trac ticket, in order of component, with the components R5 ships first:
-  - Tracker, Interface Kit, app_server, Kernel, Deskbar, Terminal, MediaPlayer and so on;
+  - Tracker, Interface Kit, Kernel, Deskbar, Terminal, MediaPlayer and so on;
+  - tickets in a class X area (section 3) are only marked: class X, `needs-owner`, with the path. Nobody checks them further during the run;
   - WebPositive and the Web Kit last.
 - For each ticket:
   - Does the code still exist in R5's tree?
@@ -75,7 +102,6 @@ Not in this release: tickets for architectures R5 does not target (32-bit x86, P
   - Which class, which path, which priority?
 - A ticket whose code is gone, or that R5 already fixed, gets `not-applicable` or `fixed` in `r5-status.tsv`, with the reason in the notes.
 - In the same phase, one read-only review per R5 area. Each finding becomes an `r5:` line in the queue:
-  - Bluetooth, Wi-Fi, the GPU interface and the compositor;
   - Settings and `libr5ui`;
   - multi-user and Login;
   - zeroconf and networking;
@@ -141,6 +167,7 @@ The loop:
 7. Every 10 items, and at the end: commit the queue file in its own PR `Tracker - bug-fix run <date>: queue status`.
 
 Never:
+- change a file in a class X area (section 3): app_server, GPU, Bluetooth, Wi-Fi, the Game Kit and controllers, and the areas the owner keeps. This also holds when a fix elsewhere would need it; the item then becomes `needs-owner`;
 - merge, write a stick, or change `distro/VERSION`, `distro/BUILD` or `distro/WHATSNEW`;
 - stack PRs; each fix starts from `origin/main`;
 - turn off a check, a test or SMAP to make something pass;
