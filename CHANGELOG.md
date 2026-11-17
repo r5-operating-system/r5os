@@ -1,5 +1,16 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Game controllers: no stray bar in a small Settings window
+
+Problem: at 910 by 560 a light bar, 3 px high, showed just above the controller strip on the Game controllers page, in the box colour (231) and exactly the width of the picture column. A whole-window redraw did not remove it.
+
+Cause: app_server (Haiku `View::_ScreenClipping()`) clipped a view to the visible part of its parents only when that part was narrower or lower than the frame of the view's own clipping. The own clipping of a group view is the spacing between its children. At 910 by 560 the area above the strip scrolls, so the picture column is taller than what shows; the frame of its own clipping (the gaps between the test, the hint and the vendor line) was not larger than the visible part, the check was skipped, and the 6 px gap between the hint and the vendor line was painted below the scroll area each time the column drew. In an earlier build the same gap landed in the bottom row beside the lock. #4373 (the lock and views that are not `BControl`) only changes input and is not involved.
+
+What changed:
+- app_server: `distro/app_server/View.cpp` is a copy of Haiku `src/servers/app/View.cpp` (MIT header kept); `_ScreenClipping()` now always intersects with the visible bounds (SPDX snippet, MIT). `scripts/apply-app-server.py` copies it. This applies to every window: a view inside a scrolled or smaller parent no longer paints its background outside that parent.
+
+Limits: Haiku upstream was not checked for the same fix. ARM64 and RISC-V 64 were not built.
+
 ## 2026-11-17 - Game controllers: fits at 1030 by 610, Motion gray without a controller
 
 Problem: on the screendumps of the layout-A page (1) at 1030 by 610 with a controller the area above the strip still scrolled by about 15 px, hiding the last line of Trigger feedback and the vendor and product line; (2) without a controller the Motion bubble of the gray example stayed blue (the level, the bars and their labels drew as enabled); (3) at 910 by 560 a light bar showed in the bottom row next to the lock.
@@ -12,7 +23,7 @@ What changed:
 
 Tested: AMD64 `scripts/build-locked.sh` twice, `jam_exit=0`. QEMU (SMAP and SMEP enabled, LOGIN=1, own image copy): with a virtual DualSense (GAMEPAD=1) at 1030 by 610 everything fits, no scroll bar, Trigger feedback and "Vendor 054C · Product 0CE6" visible (the first build still overflowed by about 3 px, hence the closer groups); without a controller (SIGNIN_AWAY=1) the Motion bubble, the bars and the labels are gray; at 910 by 560 the page lays out and scrolls as before. No panic, no SMAP or SMEP fault in the serial logs.
 
-Not fixed (3): at 910 by 560 a light strip, 3 to 6 px high, still shows below the area above the strip, in the colour and exactly the width of the picture column (in the first screendumps further down, beside the lock). It is not on the 1030 by 610 screendumps. Redrawing the whole window from `UpperArea::DoLayout()` did not remove it (tried in a QEMU run, then taken back), so it is not a missing redraw; the cause is not found. It needs this PR's picture column, so it most likely comes from this page (the self-scrolling `UpperArea` after the window gets smaller); origin/main without this PR was not built to compare.
+Fixed later (3): the light strip at 910 by 560 came from app_server clipping, not from this page; see "Game controllers: no stray bar in a small Settings window" above.
 
 ## 2026-11-17 - Game controllers: controllers in a strip at the bottom (layout A), and an example without a controller
 
