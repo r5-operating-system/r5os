@@ -1264,13 +1264,29 @@ sender_may_change(BMessage* request)
 }
 
 
+static uid_t
+first_grant_uid()
+{
+	forget_expired_grants();
+	team_info info;
+	for (int32 i = 0; i < kMaxAdminGrants; i++) {
+		if (sGrants[i].team <= 0)
+			continue;
+		if (get_team_info(sGrants[i].team, &info) == B_OK && info.uid != 0)
+			return info.uid;
+	}
+	return 0;
+}
+
+
 static void
-chmod_settings_tree(const char* dir, mode_t dirMode, mode_t fileMode, gid_t gid)
+chmod_settings_tree(const char* dir, mode_t dirMode, mode_t fileMode,
+	uid_t uid, gid_t gid)
 {
 	if (dir == NULL)
 		return;
 	chmod(dir, dirMode);
-	chown(dir, 0, gid);
+	chown(dir, uid, gid);
 	DIR* folder = opendir(dir);
 	if (folder == NULL)
 		return;
@@ -1283,10 +1299,10 @@ chmod_settings_tree(const char* dir, mode_t dirMode, mode_t fileMode, gid_t gid)
 		if (lstat(path.String(), &st) != 0 || S_ISLNK(st.st_mode))
 			continue;
 		if (S_ISDIR(st.st_mode))
-			chmod_settings_tree(path.String(), dirMode, fileMode, gid);
+			chmod_settings_tree(path.String(), dirMode, fileMode, uid, gid);
 		else {
 			chmod(path.String(), fileMode);
-			chown(path.String(), 0, gid);
+			chown(path.String(), uid, gid);
 		}
 	}
 	closedir(folder);
@@ -1396,11 +1412,11 @@ copy_file_if_missing(const char* from, const char* to)
 
 
 static void
-share_file(const char* path, mode_t mode, gid_t gid)
+share_file(const char* path, mode_t mode, uid_t uid, gid_t gid)
 {
 	if (access(path, F_OK) != 0)
 		return;
-	chown(path, 0, gid);
+	chown(path, uid, gid);
 	chmod(path, mode);
 }
 
@@ -1413,18 +1429,19 @@ refresh_machine_settings_access()
 	struct group* admin = getgrnam(kAdminGroupName);
 	gid_t gid = admin != NULL ? admin->gr_gid : 0;
 	bool open = any_grant();
-	mode_t dirMode = open ? 0777 : 0775;
-	mode_t fileMode = open ? 0666 : 0664;
+	uid_t owner = open ? first_grant_uid() : 0;
+	// Owner is the granted Settings team. Group admin still writes. Never
+	// 0777/0666: any local uid used to be able to change machine settings
+	// for the five-minute grant.
+	mode_t dirMode = (open && owner != 0) ? 0770 : 0775;
+	mode_t fileMode = (open && owner != 0) ? 0660 : 0664;
 
 	mkdir(kNetworkSettings, 0755);
-	// An administrator is in group admin and can write. A granted standard
-	// account is not, so those few minutes use a world-writable directory.
-	// One person is at this screen.
-	chmod_settings_tree(kNetworkSettings, dirMode, fileMode, gid);
+	chmod_settings_tree(kNetworkSettings, dirMode, fileMode, owner, gid);
 
 	mkdir(kMachinePrinters, 0755);
 	copy_tree_if_empty(kUserPrinters, kMachinePrinters);
-	chmod_settings_tree(kMachinePrinters, dirMode, fileMode, gid);
+	chmod_settings_tree(kMachinePrinters, dirMode, fileMode, owner, gid);
 
 	mkdir("/boot/system/settings/kernel", 0755);
 	mkdir("/boot/system/settings/kernel/drivers", 0755);
@@ -1438,13 +1455,13 @@ refresh_machine_settings_access()
 		if (created != NULL)
 			fclose(created);
 	}
-	share_file(kSwapSettings, fileMode, gid);
+	share_file(kSwapSettings, fileMode, owner, gid);
 
 	copy_file_if_missing(kUserRepoSettings, kRepoSettings);
-	share_file(kRepoSettings, fileMode, gid);
+	share_file(kRepoSettings, fileMode, owner, gid);
 
 	mkdir(kPackageRepos, 0755);
-	chmod_settings_tree(kPackageRepos, dirMode, fileMode, gid);
+	chmod_settings_tree(kPackageRepos, dirMode, fileMode, owner, gid);
 
 	write_grant_file();
 }
