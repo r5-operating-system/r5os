@@ -35,14 +35,16 @@
 # (the hang while composed, never re-run after the fix in 6829434c46).
 #
 # M13 stick (generated/m13/STICK-PLAN.md): "boot-next m13" starts it, and
-# a settings file with a gpu_m13_boot line continues it: 1, 2, 3, then no
+# a settings file with a gpu_m13_boot line continues it: 1, 2, 3, 4, then no
 # settings file. Every boot has gpu_draw, gpu_debug and gpu_selftest true.
 # Boot 1 is Skia on RADV with every other switch at its default (step 2 on
 # RADV, #4324), boot 2 adds the step 3 hardware switches
 # (gpu_compositor_scanout, gfx9_wc_gtt) and gpu_app_server, which scanout
 # needs for a back buffer on the GPU; boot 3 is Skia on Lavapipe with a
-# 128-bit vector width. The note is ~/m13/next. gpu_m13_boot is only the
-# marker; nothing reads it but check and this script.
+# 128-bit vector width. Boot 4 is boot 3 again: the second Lavapipe start,
+# which reuses Mesa's shader cache from boot 3. The note is ~/m13/next.
+# gpu_m13_boot is only the marker; nothing reads it but check and this
+# script.
 #
 # For the host tests: R5_HOME and R5_USER_SETTINGS move the paths, BOOT_NEXT_YES=0 never
 # restarts.
@@ -112,9 +114,10 @@ if [ "$stick" = m13 ]; then
 		case $cur in
 		1) next=2 ;;
 		2) next=3 ;;
-		3) next=done ;;
+		3) next=4 ;;
+		4) next=done ;;
 		*)
-			echo "FAIL no M13 boot follows $cur; run boot-next <1|2|3|done>"
+			echo "FAIL no M13 boot follows $cur; run boot-next <1|2|3|4|done>"
 			exit 1
 			;;
 		esac
@@ -195,9 +198,13 @@ gpu_m13_boot 2" ;;
 gpu_compositor_lavapipe true
 gpu_lavapipe_vector 128
 gpu_m13_boot 3" ;;
+	4) lines="$m13
+gpu_compositor_lavapipe true
+gpu_lavapipe_vector 128
+gpu_m13_boot 4" ;;
 	done) lines= ;;
 	*)
-		echo "FAIL unknown M13 boot $next (1, 2, 3 or done)"
+		echo "FAIL unknown M13 boot $next (1, 2, 3, 4 or done)"
 		exit 1
 		;;
 	esac

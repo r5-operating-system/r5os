@@ -60,10 +60,10 @@ fi
 # M11 next: its boot 4 also has gpu_hang_test 1.
 stick=m10
 m12note=$home/m12/next
-if [ -f "$settings" ] && grep -Eq '^gpu_m13_boot[[:space:]]+[123]' "$settings"; then
+if [ -f "$settings" ] && grep -Eq '^gpu_m13_boot[[:space:]]+[1234]' "$settings"; then
 	# M13 stick (generated/m13/STICK-PLAN.md): the marker names the boot
 	stick=m13
-	boot=$(sed -n 's/^gpu_m13_boot[[:space:]]*\([123]\).*/\1/p' "$settings" \
+	boot=$(sed -n 's/^gpu_m13_boot[[:space:]]*\([1234]\).*/\1/p' "$settings" \
 		| head -n 1)
 elif [ -f "$settings" ] && grep -q '^gpu_draw true' "$settings" \
 		&& ! grep -q '^gpu_compositor true' "$settings"; then
@@ -853,7 +853,9 @@ m13_boot() {
 	have 'decorator: r5 loaded' "$slog" "decorator: r5 loaded"
 	none 'gpu lost' "$slog" "no gpu lost"
 	none 'radeon_hd: gpu hang' "$slog" "no gpu hang"
-	if [ "$boot" = 3 ]; then
+	# #4363: after the GPU stop of the restart before, the ring comes up
+	contract 1
+	if [ "$boot" = 3 ] || [ "$boot" = 4 ]; then
 		have 'app_server: gpu compositor on lavapipe' "$slog" \
 			"gpu compositor on lavapipe"
 		have 'app_server: gpu draw on llvmpipe' "$slog" "gpu draw on llvmpipe"
@@ -873,6 +875,15 @@ m13_boot() {
 	fi
 	have 'app_server: gpu draw warm up [0-9]+ ms' "$slog" "gpu draw warm up"
 	emit "INFO $(grep -Eo 'gpu draw warm up [0-9]+ ms' "$slog" | head -n 1)"
+	if [ "$boot" = 3 ] || [ "$boot" = 4 ]; then
+		# M13 step 4 (#4396): the Lavapipe warm-up in 8 parts, no timeout;
+		# boot 4 reuses Mesa's shader cache, so its warm up is much shorter
+		have 'app_server: gpu draw warm-up parts 8' "$slog" \
+			"gpu draw warm-up parts 8"
+		emit "INFO $(grep -Eo 'gpu draw warm-up parts .*' "$slog" | head -n 1)"
+		none 'app_server: gpu draw warm up status' "$slog" \
+			"no gpu draw warm up status"
+	fi
 	emit "INFO $(grep -Eo 'gpu draw pipeline cache [a-z]+' "$slog" | head -n 1)"
 	emit "INFO $(grep -Eo 'gpu draw budget heap .*' "$slog" | head -n 1)"
 	none 'compose compare MISMATCH' "$slog" "no compose compare MISMATCH"
@@ -883,6 +894,17 @@ m13_boot() {
 	manual "text in menus and Terminal sharp and readable: ____"
 	manual "dragging, scrolling and resizing felt (smooth, jumps, stalls): ____"
 	manual "anything odd on screen (blocks, stripes, wrong colours): ____"
+	if [ "$boot" = 3 ]; then
+		manual "resize: only the outline moves, right size and place after release: ____"
+		manual "VulkanTeapot from Demos (on RADV) tears (yes/no): ____"
+	fi
+	if [ "$boot" = 4 ]; then
+		manual "time from power on to Sign in, against boot 3 (shorter?): ____"
+	fi
+	if [ "$boot" != 1 ]; then
+		# #4363: the GPU stop at the restart before this boot
+		manual "caps lock blinked at the restart before this boot (no / count): ____"
+	fi
 }
 
 if [ "$stick" = m13 ]; then

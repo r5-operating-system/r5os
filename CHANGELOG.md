@@ -1,5 +1,33 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Graphics (M13): VulkanTeapot on RADV no longer tears under a Lavapipe compositor (mesa_radv -10), and stick 5 on paper
+
+Problem (owner, stick 4): VulkanTeapot tears when the compositor runs on Lavapipe and the program on RADV. Cause, from the Mesa 25.3.6 source: on R5 RADV has no separate blit queue (`radv_wsi_get_prime_blit_queue` is under `#ifndef VK_USE_PLATFORM_VIEW_RFIVE`), so `blit.queue` is NULL and the copy into the host-visible buffer runs in the program's own submit, which signals the per-image fence. Mesa's `wsi_common_queue_present` waits that fence only for a software device (`wsi->sw`). `r5_queue_present` then read the buffer before the GPU had finished writing it. The existing `QueueWaitIdle` branch (for a blit queue) never runs on R5; left as it is.
+
+What changed:
+- `distro/mesa/wsi/wsi_common_haiku.cpp`: with a buffer blit, no blit queue and a hardware device, `r5_queue_present` waits the image's fence (at most 1 s) before it copies the rows. A timeout returns `VK_ERROR_DEVICE_LOST`. Lavapipe (`wsi->sw`) and the shared (zero-copy) path are unchanged. From `generated/m13/wsi-blit-fence.patch`, checked against the 25.3.6 source (`blit.queue`, `wsi->sw`, `fences[]`, `WaitForFences`).
+- `mesa_radv-25.3.6-10`: `pack-radv.py` takes `-9` as its base in both modes, writes `-10`; `check-pre-stick.py`, `install-mesa-packages.sh`, `pin-mesa-packages.sh` and `distro/gpu/COMPAT` name `-10`. The old-package filter of `install-mesa-packages.sh` matched `mesa_radv-25.3.6-1` as a prefix, which would also have matched `-10`; it now matches `mesa_radv-25.3.6-1-`, and `-9` is added. Lavapipe stays `-5` (the change does nothing on a software device).
+- M13 stick tools: a boot 4 (boot 3's settings again, `gpu_m13_boot 4`: the second Lavapipe start, Mesa's shader cache) in `boot-next`, `check`, `m13-measure` and `check-pre-stick.py`. `check` on M13 boots now also runs `contract 1` (`GFX9 scratch 0xdeadbeef`, fence, K2), on boots 3 and 4 wants `gpu draw warm-up parts 8` and no `gpu draw warm up status`, and asks for the outline resize and VulkanTeapot tearing (boot 3), the warm up against boot 3 (boot 4) and the caps lock at the restart before (boots 2 to 4). `check-pre-stick.py` wants `gpu draw warm-up parts` in app_server and `tmr destroy` (#4363) in radeon_hd.
+
+Not seen: the `shutdown rlc ..., tmr destroy ..., gart off` line is printed after the syslog's last write; stick 4's logs have no `shutdown gpu stop` line either. The stick shows #4363 by the caps lock and the next start's scratch, not by that line.
+
+Built: `distro/mesa/build-radv.sh` under the build lock, exit 0; `check-libdrm-symbols.py`: `ok libdrm symbols`. `mesa_radv-25.3.6-10`: version `25.3.6-10`, `libvulkan_radeon.so` differs from `-9`'s, no `/home/nickr` in it, the tools have boot 4. The script also repacks `mesa_lavapipe-25.3.6-5` and `mesa-25.3.6-5`; those were put back to the committed files, so a package name keeps its contents.
+
+Stick 5 written 17 Nov 21:38 at `56e06d7b7e`: `build-locked.sh` (`jam_exit=0`, `mesa_packages_ok`), `@r5-anyboot`, boot 1 planted, `check-pre-stick.py` on the image `pre-stick ok`, `write-stick.py` exit 0, stick sha256 `dd5c7931…` matches the image, all under one held build lock.
+
+Stick 5 on the 5625U (17 Nov, logs `generated/boot-5625u-51` in the worktree; the folder number is per worktree): `check` PASS on all 4 boots. Every boot `GFX9 scratch 0xdeadbeef`, fence landed, `k2 ok gart`, no gpu hang or lost, no `gpu draw off`, no `MISMATCH`. Shutdown to the last heartbeat 3–4 s.
+- Boot 1 (RADV): warm up 2332 ms, cache none; drag 16.8, resize 16.8 ms per frame (p95 19.6).
+- Boot 2 (RADV, scanout): scanout through Vulkan, warm up 84 ms, cache loaded; resize 16.7 (p95 23.0).
+- Boot 3 (Lavapipe, first start): `gpu draw warm-up parts 8, longest 9844 ms`, warm up 32722 ms, no `warm up status` (stick 4: 10448 ms and `Operation timed out`). Resize median 16.7 ms, p95 236.6 ms (not met); drag 16.7.
+- Boot 4 (Lavapipe, second start): warm up 2046 ms, longest part 1386 ms: Mesa's shader cache works on the 5625U. Resize 16.7 ms, p95 18.1 (met).
+- Owner, after the boots: VulkanTeapot no longer tears (boot 3: compositor on Lavapipe, VulkanTeapot on RADV). Mesa `-10` fixes it.
+- Owner, caps lock (#4363 **not** fixed): restart after boot 1 (RADV): caps lock blinks. After boot 2 (RADV): no blink, but the machine did not restart. After boot 3 (Lavapipe): blinks (stick 4: no blink after the Lavapipe boot). After boot 4: not watched, did not come back either. The next boot each time came up after a power cycle. So the shutdown stop of #4363 does not stop the blink, and a restart can now also hang. The OS side ends in 3–4 s (boot-next to the last heartbeat). The outline-resize question was not answered.
+- Owner: GLTeapot (Zink) on RADV runs slower than on Lavapipe (llvmpipe). No numbers or boot recorded. Not caused by `-10` as far as the source shows: Zink on R5 presents through `r5_present_frame()` (`haiku-zink-present.patch`, a CPU copy), not through the Vulkan WSI that `-10` changes. Not looked into.
+
+Limits: the boot 3 resize p95 (236.6 ms) is most likely Lavapipe compiling on its first start (boot 4 with the cache: 18.1); not proven. VulkanTeapot's frame rate on RADV with the fence wait was not measured. Scroll p95 stays 170–240 ms on every boot (not judged). The present now waits for the GPU on RADV without a shared image, so VulkanTeapot's frame rate on that path may drop; measure it on the stick. A frame over 1 s on that path ends the swapchain. ARM64 and RISC-V 64 not built.
+
+Tested: `git apply --check` of the patch on `origin/main`; `sh -n` of `check`, `boot-next` and `m13-measure`; `py scripts/check-pre-stick.py --paper` at `331843fef0`: `m13 lines 9 have a source`, `m13 boot 1/2/3/4/done settings ok`, M11 and M12 walks unchanged, `pre-stick paper ok`.
+
 ## 2026-11-17 - Tracker: selection, columns and broken links do not crash on a stale pose
 
 Problem: five Haiku Tracker crash tickets still followed from the R5 copies of PoseView and ContainerWindow: a NULL pose after a file vanished during a list-mode rubber-band (#11031), StopWatching on a Model that already left the pose list (#17837), BBitmap::Lock on a failed drag bitmap and an unbounded attribute column width (#9434), and GetFont on a menu whose looper was not locked (#14390). Replicant removal (#14880) lives in BShelf, which is not in distro/.
