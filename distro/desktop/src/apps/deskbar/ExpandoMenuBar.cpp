@@ -986,7 +986,14 @@ TExpandoMenuBar::monitor_team_windows(void* arg)
 	while (teamMenu->sDoMonitor) {
 		sMonLocker.Lock();
 
-		if (teamMenu->Window()->LockWithTimeout(50000) == B_OK) {
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// Closing the Deskbar detaches this menu before the watcher stops.
+		// Window() is then NULL, and the old call crashed (Haiku #6846).
+		BWindow* window = teamMenu->Window();
+		if (window != NULL && window->LockWithTimeout(50000) == B_OK) {
+		// SPDX-SnippetEnd
 			int32 totalItems = teamMenu->CountItems();
 
 			// Set all WindowMenuItems to require an update.
@@ -1096,7 +1103,7 @@ TExpandoMenuBar::monitor_team_windows(void* arg)
 					teamMenu->SizeWindow(1);
 			}
 
-			teamMenu->Window()->Unlock();
+			window->Unlock();
 		}
 
 		sMonLocker.Unlock();
