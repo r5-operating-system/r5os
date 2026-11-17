@@ -1,5 +1,15 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Tracker: selection, columns and broken links do not crash on a stale pose
+
+Problem: five Haiku Tracker crash tickets still followed from the R5 copies of PoseView and ContainerWindow: a NULL pose after a file vanished during a list-mode rubber-band (#11031), StopWatching on a Model that already left the pose list (#17837), BBitmap::Lock on a failed drag bitmap and an unbounded attribute column width (#9434), and GetFont on a menu whose looper was not locked (#14390). Replicant removal (#14880) lives in BShelf, which is not in distro/.
+
+What changed: SelectPoses skips a missing pose; TryUpdatingBrokenLinks only watches models that still have a pose; MakeDragBitmap returns NULL if the bitmap did not initialise; attribute widths are clamped 20–600; attribute menus lock the looper before GetFont; ShowContextMenu takes the window lock.
+
+Limits: BShelf / ActivityMonitor replicant (#14880) is unchanged. NavMenu.cpp is still Haiku's copy, so ModelMenuItem::Highlight can still hit the looper assert. Not jammed, not booted.
+
+Tested: none.
+
 ## 2026-11-17 - Bluetooth: the ASUS USB-BT600 dongle starts in R5 (Bluetooth plan 2, step B0)
 
 Problem: the ASUS USB-BT600 (USB `0b05:1d70`, a Realtek RTL8761CU), the radio the owner bought for LE Audio and Auracast (`docs/BLUETOOTH-2.md`), needs a patch from the host. R5 had no Realtek loader, so `docs/BLUETOOTH.md` listed Realtek dongles as not working.
