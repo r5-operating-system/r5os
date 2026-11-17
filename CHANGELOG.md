@@ -45,6 +45,16 @@ Tested: `scripts/test-game-feel.sh` (host, ASan and UBSan): `feel_host_test: ok`
 
 Not tested: any real controller. DualSense and DualShock 4 rumble, trigger effects and motion need the owner's DualSense on a stick. The click and vibration trigger parameters, the sensor axes' signs and the DualShock 4 switch to full reports without its calibration report are the likely fixes. No PID controller was tested. The usb_hid output, feature and cache paths did not run (no USB game controller in QEMU). The widget drawing check is open. ARM64 and RISC-V 64 were not built.
 
+## 2026-11-17 - Settings: notifications file is replaced, not erased
+
+Problem: the Notifications page flattened the live `~/config/settings/system/notifications` file after `B_ERASE_FILE`. A failed Flatten left the notification server with an empty file.
+
+What changed: the message is flattened into memory first, then written to a `.tmp` file, `fsync`ed, and renamed over the path.
+
+Limits: the separate Notifications program still erases then writes. The server still watches that node.
+
+Tested: the C++ was not compiled on this host (needs libbe).
+
 ## 2026-11-17 - Settings: virtual memory file is replaced, not erased
 
 Problem: Settings wrote `/boot/system/settings/kernel/drivers/virtual_memory` with `B_ERASE_FILE` and then `Write`. A crash or a short write left an empty or truncated swap file. The kernel reads that file on the next start.

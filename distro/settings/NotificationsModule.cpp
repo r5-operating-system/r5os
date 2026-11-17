@@ -19,6 +19,7 @@
 #include <Button.h>
 #include <CheckBox.h>
 #include <Control.h>
+#include <DataIO.h>
 #include <Deskbar.h>
 #include <Directory.h>
 #include <Entry.h>
@@ -41,9 +42,12 @@
 #include <SupportDefs.h>
 
 #include <algorithm>
+#include <errno.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
 #include <syslog.h>
+#include <unistd.h>
 #include <vector>
 
 
@@ -385,11 +389,29 @@ write_state(const NotificationState& state)
 	if (status != B_OK)
 		return status;
 
-	BFile file(path.Path(), B_WRITE_ONLY | B_CREATE_FILE | B_ERASE_FILE);
-	status = file.InitCheck();
+	BMallocIO io;
+	status = store.Flatten(&io);
 	if (status != B_OK)
 		return status;
-	return store.Flatten(&file);
+
+	char tempPath[B_PATH_NAME_LENGTH];
+	if (snprintf(tempPath, sizeof(tempPath), "%s.tmp", path.Path())
+			>= (int)sizeof(tempPath))
+		return B_NAME_TOO_LONG;
+	int fd = open(tempPath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	if (fd < 0)
+		return errno != 0 ? errno : B_ERROR;
+	ssize_t written = write(fd, io.Buffer(), io.BufferLength());
+	if (written != (ssize_t)io.BufferLength())
+		status = written < 0 && errno != 0 ? errno : B_ERROR;
+	else if (fsync(fd) != 0)
+		status = errno != 0 ? errno : B_ERROR;
+	close(fd);
+	if (status == B_OK && rename(tempPath, path.Path()) != 0)
+		status = errno != 0 ? errno : B_ERROR;
+	if (status != B_OK)
+		unlink(tempPath);
+	return status;
 }
 
 
