@@ -1,5 +1,15 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Network: link-local mDNS results carry a scope
+
+Problem: AAAA answers from mDNS were returned with `sin6_scope_id` 0, so a link-local address could not be used.
+
+What changed: a link-local result gets the first up, non-loopback interface that already has a link-local IPv6 address.
+
+Limits: several such interfaces pick the first. QEMU usernet is not this test.
+
+Tested: the C++ was not compiled on this host (needs libbe).
+
 ## 2026-11-17 - Network: mDNS joins the multicast group
 
 Problem: `mdns_query` sent to 224.0.0.251 and ff02::fb but never joined those groups, so multicast replies could be missed.
