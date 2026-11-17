@@ -120,6 +120,28 @@ SDPClient::RequestServiceRecords()
 		_ParseAttrLists(&lists, &classes);
 	_LogRecords(browsed ? "sdp:" : "sdp: browse not read,", classes);
 
+	// A record is found by any UUID in it (Part B, 2.5.2), and a record
+	// without a BrowseGroupList is not in the public browse group. On
+	// stick 54 the WH-1000XM3 answered the browse with no records but had
+	// a Hands-Free record. Every profile on L2CAP (A2DP, AVRCP, HFP over
+	// RFCOMM, HID) names L2CAP (0x0100) in its protocol list: that search
+	// finds them.
+	bool l2capSearched = false;
+	if (classes.empty()) {
+		static const uint8 kL2CAPSearch[] = {
+			0x35, 0x03, 0x19, 0x01, 0x00,			// L2CAP
+			0x00, 0xff,								// at most 255 bytes a piece
+			0x35, 0x05, 0x0a, 0x00, 0x00, 0xff, 0xff	// attributes 0 to 0xffff
+		};
+		BMallocIO l2capLists;
+		l2capSearched = _SearchAttributes(kL2CAPSearch, sizeof(kL2CAPSearch),
+			&l2capLists) == B_OK;
+		if (l2capSearched)
+			_ParseAttrLists(&l2capLists, &classes);
+		_LogRecords(l2capSearched ? "sdp: l2cap search,"
+			: "sdp: l2cap search not read,", classes);
+	}
+
 	bool searched = false;
 	if (_MayOfferHandsFree()
 		&& BluetoothServer::R5RFCOMMChannel(fRemoteDevice->services,
@@ -140,7 +162,7 @@ SDPClient::RequestServiceRecords()
 		_LogRecords(searched ? "sdp: hands-free search,"
 			: "sdp: hands-free search not read,", found);
 	}
-	return browsed || searched ? B_OK : B_ERROR;
+	return browsed || l2capSearched || searched ? B_OK : B_ERROR;
 	// SPDX-SnippetEnd
 }
 

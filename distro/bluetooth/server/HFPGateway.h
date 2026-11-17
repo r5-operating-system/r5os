@@ -45,7 +45,8 @@ public:
 		Connector		connect;
 		ConnectedCheck	connected;
 		void*			cookie;
-		// After DeviceReady(): A2DP and HID go first.
+		// After DeviceReady(), before the RFCOMM connect. Short: a
+		// headset leaves within seconds when no profile comes up.
 		bigtime_t		connectDelay;
 		// After a session that never reached the SLC, up to retries
 		// times while the device is connected.

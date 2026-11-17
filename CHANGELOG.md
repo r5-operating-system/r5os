@@ -1,5 +1,23 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Bluetooth: Classic devices answer the scan again, and HFP starts before a headset gives up
+
+Problem (stick 54, build 10065 with #4398, HP ENVY x360 with the Ryzen 5 5625U and the MediaTek MT7961 over h2generic): every scan ended with `inquiry heard 0 classic devices` (Wi-Fi off and on), while the LE scan in the same 13 s heard 31 to 37 devices. Classic-only devices in pairing mode (the 8BitDo M30 in Classic mode, a DualSense) were never found. The WH-1000XM3 (found by its dual-mode LE advert, paired over Classic) went: connection up, SSP pairing, authentication and encryption ok, `sdp: 0 records:`, `sdp: hands-free search, 1 records: 0x111e`, `hands-free service on RFCOMM channel 10`, and 2 s later `link down (reason 0x13, the device ended it)`.
+
+Cause, Classic scan (found in the code, not yet proven on the radio): since the stick-51 fix R5 writes Write Inquiry Mode 2 (Extended Inquiry Result) on a controller that has EIR, but its Set Event Mask never had bit 46, Extended Inquiry Result (event 0x2F; Core 5.4, Vol 4, Part E, 7.3.1: bit n is event code n + 1). The default after a reset is bits 0 to 44. The logged mask `0x3cbf9fffffffffff` has 0x9f in bits 40 to 47, so bit 46 is off. In extended mode a device with EIR data (every recent one) answers only with event 0x2F, and the controller does not send a masked event. Inquiry Complete still came, so every scan ran its full length and heard nothing. A device without EIR answers with event 0x22 (bit 33 is in the default mask); that is probably why the M30 was found on stick 52. The brief's guess, that the inquiry and the extended LE scan running at the same time starve each other on the MT7961, is not needed for this and was not changed: the two still run together.
+
+Cause, headset drop (most likely, not proven): nothing opened a profile within the headset's wait. HFP waited 5 s after SDP (`HFPGateway` connectDelay, so A2DP and HID would go first), but A2DP only connects when sound plays (`BT_MSG_R5_AUDIO_CONNECT`), and the XM3 left after 2 s. The general SDP browse with 0 records is legal (a record without a BrowseGroupList is not in the public browse group), and the hands-free search found the record anyway.
+
+What changed:
+- `bluetooth_server`: the event mask gets the answer events of the inquiry mode it writes (`scan_inquiry_mode()` and `scan_inquiry_event_bits()` in `scan_log.h`): 0x02 always, 0x22 in modes 1 and 2, 0x2F in mode 2. The log line becomes `event mask 0x3cbfdfffffffffff` on the MT7961.
+- New syslog lines: `inquiry command status 0x0`, `inquiry complete, status 0x0`, and the scan's last line counts every raw inquiry event from the radio before any check or parse: `...; events from the radio: N standard, M with rssi, K extended)`.
+- HFP starts 0.5 s after SDP instead of 5 s (retries unchanged: twice, 10 s apart, only while the link is up).
+- SDP: when the public browse brings no records, a Service Search Attribute Request for L2CAP (0x0100, all attributes) follows, which every profile on L2CAP names in its protocol list; logged as `sdp: l2cap search, N records: ...`.
+
+Not fixed, reported: R5's SDP server has no Hands-Free Audio Gateway record (0x111F) and no RFCOMM server channel for it (only A2DP source and AVRCP, `SDPRecords.h`); HFP 1.8 asks the AG to have one. A headset that checks it before it takes the SLC would still leave. Adding it is a profile change and was not done here.
+
+Limits: hardware untested. QEMU has no Bluetooth radio, so the mask, the Classic answers, the earlier HFP start and the L2CAP search were not seen on a radio. The next stick shows it: `inquiry heard N classic devices` with N > 0 and `K extended` > 0, and for the XM3 an `hfp: service level connection up` line before any `link down`. ARM64 and RISC-V 64 not built or tested.
+
 ## 2026-11-17 - Bluetooth: a syslog line per device a scan hears
 
 Problem (stick 53, build 10065, 5625U with the MediaTek MT7961): in Settings > Bluetooth the first scan found nothing and the second only a few devices without a name; the Sony WH-1000XM3 and the 8BitDo M30, both in pairing mode, were not found. On stick 52 the same morning both were found and paired. The syslog of both sticks has the same server start and a full "le scan on/off" (13 s) per scan, but no line per device, so it could not tell whether the radio heard nothing or the page did not show it.

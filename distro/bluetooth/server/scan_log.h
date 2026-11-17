@@ -15,6 +15,7 @@
 
 
 #include <stdio.h>
+#include <stdint.h>
 #include <string.h>
 
 #include <SupportDefs.h>
@@ -107,6 +108,41 @@ scan_log_format(const uint8 address[6], const char* name,
 		nameText[i] = c < 0x20 || c == 0x7f || c == '"' ? '?' : (char)c;
 	}
 	nameText[length] = '\0';
+}
+
+
+// The inquiry mode bluetooth_server writes after a reset (Write Inquiry
+// Mode, Core 5.4, Vol 4, Part E, 7.3.50): Extended Inquiry Result (2)
+// where the controller has it (LMP features octet 6, bit 0), otherwise
+// Inquiry Result with RSSI (1, octet 3, bit 6), otherwise the standard
+// Inquiry Result (0) (Vol 2, Part C, 3.3).
+static inline uint8
+scan_inquiry_mode(const uint8 features[8])
+{
+	if ((features[6] & 0x01) != 0)
+		return 2;
+	if ((features[3] & 0x40) != 0)
+		return 1;
+	return 0;
+}
+
+
+/*!	The Set Event Mask bits (7.3.1; bit n is event code n + 1) that the
+	answers of that inquiry mode need. Bit 33 (Inquiry Result with RSSI,
+	0x22) is in the default mask after a reset, bit 46 (Extended Inquiry
+	Result, 0x2F) is not: in extended mode every device with EIR data
+	answers with event 0x2F, and the controller drops it when the bit is
+	off. On stick 54 every inquiry heard 0 classic devices that way.
+*/
+static inline uint64_t
+scan_inquiry_event_bits(uint8 mode)
+{
+	uint64_t bits = 1ULL << (0x02 - 1);
+	if (mode >= 1)
+		bits |= 1ULL << (0x22 - 1);
+	if (mode >= 2)
+		bits |= 1ULL << (0x2f - 1);
+	return bits;
 }
 
 
