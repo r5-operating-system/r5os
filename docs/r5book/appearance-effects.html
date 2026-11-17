@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<!--
+  SPDX-FileCopyrightText: 2026 R5OS Contributors
+  SPDX-License-Identifier: MIT
+-->
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Functions &amp; effects — Appearance Kit — R5Book</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
+	<link rel="stylesheet" href="r5book.css" />
+	<style>
+		.people { display: block; }
+		.m-screen { position: relative; background: #2b2b2b; border-radius: 5px; padding: 5px; }
+		.m-screen .glass { width: 100%; height: 100%; background: #336698; border-radius: 2px; position: relative; }
+	</style>
+</head>
+<body data-page="appearance">
+
+<div class="book">
+	<aside class="toc"></aside>
+
+	<main class="page">
+		<div class="breadcrumb"><a href="index.html">R5Book</a> &rsaquo; <a href="appearance-kit.html">Appearance Kit</a> &rsaquo; Functions &amp; effects</div>
+
+		<section class="page-hero">
+			<span class="kit-label">libr5ui.so &middot; namespace BAppearanceKit</span>
+			<h1>Functions &amp; effects</h1>
+			<p>Drawing helpers for screens and account avatars, plus window shadow and frosted glass controls.</p>
+		</section>
+
+		<nav class="on-this-page" aria-label="On this page">
+			<h3>What is in this page</h3>
+			<ul>
+				<li><a href="#functions">Functions</a> &mdash; <code class="inline">r5_screen_draw()</code>, <code class="inline">r5_screen_caption()</code>, and <code class="inline">r5_avatar_draw()</code>.</li>
+				<li><a href="#window-effects">Window effects</a> &mdash; Desktop shadows, animations, and frosted glass hints.</li>
+			</ul>
+		</nav>
+
+		<!-- Functions -->
+		<section class="entry" id="functions">
+			<div class="entry-header"><h2 class="plain">Functions</h2><span class="kind">&lt;R5UI.h&gt;</span></div>
+			<table class="facts">
+				<tr><th>Declared in</th><td>&lt;R5UI.h&gt;</td></tr>
+				<tr><th>Library</th><td>libr5ui.so</td></tr>
+				<tr><th>First user</th><td>Display, Notifications, Desktop and Deskbar, Sign in</td></tr>
+			</table>
+
+			<figure class="stage">
+				<div class="shot sys" style="gap:40px">
+					<div class="m-screen" style="position:relative;width:180px;height:116px"><div class="glass"></div></div>
+					<div style="display:flex;gap:16px;align-items:center">
+						<div class="sys-avatar" style="width:44px;height:44px"><img class="people" src="../design/login-mockup/icons/people.svg" width="34" height="34" alt="" /></div>
+						<div class="sys-avatar muted" style="width:44px;height:44px"><img class="people" src="../design/login-mockup/icons/people.svg" width="34" height="34" alt="" /></div>
+					</div>
+				</div>
+				<figcaption><span><code>r5_screen_draw()</code>, and <code>r5_avatar_draw()</code> highlighted and not</span><span class="badge-mockup">Mockup</span></figcaption>
+			</figure>
+
+			<div class="member"><div class="sig">BRect r5_screen_draw(BView* view, BRect bounds, rgb_color contentColor);</div>
+				<p>The screen frame Settings uses, in a 4:3 shape centered in <code class="inline">bounds</code>,
+				filled with <code class="inline">contentColor</code>. It returns that fill, in the view's coordinates,
+				so the caller can draw a Deskbar or a notification on the glass.</p></div>
+			<div class="member"><div class="sig">void r5_screen_caption(BView* view, BRect content, const char* text, rgb_color textColor);</div>
+				<p>One centered line on the glass. Text that does not fit is skipped.</p></div>
+			<div class="member"><div class="sig">void r5_avatar_draw(BView* view, BRect circle, const BBitmap* icon, bool highlighted);
+float r5_avatar_icon_side(float circleSide);</div>
+				<p>An account picture: a round plate with a thin ring and the icon in the middle. Highlighted is the
+				light accent plate; otherwise the plate and the picture are gray. A bitmap of
+				<code class="inline">r5_avatar_icon_side()</code> pixels is drawn pixel for pixel; any other size is
+				filtered. Without an icon a plain person outline is drawn.</p></div>
+
+<pre class="code"><span class="k">float</span> side = r5_avatar_icon_side(44);
+BBitmap* people = r5_mime_icon_bitmap(<span class="s">"application/x-vnd.Be-PEPL"</span>, side);
+r5_avatar_draw(<span class="k">this</span>, BRect(0, 0, 43, 43), people, <span class="k">true</span>);</pre>
+
+			<div class="see-also">
+				<strong>See also</strong>
+				<a href="appearance-controls.html#BScreenArrangement">BScreenArrangement</a>
+				<a href="appearance-settings.html#BUserCard">BUserCard</a>
+				<a href="appearance-settings.html#BUserListItem">BUserListItem</a>
+			</div>
+		</section>
+
+		<section class="entry" id="window-effects">
+			<div class="entry-header"><h2 class="plain">Window effects</h2><span class="kind">&lt;WindowEffects.h&gt;</span></div>
+			<table class="facts">
+				<tr><th>Declared in</th><td>&lt;WindowEffects.h&gt;</td></tr>
+				<tr><th>Library</th><td>libr5ui.so</td></tr>
+				<tr><th>First user</th><td>Appearance (Look and feel), Settings</td></tr>
+			</table>
+
+			<p>The shadow and the frosted glass of windows, shown in the GPU mode only. These are free functions in <code class="inline">BAppearanceKit</code>, like <code class="inline">ui_color()</code>: each sends one message to <code class="inline">app_server</code>.</p>
+			<p>In CPU mode every call is accepted and stored and nothing changes on screen. <code class="inline">B_TRANSPARENT_COLOR</code> keeps meaning "do not erase" and never becomes glass. First user: the "Window effects" box on Look and feel, in Settings and in the Appearance program.</p>
+
+			<div class="member"><div class="sig">uint32 window_effects();
+status_t set_window_effects(uint32 effects);</div>
+				<p>The user's choice of <code class="inline">B_WINDOW_SHADOW</code>,
+				<code class="inline">B_WINDOW_FROSTED_GLASS</code> and <code class="inline">B_WINDOW_ANIMATIONS</code>,
+				for the whole desktop. app_server keeps it with its other appearance settings. Only Settings and the
+				Appearance program set it.</p></div>
+			<div class="member"><div class="sig">enum window_effect_strength window_effect_strength();
+status_t set_window_effect_strength(enum window_effect_strength strength);</div>
+				<p>One step for the shadow and the glass: <code class="inline">B_WINDOW_EFFECTS_QUIET</code>,
+				<code class="inline">B_WINDOW_EFFECTS_BALANCED</code> (the default) or
+				<code class="inline">B_WINDOW_EFFECTS_GLASSY</code>. The function has the name of the type, as
+				<code class="inline">stat()</code> has that of <code class="inline">struct stat</code>, so the type
+				is written <code class="inline">enum window_effect_strength</code>.</p></div>
+			<div class="member"><div class="sig">status_t set_window_glass(BWindow* window, bool glass);
+status_t set_view_glass(BView* view, bool glass);</div>
+				<p>A program asks for glass behind its own content. The view's background is drawn with alpha 0 and
+				the blur behind the window shows through. What the view draws with <code class="inline">B_OP_ALPHA</code>
+				and <code class="inline">B_ALPHA_COMPOSITE</code> keeps its alpha; every other mode stays opaque.
+				The view must be attached and its window locked.</p></div>
+
+<pre class="code"><span class="k">#include</span> &lt;WindowEffects.h&gt;
+
+MyWindow::MyWindow()
+	: BWindow(BRect(100, 100, 500, 400), <span class="s">"Glass"</span>, B_TITLED_WINDOW, 0)
+{
+	BAppearanceKit::set_window_glass(<span class="k">this</span>, <span class="k">true</span>);
+}</pre>
+
+			<div class="see-also">
+				<strong>See also</strong>
+				<a href="haiku-additions.html#decorator">Decorator hooks</a>
+			</div>
+		</section>
+	</main>
+</div>
+
+<script src="r5book.js"></script>
+</body>
+</html>
