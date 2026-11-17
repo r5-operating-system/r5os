@@ -137,6 +137,24 @@ if (pad.CountDevices() &gt; 0 &amp;&amp; pad.GetDeviceName(0, name) == B_OK
 				A model's picture shows what is printed on that model.</p></div>
 		</section>
 
+		<section class="entry" id="picture-bitmap">
+			<div class="entry-header"><h2 class="plain">PictureBitmap()</h2><span class="kind">BGameControllerView</span></div>
+			<div class="member"><div class="sig">static BBitmap* PictureBitmap(uint16 vendorID, uint16 productID, game_controller_family family, float width, float height, rgb_color lineColor);</div>
+				<p>Added at the end (17 Nov 2026). The still drawing of a model as a new bitmap, for a card or a
+				list row: chosen as <code class="inline">SetDevice()</code> chooses it (the vendor and product ID,
+				else the family's own picture), <code class="inline">width</code> by <code class="inline">height</code>
+				pixels, transparent around the line, the line in <code class="inline">lineColor</code>, kept in shape
+				and centred. Without a model and with <code class="inline">B_GAME_CONTROLLER_FAMILY_UNKNOWN</code> a
+				plain outline. The caller owns the bitmap; <code class="inline">NULL</code> for an empty size. It
+				needs a <code class="inline">BApplication</code>, because app_server draws it. Settings uses it for the
+				cards of its <a href="appearance-kit.html#BCardStrip">BCardStrip</a> and for the gray example when no
+				controller is connected.</p></div>
+<pre class="code">BBitmap* picture = BGameControllerView::PictureBitmap(pad.VendorID(), pad.ProductID(),
+	pad.Family(), 56, 38, ui_color(B_DOCUMENT_TEXT_COLOR));
+<span class="c">// draw it with B_OP_ALPHA, then</span>
+<span class="k">delete</span> picture;</pre>
+		</section>
+
 		<section class="entry" id="feel">
 			<div class="entry-header"><h2 class="plain">Rumble, triggers and motion</h2><span class="kind">BGameController</span></div>
 			<p>Added at the end of <code class="inline">BGameController</code> (17 Nov 2026). For the DualSense,
@@ -195,12 +213,15 @@ game_controller_motion motion;
 
 		<section class="entry" id="settings">
 			<div class="entry-header"><h2 class="plain">Where people see it</h2></div>
-			<p>Settings, Devices, Game controllers: a card per controller, and the live test of the chosen one
-			with its layout, the button-label choice and <em>Set up buttons&hellip;</em>, a window that asks
-			the person to press each control in turn. The Bluetooth page's <em>Test buttons&hellip;</em> opens
-			it.</p>
+			<p>Settings, Devices, Game controllers: the controllers in a
+			<a href="appearance-kit.html#BCardStrip">BCardStrip</a> at the bottom, one card each with a small
+			picture from <code class="inline">PictureBitmap()</code>; above it the live test of the chosen one
+			with its layout, the button-label choice and <em>Set up buttons&hellip;</em> (a window that asks
+			the person to press each control in turn), and Rumble, Motion and Trigger feedback beside the
+			picture. Without a controller the page shows a gray example and a dashed card that opens the
+			Bluetooth page. The Bluetooth page's <em>Test buttons&hellip;</em> opens it.</p>
 			<div class="note"><strong>Not yet.</strong> Swapping buttons for old programs, lights and the
-			touchpad; the Switch Pro and Xbox controllers over Bluetooth for rumble (phase 2). The Test box has Rumble, Motion and Trigger feedback for the controllers that have them.
+			touchpad; the Switch Pro and Xbox controllers over Bluetooth for rumble (phase 2). Rumble, Motion and Trigger feedback are shown for the controllers that have them.
 			The battery shows only when the controller reports it in its input report (the
 			HID Battery Strength usage). Tested in QEMU with virtual controllers fed to the Bluetooth HID
 			driver; not yet with a real controller.</div>
