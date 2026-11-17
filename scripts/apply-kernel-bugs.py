@@ -77,6 +77,15 @@ def install_kernel_sources() -> None:
         "src/libs/compat/freebsd_wlan/net80211/ieee80211_output.c",
         "src/libs/compat/freebsd_wlan/net80211/ieee80211_scan_sw.c",
         "src/libs/compat/freebsd_wlan/net80211/ieee80211_sta.c",
+        # R5: Wi-Fi parsers drop a frame that does not fit (docs/WIFI.md step 1)
+        "src/libs/compat/freebsd_wlan/net80211/ieee80211_hostap.c",
+        "src/libs/compat/freebsd_wlan/net80211/ieee80211_crypto_bip.c",
+        "src/libs/compat/freebsd_wlan/net80211/Jamfile",
+        "src/libs/compat/freebsd_wlan/net80211/ieee80211_ht.c",
+        "src/libs/compat/freebsd_wlan/net80211/ieee80211_input.c",
+        "src/libs/compat/freebsd_wlan/net80211/ieee80211_input.h",
+        "src/libs/compat/freebsd_wlan/net80211/ieee80211_node.c",
+        "src/libs/compat/freebsd_wlan/net80211/ieee80211_vht.c",
         # air/OS: MediaTek Bluetooth firmware loader in h2generic
         "src/add-ons/kernel/bluetooth/hci/bluetooth.cpp",
         "src/add-ons/kernel/bluetooth/hci/hci_assemble.h",
@@ -85,7 +94,10 @@ def install_kernel_sources() -> None:
         "src/add-ons/kernel/drivers/bluetooth/h2/h2generic/h2generic.cpp",
         "src/add-ons/kernel/drivers/bluetooth/h2/h2generic/h2mediatek.cpp",
         "src/add-ons/kernel/drivers/bluetooth/h2/h2generic/h2mediatek.h",
+        "src/add-ons/kernel/drivers/bluetooth/h2/h2generic/h2sco.h",
         "src/add-ons/kernel/drivers/bluetooth/h2/h2generic/h2transactions.cpp",
+        "src/add-ons/kernel/drivers/bluetooth/h2/h2generic/h2voice.cpp",
+        "src/add-ons/kernel/drivers/bluetooth/h2/h2generic/h2voice.h",
         # R5: L2CAP, docs/BLUETOOTH.md step 1b
         "src/add-ons/kernel/network/protocols/bluetooth/l2cap/Jamfile",
         "src/add-ons/kernel/network/protocols/bluetooth/l2cap/L2capEndpoint.cpp",

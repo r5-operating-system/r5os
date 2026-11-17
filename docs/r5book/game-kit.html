@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<!--
+  SPDX-FileCopyrightText: 2026 R5OS Contributors
+  SPDX-License-Identifier: MIT
+-->
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Game Kit</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
+	<link rel="stylesheet" href="r5book.css" />
+</head>
+<body data-page="game">
+
+<div class="book">
+	<aside class="toc"></aside>
+
+	<main class="page">
+		<section class="page-hero">
+			<span class="kit-label">libr5game.so</span>
+			<h1>The Game Kit</h1>
+			<p>R5's <code class="inline">libr5game.so</code> turns a game controller into named buttons and
+			sticks: A, B, X and Y, the two sticks and the two triggers, in the order of SDL's standard
+			gamepad, so a ported game finds them where it expects. It sits on top of Haiku's
+			<code class="inline">BJoystick</code>, which stays as it is: a program that uses
+			<code class="inline">BJoystick</code> keeps working and sees the controller's own button
+			numbers. The code is R5's own and MIT.</p>
+		</section>
+
+		<table class="facts">
+			<tr><th>Declared in</th><td>&lt;GameController.h&gt;, &lt;GameControllerView.h&gt;</td></tr>
+			<tr><th>Library</th><td>libr5game.so (link be and libr5game.so)</td></tr>
+			<tr><th>Source</th><td>distro/game/lib</td></tr>
+			<tr><th>Contract</th><td>docs/LIBR5.md, docs/GAME-CONTROLLERS.md</td></tr>
+		</table>
+
+		<div class="note"><strong>How a controller gets its layout.</strong> The driver tells R5 the
+		controller's USB vendor and product ID (a USB controller from its device descriptor, a Bluetooth
+		one from its Device ID record). R5 looks that up in the community mapping database
+		SDL_GameControllerDB, which ships unmodified with R5. A controller that is not in it still works:
+		its raw buttons and axes are there, and the picture is built from what it reports.</div>
+
+		<section class="entry" id="controller">
+			<div class="entry-header"><h2>BGameController</h2><span class="kind">class</span></div>
+			<table class="facts">
+				<tr><th>Declared in</th><td>&lt;GameController.h&gt;</td></tr>
+			</table>
+			<div class="member"><div class="sig">int32 CountDevices();<br>status_t GetDeviceName(int32 index, char* name, size_t bufferSize = B_OS_NAME_LENGTH);<br>status_t RescanDevices();</div>
+				<p>The controllers under <code class="inline">/dev/joystick</code>, by the names
+				<code class="inline">Open()</code> takes, such as <code class="inline">usb/0</code> and
+				<code class="inline">bluetooth/0</code>, the same names <code class="inline">BJoystick</code>
+				lists.</p></div>
+			<div class="member"><div class="sig">status_t Open(const char* deviceName);<br>void Close();<br>status_t Update();</div>
+				<p>As with <code class="inline">BJoystick</code>: open once, then call
+				<code class="inline">Update()</code> every frame and read the values.</p></div>
+			<div class="member"><div class="sig">bool IsButtonDown(game_controller_button button) const;<br>uint32 ButtonValues() const;<br>int16 AxisValue(game_controller_axis axis) const;<br>bool HasMapping() const;<br>bool HasButton(game_controller_button button) const;<br>bool HasAxis(game_controller_axis axis) const;</div>
+				<p>The standard layout. <code class="inline">B_CONTROLLER_BUTTON_A</code> is the lower face
+				button, <code class="inline">_B</code> the right one, <code class="inline">_X</code> the left
+				one and <code class="inline">_Y</code> the upper one, whatever is printed on them. Sticks run
+				from -32768 to 32767 (left and up negative), triggers from 0 to 32767. Without a mapping these
+				stay up and centered.</p></div>
+			<div class="member"><div class="sig">int32 CountRawAxes() const;<br>int16 RawAxisValue(int32 index) const;<br>int32 CountRawButtons() const;<br>bool IsRawButtonDown(int32 index) const;<br>int32 CountRawHats() const;<br>uint8 RawHatValue(int32 index) const;</div>
+				<p>What the controller itself reports, in the driver's order.</p></div>
+			<div class="member"><div class="sig">const char* Name() const;<br>uint16 VendorID() const;<br>uint16 ProductID() const;<br>game_controller_connection Connection() const;<br>game_controller_family Family() const;<br>int32 BatteryLevel() const;</div>
+				<p>The product name, the IDs, USB or Bluetooth, the shape (PlayStation, Xbox, Nintendo, Sega
+				Genesis, or unknown) and the battery in percent, or -1 when the controller does not say.</p></div>
+			<div class="member"><div class="sig">game_controller_labels LabelStyle() const;<br>static game_controller_labels LabelStyleFor(uint16 vendorID, uint16 productID);<br>static status_t SetLabelStyle(uint16 vendorID, uint16 productID, game_controller_labels labels);<br>static status_t ResetLabelStyles();</div>
+				<p>Which labels the person wants to see for this controller: Xbox letters or PlayStation
+				symbols. A game uses <code class="inline">LabelStyle()</code> to show the right button in its
+				prompts. The choice is made in Settings; only Settings calls the setters.</p></div>
+			<div class="member"><div class="sig">static status_t StartWatching(BMessenger target);<br>static status_t StopWatching(BMessenger target);</div>
+				<p><code class="inline">B_GAME_CONTROLLER_ADDED</code> and
+				<code class="inline">B_GAME_CONTROLLER_REMOVED</code>, with the string
+				<code class="inline">"device"</code>, when a controller is plugged in, paired, unplugged or
+				turned off. No polling.</p></div>
+			<div class="member"><div class="sig">static game_controller_family LayoutFor(uint16 vendorID, uint16 productID);<br>static status_t SetLayout(uint16 vendorID, uint16 productID, game_controller_family layout);</div>
+				<p>The layout the person chose for a controller model in Settings: the shape, and a fixed
+				mapping in the order that family's own controllers report their buttons.
+				<code class="inline">B_GAME_CONTROLLER_FAMILY_UNKNOWN</code> means automatic: the mapping
+				database. Only Settings calls the setter.</p></div>
+			<div class="member"><div class="sig">static status_t GetSavedMapping(uint16 vendorID, uint16 productID, char* mapping, size_t size);<br>static status_t SetSavedMapping(uint16 vendorID, uint16 productID, const char* mapping);<br>bool HasSavedMapping() const;</div>
+				<p>A setup the person made button by button with <em>Set up buttons&hellip;</em> in Settings,
+				as text in SDL's mapping keys: <code class="inline">"a:b0,b:b1,dpup:h0.1,leftx:a0,"</code>.
+				Buttons and hats are numbered as the raw calls number them, axes in the order of
+				<code class="inline">RawAxisValue()</code>; <code class="inline">+</code> and
+				<code class="inline">-</code> take half an axis, <code class="inline">~</code> turns it round.
+				<code class="inline">NULL</code> or an empty string removes it. <code class="inline">Open()</code>
+				takes a saved setup first, then a chosen layout, then the database, so a change counts from the
+				next <code class="inline">Open()</code>. Programs that use <code class="inline">BJoystick</code>
+				still see the raw buttons.</p></div>
+		</section>
+
+		<section class="entry" id="example">
+			<div class="entry-header"><h2 class="plain">Example</h2></div>
+<pre class="code">#include &lt;GameController.h&gt;
+
+BGameController pad;
+char name[B_OS_NAME_LENGTH];
+if (pad.CountDevices() &gt; 0 &amp;&amp; pad.GetDeviceName(0, name) == B_OK
+	&amp;&amp; pad.Open(name) == B_OK) {
+	// every frame
+	pad.Update();
+	if (pad.IsButtonDown(B_CONTROLLER_BUTTON_A))
+		Jump();
+	float x = pad.AxisValue(B_CONTROLLER_AXIS_LEFT_X) / 32768.0f;
+}</pre>
+		</section>
+
+		<section class="entry" id="view">
+			<div class="entry-header"><h2>BGameControllerView</h2><span class="kind">class</span></div>
+			<table class="facts">
+				<tr><th>Declared in</th><td>&lt;GameControllerView.h&gt;</td></tr>
+				<tr><th>Derived from</th><td>BView</td></tr>
+			</table>
+			<p>A picture of a controller, drawn in code: vector, scaled to the view, in the system colors, so
+			dark mode works. While a controller is open the pressed buttons fill with the accent color, the dot
+			of a stick follows the stick and a trigger bar fills as far as it is pulled. Simplified shapes in
+			R5's thin-line style, no logos.</p>
+			<div class="member"><div class="sig">status_t SetDevice(const char* deviceName);<br>BGameController* Controller();</div>
+				<p>Opens the controller and shows it live while the view is in a window; it reads the controller
+				about 60 times a second and draws only when something changed. <code class="inline">NULL</code>
+				closes it.</p></div>
+			<div class="member"><div class="sig">void SetFamily(game_controller_family family);<br>void SetLabels(game_controller_labels labels);</div>
+				<p>The still shape of a family, without a controller; and the labels on the face buttons
+				(<code class="inline">B_GAME_CONTROLLER_LABELS_AUTOMATIC</code>: the controller's own
+				choice).</p></div>
+		</section>
+
+		<section class="entry" id="settings">
+			<div class="entry-header"><h2 class="plain">Where people see it</h2></div>
+			<p>Settings, Devices, Game controllers: a card per controller, and the live test of the chosen one
+			with its layout, the button-label choice and <em>Set up buttons&hellip;</em>, a window that asks
+			the person to press each control in turn. The Bluetooth page's <em>Test buttons&hellip;</em> opens
+			it.</p>
+			<div class="note"><strong>Not yet.</strong> Swapping buttons for old programs, rumble, lights, the
+			touchpad and motion. The battery shows only when the controller reports it in its input report (the
+			HID Battery Strength usage). Tested in QEMU with virtual controllers fed to the Bluetooth HID
+			driver; not yet with a real controller.</div>
+		</section>
+	</main>
+</div>
+
+<script src="r5book.js"></script>
+</body>
+</html>

@@ -40,6 +40,11 @@ static void admin_request(BMessage* request, const r5_admin_sender& sender,
 #include <TypeConstants.h>
 #include <new>
 #include <syslog.h>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <driver_settings.h>
+// SPDX-SnippetEnd
 
 #include <bluetoothserver_p.h>
 #include <bluetooth/HCI/btHCI_command.h>
@@ -58,6 +63,7 @@ static void admin_request(BMessage* request, const r5_admin_sender& sender,
 // SPDX-License-Identifier: MIT
 #include "LEManager.h"
 #include "PasskeyWindow.h"
+#include "HFPGateway.h"
 #include "RFCOMMMux.h"
 
 #include <MessageRunner.h>
@@ -142,6 +148,16 @@ BluetoothServer::BluetoothServer()
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
 	fHIDHost = new HIDHost();
+	{
+		HFPGateway::Options options = HFPGateway::DefaultOptions();
+		options.connected = _R5DeviceConnected;
+		// Step 7c: with bt_voice the microphone opens the voice link.
+		if (_R5VoiceEnabled()) {
+			options.voice = _R5Voice;
+			options.codecNegotiation = true;
+		}
+		fHFPGateway = new HFPGateway(options);
+	}
 	fLEPulse = NULL;
 	// SPDX-SnippetEnd
 }
@@ -165,6 +181,8 @@ bool BluetoothServer::QuitRequested(void)
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
+	// HFP first, while the links are up: its sessions end at once (step 7b).
+	fHFPGateway->Stop();
 	fDevicesLock.Lock();
 	while ((lDeviceImpl = (LocalDeviceImpl*)
 		fLocalDevicesList.RemoveItemAt(0)) != NULL)
@@ -190,6 +208,8 @@ bool BluetoothServer::QuitRequested(void)
 	fHIDHost->Stop();
 	delete fHIDHost;
 	fHIDHost = NULL;
+	delete fHFPGateway;
+	fHFPGateway = NULL;
 	// SPDX-SnippetEnd
 
 	delete fEventListener2;
@@ -602,8 +622,12 @@ void BluetoothServer::MessageReceived(BMessage* message)
 			break;
 
 		case kMsgR5LEPulse:
-			if (!message->IsSourceRemote())
+			if (!message->IsSourceRemote()) {
 				LEManager::Pulse();
+				// A Remote Name Request without an answer in time.
+				for (int32 i = 0; i < fLocalDevicesList.CountItems(); i++)
+					fLocalDevicesList.ItemAt(i)->R5NamePulse();
+			}
 			break;
 		// SPDX-SnippetEnd
 
@@ -683,6 +707,7 @@ void BluetoothServer::MessageReceived(BMessage* message)
 		case BT_MSG_R5_AUDIO_STREAMING:
 		case BT_MSG_R5_AUDIO_PAIRED:
 		case BT_MSG_R5_AUDIO_CONNECT:
+		case BT_MSG_R5_AUDIO_VOICE:
 			status = B_NOT_ALLOWED;
 			reply.AddString("text", "Send this with r5_admin_send().");
 			break;
@@ -890,6 +915,24 @@ BluetoothServer::R5AdminRequest(BMessage* message, BMessage& reply,
 			}
 			status = _SetRadioEnabled(enabled);
 			reply.AddBool("enabled", fRadioEnabled);
+			break;
+		}
+
+		case BT_MSG_R5_AUDIO_VOICE:
+		{
+			// Step 7c: the headset microphone, from bluetooth_audio (uid 0).
+			bool on;
+			if (sender.uid != 0) {
+				status = B_NOT_ALLOWED;
+				break;
+			}
+			if (message->FindBool("on", &on) != B_OK) {
+				status = B_BAD_VALUE;
+				break;
+			}
+			if (fHFPGateway != NULL)
+				fHFPGateway->SetVoiceWanted(on);
+			status = B_OK;
 			break;
 		}
 
@@ -1159,6 +1202,8 @@ BluetoothServer::DiscoverServices(ServerRemoteDevice* rd)
 struct r5_sdp_args {
 	hci_id		hid;
 	bdaddr_t	address;
+	BString		name;
+	uint8		deviceClass[3];
 };
 
 
@@ -1170,6 +1215,11 @@ BluetoothServer::R5DiscoverServices(hci_id hid, ServerRemoteDevice* rd)
 		return;
 	args->hid = hid;
 	args->address = rd->bdaddr;
+	// The probe record lacked them: the device's name never reached
+	// bluetooth_hid (the Game controllers page showed "Game controller"
+	// for the 8BitDo M30), and SDP could not tell a headset by its class.
+	args->name = rd->friendly_name;
+	memcpy(args->deviceClass, rd->classOfDevice, sizeof(args->deviceClass));
 	thread_id thread = spawn_thread(_SDPThread, "bluetooth sdp",
 		B_NORMAL_PRIORITY, args);
 	if (thread < 0) {
@@ -1190,6 +1240,9 @@ BluetoothServer::_SDPThread(void* data)
 	// unpaired device that left) by the time the device answered.
 	ServerRemoteDevice probe;
 	probe.bdaddr = args->address;
+	probe.friendly_name = args->name;
+	memcpy(probe.classOfDevice, args->deviceClass,
+		sizeof(probe.classOfDevice));
 	bool read;
 	{
 		SDPClient client(&probe);
@@ -1204,6 +1257,12 @@ BluetoothServer::_SDPThread(void* data)
 		if (channel != 0) {
 			syslog(LOG_INFO, "bluetooth_server: hands-free service on "
 				"RFCOMM channel %u", channel);
+		} else if ((probe.classOfDevice[1] & 0x1f) == 4
+			|| (probe.classOfDevice[0] | probe.classOfDevice[1]
+				| probe.classOfDevice[2]) == 0) {
+			// An audio device (or one of unknown class) without one: HFP
+			// does not start for it.
+			syslog(LOG_INFO, "bluetooth_server: hfp: no hands-free record");
 		}
 	}
 
@@ -1270,6 +1329,61 @@ BluetoothServer::R5FindRFCOMMChannel(const bdaddr_t& address,
 	}
 	return B_NAME_NOT_FOUND;
 }
+
+
+bool
+BluetoothServer::_R5DeviceConnected(const bdaddr_t& address, void*)
+{
+	BluetoothServer* server = (BluetoothServer*)be_app;
+	BAutolock locker(server->fDevicesLock);
+	for (int32 i = 0; i < server->fLocalDevicesList.CountItems(); i++) {
+		ServerRemoteDevice* rd
+			= server->fLocalDevicesList.ItemAt(i)->RemoteDeviceByAddr(address);
+		if (rd != NULL && rd->conn_state == RemoteDevice::CONNECTED)
+			return true;
+	}
+	return false;
+}
+
+
+bool
+BluetoothServer::_R5VoiceEnabled()
+{
+	// The same file and line the h2generic driver reads (step 7c). By
+	// path: a bare name would follow this service's home folder, while
+	// the kernel reads the boot volume's settings.
+	void* settings = load_driver_settings(
+		"/boot/home/config/settings/kernel/drivers/h2generic");
+	if (settings == NULL) {
+		settings = load_driver_settings(
+			"/boot/system/settings/kernel/drivers/h2generic");
+	}
+	bool enabled = get_driver_boolean_parameter(settings, "bt_voice", false,
+		true);
+	unload_driver_settings(settings);
+	return enabled;
+}
+
+
+status_t
+BluetoothServer::_R5Voice(const bdaddr_t& address, int codec, bool open,
+	void*)
+{
+	BluetoothServer* server = (BluetoothServer*)be_app;
+	BAutolock locker(server->fDevicesLock);
+	for (int32 i = 0; i < server->fLocalDevicesList.CountItems(); i++) {
+		LocalDeviceImpl* radio = server->fLocalDevicesList.ItemAt(i);
+		ServerRemoteDevice* rd = radio->RemoteDeviceByAddr(address);
+		if (rd == NULL || rd->conn_state != RemoteDevice::CONNECTED)
+			continue;
+		if (!open) {
+			radio->R5VoiceClose(address);
+			return B_OK;
+		}
+		return radio->R5VoiceOpen(address, codec);
+	}
+	return open ? B_NOT_ALLOWED : B_OK;
+}
 // SPDX-SnippetEnd
 
 
@@ -1284,6 +1398,15 @@ BluetoothServer::NotifyServices(ServerRemoteDevice* rd)
 	else
 		TRACE_BT("SDP: Error could not notify the dedicated profile\n");
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Step 7b: a headset with a Hands-Free service gets an HFP session
+	// (R5 is the Audio Gateway), whatever profile the call above chose.
+	uint8 channel = R5RFCOMMChannel(rd->services, kR5ServiceHandsFree);
+	if (channel != 0 && fHFPGateway != NULL)
+		fHFPGateway->DeviceReady(rd->bdaddr, channel);
+	// SPDX-SnippetEnd
 }
 
 

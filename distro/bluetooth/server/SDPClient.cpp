@@ -14,6 +14,7 @@
 // SPDX-License-Identifier: MIT
 #include "BluetoothServer.h"
 #include "HIDHost.h"
+#include "SDPParse.h"
 #include <syslog.h>
 // SPDX-SnippetEnd
 
@@ -93,107 +94,147 @@ SDPClient::Stop()
 status_t
 SDPClient::RequestServiceRecords()
 {
-	BMallocIO rawReqDataIO;
-	SDPDataIO rawReq(&rawReqDataIO);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// First every record of the public browse group, all attributes, in
+	// pieces of at most 255 attribute bytes (Core 5.4, Vol 3, Part B,
+	// 4.7). The WH-1000XM3 (stick 51) gave no Hands-Free channel from this
+	// browse: when a headset's browse brings none, a search for the
+	// Hands-Free service class itself follows (HFP 1.8, 5.3), with only the
+	// attributes HFP needs.
+	static const uint8 kBrowse[] = {
+		0x35, 0x03, 0x19, 0x10, 0x02,			// public browse group
+		0x00, 0xff,								// at most 255 bytes a piece
+		0x35, 0x05, 0x0a, 0x00, 0x00, 0xff, 0xff	// attributes 0 to 0xffff
+	};
+	BMallocIO lists;
+	const bool browsed = _SearchAttributes(kBrowse, sizeof(kBrowse), &lists)
+		== B_OK;
 
-	// Browse Group List UUID returns all services
-	rawReq.AddDataSeq(3);
-	rawReq.AddUUID16(SDP_SERVICE_CLASS_PUBLIC_BROWSE_GROUP);
+	// The records of this connection replace the earlier ones; they piled
+	// up and old ones were offered to the profiles again.
+	fRemoteDevice->services.MakeEmpty();
+	std::vector<uint16> classes;
+	if (browsed)
+		_ParseAttrLists(&lists, &classes);
+	_LogRecords(browsed ? "sdp:" : "sdp: browse not read,", classes);
 
-	// no response is larger than 400
-	uint16 maxAttrByteCount = B_HOST_TO_BENDIAN_INT16(255);
-	rawReqDataIO.WriteExactly(&maxAttrByteCount, 2);
+	bool searched = false;
+	if (_MayOfferHandsFree()
+		&& BluetoothServer::R5RFCOMMChannel(fRemoteDevice->services,
+			r5sdpparse::kServiceHandsFree) == 0) {
+		uint8 parameters[32];
+		static const uint16 kAttributes[] = { 0x0001, 0x0004, 0x0009,
+			0x0311 };
+		size_t length = r5sdpparse::BuildSearchAttributes(
+			r5sdpparse::kServiceHandsFree, kAttributes,
+			sizeof(kAttributes) / sizeof(kAttributes[0]), 255, parameters,
+			sizeof(parameters));
+		BMallocIO handsFree;
+		searched = length > 0
+			&& _SearchAttributes(parameters, length, &handsFree) == B_OK;
+		std::vector<uint16> found;
+		if (searched)
+			_ParseAttrLists(&handsFree, &found);
+		_LogRecords(searched ? "sdp: hands-free search,"
+			: "sdp: hands-free search not read,", found);
+	}
+	return browsed || searched ? B_OK : B_ERROR;
+	// SPDX-SnippetEnd
+}
 
-	// getting all attributes start_id = 0x0000, end_id = 0xFFFF
-	uint32 attrRange = 0x0000FFFF;
-	rawReq.AddDataSeq(5);
-	rawReq.AddUInt32(attrRange);
 
-	char contStateData[17];
-	uint8 contStateNumBytes = 0;
-	sdp_pdu pduHeader;
-	pduHeader.pdu_id = SDP_PDU_SERVICE_SEARCH_ATTRIBUTE_REQUEST;
-
-	BMallocIO fullAttrLists;
-	while (true) {
-		pduHeader.transaction_id = B_HOST_TO_BENDIAN_INT16(transactionID++);
-		pduHeader.param_len = B_HOST_TO_BENDIAN_INT16(rawReqDataIO.BufferLength()
-			+ contStateNumBytes + 1);
-
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+/*!	A Service Search Attribute transaction (Core 5.4, Vol 3, Part B, 4.7):
+	the request with these parameters, again with each continuation state,
+	until the device sends none. The attribute lists of all pieces go to
+	lists, as one answer.
+*/
+status_t
+SDPClient::_SearchAttributes(const uint8* parameters, size_t length,
+	BMallocIO* lists)
+{
+	// A device that never ends its continuation is not followed for ever.
+	static const int kMaxPieces = 64;
+	uint8 continuation[16];
+	size_t continuationLength = 0;
+	for (int piece = 0; piece < kMaxPieces; piece++) {
+		const uint16 transaction = transactionID++;
+		const size_t parameterLength = length + 1 + continuationLength;
+		uint8 header[5] = { SDP_PDU_SERVICE_SEARCH_ATTRIBUTE_REQUEST,
+			(uint8)(transaction >> 8), (uint8)transaction,
+			(uint8)(parameterLength >> 8), (uint8)parameterLength };
+		uint8 count = (uint8)continuationLength;
 		BMallocIO request;
-		request.WriteExactly(&pduHeader, sizeof(sdp_pdu));
-		request.WriteExactly(rawReqDataIO.Buffer(), rawReqDataIO.BufferLength());
-		request.WriteExactly(&contStateNumBytes, 1);
-		request.WriteExactly(contStateData, contStateNumBytes);
-
-		request.Seek(0, SEEK_SET);
-		printf("SDP: Request=\n");
-		for (size_t i = 0; i < request.BufferLength(); i++) {
-			uint8 byte = 0;
-			request.ReadExactly(&byte, sizeof(uint8));
-			printf("%02X ", byte);
-		}
-		printf("\n");
+		request.WriteExactly(header, sizeof(header));
+		request.WriteExactly(parameters, length);
+		request.WriteExactly(&count, 1);
+		if (continuationLength > 0)
+			request.WriteExactly(continuation, continuationLength);
 
 		BMallocIO reply;
-		if (_IssueRequest(request.Buffer(), request.BufferLength(), &reply) != B_OK) {
+		if (_IssueRequest(request.Buffer(), request.BufferLength(), &reply)
+				!= B_OK) {
 			TRACE_BT("SDP: Issuing Request failed\n");
 			return B_ERROR;
 		}
 
-		// SPDX-SnippetBegin
-		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
-		// SPDX-License-Identifier: MIT
-		// Every length comes from the remote device: checked against what
-		// arrived. An SDP Error Response is not parsed as records, and the
-		// continuation state is at most 16 bytes (Core 5.4, Vol 3, Part B,
-		// 4.3).
-		const size_t received = reply.BufferLength();
-		const uint8* bytes = (const uint8*)reply.Buffer();
-		if (received < sizeof(sdp_pdu) + 2 + 1
-			|| bytes[0] != SDP_PDU_SERVICE_SEARCH_ATTRIBUTE_RESPONSE) {
-			TRACE_BT("SDP: not an attribute response\n");
+		const uint8* pieceLists;
+		size_t pieceLength;
+		const uint8* state;
+		size_t stateLength;
+		if (!r5sdpparse::ReadAnswerPiece((const uint8*)reply.Buffer(),
+				reply.BufferLength(), &pieceLists, &pieceLength, &state,
+				&stateLength)) {
+			TRACE_BT("SDP: not a sound attribute response\n");
 			return B_ERROR;
 		}
-		size_t position = sizeof(sdp_pdu);
-		uint16 attrListsSize = (uint16)((bytes[position] << 8)
-			| bytes[position + 1]);
-		position += 2;
-		if (attrListsSize > received - position - 1) {
-			TRACE_BT("SDP: attribute lists longer than the reply\n");
-			return B_ERROR;
-		}
-		fullAttrLists.WriteExactly(bytes + position, attrListsSize);
-		position += attrListsSize;
-
-		contStateNumBytes = bytes[position++];
-		if (contStateNumBytes > 16
-			|| contStateNumBytes > received - position) {
-			TRACE_BT("SDP: bad continuation state\n");
-			return B_ERROR;
-		}
-		memcpy(contStateData, bytes + position, contStateNumBytes);
-		// SPDX-SnippetEnd
-
-		if (contStateNumBytes == 0)
-			break;
+		if (pieceLength > 0)
+			lists->WriteExactly(pieceLists, pieceLength);
+		memcpy(continuation, state, stateLength);
+		continuationLength = stateLength;
+		if (continuationLength == 0)
+			return B_OK;
 	}
-
-	if (contStateNumBytes) {
-		TRACE_BT("SDP: Too large response\n");
-		return B_ERROR;
-	}
-
-	// SPDX-SnippetBegin
-	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
-	// SPDX-License-Identifier: MIT
-	// The records of this connection replace the earlier ones; they piled
-	// up and old ones were offered to the profiles again.
-	fRemoteDevice->services.MakeEmpty();
-	// SPDX-SnippetEnd
-	_ParseAttrLists(&fullAttrLists);
-	return B_OK;
+	TRACE_BT("SDP: Too large response\n");
+	return B_ERROR;
 }
+
+
+/*!	Hands-Free comes from a headset or another audio device (major device
+	class 4), or from a device whose class is not known here.
+*/
+bool
+SDPClient::_MayOfferHandsFree() const
+{
+	const uint8* deviceClass = fRemoteDevice->classOfDevice;
+	if (deviceClass[0] == 0 && deviceClass[1] == 0 && deviceClass[2] == 0)
+		return true;
+	return (deviceClass[1] & 0x1f) == 4;
+}
+
+
+//!	One line per answer, without addresses: the records' service classes.
+void
+SDPClient::_LogRecords(const char* what, const std::vector<uint16>& classes)
+{
+	BString line;
+	line.SetToFormat("bluetooth_server: %s %" B_PRIuSIZE " records:", what,
+		classes.size());
+	for (size_t i = 0; i < classes.size()
+			&& i < r5sdpparse::kMaxLoggedClasses; i++) {
+		BString item;
+		item.SetToFormat(" 0x%04x", classes[i]);
+		line << item;
+	}
+	if (classes.size() > r5sdpparse::kMaxLoggedClasses)
+		line << " ...";
+	syslog(LOG_INFO, "%s", line.String());
+}
+// SPDX-SnippetEnd
 
 
 status_t
@@ -239,37 +280,137 @@ SDPClient::NotifyProfiles()
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+namespace {
+
+
+/*!	One attribute into the record message, stored as SDPDataIO::ParseNext()
+	stored it, so the profiles read it as before: numbers as numbers, UUIDs
+	as sdp_uuid, strings (and now URLs) as strings, a sequence as its
+	contents. 128-bit integers and Nil are left out, as before.
+*/
 void
-SDPClient::_ParseAttrLists(BMallocIO* attrListsDataIO)
+add_attribute(BMessage* record, uint16 id, const r5sdpparse::Element& value)
 {
-	attrListsDataIO->Seek(0, SEEK_SET);
-	TRACE_BT("SDP: Parsing the AttrLists... Num Bytes=%" B_PRIdSSIZE "\n",
-		attrListsDataIO->BufferLength());
+	BString label;
+	label.SetToFormat("0x%04X", id);
+	uint64 number = 0;
+	for (size_t i = 0; i < value.length && i < 8; i++)
+		number = (number << 8) | value.value[i];
 
-	SDPDataIO attrLists(attrListsDataIO);
-	attrLists.ReadSeq();
+	switch (value.type) {
+		case r5sdpparse::kTypeBool:
+			record->AddBool(label, value.value[0] != 0);
+			break;
 
-	size_t attrListSize = 0;
-	while ((attrListSize = attrLists.ReadSeq())) {
+		case r5sdpparse::kTypeUnsigned:
+			if (value.length == 1)
+				record->AddUInt8(label, (uint8)number);
+			else if (value.length == 2)
+				record->AddUInt16(label, (uint16)number);
+			else if (value.length == 4)
+				record->AddUInt32(label, (uint32)number);
+			else if (value.length == 8)
+				record->AddUInt64(label, number);
+			break;
 
-		off_t endPos = attrListsDataIO->Position() + attrListSize;
-		BMessage attrListMsg;
-		while (attrListsDataIO->Position() < endPos) {
-			uint16 attrID = attrLists.ReadNumber<uint16>();
+		case r5sdpparse::kTypeSigned:
+			if (value.length == 1)
+				record->AddInt8(label, (int8)number);
+			else if (value.length == 2)
+				record->AddInt16(label, (int16)number);
+			else if (value.length == 4)
+				record->AddInt32(label, (int32)number);
+			else if (value.length == 8)
+				record->AddInt64(label, (int64)number);
+			break;
 
-			// attribute id's strings are formated in hex to match the bluetooth specification
-			// section 5 in assigned numbers specs:
-			// https://www.bluetooth.com/specifications/assigned-numbers/
-			BString attrIdStr;
-			attrIdStr.SetToFormat("0x%04X", attrID);
-
-			attrLists.ParseNext(&attrListMsg, attrIdStr);
+		case r5sdpparse::kTypeUUID:
+		{
+			BMallocIO element;
+			element.WriteExactly(value.start, value.total);
+			element.Seek(0, SEEK_SET);
+			SDPDataIO reader(&element);
+			sdp_uuid uuid = reader.ReadUUID();
+			if (reader.ReadingStatus() == B_OK)
+				record->AddData(label, B_RAW_TYPE, &uuid, sizeof(uuid));
+			break;
 		}
-		if (attrLists.ReadingStatus() == B_OK)
-			fRemoteDevice->services.AddMessage("service", &attrListMsg);
+
+		case r5sdpparse::kTypeString:
+		case r5sdpparse::kTypeURL:
+			record->AddString(label,
+				BString((const char*)value.value, value.length));
+			break;
+
+		case r5sdpparse::kTypeSequence:
+			if (value.length > 0)
+				record->AddData(label, B_RAW_TYPE, value.value, value.length);
+			break;
+
+		case r5sdpparse::kTypeAlternative:
+		{
+			// A choice of protocol stacks or other sequences: the first one
+			// is kept, as a sequence would be.
+			size_t offset = 0;
+			r5sdpparse::Element first;
+			if (r5sdpparse::NextElement(value.value, value.length, &offset,
+					&first)
+				&& first.type == r5sdpparse::kTypeSequence
+				&& first.length > 0)
+				record->AddData(label, B_RAW_TYPE, first.value, first.length);
+			break;
+		}
 	}
+}
+
+
+struct RecordCollector {
+	BMessage*				services;
+	std::vector<uint16>*	classes;
+
+	void operator()(const uint8* value, size_t length)
+	{
+		BMessage record;
+		uint16 serviceClass = 0;
+		r5sdpparse::ForEachAttribute(value, length,
+			[&](uint16 id, const r5sdpparse::Element& element) {
+				if (id == 0x0001
+					&& element.type == r5sdpparse::kTypeSequence) {
+					serviceClass = r5sdpparse::FirstServiceClass(
+						element.value, element.length);
+				}
+				add_attribute(&record, id, element);
+			});
+		services->AddMessage("service", &record);
+		if (classes != NULL)
+			classes->push_back(serviceClass);
+	}
+};
+
+
+} // namespace
+
+
+/*!	The records of one answer, added to fRemoteDevice->services. It used
+	SDPDataIO for the whole answer: a Nil or URL value, a 128-bit integer or
+	any other element it did not step over put it out of step, and that
+	record and every record after it were lost. Each element is stepped
+	over by its own length now (SDPParse.h), and classes gets each record's
+	first service class (0 when it has none as a 16-bit UUID).
+*/
+void
+SDPClient::_ParseAttrLists(BMallocIO* attrListsDataIO,
+	std::vector<uint16>* classes)
+{
+	RecordCollector collect = { &fRemoteDevice->services, classes };
+	r5sdpparse::ForEachRecord((const uint8*)attrListsDataIO->Buffer(),
+		attrListsDataIO->BufferLength(), collect);
 	TRACE_BT("SDP: Finished parsing\n");
 }
+// SPDX-SnippetEnd
 
 
 status_t
@@ -332,6 +473,37 @@ SDPClient::_NotifyHIDProfile(BMessage* attrList)
 	HIDHost* host = ((BluetoothServer*)be_app)->GetHIDHost();
 	if (host == NULL)
 		return B_NO_INIT;
+
+	// Step 8 (docs/GAME-CONTROLLERS.md): the vendor and product ID of the
+	// Device ID record (PnP Information, attributes 0x0201 to 0x0203), so a
+	// game controller gets its standard layout, and the device's name.
+	// Only a USB-IF vendor ID (VendorIDSource 0x0205 = 2) is the one the
+	// mapping database knows; a Bluetooth SIG company ID is not.
+	uint16 vendorID = 0;
+	uint16 productID = 0;
+	uint16 version = 0;
+	BMessage record;
+	for (int32 i = 0; fRemoteDevice->services.FindMessage("service", i,
+			&record) == B_OK; i++) {
+		uint16 source = 0;
+		if (record.FindUInt16("0x0205", &source) != B_OK || source != 2
+			|| record.FindUInt16("0x0201", &vendorID) != B_OK
+			|| record.FindUInt16("0x0202", &productID) != B_OK) {
+			vendorID = productID = 0;
+			continue;
+		}
+		if (record.FindUInt16("0x0203", &version) != B_OK)
+			version = 0;
+		break;
+	}
+	const char* name = fRemoteDevice->friendly_name.String();
+	if (vendorID != 0 || name[0] != '\0') {
+		syslog(LOG_INFO, "bluetooth_hid: device id %04x:%04x", vendorID,
+			productID);
+		host->SetDeviceInfo(fRemoteDevice->bdaddr, vendorID, productID,
+			version, name);
+	}
+
 	host->DeviceReady(fRemoteDevice->bdaddr, descriptor, length);
 	return B_OK;
 	// SPDX-SnippetEnd

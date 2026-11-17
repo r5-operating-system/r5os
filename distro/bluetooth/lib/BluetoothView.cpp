@@ -12,6 +12,7 @@
 
 #include <R5Bluetooth.h>
 
+#include <Application.h>
 #include <Box.h>
 #include <Button.h>
 #include <Catalog.h>
@@ -22,10 +23,10 @@
 #include <MenuField.h>
 #include <MenuItem.h>
 #include <PopUpMenu.h>
+#include <Roster.h>
 #include <ScrollView.h>
 #include <StringFormat.h>
 #include <StringView.h>
-#include <Joystick.h>
 #include <MessageRunner.h>
 #include <Window.h>
 
@@ -36,6 +37,7 @@
 
 #include <new>
 #include <string.h>
+#include <strings.h>
 
 
 #undef B_TRANSLATION_CONTEXT
@@ -254,155 +256,6 @@ private:
 };
 
 
-// #pragma mark - GamepadWindow
-
-
-/*!	"Test buttons": what a Bluetooth game controller sends, read through
-	BJoystick as a game reads it, live. The same as the gamepad command.
-*/
-class GamepadWindow : public BWindow {
-public:
-	GamepadWindow(const BString& name)
-		:
-		BWindow(BRect(0, 0, 10, 10), "", B_TITLED_WINDOW,
-			B_NOT_ZOOMABLE | B_AUTO_UPDATE_SIZE_LIMITS
-				| B_CLOSE_ON_ESCAPE),
-		fRunner(NULL),
-		fOpen(false)
-	{
-		BString title(B_TRANSLATE("Test buttons: %name%"));
-		title.ReplaceFirst("%name%", name);
-		SetTitle(title.String());
-
-		fController = new BStringView("controller", "");
-		fButtons = new BStringView("buttons", "");
-		fAxes = new BStringView("axes", "");
-		fHats = new BStringView("hats", "");
-		BStringView* hint = new BStringView("hint",
-			B_TRANSLATE("Press buttons and move the sticks."));
-		BStringView* views[] = { fController, fButtons, fAxes, fHats, hint };
-		for (size_t i = 0; i < sizeof(views) / sizeof(views[0]); i++)
-			views[i]->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
-		BFont bold(be_bold_font);
-		fController->SetFont(&bold);
-		const float width = be_plain_font->StringWidth("M") * 34;
-		fButtons->SetExplicitMinSize(BSize(width, B_SIZE_UNSET));
-
-		BLayoutBuilder::Group<>(this, B_VERTICAL, B_USE_SMALL_SPACING)
-			.SetInsets(B_USE_WINDOW_SPACING)
-			.Add(fController)
-			.Add(hint)
-			.AddStrut(be_plain_font->Size())
-			.Add(fButtons)
-			.Add(fAxes)
-			.Add(fHats);
-
-		_Open();
-		BMessage poll(kMsgGamepadPoll);
-		fRunner = new BMessageRunner(BMessenger(this), &poll, 50000);
-		_Poll();
-		CenterOnScreen();
-	}
-
-	virtual ~GamepadWindow()
-	{
-		delete fRunner;
-		if (fOpen)
-			fStick.Close();
-	}
-
-	virtual void MessageReceived(BMessage* message)
-	{
-		if (message->what == kMsgGamepadPoll) {
-			_Poll();
-			return;
-		}
-		BWindow::MessageReceived(message);
-	}
-
-private:
-	void _Open()
-	{
-		// The first controller of the Bluetooth HID driver.
-		char name[B_OS_NAME_LENGTH];
-		const int32 count = fStick.CountDevices();
-		for (int32 i = 0; i < count && !fOpen; i++) {
-			if (fStick.GetDeviceName(i, name, sizeof(name)) != B_OK
-				|| strncmp(name, "bluetooth/", 10) != 0)
-				continue;
-			fOpen = fStick.Open(name, true) >= 0;
-			if (fOpen)
-				fController->SetText(name);
-		}
-		if (!fOpen) {
-			fController->SetText(B_TRANSLATE("No Bluetooth game controller "
-				"is connected."));
-		}
-	}
-
-	void _Poll()
-	{
-		if (!fOpen) {
-			_Open();
-			if (!fOpen)
-				return;
-		}
-		if (fStick.Update() != B_OK) {
-			fStick.Close();
-			fOpen = false;
-			fController->SetText(B_TRANSLATE("The controller went away."));
-			return;
-		}
-
-		BString text(B_TRANSLATE("Buttons:"));
-		const uint32 pressed = fStick.ButtonValues();
-		bool any = false;
-		for (int32 i = 0; i < 32 && i < fStick.CountButtons(); i++) {
-			if ((pressed & (1UL << i)) == 0)
-				continue;
-			text << " " << i + 1;
-			any = true;
-		}
-		if (!any)
-			text << " " << B_TRANSLATE("none");
-		fButtons->SetText(text.String());
-
-		text = B_TRANSLATE("Sticks:");
-		const int32 axes = fStick.CountAxes();
-		if (axes > 0 && axes <= 16) {
-			int16 values[16];
-			if (fStick.GetAxisValues(values) == B_OK) {
-				for (int32 i = 0; i < axes; i++)
-					text << " " << (int32)(values[i] * 100 / 32767);
-			}
-		}
-		fAxes->SetText(text.String());
-
-		text = B_TRANSLATE("D-pad:");
-		const int32 hats = fStick.CountHats();
-		if (hats > 0 && hats <= 8) {
-			uint8 values[8];
-			if (fStick.GetHatValues(values) == B_OK) {
-				static const char* const kDirections[] = { "-", "N", "NE",
-					"E", "SE", "S", "SW", "W", "NW" };
-				for (int32 i = 0; i < hats; i++)
-					text << " " << (values[i] <= 8 ? kDirections[values[i]]
-						: "?");
-			}
-		}
-		fHats->SetText(text.String());
-	}
-
-	BJoystick			fStick;
-	BMessageRunner*		fRunner;
-	bool				fOpen;
-	BStringView*		fController;
-	BStringView*		fButtons;
-	BStringView*		fAxes;
-	BStringView*		fHats;
-};
-
-
 } // namespace
 
 
@@ -477,7 +330,10 @@ BluetoothView::BluetoothView(bool settingsPage)
 	fMine->list->SetSelectionMessage(new BMessage(kMsgMineSelected));
 	BScrollView* mineScroller = new BScrollView("my devices scroll",
 		fMine->list, 0, false, true);
-	mineScroller->SetExplicitMinSize(BSize(B_SIZE_UNSET, roundf(140 * scale)));
+	// A width of its own: in the narrow Bluetooth window the panel took
+	// all of it and the list was a strip (stick 52).
+	mineScroller->SetExplicitMinSize(BSize(roundf(200 * scale),
+		roundf(140 * scale)));
 
 	fMine->name = new BStringView("device name", "");
 	fMine->name->SetFont(&bold);
@@ -499,8 +355,14 @@ BluetoothView::BluetoothView(bool settingsPage)
 	memset(&fMine->soundAddress, 0, sizeof(fMine->soundAddress));
 	BStringView* texts[] = { fMine->name, fMine->kind, fMine->status,
 		fMine->connection, fMine->address, fMine->battery };
-	for (size_t i = 0; i < sizeof(texts) / sizeof(texts[0]); i++)
+	for (size_t i = 0; i < sizeof(texts) / sizeof(texts[0]); i++) {
 		texts[i]->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
+		// A long device name (up to 248 bytes) is cut with an ellipsis:
+		// as its full width it made the page wider than the window.
+		texts[i]->SetTruncation(B_TRUNCATE_END);
+		texts[i]->SetExplicitMinSize(BSize(roundf(60 * scale),
+			B_SIZE_UNSET));
+	}
 	fMine->disconnect = new BButton("disconnect", B_TRANSLATE("Disconnect"),
 		new BMessage(kMsgDisconnectButton));
 	fMine->forget = new BButton("forget", B_TRANSLATE("Forget"),
@@ -508,9 +370,10 @@ BluetoothView::BluetoothView(bool settingsPage)
 
 	BAppearanceKit::BCard* info = new BAppearanceKit::BCard("device info",
 		BAppearanceKit::B_CARD_PANEL, B_VERTICAL);
-	// As wide as its buttons need, at least a third of the page width at
-	// font size 12; the list takes the rest.
-	info->SetExplicitMinSize(BSize(roundf(250 * scale), B_SIZE_UNSET));
+	// As wide as its line of buttons needs; the list takes the rest. An
+	// explicit minimum of 250 pixels used to stand in for the buttons'
+	// own: narrower than three buttons, so they ran past the window's
+	// right edge (stick 51).
 	BLayoutBuilder::Group<>(info, B_VERTICAL, B_USE_SMALL_SPACING)
 		.SetInsets(B_USE_DEFAULT_SPACING)
 		.AddGroup(B_VERTICAL, 0)
@@ -527,10 +390,13 @@ BluetoothView::BluetoothView(bool settingsPage)
 			.Add(fMine->batteryLabel, 0, 3)
 			.Add(fMine->battery, 1, 3)
 		.End()
-		// Only for a headset, or only for a game controller.
-		.Add(fMine->useForSound)
 		.AddGlue()
+		// "Use for sound" only for a headset, "Test buttons…" only for a
+		// game controller. One line, so the page fits the window's height
+		// at its default size with a device chosen (stick 51 had a scroll
+		// bar there).
 		.AddGroup(B_HORIZONTAL)
+			.Add(fMine->useForSound)
 			.Add(fMine->testButtons)
 			.AddGlue()
 			.Add(fMine->disconnect)
@@ -553,9 +419,13 @@ BluetoothView::BluetoothView(bool settingsPage)
 	fDeviceList = new BListView("devices", B_SINGLE_SELECTION_LIST);
 	BScrollView* scroller = new BScrollView("devices scroll", fDeviceList, 0,
 		false, true);
-	scroller->SetExplicitMinSize(BSize(B_SIZE_UNSET, roundf(90 * scale)));
+	// At least three rows; it takes the rest of the page's height.
+	scroller->SetExplicitMinSize(BSize(B_SIZE_UNSET, roundf(60 * scale)));
 	fScanStatus = new BStringView("scan status", "");
 	fScanStatus->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
+	// The hint and the pairing result are cut, not the page made wider.
+	fScanStatus->SetTruncation(B_TRUNCATE_END);
+	fScanStatus->SetExplicitMinSize(BSize(roundf(60 * scale), B_SIZE_UNSET));
 	fScanButton = new BButton("scan", B_TRANSLATE("Scan"),
 		new BMessage(kMsgScanButton));
 	fDeviceList->SetSelectionMessage(new BMessage(kMsgDeviceSelected));
@@ -588,6 +458,8 @@ BluetoothView::BluetoothView(bool settingsPage)
 	fRadioField = new BMenuField("radio", NULL, fRadioMenu);
 	fRadioNote = new BStringView("radio note", "");
 	fRadioNote->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
+	fRadioNote->SetTruncation(B_TRUNCATE_END);
+	fRadioNote->SetExplicitMinSize(BSize(roundf(60 * scale), B_SIZE_UNSET));
 
 	// Devices nearby takes the rest of the height, down to the Bluetooth
 	// line (in Settings: as far down as the list of pages).
@@ -757,10 +629,27 @@ BluetoothView::MessageReceived(BMessage* message)
 
 		case kMsgTestButtons:
 		{
-			PairedItem* item = dynamic_cast<PairedItem*>(
-				fMine->list->ItemAt(fMine->list->CurrentSelection()));
-			if (item != NULL)
-				(new GamepadWindow(item->Device().info.DisplayName()))->Show();
+			// The live test is the Game controllers page of Settings
+			// (docs/GAME-CONTROLLERS.md, step 8), which also runs when
+			// Settings is open already.
+			// BRoster::Launch() refuses a launch of the calling team itself
+			// (B_BAD_VALUE, nothing sent), so on this page inside Settings
+			// the button did nothing (stick 51). There the same "--page"
+			// arguments go to Settings directly, as B_ARGV_RECEIVED.
+			static const char* kSettings = "application/x-vnd.R5OS-Settings";
+			app_info info;
+			if (be_app != NULL && be_app->GetAppInfo(&info) == B_OK
+				&& strcasecmp(info.signature, kSettings) == 0) {
+				BMessage argv(B_ARGV_RECEIVED);
+				argv.AddInt32("argc", 3);
+				argv.AddString("argv", "Settings");
+				argv.AddString("argv", "--page");
+				argv.AddString("argv", "gamecontrollers");
+				be_app->PostMessage(&argv);
+				break;
+			}
+			const char* args[] = { "--page", "gamecontrollers", NULL };
+			be_roster->Launch(kSettings, 2, args);
 			break;
 		}
 

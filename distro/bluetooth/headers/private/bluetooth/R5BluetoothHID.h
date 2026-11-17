@@ -35,7 +35,11 @@ enum {
 	// descriptor uses report IDs), as it came after the DATA header.
 	R5_BTHID_INPUT,
 	// r5_bthid_output: wait for an output report (keyboard lights).
-	R5_BTHID_GET_OUTPUT
+	R5_BTHID_GET_OUTPUT,
+	// r5_bthid_info: vendor and product ID and the name of a device, for
+	// R5_JOYSTICK_GET_INFO (docs/GAME-CONTROLLERS.md, step 8). Sent right
+	// after R5_BTHID_CREATE when the SDP Device ID record has them.
+	R5_BTHID_SET_INFO
 };
 
 struct r5_bthid_create {
@@ -57,6 +61,15 @@ struct r5_bthid_output {
 	uint32			capacity;			// in
 	int32			id;					// out
 	uint32			length;				// out: report ID first
+};
+
+struct r5_bthid_info {
+	int32			id;
+	uint16			vendor_id;			// Device ID attribute 0x0201
+	uint16			product_id;			// 0x0202
+	uint16			version;			// 0x0203
+	uint16			_reserved;
+	char			name[64];			// the device's name, UTF-8
 };
 
 

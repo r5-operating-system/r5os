@@ -5,7 +5,8 @@
  * bluetooth_audio.media_addon: one audio output, "Bluetooth audio", that
  * Media preferences lists with the other outputs (docs/BLUETOOTH.md,
  * step 5). Which headset it plays to is each person's own choice
- * (AudioSettings.h).
+ * (AudioSettings.h). Since step 7c also one audio input, "Bluetooth headset
+ * microphone" (BluetoothMicNode.h), silent until a voice link runs.
  */
 
 
@@ -14,6 +15,7 @@
 #include <new>
 
 #include "BluetoothAudioNode.h"
+#include "BluetoothMicNode.h"
 
 
 class BluetoothAudioAddOn : public BMediaAddOn {
@@ -35,6 +37,8 @@ public:
 private:
 			flavor_info			fFlavor;
 			media_format		fFormat;
+			flavor_info			fMicFlavor;
+			media_format		fMicFormat;
 };
 
 
@@ -57,6 +61,21 @@ BluetoothAudioAddOn::BluetoothAudioAddOn(image_id image)
 	fFlavor.out_format_count = 0;
 	fFlavor.out_format_flags = 0;
 	fFlavor.out_formats = NULL;
+
+	BluetoothMicNode::PreferredFormat(&fMicFormat);
+	fMicFlavor.name = (char*)"Bluetooth headset microphone";
+	fMicFlavor.info = (char*)"Records from a Bluetooth headset (HFP, mSBC "
+		"or CVSD).";
+	fMicFlavor.kinds = B_BUFFER_PRODUCER | B_PHYSICAL_INPUT;
+	fMicFlavor.flavor_flags = 0;
+	fMicFlavor.internal_id = 1;
+	fMicFlavor.possible_count = 1;
+	fMicFlavor.in_format_count = 0;
+	fMicFlavor.in_format_flags = 0;
+	fMicFlavor.in_formats = NULL;
+	fMicFlavor.out_format_count = 1;
+	fMicFlavor.out_format_flags = 0;
+	fMicFlavor.out_formats = &fMicFormat;
 }
 
 
@@ -70,16 +89,19 @@ BluetoothAudioAddOn::InitCheck(const char** failureText)
 int32
 BluetoothAudioAddOn::CountFlavors()
 {
-	return 1;
+	return 2;
 }
 
 
 status_t
 BluetoothAudioAddOn::GetFlavorAt(int32 index, const flavor_info** info)
 {
-	if (index != 0)
+	if (index == 0)
+		*info = &fFlavor;
+	else if (index == 1)
+		*info = &fMicFlavor;
+	else
 		return B_BAD_INDEX;
-	*info = &fFlavor;
 	return B_OK;
 }
 
@@ -88,12 +110,15 @@ BMediaNode*
 BluetoothAudioAddOn::InstantiateNodeFor(const flavor_info* info,
 	BMessage* config, status_t* error)
 {
-	if (info == NULL || info->internal_id != 0) {
+	if (info == NULL || (info->internal_id != 0 && info->internal_id != 1)) {
 		*error = B_BAD_INDEX;
 		return NULL;
 	}
-	BluetoothAudioNode* node
-		= new(std::nothrow) BluetoothAudioNode(this, 0);
+	BMediaNode* node;
+	if (info->internal_id == 1)
+		node = new(std::nothrow) BluetoothMicNode(this, 1);
+	else
+		node = new(std::nothrow) BluetoothAudioNode(this, 0);
 	*error = node != NULL ? B_OK : B_NO_MEMORY;
 	return node;
 }

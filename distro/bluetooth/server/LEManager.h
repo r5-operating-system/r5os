@@ -80,6 +80,9 @@ public:
 	// A device the Classic inquiry found: Pair uses Classic for it, also
 	// when it advertises on LE with the same address (dual mode).
 			void				NoteClassic(const bdaddr_t& address);
+	// Pair() sent this address to Classic because its LE advertisement
+	// says it is dual-mode: its LE name ("LE_...") is not its Classic one.
+			bool				DualModeAdvert(const bdaddr_t& address);
 			void				RadioChanged(bool enabled);
 	// Removes the keys of a paired LE device and ends its link.
 			bool				Forget(const bdaddr_t& address);

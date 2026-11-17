@@ -35,6 +35,7 @@
 #include "AudioSettings.h"
 
 #include <new>
+#include <stdlib.h>
 #include <syslog.h>
 #include <string.h>
 
@@ -895,15 +896,29 @@ BluetoothController::_StopScan()
 void
 BluetoothController::_DeviceFound(BMessage* message)
 {
-	if (!fState.scanning)
-		return;
-
 	BluetoothDeviceInfo info;
 	if (!find_address(*message, "address", 0, info.address))
 		return;
 	message->FindUInt32("class", &info.deviceClass);
 	message->FindString("name", &info.name);
 	message->FindInt8("rssi", &info.rssi);
+
+	// After the scan, bluetooth_server asks the devices that sent no name
+	// for it (Remote Name Request) and sends each answer the same way: it
+	// names a device already in the list, and adds none.
+	if (!fState.scanning) {
+		if (info.name.IsEmpty())
+			return;
+		for (size_t i = 0; i < fState.devices.size(); i++) {
+			if (bdaddrUtils::Compare(fState.devices[i].address, info.address)
+				&& fState.devices[i].name != info.name) {
+				fState.devices[i].name = info.name;
+				_PostState();
+				return;
+			}
+		}
+		return;
+	}
 
 	for (size_t i = 0; i < fState.devices.size(); i++) {
 		if (bdaddrUtils::Compare(fState.devices[i].address, info.address)) {
@@ -1135,6 +1150,24 @@ BluetoothController::_PostState()
 		state.AddBool("paired:connected",
 			fPaired->GetBool("connected", i, false));
 		state.AddInt32("paired:battery", fPaired->GetInt32("battery", i, -1));
+	}
+
+	// Test only: R5_BLUETOOTH_PREVIEW=1 in the environment of the program
+	// that shows the page (only distro/bluetooth/tests/run-qemu-smoke.sh
+	// sets it, BT_PREVIEW=1) adds one made-up connected game controller to
+	// My devices, so the page's layout can be checked in QEMU, which has no
+	// radio. Its address is from the documentation range (RFC 7042).
+	const char* preview = getenv("R5_BLUETOOTH_PREVIEW");
+	if (preview != NULL && strcmp(preview, "1") == 0) {
+		const bdaddr_t address = {{ 0x01, 0x53, 0x00, 0x5e, 0x00, 0x00 }};
+		state.AddData("paired:address", B_RAW_TYPE, &address,
+			sizeof(address));
+		state.AddString("paired:name", "Preview controller");
+		state.AddUInt32("paired:class", 0x000508);
+		state.AddBool("paired:le", false);
+		state.AddBool("paired:hid", true);
+		state.AddBool("paired:connected", true);
+		state.AddInt32("paired:battery", 80);
 	}
 
 	ssize_t size = state.FlattenedSize();

@@ -254,6 +254,127 @@ mtk_send_frame_locked(struct mtk_softc* sc, struct mbuf* m)
 }
 
 
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * A transmit-status record is eight words. The rate is the low 14 bits of
+ * the first. A record that was not acknowledged is ignored.
+ */
+static uint32_t
+mtk_legacy_kbps(int mode, int index)
+{
+	static const uint32_t cck[4] = { 1000, 2000, 5500, 11000 };
+	static const struct {
+		uint8_t index;
+		uint16_t kbps;
+	} ofdm[] = {
+		{ 11, 6000 }, { 15, 9000 }, { 10, 12000 }, { 14, 18000 },
+		{ 9, 24000 }, { 13, 36000 }, { 8, 48000 }, { 12, 54000 },
+	};
+	size_t i;
+
+	if (mode == 0) {
+		if (index < 0 || index > 3)
+			return 0;
+		return cck[index];
+	}
+	for (i = 0; i < sizeof(ofdm) / sizeof(ofdm[0]); i++) {
+		if (ofdm[i].index == index)
+			return ofdm[i].kbps;
+	}
+	return 0;
+}
+
+
+static uint32_t
+mtk_ht_kbps(int mcs, int width)
+{
+	static const uint32_t ht20[8] = {
+		6500, 13000, 19500, 26000, 39000, 52000, 58500, 65000
+	};
+	static const uint32_t ht40[8] = {
+		13500, 27000, 40500, 54000, 81000, 108000, 121500, 135000
+	};
+
+	if (mcs < 0 || mcs > 7)
+		return 0;
+	return width >= 40 ? ht40[mcs] : ht20[mcs];
+}
+
+
+static uint32_t
+mtk_vht_kbps(int mcs, int width)
+{
+	static const uint32_t vht20[10] = {
+		6500, 13000, 19500, 26000, 39000, 52000, 58500, 65000, 78000, 0
+	};
+	static const uint32_t vht40[10] = {
+		13500, 27000, 40500, 54000, 81000, 108000, 121500, 135000,
+		162000, 180000
+	};
+	static const uint32_t vht80[10] = {
+		29300, 58500, 87800, 117000, 175500, 234000, 263300, 292500,
+		351000, 390000
+	};
+
+	if (mcs < 0 || mcs > 9)
+		return 0;
+	if (width >= 80)
+		return vht80[mcs];
+	if (width >= 40)
+		return vht40[mcs];
+	return vht20[mcs];
+}
+
+
+static void
+mtk_note_txs(struct mtk_softc* sc, const uint8_t* data, size_t got)
+{
+	size_t at;
+
+	for (at = 8; at + 32 <= got; at += 32) {
+		uint32_t word = mtk_rd32(data + at);
+		uint32_t rate, mode, index, nss, kbps;
+		int width, kit;
+
+		if (((word >> 23) & 0x3) > 1)
+			continue;
+		if ((word & (7u << 16)) != 0)
+			continue;
+
+		rate = word & 0x3fff;
+		mode = (rate >> 6) & 0xf;
+		width = 20 << ((word >> 29) & 0x3);
+		if (mode == 2 || mode == 3) {
+			index = rate & 0x3f;
+			nss = index / 8 + 1;
+			index %= 8;
+			kit = 2;
+			kbps = mtk_ht_kbps((int)index, width) * nss;
+		} else if (mode == 4 || mode >= 8) {
+			index = rate & 0xf;
+			nss = ((rate >> 10) & 0x7) + 1;
+			kit = mode >= 8 ? 4 : 3;
+			kbps = mtk_vht_kbps((int)index, width) * nss;
+		} else {
+			index = rate & 0x3f;
+			nss = 1;
+			kit = 1;
+			kbps = mtk_legacy_kbps((int)mode, (int)index);
+		}
+		if (kbps == 0 || nss == 0 || nss > 8)
+			continue;
+
+		sc->sc_tx_kbps = kbps;
+		sc->sc_tx_mode = (uint8_t)kit;
+		sc->sc_tx_mcs = (uint8_t)index;
+		sc->sc_tx_nss = (uint8_t)nss;
+		sc->sc_tx_width = (uint16_t)width;
+	}
+}
+/* SPDX-SnippetEnd */
+
+
 /* One frame off the air, handed up to the stack that knows what to do with
  * it. Everything about what it means is decided there.
  */
@@ -273,6 +394,11 @@ mtk_receive_frame(struct mtk_softc* sc, const uint8_t* data, size_t got,
 		return;
 	word0 = mtk_rd32(data);
 	type = (word0 >> 27) & 0x1f;
+
+	if (type == MTK_RX_TYPE_TXS) {
+		mtk_note_txs(sc, data, got);
+		return;
+	}
 
 	/* Frames the part has finished sending (mt7921_mac_tx_free): after
 	 * eight bytes of header, one word per frame naming its token, with

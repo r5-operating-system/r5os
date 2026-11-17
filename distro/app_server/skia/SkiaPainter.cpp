@@ -401,6 +401,7 @@ SkiaTarget::DropGpu()
 	fRecorded = false;
 	fTextures.clear();
 	fTextureBytes = 0;
+	fGradients.clear();
 	if (fGpu != NULL && fRecorder != NULL)
 		fGpu->DeleteRecorder(fRecorder);
 	fRecorder = NULL;
@@ -412,6 +413,42 @@ static const size_t kTextureBytes = 96 * 1024 * 1024;
 static const int32 kTextureLargest = 64 * 1024 * 1024;
 
 
+/*!	M13 step 1: a fast 64-bit hash of a bitmap's bytes, so a cached texture
+	is checked without a copy of the bitmap and a memcmp against it. A
+	program writes its BBitmap's memory at any time, so every byte counts:
+	four lanes of 8-byte words (multiply and rotate), the tail byte by
+	byte. Not for an attacker: a collision only shows the program's own
+	old picture.
+*/
+static uint64
+bitmap_hash(const uint8* bits, int32 length)
+{
+	const uint64 kPrime = 0x9e3779b97f4a7c15ull;
+	uint64 lanes[4] = { kPrime, kPrime * 3, kPrime * 5, kPrime * 7 };
+	int32 words = length / 8;
+	int32 i = 0;
+	for (; i + 4 <= words; i += 4) {
+		for (int lane = 0; lane < 4; lane++) {
+			uint64 word;
+			memcpy(&word, bits + (size_t)(i + lane) * 8, 8);
+			uint64 h = (lanes[lane] ^ word) * kPrime;
+			lanes[lane] = (h << 31) | (h >> 33);
+		}
+	}
+	uint64 hash = (uint64)length;
+	for (int lane = 0; lane < 4; lane++)
+		hash = (hash ^ lanes[lane]) * kPrime;
+	for (; i < words; i++) {
+		uint64 word;
+		memcpy(&word, bits + (size_t)i * 8, 8);
+		hash = (hash ^ word) * kPrime;
+	}
+	for (int32 j = words * 8; j < length; j++)
+		hash = (hash ^ bits[j]) * kPrime;
+	return hash ^ (hash >> 29);
+}
+
+
 sk_sp<SkImage>
 SkiaTarget::FindTexture(const void* id, const uint8* bits, int32 length,
 	int32 width, int32 height, int32 bytesPerRow, int32 space, bool raw)
@@ -420,14 +457,62 @@ SkiaTarget::FindTexture(const void* id, const uint8* bits, int32 length,
 		if (texture.id != id || texture.width != width
 			|| texture.height != height || texture.bytesPerRow != bytesPerRow
 			|| texture.space != space || texture.raw != raw
-			|| (int32)texture.bits.size() != length)
+			|| texture.length != length)
 			continue;
-		if (memcmp(texture.bits.data(), bits, length) != 0)
+		if (texture.hash != bitmap_hash(bits, length))
 			return nullptr;
 		texture.used = system_time();
 		return texture.image;
 	}
 	return nullptr;
+}
+
+
+/*!	M13 step 1: FillRectVerticalGradient() and _GradientShader() made and
+	uploaded a new image of their colours on every draw. The colours are
+	still computed (cheap); the same colours reuse the uploaded image.
+	Compared byte for byte (a ramp is 1 KB, a column a few KB).
+*/
+sk_sp<SkImage>
+SkiaTarget::GradientImage(const SkBitmap& colors)
+{
+	static const size_t kGradientCount = 32;
+	static const size_t kGradientLargest = 64 * 1024;
+	const uint8* bits = (const uint8*)colors.getPixels();
+	size_t length = colors.computeByteSize();
+	if (bits == NULL || fRecorder == NULL)
+		return nullptr;
+	for (Gradient& gradient : fGradients) {
+		if (gradient.width == colors.width()
+			&& gradient.height == colors.height()
+			&& gradient.bits.size() == length
+			&& memcmp(gradient.bits.data(), bits, length) == 0) {
+			gradient.used = system_time();
+			return gradient.image;
+		}
+	}
+	sk_sp<SkImage> image = upload_texture(fRecorder, colors.asImage());
+	if (image == nullptr || length > kGradientLargest)
+		return image;
+	if (fGradients.size() >= kGradientCount) {
+		size_t oldest = 0;
+		for (size_t i = 1; i < fGradients.size(); i++) {
+			if (fGradients[i].used < fGradients[oldest].used)
+				oldest = i;
+		}
+		fGradients.erase(fGradients.begin() + oldest);
+	}
+	try {
+		Gradient gradient;
+		gradient.bits.assign(bits, bits + length);
+		gradient.width = colors.width();
+		gradient.height = colors.height();
+		gradient.image = image;
+		gradient.used = system_time();
+		fGradients.push_back(std::move(gradient));
+	} catch (...) {
+	}
+	return image;
 }
 
 
@@ -440,7 +525,7 @@ SkiaTarget::KeepTexture(const void* id, const uint8* bits, int32 length,
 		return;
 	for (size_t i = 0; i < fTextures.size(); i++) {
 		if (fTextures[i].id == id && fTextures[i].raw == raw) {
-			fTextureBytes -= fTextures[i].bits.size();
+			fTextureBytes -= fTextures[i].length;
 			fTextures.erase(fTextures.begin() + i);
 			break;
 		}
@@ -452,7 +537,7 @@ SkiaTarget::KeepTexture(const void* id, const uint8* bits, int32 length,
 			if (fTextures[i].used < fTextures[oldest].used)
 				oldest = i;
 		}
-		fTextureBytes -= fTextures[oldest].bits.size();
+		fTextureBytes -= fTextures[oldest].length;
 		fTextures.erase(fTextures.begin() + oldest);
 	}
 	Texture texture;
@@ -463,7 +548,8 @@ SkiaTarget::KeepTexture(const void* id, const uint8* bits, int32 length,
 	texture.space = space;
 	texture.raw = raw;
 	try {
-		texture.bits.assign(bits, bits + length);
+		texture.length = length;
+		texture.hash = bitmap_hash(bits, length);
 		texture.image = image;
 		texture.used = system_time();
 		fTextureBytes += length;
@@ -1067,11 +1153,20 @@ SkiaPainter::_FillSolid(const BRegion& region, const rgb_color& color,
 	SkPaint paint;
 	paint.setBlendMode(SkBlendMode::kSrc);
 	paint.setAntiAlias(false);
-	// straight bytes, no conversion: the colour as Haiku writes it
-	sk_sp<SkShader> shader = color_shader(color);
-	if (shader == nullptr)
-		return;
-	paint.setShader(shader);
+	if (color.alpha == 255) {
+		// M13 step 1: an opaque colour is the same premultiplied and
+		// straight, and an 8-bit value goes through Skia's float colour
+		// unchanged, so a plain colour writes Haiku's bytes without the
+		// runtime shader
+		paint.setColor(SkColorSetARGB(255, color.red, color.green,
+			color.blue));
+	} else {
+		// straight bytes, no conversion: the colour as Haiku writes it
+		sk_sp<SkShader> shader = color_shader(color);
+		if (shader == nullptr)
+			return;
+		paint.setShader(shader);
+	}
 	SkCanvas* canvas = fTarget->Canvas();
 	for (int32 i = 0; i < rects.CountRects(); i++) {
 		clipping_rect r = rects.RectAtInt(i);
@@ -1770,8 +1865,7 @@ SkiaPainter::FillRect(const BRect& r, const BGradient* gradient)
 				}
 			}
 			column.setImmutable();
-			sk_sp<SkImage> image = upload_texture(
-				fTarget->Recorder(), column.asImage());
+			sk_sp<SkImage> image = fTarget->GradientImage(column);
 			if (image == nullptr)
 				return _Clipped(BRect(a, b));
 			SkMatrix at = SkMatrix::Translate((float)(int32)rect.left,
@@ -2375,8 +2469,7 @@ SkiaPainter::_GradientShader(const BGradient& gradient, bool* _ok)
 		out[3] = stop->color.alpha;
 	}
 	ramp.setImmutable();
-	sk_sp<SkImage> image = upload_texture(fTarget->Recorder(),
-		ramp.asImage());
+	sk_sp<SkImage> image = fTarget->GradientImage(ramp);
 	if (image == nullptr)
 		return nullptr;
 
