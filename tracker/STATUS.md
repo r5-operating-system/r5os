@@ -5,20 +5,20 @@ Gegenereerd door `scripts/tracker-report.py`. Niet met de hand bewerken.
 | R5-status | Aantal |
 |---|---|
 | open | 3795 |
-| in-progress | 9 |
-| fixed | 132 |
+| in-progress | 8 |
+| fixed | 133 |
 | wontfix | 0 |
 | not-applicable | 0 |
 | **totaal in tracker** | **3936** |
 | open bij Haiku (laatste import) | 3936 |
 
-Nog open in R5OS: **2456** bugs, **1288** enhancements, rest overig (van 3804 open/bezig).
+Nog open in R5OS: **2455** bugs, **1288** enhancements, rest overig (van 3803 open/bezig).
 
 ## Type
 
 | Type | Aantal |
 |---|---|
-| bug | 2456 |
+| bug | 2455 |
 | enhancement | 1288 |
 | task | 60 |
 
@@ -27,7 +27,7 @@ Nog open in R5OS: **2456** bugs, **1288** enhancements, rest overig (van 3804 op
 | Priority | Aantal |
 |---|---|
 | normal | 3510 |
-| low | 258 |
+| low | 257 |
 | high | 34 |
 | critical | 1 |
 | blocker | 1 |
@@ -36,7 +36,7 @@ Nog open in R5OS: **2456** bugs, **1288** enhancements, rest overig (van 3804 op
 
 | Milestone | Aantal |
 |---|---|
-| Unscheduled | 3016 |
+| Unscheduled | 3015 |
 | R1 | 419 |
 | R1.1 | 298 |
 | — | 29 |
@@ -79,7 +79,6 @@ Nog open in R5OS: **2456** bugs, **1288** enhancements, rest overig (van 3804 op
 | [#8319](https://dev.haiku-os.org/ticket/8319) | assigned | Network & Internet/IPv6 | Haiku needs IPv6 Duplicate Address Detection | cursor/ipv6-finish |
 | [#8940](https://dev.haiku-os.org/ticket/8940) | new | Preferences | optional user login (screen) similar to BeLogin but homegrown supported | cursor/session-user |
 | [#16318](https://dev.haiku-os.org/ticket/16318) | new | Printing | IPP-Everywhere and AirPrint - Print support the XXIst century way | cursor/zeroconf-1042 |
-| [#17317](https://dev.haiku-os.org/ticket/17317) | new | Preferences/Input | Joysticks/Gamepad preferences | claude/game-controllers-fixes |
 | [#18970](https://dev.haiku-os.org/ticket/18970) | assigned | User Interface | Various dark mode problems (easy) |  |
 
 ## Gefixt in R5OS
@@ -166,7 +165,7 @@ Nog open in R5OS: **2456** bugs, **1288** enhancements, rest overig (van 3804 op
 | [#16643](https://dev.haiku-os.org/ticket/16643) | new | Applications/Tracker | Tracker: when requesting to show file in a folder with a lot of files, list is not scrolled to selected file |  |
 | [#16678](https://dev.haiku-os.org/ticket/16678) | assigned | Applications/Tracker | Tracker: use same text color for header |  |
 | [#16726](https://dev.haiku-os.org/ticket/16726) | new | Applications/Tracker | Item count view in Tracker windows are now resizing |  |
-| … | | | *52 meer in r5-status.tsv* | |
+| … | | | *53 meer in r5-status.tsv* | |
 
 ## Nog open (eerste 80)
 
