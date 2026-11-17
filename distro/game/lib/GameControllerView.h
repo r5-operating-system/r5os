@@ -16,6 +16,7 @@
 #include <GameController.h>
 
 
+class BBitmap;
 class BMessageRunner;
 
 
@@ -54,6 +55,20 @@ public:
 	// triggers.
 			void				SetTriggerMark(game_controller_trigger trigger,
 									float position);
+
+	// Added 17 Nov 2026 (docs/LIBR5.md, "Game Kit"): the still drawing of
+	// a model, chosen as SetDevice() chooses it (by vendor and product ID,
+	// else the family's own), as a new B_RGBA32 bitmap of width by height
+	// pixels: transparent background, the line in lineColor, kept in shape
+	// and centred. Without a known model and with
+	// B_GAME_CONTROLLER_FAMILY_UNKNOWN: a plain outline. For a card or a
+	// list row. The caller owns the bitmap; NULL when it could not be made.
+	// Needs a BApplication: app_server draws it.
+	static	BBitmap*			PictureBitmap(uint16 vendorID,
+									uint16 productID,
+									game_controller_family family,
+									float width, float height,
+									rgb_color lineColor);
 
 private:
 			struct Private;

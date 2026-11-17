@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <Bitmap.h>
 #include <GradientLinear.h>
 #include <InterfaceDefs.h>
 #include <LayoutUtils.h>
@@ -553,6 +554,94 @@ BGameControllerView::SetTriggerMark(game_controller_trigger trigger,
 		return;
 	fPrivate->triggerMark[trigger] = position;
 	Invalidate();
+}
+
+
+/*static*/ BBitmap*
+BGameControllerView::PictureBitmap(uint16 vendorID, uint16 productID,
+	game_controller_family family, float width, float height,
+	rgb_color lineColor)
+{
+	// Not NaN, at least one pixel, and not a picture of gigabytes.
+	if (!(width >= 1 && height >= 1 && width <= 4096 && height <= 4096))
+		return NULL;
+	BRect frame(0, 0, ceilf(width) - 1, ceilf(height) - 1);
+	BBitmap* bitmap = new(std::nothrow) BBitmap(frame,
+		B_BITMAP_ACCEPTS_VIEWS, B_RGBA32);
+	if (bitmap == NULL || bitmap->InitCheck() != B_OK) {
+		delete bitmap;
+		return NULL;
+	}
+	memset(bitmap->Bits(), 0, bitmap->BitsLength());
+	BView* view = new(std::nothrow) BView(frame, "picture", B_FOLLOW_NONE,
+		B_WILL_DRAW | B_SUBPIXEL_PRECISE);
+	if (view == NULL) {
+		delete bitmap;
+		return NULL;
+	}
+	bitmap->AddChild(view);
+	if (!bitmap->Lock()) {
+		delete bitmap;
+		return NULL;
+	}
+
+	// Drawn onto transparent pixels: the composite mode builds the alpha.
+	view->SetDrawingMode(B_OP_ALPHA);
+	view->SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_COMPOSITE);
+	view->SetLineMode(B_ROUND_CAP, B_ROUND_JOIN);
+	view->SetHighColor(lineColor);
+	BRect bounds = view->Bounds();
+	const gc_model* model = PictureFor(vendorID, productID, family);
+	if (model != NULL) {
+		model_painter m;
+		m.model = model;
+		m.scale = std::min(bounds.Width() / model->width,
+			bounds.Height() / model->height);
+		m.origin.x = roundf((bounds.Width() - model->width * m.scale) / 2);
+		m.origin.y = roundf((bounds.Height() - model->height * m.scale) / 2);
+		std::vector<BShape*> art;
+		build_art(model, m.scale, art);
+		view->SetFillRule(B_EVEN_ODD);
+		// Small: the line a little bolder, as in the view.
+		static const BPoint kBold[] = {
+			BPoint(0, 0), BPoint(0.45f, 0), BPoint(-0.45f, 0),
+			BPoint(0, 0.45f), BPoint(0, -0.45f)
+		};
+		int32 passes = model->width * m.scale < kBoldWidth ? 5 : 1;
+		for (int32 pass = 0; pass < passes; pass++) {
+			view->MovePenTo(m.origin + kBold[pass]);
+			for (size_t i = 0; i < art.size(); i++)
+				view->FillShape(art[i]);
+		}
+		view->MovePenTo(B_ORIGIN);
+		for (size_t i = 0; i < art.size(); i++)
+			delete art[i];
+		// The printed labels, when they are large enough to read.
+		for (int32 i = 0; i < model->textCount; i++) {
+			if (model->texts[i].size * m.scale >= 6)
+				model_text(view, m, model->texts[i], lineColor);
+		}
+	} else {
+		// No model: the body of the picture built from a report.
+		painter p;
+		p.view = view;
+		p.scale = std::min(bounds.Width() / kShapeBox.Width(),
+			bounds.Height() / kShapeBox.Height());
+		p.origin.x = (bounds.Width() - kShapeBox.Width() * p.scale) / 2
+			- kShapeBox.left * p.scale;
+		p.origin.y = (bounds.Height() - kShapeBox.Height() * p.scale) / 2
+			- kShapeBox.top * p.scale;
+		BRect body = p.MapRect(10, 44, 380, 170);
+		float radius = p.Size(26);
+		view->SetPenSize(std::max(1.0f, p.Size(4)));
+		view->StrokeRoundRect(body.InsetByCopy(1, 1), radius, radius);
+		view->SetPenSize(1);
+	}
+	view->Sync();
+	bitmap->RemoveChild(view);
+	bitmap->Unlock();
+	delete view;
+	return bitmap;
 }
 
 

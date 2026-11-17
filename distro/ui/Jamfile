@@ -44,5 +44,7 @@ SharedLibrary [ MultiArchDefaultGristFiles libr5ui.so ] :
 	WindowEffects.cpp
 	TiltLevel.cpp
 	AxisBar.cpp
+	CardStripItem.cpp
+	CardStrip.cpp
 	: be libr5icons.so libr5admin.so [ TargetLibstdc++ ]
 	;
