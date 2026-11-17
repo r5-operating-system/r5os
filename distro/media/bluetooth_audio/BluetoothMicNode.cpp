@@ -14,11 +14,41 @@
 #include <BufferGroup.h>
 #include <MediaAddOn.h>
 #include <TimeSource.h>
+#include <Messenger.h>
+#include <OS.h>
+
+#include <R5Admin.h>
+#include <bluetoothserver_p.h>
 
 
 // 240 frames of 16 kHz mono float: 15 ms, two mSBC frames.
 static const size_t kFramesPerBuffer = 240;
 static const size_t kBufferSize = kFramesPerBuffer * sizeof(float);
+
+
+// Tells bluetooth_server that a program records from the microphone (on)
+// or stopped (off), so the HFP session opens or closes the voice link
+// (BT_MSG_R5_AUDIO_VOICE). On a thread of its own: the node never waits.
+static status_t
+tell_server_voice(void* data)
+{
+	BMessenger server(BLUETOOTH_SIGNATURE);
+	BMessage message(BT_MSG_R5_AUDIO_VOICE);
+	message.AddBool("on", data != NULL);
+	BMessage reply;
+	r5_admin_send(server, &message, &reply, 2000000);
+	return B_OK;
+}
+
+
+static void
+voice_wanted(bool on)
+{
+	thread_id thread = spawn_thread(tell_server_voice, "bt voice wanted",
+		B_NORMAL_PRIORITY, on ? (void*)1 : NULL);
+	if (thread >= 0)
+		resume_thread(thread);
+}
 static const bigtime_t kBufferDuration
 	= (bigtime_t)kFramesPerBuffer * 1000000 / VoiceSource::kRate;
 static const char* kName = "Bluetooth headset microphone";
@@ -47,6 +77,8 @@ BluetoothMicNode::BluetoothMicNode(BMediaAddOn* addOn, int32 internalID)
 BluetoothMicNode::~BluetoothMicNode()
 {
 	BMediaEventLooper::Quit();
+	if (fConnected)
+		voice_wanted(false);
 	if (fSource != NULL) {
 		fSource->Stop();
 		delete fSource;
@@ -324,6 +356,8 @@ BluetoothMicNode::Connect(status_t error, const media_source& source,
 		}
 	}
 	fConnected = fBufferGroup != NULL;
+	if (fConnected)
+		voice_wanted(true);
 }
 
 
@@ -335,6 +369,8 @@ BluetoothMicNode::Disconnect(const media_source& what,
 		return;
 	fOutput.destination = media_destination::null;
 	PreferredFormat(&fOutput.format);
+	if (fConnected)
+		voice_wanted(false);
 	fConnected = false;
 	delete fBufferGroup;
 	fBufferGroup = NULL;

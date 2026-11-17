@@ -1,5 +1,18 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Bluetooth step 7c joined with HFP: the microphone opens the headset's voice link
+
+Problem: 7c (#4334) brought the voice path (h2generic, the decoder, the "Bluetooth headset microphone" input) but nothing opened a voice link, because the HFP side (#4333) was not on `main` yet. A voice link the headset opened itself went into the ACL code and marked the device as connecting.
+
+What changed (all only with `bt_voice true`; without it nothing changes):
+- bluetooth_server reads `bt_voice` once at start. The HFP agent then offers codec negotiation (`+BRSF` bit 9), keeps `AT+BAC`, takes `AT+BCS` and `AT+BCC`.
+- The microphone node tells bluetooth_server when a program connects to it and when it lets go (`BT_MSG_R5_AUDIO_VOICE`, admin port, uid 0). The HFP session then sends `+BCS` (mSBC when both sides have it), waits for `AT+BCS`, and asks for the voice link with the HFP 1.8 settings in turn (T2, T1 for mSBC; S4, S3, S1, D1 for CVSD). It closes the link when the microphone is let go or the session ends.
+- `LocalDeviceVoice.cpp`: Setup Synchronous Connection, the next setting after a refused or failed one, Accept Synchronous Connection Request for a link the headset opens while R5 wants one, Reject Synchronous Connection Request otherwise (also without `bt_voice`: a voice request no longer reaches the ACL code), and the end of the link.
+
+Limits: nothing tried on a radio. If the XM4 refuses mSBC with these settings, the link stays down (R5 does not fall back to CVSD after an mSBC codec choice). The headset hears silence (no speaker path).
+
+Tested: see the pull request. Host: `bt_rfcomm_test` (agent parts) 0 failed; `fuzz-bt.sh hfp` 60 s: 27.5 million lines, 0 crashes, with and without codec negotiation. ARM64 and RISC-V 64 not built or tested.
+
 ## 2026-11-17 - Bluetooth step 7c: a headset's microphone as a sound input (off until tested)
 
 Problem: a headset's microphone works only over a SCO or eSCO voice link, and `h2generic` never ran the isochronous USB transfers that carry it (`BT_SCO_NOT_WORKING`; on the MT7922 a standing isochronous transfer once starved the HCI events). There was no SBC decoder for mSBC and no audio input for a headset.

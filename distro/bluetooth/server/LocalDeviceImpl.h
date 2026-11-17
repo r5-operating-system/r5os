@@ -151,6 +151,10 @@ public:
 	// BT_MSG_R5_GET_PAIRED and BT_MSG_R5_DISCONNECT (Classic and LE).
 	void				R5AddPaired(BMessage& reply);
 	bool				R5Disconnect(const bdaddr_t& address);
+	// Step 7c: the voice link to a headset (LocalDeviceVoice.cpp). Open
+	// tries the HFP 1.8 settings of the codec in turn; close ends it.
+	status_t			R5VoiceOpen(const bdaddr_t& address, int codec);
+	void				R5VoiceClose(const bdaddr_t& address);
 private:
 	// Remote host features before Authentication Requested.
 	std::vector<uint16> fFeatureHandles;
@@ -159,6 +163,20 @@ private:
 	uint8				fRemoteIOCapability;
 	void				_ReadRemoteHostFeatures(uint16 handle);
 	bool				_TakeFeatureHandle(uint16 handle);
+
+	// Step 7c (LocalDeviceVoice.cpp): one voice link per radio.
+	bool				_R5VoiceEvent(const struct hci_event_header* event);
+	void				_R5VoiceSetupNext();
+	void				_R5VoiceRequest(const uint8* data);
+	bdaddr_t			fVoiceAddress;
+	bool				fVoiceWanted;
+	bool				fVoicePending;
+	int					fVoiceCodec;
+	int					fVoiceSettings[4];
+	int					fVoiceCount;
+	int					fVoiceIndex;
+	uint16				fVoiceHandle;
+	uint16				fVoiceAcl;
 
 	// Controller setup after a reset (SetupController()).
 	uint8				fFeatures[8];

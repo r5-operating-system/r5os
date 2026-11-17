@@ -117,6 +117,11 @@ public:
 	// Step 7b: whether a Classic device has its link, for HFPGateway
 	// (takes fDevicesLock).
 	static bool	_R5DeviceConnected(const bdaddr_t& address, void* cookie);
+	// Step 7c: the voice path is on (bt_voice in the h2generic driver
+	// settings, read once), and the HFPGateway voice callback.
+	static bool	_R5VoiceEnabled();
+	static status_t _R5Voice(const bdaddr_t& address, int codec, bool open,
+					void* cookie);
 	// SPDX-SnippetEnd
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors

@@ -40,6 +40,11 @@ static void admin_request(BMessage* request, const r5_admin_sender& sender,
 #include <TypeConstants.h>
 #include <new>
 #include <syslog.h>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <driver_settings.h>
+// SPDX-SnippetEnd
 
 #include <bluetoothserver_p.h>
 #include <bluetooth/HCI/btHCI_command.h>
@@ -146,6 +151,11 @@ BluetoothServer::BluetoothServer()
 	{
 		HFPGateway::Options options = HFPGateway::DefaultOptions();
 		options.connected = _R5DeviceConnected;
+		// Step 7c: with bt_voice the microphone opens the voice link.
+		if (_R5VoiceEnabled()) {
+			options.voice = _R5Voice;
+			options.codecNegotiation = true;
+		}
 		fHFPGateway = new HFPGateway(options);
 	}
 	fLEPulse = NULL;
@@ -687,7 +697,8 @@ void BluetoothServer::MessageReceived(BMessage* message)
 		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 		// SPDX-License-Identifier: MIT
 		// Decided by the sender: only on the admin port (R5AdminRequest()),
-		// where the kernel names it. Here the reply address is whatever the
+		case BT_MSG_R5_AUDIO_CONNECT:
+		case BT_MSG_R5_AUDIO_VOICE:
 		// sender chose.
 		case BT_MSG_R5_SET_RADIO:
 		case BT_MSG_R5_AUDIO_STREAMING:
@@ -900,6 +911,24 @@ BluetoothServer::R5AdminRequest(BMessage* message, BMessage& reply,
 			}
 			status = _SetRadioEnabled(enabled);
 			reply.AddBool("enabled", fRadioEnabled);
+			break;
+		}
+
+		case BT_MSG_R5_AUDIO_VOICE:
+		{
+			// Step 7c: the headset microphone, from bluetooth_audio (uid 0).
+			bool on;
+			if (sender.uid != 0) {
+				status = B_NOT_ALLOWED;
+				break;
+			}
+			if (message->FindBool("on", &on) != B_OK) {
+				status = B_BAD_VALUE;
+				break;
+			}
+			if (fHFPGateway != NULL)
+				fHFPGateway->SetVoiceWanted(on);
+			status = B_OK;
 			break;
 		}
 
@@ -1294,6 +1323,39 @@ BluetoothServer::_R5DeviceConnected(const bdaddr_t& address, void*)
 			return true;
 	}
 	return false;
+}
+
+
+bool
+BluetoothServer::_R5VoiceEnabled()
+{
+	// The same file and line the h2generic driver reads (step 7c).
+	void* settings = load_driver_settings("h2generic");
+	bool enabled = get_driver_boolean_parameter(settings, "bt_voice", false,
+		true);
+	unload_driver_settings(settings);
+	return enabled;
+}
+
+
+status_t
+BluetoothServer::_R5Voice(const bdaddr_t& address, int codec, bool open,
+	void*)
+{
+	BluetoothServer* server = (BluetoothServer*)be_app;
+	BAutolock locker(server->fDevicesLock);
+	for (int32 i = 0; i < server->fLocalDevicesList.CountItems(); i++) {
+		LocalDeviceImpl* radio = server->fLocalDevicesList.ItemAt(i);
+		ServerRemoteDevice* rd = radio->RemoteDeviceByAddr(address);
+		if (rd == NULL || rd->conn_state != RemoteDevice::CONNECTED)
+			continue;
+		if (!open) {
+			radio->R5VoiceClose(address);
+			return B_OK;
+		}
+		return radio->R5VoiceOpen(address, codec);
+	}
+	return open ? B_NOT_ALLOWED : B_OK;
 }
 // SPDX-SnippetEnd
 

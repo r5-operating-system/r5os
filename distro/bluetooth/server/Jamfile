@@ -28,6 +28,7 @@ Application bluetooth_server
 	LEManagerSMP.cpp
 	LocalDeviceHandler.cpp
 	LocalDeviceImpl.cpp
+	LocalDeviceVoice.cpp
 	PairingNotice.cpp
 	PasskeyWindow.cpp
 	HFPAgent.cpp

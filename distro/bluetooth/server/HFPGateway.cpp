@@ -9,6 +9,7 @@
 #include "HFPGateway.h"
 
 #include <new>
+#include <stdio.h>
 #include <string.h>
 #include <syslog.h>
 
@@ -16,12 +17,15 @@
 
 #include "HFPAgent.h"
 #include "RFCOMMLink.h"
+#include "VoiceLink.h"
 
 
 static const bigtime_t kOpenTimeout = 30000000;
 static const bigtime_t kReadWait = 1000000;
 static const bigtime_t kSendWait = 5000000;
 static const bigtime_t kSleepStep = 250000;
+// The headset answers +BCS with AT+BCS within this time.
+static const bigtime_t kCodecWait = 3000000;
 
 
 struct HFPGateway::Session {
@@ -30,6 +34,11 @@ struct HFPGateway::Session {
 	thread_id	thread;
 	int32		battery;
 	bool		again;		// DeviceReady() came while this one ran
+	// Step 7c, used by the session thread only (voiceOpen read under fLock).
+	bool		voiceOpen;
+	bool		voiceFailed;	// until the microphone is let go
+	int			codecPending;	// +BCS sent, waiting for AT+BCS
+	bigtime_t	codecDeadline;
 	bool		done;
 	HFPGateway*	gateway;
 };
@@ -54,6 +63,8 @@ HFPGateway::DefaultOptions()
 	options.retryDelay = 10000000;
 	options.retries = 2;
 	options.serviceLevelTimeout = 30000000;
+	options.voice = NULL;
+	options.codecNegotiation = false;
 	return options;
 }
 
@@ -63,7 +74,9 @@ HFPGateway::HFPGateway(const Options& options)
 	fOptions(options),
 	fLock("hfp gateway"),
 	fSessions(4),
-	fQuitting(false)
+	fQuitting(false),
+	fVoiceWanted(false),
+	fVoiceOwner(NULL)
 {
 	if (fOptions.connect == NULL)
 		fOptions.connect = default_connect;
@@ -124,6 +137,10 @@ HFPGateway::DeviceReady(const bdaddr_t& address, uint8 channel)
 	session->battery = -1;
 	session->again = false;
 	session->done = false;
+	session->voiceOpen = false;
+	session->voiceFailed = false;
+	session->codecPending = 0;
+	session->codecDeadline = 0;
 	session->gateway = this;
 	session->thread = spawn_thread(_SessionThread, "bluetooth hfp",
 		B_NORMAL_PRIORITY, session);
@@ -246,7 +263,7 @@ HFPGateway::_Run(Session* session)
 bool
 HFPGateway::_Serve(Session* session, RFCOMMLink* link)
 {
-	r5hfp::Agent agent;
+	r5hfp::Agent agent(fOptions.codecNegotiation);
 	bigtime_t start = system_time();
 	char line[256];
 	char answer[r5hfp::kMaxAnswer];
@@ -259,6 +276,8 @@ HFPGateway::_Serve(Session* session, RFCOMMLink* link)
 					"started no service level connection");
 				break;
 			}
+			// The microphone may be wanted without a word from the headset.
+			_Voice(session, agent, link, 0);
 			continue;
 		}
 		if (status != B_OK)
@@ -270,6 +289,7 @@ HFPGateway::_Serve(Session* session, RFCOMMLink* link)
 			break;
 
 		uint32 events = agent.TakeEvents();
+		_Voice(session, agent, link, events);
 		if ((events & r5hfp::kEventServiceLevel) != 0) {
 			{
 				// A DeviceReady() for this same link (encryption and SDP
@@ -303,6 +323,126 @@ HFPGateway::_Serve(Session* session, RFCOMMLink* link)
 		syslog(LOG_INFO, "bluetooth_server: hfp: %" B_PRIu32 " commands "
 			"not known", agent.Unknown());
 	}
+	// The voice link goes with the session.
+	if (session->voiceOpen)
+		_VoiceSet(session, 0, false);
+	{
+		BAutolock locker(fLock);
+		if (fVoiceOwner == session)
+			fVoiceOwner = NULL;
+		session->codecPending = 0;
+		session->voiceFailed = false;
+	}
 	syslog(LOG_INFO, "bluetooth_server: hfp: session ended");
 	return agent.ServiceLevel();
+}
+
+
+void
+HFPGateway::SetVoiceWanted(bool wanted)
+{
+	BAutolock locker(fLock);
+	if (fVoiceWanted == wanted)
+		return;
+	fVoiceWanted = wanted;
+	syslog(LOG_INFO, "bluetooth_server: hfp: microphone %s",
+		wanted ? "wanted" : "no longer wanted");
+}
+
+
+bool
+HFPGateway::VoiceOpen()
+{
+	BAutolock locker(fLock);
+	for (int32 i = 0; i < fSessions.CountItems(); i++) {
+		if (fSessions.ItemAt(i)->voiceOpen)
+			return true;
+	}
+	return false;
+}
+
+
+// Step 7c: the voice link follows the microphone. With codec negotiation
+// on both sides the AG first sends +BCS and waits for AT+BCS (HFP 1.8,
+// 4.11.3); otherwise the link is CVSD.
+void
+HFPGateway::_Voice(Session* session, r5hfp::Agent& agent, RFCOMMLink* link,
+	uint32 events)
+{
+	if (fOptions.voice == NULL || !agent.ServiceLevel())
+		return;
+	bool wanted;
+	{
+		BAutolock locker(fLock);
+		if (fVoiceWanted && fVoiceOwner == NULL)
+			fVoiceOwner = session;
+		wanted = fVoiceWanted && fVoiceOwner == session;
+		if (!fVoiceWanted)
+			session->voiceFailed = false;
+	}
+
+	if (!wanted) {
+		session->codecPending = 0;
+		if (session->voiceOpen)
+			_VoiceSet(session, 0, false);
+		{
+			BAutolock locker(fLock);
+			if (fVoiceOwner == session && !fVoiceWanted)
+				fVoiceOwner = NULL;
+		}
+		return;
+	}
+	if (session->voiceOpen || session->voiceFailed)
+		return;
+
+	if (session->codecPending != 0) {
+		if ((events & r5hfp::kEventCodec) != 0) {
+			int codec = agent.ConfirmedCodec();
+			if (codec != voice::kCodecMSBC)
+				codec = voice::kCodecCVSD;
+			session->codecPending = 0;
+			_VoiceSet(session, codec, true);
+		} else if (system_time() > session->codecDeadline) {
+			syslog(LOG_NOTICE, "bluetooth_server: hfp: the headset did not "
+				"confirm the codec");
+			session->codecPending = 0;
+			session->voiceFailed = true;
+		}
+		return;
+	}
+
+	if (agent.CanNegotiateCodecs()) {
+		int codec = voice::ChooseCodec(agent.CodecList(), true);
+		char select[32];
+		int length = snprintf(select, sizeof(select), "\r\n+BCS: %d\r\n",
+			codec);
+		if (link->Send(select, length, kSendWait) == B_OK) {
+			session->codecPending = codec;
+			session->codecDeadline = system_time() + kCodecWait;
+		}
+		return;
+	}
+	_VoiceSet(session, voice::kCodecCVSD, true);
+}
+
+
+void
+HFPGateway::_VoiceSet(Session* session, int codec, bool open)
+{
+	bdaddr_t address;
+	{
+		BAutolock locker(fLock);
+		address = session->address;
+	}
+	// Never under fLock: the server takes its devices lock.
+	status_t status = fOptions.voice(address, codec, open, fOptions.cookie);
+	if (!open || status == B_OK) {
+		BAutolock locker(fLock);
+		session->voiceOpen = open;
+	}
+	if (open && status != B_OK) {
+		syslog(LOG_NOTICE, "bluetooth_server: hfp: voice link not asked: "
+			"%s", strerror(status));
+		session->voiceFailed = true;
+	}
 }

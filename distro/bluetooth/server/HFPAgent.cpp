@@ -110,7 +110,7 @@ is(const char* command, size_t length, const char* text)
 }
 
 
-Agent::Agent()
+Agent::Agent(bool codecNegotiation)
 	:
 	fServiceLevel(false),
 	fBatteryIndicator(false),
@@ -120,8 +120,20 @@ Agent::Agent()
 	fMicrophone(-1),
 	fEvents(0),
 	fButton(""),
-	fUnknown(0)
+	fUnknown(0),
+	fCodecNegotiation(codecNegotiation),
+	fConfirmedCodec(0)
 {
+	fCodecs[0] = '\0';
+}
+
+
+bool
+Agent::CanNegotiateCodecs() const
+{
+	return fCodecNegotiation
+		&& (fFeatures & kHandsFreeCodecNegotiation) != 0
+		&& fCodecs[0] != '\0';
 }
 
 
@@ -178,9 +190,32 @@ Agent::Handle(const char* line, size_t length, char* out, size_t outSize)
 			return answer.length;
 		}
 		fFeatures = (uint32_t)values[0];
-		answer.Add("\r\n+BRSF: %u\r\n", (unsigned)kGatewayFeatures);
+		answer.Add("\r\n+BRSF: %u\r\n", (unsigned)(kGatewayFeatures
+			| (fCodecNegotiation ? kGatewayCodecNegotiation : 0)));
 		answer.Ok();
 	} else if (starts(c, n, "+BAC=", &rest, &restLength)) {
+		// The headset's codecs (HFP 1.8, 4.34.2): kept for +BCS.
+		if (ParseNumbers(rest, restLength, values, 16) < 1
+			|| restLength > kMaxCodecList) {
+			answer.Error();
+			return answer.length;
+		}
+		memcpy(fCodecs, rest, restLength);
+		fCodecs[restLength] = '\0';
+		answer.Ok();
+	} else if (fCodecNegotiation && starts(c, n, "+BCS=", &rest, &restLength)) {
+		// The headset confirms the codec of the AG's +BCS (HFP 1.8, 4.11.3).
+		if (ParseNumbers(rest, restLength, values, 1) != 1
+			|| values[0] < 1 || values[0] > 255) {
+			answer.Error();
+			return answer.length;
+		}
+		fConfirmedCodec = (int)values[0];
+		fEvents |= kEventCodec;
+		answer.Ok();
+	} else if (fCodecNegotiation && is(c, n, "+BCC")) {
+		// The headset asks the AG to start a codec connection.
+		fEvents |= kEventCodecRequest;
 		answer.Ok();
 	} else if (is(c, n, "+CIND=?")) {
 		answer.Line(kIndicators);

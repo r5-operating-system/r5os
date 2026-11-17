@@ -20,6 +20,9 @@
 
 
 class RFCOMMLink;
+namespace r5hfp {
+class Agent;
+}
 
 
 class HFPGateway {
@@ -33,6 +36,10 @@ public:
 	// session only connects, and tries again, while it has.
 	typedef	bool				(*ConnectedCheck)(const bdaddr_t& address,
 									void* cookie);
+	// Opens (open true, with an HFP codec ID) or closes the voice link to
+	// the headset (step 7c). NULL: no voice.
+	typedef	status_t			(*VoiceControl)(const bdaddr_t& address,
+									int codec, bool open, void* cookie);
 
 	struct Options {
 		Connector		connect;
@@ -46,6 +53,10 @@ public:
 		int32			retries;
 		// The headset starts the SLC (HFP 1.8, 4.2.1) within this time.
 		bigtime_t		serviceLevelTimeout;
+		// The voice path (bt_voice): codec negotiation in the AT layer,
+		// and voice for the microphone.
+		VoiceControl	voice;
+		bool			codecNegotiation;
 	};
 
 	static	Options				DefaultOptions();
@@ -70,6 +81,12 @@ public:
 			int32				Battery(const bdaddr_t& address);
 	// Sessions that run (for the test).
 			int32				CountSessions();
+	// The microphone is wanted (a program records from the headset): the
+	// first session with an SLC opens the voice link, and closes it when
+	// this goes back to false. Takes effect within a second.
+			void				SetVoiceWanted(bool wanted);
+	// Whether a session asked for the voice link (for the test).
+			bool				VoiceOpen();
 
 private:
 			struct Session;
@@ -77,12 +94,19 @@ private:
 	static	status_t			_SessionThread(void* data);
 			void				_Run(Session* session);
 			bool				_Serve(Session* session, RFCOMMLink* link);
+			void				_Voice(Session* session,
+									r5hfp::Agent& agent,
+									RFCOMMLink* link, uint32 events);
+			void				_VoiceSet(Session* session, int codec,
+									bool open);
 			void				_Sleep(bigtime_t duration);
 
 			Options				fOptions;
 			BLocker				fLock;
 			BObjectList<Session, true> fSessions;
 	volatile bool				fQuitting;
+			bool				fVoiceWanted;
+			Session*			fVoiceOwner;
 };
 
 
