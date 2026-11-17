@@ -4,31 +4,31 @@ Gegenereerd door `scripts/tracker-report.py`. Niet met de hand bewerken.
 
 | R5-status | Aantal |
 |---|---|
-| open | 3795 |
+| open | 3686 |
 | in-progress | 8 |
 | fixed | 133 |
 | wontfix | 0 |
-| not-applicable | 0 |
+| not-applicable | 109 |
 | **totaal in tracker** | **3936** |
 | open bij Haiku (laatste import) | 3936 |
 
-Nog open in R5OS: **2455** bugs, **1288** enhancements, rest overig (van 3803 open/bezig).
+Nog open in R5OS: **2392** bugs, **1250** enhancements, rest overig (van 3694 open/bezig).
 
 ## Type
 
 | Type | Aantal |
 |---|---|
-| bug | 2455 |
-| enhancement | 1288 |
-| task | 60 |
+| bug | 2392 |
+| enhancement | 1250 |
+| task | 52 |
 
 ## Priority
 
 | Priority | Aantal |
 |---|---|
-| normal | 3510 |
-| low | 257 |
-| high | 34 |
+| normal | 3417 |
+| low | 247 |
+| high | 28 |
 | critical | 1 |
 | blocker | 1 |
 
@@ -36,37 +36,37 @@ Nog open in R5OS: **2455** bugs, **1288** enhancements, rest overig (van 3803 op
 
 | Milestone | Aantal |
 |---|---|
-| Unscheduled | 3015 |
+| Unscheduled | 2927 |
 | R1 | 419 |
-| R1.1 | 298 |
-| — | 29 |
-| R1/beta7 | 26 |
+| R1.1 | 296 |
+| R1/beta7 | 25 |
 | R2 | 16 |
+| — | 11 |
 
 ## Component (top 20)
 
 | Component | Aantal |
 |---|---|
-| Applications/Tracker | 176 |
+| Applications/Tracker | 175 |
 | Servers/app_server | 161 |
 | Kits/Interface Kit | 153 |
-| System/Kernel | 153 |
+| System/Kernel | 150 |
 | Applications/WebPositive | 131 |
 | Kits/Web Kit | 126 |
 | Applications/MediaPlayer | 94 |
-| - General | 87 |
+| - General | 86 |
 | User Interface | 85 |
 | Drivers/Graphics/radeon_hd | 77 |
 | Applications/HaikuDepot | 68 |
-| Build System | 64 |
+| Build System | 60 |
 | Applications/Command Line Tools | 52 |
 | Applications/Debugger | 45 |
 | System/POSIX | 43 |
 | Applications/Deskbar | 42 |
 | Kits/Package Kit | 40 |
 | Documentation | 38 |
-| System | 37 |
 | Applications/Icon-O-Matic | 37 |
+| System | 36 |
 
 ## Bezig
 
@@ -172,7 +172,6 @@ Nog open in R5OS: **2455** bugs, **1288** enhancements, rest overig (van 3803 op
 | Ticket | Haiku | Component | Samenvatting | Branch |
 |---|---|---|---|---|
 | [#344](https://dev.haiku-os.org/ticket/344) | assigned | - General | Unify file/folder names in ~/config/settings |  |
-| [#570](https://dev.haiku-os.org/ticket/570) | assigned | - General | spybmessage wont load NetPositive |  |
 | [#605](https://dev.haiku-os.org/ticket/605) | assigned | Kits/Interface Kit | [VLC] resizing control window doesn't resize the timeview |  |
 | [#804](https://dev.haiku-os.org/ticket/804) | new | Network & Internet | "ifconfig" should support :x notion |  |
 | [#808](https://dev.haiku-os.org/ticket/808) | new | Network & Internet/Stack | Get userland stack to run again |  |
@@ -188,7 +187,6 @@ Nog open in R5OS: **2455** bugs, **1288** enhancements, rest overig (van 3803 op
 | [#976](https://dev.haiku-os.org/ticket/976) | assigned | Kits/libtextencoding.so | convert_from_utf8() broken |  |
 | [#1036](https://dev.haiku-os.org/ticket/1036) | new | Applications/Tracker | Tracker Doesn't Like Hard Links |  |
 | [#1041](https://dev.haiku-os.org/ticket/1041) | new | File Systems/UDF | UDF attributes support |  |
-| [#1048](https://dev.haiku-os.org/ticket/1048) | assigned | System | add support for PowerPC |  |
 | [#1059](https://dev.haiku-os.org/ticket/1059) | new | Network & Internet/PPP | [IPCP] update DNS server list |  |
 | [#1070](https://dev.haiku-os.org/ticket/1070) | new | System/Kernel | Implement a precache algorithm for the file system caches |  |
 | [#1071](https://dev.haiku-os.org/ticket/1071) | new | System/Kernel | Identify and fix performance bottlenecks in the kernel and I/O subsystems |  |
@@ -236,7 +234,6 @@ Nog open in R5OS: **2455** bugs, **1288** enhancements, rest overig (van 3803 op
 | [#1993](https://dev.haiku-os.org/ticket/1993) | new | System/Kernel | Implement using HPET timers and other mechanisms than TSC for time keeping |  |
 | [#1994](https://dev.haiku-os.org/ticket/1994) | new | Network & Internet/TCP | TCP does not support urgent (or inline) data |  |
 | [#2044](https://dev.haiku-os.org/ticket/2044) | assigned | System/POSIX | Many sysconf definitions are missing. |  |
-| [#2045](https://dev.haiku-os.org/ticket/2045) | new | Applications/Tracker | NetPositive Bookmarks not consistent |  |
 | [#2055](https://dev.haiku-os.org/ticket/2055) | reopened | Add-Ons/Media/Mixer | Eric's Ulimate Solitare, and Axia fail to run |  |
 | [#2103](https://dev.haiku-os.org/ticket/2103) | new | Servers/app_server | BShisen: changing tile set is not working as expected |  |
 | [#2120](https://dev.haiku-os.org/ticket/2120) | assigned | Documentation | Build system Documentation/Reference? |  |
@@ -251,5 +248,8 @@ Nog open in R5OS: **2455** bugs, **1288** enhancements, rest overig (van 3803 op
 | [#2490](https://dev.haiku-os.org/ticket/2490) | new | File Systems/BFS | File version as on VMS (DEC VAX) |  |
 | [#2499](https://dev.haiku-os.org/ticket/2499) | assigned | Kits/Interface Kit | [Keymap] shortcuts don't work with some keymaps |  |
 | [#2505](https://dev.haiku-os.org/ticket/2505) | reopened | Network & Internet/Bluetooth | bluetooth_server provokes vm_page_fault in h2generic |  |
-| … | | | *3715 meer in r5-status.tsv* | |
+| [#2532](https://dev.haiku-os.org/ticket/2532) | assigned | Drivers/Graphics/NeoMagic | broken Video/Audio on Dell Latitude LS [NeoMagic chipset] |  |
+| [#2551](https://dev.haiku-os.org/ticket/2551) | assigned | Applications/Tracker | [Tracker]: Copy To shows wrong content of Desktop directory when selecting a bfs volume on a usb stick |  |
+| [#2615](https://dev.haiku-os.org/ticket/2615) | assigned | Kits/Interface Kit | Improved keyboard navigation with triggers |  |
+| … | | | *3606 meer in r5-status.tsv* | |
 
