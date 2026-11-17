@@ -15,7 +15,14 @@ Built: `distro/mesa/build-radv.sh` under the build lock, exit 0; `check-libdrm-s
 
 Stick 5 written 17 Nov 21:38 at `56e06d7b7e`: `build-locked.sh` (`jam_exit=0`, `mesa_packages_ok`), `@r5-anyboot`, boot 1 planted, `check-pre-stick.py` on the image `pre-stick ok`, `write-stick.py` exit 0, stick sha256 `dd5c7931…` matches the image, all under one held build lock.
 
-Limits: nothing booted yet. The present now waits for the GPU on RADV without a shared image, so VulkanTeapot's frame rate on that path may drop; measure it on the stick. A frame over 1 s on that path ends the swapchain. ARM64 and RISC-V 64 not built.
+Stick 5 on the 5625U (17 Nov, logs `generated/boot-5625u-51` in the worktree; the folder number is per worktree): `check` PASS on all 4 boots. Every boot `GFX9 scratch 0xdeadbeef`, fence landed, `k2 ok gart`, no gpu hang or lost, no `gpu draw off`, no `MISMATCH`. Shutdown to the last heartbeat 3–4 s.
+- Boot 1 (RADV): warm up 2332 ms, cache none; drag 16.8, resize 16.8 ms per frame (p95 19.6).
+- Boot 2 (RADV, scanout): scanout through Vulkan, warm up 84 ms, cache loaded; resize 16.7 (p95 23.0).
+- Boot 3 (Lavapipe, first start): `gpu draw warm-up parts 8, longest 9844 ms`, warm up 32722 ms, no `warm up status` (stick 4: 10448 ms and `Operation timed out`). Resize median 16.7 ms, p95 236.6 ms (not met); drag 16.7.
+- Boot 4 (Lavapipe, second start): warm up 2046 ms, longest part 1386 ms: Mesa's shader cache works on the 5625U. Resize 16.7 ms, p95 18.1 (met).
+- The owner said "ging goed"; the manual answers (caps lock, outline, VulkanTeapot tearing) were not written into the check files.
+
+Limits: the boot 3 resize p95 (236.6 ms) is most likely Lavapipe compiling on its first start (boot 4 with the cache: 18.1); not proven. VulkanTeapot's frame rate on RADV with the fence wait was not measured. Scroll p95 stays 170–240 ms on every boot (not judged). The present now waits for the GPU on RADV without a shared image, so VulkanTeapot's frame rate on that path may drop; measure it on the stick. A frame over 1 s on that path ends the swapchain. ARM64 and RISC-V 64 not built.
 
 Tested: `git apply --check` of the patch on `origin/main`; `sh -n` of `check`, `boot-next` and `m13-measure`; `py scripts/check-pre-stick.py --paper` at `331843fef0`: `m13 lines 9 have a source`, `m13 boot 1/2/3/4/done settings ok`, M11 and M12 walks unchanged, `pre-stick paper ok`.
 
