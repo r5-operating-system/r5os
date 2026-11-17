@@ -685,7 +685,8 @@ mtk_read_capability(struct mtk_softc* sc)
 		uint32_t size = mtk_le32(reply + at + 4);
 
 		at += 8;
-		if (at + size > length)
+		/* size is untrusted. A uint32 sum wraps and then looks in range. */
+		if (at > length || size > length - at)
 			break;
 
 		if (tag == MTK_NIC_CAP_MAC_ADDR && size >= 6)

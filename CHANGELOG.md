@@ -1,5 +1,19 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Wi-Fi: key slot size, BSS mode, capability length
+
+Problem: a review of the MT7921 station and network records found four mistakes. The integrity-key record told the firmware each key slot was 16 bytes, so a second key was read from the middle of the first. The network record stayed a legacy mode when `ht_vht` was on, and it could say Wi-Fi 6 when `he` was on without `ht_vht`. A capability reply whose length wrapped a 32-bit sum was treated as inside the buffer. A transmit-status mode above the HT or HE range was stored as a rate.
+
+What changed:
+- `cipher_len` is 36, the size of one key slot, matching mt76 `sec_key`. `key_len` stays 16.
+- The network record now sets GN or AN, and AC on 5 GHz, when `ht_vht` is on and the station is that kind. Wi-Fi 6 on that record, and the HE bit on the station PHY byte, require `he` and `ht_vht` together, the same gate as the HE station records.
+- The capability walk rejects a tag whose size does not fit in the bytes still left.
+- HT MCS above 31 is ignored. Only modes 8 to 11 are stored as HE. Any other unknown mode is ignored.
+
+Limits: still off unless the settings say `ht_vht` or `he`. The receive rate is still not reported. No stick boot, so the firmware has not accepted the 36-byte slot or the extra mode bits.
+
+Tested: compared with mt76 `sec_key` (`cipher_len = sizeof(sec_key)`) and `mt76_connac_get_phy_mode`. Not built and not booted in this pass.
+
 ## 2026-11-17 - Graphics: the GPU is stopped before a restart or power off
 
 Problem: after a restart from R5 the 5625U's caps lock blinked. Haiku's shutdown calls no driver, so the GPU's command processor, PSP ring and interrupts ran on into the firmware's start. Linux stops them at shutdown (`amdgpu_pci_shutdown`).
