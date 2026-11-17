@@ -77,6 +77,12 @@ def install_kernel_sources() -> None:
         "src/libs/compat/freebsd_wlan/net80211/ieee80211_output.c",
         "src/libs/compat/freebsd_wlan/net80211/ieee80211_scan_sw.c",
         "src/libs/compat/freebsd_wlan/net80211/ieee80211_sta.c",
+        # R5: Wi-Fi parsers drop a frame that does not fit (docs/WIFI.md step 1)
+        "src/libs/compat/freebsd_wlan/net80211/ieee80211_ht.c",
+        "src/libs/compat/freebsd_wlan/net80211/ieee80211_input.c",
+        "src/libs/compat/freebsd_wlan/net80211/ieee80211_input.h",
+        "src/libs/compat/freebsd_wlan/net80211/ieee80211_node.c",
+        "src/libs/compat/freebsd_wlan/net80211/ieee80211_vht.c",
         # air/OS: MediaTek Bluetooth firmware loader in h2generic
         "src/add-ons/kernel/bluetooth/hci/bluetooth.cpp",
         "src/add-ons/kernel/bluetooth/hci/hci_assemble.h",
