@@ -2919,6 +2919,9 @@ Compositor::NoteInput()
 	part of the damage, back to front. Waits for the fence, then puts the
 	damage on the screen. Returns false when the GPU mode ended.
 */
+static BRegion grow_region(const BRegion& region, int32 by);
+
+
 bool
 Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 	const ShareDrawList& shares, bool effects)
@@ -2983,10 +2986,57 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 			rect.frameStride);
 	}
 
+	// M13 step 3: what the layers above each one overwrite with their
+	// plain copy, so it is not copied first and then overwritten (a pixel
+	// under three windows was written four times). An upper layer covers
+	// its shape without its glass; what an effect of an upper layer reads
+	// of the frame below stays: the glass with the blur's reach, an
+	// opening window's rectangle, a closing window's fade. No culling
+	// during the workspace slide. The frame is the same pixels.
+	std::vector<BRegion> covered(layers.CountItems() + 1);
+	if (!slide) {
+		BRegion over;
+		BRegion read;
+		int32 reach = window_glass_for(fStrength).reach;
+		for (int32 i = 0; fFrameGhosts != NULL
+				&& i < fFrameGhosts->CountItems(); i++) {
+			Layer* ghost = fFrameGhosts->ItemAt(i);
+			if (ghost->HasPixels()) {
+				BRegion area(ghost->PixelRect());
+				read.Include(&area);
+			}
+		}
+		for (int32 i = layers.CountItems() - 1; i >= -1; i--) {
+			covered[i + 1] = over;
+			covered[i + 1].Exclude(&read);
+			if (i < 0)
+				break;
+			Layer* upper = layers.ItemAt(i);
+			if (!upper->HasPixels())
+				continue;
+			BRegion pixels(upper->PixelRect());
+			if (upper->visible >= 0) {
+				read.Include(&pixels);
+				continue;
+			}
+			BRegion plain(upper->shape);
+			plain.IntersectWith(&pixels);
+			BRegion glass(upper->glassFixed);
+			glass.Include(&upper->glassAlpha);
+			plain.Exclude(&glass);
+			over.Include(&plain);
+			if (glass.CountRects() > 0) {
+				BRegion grown = grow_region(glass, reach);
+				read.Include(&grown);
+			}
+		}
+	}
+
 	for (int32 layerIndex = -1; layerIndex < layers.CountItems();
 			layerIndex++) {
 		Layer* layer = layerIndex >= 0 ? layers.ItemAt(layerIndex) : NULL;
 		BRegion part(damage);
+		part.Exclude(&covered[layerIndex + 1]);
 		// M11 step 4: a window with a shadow or glass. Without one, this
 		// loop is step 2's copy.
 		bool withEffects = effects && layer != NULL && layer->HasEffects()
