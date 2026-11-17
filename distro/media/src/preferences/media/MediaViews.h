@@ -129,6 +129,11 @@ public:
 								AudioSettingsView();
 
 			void				SetDefaultChannel(int32 channelID);
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			void				RefreshUsbLayout();
+			// SPDX-SnippetEnd
 
 	virtual	void				SetDefaultInput(const dormant_node_info* info);
 	virtual	void				SetDefaultOutput(const dormant_node_info* info);

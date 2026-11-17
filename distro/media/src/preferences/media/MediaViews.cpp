@@ -546,6 +546,21 @@ AudioSettingsView::AudioSettingsView()
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+void
+AudioSettingsView::RefreshUsbLayout()
+{
+	bool has = has_usb_audio_device();
+	if (has == fHasUsbAudio)
+		return;
+	fHasUsbAudio = has;
+	_UpdateLock();
+}
+// SPDX-SnippetEnd
+
+
 void
 AudioSettingsView::SetDefaultChannel(int32 channelID)
 {
