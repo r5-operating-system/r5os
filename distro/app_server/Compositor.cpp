@@ -3010,7 +3010,7 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 	if (!slide && !fNoCull) {
 		BRegion over;
 		BRegion read;
-		int32 reach = window_glass_for(_GlassStrength()).reach;
+		int32 reach = window_glass_for(fStrength).reach;
 		for (int32 i = 0; fFrameGhosts != NULL
 				&& i < fFrameGhosts->CountItems(); i++) {
 			Layer* ghost = fFrameGhosts->ItemAt(i);
@@ -3604,18 +3604,6 @@ Compositor::_RecordBufferCopy(const Layer* layer, const BRegion& region,
 }
 
 
-/*!	M13 (owner, 17 Nov 2026): on Lavapipe the frosted glass uses the
-	lightest step ("quiet": a 4 px blur instead of balanced's 9 px), so
-	the blur, the largest pass while dragging there, costs less. The
-	shadows keep the chosen strength. RADV uses the chosen strength.
-*/
-int32
-Compositor::_GlassStrength() const
-{
-	return fOnLavapipe ? (int32)kWindowEffectsQuiet : fStrength;
-}
-
-
 //!	M13 step 2, gpu_debug: a timestamp; the time since the last one counts
 //!	for \a pass.
 void
@@ -4079,7 +4067,7 @@ Compositor::_EnsureGlassCache(Layer* layer, const BRegion& glass)
 	entry->glassShape = glass;
 	entry->glassLeft = layer->left;
 	entry->glassTop = layer->top;
-	entry->glassStrength = _GlassStrength();
+	entry->glassStrength = fStrength;
 	entry->glassBelow = layer->belowHash;
 	entry->glassValid = true;
 	return true;
@@ -4127,7 +4115,7 @@ Compositor::_PrepareEffects(BRegion& damage, const LayerList& layers,
 {
 	BRegion screen(BRect(0, 0, (float)fFrameWidth - 1,
 		(float)fFrameHeight - 1));
-	int32 strength = _GlassStrength();
+	int32 strength = fStrength;
 	window_glass_geometry glassGeometry = window_glass_for(strength);
 
 	// M13 (owner, 17 Nov 2026): the blur is made only for the glass that

@@ -171,7 +171,6 @@ private:
 			};
 			static const int32	kPassStamps = 128;
 			void				_Stamp(int32 pass);
-			int32				_GlassStrength() const;
 			void				_RecordBufferCopy(const Layer* layer,
 									const BRegion& region,
 									struct VkBuffer_T* frame,
