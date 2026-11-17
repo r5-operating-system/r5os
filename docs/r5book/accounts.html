@@ -22,6 +22,8 @@
 	<aside class="toc"></aside>
 
 	<main class="page">
+		<div class="breadcrumb"><a href="index.html">R5Book</a> &rsaquo; <a href="index.html#guides">Guides</a> &rsaquo; Accounts &amp; sessions</div>
+
 		<section class="page-hero">
 			<span class="kit-label">Accounts and sessions</span>
 			<h1>More than one person</h1>
@@ -29,6 +31,17 @@
 			in, works, locks the screen or logs out. A program does not draw those screens, but it runs inside that
 			session, and a few things follow from that.</p>
 		</section>
+
+		<nav class="on-this-page" aria-label="On this page">
+			<h3>What is in this page</h3>
+			<ul>
+				<li><a href="#who">Who your program runs as</a> &mdash; User uids, system services, and home folders.</li>
+				<li><a href="#paths">Folders and settings</a> &mdash; Using <code class="inline">find_directory()</code>.</li>
+				<li><a href="#admin">Changes that need an administrator</a> &mdash; Using Admin Kit and <code class="inline">BAdminLockBar</code>.</li>
+				<li><a href="#session">Lock and log out</a> &mdash; How programs behave across lock/logout.</li>
+				<li><a href="#example">Example: Sign in</a> &mdash; How Sign in is built from LibR5.</li>
+			</ul>
+		</nav>
 
 		<section class="entry" id="who">
 			<div class="entry-header"><h2 class="plain">Who your program runs as</h2></div>
@@ -118,13 +131,13 @@
 
 			<table class="spec parts">
 				<tr><th>What you see</th><th>Part</th></tr>
-				<tr><td>The white areas</td><td><a href="appearance-kit.html#BCard">BCard</a>, document style</td></tr>
-				<tr><td>The R5 pebble and the clock symbol</td><td><a href="appearance-kit.html#BIconView">BIconView</a>, with <a href="icons-kit.html#icon-bitmaps"><code>r5_vector_icon_bitmap()</code></a> and <a href="icons-kit.html#r5_glyph"><code>r5_glyph_bitmap()</code></a></td></tr>
-				<tr><td>The account picture</td><td><a href="appearance-kit.html#functions"><code>r5_avatar_draw()</code></a> with the People icon</td></tr>
-				<tr><td>Two to four accounts</td><td><a href="appearance-kit.html#BUserCard">BUserCard</a>, two on a row</td></tr>
-				<tr><td>Five accounts or more</td><td><a href="appearance-kit.html#BUserListItem">BUserListItem</a> in a <code>BListView</code></td></tr>
-				<tr><td>The password field</td><td><a href="appearance-kit.html#BPasswordControl">BPasswordControl</a>, with "Enter password"</td></tr>
-				<tr><td>Sign in, Unlock</td><td><a href="appearance-kit.html#BAccentButton">BAccentButton</a>, the one main action</td></tr>
+				<tr><td>The white areas</td><td><a href="appearance-cards.html#BCard">BCard</a>, document style</td></tr>
+				<tr><td>The R5 pebble and the clock symbol</td><td><a href="appearance-controls.html#BIconView">BIconView</a>, with <a href="icons-kit.html#icon-bitmaps"><code>r5_vector_icon_bitmap()</code></a> and <a href="icons-kit.html#r5_glyph"><code>r5_glyph_bitmap()</code></a></td></tr>
+				<tr><td>The account picture</td><td><a href="appearance-effects.html#functions"><code>r5_avatar_draw()</code></a> with the People icon</td></tr>
+				<tr><td>Two to four accounts</td><td><a href="appearance-settings.html#BUserCard">BUserCard</a>, two on a row</td></tr>
+				<tr><td>Five accounts or more</td><td><a href="appearance-settings.html#BUserListItem">BUserListItem</a> in a <code>BListView</code></td></tr>
+				<tr><td>The password field</td><td><a href="appearance-controls.html#BPasswordControl">BPasswordControl</a>, with "Enter password"</td></tr>
+				<tr><td>Sign in, Unlock</td><td><a href="appearance-controls.html#BAccentButton">BAccentButton</a>, the one main action</td></tr>
 				<tr><td>Log out, Restart, Shut down</td><td>Plain <code>BButton</code>s with <a href="icons-kit.html#r5_glyph"><code>r5_button_set_glyph()</code></a></td></tr>
 			</table>
 

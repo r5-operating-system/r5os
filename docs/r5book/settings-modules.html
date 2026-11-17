@@ -19,6 +19,8 @@
 	<aside class="toc"></aside>
 
 	<main class="page">
+		<div class="breadcrumb"><a href="index.html">R5Book</a> &rsaquo; <a href="index.html#guides">Guides</a> &rsaquo; Settings modules</div>
+
 		<section class="page-hero">
 			<span class="kit-label">Settings add-on</span>
 			<h1>Settings modules</h1>
@@ -26,6 +28,20 @@
 			shows its view when someone opens it. A new page needs no change to the Settings window. Fonts and
 			Look and feel are built this way.</p>
 		</section>
+
+		<nav class="on-this-page" aria-label="On this page">
+			<h3>What is in this page</h3>
+			<ul>
+				<li><a href="#files">Where it goes</a> &mdash; Add-on folder and naming.</li>
+				<li><a href="#entry-points">Entry points</a> &mdash; API version check and instantiation.</li>
+				<li><a href="#SettingsModule">SettingsModule</a> &mdash; Metadata, view, Revert, and Defaults.</li>
+				<li><a href="#SettingsContext">SettingsContext</a> &mdash; Host callbacks for lock and notifications.</li>
+				<li><a href="#storage">Where the values go</a> &mdash; User settings vs. machine settings.</li>
+				<li><a href="#admin">The lock</a> &mdash; Administrator-gated pages.</li>
+				<li><a href="#example">Example</a> &mdash; Minimal Settings module skeleton.</li>
+				<li><a href="#limits">Not yet</a> &mdash; Current limitations.</li>
+			</ul>
+		</nav>
 
 		<table class="facts">
 			<tr><th>Declared in</th><td>SettingsModule.h (in the R5 source, <code class="inline">distro/settings</code>; not yet in a development package)</td></tr>
@@ -148,7 +164,7 @@ virtual status_t WriteSettings(const char* moduleId, const BMessage&amp; setting
 				<p>Call it after the person changes a value. The window then calls
 				<code class="inline">SaveSettings()</code>.</p></div>
 			<div class="member"><div class="sig">virtual bool AdminChangeAllowed() const = 0;</div>
-				<p>True while the lock is open. This is <a href="appearance-kit.html#functions">r5_admin_change_allowed()</a>.</p></div>
+				<p>True while the lock is open. This is <a href="appearance-settings.html#BAdminLockBar">r5_admin_change_allowed()</a>.</p></div>
 			<div class="member"><div class="sig">virtual status_t OpenPage(const char* moduleId) = 0;
 virtual status_t LaunchLegacy(const char* signature) = 0;</div>
 				<p>Open another page, or start a preferences program by its signature.</p></div>
@@ -174,7 +190,7 @@ virtual status_t LaunchLegacy(const char* signature) = 0;</div>
 			<code class="inline">AdminChangeAllowed()</code> is false. A check box in the page is not the check:
 			call <code class="inline">AdminChangeAllowed()</code> again in <code class="inline">SaveSettings()</code>
 			before writing a value for the whole computer. For a driver setting, the clock or the time zone, use
-			the administrator calls in <a href="appearance-kit.html#functions">R5UI.h</a>; the page itself runs
+			the administrator calls in <a href="appearance-settings.html#BAdminLockBar">AdminLock.h</a>; the page itself runs
 			as the signed-in account.</p>
 		</section>
 
