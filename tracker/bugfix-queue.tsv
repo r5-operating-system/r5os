@@ -32,20 +32,20 @@ r5:zeroconf-6	A	AirPlay	distro/zeroconf/MdnsService.cpp	3	pr	4395	mDNS advertise
 trac:7841	A	Tracker	distro/desktop/src/kits/tracker/Tracker.cpp	1	todo		Change icon for open folders in tracker spacial mode
 trac:9434	A	Tracker	distro/desktop/src/kits/tracker/PoseView.cpp	1	pr	4409	[Tracker] wrong column display + crash in BBitmap::Lock()
 trac:11031	A	Tracker	distro/desktop/src/kits/tracker/PoseView.cpp	1	pr	4409	[Tracker] crashes in BPoseView::SelectPosesListMode
-trac:12050	A	Tracker	distro/desktop/src/kits/tracker/Tracker.cpp	1	todo		Tracker deadlock between FS unmount and DoPeriodicUpdate
+trac:12050	A	Tracker	distro/desktop/src/kits/tracker/Utilities.cpp	1	pr		Volume space-bar pulse no longer locks the window while holding the pose list
 trac:14390	A	Tracker	distro/desktop/src/kits/tracker/ContainerWindow.cpp	1	pr	4409	Tracker crash on context menu (Looper must be locked)
-trac:14473	A	Tracker	distro/desktop/src/kits/tracker/Tracker.cpp	1	todo		Tracker hangs if open location is scanned with checkfs
+trac:14473	A	Tracker	distro/desktop/src/kits/tracker/PoseView.cpp	1	parked		checkfs floods node monitors; no single hang site in the current handler
 trac:14880	A	Tracker	distro/desktop/src/kits/tracker/DeskWindow.cpp	1	parked		Replicant removal can crash Tracker; BShelf is not in distro/, ActivityMonitor path not copied
 trac:15535	A	Tracker	distro/desktop/src/kits/tracker/Tracker.cpp	1	todo		Saved query icon changed recently
 trac:16385	A	Tracker	distro/desktop/src/kits/tracker/Tracker.cpp	1	todo		Query name is not changed after query update
-trac:16427	A	Tracker	distro/desktop/src/kits/tracker/Tracker.cpp	1	todo		Tracker: node monitoring cause invalid duplicate items and crash on window close
+trac:16427	A	Tracker	distro/desktop/src/kits/tracker/PoseView.cpp	1	parked		EntryCreated already skips a node that has a pose; the close crash was not found
 trac:16769	A	Tracker	distro/desktop/src/kits/tracker/Tracker.cpp	1	todo		"Add change time (ctime) to list view column and ""Get info"""
-trac:17198	A	Tracker	distro/desktop/src/kits/tracker/Tracker.cpp	1	todo		Tracker crash on query result window
+trac:17198	A	Tracker	distro/desktop/src/kits/tracker/PoseView.cpp	1	parked		Query window has no separate crash site in the current code
 trac:17837	A	Tracker	distro/desktop/src/kits/tracker/PoseView.cpp	1	pr	4409	[Tracker] crash in BPoseView::TryUpdatingBrokenLinks
 trac:18085	A	Tracker	distro/desktop/src/kits/tracker/Tracker.cpp	1	todo		Get info doesn't update size if contents changes
-trac:19318	A	Tracker	distro/desktop/src/kits/tracker/Tracker.cpp	1	todo		[Tracker] crashed when I uninstalled several packages
+trac:19318	A	Tracker	distro/desktop/src/kits/tracker/PoseView.cpp	1	parked		Package removal is a burst of node monitors; no null site found
 trac:19489	A	Tracker	distro/desktop/src/kits/tracker/Tracker.cpp	1	todo		"Tracker ""Get Info"" crashes when interacting with a file on NFS4"
-trac:20020	A	Tracker	distro/desktop/src/kits/tracker/Tracker.cpp	1	todo		[Tracker] On nightlies, seems to freeze (dead-lock?) sometimes.
+trac:20020	A	Tracker	distro/desktop/src/kits/tracker/Tracker.cpp	1	parked		No stack. The unmount deadlock is #12050
 trac:1036	A	Tracker	distro/desktop/src/kits/tracker/Tracker.cpp	2	todo		Tracker Doesn't Like Hard Links
 trac:2551	A	Tracker	distro/desktop/src/kits/tracker/Tracker.cpp	2	todo		[Tracker]: Copy To shows wrong content of Desktop directory when selecting a bfs volume on a usb sti
 trac:2885	A	Tracker	distro/desktop/src/kits/tracker/Tracker.cpp	2	todo		"""replace other file"": can't replace directory with file"

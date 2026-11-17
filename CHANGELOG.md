@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Tracker: unmounting a volume no longer deadlocks the space bar
+
+Problem: the pulse that redraws a volume space bar held its list lock and then locked the window. Unmount runs on that window and takes the same list lock from the pose destructor. Each side waits for the other (Haiku #12050).
+
+Changed: adding and removing a pose take the list lock for the whole change. The pulse runs the space-bar callback under that lock, drops it, then locks the window and redraws only a pose that is still in the list.
+
+Limits: #14473 (checkfs), #16427 (duplicate poses), #17198 (query window), #19318 (package removal) and #20020 (an unnamed freeze) are not this lock. They stay open. Not jammed and not booted.
+
 ## 2026-11-17 - MediaPlayer: a clip with no frame rate no longer divides by zero
 
 Problem: turning a video frame into an audio frame divided by `fVideoFrameRate`. A clip that reports 0 crashed there. `StreamBase` is gone; this is the same conversion (Haiku #15293).
