@@ -336,6 +336,26 @@
 				stroke-width="2.5" stroke-linecap="round" opacity="0.38"/>
 		</svg>`;
 
+	// Apply saved light/dark theme preference before rendering the toggle
+	let savedTheme = null;
+	try {
+		savedTheme = localStorage.getItem("r5book-theme");
+	} catch (e) {}
+	if (savedTheme === "light" || savedTheme === "dark") {
+		document.documentElement.dataset.theme = savedTheme;
+	}
+
+	function currentTheme() {
+		const explicit = document.documentElement.dataset.theme;
+		if (explicit === "light" || explicit === "dark") return explicit;
+		return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+			? "dark"
+			: "light";
+	}
+
+	const sunSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>';
+	const moonSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+
 	const header = document.createElement("header");
 	header.className = "site-nav";
 	header.innerHTML = `
@@ -356,9 +376,29 @@
 				<input type="search" id="r5-search" placeholder="Search classes, calls…" aria-label="Search R5Book" autocomplete="off" />
 				<div class="search-results" id="r5-search-results"></div>
 			</div>
+			<button type="button" class="theme-toggle" id="r5-theme-toggle" aria-label="Switch light or dark mode"></button>
 			<a href="https://github.com/r5-operating-system/r5os" class="nav-pill">GitHub</a>
 		</nav>`;
 	document.body.prepend(header);
+
+	const themeBtn = document.getElementById("r5-theme-toggle");
+	function updateThemeButton() {
+		if (!themeBtn) return;
+		const isDark = currentTheme() === "dark";
+		themeBtn.innerHTML = isDark ? `${sunSvg}<span>Light</span>` : `${moonSvg}<span>Dark</span>`;
+		themeBtn.title = isDark ? "Switch to light mode" : "Switch to dark mode";
+	}
+	updateThemeButton();
+	if (themeBtn) {
+		themeBtn.addEventListener("click", () => {
+			const next = currentTheme() === "dark" ? "light" : "dark";
+			document.documentElement.dataset.theme = next;
+			try {
+				localStorage.setItem("r5book-theme", next);
+			} catch (e) {}
+			updateThemeButton();
+		});
+	}
 
 	// Wire up top-bar client-side search
 	const searchInput = document.getElementById("r5-search");
