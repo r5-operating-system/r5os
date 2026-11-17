@@ -1,5 +1,6 @@
 # R5OS changelog (lokaal)
 
+<<<<<<< HEAD
 ## 2026-11-17 - Game controllers: fits at 1030 by 610, Motion gray without a controller
 
 Problem: on the screendumps of the layout-A page (1) at 1030 by 610 with a controller the area above the strip still scrolled by about 15 px, hiding the last line of Trigger feedback and the vendor and product line; (2) without a controller the Motion bubble of the gray example stayed blue (the level, the bars and their labels drew as enabled); (3) at 910 by 560 a light bar showed in the bottom row next to the lock.
@@ -44,6 +45,27 @@ What changed:
 Tested: `scripts/test-game-feel.sh` (host, ASan and UBSan): `feel_host_test: ok`. It checks the exact bytes of every report, the CRC against a second implementation, motion, the short report, the cache and the PID reports of a synthetic descriptor. `scripts/fuzz-bt.sh hid` 60 s: about 19.4 million rounds, 0 crashes. AMD64 `scripts/build-locked.sh`: `jam_exit=0`. QEMU (SMAP enabled, LOGIN=1, GAMEPAD=1, own image copy): no panic, no SMAP fault. `bt_hid_driver_test` and `gamecontroller_test` ok. `gamecontroller_feel_test` passed the driver calls (including the refused ones and kernel addresses), buttons and stick from full reports only, motion (0, 1, -0.5 g and 1, -2, 100 deg/s), and the exact rumble, trigger, stop, timed-stop and Close reports with their CRC in bluetooth_hid's queue. Its last check, the drawing of the two widgets, fails twice: it counts nearly every pixel as drawn (the level 8024 of 10000, the bar 2778 at -0.5 and at 0), so the check measures the bitmap background, not the widget. Settings showed the page with the virtual DualSense and the Rumble group in screendumps, and kept running. Motion and Trigger feedback are below the fold there and were not seen.
 
 Not tested: any real controller. DualSense and DualShock 4 rumble, trigger effects and motion need the owner's DualSense on a stick. The click and vibration trigger parameters, the sensor axes' signs and the DualShock 4 switch to full reports without its calibration report are the likely fixes. No PID controller was tested. The usb_hid output, feature and cache paths did not run (no USB game controller in QEMU). The widget drawing check is open. ARM64 and RISC-V 64 were not built.
+=======
+## 2026-11-17 - Network: an RA with lifetime 0 is not a default router
+
+Problem: SLAAC still called `AddDefaultRoute` when the router advertisement had Router Lifetime 0. RFC 4861 forbids using that router as a default.
+
+What changed: lifetime 0 now removes the IPv6 default route and does not add one. Prefixes in the same RA are still applied.
+
+Limits: no packet capture. VirtualBox usernet is not this test.
+
+Tested: the C++ was not compiled on this host (needs libbe).
+
+## 2026-11-17 - Settings: Revert closes the display keep-picture dialog
+
+Problem: window Revert during the 12-second keep-picture dialog called `Settle(false)` but left `DisplayView::fConfirming` set, so Apply stayed disabled and the alert stayed up.
+
+What changed: `RevertSettings` asks the view to quit that alert, drop the timeout, and clear `fConfirming` before it restores the previous mode.
+
+Limits: no boot test of the 12-second dialog.
+
+Tested: the C++ was not compiled on this host (needs libbe).
+>>>>>>> origin/main
 
 ## 2026-11-17 - Settings: the lock also blocks views that are not BControl
 

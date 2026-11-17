@@ -259,6 +259,7 @@ public:
 	virtual	void				MessageReceived(BMessage* message);
 			void				ShowChoice(const DisplayChoice& choice,
 									bool hardware);
+			void				CancelConfirm();
 
 private:
 			void				_ApplySizes();
@@ -575,6 +576,8 @@ status_t
 DisplayModule::RevertSettings(SettingsContext* context)
 {
 	(void)context;
+	if (fView != NULL)
+		fView->CancelConfirm();
 	Settle(false);
 	BPrivate::set_workspaces_layout(fOpened.columns, fOpened.rows);
 	fSelected = fOpened;
@@ -1265,6 +1268,21 @@ DisplayView::_Edited(bool workspaces)
 		choice.rows = (uint32)fRows->Value();
 		fModule->UserEdited(choice, true);
 	}
+}
+
+
+void
+DisplayView::CancelConfirm()
+{
+	if (fAlert != NULL) {
+		BAlert* alert = fAlert;
+		fAlert = NULL;
+		alert->PostMessage(B_QUIT_REQUESTED);
+	}
+	delete fConfirmRunner;
+	fConfirmRunner = NULL;
+	fConfirming = false;
+	_UpdateApply();
 }
 
 
