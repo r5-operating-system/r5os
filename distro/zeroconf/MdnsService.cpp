@@ -466,7 +466,7 @@ build_response(uint8_t* out, size_t cap, const char* host)
 	};
 	const char* airTxt[] = {
 		pkPair,
-		"features=0x5A7FFFF7,0x1E",
+		"features=0x4A7FFFF7,0x0",
 		"flags=0x4",
 		"model=R5OS1,1",
 		"manufacturer=R5OS",
