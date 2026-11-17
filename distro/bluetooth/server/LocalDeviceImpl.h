@@ -155,6 +155,52 @@ public:
 	// tries the HFP 1.8 settings of the codec in turn; close ends it.
 	status_t			R5VoiceOpen(const bdaddr_t& address, int codec);
 	void				R5VoiceClose(const bdaddr_t& address);
+	// Device names (LocalDeviceNames.cpp): a Remote Name Request that has
+	// not been answered in time is cancelled (every 5 s, from the server's
+	// pulse).
+	void				R5NamePulse();
+private:
+	// Device names (LocalDeviceNames.cpp). A Classic device that sends no
+	// name in its inquiry answer, or connects without a known name, is
+	// asked for it after the scan: one Remote Name Request at a time.
+	struct NameWanted {
+		bdaddr_t		address;
+		uint8			pageScanRepetitionMode;
+		uint16			clockOffset;	// with bit 15 set when valid
+		uint8			deviceClass[3];
+	};
+	struct NameKnown {
+		bdaddr_t		address;
+		BString			name;
+	};
+	std::vector<NameWanted> fNamesWanted;
+	std::vector<NameKnown> fNamesKnown;
+	BMessenger			fNameTarget;
+	bool				fNameInquiring = false;
+	bool				fNameAsking = false;
+	bool				fNameStatusPending = false;
+	NameWanted			fNameCurrent;
+	bigtime_t			fNameDeadline = 0;
+	bool				fNameCancelled = false;
+	bdaddr_t			fNameCancelledAddress;
+	bool				_R5NameEvent(const struct hci_event_header* event);
+	void				_R5NameWanted(const bdaddr_t& address,
+							uint8 pageScanRepetitionMode, uint16 clockOffset,
+							const uint8 deviceClass[3]);
+	const BString*		_R5KnownName(const bdaddr_t& address) const;
+	void				_R5NameHeard(const bdaddr_t& address,
+							const BString& name, const uint8* deviceClass,
+							bool tellPage);
+	void				_R5AddInquiryName(BMessage& reply,
+							const bdaddr_t& address,
+							uint8 pageScanRepetitionMode, uint16 clockOffset,
+							const uint8 deviceClass[3]);
+	void				_R5AskNextName();
+	void				_R5CancelName();
+	void				_R5InquiryStarted(const BMessenger& target);
+	void				_R5InquiryEnded();
+	void				_R5ConnectedWithoutName(ServerRemoteDevice* rd);
+	void				_R5PairingStarts();
 private:
 	// Remote host features before Authentication Requested.
 	std::vector<uint16> fFeatureHandles;

@@ -12,6 +12,7 @@
 
 #include <R5Bluetooth.h>
 
+#include <Application.h>
 #include <Box.h>
 #include <Button.h>
 #include <Catalog.h>
@@ -36,6 +37,7 @@
 
 #include <new>
 #include <string.h>
+#include <strings.h>
 
 
 #undef B_TRANSLATION_CONTEXT
@@ -350,8 +352,14 @@ BluetoothView::BluetoothView(bool settingsPage)
 	memset(&fMine->soundAddress, 0, sizeof(fMine->soundAddress));
 	BStringView* texts[] = { fMine->name, fMine->kind, fMine->status,
 		fMine->connection, fMine->address, fMine->battery };
-	for (size_t i = 0; i < sizeof(texts) / sizeof(texts[0]); i++)
+	for (size_t i = 0; i < sizeof(texts) / sizeof(texts[0]); i++) {
 		texts[i]->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
+		// A long device name (up to 248 bytes) is cut with an ellipsis:
+		// as its full width it made the page wider than the window.
+		texts[i]->SetTruncation(B_TRUNCATE_END);
+		texts[i]->SetExplicitMinSize(BSize(roundf(60 * scale),
+			B_SIZE_UNSET));
+	}
 	fMine->disconnect = new BButton("disconnect", B_TRANSLATE("Disconnect"),
 		new BMessage(kMsgDisconnectButton));
 	fMine->forget = new BButton("forget", B_TRANSLATE("Forget"),
@@ -359,9 +367,10 @@ BluetoothView::BluetoothView(bool settingsPage)
 
 	BAppearanceKit::BCard* info = new BAppearanceKit::BCard("device info",
 		BAppearanceKit::B_CARD_PANEL, B_VERTICAL);
-	// As wide as its buttons need, at least a third of the page width at
-	// font size 12; the list takes the rest.
-	info->SetExplicitMinSize(BSize(roundf(250 * scale), B_SIZE_UNSET));
+	// As wide as its line of buttons needs; the list takes the rest. An
+	// explicit minimum of 250 pixels used to stand in for the buttons'
+	// own: narrower than three buttons, so they ran past the window's
+	// right edge (stick 51).
 	BLayoutBuilder::Group<>(info, B_VERTICAL, B_USE_SMALL_SPACING)
 		.SetInsets(B_USE_DEFAULT_SPACING)
 		.AddGroup(B_VERTICAL, 0)
@@ -378,10 +387,13 @@ BluetoothView::BluetoothView(bool settingsPage)
 			.Add(fMine->batteryLabel, 0, 3)
 			.Add(fMine->battery, 1, 3)
 		.End()
-		// Only for a headset, or only for a game controller.
-		.Add(fMine->useForSound)
 		.AddGlue()
+		// "Use for sound" only for a headset, "Test buttons…" only for a
+		// game controller. One line, so the page fits the window's height
+		// at its default size with a device chosen (stick 51 had a scroll
+		// bar there).
 		.AddGroup(B_HORIZONTAL)
+			.Add(fMine->useForSound)
 			.Add(fMine->testButtons)
 			.AddGlue()
 			.Add(fMine->disconnect)
@@ -404,9 +416,13 @@ BluetoothView::BluetoothView(bool settingsPage)
 	fDeviceList = new BListView("devices", B_SINGLE_SELECTION_LIST);
 	BScrollView* scroller = new BScrollView("devices scroll", fDeviceList, 0,
 		false, true);
-	scroller->SetExplicitMinSize(BSize(B_SIZE_UNSET, roundf(90 * scale)));
+	// At least three rows; it takes the rest of the page's height.
+	scroller->SetExplicitMinSize(BSize(B_SIZE_UNSET, roundf(60 * scale)));
 	fScanStatus = new BStringView("scan status", "");
 	fScanStatus->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
+	// The hint and the pairing result are cut, not the page made wider.
+	fScanStatus->SetTruncation(B_TRUNCATE_END);
+	fScanStatus->SetExplicitMinSize(BSize(roundf(60 * scale), B_SIZE_UNSET));
 	fScanButton = new BButton("scan", B_TRANSLATE("Scan"),
 		new BMessage(kMsgScanButton));
 	fDeviceList->SetSelectionMessage(new BMessage(kMsgDeviceSelected));
@@ -439,6 +455,8 @@ BluetoothView::BluetoothView(bool settingsPage)
 	fRadioField = new BMenuField("radio", NULL, fRadioMenu);
 	fRadioNote = new BStringView("radio note", "");
 	fRadioNote->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
+	fRadioNote->SetTruncation(B_TRUNCATE_END);
+	fRadioNote->SetExplicitMinSize(BSize(roundf(60 * scale), B_SIZE_UNSET));
 
 	// Devices nearby takes the rest of the height, down to the Bluetooth
 	// line (in Settings: as far down as the list of pages).
@@ -611,8 +629,24 @@ BluetoothView::MessageReceived(BMessage* message)
 			// The live test is the Game controllers page of Settings
 			// (docs/GAME-CONTROLLERS.md, step 8), which also runs when
 			// Settings is open already.
+			// BRoster::Launch() refuses a launch of the calling team itself
+			// (B_BAD_VALUE, nothing sent), so on this page inside Settings
+			// the button did nothing (stick 51). There the same "--page"
+			// arguments go to Settings directly, as B_ARGV_RECEIVED.
+			static const char* kSettings = "application/x-vnd.R5OS-Settings";
+			app_info info;
+			if (be_app != NULL && be_app->GetAppInfo(&info) == B_OK
+				&& strcasecmp(info.signature, kSettings) == 0) {
+				BMessage argv(B_ARGV_RECEIVED);
+				argv.AddInt32("argc", 3);
+				argv.AddString("argv", "Settings");
+				argv.AddString("argv", "--page");
+				argv.AddString("argv", "gamecontrollers");
+				be_app->PostMessage(&argv);
+				break;
+			}
 			const char* args[] = { "--page", "gamecontrollers", NULL };
-			be_roster->Launch("application/x-vnd.R5OS-Settings", 2, args);
+			be_roster->Launch(kSettings, 2, args);
 			break;
 		}
 

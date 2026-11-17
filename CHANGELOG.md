@@ -1,5 +1,33 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Bluetooth after stick 51: device names, HFP's SDP record, link-down lines, Test buttons and the page layout
+
+Problems (boot 51 on the 5625U, MT7922, WH-1000XM3, 8BitDo M30): devices showed their kind instead of their name in Devices nearby and My devices; HFP never started with the XM3 (pairing, encryption and SDP ran, but no `hands-free service` and no `hfp:` line); the headset dropped right after connecting with nothing in the syslog; "Test buttons…" did nothing; the device panel's buttons ran past the window's right edge and the page got a scroll bar.
+
+Names, what was found:
+- Regression, found by reading the code: `_SDPThread()` reads SDP into a probe record of its own (#4328, `1a25a5f09a`) that had only the address. #4335 (`881de0451f`) then sends `fRemoteDevice->friendly_name` of that record to bluetooth_hid (`R5_BTHID_SET_INFO`), so the name was always empty there and the Game controllers page fell back to "Game controller". Each change was fine on its own; together they lost the name. The probe now carries the device's name and class.
+- For the Bluetooth page itself no change between boot 52 of 16 Nov and boot 51 touches the path from the scan to the pair request and My devices; both boots run the same controller setup. What the code shows: R5 never wrote Write Inquiry Mode, so after the HCI Reset at start the MT7922 answers in standard mode, which carries no name (and no signal strength); names came only from LE advertising. Not proven on hardware why the names showed on 16 Nov.
+- Fix: after the reset, Write Inquiry Mode (extended inquiry result where the controller has it, else with RSSI), logged as `inquiry mode extended|rssi`. A Classic device that answers without a name, or connects without a known one, is asked with Remote Name Request after the scan, one at a time, 12 s each (`LocalDeviceNames.cpp`, MIT). The name goes into the record (and the saved list when paired), is kept for the next scan, and goes to the page, which now takes a late name for a device it lists. Pair cancels a name request on its way. No name or address is logged.
+
+HFP and SDP:
+- The SDP answer was read with Haiku's `SDPDataIO` in one pass; a Nil (it did not step over it), a URL or a 128-bit integer put it out of step, which dropped that record and every record after it. R5's own parser (`SDPParse.h`, MIT, from Core 5.4 Vol 3 Part B) steps over each element by its length; attributes are stored as before. Which element the XM3 sends is not known; this is the likely cause, not a proven one.
+- When an audio device's browse brings no Hands-Free channel, a Service Search Attribute Request for `0x111E` with `0x0001`, `0x0004`, `0x0009` and `0x0311` follows (continuation states followed, at most 64 pieces).
+- One line per answer: `sdp: <n> records: 0x1000 0x110b ...`, `sdp: hands-free search, <n> records: ...`, and `hfp: no hands-free record` for an audio device without one.
+
+Link down: `bluetooth_server: link down (reason 0x13, the device ended it, status 0x0)` for every Classic link that ends (no address). The drop of the XM3 is most likely the headset leaving when no profile came up; HFP should now start 5 s after the link. Not confirmed.
+
+Test buttons: `BRoster::Launch()` refuses to launch the caller's own team (`B_BAD_VALUE`, nothing sent), and the page runs inside Settings. Inside Settings the button now posts the same `--page gamecontrollers` arguments to Settings as `B_ARGV_RECEIVED`; the separate Bluetooth program still uses `Launch()`.
+
+Page layout: the panel had an explicit minimum width of 250 pixels, narrower than its three buttons, so they were cut at the right. The panel is now as wide as its button line; "Use for sound" or "Test buttons…" share that line with Disconnect and Forget, so the page fits the default window height. Long texts (a device name can be 248 bytes, the scan hint, the radio note) are cut with an ellipsis instead of widening the page. Devices nearby has a minimum of three rows.
+
+Test aids: `R5_BLUETOOTH_PREVIEW=1` (test only, read by libr5bt) adds one made-up connected game controller (address from the documentation range) to My devices. `run-qemu-smoke.sh`: `BT_PREVIEW=1`, `BT_WINDOW="<w> <h>"` and `BT_TEST_BUTTONS=<s>` (sends the button's message with hey).
+
+Mistake on the way: the first layout put "Test buttons…" on a line of its own; the page then fit its width but kept a scroll bar at the default size, and the next one (all buttons on one line) was cut at the right until the explicit 250-pixel minimum of the panel was removed.
+
+Tested: `scripts/build-locked.sh` exit 0 (x86_64), also after merging `main` with #4345. `scripts/fuzz-bt.sh sdp` 60 s, 0 crashes (the made-up five-record answer: 5 records, classes `0x1000 0x110b 0x110e 0x111e 0`, Hands-Free channel 3 through `r5rfcomm::FindChannel()`, in pieces of 1 to 1000 bytes; then damaged copies). QEMU (KVM, SMAP and SMEP, Login) on an own image copy with `BT_PREVIEW=1`: all smoke tests `exit 0`; screendumps at 1030 by 610 show My devices with the panel, Test buttons…, Disconnect and Forget inside the window, Devices nearby and the Bluetooth line, and no scroll bar; at 910 by 560 the buttons stay inside the window and the page scrolls vertically (allowed: it is taller than the area there). `BT_TEST_BUTTONS=75`: Settings shows Devices → Game controllers afterwards.
+
+Not tested: nothing on a radio (QEMU has none): Write Inquiry Mode, Remote Name Request, the Hands-Free search, the link-down line and the names on the page are not seen working; the XM3 and the M30 are untested. ARM64 and RISC-V not built.
+
 ## 2026-11-17 - Game controllers: set up your controller's buttons, a Layout menu, and no crash when Settings closes
 
 Problem (boot 51 on the 5625U, the 8BitDo M30 paired over Bluetooth, `2dc8:0651`, report descriptor 86 bytes): Settings crashed when it quit (Segment violation in `__dynamic_cast` from `BApplication::_WindowAt()` in `~BApplication`, with the thread "game controller watcher" still there). On the page's Sega picture the D-pad did nothing and a pressed button lit the wrong key.
