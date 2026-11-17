@@ -127,6 +127,8 @@ if (pad.CountDevices() &gt; 0 &amp;&amp; pad.GetDeviceName(0, name) == B_OK
 				<p>Opens the controller and shows it live while the view is in a window; it reads the controller
 				about 60 times a second and draws only when something changed. <code class="inline">NULL</code>
 				closes it.</p></div>
+			<div class="member"><div class="sig">void SetTriggerMark(game_controller_trigger trigger, float position);</div>
+				<p>A tick across a trigger cap where a trigger effect starts, 0 to 1; below 0 removes it.</p></div>
 			<div class="member"><div class="sig">void SetFamily(game_controller_family family);<br>void SetLabels(game_controller_labels labels);</div>
 				<p>The still picture of a family, without a controller (PlayStation: the DualSense, Xbox: the
 				Xbox Series controller, Nintendo: the Switch Pro Controller, Sega Genesis: the M30); and the
@@ -198,7 +200,7 @@ game_controller_motion motion;
 			the person to press each control in turn. The Bluetooth page's <em>Test buttons&hellip;</em> opens
 			it.</p>
 			<div class="note"><strong>Not yet.</strong> Swapping buttons for old programs, lights and the
-			touchpad; rumble, trigger effects and motion on the page's Test box (the calls above are there).
+			touchpad; the Switch Pro and Xbox controllers over Bluetooth for rumble (phase 2). The Test box has Rumble, Motion and Trigger feedback for the controllers that have them.
 			The battery shows only when the controller reports it in its input report (the
 			HID Battery Strength usage). Tested in QEMU with virtual controllers fed to the Bluetooth HID
 			driver; not yet with a real controller.</div>
