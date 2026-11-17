@@ -1,6 +1,6 @@
 # R5OS changelog (lokaal)
 
-## 2026-11-17 - Graphics (M13): VulkanTeapot on RADV no longer tears under a Lavapipe compositor (mesa_radv -10, not built), and stick 5 on paper
+## 2026-11-17 - Graphics (M13): VulkanTeapot on RADV no longer tears under a Lavapipe compositor (mesa_radv -10), and stick 5 on paper
 
 Problem (owner, stick 4): VulkanTeapot tears when the compositor runs on Lavapipe and the program on RADV. Cause, from the Mesa 25.3.6 source: on R5 RADV has no separate blit queue (`radv_wsi_get_prime_blit_queue` is under `#ifndef VK_USE_PLATFORM_VIEW_RFIVE`), so `blit.queue` is NULL and the copy into the host-visible buffer runs in the program's own submit, which signals the per-image fence. Mesa's `wsi_common_queue_present` waits that fence only for a software device (`wsi->sw`). `r5_queue_present` then read the buffer before the GPU had finished writing it. The existing `QueueWaitIdle` branch (for a blit queue) never runs on R5; left as it is.
 
@@ -11,7 +11,9 @@ What changed:
 
 Not seen: the `shutdown rlc ..., tmr destroy ..., gart off` line is printed after the syslog's last write; stick 4's logs have no `shutdown gpu stop` line either. The stick shows #4363 by the caps lock and the next start's scratch, not by that line.
 
-Limits: Mesa not rebuilt, package not made, nothing booted. The present now waits for the GPU on RADV without a shared image, so VulkanTeapot's frame rate on that path may drop; measure it on the stick. A frame over 1 s on that path ends the swapchain. ARM64 and RISC-V 64 not built.
+Built: `distro/mesa/build-radv.sh` under the build lock, exit 0; `check-libdrm-symbols.py`: `ok libdrm symbols`. `mesa_radv-25.3.6-10`: version `25.3.6-10`, `libvulkan_radeon.so` differs from `-9`'s, no `/home/nickr` in it, the tools have boot 4. The script also repacks `mesa_lavapipe-25.3.6-5` and `mesa-25.3.6-5`; those were put back to the committed files, so a package name keeps its contents.
+
+Limits: no image built, nothing booted. The present now waits for the GPU on RADV without a shared image, so VulkanTeapot's frame rate on that path may drop; measure it on the stick. A frame over 1 s on that path ends the swapchain. ARM64 and RISC-V 64 not built.
 
 Tested: `git apply --check` of the patch on `origin/main`; `sh -n` of `check`, `boot-next` and `m13-measure`; `py scripts/check-pre-stick.py --paper` at `331843fef0`: `m13 lines 9 have a source`, `m13 boot 1/2/3/4/done settings ok`, M11 and M12 walks unchanged, `pre-stick paper ok`.
 
