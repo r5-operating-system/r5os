@@ -36,9 +36,12 @@
 #include <fs_info.h>
 #include <OS.h>
 
+#include <errno.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 
 static const uint32 kMsgEnable = 'vmEn';
@@ -667,6 +670,34 @@ VirtualMemoryModule::_LoadFile()
 }
 
 
+static status_t
+write_text_atomically(const char* path, const BString& text)
+{
+	char tempPath[B_PATH_NAME_LENGTH];
+	if (snprintf(tempPath, sizeof(tempPath), "%s.tmp", path)
+			>= (int)sizeof(tempPath))
+		return B_NAME_TOO_LONG;
+
+	int fd = open(tempPath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	if (fd < 0)
+		return errno != 0 ? errno : B_ERROR;
+
+	status_t status = B_OK;
+	ssize_t written = write(fd, text.String(), (size_t)text.Length());
+	if (written != (ssize_t)text.Length())
+		status = written < 0 && errno != 0 ? errno : B_ERROR;
+	else if (fsync(fd) != 0)
+		status = errno != 0 ? errno : B_ERROR;
+	close(fd);
+
+	if (status == B_OK && rename(tempPath, path) != 0)
+		status = errno != 0 ? errno : B_ERROR;
+	if (status != B_OK)
+		unlink(tempPath);
+	return status;
+}
+
+
 status_t
 VirtualMemoryModule::_Write(const SwapState& state)
 {
@@ -681,17 +712,7 @@ VirtualMemoryModule::_Write(const SwapState& state)
 		state.automatic ? "yes" : "no",
 		state.size, info.volume_name, info.device_name, info.fsh_name,
 		(off_t)info.total_blocks * (off_t)info.block_size);
-	BFile file;
-	status_t status = file.SetTo(kSwapPath,
-		B_WRITE_ONLY | B_CREATE_FILE | B_ERASE_FILE);
-	if (status != B_OK)
-		return status;
-	ssize_t wrote = file.Write(text.String(), text.Length());
-	if (wrote < 0)
-		return (status_t)wrote;
-	if ((int32)wrote != text.Length())
-		return B_ERROR;
-	return B_OK;
+	return write_text_atomically(kSwapPath, text);
 }
 
 

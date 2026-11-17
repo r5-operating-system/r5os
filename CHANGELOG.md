@@ -1,5 +1,15 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Settings: virtual memory file is replaced, not erased
+
+Problem: Settings wrote `/boot/system/settings/kernel/drivers/virtual_memory` with `B_ERASE_FILE` and then `Write`. A crash or a short write left an empty or truncated swap file. The kernel reads that file on the next start.
+
+What changed: the page writes a `.tmp` file, `fsync`s it, and `rename`s it over the real path, the same way `r5_driver_settings_write` already does.
+
+Limits: the separate VirtualMemory program still erases then writes. A change still waits for the next start.
+
+Tested: the C++ was not compiled on this host (needs libbe). Jam on this branch is recorded on the pull request.
+
 ## 2026-11-17 - Graphics (M13): step 4, resize on RADV at the refresh rate, stick 4 results
 
 Problem: on stick 3 a window resize took 25.8 to 30.9 ms per frame on RADV and Lavapipe. Every frame re-blurred the window shadow, Skia held its lock while it waited for the GPU, and each new window size made a new VkImage. `check` judged a frame count that also counted the pauses in the mouse motion.
