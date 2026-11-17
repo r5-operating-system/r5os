@@ -184,6 +184,17 @@ The fault line is `radeon_hd: vm fault vmid <n> addr <hex> status <hex>`, at mos
 
 Recorded on the stick (round 5). Boot 2 (`gpu_hang_test 1`): `gpu hang ring gfx seq 53661 after 10001 ms`, `reset psp ring stop ok 80030000`, `reset mode2 before 00000001 after 00000001`, `reset mode2 memsize ok after 0 steps`, `gpu reset mode2 ok`, then the restart with the second `GFX9 scratch 0xdeadbeef`, `fence landed` and `k2 ok gart`, `gpu selftest after reset ok`, and r5-gl-test (Zink on RADV) and VulkanTeapot (RADV) `pixels ok max 2` after the reset. Boot 3 (`gpu_hang_test 2`): two hang lines and `gpu off until reboot: second hang`; afterwards `egl: opengl llvmpipe: gpu not available`, r5-gl-test `pixels ok llvmpipe only`, VulkanTeapot `pixels ok lavapipe only`. Rounds 1 and 2, without the PSP ring stop, had `PSP ring init 0x80020115`, `k0 fail fence` and `gpu off until reboot: reset failed` after the same reset. Combined stick (13 Nov, image `d0856ac3bf`, syslog with time stamps), a hang in the middle of a session (the isolation test as standard account): `[125.799] gpu hang ring gfx seq 1662 after 10004 ms`, `[125.824] reset psp ring stop ok 80030000`, `[125.825] gpu reset mode2 ok`, `[125.944] gpu selftest after reset ok`: 0.15 s from the hang line to a working GPU, after the 10 s watchdog.
 
+## GFX9 stop at shutdown on GC 9.3 (draft)
+
+An addition after the reset; it changes no step above. Haiku's `system_shutdown()` calls no driver: after `sync()` it restarts or powers off at once. The command processor, the PSP ring and the interrupts then ran on into the firmware's start (the 5625U's caps lock blinked after a restart from R5). Linux stops them in `amdgpu_pci_shutdown()` (`amdgpu_device_ip_suspend`).
+
+- The kernel has R5 shutdown hooks (`r5_shutdown.h`, `r5_register_shutdown_hook()`, at most 8): `system_shutdown()` calls them after `sync()`, newest first, with interrupts on.
+- `radeon_hd` registers one when `r5_gfx9_kernel_start` starts the GFX9 path, and removes it in `r5_gfx9_kernel_stop`. Without the GFX9 path (another GPU, `gpu false`, `gfx9_ring false`) there is no hook and nothing changes.
+- The hook, in the reverse of the start order, as Linux: the CP halt (`CP_ME_CNTL` bits 24, 26, 28; `CP_MEC_CNTL` bits 28, 30, the same writes as `r5_gfx9_kernel_stop`), the PSP ring stop (`r5_gfx9_psp_ring_stop`, the reset's), `IH_RB_CNTL` and `CP_INT_CNTL_RING0` = 0, then `VM_CONTEXT0_CNTL` back to the value from before the start and the VM 0 invalidate (as `r5_gfx9_kernel_stop`). Nothing is freed. Bus mastering stays on (Linux clears it only for kexec).
+- `radeon_hd: shutdown gpu stop reboot|power off, psp ring stop ok|timeout <hex>` on the serial line (the syslog is written before it).
+
+Not yet booted on the 5625U (17 Nov 2026). Proof: a restart and a power off from R5 without the caps lock blinking, and the next start's `GFX9 scratch 0xdeadbeef`.
+
 ## GFX9 user address space (draft)
 
 This section is still a draft. Stick 19 did not draw the teapot without SAM (`pixels MISMATCH`). The register list is what the code programs. The stick lines below are what booted. The K sections above are not part of this draft.
