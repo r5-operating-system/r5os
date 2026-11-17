@@ -419,7 +419,10 @@ The code is air/OS's WiFi preferences (MIT, jmgasper; `THIRD_PARTY_NOTICES.md`).
 | `WiFiController(target, component, scanInterval)`, `Start()` | The state machine on its own thread. Stop it with `B_QUIT_REQUESTED` |
 | `kMsgWiFiScan`, `kMsgWiFiJoin`, `kMsgWiFiLeave`, `kMsgWiFiForget`, `kMsgWiFiSetPower`, `kMsgWiFiSelectDevice`, `kMsgWiFiRefresh`, `kMsgWiFiSetScanInterval` | Requests to the controller. The fields are in the R5Book page |
 | `kMsgWiFiStateChanged`, `kMsgWiFiJoinResult` | What the target receives |
-| `DrawWiFiTrayIcon()`, `DrawWiFiSignalBars()`, `DrawWiFiLock()` | Header only, so the Deskbar network icon uses them without loading `libr5wifi.so` into Deskbar. `DrawWiFiSignalBars()` calls `r5_level_glyph_draw()`, so a program that uses it links `libr5icons.so` |
+| `DrawWiFiTrayIcon()`, `DrawWiFiSignalBars()`, `DrawWiFiLock()` | Header only. `DrawWiFiSignalBars()` calls `r5_level_glyph_draw()`, so a program that uses it links `libr5icons.so` |
+| `WiFiLinkDetails` `standard`, `width`, `streams`, `rxKbps` | Added at the end. `standard` is `"Wi-Fi 4"`, `"Wi-Fi 5"` or `"Wi-Fi 6"`, or empty. `width` is MHz. `streams` is the spatial streams of the last transmit. `rxKbps` is the receive rate, or 0: the MT7921 driver does not report one yet. Older readers ignore the message fields `"standard"`, `"width"`, `"streams"` and `"rx kbps"` |
+| `WiFiLinkLine(link)` | `"Wi-Fi 6 · 600 Mbit/s"`. Uses `rxKbps` when it is set, otherwise `txKbps`. Empty when both the standard and the rate are unknown |
+| `r5_wifi_link_line(line)` | The same line from the first wireless adapter. It does not start a `WiFiController`. `B_ERROR` when there is no adapter or nothing to show. The Deskbar network menu calls it, so that replicant links `libr5wifi.so` for this one line |
 
 `BNetworkRoster::AddPersistentNetwork(const wireless_network&, const char* password)` is an addition to Haiku's `libbnetapi.so` (air/OS), not to this library; the one-argument call stays. `scripts/apply-wireless.py` copies the library, the WiFi program and the headers, and adds `libr5wifi.so` and WiFi to the regular image.
 

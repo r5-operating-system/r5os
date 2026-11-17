@@ -1,5 +1,17 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Wi-Fi step 5: the standard and the rate on the page and in Deskbar
+
+Problem: the driver can report a transmit rate and, when HE is on, that the link is Wi-Fi 6, but the Wi-Fi page and the Deskbar menu only say that a network is connected.
+
+What changed:
+- `IEEE80211_IOC_HAIKU_LINK` (`0x6006`) is a new request. The transmit-rate struct is unchanged. The kernel copies it out with `copyout`. The driver fills the standard from the node (HE, then VHT, then HT) or from the last transmit mode, the width from that transmit or from the channel, and the stream count from the last transmit. The receive rate stays 0: the MT7921 path does not report one.
+- `WiFiLinkDetails` gains `standard`, `width`, `streams` and `rxKbps` at the end. `WiFiLinkLine()` builds `Wi-Fi 6 · 600 Mbit/s` from the receive rate when it is set, otherwise the transmit rate. The page appends that line to the existing status. The Deskbar menu adds it under "Connected to". `r5_wifi_link_line()` does the read and does not start a controller, so the Deskbar replicant links `libr5wifi.so` for that call.
+
+Tested: AMD64 `scripts/build-locked.sh`: `jam_exit=0`, `mesa_exit=0`. QEMU (KVM, SMAP and SMEP, 2 CPUs, 2 GB, headless, 150 s) on an own copy of `r5-os.image` (`generated/wifi-qemu.sh`). The serial log has `enable SMAP` and `enable SMEP`. No panic and no `vm_page_fault`. The `kernel debugger` lines are the debugger extensions loading. Settings stayed running (`/boot/system/preferences/Settings --page wifi`, pid 96, still in `ps`). User space wrote `wifi-step5-booted`. QEMU has no Wi-Fi adapter, so the syslog has no mt7922 line and the link line was not shown. The words on the page were not read.
+
+Not tested: a joined network, so the line itself has not been seen. ARM64 and RISC-V 64 not built. No What's new section.
+
 ## 2026-11-17 - Wi-Fi step 4a: Wi-Fi 6 stays off until the settings ask
 
 Problem: the stack can join with Wi-Fi 4 and 5 when `ht_vht` is on, and it has no idea what an HE (802.11ax) element is. The MT7921 firmware wants those fields in the station record before it will use Wi-Fi 6.
@@ -14,6 +26,7 @@ What changed:
 Tested: `wifi_fuzz he: 60s 0 crashes` (62877696 rounds) and `wifi_fuzz ies: 60s 0 crashes` (22512640 rounds). `scripts/build-locked.sh` on AMD64: `jam_exit=0`, `mesa_exit=0`. `ieee80211_he.c`, `if_mtk.c` and `mtk_sta.c` compiled in that jam. An earlier compile of `ieee80211_he.c` failed because the network headers the other net80211 files include were missing; those includes are in this change. QEMU (KVM, SMAP and SMEP, 2 CPUs, 2 GB, headless, 150 s) on an own copy of `r5-os.image` (`generated/wifi-qemu.sh`, not `scripts/run-qemu-r5.sh`). The serial log has `enable SMAP` and `enable SMEP`. No panic and no `vm_page_fault`. The `kernel debugger` lines are the debugger extensions loading. Settings stayed running (`/boot/system/preferences/Settings --page wifi`, pid 129, still in `ps`). User space wrote `wifi-step4a-booted`. QEMU has no Wi-Fi adapter, so the syslog has no mt7922 line. The words on the page were not read.
 
 Not tested: a Wi-Fi 6 join, the page saying "Wi-Fi 6", and a download speed (stick W2). ARM64 and RISC-V 64 not built.
+
 ## 2026-11-17 - Graphics (M13 step 3, continued): 2 Lavapipe threads, occlusion culling, glass only where it shows, option E
 
 Problem: after the transfer copy, the compose on Lavapipe still took 140-190 ms per frame while dragging (QEMU), with the copy and the blur the largest passes.

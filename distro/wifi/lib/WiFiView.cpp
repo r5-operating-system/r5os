@@ -554,6 +554,12 @@ WiFiView::_UpdateCurrent()
 			break;
 	}
 
+	BString linkLine = WiFiLinkLine(fState.link);
+	if (linkLine.Length() > 0 && status.Length() > 0)
+		status << " · " << linkLine;
+	else if (linkLine.Length() > 0)
+		status = linkLine;
+
 	fCurrentName->SetText(name);
 	fCurrentStatus->SetText(status);
 	fCurrentSignal->SetSignal(bars, enabled, animate);

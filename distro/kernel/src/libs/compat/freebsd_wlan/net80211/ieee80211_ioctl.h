@@ -846,6 +846,18 @@ struct ieee80211_haiku_igtk {
 	uint8_t i_keyix;
 	uint8_t i_keylen;
 };
+/* The standard and the receive rate. A new request, so the transmit-rate
+ * struct stays as it shipped. Zero means the driver does not know.
+ * i_standard is 4, 5 or 6. i_rx_kbps stays 0 until a driver reports one.
+ */
+#define IEEE80211_IOC_HAIKU_LINK 0x6006
+struct ieee80211_haiku_link {
+	uint32 i_standard;
+	uint16 i_width;
+	uint8 i_streams;
+	uint8 i_reserved;
+	uint32 i_rx_kbps;
+};
 int ieee80211_send_sae_auth(struct ieee80211vap *, const uint8_t *,
 	const uint8_t *, int);
 int ieee80211_take_sae_auth(struct ieee80211vap *, uint8_t *, uint8_t *,

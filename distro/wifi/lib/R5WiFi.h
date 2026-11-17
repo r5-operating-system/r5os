@@ -109,7 +109,42 @@ struct WiFiLinkDetails {
 				// Last transmit rate, 0 when the driver does not report it
 			BString				txDetails;
 				// For example "HE MCS 11, 2 streams, 80 MHz"
+			BString				standard;
+				// "Wi-Fi 4", "Wi-Fi 5" or "Wi-Fi 6". Empty when unknown
+			int32				width;
+				// Channel width in MHz, 0 when unknown
+			int32				streams;
+				// Spatial streams, 0 when unknown
+			int32				rxKbps;
+				// Last receive rate, 0 when the driver does not report it
 };
+
+
+/*!	"Wi-Fi 6 · 600 Mbit/s". The receive rate is used when the driver
+	reports one; otherwise the transmit rate. Empty when both are unknown.
+*/
+inline BString
+WiFiLinkLine(const WiFiLinkDetails& link)
+{
+	int32 kbps = link.rxKbps > 0 ? link.rxKbps : link.txKbps;
+	BString line(link.standard);
+	if (kbps <= 0)
+		return line;
+	if (line.Length() > 0)
+		line << " · ";
+	if (kbps >= 1000)
+		line << kbps / 1000 << " Mbit/s";
+	else
+		line << kbps << " kbit/s";
+	return line;
+}
+
+
+/*!	The same line, read from the first wireless adapter. B_ERROR when there
+	is no adapter or the driver reports neither a standard nor a rate.
+	Does not start a WiFiController.
+*/
+status_t r5_wifi_link_line(BString& line);
 
 
 struct WiFiState {
