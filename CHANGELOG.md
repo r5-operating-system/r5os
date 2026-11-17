@@ -1,5 +1,15 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Media: HDA widget lookup stops at the last node
+
+Problem: `hda_audio_group_get_widget` treated `widget_start + widget_count` as a valid node id. That index is one past the allocated array, so a look-up of the last codec node could read off the end.
+
+What changed: the look-up uses an index and returns NULL when it is `>= widget_count`.
+
+Limits: not booted. Needs a machine with HD Audio (QEMU `intel-hda` or hardware).
+
+Tested: the comparison is off-by-one on paper. No jam, no QEMU.
+
 ## 2026-11-17 - Bluetooth: the headset voice test passes every time
 
 Problem: in one of four QEMU smoke runs `bt_rfcomm_test` failed "voice: +BCS 2 answered, mSBC link asked". The cause is a race in the test, not in the gateway. The test waited only for the voice callback (`voiceCalls`), then checked `bcsSeen` too. The gateway sends the OK to the headset's `AT+BCS=2` and then asks for the voice link. The test's headset thread sets `bcsSeen` only after it has read that OK, so the main thread could see the call before `bcsSeen` was set. In the same way `HFPGateway::VoiceOpen()` turns true or false only after the callback returns. The gateway order (OK, then the link, then the flag) is correct, and `VoiceOpen()` is only used by this test. It was not a timeout.
