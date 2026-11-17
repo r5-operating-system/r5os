@@ -403,9 +403,24 @@ LEManager::_CommandDone(uint16 opcode, uint8 status, const uint8* data,
 			break;
 
 		case kOpLEReadFeatures:
-			if (status == BT_OK && length >= 8)
+			if (status == BT_OK && length >= 8) {
 				memcpy(fFeatures, data, 8);
-			else {
+				// What docs/BLUETOOTH-2.md (B0) needs of every radio: the
+				// mask, and the bits LE Audio and Auracast run on (Core 6.0,
+				// Vol 6, Part B, 4.6).
+				uint64 mask = 0;
+				for (int i = 7; i >= 0; i--)
+					mask = (mask << 8) | fFeatures[i];
+#define LE_BIT(n) ((mask & (1ULL << (n))) != 0 ? 1 : 0)
+				syslog(LOG_INFO, "bluetooth_server: hci%" B_PRId32
+					" le features %#018" B_PRIx64 ": 2M %d, coded %d,"
+					" extended adv %d, periodic adv %d, CIS central %d,"
+					" CIS peripheral %d, ISO broadcaster %d,"
+					" synchronized receiver %d", fDevice->GetID(), mask,
+					LE_BIT(8), LE_BIT(11), LE_BIT(12), LE_BIT(13), LE_BIT(28),
+					LE_BIT(29), LE_BIT(30), LE_BIT(31));
+#undef LE_BIT
+			} else {
 				syslog(LOG_WARNING, "bluetooth_server: hci%" B_PRId32
 					" le features not read (%#x)", fDevice->GetID(), status);
 			}

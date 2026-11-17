@@ -30,18 +30,18 @@ r5:media-5	A	Media	distro/media/src/preferences/media/MediaViews.cpp	3	pr	4394	f
 r5:zeroconf-6	A	AirPlay	distro/zeroconf/MdnsService.cpp	3	pr	4395	mDNS advertises AirPlay features 0x5A7FFFF7,0x1E but /info returns 0x4A7FFFF7
 
 trac:7841	A	Tracker	distro/desktop/src/kits/tracker/Tracker.cpp	1	todo		Change icon for open folders in tracker spacial mode
-trac:9434	A	Tracker	distro/desktop/src/kits/tracker/Tracker.cpp	1	todo		[Tracker] wrong column display + crash in BBitmap::Lock()
-trac:11031	A	Tracker	distro/desktop/src/kits/tracker/Tracker.cpp	1	todo		[Tracker] crashes in BPoseView::SelectPosesListMode
+trac:9434	A	Tracker	distro/desktop/src/kits/tracker/PoseView.cpp	1	pr	4409	[Tracker] wrong column display + crash in BBitmap::Lock()
+trac:11031	A	Tracker	distro/desktop/src/kits/tracker/PoseView.cpp	1	pr	4409	[Tracker] crashes in BPoseView::SelectPosesListMode
 trac:12050	A	Tracker	distro/desktop/src/kits/tracker/Tracker.cpp	1	todo		Tracker deadlock between FS unmount and DoPeriodicUpdate
-trac:14390	A	Tracker	distro/desktop/src/kits/tracker/Tracker.cpp	1	todo		Tracker crash on context menu (Looper must be locked)
+trac:14390	A	Tracker	distro/desktop/src/kits/tracker/ContainerWindow.cpp	1	pr	4409	Tracker crash on context menu (Looper must be locked)
 trac:14473	A	Tracker	distro/desktop/src/kits/tracker/Tracker.cpp	1	todo		Tracker hangs if open location is scanned with checkfs
-trac:14880	A	Tracker	distro/desktop/src/kits/tracker/Tracker.cpp	1	todo		Replicant removal can crash Tracker
+trac:14880	A	Tracker	distro/desktop/src/kits/tracker/DeskWindow.cpp	1	parked		Replicant removal can crash Tracker; BShelf is not in distro/, ActivityMonitor path not copied
 trac:15535	A	Tracker	distro/desktop/src/kits/tracker/Tracker.cpp	1	todo		Saved query icon changed recently
 trac:16385	A	Tracker	distro/desktop/src/kits/tracker/Tracker.cpp	1	todo		Query name is not changed after query update
 trac:16427	A	Tracker	distro/desktop/src/kits/tracker/Tracker.cpp	1	todo		Tracker: node monitoring cause invalid duplicate items and crash on window close
 trac:16769	A	Tracker	distro/desktop/src/kits/tracker/Tracker.cpp	1	todo		"Add change time (ctime) to list view column and ""Get info"""
 trac:17198	A	Tracker	distro/desktop/src/kits/tracker/Tracker.cpp	1	todo		Tracker crash on query result window
-trac:17837	A	Tracker	distro/desktop/src/kits/tracker/Tracker.cpp	1	todo		[Tracker] crash in BPoseView::TryUpdatingBrokenLinks
+trac:17837	A	Tracker	distro/desktop/src/kits/tracker/PoseView.cpp	1	pr	4409	[Tracker] crash in BPoseView::TryUpdatingBrokenLinks
 trac:18085	A	Tracker	distro/desktop/src/kits/tracker/Tracker.cpp	1	todo		Get info doesn't update size if contents changes
 trac:19318	A	Tracker	distro/desktop/src/kits/tracker/Tracker.cpp	1	todo		[Tracker] crashed when I uninstalled several packages
 trac:19489	A	Tracker	distro/desktop/src/kits/tracker/Tracker.cpp	1	todo		"Tracker ""Get Info"" crashes when interacting with a file on NFS4"

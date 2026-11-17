@@ -132,6 +132,9 @@ static const struct mtk_part {
 static uint32_t
 mtk_raw_read(struct mtk_softc* sc, uint32_t offset)
 {
+	/* R5 (MIT): nothing is read once the register window is released. */
+	if (sc->sc_gone)
+		return 0xffffffff;
 	return bus_space_read_4(sc->sc_st, sc->sc_sh, offset);
 }
 
@@ -139,6 +142,9 @@ mtk_raw_read(struct mtk_softc* sc, uint32_t offset)
 static void
 mtk_raw_write(struct mtk_softc* sc, uint32_t offset, uint32_t value)
 {
+	/* R5 (MIT): nothing is written once the register window is released. */
+	if (sc->sc_gone)
+		return;
 	bus_space_write_4(sc->sc_st, sc->sc_sh, offset, value);
 }
 
@@ -547,12 +553,37 @@ mtk_join_prepare(struct mtk_softc* sc, struct ieee80211_node* ni)
 {
 	int error;
 
-	if (ni == NULL || ni->ni_chan == NULL
-			|| ni->ni_chan == IEEE80211_CHAN_ANYC)
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * Stick 51: with ht_vht on, the join stopped here with EINVAL and no line
+ * said why. Each stop now says it.
+ */
+	if (ni == NULL) {
+		device_printf(sc->sc_dev, "join: no node for the network\n");
 		return EINVAL;
+	}
+	if (ni->ni_chan == NULL || ni->ni_chan == IEEE80211_CHAN_ANYC) {
+		struct ieee80211_channel* bss = sc->sc_ic.ic_bsschan;
 
-	if (mtk_ensure_owned(sc) != 0)
+		device_printf(sc->sc_dev, "join: the node has no channel (%s);"
+			" network channel %u, flags %#x\n",
+			ni->ni_chan == NULL ? "none" : "any",
+			bss != NULL && bss != IEEE80211_CHAN_ANYC
+				? ieee80211_chan2ieee(&sc->sc_ic, bss) : 0,
+			bss != NULL && bss != IEEE80211_CHAN_ANYC ? bss->ic_flags : 0);
+		return EINVAL;
+	}
+	device_printf(sc->sc_dev, "join: channel %u, flags %#x, node flags %#x\n",
+		ieee80211_chan2ieee(&sc->sc_ic, ni->ni_chan), ni->ni_chan->ic_flags,
+		ni->ni_flags);
+/* SPDX-SnippetEnd */
+
+	if (mtk_ensure_owned(sc) != 0) {
+		/* R5 (MIT): say it, as the other stops in the join do. */
+		device_printf(sc->sc_dev, "join: the driver does not own the card\n");
 		return EIO;
+	}
 	mtk_keep_awake(sc);
 
 	if (sc->sc_hwscanning != 0) {
@@ -643,6 +674,10 @@ mtk_newstate(struct ieee80211vap* vap, enum ieee80211_state state, int arg)
 
 	IEEE80211_UNLOCK(ic);
 
+	/* R5 (MIT), stick 52: while the driver detaches, the stack still walks
+	 * its vaps to INIT on this task queue; that must not reach the card.
+	 */
+	if (sc->sc_detaching == 0)
 	switch (state) {
 		case IEEE80211_S_INIT:
 		case IEEE80211_S_SCAN:
@@ -740,10 +775,16 @@ static void
 mtk_ampdu_rx_stop(struct ieee80211_node* ni, struct ieee80211_rx_ampdu* rap)
 {
 	struct mtk_softc* sc = ni->ni_ic->ic_softc;
+	/* The stack stops every TID when a node is cleaned up, also when no
+	 * session ever ran, and before the station exists in the firmware (stick
+	 * 51: 16 refused commands per join). Only a running session is told.
+	 */
+	int running = rap != NULL
+		&& (rap->rxa_flags & IEEE80211_AGGR_RUNNING) != 0;
 
 	if (sc->sc_ampdu_rx_stop != NULL)
 		sc->sc_ampdu_rx_stop(ni, rap);
-	if (sc->sc_ht_vht != 0 && rap != NULL) {
+	if (sc->sc_ht_vht != 0 && running && sc->sc_ap_added) {
 		int tid = (int)(rap - ni->ni_rx_ampdu);
 
 		if (tid >= 0 && tid < IEEE80211_TID_SIZE)
@@ -870,6 +911,9 @@ mtk_parent(struct ieee80211com* ic)
 	struct mtk_softc* sc = ic->ic_softc;
 	int wanted = ic->ic_nrunning > 0;
 
+	/* R5 (MIT): the driver is going away; detach stops the card itself. */
+	if (sc->sc_detaching)
+		return;
 	if (wanted == sc->sc_running)
 		return;
 
@@ -1609,6 +1653,9 @@ mtk_detach(device_t dev)
 {
 	struct mtk_softc* sc = device_get_softc(dev);
 
+	/* R5 (MIT): from here the stack's tasks leave the card alone. */
+	sc->sc_detaching = 1;
+
 	if (sc->sc_ic.ic_softc == sc)
 		ieee80211_ifdetach(&sc->sc_ic);
 
@@ -1637,6 +1684,8 @@ mtk_detach(device_t dev)
 
 	if (sc->sc_mem != NULL) {
 		mtk_release_ownership(sc);
+		/* R5 (MIT): a task the stack still runs must not reach the window. */
+		sc->sc_gone = 1;
 		bus_release_resource(dev, SYS_RES_MEMORY, PCIR_BAR(0), sc->sc_mem);
 		sc->sc_mem = NULL;
 	}

@@ -27,6 +27,57 @@ Limits: the boot 3 resize p95 (236.6 ms) is most likely Lavapipe compiling on it
 
 Tested: `git apply --check` of the patch on `origin/main`; `sh -n` of `check`, `boot-next` and `m13-measure`; `py scripts/check-pre-stick.py --paper` at `331843fef0`: `m13 lines 9 have a source`, `m13 boot 1/2/3/4/done settings ok`, M11 and M12 walks unchanged, `pre-stick paper ok`.
 
+## 2026-11-17 - Tracker: selection, columns and broken links do not crash on a stale pose
+
+Problem: five Haiku Tracker crash tickets still followed from the R5 copies of PoseView and ContainerWindow: a NULL pose after a file vanished during a list-mode rubber-band (#11031), StopWatching on a Model that already left the pose list (#17837), BBitmap::Lock on a failed drag bitmap and an unbounded attribute column width (#9434), and GetFont on a menu whose looper was not locked (#14390). Replicant removal (#14880) lives in BShelf, which is not in distro/.
+
+What changed: SelectPoses skips a missing pose; TryUpdatingBrokenLinks only watches models that still have a pose; MakeDragBitmap returns NULL if the bitmap did not initialise; attribute widths are clamped 20–600; attribute menus lock the looper before GetFont; ShowContextMenu takes the window lock.
+
+Limits: BShelf / ActivityMonitor replicant (#14880) is unchanged. NavMenu.cpp is still Haiku's copy, so ModelMenuItem::Highlight can still hit the looper assert. Not jammed, not booted.
+
+Tested: none.
+
+## 2026-11-17 - Bluetooth: the ASUS USB-BT600 dongle starts in R5 (Bluetooth plan 2, step B0)
+
+Problem: the ASUS USB-BT600 (USB `0b05:1d70`, a Realtek RTL8761CU), the radio the owner bought for LE Audio and Auracast (`docs/BLUETOOTH-2.md`), needs a patch from the host. R5 had no Realtek loader, so `docs/BLUETOOTH.md` listed Realtek dongles as not working.
+
+What changed:
+- `h2generic`: a new Realtek loader, `h2realtek.cpp` with the parser `h2rtkfw.h` (R5, MIT), called in `device_open` right after `mediatek_setup()`. It only talks to USB vendor `0x0bda` or a USB ID in its table, and only patches when Read Local Version names Realtek. The firmware comes from the USB ID table (one entry: `0b05:1d70` → `rtl8761cu`, project id `0x33`) or else from the chip's report (FreeBSD's chip table). The file's project id is checked, the ROM version is read (`0xfc6d`), and the patch plus `_config.bin` are sent with `0xfc20` in 252-byte pieces. Written from FreeBSD `rtlbtfw` (BSD-2-Clause); its chip table and project ids are a marked BSD-2-Clause snippet. No Linux source read. A missing, wrong or refused firmware gives one `h2generic: realtek: ... It stays off.` line and that radio's open fails; MediaTek radios never get a Realtek command. After the patch the driver logs version, manufacturer, LMP features and the LE features with the ISO bits.
+- `h2mediatek.cpp`: `h2_firmware_load()` (MIT snippet), so both loaders read firmware the same way.
+- `bluetooth_server` (`LEManager.cpp`): one `hci<n> le features ...` line for every radio, with 2M, Coded, extended and periodic advertising, CIS central and peripheral, ISO broadcaster and synchronized receiver.
+- Firmware: `rtl8761cu_fw.bin` and `rtl8761cu_config.bin` from linux-firmware (commit `35e542439e`), unmodified, in `distro/firmware/realtek`, installed by `scripts/apply-bluetooth.py` at `system/non-packaged/data/firmware/h2generic` in the regular image. Licence `LICENCE.rtlwifi_firmware.txt`: binary redistribution without modification, with the notice; no reverse engineering (R5 reads only the file headers). `THIRD_PARTY_NOTICES.md`, `docs/LICENSING.md`, `LICENSES/LICENCE.rtlwifi_firmware.txt`, `LICENSES/rtlbtfw-BSD-2-Clause.txt`.
+- The question of the earlier research, a 252-byte patch in a 10 KB file: the file holds four patch entries (chip ids 0 to 3) that all point at the same 252 bytes at `0x30`; the rest up to the trailer is zeros. The patch's last four bytes are the file version, as `rtlbtfw` expects.
+- `scripts/run-vbox-r5.ps1 -PassDongle`: a USB filter for `0b05:1d70` on the xHCI, removed when the switch is not given.
+- `scripts/test-rtkfw.sh` (host test) and `scripts/fuzz-bt.sh rtkfw` (new fuzz target).
+
+Tested:
+- `scripts/test-rtkfw.sh`: ok (ASan, UBSan; the shipped files and hand-made damaged ones). `scripts/fuzz-bt.sh rtkfw 60`: 5.2 million files, 0 crashes.
+- AMD64 build with `scripts/build-locked.sh`: ok, no warnings in the new files. QEMU on an own image copy with `SMAP=1 LOGIN=1` (`run-qemu-smoke.sh`): SMAP on, no panic, all Bluetooth tests exit 0 (QEMU has no radio).
+- VirtualBox 7.2.22 with `-PassDongle`, the dongle in the owner's PC: first try R5 saw no radio, because Windows had bound its own BTHUSB driver to the dongle (code 31, failed) and VirtualBox never attached it (`VBox.log`: only the mouse). The second time the owner plugged the dongle in while R5 ran. Syslog: from ROM HCI `0x0e` revision `0x0e`, LMP subversion `0x8761`, ROM version 1; `rtl8761cu`, 263 bytes in 11 ms; after the patch HCI `0x0e` revision `0x7bf1`, LMP subversion `0x5762`, manufacturer `0x5d`; LMP features `0x877bfddbfeffffff`; LE features `0x0000008ef7fe77fd`: 2M yes, Coded no, extended and periodic advertising yes, CIS central and peripheral yes, ISO broadcaster and synchronized receiver yes. `bluetooth_server` set the radio up, the Bluetooth page showed it, and a scan heard 13 LE devices and one Classic device.
+
+Limits and not tested:
+- Not tested on the 5625U itself, and not with the MediaTek radio and the dongle at the same time (that needs a stick). The MediaTek path itself is unchanged.
+- Pairing and links over the dongle were not tried. `bluetooth_server` logged `secure connections host failed (0xc)` on the dongle; not looked into in this change.
+- RTBTCore (v2) files are refused for now. A chip that kept its patch through a warm restart is not detected; if it then refuses the download it stays off until it is unplugged.
+- In VirtualBox the dongle must be plugged in after the VM started, as long as Windows binds its BTHUSB driver to it.
+
+## 2026-11-17 - Wi-Fi: sticks 51 and 52 on the 5625U, stick commands, join logging and a shutdown panic
+
+Sticks 51 and 52 (5625U, MT7961, WPA2 network "Skynet" on channel 40, FT-PSK/CCMP, owner's home).
+
+- Stick 51: boot 1 (no `mt7922wifi` file) joined over 802.11a; `wifi-check` 5 PASS. Boots 2 and 3 (`ht_vht true`, then also `he true`): `ht/vht on, 2 streams, bandwidth step 2`, and on boot 3 `he on, 2 streams` (the card reports HE). Neither joined. Every join sent 16 block-ack-off commands that the firmware refused (`status 0x10003`), then `the firmware was not ready for AUTH: -2147483643` (EINVAL) with no line saying why. The page asked for the password again, and so did Haiku's own `net_server` dialog. The password was right.
+- Stick 52 (boot 2 planted, with the changes below): no refused commands; the driver no longer stops the join (`join: channel 40, flags 0x40140, node flags 0xaf8c40`, six times); the join still failed, with the same password dialogs. Restarting with `wifi-next` panicked in KDL: `vm_page_fault` in `mtk_write` on thread `ic_taskq`, after `msi_free_vectors` (the driver's detach).
+
+What changed:
+- `wifi-next` and `wifi-check` (`distro/wifi/stick`, in `/boot/system/non-packaged/bin` of the regular image through `apply-wireless.py`): write the settings for the next boot and restart; PASS or FAIL per driver line, files in `~/wifi-stick`. `wifi-check` reads `syslog.1` too, and takes the boot from the settings file when there is no note. `read-stick-logs.py` copies `~/wifi-stick` and both `mt7922wifi` files. `scripts/plant-wifi-stick.sh` plants the boot 2 settings and a 4 MiB syslog into a stick image only.
+- `mtk_ampdu_rx_stop()` tells the firmware only about a session that was running (`IEEE80211_AGGR_RUNNING`) on an added station.
+- `mtk_join_prepare()` logs each stop (no node, no channel, card not owned) and the channel, its flags and the node flags of every join.
+- Shutdown: `sc_detaching` is set first in `mtk_detach()`; `mtk_newstate()` and `mtk_parent()` then leave the card alone. `sc_gone` is set just before the register window is released, and `mtk_raw_read()`/`mtk_raw_write()` do nothing after it. The stack walks its vaps to INIT on `ic_taskq` during `ieee80211_ifdetach()`, and that work reached the card after its registers were gone.
+
+Tested: `scripts/build-locked.sh` (`jam_exit=0`, `mesa_exit=0`, `if_mtk.o` built). QEMU (KVM, `-cpu host,+smap`, a copy of `r5-os.image`, 120 s): `enable SMAP`, boots to `net_server`, no panic. QEMU has no Wi-Fi adapter, so neither the join nor the detach path ran.
+
+Not proven: the shutdown fix on the 5625U (no stick for it yet). Why the access point does not accept the join with HT/VHT on: the auth and association frames are only logged with `debug true`. The width is a guess (the driver's `bandwidth step 2` against the AP's 40 MHz on channel 40), not checked. The second password dialog (Haiku's `net_server` "Connect to a WiFi network") is separate UI work.
+
 ## 2026-11-17 - Game controllers: Switch Pro, Joy-Con and Xbox controllers rumble and move too (option C, phase 2)
 
 Problem: phase 1 gave rumble, trigger effects and motion only to the PlayStation controllers and to HID PID force feedback. The owner asked for the Switch Pro Controller and the Xbox controllers over Bluetooth anyway ("zet het er sowieso in"), and the same day for Xbox One and Series controllers over USB (GIP), without having any of them. Haiku has no Xbox One or Series USB driver (only an Xbox 360 quirk in usb_hid); RenkuOS has none either (its kernel driver tree checked, no xbox, gip or 045e driver), so the GIP part is written new. A Switch Pro Controller over USB sent nothing before its handshake, and its own report descriptor does not describe its reports; a GIP controller is not HID at all; an Xbox controller with Low Energy firmware had no vendor and product ID on R5 (the PnP ID was not read).

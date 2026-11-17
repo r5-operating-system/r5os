@@ -5526,15 +5526,28 @@ BPoseView::TryUpdatingBrokenLinks()
 	if (!lock)
 		return;
 
+	if (fBrokenLinks == NULL || CurrentPoseList() == NULL)
+		return;
+
 	BObjectList<Model>* brokenLinksCopy = new BObjectList<Model>(*fBrokenLinks);
 
 	// try fixing broken symlinks, and detecting broken ones.
 	EachPoseAndModel(fPoseList, &UpdateWasBrokenSymlinkBinder, this, fBrokenLinks);
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// A model that left fBrokenLinks may already have been deleted with
+	// its pose (ticket 17837). Only watch a model that still has a pose.
 	for (int i = brokenLinksCopy->CountItems() - 1; i >= 0; i--) {
-		if (!fBrokenLinks->HasItem(brokenLinksCopy->ItemAt(i)))
-			StopWatchingParentsOf(brokenLinksCopy->ItemAt(i)->EntryRef());
+		Model* model = brokenLinksCopy->ItemAt(i);
+		if (model == NULL || fBrokenLinks->HasItem(model))
+			continue;
+		if (FindPose(model) == NULL)
+			continue;
+		StopWatchingParentsOf(model->EntryRef());
 	}
+	// SPDX-SnippetEnd
 
 	delete brokenLinksCopy;
 }
@@ -7448,6 +7461,14 @@ BPoseView::ShowContextMenu(BPoint where)
 	if (window == NULL)
 		return;
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	AutoLock<BWindow> windowLock(window);
+	if (!windowLock)
+		return;
+	// SPDX-SnippetEnd
+
 	// handle pose selection
 	int32 index;
 	BPose* clickedPose = FindPose(where, &index);
@@ -8055,6 +8076,14 @@ BPoseView::MakeDragBitmap(BRect dragRect, BPoint where, int32 poseIndex, BPoint&
 	rect.OffsetTo(B_ORIGIN);
 
 	BBitmap* bitmap = new BBitmap(rect, B_RGBA32, true);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	if (bitmap->InitCheck() != B_OK) {
+		delete bitmap;
+		return NULL;
+	}
+	// SPDX-SnippetEnd
 	bitmap->Lock();
 	BView* view = new BView(bitmap->Bounds(), "", B_FOLLOW_NONE, B_WILL_DRAW);
 	bitmap->AddChild(view);
@@ -8193,6 +8222,12 @@ BPoseView::SelectPoses(BRect selectionRect, BList** oldList)
 
 	const bool inListMode = (ViewMode() == kListMode);
 	const PoseList* poseList = CurrentPoseList();
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	if (poseList == NULL || oldList == NULL || *oldList == NULL)
+		return;
+	// SPDX-SnippetEnd
 	const int32 poseCount = poseList->CountItems();
 
 	// collect all the poses which are enclosed inside the selection rect
@@ -8256,6 +8291,12 @@ BPoseView::SelectPoses(BRect selectionRect, BList** oldList)
 
 		if (!newList->HasItem((void*)(addr_t)oldIndex)) {
 			BPose* pose = poseList->ItemAt(oldIndex);
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			if (pose == NULL)
+				continue;
+			// SPDX-SnippetEnd
 			pose->Select(!pose->IsSelected());
 
 			BRect poseRect;

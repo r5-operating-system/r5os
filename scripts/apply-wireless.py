@@ -32,6 +32,15 @@ WIFI_FIRMWARE = ("WIFI_MT7961_patch_mcu_1_2_hdr.bin",
     "WIFI_RAM_CODE_MT7961_1.bin")
 BT_FIRMWARE = ("BT_RAM_CODE_MT7961_1_2_hdr.bin",)
 MARK = "r5MtkDir"
+STICK_TOOLS = ("wifi-next", "wifi-check")
+STICK_MARK = "r5WifiStickDir"
+STICK_BLOCK = """
+# R5OS Wi-Fi stick W1 tools (docs/WIFI.md): wifi-next and wifi-check.
+local r5WifiStickDir = [ FDirName $(HAIKU_TOP) data r5-wifi-stick ] ;
+local r5WifiStick = <r5wifistick>wifi-next <r5wifistick>wifi-check ;
+SEARCH on $(r5WifiStick) = $(r5WifiStickDir) ;
+AddFilesToHaikuImage system non-packaged bin : $(r5WifiStick) ;
+"""
 
 JAM_BLOCK = """
 # R5OS MediaTek MT7921 (MT7961) firmware, from linux-firmware, unmodified.
@@ -107,6 +116,13 @@ def copy_sources() -> None:
         HAIKU / "data/firmware/mediatek/LICENCE.mediatek")
     print("copied MediaTek firmware")
 
+    stick = ROOT / "distro/wifi/stick"
+    for name in STICK_TOOLS:
+        target = HAIKU / "data/r5-wifi-stick" / name
+        copy(stick / name, target)
+        target.chmod(0o755)
+    print("copied Wi-Fi stick tools")
+
 
 def hook_jam() -> None:
     preferences = HAIKU / "src/preferences/Jamfile"
@@ -139,6 +155,10 @@ def hook_image() -> None:
     insert_once(regular,
         "AddFilesToHaikuImage home config settings : $(shortcutsSettingsFile) ;\n",
         JAM_BLOCK, MARK, "MediaTek firmware")
+    insert_once(regular,
+        "AddFilesToHaikuImage system non-packaged data firmware h2generic\n"
+        "\t: $(r5MtkBt) $(r5MtkLicense) ;\n",
+        STICK_BLOCK, STICK_MARK, "Wi-Fi stick tools")
 
 
 def main() -> int:

@@ -10,9 +10,10 @@
 # voice link (step 7c: h2generic's h2sco.h, the mSBC deframer and the SBC
 # decoder), and the game controller reports (docs/GAME-CONTROLLERS.md,
 # option C phase 1: hid_shared's R5HIDReports.h and libr5game's
-# GameControllerReports.cpp). Run it in WSL.
+# GameControllerReports.cpp), and the Realtek firmware parser
+# (docs/BLUETOOTH-2.md step B0: h2generic's h2rtkfw.h). Run it in WSL.
 # Usage: fuzz-bt.sh <target> [seconds]   (target: hci, l2cap, le, audio,
-# sdp, rfcomm, hfp, sco or hid; default 60 s)
+# sdp, rfcomm, hfp, sco, hid or rtkfw; default 60 s)
 # The log is generated/bluetooth/fuzz-<target>.log; its last line is
 # "<target>_fuzz: <seconds>s 0 crashes" when nothing failed.
 set -eu
@@ -22,7 +23,7 @@ seconds="${2:-60}"
 K=distro/kernel/src/add-ons/kernel
 A=distro/media/bluetooth_audio
 case "$target" in
-	hci|l2cap|le|audio|sdp|rfcomm|hfp|sco|hid) ;;
+	hci|l2cap|le|audio|sdp|rfcomm|hfp|sco|hid|rtkfw) ;;
 	*) echo "fuzz-bt: unknown target $target" >&2; exit 2 ;;
 esac
 out=/tmp/bt-fuzz-$$
@@ -45,6 +46,9 @@ elif [ "$target" = hid ]; then
 	g++ $flags -I scripts/bt-host -I distro/game/lib \
 		-I "$K/drivers/input/hid_shared" scripts/bt-hid-fuzz.cpp \
 		distro/game/lib/GameControllerReports.cpp -o "$out"
+elif [ "$target" = rtkfw ]; then
+	g++ $flags -I scripts/bt-host -I "$K/drivers/bluetooth/h2/h2generic" \
+		scripts/bt-rtkfw-fuzz.cpp -o "$out"
 elif [ "$target" = hfp ]; then
 	g++ $flags -I distro/bluetooth/server scripts/bt-hfp-fuzz.cpp \
 		distro/bluetooth/server/HFPAgent.cpp -o "$out"
@@ -61,7 +65,8 @@ mkdir -p generated/bluetooth
 log="generated/bluetooth/fuzz-$target.log"
 status=0
 if [ "$target" = audio ] || [ "$target" = sdp ] || [ "$target" = rfcomm ] \
-	|| [ "$target" = hfp ] || [ "$target" = sco ] || [ "$target" = hid ]; then
+	|| [ "$target" = hfp ] || [ "$target" = sco ] || [ "$target" = hid ] \
+	|| [ "$target" = rtkfw ]; then
 	"$out" "$seconds" > "$log" 2>&1 || status=$?
 else
 	"$out" "$target" "$seconds" > "$log" 2>&1 || status=$?

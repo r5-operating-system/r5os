@@ -1,0 +1,150 @@
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+#
+# Wi-Fi stick W1: PASS or FAIL per line for the current boot, after the
+# WPA2 network is joined. The boot is the number wifi-next noted in
+# ~/wifi-stick/next (1 when there is none). Files go to
+# ~/wifi-stick/boot<k>/ (boot<k>-2, ... when it already exists):
+# check.txt, the driver's syslog lines of this boot, ifconfig and the
+# settings file. read-stick-logs.py copies ~/wifi-stick.
+
+fd() {
+	finddir "$1" 2>/dev/null || echo "$2"
+}
+
+home=$(fd B_USER_DIRECTORY /boot/home)
+dir=$home/wifi-stick
+file=$(fd B_USER_SETTINGS_DIRECTORY "$home/config/settings")/kernel/drivers/mt7922wifi
+syslog=$(fd B_SYSTEM_LOG_DIRECTORY /boot/system/var/log)/syslog
+mkdir -p "$dir"
+
+# The note wins; without one the settings file says which boot this is
+# (a planted stick starts at boot 2 without a note).
+boot=1
+if [ -f "$dir/next" ]; then
+	boot=$(cat "$dir/next")
+elif [ -f "$file" ] && grep -q '^he true' "$file"; then
+	boot=3
+elif [ -f "$file" ] && grep -q '^ht_vht true' "$file"; then
+	boot=2
+fi
+out=$dir/boot$boot
+n=2
+while [ -e "$out" ]; do
+	out=$dir/boot$boot-$n
+	n=$((n + 1))
+done
+mkdir -p "$out"
+
+# This boot's driver lines: from the last firmware line on. The syslog can
+# move to syslog.1 during a boot (stick 51, boot 3), so both are read.
+all=$out/syslog-both.txt
+cat "$syslog.1" "$syslog" > "$all" 2>/dev/null
+last=$(grep -n 'firmware WIFI_' "$all" | tail -n 1 | cut -d: -f1)
+if [ -n "$last" ]; then
+	tail -n +"$last" "$all" > "$out/syslog-boot.txt"
+else
+	cp "$syslog" "$out/syslog-boot.txt"
+fi
+rm -f "$all"
+grep -E 'mt7922|mtk|ht/vht|he on|he off|firmware|wlan|net80211|wpa_supplicant|join:' \
+	"$out/syslog-boot.txt" > "$out/syslog-wifi.txt"
+ifconfig > "$out/ifconfig.txt" 2>&1
+if [ -f "$file" ]; then
+	cp "$file" "$out/mt7922wifi"
+fi
+
+pass=0
+fail=0
+result() {
+	echo "$1 $2" | tee -a "$out/check.txt"
+	[ "$1" = PASS ] && pass=$((pass + 1))
+	[ "$1" = FAIL ] && fail=$((fail + 1))
+	return 0
+}
+# expect PATTERN PASS-TEXT FAIL-TEXT: PASS when the line is there.
+expect() {
+	if has "$1"; then result PASS "$2"; else result FAIL "$3"; fi
+}
+# refuse PATTERN PASS-TEXT FAIL-TEXT: PASS when the line is not there.
+refuse() {
+	if has "$1"; then result FAIL "$3"; else result PASS "$2"; fi
+}
+has() {
+	grep -q -- "$1" "$out/syslog-boot.txt"
+}
+
+echo "wifi-check: boot $boot, files in $out" | tee "$out/check.txt"
+
+# The settings file must match the boot.
+case "$boot" in
+	1) want="" ;;
+	2) want="ht_vht true he false" ;;
+	3) want="ht_vht true he true" ;;
+	*) want="?" ;;
+esac
+got=""
+[ -f "$file" ] && got=$(tr '\n' ' ' < "$file" | sed 's/ *$//')
+if [ "$got" = "$want" ]; then
+	result PASS "settings file: ${got:-none}"
+else
+	result FAIL "settings file: ${got:-none}, boot $boot wants ${want:-none}"
+fi
+
+if has 'firmware WIFI_'; then
+	result PASS "$(grep 'firmware WIFI_' "$out/syslog-boot.txt" | tail -n 1)"
+else
+	result FAIL "no firmware line in this boot"
+fi
+
+if has 'KERNEL PANIC\|vm_page_fault\|PANIC:'; then
+	result FAIL "panic or vm_page_fault in the syslog"
+else
+	result PASS "no panic, no vm_page_fault"
+fi
+
+refuse 'firmware was not ready for' "the join was not stopped by the driver" \
+	"$(grep 'firmware was not ready for' "$out/syslog-boot.txt" | tail -n 1)"
+if has 'join:'; then
+	result INFO "$(grep 'join:' "$out/syslog-boot.txt" | tail -n 1)"
+fi
+
+case "$boot" in
+	1)
+		expect 'ht/vht off' "ht/vht off" "no 'ht/vht off' line"
+		refuse 'he on,' "he not on" "he on, but it should be off"
+		;;
+	2)
+		if has 'ht/vht on,'; then
+			result PASS "$(grep 'ht/vht on,' "$out/syslog-boot.txt" | tail -n 1)"
+		else
+			result FAIL "no 'ht/vht on' line"
+		fi
+		refuse 'he on,' "he not on" "he on, but he is false"
+		;;
+	3)
+		if has 'ht/vht on,'; then
+			result PASS "$(grep 'ht/vht on,' "$out/syslog-boot.txt" | tail -n 1)"
+		else
+			result FAIL "no 'ht/vht on' line"
+		fi
+		if has 'he on,'; then
+			result PASS "$(grep 'he on,' "$out/syslog-boot.txt" | tail -n 1)"
+		elif has 'he off, the card did not report it'; then
+			result INFO "he off, the card did not report it (a result, not a fault)"
+		else
+			result FAIL "no he line"
+		fi
+		;;
+esac
+
+if grep -q 'inet addr' "$out/ifconfig.txt" && grep -q -i 'wireless\|802.11' "$out/ifconfig.txt"; then
+	result INFO "ifconfig saved; check that the Wi-Fi adapter has an address"
+else
+	result INFO "ifconfig saved"
+fi
+
+echo "wifi-check: $pass PASS, $fail FAIL" | tee -a "$out/check.txt"
+echo "wifi-check: now write down what the Wi-Fi page and Deskbar say (see the stick card)"
+sync

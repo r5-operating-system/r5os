@@ -101,6 +101,10 @@ def install_kernel_sources() -> None:
         "src/add-ons/kernel/drivers/bluetooth/h2/h2generic/h2generic.cpp",
         "src/add-ons/kernel/drivers/bluetooth/h2/h2generic/h2mediatek.cpp",
         "src/add-ons/kernel/drivers/bluetooth/h2/h2generic/h2mediatek.h",
+        # R5: Realtek firmware loader, docs/BLUETOOTH-2.md step B0
+        "src/add-ons/kernel/drivers/bluetooth/h2/h2generic/h2realtek.cpp",
+        "src/add-ons/kernel/drivers/bluetooth/h2/h2generic/h2realtek.h",
+        "src/add-ons/kernel/drivers/bluetooth/h2/h2generic/h2rtkfw.h",
         "src/add-ons/kernel/drivers/bluetooth/h2/h2generic/h2sco.h",
         "src/add-ons/kernel/drivers/bluetooth/h2/h2generic/h2transactions.cpp",
         "src/add-ons/kernel/drivers/bluetooth/h2/h2generic/h2voice.cpp",
