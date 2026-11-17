@@ -53,6 +53,9 @@ def install_kernel_sources() -> None:
         "src/system/kernel/arch/x86/ioapic.cpp",
         # air/OS 3683cfbe47: choose the cpuidle module before using it
         "src/system/kernel/cpu.cpp",
+        # R5: shutdown hooks, so radeon_hd stops the GPU before a restart
+        "headers/private/kernel/r5_shutdown.h",
+        "src/system/kernel/shutdown.cpp",
         # R5: no USB modules in the BIOS CD floppy archive (size limit)
         "build/jam/images/FloppyBootImage",
         # R5: the AMD CPPC values stay per CPU (no shared globals)

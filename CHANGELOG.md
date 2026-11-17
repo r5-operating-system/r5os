@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Graphics: the GPU is stopped before a restart or power off
+
+Problem: after a restart from R5 the 5625U's caps lock blinked. Haiku's shutdown calls no driver, so the GPU's command processor, PSP ring and interrupts ran on into the firmware's start. Linux stops them at shutdown (`amdgpu_pci_shutdown`).
+
+What changed: the kernel has R5 shutdown hooks (`r5_shutdown.h`, `shutdown.cpp` in `distro/kernel`, copied by `apply-kernel-bugs.py`), called after `sync()`. `radeon_hd` registers one with the GFX9 path: CP halt, PSP ring stop, interrupts off, VM 0 back, as `docs/GRAPHICS.md` "GFX9 stop at shutdown on GC 9.3". An addition after the reset contract; no fixed step changed.
+
+Limits: not built or booted yet. Whether the blinking was this cause is not proven; the HP blink count was not read.
+
 ## 2026-11-17 - Graphics (M13 step 3, continued): 2 Lavapipe threads, occlusion culling, glass only where it shows, option E
 
 Problem: after the transfer copy, the compose on Lavapipe still took 140-190 ms per frame while dragging (QEMU), with the copy and the blur the largest passes.
