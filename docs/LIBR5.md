@@ -13,11 +13,11 @@ The R5Book (`docs/r5book/index.html`) shows each part with a picture, what it is
 | Library | Header | Source | What it is |
 |---|---|---|---|
 | `libr5icons.so` | `<R5Icons.h>` | `distro/icons` | Icons and icon buttons, line glyphs (`r5_glyph_draw()`) and level glyphs for signal and battery (`r5_level_glyph_draw()`). `docs/ICONS.md` |
-| `libr5ui.so` | `<R5UI.h>` | `distro/ui` | The screen picture, cards, the sidebar, the page heading, the administrator lock (`<AdminLock.h>`), and the window effects (`<WindowEffects.h>`). It links `libr5icons.so` because a locked sidebar row draws `R5_ICON_LOCKED` |
+| `libr5ui.so` | `<R5UI.h>` | `distro/ui` | The screen picture, cards, the sidebar, the page heading, the administrator lock (`<AdminLock.h>`), the window effects (`<WindowEffects.h>`), and the tilt level and axis bar (`<TiltLevel.h>`, `<AxisBar.h>`). It links `libr5icons.so` because a locked sidebar row draws `R5_ICON_LOCKED` |
 | `libr5wifi.so` | `<R5WiFi.h>` | `distro/wifi/lib` | The Wi-Fi panel (`WiFiView`), the Wi-Fi state machine (`WiFiController`), the network list, and the Wi-Fi glyphs. From air/OS, MIT. Regular image only. It links `libr5icons.so`, which draws the signal bars. See "Wi-Fi Kit" below |
 | `libr5admin.so` | `<R5Admin.h>` | `distro/admin` | Admin requests: a request that changes the machine goes to a service's own port, where the kernel names the sender (uid, group, team). Login, bluetooth_server, `libr5ui.so`, `libr5bt.so`, Users and bluetooth_audio use it. Both images. See "Admin requests" below |
 | `libr5bt.so` | `<R5Bluetooth.h>` | `distro/bluetooth/lib` | The Bluetooth panel (`BluetoothView`), its controller (`BluetoothController`) and state. R5's own, MIT. Regular image only, because it needs `libbluetooth.so`. It links `libr5icons.so` (the Bluetooth glyph and the signal bars) and `libr5ui.so` (`BCard`). See "Bluetooth Kit" below |
-| `libr5game.so` | `<GameController.h>`, `<GameControllerView.h>` | `distro/game/lib` | Game controllers: `BGameController` (the standard layout, name, vendor and product ID, battery, button labels, plug and unplug messages) and `BGameControllerView` (the live picture). R5's own, MIT. Both images; the mapping database only in the regular image. It links `libr5icons.so` (the PlayStation glyphs). See "Game Kit" below |
+| `libr5game.so` | `<GameController.h>`, `<GameControllerView.h>`, `<GameControllerMotionView.h>` | `distro/game/lib` | Game controllers: `BGameController` (the standard layout, name, vendor and product ID, battery, button labels, plug and unplug messages, rumble, trigger effects and motion), `BGameControllerView` (the live picture) and `BGameControllerMotionView` (tilt and turn). R5's own, MIT. Both images; the mapping database only in the regular image. It links `libr5icons.so` (the PlayStation glyphs) and `libr5ui.so` (`BTiltLevel`, `BAxisBar`). See "Game Kit" below |
 
 `scripts/apply-icons.py` and `scripts/apply-r5ui.py` copy the sources into the Haiku tree, copy the header to `headers/os/interface/`, and add the library to the regular image and the minimum image. On a running system the files are `/system/lib/libr5icons.so` and `/system/lib/libr5ui.so`. The soname is the file name, with no version suffix, the same way `libbe.so` is named.
 
@@ -296,6 +296,30 @@ BAppearanceKit::BAccentButton* signIn = new BAppearanceKit::BAccentButton(
 signIn->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
 ```
 
+## Tilt level
+
+`BAppearanceKit::BTiltLevel` (`<TiltLevel.h>`, added 17 Nov 2026) is a spirit level seen from above: a circle with a cross and a small centre ring, and a bubble in the accent colour (`B_CONTROL_HIGHLIGHT_COLOR`). `SetValue(x, y)` moves the bubble, each -1 to 1 (left to right, top to bottom; NaN is 0), clamped, and kept inside the circle; `X()` and `Y()` read it back. It redraws only when the value changed. It shows a value; the user does not edit it. The lines mix `B_PANEL_TEXT_COLOR` into the parent's colour, so it follows dark mode. Its size follows the plain font: at least 5, preferred 7.5, at most 10 line heights square. `Archive()` keeps the value (`"r5:x"`, `"r5:y"`). First user: `BGameControllerMotionView` (the tilt of a game controller); a second is any program that shows a two-axis value around a centre (a balance, a stick's position).
+
+```cpp
+#include <TiltLevel.h>
+
+BAppearanceKit::BTiltLevel* level = new BAppearanceKit::BTiltLevel("tilt");
+level->SetValue(motion.acceleration[0], motion.acceleration[2]);
+```
+
+## Axis bar
+
+`BAppearanceKit::BAxisBar` (`<AxisBar.h>`, added 17 Nov 2026) is a horizontal rounded bar for a value from -1 to 1 that fills from the middle in the accent colour: to the right for a positive value, to the left for a negative one, with a tick at 0. `SetValue()` (clamped, NaN is 0) and `Value()`. For a value that has a centre: a turn rate, a stick axis, a balance. It is not a control (that is `BSlider`) and not progress (that is `BStatusBar`, which fills from the left). One line height high, at least 5 and preferably 14 line heights wide, as wide as the layout gives it. Dark mode as `BTiltLevel`. `Archive()` keeps `"r5:value"`.
+
+```cpp
+#include <AxisBar.h>
+
+BAppearanceKit::BAxisBar* pitch = new BAppearanceKit::BAxisBar("pitch");
+pitch->SetValue(motion.rotation[0] / 360);
+```
+
+What was checked first (`AGENTS.md`, LibR5): libr5ui had no level or centred bar; `r5_level_glyph_draw()` in libr5icons draws signal and battery steps, not a position. In Haiku, `BSlider` and `BChannelSlider` are controls the user drags, `BStatusBar` fills from the left only, and nothing draws a two-axis position; `BGameControllerView` draws sticks as part of its picture, not as a view of its own. So both are new, in libr5ui, because the Game Kit uses them and other programs can.
+
 ## Account picture
 
 `r5_avatar_draw(view, circle, icon, highlighted)` in `<R5UI.h>` draws a round plate with a thin ring and the icon in the middle. `highlighted` gives the light accent plate (an administrator, as on Sign in); otherwise the plate is gray and the picture is drawn in gray. Without an icon it draws a plain person outline. `r5_avatar_icon_side(circleSide)` is the icon size that is drawn pixel for pixel; any other size is filtered. `BUserCard`, `BUserListItem` and the Sign in window use it.
@@ -483,3 +507,28 @@ The watcher is one looper per team in this library. The last `StopWatching()` qu
 The family: no mapping is Unknown; a chosen layout gives its own family; a name with "M30", "Genesis", "Mega Drive" or "Saturn" is Sega Genesis; vendor `0x054C` is PlayStation, `0x057E` Nintendo; every other mapped controller is Xbox (the standard layout). The Sega shape draws C and Z on the right and left shoulder of the standard layout, and L and R on the triggers, where the database puts the 8BitDo M30's extra buttons; not checked with the controller.
 
 `gamecontroller_test` (regular image, `/bin`) is the test without hardware: the parser and the descriptor-first rules, the installed database, a virtual controller on bluetooth_hid read through `BGameController`, two synthetic pads with the M30's IDs (one with a hat, one with the d-pad on X and Y), a saved setup and a chosen layout, the plug and unplug messages, and the drawing. `gamecontroller_test --hold <seconds>` keeps that virtual controller for a look at the Settings page.
+
+### Feel and motion (added 17 Nov 2026)
+
+Option C, phase 1 (`docs/GAME-CONTROLLERS.md`): rumble, trigger effects and motion for the DualSense, the DualSense Edge and the DualShock 4 over USB and Bluetooth, and rumble on any controller whose report descriptor has HID PID force feedback (USB HID PID 1.0, usage page `0x0F`). The calls are added at the end of `BGameController`, after `HasSavedMapping()`, with two enums and a struct before the class; nothing that shipped changed. A call the open controller cannot do returns `B_NOT_SUPPORTED`; before `Open()` every call returns `B_NO_INIT`. None of it is tested with a real controller.
+
+| Call | What it does |
+|---|---|
+| `CanRumble()`, `SetRumble(strong, weak, duration)`, `StopRumble()` | `strong` is the heavy, low-frequency motor (the left one), `weak` the light, fast one (the right), each 0 to 1. After `duration` (µs) the library stops it from a thread of its own; 0 keeps it until the next call; a negative one is `B_BAD_VALUE`. A PID controller gets one effect: a sine (Set Periodic Report) when it offers one, else a constant force, with the larger of the two values as the magnitude and a period of 60 ms (strong) or 20 ms (weak). `Close()` stops it |
+| `HasTriggerEffects()`, `SetTriggerEffect(game_controller_trigger, game_controller_trigger_effect, start, strength)` | DualSense and Edge only. `B_CONTROLLER_TRIGGER_LEFT` (0) or `_RIGHT` (1); `B_TRIGGER_EFFECT_OFF` (0), `_RESISTANCE` (1), `_CLICK` (2), `_VIBRATION` (3); `start` is where on the pull it begins and `strength` how hard, each 0 to 1. The controller's simple modes (`0x05`, `0x01`, `0x02`, `0x06`); `Close()` sets both triggers free |
+| `HasMotion()`, `SetMotionEnabled(bool)`, `IsMotionEnabled()`, `GetMotion(game_controller_motion*)` | `game_controller_motion` has `timestamp` (`system_time()` when the report came), `acceleration[3]` in g and `rotation[3]` in degrees per second (x pitch, y yaw, z roll), and `_reserved[4]`. `Update()` reads the newest report; `GetMotion()` is `B_NOT_ALLOWED` while motion is off and `B_ENTRY_NOT_FOUND` until the first sample. Uncalibrated: 8192 counts per g and 16 per degree per second, SDL's values without the controller's calibration report; the axes as SDL documents its sensors (x right, y up, z toward the player), not checked with a controller |
+
+Per model, all built in user space (`GameControllerReports.cpp`, from SDL's `SDL_hidapi_ps4.c` and `SDL_hidapi_ps5.c` as a reference for the layouts, facts only, zlib):
+- DualSense: output report `0x02` (48 bytes) on USB, `0x31` (78 bytes, with `0x00`, `0x10` and a CRC-32 of `0xA2` and bytes 0 to 73 in bytes 74 to 77) on Bluetooth. The motors and both trigger effects are sent every time, with the improved rumble of firmware 2.24 and later (the firmware report `0x20` is read on USB; over Bluetooth and on the Edge it is assumed). Motion from input report `0x01` on USB and `0x31` on Bluetooth.
+- DualShock 4: output report `0x05` (32 bytes) on USB, `0x11` (78 bytes, `0xC4`, CRC) on Bluetooth, with only the rumble flag, so the light bar keeps its colour. Motion from `0x01` on USB and `0x11` on Bluetooth.
+- Over Bluetooth both controllers send only their short report `0x01` until their first output report, then only their full report. `SetMotionEnabled(true)` sends one; a rumble or trigger effect does too. bluetooth_hid then builds the short report from every full one, so `BJoystick` programs keep their buttons and sticks (`R5HIDReports.h` in hid_shared).
+- HID PID: Device Control (Device Reset, Enable Actuators) and Device Gain at the first rumble, then Create New Effect (feature) and the effect block index from PID Block Load (feature) when the controller manages its own effects, else block 1; Set Effect, Set Periodic or Set Constant Force and Effect Operation Start Solo per rumble; Effect Operation Stop to stop. Feature reports are only carried over USB; a Bluetooth PID controller that needs them answers the error.
+
+The driver side, three additive calls in `<joystick_driver.h>` (an R5 snippet), answered by hid_shared for usb_hid and bluetooth_hid (i2c_hid and hyperv/hid answer `B_NOT_SUPPORTED`). Each takes a structure whose pointer and lengths come from the caller; hid_shared copies them with `user_memcpy()` after `IS_USER_ADDRESS()` on both ends:
+- `R5_JOYSTICK_SEND_REPORT` (`B_JOYSTICK_DRIVER_BASE + 83`, `r5_joystick_report`): an output or feature report the report descriptor declares with that type and ID, at most as long as declared (padded with zeros to that length), report ID first when the device uses IDs. usb_hid sends an output report on the interrupt OUT pipe when there is one (one at a time, one second at most), else as `SET_REPORT`, and a feature report as `SET_REPORT`; bluetooth_hid hands an output report to bluetooth_server (its queue now holds up to 512 bytes per report), a feature report is `B_NOT_SUPPORTED`.
+- `R5_JOYSTICK_GET_REPORT` (`+ 84`): `R5_JOYSTICK_REPORT_INPUT` gives the last input report with that ID as it came, its first 128 bytes, with `timestamp` (four IDs are kept; usb_hid only sees reports while the joystick is open); `R5_JOYSTICK_REPORT_FEATURE` reads a declared feature report with `GET_REPORT` (usb_hid only).
+- `R5_JOYSTICK_GET_DESCRIPTOR` (`+ 85`, `r5_joystick_descriptor`): the report descriptor as the device gave it (at most 4096 bytes), or `B_BUFFER_OVERFLOW` with the full length when it did not fit.
+
+`BGameControllerMotionView` (`<GameControllerMotionView.h>`): the controller's motion as a `BTiltLevel` ("Tilt") and three `BAxisBar`s ("Pitch", "Roll", "Yaw" over "Turn"), from the Appearance Kit. `SetMotion(const game_controller_motion&)` shows a sample: the level from the acceleration's x and z, the bars from the rotation, full at `TurnRange()` degrees per second (360 unless `SetTurnRange()` changed it). `Reset()` puts everything back in the middle. The program reads the controller; the view only shows. A private data pointer, four reserved virtual functions and `_reserved[4]`. The library now links `libr5ui.so`.
+
+`gamecontroller_feel_test` (regular image, `/bin`) is the test without hardware: a virtual DualSense on bluetooth_hid with report IDs and the full report `0x31` in and out, the three driver calls (and what they refuse, kernel addresses included), the buttons and motion from full reports only, the exact rumble and trigger reports with their CRC in bluetooth_hid's output queue, a timed rumble that stops, `Close()` freeing the triggers, and the two widgets drawing. `scripts/test-game-feel.sh` runs the host unit test of the report builders, the CRC, the motion parser, the short report and the PID reports; `scripts/fuzz-bt.sh hid` fuzzes the descriptor parser and the report code.

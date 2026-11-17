@@ -295,6 +295,37 @@ BLayoutBuilder::Group&lt;&gt;(bottomRow, B_HORIZONTAL)
 	r5_admin_prompt_unlock(BMessenger(<span class="k">this</span>));	<span class="c">// kMsgAdminLockChanged follows</span></pre>
 		</section>
 
+		<!-- BAxisBar -->
+		<section class="entry" id="BAxisBar">
+			<div class="entry-header"><h2>BAxisBar</h2><span class="kind">class</span></div>
+			<table class="facts">
+				<tr><th>Declared in</th><td>&lt;AxisBar.h&gt;</td></tr>
+				<tr><th>Derived from</th><td>BView</td></tr>
+				<tr><th>First user</th><td>BGameControllerMotionView (Pitch, Roll, Yaw)</td></tr>
+			</table>
+			<p>A rounded bar for a value from -1 to 1 that fills from the middle in the accent colour: to the
+			right for a positive value, to the left for a negative one, with a tick at 0. For a value with a
+			centre, such as a turn rate or a stick axis. It only shows the value: a value the user drags is a
+			<code class="inline">BSlider</code>, progress is a <code class="inline">BStatusBar</code>. The lines
+			come from the panel text colour, so it follows dark mode. One line height high.</p>
+
+			<figure class="stage">
+				<div class="shot sys" style="flex-direction:column;gap:10px;align-items:stretch;width:280px">
+					<svg width="240" height="14" viewBox="0 0 240 14" aria-hidden="true"><rect x="0.5" y="1.5" width="239" height="11" rx="5.5" fill="none" stroke="#555"/><rect x="120" y="3.5" width="48" height="7" rx="3.5" fill="#3296ff"/><line x1="120.5" y1="0" x2="120.5" y2="14" stroke="#999"/></svg>
+					<svg width="240" height="14" viewBox="0 0 240 14" aria-hidden="true"><rect x="0.5" y="1.5" width="239" height="11" rx="5.5" fill="none" stroke="#555"/><rect x="100" y="3.5" width="20" height="7" rx="3.5" fill="#3296ff"/><line x1="120.5" y1="0" x2="120.5" y2="14" stroke="#999"/></svg>
+				</div>
+				<figcaption><span>0.4 and -0.17</span><span class="badge-mockup">Mockup</span></figcaption>
+			</figure>
+
+			<div class="member"><div class="sig">BAxisBar(const char* name);</div></div>
+			<div class="member"><div class="sig">void SetValue(float value);
+float Value() const;</div><p>Clamped to -1 to 1; NaN is 0. It redraws only when the value changed.</p></div>
+<pre class="code">#include &lt;AxisBar.h&gt;
+
+BAppearanceKit::BAxisBar* pitch = <span class="k">new</span> BAppearanceKit::BAxisBar(<span class="s">"pitch"</span>);
+pitch-&gt;SetValue(motion.rotation[0] / 360);</pre>
+		</section>
+
 		<!-- BCard -->
 		<section class="entry" id="BCard">
 			<div class="entry-header"><h2>BCard</h2><span class="kind">class</span></div>
@@ -578,6 +609,36 @@ const char* Id() const;</div></div>
 <pre class="code">BAppearanceKit::BSidebarItem* home = <span class="k">new</span> BAppearanceKit::BSidebarItem(
 	<span class="s">"Home"</span>, <span class="s">"home"</span>, pebble);
 home-&gt;SetEmphasized(<span class="k">true</span>);</pre>
+		</section>
+
+		<!-- BTiltLevel -->
+		<section class="entry" id="BTiltLevel">
+			<div class="entry-header"><h2>BTiltLevel</h2><span class="kind">class</span></div>
+			<table class="facts">
+				<tr><th>Declared in</th><td>&lt;TiltLevel.h&gt;</td></tr>
+				<tr><th>Derived from</th><td>BView</td></tr>
+				<tr><th>First user</th><td>BGameControllerMotionView (the Tilt of a game controller)</td></tr>
+			</table>
+			<p>A spirit level seen from above: a circle with a cross and a small centre ring, and a bubble in the
+			accent colour. x and y run from -1 to 1, left to right and top to bottom; the bubble stays inside
+			the circle. For a two-axis value around a centre: a tilt, a balance, a stick position. It only shows
+			the value. Square, 5 to 10 line heights; dark mode as <code class="inline">BAxisBar</code>.</p>
+
+			<figure class="stage">
+				<div class="shot sys">
+					<svg width="116" height="116" viewBox="0 0 116 116" aria-hidden="true"><line x1="2" y1="58" x2="114" y2="58" stroke="#999"/><line x1="58" y1="2" x2="58" y2="114" stroke="#999"/><circle cx="58" cy="58" r="17" fill="none" stroke="#999"/><circle cx="82" cy="45" r="10" fill="#3296ff"/><circle cx="58" cy="58" r="56" fill="none" stroke="#555" stroke-width="2"/></svg>
+				</div>
+				<figcaption><span>x 0.5, y -0.3</span><span class="badge-mockup">Mockup</span></figcaption>
+			</figure>
+
+			<div class="member"><div class="sig">BTiltLevel(const char* name);</div></div>
+			<div class="member"><div class="sig">void SetValue(float x, float y);
+float X() const;
+float Y() const;</div><p>Each clamped to -1 to 1; NaN is 0. It redraws only when the value changed.</p></div>
+<pre class="code">#include &lt;TiltLevel.h&gt;
+
+BAppearanceKit::BTiltLevel* level = <span class="k">new</span> BAppearanceKit::BTiltLevel(<span class="s">"tilt"</span>);
+level-&gt;SetValue(motion.acceleration[0], motion.acceleration[2]);</pre>
 		</section>
 
 		<!-- BUserCard -->

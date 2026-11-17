@@ -24,6 +24,8 @@ The R5 interface classes: what exists, and when to use it. The exact calls, colo
 | `BPasswordControl` | `<PasswordControl.h>` | A password text field with an integrated show/hide eye toggle button | Plain text controls | Sign in. Users & Accounts and Network are future users |
 | `BIconView` | `<R5IconView.h>` | One icon at its own pixel size, such as a logo beside a heading | An icon that has to grow or shrink with the view. Render a new bitmap instead | Sign in, for the R5 pebble and the clock |
 | `BAccentButton` | `<AccentButton.h>` | The one main action of a window, in the accent blue | Every button in a row. Restart, Cancel and the like stay plain `BButton`s | Sign in, for Sign in |
+| `BTiltLevel` | `<TiltLevel.h>` | A two-axis value around a centre, shown as a bubble in a circle (x and y from -1 to 1): a tilt, a balance, a stick position | A value the user sets: that is a control. A single value: use `BAxisBar` | `BGameControllerMotionView` in libr5game, the Tilt of a game controller. The Game controllers page in Settings is the second user |
+| `BAxisBar` | `<AxisBar.h>` | A value from -1 to 1 with a centre, filled from the middle: a turn rate, a stick axis | Progress (that is `BStatusBar`, from the left). A value the user drags (that is `BSlider`) | `BGameControllerMotionView` (Pitch, Roll, Yaw). The Game controllers page in Settings is the second user |
 
 ## Functions
 

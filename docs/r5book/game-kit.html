@@ -129,14 +129,71 @@ if (pad.CountDevices() &gt; 0 &amp;&amp; pad.GetDeviceName(0, name) == B_OK
 				choice).</p></div>
 		</section>
 
+		<section class="entry" id="feel">
+			<div class="entry-header"><h2 class="plain">Rumble, triggers and motion</h2><span class="kind">BGameController</span></div>
+			<p>Added at the end of <code class="inline">BGameController</code> (17 Nov 2026). For the DualSense,
+			the DualSense Edge and the DualShock 4, over USB and Bluetooth, and rumble on any controller with
+			HID force feedback (the USB HID PID page). Ask first with the <em>Can</em> and <em>Has</em> calls; a
+			call the controller cannot do returns <code class="inline">B_NOT_SUPPORTED</code>.</p>
+			<div class="member"><div class="sig">bool CanRumble() const;<br>status_t SetRumble(float strong, float weak, bigtime_t duration);<br>status_t StopRumble();</div>
+				<p><code class="inline">strong</code> is the heavy, slow motor, <code class="inline">weak</code>
+				the light, fast one, each 0 to 1. It stops by itself after <code class="inline">duration</code>
+				microseconds; 0 keeps it until the next call. <code class="inline">Close()</code> stops it.</p></div>
+			<div class="member"><div class="sig">bool HasTriggerEffects() const;<br>status_t SetTriggerEffect(game_controller_trigger trigger, game_controller_trigger_effect effect, float start, float strength);</div>
+				<p>DualSense only. <code class="inline">B_CONTROLLER_TRIGGER_LEFT</code> or
+				<code class="inline">_RIGHT</code>; <code class="inline">B_TRIGGER_EFFECT_OFF</code>,
+				<code class="inline">_RESISTANCE</code> (pushes back from the start position on),
+				<code class="inline">_CLICK</code> (resists, then gives way) or
+				<code class="inline">_VIBRATION</code>. <code class="inline">start</code> is where on the pull it
+				begins, <code class="inline">strength</code> how hard, each 0 to 1.
+				<code class="inline">Close()</code> sets both triggers free.</p></div>
+			<div class="member"><div class="sig">bool HasMotion() const;<br>status_t SetMotionEnabled(bool enabled);<br>bool IsMotionEnabled() const;<br>status_t GetMotion(game_controller_motion* motion) const;</div>
+				<p>Switch it on, call <code class="inline">Update()</code> every frame, then read the last sample:
+				<code class="inline">acceleration</code> in g (x right, y up, z toward the player),
+				<code class="inline">rotation</code> in degrees per second (pitch, yaw, roll) and the
+				<code class="inline">timestamp</code> of the report. Not calibrated per controller.</p></div>
+<pre class="code">pad.SetRumble(1.0f, 0.3f, 250000);       <span class="c">// a quarter of a second</span>
+<span class="k">if</span> (pad.HasTriggerEffects())
+	pad.SetTriggerEffect(B_CONTROLLER_TRIGGER_RIGHT, B_TRIGGER_EFFECT_CLICK, 0.4f, 0.8f);
+<span class="k">if</span> (pad.HasMotion())
+	pad.SetMotionEnabled(<span class="k">true</span>);
+<span class="c">// every frame</span>
+pad.Update();
+game_controller_motion motion;
+<span class="k">if</span> (pad.GetMotion(&amp;motion) == B_OK)
+	Steer(motion.rotation[1]);</pre>
+			<div class="note"><strong>Under the hood.</strong> The library builds each controller's own output
+			report (with the CRC-32 Bluetooth needs) and sends it through a new joystick driver call; the
+			report layouts were read from SDL's drivers (zlib), facts only. A DualSense or DualShock 4 over
+			Bluetooth switches to its full reports after the first one; the driver keeps the buttons working
+			for every <code class="inline">BJoystick</code> program. Not yet tested with a real
+			controller.</div>
+		</section>
+
+		<section class="entry" id="motion-view">
+			<div class="entry-header"><h2>BGameControllerMotionView</h2><span class="kind">class</span></div>
+			<table class="facts">
+				<tr><th>Declared in</th><td>&lt;GameControllerMotionView.h&gt;</td></tr>
+				<tr><th>Derived from</th><td>BView</td></tr>
+			</table>
+			<p>The motion of a controller: a <a href="appearance-kit.html#BTiltLevel">BTiltLevel</a> for the tilt
+			and three <a href="appearance-kit.html#BAxisBar">BAxisBar</a>s for the turn, labelled Pitch, Roll
+			and Yaw. The program reads the controller; the view only shows.</p>
+			<div class="member"><div class="sig">void SetMotion(const game_controller_motion&amp; motion);<br>void Reset();<br>void SetTurnRange(float degreesPerSecond);</div>
+				<p>A sample: the level from the acceleration's x and z, the bars full at the turn range (360
+				degrees per second unless set). <code class="inline">Reset()</code> puts everything in the
+				middle.</p></div>
+		</section>
+
 		<section class="entry" id="settings">
 			<div class="entry-header"><h2 class="plain">Where people see it</h2></div>
 			<p>Settings, Devices, Game controllers: a card per controller, and the live test of the chosen one
 			with its layout, the button-label choice and <em>Set up buttons&hellip;</em>, a window that asks
 			the person to press each control in turn. The Bluetooth page's <em>Test buttons&hellip;</em> opens
 			it.</p>
-			<div class="note"><strong>Not yet.</strong> Swapping buttons for old programs, rumble, lights, the
-			touchpad and motion. The battery shows only when the controller reports it in its input report (the
+			<div class="note"><strong>Not yet.</strong> Swapping buttons for old programs, lights and the
+			touchpad; rumble, trigger effects and motion on the page's Test box (the calls above are there).
+			The battery shows only when the controller reports it in its input report (the
 			HID Battery Strength usage). Tested in QEMU with virtual controllers fed to the Bluetooth HID
 			driver; not yet with a real controller.</div>
 		</section>
