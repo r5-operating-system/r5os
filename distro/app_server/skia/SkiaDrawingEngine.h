@@ -46,8 +46,9 @@ public:
 			SkiaTarget*			Target() const { return fTarget; }
 
 	// A read point (part 6): everything drawn so far is in memory when
-	// this returns. No-op in the CPU mode.
-			status_t			Finish();
+	// this returns. No-op in the CPU mode. M13 step 4: the warm-up on
+	// Lavapipe waits longer than the 5 s default.
+			status_t			Finish(bigtime_t timeout = 5000000);
 
 	// The window target's surface size when it is not a window engine.
 			bool				SetTargetSize(int32 width, int32 height);

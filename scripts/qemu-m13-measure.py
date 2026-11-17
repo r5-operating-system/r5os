@@ -18,7 +18,11 @@ are not touched:
   3. stops QEMU and copies the results (numbers.txt, scenario.txt,
      syslog.txt, a screenshot at "ready") to OUT.
 
-Usage: scripts/qemu-m13-measure.py [OUT] [--smp N] [--image PATH]
+  4. (M13 step 4) takes a picture during the resize and during a drag of
+     the left edge, powers off through ACPI, and lists Mesa's shader cache
+     in the image; --again boots OUT/m13.image once more without a new
+     copy, to see what that cache saves at the next start.
+Usage: scripts/qemu-m13-measure.py [OUT] [--smp N] [--image PATH] [--again]
 OUT defaults to /home/nickr/r5os/m13-measure. Other sessions jam the same
 tree: --image takes a copy made while the build lock was still held, e.g.
   . scripts/build-lock.sh && scripts/build-locked.sh @image &&
@@ -118,12 +122,18 @@ def drag(qmp, seconds):
     qmp.move(x0, y0)
     time.sleep(0.2)
     qmp.button("left", True)
+    # M13 step 4: whole circles, and the last point is the first, so the
+    # window ends where it started and the resize finds its corner (28 s
+    # left it a third of a circle away: the resize grabbed the desktop)
+    seconds -= seconds % 3
     start = time.time()
     while time.time() - start < seconds:
         a = (time.time() - start) * 2 * math.pi / 3
         qmp.move(x0 + 120 + 120 * math.cos(a + math.pi),
                  y0 + 120 * math.sin(a + math.pi))
         time.sleep(1 / 120)
+    qmp.move(x0, y0)
+    time.sleep(0.5)
     qmp.button("left", False)
 
 
@@ -137,9 +147,11 @@ def scroll(qmp, seconds):
         time.sleep(1 / 30)
 
 
-def resize(qmp, seconds):
-    # the resize corner of the document window, 7 pixels inside
-    x0, y0 = TRACKER[2] - 7, TRACKER[3] - 7
+def resize(qmp, seconds, shot=None):
+    # M13 step 4: the bottom right corner in the R5 frame's input margin,
+    # 3 pixels outside the line. 7 pixels inside (before) was the scroll
+    # bar corner: no resize happened in QEMU (QEMU run, 17 Nov 2026).
+    x0, y0 = TRACKER[2] + 3, TRACKER[3] + 3
     qmp.move(x0, y0)
     time.sleep(0.2)
     qmp.button("left", True)
@@ -147,8 +159,30 @@ def resize(qmp, seconds):
     while time.time() - start < seconds:
         f = (1 - math.cos((time.time() - start) * 2 * math.pi / 4)) / 2
         qmp.move(x0 + 150 * f, y0 + 120 * f)
+        # M13 step 4: one picture at the widest point (the outline on
+        # Lavapipe)
+        if shot is not None and time.time() - start >= 2:
+            qmp.call("screendump", filename=shot)
+            shot = None
         time.sleep(1 / 120)
     qmp.button("left", False)
+
+
+def resize_left(qmp, out):
+    # M13 step 4: the left edge, in the R5 frame's input margin outside the
+    # line: the outline grows to the left, the window moves at the end
+    x0, y0 = TRACKER[0] - 3, (TRACKER[1] + TRACKER[3]) / 2
+    qmp.move(x0, y0)
+    time.sleep(0.5)
+    qmp.button("left", True)
+    for i in range(1, 61):
+        qmp.move(x0 - 100 * i / 60, y0)
+        time.sleep(1 / 60)
+    time.sleep(0.5)
+    qmp.call("screendump", filename=os.path.join(out, "left-outline.ppm"))
+    qmp.button("left", False)
+    time.sleep(3)
+    qmp.call("screendump", filename=os.path.join(out, "left-after.ppm"))
 
 
 def main():
@@ -158,6 +192,11 @@ def main():
         i = args.index("--smp")
         smp = args[i + 1]
         del args[i:i + 2]
+    # M13 step 4: --again starts OUT/m13.image of the run before once more
+    # (no copy, nothing planted), for what Mesa kept in its shader cache
+    again = "--again" in args
+    if again:
+        args.remove("--again")
     source = IMAGE
     if "--image" in args:
         i = args.index("--image")
@@ -171,54 +210,58 @@ def main():
     for name in (serial, qmp_path):
         if os.path.exists(name):
             os.remove(name)
-
-    print("copying", source)
-    shutil.copyfile(source, image)
-    stage = os.path.join(out, "stage")
-    os.makedirs(stage, exist_ok=True)
-    files = {
-        "radeon_hd": "gpu_draw true\ngpu_debug true\n"
-                     "gpu_compositor_lavapipe true\n",
-        "kernel": "syslog_time_stamps true\nsyslog_max_size 4M\n",
-        "UserBootscript": "#!/bin/sh\n/bin/sh /boot/home/m13-measure "
-                          "/boot/home/m13/qemu > /boot/home/m13-run.txt "
-                          "2>&1 &\n",
-    }
-    for name, text in files.items():
-        with open(os.path.join(stage, name), "w", newline="\n") as f:
-            f.write(text)
-    with open(SCRIPT, newline="") as f:
-        text = f.read().replace("\r\n", "\n")
-    with open(os.path.join(stage, "m13-measure"), "w", newline="\n") as f:
-        f.write(text)
-    drivers = "myfs/home/config/settings/kernel/drivers"
-    boot = "myfs/home/config/settings/boot"
-    planted = {
-        drivers + "/radeon_hd": "radeon_hd",
-        drivers + "/kernel": "kernel",
-        boot + "/UserBootscript": "UserBootscript",
-        "myfs/home/m13-measure": "m13-measure",
-    }
-    # rm of a missing file only prints an error; the image's own
-    # UserBootscript is replaced
-    commands = ["mkdir myfs/home/config/settings/kernel", "mkdir " + drivers]
-    for target, name in planted.items():
-        commands += ["rm " + target, "cp :%s/%s %s" % (stage, name, target)]
-    text = bfs(image, commands)
-    if "Unmounting FS failed" in text:
-        print(text)
-        print("FAIL bfs_shell did not write the image")
+    if again and not os.path.exists(image):
+        print("FAIL --again: no %s from a run before" % image)
         return 1
-    # read back in a session of its own: a cat in the writing session kept
-    # the volume busy, and the unmount (and with it every write) failed
-    for target, name in planted.items():
-        got = bfs(image, ["cat " + target])
-        with open(os.path.join(stage, name), newline="") as f:
-            want = f.read().strip().splitlines()[-1]
-        if want not in got:
-            print("FAIL %s is not in the image" % target)
+
+    if not again:
+        print("copying", source)
+        shutil.copyfile(source, image)
+        stage = os.path.join(out, "stage")
+        os.makedirs(stage, exist_ok=True)
+        files = {
+            "radeon_hd": "gpu_draw true\ngpu_debug true\n"
+                         "gpu_compositor_lavapipe true\n",
+            "kernel": "syslog_time_stamps true\nsyslog_max_size 4M\n",
+            "UserBootscript": "#!/bin/sh\n/bin/sh /boot/home/m13-measure "
+                              "/boot/home/m13/qemu > /boot/home/m13-run.txt "
+                              "2>&1 &\n",
+        }
+        for name, text in files.items():
+            with open(os.path.join(stage, name), "w", newline="\n") as f:
+                f.write(text)
+        with open(SCRIPT, newline="") as f:
+            text = f.read().replace("\r\n", "\n")
+        with open(os.path.join(stage, "m13-measure"), "w", newline="\n") as f:
+            f.write(text)
+        drivers = "myfs/home/config/settings/kernel/drivers"
+        boot = "myfs/home/config/settings/boot"
+        planted = {
+            drivers + "/radeon_hd": "radeon_hd",
+            drivers + "/kernel": "kernel",
+            boot + "/UserBootscript": "UserBootscript",
+            "myfs/home/m13-measure": "m13-measure",
+        }
+        # rm of a missing file only prints an error; the image's own
+        # UserBootscript is replaced
+        commands = ["mkdir myfs/home/config/settings/kernel", "mkdir " + drivers]
+        for target, name in planted.items():
+            commands += ["rm " + target, "cp :%s/%s %s" % (stage, name, target)]
+        text = bfs(image, commands)
+        if "Unmounting FS failed" in text:
+            print(text)
+            print("FAIL bfs_shell did not write the image")
             return 1
-    print("planted", ", ".join(planted.values()))
+        # read back in a session of its own: a cat in the writing session kept
+        # the volume busy, and the unmount (and with it every write) failed
+        for target, name in planted.items():
+            got = bfs(image, ["cat " + target])
+            with open(os.path.join(stage, name), newline="") as f:
+                want = f.read().strip().splitlines()[-1]
+            if want not in got:
+                print("FAIL %s is not in the image" % target)
+                return 1
+        print("planted", ", ".join(planted.values()))
 
     qemu = subprocess.Popen([
         "qemu-system-x86_64", "-name", "R5-m13-measure",
@@ -256,14 +299,31 @@ def main():
                 print("FAIL no step", name)
                 return 1
             print("step", name)
-            action(qmp, 28)
+            if name == "resize":
+                action(qmp, 28, os.path.join(out, "resize.ppm"))
+            else:
+                action(qmp, 28)
         if not wait_serial(serial, "m13-measure: done", 180):
             print("FAIL m13-measure did not finish")
             return 1
         time.sleep(5)
+        resize_left(qmp, out)
+        print("left edge done")
+        # M13 step 4: a power off through ACPI, so what Mesa wrote to its
+        # shader cache reaches the image (a kill may drop the file cache)
+        qmp.call("system_powerdown")
+        try:
+            qemu.wait(timeout=120)
+            print("powered off")
+        except subprocess.TimeoutExpired:
+            print("no power off after 120 s, killed")
     finally:
-        qemu.kill()
+        if qemu.poll() is None:
+            qemu.kill()
         qemu.wait()
+    print(bfs(image, ["ls myfs/system/cache/app_server/mesa",
+                      "ls myfs/system/cache/app_server/mesa/mesa_shader_cache"]
+              )[-1500:])
     print(bfs(image, [
         "cp myfs/home/m13/qemu/%s :%s/%s" % (name, out, name)
         for name in ("numbers.txt", "scenario.txt", "syslog.txt")
