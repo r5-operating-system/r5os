@@ -1341,6 +1341,48 @@ mtk_ioctl(struct ieee80211com* ic, u_long cmd, void* data)
 		return mtk_sta_igtk(sc);
 	}
 
+	if (cmd == IEEE80211_IOC_HAIKU_LINK) {
+		struct ieee80211_haiku_link* link = data;
+		struct ieee80211vap* vap;
+		struct ieee80211_node* ni;
+		struct ieee80211_channel* channel;
+
+		if (link == NULL)
+			return EINVAL;
+		memset(link, 0, sizeof(*link));
+		vap = TAILQ_FIRST(&ic->ic_vaps);
+		ni = vap != NULL ? vap->iv_bss : NULL;
+		if (ni != NULL && (ni->ni_flags & IEEE80211_NODE_HE) != 0)
+			link->i_standard = 6;
+		else if (ni != NULL && (ni->ni_flags & IEEE80211_NODE_VHT) != 0)
+			link->i_standard = 5;
+		else if (ni != NULL && (ni->ni_flags & IEEE80211_NODE_HT) != 0)
+			link->i_standard = 4;
+		else if (sc->sc_tx_mode == 4)
+			link->i_standard = 6;
+		else if (sc->sc_tx_mode == 3)
+			link->i_standard = 5;
+		else if (sc->sc_tx_mode == 2)
+			link->i_standard = 4;
+		link->i_width = sc->sc_tx_width;
+		channel = ni != NULL ? ni->ni_chan : NULL;
+		if (link->i_width == 0 && channel != NULL
+			&& channel != IEEE80211_CHAN_ANYC) {
+			if (IEEE80211_IS_CHAN_VHT160(channel))
+				link->i_width = 160;
+			else if (IEEE80211_IS_CHAN_VHT80(channel))
+				link->i_width = 80;
+			else if (IEEE80211_IS_CHAN_HT40(channel)
+				|| IEEE80211_IS_CHAN_VHT40(channel))
+				link->i_width = 40;
+			else if ((channel->ic_flags & IEEE80211_CHAN_HT) != 0
+				|| (channel->ic_flags & IEEE80211_CHAN_VHT) != 0)
+				link->i_width = 20;
+		}
+		link->i_streams = sc->sc_tx_nss;
+		return 0;
+	}
+
 	if (cmd != IEEE80211_IOC_HAIKU_TX_RATE || rate == NULL)
 		return ENOTTY;
 

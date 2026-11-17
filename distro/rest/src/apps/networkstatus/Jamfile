@@ -16,7 +16,7 @@ Application NetworkStatus :
 	WirelessNetworkMenuItem.cpp
 	WiFiWindow.cpp
 
-	: be shared localestub libr5icons.so $(TARGET_NETWORK_LIBS)
+	: be shared localestub libr5icons.so libr5wifi.so $(TARGET_NETWORK_LIBS)
 		libbnetapi.so [ TargetLibstdc++ ]
 	: NetworkStatus.rdef NetworkStatusIcons.rdef
 ;

@@ -1234,6 +1234,23 @@ ieee80211_ioctl_get80211(struct ieee80211vap *vap, u_long cmd,
 			error = copyout(&rate, ireq->i_data, sizeof(rate));
 		break;
 	}
+	case IEEE80211_IOC_HAIKU_LINK: {
+		struct ieee80211_haiku_link link;
+
+		if (ireq->i_len < (int)sizeof(link) || ireq->i_data == NULL) {
+			error = EINVAL;
+			break;
+		}
+		memset(&link, 0, sizeof(link));
+		if (vap->iv_ic->ic_ioctl == NULL)
+			error = ENOTTY;
+		else
+			error = vap->iv_ic->ic_ioctl(vap->iv_ic,
+				IEEE80211_IOC_HAIKU_LINK, &link);
+		if (error == 0)
+			error = copyout(&link, ireq->i_data, sizeof(link));
+		break;
+	}
 	case IEEE80211_IOC_HAIKU_SAE_AUTH: {
 		struct ieee80211_haiku_sae_auth sae;
 

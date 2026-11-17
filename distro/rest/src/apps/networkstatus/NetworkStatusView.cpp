@@ -61,6 +61,7 @@
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 #include "WiFiWindow.h"
+#include <R5WiFi.h>
 #include <R5WiFiGlyphs.h>
 #include <R5WiFiNetworkList.h>
 // SPDX-SnippetEnd
@@ -498,6 +499,12 @@ NetworkStatusView::MouseDown(BPoint point)
 		current->SetEnabled(false);
 		current->SetMarked(true);
 		menu->AddItem(current);
+		BString linkLine;
+		if (r5_wifi_link_line(linkLine) == B_OK && linkLine.Length() > 0) {
+			BMenuItem* rate = new BMenuItem(linkLine.String(), NULL);
+			rate->SetEnabled(false);
+			menu->AddItem(rate);
+		}
 	} else {
 		BMenuItem* none = new BMenuItem(B_TRANSLATE("No network"), NULL);
 		none->SetEnabled(false);
