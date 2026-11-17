@@ -4,29 +4,29 @@ Gegenereerd door `scripts/tracker-report.py`. Niet met de hand bewerken.
 
 | R5-status | Aantal |
 |---|---|
-| open | 3682 |
+| open | 3672 |
 | in-progress | 8 |
-| fixed | 137 |
+| fixed | 147 |
 | wontfix | 0 |
 | not-applicable | 109 |
 | **totaal in tracker** | **3936** |
 | open bij Haiku (laatste import) | 3936 |
 
-Nog open in R5OS: **2388** bugs, **1250** enhancements, rest overig (van 3690 open/bezig).
+Nog open in R5OS: **2381** bugs, **1247** enhancements, rest overig (van 3680 open/bezig).
 
 ## Type
 
 | Type | Aantal |
 |---|---|
-| bug | 2388 |
-| enhancement | 1250 |
+| bug | 2381 |
+| enhancement | 1247 |
 | task | 52 |
 
 ## Priority
 
 | Priority | Aantal |
 |---|---|
-| normal | 3413 |
+| normal | 3403 |
 | low | 247 |
 | high | 28 |
 | critical | 1 |
@@ -36,8 +36,8 @@ Nog open in R5OS: **2388** bugs, **1250** enhancements, rest overig (van 3690 op
 
 | Milestone | Aantal |
 |---|---|
-| Unscheduled | 2925 |
-| R1 | 417 |
+| Unscheduled | 2916 |
+| R1 | 416 |
 | R1.1 | 296 |
 | R1/beta7 | 25 |
 | R2 | 16 |
@@ -118,6 +118,7 @@ Nog open in R5OS: **2388** bugs, **1250** enhancements, rest overig (van 3690 op
 | [#9216](https://dev.haiku-os.org/ticket/9216) | assigned | Applications/Tracker | Clearing selection not possible with keyboard only |  |
 | [#9383](https://dev.haiku-os.org/ticket/9383) | assigned | Applications/Tracker | [Tracker] doesn't show a warning when renaming system folder in InfoWindow |  |
 | [#9434](https://dev.haiku-os.org/ticket/9434) | assigned | Applications/Tracker | [Tracker] wrong column display + crash in BBitmap::Lock() |  |
+| [#9438](https://dev.haiku-os.org/ticket/9438) | reopened | Add-Ons/Media/Mixer | Mixer not resampling very well |  |
 | [#9974](https://dev.haiku-os.org/ticket/9974) | assigned | Applications/Tracker | [Tracker] add Ctrl+up/down shortcuts to be able to select first/last entrie on a laptop keyboard |  |
 | [#10208](https://dev.haiku-os.org/ticket/10208) | new | Partitioning Systems | Drivesetup creating partition size errors |  |
 | [#11029](https://dev.haiku-os.org/ticket/11029) | assigned | Applications/Tracker | [Tracker] selection is lost when opening parent directory |  |
@@ -130,6 +131,8 @@ Nog open in R5OS: **2388** bugs, **1250** enhancements, rest overig (van 3690 op
 | [#11625](https://dev.haiku-os.org/ticket/11625) | assigned | Kits/Interface Kit | BBox with layout cuts title at big font sizes |  |
 | [#11735](https://dev.haiku-os.org/ticket/11735) | assigned | Kits/Interface Kit | [BTextControl] Sends a Modification Message when the text is set with a SetText() |  |
 | [#12335](https://dev.haiku-os.org/ticket/12335) | assigned | Applications/Tracker | Replace dialog doesn't use preferred date/time format |  |
+| [#12776](https://dev.haiku-os.org/ticket/12776) | assigned | Servers/media_server | media_server can't properly disconnect/reconnect from outputs |  |
+| [#12777](https://dev.haiku-os.org/ticket/12777) | assigned | Servers/media_server | media_server doesn't find new outputs until after a restart |  |
 | [#12859](https://dev.haiku-os.org/ticket/12859) | new | Add-Ons/Tracker | "Mark as read" and "Mark as..." Tracker's addons, mistakenly appear under the "Open With..." context menu. |  |
 | [#12884](https://dev.haiku-os.org/ticket/12884) | new | User Interface | Deskbar forgets settings |  |
 | [#13431](https://dev.haiku-os.org/ticket/13431) | assigned | Applications/Deskbar | Deskbar menu screen edge margin |  |
@@ -152,6 +155,7 @@ Nog open in R5OS: **2388** bugs, **1250** enhancements, rest overig (van 3690 op
 | [#15910](https://dev.haiku-os.org/ticket/15910) | new | Applications/Deskbar | Deskbar: bottom scroll arrow is not displayed sometimes |  |
 | [#15975](https://dev.haiku-os.org/ticket/15975) | new | Applications/Deskbar | Sane minimum size for Deskbar |  |
 | [#16002](https://dev.haiku-os.org/ticket/16002) | new | Applications/Mail | Mail: Untranslated strings | claude/issues-2-prefs |
+| [#16057](https://dev.haiku-os.org/ticket/16057) | new | Servers/media_addon_server | "multi_audio audio output" occupies whole CPU indefinitely |  |
 | [#16103](https://dev.haiku-os.org/ticket/16103) | new | Preferences/Printers | [Printers] Make default changes "No pending jobs" text | claude/issues-2-prefs |
 | [#16114](https://dev.haiku-os.org/ticket/16114) | new | Applications/Expander | Expander doesn't give feedback on missing command | claude/issues-1-apps |
 | [#16116](https://dev.haiku-os.org/ticket/16116) | new | User Interface | Change standard icon size for Desktop to 48x48 |  |
@@ -161,11 +165,7 @@ Nog open in R5OS: **2388** bugs, **1250** enhancements, rest overig (van 3690 op
 | [#16359](https://dev.haiku-os.org/ticket/16359) | new | Applications/Deskbar | Deskbar auto-raise status should be the same for every virtual desktop |  |
 | [#16405](https://dev.haiku-os.org/ticket/16405) | new | Applications/Command Line Tools | [open] doesn't handle URLs with spaces | claude/issues-1-apps |
 | [#16458](https://dev.haiku-os.org/ticket/16458) | new | Applications/Deskbar | Deskbar - Opens in background |  |
-| [#16471](https://dev.haiku-os.org/ticket/16471) | new | User Interface | Selected desktop icon is not distinguishable enough with black background |  |
-| [#16573](https://dev.haiku-os.org/ticket/16573) | assigned | Kits/Package Kit | Un-activated packages after install |  |
-| [#16600](https://dev.haiku-os.org/ticket/16600) | new | Applications/MediaPlayer | Very Short WAV files crash MediaPlayer (divide error) | claude/issues-1-apps |
-| [#16618](https://dev.haiku-os.org/ticket/16618) | new | User Interface | HaikuControlLook: DrawMenuBarBackground Disabled Flag dont work |  |
-| … | | | *57 meer in r5-status.tsv* | |
+| … | | | *67 meer in r5-status.tsv* | |
 
 ## Nog open (eerste 80)
 
@@ -251,5 +251,5 @@ Nog open in R5OS: **2388** bugs, **1250** enhancements, rest overig (van 3690 op
 | [#2532](https://dev.haiku-os.org/ticket/2532) | assigned | Drivers/Graphics/NeoMagic | broken Video/Audio on Dell Latitude LS [NeoMagic chipset] |  |
 | [#2551](https://dev.haiku-os.org/ticket/2551) | assigned | Applications/Tracker | [Tracker]: Copy To shows wrong content of Desktop directory when selecting a bfs volume on a usb stick |  |
 | [#2615](https://dev.haiku-os.org/ticket/2615) | assigned | Kits/Interface Kit | Improved keyboard navigation with triggers |  |
-| … | | | *3602 meer in r5-status.tsv* | |
+| … | | | *3592 meer in r5-status.tsv* | |
 
