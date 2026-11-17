@@ -13,7 +13,11 @@
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+#include <KernelExport.h>
 #include <joystick_driver.h>
+#include <lock.h>
+
+#include "R5HIDReports.h"
 // SPDX-SnippetEnd
 
 
@@ -56,6 +60,18 @@ public:
 			// R5_JOYSTICK_GET_INFO, called by hid_shared: bus, vendor and
 			// product ID, version and the product name.
 			void				GetJoystickInfo(r5_joystick_info& info) const;
+
+			// R5_JOYSTICK_SEND_REPORT, R5_JOYSTICK_GET_REPORT and
+			// R5_JOYSTICK_GET_DESCRIPTOR, called by hid_shared with kernel
+			// buffers it checked against the descriptor. type is
+			// HID_REPORT_TYPE_*; with report IDs data starts with the ID.
+			status_t			R5SendReport(uint8 type, const uint8* data,
+									size_t length);
+			status_t			R5GetReport(uint8 type, uint8 id, uint8* data,
+									size_t capacity, size_t* length,
+									bigtime_t* when);
+			status_t			R5GetDescriptor(uint8* data, size_t capacity,
+									size_t* length) const;
 			// SPDX-SnippetEnd
 
 private:
@@ -63,6 +79,10 @@ private:
 			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 			// SPDX-License-Identifier: MIT
 			void				_ReadProductName(uint8 index);
+			status_t			_R5InterruptOut(const uint8* data,
+									size_t length);
+	static	void				_R5OutCallback(void* cookie, status_t status,
+									void* data, size_t actualLength);
 			// SPDX-SnippetEnd
 
 	static	void				_TransferCallback(void *cookie,
@@ -99,6 +119,17 @@ private:
 			uint16				fProductID;
 			uint16				fVersion;
 			char				fProductName[R5_JOYSTICK_NAME_LENGTH];
+
+			// A copy of the report descriptor (NULL when it was larger than
+			// R5_JOYSTICK_MAX_DESCRIPTOR), the interrupt OUT pipe (0: none,
+			// then SET_REPORT), one report out at a time, and the last
+			// input report per ID, filled in _TransferCallback().
+			uint8*				fR5Descriptor;
+			size_t				fR5DescriptorLength;
+			usb_pipe			fR5OutPipe;
+			mutex				fR5OutLock;
+			spinlock			fR5CacheLock;
+			r5_hid_report_cache	fR5Cache;
 			// SPDX-SnippetEnd
 };
 

@@ -24,5 +24,6 @@ typedef int64_t bigtime_t;
 #define B_OK			0
 #define B_NO_MEMORY		((status_t)0x80000000)
 #define B_BAD_VALUE		((status_t)0x80000005)
+#define B_ENTRY_NOT_FOUND	((status_t)0x80006003)
 
 #endif

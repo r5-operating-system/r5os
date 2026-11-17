@@ -60,6 +60,19 @@ public:
 									{
 										(void)info;
 									}
+
+			// R5_JOYSTICK_SEND_REPORT, R5_JOYSTICK_GET_REPORT and
+			// R5_JOYSTICK_GET_DESCRIPTOR: no game controller here.
+			status_t				R5SendReport(uint8 type,
+										const uint8* data, size_t length)
+									{ return B_NOT_SUPPORTED; }
+			status_t				R5GetReport(uint8 type, uint8 id,
+										uint8* data, size_t capacity,
+										size_t* length, bigtime_t* when)
+									{ return B_NOT_SUPPORTED; }
+			status_t				R5GetDescriptor(uint8* data,
+										size_t capacity, size_t* length) const
+									{ return B_NOT_SUPPORTED; }
 			// SPDX-SnippetEnd
 
 private:

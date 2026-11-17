@@ -38,10 +38,14 @@ HIDDevice::HIDDevice(int32 id, void* owner, const uint8* descriptor,
 	fBatteryParser(NULL),
 	fBatteryItem(NULL),
 	fBatteryBuffer(NULL),
-	fBattery(-1)
+	fBattery(-1),
+	fDescriptor(NULL),
+	fDescriptorLength(0),
+	fShortReportSize(0)
 {
 	mutex_init(&fLock, DRIVER_NAME " device");
 	memset(&fInfo, 0, sizeof(fInfo));
+	r5_hid_cache_init(fReportCache);
 
 	// Padded by 3 so that HIDReportItem can read 32 bits at a time, as in
 	// usb_hid.
@@ -80,6 +84,24 @@ HIDDevice::HIDDevice(int32 id, void* owner, const uint8* descriptor,
 	// Without memory for it the device works, without a battery.
 	_FindBattery(descriptor, descriptorLength);
 
+	// For R5_JOYSTICK_GET_DESCRIPTOR (HID PID in libr5game); without
+	// memory for it the device works without it.
+	fDescriptor = (uint8*)malloc(descriptorLength);
+	if (fDescriptor != NULL) {
+		memcpy(fDescriptor, descriptor, descriptorLength);
+		fDescriptorLength = descriptorLength;
+	}
+
+	// The short input report 0x01 with its buttons and axes, which a
+	// PlayStation controller stops sending once it sends its full report.
+	if (fParser.UsesReportIDs()) {
+		HIDReport* shortReport = fParser.FindReport(HID_REPORT_TYPE_INPUT,
+			0x01);
+		if (shortReport != NULL
+			&& shortReport->ReportSize() + 1 <= R5_BTHID_MAX_REPORT)
+			fShortReportSize = shortReport->ReportSize() + 1;
+	}
+
 	fStatus = B_OK;
 }
 
@@ -95,6 +117,7 @@ HIDDevice::~HIDDevice()
 
 	delete fBatteryParser;
 	free(fBatteryBuffer);
+	free(fDescriptor);
 	delete[] fQueue;
 	free(fTransferBuffer);
 	mutex_destroy(&fLock);
@@ -169,6 +192,23 @@ HIDDevice::Feed(const uint8* data, size_t length)
 		return;
 
 	_UpdateBattery(data, length);
+
+	// The report as it came, for R5_JOYSTICK_GET_REPORT (motion).
+	r5_hid_cache_store(fReportCache, data, length, fParser.UsesReportIDs(),
+		system_time());
+
+	// A PlayStation controller's full report: the joystick gets the short
+	// report with the same buttons and axes (R5HIDReports.h).
+	uint8 shortReport[R5_BTHID_MAX_REPORT];
+	if (fShortReportSize >= 10) {
+		size_t built = r5_hid_sony_short_report(fInfo.vendor_id,
+			fInfo.product_id, data, length, shortReport, fShortReportSize);
+		if (built > 0) {
+			memset(shortReport + built, 0, fShortReportSize - built);
+			data = shortReport;
+			length = fShortReportSize;
+		}
+	}
 
 	if (fTransferScheduled) {
 		fTransferScheduled = false;
@@ -334,4 +374,48 @@ HIDDevice::_UpdateBattery(const uint8* data, size_t length)
 
 	if (fBatteryItem->Extract() == B_OK && fBatteryItem->Valid())
 		fBattery = (int32)fBatteryItem->ScaledRangeData(0, 100);
+}
+
+
+status_t
+HIDDevice::R5SendReport(uint8 type, const uint8* data, size_t length)
+{
+	if (fRemoved)
+		return ENODEV;
+	if (data == NULL || length == 0 || length > R5_BTHID_MAX_REPORT)
+		return B_BAD_VALUE;
+	// A feature report would be SET_REPORT on the control channel (HID
+	// profile 1.1.1, 7.4.2), which bluetooth_server does not send yet.
+	if (type != HID_REPORT_TYPE_OUTPUT)
+		return B_NOT_SUPPORTED;
+	return bthid_queue_output(fID, data, length);
+}
+
+
+status_t
+HIDDevice::R5GetReport(uint8 type, uint8 id, uint8* data, size_t capacity,
+	size_t* length, bigtime_t* when)
+{
+	*length = 0;
+	*when = 0;
+	if (type != HID_REPORT_TYPE_INPUT)
+		return B_NOT_SUPPORTED;
+
+	MutexLocker locker(fLock);
+	if (fRemoved)
+		return ENODEV;
+	return r5_hid_cache_get(fReportCache, id, data, capacity, length, when);
+}
+
+
+status_t
+HIDDevice::R5GetDescriptor(uint8* data, size_t capacity, size_t* length)
+	const
+{
+	if (fDescriptor == NULL)
+		return B_NOT_SUPPORTED;
+	*length = fDescriptorLength;
+	memcpy(data, fDescriptor,
+		fDescriptorLength < capacity ? fDescriptorLength : capacity);
+	return B_OK;
 }

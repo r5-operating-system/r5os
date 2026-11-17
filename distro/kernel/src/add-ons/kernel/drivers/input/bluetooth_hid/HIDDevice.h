@@ -17,6 +17,7 @@
 #include "bluetooth/R5BluetoothHID.h"
 
 #include "HIDParser.h"
+#include "R5HIDReports.h"
 
 
 class HIDReportItem;
@@ -73,6 +74,19 @@ public:
 			// report came yet.
 			int32				Battery() const;
 
+			// R5_JOYSTICK_SEND_REPORT, R5_JOYSTICK_GET_REPORT and
+			// R5_JOYSTICK_GET_DESCRIPTOR (docs/GAME-CONTROLLERS.md, option C
+			// phase 1), called by hid_shared with kernel buffers it checked
+			// against the descriptor. Output reports go to bluetooth_server;
+			// feature reports are not carried over Bluetooth yet.
+			status_t			R5SendReport(uint8 type, const uint8* data,
+									size_t length);
+			status_t			R5GetReport(uint8 type, uint8 id, uint8* data,
+									size_t capacity, size_t* length,
+									bigtime_t* when);
+			status_t			R5GetDescriptor(uint8* data, size_t capacity,
+									size_t* length) const;
+
 private:
 			void				_Deliver(const uint8* data, size_t length);
 			void				_FindBattery(const uint8* descriptor,
@@ -118,6 +132,14 @@ private:
 			HIDReportItem*		fBatteryItem;
 			uint8*				fBatteryBuffer;
 			int32				fBattery;
+
+			// A copy of the report descriptor, the last input report per
+			// ID as it came (fLock), and room for the short report built
+			// from a PlayStation controller's full one (R5HIDReports.h).
+			uint8*				fDescriptor;
+			size_t				fDescriptorLength;
+			r5_hid_report_cache	fReportCache;
+			size_t				fShortReportSize;
 };
 
 

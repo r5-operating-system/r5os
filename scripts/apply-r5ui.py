@@ -43,6 +43,10 @@ FILES = (
     "DriverSettings.cpp",
     "WindowEffects.cpp",
     "WindowEffects.h",
+    "TiltLevel.cpp",
+    "TiltLevel.h",
+    "AxisBar.cpp",
+    "AxisBar.h",
 )
 
 
@@ -73,7 +77,7 @@ def apply_r5ui(haiku: pathlib.Path | None = None) -> None:
             "ActionCard.h", "PageHeader.h", "ScreenArrangement.h",
             "UserCard.h", "UserListItem.h", "PasswordControl.h",
             "R5IconView.h", "AccentButton.h", "AdminLock.h",
-            "WindowEffects.h"):
+            "WindowEffects.h", "TiltLevel.h", "AxisBar.h"):
         shutil.copy2(SRC / name, headers / name)
         print(f"copied {name} into the public headers")
 

@@ -84,6 +84,36 @@ enum game_controller_connection {
 	B_GAME_CONTROLLER_CONNECTION_BLUETOOTH = 2
 };
 
+// Feel and motion (added 17 Nov 2026, docs/GAME-CONTROLLERS.md, option C
+// phase 1). The numbers are part of the contract.
+enum game_controller_trigger {
+	B_CONTROLLER_TRIGGER_LEFT = 0,
+	B_CONTROLLER_TRIGGER_RIGHT = 1
+};
+
+// What a DualSense trigger does against the finger.
+enum game_controller_trigger_effect {
+	B_TRIGGER_EFFECT_OFF = 0,
+		// free, as without a game
+	B_TRIGGER_EFFECT_RESISTANCE = 1,
+		// pushes back from the start position on
+	B_TRIGGER_EFFECT_CLICK = 2,
+		// resists, then gives way, like a trigger that fires
+	B_TRIGGER_EFFECT_VIBRATION = 3
+		// buzzes from the start position on
+};
+
+struct game_controller_motion {
+	bigtime_t	timestamp;
+		// system_time() when the controller sent it
+	float		acceleration[3];
+		// in g: x to the right, y up, z toward the player; about (0, 1, 0)
+		// when the controller lies flat
+	float		rotation[3];
+		// in degrees per second around x (pitch), y (yaw) and z (roll)
+	uint32		_reserved[4];
+};
+
 // To the messenger of StartWatching(), with the string "device" (the name
 // for Open(), such as "usb/0").
 enum {
@@ -183,6 +213,39 @@ public:
 									uint16 productID, const char* mapping);
 			bool				HasSavedMapping() const;
 									// the open controller uses one
+
+	// Feel and motion (added 17 Nov 2026; docs/LIBR5.md, "Game Kit").
+	// Phase 1: the DualSense, the DualSense Edge and the DualShock 4 over
+	// USB and Bluetooth, and rumble on any controller with HID PID force
+	// feedback. A call the open controller cannot do returns
+	// B_NOT_SUPPORTED; the Can and Has calls say so beforehand.
+
+	// Rumble: strong is the heavy, low motor, weak the light, fast one,
+	// each 0 to 1. It stops by itself after duration (0: when the next
+	// call changes it). Close() stops it.
+			bool				CanRumble() const;
+			status_t			SetRumble(float strong, float weak,
+									bigtime_t duration);
+			status_t			StopRumble();
+
+	// Trigger effects (DualSense and Edge): start is where on the pull the
+	// effect begins, strength how hard it is, each 0 to 1. Close() sets
+	// both triggers free again.
+			bool				HasTriggerEffects() const;
+			status_t			SetTriggerEffect(
+									game_controller_trigger trigger,
+									game_controller_trigger_effect effect,
+									float start, float strength);
+
+	// Motion: switch it on, then call Update() each frame and read the
+	// last sample. Over Bluetooth this switches a PlayStation controller
+	// to its full reports until it disconnects; its buttons keep working
+	// for every program. B_ENTRY_NOT_FOUND until the first sample came.
+			bool				HasMotion() const;
+			status_t			SetMotionEnabled(bool enabled);
+			bool				IsMotionEnabled() const;
+			status_t			GetMotion(game_controller_motion* motion)
+									const;
 
 private:
 			struct Private;

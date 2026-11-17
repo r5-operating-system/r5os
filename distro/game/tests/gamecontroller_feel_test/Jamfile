@@ -1,0 +1,16 @@
+# SPDX-FileCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+# gamecontroller_feel_test: rumble, trigger effects and motion of
+# libr5game.so without a real controller (docs/GAME-CONTROLLERS.md, option C
+# phase 1). Regular image only.
+SubDir HAIKU_TOP src bin gamecontroller_feel_test ;
+
+UsePrivateHeaders bluetooth device ;
+SubDirHdrs $(HAIKU_TOP) src preferences r5game ;
+SEARCH_SOURCE += [ FDirName $(HAIKU_TOP) src preferences r5game ] ;
+
+Application gamecontroller_feel_test :
+	gamecontroller_feel_test.cpp
+	GameControllerReports.cpp
+	: be libr5game.so libr5ui.so [ TargetLibstdc++ ]
+	;

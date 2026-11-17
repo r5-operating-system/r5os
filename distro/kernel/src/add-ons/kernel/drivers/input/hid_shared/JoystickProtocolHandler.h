@@ -75,6 +75,19 @@ private:
 			HIDReportItem*			fBatteryItem;
 			int16					fBattery;
 			// SPDX-SnippetEnd
+
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			// R5_JOYSTICK_SEND_REPORT, R5_JOYSTICK_GET_REPORT and
+			// R5_JOYSTICK_GET_DESCRIPTOR (docs/GAME-CONTROLLERS.md, option C
+			// phase 1): checked against the report descriptor here, carried
+			// by the HIDDevice of the driver.
+			status_t				_SendReport(void* buffer, size_t length);
+			status_t				_GetReport(void* buffer, size_t length);
+			status_t				_GetDescriptor(void* buffer,
+										size_t length);
+			// SPDX-SnippetEnd
 };
 
 #endif // USB_JOYSTICK_PROTOCOL_HANDLER_H

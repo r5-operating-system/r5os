@@ -375,6 +375,17 @@ JoystickProtocolHandler::Control(uint32 *cookie, uint32 op, void *buffer,
 		case R5_JOYSTICK_GET_INFO:
 			return _GetInfo(buffer, length);
 		// SPDX-SnippetEnd
+
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		case R5_JOYSTICK_SEND_REPORT:
+			return _SendReport(buffer, length);
+		case R5_JOYSTICK_GET_REPORT:
+			return _GetReport(buffer, length);
+		case R5_JOYSTICK_GET_DESCRIPTOR:
+			return _GetDescriptor(buffer, length);
+		// SPDX-SnippetEnd
 	}
 
 	return B_ERROR;
@@ -532,5 +543,179 @@ JoystickProtocolHandler::_GetInfo(void* buffer, size_t length)
 	if (user_memcpy(buffer, &info, size) != B_OK)
 		return B_BAD_ADDRESS;
 	return B_OK;
+}
+// SPDX-SnippetEnd
+
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+static bool
+r5_user_range(const void* data, size_t length)
+{
+	// Both ends in user space; user_memcpy() catches what is not mapped.
+	return length > 0 && IS_USER_ADDRESS(data)
+		&& IS_USER_ADDRESS((const uint8*)data + length - 1)
+		&& (addr_t)data + length > (addr_t)data;
+}
+
+
+static status_t
+r5_read_request(void* buffer, size_t length, r5_joystick_report& request)
+{
+	if (length < sizeof(request))
+		return B_BAD_VALUE;
+	if (!IS_USER_ADDRESS(buffer)
+		|| user_memcpy(&request, buffer, sizeof(request)) != B_OK)
+		return B_BAD_ADDRESS;
+	return B_OK;
+}
+
+
+/*!	An output or feature report from a program: only one the report
+	descriptor declares, with that type and ID, at most as long as declared,
+	padded with zeros to that length. The driver sends it (usb_hid: the
+	interrupt OUT pipe or SET_REPORT; bluetooth_hid: bluetooth_server).
+*/
+status_t
+JoystickProtocolHandler::_SendReport(void* buffer, size_t length)
+{
+	r5_joystick_report request;
+	status_t status = r5_read_request(buffer, length, request);
+	if (status != B_OK)
+		return status;
+
+	uint8 type;
+	if (request.type == R5_JOYSTICK_REPORT_OUTPUT)
+		type = HID_REPORT_TYPE_OUTPUT;
+	else if (request.type == R5_JOYSTICK_REPORT_FEATURE)
+		type = HID_REPORT_TYPE_FEATURE;
+	else
+		return B_BAD_VALUE;
+
+	HIDDevice* device = fReport.Device();
+	HIDParser& parser = device->Parser();
+	bool withID = parser.UsesReportIDs();
+	if (request.id > 0xff || withID != (request.id != 0))
+		return B_BAD_VALUE;
+	HIDReport* report = parser.FindReport(type, (uint8)request.id);
+	if (report == NULL)
+		return B_NOT_SUPPORTED;
+
+	size_t size = report->ReportSize() + (withID ? 1 : 0);
+	if (size == 0 || size > R5_JOYSTICK_MAX_REPORT)
+		return B_NOT_SUPPORTED;
+	if (request.length == 0 || request.length > size)
+		return B_BAD_VALUE;
+	if (!r5_user_range(request.data, request.length))
+		return B_BAD_ADDRESS;
+
+	uint8* data = (uint8*)calloc(1, size);
+	if (data == NULL)
+		return B_NO_MEMORY;
+	if (user_memcpy(data, request.data, request.length) != B_OK) {
+		free(data);
+		return B_BAD_ADDRESS;
+	}
+	if (withID)
+		data[0] = (uint8)request.id;
+
+	status = device->R5SendReport(type, data, size);
+	free(data);
+	return status;
+}
+
+
+/*!	The last input report with that ID (kept by the driver as it came), or
+	a feature report the descriptor declares, read from the device.
+*/
+status_t
+JoystickProtocolHandler::_GetReport(void* buffer, size_t length)
+{
+	r5_joystick_report request;
+	status_t status = r5_read_request(buffer, length, request);
+	if (status != B_OK)
+		return status;
+
+	uint8 type;
+	if (request.type == R5_JOYSTICK_REPORT_INPUT)
+		type = HID_REPORT_TYPE_INPUT;
+	else if (request.type == R5_JOYSTICK_REPORT_FEATURE)
+		type = HID_REPORT_TYPE_FEATURE;
+	else
+		return B_BAD_VALUE;
+
+	HIDDevice* device = fReport.Device();
+	HIDParser& parser = device->Parser();
+	bool withID = parser.UsesReportIDs();
+	if (request.id > 0xff || withID != (request.id != 0))
+		return B_BAD_VALUE;
+	if (parser.FindReport(type, (uint8)request.id) == NULL)
+		return B_NOT_SUPPORTED;
+
+	size_t capacity = request.length;
+	if (capacity > R5_JOYSTICK_MAX_REPORT)
+		capacity = R5_JOYSTICK_MAX_REPORT;
+	if (!r5_user_range(request.data, capacity))
+		return B_BAD_ADDRESS;
+
+	uint8* data = (uint8*)calloc(1, capacity);
+	if (data == NULL)
+		return B_NO_MEMORY;
+	size_t got = 0;
+	bigtime_t when = 0;
+	status = device->R5GetReport(type, (uint8)request.id, data, capacity,
+		&got, &when);
+	if (status == B_OK && got > capacity)
+		status = B_ERROR;
+	if (status == B_OK && got > 0
+		&& user_memcpy(request.data, data, got) != B_OK)
+		status = B_BAD_ADDRESS;
+	free(data);
+	if (status != B_OK)
+		return status;
+
+	request.length = (uint32)got;
+	request.timestamp = when;
+	if (user_memcpy(buffer, &request, sizeof(request)) != B_OK)
+		return B_BAD_ADDRESS;
+	return B_OK;
+}
+
+
+status_t
+JoystickProtocolHandler::_GetDescriptor(void* buffer, size_t length)
+{
+	r5_joystick_descriptor request;
+	if (length < sizeof(request))
+		return B_BAD_VALUE;
+	if (!IS_USER_ADDRESS(buffer)
+		|| user_memcpy(&request, buffer, sizeof(request)) != B_OK)
+		return B_BAD_ADDRESS;
+
+	size_t capacity = request.length;
+	if (capacity > R5_JOYSTICK_MAX_DESCRIPTOR)
+		capacity = R5_JOYSTICK_MAX_DESCRIPTOR;
+	if (!r5_user_range(request.data, capacity))
+		return B_BAD_ADDRESS;
+
+	uint8* data = (uint8*)malloc(capacity);
+	if (data == NULL)
+		return B_NO_MEMORY;
+	size_t total = 0;
+	status_t status = fReport.Device()->R5GetDescriptor(data, capacity,
+		&total);
+	size_t copy = total < capacity ? total : capacity;
+	if (status == B_OK && copy > 0
+		&& user_memcpy(request.data, data, copy) != B_OK)
+		status = B_BAD_ADDRESS;
+	free(data);
+	if (status != B_OK)
+		return status;
+
+	request.length = (uint32)total;
+	if (user_memcpy(buffer, &request, sizeof(request)) != B_OK)
+		return B_BAD_ADDRESS;
+	return total > capacity ? B_BUFFER_OVERFLOW : B_OK;
 }
 // SPDX-SnippetEnd

@@ -22,6 +22,12 @@
 #include <unistd.h>
 #include <new>
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <util/AutoLock.h>
+// SPDX-SnippetEnd
+
 
 HIDDevice::HIDDevice(usb_device device, const usb_configuration_info *config,
 	size_t interfaceIndex, int32 quirkyIndex)
@@ -42,9 +48,20 @@ HIDDevice::HIDDevice(usb_device device, const usb_configuration_info *config,
 // SPDX-License-Identifier: MIT
 		fVendorID(0),
 		fProductID(0),
-		fVersion(0)
+		fVersion(0),
+		fR5Descriptor(NULL),
+		fR5DescriptorLength(0),
+		fR5OutPipe(0)
 // SPDX-SnippetEnd
 {
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	mutex_init(&fR5OutLock, "usb_hid report out");
+	B_INITIALIZE_SPINLOCK(&fR5CacheLock);
+	r5_hid_cache_init(fR5Cache);
+	// SPDX-SnippetEnd
+
 	uint8 *reportDescriptor = NULL;
 	size_t descriptorLength = 0;
 
@@ -166,6 +183,21 @@ HIDDevice::HIDDevice(usb_device device, const usb_configuration_info *config,
 	}
 #endif
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Kept for R5_JOYSTICK_GET_DESCRIPTOR (HID PID force feedback in
+	// libr5game); without memory for it the device works without it.
+	if (descriptorLength > 0
+		&& descriptorLength <= R5_JOYSTICK_MAX_DESCRIPTOR) {
+		fR5Descriptor = (uint8 *)malloc(descriptorLength);
+		if (fR5Descriptor != NULL) {
+			memcpy(fR5Descriptor, reportDescriptor, descriptorLength);
+			fR5DescriptorLength = descriptorLength;
+		}
+	}
+	// SPDX-SnippetEnd
+
 	status_t result = fParser.ParseReportDescriptor(reportDescriptor,
 		descriptorLength);
 	if (!hasFixedDescriptor)
@@ -199,6 +231,22 @@ HIDDevice::HIDDevice(usb_device device, const usb_configuration_info *config,
 		TRACE_ALWAYS("didn't find a suitable interrupt pipe\n");
 		return;
 	}
+
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// The interrupt OUT pipe, where a HID device takes its output reports
+	// (HID 1.11, 4.4); without one they go as SET_REPORT.
+	for (size_t i = 0; i < interface->endpoint_count; i++) {
+		usb_endpoint_descriptor *descriptor = interface->endpoint[i].descr;
+		if ((descriptor->endpoint_address & USB_ENDPOINT_ADDR_DIR_IN) == 0
+			&& (descriptor->attributes & USB_ENDPOINT_ATTR_MASK)
+				== USB_ENDPOINT_ATTR_INTERRUPT) {
+			fR5OutPipe = interface->endpoint[i].handle;
+			break;
+		}
+	}
+	// SPDX-SnippetEnd
 
 	fTransferBufferSize = fParser.MaxReportSize(HID_REPORT_TYPE_INPUT);
 	if (fTransferBufferSize == 0) {
@@ -244,6 +292,13 @@ HIDDevice::~HIDDevice()
 	}
 
 	free(fTransferBuffer);
+
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	free(fR5Descriptor);
+	mutex_destroy(&fR5OutLock);
+	// SPDX-SnippetEnd
 }
 
 
@@ -361,6 +416,19 @@ HIDDevice::_TransferCallback(void *cookie, status_t status, void *data,
 	}
 
 	atomic_set(&device->fTransferScheduled, 0);
+
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// The last input report per ID, for R5_JOYSTICK_GET_REPORT (motion).
+	if (status == B_OK && actualLength > 0
+		&& actualLength <= device->fTransferBufferSize) {
+		InterruptsSpinLocker locker(device->fR5CacheLock);
+		r5_hid_cache_store(device->fR5Cache, device->fTransferBuffer,
+			actualLength, device->fParser.UsesReportIDs(), system_time());
+	}
+	// SPDX-SnippetEnd
+
 	device->fParser.SetReport(status, device->fTransferBuffer, actualLength);
 }
 
@@ -431,5 +499,146 @@ HIDDevice::_ReadProductName(uint8 index)
 	while (out > 0 && fProductName[out - 1] == ' ')
 		out--;
 	fProductName[out] = '\0';
+}
+
+
+// One interrupt OUT transfer: freed by whoever comes last, the waiter or
+// the callback, so a transfer that outlives its waiter has its memory.
+struct r5_out_transfer {
+	sem_id		done;
+	int32		references;
+	status_t	status;
+	uint8		data[0];
+};
+
+
+static void
+r5_release_transfer(r5_out_transfer* transfer)
+{
+	if (atomic_add(&transfer->references, -1) == 1) {
+		delete_sem(transfer->done);
+		free(transfer);
+	}
+}
+
+
+void
+HIDDevice::_R5OutCallback(void* cookie, status_t status, void* data,
+	size_t actualLength)
+{
+	r5_out_transfer* transfer = (r5_out_transfer*)cookie;
+	transfer->status = status;
+	release_sem_etc(transfer->done, 1, B_DO_NOT_RESCHEDULE);
+	r5_release_transfer(transfer);
+}
+
+
+status_t
+HIDDevice::_R5InterruptOut(const uint8* data, size_t length)
+{
+	// fR5OutLock is held.
+	r5_out_transfer* transfer = (r5_out_transfer*)malloc(
+		sizeof(r5_out_transfer) + length);
+	if (transfer == NULL)
+		return B_NO_MEMORY;
+	transfer->done = create_sem(0, "usb_hid report out");
+	if (transfer->done < 0) {
+		status_t status = transfer->done;
+		free(transfer);
+		return status;
+	}
+	transfer->references = 2;
+	transfer->status = B_ERROR;
+	memcpy(transfer->data, data, length);
+
+	status_t status = gUSBModule->queue_interrupt(fR5OutPipe, transfer->data,
+		length, _R5OutCallback, transfer);
+	if (status != B_OK) {
+		transfer->references = 1;
+		r5_release_transfer(transfer);
+		return status;
+	}
+
+	status = acquire_sem_etc(transfer->done, 1, B_RELATIVE_TIMEOUT, 1000000);
+	if (status == B_OK)
+		status = transfer->status;
+	else {
+		// The controller did not take it: cancel it. The callback still
+		// runs (with B_CANCELED) and frees the transfer if it comes last.
+		gUSBModule->cancel_queued_transfers(fR5OutPipe);
+	}
+	r5_release_transfer(transfer);
+	return status;
+}
+
+
+status_t
+HIDDevice::R5SendReport(uint8 type, const uint8* data, size_t length)
+{
+	if (fRemoved)
+		return ENODEV;
+	if (data == NULL || length == 0)
+		return B_BAD_VALUE;
+
+	MutexLocker locker(fR5OutLock);
+	if (type == HID_REPORT_TYPE_OUTPUT && fR5OutPipe != 0)
+		return _R5InterruptOut(data, length);
+
+	// SET_REPORT on the control pipe (HID 1.11, 7.2.2): the report type in
+	// the high byte, the ID in the low byte; with IDs the data starts with
+	// the ID.
+	uint16 reportType = type == HID_REPORT_TYPE_FEATURE
+		? B_USB_REQUEST_HID_FEATURE_REPORT : B_USB_REQUEST_HID_OUTPUT_REPORT;
+	uint8 id = fParser.UsesReportIDs() ? data[0] : 0;
+	size_t actualLength = 0;
+	return gUSBModule->send_request(fDevice,
+		USB_REQTYPE_INTERFACE_OUT | USB_REQTYPE_CLASS,
+		B_USB_REQUEST_HID_SET_REPORT, (reportType << 8) | id, fInterfaceIndex,
+		length, (void*)data, &actualLength);
+}
+
+
+status_t
+HIDDevice::R5GetReport(uint8 type, uint8 id, uint8* data, size_t capacity,
+	size_t* length, bigtime_t* when)
+{
+	if (fRemoved)
+		return ENODEV;
+	*length = 0;
+	*when = 0;
+
+	if (type == HID_REPORT_TYPE_INPUT) {
+		InterruptsSpinLocker locker(fR5CacheLock);
+		return r5_hid_cache_get(fR5Cache, id, data, capacity, length, when);
+	}
+	if (type != HID_REPORT_TYPE_FEATURE)
+		return B_BAD_VALUE;
+
+	// GET_REPORT (HID 1.11, 7.2.1) for a feature report.
+	MutexLocker locker(fR5OutLock);
+	size_t actualLength = 0;
+	status_t status = gUSBModule->send_request(fDevice,
+		USB_REQTYPE_INTERFACE_IN | USB_REQTYPE_CLASS,
+		B_USB_REQUEST_HID_GET_REPORT,
+		(B_USB_REQUEST_HID_FEATURE_REPORT << 8) | id, fInterfaceIndex,
+		capacity, data, &actualLength);
+	if (status != B_OK)
+		return status;
+	*length = actualLength < capacity ? actualLength : capacity;
+	*when = system_time();
+	return B_OK;
+}
+
+
+status_t
+HIDDevice::R5GetDescriptor(uint8* data, size_t capacity, size_t* length)
+	const
+{
+	if (fR5Descriptor == NULL)
+		return B_NOT_SUPPORTED;
+	*length = fR5DescriptorLength;
+	memcpy(data, fR5Descriptor,
+		fR5DescriptorLength < capacity ? fR5DescriptorLength : capacity);
+	return B_OK;
 }
 // SPDX-SnippetEnd
