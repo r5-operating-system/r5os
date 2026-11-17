@@ -32,7 +32,7 @@ r5:zeroconf-6	A	AirPlay	distro/zeroconf/MdnsService.cpp	3	pr	4395	mDNS advertise
 trac:7841	A	Tracker	distro/desktop/src/kits/tracker/Tracker.cpp	1	todo		Change icon for open folders in tracker spacial mode
 trac:9434	A	Tracker	distro/desktop/src/kits/tracker/PoseView.cpp	1	pr	4409	[Tracker] wrong column display + crash in BBitmap::Lock()
 trac:11031	A	Tracker	distro/desktop/src/kits/tracker/PoseView.cpp	1	pr	4409	[Tracker] crashes in BPoseView::SelectPosesListMode
-trac:12050	A	Tracker	distro/desktop/src/kits/tracker/Utilities.cpp	1	pr		Volume space-bar pulse no longer locks the window while holding the pose list
+trac:12050	A	Tracker	distro/desktop/src/kits/tracker/Utilities.cpp	1	pr	4415	Volume space-bar pulse no longer locks the window while holding the pose list
 trac:14390	A	Tracker	distro/desktop/src/kits/tracker/ContainerWindow.cpp	1	pr	4409	Tracker crash on context menu (Looper must be locked)
 trac:14473	A	Tracker	distro/desktop/src/kits/tracker/PoseView.cpp	1	parked		checkfs floods node monitors; no single hang site in the current handler
 trac:14880	A	Tracker	distro/desktop/src/kits/tracker/DeskWindow.cpp	1	parked		Replicant removal can crash Tracker; BShelf is not in distro/, ActivityMonitor path not copied
