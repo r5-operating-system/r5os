@@ -6,10 +6,10 @@
 
 #include "SettingsStorage.h"
 
+#include <DataIO.h>
 #include <Directory.h>
 #include <File.h>
 #include <FindDirectory.h>
-#include <MallocIO.h>
 #include <Message.h>
 #include <Path.h>
 
