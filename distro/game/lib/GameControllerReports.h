@@ -9,10 +9,19 @@
  * PID force feedback for any controller whose report descriptor has the
  * Physical Interface Device page (0x0F).
  *
+ * Phase 2 adds the Nintendo Switch controllers (HD rumble, subcommands,
+ * SPI flash reads, the IMU) and the Xbox controllers' rumble over
+ * Bluetooth and over USB (GIP).
+ *
  * Sources, facts only, no code taken:
  * - PlayStation report layouts: SDL's hidapi drivers, SDL_hidapi_ps4.c and
  *   SDL_hidapi_ps5.c, and SDL's test/testcontroller.c for the trigger
  *   effect bytes (zlib, Copyright (C) 1997-2026 Sam Lantinga).
+ * - Switch and Xbox layouts: SDL_hidapi_switch.c and SDL_hidapi_xboxone.c
+ *   (the same license and copyright), read on 17 Nov 2026 at commit
+ *   4cc7adcaee482b63b4e1a0de77f52e200aa87b90; the Switch rumble amplitude
+ *   steps as described in dekuNukem's Nintendo_Switch_Reverse_Engineering
+ *   (rumble_data_table.md, cited by SDL), computed here, not copied.
  * - HID report descriptors: USB Device Class Definition for HID 1.11.
  * - Force feedback: USB Device Class Definition for Physical Interface
  *   Devices (PID) 1.0, and the HID Usage Tables, page 0x0F.
@@ -121,6 +130,116 @@ struct motion_sample {
 // without the controller's calibration report).
 bool parse_playstation_motion(playstation_model model, bool bluetooth,
 	const uint8* report, size_t length, motion_sample& sample);
+
+
+// #pragma mark - Nintendo Switch controllers (phase 2)
+
+
+enum switch_model {
+	SWITCH_NONE = 0,
+	SWITCH_PRO,
+	SWITCH_JOYCON_LEFT,
+	SWITCH_JOYCON_RIGHT
+};
+
+switch_model switch_model_for(uint16 vendor, uint16 product);
+
+static const size_t kSwitchBluetoothSize = 49;
+static const size_t kSwitchUSBSize = 64;
+	// output reports with their ID, as SDL pads them
+
+// HD rumble (SDL_hidapi_switch.c; the amplitude table of dekuNukem's
+// Nintendo_Switch_Reverse_Engineering, rumble_data_table.md): four bytes
+// per side, the high band (frequency code 0x74) carrying weak, the low
+// band (frequency code 0x3D) carrying strong; both 0 gives the neutral
+// 00 01 40 40. Both sides get the same.
+void switch_rumble_encode(float strong, float weak, uint8 out[4]);
+
+// The amplitude index 0 to 100 of the table above for 0 to 1: the
+// table's logarithmic steps above 12 %, a straight line below.
+uint8 switch_amplitude_index(float amplitude);
+
+// Output report 0x10 (rumble only) and 0x01 (rumble and a subcommand),
+// the report ID first, counter 0 to 15, zeros up to length (0: the
+// transport's size). 0 when it does not fit.
+size_t build_switch_rumble(uint8 counter, float strong, float weak,
+	size_t length, uint8* out, size_t capacity);
+size_t build_switch_subcommand(uint8 counter, float strong, float weak,
+	uint8 command, const uint8* args, size_t argLength, size_t length,
+	uint8* out, size_t capacity);
+
+// Subcommand 0x10: read size (at most 29) bytes of SPI flash at address.
+size_t build_switch_spi_read(uint8 counter, float strong, float weak,
+	uint32 address, uint8 size, size_t length, uint8* out, size_t capacity);
+
+// The data of the reply 0x21 to that read, when it is one: the reply has
+// the subcommand in byte 14, then the address and size it read, then the
+// bytes.
+bool parse_switch_spi_reply(const uint8* report, size_t length,
+	uint32 address, uint8 size, uint8* data);
+
+// The IMU's scale. The factory calibration is 24 bytes of SPI flash at
+// 0x6020: accelerometer origin and sensitivity, gyroscope origin and
+// sensitivity, three int16 each. Without it, the nominal scale: 4096
+// counts per g and 14.2842 counts per degree per second (SDL's defaults).
+struct switch_imu_calibration {
+	float	accelScale[3];
+		// g per count
+	float	gyroScale[3];
+		// degrees per second per count
+	int16	gyroOffset[3];
+	bool	factory;
+};
+
+static const uint32 kSwitchIMUCalibrationAddress = 0x6020;
+static const uint8 kSwitchIMUCalibrationSize = 24;
+
+void switch_imu_nominal(switch_imu_calibration& calibration);
+// false (and the nominal scale) when the data is unusable.
+bool switch_imu_from_factory(const uint8 data[24],
+	switch_imu_calibration& calibration);
+
+// The newest of the three samples of a full report (0x30 or 0x31; after
+// the report ID: twelve bytes of state, then three samples of
+// accelerometer X Y Z and gyroscope X Y Z, int16 each), in the axes of the
+// PlayStation controllers as SDL turns them. false when the report has
+// no sensors yet (all zero) or is too short.
+bool parse_switch_motion(const switch_imu_calibration& calibration,
+	const uint8* report, size_t length, motion_sample& sample);
+
+
+// #pragma mark - Xbox controllers (phase 2)
+
+
+enum xbox_model {
+	XBOX_NONE = 0,
+	XBOX_BLUETOOTH,
+		// HID over Bluetooth Classic or Low Energy: output report 0x03
+	XBOX_GIP
+		// over USB, Gaming Input Protocol, through usb_hid: output 0x09
+};
+
+// Bluetooth from the IDs (SDL_IsJoystickBluetoothXboxOne()); GIP from the
+// driver's R5_JOYSTICK_FLAG_GIP.
+xbox_model xbox_model_for(uint16 vendor, uint16 product, bool bluetooth,
+	bool gip);
+
+// The trigger motors: Microsoft's own controllers (SDL:
+// ControllerHasTriggerRumble()).
+bool xbox_has_trigger_rumble(uint16 vendor);
+
+static const size_t kXboxBluetoothRumbleSize = 9;
+static const size_t kXboxGIPRumbleSize = 13;
+
+// The rumble report, each motor 0 to 1 sent as 0 to 100, the longest
+// duration (2.55 s, repeated; libr5game stops it). Bluetooth: 0x03, the
+// motors enabled (0x0F), left trigger, right trigger, strong, weak,
+// duration, delay, repeat. GIP: the same after the header 09 00 seq 09 00.
+size_t build_xbox_bluetooth_rumble(float leftTrigger, float rightTrigger,
+	float strong, float weak, uint8* out, size_t capacity);
+size_t build_xbox_gip_rumble(uint8 sequence, float leftTrigger,
+	float rightTrigger, float strong, float weak, uint8* out,
+	size_t capacity);
 
 
 // #pragma mark - HID report descriptors

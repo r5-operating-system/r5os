@@ -25,18 +25,21 @@ public:
 								~ControllerFeel();
 
 	// fd: the open joystick node (R5_JOYSTICK_SEND_REPORT and friends);
-	// bus: R5_JOYSTICK_BUS_*.
+	// bus: R5_JOYSTICK_BUS_*; flags: R5_JOYSTICK_FLAG_* of the driver.
 			void				Open(int fd, uint16 vendor, uint16 product,
-									uint16 bus);
+									uint16 bus, uint32 flags);
 			void				Close();
 
 			bool				CanRumble() const;
 			bool				HasTriggerEffects() const;
 			bool				HasMotion() const;
+			bool				HasTriggerRumble() const;
 
 			status_t			SetRumble(float strong, float weak,
 									bigtime_t duration);
 			status_t			StopRumble();
+			status_t			SetTriggerRumble(float left, float right,
+									bigtime_t duration);
 			status_t			SetTriggerEffect(uint32 trigger,
 									uint32 effect, float start,
 									float strength);
@@ -58,8 +61,18 @@ private:
 			status_t			_PIDStart(float strong, float weak,
 									bigtime_t duration);
 			status_t			_PIDStop();
-			status_t			_StopLocked();
-			void				_ScheduleStop(bigtime_t duration);
+			status_t			_StopLocked(bool triggers);
+			void				_Wake();
+
+			// Phase 2: Switch and Xbox controllers.
+			size_t				_SwitchLength() const;
+			status_t			_SendSwitchRumble();
+			status_t			_SwitchSubcommand(uint8 command,
+									const uint8* args, size_t argLength,
+									uint8* reply, size_t replyCapacity,
+									size_t* replyLength);
+			void				_ReadSwitchCalibration();
+			status_t			_SendXbox();
 	static	status_t			_StopThread(void* data);
 
 	mutable	BLocker				fLock;
@@ -77,11 +90,28 @@ private:
 			thread_id			fStopThread;
 			sem_id				fStopSem;
 			bigtime_t			fStopAt;
+			bigtime_t			fTriggerStopAt;
+			bigtime_t			fRefreshAt;
 			bool				fQuit;
 
 			bool				fMotionEnabled;
 			bool				fHasMotion;
 			game_controller_motion fMotion;
+
+			switch_model		fSwitch;
+			uint8				fSwitchCounter;
+			float				fSwitchStrong;
+			float				fSwitchWeak;
+			bool				fSwitchSent;
+			bool				fSwitchCalibrated;
+			switch_imu_calibration fSwitchIMU;
+
+			xbox_model			fXbox;
+			bool				fXboxTriggers;
+			uint8				fXboxSequence;
+			bool				fXboxSent;
+			float				fXboxMotor[4];
+				// left trigger, right trigger, strong, weak
 };
 
 

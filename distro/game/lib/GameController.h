@@ -217,8 +217,11 @@ public:
 	// Feel and motion (added 17 Nov 2026; docs/LIBR5.md, "Game Kit").
 	// Phase 1: the DualSense, the DualSense Edge and the DualShock 4 over
 	// USB and Bluetooth, and rumble on any controller with HID PID force
-	// feedback. A call the open controller cannot do returns
-	// B_NOT_SUPPORTED; the Can and Has calls say so beforehand.
+	// feedback. Phase 2: the Switch Pro Controller (USB and Bluetooth;
+	// rumble and motion), the Joy-Cons (Bluetooth; rumble), and Xbox
+	// controllers over Bluetooth and USB (rumble). A call the open
+	// controller cannot do returns B_NOT_SUPPORTED; the Can and Has calls
+	// say so beforehand.
 
 	// Rumble: strong is the heavy, low motor, weak the light, fast one,
 	// each 0 to 1. It stops by itself after duration (0: when the next
@@ -246,6 +249,15 @@ public:
 			bool				IsMotionEnabled() const;
 			status_t			GetMotion(game_controller_motion* motion)
 									const;
+
+	// Trigger rumble (added 17 Nov 2026, phase 2): the small motors in the
+	// triggers of Microsoft's Xbox controllers, each 0 to 1, over Bluetooth
+	// and USB. It stops by itself after duration (0: when the next call
+	// changes it), and with StopRumble() and Close(). Not the adaptive
+	// triggers of the DualSense: those are SetTriggerEffect().
+			bool				HasTriggerRumble() const;
+			status_t			SetTriggerRumble(float left, float right,
+									bigtime_t duration);
 
 private:
 			struct Private;

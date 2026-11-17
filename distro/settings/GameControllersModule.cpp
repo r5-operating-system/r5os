@@ -951,6 +951,7 @@ private:
 			BView*				fRumbleGroup;
 			BButton*			fLightButton;
 			BButton*			fStrongButton;
+			BButton*			fTriggerButton;
 			RumbleWaves*		fWaves;
 			bigtime_t			fRumbleUntil;
 			BView*				fMotionGroup;
@@ -1338,6 +1339,12 @@ GameControllersPage::GameControllersPage(GameControllersModule* module,
 	strong->AddFloat("strong", 1.0f);
 	strong->AddFloat("weak", 1.0f);
 	fStrongButton = new BButton("rumble strong", "Strong", strong);
+	// Xbox controllers: the motors in the triggers (phase 2), a button only
+	// while the chosen controller has them.
+	BMessage* triggerRumble = new BMessage(kMsgRumble);
+	triggerRumble->AddBool("triggers", true);
+	fTriggerButton = new BButton("rumble triggers", "Triggers",
+		triggerRumble);
 	fWaves = new RumbleWaves();
 	BStringView* rumbleHint = new BStringView("rumble hint",
 		"One second, both motors.");
@@ -1348,6 +1355,7 @@ GameControllersPage::GameControllersPage(GameControllersModule* module,
 		.AddGroup(B_HORIZONTAL, roundf(8 * unit))
 			.Add(fLightButton)
 			.Add(fStrongButton)
+			.Add(fTriggerButton)
 			.Add(fWaves)
 			.AddGlue()
 		.End()
@@ -1503,6 +1511,7 @@ GameControllersPage::AttachedToWindow()
 	fSetupButton->SetTarget(this);
 	fLightButton->SetTarget(this);
 	fStrongButton->SetTarget(this);
+	fTriggerButton->SetTarget(this);
 	fEffectField->Menu()->SetTargetForItems(this);
 	fStartSlider->SetTarget(this);
 	fStrengthSlider->SetTarget(this);
@@ -1646,6 +1655,14 @@ GameControllersPage::MessageReceived(BMessage* message)
 			float strongMotor;
 			float weakMotor;
 			BGameController* controller = fTest->Controller();
+			if (controller != NULL && message->GetBool("triggers", false)) {
+				if (controller->SetTriggerRumble(0.6f, 0.6f, 1000000)
+						== B_OK) {
+					fRumbleUntil = system_time() + 1000000;
+					fWaves->SetActive(true);
+				}
+				break;
+			}
 			if (controller == NULL || !controller->CanRumble()
 				|| message->FindFloat("strong", &strongMotor) != B_OK
 				|| message->FindFloat("weak", &weakMotor) != B_OK)
@@ -1810,6 +1827,9 @@ GameControllersPage::_UpdateFeel()
 
 	fLightButton->SetEnabled(rumble);
 	fStrongButton->SetEnabled(rumble);
+	bool triggerRumble = controller != NULL && controller->HasTriggerRumble();
+	fTriggerButton->SetEnabled(triggerRumble);
+	set_shown(fTriggerButton, triggerRumble);
 	fEffectField->SetEnabled(triggers);
 	fStartSlider->SetEnabled(triggers);
 	fStrengthSlider->SetEnabled(triggers);

@@ -6,7 +6,8 @@ option B; docs/BLUETOOTH.md, step 8). Idempotent copy into the Haiku tree:
 
 - the two RenkuOS joystick fixes and R5_JOYSTICK_GET_INFO: joystick_driver.h,
   libdevice's Joystick.cpp, hid_shared's JoystickProtocolHandler, and the
-  HIDDevice of usb_hid and hyperv/hid (i2c_hid comes with
+  HIDDevice of usb_hid and hyperv/hid, and usb_hid's QuirkyDevices.cpp with
+  the R5 descriptors of the Switch Pro Controller and GIP (phase 2) (i2c_hid comes with
   apply-kernel-bugs.py, bluetooth_hid with apply-bluetooth.py);
 - libr5game.so (distro/game/lib) into src/preferences/r5game and its
   headers <GameController.h> and <GameControllerView.h> into
@@ -83,6 +84,7 @@ def main() -> int:
         "src/add-ons/kernel/drivers/input/hid_shared/R5HIDReports.h",
         "src/add-ons/kernel/drivers/input/usb_hid/HIDDevice.cpp",
         "src/add-ons/kernel/drivers/input/usb_hid/HIDDevice.h",
+        "src/add-ons/kernel/drivers/input/usb_hid/QuirkyDevices.cpp",
         "src/add-ons/kernel/drivers/input/hyperv/hid/HIDDevice.h",
     ]
     install_all([(KERNEL / f, HAIKU / f) for f in kernel_files],
