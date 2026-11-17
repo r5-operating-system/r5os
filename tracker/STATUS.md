@@ -4,8 +4,8 @@ Gegenereerd door `scripts/tracker-report.py`. Niet met de hand bewerken.
 
 | R5-status | Aantal |
 |---|---|
-| open | 3796 |
-| in-progress | 8 |
+| open | 3795 |
+| in-progress | 9 |
 | fixed | 132 |
 | wontfix | 0 |
 | not-applicable | 0 |
@@ -79,6 +79,7 @@ Nog open in R5OS: **2456** bugs, **1288** enhancements, rest overig (van 3804 op
 | [#8319](https://dev.haiku-os.org/ticket/8319) | assigned | Network & Internet/IPv6 | Haiku needs IPv6 Duplicate Address Detection | cursor/ipv6-finish |
 | [#8940](https://dev.haiku-os.org/ticket/8940) | new | Preferences | optional user login (screen) similar to BeLogin but homegrown supported | cursor/session-user |
 | [#16318](https://dev.haiku-os.org/ticket/16318) | new | Printing | IPP-Everywhere and AirPrint - Print support the XXIst century way | cursor/zeroconf-1042 |
+| [#17317](https://dev.haiku-os.org/ticket/17317) | new | Preferences/Input | Joysticks/Gamepad preferences | claude/game-controllers-fixes |
 | [#18970](https://dev.haiku-os.org/ticket/18970) | assigned | User Interface | Various dark mode problems (easy) |  |
 
 ## Gefixt in R5OS
@@ -251,5 +252,5 @@ Nog open in R5OS: **2456** bugs, **1288** enhancements, rest overig (van 3804 op
 | [#2490](https://dev.haiku-os.org/ticket/2490) | new | File Systems/BFS | File version as on VMS (DEC VAX) |  |
 | [#2499](https://dev.haiku-os.org/ticket/2499) | assigned | Kits/Interface Kit | [Keymap] shortcuts don't work with some keymaps |  |
 | [#2505](https://dev.haiku-os.org/ticket/2505) | reopened | Network & Internet/Bluetooth | bluetooth_server provokes vm_page_fault in h2generic |  |
-| … | | | *3716 meer in r5-status.tsv* | |
+| … | | | *3715 meer in r5-status.tsv* | |
 

@@ -2589,7 +2589,7 @@ id	r5_status	branch	commit	notes
 17301	open			
 17304	open			
 17312	open			
-17317	open			
+17317	in-progress	claude/game-controllers-fixes	c5bd328319	Settings > Devices > Game controllers lists HID game controllers (USB and Bluetooth) with a live test, a Layout menu and Set up buttons (#4335, #4345). 8BitDo M30 over Bluetooth tested on the 5625U (stick 52, 17 Nov 2026): name, buttons and D-pad right. A USB controller not tested. The old Joysticks preferences are unchanged.
 17320	open			
 17321	open			
 17322	open			
