@@ -65,6 +65,7 @@ Every page and entry must include:
 - **Picture** (`<figure class="stage">`) for any visual control, labeled `Screenshot` or `Mockup`.
 - **Member functions** (`.member` with `.sig` and short description) and a **short code example** (`<pre class="code">`).
 - **See also** (`.see-also`) linking to related classes, guides, or headers.
+- **No test reports.** Say what a call does and what it does not do yet (a "Limits" note). How or where it was tested belongs in `CHANGELOG.md`, not in the book.
 
 ### 3. Update navigation and search
 - Add the new `#anchor` to `groups` in `r5book.js` so it appears in the left sidebar.
