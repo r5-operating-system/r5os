@@ -320,6 +320,8 @@ BLayoutBuilder::Group&lt;&gt;(bottomRow, B_HORIZONTAL)
 			<div class="member"><div class="sig">BAxisBar(const char* name);</div></div>
 			<div class="member"><div class="sig">void SetValue(float value);
 float Value() const;</div><p>Clamped to -1 to 1; NaN is 0. It redraws only when the value changed.</p></div>
+			<div class="member"><div class="sig">void SetEnabled(bool enabled);
+bool IsEnabled() const;</div><p>False draws the bar gray, the fill included, as a disabled control. True at first.</p></div>
 <pre class="code">#include &lt;AxisBar.h&gt;
 
 BAppearanceKit::BAxisBar* pitch = <span class="k">new</span> BAppearanceKit::BAxisBar(<span class="s">"pitch"</span>);
@@ -727,7 +729,7 @@ home-&gt;SetEmphasized(<span class="k">true</span>);</pre>
 			<p>A spirit level seen from above: a circle with a cross and a small centre ring, and a bubble in the
 			accent colour. x and y run from -1 to 1, left to right and top to bottom; the bubble stays inside
 			the circle. For a two-axis value around a centre: a tilt, a balance, a stick position. It only shows
-			the value. Square, 5 to 10 line heights; dark mode as <code class="inline">BAxisBar</code>.</p>
+			the value. Square, 4 to 10 line heights; dark mode as <code class="inline">BAxisBar</code>.</p>
 
 			<figure class="stage">
 				<div class="shot sys">
@@ -740,6 +742,8 @@ home-&gt;SetEmphasized(<span class="k">true</span>);</pre>
 			<div class="member"><div class="sig">void SetValue(float x, float y);
 float X() const;
 float Y() const;</div><p>Each clamped to -1 to 1; NaN is 0. It redraws only when the value changed.</p></div>
+			<div class="member"><div class="sig">void SetEnabled(bool enabled);
+bool IsEnabled() const;</div><p>False draws the level gray, the bubble included, as a disabled control. True at first.</p></div>
 <pre class="code">#include &lt;TiltLevel.h&gt;
 
 BAppearanceKit::BTiltLevel* level = <span class="k">new</span> BAppearanceKit::BTiltLevel(<span class="s">"tilt"</span>);

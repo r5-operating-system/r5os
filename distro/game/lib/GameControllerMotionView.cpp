@@ -33,7 +33,9 @@ struct BGameControllerMotionView::Private {
 	BAxisBar*	pitch;
 	BAxisBar*	roll;
 	BAxisBar*	yaw;
+	BStringView* labels[5];
 	float		turnRange;
+	bool		enabled;
 };
 
 
@@ -59,6 +61,7 @@ BGameControllerMotionView::BGameControllerMotionView(const char* name)
 	if (fPrivate == NULL)
 		return;
 	fPrivate->turnRange = kDefaultTurnRange;
+	fPrivate->enabled = true;
 	fPrivate->level = new BTiltLevel("tilt");
 	fPrivate->pitch = new BAxisBar("pitch");
 	fPrivate->roll = new BAxisBar("roll");
@@ -71,6 +74,14 @@ BGameControllerMotionView::BGameControllerMotionView(const char* name)
 	tilt->SetExplicitAlignment(BAlignment(B_ALIGN_HORIZONTAL_CENTER,
 		B_ALIGN_TOP));
 	turn->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
+	BStringView* pitch = make_label("pitch label", "Pitch", true);
+	BStringView* roll = make_label("roll label", "Roll", true);
+	BStringView* yaw = make_label("yaw label", "Yaw", true);
+	fPrivate->labels[0] = tilt;
+	fPrivate->labels[1] = turn;
+	fPrivate->labels[2] = pitch;
+	fPrivate->labels[3] = roll;
+	fPrivate->labels[4] = yaw;
 
 	BLayoutBuilder::Group<>(this, B_HORIZONTAL, B_USE_DEFAULT_SPACING)
 		.AddGroup(B_VERTICAL, B_USE_HALF_ITEM_SPACING, 0.0f)
@@ -79,12 +90,12 @@ BGameControllerMotionView::BGameControllerMotionView(const char* name)
 		.End()
 		.AddGroup(B_VERTICAL, B_USE_HALF_ITEM_SPACING, 1.0f)
 			.AddGlue()
-			.AddGrid(B_USE_DEFAULT_SPACING, B_USE_DEFAULT_SPACING)
-				.Add(make_label("pitch label", "Pitch", true), 0, 0)
+			.AddGrid(B_USE_DEFAULT_SPACING, B_USE_HALF_ITEM_SPACING)
+				.Add(pitch, 0, 0)
 				.Add(fPrivate->pitch, 1, 0)
-				.Add(make_label("roll label", "Roll", true), 0, 1)
+				.Add(roll, 0, 1)
 				.Add(fPrivate->roll, 1, 1)
-				.Add(make_label("yaw label", "Yaw", true), 0, 2)
+				.Add(yaw, 0, 2)
 				.Add(fPrivate->yaw, 1, 2)
 				.Add(turn, 1, 3)
 			.End()
@@ -137,6 +148,36 @@ float
 BGameControllerMotionView::TurnRange() const
 {
 	return fPrivate != NULL ? fPrivate->turnRange : kDefaultTurnRange;
+}
+
+
+void
+BGameControllerMotionView::SetEnabled(bool enabled)
+{
+	if (fPrivate == NULL || enabled == fPrivate->enabled)
+		return;
+	fPrivate->enabled = enabled;
+	fPrivate->level->SetEnabled(enabled);
+	fPrivate->pitch->SetEnabled(enabled);
+	fPrivate->roll->SetEnabled(enabled);
+	fPrivate->yaw->SetEnabled(enabled);
+	// The labels as the text of a disabled control.
+	rgb_color gray = mix_color(ViewColor(), ui_color(B_PANEL_TEXT_COLOR),
+		100);
+	for (int32 i = 0; i < 5; i++) {
+		if (enabled)
+			fPrivate->labels[i]->SetHighUIColor(B_PANEL_TEXT_COLOR);
+		else
+			fPrivate->labels[i]->SetHighColor(gray);
+		fPrivate->labels[i]->Invalidate();
+	}
+}
+
+
+bool
+BGameControllerMotionView::IsEnabled() const
+{
+	return fPrivate == NULL || fPrivate->enabled;
 }
 
 

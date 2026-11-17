@@ -62,7 +62,8 @@ BTiltLevel::BTiltLevel(const char* name)
 	:
 	BView(name, B_WILL_DRAW | B_FULL_UPDATE_ON_RESIZE),
 	fX(0),
-	fY(0)
+	fY(0),
+	fEnabled(true)
 {
 	_Init();
 }
@@ -72,9 +73,13 @@ BTiltLevel::BTiltLevel(BMessage* archive)
 	:
 	BView(archive),
 	fX(0),
-	fY(0)
+	fY(0),
+	fEnabled(true)
 {
 	_Init();
+	bool enabled;
+	if (archive != NULL && archive->FindBool("r5:enabled", &enabled) == B_OK)
+		fEnabled = enabled;
 	float value;
 	if (archive != NULL && archive->FindFloat("r5:x", &value) == B_OK)
 		fX = clamp_axis(value);
@@ -109,6 +114,8 @@ BTiltLevel::Archive(BMessage* archive, bool deep) const
 		status = archive->AddFloat("r5:x", fX);
 	if (status == B_OK)
 		status = archive->AddFloat("r5:y", fY);
+	if (status == B_OK && !fEnabled)
+		status = archive->AddBool("r5:enabled", false);
 	return status;
 }
 
@@ -168,9 +175,10 @@ BTiltLevel::Draw(BRect updateRect)
 
 	rgb_color background = LowColor();
 	rgb_color text = ui_color(B_PANEL_TEXT_COLOR);
-	rgb_color outline = mix_color(background, text, 200);
-	rgb_color guide = mix_color(background, text, 110);
-	rgb_color bubble = ui_color(B_CONTROL_HIGHLIGHT_COLOR);
+	rgb_color outline = mix_color(background, text, fEnabled ? 200 : 90);
+	rgb_color guide = mix_color(background, text, fEnabled ? 110 : 60);
+	rgb_color bubble = fEnabled ? ui_color(B_CONTROL_HIGHLIGHT_COLOR)
+		: mix_color(background, text, 100);
 
 	SetDrawingMode(B_OP_ALPHA);
 	SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_OVERLAY);
@@ -219,7 +227,7 @@ BTiltLevel::FrameResized(float width, float height)
 BSize
 BTiltLevel::MinSize()
 {
-	float side = ceilf(font_unit() * 5);
+	float side = ceilf(font_unit() * 4);
 	return BLayoutUtils::ComposeSize(ExplicitMinSize(), BSize(side, side));
 }
 
@@ -238,6 +246,23 @@ BTiltLevel::PreferredSize()
 	float side = ceilf(font_unit() * 7.5f);
 	return BLayoutUtils::ComposeSize(ExplicitPreferredSize(),
 		BSize(side, side));
+}
+
+
+void
+BTiltLevel::SetEnabled(bool enabled)
+{
+	if (enabled == fEnabled)
+		return;
+	fEnabled = enabled;
+	Invalidate();
+}
+
+
+bool
+BTiltLevel::IsEnabled() const
+{
+	return fEnabled;
 }
 
 

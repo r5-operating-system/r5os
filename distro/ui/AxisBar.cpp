@@ -61,7 +61,8 @@ font_unit()
 BAxisBar::BAxisBar(const char* name)
 	:
 	BView(name, B_WILL_DRAW | B_FULL_UPDATE_ON_RESIZE),
-	fValue(0)
+	fValue(0),
+	fEnabled(true)
 {
 	_Init();
 }
@@ -70,9 +71,13 @@ BAxisBar::BAxisBar(const char* name)
 BAxisBar::BAxisBar(BMessage* archive)
 	:
 	BView(archive),
-	fValue(0)
+	fValue(0),
+	fEnabled(true)
 {
 	_Init();
+	bool enabled;
+	if (archive != NULL && archive->FindBool("r5:enabled", &enabled) == B_OK)
+		fEnabled = enabled;
 	float value;
 	if (archive != NULL && archive->FindFloat("r5:value", &value) == B_OK)
 		fValue = clamp_value(value);
@@ -103,6 +108,8 @@ BAxisBar::Archive(BMessage* archive, bool deep) const
 		status = archive->AddString("class", kAxisBarClassName);
 	if (status == B_OK)
 		status = archive->AddFloat("r5:value", fValue);
+	if (status == B_OK && !fEnabled)
+		status = archive->AddBool("r5:enabled", false);
 	return status;
 }
 
@@ -152,9 +159,10 @@ BAxisBar::Draw(BRect updateRect)
 
 	rgb_color background = LowColor();
 	rgb_color text = ui_color(B_PANEL_TEXT_COLOR);
-	rgb_color outline = mix_color(background, text, 200);
-	rgb_color tick = mix_color(background, text, 140);
-	rgb_color fill = ui_color(B_CONTROL_HIGHLIGHT_COLOR);
+	rgb_color outline = mix_color(background, text, fEnabled ? 200 : 90);
+	rgb_color tick = mix_color(background, text, fEnabled ? 140 : 70);
+	rgb_color fill = fEnabled ? ui_color(B_CONTROL_HIGHLIGHT_COLOR)
+		: mix_color(background, text, 100);
 
 	SetDrawingMode(B_OP_ALPHA);
 	SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_OVERLAY);
@@ -214,6 +222,23 @@ BAxisBar::PreferredSize()
 	float unit = font_unit();
 	return BLayoutUtils::ComposeSize(ExplicitPreferredSize(),
 		BSize(ceilf(unit * 14), ceilf(unit)));
+}
+
+
+void
+BAxisBar::SetEnabled(bool enabled)
+{
+	if (enabled == fEnabled)
+		return;
+	fEnabled = enabled;
+	Invalidate();
+}
+
+
+bool
+BAxisBar::IsEnabled() const
+{
+	return fEnabled;
 }
 
 

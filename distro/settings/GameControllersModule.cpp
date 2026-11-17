@@ -1454,11 +1454,13 @@ GameControllersPage::GameControllersPage(GameControllersModule* module,
 	split->GroupLayout()->AddView(feelColumn, 2);
 
 	FilledBox* testBox = new FilledBox("test box");
-	BGroupView* test = new BGroupView(B_VERTICAL, roundf(8 * unit));
+	// Tight at the top and the bottom, so the page fits at 1030 by 610
+	// with a controller and does not scroll.
+	BGroupView* test = new BGroupView(B_VERTICAL, roundf(6 * unit));
 	test->SetViewColor(network_box_fill());
 	BLayoutBuilder::Group<>(test)
-		.SetInsets(roundf(14 * unit), roundf(8 * unit), roundf(14 * unit),
-			roundf(8 * unit))
+		.SetInsets(roundf(14 * unit), roundf(6 * unit), roundf(14 * unit),
+			roundf(6 * unit))
 		.AddGroup(B_HORIZONTAL, roundf(8 * unit))
 			.Add(fLayoutField->CreateLabelLayoutItem())
 			.Add(fLayoutField->CreateMenuBarLayoutItem())
@@ -1799,6 +1801,7 @@ GameControllersPage::_UpdateFeel()
 	fRumbleUntil = 0;
 	fWaves->SetActive(false);
 	fMotion->Reset();
+	fMotion->SetEnabled(motion);
 	if (motion)
 		controller->SetMotionEnabled(true);
 	fEffectItems[0]->SetMarked(true);

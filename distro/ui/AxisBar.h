@@ -56,6 +56,10 @@ public:
 	virtual	BSize				MaxSize();
 	virtual	BSize				PreferredSize();
 
+			// False draws it gray, as a disabled control; true at first.
+			void				SetEnabled(bool enabled);
+			bool				IsEnabled() const;
+
 private:
 			void				_Init();
 
@@ -68,6 +72,7 @@ private:
 			BAxisBar&			operator=(const BAxisBar&);
 
 			float				fValue;
+			bool				fEnabled;
 			uint32				_reserved[4];
 };
 

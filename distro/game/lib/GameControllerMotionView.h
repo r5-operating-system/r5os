@@ -34,6 +34,11 @@ public:
 			void				SetTurnRange(float degreesPerSecond);
 			float				TurnRange() const;
 
+	// False draws the level, the bars and their labels gray, as a
+	// disabled control (an example without a controller); true at first.
+			void				SetEnabled(bool enabled);
+			bool				IsEnabled() const;
+
 private:
 			struct Private;
 
