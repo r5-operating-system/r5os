@@ -101,6 +101,12 @@ def main():
         "action": [
             (src("ieee80211_input.c"), "ieee80211_parse_action("),
         ],
+        "he": [
+            (src("ieee80211_he.c"), "he_room("),
+            (src("ieee80211_he.c"), "he_le16("),
+            (src("ieee80211_he.c"), "ieee80211_parse_hecap("),
+            (src("ieee80211_he.c"), "ieee80211_parse_heop("),
+        ],
         "mtkrx": [
             (mtk, "mtk_rd32("),
             (mtk, "mtk_legacy_kbps("),

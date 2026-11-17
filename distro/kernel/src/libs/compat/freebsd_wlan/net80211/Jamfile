@@ -58,6 +58,7 @@ KernelMergeObject freebsd_wlan.o :
 	ieee80211_scan_sw.c
 	ieee80211_sta.c
 	ieee80211_vht.c
+	ieee80211_he.c
 	ieee80211_wds.c
 	ieee80211_xauth.c
 

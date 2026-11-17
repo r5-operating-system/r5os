@@ -2041,6 +2041,8 @@ findchannel(struct ieee80211com *ic, int ieee, int mode)
 	    [IEEE80211_MODE_11NG]	= IEEE80211_CHAN_G,
 	    [IEEE80211_MODE_VHT_5GHZ]	= IEEE80211_CHAN_A,
 	    [IEEE80211_MODE_VHT_2GHZ]	= IEEE80211_CHAN_G,
+	    [IEEE80211_MODE_HE_5GHZ]	= IEEE80211_CHAN_A,
+	    [IEEE80211_MODE_HE_2GHZ]	= IEEE80211_CHAN_G,
 	};
 	u_int modeflags;
 	int i;
@@ -2069,6 +2071,11 @@ findchannel(struct ieee80211com *ic, int ieee, int mode)
 			if ((mode == IEEE80211_MODE_VHT_5GHZ ||
 			    mode == IEEE80211_MODE_VHT_2GHZ) &&
 			    !IEEE80211_IS_CHAN_VHT(c))
+				continue;
+
+			if ((mode == IEEE80211_MODE_HE_5GHZ ||
+			    mode == IEEE80211_MODE_HE_2GHZ) &&
+			    !IEEE80211_IS_CHAN_HE(c))
 				continue;
 
 			/*
@@ -2116,6 +2123,10 @@ check_mode_consistency(const struct ieee80211_channel *c, int mode)
 		return (IEEE80211_IS_CHAN_HTA(c));
 	case IEEE80211_MODE_11NG:
 		return (IEEE80211_IS_CHAN_HTG(c));
+	case IEEE80211_MODE_HE_2GHZ:
+		return (IEEE80211_IS_CHAN_HTG(c) && IEEE80211_IS_CHAN_HE(c));
+	case IEEE80211_MODE_HE_5GHZ:
+		return (IEEE80211_IS_CHAN_HTA(c) && IEEE80211_IS_CHAN_HE(c));
 	}
 	return 1;
 
@@ -2267,6 +2278,22 @@ ieee80211_ioctl_setchannel(struct ieee80211vap *vap,
 			if (IEEE80211_IS_CHAN_A(c)) {
 				c2 = findchannel(ic, ireq->i_val,
 					IEEE80211_MODE_VHT_5GHZ);
+				if (c2 != NULL)
+					c = c2;
+			}
+			break;
+		case IEEE80211_MODE_HE_2GHZ:
+			if (IEEE80211_IS_CHAN_ANYG(c)) {
+				c2 = findchannel(ic, ireq->i_val,
+					IEEE80211_MODE_HE_2GHZ);
+				if (c2 != NULL)
+					c = c2;
+			}
+			break;
+		case IEEE80211_MODE_HE_5GHZ:
+			if (IEEE80211_IS_CHAN_A(c)) {
+				c2 = findchannel(ic, ireq->i_val,
+					IEEE80211_MODE_HE_5GHZ);
 				if (c2 != NULL)
 					c = c2;
 			}

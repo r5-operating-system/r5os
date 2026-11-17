@@ -1,5 +1,20 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Wi-Fi step 4a: Wi-Fi 6 stays off until the settings ask
+
+Problem: the stack can join with Wi-Fi 4 and 5 when `ht_vht` is on, and it has no idea what an HE (802.11ax) element is. The MT7921 firmware wants those fields in the station record before it will use Wi-Fi 6.
+
+What changed:
+- HE Capabilities (extension 35) and HE Operation (extension 36) are parsed in `ieee80211_he.c` (MIT). A short element, a wrong id, or a length past the bytes the caller holds is ignored. The peer's MAC, PHY and MCS fields are stored on the node. The IE list keeps the same size: two spare slots now name those elements.
+- Modes `IEEE80211_MODE_HE_2GHZ` (14) and `IEEE80211_MODE_HE_5GHZ` (15) follow VHT. `IEEE80211_MODE_BYTES` stays 2. A channel that is already HT gains `IEEE80211_CHAN_HE` (`0x40000000`; `0x80000000` is already used by ifconfig) only when HE is on. No extra channel copies.
+- With `he` true and `ht_vht` true in `/boot/system/settings/kernel/drivers/mt7922wifi`, and only when the card's PHY tag byte 11 is set, the association request carries our HE Capabilities. That byte is the `he` field of `mt7921_phy_cap` (`mt7921/mcu.c`, BSD-3-Clause-Clear). Current mt76 does not read it. Assumed until a stick boot. The element is built from the streams, bandwidth, LDPC and STBC the card already reported. Absent settings leave HE off. `he` without `ht_vht` stays off.
+- The station record then carries `STA_REC_HE` (tag 14, 28 bytes) and `STA_REC_HE_V2` (tag `0x19`, 28 bytes), and the network record carries `UNI_BSS_INFO_HE_BASIC` (tag 5). The field order is `mt76_connac_mcu.h` (BSD-3-Clause-Clear). mt76 sends both station records for this card (`is_connac2`). The basic MCS map is ours; the station record's map is the access point's. 6 GHz is not in this step.
+- The host fuzzer target is `he`.
+
+Tested: `wifi_fuzz he: 60s 0 crashes` (62877696 rounds) and `wifi_fuzz ies: 60s 0 crashes` (22512640 rounds). The AMD64 image build was stopped before it finished. QEMU was not booted. An earlier compile of `ieee80211_he.c` failed because the file did not include the network headers the other net80211 files include; that include list is in this change and was not compiled again.
+
+Not tested: a Wi-Fi 6 join, the page saying "Wi-Fi 6", and a download speed (stick W2). ARM64 and RISC-V 64 not built.
+
 ## 2026-11-17 - Graphics (M13 step 3, continued): 2 Lavapipe threads, occlusion culling, glass only where it shows, option E
 
 Problem: after the transfer copy, the compose on Lavapipe still took 140-190 ms per frame while dragging (QEMU), with the copy and the blur the largest passes.
