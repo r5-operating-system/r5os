@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Settings: a failed Deskbar apply rolls back
+
+Problem: Desktop and Deskbar wrote each field as it succeeded. A later `SetLocation` failure left sort or icon size already changed.
+
+What changed: a failed `_Apply` puts the previous committed choices back.
+
+Limits: a restore that also fails leaves Deskbar where the first failure left it. No boot test.
+
 ## 2026-11-17 - Settings: the lock also stops the screen picture
 
 Problem: a closed administrator lock greys `BControl` widgets. `BScreenArrangement` is a `BView`, so Display's screen picture stayed clickable.
