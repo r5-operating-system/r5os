@@ -367,9 +367,10 @@ BluetoothView::BluetoothView(bool settingsPage)
 
 	BAppearanceKit::BCard* info = new BAppearanceKit::BCard("device info",
 		BAppearanceKit::B_CARD_PANEL, B_VERTICAL);
-	// As wide as its buttons need, at least a third of the page width at
-	// font size 12; the list takes the rest.
-	info->SetExplicitMinSize(BSize(roundf(250 * scale), B_SIZE_UNSET));
+	// As wide as its line of buttons needs; the list takes the rest. An
+	// explicit minimum of 250 pixels used to stand in for the buttons'
+	// own: narrower than three buttons, so they ran past the window's
+	// right edge (stick 51).
 	BLayoutBuilder::Group<>(info, B_VERTICAL, B_USE_SMALL_SPACING)
 		.SetInsets(B_USE_DEFAULT_SPACING)
 		.AddGroup(B_VERTICAL, 0)
