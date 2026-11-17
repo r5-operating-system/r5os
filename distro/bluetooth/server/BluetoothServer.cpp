@@ -697,13 +697,13 @@ void BluetoothServer::MessageReceived(BMessage* message)
 		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 		// SPDX-License-Identifier: MIT
 		// Decided by the sender: only on the admin port (R5AdminRequest()),
-		case BT_MSG_R5_AUDIO_CONNECT:
-		case BT_MSG_R5_AUDIO_VOICE:
+		// where the kernel names it. Here the reply address is whatever the
 		// sender chose.
 		case BT_MSG_R5_SET_RADIO:
 		case BT_MSG_R5_AUDIO_STREAMING:
 		case BT_MSG_R5_AUDIO_PAIRED:
 		case BT_MSG_R5_AUDIO_CONNECT:
+		case BT_MSG_R5_AUDIO_VOICE:
 			status = B_NOT_ALLOWED;
 			reply.AddString("text", "Send this with r5_admin_send().");
 			break;
