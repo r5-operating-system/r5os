@@ -559,11 +559,18 @@ hda_widget_get_amplifier_capabilities(hda_audio_group* audioGroup,
 hda_widget*
 hda_audio_group_get_widget(hda_audio_group* audioGroup, uint32 nodeID)
 {
-	if (audioGroup->widget_start > nodeID
-		|| audioGroup->widget_start + audioGroup->widget_count < nodeID)
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	if (nodeID < audioGroup->widget_start)
 		return NULL;
 
-	return &audioGroup->widgets[nodeID - audioGroup->widget_start];
+	uint32 index = nodeID - audioGroup->widget_start;
+	if (index >= audioGroup->widget_count)
+		return NULL;
+
+	return &audioGroup->widgets[index];
+	// SPDX-SnippetEnd
 }
 
 
