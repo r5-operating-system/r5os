@@ -1,0 +1,73 @@
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+#
+# Wi-Fi stick W1 (docs/WIFI.md, steps 1 and 2): write the mt7922wifi
+# settings for the next boot, note its number in ~/wifi-stick/next and
+# restart on y. The driver reads the file once, when it attaches, so a
+# change needs the restart.
+#
+#   wifi-next      the next boot in the order 1, 2, 3, then no file
+#   wifi-next N    boot N (1, 2 or 3)
+#
+# Boot 1: no file (ht/vht and he off). Boot 2: ht_vht true, he false.
+# Boot 3: ht_vht true, he true. After boot 3 the file is removed, so the
+# machine keeps no test switch.
+
+fd() {
+	finddir "$1" 2>/dev/null || echo "$2"
+}
+
+home=$(fd B_USER_DIRECTORY /boot/home)
+dir=$home/wifi-stick
+file=$(fd B_USER_SETTINGS_DIRECTORY "$home/config/settings")/kernel/drivers/mt7922wifi
+sysfile=$(fd B_SYSTEM_SETTINGS_DIRECTORY /boot/system/settings)/kernel/drivers/mt7922wifi
+mkdir -p "$dir" "$(dirname "$file")"
+
+cur=1
+[ -f "$dir/next" ] && cur=$(cat "$dir/next")
+if [ -n "$1" ]; then
+	next=$1
+else
+	next=$((cur + 1))
+fi
+
+case "$next" in
+	1)
+		rm -f "$file"
+		;;
+	2)
+		printf 'ht_vht true\nhe false\n' > "$file"
+		;;
+	3)
+		printf 'ht_vht true\nhe true\n' > "$file"
+		;;
+	*)
+		rm -f "$file"
+		echo done > "$dir/next"
+		echo "wifi-next: the stick is done, the settings file is removed"
+		echo "wifi-next: shut down, then put the stick back in the PC"
+		exit 0
+		;;
+esac
+
+echo "$next" > "$dir/next"
+sync
+echo "wifi-next: boot $next is next"
+if [ -f "$file" ]; then
+	echo "wifi-next: $file:"
+	sed 's/^/  /' "$file"
+else
+	echo "wifi-next: no settings file"
+fi
+if [ -f "$sysfile" ]; then
+	echo "wifi-next: note, $sysfile exists; the driver reads the home file first"
+fi
+
+printf 'wifi-next: restart? [y] '
+read answer
+if [ "$answer" = y ] || [ -z "$answer" ]; then
+	shutdown -r || echo "FAIL shutdown -r did not start (the settings are written)"
+else
+	echo "wifi-next: not restarted (the settings are written)"
+fi
