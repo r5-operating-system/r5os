@@ -96,6 +96,7 @@ SCRIPTS = {
     "m11-scroll": "distro/graphics/boot/m11-scroll",
     "m12-measure": "distro/graphics/boot/m12-measure",
     "m12-scenario": "distro/graphics/boot/m12-scenario",
+    "m13-measure": "distro/graphics/boot/m13-measure",
 }
 
 # Files planted in /boot/home (plant-m8-stick.sh, M8). The M10 stick runs
@@ -247,6 +248,16 @@ M13_BOOTS = {
 }
 
 
+# What the M13 stick's app_server must be built with (steps 2 and 3).
+M13_STRINGS = {
+    "haiku/servers/app_server": (b"lavapipe threads %s (default)",
+                                 b"compose work per frame",
+                                 b"gpu draw hardware blend off",
+                                 b"gpu draw pipeline cache %s",
+                                 b"compose passes us per frame"),
+}
+
+
 def check_m13_sources(commit: str) -> None:
     check = blob(commit, "distro/graphics/boot/check").decode("utf-8")
     for pattern, text, path in M13_LINES:
@@ -307,9 +318,11 @@ def check_m12_sources(commit: str) -> None:
             die(f"check has no M12 line {pattern!r}")
         if text.encode() not in blob(commit, path):
             die(f"{path} at {commit} does not print {text!r} (check: {pattern!r})")
+    # M13 stick: the planted boot 1 is M13's (an M12 stick had M12's)
     settings = blob(commit, "distro/graphics/boot/radeon_hd").decode("utf-8").split()
-    if " ".join(settings) != " ".join(" ".join(M12_BOOTS["1"]).split()):
-        die(f"distro/graphics/boot/radeon_hd is not M12 boot 1: {settings}")
+    if " ".join(settings) not in (" ".join(" ".join(M12_BOOTS["1"]).split()),
+            " ".join(" ".join(M13_BOOTS["1"]).split())):
+        die(f"distro/graphics/boot/radeon_hd is not M12 or M13 boot 1: {settings}")
     print(f"m12 lines {len(M12_LINES)} have a source at {commit}")
 
 
@@ -555,6 +568,7 @@ def extract(iso_wsl: str, out: str) -> None:
         f"test -s {out}/radv/bin/m11-scroll\n"
         f"test -s {out}/radv/bin/m12-measure\n"
         f"test -s {out}/radv/bin/m12-scenario\n"
+        f"test -s {out}/radv/bin/m13-measure\n"
         f"test -s {out}/teapot/bin/r5-wsi-window-test.sh\n"
         f"mkdir -p {out}/home\n"
         f"'{BFS}' --start-offset {OFFSET} '{iso_wsl}' <<EOF\n"
@@ -648,6 +662,12 @@ def check_m11_image(out: str) -> None:
             if needle not in data:
                 die(f"{relative} in the image has no {needle.decode()}; an older build")
             print(f"m12 string {relative} {needle.decode()}")
+    for relative, needles in M13_STRINGS.items():
+        data = Path(wsl(f"wslpath -w '{out}/{relative}'").strip()).read_bytes()
+        for needle in needles:
+            if needle not in data:
+                die(f"{relative} in the image has no {needle.decode()}; an older build")
+            print(f"m13 string {relative} {needle.decode()}")
 
 
 def main() -> int:
