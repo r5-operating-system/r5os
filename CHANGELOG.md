@@ -1,5 +1,15 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Settings: Revert closes the display keep-picture dialog
+
+Problem: window Revert during the 12-second keep-picture dialog called `Settle(false)` but left `DisplayView::fConfirming` set, so Apply stayed disabled and the alert stayed up.
+
+What changed: `RevertSettings` asks the view to quit that alert, drop the timeout, and clear `fConfirming` before it restores the previous mode.
+
+Limits: no boot test of the 12-second dialog.
+
+Tested: the C++ was not compiled on this host (needs libbe).
+
 ## 2026-11-17 - Settings: the lock also blocks views that are not BControl
 
 Problem: `BAdminLockBar::AcceptsInput` returned true for a view that was not a `BControl`. A screen picture stayed draggable while the machine lock was closed.
