@@ -1,5 +1,24 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Graphics (M13 step 3, continued): 2 Lavapipe threads, occlusion culling, glass only where it shows, option E
+
+Problem: after the transfer copy, the compose on Lavapipe still took 140-190 ms per frame while dragging (QEMU), with the copy and the blur the largest passes.
+
+What changed:
+- **Lavapipe uses 2 threads by default** (`LP_NUM_THREADS 2` in app_server's process, owner's choice): `gpu_lavapipe_threads <n>` sets another count, `0` Mesa's own one per CPU, and an `LP_NUM_THREADS` in the environment stays. Only Lavapipe reads it; RADV and other programs are not touched. Logged as `lavapipe threads 2 (default)`.
+- **Occlusion culling**: each layer leaves out what the layers above cover with their plain copy; what an upper effect reads of the frame below stays (glass with the blur's reach, opening and closing windows), none during the workspace slide. `gpu_compositor_cull false` is a test switch.
+- **The blur only for the glass that shows** (owner's choice): glass under opaque windows above is not blurred; it is made again when it shows. The lighter glass on Lavapipe (owner's first choice) was measured and taken out again: every strength has the same two Kawase levels, and the blur stayed at about 57 ms.
+- **Option E**: in the new look, on an opaque image, `B_OP_ALPHA` and `B_OP_OVER` bitmaps with an alpha channel, and `B_CMAP8` over, are the hardware's `kSrcOver` over the bitmap made premultiplied, with no copy of the destination. `B_RGB32` over keeps the R5 shader (with the hardware blend it failed `bitmap-rgb32-over/opaque`). The classic look keeps the R5 shader. `gpu_draw_hardware_blend false` is a test switch.
+- `gpu_debug`: `compose work per frame dispatches, regions, pixels`.
+
+Tested (QEMU, KVM, 8 virtual CPUs, Lavapipe, own image copies, short runs of 20 s per motion; load average 1-3 unless said, another session's QEMU or jam beside some runs as marked). `scripts/build-locked.sh` jam_exit=0.
+- Threads, Painter desktop: drag frame 18.5 ms (537 frames) with 2, 116.1 ms with 3, 57.2 ms with 4, about 171 ms with Mesa's default (8; the short run of the default beside another QEMU gave 260 ms); scroll 16.2 / 18.8 / 17.7 ms against about 115 ms. With 2 threads the drag passes are copy 4.1, blur 7.0, shadow 2.1, glass 1.6 ms per frame. A later run with the new default gave drag 93.5 ms and scroll 25.1 ms: single runs spread widely.
+- Skia (`gpu_draw`) with 2 threads: drag 18.3-18.7 ms (539-568 frames), scroll 33.4-33.8 ms, with option E on or off alike (a run beside another session's two QEMUs is not counted).
+- Culling against the same build without it (2 runs each): copy pass while dragging 70-77 to 54-57 ms (-25%), resizing 17-18 to 9-10 ms (-45%), scrolling 55-56 against 52-59 ms (the scroll regression of the first measurement was noise); half the pixels copied (drag 450k to 247k, scroll 686k to 280k), more copy regions (854 to 1209 per frame).
+- Option E: `r5-draw-compare --new-look` 448/490 without it, 447/490 with it before the B_RGB32 case went back to the shader; the compare after that change is not run yet. `compose compare ok` every time.
+
+Not tested: RADV and the 5625U. The thread count on real hardware: the stick measures 2 and 4 on Lavapipe (boot 3). Option E's gain on RADV.
+
 ## 2026-11-17 - Graphics (M13 step 3, code): Painter windows copied by transfer, Lavapipe settings, the M13 stick on paper
 
 Problem: step 3 of `docs/M13-PLAN.md`, code only (owner, 16 Nov 2026): the copy fast path, the Lavapipe switches, and one stick plan for RADV and Lavapipe, walked on paper.
