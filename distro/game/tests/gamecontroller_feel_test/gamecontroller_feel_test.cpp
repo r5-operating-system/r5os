@@ -633,8 +633,7 @@ test_drawing()
 	printf("gamecontroller_feel_test: drawn/highlight pixels: level %"
 		B_PRId32 "/%" B_PRId32 " of %" B_PRId32 ", bar at -0.5 %" B_PRId32
 		"/%" B_PRId32 ", bar at 0 %" B_PRId32 "/%" B_PRId32 " of %" B_PRId32
-		"
-", tilt.drawn, tilt.highlight, tilt.total, half.drawn,
+		"\n", tilt.drawn, tilt.highlight, tilt.total, half.drawn,
 		half.highlight, none.drawn, none.highlight, none.total);
 
 	// The level: a ring, a cross and a bubble, not a filled disc.
