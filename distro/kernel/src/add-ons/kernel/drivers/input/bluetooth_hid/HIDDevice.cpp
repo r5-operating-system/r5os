@@ -14,6 +14,7 @@
 
 #include "Driver.h"
 #include "HIDReport.h"
+#include "HIDReportItem.h"
 #include "ProtocolHandler.h"
 
 
@@ -33,7 +34,11 @@ HIDDevice::HIDDevice(int32 id, void* owner, const uint8* descriptor,
 	fRemoved(false),
 	fParser(this),
 	fProtocolHandlerCount(0),
-	fProtocolHandlerList(NULL)
+	fProtocolHandlerList(NULL),
+	fBatteryParser(NULL),
+	fBatteryItem(NULL),
+	fBatteryBuffer(NULL),
+	fBattery(-1)
 {
 	mutex_init(&fLock, DRIVER_NAME " device");
 	memset(&fInfo, 0, sizeof(fInfo));
@@ -72,6 +77,9 @@ HIDDevice::HIDDevice(int32 id, void* owner, const uint8* descriptor,
 		return;
 	}
 
+	// Without memory for it the device works, without a battery.
+	_FindBattery(descriptor, descriptorLength);
+
 	fStatus = B_OK;
 }
 
@@ -85,6 +93,8 @@ HIDDevice::~HIDDevice()
 		handler = next;
 	}
 
+	delete fBatteryParser;
+	free(fBatteryBuffer);
 	delete[] fQueue;
 	free(fTransferBuffer);
 	mutex_destroy(&fLock);
@@ -157,6 +167,8 @@ HIDDevice::Feed(const uint8* data, size_t length)
 	MutexLocker locker(fLock);
 	if (fRemoved)
 		return;
+
+	_UpdateBattery(data, length);
 
 	if (fTransferScheduled) {
 		fTransferScheduled = false;
@@ -244,4 +256,82 @@ HIDDevice::GetJoystickInfo(r5_joystick_info& info) const
 	info.product_id = fInfo.product_id;
 	info.version = fInfo.version;
 	strlcpy(info.name, fInfo.name, sizeof(info.name));
+	// Also before a program read the joystick (hid_shared takes the
+	// handler's own value only when this one is -1).
+	info.battery = fBattery;
+}
+
+
+int32
+HIDDevice::Battery() const
+{
+	MutexLocker locker(const_cast<mutex*>(&fLock));
+	return fBattery;
+}
+
+
+static HIDReportItem*
+find_battery_item(HIDParser& parser)
+{
+	uint8 count = parser.CountReports(HID_REPORT_TYPE_INPUT);
+	for (uint8 i = 0; i < count; i++) {
+		HIDReport* report = parser.ReportAt(HID_REPORT_TYPE_INPUT, i);
+		if (report == NULL)
+			continue;
+		for (uint32 j = 0; j < report->CountItems(); j++) {
+			HIDReportItem* item = report->ItemAt(j);
+			if (item != NULL && item->HasData() && item->UsagePage() == 0x06
+				&& item->UsageID() == 0x20)
+				return item;
+		}
+	}
+	return NULL;
+}
+
+
+void
+HIDDevice::_FindBattery(const uint8* descriptor, size_t descriptorLength)
+{
+	// Most controllers have no Battery Strength: then nothing is kept.
+	if (find_battery_item(fParser) == NULL)
+		return;
+
+	fBatteryParser = new(std::nothrow) HIDParser(this);
+	fBatteryBuffer = (uint8*)malloc(R5_BTHID_MAX_REPORT + 3);
+	if (fBatteryParser == NULL || fBatteryBuffer == NULL
+		|| fBatteryParser->ParseReportDescriptor(descriptor,
+			descriptorLength) != B_OK
+		|| (fBatteryItem = find_battery_item(*fBatteryParser)) == NULL) {
+		delete fBatteryParser;
+		fBatteryParser = NULL;
+		free(fBatteryBuffer);
+		fBatteryBuffer = NULL;
+		fBatteryItem = NULL;
+	}
+}
+
+
+void
+HIDDevice::_UpdateBattery(const uint8* data, size_t length)
+{
+	// fLock is held; length is 1 to R5_BTHID_MAX_REPORT. The buffer is
+	// zero padded by 3, as Extract() reads 4 bytes at a time.
+	if (fBatteryItem == NULL)
+		return;
+
+	memcpy(fBatteryBuffer, data, length);
+	memset(fBatteryBuffer + length, 0, R5_BTHID_MAX_REPORT + 3 - length);
+	fBatteryParser->SetReport(B_OK, fBatteryBuffer, length);
+
+	// Another report ID: SetReport() gave the battery report no data.
+	HIDReport* report = fBatteryItem->Report();
+	if (report->CurrentReport() == NULL)
+		return;
+	// A report shorter than the descriptor says carries no battery.
+	size_t payload = length - (fBatteryParser->UsesReportIDs() ? 1 : 0);
+	if (payload < report->ReportSize())
+		return;
+
+	if (fBatteryItem->Extract() == B_OK && fBatteryItem->Valid())
+		fBattery = (int32)fBatteryItem->ScaledRangeData(0, 100);
 }

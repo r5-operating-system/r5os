@@ -507,7 +507,10 @@ JoystickProtocolHandler::_GetInfo(void* buffer, size_t length)
 	MutexLocker locker(fUpdateLock);
 	if (!locker.IsLocked())
 		return B_ERROR;
-	info.battery = fBattery;
+	// bluetooth_hid knows the battery from every report it was fed, also
+	// before the first read; the other transports leave it at -1.
+	if (info.battery < 0)
+		info.battery = fBattery;
 	uint32 axes = fAxisCount;
 	if (axes > R5_JOYSTICK_MAX_AXIS_USAGES)
 		axes = R5_JOYSTICK_MAX_AXIS_USAGES;

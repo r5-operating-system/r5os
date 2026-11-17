@@ -23,6 +23,7 @@
 #include <OS.h>
 
 #include <R5BluetoothHID.h>
+#include <joystick_driver.h>
 
 
 // 8 buttons, then X and Y as 0..255 (HID 1.11 with the Generic Desktop
@@ -33,6 +34,19 @@ static const uint8 kGamepad[] = {
 	0x75, 0x01, 0x95, 0x08, 0x81, 0x02,
 	0x05, 0x01, 0x09, 0x30, 0x09, 0x31, 0x15, 0x00, 0x26, 0xFF, 0x00,
 	0x75, 0x08, 0x95, 0x02, 0x81, 0x02,
+	0xC0
+};
+
+// The same gamepad with a battery byte after X and Y: Battery Strength
+// (Generic Device Controls page 0x06, usage 0x20), 0 to 100.
+static const uint8 kBatteryPad[] = {
+	0x05, 0x01, 0x09, 0x05, 0xA1, 0x01,
+	0x05, 0x09, 0x19, 0x01, 0x29, 0x08, 0x15, 0x00, 0x25, 0x01,
+	0x75, 0x01, 0x95, 0x08, 0x81, 0x02,
+	0x05, 0x01, 0x09, 0x30, 0x09, 0x31, 0x15, 0x00, 0x26, 0xFF, 0x00,
+	0x75, 0x08, 0x95, 0x02, 0x81, 0x02,
+	0x05, 0x06, 0x09, 0x20, 0x15, 0x00, 0x25, 0x64,
+	0x75, 0x08, 0x95, 0x01, 0x81, 0x02,
 	0xC0
 };
 
@@ -201,6 +215,63 @@ main()
 	if (!wait_for_node("/dev/input/mouse/bluetooth/0", true))
 		return fail("input/mouse/bluetooth/0 not published");
 	printf("bt_hid_driver_test: mouse at /dev/input/mouse/bluetooth/0\n");
+
+	// The battery (R5_BTHID_GET_BATTERY, for the Bluetooth item in
+	// Deskbar): taken from what is fed, with no program reading.
+	r5_bthid_battery battery = { mouseID, 0 };
+	if (ioctl(sControl, R5_BTHID_GET_BATTERY, &battery, sizeof(battery)) != 0
+		|| battery.battery != -1)
+		return fail("a mouse without Battery Strength has a battery");
+	uint32 batteryHandlers = 0;
+	int32 batteryID = create(kBatteryPad, sizeof(kBatteryPad),
+		&batteryHandlers);
+	if (batteryID < 0)
+		return fail("create gamepad with battery");
+	battery.id = batteryID;
+	if (ioctl(sControl, R5_BTHID_GET_BATTERY, &battery, sizeof(battery)) != 0
+		|| battery.battery != -1)
+		return fail("battery before the first report");
+	uint8 batteryReport[4] = { 0x00, 0x80, 0x80, 73 };
+	r5_bthid_input batteryInput = { batteryID, sizeof(batteryReport),
+		batteryReport };
+	ioctl(sControl, R5_BTHID_INPUT, &batteryInput, sizeof(batteryInput));
+	// A report too short for the battery byte keeps the last value.
+	batteryInput.length = 2;
+	ioctl(sControl, R5_BTHID_INPUT, &batteryInput, sizeof(batteryInput));
+	if (ioctl(sControl, R5_BTHID_GET_BATTERY, &battery, sizeof(battery)) != 0
+		|| battery.battery != 73) {
+		printf("bt_hid_driver_test: battery %d\n", (int)battery.battery);
+		return fail("battery not 73 after a report");
+	}
+	// A kernel address and a short buffer are refused (SMAP rule).
+	if (ioctl(sControl, R5_BTHID_GET_BATTERY,
+			(void*)(addr_t)0xffffffff80000000ULL, sizeof(battery)) == 0
+		|| ioctl(sControl, R5_BTHID_GET_BATTERY, &battery, 2) == 0)
+		return fail("bad battery buffer accepted");
+	printf("bt_hid_driver_test: battery %d %%\n", (int)battery.battery);
+
+	// R5_JOYSTICK_GET_INFO has it too, before any read.
+	bool infoBattery = false;
+	for (int i = 0; i < 4 && !infoBattery; i++) {
+		char path[64];
+		snprintf(path, sizeof(path), "/dev/joystick/bluetooth/%d", i);
+		if (strcmp(path, padPath) == 0 || !wait_for_node(path, true))
+			continue;
+		int fd = open(path, O_RDONLY);
+		if (fd < 0)
+			continue;
+		r5_joystick_info info;
+		memset(&info, 0, sizeof(info));
+		info.size = sizeof(info);
+		infoBattery = ioctl(fd, R5_JOYSTICK_GET_INFO, &info, sizeof(info))
+				== 0 && info.battery == 73;
+		close(fd);
+	}
+	if (!infoBattery)
+		return fail("R5_JOYSTICK_GET_INFO battery not 73");
+	if (ioctl(sControl, R5_BTHID_DESTROY, &batteryID, sizeof(batteryID))
+			!= 0)
+		return fail("destroy gamepad with battery");
 
 	if (ioctl(sControl, R5_BTHID_DESTROY, &sPadID, sizeof(sPadID)) != 0
 		|| ioctl(sControl, R5_BTHID_DESTROY, &mouseID, sizeof(mouseID)) != 0)
