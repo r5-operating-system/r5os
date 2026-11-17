@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Graphics: the GPU is stopped before a restart or power off
+
+Problem: after a restart from R5 the 5625U's caps lock blinked. Haiku's shutdown calls no driver, so the GPU's command processor, PSP ring and interrupts ran on into the firmware's start. Linux stops them at shutdown (`amdgpu_pci_shutdown`).
+
+What changed: the kernel has R5 shutdown hooks (`r5_shutdown.h`, `shutdown.cpp` in `distro/kernel`, copied by `apply-kernel-bugs.py`), called after `sync()`. `radeon_hd` registers one with the GFX9 path: CP halt, PSP ring stop, interrupts off, VM 0 back, as `docs/GRAPHICS.md` "GFX9 stop at shutdown on GC 9.3". An addition after the reset contract; no fixed step changed.
+
+Limits: not built or booted yet. Whether the blinking was this cause is not proven; the HP blink count was not read.
+
 ## 2026-11-17 - Bluetooth: a game controller's battery in the Deskbar menu
 
 Problem: `docs/GAME-CONTROLLERS.md` puts the controller battery in the existing Bluetooth item in Deskbar. That item shows a battery line for each connected device whose `BT_MSG_R5_GET_PAIRED` entry has "battery" >= 0, but that value came only from HFP (headsets) and the LE Battery Service. A Classic HID controller's HID Battery Strength, which hid_shared reported in `R5_JOYSTICK_GET_INFO`, never reached it, and hid_shared took it only when a program read the joystick.
