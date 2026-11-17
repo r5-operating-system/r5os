@@ -1260,6 +1260,7 @@ explore_fqdn(const struct addrinfo *pai, const char *hostname,
 			freeaddrinfo(result);
 			result = NULL;
 		}
+		return error != 0 ? error : EAI_NONAME;
 	}
 // SPDX-SnippetEnd
 
