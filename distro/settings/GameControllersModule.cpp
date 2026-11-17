@@ -12,6 +12,12 @@
  * Defaults gives every controller its own labels again and removes the
  * chosen controller's layout and button setup. No administrator is needed:
  * the choice is the person's own.
+ *
+ * The Test box also has Rumble, Motion and Trigger feedback (option C,
+ * phase 1, after feedback-*.png in the mockup), each shown only when the
+ * chosen controller has it. Nothing of it is stored: Close() stops the
+ * rumble and frees the triggers when another controller is chosen or the
+ * page goes.
  */
 
 
@@ -29,6 +35,7 @@
 #include <MenuItem.h>
 #include <MessageRunner.h>
 #include <PopUpMenu.h>
+#include <Slider.h>
 #include <SpaceLayoutItem.h>
 #include <String.h>
 #include <StringView.h>
@@ -36,11 +43,14 @@
 #include <Window.h>
 
 #include <GameController.h>
+#include <GameControllerMotionView.h>
 #include <GameControllerView.h>
 #include <R5Icons.h>
 
 #include <math.h>
 #include <stdlib.h>
+
+#include <algorithm>
 
 #include <map>
 #include <string>
@@ -51,6 +61,9 @@ static const uint32 kMsgSelectController = 'gcSe';
 static const uint32 kMsgLabelsChosen = 'gcLb';
 static const uint32 kMsgOpenBluetooth = 'gcBt';
 static const uint32 kMsgBatteryTick = 'gcBa';
+static const uint32 kMsgRumble = 'gcRu';
+static const uint32 kMsgFeelTick = 'gcFt';
+static const uint32 kMsgTriggerChanged = 'gcTr';
 
 
 struct controller_entry {
@@ -713,6 +726,56 @@ private:
 };
 
 
+// #pragma mark - RumbleWaves
+
+
+/*!	Three small arcs beside the Rumble buttons while the controller
+	rumbles, in the accent colour.
+*/
+class RumbleWaves : public BView {
+public:
+	RumbleWaves()
+		:
+		BView("rumble waves", B_WILL_DRAW),
+		fActive(false)
+	{
+		float unit = network_unit();
+		SetExplicitMinSize(BSize(roundf(30 * unit), roundf(24 * unit)));
+		SetExplicitMaxSize(BSize(roundf(30 * unit), roundf(24 * unit)));
+	}
+
+	void SetActive(bool active)
+	{
+		if (active == fActive)
+			return;
+		fActive = active;
+		Invalidate();
+	}
+
+	virtual void Draw(BRect updateRect)
+	{
+		(void)updateRect;
+		if (!fActive)
+			return;
+		BRect bounds = Bounds();
+		float unit = network_unit();
+		SetDrawingMode(B_OP_ALPHA);
+		SetHighColor(ui_color(B_CONTROL_HIGHLIGHT_COLOR));
+		SetPenSize(std::max(1.5f, 2 * unit));
+		BPoint center(bounds.left, (bounds.top + bounds.bottom) / 2);
+		for (int i = 0; i < 3; i++) {
+			float radius = (6 + 7 * i) * unit;
+			StrokeArc(center, radius, radius * 1.1f, -40, 80);
+		}
+		SetPenSize(1);
+		SetDrawingMode(B_OP_COPY);
+	}
+
+private:
+	bool	fActive;
+};
+
+
 // #pragma mark - GameControllersPage
 
 
@@ -739,6 +802,11 @@ private:
 			void				_UpdateTest();
 			void				_CloseSetup();
 			ControllerCard*		_SelectedCard() const;
+			void				_UpdateFeel();
+			void				_ApplyTrigger();
+			BView*				_MakeFeelGroup(const char* name,
+									const char* title,
+									BGroupView** content);
 
 			GameControllersModule* fModule;
 			SettingsContext*	fContext;
@@ -759,6 +827,23 @@ private:
 			BStringView*		fTestHint;
 			BMessageRunner*		fBatteryRunner;
 			BMessenger			fSetup;
+
+			// Rumble, Motion and Trigger feedback.
+			BView*				fRumbleGroup;
+			BButton*			fLightButton;
+			BButton*			fStrongButton;
+			RumbleWaves*		fWaves;
+			bigtime_t			fRumbleUntil;
+			BView*				fMotionGroup;
+			BGameControllerMotionView* fMotion;
+			BView*				fTriggerGroup;
+			BMenuField*			fEffectField;
+			BMenuItem*			fEffectItems[4];
+			BSlider*			fStartSlider;
+			BStringView*		fStartValue;
+			BSlider*			fStrengthSlider;
+			BStringView*		fStrengthValue;
+			BMessageRunner*		fFeelRunner;
 };
 
 
@@ -1047,7 +1132,9 @@ GameControllersPage::GameControllersPage(GameControllersModule* module,
 	BGroupView("game controllers page", B_VERTICAL, B_USE_DEFAULT_SPACING),
 	fModule(module),
 	fContext(context),
-	fBatteryRunner(NULL)
+	fBatteryRunner(NULL),
+	fRumbleUntil(0),
+	fFeelRunner(NULL)
 {
 	float unit = network_unit();
 
@@ -1144,6 +1231,107 @@ GameControllersPage::GameControllersPage(GameControllersModule* module,
 	fTestHint->SetLowColor(network_box_fill());
 	fTestHint->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
 
+	// Rumble, Motion and Trigger feedback (option C, phase 1), under the
+	// picture, so the page keeps its width at the smallest window.
+	BFont boldFont(r5_settings_bold_font());
+	rgb_color quietText = quiet_color(150);
+
+	BMessage* light = new BMessage(kMsgRumble);
+	light->AddFloat("strong", 0.2f);
+	light->AddFloat("weak", 0.5f);
+	fLightButton = new BButton("rumble light", "Light", light);
+	BMessage* strong = new BMessage(kMsgRumble);
+	strong->AddFloat("strong", 1.0f);
+	strong->AddFloat("weak", 1.0f);
+	fStrongButton = new BButton("rumble strong", "Strong", strong);
+	fWaves = new RumbleWaves();
+	BStringView* rumbleHint = new BStringView("rumble hint",
+		"One second, both motors.");
+	rumbleHint->SetHighColor(quietText);
+	BGroupView* content;
+	fRumbleGroup = _MakeFeelGroup("rumble group", "Rumble", &content);
+	BLayoutBuilder::Group<>(content)
+		.AddGroup(B_HORIZONTAL, roundf(8 * unit))
+			.Add(fLightButton)
+			.Add(fStrongButton)
+			.Add(fWaves)
+			.AddGlue()
+		.End()
+		.Add(rumbleHint);
+
+	fMotion = new BGameControllerMotionView("motion view");
+	fMotionGroup = _MakeFeelGroup("motion group", "Motion", &content);
+	BLayoutBuilder::Group<>(content)
+		.Add(fMotion);
+
+	static const char* const kEffects[4] = { "Off", "Resistance",
+		"Trigger click", "Vibration" };
+	BPopUpMenu* effectMenu = new BPopUpMenu("effect");
+	for (int32 i = 0; i < 4; i++) {
+		BMessage* message = new BMessage(kMsgTriggerChanged);
+		message->AddInt32("effect", i);
+		fEffectItems[i] = new BMenuItem(kEffects[i], message);
+		effectMenu->AddItem(fEffectItems[i]);
+	}
+	fEffectItems[0]->SetMarked(true);
+	fEffectField = new BMenuField("effect field", NULL, effectMenu);
+	BStringView* effectLabel = new BStringView("effect label", "Effect");
+	effectLabel->SetFont(&boldFont);
+	BStringView* effectWhere = new BStringView("effect where",
+		"on L2 and R2");
+	effectWhere->SetHighColor(quietText);
+	fStartSlider = new BSlider("starts at", NULL,
+		new BMessage(kMsgTriggerChanged), 0, 100, B_HORIZONTAL);
+	fStartSlider->SetModificationMessage(new BMessage(kMsgTriggerChanged));
+	fStartSlider->SetValue(40);
+	fStrengthSlider = new BSlider("strength", NULL,
+		new BMessage(kMsgTriggerChanged), 0, 100, B_HORIZONTAL);
+	fStrengthSlider->SetModificationMessage(
+		new BMessage(kMsgTriggerChanged));
+	fStrengthSlider->SetValue(70);
+	BStringView* startLabel = new BStringView("start label", "Starts at");
+	startLabel->SetFont(&boldFont);
+	BStringView* strengthLabel = new BStringView("strength label",
+		"Strength");
+	strengthLabel->SetFont(&boldFont);
+	fStartValue = new BStringView("start value", "40 %");
+	fStartValue->SetFont(&boldFont);
+	fStrengthValue = new BStringView("strength value", "70 %");
+	fStrengthValue->SetFont(&boldFont);
+	float valueWidth = ceilf(boldFont.StringWidth("100 %"));
+	fStartValue->SetExplicitMinSize(BSize(valueWidth, B_SIZE_UNSET));
+	fStrengthValue->SetExplicitMinSize(BSize(valueWidth, B_SIZE_UNSET));
+	BStringView* triggerHint = new BStringView("trigger hint",
+		"Pull L2 or R2 to feel it.");
+	triggerHint->SetHighColor(quietText);
+	fTriggerGroup = _MakeFeelGroup("trigger group", "Trigger feedback",
+		&content);
+	BLayoutBuilder::Group<>(content)
+		.AddGrid(roundf(8 * unit), roundf(4 * unit))
+			.Add(effectLabel, 0, 0)
+			.AddGroup(B_HORIZONTAL, roundf(8 * unit), 1, 0, 2)
+				.Add(fEffectField)
+				.Add(effectWhere)
+				.AddGlue()
+			.End()
+			.Add(startLabel, 0, 1)
+			.Add(fStartSlider, 1, 1)
+			.Add(fStartValue, 2, 1)
+			.Add(strengthLabel, 0, 2)
+			.Add(fStrengthSlider, 1, 2)
+			.Add(fStrengthValue, 2, 2)
+		.End()
+		.Add(triggerHint);
+
+	BView* feelViews[] = { fWaves, fMotion, fEffectField, effectLabel,
+		effectWhere, fStartSlider, fStrengthSlider, startLabel,
+		strengthLabel, fStartValue, fStrengthValue, triggerHint,
+		rumbleHint };
+	for (size_t i = 0; i < sizeof(feelViews) / sizeof(feelViews[0]); i++) {
+		feelViews[i]->SetViewColor(network_box_fill());
+		feelViews[i]->SetLowColor(network_box_fill());
+	}
+
 	FilledBox* testBox = new FilledBox("test box");
 	testBox->SetLabel(new BoxTitle("Test"));
 	BGroupView* test = new BGroupView(B_VERTICAL, roundf(8 * unit));
@@ -1162,7 +1350,10 @@ GameControllersPage::GameControllersPage(GameControllersModule* module,
 		.End()
 		.Add(fTest, 1)
 		.Add(fTestHint)
-		.Add(fIDs);
+		.Add(fIDs)
+		.Add(fRumbleGroup)
+		.Add(fMotionGroup)
+		.Add(fTriggerGroup);
 	testBox->AddChild(test);
 
 	BLayoutBuilder::Group<>(this)
@@ -1190,6 +1381,13 @@ GameControllersPage::AttachedToWindow()
 	fLayoutField->Menu()->SetTargetForItems(this);
 	fLabelsField->Menu()->SetTargetForItems(this);
 	fSetupButton->SetTarget(this);
+	fLightButton->SetTarget(this);
+	fStrongButton->SetTarget(this);
+	fEffectField->Menu()->SetTargetForItems(this);
+	fStartSlider->SetTarget(this);
+	fStrengthSlider->SetTarget(this);
+	BMessage feelTick(kMsgFeelTick);
+	fFeelRunner = new BMessageRunner(BMessenger(this), &feelTick, 33000);
 	LinkControl* bluetooth = dynamic_cast<LinkControl*>(
 		FindView("bluetooth link"));
 	if (bluetooth != NULL)
@@ -1212,6 +1410,8 @@ GameControllersPage::DetachedFromWindow()
 	BGameController::StopWatching(BMessenger(this));
 	delete fBatteryRunner;
 	fBatteryRunner = NULL;
+	delete fFeelRunner;
+	fFeelRunner = NULL;
 	fTest->SetDevice(NULL);
 	BGroupView::DetachedFromWindow();
 }
@@ -1320,6 +1520,43 @@ GameControllersPage::MessageReceived(BMessage* message)
 			break;
 		}
 
+		case kMsgRumble:
+		{
+			float strongMotor;
+			float weakMotor;
+			BGameController* controller = fTest->Controller();
+			if (controller == NULL || !controller->CanRumble()
+				|| message->FindFloat("strong", &strongMotor) != B_OK
+				|| message->FindFloat("weak", &weakMotor) != B_OK)
+				break;
+			if (controller->SetRumble(strongMotor, weakMotor, 1000000)
+					== B_OK) {
+				fRumbleUntil = system_time() + 1000000;
+				fWaves->SetActive(true);
+			}
+			break;
+		}
+
+		case kMsgTriggerChanged:
+			_ApplyTrigger();
+			break;
+
+		case kMsgFeelTick:
+		{
+			if (fRumbleUntil != 0 && system_time() >= fRumbleUntil) {
+				fRumbleUntil = 0;
+				fWaves->SetActive(false);
+			}
+			// The picture reads the controller (Update()); this only shows
+			// the last motion sample.
+			BGameController* controller = fTest->Controller();
+			game_controller_motion motion;
+			if (controller != NULL && controller->IsMotionEnabled()
+				&& controller->GetMotion(&motion) == B_OK)
+				fMotion->SetMotion(motion);
+			break;
+		}
+
 		case kMsgOpenBluetooth:
 			if (fContext != NULL)
 				fContext->OpenPage("bluetooth");
@@ -1409,6 +1646,97 @@ GameControllersPage::_Select(const char* device)
 	else
 		fModule->SetSelected(0, 0);
 	_UpdateTest();
+	_UpdateFeel();
+}
+
+
+/*!	Shows the feel groups the chosen controller has. A newly opened
+	controller does not rumble and has free triggers, so the menu goes back
+	to Off; motion is switched on for the Motion group.
+*/
+void
+GameControllersPage::_UpdateFeel()
+{
+	BGameController* controller = fTest->Controller();
+	bool rumble = controller != NULL && controller->CanRumble();
+	bool motion = controller != NULL && controller->HasMotion();
+	bool triggers = controller != NULL && controller->HasTriggerEffects();
+
+	fRumbleUntil = 0;
+	fWaves->SetActive(false);
+	fMotion->Reset();
+	if (motion)
+		controller->SetMotionEnabled(true);
+	fEffectItems[0]->SetMarked(true);
+	fTest->SetTriggerMark(B_CONTROLLER_TRIGGER_LEFT, -1);
+	fTest->SetTriggerMark(B_CONTROLLER_TRIGGER_RIGHT, -1);
+
+	BView* groups[3] = { fRumbleGroup, fMotionGroup, fTriggerGroup };
+	bool shown[3] = { rumble, motion, triggers };
+	for (int i = 0; i < 3; i++) {
+		if (shown[i] && groups[i]->IsHidden(groups[i]))
+			groups[i]->Show();
+		else if (!shown[i] && !groups[i]->IsHidden(groups[i]))
+			groups[i]->Hide();
+	}
+}
+
+
+/*!	A group inside the Test box: a thin box on the box fill with a bold
+	title; *_content is the BGroupView to fill.
+*/
+BView*
+GameControllersPage::_MakeFeelGroup(const char* name, const char* title,
+	BGroupView** _content)
+{
+	float unit = network_unit();
+	BBox* box = new BBox(name);
+	box->SetViewColor(network_box_fill());
+	box->SetLowColor(network_box_fill());
+	BGroupView* content = new BGroupView(B_VERTICAL, roundf(6 * unit));
+	content->SetViewColor(network_box_fill());
+	BLayoutBuilder::Group<>(content)
+		.SetInsets(roundf(10 * unit), roundf(4 * unit), roundf(10 * unit),
+			roundf(8 * unit));
+	box->AddChild(content);
+	BStringView* label = new BStringView("group title", title);
+	label->SetFont(r5_settings_bold_font());
+	label->SetViewColor(network_box_fill());
+	label->SetLowColor(network_box_fill());
+	box->SetLabel(label);
+	*_content = content;
+	return box;
+}
+
+
+void
+GameControllersPage::_ApplyTrigger()
+{
+	int32 start = fStartSlider->Value();
+	int32 strength = fStrengthSlider->Value();
+	BString text;
+	text.SetToFormat("%" B_PRId32 " %%", start);
+	fStartValue->SetText(text.String());
+	text.SetToFormat("%" B_PRId32 " %%", strength);
+	fStrengthValue->SetText(text.String());
+
+	int32 effect = 0;
+	for (int32 i = 0; i < 4; i++) {
+		if (fEffectItems[i]->IsMarked())
+			effect = i;
+	}
+	float mark = effect == B_TRIGGER_EFFECT_OFF ? -1 : start / 100.0f;
+	fTest->SetTriggerMark(B_CONTROLLER_TRIGGER_LEFT, mark);
+	fTest->SetTriggerMark(B_CONTROLLER_TRIGGER_RIGHT, mark);
+
+	BGameController* controller = fTest->Controller();
+	if (controller == NULL || !controller->HasTriggerEffects())
+		return;
+	for (int32 i = 0; i < 2; i++) {
+		controller->SetTriggerEffect((game_controller_trigger)i,
+			(game_controller_trigger_effect)effect, start / 100.0f,
+			strength / 100.0f);
+	}
 }
 
 

@@ -48,6 +48,13 @@ public:
 	virtual	BSize				MinSize();
 	virtual	BSize				PreferredSize();
 
+	// Added 17 Nov 2026 (docs/LIBR5.md, "Game Kit"): a tick on a trigger
+	// cap where a trigger effect starts, 0 (released) to 1 (pulled all the
+	// way); below 0 removes it. Only drawn on a controller with analog
+	// triggers.
+			void				SetTriggerMark(game_controller_trigger trigger,
+									float position);
+
 private:
 			struct Private;
 

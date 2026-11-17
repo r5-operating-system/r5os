@@ -347,10 +347,11 @@ stick_ring(BView* view, const model_painter& m, const gc_stick& stick,
 
 
 // An analog trigger: a small cap over the shoulder, filled from the
-// bottom by how far it is pulled, with "L2 60%" beside it.
+// bottom by how far it is pulled, with "L2 60%" beside it. mark, 0 to 1,
+// is a tick where a trigger effect starts (SetTriggerMark()); below 0 none.
 void
 trigger_cap(BView* view, const painter& p, const model_painter& m,
-	BRect shoulder, const char* name, int16 value, bool left)
+	BRect shoulder, const char* name, int16 value, bool left, float mark)
 {
 	float width = m.model->width * m.scale;
 	float capWidth = kCapWidth * width;
@@ -376,6 +377,12 @@ trigger_cap(BView* view, const painter& p, const model_painter& m,
 	view->SetHighColor(p.line);
 	view->SetPenSize(std::max(1.5f, capWidth * 0.08f));
 	view->StrokeRoundRect(cap, radius, radius);
+	if (mark >= 0) {
+		float y = cap.bottom - cap.Height() * std::min(1.0f, mark);
+		float reach = capWidth * 0.2f;
+		view->StrokeLine(BPoint(cap.left - reach, y),
+			BPoint(cap.right + reach, y));
+	}
 
 	char text[32];
 	snprintf(text, sizeof(text), "%s %d%%", name,
@@ -410,6 +417,7 @@ struct BGameControllerView::Private {
 	std::vector<BShape*>	art;
 	const gc_model*			artModel;
 	float					artScale;
+	float					triggerMark[2];
 
 	Private()
 		:
@@ -420,6 +428,8 @@ struct BGameControllerView::Private {
 		artModel(NULL),
 		artScale(0)
 	{
+		triggerMark[0] = -1;
+		triggerMark[1] = -1;
 		memset(&state, 0, sizeof(state));
 		state.battery = -1;
 	}
@@ -524,6 +534,24 @@ BGameControllerView::SetLabels(game_controller_labels labels)
 	if (fPrivate == NULL || fPrivate->labels == labels)
 		return;
 	fPrivate->labels = labels;
+	Invalidate();
+}
+
+
+void
+BGameControllerView::SetTriggerMark(game_controller_trigger trigger,
+	float position)
+{
+	if (fPrivate == NULL || trigger < B_CONTROLLER_TRIGGER_LEFT
+		|| trigger > B_CONTROLLER_TRIGGER_RIGHT)
+		return;
+	if (position > 1)
+		position = 1;
+	if (!(position >= 0))
+		position = -1;
+	if (fPrivate->triggerMark[trigger] == position)
+		return;
+	fPrivate->triggerMark[trigger] = position;
 	Invalidate();
 }
 
@@ -770,13 +798,15 @@ BGameControllerView::Draw(BRect updateRect)
 		if (leftTrigger
 			&& control_bounds(m, B_CONTROLLER_BUTTON_LEFT_SHOULDER, shoulder)) {
 			trigger_cap(this, p, m, shoulder, model->leftCap,
-				s.axes[B_CONTROLLER_AXIS_LEFT_TRIGGER], true);
+				s.axes[B_CONTROLLER_AXIS_LEFT_TRIGGER], true,
+				fPrivate->triggerMark[B_CONTROLLER_TRIGGER_LEFT]);
 		}
 		if (rightTrigger
 			&& control_bounds(m, B_CONTROLLER_BUTTON_RIGHT_SHOULDER,
 				shoulder)) {
 			trigger_cap(this, p, m, shoulder, model->rightCap,
-				s.axes[B_CONTROLLER_AXIS_RIGHT_TRIGGER], false);
+				s.axes[B_CONTROLLER_AXIS_RIGHT_TRIGGER], false,
+				fPrivate->triggerMark[B_CONTROLLER_TRIGGER_RIGHT]);
 		}
 		return;
 	}
