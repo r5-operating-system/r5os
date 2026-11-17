@@ -98,6 +98,10 @@ smallest_local_heap(VkInstance instance, VkPhysicalDevice physical)
 // the compositor's (SkiaGpu::LockQueue()) take this lock.
 static BLocker sQueueLock("vulkan queue");
 
+// M13: signalled semaphores that wait for a compose, at most (each one is a
+// sync object of the R5 GPU interface, 128 per program)
+static const size_t kMaxSignalled = 8;
+
 // M13 step 2: the pipeline cache on disk
 static const bigtime_t kPipelineSyncInterval = 10000000;
 static const size_t kPipelineDataLargest = 32 * 1024 * 1024;
@@ -1031,11 +1035,23 @@ SkiaGpu::RunWork(const char** _reason)
 		// the fence: the next run waits for it, a read-back right now
 		VkFence fence = (VkFence)fRunFence;
 		bool submitted;
+		const char* failure = NULL;
 		{
 			BAutolock queueLock(sQueueLock);
 			submitted = context->submit(submit);
+			if (!submitted)
+				failure = "submit failed: graphite";
 			if (submitted) {
-				VkSemaphore semaphore = shared
+				// 5625U stick, 17 Nov 2026: at most kMaxSignalled wait for
+				// a compose. A pass without a compose used to wait for them
+				// in an empty batch; RADV turns an empty submit with waits
+				// into sync files (radv_amdgpu_cs_submit_zero), which the
+				// R5 DRM library has not, and the device was lost. Now they
+				// wait for the next compose, and a run beyond the limit
+				// signals none: it is done on the GPU before its damage
+				// goes out anyway (the run's fence, below).
+				bool signal = shared && fSignalled.size() < kMaxSignalled;
+				VkSemaphore semaphore = signal
 					? (VkSemaphore)_Signal() : VK_NULL_HANDLE;
 				VkSubmitInfo batch = {};
 				batch.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -1044,9 +1060,18 @@ SkiaGpu::RunWork(const char** _reason)
 				batch.pSignalSemaphores = &semaphore;
 				if (fence != VK_NULL_HANDLE)
 					sResetFences(sDevice, 1, &fence);
-				if ((shared && semaphore == VK_NULL_HANDLE)
-					|| sRawQueueSubmit(sQueue, 1, &batch, fence)
-						!= VK_SUCCESS) {
+				VkResult batchResult = VK_SUCCESS;
+				if (signal && semaphore == VK_NULL_HANDLE)
+					failure = "submit failed: no semaphore";
+				else if ((batchResult = sRawQueueSubmit(sQueue, 1, &batch,
+						fence)) != VK_SUCCESS)
+					failure = "submit failed: signal batch";
+				if (failure != NULL) {
+					// 5625U stick, 17 Nov 2026: say which and why
+					syslog(LOG_INFO, "app_server: gpu draw %s, result %d, "
+						"semaphores %zu free %zu signalled\n", failure,
+						(int)batchResult, fFreeSemaphores.size(),
+						fSignalled.size());
 					if (semaphore != VK_NULL_HANDLE)
 						sDestroySemaphore(sDevice, semaphore, NULL);
 					submitted = false;
@@ -1058,7 +1083,7 @@ SkiaGpu::RunWork(const char** _reason)
 			}
 		}
 		if (!submitted) {
-			*_reason = "submit failed";
+			*_reason = failure != NULL ? failure : "submit failed";
 			ok = false;
 		} else {
 			bigtime_t submitTime = system_time();

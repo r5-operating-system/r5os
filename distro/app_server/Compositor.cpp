@@ -804,6 +804,21 @@ Compositor::Create(Desktop* desktop, HWInterface* screen)
 		return NULL;
 	compositor->fDebug = options.debug;
 	compositor->fForceFail = options.fail;
+	// 5625U stick, 17 Nov 2026: RADV and the R5 DRM library print their
+	// errors on stderr, which did not reach the syslog. With gpu_debug
+	// app_server's stderr goes to a file next to it.
+	if (options.debug) {
+		char path[B_PATH_NAME_LENGTH];
+		if (find_directory(B_SYSTEM_LOG_DIRECTORY, -1, true, path,
+				sizeof(path)) == B_OK
+			&& strlcat(path, "/app_server-stderr.log", sizeof(path))
+				< sizeof(path)
+			&& freopen(path, "a", stderr) != NULL) {
+			setvbuf(stderr, NULL, _IONBF, 0);
+			fprintf(stderr, "app_server: stderr of this session\n");
+			log_line("stderr into %s", path);
+		}
+	}
 	compositor->fLavapipeMsaa = options.lavapipeMsaa;
 	compositor->fNoCull = options.noCull;
 	if (options.noCull)
@@ -2728,7 +2743,6 @@ Compositor::_ComposeLoop()
 			}
 		}
 		if (fPaused) {
-			_ConsumeSkiaSignals();
 			// M11 review: no frame runs while paused, but a program whose
 			// window app_server ended still waits for its images. The
 			// last frame waited for its fence, so none is read. Third
@@ -2815,7 +2829,6 @@ Compositor::_ComposeLoop()
 		if (damage.CountRects() == 0) {
 			// Fourth review: the wake of an ended share has no damage when
 			// its view is hidden; what ended is still freed and given back.
-			_ConsumeSkiaSignals();
 			BAutolock _(fShareLock);
 			_ShareRetire();
 			continue;
@@ -3132,6 +3145,7 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 		rect.fill = layer == NULL ? 1 : fromImage ? kComposeFromImage : 0;
 		rect.color = background;
 		rect.sourceStride = layer != NULL ? layer->buffer->Width() : 0;
+		bool copied = false;
 		if (fromImage && part.CountRects() > 0) {
 			// M13 (step 3's copy path, done with step 2): the plain part of
 			// a Skia window is a transfer copy from its image into the
@@ -3139,15 +3153,18 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 			// texelFetch in compose.comp cost 150-160 ms per frame while
 			// dragging (QEMU, "compose passes"), a copy is a row memcpy.
 			_RecordImageCopy(layer, part, frameInfo.buffer, rect.frameStride);
-			part.MakeEmpty();
+			copied = true;
 		} else if (layer != NULL && part.CountRects() > 0) {
 			// M13 step 3: a Painter window's plain part too, row by row
 			// from its buffer (vkCmdCopyBuffer), the same words
 			_RecordBufferCopy(layer, part, frameInfo.buffer,
 				rect.frameStride);
-			part.MakeEmpty();
+			copied = true;
 		}
-		for (int32 i = 0; i < part.CountRects(); i++) {
+		// 5625U stick, 17 Nov 2026: part stays as it is; the window's
+		// shared views below are drawn inside it (part was emptied after
+		// the copy, and VulkanTeapot's zero-copy view stayed white)
+		for (int32 i = 0; !copied && i < part.CountRects(); i++) {
 			clipping_rect r = part.RectAtInt(i);
 			rect.frameX = r.left;
 			rect.frameY = r.top;
@@ -3390,10 +3407,6 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 		fSamples[fSampleCount++] = took;
 	if (!signals.empty())
 		fSkia->ReturnSignals(signals);
-	if (!fConsumedSignals.empty()) {
-		fSkia->ReturnSignals(fConsumedSignals);
-		fConsumedSignals.clear();
-	}
 	_TakeStamps();
 	sComposeFrames++;
 
@@ -3655,51 +3668,6 @@ Compositor::_TakeStamps()
 			* (double)vk->timestampPeriod / 1000.0);
 	}
 	fPassFrames++;
-}
-
-
-/*!	M13 step 2: a pass that composes nothing (damage off screen, a pause)
-	still waits for the semaphores of the runs before it, so the runs can
-	signal them again. Between two composes, so the compose fence is free.
-*/
-void
-Compositor::_ConsumeSkiaSignals()
-{
-	CompositorVulkan* vk = fVulkan;
-	if (fSkia == NULL || fSkia->IsShutDown() || vk == NULL)
-		return;
-	std::vector<uint64> signals;
-	std::vector<VkSemaphore> waits;
-	std::vector<VkPipelineStageFlags> stages;
-	VkResult result = VK_SUCCESS;
-	SkiaGpu::LockQueue();
-	fSkia->TakeSignals(signals);
-	if (!signals.empty()) {
-		for (size_t i = 0; i < signals.size(); i++) {
-			waits.push_back((VkSemaphore)signals[i]);
-			stages.push_back(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
-		}
-		VkSubmitInfo submit = {};
-		submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-		submit.waitSemaphoreCount = (uint32)waits.size();
-		submit.pWaitSemaphores = &waits[0];
-		submit.pWaitDstStageMask = &stages[0];
-		result = vk->vkQueueSubmit(vk->queue, 1, &submit, VK_NULL_HANDLE);
-	}
-	SkiaGpu::UnlockQueue();
-	if (signals.empty())
-		return;
-	if (result != VK_SUCCESS) {
-		if (fFailure == NULL)
-			fFailure = "submit";
-		return;
-	}
-	// No CPU wait: a Skia run can take seconds on Lavapipe, and a late GPU
-	// is not a failure (M11 decision 14; a 15 s wait here turned the
-	// compositor off in QEMU). The next compose's fence covers this batch,
-	// so they go back to the pool after it.
-	fConsumedSignals.insert(fConsumedSignals.end(), signals.begin(),
-		signals.end());
 }
 
 

@@ -154,12 +154,6 @@ private:
 			status_t			_InitVulkan(bool radv, const char** reason);
 			// M13 step 2: the sampler and the blank image
 			bool				_InitImages(const char** _reason);
-			// M13 step 2: a pass without a compose still waits for the
-			// runs' semaphores, so they can be signalled again
-			void				_ConsumeSkiaSignals();
-			// waited for in an empty batch, back to the pool after the next
-			// compose's fence
-			std::vector<uint64>	fConsumedSignals;
 			// M13 step 2, gpu_debug: the compose time per pass
 			enum {
 				kPassCopy = 0,
