@@ -321,6 +321,20 @@ Location: `distro/firmware/mediatek`. Installed at `system/non-packaged/data/fir
 
 The blobs are unmodified. sha256 starts: `WIFI_MT7961_patch_mcu_1_2_hdr.bin` `a276c06c2b772adb`, `WIFI_RAM_CODE_MT7961_1.bin` `b94217a951518a9c`, `BT_RAM_CODE_MT7961_1_2_hdr.bin` `7a440a0f7404c73a`. MediaTek allows use and redistribution with devices that contain MediaTek chipsets, but not in a form that would require the files themselves to be covered by the GPL or LGPL. R5 ships them as separate files that the drivers read at run time, the same way as the AMD firmware. This is not an open-source license. The text is `LICENSES/LICENCE.mediatek`. MediaTek does not endorse R5.
 
+### Realtek RTL8761CU Bluetooth firmware
+
+Location: `distro/firmware/realtek`. Installed at `system/non-packaged/data/firmware/h2generic/` with `LICENCE.rtlwifi_firmware.txt`, in the regular image. It is the patch for the ASUS USB-BT600 dongle (USB `0b05:1d70`).
+
+| Piece | Project | License |
+|---|---|---|
+| `rtl8761cu_fw.bin` (10296 bytes, file version `0x4618d3f3`), `rtl8761cu_config.bin` (11 bytes) | Realtek Semiconductor Corporation, via linux-firmware (git.kernel.org, commit `35e542439e8aaca81fa1527fe3887afbb68a6779`, "rtl_bt: Add firmware and config files for RTL8761CUV"; fetched 17 Nov 2026) | `LICENCE.rtlwifi_firmware.txt` (`LicenseRef-LICENCE.rtlwifi_firmware.txt`) |
+
+The blobs are unmodified. sha256: `rtl8761cu_fw.bin` `525bfa5ab9a3ed74b788f9ac494467c522a436c1bc5290ebcb05c7f920533c09`, `rtl8761cu_config.bin` `3142c2732470e4edcdb68edf58cc505b581e38d56b3ec09c64eddcb1d5099507`. Copyright (c) 2010, Realtek Semiconductor Corporation. Realtek allows redistribution and use in binary form without modification, if the copyright notice and the disclaimer are reproduced in the documentation, and forbids using its name to endorse a product and any reverse engineering, decompilation or disassembly. R5 only reads the file headers (signature, patch table, trailer), never the code inside. The licence also grants a limited patent licence for use with an operating system under an OSI-approved licence. This is not an open-source licence. The text is `LICENSES/LICENCE.rtlwifi_firmware.txt`. Realtek does not endorse R5.
+
+### FreeBSD rtlbtfw
+
+The Realtek loader in `h2generic` (`h2realtek.cpp`, `h2rtkfw.h`) is R5's own MIT code, written from the protocol and file format of FreeBSD's `usr.sbin/bluetooth/rtlbtfw`. Two of its tables, the chip table and the project ids in `h2rtkfw.h`, are FreeBSD's data and are marked as a `BSD-2-Clause` snippet. Copyright (c) 2013 Adrian Chadd, (c) 2019 Vladimir Kondratyev, (c) 2023 Future Crew LLC. License: BSD-2-Clause, text in `LICENSES/rtlbtfw-BSD-2-Clause.txt`. No GPL source (Linux `btrtl`, `btusb`) was read.
+
 ### AMD family 19h microcode
 
 Location: `distro/firmware/amd-ucode`. Installed on the boot volume at `system/non-packaged/data/firmware/amd-ucode/`.

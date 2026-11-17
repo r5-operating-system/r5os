@@ -8,7 +8,7 @@ This is the second Bluetooth plan for R5 Operating System. The first plan, `docs
 
 Channel Sounding (distance measurement) is not part of this plan. The owner chose that on 17 Nov 2026, and no USB radio with Channel Sounding was found.
 
-Nothing in this document is built yet. The facts about the tree were checked on 17 Nov 2026 against `main`. Facts from the web are marked with their source and are not verified unless the text says so. The choices in section 6 are the owner's.
+Only the radio part of step B0 is built (section 5, "B0 as built"). The facts about the tree were checked on 17 Nov 2026 against `main`. Facts from the web are marked with their source and are not verified unless the text says so. The choices in section 6 are the owner's.
 
 It follows the BeOS and Haiku way. An application sees the Media Kit (a sound output and input node) and the R5 Bluetooth calls in `docs/LIBR5.md`, never an HCI command. The stack stays R5's own: `bluetooth_server`, the `h2generic` driver and the kernel `bluetooth` modules. BlueZ is not used.
 
@@ -86,6 +86,27 @@ Each step is its own small pull request, built for AMD64 with `scripts/build-loc
 - The dongle: which chip it has (USB ID), whether `h2generic` takes it, which firmware it needs and that firmware's licence.
 - The LE feature bits of both radios, the dongle and the 5625U, read with `0x2003`: CIS Central, CIS Peripheral, Isochronous Broadcaster, Synchronized Receiver, Periodic Advertising, and the 6.0 bits. If the 5625U radio lacks the ISO bits, LE Audio runs only on the dongle.
 - **Pass:** the reports are in this document. The feature bits are recorded from a real radio, with how they were read.
+
+#### B0 as built: the dongle starts in R5
+
+- **The chip:** the ASUS USB-BT600 is USB `0b05:1d70` (Windows: `USB\VID_0B05&PID_1D70&REV_0200`), a Realtek RTL8761CU. It reports the Bluetooth class, so `h2generic` already takes it; without a patch from the host it is not usable, and Windows on the owner's PC has no driver for it either.
+- **The firmware:** `rtl_bt/rtl8761cu_fw.bin` (10296 bytes) and `rtl_bt/rtl8761cu_config.bin` (11 bytes) from linux-firmware (commit `35e542439e`), unmodified, in `distro/firmware/realtek` and in the regular image at `system/non-packaged/data/firmware/h2generic`, next to the MediaTek file. Licence: `LICENCE.rtlwifi_firmware.txt` (Realtek, 2010): binary redistribution without modification, with the notice and disclaimer; no reverse engineering. So R5 reads only the headers of the file. Credits: `THIRD_PARTY_NOTICES.md`, `docs/LICENSING.md`, `LICENSES/`.
+- **The file:** a v1 ("Realtech") file, version `0x4618d3f3`, with four patch entries for chip ids 0 to 3. Each entry points at the same 252 bytes at offset `0x30`; the rest of the file up to the trailer is zeros. The trailer (`51 04 fd 77`) names project id `0x33` (51), which FreeBSD's table does not have. The patch's last four bytes are the file version, as `rtlbtfw` expects. A chip id is the ROM version plus one, so ROM versions 0, 1 and 2 have a patch.
+- **The loader:** `h2realtek.cpp` (R5, MIT) runs in `device_open` right after `mediatek_setup()`, only for USB vendor `0x0bda` or a USB ID in its table, and only when Read Local Version names Realtek (`0x005d`). It follows FreeBSD `rtlbtfw` (BSD-2-Clause): the firmware name from the USB ID table (one entry, `0b05:1d70` → `rtl8761cu`, project `0x33`) or else from the chip's report (FreeBSD's chip table), the project id check, the ROM version (vendor command `0xfc6d`), the patch with the config after it, sent with `0xfc20` in 252-byte pieces (263 bytes: two pieces). No Linux source was read. The parser is `h2rtkfw.h`, without kernel dependencies.
+- **When it fails:** a missing, wrong or refused firmware gives one syslog line (`h2generic: realtek: ... It stays off.`) and the radio's `open` fails; nothing panics and nothing waits longer than two seconds per command. The MediaTek radio is not touched: MediaTek vendors never get a Realtek command, and the Realtek loader returns at once for any other device. A Realtek chip without an entry is used as it is, as before.
+- **What is logged after the patch:** HCI and LMP version and subversion, manufacturer, the LMP feature mask, and the LE feature mask with 2M, Coded, extended and periodic advertising, CIS central and peripheral, ISO broadcaster and synchronized receiver. `bluetooth_server` logs the same LE line for every radio (`hci<n> le features ...`), so the 5625U's MediaTek radio is recorded on its next stick boot.
+- **Two radios:** `bluetooth_server` keeps a list of radios and the Bluetooth page of Settings already has the radio menu; nothing there changed.
+- **VirtualBox:** `scripts/run-vbox-r5.ps1 -PassDongle` passes `0b05:1d70` through the VM's xHCI; without the switch the filter is removed.
+- **Tests:** `scripts/test-rtkfw.sh` (host, ASan and UBSan, also against the shipped files) and `scripts/fuzz-bt.sh rtkfw` (60 s).
+- **Read from the real dongle (17 Nov 2026, VirtualBox 7.2.22, `-PassDongle`, plugged in while R5 ran; from the syslog):**
+  - From ROM: HCI version `0x0e`, revision `0x0e`, LMP version `0x0e`, subversion `0x8761`. FreeBSD's table has no such entry, so the USB ID entry is needed. ROM version 1.
+  - Download: `rtl8761cu`, file version `0x4618d3f3`, 263 bytes in 11 ms.
+  - After the patch: HCI version `0x0e` (Core 6.0), revision `0x7bf1`, LMP version `0x0e`, subversion `0x5762`, manufacturer `0x5d` (Realtek).
+  - LMP features `0x877bfddbfeffffff` (LE supported). Page 1 `0x3`, page 2 `0x920` (Secure Connections), read by `bluetooth_server`.
+  - LE features `0x0000008ef7fe77fd`: 2M PHY yes, Coded PHY **no** (bit 11), extended advertising yes, periodic advertising yes, CIS Central yes, CIS Peripheral yes, Isochronous Broadcaster yes, Synchronized Receiver yes. Read by the driver and by `bluetooth_server` (`0x2003`), the same value.
+  - `bluetooth_server` set the radio up and a scan heard 13 LE devices and one Classic device. The Bluetooth page showed the radio.
+  - So the dongle has what B1 to B7 need. The 5625U's MediaTek radio is read on its next stick boot (the same `le features` line); not done yet.
+- **Limits:** v2 ("RTBTCore") files are refused for now (no shipped chip needs one). A chip that kept its patch through a warm restart while staying powered is not detected; if it then refuses the download, it stays off until it is unplugged.
 
 ### B1: sending advertisements (legacy, extended, periodic)
 
@@ -165,4 +186,4 @@ Each step is its own small pull request, built for AMD64 with `scripts/build-loc
 
 - The liblc3 qualification (QDID 194161) and the royalty-free claim for LC3 come from Google's README and from secondary sources.
 - The SIG fees and trademark rules come from bluetooth.com pages as found on 17 Nov 2026.
-- The ASUS USB-BT600's features come from one article (Argenox); R5 has not read them yet. Whether the 5625U radio supports ISO is unknown until B0.
+- The ASUS USB-BT600's features were read on R5 in step B0 (above). They match the Argenox article except the Coded PHY, which the dongle does not report. Whether the 5625U radio supports ISO is unknown until its next stick boot.
