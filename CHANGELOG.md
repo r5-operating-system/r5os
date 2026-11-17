@@ -15,7 +15,7 @@ Tested (QEMU, KVM, 8 virtual CPUs, Lavapipe, own image copies, short runs of 20 
 - Threads, Painter desktop: drag frame 18.5 ms (537 frames) with 2, 116.1 ms with 3, 57.2 ms with 4, about 171 ms with Mesa's default (8; the short run of the default beside another QEMU gave 260 ms); scroll 16.2 / 18.8 / 17.7 ms against about 115 ms. With 2 threads the drag passes are copy 4.1, blur 7.0, shadow 2.1, glass 1.6 ms per frame. A later run with the new default gave drag 93.5 ms and scroll 25.1 ms: single runs spread widely.
 - Skia (`gpu_draw`) with 2 threads: drag 18.3-18.7 ms (539-568 frames), scroll 33.4-33.8 ms, with option E on or off alike (a run beside another session's two QEMUs is not counted).
 - Culling against the same build without it (2 runs each): copy pass while dragging 70-77 to 54-57 ms (-25%), resizing 17-18 to 9-10 ms (-45%), scrolling 55-56 against 52-59 ms (the scroll regression of the first measurement was noise); half the pixels copied (drag 450k to 247k, scroll 686k to 280k), more copy regions (854 to 1209 per frame).
-- Option E: `r5-draw-compare --new-look` 448/490 without it, 447/490 with it before the B_RGB32 case went back to the shader; the compare after that change is not run yet. `compose compare ok` every time.
+- Option E: `r5-draw-compare --new-look` 448/490 without it, 447/490 with it before the B_RGB32 case went back to the shader, and 448/490 with the same FAILs as without option E after it. `compose compare ok` every time.
 
 Not tested: RADV and the 5625U. The thread count on real hardware: the stick measures 2 and 4 on Lavapipe (boot 3). Option E's gain on RADV.
 
