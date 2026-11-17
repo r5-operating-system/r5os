@@ -2283,14 +2283,15 @@ SkiaPainter::DrawBitmap(const ServerBitmap* bitmap, BRect bitmapRect,
 			// M13 (option E of docs/M13-PLAN.md): on an opaque image in the
 			// new look these three are the hardware's own blend over the
 			// bitmap made premultiplied, with no copy of the destination.
-			// B_OP_OVER on B_RGB32 (the magic colour) and on B_CMAP8 (alpha
-			// 0 or 255) write a pixel whole or not at all, so they are
-			// exact; B_OP_ALPHA and B_OP_OVER with an alpha channel round
-			// in floating point (a step of 1 at most). The classic look,
-			// where the compare set runs, keeps the R5 shader.
+			// B_OP_OVER on B_CMAP8 (alpha 0 or 255) writes a pixel whole
+			// or not at all; B_OP_ALPHA and B_OP_OVER with an alpha channel
+			// round in floating point (a step of 1 at most). B_OP_OVER on
+			// B_RGB32 (the magic colour) keeps the R5 shader: done this way
+			// it failed bitmap-rgb32-over/opaque in the new-look compare
+			// (QEMU, 17 Nov 2026). The classic look, where the compare set
+			// runs, keeps the R5 shader.
 			if (sHardwareBlend && fTarget->IsOpaque() && !SkiaPainter::Classic()
 				&& (source.special == kSpecialAlphaBlend
-					|| source.special == kSpecialOver32Magic
 					|| source.special == kSpecialCopyIfAlpha)) {
 				sk_sp<SkRuntimeEffect> effect = bitmap_over_effect();
 				if (effect != nullptr) {
