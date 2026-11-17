@@ -1,5 +1,18 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-17 - Graphics (M13 step 1): five small app_server fixes for Skia drawing
+
+Problem: `docs/M13-PLAN.md` Priority 2: hot paths of the Skia drawing that cost CPU or uploads on every draw.
+
+What changed (one commit each): bitmap textures are checked by a fast 64-bit hash of all bytes instead of a full copy and `memcmp` (`FindTexture`; no flag, because a program writes its `BBitmap` at any time); a drawn, unrotated string without a view transform is laid out once (the pen position is the width of the drawing's own pass); an opaque solid fill uses `SkPaint::setColor()` instead of a runtime shader; gradients reuse their uploaded colours (32 per target, compared byte for byte); no wake of the draw thread per draw call inside `BeginUpdate()..EndUpdate()` (drawing outside an update, and an update held over 100 ms, still wake at once).
+
+Tested (QEMU, KVM, 8 virtual CPUs, Lavapipe, `gpu_draw true`, `scripts/qemu-m13-measure.py` on own image copies, base and this branch alternated: base, step 1, base, step 1). Host load: load average about 2 (only these runs, no other QEMU or jam). `scripts/build-locked.sh` jam_exit=0.
+- Base (`claude/m13-step2-fix`): drag 161.4 / 166.8 ms (121 / 122 frames), scroll 182.8 / 142.4 ms (111 / 135 frames), draw while dragging 97.8 / 101.4 ms.
+- Step 1: drag 163.4 / 160.7 ms (126 / 190 frames), scroll 143.4 / 147.6 ms (140 / 136 frames), draw while dragging 92.4 / 107.5 ms.
+- No `compositor off`, no `gpu draw off`. The difference is within the spread of the base runs: on Lavapipe the frame is bound by the GPU work (compose passes: copy about 55 ms, blur 55 ms, shadow 21 ms, glass 18 ms per frame), which these CPU-side fixes do not change. An earlier measurement per commit (17 Nov, 00:00-01:00) ran beside another session's jam (load 3-9) and is not used.
+
+Not tested: RADV and the 5625U, where the CPU side weighs more (first M13 stick). The 36 MB wallpaper case of the hash is not in the QEMU scenario.
+
 ## 2026-11-17 - Graphics (M13 step 2 fix): no compositor off on Lavapipe, a copy instead of texelFetch, Mesa's cache, compose time per pass
 
 Problem: after #4330 the compositor turned itself off with `fence timeout` on Lavapipe (QEMU, `gpu_draw true`). Two causes were in step 2's own code: the damage of a Skia run went out right after the submit, so a compose was queued behind runs of 11-15 s after Sign in and hit its 15 s limit; and a pass without a compose waited up to 15 s on the CPU for the runs' semaphores. The old build (main with step 0) also turned it off, in 2 of 5 runs, so the limit itself did not fit Lavapipe. And with the images, the plain copy of a Skia window (`texelFetch` in `compose.comp`) cost 150-163 ms per frame while dragging on Lavapipe.

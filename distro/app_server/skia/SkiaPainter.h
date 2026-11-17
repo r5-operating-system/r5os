@@ -27,6 +27,7 @@
 #include <memory>
 #include <vector>
 
+#include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkPath.h"
@@ -93,11 +94,16 @@ public:
 			SkiaImage*			SharedImage() const { return fImage.Get(); }
 
 	// Step 5c: textures of bitmaps drawn into this target, kept while the
-	// bitmap's bytes stay the same (compared with a copy; a program may
-	// write a bitmap's memory at any time).
+	// bitmap's bytes stay the same (M13 step 1: compared by a hash of all
+	// bytes; a program may write a bitmap's memory at any time).
 			sk_sp<SkImage>		FindTexture(const void* id, const uint8* bits,
 									int32 length, int32 width, int32 height,
 									int32 bytesPerRow, int32 space, bool raw);
+	// M13 step 1: the GPU image of a gradient's colours (the 256-entry
+	// ramp, or a vertical gradient's column), kept per target while the
+	// same colours come again; under the lock. NULL when it cannot be
+	// uploaded.
+			sk_sp<SkImage>		GradientImage(const SkBitmap& colors);
 			void				KeepTexture(const void* id, const uint8* bits,
 									int32 length, int32 width, int32 height,
 									int32 bytesPerRow, int32 space, bool raw,
@@ -189,11 +195,22 @@ protected:
 				int32				bytesPerRow;
 				int32				space;
 				bool				raw;
-				std::vector<uint8>	bits;
+				// M13 step 1: a hash of the bytes instead of a copy
+				int32				length;
+				uint64				hash;
 				sk_sp<SkImage>		image;
 				bigtime_t			used;
 			};
 			std::vector<Texture>	fTextures;
+
+			struct Gradient {
+				std::vector<uint8>	bits;
+				int32				width;
+				int32				height;
+				sk_sp<SkImage>		image;
+				bigtime_t			used;
+			};
+			std::vector<Gradient>	fGradients;
 			size_t				fTextureBytes = 0;
 };
 
@@ -307,10 +324,14 @@ public:
 									BRegion& _touched);
 
 	// text (step 4); the pen position stays ServerFont's
+	// M13 step 1: _advance gets the layout's pen advance (the x of
+	// GlyphLayoutEngine's Finish()), so the caller needs no second layout
+	// for the pen position; untouched when nothing was laid out.
 			BRect				DrawString(const char* string, uint32 length,
 									BPoint baseLine,
 									const escapement_delta* delta,
-									const BPoint* offsets);
+									const BPoint* offsets,
+									double* _advance = NULL);
 
 private:
 			// what the R5 shader blends (SkiaPainter.cpp, _Composite())
