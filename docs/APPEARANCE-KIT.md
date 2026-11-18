@@ -2,6 +2,12 @@
 
 The R5 interface classes: what exists, and when to use it. The exact calls, colors and sizes are in `docs/LIBR5.md`. Window chrome (tab, frame, control look) is `docs/LOOK.md`. Form layout is `docs/STYLE.md`.
 
+## Before you design a window
+
+- Glass: read R5Book `docs/r5book/appearance-effects.html`, "Window effects". A program window asks for glass with `BAppearanceKit::set_window_glass(this, true)` in its constructor (or `set_view_glass()` for one view) and uses the theme colors. Do not paint an opaque fill of its own over the background: only `B_OP_ALPHA` and `B_ALPHA_COMPOSITE` drawing lets the glass through. Glass shows only in the GPU mode and when the user has frosted glass on; otherwise the window is the plain theme panel. A mockup shows both states.
+- Reuse first: `libr5ui` and `libr5icons` (`docs/LIBR5.md`, `docs/ICONS.md`), then the Haiku kits.
+- Match one existing Settings page and About R5 for spacing, bold box titles and icons.
+
 ## What it is
 
 - C++ classes in BeOS style, in namespace `BAppearanceKit`, the same way as `BPackageKit`. A program writes `using BAppearanceKit::BCard;` or the full name.
