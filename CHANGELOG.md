@@ -1,5 +1,25 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-18 - Kernel (AMD64): microcode-grenzen, INVPCID type 2, TLB-range-limiet, clflushopt en amd_pstates
+
+Problem:
+- `find_microcode_amd()` in `arch_cpu.cpp` las `table[i].installed_cpu` tot een `0`-sentinel zonder `section->size` of de resterende containergrootte te begrenzen.
+- `arch_cpu_global_tlb_invalidate()` las `CR4` in een `uint32` en schakelde altijd tweemaal `CR4.PGE`, ook wanneer `INVPCID` beschikbaar is.
+- `arch_cpu_invalidate_tlb_range()` riep `invlpg` per pagina aan zonder bovengrens op het aantal pagina's. Op x86 wordt deze functie alleen aangeroepen vanuit `SMP_MSG_INVALIDATE_PAGE_RANGE` (`smp.cpp:802`), dat alleen vanuit `x86_physical_page_mapper_large_memory.cpp:506` voor globale kernelpagina's wordt verstuurd.
+- `arch_vm_flush_memory_type_range()` gebruikte altijd geserialiseerde `clflush`, ook wanneer `CLFLUSHOPT` beschikbaar is.
+- `amd_pstates` forceerde in `init_pstates()` altijd `SCHEDULER_MODE_LOW_LATENCY` (met dubbele IPI) en herstelde in `uninit_pstates()` niet de schedulermodus die vóór `init_pstates()` actief was.
+
+What changed:
+- `find_microcode_amd()` controleert dat de eerste sectie binnen `size` past en begrenst de equivalentietabel-lus met `(i + 1) * sizeof(amd_equiv_cpu_entry) <= section->size`.
+- `arch_cpu_global_tlb_invalidate()` gebruikt `invpcid` type 2 wanneer `IA32_FEATURE_INVPCID` (`FEATURE_7_EBX`) aanwezig is, en bewaart `x86_read_cr4()` in `addr_t` als fallback. Geen PCID (5625U heeft CPUID leaf 1 ECX bit 17 = 0).
+- `arch_cpu_invalidate_tlb_range()` valt bij `start > end` of `>= 64` pagina's terug op `arch_cpu_global_tlb_invalidate()` (niet een CR3-reload, omdat de pagina's globaal zijn). Op AMD64 heeft dit geen effect: `src/system/kernel/arch/x86/Jamfile` bouwt op `x86_64` `x86_physical_page_mapper_mapped.cpp` en niet `x86_physical_page_mapper_large_memory.cpp`, zodat `SMP_MSG_INVALIDATE_PAGE_RANGE` en `arch_cpu_invalidate_tlb_range()` op AMD64 nooit worden aangeroepen.
+- `arch_vm_flush_memory_type_range()` gebruikt `clflushopt` gevolgd door `sfence` wanneer `IA32_FEATURE_CLFLUSHOPT` (`FEATURE_7_EBX`) beschikbaar is, met `clflush` + `sfence` als fallback.
+- `amd_pstates` bewaart in `init_pstates()` de huidige schedulermodus (`_user_get_scheduler_mode()`) in `sSavedSchedulerMode` en herstelt die modus in `uninit_pstates()` synchroon op alle CPU's. `MSR_AMD_CPPC_ENABLE` blijft ongewijzigd (kan op AMD CPPC wel op 1 worden gezet maar niet naar 0 worden gewist).
+
+Tested: `scripts/build-locked.sh` geeft `jam_exit=0`, `mesa_exit=0`. Korte QEMU-boot (KVM, `-cpu host,+smap`, eigen kopie van `r5-os.image`): rapporteert `invpcid`, `smap` en `cflushopt`, schakelt SMAP in (`enable SMAP`), doorloopt `arch_cpu` en `arch_vm` (PAT) en `vesa_init()` zonder panic.
+
+Limits: QEMU onder KVM geeft het hypervisor-bit door en biedt geen AMD CPPC-MSR's of microcode-container-update op echte cores; het `amd_pstates`- en microcodepad zijn niet op de 5625U geboot. `arch_cpu_invalidate_tlb_range()` is op AMD64 onbereikbaar.
+
 ## 2026-11-18 - IPv6: review fixes for DHCPv6, SLAAC, the resolver, UDP sources and the default route
 
 Problem (review of #4425, before merge):

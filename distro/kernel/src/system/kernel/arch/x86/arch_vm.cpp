@@ -382,8 +382,13 @@ arch_vm_flush_memory_type_range(addr_t address, size_t bytes)
 	mapped = KERNEL_PMAP_BASE + address;
 	line = mapped & ~((addr_t)step - 1);
 	end = mapped + bytes;
-	for (; line < end; line += step)
-		asm volatile("clflush (%0)" : : "r"(line) : "memory");
+	if (x86_check_feature(IA32_FEATURE_CLFLUSHOPT, FEATURE_7_EBX)) {
+		for (; line < end; line += step)
+			asm volatile("clflushopt (%0)" : : "r"(line) : "memory");
+	} else {
+		for (; line < end; line += step)
+			asm volatile("clflush (%0)" : : "r"(line) : "memory");
+	}
 	asm volatile("sfence" ::: "memory");
 }
 /* SPDX-SnippetEnd */

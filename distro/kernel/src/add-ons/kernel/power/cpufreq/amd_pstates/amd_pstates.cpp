@@ -19,6 +19,11 @@
 
 #include <arch_cpu.h>
 #include <cpu.h>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <kscheduler.h>
+// SPDX-SnippetEnd
 #include <smp.h>
 #include <util/AutoLock.h>
 
@@ -27,6 +32,11 @@
 
 
 static bool sAvoidBoost = true;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+static scheduler_mode sSavedSchedulerMode = SCHEDULER_MODE_LOW_LATENCY;
+// SPDX-SnippetEnd
 
 
 static void set_normal_pstate(void* /* dummy */, int cpu);
@@ -108,7 +118,12 @@ init_pstates()
 	dprintf("using AMD P-States (capabilities: 0x%08" B_PRIx64 ")\n",
 		x86_read_msr(MSR_AMD_CPPC_CAP1));
 
-	pstates_set_scheduler_mode(SCHEDULER_MODE_LOW_LATENCY);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	sSavedSchedulerMode = static_cast<scheduler_mode>(_user_get_scheduler_mode());
+	sAvoidBoost = sSavedSchedulerMode == SCHEDULER_MODE_POWER_SAVING;
+// SPDX-SnippetEnd
 
 	call_all_cpus_sync(set_normal_pstate, NULL);
 	return B_OK;
@@ -118,6 +133,11 @@ init_pstates()
 static status_t
 uninit_pstates()
 {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	sAvoidBoost = sSavedSchedulerMode == SCHEDULER_MODE_POWER_SAVING;
+// SPDX-SnippetEnd
 	call_all_cpus_sync(set_normal_pstate, NULL);
 
 	return B_OK;
