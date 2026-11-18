@@ -52,6 +52,14 @@ done
 if [[ "${R5_KERNEL_DEBUG:-0}" == "1" ]]; then
 	kdebug_level=2
 fi
+kdebug_hdr="$HAIKU/build/config_headers/r5_kdebug_level.h"
+tmp_kdebug="$(mktemp)"
+printf '#define KDEBUG_LEVEL %s\n' "$kdebug_level" > "$tmp_kdebug"
+if ! cmp -s "$tmp_kdebug" "$kdebug_hdr" 2>/dev/null; then
+	mv "$tmp_kdebug" "$kdebug_hdr"
+else
+	rm -f "$tmp_kdebug"
+fi
 echo "jam jobs=$jobs profile=$profile kdebug_level=$kdebug_level"
 jam -q -j"$jobs" "$profile"
 jam_exit=$?
