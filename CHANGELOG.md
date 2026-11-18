@@ -1,5 +1,20 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-18 - Kernel (AMD64): syscall-tijdregistratie zonder spinlock (`time_seq`)
+
+Problem:
+- `src/system/kernel/arch/x86/64/interrupts.S` (`UPDATE_THREAD_USER_TIME` / `UPDATE_THREAD_KERNEL_TIME`) en `thread.cpp` namen bij elke syscall-entry, syscall-exit, `thread_at_kernel_entry`/`exit` en elke `get_thread_info`/`CPUTime`-lezing `thread->time_lock` (spinlock).
+
+What changed (Step 3):
+- `distro/kernel/headers/private/kernel/thread_types.h`: `uint32 time_seq` toegevoegd aan `Thread` met `BeginTimeWrite()`, `EndTimeWrite()` en `ReadTimes()` (standaard seqlock-ordening met `__atomic_thread_fence(__ATOMIC_RELEASE)` / `__ATOMIC_ACQUIRE` en `arch_cpu_pause()`).
+- `distro/kernel/src/system/kernel/arch/x86/asm_offsets.cpp` en `distro/kernel/src/system/kernel/arch/x86/64/interrupts.S`: `UPDATE_THREAD_USER_TIME` en `UPDATE_THREAD_KERNEL_TIME` gebruiken `THREAD_time_seq` (`addl $1`) in plaats van `acquire_spinlock`/`release_spinlock` op `THREAD_time_lock`.
+- `distro/kernel/src/system/kernel/thread.cpp`, `team.cpp`, `scheduler/scheduler.cpp`, `scheduler/scheduler_cpu.cpp`, `scheduler/scheduler_thread.h`: alle lezers van `user_time`/`kernel_time`/`last_time`/`in_kernel` omgezet naar `ReadTimes()`; schrijvers gebruiken `BeginTimeWrite()`/`EndTimeWrite()`. `thread_reset_for_exec()` houdt `InterruptsSpinLocker` op `thread->time_lock` rond `cpu_clock_offset`.
+- `distro/cpu/r5_pstate_log.cpp`: meet `user_time + kernel_time` van een 1-seconde drukke lus via `get_thread_info()` en logt `R5 time check:`.
+
+Tested (Step 3):
+- `scripts/build-locked.sh`: `jam_exit=0`, `mesa_exit=0`.
+- Korte QEMU-boot (`-cpu Nehalem,+smap,+smep`, eigen kopie van `r5-os.image`): schakelt SMEP/SMAP in, bereikt `net_server` zonder panic en logt `R5 time check: busy thread wall=1000000 us user=928103 us kernel=54447 us sum=982550 us`.
+
 ## 2026-11-18 - Kernel (AMD64): 64-bits add-with-carry netwerk-checksum (`compute_checksum`)
 
 Problem:

@@ -282,8 +282,14 @@ scheduler_new_thread_entry(Thread* thread)
 {
 	thread_resumes(thread);
 
-	SpinLocker locker(thread->time_lock);
-	thread->last_time = system_time();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	bigtime_t now = system_time();
+	thread->BeginTimeWrite();
+	thread->last_time = now;
+	thread->EndTimeWrite();
+// SPDX-SnippetEnd
 }
 
 
