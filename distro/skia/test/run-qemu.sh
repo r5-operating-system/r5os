@@ -46,7 +46,7 @@ quit
 EOT
 
 accel=tcg
-cpu=qemu64
+cpu=Nehalem,+smap,+smep
 if [ -r /dev/kvm ]; then
 	accel=kvm
 	cpu=host

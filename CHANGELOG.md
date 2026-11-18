@@ -1,5 +1,22 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-18 - AMD64 baseline is x86-64-v2, including the kernel
+
+Problem: user space and the kernel were built as x86-64-v1 (`-march=x86-64`). POPCNT, SSE4.2 and the rest of x86-64-v2 were not available to the compiler. A higher baseline with no check in the loader stops an older CPU with `#UD` and no message.
+
+What changed:
+- `distro/jam/ArchitectureRules` adds `case x86_64 : archFlags += -march=x86-64-v2`. `archFlags` is in `ccBaseFlags` and in `HAIKU_CCFLAGS`, so user space, the kernel and kernel add-ons are v2. Chosen 18 Nov 2026.
+- The same file strips `-march=x86-64-v2` from the boot-loader flags (the loaders inherit `HAIKU_CCFLAGS`) and prints `R5 boot loader flags` for each loader. `bios_ia32` stays `-march=pentium` and `-m32`.
+- One check in `distro/boot/arch/x86/arch_cpu.cpp` (`boot_arch_cpu_init`). The EFI loader already calls it. The BIOS loader calls it from `distro/boot/bios_ia32/cpu.cpp`. Missing SSE3, SSSE3, SSE4.1, SSE4.2, POPCNT, CMPXCHG16B or LAHF/SAHF prints `This R5 Operating System build requires an x86-64-v2 CPU (SSE4.2 / POPCNT).` and halts. LAHF/SAHF is part of GCC's x86-64-v2; the screen text names SSE4.2 and POPCNT.
+- `scripts/run-qemu-r5.sh` uses `-cpu Nehalem,+smap,+smep` when KVM is absent, and `-cpu host` when KVM is present. The Skia and Bluetooth QEMU scripts use the same CPU. `qemu64` is below v2 (no SSSE3, SSE4.1, SSE4.2 or POPCNT on QEMU 10.2.1).
+
+Tested: `scripts/build-locked.sh` gives `jam_exit=0`, `mesa_exit=0` (18 Nov 2026, about 13:31 Europe/Amsterdam). The jam log prints `R5 boot loader flags` for `bios_ia32`, `efi` and `pxe_ia32`. None of those lines contains `-march=x86-64-v2`. `bios_ia32` and `pxe_ia32` have `-march=pentium -m32`. The kernel line is `-march=x86-64-v2` plus `-mno-red-zone -fno-omit-frame-pointer -fno-tree-vectorize`, and it has no `-mno-sse`. QEMU 10.2.1, KVM, an own copy of `r5-os.image` (not `scripts/run-qemu-r5.sh`):
+- `-cpu Nehalem,+smap,+smep`, 150 s: serial has `enable SMAP` and `R5 net_server`. The screen is the first-boot window ("Welcome to R5 Operating System") on the blue desktop. No panic and no invalid-opcode line.
+- `-cpu qemu64`, BIOS: serial is only `This R5 Operating System build requires an x86-64-v2 CPU (SSE4.2 / POPCNT).` The guest stays at that text screen until it is killed (the loader waits for a key).
+- OVMF (`/usr/share/ovmf/OVMF.fd`) starting the built `haiku_loader.efi`: `-cpu qemu64` prints the same sentence and `*** PANIC ***`. `-cpu Nehalem,+smap,+smep` prints `Welcome to the Haiku boot loader!` and then finds no boot volume, because that disk is only the loader. The raw `r5-os.image` has no EFI system partition, so OVMF on that image stops with `No bootable option or device was found` and never enters the loader.
+
+Limits: no stick boot and no step 0 benchmark, so no speed claim. The PXE loader is not on the v2 march, and it does not call the CPU check. VirtualBox was not booted. ARM64 and RISC-V rules were not edited.
+
 ## 2026-11-18 - Kernel (AMD64): a missing standby page table stops with a panic, not silently
 
 Problem (review of #4435): `_SplitLargePage()` checked for an empty standby page-table list only with `ASSERT_PRINT`. A release kernel (`KDEBUG_LEVEL 0`, prompt 4) compiles that away. On an empty list the split would then write 512 entries into physical page 0. It should not happen, because every 2 MB PDE takes one standby table when it is mapped, but the result would be silent memory damage.

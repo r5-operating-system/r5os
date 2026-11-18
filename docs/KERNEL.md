@@ -11,7 +11,7 @@ R5 AMD64 defaults to the BIOS boot platform and also builds the EFI loader.
 
 `build/jam/ArchitectureRules` (x86_64 case): `HAIKU_KERNEL_PLATFORM ?= bios_ia32`, and boot targets `bios_ia32`, `efi`, `pxe_ia32`. The kernel sources live under `src/system/kernel/arch/x86`.
 
-`scripts/run-qemu-r5.sh` starts QEMU with `-machine pc` (SeaBIOS), `-smp 2`, and `-cpu host` when KVM is available, otherwise `-cpu qemu64`. `scripts/run-vbox-r5.ps1` defaults to `--cpus 2` and `--firmware bios`. Those two scripts never reach the EFI loader.
+`scripts/run-qemu-r5.sh` starts QEMU with `-machine pc` (SeaBIOS), `-smp 2`, and `-cpu host` when KVM is available, otherwise `-cpu Nehalem,+smap,+smep` (x86-64-v2). `qemu64` is below that baseline and stops in the loader. `scripts/run-vbox-r5.ps1` defaults to `--cpus 2` and `--firmware bios`. Those two scripts never reach the EFI loader.
 
 CPU identification in `src/system/kernel/arch/x86/arch_cpu.cpp` reads the vendor string, family, extended family, model, extended model, and stepping from leaf 1, then the brand string from leaves `0x80000002`–`0x80000004` (around lines 1215–1297). Named feature bits include x2APIC (`FEATURE_EXT` / `EXT_X2APIC`, line 445), Intel HWP (lines 471–483), hybrid (`FEATURE_7_EDX` / `HYBRID_CPU`, line 530), AMD hardware P-states, and invariant TSC (lines 541–542). A per-CPU feature mismatch with the boot CPU is detected only inside the optional feature dump (`sameAsBoot`, around line 388). That dump does not change scheduling.
 
