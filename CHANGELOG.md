@@ -1,5 +1,19 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-18 - Kernel (AMD64): x86_64 user copies en STAC/CLAC (stap 6)
+
+Problem:
+- `arch_cpu_user_memcpy`, `arch_cpu_user_memset` en `arch_cpu_user_strlcpy` op x86_64 misten snelle `rep movsb`/`rep stosb`-paden, gebruikten een aparte functie in plaats van één `stac`/`clac`-paar rond de kopie, of misten een assemblerspecifiek strlcpy-pad met fault-handler.
+
+What changed (Step 6):
+- `distro/kernel/headers/private/kernel/arch/user_memory.h` + `distro/kernel/src/system/kernel/arch/x86/64/arch.S`: `_arch_cpu_user_memcpy` (`rep movsb`), `_arch_cpu_user_memset` (`rep stosb`) en `_arch_cpu_user_strlcpy` (tot 8 bytes per stap met null-check via `0x0101010101010101`/`0x8080808080808080` en `-2147478783` / `B_BAD_ADDRESS` bij pagefault), elk met één `stac`/`clac`-paar en `fault_handler`.
+- `distro/cpu/r5_usercopy_test.cpp`: test `_kern_*` syscalls op `NULL`, kerneladres, unmapped page en page-straddling.
+- `scripts/apply-kernel-bugs.py`: kopieert `user_memory.h`, `arch.S` en `r5_usercopy_test.cpp` en voegt `r5_usercopy_test` toe aan `src/bin/Jamfile` en `minimum`.
+
+Tested (Step 6):
+- `scripts/jam-r5-raw.sh`: `jam_exit=0`, `mesa_exit=0`.
+- QEMU `-cpu Nehalem,+smap,+smep`: `enable SMEP`, `enable SMAP`, `R5 net_server`, `r5_usercopy_test PASS` (`exit=0`).
+
 ## 2026-11-18 - Kernel (AMD64): TSC-deadline timer en 1-write APIC one-shot fallback (stap 5)
 
 Problem:
