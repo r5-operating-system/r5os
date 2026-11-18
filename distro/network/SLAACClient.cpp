@@ -271,7 +271,8 @@ SLAACClient::_ApplyDefaultRoute(const sockaddr_in6& from, uint32 ifIndex)
 	bool removed = false;
 	if (fHaveDefaultRoute) {
 		BNetworkRoute previous;
-		previous.SetGateway(BNetworkAddress(fDefaultGateway));
+		previous.SetGateway(
+			reinterpret_cast<const sockaddr&>(fDefaultGateway));
 		previous.SetFlags(RTF_STATIC | RTF_DEFAULT | RTF_GATEWAY);
 		if (routeInterface.RemoveRoute(AF_INET6, previous) == B_OK)
 			removed = true;
@@ -436,9 +437,8 @@ SLAACClient::_ApplyAdvert(const uint8* buffer, ssize_t bytes,
 				sizeof(router.sin6_addr)) == 0
 			&& fDefaultGateway.sin6_scope_id == router.sin6_scope_id) {
 			BNetworkRoute route;
-			BNetworkAddress gateway(router);
 			BNetworkInterface routeInterface(Device());
-			route.SetGateway(gateway);
+			route.SetGateway(reinterpret_cast<const sockaddr&>(router));
 			route.SetFlags(RTF_STATIC | RTF_DEFAULT | RTF_GATEWAY);
 			if (routeInterface.RemoveRoute(AF_INET6, route) == B_OK) {
 				fHaveDefaultRoute = false;

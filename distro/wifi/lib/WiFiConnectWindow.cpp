@@ -376,7 +376,7 @@ WiFiConnectWindow::QuitRequested()
 	if (fClosedTarget.IsValid()) {
 		BMessage closed(kMsgWiFiConnectClosed);
 		closed.AddInt32("token", fToken);
-		fClosedTarget.PostMessage(&closed);
+		fClosedTarget.SendMessage(&closed);
 	}
 	_Finish(B_CANCELED, false);
 	return true;
