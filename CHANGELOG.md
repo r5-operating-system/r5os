@@ -12,6 +12,7 @@ Checked (18 Nov 2026, Europe/Amsterdam):
 - Host, Ryzen 5 5625U, about 16:30: all six PASS for 60 seconds.
 - `scripts/build-locked.sh`: `jam_exit=0`, `mesa_exit=0`.
 - QEMU KVM, own image copy, window, virtio-rng, SMAP on. The fuzz prints PASS for each function at 60 seconds, then `PASS all`. Serial has `enable SMAP` on every boot. The script runs only after Tracker and Deskbar are up. `-cpu host,+smap`, `-cpu Nehalem,+smap,+smep` (KVM accepted this model) and `-cpu EPYC-Rome,+smap`. Nehalem has no AVX2, so that guest stays on the 16-byte path. Host and EPYC-Rome take AVX2 for the long scans.
+
 ## 2026-11-18 - Kernel (AMD64): syscall-tijdregistratie zonder spinlock (`time_seq`)
 
 Problem:
