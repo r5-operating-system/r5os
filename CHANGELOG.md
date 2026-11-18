@@ -1,5 +1,18 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-18 - Kernel (AMD64): 64-bits add-with-carry netwerk-checksum (`compute_checksum`)
+
+Problem:
+- `src/add-ons/kernel/network/stack/utility.cpp:102` (`compute_checksum`) telde een pakketbuffer per 16-bit woord op in een 32-bit teller.
+
+What changed (Step 2):
+- `distro/kernel/src/add-ons/kernel/network/stack/utility.cpp` (gekopieerd via `scripts/apply-kernel-bugs.py`) vervangt de 16-bits lus op `x86_64` door een uitgerolde 64-bits add-with-carry-lus (`addq` + 7× `adcq`, 64 bytes per iteratie, gevolgd door 8/4/2/1-byte staart en 64→32→16-bit vouwen, met byte-swap bij een oneven startadres zoals Linux `csum_partial`).
+- Host-fuzz-target `distro/tests/kernel/checksum_fuzz.cpp` (MIT) vergelijkt de oude 16-bits en nieuwe 64-bits implementatie op deterministische patronen en willekeurige buffers, oneven lengtes en oneven startadressen.
+
+Tested (Step 2):
+- Host-fuzz-test gedurende 60 s: `PASS: compute_checksum fuzz 60s, iterations=162298176 (odd_len=81007278, odd_addr=81144479), 0 mismatches`.
+- `scripts/build-locked.sh`: `jam_exit=0`, `mesa_exit=0`. Korte QEMU-boot (`-cpu Nehalem,+smap,+smep`, eigen kopie van `r5-os.image`): schakelt SMEP en SMAP in en bereikt `net_server` in 20 s zonder panic.
+
 ## 2026-11-18 - Kernel (AMD64): release-kernel (`KDEBUG_LEVEL 0`) en debug-profiel (`KDEBUG_LEVEL 2`)
 
 Problem:
