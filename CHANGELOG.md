@@ -1,5 +1,18 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-18 - AMD64 user space, step 4: page-safe string scans
+
+`strlen`, `strchr` (through `strchrnul`), `strchrnul`, `memchr`, `strcmp` and `memcmp` scan 16 bytes at a time with SSE4.2. The load is aligned, or it is two aligned halves joined with `palignr` only when the next 16 bytes stay in the same page, so a read does not cross into an unmapped page. Strings and counts that finish within 32 bytes stay on that path and do not go through a function pointer. Longer work uses a pointer chosen once: AVX2, 32 bytes at a time, when XCR0 has XMM and YMM, otherwise the same SSE4.2 loop. `strchr` is still the one-line call of `strchrnul`.
+
+The same sources are built into the kernel (`src/system/kernel/lib/Jamfile`: memchr 124, memcmp 125, strchr 132, strchrnul 133, strcmp 134, strlen 141) and into the bootloader (`src/system/boot/Jamfile`: memchr 323, memcmp 324, strlen 329, strcmp 331, strchr 339, strchrnul 340). AVX2 stays off unless the CPU helper says the OS enabled YMM, so the bootloader keeps the 16-byte path until that is true.
+
+`r5_string_fuzz` compares each function with the byte version, including strings and counts that end on the last byte of a page, for 60 seconds each.
+
+Checked (18 Nov 2026, Europe/Amsterdam):
+- Host, Ryzen 5 5625U, about 16:30: all six PASS for 60 seconds.
+- `scripts/build-locked.sh`: `jam_exit=0`, `mesa_exit=0`.
+- QEMU KVM, own image copy, window, virtio-rng, SMAP on. The fuzz prints PASS for each function at 60 seconds, then `PASS all`. Serial has `enable SMAP` on every boot. The script runs only after Tracker and Deskbar are up. `-cpu host,+smap`, `-cpu Nehalem,+smap,+smep` (KVM accepted this model) and `-cpu EPYC-Rome,+smap`. Nehalem has no AVX2, so that guest stays on the 16-byte path. Host and EPYC-Rome take AVX2 for the long scans.
+
 ## 2026-11-18 - memcpy dispatch also builds into the kernel
 
 The step 3 files are not only libroot. The kernel builds `memcpy.cpp` and `memset.cpp` (`src/system/kernel/lib/arch/x86_64/Jamfile`, lines 32-33) and `memmove.c` (`src/system/kernel/lib/Jamfile`, line 127). The kernel therefore uses the CPUID choice and the non-temporal stores. The QEMU boots of step 3 already ran that kernel. The bootloader builds `memmove.c` (`src/system/boot/Jamfile`, line 325) and keeps `generic_memcpy.c` and `generic_memset.c`, so the bootloader does not take the CPUID or `movntdq` path. Its overlapping `memmove` is the 16-byte SSE loop, and a non-overlapping `memmove` calls the generic `memcpy`. Prompt 4 is also editing the kernel, so this share is recorded here.
