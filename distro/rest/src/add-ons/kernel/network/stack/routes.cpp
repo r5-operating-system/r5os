@@ -34,6 +34,9 @@
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 #include <netinet6/in6.h>
+
+static bool r5_ipv6_unspecified(const in6_addr& address);
+static bool r5_ipv6_loopback(const in6_addr& address);
 // SPDX-SnippetEnd
 #include <new>
 #include <stdlib.h>
@@ -493,6 +496,7 @@ control_routes(struct net_interface* _interface, net_domain* domain,
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 			if (domain->family == AF_INET6 && address != NULL) {
+				RecursiveLocker addressLocker(interface->Lock());
 				size_t count = interface->CountAddresses();
 				for (size_t i = 0; i < count; i++) {
 					InterfaceAddress* candidate = interface->AddressAt(i);
@@ -503,7 +507,9 @@ control_routes(struct net_interface* _interface, net_domain* domain,
 						const sockaddr_in6* local
 							= (const sockaddr_in6*)candidate->local;
 						if (!IN6_IS_ADDR_LINKLOCAL(&local->sin6_addr)
-							&& local->sin6_addr.s6_addr[0] != 0) {
+							&& !r5_ipv6_unspecified(local->sin6_addr)
+							&& !r5_ipv6_loopback(local->sin6_addr)
+							&& !IN6_IS_ADDR_MULTICAST(&local->sin6_addr)) {
 							address->ReleaseReference();
 							address = candidate;
 							break;
@@ -698,15 +704,77 @@ invalidate_routes(InterfaceAddress* address)
 	TRACE("invalidate_routes(%s)\n",
 		AddressString(domain, address->local).Data());
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// An IPv6 default or gateway route is bound to a global address when the
+	// interface has one. When that address goes (lifetime end, renumbering)
+	// the route moves to another address on the same interface instead of
+	// going with it: a global one if there is one, else the link-local one.
+	// The replacement is looked up before the domain lock is taken, because
+	// the interface lock comes first everywhere else.
+	InterfaceAddress* replacement = NULL;
+	Interface* interface = (Interface*)address->interface;
+	if (domain->family == AF_INET6 && interface != NULL) {
+		for (size_t index = 0;; index++) {
+			InterfaceAddress* candidate = interface->AddressAt(index);
+			if (candidate == NULL)
+				break;
+			bool usable = candidate != address
+				&& candidate->domain == address->domain
+				&& candidate->local != NULL
+				&& candidate->local->sa_family == AF_INET6;
+			const sockaddr_in6* local = usable
+				? (const sockaddr_in6*)candidate->local : NULL;
+			// The IN6_IS_ADDR_UNSPECIFIED and _LOOPBACK macros need
+			// in6addr_any, which the kernel does not have.
+			if (usable && (r5_ipv6_unspecified(local->sin6_addr)
+					|| r5_ipv6_loopback(local->sin6_addr)
+					|| IN6_IS_ADDR_MULTICAST(&local->sin6_addr)))
+				usable = false;
+			bool better = usable && (replacement == NULL
+				|| (IN6_IS_ADDR_LINKLOCAL(&((const sockaddr_in6*)
+						replacement->local)->sin6_addr)
+					&& !IN6_IS_ADDR_LINKLOCAL(&local->sin6_addr)));
+			if (better) {
+				if (replacement != NULL)
+					replacement->ReleaseReference();
+				replacement = candidate;
+			} else
+				candidate->ReleaseReference();
+		}
+	}
+// SPDX-SnippetEnd
+
 	RecursiveLocker locker(domain->lock);
 
 	RouteList::Iterator iterator = domain->routes.GetIterator();
 	while (iterator.HasNext()) {
 		net_route* route = iterator.Next();
 
-		if (route->interface_address == address)
-			remove_route(domain, route);
+		if (route->interface_address != address)
+			continue;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		if (replacement != NULL
+			&& (route->flags & (RTF_GATEWAY | RTF_DEFAULT)) != 0
+			&& (route->flags & (RTF_LOCAL | RTF_HOST)) == 0) {
+			replacement->AcquireReference();
+			route->interface_address = replacement;
+			address->ReleaseReference();
+			continue;
+		}
+// SPDX-SnippetEnd
+		remove_route(domain, route);
 	}
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	locker.Unlock();
+	if (replacement != NULL)
+		replacement->ReleaseReference();
+// SPDX-SnippetEnd
 }
 
 
@@ -765,7 +833,8 @@ get_buffer_route(net_domain* _domain, net_buffer* buffer, net_route** _route)
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 	InterfaceAddress* localDest = get_interface_address(buffer->destination);
-	if (status == B_OK && localDest != NULL && localDest->local != NULL) {
+	if (status == B_OK && localDest != NULL && localDest->local != NULL
+		&& domain->address_module->is_empty_address(source, false)) {
 		uint16 port = domain->address_module->get_port(source);
 		status = domain->address_module->set_to(source, localDest->local);
 		if (status == B_OK)
@@ -834,4 +903,76 @@ update_route_info(struct net_domain* _domain, struct net_route_info* info)
 	info->route = get_route_internal(domain, &info->address);
 	return B_OK;
 }
+
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+static bool
+r5_ipv6_unspecified(const in6_addr& address)
+{
+	for (int i = 0; i < 16; i++) {
+		if (address.s6_addr[i] != 0)
+			return false;
+	}
+	return true;
+}
+
+
+static bool
+r5_ipv6_loopback(const in6_addr& address)
+{
+	for (int i = 0; i < 15; i++) {
+		if (address.s6_addr[i] != 0)
+			return false;
+	}
+	return address.s6_addr[15] == 1;
+}
+
+
+static bool
+r5_ipv6_source_needs_upgrade(const sockaddr* address)
+{
+	if (address == NULL || address->sa_family != AF_INET6)
+		return true;
+
+	const sockaddr_in6* in6 = (const sockaddr_in6*)address;
+	return IN6_IS_ADDR_LINKLOCAL(&in6->sin6_addr)
+		|| r5_ipv6_unspecified(in6->sin6_addr)
+		|| r5_ipv6_loopback(in6->sin6_addr)
+		|| IN6_IS_ADDR_MULTICAST(&in6->sin6_addr);
+}
+
+
+void
+r5_rebind_ipv6_offlink_routes(Interface* interface, net_domain_private* domain,
+	InterfaceAddress* source)
+{
+	if (interface == NULL || domain == NULL || source == NULL
+		|| source->local == NULL || domain->family != AF_INET6)
+		return;
+	if (r5_ipv6_source_needs_upgrade(source->local))
+		return;
+
+	RecursiveLocker _(domain->lock);
+	RouteList::Iterator iterator = domain->routes.GetIterator();
+	while (net_route_private* route = iterator.Next()) {
+		if (route->interface_address == NULL
+			|| route->interface_address->interface != interface)
+			continue;
+		if ((route->flags & (RTF_GATEWAY | RTF_DEFAULT)) == 0)
+			continue;
+		if ((route->flags & (RTF_LOCAL | RTF_HOST)) != 0)
+			continue;
+		if (!r5_ipv6_source_needs_upgrade(route->interface_address->local))
+			continue;
+
+		InterfaceAddress* previous
+			= (InterfaceAddress*)route->interface_address;
+		source->AcquireReference();
+		route->interface_address = source;
+		previous->ReleaseReference();
+	}
+}
+// SPDX-SnippetEnd
 

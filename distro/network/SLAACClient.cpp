@@ -10,6 +10,7 @@
 
 #include <arpa/inet.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <net/if.h>
 #include <netinet/icmp6.h>
 #include <netinet/in.h>
@@ -44,11 +45,24 @@ SLAACClient::SLAACClient(BMessenger target, const char* device)
 	AutoconfigClient("slaac", target, device),
 	fThread(-1),
 	fSocket(-1),
+	fWakeRead(-1),
+	fWakeWrite(-1),
+	fStop(0),
 	fHaveMAC(false),
-	fHaveDefaultRoute(false)
+	fHaveDefaultRoute(false),
+	fRouterUntil(0)
 {
 	memset(fMAC, 0, sizeof(fMAC));
 	memset(&fDefaultGateway, 0, sizeof(fDefaultGateway));
+	memset(fPrefixes, 0, sizeof(fPrefixes));
+
+	int pipeFds[2];
+	if (pipe(pipeFds) == 0) {
+		fWakeRead = pipeFds[0];
+		fWakeWrite = pipeFds[1];
+		fcntl(fWakeRead, F_SETFL, O_NONBLOCK);
+		fcntl(fWakeWrite, F_SETFL, O_NONBLOCK);
+	}
 
 	BNetworkAddress link;
 	BNetworkInterface interface(device);
@@ -60,33 +74,48 @@ SLAACClient::SLAACClient(BMessenger target, const char* device)
 }
 
 
-static void
-stop_worker(thread_id thread, int socket)
+bool
+SLAACClient::_Stopped() const
 {
-	if (socket >= 0)
-		shutdown(socket, SHUT_RDWR);
-	if (thread < 0)
-		return;
+	return fStop != 0;
+}
 
-	status_t ignored;
-	wait_for_thread_etc(thread, B_RELATIVE_TIMEOUT, 500000, &ignored);
-	kill_thread(thread);
-	wait_for_thread_etc(thread, B_RELATIVE_TIMEOUT, 250000, &ignored);
+
+void
+SLAACClient::_Wake()
+{
+	if (fWakeWrite < 0)
+		return;
+	char byte = 1;
+	write(fWakeWrite, &byte, 1);
 }
 
 
 SLAACClient::~SLAACClient()
 {
+	fStop = 1;
+	_Wake();
 	thread_id thread = fThread;
-	int socket = fSocket;
-	fThread = -1;
-	fSocket = -1;
 	if (thread != -1) {
 		UnlockLooper();
-		stop_worker(thread, socket);
+		status_t result;
+		wait_for_thread(thread, &result);
 		LockLooper();
-	} else if (socket >= 0)
-		shutdown(socket, SHUT_RDWR);
+	}
+	// The client goes away with the link (AutoconfigLooper deletes it on
+	// link down): take its addresses, on-link routes and default route with
+	// it, so a network switch does not leave the old prefix behind.
+	for (int32 i = 0; i < 8; i++) {
+		if (fPrefixes[i].inUse)
+			_WithdrawPrefix(fPrefixes[i]);
+	}
+	_RemoveDefaultRoute("link gone");
+	if (fWakeRead >= 0)
+		close(fWakeRead);
+	if (fWakeWrite >= 0)
+		close(fWakeWrite);
+	fWakeRead = -1;
+	fWakeWrite = -1;
 }
 
 
@@ -132,6 +161,23 @@ SLAACClient::_EnsureLinkLocal(BNetworkInterface& interface)
 	in6_addr existing;
 	if (r5_ipv6_link_local(Device(), existing) == B_OK)
 		return B_OK;
+	if (_Stopped())
+		return B_CANCELED;
+
+	uint32 ifIndex = interface.Index();
+	if (ifIndex == 0)
+		ifIndex = if_nametoindex(Device());
+	// Only another node holding the address stops us. DAD runs before the
+	// interface has any IPv6 address, so its socket may fail (no source to
+	// send from); that is not a collision, and refusing the link-local
+	// address would turn IPv6 off on the link (QEMU, link-local only LANs).
+	status_t dad = r5_ipv6_dad_until(Device(), ifIndex, fMAC, raw, &fStop);
+	if (dad == B_NAME_IN_USE || dad == B_CANCELED)
+		return dad;
+	if (dad != B_OK) {
+		syslog(LOG_INFO, "slaac %s: DAD could not run (%s); adding the "
+			"link-local address\n", Device(), strerror(dad));
+	}
 
 	BNetworkAddress local(raw, 0);
 	BNetworkAddress mask(AF_INET6, "ffff:ffff:ffff:ffff::", (uint16)0,
@@ -266,6 +312,14 @@ SLAACClient::_ApplyDefaultRoute(const sockaddr_in6& from, uint32 ifIndex)
 		&& gatewayAddr.sin6_scope_id == 0)
 		gatewayAddr.sin6_scope_id = ifIndex;
 
+	// The same router again: the route is already there. Removing and adding
+	// it on every RA left a gap with no default route.
+	if (fHaveDefaultRoute
+		&& memcmp(&fDefaultGateway.sin6_addr, &gatewayAddr.sin6_addr,
+			sizeof(gatewayAddr.sin6_addr)) == 0
+		&& fDefaultGateway.sin6_scope_id == gatewayAddr.sin6_scope_id)
+		return B_OK;
+
 	BNetworkAddress gateway(gatewayAddr);
 	BNetworkInterface routeInterface(Device());
 	bool removed = false;
@@ -294,6 +348,23 @@ SLAACClient::_ApplyDefaultRoute(const sockaddr_in6& from, uint32 ifIndex)
 
 
 void
+SLAACClient::_RemoveDefaultRoute(const char* why)
+{
+	if (!fHaveDefaultRoute)
+		return;
+	BNetworkRoute route;
+	BNetworkInterface routeInterface(Device());
+	route.SetGateway(reinterpret_cast<const sockaddr&>(fDefaultGateway));
+	route.SetFlags(RTF_STATIC | RTF_DEFAULT | RTF_GATEWAY);
+	routeInterface.RemoveRoute(AF_INET6, route);
+	fHaveDefaultRoute = false;
+	fRouterUntil = 0;
+	syslog(LOG_INFO, "slaac %s: route via %s removed (%s)\n", Device(),
+		_ToString(fDefaultGateway.sin6_addr).String(), why);
+}
+
+
+void
 SLAACClient::_ApplyResolver(BMessage& resolver, int32 nameservers)
 {
 	if (nameservers <= 0)
@@ -304,6 +375,223 @@ SLAACClient::_ApplyResolver(BMessage& resolver, int32 nameservers)
 }
 
 
+static void
+prefix_mask(in6_addr& mask, uint8 length)
+{
+	memset(&mask, 0, sizeof(mask));
+	if (length > 128)
+		length = 128;
+	for (uint8 i = 0; i < length / 8; i++)
+		mask.s6_addr[i] = 0xff;
+	if ((length % 8) != 0)
+		mask.s6_addr[length / 8] = (uint8)(0xff << (8 - (length % 8)));
+}
+
+
+static void
+mask_prefix(in6_addr& prefix, uint8 length)
+{
+	if (length > 128)
+		length = 128;
+	uint8 first = length / 8;
+	if ((length % 8) != 0) {
+		prefix.s6_addr[first] &= (uint8)(0xff << (8 - (length % 8)));
+		first++;
+	}
+	for (uint8 i = first; i < 16; i++)
+		prefix.s6_addr[i] = 0;
+}
+
+
+void
+SLAACClient::_ExpirePrefixes()
+{
+	bigtime_t now = system_time();
+	// The router lifetime ends like a prefix does (RFC 4861 section 6.3.4).
+	if (fHaveDefaultRoute && fRouterUntil != 0 && now >= fRouterUntil)
+		_RemoveDefaultRoute("router lifetime ended");
+	for (int32 i = 0; i < 8; i++) {
+		if (!fPrefixes[i].inUse || fPrefixes[i].validUntil == 0)
+			continue;
+		if (now < fPrefixes[i].validUntil)
+			continue;
+		syslog(LOG_INFO, "slaac %s: prefix %s/%u expired\n", Device(),
+			_ToString(fPrefixes[i].prefix).String(), fPrefixes[i].length);
+		_WithdrawPrefix(fPrefixes[i]);
+	}
+}
+
+
+void
+SLAACClient::_WithdrawPrefix(PrefixRecord& record)
+{
+	BNetworkInterface interface(Device());
+	if (record.haveAddress) {
+		BNetworkAddress address(record.address, 0);
+		interface.RemoveAddress(address);
+		record.haveAddress = false;
+	}
+	if (record.onLink) {
+		in6_addr rawMask;
+		prefix_mask(rawMask, record.length);
+		sockaddr_in6 destination;
+		sockaddr_in6 mask;
+		memset(&destination, 0, sizeof(destination));
+		memset(&mask, 0, sizeof(mask));
+		destination.sin6_len = sizeof(destination);
+		destination.sin6_family = AF_INET6;
+		destination.sin6_addr = record.prefix;
+		mask.sin6_len = sizeof(mask);
+		mask.sin6_family = AF_INET6;
+		mask.sin6_addr = rawMask;
+		BNetworkRoute route;
+		route.SetDestination(reinterpret_cast<const sockaddr&>(destination));
+		route.SetMask(reinterpret_cast<const sockaddr&>(mask));
+		route.SetFlags(RTF_STATIC);
+		interface.RemoveRoute(AF_INET6, route);
+		record.onLink = false;
+	}
+	record.inUse = false;
+}
+
+
+status_t
+SLAACClient::_ApplyPrefix(const in6_addr& rawPrefix, uint8 length, uint8 flags,
+	uint32 valid, uint32 ifIndex)
+{
+	bool autonomous = (flags & ND_OPT_PI_FLAG_AUTO) != 0 && length == 64
+		&& !IN6_IS_ADDR_LINKLOCAL(&rawPrefix);
+	bool onLink = (flags & ND_OPT_PI_FLAG_ONLINK) != 0 && length > 0
+		&& length <= 128;
+	if (!autonomous && !onLink)
+		return B_OK;
+
+	in6_addr prefix = rawPrefix;
+	mask_prefix(prefix, length);
+
+	PrefixRecord* slot = NULL;
+	for (int32 i = 0; i < 8; i++) {
+		if (fPrefixes[i].inUse
+			&& fPrefixes[i].length == length
+			&& memcmp(&fPrefixes[i].prefix, &prefix, sizeof(prefix)) == 0) {
+			slot = &fPrefixes[i];
+			break;
+		}
+	}
+	if (slot == NULL) {
+		for (int32 i = 0; i < 8; i++) {
+			if (!fPrefixes[i].inUse) {
+				slot = &fPrefixes[i];
+				memset(slot, 0, sizeof(*slot));
+				slot->prefix = prefix;
+				slot->length = length;
+				slot->inUse = true;
+				break;
+			}
+		}
+	}
+	if (slot == NULL) {
+		syslog(LOG_ERR, "slaac %s: prefix table full\n", Device());
+		return B_NO_MEMORY;
+	}
+
+	bigtime_t now = system_time();
+	static const bigtime_t kTwoHours = 7200 * (bigtime_t)1000000;
+	if (slot->haveAddress) {
+		// RFC 4862 section 5.5.3 e): an RA can shorten the lifetime of an
+		// address we hold only to two hours, so one forged RA cannot take
+		// the address away (valid 0 included).
+		bigtime_t received = valid == 0xffffffff ? 0
+			: now + (bigtime_t)valid * 1000000;
+		bool infiniteNow = slot->validUntil == 0;
+		bigtime_t remaining = infiniteNow ? B_INFINITE_TIMEOUT
+			: slot->validUntil - now;
+		if (valid == 0xffffffff || (bigtime_t)valid * 1000000 > kTwoHours
+			|| (!infiniteNow && received > slot->validUntil)) {
+			slot->validUntil = received;
+		} else if (remaining <= kTwoHours) {
+			// keep the lifetime we have
+		} else {
+			slot->validUntil = now + kTwoHours;
+			syslog(LOG_INFO, "slaac %s: prefix %s/%u lifetime cut to 2 hours\n",
+				Device(), _ToString(prefix).String(), length);
+		}
+	} else if (valid == 0) {
+		syslog(LOG_INFO, "slaac %s: prefix %s/%u withdrawn\n", Device(),
+			_ToString(prefix).String(), length);
+		_WithdrawPrefix(*slot);
+		return B_OK;
+	} else if (valid == 0xffffffff)
+		slot->validUntil = 0;
+	else
+		slot->validUntil = now + (bigtime_t)valid * 1000000;
+	if (valid == 0)
+		return B_OK;
+
+	if (onLink && !slot->onLink) {
+		in6_addr rawMask;
+		prefix_mask(rawMask, length);
+		sockaddr_in6 destinationAddr;
+		sockaddr_in6 maskAddr;
+		memset(&destinationAddr, 0, sizeof(destinationAddr));
+		memset(&maskAddr, 0, sizeof(maskAddr));
+		destinationAddr.sin6_len = sizeof(destinationAddr);
+		destinationAddr.sin6_family = AF_INET6;
+		destinationAddr.sin6_addr = prefix;
+		maskAddr.sin6_len = sizeof(maskAddr);
+		maskAddr.sin6_family = AF_INET6;
+		maskAddr.sin6_addr = rawMask;
+		BNetworkRoute route;
+		route.SetDestination(
+			reinterpret_cast<const sockaddr&>(destinationAddr));
+		route.SetMask(reinterpret_cast<const sockaddr&>(maskAddr));
+		route.SetFlags(RTF_STATIC);
+		BNetworkInterface interface(Device());
+		status_t status = interface.AddRoute(route);
+		if (status == B_OK || status == B_FILE_EXISTS) {
+			slot->onLink = true;
+			syslog(LOG_INFO, "slaac %s: on-link %s/%u\n", Device(),
+				_ToString(prefix).String(), length);
+		} else {
+			syslog(LOG_ERR, "slaac %s: on-link %s/%u failed: %s\n", Device(),
+				_ToString(prefix).String(), length, strerror(status));
+		}
+	}
+
+	if (!autonomous || _Stopped())
+		return _Stopped() ? B_CANCELED : B_OK;
+
+	in6_addr global;
+	_BuildSlaacAddress(prefix, global);
+	slot->address = global;
+	if (slot->haveAddress || r5_ipv6_has_address(Device(), global)) {
+		slot->haveAddress = true;
+		return B_OK;
+	}
+
+	status_t dad = r5_ipv6_dad_until(Device(), ifIndex, fMAC, global, &fStop);
+	if (dad != B_OK)
+		return dad;
+
+	BNetworkInterface interface(Device());
+	BNetworkAddress address(global, 0);
+	BNetworkAddress mask(AF_INET6, "ffff:ffff:ffff:ffff::", (uint16)0,
+		B_UNCONFIGURED_ADDRESS_FAMILIES);
+	BNetworkInterfaceAddress slotAddress;
+	slotAddress.SetAddress(address);
+	slotAddress.SetMask(mask);
+	status_t status = interface.AddAddress(slotAddress);
+	if (status != B_OK && status != B_FILE_EXISTS) {
+		syslog(LOG_ERR, "slaac %s: add %s failed: %s\n", Device(),
+			_ToString(global).String(), strerror(status));
+		return status;
+	}
+	slot->haveAddress = true;
+	syslog(LOG_INFO, "slaac %s: %s\n", Device(), _ToString(global).String());
+	return B_OK;
+}
+
+
 status_t
 SLAACClient::_ApplyAdvert(const uint8* buffer, ssize_t bytes,
 	const sockaddr_in6& from, uint32 ifIndex)
@@ -311,9 +599,24 @@ SLAACClient::_ApplyAdvert(const uint8* buffer, ssize_t bytes,
 	if (bytes < (ssize_t)sizeof(struct nd_router_advert))
 		return B_BAD_VALUE;
 
+	// RFC 4861 section 6.1.2: a router advertisement comes from a link-local
+	// address with hop limit 255, so it cannot have been routed here. The
+	// hop limit can only be checked when the raw socket hands us the IPv6
+	// header.
+	if (!IN6_IS_ADDR_LINKLOCAL(&from.sin6_addr)) {
+		syslog(LOG_INFO, "slaac %s: RA from %s ignored: not link-local\n",
+			Device(), _ToString(from.sin6_addr).String());
+		return B_BAD_VALUE;
+	}
+
 	const uint8* data = buffer;
 	ssize_t length = bytes;
 	if (length >= 40 && (data[0] >> 4) == 6) {
+		if (data[7] != 255) {
+			syslog(LOG_INFO, "slaac %s: RA ignored: hop limit %u\n", Device(),
+				data[7]);
+			return B_BAD_VALUE;
+		}
 		data += 40;
 		length -= 40;
 	}
@@ -333,8 +636,8 @@ SLAACClient::_ApplyAdvert(const uint8* buffer, ssize_t bytes,
 	const uint8* option = data + sizeof(struct nd_router_advert);
 	const uint8* end = data + length;
 
-	in6_addr prefix;
 	bool havePrefix = false;
+	bool addedAddress = false;
 	BMessage resolver(kMsgConfigureResolver);
 	int32 nameservers = 0;
 	uint8 raFlags = ra->nd_ra_flags_reserved;
@@ -361,12 +664,29 @@ SLAACClient::_ApplyAdvert(const uint8* buffer, ssize_t bytes,
 				prefixText, info->nd_opt_pi_prefix_len,
 				(info->nd_opt_pi_flags_reserved & ND_OPT_PI_FLAG_AUTO) != 0,
 				(info->nd_opt_pi_flags_reserved & ND_OPT_PI_FLAG_ONLINK) != 0);
-			if ((info->nd_opt_pi_flags_reserved & ND_OPT_PI_FLAG_AUTO) != 0
-				&& info->nd_opt_pi_prefix_len == 64
-				&& !IN6_IS_ADDR_LINKLOCAL(&info->nd_opt_pi_prefix)) {
-				prefix = info->nd_opt_pi_prefix;
-				havePrefix = true;
+			uint32 valid = ntohl(info->nd_opt_pi_valid_time);
+			uint32 preferred = ntohl(info->nd_opt_pi_preferred_time);
+			// RFC 4862 section 5.5.3 c): preferred above valid is ignored.
+			if (preferred > valid) {
+				syslog(LOG_INFO, "slaac %s: PIO %s ignored: preferred %" B_PRIu32
+					" > valid %" B_PRIu32 "\n", Device(), prefixText, preferred,
+					valid);
+				option += bytesLen;
+				continue;
 			}
+			bool autonomous
+				= (info->nd_opt_pi_flags_reserved & ND_OPT_PI_FLAG_AUTO) != 0
+				&& info->nd_opt_pi_prefix_len == 64
+				&& !IN6_IS_ADDR_LINKLOCAL(&info->nd_opt_pi_prefix);
+			if (autonomous)
+				havePrefix = true;
+			status_t prefixStatus = _ApplyPrefix(info->nd_opt_pi_prefix,
+				info->nd_opt_pi_prefix_len, info->nd_opt_pi_flags_reserved,
+				valid, ifIndex);
+			if (prefixStatus == B_CANCELED)
+				return prefixStatus;
+			if (autonomous && prefixStatus == B_OK && valid > 0)
+				addedAddress = true;
 		} else if (type == kRdnsOption && bytesLen >= 24) {
 			const uint8* addr = option + 8;
 			const uint8* addrEnd = option + bytesLen;
@@ -387,71 +707,35 @@ SLAACClient::_ApplyAdvert(const uint8* buffer, ssize_t bytes,
 
 	_ApplyResolver(resolver, nameservers);
 
-	bool addedAddress = false;
-	if (havePrefix) {
-		in6_addr global;
-		_BuildSlaacAddress(prefix, global);
-		BString globalText = _ToString(global);
-		if (globalText.Length() == 0)
-			return B_ERROR;
-
-		if (r5_ipv6_has_address(Device(), global)) {
-			syslog(LOG_INFO, "slaac %s: %s already assigned\n", Device(),
-				globalText.String());
-		} else {
-			BNetworkInterface interface(Device());
-			BNetworkAddress address(global, 0);
-			status_t dad = r5_ipv6_dad(Device(), ifIndex, fMAC, global);
-			if (dad != B_OK)
-				return dad;
-
-			BNetworkAddress mask(AF_INET6, "ffff:ffff:ffff:ffff::",
-				(uint16)0, B_UNCONFIGURED_ADDRESS_FAMILIES);
-			BNetworkInterfaceAddress slot;
-			slot.SetAddress(address);
-			slot.SetMask(mask);
-			status_t status = interface.AddAddress(slot);
-			if (status != B_OK) {
-				syslog(LOG_ERR, "slaac %s: add %s failed: %s\n", Device(),
-					globalText.String(), strerror(status));
-				return status;
-			}
-			addedAddress = true;
-			syslog(LOG_INFO, "slaac %s: %s via %s\n", Device(),
-				globalText.String(), _ToString(from.sin6_addr).String());
-		}
-	} else {
+	if (!havePrefix) {
 		syslog(LOG_INFO, "slaac %s: RA from %s M=%d O=%d without SLAAC /64 "
 			"prefix (DHCPv6 %s)\n", Device(),
 			_ToString(from.sin6_addr).String(), managed, other,
 			(managed || other) ? "should run" : "may be absent");
 	}
 
+	sockaddr_in6 router = from;
+	if (IN6_IS_ADDR_LINKLOCAL(&router.sin6_addr) && router.sin6_scope_id == 0)
+		router.sin6_scope_id = ifIndex;
+	bool sameRouter = fHaveDefaultRoute
+		&& memcmp(&fDefaultGateway.sin6_addr, &router.sin6_addr,
+			sizeof(router.sin6_addr)) == 0
+		&& fDefaultGateway.sin6_scope_id == router.sin6_scope_id;
 	if (lifetime == 0) {
-		sockaddr_in6 router = from;
-		if (IN6_IS_ADDR_LINKLOCAL(&router.sin6_addr)
-			&& router.sin6_scope_id == 0)
-			router.sin6_scope_id = ifIndex;
-		if (fHaveDefaultRoute
-			&& memcmp(&fDefaultGateway.sin6_addr, &router.sin6_addr,
-				sizeof(router.sin6_addr)) == 0
-			&& fDefaultGateway.sin6_scope_id == router.sin6_scope_id) {
-			BNetworkRoute route;
-			BNetworkInterface routeInterface(Device());
-			route.SetGateway(reinterpret_cast<const sockaddr&>(router));
-			route.SetFlags(RTF_STATIC | RTF_DEFAULT | RTF_GATEWAY);
-			if (routeInterface.RemoveRoute(AF_INET6, route) == B_OK) {
-				fHaveDefaultRoute = false;
-				syslog(LOG_INFO,
-					"slaac %s: RA lifetime 0, route via %s forgotten\n",
-					Device(), _ToString(from.sin6_addr).String());
+		// Only the router that is our gateway can take the route away.
+		if (sameRouter)
+			_RemoveDefaultRoute("RA lifetime 0");
+	} else {
+		// A second router does not replace a working one; it may take over
+		// once the first one's lifetime has ended.
+		if (!fHaveDefaultRoute || sameRouter) {
+			if (_ApplyDefaultRoute(from, ifIndex) == B_OK) {
+				fHaveDefaultRoute = true;
+				fRouterUntil = system_time() + (bigtime_t)lifetime * 1000000;
 			}
 		}
-	} else if (lifetime > 0 || addedAddress
-			|| (havePrefix && !fHaveDefaultRoute)) {
-		if (_ApplyDefaultRoute(from, ifIndex) == B_OK)
-			fHaveDefaultRoute = true;
 	}
+	(void)addedAddress;
 
 	return havePrefix ? B_OK : B_BAD_VALUE;
 }
@@ -462,11 +746,12 @@ SLAACClient::_Run()
 {
 	BNetworkInterface interface(Device());
 	status_t status = B_ERROR;
-	for (int32 i = 0; i < 10 && fThread != -1; i++) {
+	for (int32 i = 0; i < 10 && !_Stopped(); i++) {
 		status = _EnsureLinkLocal(interface);
-		if (status == B_OK)
+		if (status == B_OK || status == B_CANCELED)
 			break;
-		snooze(500000);
+		for (int32 slice = 0; slice < 5 && !_Stopped(); slice++)
+			snooze(100000);
 	}
 	if (status != B_OK) {
 		syslog(LOG_ERR, "slaac %s: no link-local: %s\n", Device(),
@@ -494,7 +779,8 @@ SLAACClient::_Run()
 	bigtime_t nextSolicit = 0;
 	bool configured = false;
 
-	while (fThread != -1) {
+	while (!_Stopped()) {
+		_ExpirePrefixes();
 		bigtime_t now = system_time();
 		if (now >= nextSolicit && (!configured || solicits < kMaxSolicits)) {
 			_SendSolicit(socket, ifIndex);
@@ -508,20 +794,33 @@ SLAACClient::_Run()
 		fd_set readSet;
 		FD_ZERO(&readSet);
 		FD_SET(socket, &readSet);
+		int maxFd = socket;
+		if (fWakeRead >= 0) {
+			FD_SET(fWakeRead, &readSet);
+			if (fWakeRead > maxFd)
+				maxFd = fWakeRead;
+		}
 		timeval wait;
 		wait.tv_sec = 1;
 		wait.tv_usec = 0;
-		int ready = select(socket + 1, &readSet, NULL, NULL, &wait);
+		int ready = select(maxFd + 1, &readSet, NULL, NULL, &wait);
 		if (ready < 0) {
 			if (errno == EINTR)
 				continue;
-			if (errno == EBADF || fThread == -1)
+			if (errno == EBADF || _Stopped())
 				break;
 			syslog(LOG_ERR, "slaac %s: select: %s\n", Device(),
 				strerror(errno));
 			break;
 		}
-		if (ready == 0)
+		if (fWakeRead >= 0 && FD_ISSET(fWakeRead, &readSet)) {
+			char ignored;
+			while (read(fWakeRead, &ignored, 1) > 0)
+				;
+		}
+		if (ready == 0 || _Stopped()
+			|| (fWakeRead >= 0 && FD_ISSET(fWakeRead, &readSet)
+				&& !FD_ISSET(socket, &readSet)))
 			continue;
 
 		uint8 packet[1280];

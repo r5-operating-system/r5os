@@ -1351,6 +1351,11 @@ add_interface_address(Interface* interface, net_domain_private* domain,
 		// SIOCAIFADDR / ADD_ALIAS used to skip this; IPv6 SLAAC then had
 		// no RTF_LOCAL host route, so ping to the ULA went off-link.
 		address->AddDefaultRoutes(SIOCSIFADDR);
+		if (domain->family == AF_INET6) {
+			extern void r5_rebind_ipv6_offlink_routes(Interface* interface,
+				net_domain_private* domain, InterfaceAddress* source);
+			r5_rebind_ipv6_offlink_routes(interface, domain, address);
+		}
 // SPDX-SnippetEnd
 		notify_interface_changed(interface);
 // SPDX-SnippetBegin

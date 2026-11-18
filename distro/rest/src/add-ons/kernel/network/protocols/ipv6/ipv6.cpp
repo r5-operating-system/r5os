@@ -1283,13 +1283,76 @@ ip6_select_hoplimit(net_protocol* _protocol, net_buffer* buffer)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+static uint32
+r5_fold_checksum(uint32 sum)
+{
+	while ((sum >> 16) != 0)
+		sum = (sum & 0xffff) + (sum >> 16);
+	return sum;
+}
+
+
+static uint16
+r5_checksum_replace_address(uint16 checksum, const in6_addr& oldAddress,
+	const in6_addr& newAddress)
+{
+	// RFC 1624: HC' = ~(~HC + ~m + m') over the eight source-address words.
+	uint32 sum = (uint16)~checksum;
+	for (int i = 0; i < 16; i += 2) {
+		uint16 oldWord = (uint16)((oldAddress.s6_addr[i] << 8)
+			| oldAddress.s6_addr[i + 1]);
+		uint16 newWord = (uint16)((newAddress.s6_addr[i] << 8)
+			| newAddress.s6_addr[i + 1]);
+		sum += (uint16)~oldWord;
+		sum += newWord;
+	}
+	return (uint16)~r5_fold_checksum(sum);
+}
+
+
+static void
+r5_update_l4_checksum(net_buffer* buffer, uint8 protocol,
+	const in6_addr& oldAddress, const in6_addr& newAddress)
+{
+	if ((buffer->buffer_flags & NET_BUFFER_L4_CHECKSUM_VALID) == 0)
+		return;
+
+	if (protocol == IPPROTO_UDP) {
+		if (buffer->size < 8)
+			return;
+		NetBufferField<uint16, 6> field(buffer);
+		uint16 current = ntohs(*field);
+		// A zero UDP checksum means "no checksum". IPv6 stores that as 0xffff.
+		if (current == 0)
+			return;
+		uint16 updated = r5_checksum_replace_address(current, oldAddress,
+			newAddress);
+		if (updated == 0)
+			updated = 0xffff;
+		*field = htons(updated);
+		field.Sync();
+	} else if (protocol == IPPROTO_TCP) {
+		if (buffer->size < 20)
+			return;
+		NetBufferField<uint16, 16> field(buffer);
+		uint16 updated = r5_checksum_replace_address(ntohs(*field), oldAddress,
+			newAddress);
+		*field = htons(updated);
+		field.Sync();
+	}
+}
+
+
 static void
 ipv6_prefer_nonlocal_source(net_interface* interface, sockaddr_in6& source,
 	const sockaddr_in6& destination)
 {
-	// Default IPv6 routes are bound to the first address (link-local).
-	// Off-link destinations must not use fe80 as the source (RFC 6724).
-	if (!IN6_IS_ADDR_LINKLOCAL(&source.sin6_addr))
+	// Only an empty source is filled in here. A source the transport already
+	// chose (a bound socket, or a TCP connection registered on it) is never
+	// replaced: TCP would get the SYN-ACK for another address and answer
+	// with RST. The default route itself is bound to a global address when
+	// the interface has one (routes.cpp), so transports pick that source.
+	if (!IN6_IS_ADDR_UNSPECIFIED(&source.sin6_addr))
 		return;
 	if (IN6_IS_ADDR_LINKLOCAL(&destination.sin6_addr)
 		|| IN6_IS_ADDR_MC_LINKLOCAL(&destination.sin6_addr)
@@ -1339,11 +1402,16 @@ ipv6_send_routed_data(net_protocol* _protocol, struct net_route* route,
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 
+	in6_addr previousSource = source.sin6_addr;
 	if (sDatalinkModule->is_local_address(sDomain, (sockaddr*)&destination,
-			NULL, NULL))
-		source.sin6_addr = destination.sin6_addr;
-	else
+			NULL, NULL)) {
+		if (IN6_IS_ADDR_UNSPECIFIED(&source.sin6_addr))
+			source.sin6_addr = destination.sin6_addr;
+	} else
 		ipv6_prefer_nonlocal_source(interface, source, destination);
+	if (memcmp(&previousSource, &source.sin6_addr, sizeof(previousSource)) != 0)
+		r5_update_l4_checksum(buffer, protocolNumber, previousSource,
+			source.sin6_addr);
 // SPDX-SnippetEnd
 
 	buffer->msg_flags &= ~(MSG_BCAST | MSG_MCAST);

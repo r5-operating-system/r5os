@@ -1,5 +1,53 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-18 - IPv6: review fixes for DHCPv6, SLAAC, the resolver, UDP sources and the default route
+
+Problem (review of #4425, before merge):
+- One stray UDP packet on port 546 removed the DHCPv6 address.
+- DHCPv6 sent Solicit every 2 s forever.
+- An IPv6 resolver update dropped the IPv4 DNS servers and the domain.
+- A UDP socket kept the source of its first connect() (127.0.0.1, or an old DHCP address) for every later peer. This is an IPv4 regression.
+- Removing a global address deleted the IPv6 default route.
+- DAD before the link-local address treated any socket error as a collision, which could turn IPv6 off on link-local-only links.
+
+What changed:
+- DHCPv6 (`DHCPv6Client.cpp`):
+  - A packet with a wrong transaction id, type or server is dropped without touching the lease.
+  - A retransmission keeps its transaction id, and RT doubles with jitter up to the RFC 8415 maximum (Solicit and Information-Request 3600 s, Request 30 s, Renew and Rebind 600 s). Request gives up after ten tries.
+  - A refusal starts over after a delay that doubles, up to an hour.
+  - NoBinding sends a Request for the same lease.
+  - T1 > T2 discards the IA. T1 and T2 default to 0.5 and 0.8 of the preferred lifetime; an infinite preferred lifetime means no renewal, never an immediate one.
+  - A new address replaces the old one instead of leaking it.
+  - The lease is removed when the client is deleted (link down).
+- Resolver (`NetServer.cpp`):
+  - Every source writes its own block: "# interface ipv4" for IPv4 DHCP, the device for SLAAC and DHCPv6. An update replaces only its own servers and domain, and untagged lines from an older file belong to ipv4.
+  - resolv.conf is written to a temporary file and renamed.
+- UDP (`udp.cpp`):
+  - The endpoint remembers whether bind() named an address.
+  - Only then is the source kept. Otherwise connect() takes it from the route each time, and disconnect (AF_UNSPEC) forgets it.
+  - A bound source is never replaced on send.
+- IPv6 (`ipv6.cpp`): the IP layer only fills an empty source and never replaces one a transport chose, so TCP no longer registers on one address and sends from another.
+- Routes (`routes.cpp`): when an address goes, an IPv6 gateway or default route bound to it moves to another address on the same interface (global first, else link-local) instead of being deleted. The replacement is found before the domain lock is taken.
+- SLAAC (`SLAACClient.cpp`):
+  - Only a DAD collision stops the link-local address.
+  - An RA must come from a link-local address, with hop limit 255 when the header is visible.
+  - A PIO with preferred > valid is ignored.
+  - The two-hour rule protects an address we hold.
+  - The default route is not removed and re-added on every RA, ends with the router lifetime, and is not taken over by a second router while the first is alive.
+  - Addresses, on-link routes and the default route are removed when the client is deleted.
+
+Tested: `scripts/build-locked.sh` gives `jam_exit=0`, `mesa_exit=0`. QEMU (KVM, `-cpu host,+smap`, usernet with `ipv6=on`, 150 s): `enable SMAP`, boots to `net_server`, no panic.
+
+Not proven: the guest syslog could not be read back from the image after the QEMU run, so SLAAC's behaviour on QEMU's RA was not seen. No DHCPv6 server, no real router, and no IPv4/IPv6 dual-stack LAN were tried. Still open from the review: RFC 6724 source selection beyond "first global" (ULA versus GUA), the DHCPv6 elapsed-time option, RDNSS lifetime and DNSSL, and the zone suffix format of a link-local DNS server.
+
+## 2026-11-18 - IPv6: the default route sorts last, and the checksum follows the source
+
+Problem: an all-zero IPv6 mask was counted like a host mask, so `::/0` did not sit under the more specific prefixes. A default route bound to `fe80::` was still the source after TCP or unconnected UDP had already checksummed the packet. A socket bound to one local address was rewritten to the destination when that destination was also local. SLAAC kept only the last prefix, skipped duplicate-address detection for the link-local address, and did not install an on-link route for `L=1`. DHCPv6 installed an `IA_NA` address as `/64`, ignored status codes, and stopped after the first reply. Stopping either client killed the worker, which could leave its socket open in the network server. `resolv.conf` filled up with old servers, and a link-local DNS address was written without a zone.
+
+Changed: the mask bit is the least significant set bit, matching IPv4, so `::/0` returns 128 and sorts last. An off-link route is bound to a global or ULA address when the interface has one, including after SLAAC or DHCPv6 adds that address. UDP chooses that source before the checksum. If IPv6 still changes the source, the TCP or UDP checksum is updated with the incremental rule. A bound source is left alone when the destination is local; only `::` is filled in. SLAAC applies every `/64` autonomous prefix, runs duplicate-address detection before the link-local address, and keeps `L=1` prefixes as on-link routes until the lifetime is withdrawn or runs out. DHCPv6 uses a `/128` mask, logs status codes, and renews or rebinds until the valid lifetime, then removes the address. Both clients wake their own thread and wait for it to close the socket. New resolver servers are written first, per interface, and a bare `fe80::` DNS address gets `%<device>` or is dropped. The address walk in `SIOCADDRT` holds the interface lock. `0064:ff9b::/96` is no longer treated as an empty source.
+
+Limits: jammed (`jam_exit=0`, 11:14 Europe/Amsterdam). Not booted. QEMU has no IPv6 router, so SLAAC routes, DHCPv6, and an off-link TCP or UDP checksum were not tried on a wire. The kernel paths do not read a user pointer themselves; route control still copies the request with `user_memcpy`.
+
 ## 2026-11-18 - Build: main builds again after the Wi-Fi merges
 
 Problem: #4419, #4421 and #4422 were merged without a jam. Main (`d2e4038d0b`) did not build:
