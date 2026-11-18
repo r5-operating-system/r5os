@@ -8,6 +8,14 @@ Changed: each station keeps four SAE frames under the com lock. A read removes t
 
 Limits: not jammed and not booted. A protected deauth is still discarded. This stack does not check the BIP MIC, so a real protected deauth does not disconnect the station. The signed-in person still scans. The network server runs as root and still joins.
 
+## 2026-11-18 - Wi-Fi: a beacon does not turn HE on
+
+Problem: parsing an HE capability set the HE flag on the station even when `he` is off. The association reply did the same.
+
+Changed: the capability is still stored. The flag is set only when this image is sending HE.
+
+Limits: not jammed and not booted. `he` stays off. The 160 MHz bit in that element is bit 3 (`0x08`), the same value the published HE PHY map uses. It was left as it is.
+
 ## 2026-11-18 - Wi-Fi: one password window, and a saved WPA3 network stays WPA3
 
 Problem: a failed join opened Haiku's password window as well as R5's, and the message said the password was wrong when the join had simply not finished. A WPA3 or OWE network had no name in the Wi-Fi Kit, so the join was sent without an authentication mode and the supplicant asked again. A remembered WPA3 network was read back as an open network.

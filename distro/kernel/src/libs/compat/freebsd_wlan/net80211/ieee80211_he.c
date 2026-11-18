@@ -98,7 +98,11 @@ ieee80211_parse_hecap(struct ieee80211_node *ni, const uint8_t *ie, int avail)
 		ni->ni_he_tx_mcs160 = he_le16(ie + 26);
 	}
 	ni->ni_he_cap_ok = 1;
-	ni->ni_flags |= IEEE80211_NODE_HE;
+	/* The element is stored either way. The station is HE only when
+	 * this image is sending HE. A beacon must not turn that on.
+	 */
+	if (ni->ni_ic != NULL && ieee80211_he_is_on(ni->ni_ic))
+		ni->ni_flags |= IEEE80211_NODE_HE;
 }
 
 
