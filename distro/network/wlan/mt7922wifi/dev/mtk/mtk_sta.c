@@ -561,26 +561,25 @@ mtk_sta_igtk(struct mtk_softc* sc)
 	if (sc->sc_igtk_len != 16)
 		return EINVAL;
 
-	if (sc->sc_ccmp_len == 16)
-		n = 2;
+	/* The pairwise key stays in software. Putting it in this record
+	 * turns hardware CCMP on for the same frames the stack encrypts.
+	 * The integrity key is a group key, so it goes on our own entry,
+	 * which is where broadcast is sent.
+	 */
+	n = 1;
 	tlv = 8 + n * 36;
 	memset(m, 0, sizeof(m));
 	m[0] = 0;
-	m[1] = MTK_WCID_AP & 0xff;
+	m[1] = MTK_WCID_OWN & 0xff;
 	put16(m + 2, 1);
 	m[4] = 1;
-	m[6] = MTK_WCID_AP >> 8;
+	m[6] = MTK_WCID_OWN >> 8;
 	put16(m + 8, STA_REC_KEY_V2);
 	put16(m + 10, (uint16_t)tlv);
 	m[12] = 1;
 	m[13] = (uint8_t)n;
-	if (n == 2) {
-		mtk_sec_key(m + 16, MTK_CIPHER_AES_CCMP, 0, sc->sc_ccmp);
-		mtk_sec_key(m + 52, MTK_CIPHER_BIP_CMAC_128, sc->sc_igtk_id,
-			sc->sc_igtk);
-	} else
-		mtk_sec_key(m + 16, MTK_CIPHER_BIP_CMAC_128, sc->sc_igtk_id,
-			sc->sc_igtk);
+	mtk_sec_key(m + 16, MTK_CIPHER_BIP_CMAC_128, sc->sc_igtk_id,
+		sc->sc_igtk);
 
 	error = mtk_mcu_send_uni(sc, UNI_STA_REC_UPDATE, m, 8 + tlv, 1);
 	memset(m, 0, sizeof(m));

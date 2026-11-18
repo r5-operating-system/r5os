@@ -774,9 +774,18 @@ BNetworkSettings::_ConvertNetworkToSettings(BMessage& message)
 
 		const char* authenticationString = NULL;
 		switch (authentication) {
-			case B_NETWORK_AUTHENTICATION_NONE:
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			case B_NETWORK_AUTHENTICATION_NONE: {
+				uint32 keyMode = 0;
 				authenticationString = "none";
+				if (message.FindUInt32("key_mode", &keyMode) == B_OK
+					&& (keyMode & B_KEY_MODE_OWE) != 0)
+					authenticationString = "owe";
 				break;
+			}
+// SPDX-SnippetEnd
 			case B_NETWORK_AUTHENTICATION_WEP:
 				authenticationString = "wep";
 				break;
@@ -786,6 +795,13 @@ BNetworkSettings::_ConvertNetworkToSettings(BMessage& message)
 			case B_NETWORK_AUTHENTICATION_WPA2:
 				authenticationString = "wpa2";
 				break;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			case B_NETWORK_AUTHENTICATION_WPA3:
+				authenticationString = "wpa3";
+				break;
+// SPDX-SnippetEnd
 		}
 
 		if (result == B_OK && authenticationString != NULL)
@@ -853,6 +869,18 @@ BNetworkSettings::_ConvertNetworkFromSettings(BMessage& message)
 		} else if (strcasecmp(authentication, "wpa2") == 0) {
 			message.AddUInt32("authentication_mode",
 				B_NETWORK_AUTHENTICATION_WPA2);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		} else if (strcasecmp(authentication, "wpa3") == 0) {
+			message.AddUInt32("authentication_mode",
+				B_NETWORK_AUTHENTICATION_WPA3);
+			message.AddUInt32("key_mode", B_KEY_MODE_SAE);
+		} else if (strcasecmp(authentication, "owe") == 0) {
+			message.AddUInt32("authentication_mode",
+				B_NETWORK_AUTHENTICATION_NONE);
+			message.AddUInt32("key_mode", B_KEY_MODE_OWE);
+// SPDX-SnippetEnd
 		}
 
 		message.RemoveName("authentication");

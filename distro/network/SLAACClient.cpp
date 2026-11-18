@@ -14,6 +14,7 @@
 #include <netinet/icmp6.h>
 #include <netinet/in.h>
 #include <netinet6/in6.h>
+#include <net/route.h>
 #include <stdio.h>
 #include <string.h>
 #include <syslog.h>
@@ -25,6 +26,7 @@
 #include <Message.h>
 #include <NetworkAddress.h>
 #include <NetworkInterface.h>
+#include <NetworkRoute.h>
 #include <OS.h>
 #include <String.h>
 
@@ -266,9 +268,18 @@ SLAACClient::_ApplyDefaultRoute(const sockaddr_in6& from, uint32 ifIndex)
 
 	BNetworkAddress gateway(gatewayAddr);
 	BNetworkInterface routeInterface(Device());
-	routeInterface.RemoveDefaultRoute(AF_INET6);
+	bool removed = false;
+	if (fHaveDefaultRoute) {
+		BNetworkRoute previous;
+		previous.SetGateway(BNetworkAddress(fDefaultGateway));
+		previous.SetFlags(RTF_STATIC | RTF_DEFAULT | RTF_GATEWAY);
+		if (routeInterface.RemoveRoute(AF_INET6, previous) == B_OK)
+			removed = true;
+	}
 	status_t routeStatus = routeInterface.AddDefaultRoute(gateway);
 	if (routeStatus != B_OK) {
+		if (removed)
+			fHaveDefaultRoute = false;
 		syslog(LOG_ERR, "slaac %s: default route failed: %s\n", Device(),
 			strerror(routeStatus));
 		return routeStatus;
@@ -416,11 +427,26 @@ SLAACClient::_ApplyAdvert(const uint8* buffer, ssize_t bytes,
 	}
 
 	if (lifetime == 0) {
-		BNetworkInterface routeInterface(Device());
-		routeInterface.RemoveDefaultRoute(AF_INET6);
-		fHaveDefaultRoute = false;
-		syslog(LOG_INFO, "slaac %s: RA lifetime 0, default router forgotten\n",
-			Device());
+		sockaddr_in6 router = from;
+		if (IN6_IS_ADDR_LINKLOCAL(&router.sin6_addr)
+			&& router.sin6_scope_id == 0)
+			router.sin6_scope_id = ifIndex;
+		if (fHaveDefaultRoute
+			&& memcmp(&fDefaultGateway.sin6_addr, &router.sin6_addr,
+				sizeof(router.sin6_addr)) == 0
+			&& fDefaultGateway.sin6_scope_id == router.sin6_scope_id) {
+			BNetworkRoute route;
+			BNetworkAddress gateway(router);
+			BNetworkInterface routeInterface(Device());
+			route.SetGateway(gateway);
+			route.SetFlags(RTF_STATIC | RTF_DEFAULT | RTF_GATEWAY);
+			if (routeInterface.RemoveRoute(AF_INET6, route) == B_OK) {
+				fHaveDefaultRoute = false;
+				syslog(LOG_INFO,
+					"slaac %s: RA lifetime 0, route via %s forgotten\n",
+					Device(), _ToString(from.sin6_addr).String());
+			}
+		}
 	} else if (lifetime > 0 || addedAddress
 			|| (havePrefix && !fHaveDefaultRoute)) {
 		if (_ApplyDefaultRoute(from, ifIndex) == B_OK)

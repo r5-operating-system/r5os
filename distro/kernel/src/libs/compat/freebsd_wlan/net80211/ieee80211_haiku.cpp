@@ -83,10 +83,29 @@ static net_notifications_module_info* sNotificationModule;
  * priv(9) NET80211 checks.
  * Return 0 if operation is allowed, E* (usually EPERM) otherwise.
  */
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * The network server and the supplicant run as root. The signed-in
+ * person scans through the kit and does not set keys.
+ */
+extern "C" int
+ieee80211_r5_root(void)
+{
+	Thread* thread = thread_get_current_thread();
+
+	if (thread == NULL || thread->team == NULL)
+		return 0;
+	return thread->team->effective_uid == 0;
+}
+/* SPDX-SnippetEnd */
+
 int
 ieee80211_priv_check_vap_getkey(u_long cmd __unused,
      struct ieee80211vap *vap __unused, struct ifnet *ifp __unused)
 {
+	if (!ieee80211_r5_root())
+		return EPERM;
 	return 0;
 }
 
@@ -101,6 +120,8 @@ int
 ieee80211_priv_check_vap_setmac(u_long cmd __unused,
      struct ieee80211vap *vap __unused, struct ifnet *ifp __unused)
 {
+	if (!ieee80211_r5_root())
+		return EPERM;
 	return 0;
 }
 
@@ -108,6 +129,8 @@ int
 ieee80211_priv_check_create_vap(u_long cmd __unused,
     struct ieee80211vap *vap __unused, struct ifnet *ifp __unused)
 {
+	if (!ieee80211_r5_root())
+		return EPERM;
 	return 0;
 }
 

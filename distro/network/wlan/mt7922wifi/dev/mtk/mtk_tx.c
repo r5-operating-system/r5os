@@ -138,16 +138,24 @@ mtk_write_txd(struct mtk_softc* sc, uint8_t* txd,
 		| (((headerLength / 2) & 0x1f) << 11)
 		| (mtk_tx_wcid(sc, frame) & 0x3ff));
 
-	/* Management, control and group frames at a fixed basic rate, which
-	 * carries HT control itself (the part adds none to them); frames to
-	 * the access point at whatever rate the firmware's rate control picks
-	 * from the rates in its station record, as mt76_connac2 has it.
+	/* Management, control, group frames and the 4-way handshake at a
+	 * fixed basic rate. EAPOL is ethertype 0x888E behind the LLC header.
+	 * There is no transmit block-ack session, so every frame tells the
+	 * firmware not to wait for one. A later session must clear that bit
+	 * only for frames that belong to it.
 	 */
 	fixed = !data || multicast;
+	if (data && length >= headerLength + 8) {
+		const uint8_t* llc = (const uint8_t*)frame + headerLength;
+
+		if (llc[0] == 0xaa && llc[1] == 0xaa && llc[2] == 0x03
+			&& llc[6] == 0x88 && llc[7] == 0x8e)
+			fixed = 1;
+	}
 	mtk_wr32(txd + 8, (fixed ? MTK_TXD2_FIX_RATE | MTK_TXD2_HTC_VLD : 0)
 		| (multicast ? MTK_TXD2_MULTICAST : 0)
 		| ((uint32_t)(type & 0x3) << 4) | (subtype & 0xf));
-	mtk_wr32(txd + 12, (fixed ? MTK_TXD3_BA_DISABLE : 0) | ((uint32_t)15 << 11));
+	mtk_wr32(txd + 12, MTK_TXD3_BA_DISABLE | ((uint32_t)15 << 11));
 	if (fixed)
 		mtk_wr32(txd + 24, MTK_TXD6_FIXED_BW | (mtk_fixed_rate(sc) << 16));
 	mtk_wr32(txd + 28, ((uint32_t)(type & 0x3) << 20)
@@ -302,6 +310,33 @@ mtk_ht_kbps(int mcs, int width)
 }
 
 
+/* One stream, 0.8 µs guard. Used only to report the last transmit rate. */
+static uint32_t
+mtk_he_kbps(int mcs, int width)
+{
+	static const uint32_t he20[12] = {
+		8600, 17200, 25800, 34400, 51600, 68800,
+		77400, 86000, 103200, 114700, 129000, 143400
+	};
+	static const uint32_t he40[12] = {
+		17200, 34400, 51600, 68800, 103200, 137600,
+		154900, 172100, 206500, 229400, 258100, 286800
+	};
+	static const uint32_t he80[12] = {
+		36000, 72100, 108100, 144100, 216200, 288200,
+		324300, 360300, 432400, 480400, 540400, 600500
+	};
+
+	if (mcs < 0 || mcs > 11)
+		return 0;
+	if (width >= 80)
+		return he80[mcs];
+	if (width >= 40)
+		return he40[mcs];
+	return he20[mcs];
+}
+
+
 static uint32_t
 mtk_vht_kbps(int mcs, int width)
 {
@@ -359,7 +394,8 @@ mtk_note_txs(struct mtk_softc* sc, const uint8_t* data, size_t got)
 			nss = ((rate >> 10) & 0x7) + 1;
 			/* 4 is VHT. 8 through 11 are the HE modes. */
 			kit = mode >= 8 ? 4 : 3;
-			kbps = mtk_vht_kbps((int)index, width) * nss;
+			kbps = (mode >= 8 ? mtk_he_kbps((int)index, width)
+				: mtk_vht_kbps((int)index, width)) * nss;
 		} else if (mode <= 1) {
 			index = rate & 0x3f;
 			nss = 1;
@@ -672,6 +708,10 @@ mtk_receive_frame(struct mtk_softc* sc, const uint8_t* data, size_t got,
 		rxs.c_freq = ieee80211_ieee2mhz(channel, IEEE80211_CHAN_5GHZ);
 	}
 
+	if (sc->sc_stack == 0) {
+		m_freem(m);
+		return;
+	}
 	if (!ieee80211_add_rx_params(m, &rxs)) {
 		m_freem(m);
 		return;

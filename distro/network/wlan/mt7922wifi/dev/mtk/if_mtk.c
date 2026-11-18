@@ -53,6 +53,8 @@ struct mtk_fixed {
 static void mtk_tick(void* arg);
 static void mtk_work(void* arg, int pending);
 static void mtk_rxwork(void* arg, int pending);
+static void mtk_ba_queue(struct mtk_softc* sc, int tid, int winsize, int ssn,
+	int enable);
 
 
 /* Linux's table for this family (mt7921/pci.c, __mt7921_reg_addr), entry for
@@ -394,11 +396,8 @@ mtk_getradiocaps(struct ieee80211com* ic, int maxchans, int* nchans,
 	memset(bands, 0, sizeof(bands));
 	setbit(bands, IEEE80211_MODE_11B);
 	setbit(bands, IEEE80211_MODE_11G);
-	if (mtk_ht_on(sc)) {
+	if (mtk_ht_on(sc))
 		setbit(bands, IEEE80211_MODE_11NG);
-		if (sc->sc_phy_bw >= 1)
-			flags = NET80211_CBW_FLAG_HT40;
-	}
 	ieee80211_add_channel_list_2ghz(chans, maxchans, nchans,
 		mtk_channels_2ghz, MTK_CHANNELS_2GHZ, bands, flags);
 
@@ -407,13 +406,8 @@ mtk_getradiocaps(struct ieee80211com* ic, int maxchans, int* nchans,
 	flags = 0;
 	if (mtk_ht_on(sc)) {
 		setbit(bands, IEEE80211_MODE_11NA);
-		if (sc->sc_phy_bw >= 1)
-			flags = NET80211_CBW_FLAG_HT40;
-		if (sc->sc_phy_vht != 0) {
+		if (sc->sc_phy_vht != 0)
 			setbit(bands, IEEE80211_MODE_VHT_5GHZ);
-			if (sc->sc_phy_bw >= 2)
-				flags |= NET80211_CBW_FLAG_VHT80;
-		}
 	}
 	ieee80211_add_channel_list_5ghz(chans, maxchans, nchans,
 		mtk_channels_5ghz, MTK_CHANNELS_5GHZ, bands, flags);
@@ -450,23 +444,34 @@ mtk_apply_phy(struct mtk_softc* sc)
 {
 	struct ieee80211com* ic = &sc->sc_ic;
 
+	int streams = sc->sc_streams;
+
 	ic->ic_htcaps = 0;
 	memset(&ic->ic_vht_cap, 0, sizeof(ic->ic_vht_cap));
+	ic->ic_flags_ext &= ~IEEE80211_FEXT_VHT;
+	/* An empty RX MCS set is illegal. The card's count is capped at
+	 * four, which is as far as the stack's MCS writer goes.
+	 */
+	if (streams < 1)
+		streams = 1;
+	if (streams > 4)
+		streams = 4;
+	ic->ic_txstream = streams;
+	ic->ic_rxstream = streams;
 	if (mtk_ht_on(sc)) {
 		ic->ic_htcaps = IEEE80211_HTCAP_SHORTGI20
 			| IEEE80211_HTC_HT
 			| IEEE80211_HTC_AMPDU;
-		if (sc->sc_phy_bw >= 1) {
-			ic->ic_htcaps |= IEEE80211_HTCAP_CHWIDTH40
-				| IEEE80211_HTCAP_SHORTGI40;
-		}
+		/* The radio is programmed at 20 MHz. Advertising 40 MHz here
+		 * makes the access point send at a width the part is not on.
+		 */
 		if (sc->sc_phy_rx_ldpc != 0)
 			ic->ic_htcaps |= IEEE80211_HTCAP_LDPC | IEEE80211_HTC_TXLDPC;
 		if (sc->sc_phy_rx_stbc != 0)
 			ic->ic_htcaps |= IEEE80211_HTCAP_RXSTBC_1STREAM;
 		if (sc->sc_phy_vht != 0) {
-			if (sc->sc_phy_bw >= 2)
-				ic->ic_vht_cap.vht_cap_info |= IEEE80211_VHTCAP_SHORT_GI_80;
+			/* vht_vattach returns immediately unless this is set. */
+			ic->ic_flags_ext |= IEEE80211_FEXT_VHT;
 			if (sc->sc_phy_rx_ldpc != 0)
 				ic->ic_vht_cap.vht_cap_info |= IEEE80211_VHTCAP_RXLDPC;
 			if (sc->sc_phy_rx_stbc != 0)
@@ -496,12 +501,7 @@ mtk_apply_phy(struct mtk_softc* sc)
 		mac[0] = IEEE80211_HE_MAC_CAP0_HTC_HE;
 		phy[0] = IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_RU_MAPPING_IN_2G
 			| IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_RU_MAPPING_IN_5G;
-		if (sc->sc_phy_bw >= 1)
-			phy[0] |= IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_40MHZ_IN_2G;
-		if (sc->sc_phy_bw >= 2)
-			phy[0] |= IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_40MHZ_80MHZ_IN_5G;
-		if (sc->sc_phy_bw >= 3)
-			phy[0] |= IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_160MHZ_IN_5G;
+		/* Width stays 20 MHz until the radio is programmed wider. */
 		if (sc->sc_phy_rx_ldpc != 0)
 			phy[1] |= IEEE80211_HE_PHY_CAP1_LDPC_CODING_IN_PAYLOAD;
 		if (sc->sc_phy_rx_stbc != 0)
@@ -542,6 +542,16 @@ mtk_join_teardown(struct mtk_softc* sc)
 		mtk_bss_update(sc, NULL, 0);
 		mtk_wtbl_clear(sc, MTK_WCID_AP);
 	}
+	memset(sc->sc_ccmp, 0, sizeof(sc->sc_ccmp));
+	sc->sc_ccmp_len = 0;
+	memset(sc->sc_igtk, 0, sizeof(sc->sc_igtk));
+	sc->sc_igtk_len = 0;
+	sc->sc_igtk_ipn = 0;
+	sc->sc_tx_kbps = 0;
+	sc->sc_tx_mode = 0;
+	sc->sc_tx_mcs = 0;
+	sc->sc_tx_nss = 0;
+	sc->sc_tx_width = 0;
 }
 
 
@@ -760,13 +770,15 @@ mtk_ampdu_rx_start(struct ieee80211_node* ni, struct ieee80211_rx_ampdu* rap,
 	struct mtk_softc* sc = ni->ni_ic->ic_softc;
 	int error = 0;
 	int tid = (baparamset & IEEE80211_BAPS_TID) >> IEEE80211_BAPS_TID_S;
-	int winsize = (baparamset & IEEE80211_BAPS_BUFSIZ) >> IEEE80211_BAPS_BUFSIZ_S;
 
 	if (sc->sc_ampdu_rx_start != NULL)
 		error = sc->sc_ampdu_rx_start(ni, rap, baparamset, batimeout,
 			baseqctl);
-	if (error == 0 && sc->sc_ht_vht != 0)
-		mtk_sta_ba(sc, MTK_WCID_AP, tid, winsize, baseqctl, 1, 0);
+	/* rxa_start is the sequence, already shifted. The raw baseqctl is
+	 * not. A window of 0 is not a session.
+	 */
+	if (error == 0 && sc->sc_ht_vht != 0 && rap->rxa_wnd != 0)
+		mtk_ba_queue(sc, tid, rap->rxa_wnd, rap->rxa_start, 1);
 	return error;
 }
 
@@ -788,7 +800,7 @@ mtk_ampdu_rx_stop(struct ieee80211_node* ni, struct ieee80211_rx_ampdu* rap)
 		int tid = (int)(rap - ni->ni_rx_ampdu);
 
 		if (tid >= 0 && tid < IEEE80211_TID_SIZE)
-			mtk_sta_ba(sc, MTK_WCID_AP, tid, 0, 0, 0, 0);
+			mtk_ba_queue(sc, tid, 0, 0, 0);
 	}
 }
 /* SPDX-SnippetEnd */
@@ -915,8 +927,10 @@ mtk_parent(struct ieee80211com* ic)
 	int wanted = ic->ic_nrunning > 0;
 
 	/* R5 (MIT): the driver is going away; detach stops the card itself. */
-	if (sc->sc_detaching)
+	if (sc->sc_detaching) {
+		sc->sc_running = 0;
 		return;
+	}
 	if (wanted == sc->sc_running)
 		return;
 
@@ -1134,12 +1148,93 @@ mtk_rxwork(void* arg, int pending)
 }
 
 
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * The receive path already holds sc_rxmtx. mtk_sta_ba waits for a reply
+ * and takes that lock again, which is not recursive. Remember the change
+ * and let mtk_work send it.
+ */
+static void
+mtk_ba_queue(struct mtk_softc* sc, int tid, int winsize, int ssn, int enable)
+{
+	if (sc->sc_detaching != 0 || tid < 0 || tid > 7)
+		return;
+
+	mtx_lock(&sc->sc_bamtx);
+	sc->sc_ba[tid].winsize = (uint16_t)winsize;
+	sc->sc_ba[tid].ssn = (uint16_t)ssn;
+	sc->sc_ba[tid].enable = enable ? 1 : 0;
+	sc->sc_ba[tid].pending = 1;
+	mtx_unlock(&sc->sc_bamtx);
+	if (sc->sc_tq != NULL)
+		taskqueue_enqueue(sc->sc_tq, &sc->sc_work);
+}
+
+
+static void
+mtk_ba_drain(struct mtk_softc* sc)
+{
+	struct mtk_ba_job job[8];
+	int tid;
+
+	mtx_lock(&sc->sc_bamtx);
+	memcpy(job, sc->sc_ba, sizeof(job));
+	memset(sc->sc_ba, 0, sizeof(sc->sc_ba));
+	mtx_unlock(&sc->sc_bamtx);
+
+	if (sc->sc_detaching != 0 || sc->sc_gone != 0)
+		return;
+	for (tid = 0; tid < 8; tid++) {
+		int error;
+
+		if (job[tid].pending == 0)
+			continue;
+		error = mtk_sta_ba(sc, MTK_WCID_AP, tid, job[tid].winsize,
+			job[tid].ssn, job[tid].enable, 0);
+		/* The firmware refused the session. Drop it in the stack too,
+		 * or it will reorder frames the part is not keeping.
+		 */
+		if (error != 0 && job[tid].enable != 0
+			&& sc->sc_ampdu_rx_stop != NULL) {
+			struct ieee80211vap* vap;
+			struct ieee80211_node* ni = NULL;
+
+			/* The station can leave while this thread runs. Hold a
+			 * reference taken under the com lock. The reorder buffer
+			 * is also touched from the receive thread, which holds
+			 * sc_rxmtx, so the stop takes that lock too. No DELBA
+			 * is sent: the firmware already refused the session.
+			 */
+			IEEE80211_LOCK(&sc->sc_ic);
+			vap = TAILQ_FIRST(&sc->sc_ic.ic_vaps);
+			if (vap != NULL && vap->iv_bss != NULL)
+				ni = ieee80211_ref_node(vap->iv_bss);
+			IEEE80211_UNLOCK(&sc->sc_ic);
+			if (ni != NULL) {
+				mtx_lock(&sc->sc_rxmtx);
+				sc->sc_ampdu_rx_stop(ni, &ni->ni_rx_ampdu[tid]);
+				mtx_unlock(&sc->sc_rxmtx);
+				ieee80211_free_node(ni);
+			}
+		}
+	}
+}
+/* SPDX-SnippetEnd */
+
+
 /* Our own thread: the one place allowed to wait for the part. */
 static void
 mtk_work(void* arg, int pending)
 {
 	struct mtk_softc* sc = arg;
 	struct ieee80211com* ic = &sc->sc_ic;
+
+	/* Before anything that can return early. A block-ack reply takes
+	 * sc_rxmtx, which the receive path may still hold when it queued us,
+	 * so this runs only after that path has dropped the lock.
+	 */
+	mtk_ba_drain(sc);
 
 	if (sc->sc_startall != 0) {
 		sc->sc_startall = 0;
@@ -1376,15 +1471,26 @@ mtk_ioctl(struct ieee80211com* ic, u_long cmd, void* data)
 	struct mtk_softc* sc = ic->ic_softc;
 	struct ieee80211_haiku_tx_rate* rate = data;
 
-	if (cmd == IEEE80211_IOC_HAIKU_IGTK) {
+	if (cmd == IEEE80211_IOC_HAIKU_IGTK
+		|| cmd == IEEE80211_IOC_HAIKU_IGTK_PN) {
 		const struct ieee80211_haiku_igtk* g = data;
+		uint64_t ipn = 0;
 
+		if (cmd == IEEE80211_IOC_HAIKU_IGTK_PN) {
+			const struct ieee80211_haiku_igtk_pn* pn = data;
+
+			if (pn == NULL)
+				return EINVAL;
+			g = (const struct ieee80211_haiku_igtk*)pn;
+			ipn = pn->i_ipn;
+		}
 		if (g == NULL || g->i_keylen != 16
 			|| (g->i_keyix != 4 && g->i_keyix != 5))
 			return EINVAL;
 		memcpy(sc->sc_igtk, g->i_key, 16);
 		sc->sc_igtk_id = g->i_keyix;
 		sc->sc_igtk_len = 16;
+		sc->sc_igtk_ipn = ipn;
 		return mtk_sta_igtk(sc);
 	}
 
@@ -1398,6 +1504,9 @@ mtk_ioctl(struct ieee80211com* ic, u_long cmd, void* data)
 			return EINVAL;
 		memset(link, 0, sizeof(*link));
 		vap = TAILQ_FIRST(&ic->ic_vaps);
+		if (vap == NULL || (vap->iv_state != IEEE80211_S_RUN
+			&& vap->iv_state != IEEE80211_S_SLEEP))
+			return 0;
 		ni = vap != NULL ? vap->iv_bss : NULL;
 		/* net80211 marks the node from the access point's beacon, also
 		 * when this driver keeps the mode off. Only a mode that is on here
@@ -1480,6 +1589,7 @@ mtk_attach(device_t dev)
 	mtx_init(&sc->sc_cmdmtx, "mtk commands", MTX_NETWORK_LOCK, MTX_DEF);
 	mtx_init(&sc->sc_txmtx, "mtk transmit", MTX_NETWORK_LOCK, MTX_DEF);
 	mtx_init(&sc->sc_rxmtx, "mtk receive", MTX_NETWORK_LOCK, MTX_DEF);
+	mtx_init(&sc->sc_bamtx, "mtk block ack", MTX_NETWORK_LOCK, MTX_DEF);
 	callout_init(&sc->sc_poll, 1);
 	sc->sc_tq = taskqueue_create_fast("mtk_taskq", M_NOWAIT,
 		taskqueue_thread_enqueue, &sc->sc_tq);
@@ -1574,11 +1684,25 @@ mtk_attach(device_t dev)
 
 	IEEE80211_ADDR_COPY(ic->ic_macaddr, sc->sc_macaddr);
 
-	mtk_getradiocaps(ic, IEEE80211_CHAN_MAX, &ic->ic_nchans, ic->ic_channels);
+	/* The card's own report has to exist before the stack is attached.
+	 * ifattach reads the channel list and the HT and VHT capability.
+	 * Building those afterwards leaves 11a/b/g only, and a channel
+	 * pointer into an array that was then rebuilt.
+	 */
+	error = mtk_dma_setup(sc);
+	if (error != 0)
+		goto fail;
 
-	ieee80211_ifattach(ic);
+	error = mtk_firmware_start(sc);
+	if (error != 0)
+		goto fail;
 
 	ic->ic_getradiocaps = mtk_getradiocaps;
+	mtk_apply_phy(sc);
+	IEEE80211_ADDR_COPY(ic->ic_macaddr, sc->sc_macaddr);
+
+	ieee80211_ifattach(ic);
+	sc->sc_stack = 1;
 	ic->ic_scan_start = mtk_scan_start;
 	ic->ic_scan_end = mtk_scan_end;
 	ic->ic_set_channel = mtk_set_channel;
@@ -1592,16 +1716,6 @@ mtk_attach(device_t dev)
 	ic->ic_vap_create = mtk_vap_create;
 	ic->ic_vap_delete = mtk_vap_delete;
 	ic->ic_ioctl = mtk_ioctl;
-
-	error = mtk_dma_setup(sc);
-	if (error != 0)
-		goto fail;
-
-	error = mtk_firmware_start(sc);
-	if (error != 0)
-		goto fail;
-
-	mtk_apply_phy(sc);
 
 	error = mtk_radio_init(sc);
 	if (error != 0)
@@ -1646,6 +1760,7 @@ fail:
 	mtx_destroy(&sc->sc_cmdmtx);
 	mtx_destroy(&sc->sc_txmtx);
 	mtx_destroy(&sc->sc_rxmtx);
+	mtx_destroy(&sc->sc_bamtx);
 	mtx_destroy(&sc->sc_mtx);
 	return error;
 }
@@ -1657,6 +1772,7 @@ mtk_detach(device_t dev)
 	struct mtk_softc* sc = device_get_softc(dev);
 
 	/* R5 (MIT): from here the stack's tasks leave the card alone. */
+	sc->sc_stack = 0;
 	sc->sc_detaching = 1;
 
 	if (sc->sc_ic.ic_softc == sc)
@@ -1696,6 +1812,7 @@ mtk_detach(device_t dev)
 	mtx_destroy(&sc->sc_cmdmtx);
 	mtx_destroy(&sc->sc_txmtx);
 	mtx_destroy(&sc->sc_rxmtx);
+	mtx_destroy(&sc->sc_bamtx);
 	mtx_destroy(&sc->sc_mtx);
 	return 0;
 }
