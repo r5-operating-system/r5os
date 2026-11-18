@@ -1,5 +1,20 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-18 - AMD64 user space, step 2: one CPUID helper
+
+`headers/private/system/r5_x86_cpu.h` is the only place that reads CPUID for the later user-space dispatch. It is a private header. libroot exports no new symbol. The first call stores the result; later calls in that translation unit reuse it.
+
+What it reads, once: leaf 1 and leaf 7, and XCR0 when OSXSAVE is set. AVX, AVX2 and FMA are set only when XMM and YMM are both enabled in XCR0. BMI1, BMI2, ERMS and FSRM come from leaf 7. The last-level cache is leaf 4 on GenuineIntel and leaf `0x8000001D` on AuthenticAMD (highest data or unified level). Anything else, or a size that does not fit, uses 8 MiB. x86-64-v2 is the baseline and is not a flag.
+
+`r5_cpu_flags` prints the flags and the cache size. It is the check program for this step.
+
+Checked (18 Nov 2026, about 15:00 Europe/Amsterdam):
+- Host, Ryzen 5 5625U: flags `0x7f` (AVX, AVX2, FMA, BMI1, BMI2, ERMS and FSRM) and a 16 MiB last-level cache. A second call returns the same value.
+- `scripts/build-locked.sh`: `jam_exit=0`, `mesa_exit=0`.
+- QEMU KVM, own image copy, `-cpu host,+smap`: serial has `enable SMAP` and `R5 net_server`. After Sign in, `r5_cpu_flags` prints the same `0x7f` and 16 MiB, and Tracker, Deskbar, Terminal, WebPositive, StyledEdit, Settings and GLTeapot are running.
+- QEMU KVM `-cpu Nehalem`: flags `0` (no AVX, AVX2, FMA, BMI, ERMS or FSRM). Leaf 4 has no cache entry in this QEMU model, so the helper uses the 8 MiB fallback. The same apps start. This CPU has no SMAP; the kernel does not print `enable SMAP`.
+- QEMU KVM `-cpu EPYC-Rome`: flags `0x1f` (AVX, AVX2, FMA, BMI1, BMI2; no ERMS or FSRM, which this model does not advertise) and 16 MiB from leaf `0x8000001D`. Serial has `enable SMAP`. The same apps start.
+
 ## 2026-11-18 - AMD64 user space, step 1: GNU hash and local binding
 
 Problem: user-space binaries used only the SysV hash (`DT_HASH`). Calls inside `libbe` and `app_server` could go through the PLT, and the compiler assumed another library might interpose those functions. `malloc` must stay interposable, so `libroot` is left alone.
