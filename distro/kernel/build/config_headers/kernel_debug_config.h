@@ -8,6 +8,11 @@
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+#if defined(__has_include)
+#if __has_include("r5_kdebug_level.h")
+#include "r5_kdebug_level.h"
+#endif
+#endif
 #ifndef KDEBUG_LEVEL
 #define KDEBUG_LEVEL 0
 #endif

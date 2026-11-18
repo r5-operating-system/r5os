@@ -67,15 +67,30 @@ find_idle_core(const ThreadData* threadData)
 	CPUSet mask = threadData->GetCPUMask();
 	const bool useMask = !mask.IsEmpty();
 
+	// SPDX-SnippetBegin
+	// SPDX-License-Identifier: MIT
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	CoreEntry* fallback = NULL;
+	const bool preferLocalCache = gCacheDomainCount > 1
+		&& threadData->Core() != NULL;
+	const int32 localCache = preferLocalCache
+		? threadData->Core()->CacheDomain() : -1;
 	for (int32 index = 0; index < smp_get_num_cpus(); index++) {
 		CoreEntry* core = package->GetIdleCore(index);
 		if (core == NULL)
 			break;
 		if (useMask && !core->CPUMask().Matches(mask))
 			continue;
-		if (core->ThreadCount() == 0)
-			return core;
+		if (core->ThreadCount() == 0) {
+			if (!preferLocalCache || core->CacheDomain() == localCache)
+				return core;
+			if (fallback == NULL)
+				fallback = core;
+		}
 	}
+	if (fallback != NULL)
+		return fallback;
+	// SPDX-SnippetEnd
 
 	// The package lists lag behind (a core leaves them only when it runs
 	// what it was given): ask the cores themselves.

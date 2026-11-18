@@ -21,6 +21,7 @@
 
 #include <boot/kernel_args.h>
 #include <kscheduler.h>
+#include <thread.h>
 #include <thread_types.h>
 #include <util/AutoLock.h>
 #include <util/ThreadAutoLock.h>
@@ -345,6 +346,21 @@ cpu_idle(void)
 		sCPUIdleModule->cpuidle_idle();
 	else
 		arch_cpu_idle();
+
+	// SPDX-SnippetBegin
+	// SPDX-License-Identifier: MIT
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// MWAIT wake-up via invoke_scheduler does not fire an interrupt, so
+	// reschedule here the same way x86_hardware_interrupt() does.
+	cpu_status state = disable_interrupts();
+	Thread* thread = thread_get_current_thread();
+	if (thread->cpu->invoke_scheduler) {
+		SpinLocker schedulerLocker(thread->scheduler_lock);
+		scheduler_reschedule(B_THREAD_READY);
+		schedulerLocker.Unlock();
+	}
+	restore_interrupts(state);
+	// SPDX-SnippetEnd
 }
 
 
