@@ -704,15 +704,77 @@ invalidate_routes(InterfaceAddress* address)
 	TRACE("invalidate_routes(%s)\n",
 		AddressString(domain, address->local).Data());
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// An IPv6 default or gateway route is bound to a global address when the
+	// interface has one. When that address goes (lifetime end, renumbering)
+	// the route moves to another address on the same interface instead of
+	// going with it: a global one if there is one, else the link-local one.
+	// The replacement is looked up before the domain lock is taken, because
+	// the interface lock comes first everywhere else.
+	InterfaceAddress* replacement = NULL;
+	Interface* interface = (Interface*)address->interface;
+	if (domain->family == AF_INET6 && interface != NULL) {
+		for (size_t index = 0;; index++) {
+			InterfaceAddress* candidate = interface->AddressAt(index);
+			if (candidate == NULL)
+				break;
+			bool usable = candidate != address
+				&& candidate->domain == address->domain
+				&& candidate->local != NULL
+				&& candidate->local->sa_family == AF_INET6;
+			const sockaddr_in6* local = usable
+				? (const sockaddr_in6*)candidate->local : NULL;
+			// The IN6_IS_ADDR_UNSPECIFIED and _LOOPBACK macros need
+			// in6addr_any, which the kernel does not have.
+			if (usable && (r5_ipv6_unspecified(local->sin6_addr)
+					|| r5_ipv6_loopback(local->sin6_addr)
+					|| IN6_IS_ADDR_MULTICAST(&local->sin6_addr)))
+				usable = false;
+			bool better = usable && (replacement == NULL
+				|| (IN6_IS_ADDR_LINKLOCAL(&((const sockaddr_in6*)
+						replacement->local)->sin6_addr)
+					&& !IN6_IS_ADDR_LINKLOCAL(&local->sin6_addr)));
+			if (better) {
+				if (replacement != NULL)
+					replacement->ReleaseReference();
+				replacement = candidate;
+			} else
+				candidate->ReleaseReference();
+		}
+	}
+// SPDX-SnippetEnd
+
 	RecursiveLocker locker(domain->lock);
 
 	RouteList::Iterator iterator = domain->routes.GetIterator();
 	while (iterator.HasNext()) {
 		net_route* route = iterator.Next();
 
-		if (route->interface_address == address)
-			remove_route(domain, route);
+		if (route->interface_address != address)
+			continue;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		if (replacement != NULL
+			&& (route->flags & (RTF_GATEWAY | RTF_DEFAULT)) != 0
+			&& (route->flags & (RTF_LOCAL | RTF_HOST)) == 0) {
+			replacement->AcquireReference();
+			route->interface_address = replacement;
+			address->ReleaseReference();
+			continue;
+		}
+// SPDX-SnippetEnd
+		remove_route(domain, route);
 	}
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	locker.Unlock();
+	if (replacement != NULL)
+		replacement->ReleaseReference();
+// SPDX-SnippetEnd
 }
 
 

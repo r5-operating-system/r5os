@@ -126,6 +126,16 @@ public:
 			// we don't really need to protect it with the socket lock.
 			bool				IsActive() const { return fActive; }
 			void				SetActive(bool newValue) { fActive = newValue; }
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			// True when bind() named a local address. Only then is the source
+			// the program's choice; otherwise connect() picks it from the
+			// route each time and a disconnect forgets it.
+			bool				SourceBound() const { return fSourceBound; }
+			void				SetSourceBound(bool bound)
+									{ fSourceBound = bound; }
+// SPDX-SnippetEnd
 
 			UdpEndpoint*&		HashTableLink() { return fLink; }
 
@@ -133,6 +143,7 @@ public:
 
 private:
 			UdpDomainSupport*	fManager;
+			bool				fSourceBound;
 			bool				fActive;
 									// an active UdpEndpoint is part of the
 									// endpoint hash (and it is bound and
@@ -378,6 +389,17 @@ UdpDomainSupport::ConnectEndpoint(UdpEndpoint *endpoint,
 		// so we reset the peer address:
 		endpoint->PeerAddress().SetToEmpty();
 		(*endpoint->PeerAddress())->sa_family = AF_UNSPEC;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// A source the route picked belongs to that peer; forget it, keep
+		// the port. A source the program bound stays.
+		if (!endpoint->SourceBound()) {
+			uint16 port = endpoint->LocalAddress().Port();
+			endpoint->LocalAddress().SetToEmpty();
+			endpoint->LocalAddress().SetPort(port);
+		}
+// SPDX-SnippetEnd
 	} else {
 		if (!AddressModule()->is_same_family(address))
 			return EAFNOSUPPORT;
@@ -403,9 +425,11 @@ UdpDomainSupport::ConnectEndpoint(UdpEndpoint *endpoint,
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-			const sockaddr* previous = *endpoint->LocalAddress();
-			bool unspecified = previous == NULL
-				|| AddressModule()->is_empty_address(previous, false);
+			// Only a source the program bound is kept. One the route picked
+			// for an earlier peer is picked again for this one: keeping it
+			// would send to a remote host from 127.0.0.1, or from an
+			// address DHCP has since replaced.
+			bool unspecified = !endpoint->SourceBound();
 			if (unspecified && routeToDestination->interface_address != NULL
 				&& routeToDestination->interface_address->local != NULL) {
 				status = endpoint->LocalAddress().SetTo(
@@ -420,7 +444,8 @@ UdpDomainSupport::ConnectEndpoint(UdpEndpoint *endpoint,
 					NULL, NULL)) {
 				endpoint->LocalAddress().SetTo(address);
 				endpoint->LocalAddress().SetPort(port);
-			} else if (status == B_OK && address->sa_family == AF_INET6) {
+			} else if (status == B_OK && unspecified
+				&& address->sa_family == AF_INET6) {
 				const sockaddr_in6* dest6 = (const sockaddr_in6*)address;
 				const sockaddr_in6* src6
 					= (const sockaddr_in6*)*endpoint->LocalAddress();
@@ -1024,6 +1049,7 @@ UdpEndpointManager::_GetDomainSupport(net_buffer* buffer)
 UdpEndpoint::UdpEndpoint(net_socket *socket)
 	:
 	DatagramSocket<>("udp endpoint", socket),
+	fSourceBound(false),
 	fActive(false),
 	fFlags(0)
 {
@@ -1037,7 +1063,13 @@ status_t
 UdpEndpoint::Bind(const sockaddr *address)
 {
 	TRACE_EP("Bind(%s)", AddressString(Domain(), address, true).Data());
-	return fManager->BindEndpoint(this, address);
+	status_t status = fManager->BindEndpoint(this, address);
+	// R5 (MIT): remember whether the program chose the source address.
+	if (status == B_OK) {
+		fSourceBound = address != NULL
+			&& !Domain()->address_module->is_empty_address(address, false);
+	}
+	return status;
 }
 
 
@@ -1045,6 +1077,8 @@ status_t
 UdpEndpoint::Unbind(sockaddr *address)
 {
 	TRACE_EP("Unbind()");
+	fSourceBound = false;
+		// R5 (MIT): an unbound socket has no chosen source
 	return fManager->UnbindEndpoint(this);
 }
 
@@ -1213,7 +1247,9 @@ UdpEndpoint::SendRoutedData(net_buffer *buffer, net_route *route)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-	r5_udp_choose_ipv6_source(Domain(), buffer, route);
+	// A source the program bound is never replaced.
+	if (!fSourceBound)
+		r5_udp_choose_ipv6_source(Domain(), buffer, route);
 // SPDX-SnippetEnd
 
 	// add and fill UDP-specific header:

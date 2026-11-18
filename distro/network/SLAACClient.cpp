@@ -49,7 +49,8 @@ SLAACClient::SLAACClient(BMessenger target, const char* device)
 	fWakeWrite(-1),
 	fStop(0),
 	fHaveMAC(false),
-	fHaveDefaultRoute(false)
+	fHaveDefaultRoute(false),
+	fRouterUntil(0)
 {
 	memset(fMAC, 0, sizeof(fMAC));
 	memset(&fDefaultGateway, 0, sizeof(fDefaultGateway));
@@ -101,6 +102,14 @@ SLAACClient::~SLAACClient()
 		wait_for_thread(thread, &result);
 		LockLooper();
 	}
+	// The client goes away with the link (AutoconfigLooper deletes it on
+	// link down): take its addresses, on-link routes and default route with
+	// it, so a network switch does not leave the old prefix behind.
+	for (int32 i = 0; i < 8; i++) {
+		if (fPrefixes[i].inUse)
+			_WithdrawPrefix(fPrefixes[i]);
+	}
+	_RemoveDefaultRoute("link gone");
 	if (fWakeRead >= 0)
 		close(fWakeRead);
 	if (fWakeWrite >= 0)
@@ -158,9 +167,17 @@ SLAACClient::_EnsureLinkLocal(BNetworkInterface& interface)
 	uint32 ifIndex = interface.Index();
 	if (ifIndex == 0)
 		ifIndex = if_nametoindex(Device());
+	// Only another node holding the address stops us. DAD runs before the
+	// interface has any IPv6 address, so its socket may fail (no source to
+	// send from); that is not a collision, and refusing the link-local
+	// address would turn IPv6 off on the link (QEMU, link-local only LANs).
 	status_t dad = r5_ipv6_dad_until(Device(), ifIndex, fMAC, raw, &fStop);
-	if (dad != B_OK)
+	if (dad == B_NAME_IN_USE || dad == B_CANCELED)
 		return dad;
+	if (dad != B_OK) {
+		syslog(LOG_INFO, "slaac %s: DAD could not run (%s); adding the "
+			"link-local address\n", Device(), strerror(dad));
+	}
 
 	BNetworkAddress local(raw, 0);
 	BNetworkAddress mask(AF_INET6, "ffff:ffff:ffff:ffff::", (uint16)0,
@@ -295,6 +312,14 @@ SLAACClient::_ApplyDefaultRoute(const sockaddr_in6& from, uint32 ifIndex)
 		&& gatewayAddr.sin6_scope_id == 0)
 		gatewayAddr.sin6_scope_id = ifIndex;
 
+	// The same router again: the route is already there. Removing and adding
+	// it on every RA left a gap with no default route.
+	if (fHaveDefaultRoute
+		&& memcmp(&fDefaultGateway.sin6_addr, &gatewayAddr.sin6_addr,
+			sizeof(gatewayAddr.sin6_addr)) == 0
+		&& fDefaultGateway.sin6_scope_id == gatewayAddr.sin6_scope_id)
+		return B_OK;
+
 	BNetworkAddress gateway(gatewayAddr);
 	BNetworkInterface routeInterface(Device());
 	bool removed = false;
@@ -319,6 +344,23 @@ SLAACClient::_ApplyDefaultRoute(const sockaddr_in6& from, uint32 ifIndex)
 		Device(), _ToString(gatewayAddr.sin6_addr).String(),
 		gatewayAddr.sin6_scope_id);
 	return B_OK;
+}
+
+
+void
+SLAACClient::_RemoveDefaultRoute(const char* why)
+{
+	if (!fHaveDefaultRoute)
+		return;
+	BNetworkRoute route;
+	BNetworkInterface routeInterface(Device());
+	route.SetGateway(reinterpret_cast<const sockaddr&>(fDefaultGateway));
+	route.SetFlags(RTF_STATIC | RTF_DEFAULT | RTF_GATEWAY);
+	routeInterface.RemoveRoute(AF_INET6, route);
+	fHaveDefaultRoute = false;
+	fRouterUntil = 0;
+	syslog(LOG_INFO, "slaac %s: route via %s removed (%s)\n", Device(),
+		_ToString(fDefaultGateway.sin6_addr).String(), why);
 }
 
 
@@ -365,6 +407,9 @@ void
 SLAACClient::_ExpirePrefixes()
 {
 	bigtime_t now = system_time();
+	// The router lifetime ends like a prefix does (RFC 4861 section 6.3.4).
+	if (fHaveDefaultRoute && fRouterUntil != 0 && now >= fRouterUntil)
+		_RemoveDefaultRoute("router lifetime ended");
 	for (int32 i = 0; i < 8; i++) {
 		if (!fPrefixes[i].inUse || fPrefixes[i].validUntil == 0)
 			continue;
@@ -450,17 +495,38 @@ SLAACClient::_ApplyPrefix(const in6_addr& rawPrefix, uint8 length, uint8 flags,
 		return B_NO_MEMORY;
 	}
 
-	if (valid == 0) {
+	bigtime_t now = system_time();
+	static const bigtime_t kTwoHours = 7200 * (bigtime_t)1000000;
+	if (slot->haveAddress) {
+		// RFC 4862 section 5.5.3 e): an RA can shorten the lifetime of an
+		// address we hold only to two hours, so one forged RA cannot take
+		// the address away (valid 0 included).
+		bigtime_t received = valid == 0xffffffff ? 0
+			: now + (bigtime_t)valid * 1000000;
+		bool infiniteNow = slot->validUntil == 0;
+		bigtime_t remaining = infiniteNow ? B_INFINITE_TIMEOUT
+			: slot->validUntil - now;
+		if (valid == 0xffffffff || (bigtime_t)valid * 1000000 > kTwoHours
+			|| (!infiniteNow && received > slot->validUntil)) {
+			slot->validUntil = received;
+		} else if (remaining <= kTwoHours) {
+			// keep the lifetime we have
+		} else {
+			slot->validUntil = now + kTwoHours;
+			syslog(LOG_INFO, "slaac %s: prefix %s/%u lifetime cut to 2 hours\n",
+				Device(), _ToString(prefix).String(), length);
+		}
+	} else if (valid == 0) {
 		syslog(LOG_INFO, "slaac %s: prefix %s/%u withdrawn\n", Device(),
 			_ToString(prefix).String(), length);
 		_WithdrawPrefix(*slot);
 		return B_OK;
-	}
-
-	if (valid == 0xffffffff)
+	} else if (valid == 0xffffffff)
 		slot->validUntil = 0;
 	else
-		slot->validUntil = system_time() + (bigtime_t)valid * 1000000;
+		slot->validUntil = now + (bigtime_t)valid * 1000000;
+	if (valid == 0)
+		return B_OK;
 
 	if (onLink && !slot->onLink) {
 		in6_addr rawMask;
@@ -533,9 +599,24 @@ SLAACClient::_ApplyAdvert(const uint8* buffer, ssize_t bytes,
 	if (bytes < (ssize_t)sizeof(struct nd_router_advert))
 		return B_BAD_VALUE;
 
+	// RFC 4861 section 6.1.2: a router advertisement comes from a link-local
+	// address with hop limit 255, so it cannot have been routed here. The
+	// hop limit can only be checked when the raw socket hands us the IPv6
+	// header.
+	if (!IN6_IS_ADDR_LINKLOCAL(&from.sin6_addr)) {
+		syslog(LOG_INFO, "slaac %s: RA from %s ignored: not link-local\n",
+			Device(), _ToString(from.sin6_addr).String());
+		return B_BAD_VALUE;
+	}
+
 	const uint8* data = buffer;
 	ssize_t length = bytes;
 	if (length >= 40 && (data[0] >> 4) == 6) {
+		if (data[7] != 255) {
+			syslog(LOG_INFO, "slaac %s: RA ignored: hop limit %u\n", Device(),
+				data[7]);
+			return B_BAD_VALUE;
+		}
 		data += 40;
 		length -= 40;
 	}
@@ -584,6 +665,15 @@ SLAACClient::_ApplyAdvert(const uint8* buffer, ssize_t bytes,
 				(info->nd_opt_pi_flags_reserved & ND_OPT_PI_FLAG_AUTO) != 0,
 				(info->nd_opt_pi_flags_reserved & ND_OPT_PI_FLAG_ONLINK) != 0);
 			uint32 valid = ntohl(info->nd_opt_pi_valid_time);
+			uint32 preferred = ntohl(info->nd_opt_pi_preferred_time);
+			// RFC 4862 section 5.5.3 c): preferred above valid is ignored.
+			if (preferred > valid) {
+				syslog(LOG_INFO, "slaac %s: PIO %s ignored: preferred %" B_PRIu32
+					" > valid %" B_PRIu32 "\n", Device(), prefixText, preferred,
+					valid);
+				option += bytesLen;
+				continue;
+			}
 			bool autonomous
 				= (info->nd_opt_pi_flags_reserved & ND_OPT_PI_FLAG_AUTO) != 0
 				&& info->nd_opt_pi_prefix_len == 64
@@ -624,31 +714,28 @@ SLAACClient::_ApplyAdvert(const uint8* buffer, ssize_t bytes,
 			(managed || other) ? "should run" : "may be absent");
 	}
 
+	sockaddr_in6 router = from;
+	if (IN6_IS_ADDR_LINKLOCAL(&router.sin6_addr) && router.sin6_scope_id == 0)
+		router.sin6_scope_id = ifIndex;
+	bool sameRouter = fHaveDefaultRoute
+		&& memcmp(&fDefaultGateway.sin6_addr, &router.sin6_addr,
+			sizeof(router.sin6_addr)) == 0
+		&& fDefaultGateway.sin6_scope_id == router.sin6_scope_id;
 	if (lifetime == 0) {
-		sockaddr_in6 router = from;
-		if (IN6_IS_ADDR_LINKLOCAL(&router.sin6_addr)
-			&& router.sin6_scope_id == 0)
-			router.sin6_scope_id = ifIndex;
-		if (fHaveDefaultRoute
-			&& memcmp(&fDefaultGateway.sin6_addr, &router.sin6_addr,
-				sizeof(router.sin6_addr)) == 0
-			&& fDefaultGateway.sin6_scope_id == router.sin6_scope_id) {
-			BNetworkRoute route;
-			BNetworkInterface routeInterface(Device());
-			route.SetGateway(reinterpret_cast<const sockaddr&>(router));
-			route.SetFlags(RTF_STATIC | RTF_DEFAULT | RTF_GATEWAY);
-			if (routeInterface.RemoveRoute(AF_INET6, route) == B_OK) {
-				fHaveDefaultRoute = false;
-				syslog(LOG_INFO,
-					"slaac %s: RA lifetime 0, route via %s forgotten\n",
-					Device(), _ToString(from.sin6_addr).String());
+		// Only the router that is our gateway can take the route away.
+		if (sameRouter)
+			_RemoveDefaultRoute("RA lifetime 0");
+	} else {
+		// A second router does not replace a working one; it may take over
+		// once the first one's lifetime has ended.
+		if (!fHaveDefaultRoute || sameRouter) {
+			if (_ApplyDefaultRoute(from, ifIndex) == B_OK) {
+				fHaveDefaultRoute = true;
+				fRouterUntil = system_time() + (bigtime_t)lifetime * 1000000;
 			}
 		}
-	} else if (lifetime > 0 || addedAddress
-			|| (havePrefix && !fHaveDefaultRoute)) {
-		if (_ApplyDefaultRoute(from, ifIndex) == B_OK)
-			fHaveDefaultRoute = true;
 	}
+	(void)addedAddress;
 
 	return havePrefix ? B_OK : B_BAD_VALUE;
 }

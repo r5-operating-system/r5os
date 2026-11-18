@@ -53,6 +53,7 @@ private:
 			status_t			_ApplyPrefix(const in6_addr& prefix,
 									uint8 length, uint8 flags, uint32 valid,
 									uint32 ifIndex);
+			void				_RemoveDefaultRoute(const char* why);
 
 			thread_id			fThread;
 			int					fSocket;
@@ -63,6 +64,8 @@ private:
 			bool				fHaveMAC;
 			bool				fHaveDefaultRoute;
 			sockaddr_in6		fDefaultGateway;
+			bigtime_t			fRouterUntil;
+				// when the router lifetime of fDefaultGateway ends
 			PrefixRecord		fPrefixes[8];
 };
 

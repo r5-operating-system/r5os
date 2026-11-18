@@ -58,6 +58,50 @@ static const uint16 kStatusUnspecFail = 1;
 static const uint16 kStatusNoAddrsAvail = 2;
 static const uint16 kStatusNoBinding = 3;
 
+// _HandleReply results besides B_OK and errors.
+static const status_t kGotAdvertise = 1;
+static const status_t kIgnored = 2;
+	// not for this exchange (another transaction, type or server): dropped
+static const status_t kNoBinding = 3;
+	// the server has no binding for our lease: Request it again
+
+// Retransmission (RFC 8415 section 7.6), in seconds.
+static const bigtime_t kSecond = 1000000;
+
+
+static void
+retransmit_limits(uint8 type, bigtime_t& initial, bigtime_t& maximum)
+{
+	switch (type) {
+		case kRequest:
+			initial = 1 * kSecond;
+			maximum = 30 * kSecond;
+			break;
+		case kRenew:
+		case kRebind:
+			initial = 10 * kSecond;
+			maximum = 600 * kSecond;
+			break;
+		case kSolicit:
+		case kInformationRequest:
+		default:
+			initial = 1 * kSecond;
+			maximum = 3600 * kSecond;
+			break;
+	}
+}
+
+
+/*!	RT with the +/-10 % jitter of RFC 8415 section 15. */
+static bigtime_t
+jittered(bigtime_t rt)
+{
+	bigtime_t span = rt / 5;
+	if (span <= 0)
+		return rt;
+	return rt - rt / 10 + (bigtime_t)((uint64)system_time() % (uint64)span);
+}
+
 
 static bool
 append_option(uint8* out, size_t& used, size_t cap, uint16 code,
@@ -85,6 +129,7 @@ DHCPv6Client::DHCPv6Client(BMessenger target, const char* device)
 	fWakeWrite(-1),
 	fStop(0),
 	fTransaction(0),
+	fExchange(0),
 	fServerIdLength(0),
 	fHaveMAC(false),
 	fHaveOffer(false),
@@ -162,6 +207,9 @@ DHCPv6Client::~DHCPv6Client()
 		wait_for_thread(thread, &result);
 		LockLooper();
 	}
+	// The client goes away with the link: its address goes with it, so a
+	// network switch does not leave the old lease on the interface.
+	_ForgetLease();
 	if (fWakeRead >= 0)
 		close(fWakeRead);
 	if (fWakeWrite >= 0)
@@ -374,14 +422,20 @@ DHCPv6Client::_Send(int socket, uint32 ifIndex, const uint8* packet,
 status_t
 DHCPv6Client::_HandleReply(const uint8* packet, ssize_t bytes, uint32 ifIndex)
 {
+	// Anything that is not an answer to the exchange in flight is dropped
+	// without touching the lease: a stray packet on port 546 must not
+	// remove the address (RFC 8415 section 16).
 	if (bytes < 4)
-		return B_BAD_VALUE;
+		return kIgnored;
 	uint8 type = packet[0];
 	uint32 xid = ((uint32)packet[1] << 16) | ((uint32)packet[2] << 8) | packet[3];
 	if (xid != fTransaction)
-		return B_BAD_VALUE;
+		return kIgnored;
 	if (type != kAdvertise && type != kReply)
-		return B_BAD_VALUE;
+		return kIgnored;
+	uint8 serverId[sizeof(fServerId)];
+	uint16 serverIdLength = 0;
+	bool noBinding = false;
 
 	const uint8* option = packet + 4;
 	const uint8* end = packet + bytes;
@@ -410,9 +464,9 @@ DHCPv6Client::_HandleReply(const uint8* packet, ssize_t bytes, uint32 ifIndex)
 		if (code == kOptStatusCode) {
 			if (read_status(data, length, Device(), "reply") != kStatusSuccess)
 				failed = true;
-		} else if (code == kOptServerId && length <= sizeof(fServerId)) {
-			memcpy(fServerId, data, length);
-			fServerIdLength = length;
+		} else if (code == kOptServerId && length <= sizeof(serverId)) {
+			memcpy(serverId, data, length);
+			serverIdLength = length;
 		} else if (code == kOptIaNa && length >= 12) {
 			memcpy(&t1, data + 4, 4);
 			memcpy(&t2, data + 8, 4);
@@ -432,8 +486,11 @@ DHCPv6Client::_HandleReply(const uint8* packet, ssize_t bytes, uint32 ifIndex)
 				if (inner + 4 + innerLength > innerEnd)
 					break;
 				if (innerCode == kOptStatusCode) {
-					if (read_status(inner + 4, innerLength, Device(), "IA_NA")
-							!= kStatusSuccess)
+					uint16 iaStatus = read_status(inner + 4, innerLength,
+						Device(), "IA_NA");
+					if (iaStatus == kStatusNoBinding)
+						noBinding = true;
+					if (iaStatus != kStatusSuccess)
 						iaFailed = true;
 				} else if (innerCode == kOptIaAddr && innerLength >= 24
 					&& !iaFailed) {
@@ -470,6 +527,12 @@ DHCPv6Client::_HandleReply(const uint8* packet, ssize_t bytes, uint32 ifIndex)
 			}
 			if (iaFailed)
 				haveAddress = false;
+			// RFC 8415 section 21.4: T1 greater than T2 discards the IA.
+			if (t1 != 0 && t2 != 0 && t1 > t2) {
+				syslog(LOG_ERR, "dhcpv6 %s: IA_NA with T1 %" B_PRIu32
+					" > T2 %" B_PRIu32 " ignored\n", Device(), t1, t2);
+				haveAddress = false;
+			}
 		} else if (code == kOptDnsServers && length >= 16) {
 			for (uint16 offset = 0; offset + 16 <= length; offset += 16) {
 				in6_addr dns;
@@ -485,6 +548,16 @@ DHCPv6Client::_HandleReply(const uint8* packet, ssize_t bytes, uint32 ifIndex)
 		option += 4 + length;
 	}
 
+	// A Reply has to come from the server we are talking to. Rebind is the
+	// one exchange that may be answered by any server.
+	if (type == kReply && fServerIdLength > 0 && fExchange != kRebind
+		&& fExchange != kSolicit && fExchange != kInformationRequest
+		&& (serverIdLength != fServerIdLength
+			|| memcmp(serverId, fServerId, serverIdLength) != 0))
+		return kIgnored;
+
+	if (noBinding && fInstalled)
+		return kNoBinding;
 	if (failed)
 		return B_ERROR;
 
@@ -496,25 +569,53 @@ DHCPv6Client::_HandleReply(const uint8* packet, ssize_t bytes, uint32 ifIndex)
 			fT1 = t1;
 			fT2 = t2;
 			fHaveOffer = true;
+			if (serverIdLength > 0) {
+				memcpy(fServerId, serverId, serverIdLength);
+				fServerIdLength = serverIdLength;
+			}
 		}
-		return 1;
+		return kGotAdvertise;
+	}
+	if (serverIdLength > 0) {
+		memcpy(fServerId, serverId, serverIdLength);
+		fServerIdLength = serverIdLength;
 	}
 
 	if (haveAddress) {
 		char text[INET6_ADDRSTRLEN];
 		inet_ntop(AF_INET6, &leased, text, sizeof(text));
+		// A different address replaces the one we hold: remove the old one
+		// first, so it does not stay on the interface for good.
+		if (fInstalled && memcmp(&fLeaseAddress, &leased, sizeof(leased)) != 0)
+			_ForgetLease();
 		fLeaseAddress = leased;
 		fPreferred = preferred;
 		fValid = valid;
 		if (haveTiming) {
 			fT1 = t1;
 			fT2 = t2;
+		} else {
+			fT1 = 0;
+			fT2 = 0;
 		}
-		if (fValid != 0 && fValid != 0xffffffff) {
-			if (fT1 == 0 || fT1 >= fValid)
-				fT1 = fValid / 2;
-			if (fT2 == 0 || fT2 > fValid || fT2 < fT1)
-				fT2 = fValid - fValid / 5;
+		// RFC 8415 section 21.4: when the server leaves T1 and T2 to us,
+		// take 0.5 and 0.8 of the preferred lifetime. An infinite preferred
+		// lifetime means no renewal at all, never a renewal right away.
+		if (fPreferred == 0xffffffff) {
+			if (fT1 == 0)
+				fT1 = 0xffffffff;
+			if (fT2 == 0)
+				fT2 = 0xffffffff;
+		} else {
+			uint32 base = fPreferred != 0 ? fPreferred : fValid;
+			if (fT1 == 0)
+				fT1 = base / 2;
+			if (fT2 == 0)
+				fT2 = base - base / 5;
+			if (fT1 == 0)
+				fT1 = 1;
+			if (fT2 < fT1)
+				fT2 = fT1;
 		}
 		fHaveOffer = true;
 		fLeaseStart = system_time();
@@ -589,21 +690,32 @@ DHCPv6Client::_Run()
 		return errno;
 	fSocket = socket;
 
+	// One exchange at a time. A retransmission keeps the transaction id and
+	// doubles RT up to the type's maximum (RFC 8415 sections 7.6, 15); a new
+	// exchange takes a new id. Solicit backs off to one try an hour, so a
+	// LAN without a DHCPv6 server (SLAAC only, or QEMU) stays quiet.
 	uint8 phase = kSolicit;
 	int32 solicitTries = 0;
+	int32 requestTries = 0;
 	bool askedForInformation = false;
+	bool requestAgain = false;
 	bigtime_t nextSend = 0;
+	bigtime_t rt = 0;
+	bigtime_t failDelay = 0;
 	status_t status = B_TIMED_OUT;
+	fExchange = 0;
 
 	while (!_Stopped()) {
 		bigtime_t now = system_time();
 		if (fInstalled && fValid != 0 && fValid != 0xffffffff) {
-			bigtime_t expireAt = fLeaseStart + (bigtime_t)fValid * 1000000;
+			bigtime_t expireAt = fLeaseStart + (bigtime_t)fValid * kSecond;
 			if (now >= expireAt) {
 				_ForgetLease();
 				fHaveOffer = false;
 				fServerIdLength = 0;
 				phase = kSolicit;
+				requestAgain = false;
+				fExchange = 0;
 				nextSend = now;
 				syslog(LOG_INFO, "dhcpv6 %s: lease expired\n", Device());
 			}
@@ -611,12 +723,14 @@ DHCPv6Client::_Run()
 
 		if (now >= nextSend) {
 			uint8 type = 0;
-			if (fInstalled) {
+			if (fInstalled && requestAgain) {
+				type = kRequest;
+			} else if (fInstalled) {
 				if (fT1 != 0xffffffff) {
 					bigtime_t renewAt = fLeaseStart
-						+ (bigtime_t)fT1 * 1000000;
-					bigtime_t rebindAt = fLeaseStart
-						+ (bigtime_t)fT2 * 1000000;
+						+ (bigtime_t)fT1 * kSecond;
+					bigtime_t rebindAt = fT2 == 0xffffffff ? B_INFINITE_TIMEOUT
+						: fLeaseStart + (bigtime_t)fT2 * kSecond;
 					if (now >= rebindAt)
 						type = kRebind;
 					else if (now >= renewAt)
@@ -629,27 +743,52 @@ DHCPv6Client::_Run()
 			} else
 				type = phase;
 
+			// A Request that nobody answers ten times starts over (REQ_MAX_RC).
+			if (type == kRequest && fExchange == kRequest && requestTries >= 10) {
+				syslog(LOG_INFO, "dhcpv6 %s: no answer to Request\n", Device());
+				phase = kSolicit;
+				requestAgain = false;
+				fHaveOffer = false;
+				fServerIdLength = 0;
+				type = fInstalled ? kRebind : kSolicit;
+			}
+
 			if (type != 0) {
-				fTransaction = (fTransaction + 1) & 0x00ffffff;
-				if (fTransaction == 0)
-					fTransaction = 1;
+				bigtime_t initial;
+				bigtime_t maximum;
+				retransmit_limits(type, initial, maximum);
+				bool fresh = type != fExchange;
+				if (fresh) {
+					fTransaction = (fTransaction + 1) & 0x00ffffff;
+					if (fTransaction == 0)
+						fTransaction = 1;
+					fExchange = type;
+					rt = initial;
+					requestTries = 0;
+				} else {
+					rt *= 2;
+					if (rt > maximum)
+						rt = maximum;
+				}
 				uint8 packet[768];
 				ssize_t length = _BuildSolicit(packet, sizeof(packet), type);
 				if (length > 0)
 					_Send(socket, ifIndex, packet, (size_t)length);
 				if (type == kSolicit)
 					solicitTries++;
-				if (type == kRenew || type == kRebind)
-					nextSend = now + 10000000;
-				else if (type == kInformationRequest)
-					nextSend = now + 60000000;
-				else
-					nextSend = now + 2000000;
-				syslog(LOG_INFO, "dhcpv6 %s: sent type %u\n", Device(), type);
+				if (type == kRequest)
+					requestTries++;
+				nextSend = now + jittered(rt);
+				if (fresh) {
+					syslog(LOG_INFO, "dhcpv6 %s: sent type %u\n", Device(),
+						type);
+				}
 			} else if (fInstalled && fT1 != 0xffffffff) {
-				nextSend = fLeaseStart + (bigtime_t)fT1 * 1000000;
+				nextSend = fLeaseStart + (bigtime_t)fT1 * kSecond;
+				if (nextSend <= now)
+					nextSend = now + kSecond;
 			} else
-				nextSend = now + 60000000;
+				nextSend = now + 60 * kSecond;
 		}
 
 		bigtime_t waitUs = 1000000;
@@ -692,23 +831,45 @@ DHCPv6Client::_Run()
 		if (bytes < 0)
 			continue;
 
-		status = _HandleReply(incoming, bytes, ifIndex);
-		if (status == 1) {
+		status_t result = _HandleReply(incoming, bytes, ifIndex);
+		if (result == kIgnored)
+			continue;
+		status = result;
+		if (result == kGotAdvertise) {
 			phase = kRequest;
 			nextSend = system_time();
-		} else if (status == B_OK && fInstalled) {
+		} else if (result == kNoBinding) {
+			// RFC 8415 section 18.2.10.1: Request the same lease again.
+			requestAgain = true;
+			nextSend = system_time();
+		} else if (result == B_OK && fInstalled) {
+			requestAgain = false;
+			fExchange = 0;
 			nextSend = fT1 == 0xffffffff
-				? system_time() + 60000000
-				: fLeaseStart + (bigtime_t)fT1 * 1000000;
-		} else if (status != B_OK && status != 1) {
-			if (fInstalled && (status == B_ERROR || status == B_BAD_VALUE)) {
-				_ForgetLease();
-				fHaveOffer = false;
-				fServerIdLength = 0;
-			}
+				? system_time() + 60 * kSecond
+				: fLeaseStart + (bigtime_t)fT1 * kSecond;
+			if (nextSend <= system_time())
+				nextSend = system_time() + kSecond;
+		} else if (result == B_OK) {
+			// Information only: nothing more to ask until the next start.
+			fExchange = 0;
+			nextSend = system_time() + 3600 * kSecond;
+		} else if (!fInstalled) {
+			// The server said no (a status code, or DAD found the address
+			// taken). Start over after a delay that doubles each time, so a
+			// refusing server is not asked again every few seconds.
 			phase = kSolicit;
-			nextSend = system_time() + 2000000;
+			fHaveOffer = false;
+			fServerIdLength = 0;
+			failDelay = failDelay == 0 ? 2 * kSecond : failDelay * 2;
+			if (failDelay > 3600 * kSecond)
+				failDelay = 3600 * kSecond;
+			nextSend = system_time() + jittered(failDelay);
 		}
+		if (fInstalled)
+			failDelay = 0;
+		// With a lease, a failed Renew or Rebind keeps the address until its
+		// valid lifetime ends; the retransmission schedule carries on.
 	}
 
 	fSocket = -1;

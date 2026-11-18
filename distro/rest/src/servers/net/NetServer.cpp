@@ -691,54 +691,71 @@ NetServer::_ConfigureResolver(BMessage& resolverConfiguration)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+	// Every source owns one block, opened by "# interface <tag>": IPv4 DHCP
+	// (which sends no "device") is the tag "ipv4", SLAAC and DHCPv6 use
+	// their device. An update replaces only its own block, servers and
+	// domain, and keeps every other block as it was. Untagged lines from
+	// an older file belong to "ipv4".
+	static const char* kIPv4Tag = "ipv4";
 	struct ServerEntry {
 		char server[96];
 		char tag[64];
 	};
+	struct DomainEntry {
+		char domain[128];
+		char tag[64];
+	};
 	ServerEntry kept[8];
 	ServerEntry fresh[8];
+	DomainEntry keptDomains[4];
 	int32 nKept = 0;
 	int32 nFresh = 0;
+	int32 nKeptDomains = 0;
 	bool staticOnly = false;
 	char deviceName[64];
-	deviceName[0] = '\0';
+	strlcpy(deviceName, kIPv4Tag, sizeof(deviceName));
 	const char* device = NULL;
 	if (resolverConfiguration.FindString("device", &device) == B_OK
-		&& device != NULL)
+		&& device != NULL && device[0] != '\0')
 		strlcpy(deviceName, device, sizeof(deviceName));
+	bool ipv4Update = strcmp(deviceName, kIPv4Tag) == 0;
 
 	FILE* existing = fopen(path.Path(), "r");
 	if (existing != NULL) {
 		char line[192];
 		char currentTag[64];
-		currentTag[0] = '\0';
+		strlcpy(currentTag, kIPv4Tag, sizeof(currentTag));
 		while (fgets(line, sizeof(line), existing) != NULL) {
 			if (strncmp(line, "# Static DNS Only", 17) == 0) {
 				staticOnly = true;
 				break;
 			}
+			size_t lineLength = strlen(line);
+			while (lineLength > 0 && (line[lineLength - 1] == '\n'
+					|| line[lineLength - 1] == '\r'
+					|| line[lineLength - 1] == ' '))
+				line[--lineLength] = '\0';
 			if (strncmp(line, "# interface ", 12) == 0) {
-				char* start = line + 12;
-				size_t length = strlen(start);
-				while (length > 0 && (start[length - 1] == '\n'
-						|| start[length - 1] == '\r'
-						|| start[length - 1] == ' '))
-					start[--length] = '\0';
-				strlcpy(currentTag, start, sizeof(currentTag));
+				strlcpy(currentTag, line + 12, sizeof(currentTag));
+				if (currentTag[0] == '\0')
+					strlcpy(currentTag, kIPv4Tag, sizeof(currentTag));
+				continue;
+			}
+			bool ours = strcmp(currentTag, deviceName) == 0;
+			if (strncmp(line, "domain ", 7) == 0) {
+				if (!ours && line[7] != '\0' && nKeptDomains < 4) {
+					strlcpy(keptDomains[nKeptDomains].domain, line + 7,
+						sizeof(keptDomains[nKeptDomains].domain));
+					strlcpy(keptDomains[nKeptDomains].tag, currentTag,
+						sizeof(keptDomains[nKeptDomains].tag));
+					nKeptDomains++;
+				}
 				continue;
 			}
 			if (strncmp(line, "nameserver ", 11) != 0)
 				continue;
-			char* start = line + 11;
-			size_t length = strlen(start);
-			while (length > 0 && (start[length - 1] == '\n'
-					|| start[length - 1] == '\r'))
-				start[--length] = '\0';
-			if (start[0] == '\0')
-				continue;
-			if (deviceName[0] != '\0' && strcmp(currentTag, deviceName) == 0)
-				continue;
-			if (nKept >= 8)
+			const char* start = line + 11;
+			if (start[0] == '\0' || ours || nKept >= 8)
 				continue;
 			strlcpy(kept[nKept].server, start, sizeof(kept[nKept].server));
 			strlcpy(kept[nKept].tag, currentTag, sizeof(kept[nKept].tag));
@@ -754,8 +771,8 @@ NetServer::_ConfigureResolver(BMessage& resolverConfiguration)
 			&nameserver) == B_OK; i++) {
 		if (nFresh >= 8)
 			break;
-		if (!r5_copy_nameserver(nameserver, deviceName, fresh[nFresh].server,
-				sizeof(fresh[nFresh].server)))
+		if (!r5_copy_nameserver(nameserver, ipv4Update ? NULL : deviceName,
+				fresh[nFresh].server, sizeof(fresh[nFresh].server)))
 			continue;
 		bool have = false;
 		for (int32 j = 0; j < nFresh; j++) {
@@ -768,18 +785,24 @@ NetServer::_ConfigureResolver(BMessage& resolverConfiguration)
 		nFresh++;
 	}
 
-	FILE* file = fopen(path.Path(), "w");
+	// Written to a temporary file and renamed, so a reader never sees half
+	// a resolv.conf.
+	char temporary[B_PATH_NAME_LENGTH + 8];
+	snprintf(temporary, sizeof(temporary), "%s.new", path.Path());
+	FILE* file = fopen(temporary, "w");
 	if (file == NULL) {
 		fprintf(stderr, "Could not open resolv.conf: %s\n", strerror(errno));
 		return errno;
 	}
 
+	// The new servers first, then the kept blocks in file order. Every block
+	// starts with its tag line, so the next parse puts each line back in
+	// its own block.
 	fprintf(file, "# Added automatically by DHCP\n");
 	int32 written = 0;
 	const char* openTag = NULL;
 	for (int32 i = 0; i < nFresh && written < 8; i++) {
-		if (fresh[i].tag[0] != '\0'
-			&& (openTag == NULL || strcmp(openTag, fresh[i].tag) != 0)) {
+		if (openTag == NULL || strcmp(openTag, fresh[i].tag) != 0) {
 			fprintf(file, "# interface %s\n", fresh[i].tag);
 			openTag = fresh[i].tag;
 		}
@@ -794,24 +817,43 @@ NetServer::_ConfigureResolver(BMessage& resolverConfiguration)
 		}
 		if (have)
 			continue;
-		if (kept[i].tag[0] != '\0'
-			&& (openTag == NULL || strcmp(openTag, kept[i].tag) != 0)) {
+		if (openTag == NULL || strcmp(openTag, kept[i].tag) != 0) {
 			fprintf(file, "# interface %s\n", kept[i].tag);
 			openTag = kept[i].tag;
 		}
 		fprintf(file, "nameserver %s\n", kept[i].server);
 		written++;
 	}
-// SPDX-SnippetEnd
 
-	const char* domain;
+	// One domain line: this update's own, otherwise a kept one, the IPv4
+	// block's first. The domain is written under its own tag so the next
+	// update keeps it with its block.
+	const char* domain = NULL;
 	if (resolverConfiguration.FindString("domain", &domain) == B_OK
-		&& domain != NULL && domain[0] != '\0')
+		&& domain != NULL && domain[0] != '\0') {
+		fprintf(file, "# interface %s\n", deviceName);
 		fprintf(file, "domain %s\n", domain);
+	} else {
+		int32 pick = -1;
+		for (int32 i = 0; i < nKeptDomains; i++) {
+			if (pick < 0 || strcmp(keptDomains[i].tag, kIPv4Tag) == 0)
+				pick = i;
+		}
+		if (pick >= 0) {
+			fprintf(file, "# interface %s\n", keptDomains[pick].tag);
+			fprintf(file, "domain %s\n", keptDomains[pick].domain);
+		}
+	}
 
 	fprintf(file, "# End of automatic DHCP additions\n");
 
-	fclose(file);
+	if (fclose(file) != 0 || rename(temporary, path.Path()) != 0) {
+		status_t error = errno;
+		unlink(temporary);
+		fprintf(stderr, "Could not write resolv.conf: %s\n", strerror(error));
+		return error;
+	}
+// SPDX-SnippetEnd
 
 	return B_OK;
 }

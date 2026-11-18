@@ -41,6 +41,8 @@ private:
 			volatile int32		fStop;
 			uint8				fMAC[6];
 			uint32				fTransaction;
+			uint8				fExchange;
+				// message type of the exchange in flight, 0 for none
 			uint8				fServerId[128];
 			uint16				fServerIdLength;
 			bool				fHaveMAC;

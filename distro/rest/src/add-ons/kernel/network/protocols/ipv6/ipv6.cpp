@@ -1347,11 +1347,12 @@ static void
 ipv6_prefer_nonlocal_source(net_interface* interface, sockaddr_in6& source,
 	const sockaddr_in6& destination)
 {
-	// Default IPv6 routes are bound to the first address (link-local).
-	// Off-link destinations must not use fe80 as the source (RFC 6724).
-	if (!IN6_IS_ADDR_LINKLOCAL(&source.sin6_addr)
-		&& !IN6_IS_ADDR_UNSPECIFIED(&source.sin6_addr)
-		&& !IN6_IS_ADDR_LOOPBACK(&source.sin6_addr))
+	// Only an empty source is filled in here. A source the transport already
+	// chose (a bound socket, or a TCP connection registered on it) is never
+	// replaced: TCP would get the SYN-ACK for another address and answer
+	// with RST. The default route itself is bound to a global address when
+	// the interface has one (routes.cpp), so transports pick that source.
+	if (!IN6_IS_ADDR_UNSPECIFIED(&source.sin6_addr))
 		return;
 	if (IN6_IS_ADDR_LINKLOCAL(&destination.sin6_addr)
 		|| IN6_IS_ADDR_MC_LINKLOCAL(&destination.sin6_addr)
