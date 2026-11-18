@@ -201,3 +201,38 @@ Work on a new branch from `origin/main` AFTER `x86-64-v2` is merged. Copy any mo
 - Commit locally on the new branch. Ask me before `git push` / PR.
 - Report in Dutch, short (mark `[V]` = verified in code/output, `[I]` = inference).
 ```
+
+---
+
+## Prompt 6 — R5 CPUID: CPU vs. OS Capabilities app (Cursor / Argon)
+
+```markdown
+Read `AGENTS.md`, `docs/LIBR5.md`, `docs/APPEARANCE-KIT.md`, and `distro/kernel/x86/r5_pstate.cpp` first.
+Work on a new branch from `origin/main`. All new R5 files are MIT (`SPDX-FileCopyrightText: 2026 R5OS Contributors`, `SPDX-License-Identifier: MIT`). Do not modify Settings layout (`AGENTS.md`).
+
+## Goal: Build a lightweight "CPU Info" (CPUID) app showing **Hardware Capabilities** vs **What R5 Uses**
+
+1. **App location & UI (`distro/apps/cpuinfo/` or similar, hooked into regular image)**
+   - Follow `docs/APPEARANCE-KIT.md` (`BAppearanceKit::BCard`, `libr5ui.so`) and match R5's UI style (product name **R5**, never Haiku/BeOS).
+   - Keep it clean and readable in one window with two clear sections/columns:
+     - **CPU Hardware (via `CPUID` + `xgetbv`):**
+       - Vendor, Brand string, Family/Model/Stepping, Physical cores / Logical threads, Cache sizes (L1/L2/L3).
+       - Baseline level supported by hardware: `x86-64-v1` (SSE2), `x86-64-v2` (SSE3, SSSE3, SSE4.1, SSE4.2, POPCNT, CMPXCHG16B), `x86-64-v3` (AVX, AVX2, FMA, BMI1, BMI2, MOVBE, F16C), `x86-64-v4` (AVX-512).
+       - Extra features: `AES-NI`, `SHA`, `INVPCID`, `PCID`, `CLFLUSHOPT`, `PDPE1GB`, `Invariant TSC`, `x2APIC`, `SMEP`, `SMAP`, `NX`, `PAT`.
+     - **R5 OS Status (what the OS actually enables/uses):**
+       - **User-space baseline:** built with `x86-64-v1` vs `x86-64-v2` (from compiler feature macros like `__SSE4_2__` / `__POPCNT__` and/or ELF/libroot check).
+       - **OS Vector State (`XCR0` via `xgetbv`):** SSE/XMM enabled, AVX/YMM enabled (ready for AVX2 dispatch), AVX-512/ZMM enabled.
+       - **Kernel features (read-only):** extend `distro/kernel/x86/r5_pstate.cpp` (or read from it) to expose a read-only line of active kernel flags: `SMEP`, `SMAP`, `NX`, `PAT`, `x2APIC`, `INVPCID`, `CLFLUSHOPT`, `PCID`, `2MB-pages`, `CPPC/HWP`. Never write MSRs; keep it purely read-only and SMAP-safe.
+   - Add a **"Copy report"** button (copies a clean plain-text summary to `be_clipboard`) and support `--cli` / stdout output so it can also be run from Terminal or stick scripts.
+
+2. **Safe fallbacks**
+   - On non-x86_64 or when `/dev/...` kernel snapshot is unavailable, degrade gracefully ("Unknown" / "Not reported") without crashing.
+
+## Verification & delivery
+- Jam AMD64 with `scripts/build-locked.sh` in WSL (`jam_exit=0`).
+- Boot in QEMU with SMAP on (your own copy of `r5-os.image`, never `scripts/run-qemu-r5.sh` if another session may run):
+  - Launch the app (and run with `--cli` in Terminal) under `-cpu qemu64` and `-cpu EPYC-Rome` (or `Nehalem`) and verify the Hardware vs OS columns update accurately without panic.
+- Update `CHANGELOG.md` (newest first) with what changed and what was tested.
+- Commit locally on the new branch. Ask me before `git push` / PR.
+- Report in Dutch, short (mark `[V]` = verified in code/output, `[I]` = inference).
+```
