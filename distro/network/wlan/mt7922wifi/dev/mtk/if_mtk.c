@@ -1197,11 +1197,26 @@ mtk_ba_drain(struct mtk_softc* sc)
 		 */
 		if (error != 0 && job[tid].enable != 0
 			&& sc->sc_ampdu_rx_stop != NULL) {
-			struct ieee80211vap* vap = TAILQ_FIRST(&sc->sc_ic.ic_vaps);
-			struct ieee80211_node* ni = vap != NULL ? vap->iv_bss : NULL;
+			struct ieee80211vap* vap;
+			struct ieee80211_node* ni = NULL;
 
-			if (ni != NULL)
+			/* The station can leave while this thread runs. Hold a
+			 * reference taken under the com lock. The reorder buffer
+			 * is also touched from the receive thread, which holds
+			 * sc_rxmtx, so the stop takes that lock too. No DELBA
+			 * is sent: the firmware already refused the session.
+			 */
+			IEEE80211_LOCK(&sc->sc_ic);
+			vap = TAILQ_FIRST(&sc->sc_ic.ic_vaps);
+			if (vap != NULL && vap->iv_bss != NULL)
+				ni = ieee80211_ref_node(vap->iv_bss);
+			IEEE80211_UNLOCK(&sc->sc_ic);
+			if (ni != NULL) {
+				mtx_lock(&sc->sc_rxmtx);
 				sc->sc_ampdu_rx_stop(ni, &ni->ni_rx_ampdu[tid]);
+				mtx_unlock(&sc->sc_rxmtx);
+				ieee80211_free_node(ni);
+			}
 		}
 	}
 }
@@ -1687,6 +1702,7 @@ mtk_attach(device_t dev)
 	IEEE80211_ADDR_COPY(ic->ic_macaddr, sc->sc_macaddr);
 
 	ieee80211_ifattach(ic);
+	sc->sc_stack = 1;
 	ic->ic_scan_start = mtk_scan_start;
 	ic->ic_scan_end = mtk_scan_end;
 	ic->ic_set_channel = mtk_set_channel;
@@ -1756,6 +1772,7 @@ mtk_detach(device_t dev)
 	struct mtk_softc* sc = device_get_softc(dev);
 
 	/* R5 (MIT): from here the stack's tasks leave the card alone. */
+	sc->sc_stack = 0;
 	sc->sc_detaching = 1;
 
 	if (sc->sc_ic.ic_softc == sc)

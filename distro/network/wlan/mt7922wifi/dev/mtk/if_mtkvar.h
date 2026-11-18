@@ -579,6 +579,10 @@ struct mtk_softc {
 	int			sc_owned;
 	uint32_t		sc_badaddr;
 	uint32_t		sc_events_shown;
+	/* Set after ieee80211_ifattach. Firmware starts earlier, and a
+	 * frame must not enter the stack before that returns.
+	 */
+	int			sc_stack;
 };
 
 uint32_t	mtk_read(struct mtk_softc*, uint32_t);

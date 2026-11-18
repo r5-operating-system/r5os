@@ -268,9 +268,18 @@ SLAACClient::_ApplyDefaultRoute(const sockaddr_in6& from, uint32 ifIndex)
 
 	BNetworkAddress gateway(gatewayAddr);
 	BNetworkInterface routeInterface(Device());
-	routeInterface.RemoveDefaultRoute(AF_INET6);
+	bool removed = false;
+	if (fHaveDefaultRoute) {
+		BNetworkRoute previous;
+		previous.SetGateway(BNetworkAddress(fDefaultGateway));
+		previous.SetFlags(RTF_STATIC | RTF_DEFAULT | RTF_GATEWAY);
+		if (routeInterface.RemoveRoute(AF_INET6, previous) == B_OK)
+			removed = true;
+	}
 	status_t routeStatus = routeInterface.AddDefaultRoute(gateway);
 	if (routeStatus != B_OK) {
+		if (removed)
+			fHaveDefaultRoute = false;
 		syslog(LOG_ERR, "slaac %s: default route failed: %s\n", Device(),
 			strerror(routeStatus));
 		return routeStatus;
@@ -418,12 +427,16 @@ SLAACClient::_ApplyAdvert(const uint8* buffer, ssize_t bytes,
 	}
 
 	if (lifetime == 0) {
+		sockaddr_in6 router = from;
+		if (IN6_IS_ADDR_LINKLOCAL(&router.sin6_addr)
+			&& router.sin6_scope_id == 0)
+			router.sin6_scope_id = ifIndex;
 		if (fHaveDefaultRoute
-			&& memcmp(&fDefaultGateway.sin6_addr, &from.sin6_addr,
-				sizeof(from.sin6_addr)) == 0
-			&& fDefaultGateway.sin6_scope_id == from.sin6_scope_id) {
+			&& memcmp(&fDefaultGateway.sin6_addr, &router.sin6_addr,
+				sizeof(router.sin6_addr)) == 0
+			&& fDefaultGateway.sin6_scope_id == router.sin6_scope_id) {
 			BNetworkRoute route;
-			BNetworkAddress gateway(from);
+			BNetworkAddress gateway(router);
 			BNetworkInterface routeInterface(Device());
 			route.SetGateway(gateway);
 			route.SetFlags(RTF_STATIC | RTF_DEFAULT | RTF_GATEWAY);

@@ -16,7 +16,7 @@ The Back, Forward, Up, and Home pictures in `libr5icons.so` are unmodified HVIF 
 
 ### wpa_supplicant
 
-Location: `distro/wpa_supplicant` (the recipe) and `distro/packages/x86_64/wpa_supplicant-2.11.r5.4-1-x86_64.hpkg` (the program). The source is not in git. The license text is `LICENSES/wpa_supplicant-BSD-3-Clause.txt`.
+Location: `distro/wpa_supplicant` (the recipe) and `distro/packages/x86_64/wpa_supplicant-2.11.r5.5-1-x86_64.hpkg` (the program). The source is not in git. The license text is `LICENSES/wpa_supplicant-BSD-3-Clause.txt`.
 
 wpa_supplicant 2.11, from haiku/wpa_supplicant commit `bdf3144`. Copyright 2002-2022 Jouni Malinen and contributors. License: BSD-3-Clause (the BSD license with the advertising clause removed). The Haiku entry point `wpa_gui-haiku/main_haiku.cpp` is GPL-2.0-only OR BSD, copyright 2011 Michael Lotz. `src/drivers/driver_haiku_events.cpp` is the Haiku file, copyright 2010 Axel Dörfler, GPL-2.0-only OR BSD. R5's changes are applied at build time by `patch-src.py` to `src/drivers/driver_bsd.c` and `wpa_gui-haiku/main_haiku.cpp`. That script is MIT and holds the match strings only. It does not contain those source files. The program is distributed under the BSD alternative. It links OpenSSL 3 from the HaikuPorts package already in the image. It is not part of the kernel.
 

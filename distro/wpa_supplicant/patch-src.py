@@ -277,10 +277,9 @@ def main() -> None:
         "\t\t\t\t// We need to actually \"apply\" the PSK\n"
         "\t\t\t\twpa_config_update_psk(network);\n"
         "\t\t\t}\n"
-        "\t\t\t// Optional management protection. A network that requires\n"
-        "\t\t\t// it can use it. A network that does not is unchanged.\n"
-        "\t\t\tif (result == 0)\n"
-        "\t\t\t\tresult = wpa_config_set(network, \"ieee80211w\", \"1\", 0);\n"
+        "\t\t\t// Management protection stays off for a passphrase.\n"
+        "\t\t\t// Optional PMF would move the working WPA2 join onto an\n"
+        "\t\t\t// integrity-key path that has not been booted.\n"
         "\t\t}\n", "sae password")
 
     replace(gui,

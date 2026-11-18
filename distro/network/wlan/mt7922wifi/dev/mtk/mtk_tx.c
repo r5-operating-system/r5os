@@ -708,6 +708,10 @@ mtk_receive_frame(struct mtk_softc* sc, const uint8_t* data, size_t got,
 		rxs.c_freq = ieee80211_ieee2mhz(channel, IEEE80211_CHAN_5GHZ);
 	}
 
+	if (sc->sc_stack == 0) {
+		m_freem(m);
+		return;
+	}
 	if (!ieee80211_add_rx_params(m, &rxs)) {
 		m_freem(m);
 		return;

@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-18 - Wi-Fi: do not turn management protection on for a passphrase
+
+Problem: every WPA2 network was told that management protection is optional. A router that offers it would then install an integrity key. That path has not been booted, and it would replace the WPA2 join that already works. A block-ack stop ran without a reference to the station and without the receive lock. An integrity key and SAE frames stayed after a roam or a return to scan, so a later open network still ignored deauthentication. A router advertisement with lifetime 0 compared the gateway's scope with the raw address, so the route was never the one removed, and a new advertisement still removed every IPv6 default route. The firmware starts before the stack is attached, and a frame could be handed to the stack in between.
+
+Changed: a passphrase no longer sets `ieee80211w`. SAE and OWE still require it. The package is `wpa_supplicant-2.11.r5.5-1`. The block-ack stop holds a reference taken under the com lock, and it runs while the receive lock is held. No DELBA is sent when the firmware has already refused the session. The integrity key and the SAE frames are dropped when authentication starts, and when the station leaves RUN or ASSOC for anything other than sleep or RUN. The IPv6 route is matched after the link-local scope is filled in, and only that route is removed. Frames are not given to the stack until `ieee80211_ifattach` has returned.
+
+Limits: not jammed and not booted. A protected deauth is still discarded. The station record was not widened. The detach order was not changed. Fast transition stays off.
+
 ## 2026-11-18 - Wi-Fi: the rest of the review that could be checked
 
 Problem: several notes from the same review were still open. An integrity key had no packet number. A beacon's HE element could claim PPE thresholds this builder does not send. A router advertisement with lifetime 0 removed every IPv6 default route. An old DNS domain was written back when the new configuration had none. The link rate stayed on screen after the station left. A device named `10` matched a notification for `0`. "Wi-Fi 6E" sorted above "Wi-Fi 7" because the comparison used the last character.

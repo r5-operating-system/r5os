@@ -329,6 +329,19 @@ sta_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 	    __func__, ieee80211_state_name[ostate],
 	    ieee80211_state_name[nstate], arg);
 	vap->iv_state = nstate;			/* state transition */
+	/* SPDX-SnippetBegin
+	 * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	 * SPDX-License-Identifier: MIT
+	 * An integrity key and SAE frames belong to one authentication.
+	 * A roam, or a return to scan, must not keep ignoring deauths
+	 * for an access point that has no integrity key.
+	 */
+	if (nstate == IEEE80211_S_AUTH
+		|| ((ostate == IEEE80211_S_RUN || ostate == IEEE80211_S_ASSOC)
+			&& nstate != IEEE80211_S_RUN
+			&& nstate != IEEE80211_S_SLEEP))
+		r5_sae_reset(vap);
+	/* SPDX-SnippetEnd */
 	callout_stop(&vap->iv_mgtsend);		/* XXX callout_drain */
 	if (ostate != IEEE80211_S_SCAN)
 		ieee80211_cancel_scan(vap);	/* background scan */
