@@ -32,6 +32,11 @@ PackageEntry* gPackageEntries;
 IdlePackageList gIdlePackageList;
 rw_spinlock gIdlePackageLock = B_RW_SPINLOCK_INITIALIZER;
 int32 gPackageCount;
+// SPDX-SnippetBegin
+// SPDX-License-Identifier: MIT
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+int32 gCacheDomainCount;
+// SPDX-SnippetEnd
 
 
 /*!	The fastest core with nothing to run and nothing on its way that the
@@ -47,21 +52,38 @@ FastestIdleCore(const ThreadData* thread, uint32 minCapacity)
 	CPUSet mask = thread->GetCPUMask();
 	const bool useMask = !mask.IsEmpty();
 
+	// SPDX-SnippetBegin
+	// SPDX-License-Identifier: MIT
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	const bool preferLocalCache = gCacheDomainCount > 1
+		&& thread->Core() != NULL;
+	const int32 localCache = preferLocalCache ? thread->Core()->CacheDomain() : -1;
 	CoreEntry* fastest = NULL;
+	bool fastestLocal = false;
 	for (int32 i = 0; i < gCoreCount; i++) {
 		CoreEntry* core = &gCoreEntries[i];
 		if (core->Capacity() < minCapacity || core->CPUCount() == 0
-			|| core->ThreadCount() != 0
-			|| (fastest != NULL && core->Capacity() <= fastest->Capacity())) {
+			|| core->ThreadCount() != 0) {
 			continue;
 		}
 		if (useMask && !core->CPUMask().Matches(mask))
 			continue;
+		const bool isLocal = preferLocalCache && core->CacheDomain() == localCache;
+		if (fastest != NULL) {
+			if (core->Capacity() < fastest->Capacity())
+				continue;
+			if (core->Capacity() == fastest->Capacity()
+				&& (!isLocal || fastestLocal)) {
+				continue;
+			}
+		}
 		fastest = core;
-		if (core->Capacity() == gMaxCoreCapacity)
+		fastestLocal = isLocal;
+		if (core->Capacity() == gMaxCoreCapacity && (!preferLocalCache || fastestLocal))
 			break;
 	}
 	return fastest;
+	// SPDX-SnippetEnd
 }
 
 

@@ -1,5 +1,19 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-18 - Kernel (AMD64): scheduler cache-domein topologie en log (stap 8)
+
+Problem:
+- `scheduler` gebruikte wel SMT/core/package en P/E-core-capaciteit (`0x1a`), maar groepeerde cores niet op gedeelde cache (`cache_id`, zoals AMD CCX / Intel LLC) en logde de gebouwde schedulertopologie niet bij boot.
+
+What changed (Step 8):
+- `distro/kernel/src/system/kernel/scheduler/scheduler_cpu.h` + `scheduler_cpu.cpp`: `CoreEntry::CacheDomain()`/`SetCacheDomain()` en `gCacheDomainCount`; `FastestIdleCore()` kiest bij meerdere cache-domeinen eerst een idle core in hetzelfde cache-domein (met behoud van hoogste capaciteit).
+- `distro/kernel/src/system/kernel/scheduler/low_latency.cpp`: `find_idle_core()` geeft bij meerdere cache-domeinen voorrang aan een idle core in het huidige cache-domein.
+- `distro/kernel/src/system/kernel/scheduler/scheduler.cpp`: berekent `gCacheDomainCount` en het cache-domein per core uit `gCPU[i].cache_id[gCPUCacheLevelCount - 1]` (fallback naar `sCPUToPackage[i]` zonder cache-info) en logt eenmalig `R5 scheduler topology: <N> CPUs, <N> cores, <N> cache domains, <N> packages`.
+
+Tested (Step 8):
+- `scripts/jam-r5-raw.sh`: `jam_exit=0`, `mesa_exit=0`.
+- QEMU `-cpu EPYC-Rome,+smap,+smep -smp 4,sockets=1,cores=2,threads=2`: `R5 scheduler topology: 4 CPUs, 2 cores, 1 cache domains, 1 packages`, `enable SMEP`, `enable SMAP`, `R5 net_server`, `r5_idle_pingpong PASS rounds=20000 us=1238402` (`exit=0`).
+
 ## 2026-11-18 - Kernel (AMD64): MWAIT idle wake-up zonder IPI (stap 7)
 
 Problem:

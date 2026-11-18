@@ -799,17 +799,43 @@ init()
 
 	new(&gIdlePackageList) IdlePackageList;
 
+	// SPDX-SnippetBegin
+	// SPDX-License-Identifier: MIT
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	int32 uniqueCacheIDs[SMP_MAX_CPUS];
+	gCacheDomainCount = 0;
 	for (int32 i = 0; i < cpuCount; i++) {
+		int32 rawCacheID = gCPUCacheLevelCount > 0
+			? gCPU[i].cache_id[gCPUCacheLevelCount - 1] : sCPUToPackage[i];
+		if (rawCacheID < 0)
+			rawCacheID = sCPUToPackage[i];
+		int32 cacheDomain = -1;
+		for (int32 j = 0; j < gCacheDomainCount; j++) {
+			if (uniqueCacheIDs[j] == rawCacheID) {
+				cacheDomain = j;
+				break;
+			}
+		}
+		if (cacheDomain < 0) {
+			cacheDomain = gCacheDomainCount;
+			uniqueCacheIDs[gCacheDomainCount++] = rawCacheID;
+		}
+
 		CoreEntry* core = &gCoreEntries[sCPUToCore[i]];
 		PackageEntry* package = &gPackageEntries[sCPUToPackage[i]];
 
 		package->Init(sCPUToPackage[i]);
 		core->Init(sCPUToCore[i], package);
+		core->SetCacheDomain(cacheDomain);
 		gCPUEntries[i].Init(i, core);
 
 		core->AddCPU(&gCPUEntries[i]);
 		core->SetCapacity(std::max(core->Capacity(), gCPU[i].capacity));
 	}
+	dprintf("R5 scheduler topology: %" B_PRId32 " CPUs, %" B_PRId32 " cores, %"
+		B_PRId32 " cache domains, %" B_PRId32 " packages\n",
+		cpuCount, coreCount, gCacheDomainCount, packageCount);
+	// SPDX-SnippetEnd
 
 	// The cores' speeds, the fastest at gMaxCoreCapacity; a core whose
 	// speed the architecture does not know counts as one of the fastest.

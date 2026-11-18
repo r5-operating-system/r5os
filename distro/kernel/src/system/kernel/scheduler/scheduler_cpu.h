@@ -139,6 +139,14 @@ public:
 											{ return fCapacity; }
 	inline				void			SetCapacity(uint32 capacity)
 											{ fCapacity = capacity; }
+	// SPDX-SnippetBegin
+	// SPDX-License-Identifier: MIT
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	inline				int32			CacheDomain() const
+											{ return fCacheDomain; }
+	inline				void			SetCacheDomain(int32 domain)
+											{ fCacheDomain = domain; }
+	// SPDX-SnippetEnd
 
 	inline				void			LockCPUHeap();
 	inline				void			UnlockCPUHeap();
@@ -189,6 +197,7 @@ private:
 
 						int32			fCoreID;
 						PackageEntry*	fPackage;
+						int32			fCacheDomain;
 						uint32			fCapacity;
 
 						int32			fCPUCount;
@@ -281,6 +290,11 @@ extern PackageEntry* gPackageEntries;
 extern IdlePackageList gIdlePackageList;
 extern rw_spinlock gIdlePackageLock;
 extern int32 gPackageCount;
+// SPDX-SnippetBegin
+// SPDX-License-Identifier: MIT
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+extern int32 gCacheDomainCount;
+// SPDX-SnippetEnd
 
 
 inline void
