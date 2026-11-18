@@ -183,13 +183,20 @@ memcpy_sse(uint8_t* destination, const uint8_t* source, size_t length)
 using MemcpyBulk = void (*)(uint8_t*, const uint8_t*, size_t);
 
 static MemcpyBulk sMemcpyBulk = memcpy_sse;
+static size_t sMemcpyStreaming;
+static size_t sMemcpyRepFrom = 2048;
 
 
 static void
 memcpy_choose_bulk(void)
 {
-	if ((r5_x86_cpu_flags() & R5_CPU_ERMS) != 0)
+	uint32_t flags = r5_x86_cpu_flags();
+	sMemcpyStreaming = (size_t)r5_x86_cpu_llc() / 4 * 3;
+	if ((flags & R5_CPU_ERMS) != 0) {
 		sMemcpyBulk = memcpy_repmovs;
+		if ((flags & R5_CPU_FSRM) != 0)
+			sMemcpyRepFrom = 128;
+	}
 }
 
 
@@ -212,16 +219,14 @@ memcpy(void* destination, const void* source, size_t length)
 		__atomic_store_n(&chosen, 1, __ATOMIC_RELEASE);
 	}
 
-	uint32_t flags = r5_x86_cpu_flags();
-	size_t streaming = (size_t)r5_x86_cpu_llc() / 4 * 3;
-	if (length >= streaming) {
+	if (length >= sMemcpyStreaming) {
 		memcpy_nt(to, from, length);
 		return destination;
 	}
 
 	// FSRM makes a short rep movsb fast. Without it the old cut stays.
-	size_t repFrom = (flags & R5_CPU_FSRM) != 0 ? 128 : 2048;
-	if (sMemcpyBulk != memcpy_repmovs || length < repFrom) {
+	// Both cuts were stored by memcpy_choose_bulk.
+	if (sMemcpyBulk != memcpy_repmovs || length < sMemcpyRepFrom) {
 		memcpy_sse(to, from, length);
 		return destination;
 	}

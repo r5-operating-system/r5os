@@ -1,6 +1,18 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-18 - memcpy dispatch also builds into the kernel
+
+The step 3 files are not only libroot. The kernel builds `memcpy.cpp` and `memset.cpp` (`src/system/kernel/lib/arch/x86_64/Jamfile`, lines 32-33) and `memmove.c` (`src/system/kernel/lib/Jamfile`, line 127). The kernel therefore uses the CPUID choice and the non-temporal stores. The QEMU boots of step 3 already ran that kernel. The bootloader builds `memmove.c` (`src/system/boot/Jamfile`, line 325) and keeps `generic_memcpy.c` and `generic_memset.c`, so the bootloader does not take the CPUID or `movntdq` path. Its overlapping `memmove` is the 16-byte SSE loop, and a non-overlapping `memmove` calls the generic `memcpy`. Prompt 4 is also editing the kernel, so this share is recorded here.
+
+`memcpy_choose_bulk` and `memset_choose_bulk` now store the streaming cut, and memcpy also stores the `rep` cut, in statics. A later call above the small size does not read the flags again. The small sizes stay inline.
+
+`rep movsb` with the FSRM cut at 128 bytes ran on the Ryzen 5 5625U: the host fuzz, and the QEMU guest with `-cpu host,+smap` (flags `0x7f`). QEMU `-cpu EPYC-Rome` advertises `0x1f`, so no ERMS and no FSRM. `-cpu Nehalem` advertises none either. Those two guests took the SSE loop and, for the large sizes, the non-temporal stores.
+
+The agreed fuzz length is 60 seconds. On the host it finished in 19 seconds, and again in 20 seconds after the cuts were cached (17043584 checks, flags on and flags forced off). The three QEMU runs were about that minute: 61, 68 and 58 seconds, same check count, all PASS.
+
 ## 2026-11-18 - AMD64 user space, step 3: memcpy, memset, memmove
+
+The same `memcpy.cpp`, `memset.cpp` and `memmove.c` are linked into the kernel, and `memmove.c` into the bootloader. Detail is in the entry above.
 
 `rep movsb` and `rep stosb` run only when ERMS is set. Without it the existing SSE loop is used. With FSRM, `rep movsb` starts at 128 bytes instead of 2048. `memset` keeps the 2048 cut. Copies and fills at or above three quarters of the last-level cache use `movntdq` and an `sfence`. The 4K-alias window (distance 1..31 or the last 16 bytes of the page) still stays on the SSE loop. Sizes up to 16 bytes (`memcpy`) and 31 bytes (`memset`) stay on the old inline path, with no function pointer.
 

@@ -106,11 +106,14 @@ memset_small(uint8_t* destination, uint8_t value, size_t length)
 using MemsetBulk = void (*)(uint8_t*, uint8_t, size_t);
 
 static MemsetBulk sMemsetBulk = memset_sse;
+static size_t sMemsetStreaming;
+static const size_t sMemsetRepFrom = 2048;
 
 
 static void
 memset_choose_bulk(void)
 {
+	sMemsetStreaming = (size_t)r5_x86_cpu_llc() / 4 * 3;
 	if ((r5_x86_cpu_flags() & R5_CPU_ERMS) != 0)
 		sMemsetBulk = memset_repstos;
 }
@@ -135,12 +138,11 @@ memset(void* ptr, int chr, size_t length)
 		__atomic_store_n(&chosen, 1, __ATOMIC_RELEASE);
 	}
 
-	size_t streaming = (size_t)r5_x86_cpu_llc() / 4 * 3;
-	if (length >= streaming) {
+	if (length >= sMemsetStreaming) {
 		memset_nt(destination, value, length);
 		return ptr;
 	}
-	if (sMemsetBulk != memset_repstos || length < 2048) {
+	if (sMemsetBulk != memset_repstos || length < sMemsetRepFrom) {
 		memset_sse(destination, value, length);
 		return ptr;
 	}
