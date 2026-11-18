@@ -79,6 +79,13 @@ def install_kernel_sources() -> None:
         "src/system/libroot/posix/string/arch/x86_64/memcpy.cpp",
         "src/system/libroot/posix/string/arch/x86_64/memset.cpp",
         "src/system/libroot/posix/musl/string/memmove.c",
+        "src/system/libroot/posix/musl/string/strlen.c",
+        "src/system/libroot/posix/musl/string/strchr.c",
+        "src/system/libroot/posix/musl/string/strchrnul.c",
+        "src/system/libroot/posix/musl/string/memchr.c",
+        "src/system/libroot/posix/string/strcmp.c",
+        "src/system/libroot/posix/string/memcmp.c",
+        "headers/private/system/r5_string_x86.h",
         # R5: one CPUID/XCR0 read for user-space dispatch
         "headers/private/system/r5_x86_cpu.h",
         "src/tests/system/libroot/posix/string/Jamfile",
@@ -180,6 +187,35 @@ def install_kernel_sources() -> None:
             HAIKU / relative,
             relative,
         )
+    insert_once(
+        HAIKU / "src/system/libroot/posix/musl/string/Jamfile",
+        "SubDirCcFlags -fno-builtin ;\n",
+        "SubDirCcFlags -fno-builtin ;\nUsePrivateSystemHeaders ;\n",
+        "UsePrivateSystemHeaders ;\n",
+        "musl string headers",
+    )
+    insert_once(
+        HAIKU / "src/system/libroot/posix/string/Jamfile",
+        "\t[ FDirName libroot locale ]\n\t;\n",
+        "\t[ FDirName libroot locale ]\n\t;\nUsePrivateSystemHeaders ;\n",
+        "UsePrivateSystemHeaders ;\n",
+        "posix string headers",
+    )
+    insert_once(
+        HAIKU / "src/system/kernel/lib/Jamfile",
+        "UsePrivateHeaders shared ;\n",
+        "UsePrivateHeaders shared ;\nUsePrivateSystemHeaders ;\n",
+        "UsePrivateSystemHeaders ;\n",
+        "kernel lib headers",
+    )
+    insert_once(
+        HAIKU / "src/system/boot/Jamfile",
+        "UsePrivateHeaders [ FDirName libroot locale ] ;\n",
+        "UsePrivateHeaders [ FDirName libroot locale ] ;\n"
+        "UsePrivateSystemHeaders ;\n",
+        "UsePrivateSystemHeaders ;\n",
+        "boot headers",
+    )
 
 
 def install_smp_boot() -> None:
@@ -248,6 +284,11 @@ def install_pstate() -> None:
         HAIKU / "src/bin/r5_mem_fuzz.cpp",
         "memory fuzz",
     )
+    install_file(
+        root / "distro/cpu/r5_string_fuzz.cpp",
+        HAIKU / "src/bin/r5_string_fuzz.cpp",
+        "string fuzz",
+    )
 
     insert_once(
         HAIKU / "src/system/kernel/arch/x86/Jamfile",
@@ -278,6 +319,13 @@ def install_pstate() -> None:
         "bin Jamfile memory fuzz",
     )
     insert_once(
+        HAIKU / "src/bin/Jamfile",
+        "\tr5_mem_fuzz.cpp\n",
+        "\tr5_mem_fuzz.cpp\n\tr5_string_fuzz.cpp\n",
+        "\tr5_string_fuzz.cpp\n",
+        "bin Jamfile string fuzz",
+    )
+    insert_once(
         HAIKU / "build/jam/images/definitions/minimum",
         "\tsystem_time\n",
         "\tsystem_time\n\tr5_pstate_log\n",
@@ -297,6 +345,13 @@ def install_pstate() -> None:
         "\tr5_cpu_flags\n\tr5_mem_fuzz\n",
         "\tr5_mem_fuzz\n",
         "image bins memory fuzz",
+    )
+    insert_once(
+        HAIKU / "build/jam/images/definitions/minimum",
+        "\tr5_mem_fuzz\n",
+        "\tr5_mem_fuzz\n\tr5_string_fuzz\n",
+        "\tr5_string_fuzz\n",
+        "image bins string fuzz",
     )
     insert_once(
         HAIKU / "data/launch/system",
