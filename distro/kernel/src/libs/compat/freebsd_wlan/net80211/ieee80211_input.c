@@ -683,9 +683,16 @@ ieee80211_parse_beacon(struct ieee80211_node *ni, struct mbuf *m,
 				if (ishtcapoui(frm)) {
 					if (scan->htcap == NULL)
 						scan->htcap = frm;
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * A vendor HT information element was stored as the capabilities element,
+ * and the length check then threw both away.
+ */
 				} else if (ishtinfooui(frm)) {
 					if (scan->htinfo == NULL)
-						scan->htcap = frm;
+						scan->htinfo = frm;
+/* SPDX-SnippetEnd */
 				}
 			}
 			break;

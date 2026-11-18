@@ -552,6 +552,20 @@ mtk_load_patch(struct mtk_softc* sc)
 		uint32_t length = mtk_be32(section + 16);
 		uint32_t mode = mtk_patch_mode(mtk_be32(section + 20));
 
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * The length sum does not look at this offset. A wild one reads off the
+ * end of the file.
+ */
+		if ((uint64_t)offset + length > image->datasize) {
+			device_printf(sc->sc_dev,
+				"a patch section sits outside the file\n");
+			error = EINVAL;
+			goto release;
+		}
+/* SPDX-SnippetEnd */
+
 		error = mtk_mcu_start_download(sc, address, length, mode);
 		if (error != 0)
 			goto release;
@@ -619,6 +633,20 @@ mtk_load_ram(struct mtk_softc* sc)
 		uint32_t address = mtk_le32(region + 16);
 		uint32_t length = mtk_le32(region + 20);
 		uint8_t features = region[24];
+
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * A not-sent region still advances the cursor. A length that does not fit,
+ * or that wraps the cursor, would read off the file.
+ */
+		if ((uint64_t)offset + length > image->datasize) {
+			device_printf(sc->sc_dev,
+				"a firmware region sits outside the file\n");
+			error = EINVAL;
+			goto done;
+		}
+/* SPDX-SnippetEnd */
 
 		if ((features & MTK_FW_FEATURE_OVERRIDE) != 0)
 			override = address;

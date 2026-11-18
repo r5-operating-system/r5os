@@ -1587,20 +1587,34 @@ sta_recv_mgmt(struct ieee80211_node *ni, struct mbuf *m0, int subtype,
 			 * IE has disappeared - only do that once rather than
 			 * spamming it each time.
 			 */
-			if (scan.quiet) {
-				ic->ic_set_quiet(ni, scan.quiet);
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * ieee80211_add_quiet writes 6 bytes after the length. A shorter element,
+ * or a driver that never set the callback, must not be read or called.
+ */
+			if (scan.quiet != NULL && scan.quiet[1] >= 6) {
+				if (ic->ic_set_quiet != NULL)
+					ic->ic_set_quiet(ni, scan.quiet);
 				ni->ni_quiet_ie_set = 1;
 				memcpy(&ni->ni_quiet_ie, scan.quiet,
 				    sizeof(struct ieee80211_quiet_ie));
 			} else {
-				if (ni->ni_quiet_ie_set == 1)
+				if (ni->ni_quiet_ie_set == 1 && ic->ic_set_quiet != NULL)
 					ic->ic_set_quiet(ni, NULL);
+/* SPDX-SnippetEnd */
 				ni->ni_quiet_ie_set = 0;
 				bzero(&ni->ni_quiet_ie,
 				    sizeof(struct ieee80211_quiet_ie));
 			}
 
-			if (scan.tim != NULL) {
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * count, period, bitmap control, and one bitmap byte.
+ */
+			if (scan.tim != NULL && scan.tim[1] >= 4) {
+/* SPDX-SnippetEnd */
 				struct ieee80211_tim_ie *tim =
 				    (struct ieee80211_tim_ie *) scan.tim;
 				/*

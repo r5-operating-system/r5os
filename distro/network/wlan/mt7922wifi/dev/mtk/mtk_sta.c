@@ -406,12 +406,16 @@ mtk_bss_update(struct mtk_softc* sc, struct ieee80211_node* ni, int enable)
 	{
 		uint16_t phytype = five ? PHY_TYPE_BIT_OFDM
 			: (PHY_TYPE_BIT_HR_DSSS | PHY_TYPE_BIT_ERP);
-		/* Same gates as the station record. he without ht_vht stays off. */
-		int ht = sc->sc_ht_vht != 0 && ni != NULL
+		/* Same gates as the station record. The card's own report is
+		 * required, as it is for the channel list. he without ht_vht,
+		 * or without that report, stays off.
+		 */
+		int ht = sc->sc_ht_vht != 0 && sc->sc_phy_ht != 0 && ni != NULL
 			&& (ni->ni_flags & IEEE80211_NODE_HT) != 0;
-		int vht = sc->sc_ht_vht != 0 && five && ni != NULL
-			&& (ni->ni_flags & IEEE80211_NODE_VHT) != 0;
-		int he = sc->sc_he != 0 && sc->sc_ht_vht != 0 && ni != NULL
+		int vht = sc->sc_ht_vht != 0 && sc->sc_phy_vht != 0 && five
+			&& ni != NULL && (ni->ni_flags & IEEE80211_NODE_VHT) != 0;
+		int he = sc->sc_he != 0 && sc->sc_ht_vht != 0
+			&& sc->sc_phy_ht != 0 && sc->sc_phy_he != 0 && ni != NULL
 			&& (ni->ni_flags & IEEE80211_NODE_HE) != 0;
 
 		if (ht) {
@@ -443,7 +447,8 @@ mtk_bss_update(struct mtk_softc* sc, struct ieee80211_node* ni, int enable)
 		if (error != 0) {
 			device_printf(sc->sc_dev, "network channel %u: %d\n",
 				ieee80211_chan2ieee(&sc->sc_ic, channel), error);
-		} else if (sc->sc_he != 0 && sc->sc_ht_vht != 0 && ni != NULL
+		} else if (sc->sc_he != 0 && sc->sc_ht_vht != 0
+			&& sc->sc_phy_ht != 0 && sc->sc_phy_he != 0 && ni != NULL
 			&& (ni->ni_flags & IEEE80211_NODE_HE) != 0) {
 			error = mtk_bss_he(sc, ni);
 			if (error != 0)
@@ -655,11 +660,14 @@ mtk_sta_update(struct mtk_softc* sc, struct ieee80211_node* ni,
  * written only when the settings asked for them and the station is that
  * kind of station.
  */
-			if (sc->sc_ht_vht != 0 && (ni->ni_flags & IEEE80211_NODE_HT) != 0)
+			if (sc->sc_ht_vht != 0 && sc->sc_phy_ht != 0
+				&& (ni->ni_flags & IEEE80211_NODE_HT) != 0)
 				m[at + 6] |= PHY_TYPE_BIT_HT;
-			if (sc->sc_ht_vht != 0 && (ni->ni_flags & IEEE80211_NODE_VHT) != 0)
+			if (sc->sc_ht_vht != 0 && sc->sc_phy_vht != 0 && five
+				&& (ni->ni_flags & IEEE80211_NODE_VHT) != 0)
 				m[at + 6] |= PHY_TYPE_BIT_VHT;
 			if (sc->sc_he != 0 && sc->sc_ht_vht != 0
+				&& sc->sc_phy_ht != 0 && sc->sc_phy_he != 0
 				&& (ni->ni_flags & IEEE80211_NODE_HE) != 0)
 				m[at + 6] |= PHY_TYPE_BIT_HE;
 /* SPDX-SnippetEnd */
@@ -671,7 +679,8 @@ mtk_sta_update(struct mtk_softc* sc, struct ieee80211_node* ni,
  * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
  * SPDX-License-Identifier: MIT
  */
-			if (sc->sc_ht_vht != 0 && (ni->ni_flags & IEEE80211_NODE_HT) != 0
+			if (sc->sc_ht_vht != 0 && sc->sc_phy_ht != 0
+				&& (ni->ni_flags & IEEE80211_NODE_HT) != 0
 				&& at + 8 <= sizeof(m)) {
 				put16(m + at, STA_REC_HT);
 				put16(m + at + 2, 8);
@@ -679,7 +688,8 @@ mtk_sta_update(struct mtk_softc* sc, struct ieee80211_node* ni,
 				at += 8;
 				tlvs++;
 			}
-			if (sc->sc_ht_vht != 0 && (ni->ni_flags & IEEE80211_NODE_VHT) != 0
+			if (sc->sc_ht_vht != 0 && sc->sc_phy_vht != 0 && five
+				&& (ni->ni_flags & IEEE80211_NODE_VHT) != 0
 				&& at + 16 <= sizeof(m)) {
 				put16(m + at, STA_REC_VHT);
 				put16(m + at + 2, 16);
@@ -690,6 +700,7 @@ mtk_sta_update(struct mtk_softc* sc, struct ieee80211_node* ni,
 				tlvs++;
 			}
 			if (sc->sc_he != 0 && sc->sc_ht_vht != 0
+				&& sc->sc_phy_ht != 0 && sc->sc_phy_he != 0
 				&& (ni->ni_flags & IEEE80211_NODE_HE) != 0
 				&& ni->ni_he_cap_ok != 0)
 				at = mtk_put_he(m, at, sizeof(m), &tlvs, ni);
