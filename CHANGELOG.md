@@ -1,5 +1,15 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-18 - Wi-Fi: the supplicant can ask for WPA3
+
+Problem: the image installed HaikuPorts `wpa_supplicant-2.11.haiku.1-1`. That build has SAE, protected management frames and OWE off, so a WPA3 network was joined as a passphrase network. The kernel already carries SAE frames (algorithm 3) and an IGTK, and a second join while SAE is in progress sends the association.
+
+Changed: `distro/wpa_supplicant` fetches the same Haiku source (commit `bdf3144`, sha256 `e7e36b4ed5d6ff0e6a233b427b312c6984ab01d79e219d0d4b9c9e2ccf86f8ab`) and builds it with SAE, PMF and OWE. The Haiku driver glue sends an SAE frame through `IEEE80211_IOC_HAIKU_SAE_AUTH`, polls the reply without writing it to the log, and on success joins a second time so the kernel sends the association. The external-auth event carries the RSN selector 00-0F-AC:8. A frame already stored from an earlier attempt is marked seen and is not delivered again. An IGTK (BIP-CMAC-128, index 4 or 5) uses `IEEE80211_IOC_HAIKU_IGTK`. `IEEE80211_IOC_AUTHMODE` accepts SAE (6), which has no net80211 authenticator, so the first join does not send an open authentication frame. A WPA3 network is configured with `key_mgmt=SAE`, `sae_password` and required management-frame protection, not a PSK. An OWE-only network uses `key_mgmt=OWE` and is not joined as an open network while the supplicant is still starting. The scan reports SAE, including a network that also offers a passphrase, as WPA3. `scripts/pin-mesa-packages.sh` selects `wpa_supplicant-2.11.r5.1-1` instead of the HaikuPorts package. WPA2 still uses the existing associate path: the driver does not advertise the SME flag.
+
+Limits: not jammed and not booted. QEMU has no Wi-Fi, so this was not joined. The pass is still a stick on the 5625U that joins a WPA3-only network and a WPA2 network on the same boot, with `sae: authenticated` and `pmf: on` in the syslog. FT-SAE is reported as SAE and fast transition is not implemented. The cross build has no `rc`, so the binary has no resource icon and no catalogs. A second identical SAE frame is not delivered again. The password is not written to the log.
+
+Tested: the cross compiler `x86_64-unknown-haiku-gcc` 13.3.0 produced a Haiku ELF and `distro/packages/x86_64/wpa_supplicant-2.11.r5.1-1-x86_64.hpkg` (1.1 MB). The binary contains the SAE handshake and the IGTK rejection text. No image was built.
+
 ## 2026-11-17 - Wi-Fi: a short beacon element and a second adapter
 
 Problem: a review of the whole Wi-Fi stack, read without the design notes, found places a frame, a firmware file, or a second adapter was handled wrongly.
@@ -12,7 +22,7 @@ Changed:
 - The pairwise CCMP key kept for an integrity update is not replaced by the group key. The group key was sent back as pairwise key 0.
 - The Deskbar list and Join target use the adapter that is associated. The password window floats, so it does not freeze the Deskbar. A network that joined but was not saved is reported as a failure. A scan notification for interface 1 no longer updates interface 10.
 
-Limits: no jam and no boot. WPA3 still has no supplicant. `ht_vht` and `he` still default to off.
+Limits: no jam and no boot. `ht_vht` and `he` still default to off.
 
 ## 2026-11-17 - Deskbar: the window watcher no longer calls a missing window
 

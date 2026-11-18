@@ -48,6 +48,8 @@ auth_label(uint32 mode)
 			return "WPA";
 		case B_NETWORK_AUTHENTICATION_WPA2:
 			return "WPA2";
+		case B_NETWORK_AUTHENTICATION_WPA3:
+			return "WPA3";
 		case B_NETWORK_AUTHENTICATION_EAP:
 			return "EAP";
 		default:
@@ -66,6 +68,8 @@ auth_setting(uint32 mode)
 			return "wpa";
 		case B_NETWORK_AUTHENTICATION_WPA2:
 			return "wpa2";
+		case B_NETWORK_AUTHENTICATION_WPA3:
+			return "wpa3";
 		default:
 			return "none";
 	}
@@ -116,7 +120,13 @@ r5_wifi_join_and_remember(const char* deviceName, const wireless_network& networ
 	persist.AddString("name", network.name);
 	if (password != NULL && password[0] != '\0')
 		persist.AddString("password", password);
-	persist.AddString("authentication", auth_setting(network.authentication_mode));
+	const char* authentication = auth_setting(network.authentication_mode);
+	if ((network.key_mode & B_KEY_MODE_OWE) != 0
+		&& (network.key_mode & B_KEY_MODE_SAE) == 0
+		&& network.authentication_mode == B_NETWORK_AUTHENTICATION_NONE) {
+		authentication = "owe";
+	}
+	persist.AddString("authentication", authentication);
 	BMessenger server(kNetServerSignature);
 	if (!server.IsValid())
 		return B_NAME_NOT_FOUND;
