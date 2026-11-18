@@ -72,6 +72,11 @@ Under the hood, networking has had a serious upgrade too. R5 supports
 modern IPv4 and IPv6 networking, flexible DNS configuration, and Wi-Fi
 drivers for MediaTek MT7921 and MT7922 hardware.
 
+**Ready to play.** Game controllers are here! Say hello to them on R5,
+over USB and Bluetooth. Plug in or pair your favourite controller and
+pick up where you left off, with buttons, sticks, triggers, rumble and
+even motion working the way you'd expect.
+
 ## Sound that feels right
 
 **From a quick video to a serious session, sound matters.**
@@ -154,6 +159,26 @@ towards future HiDPI support.
 This is still a work in progress, not a feature of the current build.
 But it's a good glimpse of where we're heading.
 
+We're also optimising R5 for modern processors. R5 is built to use the
+modern instruction sets in your CPU, such as AVX2 and FMA, and picks
+the fastest path your processor supports when it starts. From the
+kernel and the scheduler to memory, text and drawing, the goal is a
+system that gets more out of the hardware you already have.
+
+None of this changes how your apps work. They should just feel a little
+quicker. We'll share real numbers once we've measured them on real
+hardware.
+
+**Wi-Fi, the modern way.** R5 is working towards full Wi-Fi 6 support
+on supported cards, with WPA3 for the security today's networks expect.
+We're also freshening up the dialogs you use to connect to Wi-Fi, with
+the glass look of the rest of the desktop.
+
+**Bluetooth that keeps up.** Pair your mouse, keyboard or headset in
+Settings, and soon a lot more. Next up is LE Audio, the new standard
+for wireless earbuds and headphones, with better sound at lower power,
+and Auracast, so you can tune in to shared audio streams.
+
 ## Project status
 
 **A work in progress. And very much alive.**
@@ -164,6 +189,8 @@ development is moving forward.
 -   **Current build:** 10064
 -   **Version:** 2026.1-dev
 -   **Primary architecture:** AMD64
+-   **Minimum processor:** a 64-bit AMD or Intel CPU with x86-64-v2
+    (Intel Nehalem, AMD Bulldozer or newer)
 
 Some features are still evolving, and hardware support varies. GPU
 compositor testing is currently limited to the AMD Ryzen 5 5625U system
