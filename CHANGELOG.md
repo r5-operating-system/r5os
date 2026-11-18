@@ -1,5 +1,18 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-18 - AMD64 user space, step 3: memcpy, memset, memmove
+
+`rep movsb` and `rep stosb` run only when ERMS is set. Without it the existing SSE loop is used. With FSRM, `rep movsb` starts at 128 bytes instead of 2048. `memset` keeps the 2048 cut. Copies and fills at or above three quarters of the last-level cache use `movntdq` and an `sfence`. The 4K-alias window (distance 1..31 or the last 16 bytes of the page) still stays on the SSE loop. Sizes up to 16 bytes (`memcpy`) and 31 bytes (`memset`) stay on the old inline path, with no function pointer.
+
+Overlapping `memmove` uses 16-byte SSE loads and stores. A backward copy steps by 16 only when the regions are at least 16 bytes apart; a closer overlap is copied byte by byte, because a 16-byte store would reach the next load. It does not use `std` or `rep movsb`. No overlap still calls `memcpy`. Other architectures keep the musl word loop.
+
+`r5_mem_fuzz` compares all three with byte copies: every size 0..4096, every source and destination alignment 0..63, 64 random sizes up to 16 MiB (the last ones sit above the non-temporal cut), and every memmove overlap 1..64 in both directions.
+
+Checked (18 Nov 2026, about 15:30 Europe/Amsterdam):
+- Host, 5625U: the fuzz passes in 19 seconds, 17043584 checks. The same binary with the feature flags forced off (SSE and non-temporal only) also passes, same count, 19 seconds.
+- `scripts/build-locked.sh`: `jam_exit=0`, `mesa_exit=0`. `memcpy.cpp`, `memset.cpp` and `memmove.c` were recompiled.
+- QEMU KVM, own image copy. The fuzz does the same 17043584 checks and prints PASS: `-cpu host,+smap` in 61 seconds (serial has `enable SMAP`), `-cpu Nehalem` in 68 seconds (no SMAP on that CPU), `-cpu EPYC-Rome` in 58 seconds (serial has `enable SMAP`). Tracker, Deskbar, Terminal, WebPositive, StyledEdit, Settings and GLTeapot start on each boot. The guest is slower than the host; the matrix is complete on all three.
+
 ## 2026-11-18 - AMD64 user space, step 2: one CPUID helper
 
 `headers/private/system/r5_x86_cpu.h` is the only place that reads CPUID for the later user-space dispatch. It is a private header. libroot exports no new symbol. The first call stores the result; later calls in that translation unit reuse it.

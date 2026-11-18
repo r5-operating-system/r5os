@@ -68,6 +68,8 @@ def install_kernel_sources() -> None:
         "src/add-ons/kernel/power/cpufreq/amd_pstates/amd_pstates.cpp",
         # air/OS 6178b691d2: memcpy leaves rep movsb under 4K aliasing
         "src/system/libroot/posix/string/arch/x86_64/memcpy.cpp",
+        "src/system/libroot/posix/string/arch/x86_64/memset.cpp",
+        "src/system/libroot/posix/musl/string/memmove.c",
         # R5: one CPUID/XCR0 read for user-space dispatch
         "headers/private/system/r5_x86_cpu.h",
         "src/tests/system/libroot/posix/string/Jamfile",
@@ -232,6 +234,11 @@ def install_pstate() -> None:
         HAIKU / "src/bin/r5_cpu_flags.cpp",
         "cpu flags",
     )
+    install_file(
+        root / "distro/cpu/r5_mem_fuzz.cpp",
+        HAIKU / "src/bin/r5_mem_fuzz.cpp",
+        "memory fuzz",
+    )
 
     insert_once(
         HAIKU / "src/system/kernel/arch/x86/Jamfile",
@@ -255,6 +262,13 @@ def install_pstate() -> None:
         "bin Jamfile cpu flags",
     )
     insert_once(
+        HAIKU / "src/bin/Jamfile",
+        "\tr5_cpu_flags.cpp\n",
+        "\tr5_cpu_flags.cpp\n\tr5_mem_fuzz.cpp\n",
+        "\tr5_mem_fuzz.cpp\n",
+        "bin Jamfile memory fuzz",
+    )
+    insert_once(
         HAIKU / "build/jam/images/definitions/minimum",
         "\tsystem_time\n",
         "\tsystem_time\n\tr5_pstate_log\n",
@@ -267,6 +281,13 @@ def install_pstate() -> None:
         "\tr5_pstate_log\n\tr5_cpu_flags\n",
         "\tr5_cpu_flags\n",
         "image bins cpu flags",
+    )
+    insert_once(
+        HAIKU / "build/jam/images/definitions/minimum",
+        "\tr5_cpu_flags\n",
+        "\tr5_cpu_flags\n\tr5_mem_fuzz\n",
+        "\tr5_mem_fuzz\n",
+        "image bins memory fuzz",
     )
     insert_once(
         HAIKU / "data/launch/system",
