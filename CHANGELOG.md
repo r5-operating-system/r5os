@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-18 - AMD64 user space, step 6: short lock spin and reader fast path
+
+`__mutex_lock` and `__pthread_mutex_lock` still try the lock once. If that fails, and the call is not a trylock, they read the lock word and execute `pause` until the word is clear or 2000 TSC cycles have passed (8000 when the mutex is adaptive). Then they try once more and, if it is still taken, enter the kernel. The bound is the time stamp counter, so a CPU where `pause` is expensive does not spin longer. `mutex.cpp` is also linked into the runtime loader, which does not provide `system_time_nsecs`, so the spin reads the counter directly.
+
+A private read-write lock takes the reader count with an atomic add and then checks the writer count. If a writer is present the reader drops the count. The last reader takes the internal mutex and wakes a queued writer. A writer publishes its count before it looks at the readers again, so a reader cannot pass that check and keep the lock. The slow path is unchanged when a writer is already waiting.
+
+Checked (18 Nov 2026, Europe/Amsterdam): the first `scripts/build-locked.sh` failed in the runtime loader (`system_time_nsecs` was not linked there) and again on files another session had left in the shared tree. After the spin used the time stamp counter, the next jam was `jam_exit=0`, `mesa_exit=0`. The 12-thread stress test was not run. No QEMU boot.
+
 ## 2026-11-18 - AMD64 user space, step 5: heap pools and adaptive mutexes
 
 The heap starts with one pool per CPU, rounded up to a power of two, and never more than `_MALLOC_MUTEXES` (32). One CPU still uses two pools, which is the smallest count the allocator already allowed. Each heap mutex is created with `MUTEX_FLAG_ADAPTIVE`. That is the init in `__init_heap`, the extra mutexes in `init_threaded_malloc`, and the re-init after `fork`.
