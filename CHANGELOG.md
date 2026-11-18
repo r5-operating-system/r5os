@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-18 - IPv6: the default route sorts last, and the checksum follows the source
+
+Problem: an all-zero IPv6 mask was counted like a host mask, so `::/0` did not sit under the more specific prefixes. A default route bound to `fe80::` was still the source after TCP or unconnected UDP had already checksummed the packet. A socket bound to one local address was rewritten to the destination when that destination was also local. SLAAC kept only the last prefix, skipped duplicate-address detection for the link-local address, and did not install an on-link route for `L=1`. DHCPv6 installed an `IA_NA` address as `/64`, ignored status codes, and stopped after the first reply. Stopping either client killed the worker, which could leave its socket open in the network server. `resolv.conf` filled up with old servers, and a link-local DNS address was written without a zone.
+
+Changed: the mask bit is the least significant set bit, matching IPv4, so `::/0` returns 128 and sorts last. An off-link route is bound to a global or ULA address when the interface has one, including after SLAAC or DHCPv6 adds that address. UDP chooses that source before the checksum. If IPv6 still changes the source, the TCP or UDP checksum is updated with the incremental rule. A bound source is left alone when the destination is local; only `::` is filled in. SLAAC applies every `/64` autonomous prefix, runs duplicate-address detection before the link-local address, and keeps `L=1` prefixes as on-link routes until the lifetime is withdrawn or runs out. DHCPv6 uses a `/128` mask, logs status codes, and renews or rebinds until the valid lifetime, then removes the address. Both clients wake their own thread and wait for it to close the socket. New resolver servers are written first, per interface, and a bare `fe80::` DNS address gets `%<device>` or is dropped. The address walk in `SIOCADDRT` holds the interface lock. `0064:ff9b::/96` is no longer treated as an empty source.
+
+Limits: jammed (`jam_exit=0`, 11:14 Europe/Amsterdam). Not booted. QEMU has no IPv6 router, so SLAAC routes, DHCPv6, and an off-link TCP or UDP checksum were not tried on a wire. The kernel paths do not read a user pointer themselves; route control still copies the request with `user_memcpy`.
+
 ## 2026-11-18 - Build: main builds again after the Wi-Fi merges
 
 Problem: #4419, #4421 and #4422 were merged without a jam. Main (`d2e4038d0b`) did not build:

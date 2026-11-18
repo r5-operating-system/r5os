@@ -33,6 +33,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string>
+#include <string.h>
 #include <strings.h>
 #include <syslog.h>
 #include <unistd.h>
@@ -645,6 +646,33 @@ NetServer::_ConfigureInterface(BMessage& message)
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+static bool
+r5_copy_nameserver(const char* nameserver, const char* device, char* out,
+	size_t outSize)
+{
+	if (nameserver == NULL || nameserver[0] == '\0' || outSize == 0)
+		return false;
+
+	// A link-local RDNSS without a zone id is not usable. The resolver has
+	// no interface for a bare fe80:: address, so attach %<device> when we
+	// know the device and drop the address when we do not.
+	if (strncasecmp(nameserver, "fe80:", 5) == 0
+		&& strchr(nameserver, '%') == NULL) {
+		if (device == NULL || device[0] == '\0')
+			return false;
+		snprintf(out, outSize, "%s%%%s", nameserver, device);
+		return out[0] != '\0';
+	}
+
+	strlcpy(out, nameserver, outSize);
+	return true;
+}
+// SPDX-SnippetEnd
+
+
 status_t
 NetServer::_ConfigureResolver(BMessage& resolverConfiguration)
 {
@@ -663,67 +691,81 @@ NetServer::_ConfigureResolver(BMessage& resolverConfiguration)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-	char servers[8][INET6_ADDRSTRLEN];
-	int32 nServers = 0;
+	struct ServerEntry {
+		char server[96];
+		char tag[64];
+	};
+	ServerEntry kept[8];
+	ServerEntry fresh[8];
+	int32 nKept = 0;
+	int32 nFresh = 0;
 	bool staticOnly = false;
+	char deviceName[64];
+	deviceName[0] = '\0';
+	const char* device = NULL;
+	if (resolverConfiguration.FindString("device", &device) == B_OK
+		&& device != NULL)
+		strlcpy(deviceName, device, sizeof(deviceName));
 
 	FILE* existing = fopen(path.Path(), "r");
 	if (existing != NULL) {
-		char line[128];
+		char line[192];
+		char currentTag[64];
+		currentTag[0] = '\0';
 		while (fgets(line, sizeof(line), existing) != NULL) {
 			if (strncmp(line, "# Static DNS Only", 17) == 0) {
 				staticOnly = true;
-// SPDX-SnippetEnd
 				break;
 			}
-// SPDX-SnippetBegin
-// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
-// SPDX-License-Identifier: MIT
-			if (strncmp(line, "nameserver ", 11) == 0) {
-				char* start = line + 11;
+			if (strncmp(line, "# interface ", 12) == 0) {
+				char* start = line + 12;
 				size_t length = strlen(start);
 				while (length > 0 && (start[length - 1] == '\n'
-						|| start[length - 1] == '\r')) {
+						|| start[length - 1] == '\r'
+						|| start[length - 1] == ' '))
 					start[--length] = '\0';
-				}
-				bool have = false;
-				for (int32 i = 0; i < nServers; i++) {
-					if (strcmp(servers[i], start) == 0)
-						have = true;
-				}
-				if (!have && nServers < 8 && start[0] != '\0') {
-					strlcpy(servers[nServers], start, sizeof(servers[0]));
-					nServers++;
-				}
-// SPDX-SnippetEnd
+				strlcpy(currentTag, start, sizeof(currentTag));
+				continue;
 			}
+			if (strncmp(line, "nameserver ", 11) != 0)
+				continue;
+			char* start = line + 11;
+			size_t length = strlen(start);
+			while (length > 0 && (start[length - 1] == '\n'
+					|| start[length - 1] == '\r'))
+				start[--length] = '\0';
+			if (start[0] == '\0')
+				continue;
+			if (deviceName[0] != '\0' && strcmp(currentTag, deviceName) == 0)
+				continue;
+			if (nKept >= 8)
+				continue;
+			strlcpy(kept[nKept].server, start, sizeof(kept[nKept].server));
+			strlcpy(kept[nKept].tag, currentTag, sizeof(kept[nKept].tag));
+			nKept++;
 		}
-// SPDX-SnippetBegin
-// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
-// SPDX-License-Identifier: MIT
 		fclose(existing);
 	}
 	if (staticOnly)
 		return B_OK;
-// SPDX-SnippetEnd
 
 	const char* nameserver;
 	for (int32 i = 0; resolverConfiguration.FindString("nameserver", i,
 			&nameserver) == B_OK; i++) {
-// SPDX-SnippetBegin
-// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
-// SPDX-License-Identifier: MIT
-		if (nameserver == NULL || nameserver[0] == '\0')
+		if (nFresh >= 8)
+			break;
+		if (!r5_copy_nameserver(nameserver, deviceName, fresh[nFresh].server,
+				sizeof(fresh[nFresh].server)))
 			continue;
 		bool have = false;
-		for (int32 j = 0; j < nServers; j++) {
-			if (strcmp(servers[j], nameserver) == 0)
+		for (int32 j = 0; j < nFresh; j++) {
+			if (strcmp(fresh[j].server, fresh[nFresh].server) == 0)
 				have = true;
 		}
-		if (!have && nServers < 8) {
-			strlcpy(servers[nServers], nameserver, sizeof(servers[0]));
-			nServers++;
-		}
+		if (have)
+			continue;
+		strlcpy(fresh[nFresh].tag, deviceName, sizeof(fresh[nFresh].tag));
+		nFresh++;
 	}
 
 	FILE* file = fopen(path.Path(), "w");
@@ -733,8 +775,33 @@ NetServer::_ConfigureResolver(BMessage& resolverConfiguration)
 	}
 
 	fprintf(file, "# Added automatically by DHCP\n");
-	for (int32 i = 0; i < nServers; i++)
-		fprintf(file, "nameserver %s\n", servers[i]);
+	int32 written = 0;
+	const char* openTag = NULL;
+	for (int32 i = 0; i < nFresh && written < 8; i++) {
+		if (fresh[i].tag[0] != '\0'
+			&& (openTag == NULL || strcmp(openTag, fresh[i].tag) != 0)) {
+			fprintf(file, "# interface %s\n", fresh[i].tag);
+			openTag = fresh[i].tag;
+		}
+		fprintf(file, "nameserver %s\n", fresh[i].server);
+		written++;
+	}
+	for (int32 i = 0; i < nKept && written < 8; i++) {
+		bool have = false;
+		for (int32 j = 0; j < nFresh; j++) {
+			if (strcmp(fresh[j].server, kept[i].server) == 0)
+				have = true;
+		}
+		if (have)
+			continue;
+		if (kept[i].tag[0] != '\0'
+			&& (openTag == NULL || strcmp(openTag, kept[i].tag) != 0)) {
+			fprintf(file, "# interface %s\n", kept[i].tag);
+			openTag = kept[i].tag;
+		}
+		fprintf(file, "nameserver %s\n", kept[i].server);
+		written++;
+	}
 // SPDX-SnippetEnd
 
 	const char* domain;

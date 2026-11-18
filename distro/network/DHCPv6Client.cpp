@@ -11,6 +11,7 @@
 
 #include <arpa/inet.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <net/if.h>
 #include <netinet/in.h>
 #include <netinet6/in6.h>
@@ -38,6 +39,8 @@ static const int kMaxTries = 3;
 static const uint8 kSolicit = 1;
 static const uint8 kAdvertise = 2;
 static const uint8 kRequest = 3;
+static const uint8 kRenew = 5;
+static const uint8 kRebind = 6;
 static const uint8 kReply = 7;
 static const uint8 kInformationRequest = 11;
 
@@ -47,7 +50,13 @@ static const uint16 kOptIaNa = 3;
 static const uint16 kOptIaAddr = 5;
 static const uint16 kOptOro = 6;
 static const uint16 kOptElapsed = 8;
+static const uint16 kOptStatusCode = 13;
 static const uint16 kOptDnsServers = 23;
+
+static const uint16 kStatusSuccess = 0;
+static const uint16 kStatusUnspecFail = 1;
+static const uint16 kStatusNoAddrsAvail = 2;
+static const uint16 kStatusNoBinding = 3;
 
 
 static bool
@@ -72,12 +81,31 @@ DHCPv6Client::DHCPv6Client(BMessenger target, const char* device)
 	AutoconfigClient("dhcpv6", target, device),
 	fThread(-1),
 	fSocket(-1),
+	fWakeRead(-1),
+	fWakeWrite(-1),
+	fStop(0),
 	fTransaction(0),
 	fServerIdLength(0),
-	fHaveMAC(false)
+	fHaveMAC(false),
+	fHaveOffer(false),
+	fInstalled(false),
+	fPreferred(0),
+	fT1(0),
+	fT2(0),
+	fValid(0),
+	fLeaseStart(0)
 {
 	memset(fMAC, 0, sizeof(fMAC));
 	memset(fServerId, 0, sizeof(fServerId));
+	memset(&fLeaseAddress, 0, sizeof(fLeaseAddress));
+
+	int pipeFds[2];
+	if (pipe(pipeFds) == 0) {
+		fWakeRead = pipeFds[0];
+		fWakeWrite = pipeFds[1];
+		fcntl(fWakeRead, F_SETFL, O_NONBLOCK);
+		fcntl(fWakeWrite, F_SETFL, O_NONBLOCK);
+	}
 
 	BNetworkAddress link;
 	BNetworkInterface interface(device);
@@ -91,33 +119,55 @@ DHCPv6Client::DHCPv6Client(BMessenger target, const char* device)
 }
 
 
-static void
-stop_worker(thread_id thread, int socket)
+bool
+DHCPv6Client::_Stopped() const
 {
-	if (socket >= 0)
-		shutdown(socket, SHUT_RDWR);
-	if (thread < 0)
-		return;
+	return fStop != 0;
+}
 
-	status_t ignored;
-	wait_for_thread_etc(thread, B_RELATIVE_TIMEOUT, 500000, &ignored);
-	kill_thread(thread);
-	wait_for_thread_etc(thread, B_RELATIVE_TIMEOUT, 250000, &ignored);
+
+void
+DHCPv6Client::_Wake()
+{
+	if (fWakeWrite < 0)
+		return;
+	char byte = 1;
+	write(fWakeWrite, &byte, 1);
+}
+
+
+void
+DHCPv6Client::_ForgetLease()
+{
+	if (!fInstalled)
+		return;
+	BNetworkInterface interface(Device());
+	BNetworkAddress address(fLeaseAddress, 0);
+	interface.RemoveAddress(address);
+	fInstalled = false;
+	char text[INET6_ADDRSTRLEN];
+	inet_ntop(AF_INET6, &fLeaseAddress, text, sizeof(text));
+	syslog(LOG_INFO, "dhcpv6 %s: removed %s\n", Device(), text);
 }
 
 
 DHCPv6Client::~DHCPv6Client()
 {
+	fStop = 1;
+	_Wake();
 	thread_id thread = fThread;
-	int socket = fSocket;
-	fThread = -1;
-	fSocket = -1;
 	if (thread != -1) {
 		UnlockLooper();
-		stop_worker(thread, socket);
+		status_t result;
+		wait_for_thread(thread, &result);
 		LockLooper();
-	} else if (socket >= 0)
-		shutdown(socket, SHUT_RDWR);
+	}
+	if (fWakeRead >= 0)
+		close(fWakeRead);
+	if (fWakeWrite >= 0)
+		close(fWakeWrite);
+	fWakeRead = -1;
+	fWakeWrite = -1;
 }
 
 
@@ -198,12 +248,49 @@ DHCPv6Client::_OpenSocket(uint32& ifIndex)
 }
 
 
+static const char*
+status_name(uint16 code)
+{
+	switch (code) {
+		case kStatusSuccess:
+			return "Success";
+		case kStatusUnspecFail:
+			return "UnspecFail";
+		case kStatusNoAddrsAvail:
+			return "NoAddrsAvail";
+		case kStatusNoBinding:
+			return "NoBinding";
+		default:
+			return "other";
+	}
+}
+
+
+static uint16
+read_status(const uint8* data, uint16 length, const char* device,
+	const char* where)
+{
+	if (length < 2)
+		return kStatusSuccess;
+	uint16 code;
+	memcpy(&code, data, 2);
+	code = ntohs(code);
+	if (code == kStatusSuccess) {
+		syslog(LOG_INFO, "dhcpv6 %s: %s status Success\n", device, where);
+	} else {
+		syslog(LOG_ERR, "dhcpv6 %s: %s status %u (%s)\n", device, where, code,
+			status_name(code));
+	}
+	return code;
+}
+
+
 ssize_t
-DHCPv6Client::_BuildSolicit(uint8* out, size_t outSize, bool informationOnly)
+DHCPv6Client::_BuildSolicit(uint8* out, size_t outSize, uint8 type)
 {
 	if (outSize < 4)
 		return -1;
-	out[0] = informationOnly ? kInformationRequest : kSolicit;
+	out[0] = type;
 	out[1] = (fTransaction >> 16) & 0xff;
 	out[2] = (fTransaction >> 8) & 0xff;
 	out[3] = fTransaction & 0xff;
@@ -226,21 +313,38 @@ DHCPv6Client::_BuildSolicit(uint8* out, size_t outSize, bool informationOnly)
 	if (!append_option(out, used, outSize, kOptOro, &dns, 2))
 		return -1;
 
-	if (!informationOnly) {
-		uint8 ia[12];
+	bool includeServer = type == kRequest || type == kRenew;
+	bool includeAddress = (type == kRequest || type == kRenew || type == kRebind)
+		&& (fHaveOffer || fInstalled);
+	if (type != kInformationRequest) {
+		uint8 ia[64];
 		memset(ia, 0, sizeof(ia));
 		memcpy(ia, fMAC + 2, 4);
-		if (!append_option(out, used, outSize, kOptIaNa, ia, sizeof(ia)))
+		uint32 t1 = htonl(type == kSolicit ? 0 : fT1);
+		uint32 t2 = htonl(type == kSolicit ? 0 : fT2);
+		memcpy(ia + 4, &t1, 4);
+		memcpy(ia + 8, &t2, 4);
+		size_t iaLength = 12;
+		if (includeAddress) {
+			uint16 code = htons(kOptIaAddr);
+			uint16 length = htons(24);
+			memcpy(ia + iaLength, &code, 2);
+			memcpy(ia + iaLength + 2, &length, 2);
+			memcpy(ia + iaLength + 4, &fLeaseAddress, 16);
+			uint32 preferred = htonl(fPreferred);
+			uint32 valid = htonl(fValid);
+			memcpy(ia + iaLength + 20, &preferred, 4);
+			memcpy(ia + iaLength + 24, &valid, 4);
+			iaLength += 28;
+		}
+		if (!append_option(out, used, outSize, kOptIaNa, ia, (uint16)iaLength))
 			return -1;
 	}
 
-	if (fServerIdLength > 0
+	if (includeServer && fServerIdLength > 0
 		&& !append_option(out, used, outSize, kOptServerId, fServerId,
 			fServerIdLength))
 		return -1;
-
-	if (fServerIdLength > 0 && !informationOnly)
-		out[0] = kRequest;
 
 	return (ssize_t)used;
 }
@@ -283,8 +387,14 @@ DHCPv6Client::_HandleReply(const uint8* packet, ssize_t bytes, uint32 ifIndex)
 	const uint8* end = packet + bytes;
 	in6_addr leased;
 	bool haveAddress = false;
+	uint32 preferred = 0;
+	uint32 valid = 0;
+	uint32 t1 = 0;
+	uint32 t2 = 0;
+	bool haveTiming = false;
 	BMessage resolver(kMsgConfigureResolver);
 	int32 nameservers = 0;
+	bool failed = false;
 
 	while (option + 4 <= end) {
 		uint16 code;
@@ -297,12 +407,21 @@ DHCPv6Client::_HandleReply(const uint8* packet, ssize_t bytes, uint32 ifIndex)
 		if (data + length > end)
 			break;
 
-		if (code == kOptServerId && length <= sizeof(fServerId)) {
+		if (code == kOptStatusCode) {
+			if (read_status(data, length, Device(), "reply") != kStatusSuccess)
+				failed = true;
+		} else if (code == kOptServerId && length <= sizeof(fServerId)) {
 			memcpy(fServerId, data, length);
 			fServerIdLength = length;
 		} else if (code == kOptIaNa && length >= 12) {
+			memcpy(&t1, data + 4, 4);
+			memcpy(&t2, data + 8, 4);
+			t1 = ntohl(t1);
+			t2 = ntohl(t2);
+			haveTiming = true;
 			const uint8* inner = data + 12;
 			const uint8* innerEnd = data + length;
+			bool iaFailed = false;
 			while (inner + 4 <= innerEnd) {
 				uint16 innerCode;
 				uint16 innerLength;
@@ -312,12 +431,45 @@ DHCPv6Client::_HandleReply(const uint8* packet, ssize_t bytes, uint32 ifIndex)
 				innerLength = ntohs(innerLength);
 				if (inner + 4 + innerLength > innerEnd)
 					break;
-				if (innerCode == kOptIaAddr && innerLength >= 24) {
-					memcpy(&leased, inner + 4, 16);
-					haveAddress = true;
+				if (innerCode == kOptStatusCode) {
+					if (read_status(inner + 4, innerLength, Device(), "IA_NA")
+							!= kStatusSuccess)
+						iaFailed = true;
+				} else if (innerCode == kOptIaAddr && innerLength >= 24
+					&& !iaFailed) {
+					bool addrFailed = false;
+					if (innerLength > 24) {
+						const uint8* extra = inner + 4 + 24;
+						const uint8* extraEnd = inner + 4 + innerLength;
+						while (extra + 4 <= extraEnd) {
+							uint16 extraCode;
+							uint16 extraLength;
+							memcpy(&extraCode, extra, 2);
+							memcpy(&extraLength, extra + 2, 2);
+							extraCode = ntohs(extraCode);
+							extraLength = ntohs(extraLength);
+							if (extra + 4 + extraLength > extraEnd)
+								break;
+							if (extraCode == kOptStatusCode
+								&& read_status(extra + 4, extraLength, Device(),
+									"IA_ADDR") != kStatusSuccess)
+								addrFailed = true;
+							extra += 4 + extraLength;
+						}
+					}
+					if (!addrFailed) {
+						memcpy(&leased, inner + 4, 16);
+						memcpy(&preferred, inner + 20, 4);
+						memcpy(&valid, inner + 24, 4);
+						preferred = ntohl(preferred);
+						valid = ntohl(valid);
+						haveAddress = true;
+					}
 				}
 				inner += 4 + innerLength;
 			}
+			if (iaFailed)
+				haveAddress = false;
 		} else if (code == kOptDnsServers && length >= 16) {
 			for (uint16 offset = 0; offset + 16 <= length; offset += 16) {
 				in6_addr dns;
@@ -333,23 +485,59 @@ DHCPv6Client::_HandleReply(const uint8* packet, ssize_t bytes, uint32 ifIndex)
 		option += 4 + length;
 	}
 
-	if (type == kAdvertise)
+	if (failed)
+		return B_ERROR;
+
+	if (type == kAdvertise) {
+		if (haveAddress) {
+			fLeaseAddress = leased;
+			fPreferred = preferred;
+			fValid = valid;
+			fT1 = t1;
+			fT2 = t2;
+			fHaveOffer = true;
+		}
 		return 1;
+	}
 
 	if (haveAddress) {
 		char text[INET6_ADDRSTRLEN];
 		inet_ntop(AF_INET6, &leased, text, sizeof(text));
-		if (r5_ipv6_has_address(Device(), leased)) {
-			syslog(LOG_INFO, "dhcpv6 %s: %s already assigned\n", Device(),
+		fLeaseAddress = leased;
+		fPreferred = preferred;
+		fValid = valid;
+		if (haveTiming) {
+			fT1 = t1;
+			fT2 = t2;
+		}
+		if (fValid != 0 && fValid != 0xffffffff) {
+			if (fT1 == 0 || fT1 >= fValid)
+				fT1 = fValid / 2;
+			if (fT2 == 0 || fT2 > fValid || fT2 < fT1)
+				fT2 = fValid - fValid / 5;
+		}
+		fHaveOffer = true;
+		fLeaseStart = system_time();
+		if (valid == 0) {
+			_ForgetLease();
+			fHaveOffer = false;
+			syslog(LOG_INFO, "dhcpv6 %s: %s valid lifetime 0\n", Device(),
 				text);
+		} else if (r5_ipv6_has_address(Device(), leased)) {
+			fInstalled = true;
+			syslog(LOG_INFO, "dhcpv6 %s: %s already assigned, T1=%" B_PRIu32
+				" T2=%" B_PRIu32 " valid=%" B_PRIu32 "\n", Device(), text,
+				fT1, fT2, fValid);
 		} else {
-			status_t dad = r5_ipv6_dad(Device(), ifIndex, fMAC, leased);
+			status_t dad = r5_ipv6_dad_until(Device(), ifIndex, fMAC, leased,
+				&fStop);
 			if (dad != B_OK)
 				return dad;
 
 			BNetworkInterface interface(Device());
 			BNetworkAddress address(leased, 0);
-			BNetworkAddress mask(AF_INET6, "ffff:ffff:ffff:ffff::", (uint16)0,
+			BNetworkAddress mask(AF_INET6,
+				"ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", (uint16)0,
 				B_UNCONFIGURED_ADDRESS_FAMILIES);
 			BNetworkInterfaceAddress slot;
 			slot.SetAddress(address);
@@ -360,7 +548,9 @@ DHCPv6Client::_HandleReply(const uint8* packet, ssize_t bytes, uint32 ifIndex)
 					Device(), strerror(status));
 				return status;
 			}
-			syslog(LOG_INFO, "dhcpv6 %s: %s\n", Device(), text);
+			fInstalled = true;
+			syslog(LOG_INFO, "dhcpv6 %s: %s/128 T1=%" B_PRIu32 " T2=%" B_PRIu32
+				" valid=%" B_PRIu32 "\n", Device(), text, fT1, fT2, fValid);
 		}
 	}
 
@@ -379,11 +569,14 @@ DHCPv6Client::_HandleReply(const uint8* packet, ssize_t bytes, uint32 ifIndex)
 status_t
 DHCPv6Client::_Run()
 {
-	for (int32 i = 0; i < 15 && fThread != -1; i++) {
+	for (int32 i = 0; i < 15 && !_Stopped(); i++) {
 		if (_EnsureLinkLocal() == B_OK)
 			break;
-		snooze(200000);
+		for (int32 slice = 0; slice < 2 && !_Stopped(); slice++)
+			snooze(100000);
 	}
+	if (_Stopped())
+		return B_CANCELED;
 	if (_EnsureLinkLocal() != B_OK) {
 		syslog(LOG_ERR, "dhcpv6 %s: waiting for link-local timed out\n",
 			Device());
@@ -396,24 +589,99 @@ DHCPv6Client::_Run()
 		return errno;
 	fSocket = socket;
 
-	bool informationOnly = false;
+	uint8 phase = kSolicit;
+	int32 solicitTries = 0;
+	bool askedForInformation = false;
+	bigtime_t nextSend = 0;
 	status_t status = B_TIMED_OUT;
 
-	for (int32 tries = 0; tries < kMaxTries && fThread != -1; tries++) {
-		uint8 packet[768];
-		ssize_t length = _BuildSolicit(packet, sizeof(packet), informationOnly);
-		if (length < 0)
-			break;
-		if (_Send(socket, ifIndex, packet, (size_t)length) != B_OK)
-			continue;
+	while (!_Stopped()) {
+		bigtime_t now = system_time();
+		if (fInstalled && fValid != 0 && fValid != 0xffffffff) {
+			bigtime_t expireAt = fLeaseStart + (bigtime_t)fValid * 1000000;
+			if (now >= expireAt) {
+				_ForgetLease();
+				fHaveOffer = false;
+				fServerIdLength = 0;
+				phase = kSolicit;
+				nextSend = now;
+				syslog(LOG_INFO, "dhcpv6 %s: lease expired\n", Device());
+			}
+		}
 
+		if (now >= nextSend) {
+			uint8 type = 0;
+			if (fInstalled) {
+				if (fT1 != 0xffffffff) {
+					bigtime_t renewAt = fLeaseStart
+						+ (bigtime_t)fT1 * 1000000;
+					bigtime_t rebindAt = fLeaseStart
+						+ (bigtime_t)fT2 * 1000000;
+					if (now >= rebindAt)
+						type = kRebind;
+					else if (now >= renewAt)
+						type = kRenew;
+				}
+			} else if (solicitTries >= kMaxTries && phase == kSolicit
+				&& !askedForInformation) {
+				type = kInformationRequest;
+				askedForInformation = true;
+			} else
+				type = phase;
+
+			if (type != 0) {
+				fTransaction = (fTransaction + 1) & 0x00ffffff;
+				if (fTransaction == 0)
+					fTransaction = 1;
+				uint8 packet[768];
+				ssize_t length = _BuildSolicit(packet, sizeof(packet), type);
+				if (length > 0)
+					_Send(socket, ifIndex, packet, (size_t)length);
+				if (type == kSolicit)
+					solicitTries++;
+				if (type == kRenew || type == kRebind)
+					nextSend = now + 10000000;
+				else if (type == kInformationRequest)
+					nextSend = now + 60000000;
+				else
+					nextSend = now + 2000000;
+				syslog(LOG_INFO, "dhcpv6 %s: sent type %u\n", Device(), type);
+			} else if (fInstalled && fT1 != 0xffffffff) {
+				nextSend = fLeaseStart + (bigtime_t)fT1 * 1000000;
+			} else
+				nextSend = now + 60000000;
+		}
+
+		bigtime_t waitUs = 1000000;
+		if (nextSend > system_time()) {
+			waitUs = nextSend - system_time();
+			if (waitUs > 1000000)
+				waitUs = 1000000;
+		}
 		fd_set readSet;
 		FD_ZERO(&readSet);
 		FD_SET(socket, &readSet);
+		int maxFd = socket;
+		if (fWakeRead >= 0) {
+			FD_SET(fWakeRead, &readSet);
+			if (fWakeRead > maxFd)
+				maxFd = fWakeRead;
+		}
 		timeval wait;
-		wait.tv_sec = 2;
-		wait.tv_usec = 0;
-		if (select(socket + 1, &readSet, NULL, NULL, &wait) <= 0)
+		wait.tv_sec = waitUs / 1000000;
+		wait.tv_usec = waitUs % 1000000;
+		int ready = select(maxFd + 1, &readSet, NULL, NULL, &wait);
+		if (ready < 0) {
+			if (errno == EINTR)
+				continue;
+			break;
+		}
+		if (fWakeRead >= 0 && FD_ISSET(fWakeRead, &readSet)) {
+			char ignored;
+			while (read(fWakeRead, &ignored, 1) > 0)
+				;
+		}
+		if (ready == 0 || _Stopped() || !FD_ISSET(socket, &readSet))
 			continue;
 
 		uint8 incoming[1280];
@@ -426,50 +694,26 @@ DHCPv6Client::_Run()
 
 		status = _HandleReply(incoming, bytes, ifIndex);
 		if (status == 1) {
-			length = _BuildSolicit(packet, sizeof(packet), false);
-			if (length > 0)
-				_Send(socket, ifIndex, packet, (size_t)length);
-			FD_ZERO(&readSet);
-			FD_SET(socket, &readSet);
-			wait.tv_sec = 2;
-			wait.tv_usec = 0;
-			if (select(socket + 1, &readSet, NULL, NULL, &wait) <= 0)
-				continue;
-			bytes = recvfrom(socket, incoming, sizeof(incoming), 0,
-				reinterpret_cast<sockaddr*>(&from), &fromLen);
-			if (bytes > 0)
-				status = _HandleReply(incoming, bytes, ifIndex);
-		}
-		if (status == B_OK)
-			break;
-	}
-
-	if (status != B_OK && !informationOnly) {
-		informationOnly = true;
-		uint8 packet[768];
-		ssize_t length = _BuildSolicit(packet, sizeof(packet), true);
-		if (length > 0 && _Send(socket, ifIndex, packet, (size_t)length) == B_OK) {
-			fd_set readSet;
-			FD_ZERO(&readSet);
-			FD_SET(socket, &readSet);
-			timeval wait;
-			wait.tv_sec = 2;
-			wait.tv_usec = 0;
-			if (select(socket + 1, &readSet, NULL, NULL, &wait) > 0) {
-				uint8 incoming[1280];
-				sockaddr_in6 from;
-				socklen_t fromLen = sizeof(from);
-				ssize_t bytes = recvfrom(socket, incoming, sizeof(incoming), 0,
-					reinterpret_cast<sockaddr*>(&from), &fromLen);
-				if (bytes > 0)
-					status = _HandleReply(incoming, bytes, ifIndex);
+			phase = kRequest;
+			nextSend = system_time();
+		} else if (status == B_OK && fInstalled) {
+			nextSend = fT1 == 0xffffffff
+				? system_time() + 60000000
+				: fLeaseStart + (bigtime_t)fT1 * 1000000;
+		} else if (status != B_OK && status != 1) {
+			if (fInstalled && (status == B_ERROR || status == B_BAD_VALUE)) {
+				_ForgetLease();
+				fHaveOffer = false;
+				fServerIdLength = 0;
 			}
+			phase = kSolicit;
+			nextSend = system_time() + 2000000;
 		}
 	}
 
 	fSocket = -1;
 	close(socket);
-	if (status != B_OK)
+	if (!fInstalled && status != B_OK)
 		syslog(LOG_INFO, "dhcpv6 %s: no server\n", Device());
-	return status;
+	return _Stopped() ? B_CANCELED : status;
 }

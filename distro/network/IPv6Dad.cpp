@@ -123,8 +123,16 @@ r5_ipv6_has_address(const char* device, const in6_addr& address)
 
 
 status_t
-r5_ipv6_dad(const char* device, uint32 ifIndex, const uint8* /*mac*/,
+r5_ipv6_dad(const char* device, uint32 ifIndex, const uint8* mac,
 	const in6_addr& tentative)
+{
+	return r5_ipv6_dad_until(device, ifIndex, mac, tentative, NULL);
+}
+
+
+status_t
+r5_ipv6_dad_until(const char* device, uint32 ifIndex, const uint8* /*mac*/,
+	const in6_addr& tentative, const volatile int32* stop)
 {
 	int socket = ::socket(AF_INET6, SOCK_RAW, IPPROTO_ICMPV6);
 	if (socket < 0) {
@@ -214,7 +222,14 @@ r5_ipv6_dad(const char* device, uint32 ifIndex, const uint8* /*mac*/,
 	int ioError = 0;
 
 	while (system_time() < deadline) {
-		int ready = wait_readable(socket, deadline - system_time());
+		if (stop != NULL && *stop != 0) {
+			close(socket);
+			return B_CANCELED;
+		}
+		bigtime_t slice = deadline - system_time();
+		if (slice > 200000)
+			slice = 200000;
+		int ready = wait_readable(socket, slice);
 		if (ready == 0)
 			break;
 		if (ready < 0) {

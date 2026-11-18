@@ -10,6 +10,7 @@
 
 #include <arpa/inet.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <net/if.h>
 #include <netinet/icmp6.h>
 #include <netinet/in.h>
@@ -44,11 +45,23 @@ SLAACClient::SLAACClient(BMessenger target, const char* device)
 	AutoconfigClient("slaac", target, device),
 	fThread(-1),
 	fSocket(-1),
+	fWakeRead(-1),
+	fWakeWrite(-1),
+	fStop(0),
 	fHaveMAC(false),
 	fHaveDefaultRoute(false)
 {
 	memset(fMAC, 0, sizeof(fMAC));
 	memset(&fDefaultGateway, 0, sizeof(fDefaultGateway));
+	memset(fPrefixes, 0, sizeof(fPrefixes));
+
+	int pipeFds[2];
+	if (pipe(pipeFds) == 0) {
+		fWakeRead = pipeFds[0];
+		fWakeWrite = pipeFds[1];
+		fcntl(fWakeRead, F_SETFL, O_NONBLOCK);
+		fcntl(fWakeWrite, F_SETFL, O_NONBLOCK);
+	}
 
 	BNetworkAddress link;
 	BNetworkInterface interface(device);
@@ -60,33 +73,40 @@ SLAACClient::SLAACClient(BMessenger target, const char* device)
 }
 
 
-static void
-stop_worker(thread_id thread, int socket)
+bool
+SLAACClient::_Stopped() const
 {
-	if (socket >= 0)
-		shutdown(socket, SHUT_RDWR);
-	if (thread < 0)
-		return;
+	return fStop != 0;
+}
 
-	status_t ignored;
-	wait_for_thread_etc(thread, B_RELATIVE_TIMEOUT, 500000, &ignored);
-	kill_thread(thread);
-	wait_for_thread_etc(thread, B_RELATIVE_TIMEOUT, 250000, &ignored);
+
+void
+SLAACClient::_Wake()
+{
+	if (fWakeWrite < 0)
+		return;
+	char byte = 1;
+	write(fWakeWrite, &byte, 1);
 }
 
 
 SLAACClient::~SLAACClient()
 {
+	fStop = 1;
+	_Wake();
 	thread_id thread = fThread;
-	int socket = fSocket;
-	fThread = -1;
-	fSocket = -1;
 	if (thread != -1) {
 		UnlockLooper();
-		stop_worker(thread, socket);
+		status_t result;
+		wait_for_thread(thread, &result);
 		LockLooper();
-	} else if (socket >= 0)
-		shutdown(socket, SHUT_RDWR);
+	}
+	if (fWakeRead >= 0)
+		close(fWakeRead);
+	if (fWakeWrite >= 0)
+		close(fWakeWrite);
+	fWakeRead = -1;
+	fWakeWrite = -1;
 }
 
 
@@ -132,6 +152,15 @@ SLAACClient::_EnsureLinkLocal(BNetworkInterface& interface)
 	in6_addr existing;
 	if (r5_ipv6_link_local(Device(), existing) == B_OK)
 		return B_OK;
+	if (_Stopped())
+		return B_CANCELED;
+
+	uint32 ifIndex = interface.Index();
+	if (ifIndex == 0)
+		ifIndex = if_nametoindex(Device());
+	status_t dad = r5_ipv6_dad_until(Device(), ifIndex, fMAC, raw, &fStop);
+	if (dad != B_OK)
+		return dad;
 
 	BNetworkAddress local(raw, 0);
 	BNetworkAddress mask(AF_INET6, "ffff:ffff:ffff:ffff::", (uint16)0,
@@ -304,6 +333,199 @@ SLAACClient::_ApplyResolver(BMessage& resolver, int32 nameservers)
 }
 
 
+static void
+prefix_mask(in6_addr& mask, uint8 length)
+{
+	memset(&mask, 0, sizeof(mask));
+	if (length > 128)
+		length = 128;
+	for (uint8 i = 0; i < length / 8; i++)
+		mask.s6_addr[i] = 0xff;
+	if ((length % 8) != 0)
+		mask.s6_addr[length / 8] = (uint8)(0xff << (8 - (length % 8)));
+}
+
+
+static void
+mask_prefix(in6_addr& prefix, uint8 length)
+{
+	if (length > 128)
+		length = 128;
+	uint8 first = length / 8;
+	if ((length % 8) != 0) {
+		prefix.s6_addr[first] &= (uint8)(0xff << (8 - (length % 8)));
+		first++;
+	}
+	for (uint8 i = first; i < 16; i++)
+		prefix.s6_addr[i] = 0;
+}
+
+
+void
+SLAACClient::_ExpirePrefixes()
+{
+	bigtime_t now = system_time();
+	for (int32 i = 0; i < 8; i++) {
+		if (!fPrefixes[i].inUse || fPrefixes[i].validUntil == 0)
+			continue;
+		if (now < fPrefixes[i].validUntil)
+			continue;
+		syslog(LOG_INFO, "slaac %s: prefix %s/%u expired\n", Device(),
+			_ToString(fPrefixes[i].prefix).String(), fPrefixes[i].length);
+		_WithdrawPrefix(fPrefixes[i]);
+	}
+}
+
+
+void
+SLAACClient::_WithdrawPrefix(PrefixRecord& record)
+{
+	BNetworkInterface interface(Device());
+	if (record.haveAddress) {
+		BNetworkAddress address(record.address, 0);
+		interface.RemoveAddress(address);
+		record.haveAddress = false;
+	}
+	if (record.onLink) {
+		in6_addr rawMask;
+		prefix_mask(rawMask, record.length);
+		sockaddr_in6 destination;
+		sockaddr_in6 mask;
+		memset(&destination, 0, sizeof(destination));
+		memset(&mask, 0, sizeof(mask));
+		destination.sin6_len = sizeof(destination);
+		destination.sin6_family = AF_INET6;
+		destination.sin6_addr = record.prefix;
+		mask.sin6_len = sizeof(mask);
+		mask.sin6_family = AF_INET6;
+		mask.sin6_addr = rawMask;
+		BNetworkRoute route;
+		route.SetDestination(reinterpret_cast<const sockaddr&>(destination));
+		route.SetMask(reinterpret_cast<const sockaddr&>(mask));
+		route.SetFlags(RTF_STATIC);
+		interface.RemoveRoute(AF_INET6, route);
+		record.onLink = false;
+	}
+	record.inUse = false;
+}
+
+
+status_t
+SLAACClient::_ApplyPrefix(const in6_addr& rawPrefix, uint8 length, uint8 flags,
+	uint32 valid, uint32 ifIndex)
+{
+	bool autonomous = (flags & ND_OPT_PI_FLAG_AUTO) != 0 && length == 64
+		&& !IN6_IS_ADDR_LINKLOCAL(&rawPrefix);
+	bool onLink = (flags & ND_OPT_PI_FLAG_ONLINK) != 0 && length > 0
+		&& length <= 128;
+	if (!autonomous && !onLink)
+		return B_OK;
+
+	in6_addr prefix = rawPrefix;
+	mask_prefix(prefix, length);
+
+	PrefixRecord* slot = NULL;
+	for (int32 i = 0; i < 8; i++) {
+		if (fPrefixes[i].inUse
+			&& fPrefixes[i].length == length
+			&& memcmp(&fPrefixes[i].prefix, &prefix, sizeof(prefix)) == 0) {
+			slot = &fPrefixes[i];
+			break;
+		}
+	}
+	if (slot == NULL) {
+		for (int32 i = 0; i < 8; i++) {
+			if (!fPrefixes[i].inUse) {
+				slot = &fPrefixes[i];
+				memset(slot, 0, sizeof(*slot));
+				slot->prefix = prefix;
+				slot->length = length;
+				slot->inUse = true;
+				break;
+			}
+		}
+	}
+	if (slot == NULL) {
+		syslog(LOG_ERR, "slaac %s: prefix table full\n", Device());
+		return B_NO_MEMORY;
+	}
+
+	if (valid == 0) {
+		syslog(LOG_INFO, "slaac %s: prefix %s/%u withdrawn\n", Device(),
+			_ToString(prefix).String(), length);
+		_WithdrawPrefix(*slot);
+		return B_OK;
+	}
+
+	if (valid == 0xffffffff)
+		slot->validUntil = 0;
+	else
+		slot->validUntil = system_time() + (bigtime_t)valid * 1000000;
+
+	if (onLink && !slot->onLink) {
+		in6_addr rawMask;
+		prefix_mask(rawMask, length);
+		sockaddr_in6 destinationAddr;
+		sockaddr_in6 maskAddr;
+		memset(&destinationAddr, 0, sizeof(destinationAddr));
+		memset(&maskAddr, 0, sizeof(maskAddr));
+		destinationAddr.sin6_len = sizeof(destinationAddr);
+		destinationAddr.sin6_family = AF_INET6;
+		destinationAddr.sin6_addr = prefix;
+		maskAddr.sin6_len = sizeof(maskAddr);
+		maskAddr.sin6_family = AF_INET6;
+		maskAddr.sin6_addr = rawMask;
+		BNetworkRoute route;
+		route.SetDestination(
+			reinterpret_cast<const sockaddr&>(destinationAddr));
+		route.SetMask(reinterpret_cast<const sockaddr&>(maskAddr));
+		route.SetFlags(RTF_STATIC);
+		BNetworkInterface interface(Device());
+		status_t status = interface.AddRoute(route);
+		if (status == B_OK || status == B_FILE_EXISTS) {
+			slot->onLink = true;
+			syslog(LOG_INFO, "slaac %s: on-link %s/%u\n", Device(),
+				_ToString(prefix).String(), length);
+		} else {
+			syslog(LOG_ERR, "slaac %s: on-link %s/%u failed: %s\n", Device(),
+				_ToString(prefix).String(), length, strerror(status));
+		}
+	}
+
+	if (!autonomous || _Stopped())
+		return _Stopped() ? B_CANCELED : B_OK;
+
+	in6_addr global;
+	_BuildSlaacAddress(prefix, global);
+	slot->address = global;
+	if (slot->haveAddress || r5_ipv6_has_address(Device(), global)) {
+		slot->haveAddress = true;
+		return B_OK;
+	}
+
+	status_t dad = r5_ipv6_dad_until(Device(), ifIndex, fMAC, global, &fStop);
+	if (dad != B_OK)
+		return dad;
+
+	BNetworkInterface interface(Device());
+	BNetworkAddress address(global, 0);
+	BNetworkAddress mask(AF_INET6, "ffff:ffff:ffff:ffff::", (uint16)0,
+		B_UNCONFIGURED_ADDRESS_FAMILIES);
+	BNetworkInterfaceAddress slotAddress;
+	slotAddress.SetAddress(address);
+	slotAddress.SetMask(mask);
+	status_t status = interface.AddAddress(slotAddress);
+	if (status != B_OK && status != B_FILE_EXISTS) {
+		syslog(LOG_ERR, "slaac %s: add %s failed: %s\n", Device(),
+			_ToString(global).String(), strerror(status));
+		return status;
+	}
+	slot->haveAddress = true;
+	syslog(LOG_INFO, "slaac %s: %s\n", Device(), _ToString(global).String());
+	return B_OK;
+}
+
+
 status_t
 SLAACClient::_ApplyAdvert(const uint8* buffer, ssize_t bytes,
 	const sockaddr_in6& from, uint32 ifIndex)
@@ -333,8 +555,8 @@ SLAACClient::_ApplyAdvert(const uint8* buffer, ssize_t bytes,
 	const uint8* option = data + sizeof(struct nd_router_advert);
 	const uint8* end = data + length;
 
-	in6_addr prefix;
 	bool havePrefix = false;
+	bool addedAddress = false;
 	BMessage resolver(kMsgConfigureResolver);
 	int32 nameservers = 0;
 	uint8 raFlags = ra->nd_ra_flags_reserved;
@@ -361,12 +583,20 @@ SLAACClient::_ApplyAdvert(const uint8* buffer, ssize_t bytes,
 				prefixText, info->nd_opt_pi_prefix_len,
 				(info->nd_opt_pi_flags_reserved & ND_OPT_PI_FLAG_AUTO) != 0,
 				(info->nd_opt_pi_flags_reserved & ND_OPT_PI_FLAG_ONLINK) != 0);
-			if ((info->nd_opt_pi_flags_reserved & ND_OPT_PI_FLAG_AUTO) != 0
+			uint32 valid = ntohl(info->nd_opt_pi_valid_time);
+			bool autonomous
+				= (info->nd_opt_pi_flags_reserved & ND_OPT_PI_FLAG_AUTO) != 0
 				&& info->nd_opt_pi_prefix_len == 64
-				&& !IN6_IS_ADDR_LINKLOCAL(&info->nd_opt_pi_prefix)) {
-				prefix = info->nd_opt_pi_prefix;
+				&& !IN6_IS_ADDR_LINKLOCAL(&info->nd_opt_pi_prefix);
+			if (autonomous)
 				havePrefix = true;
-			}
+			status_t prefixStatus = _ApplyPrefix(info->nd_opt_pi_prefix,
+				info->nd_opt_pi_prefix_len, info->nd_opt_pi_flags_reserved,
+				valid, ifIndex);
+			if (prefixStatus == B_CANCELED)
+				return prefixStatus;
+			if (autonomous && prefixStatus == B_OK && valid > 0)
+				addedAddress = true;
 		} else if (type == kRdnsOption && bytesLen >= 24) {
 			const uint8* addr = option + 8;
 			const uint8* addrEnd = option + bytesLen;
@@ -387,40 +617,7 @@ SLAACClient::_ApplyAdvert(const uint8* buffer, ssize_t bytes,
 
 	_ApplyResolver(resolver, nameservers);
 
-	bool addedAddress = false;
-	if (havePrefix) {
-		in6_addr global;
-		_BuildSlaacAddress(prefix, global);
-		BString globalText = _ToString(global);
-		if (globalText.Length() == 0)
-			return B_ERROR;
-
-		if (r5_ipv6_has_address(Device(), global)) {
-			syslog(LOG_INFO, "slaac %s: %s already assigned\n", Device(),
-				globalText.String());
-		} else {
-			BNetworkInterface interface(Device());
-			BNetworkAddress address(global, 0);
-			status_t dad = r5_ipv6_dad(Device(), ifIndex, fMAC, global);
-			if (dad != B_OK)
-				return dad;
-
-			BNetworkAddress mask(AF_INET6, "ffff:ffff:ffff:ffff::",
-				(uint16)0, B_UNCONFIGURED_ADDRESS_FAMILIES);
-			BNetworkInterfaceAddress slot;
-			slot.SetAddress(address);
-			slot.SetMask(mask);
-			status_t status = interface.AddAddress(slot);
-			if (status != B_OK) {
-				syslog(LOG_ERR, "slaac %s: add %s failed: %s\n", Device(),
-					globalText.String(), strerror(status));
-				return status;
-			}
-			addedAddress = true;
-			syslog(LOG_INFO, "slaac %s: %s via %s\n", Device(),
-				globalText.String(), _ToString(from.sin6_addr).String());
-		}
-	} else {
+	if (!havePrefix) {
 		syslog(LOG_INFO, "slaac %s: RA from %s M=%d O=%d without SLAAC /64 "
 			"prefix (DHCPv6 %s)\n", Device(),
 			_ToString(from.sin6_addr).String(), managed, other,
@@ -462,11 +659,12 @@ SLAACClient::_Run()
 {
 	BNetworkInterface interface(Device());
 	status_t status = B_ERROR;
-	for (int32 i = 0; i < 10 && fThread != -1; i++) {
+	for (int32 i = 0; i < 10 && !_Stopped(); i++) {
 		status = _EnsureLinkLocal(interface);
-		if (status == B_OK)
+		if (status == B_OK || status == B_CANCELED)
 			break;
-		snooze(500000);
+		for (int32 slice = 0; slice < 5 && !_Stopped(); slice++)
+			snooze(100000);
 	}
 	if (status != B_OK) {
 		syslog(LOG_ERR, "slaac %s: no link-local: %s\n", Device(),
@@ -494,7 +692,8 @@ SLAACClient::_Run()
 	bigtime_t nextSolicit = 0;
 	bool configured = false;
 
-	while (fThread != -1) {
+	while (!_Stopped()) {
+		_ExpirePrefixes();
 		bigtime_t now = system_time();
 		if (now >= nextSolicit && (!configured || solicits < kMaxSolicits)) {
 			_SendSolicit(socket, ifIndex);
@@ -508,20 +707,33 @@ SLAACClient::_Run()
 		fd_set readSet;
 		FD_ZERO(&readSet);
 		FD_SET(socket, &readSet);
+		int maxFd = socket;
+		if (fWakeRead >= 0) {
+			FD_SET(fWakeRead, &readSet);
+			if (fWakeRead > maxFd)
+				maxFd = fWakeRead;
+		}
 		timeval wait;
 		wait.tv_sec = 1;
 		wait.tv_usec = 0;
-		int ready = select(socket + 1, &readSet, NULL, NULL, &wait);
+		int ready = select(maxFd + 1, &readSet, NULL, NULL, &wait);
 		if (ready < 0) {
 			if (errno == EINTR)
 				continue;
-			if (errno == EBADF || fThread == -1)
+			if (errno == EBADF || _Stopped())
 				break;
 			syslog(LOG_ERR, "slaac %s: select: %s\n", Device(),
 				strerror(errno));
 			break;
 		}
-		if (ready == 0)
+		if (fWakeRead >= 0 && FD_ISSET(fWakeRead, &readSet)) {
+			char ignored;
+			while (read(fWakeRead, &ignored, 1) > 0)
+				;
+		}
+		if (ready == 0 || _Stopped()
+			|| (fWakeRead >= 0 && FD_ISSET(fWakeRead, &readSet)
+				&& !FD_ISSET(socket, &readSet)))
 			continue;
 
 		uint8 packet[1280];

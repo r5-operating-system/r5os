@@ -265,28 +265,23 @@ ipv6_first_mask_bit(const sockaddr *_mask)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-	bool allZero = true;
-	for (uint8 i = 0; i < sizeof(in6_addr); ++i) {
-		if (pmask[i] != 0) {
-			allZero = false;
-			break;
-		}
-	}
-	if (allZero)
-		return 128;
-
-// SPDX-SnippetEnd
-	for (uint8 i = 0; i < sizeof(in6_addr); ++i) {
-		if (pmask[i] == 0xff)
+	// Same meaning as ipv4_first_mask_bit: the index of the least significant
+	// set bit. 128 means the mask is all zeros, so ::/0 sorts after every
+	// more specific prefix. Counting the first clear bit from the MSB made
+	// a /128 and ::/0 share 128, and an all-zero override was required only
+	// because that count returns 0 for ::/0.
+	for (int32 byte = 15; byte >= 0; byte--) {
+		if (pmask[byte] == 0)
 			continue;
 
-		for (uint8 bit = 0; bit < 8; bit++) {
-			if ((pmask[i] & (1 << (7 - bit))) == 0)
-				return i * 8 + bit;
+		for (int32 bit = 0; bit < 8; bit++) {
+			if ((pmask[byte] & (1 << bit)) != 0)
+				return (15 - byte) * 8 + bit;
 		}
 	}
 
 	return 128;
+// SPDX-SnippetEnd
 }
 
 

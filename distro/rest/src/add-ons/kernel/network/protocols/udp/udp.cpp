@@ -39,6 +39,9 @@
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 #include <netinet6/in6.h>
+
+static bool r5_udp_unspecified(const in6_addr* address);
+static bool r5_udp_loopback(const in6_addr* address);
 // SPDX-SnippetEnd
 #include <new>
 #include <stdlib.h>
@@ -397,13 +400,22 @@ UdpDomainSupport::ConnectEndpoint(UdpEndpoint *endpoint,
 		if (routeToDestination) {
 			// stay bound to current local port, if any.
 			uint16 port = endpoint->LocalAddress().Port();
-			status = endpoint->LocalAddress().SetTo(
-				routeToDestination->interface_address->local);
-			endpoint->LocalAddress().SetPort(port);
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+			const sockaddr* previous = *endpoint->LocalAddress();
+			bool unspecified = previous == NULL
+				|| AddressModule()->is_empty_address(previous, false);
+			if (unspecified && routeToDestination->interface_address != NULL
+				&& routeToDestination->interface_address->local != NULL) {
+				status = endpoint->LocalAddress().SetTo(
+					routeToDestination->interface_address->local);
+				endpoint->LocalAddress().SetPort(port);
+			} else
+				status = B_OK;
+
 			if (status == B_OK
+				&& unspecified
 				&& gDatalinkModule->is_local_address(fDomain, address,
 					NULL, NULL)) {
 				endpoint->LocalAddress().SetTo(address);
@@ -412,9 +424,14 @@ UdpDomainSupport::ConnectEndpoint(UdpEndpoint *endpoint,
 				const sockaddr_in6* dest6 = (const sockaddr_in6*)address;
 				const sockaddr_in6* src6
 					= (const sockaddr_in6*)*endpoint->LocalAddress();
-				if (src6 != NULL && IN6_IS_ADDR_LINKLOCAL(&src6->sin6_addr)
+				bool sourceNeedsUpgrade = src6 == NULL
+					|| IN6_IS_ADDR_LINKLOCAL(&src6->sin6_addr)
+					|| r5_udp_unspecified(&src6->sin6_addr)
+					|| r5_udp_loopback(&src6->sin6_addr);
+				if (sourceNeedsUpgrade
 					&& !IN6_IS_ADDR_LINKLOCAL(&dest6->sin6_addr)
 					&& !IN6_IS_ADDR_MC_LINKLOCAL(&dest6->sin6_addr)
+					&& !r5_udp_loopback(&dest6->sin6_addr)
 					&& routeToDestination->interface_address != NULL) {
 					net_interface* interface
 						= routeToDestination->interface_address->interface;
@@ -428,7 +445,8 @@ UdpDomainSupport::ConnectEndpoint(UdpEndpoint *endpoint,
 							= (const sockaddr_in6*)cursor->local;
 						if (IN6_IS_ADDR_LINKLOCAL(&local->sin6_addr)
 							|| IN6_IS_ADDR_MULTICAST(&local->sin6_addr)
-							|| local->sin6_addr.s6_addr[0] == 0)
+							|| r5_udp_unspecified(&local->sin6_addr)
+							|| r5_udp_loopback(&local->sin6_addr))
 							continue;
 						endpoint->LocalAddress().SetTo(cursor->local);
 						endpoint->LocalAddress().SetPort(port);
@@ -1097,6 +1115,84 @@ UdpEndpoint::Free()
 // #pragma mark - outbound
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+static bool
+r5_udp_unspecified(const in6_addr* address)
+{
+	if (address == NULL)
+		return true;
+	for (int i = 0; i < 16; i++) {
+		if (address->s6_addr[i] != 0)
+			return false;
+	}
+	return true;
+}
+
+
+static bool
+r5_udp_loopback(const in6_addr* address)
+{
+	if (address == NULL)
+		return false;
+	for (int i = 0; i < 15; i++) {
+		if (address->s6_addr[i] != 0)
+			return false;
+	}
+	return address->s6_addr[15] == 1;
+}
+
+
+static void
+r5_udp_choose_ipv6_source(net_domain* domain, net_buffer* buffer,
+	net_route* route)
+{
+	if (domain == NULL || buffer->source == NULL || buffer->destination == NULL
+		|| buffer->source->sa_family != AF_INET6
+		|| buffer->destination->sa_family != AF_INET6)
+		return;
+
+	sockaddr_in6* source = (sockaddr_in6*)buffer->source;
+	const sockaddr_in6* destination = (const sockaddr_in6*)buffer->destination;
+	bool localDestination = gDatalinkModule->is_local_address(domain,
+		buffer->destination, NULL, NULL);
+	if (localDestination) {
+		if (r5_udp_unspecified(&source->sin6_addr))
+			source->sin6_addr = destination->sin6_addr;
+		return;
+	}
+	if (IN6_IS_ADDR_LINKLOCAL(&destination->sin6_addr)
+		|| IN6_IS_ADDR_MC_LINKLOCAL(&destination->sin6_addr)
+		|| r5_udp_loopback(&destination->sin6_addr))
+		return;
+	if (!IN6_IS_ADDR_LINKLOCAL(&source->sin6_addr)
+		&& !r5_udp_unspecified(&source->sin6_addr)
+		&& !r5_udp_loopback(&source->sin6_addr))
+		return;
+	if (route == NULL || route->interface_address == NULL
+		|| route->interface_address->interface == NULL)
+		return;
+
+	net_interface_address* cursor = NULL;
+	while (gDatalinkModule->get_next_interface_address(
+			route->interface_address->interface, &cursor)) {
+		if (cursor->local == NULL || cursor->local->sa_family != AF_INET6)
+			continue;
+		const sockaddr_in6* local = (const sockaddr_in6*)cursor->local;
+		if (IN6_IS_ADDR_LINKLOCAL(&local->sin6_addr)
+			|| IN6_IS_ADDR_MULTICAST(&local->sin6_addr)
+			|| r5_udp_unspecified(&local->sin6_addr)
+			|| r5_udp_loopback(&local->sin6_addr))
+			continue;
+		source->sin6_addr = local->sin6_addr;
+		gDatalinkModule->put_interface_address(cursor);
+		return;
+	}
+}
+// SPDX-SnippetEnd
+
+
 status_t
 UdpEndpoint::SendRoutedData(net_buffer *buffer, net_route *route)
 {
@@ -1113,6 +1209,12 @@ UdpEndpoint::SendRoutedData(net_buffer *buffer, net_route *route)
 		return status;
 
 	buffer->protocol = IPPROTO_UDP;
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	r5_udp_choose_ipv6_source(Domain(), buffer, route);
+// SPDX-SnippetEnd
 
 	// add and fill UDP-specific header:
 	NetBufferPrepend<udp_header> header(buffer);
