@@ -374,6 +374,17 @@ cpu_wait(int32* variable, int32 test)
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-License-Identifier: MIT
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+extern "C" bool
+r5_cpu_idle_has_module(void)
+{
+	return sCPUIdleModule != NULL;
+}
+// SPDX-SnippetEnd
+
+
 //	#pragma mark -
 
 

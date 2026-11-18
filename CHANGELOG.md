@@ -1,5 +1,24 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - Kernel (AMD64): /dev/misc/r5_pstate kernel-info ioctl voor CPU Info (stap 3)
+
+What changed:
+- `distro/kernel/headers/private/system/r5_pstate_info.h` + `distro/kernel/x86/r5_pstate.cpp`: nieuw read-only ioctl `R5_PSTATE_GET_KERNEL_INFO` (`struct r5_pstate_kernel_info`) op `/dev/misc/r5_pstate` met SMEP, SMAP, NX, PAT, x2APIC, INVPCID, CLFLUSHOPT, PCID, 2 MB pages (`amd64_large_pages`), CPPC/HWP, XSAVE-variant, TSC-deadline vs APIC-timer, cpuidle/MWAIT-idle, release vs debug kernel en `XCR0` (alleen kernelvariabelen, CR4 en XCR0 lezen; geen MSR-writes; `IS_USER_ADDRESS()` + `user_memcpy()`). Bestaande `read()`-rapportage blijft ongewijzigd.
+- `distro/kernel/src/system/kernel/arch/x86/timers/x86_apic.cpp` + `cpu.cpp`: `r5_apic_timer_uses_tsc_deadline()` en `r5_cpu_idle_has_module()` toegevoegd.
+- `distro/apps/cpuinfo/CpuReport.cpp`: leest `R5_PSTATE_GET_KERNEL_INFO` voor de kernelregel onder `What R5 uses`, met fallback `Not reported`.
+- `docs/KERNEL.md`: `R5_PSTATE_GET_KERNEL_INFO` gedocumenteerd.
+
+Tested:
+- `scripts/jam-r5-raw.sh` onder `build-lock.sh`: `jam_exit=0`, `mesa_exit=0`.
+- QEMU `-cpu Skylake-Client,+smap,+smep,+tsc-deadline -smp 2`: `enable SMEP`, `enable SMAP`, `R5 net_server: NetServer from distro`, `/boot/system/apps/CPUInfo --cli` (`exit=0`) toont `x86-64-v3`, `User-space paths: memcpy: ERMS, strings: AVX2, libm: FMA`, `XCR0: 0x7 (x87, SSE, AVX)` en `Kernel: release, SMEP, SMAP, NX, PAT, x2APIC, INVPCID, 2MB pages: off, XSAVEC, TSC-deadline, MWAIT idle: off, XCR0 0x7`.
+
+## 2026-11-19 - Apps: CPU Info en 'CPU details…' in Settings (stap 2)
+
+What changed:
+- `distro/apps/cpuinfo/` (`Jamfile`, `CPUInfo.rdef`, `CpuReport.h/.cpp`, `CPUInfoWindow.h/.cpp`, `CPUInfoApp.cpp`, MIT): nieuw programma `CPU Info` met Mockup 1-layout (`BPageHeader`, twee `BCard`-blokken voor `CPU hardware` en `What R5 uses`, `set_window_glass(this, true)`, `Copy report` naar `be_clipboard` en `--cli` op stdout).
+- `distro/settings/InformationModule.cpp`: knop `CPU details…` toegevoegd die `application/x-vnd.R5-CPUInfo` start; rest van Settings ongewijzigd.
+- `scripts/apply-cpuinfo.py` + `scripts/apply-overlay.sh`: kopieert `distro/apps/cpuinfo`, voegt `HaikuSubInclude cpuinfo ;` toe aan `src/apps/Jamfile` en `CPUInfo` aan `SYSTEM_APPS` in `regular`.
+
 ## 2026-11-19 - AMD64 user space: x86 code stays off the other architectures
 
 The TSC spin in the kernel mutex and the pthread mutex is compiled only for AMD64. ARM64 and RISC-V keep Haiku's own lock loop: the counted spin in the kernel mutex, and one try then the syscall in the pthread mutex. `ConvertBits` includes `<r5_x86_cpu.h>` through the interface Jamfile's private system headers, and the row loops with `immintrin.h` and the `target` attributes are AMD64 only. The other architectures take the generic per-pixel path. The present copy and the window-buffer blend use AVX2 only on AMD64; elsewhere they are `memcpy` and the C loop. The 16-byte share token in `GPUCopy` is `memcpy` again.

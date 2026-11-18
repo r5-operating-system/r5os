@@ -23,8 +23,13 @@
 
 #include <fs/devfs.h>
 
+#include <arch/x86/apic.h>
 #include <arch/x86/arch_cpu.h>
 #include <arch/x86/timer.h>
+#include <r5_pstate_info.h>
+#ifdef __x86_64__
+#include "paging/64bit/X86PagingMethod64Bit.h"
+#endif
 
 
 static const uint32 kAmdPStateLimit = 0xc0010061;
@@ -298,14 +303,79 @@ r5_pstate_free(void* _cookie)
 }
 
 
+extern bool gHasXsave;
+extern bool gHasXsavec;
+extern "C" bool r5_apic_timer_uses_tsc_deadline(void);
+extern "C" bool r5_cpu_idle_has_module(void);
+
+
+static inline uint64
+read_xcr0()
+{
+	uint32 lo, hi;
+	__asm__ __volatile__("xgetbv" : "=a"(lo), "=d"(hi) : "c"(0));
+	return (uint64(hi) << 32) | lo;
+}
+
+
 static status_t
 r5_pstate_control(void* cookie, uint32 op, void* data, size_t length)
 {
 	(void)cookie;
-	(void)op;
-	(void)data;
-	(void)length;
-	return B_BAD_VALUE;
+	if (op != R5_PSTATE_GET_KERNEL_INFO)
+		return B_BAD_VALUE;
+	if (data == NULL || length < sizeof(r5_pstate_kernel_info)
+		|| !IS_USER_ADDRESS(data)) {
+		return B_BAD_ADDRESS;
+	}
+
+	r5_pstate_kernel_info info = {};
+	info.size = sizeof(info);
+
+	uint64 cr4 = x86_read_cr4();
+	if ((cr4 & IA32_CR4_SMEP) != 0)
+		info.flags |= R5_KERNEL_F_SMEP;
+	if ((cr4 & IA32_CR4_SMAP) != 0)
+		info.flags |= R5_KERNEL_F_SMAP;
+	if ((cr4 & (1ULL << 17)) != 0)
+		info.flags |= R5_KERNEL_F_PCID;
+	if (x86_check_feature(IA32_FEATURE_AMD_EXT_NX, FEATURE_EXT_AMD))
+		info.flags |= R5_KERNEL_F_NX;
+	if (x86_check_feature(IA32_FEATURE_PAT, FEATURE_COMMON))
+		info.flags |= R5_KERNEL_F_PAT;
+	if (x2apic_available())
+		info.flags |= R5_KERNEL_F_X2APIC;
+	if (x86_check_feature(IA32_FEATURE_INVPCID, FEATURE_7_EBX))
+		info.flags |= R5_KERNEL_F_INVPCID;
+	if (x86_check_feature(IA32_FEATURE_CLFLUSHOPT, FEATURE_7_EBX))
+		info.flags |= R5_KERNEL_F_CLFLUSHOPT;
+#ifdef __x86_64__
+	if (X86PagingMethod64Bit::LargePagesEnabled())
+		info.flags |= R5_KERNEL_F_LARGE_PAGES;
+#endif
+	if (x86_check_feature(IA32_FEATURE_CPPC, FEATURE_EXT_8_EBX))
+		info.flags |= R5_KERNEL_F_CPPC;
+	if (x86_check_feature(IA32_FEATURE_HWP, FEATURE_6_EAX))
+		info.flags |= R5_KERNEL_F_HWP;
+	if (r5_apic_timer_uses_tsc_deadline())
+		info.flags |= R5_KERNEL_F_TSC_DEADLINE;
+	if (r5_cpu_idle_has_module())
+		info.flags |= R5_KERNEL_F_MWAIT_IDLE;
+#if KDEBUG_LEVEL > 0
+	info.flags |= R5_KERNEL_F_DEBUG;
+#endif
+
+	if (gHasXsavec)
+		info.xsave_variant = R5_XSAVE_XSAVEC;
+	else if (gHasXsave)
+		info.xsave_variant = R5_XSAVE_XSAVE;
+	else
+		info.xsave_variant = R5_XSAVE_FXSAVE;
+
+	if ((cr4 & IA32_CR4_OSXSAVE) != 0)
+		info.xcr0 = read_xcr0();
+
+	return user_memcpy(data, &info, sizeof(info));
 }
 
 

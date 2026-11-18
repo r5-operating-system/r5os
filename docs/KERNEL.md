@@ -241,4 +241,10 @@ Write-combined graphics buffers stay off unless the radeon_hd setting `gfx9_wc_g
 
 For QEMU and test runs that need kernel assertions and lock/heap debugging, the `@r5-debug` profile in `distro/UserBuildConfig` (`scripts/build-locked.sh --debug`, or `R5_KERNEL_DEBUG=1 scripts/build-locked.sh`) builds `r5-os.image` with `KDEBUG_LEVEL 2`.
 
+## `/dev/misc/r5_pstate` kernel info (`R5_PSTATE_GET_KERNEL_INFO`)
+
+`distro/kernel/x86/r5_pstate.cpp` keeps its existing `read()` text report unchanged and adds one read-only `ioctl` request (`R5_PSTATE_GET_KERNEL_INFO` in `headers/private/system/r5_pstate_info.h`, `struct r5_pstate_kernel_info`). It reads kernel variables, `CR4`, and `XCR0` without writing any MSR, checks `IS_USER_ADDRESS(data)`, and copies out via `user_memcpy()`.
+
+It reports whether the kernel is `release` (`KDEBUG_LEVEL == 0`) or `debug`, and whether SMEP, SMAP, NX, PAT, x2APIC, INVPCID, CLFLUSHOPT, PCID, 2 MB pages (`amd64_large_pages`), CPPC, HWP, TSC-deadline vs APIC timer, and a `cpuidle` module (for MWAIT idle) are active, together with the active XSAVE variant (`FXSAVE`, `XSAVE`, or `XSAVEC`) and `XCR0`. `CPUInfo` (`distro/apps/cpuinfo`) reads this request for the "What R5 uses" kernel line and falls back to `"Not reported"` when the request or device is absent.
+
 
