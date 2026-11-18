@@ -113,13 +113,14 @@ If a caller partially unmaps (`Unmap`, `UnmapPage`, `UnmapPages`) or partially c
      - When a 2 MB PDE is unmapped as a whole (the common case in `UnmapArea()` / `delete_area()`), its unused standby 4 KB page-table page is freed right alongside the PDE clear (`vm_page_free_etc()`).
      - When a 2 MB PDE is split into 512 PTEs, the standby 4 KB page becomes the live page table (`fMapCount` delta: `+1` table page if not already counted, and `+512 - 1` or consistent `fMapCount` accounting; see Section 4).
 
-### 3.2 Break-Before-Make Sequence (Avoiding Multi-Size TLB Machine Check / Undefined Behavior)
+### 3.2 Gapless PDE Split Sequence (No Break-Before-Make Window)
 
-Both AMD APM Vol. 2 (Section 5.5.4, *TLB Management*) and Intel SDM Vol. 3A (Section 4.10.4.2) warn that having both a 2 MB TLB entry and 4 KB TLB entries translating the same virtual address range simultaneously can result in undefined processor behavior or a machine check exception (`#MC`).
+Per Intel SDM Vol. 3A Section 4.10.4.2 (*Recommended Invalidation*):
+> *"Software should not write to a paging-structure entry in a way that would change, for any linear address, both the page size and either the page frame, access rights, or other attributes."*
 
-Therefore, `_SplitLargePage(uint64* pde, addr_t pdeVirtualBase)` **must** follow strict **break-before-make** under `fLock` + `ThreadCPUPinner`:
+Clearing the PDE (`P = 0`) before installing the 4 KB page table (break-before-make) would open a window in which another CPU or an interrupt handler accessing live kernel memory (e.g. GPU rings or VRAM) faults on a kernel address and panics. Because the split itself keeps the **exact same physical frames, access rights, and memory type** for all 512 4 KB pages, `_SplitLargePage(uint64* pde, addr_t pdeVirtualBase, const char* reason)` switches the PDE without an unmapped gap under `fLock` + `ThreadCPUPinner`:
 
-1. **Populate the detached 4 KB page table in memory first** (before touching `*pde`):
+1. **Populate the standby 4 KB page table in memory first** (before touching `*pde`):
    - Read `uint64 oldPDE = *pde;` (assert `(oldPDE & (X86_64_PDE_PRESENT | X86_64_PDE_LARGE_PAGE)) == (X86_64_PDE_PRESENT | X86_64_PDE_LARGE_PAGE)`).
    - Extract `phys_addr_t basePA = oldPDE & X86_64_PDE_LARGE_ADDRESS_MASK;`.
    - Translate PDE flags to PTE flags for all 512 entries `i = 0..511`:
@@ -127,19 +128,17 @@ Therefore, `_SplitLargePage(uint64* pde, addr_t pdeVirtualBase)` **must** follow
      - Translate **bit 12 (`X86_64_PDE_PAT`) → bit 7 (`X86_64_PTE_PAT`)**!
      - Set PTE address to `basePA + i * B_PAGE_SIZE`.
    - Write all 512 entries into `virtualPageTable` (mapped via `fPageMapper->GetPageTableAt(physicalPageTable)`), followed by a store fence (`memory_write_barrier()`).
-2. **Break (clear the 2 MB PDE)**:
-   - Atomically clear `*pde` to `0` via `X86PagingMethod64Bit::ClearTableEntry(pde)` (`X86PagingMethod64Bit.h:150-154`).
-3. **Synchronous cross-CPU TLB shootdown**:
-   - Invalidate `pdeVirtualBase` on all active CPUs **before** installing the new PDE:
-     - If `fIsKernelMap`: `smp_broadcast_ici(SMP_MSG_GLOBAL_INVALIDATE_PAGES, 0, 0, 0, NULL, SMP_MSG_FLAG_SYNC)` (or `SMP_MSG_INVALIDATE_PAGE_LIST` with `pdeVirtualBase` if `invlpg` on a 2 MB page flushes the 2 MB TLB entry on all x86_64 CPUs; note AMD APM Vol. 2 states `invlpg` invalidates the TLB entry covering the target address regardless of whether it is 4 KB or 2 MB, even if `G=1`!). Using `InvalidateTLBList` / `SMP_MSG_INVALIDATE_PAGE_LIST` with `pdeVirtualBase` + local `invalidate_TLB(pdeVirtualBase)` shoots down the 2 MB global/non-global TLB entry on every CPU synchronously.
-4. **Make (install the non-PS PDE pointing to the 4 KB page table)**:
-   - Write the new directory entry pointing to `physicalPageTable`:
+2. **Atomically switch the PDE to the 4 KB page table**:
+   - Write the new directory entry pointing to `physicalPageTable` in one atomic store (`SetTableEntry`), changing only the page size while keeping every linear address's frame and attributes identical:
      ```cpp
      X86PagingMethod64Bit::SetTableEntry(pde,
          (physicalPageTable & X86_64_PDE_ADDRESS_MASK)
          | X86_64_PDE_PRESENT | X86_64_PDE_WRITABLE | X86_64_PDE_USER);
      ```
-5. Apply the caller's partial `Unmap` or `Protect` operation to the now-standard 4 KB PTEs in `virtualPageTable`.
+3. **Synchronous cross-CPU TLB shootdown**:
+   - Invalidate the 2 MB TLB entry on all active CPUs synchronously (`SMP_MSG_GLOBAL_INVALIDATE_PAGES` for `fIsKernelMap`, or `InvalidateUserTLB` for user maps) before any individual 4 KB PTE is modified.
+4. **Apply the caller's change**:
+   - Apply the caller's partial `Unmap` or `Protect` operation to the 4 KB PTEs in `virtualPageTable`, followed by its own invalidation.
 
 ---
 

@@ -33,6 +33,17 @@
 #include <arch/x86/bios.h>
 #include <arch/x86/arch_kernel.h>
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <driver_settings.h>
+#ifdef __x86_64__
+#	include "paging/64bit/X86PagingMethod64Bit.h"
+#	include "paging/64bit/X86PagingStructures64Bit.h"
+#	include "paging/64bit/X86VMTranslationMap64Bit.h"
+#endif
+// SPDX-SnippetEnd
+
 
 //#define TRACE_ARCH_VM
 #ifdef TRACE_ARCH_VM
@@ -343,6 +354,17 @@ arch_vm_page_memory_type_supported(uint32 type)
 	if (type == 0 || type == B_WRITE_BACK_MEMORY)
 		return true;
 	return x86_use_pat();
+}
+
+
+extern "C" bool
+arch_vm_large_pages_enabled(void)
+{
+#ifdef __x86_64__
+	return X86PagingMethod64Bit::LargePagesEnabled();
+#else
+	return false;
+#endif
 }
 
 
@@ -841,6 +863,261 @@ arch_vm_init_post_area(kernel_args *args)
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#ifdef __x86_64__
+static void
+r5_amd64_large_pages_selftest()
+{
+	const size_t kLargeSize = k64BitPageTableRange;
+	const size_t kAreaSize = 2 * kLargeSize; // 4 MB
+
+	virtual_address_restrictions virtualRestrictions = {};
+	virtualRestrictions.address_specification = B_ANY_KERNEL_ADDRESS;
+	virtualRestrictions.alignment = kLargeSize;
+	physical_address_restrictions physicalRestrictions = {};
+	physicalRestrictions.alignment = kLargeSize;
+
+	void* basePtr = NULL;
+	area_id areaID = create_area_etc(VMAddressSpace::KernelID(),
+		"r5_large_page_selftest", kAreaSize, B_CONTIGUOUS,
+		B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA, 0, 0,
+		&virtualRestrictions, &physicalRestrictions, &basePtr);
+	if (areaID < 0 || basePtr == NULL
+		|| ((addr_t)basePtr & (kLargeSize - 1)) != 0) {
+		dprintf("R5 VM: amd64_large_pages self-test FAIL at step create_4mb "
+			"(area %" B_PRId32 " base %p)\n", areaID, basePtr);
+		if (areaID >= 0)
+			vm_delete_area(VMAddressSpace::KernelID(), areaID, true);
+		return;
+	}
+
+	addr_t base = (addr_t)basePtr;
+	X86VMTranslationMap64Bit* kernelMap = static_cast<X86VMTranslationMap64Bit*>(
+		VMAddressSpace::Kernel()->TranslationMap());
+	int32 dummyCount = 0;
+
+	kernelMap->Lock();
+	uint64* pde0 = X86PagingMethod64Bit::PageDirectoryEntryForAddress(
+		kernelMap->PagingStructures64Bit()->VirtualPMLTop(), base, true,
+		false, NULL, X86PagingMethod64Bit::Method()->KernelPhysicalPageMapper(),
+		dummyCount);
+	uint64* pde1 = X86PagingMethod64Bit::PageDirectoryEntryForAddress(
+		kernelMap->PagingStructures64Bit()->VirtualPMLTop(), base + kLargeSize,
+		true, false, NULL,
+		X86PagingMethod64Bit::Method()->KernelPhysicalPageMapper(),
+		dummyCount);
+	uint64 pde0Val = pde0 != NULL ? *pde0 : 0;
+	uint64 pde1Val = pde1 != NULL ? *pde1 : 0;
+	kernelMap->Unlock();
+
+	const uint64 kRequiredPDE = X86_64_PDE_PRESENT | X86_64_PDE_LARGE_PAGE
+		| X86_64_PDE_WRITABLE;
+	if ((pde0Val & kRequiredPDE) != kRequiredPDE
+		|| (pde1Val & kRequiredPDE) != kRequiredPDE) {
+		dprintf("R5 VM: amd64_large_pages self-test FAIL at step check_2mb_pde "
+			"(pde0 %#" B_PRIx64 " pde1 %#" B_PRIx64 ")\n", pde0Val, pde1Val);
+		vm_delete_area(VMAddressSpace::KernelID(), areaID, true);
+		return;
+	}
+
+	phys_addr_t expectedPA0 = pde0Val & X86_64_PDE_LARGE_ADDRESS_MASK;
+
+	// Write a test pattern into every 4 KB page across all 4 MB.
+	for (size_t pageIdx = 0; pageIdx < kAreaSize / B_PAGE_SIZE; pageIdx++) {
+		volatile uint64* word = (volatile uint64*)(base + pageIdx * B_PAGE_SIZE);
+		*word = 0x52354f5300000000ULL ^ pageIdx;
+	}
+
+	// Test 2 MB PDE with B_WRITE_COMBINING_MEMORY (PAT bit 12) and verify
+	// Query() returns the exact physical address without +0x1000 corruption.
+	if (vm_set_area_page_memory_type(areaID, B_WRITE_COMBINING_MEMORY) != B_OK) {
+		dprintf("R5 VM: amd64_large_pages self-test FAIL at step wc_set_type\n");
+		vm_delete_area(VMAddressSpace::KernelID(), areaID, true);
+		return;
+	}
+
+	phys_addr_t queriedPA0 = 0;
+	phys_addr_t queriedPA1 = 0;
+	uint32 flags0 = 0;
+	uint32 flags1 = 0;
+	kernelMap->Lock();
+	uint64 wcPDE0 = *pde0;
+	kernelMap->Query(base, &queriedPA0, &flags0);
+	kernelMap->Query(base + B_PAGE_SIZE, &queriedPA1, &flags1);
+	kernelMap->Unlock();
+
+	if ((wcPDE0 & X86_64_PDE_LARGE_PAGE) == 0
+		|| (x86_use_pat() && (wcPDE0 & X86_64_PDE_PAT) == 0)
+		|| queriedPA0 != expectedPA0
+		|| queriedPA1 != expectedPA0 + B_PAGE_SIZE) {
+		dprintf("R5 VM: amd64_large_pages self-test FAIL at step wc_query_mask "
+			"(wcPDE0 %#" B_PRIx64 " pa0 %#" B_PRIxPHYSADDR " expected %#"
+			B_PRIxPHYSADDR ")\n", wcPDE0, queriedPA0, expectedPA0);
+		vm_delete_area(VMAddressSpace::KernelID(), areaID, true);
+		return;
+	}
+
+	vm_set_area_page_memory_type(areaID, B_WRITE_BACK_MEMORY);
+
+	// Test cloning the 4 MB area into a user team address space, reading it
+	// through the user 2 MB PDEs, and destroying the user address space
+	// (testing the ~X86VMTranslationMap64Bit() large-page guard).
+	vm_set_area_protection(areaID,
+		B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA | B_READ_AREA, true);
+
+	const team_id kTestTeamID = 0x7ffffff0;
+	VMAddressSpace* userSpace = NULL;
+	if (VMAddressSpace::Create(kTestTeamID, USER_BASE, USER_SIZE, false,
+			&userSpace) != B_OK || userSpace == NULL) {
+		dprintf("R5 VM: amd64_large_pages self-test FAIL at step user_aspace\n");
+		vm_delete_area(VMAddressSpace::KernelID(), areaID, true);
+		return;
+	}
+
+	void* userPtr = NULL;
+	area_id userCloneID = vm_clone_area(kTestTeamID,
+		"r5_large_page_user_clone", &userPtr, B_ANY_ADDRESS, B_READ_AREA,
+		REGION_NO_PRIVATE_MAP, areaID, true);
+	if (userCloneID < 0 || userPtr == NULL
+		|| ((addr_t)userPtr & (kLargeSize - 1)) != 0) {
+		dprintf("R5 VM: amd64_large_pages self-test FAIL at step user_clone "
+			"(id %" B_PRId32 " ptr %p)\n", userCloneID, userPtr);
+		vm_delete_areas(userSpace, true);
+		userSpace->RemoveAndPut();
+		vm_delete_area(VMAddressSpace::KernelID(), areaID, true);
+		return;
+	}
+
+	addr_t userBase = (addr_t)userPtr;
+	X86VMTranslationMap64Bit* userMap = static_cast<X86VMTranslationMap64Bit*>(
+		userSpace->TranslationMap());
+
+	userMap->Lock();
+	uint64* userPDE0 = X86PagingMethod64Bit::PageDirectoryEntryForAddress(
+		userMap->PagingStructures64Bit()->VirtualPMLTop(), userBase, false,
+		false, NULL,
+		X86PagingMethod64Bit::Method()->KernelPhysicalPageMapper(),
+		dummyCount);
+	uint64* userPDE1 = X86PagingMethod64Bit::PageDirectoryEntryForAddress(
+		userMap->PagingStructures64Bit()->VirtualPMLTop(),
+		userBase + kLargeSize, false, false, NULL,
+		X86PagingMethod64Bit::Method()->KernelPhysicalPageMapper(),
+		dummyCount);
+	uint64 userPDE0Val = userPDE0 != NULL ? *userPDE0 : 0;
+	uint64 userPDE1Val = userPDE1 != NULL ? *userPDE1 : 0;
+	userMap->Unlock();
+
+	const uint64 kRequiredUserPDE = X86_64_PDE_PRESENT | X86_64_PDE_LARGE_PAGE
+		| X86_64_PDE_USER;
+	if ((userPDE0Val & kRequiredUserPDE) != kRequiredUserPDE
+		|| (userPDE1Val & kRequiredUserPDE) != kRequiredUserPDE) {
+		dprintf("R5 VM: amd64_large_pages self-test FAIL at step user_2mb_pde "
+			"(u0 %#" B_PRIx64 " u1 %#" B_PRIx64 ")\n", userPDE0Val,
+			userPDE1Val);
+		vm_delete_areas(userSpace, true);
+		userSpace->RemoveAndPut();
+		vm_delete_area(VMAddressSpace::KernelID(), areaID, true);
+		return;
+	}
+
+	// Read from the user 2 MB mappings under the user address space CR3.
+	uint64 userVal0 = 0;
+	uint64 userVal512 = 0;
+	{
+		cpu_status state = disable_interrupts();
+		size_t savedCR3 = x86_read_cr3();
+		x86_write_cr3(userMap->PagingStructures64Bit()->pgdir_phys);
+		arch_cpu_enable_user_access();
+		userVal0 = *(volatile uint64*)userBase;
+		userVal512 = *(volatile uint64*)(userBase + kLargeSize);
+		arch_cpu_disable_user_access();
+		x86_write_cr3(savedCR3);
+		restore_interrupts(state);
+	}
+
+	if (userVal0 != (0x52354f5300000000ULL ^ 0)
+		|| userVal512 != (0x52354f5300000000ULL ^ 512)) {
+		dprintf("R5 VM: amd64_large_pages self-test FAIL at step user_read "
+			"(v0 %#" B_PRIx64 " v512 %#" B_PRIx64 ")\n", userVal0, userVal512);
+		vm_delete_areas(userSpace, true);
+		userSpace->RemoveAndPut();
+		vm_delete_area(VMAddressSpace::KernelID(), areaID, true);
+		return;
+	}
+
+	vm_delete_areas(userSpace, true);
+
+	// Also verify ~X86VMTranslationMap64Bit() when a 2 MB PDE is still
+	// present in the user page directory at destructor time.
+	{
+		vm_page_reservation res = {};
+		vm_page_reserve_pages(&res, 4, VM_PRIORITY_SYSTEM);
+		userMap->Lock();
+		userMap->MapLarge(userBase, expectedPA0, B_READ_AREA,
+			B_WRITE_BACK_MEMORY, &res);
+		userMap->Unlock();
+		vm_page_unreserve_pages(&res);
+	}
+	userSpace->RemoveAndPut();
+
+	// Protect the first 1 MB (half of the first 2 MB PDE) read-only and verify
+	// that pde0 splits without a gap while pde1 remains a 2 MB large page.
+	kernelMap->Lock();
+	kernelMap->Protect(base, base + 0x100000 - 1, B_KERNEL_READ_AREA,
+		B_WRITE_BACK_MEMORY);
+	uint64 postSplitPDE0 = *pde0;
+	uint64 postSplitPDE1 = *pde1;
+	phys_addr_t splitPA0 = 0;
+	phys_addr_t splitPAHalf = 0;
+	uint32 splitFlags0 = 0;
+	uint32 splitFlagsHalf = 0;
+	kernelMap->Query(base, &splitPA0, &splitFlags0);
+	kernelMap->Query(base + 0x100000, &splitPAHalf, &splitFlagsHalf);
+	kernelMap->Unlock();
+
+	if ((postSplitPDE0 & X86_64_PDE_PRESENT) == 0
+		|| (postSplitPDE0 & X86_64_PDE_LARGE_PAGE) != 0
+		|| (postSplitPDE1 & X86_64_PDE_LARGE_PAGE) == 0
+		|| (splitFlags0 & B_KERNEL_WRITE_AREA) != 0
+		|| (splitFlagsHalf & B_KERNEL_WRITE_AREA) == 0
+		|| splitPA0 != expectedPA0
+		|| splitPAHalf != expectedPA0 + 0x100000) {
+		dprintf("R5 VM: amd64_large_pages self-test FAIL at step split_protect "
+			"(pde0 %#" B_PRIx64 " pde1 %#" B_PRIx64 " f0 %#" B_PRIx32
+			" fHalf %#" B_PRIx32 ")\n", postSplitPDE0, postSplitPDE1,
+			splitFlags0, splitFlagsHalf);
+		vm_delete_area(VMAddressSpace::KernelID(), areaID, true);
+		return;
+	}
+
+	// Verify data integrity across all 1024 4 KB pages and write to the
+	// writable second half of the split PDE and the unsplit second 2 MB PDE.
+	for (size_t pageIdx = 0; pageIdx < kAreaSize / B_PAGE_SIZE; pageIdx++) {
+		volatile uint64* word = (volatile uint64*)(base + pageIdx * B_PAGE_SIZE);
+		if (*word != (0x52354f5300000000ULL ^ pageIdx)) {
+			dprintf("R5 VM: amd64_large_pages self-test FAIL at step "
+				"verify_data page %zu\n", pageIdx);
+			vm_delete_area(VMAddressSpace::KernelID(), areaID, true);
+			return;
+		}
+	}
+	*(volatile uint64*)(base + 0x100000) = 0xfeedfacecafebeefULL;
+	*(volatile uint64*)(base + kLargeSize) = 0xdeadbeef12345678ULL;
+
+	if (vm_delete_area(VMAddressSpace::KernelID(), areaID, true) != B_OK) {
+		dprintf("R5 VM: amd64_large_pages self-test FAIL at step unmap_delete\n");
+		return;
+	}
+
+	dprintf("R5 VM: amd64_large_pages self-test PASS (4 MB map, WC mask check, "
+		"user clone/exit, 1 MB split-protect, unmap)\n");
+}
+#endif
+// SPDX-SnippetEnd
+
+
 /*!	Gets rid of all yet unmapped (and therefore now unused) page tables */
 status_t
 arch_vm_init_end(kernel_args *args)
@@ -851,6 +1128,19 @@ arch_vm_init_end(kernel_args *args)
 	vm_free_unused_boot_loader_range(KERNEL_LOAD_BASE,
 		args->arch_args.virtual_end - KERNEL_LOAD_BASE);
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#ifdef __x86_64__
+	if (void* handle = load_driver_settings("kernel")) {
+		bool enabled = get_driver_boolean_parameter(handle,
+			"amd64_large_pages", false, false);
+		X86PagingMethod64Bit::SetLargePagesEnabled(enabled);
+		unload_driver_settings(handle);
+	}
+#endif
+// SPDX-SnippetEnd
+
 	return B_OK;
 }
 
@@ -859,6 +1149,27 @@ status_t
 arch_vm_init_post_modules(kernel_args *args)
 {
 	// the x86 CPU modules are now accessible
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#ifdef __x86_64__
+	bool largePages = X86PagingMethod64Bit::LargePagesEnabled();
+	bool runSelfTest = false;
+	if (void* handle = load_driver_settings("kernel")) {
+		largePages = get_driver_boolean_parameter(handle,
+			"amd64_large_pages", largePages, largePages);
+		runSelfTest = get_driver_boolean_parameter(handle,
+			"amd64_large_pages_selftest", false, false);
+		unload_driver_settings(handle);
+	}
+	X86PagingMethod64Bit::SetLargePagesEnabled(largePages);
+	dprintf("R5 VM: amd64_large_pages %s\n",
+		largePages ? "enabled" : "disabled");
+	if (largePages && runSelfTest)
+		r5_amd64_large_pages_selftest();
+#endif
+// SPDX-SnippetEnd
 
 	sMemoryTypeRegisterCount = x86_count_mtrrs();
 	if (sMemoryTypeRegisterCount == 0)

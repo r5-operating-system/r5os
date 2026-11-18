@@ -66,6 +66,12 @@
 #include "VMAnonymousNoSwapCache.h"
 #include "IORequest.h"
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+extern "C" bool arch_vm_large_pages_enabled(void);
+// SPDX-SnippetEnd
+
 
 //#define TRACE_VM
 //#define TRACE_FAULTS
@@ -1714,8 +1720,25 @@ vm_create_anonymous_area(team_id team, const char *name, addr_t size,
 	// space. E.g. block caches can't release their memory while we hold the
 	// address space lock.
 	page_num_t reservedPages = reservedMapPages;
-	if (wiring == B_FULL_LOCK)
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	const size_t kLargePageSize = 0x200000;
+	bool fullLockHasRun = false;
+	if (wiring == B_FULL_LOCK && !isStack && size >= kLargePageSize
+		&& (size & (kLargePageSize - 1)) == 0
+		&& (flags & CREATE_AREA_DONT_WAIT) == 0
+		&& arch_vm_large_pages_enabled()) {
+		physical_address_restrictions fullLockRestrictions = {};
+		fullLockRestrictions.alignment = kLargePageSize;
+		page = vm_page_allocate_page_run(PAGE_STATE_WIRED | pageAllocFlags,
+			size / B_PAGE_SIZE, &fullLockRestrictions, priority);
+		if (page != NULL)
+			fullLockHasRun = true;
+	}
+	if (wiring == B_FULL_LOCK && !fullLockHasRun)
 		reservedPages += size / B_PAGE_SIZE;
+// SPDX-SnippetEnd
 
 	vm_page_reservation reservation;
 	if (reservedPages > 0) {
@@ -1733,8 +1756,25 @@ vm_create_anonymous_area(team_id team, const char *name, addr_t size,
 	if (wiring == B_CONTIGUOUS) {
 		// we try to allocate the page run here upfront as this may easily
 		// fail for obvious reasons
-		page = vm_page_allocate_page_run(PAGE_STATE_WIRED | pageAllocFlags,
-			size / B_PAGE_SIZE, physicalAddressRestrictions, priority);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		page = NULL;
+		if (size >= kLargePageSize && arch_vm_large_pages_enabled()
+			&& physicalAddressRestrictions->alignment < kLargePageSize
+			&& (physicalAddressRestrictions->boundary == 0
+				|| physicalAddressRestrictions->boundary >= kLargePageSize)) {
+			physical_address_restrictions alignedPhysical
+				= *physicalAddressRestrictions;
+			alignedPhysical.alignment = kLargePageSize;
+			page = vm_page_allocate_page_run(PAGE_STATE_WIRED | pageAllocFlags,
+				size / B_PAGE_SIZE, &alignedPhysical, priority);
+		}
+		if (page == NULL) {
+			page = vm_page_allocate_page_run(PAGE_STATE_WIRED | pageAllocFlags,
+				size / B_PAGE_SIZE, physicalAddressRestrictions, priority);
+		}
+// SPDX-SnippetEnd
 		if (page == NULL) {
 			status = B_NO_MEMORY;
 			goto err0;
@@ -1775,9 +1815,27 @@ vm_create_anonymous_area(team_id team, const char *name, addr_t size,
 
 	cache->Lock();
 
-	status = vm_map_cache(addressSpace, cache, 0, name, size, wiring,
-		protection, 0, REGION_NO_PRIVATE_MAP, flags,
-		virtualAddressRestrictions, kernel, &area, _address);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	{
+		virtual_address_restrictions alignedVirtual
+			= *virtualAddressRestrictions;
+		if ((wiring == B_CONTIGUOUS || fullLockHasRun)
+			&& page != NULL && size >= kLargePageSize
+			&& arch_vm_large_pages_enabled()
+			&& (((phys_addr_t)page->physical_page_number * B_PAGE_SIZE)
+				& (kLargePageSize - 1)) == 0
+			&& alignedVirtual.address_specification != B_EXACT_ADDRESS
+			&& alignedVirtual.address_specification != B_CLONE_ADDRESS
+			&& alignedVirtual.alignment < kLargePageSize) {
+			alignedVirtual.alignment = kLargePageSize;
+		}
+		status = vm_map_cache(addressSpace, cache, 0, name, size, wiring,
+			protection, 0, REGION_NO_PRIVATE_MAP, flags,
+			&alignedVirtual, kernel, &area, _address);
+	}
+// SPDX-SnippetEnd
 
 	if (status != B_OK) {
 		cache->ReleaseRefAndUnlock();
@@ -1794,6 +1852,59 @@ vm_create_anonymous_area(team_id team, const char *name, addr_t size,
 
 		case B_FULL_LOCK:
 		{
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			if (fullLockHasRun) {
+				VMTranslationMap* map = addressSpace->TranslationMap();
+				phys_addr_t physicalAddress
+					= (phys_addr_t)page->physical_page_number * B_PAGE_SIZE;
+				addr_t virtualAddress = area->Base();
+				off_t offset = 0;
+
+				map->Lock();
+				while (virtualAddress < area->Base() + (area->Size() - 1)) {
+					if ((area->Base() + area->Size()) - virtualAddress
+							>= kLargePageSize
+						&& (virtualAddress & (kLargePageSize - 1)) == 0
+						&& (physicalAddress & (kLargePageSize - 1)) == 0
+						&& map->MapLarge(virtualAddress, physicalAddress,
+							protection, area->MemoryType(), &reservation)
+							== B_OK) {
+						for (uint32 i = 0; i < kLargePageSize / B_PAGE_SIZE;
+								i++) {
+							page = vm_lookup_page(
+								physicalAddress / B_PAGE_SIZE);
+							if (page == NULL)
+								panic("couldn't lookup page in 2 MB run\n");
+							cache->InsertPage(page, offset);
+							increment_page_wired_count(page);
+							DEBUG_PAGE_ACCESS_END(page);
+							virtualAddress += B_PAGE_SIZE;
+							offset += B_PAGE_SIZE;
+							physicalAddress += B_PAGE_SIZE;
+						}
+						continue;
+					}
+
+					page = vm_lookup_page(physicalAddress / B_PAGE_SIZE);
+					if (page == NULL)
+						panic("couldn't lookup physical page just allocated\n");
+					status = map->Map(virtualAddress, physicalAddress,
+						protection, area->MemoryType(), &reservation);
+					if (status < B_OK)
+						panic("couldn't map physical page in page run\n");
+					cache->InsertPage(page, offset);
+					increment_page_wired_count(page);
+					DEBUG_PAGE_ACCESS_END(page);
+					virtualAddress += B_PAGE_SIZE;
+					offset += B_PAGE_SIZE;
+					physicalAddress += B_PAGE_SIZE;
+				}
+				map->Unlock();
+				break;
+			}
+// SPDX-SnippetEnd
 			// Allocate and map all pages for this area
 
 			off_t offset = 0;
@@ -1876,9 +1987,33 @@ vm_create_anonymous_area(team_id team, const char *name, addr_t size,
 
 			map->Lock();
 
-			for (virtualAddress = area->Base(); virtualAddress < area->Base()
-					+ (area->Size() - 1); virtualAddress += B_PAGE_SIZE,
-					offset += B_PAGE_SIZE, physicalAddress += B_PAGE_SIZE) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			while (virtualAddress < area->Base() + (area->Size() - 1)) {
+				if ((area->Base() + area->Size()) - virtualAddress
+						>= kLargePageSize
+					&& (virtualAddress & (kLargePageSize - 1)) == 0
+					&& (physicalAddress & (kLargePageSize - 1)) == 0
+					&& map->MapLarge(virtualAddress, physicalAddress,
+						protection, area->MemoryType(), &reservation)
+						== B_OK) {
+					for (uint32 i = 0; i < kLargePageSize / B_PAGE_SIZE; i++) {
+						page = vm_lookup_page(physicalAddress / B_PAGE_SIZE);
+						if (page == NULL)
+							panic("couldn't lookup physical page just allocated\n");
+
+						cache->InsertPage(page, offset);
+						increment_page_wired_count(page);
+						DEBUG_PAGE_ACCESS_END(page);
+
+						virtualAddress += B_PAGE_SIZE;
+						offset += B_PAGE_SIZE;
+						physicalAddress += B_PAGE_SIZE;
+					}
+					continue;
+				}
+
 				page = vm_lookup_page(physicalAddress / B_PAGE_SIZE);
 				if (page == NULL)
 					panic("couldn't lookup physical page just allocated\n");
@@ -1892,7 +2027,12 @@ vm_create_anonymous_area(team_id team, const char *name, addr_t size,
 				increment_page_wired_count(page);
 
 				DEBUG_PAGE_ACCESS_END(page);
+
+				virtualAddress += B_PAGE_SIZE;
+				offset += B_PAGE_SIZE;
+				physicalAddress += B_PAGE_SIZE;
 			}
+// SPDX-SnippetEnd
 
 			map->Unlock();
 			break;
@@ -1913,7 +2053,11 @@ vm_create_anonymous_area(team_id team, const char *name, addr_t size,
 	return area->id;
 
 err1:
-	if (wiring == B_CONTIGUOUS) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (wiring == B_CONTIGUOUS || fullLockHasRun) {
+// SPDX-SnippetEnd
 		// we had reserved the area space upfront...
 		phys_addr_t pageNumber = page->physical_page_number;
 		int32 i;
@@ -1980,6 +2124,17 @@ vm_map_physical_memory(team_id team, const char* name, void** _address,
 	virtual_address_restrictions addressRestrictions = {};
 	addressRestrictions.address = *_address;
 	addressRestrictions.address_specification = addressSpec & ~B_MEMORY_TYPE_MASK;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	const size_t kLargePageSize = 0x200000;
+	if (arch_vm_large_pages_enabled() && size >= kLargePageSize
+		&& (physicalAddress & (kLargePageSize - 1)) == 0
+		&& addressRestrictions.address_specification != B_EXACT_ADDRESS
+		&& addressRestrictions.address_specification != B_CLONE_ADDRESS) {
+		addressRestrictions.alignment = kLargePageSize;
+	}
+// SPDX-SnippetEnd
 	status = vm_map_cache(locker.AddressSpace(), cache, 0, name, size,
 		B_FULL_LOCK, protection, 0, REGION_NO_PRIVATE_MAP, CREATE_AREA_DONT_COMMIT_MEMORY,
 		&addressRestrictions, true, &area, _address);
@@ -2030,10 +2185,24 @@ vm_map_physical_memory(team_id team, const char* name, void** _address,
 
 		map->Lock();
 
-		for (addr_t offset = 0; offset < size; offset += B_PAGE_SIZE) {
-			map->Map(area->Base() + offset, physicalAddress + offset,
-				protection, area->MemoryType(), &reservation);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		for (addr_t offset = 0; offset < size;) {
+			addr_t va = area->Base() + offset;
+			phys_addr_t pa = physicalAddress + offset;
+			if (size - offset >= kLargePageSize
+				&& (va & (kLargePageSize - 1)) == 0
+				&& (pa & (kLargePageSize - 1)) == 0
+				&& map->MapLarge(va, pa, protection, area->MemoryType(),
+					&reservation) == B_OK) {
+				offset += kLargePageSize;
+				continue;
+			}
+			map->Map(va, pa, protection, area->MemoryType(), &reservation);
+			offset += B_PAGE_SIZE;
 		}
+// SPDX-SnippetEnd
 
 		map->Unlock();
 
@@ -2554,6 +2723,20 @@ vm_clone_area(team_id team, const char* name, void** address,
 	VMArea* newArea;
 	addressRestrictions.address = *address;
 	addressRestrictions.address_specification = addressSpec;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	const size_t kLargePageSize = 0x200000;
+	if (arch_vm_large_pages_enabled() && sourceArea->Size() >= kLargePageSize
+		&& (sourceArea->Base() & (kLargePageSize - 1)) == 0
+		&& (sourceArea->cache_type == CACHE_TYPE_DEVICE
+			|| sourceArea->wiring == B_CONTIGUOUS
+			|| sourceArea->wiring == B_FULL_LOCK)
+		&& addressSpec != B_EXACT_ADDRESS
+		&& addressSpec != B_CLONE_ADDRESS) {
+		addressRestrictions.alignment = kLargePageSize;
+	}
+// SPDX-SnippetEnd
 	status = vm_map_cache(targetAddressSpace, cache,
 		sourceArea->cache_offset, name, sourceArea->Size(),
 		sourceArea->wiring, protection, protectionMax,
@@ -2569,7 +2752,11 @@ vm_clone_area(team_id team, const char* name, void** address,
 		cache->AcquireRefLocked();
 	}
 
-	if (newArea->wiring == B_FULL_LOCK) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (newArea->wiring == B_FULL_LOCK || newArea->wiring == B_CONTIGUOUS) {
+// SPDX-SnippetEnd
 		// we need to map in everything at this point
 		if (sourceArea->cache_type == CACHE_TYPE_DEVICE) {
 			// we don't have actual pages to map but a physical area
@@ -2596,11 +2783,25 @@ vm_clone_area(team_id team, const char* name, void** address,
 					? VM_PRIORITY_SYSTEM : VM_PRIORITY_USER);
 			map->Lock();
 
-			for (addr_t offset = 0; offset < newArea->Size();
-					offset += B_PAGE_SIZE) {
-				map->Map(newArea->Base() + offset, physicalAddress + offset,
-					protection, newArea->MemoryType(), &reservation);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			for (addr_t offset = 0; offset < newArea->Size();) {
+				addr_t va = newArea->Base() + offset;
+				phys_addr_t pa = physicalAddress + offset;
+				if (newArea->Size() - offset >= kLargePageSize
+					&& (va & (kLargePageSize - 1)) == 0
+					&& (pa & (kLargePageSize - 1)) == 0
+					&& map->MapLarge(va, pa, protection,
+						newArea->MemoryType(), &reservation) == B_OK) {
+					offset += kLargePageSize;
+					continue;
+				}
+				map->Map(va, pa, protection, newArea->MemoryType(),
+					&reservation);
+				offset += B_PAGE_SIZE;
 			}
+// SPDX-SnippetEnd
 
 			map->Unlock();
 			vm_page_unreserve_pages(&reservation);
@@ -2622,18 +2823,97 @@ vm_clone_area(team_id team, const char* name, void** address,
 				targetAddressSpace == VMAddressSpace::Kernel()
 					? VM_PRIORITY_SYSTEM : VM_PRIORITY_USER);
 
-			// map in all pages from source
-			for (VMCachePagesTree::Iterator it = cache->pages.GetIterator();
-					vm_page* page  = it.Next();) {
-				if (!page->busy) {
-					DEBUG_PAGE_ACCESS_START(page);
-					map_page(newArea, page,
-						newArea->Base() + ((page->cache_offset << PAGE_SHIFT)
-							- newArea->cache_offset),
-						protection, &reservation);
-					DEBUG_PAGE_ACCESS_END(page);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			bool mappedAsLarge = false;
+			if (arch_vm_large_pages_enabled()
+				&& newArea->Size() >= kLargePageSize
+				&& (newArea->Size() & (kLargePageSize - 1)) == 0
+				&& (newArea->Base() & (kLargePageSize - 1)) == 0) {
+				bool allContiguous2MB = true;
+				for (addr_t chunkOffset = 0; chunkOffset < newArea->Size();
+						chunkOffset += kLargePageSize) {
+					vm_page* firstPage = cache->LookupPage(
+						newArea->cache_offset + chunkOffset);
+					if (firstPage == NULL || firstPage->busy) {
+						allContiguous2MB = false;
+						break;
+					}
+					phys_addr_t chunkPA
+						= (phys_addr_t)firstPage->physical_page_number
+							* B_PAGE_SIZE;
+					if ((chunkPA & (kLargePageSize - 1)) != 0) {
+						allContiguous2MB = false;
+						break;
+					}
+					for (size_t i = 1; i < kLargePageSize / B_PAGE_SIZE; i++) {
+						vm_page* nextPage = cache->LookupPage(
+							newArea->cache_offset + chunkOffset
+								+ i * B_PAGE_SIZE);
+						if (nextPage == NULL || nextPage->busy
+							|| nextPage->physical_page_number
+								!= firstPage->physical_page_number + i) {
+							allContiguous2MB = false;
+							break;
+						}
+					}
+					if (!allContiguous2MB)
+						break;
+				}
+
+				if (allContiguous2MB) {
+					mappedAsLarge = true;
+					map->Lock();
+					for (addr_t chunkOffset = 0; chunkOffset < newArea->Size();
+							chunkOffset += kLargePageSize) {
+						vm_page* firstPage = cache->LookupPage(
+							newArea->cache_offset + chunkOffset);
+						phys_addr_t chunkPA
+							= (phys_addr_t)firstPage->physical_page_number
+								* B_PAGE_SIZE;
+						addr_t chunkVA = newArea->Base() + chunkOffset;
+						if (map->MapLarge(chunkVA, chunkPA, protection,
+								newArea->MemoryType(), &reservation) == B_OK) {
+							for (size_t i = 0;
+									i < kLargePageSize / B_PAGE_SIZE; i++) {
+								vm_page* p = cache->LookupPage(
+									newArea->cache_offset + chunkOffset
+										+ i * B_PAGE_SIZE);
+								increment_page_wired_count(p);
+							}
+						} else {
+							for (size_t i = 0;
+									i < kLargePageSize / B_PAGE_SIZE; i++) {
+								vm_page* p = cache->LookupPage(
+									newArea->cache_offset + chunkOffset
+										+ i * B_PAGE_SIZE);
+								map->Map(chunkVA + i * B_PAGE_SIZE,
+									chunkPA + i * B_PAGE_SIZE, protection,
+									newArea->MemoryType(), &reservation);
+								increment_page_wired_count(p);
+							}
+						}
+					}
+					map->Unlock();
 				}
 			}
+
+			if (!mappedAsLarge) {
+				// map in all pages from source
+				for (VMCachePagesTree::Iterator it = cache->pages.GetIterator();
+						vm_page* page  = it.Next();) {
+					if (!page->busy) {
+						DEBUG_PAGE_ACCESS_START(page);
+						map_page(newArea, page,
+							newArea->Base() + ((page->cache_offset << PAGE_SHIFT)
+								- newArea->cache_offset),
+							protection, &reservation);
+						DEBUG_PAGE_ACCESS_END(page);
+					}
+				}
+			}
+// SPDX-SnippetEnd
 			// TODO: B_FULL_LOCK means that all pages are locked. We are not
 			// ensuring that!
 
@@ -4609,6 +4889,13 @@ extern "C" __attribute__((weak)) bool
 arch_vm_page_memory_type_supported(uint32 type)
 {
 	(void)type;
+	return false;
+}
+
+
+extern "C" __attribute__((weak)) bool
+arch_vm_large_pages_enabled(void)
+{
 	return false;
 }
 
