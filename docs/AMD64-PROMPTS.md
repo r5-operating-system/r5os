@@ -5,7 +5,7 @@ Geverifieerde prompts (gecontroleerd tegen `origin/main` bij `#4426`, de Haiku-t
 - **IPv6 & Networking (Prompt 1 uit `REVIEW-PROMPTS.md`):** `[DONE in #4425]` (`91f9d96a31`).
 - **Prompt 1 (AMD64 kernel fixes):** `[DONE in #4428]`.
 - **Prompt 2:** gesplitst in 2a (ontwerp, `[DONE in #4430]`) en 2b (bouwen, verstuurd).
-- **Prompt 4 tot en met 6** (18 nov 2026): de oude prompts 4 (AVX2-dispatch) en 5 (CPU Info) samengevoegd met de AMD64-inventarisatie van die dag tot drie prompts: 4 kernel, 5 user space, 6 CPU Info. Elk onderdeel wordt een eigen commit, met een meting erna.
+- **Prompt 4 tot en met 6** (18 nov 2026): de oude prompts 4 (AVX2-dispatch) en 5 (CPU Info) samengevoegd met de AMD64-inventarisatie van die dag tot drie prompts: 4 kernel, 5 user space, 6 CPU Info. Elk onderdeel wordt een eigen commit met een eigen correctheidscontrole. Geen meting per stap; één meting aan het eind van prompt 4 en 5: het image van vóór de prompt tegenover het eindresultaat (eigenaar, 18 nov 2026).
 
 Volgorde: 2a → 2b. Prompt 3 (x86-64-v2) kan los van 2 lopen. Prompt 4 en 5 komen na prompt 3 en kunnen tegelijk lopen (andere bestanden). Prompt 6 als laatste, met de regel "2MB-pages" pas na 2b.
 
@@ -176,35 +176,31 @@ Nagekeken (18 nov 2026, inventarisatie op `origin/main`): `haiku/build/config_he
 
 Read AGENTS.md first. Work on a new branch from origin/main AFTER prompt 3 (x86-64-v2) is merged: the kernel is built for v2, so everything in v2 is used without a check; anything above v2 is chosen at boot by CPUID with the current code as the fallback. Copy every Haiku file you change into distro/kernel/ with its original header and copyright, wrap all R5 changes in SPDX-SnippetBegin/End (MIT, 2026 R5OS Contributors), and hook new copies into scripts/apply-kernel-bugs.py. Do not touch Wi-Fi, IPv6, Bluetooth, GPU drivers or app_server. AMD-only or Intel-only paths are fine when chosen at run time; the whole must make both Intel and AMD faster. Check every location below in the code before changing it, and say in the report if one is not as described.
 
-One commit per numbered step. After each step: jam, one short QEMU boot with SMAP on (own copy of r5-os.image, not scripts/run-qemu-r5.sh), and the measurement of step 0 again. Write every number in CHANGELOG.md.
+One commit per numbered step. After each step: jam, and one short QEMU boot with SMAP on (own copy of r5-os.image, not scripts/run-qemu-r5.sh) that reaches net_server without a panic. Each step proves it is correct as described in that step; no speed measurements.
 
-0. Baseline measurement (no code change): a small benchmark set you add under distro/ (MIT), run in QEMU and reusable on a stick:
-   - a null syscall loop (10 million _kern_get_current_team()), ns per call;
-   - a port or pipe ping-pong between two threads on different CPUs, round trips per second;
-   - a TCP transfer over loopback, MB/s;
-   - a checksum microbenchmark (old function, random buffers);
-   - boot time to net_server from the serial log.
-
-1. Release kernel. Add a release build profile with KDEBUG_LEVEL 0 (haiku/build/config_headers/kernel_debug_config.h:8 is 2 today; level 2 turns on paranoid malloc/free, spinlock debugging, page-access and heap debugging, and makes every mutex_lock take the slow path). The image built by scripts/build-locked.sh uses the release profile; a debug profile with level 2 stays available for QEMU and test runs (a switch in distro/UserBuildConfig or a build-locked.sh option, documented in docs/). Measure step 0 with both kernels.
+1. Release kernel. Add a release build profile with KDEBUG_LEVEL 0 (haiku/build/config_headers/kernel_debug_config.h:8 is 2 today; level 2 turns on paranoid malloc/free, spinlock debugging, page-access and heap debugging, and makes every mutex_lock take the slow path). The image built by scripts/build-locked.sh uses the release profile; a debug profile with level 2 stays available for QEMU and test runs (a switch in distro/UserBuildConfig or a build-locked.sh option, documented in docs/). Boot both kernels in QEMU with SMAP on; the debug kernel must still catch what it caught before (it is the one for test runs).
 
 2. Network checksum: replace the 16-bit loop in haiku/src/add-ons/kernel/network/stack/utility.cpp:102 with a 64-bit add-with-carry loop, unrolled (as Linux csum_partial). Results must be bit-identical: add a host fuzz target that compares old and new on random buffers, odd lengths and odd start addresses (60 s).
 
-3. Syscall time accounting: haiku/src/system/kernel/arch/x86/64/interrupts.S:77-109 (UPDATE_THREAD_USER_TIME / UPDATE_THREAD_KERNEL_TIME) takes a spinlock and reads the clock on syscall entry and exit. Only the current thread writes these times: use a per-thread sequence counter instead of the spinlock, change every reader (thread.cpp, team.cpp, the scheduler) to the retry read, and read the clock once per round trip if the accounting allows it.
+3. Syscall time accounting: haiku/src/system/kernel/arch/x86/64/interrupts.S:77-109 (UPDATE_THREAD_USER_TIME / UPDATE_THREAD_KERNEL_TIME) takes a spinlock and reads the clock on syscall entry and exit. Only the current thread writes these times: use a per-thread sequence counter instead of the spinlock, change every reader (thread.cpp, team.cpp, the scheduler) to the retry read, and read the clock once per round trip if the accounting allows it. Check: the user and kernel times that `ps`/ProcessController show still add up to the wall time of a busy test thread.
 
 4. FPU state on interrupts (interrupts.S:222-279, arch_cpu.cpp around 1857):
    - zero only the 64-byte XSAVE header instead of the whole save area before XSAVE;
    - choose at boot: XSAVES/XRSTORS (with IA32_XSS = 0) when present, else XSAVEOPT, else XSAVEC, else today's XSAVE. Convert the format where signal frames copy this area (64/thread.cpp:377-471);
    - Intel only, chosen at run time: vzeroupper on syscall entry when AVX is enabled.
+   Check: a test program that keeps known values in XMM/YMM registers across many syscalls, signals and interrupts gets them back unchanged, under -cpu Nehalem and -cpu EPYC-Rome.
 
-5. Timer: haiku/src/system/kernel/arch/x86/timers/x86_apic.cpp:50-74 does four APIC writes per timer. Write the initial count once (a write restarts a one-shot timer). Use TSC-deadline mode (one WRMSR) when CPUID leaf 1 ECX bit 24 is set and the CPU is not on the known errata list; keep the APIC count as the fallback. Measure the cost in QEMU (VM exits) and say what it was.
+5. Timer: haiku/src/system/kernel/arch/x86/timers/x86_apic.cpp:50-74 does four APIC writes per timer. Write the initial count once (a write restarts a one-shot timer). Use TSC-deadline mode (one WRMSR) when CPUID leaf 1 ECX bit 24 is set and the CPU is not on the known errata list; keep the APIC count as the fallback. Check: snooze() and timers fire on time in both modes (a test that sleeps 1 ms, 10 ms and 1 s and checks system_time()).
 
-6. User copies: user_memcpy/user_memset/user_strlcpy (haiku/headers/private/kernel/arch/generic/user_memory.h:59-80) use setjmp per call. Write x86_64 assembly versions with a fault entry, as the 32-bit version in 32/arch.S:129 does, using rep movsb (with FSRM, also for short copies). STAC/CLAC must stay paired: review by hand and boot with SMAP on.
+6. User copies: user_memcpy/user_memset/user_strlcpy (haiku/headers/private/kernel/arch/generic/user_memory.h:59-80) use setjmp per call. Write x86_64 assembly versions with a fault entry, as the 32-bit version in 32/arch.S:129 does, using rep movsb (with FSRM, also for short copies). STAC/CLAC must stay paired: review by hand and boot with SMAP on. Check: a test that passes bad user pointers (NULL, kernel address, unmapped page, a buffer that ends on an unmapped page) gets B_BAD_ADDRESS, never a panic.
 
-7. Idle wake-up: distro/kernel/src/system/kernel/scheduler/scheduler.cpp:144-145 always sends a reschedule IPI; the MWAIT idle in distro/kernel/src/add-ons/kernel/power/cpuidle/x86_acpi_cstates/acpi_cpuidle.cpp:229 monitors a dummy variable. MONITOR the CPU's own invoke_scheduler word, set a per-CPU "polling" flag while in MWAIT, and skip the IPI when the target CPU is polling. HLT idle keeps the IPI. Get the memory ordering right and count IPIs before and after.
+7. Idle wake-up: distro/kernel/src/system/kernel/scheduler/scheduler.cpp:144-145 always sends a reschedule IPI; the MWAIT idle in distro/kernel/src/add-ons/kernel/power/cpuidle/x86_acpi_cstates/acpi_cpuidle.cpp:229 monitors a dummy variable. MONITOR the CPU's own invoke_scheduler word, set a per-CPU "polling" flag while in MWAIT, and skip the IPI when the target CPU is polling. HLT idle keeps the IPI. Get the memory ordering right. Check: a ping-pong between two threads on different CPUs runs for a minute without a lost wake-up (no thread stuck waiting).
 
-8. Scheduler topology: distro/kernel/src/system/kernel/arch/x86/arch_cpu.cpp reads the hybrid bit (around 542) and the cache-sharing masks (around 684-848) but the scheduler only uses SMT, core and package. Add a cache-domain level from the existing sharing masks (AMD CCX and Intel alike), and on Intel hybrid CPUs read CPUID leaf 0x1A and prefer P-cores for busy threads. Behind topology detection; no change on CPUs without these.
+8. Scheduler topology: distro/kernel/src/system/kernel/arch/x86/arch_cpu.cpp reads the hybrid bit (around 542) and the cache-sharing masks (around 684-848) but the scheduler only uses SMT, core and package. Add a cache-domain level from the existing sharing masks (AMD CCX and Intel alike), and on Intel hybrid CPUs read CPUID leaf 0x1A and prefer P-cores for busy threads. Behind topology detection; no change on CPUs without these. Check: the topology the scheduler builds is logged once at boot and matches the CPU (QEMU -smp with sockets/cores/threads, and the 5625U).
 
-Verification: jam_exit=0 for every step; the QEMU boot with SMAP on after every step; the step-0 numbers per step in CHANGELOG.md, noting that QEMU is not hardware. Steps 7 and 8 cannot show their full gain on the 5625U (one CCX, not hybrid) or in QEMU; say so. Hardware: one 5625U stick at the end, with the benchmark set. Commit locally; ask me before push/PR. Report in Dutch, short, with [V]/[I].
+Final measurement, once, after the last step: before step 1, keep a copy of the r5-os.image built from origin/main ("before"). At the end, run the same small benchmark set (MIT, under distro/) on "before" and on the final image ("after") in QEMU, same CPU model and settings: a null syscall loop (ns per call), a thread ping-pong across CPUs (round trips per second), a TCP transfer over loopback (MB/s), and boot time to net_server. Put the before/after table in CHANGELOG.md and the PR, noting that QEMU is not hardware; run the same set once on the 5625U stick.
+
+Verification: jam_exit=0 for every step; the QEMU boot with SMAP on after every step; each step's own check. CHANGELOG.md says per step what changed and what was checked. Hardware: one 5625U stick at the end that boots, runs the desktop, GPU, Wi-Fi and Bluetooth as before, and restarts and powers off cleanly. Commit locally; ask me before push/PR. Report in Dutch, short, with [V]/[I].
 ```
 
 ---
@@ -218,27 +214,27 @@ Nagekeken (18 nov 2026, inventarisatie op `origin/main`): `distro/kernel/src/sys
 
 Read AGENTS.md first, and docs/LIBR5.md before touching libbe or app_server. Work on a new branch from origin/main AFTER prompt 3 (x86-64-v2) is merged: everything in v2 (SSE3, SSSE3, SSE4.1, SSE4.2, POPCNT, CMPXCHG16B) is used directly; AVX2, FMA, BMI1/2, ERMS and FSRM are chosen at run time by CPUID with the v2 code as the fallback. The runtime_loader has no IFUNC: dispatch with a function pointer set once at init, as haiku/src/system/libroot/os/arch/x86_64/system_time.cpp does, and keep small sizes on an inline path without the indirect call. Copy every Haiku file you change into distro/ with its original header, wrap R5 changes in SPDX-SnippetBegin/End (MIT), hook copies into the existing apply scripts. libbe and libroot keep their ABI. Do not touch Wi-Fi, IPv6, Bluetooth or the GPU drivers. Check every location below in the code before changing it.
 
-One commit per numbered step. After each step: jam, a QEMU boot with SMAP on (own image copy), and the measurement of step 0 again; every number in CHANGELOG.md.
-
-0. Baseline measurement (no code change), benchmarks you add under distro/ (MIT): memcpy/memset/memmove size sweep 16 B to 64 MB; strlen/strchr/strcmp/memcmp on 16 B to 4 KB; a 12-thread malloc/free loop; a 12-thread mutex and rwlock contention test; fma/floor/ceil loops; BBitmap SetBits/ImportBits with color conversion; app start time (StyledEdit, a Tracker window) in a loop; the existing app_server benchmark (haiku/src/tests/servers/app/benchmark) plus a scaled DrawBitmap test; scripts/qemu-m13-measure.py.
+One commit per numbered step. After each step: jam, and a QEMU boot with SMAP on (own image copy) that reaches the desktop. Each step proves it is correct as described in that step; no speed measurements.
 
 1. Linker and visibility:
    - add -Wl,--hash-style=both to user-space LINKFLAGS (ArchitectureRules around line 65); the runtime_loader already reads DT_GNU_HASH. Kernel add-ons stay as they are;
    - -Bsymbolic-functions and -fno-semantic-interposition for libbe and app_server (not libroot: malloc must stay interposable);
    - -Wl,--gc-sections for app_server (distro/app_server/app_server-Jamfile); check that the decorator add-on symbols stay exported.
+   Check: the desktop, Tracker, Deskbar, Settings, Terminal, WebPositive and a Vulkan/OpenGL demo start; readelf shows .gnu.hash in libbe.
 
 2. CPU-feature helper in libroot (private header, one place): reads CPUID and XCR0 once (OSXSAVE plus XMM/YMM enabled before AVX/AVX2/FMA count), plus ERMS, FSRM, BMI2, and the last-level cache size (leaf 4 on Intel, 0x8000001D on AMD, fixed fallback). Used by every step below.
 
 3. memcpy, memset, memmove (distro/kernel/src/system/libroot/posix/string/arch/x86_64/memcpy.cpp; copy memset.cpp and musl memmove.c into distro/):
    - rep movsb/stosb only when ERMS is present; otherwise the existing SSE loop;
-   - with FSRM, a lower rep-movsb threshold, only if the sweep shows it;
+   - with FSRM, rep movsb from 128 bytes instead of 2048;
    - above about 3/4 of the last-level cache: non-temporal stores (movntdq) and sfence;
    - memmove with overlap: 16-byte SSE loops (never std; rep movsb);
    - keep the existing 4K-aliasing guard.
+   Check: a fuzz test compares every function with the old version for all sizes 0-4096, every source and destination alignment 0-63, and random large sizes, including every overlap offset 1-64 for memmove (60 s), under -cpu Nehalem and -cpu EPYC-Rome.
 
 4. String functions (musl strlen/strchr/strchrnul/memchr, Haiku strcmp.c and memcmp.c): v2 SSE2/SSE4.2 versions, 16 bytes per step, with aligned loads so no read crosses into an unmapped page; AVX2 32-byte versions by dispatch for long strings. Fuzz every function against the old C version (60 s each).
 
-5. malloc (haiku/src/system/libroot/posix/malloc/openbsd): set the pool count at init to the CPU count rounded up to a power of two (cap _MALLOC_MUTEXES, 32), and create the heap mutexes with MUTEX_FLAG_ADAPTIVE.
+5. malloc (haiku/src/system/libroot/posix/malloc/openbsd): set the pool count at init to the CPU count rounded up to a power of two (cap _MALLOC_MUTEXES, 32), and create the heap mutexes with MUTEX_FLAG_ADAPTIVE. Check: a 12-thread malloc/free/realloc stress test runs for a minute without a crash or corruption, and the build of a large jam target still works inside R5.
 
 6. Locks: pthread_mutex.cpp (one atomic_test_and_set, then _kern_mutex_lock) and os/locks/mutex.cpp: a short read-only spin with pause before the syscall, bounded by time (TSC), not by loop count, because pause costs very different cycles on Intel and AMD. pthread_rwlock.cpp: a reader-count fast path with atomic add instead of taking the internal mutex on every read. Stress with 12 threads; review the fail paths.
 
@@ -246,11 +242,13 @@ One commit per numbered step. After each step: jam, a QEMU boot with SMAP on (ow
 
 8. libbe ConvertBits (haiku/src/kits/interface/ColorConversion.cpp:817-875 calls a function per pixel): dedicated row loops for RGB32↔RGBA32, RGB24→RGB32, RGB16→RGB32 and CMAP8→RGB32 with SSSE3 pshufb (v2, no dispatch), AVX2 by dispatch; the generic path stays the fallback. Compare every pair with the old output.
 
-9. app_server Painter: an SSE2 version of the bilinear x-loop (DrawBitmapBilinear.h around 602; Painter.cpp:120 only detects SIMD under __i386__ and the nasm loop is 32-bit only), pixel-identical to the C path; -O3 for Painter, AGG and drawing_modes only (per-directory OPTIM; BuildSetup:714 is -O2); FontCache kMaxEntryCount from 30 to 128 (FontCache.cpp:108), and count evictions before and after.
+9. app_server Painter: an SSE2 version of the bilinear x-loop (DrawBitmapBilinear.h around 602; Painter.cpp:120 only detects SIMD under __i386__ and the nasm loop is 32-bit only), pixel-identical to the C path; -O3 for Painter, AGG and drawing_modes only (per-directory OPTIM; BuildSetup:714 is -O2); FontCache kMaxEntryCount from 30 to 128 (FontCache.cpp:108). Check: the scaled DrawBitmap output is pixel-identical to the C path; text and icons look the same.
 
-10. AVX2 in the compositor (the former prompt 4): measure first with step 0 and scripts/qemu-m13-measure.py; then AVX2 versions, chosen by the helper of step 2, only for paths that cost measurable time (distro/app_server/Compositor.cpp, GPUCopy.cpp and the blends app_server does itself; Skia already dispatches its own v3/v4 paths). Identical output on the v2 path. Keep this step out of the stick that turns Skia on by default.
+10. AVX2 in the compositor (the former prompt 4): AVX2 versions, chosen by the helper of step 2, of the blend and copy loops app_server runs itself (distro/app_server/Compositor.cpp, GPUCopy.cpp; Skia already dispatches its own v3/v4 paths). Check: output pixel-identical to the v2 path on a set of test frames. Keep this step out of the stick that turns Skia on by default.
 
-Verification: jam_exit=0 for every step; the QEMU boot with SMAP on after every step; QEMU runs with -cpu Nehalem (v2, no AVX2) and -cpu EPYC-Rome (AVX2) for every dispatched step, and both paths give the same results; the step-0 numbers per step in CHANGELOG.md, noting QEMU versus hardware. UI changes: I check them in VirtualBox. Commit locally; ask me before push/PR. Report in Dutch, short, with [V]/[I].
+Final measurement, once, after the last step: before step 1, keep a copy of the r5-os.image built from origin/main ("before"). At the end, run the same small benchmark set (MIT, under distro/) on "before" and on the final image ("after") in QEMU, same CPU model and settings, under -cpu Nehalem and -cpu EPYC-Rome: memcpy/memset at 64 B, 4 KB and 16 MB; strlen on 1 KB; a 12-thread malloc/free loop; a 12-thread mutex loop; BBitmap SetBits with color conversion; app start time (StyledEdit); scripts/qemu-m13-measure.py. Put the before/after table in CHANGELOG.md and the PR, noting that QEMU is not hardware.
+
+Verification: jam_exit=0 for every step; the QEMU boot with SMAP on after every step; each step's own check; for every dispatched step, QEMU runs with -cpu Nehalem (v2, no AVX2) and -cpu EPYC-Rome (AVX2) give the same results. CHANGELOG.md says per step what changed and what was checked. UI changes: I check them in VirtualBox. Commit locally; ask me before push/PR. Report in Dutch, short, with [V]/[I].
 ```
 
 ---
