@@ -1,5 +1,26 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-18 - Kernel (AMD64): XSAVE-varianten, 64-byte header-zeroing en Intel `vzeroupper` (stap 4)
+
+Problem:
+- `intr_bottom` in `interrupts.S` zeroede de volledige FPU-save-area (`gFPUSaveLength`) vóór XSAVE.
+- `arch_cpu.cpp` koos alleen tussen `XSAVEC` en `XSAVE`, zonder `XSAVES`/`XRSTORS` of `XSAVEOPT`, en `64/thread.cpp` kopieerde signaalframes zonder compacted-to-standard conversie.
+- `x86_64_syscall_entry` miste `vzeroupper` op Intel bij ingeschakelde AVX.
+- `build-locked.sh --debug` herbouwde onvoldoende doordat Jam geen `-D`-defines op de command-line volgt.
+
+What changed (Step 4 + `r5_kdebug_level.h` fix):
+- `scripts/jam-r5-raw.sh` schrijft `build/config_headers/r5_kdebug_level.h` met `#define KDEBUG_LEVEL <0|2>` alleen bij wijziging; `distro/kernel/build/config_headers/kernel_debug_config.h` includeert dit bestand vóór `#ifndef KDEBUG_LEVEL`; de define in `distro/UserBuildConfig` is verwijderd.
+- `distro/kernel/src/system/kernel/arch/x86/64/interrupts.S`: zeroet in `intr_bottom` alleen de 64-byte XSAVE-header (`512(%rsp)`) bij `gFPUSaveLength >= 576`, en voegt `ALTCODEPATCH_TAG_VZEROUPPER` toe bij `x86_64_syscall_entry`.
+- `distro/kernel/headers/private/kernel/arch/x86/arch_altcodepatch.h` en `64/stubs.S`: `ALTCODEPATCH_TAG_VZEROUPPER` (6), `_xsaveopt`, `_xsaves`, `_xrstors`, `_vzeroupper` en `_xrstors_initial`.
+- `distro/kernel/src/system/kernel/arch/x86/arch_cpu.cpp`: kiest bij boot `XSAVES`/`XRSTORS` (met `IA32_MSR_XSS = 0` op alle CPU's) > `XSAVEOPT` > `XSAVEC` > `XSAVE`, en patcht `_vzeroupper` alleen op Intel met AVX actief.
+- `distro/kernel/src/system/kernel/arch/x86/64/thread.cpp`: `arch_thread_init()` gebruikt de actieve XSAVE-variant; `arch_setup_signal_frame()` en `arch_restore_signal_frame()` converteren tussen compacted format en standaard `struct savefpu`.
+- `distro/cpu/r5_fpu_test.cpp`: testprogramma voor XMM0–XMM15 en YMM0–YMM15 over syscalls, signalen (`SIGUSR1` + clobber) en interrupts/preemptie.
+
+Tested (Step 4):
+- `scripts/build-locked.sh`: `jam_exit=0`, `mesa_exit=0`.
+- QEMU `-cpu Nehalem,+smap,+smep`: `enable SMEP`, `enable SMAP`, `R5 net_server`, `r5_fpu_test PASS avx=0 signals=71` (`exit=0`).
+- QEMU `-cpu EPYC-Rome,+smap,+smep`: `enable SMEP`, `enable SMAP`, `enable XSAVES 0x7 832`, `R5 net_server`, `r5_fpu_test PASS avx=1 signals=106` (`exit=0`).
+
 ## 2026-11-18 - Kernel (AMD64): syscall-tijdregistratie zonder spinlock (`time_seq`)
 
 Problem:

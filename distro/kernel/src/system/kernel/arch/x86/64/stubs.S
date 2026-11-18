@@ -1,0 +1,70 @@
+/*
+ * Copyright 2018-2020, Jérôme Duval, jerome.duval@gmail.com.
+ * Distributed under the terms of the MIT License.
+ */
+
+
+#include <asm_defs.h>
+
+#include "asm_offsets.h"
+
+
+.section .rodata
+
+FUNCTION(_stac):
+	stac
+FUNCTION_END(_stac)
+
+FUNCTION(_clac):
+	clac
+FUNCTION_END(_clac)
+
+FUNCTION(_xsave):
+	xsave64		(%rdi)
+FUNCTION_END(_xsave)
+
+FUNCTION(_xsavec):
+	xsavec64	(%rdi)
+FUNCTION_END(_xsavec)
+
+FUNCTION(_xrstor):
+	xrstor64	(%rdi)
+FUNCTION_END(_xrstor)
+
+FUNCTION(_vzeroall):
+	vzeroall
+FUNCTION_END(_vzeroall)
+
+FUNCTION(_xrstor_initial):
+	movabsq		$gInitialState + ARCH_THREAD_user_fpu_state, %rdi
+	mov 		$0xFFFFFFFF, %eax
+	mov 		$0xFFFFFFFF, %edx
+	xrstor64	(%rdi)
+FUNCTION_END(_xrstor_initial)
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+FUNCTION(_xsaveopt):
+	xsaveopt64	(%rdi)
+FUNCTION_END(_xsaveopt)
+
+FUNCTION(_xsaves):
+	xsaves64	(%rdi)
+FUNCTION_END(_xsaves)
+
+FUNCTION(_xrstors):
+	xrstors64	(%rdi)
+FUNCTION_END(_xrstors)
+
+FUNCTION(_vzeroupper):
+	vzeroupper
+FUNCTION_END(_vzeroupper)
+
+FUNCTION(_xrstors_initial):
+	movabsq		$gInitialState + ARCH_THREAD_user_fpu_state, %rdi
+	mov 		$0xFFFFFFFF, %eax
+	mov 		$0xFFFFFFFF, %edx
+	xrstors64	(%rdi)
+FUNCTION_END(_xrstors_initial)
+// SPDX-SnippetEnd

@@ -221,14 +221,21 @@ STATIC_FUNCTION(intr_bottom):
 	// exception.
 	orq		$X86_EFLAGS_RESUME, IFRAME_flags(%rbp)
 
-	// xsave needs a 64-byte alignment
+	// xsave needs a 64-byte alignment; only the 64-byte XSAVE header needs zeroing
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
 	andq	$~63, %rsp
 	movq	(gFPUSaveLength), %rcx
 	subq	%rcx, %rsp
-	leaq	(%rsp), %rdi
-	shrq	$3, %rcx
-	movq	$0, %rax
+	cmpq	$576, %rcx
+	jb		1f
+	leaq	512(%rsp), %rdi
+	movq	$8, %rcx
+	xorl	%eax, %eax
 	rep stosq
+1:
+// SPDX-SnippetEnd
 	movl	(gXsaveMask), %eax
 	movl	(gXsaveMask+4), %edx
 	movq	%rsp, %rdi
@@ -387,6 +394,13 @@ FUNCTION(x86_64_syscall_entry):
 	push	$99							// vector
 	PUSH_IFRAME_BOTTOM(IFRAME_TYPE_SYSCALL)
 	cld
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	CODEPATCH_START
+	.byte X86_NOP3
+	CODEPATCH_END(ALTCODEPATCH_TAG_VZEROUPPER)
+// SPDX-SnippetEnd
 
 	// Frame pointer is the iframe.
 	movq	%rsp, %rbp
