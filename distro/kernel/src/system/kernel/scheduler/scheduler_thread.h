@@ -231,8 +231,14 @@ ThreadData::StartCPUTime()
 {
 	SCHEDULER_ENTER_FUNCTION();
 
-	SpinLocker threadTimeLocker(fThread->time_lock);
-	fThread->last_time = system_time();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	bigtime_t now = system_time();
+	fThread->BeginTimeWrite();
+	fThread->last_time = now;
+	fThread->EndTimeWrite();
+// SPDX-SnippetEnd
 }
 
 
@@ -242,10 +248,15 @@ ThreadData::StopCPUTime()
 	SCHEDULER_ENTER_FUNCTION();
 
 	// User time is tracked in thread_at_kernel_entry()
-	SpinLocker threadTimeLocker(fThread->time_lock);
-	fThread->kernel_time += system_time() - fThread->last_time;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	bigtime_t now = system_time();
+	fThread->BeginTimeWrite();
+	fThread->kernel_time += now - fThread->last_time;
 	fThread->last_time = 0;
-	threadTimeLocker.Unlock();
+	fThread->EndTimeWrite();
+// SPDX-SnippetEnd
 
 	// If the old thread's team has user time timers, check them now.
 	Team* team = fThread->team;

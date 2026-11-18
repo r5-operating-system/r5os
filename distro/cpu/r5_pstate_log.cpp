@@ -18,6 +18,9 @@
 #include <OS.h>
 
 
+extern "C" void _kern_debug_output(const char* userString);
+
+
 static const char* kHomeReport = "/boot/home/r5-cpu.txt";
 static const char* kHomeHardware = "/boot/home/r5-hardware.txt";
 static const char* kHomeSyslog = "/boot/home/r5-syslog.txt";
@@ -43,13 +46,31 @@ read_report(char* buffer, size_t capacity)
 
 
 static void
-burn_cpu()
+burn_cpu(bigtime_t& _wallDelta, bigtime_t& _userDelta, bigtime_t& _kernelDelta)
 {
+	thread_info beforeInfo = {};
+	thread_info afterInfo = {};
+	get_thread_info(find_thread(NULL), &beforeInfo);
+
 	volatile uint64 sink = 0;
 	bigtime_t start = system_time();
 	while (system_time() - start < 1000000)
 		sink += 1;
+	bigtime_t end = system_time();
 	(void)sink;
+
+	get_thread_info(find_thread(NULL), &afterInfo);
+	_wallDelta = end - start;
+	_userDelta = afterInfo.user_time - beforeInfo.user_time;
+	_kernelDelta = afterInfo.kernel_time - beforeInfo.kernel_time;
+
+	char msg[256];
+	snprintf(msg, sizeof(msg),
+		"R5 time check: busy thread wall=%lld us user=%lld us kernel=%lld us sum=%lld us\n",
+		(long long)_wallDelta, (long long)_userDelta, (long long)_kernelDelta,
+		(long long)(_userDelta + _kernelDelta));
+	_kern_debug_output(msg);
+	fputs(msg, stderr);
 }
 
 
@@ -259,7 +280,10 @@ main()
 
 	snooze(500000);
 	read_report(idle, sizeof(idle));
-	burn_cpu();
+	bigtime_t wallDelta = 0;
+	bigtime_t userDelta = 0;
+	bigtime_t kernelDelta = 0;
+	burn_cpu(wallDelta, userDelta, kernelDelta);
 	if (!read_report(busy, sizeof(busy)))
 		strcpy(busy, "R5 CPU: second read failed\n");
 
@@ -269,8 +293,10 @@ main()
 		"sample: after a short wait\n"
 		"%s"
 		"sample: after one second busy on this thread\n"
-		"%s",
-		idle, busy);
+		"%s"
+		"R5 time check: busy thread wall=%lld us user=%lld us kernel=%lld us sum=%lld us\n",
+		idle, busy, (long long)wallDelta, (long long)userDelta,
+		(long long)kernelDelta, (long long)(userDelta + kernelDelta));
 	write_boot_logs(report, 0);
 
 	// Later passes still run if the desktop has not appeared. They write

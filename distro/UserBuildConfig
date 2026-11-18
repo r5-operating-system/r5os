@@ -6,11 +6,16 @@
 HAIKU_REVISION = r5-2026.1-dev ;
 
 DefineBuildProfile r5-raw : image : "r5-os.image" ;
+DefineBuildProfile r5-debug : image : "r5-os.image" ;
 DefineBuildProfile r5-anyboot : anyboot-image : "r5-os-anyboot.iso" ;
 DefineBuildProfile r5-vmware : vmware-image : "r5-os.vmdk" ;
 
 switch $(HAIKU_BUILD_PROFILE) {
 	case "r5-*" : {
+		if $(HAIKU_BUILD_PROFILE) = r5-debug || $(R5_KERNEL_DEBUG) = 1 {
+			HAIKU_KERNEL_DEFINES += KDEBUG_LEVEL=2 ;
+			TARGET_KERNEL_DEFINES += KDEBUG_LEVEL=2 ;
+		}
 		HAIKU_ROOT_USER_NAME = user ;
 		HAIKU_ROOT_USER_REAL_NAME = "R5OS" ;
 		HAIKU_IMAGE_HOST_NAME = r5os ;

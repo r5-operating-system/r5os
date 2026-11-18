@@ -12,6 +12,57 @@ Checked (18 Nov 2026, Europe/Amsterdam):
 - Host, Ryzen 5 5625U, about 16:30: all six PASS for 60 seconds.
 - `scripts/build-locked.sh`: `jam_exit=0`, `mesa_exit=0`.
 - QEMU KVM, own image copy, window, virtio-rng, SMAP on. The fuzz prints PASS for each function at 60 seconds, then `PASS all`. Serial has `enable SMAP` on every boot. The script runs only after Tracker and Deskbar are up. `-cpu host,+smap`, `-cpu Nehalem,+smap,+smep` (KVM accepted this model) and `-cpu EPYC-Rome,+smap`. Nehalem has no AVX2, so that guest stays on the 16-byte path. Host and EPYC-Rome take AVX2 for the long scans.
+## 2026-11-18 - Kernel (AMD64): syscall-tijdregistratie zonder spinlock (`time_seq`)
+
+Problem:
+- `src/system/kernel/arch/x86/64/interrupts.S` (`UPDATE_THREAD_USER_TIME` / `UPDATE_THREAD_KERNEL_TIME`) en `thread.cpp` namen bij elke syscall-entry, syscall-exit, `thread_at_kernel_entry`/`exit` en elke `get_thread_info`/`CPUTime`-lezing `thread->time_lock` (spinlock).
+
+What changed (Step 3):
+- `distro/kernel/headers/private/kernel/thread_types.h`: `uint32 time_seq` toegevoegd aan `Thread` met `BeginTimeWrite()`, `EndTimeWrite()` en `ReadTimes()` (standaard seqlock-ordening met `__atomic_thread_fence(__ATOMIC_RELEASE)` / `__ATOMIC_ACQUIRE` en `arch_cpu_pause()`).
+- `distro/kernel/src/system/kernel/arch/x86/asm_offsets.cpp` en `distro/kernel/src/system/kernel/arch/x86/64/interrupts.S`: `UPDATE_THREAD_USER_TIME` en `UPDATE_THREAD_KERNEL_TIME` gebruiken `THREAD_time_seq` (`addl $1`) in plaats van `acquire_spinlock`/`release_spinlock` op `THREAD_time_lock`.
+- `distro/kernel/src/system/kernel/thread.cpp`, `team.cpp`, `scheduler/scheduler.cpp`, `scheduler/scheduler_cpu.cpp`, `scheduler/scheduler_thread.h`: alle lezers van `user_time`/`kernel_time`/`last_time`/`in_kernel` omgezet naar `ReadTimes()`; schrijvers gebruiken `BeginTimeWrite()`/`EndTimeWrite()`. `thread_reset_for_exec()` houdt `InterruptsSpinLocker` op `thread->time_lock` rond `cpu_clock_offset`.
+- `distro/cpu/r5_pstate_log.cpp`: meet `user_time + kernel_time` van een 1-seconde drukke lus via `get_thread_info()` en logt `R5 time check:`.
+
+Tested (Step 3):
+- `scripts/build-locked.sh`: `jam_exit=0`, `mesa_exit=0`.
+- Korte QEMU-boot (`-cpu Nehalem,+smap,+smep`, eigen kopie van `r5-os.image`): schakelt SMEP/SMAP in, bereikt `net_server` zonder panic en logt `R5 time check: busy thread wall=1000000 us user=928103 us kernel=54447 us sum=982550 us`.
+
+## 2026-11-18 - Kernel (AMD64): 64-bits add-with-carry netwerk-checksum (`compute_checksum`)
+
+Problem:
+- `src/add-ons/kernel/network/stack/utility.cpp:102` (`compute_checksum`) telde een pakketbuffer per 16-bit woord op in een 32-bit teller.
+
+What changed (Step 2):
+- `distro/kernel/src/add-ons/kernel/network/stack/utility.cpp` (gekopieerd via `scripts/apply-kernel-bugs.py`) vervangt de 16-bits lus op `x86_64` door een uitgerolde 64-bits add-with-carry-lus (`addq` + 7× `adcq`, 64 bytes per iteratie, gevolgd door 8/4/2/1-byte staart en 64→32→16-bit vouwen, met byte-swap bij een oneven startadres zoals Linux `csum_partial`).
+- Host-fuzz-target `distro/tests/kernel/checksum_fuzz.cpp` (MIT) vergelijkt de oude 16-bits en nieuwe 64-bits implementatie op deterministische patronen en willekeurige buffers, oneven lengtes en oneven startadressen.
+
+Tested (Step 2):
+- Host-fuzz-test gedurende 60 s: `PASS: compute_checksum fuzz 60s, iterations=162298176 (odd_len=81007278, odd_addr=81144479), 0 mismatches`.
+- `scripts/build-locked.sh`: `jam_exit=0`, `mesa_exit=0`. Korte QEMU-boot (`-cpu Nehalem,+smap,+smep`, eigen kopie van `r5-os.image`): schakelt SMEP en SMAP in en bereikt `net_server` in 20 s zonder panic.
+
+## 2026-11-18 - Kernel (AMD64): release-kernel (`KDEBUG_LEVEL 0`) en debug-profiel (`KDEBUG_LEVEL 2`)
+
+Problem:
+- `build/config_headers/kernel_debug_config.h:8` stond vast op `#define KDEBUG_LEVEL 2`, waardoor elk image werd gebouwd met paranoïde kernel-heap-fills (`PARANOID_KERNEL_MALLOC`, `PARANOID_KERNEL_FREE`), spinlock-caller-tracking (`DEBUG_SPINLOCKS`), block-cache dirty-checks (`BLOCK_CACHE_DEBUG_CHANGED`) en debug-mutexen (`KDEBUG`, waardoor elke `mutex_lock` / `mutex_unlock` het trage functiepad nam in plaats van de inline fast path).
+
+What changed (Step 1):
+- `distro/kernel/build/config_headers/kernel_debug_config.h` zet het standaardniveau op `#ifndef KDEBUG_LEVEL` / `#define KDEBUG_LEVEL 0` (gekopieerd via `scripts/apply-kernel-bugs.py`).
+- `distro/UserBuildConfig`, `scripts/build-locked.sh` en `scripts/jam-r5-raw.sh` voegen het debug-profiel `@r5-debug` (`scripts/build-locked.sh --debug` of `R5_KERNEL_DEBUG=1`) toe met `KDEBUG_LEVEL 2` voor QEMU- en test-runs, terwijl `scripts/build-locked.sh` standaard het release-profiel (`@r5-raw`, `KDEBUG_LEVEL 0`) bouwt. `docs/KERNEL.md` documenteert beide profielen.
+
+Tested (Step 1):
+- Release-profiel (`scripts/build-locked.sh`, `KDEBUG_LEVEL 0`): `jam_exit=0`, `mesa_exit=0`. Korte QEMU-boot (`-cpu Nehalem,+smap,+smep`, eigen kopie van `r5-os.image`): schakelt SMEP en SMAP in (`enable SMEP`, `enable SMAP`) en bereikt `net_server` zonder panic.
+- Debug-profiel (`scripts/build-locked.sh --debug`, `KDEBUG_LEVEL 2`): `jam_exit=0`, `mesa_exit=0`. Korte QEMU-boot (`-cpu Nehalem,+smap,+smep`, eigen kopie van `r5-os.image`): schakelt SMEP en SMAP in en bereikt `net_server` zonder panic.
+
+## 2026-11-18 - Game controllers and Bluetooth devices tested on real hardware
+
+Tested by the owner on the HP ENVY x360 (Ryzen 5 5625U), build 10065, on a stick after stick 54:
+
+- Sony DualSense over USB: buttons, sticks, rumble, trigger feedback and motion work.
+- 8BitDo M30 over USB and Bluetooth: works. It has no rumble motor.
+- Microsoft Designer Mouse over Bluetooth: works, also after a restart.
+- Sony WH-1000XM3 over Bluetooth: connects. Sound (A2DP) and the microphone (HFP) were not tested yet.
+
+For the DualSense over USB this replaces the "only tested in QEMU" limit of build 10065. Still not tested on hardware: the DualSense over Bluetooth, the DualShock 4, the DualSense Edge, and the Switch and Xbox controllers. The logs of this boot were not read off the stick.
 
 ## 2026-11-18 - memcpy dispatch also builds into the kernel
 

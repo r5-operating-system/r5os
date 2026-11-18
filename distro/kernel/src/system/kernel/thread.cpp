@@ -303,6 +303,11 @@ Thread::Thread(const char* name, thread_id threadID, struct cpu_ent* cpu)
 	user_stack_base(0),
 	user_local_storage(0),
 	kernel_errno(0),
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	time_seq(0),
+// SPDX-SnippetEnd
 	user_time(0),
 	kernel_time(0),
 	last_time(0),
@@ -1325,16 +1330,20 @@ fill_thread_info(Thread *thread, thread_info *info, size_t size)
 	info->stack_end = (void *)(thread->user_stack_base
 		+ thread->user_stack_size);
 
-	InterruptsSpinLocker threadTimeLocker(thread->time_lock);
-	info->user_time = thread->user_time;
-	info->kernel_time = thread->kernel_time;
-	if (thread->last_time != 0) {
-		const bigtime_t current = system_time() - thread->last_time;
-		if (thread->in_kernel)
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	bigtime_t lastTime;
+	bool inKernel;
+	thread->ReadTimes(info->user_time, info->kernel_time, lastTime, inKernel);
+	if (lastTime != 0) {
+		const bigtime_t current = system_time() - lastTime;
+		if (inKernel)
 			info->kernel_time += current;
 		else
 			info->user_time += current;
 	}
+// SPDX-SnippetEnd
 }
 
 
@@ -2248,8 +2257,14 @@ thread_exit(void)
 		SpinLocker teamTimeLocker(kernelTeam->time_lock);
 		SpinLocker threadTimeLocker(thread->time_lock);
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		thread->BeginTimeWrite();
 		thread->kernel_time += now - thread->last_time;
 		thread->last_time = now;
+		thread->EndTimeWrite();
+// SPDX-SnippetEnd
 
 		team->dead_threads_kernel_time += thread->kernel_time;
 		team->dead_threads_user_time += thread->user_time;
@@ -2524,11 +2539,15 @@ thread_at_kernel_entry(bigtime_t now)
 	TRACE(("thread_at_kernel_entry: entry thread %" B_PRId32 "\n", thread->id));
 
 	// track user time
-	SpinLocker threadTimeLocker(thread->time_lock);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	thread->BeginTimeWrite();
 	thread->user_time += now - thread->last_time;
 	thread->last_time = now;
 	thread->in_kernel = true;
-	threadTimeLocker.Unlock();
+	thread->EndTimeWrite();
+// SPDX-SnippetEnd
 }
 
 
@@ -2554,10 +2573,15 @@ thread_at_kernel_exit(void)
 
 	// track kernel time
 	bigtime_t now = system_time();
-	SpinLocker threadTimeLocker(thread->time_lock);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	thread->BeginTimeWrite();
 	thread->in_kernel = false;
 	thread->kernel_time += now - thread->last_time;
 	thread->last_time = now;
+	thread->EndTimeWrite();
+// SPDX-SnippetEnd
 }
 
 
@@ -2577,10 +2601,15 @@ thread_at_kernel_exit_no_signals(void)
 
 	// track kernel time
 	bigtime_t now = system_time();
-	SpinLocker threadTimeLocker(thread->time_lock);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	thread->BeginTimeWrite();
 	thread->in_kernel = false;
 	thread->kernel_time += now - thread->last_time;
 	thread->last_time = now;
+	thread->EndTimeWrite();
+// SPDX-SnippetEnd
 }
 
 
@@ -2608,8 +2637,15 @@ thread_reset_for_exec(void)
 	thread->ResetSignalsOnExec();
 
 	// reset thread CPU time clock
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
 	InterruptsSpinLocker timeLocker(thread->time_lock);
-	thread->cpu_clock_offset = -thread->CPUTime(false);
+	bigtime_t cpuTime = thread->CPUTime(false);
+	thread->BeginTimeWrite();
+	thread->cpu_clock_offset = -cpuTime;
+	thread->EndTimeWrite();
+// SPDX-SnippetEnd
 }
 
 

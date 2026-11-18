@@ -8,6 +8,11 @@
 # after the other. Arguments go to jam-r5-raw.sh.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
+for arg in "$@"; do
+	if [[ "$arg" == "--debug" || "$arg" == "@r5-debug" ]]; then
+		export R5_KERNEL_DEBUG=1
+	fi
+done
 . "$HERE/build-lock.sh"
 "$HERE/apply-overlay.sh" || exit 1
 "$HERE/jam-r5-raw.sh" "$@"

@@ -12,6 +12,8 @@ HAIKU = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else "/home/nickr/r5os/hai
 def install_kernel_sources() -> None:
     root = pathlib.Path(__file__).resolve().parents[1]
     files = (
+        "build/config_headers/kernel_debug_config.h",
+        "src/add-ons/kernel/network/stack/utility.cpp",
         "src/system/kernel/arch/x86/arch_timer.cpp",
         "src/system/kernel/arch/x86/arch_cpu.cpp",
         "src/system/kernel/arch/x86/arch_vm.cpp",
@@ -22,7 +24,11 @@ def install_kernel_sources() -> None:
         "src/system/kernel/arch/x86/paging/64bit/X86VMTranslationMap64Bit.cpp",
         "headers/private/kernel/vm/VMTranslationMap.h",
         "headers/private/kernel/ksignal.h",
+        "headers/private/kernel/thread_types.h",
+        "src/system/kernel/arch/x86/asm_offsets.cpp",
+        "src/system/kernel/arch/x86/64/interrupts.S",
         "src/system/kernel/signal.cpp",
+        "src/system/kernel/team.cpp",
         "src/system/kernel/thread.cpp",
         "src/system/kernel/vm/vm.cpp",
         "headers/private/kernel/vm/vm.h",
