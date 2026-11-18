@@ -10,7 +10,7 @@
 #undef strcmp
 
 
-#if !defined(__x86_64__)
+#if !defined(__x86_64__) || defined(_BOOT_MODE)
 
 #define LACKS_ZERO_BYTE(value) \
 	(((value - 0x01010101) & ~value & 0x80808080) == 0)

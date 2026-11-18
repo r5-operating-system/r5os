@@ -6,7 +6,7 @@ from __future__ import annotations
 import pathlib
 import sys
 
-HAIKU = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else "/home/nickr/r5os/haiku")
+HAIKU = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else pathlib.Path(__file__).resolve().parents[1] / "haiku")
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SRC = ROOT / "distro" / "apps" / "cpuinfo"
 

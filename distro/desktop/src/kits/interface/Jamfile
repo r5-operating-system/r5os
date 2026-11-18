@@ -38,6 +38,10 @@ for architectureObject in [ MultiArchSubDirSetup ] {
 	on $(architectureObject) {
 		local architecture = $(TARGET_PACKAGING_ARCH) ;
 
+		UsePrivateSystemHeaders ;
+		SourceSysHdrs ColorConversion.cpp :
+			$(TARGET_PRIVATE_SYSTEM_HEADERS_$(architecture)) ;
+
 		SEARCH_SOURCE += [ FDirName $(SUBDIR) textview_support ] ;
 		SEARCH_SOURCE += [ FDirName $(SUBDIR) layouter ] ;
 

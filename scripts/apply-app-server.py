@@ -29,6 +29,7 @@ def main() -> int:
     copy("GPUCopy.cpp", local / "GPUCopy.cpp")
     copy("GPUCopy.h", local / "GPUCopy.h")
     copy("GPUCopyBands.h", local / "GPUCopyBands.h")
+    copy("r5_span_avx.h", local / "r5_span_avx.h")
     copy("local-Jamfile", local / "Jamfile")
     for name in ("Compositor.cpp", "Compositor.h", "WindowBuffer.cpp",
             "WindowBuffer.h", "WindowHWInterface.cpp", "WindowHWInterface.h"):
@@ -46,6 +47,11 @@ def main() -> int:
     # SkiaDrawingEngine needs to know which HWInterface it is bound to.
     copy("drawing/Jamfile", app / "drawing" / "Jamfile")
     copy("drawing/Painter/Jamfile", app / "drawing" / "Painter" / "Jamfile")
+    copy("drawing/Painter/Painter.cpp", app / "drawing" / "Painter" / "Painter.cpp")
+    copy("drawing/Painter/bitmap_painter/DrawBitmapBilinear.h",
+        app / "drawing" / "Painter" / "bitmap_painter" / "DrawBitmapBilinear.h")
+    copy("font/FontCache.cpp", app / "font" / "FontCache.cpp")
+    copy("agg-Jamfile", HAIKU / "src" / "libs" / "agg" / "Jamfile")
     copy("drawing/DrawingEngine.h", app / "drawing" / "DrawingEngine.h")
     copy("compositor/compose_period.h", local / "compose_period.h")
     # blend_line32() keeps the destination's alpha (Haiku left it unset).

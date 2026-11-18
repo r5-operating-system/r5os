@@ -19,6 +19,66 @@ What changed:
 - `distro/settings/InformationModule.cpp`: knop `CPU details…` toegevoegd die `application/x-vnd.R5-CPUInfo` start; rest van Settings ongewijzigd.
 - `scripts/apply-cpuinfo.py` + `scripts/apply-overlay.sh`: kopieert `distro/apps/cpuinfo`, voegt `HaikuSubInclude cpuinfo ;` toe aan `src/apps/Jamfile` en `CPUInfo` aan `SYSTEM_APPS` in `regular`.
 
+## 2026-11-19 - AMD64 user space: x86 code stays off the other architectures
+
+The TSC spin in the kernel mutex and the pthread mutex is compiled only for AMD64. ARM64 and RISC-V keep Haiku's own lock loop: the counted spin in the kernel mutex, and one try then the syscall in the pthread mutex. `ConvertBits` includes `<r5_x86_cpu.h>` through the interface Jamfile's private system headers, and the row loops with `immintrin.h` and the `target` attributes are AMD64 only. The other architectures take the generic per-pixel path. The present copy and the window-buffer blend use AVX2 only on AMD64; elsewhere they are `memcpy` and the C loop. The 16-byte share token in `GPUCopy` is `memcpy` again.
+
+The host `libbe` compiles the same `ColorConversion.cpp` with the host compiler. That Jamfile now asks for the private system headers as well, so `<r5_x86_cpu.h>` is found there too.
+
+Checked (19 Nov 2026, Europe/Amsterdam, about 00:42): `scripts/build-locked.sh` `jam_exit=0`, `mesa_exit=0`, AMD64 only. ARM64 and RISC-V were not built. The first jam stopped because the host `libbe` did not yet have the header path.
+
+## 2026-11-18 - AMD64 user space, step 10: AVX2 row copy and blend
+
+The CPU present copies each damaged row with AVX2 when the CPU has it, and with `memcpy` otherwise. The choice is one function pointer, set once. The window-buffer blend in the write test uses the same formula, eight pixels at a time when AVX2 is on: shift right one, mask `0x7f7f7f7f`, add `0x20202020`. The GPU scanout in `GPUCopy` is unchanged. The share-token copy goes through the same helper, so a 16-byte token still takes the plain path. Skia stays off unless the settings turn it on.
+
+The first jam died while applying the tree (`Cannot allocate memory` on one settings header). The next jam stopped on the helper: `memcpy` returns a pointer, so it could not share the function-pointer type, and the blend helper was unused in `GPUCopy`. Both are fixed. That jam also saw another session's `x86_cstates.cpp` (`mwait_polling`) and an image line for `r5_idle_pingpong`. Those were set aside for this jam only. The following jam was `jam_exit=0`, `mesa_exit=0`.
+
+Checked (18 Nov 2026, Europe/Amsterdam, about 18:54): one QEMU KVM boot of an own image copy, `-cpu host,+smap`, display none, virtio-rng. The serial log contains `enable SMAP`, and the bootscript prints `R5_STEP10_DESKTOP` after Tracker and Deskbar are up. A pixel compare of the AVX2 rows against `memcpy` and the scalar blend was not run.
+
+## 2026-11-18 - AMD64 user space, step 9: Painter bilinear, -O3, font cache
+
+The bilinear scale for a straight RGB copy uses an SSE2 row on AMD64. It does the same multiply-add as `ColorTypeRgb::Interpolate` and writes the same three bytes as `DrawModeCopy`. A bitmap with one row does not read a second row. The 32-bit nasm loop stays the x86 path. `detect_simd` reports MMX and SSE on AMD64, because the baseline is x86-64-v2. Painter, the drawing library and AGG are compiled with `-O3`. The font cache keeps 128 entries instead of 30.
+
+Checked (18 Nov 2026, Europe/Amsterdam, about 18:42): `scripts/build-locked.sh` `jam_exit=0`, `mesa_exit=0`. One QEMU KVM boot of an own image copy, `-cpu host,+smap`, display none, virtio-rng. The serial log contains `enable SMAP`, and the bootscript prints `R5_STEP9_DESKTOP` after Tracker and Deskbar are up. The pixel comparison with the C loop was not run.
+
+## 2026-11-18 - AMD64 user space, step 8: ConvertBits row loops
+
+`ConvertBits` keeps the generic per-pixel path for offsets, byte swaps, and every pair that is not listed here. Four pairs with a zero offset take a row loop instead. RGB32 to RGBA32 and RGBA32 to RGB32 copy the pixel and force the alpha byte to 255, with SSSE3 `pshufb` and an AVX2 row when `R5_CPU_AVX2` is set. RGB24 to RGB32 uses the same shuffle to insert that alpha. RGB16 to RGB32 uses the generic path's left shifts (8, 5 and 3) and the same masks, four pixels at a time with SSE2 and eight with AVX2. CMAP8 to RGB32 reads the palette entry and forces the same alpha. The pointer for each row kind is chosen once.
+
+Checked (18 Nov 2026, Europe/Amsterdam): `scripts/build-locked.sh` `jam_exit=0`, `mesa_exit=0`. The first jam failed because `ColorConversion.cpp` could not see `r5_x86_cpu.h`; the include is now a relative path. The pixel comparison with the generic path was not run. No QEMU boot.
+
+## 2026-11-18 - AMD64 user space, step 7: fma dispatch and SSE4.1 rounding
+
+`fma` and `fmaf` stay the compile-time FMA3 or FMA4 body when the compiler already defines `__FMA__` or `__FMA4__`. On the x86-64-v2 build neither is defined, so the call uses a function pointer chosen once: FMA3 (`vfmadd132sd` / `vfmadd132ss`) when `R5_CPU_FMA` is set, otherwise FMA4 (`vfmaddsd` / `vfmaddss`) when CPUID leaf `0x80000001` ECX bit 16 is set, otherwise musl's C function. `R5_CPU_FMA4` is a new bit in the private CPU word. FMA3 still requires YMM in XCR0, which the existing helper already checks.
+
+`floor`, `ceil`, `trunc` and `rint`, and the float forms, use `roundsd` / `roundss` (SSE4.1, in the v2 baseline, no dispatch). The immediate is 1, 2, 3, or 4 (current rounding mode). The generic C files are not linked on AMD64.
+
+Checked (18 Nov 2026, Europe/Amsterdam): `scripts/build-locked.sh` `jam_exit=0`, `mesa_exit=0`. The bit-identical comparison with musl's C versions was not run. No QEMU boot.
+
+## 2026-11-18 - AMD64 user space, step 6: short lock spin and reader fast path
+
+`__mutex_lock` and `__pthread_mutex_lock` still try the lock once. If that fails, and the call is not a trylock, they read the lock word and execute `pause` until the word is clear or 2000 TSC cycles have passed (8000 when the mutex is adaptive). Then they try once more and, if it is still taken, enter the kernel. The bound is the time stamp counter, so a CPU where `pause` is expensive does not spin longer. `mutex.cpp` is also linked into the runtime loader, which does not provide `system_time_nsecs`, so the spin reads the counter directly.
+
+A private read-write lock takes the reader count with an atomic add and then checks the writer count. If a writer is present the reader drops the count. The last reader takes the internal mutex and wakes a queued writer. A writer publishes its count before it looks at the readers again, so a reader cannot pass that check and keep the lock. The slow path is unchanged when a writer is already waiting.
+
+Checked (18 Nov 2026, Europe/Amsterdam): the first `scripts/build-locked.sh` failed in the runtime loader (`system_time_nsecs` was not linked there) and again on files another session had left in the shared tree. After the spin used the time stamp counter, the next jam was `jam_exit=0`, `mesa_exit=0`. The 12-thread stress test was not run. No QEMU boot.
+
+## 2026-11-18 - AMD64 user space, step 5: heap pools and adaptive mutexes
+
+The heap starts with one pool per CPU, rounded up to a power of two, and never more than `_MALLOC_MUTEXES` (32). One CPU still uses two pools, which is the smallest count the allocator already allowed. Each heap mutex is created with `MUTEX_FLAG_ADAPTIVE`. That is the init in `__init_heap`, the extra mutexes in `init_threaded_malloc`, and the re-init after `fork`.
+
+The pool count is read with `get_system_info`, which is the system-info syscall, so it does not allocate while the heap is still starting.
+
+Checked (18 Nov 2026, Europe/Amsterdam): `scripts/build-locked.sh` `jam_exit=0`, `mesa_exit=0`. The 12-thread stress test from the prompt was not run; this step is jam only. No QEMU boot.
+
+## 2026-11-18 - String scans use the C path in the loader
+
+The EFI loader and the BIOS loader compile the string files with _BOOT_MODE, and not as x86-64-v2. strlen, strchrnul, memchr, strcmp and memcmp take the C path when _BOOT_MODE is set. strchr was already the C call of strchrnul.
+
+The Jamfiles for those scans are copies under distro: musl string, posix string, the kernel lib, the boot loader, and src/bin. Apply copies them. It no longer inserts the private-header line or r5_string_fuzz.cpp into a Jamfile. The image list still names r5_string_fuzz.
+
+Checked (18 Nov 2026, Europe/Amsterdam): `scripts/build-locked.sh` `jam_exit=0`, `mesa_exit=0`. Two earlier jams failed before this one, on files another session had left in the shared Haiku tree (`gHasXsaves` in `arch/x86/64/thread.cpp`, then `r5_fpu_test` / `r5_timer_test` named by the image list and not by the copied `src/bin` Jamfile). Those files are not part of this change. The passing jam is the one after `thread.cpp` was put back to Haiku HEAD. No QEMU boot for this leftover.
+
 ## 2026-11-19 - Kernel (AMD64): review-fixes PR #4445 (XSAVEC/XSAVE, cpu_idle reschedule, TSC-deadline fence)
 
 Problem:
