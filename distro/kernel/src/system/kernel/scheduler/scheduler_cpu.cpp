@@ -338,9 +338,19 @@ CPUEntry::TrackActivity(ThreadData* oldThreadData, ThreadData* nextThreadData)
 
 	Thread* oldThread = oldThreadData->GetThread();
 	if (!thread_is_idle_thread(oldThread)) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		bigtime_t oldUserTime;
+		bigtime_t oldKernelTime;
+		bigtime_t oldLastTime;
+		bool oldInKernel;
+		oldThread->ReadTimes(oldUserTime, oldKernelTime, oldLastTime,
+			oldInKernel);
 		bigtime_t active
-			= (oldThread->kernel_time - cpuEntry->last_kernel_time)
-				+ (oldThread->user_time - cpuEntry->last_user_time);
+			= (oldKernelTime - cpuEntry->last_kernel_time)
+				+ (oldUserTime - cpuEntry->last_user_time);
+// SPDX-SnippetEnd
 
 		WriteSequentialLocker locker(cpuEntry->active_time_lock);
 		cpuEntry->active_time += active;
@@ -360,8 +370,18 @@ CPUEntry::TrackActivity(ThreadData* oldThreadData, ThreadData* nextThreadData)
 
 	Thread* nextThread = nextThreadData->GetThread();
 	if (!thread_is_idle_thread(nextThread)) {
-		cpuEntry->last_kernel_time = nextThread->kernel_time;
-		cpuEntry->last_user_time = nextThread->user_time;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		bigtime_t nextUserTime;
+		bigtime_t nextKernelTime;
+		bigtime_t nextLastTime;
+		bool nextInKernel;
+		nextThread->ReadTimes(nextUserTime, nextKernelTime, nextLastTime,
+			nextInKernel);
+		cpuEntry->last_kernel_time = nextKernelTime;
+		cpuEntry->last_user_time = nextUserTime;
+// SPDX-SnippetEnd
 
 		nextThreadData->SetLastInterruptTime(cpuEntry->interrupt_time);
 	}

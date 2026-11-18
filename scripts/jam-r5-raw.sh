@@ -36,8 +36,24 @@ touch "$HAIKU/src/apps/aboutsystem/AboutSystem.rdef"
 cd "$HAIKU/generated.x86_64"
 # One job per core; R5_JAM_JOBS overrides it (for example 1 to read an error).
 jobs="${R5_JAM_JOBS:-$(nproc)}"
-echo "jam jobs=$jobs"
-jam -q -j"$jobs" @r5-raw
+profile="@r5-raw"
+kdebug_level=0
+for arg in "$@"; do
+	case "$arg" in
+		--debug|@r5-debug)
+			profile="@r5-debug"
+			kdebug_level=2
+			;;
+		@r5-*)
+			profile="$arg"
+			;;
+	esac
+done
+if [[ "${R5_KERNEL_DEBUG:-0}" == "1" ]]; then
+	kdebug_level=2
+fi
+echo "jam jobs=$jobs profile=$profile kdebug_level=$kdebug_level"
+jam -q -j"$jobs" "$profile"
 jam_exit=$?
 echo jam_exit=$jam_exit
 if [[ "$jam_exit" -eq 0 ]]; then

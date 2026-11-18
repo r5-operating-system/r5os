@@ -235,3 +235,10 @@ The flush is empty on the other architectures, and those architectures report th
 
 Write-combined graphics buffers stay off unless the radeon_hd setting `gfx9_wc_gtt` is true. VirtualBox reached the desktop after a reboot on 10 Nov 2026. The syslog line was not captured. The 5625U was not used.
 
+## Release and debug kernel profiles
+
+`distro/kernel/build/config_headers/kernel_debug_config.h` sets the default `KDEBUG_LEVEL` to `0` (`#ifndef KDEBUG_LEVEL` / `#define KDEBUG_LEVEL 0`). The release image built by `scripts/build-locked.sh` (`@r5-raw`) compiles the kernel and kernel add-ons with `KDEBUG_LEVEL 0`, disabling paranoid kernel heap fills (`PARANOID_KERNEL_MALLOC`, `PARANOID_KERNEL_FREE`), spinlock caller tracking (`DEBUG_SPINLOCKS`), block-cache dirty checks (`BLOCK_CACHE_DEBUG_CHANGED`), and debug mutex wrappers (`KDEBUG`), so uncontended `mutex_lock()` / `mutex_unlock()` use the inline fast path in `headers/private/kernel/lock.h`.
+
+For QEMU and test runs that need kernel assertions and lock/heap debugging, the `@r5-debug` profile in `distro/UserBuildConfig` (`scripts/build-locked.sh --debug`, or `R5_KERNEL_DEBUG=1 scripts/build-locked.sh`) builds `r5-os.image` with `KDEBUG_LEVEL 2`.
+
+
