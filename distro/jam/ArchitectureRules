@@ -70,6 +70,17 @@ rule ArchitectureSetup architecture
 	HAIKU_C++FLAGS_$(architecture) += $(ccBaseFlags) -nostdinc ;
 	HAIKU_LINKFLAGS_$(architecture) += $(ccBaseFlags) ;
 
+	# SPDX-SnippetBegin
+	# SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	# SPDX-License-Identifier: MIT
+	# User space. The runtime loader reads DT_GNU_HASH. Kernel add-ons
+	# append HAIKU_KERNEL_ADDON_LINKFLAGS (--hash-style=sysv) after this,
+	# so the last flag wins and they stay SysV.
+	if $(cpu) = x86_64 {
+		HAIKU_LINKFLAGS_$(architecture) += -Wl,--hash-style=both ;
+	}
+	# SPDX-SnippetEnd
+
 	# strip is required
 	if ! $(HAIKU_STRIP_$(architecture)) {
 		Exit "HAIKU_STRIP_$(architecture) not set. Please re-run configure." ;

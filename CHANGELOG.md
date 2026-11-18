@@ -1,5 +1,18 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-18 - AMD64 user space, step 1: GNU hash and local binding
+
+Problem: user-space binaries used only the SysV hash (`DT_HASH`). Calls inside `libbe` and `app_server` could go through the PLT, and the compiler assumed another library might interpose those functions. `malloc` must stay interposable, so `libroot` is left alone.
+
+What changed:
+- `distro/jam/ArchitectureRules`: on x86_64, user-space `HAIKU_LINKFLAGS` gain `-Wl,--hash-style=both` (SysV hash and `DT_GNU_HASH`). The runtime loader already reads `DT_GNU_HASH` in `elf_load_image.cpp`. Kernel add-ons append `HAIKU_KERNEL_ADDON_LINKFLAGS` (`--hash-style=sysv`) after that, so the last flag wins and they stay SysV.
+- `libbe` (`distro/desktop/src/kits/` Jamfiles): `-fno-semantic-interposition` on the kit sources, and `-Wl,-Bsymbolic-functions` on `libbe.so`. `BString`'s counted `strncpy` into a buffer that already has a NUL at that length warns under the new flag; that warning is not an error (`-Wno-error=stringop-truncation` on the support kit).
+- `app_server`, its drawing library and Painter: the same compile flag, plus `-Wl,-Bsymbolic-functions -Wl,--gc-sections` on the executable.
+
+Checked (18 Nov 2026, about 14:38 Europe/Amsterdam):
+- `scripts/build-locked.sh`: `jam_exit=0`, `mesa_exit=0`. A `ColumnListView.cpp` compile line contains `-fno-semantic-interposition`. `readelf -d` on `libbe.so` shows both `(HASH)` and `(GNU_HASH)`. The vesa kernel add-on still has only `(HASH)`. `libbe.so` has no `JUMP_SLOT` relocation to a function it defines. BeDecorator's 65 undefined symbols that `app_server` exports (Decorator, TabDecorator, SATDecorator, DecorAddOn) are still exported after `--gc-sections`.
+- QEMU, KVM, `-cpu host,+smap`, an own copy of `r5-os.image`: serial has `enable SMAP` and `R5 net_server`. After Sign in, `ps` shows Tracker and Deskbar as the signed-in account, and Terminal, WebPositive, StyledEdit, Settings and GLTeapot. VulkanTeapot was not at `/boot/system/apps` or the demos path, so it was not started. No speed measurement.
+
 ## 2026-11-18 - AMD64 baseline is x86-64-v2, including the kernel
 
 Problem: user space and the kernel were built as x86-64-v1 (`-march=x86-64`). POPCNT, SSE4.2 and the rest of x86-64-v2 were not available to the compiler. A higher baseline with no check in the loader stops an older CPU with `#UD` and no message.

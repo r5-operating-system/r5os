@@ -1,5 +1,12 @@
 SubDir HAIKU_TOP src servers app drawing interface local ;
 
+# SPDX-SnippetBegin
+# SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+SubDirCcFlags -fno-semantic-interposition ;
+SubDirC++Flags -fno-semantic-interposition ;
+# SPDX-SnippetEnd
+
 UseLibraryHeaders agg ;
 UsePrivateHeaders app graphics interface shared ;
 UsePrivateHeaders [ FDirName graphics common ] ;

@@ -1,5 +1,13 @@
 SubDir HAIKU_TOP src servers app ;
 
+# SPDX-SnippetBegin
+# SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+# app_server calls its own functions directly. malloc is in libroot.
+SubDirCcFlags -fno-semantic-interposition ;
+SubDirC++Flags -fno-semantic-interposition ;
+# SPDX-SnippetEnd
+
 UseLibraryHeaders agg ;
 UsePrivateHeaders app graphics input interface shared storage support ;
 
@@ -129,6 +137,10 @@ Application app_server :
 local skiaArchive = /home/nickr/r5os/skia-build/pkg-root/develop/lib/libskia.a ;
 LINKLIBS on app_server += $(skiaArchive) ;
 LINKFLAGS on app_server += -Wl,--exclude-libs,libskia.a ;
+# Calls inside the executable bind locally. --gc-sections drops object
+# files nothing references. Decorator add-ons still link the classes
+# app_server itself uses (their .o files stay).
+LINKFLAGS on app_server += -Wl,-Bsymbolic-functions -Wl,--gc-sections ;
 Depends app_server : $(skiaArchive) ;
 # SPDX-SnippetEnd
 
