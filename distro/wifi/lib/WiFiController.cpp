@@ -246,6 +246,9 @@ SecurityName(const wireless_network& network)
 		case B_NETWORK_AUTHENTICATION_WPA2:
 			name = "WPA2";
 			break;
+		case B_NETWORK_AUTHENTICATION_WPA3:
+			name = "WPA3";
+			break;
 		case B_NETWORK_AUTHENTICATION_EAP:
 			return B_TRANSLATE("WPA Enterprise");
 		default:
@@ -1126,6 +1129,10 @@ WiFiController::_UpdateSaved(bool force)
 			if (network.FindString("authentication", &mode) == B_OK) {
 				if (strcasecmp(mode, "wpa2") == 0)
 					authentication = B_NETWORK_AUTHENTICATION_WPA2;
+				else if (strcasecmp(mode, "wpa3") == 0)
+					authentication = B_NETWORK_AUTHENTICATION_WPA3;
+				else if (strcasecmp(mode, "owe") == 0)
+					authentication = B_NETWORK_AUTHENTICATION_NONE;
 				else if (strcasecmp(mode, "wpa") == 0)
 					authentication = B_NETWORK_AUTHENTICATION_WPA;
 				else if (strcasecmp(mode, "wep") == 0)
@@ -1218,15 +1225,19 @@ WiFiController::_CheckJoin(bool associated, bool link, const BString& name)
 				add.AddString("password", fJoinPassword);
 			add.AddUInt32("flags", fJoinSecured ? B_NETWORK_IS_ENCRYPTED : 0);
 			add.AddUInt32("authentication_mode", fJoinAuthentication);
-			bool wpa = fJoinAuthentication == B_NETWORK_AUTHENTICATION_WPA2
+			bool wpa3 = fJoinAuthentication == B_NETWORK_AUTHENTICATION_WPA3;
+			bool wpa = wpa3
+				|| fJoinAuthentication == B_NETWORK_AUTHENTICATION_WPA2
 				|| fJoinAuthentication == B_NETWORK_AUTHENTICATION_WPA;
-			uint32 cipher = fJoinAuthentication
-					== B_NETWORK_AUTHENTICATION_WPA2 ? B_NETWORK_CIPHER_CCMP
+			uint32 cipher = wpa3
+					|| fJoinAuthentication == B_NETWORK_AUTHENTICATION_WPA2
+				? B_NETWORK_CIPHER_CCMP
 				: fJoinAuthentication == B_NETWORK_AUTHENTICATION_WPA
 					? B_NETWORK_CIPHER_TKIP : B_NETWORK_CIPHER_NONE;
 			add.AddUInt32("cipher", cipher);
 			add.AddUInt32("group_cipher", cipher);
-			add.AddUInt32("key_mode", wpa ? B_KEY_MODE_PSK : B_KEY_MODE_NONE);
+			add.AddUInt32("key_mode", wpa3 ? B_KEY_MODE_SAE
+				: wpa ? B_KEY_MODE_PSK : B_KEY_MODE_NONE);
 
 			BMessage reply;
 			status_t status = _SendToNetServer(add, reply,
@@ -1348,8 +1359,15 @@ WiFiController::_Join(BMessage* message)
 	join.AddString("name", name);
 	const char* keyword = haveAuthentication
 		? WirelessAuthenticationKeyword(authentication) : NULL;
+	if (entry != NULL
+		&& (entry->network.key_mode & B_KEY_MODE_OWE) != 0
+		&& (entry->network.key_mode & (B_KEY_MODE_SAE | B_KEY_MODE_PSK
+			| B_KEY_MODE_FT_PSK | B_KEY_MODE_PSK_SHA256)) == 0)
+		keyword = "owe";
 	if (keyword != NULL)
 		join.AddString("authentication", keyword);
+	if (entry != NULL)
+		join.AddUInt32("key_mode", entry->network.key_mode);
 	if (fJoinHasPassword && secured)
 		join.AddString("password", fJoinPassword);
 

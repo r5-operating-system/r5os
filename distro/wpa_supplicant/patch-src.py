@@ -278,6 +278,37 @@ def main() -> None:
         "\t\t}\n", "sae password")
 
     replace(gui,
+        "\t\t\tif (_CheckAskForConfig(message)) {\n"
+        "\t\t\t\tstatus_t status = wireless_config_dialog(*message);\n"
+        "\t\t\t\tif (status != B_OK) {\n"
+        "\t\t\t\t\t_SendReplyIfNeeded(*message, status);\n"
+        "\t\t\t\t\treturn;\n"
+        "\t\t\t\t}\n"
+        "\t\t\t}\n",
+        "\t\t\tif (_CheckAskForConfig(message)) {\n"
+        "\t\t\t\t/* R5 asks for the password itself. This dialog is the\n"
+        "\t\t\t\t * second one. */\n"
+        "\t\t\t\t_SendReplyIfNeeded(*message, B_NOT_ALLOWED);\n"
+        "\t\t\t\treturn;\n"
+        "\t\t\t}\n", "no second dialog")
+
+    replace(gui,
+        "\tBMessage leaveRequest = joinRequest;\n"
+        "\tleaveRequest.what = kMsgWPALeaveNetwork;\n"
+        "\tbe_app->PostMessage(&leaveRequest);\n"
+        "\n"
+        "\tBMessage newJoinRequest = joinRequest;\n"
+        "\tnewJoinRequest.AddString(\"error\",\n"
+        "\t\tB_TRANSLATE(\"Failed to join network. (Incorrect password?)\"));\n"
+        "\tnewJoinRequest.AddBool(\"forceDialog\", true);\n"
+        "\tbe_app->PostMessage(&newJoinRequest);\n",
+        "\tBMessage leaveRequest = joinRequest;\n"
+        "\tleaveRequest.what = kMsgWPALeaveNetwork;\n"
+        "\tbe_app->PostMessage(&leaveRequest);\n"
+        "\t/* The repost opened Haiku's password window on top of R5's. */\n",
+        "no failed-join dialog")
+
+    replace(gui,
         "\tif (interface == NULL) {\n"
         "\t\t// Attempt to connect using the Haiku extension ioctl\n",
         "\tif (interface == NULL) {\n"

@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-18 - Wi-Fi: one password window, and a saved WPA3 network stays WPA3
+
+Problem: a failed join opened Haiku's password window as well as R5's, and the message said the password was wrong when the join had simply not finished. A WPA3 or OWE network had no name in the Wi-Fi Kit, so the join was sent without an authentication mode and the supplicant asked again. A remembered WPA3 network was read back as an open network.
+
+Changed: the supplicant leaves the network on failure and does not open a dialog. The package is `wpa_supplicant-2.11.r5.3-1`. The Wi-Fi Kit labels WPA3, the hidden-network menu offers WPA3 Personal, and a join carries the scanned key mode. Settings read and write `wpa3` and `owe`.
+
+Limits: not jammed and not booted. OWE still has no entry in the hidden-network menu.
+
 ## 2026-11-18 - Wi-Fi: the HT join no longer waits for a block-ack that does not exist
 
 Problem: with `ht_vht` on, a WPA2 join on the 5625U never finishes and the supplicant then says the password is wrong. The password is right. The review of that path found the station record and the transmit description disagree with what the radio actually does.
