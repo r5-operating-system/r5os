@@ -596,6 +596,7 @@ struct mtk_softc {
 	uint32_t sc_txdone;
 	uint32_t sc_raw[3];
 	int sc_events_shown;
+	int sc_stack;
 	uint8_t sc_seq;
 	uint8_t sc_roc_token;
 	int sc_roc_granted;

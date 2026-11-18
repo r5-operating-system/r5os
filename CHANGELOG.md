@@ -8,6 +8,8 @@ Changed: a passphrase no longer sets `ieee80211w`. SAE and OWE still require it.
 
 Limits: not jammed and not booted. A protected deauth is still discarded. The station record was not widened. The detach order was not changed. Fast transition stays off.
 
+Tested: the host fuzz targets ies, rsn, action, mtkrx and he each ran 60 seconds, with no crash. The supplicant package for this change is `wpa_supplicant-2.11.r5.5-1`. The cross compiler rebuilt it. `ieee80211w` is set only for SAE and OWE.
+
 ## 2026-11-18 - Wi-Fi: the rest of the review that could be checked
 
 Problem: several notes from the same review were still open. An integrity key had no packet number. A beacon's HE element could claim PPE thresholds this builder does not send. A router advertisement with lifetime 0 removed every IPv6 default route. An old DNS domain was written back when the new configuration had none. The link rate stayed on screen after the station left. A device named `10` matched a notification for `0`. "Wi-Fi 6E" sorted above "Wi-Fi 7" because the comparison used the last character.
