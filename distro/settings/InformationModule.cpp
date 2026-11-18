@@ -54,6 +54,11 @@ static const uint32 kMsgCopy = 'r5cp';
 static const uint32 kMsgRename = 'r5rn';
 static const uint32 kMsgApplyName = 'r5ra';
 static const uint32 kMsgTick = 'r5tk';
+// SPDX-SnippetBegin
+// SPDX-License-Identifier: MIT
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+static const uint32 kMsgCpuDetails = 'r5cd';
+// SPDX-SnippetEnd
 static const char* kAboutSignature = "application/x-vnd.Haiku-About";
 static const char* kModuleId = "information";
 
@@ -1180,10 +1185,20 @@ InformationView::InformationView(SettingsContext* context)
 	grid->GridLayout()->AddView(fDisplay, 1, 1);
 	grid->GridLayout()->AddView(fRunning, 2, 1);
 
+	// SPDX-SnippetBegin
+	// SPDX-License-Identifier: MIT
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	BButton* cpuDetails = new BButton("cpu_details", "CPU details…",
+		new BMessage(kMsgCpuDetails));
+
 	BLayoutBuilder::Group<>(this, B_VERTICAL, u * 10.0f)
 		.Add(fDevice, 0)
 		.Add(grid, 1)
-		.Add(new FooterLine(), 0);
+		.AddGroup(B_HORIZONTAL, u * 10.0f)
+			.Add(new FooterLine(), 1)
+			.Add(cpuDetails, 0)
+		.End();
+	// SPDX-SnippetEnd
 }
 
 
@@ -1202,6 +1217,13 @@ InformationView::AttachedToWindow()
 	BButton* copy = dynamic_cast<BButton*>(FindView("copy"));
 	if (copy != NULL)
 		copy->SetTarget(this);
+	// SPDX-SnippetBegin
+	// SPDX-License-Identifier: MIT
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	BButton* cpuDetails = dynamic_cast<BButton*>(FindView("cpu_details"));
+	if (cpuDetails != NULL)
+		cpuDetails->SetTarget(this);
+	// SPDX-SnippetEnd
 	if (!IsHidden())
 		_Start();
 }
@@ -1267,6 +1289,13 @@ InformationView::MessageReceived(BMessage* message)
 		case kMsgRefreshPage:
 			_Reload();
 			break;
+		// SPDX-SnippetBegin
+		// SPDX-License-Identifier: MIT
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		case kMsgCpuDetails:
+			be_roster->Launch("application/x-vnd.R5-CPUInfo");
+			break;
+		// SPDX-SnippetEnd
 		default:
 			BView::MessageReceived(message);
 			break;

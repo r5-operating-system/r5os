@@ -1,0 +1,24 @@
+/*
+ * SPDX-FileCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ */
+
+resource app_signature "application/x-vnd.R5-CPUInfo";
+
+resource app_name_catalog_entry "x-vnd.R5-CPUInfo:System name:CPU Info";
+
+resource app_version
+{
+	major  = 1,
+	middle = 0,
+	minor  = 0,
+
+	variety = B_APPV_FINAL,
+
+	internal = 0,
+
+	short_info = "CPU Info",
+	long_info  = "CPU Info ©2026 R5OS Contributors. MIT license."
+};
+
+resource app_flags B_SINGLE_LAUNCH;

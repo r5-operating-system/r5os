@@ -137,6 +137,13 @@ apic_timer_clear_hardware_timer()
 	apic_set_lvt_initial_timer_count(0);
 	return B_OK;
 }
+
+
+extern "C" bool
+r5_apic_timer_uses_tsc_deadline(void)
+{
+	return sUseTscDeadline;
+}
 // SPDX-SnippetEnd
 
 

@@ -92,6 +92,7 @@ def install_kernel_sources() -> None:
         "headers/private/system/r5_string_x86.h",
         # R5: one CPUID/XCR0 read for user-space dispatch
         "headers/private/system/r5_x86_cpu.h",
+        "headers/private/system/r5_pstate_info.h",
         "src/tests/system/libroot/posix/string/Jamfile",
         "src/tests/system/libroot/posix/string/memcpy_test.cpp",
         # air/OS: the FreeBSD network and wireless layers the MediaTek Wi-Fi
