@@ -1254,6 +1254,13 @@ NetServer::_JoinNetwork(const BMessage& message, const BNetworkAddress* address,
 // SPDX-SnippetEnd
 	if (status == B_OK && password != NULL)
 		status = join.AddString("password", password);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	BMessenger notify;
+	if (status == B_OK && message.FindMessenger("notify", &notify) == B_OK)
+		status = join.AddMessenger("notify", notify);
+// SPDX-SnippetEnd
 	if (status != B_OK)
 		return status;
 

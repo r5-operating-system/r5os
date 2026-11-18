@@ -43,7 +43,8 @@ enum {
 	kMsgWiFiStateChanged	= 'wfST',
 		// A flattened WiFiState
 	kMsgWiFiJoinResult		= 'wfJR',
-	kMsgWiFiConnectClosed	= 'wfcl'
+	kMsgWiFiConnectClosed	= 'wfcl',
+	kMsgWiFiKeyFailed		= 'wfKF'
 		// string "name", int32 "status", string "error" (localized)
 };
 
@@ -228,7 +229,7 @@ private:
 			void				_SetPower(bool on);
 			void				_AutoJoin();
 			void				_FinishJoin(status_t status,
-									const char* error);
+									const char* error, bool keyFailed = false);
 			void				_PostState();
 
 			const SavedNetwork*	_FindSaved(const char* name) const;
@@ -283,21 +284,30 @@ namespace BAppearanceKit {
 }
 
 
+const char* r5_wifi_security_name(uint32 authentication);
+void r5_wifi_connect_subtitle(BString& subtitle, uint32 authentication,
+	int32 bars, const char* routerStandard);
+
+
 class WiFiConnectWindow : public BWindow {
 public:
 								WiFiConnectWindow(const BMessenger& controller,
 									const char* name, const char* subtitle,
-									uint32 authentication, int32 bars);
-			void				ApplyResult(status_t status,
-									const char* name, bool keyFailed = false);
-			void				SetCompletion(sem_id done, status_t* result);
-			void				SetController(const BMessenger& controller);
-			void				SetClosedMessenger(const BMessenger& target,
-									int32 token);
+									uint32 authentication, int32 bars,
+									const BMessenger& closedTarget,
+									int32 token, sem_id done,
+									status_t* result);
 	virtual	void				MessageReceived(BMessage* message);
 	virtual	bool				QuitRequested();
 
+	friend	status_t			r5_wifi_connect_dialog(const char* device,
+									const char* name, const char* subtitle,
+									uint32 authentication, int32 bars);
+
 private:
+			void				SetController(const BMessenger& controller);
+			void				ApplyResult(status_t status,
+									const char* name, bool keyFailed);
 			void				_Connect();
 			void				_SetBusy(bool busy);
 			void				_ShowFailure(bool keyFailed);
@@ -315,7 +325,7 @@ private:
 			BAppearanceKit::BPasswordControl* fPassword;
 			class BCheckBox*	fRemember;
 			class BMenuField*	fSecurity;
-			class BStringView*	fStatus;
+			class BTextView*	fStatus;
 			class BButton*		fOther;
 			class BButton*		fConnect;
 			sem_id				fDone;

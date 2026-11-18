@@ -337,6 +337,83 @@ def main() -> None:
         "#define B_KEY_MODE_OWE 0x0800\n"
         "#endif\n", "enums")
 
+    notify = ROOT / "wpa_supplicant/notify.c"
+    replace(notify,
+        "void wpas_notify_psk_mismatch(struct wpa_supplicant *wpa_s)\n"
+        "{\n"
+        "\twpas_dbus_signal_psk_mismatch(wpa_s);\n"
+        "}\n",
+        "void wpas_notify_psk_mismatch(struct wpa_supplicant *wpa_s)\n"
+        "{\n"
+        "\twpas_dbus_signal_psk_mismatch(wpa_s);\n"
+        "#ifdef __HAIKU__\n"
+        "\thaiku_key_failed();\n"
+        "#endif /* __HAIKU__ */\n"
+        "}\n", "psk mismatch")
+
+    sme = ROOT / "wpa_supplicant/sme.c"
+    replace(sme,
+        "\t\twpa_msg(wpa_s, MSG_INFO, WPA_EVENT_AUTH_REJECT MACSTR\n"
+        "\t\t\t\" auth_type=%u auth_transaction=%u status_code=%u\",\n"
+        "\t\t\tMAC2STR(bssid), WLAN_AUTH_SAE,\n"
+        "\t\t\tauth_transaction, status_code);\n"
+        "\t\treturn -2;\n",
+        "\t\twpa_msg(wpa_s, MSG_INFO, WPA_EVENT_AUTH_REJECT MACSTR\n"
+        "\t\t\t\" auth_type=%u auth_transaction=%u status_code=%u\",\n"
+        "\t\t\tMAC2STR(bssid), WLAN_AUTH_SAE,\n"
+        "\t\t\tauth_transaction, status_code);\n"
+        "#ifdef __HAIKU__\n"
+        "\t\textern void haiku_key_failed(void);\n"
+        "\t\t/* Confirm is the password check. A rejected confirm is a\n"
+        "\t\t * wrong SAE password. */\n"
+        "\t\tif (auth_transaction == 2)\n"
+        "\t\t\thaiku_key_failed();\n"
+        "#endif /* __HAIKU__ */\n"
+        "\t\treturn -2;\n", "sae reject")
+
+    replace(gui,
+        "status_t\n"
+        "WPASupplicantApp::_JoinNetwork(BMessage *message)\n"
+        "{\n",
+        "static BMessenger sKeyNotify;\n"
+        "static BString sKeyName;\n"
+        "\n"
+        "extern \"C\" void\n"
+        "haiku_key_failed(void)\n"
+        "{\n"
+        "\tif (!sKeyNotify.IsValid())\n"
+        "\t\treturn;\n"
+        "\tBMessage failed('wfKF');\n"
+        "\tfailed.AddBool(\"key_failed\", true);\n"
+        "\tfailed.AddString(\"name\", sKeyName);\n"
+        "\tsKeyNotify.SendMessage(&failed);\n"
+        "\tsKeyNotify = BMessenger();\n"
+        "}\n"
+        "\n"
+        "status_t\n"
+        "WPASupplicantApp::_JoinNetwork(BMessage *message)\n"
+        "{\n", "key failed hook")
+
+    replace(gui,
+        "\t_StartWatchingInterfaceChanges(interface, "
+        "_InterfaceStateChangeCallback, message);\n",
+        "\t_StartWatchingInterfaceChanges(interface, "
+        "_InterfaceStateChangeCallback, message);\n"
+        "\tsKeyNotify = BMessenger();\n"
+        "\tmessage->FindMessenger(\"notify\", &sKeyNotify);\n"
+        "\tsKeyName = message->FindString(\"name\");\n", "key notify")
+
+    # The hook is called from notify.c and sme.c. Declare it where those
+    # files can see a prototype.
+    replace(notify,
+        "#ifdef __HAIKU__\n"
+        "\thaiku_key_failed();\n"
+        "#endif /* __HAIKU__ */\n",
+        "#ifdef __HAIKU__\n"
+        "\textern void haiku_key_failed(void);\n"
+        "\thaiku_key_failed();\n"
+        "#endif /* __HAIKU__ */\n", "psk prototype")
+
     print("ok")
 
 

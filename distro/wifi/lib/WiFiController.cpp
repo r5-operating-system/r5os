@@ -614,6 +614,19 @@ WiFiController::MessageReceived(BMessage* message)
 			_Join(message);
 			break;
 
+		case kMsgWiFiKeyFailed:
+		{
+			const char* failed = message->GetString("name", "");
+			if (fJoinPending && (failed[0] == '\0' || fJoinName == failed)) {
+				BString error(B_TRANSLATE(
+					"%name% didn't accept this password."));
+				error.ReplaceAll("%name%", fJoinName);
+				_FinishJoin(B_PERMISSION_DENIED, error.String(), true);
+				_Leave();
+			}
+			break;
+		}
+
 		case kMsgWiFiLeave:
 			_Leave();
 			break;
@@ -1371,6 +1384,7 @@ WiFiController::_Join(BMessage* message)
 		join.AddUInt32("key_mode", entry->network.key_mode);
 	if (fJoinHasPassword && secured)
 		join.AddString("password", fJoinPassword);
+	join.AddMessenger("notify", BMessenger(this));
 
 	WiFiDebugLog(fComponent, "joining \"%s\" on %s: authentication %s, %s, "
 		"%s", name, fDevice.String(), keyword != NULL ? keyword : "(default)",
@@ -1380,6 +1394,11 @@ WiFiController::_Join(BMessage* message)
 
 	BMessage reply;
 	status_t status = _SendToNetServer(join, reply, kNetServerReplyTimeout);
+	if (fJoinHasPassword) {
+		char wipe[128];
+		memset(wipe, 0, sizeof(wipe));
+		join.ReplaceString("password", wipe);
+	}
 	if (status == B_OK)
 		status = reply.GetInt32("status", B_ERROR);
 	join.MakeEmpty();
@@ -1519,7 +1538,7 @@ WiFiController::_AutoJoin()
 
 
 void
-WiFiController::_FinishJoin(status_t status, const char* error)
+WiFiController::_FinishJoin(status_t status, const char* error, bool keyFailed)
 {
 	if (!fJoinPending)
 		return;
@@ -1536,6 +1555,7 @@ WiFiController::_FinishJoin(status_t status, const char* error)
 	BMessage result(kMsgWiFiJoinResult);
 	result.AddString("name", fJoinName);
 	result.AddInt32("status", status);
+	result.AddBool("key_failed", keyFailed);
 	if (error != NULL)
 		result.AddString("error", error);
 	fTarget.SendMessage(&result, (BHandler*)NULL, kTargetTimeout);

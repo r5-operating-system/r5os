@@ -8,6 +8,10 @@
 
 #include <R5WiFi.h>
 
+#include <OS.h>
+#include <string.h>
+
+#include <Bitmap.h>
 #include <Button.h>
 #include <Catalog.h>
 #include <CheckBox.h>
@@ -17,6 +21,7 @@
 #include <Message.h>
 #include <PopUpMenu.h>
 #include <StringView.h>
+#include <TextView.h>
 
 #include <PasswordControl.h>
 #include <WindowEffects.h>
@@ -47,30 +52,45 @@ public:
 		BView("header", B_WILL_DRAW),
 		fName(name),
 		fSubtitle(subtitle),
-		fBars(bars)
+		fBars(bars < 0 ? 0 : bars > 4 ? 4 : bars),
+		fTile(NULL)
 	{
 		SetExplicitMinSize(BSize(360, 52));
 		SetViewColor(B_TRANSPARENT_COLOR);
 	}
 
+	~ConnectHeader()
+	{
+		delete fTile;
+	}
+
 	void Draw(BRect updateRect)
 	{
 		(void)updateRect;
+		if (fTile == NULL) {
+			fTile = new BBitmap(BRect(0, 0, 39, 39), B_RGBA32, true);
+			BView* off = new BView(fTile->Bounds(), "tile", B_FOLLOW_NONE,
+				B_WILL_DRAW);
+			fTile->AddChild(off);
+			if (fTile->Lock()) {
+				off->SetViewColor(B_TRANSPARENT_COLOR);
+				off->SetHighUIColor(B_PANEL_TEXT_COLOR);
+				r5_level_glyph_draw(off, R5_LEVEL_SIGNAL,
+					fTile->Bounds().InsetByCopy(6, 8), fBars,
+					off->HighColor(),
+					ui_color(B_PANEL_BACKGROUND_COLOR),
+					R5_LEVEL_STYLE_NORMAL);
+				off->Sync();
+				fTile->Unlock();
+			}
+		}
 		SetDrawingMode(B_OP_ALPHA);
 		SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_COMPOSITE);
 		font_height height;
 		be_bold_font->GetHeight(&height);
 		float top = 8;
-		BRect tile(8, top, 48, top + 40);
-		int32 bars = fBars;
-		if (bars < 0)
-			bars = 0;
-		if (bars > 4)
-			bars = 4;
-		SetHighUIColor(B_PANEL_TEXT_COLOR);
-		r5_level_glyph_draw(this, R5_LEVEL_SIGNAL, tile.InsetByCopy(6, 8),
-			bars, HighColor(), ui_color(B_PANEL_BACKGROUND_COLOR),
-			R5_LEVEL_STYLE_NORMAL);
+		if (fTile != NULL)
+			DrawBitmap(fTile, BPoint(8, top));
 		SetFont(be_bold_font);
 		SetHighUIColor(B_PANEL_TEXT_COLOR);
 		DrawString(fName.String(), BPoint(58, top + height.ascent));
@@ -86,27 +106,29 @@ private:
 	BString fName;
 	BString fSubtitle;
 	int32 fBars;
+	BBitmap* fTile;
 };
 
 
 WiFiConnectWindow::WiFiConnectWindow(const BMessenger& controller,
-	const char* name, const char* subtitle, uint32 authentication, int32 bars)
+	const char* name, const char* subtitle, uint32 authentication, int32 bars,
+	const BMessenger& closedTarget, int32 token, sem_id done, status_t* result)
 	:
 	BWindow(BRect(0, 0, 460, 220), B_TRANSLATE("Connect to Wi-Fi"),
 		B_TITLED_WINDOW, B_NOT_ZOOMABLE | B_NOT_MINIMIZABLE | B_NOT_RESIZABLE
 			| B_AUTO_UPDATE_SIZE_LIMITS | B_CLOSE_ON_ESCAPE
 			| B_ASYNCHRONOUS_CONTROLS),
 	fController(controller),
-	fClosedTarget(),
-	fToken(0),
+	fClosedTarget(closedTarget),
+	fToken(token),
 	fBars(bars),
 	fName(name),
 	fAuthentication(authentication),
 	fBusy(false),
 	fFinished(false),
 	fOptionsOpen(false),
-	fDone(-1),
-	fResult(NULL)
+	fDone(done),
+	fResult(result)
 {
 	BAppearanceKit::set_window_glass(this, true);
 
@@ -133,9 +155,14 @@ WiFiConnectWindow::WiFiConnectWindow(const BMessenger& controller,
 			item->SetMarked(true);
 	}
 	fSecurity = new BMenuField("security", B_TRANSLATE("Security"), security);
-	fSecurity->Hide();
 
-	fStatus = new BStringView("status", "");
+	fStatus = new BTextView("status");
+	fStatus->MakeEditable(false);
+	fStatus->MakeSelectable(false);
+	fStatus->SetWordWrap(true);
+	fStatus->SetViewColor(B_TRANSPARENT_COLOR);
+	fStatus->SetExplicitMinSize(BSize(360, be_plain_font->Size() * 2));
+	fStatus->SetExplicitMaxSize(BSize(360, be_plain_font->Size() * 4));
 	fOther = new BButton("other", B_TRANSLATE("› Other options"),
 		new BMessage(kToggleOptions));
 	fConnect = new BButton("connect", B_TRANSLATE("Connect"),
@@ -147,23 +174,24 @@ WiFiConnectWindow::WiFiConnectWindow(const BMessenger& controller,
 		B_TRANSLATE("Password"));
 	passwordLabel->SetAlignment(B_ALIGN_RIGHT);
 	passwordLabel->SetViewColor(B_TRANSPARENT_COLOR);
+	passwordLabel->SetDrawingMode(B_OP_ALPHA);
+	passwordLabel->SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_COMPOSITE);
+	fStatus->SetDrawingMode(B_OP_ALPHA);
+	fStatus->SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_COMPOSITE);
 
 	ConnectHeader* header = new ConnectHeader(name,
 		subtitle != NULL ? subtitle : "", bars);
-	fStatus->SetViewColor(B_TRANSPARENT_COLOR);
+	fSecurity->Hide();
 	BLayoutBuilder::Group<>(this, B_VERTICAL, B_USE_SMALL_SPACING)
 		.SetInsets(B_USE_WINDOW_SPACING)
 		.Add(header)
-		.AddGroup(B_HORIZONTAL)
-			.Add(passwordLabel)
-			.Add(fPassword)
+		.AddGrid(B_USE_SMALL_SPACING, B_USE_SMALL_SPACING)
+			.Add(passwordLabel, 0, 0)
+			.Add(fPassword, 1, 0)
+			.Add(fRemember, 1, 1)
+			.Add(fSecurity, 0, 2, 2)
+			.Add(fStatus, 0, 3, 2)
 		.End()
-		.AddGroup(B_HORIZONTAL)
-			.Add(new BStringView("pad", ""))
-			.Add(fRemember)
-		.End()
-		.Add(fSecurity)
-		.Add(fStatus)
 		.AddGroup(B_HORIZONTAL)
 			.Add(fOther)
 			.AddGlue()
@@ -172,19 +200,7 @@ WiFiConnectWindow::WiFiConnectWindow(const BMessenger& controller,
 		.End();
 	SetDefaultButton(fConnect);
 	fPassword->MakeFocus(true);
-	fSecurity->Hide();
-	BAppearanceKit::set_view_glass(header, true);
-	BAppearanceKit::set_view_glass(passwordLabel, true);
-	BAppearanceKit::set_view_glass(fStatus, true);
 	CenterOnScreen();
-}
-
-
-void
-WiFiConnectWindow::SetCompletion(sem_id done, status_t* result)
-{
-	fDone = done;
-	fResult = result;
 }
 
 
@@ -192,14 +208,6 @@ void
 WiFiConnectWindow::SetController(const BMessenger& controller)
 {
 	fController = controller;
-}
-
-
-void
-WiFiConnectWindow::SetClosedMessenger(const BMessenger& target, int32 token)
-{
-	fClosedTarget = target;
-	fToken = token;
 }
 
 
@@ -232,6 +240,17 @@ WiFiConnectWindow::MessageReceived(BMessage* message)
 }
 
 
+static void
+set_status(BTextView* view, const char* text, rgb_color color)
+{
+	view->SetText(text != NULL ? text : "");
+	BFont font(be_plain_font);
+	view->SelectAll();
+	view->SetFontAndColor(&font, B_FONT_ALL, &color);
+	view->Select(0, 0);
+}
+
+
 void
 WiFiConnectWindow::_Connect()
 {
@@ -246,8 +265,8 @@ WiFiConnectWindow::_Connect()
 		|| (choice == kSecurityAutomatic
 			&& fAuthentication == B_NETWORK_AUTHENTICATION_NONE);
 	if (!open && (password == NULL || password[0] == '\0')) {
-		fStatus->SetHighUIColor(B_PANEL_TEXT_COLOR);
-		fStatus->SetText(B_TRANSLATE("Enter the password."));
+		set_status(fStatus, B_TRANSLATE("Enter the password."),
+			ui_color(B_PANEL_TEXT_COLOR));
 		return;
 	}
 
@@ -260,20 +279,35 @@ WiFiConnectWindow::_Connect()
 	else if (choice == kSecurityOpen)
 		authentication = B_NETWORK_AUTHENTICATION_NONE;
 
+	BString secret(password);
 	BMessage join(kMsgWiFiJoin);
 	join.AddString("name", fName);
-	if (!open && password != NULL)
-		join.AddString("password", password);
+	if (!open && secret.Length() > 0)
+		join.AddString("password", secret);
 	join.AddBool("remember", fRemember->Value() == B_CONTROL_ON);
 	join.AddUInt32("authentication", authentication);
 	fController.SendMessage(&join);
+	if (secret.Length() > 0) {
+		char wipe[128];
+		int32 length = secret.Length();
+		if (length > 127)
+			length = 127;
+		memset(wipe, 0, sizeof(wipe));
+		join.ReplaceString("password", wipe);
+		char* buffer = secret.LockBuffer(secret.Length());
+		if (buffer != NULL)
+			memset(buffer, 0, secret.Length());
+		secret.UnlockBuffer(0);
+		fPassword->SetText(wipe);
+	}
+	fPassword->SetText("");
+	fPassword->SetInvalid(false);
 	join.MakeEmpty();
 
 	BString line(B_TRANSLATE("Connecting to %name%" B_UTF8_ELLIPSIS
 		" checking the password"));
 	line.ReplaceAll("%name%", fName);
-	fStatus->SetHighUIColor(B_PANEL_TEXT_COLOR);
-	fStatus->SetText(line);
+	set_status(fStatus, line.String(), ui_color(B_PANEL_TEXT_COLOR));
 	_SetBusy(true);
 }
 
@@ -290,8 +324,6 @@ WiFiConnectWindow::ApplyResult(status_t status, const char* name,
 	}
 	if (status == B_CANCELED)
 		return;
-	// A join timeout is not a rejected password. The red line is only for
-	// a result that says the key was refused. Nothing sends that yet.
 	_ShowFailure(keyFailed);
 }
 
@@ -301,27 +333,21 @@ WiFiConnectWindow::_ShowFailure(bool keyFailed)
 {
 	_SetBusy(false);
 	BString line;
+	rgb_color color = ui_color(B_PANEL_TEXT_COLOR);
 	if (keyFailed) {
 		line = B_TRANSLATE("%name% didn't accept this password. "
 			"Check it and try again.");
-		fStatus->SetHighUIColor(B_FAILURE_COLOR);
-		fConnect->SetLabel(B_TRANSLATE("Try again"));
+		color = ui_color(B_FAILURE_COLOR);
+		fPassword->SetInvalid(true);
 	} else {
 		line = B_TRANSLATE("Couldn't reach %name%. "
 			"Your password wasn't checked. Move closer to the router "
 			"or try again.");
-		rgb_color panel = ui_color(B_PANEL_BACKGROUND_COLOR);
-		bool dark = (panel.red + panel.green + panel.blue) < 384;
-		rgb_color warning;
-		warning.red = dark ? 250 : 133;
-		warning.green = dark ? 199 : 79;
-		warning.blue = dark ? 117 : 11;
-		warning.alpha = 255;
-		fStatus->SetHighColor(warning);
-		fConnect->SetLabel(B_TRANSLATE("Try again"));
+		fPassword->SetInvalid(false);
 	}
+	fConnect->SetLabel(B_TRANSLATE("Try again"));
 	line.ReplaceAll("%name%", fName);
-	fStatus->SetText(line);
+	set_status(fStatus, line.String(), color);
 	fPassword->MakeFocus(true);
 }
 
@@ -374,24 +400,85 @@ WiFiConnectWindow::_Finish(status_t status, bool quit)
 }
 
 
+const char*
+r5_wifi_security_name(uint32 authentication)
+{
+	switch (authentication) {
+		case B_NETWORK_AUTHENTICATION_WPA3:
+			return B_TRANSLATE("WPA3 Personal");
+		case B_NETWORK_AUTHENTICATION_WPA2:
+			return B_TRANSLATE("WPA2 Personal");
+		case B_NETWORK_AUTHENTICATION_WPA:
+			return B_TRANSLATE("WPA Personal");
+		case B_NETWORK_AUTHENTICATION_WEP:
+			return B_TRANSLATE("WEP");
+		case B_NETWORK_AUTHENTICATION_NONE:
+			return B_TRANSLATE("Open");
+		default:
+			return B_TRANSLATE("Wi-Fi");
+	}
+}
+
+
+void
+r5_wifi_connect_subtitle(BString& subtitle, uint32 authentication,
+	int32 bars, const char* routerStandard)
+{
+	if (bars < 0)
+		bars = 0;
+	if (bars > 4)
+		bars = 4;
+	const char* signal;
+	switch (bars) {
+		case 0:
+			signal = B_TRANSLATE("No signal");
+			break;
+		case 1:
+			signal = B_TRANSLATE("Weak signal");
+			break;
+		case 2:
+			signal = B_TRANSLATE("Fair signal");
+			break;
+		case 3:
+			signal = B_TRANSLATE("Good signal");
+			break;
+		default:
+			signal = B_TRANSLATE("Strong signal");
+			break;
+	}
+	subtitle = r5_wifi_security_name(authentication);
+	subtitle << " · " << signal;
+	if (routerStandard != NULL && routerStandard[0] != '\0')
+		subtitle << " · " << routerStandard;
+}
+
+
+static int32 sConnectDialogOpen = 0;
+
+
 status_t
 r5_wifi_connect_dialog(const char* device, const char* name,
 	const char* subtitle, uint32 authentication, int32 bars)
 {
 	if (name == NULL || name[0] == '\0')
 		return B_BAD_VALUE;
+	if (atomic_add(&sConnectDialogOpen, 1) != 0) {
+		atomic_add(&sConnectDialogOpen, -1);
+		return B_BUSY;
+	}
 
 	status_t result = B_CANCELED;
 	sem_id done = create_sem(0, "wifi connect");
-	if (done < 0)
+	if (done < 0) {
+		atomic_add(&sConnectDialogOpen, -1);
 		return done;
+	}
 
 	WiFiConnectWindow* window = new WiFiConnectWindow(BMessenger(), name,
-		subtitle, authentication, bars);
+		subtitle, authentication, bars, BMessenger(), 0, done, &result);
 	WiFiController* controller = new WiFiController(BMessenger(window),
 		"dialog", 0);
 	window->SetController(BMessenger(controller));
-	window->SetCompletion(done, &result);
 	controller->Start();
 	if (device != NULL && device[0] != '\0') {
 		BMessage select(kMsgWiFiSelectDevice);
@@ -403,5 +490,6 @@ r5_wifi_connect_dialog(const char* device, const char* name,
 		;
 	delete_sem(done);
 	controller->PostMessage(B_QUIT_REQUESTED);
+	atomic_add(&sConnectDialogOpen, -1);
 	return result;
 }

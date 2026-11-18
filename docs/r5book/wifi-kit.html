@@ -69,8 +69,9 @@
 			The window calls <code class="inline">BAppearanceKit::set_window_glass(this, true)</code> as soon as the
 			<code class="inline">BWindow</code> exists. Connect automatically starts on. The controller stores the
 			password only after the link is up, and only when that box is on. A timeout says the router was not
-			reached. The red "didn't accept this password" line is used only when the join result has
-			<code class="inline">"key_failed"</code> set. Nothing sends that yet.
+			reached. The red "didn't accept this password" line, and a red border on the password
+			field, are used when the join result has <code class="inline">"key_failed"</code> set.
+			The supplicant sends that when the 4-way handshake or the SAE confirm is rejected.
 			It starts its own <code class="inline">WiFiController</code> when it is
 			attached to a window and stops it when it is detached, so a typed password does not outlive the
 			view.</p>
