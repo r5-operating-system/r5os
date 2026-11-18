@@ -4,9 +4,12 @@ Geverifieerde prompts (gecontroleerd tegen `origin/main` bij `#4426`, de Haiku-t
 
 - **IPv6 & Networking (Prompt 1 uit `REVIEW-PROMPTS.md`):** `[DONE in #4425]` (`91f9d96a31`).
 - **Prompt 1 (AMD64 kernel fixes):** `[DONE in #4428]`.
-- **Prompt 2:** gesplitst in 2a (ontwerp, alleen lezen; verstuurd) en 2b (bouwen, pas na het ontwerp).
+- **Prompt 2:** gesplitst in 2a (ontwerp, `[DONE in #4430]`) en 2b (bouwen, verstuurd).
+- **Prompt 4 tot en met 6** (18 nov 2026): de oude prompts 4 (AVX2-dispatch) en 5 (CPU Info) samengevoegd met de AMD64-inventarisatie van die dag tot drie prompts: 4 kernel, 5 user space, 6 CPU Info. Elk onderdeel wordt een eigen commit, met een meting erna.
 
-Volgorde: 2a → 2b. Prompt 3 kan los van 2 lopen; prompt 4 pas na 3; prompt 5 kan los lopen, maar de regel "2MB-pages" pas na 2b.
+Volgorde: 2a → 2b. Prompt 3 (x86-64-v2) kan los van 2 lopen. Prompt 4 en 5 komen na prompt 3 en kunnen tegelijk lopen (andere bestanden). Prompt 6 als laatste, met de regel "2MB-pages" pas na 2b.
+
+Afspraak voor 4 en 5: alles wat in x86-64-v2 zit (SSE3, SSSE3, SSE4.1, SSE4.2, POPCNT, CMPXCHG16B) wordt zonder dispatch gebruikt. Alleen wat erboven zit (AVX2, FMA, BMI1/2, ERMS, FSRM, XSAVEOPT/XSAVEC/XSAVES, TSC-deadline, MWAIT, RDPID) wordt bij het starten gekozen via CPUID, met de v2-code als terugval. AMD-only en Intel-only paden mogen, mits zo gekozen; het geheel moet op Intel en AMD sneller worden.
 
 ---
 
@@ -164,82 +167,117 @@ Work on a new branch from `origin/main`. Copy any modified Haiku files into `dis
 
 ---
 
-## Prompt 4 — `x86-64-v3` (AVX2 / FMA / BMI2) runtime dispatch in hot paths (Argon)
+## Prompt 4 — AMD64 kernel: release-kernel, snelle paden, scheduler en idle (Argon)
 
-Nagekeken (18 nov 2026): de kernel zet AVX (en AVX-512) al aan in XCR0 (`distro/kernel/src/system/kernel/arch/x86/arch_cpu.cpp:1843-1863`), dus de dispatch kan echt aangaan. Eerst meten, dan pas AVX2-paden. M13 staat stil (alleen Skia standaard aan rest nog, met een stick); AMD64 gaat nu voor. Advies: houd AVX2-wijzigingen in app_server buiten de stick die Skia standaard aanzet, zodat een fout op die stick één oorzaak heeft.
+Nagekeken (18 nov 2026, inventarisatie op `origin/main`): `haiku/build/config_headers/kernel_debug_config.h:8` heeft `KDEBUG_LEVEL 2` en niets in `distro/` of de scripts zet dat lager [V]; de netwerkchecksum (`haiku/src/add-ons/kernel/network/stack/utility.cpp:102`) telt per 16 bits met "TODO: unfold loop for speed" [V]. De andere punten komen uit de inventarisatie en staan in de prompt met hun plek in de code; de bouwer controleert ze eerst.
 
 ```markdown
-Read `AGENTS.md` and `docs/64BIT.md` (sections 1, 5, 6 Step 4, and 7) first.
-Work on a new branch from `origin/main` AFTER `x86-64-v2` is merged. Copy any modified Haiku files into `distro/` preserving original headers/copyright and wrapping all R5 changes in `SPDX-SnippetBegin` / `SPDX-SnippetEnd` blocks (`MIT`, `2026 R5OS Contributors`).
+## Prompt 4 — AMD64 kernel: release kernel, fast paths, scheduler and idle
 
-## Goal: Keep `x86-64-v2` as the baseline and add CPUID runtime dispatch for `x86-64-v3` (AVX2/FMA/BMI2) in hot paths
+Read AGENTS.md first. Work on a new branch from origin/main AFTER prompt 3 (x86-64-v2) is merged: the kernel is built for v2, so everything in v2 is used without a check; anything above v2 is chosen at boot by CPUID with the current code as the fallback. Copy every Haiku file you change into distro/kernel/ with its original header and copyright, wrap all R5 changes in SPDX-SnippetBegin/End (MIT, 2026 R5OS Contributors), and hook new copies into scripts/apply-kernel-bugs.py. Do not touch Wi-Fi, IPv6, Bluetooth, GPU drivers or app_server. AMD-only or Intel-only paths are fine when chosen at run time; the whole must make both Intel and AMD faster. Check every location below in the code before changing it, and say in the report if one is not as described.
 
-1. **Safe CPUID + `XCR0` detection helper (user space)**
-   - Add a small shared helper (using `cpuid` + `xgetbv(0)`) that returns `true` for `x86-64-v3` ONLY when:
-     - CPUID reports `OSXSAVE`, `AVX`, `AVX2`, `FMA`, `BMI1`, `BMI2`, `MOVBE`, `F16C`, AND
-     - `XCR0` bits 1 (XMM) and 2 (YMM) are both enabled by the OS/hypervisor.
-   - Never assume AVX2 is usable without checking `OSXSAVE` and `XCR0`.
+One commit per numbered step. After each step: jam, one short QEMU boot with SMAP on (own copy of r5-os.image, not scripts/run-qemu-r5.sh), and the measurement of step 0 again. Write every number in CHANGELOG.md.
 
-2. **Measure first, then dispatch (no global `-march=x86-64-v3`)**
-   - Before writing any AVX2 code: measure the candidate paths on the current build (`scripts/qemu-m13-measure.py` for the compositor, a small host benchmark for blend loops) and write the numbers down. Only a path that costs measurable time gets an AVX2 version.
-   - The kernel already enables AVX in XCR0 (`distro/kernel/src/system/kernel/arch/x86/arch_cpu.cpp:1843-1863`); the helper below still checks it at run time.
-   - Keep the global build baseline at `x86-64-v2`.
-   - Compile only the selected hot-path translation units or functions with `__attribute__((target("avx2,fma,bmi2")))` (or `-mavx2 -mfma -mbmi2` on a dedicated `.cpp` file), selected once at init via function pointer (same pattern as `libroot`'s `memcpy.cpp`).
-   - Concrete R5 candidates:
-     - `distro/app_server/Compositor.cpp`, `distro/app_server/GPUCopy.cpp`, `distro/app_server/skia/SkiaPainter.cpp`, and `distro/skia/build-skia.sh` (check what Skia already dispatches vs what `app_server` blends itself),
-     - `libroot` / `media` hot loops where profiling/measurement shows a real gain.
+0. Baseline measurement (no code change): a small benchmark set you add under distro/ (MIT), run in QEMU and reusable on a stick:
+   - a null syscall loop (10 million _kern_get_current_team()), ns per call;
+   - a port or pipe ping-pong between two threads on different CPUs, round trips per second;
+   - a TCP transfer over loopback, MB/s;
+   - a checksum microbenchmark (old function, random buffers);
+   - boot time to net_server from the serial log.
 
-3. **Zero regressions on non-AVX2 CPUs**
-   - Every dispatched path must have an identical `x86-64-v2` fallback and pass the same unit/rendering tests on both paths.
+1. Release kernel. Add a release build profile with KDEBUG_LEVEL 0 (haiku/build/config_headers/kernel_debug_config.h:8 is 2 today; level 2 turns on paranoid malloc/free, spinlock debugging, page-access and heap debugging, and makes every mutex_lock take the slow path). The image built by scripts/build-locked.sh uses the release profile; a debug profile with level 2 stays available for QEMU and test runs (a switch in distro/UserBuildConfig or a build-locked.sh option, documented in docs/). Measure step 0 with both kernels.
 
-## Verification & delivery
-- Full AMD64 build with `scripts/build-locked.sh` in WSL (`jam_exit=0`).
-- Run two QEMU boots (using your own copy of `r5-os.image`, never `scripts/run-qemu-r5.sh` if another session may run):
-  1. `-cpu EPYC-Rome` (or `-cpu max` with AVX2) + SMAP on → AVX2 dispatch active, desktop/compositor renders cleanly, no `#UD` / panic.
-  2. `-cpu Nehalem` (`x86-64-v2`, no AVX2) + SMAP on → falls back cleanly to v2 path, desktop renders identically, no illegal instruction.
-- Measure before/after on the same benchmark as step 2 (note hardware vs QEMU). Keep these changes out of the stick that turns Skia on by default (M13), so each stick tests one change.
-- Update `CHANGELOG.md` (newest first) with what changed and what was tested.
-- Commit locally on the new branch. Ask me before `git push` / PR.
-- Report in Dutch, short (mark `[V]` = verified in code/output, `[I]` = inference).
+2. Network checksum: replace the 16-bit loop in haiku/src/add-ons/kernel/network/stack/utility.cpp:102 with a 64-bit add-with-carry loop, unrolled (as Linux csum_partial). Results must be bit-identical: add a host fuzz target that compares old and new on random buffers, odd lengths and odd start addresses (60 s).
+
+3. Syscall time accounting: haiku/src/system/kernel/arch/x86/64/interrupts.S:77-109 (UPDATE_THREAD_USER_TIME / UPDATE_THREAD_KERNEL_TIME) takes a spinlock and reads the clock on syscall entry and exit. Only the current thread writes these times: use a per-thread sequence counter instead of the spinlock, change every reader (thread.cpp, team.cpp, the scheduler) to the retry read, and read the clock once per round trip if the accounting allows it.
+
+4. FPU state on interrupts (interrupts.S:222-279, arch_cpu.cpp around 1857):
+   - zero only the 64-byte XSAVE header instead of the whole save area before XSAVE;
+   - choose at boot: XSAVES/XRSTORS (with IA32_XSS = 0) when present, else XSAVEOPT, else XSAVEC, else today's XSAVE. Convert the format where signal frames copy this area (64/thread.cpp:377-471);
+   - Intel only, chosen at run time: vzeroupper on syscall entry when AVX is enabled.
+
+5. Timer: haiku/src/system/kernel/arch/x86/timers/x86_apic.cpp:50-74 does four APIC writes per timer. Write the initial count once (a write restarts a one-shot timer). Use TSC-deadline mode (one WRMSR) when CPUID leaf 1 ECX bit 24 is set and the CPU is not on the known errata list; keep the APIC count as the fallback. Measure the cost in QEMU (VM exits) and say what it was.
+
+6. User copies: user_memcpy/user_memset/user_strlcpy (haiku/headers/private/kernel/arch/generic/user_memory.h:59-80) use setjmp per call. Write x86_64 assembly versions with a fault entry, as the 32-bit version in 32/arch.S:129 does, using rep movsb (with FSRM, also for short copies). STAC/CLAC must stay paired: review by hand and boot with SMAP on.
+
+7. Idle wake-up: distro/kernel/src/system/kernel/scheduler/scheduler.cpp:144-145 always sends a reschedule IPI; the MWAIT idle in distro/kernel/src/add-ons/kernel/power/cpuidle/x86_acpi_cstates/acpi_cpuidle.cpp:229 monitors a dummy variable. MONITOR the CPU's own invoke_scheduler word, set a per-CPU "polling" flag while in MWAIT, and skip the IPI when the target CPU is polling. HLT idle keeps the IPI. Get the memory ordering right and count IPIs before and after.
+
+8. Scheduler topology: distro/kernel/src/system/kernel/arch/x86/arch_cpu.cpp reads the hybrid bit (around 542) and the cache-sharing masks (around 684-848) but the scheduler only uses SMT, core and package. Add a cache-domain level from the existing sharing masks (AMD CCX and Intel alike), and on Intel hybrid CPUs read CPUID leaf 0x1A and prefer P-cores for busy threads. Behind topology detection; no change on CPUs without these.
+
+Verification: jam_exit=0 for every step; the QEMU boot with SMAP on after every step; the step-0 numbers per step in CHANGELOG.md, noting that QEMU is not hardware. Steps 7 and 8 cannot show their full gain on the 5625U (one CCX, not hybrid) or in QEMU; say so. Hardware: one 5625U stick at the end, with the benchmark set. Commit locally; ask me before push/PR. Report in Dutch, short, with [V]/[I].
 ```
 
 ---
 
-## Prompt 5 — R5 CPU-informatie: wat de CPU kan en wat R5 gebruikt (Cursor / Argon)
+## Prompt 5 — AMD64 user space: build-vlaggen, CPU-dispatch, libroot, libbe en app_server (Argon)
 
-Nagekeken (18 nov 2026), met de keuzes van de eigenaar:
-- Gesplitst: 5a breidt de kerneldriver uit (alleen lezen), 5b bouwt het venster.
-- Het venster is een los programma "CPU Info", geopend met een knop op Settings → System → Information. Geen nieuwe pagina in de Settings-lijst en geen Back-knop (AGENTS.md).
-- De regel "2MB-pages" komt pas na prompt 2b; tot dan "not yet". PCID staat bij de 5625U op "not available on this CPU" (stick 49: CPUID leaf 1 ECX bit 17 = 0).
-- Na prompt 3 start R5 niet meer met `-cpu qemu64`; de test gebruikt `Nehalem` (v2) en `EPYC-Rome` (v3).
-
-### Prompt 5a — kernel: actieve CPU-functies uitlezen (alleen lezen)
+Nagekeken (18 nov 2026, inventarisatie op `origin/main`): `distro/kernel/src/system/libroot/posix/string/arch/x86_64/memcpy.cpp` gebruikt `rep movsb` vanaf 2048 bytes zonder ERMS-check [V]; `pthread_mutex.cpp` probeert één `atomic_test_and_set` en gaat dan naar `_kern_mutex_lock` [V]; `FontCache.cpp:108` heeft `kMaxEntryCount = 30` [V]; Painter's SIMD-controle staat alleen onder `#if __i386__` (`Painter.cpp:120`) [V]; `BuildSetup:714` is `OPTIM ?= -O2` [V]. Dit vervangt de oude prompt 4 (AVX2-dispatch); die zit nu in stap 2 en 10.
 
 ```markdown
-Read `AGENTS.md`, `distro/kernel/x86/r5_pstate.cpp` and `distro/cpu/r5_pstate_log.cpp` first. Work on a new branch from `origin/main`. Kernel driver change only. R5 changes MIT with SPDX headers or SPDX-Snippet blocks.
+## Prompt 5 — AMD64 user space: build flags, CPU dispatch, libroot, libbe and app_server
 
-Goal: `/dev/misc/r5_pstate` also reports, read-only, which CPU features the kernel actually turned on, so a program can show it.
+Read AGENTS.md first, and docs/LIBR5.md before touching libbe or app_server. Work on a new branch from origin/main AFTER prompt 3 (x86-64-v2) is merged: everything in v2 (SSE3, SSSE3, SSE4.1, SSE4.2, POPCNT, CMPXCHG16B) is used directly; AVX2, FMA, BMI1/2, ERMS and FSRM are chosen at run time by CPUID with the v2 code as the fallback. The runtime_loader has no IFUNC: dispatch with a function pointer set once at init, as haiku/src/system/libroot/os/arch/x86_64/system_time.cpp does, and keep small sizes on an inline path without the indirect call. Copy every Haiku file you change into distro/ with its original header, wrap R5 changes in SPDX-SnippetBegin/End (MIT), hook copies into the existing apply scripts. libbe and libroot keep their ABI. Do not touch Wi-Fi, IPv6, Bluetooth or the GPU drivers. Check every location below in the code before changing it.
 
-1. Add a new read request at the end (do not change a request or struct that shipped). It returns one line of flags the kernel has enabled: `SMEP`, `SMAP`, `NX`, `PAT`, `x2APIC`, `INVPCID` (used for the global TLB flush since #4428), `CLFLUSHOPT` (used since #4428), `PCID` (enabled or not available), `2MB-pages` (report "not yet" until prompt 2b lands), `CPPC/HWP`, and the XCR0 mask the kernel set.
-2. Read state only from the kernel's own variables and CR4/XCR0. Never write an MSR. Copy to user memory only with `user_memcpy()` after `IS_USER_ADDRESS()` (SMAP).
-3. Describe the new request in `docs/LIBR5.md` or the driver's doc in the same change.
+One commit per numbered step. After each step: jam, a QEMU boot with SMAP on (own image copy), and the measurement of step 0 again; every number in CHANGELOG.md.
 
-Verification: jam with `scripts/build-locked.sh` (`jam_exit=0`); one short QEMU boot with SMAP on (own image copy) with `-cpu EPYC-Rome`; read the new request once (a tiny test call or `r5_pstate_log`) and paste the line. Update `CHANGELOG.md`. Commit locally; ask me before push/PR. Report in Dutch, short, with [V]/[I].
+0. Baseline measurement (no code change), benchmarks you add under distro/ (MIT): memcpy/memset/memmove size sweep 16 B to 64 MB; strlen/strchr/strcmp/memcmp on 16 B to 4 KB; a 12-thread malloc/free loop; a 12-thread mutex and rwlock contention test; fma/floor/ceil loops; BBitmap SetBits/ImportBits with color conversion; app start time (StyledEdit, a Tracker window) in a loop; the existing app_server benchmark (haiku/src/tests/servers/app/benchmark) plus a scaled DrawBitmap test; scripts/qemu-m13-measure.py.
+
+1. Linker and visibility:
+   - add -Wl,--hash-style=both to user-space LINKFLAGS (ArchitectureRules around line 65); the runtime_loader already reads DT_GNU_HASH. Kernel add-ons stay as they are;
+   - -Bsymbolic-functions and -fno-semantic-interposition for libbe and app_server (not libroot: malloc must stay interposable);
+   - -Wl,--gc-sections for app_server (distro/app_server/app_server-Jamfile); check that the decorator add-on symbols stay exported.
+
+2. CPU-feature helper in libroot (private header, one place): reads CPUID and XCR0 once (OSXSAVE plus XMM/YMM enabled before AVX/AVX2/FMA count), plus ERMS, FSRM, BMI2, and the last-level cache size (leaf 4 on Intel, 0x8000001D on AMD, fixed fallback). Used by every step below.
+
+3. memcpy, memset, memmove (distro/kernel/src/system/libroot/posix/string/arch/x86_64/memcpy.cpp; copy memset.cpp and musl memmove.c into distro/):
+   - rep movsb/stosb only when ERMS is present; otherwise the existing SSE loop;
+   - with FSRM, a lower rep-movsb threshold, only if the sweep shows it;
+   - above about 3/4 of the last-level cache: non-temporal stores (movntdq) and sfence;
+   - memmove with overlap: 16-byte SSE loops (never std; rep movsb);
+   - keep the existing 4K-aliasing guard.
+
+4. String functions (musl strlen/strchr/strchrnul/memchr, Haiku strcmp.c and memcmp.c): v2 SSE2/SSE4.2 versions, 16 bytes per step, with aligned loads so no read crosses into an unmapped page; AVX2 32-byte versions by dispatch for long strings. Fuzz every function against the old C version (60 s each).
+
+5. malloc (haiku/src/system/libroot/posix/malloc/openbsd): set the pool count at init to the CPU count rounded up to a power of two (cap _MALLOC_MUTEXES, 32), and create the heap mutexes with MUTEX_FLAG_ADAPTIVE.
+
+6. Locks: pthread_mutex.cpp (one atomic_test_and_set, then _kern_mutex_lock) and os/locks/mutex.cpp: a short read-only spin with pause before the syscall, bounded by time (TSC), not by loop count, because pause costs very different cycles on Intel and AMD. pthread_rwlock.cpp: a reader-count fast path with atomic add instead of taking the internal mutex on every read. Stress with 12 threads; review the fail paths.
+
+7. libm: fma/fmaf by dispatch to FMA3 (Intel Haswell and later, AMD Piledriver and later; keep the existing FMA4 branch for AMD Bulldozer); floor/ceil/trunc/rint with roundsd/roundss (SSE4.1, in v2, no dispatch). Results bit-identical to musl's C versions on a test set.
+
+8. libbe ConvertBits (haiku/src/kits/interface/ColorConversion.cpp:817-875 calls a function per pixel): dedicated row loops for RGB32↔RGBA32, RGB24→RGB32, RGB16→RGB32 and CMAP8→RGB32 with SSSE3 pshufb (v2, no dispatch), AVX2 by dispatch; the generic path stays the fallback. Compare every pair with the old output.
+
+9. app_server Painter: an SSE2 version of the bilinear x-loop (DrawBitmapBilinear.h around 602; Painter.cpp:120 only detects SIMD under __i386__ and the nasm loop is 32-bit only), pixel-identical to the C path; -O3 for Painter, AGG and drawing_modes only (per-directory OPTIM; BuildSetup:714 is -O2); FontCache kMaxEntryCount from 30 to 128 (FontCache.cpp:108), and count evictions before and after.
+
+10. AVX2 in the compositor (the former prompt 4): measure first with step 0 and scripts/qemu-m13-measure.py; then AVX2 versions, chosen by the helper of step 2, only for paths that cost measurable time (distro/app_server/Compositor.cpp, GPUCopy.cpp and the blends app_server does itself; Skia already dispatches its own v3/v4 paths). Identical output on the v2 path. Keep this step out of the stick that turns Skia on by default.
+
+Verification: jam_exit=0 for every step; the QEMU boot with SMAP on after every step; QEMU runs with -cpu Nehalem (v2, no AVX2) and -cpu EPYC-Rome (AVX2) for every dispatched step, and both paths give the same results; the step-0 numbers per step in CHANGELOG.md, noting QEMU versus hardware. UI changes: I check them in VirtualBox. Commit locally; ask me before push/PR. Report in Dutch, short, with [V]/[I].
 ```
 
-### Prompt 5b — programma "CPU Info" en de knop op Information
+---
+
+## Prompt 6 — CPU Info: wat de CPU kan en wat R5 gebruikt (Cursor / Argon)
+
+Was prompt 5 (5a en 5b), nu na prompt 4 en 5, zodat het alles kan tonen wat die aanzetten. Keuzes van de eigenaar (18 nov 2026): een los programma "CPU Info", geopend met een knop op Settings → System → Information; geen nieuwe pagina in de Settings-lijst en geen Back-knop. "2MB-pages" pas na prompt 2b; PCID op de 5625U "not available on this CPU". Na prompt 3 start R5 niet meer met `-cpu qemu64`; de test gebruikt `Nehalem` en `EPYC-Rome`.
 
 ```markdown
-Read `AGENTS.md` (Settings window rules), `docs/LIBR5.md`, `docs/APPEARANCE-KIT.md`, R5Book, the Information page in `distro/settings/`, `distro/apps/devicemanager/Jamfile`, and the request added in prompt 5a first. Work on a new branch from `origin/main` after 5a is merged. New R5 files are MIT (`SPDX-FileCopyrightText: 2026 R5OS Contributors`, `SPDX-License-Identifier: MIT`).
+## Prompt 6 — CPU Info: what the CPU can do and what R5 uses
 
-Goal: a separate program "CPU Info" (`distro/apps/cpuinfo/`, like `distro/apps/devicemanager/`, in the regular image) that shows what the CPU can do and what R5 uses, opened from a button on the Information page.
+Read AGENTS.md (Settings window rules), docs/LIBR5.md, docs/APPEARANCE-KIT.md, R5Book, the Information page in distro/settings/, distro/kernel/x86/r5_pstate.cpp, distro/cpu/r5_pstate_log.cpp and distro/apps/devicemanager/Jamfile first. Work on a new branch from origin/main after prompts 4 and 5 are merged. New R5 files are MIT (SPDX-FileCopyrightText: 2026 R5OS Contributors, SPDX-License-Identifier: MIT). One commit per part.
 
-1. **The button:** on Settings → System → Information, one button "CPU details…" in the page content that starts the CPU Info program. Nothing else in Settings changes: no new list item, no Back button, the order and descriptions stay as AGENTS.md fixes them.
-2. **The window** (R5 frame, `BAppearanceKit::BCard` from `libr5ui.so`, product name R5, never Haiku/BeOS), two sections:
-   - **CPU hardware** (CPUID + `xgetbv`): vendor, brand string, family/model/stepping, physical cores / logical threads, cache sizes (L1/L2/L3); the level the hardware supports: `x86-64-v1`, `v2` (SSE3, SSSE3, SSE4.1, SSE4.2, POPCNT, CMPXCHG16B), `v3` (AVX, AVX2, FMA, BMI1, BMI2, MOVBE, F16C), `v4` (AVX-512); extra features: AES-NI, SHA, INVPCID, PCID, CLFLUSHOPT, PDPE1GB, invariant TSC, x2APIC, SMEP, SMAP, NX, PAT.
-   - **What R5 uses:** the build baseline (from compiler macros such as `__SSE4_2__` / `__POPCNT__`); the vector state the OS enabled (XCR0: XMM, YMM, ZMM); the kernel line from prompt 5a. A feature the CPU lacks shows "not available on this CPU" (for example PCID on the 5625U); "2MB-pages" shows "not yet" until prompt 2b.
-3. **Copy report** button (plain text to `be_clipboard`) and `--cli` (the same text on stdout, for Terminal and stick scripts).
-4. **Fallbacks:** on non-x86_64, or when the 5a request is missing, show "Unknown" / "Not reported"; never crash.
+Part A — kernel, read-only: a new read request at the end of /dev/misc/r5_pstate (do not change a shipped request or struct) that returns which features the kernel actually uses: SMEP, SMAP, NX, PAT, x2APIC, INVPCID, CLFLUSHOPT, PCID (enabled or not available), 2MB-pages ("not yet" until prompt 2b), CPPC/HWP, the XSAVE variant in use (from prompt 4), TSC-deadline or APIC timer, MWAIT idle, release or debug kernel, and the XCR0 mask. Read kernel variables and CR4/XCR0 only, never write an MSR; copy to user memory only with user_memcpy() after IS_USER_ADDRESS(). Describe the request in docs.
 
-Verification: jam with `scripts/build-locked.sh` (`jam_exit=0`). QEMU with SMAP on (own image copy): start CPU Info from the Information button and with `--cli`, under `-cpu Nehalem` and `-cpu EPYC-Rome`; the hardware section must change between the two, the R5 section must match the build. UI work: no screenshot series; I check it in VirtualBox. Update `CHANGELOG.md`. Commit locally; ask me before push/PR. Report in Dutch, short, with [V]/[I].
+Part B — the program "CPU Info" (distro/apps/cpuinfo/, like devicemanager, in the regular image), opened by one button "CPU details…" in the content of Settings → System → Information. Nothing else in Settings changes: no new list item, no Back button, order and descriptions as AGENTS.md fixes them. R5 frame, BAppearanceKit::BCard (libr5ui.so), product name R5. Two sections:
+- CPU hardware (CPUID + xgetbv): vendor, brand, family/model/stepping, cores/threads, caches; the level the hardware supports (x86-64-v1/v2/v3/v4); extra features (AES-NI, SHA, ERMS, FSRM, INVPCID, PCID, CLFLUSHOPT, PDPE1GB, invariant TSC, x2APIC, SMEP, SMAP, NX, PAT, hybrid).
+- What R5 uses: the build baseline (compiler macros), the user-space paths the libroot helper of prompt 5 chose (memcpy, strings, libm), the vector state the OS enabled (XCR0), and the kernel line of part A. A feature the CPU lacks shows "not available on this CPU".
+Plus a "Copy report" button (plain text to be_clipboard) and --cli (the same text on stdout). Without the part A request or on another architecture: "Unknown" / "Not reported", never a crash.
+
+Verification: jam_exit=0; QEMU with SMAP on (own image copy) under -cpu Nehalem and -cpu EPYC-Rome: start CPU Info from the Information button and with --cli, read part A once; the hardware section changes between the two, the R5 section matches the build. UI: no screenshot series, I check it in VirtualBox. Update CHANGELOG.md. Commit locally; ask me before push/PR. Report in Dutch, short, with [V]/[I].
 ```
+
+---
+
+## Later
+
+- Media Kit-mixer en resampler (`distro/media/.../mixer/MixerCore.cpp:692`, `Interpolate.cpp`): scalair, maar de belasting bij 48 kHz stereo is klein. Pas na 4 en 5, en alleen als een meting het toont.
+- LTO voor libbe/libroot: 2–5% geschat, maar hoog risico (assembly in libroot, commpage, symboolversies). Na 4 en 5.
+- Bewust zo gelaten: frame pointers (Debugger en `profile`), `-fno-tree-vectorize` in de kernel (Haiku-ticket #18593), Mesa en Skia (al release-builds met eigen CPU-dispatch).
