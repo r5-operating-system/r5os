@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-18 - AMD64 user space, step 7: fma dispatch and SSE4.1 rounding
+
+`fma` and `fmaf` stay the compile-time FMA3 or FMA4 body when the compiler already defines `__FMA__` or `__FMA4__`. On the x86-64-v2 build neither is defined, so the call uses a function pointer chosen once: FMA3 (`vfmadd132sd` / `vfmadd132ss`) when `R5_CPU_FMA` is set, otherwise FMA4 (`vfmaddsd` / `vfmaddss`) when CPUID leaf `0x80000001` ECX bit 16 is set, otherwise musl's C function. `R5_CPU_FMA4` is a new bit in the private CPU word. FMA3 still requires YMM in XCR0, which the existing helper already checks.
+
+`floor`, `ceil`, `trunc` and `rint`, and the float forms, use `roundsd` / `roundss` (SSE4.1, in the v2 baseline, no dispatch). The immediate is 1, 2, 3, or 4 (current rounding mode). The generic C files are not linked on AMD64.
+
+Checked (18 Nov 2026, Europe/Amsterdam): `scripts/build-locked.sh` `jam_exit=0`, `mesa_exit=0`. The bit-identical comparison with musl's C versions was not run. No QEMU boot.
+
 ## 2026-11-18 - AMD64 user space, step 6: short lock spin and reader fast path
 
 `__mutex_lock` and `__pthread_mutex_lock` still try the lock once. If that fails, and the call is not a trylock, they read the lock word and execute `pause` until the word is clear or 2000 TSC cycles have passed (8000 when the mutex is adaptive). Then they try once more and, if it is still taken, enter the kernel. The bound is the time stamp counter, so a CPU where `pause` is expensive does not spin longer. `mutex.cpp` is also linked into the runtime loader, which does not provide `system_time_nsecs`, so the spin reads the counter directly.

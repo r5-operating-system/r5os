@@ -99,6 +99,11 @@ def install_kernel_sources() -> None:
         "src/system/libroot/os/locks/mutex.cpp",
         # R5: one CPUID/XCR0 read for user-space dispatch
         "headers/private/system/r5_x86_cpu.h",
+        # R5: FMA3/FMA4 fma and SSE4.1 roundsd/roundss
+        "src/system/libroot/posix/musl/math/x86_64/Jamfile",
+        "src/system/libroot/posix/musl/math/x86_64/fma.c",
+        "src/system/libroot/posix/musl/math/x86_64/fmaf.c",
+        "src/system/libroot/posix/musl/math/x86_64/r5_round.c",
         "src/tests/system/libroot/posix/string/Jamfile",
         "src/tests/system/libroot/posix/string/memcpy_test.cpp",
         # air/OS: the FreeBSD network and wireless layers the MediaTek Wi-Fi
