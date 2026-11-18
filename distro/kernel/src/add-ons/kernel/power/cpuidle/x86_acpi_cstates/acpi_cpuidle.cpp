@@ -224,10 +224,18 @@ acpi_cstate_bm_check(void)
 static inline void
 acpi_cstate_ffh_enter(acpi_cstate_info *ci)
 {
+	// SPDX-SnippetBegin
+	// SPDX-License-Identifier: MIT
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// The register's address is the MWAIT hint (C1 is 0, C2 0x10, ...).
-	int dummy;
-	x86_monitor(&dummy, 0, 0);
-	x86_mwait(ci->address, MWAIT_INTERRUPTS_BREAK);
+	// Monitor invoke_scheduler so enqueue_thread can skip the reschedule IPI.
+	cpu_ent* cpu = get_cpu_struct();
+	__atomic_store_n(&cpu->mwait_polling, 1, __ATOMIC_SEQ_CST);
+	x86_monitor((void*)&cpu->invoke_scheduler, 0, 0);
+	if (__atomic_load_n(&cpu->invoke_scheduler, __ATOMIC_SEQ_CST) == 0)
+		x86_mwait(ci->address, MWAIT_INTERRUPTS_BREAK);
+	__atomic_store_n(&cpu->mwait_polling, 0, __ATOMIC_RELEASE);
+	// SPDX-SnippetEnd
 }
 
 

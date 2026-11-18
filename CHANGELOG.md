@@ -1,5 +1,100 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - Kernel (AMD64): review-fixes PR #4445 (XSAVEC/XSAVE, cpu_idle reschedule, TSC-deadline fence)
+
+Problem:
+- `XSAVES`/`XSAVEOPT` gebruiken de modified optimization op de kernelstack terwijl syscalls de stack tussentijds overschrijven (Intel SDM Vol. 1, 13.6/13.11).
+- Na `MWAIT`-wake-up via `invoke_scheduler` zonder IPI reschedulde `cpu_idle()` niet.
+- `IA32_MSR_TSC_DEADLINE` miste `mfence; lfence` vóór `WRMSR`.
+
+What changed:
+- `distro/kernel/src/system/kernel/arch/x86/arch_cpu.cpp`, `64/thread.cpp`, `64/stubs.S`: `XSAVES` en `XSAVEOPT` verwijderd; `XSAVEC`/`XSAVE` behouden zoals in Haiku, samen met XSAVE-header-zeroing en Intel-only `vzeroupper`.
+- `distro/kernel/src/system/kernel/cpu.cpp`: `cpu_idle()` controleert na terugkeer van de idle-module `thread->cpu->invoke_scheduler` met uitgeschakelde interrupts en roept `scheduler_reschedule(B_THREAD_READY)` onder `thread->scheduler_lock` aan. Dit MWAIT-pad heeft in QEMU geen cpuidle-module en is alleen op de 5625U te bewijzen.
+- `distro/kernel/src/system/kernel/arch/x86/timers/x86_apic.cpp`: `mfence; lfence` vóór `x86_write_msr(IA32_MSR_TSC_DEADLINE, deadline)`.
+- `CHANGELOG.md`: stap 6 (`user_strlcpy` is een byte-loop) en stap 7 (QEMU heeft geen cpuidle-module; MWAIT-pad draaide niet in QEMU) gecorrigeerd.
+
+Tested:
+- `scripts/jam-r5-raw.sh` onder `build-lock.sh`: `jam_exit=0`, `mesa_exit=0`.
+- QEMU `-cpu Skylake-Client,+smap,+smep,+tsc-deadline -smp 2`: `enable SMEP`, `enable SMAP`, `enable XSAVEC 0x7 832`, `APIC timer: using TSC-deadline mode`, `R5 scheduler topology: 2 CPUs, 2 cores, 1 cache domains, 1 packages`, `R5 net_server: NetServer from distro`.
+
+## 2026-11-18 - Kernel (AMD64): scheduler cache-domein topologie en log (stap 8)
+
+Problem:
+- `scheduler` gebruikte wel SMT/core/package en P/E-core-capaciteit (`0x1a`), maar groepeerde cores niet op gedeelde cache (`cache_id`, zoals AMD CCX / Intel LLC) en logde de gebouwde schedulertopologie niet bij boot.
+
+What changed (Step 8):
+- `distro/kernel/src/system/kernel/scheduler/scheduler_cpu.h` + `scheduler_cpu.cpp`: `CoreEntry::CacheDomain()`/`SetCacheDomain()` en `gCacheDomainCount`; `FastestIdleCore()` kiest bij meerdere cache-domeinen eerst een idle core in hetzelfde cache-domein (met behoud van hoogste capaciteit).
+- `distro/kernel/src/system/kernel/scheduler/low_latency.cpp`: `find_idle_core()` geeft bij meerdere cache-domeinen voorrang aan een idle core in het huidige cache-domein.
+- `distro/kernel/src/system/kernel/scheduler/scheduler.cpp`: berekent `gCacheDomainCount` en het cache-domein per core uit `gCPU[i].cache_id[gCPUCacheLevelCount - 1]` (fallback naar `sCPUToPackage[i]` zonder cache-info) en logt eenmalig `R5 scheduler topology: <N> CPUs, <N> cores, <N> cache domains, <N> packages`.
+
+Tested (Step 8):
+- `scripts/jam-r5-raw.sh`: `jam_exit=0`, `mesa_exit=0`.
+- QEMU `-cpu EPYC-Rome,+smap,+smep -smp 4,sockets=1,cores=2,threads=2`: `R5 scheduler topology: 4 CPUs, 2 cores, 1 cache domains, 1 packages`, `enable SMEP`, `enable SMAP`, `R5 net_server`, `r5_idle_pingpong PASS rounds=20000 us=1238402` (`exit=0`).
+
+## 2026-11-18 - Kernel (AMD64): MWAIT idle wake-up zonder IPI (stap 7)
+
+Problem:
+- `acpi_cstate_ffh_enter` en `x86_cstates` deden `x86_monitor(&dummy, 0, 0)` op een dummy-variabele terwijl `enqueue_thread` in `scheduler.cpp` altijd een `SMP_MSG_RESCHEDULE`-IPI stuurde.
+
+What changed (Step 7):
+- `distro/kernel/headers/private/kernel/cpu.h`: `int32 mwait_polling` achteraan `cpu_ent` toegevoegd.
+- `distro/kernel/src/add-ons/kernel/power/cpuidle/x86_acpi_cstates/acpi_cpuidle.cpp` + `distro/kernel/src/add-ons/kernel/power/cpuidle/x86_cstates/x86_cstates.cpp`: zetten `mwait_polling = 1` (`__ATOMIC_SEQ_CST`), monitoren `&cpu->invoke_scheduler`, checken `invoke_scheduler == 0` vóór `x86_mwait`, en zetten `mwait_polling = 0` na terugkeer.
+- `distro/kernel/src/system/kernel/scheduler/scheduler.cpp`: `enqueue_thread` slaat `smp_send_ici(..., SMP_MSG_RESCHEDULE, ...)` over wanneer `mwait_polling != 0` (de write naar `invoke_scheduler` wekt `MWAIT`); bij HLT-idle blijft de IPI behouden.
+- `distro/cpu/r5_idle_pingpong.cpp` + `scripts/apply-kernel-bugs.py`: pingpongtest met twee threads over 20.000 rondes via twee semaphores.
+
+Tested (Step 7):
+- `scripts/jam-r5-raw.sh`: `jam_exit=0`, `mesa_exit=0`.
+- QEMU `-cpu EPYC-Rome,+smap,+smep -smp 2`: `no valid cpuidle module found` (het MWAIT-pad zonder IPI draaide niet in QEMU en is alleen op de 5625U te bewijzen; QEMU testte alleen het HLT-pad met `r5_idle_pingpong PASS rounds=20000 us=923680`, `exit=0`).
+
+## 2026-11-18 - Kernel (AMD64): x86_64 user copies en STAC/CLAC (stap 6)
+
+Problem:
+- `arch_cpu_user_memcpy`, `arch_cpu_user_memset` en `arch_cpu_user_strlcpy` op x86_64 misten snelle `rep movsb`/`rep stosb`-paden, gebruikten een aparte functie in plaats van één `stac`/`clac`-paar rond de kopie, of misten een assemblerspecifiek strlcpy-pad met fault-handler.
+
+What changed (Step 6):
+- `distro/kernel/headers/private/kernel/arch/user_memory.h` + `distro/kernel/src/system/kernel/arch/x86/64/arch.S`: `_arch_cpu_user_memcpy` (`rep movsb`), `_arch_cpu_user_memset` (`rep stosb`) en `_arch_cpu_user_strlcpy` (byte-loop met `-2147478783` / `B_BAD_ADDRESS` bij pagefault), elk met één `stac`/`clac`-paar en `fault_handler`.
+- `distro/cpu/r5_usercopy_test.cpp`: test `_kern_*` syscalls op `NULL`, kerneladres, unmapped page en page-straddling.
+- `scripts/apply-kernel-bugs.py`: kopieert `user_memory.h`, `arch.S` en `r5_usercopy_test.cpp` en voegt `r5_usercopy_test` toe aan `src/bin/Jamfile` en `minimum`.
+
+Tested (Step 6):
+- `scripts/jam-r5-raw.sh`: `jam_exit=0`, `mesa_exit=0`.
+- QEMU `-cpu Nehalem,+smap,+smep`: `enable SMEP`, `enable SMAP`, `R5 net_server`, `r5_usercopy_test PASS` (`exit=0`).
+
+## 2026-11-18 - Kernel (AMD64): TSC-deadline timer en 1-write APIC one-shot fallback (stap 5)
+
+Problem:
+- `src/system/kernel/arch/x86/timers/x86_apic.cpp:50-74` deed vier APIC-writes per timer-set (mask, count=0, unmask, count=ticks) en gebruikte geen TSC-deadline mode.
+
+What changed (Step 5):
+- `distro/kernel/src/system/kernel/arch/x86/timers/x86_apic.cpp`: gebruikt TSC-deadline mode (`IA32_MSR_TSC_DEADLINE`, één `WRMSR`) wanneer CPUID leaf 1 ECX bit 24 gezet is, `gCPUClockSpeed > 0` en de CPU niet op de bekende Intel-erratalijst staat (Ivy Bridge/Haswell/Broadwell/Skylake zonder hypervisor); als fallback blijft de APIC-one-shot teller unmasked met één `apic_set_lvt_initial_timer_count(ticks)`-write.
+- `distro/cpu/r5_timer_test.cpp`: test `snooze()` op 1 ms, 10 ms en 1 s tegen `system_time()`.
+
+Tested (Step 5):
+- `scripts/jam-r5-raw.sh`: `jam_exit=0`, `mesa_exit=0`.
+- QEMU `-cpu Nehalem,+smap,+smep`: `APIC timer: using one-shot count mode`, `R5 net_server`, `r5_timer_test req=1000 got=1016`, `req=10000 got=10035`, `req=1000000 got=1000023` (`PASS`, `exit=0`).
+- QEMU `-cpu Skylake-Client,+smap,+smep,+tsc-deadline`: `APIC timer: using TSC-deadline mode`, `R5 net_server`, `r5_timer_test req=1000 got=1017`, `req=10000 got=10029`, `req=1000000 got=1000043` (`PASS`, `exit=0`).
+
+## 2026-11-18 - Kernel (AMD64): XSAVE-varianten, 64-byte header-zeroing en Intel `vzeroupper` (stap 4)
+
+Problem:
+- `intr_bottom` in `interrupts.S` zeroede de volledige FPU-save-area (`gFPUSaveLength`) vóór XSAVE.
+- `arch_cpu.cpp` koos alleen tussen `XSAVEC` en `XSAVE`, zonder `XSAVES`/`XRSTORS` of `XSAVEOPT`, en `64/thread.cpp` kopieerde signaalframes zonder compacted-to-standard conversie.
+- `x86_64_syscall_entry` miste `vzeroupper` op Intel bij ingeschakelde AVX.
+- `build-locked.sh --debug` herbouwde onvoldoende doordat Jam geen `-D`-defines op de command-line volgt.
+
+What changed (Step 4 + `r5_kdebug_level.h` fix):
+- `scripts/jam-r5-raw.sh` schrijft `build/config_headers/r5_kdebug_level.h` met `#define KDEBUG_LEVEL <0|2>` alleen bij wijziging; `distro/kernel/build/config_headers/kernel_debug_config.h` includeert dit bestand vóór `#ifndef KDEBUG_LEVEL`; de define in `distro/UserBuildConfig` is verwijderd.
+- `distro/kernel/src/system/kernel/arch/x86/64/interrupts.S`: zeroet in `intr_bottom` alleen de 64-byte XSAVE-header (`512(%rsp)`) bij `gFPUSaveLength >= 576`, en voegt `ALTCODEPATCH_TAG_VZEROUPPER` toe bij `x86_64_syscall_entry`.
+- `distro/kernel/headers/private/kernel/arch/x86/arch_altcodepatch.h` en `64/stubs.S`: `ALTCODEPATCH_TAG_VZEROUPPER` (6), `_xsaveopt`, `_xsaves`, `_xrstors`, `_vzeroupper` en `_xrstors_initial`.
+- `distro/kernel/src/system/kernel/arch/x86/arch_cpu.cpp`: kiest bij boot `XSAVES`/`XRSTORS` (met `IA32_MSR_XSS = 0` op alle CPU's) > `XSAVEOPT` > `XSAVEC` > `XSAVE`, en patcht `_vzeroupper` alleen op Intel met AVX actief.
+- `distro/kernel/src/system/kernel/arch/x86/64/thread.cpp`: `arch_thread_init()` gebruikt de actieve XSAVE-variant; `arch_setup_signal_frame()` en `arch_restore_signal_frame()` converteren tussen compacted format en standaard `struct savefpu`.
+- `distro/cpu/r5_fpu_test.cpp`: testprogramma voor XMM0–XMM15 en YMM0–YMM15 over syscalls, signalen (`SIGUSR1` + clobber) en interrupts/preemptie.
+
+Tested (Step 4):
+- `scripts/build-locked.sh`: `jam_exit=0`, `mesa_exit=0`.
+- QEMU `-cpu Nehalem,+smap,+smep`: `enable SMEP`, `enable SMAP`, `R5 net_server`, `r5_fpu_test PASS avx=0 signals=71` (`exit=0`).
+- QEMU `-cpu EPYC-Rome,+smap,+smep`: `enable SMEP`, `enable SMAP`, `enable XSAVES 0x7 832`, `R5 net_server`, `r5_fpu_test PASS avx=1 signals=106` (`exit=0`).
+
 ## 2026-11-18 - AMD64 user space, step 4: page-safe string scans
 
 `strlen`, `strchr` (through `strchrnul`), `strchrnul`, `memchr`, `strcmp` and `memcmp` scan 16 bytes at a time with SSE4.2. The load is aligned, or it is two aligned halves joined with `palignr` only when the next 16 bytes stay in the same page, so a read does not cross into an unmapped page. Strings and counts that finish within 32 bytes stay on that path and do not go through a function pointer. Longer work uses a pointer chosen once: AVX2, 32 bytes at a time, when XCR0 has XMM and YMM, otherwise the same SSE4.2 loop. `strchr` is still the one-line call of `strchrnul`.

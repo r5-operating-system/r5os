@@ -99,14 +99,19 @@ struct set_mtrrs_parameter {
 extern addr_t _stac;
 extern addr_t _clac;
 extern addr_t _xsave;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
 extern addr_t _xsavec;
 extern addr_t _xrstor;
 extern addr_t _vzeroall;
+extern addr_t _vzeroupper;
 extern addr_t _xrstor_initial;
 uint64 gXsaveMask;
 uint64 gFPUSaveLength = 512;
 bool gHasXsave = false;
 bool gHasXsavec = false;
+// SPDX-SnippetEnd
 #endif
 
 extern "C" void x86_reboot(void);
@@ -1834,8 +1839,10 @@ arch_cpu_init_post_vm(kernel_args* args)
 	// if available enable XSAVE (XSAVE and extended states)
 	gHasXsave = x86_check_feature(IA32_FEATURE_EXT_XSAVE, FEATURE_EXT);
 	if (gHasXsave) {
-		gHasXsavec = x86_check_feature(IA32_FEATURE_XSAVEC,
-			FEATURE_D_1_EAX);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		gHasXsavec = x86_check_feature(IA32_FEATURE_XSAVEC, FEATURE_D_1_EAX);
 
 		call_all_cpus_sync(&enable_osxsave, NULL);
 		// also enable the cached boot cpu feature bit
@@ -1854,10 +1861,10 @@ arch_cpu_init_post_vm(kernel_args* args)
 		if (gFPUSaveLength > sizeof(((struct arch_thread *)0)->user_fpu_state))
 			gFPUSaveLength = 832;
 
-		arch_altcodepatch_replace(ALTCODEPATCH_TAG_XSAVE,
-			gHasXsavec ? &_xsavec : &_xsave, 4);
-		arch_altcodepatch_replace(ALTCODEPATCH_TAG_XRSTOR,
-			&_xrstor, 4);
+		void* xsaveOp = gHasXsavec ? &_xsavec : &_xsave;
+		const char* xsaveName = gHasXsavec ? "XSAVEC" : "XSAVE";
+		arch_altcodepatch_replace(ALTCODEPATCH_TAG_XSAVE, xsaveOp, 4);
+		arch_altcodepatch_replace(ALTCODEPATCH_TAG_XRSTOR, &_xrstor, 4);
 
 		if ((gXsaveMask & IA32_XCR0_AVX) != 0) {
 			if ((gXsaveMask & ~(IA32_XCR0_X87 | IA32_XCR0_SSE | IA32_XCR0_AVX)) == 0) {
@@ -1869,10 +1876,15 @@ arch_cpu_init_post_vm(kernel_args* args)
 				arch_altcodepatch_replace(ALTCODEPATCH_TAG_CLEAR_FPU,
 					&_xrstor_initial, 24);
 			}
+			if (gCPU[0].arch.vendor == VENDOR_INTEL) {
+				arch_altcodepatch_replace(ALTCODEPATCH_TAG_VZEROUPPER,
+					&_vzeroupper, 3);
+			}
 		}
 
 		dprintf("enable %s 0x%" B_PRIx64 " %" B_PRId64 "\n",
-			gHasXsavec ? "XSAVEC" : "XSAVE", gXsaveMask, gFPUSaveLength);
+			xsaveName, gXsaveMask, gFPUSaveLength);
+// SPDX-SnippetEnd
 	}
 #endif
 

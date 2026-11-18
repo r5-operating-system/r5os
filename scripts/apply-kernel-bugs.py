@@ -15,6 +15,7 @@ def install_kernel_sources() -> None:
         "build/config_headers/kernel_debug_config.h",
         "src/add-ons/kernel/network/stack/utility.cpp",
         "src/system/kernel/arch/x86/arch_timer.cpp",
+        "src/system/kernel/arch/x86/timers/x86_apic.cpp",
         "src/system/kernel/arch/x86/arch_cpu.cpp",
         "src/system/kernel/arch/x86/arch_vm.cpp",
         "src/system/kernel/arch/x86/paging/64bit/paging.h",
@@ -24,9 +25,14 @@ def install_kernel_sources() -> None:
         "src/system/kernel/arch/x86/paging/64bit/X86VMTranslationMap64Bit.cpp",
         "headers/private/kernel/vm/VMTranslationMap.h",
         "headers/private/kernel/ksignal.h",
+        "headers/private/kernel/arch/x86/arch_altcodepatch.h",
+        "headers/private/kernel/arch/user_memory.h",
         "headers/private/kernel/thread_types.h",
         "src/system/kernel/arch/x86/asm_offsets.cpp",
         "src/system/kernel/arch/x86/64/interrupts.S",
+        "src/system/kernel/arch/x86/64/arch.S",
+        "src/system/kernel/arch/x86/64/stubs.S",
+        "src/system/kernel/arch/x86/64/thread.cpp",
         "src/system/kernel/signal.cpp",
         "src/system/kernel/team.cpp",
         "src/system/kernel/thread.cpp",
@@ -61,6 +67,7 @@ def install_kernel_sources() -> None:
         # air/OS: deep idle through ACPI _CST, also on AMD, and the ACPI
         # processor ids it matches CPUs by (only enabled MADT entries)
         "src/add-ons/kernel/power/cpuidle/x86_acpi_cstates/acpi_cpuidle.cpp",
+        "src/add-ons/kernel/power/cpuidle/x86_cstates/x86_cstates.cpp",
         "src/system/kernel/arch/x86/apic.cpp",
         "src/system/kernel/arch/x86/ioapic.cpp",
         # air/OS 3683cfbe47: choose the cpuidle module before using it
@@ -286,6 +293,11 @@ def install_pstate() -> None:
         HAIKU / "src/bin/r5_string_fuzz.cpp",
         "string fuzz",
     )
+    install_file(
+        root / "distro/cpu/r5_idle_pingpong.cpp",
+        HAIKU / "src/bin/r5_idle_pingpong.cpp",
+        "idle pingpong test",
+    )
 
     insert_once(
         HAIKU / "src/system/kernel/arch/x86/Jamfile",
@@ -323,6 +335,13 @@ def install_pstate() -> None:
         "bin Jamfile string fuzz",
     )
     insert_once(
+        HAIKU / "src/bin/Jamfile",
+        "\tr5_string_fuzz.cpp\n",
+        "\tr5_string_fuzz.cpp\n\tr5_idle_pingpong.cpp\n",
+        "\tr5_idle_pingpong.cpp\n",
+        "bin Jamfile idle pingpong test",
+    )
+    insert_once(
         HAIKU / "build/jam/images/definitions/minimum",
         "\tsystem_time\n",
         "\tsystem_time\n\tr5_pstate_log\n",
@@ -349,6 +368,13 @@ def install_pstate() -> None:
         "\tr5_mem_fuzz\n\tr5_string_fuzz\n",
         "\tr5_string_fuzz\n",
         "image bins string fuzz",
+    )
+    insert_once(
+        HAIKU / "build/jam/images/definitions/minimum",
+        "\tr5_string_fuzz\n",
+        "\tr5_string_fuzz\n\tr5_idle_pingpong\n",
+        "\tr5_idle_pingpong\n",
+        "image bins idle pingpong test",
     )
     insert_once(
         HAIKU / "data/launch/system",
