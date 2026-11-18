@@ -846,6 +846,18 @@ struct ieee80211_haiku_igtk {
 	uint8_t i_keyix;
 	uint8_t i_keylen;
 };
+/* The packet number did not fit the struct above, which has shipped.
+ * A driver that does not know this request returns ENOTTY and the
+ * caller sends the older one.
+ */
+#define IEEE80211_IOC_HAIKU_IGTK_PN 0x6008
+struct ieee80211_haiku_igtk_pn {
+	uint8_t i_key[16];
+	uint8_t i_keyix;
+	uint8_t i_keylen;
+	uint8_t i_reserved;
+	uint64_t i_ipn;
+};
 #ifdef __cplusplus
 extern "C" {
 #endif

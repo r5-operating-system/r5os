@@ -211,6 +211,10 @@ ieee80211_add_hecap(uint8_t *frm, struct ieee80211_node *ni)
 	frm[2] = IEEE80211_ELEMID_EXT_HE_CAPA;
 	memcpy(frm + 3, self->mac, 6);
 	memcpy(frm + 9, self->phy, 11);
+	/* PPE Thresholds Present is PHY byte 6, bit 7. The element would
+	 * then need a variable tail, and this builder does not add one.
+	 */
+	frm[15] &= (uint8_t)~0x80;
 	frm[20] = (uint8_t)self->rx_mcs;
 	frm[21] = (uint8_t)(self->rx_mcs >> 8);
 	frm[22] = (uint8_t)self->tx_mcs;

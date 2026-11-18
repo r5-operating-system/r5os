@@ -2311,7 +2311,9 @@ ieee80211_send_sae_auth(struct ieee80211vap *vap, const uint8_t *mac,
 	if (!IEEE80211_ADDR_EQ(ni->ni_macaddr, mac)
 	    && !IEEE80211_ADDR_EQ(ni->ni_bssid, mac))
 		return EADDRNOTAVAIL;
+	IEEE80211_LOCK(vap->iv_ic);
 	ni->ni_authmode = IEEE80211_AUTH_SAE;
+	IEEE80211_UNLOCK(vap->iv_ic);
 
 	ic = vap->iv_ic;
 	ieee80211_ref_node(ni);

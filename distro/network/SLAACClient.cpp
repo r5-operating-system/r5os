@@ -14,6 +14,7 @@
 #include <netinet/icmp6.h>
 #include <netinet/in.h>
 #include <netinet6/in6.h>
+#include <net/route.h>
 #include <stdio.h>
 #include <string.h>
 #include <syslog.h>
@@ -25,6 +26,7 @@
 #include <Message.h>
 #include <NetworkAddress.h>
 #include <NetworkInterface.h>
+#include <NetworkRoute.h>
 #include <OS.h>
 #include <String.h>
 
@@ -416,11 +418,22 @@ SLAACClient::_ApplyAdvert(const uint8* buffer, ssize_t bytes,
 	}
 
 	if (lifetime == 0) {
-		BNetworkInterface routeInterface(Device());
-		routeInterface.RemoveDefaultRoute(AF_INET6);
-		fHaveDefaultRoute = false;
-		syslog(LOG_INFO, "slaac %s: RA lifetime 0, default router forgotten\n",
-			Device());
+		if (fHaveDefaultRoute
+			&& memcmp(&fDefaultGateway.sin6_addr, &from.sin6_addr,
+				sizeof(from.sin6_addr)) == 0
+			&& fDefaultGateway.sin6_scope_id == from.sin6_scope_id) {
+			BNetworkRoute route;
+			BNetworkAddress gateway(from);
+			BNetworkInterface routeInterface(Device());
+			route.SetGateway(gateway);
+			route.SetFlags(RTF_STATIC | RTF_DEFAULT | RTF_GATEWAY);
+			if (routeInterface.RemoveRoute(AF_INET6, route) == B_OK) {
+				fHaveDefaultRoute = false;
+				syslog(LOG_INFO,
+					"slaac %s: RA lifetime 0, route via %s forgotten\n",
+					Device(), _ToString(from.sin6_addr).String());
+			}
+		}
 	} else if (lifetime > 0 || addedAddress
 			|| (havePrefix && !fHaveDefaultRoute)) {
 		if (_ApplyDefaultRoute(from, ifIndex) == B_OK)

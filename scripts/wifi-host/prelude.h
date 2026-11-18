@@ -369,7 +369,15 @@ struct ieee80211com {
 	struct ieee80211_channel* ic_csa_newchan;
 	struct ieee80211_channel* ic_bsschan;
 	struct ieee80211_wme_state ic_wme;
+	uint64_t ic_spare[7];
 };
+
+static inline int
+ieee80211_he_is_on(const struct ieee80211com* ic)
+{
+	(void)ic;
+	return 0;
+}
 
 struct ieee80211vap {
 	struct ieee80211com* iv_ic;
@@ -430,6 +438,7 @@ struct ieee80211_node {
 	uint8_t ni_he_er_su;
 	uint8_t ni_he_cap_ok;
 	uint8_t ni_he_op_ok;
+	struct ieee80211_ies ni_ies;
 };
 
 struct ieee80211_rsnparms {

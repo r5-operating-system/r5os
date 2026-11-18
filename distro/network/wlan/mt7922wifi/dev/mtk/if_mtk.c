@@ -546,6 +546,12 @@ mtk_join_teardown(struct mtk_softc* sc)
 	sc->sc_ccmp_len = 0;
 	memset(sc->sc_igtk, 0, sizeof(sc->sc_igtk));
 	sc->sc_igtk_len = 0;
+	sc->sc_igtk_ipn = 0;
+	sc->sc_tx_kbps = 0;
+	sc->sc_tx_mode = 0;
+	sc->sc_tx_mcs = 0;
+	sc->sc_tx_nss = 0;
+	sc->sc_tx_width = 0;
 }
 
 
@@ -921,8 +927,10 @@ mtk_parent(struct ieee80211com* ic)
 	int wanted = ic->ic_nrunning > 0;
 
 	/* R5 (MIT): the driver is going away; detach stops the card itself. */
-	if (sc->sc_detaching)
+	if (sc->sc_detaching) {
+		sc->sc_running = 0;
 		return;
+	}
 	if (wanted == sc->sc_running)
 		return;
 
@@ -1448,15 +1456,26 @@ mtk_ioctl(struct ieee80211com* ic, u_long cmd, void* data)
 	struct mtk_softc* sc = ic->ic_softc;
 	struct ieee80211_haiku_tx_rate* rate = data;
 
-	if (cmd == IEEE80211_IOC_HAIKU_IGTK) {
+	if (cmd == IEEE80211_IOC_HAIKU_IGTK
+		|| cmd == IEEE80211_IOC_HAIKU_IGTK_PN) {
 		const struct ieee80211_haiku_igtk* g = data;
+		uint64_t ipn = 0;
 
+		if (cmd == IEEE80211_IOC_HAIKU_IGTK_PN) {
+			const struct ieee80211_haiku_igtk_pn* pn = data;
+
+			if (pn == NULL)
+				return EINVAL;
+			g = (const struct ieee80211_haiku_igtk*)pn;
+			ipn = pn->i_ipn;
+		}
 		if (g == NULL || g->i_keylen != 16
 			|| (g->i_keyix != 4 && g->i_keyix != 5))
 			return EINVAL;
 		memcpy(sc->sc_igtk, g->i_key, 16);
 		sc->sc_igtk_id = g->i_keyix;
 		sc->sc_igtk_len = 16;
+		sc->sc_igtk_ipn = ipn;
 		return mtk_sta_igtk(sc);
 	}
 
@@ -1470,6 +1489,9 @@ mtk_ioctl(struct ieee80211com* ic, u_long cmd, void* data)
 			return EINVAL;
 		memset(link, 0, sizeof(*link));
 		vap = TAILQ_FIRST(&ic->ic_vaps);
+		if (vap == NULL || (vap->iv_state != IEEE80211_S_RUN
+			&& vap->iv_state != IEEE80211_S_SLEEP))
+			return 0;
 		ni = vap != NULL ? vap->iv_bss : NULL;
 		/* net80211 marks the node from the access point's beacon, also
 		 * when this driver keeps the mode off. Only a mode that is on here

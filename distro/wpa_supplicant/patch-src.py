@@ -248,6 +248,8 @@ def main() -> None:
         "\t\t\tif (result == 0)\n"
         "\t\t\t\tresult = wpa_config_set(network, \"key_mgmt\", \"SAE\", 0);\n"
         "\t\t\tif (result == 0)\n"
+        "\t\t\t\tresult = wpa_config_set(network, \"sae_pwe\", \"2\", 0);\n"
+        "\t\t\tif (result == 0)\n"
         "\t\t\t\tresult = wpa_config_set(network, \"ieee80211w\", \"2\", 0);\n"
         "\t\t\tif (result == 0)\n"
         "\t\t\t\tresult = wpa_config_set(network, \"proto\", \"RSN\", 0);\n"
@@ -275,6 +277,10 @@ def main() -> None:
         "\t\t\t\t// We need to actually \"apply\" the PSK\n"
         "\t\t\t\twpa_config_update_psk(network);\n"
         "\t\t\t}\n"
+        "\t\t\t// Optional management protection. A network that requires\n"
+        "\t\t\t// it can use it. A network that does not is unchanged.\n"
+        "\t\t\tif (result == 0)\n"
+        "\t\t\t\tresult = wpa_config_set(network, \"ieee80211w\", \"1\", 0);\n"
         "\t\t}\n", "sae password")
 
     replace(gui,

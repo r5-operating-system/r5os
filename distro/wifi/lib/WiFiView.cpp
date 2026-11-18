@@ -504,6 +504,23 @@ WiFiView::_SetState(const WiFiState& state)
 }
 
 
+static int
+WifiStandardRank(const BString& name)
+{
+	if (name == "Wi-Fi 7")
+		return 7;
+	if (name == "Wi-Fi 6E")
+		return 6;
+	if (name == "Wi-Fi 6")
+		return 5;
+	if (name == "Wi-Fi 5")
+		return 4;
+	if (name == "Wi-Fi 4")
+		return 3;
+	return 0;
+}
+
+
 void
 WiFiView::_UpdateCurrent()
 {
@@ -574,9 +591,7 @@ WiFiView::_UpdateCurrent()
 		routerLine = B_TRANSLATE("Router: %standard%");
 		routerLine.ReplaceFirst("%standard%", offered);
 		const BString& used = fState.link.standard;
-		if (used.Length() == 0
-			|| used.ByteAt(used.Length() - 1)
-				< offered.ByteAt(offered.Length() - 1)) {
+		if (WifiStandardRank(used) < WifiStandardRank(offered)) {
 			BString hint = B_TRANSLATE("Your router supports %standard%.");
 			hint.ReplaceFirst("%standard%", offered);
 			routerLine << "\n" << hint;

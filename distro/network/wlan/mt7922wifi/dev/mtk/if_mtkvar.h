@@ -439,6 +439,7 @@ struct mtk_softc {
 	uint8_t			sc_igtk[16];
 	uint8_t			sc_igtk_id;
 	uint8_t			sc_igtk_len;
+	uint64_t		sc_igtk_ipn;
 	int			(*sc_key_set)(struct ieee80211vap*,
 					const struct ieee80211_key*);
 /* SPDX-SnippetEnd */

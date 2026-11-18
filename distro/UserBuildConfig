@@ -26,7 +26,7 @@ switch $(HAIKU_BUILD_PROFILE) {
 			pe
 			vision
 			wpa_supplicant
-			# wpa_supplicant-2.11.r5.3-1, from distro/wpa_supplicant.
+			# wpa_supplicant-2.11.r5.4-1, from distro/wpa_supplicant.
 			# scripts/pin-mesa-packages.sh selects it instead of the
 			# HaikuPorts 2.11.haiku.1 package.
 			libglvnd

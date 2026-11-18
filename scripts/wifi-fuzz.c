@@ -102,6 +102,9 @@ ieee80211_parse_hecap(struct ieee80211_node* ni, const uint8_t* ie, int avail)
 __attribute__((weak)) void
 ieee80211_parse_heop(struct ieee80211_node* ni, const uint8_t* ie, int avail)
 { (void)ni; (void)ie; (void)avail; abort(); }
+__attribute__((weak)) void
+ieee80211_he_update(struct ieee80211_node* ni)
+{ (void)ni; abort(); }
 
 static uint64_t gState = 0x9e3779b97f4a7c15ULL;
 
@@ -167,12 +170,15 @@ fuzz_ies(void)
 	uint8_t qos;
 
 	setup(&ic, &vap, &ni, &chan);
+	memset(&scan, 0, sizeof(scan));
 	n = next_word() % 800;
-	buf = malloc(n + 1);
-	fill(buf, n);
+	buf = n == 0 ? NULL : malloc(n);
+	if (buf != NULL)
+		fill(buf, n);
 	m.m_data = buf;
 	m.m_len = (int)n;
-	ieee80211_parse_beacon(&ni, &m, &chan, &scan);
+	if (buf != NULL)
+		ieee80211_parse_beacon(&ni, &m, &chan, &scan);
 	if (scan.htcap != NULL)
 		ieee80211_parse_htcap(&ni, scan.htcap);
 	if (scan.htinfo != NULL)
@@ -250,7 +256,9 @@ fuzz_action(void)
 
 	setup(&ic, &vap, &ni, &chan);
 	n = next_word() % 80;
-	buf = malloc(n + 1);
+	buf = n == 0 ? NULL : malloc(n);
+	if (buf == NULL)
+		return;
 	fill(buf, n);
 	m.m_data = buf;
 	m.m_len = (int)n;
@@ -270,11 +278,19 @@ fuzz_he(void)
 	int n;
 
 	setup(&ic, &vap, &ni, &chan);
-	buf = malloc(300);
-	fill(buf, 300);
 	n = (int)(next_word() % 300);
+	buf = n == 0 ? NULL : malloc((size_t)n);
+	if (buf != NULL)
+		fill(buf, (size_t)n);
 	ieee80211_parse_hecap(&ni, buf, n);
 	ieee80211_parse_heop(&ni, buf, n);
+	if (buf != NULL && n >= 2) {
+		if (2 + buf[1] > n)
+			buf[1] = (uint8_t)(n - 2);
+		ni.ni_ies.hecap_ie = buf;
+		ni.ni_ies.heop_ie = buf;
+		ieee80211_he_update(&ni);
+	}
 	ieee80211_parse_hecap(&ni, NULL, 10);
 	ieee80211_parse_heop(&ni, buf, 0);
 	ieee80211_parse_hecap(&ni, buf, 1);
@@ -291,7 +307,9 @@ fuzz_mtkrx(void)
 
 	memset(&sc, 0, sizeof(sc));
 	n = next_word() % 400;
-	buf = malloc(n + 1);
+	buf = n == 0 ? NULL : malloc(n);
+	if (buf == NULL)
+		return;
 	fill(buf, n);
 	mtk_receive_frame(&sc, buf, n, (int)(next_word() % 5) - 1,
 		(int)(next_word() % 8));

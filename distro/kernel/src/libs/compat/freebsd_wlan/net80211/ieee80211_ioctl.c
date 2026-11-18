@@ -1253,13 +1253,15 @@ ieee80211_ioctl_get80211(struct ieee80211vap *vap, u_long cmd,
 	}
 	case IEEE80211_IOC_HAIKU_ROUTER: {
 		struct ieee80211_haiku_router router;
-		struct ieee80211_node *bss = vap->iv_bss;
+		struct ieee80211_node *bss;
 
 		if (ireq->i_len < (int)sizeof(router) || ireq->i_data == NULL) {
 			error = EINVAL;
 			break;
 		}
 		memset(&router, 0, sizeof(router));
+		IEEE80211_LOCK(vap->iv_ic);
+		bss = vap->iv_bss;
 		if (bss != NULL && (vap->iv_state == IEEE80211_S_RUN
 		    || vap->iv_state == IEEE80211_S_SLEEP)) {
 			if (bss->ni_ies.hecap_ie != NULL)
@@ -1269,6 +1271,7 @@ ieee80211_ioctl_get80211(struct ieee80211vap *vap, u_long cmd,
 			else if (bss->ni_ies.htcap_ie != NULL)
 				router.i_standard = 4;
 		}
+		IEEE80211_UNLOCK(vap->iv_ic);
 		error = copyout(&router, ireq->i_data, sizeof(router));
 		break;
 	}
@@ -1329,8 +1332,21 @@ ieee80211_ioctl_setkey(struct ieee80211vap *vap, struct ieee80211req *ireq)
 		memcpy(g.i_key, ik.ik_keydata, 16);
 		g.i_keyix = (uint8_t)ik.ik_keyix;
 		g.i_keylen = 16;
-		error = vap->iv_ic->ic_ioctl(vap->iv_ic,
-		    IEEE80211_IOC_HAIKU_IGTK, &g);
+		{
+			struct ieee80211_haiku_igtk_pn pn;
+
+			memset(&pn, 0, sizeof(pn));
+			memcpy(pn.i_key, ik.ik_keydata, 16);
+			pn.i_keyix = g.i_keyix;
+			pn.i_keylen = 16;
+			pn.i_ipn = ik.ik_keyrsc;
+			error = vap->iv_ic->ic_ioctl(vap->iv_ic,
+			    IEEE80211_IOC_HAIKU_IGTK_PN, &pn);
+			memset(&pn, 0, sizeof(pn));
+			if (error == ENOTTY)
+				error = vap->iv_ic->ic_ioctl(vap->iv_ic,
+				    IEEE80211_IOC_HAIKU_IGTK, &g);
+		}
 		memset(&g, 0, sizeof(g));
 		if (error == 0)
 			ieee80211_r5_note_igtk(vap);

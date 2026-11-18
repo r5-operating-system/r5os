@@ -659,7 +659,8 @@ WiFiController::MessageReceived(BMessage* message)
 			int32 at = interfaceLength > 0
 				? fDevice.FindFirst(interface) : -1;
 			bool ours = !fDevice.IsEmpty() && at >= 0
-				&& at + interfaceLength == fDevice.Length();
+				&& at + interfaceLength == fDevice.Length()
+				&& (at == 0 || fDevice.ByteAt(at - 1) == '/');
 /* SPDX-SnippetEnd */
 			if (opcode == B_NETWORK_WLAN_SCANNED) {
 				if (ours) {

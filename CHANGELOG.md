@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-18 - Wi-Fi: the rest of the review that could be checked
+
+Problem: several notes from the same review were still open. An integrity key had no packet number. A beacon's HE element could claim PPE thresholds this builder does not send. A router advertisement with lifetime 0 removed every IPv6 default route. An old DNS domain was written back when the new configuration had none. The link rate stayed on screen after the station left. A device named `10` matched a notification for `0`. "Wi-Fi 6E" sorted above "Wi-Fi 7" because the comparison used the last character.
+
+Changed: the integrity key's packet number goes in a new request, `IEEE80211_IOC_HAIKU_IGTK_PN` (`0x6008`). The older request is unchanged. The driver stores the number. The firmware record copied from mt76 has no field for it, so it is not sent there. The outgoing HE capability clears PPE Thresholds Present. A lifetime of 0 removes only the default route whose gateway is that router. A resolver update writes a domain only when the new configuration has one. The reported link is empty unless the station is up, and the last rate is cleared when the join ends. A notification matches the device name only at a `/` boundary. Router standards are ordered by name. WPA2 may use protected management frames. SAE sets `sae_pwe=2`. The package is `wpa_supplicant-2.11.r5.4-1`. The fuzz harness allocates the buffer it claims to pass, and also calls the HE update. The wpa_supplicant license text is in `LICENSES/`.
+
+Limits: not jammed and not booted. A protected deauth is still discarded. The station record sent to the firmware was not widened: a wrong record would break the join that already works, and that needs a stick. Fast transition stays off. The detach order was not reordered: the panic path needs a backtrace from the stick. The password is still written when the join is requested from the Deskbar; saving it after a successful join is the password window. `IEEE80211_MODE_MAX` is 16 (HE added modes 14 and 15). The roam and transmit parameter arrays are that long. `MODE_BYTES` stays 2.
+
 ## 2026-11-18 - Wi-Fi: the SAE queue, who may set a key, and an unprotected deauth
 
 Problem: one SAE slot served every station. A second frame replaced the first before it was read, and a read left the frame in place. Any local program could set keys, send SAE, or change the authentication mode. After an integrity key was installed, an unprotected deauth or disassociation still dropped the join. An SAE frame was also sent without the management rate.
