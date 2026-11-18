@@ -1194,6 +1194,18 @@ NetServer::_JoinNetwork(const BMessage& message, const BNetworkAddress* address,
 			network.authentication_mode = B_NETWORK_AUTHENTICATION_WEP;
 			network.key_mode = B_KEY_MODE_NONE;
 			network.cipher = network.group_cipher = B_NETWORK_CIPHER_WEP_40;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		} else if (string.ICompare("wpa3") == 0) {
+			network.authentication_mode = B_NETWORK_AUTHENTICATION_WPA3;
+			network.key_mode = B_KEY_MODE_SAE;
+			network.cipher = network.group_cipher = B_NETWORK_CIPHER_CCMP;
+		} else if (string.ICompare("owe") == 0) {
+			network.authentication_mode = B_NETWORK_AUTHENTICATION_NONE;
+			network.key_mode = B_KEY_MODE_OWE;
+			network.cipher = network.group_cipher = B_NETWORK_CIPHER_CCMP;
+// SPDX-SnippetEnd
 		} else if (string.ICompare("none") != 0 && string.ICompare("open") != 0) {
 			fprintf(stderr, "%s: invalid authentication mode.\n", name);
 			askForConfig = true;
@@ -1208,7 +1220,14 @@ NetServer::_JoinNetwork(const BMessage& message, const BNetworkAddress* address,
 	if (!wpaSupplicant.IsValid()) {
 		// The wpa_supplicant isn't running yet, we may join ourselves.
 		if (!askForConfig
-			&& network.authentication_mode == B_NETWORK_AUTHENTICATION_NONE) {
+			&& network.authentication_mode == B_NETWORK_AUTHENTICATION_NONE
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// OWE uses authentication "none" and must not be joined as an open network.
+			&& (network.key_mode & (B_KEY_MODE_OWE | B_KEY_MODE_SAE)) == 0
+// SPDX-SnippetEnd
+			) {
 			// We can join this network ourselves.
 			status_t status = set_80211(deviceName, IEEE80211_IOC_SSID,
 				network.name, strlen(network.name));
@@ -1239,6 +1258,14 @@ NetServer::_JoinNetwork(const BMessage& message, const BNetworkAddress* address,
 		status = join.AddFlat("address", &network.address);
 	if (status == B_OK && !askForConfig)
 		status = join.AddUInt32("authentication", network.authentication_mode);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// The supplicant uses this to tell OWE from an open network. The password
+// is a separate field and is not written here.
+	if (status == B_OK)
+		status = join.AddUInt32("key_mode", network.key_mode);
+// SPDX-SnippetEnd
 	if (status == B_OK && password != NULL)
 		status = join.AddString("password", password);
 	if (status != B_OK)

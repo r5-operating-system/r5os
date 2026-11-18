@@ -107,6 +107,8 @@ def copy_sources() -> None:
     copy(netapi / "NetworkDevice.h", HAIKU / "headers/os/net/NetworkDevice.h")
     copy(netapi / "NetworkRoster.cpp",
         HAIKU / "src/kits/network/libnetapi/NetworkRoster.cpp")
+    copy(netapi / "NetworkDevice.cpp",
+        HAIKU / "src/kits/network/libnetapi/NetworkDevice.cpp")
     print("copied NetworkRoster")
 
     firmware = ROOT / "distro/firmware/mediatek"
