@@ -2,7 +2,7 @@
 
 This is a study of what "a real 64-bit system without compromises" means for R5 Operating System, while every Haiku application and the `libbe` ABI keep working. It says what is in the tree today, which parts are a real compromise and which only look like one, what each fix costs and what it breaks, and the steps that get there. Each step is its own small pull request with a pass rule. The choices in section 7 are the owner's.
 
-Nothing in this document is built. It is paper only. Line numbers were checked on 16 Nov 2026 against `main` at `2729cf0532`. Every claim is marked **checked** (read in the tree, or in the WSL build tree's `BuildConfig`) or **assumption** (from vendor data sheets or general knowledge, not read on the machine). No speed gain in this document was measured; where a gain is named, it is a reason to measure, not a result.
+Step 3 (the x86-64-v2 baseline, including the kernel, with the boot loaders left on the plain baseline) is in the tree as of 18 Nov 2026. The other steps are still paper. Line numbers below were checked on 16 Nov 2026 against `main` at `2729cf0532`, before that baseline. Every claim is marked **checked** (read in the tree, or in the WSL build tree's `BuildConfig`) or **assumption** (from vendor data sheets or general knowledge, not read on the machine). No speed gain in this document was measured; where a gain is named, it is a reason to measure, not a result.
 
 It follows the BeOS and Haiku way. An application keeps the Haiku kits and their ABI. R5 adds new calls next to old ones; it never changes a call that shipped (AGENTS.md, "Compatibility").
 
@@ -22,7 +22,7 @@ It follows the BeOS and Haiku way. An application keeps the Haiku kits and their
 
 ### CPU baseline (checked)
 
-- **AMD64:** `ArchitectureRules:37-44` sets `-march` for arm, arm64, x86 and riscv64, but has no `case x86_64`. The cross GCC is 13.3.0 and its defaults are `-march=x86-64 -mtune=generic` (`x86_64-unknown-haiku-gcc -Q --help=target` in WSL). That is **x86-64-v1**: SSE2 is the newest guaranteed vector set; no SSE4.2, POPCNT, AVX, AVX2, BMI or FMA in generated code. `distro/UserBuildConfig` adds no CPU or optimizer flags.
+- **AMD64:** `distro/jam/ArchitectureRules` (applied by `scripts/apply-cpu-baseline.py`) has `case x86_64 : archFlags += -march=x86-64-v2`. `archFlags` is part of `ccBaseFlags`, and the kernel takes `HAIKU_CCFLAGS`, so user space, the kernel and kernel add-ons are built for **x86-64-v2** (SSE3, SSSE3, SSE4.1, SSE4.2, POPCNT, CMPXCHG16B, and LAHF/SAHF). The boot loaders strip `-march=x86-64-v2`; `bios_ia32` stays `-march=pentium` and `-m32`. The shared check is `distro/boot/arch/x86/arch_cpu.cpp` (`boot_arch_cpu_init`), which the EFI loader already calls and the BIOS loader calls from `distro/boot/bios_ia32/cpu.cpp`. A missing feature prints `This R5 Operating System build requires an x86-64-v2 CPU (SSE4.2 / POPCNT).` and halts. `distro/UserBuildConfig` adds no further CPU flags. ARM64 and RISC-V flags in that file are unchanged.
 - **ARM64:** `-march=armv8-a+crc` (`ArchitectureRules:41`): ARMv8.0 plus CRC32. No LSE atomics (v8.1), no PAN use (see section 4).
 - **RISC-V 64:** `-march=rv64gc` (`ArchitectureRules:43`), with `-mno-relax` under clang (`:45-49`). No vector (V), no bit-manipulation (Zba/Zbb/Zbs).
 - **Optimizer:** `OPTIM ?= -O2` (`haiku/build/jam/BuildSetup:714`). No LTO, no PGO in `haiku/build/jam` (grep for `-flto` and `-fprofile` found nothing).
@@ -128,8 +128,8 @@ Each step is its own small pull request, built for AMD64 with `scripts/build-loc
 
 ### Step 3 (PR 3): the CPU baseline
 
-- **What:** `case x86_64 : archFlags += -march=x86-64-v<N>` in `ArchitectureRules`, copied into `distro/` (or the owner's choice from section 7), plus a CPUID check in the EFI boot loader with a clear message on a CPU below `<N>`, plus the QEMU `-cpu` flag in `scripts/run-qemu-r5.sh`.
-- **Pass:** a QEMU boot at level `<N>` reaches the desktop; a QEMU boot one level lower shows the message and stops cleanly; on the stick, the step 0 benchmarks run again on the 5625U, and the result (faster, the same, or slower) is written in `CHANGELOG.md` as measured.
+- **What:** `case x86_64 : archFlags += -march=x86-64-v2` in `ArchitectureRules`, copied into `distro/`, plus a CPUID check in the EFI loader and the BIOS loader with a clear message on a CPU below v2, plus the QEMU `-cpu` flag in `scripts/run-qemu-r5.sh`. The kernel is included, because `archFlags` feeds the kernel flags (owner, 18 Nov 2026). The loaders strip the flag.
+- **Status (18 Nov 2026):** the flag, the strip, the shared CPUID check and the QEMU CPU are in the tree. QEMU at v2 with SMAP and QEMU `qemu64` are recorded in `CHANGELOG.md`. The step 0 benchmarks on the 5625U have not been run, so no speed claim is made. The pass rule's stick half is still open.
 
 ### Step 4 (PR 4, only if step 3 shows a gain): dispatch in the hot paths
 
@@ -148,6 +148,8 @@ Each step is its own small pull request, built for AMD64 with `scripts/build-loc
 ## 7. The owner's choices
 
 **Chosen on 16 Nov 2026** (all five as recommended): 1 (d) v2 baseline plus v3 dispatch in the hot paths, after the step 0 measurement; 2 (a) 64-bit only, stated in the R5Book; 3 (b) new 64-bit calls next to the old ones, area info first; 4 (a) PCID first, after M13; 5 (a) plus (b) Haiku's flags plus frame pointers in user space.
+
+**Chosen on 18 Nov 2026:** the v2 baseline covers user space and the kernel. The boot loaders stay on the plain x86-64 baseline and refuse a CPU below v2 before they enter the kernel. The v3 dispatch of (d) is still later, and still waits on a measurement.
 
 1. **CPU baseline on AMD64.** (a) Stay on v1, (b) v2, (c) v3 with a clear boot message, (d) v2 plus v3 dispatch in the hot paths.
    *Recommendation: (d), but only after step 0 measures.* v2 drops almost nothing; v3 drops many laptops and VMs that people will try R5 on, for a gain that is not measured yet. If the numbers after step 3 at v3 are large, revisit (c).

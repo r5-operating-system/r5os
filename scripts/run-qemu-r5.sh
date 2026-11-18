@@ -10,7 +10,9 @@ cd /home/nickr/r5os/haiku/generated.x86_64
 ls -lh r5-os.image
 
 accel=tcg
-cpu=qemu64
+# x86-64-v2 (SSE4.2 / POPCNT). qemu64 is below that baseline.
+# +smap,+smep so a TCG boot still runs the kernel's SMAP guard.
+cpu=Nehalem,+smap,+smep
 if [[ -e /dev/kvm ]] && [[ -r /dev/kvm ]]; then
 	accel=kvm
 	cpu=host
