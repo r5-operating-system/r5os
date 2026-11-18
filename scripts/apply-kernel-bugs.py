@@ -83,6 +83,13 @@ def install_kernel_sources() -> None:
         "src/system/libroot/posix/string/strcmp.c",
         "src/system/libroot/posix/string/memcmp.c",
         "headers/private/system/r5_string_x86.h",
+        # The string scans need the private header. The Jamfiles are copies,
+        # so apply does not patch them.
+        "src/system/libroot/posix/musl/string/Jamfile",
+        "src/system/libroot/posix/string/Jamfile",
+        "src/system/kernel/lib/Jamfile",
+        "src/system/boot/Jamfile",
+        "src/bin/Jamfile",
         # R5: one CPUID/XCR0 read for user-space dispatch
         "headers/private/system/r5_x86_cpu.h",
         "src/tests/system/libroot/posix/string/Jamfile",
@@ -184,35 +191,6 @@ def install_kernel_sources() -> None:
             HAIKU / relative,
             relative,
         )
-    insert_once(
-        HAIKU / "src/system/libroot/posix/musl/string/Jamfile",
-        "SubDirCcFlags -fno-builtin ;\n",
-        "SubDirCcFlags -fno-builtin ;\nUsePrivateSystemHeaders ;\n",
-        "UsePrivateSystemHeaders ;\n",
-        "musl string headers",
-    )
-    insert_once(
-        HAIKU / "src/system/libroot/posix/string/Jamfile",
-        "\t[ FDirName libroot locale ]\n\t;\n",
-        "\t[ FDirName libroot locale ]\n\t;\nUsePrivateSystemHeaders ;\n",
-        "UsePrivateSystemHeaders ;\n",
-        "posix string headers",
-    )
-    insert_once(
-        HAIKU / "src/system/kernel/lib/Jamfile",
-        "UsePrivateHeaders shared ;\n",
-        "UsePrivateHeaders shared ;\nUsePrivateSystemHeaders ;\n",
-        "UsePrivateSystemHeaders ;\n",
-        "kernel lib headers",
-    )
-    insert_once(
-        HAIKU / "src/system/boot/Jamfile",
-        "UsePrivateHeaders [ FDirName libroot locale ] ;\n",
-        "UsePrivateHeaders [ FDirName libroot locale ] ;\n"
-        "UsePrivateSystemHeaders ;\n",
-        "UsePrivateSystemHeaders ;\n",
-        "boot headers",
-    )
 
 
 def install_smp_boot() -> None:
@@ -314,13 +292,6 @@ def install_pstate() -> None:
         "\tr5_cpu_flags.cpp\n\tr5_mem_fuzz.cpp\n",
         "\tr5_mem_fuzz.cpp\n",
         "bin Jamfile memory fuzz",
-    )
-    insert_once(
-        HAIKU / "src/bin/Jamfile",
-        "\tr5_mem_fuzz.cpp\n",
-        "\tr5_mem_fuzz.cpp\n\tr5_string_fuzz.cpp\n",
-        "\tr5_string_fuzz.cpp\n",
-        "bin Jamfile string fuzz",
     )
     insert_once(
         HAIKU / "build/jam/images/definitions/minimum",

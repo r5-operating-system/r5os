@@ -10,7 +10,7 @@
 #undef memcmp
 
 
-#if !defined(__x86_64__)
+#if !defined(__x86_64__) || defined(_BOOT_MODE)
 
 #define MISALIGNMENT(PTR, TYPE) ((addr_t)(PTR) & (sizeof(TYPE) - 1))
 

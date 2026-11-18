@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-18 - String scans use the C path in the loader
+
+The EFI loader and the BIOS loader compile the string files with _BOOT_MODE, and not as x86-64-v2. strlen, strchrnul, memchr, strcmp and memcmp take the C path when _BOOT_MODE is set. strchr was already the C call of strchrnul.
+
+The Jamfiles for those scans are copies under distro: musl string, posix string, the kernel lib, the boot loader, and src/bin. Apply copies them. It no longer inserts the private-header line or r5_string_fuzz.cpp into a Jamfile. The image list still names r5_string_fuzz.
+
+Checked (18 Nov 2026, Europe/Amsterdam): `scripts/build-locked.sh` `jam_exit=0`, `mesa_exit=0`. Two earlier jams failed before this one, on files another session had left in the shared Haiku tree (`gHasXsaves` in `arch/x86/64/thread.cpp`, then `r5_fpu_test` / `r5_timer_test` named by the image list and not by the copied `src/bin` Jamfile). Those files are not part of this change. The passing jam is the one after `thread.cpp` was put back to Haiku HEAD. No QEMU boot for this leftover.
+
 ## 2026-11-18 - AMD64 user space, step 4: page-safe string scans
 
 `strlen`, `strchr` (through `strchrnul`), `strchrnul`, `memchr`, `strcmp` and `memcmp` scan 16 bytes at a time with SSE4.2. The load is aligned, or it is two aligned halves joined with `palignr` only when the next 16 bytes stay in the same page, so a read does not cross into an unmapped page. Strings and counts that finish within 32 bytes stay on that path and do not go through a function pointer. Longer work uses a pointer chosen once: AVX2, 32 bytes at a time, when XCR0 has XMM and YMM, otherwise the same SSE4.2 loop. `strchr` is still the one-line call of `strchrnul`.
