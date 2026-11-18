@@ -45,7 +45,7 @@ Implement these AMD64 kernel fixes and optimizations (note: do NOT implement PCI
 
 ---
 
-## Prompt 2a — 2 MB pages op AMD64: alleen ontwerp (Argon) `[VERSTUURD]`
+## Prompt 2a — 2 MB pages op AMD64: alleen ontwerp (Argon) `[DONE in #4430]`
 
 Nagekeken (18 nov 2026): de eerste versie wilde 2 MB-pagina's voor anoniem geheugen en de heap. Dat geheugen bestaat in Haiku/R5 uit losse 4 KB-pagina's die pas bij gebruik worden toegewezen, naar swap kunnen, copy-on-write zijn en per 4 KB accessed/dirty bijhouden; het ligt bijna nooit fysiek aaneen. Daarom eerst een ontwerp, beperkt tot geheugen dat al aaneengesloten en vast is. Ook nodig: een paginareservering voor het splitsen (in unmap/protect mag niet vrij worden toegewezen), break-before-make bij het wisselen van paginagrootte, een kernel-zelftest in plaats van een `mprotect`-test die in QEMU niet vanzelf draait, en een instelling die standaard uit staat. `X86PagingMethod64Bit.cpp:384-387` zegt nu letterlijk dat er geen echte large-page-ondersteuning is.
 
@@ -71,9 +71,56 @@ Ask me before push/PR.
 
 ---
 
-## Prompt 2b — 2 MB pages op AMD64: bouwen (Argon) `[NOG NIET]`
+## Prompt 2b — 2 MB pages op AMD64: bouwen (Argon) `[VERSTUURD]`
 
-Wordt geschreven nadat `docs/AMD64-LARGE-PAGES.md` (2a) er ligt, gereviewd is en door de eigenaar is goedgekeurd. Uitgangspunten die nu al vastliggen: alleen de geheugensoorten uit 2a; achter een kernelinstelling die standaard uit staat; de kernel-zelftest uit 2a als bewijs in QEMU; een stick op de 5625U voordat het standaard aan kan.
+Nagekeken (18 nov 2026), na de review van het ontwerp (#4430):
+- Correctie op 2a: break-before-make (de PDE eerst leegmaken) laat een moment zonder mapping, waarin een andere CPU of een interrupt (GPU-ringen, VRAM) op een kerneladres een page fault krijgt: een panic. 2b splitst daarom zonder gat: eerst een 4 KB-tabel met dezelfde frames en attributen, dan de PDE in één keer omzetten, dan flushen, en pas daarna de echte wijziging. De bouwer citeert de regel uit de Intel SDM en AMD APM en stopt bij twijfel.
+- De mask-fix (`X86_64_PDE_LARGE_ADDRESS_MASK`, PAT in `X86_64_PTE_MEMORY_TYPE_MASK`) is een aparte commit.
+- De zelftest test ook een user-clone met een team dat afsluit (destructor, RADV-risico) en een write-combining 2 MB-mapping (mask-bug).
+- Eén regel in de seriële log per 2 MB-mapping en per split, begrensd.
+
+```markdown
+## Prompt 2b — 2 MB pages on AMD64: build (Argon)
+
+Read AGENTS.md first, then docs/AMD64-LARGE-PAGES.md (the approved design, #4430) completely, and docs/reviews/KERNEL-AMD64-REVIEW.md section 4. Work on a new branch from origin/main (kernel MMU/VM only; do not touch Wi-Fi, IPv6, GPU drivers or app_server). Copy every Haiku file you change into distro/kernel/ with its original header and copyright, wrap all R5 changes in SPDX-SnippetBegin/End (MIT, 2026 R5OS Contributors), and hook new copies into scripts/apply-kernel-bugs.py.
+
+Implement the design, with these corrections from the review:
+
+1. Separate fix first (own commit, also useful without large pages):
+   - Add X86_64_PDE_LARGE_ADDRESS_MASK = 0x000fffffffe00000 and use it wherever a 2 MB PDE is read: Query() (X86VMTranslationMap64Bit.cpp:489-491) and DebugGetReverseMappingInfo().
+   - Add X86_64_PTE_PAT to X86_64_PTE_MEMORY_TYPE_MASK, so Protect() clears PAT when the memory type changes.
+
+2. Splitting a 2 MB PDE: do NOT use break-before-make. Clearing the PDE leaves a window in which another CPU or an interrupt (GPU rings, VRAM) faults on a kernel address and panics. Instead:
+   a. fill the standby 4 KB page table with 512 PTEs that keep exactly the same frames and attributes (PAT bit 12 → bit 7, all other bits as in the design), then a write barrier;
+   b. switch the PDE to that table in one atomic store;
+   c. invalidate the 2 MB range on all CPUs, synchronously;
+   d. only then apply the caller's change (unmap or protect) to the 4 KB PTEs, followed by its own invalidation.
+   Before coding, check this in the Intel SDM (section 4.10, changing page size with the same frame and attributes) and the AMD APM, and quote the rule in CHANGELOG.md. If the manuals say otherwise, stop and report to me before choosing.
+
+3. Everything else as the design says:
+   - the kernel setting amd64_large_pages, off by default, logged at boot;
+   - 2 MB PDEs only for vm_map_physical_memory, vm_clone_area of device memory, B_CONTIGUOUS, and B_FULL_LOCK with a 2 MB run, with 4 KB as the fallback;
+   - one standby page-table page per 2 MB PDE, taken from the existing MaxPagesNeededToMap reservation, so a split never allocates;
+   - every VMTranslationMap method in section 4 of the design, including the ~X86VMTranslationMap64Bit guard for large-page PDEs in user space;
+   - fMapCount in 4 KB pages.
+
+4. Logging: one serial line per 2 MB PDE created and per split ("R5 VM: 2MB map …", "R5 VM: 2MB split … (reason)"), rate-limited so a large area does not flood the log.
+
+5. Self-test (setting amd64_large_pages_selftest, or automatically once when amd64_large_pages is on), as section 5.2 of the design, plus:
+   - clone the 4 MB area into a user team, read it there, and let that team exit (this tests the destructor guard, the RADV risk);
+   - test one 2 MB PDE with B_WRITE_COMBINING_MEMORY and check Query() returns the exact physical address (the mask fix).
+   Log "R5 VM: amd64_large_pages self-test PASS …" or "FAIL at step …".
+
+Verification:
+- scripts/build-locked.sh in WSL: jam_exit=0.
+- QEMU on your own copy of r5-os.image (not scripts/run-qemu-r5.sh), SMAP on, three short boots:
+  1. setting off: boots as before, the log says disabled;
+  2. setting on, without the self-test: boots to net_server, no panic, 2 MB map lines for the framebuffer or other device memory;
+  3. setting on with the self-test: the PASS line, no panic.
+- Paste the relevant serial lines.
+- CHANGELOG.md: what changed, the SDM/APM quote, what QEMU showed. Hardware is not tested: the 5625U stick (design section 6) comes later.
+- Commit locally on the new branch. Ask me before push/PR. Report in Dutch, short, with [V]/[I].
+```
 
 ---
 
