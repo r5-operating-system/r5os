@@ -44,6 +44,8 @@ def main() -> int:
     app = HAIKU / "src" / "servers" / "app"
     copy("app_server-Jamfile", app / "Jamfile")
     # SkiaDrawingEngine needs to know which HWInterface it is bound to.
+    copy("drawing/Jamfile", app / "drawing" / "Jamfile")
+    copy("drawing/Painter/Jamfile", app / "drawing" / "Painter" / "Jamfile")
     copy("drawing/DrawingEngine.h", app / "drawing" / "DrawingEngine.h")
     copy("compositor/compose_period.h", local / "compose_period.h")
     # blend_line32() keeps the destination's alpha (Haiku left it unset).

@@ -11,6 +11,8 @@
 
 #include <emmintrin.h>
 
+#include <r5_x86_cpu.h>
+
 
 namespace {
 
@@ -116,6 +118,43 @@ constexpr static GenerateTable<SSEGenerator, 4> table_sse;
 
 
 static inline void
+memcpy_nt(uint8_t* destination, const uint8_t* source, size_t length)
+{
+	while (length != 0
+		&& (reinterpret_cast<uintptr_t>(destination) & 15) != 0) {
+		*destination++ = *source++;
+		length--;
+	}
+	auto to = reinterpret_cast<__m128i*>(destination);
+	auto from = reinterpret_cast<const __m128i*>(source);
+	while (length >= 64) {
+		__m128i a = _mm_loadu_si128(from);
+		__m128i b = _mm_loadu_si128(from + 1);
+		__m128i c = _mm_loadu_si128(from + 2);
+		__m128i d = _mm_loadu_si128(from + 3);
+		_mm_stream_si128(to, a);
+		_mm_stream_si128(to + 1, b);
+		_mm_stream_si128(to + 2, c);
+		_mm_stream_si128(to + 3, d);
+		to += 4;
+		from += 4;
+		length -= 64;
+	}
+	while (length >= 16) {
+		_mm_stream_si128(to, _mm_loadu_si128(from));
+		to++;
+		from++;
+		length -= 16;
+	}
+	_mm_sfence();
+	destination = reinterpret_cast<uint8_t*>(to);
+	source = reinterpret_cast<const uint8_t*>(from);
+	while (length--)
+		*destination++ = *source++;
+}
+
+
+static inline void
 memcpy_sse(uint8_t* destination, const uint8_t* source, size_t length)
 {
 	auto to = reinterpret_cast<__m128i*>(destination);
@@ -141,6 +180,26 @@ memcpy_sse(uint8_t* destination, const uint8_t* source, size_t length)
 } // namespace
 
 
+using MemcpyBulk = void (*)(uint8_t*, const uint8_t*, size_t);
+
+static MemcpyBulk sMemcpyBulk = memcpy_sse;
+static size_t sMemcpyStreaming;
+static size_t sMemcpyRepFrom = 2048;
+
+
+static void
+memcpy_choose_bulk(void)
+{
+	uint32_t flags = r5_x86_cpu_flags();
+	sMemcpyStreaming = (size_t)r5_x86_cpu_llc() / 4 * 3;
+	if ((flags & R5_CPU_ERMS) != 0) {
+		sMemcpyBulk = memcpy_repmovs;
+		if ((flags & R5_CPU_FSRM) != 0)
+			sMemcpyRepFrom = 128;
+	}
+}
+
+
 extern "C" void*
 memcpy(void* destination, const void* source, size_t length)
 {
@@ -150,10 +209,28 @@ memcpy(void* destination, const void* source, size_t length)
 		memcpy_small(to, from, length);
 		return destination;
 	}
-	if (length < 2048) {
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	static int chosen;
+	if (__atomic_load_n(&chosen, __ATOMIC_ACQUIRE) == 0) {
+		memcpy_choose_bulk();
+		__atomic_store_n(&chosen, 1, __ATOMIC_RELEASE);
+	}
+
+	if (length >= sMemcpyStreaming) {
+		memcpy_nt(to, from, length);
+		return destination;
+	}
+
+	// FSRM makes a short rep movsb fast. Without it the old cut stays.
+	// Both cuts were stored by memcpy_choose_bulk.
+	if (sMemcpyBulk != memcpy_repmovs || length < sMemcpyRepFrom) {
 		memcpy_sse(to, from, length);
 		return destination;
 	}
+// SPDX-SnippetEnd
 
 	// rep movsb slows down about 14 times when the destination is less than
 	// 16 bytes from the source, modulo the page size (4K aliasing; a
@@ -175,6 +252,6 @@ memcpy(void* destination, const void* source, size_t length)
 		return destination;
 	}
 
-	memcpy_repmovs(to, from, length);
+	sMemcpyBulk(to, from, length);
 	return destination;
 }

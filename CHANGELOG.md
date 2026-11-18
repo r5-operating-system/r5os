@@ -1,5 +1,58 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-18 - memcpy dispatch also builds into the kernel
+
+The step 3 files are not only libroot. The kernel builds `memcpy.cpp` and `memset.cpp` (`src/system/kernel/lib/arch/x86_64/Jamfile`, lines 32-33) and `memmove.c` (`src/system/kernel/lib/Jamfile`, line 127). The kernel therefore uses the CPUID choice and the non-temporal stores. The QEMU boots of step 3 already ran that kernel. The bootloader builds `memmove.c` (`src/system/boot/Jamfile`, line 325) and keeps `generic_memcpy.c` and `generic_memset.c`, so the bootloader does not take the CPUID or `movntdq` path. Its overlapping `memmove` is the 16-byte SSE loop, and a non-overlapping `memmove` calls the generic `memcpy`. Prompt 4 is also editing the kernel, so this share is recorded here.
+
+`memcpy_choose_bulk` and `memset_choose_bulk` now store the streaming cut, and memcpy also stores the `rep` cut, in statics. A later call above the small size does not read the flags again. The small sizes stay inline.
+
+`rep movsb` with the FSRM cut at 128 bytes ran on the Ryzen 5 5625U: the host fuzz, and the QEMU guest with `-cpu host,+smap` (flags `0x7f`). QEMU `-cpu EPYC-Rome` advertises `0x1f`, so no ERMS and no FSRM. `-cpu Nehalem` advertises none either. Those two guests took the SSE loop and, for the large sizes, the non-temporal stores.
+
+The agreed fuzz length is 60 seconds. On the host it finished in 19 seconds, and again in 20 seconds after the cuts were cached (17043584 checks, flags on and flags forced off). The three QEMU runs were about that minute: 61, 68 and 58 seconds, same check count, all PASS.
+
+## 2026-11-18 - AMD64 user space, step 3: memcpy, memset, memmove
+
+The same `memcpy.cpp`, `memset.cpp` and `memmove.c` are linked into the kernel, and `memmove.c` into the bootloader. Detail is in the entry above.
+
+`rep movsb` and `rep stosb` run only when ERMS is set. Without it the existing SSE loop is used. With FSRM, `rep movsb` starts at 128 bytes instead of 2048. `memset` keeps the 2048 cut. Copies and fills at or above three quarters of the last-level cache use `movntdq` and an `sfence`. The 4K-alias window (distance 1..31 or the last 16 bytes of the page) still stays on the SSE loop. Sizes up to 16 bytes (`memcpy`) and 31 bytes (`memset`) stay on the old inline path, with no function pointer.
+
+Overlapping `memmove` uses 16-byte SSE loads and stores. A backward copy steps by 16 only when the regions are at least 16 bytes apart; a closer overlap is copied byte by byte, because a 16-byte store would reach the next load. It does not use `std` or `rep movsb`. No overlap still calls `memcpy`. Other architectures keep the musl word loop.
+
+`r5_mem_fuzz` compares all three with byte copies: every size 0..4096, every source and destination alignment 0..63, 64 random sizes up to 16 MiB (the last ones sit above the non-temporal cut), and every memmove overlap 1..64 in both directions.
+
+Checked (18 Nov 2026, about 15:30 Europe/Amsterdam):
+- Host, 5625U: the fuzz passes in 19 seconds, 17043584 checks. The same binary with the feature flags forced off (SSE and non-temporal only) also passes, same count, 19 seconds.
+- `scripts/build-locked.sh`: `jam_exit=0`, `mesa_exit=0`. `memcpy.cpp`, `memset.cpp` and `memmove.c` were recompiled.
+- QEMU KVM, own image copy. The fuzz does the same 17043584 checks and prints PASS: `-cpu host,+smap` in 61 seconds (serial has `enable SMAP`), `-cpu Nehalem` in 68 seconds (no SMAP on that CPU), `-cpu EPYC-Rome` in 58 seconds (serial has `enable SMAP`). Tracker, Deskbar, Terminal, WebPositive, StyledEdit, Settings and GLTeapot start on each boot. The guest is slower than the host; the matrix is complete on all three.
+
+## 2026-11-18 - AMD64 user space, step 2: one CPUID helper
+
+`headers/private/system/r5_x86_cpu.h` is the only place that reads CPUID for the later user-space dispatch. It is a private header. libroot exports no new symbol. The first call stores the result; later calls in that translation unit reuse it.
+
+What it reads, once: leaf 1 and leaf 7, and XCR0 when OSXSAVE is set. AVX, AVX2 and FMA are set only when XMM and YMM are both enabled in XCR0. BMI1, BMI2, ERMS and FSRM come from leaf 7. The last-level cache is leaf 4 on GenuineIntel and leaf `0x8000001D` on AuthenticAMD (highest data or unified level). Anything else, or a size that does not fit, uses 8 MiB. x86-64-v2 is the baseline and is not a flag.
+
+`r5_cpu_flags` prints the flags and the cache size. It is the check program for this step.
+
+Checked (18 Nov 2026, about 15:00 Europe/Amsterdam):
+- Host, Ryzen 5 5625U: flags `0x7f` (AVX, AVX2, FMA, BMI1, BMI2, ERMS and FSRM) and a 16 MiB last-level cache. A second call returns the same value.
+- `scripts/build-locked.sh`: `jam_exit=0`, `mesa_exit=0`.
+- QEMU KVM, own image copy, `-cpu host,+smap`: serial has `enable SMAP` and `R5 net_server`. After Sign in, `r5_cpu_flags` prints the same `0x7f` and 16 MiB, and Tracker, Deskbar, Terminal, WebPositive, StyledEdit, Settings and GLTeapot are running.
+- QEMU KVM `-cpu Nehalem`: flags `0` (no AVX, AVX2, FMA, BMI, ERMS or FSRM). Leaf 4 has no cache entry in this QEMU model, so the helper uses the 8 MiB fallback. The same apps start. This CPU has no SMAP; the kernel does not print `enable SMAP`.
+- QEMU KVM `-cpu EPYC-Rome`: flags `0x1f` (AVX, AVX2, FMA, BMI1, BMI2; no ERMS or FSRM, which this model does not advertise) and 16 MiB from leaf `0x8000001D`. Serial has `enable SMAP`. The same apps start.
+
+## 2026-11-18 - AMD64 user space, step 1: GNU hash and local binding
+
+Problem: user-space binaries used only the SysV hash (`DT_HASH`). Calls inside `libbe` and `app_server` could go through the PLT, and the compiler assumed another library might interpose those functions. `malloc` must stay interposable, so `libroot` is left alone.
+
+What changed:
+- `distro/jam/ArchitectureRules`: on x86_64, user-space `HAIKU_LINKFLAGS` gain `-Wl,--hash-style=both` (SysV hash and `DT_GNU_HASH`). The runtime loader already reads `DT_GNU_HASH` in `elf_load_image.cpp`. Kernel add-ons append `HAIKU_KERNEL_ADDON_LINKFLAGS` (`--hash-style=sysv`) after that, so the last flag wins and they stay SysV.
+- `libbe` (`distro/desktop/src/kits/` Jamfiles): `-fno-semantic-interposition` on the kit sources, and `-Wl,-Bsymbolic-functions` on `libbe.so`. `BString`'s counted `strncpy` into a buffer that already has a NUL at that length warns under the new flag; that warning is not an error (`-Wno-error=stringop-truncation` on the support kit).
+- `app_server`, its drawing library and Painter: the same compile flag, plus `-Wl,-Bsymbolic-functions -Wl,--gc-sections` on the executable.
+
+Checked (18 Nov 2026, about 14:38 Europe/Amsterdam):
+- `scripts/build-locked.sh`: `jam_exit=0`, `mesa_exit=0`. A `ColumnListView.cpp` compile line contains `-fno-semantic-interposition`. `readelf -d` on `libbe.so` shows both `(HASH)` and `(GNU_HASH)`. The vesa kernel add-on still has only `(HASH)`. `libbe.so` has no `JUMP_SLOT` relocation to a function it defines. BeDecorator's 65 undefined symbols that `app_server` exports (Decorator, TabDecorator, SATDecorator, DecorAddOn) are still exported after `--gc-sections`.
+- QEMU, KVM, `-cpu host,+smap`, an own copy of `r5-os.image`: serial has `enable SMAP` and `R5 net_server`. After Sign in, `ps` shows Tracker and Deskbar as the signed-in account, and Terminal, WebPositive, StyledEdit, Settings and GLTeapot. VulkanTeapot was not at `/boot/system/apps` or the demos path, so it was not started. No speed measurement.
+
 ## 2026-11-18 - AMD64 baseline is x86-64-v2, including the kernel
 
 Problem: user space and the kernel were built as x86-64-v1 (`-march=x86-64`). POPCNT, SSE4.2 and the rest of x86-64-v2 were not available to the compiler. A higher baseline with no check in the loader stops an older CPU with `#UD` and no message.
