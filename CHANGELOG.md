@@ -1,5 +1,16 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-18 - Game controllers and Bluetooth devices tested on real hardware
+
+Tested by the owner on the HP ENVY x360 (Ryzen 5 5625U), build 10065, on a stick after stick 54:
+
+- Sony DualSense over USB: buttons, sticks, rumble, trigger feedback and motion work.
+- 8BitDo M30 over USB and Bluetooth: works. It has no rumble motor.
+- Microsoft Designer Mouse over Bluetooth: works, also after a restart.
+- Sony WH-1000XM3 over Bluetooth: connects. Sound (A2DP) and the microphone (HFP) were not tested yet.
+
+For the DualSense over USB this replaces the "only tested in QEMU" limit of build 10065. Still not tested on hardware: the DualSense over Bluetooth, the DualShock 4, the DualSense Edge, and the Switch and Xbox controllers. The logs of this boot were not read off the stick.
+
 ## 2026-11-18 - memcpy dispatch also builds into the kernel
 
 The step 3 files are not only libroot. The kernel builds `memcpy.cpp` and `memset.cpp` (`src/system/kernel/lib/arch/x86_64/Jamfile`, lines 32-33) and `memmove.c` (`src/system/kernel/lib/Jamfile`, line 127). The kernel therefore uses the CPUID choice and the non-temporal stores. The QEMU boots of step 3 already ran that kernel. The bootloader builds `memmove.c` (`src/system/boot/Jamfile`, line 325) and keeps `generic_memcpy.c` and `generic_memset.c`, so the bootloader does not take the CPUID or `movntdq` path. Its overlapping `memmove` is the 16-byte SSE loop, and a non-overlapping `memmove` calls the generic `memcpy`. Prompt 4 is also editing the kernel, so this share is recorded here.
