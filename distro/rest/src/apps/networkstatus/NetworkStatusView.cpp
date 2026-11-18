@@ -111,7 +111,8 @@ deskbar_join(void* arg)
 			join->network, password.String());
 	}
 	if (status != B_OK) {
-		BString text = B_TRANSLATE("Could not join wireless network:\n");
+		BString text = B_TRANSLATE(
+			"Could not join or remember the wireless network:\n");
 		text << strerror(status);
 		BAlert* alert = new BAlert(join->name.String(), text.String(),
 			B_TRANSLATE("OK"), NULL, NULL, B_WIDTH_AS_USUAL, B_STOP_ALERT);
@@ -499,14 +500,26 @@ NetworkStatusView::MouseDown(BPoint point)
 	menu->SetFont(be_plain_font);
 	BString wifiInterface;
 	BNetworkDevice device;
+	BString currentSsid;
+	BString associatedDevice;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	bool haveSsid = r5_wifi_current_ssid(currentSsid, &associatedDevice)
+			== B_OK && currentSsid.Length() > 0;
 
-	if (!fInterfaceStatuses.empty()) {
+	// The list and the Join target follow the adapter that is actually
+	// associated. The "Connected to" line is that same adapter. With
+	// nothing associated, the first wireless device is the list.
+	if (haveSsid && associatedDevice.Length() > 0) {
+		wifiInterface = associatedDevice;
+		device.SetTo(wifiInterface.String());
+	} else if (!fInterfaceStatuses.empty()) {
 		for (std::map<BString, int32>::const_iterator it
 				= fInterfaceStatuses.begin(); it != fInterfaceStatuses.end();
 				++it) {
 			const BString& name = it->first;
 
-			// we only show network of the first wireless device we find
 			if (wifiInterface.IsEmpty()) {
 				device.SetTo(name);
 				if (device.IsWireless())
@@ -514,6 +527,7 @@ NetworkStatusView::MouseDown(BPoint point)
 			}
 		}
 	}
+// SPDX-SnippetEnd
 
 	// Add wireless networks, if any, first so that we can sort the menu
 // SPDX-SnippetBegin
@@ -523,8 +537,7 @@ NetworkStatusView::MouseDown(BPoint point)
 	menu->AddItem(new BMenuItem(B_TRANSLATE("Wi-Fi settings" B_UTF8_ELLIPSIS),
 		new BMessage(kMsgOpenWifi)));
 
-	BString currentSsid;
-	if (r5_wifi_current_ssid(currentSsid) == B_OK && currentSsid.Length() > 0) {
+	if (haveSsid) {
 		BString connected(B_TRANSLATE("Connected to %ssid%"));
 		connected.ReplaceFirst("%ssid%", currentSsid);
 		BMenuItem* current = new BMenuItem(connected.String(), NULL);

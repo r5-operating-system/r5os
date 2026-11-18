@@ -10,6 +10,20 @@ Limits: not jammed and not booted. QEMU has no Wi-Fi, so this was not joined. Th
 
 Tested: the cross compiler `x86_64-unknown-haiku-gcc` 13.3.0 produced a Haiku ELF and `distro/packages/x86_64/wpa_supplicant-2.11.r5.1-1-x86_64.hpkg` (1.1 MB). The binary contains the SAE handshake and the IGTK rejection text. No image was built.
 
+## 2026-11-17 - Wi-Fi: a short beacon element and a second adapter
+
+Problem: a review of the whole Wi-Fi stack, read without the design notes, found places a frame, a firmware file, or a second adapter was handled wrongly.
+
+Changed:
+- A vendor HT information element is stored as the information element. It was stored as the capabilities element, and the length check then dropped HT.
+- A Quiet element shorter than 6 bytes is ignored, and the quiet callback is not called when the driver never set it. A TIM shorter than 4 bytes is ignored. Both used to be read past the element.
+- A patch section or a firmware region whose offset and length leave the file is refused. The old check added up the lengths and did not look at the offset.
+- The station and network records set HT, VHT, and HE only when the card's own report says so, the same gate as the channel list. VHT in the station record also requires 5 GHz, as the network record already did.
+- The pairwise CCMP key kept for an integrity update is not replaced by the group key. The group key was sent back as pairwise key 0.
+- The Deskbar list and Join target use the adapter that is associated. The password window floats, so it does not freeze the Deskbar. A network that joined but was not saved is reported as a failure. A scan notification for interface 1 no longer updates interface 10.
+
+Limits: no jam and no boot. `ht_vht` and `he` still default to off.
+
 ## 2026-11-17 - Deskbar: the window watcher no longer calls a missing window
 
 Problem: the thread that watches open windows called `Window()->LockWithTimeout()` on the team menu. While the Deskbar is closing, that menu is already detached, so `Window()` is NULL and the call crashed (Haiku #6846).

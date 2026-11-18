@@ -128,9 +128,9 @@ r5_wifi_join_and_remember(const char* deviceName, const wireless_network& networ
 	}
 	persist.AddString("authentication", authentication);
 	BMessenger server(kNetServerSignature);
-	if (server.IsValid())
-		server.SendMessage(&persist);
-	return B_OK;
+	if (!server.IsValid())
+		return B_NAME_NOT_FOUND;
+	return server.SendMessage(&persist);
 }
 
 
@@ -151,7 +151,11 @@ public:
 		if (fPassword->TextView() != NULL)
 			fPassword->TextView()->HideTyping(true);
 
-		SetFeel(B_MODAL_APP_WINDOW_FEEL);
+		/* Deskbar is the app that shows this window. An application-modal
+		 * feel would freeze every Deskbar window until the password
+		 * is entered. Floating keeps the prompt in front.
+		 */
+		SetFeel(B_FLOATING_ALL_WINDOW_FEEL);
 		BLayoutBuilder::Group<>(this, B_VERTICAL, B_USE_DEFAULT_SPACING)
 			.SetInsets(B_USE_WINDOW_INSETS)
 			.Add(fPassword)

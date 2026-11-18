@@ -646,9 +646,18 @@ WiFiController::MessageReceived(BMessage* message)
 		{
 			int32 opcode = message->GetInt32("opcode", 0);
 			const char* interface = message->GetString("interface", "");
-			// Notifications may name the interface without the /dev/ prefix
-			bool ours = !fDevice.IsEmpty() && interface[0] != '\0'
-				&& fDevice.FindFirst(interface) >= 0;
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * Notifications may name the interface without the /dev/ prefix. The match
+ * has to end at the end of our name, so index 1 is not index 10.
+ */
+			int32 interfaceLength = (int32)strlen(interface);
+			int32 at = interfaceLength > 0
+				? fDevice.FindFirst(interface) : -1;
+			bool ours = !fDevice.IsEmpty() && at >= 0
+				&& at + interfaceLength == fDevice.Length();
+/* SPDX-SnippetEnd */
 			if (opcode == B_NETWORK_WLAN_SCANNED) {
 				if (ours) {
 					WiFiDebugLog(fComponent, "%s: scan completed",

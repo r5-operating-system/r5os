@@ -798,8 +798,10 @@ mtk_ampdu_rx_stop(struct ieee80211_node* ni, struct ieee80211_rx_ampdu* rap)
  * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
  * SPDX-License-Identifier: MIT
  * Remember a pairwise CCMP key so an IGTK update can send it beside the
- * integrity key. The bytes are not written to the log. Returning the
- * previous result leaves encryption in the stack.
+ * integrity key. A group key is also CCMP and must not replace it: the
+ * integrity update sends this buffer as pairwise key 0. The bytes are not
+ * written to the log. Returning the previous result leaves encryption in
+ * the stack.
  */
 static int
 mtk_key_set(struct ieee80211vap* vap, const struct ieee80211_key* key)
@@ -808,7 +810,8 @@ mtk_key_set(struct ieee80211vap* vap, const struct ieee80211_key* key)
 
 	if (key != NULL && key->wk_cipher != NULL
 		&& key->wk_cipher->ic_cipher == IEEE80211_CIPHER_AES_CCM
-		&& key->wk_keylen == 16) {
+		&& key->wk_keylen == 16
+		&& (key->wk_flags & IEEE80211_KEY_GROUP) == 0) {
 		memcpy(sc->sc_ccmp, key->wk_key, 16);
 		sc->sc_ccmp_len = 16;
 	}
