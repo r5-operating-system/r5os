@@ -12,6 +12,7 @@ HAIKU = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else "/home/nickr/r5os/hai
 def install_kernel_sources() -> None:
     root = pathlib.Path(__file__).resolve().parents[1]
     files = (
+        "build/config_headers/kernel_debug_config.h",
         "src/system/kernel/arch/x86/arch_timer.cpp",
         "src/system/kernel/arch/x86/arch_cpu.cpp",
         "src/system/kernel/arch/x86/arch_vm.cpp",

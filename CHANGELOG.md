@@ -1,5 +1,18 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-18 - Kernel (AMD64): release-kernel (`KDEBUG_LEVEL 0`) en debug-profiel (`KDEBUG_LEVEL 2`)
+
+Problem:
+- `build/config_headers/kernel_debug_config.h:8` stond vast op `#define KDEBUG_LEVEL 2`, waardoor elk image werd gebouwd met paranoïde kernel-heap-fills (`PARANOID_KERNEL_MALLOC`, `PARANOID_KERNEL_FREE`), spinlock-caller-tracking (`DEBUG_SPINLOCKS`), block-cache dirty-checks (`BLOCK_CACHE_DEBUG_CHANGED`) en debug-mutexen (`KDEBUG`, waardoor elke `mutex_lock` / `mutex_unlock` het trage functiepad nam in plaats van de inline fast path).
+
+What changed (Step 1):
+- `distro/kernel/build/config_headers/kernel_debug_config.h` zet het standaardniveau op `#ifndef KDEBUG_LEVEL` / `#define KDEBUG_LEVEL 0` (gekopieerd via `scripts/apply-kernel-bugs.py`).
+- `distro/UserBuildConfig`, `scripts/build-locked.sh` en `scripts/jam-r5-raw.sh` voegen het debug-profiel `@r5-debug` (`scripts/build-locked.sh --debug` of `R5_KERNEL_DEBUG=1`) toe met `KDEBUG_LEVEL 2` voor QEMU- en test-runs, terwijl `scripts/build-locked.sh` standaard het release-profiel (`@r5-raw`, `KDEBUG_LEVEL 0`) bouwt. `docs/KERNEL.md` documenteert beide profielen.
+
+Tested (Step 1):
+- Release-profiel (`scripts/build-locked.sh`, `KDEBUG_LEVEL 0`): `jam_exit=0`, `mesa_exit=0`. Korte QEMU-boot (`-cpu Nehalem,+smap,+smep`, eigen kopie van `r5-os.image`): schakelt SMEP en SMAP in (`enable SMEP`, `enable SMAP`) en bereikt `net_server` zonder panic.
+- Debug-profiel (`scripts/build-locked.sh --debug`, `KDEBUG_LEVEL 2`): `jam_exit=0`, `mesa_exit=0`. Korte QEMU-boot (`-cpu Nehalem,+smap,+smep`, eigen kopie van `r5-os.image`): schakelt SMEP en SMAP in en bereikt `net_server` zonder panic.
+
 ## 2026-11-18 - Game controllers and Bluetooth devices tested on real hardware
 
 Tested by the owner on the HP ENVY x360 (Ryzen 5 5625U), build 10065, on a stick after stick 54:

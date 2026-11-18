@@ -1920,7 +1920,8 @@ arch_cpu_init_post_modules(kernel_args* args)
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
 	r5_pstate_publish();
-	dprintf("R5 kernel: arch_cpu from distro, microcode match uses installed_cpu\n");
+	dprintf("R5 kernel: arch_cpu from distro, microcode match uses installed_cpu (KDEBUG_LEVEL=%d)\n",
+		KDEBUG_LEVEL);
 	// SPDX-SnippetEnd
 	return B_OK;
 }
