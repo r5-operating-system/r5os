@@ -1,0 +1,35 @@
+SubDir HAIKU_TOP src build libbe interface ;
+
+UsePrivateBuildHeaders app interface shared ;
+
+SEARCH_SOURCE += [ FDirName $(HAIKU_TOP) src kits interface ] ;
+
+USES_BE_API on <libbe_build>interface_kit.o = true ;
+
+# SPDX-SnippetBegin
+# SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+# ColorConversion.cpp includes <r5_x86_cpu.h> on AMD64. The host libbe is
+# built with the host compiler, which is x86-64 here, so it needs the same
+# private system headers as the target.
+UsePrivateSystemHeaders ;
+SourceSysHdrs ColorConversion.cpp :
+	$(TARGET_PRIVATE_SYSTEM_HEADERS_$(TARGET_PACKAGING_ARCH)) ;
+# SPDX-SnippetEnd
+
+BuildPlatformMergeObjectPIC <libbe_build>interface_kit.o :
+	Bitmap.cpp
+	ColorConversion.cpp
+	Gradient.cpp
+	GradientLinear.cpp
+	GradientRadial.cpp
+	GradientRadialFocus.cpp
+	GradientDiamond.cpp
+	GradientConic.cpp
+ 	GraphicsDefs.cpp
+ 	Point.cpp
+ 	Rect.cpp
+ 	Region.cpp
+ 	RegionSupport.cpp
+ 	SystemPalette.cpp
+;

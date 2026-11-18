@@ -20,8 +20,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#include "r5_span_avx.h"
 #include <syslog.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
@@ -266,7 +264,7 @@ export_bo(uint32 handle, uint8 token[16])
 	out.target = R5_GPU_SHARE_COMPOSITOR;
 	if (ioctl(sFd, R5_GPU_BO_EXPORT, &out, sizeof(out)) != 0)
 		return false;
-	r5_span_copy(token, out.token, sizeof(out.token));
+	memcpy(token, out.token, sizeof(out.token));
 	return true;
 }
 

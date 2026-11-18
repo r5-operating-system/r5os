@@ -13,11 +13,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <stdint.h>
 #include <syscalls.h>
 #include <user_mutex_defs.h>
 #include <time_private.h>
 
+
+#if defined(__x86_64__)
+#include <stdint.h>
 
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
@@ -51,6 +53,7 @@ r5_lock_word_clear(int32* word, uint64_t budgetCycles)
 	}
 }
 // SPDX-SnippetEnd
+#endif
 
 
 #define MUTEX_TYPE_BITS		0x0000000f
@@ -114,6 +117,7 @@ __pthread_mutex_lock(pthread_mutex_t* mutex, uint32 flags, bigtime_t timeout)
 		// someone else has the lock or is at least waiting for it
 		if (timeout < 0)
 			return EBUSY;
+#if defined(__x86_64__)
 		// SPDX-SnippetBegin
 		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 		// SPDX-License-Identifier: MIT
@@ -125,6 +129,7 @@ __pthread_mutex_lock(pthread_mutex_t* mutex, uint32 flags, bigtime_t timeout)
 		if (oldValue == 0)
 			goto locked;
 		// SPDX-SnippetEnd
+#endif
 		if ((mutex->flags & MUTEX_FLAG_SHARED) != 0)
 			flags |= B_USER_MUTEX_SHARED;
 
@@ -138,7 +143,9 @@ __pthread_mutex_lock(pthread_mutex_t* mutex, uint32 flags, bigtime_t timeout)
 			return error;
 	}
 
+#if defined(__x86_64__)
 locked:
+#endif
 	// we have locked the mutex for the first time
 	assert(mutex->owner == -1);
 	mutex->owner = thisThread;

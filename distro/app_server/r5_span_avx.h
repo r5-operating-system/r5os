@@ -2,16 +2,18 @@
  * SPDX-FileCopyrightText: 2026 R5OS Contributors
  * SPDX-License-Identifier: MIT
  *
- * Row copy and the window-buffer blend, chosen once. AVX2 when the CPU
- * has it, otherwise the same byte copy and the same per-pixel formula.
+ * Row copy and the window-buffer blend, chosen once. AVX2 on AMD64 when
+ * the CPU has it. Every other architecture uses memcpy and the C loop.
  */
 
 #ifndef R5_SPAN_AVX_H
 #define R5_SPAN_AVX_H
 
-#include <immintrin.h>
 #include <stdint.h>
 #include <string.h>
+
+#if defined(__x86_64__)
+#include <immintrin.h>
 
 #include <r5_x86_cpu.h>
 
@@ -54,7 +56,7 @@ r5_span_copy(void* dst, const void* src, size_t bytes)
 }
 
 
-static void __attribute__((target("avx2"), unused))
+static void __attribute__((target("avx2")))
 r5_span_blend_avx(uint32_t* bits, uint64_t pixels)
 {
 	const __m256i mask = _mm256_set1_epi32(0x7f7f7f7f);
@@ -75,7 +77,7 @@ r5_span_blend_avx(uint32_t* bits, uint64_t pixels)
 }
 
 
-static void __attribute__((unused))
+static void
 r5_span_blend(uint32_t* bits, uint64_t pixels)
 {
 	static int useAvx = -1;
@@ -90,5 +92,22 @@ r5_span_blend(uint32_t* bits, uint64_t pixels)
 		bits[i] = ((value >> 1) & 0x7f7f7f7fu) + 0x20202020u;
 	}
 }
+#else
+static void
+r5_span_copy(void* dst, const void* src, size_t bytes)
+{
+	memcpy(dst, src, bytes);
+}
+
+
+static void
+r5_span_blend(uint32_t* bits, uint64_t pixels)
+{
+	for (uint64_t i = 0; i < pixels; i++) {
+		uint32_t value = bits[i];
+		bits[i] = ((value >> 1) & 0x7f7f7f7fu) + 0x20202020u;
+	}
+}
+#endif
 
 #endif

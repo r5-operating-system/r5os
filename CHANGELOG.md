@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - AMD64 user space: x86 code stays off the other architectures
+
+The TSC spin in the kernel mutex and the pthread mutex is compiled only for AMD64. ARM64 and RISC-V keep Haiku's own lock loop: the counted spin in the kernel mutex, and one try then the syscall in the pthread mutex. `ConvertBits` includes `<r5_x86_cpu.h>` through the interface Jamfile's private system headers, and the row loops with `immintrin.h` and the `target` attributes are AMD64 only. The other architectures take the generic per-pixel path. The present copy and the window-buffer blend use AVX2 only on AMD64; elsewhere they are `memcpy` and the C loop. The 16-byte share token in `GPUCopy` is `memcpy` again.
+
+The host `libbe` compiles the same `ColorConversion.cpp` with the host compiler. That Jamfile now asks for the private system headers as well, so `<r5_x86_cpu.h>` is found there too.
+
+Checked (19 Nov 2026, Europe/Amsterdam, about 00:42): `scripts/build-locked.sh` `jam_exit=0`, `mesa_exit=0`, AMD64 only. ARM64 and RISC-V were not built. The first jam stopped because the host `libbe` did not yet have the header path.
+
 ## 2026-11-18 - AMD64 user space, step 10: AVX2 row copy and blend
 
 The CPU present copies each damaged row with AVX2 when the CPU has it, and with `memcpy` otherwise. The choice is one function pointer, set once. The window-buffer blend in the write test uses the same formula, eight pixels at a time when AVX2 is on: shift right one, mask `0x7f7f7f7f`, add `0x20202020`. The GPU scanout in `GPUCopy` is unchanged. The share-token copy goes through the same helper, so a 16-byte token still takes the plain path. Skia stays off unless the settings turn it on.

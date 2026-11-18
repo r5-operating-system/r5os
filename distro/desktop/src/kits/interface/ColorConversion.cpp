@@ -23,9 +23,11 @@
 #include <string.h>
 #include <pthread.h>
 
+#if defined(__x86_64__)
 #include <immintrin.h>
 
-#include "../../../../headers/private/system/r5_x86_cpu.h"
+#include <r5_x86_cpu.h>
+#endif
 
 
 using std::nothrow;
@@ -1136,6 +1138,7 @@ ConvertBits(const void *srcBits, void *dstBits, int32 srcBitsLength,
 // byte shuffle. RGB16 uses the same left shifts as the generic path.
 // CMAP8 reads the palette and forces the same opaque alpha. Offsets, byte
 // swaps, and every other pair stay on the generic path.
+#if defined(__x86_64__)
 
 static bool
 r5_rows_fit(int32 width, int32 height, int32 srcPixel, int32 dstPixel,
@@ -1401,6 +1404,7 @@ r5_convert_fast(const void* srcBits, void* dstBits, int32 srcBitsLength,
 	}
 	return false;
 }
+#endif
 // SPDX-SnippetEnd
 
 
@@ -1414,10 +1418,12 @@ ConvertBits(const void *srcBits, void *dstBits, int32 srcBitsLength,
 		|| width < 0 || height < 0 || srcBytesPerRow < 0 || dstBytesPerRow < 0)
 		return B_BAD_VALUE;
 
+#if defined(__x86_64__)
 	if (r5_convert_fast(srcBits, dstBits, srcBitsLength, dstBitsLength,
 			srcBytesPerRow, dstBytesPerRow, srcColorSpace, dstColorSpace,
 			srcOffset, dstOffset, width, height))
 		return B_OK;
+#endif
 
 	switch (srcColorSpace) {
 		case B_RGBA64:

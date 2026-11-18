@@ -11,13 +11,15 @@
 
 #include <locks.h>
 
-#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include <syscalls.h>
 #include <user_mutex_defs.h>
 
+
+#if defined(__x86_64__)
+#include <stdint.h>
 
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
@@ -52,6 +54,9 @@ r5_lock_word_ready(int32* word, uint64_t budgetCycles)
 	}
 }
 // SPDX-SnippetEnd
+#else
+#define MAX_UNSUCCESSFUL_SPINS	100
+#endif
 
 
 extern int32 __gCPUCount;
@@ -92,6 +97,7 @@ __mutex_destroy(mutex *lock)
 status_t
 __mutex_lock(mutex *lock)
 {
+#if defined(__x86_64__)
 	int32 oldValue = atomic_test_and_set(&lock->lock, B_USER_MUTEX_LOCKED, 0);
 	if (oldValue == 0 || (oldValue & B_USER_MUTEX_DISABLED) != 0)
 		return B_OK;
@@ -109,6 +115,18 @@ __mutex_lock(mutex *lock)
 			return B_OK;
 	}
 	// SPDX-SnippetEnd
+#else
+	uint32 count = 0;
+	const uint32 kMaxCount
+		= (lock->flags & MUTEX_FLAG_ADAPTIVE) != 0 ? MAX_UNSUCCESSFUL_SPINS : 1;
+
+	int32 oldValue;
+	do {
+		oldValue = atomic_test_and_set(&lock->lock, B_USER_MUTEX_LOCKED, 0);
+		if (oldValue == 0 || (oldValue & B_USER_MUTEX_DISABLED) != 0)
+			return B_OK;
+	} while (count++ < kMaxCount && (oldValue & B_USER_MUTEX_WAITING) != 0);
+#endif
 
 	// we have to call the kernel
 	status_t error;
