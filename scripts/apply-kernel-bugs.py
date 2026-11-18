@@ -90,6 +90,9 @@ def install_kernel_sources() -> None:
         "src/system/kernel/lib/Jamfile",
         "src/system/boot/Jamfile",
         "src/bin/Jamfile",
+        # R5: heap pool count from the CPU count, adaptive heap mutexes
+        "src/system/libroot/posix/malloc/openbsd/malloc.c",
+        "src/system/libroot/posix/malloc/openbsd/wrapper.c",
         # R5: one CPUID/XCR0 read for user-space dispatch
         "headers/private/system/r5_x86_cpu.h",
         "src/tests/system/libroot/posix/string/Jamfile",

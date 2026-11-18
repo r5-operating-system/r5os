@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-18 - AMD64 user space, step 5: heap pools and adaptive mutexes
+
+The heap starts with one pool per CPU, rounded up to a power of two, and never more than `_MALLOC_MUTEXES` (32). One CPU still uses two pools, which is the smallest count the allocator already allowed. Each heap mutex is created with `MUTEX_FLAG_ADAPTIVE`. That is the init in `__init_heap`, the extra mutexes in `init_threaded_malloc`, and the re-init after `fork`.
+
+The pool count is read with `get_system_info`, which is the system-info syscall, so it does not allocate while the heap is still starting.
+
+Checked (18 Nov 2026, Europe/Amsterdam): `scripts/build-locked.sh` `jam_exit=0`, `mesa_exit=0`. The 12-thread stress test from the prompt was not run; this step is jam only. No QEMU boot.
+
 ## 2026-11-18 - String scans use the C path in the loader
 
 The EFI loader and the BIOS loader compile the string files with _BOOT_MODE, and not as x86-64-v2. strlen, strchrnul, memchr, strcmp and memcmp take the C path when _BOOT_MODE is set. strchr was already the C call of strchrnul.
