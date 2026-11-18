@@ -1,5 +1,11 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-18 - AMD64 user space, step 8: ConvertBits row loops
+
+`ConvertBits` keeps the generic per-pixel path for offsets, byte swaps, and every pair that is not listed here. Four pairs with a zero offset take a row loop instead. RGB32 to RGBA32 and RGBA32 to RGB32 copy the pixel and force the alpha byte to 255, with SSSE3 `pshufb` and an AVX2 row when `R5_CPU_AVX2` is set. RGB24 to RGB32 uses the same shuffle to insert that alpha. RGB16 to RGB32 uses the generic path's left shifts (8, 5 and 3) and the same masks, four pixels at a time with SSE2 and eight with AVX2. CMAP8 to RGB32 reads the palette entry and forces the same alpha. The pointer for each row kind is chosen once.
+
+Checked (18 Nov 2026, Europe/Amsterdam): `scripts/build-locked.sh` `jam_exit=0`, `mesa_exit=0`. The first jam failed because `ColorConversion.cpp` could not see `r5_x86_cpu.h`; the include is now a relative path. The pixel comparison with the generic path was not run. No QEMU boot.
+
 ## 2026-11-18 - AMD64 user space, step 7: fma dispatch and SSE4.1 rounding
 
 `fma` and `fmaf` stay the compile-time FMA3 or FMA4 body when the compiler already defines `__FMA__` or `__FMA4__`. On the x86-64-v2 build neither is defined, so the call uses a function pointer chosen once: FMA3 (`vfmadd132sd` / `vfmadd132ss`) when `R5_CPU_FMA` is set, otherwise FMA4 (`vfmaddsd` / `vfmaddss`) when CPUID leaf `0x80000001` ECX bit 16 is set, otherwise musl's C function. `R5_CPU_FMA4` is a new bit in the private CPU word. FMA3 still requires YMM in XCR0, which the existing helper already checks.
