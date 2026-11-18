@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-18 - AMD64 user space, step 10: AVX2 row copy and blend
+
+The CPU present copies each damaged row with AVX2 when the CPU has it, and with `memcpy` otherwise. The choice is one function pointer, set once. The window-buffer blend in the write test uses the same formula, eight pixels at a time when AVX2 is on: shift right one, mask `0x7f7f7f7f`, add `0x20202020`. The GPU scanout in `GPUCopy` is unchanged. The share-token copy goes through the same helper, so a 16-byte token still takes the plain path. Skia stays off unless the settings turn it on.
+
+The first jam died while applying the tree (`Cannot allocate memory` on one settings header). The next jam stopped on the helper: `memcpy` returns a pointer, so it could not share the function-pointer type, and the blend helper was unused in `GPUCopy`. Both are fixed. That jam also saw another session's `x86_cstates.cpp` (`mwait_polling`) and an image line for `r5_idle_pingpong`. Those were set aside for this jam only. The following jam was `jam_exit=0`, `mesa_exit=0`.
+
+Checked (18 Nov 2026, Europe/Amsterdam, about 18:54): one QEMU KVM boot of an own image copy, `-cpu host,+smap`, display none, virtio-rng. The serial log contains `enable SMAP`, and the bootscript prints `R5_STEP10_DESKTOP` after Tracker and Deskbar are up. A pixel compare of the AVX2 rows against `memcpy` and the scalar blend was not run.
+
 ## 2026-11-18 - AMD64 user space, step 9: Painter bilinear, -O3, font cache
 
 The bilinear scale for a straight RGB copy uses an SSE2 row on AMD64. It does the same multiply-add as `ColorTypeRgb::Interpolate` and writes the same three bytes as `DrawModeCopy`. A bitmap with one row does not read a second row. The 32-bit nasm loop stays the x86 path. `detect_simd` reports MMX and SSE on AMD64, because the baseline is x86-64-v2. Painter, the drawing library and AGG are compiled with `-O3`. The font cache keeps 128 entries instead of 30.

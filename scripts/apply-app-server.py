@@ -29,6 +29,7 @@ def main() -> int:
     copy("GPUCopy.cpp", local / "GPUCopy.cpp")
     copy("GPUCopy.h", local / "GPUCopy.h")
     copy("GPUCopyBands.h", local / "GPUCopyBands.h")
+    copy("r5_span_avx.h", local / "r5_span_avx.h")
     copy("local-Jamfile", local / "Jamfile")
     for name in ("Compositor.cpp", "Compositor.h", "WindowBuffer.cpp",
             "WindowBuffer.h", "WindowHWInterface.cpp", "WindowHWInterface.h"):
