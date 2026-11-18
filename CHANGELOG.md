@@ -1,5 +1,20 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-18 - Kernel (AMD64): MWAIT idle wake-up zonder IPI (stap 7)
+
+Problem:
+- `acpi_cstate_ffh_enter` en `x86_cstates` deden `x86_monitor(&dummy, 0, 0)` op een dummy-variabele terwijl `enqueue_thread` in `scheduler.cpp` altijd een `SMP_MSG_RESCHEDULE`-IPI stuurde.
+
+What changed (Step 7):
+- `distro/kernel/headers/private/kernel/cpu.h`: `int32 mwait_polling` achteraan `cpu_ent` toegevoegd.
+- `distro/kernel/src/add-ons/kernel/power/cpuidle/x86_acpi_cstates/acpi_cpuidle.cpp` + `distro/kernel/src/add-ons/kernel/power/cpuidle/x86_cstates/x86_cstates.cpp`: zetten `mwait_polling = 1` (`__ATOMIC_SEQ_CST`), monitoren `&cpu->invoke_scheduler`, checken `invoke_scheduler == 0` vóór `x86_mwait`, en zetten `mwait_polling = 0` na terugkeer.
+- `distro/kernel/src/system/kernel/scheduler/scheduler.cpp`: `enqueue_thread` slaat `smp_send_ici(..., SMP_MSG_RESCHEDULE, ...)` over wanneer `mwait_polling != 0` (de write naar `invoke_scheduler` wekt `MWAIT`); bij HLT-idle blijft de IPI behouden.
+- `distro/cpu/r5_idle_pingpong.cpp` + `scripts/apply-kernel-bugs.py`: pingpongtest met twee threads over 20.000 rondes via twee semaphores.
+
+Tested (Step 7):
+- `scripts/jam-r5-raw.sh`: `jam_exit=0`, `mesa_exit=0`.
+- QEMU `-cpu EPYC-Rome,+smap,+smep -smp 2`: `enable SMEP`, `enable SMAP`, `no valid cpuidle module found` (HLT-pad in QEMU), `R5 net_server`, `r5_idle_pingpong PASS rounds=20000 us=923680` (`exit=0`).
+
 ## 2026-11-18 - Kernel (AMD64): x86_64 user copies en STAC/CLAC (stap 6)
 
 Problem:

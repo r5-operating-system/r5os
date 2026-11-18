@@ -142,8 +142,16 @@ enqueue(Thread* thread, bool newOne)
 		if (targetCPU->ID() == smp_get_current_cpu()) {
 			gCPU[targetCPU->ID()].invoke_scheduler = true;
 		} else if (atomic_get_and_set(&gCPU[targetCPU->ID()].invoke_scheduler, true) != true) {
-			smp_send_ici(targetCPU->ID(), SMP_MSG_RESCHEDULE, 0, 0, 0,
-				NULL, SMP_MSG_FLAG_ASYNC);
+			// SPDX-SnippetBegin
+			// SPDX-License-Identifier: MIT
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// If the target CPU is polling invoke_scheduler in MWAIT, the
+			// atomic_get_and_set store above already wakes it without an IPI.
+			if (__atomic_load_n(&gCPU[targetCPU->ID()].mwait_polling, __ATOMIC_SEQ_CST) == 0) {
+				smp_send_ici(targetCPU->ID(), SMP_MSG_RESCHEDULE, 0, 0, 0,
+					NULL, SMP_MSG_FLAG_ASYNC);
+			}
+			// SPDX-SnippetEnd
 		}
 	}
 }

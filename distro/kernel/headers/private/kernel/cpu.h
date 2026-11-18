@@ -95,6 +95,12 @@ typedef struct CACHE_LINE_ALIGN cpu_ent {
 	// which prefers the faster ones (big.LITTLE, hybrid x86). Last, so that
 	// modules built without it still find the fields before it.
 	uint32			capacity;
+	// SPDX-SnippetBegin
+	// SPDX-License-Identifier: MIT
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// Non-zero while this CPU is in MONITOR/MWAIT idle watching invoke_scheduler.
+	int32			mwait_polling;
+	// SPDX-SnippetEnd
 } cpu_ent;
 
 
