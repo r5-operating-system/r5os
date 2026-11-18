@@ -329,6 +329,19 @@ struct mtk_vap {
 #define MTK_VAP(vap)	((struct mtk_vap *)(vap))
 
 
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ */
+struct mtk_ba_job {
+	uint8_t		pending;
+	uint8_t		enable;
+	uint16_t	winsize;
+	uint16_t	ssn;
+};
+/* SPDX-SnippetEnd */
+
+
 struct mtk_softc {
 	struct ieee80211com	sc_ic;
 	device_t		sc_dev;
@@ -446,6 +459,17 @@ struct mtk_softc {
 	 * collecting its own answer.
 	 */
 	struct mtx		sc_rxmtx;
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * A block-ack change asked for while a frame is being received. That path
+ * already holds sc_rxmtx, and telling the firmware waits for a reply that
+ * takes the same lock. The change sits here until mtk_work, which holds
+ * nothing, sends it.
+ */
+	struct mtx		sc_bamtx;
+	struct mtk_ba_job	sc_ba[8];
+/* SPDX-SnippetEnd */
 	uint32_t		sc_replies_shown;
 
 	/* While the part is sweeping, the radio is its. The stack is stepped

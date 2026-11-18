@@ -53,6 +53,8 @@ struct mtk_fixed {
 static void mtk_tick(void* arg);
 static void mtk_work(void* arg, int pending);
 static void mtk_rxwork(void* arg, int pending);
+static void mtk_ba_queue(struct mtk_softc* sc, int tid, int winsize, int ssn,
+	int enable);
 
 
 /* Linux's table for this family (mt7921/pci.c, __mt7921_reg_addr), entry for
@@ -766,7 +768,7 @@ mtk_ampdu_rx_start(struct ieee80211_node* ni, struct ieee80211_rx_ampdu* rap,
 		error = sc->sc_ampdu_rx_start(ni, rap, baparamset, batimeout,
 			baseqctl);
 	if (error == 0 && sc->sc_ht_vht != 0)
-		mtk_sta_ba(sc, MTK_WCID_AP, tid, winsize, baseqctl, 1, 0);
+		mtk_ba_queue(sc, tid, winsize, baseqctl, 1);
 	return error;
 }
 
@@ -788,7 +790,7 @@ mtk_ampdu_rx_stop(struct ieee80211_node* ni, struct ieee80211_rx_ampdu* rap)
 		int tid = (int)(rap - ni->ni_rx_ampdu);
 
 		if (tid >= 0 && tid < IEEE80211_TID_SIZE)
-			mtk_sta_ba(sc, MTK_WCID_AP, tid, 0, 0, 0, 0);
+			mtk_ba_queue(sc, tid, 0, 0, 0);
 	}
 }
 /* SPDX-SnippetEnd */
@@ -1134,12 +1136,65 @@ mtk_rxwork(void* arg, int pending)
 }
 
 
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * The receive path already holds sc_rxmtx. mtk_sta_ba waits for a reply
+ * and takes that lock again, which is not recursive. Remember the change
+ * and let mtk_work send it.
+ */
+static void
+mtk_ba_queue(struct mtk_softc* sc, int tid, int winsize, int ssn, int enable)
+{
+	if (sc->sc_detaching != 0 || tid < 0 || tid > 7)
+		return;
+
+	mtx_lock(&sc->sc_bamtx);
+	sc->sc_ba[tid].winsize = (uint16_t)winsize;
+	sc->sc_ba[tid].ssn = (uint16_t)ssn;
+	sc->sc_ba[tid].enable = enable ? 1 : 0;
+	sc->sc_ba[tid].pending = 1;
+	mtx_unlock(&sc->sc_bamtx);
+	if (sc->sc_tq != NULL)
+		taskqueue_enqueue(sc->sc_tq, &sc->sc_work);
+}
+
+
+static void
+mtk_ba_drain(struct mtk_softc* sc)
+{
+	struct mtk_ba_job job[8];
+	int tid;
+
+	mtx_lock(&sc->sc_bamtx);
+	memcpy(job, sc->sc_ba, sizeof(job));
+	memset(sc->sc_ba, 0, sizeof(sc->sc_ba));
+	mtx_unlock(&sc->sc_bamtx);
+
+	if (sc->sc_detaching != 0 || sc->sc_gone != 0)
+		return;
+	for (tid = 0; tid < 8; tid++) {
+		if (job[tid].pending == 0)
+			continue;
+		mtk_sta_ba(sc, MTK_WCID_AP, tid, job[tid].winsize, job[tid].ssn,
+			job[tid].enable, 0);
+	}
+}
+/* SPDX-SnippetEnd */
+
+
 /* Our own thread: the one place allowed to wait for the part. */
 static void
 mtk_work(void* arg, int pending)
 {
 	struct mtk_softc* sc = arg;
 	struct ieee80211com* ic = &sc->sc_ic;
+
+	/* Before anything that can return early. A block-ack reply takes
+	 * sc_rxmtx, which the receive path may still hold when it queued us,
+	 * so this runs only after that path has dropped the lock.
+	 */
+	mtk_ba_drain(sc);
 
 	if (sc->sc_startall != 0) {
 		sc->sc_startall = 0;
@@ -1480,6 +1535,7 @@ mtk_attach(device_t dev)
 	mtx_init(&sc->sc_cmdmtx, "mtk commands", MTX_NETWORK_LOCK, MTX_DEF);
 	mtx_init(&sc->sc_txmtx, "mtk transmit", MTX_NETWORK_LOCK, MTX_DEF);
 	mtx_init(&sc->sc_rxmtx, "mtk receive", MTX_NETWORK_LOCK, MTX_DEF);
+	mtx_init(&sc->sc_bamtx, "mtk block ack", MTX_NETWORK_LOCK, MTX_DEF);
 	callout_init(&sc->sc_poll, 1);
 	sc->sc_tq = taskqueue_create_fast("mtk_taskq", M_NOWAIT,
 		taskqueue_thread_enqueue, &sc->sc_tq);
@@ -1646,6 +1702,7 @@ fail:
 	mtx_destroy(&sc->sc_cmdmtx);
 	mtx_destroy(&sc->sc_txmtx);
 	mtx_destroy(&sc->sc_rxmtx);
+	mtx_destroy(&sc->sc_bamtx);
 	mtx_destroy(&sc->sc_mtx);
 	return error;
 }
@@ -1696,6 +1753,7 @@ mtk_detach(device_t dev)
 	mtx_destroy(&sc->sc_cmdmtx);
 	mtx_destroy(&sc->sc_txmtx);
 	mtx_destroy(&sc->sc_rxmtx);
+	mtx_destroy(&sc->sc_bamtx);
 	mtx_destroy(&sc->sc_mtx);
 	return 0;
 }

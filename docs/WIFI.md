@@ -48,7 +48,7 @@ The beacon and element parsers that a nearby access point reaches without any pa
 
 ### wpa_supplicant
 
-- Built in this tree. `distro/wpa_supplicant/build-wpa.sh` fetches haiku/wpa_supplicant commit `bdf3144` (the HaikuPorts 2.11.haiku.1 source, sha256 in `pins.sh`) and packs `wpa_supplicant-2.11.r5.1-1`. `scripts/pin-mesa-packages.sh` points the image at that package instead of `wpa_supplicant-2.11.haiku.1-1`. SAE, PMF and OWE are on. The HaikuPorts binary had all three off.
+- Built in this tree. `distro/wpa_supplicant/build-wpa.sh` fetches haiku/wpa_supplicant commit `bdf3144` (the HaikuPorts 2.11.haiku.1 source, sha256 in `pins.sh`) and packs `wpa_supplicant-2.11.r5.2-1`. `scripts/pin-mesa-packages.sh` points the image at that package instead of `wpa_supplicant-2.11.haiku.1-1`. SAE, PMF and OWE are on. The HaikuPorts binary had all three off.
 - wpa_supplicant is `BSD-3-Clause`.
 - The Network Kit asks it to join through `BNetworkDevice::JoinNetwork()` (`haiku/headers/os/net/NetworkDevice.h` lines 122–126). The authentication modes stop at `B_NETWORK_AUTHENTICATION_WPA2` and `EAP` (lines 15–19), the key modes at `B_KEY_MODE_WPS` (lines 34–41). There is `B_NETWORK_CIPHER_AES_128_CMAC` (line 29), but no WPA3 or SAE value yet.
 

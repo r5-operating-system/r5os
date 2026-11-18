@@ -1,5 +1,18 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-18 - Wi-Fi: an integrity key, a block-ack reply, and a mixed network
+
+Problem: a review of the merged Wi-Fi and WPA3 changes found three places a join stops.
+- The supplicant sent an IGTK with `IEEE80211_IOC_HAIKU_IGTK`. That number has no setter in `ieee80211_ioctl_set80211`, so the call returns EINVAL. The kernel already accepts the same key as a WPA key of type BIP-CMAC-128, index 4 or 5.
+- Opening or closing a block-ack session runs on the receive path, which holds `sc_rxmtx`. Telling the firmware waits for a reply and takes that lock again. The lock is not recursive, so the thread hangs. With `ht_vht` on, an access point that opens block-ack hits this.
+- A network that offers both a passphrase and SAE was asked for as WPA3 only. A transition-mode router that joined as WPA2 then took the SAE path.
+
+Changed: the integrity key is sent as `IEEE80211_IOC_WPAKEY`. The package is `wpa_supplicant-2.11.r5.2-1`. A block-ack change is remembered under its own lock and sent from the driver's thread, which holds `sc_rxmtx` only while it waits for the reply. A network that also offers a passphrase stays WPA-PSK. SAE on its own is still WPA3. The key bytes are not written to the log.
+
+Limits: not jammed and not booted. This does not by itself make an HT or VHT join succeed. `ht_vht` and `he` stay off. A stick on the 5625U is still the pass.
+
+Tested: the cross compiler rebuilt the supplicant package. The driver was not compiled.
+
 ## 2026-11-18 - Wi-Fi: the supplicant can ask for WPA3
 
 Problem: the image installed HaikuPorts `wpa_supplicant-2.11.haiku.1-1`. That build has SAE, protected management frames and OWE off, so a WPA3 network was joined as a passphrase network. The kernel already carries SAE frames (algorithm 3) and an IGTK, and a second join while SAE is in progress sends the association.

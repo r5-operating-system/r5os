@@ -338,10 +338,13 @@ parse_ie(wireless_network& network, uint8* _ie, int32 ieLength)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-// A network that offers SAE is asked for as WPA3, including one that also
-// offers a passphrase. An OWE-only network stays open here; the key mode
-// tells the supplicant to use OWE.
-		if ((network.key_mode & B_KEY_MODE_SAE) != 0) {
+// SAE on its own is asked for as WPA3. A network that also offers a
+// passphrase stays WPA2 until a WPA3 join has been shown to work.
+// An OWE-only network stays open here; the key mode tells the
+// supplicant to use OWE.
+		if ((network.key_mode & B_KEY_MODE_SAE) != 0
+			&& (network.key_mode & (B_KEY_MODE_PSK | B_KEY_MODE_FT_PSK
+				| B_KEY_MODE_PSK_SHA256)) == 0) {
 			network.authentication_mode = B_NETWORK_AUTHENTICATION_WPA3;
 		} else if ((network.key_mode & B_KEY_MODE_OWE) != 0
 			&& (network.key_mode & (B_KEY_MODE_IEEE802_1X
