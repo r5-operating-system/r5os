@@ -1,5 +1,20 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-18 - Wi-Fi: the HT join no longer waits for a block-ack that does not exist
+
+Problem: with `ht_vht` on, a WPA2 join on the 5625U never finishes and the supplicant then says the password is wrong. The password is right. The review of that path found the station record and the transmit description disagree with what the radio actually does.
+- Unicast data left block-ack enabled. There is no transmit block-ack session, so the handshake frame can be held. EAPOL was also sent at a rate the firmware chose.
+- The HT capability was built with no streams, so the MCS set was empty.
+- The stack was attached before the card reported HT and VHT, so the channel list stayed 11a/b/g and was then rebuilt underneath the attached stack.
+- 40 MHz was advertised while the radio stayed at 20 MHz.
+- VHT was filled in but `IEEE80211_FEXT_VHT` was never set, so the stack sent no VHT element.
+- A block-ack start used the raw sequence word, and a window of 0 was accepted.
+- The integrity key was installed on the access point's entry together with the pairwise key, which can make the firmware encrypt frames the stack already encrypted. HE MCS 10 and 11 were dropped from the reported transmit rate.
+
+Changed: every transmit description disables block-ack, and an EAPOL frame uses the fixed basic rate. The stream count is taken from the card, at least one and at most four, before the stack is attached. The firmware is started and the channel list is built before `ieee80211_ifattach`. The advertisement stays at 20 MHz, matching the radio. VHT is marked on when the card reports it. A block-ack session uses the stack's start and window, and is dropped if the firmware refuses it. The integrity key is only the BIP key, on our own entry. The pairwise key and the integrity key are cleared when the join is torn down. HE rates through MCS 11 are reported.
+
+Limits: not jammed and not booted. `ht_vht` and `he` stay off until the settings say otherwise. The pass is still a stick with `ht_vht true` that joins the WPA2 network.
+
 ## 2026-11-18 - Wi-Fi: an integrity key, a block-ack reply, and a mixed network
 
 Problem: a review of the merged Wi-Fi and WPA3 changes found three places a join stops.

@@ -396,11 +396,8 @@ mtk_getradiocaps(struct ieee80211com* ic, int maxchans, int* nchans,
 	memset(bands, 0, sizeof(bands));
 	setbit(bands, IEEE80211_MODE_11B);
 	setbit(bands, IEEE80211_MODE_11G);
-	if (mtk_ht_on(sc)) {
+	if (mtk_ht_on(sc))
 		setbit(bands, IEEE80211_MODE_11NG);
-		if (sc->sc_phy_bw >= 1)
-			flags = NET80211_CBW_FLAG_HT40;
-	}
 	ieee80211_add_channel_list_2ghz(chans, maxchans, nchans,
 		mtk_channels_2ghz, MTK_CHANNELS_2GHZ, bands, flags);
 
@@ -409,13 +406,8 @@ mtk_getradiocaps(struct ieee80211com* ic, int maxchans, int* nchans,
 	flags = 0;
 	if (mtk_ht_on(sc)) {
 		setbit(bands, IEEE80211_MODE_11NA);
-		if (sc->sc_phy_bw >= 1)
-			flags = NET80211_CBW_FLAG_HT40;
-		if (sc->sc_phy_vht != 0) {
+		if (sc->sc_phy_vht != 0)
 			setbit(bands, IEEE80211_MODE_VHT_5GHZ);
-			if (sc->sc_phy_bw >= 2)
-				flags |= NET80211_CBW_FLAG_VHT80;
-		}
 	}
 	ieee80211_add_channel_list_5ghz(chans, maxchans, nchans,
 		mtk_channels_5ghz, MTK_CHANNELS_5GHZ, bands, flags);
@@ -452,23 +444,34 @@ mtk_apply_phy(struct mtk_softc* sc)
 {
 	struct ieee80211com* ic = &sc->sc_ic;
 
+	int streams = sc->sc_streams;
+
 	ic->ic_htcaps = 0;
 	memset(&ic->ic_vht_cap, 0, sizeof(ic->ic_vht_cap));
+	ic->ic_flags_ext &= ~IEEE80211_FEXT_VHT;
+	/* An empty RX MCS set is illegal. The card's count is capped at
+	 * four, which is as far as the stack's MCS writer goes.
+	 */
+	if (streams < 1)
+		streams = 1;
+	if (streams > 4)
+		streams = 4;
+	ic->ic_txstream = streams;
+	ic->ic_rxstream = streams;
 	if (mtk_ht_on(sc)) {
 		ic->ic_htcaps = IEEE80211_HTCAP_SHORTGI20
 			| IEEE80211_HTC_HT
 			| IEEE80211_HTC_AMPDU;
-		if (sc->sc_phy_bw >= 1) {
-			ic->ic_htcaps |= IEEE80211_HTCAP_CHWIDTH40
-				| IEEE80211_HTCAP_SHORTGI40;
-		}
+		/* The radio is programmed at 20 MHz. Advertising 40 MHz here
+		 * makes the access point send at a width the part is not on.
+		 */
 		if (sc->sc_phy_rx_ldpc != 0)
 			ic->ic_htcaps |= IEEE80211_HTCAP_LDPC | IEEE80211_HTC_TXLDPC;
 		if (sc->sc_phy_rx_stbc != 0)
 			ic->ic_htcaps |= IEEE80211_HTCAP_RXSTBC_1STREAM;
 		if (sc->sc_phy_vht != 0) {
-			if (sc->sc_phy_bw >= 2)
-				ic->ic_vht_cap.vht_cap_info |= IEEE80211_VHTCAP_SHORT_GI_80;
+			/* vht_vattach returns immediately unless this is set. */
+			ic->ic_flags_ext |= IEEE80211_FEXT_VHT;
 			if (sc->sc_phy_rx_ldpc != 0)
 				ic->ic_vht_cap.vht_cap_info |= IEEE80211_VHTCAP_RXLDPC;
 			if (sc->sc_phy_rx_stbc != 0)
@@ -498,12 +501,7 @@ mtk_apply_phy(struct mtk_softc* sc)
 		mac[0] = IEEE80211_HE_MAC_CAP0_HTC_HE;
 		phy[0] = IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_RU_MAPPING_IN_2G
 			| IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_RU_MAPPING_IN_5G;
-		if (sc->sc_phy_bw >= 1)
-			phy[0] |= IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_40MHZ_IN_2G;
-		if (sc->sc_phy_bw >= 2)
-			phy[0] |= IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_40MHZ_80MHZ_IN_5G;
-		if (sc->sc_phy_bw >= 3)
-			phy[0] |= IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_160MHZ_IN_5G;
+		/* Width stays 20 MHz until the radio is programmed wider. */
 		if (sc->sc_phy_rx_ldpc != 0)
 			phy[1] |= IEEE80211_HE_PHY_CAP1_LDPC_CODING_IN_PAYLOAD;
 		if (sc->sc_phy_rx_stbc != 0)
@@ -544,6 +542,10 @@ mtk_join_teardown(struct mtk_softc* sc)
 		mtk_bss_update(sc, NULL, 0);
 		mtk_wtbl_clear(sc, MTK_WCID_AP);
 	}
+	memset(sc->sc_ccmp, 0, sizeof(sc->sc_ccmp));
+	sc->sc_ccmp_len = 0;
+	memset(sc->sc_igtk, 0, sizeof(sc->sc_igtk));
+	sc->sc_igtk_len = 0;
 }
 
 
@@ -762,13 +764,15 @@ mtk_ampdu_rx_start(struct ieee80211_node* ni, struct ieee80211_rx_ampdu* rap,
 	struct mtk_softc* sc = ni->ni_ic->ic_softc;
 	int error = 0;
 	int tid = (baparamset & IEEE80211_BAPS_TID) >> IEEE80211_BAPS_TID_S;
-	int winsize = (baparamset & IEEE80211_BAPS_BUFSIZ) >> IEEE80211_BAPS_BUFSIZ_S;
 
 	if (sc->sc_ampdu_rx_start != NULL)
 		error = sc->sc_ampdu_rx_start(ni, rap, baparamset, batimeout,
 			baseqctl);
-	if (error == 0 && sc->sc_ht_vht != 0)
-		mtk_ba_queue(sc, tid, winsize, baseqctl, 1);
+	/* rxa_start is the sequence, already shifted. The raw baseqctl is
+	 * not. A window of 0 is not a session.
+	 */
+	if (error == 0 && sc->sc_ht_vht != 0 && rap->rxa_wnd != 0)
+		mtk_ba_queue(sc, tid, rap->rxa_wnd, rap->rxa_start, 1);
 	return error;
 }
 
@@ -1174,10 +1178,23 @@ mtk_ba_drain(struct mtk_softc* sc)
 	if (sc->sc_detaching != 0 || sc->sc_gone != 0)
 		return;
 	for (tid = 0; tid < 8; tid++) {
+		int error;
+
 		if (job[tid].pending == 0)
 			continue;
-		mtk_sta_ba(sc, MTK_WCID_AP, tid, job[tid].winsize, job[tid].ssn,
-			job[tid].enable, 0);
+		error = mtk_sta_ba(sc, MTK_WCID_AP, tid, job[tid].winsize,
+			job[tid].ssn, job[tid].enable, 0);
+		/* The firmware refused the session. Drop it in the stack too,
+		 * or it will reorder frames the part is not keeping.
+		 */
+		if (error != 0 && job[tid].enable != 0
+			&& sc->sc_ampdu_rx_stop != NULL) {
+			struct ieee80211vap* vap = TAILQ_FIRST(&sc->sc_ic.ic_vaps);
+			struct ieee80211_node* ni = vap != NULL ? vap->iv_bss : NULL;
+
+			if (ni != NULL)
+				sc->sc_ampdu_rx_stop(ni, &ni->ni_rx_ampdu[tid]);
+		}
 	}
 }
 /* SPDX-SnippetEnd */
@@ -1630,11 +1647,24 @@ mtk_attach(device_t dev)
 
 	IEEE80211_ADDR_COPY(ic->ic_macaddr, sc->sc_macaddr);
 
-	mtk_getradiocaps(ic, IEEE80211_CHAN_MAX, &ic->ic_nchans, ic->ic_channels);
+	/* The card's own report has to exist before the stack is attached.
+	 * ifattach reads the channel list and the HT and VHT capability.
+	 * Building those afterwards leaves 11a/b/g only, and a channel
+	 * pointer into an array that was then rebuilt.
+	 */
+	error = mtk_dma_setup(sc);
+	if (error != 0)
+		goto fail;
 
-	ieee80211_ifattach(ic);
+	error = mtk_firmware_start(sc);
+	if (error != 0)
+		goto fail;
 
 	ic->ic_getradiocaps = mtk_getradiocaps;
+	mtk_apply_phy(sc);
+	IEEE80211_ADDR_COPY(ic->ic_macaddr, sc->sc_macaddr);
+
+	ieee80211_ifattach(ic);
 	ic->ic_scan_start = mtk_scan_start;
 	ic->ic_scan_end = mtk_scan_end;
 	ic->ic_set_channel = mtk_set_channel;
@@ -1648,16 +1678,6 @@ mtk_attach(device_t dev)
 	ic->ic_vap_create = mtk_vap_create;
 	ic->ic_vap_delete = mtk_vap_delete;
 	ic->ic_ioctl = mtk_ioctl;
-
-	error = mtk_dma_setup(sc);
-	if (error != 0)
-		goto fail;
-
-	error = mtk_firmware_start(sc);
-	if (error != 0)
-		goto fail;
-
-	mtk_apply_phy(sc);
 
 	error = mtk_radio_init(sc);
 	if (error != 0)
