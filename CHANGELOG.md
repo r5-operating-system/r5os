@@ -1,5 +1,19 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-18 - Kernel (AMD64): TSC-deadline timer en 1-write APIC one-shot fallback (stap 5)
+
+Problem:
+- `src/system/kernel/arch/x86/timers/x86_apic.cpp:50-74` deed vier APIC-writes per timer-set (mask, count=0, unmask, count=ticks) en gebruikte geen TSC-deadline mode.
+
+What changed (Step 5):
+- `distro/kernel/src/system/kernel/arch/x86/timers/x86_apic.cpp`: gebruikt TSC-deadline mode (`IA32_MSR_TSC_DEADLINE`, één `WRMSR`) wanneer CPUID leaf 1 ECX bit 24 gezet is, `gCPUClockSpeed > 0` en de CPU niet op de bekende Intel-erratalijst staat (Ivy Bridge/Haswell/Broadwell/Skylake zonder hypervisor); als fallback blijft de APIC-one-shot teller unmasked met één `apic_set_lvt_initial_timer_count(ticks)`-write.
+- `distro/cpu/r5_timer_test.cpp`: test `snooze()` op 1 ms, 10 ms en 1 s tegen `system_time()`.
+
+Tested (Step 5):
+- `scripts/jam-r5-raw.sh`: `jam_exit=0`, `mesa_exit=0`.
+- QEMU `-cpu Nehalem,+smap,+smep`: `APIC timer: using one-shot count mode`, `R5 net_server`, `r5_timer_test req=1000 got=1016`, `req=10000 got=10035`, `req=1000000 got=1000023` (`PASS`, `exit=0`).
+- QEMU `-cpu Skylake-Client,+smap,+smep,+tsc-deadline`: `APIC timer: using TSC-deadline mode`, `R5 net_server`, `r5_timer_test req=1000 got=1017`, `req=10000 got=10029`, `req=1000000 got=1000043` (`PASS`, `exit=0`).
+
 ## 2026-11-18 - Kernel (AMD64): XSAVE-varianten, 64-byte header-zeroing en Intel `vzeroupper` (stap 4)
 
 Problem:

@@ -15,6 +15,7 @@ def install_kernel_sources() -> None:
         "build/config_headers/kernel_debug_config.h",
         "src/add-ons/kernel/network/stack/utility.cpp",
         "src/system/kernel/arch/x86/arch_timer.cpp",
+        "src/system/kernel/arch/x86/timers/x86_apic.cpp",
         "src/system/kernel/arch/x86/arch_cpu.cpp",
         "src/system/kernel/arch/x86/arch_vm.cpp",
         "src/system/kernel/arch/x86/paging/64bit/paging.h",
