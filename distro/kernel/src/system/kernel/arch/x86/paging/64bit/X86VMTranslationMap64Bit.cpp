@@ -296,9 +296,15 @@ X86VMTranslationMap64Bit::_SplitLargePage(uint64* pde, addr_t pdeVirtualBase,
 	}
 
 	phys_addr_t physicalPageTable = _PopStandbyPageTable();
-	ASSERT_PRINT(physicalPageTable != 0,
-		"no standby page table to split 2 MB PDE at va %#" B_PRIxADDR,
-		pdeVirtualBase);
+	// Every 2 MB PDE takes one standby table when it is mapped, so this
+	// cannot be empty. If it is, stop here: an ASSERT is gone in a release
+	// kernel (KDEBUG_LEVEL 0), and going on would write 512 entries into
+	// physical page 0.
+	if (physicalPageTable == 0) {
+		panic("R5 VM: no standby page table to split the 2 MB PDE at va %#"
+			B_PRIxADDR " (%s)", pdeVirtualBase, reason);
+		return NULL;
+	}
 
 	uint64* virtualPageTable = (uint64*)fPageMapper->GetPageTableAt(
 		physicalPageTable);

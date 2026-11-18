@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-18 - Kernel (AMD64): a missing standby page table stops with a panic, not silently
+
+Problem (review of #4435): `_SplitLargePage()` checked for an empty standby page-table list only with `ASSERT_PRINT`. A release kernel (`KDEBUG_LEVEL 0`, prompt 4) compiles that away. On an empty list the split would then write 512 entries into physical page 0. It should not happen, because every 2 MB PDE takes one standby table when it is mapped, but the result would be silent memory damage.
+
+What changed: `X86VMTranslationMap64Bit.cpp` `_SplitLargePage()` calls `panic("R5 VM: no standby page table to split the 2 MB PDE at va … (reason)")` when the list is empty, in every kernel. Every caller checks that the PDE is present and large before splitting, so this is the only unchecked case.
+
+Tested: `scripts/build-locked.sh` gives `jam_exit=0`, `mesa_exit=0`. QEMU (KVM, `-cpu host,+smap`, a copy of the image, 120 s): `enable SMAP`, `R5 VM: amd64_large_pages disabled`, boots to `net_server`, no panic. The new branch itself was not reached (it should never be).
+
 ## 2026-11-18 - Kernel (AMD64): 2 MB large pages (`PS` PDE's) voor fysiek aaneengesloten en device-geheugen
 
 Problem:
