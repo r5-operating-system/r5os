@@ -1,5 +1,23 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-18 - Build: main builds again after the Wi-Fi merges
+
+Problem: #4419, #4421 and #4422 were merged without a jam. Main (`d2e4038d0b`) did not build:
+- `WiFiView.cpp` (4 places) and `WiFiConnectWindow.cpp` (1 place) called `BMessenger::PostMessage`, which does not exist.
+- `SLAACClient.cpp` (2 places) passed a `BNetworkAddress` to `BNetworkRoute::SetGateway(const sockaddr&)`; the conversion is ambiguous.
+- `scripts/apply-wireless.py` did not copy the new `WiFiConnectWindow.cpp` into the tree ("don't know how to make").
+- The image could not resolve `wpa_supplicant-2.11.r5.6-1`: it required `lib:libnetwork`, `lib:libbe` and `lib:libbnetapi`, which the haiku package does not provide as such. That has been true since r5.1 (#4419), so no image was ever built with R5's supplicant.
+
+What changed:
+- `BMessenger::SendMessage` instead (asynchronous, as `PostMessage` would have been).
+- The `sockaddr_in6` is passed to `SetGateway` directly.
+- `WiFiConnectWindow.cpp` is in `LIB_SOURCES`.
+- `build-wpa.sh` requires only `haiku` and `lib:libcrypto`, as Haiku's own package does. The r5.6 package was repacked with that `.PackageInfo`; the binary is unchanged and the version stays.
+
+Tested: `scripts/build-locked.sh` gives `jam_exit=0`, `mesa_exit=0`. QEMU (KVM, `-cpu host,+smap`, a copy of `r5-os.image`, 150 s): `enable SMAP`, boots to `net_server`, no panic. QEMU has no Wi-Fi adapter and no IPv6 router, so the Wi-Fi changes and the SLAAC route removal did not run.
+
+Limits: nothing of #4419, #4421 or #4422 was tried on hardware.
+
 ## 2026-11-18 - Wi-Fi: the connect window
 
 Problem: the Wi-Fi page asked for a password in the page itself, and the Deskbar asked in a second window. The Deskbar stored the password as soon as the join was requested, before the handshake. A join that timed out was described as a wrong password, which is what the earlier HT join showed.

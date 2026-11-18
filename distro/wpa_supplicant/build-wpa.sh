@@ -73,9 +73,6 @@ provides {
 requires {
 	haiku
 	lib:libcrypto
-	lib:libnetwork
-	lib:libbe
-	lib:libbnetapi
 }
 EOF
 PACKAGE_TOOL=$HAIKU/generated.x86_64/objects/linux/x86_64/release/tools/package/package

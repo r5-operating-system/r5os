@@ -188,7 +188,7 @@ WiFiView::WiFiView(bool settingsPage)
 WiFiView::~WiFiView()
 {
 	if (sConnectWindow.IsValid())
-		sConnectWindow.PostMessage(B_QUIT_REQUESTED);
+		sConnectWindow.SendMessage(B_QUIT_REQUESTED);
 	sConnectWindow = BMessenger();
 	_StopController();
 }
@@ -240,7 +240,7 @@ void
 WiFiView::DetachedFromWindow()
 {
 	if (sConnectWindow.IsValid())
-		sConnectWindow.PostMessage(B_QUIT_REQUESTED);
+		sConnectWindow.SendMessage(B_QUIT_REQUESTED);
 	sConnectWindow = BMessenger();
 	_StopController();
 	BGroupView::DetachedFromWindow();
@@ -613,7 +613,7 @@ WiFiView::_JoinResult(BMessage* message)
 		result.AddBool("key_failed", message->GetBool("key_failed", false));
 		if (error != NULL)
 			result.AddString("error", error);
-		sConnectWindow.PostMessage(&result);
+		sConnectWindow.SendMessage(&result);
 	} else if (status == B_OK) {
 		_SetMessage(error != NULL ? error : "", error != NULL);
 	} else if (status != B_CANCELED) {
@@ -669,7 +669,7 @@ void
 WiFiView::_ShowPrompt(const char* name, uint32 authentication)
 {
 	if (sConnectWindow.IsValid())
-		sConnectWindow.PostMessage(B_QUIT_REQUESTED);
+		sConnectWindow.SendMessage(B_QUIT_REQUESTED);
 	sConnectWindow = BMessenger();
 	sConnectToken++;
 	sUserJoin = true;
