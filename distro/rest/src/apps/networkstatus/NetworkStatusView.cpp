@@ -101,16 +101,22 @@ static status_t
 deskbar_join(void* arg)
 {
 	DeskbarJoin* join = static_cast<DeskbarJoin*>(arg);
-	BString password;
-	status_t status = B_OK;
-
-	if (join->network.authentication_mode != B_NETWORK_AUTHENTICATION_NONE)
-		status = r5_wifi_ask_password(join->name.String(), password);
-	if (status == B_OK) {
-		status = r5_wifi_join_and_remember(join->device.String(),
-			join->network, password.String());
-	}
-	if (status != B_OK) {
+	const char* security = "Wi-Fi";
+	uint32 authentication = join->network.authentication_mode;
+	if (authentication == B_NETWORK_AUTHENTICATION_WPA3)
+		security = "WPA3 Personal";
+	else if (authentication == B_NETWORK_AUTHENTICATION_WPA2)
+		security = "WPA2 Personal";
+	else if (authentication == B_NETWORK_AUTHENTICATION_WPA)
+		security = "WPA Personal";
+	else if (authentication == B_NETWORK_AUTHENTICATION_NONE)
+		security = "Open";
+	int32 bars = (int32)join->network.signal_strength * 4 / 100;
+	if (bars > 4)
+		bars = 4;
+	status_t status = r5_wifi_connect_dialog(join->device.String(),
+		join->name.String(), security, authentication, bars);
+	if (status != B_OK && status != B_CANCELED) {
 		BString text = B_TRANSLATE(
 			"Could not join or remember the wireless network:\n");
 		text << strerror(status);

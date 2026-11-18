@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-18 - Wi-Fi: the connect window
+
+Problem: the Wi-Fi page asked for a password in the page itself, and the Deskbar asked in a second window. The Deskbar stored the password as soon as the join was requested, before the handshake. A join that timed out was described as a wrong password, which is what the earlier HT join showed.
+
+Changed: Settings, the Wi-Fi program and the Deskbar open "Connect to Wi-Fi". The password field is the shared password control, with the eye. The window asks for glass as soon as it exists. Connect automatically is on. The password is stored only after the link is up, and only when that box is on. A timeout says the router was not reached and the password was not checked. The red line for a rejected password is shown only when a result says the key was refused. Nothing sends that yet. Other options stays closed until it is opened: Automatic, WPA2 Personal, WPA3 Personal, WPA2/WPA3 and Open. WPA2/WPA3 stays WPA-PSK.
+
+Limits: not jammed and not booted. The glass was not looked at on a screen. A wrong password still cannot be told apart from a timeout, because the supplicant reports the timeout and not a rejected key. QEMU has no Wi-Fi adapter.
+
 ## 2026-11-18 - Wi-Fi: do not turn management protection on for a passphrase
 
 Problem: every WPA2 network was told that management protection is optional. A router that offers it would then install an integrity key. That path has not been booted, and it would replace the WPA2 join that already works. A block-ack stop ran without a reference to the station and without the receive lock. An integrity key and SAE frames stayed after a roam or a return to scan, so a later open network still ignored deauthentication. A router advertisement with lifetime 0 compared the gateway's scope with the raw address, so the route was never the one removed, and a new advertisement still removed every IPv6 default route. The firmware starts before the stack is attached, and a frame could be handed to the stack in between.

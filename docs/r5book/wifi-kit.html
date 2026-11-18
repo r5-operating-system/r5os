@@ -61,8 +61,17 @@
 				<tr><th>Declared in</th><td>&lt;R5WiFiView.h&gt;</td></tr>
 				<tr><th>Derived from</th><td>BGroupView</td></tr>
 			</table>
-			<p>Power, the current network with its signal, known networks, other networks, the password prompt,
-			Join other network and Advanced. It starts its own <code class="inline">WiFiController</code> when it is
+			<p>Power, the current network with its signal, known networks, other networks,
+			Join other network and Advanced. A secured network that is not saved opens
+			<code class="inline">WiFiConnectWindow</code> (declared in <code class="inline">&lt;R5WiFi.h&gt;</code>).
+			The Deskbar opens the same window through <code class="inline">r5_wifi_connect_dialog()</code>.
+			The title is "Connect to Wi-Fi". The password field is <code class="inline">BAppearanceKit::BPasswordControl</code>.
+			The window calls <code class="inline">BAppearanceKit::set_window_glass(this, true)</code> as soon as the
+			<code class="inline">BWindow</code> exists. Connect automatically starts on. The controller stores the
+			password only after the link is up, and only when that box is on. A timeout says the router was not
+			reached. The red "didn't accept this password" line is used only when the join result has
+			<code class="inline">"key_failed"</code> set. Nothing sends that yet.
+			It starts its own <code class="inline">WiFiController</code> when it is
 			attached to a window and stops it when it is detached, so a typed password does not outlive the
 			view.</p>
 			<figure class="stage">
@@ -72,8 +81,7 @@
 			<div class="member"><div class="sig">WiFiView(bool settingsPage = false);</div>
 				<p><code class="inline">false</code>: the program's look, with the large icon and window insets, and
 				Join as the window's default button. <code class="inline">true</code>: for a Settings page, without
-				the icon or insets, and it leaves the window's default button alone (the password field joins on
-				Enter by itself).</p></div>
+				the icon or insets. The connect window has its own Connect button.</p></div>
 <pre><code>#include &lt;R5WiFiView.h&gt;
 
 BLayoutBuilder::Group&lt;&gt;(this, B_VERTICAL, 0)

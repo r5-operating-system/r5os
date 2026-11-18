@@ -58,24 +58,6 @@ auth_label(uint32 mode)
 }
 
 
-static const char*
-auth_setting(uint32 mode)
-{
-	switch (mode) {
-		case B_NETWORK_AUTHENTICATION_WEP:
-			return "wep";
-		case B_NETWORK_AUTHENTICATION_WPA:
-			return "wpa";
-		case B_NETWORK_AUTHENTICATION_WPA2:
-			return "wpa2";
-		case B_NETWORK_AUTHENTICATION_WPA3:
-			return "wpa3";
-		default:
-			return "none";
-	}
-}
-
-
 status_t
 r5_wifi_current_ssid(BString& ssid, BString* deviceName)
 {
@@ -110,27 +92,12 @@ r5_wifi_join_and_remember(const char* deviceName, const wireless_network& networ
 	if (deviceName == NULL || deviceName[0] == '\0' || network.name[0] == '\0')
 		return B_BAD_VALUE;
 
+	// JoinNetwork returns when the request is sent, before the handshake.
+	// The password is stored by the Wi-Fi controller after the association,
+	// and only when the connect window's checkbox is on.
 	BNetworkDevice device(deviceName);
-	status_t status = device.JoinNetwork(network.name,
+	return device.JoinNetwork(network.name,
 		(password != NULL && password[0] != '\0') ? password : NULL);
-	if (status != B_OK)
-		return status;
-
-	BMessage persist(kMsgAddPersistentNetwork);
-	persist.AddString("name", network.name);
-	if (password != NULL && password[0] != '\0')
-		persist.AddString("password", password);
-	const char* authentication = auth_setting(network.authentication_mode);
-	if ((network.key_mode & B_KEY_MODE_OWE) != 0
-		&& (network.key_mode & B_KEY_MODE_SAE) == 0
-		&& network.authentication_mode == B_NETWORK_AUTHENTICATION_NONE) {
-		authentication = "owe";
-	}
-	persist.AddString("authentication", authentication);
-	BMessenger server(kNetServerSignature);
-	if (!server.IsValid())
-		return B_NAME_NOT_FOUND;
-	return server.SendMessage(&persist);
 }
 
 

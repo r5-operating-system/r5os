@@ -71,6 +71,8 @@ WiFiView::WiFiView(bool settingsPage)
 	fController(NULL),
 	fHasState(false),
 	fShowingNetServerError(false),
+	fConnectWindow(NULL),
+	fConnectToken(0),
 	fPromptAuthentication(B_NETWORK_AUTHENTICATION_NONE),
 	fRequestedAuthentication(B_NETWORK_AUTHENTICATION_NONE),
 	fRequestedTime(0)
@@ -230,6 +232,9 @@ WiFiView::WiFiView(bool settingsPage)
 
 WiFiView::~WiFiView()
 {
+	if (fConnectWindow != NULL)
+		fConnectWindow->PostMessage(B_QUIT_REQUESTED);
+	fConnectWindow = NULL;
 	_StopController();
 }
 
@@ -310,6 +315,11 @@ WiFiView::MessageReceived(BMessage* message)
 
 		case kMsgWiFiJoinResult:
 			_JoinResult(message);
+			break;
+
+		case kMsgWiFiConnectClosed:
+			if (message->GetInt32("token", 0) == fConnectToken)
+				fConnectWindow = NULL;
 			break;
 
 		case kMsgPower:
@@ -669,6 +679,17 @@ WiFiView::_JoinResult(BMessage* message)
 	if (fJoiningName == name)
 		fJoiningName = "";
 
+	bool shown = false;
+	if (fConnectWindow != NULL && fConnectWindow->Lock()) {
+		fConnectWindow->ApplyResult(status, name);
+		if (status == B_OK)
+			fConnectWindow = NULL;
+		else {
+			fConnectWindow->Unlock();
+			shown = true;
+		}
+	}
+
 	if (status == B_OK) {
 		if (fPromptName == name)
 			_HidePrompt();
@@ -676,12 +697,18 @@ WiFiView::_JoinResult(BMessage* message)
 	} else if (status == B_CANCELED) {
 		if (error != NULL)
 			_SetMessage(error, false);
+	} else if (shown) {
+		// The connect window already says what happened.
 	} else {
 		const WiFiNetworkInfo* info = fState.FindNetwork(name);
 		if (fPromptBox->IsHidden() && info != NULL && info->saved
 			&& info->secured && info->inRange) {
-			// The saved password did not work, ask for a new one
 			_ShowPrompt(name, info->authentication);
+			if (fConnectWindow != NULL && fConnectWindow->Lock()) {
+				fConnectWindow->ApplyResult(status, name);
+				fConnectWindow->Unlock();
+			}
+			return;
 		}
 		if (!fPromptBox->IsHidden() && fPromptName == name) {
 			BString label(B_TRANSLATE("Enter the password for " QUOTED_NAME
@@ -743,23 +770,29 @@ WiFiView::_JoinSelected()
 void
 WiFiView::_ShowPrompt(const char* name, uint32 authentication)
 {
-	if (fPromptName != name)
-		fPasswordControl->SetText("");
-
-	fPromptName = name;
-	fPromptAuthentication = authentication;
-
-	BString label(B_TRANSLATE("Enter the password for " QUOTED_NAME "."));
-	label.ReplaceAll("%name%", name);
-	fPromptLabel->SetText(label);
-	fPromptError->SetText("");
-
-	if (fPromptBox->IsHidden())
-		fPromptBox->Show();
-	if (Window() != NULL && !fSettingsPage)
-		Window()->SetDefaultButton(fPromptJoinButton);
-	fPasswordControl->MakeFocus(true);
-	_UpdateButtons();
+	BString subtitle;
+	const char* security = "Wi-Fi";
+	if (authentication == B_NETWORK_AUTHENTICATION_WPA3)
+		security = "WPA3 Personal";
+	else if (authentication == B_NETWORK_AUTHENTICATION_WPA2)
+		security = "WPA2 Personal";
+	else if (authentication == B_NETWORK_AUTHENTICATION_WPA)
+		security = "WPA Personal";
+	else if (authentication == B_NETWORK_AUTHENTICATION_NONE)
+		security = "Open";
+	subtitle << security;
+	if (fConnectWindow != NULL)
+		fConnectWindow->PostMessage(B_QUIT_REQUESTED);
+	fConnectWindow = NULL;
+	fConnectToken++;
+	int32 bars = 0;
+	const WiFiNetworkInfo* info = fState.FindNetwork(name);
+	if (info != NULL)
+		bars = info->bars;
+	fConnectWindow = new WiFiConnectWindow(fControllerMessenger, name,
+		subtitle.String(), authentication, bars);
+	fConnectWindow->SetClosedMessenger(BMessenger(this), fConnectToken);
+	fConnectWindow->Show();
 }
 
 

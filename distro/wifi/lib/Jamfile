@@ -10,13 +10,15 @@ SubDir HAIKU_TOP src preferences r5wifi ;
 UsePrivateHeaders interface net shared ;
 UseHeaders [ FDirName $(HAIKU_TOP) src libs compat ] : true ;
 UseHeaders [ FDirName $(HAIKU_TOP) src libs compat freebsd_wlan ] : true ;
+SubDirHdrs [ FDirName $(HAIKU_TOP) src preferences r5ui ] ;
 
 SharedLibrary [ MultiArchDefaultGristFiles libr5wifi.so ] :
 	WiFiController.cpp
 	NetworkListView.cpp
 	JoinOtherWindow.cpp
 	WiFiView.cpp
-	: be bnetapi shared localestub libr5icons.so [ TargetLibstdc++ ]
+	WiFiConnectWindow.cpp
+	: be bnetapi shared localestub libr5icons.so libr5ui.so [ TargetLibstdc++ ]
 	;
 
 DoCatalogs libr5wifi.so :
@@ -26,4 +28,5 @@ DoCatalogs libr5wifi.so :
 	NetworkListView.cpp
 	JoinOtherWindow.cpp
 	WiFiView.cpp
+	WiFiConnectWindow.cpp
 	;

@@ -8,6 +8,7 @@
 
 #include <Looper.h>
 #include <Messenger.h>
+#include <Window.h>
 #include <NetworkDevice.h>
 #include <String.h>
 
@@ -41,7 +42,8 @@ enum {
 enum {
 	kMsgWiFiStateChanged	= 'wfST',
 		// A flattened WiFiState
-	kMsgWiFiJoinResult		= 'wfJR'
+	kMsgWiFiJoinResult		= 'wfJR',
+	kMsgWiFiConnectClosed	= 'wfcl'
 		// string "name", int32 "status", string "error" (localized)
 };
 
@@ -274,6 +276,62 @@ private:
 			// program built against this header keeps working.
 			uint32				_reserved[8];
 };
+
+
+namespace BAppearanceKit {
+	class BPasswordControl;
+}
+
+
+class WiFiConnectWindow : public BWindow {
+public:
+								WiFiConnectWindow(const BMessenger& controller,
+									const char* name, const char* subtitle,
+									uint32 authentication, int32 bars);
+			void				ApplyResult(status_t status,
+									const char* name, bool keyFailed = false);
+			void				SetCompletion(sem_id done, status_t* result);
+			void				SetController(const BMessenger& controller);
+			void				SetClosedMessenger(const BMessenger& target,
+									int32 token);
+	virtual	void				MessageReceived(BMessage* message);
+	virtual	bool				QuitRequested();
+
+private:
+			void				_Connect();
+			void				_SetBusy(bool busy);
+			void				_ShowFailure(bool keyFailed);
+			void				_Finish(status_t status, bool quit);
+
+			BMessenger			fController;
+			BMessenger			fClosedTarget;
+			int32				fToken;
+			int32				fBars;
+			BString				fName;
+			uint32				fAuthentication;
+			bool				fBusy;
+			bool				fFinished;
+			bool				fOptionsOpen;
+			BAppearanceKit::BPasswordControl* fPassword;
+			class BCheckBox*	fRemember;
+			class BMenuField*	fSecurity;
+			class BStringView*	fStatus;
+			class BButton*		fOther;
+			class BButton*		fConnect;
+			sem_id				fDone;
+			status_t*			fResult;
+
+			uint32				_reserved[4];
+};
+
+
+/*!	One password window for Settings, the Wi-Fi program and the Deskbar.
+	The status line changes in this window. A password is stored only after
+	the join succeeds, and only when Connect automatically is on.
+	B_CANCELED when the window is closed first. B_OK when the join succeeds.
+*/
+status_t r5_wifi_connect_dialog(const char* device, const char* name,
+	const char* subtitle, uint32 authentication, int32 bars);
 
 
 #endif	// WIFI_CONTROLLER_H

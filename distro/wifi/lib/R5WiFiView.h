@@ -85,6 +85,8 @@ private:
 			BCheckBox*			fRememberCheck;
 			BStringView*		fPromptError;
 			BButton*			fPromptJoinButton;
+			WiFiConnectWindow*	fConnectWindow;
+			int32				fConnectToken;
 			BString				fPromptName;
 			uint32				fPromptAuthentication;
 
