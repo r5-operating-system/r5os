@@ -1,5 +1,11 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-18 - AMD64 user space, step 9: Painter bilinear, -O3, font cache
+
+The bilinear scale for a straight RGB copy uses an SSE2 row on AMD64. It does the same multiply-add as `ColorTypeRgb::Interpolate` and writes the same three bytes as `DrawModeCopy`. A bitmap with one row does not read a second row. The 32-bit nasm loop stays the x86 path. `detect_simd` reports MMX and SSE on AMD64, because the baseline is x86-64-v2. Painter, the drawing library and AGG are compiled with `-O3`. The font cache keeps 128 entries instead of 30.
+
+Checked (18 Nov 2026, Europe/Amsterdam, about 18:42): `scripts/build-locked.sh` `jam_exit=0`, `mesa_exit=0`. One QEMU KVM boot of an own image copy, `-cpu host,+smap`, display none, virtio-rng. The serial log contains `enable SMAP`, and the bootscript prints `R5_STEP9_DESKTOP` after Tracker and Deskbar are up. The pixel comparison with the C loop was not run.
+
 ## 2026-11-18 - AMD64 user space, step 8: ConvertBits row loops
 
 `ConvertBits` keeps the generic per-pixel path for offsets, byte swaps, and every pair that is not listed here. Four pairs with a zero offset take a row loop instead. RGB32 to RGBA32 and RGBA32 to RGB32 copy the pixel and force the alpha byte to 255, with SSSE3 `pshufb` and an AVX2 row when `R5_CPU_AVX2` is set. RGB24 to RGB32 uses the same shuffle to insert that alpha. RGB16 to RGB32 uses the generic path's left shifts (8, 5 and 3) and the same masks, four pixels at a time with SSE2 and eight with AVX2. CMAP8 to RGB32 reads the palette entry and forces the same alpha. The pointer for each row kind is chosen once.
