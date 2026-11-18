@@ -1138,9 +1138,22 @@ find_microcode_amd(addr_t data, size_t size, uint32 patchLevel)
 	size -= sizeof(*container);
 	data += sizeof(*container);
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (size < sizeof(struct amd_section_header)) {
+		dprintf("find_microcode_amd update is too small for first section\n");
+		return NULL;
+	}
+// SPDX-SnippetEnd
 	struct amd_section_header* section =
 		(struct amd_section_header*)data;
-	if (section->type != 0 || section->size == 0) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (section->type != 0 || section->size == 0
+		|| section->size > size - sizeof(*section)) {
+// SPDX-SnippetEnd
 		dprintf("find_microcode_amd update first section invalid\n");
 		return NULL;
 	}
@@ -1153,10 +1166,11 @@ find_microcode_amd(addr_t data, size_t size, uint32 patchLevel)
 	data += section->size;
 
 	uint16 equiv_id = 0;
-	for (uint32 i = 0; table[i].installed_cpu != 0; i++) {
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+	for (uint32 i = 0; (i + 1) * sizeof(amd_equiv_cpu_entry) <= section->size
+			&& table[i].installed_cpu != 0; i++) {
 		if (signature == table[i].installed_cpu) {
 			equiv_id = table[i].equiv_cpu;
 // SPDX-SnippetEnd
@@ -1925,7 +1939,22 @@ arch_cpu_user_tlb_invalidate(intptr_t context)
 void
 arch_cpu_global_tlb_invalidate()
 {
-	uint32 flags = x86_read_cr4();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (x86_check_feature(IA32_FEATURE_INVPCID, FEATURE_7_EBX)) {
+		struct {
+			uint64 pcid;
+			uint64 address;
+		} descriptor = { 0, 0 };
+		addr_t type = 2;
+		asm volatile("invpcid %[desc], %[type]"
+			: : [desc] "m"(descriptor), [type] "r"(type) : "memory");
+		return;
+	}
+
+	addr_t flags = x86_read_cr4();
+// SPDX-SnippetEnd
 	if ((flags & IA32_CR4_GLOBAL_PAGES) != 0) {
 		// disable and reenable the global pages to flush all TLBs regardless
 		// of the global page bit
@@ -1942,6 +1971,16 @@ arch_cpu_invalidate_tlb_range(intptr_t context, addr_t start, addr_t end)
 {
 	if (context != 0 && (intptr_t)x86_read_cr3() != context)
 		return;
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	const addr_t kMaxRangePages = 64;
+	if (start > end || (end - start) / B_PAGE_SIZE >= kMaxRangePages) {
+		arch_cpu_global_tlb_invalidate();
+		return;
+	}
+// SPDX-SnippetEnd
 
 	while (start <= end) {
 		invalidate_TLB(start);
