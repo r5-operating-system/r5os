@@ -102,21 +102,15 @@ extern addr_t _xsave;
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-extern addr_t _xsaveopt;
 extern addr_t _xsavec;
-extern addr_t _xsaves;
 extern addr_t _xrstor;
-extern addr_t _xrstors;
 extern addr_t _vzeroall;
 extern addr_t _vzeroupper;
 extern addr_t _xrstor_initial;
-extern addr_t _xrstors_initial;
 uint64 gXsaveMask;
 uint64 gFPUSaveLength = 512;
 bool gHasXsave = false;
-bool gHasXsaveopt = false;
 bool gHasXsavec = false;
-bool gHasXsaves = false;
 // SPDX-SnippetEnd
 #endif
 
@@ -1791,12 +1785,6 @@ static void
 enable_xsavemask(void* dummy, int cpu)
 {
 	xsetbv(0, gXsaveMask);
-// SPDX-SnippetBegin
-// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
-// SPDX-License-Identifier: MIT
-	if (gHasXsaves)
-		x86_write_msr(IA32_MSR_XSS, 0);
-// SPDX-SnippetEnd
 }
 #endif
 
@@ -1854,11 +1842,7 @@ arch_cpu_init_post_vm(kernel_args* args)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-		gHasXsaves = x86_check_feature(IA32_FEATURE_XSAVES, FEATURE_D_1_EAX);
-		gHasXsaveopt = !gHasXsaves
-			&& x86_check_feature(IA32_FEATURE_XSAVEOPT, FEATURE_D_1_EAX);
-		gHasXsavec = !gHasXsaves && !gHasXsaveopt
-			&& x86_check_feature(IA32_FEATURE_XSAVEC, FEATURE_D_1_EAX);
+		gHasXsavec = x86_check_feature(IA32_FEATURE_XSAVEC, FEATURE_D_1_EAX);
 
 		call_all_cpus_sync(&enable_osxsave, NULL);
 		// also enable the cached boot cpu feature bit
@@ -1877,22 +1861,10 @@ arch_cpu_init_post_vm(kernel_args* args)
 		if (gFPUSaveLength > sizeof(((struct arch_thread *)0)->user_fpu_state))
 			gFPUSaveLength = 832;
 
-		void* xsaveOp = &_xsave;
-		void* xrstorOp = &_xrstor;
-		const char* xsaveName = "XSAVE";
-		if (gHasXsaves) {
-			xsaveOp = &_xsaves;
-			xrstorOp = &_xrstors;
-			xsaveName = "XSAVES";
-		} else if (gHasXsaveopt) {
-			xsaveOp = &_xsaveopt;
-			xsaveName = "XSAVEOPT";
-		} else if (gHasXsavec) {
-			xsaveOp = &_xsavec;
-			xsaveName = "XSAVEC";
-		}
+		void* xsaveOp = gHasXsavec ? &_xsavec : &_xsave;
+		const char* xsaveName = gHasXsavec ? "XSAVEC" : "XSAVE";
 		arch_altcodepatch_replace(ALTCODEPATCH_TAG_XSAVE, xsaveOp, 4);
-		arch_altcodepatch_replace(ALTCODEPATCH_TAG_XRSTOR, xrstorOp, 4);
+		arch_altcodepatch_replace(ALTCODEPATCH_TAG_XRSTOR, &_xrstor, 4);
 
 		if ((gXsaveMask & IA32_XCR0_AVX) != 0) {
 			if ((gXsaveMask & ~(IA32_XCR0_X87 | IA32_XCR0_SSE | IA32_XCR0_AVX)) == 0) {
@@ -1900,9 +1872,9 @@ arch_cpu_init_post_vm(kernel_args* args)
 				arch_altcodepatch_replace(ALTCODEPATCH_TAG_CLEAR_FPU,
 					&_vzeroall, 3);
 			} else {
-				// Otherwise, use XRSTOR(S) to reset every supported state.
+				// Otherwise, use XRSTOR to reset every supported state.
 				arch_altcodepatch_replace(ALTCODEPATCH_TAG_CLEAR_FPU,
-					gHasXsaves ? &_xrstors_initial : &_xrstor_initial, 24);
+					&_xrstor_initial, 24);
 			}
 			if (gCPU[0].arch.vendor == VENDOR_INTEL) {
 				arch_altcodepatch_replace(ALTCODEPATCH_TAG_VZEROUPPER,

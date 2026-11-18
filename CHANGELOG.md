@@ -1,5 +1,22 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - Kernel (AMD64): review-fixes PR #4445 (XSAVEC/XSAVE, cpu_idle reschedule, TSC-deadline fence)
+
+Problem:
+- `XSAVES`/`XSAVEOPT` gebruiken de modified optimization op de kernelstack terwijl syscalls de stack tussentijds overschrijven (Intel SDM Vol. 1, 13.6/13.11).
+- Na `MWAIT`-wake-up via `invoke_scheduler` zonder IPI reschedulde `cpu_idle()` niet.
+- `IA32_MSR_TSC_DEADLINE` miste `mfence; lfence` vóór `WRMSR`.
+
+What changed:
+- `distro/kernel/src/system/kernel/arch/x86/arch_cpu.cpp`, `64/thread.cpp`, `64/stubs.S`: `XSAVES` en `XSAVEOPT` verwijderd; `XSAVEC`/`XSAVE` behouden zoals in Haiku, samen met XSAVE-header-zeroing en Intel-only `vzeroupper`.
+- `distro/kernel/src/system/kernel/cpu.cpp`: `cpu_idle()` controleert na terugkeer van de idle-module `thread->cpu->invoke_scheduler` met uitgeschakelde interrupts en roept `scheduler_reschedule(B_THREAD_READY)` onder `thread->scheduler_lock` aan. Dit MWAIT-pad heeft in QEMU geen cpuidle-module en is alleen op de 5625U te bewijzen.
+- `distro/kernel/src/system/kernel/arch/x86/timers/x86_apic.cpp`: `mfence; lfence` vóór `x86_write_msr(IA32_MSR_TSC_DEADLINE, deadline)`.
+- `CHANGELOG.md`: stap 6 (`user_strlcpy` is een byte-loop) en stap 7 (QEMU heeft geen cpuidle-module; MWAIT-pad draaide niet in QEMU) gecorrigeerd.
+
+Tested:
+- `scripts/jam-r5-raw.sh` onder `build-lock.sh`: `jam_exit=0`, `mesa_exit=0`.
+- QEMU `-cpu Skylake-Client,+smap,+smep,+tsc-deadline -smp 2`: `enable SMEP`, `enable SMAP`, `enable XSAVEC 0x7 832`, `APIC timer: using TSC-deadline mode`, `R5 scheduler topology: 2 CPUs, 2 cores, 1 cache domains, 1 packages`, `R5 net_server: NetServer from distro`.
+
 ## 2026-11-18 - Kernel (AMD64): scheduler cache-domein topologie en log (stap 8)
 
 Problem:
@@ -27,7 +44,7 @@ What changed (Step 7):
 
 Tested (Step 7):
 - `scripts/jam-r5-raw.sh`: `jam_exit=0`, `mesa_exit=0`.
-- QEMU `-cpu EPYC-Rome,+smap,+smep -smp 2`: `enable SMEP`, `enable SMAP`, `no valid cpuidle module found` (HLT-pad in QEMU), `R5 net_server`, `r5_idle_pingpong PASS rounds=20000 us=923680` (`exit=0`).
+- QEMU `-cpu EPYC-Rome,+smap,+smep -smp 2`: `no valid cpuidle module found` (het MWAIT-pad zonder IPI draaide niet in QEMU en is alleen op de 5625U te bewijzen; QEMU testte alleen het HLT-pad met `r5_idle_pingpong PASS rounds=20000 us=923680`, `exit=0`).
 
 ## 2026-11-18 - Kernel (AMD64): x86_64 user copies en STAC/CLAC (stap 6)
 
@@ -35,7 +52,7 @@ Problem:
 - `arch_cpu_user_memcpy`, `arch_cpu_user_memset` en `arch_cpu_user_strlcpy` op x86_64 misten snelle `rep movsb`/`rep stosb`-paden, gebruikten een aparte functie in plaats van één `stac`/`clac`-paar rond de kopie, of misten een assemblerspecifiek strlcpy-pad met fault-handler.
 
 What changed (Step 6):
-- `distro/kernel/headers/private/kernel/arch/user_memory.h` + `distro/kernel/src/system/kernel/arch/x86/64/arch.S`: `_arch_cpu_user_memcpy` (`rep movsb`), `_arch_cpu_user_memset` (`rep stosb`) en `_arch_cpu_user_strlcpy` (tot 8 bytes per stap met null-check via `0x0101010101010101`/`0x8080808080808080` en `-2147478783` / `B_BAD_ADDRESS` bij pagefault), elk met één `stac`/`clac`-paar en `fault_handler`.
+- `distro/kernel/headers/private/kernel/arch/user_memory.h` + `distro/kernel/src/system/kernel/arch/x86/64/arch.S`: `_arch_cpu_user_memcpy` (`rep movsb`), `_arch_cpu_user_memset` (`rep stosb`) en `_arch_cpu_user_strlcpy` (byte-loop met `-2147478783` / `B_BAD_ADDRESS` bij pagefault), elk met één `stac`/`clac`-paar en `fault_handler`.
 - `distro/cpu/r5_usercopy_test.cpp`: test `_kern_*` syscalls op `NULL`, kerneladres, unmapped page en page-straddling.
 - `scripts/apply-kernel-bugs.py`: kopieert `user_memory.h`, `arch.S` en `r5_usercopy_test.cpp` en voegt `r5_usercopy_test` toe aan `src/bin/Jamfile` en `minimum`.
 

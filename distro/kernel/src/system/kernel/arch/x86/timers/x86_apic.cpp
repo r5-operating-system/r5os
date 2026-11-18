@@ -109,6 +109,8 @@ apic_timer_set_hardware_timer(bigtime_t relativeTimeout)
 		uint64 deadline = read_tsc() + ticks;
 		if (deadline == 0)
 			deadline = 1;
+		// Serialize RDTSC/stores before the non-serializing WRMSR to IA32_MSR_TSC_DEADLINE.
+		asm volatile("mfence; lfence" ::: "memory");
 		x86_write_msr(IA32_MSR_TSC_DEADLINE, deadline);
 		return B_OK;
 	}

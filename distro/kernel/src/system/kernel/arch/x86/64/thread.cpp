@@ -77,9 +77,7 @@ extern uint64 gFPUSaveLength;
 // SPDX-License-Identifier: MIT
 extern uint64 gXsaveMask;
 extern bool gHasXsave;
-extern bool gHasXsaveopt;
 extern bool gHasXsavec;
-extern bool gHasXsaves;
 
 
 static void
@@ -112,7 +110,7 @@ copy_fpu_to_signal_frame(savefpu* dest, const void* src)
 static void
 copy_fpu_from_signal_frame(void* dest, const savefpu* src)
 {
-	if (!(gHasXsaves || gHasXsavec)) {
+	if (!gHasXsavec) {
 		memcpy(dest, src, min_c(gFPUSaveLength, sizeof(savefpu)));
 		return;
 	}
@@ -234,25 +232,7 @@ arch_thread_init(kernel_args* args)
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 	if (gHasXsave) {
-		if (gHasXsaves) {
-			asm volatile (
-				"clts;"		\
-				"fninit;"	\
-				"fnclex;"	\
-				"movl $0xFFFFFFFF,%%eax;"	\
-				"movl $0xFFFFFFFF,%%edx;"	\
-				"xsaves64 %0"
-				:: "m" (gInitialState.user_fpu_state));
-		} else if (gHasXsaveopt) {
-			asm volatile (
-				"clts;"		\
-				"fninit;"	\
-				"fnclex;"	\
-				"movl $0xFFFFFFFF,%%eax;"	\
-				"movl $0xFFFFFFFF,%%edx;"	\
-				"xsaveopt64 %0"
-				:: "m" (gInitialState.user_fpu_state));
-		} else if (gHasXsavec) {
+		if (gHasXsavec) {
 			asm volatile (
 				"clts;"		\
 				"fninit;"	\

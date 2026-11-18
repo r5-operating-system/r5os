@@ -45,26 +45,7 @@ FUNCTION_END(_xrstor_initial)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-FUNCTION(_xsaveopt):
-	xsaveopt64	(%rdi)
-FUNCTION_END(_xsaveopt)
-
-FUNCTION(_xsaves):
-	xsaves64	(%rdi)
-FUNCTION_END(_xsaves)
-
-FUNCTION(_xrstors):
-	xrstors64	(%rdi)
-FUNCTION_END(_xrstors)
-
 FUNCTION(_vzeroupper):
 	vzeroupper
 FUNCTION_END(_vzeroupper)
-
-FUNCTION(_xrstors_initial):
-	movabsq		$gInitialState + ARCH_THREAD_user_fpu_state, %rdi
-	mov 		$0xFFFFFFFF, %eax
-	mov 		$0xFFFFFFFF, %edx
-	xrstors64	(%rdi)
-FUNCTION_END(_xrstors_initial)
 // SPDX-SnippetEnd
