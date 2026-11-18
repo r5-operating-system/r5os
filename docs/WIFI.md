@@ -48,7 +48,7 @@ The beacon and element parsers that a nearby access point reaches without any pa
 
 ### wpa_supplicant
 
-- Not built in this tree. It is the HaikuPorts binary package `wpa_supplicant-2.11.haiku.1-1` (`haiku/build/jam/repositories/HaikuPorts/x86_64` line 251), added by `distro/UserBuildConfig` line 28. Its `.config` (`CONFIG_SAE`, `CONFIG_IEEE80211W`, `CONFIG_OWE`) lives in the HaikuPorts recipe, not here; step 3 starts by reading it from the recipe and the package.
+- Built in this tree. `distro/wpa_supplicant/build-wpa.sh` fetches haiku/wpa_supplicant commit `bdf3144` (the HaikuPorts 2.11.haiku.1 source, sha256 in `pins.sh`) and packs `wpa_supplicant-2.11.r5.1-1`. `scripts/pin-mesa-packages.sh` points the image at that package instead of `wpa_supplicant-2.11.haiku.1-1`. SAE, PMF and OWE are on. The HaikuPorts binary had all three off.
 - wpa_supplicant is `BSD-3-Clause`.
 - The Network Kit asks it to join through `BNetworkDevice::JoinNetwork()` (`haiku/headers/os/net/NetworkDevice.h` lines 122–126). The authentication modes stop at `B_NETWORK_AUTHENTICATION_WPA2` and `EAP` (lines 15–19), the key modes at `B_KEY_MODE_WPS` (lines 34–41). There is `B_NETWORK_CIPHER_AES_128_CMAC` (line 29), but no WPA3 or SAE value yet.
 
@@ -174,7 +174,7 @@ Each step is its own small pull request, built for AMD64 with `scripts/build-loc
 2. **Hardware for 6E and Wi-Fi 7.** (a) Buy nothing now, (b) an MT7922 card, (c) an MT7925 card, (d) an Intel AX210 or BE200.
    *Recommendation: (a) until step 4a passes, then (c) MT7925* if the 5625U laptop has a replaceable M.2 slot: the same driver family as today, and it covers 6E and Wi-Fi 7 in one card. Intel means a second driver with a second stack.
 3. **wpa_supplicant.** (a) Keep the HaikuPorts package and hope its build has SAE and PMF, or (b) build it from R5's own recipe in this repository, like Mesa.
-   *Recommendation: (b), but only if step 3's check finds SAE or PMF off.* Then the options are in our hands and documented.
+   *Choice (b) is in the tree.* The check found SAE, PMF and OWE off in the HaikuPorts build. The recipe turns them on. A stick that joins WPA3 and WPA2 on the same boot is still the pass; that boot has not been done.
 4. **The X1 (AX201).** (a) Wi-Fi 5 and PMF only, as OpenBSD gives it, or (b) also Wi-Fi 6, which means writing HE a second time for OpenBSD net80211, or (c) later move the X1 to FreeBSD net80211 so both machines share one stack.
    *Recommendation: (a) now.* The AX201's Wi-Fi 5 is already fast; a second HE implementation costs more than the gain. (c) is a bigger choice for after step 4a.
 5. **Order.** This plan does hardening first, then speed (11n/ac), then WPA3, then Wi-Fi 6. WPA3 could go before speed.

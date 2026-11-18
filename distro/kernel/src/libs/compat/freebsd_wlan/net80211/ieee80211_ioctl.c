@@ -3051,6 +3051,17 @@ ieee80211_ioctl_set80211(struct ieee80211vap *vap, u_long cmd, struct ieee80211r
 		ieee80211_key_update_end(vap);
 		break;
 	case IEEE80211_IOC_AUTHMODE:
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * SAE has no net80211 authenticator. Remember the mode so the first join
+ * does not send an open authentication frame.
+ */
+		if (ireq->i_val == IEEE80211_AUTH_SAE) {
+			vap->iv_bss->ni_authmode = IEEE80211_AUTH_SAE;
+			break;
+		}
+/* SPDX-SnippetEnd */
 		switch (ireq->i_val) {
 		case IEEE80211_AUTH_WPA:
 		case IEEE80211_AUTH_8021X:	/* 802.1x */

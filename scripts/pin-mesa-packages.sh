@@ -22,6 +22,7 @@ needed=(
 	vulkan_loader-1.4.367-4-x86_64.hpkg
 	vulkan_tools-1.4.367-2-x86_64.hpkg
 	vulkanteapot-1.0.0-5-x86_64.hpkg
+	wpa_supplicant-2.11.r5.1-1-x86_64.hpkg
 )
 mkdir -p "$DL"
 for name in "${needed[@]}"; do
@@ -120,6 +121,20 @@ if "\tvulkan_loader-1.4.367-4\n" not in text:
     sys.exit("vulkan loader pin missing")
 path.write_text(text, encoding="utf-8")
 print("pin updated")
+PY
+
+python3 - "$PIN" <<'PY'
+import pathlib, sys
+path = pathlib.Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+old = "\twpa_supplicant-2.11.haiku.1-1\n"
+new = "\twpa_supplicant-2.11.r5.1-1\n"
+if old in text:
+    text = text.replace(old, new, 1)
+if new not in text:
+    sys.exit("wpa_supplicant pin missing")
+path.write_text(text, encoding="utf-8")
+print("wpa_supplicant pin")
 PY
 
 list="$(mktemp)"
