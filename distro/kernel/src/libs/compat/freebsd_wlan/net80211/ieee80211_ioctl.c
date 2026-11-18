@@ -1332,6 +1332,8 @@ ieee80211_ioctl_setkey(struct ieee80211vap *vap, struct ieee80211req *ireq)
 		error = vap->iv_ic->ic_ioctl(vap->iv_ic,
 		    IEEE80211_IOC_HAIKU_IGTK, &g);
 		memset(&g, 0, sizeof(g));
+		if (error == 0)
+			ieee80211_r5_note_igtk(vap);
 		return error;
 	}
 /* SPDX-SnippetEnd */
@@ -2973,6 +2975,17 @@ ieee80211_ioctl_set80211(struct ieee80211vap *vap, u_long cmd, struct ieee80211r
 	uint32_t flags;
 
 	error = 0;
+	/* SPDX-SnippetBegin
+	 * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	 * SPDX-License-Identifier: MIT
+	 * A program that is not root may start a scan. Keys, SAE, and the
+	 * authentication mode stay with the network server.
+	 */
+	if (!ieee80211_r5_root()
+	    && ireq->i_type != IEEE80211_IOC_SCAN_REQ
+	    && ireq->i_type != IEEE80211_IOC_HAIKU_COMPAT_WLAN_UP)
+		return EPERM;
+	/* SPDX-SnippetEnd */
 	switch (ireq->i_type) {
 	case IEEE80211_IOC_SSID:
 		if (ireq->i_val != 0 ||
@@ -3934,7 +3947,7 @@ ieee80211_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		break;
 	case SIOCSIFLLADDR:
 		error = ieee80211_priv_check_vap_setmac(cmd, vap, ifp);
-		if (error == 0)
+		if (error == 0 || error == EPERM)
 			break;
 		/* Fallthrough */
 	default:

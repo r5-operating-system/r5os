@@ -67,13 +67,92 @@
 /* SPDX-SnippetBegin
  * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
  * SPDX-License-Identifier: MIT
- * One station. The last SAE body is kept for the supplicant. The length
- * is written after the body so a reader does not take a new length with
- * the previous body.
+ * Each station keeps four SAE bodies. A read removes the oldest. A fifth
+ * frame is dropped, so a later frame cannot replace one that was not read.
+ * The com lock is recursive. The integrity-key flag is the same table:
+ * once it is set, an unprotected deauth is ignored.
  */
-static uint8_t sae_mac[IEEE80211_ADDR_LEN];
-static uint8_t sae_body[IEEE80211_SAE_MAX];
-static uint16_t sae_len;
+#define R5_SAE_RING 4
+#define R5_SAE_VAPS 4
+
+struct r5_sae_frame {
+	uint8_t mac[IEEE80211_ADDR_LEN];
+	uint16_t len;
+	uint8_t body[IEEE80211_SAE_MAX];
+};
+
+struct r5_sae_q {
+	struct ieee80211vap *vap;
+	struct r5_sae_frame frame[R5_SAE_RING];
+	uint8_t count;
+	uint8_t next;
+	uint8_t igtk;
+};
+
+static struct r5_sae_q r5_sae_q[R5_SAE_VAPS];
+
+static struct r5_sae_q *
+r5_sae_find(struct ieee80211vap *vap, int create)
+{
+	int i;
+	int free_slot = -1;
+
+	for (i = 0; i < R5_SAE_VAPS; i++) {
+		if (r5_sae_q[i].vap == vap)
+			return &r5_sae_q[i];
+		if (r5_sae_q[i].vap == NULL && free_slot < 0)
+			free_slot = i;
+	}
+	if (!create || free_slot < 0)
+		return NULL;
+	memset(&r5_sae_q[free_slot], 0, sizeof(r5_sae_q[free_slot]));
+	r5_sae_q[free_slot].vap = vap;
+	return &r5_sae_q[free_slot];
+}
+
+static void
+r5_sae_reset(struct ieee80211vap *vap)
+{
+	struct r5_sae_q *q;
+
+	if (vap == NULL || vap->iv_ic == NULL)
+		return;
+	IEEE80211_LOCK(vap->iv_ic);
+	q = r5_sae_find(vap, 0);
+	if (q != NULL)
+		memset(q, 0, sizeof(*q));
+	IEEE80211_UNLOCK(vap->iv_ic);
+}
+
+void
+ieee80211_r5_note_igtk(struct ieee80211vap *vap)
+{
+	struct r5_sae_q *q;
+
+	if (vap == NULL || vap->iv_ic == NULL)
+		return;
+	IEEE80211_LOCK(vap->iv_ic);
+	q = r5_sae_find(vap, 1);
+	if (q != NULL)
+		q->igtk = 1;
+	IEEE80211_UNLOCK(vap->iv_ic);
+}
+
+int
+ieee80211_r5_has_igtk(struct ieee80211vap *vap)
+{
+	struct r5_sae_q *q;
+	int on = 0;
+
+	if (vap == NULL || vap->iv_ic == NULL)
+		return 0;
+	IEEE80211_LOCK(vap->iv_ic);
+	q = r5_sae_find(vap, 0);
+	if (q != NULL)
+		on = q->igtk;
+	IEEE80211_UNLOCK(vap->iv_ic);
+	return on;
+}
 /* SPDX-SnippetEnd */
 
 static	void sta_vattach(struct ieee80211vap *);
@@ -285,6 +364,12 @@ sta_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 		}
 		if (vap->iv_auth->ia_detach != NULL)
 			vap->iv_auth->ia_detach(vap);
+		/* SPDX-SnippetBegin
+		 * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		 * SPDX-License-Identifier: MIT
+		 */
+		r5_sae_reset(vap);
+		/* SPDX-SnippetEnd */
 		break;
 	case IEEE80211_S_SCAN:
 		switch (ostate) {
@@ -1803,12 +1888,23 @@ sta_recv_mgmt(struct ieee80211_node *ni, struct mbuf *m0, int subtype,
 		else if (algo == IEEE80211_AUTH_ALG_SAE) {
 			int n = efrm - frm;
 
-			if (n >= 6 && n <= IEEE80211_SAE_MAX) {
-				memcpy(sae_body, frm, n);
-				IEEE80211_ADDR_COPY(sae_mac, wh->i_addr2);
-				sae_len = (uint16_t)n;
-				if (status == 0 && seq == 2)
-					printf("sae: authenticated\n");
+			if (vap->iv_state == IEEE80211_S_AUTH
+			    && IEEE80211_ADDR_EQ(wh->i_addr2, ni->ni_bssid)
+			    && n >= 6 && n <= IEEE80211_SAE_MAX) {
+				struct r5_sae_q *q;
+
+				IEEE80211_LOCK(vap->iv_ic);
+				q = r5_sae_find(vap, 1);
+				if (q != NULL && q->count < R5_SAE_RING) {
+					int slot = (q->next + q->count) % R5_SAE_RING;
+					struct r5_sae_frame *f = &q->frame[slot];
+
+					memcpy(f->body, frm, n);
+					IEEE80211_ADDR_COPY(f->mac, wh->i_addr2);
+					f->len = (uint16_t)n;
+					q->count++;
+				}
+				IEEE80211_UNLOCK(vap->iv_ic);
 			}
 			return;
 		}
@@ -2066,6 +2162,18 @@ assoc_ht_done:
 			vap->iv_stats.is_rx_mgtdiscard++;
 			break;
 		}
+		/* SPDX-SnippetBegin
+		 * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		 * SPDX-License-Identifier: MIT
+		 * An integrity key means management protection was negotiated.
+		 * An unprotected deauth is ignored. A protected one is still
+		 * dropped earlier: this stack does not check the BIP MIC yet.
+		 */
+		if (ieee80211_r5_has_igtk(vap) && !IEEE80211_IS_PROTECTED(wh)) {
+			vap->iv_stats.is_rx_mgtdiscard++;
+			break;
+		}
+		/* SPDX-SnippetEnd */
 
 		/*
 		 * deauth frame format
@@ -2100,6 +2208,15 @@ assoc_ht_done:
 			vap->iv_stats.is_rx_mgtdiscard++;
 			break;
 		}
+		/* SPDX-SnippetBegin
+		 * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		 * SPDX-License-Identifier: MIT
+		 */
+		if (ieee80211_r5_has_igtk(vap) && !IEEE80211_IS_PROTECTED(wh)) {
+			vap->iv_stats.is_rx_mgtdiscard++;
+			break;
+		}
+		/* SPDX-SnippetEnd */
 
 		/*
 		 * disassoc frame format
@@ -2210,6 +2327,11 @@ ieee80211_send_sae_auth(struct ieee80211vap *vap, const uint8_t *mac,
 	m->m_pkthdr.len = len;
 	memset(&params, 0, sizeof(params));
 	params.ibp_pri = WME_AC_VO;
+	if (ni->ni_txparms != NULL) {
+		params.ibp_rate0 = ni->ni_txparms->mgmtrate;
+		params.ibp_try0 = ni->ni_txparms->maxretry;
+	}
+	params.ibp_power = ni->ni_txpower;
 	return ieee80211_mgmt_output(ni, m, IEEE80211_FC0_SUBTYPE_AUTH,
 	    &params);
 }
@@ -2218,16 +2340,33 @@ int
 ieee80211_take_sae_auth(struct ieee80211vap *vap, uint8_t *mac,
 	uint8_t *body, uint16_t *outlen)
 {
-	uint16_t n;
+	struct r5_sae_q *q;
+	struct r5_sae_frame *f;
 
-	if (vap == NULL || mac == NULL || body == NULL || outlen == NULL)
+	if (vap == NULL || vap->iv_ic == NULL || mac == NULL || body == NULL
+	    || outlen == NULL)
 		return EINVAL;
-	n = sae_len;
-	if (n < 6 || n > IEEE80211_SAE_MAX)
+	IEEE80211_LOCK(vap->iv_ic);
+	q = r5_sae_find(vap, 0);
+	if (q == NULL || q->count == 0) {
+		IEEE80211_UNLOCK(vap->iv_ic);
 		return ENOENT;
-	memcpy(mac, sae_mac, IEEE80211_ADDR_LEN);
-	memcpy(body, sae_body, n);
-	*outlen = n;
+	}
+	f = &q->frame[q->next];
+	if (f->len < 6 || f->len > IEEE80211_SAE_MAX) {
+		memset(f, 0, sizeof(*f));
+		q->next = (q->next + 1) % R5_SAE_RING;
+		q->count--;
+		IEEE80211_UNLOCK(vap->iv_ic);
+		return ENOENT;
+	}
+	memcpy(mac, f->mac, IEEE80211_ADDR_LEN);
+	memcpy(body, f->body, f->len);
+	*outlen = f->len;
+	memset(f, 0, sizeof(*f));
+	q->next = (q->next + 1) % R5_SAE_RING;
+	q->count--;
+	IEEE80211_UNLOCK(vap->iv_ic);
 	return 0;
 }
 /* SPDX-SnippetEnd */

@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-18 - Wi-Fi: the SAE queue, who may set a key, and an unprotected deauth
+
+Problem: one SAE slot served every station. A second frame replaced the first before it was read, and a read left the frame in place. Any local program could set keys, send SAE, or change the authentication mode. After an integrity key was installed, an unprotected deauth or disassociation still dropped the join. An SAE frame was also sent without the management rate.
+
+Changed: each station keeps four SAE frames under the com lock. A read removes the oldest, and the queue is cleared when the station returns to INIT. A frame is stored only while authenticating, and only from the BSS address. A program that is not root may start a scan. Setting a key, SAE, the authentication mode, or the MAC address requires root. Once an integrity key is installed, an unprotected deauth or disassociation is ignored. An SAE frame uses the management rate, the retry count, and the node power.
+
+Limits: not jammed and not booted. A protected deauth is still discarded. This stack does not check the BIP MIC, so a real protected deauth does not disconnect the station. The signed-in person still scans. The network server runs as root and still joins.
+
 ## 2026-11-18 - Wi-Fi: one password window, and a saved WPA3 network stays WPA3
 
 Problem: a failed join opened Haiku's password window as well as R5's, and the message said the password was wrong when the join had simply not finished. A WPA3 or OWE network had no name in the Wi-Fi Kit, so the join was sent without an authentication mode and the supplicant asked again. A remembered WPA3 network was read back as an open network.

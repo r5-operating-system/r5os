@@ -846,6 +846,15 @@ struct ieee80211_haiku_igtk {
 	uint8_t i_keyix;
 	uint8_t i_keylen;
 };
+#ifdef __cplusplus
+extern "C" {
+#endif
+void ieee80211_r5_note_igtk(struct ieee80211vap *);
+int ieee80211_r5_has_igtk(struct ieee80211vap *);
+int ieee80211_r5_root(void);
+#ifdef __cplusplus
+}
+#endif
 /* The standard and the receive rate. A new request, so the transmit-rate
  * struct stays as it shipped. Zero means the driver does not know.
  * i_standard is 4, 5 or 6. i_rx_kbps stays 0 until a driver reports one.
