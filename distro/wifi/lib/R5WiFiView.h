@@ -48,8 +48,6 @@ private:
 			void				_JoinSelected();
 			void				_ShowPrompt(const char* name,
 									uint32 authentication);
-			void				_HidePrompt();
-			void				_JoinFromPrompt();
 			void				_SetMessage(const char* text, bool error);
 			void				_Forget();
 			void				_ShowJoinOther();
@@ -77,16 +75,6 @@ private:
 			BStringView*		fOtherLabel;
 			BStringView*		fScanLabel;
 			NetworkListView*	fOtherList;
-
-			BBox*				fPromptBox;
-			BStringView*		fPromptLabel;
-			BTextControl*		fPasswordControl;
-			BCheckBox*			fShowPassword;
-			BCheckBox*			fRememberCheck;
-			BStringView*		fPromptError;
-			BButton*			fPromptJoinButton;
-			BString				fPromptName;
-			uint32				fPromptAuthentication;
 
 			BStringView*		fMessageView;
 			BButton*			fJoinButton;

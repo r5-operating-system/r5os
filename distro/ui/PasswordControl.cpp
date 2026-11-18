@@ -135,12 +135,14 @@ private:
 struct BPasswordControl::Data {
 	PasswordTextView*	textView;
 	bool				revealed;
+	bool				invalid;
 	BString				placeholder;
 
 	Data()
 		:
 		textView(NULL),
-		revealed(false)
+		revealed(false),
+		invalid(false)
 	{
 	}
 };
@@ -304,6 +306,23 @@ BPasswordControl::Placeholder() const
 
 
 void
+BPasswordControl::SetInvalid(bool invalid)
+{
+	if (fData == NULL || fData->invalid == invalid)
+		return;
+	fData->invalid = invalid;
+	Invalidate();
+}
+
+
+bool
+BPasswordControl::IsInvalid() const
+{
+	return fData != NULL && fData->invalid;
+}
+
+
+void
 BPasswordControl::AttachedToWindow()
 {
 	BControl::AttachedToWindow();
@@ -418,10 +437,13 @@ BPasswordControl::Draw(BRect updateRect)
 	bool hasFocus = fData != NULL && fData->textView != NULL
 		&& fData->textView->IsFocus() && Window() != NULL
 		&& Window()->IsActive();
+	bool invalid = fData != NULL && fData->invalid;
 
 	SetDrawingMode(B_OP_ALPHA);
 	SetBlendingMode(B_CONSTANT_ALPHA, B_ALPHA_OVERLAY);
-	if (hasFocus && IsEnabled()) {
+	if (invalid && IsEnabled())
+		border = ui_color(B_FAILURE_COLOR);
+	else if (hasFocus && IsEnabled()) {
 		// The soft blue ring outside the field.
 		border = accent;
 		rgb_color halo = accent;

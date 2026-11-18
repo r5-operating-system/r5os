@@ -58,6 +58,10 @@ public:
 			void				SetPlaceholder(const char* text);
 			const char*			Placeholder() const;
 
+			// A red border, used only when the router refused the password.
+			void				SetInvalid(bool invalid);
+			bool				IsInvalid() const;
+
 	virtual	void				AttachedToWindow();
 	virtual	void				FrameResized(float newWidth, float newHeight);
 	virtual	void				Draw(BRect updateRect);

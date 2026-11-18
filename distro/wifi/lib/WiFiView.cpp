@@ -44,10 +44,9 @@ static const uint32 kMsgInvoke = 'winv';
 static const uint32 kMsgJoinSelected = 'wjsl';
 static const uint32 kMsgForget = 'wfgt';
 static const uint32 kMsgForgetConfirmed = 'wfgc';
-static const uint32 kMsgShowPassword = 'wshp';
-static const uint32 kMsgPromptJoin = 'wpjn';
-static const uint32 kMsgPromptCancel = 'wpcn';
-static const uint32 kMsgPasswordModified = 'wpmd';
+static BMessenger sConnectWindow;
+static int32 sConnectToken = 0;
+static bool sUserJoin = false;
 static const uint32 kMsgAdvanced = 'wadv';
 
 static const bigtime_t kPanelScanInterval = 30000000;
@@ -71,7 +70,6 @@ WiFiView::WiFiView(bool settingsPage)
 	fController(NULL),
 	fHasState(false),
 	fShowingNetServerError(false),
-	fPromptAuthentication(B_NETWORK_AUTHENTICATION_NONE),
 	fRequestedAuthentication(B_NETWORK_AUTHENTICATION_NONE),
 	fRequestedTime(0)
 {
@@ -131,45 +129,6 @@ WiFiView::WiFiView(bool settingsPage)
 	otherScroll->SetExplicitMinSize(BSize(B_SIZE_UNSET,
 		be_plain_font->Size() * 10));
 
-	// Inline password prompt
-
-	fPromptBox = new BBox("prompt");
-	fPromptLabel = new BStringView("prompt label", "");
-	fPromptLabel->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
-	fPasswordControl = new BTextControl("password", B_TRANSLATE("Password:"),
-		"", new BMessage(kMsgPromptJoin));
-	fPasswordControl->TextView()->HideTyping(true);
-	fPasswordControl->SetModificationMessage(
-		new BMessage(kMsgPasswordModified));
-	fShowPassword = new BCheckBox("show password",
-		B_TRANSLATE("Show password"), new BMessage(kMsgShowPassword));
-	fRememberCheck = new BCheckBox("remember",
-		B_TRANSLATE("Remember this network"), NULL);
-	fRememberCheck->SetValue(B_CONTROL_ON);
-	fPromptError = new BStringView("prompt error", "");
-	fPromptError->SetHighUIColor(B_FAILURE_COLOR);
-	fPromptError->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
-	fPromptJoinButton = new BButton("prompt join", B_TRANSLATE("Join"),
-		new BMessage(kMsgPromptJoin));
-	BButton* promptCancel = new BButton("prompt cancel",
-		B_TRANSLATE("Cancel"), new BMessage(kMsgPromptCancel));
-
-	BLayoutBuilder::Group<>(fPromptBox, B_VERTICAL, B_USE_SMALL_SPACING)
-		.SetInsets(B_USE_DEFAULT_SPACING)
-		.Add(fPromptLabel)
-		.Add(fPasswordControl)
-		.AddGroup(B_HORIZONTAL)
-			.Add(fShowPassword)
-			.Add(fRememberCheck)
-			.AddGlue()
-		.End()
-		.Add(fPromptError)
-		.AddGroup(B_HORIZONTAL)
-			.AddGlue()
-			.Add(promptCancel)
-			.Add(fPromptJoinButton)
-		.End();
-
 	fMessageView = new BStringView("message", "");
 	fMessageView->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
 
@@ -214,7 +173,6 @@ WiFiView::WiFiView(bool settingsPage)
 			.Add(fScanLabel)
 		.End()
 		.Add(otherScroll, 3)
-		.Add(fPromptBox)
 		.Add(fMessageView)
 		.AddGroup(B_HORIZONTAL)
 			.Add(joinOther)
@@ -223,13 +181,15 @@ WiFiView::WiFiView(bool settingsPage)
 			.Add(fJoinButton)
 		.End();
 
-	fPromptBox->Hide();
 	fDeviceField->Hide();
 }
 
 
 WiFiView::~WiFiView()
 {
+	if (sConnectWindow.IsValid())
+		sConnectWindow.PostMessage(B_QUIT_REQUESTED);
+	sConnectWindow = BMessenger();
 	_StopController();
 }
 
@@ -279,8 +239,9 @@ WiFiView::AttachedToWindow()
 void
 WiFiView::DetachedFromWindow()
 {
-	// Do not keep a typed password around
-	fPasswordControl->SetText("");
+	if (sConnectWindow.IsValid())
+		sConnectWindow.PostMessage(B_QUIT_REQUESTED);
+	sConnectWindow = BMessenger();
 	_StopController();
 	BGroupView::DetachedFromWindow();
 }
@@ -312,13 +273,16 @@ WiFiView::MessageReceived(BMessage* message)
 			_JoinResult(message);
 			break;
 
+		case kMsgWiFiConnectClosed:
+			if (message->GetInt32("token", 0) == sConnectToken)
+				sConnectWindow = BMessenger();
+			break;
+
 		case kMsgPower:
 		{
 			BMessage power(kMsgWiFiSetPower);
 			power.AddBool("on", fPowerCheck->Value() == B_CONTROL_ON);
 			fControllerMessenger.SendMessage(&power);
-			if (fPowerCheck->Value() != B_CONTROL_ON)
-				_HidePrompt();
 			break;
 		}
 
@@ -326,7 +290,6 @@ WiFiView::MessageReceived(BMessage* message)
 		{
 			const char* device;
 			if (message->FindString("device", &device) == B_OK) {
-				_HidePrompt();
 				BMessage select(kMsgWiFiSelectDevice);
 				select.AddString("device", device);
 				fControllerMessenger.SendMessage(&select);
@@ -335,7 +298,6 @@ WiFiView::MessageReceived(BMessage* message)
 		}
 
 		case kMsgDisconnect:
-			_HidePrompt();
 			fControllerMessenger.SendMessage(kMsgWiFiLeave);
 			break;
 
@@ -347,13 +309,8 @@ WiFiView::MessageReceived(BMessage* message)
 			NetworkListView* other = list == fKnownList
 				? fOtherList : fKnownList;
 			const WiFiNetworkInfo* selected = list->SelectedNetwork();
-			if (selected != NULL) {
+			if (selected != NULL)
 				other->DeselectAll();
-				if (fPromptBox->IsHidden() == false
-					&& selected->name != fPromptName) {
-					_HidePrompt();
-				}
-			}
 			_UpdateButtons();
 			break;
 		}
@@ -378,30 +335,6 @@ WiFiView::MessageReceived(BMessage* message)
 			}
 			break;
 		}
-
-		case kMsgShowPassword:
-		{
-			BString text(fPasswordControl->Text());
-			fPasswordControl->TextView()->HideTyping(
-				fShowPassword->Value() != B_CONTROL_ON);
-			fPasswordControl->SetText(text);
-			text.SetTo('\0', text.Length());
-			break;
-		}
-
-		case kMsgPasswordModified:
-			if (fJoiningName != fPromptName)
-				fPromptError->SetText("");
-			break;
-
-		case kMsgPromptJoin:
-			if (!fPromptBox->IsHidden())
-				_JoinFromPrompt();
-			break;
-
-		case kMsgPromptCancel:
-			_HidePrompt();
-			break;
 
 		case kMsgAdvanced:
 			be_roster->Launch("application/x-vnd.Haiku-Network");
@@ -432,9 +365,6 @@ WiFiView::MessageReceived(BMessage* message)
 			if (!fOtherList->Select(name))
 				fKnownList->Select(name);
 			_ShowPrompt(name, authentication);
-			const char* error;
-			if (message->FindString("error", &error) == B_OK)
-				fPromptError->SetText(error);
 			break;
 		}
 
@@ -496,9 +426,6 @@ WiFiView::_SetState(const WiFiState& state)
 		_SetMessage("", false);
 		fShowingNetServerError = false;
 	}
-
-	if (!on && !fPromptBox->IsHidden())
-		_HidePrompt();
 
 	_UpdateButtons();
 }
@@ -655,7 +582,6 @@ WiFiView::_UpdateButtons()
 	fJoinButton->SetEnabled(on && selected != NULL && selected->inRange
 		&& !isCurrent);
 	fForgetButton->SetEnabled(fKnownList->SelectedNetwork() != NULL);
-	fPromptJoinButton->SetEnabled(on && fJoiningName != fPromptName);
 }
 
 
@@ -669,33 +595,32 @@ WiFiView::_JoinResult(BMessage* message)
 	if (fJoiningName == name)
 		fJoiningName = "";
 
-	if (status == B_OK) {
-		if (fPromptName == name)
-			_HidePrompt();
-		_SetMessage(error != NULL ? error : "", error != NULL);
-	} else if (status == B_CANCELED) {
-		if (error != NULL)
-			_SetMessage(error, false);
-	} else {
+	if (status == B_OK || status == B_CANCELED)
+		sUserJoin = false;
+
+	bool shown = sConnectWindow.IsValid();
+	if (!shown && status != B_OK && status != B_CANCELED && sUserJoin) {
 		const WiFiNetworkInfo* info = fState.FindNetwork(name);
-		if (fPromptBox->IsHidden() && info != NULL && info->saved
-			&& info->secured && info->inRange) {
-			// The saved password did not work, ask for a new one
-			_ShowPrompt(name, info->authentication);
-		}
-		if (!fPromptBox->IsHidden() && fPromptName == name) {
-			BString label(B_TRANSLATE("Enter the password for " QUOTED_NAME
-				"."));
-			label.ReplaceAll("%name%", name);
-			fPromptLabel->SetText(label);
-			fPromptError->SetText(error != NULL ? error
-				: B_TRANSLATE("Could not connect."));
-			fPasswordControl->MakeFocus(true);
-			fPasswordControl->TextView()->SelectAll();
-		} else {
-			_SetMessage(error != NULL ? error
-				: B_TRANSLATE("Could not connect."), true);
-		}
+		uint32 authentication = info != NULL ? info->authentication
+			: B_NETWORK_AUTHENTICATION_WPA2;
+		_ShowPrompt(name, authentication);
+		shown = sConnectWindow.IsValid();
+	}
+	if (shown) {
+		BMessage result(kMsgWiFiJoinResult);
+		result.AddString("name", name);
+		result.AddInt32("status", status);
+		result.AddBool("key_failed", message->GetBool("key_failed", false));
+		if (error != NULL)
+			result.AddString("error", error);
+		sConnectWindow.PostMessage(&result);
+	} else if (status == B_OK) {
+		_SetMessage(error != NULL ? error : "", error != NULL);
+	} else if (status != B_CANCELED) {
+		_SetMessage(error != NULL ? error
+			: B_TRANSLATE("Could not connect."), true);
+	} else if (error != NULL) {
+		_SetMessage(error, false);
 	}
 
 	_UpdateButtons();
@@ -724,12 +649,12 @@ WiFiView::_JoinSelected()
 	if (selected->name == fState.current)
 		return;
 
+	sUserJoin = true;
 	if (selected->secured && !selected->saved) {
 		_ShowPrompt(selected->name, selected->authentication);
 		return;
 	}
 
-	_HidePrompt();
 	BMessage join(kMsgWiFiJoin);
 	join.AddString("name", selected->name);
 	join.AddBool("remember", true);
@@ -743,69 +668,25 @@ WiFiView::_JoinSelected()
 void
 WiFiView::_ShowPrompt(const char* name, uint32 authentication)
 {
-	if (fPromptName != name)
-		fPasswordControl->SetText("");
-
-	fPromptName = name;
-	fPromptAuthentication = authentication;
-
-	BString label(B_TRANSLATE("Enter the password for " QUOTED_NAME "."));
-	label.ReplaceAll("%name%", name);
-	fPromptLabel->SetText(label);
-	fPromptError->SetText("");
-
-	if (fPromptBox->IsHidden())
-		fPromptBox->Show();
-	if (Window() != NULL && !fSettingsPage)
-		Window()->SetDefaultButton(fPromptJoinButton);
-	fPasswordControl->MakeFocus(true);
-	_UpdateButtons();
-}
-
-
-void
-WiFiView::_HidePrompt()
-{
-	fPasswordControl->SetText("");
-	fPromptError->SetText("");
-	fPromptName = "";
-	if (!fPromptBox->IsHidden())
-		fPromptBox->Hide();
-	if (Window() != NULL && !fSettingsPage)
-		Window()->SetDefaultButton(fJoinButton);
-	_UpdateButtons();
-}
-
-
-void
-WiFiView::_JoinFromPrompt()
-{
-	if (fPromptName.IsEmpty() || fJoiningName == fPromptName)
-		return;
-
-	const char* password = fPasswordControl->Text();
-	if (password[0] == '\0') {
-		fPromptError->SetText(B_TRANSLATE("Enter the network password."));
-		fPasswordControl->MakeFocus(true);
-		return;
-	}
-
-	BMessage join(kMsgWiFiJoin);
-	join.AddString("name", fPromptName);
-	join.AddString("password", password);
-	join.AddBool("remember", fRememberCheck->Value() == B_CONTROL_ON);
-	if (fPromptAuthentication != B_NETWORK_AUTHENTICATION_NONE)
-		join.AddUInt32("authentication", fPromptAuthentication);
-	fControllerMessenger.SendMessage(&join);
-	join.MakeEmpty();
-
-	fJoiningName = fPromptName;
-	BString label(B_TRANSLATE("Connecting to " QUOTED_NAME B_UTF8_ELLIPSIS));
-	label.ReplaceAll("%name%", fPromptName);
-	fPromptLabel->SetText(label);
-	fPromptError->SetText("");
-	_SetMessage("", false);
-	_UpdateButtons();
+	if (sConnectWindow.IsValid())
+		sConnectWindow.PostMessage(B_QUIT_REQUESTED);
+	sConnectWindow = BMessenger();
+	sConnectToken++;
+	sUserJoin = true;
+	int32 bars = 0;
+	const WiFiNetworkInfo* info = fState.FindNetwork(name);
+	if (info != NULL)
+		bars = info->bars;
+	const char* standard = NULL;
+	if (fState.current == name && fState.link.routerStandard.Length() > 0)
+		standard = fState.link.routerStandard.String();
+	BString subtitle;
+	r5_wifi_connect_subtitle(subtitle, authentication, bars, standard);
+	WiFiConnectWindow* window = new WiFiConnectWindow(fControllerMessenger,
+		name, subtitle.String(), authentication, bars, BMessenger(this),
+		sConnectToken, -1, NULL);
+	sConnectWindow = BMessenger(window);
+	window->Show();
 }
 
 

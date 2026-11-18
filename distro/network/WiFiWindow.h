@@ -33,7 +33,6 @@ private:
 			void				_ConnectSelected();
 
 			BListView*			fList;
-			BTextControl*		fPassword;
 			BStringView*		fStatus;
 			BButton*			fConnect;
 			BString				fDevice;
@@ -43,7 +42,6 @@ private:
 status_t	r5_wifi_current_ssid(BString& ssid, BString* deviceName = NULL);
 status_t	r5_wifi_join_and_remember(const char* device,
 					const wireless_network& network, const char* password);
-status_t	r5_wifi_ask_password(const char* ssid, BString& password);
 
 
 #endif

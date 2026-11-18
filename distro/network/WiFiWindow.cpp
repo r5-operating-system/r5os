@@ -7,6 +7,8 @@
 
 #include "WiFiWindow.h"
 
+#include <R5WiFi.h>
+
 #include <Button.h>
 #include <Catalog.h>
 #include <LayoutBuilder.h>
@@ -32,8 +34,6 @@
 
 static const uint32 kMsgRefresh		= 'wref';
 static const uint32 kMsgConnect		= 'wcon';
-static const uint32 kMsgPasswordOk	= 'pwok';
-static const uint32 kMsgPasswordCancel	= 'pwcl';
 
 static WiFiWindow* sWindow = NULL;
 
@@ -54,24 +54,6 @@ auth_label(uint32 mode)
 			return "EAP";
 		default:
 			return "open";
-	}
-}
-
-
-static const char*
-auth_setting(uint32 mode)
-{
-	switch (mode) {
-		case B_NETWORK_AUTHENTICATION_WEP:
-			return "wep";
-		case B_NETWORK_AUTHENTICATION_WPA:
-			return "wpa";
-		case B_NETWORK_AUTHENTICATION_WPA2:
-			return "wpa2";
-		case B_NETWORK_AUTHENTICATION_WPA3:
-			return "wpa3";
-		default:
-			return "none";
 	}
 }
 
@@ -110,122 +92,12 @@ r5_wifi_join_and_remember(const char* deviceName, const wireless_network& networ
 	if (deviceName == NULL || deviceName[0] == '\0' || network.name[0] == '\0')
 		return B_BAD_VALUE;
 
+	// JoinNetwork returns when the request is sent, before the handshake.
+	// The password is stored by the Wi-Fi controller after the association,
+	// and only when the connect window's checkbox is on.
 	BNetworkDevice device(deviceName);
-	status_t status = device.JoinNetwork(network.name,
+	return device.JoinNetwork(network.name,
 		(password != NULL && password[0] != '\0') ? password : NULL);
-	if (status != B_OK)
-		return status;
-
-	BMessage persist(kMsgAddPersistentNetwork);
-	persist.AddString("name", network.name);
-	if (password != NULL && password[0] != '\0')
-		persist.AddString("password", password);
-	const char* authentication = auth_setting(network.authentication_mode);
-	if ((network.key_mode & B_KEY_MODE_OWE) != 0
-		&& (network.key_mode & B_KEY_MODE_SAE) == 0
-		&& network.authentication_mode == B_NETWORK_AUTHENTICATION_NONE) {
-		authentication = "owe";
-	}
-	persist.AddString("authentication", authentication);
-	BMessenger server(kNetServerSignature);
-	if (!server.IsValid())
-		return B_NAME_NOT_FOUND;
-	return server.SendMessage(&persist);
-}
-
-
-class PasswordWindow : public BWindow {
-public:
-	PasswordWindow(const char* ssid, BString* out, sem_id done)
-		:
-		BWindow(BRect(0, 0, 320, 120), B_TRANSLATE("Wi-Fi password"),
-			B_TITLED_WINDOW, B_NOT_ZOOMABLE | B_NOT_MINIMIZABLE
-				| B_AUTO_UPDATE_SIZE_LIMITS | B_CLOSE_ON_ESCAPE),
-		fOut(out),
-		fDone(done),
-		fResult(B_ERROR)
-	{
-		BString label(B_TRANSLATE("Password for %ssid%"));
-		label.ReplaceFirst("%ssid%", ssid);
-		fPassword = new BTextControl("password", label, "", NULL);
-		if (fPassword->TextView() != NULL)
-			fPassword->TextView()->HideTyping(true);
-
-		/* Deskbar is the app that shows this window. An application-modal
-		 * feel would freeze every Deskbar window until the password
-		 * is entered. Floating keeps the prompt in front.
-		 */
-		SetFeel(B_FLOATING_ALL_WINDOW_FEEL);
-		BLayoutBuilder::Group<>(this, B_VERTICAL, B_USE_DEFAULT_SPACING)
-			.SetInsets(B_USE_WINDOW_INSETS)
-			.Add(fPassword)
-			.AddGroup(B_HORIZONTAL)
-				.AddGlue()
-				.Add(new BButton("cancel", B_TRANSLATE("Cancel"),
-					new BMessage(kMsgPasswordCancel)))
-				.Add(new BButton("ok", B_TRANSLATE("Connect"),
-					new BMessage(kMsgPasswordOk)))
-			.End();
-		SetDefaultButton((BButton*)FindView("ok"));
-		CenterOnScreen();
-	}
-
-	virtual void MessageReceived(BMessage* message)
-	{
-		switch (message->what) {
-			case kMsgPasswordOk:
-				if (fOut != NULL)
-					*fOut = fPassword->Text();
-				fResult = B_OK;
-				release_sem(fDone);
-				Hide();
-				break;
-			case kMsgPasswordCancel:
-			case B_QUIT_REQUESTED:
-				fResult = B_CANCELED;
-				release_sem(fDone);
-				Hide();
-				break;
-			default:
-				BWindow::MessageReceived(message);
-				break;
-		}
-	}
-
-	virtual bool QuitRequested()
-	{
-		fResult = B_CANCELED;
-		release_sem(fDone);
-		Hide();
-		return false;
-	}
-
-			status_t			Result() const { return fResult; }
-
-private:
-			BTextControl*		fPassword;
-			BString*			fOut;
-			sem_id				fDone;
-			status_t			fResult;
-};
-
-
-status_t
-r5_wifi_ask_password(const char* ssid, BString& password)
-{
-	sem_id done = create_sem(0, "wifi-password");
-	if (done < 0)
-		return done;
-
-	PasswordWindow* window = new PasswordWindow(ssid, &password, done);
-	window->Show();
-	while (acquire_sem(done) == B_INTERRUPTED)
-		;
-	status_t result = window->Result();
-	window->Lock();
-	window->Quit();
-	delete_sem(done);
-	return result;
 }
 
 
@@ -255,23 +127,18 @@ WiFiWindow::WiFiWindow()
 	BWindow(BRect(0, 0, 420, 360), B_TRANSLATE("Wi-Fi"),
 		B_TITLED_WINDOW, B_AUTO_UPDATE_SIZE_LIMITS | B_NOT_ZOOMABLE),
 	fList(new BListView("networks")),
-	fPassword(new BTextControl("password", B_TRANSLATE("Password"), "",
-		NULL)),
 	fStatus(new BStringView("status", "")),
 	fConnect(new BButton("connect", B_TRANSLATE("Connect"),
 		new BMessage(kMsgConnect)))
 {
-	if (fPassword->TextView() != NULL)
-		fPassword->TextView()->HideTyping(true);
 	fList->SetInvocationMessage(new BMessage(kMsgConnect));
 
 	BLayoutBuilder::Group<>(this, B_VERTICAL, B_USE_DEFAULT_SPACING)
 		.SetInsets(B_USE_WINDOW_INSETS)
 		.Add(new BStringView("hint",
-			B_TRANSLATE("Choose a network, enter a password if needed, "
-				"and connect. R5 remembers it for next boot.")))
+			B_TRANSLATE("Choose a network and connect. "
+				"R5 remembers it for next boot.")))
 		.Add(new BScrollView("scroll", fList, 0, false, true))
-		.Add(fPassword)
 		.AddGroup(B_HORIZONTAL)
 			.Add(fStatus)
 			.AddGlue()
@@ -381,12 +248,14 @@ WiFiWindow::_ConnectSelected()
 		return;
 
 	const wireless_network& network = item->Network();
-	BString text(B_TRANSLATE("Connecting to %ssid%…"));
-	text.ReplaceFirst("%ssid%", network.name);
-	fStatus->SetText(text);
-
-	status_t status = r5_wifi_join_and_remember(fDevice.String(), network,
-		fPassword->Text());
+	int32 bars = (int32)network.signal_strength * 4 / 100;
+	if (bars > 4)
+		bars = 4;
+	BString subtitle;
+	r5_wifi_connect_subtitle(subtitle, network.authentication_mode, bars,
+		NULL);
+	status_t status = r5_wifi_connect_dialog(fDevice.String(), network.name,
+		subtitle.String(), network.authentication_mode, bars);
 	if (status != B_OK) {
 		BString error(B_TRANSLATE("Could not join: %error%"));
 		error.ReplaceFirst("%error%", strerror(status));
