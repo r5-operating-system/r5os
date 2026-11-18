@@ -45,7 +45,12 @@
 X86VMTranslationMap64Bit::X86VMTranslationMap64Bit(bool la57)
 	:
 	fPagingStructures(NULL),
-	fLA57(la57)
+	fLA57(la57),
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	fStandbyPageTableHead(0)
+// SPDX-SnippetEnd
 {
 }
 
@@ -100,6 +105,13 @@ X86VMTranslationMap64Bit::~X86VMTranslationMap64Bit()
 					if ((virtualPageDir[k] & X86_64_PDE_PRESENT) == 0)
 						continue;
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+					if ((virtualPageDir[k] & X86_64_PDE_LARGE_PAGE) != 0)
+						continue;
+// SPDX-SnippetEnd
+
 					address = virtualPageDir[k] & X86_64_PDE_ADDRESS_MASK;
 					page = vm_lookup_page(address / B_PAGE_SIZE);
 					if (page == NULL) {
@@ -147,6 +159,19 @@ X86VMTranslationMap64Bit::~X86VMTranslationMap64Bit()
 			break;
 		}
 	}
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	while (fStandbyPageTableHead != 0) {
+		address = _PopStandbyPageTable();
+		page = vm_lookup_page(address / B_PAGE_SIZE);
+		if (page != NULL) {
+			DEBUG_PAGE_ACCESS_START(page);
+			vm_page_free_etc(NULL, page, &reservation);
+		}
+	}
+// SPDX-SnippetEnd
 
 	vm_page_unreserve_pages(&reservation);
 
@@ -211,6 +236,112 @@ X86VMTranslationMap64Bit::Init(bool kernel)
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+void
+X86VMTranslationMap64Bit::_PushStandbyPageTable(phys_addr_t physicalPageTable)
+{
+	uint64* virtualTable = (uint64*)fPageMapper->GetPageTableAt(
+		physicalPageTable);
+	virtualTable[0] = fStandbyPageTableHead;
+	fStandbyPageTableHead = physicalPageTable;
+}
+
+
+phys_addr_t
+X86VMTranslationMap64Bit::_PopStandbyPageTable()
+{
+	if (fStandbyPageTableHead == 0)
+		return 0;
+
+	phys_addr_t physicalPageTable = fStandbyPageTableHead;
+	uint64* virtualTable = (uint64*)fPageMapper->GetPageTableAt(
+		physicalPageTable);
+	fStandbyPageTableHead = virtualTable[0];
+	virtualTable[0] = 0;
+	return physicalPageTable;
+}
+
+
+void
+X86VMTranslationMap64Bit::_FreeStandbyPageTable()
+{
+	phys_addr_t physicalPageTable = _PopStandbyPageTable();
+	if (physicalPageTable == 0)
+		return;
+
+	vm_page* page = vm_lookup_page(physicalPageTable / B_PAGE_SIZE);
+	if (page != NULL) {
+		vm_page_reservation reservation = {};
+		DEBUG_PAGE_ACCESS_START(page);
+		vm_page_free_etc(NULL, page, &reservation);
+		vm_page_unreserve_pages(&reservation);
+	}
+}
+
+
+uint64*
+X86VMTranslationMap64Bit::_SplitLargePage(uint64* pde, addr_t pdeVirtualBase,
+	const char* reason)
+{
+	ASSERT_LOCKED_RECURSIVE(&fLock);
+	ASSERT((pdeVirtualBase & (k64BitPageTableRange - 1)) == 0);
+
+	uint64 oldPDE = *pde;
+	if ((oldPDE & X86_64_PDE_PRESENT) == 0
+		|| (oldPDE & X86_64_PDE_LARGE_PAGE) == 0) {
+		return (uint64*)fPageMapper->GetPageTableAt(
+			oldPDE & X86_64_PDE_ADDRESS_MASK);
+	}
+
+	phys_addr_t physicalPageTable = _PopStandbyPageTable();
+	ASSERT_PRINT(physicalPageTable != 0,
+		"no standby page table to split 2 MB PDE at va %#" B_PRIxADDR,
+		pdeVirtualBase);
+
+	uint64* virtualPageTable = (uint64*)fPageMapper->GetPageTableAt(
+		physicalPageTable);
+
+	phys_addr_t basePA = oldPDE & X86_64_PDE_LARGE_ADDRESS_MASK;
+	uint64 pteFlags = (oldPDE & (X86_64_PTE_PRESENT | X86_64_PTE_WRITABLE
+			| X86_64_PTE_USER | X86_64_PTE_WRITE_THROUGH
+			| X86_64_PTE_CACHING_DISABLED | X86_64_PTE_ACCESSED
+			| X86_64_PTE_DIRTY | X86_64_PTE_GLOBAL
+			| X86_64_PTE_NOT_EXECUTABLE))
+		| ((oldPDE & X86_64_PDE_PAT) != 0 ? X86_64_PTE_PAT : 0);
+
+	// Step (a): populate the 512 4 KB PTEs with the exact same frames and
+	// attributes before switching the PDE (Intel SDM Vol. 3A 4.10.4.2).
+	for (uint32 i = 0; i < k64BitTableEntryCount; i++) {
+		virtualPageTable[i] = ((basePA + (phys_addr_t)i * B_PAGE_SIZE)
+				& X86_64_PTE_ADDRESS_MASK)
+			| pteFlags;
+	}
+	memory_write_barrier();
+
+	// Step (b): switch the PDE to the 4 KB page table in one atomic store.
+	X86PagingMethod64Bit::SetTableEntry(pde,
+		(physicalPageTable & X86_64_PDE_ADDRESS_MASK)
+			| X86_64_PDE_PRESENT | X86_64_PDE_WRITABLE | X86_64_PDE_USER);
+	fMapCount++;
+
+	// Step (c): synchronously invalidate the 2 MB TLB entry on all CPUs
+	// before the caller modifies any individual 4 KB PTE.
+	if (fIsKernelMap) {
+		smp_broadcast_ici(SMP_MSG_GLOBAL_INVALIDATE_PAGES, 0, 0, 0,
+			NULL, SMP_MSG_FLAG_SYNC);
+	} else {
+		InvalidateUserTLB(fPagingStructures->active_on_cpus,
+			fPagingStructures->pgdir_phys);
+	}
+
+	X86PagingMethod64Bit::LogLargePageSplit(pdeVirtualBase, basePA, reason);
+	return virtualPageTable;
+}
+// SPDX-SnippetEnd
+
+
 size_t
 X86VMTranslationMap64Bit::MaxPagesNeededToMap(addr_t start, addr_t end) const
 {
@@ -249,6 +380,20 @@ X86VMTranslationMap64Bit::Map(addr_t virtualAddress, phys_addr_t physicalAddress
 
 	ThreadCPUPinner pinner(thread_get_current_thread());
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	uint64* pde = X86PagingMethod64Bit::PageDirectoryEntryForAddress(
+		fPagingStructures->VirtualPMLTop(), virtualAddress, fIsKernelMap,
+		true, reservation, fPageMapper, fMapCount);
+	ASSERT(pde != NULL);
+	if ((*pde & (X86_64_PDE_PRESENT | X86_64_PDE_LARGE_PAGE))
+			== (X86_64_PDE_PRESENT | X86_64_PDE_LARGE_PAGE)) {
+		_SplitLargePage(pde, ROUNDDOWN(virtualAddress, k64BitPageTableRange),
+			"map_4k");
+	}
+// SPDX-SnippetEnd
+
 	// Look up the page table for the virtual address, allocating new tables
 	// if required. Shouldn't fail.
 	uint64* entry = X86PagingMethod64Bit::PageTableEntryForAddress(
@@ -274,6 +419,70 @@ X86VMTranslationMap64Bit::Map(addr_t virtualAddress, phys_addr_t physicalAddress
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+status_t
+X86VMTranslationMap64Bit::MapLarge(addr_t virtualAddress,
+	phys_addr_t physicalAddress, uint32 attributes, uint32 memoryType,
+	vm_page_reservation* reservation)
+{
+	if (!X86PagingMethod64Bit::LargePagesEnabled())
+		return B_NOT_SUPPORTED;
+	if ((virtualAddress & (k64BitPageTableRange - 1)) != 0
+		|| (physicalAddress & (k64BitPageTableRange - 1)) != 0
+		|| reservation == NULL) {
+		return B_BAD_VALUE;
+	}
+
+	ASSERT_LOCKED_RECURSIVE(&fLock);
+
+	ThreadCPUPinner pinner(thread_get_current_thread());
+
+	uint64* pde = X86PagingMethod64Bit::PageDirectoryEntryForAddress(
+		fPagingStructures->VirtualPMLTop(), virtualAddress, fIsKernelMap,
+		true, reservation, fPageMapper, fMapCount);
+	ASSERT(pde != NULL);
+
+	if ((*pde & X86_64_PDE_PRESENT) != 0) {
+		if ((*pde & X86_64_PDE_LARGE_PAGE) != 0)
+			return B_BUSY;
+
+		// If an existing 4 KB page table at this PDE slot has any present
+		// entries, keep 4 KB mappings; if it is completely empty (left over
+		// from a previously unmapped area), reclaim it as our standby split
+		// table and install the 2 MB PDE.
+		phys_addr_t existingTablePA = *pde & X86_64_PDE_ADDRESS_MASK;
+		uint64* existingTable = (uint64*)fPageMapper->GetPageTableAt(
+			existingTablePA);
+		for (uint32 i = 0; i < k64BitTableEntryCount; i++) {
+			if ((existingTable[i] & X86_64_PTE_PRESENT) != 0)
+				return B_BUSY;
+		}
+
+		X86PagingMethod64Bit::ClearTableEntry(pde);
+		fMapCount--;
+		_PushStandbyPageTable(existingTablePA);
+	} else {
+		vm_page* standbyPage = vm_page_allocate_page(reservation,
+			PAGE_STATE_WIRED | VM_PAGE_ALLOC_CLEAR);
+		DEBUG_PAGE_ACCESS_END(standbyPage);
+		_PushStandbyPageTable(
+			(phys_addr_t)standbyPage->physical_page_number * B_PAGE_SIZE);
+	}
+
+	X86PagingMethod64Bit::PutPageDirectoryEntryInTable(pde, physicalAddress,
+		attributes, memoryType, fIsKernelMap);
+
+	fMapCount += k64BitTableEntryCount;
+
+	X86PagingMethod64Bit::LogLargePageMap(virtualAddress, physicalAddress,
+		memoryType, attributes);
+	return B_OK;
+}
+// SPDX-SnippetEnd
+
+
 status_t
 X86VMTranslationMap64Bit::Unmap(addr_t start, addr_t end)
 {
@@ -287,6 +496,32 @@ X86VMTranslationMap64Bit::Unmap(addr_t start, addr_t end)
 	ThreadCPUPinner pinner(thread_get_current_thread());
 
 	do {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		uint64* pde = X86PagingMethod64Bit::PageDirectoryEntryForAddress(
+			fPagingStructures->VirtualPMLTop(), start, fIsKernelMap, false,
+			NULL, fPageMapper, fMapCount);
+		if (pde == NULL || (*pde & X86_64_PDE_PRESENT) == 0) {
+			start = ROUNDUP(start + 1, k64BitPageTableRange);
+			continue;
+		}
+		if ((*pde & X86_64_PDE_LARGE_PAGE) != 0) {
+			if ((start & (k64BitPageTableRange - 1)) == 0
+				&& (end - start) >= k64BitPageTableRange) {
+				uint64 oldPDE = X86PagingMethod64Bit::ClearTableEntry(pde);
+				fMapCount -= k64BitTableEntryCount;
+				_FreeStandbyPageTable();
+				if ((oldPDE & X86_64_PDE_ACCESSED) != 0)
+					InvalidatePage(start);
+				start += k64BitPageTableRange;
+				continue;
+			}
+			_SplitLargePage(pde, ROUNDDOWN(start, k64BitPageTableRange),
+				"unmap_partial");
+		}
+// SPDX-SnippetEnd
+
 		uint64* pageTable = X86PagingMethod64Bit::PageTableForAddress(
 			fPagingStructures->VirtualPMLTop(), start, fIsKernelMap, false,
 			NULL, fPageMapper, fMapCount);
@@ -332,7 +567,22 @@ X86VMTranslationMap64Bit::UnmapPage(VMArea* area, addr_t address,
 
 	TRACE("X86VMTranslationMap64Bit::UnmapPage(%#" B_PRIxADDR ")\n", address);
 
+	RecursiveLocker locker(fLock);
 	ThreadCPUPinner pinner(thread_get_current_thread());
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	uint64* pde = X86PagingMethod64Bit::PageDirectoryEntryForAddress(
+		fPagingStructures->VirtualPMLTop(), address, fIsKernelMap,
+		false, NULL, fPageMapper, fMapCount);
+	if (pde == NULL || (*pde & X86_64_PDE_PRESENT) == 0)
+		return B_ENTRY_NOT_FOUND;
+	if ((*pde & X86_64_PDE_LARGE_PAGE) != 0) {
+		_SplitLargePage(pde, ROUNDDOWN(address, k64BitPageTableRange),
+			"unmap_page");
+	}
+// SPDX-SnippetEnd
 
 	// Look up the page table for the virtual address.
 	uint64* entry = X86PagingMethod64Bit::PageTableEntryForAddress(
@@ -340,8 +590,6 @@ X86VMTranslationMap64Bit::UnmapPage(VMArea* area, addr_t address,
 		false, NULL, fPageMapper, fMapCount);
 	if (entry == NULL)
 		return B_ENTRY_NOT_FOUND;
-
-	RecursiveLocker locker(fLock);
 
 	uint64 oldEntry = X86PagingMethod64Bit::ClearTableEntry(entry);
 
@@ -415,6 +663,49 @@ X86VMTranslationMap64Bit::UnmapPages(VMArea* area, addr_t base, size_t size,
 	ThreadCPUPinner pinner(thread_get_current_thread());
 
 	do {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		uint64* pde = X86PagingMethod64Bit::PageDirectoryEntryForAddress(
+			fPagingStructures->VirtualPMLTop(), start, fIsKernelMap, false,
+			NULL, fPageMapper, fMapCount);
+		if (pde == NULL || (*pde & X86_64_PDE_PRESENT) == 0) {
+			start = ROUNDUP(start + 1, k64BitPageTableRange);
+			continue;
+		}
+		if ((*pde & X86_64_PDE_LARGE_PAGE) != 0) {
+			if ((start & (k64BitPageTableRange - 1)) == 0
+				&& (end - start + 1) >= k64BitPageTableRange) {
+				uint64 oldPDE = X86PagingMethod64Bit::ClearTableEntry(pde);
+				fMapCount -= k64BitTableEntryCount;
+				_FreeStandbyPageTable();
+
+				if ((oldPDE & X86_64_PDE_ACCESSED) != 0
+					&& !deletingAddressSpace) {
+					InvalidatePage(start);
+				}
+
+				if (area->cache_type != CACHE_TYPE_DEVICE) {
+					page_num_t basePage
+						= (oldPDE & X86_64_PDE_LARGE_ADDRESS_MASK)
+							/ B_PAGE_SIZE;
+					bool accessed = (oldPDE & X86_64_PDE_ACCESSED) != 0;
+					bool dirty = (oldPDE & X86_64_PDE_DIRTY) != 0;
+					for (uint32 i = 0; i < k64BitTableEntryCount; i++) {
+						PageUnmapped(area, basePage + i, accessed, dirty,
+							updatePageQueue, &queue);
+					}
+				}
+
+				Flush();
+				start += k64BitPageTableRange;
+				continue;
+			}
+			_SplitLargePage(pde, ROUNDDOWN(start, k64BitPageTableRange),
+				"unmap_pages_partial");
+		}
+// SPDX-SnippetEnd
+
 		uint64* pageTable = X86PagingMethod64Bit::PageTableForAddress(
 			fPagingStructures->VirtualPMLTop(), start, fIsKernelMap, false,
 			NULL, fPageMapper, fMapCount);
@@ -566,6 +857,47 @@ X86VMTranslationMap64Bit::Protect(addr_t start, addr_t end, uint32 attributes,
 	ThreadCPUPinner pinner(thread_get_current_thread());
 
 	do {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		uint64* pde = X86PagingMethod64Bit::PageDirectoryEntryForAddress(
+			fPagingStructures->VirtualPMLTop(), start, fIsKernelMap, false,
+			NULL, fPageMapper, fMapCount);
+		if (pde == NULL || (*pde & X86_64_PDE_PRESENT) == 0) {
+			start = ROUNDUP(start + 1, k64BitPageTableRange);
+			continue;
+		}
+		if ((*pde & X86_64_PDE_LARGE_PAGE) != 0) {
+			if ((start & (k64BitPageTableRange - 1)) == 0
+				&& (end - start + 1) >= k64BitPageTableRange) {
+				uint64 entry = *pde;
+				uint64 oldEntry;
+				while (true) {
+					oldEntry = X86PagingMethod64Bit::TestAndSetTableEntry(
+						pde,
+						(entry & ~(X86_64_PTE_PROTECTION_MASK
+								| X86_64_PDE_MEMORY_TYPE_MASK))
+							| newProtectionFlags
+							| X86PagingMethod64Bit
+								::MemoryTypeToPageDirectoryEntryFlags(
+									memoryType),
+						entry);
+					if (oldEntry == entry)
+						break;
+					entry = oldEntry;
+				}
+
+				if ((oldEntry & X86_64_PDE_ACCESSED) != 0)
+					InvalidatePage(start);
+
+				start += k64BitPageTableRange;
+				continue;
+			}
+			_SplitLargePage(pde, ROUNDDOWN(start, k64BitPageTableRange),
+				"protect_partial");
+		}
+// SPDX-SnippetEnd
+
 		uint64* pageTable = X86PagingMethod64Bit::PageTableForAddress(
 			fPagingStructures->VirtualPMLTop(), start, fIsKernelMap, false,
 			NULL, fPageMapper, fMapCount);
@@ -623,6 +955,25 @@ X86VMTranslationMap64Bit::ClearFlags(addr_t address, uint32 flags)
 
 	ThreadCPUPinner pinner(thread_get_current_thread());
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	uint64* pde = X86PagingMethod64Bit::PageDirectoryEntryForAddress(
+		fPagingStructures->VirtualPMLTop(), address, fIsKernelMap,
+		false, NULL, fPageMapper, fMapCount);
+	if (pde == NULL || (*pde & X86_64_PDE_PRESENT) == 0)
+		return B_OK;
+	if ((*pde & X86_64_PDE_LARGE_PAGE) != 0) {
+		uint64 flagsToClear = ((flags & PAGE_MODIFIED) ? X86_64_PDE_DIRTY : 0)
+			| ((flags & PAGE_ACCESSED) ? X86_64_PDE_ACCESSED : 0);
+		uint64 oldPDE = X86PagingMethod64Bit::ClearTableEntryFlags(pde,
+			flagsToClear);
+		if ((oldPDE & flagsToClear) != 0)
+			InvalidatePage(ROUNDDOWN(address, k64BitPageTableRange));
+		return B_OK;
+	}
+// SPDX-SnippetEnd
+
 	uint64* entry = X86PagingMethod64Bit::PageTableEntryForAddress(
 		fPagingStructures->VirtualPMLTop(), address, fIsKernelMap,
 		false, NULL, fPageMapper, fMapCount);
@@ -653,6 +1004,33 @@ X86VMTranslationMap64Bit::ClearAccessedAndModified(VMArea* area, addr_t address,
 
 	RecursiveLocker locker(fLock);
 	ThreadCPUPinner pinner(thread_get_current_thread());
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	uint64* pde = X86PagingMethod64Bit::PageDirectoryEntryForAddress(
+		fPagingStructures->VirtualPMLTop(), address, fIsKernelMap,
+		false, NULL, fPageMapper, fMapCount);
+	if (pde == NULL || (*pde & X86_64_PDE_PRESENT) == 0)
+		return false;
+	if ((*pde & X86_64_PDE_LARGE_PAGE) != 0) {
+		if (unmapIfUnaccessed && (*pde & X86_64_PDE_ACCESSED) == 0) {
+			_SplitLargePage(pde, ROUNDDOWN(address, k64BitPageTableRange),
+				"clear_unaccessed");
+		} else {
+			uint64 oldPDE = X86PagingMethod64Bit::ClearTableEntryFlags(pde,
+				X86_64_PDE_ACCESSED | X86_64_PDE_DIRTY);
+			pinner.Unlock();
+			_modified = (oldPDE & X86_64_PDE_DIRTY) != 0;
+			if ((oldPDE & X86_64_PDE_ACCESSED) != 0) {
+				InvalidatePage(ROUNDDOWN(address, k64BitPageTableRange));
+				Flush();
+				return true;
+			}
+			return false;
+		}
+	}
+// SPDX-SnippetEnd
 
 	uint64* entry = X86PagingMethod64Bit::PageTableEntryForAddress(
 		fPagingStructures->VirtualPMLTop(), address, fIsKernelMap,

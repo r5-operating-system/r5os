@@ -1,5 +1,28 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-18 - Kernel (AMD64): 2 MB large pages (`PS` PDE's) voor fysiek aaneengesloten en device-geheugen
+
+Problem:
+- `X86PagingMethod64Bit.cpp:387` en `X86VMTranslationMap64Bit.cpp` lieten buiten `KERNEL_PMAP_BASE` alleen 4 KB PTE's toe, zodat grote MMIO-/framebuffer-/VRAM-mappings (`vm_map_physical_memory`, `vm_clone_area`) en aaneengesloten kernelbuffers (`B_CONTIGUOUS` en `B_FULL_LOCK` met 2 MB run) altijd 512 4 KB PTE's per 2 MB gebruikten.
+- `X86_64_PDE_ADDRESS_MASK` (`0x000ffffffffff000L`) nam op een 2 MB PDE bit 12 (`X86_64_PDE_PAT`) mee in het fysieke adres, waardoor `Query()` en `DebugGetReverseMappingInfo()` bij Write-Combining (`WC`) 2 MB PDE's een fysiek adres met `+0x1000` teruggeven. Daarnaast ontbrak `X86_64_PTE_PAT` in `X86_64_PTE_MEMORY_TYPE_MASK` en controleerde `~X86VMTranslationMap64Bit()` niet op `X86_64_PDE_LARGE_PAGE` in user-space.
+
+What changed:
+- Aparte commit eerst: `X86_64_PDE_LARGE_ADDRESS_MASK` (`0x000fffffffe00000L`) toegevoegd aan `paging.h` en gebruikt in `Query()` en `DebugGetReverseMappingInfo()`, plus `X86_64_PTE_PAT` toegevoegd aan `X86_64_PTE_MEMORY_TYPE_MASK`.
+- Implementatie van `docs/AMD64-LARGE-PAGES.md`:
+  - Kernelsetting `amd64_large_pages` (standaard `false`, gelogd bij boot als `R5 VM: amd64_large_pages enabled/disabled`).
+  - `MapLarge()` op `VMTranslationMap` / `X86VMTranslationMap64Bit` voor 2 MB-uitgelijnde mappings in `vm_map_physical_memory()`, `vm_clone_area()` (zowel `CACHE_TYPE_DEVICE` als 2 MB-aaneengesloten `B_CONTIGUOUS`/`B_FULL_LOCK`), `B_CONTIGUOUS` en `B_FULL_LOCK` met 2 MB run (met 4 KB als fallback).
+  - Eén standby 4 KB paginatabel per 2 MB PDE uit de bestaande `MaxPagesNeededToMap()`-reservering (`fStandbyPageTableHead`), zodat een latere split nooit hoeft te alloceren.
+  - Splitsen zonder gat (`_SplitLargePage()`): geen break-before-make (het tijdelijk wissen van de PDE zou op een andere CPU of in een interrupt een fatale kernel-pagefault op VRAM/ringen kunnen veroorzaken). Conform Intel SDM Vol. 3A sectie 4.10.4.2 (*"Software should not write to a paging-structure entry in a way that would change, for any linear address, both the page size and either the page frame, access rights, or other attributes"*) en AMD64 APM Vol. 2 sectie 5.5.4 / 7.3.4 wordt eerst de standby 4 KB paginatabel gevuld met 512 PTE's met exact dezelfde fysieke frames en attributen (`X86_64_PDE_PAT` bit 12 → `X86_64_PTE_PAT` bit 7) gevolgd door een write-barrier, daarna de PDE in één atomaire store omgezet naar die tabel, vervolgens de 2 MB range synchroon op alle CPU's geïnvalideerd, en pas daarna de `Unmap`-/`Protect`-wijziging op de 4 KB PTE's toegepast.
+  - Alle `VMTranslationMap`-methodes (`Map`, `MapLarge`, `Unmap`, `UnmapPage`, `UnmapPages`, `UnmapArea`, `Query`, `QueryInterrupt`, `Protect`, `ClearFlags`, `ClearAccessedAndModified`, en de `X86_64_PDE_LARGE_PAGE`-guard in `~X86VMTranslationMap64Bit()`) verwerken 2 MB PDE's met `fMapCount` in 4 KB pagina's.
+  - Rate-limited logging per 2 MB map (`R5 VM: 2MB map ...`) en split (`R5 VM: 2MB split ... (reason)`), plus boot-zelftest achter `amd64_large_pages_selftest`.
+
+Tested: `scripts/build-locked.sh` geeft `jam_exit=0`, `mesa_exit=0`. Drie korte QEMU-boots (KVM, `-cpu host,+smap`, eigen kopie van `r5-os.image`):
+1. `amd64_large_pages` uit (standaard): logt `R5 VM: amd64_large_pages disabled`, boot naar `net_server` en `vesa_init()`, geen panic.
+2. `amd64_large_pages true` (zonder zelftest): logt `R5 VM: amd64_large_pages enabled`, mapt o.a. de 16 MB VESA-framebuffer (`0xfd000000`, `type 0x20000000` = `WC`) in zowel kernel-space als de `app_server` user-clone met 8 × 2 MB PDE's (`R5 VM: 2MB map ...`), boot naar `net_server`, geen panic.
+3. `amd64_large_pages true` + `amd64_large_pages_selftest true`: voert de 4 MB `B_CONTIGUOUS` map, `B_WRITE_COMBINING_MEMORY` `Query()`-maskertest, user-space clone + read onder SMAP + destructor-guard, en 1 MB split-protect (`R5 VM: 2MB split ... (protect_partial)`) + unmap uit en logt `R5 VM: amd64_large_pages self-test PASS (4 MB map, WC mask check, user clone/exit, 1 MB split-protect, unmap)`, gevolgd door `net_server` en `vesa_init()`, geen panic.
+
+Limits: niet getest op de Ryzen 5 5625U; de USB-stick op hardware (sectie 6 van `docs/AMD64-LARGE-PAGES.md`) volgt later.
+
 ## 2026-11-18 - Kernel (AMD64): microcode-grenzen, INVPCID type 2, TLB-range-limiet, clflushopt en amd_pstates
 
 Problem:
