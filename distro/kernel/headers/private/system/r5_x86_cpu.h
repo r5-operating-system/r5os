@@ -23,6 +23,7 @@
 #define R5_CPU_BMI2	(1u << 4)
 #define R5_CPU_ERMS	(1u << 5)
 #define R5_CPU_FSRM	(1u << 6)
+#define R5_CPU_FMA4	(1u << 7)
 
 /* Last-level cache when leaf 4 / 0x8000001D is missing or unusable. */
 #define R5_CPU_LLC_FALLBACK	(8u * 1024u * 1024u)
@@ -95,6 +96,17 @@ r5_x86_cpu_pack(void)
 			flags |= R5_CPU_ERMS;
 		if ((edx & (1u << 4)) != 0)
 			flags |= R5_CPU_FSRM;
+	}
+
+	/* FMA4 is AMD's earlier fused multiply-add. It is not FMA3. */
+	{
+		uint32_t extEax, extEbx, extEcx, extEdx;
+		r5_x86_cpuid(0x80000000, 0, &extEax, &extEbx, &extEcx, &extEdx);
+		if (extEax >= 0x80000001) {
+			r5_x86_cpuid(0x80000001, 0, &extEax, &extEbx, &extEcx, &extEdx);
+			if ((extEcx & (1u << 16)) != 0)
+				flags |= R5_CPU_FMA4;
+		}
 	}
 
 	uint32_t llc = R5_CPU_LLC_FALLBACK;

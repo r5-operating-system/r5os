@@ -5,6 +5,8 @@ SubDir HAIKU_TOP src servers app drawing ;
 # SPDX-License-Identifier: MIT
 SubDirCcFlags -fno-semantic-interposition ;
 SubDirC++Flags -fno-semantic-interposition ;
+SubDirCcFlags -O3 ;
+SubDirC++Flags -O3 ;
 # SPDX-SnippetEnd
 
 UseLibraryHeaders agg ;

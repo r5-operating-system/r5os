@@ -23,6 +23,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "r5_span_avx.h"
 #include <syslog.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
@@ -1849,12 +1851,9 @@ time_write(uint32* bits, uint64 pixels, bool blend, volatile uint32* sink)
 	bigtime_t best = B_INFINITE_TIMEOUT;
 	for (int run = 0; run < 3; run++) {
 		bigtime_t start = system_time();
-		if (blend) {
-			for (uint64 i = 0; i < pixels; i++) {
-				uint32 dst = bits[i];
-				bits[i] = ((dst >> 1) & 0x7f7f7f7f) + 0x20202020;
-			}
-		} else {
+		if (blend)
+			r5_span_blend(bits, pixels);
+		else {
 			uint32 color = 0xff336699 + run;
 			for (uint64 i = 0; i < pixels; i++)
 				bits[i] = color;
@@ -3884,7 +3883,7 @@ Compositor::_Present(const BRegion& damage)
 			clipping_rect r = damage.RectAtInt(i);
 			uint32 bytes = (r.right - r.left + 1) * 4;
 			for (int32 y = r.top; y <= r.bottom; y++) {
-				memcpy(bits + y * backRow + r.left * 4,
+				r5_span_copy(bits + y * backRow + r.left * 4,
 					frame + y * frameRow + r.left * 4, bytes);
 			}
 		}

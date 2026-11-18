@@ -3,7 +3,7 @@
 #include <limits.h>
 #undef strlen
 
-#if !defined(__x86_64__)
+#if !defined(__x86_64__) || defined(_BOOT_MODE)
 
 #define ALIGN (sizeof(size_t))
 #define ONES ((size_t)-1/UCHAR_MAX)
