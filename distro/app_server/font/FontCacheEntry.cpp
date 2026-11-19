@@ -293,12 +293,17 @@ FontCacheEntry::CanCreateGlyph(uint32 glyphCode)
 	// SPDX-License-Identifier: MIT
 	// The face is shared by every app_server thread that draws this font.
 	// FT_Get_Char_Index is not safe on two threads, and the cmap walk in
-	// that call is what faulted (stick 57, WebPositive). Callers do not
-	// hold this lock: layout asks first, then locks to create the glyph.
-	if (!WriteLock())
-		return false;
+	// that call is what faulted (stick 57, WebPositive).
+	// Do not take this entry's MultiLocker here: GlyphLayoutEngine calls
+	// this while it holds the entry's read lock (_CreateGlyph asks before it
+	// upgrades), and a write lock from the same thread then waits on itself.
+	// That hung app_server at the first new glyph (stick 58: blue desktop,
+	// no window). Every other FreeType call on the face runs under the
+	// entry's write lock, which keeps readers out, so a lock for this one
+	// call is enough.
+	static BLocker sCharIndexLock("font char index");
+	BAutolock charIndexLocker(sCharIndexLock);
 	uint32 glyphIndex = fEngine.GlyphIndexForGlyphCode(glyphCode);
-	WriteUnlock();
 	// SPDX-SnippetEnd
 	return glyphIndex != 0;
 }
