@@ -24,8 +24,133 @@
 #include <TextView.h>
 #include <WindowEffects.h>
 
+#include <string.h>
+
 
 static const uint32 kMsgCopyReport = 'cpcp';
+
+
+static void
+apply_glass_children(BView* parent)
+{
+	for (int32 index = 0; index < parent->CountChildren(); index++) {
+		BView* view = parent->ChildAt(index);
+		if (view == NULL)
+			continue;
+		view->SetFlags(view->Flags() | B_TRANSPARENT_BACKGROUND);
+		view->SetViewColor(B_TRANSPARENT_COLOR);
+		view->SetLowColor(blend_color(B_TRANSPARENT_COLOR,
+			view->HighColor(), 192));
+		view->SetDrawingMode(B_OP_ALPHA);
+		view->SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_COMPOSITE);
+		apply_glass_children(view);
+	}
+}
+
+
+class GlassSectionCard : public BAppearanceKit::BCard {
+public:
+								GlassSectionCard(const char* name,
+									const char* title);
+	virtual	void				AttachedToWindow();
+	virtual	void				Draw(BRect updateRect);
+	virtual	void				MessageReceived(BMessage* message);
+
+private:
+			void				_UpdateColors();
+			BStringView*		fTitleView;
+};
+
+
+GlassSectionCard::GlassSectionCard(const char* name, const char* title)
+	:
+	BCard(name, BAppearanceKit::B_CARD_PANEL),
+	fTitleView(NULL)
+{
+	fTitleView = new BStringView("title", title);
+	fTitleView->SetFont(be_bold_font);
+	fTitleView->SetHighColor(ui_color(B_PANEL_TEXT_COLOR));
+	fTitleView->SetExplicitAlignment(BAlignment(B_ALIGN_LEFT, B_ALIGN_TOP));
+
+	BLayoutBuilder::Group<>((BGroupLayout*)GetLayout())
+		.Add(fTitleView);
+}
+
+
+void
+GlassSectionCard::AttachedToWindow()
+{
+	BCard::AttachedToWindow();
+	BAppearanceKit::set_view_glass(this, true);
+	_UpdateColors();
+}
+
+
+void
+GlassSectionCard::Draw(BRect updateRect)
+{
+	(void)updateRect;
+	// Match About R5's SysInfoView: half-transparent face over the frosted
+	// glass in GPU mode; in CPU mode the panel background is erased first.
+	BRect bounds = Bounds();
+	float radius = be_plain_font->Size() * 0.25f;
+	rgb_color face = tint_color(ui_color(B_PANEL_BACKGROUND_COLOR),
+		B_DARKEN_1_TINT);
+	rgb_color border = tint_color(ui_color(B_PANEL_BACKGROUND_COLOR),
+		B_DARKEN_2_TINT);
+	face.alpha = 110;
+	border.alpha = 170;
+	PushState();
+	SetDrawingMode(B_OP_ALPHA);
+	SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_COMPOSITE);
+	SetHighColor(face);
+	FillRoundRect(bounds, radius, radius);
+	SetHighColor(border);
+	StrokeRoundRect(bounds, radius, radius);
+	PopState();
+}
+
+
+void
+GlassSectionCard::MessageReceived(BMessage* message)
+{
+	if (message->what == B_COLORS_UPDATED) {
+		_UpdateColors();
+		Invalidate();
+	}
+	BCard::MessageReceived(message);
+}
+
+
+void
+GlassSectionCard::_UpdateColors()
+{
+	rgb_color textColor = ui_color(B_PANEL_TEXT_COLOR);
+	rgb_color labelColor = mix_color(ui_color(B_PANEL_BACKGROUND_COLOR),
+		textColor, 170);
+	if (fTitleView != NULL)
+		fTitleView->SetHighColor(textColor);
+
+	for (int32 i = 0; i < CountChildren(); i++) {
+		BView* child = ChildAt(i);
+		if (child == NULL)
+			continue;
+		for (int32 j = 0; j < child->CountChildren(); j++) {
+			BView* item = child->ChildAt(j);
+			if (item == NULL)
+				continue;
+			if (strcmp(item->Name(), "label") == 0) {
+				item->SetHighColor(labelColor);
+			} else if (strcmp(item->Name(), "value") == 0) {
+				item->SetHighColor(textColor);
+				BTextView* tv = dynamic_cast<BTextView*>(item);
+				if (tv != NULL)
+					tv->SetFontAndColor(be_plain_font, B_FONT_ALL, &textColor);
+			}
+		}
+	}
+	apply_glass_children(this);
+}
 
 
 static void
@@ -46,8 +171,14 @@ add_row(BGridLayout* grid, int32 row, const char* label, const char* value,
 		textView->MakeSelectable(true);
 		textView->SetWordWrap(true);
 		textView->SetStylable(false);
+		textView->SetFlags(textView->Flags() | B_TRANSPARENT_BACKGROUND);
 		textView->SetViewColor(B_TRANSPARENT_COLOR);
 		rgb_color textColor = ui_color(B_PANEL_TEXT_COLOR);
+		textView->SetHighColor(textColor);
+		textView->SetLowColor(blend_color(B_TRANSPARENT_COLOR,
+			textColor, 192));
+		textView->SetDrawingMode(B_OP_ALPHA);
+		textView->SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_COMPOSITE);
 		textView->SetFontAndColor(be_plain_font, B_FONT_ALL, &textColor);
 		textView->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
 		grid->AddView(textView, 1, row);
@@ -58,22 +189,6 @@ add_row(BGridLayout* grid, int32 row, const char* label, const char* value,
 		valueView->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
 		grid->AddView(valueView, 1, row);
 	}
-}
-
-
-static BAppearanceKit::BCard*
-make_section_card(const char* name, const char* title)
-{
-	BAppearanceKit::BCard* card = new BAppearanceKit::BCard(name,
-		BAppearanceKit::B_CARD_PANEL);
-	BStringView* titleView = new BStringView("title", title);
-	titleView->SetFont(be_bold_font);
-	titleView->SetHighColor(ui_color(B_PANEL_TEXT_COLOR));
-	titleView->SetExplicitAlignment(BAlignment(B_ALIGN_LEFT, B_ALIGN_TOP));
-
-	BLayoutBuilder::Group<>((BGroupLayout*)card->GetLayout())
-		.Add(titleView);
-	return card;
 }
 
 
@@ -95,10 +210,12 @@ CPUInfoWindow::CPUInfoWindow()
 		? be_control_look->ComposeIconSize(40).Width() : 40.0f;
 	BBitmap* icon = r5_mime_icon_bitmap(
 		"application/x-vnd.Haiku-ActivityMonitor", iconSize);
-	if (icon != NULL)
+	if (icon != NULL) {
 		header->SetIcon(icon);
+		delete icon;
+	}
 
-	BAppearanceKit::BCard* hwCard = make_section_card("hw", "CPU hardware");
+	GlassSectionCard* hwCard = new GlassSectionCard("hw", "CPU hardware");
 	BGridView* hwGrid = new BGridView(B_USE_DEFAULT_SPACING,
 		B_USE_SMALL_SPACING);
 	BGridLayout* hwLayout = hwGrid->GridLayout();
@@ -115,7 +232,7 @@ CPUInfoWindow::CPUInfoWindow()
 	BLayoutBuilder::Group<>((BGroupLayout*)hwCard->GetLayout())
 		.Add(hwGrid);
 
-	BAppearanceKit::BCard* r5Card = make_section_card("r5", "What R5 uses");
+	GlassSectionCard* r5Card = new GlassSectionCard("r5", "What R5 uses");
 	BGridView* r5Grid = new BGridView(B_USE_DEFAULT_SPACING,
 		B_USE_SMALL_SPACING);
 	BGridLayout* r5Layout = r5Grid->GridLayout();
@@ -129,7 +246,7 @@ CPUInfoWindow::CPUInfoWindow()
 		.Add(r5Grid);
 
 	BView* cardsContainer = new BView("cards", B_WILL_DRAW);
-	cardsContainer->SetViewColor(B_TRANSPARENT_COLOR);
+	cardsContainer->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
 	BLayoutBuilder::Group<>(cardsContainer, B_VERTICAL, B_USE_DEFAULT_SPACING)
 		.Add(hwCard)
 		.Add(r5Card)
@@ -137,7 +254,7 @@ CPUInfoWindow::CPUInfoWindow()
 
 	BScrollView* scrollView = new BScrollView("scroll", cardsContainer, 0,
 		false, true, B_NO_BORDER);
-	scrollView->SetViewColor(B_TRANSPARENT_COLOR);
+	scrollView->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
 
 	BButton* copyButton = new BButton("copy", "Copy report",
 		new BMessage(kMsgCopyReport));
@@ -150,6 +267,9 @@ CPUInfoWindow::CPUInfoWindow()
 			.AddGlue()
 			.Add(copyButton)
 		.End();
+
+	BAppearanceKit::set_view_glass(scrollView, true);
+	BAppearanceKit::set_view_glass(cardsContainer, true);
 
 	CenterOnScreen();
 }
