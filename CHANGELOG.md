@@ -1,5 +1,15 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - Kernel (AMD64): 2 MB pages on by default
+
+Problem: `amd64_large_pages` (#4435) was off unless the kernel settings said `amd64_large_pages true`. On the 5625U the self-test passed (sticks 53 and 56) and whole sessions ran with it on, without a fault.
+
+What changed: `arch_vm.cpp` (`arch_vm_init_end`) now starts from `true`, also when there is no kernel settings file. `amd64_large_pages false` turns it off. The self-test stays opt-in (`amd64_large_pages_selftest`). `docs/AMD64-LARGE-PAGES.md` and `docs/M13-PLAN.md` say so. Owner decision, 19 Nov 2026.
+
+Limits: on the 5625U no real area used 2 MB pages yet (no `R5 VM: 2MB map` line on those sticks); aligning the GPU areas is M13 step 3. In QEMU, VirtualBox or on other machines a 2 MB aligned area (such as the VESA framebuffer in QEMU) now does get 2 MB pages; that path was proven in QEMU and by the self-test, not on Intel hardware.
+
+Tested: no separate jam (owner); the next stick build compiles it.
+
 ## 2026-11-19 - CPU Info and the Wi-Fi dialog draw their text once, on the glass
 
 Problem: On the 5625U, CPU Info still drew a grey bar behind every label and value. BStringView::AttachedToWindow() copies the parent's view colour after the card's AttachedToWindow() had marked the children transparent, so each label was an opaque panel rectangle on the glass. The Wi-Fi connect dialog's "WPA3 Personal" line, "Password" and "Connecting to … checking the password" looked drawn twice. Those views were B_TRANSPARENT_COLOR with B_OP_ALPHA, so app_server did not clear them and the next draw composited onto the previous glyphs. The subtitle was also stored at alpha 180 and blended again by the glass compose.
