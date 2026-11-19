@@ -484,6 +484,9 @@ ih_get_wptr(uint32* rptr, bool allowMmioFallback)
 	*rptr = (wptr + 32u) & (kIhBytes - 1u);
 	uint32 cntl = kread(sInfo, oss_byte(mmIH_RB_CNTL));
 	kwrite(sInfo, oss_byte(mmIH_RB_CNTL), cntl | kIhWptrOverflowClear);
+	/* Linux vega10_ih_get_wptr(): unset the clear bit at once, so a
+	 * later overflow is detected again. */
+	kwrite(sInfo, oss_byte(mmIH_RB_CNTL), cntl & ~kIhWptrOverflowClear);
 	sIhOverflowCount++;
 	return wptr;
 }
