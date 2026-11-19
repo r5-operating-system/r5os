@@ -57,43 +57,64 @@ r5_fail(int err)
 
 #if defined(R5_HOST_TEST)
 int r5_host_gpu_debug;
+int r5_host_gpu_trace;
 static int
 r5_debug_on(void)
 {
 	return r5_host_gpu_debug;
 }
-#else
 static int
-r5_debug_on(void)
+r5_trace_on(void)
 {
-	static int cached = -1;
+	return r5_host_gpu_trace;
+}
+#else
+static int sR5Debug = -1;
+static int sR5Trace = -1;
+static void
+r5_read_log_keys(void)
+{
 	FILE *file;
 	char line[128];
-	if (cached >= 0)
-		return cached;
-	cached = 0;
+	if (sR5Debug >= 0)
+		return;
+	sR5Debug = 0;
+	sR5Trace = 0;
 	file = fopen("/boot/home/config/settings/kernel/drivers/radeon_hd", "r");
 	if (file == NULL)
 		file = fopen("/boot/system/settings/kernel/drivers/radeon_hd", "r");
 	if (file == NULL)
-		return 0;
+		return;
 	while (fgets(line, (int)sizeof(line), file) != NULL) {
 		if (strncmp(line, "gpu_debug", 9) == 0
 			&& strstr(line, "true") != NULL)
-			cached = 1;
+			sR5Debug = 1;
+		if (strncmp(line, "gpu_trace", 9) == 0
+			&& strstr(line, "true") != NULL)
+			sR5Trace = 1;
 	}
 	fclose(file);
-	return cached;
+}
+static int
+r5_debug_on(void)
+{
+	r5_read_log_keys();
+	return sR5Debug;
+}
+static int
+r5_trace_on(void)
+{
+	r5_read_log_keys();
+	return sR5Trace;
 }
 #endif
 
 
-/* M13 step 1: the detail of an ioctl is only formatted with gpu_debug,
- * where every call is printed; production ioctls no longer pay for an
- * snprintf. A failed ioctl without gpu_debug is printed without it. */
+/* The detail of an ioctl is only formatted with gpu_trace, where every
+ * call is printed. A failed ioctl is printed without that detail. */
 #define R5_DETAIL(...) \
 	do { \
-		if (r5_debug_on()) \
+		if (r5_trace_on()) \
 			snprintf(sIoctlDetail, sizeof(sIoctlDetail), __VA_ARGS__); \
 	} while (0)
 
@@ -106,7 +127,7 @@ r5_ioctl_done(int ret)
 			sIoctlName != NULL ? sIoctlName : "ioctl", sIoctlRequest,
 			(unsigned)R5_IOC_NR(sIoctlRequest),
 			sIoctlDetail[0] != '\0' ? " " : "", sIoctlDetail, errno);
-	} else if (r5_debug_on()) {
+	} else if (r5_trace_on()) {
 		fprintf(stderr, "r5 libdrm: %s linux %#lx nr %#x%s%s\n",
 			sIoctlName != NULL ? sIoctlName : "ioctl", sIoctlRequest,
 			(unsigned)R5_IOC_NR(sIoctlRequest),
@@ -419,7 +440,7 @@ r5_gem_create(int fd, union drm_amdgpu_gem_create *gem)
 				(unsigned long long)bo.bytes);
 		}
 	}
-	if (r5_debug_on()) {
+	if (r5_trace_on()) {
 		fprintf(stderr, "kernel bo domain %u flags %08x bytes %llu\n",
 			bo.domain, bo.flags, (unsigned long long)bo.bytes);
 	}

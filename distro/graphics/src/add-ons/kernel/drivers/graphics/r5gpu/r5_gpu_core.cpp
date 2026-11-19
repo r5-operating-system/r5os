@@ -62,6 +62,7 @@ int sOnceBits;
 int sDebugOn = -1;
 int sSelftestOn = -1;
 int sSubmitLogOn = -1;
+int sTraceOn = -1;
 int sDeferred = 0;
 /* One deferred VRAM free per backing at most (M11 step 3b: kMaxBo). */
 static r5_defer sDefer[kMaxBo];
@@ -264,6 +265,188 @@ r5_gpu_log_error()
 {
 	return gpu_error_line();
 }
+
+bool
+gpu_trace_enabled()
+{
+	if (sTraceOn < 0)
+		gpu_cache_log_settings();
+	return sTraceOn != 0;
+}
+
+
+/* The four lines that filled stick 62. The first 20 of each kind stay
+ * in full. After that, one line every 10 s, the same interval app_server
+ * already uses for its gpu_debug report (kReportInterval). gpu_trace
+ * prints every call and does not summarize. */
+static const int32 kGpuLogFull = 20;
+static const bigtime_t kGpuLogInterval = 10000000;
+static const int kGpuLogSubmit = 0;
+static const int kGpuLogVa = 1;
+static const int kGpuLogBo = 2;
+static const int kGpuLogCu = 3;
+static const int kGpuLogKinds = 4;
+
+static int32 sLogFull[kGpuLogKinds];
+static int32 sLogCount[kGpuLogKinds];
+static int32 sLogDwMax;
+static int32 sLogGtt;
+static int32 sLogVram;
+static int32 sLogWc;
+static bigtime_t sLogWindow;
+static int32 sLogFlush;
+
+
+static bool
+gpu_log_watched(int kind)
+{
+	if (gpu_trace_enabled() || gpu_debug_enabled())
+		return true;
+	return kind == kGpuLogBo && gpu_selftest_enabled();
+}
+
+
+static bool
+gpu_log_full(int kind)
+{
+	if (gpu_trace_enabled())
+		return true;
+	return atomic_add(&sLogFull[kind], 1) < kGpuLogFull;
+}
+
+
+static void
+gpu_log_summary(bigtime_t now)
+{
+	if (gpu_trace_enabled())
+		return;
+	if (sLogWindow == 0) {
+		sLogWindow = now;
+		return;
+	}
+	if (now - sLogWindow < kGpuLogInterval)
+		return;
+	if (atomic_add(&sLogFlush, 1) != 0) {
+		atomic_add(&sLogFlush, -1);
+		return;
+	}
+	if (now - sLogWindow < kGpuLogInterval) {
+		atomic_add(&sLogFlush, -1);
+		return;
+	}
+	int32 submits = atomic_get(&sLogCount[kGpuLogSubmit]);
+	int32 maps = atomic_get(&sLogCount[kGpuLogVa]);
+	int32 creates = atomic_get(&sLogCount[kGpuLogBo]);
+	int32 cus = atomic_get(&sLogCount[kGpuLogCu]);
+	int32 dwMax = atomic_get(&sLogDwMax);
+	int32 gtt = atomic_get(&sLogGtt);
+	int32 vram = atomic_get(&sLogVram);
+	int32 wc = atomic_get(&sLogWc);
+	atomic_set(&sLogCount[kGpuLogSubmit], 0);
+	atomic_set(&sLogCount[kGpuLogVa], 0);
+	atomic_set(&sLogCount[kGpuLogBo], 0);
+	atomic_set(&sLogCount[kGpuLogCu], 0);
+	atomic_set(&sLogDwMax, 0);
+	atomic_set(&sLogGtt, 0);
+	atomic_set(&sLogVram, 0);
+	atomic_set(&sLogWc, 0);
+	sLogWindow = now;
+	atomic_add(&sLogFlush, -1);
+	if (submits == 0 && maps == 0 && creates == 0 && cus == 0)
+		return;
+	dprintf("radeon_hd: 10 s submits %lu dw max %lu va maps %lu "
+		"bo creates %lu (gtt %lu vram %lu, wc %lu) cu %lu\n",
+		(unsigned long)submits, (unsigned long)dwMax, (unsigned long)maps,
+		(unsigned long)creates, (unsigned long)gtt, (unsigned long)vram,
+		(unsigned long)wc, (unsigned long)cus);
+}
+
+
+static void
+gpu_log_bump(int kind, bigtime_t now)
+{
+	atomic_add(&sLogCount[kind], 1);
+	gpu_log_summary(now);
+}
+
+
+void
+gpu_log_submit(uint64 va, uint32 dwords, uint32 flags)
+{
+	if (!gpu_log_watched(kGpuLogSubmit))
+		return;
+	bigtime_t now = system_time();
+	if (gpu_log_full(kGpuLogSubmit)) {
+		dprintf("radeon_hd: t %lld submit ib va %016llx dw %lu flags %lu\n",
+			(long long)now, (unsigned long long)va,
+			(unsigned long)dwords, (unsigned long)flags);
+	}
+	if (gpu_trace_enabled())
+		return;
+	if ((int32)dwords > atomic_get(&sLogDwMax))
+		atomic_set(&sLogDwMax, (int32)dwords);
+	gpu_log_bump(kGpuLogSubmit, now);
+}
+
+
+void
+gpu_log_va_map(uint64 va, uint64 bytes, uint32 domain)
+{
+	if (!gpu_log_watched(kGpuLogVa))
+		return;
+	bigtime_t now = system_time();
+	if (gpu_log_full(kGpuLogVa)) {
+		dprintf("radeon_hd: t %lld va map %016llx bytes %llu domain %lu\n",
+			(long long)now, (unsigned long long)va,
+			(unsigned long long)bytes, (unsigned long)domain);
+	}
+	if (gpu_trace_enabled())
+		return;
+	gpu_log_bump(kGpuLogVa, now);
+}
+
+
+void
+gpu_log_bo(uint32 domain, uint32 requested, uint32 used, uint64 bytes,
+	int snooped)
+{
+	if (!gpu_log_watched(kGpuLogBo))
+		return;
+	if (gpu_log_full(kGpuLogBo)) {
+		dprintf("radeon_hd: bo domain %lu requested %08lx used %08lx "
+			"bytes %llu snooped %d\n",
+			(unsigned long)domain, (unsigned long)requested,
+			(unsigned long)used, (unsigned long long)bytes, snooped);
+	}
+	if (gpu_trace_enabled())
+		return;
+	if (domain == R5_GPU_DOMAIN_GTT)
+		atomic_add(&sLogGtt, 1);
+	else if (domain == R5_GPU_DOMAIN_VRAM)
+		atomic_add(&sLogVram, 1);
+	if ((used & R5_GPU_BO_WC) != 0)
+		atomic_add(&sLogWc, 1);
+	gpu_log_bump(kGpuLogBo, system_time());
+}
+
+
+void
+gpu_log_cu(uint32 cc, uint32 user, uint32 active, uint32 bitmap)
+{
+	if (!gpu_log_watched(kGpuLogCu))
+		return;
+	bigtime_t now = system_time();
+	if (gpu_log_full(kGpuLogCu)) {
+		dprintf("radeon_hd: t %lld gfx9 cu cc %08lx user %08lx "
+			"active %lu bitmap %08lx\n",
+			(long long)now, (unsigned long)cc, (unsigned long)user,
+			(unsigned long)active, (unsigned long)bitmap);
+	}
+	if (gpu_trace_enabled())
+		return;
+	gpu_log_bump(kGpuLogCu, now);
+}
+
 
 
 /* The first 32 refusals in a boot. Later ones still return the status. */
@@ -942,14 +1125,9 @@ gpu_bo_fill(gpu_client* client, gpu_bo* bo, r5_gpu_bo* request, uint64 bytes)
 					B_WRITE_COMBINING_MEMORY) != B_OK)
 				used &= ~R5_GPU_BO_WC;
 		}
-		if (gpu_selftest_enabled()) {
-			dprintf("radeon_hd: bo domain %lu requested %08lx used %08lx "
-				"bytes %llu snooped %d\n",
-				(unsigned long)in.domain, (unsigned long)in.flags,
-				(unsigned long)used, (unsigned long long)bytes,
-				in.domain == R5_GPU_DOMAIN_GTT
-					&& (used & R5_GPU_BO_WC) == 0 ? 1 : 0);
-		}
+		gpu_log_bo(in.domain, in.flags, used, bytes,
+			in.domain == R5_GPU_DOMAIN_GTT && (used & R5_GPU_BO_WC) == 0
+				? 1 : 0);
 		in.flags = used;
 	}
 	return B_OK;
@@ -1598,12 +1776,7 @@ gpu_va_map_copied(gpu_client* client, const r5_gpu_va* copied)
 	bo->ranges[slot].offset = in.bo_offset;
 	bo->ranges[slot].bytes = in.map_bytes;
 	bo->ranges[slot].vm = gpu_vm(client);
-	if (gpu_debug_enabled())
-		dprintf("radeon_hd: t %lld va map %016llx bytes %llu domain %lu\n",
-			(long long)system_time(),
-			(unsigned long long)in.gpu_va,
-			(unsigned long long)in.map_bytes,
-			(unsigned long)bo->backing->domain);
+	gpu_log_va_map(in.gpu_va, in.map_bytes, bo->backing->domain);
 	return B_OK;
 }
 
@@ -2034,14 +2207,9 @@ gpu_submit(gpu_client* client, void* buffer, size_t length)
 		asm volatile("sfence" ::: "memory");
 	else
 		asm volatile("mfence" ::: "memory");
-	if (gpu_debug_enabled()) {
-		for (uint32 i = 0; i < in.ib_count; i++) {
-			dprintf("radeon_hd: t %lld submit ib va %016llx dw %lu flags %lu\n",
-				(long long)system_time(),
-				(unsigned long long)ibs[i].gpu_va,
-				(unsigned long)ibs[i].dwords,
-				(unsigned long)ibs[i].flags);
-		}
+	if (gpu_debug_enabled() || gpu_trace_enabled()) {
+		for (uint32 i = 0; i < in.ib_count; i++)
+			gpu_log_submit(ibs[i].gpu_va, ibs[i].dwords, ibs[i].flags);
 	}
 	gpu_job* job = &sJobs[jobSlot];
 	memset(job, 0, sizeof(*job));
