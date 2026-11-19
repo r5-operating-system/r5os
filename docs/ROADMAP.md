@@ -43,7 +43,8 @@ The order is impact, not ticket number.
    4. SMB in Tracker.
    5. A simple firewall, with incoming connections closed by default.
    6. WireGuard.
-   7. LAN tests: VirtualBox bridged (`docs/vbox.md`), or QEMU bridged/tap. QEMU usernet is not a LAN.
+   7. HTTP/2 (owner, 19 Nov 2026, option B). Both Haiku network kits (`libnetservices` and `libnetservices2`) speak only HTTP/1.1, and `BSecureSocket` has no ALPN. One shared HTTP/2 layer (`nghttp2`, MIT) sits under both kits: ALPN offers `h2` and falls back to HTTP/1.1, and the kits' source API stays the same. Both kits are static libraries, so a program gets HTTP/2 only after it is rebuilt: WebPositive, HaikuDepot and the package kit in the tree, and the prebuilt `haikuwebkit` package through its own R5 recipe. HTTP/3 (QUIC) is later.
+   8. LAN tests: VirtualBox bridged (`docs/vbox.md`), or QEMU bridged/tap. QEMU usernet is not a LAN.
 6. **Dark mode in the remaining system applications** and Deskbar (Haiku #18970). The dark color scheme exists; some applications still keep their own look.
 7. **Bluetooth and game controllers** (owner, 16 Nov 2026). Bluetooth follows `docs/BLUETOOTH.md`: step 4 (classic HID, with the owner's 8BitDo M30 and PS5 DualSense) on a stick, then Low Energy (steps 1c and 6) before audio (step 5). Game controllers follow `docs/GAME-CONTROLLERS.md`, option B: right after step 4 is merged, in parallel with Low Energy, tested over a USB cable in VirtualBox; their Bluetooth part rides on the Low Energy stick.
 8. **Polish:** screenshots, emoji and fonts, the image clipboard. Rounder windows and Deskbar: `docs/LOOK.md`, not while multi-user is still open.
