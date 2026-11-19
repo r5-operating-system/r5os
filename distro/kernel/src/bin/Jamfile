@@ -50,9 +50,18 @@ StdBinCommands
 	rescan.c
 	system_time.cpp
 	r5_string_fuzz.cpp
+	r5_timer_test.cpp
+	r5_usercopy_test.cpp
 	unchop.c
 	vmstat.cpp
 	: : $(haiku-utils_rsrc) ;
+
+# R5: the XMM/YMM check uses x86 instructions.
+if $(TARGET_ARCH) = x86_64 {
+	StdBinCommands
+		r5_fpu_test.cpp
+		: : $(haiku-utils_rsrc) ;
+}
 
 # Commands which don't need another library that depend on
 # Haiku-specific code

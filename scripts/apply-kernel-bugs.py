@@ -284,6 +284,12 @@ def install_pstate() -> None:
         HAIKU / "src/bin/r5_string_fuzz.cpp",
         "string fuzz",
     )
+    for test in ("r5_fpu_test", "r5_timer_test", "r5_usercopy_test"):
+        install_file(
+            root / f"distro/cpu/{test}.cpp",
+            HAIKU / f"src/bin/{test}.cpp",
+            test,
+        )
     install_file(
         root / "distro/cpu/r5_idle_pingpong.cpp",
         HAIKU / "src/bin/r5_idle_pingpong.cpp",
@@ -359,6 +365,14 @@ def install_pstate() -> None:
         "\tr5_string_fuzz\n\tr5_idle_pingpong\n",
         "\tr5_idle_pingpong\n",
         "image bins idle pingpong test",
+    )
+    insert_once(
+        HAIKU / "build/jam/images/definitions/minimum",
+        "\tr5_idle_pingpong\n",
+        "\tr5_idle_pingpong\n\tr5_timer_test\n\tr5_usercopy_test\n"
+        "\tx86_64 @{\n\t\tr5_fpu_test\n\t}@ # x86_64\n",
+        "\tr5_usercopy_test\n",
+        "image bins amd64 tests",
     )
     insert_once(
         HAIKU / "data/launch/system",

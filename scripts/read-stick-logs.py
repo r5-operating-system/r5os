@@ -55,6 +55,13 @@ WANTED = (
     # The standard account of the stick card (check-user).
     ("home/users/test/config/cache/r5-gpu-selftest.txt", "r5-gpu-selftest-test.txt"),
     ("home/users/test/config/settings/kernel/drivers/radeon_hd", "radeon_hd-test"),
+    # AMD64 stick: the CPU report, the test run and the kernel settings
+    # (amd64_large_pages).
+    ("home/r5-cpu.txt", "r5-cpu.txt"),
+    ("home/r5-hardware.txt", "r5-hardware.txt"),
+    ("home/r5-amd64-check.txt", "r5-amd64-check.txt"),
+    ("home/config/settings/kernel/drivers/kernel", "kernel-settings-home"),
+    ("system/settings/kernel/drivers/kernel", "kernel-settings"),
 )
 
 
