@@ -145,8 +145,13 @@ enqueue(Thread* thread, bool newOne)
 			// SPDX-SnippetBegin
 			// SPDX-License-Identifier: MIT
 			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
-			// If the target CPU is polling invoke_scheduler in MWAIT, the
-			// atomic_get_and_set store above already wakes it without an IPI.
+			// Skip the IPI only when the idle CPU is inside MONITOR/MWAIT on
+			// this word. x86_monitor() is a compiler barrier and MONITOR is
+			// ordered as a load, so the idle CPU's SEQ_CST load of
+			// invoke_scheduler stays after the arming. The atomic_get_and_set
+			// above stores this int32, which sits in the monitored line
+			// (CPUID leaf 5 refuses a line smaller than an int32), so MWAIT
+			// returns without an IPI. Outside that window mwait_polling is 0.
 			if (__atomic_load_n(&gCPU[targetCPU->ID()].mwait_polling, __ATOMIC_SEQ_CST) == 0) {
 				smp_send_ici(targetCPU->ID(), SMP_MSG_RESCHEDULE, 0, 0, 0,
 					NULL, SMP_MSG_FLAG_ASYNC);
