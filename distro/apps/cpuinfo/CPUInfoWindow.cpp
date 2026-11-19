@@ -310,7 +310,8 @@ CPUInfoWindow::CPUInfoWindow()
 	BAppearanceKit::set_view_glass(cardsContainer, true);
 
 	Layout(true);
-	fit_wrapped(this);
+	for (int32 i = 0; i < CountChildren(); i++)
+		fit_wrapped(ChildAt(i));
 	ResizeToPreferred();
 	CenterOnScreen();
 }
