@@ -89,8 +89,7 @@ strchrnul_avx2(const char *s, int c)
 }
 
 
-static char *(*sStrchrnulLong)(const char *, int) = strchrnul_sse;
-static int sStrchrnulChosen;
+static char *(*sStrchrnulLong)(const char *, int);
 
 
 char *
@@ -111,12 +110,14 @@ strchrnul(const char *s, int c)
 		p += step;
 		seen += step;
 	}
-	if (__atomic_load_n(&sStrchrnulChosen, __ATOMIC_ACQUIRE) == 0) {
-		if ((r5_x86_cpu_flags() & R5_CPU_AVX2) != 0)
-			sStrchrnulLong = strchrnul_avx2;
-		__atomic_store_n(&sStrchrnulChosen, 1, __ATOMIC_RELEASE);
+	char *(*fn)(const char *, int)
+		= __atomic_load_n(&sStrchrnulLong, __ATOMIC_ACQUIRE);
+	if (fn == NULL) {
+		fn = (r5_x86_cpu_flags() & R5_CPU_AVX2) != 0
+			? strchrnul_avx2 : strchrnul_sse;
+		__atomic_store_n(&sStrchrnulLong, fn, __ATOMIC_RELEASE);
 	}
-	return sStrchrnulLong(p, c);
+	return fn(p, c);
 }
 
 /* SPDX-SnippetEnd */

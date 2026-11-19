@@ -54,6 +54,7 @@ memset_sse(uint8_t* destination, uint8_t value, size_t length)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+#ifndef _KERNEL_MODE
 static inline void
 memset_nt(uint8_t* destination, uint8_t value, size_t length)
 {
@@ -80,6 +81,7 @@ memset_nt(uint8_t* destination, uint8_t value, size_t length)
 	while (length--)
 		*destination++ = value;
 }
+#endif
 // SPDX-SnippetEnd
 
 
@@ -133,15 +135,24 @@ memset(void* ptr, int chr, size_t length)
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 	static int chosen;
-	if (__atomic_load_n(&chosen, __ATOMIC_ACQUIRE) == 0) {
-		memset_choose_bulk();
-		__atomic_store_n(&chosen, 1, __ATOMIC_RELEASE);
+	if (__atomic_load_n(&chosen, __ATOMIC_ACQUIRE) != 2) {
+		int expected = 0;
+		if (__atomic_compare_exchange_n(&chosen, &expected, 1, false,
+				__ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
+			memset_choose_bulk();
+			__atomic_store_n(&chosen, 2, __ATOMIC_RELEASE);
+		} else {
+			while (__atomic_load_n(&chosen, __ATOMIC_ACQUIRE) != 2)
+				__asm__ __volatile__("pause");
+		}
 	}
 
+#ifndef _KERNEL_MODE
 	if (length >= sMemsetStreaming) {
 		memset_nt(destination, value, length);
 		return ptr;
 	}
+#endif
 	if (sMemsetBulk != memset_repstos || length < sMemsetRepFrom) {
 		memset_sse(destination, value, length);
 		return ptr;

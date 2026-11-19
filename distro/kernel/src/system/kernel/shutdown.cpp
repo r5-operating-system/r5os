@@ -91,6 +91,11 @@ system_shutdown(bool reboot)
 	team_info info;
 
 	gKernelShutdown = true;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	dprintf("r5 shutdown: enter reboot=%d\n", reboot ? 1 : 0);
+// SPDX-SnippetEnd
 
 	// Now shutdown all system services!
 	// TODO: Once we are sure we can shutdown the system on all hardware
@@ -101,14 +106,25 @@ system_shutdown(bool reboot)
 				continue;
 			kill_team(info.team);
 		}
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		dprintf("r5 shutdown: teams killed\n");
+// SPDX-SnippetEnd
 	}
 
 	sync();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	dprintf("r5 shutdown: sync done\n");
+// SPDX-SnippetEnd
 
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 	call_shutdown_hooks(reboot);
+	dprintf("r5 shutdown: hooks done\n");
 // SPDX-SnippetEnd
 
 	return arch_cpu_shutdown(reboot);

@@ -117,6 +117,7 @@ struct SSEGenerator {
 constexpr static GenerateTable<SSEGenerator, 4> table_sse;
 
 
+#ifndef _KERNEL_MODE
 static inline void
 memcpy_nt(uint8_t* destination, const uint8_t* source, size_t length)
 {
@@ -152,6 +153,7 @@ memcpy_nt(uint8_t* destination, const uint8_t* source, size_t length)
 	while (length--)
 		*destination++ = *source++;
 }
+#endif
 
 
 static inline void
@@ -214,15 +216,24 @@ memcpy(void* destination, const void* source, size_t length)
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 	static int chosen;
-	if (__atomic_load_n(&chosen, __ATOMIC_ACQUIRE) == 0) {
-		memcpy_choose_bulk();
-		__atomic_store_n(&chosen, 1, __ATOMIC_RELEASE);
+	if (__atomic_load_n(&chosen, __ATOMIC_ACQUIRE) != 2) {
+		int expected = 0;
+		if (__atomic_compare_exchange_n(&chosen, &expected, 1, false,
+				__ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
+			memcpy_choose_bulk();
+			__atomic_store_n(&chosen, 2, __ATOMIC_RELEASE);
+		} else {
+			while (__atomic_load_n(&chosen, __ATOMIC_ACQUIRE) != 2)
+				__asm__ __volatile__("pause");
+		}
 	}
 
+#ifndef _KERNEL_MODE
 	if (length >= sMemcpyStreaming) {
 		memcpy_nt(to, from, length);
 		return destination;
 	}
+#endif
 
 	// FSRM makes a short rep movsb fast. Without it the old cut stays.
 	// Both cuts were stored by memcpy_choose_bulk.

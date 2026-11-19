@@ -1,5 +1,22 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - AMD64 review: dispatch races, kernel NT guard, shutdown trail, Information GPU state
+
+Problem (review of #4435..#4448 and `boot-5625u-52` stick logs):
+- `memcpy.cpp`, `memset.cpp`, `strlen.c`, `memcmp.c`, `strcmp.c`, `memchr.c`, `strchrnul.c`, and `r5_span_blend()` in `r5_span_avx.h` had non-atomic one-time dispatch initialization races on multi-threaded first use.
+- `memcpy.cpp` and `memset.cpp` are also built into the kernel, where `_mm_stream_si128` (`memcpy_nt`/`memset_nt`) could run on uncacheable memory for >= 3/4 LLC transfers.
+- `distro/settings/InformationModule.cpp` always displayed `"Drawn by the processor (software)"` instead of checking GPU availability.
+- The first restart on the 5625U stick hung (with CMOS corruption) after `syslog` ended before shutdown; no clear root cause was found in `#4443`/`#4445` by inspection. GLTeapot on RADV also showed frame-by-frame at 300 fps (vs smooth 700 fps on llvmpipe); cause remains unproven without 5625U hardware trace.
+
+What changed:
+- `distro/kernel/src/system/libroot/posix/string/arch/x86_64/memcpy.cpp` & `memset.cpp`: 3-state CAS (`0 -> 1 -> 2`) on `chosen` to serialize one-time dispatch; guarded `memcpy_nt`/`memset_nt` out under `#ifndef _KERNEL_MODE`.
+- `distro/kernel/src/system/libroot/posix/musl/string/{strlen,memchr,strchrnul}.c`, `posix/string/{memcmp,strcmp}.c`, `distro/app_server/r5_span_avx.h`: atomic load/store on the function pointer / `useAvx` flag.
+- `distro/kernel/src/system/kernel/shutdown.cpp` & `arch/x86/arch_cpu.cpp`: added minimal `dprintf` trail across `system_shutdown` and `arch_cpu_shutdown` steps (GFX9 stop contract untouched).
+- `distro/settings/InformationModule.cpp` & `Jamfile`: added `graphics_detail()` querying `/dev/gpu/radeon_hd/0` (`R5_GPU_GET_INFO`, `R5_GPU_CAP_AVAILABLE` and not `R5_GPU_CAP_LOST`).
+- `generated/AMD64-REVIEW.md`: full review report.
+
+Limits: The 5625U restart hang and GLTeapot RADV frame-by-frame behavior are not proven fixed here; a restart fix can only be proven on the 5625U.
+
 ## 2026-11-19 - AMD64 stick: the FPU, user-copy and timer tests are in the image
 
 Problem: `distro/cpu/r5_fpu_test.cpp`, `r5_usercopy_test.cpp` and `r5_timer_test.cpp` (#4445) were never copied into the tree or listed in the image, although that CHANGELOG section said the user-copy test was. On the 5625U stick XSAVEC and the SMAP user copies could not be checked.
