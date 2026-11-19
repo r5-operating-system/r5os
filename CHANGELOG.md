@@ -1,5 +1,30 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - GFX9 interrupt ring (IH): barrier, carve-out read, overflow handling, and re-read counters
+
+Problem (`generated/boot-5625u-53/syslog`, 5625U): while RADV/Zink ran, `radeon_hd` logged `ih client 0 src 0 ring 0 vmid 0 0000b514 ...` about once a second. Dword 0 `0x0000b514` decodes to CP (`0x14`), EOP (`181`), ring 0 — a normal end-of-pipe interrupt that `r5_gfx9_ih_parse()` decodes correctly. That means `r5_gfx9_ih_parse()` read zero before the GPU's write was visible, and the entry had landed by the time `dprintf()` printed it.
+
+Cause:
+- `ih_writeback()` read `wptr` from the direct DRAM carve-out (`r5_gfx9_vram_cpu(sIhWbOffset)`), while `ih_handler()` read the 32-byte IV entries from `sIhRing + rptr` (BAR mapping) with no `lfence` (`rmb()`) after reading `wptr` and non-volatile reads in `r5_gfx9_ih_parse()`.
+- `ih_writeback()` masked `wptr` with `0x0003fffc` (256 KB) on a 64 KB ring (`kIhBytes = 64 * 1024`, mask `0xfffc`) and dropped `RB_OVERFLOW` (bit 0) instead of advancing `rptr` and setting `WPTR_OVERFLOW_CLEAR`.
+- Wrapped ring slots were not cleared after processing, so stale non-zero entries could mask incomplete writes on wrap-around.
+
+What changed (`distro/graphics/src/add-ons/kernel/drivers/graphics/radeon_hd/gfx9_k12.cpp`):
+- Aligned the IH walk with Linux `amdgpu_ih_process()` / `vega10_ih_get_wptr()`:
+  - `ih_get_wptr()` reads writeback, checks `RB_OVERFLOW` (bit 0), advances `rptr = (wptr + 32) & (kIhBytes - 1)` and sets `WPTR_OVERFLOW_CLEAR` (`1u << 31`) in `mmIH_RB_CNTL` on overflow, and masks with `kIhPtrMask` (`0xfffc`).
+  - Added `lfence` after reading `wptr` before reading the IV ring.
+  - `ih_ring_cpu()` reads the IV ring through `r5_gfx9_vram_cpu(sIhRingOffset)` (same carve-out path as writeback, with `sIhRing` fallback).
+  - Snapshots each 32-byte entry via `volatile uint32*` into local `iv[8]`; if `iv[0] == 0`, spins up to 16 × `spin(1)` with `lfence` and re-reads all 8 dwords, counting `sIhRereadCount` and `sIhEmptyCount`. Parses and logs exclusively from `iv[0..7]`, then clears `slot[0] = 0`.
+  - Added `sfence` in `ih_set_rptr()` before writing `mmIH_RB_RPTR`.
+- Added once-per-boot summary logging (`radeon_hd: ih walk reread ... empty ... overflow ... eop ...` once `sEopCount >= 64`, plus a one-shot `ih walk anomaly` line if any counter becomes non-zero).
+- Open-view fixes in the same handler: made `sFaultR` `volatile` with a compiler barrier before advancing it in `r5_gfx9_fault_take()`, and removed the duplicate `r5_gpu_log_error()` check that silenced `radeon_hd: ih ib1 ... ib2 ...`.
+- Open-view findings noted (not changed here): `sEopSem` is released on every EOP interrupt forever even though only `run_k1()` acquires it, and `r5_gpu_retire_wake()` / `gpu_retire_thread` wakes once per EOP count without draining/coalescing excess semaphore counts.
+- GFX9 start order, registers in `ih_on()`, PSP load, firmware blobs, ring contents, and stop-at-shutdown contract are unchanged.
+
+Tested: `scripts/build-locked.sh` (`jam_exit=0`, `mesa_exit=0`; `gfx9_k12.o` compiled cleanly). Short QEMU KVM boot (`-cpu host,+smap`, 25 s, headless, own copy of `r5-os.image`): 960 serial lines, `enable SMAP`, `radeon_hd: init_hardware`, reached `package_daemon` post-install and PS/2 input init with no panic, KDL, or `vm_page_fault`.
+
+Limits: QEMU has no AMD GPU, so the GFX9 IH walk did not run. Per `AGENTS.md`, this change needs a 5625U boot that lands the K fences (K1/K2) and runs RADV/Zink to prove zero `ih client 0 src 0` lines and inspect the `ih walk` counters. ARM64 and RISC-V 64 not built or tested.
+
 ## 2026-11-19 - Stick 53 fixes: Settings/CPU Info UI, Wi-Fi connect/wpa_supplicant, reboot path & trail, GLTeapot updates
 
 Problem: Findings from 5625U `boot-5625u-53`:

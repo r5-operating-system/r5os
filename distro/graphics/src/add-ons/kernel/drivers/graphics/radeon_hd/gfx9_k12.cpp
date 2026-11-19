@@ -52,6 +52,7 @@ static bool sMsi = false;
 static uint32 sIrq = 0;
 static sem_id sEopSem = -1;
 static uint8* sIhRing = NULL;
+static uint64 sIhRingOffset = 0;
 static volatile uint32* sIhWriteback = NULL;
 static uint64 sIhWbOffset = 0;
 static bool sIhWbReady = false;
@@ -60,6 +61,11 @@ static uint32 sMsiCount = 0;
 static uint32 sEarlyCount = 0;
 static uint32 sIhEntries = 0;
 static uint32 sIhOther = 0;
+static uint32 sIhRereadCount = 0;
+static uint32 sIhEmptyCount = 0;
+static uint32 sIhOverflowCount = 0;
+static bool sIhWalkLogged = false;
+static bool sIhAnomalyLogged = false;
 extern bool r5_gpu_log_error();
 static uint32 sEopCount = 0;
 static uint32 sLastClient = 0;
@@ -407,7 +413,7 @@ struct r5_fault_note {
 
 static r5_fault_note sFaultQ[32];
 static volatile uint32 sFaultW;
-static uint32 sFaultR;
+static volatile uint32 sFaultR;
 
 
 int
@@ -418,18 +424,25 @@ r5_gfx9_fault_take(uint32* pasid, uint32* vmid, uint64* addr)
 	if (sFaultR == sFaultW)
 		return 0;
 	asm volatile("lfence" ::: "memory");
-	*pasid = sFaultQ[sFaultR].pasid;
-	*vmid = sFaultQ[sFaultR].vmid;
-	*addr = sFaultQ[sFaultR].addr;
-	sFaultR = (sFaultR + 1u) & 31u;
+	uint32 r = sFaultR;
+	*pasid = sFaultQ[r].pasid;
+	*vmid = sFaultQ[r].vmid;
+	*addr = sFaultQ[r].addr;
+	asm volatile("" ::: "memory");
+	sFaultR = (r + 1u) & 31u;
 	return 1;
 }
+
+
+static const uint32 kIhPtrMask = (kIhBytes - 1u) & ~3u;
+static const uint32 kIhWptrOverflow = 1u << 0;
+static const uint32 kIhWptrOverflowClear = 1u << 31;
 
 
 /* The carve-out is the read. The pool pointer is the fallback until
  * map_carveout has run. No second mapping is created. */
 static uint32
-ih_writeback()
+ih_writeback_raw()
 {
 	uint32 word = 0;
 	if (sIhWbReady) {
@@ -439,13 +452,50 @@ ih_writeback()
 		else if (sIhWriteback != NULL)
 			word = *sIhWriteback;
 	}
-	return word & 0x0003fffc;
+	return word;
+}
+
+
+static uint8*
+ih_ring_cpu()
+{
+	uint8* cpu = r5_gfx9_vram_cpu(sIhRingOffset);
+	return cpu != NULL ? cpu : sIhRing;
+}
+
+
+/* Matches Linux vega10_ih_get_wptr(): read writeback, handle RB_OVERFLOW
+ * (bit 0) by advancing rptr past wptr and setting WPTR_OVERFLOW_CLEAR, and
+ * mask to the ring size. */
+static uint32
+ih_get_wptr(uint32* rptr, bool allowMmioFallback)
+{
+	uint32 raw = ih_writeback_raw();
+	if ((raw & kIhWptrOverflow) == 0) {
+		uint32 wptr = raw & kIhPtrMask;
+		if (allowMmioFallback && wptr == *rptr) {
+			raw = kread(sInfo, oss_byte(mmIH_RB_WPTR));
+			if ((raw & kIhWptrOverflow) == 0)
+				return raw & kIhPtrMask;
+		} else
+			return wptr;
+	}
+	uint32 wptr = kread(sInfo, oss_byte(mmIH_RB_WPTR)) & kIhPtrMask;
+	*rptr = (wptr + 32u) & (kIhBytes - 1u);
+	uint32 cntl = kread(sInfo, oss_byte(mmIH_RB_CNTL));
+	kwrite(sInfo, oss_byte(mmIH_RB_CNTL), cntl | kIhWptrOverflowClear);
+	/* Linux vega10_ih_get_wptr(): unset the clear bit at once, so a
+	 * later overflow is detected again. */
+	kwrite(sInfo, oss_byte(mmIH_RB_CNTL), cntl & ~kIhWptrOverflowClear);
+	sIhOverflowCount++;
+	return wptr;
 }
 
 
 static void
 ih_set_rptr(uint32 rptr)
 {
+	asm volatile("sfence" ::: "memory");
 	sIhRptr = rptr;
 	*(volatile uint32*)(sInfo->registers + oss_byte(mmIH_RB_RPTR)) = rptr;
 }
@@ -477,9 +527,7 @@ ih_handler(void* data)
 	 * writes IH_RB_RPTR, because RPTR_REARM sends the next interrupt only
 	 * after that write. Pass 1 reads the write pointer once more. */
 	for (int pass = 0; pass < 2; pass++) {
-	uint32 wptr = ih_writeback();
-	if (pass == 1 && wptr == rptr)
-		wptr = kread(sInfo, oss_byte(mmIH_RB_WPTR)) & 0x0003fffc;
+	uint32 wptr = ih_get_wptr(&rptr, pass == 1);
 	if (pass == 0 && wptr == rptr)
 		sEarlyCount++;
 	if (wptr == rptr) {
@@ -493,20 +541,48 @@ ih_handler(void* data)
 			return B_UNHANDLED_INTERRUPT;
 		return woke ? B_INVOKE_SCHEDULER : B_HANDLED_INTERRUPT;
 	}
+	/* Linux amdgpu_ih_process(): order wptr read before reading IV ring. */
+	asm volatile("lfence" ::: "memory");
+	uint8* ringBase = ih_ring_cpu();
 	found = true;
 	uint32 walked = 0;
 	while (rptr != wptr && walked < (kIhBytes / 32)) {
-		r5_gfx9_ih_entry entry = r5_gfx9_ih_parse(sIhRing + rptr);
+		volatile uint32* slot = (volatile uint32*)(ringBase + rptr);
+		uint32 iv[8];
+		for (int i = 0; i < 8; i++)
+			iv[i] = slot[i];
+		if (iv[0] == 0) {
+			/* Writeback became visible before the 32-byte IV landed.
+			 * Re-read after an lfence + short spin until complete. */
+			bool filled = false;
+			for (int retry = 0; retry < 16; retry++) {
+				spin(1);
+				asm volatile("lfence" ::: "memory");
+				if (slot[0] != 0) {
+					for (int i = 0; i < 8; i++)
+						iv[i] = slot[i];
+					filled = true;
+					break;
+				}
+			}
+			if (filled)
+				sIhRereadCount++;
+			else
+				sIhEmptyCount++;
+		}
+		r5_gfx9_ih_entry entry = r5_gfx9_ih_parse((const uint8*)iv);
+		/* Clear dword 0 after snapshotting so a wrapped slot reads as 0
+		 * until the GPU finishes writing the next IV. */
+		slot[0] = 0;
 		/* Linux soc15_ih_clientid.h: VMC is 0x12, UTCL2 is 0x1b.
 		 * Source 0 is the fault. Queue only. The retire thread logs. */
 		if ((entry.client == 0x12u || entry.client == 0x1bu)
 			&& entry.source == 0) {
-			const uint32* raw = (const uint32*)(sIhRing + rptr);
 			uint32 next = (sFaultW + 1u) & 31u;
 			if (next != sFaultR) {
-				sFaultQ[sFaultW].pasid = raw[3] & 0xffffu;
-				sFaultQ[sFaultW].vmid = (raw[0] >> 24) & 0xfu;
-				sFaultQ[sFaultW].addr = r5_gfx9_fault_address(raw[4], raw[5]);
+				sFaultQ[sFaultW].pasid = iv[3] & 0xffffu;
+				sFaultQ[sFaultW].vmid = (iv[0] >> 24) & 0xfu;
+				sFaultQ[sFaultW].addr = r5_gfx9_fault_address(iv[4], iv[5]);
 				asm volatile("sfence" ::: "memory");
 				sFaultW = next;
 			}
@@ -514,7 +590,7 @@ ih_handler(void* data)
 			woke = true;
 		} else {
 		if (sIhEntries < 4)
-			memcpy(sFirstRaw[sIhEntries], sIhRing + rptr, 32);
+			memcpy(sFirstRaw[sIhEntries], iv, 32);
 		sIhEntries++;
 		sLastClient = entry.client;
 		sLastSource = entry.source;
@@ -531,23 +607,21 @@ ih_handler(void* data)
 				|| entry.source == 185 || entry.source == 186))
 				sPrivCount++;
 			if (r5_gpu_log_error()) {
-				const uint32* raw = (const uint32*)(sIhRing + rptr);
-				uint32 vmid = (raw[0] >> 24) & 0xfu;
+				uint32 vmid = (iv[0] >> 24) & 0xfu;
 				sIhOther++;
 				dprintf("radeon_hd: ih client %lu src %lu ring %lu vmid %lu "
 					"%08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
 					(unsigned long)entry.client, (unsigned long)entry.source,
 					(unsigned long)entry.ring, (unsigned long)vmid,
-					(unsigned long)raw[0], (unsigned long)raw[1],
-					(unsigned long)raw[2], (unsigned long)raw[3],
-					(unsigned long)raw[4], (unsigned long)raw[5],
-					(unsigned long)raw[6], (unsigned long)raw[7]);
+					(unsigned long)iv[0], (unsigned long)iv[1],
+					(unsigned long)iv[2], (unsigned long)iv[3],
+					(unsigned long)iv[4], (unsigned long)iv[5],
+					(unsigned long)iv[6], (unsigned long)iv[7]);
 				/* Registers only. The dword dump runs on the retire thread,
 				 * from this snapshot, so the handler does not map a page. */
 				if (entry.client == kClientCp && sPrivPending == 0) {
 					r5_gfx9_ib_regs(&sPrivIb1, &sPrivIb2);
 					sPrivPending = 1;
-					if (r5_gpu_log_error())
 					dprintf("radeon_hd: ih ib1 %016llx sz %08lx off %08lx "
 						"ib2 %016llx sz %08lx off %08lx\n",
 						(unsigned long long)sPrivIb1.base,
@@ -565,6 +639,21 @@ ih_handler(void* data)
 		walked++;
 	}
 	ih_set_rptr(rptr);
+	}
+	if (!sIhWalkLogged && sEopCount >= 64) {
+		sIhWalkLogged = true;
+		dprintf("radeon_hd: ih walk reread %lu empty %lu overflow %lu "
+			"eop %lu\n", (unsigned long)sIhRereadCount,
+			(unsigned long)sIhEmptyCount, (unsigned long)sIhOverflowCount,
+			(unsigned long)sEopCount);
+	}
+	if (!sIhAnomalyLogged && (sIhRereadCount > 0 || sIhEmptyCount > 0
+			|| sIhOverflowCount > 0)) {
+		sIhAnomalyLogged = true;
+		dprintf("radeon_hd: ih walk anomaly reread %lu empty %lu overflow %lu "
+			"eop %lu\n", (unsigned long)sIhRereadCount,
+			(unsigned long)sIhEmptyCount, (unsigned long)sIhOverflowCount,
+			(unsigned long)sEopCount);
 	}
 	return woke ? B_INVOKE_SCHEDULER : B_HANDLED_INTERRUPT;
 }
@@ -835,6 +924,7 @@ ih_on()
 		return false;
 	memset(ring, 0, kIhBytes + 4);
 	sIhRing = ring;
+	sIhRingOffset = ringOffset;
 	sIhWriteback = (volatile uint32*)(ring + kIhBytes);
 	sIhWbOffset = ringOffset + kIhBytes;
 	sIhWbReady = true;
