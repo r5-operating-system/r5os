@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - A Wi-Fi join keeps its station while the lock is down
+
+Problem: On the 5625U a WPA3 join panicked in mtk_sta_update, called from mtk_newstate on ic_taskq. The instruction at mtk_sta_update+0x73 loads ni_chan (offset 0x2b8 of the station node). The fault address 0xfffffffe37002b8 is that field of a node pointer 0xfffffffe3700000, which is not a live object. mtk_newstate takes vap->iv_bss, drops the stack lock, and then mtk_join_prepare calls mtk_sta_update. WPA3 replaces the node while SAE is still joining, so the pointer is dead by the time the field is read. WPA2 uses the same function and has been connecting.
+
+What changed: The node is referenced before the lock is dropped and released after the stack's own state change. WPA2 and WPA3 both take that reference.
+
+Limits: Not booted on the 5625U. The SAE hold, the firmware, and the ring are unchanged. WPA3 associating, and WPA2 still connecting, are only proven on the 5625U.
+
 ## 2026-11-19 - A shared font face is locked while its character map is read
 
 Problem: On the 5625U, stick 57, app_server died with a segment violation in libfreetype tt_cmap12_char_map_binary, called from FT_Get_Char_Index, FontCacheEntry::CanCreateGlyph, GlyphLayoutEngine::_CreateGlyph, ServerFont::GetEscapements. The thread was WebPositive's app_server drawing thread. CanCreateGlyph calls FT_Get_Char_Index on the entry's face and takes no lock. _CreateGlyph calls it before the entry write lock, and GetHasGlyphs calls it with no lock either. A FreeType face is not safe on two threads. The font cache holds 128 entries (raised earlier); a larger cache does not stop two threads from walking the same character map. The debugger line about libvulkan and compilation unit version 5 is DWARF 5, which that debugger does not read.

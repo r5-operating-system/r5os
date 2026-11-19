@@ -663,6 +663,16 @@ mtk_newstate(struct ieee80211vap* vap, enum ieee80211_state state, int arg)
 	enum ieee80211_state old = vap->iv_state;
 	struct ieee80211_node* ni = vap->iv_bss;
 	int error = 0;
+	/* SPDX-SnippetBegin
+	 * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	 * SPDX-License-Identifier: MIT
+	 * The join runs after the lock is let go. A later state can free the
+	 * node (WPA3 replaces it while SAE is still joining) and the next
+	 * mtk_sta_update then reads ni_chan from a dead pointer.
+	 */
+	if (ni != NULL)
+		ieee80211_ref_node(ni);
+	/* SPDX-SnippetEnd */
 
 	/* The stack can queue a transition from INIT to a later state: a
 	 * deauthentication queued (INIT) while a join is under way, and then the
@@ -751,6 +761,14 @@ mtk_newstate(struct ieee80211vap* vap, enum ieee80211_state state, int arg)
 	 * refused here tends to stay stuck.
 	 */
 	error = mvp->newstate(vap, state, arg);
+
+	/* SPDX-SnippetBegin
+	 * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	 * SPDX-License-Identifier: MIT
+	 */
+	if (ni != NULL)
+		ieee80211_free_node(ni);
+	/* SPDX-SnippetEnd */
 
 	MTK_DEBUG(sc, "state %s settled (%d)\n",
 		ieee80211_state_name[state], error);
