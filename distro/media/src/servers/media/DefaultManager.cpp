@@ -61,6 +61,7 @@ DefaultManager::DefaultManager()
 	// SPDX-License-Identifier: MIT
 	fLock("default manager"),
 	fAudioOutGeneration(0),
+	fAudioOutChosen(false),
 	// SPDX-SnippetEnd
 	fMixerConnected(false),
 	// SPDX-SnippetBegin
@@ -216,6 +217,7 @@ DefaultManager::SaveState(NodeManager *node_manager)
 	// SPDX-License-Identifier: MIT
 	media_node_id media_node_ids[4];
 	int32 audioOutInputID;
+	bool audioOutChosen;
 	{
 		BAutolock stateLock(fLock);
 		media_node_ids[0] = fPhysicalVideoIn;
@@ -223,6 +225,7 @@ DefaultManager::SaveState(NodeManager *node_manager)
 		media_node_ids[2] = fPhysicalAudioIn;
 		media_node_ids[3] = fPhysicalAudioOut;
 		audioOutInputID = fPhysicalAudioOutInputID;
+		audioOutChosen = fAudioOutChosen;
 	}
 	// SPDX-SnippetEnd
 	for (uint32 i = 0; i < sizeof(default_types) / sizeof(default_types[0]);
@@ -231,8 +234,12 @@ DefaultManager::SaveState(NodeManager *node_manager)
 		// A fallback, or no node at all, must not replace the saved device.
 		// One boot without that device would otherwise forget it.
 		BMessage saved;
-		if (_CopySavedDefault(default_types[i], saved)
-			&& (media_node_ids[i] == -1 || _IsFallback(default_types[i]))) {
+		bool keepSaved = media_node_ids[i] == -1
+			|| _IsFallback(default_types[i]);
+		// An explicit choice replaces a stored Bluetooth preference.
+		if (audioOutChosen && default_types[i] == kMsgTypeAudioOut)
+			keepSaved = false;
+		if (_CopySavedDefault(default_types[i], saved) && keepSaved) {
 			list.AddItem(new BMessage(saved));
 			continue;
 		}
@@ -367,6 +374,7 @@ DefaultManager::Set(media_node_id node_id, const char *input_name,
 			media_node_id prevNode = -1;
 			{
 				BAutolock stateLock(fLock);
+				fAudioOutChosen = true;
 				if (fPhysicalAudioOut == node_id
 					&& fPhysicalAudioOutInputID == input_id)
 					return B_OK;
@@ -594,6 +602,7 @@ DefaultManager::_RescanThread()
 					BAutolock stateLock(fLock);
 					if (fAudioOutGeneration == audioOutGen
 						&& fPhysicalAudioOut == audioOut) {
+						fAudioOutChosen = false;
 						fPhysicalAudioOut = -1;
 						fMixerConnected = false;
 						fAudioOutGeneration++;
@@ -615,13 +624,21 @@ DefaultManager::_RescanThread()
 			_FindPhysical(&audioOut, kMsgTypeAudioOut, false,
 				B_MEDIA_RAW_AUDIO, false, &foundInputID);
 			if (audioOut != -1) {
-				BAutolock stateLock(fLock);
-				if (fAudioOutGeneration == audioOutGen
-					&& fPhysicalAudioOut == -1) {
-					fPhysicalAudioOut = audioOut;
-					fPhysicalAudioOutInputID = foundInputID;
-					fAudioOutGeneration++;
+				bool applied = false;
+				{
+					BAutolock stateLock(fLock);
+					// A user choice that landed while this search ran stays.
+					if (!fAudioOutChosen
+						&& fAudioOutGeneration == audioOutGen
+						&& fPhysicalAudioOut == -1) {
+						fPhysicalAudioOut = audioOut;
+						fPhysicalAudioOutInputID = foundInputID;
+						fAudioOutGeneration++;
+						applied = true;
+					}
 				}
+				if (applied)
+					_SetFallback(kMsgTypeAudioOut, true);
 			}
 		}
 		if (audioIn == -1) {
@@ -891,11 +908,15 @@ DefaultManager::_FindPhysical(media_node_id *id, uint32 default_type,
 				&& strcmp(info[i].name, "Bluetooth audio") == 0)
 			|| (isInput && strcmp(info[i].name,
 				"Bluetooth headset microphone") == 0));
-		if (firstReal < 0 && !chosenOnly)
+		// HDMI is also a physical output. Prefer the analog codec, which
+		// stays named "HD Audio"; a display-only controller is "HDMI".
+		if (isAudio && !isInput && strcmp(info[i].name, "HD Audio") == 0)
+			firstReal = i;
+		else if (firstReal < 0 && !chosenOnly)
 			firstReal = i;
 
 		if (msg == NULL) {
-			if (firstReal >= 0)
+			if (isAudio && !isInput && strcmp(info[i].name, "HD Audio") == 0)
 				break;
 			continue;
 		}
@@ -966,15 +987,21 @@ DefaultManager::_FindPhysical(media_node_id *id, uint32 default_type,
 		// SPDX-License-Identifier: MIT
 		// Only a "None" node stands in. It must not replace the saved device
 		// either.
-		if (msg != NULL && *id != -1)
-			_SetFallback(default_type, true);
+		if (msg != NULL && *id != -1) {
+			BAutolock stateLock(fLock);
+			if (!(fAudioOutChosen && default_type == kMsgTypeAudioOut))
+				_SetFallback(default_type, true);
+		}
 		// SPDX-SnippetEnd
 		return;
 	}
 
 	*id = info[firstReal].node.node;
 	if (msg != NULL) {
-		_SetFallback(default_type, true);
+		BAutolock stateLock(fLock);
+		if (!(fAudioOutChosen && default_type == kMsgTypeAudioOut))
+			_SetFallback(default_type, true);
+		stateLock.Unlock();
 		syslog(LOG_NOTICE, "media_server: default %s %s \"%s\" not present;"
 			" using \"%s\" until it is\n", isAudio ? "audio" : "video",
 			isInput ? "input" : "output", msgDninfo.name,
@@ -1023,6 +1050,11 @@ DefaultManager::_RestoreSaved(media_node_id* id, uint32 defaultType,
 	bool isInput, media_type type, int32* inputID)
 {
 	// A fallback goes back to the saved device once that device has a node.
+	if (defaultType == kMsgTypeAudioOut) {
+		BAutolock stateLock(fLock);
+		if (fAudioOutChosen)
+			return;
+	}
 	if (*id == -1 || !_IsFallback(defaultType))
 		return;
 

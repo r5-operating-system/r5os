@@ -827,6 +827,22 @@ L2capEndpoint::_HandleConnectionRsp(uint8 ident, const l2cap_connection_rsp& res
 		return;
 	}
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	{
+		uint16 psm = 0;
+		if (socket != NULL) {
+			psm = reinterpret_cast<sockaddr_l2cap*>(&socket->peer)->l2cap_psm;
+		}
+		if (psm == 0x0019 || response.result
+			!= l2cap_connection_rsp::RESULT_SUCCESS) {
+			dprintf("l2cap: PSM %#x connection response result %u status %u"
+				" scid %u dcid %u\n", psm, response.result, response.status,
+				response.scid, response.dcid);
+		}
+	}
+	// SPDX-SnippetEnd
 	if (response.result == l2cap_connection_rsp::RESULT_PENDING) {
 		// The connection is still pending on the remote end.
 		// We will receive another CONNECTION_RSP later.
@@ -976,6 +992,16 @@ L2capEndpoint::_HandleConfigurationRsp(uint8 ident, uint16 scid, uint16 flags,
 	}
 	// SPDX-SnippetEnd
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	if (socket != NULL
+		&& reinterpret_cast<sockaddr_l2cap*>(&socket->peer)->l2cap_psm
+			== 0x0019) {
+		dprintf("l2cap: PSM 0x19 config response result %u scid %u"
+			" flags %#x\n", result, scid, flags);
+	}
+	// SPDX-SnippetEnd
 	// TODO: Validate parameters!
 	if (result == l2cap_configuration_rsp::RESULT_PENDING) {
 		// We will receive another CONFIGURATION_RSP later.
@@ -1022,6 +1048,17 @@ L2capEndpoint::_MarkEstablished()
 
 	fState = OPEN;
 	fCommandWait.NotifyAll();
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	if (socket != NULL) {
+		uint16 psm = reinterpret_cast<sockaddr_l2cap*>(&socket->peer)->l2cap_psm;
+		if (psm == 0x0019) {
+			dprintf("l2cap: PSM 0x19 open, local cid %u remote cid %u\n",
+				fChannelID, fDestinationChannelID);
+		}
+	}
+	// SPDX-SnippetEnd
 
 	status_t error = B_OK;
 	if (gSocketModule->has_parent(socket)) {

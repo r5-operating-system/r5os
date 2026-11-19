@@ -3,13 +3,12 @@
 
 The previous file kept the name mesa_radv-25.3.6-1. An older copy of that
 same name, from 9 Nov, could be the one the image installed. The new name
-is mesa_radv-25.3.6-10, so a cached older build cannot be installed in its place.
+is mesa_radv-25.3.6-11, so a cached older build cannot be installed in its place.
 
-pack-radv.py ROOT               -9 plus the freshly built library and the current
-                                stick scripts (-10: the WSI waits for the blit
-                                fence, M13 stick)
-pack-radv.py ROOT --tools-only  -9 with its library unchanged and the current
-                                stick scripts
+pack-radv.py ROOT               -10 plus the freshly built library and the current
+                                stick scripts (-11)
+pack-radv.py ROOT --tools-only  -10 with its library unchanged and the current
+                                stick scripts (boot-next knows m13 and m13f)
 """
 import shutil
 import subprocess
@@ -46,9 +45,9 @@ def main() -> None:
     root = Path(sys.argv[1])
     tools_only = len(sys.argv) > 2 and sys.argv[2] == "--tools-only"
     out_dir = root / "distro" / "packages" / "x86_64"
-    base = "25.3.6-9"
+    base = "25.3.6-10"
     previous = out_dir / f"mesa_radv-{base}-x86_64.hpkg"
-    dest = out_dir / "mesa_radv-25.3.6-10-x86_64.hpkg"
+    dest = out_dir / "mesa_radv-25.3.6-11-x86_64.hpkg"
     stage = Path("/tmp/r5-radv-pkg")
     shutil.rmtree(stage, ignore_errors=True)
     stage.mkdir(parents=True)
@@ -71,9 +70,9 @@ def main() -> None:
         (bindir / name).chmod(0o755)
     info = stage / ".PackageInfo"
     text = info.read_text(encoding="utf-8")
-    text = text.replace(f"version\t\t\t{base}", "version\t\t\t25.3.6-10")
-    text = text.replace(f"mesa_radv = {base}", "mesa_radv = 25.3.6-10")
-    if "25.3.6-10" not in text or base in text:
+    text = text.replace(f"version\t\t\t{base}", "version\t\t\t25.3.6-11")
+    text = text.replace(f"mesa_radv = {base}", "mesa_radv = 25.3.6-11")
+    if "25.3.6-11" not in text or base in text:
         raise SystemExit("package version was not bumped")
     info.write_text(text, encoding="utf-8")
     if dest.exists():

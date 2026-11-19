@@ -1,5 +1,25 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - WPA3 join, analog audio default, AVDTP logs, mesa_radv-25.3.6-11
+
+Problem: On the 5625U (stick 60, main e0f8560010):
+1. A user join of "Skynet Guest" (SAE, key_mode 0x400) was dropped. wpa_supplicant logged "No suitable network found" on the first scans, then started SAE, and while SAE was held net_server joined the remembered WPA2 network "Skynet" (auth 3, key_mode 0x42). That join is a local DEAUTH_LEAVING. The mt7922 line "the firmware was not ready for AUTH/ASSOC: -2147483643" is B_TIMED_OUT on the join command that the deauth aborted.
+2. The owner chose an output node and media_server then logged that "Bluetooth audio" was not present and connected the mixer to the other "HD Audio" (the HDMI controller, node 2). Both controllers were named "HD Audio". An earlier choice of the analog node stayed connected and still made no sound. Linux names 103c:8a31 as ALC287_FIXUP_CS35L41_I2C_2_HP_MUTE_LEDS: the speakers are two CS35L41 amplifiers on I2C.
+3. The WH-1000XM3 opened HFP, then AVDTP logged discover and "the headset did not answer", and a later open of PSM 0x19 was "Connection refused". The syslog had no L2CAP or AVDTP signal lines, so the stop was not visible.
+4. mesa_radv-25.3.6-10 still carried a boot-next from before m13 and m13f.
+
+What changed:
+- Part A: An explicit join records the device and the network name (not the password) and net_server skips auto-join of that device for 60 seconds, or until the join fails or the user leaves. IEEE80211_IOC_HAIKU_PREFER_SSID (0x6009) asks the scan copy to put that SSID first in wpa_supplicant's 24 KB buffer, without the ENETRESET that IEEE80211_IOC_SSID does. "RSN: clearing own RSNXE" on the SAE attempt is the SME clearing its copy before set_suites builds it again; the Association Request still takes RSNXE from the WPA IE. The firmware timeout is named in the log and the ROC sequence is unchanged.
+- Part B: A chosen output is kept. SaveState writes it in place of a stored Bluetooth preference, and a fallback that was already searching cannot commit over it or mark it as a stand-in. A controller with no headphone, speaker, or line-out pin is named "HDMI"; the analog codec stays "HD Audio", and a fallback or a first choice prefers "HD Audio". The headphone pin and its EAPD stay enabled when jack sense says empty; speaker pins mute only while a jack is present. No CS35L41 driver is added. The codec logs the subsystem, and 103c:8a31 logs that the speakers need the two amplifiers.
+- Part C: PSM 0x19 logs the connection result and the config response. Each configuration option is logged, including retransmission mode 3 (ERTM). AVDTP logs every signal sent and received (signal id, transaction label, message type) and a signal that is dropped. Classic ERTM is still not implemented. BlueZ opens AVDTP on PSM 0x19 in ERTM; this stack accepts basic mode only. The configuration response is still matched on the local channel id, as in #4465.
+- Part D: mesa_radv-25.3.6-11 is 25.3.6-10 with the same libvulkan_radeon.so and the current stick scripts, so boot-next knows m13 and m13f. pin-mesa-packages.sh, check-pre-stick.py, install-mesa-packages.sh and distro/gpu/COMPAT name -11. The GFX9 contracts are unchanged. Mesa itself is unchanged, so the libdrm symbol check does not apply.
+
+Tested:
+- The mesa_radv-25.3.6-11 heap was read back: libvulkan_radeon.so matches -10, boot-next and m13-measure match distro/graphics/boot, and the package version is 25.3.6-11.
+- `scripts/build-locked.sh` exited 1 before jam: `build-lock.sh` cannot create `/home/nickr/r5os/.r5-build.lock` on this machine, and there is no generated Haiku tree or host `package` tool. `mesa_radv-25.3.6-11` was packed by rewriting the `-10` heap. No QEMU. No USB stick. `scripts/check-pre-stick.py` was not run: it reads the anyboot image through `wsl` and `bfs_shell`. A local `boot-next m13f` wrote `gpu_m13f_boot 1` and exited 0.
+
+Limits:
+- Parts A, B and C are not proven until the next stick. WPA2 with a large download is unchanged in the join and ROC path and was not retested here. The speakers stay silent until a CS35L41 driver exists; the headphone jack is the path that does not need it. If the headset asked for ERTM, the next syslog shows the mode byte and the AVDTP signal that got no answer.
 ## 2026-11-19 - Boot 59 fixes: WPA3 RSNXE, Bluetooth audio presence, mixer routing, L2CAP response routing
 
 Problem: On the 5625U (stick 59):

@@ -185,6 +185,12 @@ parse_configuration_options(net_buffer* buffer, size_t offset, uint16 length,
 		l2cap_configuration_option option;
 		option.type = parsed.type;
 		option.length = parsed.length;
+		dprintf("l2cap: config option type %u len %u hint %d\n",
+			option.type, option.length, hint ? 1 : 0);
+		if (option.type == 0x04 && parsed.length > 0) {
+			dprintf("l2cap: retransmission mode %u (0 basic, 3 ERTM);"
+				" classic ERTM is not implemented\n", parsed.value[0]);
+		}
 
 		// A known option shorter than its value is treated as unknown.
 		bool known = true;
@@ -231,6 +237,8 @@ parse_configuration_options(net_buffer* buffer, size_t offset, uint16 length,
 				// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 				// SPDX-License-Identifier: MIT
 				// Unknown option: we need to reject it.
+				dprintf("l2cap: rejecting config option type %u len %u\n",
+					parsed.type, parsed.length);
 				if (options.rejected == NULL)
 					options.rejected = gBufferModule->create(128);
 				if (options.rejected == NULL) {
