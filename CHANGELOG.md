@@ -1,5 +1,15 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - A direct window's view bitmap is drawn into the front buffer
+
+Problem: GLTeapot on Zink and RADV on the 5625U stayed on one frame while the counter climbed (751 fps, then 999 fps, two screenshots a second apart). VulkanTeapot ran, and GLTeapot on llvmpipe was smooth. The log showed "egl: opengl zink" and "app_server: compositor paused: direct window". Clearing fUpdateRequested in Window::EndUpdate() (the previous 1 fps symptom) did not change this: the swaps return. Zink's present copies the frame into a BBitmap and calls BitmapHook::SetBitmap(). It does not write the BDirectWindow front buffer, which is what llvmpipe's flush_frontbuffer does. While the window has direct access, app_server leaves that rectangle to the client, so the bitmap never reaches the buffer on the display.
+
+What changed: When a directly accessing window sets a view bitmap, the server draws that view and copies the view's screen rectangle to the front. distro/desktop/src/servers/app/ServerWindow.cpp. The compositor pause and the Zink present hook are unchanged.
+
+Limits: That the teapot moves on the 5625U is unproven here. A real BDirectWindow that writes the front buffer itself still has that rectangle drawn by the server when it also sets a view bitmap.
+
+Tested: not on hardware in this change.
+
 ## 2026-11-19 - L2CAP send timer no longer outlives its connection
 
 Problem: Power off on the 5625U panicked in thread "net timer": vm_page_fault at 0x60, L2capEndpoint::_SendTimer -> _SendQueued. The next boot's trail was only "enter reboot=0". RemoveConnection() took the HciConnection off the list and then asked L2CAP to drop its endpoints. connection_for() only accepts a connection still in that list, so Disconnected() never ran, the endpoints stayed OPEN, and the send timer used the freed connection. The log line "Couldn't find the connection to complete l2cap disconnection" is that miss.
