@@ -103,8 +103,10 @@ public:
 			}
 		}
 		PushState();
-		SetDrawingMode(B_OP_ALPHA);
-		SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_COMPOSITE);
+		// The glass fill is alpha 0. Drawing the subtitle at alpha 180 with
+		// B_OP_ALPHA stores a half-blended glyph, and the compose blends it
+		// again, so the line looks drawn twice. Opaque copy replaces pixels.
+		SetDrawingMode(B_OP_COPY);
 		font_height boldHeight;
 		be_bold_font->GetHeight(&boldHeight);
 		font_height plainHeight;
@@ -118,7 +120,11 @@ public:
 		DrawString(fName.String(), BPoint(54, titleBaseline));
 		SetFont(be_plain_font);
 		rgb_color text = ui_color(B_PANEL_TEXT_COLOR);
-		text.alpha = 180;
+		rgb_color panel = ui_color(B_PANEL_BACKGROUND_COLOR);
+		text.red = (uint8)((text.red * 2 + panel.red) / 3);
+		text.green = (uint8)((text.green * 2 + panel.green) / 3);
+		text.blue = (uint8)((text.blue * 2 + panel.blue) / 3);
+		text.alpha = 255;
 		SetHighColor(text);
 		float subBaseline = titleBaseline + boldHeight.descent
 			+ plainHeight.ascent + 4;
@@ -139,12 +145,17 @@ setup_glass_view(BView* view)
 {
 	if (view == NULL)
 		return;
-	view->SetFlags(view->Flags() | B_TRANSPARENT_BACKGROUND);
-	view->SetViewColor(B_TRANSPARENT_COLOR);
-	view->SetLowColor(blend_color(B_TRANSPARENT_COLOR,
-		ui_color(B_PANEL_TEXT_COLOR), 192));
-	view->SetDrawingMode(B_OP_ALPHA);
-	view->SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_COMPOSITE);
+	// A transparent view is not filled before Draw. B_OP_ALPHA then
+	// composites the glyphs onto the previous frame, which is the smeared
+	// "Password" and status line. A real view colour is filled with alpha 0
+	// while the view is glass, so each Draw starts clear, and copy draws
+	// the text once.
+	view->SetFlags(view->Flags() & ~B_TRANSPARENT_BACKGROUND);
+	view->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
+	view->SetLowUIColor(B_PANEL_BACKGROUND_COLOR);
+	view->SetDrawingMode(B_OP_COPY);
+	if (view->Window() != NULL)
+		BAppearanceKit::set_view_glass(view, true);
 }
 
 
@@ -301,7 +312,6 @@ set_status(BTextView* view, const char* text, rgb_color color)
 	view->SelectAll();
 	view->SetFontAndColor(&font, B_FONT_ALL, &color);
 	view->Select(0, 0);
-	view->Invalidate();
 }
 
 

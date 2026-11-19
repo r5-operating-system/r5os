@@ -1,5 +1,15 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - CPU Info and the Wi-Fi dialog draw their text once, on the glass
+
+Problem: On the 5625U, CPU Info still drew a grey bar behind every label and value. BStringView::AttachedToWindow() copies the parent's view colour after the card's AttachedToWindow() had marked the children transparent, so each label was an opaque panel rectangle on the glass. The Wi-Fi connect dialog's "WPA3 Personal" line, "Password" and "Connecting to … checking the password" looked drawn twice. Those views were B_TRANSPARENT_COLOR with B_OP_ALPHA, so app_server did not clear them and the next draw composited onto the previous glyphs. The subtitle was also stored at alpha 180 and blended again by the glass compose.
+
+What changed: CPU Info applies the glass colours in AllAttached, after the string views have copied the parent colour (distro/apps/cpuinfo/CPUInfoWindow.cpp). The Wi-Fi dialog keeps a real panel colour, marks the view glass so the fill is alpha 0, and draws with B_OP_COPY. The subtitle is an opaque dimmed colour. The status line is not invalidated a second time (distro/wifi/lib/WiFiConnectWindow.cpp).
+
+Limits: The 5625U screenshots are of the previous build. This change is what the code does; the short QEMU boot does not open these windows.
+
+Tested: not on the 5625U.
+
 ## 2026-11-19 - A WPA3 join no longer deletes its own network
 
 Problem: Joining "Skynet Guest" (WPA3-Personal) on the 5625U reached wpa_supplicant ("haiku: join ssid='Skynet Guest' auth=5 key_mode=0x400 sae=1") and net_server returned success, then the supplicant only scanned. Every scan ended with "No suitable network found" and "Short-circuit new scan request since there are no enabled networks", and the state went back to INACTIVE. No SAE commit was sent. wpa_config_set(network, "sae_pwe", "2") fails: sae_pwe is a global setting, not a network field, and the line number 0 hid the error. The join then removed the network and returned before wpa_supplicant_select_network(). The ioctl SIOCS80211 op 20 Invalid Argument lines are bsd_del_key for key index 4 and 5 at interface start (the driver has four key slots). They are not the join. WPA2 "Skynet" has no MLD address and still associates. Every "Skynet Guest" BSS in that scan is an MLD BSS; that match is only reached once a network exists.
