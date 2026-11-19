@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - CPU Info is tall enough for both cards
+
+Problem: CPU Info still opened a little short. The bottom card, Enabled features, was cut off. The wrapping lines (Extra features, Kernel) report a height of one line until they have a width, so the preferred window height was short of the wrapped text. There is no scrollbar.
+
+What changed: After the layout has given those lines their width, their height is the wrapped text, and the window is sized from that. Both cards fit.
+
+Limits: Not opened on the 5625U.
+
 ## 2026-11-19 - The headset stream configures when the channel numbers differ
 
 Problem: On the 5625U, stick 57, the WH-1000XM3 stayed connected. Hands-free reached "service level connection up" and "battery 100 %". bluetooth_audio logged "opening AVDTP" and then nothing about discover, capabilities, configuration, open, or start. The kernel logged "l2cap: unexpected configuration rsp: invalid source channel (cid=67, scid=66)". A configuration response carries the destination CID of the request, which is the remote endpoint. The check compared it with the local CID. When those two numbers differ the answer was rejected and the AVDTP channel never opened. Also "hfp: 1 commands not known" did not say which command.

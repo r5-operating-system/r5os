@@ -29,6 +29,40 @@
 static const uint32 kMsgCopyReport = 'cpcp';
 
 
+// A wrapping line reports one line of height until it has a width. After
+// the layout has given it that width, the window is sized from the real
+// height so the bottom card is not cut off.
+static void
+fit_wrapped(BView* view)
+{
+	BTextView* text = dynamic_cast<BTextView*>(view);
+	if (text != NULL) {
+		float width = text->Frame().Width();
+		float left = 0.0f;
+		float top = 0.0f;
+		float right = 0.0f;
+		float bottom = 0.0f;
+		text->GetInsets(&left, &top, &right, &bottom);
+		float textWidth = width - left - right;
+		if (textWidth > 1.0f) {
+			text->SetTextRect(BRect(0, 0, textWidth - 1.0f, 1000000.0f));
+			int32 lines = text->CountLines();
+			if (lines < 1)
+				lines = 1;
+			float height = text->TextHeight(0, lines - 1) + top + bottom;
+			float line = text->LineHeight();
+			if (height < line)
+				height = line;
+			text->SetExplicitMinSize(BSize(B_SIZE_UNSET, height));
+			text->SetExplicitPreferredSize(BSize(B_SIZE_UNSET, height));
+		}
+	}
+	int32 count = view->CountChildren();
+	for (int32 i = 0; i < count; i++)
+		fit_wrapped(view->ChildAt(i));
+}
+
+
 static void
 apply_glass_children(BView* parent)
 {
@@ -275,6 +309,8 @@ CPUInfoWindow::CPUInfoWindow()
 
 	BAppearanceKit::set_view_glass(cardsContainer, true);
 
+	Layout(true);
+	fit_wrapped(this);
 	ResizeToPreferred();
 	CenterOnScreen();
 }
