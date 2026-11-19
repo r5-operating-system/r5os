@@ -14,6 +14,12 @@
 
 #include "driver.h"
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+extern bool hda_group_has_analog_output(hda_audio_group* group);
+// SPDX-SnippetEnd
+
 #include <kernel.h>
 
 
@@ -137,7 +143,21 @@ get_description(hda_audio_group* audioGroup, multi_description* data)
 	data->interface_version = B_CURRENT_INTERFACE_VERSION;
 	data->interface_minimum = B_CURRENT_INTERFACE_VERSION;
 
-	strcpy(data->friendly_name, "HD Audio");
+	/* SPDX-SnippetBegin
+	 * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	 * SPDX-License-Identifier: MIT
+	 */
+	bool analog = hda_group_has_analog_output(audioGroup);
+	strcpy(data->friendly_name, analog ? "HD Audio" : "HDMI");
+	static int32 sNamed = 0;
+	if (sNamed < 8) {
+		sNamed++;
+		dprintf("hda: output \"%s\" subsystem %08" B_PRIx32 "\n",
+			data->friendly_name,
+			audioGroup->codec != NULL
+				? (uint32)audioGroup->codec->subsystem_id : 0);
+	}
+	/* SPDX-SnippetEnd */
 	strcpy(data->vendor_info, "Haiku");
 
 	int32 inChannels = 0;

@@ -1234,6 +1234,32 @@ hda_audio_group_switch_init(hda_audio_group* audioGroup)
 }
 
 
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * HDMI/DP on the GPU and the Realtek codec were both named "HD Audio",
+ * so a fallback took the first, which is the display.
+ */
+bool
+hda_group_has_analog_output(hda_audio_group* audioGroup)
+{
+	if (audioGroup == NULL)
+		return false;
+	for (uint32 i = 0; i < audioGroup->widget_count; i++) {
+		hda_widget& widget = audioGroup->widgets[i];
+		if (widget.type != WT_PIN_COMPLEX
+			|| !PIN_CAP_IS_OUTPUT(widget.d.pin.capabilities))
+			continue;
+		int device = CONF_DEFAULT_DEVICE(widget.d.pin.config);
+		if (device == PIN_DEV_HEAD_PHONE_OUT || device == PIN_DEV_SPEAKER
+			|| device == PIN_DEV_LINE_OUT)
+			return true;
+	}
+	return false;
+}
+/* SPDX-SnippetEnd */
+
+
 static void
 hda_audio_group_check_sense(hda_audio_group* audioGroup, bool disable)
 {
@@ -1252,11 +1278,22 @@ hda_audio_group_check_sense(hda_audio_group* audioGroup, bool disable)
 		hda_send_verbs(audioGroup->codec, &verb, &response, 1);
 		disable = response & PIN_SENSE_PRESENCE_DETECT;
 		TRACE("sensed pin widget %" B_PRIu32 ", %d\n", widget.node_id, disable);
+		/* SPDX-SnippetBegin
+		 * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		 * SPDX-License-Identifier: MIT
+		 * The headphone pin stays enabled when sense says empty. A
+		 * jack that does not report presence was left off, so the
+		 * headphones were silent. Speakers mute only while a jack
+		 * is present.
+		 */
+		dprintf("hda: headphone pin %" B_PRIu32 " sense %u; pin stays"
+			" enabled\n", widget.node_id, disable ? 1 : 0);
 
 		uint32 ctrl = hda_widget_prepare_pin_ctrl(audioGroup, &widget,
 				true);
 		verb = MAKE_VERB(audioGroup->codec->addr, widget.node_id,
-			VID_SET_PIN_WIDGET_CONTROL, disable ? ctrl : 0);
+			VID_SET_PIN_WIDGET_CONTROL, ctrl);
+		/* SPDX-SnippetEnd */
 		hda_send_verbs(audioGroup->codec, &verb, NULL, 1);
 		break;
 	}
@@ -1640,6 +1677,24 @@ hda_codec_new(hda_controller* controller, uint32 codecAddress)
 		(uint32)codec->subsystem_id,
 		response.major, response.minor, response.revision, response.stepping,
 		codec->quirks);
+	/* SPDX-SnippetBegin
+	 * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	 * SPDX-License-Identifier: MIT
+	 * Linux sound/hda/codecs/realtek/alc269.c:
+	 * SND_PCI_QUIRK(0x103c, 0x8a31, "HP ENVY x360 2-in-1 Laptop 15-ey0xxx",
+	 * ALC287_FIXUP_CS35L41_I2C_2_HP_MUTE_LEDS). The speakers are two
+	 * Cirrus CS35L41 amplifiers on I2C. No amplifier driver is included.
+	 * The headphone jack is a codec pin and does not need that driver.
+	 */
+	dprintf("hda: codec %04" B_PRIx16 ":%04" B_PRIx16 " subsystem %08"
+		B_PRIx32 "\n", response.vendor, response.device,
+		(uint32)codec->subsystem_id);
+	if (codec->subsystem_id == 0x103c8a31) {
+		dprintf("hda: 103c:8a31 speakers need two CS35L41 amplifiers"
+			" on I2C (Linux ALC287_FIXUP_CS35L41_I2C_2_HP_MUTE_LEDS);"
+			" no amplifier driver; headphones use the codec jack\n");
+	}
+	/* SPDX-SnippetEnd */
 
 	codec->unsol_response_thread = spawn_kernel_thread(
 		(status_t(*)(void*))hda_codec_switch_handler,

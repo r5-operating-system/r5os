@@ -30,6 +30,11 @@
 
 #include <errno.h>
 #include <map>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <OS.h>
+// SPDX-SnippetEnd
 #include <stdio.h>
 #include <stdlib.h>
 #include <string>
@@ -131,6 +136,15 @@ private:
 			BNetworkSettings	fSettings;
 			LooperMap			fDeviceMap;
 			BMessenger			fServices;
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			// An explicit join. Auto-join stays quiet until this fails or
+			// this long has passed, so a remembered network cannot drop SAE.
+			char				fUserJoinDevice[IF_NAMESIZE];
+			char				fUserJoinName[IEEE80211_NWID_LEN + 1];
+			bigtime_t			fUserJoinTime;
+			// SPDX-SnippetEnd
 };
 
 
@@ -171,6 +185,9 @@ NetServer::NetServer(status_t& error)
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 	debug_printf("R5 net_server: NetServer from distro\n");
+	fUserJoinDevice[0] = '\0';
+	fUserJoinName[0] = '\0';
+	fUserJoinTime = 0;
 
 // SPDX-SnippetEnd
 }
@@ -248,7 +265,28 @@ NetServer::MessageReceived(BMessage* message)
 
 		case kMsgJoinNetwork:
 		{
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			const char* joinDevice = NULL;
+			const char* joinName = NULL;
+			message->FindString("device", &joinDevice);
+			message->FindString("name", &joinName);
+			if (joinDevice != NULL && joinName != NULL && joinName[0] != '\0') {
+				strlcpy(fUserJoinDevice, joinDevice, sizeof(fUserJoinDevice));
+				strlcpy(fUserJoinName, joinName, sizeof(fUserJoinName));
+				fUserJoinTime = system_time();
+				syslog(LOG_INFO, "net_server: user join of \"%s\" on %s"
+					" holds auto join\n", fUserJoinName, fUserJoinDevice);
+			}
+			// SPDX-SnippetEnd
 			status_t status = _JoinNetwork(*message);
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			if (status != B_OK)
+				fUserJoinTime = 0;
+			// SPDX-SnippetEnd
 
 			BMessage reply(B_REPLY);
 			reply.AddInt32("status", status);
@@ -1171,6 +1209,20 @@ NetServer::_AutoJoinNetwork(const BMessage& message)
 
 	BNetworkDevice device(name);
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// A scan while SAE is held has no link, so this message arrives again
+	// for the remembered network. That join sends DEAUTH_LEAVING.
+	if (fUserJoinTime != 0
+		&& system_time() - fUserJoinTime < 60000000
+		&& strcmp(name, fUserJoinDevice) == 0) {
+		syslog(LOG_INFO, "net_server: auto join skipped; user join of \"%s\""
+			" still pending\n", fUserJoinName);
+		return B_OK;
+	}
+	// SPDX-SnippetEnd
+
 	// Choose among configured networks
 
 	uint32 cookie = 0;
@@ -1222,6 +1274,18 @@ NetServer::_JoinNetwork(const BMessage& message, const BNetworkAddress* address,
 		if (address->Family() != AF_LINK)
 			return B_BAD_VALUE;
 	}
+
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Copy this SSID first into the scan results. Does not reset the link.
+	if (name != NULL && name[0] != '\0') {
+		status_t prefer = set_80211(deviceName,
+			IEEE80211_IOC_HAIKU_PREFER_SSID, (void*)name, strlen(name));
+		syslog(LOG_INFO, "net_server: scan keeps \"%s\" first: %s\n",
+			name, strerror(prefer));
+	}
+	// SPDX-SnippetEnd
 
 	// Search for a network configuration that may override the defaults
 
@@ -1428,6 +1492,13 @@ NetServer::_LeaveNetwork(const BMessage& message)
 	int32 reason;
 	if (message.FindInt32("reason", &reason) != B_OK)
 		reason = IEEE80211_REASON_AUTH_LEAVE;
+
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	if (strcmp(deviceName, fUserJoinDevice) == 0)
+		fUserJoinTime = 0;
+	// SPDX-SnippetEnd
 
 	// We always try to send the leave request to the wpa_supplicant.
 

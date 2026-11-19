@@ -871,6 +871,8 @@ A2DPSource::_HandleSignal(const uint8* data, size_t size)
 {
 	SignalHeader header;
 	if (!ParseSignalHeader(data, size, &header)) {
+		syslog(LOG_INFO, "bluetooth_audio: AVDTP signal dropped, %zu bytes,"
+			" header %#x", size, size >= 1 ? data[0] : 0);
 		// Fragmented or broken: a command gets a General Reject (8.18).
 		if (size >= 1 && (data[0] & 3) == kMessageCommand) {
 			uint8 reply[2];
@@ -883,12 +885,19 @@ A2DPSource::_HandleSignal(const uint8* data, size_t size)
 
 	const uint8* payload = data + header.length;
 	size_t payloadSize = size - header.length;
+	syslog(LOG_INFO, "bluetooth_audio: AVDTP signal %u label %u type %u"
+		" received (%zu bytes)", header.signal, header.label,
+		header.messageType, size);
 	if (header.messageType == kMessageCommand) {
 		_HandleCommand(header.label, header.signal, payload, payloadSize);
 		return;
 	}
-	if (fPendingCommand == 0 || header.label != fPendingLabel)
+	if (fPendingCommand == 0 || header.label != fPendingLabel) {
+		syslog(LOG_INFO, "bluetooth_audio: AVDTP signal %u label %u dropped"
+			" (pending %u label %u)", header.signal, header.label,
+			fPendingCommand, fPendingLabel);
 		return;
+	}
 	// A General Reject may not name the signal.
 	if (header.messageType != kMessageGeneralReject
 		&& header.signal != fPendingCommand)
@@ -911,6 +920,8 @@ A2DPSource::_SendCommand(uint8 signal, const uint8* payload, size_t size)
 		memcpy(packet + 2, payload, size);
 	if (send(fSignal, packet, 2 + size, 0) < 0)
 		return errno;
+	syslog(LOG_INFO, "bluetooth_audio: AVDTP signal %u label %u sent"
+		" (%zu bytes)", signal, fLabel, 2 + size);
 	fPendingLabel = fLabel;
 	fPendingCommand = signal;
 	fPendingSince = system_time();

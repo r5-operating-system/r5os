@@ -101,6 +101,8 @@ private:
 			// SPDX-License-Identifier: MIT
 	mutable	BLocker				fLock;
 			uint32				fAudioOutGeneration;
+			// Set when the user picks an output. A fallback must not replace it.
+			bool				fAudioOutChosen;
 			bool		 		fMixerConnected;
 			bool				fBluetoothAudioReady;
 			media_node_id		fPhysicalVideoOut;

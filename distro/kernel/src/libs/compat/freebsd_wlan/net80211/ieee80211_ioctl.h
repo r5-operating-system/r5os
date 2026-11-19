@@ -858,6 +858,10 @@ struct ieee80211_haiku_igtk_pn {
 	uint8_t i_reserved;
 	uint64_t i_ipn;
 };
+/* The SSID a join wants copied first into wpa_supplicant's scan buffer.
+ * Setting IEEE80211_IOC_SSID resets the interface; this does not.
+ */
+#define IEEE80211_IOC_HAIKU_PREFER_SSID 0x6009
 #ifdef __cplusplus
 extern "C" {
 #endif

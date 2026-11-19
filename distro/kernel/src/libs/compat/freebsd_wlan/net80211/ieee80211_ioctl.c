@@ -236,7 +236,8 @@ struct scanreq {
 	size_t space;
 	const struct ieee80211_scan_state *ss;
 	const struct ieee80211vap *vap;
-	int matchpass;		/* 1: only wanted SSIDs, 0: only the rest */
+	int matchpass;		/* 2: preferred join SSID, 1: wanted, 0: the rest */
+	int truncated;
 };
 
 static int
@@ -281,6 +282,22 @@ scan_entry_wanted(const struct scanreq *req,
 	return 0;
 }
 
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * The SSID of the join in progress. wpa_supplicant reads scan results into
+ * 24 KB. A wildcard scan still lists the previous network first, and that
+ * network's multi-link elements fill the buffer, so the joined SSID is
+ * missing and wpa_supplicant says "No suitable network found".
+ */
+struct r5_prefer_ssid {
+	const struct ieee80211vap *vap;
+	uint8_t len;
+	uint8_t ssid[IEEE80211_NWID_LEN];
+};
+static struct r5_prefer_ssid sPreferSsid;
+/* SPDX-SnippetEnd */
+
 static size_t
 scan_space(const struct ieee80211_scan_entry *se, int *ielen)
 {
@@ -314,12 +331,29 @@ get_scan_result(void *arg, const struct ieee80211_scan_entry *se)
 	int ielen, len, nr, nxr;
 	uint8_t *cp;
 
-	if (scan_entry_wanted(req, se) != req->matchpass)
+	/* SPDX-SnippetBegin
+	 * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	 * SPDX-License-Identifier: MIT
+	 */
+	int rank = scan_entry_wanted(req, se) ? 1 : 0;
+	if (sPreferSsid.vap == req->vap && sPreferSsid.len > 0
+	    && scan_entry_ssid_is(se, sPreferSsid.ssid, sPreferSsid.len))
+		rank = 2;
+	if (rank != req->matchpass)
 		return;
+	/* SPDX-SnippetEnd */
 
 	len = scan_space(se, &ielen);
-	if (len > req->space)
+	if (len > req->space) {
+		/* SPDX-SnippetBegin
+		 * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		 * SPDX-License-Identifier: MIT
+		 */
+		if (rank == 2)
+			req->truncated = 1;
+		/* SPDX-SnippetEnd */
 		return;
+	}
 
 	sr = req->sr;
 	KASSERT(len <= 65535 && ielen <= 65535,
@@ -387,6 +421,16 @@ ieee80211_ioctl_getscanresults(struct ieee80211vap *vap,
 		req.sr = p;
 		req.ss = vap->iv_ic->ic_scan;
 		req.vap = vap;
+		req.truncated = 0;
+		/* SPDX-SnippetBegin
+		 * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		 * SPDX-License-Identifier: MIT
+		 */
+		req.matchpass = 2;
+		ieee80211_scan_iterate(vap, get_scan_result, &req);
+		if (req.truncated)
+			net80211_printf("wlan: preferred SSID did not fit in the scan results\n");
+		/* SPDX-SnippetEnd */
 		req.matchpass = 1;
 		ieee80211_scan_iterate(vap, get_scan_result, &req);
 		req.matchpass = 0;
@@ -3013,6 +3057,25 @@ ieee80211_ioctl_set80211(struct ieee80211vap *vap, u_long cmd, struct ieee80211r
 		return EPERM;
 	/* SPDX-SnippetEnd */
 	switch (ireq->i_type) {
+	/* SPDX-SnippetBegin
+	 * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	 * SPDX-License-Identifier: MIT
+	 */
+	case IEEE80211_IOC_HAIKU_PREFER_SSID:
+		if (ireq->i_len > IEEE80211_NWID_LEN)
+			return EINVAL;
+		memset(sPreferSsid.ssid, 0, sizeof(sPreferSsid.ssid));
+		sPreferSsid.len = 0;
+		sPreferSsid.vap = NULL;
+		if (ireq->i_len > 0) {
+			error = copyin(ireq->i_data, sPreferSsid.ssid, ireq->i_len);
+			if (error)
+				break;
+			sPreferSsid.len = ireq->i_len;
+			sPreferSsid.vap = vap;
+		}
+		break;
+	/* SPDX-SnippetEnd */
 	case IEEE80211_IOC_SSID:
 		if (ireq->i_val != 0 ||
 		    ireq->i_len > IEEE80211_NWID_LEN)

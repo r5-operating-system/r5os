@@ -24,6 +24,7 @@
 #include <machine/bus.h>
 
 #include <driver_settings.h>
+#include <SupportDefs.h>
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
@@ -750,8 +751,16 @@ mtk_newstate(struct ieee80211vap* vap, enum ieee80211_state state, int arg)
 	}
 
 	if (error != 0) {
-		device_printf(sc->sc_dev, "the firmware was not ready for %s: %d\n",
-			ieee80211_state_name[state], error);
+		/* SPDX-SnippetBegin
+		 * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		 * SPDX-License-Identifier: MIT
+		 * B_TIMED_OUT is the in-flight MCU wait after a local deauth
+		 * aborted AUTH or ASSOC. It is not a separate firmware fault.
+		 */
+		device_printf(sc->sc_dev, "the firmware was not ready for %s: %d%s\n",
+			ieee80211_state_name[state], error,
+			error == B_TIMED_OUT ? " (timed out)" : "");
+		/* SPDX-SnippetEnd */
 	}
 
 	IEEE80211_LOCK(ic);
