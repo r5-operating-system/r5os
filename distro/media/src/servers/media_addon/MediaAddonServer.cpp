@@ -570,6 +570,7 @@ MediaAddonServer::_ScanAddOnFlavors(BMediaAddOn* addon)
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
 	bool purged = false;
+	bool allocFailed = false;
 	// SPDX-SnippetEnd
 	// during the first update (i == 0), the server removes old dormant_flavor_infos
 	for (int i = 0; i < newFlavorCount; i++) {
@@ -597,8 +598,10 @@ MediaAddonServer::_ScanAddOnFlavors(BMediaAddOn* addon)
 			+ sizeof(server_register_dormant_node_command);
 		server_register_dormant_node_command* message
 			= (server_register_dormant_node_command*)malloc(messageSize);
-		if (message == NULL)
+		if (message == NULL) {
+			allocFailed = true;
 			break;
+		}
 
 		// The server should remove previously registered "dormant_flavor_info"s
 		// during the first update, but after  the first iteration, we don't
@@ -623,7 +626,7 @@ MediaAddonServer::_ScanAddOnFlavors(BMediaAddOn* addon)
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
-	if (!purged) {
+	if (!purged && !allocFailed && newFlavorCount <= 0) {
 		server_register_dormant_node_command cmd = {};
 		cmd.purge_id = addonID;
 		cmd.flattened_size = 0;

@@ -2,14 +2,59 @@
 
 ## 2026-11-19 - Media server and media_addon_server robustness fixes
 
+Problem: code review of `media_server` and `media_addon_server` found synchronization races in `DefaultManager` between `_RescanThread()` and `Set()`/`Get()`/`SaveState()`, missing port-message size/count validation and invalid cross-team `delete_area()` calls in `media_server.cpp`, `NotificationManager` holding `fLocker` across blocking `BMessenger::SendMessage()`, unpurged dormant flavors when an add-on rescans to 0 flavors, `ReleaseNodeAll()` skipped on error in `_DestroyInstantiatedFlavors()`, and `MediaFilePlayer::PlayFunction()` leaving trailing EOF buffer bytes unpadded / `fFinished` non-atomic / `fPlayTrack` unreleased.
+
 What changed:
 - `distro/media/src/servers/media/DefaultManager.h` & `DefaultManager.cpp`: added `fLock` and `fAudioOutGeneration` to synchronize `_RescanThread()`, `Set()`, `Get()`, and `SaveState()`, snapshotting state before `_ConnectMixerToOutput()` IPC; replaced `strcpy` on `fPhysicalAudioOutInputName` with `strlcpy(..., B_MEDIA_NAME_LENGTH)`; ensured `SaveState()` always calls `ReleaseNodeReference()` on cloned nodes and frees `list` items on early error; waited for `fRescanThread` and freed `fMsgList` in `~DefaultManager()`.
-- `distro/media/src/servers/media/media_server.cpp`: validated message sizes in `_HandleMessage()`, `flattened_size` in `SERVER_REGISTER_DORMANT_NODE`, `count` and cloned area sizes in `SERVER_PUBLISH_INPUTS`/`OUTPUTS`, and `max_count > 0` with `write_port_etc(..., B_RELATIVE_TIMEOUT, 100000)` in `SERVER_GET_DORMANT_NODES`; initialized `reply` fields in `SERVER_GET_MEDIA_FILE_TYPES`; removed invalid `delete_area(reply.area)` after `_kern_transfer_area()`; assigned `err = be_roster->Launch(&ref)` in `_LaunchAddOnServer()`; continued `_ControlThread()` on `B_INTERRUPTED`.
+- `distro/media/src/servers/media/media_server.cpp`: validated message sizes in `_HandleMessage()`, `flattened_size` in `SERVER_REGISTER_DORMANT_NODE`, `count` and cloned area sizes in `SERVER_PUBLISH_INPUTS`/`OUTPUTS`, and `max_count` (`< 0` -> `B_BAD_VALUE`, `== 0` -> `B_OK` with count 0, keeping blocking `write_port` for the dormant-node list) in `SERVER_GET_DORMANT_NODES`; initialized `reply` fields in `SERVER_GET_MEDIA_FILE_TYPES`; removed invalid `delete_area(reply.area)` after `_kern_transfer_area()`; assigned `err = be_roster->Launch(&ref)` in `_LaunchAddOnServer()`; continued `_ControlThread()` on `B_INTERRUPTED`.
 - `distro/media/src/servers/media/NotificationManager.cpp`: copied matching `BMessenger` targets under `fLocker` before sending notifications with `TIMEOUT`, and checked `FindMessenger`/`FindInt32` return values.
-- `distro/media/src/servers/media_addon/MediaAddonServer.cpp`: validated message sizes in `_HandleMessage()`; continued `_ControlThread()` on `B_INTERRUPTED`; always sent a purge command in `_ScanAddOnFlavors()` when `newFlavorCount == 0` or all `GetFlavorAt()` calls fail; avoided skipping `ReleaseNodeAll(node)` in `_DestroyInstantiatedFlavors()`; replaced `strcpy` with `strlcpy(..., B_MEDIA_NAME_LENGTH)`.
-- `distro/media/src/servers/media_addon/MediaFilePlayer.h` & `MediaFilePlayer.cpp`: zero-filled trailing buffer bytes on short read/EOF in `PlayFunction()`, made `fFinished` atomic via `atomic_set`/`atomic_get`, and released `fPlayTrack` in `~MediaFilePlayer()`.
+- `distro/media/src/servers/media_addon/MediaAddonServer.cpp`: validated message sizes in `_HandleMessage()`; continued `_ControlThread()` on `B_INTERRUPTED`; purged dormant nodes in `_ScanAddOnFlavors()` only when `!purged && !allocFailed && newFlavorCount <= 0`; avoided skipping `ReleaseNodeAll(node)` in `_DestroyInstantiatedFlavors()`; replaced `strcpy` with `strlcpy(..., B_MEDIA_NAME_LENGTH)`.
+- `distro/media/src/servers/media_addon/MediaFilePlayer.h` & `MediaFilePlayer.cpp`: padded trailing buffer bytes on short read/EOF in `PlayFunction()` (`0x80` for `B_AUDIO_UCHAR`, `0` otherwise), made `fFinished` atomic via `atomic_set`/`atomic_get`, and released `fPlayTrack` in `~MediaFilePlayer()`.
 
-Limits: not built or booted in this worktree.
+Limits: compile-tested via `scripts/build-locked.sh` (`jam_exit=0`); runtime QEMU/hardware audio playback and hot-unplug behavior were not booted or exercised here.
+
+Tested: `scripts/build-locked.sh` in WSL after merging `origin/main` (`jam_exit=0`).
+
+## 2026-11-19 - AMD64 review: dispatch races, kernel NT guard, shutdown trail, Information GPU state
+
+Problem (review of #4435..#4448 and `boot-5625u-52` stick logs):
+- `memcpy.cpp`, `memset.cpp`, `strlen.c`, `memcmp.c`, `strcmp.c`, `memchr.c`, `strchrnul.c`, and `r5_span_blend()` in `r5_span_avx.h` had non-atomic one-time dispatch initialization races on multi-threaded first use.
+- `memcpy.cpp` and `memset.cpp` are also built into the kernel, where `_mm_stream_si128` (`memcpy_nt`/`memset_nt`) could run on uncacheable memory for >= 3/4 LLC transfers.
+- `distro/settings/InformationModule.cpp` always displayed `"Drawn by the processor (software)"` instead of checking GPU availability.
+- The first restart on the 5625U stick hung (with CMOS corruption) after `syslog` ended before shutdown; no clear root cause was found in `#4443`/`#4445` by inspection.
+- GLTeapot on RADV showed frame by frame (300 fps reported, llvmpipe smooth at 700 fps; RADV was smooth before this round): **not found** in `#4435..#4448`. Ruled out by inspection and `boot-5625u-52` logs: GTT `memcpy` from uncached memory (`gfx9_wc_gtt` is off, so GTT is cached, and both RADV and llvmpipe copy rows to `BDirectWindow`), `Compositor.cpp` / `Painter.cpp` / `ColorConversion.cpp` (`syslog` shows `app_server: compositor paused: direct window`), MWAIT IPI skip / `cpu_idle` reschedule / APIC one-shot / `XSAVEC` (`r5_idle_pingpong`, `r5_timer_test`, `r5_fpu_test` all passed, and multi-threaded llvmpipe is smooth), `pthread_mutex`/`pthread_rwlock`/`malloc` (no x86-64 stall found, shared with llvmpipe), and 2 MB large pages (`2MB pages: off`).
+
+What changed:
+- `distro/kernel/src/system/libroot/posix/string/arch/x86_64/memcpy.cpp` & `memset.cpp`: compute dispatch values into locals, publish with `__atomic_store_n`, and set `sMemcpyChosen`/`sMemsetChosen` last with `__ATOMIC_RELEASE` (no spinning/waiting, safe in signal handlers and interrupts); guarded `memcpy_nt`/`memset_nt` out under `#ifndef _KERNEL_MODE`.
+- `distro/kernel/src/system/kernel/arch/x86/timers/x86_apic.cpp`: used `__uint128_t` in the APIC one-shot count calculation to prevent `uint64` overflow on large timeouts before clamping to `UINT32_MAX`.
+- `distro/kernel/src/system/libroot/posix/musl/string/{strlen,memchr,strchrnul}.c`, `posix/string/{memcmp,strcmp}.c`, `distro/app_server/r5_span_avx.h`: atomic load/store on the function pointer / `useAvx` flag.
+- `distro/kernel/src/system/kernel/shutdown.cpp` & `arch/x86/arch_cpu.cpp`: added minimal `dprintf` trail across `system_shutdown` and `arch_cpu_shutdown` steps (GFX9 stop contract untouched).
+- `distro/settings/InformationModule.cpp` & `Jamfile`: added `graphics_detail()` querying `/dev/gpu/radeon_hd/0` (`R5_GPU_GET_INFO`, `R5_GPU_CAP_AVAILABLE` and not `R5_GPU_CAP_LOST`).
+- `generated/AMD64-REVIEW.md`: full review report.
+
+Limits: The 5625U restart hang and GLTeapot RADV frame-by-frame behavior are not proven fixed here; a restart fix can only be proven on the 5625U.
+
+## 2026-11-19 - Input Server: thread safety, device retry notifications, and mouse/touchpad fixes
+
+What changed:
+- `distro/rest/src/servers/input/InputServer.cpp`:
+  - `SetNextMethod(bool)`: use `BAutolock` on `gInputMethodListLocker` so `B_BAD_INDEX` does not leak the lock.
+  - Synchronized `_AcquireInput()`, `_ReleaseInput()`, and `_DispatchEvent()` with `sEventStateLocker`; reset `fAppServerPort = -1` and `fAppServerTeam = -1` in `_ReleaseInput()`, clean up `fCursorSem` on `clone_area()` failure, and call `_ReleaseInput()` before re-acquiring.
+  - Synchronized `fActiveMethod` in `_MethodizeEvents()` / `_UpdateMouseAndKeys()` via `gInputMethodListLocker`, and synchronized `fFrame`, `fMousePos`, and `fKeyInfo` between `MessageReceived()` and `_EventLoop()` via `sInputStateLocker`.
+  - `IS_RETRY_UNSTARTED_DEVICES`: call `_DeviceStarted(*item)` and post `IS_NOTIFY_DEVICE` (`started = true`) to `fAddOnManager` when a retried device starts.
+  - `HandleGetSetMouseMap()`: validate `size >= (ssize_t)sizeof(mouse_map)` before dereferencing `map`.
+  - `_EventLoop()`: delete queued `events` items before `continue` on `Unflatten()` failure.
+  - `_StartEventLoop()`, `QuitRequested()`, `~InputServer()`: track `sEventLoopThread` and `wait_for_thread()` before `_ReleaseInput()`; free `fChars` in `~InputServer()`.
+  - `_UpdateMouseAndKeys()`: decrement `index` after `events.RemoveItemAt(index)`.
+- `distro/rest/src/add-ons/input_server/devices/mouse/movement_maker.h` + `movement_maker.cpp`:
+  - Added `MovementMaker::MovementMaker()` and initialized all fields in both `MovementMaker` and `TouchpadMovement`.
+  - Guarded `MovementMaker::SetSpecs()` against non-positive `fAreaWidth`/`fAreaHeight` and clamped `fSpeed` to at least `1` (within `int8`) to prevent divide-by-zero.
+- `distro/rest/src/add-ons/input_server/devices/mouse/MouseInputDevice.cpp`:
+  - `_UpdateSettings()`: copy `accel` into `fSettings.accel` before `MS_SET_ACCEL` `ioctl`.
+  - `Start()` / `Stop()`: fail early if `open()` returns `< 0`, guard `close(fDevice)` with `fDevice >= 0`, and reset `fThread = -1` after `wait_for_thread()`.
+  - `_ControlThread()`: reset `nextTransferTime` after `ioctl` returns from an idle gap to avoid a catch-up burst.
+
+Limits: not built or booted yet.
 
 ## 2026-11-19 - AMD64 stick: the FPU, user-copy and timer tests are in the image
 

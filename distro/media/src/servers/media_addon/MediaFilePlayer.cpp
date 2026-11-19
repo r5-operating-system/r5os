@@ -243,8 +243,11 @@ MediaFilePlayer::PlayFunction(void* cookie, void* buffer,
 		* format.channel_count;
 	size_t bytesRead = (status == B_OK && frames > 0 && frameSize > 0)
 		? (size_t)frames * frameSize : 0;
-	if (bytesRead < size)
-		memset((uint8*)buffer + bytesRead, 0, size - bytesRead);
+	if (bytesRead < size) {
+		uint8 silence = (format.format == media_raw_audio_format::B_AUDIO_UCHAR)
+			? 0x80 : 0;
+		memset((uint8*)buffer + bytesRead, silence, size - bytesRead);
+	}
 
 	if (status != B_OK || frames <= 0) {
 		player->fSoundPlayer->SetHasData(false);

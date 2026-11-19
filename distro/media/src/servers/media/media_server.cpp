@@ -721,10 +721,16 @@ ServerApp::_HandleMessage(int32 code, const void* data, size_t size)
 				break;
 
 			server_get_dormant_nodes_reply reply;
-			if (request->max_count <= 0) {
+			if (request->max_count < 0) {
 				reply.count = 0;
 				reply.result = B_BAD_VALUE;
 				request->SendReply(reply.result, &reply, sizeof(reply));
+				break;
+			}
+			if (request->max_count == 0) {
+				reply.count = 0;
+				reply.result = B_OK;
+				request->SendReply(B_OK, &reply, sizeof(reply));
 				break;
 			}
 			reply.count = request->max_count;
@@ -746,9 +752,8 @@ ServerApp::_HandleMessage(int32 code, const void* data, size_t size)
 
 			request->SendReply(reply.result, &reply, sizeof(reply));
 			if (reply.count > 0) {
-				write_port_etc(request->reply_port, 0, infos,
-					reply.count * sizeof(dormant_node_info),
-					B_RELATIVE_TIMEOUT, 100000);
+				write_port(request->reply_port, 0, infos,
+					reply.count * sizeof(dormant_node_info));
 			}
 			delete[] infos;
 			// SPDX-SnippetEnd

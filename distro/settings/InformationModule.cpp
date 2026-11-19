@@ -36,12 +36,15 @@
 #include <VolumeRoster.h>
 #include <Window.h>
 
+#include <fcntl.h>
 #include <new>
 #include <stdio.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <time.h>
 #include <unistd.h>
 
+#include <r5_gpu.h>
 #include <system/r5_os_version.h>
 
 
@@ -337,6 +340,26 @@ graphics_name()
 		|| device.name[0] == '\0')
 		return BString("Unknown");
 	return BString(device.name);
+}
+
+
+static const char*
+graphics_detail()
+{
+	int fd = open("/dev/gpu/radeon_hd/0", O_RDWR);
+	if (fd < 0)
+		return "Drawn by the processor (software)";
+	r5_gpu_info info;
+	memset(&info, 0, sizeof(info));
+	info.size = sizeof(info);
+	info.version = 1;
+	bool ok = ioctl(fd, R5_GPU_GET_INFO, &info, sizeof(info)) == 0;
+	close(fd);
+	if (ok && (info.capabilities & R5_GPU_CAP_AVAILABLE) != 0
+		&& (info.capabilities & R5_GPU_CAP_LOST) == 0) {
+		return "Drawn by the GPU (hardware)";
+	}
+	return "Drawn by the processor (software)";
 }
 
 
@@ -1168,7 +1191,7 @@ InformationView::InformationView(SettingsContext* context)
 		storageBar);
 
 	fGraphics->SetLines(graphics_name().String(),
-		"Drawn by the processor (software)", -1.0f);
+		graphics_detail(), -1.0f);
 	fDisplay->SetLines(display_value().String(), display_detail().String(),
 		-1.0f);
 	fRunningValue = running_value();
@@ -1417,7 +1440,7 @@ InformationView::_CopyText() const
 	text << format_bytes(capacity > stored ? capacity - stored : 0);
 	text << " free\n";
 	text << "Graphics: " << graphics_name() << "\n";
-	text << "Graphics detail: Drawn by the processor (software)\n";
+	text << "Graphics detail: " << graphics_detail() << "\n";
 	text << "Display: " << display_value() << "\n";
 	text << "Display detail: " << display_detail() << "\n";
 	text << "Running for: " << fRunningValue << "\n";

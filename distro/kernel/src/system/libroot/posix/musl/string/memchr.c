@@ -84,9 +84,7 @@ memchr_avx2(const unsigned char *s, int c, size_t n)
 }
 
 
-static const unsigned char *(*sMemchrLong)(const unsigned char *, int, size_t)
-	= memchr_sse;
-static int sMemchrChosen;
+static const unsigned char *(*sMemchrLong)(const unsigned char *, int, size_t);
 
 
 void *
@@ -96,12 +94,14 @@ memchr(const void *src, int c, size_t n)
 	c = (unsigned char)c;
 	if (n < R5_STR_INLINE)
 		return (void *)memchr_sse(s, c, n);
-	if (__atomic_load_n(&sMemchrChosen, __ATOMIC_ACQUIRE) == 0) {
-		if ((r5_x86_cpu_flags() & R5_CPU_AVX2) != 0)
-			sMemchrLong = memchr_avx2;
-		__atomic_store_n(&sMemchrChosen, 1, __ATOMIC_RELEASE);
+	const unsigned char *(*fn)(const unsigned char *, int, size_t)
+		= __atomic_load_n(&sMemchrLong, __ATOMIC_ACQUIRE);
+	if (fn == NULL) {
+		fn = (r5_x86_cpu_flags() & R5_CPU_AVX2) != 0
+			? memchr_avx2 : memchr_sse;
+		__atomic_store_n(&sMemchrLong, fn, __ATOMIC_RELEASE);
 	}
-	return (void *)sMemchrLong(s, c, n);
+	return (void *)fn(s, c, n);
 }
 
 /* SPDX-SnippetEnd */

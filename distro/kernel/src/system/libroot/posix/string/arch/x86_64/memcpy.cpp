@@ -117,6 +117,7 @@ struct SSEGenerator {
 constexpr static GenerateTable<SSEGenerator, 4> table_sse;
 
 
+#ifndef _KERNEL_MODE
 static inline void
 memcpy_nt(uint8_t* destination, const uint8_t* source, size_t length)
 {
@@ -152,6 +153,7 @@ memcpy_nt(uint8_t* destination, const uint8_t* source, size_t length)
 	while (length--)
 		*destination++ = *source++;
 }
+#endif
 
 
 static inline void
@@ -185,19 +187,7 @@ using MemcpyBulk = void (*)(uint8_t*, const uint8_t*, size_t);
 static MemcpyBulk sMemcpyBulk = memcpy_sse;
 static size_t sMemcpyStreaming;
 static size_t sMemcpyRepFrom = 2048;
-
-
-static void
-memcpy_choose_bulk(void)
-{
-	uint32_t flags = r5_x86_cpu_flags();
-	sMemcpyStreaming = (size_t)r5_x86_cpu_llc() / 4 * 3;
-	if ((flags & R5_CPU_ERMS) != 0) {
-		sMemcpyBulk = memcpy_repmovs;
-		if ((flags & R5_CPU_FSRM) != 0)
-			sMemcpyRepFrom = 128;
-	}
-}
+static int sMemcpyChosen;
 
 
 extern "C" void*
@@ -213,20 +203,34 @@ memcpy(void* destination, const void* source, size_t length)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-	static int chosen;
-	if (__atomic_load_n(&chosen, __ATOMIC_ACQUIRE) == 0) {
-		memcpy_choose_bulk();
-		__atomic_store_n(&chosen, 1, __ATOMIC_RELEASE);
+	MemcpyBulk bulk;
+	size_t streaming;
+	size_t repFrom;
+	if (__atomic_load_n(&sMemcpyChosen, __ATOMIC_ACQUIRE) == 0) {
+		uint32_t flags = r5_x86_cpu_flags();
+		streaming = (size_t)r5_x86_cpu_llc() / 4 * 3;
+		bulk = (flags & R5_CPU_ERMS) != 0 ? memcpy_repmovs : memcpy_sse;
+		repFrom = ((flags & R5_CPU_ERMS) != 0 && (flags & R5_CPU_FSRM) != 0)
+			? 128 : 2048;
+		__atomic_store_n(&sMemcpyStreaming, streaming, __ATOMIC_RELAXED);
+		__atomic_store_n(&sMemcpyRepFrom, repFrom, __ATOMIC_RELAXED);
+		__atomic_store_n(&sMemcpyBulk, bulk, __ATOMIC_RELAXED);
+		__atomic_store_n(&sMemcpyChosen, 1, __ATOMIC_RELEASE);
+	} else {
+		streaming = __atomic_load_n(&sMemcpyStreaming, __ATOMIC_RELAXED);
+		repFrom = __atomic_load_n(&sMemcpyRepFrom, __ATOMIC_RELAXED);
+		bulk = __atomic_load_n(&sMemcpyBulk, __ATOMIC_RELAXED);
 	}
 
-	if (length >= sMemcpyStreaming) {
+#ifndef _KERNEL_MODE
+	if (length >= streaming) {
 		memcpy_nt(to, from, length);
 		return destination;
 	}
+#endif
 
 	// FSRM makes a short rep movsb fast. Without it the old cut stays.
-	// Both cuts were stored by memcpy_choose_bulk.
-	if (sMemcpyBulk != memcpy_repmovs || length < sMemcpyRepFrom) {
+	if (bulk != memcpy_repmovs || length < repFrom) {
 		memcpy_sse(to, from, length);
 		return destination;
 	}
@@ -252,6 +256,6 @@ memcpy(void* destination, const void* source, size_t length)
 		return destination;
 	}
 
-	sMemcpyBulk(to, from, length);
+	bulk(to, from, length);
 	return destination;
 }
