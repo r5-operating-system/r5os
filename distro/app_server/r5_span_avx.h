@@ -81,9 +81,12 @@ static void
 r5_span_blend(uint32_t* bits, uint64_t pixels)
 {
 	static int useAvx = -1;
-	if (useAvx < 0)
-		useAvx = (r5_x86_cpu_flags() & R5_CPU_AVX2) != 0 ? 1 : 0;
-	if (useAvx) {
+	int use = __atomic_load_n(&useAvx, __ATOMIC_RELAXED);
+	if (use < 0) {
+		use = (r5_x86_cpu_flags() & R5_CPU_AVX2) != 0 ? 1 : 0;
+		__atomic_store_n(&useAvx, use, __ATOMIC_RELAXED);
+	}
+	if (use) {
 		r5_span_blend_avx(bits, pixels);
 		return;
 	}

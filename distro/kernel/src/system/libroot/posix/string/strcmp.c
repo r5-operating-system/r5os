@@ -137,8 +137,7 @@ strcmp_avx2(const char *a, const char *b)
 }
 
 
-static int (*sStrcmpLong)(const char *, const char *) = strcmp_sse;
-static int sStrcmpChosen;
+static int (*sStrcmpLong)(const char *, const char *);
 
 
 int
@@ -167,12 +166,14 @@ strcmp(char const *a, char const *b)
 		b += 16;
 		seen += 16;
 	}
-	if (__atomic_load_n(&sStrcmpChosen, __ATOMIC_ACQUIRE) == 0) {
-		if ((r5_x86_cpu_flags() & R5_CPU_AVX2) != 0)
-			sStrcmpLong = strcmp_avx2;
-		__atomic_store_n(&sStrcmpChosen, 1, __ATOMIC_RELEASE);
+	int (*fn)(const char *, const char *)
+		= __atomic_load_n(&sStrcmpLong, __ATOMIC_ACQUIRE);
+	if (fn == NULL) {
+		fn = (r5_x86_cpu_flags() & R5_CPU_AVX2) != 0
+			? strcmp_avx2 : strcmp_sse;
+		__atomic_store_n(&sStrcmpLong, fn, __ATOMIC_RELEASE);
 	}
-	return sStrcmpLong(a, b);
+	return fn(a, b);
 }
 
 /* SPDX-SnippetEnd */

@@ -133,9 +133,7 @@ memcmp_avx2(const unsigned char *a, const unsigned char *b, size_t count)
 }
 
 
-static int (*sMemcmpLong)(const unsigned char *, const unsigned char *, size_t)
-	= memcmp_sse;
-static int sMemcmpChosen;
+static int (*sMemcmpLong)(const unsigned char *, const unsigned char *, size_t);
 
 
 int
@@ -145,12 +143,14 @@ memcmp(const void *_a, const void *_b, size_t count)
 	const unsigned char *b = _b;
 	if (count < R5_STR_INLINE)
 		return memcmp_sse(a, b, count);
-	if (__atomic_load_n(&sMemcmpChosen, __ATOMIC_ACQUIRE) == 0) {
-		if ((r5_x86_cpu_flags() & R5_CPU_AVX2) != 0)
-			sMemcmpLong = memcmp_avx2;
-		__atomic_store_n(&sMemcmpChosen, 1, __ATOMIC_RELEASE);
+	int (*fn)(const unsigned char *, const unsigned char *, size_t)
+		= __atomic_load_n(&sMemcmpLong, __ATOMIC_ACQUIRE);
+	if (fn == NULL) {
+		fn = (r5_x86_cpu_flags() & R5_CPU_AVX2) != 0
+			? memcmp_avx2 : memcmp_sse;
+		__atomic_store_n(&sMemcmpLong, fn, __ATOMIC_RELEASE);
 	}
-	return sMemcmpLong(a, b, count);
+	return fn(a, b, count);
 }
 
 /* SPDX-SnippetEnd */
