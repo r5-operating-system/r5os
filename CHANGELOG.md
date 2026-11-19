@@ -1,5 +1,57 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - CPU Info and the Wi-Fi dialog draw their text once, on the glass
+
+Problem: On the 5625U, CPU Info still drew a grey bar behind every label and value. BStringView::AttachedToWindow() copies the parent's view colour after the card's AttachedToWindow() had marked the children transparent, so each label was an opaque panel rectangle on the glass. The Wi-Fi connect dialog's "WPA3 Personal" line, "Password" and "Connecting to … checking the password" looked drawn twice. Those views were B_TRANSPARENT_COLOR with B_OP_ALPHA, so app_server did not clear them and the next draw composited onto the previous glyphs. The subtitle was also stored at alpha 180 and blended again by the glass compose.
+
+What changed: CPU Info applies the glass colours in AllAttached, after the string views have copied the parent colour (distro/apps/cpuinfo/CPUInfoWindow.cpp). The Wi-Fi dialog keeps a real panel colour, marks the view glass so the fill is alpha 0, and draws with B_OP_COPY. The subtitle is an opaque dimmed colour. The status line is not invalidated a second time (distro/wifi/lib/WiFiConnectWindow.cpp).
+
+Limits: The 5625U screenshots are of the previous build. This change is what the code does; the short QEMU boot does not open these windows.
+
+Tested: not on the 5625U. One jam (`scripts/build-locked.sh`) and one short QEMU KVM boot of a private copy of `r5-os.image` (`q35`, `-display none`, not `scripts/run-qemu-r5.sh`) reached package activation, vesa and PS/2 with no panic. That boot does not open these windows.
+
+## 2026-11-19 - A WPA3 join no longer deletes its own network
+
+Problem: Joining "Skynet Guest" (WPA3-Personal) on the 5625U reached wpa_supplicant ("haiku: join ssid='Skynet Guest' auth=5 key_mode=0x400 sae=1") and net_server returned success, then the supplicant only scanned. Every scan ended with "No suitable network found" and "Short-circuit new scan request since there are no enabled networks", and the state went back to INACTIVE. No SAE commit was sent. wpa_config_set(network, "sae_pwe", "2") fails: sae_pwe is a global setting, not a network field, and the line number 0 hid the error. The join then removed the network and returned before wpa_supplicant_select_network(). The ioctl SIOCS80211 op 20 Invalid Argument lines are bsd_del_key for key index 4 and 5 at interface start (the driver has four key slots). They are not the join. WPA2 "Skynet" has no MLD address and still associates. Every "Skynet Guest" BSS in that scan is an MLD BSS; that match is only reached once a network exists.
+
+What changed: The Haiku join sets interface->conf->sae_pwe to SAE_PWE_BOTH (hunt-and-peck and hash-to-element) and no longer calls wpa_config_set() for sae_pwe. The package is wpa_supplicant 2.11.r5.8. WPA2 still uses the passphrase path with management-frame protection off.
+
+Limits: SAE authentication against "Skynet Guest" is only proven on the 5625U. If the RSN element the supplicant sees has no SAE AKM or no management-frame protection, or if wpa 2.11 then refuses the MLD BSS because the driver has no MLO, the join still will not associate. The DELKEY index 4 and 5 errors are unchanged so the WPA2 key path is not touched.
+
+Tested: not on hardware in this change. The hpkg is built before the image jam. QEMU has no MT7921, so SAE was not run.
+
+## 2026-11-19 - A direct window's view bitmap is drawn into the front buffer
+
+Problem: GLTeapot on Zink and RADV on the 5625U stayed on one frame while the counter climbed (751 fps, then 999 fps, two screenshots a second apart). VulkanTeapot ran, and GLTeapot on llvmpipe was smooth. The log showed "egl: opengl zink" and "app_server: compositor paused: direct window". Clearing fUpdateRequested in Window::EndUpdate() (the previous 1 fps symptom) did not change this: the swaps return. Zink's present copies the frame into a BBitmap and calls BitmapHook::SetBitmap(). It does not write the BDirectWindow front buffer, which is what llvmpipe's flush_frontbuffer does. While the window has direct access, app_server leaves that rectangle to the client, so the bitmap never reaches the buffer on the display.
+
+What changed: When a directly accessing window sets a view bitmap, the server draws that view and copies the view's screen rectangle to the front. distro/desktop/src/servers/app/ServerWindow.cpp. The compositor pause and the Zink present hook are unchanged.
+
+Limits: That the teapot moves on the 5625U is unproven here. A real BDirectWindow that writes the front buffer itself still has that rectangle drawn by the server when it also sets a view bitmap.
+
+Tested: not on hardware in this change. QEMU has no AMD GPU, so the direct-window blit did not run.
+
+## 2026-11-19 - L2CAP send timer no longer outlives its connection
+
+Problem: Power off on the 5625U panicked in thread "net timer": vm_page_fault at 0x60, L2capEndpoint::_SendTimer -> _SendQueued. The next boot's trail was only "enter reboot=0". RemoveConnection() took the HciConnection off the list and then asked L2CAP to drop its endpoints. connection_for() only accepts a connection still in that list, so Disconnected() never ran, the endpoints stayed OPEN, and the send timer used the freed connection. The log line "Couldn't find the connection to complete l2cap disconnection" is that miss.
+
+The WH-1000XM3 was not ended by R5 with reason 0x16. In boot-5625u-55, 0x16 ("this computer ended it") is logged twice while the game controllers are up, before the headset. Nobody in this tree sends HCI reason 0x16; MediaTek firmware reports it for a disconnect the controller started. The headset itself then sent 0x13 ("the device ended it") about when SDP finished and before any profile channel existed. A2DP connected only once sound was playing, and HFP waited half a second, so the headset dropped the idle link. The microphone (HFP) was not reached.
+
+What changed: l2cap_error_received() accepts the still-living HciConnection after it has left the list, because RemoveConnection() deletes it only after this returns. _MarkClosed() cancels the send timer and frees the queued buffers. bluetooth_audio opens AVDTP as soon as a paired headset's link is up, not only when audio plays. HFP no longer waits half a second before its first RFCOMM connect.
+
+Limits: The panic, the XM3 staying connected, and A2DP playback are only proven on the 5625U. Why the controllers' links were reported as 0x16 is not fixed: this tree never sends that reason.
+
+Tested: not on hardware in this change. QEMU has no Bluetooth controller, so the timer and the headset path did not run.
+
+## 2026-11-19 - Restart syncs before anything else
+
+Problem: On the 5625U a restart's next-boot trail was "r5 previous shutdown: enter reboot=1 -> teams_killed" and nothing after it. Power off, which does not kill teams, reached the end of the trail. sync() never returned. kill_team() only signals a team's main thread and does not wait, so the vnode walk and the block cache ran while those teams were tearing the same objects down. No network share was mounted. The HP CMOS error only followed the forced power-off after that hang.
+
+What changed: system_shutdown() now syncs, runs the shutdown hooks, then resets or powers off. A restart and power off use that same order. Teams are not killed. distro/kernel/src/system/kernel/shutdown.cpp.
+
+Limits: A restart that passes sync() and the hooks is only proven on the 5625U.
+
+Tested: not on the 5625U, so a restart that used to stop at teams_killed is unproven. One short QEMU KVM boot of a private image copy (q35, display none) accepted ACPI power off and the serial log showed enter reboot=0, sync_done, hooks_start, hooks_done, acpi_poweroff, then QEMU exited. Restart (reboot=1) was not run. QEMU is not the 5625U hang.
+
 ## 2026-11-19 - GFX9 interrupt ring (IH): barrier, carve-out read, overflow handling, and re-read counters
 
 Problem (`generated/boot-5625u-53/syslog`, 5625U): while RADV/Zink ran, `radeon_hd` logged `ih client 0 src 0 ring 0 vmid 0 0000b514 ...` about once a second. Dword 0 `0x0000b514` decodes to CP (`0x14`), EOP (`181`), ring 0 — a normal end-of-pipe interrupt that `r5_gfx9_ih_parse()` decodes correctly. That means `r5_gfx9_ih_parse()` read zero before the GPU's write was visible, and the entry had landed by the time `dprintf()` printed it.

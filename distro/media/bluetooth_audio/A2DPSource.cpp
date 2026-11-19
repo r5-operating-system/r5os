@@ -715,14 +715,26 @@ A2DPSource::_Manage()
 		}
 
 		if (fSignal < 0) {
-			// No session: reach the chosen headset when audio plays.
+			// No session. Open AVDTP as soon as a paired headset's link is
+			// up, not only when sound plays. The WH-1000XM3 ended the ACL
+			// (reason 0x13, the headset) about 2 s after SDP when no profile
+			// had connected; A2DP used to wait for playback.
 			bdaddr_t device;
 			bigtime_t now = system_time();
-			bool connect = fPlaying
-				&& now - fLastSound.load() < kIdleSuspend
-				&& now - fLastAttempt >= kRetryInterval
+			bool playing = fPlaying
+				&& now - fLastSound.load() < kIdleSuspend;
+			bool have = now - fLastAttempt >= kRetryInterval
 				&& (_ChosenDevice(&device) || _PairedHeadset(&device));
 			fLock.Unlock();
+			bool linkUp = false;
+			if (have && !playing) {
+				bool paired = false;
+				bool connected = false;
+				bool encrypted = false;
+				linkUp = _LinkState(device, &paired, &connected, &encrypted)
+					&& connected;
+			}
+			bool connect = have && (playing || linkUp);
 			if (!connect) {
 				acquire_sem_etc(fWake, 1, B_RELATIVE_TIMEOUT, kPollInterval);
 				continue;

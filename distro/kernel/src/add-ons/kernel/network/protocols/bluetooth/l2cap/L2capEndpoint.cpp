@@ -1099,6 +1099,19 @@ L2capEndpoint::_MarkClosed()
 
 	fState = CLOSED;
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// The send timer and anything still queued belong to the channel that
+	// just went away. A timer that fires after this sees CLOSED and returns.
+	// cancel_timer() from inside the timer callback only disarms it.
+	gStackModule->cancel_timer(&fSendTimer);
+	net_buffer* queued;
+	while (gStackModule->fifo_dequeue_buffer(&fSendQueue, MSG_DONTWAIT, 0,
+			&queued) >= 0)
+		gBufferModule->free(queued);
+	// SPDX-SnippetEnd
+
 	socket->error = ENOTCONN;
 	gSocketModule->notify(socket, B_SELECT_ERROR, ENOTCONN);
 

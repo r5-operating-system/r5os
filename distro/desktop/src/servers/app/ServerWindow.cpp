@@ -2136,6 +2136,32 @@ fDesktop->LockSingleWindow();
 						BRegion dirty((BRect)fCurrentView->Bounds());
 						fWindow->InvalidateView(fCurrentView, dirty);
 					}
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+					// A BDirectWindow is expected to write HWInterface's front
+					// buffer itself. Zink does not: each frame is this view
+					// bitmap (BitmapHook::SetBitmap). While the window has
+					// direct access the server leaves that rectangle to the
+					// client, so the bitmap never reaches the buffer the
+					// display is scanning and GLTeapot stays on its first
+					// frame. Draw it now. llvmpipe writes the front buffer
+					// and does not come through here.
+					if (fIsDirectlyAccessing && bitmap != NULL
+						&& fWindow->GetDrawingEngine() != NULL) {
+						DrawingEngine* engine = fWindow->GetDrawingEngine();
+						if (engine->LockParallelAccess()) {
+							BRegion content;
+							fWindow->GetContentRegion(&content);
+							fCurrentView->Draw(engine, &content, &content,
+								false);
+							BRegion shown(fCurrentView->ScreenAndUserClipping(
+								&content));
+							engine->CopyToFront(shown);
+							engine->UnlockParallelAccess();
+						}
+					}
+// SPDX-SnippetEnd
 
 					if (bitmap != NULL && bitmap->Overlay() != NULL) {
 						bitmap->Overlay()->SetFlags(options);

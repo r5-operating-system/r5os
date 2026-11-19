@@ -53,6 +53,7 @@ public:
 								GlassSectionCard(const char* name,
 									const char* title);
 	virtual	void				AttachedToWindow();
+	virtual	void				AllAttached();
 	virtual	void				Draw(BRect updateRect);
 	virtual	void				MessageReceived(BMessage* message);
 
@@ -82,6 +83,16 @@ GlassSectionCard::AttachedToWindow()
 {
 	BCard::AttachedToWindow();
 	BAppearanceKit::set_view_glass(this, true);
+}
+
+
+void
+GlassSectionCard::AllAttached()
+{
+	BCard::AllAttached();
+	// BStringView::AttachedToWindow() copies the parent's view colour after
+	// a parent AttachedToWindow() has run, which put an opaque bar behind
+	// every label. AllAttached runs after that.
 	_UpdateColors();
 }
 
