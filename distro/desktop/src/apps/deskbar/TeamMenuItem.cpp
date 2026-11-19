@@ -221,11 +221,43 @@ TTeamMenuItem::HandleMouseDown(BPoint where)
 void
 TTeamMenuItem::UpdateHasListedWindows()
 {
-	fHasListedWindows = false;
-	if (fTeam == NULL)
-		return;
+	fTokenCount = -1;
+	RefreshListedWindowsIfChanged();
+}
 
+
+bool
+TTeamMenuItem::RefreshListedWindowsIfChanged()
+{
+	if (fTeam == NULL) {
+		fHasListedWindows = false;
+		return false;
+	}
+
+	uint64 hash = 14695981039346656037ULL;
+	int32 totalCount = 0;
 	int32 teamCount = fTeam->CountItems();
+	for (int32 i = 0; i < teamCount; i++) {
+		team_id team = (addr_t)fTeam->ItemAt(i);
+		int32 count = 0;
+		int32* tokens = get_token_list(team, &count);
+		if (tokens == NULL)
+			continue;
+		totalCount += count;
+		for (int32 j = 0; j < count; j++) {
+			hash ^= (uint32)tokens[j];
+			hash *= 1099511628211ULL;
+		}
+		free(tokens);
+	}
+
+	if (totalCount == fTokenCount && hash == fTokenHash)
+		return false;
+
+	fTokenCount = totalCount;
+	fTokenHash = hash;
+	fHasListedWindows = false;
+
 	for (int32 i = 0; i < teamCount; i++) {
 		team_id team = (addr_t)fTeam->ItemAt(i);
 		int32 count = 0;
@@ -241,11 +273,12 @@ TTeamMenuItem::UpdateHasListedWindows()
 			if (listed) {
 				free(tokens);
 				fHasListedWindows = true;
-				return;
+				return true;
 			}
 		}
 		free(tokens);
 	}
+	return true;
 }
 // SPDX-SnippetEnd
 
@@ -651,6 +684,9 @@ TTeamMenuItem::_Init(BList* team, BBitmap* icon, char* name, char* signature,
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+	fHasListedWindows = false;
+	fTokenHash = 0;
+	fTokenCount = -1;
 	UpdateHasListedWindows();
 // SPDX-SnippetEnd
 }

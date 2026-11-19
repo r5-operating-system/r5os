@@ -66,8 +66,7 @@ strlen_avx2(const char *s)
 }
 
 
-static size_t (*sStrlenLong)(const char *) = strlen_sse;
-static int sStrlenChosen;
+static size_t (*sStrlenLong)(const char *);
 
 
 size_t
@@ -84,12 +83,13 @@ strlen(const char *s)
 		p += step;
 		seen += step;
 	}
-	if (__atomic_load_n(&sStrlenChosen, __ATOMIC_ACQUIRE) == 0) {
-		if ((r5_x86_cpu_flags() & R5_CPU_AVX2) != 0)
-			sStrlenLong = strlen_avx2;
-		__atomic_store_n(&sStrlenChosen, 1, __ATOMIC_RELEASE);
+	size_t (*fn)(const char *) = __atomic_load_n(&sStrlenLong, __ATOMIC_ACQUIRE);
+	if (fn == NULL) {
+		fn = (r5_x86_cpu_flags() & R5_CPU_AVX2) != 0
+			? strlen_avx2 : strlen_sse;
+		__atomic_store_n(&sStrlenLong, fn, __ATOMIC_RELEASE);
 	}
-	return seen + sStrlenLong(p);
+	return seen + fn(p);
 }
 
 /* SPDX-SnippetEnd */

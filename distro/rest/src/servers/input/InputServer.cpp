@@ -67,6 +67,14 @@ BLocker InputServer::gInputMethodListLocker("is_method_queue_sem");
 
 KeymapMethod InputServer::gKeymapMethod;
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+static BLocker sEventStateLocker("is_event_state");
+static BLocker sInputStateLocker("is_input_state");
+static thread_id sEventLoopThread = -1;
+// SPDX-SnippetEnd
+
 
 extern "C" _EXPORT BView* instantiate_deskbar_item();
 
@@ -169,6 +177,11 @@ InputServer::InputServer()
 	fAppServerTeam(-1),
 	fCursorArea(-1)
 {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	fCursorBuffer = NULL;
+// SPDX-SnippetEnd
 	CALLED();
 	gInputServer = this;
 
@@ -204,7 +217,22 @@ InputServer::~InputServer()
 	if (fAddOnManager->Lock())
 		fAddOnManager->Quit();
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (fEventLooperPort >= 0) {
+		delete_port(fEventLooperPort);
+		fEventLooperPort = -1;
+	}
+	if (sEventLoopThread >= B_OK) {
+		status_t dummy;
+		wait_for_thread(sEventLoopThread, &dummy);
+		sEventLoopThread = -1;
+	}
+
 	_ReleaseInput(NULL);
+	delete[] fChars;
+// SPDX-SnippetEnd
 }
 
 
@@ -372,6 +400,15 @@ InputServer::QuitRequested()
 		delete_port(fEventLooperPort);
 			// the event looper thread will exit after this
 		fEventLooperPort = -1;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		if (sEventLoopThread >= B_OK) {
+			status_t dummy;
+			wait_for_thread(sEventLoopThread, &dummy);
+			sEventLoopThread = -1;
+		}
+// SPDX-SnippetEnd
 		return true;
 	}
 }
@@ -403,6 +440,12 @@ InputServer::ReadyToRun()
 status_t
 InputServer::_AcquireInput(BMessage& message, BMessage& reply)
 {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	BAutolock _(sEventStateLocker);
+	_ReleaseInput(&message);
+
 	// TODO: it currently just gets everything we have
 	area_id area;
 	if (message.FindInt32("cursor area", &area) == B_OK) {
@@ -413,8 +456,14 @@ InputServer::_AcquireInput(BMessage& message, BMessage& reply)
 		if (fCursorSem >= B_OK) {
 			fCursorArea = clone_area("input server cursor", (void**)&fCursorBuffer,
 				B_ANY_ADDRESS, B_READ_AREA | B_WRITE_AREA, area);
+			if (fCursorArea < B_OK) {
+				delete_sem(fCursorSem);
+				fCursorSem = -1;
+				fCursorBuffer = NULL;
+			}
 		}
 	}
+// SPDX-SnippetEnd
 
 	if (message.FindInt32("remote team", &fAppServerTeam) != B_OK)
 		fAppServerTeam = -1;
@@ -441,16 +490,27 @@ InputServer::_AcquireInput(BMessage& message, BMessage& reply)
 void
 InputServer::_ReleaseInput(BMessage* /*message*/)
 {
-	if (fCursorBuffer != NULL) {
-		fCursorBuffer = NULL;
-		delete_sem(fCursorSem);
-		delete_area(fCursorArea);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	BAutolock _(sEventStateLocker);
 
+	fCursorBuffer = NULL;
+	if (fCursorSem >= 0) {
+		delete_sem(fCursorSem);
 		fCursorSem = -1;
+	}
+	if (fCursorArea >= 0) {
+		delete_area(fCursorArea);
 		fCursorArea = -1;
 	}
 
-	delete_port(fAppServerPort);
+	if (fAppServerPort >= 0) {
+		delete_port(fAppServerPort);
+		fAppServerPort = -1;
+	}
+	fAppServerTeam = -1;
+// SPDX-SnippetEnd
 }
 
 
@@ -564,7 +624,14 @@ InputServer::MessageReceived(BMessage* message)
 					if (item == NULL || item->Running())
 						continue;
 					item->Start();
-					if (!item->Running())
+					if (item->Running()) {
+						_DeviceStarted(*item);
+						BMessage notify(IS_NOTIFY_DEVICE);
+						notify.AddBool("started", true);
+						notify.AddString("name", item->Name());
+						notify.AddInt32("type", item->Type());
+						fAddOnManager->PostMessage(&notify);
+					} else
 						pending++;
 				}
 			}
@@ -593,12 +660,20 @@ InputServer::MessageReceived(BMessage* message)
 			if (message->FindRect("screen_bounds", &frame) != B_OK)
 				frame = fScreen.Frame();
 
-			if (frame == fFrame)
-				break;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			BPoint pos;
+			{
+				BAutolock _(sInputStateLocker);
+				if (frame == fFrame)
+					break;
 
-			BPoint pos(fMousePos.x * frame.Width() / fFrame.Width(),
-				fMousePos.y * frame.Height() / fFrame.Height());
-			fFrame = frame;
+				pos = BPoint(fMousePos.x * frame.Width() / fFrame.Width(),
+					fMousePos.y * frame.Height() / fFrame.Height());
+				fFrame = frame;
+			}
+// SPDX-SnippetEnd
 
 			BMessage set;
 			set.AddPoint("where", pos);
@@ -699,6 +774,11 @@ InputServer::HandleGetSetKeyRepeatDelay(BMessage* message, BMessage* reply)
 status_t
 InputServer::HandleGetKeyInfo(BMessage* message, BMessage* reply)
 {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	BAutolock _(sInputStateLocker);
+// SPDX-SnippetEnd
 	return reply->AddData("key_info", B_ANY_TYPE, &fKeyInfo, sizeof(fKeyInfo));
 }
 
@@ -706,6 +786,11 @@ InputServer::HandleGetKeyInfo(BMessage* message, BMessage* reply)
 status_t
 InputServer::HandleGetModifiers(BMessage* message, BMessage* reply)
 {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	BAutolock _(sInputStateLocker);
+// SPDX-SnippetEnd
 	return reply->AddInt32("modifiers", fKeyInfo.modifiers);
 }
 
@@ -999,6 +1084,12 @@ InputServer::HandleGetSetMouseMap(BMessage* message, BMessage* reply)
 	mouse_map *map;
 	ssize_t size;
 	if (message->FindData("mousemap", B_RAW_TYPE, (const void**)&map, &size) == B_OK) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		if (size < (ssize_t)sizeof(mouse_map))
+			return B_BAD_VALUE;
+// SPDX-SnippetEnd
 		if (settings == NULL) {
 			BList allSettings;
 			_RunningMiceSettings(allSettings);
@@ -1226,7 +1317,11 @@ InputServer::EnqueueMethodMessage(BMessage* message)
 status_t
 InputServer::SetNextMethod(bool direction)
 {
-	gInputMethodListLocker.Lock();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	BAutolock _(gInputMethodListLocker);
+// SPDX-SnippetEnd
 
 	int32 index = gInputMethodList.IndexOf(fActiveMethod);
 	int32 oldIndex = index;
@@ -1248,7 +1343,6 @@ InputServer::SetNextMethod(bool direction)
 
 	SetActiveMethod(method);
 
-	gInputMethodListLocker.Unlock();
 	return B_OK;
 }
 
@@ -1586,6 +1680,11 @@ InputServer::_StartEventLoop()
 		return thread < B_OK ? thread : B_ERROR;
 	}
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	sEventLoopThread = thread;
+// SPDX-SnippetEnd
 	return B_OK;
 }
 
@@ -1643,6 +1742,13 @@ InputServer::_EventLoop()
 				PRINTERR(("[InputServer] Unflatten() error: (0x%" B_PRIx32
 					") %s\n", err, strerror(err)));
 				delete event;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+				for (int32 i = 0; i < events.CountItems(); i++)
+					delete events.ItemAt(i);
+				events.MakeEmpty();
+// SPDX-SnippetEnd
 				continue;
 			}
 
@@ -1671,28 +1777,51 @@ InputServer::_UpdateMouseAndKeys(EventList& events)
 			case B_MOUSE_DOWN:
 			case B_MOUSE_UP:
 			case B_MOUSE_MOVED:
+			{
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+				BAutolock _(sInputStateLocker);
 				event->FindPoint("where", &fMousePos);
+// SPDX-SnippetEnd
 				break;
+			}
 
 			case B_KEY_DOWN:
 			case B_UNMAPPED_KEY_DOWN:
-				// update modifiers
-				uint32 modifiers;
-				if (event->FindInt32("modifiers", (int32*)&modifiers) == B_OK)
-					fKeyInfo.modifiers = modifiers;
+			{
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+				uint32 currentModifiers;
+				{
+					BAutolock _(sInputStateLocker);
+					// update modifiers
+					uint32 modifiers;
+					if (event->FindInt32("modifiers", (int32*)&modifiers) == B_OK)
+						fKeyInfo.modifiers = modifiers;
 
-				// update key states
-				const uint8 *data;
-				ssize_t size;
-				if (event->FindData("states", B_UINT8_TYPE,
-						(const void**)&data, &size) == B_OK) {
-					PRINT(("updated keyinfo\n"));
-					if (size == sizeof(fKeyInfo.key_states))
-						memcpy(fKeyInfo.key_states, data, size);
+					// update key states
+					const uint8 *data;
+					ssize_t size;
+					if (event->FindData("states", B_UINT8_TYPE,
+							(const void**)&data, &size) == B_OK) {
+						PRINT(("updated keyinfo\n"));
+						if (size == sizeof(fKeyInfo.key_states))
+							memcpy(fKeyInfo.key_states, data, size);
+					}
+
+					currentModifiers = fKeyInfo.modifiers;
+					PRINT(("SanitizeEvents: %" B_PRIx32 ", %x\n", fKeyInfo.modifiers,
+						fKeyInfo.key_states[KEY_Spacebar >> 3]));
 				}
 
-				if (fActiveMethod == NULL)
-					break;
+				{
+					BAutolock _(gInputMethodListLocker);
+					if (fActiveMethod == NULL)
+						break;
+				}
+// SPDX-SnippetEnd
 
 				// we scan for Alt+Space key down events which means we change
 				// to next input method
@@ -1701,23 +1830,26 @@ InputServer::_UpdateMouseAndKeys(EventList& events)
 				// If there is only one input method, SetNextMethod will return
 				// B_BAD_INDEX and the event will be forwarded to the user.
 
-				PRINT(("SanitizeEvents: %" B_PRIx32 ", %x\n", fKeyInfo.modifiers,
-					fKeyInfo.key_states[KEY_Spacebar >> 3]));
-
 				uint8 byte;
 				if (event->FindInt8("byte", (int8*)&byte) < B_OK)
 					byte = 0;
 
-				if ((((fKeyInfo.modifiers & B_COMMAND_KEY) != 0 && byte == ' ')
+				if ((((currentModifiers & B_COMMAND_KEY) != 0 && byte == ' ')
 						|| byte == B_HANKAKU_ZENKAKU)
-					&& SetNextMethod((fKeyInfo.modifiers & B_SHIFT_KEY) == 0)
+					&& SetNextMethod((currentModifiers & B_SHIFT_KEY) == 0)
 							== B_OK) {
 					// this event isn't sent to the user
 					events.RemoveItemAt(index);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+					index--;
+// SPDX-SnippetEnd
 					delete event;
 					continue;
 				}
 				break;
+			}
 		}
 	}
 }
@@ -1730,6 +1862,11 @@ bool
 InputServer::_SanitizeEvents(EventList& events)
 {
 	CALLED();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	BAutolock _(sInputStateLocker);
+// SPDX-SnippetEnd
 
 	for (int32 index = 0; BMessage* event = (BMessage*)events.ItemAt(index);
 			index++) {
@@ -1819,13 +1956,20 @@ InputServer::_MethodizeEvents(EventList& events)
 {
 	CALLED();
 
-	if (fActiveMethod == NULL)
-		return true;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	{
+		BAutolock _(gInputMethodListLocker);
+		if (fActiveMethod == NULL)
+			return true;
 
-	int32 count = events.CountItems();
-	for (int32 i = 0; i < count;) {
-		_FilterEvent(fActiveMethod, events, i, count);
+		int32 count = events.CountItems();
+		for (int32 i = 0; i < count;) {
+			_FilterEvent(fActiveMethod, events, i, count);
+		}
 	}
+// SPDX-SnippetEnd
 
 	{
 		// move the method events into the event queue - they are not
@@ -1988,17 +2132,30 @@ InputServer::_DispatchEvent(BMessage* event)
 {
 	CALLED();
 
-   	switch (event->what) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	switch (event->what) {
 		case B_MOUSE_MOVED:
 		case B_MOUSE_DOWN:
 		case B_MOUSE_UP:
-			if (fCursorBuffer) {
-				atomic_set((int32*)&fCursorBuffer->pos, (uint32)fMousePos.x << 16UL
-					| ((uint32)fMousePos.y & 0xffff));
+		{
+			BPoint mousePos;
+			{
+				BAutolock _(sInputStateLocker);
+				mousePos = fMousePos;
+			}
+
+			BAutolock _(sEventStateLocker);
+			if (fCursorBuffer != NULL) {
+				atomic_set((int32*)&fCursorBuffer->pos,
+					(uint32)mousePos.x << 16UL
+					| ((uint32)mousePos.y & 0xffff));
 				if (atomic_or(&fCursorBuffer->read, 1) == 0)
 					release_sem(fCursorSem);
-        	}
-        	break;
+			}
+			break;
+		}
 
 		case B_KEY_DOWN:
 		case B_KEY_UP:
@@ -2006,6 +2163,7 @@ InputServer::_DispatchEvent(BMessage* event)
 		case B_UNMAPPED_KEY_UP:
 		case B_MODIFIERS_CHANGED:
 		{
+			BAutolock _(sInputStateLocker);
 			// update or add modifiers
 			uint32 modifiers;
 			if (event->FindInt32("modifiers", (int32*)&modifiers) == B_OK)
@@ -2029,14 +2187,25 @@ InputServer::_DispatchEvent(BMessage* event)
 			break;
 		}
 
-   		default:
+		default:
 			break;
 	}
 
+	port_id appServerPort;
+	team_id appServerTeam;
+	{
+		BAutolock _(sEventStateLocker);
+		appServerPort = fAppServerPort;
+		appServerTeam = fAppServerTeam;
+	}
+	if (appServerPort < 0)
+		return B_BAD_PORT_ID;
+
 	BMessenger reply;
 	BMessage::Private messagePrivate(event);
-	return messagePrivate.SendMessage(fAppServerPort, fAppServerTeam, 0, 0,
+	return messagePrivate.SendMessage(appServerPort, appServerTeam, 0, 0,
 		false, reply);
+// SPDX-SnippetEnd
 }
 
 

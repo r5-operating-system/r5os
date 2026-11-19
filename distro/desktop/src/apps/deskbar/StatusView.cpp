@@ -349,6 +349,7 @@ TReplicantTray::MessageReceived(BMessage* message)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+			SaveTimeSettings();
 			be_app->PostMessage(kSaveSettings);
 // SPDX-SnippetEnd
 
@@ -363,6 +364,7 @@ TReplicantTray::MessageReceived(BMessage* message)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+			SaveTimeSettings();
 			be_app->PostMessage(kSaveSettings);
 // SPDX-SnippetEnd
 
@@ -377,6 +379,7 @@ TReplicantTray::MessageReceived(BMessage* message)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+			SaveTimeSettings();
 			be_app->PostMessage(kSaveSettings);
 // SPDX-SnippetEnd
 

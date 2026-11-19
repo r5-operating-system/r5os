@@ -2016,8 +2016,15 @@ arch_cpu_invalidate_tlb_list(intptr_t context, addr_t pages[], int num_pages)
 status_t
 arch_cpu_shutdown(bool rebootSystem)
 {
-	if (acpi_shutdown(rebootSystem) == B_OK)
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	dprintf("r5 shutdown: arch_cpu_shutdown(%d) acpi\n", rebootSystem ? 1 : 0);
+	status_t acpiStatus = acpi_shutdown(rebootSystem);
+	if (acpiStatus == B_OK)
 		return B_OK;
+	dprintf("r5 shutdown: acpi_shutdown returned 0x%x\n", (unsigned)acpiStatus);
+// SPDX-SnippetEnd
 
 	if (!rebootSystem) {
 #ifndef __x86_64__
@@ -2030,12 +2037,22 @@ arch_cpu_shutdown(bool rebootSystem)
 	cpu_status state = disable_interrupts();
 
 	// try to reset the system using the keyboard controller
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	dprintf("r5 shutdown: kbc 0xfe\n");
+// SPDX-SnippetEnd
 	out8(0xfe, 0x64);
 
 	// Give some time to the controller to do its job (0.5s)
 	snooze(500000);
 
 	// if that didn't help, try it this way
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	dprintf("r5 shutdown: x86_reboot\n");
+// SPDX-SnippetEnd
 	x86_reboot();
 
 	restore_interrupts(state);

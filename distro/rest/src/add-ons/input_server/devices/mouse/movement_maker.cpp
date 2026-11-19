@@ -87,6 +87,34 @@ three_or_more_fingers(const touchpad_movement* event) {
 // #pragma mark -
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+MovementMaker::MovementMaker()
+	:
+	xDelta(0),
+	yDelta(0),
+	scrolling_x(0),
+	scrolling_y(0),
+	precise_x(0),
+	precise_y(0),
+	fSpecs(),
+	fSettings(),
+	fSpeed(1),
+	fAreaWidth(SYN_WIDTH),
+	fAreaHeight(SYN_HEIGHT),
+	fMovementMakerStarted(false),
+	fPreviousX(0),
+	fPreviousY(0),
+	fDeltaSumX(0),
+	fDeltaSumY(0),
+	fSmallMovement(0)
+{
+	CALLED();
+}
+// SPDX-SnippetEnd
+
+
 void
 MovementMaker::SetSettings(const touchpad_settings& settings)
 {
@@ -105,10 +133,23 @@ MovementMaker::SetSpecs(const touchpad_specs& specs)
 
 	fAreaWidth = fSpecs.areaEndX - fSpecs.areaStartX;
 	fAreaHeight = fSpecs.areaEndY - fSpecs.areaStartY;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (fAreaWidth <= 0 || fAreaHeight <= 0) {
+		fAreaWidth = SYN_WIDTH;
+		fAreaHeight = SYN_HEIGHT;
+	}
 
 	// calibrated on the synaptics touchpad
-	fSpeed = SYN_WIDTH / fAreaWidth;
+	int32 speed = SYN_WIDTH / fAreaWidth;
+	if (speed < 1)
+		speed = 1;
+	else if (speed > INT8_MAX)
+		speed = INT8_MAX;
+	fSpeed = (int8)speed;
 	fSmallMovement = 3 / fSpeed;
+// SPDX-SnippetEnd
 }
 
 
@@ -287,18 +328,34 @@ MovementMaker::_ComputeAcceleration(int8 accel_factor)
 #define fTapTimeOUT			200000
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
 TouchpadMovement::TouchpadMovement()
+	:
+	click_speed(0),
+	fMovementStarted(false),
+	fScrollingStarted(false),
+	fScrollPhaseActive(false),
+	fTapStarted(false),
+	fTapTime(0),
+	fTapDeltaX(0),
+	fTapDeltaY(0),
+	fTapClicks(0),
+	fTapFingers(0),
+	fTapdragStarted(false),
+	fValidEdgeMotion(false),
+	fLastEdgeMotion(0),
+	fRestEdgeMotion(0),
+	fDoubleClick(false),
+	fFingers(0),
+	fClickLastTime(0),
+	fClickCount(0),
+	fButtonsState(0)
 {
 	CALLED();
-
-	fMovementStarted = false;
-	fScrollingStarted = false;
-	fScrollPhaseActive = false;
-	fTapStarted = false;
-	fValidEdgeMotion = false;
-	fDoubleClick = false;
-	fFingers = 0;
 }
+// SPDX-SnippetEnd
 
 TouchpadMovement::~TouchpadMovement() {
 	CALLED();

@@ -79,6 +79,7 @@ public:
 			void				SetHasListedWindows(bool hasListed)
 									{ fHasListedWindows = hasListed; };
 			void				UpdateHasListedWindows();
+			bool				RefreshListedWindowsIfChanged();
 // SPDX-SnippetEnd
 			status_t			Invoke(BMessage* message = NULL);
 
@@ -141,6 +142,8 @@ private:
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 			bool				fHasListedWindows;
+			uint64				fTokenHash;
+			int32				fTokenCount;
 // SPDX-SnippetEnd
 };
 

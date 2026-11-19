@@ -1141,9 +1141,10 @@ TExpandoMenuBar::monitor_team_windows(void* arg)
 					}
 				} else {
 					bool hadListed = teamItem->HasListedWindows();
-					teamItem->UpdateHasListedWindows();
-					if (teamItem->HasListedWindows() != hadListed)
+					if (teamItem->RefreshListedWindowsIfChanged()
+						&& teamItem->HasListedWindows() != hadListed) {
 						itemModified = true;
+					}
 				}
 // SPDX-SnippetEnd
 			}
