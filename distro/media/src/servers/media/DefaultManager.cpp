@@ -49,8 +49,14 @@ const char *kDefaultManagerSettingsFile				= "MDefaultManager";
 
 DefaultManager::DefaultManager()
 	:
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	fLock("default manager"),
+	fAudioOutGeneration(0),
+	// SPDX-SnippetEnd
 	fMixerConnected(false),
- 	fPhysicalVideoOut(-1),
+	fPhysicalVideoOut(-1),
 	fPhysicalVideoIn(-1),
 	fPhysicalAudioOut(-1),
 	fPhysicalAudioIn(-1),
@@ -64,7 +70,7 @@ DefaultManager::DefaultManager()
 	fRescanLock("rescan default manager"),
 	fRoster(NULL)
 {
-	strcpy(fPhysicalAudioOutInputName, "default");
+	strlcpy(fPhysicalAudioOutInputName, "default", B_MEDIA_NAME_LENGTH);
 	for (int32 i = 0; i < 4; i++)
 		fUsingFallback[i] = false;
 	fBeginHeader[0] = 0xab00150b;
@@ -82,6 +88,24 @@ DefaultManager::DefaultManager()
 
 DefaultManager::~DefaultManager()
 {
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	thread_id rescanThread = -1;
+	{
+		BAutolock locker(fRescanLock);
+		rescanThread = fRescanThread;
+	}
+	if (rescanThread >= 0) {
+		status_t dummy;
+		wait_for_thread(rescanThread, &dummy);
+	}
+
+	BAutolock savedLocker(fSavedLock);
+	for (int32 i = 0; i < fMsgList.CountItems(); i++)
+		delete (BMessage*)fMsgList.ItemAt(i);
+	fMsgList.MakeEmpty();
+	// SPDX-SnippetEnd
 }
 
 
@@ -161,8 +185,20 @@ DefaultManager::SaveState(NodeManager *node_manager)
 
 	uint32 default_types[] = {kMsgTypeVideoIn, kMsgTypeVideoOut,
 		kMsgTypeAudioIn, kMsgTypeAudioOut};
-	media_node_id media_node_ids[] = {fPhysicalVideoIn, fPhysicalVideoOut,
-		fPhysicalAudioIn, fPhysicalAudioOut};
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	media_node_id media_node_ids[4];
+	int32 audioOutInputID;
+	{
+		BAutolock stateLock(fLock);
+		media_node_ids[0] = fPhysicalVideoIn;
+		media_node_ids[1] = fPhysicalVideoOut;
+		media_node_ids[2] = fPhysicalAudioIn;
+		media_node_ids[3] = fPhysicalAudioOut;
+		audioOutInputID = fPhysicalAudioOutInputID;
+	}
+	// SPDX-SnippetEnd
 	for (uint32 i = 0; i < sizeof(default_types) / sizeof(default_types[0]);
 		i++) {
 
@@ -179,18 +215,27 @@ DefaultManager::SaveState(NodeManager *node_manager)
 		dormant_node_info info;
 		media_node node;
 		entry_ref ref;
-		if (node_manager->GetCloneForID(media_node_ids[i], be_app->Team(),
-				&node) != B_OK
-			|| node_manager->GetDormantNodeInfo(node, &info) != B_OK
-			|| node_manager->ReleaseNodeReference(media_node_ids[i],
-				be_app->Team()) != B_OK
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		bool haveClone = node_manager->GetCloneForID(media_node_ids[i],
+			be_app->Team(), &node) == B_OK;
+		status_t infoStatus = haveClone
+			? node_manager->GetDormantNodeInfo(node, &info) : B_ERROR;
+		status_t releaseStatus = haveClone
+			? node_manager->ReleaseNodeReference(media_node_ids[i],
+				be_app->Team()) : B_ERROR;
+		if (!haveClone || infoStatus != B_OK || releaseStatus != B_OK
 			|| node_manager->GetAddOnRef(info.addon, &ref) != B_OK) {
 			if (media_node_ids[i] != -1) {
 				// failed to get node info thus just return
+				for (int32 j = 0; j < list.CountItems(); j++)
+					delete (BMessage*)list.ItemAt(j);
 				return B_ERROR;
 			}
 			continue;
 		}
+		// SPDX-SnippetEnd
 
 		BMessage *settings = new BMessage();
 		settings->AddInt32(kDefaultManagerType, default_types[i]);
@@ -198,7 +243,7 @@ DefaultManager::SaveState(NodeManager *node_manager)
 		settings->AddInt32(kDefaultManagerAddon, info.addon);
 		settings->AddInt32(kDefaultManagerFlavorId, info.flavor_id);
 		settings->AddInt32(kDefaultManagerInput,
-			default_types[i] == kMsgTypeAudioOut ? fPhysicalAudioOutInputID : 0);
+			default_types[i] == kMsgTypeAudioOut ? audioOutInputID : 0);
 		settings->AddString(kDefaultManagerFlavorName, info.name);
 		settings->AddString(kDefaultManagerPath, path.Path());
 
@@ -257,47 +302,71 @@ DefaultManager::Set(media_node_id node_id, const char *input_name,
 	CALLED();
 	TRACE("DefaultManager::Set type : %i, node : %li, input : %li\n", type,
 		node_id, input_id);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
 	switch (type) {
 		// An explicit choice replaces a fallback, so it is saved as such.
 		case VIDEO_INPUT:
+		{
+			BAutolock stateLock(fLock);
 			fPhysicalVideoIn = node_id;
+			stateLock.Unlock();
 			_SetFallback(kMsgTypeVideoIn, false);
 			return B_OK;
+		}
 		case AUDIO_INPUT:
+		{
+			BAutolock stateLock(fLock);
 			fPhysicalAudioIn = node_id;
+			stateLock.Unlock();
 			_SetFallback(kMsgTypeAudioIn, false);
 			return B_OK;
+		}
 		case VIDEO_OUTPUT:
+		{
+			BAutolock stateLock(fLock);
 			fPhysicalVideoOut = node_id;
+			stateLock.Unlock();
 			_SetFallback(kMsgTypeVideoOut, false);
 			return B_OK;
+		}
 		case AUDIO_MIXER:
 			return B_ERROR;
 		case AUDIO_OUTPUT:
+		{
 			// Choosing the device that stands in is still a choice. Clear the
 			// flag first, so SaveState() keeps it instead of the absent one.
 			_SetFallback(kMsgTypeAudioOut, false);
-			if (fPhysicalAudioOut == node_id && fPhysicalAudioOutInputID == input_id)
-				return B_OK;
+			{
+				BAutolock stateLock(fLock);
+				if (fPhysicalAudioOut == node_id
+					&& fPhysicalAudioOutInputID == input_id)
+					return B_OK;
 
-			fPhysicalAudioOut = node_id;
-			fPhysicalAudioOutInputID = input_id;
-			strcpy(fPhysicalAudioOutInputName,
-				input_name ? input_name : "<null>");
+				fPhysicalAudioOut = node_id;
+				fPhysicalAudioOutInputID = input_id;
+				strlcpy(fPhysicalAudioOutInputName,
+					input_name ? input_name : "<null>", B_MEDIA_NAME_LENGTH);
 
-			fMixerConnected = false;
+				fMixerConnected = false;
+				fAudioOutGeneration++;
+			}
 			Rescan();
 			return B_OK;
+		}
 		case TIME_SOURCE:
 			return B_ERROR;
 
 		// called by the media_server's ServerApp::StartSystemTimeSource()
 		case SYSTEM_TIME_SOURCE:
 		{
+			BAutolock stateLock(fLock);
 			ASSERT(fSystemTimeSource == -1);
 			fSystemTimeSource = node_id;
 			return B_OK;
 		}
+	// SPDX-SnippetEnd
 
 		default:
 		{
@@ -314,6 +383,11 @@ DefaultManager::Get(media_node_id *nodeid, char *input_name, int32 *inputid,
 	node_type type)
 {
 	CALLED();
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	BAutolock stateLock(fLock);
+	// SPDX-SnippetEnd
 	switch (type) {
 		case VIDEO_INPUT: 		// output: nodeid
 			if (fPhysicalVideoIn == -1)
@@ -344,7 +418,12 @@ DefaultManager::Get(media_node_id *nodeid, char *input_name, int32 *inputid,
 				return B_NAME_NOT_FOUND;
 			*nodeid = fPhysicalAudioOut;
 			*inputid = fPhysicalAudioOutInputID;
-			strcpy(input_name, fPhysicalAudioOutInputName);
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			strlcpy(input_name, fPhysicalAudioOutInputName,
+				B_MEDIA_NAME_LENGTH);
+			// SPDX-SnippetEnd
 			return B_OK;
 
 		case AUDIO_MIXER:		// output: nodeid
@@ -409,93 +488,242 @@ DefaultManager::_RescanThread()
 	while (atomic_and(&fRescanRequested, 0) != 0) {
 		locker.Unlock();
 
-		// We do not search for the system time source,
-		// it should already exist
-		ASSERT(fSystemTimeSource != -1);
-
-		if (fPhysicalVideoOut == -1) {
-			_FindPhysical(&fPhysicalVideoOut, kMsgTypeVideoOut, false,
-				B_MEDIA_RAW_VIDEO);
-			_FindPhysical(&fPhysicalVideoOut, kMsgTypeVideoOut, false,
-				B_MEDIA_ENCODED_VIDEO);
-		}
-		if (fPhysicalVideoIn == -1) {
-			_FindPhysical(&fPhysicalVideoIn, kMsgTypeVideoIn, true,
-				B_MEDIA_RAW_VIDEO);
-			_FindPhysical(&fPhysicalVideoIn, kMsgTypeVideoIn, true,
-				B_MEDIA_ENCODED_VIDEO);
-		}
-		if (fPhysicalAudioOut != -1 && fRoster != NULL) {
-			media_node existing;
-			if (fRoster->GetNodeFor(fPhysicalAudioOut, &existing) != B_OK) {
-				// The output node is gone. Look again, including a device
-				// that was plugged in after startup (Haiku #12776, #12777).
-				fPhysicalAudioOut = -1;
-				fMixerConnected = false;
-				// SPDX-SnippetBegin
-				// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
-				// SPDX-License-Identifier: MIT
-				// The mixer still holds its output for the dead input, and
-				// the dead node was usually the time source too.
-				_DisconnectMixerFromOutput();
-				fTimeSource = -1;
-				// SPDX-SnippetEnd
-			} else
-				fRoster->ReleaseNode(existing);
-		}
-		if (fPhysicalAudioOut == -1)
-			_FindPhysical(&fPhysicalAudioOut, kMsgTypeAudioOut, false,
-				B_MEDIA_RAW_AUDIO);
-		if (fPhysicalAudioIn == -1)
-			_FindPhysical(&fPhysicalAudioIn, kMsgTypeAudioIn, true,
-				B_MEDIA_RAW_AUDIO);
-
-		// A fallback goes back to the saved device once that device has a
-		// node. The mixer is reconnected below.
-		media_node_id previousOut = fPhysicalAudioOut;
-		_RestoreSaved(&fPhysicalAudioOut, kMsgTypeAudioOut, false,
-			B_MEDIA_RAW_AUDIO);
-		if (fPhysicalAudioOut != previousOut)
-			fMixerConnected = false;
-		_RestoreSaved(&fPhysicalAudioIn, kMsgTypeAudioIn, true,
-			B_MEDIA_RAW_AUDIO);
 		// SPDX-SnippetBegin
 		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 		// SPDX-License-Identifier: MIT
-		_RestoreSaved(&fPhysicalVideoOut, kMsgTypeVideoOut, false,
-			B_MEDIA_RAW_VIDEO);
-		_RestoreSaved(&fPhysicalVideoOut, kMsgTypeVideoOut, false,
-			B_MEDIA_ENCODED_VIDEO);
-		_RestoreSaved(&fPhysicalVideoIn, kMsgTypeVideoIn, true,
-			B_MEDIA_RAW_VIDEO);
-		_RestoreSaved(&fPhysicalVideoIn, kMsgTypeVideoIn, true,
-			B_MEDIA_ENCODED_VIDEO);
-		// SPDX-SnippetEnd
+		// Snapshot fields under fLock before IPC, and only commit results if
+		// Set() did not change them concurrently.
+		media_node_id systemTimeSource;
+		media_node_id videoOut;
+		media_node_id videoIn;
+		media_node_id audioOut;
+		media_node_id audioIn;
+		media_node_id audioMixer;
+		media_node_id timeSource;
+		uint32 audioOutGen;
+		{
+			BAutolock stateLock(fLock);
+			systemTimeSource = fSystemTimeSource;
+			videoOut = fPhysicalVideoOut;
+			videoIn = fPhysicalVideoIn;
+			audioOut = fPhysicalAudioOut;
+			audioIn = fPhysicalAudioIn;
+			audioMixer = fAudioMixer;
+			timeSource = fTimeSource;
+			audioOutGen = fAudioOutGeneration;
+		}
 
-		if (fAudioMixer == -1)
-			_FindAudioMixer();
+		// We do not search for the system time source,
+		// it should already exist
+		ASSERT(systemTimeSource != -1);
+
+		if (videoOut == -1) {
+			_FindPhysical(&videoOut, kMsgTypeVideoOut, false,
+				B_MEDIA_RAW_VIDEO);
+			_FindPhysical(&videoOut, kMsgTypeVideoOut, false,
+				B_MEDIA_ENCODED_VIDEO);
+			if (videoOut != -1) {
+				BAutolock stateLock(fLock);
+				if (fPhysicalVideoOut == -1)
+					fPhysicalVideoOut = videoOut;
+			}
+		}
+		if (videoIn == -1) {
+			_FindPhysical(&videoIn, kMsgTypeVideoIn, true,
+				B_MEDIA_RAW_VIDEO);
+			_FindPhysical(&videoIn, kMsgTypeVideoIn, true,
+				B_MEDIA_ENCODED_VIDEO);
+			if (videoIn != -1) {
+				BAutolock stateLock(fLock);
+				if (fPhysicalVideoIn == -1)
+					fPhysicalVideoIn = videoIn;
+			}
+		}
+		if (audioOut != -1 && fRoster != NULL) {
+			media_node existing;
+			if (fRoster->GetNodeFor(audioOut, &existing) != B_OK) {
+				// The output node is gone. Look again, including a device
+				// that was plugged in after startup (Haiku #12776, #12777).
+				bool cleared = false;
+				{
+					BAutolock stateLock(fLock);
+					if (fAudioOutGeneration == audioOutGen
+						&& fPhysicalAudioOut == audioOut) {
+						fPhysicalAudioOut = -1;
+						fMixerConnected = false;
+						fAudioOutGeneration++;
+						fTimeSource = -1;
+						audioOut = -1;
+						audioOutGen = fAudioOutGeneration;
+						timeSource = -1;
+						cleared = true;
+					}
+				}
+				// The mixer still holds its output for the dead input, and
+				// the dead node was usually the time source too.
+				if (cleared)
+					_DisconnectMixerFromOutput();
+			} else
+				fRoster->ReleaseNode(existing);
+		}
+		if (audioOut == -1) {
+			int32 foundInputID = 0;
+			_FindPhysical(&audioOut, kMsgTypeAudioOut, false,
+				B_MEDIA_RAW_AUDIO, false, &foundInputID);
+			if (audioOut != -1) {
+				BAutolock stateLock(fLock);
+				if (fAudioOutGeneration == audioOutGen
+					&& fPhysicalAudioOut == -1) {
+					fPhysicalAudioOut = audioOut;
+					fPhysicalAudioOutInputID = foundInputID;
+					fAudioOutGeneration++;
+				}
+			}
+		}
+		if (audioIn == -1) {
+			_FindPhysical(&audioIn, kMsgTypeAudioIn, true,
+				B_MEDIA_RAW_AUDIO);
+			if (audioIn != -1) {
+				BAutolock stateLock(fLock);
+				if (fPhysicalAudioIn == -1)
+					fPhysicalAudioIn = audioIn;
+			}
+		}
+
+		// A fallback goes back to the saved device once that device has a
+		// node. The mixer is reconnected below.
+		{
+			int32 restoredInputID = 0;
+			{
+				BAutolock stateLock(fLock);
+				audioOut = fPhysicalAudioOut;
+				restoredInputID = fPhysicalAudioOutInputID;
+				audioOutGen = fAudioOutGeneration;
+			}
+			media_node_id restoredOut = audioOut;
+			_RestoreSaved(&restoredOut, kMsgTypeAudioOut, false,
+				B_MEDIA_RAW_AUDIO, &restoredInputID);
+			if (restoredOut != audioOut) {
+				BAutolock stateLock(fLock);
+				if (fAudioOutGeneration == audioOutGen
+					&& fPhysicalAudioOut == audioOut) {
+					fPhysicalAudioOut = restoredOut;
+					fPhysicalAudioOutInputID = restoredInputID;
+					fMixerConnected = false;
+					fAudioOutGeneration++;
+				}
+			}
+		}
+		{
+			BAutolock stateLock(fLock);
+			audioIn = fPhysicalAudioIn;
+		}
+		media_node_id restoredIn = audioIn;
+		_RestoreSaved(&restoredIn, kMsgTypeAudioIn, true, B_MEDIA_RAW_AUDIO);
+		if (restoredIn != audioIn) {
+			BAutolock stateLock(fLock);
+			if (fPhysicalAudioIn == audioIn)
+				fPhysicalAudioIn = restoredIn;
+		}
+		{
+			BAutolock stateLock(fLock);
+			videoOut = fPhysicalVideoOut;
+		}
+		media_node_id restoredVideoOut = videoOut;
+		_RestoreSaved(&restoredVideoOut, kMsgTypeVideoOut, false,
+			B_MEDIA_RAW_VIDEO);
+		_RestoreSaved(&restoredVideoOut, kMsgTypeVideoOut, false,
+			B_MEDIA_ENCODED_VIDEO);
+		if (restoredVideoOut != videoOut) {
+			BAutolock stateLock(fLock);
+			if (fPhysicalVideoOut == videoOut)
+				fPhysicalVideoOut = restoredVideoOut;
+		}
+		{
+			BAutolock stateLock(fLock);
+			videoIn = fPhysicalVideoIn;
+		}
+		media_node_id restoredVideoIn = videoIn;
+		_RestoreSaved(&restoredVideoIn, kMsgTypeVideoIn, true,
+			B_MEDIA_RAW_VIDEO);
+		_RestoreSaved(&restoredVideoIn, kMsgTypeVideoIn, true,
+			B_MEDIA_ENCODED_VIDEO);
+		if (restoredVideoIn != videoIn) {
+			BAutolock stateLock(fLock);
+			if (fPhysicalVideoIn == videoIn)
+				fPhysicalVideoIn = restoredVideoIn;
+		}
+
+		if (audioMixer == -1) {
+			media_node_id foundMixer = _FindAudioMixer();
+			if (foundMixer != -1) {
+				BAutolock stateLock(fLock);
+				if (fAudioMixer == -1)
+					fAudioMixer = foundMixer;
+			}
+		}
 
 		// The normal time source is searched for after the
 		// Physical Audio Out has been created.
-		if (fTimeSource == -1)
-			_FindTimeSource();
+		{
+			BAutolock stateLock(fLock);
+			timeSource = fTimeSource;
+			audioOut = fPhysicalAudioOut;
+		}
+		if (timeSource == -1) {
+			media_node_id foundTimeSource = _FindTimeSource(audioOut);
+			if (foundTimeSource != -1) {
+				BAutolock stateLock(fLock);
+				if (fTimeSource == -1)
+					fTimeSource = foundTimeSource;
+			}
+		}
 
 		// Connect the mixer and physical audio out (soundcard)
-		if (!fMixerConnected && fAudioMixer != -1 && fPhysicalAudioOut != -1) {
-			fMixerConnected = _ConnectMixerToOutput() == B_OK;
-			if (!fMixerConnected)
+		bool needConnect = false;
+		int32 audioOutInputID = 0;
+		{
+			BAutolock stateLock(fLock);
+			if (!fMixerConnected && fAudioMixer != -1
+				&& fPhysicalAudioOut != -1) {
+				needConnect = true;
+				audioMixer = fAudioMixer;
+				audioOut = fPhysicalAudioOut;
+				audioOutInputID = fPhysicalAudioOutInputID;
+				audioOutGen = fAudioOutGeneration;
+			}
+		}
+
+		bool mixerConnected = false;
+		if (needConnect) {
+			media_output newOutput;
+			media_input newInput;
+			if (_ConnectMixerToOutput(audioMixer, audioOut, audioOutInputID,
+					newOutput, newInput) == B_OK) {
+				BAutolock stateLock(fLock);
+				fMixerToPhysicalAudioOut = newOutput;
+				fPhysicalAudioOutFromMixer = newInput;
+				if (fAudioOutGeneration == audioOutGen) {
+					fMixerConnected = true;
+					mixerConnected = true;
+				}
+			} else {
 				TRACE("DefaultManager: failed to connect mixer and "
 					"soundcard\n");
+			}
 		} else {
+			BAutolock stateLock(fLock);
+			mixerConnected = fMixerConnected;
 			TRACE("DefaultManager: Did not try to connect mixer and "
 				"soundcard\n");
 		}
 
-		if (fMixerConnected) {
+		if (mixerConnected) {
 			add_on_server_rescan_finished_notify_command cmd;
 			SendToAddOnServer(ADD_ON_SERVER_RESCAN_FINISHED_NOTIFY, &cmd,
 				sizeof(cmd));
 		}
+		// SPDX-SnippetEnd
 
 		locker.Lock();
 	}
@@ -510,8 +738,8 @@ DefaultManager::_RescanThread()
 
 
 void
-DefaultManager::_FindPhysical(volatile media_node_id *id, uint32 default_type,
-	bool isInput, media_type type, bool savedOnly)
+DefaultManager::_FindPhysical(media_node_id *id, uint32 default_type,
+	bool isInput, media_type type, bool savedOnly, int32 *inputID)
 {
 	live_node_info info[MAX_NODE_INFOS];
 	media_format format;
@@ -589,8 +817,8 @@ DefaultManager::_FindPhysical(volatile media_node_id *id, uint32 default_type,
 					// we keep the Null audio driver if none else matchs
 					if (!savedOnly) {
 						*id = info[i].node.node;
-						if (msg)
-							fPhysicalAudioOutInputID = input_id;
+						if (msg && inputID != NULL)
+							*inputID = input_id;
 					}
 					continue;
 				}
@@ -664,8 +892,8 @@ DefaultManager::_FindPhysical(volatile media_node_id *id, uint32 default_type,
 			}
 			// SPDX-SnippetEnd
 		}
-		if (isAudio && !isInput)
-			fPhysicalAudioOutInputID = input_id;
+		if (isAudio && !isInput && inputID != NULL)
+			*inputID = input_id;
 		_SetFallback(default_type, false);
 		if (savedOnly) {
 			syslog(LOG_NOTICE, "media_server: default %s %s \"%s\" is present"
@@ -739,15 +967,15 @@ DefaultManager::_SetFallback(uint32 defaultType, bool fallback)
 
 
 void
-DefaultManager::_RestoreSaved(volatile media_node_id* id, uint32 defaultType,
-	bool isInput, media_type type)
+DefaultManager::_RestoreSaved(media_node_id* id, uint32 defaultType,
+	bool isInput, media_type type, int32* inputID)
 {
 	// A fallback goes back to the saved device once that device has a node.
 	if (*id == -1 || !_IsFallback(defaultType))
 		return;
 
 	media_node_id saved = *id;
-	_FindPhysical(&saved, defaultType, isInput, type, true);
+	_FindPhysical(&saved, defaultType, isInput, type, true, inputID);
 	*id = saved;
 }
 
@@ -758,16 +986,22 @@ DefaultManager::_DisconnectMixerFromOutput()
 	// The roster tells the producer even when the consumer has gone, so the
 	// mixer frees its one output. Without that, GetFreeOutputsFor() finds
 	// none and the next card is never connected.
-	if (fPhysicalAudioOutFromMixer.node != media_node::null) {
-		status_t status = fRoster->Disconnect(fMixerToPhysicalAudioOut,
-			fPhysicalAudioOutFromMixer);
+	media_output oldOutput;
+	media_input oldInput;
+	{
+		BAutolock stateLock(fLock);
+		oldOutput = fMixerToPhysicalAudioOut;
+		oldInput = fPhysicalAudioOutFromMixer;
+		fMixerToPhysicalAudioOut.node = media_node::null;
+		fPhysicalAudioOutFromMixer.node = media_node::null;
+	}
+	if (oldInput.node != media_node::null) {
+		status_t status = fRoster->Disconnect(oldOutput, oldInput);
 		if (status != B_OK) {
 			TRACE("DefaultManager: disconnect from the old output returned "
 				"%s\n", strerror(status));
 		}
 	}
-	fMixerToPhysicalAudioOut.node = media_node::null;
-	fPhysicalAudioOutFromMixer.node = media_node::null;
 }
 // SPDX-SnippetEnd
 
@@ -798,8 +1032,11 @@ DefaultManager::_SavedDefault(uint32 defaultType) const
 }
 
 
-void
-DefaultManager::_FindTimeSource()
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+media_node_id
+DefaultManager::_FindTimeSource(media_node_id physicalAudioOut)
 {
 	live_node_info info[MAX_NODE_INFOS];
 	media_format input; /* a physical audio output has a logical data input (DAC)*/
@@ -808,17 +1045,17 @@ DefaultManager::_FindTimeSource()
 
 	/* First try to use the current default physical audio out
 	 */
-	if (fPhysicalAudioOut != -1) {
+	if (physicalAudioOut != -1) {
 		media_node clone;
-		if (fRoster->GetNodeFor(fPhysicalAudioOut,
+		if (fRoster->GetNodeFor(physicalAudioOut,
 				&clone) == B_OK) {
 			if (clone.kind & B_TIME_SOURCE) {
-				fTimeSource = clone.node;
+				media_node_id timeSource = clone.node;
 				fRoster->StartTimeSource(clone,
 					system_time() + 1000);
 				fRoster->ReleaseNode(clone);
 				TRACE("Default DAC timesource created!\n");
-				return;
+				return timeSource;
 			}
 			fRoster->ReleaseNode(clone);
 		} else {
@@ -848,10 +1085,10 @@ DefaultManager::_FindTimeSource()
 			if (0 != strstr(info[i].name, "DV Output"))
 				continue;
 			TRACE("Default DAC timesource \"%s\" created!\n", info[i].name);
-			fTimeSource = info[i].node.node;
+			media_node_id timeSource = info[i].node.node;
 			fRoster->StartTimeSource(info[i].node,
 				system_time() + 1000);
-			return;
+			return timeSource;
 		}
 	} else {
 		TRACE("Couldn't find DAC timesource node\n");
@@ -859,10 +1096,11 @@ DefaultManager::_FindTimeSource()
 
 	/* XXX we might use other audio or video clock timesources
 	 */
+	return -1;
 }
 
 
-void
+media_node_id
 DefaultManager::_FindAudioMixer()
 {
 	live_node_info info;
@@ -877,31 +1115,46 @@ DefaultManager::_FindAudioMixer()
 		B_BUFFER_PRODUCER | B_BUFFER_CONSUMER | B_SYSTEM_MIXER);
 	if (rv != B_OK || count != 1) {
 		TRACE("Couldn't find audio mixer node\n");
-		return;
+		return -1;
 	}
-	fAudioMixer = info.node.node;
 	TRACE("Default audio mixer node created\n");
+	return info.node.node;
 }
 
 
 status_t
-DefaultManager::_ConnectMixerToOutput()
+DefaultManager::_ConnectMixerToOutput(media_node_id audioMixer,
+	media_node_id physicalAudioOut, int32 inputID, media_output& newOutput,
+	media_input& newInput)
 {
-	if (fPhysicalAudioOutFromMixer.node != media_node::null) {
+	media_output oldOutput;
+	media_input oldInput;
+	bool hadOldConnection = false;
+	{
+		BAutolock stateLock(fLock);
+		if (fPhysicalAudioOutFromMixer.node != media_node::null) {
+			oldOutput = fMixerToPhysicalAudioOut;
+			oldInput = fPhysicalAudioOutFromMixer;
+			fMixerToPhysicalAudioOut.node = media_node::null;
+			fPhysicalAudioOutFromMixer.node = media_node::null;
+			hadOldConnection = true;
+		}
+	}
+	if (hadOldConnection) {
 		// Disconnect the old output. (The mixer should be in auto-stop mode,
 		// and stop the output on its own.)
-		status_t status = fRoster->Disconnect(fMixerToPhysicalAudioOut,
-			fPhysicalAudioOutFromMixer);
+		status_t status = fRoster->Disconnect(oldOutput, oldInput);
 		if (status != B_OK) {
 			TRACE("DefaultManager: disconnecting the old output failed (%s), "
 				"connecting the new one anyway\n", strerror(status));
 		}
 
-		fMixerToPhysicalAudioOut.node = media_node::null;
-		fPhysicalAudioOutFromMixer.node = media_node::null;
-
 		// Find and start the new timesource.
-		_FindTimeSource();
+		media_node_id newTimeSource = _FindTimeSource(physicalAudioOut);
+		if (newTimeSource != -1) {
+			BAutolock stateLock(fLock);
+			fTimeSource = newTimeSource;
+		}
 	}
 
 	media_node timesource, mixer, soundcard;
@@ -916,14 +1169,15 @@ DefaultManager::_ConnectMixerToOutput()
 	if (fRoster == NULL)
 		fRoster = BMediaRoster::Roster();
 
-	status_t rv = fRoster->GetNodeFor(fPhysicalAudioOut, &soundcard);
+	status_t rv = fRoster->GetNodeFor(physicalAudioOut, &soundcard);
 	if (rv != B_OK) {
 		TRACE("DefaultManager: failed to find soundcard (physical audio "
 			"output)\n");
 		return B_ERROR;
 	}
 
-	rv = fRoster->GetNodeFor(fAudioMixer, &mixer);
+	rv = fRoster->GetNodeFor(audioMixer, &mixer);
+// SPDX-SnippetEnd
 	if (rv != B_OK) {
 		fRoster->ReleaseNode(soundcard);
 		TRACE("DefaultManager: failed to find mixer\n");
@@ -963,7 +1217,7 @@ DefaultManager::_ConnectMixerToOutput()
 
 	for (int32 i = 0; i < count; i++) {
 		input = inputs[i];
-		if (input.destination.id == fPhysicalAudioOutInputID)
+		if (input.destination.id == inputID)
 			break;
 	}
 
@@ -1052,8 +1306,8 @@ DefaultManager::_ConnectMixerToOutput()
 		ts->Release();
 	}
 
-	fMixerToPhysicalAudioOut = newoutput;
-	fPhysicalAudioOutFromMixer = newinput;
+	newOutput = newoutput;
+	newInput = newinput;
 
 finish:
 	fRoster->ReleaseNode(mixer);

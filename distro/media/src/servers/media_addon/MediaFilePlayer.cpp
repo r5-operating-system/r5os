@@ -14,6 +14,7 @@
 #include <ObjectList.h>
 
 #include <stdlib.h>
+#include <string.h>
 
 
 static BObjectList<MediaFilePlayer> sPlayers;
@@ -116,7 +117,7 @@ MediaFilePlayer::MediaFilePlayer(const char* media_type,
 	fRef(*ref),
 	fSoundPlayer(NULL),
 	fPlayTrack(NULL),
-	fFinished(false)
+	fFinished(0)
 {
 	fPlayFile = new BMediaFile(&fRef);
 	fInitCheck = fPlayFile->InitCheck();
@@ -159,6 +160,12 @@ MediaFilePlayer::MediaFilePlayer(const char* media_type,
 MediaFilePlayer::~MediaFilePlayer()
 {
 	delete fSoundPlayer;
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	if (fPlayFile != NULL && fPlayTrack != NULL)
+		fPlayFile->ReleaseTrack(fPlayTrack);
+	// SPDX-SnippetEnd
 	delete fPlayFile;
 }
 
@@ -191,10 +198,13 @@ MediaFilePlayer::IsPlaying()
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
 bool
 MediaFilePlayer::IsFinished() const
 {
-	return fFinished;
+	return atomic_get(&fFinished) != 0;
 }
 
 
@@ -202,7 +212,8 @@ void
 MediaFilePlayer::Restart()
 {
 	fSoundPlayer->Stop();
-	fFinished = false;
+	atomic_set(&fFinished, 0);
+// SPDX-SnippetEnd
 	int64 frame = 0;
 	fPlayTrack->SeekToFrame(&frame);
 	fSoundPlayer->SetHasData(true);
@@ -217,20 +228,34 @@ MediaFilePlayer::Stop()
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
 void
 MediaFilePlayer::PlayFunction(void* cookie, void* buffer,
 	size_t size, const media_raw_audio_format& format)
 {
 	MediaFilePlayer* player = (MediaFilePlayer*)cookie;
 	int64 frames = 0;
-	player->fPlayTrack->ReadFrames(buffer, &frames);
+	status_t status = player->fPlayTrack->ReadFrames(buffer, &frames);
 
-	if (frames <= 0) {
+	size_t frameSize = (format.format & media_raw_audio_format::B_AUDIO_SIZE_MASK)
+		* format.channel_count;
+	size_t bytesRead = (status == B_OK && frames > 0 && frameSize > 0)
+		? (size_t)frames * frameSize : 0;
+	if (bytesRead < size) {
+		uint8 silence = (format.format == media_raw_audio_format::B_AUDIO_UCHAR)
+			? 0x80 : 0;
+		memset((uint8*)buffer + bytesRead, silence, size - bytesRead);
+	}
+
+	if (status != B_OK || frames <= 0) {
 		player->fSoundPlayer->SetHasData(false);
 		// Drop the player off this thread. Its destructor disconnects the
 		// mixer input and releases the mixer node (Haiku #16739).
-		player->fFinished = true;
+		atomic_set(&player->fFinished, 1);
 		if (sReleaseSem >= 0)
 			release_sem(sReleaseSem);
 	}
 }
+// SPDX-SnippetEnd
