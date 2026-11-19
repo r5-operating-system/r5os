@@ -13,11 +13,85 @@
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+#include <fcntl.h>
+#include <stdio.h>
 #include <string.h>
 
 #include <lock.h>
+#include <team.h>
 #include <util/AutoLock.h>
 #include <r5_shutdown.h>
+
+
+static const char* kShutdownTrailPath = "/boot/system/var/log/r5-shutdown-trail";
+
+
+void
+r5_shutdown_trail(const char* step, bool reset)
+{
+	if (step == NULL || step[0] == '\0')
+		return;
+	dprintf("r5 shutdown: %s\n", step);
+	if (!are_interrupts_enabled())
+		return;
+
+	int flags = O_WRONLY | O_CREAT | (reset ? O_TRUNC : O_APPEND);
+	int fd = _kern_open(-1, kShutdownTrailPath, flags, 0644);
+	if (fd < 0)
+		return;
+
+	char line[128];
+	int len = snprintf(line, sizeof(line), "%s\n", step);
+	if (len > 0) {
+		if ((size_t)len >= sizeof(line))
+			len = (int)sizeof(line) - 1;
+		_kern_write(fd, -1, line, (size_t)len);
+		_kern_fsync(fd, false);
+	}
+	_kern_close(fd);
+}
+
+
+void
+r5_shutdown_log_previous(void)
+{
+	int fd = _kern_open(-1, kShutdownTrailPath, O_RDONLY, 0);
+	if (fd < 0)
+		return;
+
+	char raw[512];
+	ssize_t got = _kern_read(fd, 0, raw, sizeof(raw) - 1);
+	_kern_close(fd);
+	_kern_unlink(-1, kShutdownTrailPath);
+
+	if (got <= 0)
+		return;
+	raw[got] = '\0';
+
+	char summary[600];
+	size_t out = 0;
+	bool needSep = false;
+	for (ssize_t i = 0; i < got && out + 5 < sizeof(summary); i++) {
+		char c = raw[i];
+		if (c == '\r')
+			continue;
+		if (c == '\n') {
+			needSep = (out > 0);
+			continue;
+		}
+		if (needSep) {
+			summary[out++] = ' ';
+			summary[out++] = '-';
+			summary[out++] = '>';
+			summary[out++] = ' ';
+			needSep = false;
+		}
+		summary[out++] = c;
+	}
+	summary[out] = '\0';
+	if (out > 0)
+		dprintf("r5 previous shutdown: %s\n", summary);
+}
 
 
 /* R5: a driver that leaves hardware running (a GPU's command processor,
@@ -94,22 +168,27 @@ system_shutdown(bool reboot)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-	dprintf("r5 shutdown: enter reboot=%d\n", reboot ? 1 : 0);
+	r5_shutdown_trail(reboot ? "enter reboot=1" : "enter reboot=0", true);
 // SPDX-SnippetEnd
 
 	// Now shutdown all system services!
 	// TODO: Once we are sure we can shutdown the system on all hardware
 	// checking reboot may not be necessary anymore.
 	if (reboot) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		team_id currentTeam = team_get_current_team_id();
+// SPDX-SnippetEnd
 		while (get_next_team_info(&cookie, &info) == B_OK) {
-			if (info.team == B_SYSTEM_TEAM)
+			if (info.team == B_SYSTEM_TEAM || info.team == currentTeam)
 				continue;
 			kill_team(info.team);
 		}
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-		dprintf("r5 shutdown: teams killed\n");
+		r5_shutdown_trail("teams_killed", false);
 // SPDX-SnippetEnd
 	}
 
@@ -117,14 +196,15 @@ system_shutdown(bool reboot)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-	dprintf("r5 shutdown: sync done\n");
+	r5_shutdown_trail("sync_done", false);
 // SPDX-SnippetEnd
 
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+	r5_shutdown_trail("hooks_start", false);
 	call_shutdown_hooks(reboot);
-	dprintf("r5 shutdown: hooks done\n");
+	r5_shutdown_trail("hooks_done", false);
 // SPDX-SnippetEnd
 
 	return arch_cpu_shutdown(reboot);

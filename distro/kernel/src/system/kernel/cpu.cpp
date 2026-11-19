@@ -11,6 +11,11 @@
 
 
 #include <cpu.h>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <r5_shutdown.h>
+// SPDX-SnippetEnd
 #include <arch/cpu.h>
 #include <arch/system_info.h>
 
@@ -137,6 +142,11 @@ cpu_init_post_modules(kernel_args *args)
 
 	load_cpufreq_module();
 	load_cpuidle_module();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	r5_shutdown_log_previous();
+// SPDX-SnippetEnd
 	return B_OK;
 }
 

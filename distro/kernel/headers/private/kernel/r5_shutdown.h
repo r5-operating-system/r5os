@@ -22,6 +22,8 @@ extern "C" {
 
 status_t r5_register_shutdown_hook(r5_shutdown_hook hook, void* cookie);
 status_t r5_unregister_shutdown_hook(r5_shutdown_hook hook, void* cookie);
+void r5_shutdown_trail(const char* step, bool reset);
+void r5_shutdown_log_previous(void);
 
 #ifdef __cplusplus
 }
