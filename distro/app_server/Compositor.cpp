@@ -3468,12 +3468,24 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 		uint32 n = 0;
 		for (int32 i = 0; regions != NULL && i < copy.CountRects(); i++) {
 			clipping_rect r = copy.RectAtInt(i);
+			uint32 widthBytes = (uint32)(r.right - r.left + 1) * 4;
+			// One linear copy only when the rows are contiguous in both
+			// buffers. A partial row has a gap, and one copy would overwrite it.
+			if (vk->backPitch == vk->scanPitch && r.left == 0
+				&& widthBytes == vk->backPitch) {
+				regions[n].srcOffset = (uint64)r.top * vk->backPitch;
+				regions[n].dstOffset = (uint64)r.top * vk->scanPitch;
+				regions[n].size = (uint64)(r.bottom - r.top + 1)
+					* vk->backPitch;
+				n++;
+				continue;
+			}
 			for (int32 y = r.top; y <= r.bottom; y++) {
 				regions[n].srcOffset = (uint64)y * vk->backPitch
 					+ (uint64)r.left * 4;
 				regions[n].dstOffset = (uint64)y * vk->scanPitch
 					+ (uint64)r.left * 4;
-				regions[n].size = (uint64)(r.right - r.left + 1) * 4;
+				regions[n].size = widthBytes;
 				n++;
 			}
 		}
@@ -3781,11 +3793,24 @@ Compositor::_RecordBufferCopy(const Layer* layer, const BRegion& region,
 	for (int32 i = 0; i < region.CountRects(); i++) {
 		clipping_rect r = region.RectAtInt(i);
 		uint32 sourceX = r.left - layer->left;
+		uint32 width = (uint32)(r.right - r.left + 1);
+		// Pitches are in pixels. One copy per rectangle when they match and
+		// the rectangle is the whole row; otherwise the gap between rows
+		// would be copied too.
+		if (sourceStride == frameStride && sourceX == 0 && r.left == 0
+			&& width == sourceStride) {
+			uint32 sourceY = r.top - layer->top;
+			copies[n].srcOffset = (uint64)sourceY * sourceStride * 4;
+			copies[n].dstOffset = (uint64)r.top * frameStride * 4;
+			copies[n].size = (uint64)(r.bottom - r.top + 1) * sourceStride * 4;
+			n++;
+			continue;
+		}
 		for (int32 y = r.top; y <= r.bottom; y++) {
 			uint32 sourceY = y - layer->top;
 			copies[n].srcOffset = ((uint64)sourceY * sourceStride + sourceX) * 4;
 			copies[n].dstOffset = ((uint64)y * frameStride + r.left) * 4;
-			copies[n].size = (uint64)(r.right - r.left + 1) * 4;
+			copies[n].size = (uint64)width * 4;
 			n++;
 		}
 	}

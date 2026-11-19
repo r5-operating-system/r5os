@@ -210,7 +210,8 @@ SkiaPainter::_DrawTextLines(SkCanvas* canvas, const GlyphCollector& collector,
 /*!	Painter::DrawString() and AGGTextRenderer::RenderString(). */
 BRect
 SkiaPainter::DrawString(const char* string, uint32 length, BPoint baseLine,
-	const escapement_delta* delta, const BPoint* offsets, double* _advance)
+	const escapement_delta* delta, const BPoint* offsets, double* _advance,
+	BPoint* _pen)
 {
 	if (fClippingRegion == NULL || !fClippingRegion->Frame().IsValid()
 		|| fTarget == NULL || !fTarget->HasSurface())
@@ -229,6 +230,8 @@ SkiaPainter::DrawString(const char* string, uint32 length, BPoint baseLine,
 	}
 	if (_advance != NULL)
 		*_advance = collector.fEndX;
+	if (_pen != NULL)
+		_pen->Set(collector.fEndX, collector.fEndY);
 
 	// AGGTextRenderer: shear and rotation, the baseline, the view's
 	// transform; with offsets the positions are absolute

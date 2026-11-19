@@ -50,7 +50,7 @@ skia_use_perfetto=false skia_use_partition_alloc=false
 skia_enable_pdf=false skia_enable_skottie=false skia_enable_svg=false
 skia_enable_tools=false skia_enable_fontmgr_custom_empty=true
 werror=false
-extra_cflags=[\"-DSK_BUILD_FOR_UNIX\"]
+extra_cflags=[\"-DSK_BUILD_FOR_UNIX\",\"-march=x86-64-v2\"]
 "
 ARGS=$(echo $ARGS)
 
@@ -62,5 +62,28 @@ if grep -q 'char const \* const name;' src/ports/SkFontHost_FreeType.cpp; then
 	sed 's/\r$//' "$HERE/patches/gcc13-to-array.patch" | git apply
 fi
 bin/gn gen "$OUT" --args="$ARGS"
+# The library baseline is x86-64-v2. Skia's opts("ml3") adds
+# -march=x86-64-v3 after that, and SkOpts.cpp calls Init_ml3() only when
+# this baseline is below AVX2. A last -march of x86-64-v2 on the ml3
+# object would mean extra_cflags overrode the per-ISA flag.
+python3 - "$OUT/build.ninja" <<'PY'
+import sys
+text = open(sys.argv[1], encoding="utf-8", errors="replace").read()
+if "x86-64-v3" not in text:
+    sys.exit("build.ninja has no -march=x86-64-v3 (Skia ml3 flags missing)")
+if "x86-64-v2" not in text:
+    sys.exit("build.ninja has no -march=x86-64-v2 baseline")
+PY
 "$NINJA" -C "$OUT" skia
 ls -l "$OUT/libskia.a"
+"$CROSS/bin/x86_64-unknown-haiku-nm" -A "$OUT/libskia.a" | grep -q 'Init_ml3$' \
+	|| { echo "libskia.a has no Init_ml3"; exit 1; }
+# vfmadd is AVX2+FMA, which x86-64-v2 does not have. It must appear in an
+# ml3 member, so that member was compiled with Skia's per-ISA flag.
+"$CROSS/bin/x86_64-unknown-haiku-objdump" -d "$OUT/libskia.a" | awk '
+	/^In archive/ { next }
+	/^[^ ].*:/ { ml3 = index($0, "ml3") != 0; next }
+	ml3 && /vfmadd/ { hit = 1 }
+	END { exit !hit }
+' || { echo "ml3 objects in libskia.a have no AVX2/FMA instruction"; exit 1; }
+echo "skia: Init_ml3 is in libskia.a and the ml3 objects use AVX2/FMA"

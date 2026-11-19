@@ -1780,6 +1780,109 @@ gpu_wait_ready(const gpu_sync* sync, const r5_gpu_cs_sync* wait)
 }
 
 
+static bool
+gpu_clflushopt()
+{
+	static int cached = -1;
+	if (cached >= 0)
+		return cached == 1;
+	uint32 eax = 0;
+	uint32 ebx = 0;
+	uint32 ecx = 0;
+	uint32 edx = 0;
+	asm volatile("cpuid"
+		: "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx)
+		: "a"(0));
+	if (eax < 7) {
+		cached = 0;
+		return false;
+	}
+	eax = 7;
+	ecx = 0;
+	asm volatile("cpuid"
+		: "+a"(eax), "=b"(ebx), "+c"(ecx), "=d"(edx));
+	/* IA32_FEATURE_CLFLUSHOPT, leaf 7 ebx bit 23. */
+	cached = (ebx & (1u << 23)) != 0 ? 1 : 0;
+	return cached == 1;
+}
+
+
+static void
+gpu_flush_lines(void* cpu, uint64 bytes)
+{
+	uintptr_t start = (uintptr_t)cpu & ~(uintptr_t)63;
+	uintptr_t end = ((uintptr_t)cpu + (uintptr_t)bytes + 63) & ~(uintptr_t)63;
+	for (uintptr_t line = start; line < end; line += 64) {
+		if (gpu_clflushopt())
+			asm volatile("clflushopt (%0)" :: "r"((void*)line) : "memory");
+		else
+			asm volatile("clflush (%0)" :: "r"((void*)line) : "memory");
+	}
+}
+
+
+/*!	The kernel pointer of this indirect buffer. The remembered one is used
+	when that range is still mapped there; otherwise the handles are walked
+	once and the pointer is remembered.
+*/
+static uint8*
+gpu_ib_cpu(gpu_client* client, uint64 va, uint64 bytes)
+{
+	for (uint32 n = 0; n < kMaxList; n++) {
+		gpu_ib_cpu* known = &client->ibCpu[n];
+		if (!known->valid || known->va != va || known->bytes != bytes)
+			continue;
+		if (known->handleIndex >= client->handleCount
+			|| known->range >= kMaxRange)
+			continue;
+		gpu_bo* bo = gpu_bo_get(client, client->handles[known->handleIndex]);
+		if (bo == NULL || bo->backing == NULL
+			|| bo->backing->domain != R5_GPU_DOMAIN_GTT
+			|| bo->backing->kernel == NULL)
+			continue;
+		gpu_range* range = &bo->ranges[known->range];
+		if (!range->live || va < range->va
+			|| va + bytes > range->va + range->bytes)
+			continue;
+		uint8* cpu = (uint8*)bo->backing->kernel + range->offset
+			+ (va - range->va);
+		if (cpu != known->cpu)
+			continue;
+		return cpu;
+	}
+	for (uint32 h = 0; h < client->handleCount; h++) {
+		gpu_bo* bo = gpu_bo_get(client, client->handles[h]);
+		if (bo == NULL || bo->backing == NULL
+			|| bo->backing->domain != R5_GPU_DOMAIN_GTT
+			|| bo->backing->kernel == NULL)
+			continue;
+		for (uint32 r = 0; r < kMaxRange; r++) {
+			gpu_range* range = &bo->ranges[r];
+			if (!range->live || va < range->va
+				|| va + bytes > range->va + range->bytes)
+				continue;
+			uint8* cpu = (uint8*)bo->backing->kernel + range->offset
+				+ (va - range->va);
+			gpu_ib_cpu* slot = &client->ibCpu[0];
+			for (uint32 n = 0; n < kMaxList; n++) {
+				if (!client->ibCpu[n].valid) {
+					slot = &client->ibCpu[n];
+					break;
+				}
+			}
+			slot->valid = true;
+			slot->va = va;
+			slot->bytes = bytes;
+			slot->cpu = cpu;
+			slot->handleIndex = h;
+			slot->range = r;
+			return cpu;
+		}
+	}
+	return NULL;
+}
+
+
 static status_t
 gpu_submit(gpu_client* client, void* buffer, size_t length)
 {
@@ -1889,36 +1992,22 @@ gpu_submit(gpu_client* client, void* buffer, size_t length)
 	status = gpu_ibs_mapped(client, ibs, in.ib_count, in.ring);
 	if (status != B_OK)
 		return status;
-	/* Temporary. A GTT indirect buffer is MTYPE_NC and snooped. clflush
-	 * plus mfence makes the CPU stores visible before the doorbell. The
-	 * pointer is the kernel area, never the user clone (SMAP).
+	/* A GTT indirect buffer is MTYPE_NC and snooped. The PTE flags stay
+	 * as they are. The lines of the remembered buffer are flushed, then
+	 * one fence, before the doorbell. clflushopt and sfence when the CPU
+	 * has them, otherwise clflush and mfence. The pointer is the kernel
+	 * area, never the user clone (SMAP).
 	 */
 	for (uint32 i = 0; i < in.ib_count; i++) {
 		uint64 bytes = (uint64)ibs[i].dwords * 4;
-		for (uint32 h = 0; h < client->handleCount; h++) {
-			gpu_bo* bo = gpu_bo_get(client, client->handles[h]);
-			if (bo == NULL || bo->backing->domain != R5_GPU_DOMAIN_GTT
-				|| bo->backing->kernel == NULL)
-				continue;
-			for (uint32 r = 0; r < kMaxRange; r++) {
-				gpu_range* range = &bo->ranges[r];
-				if (!range->live)
-					continue;
-				if (ibs[i].gpu_va < range->va
-					|| ibs[i].gpu_va + bytes > range->va + range->bytes)
-					continue;
-				uint8* cpu = (uint8*)bo->backing->kernel + range->offset
-					+ (ibs[i].gpu_va - range->va);
-				uintptr_t start = (uintptr_t)cpu & ~(uintptr_t)63;
-				uintptr_t end = ((uintptr_t)cpu + (uintptr_t)bytes + 63)
-					& ~(uintptr_t)63;
-				for (uintptr_t line = start; line < end; line += 64)
-					asm volatile("clflush (%0)" :: "r"((void*)line)
-						: "memory");
-			}
-		}
+		uint8* cpu = gpu_ib_cpu(client, ibs[i].gpu_va, bytes);
+		if (cpu != NULL)
+			gpu_flush_lines(cpu, bytes);
 	}
-	asm volatile("mfence" ::: "memory");
+	if (gpu_clflushopt())
+		asm volatile("sfence" ::: "memory");
+	else
+		asm volatile("mfence" ::: "memory");
 	if (gpu_debug_enabled()) {
 		for (uint32 i = 0; i < in.ib_count; i++) {
 			dprintf("radeon_hd: t %lld submit ib va %016llx dw %lu flags %lu\n",

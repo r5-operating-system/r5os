@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - M13 follow-up, part 1: the review fixes
+
+Problem: The review of the Skia drawing path found six costs. The ioctl wait for a sync object was 5 seconds while the RADV compose fence allows 15, so a compose still inside its own limit failed the submit and turned GPU drawing off. Finding a cached bitmap hashed every pixel on every lookup. A buffer copy of a rectangle submitted one Vulkan copy per row even when the rows were one contiguous span. DrawString with an offset array laid the glyphs out twice. Each submit walked every buffer handle to flush the indirect buffer. Skia's AVX2 and FMA functions are selected at run time only when the library itself is built below that level.
+
+What changed: The submit wait is 15 seconds, the same as the compose fence. It stays in the ioctl. Damage is still published after the fence, because a timeout still fails the submit. A bitmap app_server owns is recognised by a generation counter, bumped when its pixels are replaced or drawn. A client bitmap is recognised by a sample of 64 words, and a full hash every 32 lookups. A rectangle is one Vulkan copy when the pitches match and the rectangle is the whole row; a partial row stays one copy per row, because one linear copy would overwrite the gap. DrawString with offsets uses the pen from that one layout. The indirect buffer's kernel pointer is remembered and only its lines are flushed, with clflushopt and sfence when the CPU has them. The page-table flags and the snooped GTT mapping are unchanged. The Skia build pins the rest of the library to x86-64-v2 and checks that Init_ml3 is in libskia.a and that the ml3 objects contain an FMA instruction. app_server is not built above x86-64-v2.
+
+Limits: Not booted on the 5625U. The shipped libskia.a was not rebuilt by this change; the check runs when distro/skia/build-skia.sh runs. Compose compare on Lavapipe is the QEMU check for the bitmap cache and the copies.
+
 ## 2026-11-19 - CPU Info is tall enough for both cards
 
 Problem: CPU Info still opened a little short. The bottom card, Enabled features, was cut off. The wrapping lines (Extra features, Kernel) report a height of one line until they have a width, so the preferred window height was short of the wrapped text. There is no scrollbar.

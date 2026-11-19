@@ -31,7 +31,11 @@ static const uint32 kMaxPrt = 32;
 // The same as R5_SHARE_MAX_IMAGE_BYTES (r5_share.h), app_server's cap.
 static const uint64 kMaxBoBytes = R5_SHARE_MAX_IMAGE_BYTES;
 static const uint64 kRoomWaitUs = 100000;
-static const uint64 kFreeWaitUs = 5000000;
+/* The same 15 s as the RADV compose fence (Compositor.cpp kFenceLimit).
+ * A shorter wait here made vkQueueSubmit fail and turned GPU drawing off
+ * while the compose was still inside its own limit. Lavapipe does not
+ * use this ioctl. */
+static const uint64 kFreeWaitUs = 15000000;
 /* amdgpu.lockup_timeout for GFX is 10000 ms. Client waits do not use this. */
 static const bigtime_t kWatchdogUs = 10000000;
 
@@ -122,6 +126,20 @@ struct gpu_prt {
 };
 
 
+/* The indirect buffer flushed on the last submit of this file. The next
+ * submit flushes those lines only, after checking the range is still the
+ * one that was remembered. A miss walks the handles once and remembers
+ * the new one. */
+struct gpu_ib_cpu {
+	bool		valid;
+	uint64		va;
+	uint64		bytes;
+	void*		cpu;
+	uint32		handleIndex;
+	uint32		range;
+};
+
+
 struct gpu_client {
 	void*			info;
 	uint32			handles[kMaxClientBo];
@@ -148,6 +166,7 @@ struct gpu_client {
 	r5_share_export	exports[R5_SHARE_EXPORTS_PER_FILE];
 	/* "buffer limit <n> reached" was logged for this file. */
 	bool			limitLogged;
+	gpu_ib_cpu		ibCpu[kMaxList];
 };
 
 

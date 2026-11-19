@@ -5,6 +5,10 @@
 
 M12 made Skia work as the drawing engine, opt-in (`gpu_draw true` in the radeon_hd settings); it closed on correctness, not speed (owner, 16 Nov 2026). M13 makes R5 fast, and then turns Skia on by default: window drag, scroll and resize at 60 fps on the Ryzen 5 5625U (RADV), and smooth on Lavapipe (about 8 ms or less per full frame). This plan is the owner's performance advice (16 Nov 2026) with the R5 corrections and the M13 items that were already agreed. Rules: `AGENTS.md` and `docs/GPU-ARCHITECTURE.md`.
 
+## Submit wait (19 Nov 2026)
+
+`gpu_submit` waits in the ioctl for a wait syncobj. That wait is 15 seconds, the same as the RADV compose fence (`kFenceLimit` in `Compositor.cpp`). It was 5 seconds, which is stricter than the fence: a compose still inside its own 15 seconds failed `vkQueueSubmit` and turned GPU drawing off. The wait stays in the ioctl. Moving it onto the GPU queue would change the packets that are submitted, and that is not a change to make without a boot on the 5625U. Damage stays after the fence. The ioctl still returns a timeout when the wait exceeds 15 seconds, `vkQueueSubmit` fails, and drawing turns off, so publishing the damage before the fence would show a frame whose compose had already failed. Lavapipe does not use this ioctl. Its compose wait stays unlimited.
+
 ## Part 1: the core of M13 in plain language
 
 **What happens now (M12).**

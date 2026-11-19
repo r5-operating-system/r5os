@@ -50,6 +50,8 @@ def main() -> int:
     copy("drawing/Painter/Painter.cpp", app / "drawing" / "Painter" / "Painter.cpp")
     copy("drawing/Painter/bitmap_painter/DrawBitmapBilinear.h",
         app / "drawing" / "Painter" / "bitmap_painter" / "DrawBitmapBilinear.h")
+    copy("ServerBitmap.h", app / "ServerBitmap.h")
+    copy("ServerBitmap.cpp", app / "ServerBitmap.cpp")
     copy("font/FontCache.cpp", app / "font" / "FontCache.cpp")
     copy("font/FontCacheEntry.cpp", app / "font" / "FontCacheEntry.cpp")
     copy("agg-Jamfile", HAIKU / "src" / "libs" / "agg" / "Jamfile")
