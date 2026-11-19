@@ -1,5 +1,17 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - L2CAP send timer no longer outlives its connection
+
+Problem: Power off on the 5625U panicked in thread "net timer": vm_page_fault at 0x60, L2capEndpoint::_SendTimer -> _SendQueued. The next boot's trail was only "enter reboot=0". RemoveConnection() took the HciConnection off the list and then asked L2CAP to drop its endpoints. connection_for() only accepts a connection still in that list, so Disconnected() never ran, the endpoints stayed OPEN, and the send timer used the freed connection. The log line "Couldn't find the connection to complete l2cap disconnection" is that miss.
+
+The WH-1000XM3 was not ended by R5 with reason 0x16. In boot-5625u-55, 0x16 ("this computer ended it") is logged twice while the game controllers are up, before the headset. Nobody in this tree sends HCI reason 0x16; MediaTek firmware reports it for a disconnect the controller started. The headset itself then sent 0x13 ("the device ended it") about when SDP finished and before any profile channel existed. A2DP connected only once sound was playing, and HFP waited half a second, so the headset dropped the idle link. The microphone (HFP) was not reached.
+
+What changed: l2cap_error_received() accepts the still-living HciConnection after it has left the list, because RemoveConnection() deletes it only after this returns. _MarkClosed() cancels the send timer and frees the queued buffers. bluetooth_audio opens AVDTP as soon as a paired headset's link is up, not only when audio plays. HFP no longer waits half a second before its first RFCOMM connect.
+
+Limits: The panic, the XM3 staying connected, and A2DP playback are only proven on the 5625U. Why the controllers' links were reported as 0x16 is not fixed: this tree never sends that reason.
+
+Tested: not on hardware in this change.
+
 ## 2026-11-19 - Restart syncs before anything else
 
 Problem: On the 5625U a restart's next-boot trail was "r5 previous shutdown: enter reboot=1 -> teams_killed" and nothing after it. Power off, which does not kill teams, reached the end of the trail. sync() never returned. kill_team() only signals a team's main thread and does not wait, so the vnode walk and the block cache ran while those teams were tearing the same objects down. No network share was mounted. The HP CMOS error only followed the forced power-off after that hang.

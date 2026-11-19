@@ -59,10 +59,10 @@ HFPGateway::DefaultOptions()
 	options.connect = default_connect;
 	options.connected = NULL;
 	options.cookie = NULL;
-	// Half a second, not 5 s: on stick 54 the WH-1000XM3 ended the link
-	// (reason 0x13) 2 s after SDP when no profile had come up, and nothing
-	// else opens one right after pairing (A2DP connects when sound plays).
-	options.connectDelay = 500000;
+	// No wait. On stick 54 the WH-1000XM3 ended the link (reason 0x13,
+	// the headset) about 2 s after SDP when no profile had come up.
+	// A2DP now opens as soon as that link is up; HFP starts at once too.
+	options.connectDelay = 0;
 	options.retryDelay = 10000000;
 	options.retries = 2;
 	options.serviceLevelTimeout = 30000000;

@@ -419,6 +419,20 @@ l2cap_error_received(net_error error, net_error_data* errorData, net_buffer* dat
 		data->interface_address = NULL;
 		struct HciConnection* connection = connection_for(data,
 			interfaceAddress);
+		// RemoveConnection() takes the HciConnection off the list and only
+		// then calls this, and deletes the object after we return. The
+		// list check in connection_for() therefore never finds it, the
+		// endpoints stay OPEN, and a send timer later uses the freed
+		// connection (page fault at a small offset, thread "net timer").
+		// The pointer in the buffer is that object, and it is still alive.
+		if (connection == NULL && interfaceAddress != NULL
+			&& interfaceAddress->local != NULL) {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Winvalid-offsetof"
+			connection = (HciConnection*)((uint8*)interfaceAddress
+				- offsetof(HciConnection, interface_address));
+#pragma GCC diagnostic pop
+		}
 		// SPDX-SnippetEnd
 		if (connection == NULL) {
 			ERROR("Couldn't find the connection to complete l2cap disconnection\n");
