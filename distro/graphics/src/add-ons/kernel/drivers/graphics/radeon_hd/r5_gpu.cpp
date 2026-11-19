@@ -72,6 +72,7 @@ gpu_cache_log_settings()
 	bool debugOn = false;
 	bool selftestOn = false;
 	bool submitLogOn = false;
+	bool traceOn = false;
 	uint32 hangTest = 0;
 	void* settings = load_driver_settings("radeon_hd");
 	if (settings != NULL) {
@@ -81,6 +82,8 @@ gpu_cache_log_settings()
 		if (hang != NULL)
 			hangTest = (uint32)strtoul(hang, NULL, 10);
 		debugOn = get_driver_boolean_parameter(settings, "gpu_debug",
+			false, true);
+		traceOn = get_driver_boolean_parameter(settings, "gpu_trace",
 			false, true);
 		selftestOn = get_driver_boolean_parameter(settings, "gpu_selftest",
 			false, true);
@@ -109,6 +112,7 @@ gpu_cache_log_settings()
 	}
 	r5_gfx9_set_defer_stamp(sDeferred ? gpu_defer_stamp : 0);
 	sDebugOn = debugOn ? 1 : 0;
+	sTraceOn = traceOn ? 1 : 0;
 	sSelftestOn = selftestOn ? 1 : 0;
 	sSubmitLogOn = submitLogOn ? 1 : 0;
 	sHangTest = hangTest;
@@ -149,11 +153,7 @@ gpu_active_cus(radeon_info* info, uint32 cuPerSh, uint32* _bitmap)
 		count += bit & 1u;
 	if (_bitmap != NULL)
 		*_bitmap = bitmap;
-	if (gpu_debug_enabled())
-	dprintf("radeon_hd: t %lld gfx9 cu cc %08lx user %08lx active %lu bitmap %08lx\n",
-		(long long)system_time(),
-		(unsigned long)cc, (unsigned long)user, (unsigned long)count,
-		(unsigned long)bitmap);
+	gpu_log_cu(cc, user, count, bitmap);
 	return count;
 }
 

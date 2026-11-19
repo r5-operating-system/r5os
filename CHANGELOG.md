@@ -1,5 +1,19 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - gpu_debug no longer fills the syslog
+
+Problem: stick 62 on the 5625U (`gpu_debug true`, `gpu_selftest true`) wrote 52,657 `radeon_hd` lines between kernel time 8.779 s and 236.050 s (227 s, about 13,900 lines a minute). 49,552 are `submit ib va`, 1,145 are `va map`, 1,113 are `bo domain` and 430 are `gfx9 cu cc`. The syslog rotated at 4 MB, so a longer session loses the boot start and the self-test. The `dprintf` is also on the submit path.
+
+What changed: with `gpu_debug` or `gpu_selftest`, the first 20 of each of those four kinds are still printed in full. After that they are counted, and one line is printed every 10 seconds (the same interval as app_server's `gpu_debug` report): `radeon_hd: 10 s submits … dw max … va maps … bo creates … (gtt … vram …, wc …) cu …`. `gpu_trace` (default off), read next to `gpu_debug` in the kernel settings and in libdrm, prints every one of those lines and the translator's successful ioctl, and does not summarize. `gpu_debug` no longer does. Refusals, `gpu lost` and `syncobj limit` stay, still capped at 32 a boot. The ring-room line stays at most once a second. The self-test stage lines are unchanged. The ring, the PSP load, the reset, the stop at shutdown and the page tables are unchanged.
+
+On a session shaped like stick 62 that is 20 full lines of each kind (80) plus one summary every 10 s (about 23 over those 227 s) plus the 417 other `radeon_hd` lines that log already had. That is about 140 `radeon_hd` lines a minute, and 6 a minute from these four kinds once the first 20 are done. The 5625U itself is unproven until a stick.
+
+The strings the stick checks look for are still in the source. `distro/graphics/boot/check` matches `radeon_hd: bo domain .* snooped 1` and `radeon_hd: bo domain 2 .*snooped 0`. `scripts/check-pre-stick.py` matches `bytes %llu snooped %d` in `r5_gpu_core.cpp`. Those lines are the first 20 buffer creates. `m13-measure` and `r5-gpu-selftest` do not look for `submit ib va`, `va map`, `bo domain` or `gfx9 cu cc`.
+
+Tested: `scripts/build-locked.sh` on this machine (WSL). The first jam failed to compile `r5_gpu_core.cpp` (`atomic_add` takes `int32*`, not `vint32*`). The counters are `int32`. The rebuild exited 0 (`...updated 8633 target(s)...`, `jam_exit=0`, `mesa_exit=0`, 19 Nov 2026, 21:16 Europe/Amsterdam).
+
+QEMU, KVM, a private copy of `r5-os.image` at `/home/nickr/r5-os-gpu-debug.image`, no other QEMU was running. `-display none` and Enter over QMP. The guest settings file was `gpu_debug true`. Lavapipe (`gpu compositor on lavapipe: no render node`, `gpu draw on llvmpipe (LLVM 21.1.8, 256 bits)`). Tracker and Deskbar started. The syslog has `compose median 1041 us cpu 44 ms per 10 s`, a second `compose median … per 10 s`, and `draw median … per 10 s`. There is no radeon_hd device in this guest, so the kernel summary is not in this log. 19 Nov 2026, 21:19–21:27 Europe/Amsterdam. No stick.
+
 ## 2026-11-19 - CS35L41 firmware for the ENVY speakers, stored only
 
 Problem: the HP ENVY x360 15-ey0xxx (Ryzen 5 5625U, ACPI `CSC3551`, subsystem `103C8A31`) plays through two Cirrus CS35L41 amplifiers. The HDA controller is already driven. The speakers stay silent because nothing powers those amplifiers or loads their firmware.

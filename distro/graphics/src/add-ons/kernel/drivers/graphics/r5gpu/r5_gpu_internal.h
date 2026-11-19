@@ -175,6 +175,7 @@ extern int sOnceBits;
 extern int sDebugOn;
 extern int sSelftestOn;
 extern int sSubmitLogOn;
+extern int sTraceOn;
 extern int sDeferred;
 extern gpu_bo sBo[kMaxBo];
 extern gpu_backing sBacking[kMaxBo];
@@ -212,6 +213,12 @@ gpu_gone(const gpu_client* client)
 void gpu_cache_log_settings();
 bool gpu_debug_enabled();
 bool gpu_submit_log_enabled();
+bool gpu_trace_enabled();
+void gpu_log_submit(uint64 va, uint32 dwords, uint32 flags);
+void gpu_log_va_map(uint64 va, uint64 bytes, uint32 domain);
+void gpu_log_bo(uint32 domain, uint32 requested, uint32 used, uint64 bytes,
+	int snooped);
+void gpu_log_cu(uint32 cc, uint32 user, uint32 active, uint32 bitmap);
 bool gpu_dump_begin();
 bool gpu_dump_line();
 // A file's GTT limit (a quarter of system memory), also what GET_INFO
