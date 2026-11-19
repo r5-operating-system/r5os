@@ -110,22 +110,34 @@ copy_fpu_to_signal_frame(savefpu* dest, const void* src)
 static void
 copy_fpu_from_signal_frame(void* dest, const savefpu* src)
 {
-	if (!gHasXsavec) {
-		memcpy(dest, src, min_c(gFPUSaveLength, sizeof(savefpu)));
-		return;
-	}
+	const savefpu* initialState
+		= reinterpret_cast<const savefpu*>(&gInitialState.user_fpu_state);
+	uint32 mxcsrMask = initialState->fp_fxsave.mxcsr_mask;
+	if (mxcsrMask == 0)
+		mxcsrMask = 0x0000ffbf;
 
 	uint8* destBytes = static_cast<uint8*>(dest);
-	memset(destBytes, 0, min_c(gFPUSaveLength, sizeof(((arch_thread*)0)->user_fpu_state)));
+	size_t maxLen = min_c(gFPUSaveLength,
+		sizeof(((arch_thread*)0)->user_fpu_state));
+	memset(destBytes, 0, maxLen);
 	memcpy(destBytes, &src->fp_fxsave, sizeof(src->fp_fxsave));
+	reinterpret_cast<savefpu*>(destBytes)->fp_fxsave.mxcsr &= mxcsrMask;
 
-	uint64 supported = gXsaveMask & (IA32_XCR0_X87 | IA32_XCR0_SSE | IA32_XCR0_AVX);
+	if (!gHasXsave)
+		return;
+
+	uint64 supported = gXsaveMask
+		& (IA32_XCR0_X87 | IA32_XCR0_SSE | IA32_XCR0_AVX);
 	uint64 xstateBv = src->fp_xstate.bv & supported;
-	uint64 xcompBv = (1ULL << 63) | supported;
-	memcpy(destBytes + 512, &xstateBv, sizeof(xstateBv));
-	memcpy(destBytes + 520, &xcompBv, sizeof(xcompBv));
+	if (maxLen >= 576) {
+		memcpy(destBytes + 512, &xstateBv, sizeof(xstateBv));
+		if (gHasXsavec) {
+			uint64 xcompBv = (1ULL << 63) | supported;
+			memcpy(destBytes + 520, &xcompBv, sizeof(xcompBv));
+		}
+	}
 
-	if ((supported & IA32_XCR0_AVX) != 0)
+	if ((supported & IA32_XCR0_AVX) != 0 && maxLen >= 832)
 		memcpy(destBytes + 576, src->fp_ymm, sizeof(src->fp_ymm));
 }
 // SPDX-SnippetEnd

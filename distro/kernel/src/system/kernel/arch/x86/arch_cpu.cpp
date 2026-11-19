@@ -1990,7 +1990,10 @@ arch_cpu_invalidate_tlb_range(intptr_t context, addr_t start, addr_t end)
 // SPDX-License-Identifier: MIT
 	const addr_t kMaxRangePages = 64;
 	if (start > end || (end - start) / B_PAGE_SIZE >= kMaxRangePages) {
-		arch_cpu_global_tlb_invalidate();
+		if (context != 0)
+			arch_cpu_user_tlb_invalidate(context);
+		else
+			arch_cpu_global_tlb_invalidate();
 		return;
 	}
 // SPDX-SnippetEnd

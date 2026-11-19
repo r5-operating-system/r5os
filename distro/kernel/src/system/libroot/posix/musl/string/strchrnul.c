@@ -4,7 +4,7 @@
 #include <limits.h>
 #undef strchrnul
 
-#if !defined(__x86_64__) || defined(_BOOT_MODE)
+#if !defined(__x86_64__) || defined(_BOOT_MODE) || defined(_KERNEL_MODE)
 
 #define ALIGN (sizeof(size_t))
 #define ONES ((size_t)-1/UCHAR_MAX)

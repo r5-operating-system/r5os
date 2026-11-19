@@ -106,13 +106,16 @@ __mutex_lock(mutex *lock)
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
 	// Adaptive locks wait longer. The bound is TSC cycles, not a loop of
-	// pause, so a slow pause does not stretch the wait.
-	const uint64_t budget
-		= (lock->flags & MUTEX_FLAG_ADAPTIVE) != 0 ? 8000 : 2000;
-	if (r5_lock_word_ready(&lock->lock, budget)) {
-		oldValue = atomic_test_and_set(&lock->lock, B_USER_MUTEX_LOCKED, 0);
-		if (oldValue == 0 || (oldValue & B_USER_MUTEX_DISABLED) != 0)
-			return B_OK;
+	// pause, so a slow pause does not stretch the wait. Skip spinning on a
+	// single-CPU system or when a non-adaptive lock already has waiters.
+	const bool adaptive = (lock->flags & MUTEX_FLAG_ADAPTIVE) != 0;
+	if (__gCPUCount > 1 && (adaptive || (oldValue & B_USER_MUTEX_WAITING) == 0)) {
+		const uint64_t budget = adaptive ? 8000 : 2000;
+		if (r5_lock_word_ready(&lock->lock, budget)) {
+			oldValue = atomic_test_and_set(&lock->lock, B_USER_MUTEX_LOCKED, 0);
+			if (oldValue == 0 || (oldValue & B_USER_MUTEX_DISABLED) != 0)
+				return B_OK;
+		}
 	}
 	// SPDX-SnippetEnd
 #else

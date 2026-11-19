@@ -104,7 +104,7 @@ r5_x86_cpu_pack(void)
 		r5_x86_cpuid(0x80000000, 0, &extEax, &extEbx, &extEcx, &extEdx);
 		if (extEax >= 0x80000001) {
 			r5_x86_cpuid(0x80000001, 0, &extEax, &extEbx, &extEcx, &extEdx);
-			if ((extEcx & (1u << 16)) != 0)
+			if ((extEcx & (1u << 16)) != 0 && ymm)
 				flags |= R5_CPU_FMA4;
 		}
 	}

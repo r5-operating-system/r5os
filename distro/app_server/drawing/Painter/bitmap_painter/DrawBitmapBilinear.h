@@ -61,23 +61,27 @@ r5_bilinear_xloop_sse2(const uint8* src, uint8* dst, const r5_filter_info* weigh
 		__m128i high = _mm_madd_epi16(_mm_unpackhi_epi16(left, right), scale);
 		__m128i sum = _mm_unpacklo_epi64(low, high);
 
+		__m128i bottomSum = zero;
+		if (sourceHeight > 1) {
+			__m128i rawBottom = _mm_loadl_epi64(
+				(const __m128i*)(sample + sourceBytesPerRow));
+			__m128i bottomPixels = _mm_unpacklo_epi8(rawBottom, zero);
+			__m128i bottomRight = _mm_srli_si128(bottomPixels, 8);
+			__m128i bottomLeft = _mm_unpacklo_epi64(bottomPixels, zero);
+			__m128i bottomLow = _mm_madd_epi16(
+				_mm_unpacklo_epi16(bottomLeft, bottomRight), scale);
+			__m128i bottomHigh = _mm_madd_epi16(
+				_mm_unpackhi_epi16(bottomLeft, bottomRight), scale);
+			bottomSum = _mm_unpacklo_epi64(bottomLow, bottomHigh);
+		}
+
 		uint32 channel[3];
 		for (int i = 0; i < 3; i++) {
 			uint32 top = (uint32)_mm_cvtsi128_si32(sum);
 			sum = _mm_srli_si128(sum, 4);
 			if (sourceHeight > 1) {
-				__m128i rawBottom = _mm_loadl_epi64(
-					(const __m128i*)(sample + sourceBytesPerRow));
-				__m128i bottomPixels = _mm_unpacklo_epi8(rawBottom, zero);
-				__m128i bottomRight = _mm_srli_si128(bottomPixels, 8);
-				__m128i bottomLeft = _mm_unpacklo_epi64(bottomPixels, zero);
-				__m128i bottomLow = _mm_madd_epi16(
-					_mm_unpacklo_epi16(bottomLeft, bottomRight), scale);
-				__m128i bottomHigh = _mm_madd_epi16(
-					_mm_unpackhi_epi16(bottomLeft, bottomRight), scale);
-				__m128i bottomSum = _mm_unpacklo_epi64(bottomLow, bottomHigh);
-				uint32 bottom = (uint32)_mm_cvtsi128_si32(
-					_mm_srli_si128(bottomSum, i * 4));
+				uint32 bottom = (uint32)_mm_cvtsi128_si32(bottomSum);
+				bottomSum = _mm_srli_si128(bottomSum, 4);
 				channel[i] = (top * wTop + bottom * wBottom) >> 16;
 			} else
 				channel[i] = top >> 8;

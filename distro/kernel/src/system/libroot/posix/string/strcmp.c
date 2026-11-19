@@ -10,7 +10,7 @@
 #undef strcmp
 
 
-#if !defined(__x86_64__) || defined(_BOOT_MODE)
+#if !defined(__x86_64__) || defined(_BOOT_MODE) || defined(_KERNEL_MODE)
 
 #define LACKS_ZERO_BYTE(value) \
 	(((value - 0x01010101) & ~value & 0x80808080) == 0)
@@ -117,10 +117,10 @@ strcmp_avx2(const char *a, const char *b)
 		unsigned roomA = r5_page_room(a);
 		unsigned roomB = r5_page_room(b);
 		unsigned room = roomA < roomB ? roomA : roomB;
-		if (room < 32 || ((uintptr_t)a & 31u) != 0 || ((uintptr_t)b & 31u) != 0)
+		if (room < 32)
 			return strcmp_sse(a, b);
-		__m256i va = _mm256_load_si256((const __m256i*)a);
-		__m256i vb = _mm256_load_si256((const __m256i*)b);
+		__m256i va = _mm256_loadu_si256((const __m256i*)a);
+		__m256i vb = _mm256_loadu_si256((const __m256i*)b);
 		unsigned equal = (unsigned)_mm256_movemask_epi8(
 			_mm256_cmpeq_epi8(va, vb));
 		unsigned zeros = (unsigned)_mm256_movemask_epi8(

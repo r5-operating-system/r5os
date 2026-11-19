@@ -359,7 +359,8 @@ r5_pstate_control(void* cookie, uint32 op, void* data, size_t length)
 		info.flags |= R5_KERNEL_F_HWP;
 	if (r5_apic_timer_uses_tsc_deadline())
 		info.flags |= R5_KERNEL_F_TSC_DEADLINE;
-	if (r5_cpu_idle_has_module())
+	if (r5_cpu_idle_has_module()
+		&& x86_check_feature(IA32_FEATURE_EXT_MONITOR, FEATURE_EXT))
 		info.flags |= R5_KERNEL_F_MWAIT_IDLE;
 #if KDEBUG_LEVEL > 0
 	info.flags |= R5_KERNEL_F_DEBUG;

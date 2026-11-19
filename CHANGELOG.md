@@ -1,5 +1,28 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - AMD64 review fixes: rwlock wake-up, FPU signal validation, math/SIMD/TLB/lock paths
+
+Problem: code review of the AMD64 PRs (#4435–#4450) found a lost wake-up deadlock in `pthread_rwlock` (`WriteLock` / `_Wait` vs `Unlock`) and a non-atomic `owner` read, unmasked `mxcsr` and unsanitized non-XSAVEC headers in `copy_fpu_from_signal_frame()`, `floor`/`ceil`/`trunc` raising `FE_INEXACT` via `roundsd`/`roundss`, `R5_CPU_FMA4` missing the `ymm` (OSXSAVE/XCR0) check, `ClearAccessedAndModified()` clearing shared `ACCESSED`/`DIRTY` bits on 2 MB PDEs, missing `_KERNEL_MODE` guards in the x86-64 SIMD string files (`strlen`, `memchr`, `strchrnul`, `memcmp`, `strcmp`), dead 32-byte-aligned-only AVX2 paths in `memcmp`/`strcmp`, a 15-way switch in `r5_load16()`, global kernel TLB invalidation on user range flushes in `arch_cpu_invalidate_tlb_range()`, redundant 3x bottom-row SSE computation and non-constant shift in `r5_bilinear_xloop_sse2()`, byte-by-byte `memmove` for overlap distances 4–15, `rep movsb`/`rep stosb` startup overhead on small `user_memcpy`/`user_memset` calls, unconditional TSC spinning in `mutex`/`pthread_mutex` on single-CPU or waiter-queued locks, and mismatched `CPUInfo` / `r5_pstate` feature reporting.
+
+What changed:
+- `distro/kernel/src/system/libroot/posix/pthread/pthread_rwlock.cpp`: publish `writer_count` before checking `reader_count` in `WriteLock()` (eliminating the lost wake-up against concurrent reader `Unlock()`), call `_Unblock()` on `trywrlock` (`timeout == 0`) rollback, and access `owner` with acquire/release atomics.
+- `distro/kernel/src/system/kernel/arch/x86/64/thread.cpp`: mask `fp_fxsave.mxcsr` against `gInitialState`'s `mxcsr_mask` (fallback `0x0000ffbf`) on all paths in `copy_fpu_from_signal_frame()`, and sanitize `xstate_bv` / zero reserved header bytes on `!gHasXsavec` XSAVE systems.
+- `distro/kernel/src/system/libroot/posix/musl/math/x86_64/r5_round.c`: pass precision-override bit `0x08` (`1|8`, `2|8`, `3|8`) to `roundsd`/`roundss` for `floor`/`ceil`/`trunc` (and `f` variants); keep `4` for `rint`/`rintf`.
+- `distro/kernel/headers/private/system/r5_x86_cpu.h`: gate `R5_CPU_FMA4` on `ymm` (OSXSAVE + XCR0 XMM/YMM).
+- `distro/kernel/src/system/kernel/arch/x86/paging/64bit/X86VMTranslationMap64Bit.cpp`: split 2 MB large pages in `ClearAccessedAndModified()` so per-page `ACCESSED`/`DIRTY` bits are preserved across all 512 4 KB PTEs.
+- `distro/kernel/src/system/libroot/posix/musl/string/{strlen,memchr,strchrnul}.c` & `distro/kernel/src/system/libroot/posix/string/{memcmp,strcmp}.c`: add `defined(_KERNEL_MODE)` guard to keep the kernel off user-space AVX2 dispatch; remove the 32-byte alignment gate in `memcmp_avx2`/`strcmp_avx2` and use `_mm256_loadu_si256` under the existing `r5_page_room >= 32` check.
+- `distro/kernel/headers/private/system/r5_string_x86.h`: simplify `r5_load16()` to `_mm_loadu_si128()` (all callers already guarantee `r5_page_room >= 16`).
+- `distro/kernel/src/system/kernel/arch/x86/arch_cpu.cpp`: use `arch_cpu_user_tlb_invalidate(context)` instead of `arch_cpu_global_tlb_invalidate()` for user-space range flushes (`context != 0`).
+- `distro/app_server/drawing/Painter/bitmap_painter/DrawBitmapBilinear.h`: hoist `bottomSum` calculation out of the 3-channel loop and shift by constant `4` per channel.
+- `distro/kernel/src/system/libroot/posix/musl/string/memmove.c`: add 8-byte (`apart >= 8`) and 4-byte (`apart >= 4`) overlapping copy paths before byte-by-byte fallback.
+- `distro/kernel/src/system/kernel/arch/x86/64/arch.S`: add `< 64` byte qword/byte fast path in `_arch_cpu_user_memcpy` and `_arch_cpu_user_memset` before `rep movsb`/`rep stosb`.
+- `distro/kernel/src/system/libroot/os/locks/mutex.cpp` & `distro/kernel/src/system/libroot/posix/pthread/pthread_mutex.cpp`: skip TSC spin when `__gCPUCount <= 1` or when a non-adaptive lock already has `B_USER_MUTEX_WAITING`.
+- `distro/apps/cpuinfo/CpuReport.cpp` & `distro/kernel/x86/r5_pstate.cpp`: report actual `memcpy` (`FSRM/ERMS`/`ERMS`/`SSE2`), `strings` (`AVX2`/`SSE4.2`), and `libm` (`FMA`/`FMA4`/`baseline`) dispatch paths, and gate `R5_KERNEL_F_MWAIT_IDLE` on `IA32_FEATURE_EXT_MONITOR`.
+
+Limits: `x86_cstates.cpp` was left untouched (already fixed by PR #4453). Hardware-specific paths (Intel Comet Lake X1 Carbon Gen 8, AMD FMA4/non-XSAVEC CPUs, 2 MB `amd64_large_pages` opt-in, and high-contention `pthread_rwlock` stress) were not tested on physical hardware here.
+
+Tested (19 Nov 2026, Europe/Amsterdam, ~09:42): `scripts/build-locked.sh` in WSL (`jam_exit=0`, `mesa_exit=0`). One short QEMU KVM boot of an own image copy (`-machine q35,accel=kvm -cpu host,+smap -smp 2 -m 2048 -display none`): serial log reached `enable SMAP`, `enable XSAVEC 0x7 832`, `APIC timer: using TSC-deadline mode`, `R5 kernel: arch_cpu from distro`, `R5 net_server: NetServer from distro`, `R5 interface: HaikuControlLook from distro`, `package_daemon` post-install scripts (`result 0`), and audio/PS2 input drivers without panic.
+
 ## 2026-11-19 - AMD64: MWAIT wake, 2 MB page-table reuse, C-state hint
 
 Problem: an idle CPU arms MONITOR on invoke_scheduler and then loads that word. Without a compiler barrier the load can move above MONITOR. The waker stores the word, sees mwait_polling, and skips the reschedule IPI, so MWAIT sleeps on a line that was already written. MapLarge() wrote an empty 4 KB page table (the standby-list link in entry 0) while a CPU could still walk it through a cached PDE. The MWAIT C-state hint used the packed table index. Intel SDM MWAIT says EAX[7:4] is 0 for C1, so the hint is the CPUID C-state number minus 1. Haiku's original x86_cstates.cpp has the same class of bug: sCStateCount * 0x10.

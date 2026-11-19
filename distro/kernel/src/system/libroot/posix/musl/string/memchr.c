@@ -3,7 +3,7 @@
 #include <limits.h>
 #undef memchr
 
-#if !defined(__x86_64__) || defined(_BOOT_MODE)
+#if !defined(__x86_64__) || defined(_BOOT_MODE) || defined(_KERNEL_MODE)
 
 #define SS (sizeof(size_t))
 #define ALIGN (sizeof(size_t)-1)
