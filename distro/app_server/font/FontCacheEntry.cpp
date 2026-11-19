@@ -283,6 +283,26 @@ FontCacheEntry::CachedGlyph(uint32 glyphCode)
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// Every char-index lookup goes through this one lock. The entry locks do
+// not cover it: a fallback entry is asked in CanCreateGlyph() without its
+// own lock while another thread creates a glyph in it under that entry's
+// write lock (stick 62, tt_cmap12_char_map_binary, WebPositive). This is a
+// leaf lock: nothing else is locked while it is held.
+static BLocker sCharIndexLock("font char index");
+
+
+static uint32
+_GlyphIndex(FontEngine& engine, uint32 glyphCode)
+{
+	BAutolock charIndexLocker(sCharIndexLock);
+	return engine.GlyphIndexForGlyphCode(glyphCode);
+}
+// SPDX-SnippetEnd
+
+
 bool
 FontCacheEntry::CanCreateGlyph(uint32 glyphCode)
 {
@@ -298,12 +318,8 @@ FontCacheEntry::CanCreateGlyph(uint32 glyphCode)
 	// this while it holds the entry's read lock (_CreateGlyph asks before it
 	// upgrades), and a write lock from the same thread then waits on itself.
 	// That hung app_server at the first new glyph (stick 58: blue desktop,
-	// no window). Every other FreeType call on the face runs under the
-	// entry's write lock, which keeps readers out, so a lock for this one
-	// call is enough.
-	static BLocker sCharIndexLock("font char index");
-	BAutolock charIndexLocker(sCharIndexLock);
-	uint32 glyphIndex = fEngine.GlyphIndexForGlyphCode(glyphCode);
+	// no window). The lookup takes the char-index lock in _GlyphIndex().
+	uint32 glyphIndex = _GlyphIndex(fEngine, glyphCode);
 	// SPDX-SnippetEnd
 	return glyphIndex != 0;
 }
@@ -325,13 +341,17 @@ FontCacheEntry::CreateGlyph(uint32 glyphCode, FontCacheEntry* fallbackEntry)
 	if (glyph != NULL)
 		return glyph;
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// The lookups below take the char-index lock (_GlyphIndex).
 	FontEngine* engine = &fEngine;
-	uint32 glyphIndex = engine->GlyphIndexForGlyphCode(glyphCode);
+	uint32 glyphIndex = _GlyphIndex(*engine, glyphCode);
 	if (glyphIndex == 0 && fallbackEntry != NULL) {
 		// Our FontEngine does not contain this glyph, but we can retry with
 		// the fallbackEntry.
 		engine = &fallbackEntry->fEngine;
-		glyphIndex = engine->GlyphIndexForGlyphCode(glyphCode);
+		glyphIndex = _GlyphIndex(*engine, glyphCode);
 	}
 
 	if (glyphIndex == 0) {
@@ -345,9 +365,10 @@ FontCacheEntry::CreateGlyph(uint32 glyphCode, FontCacheEntry* fallbackEntry)
 		engine = &fEngine;
 		if (render_as_space(glyphCode)) {
 			// get the normal space glyph
-			glyphIndex = engine->GlyphIndexForGlyphCode(0x20 /* space */);
+			glyphIndex = _GlyphIndex(*engine, 0x20 /* space */);
 		}
 	}
+	// SPDX-SnippetEnd
 
 	if (engine->PrepareGlyph(glyphIndex)) {
 		glyph = fGlyphCache->CacheGlyph(glyphCode,
