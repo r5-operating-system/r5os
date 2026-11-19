@@ -51,6 +51,7 @@ def main() -> int:
     copy("drawing/Painter/bitmap_painter/DrawBitmapBilinear.h",
         app / "drawing" / "Painter" / "bitmap_painter" / "DrawBitmapBilinear.h")
     copy("font/FontCache.cpp", app / "font" / "FontCache.cpp")
+    copy("font/FontCacheEntry.cpp", app / "font" / "FontCacheEntry.cpp")
     copy("agg-Jamfile", HAIKU / "src" / "libs" / "agg" / "Jamfile")
     copy("drawing/DrawingEngine.h", app / "drawing" / "DrawingEngine.h")
     copy("compositor/compose_period.h", local / "compose_period.h")

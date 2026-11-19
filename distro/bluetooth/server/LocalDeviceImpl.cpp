@@ -865,7 +865,28 @@ LocalDeviceImpl::HandleEvent(struct hci_event_header* event, size_t size)
 				// Bluetooth". Answer with the error.
 				request = FindPetition(HCI_EVENT_CMD_COMPLETE,
 					commandStatus->opcode, &eventIndexLocation);
-				if (request != NULL)
+				if (request != NULL
+					&& commandStatus->opcode == PACK_OPCODE(
+						OGF_CONTROL_BASEBAND, OCF_READ_STORED_LINK_KEY)
+					&& commandStatus->status == 0x01) {
+					// 0x0c0d is Read Stored Link Key. Write Link Policy
+					// Settings is 0x080d and is not sent. The kit asks for
+					// the controller's key store when a LocalDevice opens.
+					// The MT7961 answers Unknown Command. Keys stay in the
+					// server, so the waiter is told there is nothing to add.
+					syslog(LOG_INFO, "bluetooth_server: hci%" B_PRId32
+						" does not store link keys; they stay on the"
+						" computer", GetID());
+					bool own = request->HasBool("r5_setup");
+					if (!own) {
+						BMessage reply;
+						reply.AddUInt8("status", BT_OK);
+						request->SendReply(&reply);
+					}
+					ClearWantedEvent(request);
+					if (own)
+						delete request;
+				} else if (request != NULL)
 					_RefuseRequest(request, commandStatus->opcode,
 						commandStatus->status);
 			}

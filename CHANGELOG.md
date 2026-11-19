@@ -1,5 +1,57 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - CPU Info is tall enough for both cards
+
+Problem: CPU Info still opened a little short. The bottom card, Enabled features, was cut off. The wrapping lines (Extra features, Kernel) report a height of one line until they have a width, so the preferred window height was short of the wrapped text. There is no scrollbar.
+
+What changed: After the layout has given those lines their width, their height is the wrapped text, and the window is sized from that. Both cards fit.
+
+Limits: Not opened on the 5625U.
+
+## 2026-11-19 - The headset stream configures when the channel numbers differ
+
+Problem: On the 5625U, stick 57, the WH-1000XM3 stayed connected. Hands-free reached "service level connection up" and "battery 100 %". bluetooth_audio logged "opening AVDTP" and then nothing about discover, capabilities, configuration, open, or start. The kernel logged "l2cap: unexpected configuration rsp: invalid source channel (cid=67, scid=66)". A configuration response carries the destination CID of the request, which is the remote endpoint. The check compared it with the local CID. When those two numbers differ the answer was rejected and the AVDTP channel never opened. Also "hfp: 1 commands not known" did not say which command.
+
+What changed: The configuration response is accepted when its source CID is the remote endpoint. bluetooth_audio logs each AVDTP step (discover, get capabilities, set configuration, open, start) and a notice when a command is not sent. An HFP command the agent does not know is logged with its text and still answered with ERROR, which is what Hands-Free Profile 1.8 specifies for a command it does not define.
+
+Limits: Not booted on the 5625U. That the WH-1000XM3 plays audio is only proven there. The unknown command on stick 57 was not recorded, so this build is what names it.
+
+## 2026-11-19 - A Wi-Fi join keeps its station while the lock is down
+
+Problem: On the 5625U a WPA3 join panicked in mtk_sta_update, called from mtk_newstate on ic_taskq. The instruction at mtk_sta_update+0x73 loads ni_chan (offset 0x2b8 of the station node). The fault address 0xfffffffe37002b8 is that field of a node pointer 0xfffffffe3700000, which is not a live object. mtk_newstate takes vap->iv_bss, drops the stack lock, and then mtk_join_prepare calls mtk_sta_update. WPA3 replaces the node while SAE is still joining, so the pointer is dead by the time the field is read. WPA2 uses the same function and has been connecting.
+
+What changed: The node is referenced before the lock is dropped and released after the stack's own state change. WPA2 and WPA3 both take that reference.
+
+Limits: Not booted on the 5625U. The SAE hold, the firmware, and the ring are unchanged. WPA3 associating, and WPA2 still connecting, are only proven on the 5625U.
+
+## 2026-11-19 - A shared font face is locked while its character map is read
+
+Problem: On the 5625U, stick 57, app_server died with a segment violation in libfreetype tt_cmap12_char_map_binary, called from FT_Get_Char_Index, FontCacheEntry::CanCreateGlyph, GlyphLayoutEngine::_CreateGlyph, ServerFont::GetEscapements. The thread was WebPositive's app_server drawing thread. CanCreateGlyph calls FT_Get_Char_Index on the entry's face and takes no lock. _CreateGlyph calls it before the entry write lock, and GetHasGlyphs calls it with no lock either. A FreeType face is not safe on two threads. The font cache holds 128 entries (raised earlier); a larger cache does not stop two threads from walking the same character map. The debugger line about libvulkan and compilation unit version 5 is DWARF 5, which that debugger does not read.
+
+What changed: CanCreateGlyph takes the entry write lock for the character-map lookup and releases it before returning. CreateGlyph still does its own lookup while it already holds that lock, so this does not nest. The cache stays at 128 entries.
+
+Limits: Not booted on the 5625U. WebPositive has to draw text that misses the cache, on two threads, to show the crash is gone.
+
+## 2026-11-19 - A caught user copy names its thread
+
+Problem: On the 5625U, stick 56 logged eight kernel page faults at 0xb17091c000, thread 901, just after the GLTeapot open animation. The kernel image symbols put the instruction pointers in the user-copy routines: 0xffffffff8014c3f6 is the 8-byte load in _arch_cpu_user_memcpy (a copy from user memory, shorter than 64 bytes), 0xffffffff8014c422 is rep movsb in that function (a write to user memory of at least 64 bytes), 0xffffffff8014c4c9 is the lods in _arch_cpu_user_strlcpy (a string read from user memory), and 0xffffffff8014c46f is the 8-byte store in _arch_cpu_user_memset (a write of 8 to 63 bytes). The fault handler was set, so each call returned B_BAD_ADDRESS and the machine did not panic. The log line carried only the thread id. Stick 56 has no other mention of thread 901, so the program is not named there. Stick 57 does not repeat the fault.
+
+What changed: That log line now includes the thread name and the team name and id.
+
+Limits: The caller is not changed. The next stick has to show which program passed the unmapped pointer. Not booted on the 5625U.
+
+Tested: symbols checked against kernel_x86_64 built 19 Nov 2026 14:01 Europe/Amsterdam. The addresses match the stick-56 instruction pointers. No boot.
+
+## 2026-11-19 - A controller without a link-key store
+
+Problem: On the 5625U, hci125 (the MT7961) logged "command 0x0c0d answered with status 0x1". 0x0c0d is Read Stored Link Key (controller and baseband, OCF 0x000D). Write Link Policy Settings is 0x080d and is not sent. The Bluetooth kit asks for the controller's key store each time a LocalDevice is opened. The MT7961 answers with Command Status Unknown Command. The server logged that as a notice. Link keys are already kept by the server.
+
+What changed: That answer is not an error. The program that asked is told the read succeeded and there is nothing to add, and the log says the controller does not store link keys.
+
+Limits: Not booted on the 5625U. The kit still sends the command once per LocalDevice. The kernel page fault after the GLTeapot animation is not in this commit.
+
+Tested: not on the 5625U.
+
 ## 2026-11-19 - The Wi-Fi dialog and CPU Info sit on the glass
 
 Problem: On the 5625U the Wi-Fi connect dialog drew the signal icon inside a dark square, the status line ("Connecting to … checking the password") on a grey bar, and the password field only partly white. The icon was a bitmap of zeros copied with B_OP_COPY, which paints black. The status line was a BTextView, which fills with its own colour. The password field was an alpha fill, so only the text view's white showed. CPU Info opened shorter than its two cards and showed a scrollbar. The cards were titled "CPU hardware" and "What R5 uses".
