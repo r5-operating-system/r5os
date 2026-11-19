@@ -1,5 +1,15 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - A caught user copy names its thread
+
+Problem: On the 5625U, stick 56 logged eight kernel page faults at 0xb17091c000, thread 901, just after the GLTeapot open animation. The kernel image symbols put the instruction pointers in the user-copy routines: 0xffffffff8014c3f6 is the 8-byte load in _arch_cpu_user_memcpy (a copy from user memory, shorter than 64 bytes), 0xffffffff8014c422 is rep movsb in that function (a write to user memory of at least 64 bytes), 0xffffffff8014c4c9 is the lods in _arch_cpu_user_strlcpy (a string read from user memory), and 0xffffffff8014c46f is the 8-byte store in _arch_cpu_user_memset (a write of 8 to 63 bytes). The fault handler was set, so each call returned B_BAD_ADDRESS and the machine did not panic. The log line carried only the thread id. Stick 56 has no other mention of thread 901, so the program is not named there. Stick 57 does not repeat the fault.
+
+What changed: That log line now includes the thread name and the team name and id.
+
+Limits: The caller is not changed. The next stick has to show which program passed the unmapped pointer. Not booted on the 5625U.
+
+Tested: symbols checked against kernel_x86_64 built 19 Nov 2026 14:01 Europe/Amsterdam. The addresses match the stick-56 instruction pointers. No boot.
+
 ## 2026-11-19 - A controller without a link-key store
 
 Problem: On the 5625U, hci125 (the MT7961) logged "command 0x0c0d answered with status 0x1". 0x0c0d is Read Stored Link Key (controller and baseband, OCF 0x000D). Write Link Policy Settings is 0x080d and is not sent. The Bluetooth kit asks for the controller's key store each time a LocalDevice is opened. The MT7961 answers with Command Status Unknown Command. The server logged that as a notice. Link keys are already kept by the server.

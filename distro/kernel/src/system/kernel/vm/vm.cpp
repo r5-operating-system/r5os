@@ -4070,12 +4070,26 @@ vm_page_fault(addr_t address, addr_t faultAddress, bool isWrite, bool isExecute,
 
 	if (status < B_OK) {
 		if (!isUser) {
-			dprintf("vm_page_fault: vm_soft_fault returned error '%s' on fault at "
-				"0x%lx, ip 0x%lx, write %d, kernel, exec %d, thread %" B_PRId32 "\n",
-				strerror(status), address, faultAddress, isWrite, isExecute,
-				thread_get_current_thread_id());
-
 			Thread* thread = thread_get_current_thread();
+			/* SPDX-SnippetBegin
+			 * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			 * SPDX-License-Identifier: MIT
+			 * A caught user copy (fault_handler set) returns B_BAD_ADDRESS.
+			 * Stick 56 logged only the thread id, so the program was unknown.
+			 */
+			const char* threadName = thread != NULL ? thread->name : "?";
+			const char* teamName = "?";
+			team_id teamID = -1;
+			if (thread != NULL && thread->team != NULL) {
+				teamName = thread->team->Name();
+				teamID = thread->team->id;
+			}
+			dprintf("vm_page_fault: vm_soft_fault returned error '%s' on fault at "
+				"0x%lx, ip 0x%lx, write %d, kernel, exec %d, thread %" B_PRId32
+				" \"%s\" team \"%s\" (%" B_PRId32 ")\n",
+				strerror(status), address, faultAddress, isWrite, isExecute,
+				thread_get_current_thread_id(), threadName, teamName, teamID);
+			/* SPDX-SnippetEnd */
 			if (thread != NULL && thread->fault_handler != 0) {
 				// this will cause the arch dependant page fault handler to
 				// modify the IP on the interrupt frame or whatever to return
