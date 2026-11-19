@@ -129,9 +129,13 @@ TExpandoMenuBar::AttachedToWindow()
 void
 TExpandoMenuBar::DetachedFromWindow()
 {
-	BMenuBar::DetachedFromWindow();
-
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
 	StopMonitoringWindows();
+
+	BMenuBar::DetachedFromWindow();
+// SPDX-SnippetEnd
 
 	BMessenger self(this);
 	BMessage message(kUnsubscribe);
@@ -166,7 +170,11 @@ TExpandoMenuBar::MessageReceived(BMessage* message)
 			const char* name = NULL;
 			message->FindString("name", &name);
 
-			AddTeam(teams, icon, strdup(name), strdup(signature));
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			AddTeam(teams, icon, const_cast<char*>(name), strdup(signature));
+// SPDX-SnippetEnd
 			break;
 		}
 
@@ -297,24 +305,6 @@ TExpandoMenuBar::MouseDown(BPoint where)
 	if (teamItem->HandleMouseDown(where))
 		return;
 			// absorb the message
-// SPDX-SnippetBegin
-// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
-// SPDX-License-Identifier: MIT
-
-	if (Vertical() && static_cast<TBarApp*>(be_app)->Settings()->superExpando
-		&& (buttons & B_PRIMARY_MOUSE_BUTTON) != 0) {
-		app_info info;
-		if (be_roster->GetActiveAppInfo(&info) == B_OK
-			&& teamItem->Teams()->HasItem((void*)(addr_t)info.team)) {
-			TShowHideMenuItem::TeamShowHideCommon(B_MINIMIZE_WINDOW,
-				teamItem->Teams());
-			return;
-		}
-		be_roster->ActivateApp((addr_t)teamItem->Teams()->ItemAt(0));
-		return;
-	}
-// SPDX-SnippetEnd
-
 	// check if within expander bounds to expand window items
 	if (Vertical() && static_cast<TBarApp*>(be_app)->Settings()->superExpando
 		&& teamItem->ExpanderBounds().Contains(where)) {
@@ -326,13 +316,32 @@ TExpandoMenuBar::MouseDown(BPoint where)
 			// absorb the message
 	}
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (Vertical() && static_cast<TBarApp*>(be_app)->Settings()->superExpando
+		&& (buttons & B_PRIMARY_MOUSE_BUTTON) != 0) {
+		app_info info;
+		if (be_roster->GetActiveAppInfo(&info) == B_OK
+			&& teamItem->Teams()->HasItem((void*)(addr_t)info.team)) {
+			TShowHideMenuItem::TeamShowHideCommon(B_MINIMIZE_WINDOW,
+				teamItem->Teams());
+			return;
+		}
+		if (teamItem->Teams()->CountItems() > 0)
+			be_roster->ActivateApp((addr_t)teamItem->Teams()->ItemAt(0));
+		return;
+	}
+// SPDX-SnippetEnd
+
 	// double-click on an item brings the team to front
 	int32 clicks;
 	bigtime_t clickSpeed = 0;
 	get_click_speed(&clickSpeed);
 	bigtime_t delta = system_time() - fLastClickTime;
 	if (message->FindInt32("clicks", &clicks) == B_OK && clicks > 1
-		&& item == fLastClickedItem && delta <= clickSpeed) {
+		&& item == fLastClickedItem && delta <= clickSpeed
+		&& teamItem->Teams()->CountItems() > 0) {
 		be_roster->ActivateApp((addr_t)teamItem->Teams()->ItemAt(0));
 			// activate this team
 		return;
@@ -522,6 +531,15 @@ TExpandoMenuBar::BuildItems()
 
 			if (fFirstBuild && Vertical() && settings->expandNewTeams)
 				item->ToggleExpandState(true);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+
+			barInfo->teams = NULL;
+			barInfo->icon = NULL;
+			barInfo->sig = NULL;
+			delete barInfo;
+// SPDX-SnippetEnd
 		} else {
 			// existing team, update info and add it
 			TTeamMenuItem* item = iter->second;
@@ -533,6 +551,13 @@ TExpandoMenuBar::BuildItems()
 				AddItem(item, 0);
 			} else
 				AddItem(item);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+
+			barInfo->icon = NULL;
+			delete barInfo;
+// SPDX-SnippetEnd
 
 			// add window items back
 			int32 index = itemList.IndexOf(item);
@@ -560,6 +585,11 @@ TExpandoMenuBar::BuildItems()
 			}
 		}
 	}
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	fTeamList.MakeEmpty();
+// SPDX-SnippetEnd
 
 	if (CountItems() == 0) {
 		// If we're empty, BMenuBar::AttachedToWindow() resizes us to some
@@ -700,6 +730,11 @@ TExpandoMenuBar::AddTeam(team_id team, const char* signature)
 		if (item != NULL && strcasecmp(item->Signature(), signature) == 0
 			&& !(item->Teams()->HasItem((void*)(addr_t)team))) {
 			item->Teams()->AddItem((void*)(addr_t)team);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			item->UpdateHasListedWindows();
+// SPDX-SnippetEnd
 			break;
 		}
 	}
@@ -714,9 +749,15 @@ TExpandoMenuBar::RemoveTeam(team_id team, bool partial)
 	for (int32 i = CountItems() - 1; i >= 0; i--) {
 		TTeamMenuItem* item = dynamic_cast<TTeamMenuItem*>(ItemAt(i));
 		if (item != NULL && item->Teams()->HasItem((void*)(addr_t)team)) {
-			item->Teams()->RemoveItem(team);
-			if (partial)
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			item->Teams()->RemoveItem((void*)(addr_t)team);
+			if (partial) {
+				item->UpdateHasListedWindows();
 				return;
+			}
+// SPDX-SnippetEnd
 
 			BAutolock locker(sMonLocker);
 				// make the update thread wait
@@ -984,16 +1025,15 @@ TExpandoMenuBar::monitor_team_windows(void* arg)
 	TExpandoMenuBar* teamMenu = (TExpandoMenuBar*)arg;
 
 	while (teamMenu->sDoMonitor) {
-		sMonLocker.Lock();
-
-		// SPDX-SnippetBegin
-		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
-		// SPDX-License-Identifier: MIT
-		// Closing the Deskbar detaches this menu before the watcher stops.
-		// Window() is then NULL, and the old call crashed (Haiku #6846).
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// Lock Window() before sMonLocker to match RemoveTeam()'s lock order,
+		// and check Window() != NULL in case Deskbar is closing (Haiku #6846).
 		BWindow* window = teamMenu->Window();
 		if (window != NULL && window->LockWithTimeout(50000) == B_OK) {
-		// SPDX-SnippetEnd
+			sMonLocker.Lock();
+// SPDX-SnippetEnd
 			int32 totalItems = teamMenu->CountItems();
 
 			// Set all WindowMenuItems to require an update.
@@ -1017,6 +1057,11 @@ TExpandoMenuBar::monitor_team_windows(void* arg)
 
 				teamItem = static_cast<TTeamMenuItem*>(teamMenu->ItemAt(i));
 				if (teamItem->IsExpanded()) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+					bool hasListed = false;
+// SPDX-SnippetEnd
 					int32 teamCount = teamItem->Teams()->CountItems();
 					for (int32 j = 0; j < teamCount; j++) {
 						// The following code is almost a copy/paste from
@@ -1045,6 +1090,11 @@ TExpandoMenuBar::monitor_team_windows(void* arg)
 								windowName.RemoveLast(teamSuffix);
 
 							if (TWindowMenu::WindowShouldBeListed(wInfo)) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+								hasListed = true;
+// SPDX-SnippetEnd
 								// Check if we have a matching window item...
 								item = teamItem->ExpandedWindowItem(
 									wInfo->server_token);
@@ -1070,6 +1120,11 @@ TExpandoMenuBar::monitor_team_windows(void* arg)
 									teamMenu->AddItem(item,
 										TWindowMenuItem::InsertIndexFor(
 											teamMenu, i + 1, item));
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+									totalItems++;
+// SPDX-SnippetEnd
 									resize = true;
 								}
 							}
@@ -1077,7 +1132,21 @@ TExpandoMenuBar::monitor_team_windows(void* arg)
 						}
 						free(tokens);
 					}
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+					if (teamItem->HasListedWindows() != hasListed) {
+						teamItem->SetHasListedWindows(hasListed);
+						itemModified = true;
+					}
+				} else {
+					bool hadListed = teamItem->HasListedWindows();
+					if (teamItem->RefreshListedWindowsIfChanged()
+						&& teamItem->HasListedWindows() != hadListed) {
+						itemModified = true;
+					}
 				}
+// SPDX-SnippetEnd
 			}
 
 			// Remove any remaining items which require an update.
@@ -1089,6 +1158,11 @@ TExpandoMenuBar::monitor_team_windows(void* arg)
 							(teamMenu->RemoveItem(i));
 						delete item;
 						totalItems--;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+						i--;
+// SPDX-SnippetEnd
 
 						resize = true;
 					}
@@ -1103,10 +1177,13 @@ TExpandoMenuBar::monitor_team_windows(void* arg)
 					teamMenu->SizeWindow(1);
 			}
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			sMonLocker.Unlock();
 			window->Unlock();
 		}
-
-		sMonLocker.Unlock();
+// SPDX-SnippetEnd
 
 		// sleep for a bit...
 		snooze(150000);

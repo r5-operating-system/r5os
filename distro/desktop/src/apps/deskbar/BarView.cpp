@@ -743,8 +743,12 @@ TBarView::PositionWindow(BRect screenFrame)
 void
 TBarView::CheckForScrolling()
 {
-	if (fInlineScrollView == NULL && fExpandoMenuBar == NULL)
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (fInlineScrollView == NULL || fExpandoMenuBar == NULL)
 		return;
+// SPDX-SnippetEnd
 
 	if (fExpandoMenuBar->CheckForSizeOverrun())
 		fInlineScrollView->AttachScrollers();

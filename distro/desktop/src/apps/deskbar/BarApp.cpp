@@ -48,6 +48,9 @@ All rights reserved.
 
 #include "DeskbarMenu.h"
 
+static const uint32 kConfirmLogout = 'CfLo';
+static const uint32 kConfirmForceQuit = 'CfQt';
+
 
 namespace BPrivate {
 	void ForceUnloadCatalog();
@@ -77,6 +80,7 @@ namespace BPrivate {
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 #include <Alert.h>
+#include <Invoker.h>
 #include <OS.h>
 #include <LaunchRoster.h>
 // SPDX-SnippetEnd
@@ -519,6 +523,15 @@ TBarApp::MessageReceived(BMessage* message)
 		case kStateChanged:
 			if (fPreferencesWindow != NULL)
 				fPreferencesWindow->PostMessage(message);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			SaveSettings();
+			break;
+
+		case kSaveSettings:
+			SaveSettings();
+// SPDX-SnippetEnd
 			break;
 
 		case kShowDeskbarMenu:
@@ -536,7 +549,12 @@ TBarApp::MessageReceived(BMessage* message)
 			break;
 
 		case kUpdateRecentCounts:
-			int32 count;
+		{
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			int32 count = 0;
+// SPDX-SnippetEnd
 			bool enabled;
 
 			if (message->FindInt32("applications", &count) == B_OK)
@@ -556,7 +574,13 @@ TBarApp::MessageReceived(BMessage* message)
 
 			if (fPreferencesWindow != NULL)
 				fPreferencesWindow->PostMessage(kUpdatePreferences);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			SaveSettings();
+// SPDX-SnippetEnd
 			break;
+		}
 
 		case B_SOME_APP_LAUNCHED:
 		{
@@ -607,6 +631,11 @@ TBarApp::MessageReceived(BMessage* message)
 			fBarWindow->SetFeel(fSettings.alwaysOnTop
 				? B_FLOATING_ALL_WINDOW_FEEL
 				: B_NORMAL_WINDOW_FEEL);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			SaveSettings();
+// SPDX-SnippetEnd
 			break;
 
 		case kMsgAutoRaise: // from BDeskbar
@@ -616,6 +645,11 @@ TBarApp::MessageReceived(BMessage* message)
 
 			if (fPreferencesWindow != NULL)
 				fPreferencesWindow->PostMessage(kUpdatePreferences);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			SaveSettings();
+// SPDX-SnippetEnd
 			break;
 
 		case kMsgAutoHide: // from BDeskbar
@@ -640,6 +674,11 @@ TBarApp::MessageReceived(BMessage* message)
 
 			if (fPreferencesWindow != NULL)
 				fPreferencesWindow->PostMessage(kUpdatePreferences);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			SaveSettings();
+// SPDX-SnippetEnd
 
 			// if mini mode we don't need to update the view
 			if (fBarView->MiniState())
@@ -655,6 +694,11 @@ TBarApp::MessageReceived(BMessage* message)
 
 			if (fPreferencesWindow != NULL)
 				fPreferencesWindow->PostMessage(kUpdatePreferences);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			SaveSettings();
+// SPDX-SnippetEnd
 
 			// if mini mode we don't need to update the view
 			if (fBarView->MiniState())
@@ -678,6 +722,11 @@ TBarApp::MessageReceived(BMessage* message)
 
 			if (fPreferencesWindow != NULL)
 				fPreferencesWindow->PostMessage(kUpdatePreferences);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			SaveSettings();
+// SPDX-SnippetEnd
 
 			// if mini mode we don't need to update the view
 			if (fBarView->MiniState())
@@ -693,6 +742,11 @@ TBarApp::MessageReceived(BMessage* message)
 
 			if (fPreferencesWindow != NULL)
 				fPreferencesWindow->PostMessage(kUpdatePreferences);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			SaveSettings();
+// SPDX-SnippetEnd
 
 			// if mini mode we don't need to update the view
 			if (fBarView->MiniState())
@@ -708,6 +762,11 @@ TBarApp::MessageReceived(BMessage* message)
 
 			if (fPreferencesWindow != NULL)
 				fPreferencesWindow->PostMessage(kUpdatePreferences);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			SaveSettings();
+// SPDX-SnippetEnd
 
 			// if mini mode we don't need to update the view
 			if (fBarView->MiniState())
@@ -742,6 +801,11 @@ TBarApp::MessageReceived(BMessage* message)
 
 			if (fPreferencesWindow != NULL)
 				fPreferencesWindow->PostMessage(kUpdatePreferences);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			SaveSettings();
+// SPDX-SnippetEnd
 
 			// if mini mode we don't need to update the view
 			if (fBarView->MiniState())
@@ -800,7 +864,14 @@ TBarApp::MessageReceived(BMessage* message)
 				"Log out of this session?",
 				"Cancel", "Log out");
 			alert->SetShortcut(0, B_ESCAPE);
-			if (alert->Go() != 1)
+			alert->Go(new BInvoker(new BMessage(kConfirmLogout), this));
+			break;
+		}
+
+		case kConfirmLogout:
+		{
+			int32 which = -1;
+			if (message->FindInt32("which", &which) != B_OK || which != 1)
 				break;
 
 			BMessenger login("application/x-vnd.Haiku-Login");
@@ -857,8 +928,20 @@ TBarApp::MessageReceived(BMessage* message)
 				B_TRANSLATE("Wait"), B_TRANSLATE("Force quit"), NULL,
 				B_WIDTH_AS_USUAL, B_WARNING_ALERT);
 			alert->SetShortcut(0, B_ESCAPE);
-			if (alert->Go() == 1)
+			BMessage* confirm = new BMessage(kConfirmForceQuit);
+			confirm->AddInt32("team", team);
+			alert->Go(new BInvoker(confirm, this));
+			break;
+		}
+
+		case kConfirmForceQuit:
+		{
+			int32 which = -1;
+			team_id team = -1;
+			if (message->FindInt32("which", &which) == B_OK && which == 1
+				&& message->FindInt32("team", &team) == B_OK) {
 				kill_team(team);
+			}
 			break;
 		}
 
@@ -1127,7 +1210,14 @@ TBarApp::AddTeam(team_id team, uint32 flags, const char* sig, entry_ref* ref)
 			message.AddString("name", barInfo->name);
 			message.AddString("sig", barInfo->sig);
 
-			messenger->SendMessage(&message);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			if (messenger->SendMessage(&message) != B_OK) {
+				delete tList;
+				delete icon;
+			}
+// SPDX-SnippetEnd
 		}
 	}
 }
@@ -1387,8 +1477,18 @@ BarTeamInfo::~BarTeamInfo()
 	delete teams;
 	free(sig);
 	free(name);
-	for (int32 i = 0; i < kIconCacheCount; i++)
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	bool iconInCache = false;
+	for (int32 i = 0; i < kIconCacheCount; i++) {
+		if (iconCache[i] == icon)
+			iconInCache = true;
 		delete iconCache[i];
+	}
+	if (!iconInCache)
+		delete icon;
+// SPDX-SnippetEnd
 }
 
 
