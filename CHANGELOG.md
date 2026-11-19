@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - A shared font face is locked while its character map is read
+
+Problem: On the 5625U, stick 57, app_server died with a segment violation in libfreetype tt_cmap12_char_map_binary, called from FT_Get_Char_Index, FontCacheEntry::CanCreateGlyph, GlyphLayoutEngine::_CreateGlyph, ServerFont::GetEscapements. The thread was WebPositive's app_server drawing thread. CanCreateGlyph calls FT_Get_Char_Index on the entry's face and takes no lock. _CreateGlyph calls it before the entry write lock, and GetHasGlyphs calls it with no lock either. A FreeType face is not safe on two threads. The font cache holds 128 entries (raised earlier); a larger cache does not stop two threads from walking the same character map. The debugger line about libvulkan and compilation unit version 5 is DWARF 5, which that debugger does not read.
+
+What changed: CanCreateGlyph takes the entry write lock for the character-map lookup and releases it before returning. CreateGlyph still does its own lookup while it already holds that lock, so this does not nest. The cache stays at 128 entries.
+
+Limits: Not booted on the 5625U. WebPositive has to draw text that misses the cache, on two threads, to show the crash is gone.
+
 ## 2026-11-19 - A caught user copy names its thread
 
 Problem: On the 5625U, stick 56 logged eight kernel page faults at 0xb17091c000, thread 901, just after the GLTeapot open animation. The kernel image symbols put the instruction pointers in the user-copy routines: 0xffffffff8014c3f6 is the 8-byte load in _arch_cpu_user_memcpy (a copy from user memory, shorter than 64 bytes), 0xffffffff8014c422 is rep movsb in that function (a write to user memory of at least 64 bytes), 0xffffffff8014c4c9 is the lods in _arch_cpu_user_strlcpy (a string read from user memory), and 0xffffffff8014c46f is the 8-byte store in _arch_cpu_user_memset (a write of 8 to 63 bytes). The fault handler was set, so each call returned B_BAD_ADDRESS and the machine did not panic. The log line carried only the thread id. Stick 56 has no other mention of thread 901, so the program is not named there. Stick 57 does not repeat the fault.
