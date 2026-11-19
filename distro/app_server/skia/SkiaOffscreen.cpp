@@ -237,6 +237,7 @@ skia_offscreen_engine(HWInterface* lockInterface, ServerBitmap* bitmap,
 		delete engine;
 		return NULL;
 	}
+	engine->SetPixelBitmap(bitmap);
 	if (track) {
 		BAutolock _(sTrackLock);
 		sTracked[bitmap] = engine;

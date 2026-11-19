@@ -216,18 +216,29 @@ if [ ! -f "$radeon" ]; then
 		2> /dev/null || echo /boot/system/settings)}/kernel/drivers/radeon_hd
 fi
 boot=
+folder=m13
 if [ -f "$radeon" ]; then
-	boot=$(sed -n 's/^gpu_m13_boot[[:space:]]*\([1234]\).*/\1/p' "$radeon" \
+	boot=$(sed -n 's/^gpu_m13f_boot[[:space:]]*\([1234]\).*/\1/p' "$radeon" \
 		| head -n 1)
+	if [ -n "$boot" ]; then
+		folder=m13f
+	else
+		boot=$(sed -n 's/^gpu_m13_boot[[:space:]]*\([1234]\).*/\1/p' \
+			"$radeon" | head -n 1)
+	fi
 fi
 if [ -n "$boot" ]; then
-	dir=${1:-$home/m13/boot$boot/measure}
+	dir=${1:-$home/$folder/boot$boot/measure}
 else
 	dir=${1:-$home/m13/$(date +%Y%m%d-%H%M%S)}
 fi
 mkdir -p "$dir"
 log=$dir/scenario.txt
 : > "$log"
+echo "settings $radeon" >> "$log"
+if [ -f "$radeon" ]; then
+	cp "$radeon" "$dir/radeon_hd"
+fi
 syslog=$(finddir B_SYSTEM_LOG_DIRECTORY)/syslog
 
 say() {

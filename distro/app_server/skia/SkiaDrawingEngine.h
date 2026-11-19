@@ -40,6 +40,7 @@ public:
 			bool				OnGpu() const { return _Gpu(); }
 	// An offscreen window's bitmap (skia_offscreen_sync() finds it).
 			void				SetTrackedBitmap(ServerBitmap* bitmap);
+			void				SetPixelBitmap(ServerBitmap* bitmap);
 	// Every pixel of the image has alpha 255 (no glass views): COPY and
 	// OVER with one colour use Skia's own blending.
 			void				SetOpaque(bool opaque);
@@ -198,6 +199,7 @@ private:
 			SkiaGpu*			fGpu;
 			bool				fOnGpu;
 			ServerBitmap*		fTrackedBitmap;
+			ServerBitmap*		fPixelBitmap;
 	volatile bigtime_t			fCpuFirst;
 	volatile bigtime_t			fCpuLast;
 };
