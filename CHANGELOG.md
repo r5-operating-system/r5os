@@ -1,5 +1,21 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - M13 follow-up, part 5: one stick, four boots
+
+No stick was written here. The owner writes it later with `scripts/write-stick.py`.
+
+On the laptop, after Sign in. One command, then restart. On each boot, once the desktop is up, run `m13-measure` (drag, scroll, resize). The syslog line `radeon_hd settings` is the settings file in use, and `m13-measure` copies that file to `~/m13f/bootN/measure/radeon_hd`. `read-stick-logs.py` copies `~/m13f`.
+
+The system kernel settings need `syslog_time_stamps true` or the measure cannot match the syslog. That is the line `scripts/plant-m10-stick.sh` already writes into the image; this boot does not create a user kernel settings file, because that file would hide the system one.
+
+- Boot 1: `boot-next m13f`, restart. Defaults. Skia on, 2 MB areas. Look for `R5 VM: area` and `gpu draw on`.
+- Boot 2: `boot-next`, restart. Adds `gpu_compositor_scanout`. `gpu_app_server` is on with it, because scanout copies that back buffer. Write-combined GTT stays off.
+- Boot 3: `boot-next`, restart. Scanout off. Adds `gfx9_wc_gtt`.
+- Boot 4: `boot-next`, restart. `gpu false`. Lavapipe and Skia.
+- After boot 4: `boot-next` clears the settings.
+
+`gpu_debug true` is on every boot so the 10 second lines are in the syslog.
+
 ## 2026-11-19 - M13 follow-up, part 4: Skia draws by default
 
 Problem: Skia still drew only when the radeon_hd settings said `gpu_draw true`. The owner's decision of 16 Nov 2026 was that Skia is the default for RADV and Lavapipe together, and Painter draws only in Safe mode.

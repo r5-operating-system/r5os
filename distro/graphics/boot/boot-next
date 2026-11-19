@@ -65,7 +65,19 @@ mkdir -p "$m10"
 stick=m10
 start11=0
 m12note=$home/m12/next
-if [ "$1" = m13 ]; then
+# M13 follow-up (19 Nov 2026): "boot-next m13f" starts it, and a settings
+# file with gpu_m13f_boot continues it. One switch per boot. Boot 1 is the
+# defaults (Skia on, 2 MB areas). Boot 2 adds gpu_compositor_scanout, and
+# gpu_app_server because scanout copies that back buffer. Boot 3 turns
+# scanout off and adds gfx9_wc_gtt. Boot 4 is gpu false (Lavapipe and
+# Skia). gpu_debug is on every boot so m13-measure can read the 10 s lines.
+if [ "$1" = m13f ]; then
+	stick=m13f
+	start11=1
+	set -- 1
+elif [ -f "$file" ] && grep -q '^gpu_m13f_boot' "$file"; then
+	stick=m13f
+elif [ "$1" = m13 ]; then
 	stick=m13
 	start11=1
 	set -- 1
@@ -100,6 +112,10 @@ if [ "$stick" = m13 ]; then
 	m10=$home/m13
 	mkdir -p "$m10"
 fi
+if [ "$stick" = m13f ]; then
+	m10=$home/m13f
+	mkdir -p "$m10"
+fi
 
 # The boot that just ran: the note, else no note means boot 1.
 cur=1
@@ -107,7 +123,22 @@ if [ -f "$m10/next" ]; then
 	cur=$(head -n 1 "$m10/next" | tr -d ' \r')
 fi
 
-if [ "$stick" = m13 ]; then
+if [ "$stick" = m13f ]; then
+	if [ -n "$1" ]; then
+		next=$1
+	else
+		case $cur in
+		1) next=2 ;;
+		2) next=3 ;;
+		3) next=4 ;;
+		4) next=done ;;
+		*)
+			echo "FAIL no M13 follow-up boot follows $cur; run boot-next m13f"
+			exit 1
+			;;
+		esac
+	fi
+elif [ "$stick" = m13 ]; then
 	if [ -n "$1" ]; then
 		next=$1
 	else
@@ -172,7 +203,7 @@ for d in "$m10/boot$cur" "$m10/boot$cur"-*; do
 		done_check=1
 	fi
 done
-if [ "$done_check" -ne 1 ] && [ "$start11" != 1 ]; then
+if [ "$done_check" -ne 1 ] && [ "$start11" != 1 ] && [ "$stick" != m13f ]; then
 	echo "FAIL run check first (no check.txt for boot $cur in $m10)"
 	exit 1
 fi
@@ -185,7 +216,28 @@ gpu_selftest true"
 m13="gpu_draw true
 gpu_debug true
 gpu_selftest true"
-if [ "$stick" = m13 ]; then
+m13f="gpu_debug true"
+if [ "$stick" = m13f ]; then
+	case $next in
+	1) lines="$m13f
+gpu_m13f_boot 1" ;;
+	2) lines="$m13f
+gpu_app_server true
+gpu_compositor_scanout true
+gpu_m13f_boot 2" ;;
+	3) lines="$m13f
+gfx9_wc_gtt true
+gpu_m13f_boot 3" ;;
+	4) lines="$m13f
+gpu false
+gpu_m13f_boot 4" ;;
+	done) lines= ;;
+	*)
+		echo "FAIL unknown M13 follow-up boot $next (1, 2, 3, 4 or done)"
+		exit 1
+		;;
+	esac
+elif [ "$stick" = m13 ]; then
 	case $next in
 	1) lines="$m13
 gpu_m13_boot 1" ;;
@@ -307,6 +359,16 @@ else
 fi
 echo "$next" > "$m10/next"
 echo "boot-next: boot $next is next"
+if [ "$stick" = m13f ]; then
+	case $next in
+	1) echo "boot-next: next boot is defaults (Skia on, 2 MB areas)" ;;
+	2) echo "boot-next: next boot adds scanout (and the GPU back buffer it copies)" ;;
+	3) echo "boot-next: next boot is write-combined GTT, scanout off" ;;
+	4) echo "boot-next: next boot is gpu false (Lavapipe and Skia)" ;;
+	done) echo "boot-next: next boot clears the settings" ;;
+	esac
+	echo "boot-next: settings file $file"
+fi
 
 if [ "${BOOT_NEXT_YES:-1}" = 0 ]; then
 	echo PASS

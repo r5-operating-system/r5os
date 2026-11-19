@@ -177,8 +177,11 @@ load_settings(settings& out)
 			>= sizeof(path))
 		return;
 	FILE* file = fopen(path, "r");
-	if (file == NULL)
+	if (file == NULL) {
+		fprintf(stderr, "app_server: radeon_hd settings none\n");
+		syslog(LOG_INFO, "app_server: radeon_hd settings none\n");
 		return;
+	}
 	char line[256];
 	while (fgets(line, sizeof(line), file) != NULL) {
 		if (strncmp(line, "gpu_compositor true", 19) == 0)
@@ -224,6 +227,8 @@ load_settings(settings& out)
 			out.lavapipeVector = value;
 	}
 	fclose(file);
+	fprintf(stderr, "app_server: radeon_hd settings %s\n", path);
+	syslog(LOG_INFO, "app_server: radeon_hd settings %s\n", path);
 }
 
 
