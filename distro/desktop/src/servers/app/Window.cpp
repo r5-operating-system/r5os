@@ -2179,11 +2179,20 @@ Window::EndUpdate()
 		fInUpdate = false;
 		fEffectiveDrawingRegionValid = false;
 	}
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// Clear fUpdateRequested before retrying _SendUpdateMessage(): if the
+	// client's looper port is full (e.g. a fast GL/Zink thread posting
+	// B_INVALIDATE every frame), SendMessageToClient() returns B_WOULD_BLOCK
+	// and returns early. Leaving fUpdateRequested true would block every
+	// subsequent _TransferToUpdateSession() from sending _UPDATE_.
+	fUpdateRequested = false;
+// SPDX-SnippetEnd
 	if (fPendingUpdateSession->IsUsed()) {
 		// send this to client
 		_SendUpdateMessage();
 	} else {
-		fUpdateRequested = false;
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
