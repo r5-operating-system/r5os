@@ -63,6 +63,11 @@ All rights reserved.
 #include <FindDirectory.h>
 #include <Locale.h>
 #include <MenuItem.h>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <MessageRunner.h>
+// SPDX-SnippetEnd
 #include <NodeInfo.h>
 #include <NodeMonitor.h>
 #include <Path.h>
@@ -85,6 +90,13 @@ All rights reserved.
 
 
 static const float kVerticalMiniMultiplier = 2.9f;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+static const uint32 kLongClickMsg = 'LgCk';
+static BMessageRunner* sLongClickRunner = NULL;
+static BPoint sLongClickPoint;
+// SPDX-SnippetEnd
 
 float sIconGap = 0.0f;
 float gDragWidth, gDragRegionWidth = 0.0f;
@@ -322,6 +334,11 @@ TReplicantTray::MessageReceived(BMessage* message)
 		case kShowHideTime:
 			// from context menu in clock and in this view
 			ShowHideTime();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			be_app->PostMessage(kSaveSettings);
+// SPDX-SnippetEnd
 			break;
 
 		case kShowSeconds:
@@ -329,6 +346,11 @@ TReplicantTray::MessageReceived(BMessage* message)
 				return;
 
 			fTime->SetShowSeconds(!fTime->ShowSeconds());
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			be_app->PostMessage(kSaveSettings);
+// SPDX-SnippetEnd
 
 			// time string reformat -> realign
 			goto realignReplicants;
@@ -338,6 +360,11 @@ TReplicantTray::MessageReceived(BMessage* message)
 				return;
 
 			fTime->SetShowDayOfWeek(!fTime->ShowDayOfWeek());
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			be_app->PostMessage(kSaveSettings);
+// SPDX-SnippetEnd
 
 			// time string reformat -> realign
 			goto realignReplicants;
@@ -347,9 +374,34 @@ TReplicantTray::MessageReceived(BMessage* message)
 				return;
 
 			fTime->SetShowTimeZone(!fTime->ShowTimeZone());
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			be_app->PostMessage(kSaveSettings);
+// SPDX-SnippetEnd
 
 			// time string reformat -> realign
 			goto realignReplicants;
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		case kLongClickMsg:
+		{
+			delete sLongClickRunner;
+			sLongClickRunner = NULL;
+
+			BPoint current;
+			uint32 buttons = 0;
+			GetMouse(&current, &buttons, false);
+			if (buttons != 0
+				&& fabs(current.x - sLongClickPoint.x) <= 4
+				&& fabs(current.y - sLongClickPoint.y) <= 4) {
+				ShowReplicantMenu(sLongClickPoint);
+			}
+			break;
+		}
+// SPDX-SnippetEnd
 
 		case kGetClockSettings:
 		{
@@ -403,26 +455,18 @@ TReplicantTray::MouseDown(BPoint where)
 	if (buttons == B_SECONDARY_MOUSE_BUTTON) {
 		ShowReplicantMenu(where);
 	} else {
-		BPoint save = where;
-		bigtime_t doubleClickSpeed;
-		bigtime_t start = system_time();
-		uint32 buttons;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		delete sLongClickRunner;
+		sLongClickRunner = NULL;
 
+		bigtime_t doubleClickSpeed = 500000;
 		get_click_speed(&doubleClickSpeed);
-
-		do {
-			if (fabs(where.x - save.x) > 4 || fabs(where.y - save.y) > 4)
-				// user moved out of bounds of click area
-				break;
-
-			if ((system_time() - start) > (2 * doubleClickSpeed)) {
-				ShowReplicantMenu(where);
-				break;
-			}
-
-			snooze(50000);
-			GetMouse(&where, &buttons);
-		} while (buttons);
+		sLongClickPoint = where;
+		sLongClickRunner = new BMessageRunner(BMessenger(this),
+			new BMessage(kLongClickMsg), 2 * doubleClickSpeed, 1);
+// SPDX-SnippetEnd
 	}
 	BView::MouseDown(where);
 }
@@ -431,20 +475,24 @@ TReplicantTray::MouseDown(BPoint where)
 void
 TReplicantTray::ShowReplicantMenu(BPoint point)
 {
-	BPopUpMenu* menu = new BPopUpMenu("", false, false);
-
 	// If clock is visible show the extended menu, otherwise show "Show clock"
 
 	if (!fTime->IsHidden(fTime))
 		fTime->ShowTimeOptions(ConvertToScreen(point));
 	else {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		BPopUpMenu* menu = new BPopUpMenu("", false, false);
 		BMenuItem* item = new BMenuItem(B_TRANSLATE("Show clock"),
 			new BMessage(kShowHideTime));
 		menu->AddItem(item);
 		menu->SetTargetForItems(this);
 		BPoint where = ConvertToScreen(point);
 		menu->Go(where, true, true, BRect(where - BPoint(4, 4),
-			where + BPoint(4, 4)), true);
+			where + BPoint(4, 4)), false);
+		delete menu;
+// SPDX-SnippetEnd
 	}
 }
 
@@ -701,8 +749,16 @@ TReplicantTray::LoadAddOn(BEntry* entry, int32* id, bool addToSettings)
 	delete view;
 
 	// add the rep; adds info to list
-	if (AddIcon(data, id, &ref) != B_OK)
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	status = AddIcon(data, id, &ref);
+	if (status != B_OK) {
 		delete data;
+		unload_add_on(image);
+		return status;
+	}
+// SPDX-SnippetEnd
 
 	if (addToSettings) {
 		fAddOnSettings.AddString(kReplicantPathField, path.Path());

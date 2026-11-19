@@ -1,5 +1,12 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - Deskbar: fix expander clicks, thread/lock safety, leaks, auto-hide edge, and settings persistence
+
+What changed:
+- ExpandoMenuBar.cpp & TeamMenu.cpp: check ExpanderBounds().Contains(where) before the primary-click shortcut in MouseDown() and guard Teams()->CountItems() > 0; cast team_id to (void*)(addr_t) in Teams()->RemoveItem(); stop window monitoring before BMenuBar::DetachedFromWindow(); lock Window()->LockWithTimeout(50000) before sMonLocker to eliminate lock-order inversion with RemoveTeam(); adjust totalItems / i-- when adding/removing TWindowMenuItems in monitor_team_windows().
+- BarApp.cpp, BarWindow.cpp, BarSettings.h, ShowHideMenuItem.cpp: use async BAlert::Go(new BInvoker(...)) for kLogoutSession and kCheckHungApp; persist settings via SaveSettings() / kSaveSettings on all settings-changing IPC messages; initialize count = 0 in kUpdateRecentCounts; check GetRunningAppInfo() == B_OK in ShowHideMenuItem.cpp; free BarTeamInfo copies and AddTeam() error-path allocations (tList, icon).
+- BarView.cpp, StatusView.cpp, DeskbarMenu.cpp, TimeView.cpp, TeamMenuItem.h/.cpp: fix CheckForScrolling() (||) and auto-hide edge sizing along the full edge; delete BPopUpMenu in ShowReplicantMenu(), unload failed add-ons in LoadAddOn(), and replace the snooze(50000) polling loop in TReplicantTray::MouseDown() with a BMessageRunner; delete disabled recentItem[i] in DeskbarMenu.cpp; post kShowHideTime via be_app->PostMessage() and reuse cached BTimeFormat in TimeView.cpp; cache fHasListedWindows on TTeamMenuItem instead of querying window info on every draw/hit-test.
+
 ## 2026-11-19 - AMD64 stick: the FPU, user-copy and timer tests are in the image
 
 Problem: `distro/cpu/r5_fpu_test.cpp`, `r5_usercopy_test.cpp` and `r5_timer_test.cpp` (#4445) were never copied into the tree or listed in the image, although that CHANGELOG section said the user-copy test was. On the 5625U stick XSAVEC and the SMAP user copies could not be checked.

@@ -662,15 +662,7 @@ TBarView::GetPreferredWindowSize(BRect screenFrame, float* width,
 	bool setToHiddenSize = fBarApp->Settings()->autoHide && IsHidden()
 		&& !fDragRegion->IsDragging();
 
-	if (setToHiddenSize) {
-		windowHeight = kHiddenDimension;
-
-// SPDX-SnippetBegin
-// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
-// SPDX-License-Identifier: MIT
-		windowWidth = kHiddenDimension;
-// SPDX-SnippetEnd
-	} else if (Vertical()) {
+	if (Vertical()) {
 		if (State() == kFullState) {
 			// full state has minimum screen window height
 			windowHeight = std::max(screenFrame.bottom, windowHeight);
@@ -704,6 +696,17 @@ TBarView::GetPreferredWindowSize(BRect screenFrame, float* width,
 		}
 	}
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (setToHiddenSize) {
+		if (Vertical())
+			windowWidth = kHiddenDimension;
+		else
+			windowHeight = kHiddenDimension;
+	}
+
+// SPDX-SnippetEnd
 	*width = windowWidth;
 	*height = windowHeight;
 }
@@ -743,8 +746,12 @@ TBarView::PositionWindow(BRect screenFrame)
 void
 TBarView::CheckForScrolling()
 {
-	if (fInlineScrollView == NULL && fExpandoMenuBar == NULL)
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (fInlineScrollView == NULL || fExpandoMenuBar == NULL)
 		return;
+// SPDX-SnippetEnd
 
 	if (fExpandoMenuBar->CheckForSizeOverrun())
 		fInlineScrollView->AttachScrollers();

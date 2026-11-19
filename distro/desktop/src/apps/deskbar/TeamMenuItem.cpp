@@ -218,11 +218,12 @@ TTeamMenuItem::HandleMouseDown(BPoint where)
 }
 
 
-bool
-TTeamMenuItem::HasListedWindows() const
+void
+TTeamMenuItem::UpdateHasListedWindows()
 {
+	fHasListedWindows = false;
 	if (fTeam == NULL)
-		return false;
+		return;
 
 	int32 teamCount = fTeam->CountItems();
 	for (int32 i = 0; i < teamCount; i++) {
@@ -239,14 +240,14 @@ TTeamMenuItem::HasListedWindows() const
 			free(info);
 			if (listed) {
 				free(tokens);
-				return true;
+				fHasListedWindows = true;
+				return;
 			}
 		}
 		free(tokens);
 	}
-// SPDX-SnippetEnd
-	return false;
 }
+// SPDX-SnippetEnd
 
 
 status_t
@@ -647,6 +648,11 @@ TTeamMenuItem::_Init(BList* team, BBitmap* icon, char* name, char* signature,
 
 	fExpanded = false;
 	fArrowDirection = BControlLook::B_RIGHT_ARROW;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	UpdateHasListedWindows();
+// SPDX-SnippetEnd
 }
 
 

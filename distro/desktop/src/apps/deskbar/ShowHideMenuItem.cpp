@@ -155,9 +155,12 @@ TShowHideMenuItem::TeamShowHideCommon(int32 action, const BList* teamList,
 				BMessenger messenger((char*)NULL, team);
 				uint32 command = B_QUIT_REQUESTED;
 				app_info aInfo;
-				be_roster->GetRunningAppInfo(team, &aInfo);
-
-				if (strcasecmp(aInfo.signature, kTrackerSignature) == 0)
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+				if (be_roster->GetRunningAppInfo(team, &aInfo) == B_OK
+					&& strcasecmp(aInfo.signature, kTrackerSignature) == 0)
+// SPDX-SnippetEnd
 					command = 'Tall';
 
 				messenger.SendMessage(command);

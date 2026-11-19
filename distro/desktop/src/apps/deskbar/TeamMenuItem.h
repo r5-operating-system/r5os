@@ -74,7 +74,11 @@ public:
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-			bool				HasListedWindows() const;
+			bool				HasListedWindows() const
+									{ return fHasListedWindows; };
+			void				SetHasListedWindows(bool hasListed)
+									{ fHasListedWindows = hasListed; };
+			void				UpdateHasListedWindows();
 // SPDX-SnippetEnd
 			status_t			Invoke(BMessage* message = NULL);
 
@@ -133,6 +137,11 @@ private:
 
 			bool				fExpanded;
 			int32				fArrowDirection;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			bool				fHasListedWindows;
+// SPDX-SnippetEnd
 };
 
 

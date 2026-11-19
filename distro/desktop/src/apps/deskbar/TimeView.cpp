@@ -83,6 +83,11 @@ All rights reserved.
 
 
 static const float kHMargin = 2.0;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+static BTimeFormat* sTimeFormat = NULL;
+// SPDX-SnippetEnd
 
 
 #undef B_TRANSLATION_CONTEXT
@@ -138,6 +143,12 @@ TTimeView::~TTimeView()
 
 	delete fTimeFormat;
 	delete fDateFormat;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	delete sTimeFormat;
+	sTimeFormat = NULL;
+// SPDX-SnippetEnd
 }
 
 
@@ -273,7 +284,11 @@ TTimeView::MessageReceived(BMessage* message)
 
 		case kShowHideTime:
 		{
-			be_app->MessageReceived(message);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			be_app->PostMessage(message);
+// SPDX-SnippetEnd
 			break;
 		}
 
@@ -492,6 +507,13 @@ TTimeView::UpdateTimeFormat()
 
 	delete fDateFormat;
 	fDateFormat = new BDateFormat(BLocale::Default());
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+
+	delete sTimeFormat;
+	sTimeFormat = new BTimeFormat();
+// SPDX-SnippetEnd
 }
 
 
@@ -510,8 +532,9 @@ TTimeView::GetCurrentTime()
 		style = B_MEDIUM_TIME_FORMAT;
 
 	BString formatted;
-	BTimeFormat timeFormat;
-	if (timeFormat.Format(formatted, fCurrentTime, style) == B_OK
+	if (sTimeFormat == NULL)
+		sTimeFormat = new BTimeFormat();
+	if (sTimeFormat->Format(formatted, fCurrentTime, style) == B_OK
 		&& formatted.Length() > 0) {
 		strlcpy(fCurrentTimeStr, formatted.String(), sizeof(fCurrentTimeStr));
 	}

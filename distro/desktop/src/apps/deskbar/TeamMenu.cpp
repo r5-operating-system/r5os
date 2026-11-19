@@ -169,6 +169,14 @@ TTeamMenu::AttachedToWindow()
 					fBarView->GetTrackingHookData());
 			}
 		}
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		barInfo->teams = NULL;
+		barInfo->icon = NULL;
+		barInfo->sig = NULL;
+		delete barInfo;
+// SPDX-SnippetEnd
 	}
 
 	if (CountItems() == 0) {
@@ -226,7 +234,11 @@ TTeamMenu::MessageReceived(BMessage* message)
 
 			item = dynamic_cast<TTeamMenuItem*>(ItemAt(itemIndex));
 			if (item != NULL && item->Teams()->HasItem((void*)(addr_t)team)) {
-				item->Teams()->RemoveItem(team);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+				item->Teams()->RemoveItem((void*)(addr_t)team);
+// SPDX-SnippetEnd
 				RemoveItem(itemIndex);
 				delete item;
 			}

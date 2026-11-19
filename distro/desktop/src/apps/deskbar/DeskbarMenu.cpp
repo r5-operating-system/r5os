@@ -206,11 +206,17 @@ TDeskbarMenu::AddNextItem()
 					recentItem[i]->SetTypesList(TypesList());
 					recentItem[i]->SetTarget(Target());
 					AddItem(recentItem[i]);
-				}
 
-				if (data && fBarView && fBarView->Dragging()) {
-					recentItem[i]->InitTrackingHook(data->fTrackingHook,
-						&data->fTarget, data->fDragMessage);
+					if (data && fBarView && fBarView->Dragging()) {
+						recentItem[i]->InitTrackingHook(data->fTrackingHook,
+							&data->fTarget, data->fDragMessage);
+					}
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+				} else {
+					delete recentItem[i];
+// SPDX-SnippetEnd
 				}
 			}
 		} else {

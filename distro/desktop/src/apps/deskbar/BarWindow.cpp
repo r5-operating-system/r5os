@@ -495,8 +495,14 @@ TBarWindow::SetLocation(BMessage* message)
 	deskbar_location location;
 	bool expand;
 	if (message->FindInt32("location", (int32*)&location) == B_OK
-		&& message->FindBool("expand", &expand) == B_OK)
+		&& message->FindBool("expand", &expand) == B_OK) {
 		SetDeskbarLocation(location, expand);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		be_app->PostMessage(kSaveSettings);
+// SPDX-SnippetEnd
+	}
 }
 
 
@@ -518,6 +524,11 @@ TBarWindow::Expand(BMessage* message)
 		bool left = fBarView->Left();
 		bool top = fBarView->Top();
 		fBarView->ChangeState(vertical, left, top, expand ? kExpandoState : kMiniState);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		be_app->PostMessage(kSaveSettings);
+// SPDX-SnippetEnd
 	}
 }
 
