@@ -30,6 +30,11 @@
 #include "NotificationManager.h"
 
 #include <string.h>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <vector>
+// SPDX-SnippetEnd
 
 #include <Autolock.h>
 #include <Locker.h>
@@ -85,9 +90,16 @@ NotificationManager::RequestNotifications(BMessage *msg)
 	team_id team;
 	int32 what;
 
-	msg->FindMessenger(NOTIFICATION_PARAM_MESSENGER, &messenger);
-	msg->FindInt32(NOTIFICATION_PARAM_TEAM, &team);
-	msg->FindInt32(NOTIFICATION_PARAM_WHAT, &what);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	if (msg->FindMessenger(NOTIFICATION_PARAM_MESSENGER, &messenger) != B_OK
+		|| msg->FindInt32(NOTIFICATION_PARAM_TEAM, &team) != B_OK
+		|| msg->FindInt32(NOTIFICATION_PARAM_WHAT, &what) != B_OK) {
+		ERROR("NotificationManager: request missing parameters\n");
+		return;
+	}
+	// SPDX-SnippetEnd
 	const void* nodeData;
 	media_node nodeCopy;
 	// SPDX-SnippetBegin
@@ -134,9 +146,16 @@ NotificationManager::CancelNotifications(BMessage *msg)
 	team_id team;
 	int32 what;
 
-	msg->FindMessenger(NOTIFICATION_PARAM_MESSENGER, &messenger);
-	msg->FindInt32(NOTIFICATION_PARAM_TEAM, &team);
-	msg->FindInt32(NOTIFICATION_PARAM_WHAT, &what);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	if (msg->FindMessenger(NOTIFICATION_PARAM_MESSENGER, &messenger) != B_OK
+		|| msg->FindInt32(NOTIFICATION_PARAM_TEAM, &team) != B_OK
+		|| msg->FindInt32(NOTIFICATION_PARAM_WHAT, &what) != B_OK) {
+		ERROR("NotificationManager: cancel missing parameters\n");
+		return;
+	}
+	// SPDX-SnippetEnd
 	const void* nodeData;
 	media_node nodeCopy;
 	// SPDX-SnippetBegin
@@ -204,74 +223,89 @@ NotificationManager::SendNotifications(BMessage *msg)
 	ssize_t size;
 	int32 what;
 
-	msg->FindInt32(NOTIFICATION_PARAM_WHAT, &what);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	if (msg->FindInt32(NOTIFICATION_PARAM_WHAT, &what) != B_OK) {
+		ERROR("NotificationManager: SendNotifications missing what\n");
+		return;
+	}
 	msg->RemoveName(NOTIFICATION_PARAM_WHAT);
 	msg->what = what;
 
 	TRACE("NotificationManager::SendNotifications what %#lx\n", what);
 
-	BAutolock _(fLocker);
+	std::vector<BMessenger> targets;
+	{
+		BAutolock _(fLocker);
 
-	Notification *n;
-	for (fNotificationList.Rewind(); fNotificationList.GetNext(&n); ) {
-		if (n->what != B_MEDIA_WILDCARD && n->what != what)
-			continue;
-		
-		switch (what) {
-			case B_MEDIA_NODE_CREATED:
-			case B_MEDIA_NODE_DELETED:
-			case B_MEDIA_CONNECTION_MADE:
-			case B_MEDIA_CONNECTION_BROKEN:
-			case B_MEDIA_BUFFER_CREATED:
-			case B_MEDIA_BUFFER_DELETED:
-			case B_MEDIA_TRANSPORT_STATE:
-			case B_MEDIA_DEFAULT_CHANGED:
-			case B_MEDIA_FLAVORS_CHANGED:
-				if (n->node != media_node::null)
-					continue;
-				break;
+		Notification *n;
+		for (fNotificationList.Rewind(); fNotificationList.GetNext(&n); ) {
+			if (n->what != B_MEDIA_WILDCARD && n->what != what)
+				continue;
+			
+			switch (what) {
+				case B_MEDIA_NODE_CREATED:
+				case B_MEDIA_NODE_DELETED:
+				case B_MEDIA_CONNECTION_MADE:
+				case B_MEDIA_CONNECTION_BROKEN:
+				case B_MEDIA_BUFFER_CREATED:
+				case B_MEDIA_BUFFER_DELETED:
+				case B_MEDIA_TRANSPORT_STATE:
+				case B_MEDIA_DEFAULT_CHANGED:
+				case B_MEDIA_FLAVORS_CHANGED:
+					if (n->node != media_node::null)
+						continue;
+					break;
 
-			case B_MEDIA_NEW_PARAMETER_VALUE:
-			case B_MEDIA_PARAMETER_CHANGED:
-			case B_MEDIA_NODE_STOPPED:
-			case B_MEDIA_WEB_CHANGED:
-			{
-				const void* data;
-				media_node nodeCopy;
-				if (msg->FindData("node", B_RAW_TYPE, &data, &size) != B_OK
-					|| size != sizeof(media_node))
-					continue;
-				memcpy((void*)&nodeCopy, data, sizeof(nodeCopy));
-				if (n->node != nodeCopy)
-					continue;
-				break;
+				case B_MEDIA_NEW_PARAMETER_VALUE:
+				case B_MEDIA_PARAMETER_CHANGED:
+				case B_MEDIA_NODE_STOPPED:
+				case B_MEDIA_WEB_CHANGED:
+				{
+					const void* data;
+					media_node nodeCopy;
+					if (msg->FindData("node", B_RAW_TYPE, &data, &size) != B_OK
+						|| size != sizeof(media_node))
+						continue;
+					memcpy((void*)&nodeCopy, data, sizeof(nodeCopy));
+					if (n->node != nodeCopy)
+						continue;
+					break;
+				}
+
+				case B_MEDIA_FORMAT_CHANGED:
+				{
+					const void* data;
+					media_source sourceCopy;
+					media_destination destinationCopy;
+					if (msg->FindData("source", B_RAW_TYPE, &data, &size) != B_OK
+						|| size != sizeof(media_source))
+						continue;
+					memcpy((void*)&sourceCopy, data, sizeof(sourceCopy));
+					if (msg->FindData("destination", B_RAW_TYPE, &data, &size)
+							!= B_OK
+						|| size != sizeof(media_destination))
+						continue;
+					memcpy((void*)&destinationCopy, data,
+						sizeof(destinationCopy));
+
+					if (n->node.port != sourceCopy.port
+						&& n->node.port != destinationCopy.port)
+						continue;
+					break;
+				}
 			}
 
-			case B_MEDIA_FORMAT_CHANGED:
-			{
-				const void* data;
-				media_source sourceCopy;
-				media_destination destinationCopy;
-				if (msg->FindData("source", B_RAW_TYPE, &data, &size) != B_OK
-					|| size != sizeof(media_source))
-					continue;
-				memcpy((void*)&sourceCopy, data, sizeof(sourceCopy));
-				if (msg->FindData("destination", B_RAW_TYPE, &data, &size)
-						!= B_OK
-					|| size != sizeof(media_destination))
-					continue;
-				memcpy((void*)&destinationCopy, data, sizeof(destinationCopy));
-
-				if (n->node.port != sourceCopy.port
-					&& n->node.port != destinationCopy.port)
-					continue;
-				break;
-			}
+			targets.push_back(n->messenger);
 		}
-
-		TRACE("NotificationManager::SendNotifications sending\n");
-		n->messenger.SendMessage(msg, static_cast<BHandler *>(NULL), TIMEOUT);
 	}
+
+	for (size_t i = 0; i < targets.size(); i++) {
+		TRACE("NotificationManager::SendNotifications sending\n");
+		targets[i].SendMessage(msg, static_cast<BHandler *>(NULL), TIMEOUT);
+	}
+	// SPDX-SnippetEnd
 }
 	
 

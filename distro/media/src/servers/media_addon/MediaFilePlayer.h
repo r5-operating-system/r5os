@@ -47,7 +47,11 @@ private:
 	BMediaFile*				fPlayFile;
 	BMediaTrack*			fPlayTrack;
 	media_format			fPlayFormat;
-	bool					fFinished;
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	mutable int32			fFinished;
+	// SPDX-SnippetEnd
 };
 
 #endif // _MEDIA_FILE_PLAYER_H

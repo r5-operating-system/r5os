@@ -1,5 +1,16 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - Media server and media_addon_server robustness fixes
+
+What changed:
+- `distro/media/src/servers/media/DefaultManager.h` & `DefaultManager.cpp`: added `fLock` and `fAudioOutGeneration` to synchronize `_RescanThread()`, `Set()`, `Get()`, and `SaveState()`, snapshotting state before `_ConnectMixerToOutput()` IPC; replaced `strcpy` on `fPhysicalAudioOutInputName` with `strlcpy(..., B_MEDIA_NAME_LENGTH)`; ensured `SaveState()` always calls `ReleaseNodeReference()` on cloned nodes and frees `list` items on early error; waited for `fRescanThread` and freed `fMsgList` in `~DefaultManager()`.
+- `distro/media/src/servers/media/media_server.cpp`: validated message sizes in `_HandleMessage()`, `flattened_size` in `SERVER_REGISTER_DORMANT_NODE`, `count` and cloned area sizes in `SERVER_PUBLISH_INPUTS`/`OUTPUTS`, and `max_count > 0` with `write_port_etc(..., B_RELATIVE_TIMEOUT, 100000)` in `SERVER_GET_DORMANT_NODES`; initialized `reply` fields in `SERVER_GET_MEDIA_FILE_TYPES`; removed invalid `delete_area(reply.area)` after `_kern_transfer_area()`; assigned `err = be_roster->Launch(&ref)` in `_LaunchAddOnServer()`; continued `_ControlThread()` on `B_INTERRUPTED`.
+- `distro/media/src/servers/media/NotificationManager.cpp`: copied matching `BMessenger` targets under `fLocker` before sending notifications with `TIMEOUT`, and checked `FindMessenger`/`FindInt32` return values.
+- `distro/media/src/servers/media_addon/MediaAddonServer.cpp`: validated message sizes in `_HandleMessage()`; continued `_ControlThread()` on `B_INTERRUPTED`; always sent a purge command in `_ScanAddOnFlavors()` when `newFlavorCount == 0` or all `GetFlavorAt()` calls fail; avoided skipping `ReleaseNodeAll(node)` in `_DestroyInstantiatedFlavors()`; replaced `strcpy` with `strlcpy(..., B_MEDIA_NAME_LENGTH)`.
+- `distro/media/src/servers/media_addon/MediaFilePlayer.h` & `MediaFilePlayer.cpp`: zero-filled trailing buffer bytes on short read/EOF in `PlayFunction()`, made `fFinished` atomic via `atomic_set`/`atomic_get`, and released `fPlayTrack` in `~MediaFilePlayer()`.
+
+Limits: not built or booted in this worktree.
+
 ## 2026-11-19 - AMD64 stick: the FPU, user-copy and timer tests are in the image
 
 Problem: `distro/cpu/r5_fpu_test.cpp`, `r5_usercopy_test.cpp` and `r5_timer_test.cpp` (#4445) were never copied into the tree or listed in the image, although that CHANGELOG section said the user-copy test was. On the 5625U stick XSAVEC and the SMAP user copies could not be checked.
