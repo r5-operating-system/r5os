@@ -1386,8 +1386,11 @@ WiFiController::_Join(BMessage* message)
 		join.AddString("password", fJoinPassword);
 	join.AddMessenger("notify", BMessenger(this));
 
-	WiFiDebugLog(fComponent, "joining \"%s\" on %s: authentication %s, %s, "
-		"%s", name, fDevice.String(), keyword != NULL ? keyword : "(default)",
+	syslog(LOG_INFO, "WiFi[%s]: joining \"%s\" on %s: authentication %s, "
+		"key_mode 0x%" B_PRIx32 ", %s, %s",
+		fComponent.String(), name, fDevice.String(),
+		keyword != NULL ? keyword : "(default)",
+		entry != NULL ? entry->network.key_mode : 0,
 		fJoinHasPassword ? "new password" : saved != NULL
 			? "saved credentials" : "no password",
 		fJoinRemember ? "remember" : "do not remember");
@@ -1402,6 +1405,9 @@ WiFiController::_Join(BMessage* message)
 	if (status == B_OK)
 		status = reply.GetInt32("status", B_ERROR);
 	join.MakeEmpty();
+	syslog(LOG_INFO, "WiFi[%s]: net_server join reply for \"%s\": %s "
+		"(0x%" B_PRIx32 ")", fComponent.String(), name, strerror(status),
+		status);
 
 	fJoinPending = true;
 	fJoinStarted = system_time();
@@ -1548,9 +1554,15 @@ WiFiController::_FinishJoin(status_t status, const char* error, bool keyFailed)
 	fJoinPassword = "";
 	fJoinHasPassword = false;
 
-	if (status != B_OK && status != B_CANCELED)
-		WiFiDebugLog(fComponent, "join of \"%s\" failed: %s",
-			fJoinName.String(), error != NULL ? error : strerror(status));
+	if (status != B_OK && status != B_CANCELED) {
+		syslog(LOG_INFO, "WiFi[%s]: join of \"%s\" failed (status=0x%" B_PRIx32
+			" key_failed=%d): %s", fComponent.String(), fJoinName.String(),
+			status, keyFailed ? 1 : 0,
+			error != NULL ? error : strerror(status));
+	} else if (status == B_OK) {
+		syslog(LOG_INFO, "WiFi[%s]: join of \"%s\" succeeded",
+			fComponent.String(), fJoinName.String());
+	}
 
 	BMessage result(kMsgWiFiJoinResult);
 	result.AddString("name", fJoinName);

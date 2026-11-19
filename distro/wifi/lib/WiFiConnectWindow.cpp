@@ -49,14 +49,14 @@ class ConnectHeader : public BView {
 public:
 	ConnectHeader(const char* name, const char* subtitle, int32 bars)
 		:
-		BView("header", B_WILL_DRAW),
+		BView("header", B_WILL_DRAW | B_FULL_UPDATE_ON_RESIZE),
 		fName(name),
 		fSubtitle(subtitle),
 		fBars(bars < 0 ? 0 : bars > 4 ? 4 : bars),
 		fTile(NULL)
 	{
 		SetExplicitMinSize(BSize(360, 52));
-		SetViewColor(B_TRANSPARENT_COLOR);
+		SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
 	}
 
 	~ConnectHeader()
@@ -64,11 +64,29 @@ public:
 		delete fTile;
 	}
 
+	void AttachedToWindow()
+	{
+		BView::AttachedToWindow();
+		BAppearanceKit::set_view_glass(this, true);
+	}
+
+	void MessageReceived(BMessage* message)
+	{
+		if (message->what == B_COLORS_UPDATED) {
+			delete fTile;
+			fTile = NULL;
+			Invalidate();
+		}
+		BView::MessageReceived(message);
+	}
+
 	void Draw(BRect updateRect)
 	{
 		(void)updateRect;
 		if (fTile == NULL) {
 			fTile = new BBitmap(BRect(0, 0, 39, 39), B_RGBA32, true);
+			if (fTile->IsValid() && fTile->Bits() != NULL)
+				memset(fTile->Bits(), 0, fTile->BitsLength());
 			BView* off = new BView(fTile->Bounds(), "tile", B_FOLLOW_NONE,
 				B_WILL_DRAW);
 			fTile->AddChild(off);
@@ -84,22 +102,28 @@ public:
 				fTile->Unlock();
 			}
 		}
+		PushState();
 		SetDrawingMode(B_OP_ALPHA);
 		SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_COMPOSITE);
-		font_height height;
-		be_bold_font->GetHeight(&height);
-		float top = 8;
+		font_height boldHeight;
+		be_bold_font->GetHeight(&boldHeight);
+		font_height plainHeight;
+		be_plain_font->GetHeight(&plainHeight);
+		float top = 6;
 		if (fTile != NULL)
-			DrawBitmap(fTile, BPoint(8, top));
+			DrawBitmap(fTile, BPoint(4, top));
 		SetFont(be_bold_font);
 		SetHighUIColor(B_PANEL_TEXT_COLOR);
-		DrawString(fName.String(), BPoint(58, top + height.ascent));
+		float titleBaseline = top + boldHeight.ascent + 2;
+		DrawString(fName.String(), BPoint(54, titleBaseline));
 		SetFont(be_plain_font);
 		rgb_color text = ui_color(B_PANEL_TEXT_COLOR);
 		text.alpha = 180;
 		SetHighColor(text);
-		DrawString(fSubtitle.String(),
-			BPoint(58, top + height.ascent + be_plain_font->Size() + 4));
+		float subBaseline = titleBaseline + boldHeight.descent
+			+ plainHeight.ascent + 4;
+		DrawString(fSubtitle.String(), BPoint(54, subBaseline));
+		PopState();
 	}
 
 private:
@@ -108,6 +132,20 @@ private:
 	int32 fBars;
 	BBitmap* fTile;
 };
+
+
+static void
+setup_glass_view(BView* view)
+{
+	if (view == NULL)
+		return;
+	view->SetFlags(view->Flags() | B_TRANSPARENT_BACKGROUND);
+	view->SetViewColor(B_TRANSPARENT_COLOR);
+	view->SetLowColor(blend_color(B_TRANSPARENT_COLOR,
+		ui_color(B_PANEL_TEXT_COLOR), 192));
+	view->SetDrawingMode(B_OP_ALPHA);
+	view->SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_COMPOSITE);
+}
 
 
 WiFiConnectWindow::WiFiConnectWindow(const BMessenger& controller,
@@ -160,7 +198,8 @@ WiFiConnectWindow::WiFiConnectWindow(const BMessenger& controller,
 	fStatus->MakeEditable(false);
 	fStatus->MakeSelectable(false);
 	fStatus->SetWordWrap(true);
-	fStatus->SetViewColor(B_TRANSPARENT_COLOR);
+	fStatus->SetStylable(false);
+	setup_glass_view(fStatus);
 	fStatus->SetExplicitMinSize(BSize(360, be_plain_font->Size() * 2));
 	fStatus->SetExplicitMaxSize(BSize(360, be_plain_font->Size() * 4));
 	fOther = new BButton("other", B_TRANSLATE("› Other options"),
@@ -173,15 +212,11 @@ WiFiConnectWindow::WiFiConnectWindow(const BMessenger& controller,
 	BStringView* passwordLabel = new BStringView("password label",
 		B_TRANSLATE("Password"));
 	passwordLabel->SetAlignment(B_ALIGN_RIGHT);
-	passwordLabel->SetViewColor(B_TRANSPARENT_COLOR);
-	passwordLabel->SetDrawingMode(B_OP_ALPHA);
-	passwordLabel->SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_COMPOSITE);
-	fStatus->SetDrawingMode(B_OP_ALPHA);
-	fStatus->SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_COMPOSITE);
 
 	ConnectHeader* header = new ConnectHeader(name,
 		subtitle != NULL ? subtitle : "", bars);
 	fSecurity->Hide();
+	fStatus->Hide();
 	BLayoutBuilder::Group<>(this, B_VERTICAL, B_USE_SMALL_SPACING)
 		.SetInsets(B_USE_WINDOW_SPACING)
 		.Add(header)
@@ -198,6 +233,16 @@ WiFiConnectWindow::WiFiConnectWindow(const BMessenger& controller,
 			.Add(cancel)
 			.Add(fConnect)
 		.End();
+
+	setup_glass_view(passwordLabel);
+	setup_glass_view(fRemember);
+	setup_glass_view(fSecurity);
+	setup_glass_view(fStatus);
+	BAppearanceKit::set_view_glass(passwordLabel, true);
+	BAppearanceKit::set_view_glass(fRemember, true);
+	BAppearanceKit::set_view_glass(fSecurity, true);
+	BAppearanceKit::set_view_glass(fStatus, true);
+
 	SetDefaultButton(fConnect);
 	fPassword->MakeFocus(true);
 	CenterOnScreen();
@@ -243,11 +288,20 @@ WiFiConnectWindow::MessageReceived(BMessage* message)
 static void
 set_status(BTextView* view, const char* text, rgb_color color)
 {
-	view->SetText(text != NULL ? text : "");
+	if (text == NULL || text[0] == '\0') {
+		view->SetText("");
+		if (!view->IsHidden())
+			view->Hide();
+		return;
+	}
+	if (view->IsHidden())
+		view->Show();
+	view->SetText(text);
 	BFont font(be_plain_font);
 	view->SelectAll();
 	view->SetFontAndColor(&font, B_FONT_ALL, &color);
 	view->Select(0, 0);
+	view->Invalidate();
 }
 
 

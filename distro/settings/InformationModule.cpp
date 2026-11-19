@@ -357,7 +357,7 @@ graphics_detail()
 	close(fd);
 	if (ok && (info.capabilities & R5_GPU_CAP_AVAILABLE) != 0
 		&& (info.capabilities & R5_GPU_CAP_LOST) == 0) {
-		return "Drawn by the GPU (hardware)";
+		return "Hardware accelerated";
 	}
 	return "Drawn by the processor (software)";
 }
@@ -495,19 +495,23 @@ public:
 									const char* signature);
 	virtual						~InfoTile();
 	virtual	void				Draw(BRect update);
+	virtual	void				FrameResized(float width, float height);
 	virtual	BSize				MinSize();
 	virtual	BSize				MaxSize();
 	virtual	BSize				PreferredSize();
 			void				SetLines(const char* value, const char* detail,
 									float bar);
+			void				SetActionButton(BButton* button);
 
 private:
 			float				_TextHeight() const;
+			void				_PlaceAction();
 			BString				fLabel;
 			BString				fValue;
 			BString				fDetail;
 			float				fBar;
 			BBitmap*			fIcon;
+			BButton*			fAction;
 };
 
 
@@ -516,7 +520,8 @@ InfoTile::InfoTile(const char* name, const char* label, const char* signature)
 	BCard(name, BAppearanceKit::B_CARD_PANEL),
 	fLabel(label),
 	fBar(-1.0f),
-	fIcon(NULL)
+	fIcon(NULL),
+	fAction(NULL)
 {
 	SetLayout(NULL);
 	float u = unit();
@@ -538,7 +543,58 @@ InfoTile::SetLines(const char* value, const char* detail, float bar)
 	fValue = value != NULL ? value : "";
 	fDetail = detail != NULL ? detail : "";
 	fBar = bar;
+	_PlaceAction();
 	Invalidate();
+}
+
+
+void
+InfoTile::SetActionButton(BButton* button)
+{
+	if (fAction != NULL) {
+		fAction->RemoveSelf();
+		delete fAction;
+		fAction = NULL;
+	}
+	fAction = button;
+	if (fAction != NULL) {
+		AddChild(fAction);
+		_PlaceAction();
+	}
+	InvalidateLayout();
+}
+
+
+void
+InfoTile::FrameResized(float width, float height)
+{
+	BCard::FrameResized(width, height);
+	_PlaceAction();
+}
+
+
+void
+InfoTile::_PlaceAction()
+{
+	if (fAction == NULL)
+		return;
+	float u = unit();
+	float padX = u * 12.0f;
+	float padY = u * 10.0f;
+	float iconSide = u * 34.0f;
+	float left = padX + iconSide + u * 10.0f;
+	BSize pref = fAction->PreferredSize();
+	float width = pref.width;
+	float height = pref.height;
+	float maxWidth = Bounds().right - padX - left;
+	if (maxWidth > 0.0f && width > maxWidth)
+		width = maxWidth;
+	float minY = padY + _TextHeight() + u * 6.0f;
+	float y = Bounds().bottom - padY - height;
+	if (y < minY)
+		y = minY;
+	fAction->MoveTo(left, y);
+	fAction->ResizeTo(width, height);
 }
 
 
@@ -574,6 +630,8 @@ InfoTile::MinSize()
 	float u = unit();
 	float icon = u * 34.0f;
 	float text = _TextHeight();
+	if (fAction != NULL)
+		text += u * 6.0f + fAction->PreferredSize().height;
 	float body = text > icon ? text : icon;
 	return BSize(u * 12.0f * 2 + icon + u * 10.0f, body + u * 10.0f * 2);
 }
@@ -597,6 +655,7 @@ void
 InfoTile::Draw(BRect update)
 {
 	(void)update;
+	_PlaceAction();
 	// Same shape and border as BCard::Draw(), with the lighter tile fill.
 	BRect bounds = Bounds();
 	float radius = be_plain_font->Size() * 0.25f;
@@ -1213,15 +1272,13 @@ InformationView::InformationView(SettingsContext* context)
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	BButton* cpuDetails = new BButton("cpu_details", "CPU details…",
 		new BMessage(kMsgCpuDetails));
+	fProcessor->SetActionButton(cpuDetails);
+	// SPDX-SnippetEnd
 
 	BLayoutBuilder::Group<>(this, B_VERTICAL, u * 10.0f)
 		.Add(fDevice, 0)
 		.Add(grid, 1)
-		.AddGroup(B_HORIZONTAL, u * 10.0f)
-			.Add(new FooterLine(), 1)
-			.Add(cpuDetails, 0)
-		.End();
-	// SPDX-SnippetEnd
+		.Add(new FooterLine(), 0);
 }
 
 

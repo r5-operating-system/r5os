@@ -166,6 +166,7 @@ def main() -> None:
     cfg = config.read_text(encoding="utf-8")
     cfg2 = cfg.replace("#CONFIG_IEEE80211W=y", "CONFIG_IEEE80211W=y", 1)
     cfg2 = cfg2.replace("#CONFIG_OWE=y", "CONFIG_OWE=y", 1)
+    cfg2 = cfg2.replace("#CONFIG_DEBUG_SYSLOG=y", "CONFIG_DEBUG_SYSLOG=y", 1)
     if "\nCONFIG_SAE=y\n" not in cfg2:
         cfg2 = cfg2.replace("CONFIG_IEEE80211W=y\n",
             "CONFIG_IEEE80211W=y\nCONFIG_SAE=y\n", 1)
@@ -179,6 +180,19 @@ def main() -> None:
     print("patched .config")
 
     gui = ROOT / "wpa_supplicant/wpa_gui-haiku/main_haiku.cpp"
+    replace(gui,
+        "\tmemset(&fWPAParameters, 0, sizeof(fWPAParameters));\n"
+        "\t//fWPAParameters.wpa_debug_level = MSG_DEBUG;\n",
+        "\tmemset(&fWPAParameters, 0, sizeof(fWPAParameters));\n"
+        "\tfWPAParameters.wpa_debug_syslog = 1;\n"
+        "\tfWPAParameters.wpa_debug_level = MSG_INFO;\n"
+        "\tconst char *wifiDebug = getenv(\"WIFI_DEBUG\");\n"
+        "\tif ((wifiDebug != NULL && wifiDebug[0] != '\\0'\n"
+        "\t\t&& strcmp(wifiDebug, \"0\") != 0)\n"
+        "\t\t|| access(\"/boot/home/config/settings/WiFi_debug\", F_OK) == 0) {\n"
+        "\t\tfWPAParameters.wpa_debug_level = MSG_DEBUG;\n"
+        "\t}\n", "syslog debug")
+
     replace(gui,
         "\tuint32 authMode = B_NETWORK_AUTHENTICATION_NONE;\n"
         "\tstatus = message->FindUInt32(\"authentication\", &authMode);\n"
@@ -212,7 +226,12 @@ def main() -> None:
         "\t\tstatus = message->FindString(\"password\", &password);\n"
         "\t\tif (status != B_OK)\n"
         "\t\t\treturn status;\n"
-        "\t}\n", "join read")
+        "\t}\n"
+        "\twpa_printf(MSG_INFO, \"haiku: join ssid='%s' auth=%u key_mode=0x%x \"\n"
+        "\t\t\"sae=%d owe=%d psk=%d has_pw=%d\",\n"
+        "\t\tnetworkName, (unsigned)authMode, (unsigned)keyMode,\n"
+        "\t\tsae ? 1 : 0, owe ? 1 : 0, pskOffered ? 1 : 0,\n"
+        "\t\t(password != NULL && password[0] != '\\0') ? 1 : 0);\n", "join read")
 
     replace(gui,
         "\tif (authMode >= B_NETWORK_AUTHENTICATION_WPA) {\n"

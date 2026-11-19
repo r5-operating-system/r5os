@@ -30,6 +30,11 @@
 #include <commpage.h>
 #include <debug.h>
 #include <elf.h>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <r5_shutdown.h>
+// SPDX-SnippetEnd
 #include <safemode.h>
 #include <smp.h>
 #include <util/BitUtils.h>
@@ -2022,11 +2027,16 @@ arch_cpu_shutdown(bool rebootSystem)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-	dprintf("r5 shutdown: arch_cpu_shutdown(%d) acpi\n", rebootSystem ? 1 : 0);
+	r5_shutdown_trail(rebootSystem ? "acpi_reboot" : "acpi_poweroff", false);
 	status_t acpiStatus = acpi_shutdown(rebootSystem);
 	if (acpiStatus == B_OK)
 		return B_OK;
-	dprintf("r5 shutdown: acpi_shutdown returned 0x%x\n", (unsigned)acpiStatus);
+	{
+		char step[64];
+		snprintf(step, sizeof(step), "acpi_returned=0x%x",
+			(unsigned)acpiStatus);
+		r5_shutdown_trail(step, false);
+	}
 // SPDX-SnippetEnd
 
 	if (!rebootSystem) {
@@ -2037,23 +2047,44 @@ arch_cpu_shutdown(bool rebootSystem)
 #endif
 	}
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	r5_shutdown_trail("hw_reset_cf9_kbc_triple", false);
+	sync();
+// SPDX-SnippetEnd
+
 	cpu_status state = disable_interrupts();
 
-	// try to reset the system using the keyboard controller
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+	// PCI reset via port 0xCF9 (Linux arch/x86/kernel/reboot.c):
+	// assert SYS_RST (0x02), wait, then pulse RST_CPU | SYS_RST (0x06),
+	// then FULL_RST | RST_CPU | SYS_RST (0x0e). Never touch CMOS/RTC.
+	// Use spin() — interrupts are disabled so snooze() would deadlock.
+	dprintf("r5 shutdown: pci cf9\n");
+	uint8 cf9 = in8(0xcf9) & ~0x06;
+	out8(cf9 | 0x02, 0xcf9);
+	spin(50000);
+	out8(cf9 | 0x06, 0xcf9);
+	spin(50000);
+	out8(cf9 | 0x0e, 0xcf9);
+	spin(50000);
+
+	// Try to reset the system using the 8042 keyboard controller
 	dprintf("r5 shutdown: kbc 0xfe\n");
-// SPDX-SnippetEnd
+	for (int i = 0; i < 100; i++) {
+		if ((in8(0x64) & 0x02) == 0)
+			break;
+		spin(50);
+	}
 	out8(0xfe, 0x64);
 
-	// Give some time to the controller to do its job (0.5s)
-	snooze(500000);
+	// Give some time to the controller to do its job (0.5s, busy-wait)
+	spin(500000);
 
-	// if that didn't help, try it this way
-// SPDX-SnippetBegin
-// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
-// SPDX-License-Identifier: MIT
+	// Last resort: triple fault via null IDT
 	dprintf("r5 shutdown: x86_reboot\n");
 // SPDX-SnippetEnd
 	x86_reboot();

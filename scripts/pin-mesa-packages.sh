@@ -22,7 +22,7 @@ needed=(
 	vulkan_loader-1.4.367-4-x86_64.hpkg
 	vulkan_tools-1.4.367-2-x86_64.hpkg
 	vulkanteapot-1.0.0-5-x86_64.hpkg
-	wpa_supplicant-2.11.r5.6-1-x86_64.hpkg
+	wpa_supplicant-2.11.r5.7-1-x86_64.hpkg
 )
 mkdir -p "$DL"
 for name in "${needed[@]}"; do
@@ -128,18 +128,20 @@ import pathlib, sys
 path = pathlib.Path(sys.argv[1])
 text = path.read_text(encoding="utf-8")
 text = text.replace("\twpa_supplicant-2.11.haiku.1-1\n",
-    "\twpa_supplicant-2.11.r5.6-1\n")
+    "\twpa_supplicant-2.11.r5.7-1\n")
 text = text.replace("\twpa_supplicant-2.11.r5.1-1\n",
-    "\twpa_supplicant-2.11.r5.6-1\n")
+    "\twpa_supplicant-2.11.r5.7-1\n")
 text = text.replace("\twpa_supplicant-2.11.r5.2-1\n",
-    "\twpa_supplicant-2.11.r5.6-1\n")
+    "\twpa_supplicant-2.11.r5.7-1\n")
 text = text.replace("\twpa_supplicant-2.11.r5.3-1\n",
-    "\twpa_supplicant-2.11.r5.6-1\n")
+    "\twpa_supplicant-2.11.r5.7-1\n")
 text = text.replace("\twpa_supplicant-2.11.r5.4-1\n",
-    "\twpa_supplicant-2.11.r5.6-1\n")
+    "\twpa_supplicant-2.11.r5.7-1\n")
 text = text.replace("\twpa_supplicant-2.11.r5.5-1\n",
-    "\twpa_supplicant-2.11.r5.6-1\n")
-if "\twpa_supplicant-2.11.r5.6-1\n" not in text:
+    "\twpa_supplicant-2.11.r5.7-1\n")
+text = text.replace("\twpa_supplicant-2.11.r5.6-1\n",
+    "\twpa_supplicant-2.11.r5.7-1\n")
+if "\twpa_supplicant-2.11.r5.7-1\n" not in text:
     sys.exit("wpa_supplicant pin missing")
 path.write_text(text, encoding="utf-8")
 print("wpa_supplicant pin")
