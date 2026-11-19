@@ -1,5 +1,24 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - Boot 59 fixes: WPA3 RSNXE, Bluetooth audio presence, mixer routing, L2CAP response routing
+
+Problem: On the 5625U (stick 59):
+1. WPA3 ("Skynet Guest") completed SAE commit/confirm and associated, then immediately received DISASSOC after sending EAPOL-Key 2/4. `bsd_set_opt_ie` passes RSN IE + RSNXE (`0xf4 0x01 0x20`, 31 bytes) in `IEEE80211_APPIE_WPA`, but `setwparsnie()` dropped RSNXE so the Association Request omitted it while EAPOL-Key 2/4 included it. The brief `No buffer space available` lines right after `link up` (also present on stick 55) come from `mtk_encap()` before the 4-way handshake installs PTK.
+2. Audio was silent: `media_server` logged `"Bluetooth audio" not present; using "HD Audio"` and immediately `"is present again; using it"` when no headset was connected because the `bluetooth_audio` node is always registered. On output switches `_ConnectMixerToOutput()` also did not update the mixer's time source before `MakeTimeSourceFor(mixer)`, and default-output changes / mixer connect-disconnect results were only logged under `TRACE`.
+3. Bluetooth L2CAP regressed after #4461: `L2capEndpoint::_HandleConfigurationRsp()` compared `scid` against `fDestinationChannelID` instead of `fChannelID`, rejecting valid responses (`cid=65, remote=2881, scid=65`) and revealing that `l2cap_signal.cpp` routed responses solely by `ident` (delivering `scid=65` to `cid=66`).
+
+What changed:
+- Part 1 (Wi-Fi): `ieee80211_add_rsn()` in `distro/kernel/src/libs/compat/freebsd_wlan/net80211/ieee80211_output.c` now emits any `IEEE80211_ELEMID_RSNXE` (244) from `vap->iv_appie_wpa` in Association Requests. `mtk_tx.c` handles Connac2 `TX_FREE` v3 (`ver == 4`) and logs rate-limited TX slot/ring stall diagnostics (`txfull`, `txstale`, `head`, `tail`, `dma`, `txdone`).
+- Part 2 (Audio): `A2DPSource` / `BluetoothAudioNode` notify `media_server` (`'BTAR'`, `ready`) when A2DP transport is open vs down; `DefaultManager` only counts `"Bluetooth audio"` as present while A2DP is up, falling back to `"HD Audio"` while keeping the saved choice and switching back when the headset connects. `_ConnectMixerToOutput()` now sets the time source on both the soundcard and the mixer, and logs default-output changes and mixer connect/disconnect results to syslog.
+- Part 3 (Bluetooth L2CAP): Restored `scid != fChannelID` in `L2capEndpoint::_HandleConfigurationRsp()`, and updated `l2cap_signal.cpp` (`resolve_response_endpoint()`) so Connection, Configuration, and Disconnection responses whose `ident` lookup misses or hits a different endpoint are delivered to the endpoint on the same link whose `ChannelID() == scid` while preserving the other endpoint's `ident`.
+
+Tested:
+- `scripts/build-locked.sh`: `jam_exit=0`, `mesa_exit=0`.
+- Short QEMU KVM boot on an isolated copy of `r5-os.image` with `-device intel-hda -device hda-duplex`: HDA initialized cleanly, `bluetooth_audio` listened without stealing default output, and syslog logged `media_server: mixer (5) connected to output (2, input 0, ts 2): 96000 Hz 2 ch fmt 0x2 buf 24576, start=No error`.
+
+Limits:
+- Parts 1 (WPA2 large download / WPA3 SAE + 4-way handshake), 2a (live WH-1000XM3 A2DP connect/disconnect switching), 2b (audible sound playback after Sign in and on AMD HDA hardware), and 3 (WH-1000XM3 AVDTP open and audio) are only proven on the 5625U. The QEMU test ran headless before Sign in so no audible beep WAV was captured.
+
 ## 2026-11-19 - CPU Info is tall enough for both cards
 
 Problem: CPU Info still opened a little short. The bottom card, Enabled features, was cut off. The wrapping lines (Extra features, Kernel) report a height of one line until they have a width, so the preferred window height was short of the wrapped text. There is no scrollbar.
