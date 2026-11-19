@@ -205,9 +205,32 @@ mtk_send_frame_locked(struct mtk_softc* sc, struct mbuf* m)
 	if (sc->sc_txbusy[ring->head] != 0) {
 		if ((int)(ticks - sc->sc_txbusy[ring->head]) < hz) {
 			sc->sc_txfull++;
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ */
+			if (sc->sc_txfull == 1 || (sc->sc_txfull % 256) == 0) {
+				device_printf(sc->sc_dev, "tx slot %u busy (full %u, stale %u,"
+					" sent %u, done %u, head %u, tail %u, dma %u)\n",
+					ring->head, sc->sc_txfull, sc->sc_txstale,
+					sc->sc_sent, sc->sc_txdone, ring->head, ring->tail,
+					mtk_read(sc, ring->regs + MTK_RING_DMA_INDEX));
+			}
+/* SPDX-SnippetEnd */
 			return ENOBUFS;
 		}
 		sc->sc_txstale++;
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ */
+		if (sc->sc_txstale == 1 || (sc->sc_txstale % 64) == 0) {
+			device_printf(sc->sc_dev, "tx slot %u timed out without TX_FREE"
+				" (stale %u, full %u, sent %u, done %u)\n",
+				ring->head, sc->sc_txstale, sc->sc_txfull,
+				sc->sc_sent, sc->sc_txdone);
+		}
+/* SPDX-SnippetEnd */
 		sc->sc_txbusy[ring->head] = 0;
 	}
 
@@ -217,8 +240,20 @@ mtk_send_frame_locked(struct mtk_softc* sc, struct mbuf* m)
 		uint32_t at = mtk_read(sc, ring->regs + MTK_RING_DMA_INDEX);
 		if (at < ring->count)
 			ring->tail = at;
-		if (next == ring->tail)
+		if (next == ring->tail) {
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ */
+			sc->sc_txfull++;
+			if (sc->sc_txfull == 1 || (sc->sc_txfull % 256) == 0) {
+				device_printf(sc->sc_dev, "tx ring full (head %u, tail %u,"
+					" dma %u, sent %u, done %u)\n",
+					ring->head, ring->tail, at, sc->sc_sent, sc->sc_txdone);
+			}
+/* SPDX-SnippetEnd */
 			return ENOBUFS;
+		}
 	}
 
 	slot = (uint8_t*)sc->sc_txbuf.addr + (size_t)ring->head * MTK_TXBUF_SIZE;
@@ -447,6 +482,13 @@ mtk_receive_frame(struct mtk_softc* sc, const uint8_t* data, size_t got,
 	 */
 	if (type == MTK_RX_TYPE_SENT) {
 		uint32_t count = (word0 >> 16) & 0x3ff, i = 0;
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * Connac2 TX_FREE v3 (ver == 4 in word1 bits 18:16) carries the MSDU token
+ * in bits 14:0 and marks header words with bit 30 in addition to pair bit 31.
+ */
+		uint32_t ver = (mtk_rd32(data + 4) >> 16) & 0x7;
 
 		for (at = 8; i < count && at + 4 <= got; at += 4) {
 			uint32_t info = mtk_rd32(data + at);
@@ -454,12 +496,15 @@ mtk_receive_frame(struct mtk_softc* sc, const uint8_t* data, size_t got,
 
 			if ((info & (1u << 31)) != 0)
 				continue;		/* another station's run */
+			if (ver == 4 && (info & (1u << 30)) != 0)
+				continue;		/* v3 header word */
 			i++;
-			msdu = (info >> 16) & 0x7fff;
+			msdu = ver == 4 ? (info & 0x7fff) : ((info >> 16) & 0x7fff);
 			if (msdu < MTK_TX_RING_COUNT)
 				sc->sc_txbusy[msdu] = 0;
 			sc->sc_txdone++;
 		}
+/* SPDX-SnippetEnd */
 		return;
 	}
 

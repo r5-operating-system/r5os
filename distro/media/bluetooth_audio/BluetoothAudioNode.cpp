@@ -12,6 +12,8 @@
 
 #include <Buffer.h>
 #include <MediaAddOn.h>
+#include <Message.h>
+#include <Messenger.h>
 #include <ParameterWeb.h>
 #include <TimeSource.h>
 
@@ -340,4 +342,18 @@ void
 BluetoothAudioNode::RemoteDelayChanged(bigtime_t delay)
 {
 	_UpdateLatency();
+}
+
+
+void
+BluetoothAudioNode::ConnectionStateChanged(bool connected)
+{
+	syslog(LOG_NOTICE, "bluetooth_audio: headset A2DP %s",
+		connected ? "up" : "down");
+	BMessenger mediaServer("application/x-vnd.Be.media-server");
+	if (mediaServer.IsValid()) {
+		BMessage msg('BTAR');
+		msg.AddBool("ready", connected);
+		mediaServer.SendMessage(&msg);
+	}
 }

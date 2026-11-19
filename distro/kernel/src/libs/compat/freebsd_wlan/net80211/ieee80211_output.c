@@ -2456,9 +2456,34 @@ ieee80211_add_wpa(uint8_t *frm, const struct ieee80211vap *vap)
 uint8_t *
 ieee80211_add_rsn(uint8_t *frm, const struct ieee80211vap *vap)
 {
-	if (vap->iv_flags & IEEE80211_F_WPA2 && vap->iv_rsn_ie != NULL)
-		return (add_ie(frm, vap->iv_rsn_ie));
-	else {
+	if (vap->iv_flags & IEEE80211_F_WPA2 && vap->iv_rsn_ie != NULL) {
+		frm = add_ie(frm, vap->iv_rsn_ie);
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * wpa_supplicant appends the RSN Extension element (RSNXE, element ID 244,
+ * 0xf4, e.g. SAE H2E) after the RSN IE in IEEE80211_APPIE_WPA. setwparsnie()
+ * only extracts the RSN and vendor WPA IEs, so without emitting RSNXE here
+ * the Association Request omits it while EAPOL-Key 2/4 includes it, causing
+ * WPA3 APs to disassociate immediately on message 2/4.
+ */
+		if (vap->iv_appie_wpa != NULL) {
+			const uint8_t *data = vap->iv_appie_wpa->ie_data;
+			uint16_t len = vap->iv_appie_wpa->ie_len;
+			uint16_t off = 0;
+
+			while (off + 2 <= len) {
+				uint16_t ielen = (uint16_t)(2 + data[off + 1]);
+				if (off + ielen > len)
+					break;
+				if (data[off] == 244) /* IEEE80211_ELEMID_RSNXE */
+					frm = add_ie(frm, data + off);
+				off += ielen;
+			}
+		}
+/* SPDX-SnippetEnd */
+		return (frm);
+	} else {
 		/* XXX else complain? */
 		return (frm);
 	}

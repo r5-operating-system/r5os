@@ -75,19 +75,41 @@ l2cap_handle_connection_req(HciConnection* conn, uint8 ident, net_buffer* buffer
 }
 
 
-static void
-l2cap_handle_connection_rsp(L2capEndpoint* endpoint, uint8 ident, net_buffer* buffer,
-	bool& releaseIdent)
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// Responses carrying a Source CID (Connection, Configuration, Disconnection)
+// identify our local channel by scid. If the ident lookup returned NULL or a
+// different endpoint, deliver to the endpoint whose ChannelID() equals scid
+// on this link and preserve the other endpoint's ident.
+static L2capEndpoint*
+resolve_response_endpoint(HciConnection* conn, L2capEndpoint* identEndpoint,
+	uint16 scid, bool& releaseIdent, bool& releaseTarget)
 {
-	// SPDX-SnippetBegin
-	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
-	// SPDX-License-Identifier: MIT
-	// A response whose identifier nobody waits for (a remote can send one).
-	if (endpoint == NULL) {
-		ERROR("l2cap: unexpected connection response: ident %d unknown\n", ident);
-		return;
+	releaseTarget = false;
+	if (identEndpoint != NULL && identEndpoint->ChannelID() == scid)
+		return identEndpoint;
+
+	if (identEndpoint != NULL)
+		releaseIdent = false;
+
+	L2capEndpoint* byChannel = gL2capEndpointManager.GetForChannel(scid);
+	if (byChannel != NULL) {
+		if (byChannel->Connection() != NULL && byChannel->Connection() != conn) {
+			gSocketModule->release_socket(byChannel->socket);
+			return NULL;
+		}
+		releaseTarget = true;
 	}
-	// SPDX-SnippetEnd
+	return byChannel;
+}
+// SPDX-SnippetEnd
+
+
+static void
+l2cap_handle_connection_rsp(HciConnection* conn, L2capEndpoint* endpoint,
+	uint8 ident, net_buffer* buffer, bool& releaseIdent)
+{
 	NetBufferHeaderReader<l2cap_connection_rsp> command(buffer);
 	if (command.Status() != B_OK)
 		return;
@@ -98,6 +120,19 @@ l2cap_handle_connection_rsp(L2capEndpoint* endpoint, uint8 ident, net_buffer* bu
 	response.result = le16toh(command->result);
 	response.status = le16toh(command->status);
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	bool releaseTarget = false;
+	L2capEndpoint* target = resolve_response_endpoint(conn, endpoint,
+		response.scid, releaseIdent, releaseTarget);
+	if (target == NULL) {
+		ERROR("l2cap: unexpected connection response: ident %d scid %d unknown\n",
+			ident, response.scid);
+		return;
+	}
+	// SPDX-SnippetEnd
+
 	TRACE("%s: dcid=%d scid=%d result=%d status%d\n",
 		__func__, response.dcid, response.scid, response.result, response.status);
 
@@ -107,9 +142,11 @@ l2cap_handle_connection_rsp(L2capEndpoint* endpoint, uint8 ident, net_buffer* bu
 	// A second Connection Response with the same identifier follows.
 	if (response.result == l2cap_connection_rsp::RESULT_PENDING)
 		releaseIdent = false;
-	// SPDX-SnippetEnd
 
-	endpoint->_HandleConnectionRsp(ident, response);
+	target->_HandleConnectionRsp(ident, response);
+	if (releaseTarget)
+		gSocketModule->release_socket(target->socket);
+	// SPDX-SnippetEnd
 }
 
 
@@ -292,11 +329,6 @@ static status_t
 l2cap_handle_configuration_rsp(HciConnection* conn, L2capEndpoint* endpoint,
 	uint8 ident, net_buffer* buffer, uint16 length, bool& releaseIdent)
 {
-	if (endpoint == NULL) {
-		// The endpoint seems to be gone.
-		return B_ERROR;
-	}
-
 	NetBufferHeaderReader<l2cap_configuration_rsp> command(buffer);
 	if (command.Status() != B_OK)
 		return ENOBUFS;
@@ -305,6 +337,19 @@ l2cap_handle_configuration_rsp(HciConnection* conn, L2capEndpoint* endpoint,
 	const uint16 flags = le16toh(command->flags);
 	const uint16 result = le16toh(command->result);
 	releaseIdent = (flags & L2CAP_CFG_FLAG_CONTINUATION) == 0;
+
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	bool releaseTarget = false;
+	L2capEndpoint* target = resolve_response_endpoint(conn, endpoint, scid,
+		releaseIdent, releaseTarget);
+	if (target == NULL) {
+		ERROR("l2cap: unexpected configuration rsp: ident %d scid %d unknown\n",
+			ident, scid);
+		return B_ERROR;
+	}
+	// SPDX-SnippetEnd
 
 	// Read options (if any).
 	l2cap_config_options options = {};
@@ -322,16 +367,21 @@ l2cap_handle_configuration_rsp(HciConnection* conn, L2capEndpoint* endpoint,
 			l2cap_command_reject::REJECTED_NOT_UNDERSTOOD, 0, 0, 0);
 		// No usable answer will come for this identifier: free it and
 		// wake the waiting connect() (it kept waiting before).
-		releaseIdent = true;
-		endpoint->_HandleBadResponse(ident);
+		if (!releaseTarget)
+			releaseIdent = true;
+		target->_HandleBadResponse(ident);
+		if (releaseTarget)
+			gSocketModule->release_socket(target->socket);
 		return B_OK;
 	}
-	// SPDX-SnippetEnd
 
-	endpoint->_HandleConfigurationRsp(ident, scid, flags, result,
+	target->_HandleConfigurationRsp(ident, scid, flags, result,
 		options.mtu_set ? &options.mtu : NULL,
 		options.flush_timeout_set ? &options.flush_timeout : NULL,
 		options.qos_set ? &options.qos : NULL);
+	if (releaseTarget)
+		gSocketModule->release_socket(target->socket);
+	// SPDX-SnippetEnd
 	return B_OK;
 }
 
@@ -373,17 +423,9 @@ l2cap_handle_disconnection_req(HciConnection* conn, uint8 ident, net_buffer* buf
 
 
 static status_t
-l2cap_handle_disconnection_rsp(L2capEndpoint* endpoint, uint8 ident, net_buffer* buffer)
+l2cap_handle_disconnection_rsp(HciConnection* conn, L2capEndpoint* endpoint,
+	uint8 ident, net_buffer* buffer, bool& releaseIdent)
 {
-	// SPDX-SnippetBegin
-	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
-	// SPDX-License-Identifier: MIT
-	if (endpoint == NULL) {
-		ERROR("l2cap: unexpected disconnection response: ident %d unknown\n",
-			ident);
-		return B_ERROR;
-	}
-	// SPDX-SnippetEnd
 	NetBufferHeaderReader<l2cap_disconnection_rsp> command(buffer);
 	if (command.Status() != B_OK)
 		return ENOBUFS;
@@ -391,7 +433,22 @@ l2cap_handle_disconnection_rsp(L2capEndpoint* endpoint, uint8 ident, net_buffer*
 	const uint16 dcid = le16toh(command->dcid);
 	const uint16 scid = le16toh(command->scid);
 
-	endpoint->_HandleDisconnectionRsp(ident, dcid, scid);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	bool releaseTarget = false;
+	L2capEndpoint* target = resolve_response_endpoint(conn, endpoint, scid,
+		releaseIdent, releaseTarget);
+	if (target == NULL) {
+		ERROR("l2cap: unexpected disconnection response: ident %d scid %d unknown\n",
+			ident, scid);
+		return B_ERROR;
+	}
+
+	target->_HandleDisconnectionRsp(ident, dcid, scid);
+	if (releaseTarget)
+		gSocketModule->release_socket(target->socket);
+	// SPDX-SnippetEnd
 	return B_OK;
 }
 
@@ -735,7 +792,7 @@ l2cap_handle_signaling_command(HciConnection* connection, net_buffer* buffer)
 				break;
 
 			case L2CAP_CONNECTION_RSP:
-				l2cap_handle_connection_rsp(endpoint, ident, buffer,
+				l2cap_handle_connection_rsp(connection, endpoint, ident, buffer,
 					releaseIdent);
 				break;
 
@@ -754,7 +811,8 @@ l2cap_handle_signaling_command(HciConnection* connection, net_buffer* buffer)
 				break;
 
 			case L2CAP_DISCONNECTION_RSP:
-				l2cap_handle_disconnection_rsp(endpoint, ident, buffer);
+				l2cap_handle_disconnection_rsp(connection, endpoint, ident,
+					buffer, releaseIdent);
 				break;
 
 			case L2CAP_ECHO_REQ:

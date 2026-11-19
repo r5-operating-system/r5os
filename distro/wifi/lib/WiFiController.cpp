@@ -1202,13 +1202,18 @@ WiFiController::_MaybeScan(bool associated)
 	if (fScanPending || fJoinPending)
 		return;
 
+	// While associated, do not run periodic active scans: a full-band HW scan
+	// takes the radio off-channel and can stall active traffic or downloads.
+	// Explicit scans (opening the network list or Refresh -> kMsgWiFiScan)
+	// still run on demand.
+	if (associated)
+		return;
+
 	// Without a periodic interval, still look for networks while
 	// disconnected
 	bigtime_t interval = fScanInterval;
-	if (interval <= 0 && !associated)
-		interval = 60000000;
 	if (interval <= 0)
-		return;
+		interval = 60000000;
 
 	bigtime_t now = system_time();
 	if (fLastScan != 0 && now - fLastScan < interval)

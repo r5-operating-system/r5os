@@ -142,6 +142,7 @@ A2DPSource::A2DPSource(Listener* listener, int rate)
 	fSinkCapabilitiesLength(0),
 	fStreaming(false),
 	fLoggedStart(false),
+	fReportedReady(false),
 	fControlLock("bluetooth audio control"),
 	fControlLabel(0),
 	fAbsoluteVolume(false),
@@ -803,6 +804,10 @@ A2DPSource::_Manage()
 			}
 		}
 
+		// Notify media_server when A2DP transport becomes ready or drops.
+		bool ready = fState >= kOpen && fState != kClosing && fTransport >= 0;
+		_UpdateReady(ready);
+
 		// Start or suspend with the media node and the headset's buttons.
 		bool wanted = fPlaying && !fPaused
 			&& now - fLastSound.load() < kIdleSuspend;
@@ -1395,6 +1400,17 @@ A2DPSource::_CloseTransport()
 
 
 void
+A2DPSource::_UpdateReady(bool ready)
+{
+	if (fReportedReady == ready)
+		return;
+	fReportedReady = ready;
+	if (fListener != NULL)
+		fListener->ConnectionStateChanged(ready);
+}
+
+
+void
 A2DPSource::_EndSession(bool clean, const char* reason)
 {
 	_StopStreaming();
@@ -1413,6 +1429,7 @@ A2DPSource::_EndSession(bool clean, const char* reason)
 	fHasRemote = false;
 	fPendingCommand = 0;
 	fAbsoluteVolume = false;
+	_UpdateReady(false);
 
 	// The AVRCP thread reads with a timeout and sees fControlStop within
 	// kPollInterval: shutdown() alone does not wake an L2CAP recv().

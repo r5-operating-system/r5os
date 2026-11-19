@@ -46,6 +46,13 @@ const char *kDefaultManagerInput 			= "be:_input_id";
 const char *kDefaultManagerSettingsDirectory			= "Media";
 const char *kDefaultManagerSettingsFile				= "MDefaultManager";
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+static BLocker sInstanceLock("default manager instance");
+static DefaultManager* sInstance = NULL;
+// SPDX-SnippetEnd
+
 
 DefaultManager::DefaultManager()
 	:
@@ -56,6 +63,11 @@ DefaultManager::DefaultManager()
 	fAudioOutGeneration(0),
 	// SPDX-SnippetEnd
 	fMixerConnected(false),
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	fBluetoothAudioReady(false),
+	// SPDX-SnippetEnd
 	fPhysicalVideoOut(-1),
 	fPhysicalVideoIn(-1),
 	fPhysicalAudioOut(-1),
@@ -83,6 +95,15 @@ DefaultManager::DefaultManager()
 	fRoster = BMediaRoster::Roster();
 	if (fRoster == NULL)
 		TRACE("DefaultManager: The roster is NULL\n");
+
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	{
+		BAutolock instanceLock(sInstanceLock);
+		sInstance = this;
+	}
+	// SPDX-SnippetEnd
 }
 
 
@@ -91,6 +112,11 @@ DefaultManager::~DefaultManager()
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
+	{
+		BAutolock instanceLock(sInstanceLock);
+		if (sInstance == this)
+			sInstance = NULL;
+	}
 	thread_id rescanThread = -1;
 	{
 		BAutolock locker(fRescanLock);
@@ -338,12 +364,14 @@ DefaultManager::Set(media_node_id node_id, const char *input_name,
 			// Choosing the device that stands in is still a choice. Clear the
 			// flag first, so SaveState() keeps it instead of the absent one.
 			_SetFallback(kMsgTypeAudioOut, false);
+			media_node_id prevNode = -1;
 			{
 				BAutolock stateLock(fLock);
 				if (fPhysicalAudioOut == node_id
 					&& fPhysicalAudioOutInputID == input_id)
 					return B_OK;
 
+				prevNode = fPhysicalAudioOut;
 				fPhysicalAudioOut = node_id;
 				fPhysicalAudioOutInputID = input_id;
 				strlcpy(fPhysicalAudioOutInputName,
@@ -352,6 +380,10 @@ DefaultManager::Set(media_node_id node_id, const char *input_name,
 				fMixerConnected = false;
 				fAudioOutGeneration++;
 			}
+			syslog(LOG_NOTICE, "media_server: default audio output set: "
+				"node %" B_PRId32 " -> %" B_PRId32 " (input %" B_PRId32
+				" \"%s\")\n", prevNode, node_id, input_id,
+				input_name ? input_name : "<null>");
 			Rescan();
 			return B_OK;
 		}
@@ -541,9 +573,22 @@ DefaultManager::_RescanThread()
 		}
 		if (audioOut != -1 && fRoster != NULL) {
 			media_node existing;
+			bool outputGone = false;
 			if (fRoster->GetNodeFor(audioOut, &existing) != B_OK) {
-				// The output node is gone. Look again, including a device
-				// that was plugged in after startup (Haiku #12776, #12777).
+				outputGone = true;
+			} else {
+				live_node_info liveInfo;
+				if (!_IsBluetoothAudioReady()
+					&& fRoster->GetLiveNodeInfo(existing, &liveInfo) == B_OK
+					&& strcmp(liveInfo.name, "Bluetooth audio") == 0) {
+					outputGone = true;
+				}
+				fRoster->ReleaseNode(existing);
+			}
+			if (outputGone) {
+				// The output node is gone (or Bluetooth headset disconnected).
+				// Look again, including a device that was plugged in after
+				// startup (Haiku #12776, #12777).
 				bool cleared = false;
 				{
 					BAutolock stateLock(fLock);
@@ -563,8 +608,7 @@ DefaultManager::_RescanThread()
 				// the dead node was usually the time source too.
 				if (cleared)
 					_DisconnectMixerFromOutput();
-			} else
-				fRoster->ReleaseNode(existing);
+			}
 		}
 		if (audioOut == -1) {
 			int32 foundInputID = 0;
@@ -834,7 +878,15 @@ DefaultManager::_FindPhysical(media_node_id *id, uint32 default_type,
 		// too (docs/BLUETOOTH.md, step 5). It is the default output only
 		// when someone chose it in Media, never the first one found: the
 		// sound would go to a headset that may not be there.
+		// Moreover, Bluetooth audio only counts as present while a headset
+		// has A2DP up; otherwise keep the saved choice and fall back to
+		// HD Audio until the headset connects.
 		// The headset microphone (step 7c) likewise as the default input.
+		if (isAudio && !isInput
+			&& strcmp(info[i].name, "Bluetooth audio") == 0
+			&& !_IsBluetoothAudioReady()) {
+			continue;
+		}
 		bool chosenOnly = isAudio && ((!isInput
 				&& strcmp(info[i].name, "Bluetooth audio") == 0)
 			|| (isInput && strcmp(info[i].name,
@@ -997,11 +1049,41 @@ DefaultManager::_DisconnectMixerFromOutput()
 	}
 	if (oldInput.node != media_node::null) {
 		status_t status = fRoster->Disconnect(oldOutput, oldInput);
-		if (status != B_OK) {
-			TRACE("DefaultManager: disconnect from the old output returned "
-				"%s\n", strerror(status));
-		}
+		syslog(LOG_NOTICE, "media_server: mixer disconnect from output node "
+			"%" B_PRId32 ": %s\n", oldInput.node.node, strerror(status));
 	}
+}
+
+
+void
+DefaultManager::SetBluetoothAudioReady(bool ready)
+{
+	BAutolock instanceLock(sInstanceLock);
+	if (sInstance != NULL)
+		sInstance->_SetBluetoothAudioReady(ready);
+}
+
+
+void
+DefaultManager::_SetBluetoothAudioReady(bool ready)
+{
+	{
+		BAutolock stateLock(fLock);
+		if (fBluetoothAudioReady == ready)
+			return;
+		fBluetoothAudioReady = ready;
+	}
+	syslog(LOG_NOTICE, "media_server: Bluetooth audio headset %s\n",
+		ready ? "connected (A2DP up)" : "disconnected");
+	Rescan();
+}
+
+
+bool
+DefaultManager::_IsBluetoothAudioReady() const
+{
+	BAutolock stateLock(fLock);
+	return fBluetoothAudioReady;
 }
 // SPDX-SnippetEnd
 
@@ -1144,10 +1226,8 @@ DefaultManager::_ConnectMixerToOutput(media_node_id audioMixer,
 		// Disconnect the old output. (The mixer should be in auto-stop mode,
 		// and stop the output on its own.)
 		status_t status = fRoster->Disconnect(oldOutput, oldInput);
-		if (status != B_OK) {
-			TRACE("DefaultManager: disconnecting the old output failed (%s), "
-				"connecting the new one anyway\n", strerror(status));
-		}
+		syslog(LOG_NOTICE, "media_server: mixer disconnect from output node "
+			"%" B_PRId32 ": %s\n", oldInput.node.node, strerror(status));
 
 		// Find and start the new timesource.
 		media_node_id newTimeSource = _FindTimeSource(physicalAudioOut);
@@ -1171,8 +1251,9 @@ DefaultManager::_ConnectMixerToOutput(media_node_id audioMixer,
 
 	status_t rv = fRoster->GetNodeFor(physicalAudioOut, &soundcard);
 	if (rv != B_OK) {
-		TRACE("DefaultManager: failed to find soundcard (physical audio "
-			"output)\n");
+		syslog(LOG_WARNING, "media_server: mixer connect failed: "
+			"GetNodeFor(output %" B_PRId32 ") = %s\n", physicalAudioOut,
+			strerror(rv));
 		return B_ERROR;
 	}
 
@@ -1180,7 +1261,9 @@ DefaultManager::_ConnectMixerToOutput(media_node_id audioMixer,
 // SPDX-SnippetEnd
 	if (rv != B_OK) {
 		fRoster->ReleaseNode(soundcard);
-		TRACE("DefaultManager: failed to find mixer\n");
+		syslog(LOG_WARNING, "media_server: mixer connect failed: "
+			"GetNodeFor(mixer %" B_PRId32 ") = %s\n", audioMixer,
+			strerror(rv));
 		return B_ERROR;
 	}
 
@@ -1191,18 +1274,23 @@ DefaultManager::_ConnectMixerToOutput(media_node_id audioMixer,
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
 	// The default time source can be a node that was just unplugged.
-	// GetTimeSource() does no reference counting; finish releases nothing.
+	// GetTimeSource() adds a node reference, released in finish.
 	bool haveTimeSource = fRoster->GetTimeSource(&timesource) == B_OK;
-	if (haveTimeSource)
+	if (haveTimeSource) {
 		fRoster->SetTimeSourceFor(soundcard.node, timesource.node);
-	else
-		TRACE("DefaultManager: no time source for the soundcard\n");
+		fRoster->SetTimeSourceFor(mixer.node, timesource.node);
+	} else {
+		syslog(LOG_WARNING, "media_server: no time source for output node "
+			"%" B_PRId32 "\n", soundcard.node);
+	}
 	// SPDX-SnippetEnd
 
 	rv = fRoster->GetFreeOutputsFor(mixer, &output, 1, &count,
 		B_MEDIA_RAW_AUDIO);
 	if (rv != B_OK || count != 1) {
-		TRACE("DefaultManager: can't find free mixer output\n");
+		syslog(LOG_WARNING, "media_server: mixer connect to node %" B_PRId32
+			" failed: no free mixer output (%s, count=%" B_PRId32 ")\n",
+			soundcard.node, strerror(rv), count);
 		rv = B_ERROR;
 		goto finish;
 	}
@@ -1210,7 +1298,9 @@ DefaultManager::_ConnectMixerToOutput(media_node_id audioMixer,
 	rv = fRoster->GetFreeInputsFor(soundcard, inputs, MAX_INPUT_INFOS, &count,
 		B_MEDIA_RAW_AUDIO);
 	if (rv != B_OK || count < 1) {
-		TRACE("DefaultManager: can't find free soundcard inputs\n");
+		syslog(LOG_WARNING, "media_server: mixer connect to node %" B_PRId32
+			" failed: no free output inputs (%s, count=%" B_PRId32 ")\n",
+			soundcard.node, strerror(rv), count);
 		rv = B_ERROR;
 		goto finish;
 	}
@@ -1281,7 +1371,9 @@ DefaultManager::_ConnectMixerToOutput(media_node_id audioMixer,
 			break;
 	}
 	if (rv != B_OK) {
-		ERROR("DefaultManager: connect failed\n");
+		syslog(LOG_WARNING, "media_server: mixer connect to node %" B_PRId32
+			" (input %" B_PRId32 ") failed: %s\n", soundcard.node,
+			input.destination.id, strerror(rv));
 		goto finish;
 	}
 
@@ -1295,12 +1387,22 @@ DefaultManager::_ConnectMixerToOutput(media_node_id audioMixer,
 		BTimeSource* ts = fRoster->MakeTimeSourceFor(mixer);
 		bigtime_t startAt;
 		if (ts == NULL) {
+			syslog(LOG_WARNING, "media_server: mixer connect to node %" B_PRId32
+				" failed: MakeTimeSourceFor returned NULL\n", soundcard.node);
 			rv = B_ERROR;
 			goto finish;
 		}
 
 		startAt = ts->Now() + 50000;
-		fRoster->StartNode(mixer, startAt);
+		status_t startStatus = fRoster->StartNode(mixer, startAt);
+		syslog(LOG_NOTICE, "media_server: mixer (%" B_PRId32 ") connected to "
+			"output (%" B_PRId32 ", input %" B_PRId32 ", ts %" B_PRId32 "): "
+			"%.0f Hz %" B_PRIu32 " ch fmt 0x%" B_PRIx32 " buf %zu, start=%s\n",
+			mixer.node, soundcard.node, newinput.destination.id,
+			haveTimeSource ? timesource.node : -1,
+			format.u.raw_audio.frame_rate, format.u.raw_audio.channel_count,
+			format.u.raw_audio.format, format.u.raw_audio.buffer_size,
+			strerror(startStatus));
 
 		// The mixer will be in "auto-stop" mode, so it'll start the output on its own.
 		ts->Release();

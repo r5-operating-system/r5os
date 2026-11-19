@@ -34,6 +34,8 @@ public:
 		virtual	void		RemoteVolumeChanged(float gain) = 0;
 		// The headset reported its own delay (AVDTP delay reporting).
 		virtual	void		RemoteDelayChanged(bigtime_t delay) = 0;
+		// A2DP transport is open (true) or closed/disconnected (false).
+		virtual	void		ConnectionStateChanged(bool connected) {}
 	};
 
 								A2DPSource(Listener* listener, int rate);
@@ -111,6 +113,7 @@ private:
 			void				_CloseTransport();
 			void				_EndSession(bool clean, const char* reason);
 			void				_TellServer(bool streaming);
+			void				_UpdateReady(bool ready);
 
 			// Control thread.
 			void				_HandleControl(const uint8* data, size_t size);
@@ -171,6 +174,7 @@ private:
 			sbc::Config			fConfig;
 			std::atomic<bool>	fStreaming;
 			bool				fLoggedStart;
+			bool				fReportedReady;
 
 			// AVRCP, under fControlLock.
 			BLocker				fControlLock;

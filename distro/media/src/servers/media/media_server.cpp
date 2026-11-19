@@ -50,6 +50,11 @@ char __dont_remove_copyright_from_binary[] = "Copyright (c) 2002, 2003 "
 #include "AppManager.h"
 #include "BufferManager.h"
 #include "DataExchange.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include "DefaultManager.h"
+// SPDX-SnippetEnd
 #include "MediaDebug.h"
 #include "MediaFilesManager.h"
 #include "MediaMisc.h"
@@ -1060,6 +1065,18 @@ ServerApp::MessageReceived(BMessage* msg)
 		case MEDIA_SERVER_RESCAN_COMPLETED:
 			gAppManager->NotifyRosters();
 			break;
+
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		case 'BTAR':
+		{
+			bool ready = false;
+			if (msg->FindBool("ready", &ready) == B_OK)
+				DefaultManager::SetBluetoothAudioReady(ready);
+			break;
+		}
+		// SPDX-SnippetEnd
 
 		case B_SOME_APP_QUIT:
 		{
