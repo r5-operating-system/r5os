@@ -74,8 +74,8 @@ copyrights {
 	"2010 Axel Dörfler"
 }
 provides {
-	wpa_supplicant = 2.11.r5.7
-	cmd:wpa_supplicant = 2.11.r5.7
+	wpa_supplicant = 2.11.r5.8
+	cmd:wpa_supplicant = 2.11.r5.8
 }
 requires {
 	haiku

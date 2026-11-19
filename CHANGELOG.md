@@ -1,5 +1,15 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - A WPA3 join no longer deletes its own network
+
+Problem: Joining "Skynet Guest" (WPA3-Personal) on the 5625U reached wpa_supplicant ("haiku: join ssid='Skynet Guest' auth=5 key_mode=0x400 sae=1") and net_server returned success, then the supplicant only scanned. Every scan ended with "No suitable network found" and "Short-circuit new scan request since there are no enabled networks", and the state went back to INACTIVE. No SAE commit was sent. wpa_config_set(network, "sae_pwe", "2") fails: sae_pwe is a global setting, not a network field, and the line number 0 hid the error. The join then removed the network and returned before wpa_supplicant_select_network(). The ioctl SIOCS80211 op 20 Invalid Argument lines are bsd_del_key for key index 4 and 5 at interface start (the driver has four key slots). They are not the join. WPA2 "Skynet" has no MLD address and still associates. Every "Skynet Guest" BSS in that scan is an MLD BSS; that match is only reached once a network exists.
+
+What changed: The Haiku join sets interface->conf->sae_pwe to SAE_PWE_BOTH (hunt-and-peck and hash-to-element) and no longer calls wpa_config_set() for sae_pwe. The package is wpa_supplicant 2.11.r5.8. WPA2 still uses the passphrase path with management-frame protection off.
+
+Limits: SAE authentication against "Skynet Guest" is only proven on the 5625U. If the RSN element the supplicant sees has no SAE AKM or no management-frame protection, or if wpa 2.11 then refuses the MLD BSS because the driver has no MLO, the join still will not associate. The DELKEY index 4 and 5 errors are unchanged so the WPA2 key path is not touched.
+
+Tested: not on hardware in this change. The hpkg is built before the image jam.
+
 ## 2026-11-19 - A direct window's view bitmap is drawn into the front buffer
 
 Problem: GLTeapot on Zink and RADV on the 5625U stayed on one frame while the counter climbed (751 fps, then 999 fps, two screenshots a second apart). VulkanTeapot ran, and GLTeapot on llvmpipe was smooth. The log showed "egl: opengl zink" and "app_server: compositor paused: direct window". Clearing fUpdateRequested in Window::EndUpdate() (the previous 1 fps symptom) did not change this: the swaps return. Zink's present copies the frame into a BBitmap and calls BitmapHook::SetBitmap(). It does not write the BDirectWindow front buffer, which is what llvmpipe's flush_frontbuffer does. While the window has direct access, app_server leaves that rectangle to the client, so the bitmap never reaches the buffer on the display.
