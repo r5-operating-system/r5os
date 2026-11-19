@@ -176,8 +176,13 @@ MouseDevice::Start()
 {
 	CALLED();
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
 	fDevice = open(fPath.String(), O_RDWR);
-		// let the control thread handle any error on opening the device
+	if (fDevice < 0)
+		return B_ERROR;
+// SPDX-SnippetEnd
 
 	char threadName[B_OS_NAME_LENGTH];
 	snprintf(threadName, B_OS_NAME_LENGTH, "%s watcher", fDeviceRef.name);
@@ -196,13 +201,20 @@ MouseDevice::Start()
 	if (status < B_OK) {
 		LOG_ERROR("%s: can't spawn/resume watching thread: %s\n",
 			fDeviceRef.name, strerror(status));
-		if (fDevice >= 0)
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		if (fDevice >= 0) {
 			close(fDevice);
+			fDevice = -1;
+		}
+		fThread = -1;
+// SPDX-SnippetEnd
 
 		return status;
 	}
 
-	return fDevice >= 0 ? B_OK : B_ERROR;
+	return B_OK;
 }
 
 
@@ -214,8 +226,13 @@ MouseDevice::Stop()
 	fActive = false;
 		// this will stop the thread as soon as it reads the next packet
 
-	close(fDevice);
-	fDevice = -1;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (fDevice >= 0) {
+		close(fDevice);
+		fDevice = -1;
+	}
 
 	if (fThread >= 0) {
 		// unblock the thread, which might wait on a semaphore.
@@ -224,7 +241,9 @@ MouseDevice::Stop()
 
 		status_t dummy;
 		wait_for_thread(fThread, &dummy);
+		fThread = -1;
 	}
+// SPDX-SnippetEnd
 }
 
 
@@ -443,6 +462,18 @@ MouseDevice::_ControlThread()
 				continue;
 		}
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#if USE_REGULAR_INTERVAL
+		{
+			bigtime_t now = system_time();
+			if (nextTransferTime < now)
+				nextTransferTime = now + kTransferDelay;
+		}
+#endif
+// SPDX-SnippetEnd
+
 		// take care of updating the settings first, if necessary
 		if (fUpdateSettings) {
 			fUpdateSettings = false;
@@ -620,11 +651,16 @@ MouseDevice::_UpdateSettings()
 		if (get_mouse_acceleration(fDeviceRef.name, &fSettings.accel.accel_factor) != B_OK)
 			LOG_ERROR("error when get_mouse_acceleration\n");
 		else {
-			mouse_accel accel;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			mouse_accel accel = fSettings.accel;
 			ioctl(fDevice, MS_GET_ACCEL, &accel);
 			accel.speed = fSettings.accel.speed;
 			accel.accel_factor = fSettings.accel.accel_factor;
+			fSettings.accel = accel;
 			ioctl(fDevice, MS_SET_ACCEL, &fSettings.accel);
+// SPDX-SnippetEnd
 		}
 	}
 
