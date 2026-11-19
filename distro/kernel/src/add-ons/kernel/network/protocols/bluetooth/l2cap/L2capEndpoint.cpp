@@ -964,12 +964,10 @@ L2capEndpoint::_HandleConfigurationRsp(uint8 ident, uint16 scid, uint16 flags,
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
-	// The response echoes the destination CID of our request, which is the
-	// remote endpoint, not our local CID (Core spec, Configuration
-	// Response). Comparing it to the local CID rejected a valid answer
-	// whenever the two numbers differed (stick 57, AVDTP, cid 67, scid 66)
-	// and the stream never opened.
-	if (scid != fDestinationChannelID) {
+	// In a Configuration Response, Source CID is the requester's own local
+	// channel (fChannelID), matching Linux l2cap_config_rsp ->
+	// l2cap_get_chan_by_scid.
+	if (scid != fChannelID) {
 		ERROR("l2cap: unexpected configuration rsp: invalid source channel (cid=%d, remote=%d, scid=%d)\n",
 			fChannelID, fDestinationChannelID, scid);
 		send_l2cap_command_reject(fConnection, ident,
