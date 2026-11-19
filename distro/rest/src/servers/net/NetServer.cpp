@@ -1335,15 +1335,52 @@ NetServer::_JoinNetwork(const BMessage& message, const BNetworkAddress* address,
 
 		// We need the supplicant, try to launch it.
 		status_t status = be_roster->Launch(kWPASupplicantSignature);
-		if (status != B_OK && status != B_ALREADY_RUNNING)
-			return status;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		if (status != B_OK && status != B_ALREADY_RUNNING) {
+			syslog(LOG_ERR, "net_server: Launch(%s) failed: %s (0x%" B_PRIx32
+				"), trying /boot/system/bin/wpa_supplicant\n",
+				kWPASupplicantSignature, strerror(status), status);
+			entry_ref ref;
+			if (get_ref_for_path("/boot/system/bin/wpa_supplicant", &ref)
+					== B_OK) {
+				status = be_roster->Launch(&ref);
+				if (status != B_OK && status != B_ALREADY_RUNNING) {
+					syslog(LOG_ERR, "net_server: Launch(wpa_supplicant ref) "
+						"failed: %s (0x%" B_PRIx32 ")\n", strerror(status),
+						status);
+					return status;
+				}
+			} else
+				return status;
+		}
 
-		wpaSupplicant.SetTo(kWPASupplicantSignature);
-		if (!wpaSupplicant.IsValid())
+		for (int attempt = 0; attempt < 20; attempt++) {
+			wpaSupplicant.SetTo(kWPASupplicantSignature);
+			if (wpaSupplicant.IsValid())
+				break;
+			snooze(50000);
+		}
+		if (!wpaSupplicant.IsValid()) {
+			syslog(LOG_ERR, "net_server: wpa_supplicant messenger invalid "
+				"after launch\n");
 			return B_ERROR;
+		}
+// SPDX-SnippetEnd
 	}
 
 	// TODO: listen to notifications from the supplicant!
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	syslog(LOG_INFO, "net_server: join \"%s\" on %s auth=%" B_PRIu32
+		" key_mode=0x%" B_PRIx32 " ask=%d has_pw=%d\n",
+		network.name, deviceName, network.authentication_mode,
+		network.key_mode, askForConfig ? 1 : 0,
+		(password != NULL && password[0] != '\0') ? 1 : 0);
+// SPDX-SnippetEnd
 
 	BMessage join(kMsgWPAJoinNetwork);
 	status_t status = join.AddString("device", deviceName);

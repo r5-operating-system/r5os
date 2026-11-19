@@ -39,12 +39,18 @@ INCLUDES="-I$ROOT/distro/kernel/src/libs/compat/freebsd_wlan -I$HAIKU/src/libs/c
 LIBS_EXTRA="-L$OPENSSL/develop/lib -L$OBJ/kits -L$OBJ/kits/network/libnetapi/ssl -L$OBJ/system/libnetwork -L$CROSS/sysroot/boot/system/develop/lib -lstdc++"
 printf 'CFLAGS += %s\nLIBS += %s\n' "$INCLUDES" "$LIBS_EXTRA" >> "$SRC/wpa_supplicant/.config"
 
+TOOLS=$HAIKU/generated.x86_64/objects/linux/x86_64/release/tools
+export PATH="$TOOLS/rc:$TOOLS/resattr:$TOOLS:$PATH"
+
 cd "$SRC/wpa_supplicant"
-# rc, xres and mimeset are Haiku host tools. The link is the part that
-# has to succeed; a missing resource editor does not discard the binary.
-# .config sets LDO to g++, which on the build host is the Linux compiler.
 make CC="$CC" LDO="$CXX" BINDIR=/bin -j"$(nproc)" wpa_supplicant || test -x wpa_supplicant
 test -x wpa_supplicant
+# Embed Haiku resources (BEOS:APP_SIG, B_EXCLUSIVE_LAUNCH | B_BACKGROUND_APP,
+# icon) so be_roster->Launch(kWPASupplicantSignature) can find and launch it.
+"$TOOLS/rc/rc" -I "$HAIKU/headers/os" -I "$HAIKU/headers/os/app" \
+	-I "$HAIKU/headers/os/interface" -I "$HAIKU/headers/os/storage" \
+	-o wpa_supplicant.rsrc wpa_gui-haiku/wpa_supplicant.rdef
+"$TOOLS/xres" -o wpa_supplicant wpa_supplicant.rsrc
 echo "built $(pwd)/wpa_supplicant"
 
 STAGE=$WORK/stage
@@ -52,6 +58,7 @@ rm -rf "$STAGE"
 mkdir -p "$STAGE/bin"
 cp wpa_supplicant "$STAGE/bin/wpa_supplicant"
 chmod 755 "$STAGE/bin/wpa_supplicant"
+"$TOOLS/resattr/resattr" -o "$STAGE/bin/wpa_supplicant" wpa_supplicant.rsrc
 cat > "$STAGE/.PackageInfo" <<EOF
 name			wpa_supplicant
 version			$WPA_VERSION
@@ -67,14 +74,14 @@ copyrights {
 	"2010 Axel Dörfler"
 }
 provides {
-	wpa_supplicant = 2.11.r5.6
-	cmd:wpa_supplicant = 2.11.r5.6
+	wpa_supplicant = 2.11.r5.7
+	cmd:wpa_supplicant = 2.11.r5.7
 }
 requires {
 	haiku
 	lib:libcrypto
 }
 EOF
-PACKAGE_TOOL=$HAIKU/generated.x86_64/objects/linux/x86_64/release/tools/package/package
+PACKAGE_TOOL=$TOOLS/package/package
 "$PACKAGE_TOOL" create -C "$STAGE" "$PKG/wpa_supplicant-$WPA_VERSION-x86_64.hpkg"
 echo "hpkg $PKG/wpa_supplicant-$WPA_VERSION-x86_64.hpkg"
