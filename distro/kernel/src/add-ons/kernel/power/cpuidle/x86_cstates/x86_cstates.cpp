@@ -50,14 +50,25 @@ static bigtime_t* sIdleTime;
 static inline void
 x86_monitor(void* address, uint32 ecx, uint32 edx)
 {
-	asm volatile("monitor" : : "a" (address), "c" (ecx), "d"(edx));
+	// SPDX-SnippetBegin
+	// SPDX-License-Identifier: MIT
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// "memory": the load of the monitored word must stay after MONITOR.
+	// MONITOR itself is ordered as a load (Intel SDM Vol. 2, MONITOR).
+	asm volatile("monitor" : : "a" (address), "c" (ecx), "d"(edx) : "memory");
+	// SPDX-SnippetEnd
 }
 
 
 static inline void
 x86_mwait(uint32 eax, uint32 ecx)
 {
-	asm volatile("mwait" : : "a" (eax), "c" (ecx));
+	// SPDX-SnippetBegin
+	// SPDX-License-Identifier: MIT
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// "memory": clearing mwait_polling must stay after MWAIT.
+	asm volatile("mwait" : : "a" (eax), "c" (ecx) : "memory");
+	// SPDX-SnippetEnd
 }
 
 
@@ -192,7 +203,14 @@ init_cstates()
 					", C%" B_PRId32, i);
 		}
 
-		sCStates[sCStateCount].fCode = sCStateCount * 0x10;
+		// SPDX-SnippetBegin
+		// SPDX-License-Identifier: MIT
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// EAX[7:4] is the C-state minus 1 (Intel SDM, MWAIT: 0 is C1).
+		// i is the CPUID nibble (1 = C1). Haiku's original uses the packed
+		// table index, sCStateCount * 0x10; that is the same class of bug.
+		sCStates[sCStateCount].fCode = (uint32)(i - 1) << 4;
+		// SPDX-SnippetEnd
 		sCStates[sCStateCount].fSubStatesCount = subStates;
 		sCStateCount++;
 	}

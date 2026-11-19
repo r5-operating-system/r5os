@@ -30,6 +30,8 @@
 #include "paging/64bit/X86PagingStructures64Bit.h"
 #include "paging/x86_physical_page_mapper.h"
 
+#include <arch/x86/arch_cpuasm.h>
+
 
 //#define TRACE_X86_VM_TRANSLATION_MAP_64BIT
 #ifdef TRACE_X86_VM_TRANSLATION_MAP_64BIT
@@ -466,8 +468,31 @@ X86VMTranslationMap64Bit::MapLarge(addr_t virtualAddress,
 				return B_BUSY;
 		}
 
-		X86PagingMethod64Bit::ClearTableEntry(pde);
-		fMapCount--;
+		// Switch the PDE in one store, then flush, and only then write the
+		// old table. _PushStandbyPageTable stores the list link in entry 0.
+		// A CPU that still caches this PDE would walk that word as a PTE.
+		X86PagingMethod64Bit::PutPageDirectoryEntryInTable(pde,
+			physicalAddress, attributes, memoryType, fIsKernelMap);
+		fMapCount += k64BitTableEntryCount - 1;
+		memory_write_barrier();
+
+		// Local INVLPG, then the same synchronous shootdown as
+		// _SplitLargePage(). The ICI runs on this CPU as well. INVLPG drops
+		// the TLB entry and the paging-structure cache for this address
+		// (Intel SDM Vol. 3A 4.10.4); the shootdown drops every 4 KB entry
+		// in the 2 MB range, including global pages on the kernel map.
+		if (fIsKernelMap
+			|| (intptr_t)x86_read_cr3()
+				== (intptr_t)fPagingStructures->pgdir_phys) {
+			asm volatile("invlpg (%0)" : : "r"(virtualAddress) : "memory");
+		}
+		if (fIsKernelMap) {
+			smp_broadcast_ici(SMP_MSG_GLOBAL_INVALIDATE_PAGES, 0, 0, 0,
+				NULL, SMP_MSG_FLAG_SYNC);
+		} else {
+			InvalidateUserTLB(fPagingStructures->active_on_cpus,
+				fPagingStructures->pgdir_phys);
+		}
 		_PushStandbyPageTable(existingTablePA);
 	} else {
 		vm_page* standbyPage = vm_page_allocate_page(reservation,
@@ -475,12 +500,11 @@ X86VMTranslationMap64Bit::MapLarge(addr_t virtualAddress,
 		DEBUG_PAGE_ACCESS_END(standbyPage);
 		_PushStandbyPageTable(
 			(phys_addr_t)standbyPage->physical_page_number * B_PAGE_SIZE);
+
+		X86PagingMethod64Bit::PutPageDirectoryEntryInTable(pde,
+			physicalAddress, attributes, memoryType, fIsKernelMap);
+		fMapCount += k64BitTableEntryCount;
 	}
-
-	X86PagingMethod64Bit::PutPageDirectoryEntryInTable(pde, physicalAddress,
-		attributes, memoryType, fIsKernelMap);
-
-	fMapCount += k64BitTableEntryCount;
 
 	X86PagingMethod64Bit::LogLargePageMap(virtualAddress, physicalAddress,
 		memoryType, attributes);

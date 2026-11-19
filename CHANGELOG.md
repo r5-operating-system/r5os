@@ -1,5 +1,22 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - AMD64: MWAIT wake, 2 MB page-table reuse, C-state hint
+
+Problem: an idle CPU arms MONITOR on invoke_scheduler and then loads that word. Without a compiler barrier the load can move above MONITOR. The waker stores the word, sees mwait_polling, and skips the reschedule IPI, so MWAIT sleeps on a line that was already written. MapLarge() wrote an empty 4 KB page table (the standby-list link in entry 0) while a CPU could still walk it through a cached PDE. The MWAIT C-state hint used the packed table index. Intel SDM MWAIT says EAX[7:4] is 0 for C1, so the hint is the CPUID C-state number minus 1. Haiku's original x86_cstates.cpp has the same class of bug: sCStateCount * 0x10.
+
+What changed:
+- x86_monitor and x86_mwait take a "memory" clobber, in x86_cstates.cpp and in x86_mwait.h (the ACPI idle path). The reschedule IPI is still skipped when mwait_polling is set. The load stays after MONITOR, and atomic_get_and_set stores the monitored int32, so the store hits the monitored line.
+- MapLarge() installs the 2 MB PDE, does a local INVLPG and the same synchronous shootdown as _SplitLargePage(), and only then reuses the old table.
+- The C-state hint is `(i - 1) << 4`. The loop index i is the CPUID nibble (1 = C1), and MWAIT's EAX[7:4] is 0 for C1.
+
+Checked, not changed:
+- The XSAVE header on signal return is not a bug. Intel SDM Vol. 1 section 13.8.2: compacted XRSTOR raises #GP if XCOMP_BV[62:0] sets a bit that is not set in XCR0, or if XSTATE_BV sets a bit (including bits 0 and 1) that is not set in XCOMP_BV. Setting bits 0 and 1 does not fault. XCR0[1:0] are 1 when XSAVE is enabled, and a set XSTATE_BV bit must also be set in XCOMP_BV. Linux sets the same mask. thread.cpp is unchanged.
+- User-space non-temporal stores are unchanged in this change. MOVNTDQ to write-back memory does not leave a stale cached line; glibc uses the same three-quarter last-level-cache cutoff. No wrong result found.
+
+Limits: a QEMU boot only shows that the kernel starts. Whether the MWAIT ordering stops a restart from hanging is only proven on the 5625U. 2 MB pages stay off unless amd64_large_pages is set, so MapLarge() does not run on the default boot.
+
+Tested (19 Nov 2026, Europe/Amsterdam, about 09:20): `scripts/build-locked.sh` after the hint correction, `jam_exit=0`, `mesa_exit=0`. An earlier jam in this session still had `i << 4` and was rebuilt. One QEMU KVM boot of an own image copy, `-cpu host,+smap`, `-display none`, `-smp 2`. The serial log contains `enable SMAP` and `R5 net_server: NetServer from distro`, and the boot reaches the input drivers and package scripts. No panic. `app_server` was not in the log before the boot was stopped.
+
 ## 2026-11-19 - Deskbar: fix expander clicks, thread/lock safety, leaks, settings sync, and window caching
 
 Problem: code review of Deskbar found that the R5OS primary-click shortcut blocked the expander arrow in vertical `superExpando` mode, `BList::RemoveItem(int32)` left stale `team_id`s in multi-instance teams, `monitor_team_windows()` had a detach NULL dereference, lock-order inversion with `RemoveTeam()`, and stale loop bounds, `kLogoutSession`/`kCheckHungApp` ran synchronous `BAlert::Go()` on `be_app`, Deskbar settings IPC changes were not persisted immediately, `HasListedWindows()` ran `get_token_list()`/`get_window_info()` IPC on every `DrawContent()`/`ExpanderBounds()` call, and several memory/add-on leaks existed.
