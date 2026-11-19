@@ -327,6 +327,16 @@ Location: `distro/firmware/mediatek`. Installed at `system/non-packaged/data/fir
 
 The blobs are unmodified. sha256 starts: `WIFI_MT7961_patch_mcu_1_2_hdr.bin` `a276c06c2b772adb`, `WIFI_RAM_CODE_MT7961_1.bin` `b94217a951518a9c`, `BT_RAM_CODE_MT7961_1_2_hdr.bin` `7a440a0f7404c73a`. MediaTek allows use and redistribution with devices that contain MediaTek chipsets, but not in a form that would require the files themselves to be covered by the GPL or LGPL. R5 ships them as separate files that the drivers read at run time, the same way as the AMD firmware. This is not an open-source license. The text is `LICENSES/LICENCE.mediatek`. MediaTek does not endorse R5.
 
+### Cirrus CS35L41 speaker firmware
+
+Location: `distro/firmware/cirrus`. Not installed on the image. Nothing loads these files yet. The speakers on the HP ENVY x360 15-ey0xxx stay silent until a driver exists.
+
+| Piece | Project | License |
+|---|---|---|
+| `halo_cspl_RAM_revB2_29.63.1.wmfw` (playback 6.61.1, release 29.63.1), four `cs35l41-dsp1-spk-prot-103c8a29-spkid*.bin`, four `cs35l41-dsp1-spk-cali-103c8a29-spkid*.bin` | Cirrus Logic, via linux-firmware (`gitlab.com/kernel-firmware/linux-firmware`). The wmfw and the prot bins are on that tree's main. The cali bins are from commit `9f47713653` (HP consumer laptops) and are not separate files on that main. | Cirrus Logic firmware agreement (`LICENSE.cirrus`) |
+
+The blobs are unmodified. On this ENVY (ACPI `CSC3551`, subsystem `103C8A31`, Windows config `CONF_0252`) they are the same bytes as the Windows driver `csaudioext`: the wmfw is `halo_cspl_RAM_revB2_29.63.1.wmfw`, and the `103C8A29_211103` tunings match spkid 0 or 1, left (`A0`) or right (`A1`), with `_cal` for the calibration bin. sha256: wmfw `c11cb3e25825c673a955a3519370ad77fbcd8bcf68808e8e34140a70caefcec4`, prot spkid0 l0 `119725a44103865c9f83283b6d7f82d7979db5a2ea943fe95b3efa58d7adec0b`, r0 `59c2e439ff12c78b355da6bfe91ce36ce4be9d5144e2e06af7e0108ac5a8796b`, spkid1 l0 `f99008ec0a9c50470e7fedcf31786a31664171b4ccc1a3e2bdd7bb0d6bf56e2d`, r0 `18636548a651ddf39e74c65bba738b9cd0c71c19c9fce6468c6cf094b286f934`, cali spkid0 l0 `5b927b28e587f42774f5949582b53f5f2399af3899ddc0fbf059ebeba62b9c91`, r0 `37a472da1dbcece7c9938cc09a2e8c186e2ae8080c7d31d394682b0586f701c5`, spkid1 l0 `0af356009cf503159e34ecbcfba28ce305afb040068c7ca5741cb53993148e9a`, r0 `a17badce983bfdce7f4773ddb14471224342452a22ef3ab64f9ef826ecfbdd5a`. Cirrus allows redistribution only complete and unmodified, only for use with Cirrus Logic semiconductor devices, and only with this agreement beside the files. This is not an open-source license. There is no source offer. The text is `distro/firmware/cirrus/LICENSE.cirrus`. The Windows diagnostic wmfw and `103C8A29_211103_diag.bin` are not in that publication and are not included. Cirrus Logic does not endorse R5.
+
 ### Realtek RTL8761CU Bluetooth firmware
 
 Location: `distro/firmware/realtek`. Installed at `system/non-packaged/data/firmware/h2generic/` with `LICENCE.rtlwifi_firmware.txt`, in the regular image. It is the patch for the ASUS USB-BT600 dongle (USB `0b05:1d70`).
