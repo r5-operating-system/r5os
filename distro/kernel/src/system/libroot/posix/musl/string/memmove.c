@@ -28,6 +28,54 @@ move_bytes(unsigned char* d, const unsigned char* s, size_t n, int forward)
 
 
 static void
+move_words64(unsigned char* d, const unsigned char* s, size_t n, int forward)
+{
+	if (forward) {
+		while (n >= 8) {
+			uint64_t value;
+			__builtin_memcpy(&value, s, 8);
+			__builtin_memcpy(d, &value, 8);
+			d += 8;
+			s += 8;
+			n -= 8;
+		}
+	} else {
+		while (n >= 8) {
+			n -= 8;
+			uint64_t value;
+			__builtin_memcpy(&value, s + n, 8);
+			__builtin_memcpy(d + n, &value, 8);
+		}
+	}
+	move_bytes(d, s, n, forward);
+}
+
+
+static void
+move_words32(unsigned char* d, const unsigned char* s, size_t n, int forward)
+{
+	if (forward) {
+		while (n >= 4) {
+			uint32_t value;
+			__builtin_memcpy(&value, s, 4);
+			__builtin_memcpy(d, &value, 4);
+			d += 4;
+			s += 4;
+			n -= 4;
+		}
+	} else {
+		while (n >= 4) {
+			n -= 4;
+			uint32_t value;
+			__builtin_memcpy(&value, s + n, 4);
+			__builtin_memcpy(d + n, &value, 4);
+		}
+	}
+	move_bytes(d, s, n, forward);
+}
+
+
+static void
 move_sse(unsigned char* d, const unsigned char* s, size_t n, int forward)
 {
 	if (forward) {
@@ -73,6 +121,10 @@ void *memmove(void *dest, const void *src, size_t n)
 			: (uintptr_t)(destBytes - srcBytes);
 		if (apart >= 16)
 			move_sse(destBytes, srcBytes, n, forward);
+		else if (apart >= 8)
+			move_words64(destBytes, srcBytes, n, forward);
+		else if (apart >= 4)
+			move_words32(destBytes, srcBytes, n, forward);
 		else
 			move_bytes(destBytes, srcBytes, n, forward);
 	}

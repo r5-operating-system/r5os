@@ -21,6 +21,8 @@
 #if defined(__x86_64__)
 #include <stdint.h>
 
+extern int32 __gCPUCount;
+
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
@@ -122,7 +124,9 @@ __pthread_mutex_lock(pthread_mutex_t* mutex, uint32 flags, bigtime_t timeout)
 		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 		// SPDX-License-Identifier: MIT
 		// Read the word only. The spin stops on the clock, then one more try.
-		if (r5_lock_word_clear((int32*)&mutex->lock, 2000)) {
+		// Skip spinning on a single-CPU system or when waiters are already queued.
+		if (__gCPUCount > 1 && (oldValue & B_USER_MUTEX_WAITING) == 0
+			&& r5_lock_word_clear((int32*)&mutex->lock, 2000)) {
 			oldValue = atomic_test_and_set((int32*)&mutex->lock,
 				B_USER_MUTEX_LOCKED, 0);
 		}

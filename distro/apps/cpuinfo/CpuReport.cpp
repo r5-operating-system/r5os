@@ -334,21 +334,19 @@ collect_x86_64(CpuReport& report)
 	report.buildBaseline = "x86-64-v2";
 
 	uint32 r5Flags = (uint32)r5_x86_cpu_pack();
-	const char* memcpyPath = "baseline";
-	if (r5Flags & R5_CPU_FSRM)
+	const char* memcpyPath = "SSE2";
+	if ((r5Flags & R5_CPU_ERMS) != 0 && (r5Flags & R5_CPU_FSRM) != 0)
 		memcpyPath = "FSRM/ERMS";
-	else if (r5Flags & R5_CPU_ERMS)
+	else if ((r5Flags & R5_CPU_ERMS) != 0)
 		memcpyPath = "ERMS";
-	else if (r5Flags & R5_CPU_AVX2)
-		memcpyPath = "AVX2";
 
-	const char* stringPath = (r5Flags & R5_CPU_AVX2) ? "AVX2" : "baseline";
+	const char* stringPath = (r5Flags & R5_CPU_AVX2) ? "AVX2" : "SSE4.2";
 
 	const char* libmPath = "baseline";
 	if (r5Flags & R5_CPU_FMA)
 		libmPath = "FMA";
-	else if (r5Flags & R5_CPU_AVX)
-		libmPath = "AVX";
+	else if (r5Flags & R5_CPU_FMA4)
+		libmPath = "FMA4";
 
 	report.userSpacePaths.SetToFormat(
 		"memcpy: %s, strings: %s, libm: %s",

@@ -1044,21 +1044,11 @@ X86VMTranslationMap64Bit::ClearAccessedAndModified(VMArea* area, addr_t address,
 	if (pde == NULL || (*pde & X86_64_PDE_PRESENT) == 0)
 		return false;
 	if ((*pde & X86_64_PDE_LARGE_PAGE) != 0) {
-		if (unmapIfUnaccessed && (*pde & X86_64_PDE_ACCESSED) == 0) {
-			_SplitLargePage(pde, ROUNDDOWN(address, k64BitPageTableRange),
-				"clear_unaccessed");
-		} else {
-			uint64 oldPDE = X86PagingMethod64Bit::ClearTableEntryFlags(pde,
-				X86_64_PDE_ACCESSED | X86_64_PDE_DIRTY);
-			pinner.Unlock();
-			_modified = (oldPDE & X86_64_PDE_DIRTY) != 0;
-			if ((oldPDE & X86_64_PDE_ACCESSED) != 0) {
-				InvalidatePage(ROUNDDOWN(address, k64BitPageTableRange));
-				Flush();
-				return true;
-			}
-			return false;
-		}
+		// Split first so the shared ACCESSED and DIRTY bits propagate to all
+		// 512 4 KB PTEs; clearing them directly on the 2 MB PDE would lose
+		// dirty/accessed state for the other 511 pages.
+		_SplitLargePage(pde, ROUNDDOWN(address, k64BitPageTableRange),
+			"clear_accessed_modified");
 	}
 // SPDX-SnippetEnd
 

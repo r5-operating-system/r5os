@@ -139,9 +139,34 @@ FUNCTION(_arch_cpu_user_memcpy):
 	movq	%rcx, %r9
 
 	ASM_STAC
+	cmpq	$64, %rdx
+	jae		.L_user_memcpy_rep
+	movq	%rdx, %rcx
+	shrq	$3, %rcx
+	jz		.L_user_memcpy_tail
+.L_user_memcpy_qword:
+	movq	(%rsi), %rax
+	movq	%rax, (%rdi)
+	addq	$8, %rsi
+	addq	$8, %rdi
+	decq	%rcx
+	jnz		.L_user_memcpy_qword
+.L_user_memcpy_tail:
+	andl	$7, %edx
+	jz		.L_user_memcpy_done
+.L_user_memcpy_byte:
+	movb	(%rsi), %al
+	movb	%al, (%rdi)
+	incq	%rsi
+	incq	%rdi
+	decl	%edx
+	jnz		.L_user_memcpy_byte
+	jmp		.L_user_memcpy_done
+.L_user_memcpy_rep:
 	cld
 	movq	%rdx, %rcx
 	rep	movsb
+.L_user_memcpy_done:
 	ASM_CLAC
 
 	movq	%r8, (%r9)
@@ -165,10 +190,33 @@ FUNCTION(_arch_cpu_user_memset):
 	movq	%rcx, %r9
 
 	ASM_STAC
+	movzbq	%sil, %rax
+	cmpq	$64, %rdx
+	jae		.L_user_memset_rep
+	movq	%rdx, %rcx
+	shrq	$3, %rcx
+	jz		.L_user_memset_tail
+	movabsq	$0x0101010101010101, %r10
+	imulq	%r10, %rax
+.L_user_memset_qword:
+	movq	%rax, (%rdi)
+	addq	$8, %rdi
+	decq	%rcx
+	jnz		.L_user_memset_qword
+.L_user_memset_tail:
+	andl	$7, %edx
+	jz		.L_user_memset_done
+.L_user_memset_byte:
+	movb	%al, (%rdi)
+	incq	%rdi
+	decl	%edx
+	jnz		.L_user_memset_byte
+	jmp		.L_user_memset_done
+.L_user_memset_rep:
 	cld
-	movb	%sil, %al
 	movq	%rdx, %rcx
 	rep	stosb
+.L_user_memset_done:
 	ASM_CLAC
 
 	movq	%r8, (%r9)

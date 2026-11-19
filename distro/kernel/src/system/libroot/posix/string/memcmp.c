@@ -10,7 +10,7 @@
 #undef memcmp
 
 
-#if !defined(__x86_64__) || defined(_BOOT_MODE)
+#if !defined(__x86_64__) || defined(_BOOT_MODE) || defined(_KERNEL_MODE)
 
 #define MISALIGNMENT(PTR, TYPE) ((addr_t)(PTR) & (sizeof(TYPE) - 1))
 
@@ -114,10 +114,9 @@ __attribute__((target("avx2")))
 static int
 memcmp_avx2(const unsigned char *a, const unsigned char *b, size_t count)
 {
-	while (count >= 32 && r5_page_room(a) >= 32 && r5_page_room(b) >= 32
-		&& ((uintptr_t)a & 31u) == 0 && ((uintptr_t)b & 31u) == 0) {
-		__m256i va = _mm256_load_si256((const __m256i*)a);
-		__m256i vb = _mm256_load_si256((const __m256i*)b);
+	while (count >= 32 && r5_page_room(a) >= 32 && r5_page_room(b) >= 32) {
+		__m256i va = _mm256_loadu_si256((const __m256i*)a);
+		__m256i vb = _mm256_loadu_si256((const __m256i*)b);
 		unsigned equal = (unsigned)_mm256_movemask_epi8(
 			_mm256_cmpeq_epi8(va, vb));
 		unsigned stop = ~equal;

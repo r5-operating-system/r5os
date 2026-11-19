@@ -51,31 +51,10 @@ r5_index16(__m128i needle, __m128i chunk)
 static inline __m128i
 r5_load16(const void* pointer)
 {
-	uintptr_t addr = (uintptr_t)pointer;
-	unsigned skip = (unsigned)addr & 15u;
-	if (skip == 0)
-		return _mm_load_si128((const __m128i*)pointer);
-	const __m128i* base = (const __m128i*)(addr & ~(uintptr_t)15);
-	__m128i lo = _mm_load_si128(base);
-	__m128i hi = _mm_load_si128(base + 1);
-	/* palignr's shift is an immediate. Both blocks sit in this page. */
-	switch (skip) {
-		case 1: return _mm_alignr_epi8(hi, lo, 1);
-		case 2: return _mm_alignr_epi8(hi, lo, 2);
-		case 3: return _mm_alignr_epi8(hi, lo, 3);
-		case 4: return _mm_alignr_epi8(hi, lo, 4);
-		case 5: return _mm_alignr_epi8(hi, lo, 5);
-		case 6: return _mm_alignr_epi8(hi, lo, 6);
-		case 7: return _mm_alignr_epi8(hi, lo, 7);
-		case 8: return _mm_alignr_epi8(hi, lo, 8);
-		case 9: return _mm_alignr_epi8(hi, lo, 9);
-		case 10: return _mm_alignr_epi8(hi, lo, 10);
-		case 11: return _mm_alignr_epi8(hi, lo, 11);
-		case 12: return _mm_alignr_epi8(hi, lo, 12);
-		case 13: return _mm_alignr_epi8(hi, lo, 13);
-		case 14: return _mm_alignr_epi8(hi, lo, 14);
-		default: return _mm_alignr_epi8(hi, lo, 15);
-	}
+	/* Callers guarantee r5_page_room(pointer) >= 16, so all 16 bytes lie in
+	 * the current page and an unaligned SSE load cannot cross a page boundary.
+	 */
+	return _mm_loadu_si128((const __m128i*)pointer);
 }
 
 

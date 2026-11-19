@@ -185,15 +185,15 @@ struct LocalRWLock {
 	{
 		Locker locker(this);
 
-		if (atomic_get(&reader_count) == 0 && writer_count == 0) {
+		if (atomic_get(&writer_count) == 0) {
 			// SPDX-SnippetBegin
 			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 			// SPDX-License-Identifier: MIT
-			// Publish this writer before reading the readers again, so a
-			// reader that arrives in between cannot keep the lock.
+			// Publish this writer before reading the readers, so a reader that
+			// arrives or unlocks concurrently cannot miss writer_count > 0.
 			atomic_add(&writer_count, 1);
 			if (atomic_get(&reader_count) == 0) {
-				owner = find_thread(NULL);
+				__atomic_store_n(&owner, find_thread(NULL), __ATOMIC_RELEASE);
 				return B_OK;
 			}
 			return _Wait(true, flags, timeout, false);
@@ -208,7 +208,7 @@ struct LocalRWLock {
 		// SPDX-SnippetBegin
 		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 		// SPDX-License-Identifier: MIT
-		if (find_thread(NULL) != owner) {
+		if (find_thread(NULL) != __atomic_load_n(&owner, __ATOMIC_ACQUIRE)) {
 			const int32 left = atomic_add(&reader_count, -1);
 			if (left != 1 || atomic_get(&writer_count) == 0)
 				return B_OK;
@@ -221,7 +221,7 @@ struct LocalRWLock {
 		Locker locker(this);
 
 		atomic_add(&writer_count, -1);
-		owner = -1;
+		__atomic_store_n(&owner, -1, __ATOMIC_RELEASE);
 
 		_Unblock();
 
@@ -232,8 +232,10 @@ private:
 	status_t _Wait(bool writer, uint32 flags, bigtime_t timeout, bool countWriter)
 	{
 		if (timeout == 0) {
-			if (writer && !countWriter)
+			if (writer && !countWriter) {
 				atomic_add(&writer_count, -1);
+				_Unblock();
+			}
 			return B_TIMED_OUT;
 		}
 
@@ -287,7 +289,7 @@ private:
 				waiter->status = B_OK;
 				waiter->queued = false;
 				waiters.Remove(waiter);
-				owner = waiter->thread;
+				__atomic_store_n(&owner, waiter->thread, __ATOMIC_RELEASE);
 
 				if (waiter->userThread->wait_status > 0)
 					_kern_unblock_thread(waiter->thread, B_OK);
