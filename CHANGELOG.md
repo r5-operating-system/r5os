@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - CS35L41 firmware for the ENVY speakers, stored only
+
+Problem: the HP ENVY x360 15-ey0xxx (Ryzen 5 5625U, ACPI `CSC3551`, subsystem `103C8A31`) plays through two Cirrus CS35L41 amplifiers. The HDA controller is already driven. The speakers stay silent because nothing powers those amplifiers or loads their firmware.
+
+What changed: the playback firmware and the eight tuning files Windows uses for this model are in `distro/firmware/cirrus`, unmodified, with `LICENSE.cirrus`. They are the linux-firmware files (playback 6.61.1, release 29.63.1, tunings `103c8a29`). On this laptop their sha256 matches the Windows `csaudioext` driver. The diagnostic wmfw and `103C8A29_211103_diag.bin` are not in that publication and are not included.
+
+Limits: not installed, and no driver loads them. The speakers still do not play. The register programming is not here. The Linux driver is GPL-2.0 and was not used as a source. Not built and not booted.
+
 ## 2026-11-19 - GPU hang on stick 61, and the desktop after the device is lost
 
 Problem: Stick 61 on the 5625U (main 0640813f88, Try R5, boot 1) hung the GFX ring during the Skia warm-up. The last accepted submit was at 10.705 s (`ib va ffff800100001000`, 1712 dwords). At 10.825 s `CS_SUBMIT` returned `B_BUSY` (`0x8000000e`, ring room, 100 ms). app_server logged `gpu draw off: submit` and `gpu draw warm up 198 ms`, status General system error. At 24.8 s the self-test read the command processor and marked the GPU lost. The screen stayed a striped moiré pattern. vkcube asserted on the error and the debugger opened. Stick 60 (e0f8560010, no radeon_hd settings) finished the same warm-up in 2570 ms with no refused submit.
