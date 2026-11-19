@@ -1,34 +1,46 @@
 <!-- SPDX-License-Identifier: MIT -->
 <!-- SPDX-FileCopyrightText: 2026 R5OS Contributors -->
 
-# WebKit op R5
+# Aomi Browser
 
-Plan, herzien 19 november 2026. Alleen lezen. Geen poort, geen bouw, geen commit. De motorkeuze is gemaakt op 19 november 2026: de Haiku-WebKit-poort, een schil op `BView`. Dit plan is de volgorde daarna.
+Plan, herzien 19 november 2026. De motorkeuze is gemaakt op 19 november 2026: de Haiku-WebKit-poort, een schil op `BView`. WebKit blijft de engine. Dit plan is de volgorde daarna. Deze landing bouwt niets.
 
-`generated/BROWSER-PLAN-REVIEW.md` stond niet op deze machine. Geen worktree `R5OS-amd64-stick`, geen kopie in de repo en geen kopie in `/cursor/stores/self`. Gekozen: herzien vanuit `origin/main` (`git show` en `git grep`), en bij een open punt de keuze hieronder zetten.
+`generated/BROWSER-PLAN-REVIEW.md` stond niet op deze machine. Geen worktree `R5OS-amd64-stick`, geen kopie in de repo en geen kopie in `/cursor/stores/self`. Gekozen: herzien vanuit `origin/main` (`git show` en `git grep`), en bij een open punt de keuze hieronder zetten. De naam en de rondes komen uit de review van 19 november 2026.
 
-Nick heeft de schil gekozen. De systeembrowser krijgt een nieuwe GUI, gebaseerd op WebPositive, op de Interface Kit en op R5 UI. De oude `BrowserWindow` is niet het product. Hij blijft alleen de sonde in de eerste twee stappen, tot de nieuwe schil dezelfde pagina’s opent.
+Nick heeft de schil gekozen. Aomi Browser krijgt een nieuwe GUI, gebaseerd op WebPositive, op de Interface Kit en op R5 UI. De oude `BrowserWindow` is niet het product. Hij blijft alleen de sonde tot Aomi in ronde 1 dezelfde pagina’s opent.
 
 Officieel eerst AMD64. `origin/main` is de bron van waarheid.
+
+## Naam en uiterlijk
+
+De eigenaar heeft de naam vastgelegd op 19 november 2026. Het product is Aomi Browser. In het venster en in de Deskbar heet het Aomi. De signatuur is `application/x-vnd.R5-Aomi`, vast in de eerste codestap (ronde 1). De bron staat in `distro/apps/aomi`.
+
+De merkkleuren, hemelblauw, wit en diep marineblauw, zitten in het app-icoon, de startpagina en de promo. Het venster houdt het R5-kader: gele tab, lijn van 1 px. De stijl is minimaal en glad. Dat is het glas van R5Book (`BAppearanceKit::set_window_glass`, `docs/r5book/appearance-effects.html`), met de terugval zonder GPU: app_server neemt de aanroep aan en bewaart hem, en in de CPU-stand verandert het scherm niet. `B_TRANSPARENT_COLOR` wordt geen glas. De slogan "Browse beyond the horizon." is voor de website en voor What's new, niet voor het venster.
+
+De bladwijzermap blijft `WebPositive`.
 
 De WebKit-headers (`WebView.h`, `WebPage.h`, `WebDownload.h`, `WebWindow.h`, `WebViewConstants.h`) staan niet in git. Het pakket `haikuwebkit_devel-1.10.0-2-x86_64.hpkg` stond niet op deze machine (`wsl` ontbreekt, `/home/nickr/r5os` ontbreekt). Aanroepen hieronder komen uit de WebPositive-bron. De declaratie in de header is niet gelezen en wordt niet verzonnen.
 
 ## Keuzes waar het open lag
 
-- Het programma komt nieuw onder `distro/apps/browser`. Werknaam in het venster: Browser. Signatuur, als het pakket die krijgt: `application/x-vnd.R5-Browser`. De zichtbare naam kan Nick nog wijzigen; de stappen hangen er niet aan. WebPositive blijft de naam van het Haiku-pakket tot dat pakket uit de image gaat. De oude signatuur is `application/x-vnd.Haiku-WebPositive` (`haiku/src/apps/webpositive/BrowserApp.cpp:64` en `haiku/src/apps/webpositive/WebPositive.rdef:1`). Het rdef-versieblok is app 1.3.0, korte tekst "WebPositive", lange tekst "WebPositive ©2007-2021 The WebKit Haiku Project" (`WebPositive.rdef:4-10`). Dat is de app, niet de engine.
+- Het programma komt nieuw onder `distro/apps/aomi`. Naam, signatuur en kleuren staan hierboven en hangen niet meer open. WebPositive blijft de naam van het Haiku-pakket tot ronde 3 dat pakket uit de image haalt. De oude signatuur is `application/x-vnd.Haiku-WebPositive` (`haiku/src/apps/webpositive/BrowserApp.cpp:64` en `haiku/src/apps/webpositive/WebPositive.rdef:1`). Het rdef-versieblok is app 1.3.0, korte tekst "WebPositive", lange tekst "WebPositive ©2007-2021 The WebKit Haiku Project" (`WebPositive.rdef:4-10`). Dat is de app, niet de engine. Aomi krijgt een eigen rdef. `WebPositive.rdef` gaat niet mee.
 - Bladwijzers blijven de bestanden die er al zijn. `_BookmarkPath` doet `find_directory(B_USER_SETTINGS_DIRECTORY)`, dan `kApplicationName`, dan `"Bookmarks"`, en `create_directory` met modus `0777` (`BrowserWindow.cpp:1921-1935`). `kApplicationName` is `B_TRANSLATE_SYSTEM_NAME("WebPositive")` (`BrowserApp.cpp:65`). `B_USER_SETTINGS_DIRECTORY` is een gebruikersmap (`haiku/headers/os/storage/FindDirectory.h:58-66`). Type `application/x-vnd.Be-bookmark`, attributen `META:url` en `META:title` (`BrowserWindow.cpp:2008-2015`). Submap `Bookmark bar` (`BrowserWindow.cpp:144`). De mapnaam blijft `WebPositive`, ook als het programma anders heet: de constante is de toepassingsnaam, geen aparte bladwijzerconstante. Een nieuwe browser die zijn eigen naam appendt, maakt een tweede map. Modus in de bron is `0777`, ook voor de instellingenmap (`BrowserApp.cpp:204`). Een map die er al is, blijft zoals die is: `create_directory` maakt alleen aan wat ontbreekt.
-- Pagina’s lopen via de client die haikuwebkit al linkt. `BrowserApp.cpp:112-117` zet `CURL_COOKIE_JAR_PATH` op `B_USER_SETTINGS_DIRECTORY` / toepassingsnaam / `cookie.jar.db`. WebPositive roept `BHttpRequest` niet aan (geen treffer in `haiku/src/apps/webpositive`). De browser praat niet met `WiFiController` en linkt `libr5wifi.so` niet om te laden. `BHttpRequest` in `distro/network/src/kits/network/libnetservices/HttpRequest.cpp` zet `fHttpVersion(B_HTTP_11)` en is de client van Haiku-programma’s. Overstappen daarop zou die client in de plaats van de poort zetten. Of de curl in het pakket HTTP/2 heeft, staat niet in deze bron. De Wi-Fi Kit zet de interface op via `net_server`. De browser gebruikt die interface zoals elk ander programma: sockets, route, DNS.
+- Pagina’s lopen via de client die haikuwebkit al linkt. `BrowserApp.cpp:112-117` zet `CURL_COOKIE_JAR_PATH` op `B_USER_SETTINGS_DIRECTORY` / toepassingsnaam / `cookie.jar.db`. WebPositive roept `BHttpRequest` niet aan (geen treffer in `haiku/src/apps/webpositive`). De browser praat niet met `WiFiController` en linkt `libr5wifi.so` niet om te laden. `BHttpRequest` in `distro/network/src/kits/network/libnetservices/HttpRequest.cpp` zet `fHttpVersion(B_HTTP_11)` en is de client van Haiku-programma’s. Overstappen daarop zou die client in de plaats van de poort zetten. HTTP/2 is er voor pagina’s al. `haikuwebkit-1.10.0-2` eist `lib:libcurl`. `curl-8.21.0-1` eist `lib:libnghttp2` (`package info` in de gedeelde boom). Pagina’s gebruiken HTTP/2 dan hoogstwaarschijnlijk al, als de curl-backend van WebKit erom vraagt. Onbewezen tot een pagina dat toont. De Wi-Fi Kit zet de interface op via `net_server`. De browser gebruikt die interface zoals elk ander programma: sockets, route, DNS.
 - De download-haak zit in de app, ook zonder de header. `BWebPage::SetDownloadListener(BMessenger(fDownloadWindow))` (`BrowserApp.cpp:243`). `DownloadWindow::MessageReceived` neemt `B_DOWNLOAD_ADDED` en `B_DOWNLOAD_REMOVED`, veld `"download"` als pointer naar `BWebDownload` (`DownloadWindow.cpp:248-263`). `DownloadProgressView` neemt `B_DOWNLOAD_STARTED`, `B_DOWNLOAD_PROGRESS` en `B_DOWNLOAD_REMOVED` (`DownloadProgressView.cpp:389`, `:409`, `:419`). De numerieke waarden en de klasse `BWebDownload` staan in de ontbrekende header. Er komt geen eigen downloader naast de poort. Gekozen: de MIT-vensters kopiëren (zie licenties), niet een tweede lijst verzinnen.
 - Glas: `BAppearanceKit::set_window_glass()` op het venster, zoals andere R5-vensters. De pagina zelf blijft een dekkende `BWebView`. Blijkt het glas de pagina te matten, dan gaat die aanroep in diezelfde stap weer uit. Dat is onbewezen tot een boot.
 - Stop en herladen krijgen geen nieuw nummer in `r5_icon`. De enum in `distro/icons/R5Icons.h` eindigt bij `R5_ICON_LOCKED`. Terug, vooruit en home gebruiken `r5_icon_bitmap()`. Stop en herladen zijn tekstknoppen tot iemand een bestaand vectorplaatje aanwijst. De oude knoppen zijn `BPrivate::BIconButton` met resource 201, 202, 204 en 206 (`BrowserWindow.cpp:515-527`; stop op `:522`). De header is `haiku/headers/private/shared/IconButton.h`, MIT, copyright 2006-2011 Haiku, Stephan Aßmus.
-- De vijf sonde-pagina’s, tot Nick een andere lijst geeft: de welkomstpagina of de R5Book via `file://`; `https://example.com`; een lange tekstpagina (Wikipedia); `https://github.com/login` zonder account, alleen of het formulier verschijnt; en een vijfde adres dat Nick noemt als een pagina die hij nu stuk ziet. Zonder dat vijfde adres is de sonde niet klaar voor zijn gevallen. Geen wachtwoorden in het verslag. De standaardstart van WebPositive is `file:///boot/home/config/settings/WebPositive/LoaderPages/Welcome` (`SettingsKeys.cpp:31-32`).
-- WebKit2 wacht tot de nieuwe schil die vijf pagina’s op Legacy opent. In deze git-boom staat geen `--no-webkit2` en geen `libJavaScriptCore`. `haiku/build/jam/BuildFeatures:303-311` zet de feature `webkit` aan als `haikuwebkit_devel` er is, en noemt als bibliotheek alleen `libWebKitLegacy.so`. De softwarecompositor en een `BView` komen eerst. OpenGL alleen als Zink op RADV of als llvmpipe. Lavapipe blijft voor Vulkan en krijgt geen browserwerk. Dat de recipe WebKit2 uit zet, blijft een feit uit het onderzoek van 19 november 2026; deze lezing heeft de recipe niet opnieuw geopend.
+- De vijf sonde-pagina’s, tot de eigenaar een andere lijst geeft. De vijfde pagina blijft open: de eigenaar noemt haar vóór ronde 1: de welkomstpagina of de R5Book via `file://`; `https://example.com`; een lange tekstpagina (Wikipedia); `https://github.com/login` zonder account, alleen of het formulier verschijnt; en een vijfde adres dat Nick noemt als een pagina die hij nu stuk ziet. Zonder dat vijfde adres start ronde 1 niet voor zijn gevallen. Geen wachtwoorden in het verslag. De standaardstart van WebPositive is `file:///boot/home/config/settings/WebPositive/LoaderPages/Welcome` (`SettingsKeys.cpp:31-32`).
+- De image vandaag levert Legacy. In deze git-boom staat geen `--no-webkit2` en geen `libJavaScriptCore`. `haiku/build/jam/BuildFeatures:303-311` zet de feature `webkit` aan als `haikuwebkit_devel` er is, en noemt als bibliotheek alleen `libWebKitLegacy.so`. Dat de recipe 1.10.0 WebKit2 uit zet, blijft een feit uit het onderzoek van 19 november 2026; deze lezing heeft de recipe niet opnieuw geopend. Op die pin blijven is niet het doel. Ronde 0 leest de nieuwere WebKit2-poort vóór er code komt. OpenGL alleen als Zink op RADV of als llvmpipe. Lavapipe blijft voor Vulkan en krijgt geen browserwerk.
 - `BTextControl::MarkAsInvalid(bool)` bestaat (`haiku/headers/os/interface/TextControl.h:43`). De implementatie zet `BControlLook::B_INVALID` op de look (`haiku/src/kits/interface/TextControl.cpp:592-604`). De URL-balk van WebPositive is geen `BTextControl`: `URLInputGroup::MarkAsInvalid` zet een vlag en tekent de rand (`URLInputGroup.cpp:648-671`). Lege Go roept die vlag aan (`BrowserWindow.cpp:837-838`). Gekozen: de nieuwe balk is een `BTextControl` en roept `MarkAsInvalid` aan. Een extra foutregel is niet nodig voor een leeg veld.
 - Of `BWebView` een `BWebWindow` eist, staat in de ontbrekende header. De bestaande schil is `class BrowserWindow : public BWebWindow` (`BrowserWindow.h:98`) en maakt de view met `new BWebView("web view", fContext)` (`BrowserWindow.cpp:1420`). Ze roept `BWebWindow::SetCurrentWebView` en `CurrentWebView()` aan. Gekozen: het nieuwe venster erft `BWebWindow`, dun, tot de header iets anders laat zien.
 
 ## Wat er al is
 
 WebPositive in de image is het pakket `webpositive.hpkg`. `distro/rest/build/jam/OptionalPackages:152-157` zet het erin als het optionele pakket WebPositive aan staat en de bouwfeature `webpositive` aan staat. De engine-pin voor AMD64 staat in git: `haiku/build/jam/repositories/HaikuPorts/x86_64:1-3` is het archief `https://eu.hpkg.haiku-os.org/haikuports/master/build-packages`, en regels 108-109 noemen `haikuwebkit-1.10.0-2` en `haikuwebkit_devel-1.10.0-2`. Het 32-bits archief noemt `haikuwebkit-1.5.4-1` (`haiku/build/jam/repositories/HaikuPorts/x86:449`); dat is geen officieel doel. Een opgeslagen syslog noemt hetzelfde AMD64-pakket bij de eerste start: `generated/boot-5625u-10/syslog:2044` (`haikuwebkit-1.10.0-2-x86_64.hpkg`). Deze sessie heeft `package info` op een imagebestand niet gedraaid. WebKit-revisie 625.1.25 staat niet in deze boom; die blijft aan het onderzoek van 19 november 2026 hangen.
+
+## De motor
+
+De eigenaar, 19 november 2026: een nieuwere motor hoort bij het doel. Aomi blijft niet op `haikuwebkit-1.10.0-2` met de Legacy-API in één proces. Het Haiku-project heeft MiniBrowser getoond op de WebKit2-poort. `haikuwebkit-1.10.0-2` is de pin van de image vandaag (`HaikuPorts/x86_64:108-109`), niet het doel. De vragen staan in ronde 0, een verslag vóór code.
 
 De bron van de app staat in git, 46 bestanden onder `haiku/src/apps/webpositive`. Daarnaast ligt één R5-kopie: `distro/apps/webpositive/src/apps/webpositive/BrowserWindow.cpp`. `scripts/apply-webpositive.py` kopieert die over `src/apps/webpositive/BrowserWindow.cpp`. `scripts/apply-overlay.sh` roept dat script aan. Het verschil met `origin/main` is alleen `LoadNegotiating`. Upstream (`BrowserWindow.cpp:1536-1552`) bewaart de URL van een andere tab in `PageUserData` als die string leeg is, en valt daarna door naar `fURLInputGroup->SetText`, dus de zichtbare balk. De overlay (`distro/apps/webpositive/src/apps/webpositive/BrowserWindow.cpp:1538-1549`) zet een statusregel en `return`t, zodat de balk blijft. Dat is Haiku #20319. De overlay heeft geen SPDX-snippet boven die regels; de BSD-header van het bestand blijft staan.
 
@@ -78,7 +90,7 @@ De `Jamfile` (`haiku/src/apps/webpositive/Jamfile:67-78`) zet private headers aa
 
 ## Licentie per klasse
 
-Nieuwe R5-bestanden zijn MIT, copyright 2026 R5OS Contributors. Een bestand van iemand anders houdt zijn eigen licentie (`AGENTS.md`). Kopiëren naar `distro/apps/browser` mag als de header meegaat en het bestand geen Tracker-privéstuk opent. Een bestand zonder licentieregel gaat niet mee.
+Nieuwe R5-bestanden zijn MIT, copyright 2026 R5OS Contributors. Een bestand van iemand anders houdt zijn eigen licentie (`AGENTS.md`). Kopiëren naar `distro/apps/aomi` mag als de header meegaat en het bestand geen Tracker-privéstuk opent. Een bestand zonder licentieregel gaat niet mee.
 
 | Klasse | Header | Mee als bestand |
 | --- | --- | --- |
@@ -110,7 +122,7 @@ Nieuwe R5-bestanden zijn MIT, copyright 2026 R5OS Contributors. Een bestand van 
 
 - Een `package info` van één concreet imagebestand in deze sessie. De pin in git en de syslog hierboven noemen `haikuwebkit-1.10.0-2`. Dat is de revisie die de boom vraagt, niet een meting van een image die nu op schijf ligt.
 - Een sitelijst met een boot. Geen bewijs dat 1.10.0-2 een aanmeldpagina tekent. `docs/VPN-KIT.md` zegt dat veel moderne aanmeldpagina’s falen, zonder adressen.
-- De nieuwe schil. Er is één overlappend bestand, geen programma onder `distro/apps/browser`.
+- De nieuwe schil. Er is één overlappend bestand, geen programma onder `distro/apps/aomi`.
 - De tekst van `WebView.h`, `WebPage.h`, `WebDownload.h` en `WebWindow.h`. De aanroepen staan hierboven. De basis van `BWebView` en de waarden van `B_DOWNLOAD_*` zijn ongelezen.
 - Paden per aangemelde persoon in het oude pakket. #67 staat open. `SettingsKeys.cpp:30-33` heeft de vaste paden nog.
 - Een proef dat een pagina de interface gebruikt die de Wi-Fi Kit heeft opgezet. QEMU usernet is geen Wi-Fi en geen LAN (`docs/ROADMAP.md`, `AGENTS.md`).
@@ -122,7 +134,7 @@ Nieuwe R5-bestanden zijn MIT, copyright 2026 R5OS Contributors. Een bestand van 
 
 ## De nieuwe GUI
 
-De indeling volgt WebPositive, omdat die al een Haiku-venster is en omdat de R5-fix in de URL-balk daar zit. Nieuwe code staat in `distro/apps/browser`. Wat van Haiku meegaat, houdt de header uit de tabel. WebKit-bron wordt nergens gekopieerd.
+De indeling volgt WebPositive, omdat die al een Haiku-venster is en omdat de R5-fix in de URL-balk daar zit. Nieuwe code staat in `distro/apps/aomi`. Wat van Haiku meegaat, houdt de header uit de tabel. WebKit-bron wordt nergens gekopieerd.
 
 ### Wat mee gaat
 
@@ -156,7 +168,9 @@ Sneltoetsen die de bron zet, als `BMenuItem`-shortcut (op Haiku is dat Command):
 
 De sessie gebruikt de Wi-Fi Kit om te verbinden en te onthouden. Daarna is het een gewone interface. De browser moet dan pagina’s laden zonder een eigen stack, een eigen DNS of een eigen aanroep naar `wpa_supplicant`.
 
-Dat wordt pas bewezen als `WiFiController` een netwerk heeft verbonden en de nieuwe schil daar één `https`-pagina laadt. QEMU usernet telt niet. VirtualBox bridged is een LAN-proef, geen Wi-Fi-proef. De 5625U-kaart staat in `docs/ROADMAP.md` punt 3 nog als niet op het metaal getoond. Tot die boot blijft “werkt op de Wi-Fi Kit” onbewezen. Faalt alleen de browser terwijl `ping` of een ander programma dezelfde route haalt, dan is de fix in de WebKit-poort (curl, proxy, DNS), in een volgende kleine stap. Faalt de hele machine, dan is het de stack of de kit, en dit plan stopt bij dat feit.
+Wi-Fi op de 5625U is getoond. Stick 59 en stick 60 (19 november 2026): WPA2 verbindt op de MT7922 van de laptop en een grote download loopt af. `CHANGELOG.md` legt bij stick 59 vast dat die grote WPA2-download op de 5625U bewezen is. Stick 60 heeft in de changelog op `origin/main` van deze lezing geen eigen kop; de eigenaar noemt die stick erbij. `docs/ROADMAP.md` punt 3 zegt nog dat Wi-Fi op de eigen kaart niet op het metaal is getoond. Die regel loopt achter. WPA3 blijft open en is voor ronde 3 niet nodig.
+
+Ronde 3 (oude stap 15) draait op de 5625U met WPA2: `WiFiController` heeft het netwerk verbonden en Aomi laadt daar één `https`-pagina. QEMU usernet telt niet. VirtualBox bridged is een LAN-proef, geen Wi-Fi-proef. Faalt alleen Aomi terwijl `ping` of een ander programma dezelfde route haalt, dan is de fix in de WebKit-poort (curl, proxy, DNS), in een volgende kleine stap. Faalt de hele machine, dan is het de stack of de kit, en dit plan stopt bij dat feit.
 
 Captive portal en VPN-browserlogin blijven buiten deze stappen. Een `r5vpn:`-handler komt pas als een aanmeldpagina op de nieuwe schil het formulier toont.
 
@@ -166,9 +180,11 @@ Geen wijziging aan de GFX9-ring, de workload, compute, de kernelstage, de interr
 
 De browser opent `/dev/gpu/radeon_hd/<n>` niet. Tekenen is app_server. Stick 57 en stick 51 blijven limieten voor elke `BWebView` die tekst en bitmaps tekent. WebGL en een Vulkan-pad in WebKit zijn geen stap in dit plan. Als de poort `libgl` laadt, is dat Zink op RADV of llvmpipe, zoals `docs/GPU-ARCHITECTURE.md`. Lavapipe blijft geïnstalleerd en krijgt geen werk vanuit de browser.
 
+Skia-opwarming. Op Lavapipe compileert het eerste Aomi-venster nieuwe shaders. De opwarmronde (de gewone shaders vooraf compileren, de splash laten staan tot dat klaar is) is een afhankelijkheid van ronde 3. Het is geen stap in dit plan.
+
 ## Licentie bij elke stap
 
-- Nieuwe bestanden onder `distro/apps/browser`: MIT, SPDX, copyright 2026 R5OS Contributors.
+- Nieuwe bestanden onder `distro/apps/aomi`: MIT, SPDX, copyright 2026 R5OS Contributors.
 - Gekopieerde WebPositive-bestanden: de header uit de tabel, ongewijzigd. Een R5-wijziging in zo’n bestand krijgt een SPDX-snippet, copyright 2026 R5OS Contributors, MIT. De overlay op `LoadNegotiating` heeft die snippet nog niet; die snippet hoort bij een latere landing, niet bij dit plan.
 - `libWebKitLegacy`: eigen pakket, dynamisch. `BuildFeatures:310` noemt dat bestand. LGPL zoals de bron per bestand is, plus de BSD- en MIT-delen, blijft de uitspraak van het onderzoek van 19 november 2026; het hpkg is hier niet uitgepakt. Niet in de R5-bron, niet in `libbe`, niet in `libr5ui`.
 - `BrowserWindow.cpp` in `distro/apps/webpositive` blijft het Haiku-bestand met de BSD-header zolang de overlay bestaat. Geen MIT-header eroverheen.
@@ -176,23 +192,41 @@ De browser opent `/dev/gpu/radeon_hd/<n>` niet. Tekenen is app_server. Stick 57 
 - Bij de stap die de image omzet: `THIRD_PARTY_NOTICES.md` noemt het pakket `haikuwebkit-1.10.0-2`, de licentie, de copyrightregel uit de recipe en waar de bron staat. De tekst van de LGPL blijft in `LICENSES/` als die er al staat, en wordt niet herschreven.
 - Geen combinatie met GPL-2.0-only of met de GPL-3-artwork.
 
-## Stappen
+## Rondes
 
-Elke stap is één landing. De volgende begint pas als de vorige opgeschreven is, inclusief wat er niet geboot is. Stap 2 start niet vanuit dit plan. Stap 1 is deels gelezen: de pin staat in git.
+Ronde 0 is een verslag, vóór code. Daarna drie bouwrondes, elk één pull request, en een motorronde. De oude stappen 1–16 blijven de inhoud van ronde 1 tot 3; alleen de groepering verandert. De vijfde pagina noemt de eigenaar vóór ronde 1. Ronde 1 op 1.10.0-2 geldt alleen als ronde 0 dat aanraadt. Anders zit Aomi vanaf het begin op de nieuwere motor, en wordt de schil niet twee keer gebouwd.
+
+### Ronde 0
+
+Verslag, vóór enige code. Geen jam.
+
+- De nieuwste Haiku-WebKit-bron: repository, branch, commit, welke upstream-WebKit-versie die volgt, en hoe ver 1.10.0 daarop achterloopt.
+- De staat van de WebKit2-poort: wat MiniBrowser kan, de open crashes (het forumbericht van mei 2026), en wat de poort van het systeem nodig heeft (ports, gedeeld geheugen, een softwarecompositor, `libgl` als Zink of llvmpipe).
+- De API die een programma op WebKit2 op Haiku gebruikt, of dat nog `BWebView` is of iets anders, en of Aomi daar vanaf het begin op kan zitten, zodat de schil niet twee keer wordt gebouwd.
+- Een eigen R5-recipe zoals bij Mesa: bouwtijd, grootte, en het LGPL-bronaanbod. GPU-regels uit `docs/GPU-ARCHITECTURE.md`: de browser opent `/dev/gpu` niet, Lavapipe blijft onaangeroerd, geen wijziging aan GFX9.
+- Een aanbeveling: Aomi meteen op de nieuwere motor, of ronde 1 op 1.10.0 en de motor in een latere ronde omwisselen. Zeg waarom.
+
+### Ronde 1
+
+Kopiëren en hernoemen (Aomi, signatuur `application/x-vnd.R5-Aomi`), in de image bouwen naast WebPositive, en het headercontract (stap 4). Dat contract leest een agent met WSL, uit `haikuwebkit_devel-1.10.0-2` in `/home/nickr/r5os/haiku/generated.x86_64/download/`. De vijf pagina’s op Aomi in QEMU. Oude stappen 1–7.
 
 1. **Versie van de image.** De AMD64-pin is `haikuwebkit-1.10.0-2` en `haikuwebkit_devel-1.10.0-2` (`haiku/build/jam/repositories/HaikuPorts/x86_64:108-109`). Een gebouwde image bevestigen met `package info` blijft nuttig en is deze sessie niet gedaan. Geen code, geen jam. WebKit 625.1.25 is niet deze pin; dat nummer staat niet in de repositorylijst.
 
-2. **Vijf pagina’s op de oude schil, als sonde.** Zelfde image, QEMU mag. De lijst hierboven, inclusief het vijfde adres van Nick en minstens het aanmeldformulier. Per pagina: opent, formulier zichtbaar, scriptfout, crash, of de balk de URL toont. Geen claim over de 5625U. De oude schil wordt hier niet verbeterd, behalve als de sonde niet eens start. Dit is niet het product.
+2. **Vijf pagina’s op Aomi, in QEMU.** De lijst hierboven, inclusief het vijfde adres van de eigenaar en minstens het aanmeldformulier. De eigenaar noemt het vijfde adres vóór ronde 1. Per pagina: opent, formulier zichtbaar, scriptfout, crash, of de balk de URL toont. Geen claim over de 5625U. De oude schil wordt hier niet verbeterd, behalve als de sonde niet eens start. Dit is niet het product.
 
 3. **Revisie, alleen als een image niet 1.10.0-2 heeft.** De recipe-revisie uit het onderzoek in de image brengen en stap 2 opnieuw. Wijkt de pin af van wat HaikuPorts bouwt, dan hoort het versienummer in `CHANGELOG.md` en in `THIRD_PARTY_NOTICES.md`. Geen WebKit2 in deze stap.
 
-4. **Contract van `BWebView`.** Het devel-pakket uitpakken en de headers lezen die git niet heeft. Vastleggen wat de aanroepen hierboven in de header zijn, inclusief de basis van `BWebView`, de velden van `B_DOWNLOAD_ADDED`, en of een gewone `BWindow` de view mag houden. Geen code in de browser. Wijkt de header af van een aanroep die dit plan noemt, dan wijzigt het plan op dat punt voordat de schil die aanroep verzint.
+4. **Contract van `BWebView`.** Een agent met WSL leest `haikuwebkit_devel-1.10.0-2` in `/home/nickr/r5os/haiku/generated.x86_64/download/` en de headers die git niet heeft. Vastleggen wat de aanroepen hierboven in de header zijn, inclusief de basis van `BWebView`, de velden van `B_DOWNLOAD_ADDED`, en of een gewone `BWindow` de view mag houden. Geen code in de browser. Wijkt de header af van een aanroep die dit plan noemt, dan wijzigt het plan op dat punt voordat de schil die aanroep verzint.
 
-5. **Leeg programma.** `distro/apps/browser`: `BApplication`, één `BWebWindow`, één `BWebView`, één `file://`-pagina. MIT, behalve een gekopieerd bestand uit de tabel. Linken zoals `Jamfile:73-76`: `libWebKitLegacy.so`, `libnetservices.a`, `be`, `network`, en de rest die de view nodig heeft. `tracker` alleen als een gekopieerd bestand dat nog eist; de nieuwe bladwijzers linken Tracker niet voor `BNavMenu`. Nog niet in `OptionalPackages`. De overlay blijft. Klaar als het venster die ene lokale pagina toont. QEMU is genoeg. De 5625U niet.
+5. **Leeg programma.** `distro/apps/aomi`: `BApplication`, één `BWebWindow`, één `BWebView`, één `file://`-pagina. MIT, behalve een gekopieerd bestand uit de tabel. Linken zoals `Jamfile:73-76`: `libWebKitLegacy.so`, `libnetservices.a`, `be`, `network`, en de rest die de view nodig heeft. `tracker` alleen als een gekopieerd bestand dat nog eist; de nieuwe bladwijzers linken Tracker niet voor `BNavMenu`. Aomi komt in de image naast WebPositive. De overlay van WebPositive blijft tot ronde 3. Klaar als het venster die ene lokale pagina toont. QEMU is genoeg. De 5625U niet.
 
 6. **URL-balk.** `BTextControl`, Go, Return, Escape, `MarkAsInvalid` bij lege invoer, slim adres, achtergrondgedrag ook al is er nog één tab (de tak voor “niet de huidige view” staat er meteen, zodat tabs hem niet later breken). Klaar als example.com of de lokale pagina via de balk laadt en Escape de vorige URL terugzet.
 
 7. **Menu’s en navigatie.** `BMenuBar` met Window, Edit, View, History. Terug, vooruit, home via `r5_icon_bitmap`. Stop en herladen als tekst (`StopLoading` en `Reload`, `BrowserWindow.cpp:881` en `:823`). Knippen, kopiëren en plakken via `B_EDITING_CAPABILITIES_RESULT` (`:1089-1108`, bools `"can cut"`, `"can copy"`, `"can paste"`). Klaar als terug na een tweede pagina de eerste toont.
+
+### Ronde 2
+
+Eerst een mockup, goedgekeurd door de eigenaar, vóór er UI wordt gebouwd. Daarna de R5-look, glas, R5-iconen, bladwijzers, de bladwijzerbalk, downloads, auth, zoeken en zoom, tabs, en paden per persoon met het instellingenformulier (#67). Oude stappen 8–14.
 
 8. **Bladwijzers.** Schrijven en het menu vullen vanuit `WebPositive/Bookmarks`. Beheren opent Tracker. Klaar als een bladwijzer die WebPositive al schreef in het menu staat en een nieuwe in diezelfde map belandt, onder de home van de aangemelde persoon. Modus van een nieuwe map: de bron gebruikt `0777` (`:1935`). Gekozen: dezelfde modus, zodat een map die WebPositive aanmaakte en een map die de nieuwe app aanmaakt niet uit elkaar lopen.
 
@@ -208,25 +242,35 @@ Elke stap is één landing. De volgende begint pas als de vorige opgeschreven is
 
 14. **Instellingen.** Formuliervenster, `find_directory`, startpagina, zoek-URL, home-knop, zoom alleen tekst, bladwijzerbalk. Geen Settings-item. Geen `FontSelectionView`. Klaar als twee accounts op één image verschillende startpagina’s houden. Virtuele machine is genoeg. Geen fast user switching: uitloggen, andere persoon, opnieuw (`docs/MULTIUSER.md`).
 
-15. **Wi-Fi.** Op een machine waar de Wi-Fi Kit een netwerk heeft verbonden: één `https`-pagina in de nieuwe schil. De browser linkt `libr5wifi.so` niet. Opschrijven welk apparaat en dat het niet QEMU usernet was. Zonder die machine blijft de stap open en gaat stap 16 niet naar een 5625U-claim over Wi-Fi.
+### Ronde 3
 
-16. **Image omzetten.** Vijf pagina’s opnieuw, nu op de nieuwe schil, waarvan minstens de aanmeldpagina. Daarna pas: URL-types `http`, `https`, `file` en `ftp` naar de nieuwe signatuur (`WebPositive.rdef:25-28`: `application/x-vnd.Be.URL.file`, `.ftp`, `.http`, `.https`). `webpositive.hpkg` uit `OptionalPackages`, `apply-webpositive.py` uit `apply-overlay.sh`. De welkomstpagina moet de nieuwe app openen. `CHANGELOG.md` en, als de ticketstatus wijzigt, `python3 scripts/tracker-report.py` met `tracker/r5-status.tsv` en `tracker/STATUS.md`. #67 dicht als de nieuwe app de paden heeft en het oude pakket weg is. Blijft het oude pakket ernaast, dan blijft #67 open.
+De image omzetten, en één stick op de 5625U met Wi-Fi. URL-types, WebPositive eruit, `THIRD_PARTY_NOTICES`, What's new. Oude stappen 15–16.
 
-17. **WebKit2.** Pas na stap 16. Softwarecompositor, bitmaps die app_server toont, content-proces. GL alleen via Zink of llvmpipe. Lavapipe onaangeroerd. Geen ring- of resetwijziging. Eerste bewijs is dezelfde vijf pagina’s, plus een notitie of het UI-proces blijft hangen. Een crash zoals het forum die in mei 2026 beschreef, stopt deze stap. De schil uit stap 5–14 blijft het product. MiniBrowser wordt niet de GUI.
+15. **Wi-Fi.** Op de 5625U met WPA2, de MT7922 van de laptop: één `https`-pagina in Aomi. Stick 59 en stick 60 hebben de verbinding en een grote download al getoond. WPA3 blijft open en is hier niet nodig. De browser linkt `libr5wifi.so` niet. Opschrijven dat het de 5625U was en niet QEMU usernet. Zonder die pagina blijft de stap open en gaat stap 16 niet naar een claim dat Aomi op die Wi-Fi laadt.
 
-Stap 16 is het moment waarop roadmap-punt 4 een huidige WebKit in de image heeft, op de kits. Snelheid, WebGL, sandbox en de 5625U blijven dan nog open als ze niet in die boot zaten.
+16. **Image omzetten.** Vijf pagina’s opnieuw, nu op de nieuwe schil, waarvan minstens de aanmeldpagina. Daarna pas: URL-types `http`, `https`, `file` en `ftp` naar `application/x-vnd.R5-Aomi` (`WebPositive.rdef:25-28`: `application/x-vnd.Be.URL.file`, `.ftp`, `.http`, `.https`). `webpositive.hpkg` uit `OptionalPackages`, `apply-webpositive.py` uit `apply-overlay.sh`. De welkomstpagina moet de nieuwe app openen. `CHANGELOG.md` en, als de ticketstatus wijzigt, `python3 scripts/tracker-report.py` met `tracker/r5-status.tsv` en `tracker/STATUS.md`. #67 dicht als de nieuwe app de paden heeft en het oude pakket weg is. Blijft het oude pakket ernaast, dan blijft #67 open.
+
+Skia-opwarming is een afhankelijkheid van deze ronde, geen stap hier. Op Lavapipe compileert het eerste Aomi-venster nieuwe shaders. De opwarmronde compileert de gewone shaders vooraf en laat de splash staan tot dat klaar is.
+
+Ronde 3 is het moment waarop roadmap-punt 4 de gekozen motor in de image heeft, op de kits, onder de naam Aomi. Dat is de nieuwere motor als ronde 0 dat aanraadt, niet per se `haikuwebkit-1.10.0-2`. Snelheid, WebGL en de sandbox blijven dan nog open als ze niet in die boot zaten. Wi-Fi op de 5625U is al getoond; deze ronde laat Aomi daar een pagina laden.
+
+### Motorronde
+
+Na het verslag van ronde 0 en de keuze van de eigenaar. De nieuwere motor en WebKit2 als R5-recipe (oude stap 17). Mag vóór ronde 3 als ronde 0 dat aanraadt.
+
+17. **WebKit2.** Softwarecompositor, bitmaps die app_server toont, content-proces. GL alleen via Zink of llvmpipe. Lavapipe onaangeroerd. Geen ring- of resetwijziging. Eerste bewijs is dezelfde vijf pagina’s, plus een notitie of het UI-proces blijft hangen. Een crash zoals het forum die in mei 2026 beschreef, stopt deze stap. De schil die al gebouwd is blijft het product als de API dat toelaat. MiniBrowser wordt niet de GUI.
 
 ## Onbewezen
 
 - Of een bepaald imagebestand op schijf dezelfde pin `haikuwebkit-1.10.0-2` heeft. De repositorylijst en `generated/boot-5625u-10/syslog:2044` zeggen dat wel voor de boom en voor die ene eerste start.
 - Of 1.10.0-2 een aanmeldpagina tekent.
-- De vijfde pagina, tot Nick die noemt.
+- De vijfde pagina, tot de eigenaar die noemt, vóór ronde 1.
 - De tekst van `WebView.h` en `WebDownload.h`: basis van de view, en de waarden van de downloadberichten. De aanroepen zelf staan in de app.
 - Of `set_window_glass` de pagina met rust laat.
-- Wi-Fi: geen boot met de kit en een pagina.
+- Een `https`-pagina van Aomi op de Wi-Fi van de 5625U. WPA2 en een grote download zijn getoond (stick 59 en stick 60). WPA3 blijft open.
 - Stick 57 en stick 51: de lettercrash en de volle VRAM-tabel zijn niet opnieuw geboot.
 - WebKit2 op R5. `--no-webkit2` en `libJavaScriptCore` zijn in deze boom niet nagelezen.
-- Paginatijd, HTTP/2 in de curl van het pakket, WebGL.
+- Paginatijd en WebGL. HTTP/2: `haikuwebkit-1.10.0-2` eist curl en `curl-8.21.0-1` eist nghttp2, dus pagina’s gebruiken het hoogstwaarschijnlijk al als de curl-backend van WebKit erom vraagt. Onbewezen tot een pagina dat toont.
 - Dat een standaardaccount de bladwijzermap niet deelt met de administrator. Uid 0 leest homes nog (`docs/MULTIUSER.md`). De nieuwe code gebruikt `find_directory`. Dat is geen bewijs dat de ene persoon de cookies van de ander niet kan lezen zolang uid 0 dat kan. Het geschiedenisbestand en het credentialbestand liggen naast de bladwijzers, onder dezelfde instellingenmap.
 
 ## Bronnen die ik gelezen heb
@@ -263,4 +307,4 @@ In git op `origin/main`, via `git show` en `git grep`:
 
 Niet gelezen, en dus niet als header-feit gebruikt: `WebView.h`, `WebPage.h`, `WebDownload.h`, `WebWindow.h`, `WebViewConstants.h`. Het pad van het devel-pakket op de WSL-boom van Nick stond niet op deze machine.
 
-Buiten de boom, uit het onderzoek van 19 november 2026, niet opnieuw geopend: de HaikuPorts-recipe inhoudelijk (`--no-webkit2`, `libJavaScriptCore`, WebKit 625.1.25), het forum over MiniBrowser, webkit.org over LGPL. `docs/WEBKIT.md` op `origin/cursor/webkit-plan-f12d` is het vorige plan, met SPDX en zonder het store-pad. Deze herziening vervangt het plan in de store. De pull request is niet gewijzigd.
+Buiten de boom, uit het onderzoek van 19 november 2026, niet opnieuw geopend: de HaikuPorts-recipe inhoudelijk (`--no-webkit2`, `libJavaScriptCore`, WebKit 625.1.25), het forum over MiniBrowser, webkit.org over LGPL. Dit bestand is `docs/AOMI.md`. Het vervangt `docs/WEBKIT.md` op deze branch. De licentietabel, `MarkAsInvalid`, `SetDownloadListener` (`BrowserApp.cpp:243`) en de pin van de image vandaag (`haikuwebkit-1.10.0-2`) blijven. Die pin is niet het doel.
