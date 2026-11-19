@@ -1,5 +1,15 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - A controller without a link-key store
+
+Problem: On the 5625U, hci125 (the MT7961) logged "command 0x0c0d answered with status 0x1". 0x0c0d is Read Stored Link Key (controller and baseband, OCF 0x000D). Write Link Policy Settings is 0x080d and is not sent. The Bluetooth kit asks for the controller's key store each time a LocalDevice is opened. The MT7961 answers with Command Status Unknown Command. The server logged that as a notice. Link keys are already kept by the server.
+
+What changed: That answer is not an error. The program that asked is told the read succeeded and there is nothing to add, and the log says the controller does not store link keys.
+
+Limits: Not booted on the 5625U. The kit still sends the command once per LocalDevice. The kernel page fault after the GLTeapot animation is not in this commit.
+
+Tested: not on the 5625U.
+
 ## 2026-11-19 - The Wi-Fi dialog and CPU Info sit on the glass
 
 Problem: On the 5625U the Wi-Fi connect dialog drew the signal icon inside a dark square, the status line ("Connecting to … checking the password") on a grey bar, and the password field only partly white. The icon was a bitmap of zeros copied with B_OP_COPY, which paints black. The status line was a BTextView, which fills with its own colour. The password field was an alpha fill, so only the text view's white showed. CPU Info opened shorter than its two cards and showed a scrollbar. The cards were titled "CPU hardware" and "What R5 uses".
