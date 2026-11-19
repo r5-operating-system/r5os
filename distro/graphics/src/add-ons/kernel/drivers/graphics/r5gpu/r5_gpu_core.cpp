@@ -1844,10 +1844,10 @@ gpu_flush_lines(void* cpu, uint64 bytes)
 	once and the pointer is remembered.
 */
 static uint8*
-gpu_ib_cpu(gpu_client* client, uint64 va, uint64 bytes)
+gpu_ib_pointer(gpu_client* client, uint64 va, uint64 bytes)
 {
 	for (uint32 n = 0; n < kMaxList; n++) {
-		gpu_ib_cpu* known = &client->ibCpu[n];
+		struct gpu_ib_cpu* known = &client->ibCpu[n];
 		if (!known->valid || known->va != va || known->bytes != bytes)
 			continue;
 		if (known->handleIndex >= client->handleCount
@@ -1881,7 +1881,7 @@ gpu_ib_cpu(gpu_client* client, uint64 va, uint64 bytes)
 				continue;
 			uint8* cpu = (uint8*)bo->backing->kernel + range->offset
 				+ (va - range->va);
-			gpu_ib_cpu* slot = &client->ibCpu[0];
+			struct gpu_ib_cpu* slot = &client->ibCpu[0];
 			for (uint32 n = 0; n < kMaxList; n++) {
 				if (!client->ibCpu[n].valid) {
 					slot = &client->ibCpu[n];
@@ -2018,7 +2018,7 @@ gpu_submit(gpu_client* client, void* buffer, size_t length)
 	 */
 	for (uint32 i = 0; i < in.ib_count; i++) {
 		uint64 bytes = (uint64)ibs[i].dwords * 4;
-		uint8* cpu = gpu_ib_cpu(client, ibs[i].gpu_va, bytes);
+		uint8* cpu = gpu_ib_pointer(client, ibs[i].gpu_va, bytes);
 		if (cpu != NULL)
 			gpu_flush_lines(cpu, bytes);
 	}
