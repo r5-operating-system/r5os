@@ -330,7 +330,7 @@ collect_x86_64(CpuReport& report)
 	if (report.extraFeatures.Length() == 0)
 		report.extraFeatures = "None";
 
-	// What R5 uses
+	// Enabled features
 	report.buildBaseline = "x86-64-v2";
 
 	uint32 r5Flags = (uint32)r5_x86_cpu_pack();
@@ -397,7 +397,7 @@ BString
 FormatCpuReport(const CpuReport& report)
 {
 	BString out;
-	out << "CPU hardware\n";
+	out << "Processor\n";
 	out << "  Vendor:           " << report.vendor << "\n";
 	out << "  Brand:            " << report.brand << "\n";
 	out << "  Family/Model/Stp: " << report.familyModelStepping << "\n";
@@ -406,7 +406,7 @@ FormatCpuReport(const CpuReport& report)
 	out << "  x86-64 level:     " << report.x86_64Level << "\n";
 	out << "  Extra features:   " << report.extraFeatures << "\n\n";
 
-	out << "What R5 uses\n";
+	out << "Enabled features\n";
 	out << "  Build baseline:   " << report.buildBaseline << "\n";
 	out << "  User-space paths: " << report.userSpacePaths << "\n";
 	out << "  XCR0:             " << report.xcr0 << "\n";

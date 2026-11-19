@@ -52,16 +52,10 @@ public:
 		BView("header", B_WILL_DRAW | B_FULL_UPDATE_ON_RESIZE),
 		fName(name),
 		fSubtitle(subtitle),
-		fBars(bars < 0 ? 0 : bars > 4 ? 4 : bars),
-		fTile(NULL)
+		fBars(bars < 0 ? 0 : bars > 4 ? 4 : bars)
 	{
 		SetExplicitMinSize(BSize(360, 52));
 		SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
-	}
-
-	~ConnectHeader()
-	{
-		delete fTile;
 	}
 
 	void AttachedToWindow()
@@ -72,37 +66,22 @@ public:
 
 	void MessageReceived(BMessage* message)
 	{
-		if (message->what == B_COLORS_UPDATED) {
-			delete fTile;
-			fTile = NULL;
+		if (message->what == B_COLORS_UPDATED)
 			Invalidate();
-		}
 		BView::MessageReceived(message);
 	}
 
 	void Draw(BRect updateRect)
 	{
 		(void)updateRect;
-		if (fTile == NULL) {
-			fTile = new BBitmap(BRect(0, 0, 39, 39), B_RGBA32, true);
-			if (fTile->IsValid() && fTile->Bits() != NULL)
-				memset(fTile->Bits(), 0, fTile->BitsLength());
-			BView* off = new BView(fTile->Bounds(), "tile", B_FOLLOW_NONE,
-				B_WILL_DRAW);
-			fTile->AddChild(off);
-			if (fTile->Lock()) {
-				off->SetViewColor(B_TRANSPARENT_COLOR);
-				off->SetHighUIColor(B_PANEL_TEXT_COLOR);
-				r5_level_glyph_draw(off, R5_LEVEL_SIGNAL,
-					fTile->Bounds().InsetByCopy(6, 8), fBars,
-					off->HighColor(),
-					ui_color(B_PANEL_BACKGROUND_COLOR),
-					R5_LEVEL_STYLE_NORMAL);
-				off->Sync();
-				fTile->Unlock();
-			}
-		}
 		PushState();
+		// The bars are drawn on the glass. A bitmap of zeros copied with
+		// B_OP_COPY painted a black square behind them.
+		SetDrawingMode(B_OP_COPY);
+		SetHighUIColor(B_PANEL_TEXT_COLOR);
+		r5_level_glyph_draw(this, R5_LEVEL_SIGNAL, BRect(4, 6, 36, 42),
+			fBars, HighColor(), ui_color(B_CONTROL_BORDER_COLOR),
+			R5_LEVEL_STYLE_NORMAL);
 		// The glass fill is alpha 0. Drawing the subtitle at alpha 180 with
 		// B_OP_ALPHA stores a half-blended glyph, and the compose blends it
 		// again, so the line looks drawn twice. Opaque copy replaces pixels.
@@ -112,8 +91,6 @@ public:
 		font_height plainHeight;
 		be_plain_font->GetHeight(&plainHeight);
 		float top = 6;
-		if (fTile != NULL)
-			DrawBitmap(fTile, BPoint(4, top));
 		SetFont(be_bold_font);
 		SetHighUIColor(B_PANEL_TEXT_COLOR);
 		float titleBaseline = top + boldHeight.ascent + 2;
@@ -136,7 +113,6 @@ private:
 	BString fName;
 	BString fSubtitle;
 	int32 fBars;
-	BBitmap* fTile;
 };
 
 
@@ -205,14 +181,9 @@ WiFiConnectWindow::WiFiConnectWindow(const BMessenger& controller,
 	}
 	fSecurity = new BMenuField("security", B_TRANSLATE("Security"), security);
 
-	fStatus = new BTextView("status");
-	fStatus->MakeEditable(false);
-	fStatus->MakeSelectable(false);
-	fStatus->SetWordWrap(true);
-	fStatus->SetStylable(false);
-	setup_glass_view(fStatus);
-	fStatus->SetExplicitMinSize(BSize(360, be_plain_font->Size() * 2));
-	fStatus->SetExplicitMaxSize(BSize(360, be_plain_font->Size() * 4));
+	fStatus = new BStringView("status", "");
+	fStatus->SetExplicitMinSize(BSize(360, be_plain_font->Size() + 4));
+	fStatus->SetExplicitMaxSize(BSize(360, be_plain_font->Size() + 8));
 	fOther = new BButton("other", B_TRANSLATE("› Other options"),
 		new BMessage(kToggleOptions));
 	fConnect = new BButton("connect", B_TRANSLATE("Connect"),
@@ -297,7 +268,7 @@ WiFiConnectWindow::MessageReceived(BMessage* message)
 
 
 static void
-set_status(BTextView* view, const char* text, rgb_color color)
+set_status(BStringView* view, const char* text, rgb_color color)
 {
 	if (text == NULL || text[0] == '\0') {
 		view->SetText("");
@@ -307,11 +278,9 @@ set_status(BTextView* view, const char* text, rgb_color color)
 	}
 	if (view->IsHidden())
 		view->Show();
+	view->SetFont(be_plain_font);
+	view->SetHighColor(color);
 	view->SetText(text);
-	BFont font(be_plain_font);
-	view->SelectAll();
-	view->SetFontAndColor(&font, B_FONT_ALL, &color);
-	view->Select(0, 0);
 }
 
 

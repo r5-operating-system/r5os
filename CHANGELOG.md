@@ -1,5 +1,15 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - The Wi-Fi dialog and CPU Info sit on the glass
+
+Problem: On the 5625U the Wi-Fi connect dialog drew the signal icon inside a dark square, the status line ("Connecting to … checking the password") on a grey bar, and the password field only partly white. The icon was a bitmap of zeros copied with B_OP_COPY, which paints black. The status line was a BTextView, which fills with its own colour. The password field was an alpha fill, so only the text view's white showed. CPU Info opened shorter than its two cards and showed a scrollbar. The cards were titled "CPU hardware" and "What R5 uses".
+
+What changed: The signal bars are drawn on the glass. The status line is a string view with a glass fill. The password field is an opaque document colour. CPU Info has no scrollbar and sizes to both cards. The cards are "Processor" and "Enabled features".
+
+Limits: The 5625U screenshots are of the previous build. The short QEMU boot does not open these windows.
+
+Tested: not on the 5625U.
+
 ## 2026-11-19 - A paired headset opens A2DP before hands-free
 
 Problem: On the 5625U the WH-1000XM3 paired, the link was authenticated and encrypted, and SDP found A2DP (0x110b) and HFP (0x111e, RFCOMM channel 10). The next line was "RFCOMM: cannot open PSM 3: Connection refused", then "hfp: trying again (1 of 2)", and about two seconds later "link down (reason 0x13, the device ended it)". A2DP was not opened. The class of device was not yet Audio/Video, so bluetooth_audio skipped the headset, and hands-free was the first profile channel. The headset refused RFCOMM and ended the link.
