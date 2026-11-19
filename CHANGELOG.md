@@ -19,6 +19,28 @@ What changed:
 
 Limits: The 5625U restart hang and GLTeapot RADV frame-by-frame behavior are not proven fixed here; a restart fix can only be proven on the 5625U.
 
+## 2026-11-19 - Input Server: thread safety, device retry notifications, and mouse/touchpad fixes
+
+What changed:
+- `distro/rest/src/servers/input/InputServer.cpp`:
+  - `SetNextMethod(bool)`: use `BAutolock` on `gInputMethodListLocker` so `B_BAD_INDEX` does not leak the lock.
+  - Synchronized `_AcquireInput()`, `_ReleaseInput()`, and `_DispatchEvent()` with `sEventStateLocker`; reset `fAppServerPort = -1` and `fAppServerTeam = -1` in `_ReleaseInput()`, clean up `fCursorSem` on `clone_area()` failure, and call `_ReleaseInput()` before re-acquiring.
+  - Synchronized `fActiveMethod` in `_MethodizeEvents()` / `_UpdateMouseAndKeys()` via `gInputMethodListLocker`, and synchronized `fFrame`, `fMousePos`, and `fKeyInfo` between `MessageReceived()` and `_EventLoop()` via `sInputStateLocker`.
+  - `IS_RETRY_UNSTARTED_DEVICES`: call `_DeviceStarted(*item)` and post `IS_NOTIFY_DEVICE` (`started = true`) to `fAddOnManager` when a retried device starts.
+  - `HandleGetSetMouseMap()`: validate `size >= (ssize_t)sizeof(mouse_map)` before dereferencing `map`.
+  - `_EventLoop()`: delete queued `events` items before `continue` on `Unflatten()` failure.
+  - `_StartEventLoop()`, `QuitRequested()`, `~InputServer()`: track `sEventLoopThread` and `wait_for_thread()` before `_ReleaseInput()`; free `fChars` in `~InputServer()`.
+  - `_UpdateMouseAndKeys()`: decrement `index` after `events.RemoveItemAt(index)`.
+- `distro/rest/src/add-ons/input_server/devices/mouse/movement_maker.h` + `movement_maker.cpp`:
+  - Added `MovementMaker::MovementMaker()` and initialized all fields in both `MovementMaker` and `TouchpadMovement`.
+  - Guarded `MovementMaker::SetSpecs()` against non-positive `fAreaWidth`/`fAreaHeight` and clamped `fSpeed` to at least `1` (within `int8`) to prevent divide-by-zero.
+- `distro/rest/src/add-ons/input_server/devices/mouse/MouseInputDevice.cpp`:
+  - `_UpdateSettings()`: copy `accel` into `fSettings.accel` before `MS_SET_ACCEL` `ioctl`.
+  - `Start()` / `Stop()`: fail early if `open()` returns `< 0`, guard `close(fDevice)` with `fDevice >= 0`, and reset `fThread = -1` after `wait_for_thread()`.
+  - `_ControlThread()`: reset `nextTransferTime` after `ioctl` returns from an idle gap to avoid a catch-up burst.
+
+Limits: not built or booted yet.
+
 ## 2026-11-19 - AMD64 stick: the FPU, user-copy and timer tests are in the image
 
 Problem: `distro/cpu/r5_fpu_test.cpp`, `r5_usercopy_test.cpp` and `r5_timer_test.cpp` (#4445) were never copied into the tree or listed in the image, although that CHANGELOG section said the user-copy test was. On the 5625U stick XSAVEC and the SMAP user copies could not be checked.

@@ -15,6 +15,11 @@
 
 class MovementMaker {
 public:
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+								MovementMaker();
+// SPDX-SnippetEnd
 			void				SetSpecs(const touchpad_specs& specs);
 			void				SetSettings(const touchpad_settings& settings);
 
