@@ -1,3 +1,6 @@
+R5 2026.1-dev Build 10066 - Windows are drawn on the graphics chip
+Windows are now drawn on the graphics chip when the computer has one R5 supports. On any other computer, and in a virtual machine, the same drawing runs on the processor and uses more of it. Safe mode in the boot menu keeps the classic drawing.
+
 R5 2026.1-dev Build 10065 - Game controllers in Settings
 Settings has a Game controllers page under Devices. Every controller you plug in with USB or pair over Bluetooth shows as a card at the bottom, and the page shows a picture of your own model, such as a PlayStation, Xbox or Nintendo controller or an 8BitDo M30. Buttons, sticks and triggers light up on the picture as you use them. Set up buttons fixes a controller whose buttons are mixed up. On a DualSense or DualShock 4 you can try the rumble, see the controller tilt and turn, and on a DualSense feel the trigger effects. A controller's battery shows in the Bluetooth menu of the Deskbar. With no controller connected, the page shows a gray example and a shortcut to Bluetooth.
 

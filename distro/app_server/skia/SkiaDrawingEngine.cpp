@@ -252,6 +252,8 @@ public:
 		// so the input latency stays.
 		bool held = false;
 		if (fLocked) {
+			if (fDirty.CountRects() > 0 && fEngine->fPixelBitmap != NULL)
+				fEngine->fPixelBitmap->PixelsChanged();
 			held = fEngine->fTarget->Held(system_time());
 			fEngine->fTarget->Unlock();
 		}
@@ -284,6 +286,7 @@ SkiaDrawingEngine::SkiaDrawingEngine(WindowHWInterface* windowInterface,
 	fGpu(gpu),
 	fOnGpu(false),
 	fTrackedBitmap(NULL),
+	fPixelBitmap(NULL),
 	fCpuFirst(0),
 	fCpuLast(0)
 {
@@ -313,6 +316,7 @@ SkiaDrawingEngine::SkiaDrawingEngine(HWInterface* lockInterface,
 	fGpu(ownedTarget != NULL ? ownedTarget->Gpu() : NULL),
 	fOnGpu(false),
 	fTrackedBitmap(NULL),
+	fPixelBitmap(NULL),
 	fCpuFirst(0),
 	fCpuLast(0)
 {
@@ -396,6 +400,13 @@ void
 SkiaDrawingEngine::SetTrackedBitmap(ServerBitmap* bitmap)
 {
 	fTrackedBitmap = bitmap;
+}
+
+
+void
+SkiaDrawingEngine::SetPixelBitmap(ServerBitmap* bitmap)
+{
+	fPixelBitmap = bitmap;
 }
 
 
@@ -1307,9 +1318,16 @@ SkiaDrawingEngine::DrawString(const char* string, int32 length,
 		CpuTimer cpuTimer(this);
 		return DrawingEngine::DrawString(string, length, offsets);
 	}
-	BPoint penLocation = DrawStringDry(string, length, offsets);
-	Draw draw(this);
-	if (draw.IsDirty())
-		fSkia->DrawString(string, length, BPoint(), NULL, offsets);
-	return penLocation;
+	// One layout: the pen is GlyphLayoutEngine's Finish() after the last
+	// offset glyph. DrawStringDry() only when nothing was drawn.
+	BPoint pen(HUGE_VAL, HUGE_VAL);
+	{
+		Draw draw(this);
+		if (draw.IsDirty())
+			fSkia->DrawString(string, length, BPoint(), NULL, offsets, NULL,
+				&pen);
+	}
+	if (pen.x != HUGE_VAL)
+		return pen;
+	return DrawStringDry(string, length, offsets);
 }

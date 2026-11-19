@@ -1308,8 +1308,19 @@ run_k2()
 		delete_area(sSystemArea);
 		sSystemArea = -1;
 	}
+	/* The GPU page table still covers the first 1 MB (256 entries).
+	 * The CPU area is 2 MB when that fits, so the existing full-lock
+	 * path can use one 2 MB page. amd64_large_pages false keeps 4 KB
+	 * pages inside it. A failed 2 MB area falls back to 1 MB. */
+	size_t systemBytes = 2 * 1024 * 1024;
 	sSystemArea = create_area("r5 gfx9 gart", &system, B_ANY_KERNEL_ADDRESS,
-		1024 * 1024, B_FULL_LOCK, B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA);
+		systemBytes, B_FULL_LOCK, B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA);
+	if (sSystemArea < 0 || system == NULL) {
+		systemBytes = 1024 * 1024;
+		sSystemArea = create_area("r5 gfx9 gart", &system,
+			B_ANY_KERNEL_ADDRESS, systemBytes, B_FULL_LOCK,
+			B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA);
+	}
 	if (sSystemArea < 0 || system == NULL) {
 		knote("k2 fail system area");
 		return;

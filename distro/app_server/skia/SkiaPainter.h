@@ -95,12 +95,14 @@ public:
 	// Under the lock: the image the surface draws into, or NULL.
 			SkiaImage*			SharedImage() const { return fImage.Get(); }
 
-	// Step 5c: textures of bitmaps drawn into this target, kept while the
-	// bitmap's bytes stay the same (M13 step 1: compared by a hash of all
-	// bytes; a program may write a bitmap's memory at any time).
+	// Step 5c: textures of bitmaps drawn into this target. A bitmap
+	// app_server owns is kept while its generation is unchanged. A client
+	// bitmap is kept while a sample of its bytes matches, and a full hash
+	// every 32 lookups confirms the sample.
 			sk_sp<SkImage>		FindTexture(const void* id, const uint8* bits,
 									int32 length, int32 width, int32 height,
-									int32 bytesPerRow, int32 space, bool raw);
+									int32 bytesPerRow, int32 space, bool raw,
+									uint32 generation, bool owned);
 	// M13 step 1: the GPU image of a gradient's colours (the 256-entry
 	// ramp, or a vertical gradient's column), kept per target while the
 	// same colours come again; under the lock. NULL when it cannot be
@@ -109,6 +111,7 @@ public:
 			void				KeepTexture(const void* id, const uint8* bits,
 									int32 length, int32 width, int32 height,
 									int32 bytesPerRow, int32 space, bool raw,
+									uint32 generation, bool owned,
 									const sk_sp<SkImage>& image);
 			bool				HasSurface() const
 									{ return fSurface != nullptr; }
@@ -197,9 +200,15 @@ protected:
 				int32				bytesPerRow;
 				int32				space;
 				bool				raw;
-				// M13 step 1: a hash of the bytes instead of a copy
+				// A bitmap app_server owns is identified by its generation.
+				// A client bitmap keeps a sample, a full hash, and how
+				// many lookups have passed since the full hash.
 				int32				length;
+				uint32				generation;
+				bool				owned;
+				uint64				sample;
 				uint64				hash;
+				uint32				lookups;
 				sk_sp<SkImage>		image;
 				bigtime_t			used;
 			};
@@ -330,13 +339,15 @@ public:
 
 	// text (step 4); the pen position stays ServerFont's
 	// M13 step 1: _advance gets the layout's pen advance (the x of
-	// GlyphLayoutEngine's Finish()), so the caller needs no second layout
-	// for the pen position; untouched when nothing was laid out.
+	// GlyphLayoutEngine's Finish()), and _pen the absolute pen after the
+	// last glyph when the positions come from an offset array. Both stay
+	// untouched when nothing was laid out, so that call is the only layout.
 			BRect				DrawString(const char* string, uint32 length,
 									BPoint baseLine,
 									const escapement_delta* delta,
 									const BPoint* offsets,
-									double* _advance = NULL);
+									double* _advance = NULL,
+									BPoint* _pen = NULL);
 
 private:
 			// what the R5 shader blends (SkiaPainter.cpp, _Composite())

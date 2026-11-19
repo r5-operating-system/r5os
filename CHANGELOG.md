@@ -1,5 +1,53 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - M13 follow-up, part 5: one stick, four boots
+
+No stick was written here. The owner writes it later with `scripts/write-stick.py`.
+
+On the laptop, after Sign in. One command, then restart. On each boot, once the desktop is up, run `m13-measure` (drag, scroll, resize). The syslog line `radeon_hd settings` is the settings file in use, and `m13-measure` copies that file to `~/m13f/bootN/measure/radeon_hd`. `read-stick-logs.py` copies `~/m13f`.
+
+The system kernel settings need `syslog_time_stamps true` or the measure cannot match the syslog. That is the line `scripts/plant-m10-stick.sh` already writes into the image; this boot does not create a user kernel settings file, because that file would hide the system one.
+
+- Boot 1: `boot-next m13f`, restart. Defaults. Skia on, 2 MB areas. Look for `R5 VM: area` and `gpu draw on`.
+- Boot 2: `boot-next`, restart. Adds `gpu_compositor_scanout`. `gpu_app_server` is on with it, because scanout copies that back buffer. Write-combined GTT stays off.
+- Boot 3: `boot-next`, restart. Scanout off. Adds `gfx9_wc_gtt`.
+- Boot 4: `boot-next`, restart. `gpu false`. Lavapipe and Skia.
+- After boot 4: `boot-next` clears the settings.
+
+`gpu_debug true` is on every boot so the 10 second lines are in the syslog.
+
+## 2026-11-19 - M13 follow-up, part 4: Skia draws by default
+
+Problem: Skia still drew only when the radeon_hd settings said `gpu_draw true`. The owner's decision of 16 Nov 2026 was that Skia is the default for RADV and Lavapipe together, and Painter draws only in Safe mode.
+
+What changed: `gpu_draw` defaults to true. `gpu_draw false` turns it off. Safe mode still does not create the compositor. What's new says so in ordinary language (build 10066). The plan, the drawing document and the GPU architecture document record step 5 as the default, which step 3 items are built and still opt-in, and that the old CPU read-back is history.
+
+Limits: Not booted on the 5625U. That RADV stays on with the default, and that Safe mode still draws with Painter, are only proven there. QEMU can show Lavapipe with Skia and the compose compare.
+
+## 2026-11-19 - M13 follow-up, part 3: Lavapipe's vector width follows the CPU
+
+Problem: Lavapipe's vector width stayed at Mesa's own choice unless the radeon_hd setting named 128 or 256. On a CPU with AVX2 that leaves the wider vectors unused. On a plain x86-64-v2 CPU a forced 256 would be wrong.
+
+What changed: When the CPU has AVX2 and `LP_NATIVE_VECTOR_WIDTH` is not set yet, app_server sets it to 256 before Lavapipe starts. A CPU without AVX2 sets nothing. `gpu_lavapipe_vector` still overwrites either choice, and a value already in the environment is left as it is.
+
+Limits: Not measured. The line `lavapipe vector width 256 (avx2)` is the check. QEMU's virtual CPU may or may not advertise AVX2.
+
+## 2026-11-19 - M13 follow-up, part 2: 2 MB pages for the GPU areas
+
+Problem: `amd64_large_pages` is on by default, and on the 5625U no real area was logged as using a 2 MB page. The GFX9 pool starts at an offset that is not a multiple of 2 MB. The GART CPU area is 1 MB. A GTT buffer is rounded to 4 KB, so the full-lock path, which asks for a 2 MB run only when the size is a multiple of 2 MB, never sees it. There was no line that said, once per area, whether that area got 2 MB pages.
+
+What changed: The pool start is rounded up and its size down to 2 MB when that still leaves 2 MB; otherwise it stays 4 KB aligned. The GART CPU area is 2 MB, with a fall back to 1 MB, and the GPU page table still maps the first 1 MB with the same PTE flags. A GTT buffer of 2 MB or more gets a CPU area rounded up to a multiple of 2 MB; the size told to the client stays the 4 KB rounding, and a failed larger area is tried again at that size. Each area of 2 MB or more logs `R5 VM: area "<name>" 2MB pages` or `4KB pages` once. If a 2 MB-aligned virtual hole cannot be found, the map is tried again at 4 KB. `amd64_large_pages false` still forces 4 KB pages.
+
+Limits: Not booted on the 5625U. QEMU has no radeon_hd, so the pool, the GART and the GTT lines are only proven there. The BAR and the pool on the 5625U are the areas that can show `2MB pages`.
+
+## 2026-11-19 - M13 follow-up, part 1: the review fixes
+
+Problem: The review of the Skia drawing path found six costs. The ioctl wait for a sync object was 5 seconds while the RADV compose fence allows 15, so a compose still inside its own limit failed the submit and turned GPU drawing off. Finding a cached bitmap hashed every pixel on every lookup. A buffer copy of a rectangle submitted one Vulkan copy per row even when the rows were one contiguous span. DrawString with an offset array laid the glyphs out twice. Each submit walked every buffer handle to flush the indirect buffer. Skia's AVX2 and FMA functions are selected at run time only when the library itself is built below that level.
+
+What changed: The submit wait is 15 seconds, the same as the compose fence. It stays in the ioctl. Damage is still published after the fence, because a timeout still fails the submit. A bitmap app_server owns is recognised by a generation counter, bumped when its pixels are replaced or drawn. A client bitmap is recognised by a sample of 64 words, and a full hash every 32 lookups. A rectangle is one Vulkan copy when the pitches match and the rectangle is the whole row; a partial row stays one copy per row, because one linear copy would overwrite the gap. DrawString with offsets uses the pen from that one layout. The indirect buffer's kernel pointer is remembered and only its lines are flushed, with clflushopt and sfence when the CPU has them. The page-table flags and the snooped GTT mapping are unchanged. The Skia build pins the rest of the library to x86-64-v2 and checks that Init_ml3 is in libskia.a and that the ml3 objects contain an FMA instruction. app_server is not built above x86-64-v2.
+
+Limits: Not booted on the 5625U. The shipped libskia.a was not rebuilt by this change; the check runs when distro/skia/build-skia.sh runs. Compose compare on Lavapipe is the QEMU check for the bitmap cache and the copies.
+
 ## 2026-11-19 - CPU Info is tall enough for both cards
 
 Problem: CPU Info still opened a little short. The bottom card, Enabled features, was cut off. The wrapping lines (Extra features, Kernel) report a height of one line until they have a width, so the preferred window height was short of the wrapped text. There is no scrollbar.

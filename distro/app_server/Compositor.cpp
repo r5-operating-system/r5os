@@ -162,6 +162,10 @@ load_settings(settings& out)
 	memset(&out, 0, sizeof(out));
 	// M13: no gpu_lavapipe_threads line: the R5 default (2)
 	out.lavapipeThreads = -1;
+	// M13 step 5 (owner, 16 Nov 2026, done 19 Nov 2026): Skia on for
+	// RADV and Lavapipe. gpu_draw false turns it off. Safe mode never
+	// reaches this: the compositor is not created, and Painter draws.
+	out.draw = true;
 	// On by default (user, 15 Nov 2026): RADV when the GPU passed its
 	// checks, Lavapipe otherwise. gpu_compositor false is the opt-out.
 	out.want = true;
@@ -173,8 +177,11 @@ load_settings(settings& out)
 			>= sizeof(path))
 		return;
 	FILE* file = fopen(path, "r");
-	if (file == NULL)
+	if (file == NULL) {
+		fprintf(stderr, "app_server: radeon_hd settings none\n");
+		syslog(LOG_INFO, "app_server: radeon_hd settings none\n");
 		return;
+	}
 	char line[256];
 	while (fgets(line, sizeof(line), file) != NULL) {
 		if (strncmp(line, "gpu_compositor true", 19) == 0)
@@ -220,6 +227,8 @@ load_settings(settings& out)
 			out.lavapipeVector = value;
 	}
 	fclose(file);
+	fprintf(stderr, "app_server: radeon_hd settings %s\n", path);
+	syslog(LOG_INFO, "app_server: radeon_hd settings %s\n", path);
 }
 
 
@@ -864,6 +873,17 @@ Compositor::Create(Desktop* desktop, HWInterface* screen)
 		snprintf(value, sizeof(value), "%d", options.lavapipeVector);
 		setenv("LP_NATIVE_VECTOR_WIDTH", value, 1);
 		log_line("lavapipe vector width %d (setting)", options.lavapipeVector);
+	} else if (getenv("LP_NATIVE_VECTOR_WIDTH") == NULL) {
+#if defined(__x86_64__)
+		/* x86-64-v2 stays the baseline. AVX2 picks Lavapipe's 256-bit
+		 * vectors; a CPU without it leaves Mesa's own choice. An
+		 * environment value already set is left alone, and the setting
+		 * above wins over both. */
+		if ((r5_x86_cpu_flags() & R5_CPU_AVX2) != 0
+			&& setenv("LP_NATIVE_VECTOR_WIDTH", "256", 0) == 0) {
+			log_line("lavapipe vector width 256 (avx2)");
+		}
+#endif
 	}
 	compositor->fWantScanout = options.scanout;
 	compositor->fZeroCopyOff = options.noZeroCopy ? 1 : 0;
@@ -3468,12 +3488,24 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 		uint32 n = 0;
 		for (int32 i = 0; regions != NULL && i < copy.CountRects(); i++) {
 			clipping_rect r = copy.RectAtInt(i);
+			uint32 widthBytes = (uint32)(r.right - r.left + 1) * 4;
+			// One linear copy only when the rows are contiguous in both
+			// buffers. A partial row has a gap, and one copy would overwrite it.
+			if (vk->backPitch == vk->scanPitch && r.left == 0
+				&& widthBytes == vk->backPitch) {
+				regions[n].srcOffset = (uint64)r.top * vk->backPitch;
+				regions[n].dstOffset = (uint64)r.top * vk->scanPitch;
+				regions[n].size = (uint64)(r.bottom - r.top + 1)
+					* vk->backPitch;
+				n++;
+				continue;
+			}
 			for (int32 y = r.top; y <= r.bottom; y++) {
 				regions[n].srcOffset = (uint64)y * vk->backPitch
 					+ (uint64)r.left * 4;
 				regions[n].dstOffset = (uint64)y * vk->scanPitch
 					+ (uint64)r.left * 4;
-				regions[n].size = (uint64)(r.right - r.left + 1) * 4;
+				regions[n].size = widthBytes;
 				n++;
 			}
 		}
@@ -3781,11 +3813,24 @@ Compositor::_RecordBufferCopy(const Layer* layer, const BRegion& region,
 	for (int32 i = 0; i < region.CountRects(); i++) {
 		clipping_rect r = region.RectAtInt(i);
 		uint32 sourceX = r.left - layer->left;
+		uint32 width = (uint32)(r.right - r.left + 1);
+		// Pitches are in pixels. One copy per rectangle when they match and
+		// the rectangle is the whole row; otherwise the gap between rows
+		// would be copied too.
+		if (sourceStride == frameStride && sourceX == 0 && r.left == 0
+			&& width == sourceStride) {
+			uint32 sourceY = r.top - layer->top;
+			copies[n].srcOffset = (uint64)sourceY * sourceStride * 4;
+			copies[n].dstOffset = (uint64)r.top * frameStride * 4;
+			copies[n].size = (uint64)(r.bottom - r.top + 1) * sourceStride * 4;
+			n++;
+			continue;
+		}
 		for (int32 y = r.top; y <= r.bottom; y++) {
 			uint32 sourceY = y - layer->top;
 			copies[n].srcOffset = ((uint64)sourceY * sourceStride + sourceX) * 4;
 			copies[n].dstOffset = ((uint64)y * frameStride + r.left) * 4;
-			copies[n].size = (uint64)(r.right - r.left + 1) * 4;
+			copies[n].size = (uint64)width * 4;
 			n++;
 		}
 	}
