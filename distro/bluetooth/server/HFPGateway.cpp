@@ -297,8 +297,13 @@ HFPGateway::_Serve(Session* session, RFCOMMLink* link)
 		if (status != B_OK)
 			break;
 
+		uint32_t unknownBefore = agent.Unknown();
 		size_t length = agent.Handle(line, strlen(line), answer,
 			sizeof(answer));
+		if (agent.Unknown() != unknownBefore) {
+			syslog(LOG_INFO, "bluetooth_server: hfp: command not known: %s",
+				agent.LastUnknown());
+		}
 		if (length > 0 && link->Send(answer, length, kSendWait) != B_OK)
 			break;
 
@@ -335,7 +340,7 @@ HFPGateway::_Serve(Session* session, RFCOMMLink* link)
 	}
 	if (agent.Unknown() > 0) {
 		syslog(LOG_INFO, "bluetooth_server: hfp: %" B_PRIu32 " commands "
-			"not known", agent.Unknown());
+			"not known, last \"%s\"", agent.Unknown(), agent.LastUnknown());
 	}
 	// The voice link goes with the session.
 	if (session->voiceOpen)

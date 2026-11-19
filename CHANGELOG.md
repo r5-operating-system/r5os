@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - The headset stream configures when the channel numbers differ
+
+Problem: On the 5625U, stick 57, the WH-1000XM3 stayed connected. Hands-free reached "service level connection up" and "battery 100 %". bluetooth_audio logged "opening AVDTP" and then nothing about discover, capabilities, configuration, open, or start. The kernel logged "l2cap: unexpected configuration rsp: invalid source channel (cid=67, scid=66)". A configuration response carries the destination CID of the request, which is the remote endpoint. The check compared it with the local CID. When those two numbers differ the answer was rejected and the AVDTP channel never opened. Also "hfp: 1 commands not known" did not say which command.
+
+What changed: The configuration response is accepted when its source CID is the remote endpoint. bluetooth_audio logs each AVDTP step (discover, get capabilities, set configuration, open, start) and a notice when a command is not sent. An HFP command the agent does not know is logged with its text and still answered with ERROR, which is what Hands-Free Profile 1.8 specifies for a command it does not define.
+
+Limits: Not booted on the 5625U. That the WH-1000XM3 plays audio is only proven there. The unknown command on stick 57 was not recorded, so this build is what names it.
+
 ## 2026-11-19 - A Wi-Fi join keeps its station while the lock is down
 
 Problem: On the 5625U a WPA3 join panicked in mtk_sta_update, called from mtk_newstate on ic_taskq. The instruction at mtk_sta_update+0x73 loads ni_chan (offset 0x2b8 of the station node). The fault address 0xfffffffe37002b8 is that field of a node pointer 0xfffffffe3700000, which is not a live object. mtk_newstate takes vap->iv_bss, drops the stack lock, and then mtk_join_prepare calls mtk_sta_update. WPA3 replaces the node while SAE is still joining, so the pointer is dead by the time the field is read. WPA2 uses the same function and has been connecting.

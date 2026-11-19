@@ -764,9 +764,12 @@ A2DPSource::_Manage()
 			set_receive_timeout(fSignal, kPollInterval);
 			// Without a sent Discover no answer and no timeout would come.
 			if (_SendCommand(kDiscover, NULL, 0) != B_OK) {
+				syslog(LOG_NOTICE, "bluetooth_audio: AVDTP discover was "
+					"not sent");
 				_EndSession(false, "the headset did not take the request");
 				continue;
 			}
+			syslog(LOG_INFO, "bluetooth_audio: AVDTP discover");
 			fState = kDiscovering;
 			continue;
 		}
@@ -791,8 +794,13 @@ A2DPSource::_Manage()
 		if (!fInitiator && fState == kConfigured && fPendingCommand == 0
 			&& now - fConfiguredAt > kOpenDelay) {
 			uint8 seid = (uint8)(fRemoteSEID << 2);
-			if (_SendCommand(kOpen, &seid, 1) == B_OK)
+			if (_SendCommand(kOpen, &seid, 1) == B_OK) {
+				syslog(LOG_INFO, "bluetooth_audio: AVDTP open");
 				fState = kOpening;
+			} else {
+				syslog(LOG_NOTICE, "bluetooth_audio: AVDTP open was not "
+					"sent");
+			}
 		}
 
 		// Start or suspend with the media node and the headset's buttons.
@@ -801,8 +809,13 @@ A2DPSource::_Manage()
 		if (fState == kOpen && fTransport >= 0 && wanted
 			&& fPendingCommand == 0) {
 			uint8 seid = (uint8)(fRemoteSEID << 2);
-			if (_SendCommand(kStart, &seid, 1) == B_OK)
+			if (_SendCommand(kStart, &seid, 1) == B_OK) {
+				syslog(LOG_INFO, "bluetooth_audio: AVDTP start");
 				fState = kStarting;
+			} else {
+				syslog(LOG_NOTICE, "bluetooth_audio: AVDTP start was not "
+					"sent");
+			}
 		} else if (fState == kStreaming && !wanted && fPendingCommand == 0) {
 			uint8 seid = (uint8)(fRemoteSEID << 2);
 			if (_SendCommand(kSuspend, &seid, 1) == B_OK)
@@ -1122,8 +1135,14 @@ A2DPSource::_AskCapabilities()
 	uint8 seid = (uint8)(fRemoteSEID << 2);
 	fTriedAllCapabilities = true;
 	fRetriedBitpool = false;
-	if (_SendCommand(kGetAllCapabilities, &seid, 1) == B_OK)
+	if (_SendCommand(kGetAllCapabilities, &seid, 1) == B_OK) {
+		syslog(LOG_INFO, "bluetooth_audio: AVDTP get capabilities, "
+			"endpoint %u", fRemoteSEID);
 		fState = kGettingCapabilities;
+	} else {
+		syslog(LOG_NOTICE, "bluetooth_audio: AVDTP get capabilities was "
+			"not sent");
+	}
 }
 
 
@@ -1157,8 +1176,14 @@ A2DPSource::_SendSetConfiguration()
 	}
 	fConfig = config;
 	fDelayReporting = delay;
-	if (_SendCommand(kSetConfiguration, payload, 2 + length) == B_OK)
+	if (_SendCommand(kSetConfiguration, payload, 2 + length) == B_OK) {
+		syslog(LOG_INFO, "bluetooth_audio: AVDTP set configuration, "
+			"endpoint %u", fRemoteSEID);
 		fState = kConfiguring;
+	} else {
+		syslog(LOG_NOTICE, "bluetooth_audio: AVDTP set configuration was "
+			"not sent");
+	}
 	return true;
 }
 
@@ -1184,6 +1209,8 @@ A2DPSource::_HandleResponse(uint8 messageType, uint8 signal,
 					&& endpoints[i].mediaType == kMediaTypeAudio)
 					fCandidates[fCandidateCount++] = endpoints[i].seid;
 			}
+			syslog(LOG_INFO, "bluetooth_audio: AVDTP discover answer, %d "
+				"audio sinks", fCandidateCount);
 			if (fCandidateCount == 0) {
 				_EndSession(false, "no free audio sink on the headset");
 				return;
@@ -1267,6 +1294,7 @@ A2DPSource::_HandleResponse(uint8 messageType, uint8 signal,
 				close(fd);
 			else
 				fTransport = fd;
+			syslog(LOG_INFO, "bluetooth_audio: AVDTP stream open");
 			fState = kOpen;
 			return;
 		}

@@ -78,6 +78,9 @@ public:
 	// "hang up", "redial", "voice", "dial" or "headset".
 			const char*	LastButton() const { return fButton; }
 			uint32_t	Unknown() const { return fUnknown; }
+	// The last command this agent did not know, for the log. Empty
+	// before one came. Not a secret: it is an AT command from the headset.
+			const char*	LastUnknown() const { return fLastUnknown; }
 	// Both sides negotiate codecs and the headset sent its AT+BAC list.
 			bool		CanNegotiateCodecs() const;
 	// The AT+BAC list as sent ("1,2"), empty before one came.
@@ -95,6 +98,7 @@ private:
 			uint32_t	fEvents;
 			const char*	fButton;
 			uint32_t	fUnknown;
+			char		fLastUnknown[48];
 			bool		fCodecNegotiation;
 			char		fCodecs[kMaxCodecList + 1];
 			int			fConfirmedCodec;

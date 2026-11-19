@@ -125,6 +125,7 @@ Agent::Agent(bool codecNegotiation)
 	fConfirmedCodec(0)
 {
 	fCodecs[0] = '\0';
+	fLastUnknown[0] = '\0';
 }
 
 
@@ -328,6 +329,16 @@ Agent::Handle(const char* line, size_t length, char* out, size_t outSize)
 		answer.Line("+COPS: 0");
 		answer.Ok();
 	} else {
+		// Hands-Free Profile 1.8 answers a command it does not define
+		// with ERROR. The text is kept so the log can name it.
+		size_t keep = n < sizeof(fLastUnknown) - 1 ? n
+			: sizeof(fLastUnknown) - 1;
+		size_t out = 0;
+		for (size_t i = 0; i < keep; i++) {
+			unsigned char ch = (unsigned char)c[i];
+			fLastUnknown[out++] = (ch >= 32 && ch < 127) ? (char)ch : '?';
+		}
+		fLastUnknown[out] = '\0';
 		fUnknown++;
 		answer.Error();
 	}
