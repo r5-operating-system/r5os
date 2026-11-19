@@ -1,5 +1,16 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - AMD64 stick: the FPU, user-copy and timer tests are in the image
+
+Problem: `distro/cpu/r5_fpu_test.cpp`, `r5_usercopy_test.cpp` and `r5_timer_test.cpp` (#4445) were never copied into the tree or listed in the image, although that CHANGELOG section said the user-copy test was. On the 5625U stick XSAVEC and the SMAP user copies could not be checked.
+
+What changed:
+- `distro/kernel/src/bin/Jamfile`: `r5_timer_test.cpp` and `r5_usercopy_test.cpp` join the standard commands. `r5_fpu_test.cpp` uses x86 instructions without a guard, so it is built only when `TARGET_ARCH` is `x86_64`.
+- `scripts/apply-kernel-bugs.py`: copies the three sources to `src/bin` and lists them in the minimum image after `r5_idle_pingpong`, with `r5_fpu_test` in an `x86_64 @{ }@` block.
+- `scripts/read-stick-logs.py`: also copies `r5-cpu.txt`, `r5-hardware.txt`, `r5-amd64-check.txt` and the `kernel` driver settings (home and system), for `amd64_large_pages`.
+
+Limits: the tests run only when started from Terminal; nothing runs them at boot.
+
 ## 2026-11-19 - Kernel (AMD64): /dev/misc/r5_pstate kernel-info ioctl voor CPU Info (stap 3)
 
 What changed:
