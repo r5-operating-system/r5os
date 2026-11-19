@@ -438,6 +438,7 @@ SkiaGpu::SkiaGpu()
 	fBackend(NULL),
 	fForceFail(false),
 	fShutDown(false),
+	fAbandoned(false),
 	fRecorderBudget(RecorderOptions::kDefaultRecorderBudget),
 	fWake(NULL),
 	fWakeCookie(NULL),
@@ -470,6 +471,13 @@ SkiaGpu::~SkiaGpu()
 void
 SkiaGpu::DestroyContext()
 {
+	if (fAbandoned) {
+		BAutolock _(fLock);
+		// The context still points at the device. Leave both.
+		fContext = NULL;
+		fBackend = NULL;
+		return;
+	}
 	Shutdown();
 	BAutolock _(fLock);
 	// M13 step 4: RunWork() may wait for its fence without the lock; the
@@ -926,6 +934,8 @@ void
 SkiaGpu::DeleteRecorder(void* recorder)
 {
 	BAutolock _(fLock);
+	if (fAbandoned)
+		return;
 	delete (Recorder*)recorder;
 }
 
@@ -1006,15 +1016,26 @@ SkiaGpu::RunWork(const char** _reason)
 	if (fRunInFlight) {
 		VkFence fence = (VkFence)fRunFence;
 		bigtime_t waitStart = system_time();
+		// Without the lock, so Abandon() can run while this fence sits
+		// on a ring that is not moving.
+		bool unlock = fLock.CountLocks() == 1;
+		if (unlock)
+			fLock.Unlock();
 		VkResult result;
 		do {
-			// a late GPU is not a failure (M11 decision 14)
-			result = sWaitForFences(sDevice, 1, &fence, VK_TRUE,
-				1000000000ull);
+			if (fAbandoned)
+				result = VK_ERROR_DEVICE_LOST;
+			else {
+				// a late GPU is not a failure (M11 decision 14)
+				result = sWaitForFences(sDevice, 1, &fence, VK_TRUE,
+					1000000000ull);
+			}
 		} while (result == VK_TIMEOUT);
+		if (unlock)
+			fLock.Lock();
 		fRunInFlight = false;
 		Profile(kTimeDeliver, system_time() - waitStart);
-		if (result != VK_SUCCESS) {
+		if (fAbandoned || result != VK_SUCCESS) {
 			*_reason = "device lost";
 			atomic_set64(&fDone, ticket);
 			_ReleaseWaiters();
@@ -1215,19 +1236,31 @@ SkiaGpu::RunWork(const char** _reason)
 				// a late GPU is not a failure (M11 decision 14)
 				VkResult result;
 				do {
-					result = sWaitForFences(sDevice, 1, &fence, VK_TRUE,
-						1000000000ull);
+					if (fAbandoned)
+						result = VK_ERROR_DEVICE_LOST;
+					else
+						result = sWaitForFences(sDevice, 1, &fence, VK_TRUE,
+							1000000000ull);
 				} while (result == VK_TIMEOUT);
 				if (unlock) {
 					fLock.Lock();
 					fInFlight = NULL;
 					fWaitingUnlocked = false;
 				}
-				if (result != VK_SUCCESS) {
+				if (fAbandoned || result != VK_SUCCESS) {
 					*_reason = "device lost";
 					ok = false;
 				}
 				fRunInFlight = false;
+			}
+			if (fAbandoned) {
+				// The recorder and its surfaces stay. Destroying them
+				// calls back into RADV.
+				for (size_t i = 0; i < items.size(); i++)
+					(void)items[i].release();
+				atomic_set64(&fDone, ticket);
+				_ReleaseWaiters();
+				return false;
 			}
 			// read_done() copies into the bitmaps from here (DestroyContext()
 			// waits for fWaitingUnlocked, so the context is still there)
@@ -1346,10 +1379,35 @@ SkiaGpu::TicketDone(int64 ticket)
 
 
 void
+SkiaGpu::Abandon()
+{
+	BAutolock _(fLock);
+	if (fAbandoned)
+		return;
+	fAbandoned = true;
+	// A run may be between its unlock and the fence. Its surfaces stay
+	// with the leaked recorder; do not reset them from here.
+	fInFlight = NULL;
+	fWaitingUnlocked = false;
+	for (int32 i = 0; i < fTargets.CountItems(); i++) {
+		SkiaTarget* target = fTargets.ItemAt(i);
+		if (target->Lock()) {
+			target->LeakGpu();
+			target->Unlock();
+		}
+	}
+	fShutDown = true;
+	atomic_set64(&fDone, atomic_get64(&fTicket));
+	atomic_set(&fWindowRunDone, 1);
+	_ReleaseWaiters();
+}
+
+
+void
 SkiaGpu::Shutdown()
 {
 	BAutolock _(fLock);
-	if (fShutDown)
+	if (fAbandoned || fShutDown)
 		return;
 	// M13 step 4: a run that waits for its fence without the lock holds
 	// surfaces of the targets; they go before the recorders do

@@ -154,6 +154,10 @@ public:
 	// Compose thread: the GPU drawing is off; every target lets go of its
 	// GPU objects and waiters are released. Before the device goes.
 			void				Shutdown();
+	// A lost device: recorders and the context stay allocated and are
+	// never destroyed, so a window that closes later does not call Vulkan.
+			void				Abandon();
+			bool				Abandoned() const { return fAbandoned; }
 			bool				IsShutDown() const { return fShutDown; }
 	// M13 step 4: the device is a CPU (Lavapipe); a run that drew a
 	// window has finished (the warm-up waits for that on Lavapipe).
@@ -250,6 +254,7 @@ private:
 			void*				fBackend;
 			bool				fForceFail;
 			bool				fShutDown;
+			bool				fAbandoned;
 			// 5625U stick, boot 1: the GPU's own memory sets the budgets
 			size_t				fRecorderBudget;
 			void				(*fWake)(void*);

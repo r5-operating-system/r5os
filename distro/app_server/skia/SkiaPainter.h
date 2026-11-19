@@ -83,6 +83,9 @@ public:
 	virtual	bool				UploadSource(const uint8** _bits,
 									uint32* _bytesPerRow) { return false; }
 			void				DropGpu();
+	// The device is being left in place. Drops the pointers and does not
+	// call Vulkan.
+			void				LeakGpu();
 	// M13 step 2: under the lock, the compositor took the window's buffer
 	// back (an off-screen window): the image goes too, so its memory is
 	// freed; the next SetSurface() makes a new one.

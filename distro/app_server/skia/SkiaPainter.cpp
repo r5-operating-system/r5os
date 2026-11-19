@@ -252,9 +252,35 @@ SkiaTarget::SkiaTarget(SkiaGpu* gpu)
 }
 
 
+void
+SkiaTarget::LeakGpu()
+{
+	// release() drops the pointer and does not unref. The device may
+	// already be gone, or about to be left in place.
+	(void)fSurface.release();
+	(void)fScratch.release();
+	(void)fScratchLcd.release();
+	fImage.Detach();
+	fRecorder = NULL;
+	fDamage.MakeEmpty();
+	fRecorded = false;
+	for (size_t i = 0; i < fTextures.size(); i++)
+		(void)fTextures[i].image.release();
+	fTextures.clear();
+	fTextureBytes = 0;
+	for (size_t i = 0; i < fGradients.size(); i++)
+		(void)fGradients[i].image.release();
+	fGradients.clear();
+}
+
+
 SkiaTarget::~SkiaTarget()
 {
 	// The owner removed this target from SkiaGpu first.
+	if (fGpu != NULL && fGpu->Abandoned()) {
+		LeakGpu();
+		return;
+	}
 	fSurface.reset();
 	fScratch.reset();
 	fScratchLcd.reset();
@@ -473,7 +499,12 @@ void
 SkiaTarget::DropGpu()
 {
 	// SkiaGpu::Shutdown(), with its lock held (BLocker is recursive):
-	// nothing of Graphite outlives the device
+	// nothing of Graphite outlives the device. A lost device leaks
+	// instead, which LeakGpu does; Shutdown does not call this then.
+	if (fGpu != NULL && fGpu->Abandoned()) {
+		LeakGpu();
+		return;
+	}
 	fSurface.reset();
 	fImage.Unset();
 	fScratch.reset();
