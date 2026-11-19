@@ -42,6 +42,12 @@ public:
 									int32 *input_id, node_type type);
 			status_t			Rescan();
 
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+	static	void				SetBluetoothAudioReady(bool ready);
+			// SPDX-SnippetEnd
+
 			void				Dump();
 
 			void 				CleanupTeam(team_id team);
@@ -85,6 +91,8 @@ private:
 									uint32 defaultType, bool isInput,
 									media_type type, int32* inputID = NULL);
 			void				_DisconnectMixerFromOutput();
+			void				_SetBluetoothAudioReady(bool ready);
+			bool				_IsBluetoothAudioReady() const;
 			// SPDX-SnippetEnd
 
 private:
@@ -94,6 +102,7 @@ private:
 	mutable	BLocker				fLock;
 			uint32				fAudioOutGeneration;
 			bool		 		fMixerConnected;
+			bool				fBluetoothAudioReady;
 			media_node_id		fPhysicalVideoOut;
 			media_node_id		fPhysicalVideoIn;
 			media_node_id		fPhysicalAudioOut;

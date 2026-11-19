@@ -71,6 +71,7 @@ public:
 	// A2DPSource::Listener
 	virtual	void				RemoteVolumeChanged(float gain);
 	virtual	void				RemoteDelayChanged(bigtime_t delay);
+	virtual	void				ConnectionStateChanged(bool connected);
 
 	static	void				PreferredFormat(media_format* format);
 
