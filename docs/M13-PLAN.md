@@ -3,7 +3,34 @@
 
 # M13 - speed: the 60 fps feel (RADV and Lavapipe)
 
-M12 made Skia work as the drawing engine, opt-in (`gpu_draw true` in the radeon_hd settings); it closed on correctness, not speed (owner, 16 Nov 2026). M13 makes R5 fast, and then turns Skia on by default: window drag, scroll and resize at 60 fps on the Ryzen 5 5625U (RADV), and smooth on Lavapipe (about 8 ms or less per full frame). This plan is the owner's performance advice (16 Nov 2026) with the R5 corrections and the M13 items that were already agreed. Rules: `AGENTS.md` and `docs/GPU-ARCHITECTURE.md`.
+M12 made Skia work as the drawing engine; it closed on correctness, not speed (owner, 16 Nov 2026). M13 makes R5 fast, and then turns Skia on by default: window drag, scroll and resize at 60 fps on the Ryzen 5 5625U (RADV), and smooth on Lavapipe (about 8 ms or less per full frame). This plan is the owner's performance advice (16 Nov 2026) with the R5 corrections and the M13 items that were already agreed. Rules: `AGENTS.md` and `docs/GPU-ARCHITECTURE.md`.
+
+## Status (19 Nov 2026)
+
+| Step | State |
+|---|---|
+| 0 Measure | Built 16 Nov 2026 (`m13-measure`). Used on the M13 sticks. |
+| 1 Small fixes | Built 17 Nov 2026. The follow-up of 19 Nov 2026 replaces the full-bitmap hash, the second text layout and the per-row copy where a rectangle is one span. |
+| 2 Architecture | Built 16 Nov 2026. The compositor reads Skia's images. Proven on the 5625U on stick 3 (17 Nov 2026): RADV stayed on. |
+| 3 Fine-tuning | See the rows under the table. Sticks 3, 4 and 5 are 17 Nov 2026. |
+| 4 The rest | Built 17 Nov 2026. Resize on RADV at the refresh rate is stick 4. The Lavapipe outline resize and the warm-up that finishes are the same day. |
+| 5 Skia on by default | **Default as of 19 Nov 2026.** `gpu_draw` defaults to true. `gpu_draw false` turns it off. Painter draws only in Safe mode. Not yet booted on the 5625U with this default. |
+
+Step 3, item by item:
+
+| Item | State |
+|---|---|
+| Copy path for Skia windows (`vkCmdCopyImageToBuffer`, #4332) and Painter windows (`vkCmdCopyBuffer`) | Built. Used whenever Skia or a Painter window is composed. |
+| `gpu_lavapipe_threads` | Built. Default 2. A line sets another count. |
+| `gpu_lavapipe_msaa 1\|4` | Built, opt-in. The default stays 4. `1` measured worse. |
+| `gpu_lavapipe_vector 128\|256` | Built. The setting wins. With no setting and no environment variable, AVX2 sets 256 (19 Nov 2026); a plain x86-64-v2 CPU sets nothing. |
+| `gpu_compositor_scanout` | Built, opt-in. Refused on Lavapipe. |
+| `gfx9_wc_gtt` | Built, opt-in. The PTE stays snooped. |
+| Userland EOP fence page | **Not built.** |
+| 2 MB pages for the GPU areas | Built 19 Nov 2026, on when `amd64_large_pages` is on (the default). `false` is 4 KB. Not yet shown on the 5625U. |
+| Fragment shader for the blur | **Not built.** |
+
+The CPU read-back in the next section (stop the GPU, `asyncRescaleAndReadPixels`, `memcpy` into `WindowBuffer`) is **history**. Step 2 (16 Nov 2026) removed it for a window Skia draws. It is kept here so the reason for step 2 stays readable.
 
 ## Submit wait (19 Nov 2026)
 
@@ -72,7 +99,7 @@ These gains are expected, not measured. Step 0 measures them.
 
 ## Owner decisions of 16 Nov 2026 (after M12 stick 2)
 
-- **Skia is not on by default yet.** `gpu_draw` stays opt-in through M13. Turning Skia on by default, for RADV and Lavapipe together, with Painter only in Safe mode, is the **last step of M13**, after the speed work (step 5 below). On Lavapipe Skia is still slower than Painter. Source: `docs/APP-SERVER-GPU-DRAWING.md`, "Changed again (owner, 16 Nov 2026, after M12 stick 2)".
+- **Skia is on by default (19 Nov 2026).** `gpu_draw` defaults to true for RADV and Lavapipe together. `gpu_draw false` turns it off. Painter draws only in Safe mode. This is step 5, the owner's decision of 16 Nov 2026. On Lavapipe Skia is still slower than Painter. Not yet booted on the 5625U with the default.
 - **Step 2 before step 1 (owner, 16 Nov 2026):** the architecture (step 2) goes first, together with the disk pipeline cache (`fPersistentPipelineStorage`) from step 1. The other step 1 items come after it; `_Wake` batching only after step 2. The step 0 numbers then show the architecture's gain on its own.
 - **Step 6b moves here (M13 or later):** a buffer of its own for `BDirectWindow` on Lavapipe, design on paper in `docs/APP-SERVER-GPU-DRAWING.md` (Q10). Preferably built together with a RADV variant, so the direct-window pause goes on both. Until then the pause stays. It is not on the critical path of the speed work; it comes after step 2, when the compositor reads images.
 - **The first M13 stick also proves #4324** (8 MiB VRAM reserve for page-table pages, 1024 table pages per file). Boot 1 (Skia on RADV) must stay on for the whole scenario: no `page table pool full` and no `gpu draw off` in the syslog. On M12 stick 2 boot 1 turned the drawing off after about 3.5 minutes with `insert failed`, because no page-table page could be made with the VRAM full.

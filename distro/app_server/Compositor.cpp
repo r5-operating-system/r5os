@@ -162,6 +162,10 @@ load_settings(settings& out)
 	memset(&out, 0, sizeof(out));
 	// M13: no gpu_lavapipe_threads line: the R5 default (2)
 	out.lavapipeThreads = -1;
+	// M13 step 5 (owner, 16 Nov 2026, done 19 Nov 2026): Skia on for
+	// RADV and Lavapipe. gpu_draw false turns it off. Safe mode never
+	// reaches this: the compositor is not created, and Painter draws.
+	out.draw = true;
 	// On by default (user, 15 Nov 2026): RADV when the GPU passed its
 	// checks, Lavapipe otherwise. gpu_compositor false is the opt-out.
 	out.want = true;

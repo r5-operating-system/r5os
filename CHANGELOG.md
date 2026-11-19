@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - M13 follow-up, part 4: Skia draws by default
+
+Problem: Skia still drew only when the radeon_hd settings said `gpu_draw true`. The owner's decision of 16 Nov 2026 was that Skia is the default for RADV and Lavapipe together, and Painter draws only in Safe mode.
+
+What changed: `gpu_draw` defaults to true. `gpu_draw false` turns it off. Safe mode still does not create the compositor. What's new says so in ordinary language (build 10066). The plan, the drawing document and the GPU architecture document record step 5 as the default, which step 3 items are built and still opt-in, and that the old CPU read-back is history.
+
+Limits: Not booted on the 5625U. That RADV stays on with the default, and that Safe mode still draws with Painter, are only proven there. QEMU can show Lavapipe with Skia and the compose compare.
+
 ## 2026-11-19 - M13 follow-up, part 3: Lavapipe's vector width follows the CPU
 
 Problem: Lavapipe's vector width stayed at Mesa's own choice unless the radeon_hd setting named 128 or 256. On a CPU with AVX2 that leaves the wider vectors unused. On a plain x86-64-v2 CPU a forced 256 would be wrong.

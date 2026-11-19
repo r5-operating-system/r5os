@@ -566,6 +566,8 @@ Written down so the next step and the review read the code with the same picture
 
 **Changed again (owner, 16 Nov 2026, after M12 stick 2):** Skia goes on by default after M13, not in M12. M13 removes the CPU read-back and does the speed work, then turns Skia on for RADV and Lavapipe together (on Lavapipe Skia is still slower than Painter). M12 closes on correctness: the compare set, no panic, `gpu_draw true` usable on RADV and Lavapipe. `gpu_draw` stays opt-in until then. The page-table reserve fix of this day is proven on the first M13 stick.
 
+**Done (19 Nov 2026):** that default is in. `gpu_draw` is true unless the line says `gpu_draw false`. Safe mode does not create the compositor, so Painter draws. RADV where the GPU passed its checks, Lavapipe otherwise. Not yet booted on the 5625U with the default.
+
 **M12 now includes optimisation, with one gate:** on the 5625U (RADV), **no draw class is slower with Skia than with Painter**. A draw class is a class of part 5 (E, A1, A2, T, B1, B2, G), measured per operation with `r5-draw-compare --time` (median of 100, GPU against CPU) and in the scenario of decision 9 (`draw median` against `draw cpu median`). Lavapipe numbers are recorded, not gated (decision 9). Anything beyond the gate, such as 60 frames per second while dragging, scrolling or resizing, stays M13. The copy of the window images into the window buffers may move into M12 if the profile shows it is the cause of a class being slower; otherwise it stays M13 (Q4).
 
 **Order of work for the gate:** first profile which classes and which parts of the path cause the 43 ms scenario median on Lavapipe (and the same on the 5625U once it can run), report the top causes to the owner, and only then fix.
