@@ -1834,6 +1834,12 @@ vm_create_anonymous_area(team_id team, const char *name, addr_t size,
 		status = vm_map_cache(addressSpace, cache, 0, name, size, wiring,
 			protection, 0, REGION_NO_PRIVATE_MAP, flags,
 			&alignedVirtual, kernel, &area, _address);
+		if (status != B_OK && alignedVirtual.alignment == kLargePageSize) {
+			alignedVirtual.alignment = virtualAddressRestrictions->alignment;
+			status = vm_map_cache(addressSpace, cache, 0, name, size, wiring,
+				protection, 0, REGION_NO_PRIVATE_MAP, flags,
+				&alignedVirtual, kernel, &area, _address);
+		}
 	}
 // SPDX-SnippetEnd
 
@@ -1863,6 +1869,8 @@ vm_create_anonymous_area(team_id team, const char *name, addr_t size,
 				off_t offset = 0;
 
 				map->Lock();
+				uint32 largePages = 0;
+				uint32 smallPages = 0;
 				while (virtualAddress < area->Base() + (area->Size() - 1)) {
 					if ((area->Base() + area->Size()) - virtualAddress
 							>= kLargePageSize
@@ -1871,6 +1879,7 @@ vm_create_anonymous_area(team_id team, const char *name, addr_t size,
 						&& map->MapLarge(virtualAddress, physicalAddress,
 							protection, area->MemoryType(), &reservation)
 							== B_OK) {
+						largePages++;
 						for (uint32 i = 0; i < kLargePageSize / B_PAGE_SIZE;
 								i++) {
 							page = vm_lookup_page(
@@ -1894,12 +1903,19 @@ vm_create_anonymous_area(team_id team, const char *name, addr_t size,
 						protection, area->MemoryType(), &reservation);
 					if (status < B_OK)
 						panic("couldn't map physical page in page run\n");
+					smallPages++;
 					cache->InsertPage(page, offset);
 					increment_page_wired_count(page);
 					DEBUG_PAGE_ACCESS_END(page);
 					virtualAddress += B_PAGE_SIZE;
 					offset += B_PAGE_SIZE;
 					physicalAddress += B_PAGE_SIZE;
+				}
+				if (area->Size() >= kLargePageSize) {
+					dprintf("R5 VM: area \"%s\" %s (%" B_PRIu32 " x 2MB, %"
+						B_PRIu32 " x 4KB)\n", name,
+						largePages > 0 ? "2MB pages" : "4KB pages",
+						largePages, smallPages);
 				}
 				map->Unlock();
 				break;
@@ -1990,6 +2006,8 @@ vm_create_anonymous_area(team_id team, const char *name, addr_t size,
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+			uint32 largePages = 0;
+			uint32 smallPages = 0;
 			while (virtualAddress < area->Base() + (area->Size() - 1)) {
 				if ((area->Base() + area->Size()) - virtualAddress
 						>= kLargePageSize
@@ -1998,6 +2016,7 @@ vm_create_anonymous_area(team_id team, const char *name, addr_t size,
 					&& map->MapLarge(virtualAddress, physicalAddress,
 						protection, area->MemoryType(), &reservation)
 						== B_OK) {
+					largePages++;
 					for (uint32 i = 0; i < kLargePageSize / B_PAGE_SIZE; i++) {
 						page = vm_lookup_page(physicalAddress / B_PAGE_SIZE);
 						if (page == NULL)
@@ -2023,6 +2042,7 @@ vm_create_anonymous_area(team_id team, const char *name, addr_t size,
 				if (status < B_OK)
 					panic("couldn't map physical page in page run\n");
 
+				smallPages++;
 				cache->InsertPage(page, offset);
 				increment_page_wired_count(page);
 
@@ -2031,6 +2051,12 @@ vm_create_anonymous_area(team_id team, const char *name, addr_t size,
 				virtualAddress += B_PAGE_SIZE;
 				offset += B_PAGE_SIZE;
 				physicalAddress += B_PAGE_SIZE;
+			}
+			if (area->Size() >= kLargePageSize) {
+				dprintf("R5 VM: area \"%s\" %s (%" B_PRIu32 " x 2MB, %"
+					B_PRIu32 " x 4KB)\n", name,
+					largePages > 0 ? "2MB pages" : "4KB pages",
+					largePages, smallPages);
 			}
 // SPDX-SnippetEnd
 
@@ -2138,6 +2164,14 @@ vm_map_physical_memory(team_id team, const char* name, void** _address,
 	status = vm_map_cache(locker.AddressSpace(), cache, 0, name, size,
 		B_FULL_LOCK, protection, 0, REGION_NO_PRIVATE_MAP, CREATE_AREA_DONT_COMMIT_MEMORY,
 		&addressRestrictions, true, &area, _address);
+	if (status != B_OK && addressRestrictions.alignment == kLargePageSize) {
+		/* No 2 MB-aligned hole. Map at 4 KB so the framebuffer still comes up. */
+		addressRestrictions.alignment = 0;
+		status = vm_map_cache(locker.AddressSpace(), cache, 0, name, size,
+			B_FULL_LOCK, protection, 0, REGION_NO_PRIVATE_MAP,
+			CREATE_AREA_DONT_COMMIT_MEMORY, &addressRestrictions, true, &area,
+			_address);
+	}
 
 	if (status < B_OK)
 		cache->ReleaseRefLocked();
@@ -2188,6 +2222,8 @@ vm_map_physical_memory(team_id team, const char* name, void** _address,
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+		uint32 largePages = 0;
+		uint32 smallPages = 0;
 		for (addr_t offset = 0; offset < size;) {
 			addr_t va = area->Base() + offset;
 			phys_addr_t pa = physicalAddress + offset;
@@ -2196,11 +2232,19 @@ vm_map_physical_memory(team_id team, const char* name, void** _address,
 				&& (pa & (kLargePageSize - 1)) == 0
 				&& map->MapLarge(va, pa, protection, area->MemoryType(),
 					&reservation) == B_OK) {
+				largePages++;
 				offset += kLargePageSize;
 				continue;
 			}
 			map->Map(va, pa, protection, area->MemoryType(), &reservation);
+			smallPages++;
 			offset += B_PAGE_SIZE;
+		}
+		if (size >= kLargePageSize) {
+			dprintf("R5 VM: area \"%s\" %s (%" B_PRIu32 " x 2MB, %"
+				B_PRIu32 " x 4KB)\n", name,
+				largePages > 0 ? "2MB pages" : "4KB pages", largePages,
+				smallPages);
 		}
 // SPDX-SnippetEnd
 

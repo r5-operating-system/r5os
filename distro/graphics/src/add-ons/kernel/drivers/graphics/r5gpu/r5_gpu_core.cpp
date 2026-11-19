@@ -903,10 +903,28 @@ gpu_bo_fill(gpu_client* client, gpu_bo* bo, r5_gpu_bo* request, uint64 bytes)
 		/* Not B_CLONEABLE_AREA. The user mapping is vm_clone_area below,
 		 * with kernel true, so the source does not have to be cloneable.
 		 * A cloneable id would let any program map this buffer.
+		 * A buffer of 2 MB or more is rounded up to a multiple of 2 MB
+		 * so the full-lock path can use 2 MB pages. The size told to the
+		 * client stays the 4 KB rounding. amd64_large_pages false maps
+		 * the same area with 4 KB pages. If the larger area cannot be
+		 * made, the 4 KB size is tried.
 		 */
+		const uint64 kLarge = 2ull * 1024ull * 1024ull;
+		size_t areaBytes = (size_t)bytes;
+		if (bytes >= kLarge) {
+			uint64 rounded = (bytes + kLarge - 1) & ~(kLarge - 1);
+			areaBytes = (size_t)rounded;
+		}
 		area_id area = create_area("r5 gpu gtt", &kernel,
-			B_ANY_KERNEL_ADDRESS, (size_t)bytes, B_FULL_LOCK,
+			B_ANY_KERNEL_ADDRESS, areaBytes, B_FULL_LOCK,
 			B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA);
+		if ((area < 0 || kernel == NULL) && areaBytes != (size_t)bytes) {
+			kernel = NULL;
+			areaBytes = (size_t)bytes;
+			area = create_area("r5 gpu gtt", &kernel, B_ANY_KERNEL_ADDRESS,
+				areaBytes, B_FULL_LOCK,
+				B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA);
+		}
 		if (area < 0 || kernel == NULL)
 			return gpu_refuse("BO_CREATE", "gtt", area < 0 ? area : B_NO_MEMORY,
 				0, in.domain, bytes, 0, 0, 0, in.flags);

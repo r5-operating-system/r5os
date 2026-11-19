@@ -778,6 +778,24 @@ radeon_publish_vram_window(radeon_shared_info* info, uint64 barPhys,
 		poolBytes = radeon_align_down(before, kAlign);
 	}
 
+	/* 2 MB pages need the pool's CPU mapping to be 2 MB in both
+	 * directions. The start moves up and the size moves down, and the
+	 * reserved framebuffer is left where it is. A pool that cannot keep
+	 * 2 MB stays on the 4 KB alignment above. */
+	const uint64 kLarge = 2ull * 1024ull * 1024ull;
+	if (poolBytes >= kLarge) {
+		uint64 poolEnd = poolOffset + poolBytes;
+		uint64 aligned = radeon_align_up(poolOffset, kLarge);
+		if (aligned < poolEnd) {
+			uint64 alignedBytes = radeon_align_down(poolEnd - aligned,
+				kLarge);
+			if (alignedBytes >= kLarge) {
+				poolOffset = aligned;
+				poolBytes = alignedBytes;
+			}
+		}
+	}
+
 	info->vram_bar_phys = barPhys;
 	info->vram_bar_bytes = barBytes;
 	info->vram_window_phys = windowPhys;

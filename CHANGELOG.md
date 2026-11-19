@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - M13 follow-up, part 2: 2 MB pages for the GPU areas
+
+Problem: `amd64_large_pages` is on by default, and on the 5625U no real area was logged as using a 2 MB page. The GFX9 pool starts at an offset that is not a multiple of 2 MB. The GART CPU area is 1 MB. A GTT buffer is rounded to 4 KB, so the full-lock path, which asks for a 2 MB run only when the size is a multiple of 2 MB, never sees it. There was no line that said, once per area, whether that area got 2 MB pages.
+
+What changed: The pool start is rounded up and its size down to 2 MB when that still leaves 2 MB; otherwise it stays 4 KB aligned. The GART CPU area is 2 MB, with a fall back to 1 MB, and the GPU page table still maps the first 1 MB with the same PTE flags. A GTT buffer of 2 MB or more gets a CPU area rounded up to a multiple of 2 MB; the size told to the client stays the 4 KB rounding, and a failed larger area is tried again at that size. Each area of 2 MB or more logs `R5 VM: area "<name>" 2MB pages` or `4KB pages` once. If a 2 MB-aligned virtual hole cannot be found, the map is tried again at 4 KB. `amd64_large_pages false` still forces 4 KB pages.
+
+Limits: Not booted on the 5625U. QEMU has no radeon_hd, so the pool, the GART and the GTT lines are only proven there. The BAR and the pool on the 5625U are the areas that can show `2MB pages`.
+
 ## 2026-11-19 - M13 follow-up, part 1: the review fixes
 
 Problem: The review of the Skia drawing path found six costs. The ioctl wait for a sync object was 5 seconds while the RADV compose fence allows 15, so a compose still inside its own limit failed the submit and turned GPU drawing off. Finding a cached bitmap hashed every pixel on every lookup. A buffer copy of a rectangle submitted one Vulkan copy per row even when the rows were one contiguous span. DrawString with an offset array laid the glyphs out twice. Each submit walked every buffer handle to flush the indirect buffer. Skia's AVX2 and FMA functions are selected at run time only when the library itself is built below that level.

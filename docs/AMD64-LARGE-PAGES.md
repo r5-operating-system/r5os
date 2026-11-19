@@ -4,7 +4,7 @@
 -->
 # 2 MB Large Pages on AMD64 — Design (`PS` PDE Mappings)
 
-Status: **design only** (no code changes). Follows `docs/reviews/KERNEL-AMD64-REVIEW.md` section 4 (`TLB flushes and page size`).
+Status: the mapping is in the tree (18 Nov 2026). `amd64_large_pages` defaults to on, and `false` keeps every area on 4 KB pages. This round (19 Nov 2026) makes the large radeon_hd and r5gpu areas 2 MB aligned where the hardware already allows it, and logs one line per area of 2 MB or more: `R5 VM: area "<name>" 2MB pages (N x 2MB, M x 4KB)` or `4KB pages`. The areas are the VRAM BAR window (`radeon hd frame buffer`), the GFX9 pool (`radeon hd gfx9 pool`, start rounded up and size rounded down to 2 MB, or left at 4 KB when that would not leave 2 MB), the GART CPU area (`r5 gfx9 gart`, 2 MB so one page can cover it; the GPU page table still uses the first 1 MB and the same PTE flags), and a GTT buffer of 2 MB or more (`r5 gpu gtt`, the CPU area rounded up to a multiple of 2 MB, the size told to the client unchanged). A 2 MB-aligned virtual hole that cannot be found is mapped again at 4 KB, so the framebuffer still comes up. Rings live in the pool and are not areas of their own. Nothing here is proven until a boot on the 5625U shows the lines. Follows `docs/reviews/KERNEL-AMD64-REVIEW.md` section 4 (`TLB flushes and page size`).
 
 ## Scope: Contiguous, Non-Paged Memory Only
 
