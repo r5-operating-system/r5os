@@ -1,5 +1,40 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - Skia warm-up stall on the 5625U: stale read pointer, and the wait dump
+
+Problem: sticks 61 and 63 on the 5625U (Try R5, boot 1, `gpu_draw` / `gpu_debug` / `gpu_selftest` / `gpu_m13_boot 1`) stopped during the first Skia warm-up. The last accepted submits were the 24-dword buffer and the 1712-dword buffer. `CS_SUBMIT` then returned `B_BUSY` (`0x8000000e`, ring room). Stick 61 at 10.825 s, stick 63 at 10.833 s. app_server left RADV. Stick 60 (e0f8560010, no radeon_hd settings) finished in 2570 ms. Stick 62 (92e9856b40, the same settings as 61, including the room log from #4471) finished in 1815 ms and kept submitting that 1712-dword buffer through `ps2_hid`, `wacom` and `h2generic`.
+
+What the logs already showed, checked against the code:
+
+- The command processor itself had stopped. On stick 63 the room line was `mmio 00000050 wb 3b6 wptr 1792 free_mmio 335 free_wb 181 cp 94008200`. `0x3b6` is the read pointer the kernel stage left (stick 61: `k2 baseline rptr/wptr 0x3b6`). The register had moved. Fourteen seconds later stick 61 still read `CP_RB0_RPTR` `0x50`, `CP_STAT` `0x94808200` (PFP busy, ME idle). The PFP header FIFO ended in `WAIT_REG_MEM`, the ME FIFO in `DMA_DATA`. Accepting one more 256-dword job would not have moved that register.
+- The room check trusted the writeback whenever it was non-zero. A writeback stuck at `0x3b6` reports 181 dwords free. A 256-dword job needs more than that, so the submit was refused while the register still had 335 free. That is a real false `B_BUSY`. It is not what froze the command processor.
+- No single change from e0f8560010 to 1a74e375d6 is the cause. Stick 62 had #4468 through #4471 and did not hang. `libvulkan_radeon.so` in mesa_radv -11 is the same file as -10.
+- The 2 MB split is not the common cause. Stick 63 has none. Stick 61's split is 4 ms after the refusal. Sticks 60 and 62 split after a warm-up that finished.
+- Loading `h2generic`, `ps2_hid`, `i2c_hid` and `wacom` in that same second is not sufficient. Stick 62 submitted straight through it.
+- `assuming memory type 20000000` is the VRAM BAR being mapped again. It is on the good boots too.
+- The self-test dump is at 24.8 s, after the refusal. It does not build the warm-up's ring program.
+- The user fence, the irq fence and the cond-exec dword share one 64-byte line. `flush_visible` reads that line. It does not store it. The only CPU store of the user fence is after a reset. That line was not changed.
+- The ring program, the PSP load, the page-table base, the PTE flags, the invalidate word, the reset and the stop at shutdown were not changed.
+
+What changed:
+
+- The room check uses whichever read pointer has consumed more, the register or the writeback. A writeback left at the kernel-stage value can no longer hide a register that has moved. The hot path does not `clflush` that line: a dirty line would be written back over the GPU's copy. With `gpu_debug`, the room line now also prints `wb_mem`, the writeback after one `clflush`. `wb` is still the value the CPU saw before that flush. `free_wb` is the free space from `wb`.
+- The first time a boot gives up on ring room, and `gpu_debug` is on, the driver prints the wait once. The line has the register, both fence views (`seen` through the carve-out, `pool` through the fence page after `clflush`), the user-fence MC address, `CP_STAT`, and `VM_L2_PROTECTION_FAULT_STATUS` with its address. Then the ME and PFP header FIFOs, eight ring dwords at the register, and `CP_IB1` / `CP_IB2`. It walks the ring and, when the indirect-buffer register has a size, up to 2048 dwords of that buffer, for `WAIT_REG_MEM` (opcode `0x3c`). It prints the control word (function, memory-or-register, PFP engine), and for a memory poll the address, the reference, and one dword read through the VMID 1 mapping. A VRAM address read that way can still be stale. Nothing is written. The interrupt ring pointers and the EOP count are one more line.
+- A submitted indirect buffer in VRAM is flushed when it has a kernel mapping. One chained indirect buffer found in the submitted buffer is flushed too. A second chain is not. The PTE flags are unchanged. The 1712-dword buffer on these sticks was GTT and was already flushed, so this is not shown to be the stall.
+- `gpu_draw_settle true` makes the Skia warm-up wait 8 s before it draws. The default does not. `boot-next m13f` boots 2, 3 and 4 are unchanged. Boot 5 writes `gpu_debug true`, `gpu_draw_settle true` and `gpu_m13f_boot 5`. `m13-measure` files that boot under `~/m13f/boot5`.
+
+What the next stick must show, on the 5625U, Try R5, one stick, `boot-next m13f`:
+
+- Boot 1, defaults. Either the warm-up finishes and no `CS_SUBMIT` is refused for ring room, or the first refusal prints `radeon_hd: wait` with a control word and a memory value. `0x113` is the kernel pipeline sync (PFP, memory, equal). `0x143` is the invalidate acknowledgement (registers). `0x13` is RADV's flush fence (memory, equal, ME engine). The value against the reference says whether the fence write was visible.
+- Boots 2, 3 and 4 stay the scanout, write-combined GTT, and `gpu false` boots.
+- Boot 5 waits 8 s (`gpu draw warm up settled 8000 ms`) and then draws. It says whether separating the warm-up from USB probe stops the refusal. One boot of each does not prove a race.
+
+The 5625U has not booted this. QEMU has no `radeon_hd`, so it cannot show the stall or the dump.
+
+Tested: `scripts/build-locked.sh` from the worktree `R5OS-gpu-stall` (WSL, the shared Haiku tree was not reset). The process exited 0. `gfx9_k12.o`, `r5_gpu_core.o` and `SkiaOffscreen.o` were rebuilt, and `r5-os.image` was written, 19 Nov 2026, 22:32–22:34 Europe/Amsterdam.
+
+QEMU, KVM, a private copy at `/home/nickr/r5-os-gpu-stall.image`, GTK window, no other QEMU was running, and `scripts/run-qemu-r5.sh` was not used. The first window was Welcome to R5 Operating System. Try R5 then Sign in reached the desktop: Deskbar, Tracker, and the home and Trash icons. 19 Nov 2026, 22:36–22:42 Europe/Amsterdam. Lavapipe only. No stick.
+
 ## 2026-11-19 - gpu_debug no longer fills the syslog
 
 Problem: stick 62 on the 5625U (`gpu_debug true`, `gpu_selftest true`) wrote 52,657 `radeon_hd` lines between kernel time 8.779 s and 236.050 s (227 s, about 13,900 lines a minute). 49,552 are `submit ib va`, 1,145 are `va map`, 1,113 are `bo domain` and 430 are `gfx9 cu cc`. The syslog rotated at 4 MB, so a longer session loses the boot start and the self-test. The `dprintf` is also on the submit path.

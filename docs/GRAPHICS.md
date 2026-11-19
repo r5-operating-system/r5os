@@ -275,7 +275,7 @@ The GDS switch, the PASID mapping and the SPM VMID update are the VMID-switch pa
 
 ## Submission (draft)
 
-`CS_SUBMIT` takes one context, one ring, and at most eight indirect buffers. Stick 19's two teapots both submitted the 24-dword and 752-dword buffers named above. The `clflush` of a GTT indirect buffer at submit is still there. It does not cover a chained buffer. It stays until a stick shows the write-combined mapping is enough.
+`CS_SUBMIT` takes one context, one ring, and at most eight indirect buffers. Stick 19's two teapots both submitted the 24-dword and 752-dword buffers named above. The `clflush` at submit covers the indirect buffer, a VRAM buffer that has a kernel mapping, and one chained buffer found in it. A second chain is not flushed. Write-combined GTT stays off until `gfx9_wc_gtt`.
 
 ## Fence by interrupt (draft)
 

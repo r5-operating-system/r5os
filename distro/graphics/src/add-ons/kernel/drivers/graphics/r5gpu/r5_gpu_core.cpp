@@ -1921,6 +1921,9 @@ gpu_ibs_mapped(gpu_client* client, const r5_gpu_ib* ibs, uint32 count,
 
 
 void r5_gfx9_debug_room();
+void r5_gfx9_debug_wait(void);
+void r5_gfx9_ih_ptrs(uint32* rptr, uint32* wptr);
+void r5_gfx9_ih_counts(uint32* msi, uint32* early, uint32* eop);
 
 
 static status_t
@@ -1946,9 +1949,21 @@ gpu_wait_room(void* info, uint32 dwords)
 			return ECANCELED;
 		if (now >= deadline) {
 			/* The writeback can sit still while the MMIO read pointer
-			 * moves. One line tells those apart on the next stick. */
-			if (gpu_debug_enabled())
+			 * moves. The room line tells those apart. The wait lines
+			 * are once a boot: the packet the PFP is polling, and the
+			 * dword at that address. */
+			if (gpu_debug_enabled()) {
+				uint32 ihRptr = 0;
+				uint32 ihWptr = 0;
+				uint32 eop = 0;
+				r5_gfx9_debug_wait();
 				r5_gfx9_debug_room();
+				r5_gfx9_ih_ptrs(&ihRptr, &ihWptr);
+				r5_gfx9_ih_counts(NULL, NULL, &eop);
+				dprintf("radeon_hd: wait ih rptr %08lx wptr %08lx eop %lu\n",
+					(unsigned long)ihRptr, (unsigned long)ihWptr,
+					(unsigned long)eop);
+			}
 			return B_BUSY;
 		}
 		gpu_unlock();
@@ -2035,9 +2050,7 @@ gpu_ib_pointer(gpu_client* client, uint64 va, uint64 bytes)
 			|| known->range >= kMaxRange)
 			continue;
 		gpu_bo* bo = gpu_bo_get(client, client->handles[known->handleIndex]);
-		if (bo == NULL || bo->backing == NULL
-			|| bo->backing->domain != R5_GPU_DOMAIN_GTT
-			|| bo->backing->kernel == NULL)
+		if (bo == NULL || bo->backing == NULL || bo->backing->kernel == NULL)
 			continue;
 		gpu_range* range = &bo->ranges[known->range];
 		if (!range->live || va < range->va
@@ -2051,9 +2064,10 @@ gpu_ib_pointer(gpu_client* client, uint64 va, uint64 bytes)
 	}
 	for (uint32 h = 0; h < client->handleCount; h++) {
 		gpu_bo* bo = gpu_bo_get(client, client->handles[h]);
-		if (bo == NULL || bo->backing == NULL
-			|| bo->backing->domain != R5_GPU_DOMAIN_GTT
-			|| bo->backing->kernel == NULL)
+		/* GTT is cached. VRAM is the write-combined BAR, and only after
+		 * the first map. Both are pushed before the doorbell. A buffer
+		 * with no kernel pointer is skipped. */
+		if (bo == NULL || bo->backing == NULL || bo->backing->kernel == NULL)
 			continue;
 		for (uint32 r = 0; r < kMaxRange; r++) {
 			gpu_range* range = &bo->ranges[r];
@@ -2079,6 +2093,44 @@ gpu_ib_pointer(gpu_client* client, uint64 va, uint64 bytes)
 		}
 	}
 	return NULL;
+}
+
+
+/* One level. The dword after the header pair is the child size. A
+ * buffer that does not start on a packet is walked a dword at a time
+ * until a type-3 header is found. At most four children. */
+static void
+gpu_flush_chain(gpu_client* client, uint8* cpu, uint32 dwords)
+{
+	if (cpu == NULL || dwords < 4)
+		return;
+	const uint32* words = (const uint32*)cpu;
+	uint32 i = 0;
+	uint32 followed = 0;
+	while (i + 3 < dwords && followed < 4) {
+		uint32 header = words[i];
+		if ((header >> 30) != 3u) {
+			i++;
+			continue;
+		}
+		uint32 count = (header >> 16) & 0x3fffu;
+		uint32 step = count + 2u;
+		if (step < 2u || i + step > dwords)
+			break;
+		if (((header >> 8) & 0xffu) == 0x3fu && count >= 2u) {
+			uint64 child = r5_cs_ib_va(words[i + 1u], words[i + 2u]);
+			uint32 childDw = words[i + 3u] & 0xfffffu;
+			if (child != 0 && childDw != 0 && childDw <= 65536u) {
+				uint8* childCpu = gpu_ib_pointer(client, child,
+					(uint64)childDw * 4u);
+				if (childCpu != NULL && childCpu != cpu) {
+					gpu_flush_lines(childCpu, (uint64)childDw * 4u);
+					followed++;
+				}
+			}
+		}
+		i += step;
+	}
 }
 
 
@@ -2193,15 +2245,18 @@ gpu_submit(gpu_client* client, void* buffer, size_t length)
 		return status;
 	/* A GTT indirect buffer is MTYPE_NC and snooped. The PTE flags stay
 	 * as they are. The lines of the remembered buffer are flushed, then
-	 * one fence, before the doorbell. clflushopt and sfence when the CPU
-	 * has them, otherwise clflush and mfence. The pointer is the kernel
-	 * area, never the user clone (SMAP).
+	 * one chained buffer found in it, then one fence, before the
+	 * doorbell. clflushopt and sfence when the CPU has them, otherwise
+	 * clflush and mfence. The pointer is the kernel area, never the
+	 * user clone (SMAP). A second chain is not flushed.
 	 */
 	for (uint32 i = 0; i < in.ib_count; i++) {
 		uint64 bytes = (uint64)ibs[i].dwords * 4;
 		uint8* cpu = gpu_ib_pointer(client, ibs[i].gpu_va, bytes);
-		if (cpu != NULL)
-			gpu_flush_lines(cpu, bytes);
+		if (cpu == NULL)
+			continue;
+		gpu_flush_lines(cpu, bytes);
+		gpu_flush_chain(client, cpu, ibs[i].dwords);
 	}
 	if (gpu_clflushopt())
 		asm volatile("sfence" ::: "memory");

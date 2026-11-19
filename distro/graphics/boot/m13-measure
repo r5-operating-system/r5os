@@ -218,7 +218,7 @@ fi
 boot=
 folder=m13
 if [ -f "$radeon" ]; then
-	boot=$(sed -n 's/^gpu_m13f_boot[[:space:]]*\([1234]\).*/\1/p' "$radeon" \
+	boot=$(sed -n 's/^gpu_m13f_boot[[:space:]]*\([12345]\).*/\1/p' "$radeon" \
 		| head -n 1)
 	if [ -n "$boot" ]; then
 		folder=m13f
