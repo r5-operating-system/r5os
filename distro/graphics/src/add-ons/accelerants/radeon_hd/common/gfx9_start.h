@@ -77,6 +77,9 @@ bool r5_gfx9_user_room(uint32 dwords);
 uint32 r5_gfx9_user_commit_dwords(uint32 count);
 /* Continuing write count, and the CP read pointer as a ring offset. */
 void r5_gfx9_ring_ptrs(uint64* wptr, uint64* rptrOffset);
+/* gpu_debug, at most once a second: MMIO rptr against the writeback the
+ * room check trusts, and how many dwords each one still calls free. */
+void r5_gfx9_debug_room();
 bool r5_gfx9_fence_offset(uint64* offset);
 uint64 r5_gfx9_user_fence_mc();
 /* fenceCtx is the value handed out at AMDGPU_CTX create. preambleSeen

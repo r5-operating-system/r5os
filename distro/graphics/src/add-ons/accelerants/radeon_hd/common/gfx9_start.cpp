@@ -4243,6 +4243,43 @@ r5_gfx9_ring_ptrs(uint64* wptr, uint64* rptrOffset)
 }
 
 
+void
+r5_gfx9_debug_room()
+{
+	if (sHost == NULL || sHost->log == NULL || sHost->read32 == NULL)
+		return;
+	static bigtime_t sLastRoom = 0;
+	bigtime_t now = system_time();
+	if (sLastRoom != 0 && now - sLastRoom < 1000000)
+		return;
+	sLastRoom = now;
+	uint32 mmio = Read32(OUT, radeon_gfx9_byte(kGfx9Seg0, mmCP_RB0_RPTR));
+	uint64 wb = 0;
+	if (sRadeonGfx9Ring.fenceAddress != NULL)
+		wb = *(volatile uint64*)(sRadeonGfx9Ring.fenceAddress + 256);
+	uint64 wptr = sRadeonGfx9Ring.submitted;
+	uint32 dwords = 0;
+	if (sRadeonGfx9Ring.ringBytes >= sizeof(uint32))
+		dwords = sRadeonGfx9Ring.ringBytes / sizeof(uint32);
+	uint64 freeMmio = 0;
+	uint64 freeWb = 0;
+	if (dwords >= 2 && (dwords & (dwords - 1u)) == 0) {
+		uint64 fromMmio = r5_gfx9_rptr_count(dwords, wptr, mmio);
+		uint64 fromWb = r5_gfx9_rptr_count(dwords, wptr,
+			wb != 0 ? wb : (uint64)mmio);
+		freeMmio = r5_gfx9_ring_space(dwords, wptr, fromMmio);
+		freeWb = r5_gfx9_ring_space(dwords, wptr, fromWb);
+	}
+	uint32 cp = Read32(OUT, radeon_gfx9_byte(kGfx9Seg0, mmCP_STAT));
+	sHost->log(sHost->cookie,
+		"radeon_hd: room mmio %08lx wb %llx wptr %llu free_mmio %llu "
+		"free_wb %llu cp %08lx\n",
+		(unsigned long)mmio, (unsigned long long)wb,
+		(unsigned long long)wptr, (unsigned long long)freeMmio,
+		(unsigned long long)freeWb, (unsigned long)cp);
+}
+
+
 static bool
 r5_ring_doorbell()
 {

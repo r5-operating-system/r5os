@@ -438,6 +438,7 @@ SkiaGpu::SkiaGpu()
 	fBackend(NULL),
 	fForceFail(false),
 	fShutDown(false),
+	fAbandoned(0),
 	fRecorderBudget(RecorderOptions::kDefaultRecorderBudget),
 	fWake(NULL),
 	fWakeCookie(NULL),
@@ -470,6 +471,13 @@ SkiaGpu::~SkiaGpu()
 void
 SkiaGpu::DestroyContext()
 {
+	if (atomic_get(&fAbandoned) != 0) {
+		BAutolock _(fLock);
+		// The context still points at the device. Leave both.
+		fContext = NULL;
+		fBackend = NULL;
+		return;
+	}
 	Shutdown();
 	BAutolock _(fLock);
 	// M13 step 4: RunWork() may wait for its fence without the lock; the
@@ -926,6 +934,8 @@ void
 SkiaGpu::DeleteRecorder(void* recorder)
 {
 	BAutolock _(fLock);
+	if (atomic_get(&fAbandoned) != 0)
+		return;
 	delete (Recorder*)recorder;
 }
 
@@ -1006,15 +1016,47 @@ SkiaGpu::RunWork(const char** _reason)
 	if (fRunInFlight) {
 		VkFence fence = (VkFence)fRunFence;
 		bigtime_t waitStart = system_time();
-		VkResult result;
-		do {
-			// a late GPU is not a failure (M11 decision 14)
-			result = sWaitForFences(sDevice, 1, &fence, VK_TRUE,
-				1000000000ull);
-		} while (result == VK_TIMEOUT);
+		// The first second stays under fLock, as this wait did before.
+		// A fence that signals in that second is the normal path: no
+		// other thread enters, and fRunInFlight stays as this run left it.
+		// a late GPU is not a failure (M11 decision 14)
+		VkResult result = sWaitForFences(sDevice, 1, &fence, VK_TRUE,
+			1000000000ull);
+		if (result == VK_TIMEOUT) {
+			// The ring has not moved. Drop fLock so Abandon() can take
+			// it. The fence is the local copy above, not fRunFence.
+			//
+			// fLock is taken by RunWork, NewRecorder, DeleteRecorder,
+			// AddTarget, RemoveTarget, Shutdown, Abandon and
+			// DestroyContext. RunWork is this thread: the compose thread
+			// calls it only when no draw thread exists. It is the only
+			// writer of fRunInFlight. DestroyContext is the other writer
+			// of fRunFence, and the compose thread calls it only after
+			// this draw thread has returned. Abandon and Shutdown set
+			// fShutDown and do not free the fence or the context.
+			// NewRecorder, DeleteRecorder, AddTarget and RemoveTarget do
+			// not write fRunInFlight or fRunFence. The snap below reads
+			// fTargets only after this relock.
+			bool unlock = fLock.CountLocks() == 1;
+			if (unlock) {
+				fWaitingUnlocked = true;
+				fLock.Unlock();
+			}
+			do {
+				if (atomic_get(&fAbandoned) != 0)
+					result = VK_ERROR_DEVICE_LOST;
+				else
+					result = sWaitForFences(sDevice, 1, &fence, VK_TRUE,
+						1000000000ull);
+			} while (result == VK_TIMEOUT);
+			if (unlock) {
+				fLock.Lock();
+				fWaitingUnlocked = false;
+			}
+		}
 		fRunInFlight = false;
 		Profile(kTimeDeliver, system_time() - waitStart);
-		if (result != VK_SUCCESS) {
+		if (atomic_get(&fAbandoned) != 0 || result != VK_SUCCESS) {
 			*_reason = "device lost";
 			atomic_set64(&fDone, ticket);
 			_ReleaseWaiters();
@@ -1198,36 +1240,63 @@ SkiaGpu::RunWork(const char** _reason)
 			// itself still waits only on the GPU (the semaphores); nothing
 			// is read back.
 			{
-				// M13 step 4: the wait is without fLock (5625U stick 3, on
+				// The first second stays under fLock. A fence that signals
+				// in that second never opens the lock. M13 step 4: a
+				// longer wait is without fLock (5625U stick 3, on
 				// Lavapipe: one run's fence took 19.5 s at the first boot,
 				// and Sign in's window waited for it in NewRecorder() and
-				// AddTarget()). Everything shared was changed under the
-				// lock before this; RemoveTarget() and Shutdown() find the
-				// items in fInFlight and let go of their targets there.
-				// The draw thread is the only one in RunWork(), and no
-				// queue lock is held, so neither lock waits for the GPU.
-				bool unlock = fLock.CountLocks() == 1;
-				if (unlock) {
-					fInFlight = &items;
-					fWaitingUnlocked = true;
-					fLock.Unlock();
-				}
+				// AddTarget()). The same open lock lets Abandon() run
+				// when the ring is not moving.
+				//
+				// fLock is taken by RunWork, NewRecorder, DeleteRecorder,
+				// AddTarget, RemoveTarget, Shutdown, Abandon and
+				// DestroyContext. RunWork is this thread, and it is the
+				// only writer of fRunInFlight. The fence is the local copy
+				// from before this wait. DestroyContext writes fRunFence
+				// only after this draw thread has returned. Abandon and
+				// Shutdown do not free it. While the lock is open,
+				// fInFlight points at this list: RemoveTarget may clear
+				// one item's target, and this loop treats a NULL target
+				// as already gone. NewRecorder, DeleteRecorder and
+				// AddTarget do not write that list or the fence. The
+				// items are read again only after this relock.
 				// a late GPU is not a failure (M11 decision 14)
-				VkResult result;
-				do {
-					result = sWaitForFences(sDevice, 1, &fence, VK_TRUE,
-						1000000000ull);
-				} while (result == VK_TIMEOUT);
-				if (unlock) {
-					fLock.Lock();
-					fInFlight = NULL;
-					fWaitingUnlocked = false;
+				VkResult result = sWaitForFences(sDevice, 1, &fence, VK_TRUE,
+					1000000000ull);
+				if (result == VK_TIMEOUT) {
+					bool unlock = fLock.CountLocks() == 1;
+					if (unlock) {
+						fInFlight = &items;
+						fWaitingUnlocked = true;
+						fLock.Unlock();
+					}
+					do {
+						if (atomic_get(&fAbandoned) != 0)
+							result = VK_ERROR_DEVICE_LOST;
+						else
+							result = sWaitForFences(sDevice, 1, &fence,
+								VK_TRUE, 1000000000ull);
+					} while (result == VK_TIMEOUT);
+					if (unlock) {
+						fLock.Lock();
+						fInFlight = NULL;
+						fWaitingUnlocked = false;
+					}
 				}
-				if (result != VK_SUCCESS) {
+				if (atomic_get(&fAbandoned) != 0 || result != VK_SUCCESS) {
 					*_reason = "device lost";
 					ok = false;
 				}
 				fRunInFlight = false;
+			}
+			if (atomic_get(&fAbandoned) != 0) {
+				// The recorder and its surfaces stay. Destroying them
+				// calls back into RADV.
+				for (size_t i = 0; i < items.size(); i++)
+					(void)items[i].release();
+				atomic_set64(&fDone, ticket);
+				_ReleaseWaiters();
+				return false;
 			}
 			// read_done() copies into the bitmaps from here (DestroyContext()
 			// waits for fWaitingUnlocked, so the context is still there)
@@ -1346,10 +1415,35 @@ SkiaGpu::TicketDone(int64 ticket)
 
 
 void
+SkiaGpu::Abandon()
+{
+	BAutolock _(fLock);
+	if (atomic_get(&fAbandoned) != 0)
+		return;
+	atomic_set(&fAbandoned, 1);
+	// A run may be between its unlock and the fence. Its surfaces stay
+	// with the leaked recorder; do not reset them from here.
+	fInFlight = NULL;
+	fWaitingUnlocked = false;
+	for (int32 i = 0; i < fTargets.CountItems(); i++) {
+		SkiaTarget* target = fTargets.ItemAt(i);
+		if (target->Lock()) {
+			target->LeakGpu();
+			target->Unlock();
+		}
+	}
+	fShutDown = true;
+	atomic_set64(&fDone, atomic_get64(&fTicket));
+	atomic_set(&fWindowRunDone, 1);
+	_ReleaseWaiters();
+}
+
+
+void
 SkiaGpu::Shutdown()
 {
 	BAutolock _(fLock);
-	if (fShutDown)
+	if (atomic_get(&fAbandoned) != 0 || fShutDown)
 		return;
 	// M13 step 4: a run that waits for its fence without the lock holds
 	// surfaces of the targets; they go before the recorders do

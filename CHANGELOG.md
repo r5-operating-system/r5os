@@ -1,5 +1,31 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - GPU hang on stick 61, and the desktop after the device is lost
+
+Problem: Stick 61 on the 5625U (main 0640813f88, Try R5, boot 1) hung the GFX ring during the Skia warm-up. The last accepted submit was at 10.705 s (`ib va ffff800100001000`, 1712 dwords). At 10.825 s `CS_SUBMIT` returned `B_BUSY` (`0x8000000e`, ring room, 100 ms). app_server logged `gpu draw off: submit` and `gpu draw warm up 198 ms`, status General system error. At 24.8 s the self-test read the command processor and marked the GPU lost. The screen stayed a striped moiré pattern. vkcube asserted on the error and the debugger opened. Stick 60 (e0f8560010, no radeon_hd settings) finished the same warm-up in 2570 ms with no refused submit.
+
+What the dump shows (Linux 6.12 packet names from Mesa `sid.h`, `CP_STAT` bits as this driver already names them):
+
+- The ring is 1024 dwords. The kernel write pointer was `0x700` (1792). The writeback read pointer was still `0x3b6`, the value from the kernel fence. The MMIO read pointer was `0x50`. That is 154 dwords past `0x3b6` after one wrap of the 1024-dword ring, and it was still there 14 s later. The room check trusts the writeback, so it saw 181 free dwords and refused the next job. The command processor had not moved on.
+- The eight dwords at the MMIO read pointer are `0xffff1000`, the one-dword `PACKET3` NOP this ring uses as padding. The IB1 base was `0xf3f0000000` with size 0, so the prefetch was not inside an indirect buffer. `CP_ROQ_IB1_STAT` was `0x00a100a1`.
+- `CP_STAT` was `0x94808200`. Bit 15 (PFP) was set. Bit 17 (ME) and bit 14 (the VM walker) were clear. `GRBM_STATUS` was `0xa0003028` (bit 31 is the `GUI_ACTIVE` bit this driver already tests). `CP_STALLED_STAT1/3/2` were `0x00000c00`, `0x00000800` and then `0x00100000` on the second read. The ME instruction pointer was `0x0a` and the PFP instruction pointer was `0xf0b` (firmware program counters, not ring offsets).
+- The header FIFO, oldest first, ends in `DMA_DATA` (`0xc0055000`, opcode `0x50`) on the ME and `WAIT_REG_MEM` (`0xc0053c00`, opcode `0x3c`) on the PFP. The PFP was inside that wait. The ME was not executing. Earlier headers in the same FIFO are `RELEASE_MEM` (`0x49`), `WRITE_DATA` (`0x37`), `INDIRECT_BUFFER` (`0x3f`), and a count-0 type-3 packet `0xc0001700` (opcode `0x17`), which `sid.h` does not name.
+
+What did not cause it: #4468 and #4469 do not change the GPU. `libvulkan_radeon.so` in mesa_radv 25.3.6-11 is the -10 library. `gpu_selftest` and `gpu_m13_boot` run the self-test at 24.8 s, after the refuse. `gpu_debug` prints a line per map and per submit, reads `CC_RB_SHADER_ARRAY_CONFIG` when a client asks for the active CUs, and on the compose path adds timestamp queries. None of those ran a test submit, and none of them change the ring program, the PSP load, the reset, or the page tables. The CU reads in this boot are before the first submit. The hang is the PFP stuck in `WAIT_REG_MEM` inside a job the ring had already accepted. Stick 60 ran that same job stream without the debug settings and did not stick. One boot cannot show that the settings caused it. It is the hang stick 60 did not hit. The GFX9 contracts are unchanged.
+
+What changed:
+
+- When the compositor gives up on the GPU, Skia drops its recorder and surface pointers and does not destroy them. `vkDeviceWaitIdle` and `vkDestroyDevice` are not called. A window that closes later no longer enters Graphite's destructor. The draw thread's fence wait notices that and returns, so the switch is not stuck behind the ring. The back buffer is copied to the front on the CPU before the compose thread finishes. The log line is `left radv`. Painter keeps drawing. vkcube is unchanged.
+- With `gpu_debug`, a refused `CS_SUBMIT` that waited out the ring room logs one line a second: `room mmio … wb … wptr … free_mmio … free_wb … cp …`. `free_wb` is what the room check used. `free_mmio` is the same sum from the register. A stall and a stale writeback do not look the same on the next stick.
+
+The fence wait keeps its first second under the Skia lock. The lock is dropped only after that wait returns a timeout, so a running GPU does not change who can enter Skia. `fAbandoned` is an `int32` updated with `atomic_set` and read with `atomic_get`.
+
+Tested: `scripts/build-locked.sh` on this machine (WSL). `jam` exited 0 (`...updated 8638 target(s)...`, 19 Nov 2026, 19:18 Europe/Amsterdam) and `install-mesa-packages.sh` exited 0. That check looks for `mesa_radv-25.3.6-1-` and requires `mesa_radv-25.3.6-11`. An earlier note that it rejected `-11` came from a stale checkout of the script. Stick 61's build reported `mesa_exit=0`.
+
+QEMU, KVM, a private copy of `r5-os.image`, no other QEMU was running. A GTK window wedged WSL, so this boot used `-display none` and sent Enter over QMP. Lavapipe (`gpu compositor on lavapipe: no render node`, `gpu draw on llvmpipe`). The desktop came up (Tracker and Deskbar). The session then opened a Tracker folder, Terminal and About, moved About (`hey` set the frame, error 0) and closed it (`hey` quit returned true). The syslog has `gpu draw warm up 42246 ms` and has no `left radv` and no `device lost`. 19 Nov 2026, 19:37–19:45 Europe/Amsterdam. No stick. Why the PFP stopped in `WAIT_REG_MEM` is still open; the `gpu_debug` room line stays so the next stick can show what that wait was polling.
+
+Limits: the warm-up hang is not fixed. A and B stay unproven until a stick. The lost device is leaked for the rest of the boot; the ring is not reset here.
+
 ## 2026-11-19 - mesa_radv 25.3.6-11 repacked with the real package tool
 
 Problem: the -11 package from #4468 was made without Haiku's `package` tool. Four scripts were right (`boot-next`, `check`, `check-user`, `m13-measure`), but nine had the right size and the wrong content: `boot2.sh`, `check.sh`, `m8-run`, `m8-boot2`, `m8-show`, `m11-vulkan`, `m11-scroll`, `m12-measure` and `m12-scenario`. The m13f stick did not use them, but `check-pre-stick.py` compares every script and would fail.

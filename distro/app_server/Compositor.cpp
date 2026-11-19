@@ -1730,6 +1730,21 @@ Compositor::_ExitVulkan()
 		return;
 	}
 
+	// A lost device: WaitIdle does not return while the ring is stuck,
+	// and vkDestroyDevice then runs while a window still has a recorder
+	// (stick 61, VulkanResourceProvider). Leave the device in place.
+	// The engines are already on the screen.
+	if (fSkia != NULL && fSkia->Abandoned()) {
+		_StopDrawThread();
+		fSkia->DestroyContext();
+		if (!fOnLavapipe)
+			log_line("left radv");
+		delete vk;
+		fFrameWidth = 0;
+		fFrameHeight = 0;
+		return;
+	}
+
 	// A device that failed half way has some functions not loaded; they
 	// are loaded in this order, so the last one tells all were.
 	if (vk->device != VK_NULL_HANDLE && vk->vkDeviceWaitIdle != NULL) {
@@ -4123,10 +4138,12 @@ Compositor::_TurnOff(const char* reason)
 		BAutolock _(fLayerLock);
 		fLayers->MakeEmpty();
 	}
-	// M12: every engine is on the screen now (Painter); the GPU images go
-	// before the device does. Decision 8: one line when the drawing failed.
+	// M12: every engine is on the screen now (Painter). The device stays
+	// allocated: destroying it waits on the hung ring, and a window that
+	// closes afterwards faulted in Graphite (stick 61). Decision 8: one
+	// line when the drawing failed.
 	if (fSkia != NULL) {
-		fSkia->Shutdown();
+		fSkia->Abandon();
 		_StopDrawThread();
 	}
 	if (fDrawFailure)
@@ -4136,8 +4153,20 @@ Compositor::_TurnOff(const char* reason)
 
 	fDesktop->CompositorTurnedOff();
 	fDesktop->UnlockAllWindows();
+	// The back buffer is the last frame the CPU still has. Copy it to the
+	// front now, on this thread, so a striped scanout does not stay up
+	// until the window threads have redrawn.
+	GPUCopy::SetFrontCurrent(false);
+	if (fScreen != NULL && fScreen->LockParallelAccess()) {
+		if (fFrameWidth > 0 && fFrameHeight > 0) {
+			BRegion whole(BRect(0, 0, (float)fFrameWidth - 1,
+				(float)fFrameHeight - 1));
+			fScreen->InvalidateRegion(whole);
+		}
+		fScreen->UnlockParallelAccess();
+	}
 	// The device goes when the compose thread ends, after its last
-	// references to the window buffers are gone.
+	// references to the window buffers are gone. Abandon() leaves it.
 }
 
 

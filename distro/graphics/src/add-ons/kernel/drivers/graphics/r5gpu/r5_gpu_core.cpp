@@ -1747,6 +1747,9 @@ gpu_ibs_mapped(gpu_client* client, const r5_gpu_ib* ibs, uint32 count,
 }
 
 
+void r5_gfx9_debug_room();
+
+
 static status_t
 gpu_wait_room(void* info, uint32 dwords)
 {
@@ -1768,8 +1771,13 @@ gpu_wait_room(void* info, uint32 dwords)
 			return B_OK;
 		if (sLost)
 			return ECANCELED;
-		if (now >= deadline)
+		if (now >= deadline) {
+			/* The writeback can sit still while the MMIO read pointer
+			 * moves. One line tells those apart on the next stick. */
+			if (gpu_debug_enabled())
+				r5_gfx9_debug_room();
 			return B_BUSY;
+		}
 		gpu_unlock();
 		entry.Wait(B_RELATIVE_TIMEOUT, deadline - now);
 		gpu_lock();
