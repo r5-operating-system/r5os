@@ -40,6 +40,7 @@ struct HFPGateway::Session {
 	int			codecPending;	// +BCS sent, waiting for AT+BCS
 	bigtime_t	codecDeadline;
 	bool		done;
+	bigtime_t	firstWait;	// before the first RFCOMM connect
 	HFPGateway*	gateway;
 };
 
@@ -111,7 +112,8 @@ HFPGateway::Stop()
 
 
 void
-HFPGateway::DeviceReady(const bdaddr_t& address, uint8 channel)
+HFPGateway::DeviceReady(const bdaddr_t& address, uint8 channel,
+	bigtime_t wait)
 {
 	BAutolock locker(fLock);
 	if (fQuitting)
@@ -128,6 +130,8 @@ HFPGateway::DeviceReady(const bdaddr_t& address, uint8 channel)
 		if (memcmp(&session->address, &address, sizeof(address)) == 0) {
 			session->channel = channel;
 			session->again = true;
+			if (wait > session->firstWait)
+				session->firstWait = wait;
 			return;
 		}
 	}
@@ -144,6 +148,7 @@ HFPGateway::DeviceReady(const bdaddr_t& address, uint8 channel)
 	session->voiceFailed = false;
 	session->codecPending = 0;
 	session->codecDeadline = 0;
+	session->firstWait = wait;
 	session->gateway = this;
 	session->thread = spawn_thread(_SessionThread, "bluetooth hfp",
 		B_NORMAL_PRIORITY, session);
@@ -206,7 +211,13 @@ void
 HFPGateway::_Run(Session* session)
 {
 	int32 failures = 0;
-	bigtime_t delay = fOptions.connectDelay;
+	bigtime_t delay;
+	{
+		BAutolock locker(fLock);
+		delay = session->firstWait > 0 ? session->firstWait
+			: fOptions.connectDelay;
+		session->firstWait = 0;
+	}
 	while (true) {
 		_Sleep(delay);
 		if (fQuitting)

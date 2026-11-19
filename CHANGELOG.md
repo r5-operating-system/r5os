@@ -1,5 +1,15 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - A paired headset opens A2DP before hands-free
+
+Problem: On the 5625U the WH-1000XM3 paired, the link was authenticated and encrypted, and SDP found A2DP (0x110b) and HFP (0x111e, RFCOMM channel 10). The next line was "RFCOMM: cannot open PSM 3: Connection refused", then "hfp: trying again (1 of 2)", and about two seconds later "link down (reason 0x13, the device ended it)". A2DP was not opened. The class of device was not yet Audio/Video, so bluetooth_audio skipped the headset, and hands-free was the first profile channel. The headset refused RFCOMM and ended the link.
+
+What changed: A paired device with an Audio Sink record is a headset even when the class is still 0. bluetooth_audio logs "opening AVDTP" and connects that channel. Hands-free waits one second when an Audio Sink record is present, and still retries. A hands-free connect runs only while the link is encrypted.
+
+Limits: That the WH-1000XM3 stays connected and plays audio is only proven on the 5625U. The microphone (HFP service level, then the voice link) was not reached. The next stick should show "bluetooth_audio: opening AVDTP", no "cannot open PSM 3" before that, the link still up, and for the microphone "hfp: service level connection up" followed by "hfp: microphone wanted".
+
+Tested: not on the 5625U.
+
 ## 2026-11-19 - SAE authentication is sent after the radio is on the channel
 
 Problem: On the 5625U a WPA3 join of "Skynet Guest" selected SAE and management-frame protection, derived the password element, and logged Event EXTERNAL_AUTH. The commit scalar was computed and then "Authentication with ... timed out" after 10 seconds. No SAE Authentication frame left the machine. wpa_supplicant does call send_mlme, and that ioctl calls ieee80211_send_sae_auth(). The join that tunes the MT7921 (stay-on-channel) is only queued by ieee80211_sta_join(), so the commit was handed to the firmware while the radio was still on the scan channel. The access point never answered.

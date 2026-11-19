@@ -477,7 +477,10 @@ A2DPSource::_PairedHeadset(bdaddr_t* device)
 		if (size != (ssize_t)sizeof(bdaddr_t) || reply.GetBool("le", i, true))
 			continue;
 		const uint32 deviceClass = reply.GetUInt32("class", i, 0);
-		if (((deviceClass >> 8) & 0x1f) != 0x04)
+		// Class 0 until the radio reports it: SDP's Audio Sink (0x110b)
+		// is enough. The WH-1000XM3 was that, and A2DP never opened.
+		if (((deviceClass >> 8) & 0x1f) != 0x04
+			&& !reply.GetBool("a2dp", i, false))
 			continue;
 		const bool connected = reply.GetBool("connected", i, false);
 		if (!found || connected) {
@@ -740,6 +743,7 @@ A2DPSource::_Manage()
 				continue;
 			}
 			fLastAttempt = system_time();
+			syslog(LOG_INFO, "bluetooth_audio: opening AVDTP");
 			int fd = _Connect(device, kPSMAVDTP);
 			if (fd < 0)
 				continue;
