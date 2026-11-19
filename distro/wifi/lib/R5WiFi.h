@@ -325,7 +325,7 @@ private:
 			BAppearanceKit::BPasswordControl* fPassword;
 			class BCheckBox*	fRemember;
 			class BMenuField*	fSecurity;
-			class BTextView*	fStatus;
+			class BStringView*	fStatus;
 			class BButton*		fOther;
 			class BButton*		fConnect;
 			sem_id				fDone;

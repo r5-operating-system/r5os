@@ -76,7 +76,7 @@ public:
 	// Hands-Free service on this RFCOMM channel. Starts a session, or
 	// asks the running one to try again when it ends.
 			void				DeviceReady(const bdaddr_t& address,
-									uint8 channel);
+									uint8 channel, bigtime_t wait = 0);
 	// The battery in percent while a session runs and the headset sent
 	// one; -1 otherwise.
 			int32				Battery(const bdaddr_t& address);

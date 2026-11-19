@@ -1449,8 +1449,18 @@ ieee80211_ioctl_delkey(struct ieee80211vap *vap, struct ieee80211req *ireq)
 		ieee80211_node_delucastkey(ni);
 		ieee80211_free_node(ni);
 	} else {
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * wpa_supplicant flushes key indexes 0 through 5 at start. Indexes 0 to 3
+ * are the group-key slots. 4 and 5 are IGTK indexes and are not in
+ * iv_nw_keys (IEEE80211_WEP_NKID is 4). Deleting one that was never
+ * installed is not an error; the SIOCS80211 op 20 "Invalid Argument"
+ * lines were this check. Slots 0 to 3 are unchanged.
+ */
 		if (kid >= IEEE80211_WEP_NKID)
-			return EINVAL;
+			return 0;
+/* SPDX-SnippetEnd */
 		/* XXX error return */
 		ieee80211_crypto_delkey(vap, &vap->iv_nw_keys[kid]);
 	}

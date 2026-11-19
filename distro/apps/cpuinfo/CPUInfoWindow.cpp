@@ -19,7 +19,6 @@
 #include <Message.h>
 #include <PageHeader.h>
 #include <R5Icons.h>
-#include <ScrollView.h>
 #include <StringView.h>
 #include <TextView.h>
 #include <WindowEffects.h>
@@ -205,7 +204,7 @@ add_row(BGridLayout* grid, int32 row, const char* label, const char* value,
 
 CPUInfoWindow::CPUInfoWindow()
 	:
-	BWindow(BRect(0, 0, 620, 560), "CPU Info", B_TITLED_WINDOW,
+	BWindow(BRect(0, 0, 640, 720), "CPU Info", B_TITLED_WINDOW,
 		B_AUTO_UPDATE_SIZE_LIMITS)
 {
 	CollectCpuReport(fReport);
@@ -226,7 +225,7 @@ CPUInfoWindow::CPUInfoWindow()
 		delete icon;
 	}
 
-	GlassSectionCard* hwCard = new GlassSectionCard("hw", "CPU hardware");
+	GlassSectionCard* hwCard = new GlassSectionCard("hw", "Processor");
 	BGridView* hwGrid = new BGridView(B_USE_DEFAULT_SPACING,
 		B_USE_SMALL_SPACING);
 	BGridLayout* hwLayout = hwGrid->GridLayout();
@@ -243,7 +242,7 @@ CPUInfoWindow::CPUInfoWindow()
 	BLayoutBuilder::Group<>((BGroupLayout*)hwCard->GetLayout())
 		.Add(hwGrid);
 
-	GlassSectionCard* r5Card = new GlassSectionCard("r5", "What R5 uses");
+	GlassSectionCard* r5Card = new GlassSectionCard("r5", "Enabled features");
 	BGridView* r5Grid = new BGridView(B_USE_DEFAULT_SPACING,
 		B_USE_SMALL_SPACING);
 	BGridLayout* r5Layout = r5Grid->GridLayout();
@@ -260,12 +259,7 @@ CPUInfoWindow::CPUInfoWindow()
 	cardsContainer->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
 	BLayoutBuilder::Group<>(cardsContainer, B_VERTICAL, B_USE_DEFAULT_SPACING)
 		.Add(hwCard)
-		.Add(r5Card)
-		.AddGlue();
-
-	BScrollView* scrollView = new BScrollView("scroll", cardsContainer, 0,
-		false, true, B_NO_BORDER);
-	scrollView->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
+		.Add(r5Card);
 
 	BButton* copyButton = new BButton("copy", "Copy report",
 		new BMessage(kMsgCopyReport));
@@ -273,15 +267,15 @@ CPUInfoWindow::CPUInfoWindow()
 	BLayoutBuilder::Group<>(this, B_VERTICAL, B_USE_DEFAULT_SPACING)
 		.SetInsets(B_USE_WINDOW_SPACING)
 		.Add(header)
-		.Add(scrollView, 1.0f)
+		.Add(cardsContainer)
 		.AddGroup(B_HORIZONTAL)
 			.AddGlue()
 			.Add(copyButton)
 		.End();
 
-	BAppearanceKit::set_view_glass(scrollView, true);
 	BAppearanceKit::set_view_glass(cardsContainer, true);
 
+	ResizeToPreferred();
 	CenterOnScreen();
 }
 

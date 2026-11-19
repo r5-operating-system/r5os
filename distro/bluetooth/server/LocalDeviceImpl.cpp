@@ -3139,6 +3139,31 @@ LocalDeviceImpl::R5Forget(const bdaddr_t& address)
 }
 
 
+static bool
+r5_paired_has_uuid(const BMessage& services, uint16 uuid)
+{
+	uint8 needle[3];
+	needle[0] = 0x19;
+	needle[1] = (uint8)(uuid >> 8);
+	needle[2] = (uint8)uuid;
+	BMessage record;
+	for (int32 i = 0; services.FindMessage("service", i, &record) == B_OK;
+			i++) {
+		const void* data;
+		ssize_t size;
+		if (record.FindData("0x0001", B_RAW_TYPE, &data, &size) != B_OK
+			|| size < 3)
+			continue;
+		const uint8* bytes = (const uint8*)data;
+		for (ssize_t n = 0; n + 3 <= size; n++) {
+			if (memcmp(bytes + n, needle, 3) == 0)
+				return true;
+		}
+	}
+	return false;
+}
+
+
 void
 LocalDeviceImpl::R5AddPaired(BMessage& reply)
 {
@@ -3156,6 +3181,7 @@ LocalDeviceImpl::R5AddPaired(BMessage& reply)
 		reply.AddBool("hid", false);
 		reply.AddBool("connected",
 			rd->conn_state == RemoteDevice::CONNECTED);
+		reply.AddBool("a2dp", r5_paired_has_uuid(rd->services, 0x110b));
 		// A headset sends its battery over HFP (step 7b); a game controller
 		// in its HID input reports (Battery Strength, bluetooth_hid).
 		int32 battery = -1;

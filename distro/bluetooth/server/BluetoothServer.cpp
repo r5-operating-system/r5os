@@ -1339,7 +1339,8 @@ BluetoothServer::_R5DeviceConnected(const bdaddr_t& address, void*)
 	for (int32 i = 0; i < server->fLocalDevicesList.CountItems(); i++) {
 		ServerRemoteDevice* rd
 			= server->fLocalDevicesList.ItemAt(i)->RemoteDeviceByAddr(address);
-		if (rd != NULL && rd->conn_state == RemoteDevice::CONNECTED)
+		if (rd != NULL && rd->conn_state == RemoteDevice::CONNECTED
+			&& rd->encryption_enabled != 0)
 			return true;
 	}
 	return false;
@@ -1387,6 +1388,31 @@ BluetoothServer::_R5Voice(const bdaddr_t& address, int codec, bool open,
 // SPDX-SnippetEnd
 
 
+static bool
+r5_service_uuid(const BMessage& services, uint16 uuid)
+{
+	uint8 needle[3];
+	needle[0] = 0x19;
+	needle[1] = (uint8)(uuid >> 8);
+	needle[2] = (uint8)uuid;
+	BMessage record;
+	for (int32 i = 0; services.FindMessage("service", i, &record) == B_OK;
+			i++) {
+		const void* data;
+		ssize_t size;
+		if (record.FindData("0x0001", B_RAW_TYPE, &data, &size) != B_OK
+			|| size < 3)
+			continue;
+		const uint8* bytes = (const uint8*)data;
+		for (ssize_t n = 0; n + 3 <= size; n++) {
+			if (memcmp(bytes + n, needle, 3) == 0)
+				return true;
+		}
+	}
+	return false;
+}
+
+
 void
 BluetoothServer::NotifyServices(ServerRemoteDevice* rd)
 {
@@ -1404,8 +1430,17 @@ BluetoothServer::NotifyServices(ServerRemoteDevice* rd)
 	// Step 7b: a headset with a Hands-Free service gets an HFP session
 	// (R5 is the Audio Gateway), whatever profile the call above chose.
 	uint8 channel = R5RFCOMMChannel(rd->services, kR5ServiceHandsFree);
-	if (channel != 0 && fHFPGateway != NULL)
-		fHFPGateway->DeviceReady(rd->bdaddr, channel);
+	bool audioSink = r5_service_uuid(rd->services, 0x110b);
+	if (audioSink) {
+		syslog(LOG_INFO, "bluetooth_server: audio sink; A2DP opens before "
+			"hands-free");
+	}
+	if (channel != 0 && fHFPGateway != NULL) {
+		// The WH-1000XM3 refused RFCOMM (PSM 3) and then ended the link
+		// when that was the first profile. Give AVDTP the first second.
+		fHFPGateway->DeviceReady(rd->bdaddr, channel,
+			audioSink ? 1000000 : 0);
+	}
 	// SPDX-SnippetEnd
 }
 

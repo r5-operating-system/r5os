@@ -455,9 +455,16 @@ BPasswordControl::Draw(BRect updateRect)
 		SetPenSize(1.0f);
 	}
 
-	SetHighColor(IsEnabled() ? bg : mix_color(bg,
-		ui_color(B_PANEL_BACKGROUND_COLOR), 128));
+	// The field is an opaque document colour. An alpha fill left the
+	// rounded rect translucent, so only the text view's own white showed.
+	rgb_color fill = IsEnabled() ? bg : mix_color(bg,
+		ui_color(B_PANEL_BACKGROUND_COLOR), 128);
+	fill.alpha = 255;
+	SetDrawingMode(B_OP_COPY);
+	SetHighColor(fill);
 	FillRoundRect(field, radius, radius);
+	SetDrawingMode(B_OP_ALPHA);
+	SetBlendingMode(B_CONSTANT_ALPHA, B_ALPHA_OVERLAY);
 
 	// The faint inner shadow along the top.
 	SetHighColor(0, 0, 0, 20);
