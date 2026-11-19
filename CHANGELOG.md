@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - mesa_radv 25.3.6-11 repacked with the real package tool
+
+Problem: the -11 package from #4468 was made without Haiku's `package` tool. Four scripts were right (`boot-next`, `check`, `check-user`, `m13-measure`), but nine had the right size and the wrong content: `boot2.sh`, `check.sh`, `m8-run`, `m8-boot2`, `m8-show`, `m11-vulkan`, `m11-scroll`, `m12-measure` and `m12-scenario`. The m13f stick did not use them, but `check-pre-stick.py` compares every script and would fail.
+
+What changed: `distro/mesa/pack-radv.py --tools-only` was run in WSL with the tree's `package` tool. The library is byte-identical to -10. The version stays 25.3.6-11.
+
+Tested: all 13 scripts were extracted from the new package and match `distro/graphics/boot`. In a WSL sandbox, `boot-next m13f` gives boots 1 to 4 and then clears the settings. Not on a stick.
+
 ## 2026-11-19 - WPA3 join, analog audio default, AVDTP logs, mesa_radv-25.3.6-11
 
 Problem: On the 5625U (stick 60, main e0f8560010):
