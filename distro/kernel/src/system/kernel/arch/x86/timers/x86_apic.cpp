@@ -115,13 +115,13 @@ apic_timer_set_hardware_timer(bigtime_t relativeTimeout)
 		return B_OK;
 	}
 
-	uint64 ticks = ((relativeTimeout * sApicTicsPerSec) / 1000000);
-	if (ticks == 0)
-		ticks = 1;
-	if (ticks > UINT32_MAX)
-		ticks = UINT32_MAX;
+	__uint128_t ticks128 = ((__uint128_t)relativeTimeout * sApicTicsPerSec) / 1000000;
+	if (ticks128 == 0)
+		ticks128 = 1;
+	if (ticks128 > UINT32_MAX)
+		ticks128 = UINT32_MAX;
 
-	apic_set_lvt_initial_timer_count(ticks);
+	apic_set_lvt_initial_timer_count((uint32)ticks128);
 	return B_OK;
 }
 

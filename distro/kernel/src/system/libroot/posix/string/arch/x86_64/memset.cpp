@@ -110,15 +110,7 @@ using MemsetBulk = void (*)(uint8_t*, uint8_t, size_t);
 static MemsetBulk sMemsetBulk = memset_sse;
 static size_t sMemsetStreaming;
 static const size_t sMemsetRepFrom = 2048;
-
-
-static void
-memset_choose_bulk(void)
-{
-	sMemsetStreaming = (size_t)r5_x86_cpu_llc() / 4 * 3;
-	if ((r5_x86_cpu_flags() & R5_CPU_ERMS) != 0)
-		sMemsetBulk = memset_repstos;
-}
+static int sMemsetChosen;
 
 
 extern "C" void*
@@ -134,31 +126,32 @@ memset(void* ptr, int chr, size_t length)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-	static int chosen;
-	if (__atomic_load_n(&chosen, __ATOMIC_ACQUIRE) != 2) {
-		int expected = 0;
-		if (__atomic_compare_exchange_n(&chosen, &expected, 1, false,
-				__ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
-			memset_choose_bulk();
-			__atomic_store_n(&chosen, 2, __ATOMIC_RELEASE);
-		} else {
-			while (__atomic_load_n(&chosen, __ATOMIC_ACQUIRE) != 2)
-				__asm__ __volatile__("pause");
-		}
+	MemsetBulk bulk;
+	size_t streaming;
+	if (__atomic_load_n(&sMemsetChosen, __ATOMIC_ACQUIRE) == 0) {
+		streaming = (size_t)r5_x86_cpu_llc() / 4 * 3;
+		bulk = (r5_x86_cpu_flags() & R5_CPU_ERMS) != 0
+			? memset_repstos : memset_sse;
+		__atomic_store_n(&sMemsetStreaming, streaming, __ATOMIC_RELAXED);
+		__atomic_store_n(&sMemsetBulk, bulk, __ATOMIC_RELAXED);
+		__atomic_store_n(&sMemsetChosen, 1, __ATOMIC_RELEASE);
+	} else {
+		streaming = __atomic_load_n(&sMemsetStreaming, __ATOMIC_RELAXED);
+		bulk = __atomic_load_n(&sMemsetBulk, __ATOMIC_RELAXED);
 	}
 
 #ifndef _KERNEL_MODE
-	if (length >= sMemsetStreaming) {
+	if (length >= streaming) {
 		memset_nt(destination, value, length);
 		return ptr;
 	}
 #endif
-	if (sMemsetBulk != memset_repstos || length < sMemsetRepFrom) {
+	if (bulk != memset_repstos || length < sMemsetRepFrom) {
 		memset_sse(destination, value, length);
 		return ptr;
 	}
 // SPDX-SnippetEnd
 
-	sMemsetBulk(destination, value, length);
+	bulk(destination, value, length);
 	return ptr;
 }
