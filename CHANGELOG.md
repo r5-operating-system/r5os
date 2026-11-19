@@ -8,7 +8,7 @@ What changed: CPU Info applies the glass colours in AllAttached, after the strin
 
 Limits: The 5625U screenshots are of the previous build. This change is what the code does; the short QEMU boot does not open these windows.
 
-Tested: not on the 5625U.
+Tested: not on the 5625U. One jam (`scripts/build-locked.sh`) and one short QEMU KVM boot of a private copy of `r5-os.image` (`q35`, `-display none`, not `scripts/run-qemu-r5.sh`) reached package activation, vesa and PS/2 with no panic. That boot does not open these windows.
 
 ## 2026-11-19 - A WPA3 join no longer deletes its own network
 
@@ -18,7 +18,7 @@ What changed: The Haiku join sets interface->conf->sae_pwe to SAE_PWE_BOTH (hunt
 
 Limits: SAE authentication against "Skynet Guest" is only proven on the 5625U. If the RSN element the supplicant sees has no SAE AKM or no management-frame protection, or if wpa 2.11 then refuses the MLD BSS because the driver has no MLO, the join still will not associate. The DELKEY index 4 and 5 errors are unchanged so the WPA2 key path is not touched.
 
-Tested: not on hardware in this change. The hpkg is built before the image jam.
+Tested: not on hardware in this change. The hpkg is built before the image jam. QEMU has no MT7921, so SAE was not run.
 
 ## 2026-11-19 - A direct window's view bitmap is drawn into the front buffer
 
@@ -28,7 +28,7 @@ What changed: When a directly accessing window sets a view bitmap, the server dr
 
 Limits: That the teapot moves on the 5625U is unproven here. A real BDirectWindow that writes the front buffer itself still has that rectangle drawn by the server when it also sets a view bitmap.
 
-Tested: not on hardware in this change.
+Tested: not on hardware in this change. QEMU has no AMD GPU, so the direct-window blit did not run.
 
 ## 2026-11-19 - L2CAP send timer no longer outlives its connection
 
@@ -40,7 +40,7 @@ What changed: l2cap_error_received() accepts the still-living HciConnection afte
 
 Limits: The panic, the XM3 staying connected, and A2DP playback are only proven on the 5625U. Why the controllers' links were reported as 0x16 is not fixed: this tree never sends that reason.
 
-Tested: not on hardware in this change.
+Tested: not on hardware in this change. QEMU has no Bluetooth controller, so the timer and the headset path did not run.
 
 ## 2026-11-19 - Restart syncs before anything else
 
@@ -50,7 +50,7 @@ What changed: system_shutdown() now syncs, runs the shutdown hooks, then resets 
 
 Limits: A restart that passes sync() and the hooks is only proven on the 5625U.
 
-Tested: not on hardware in this change. The jam and one short QEMU boot follow the five parts and do not restart a 5625U.
+Tested: not on the 5625U, so a restart that used to stop at teams_killed is unproven. One short QEMU KVM boot of a private image copy (q35, display none) accepted ACPI power off and the serial log showed enter reboot=0, sync_done, hooks_start, hooks_done, acpi_poweroff, then QEMU exited. Restart (reboot=1) was not run. QEMU is not the 5625U hang.
 
 ## 2026-11-19 - GFX9 interrupt ring (IH): barrier, carve-out read, overflow handling, and re-read counters
 
