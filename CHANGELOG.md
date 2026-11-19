@@ -1,5 +1,15 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - Restart syncs before anything else
+
+Problem: On the 5625U a restart's next-boot trail was "r5 previous shutdown: enter reboot=1 -> teams_killed" and nothing after it. Power off, which does not kill teams, reached the end of the trail. sync() never returned. kill_team() only signals a team's main thread and does not wait, so the vnode walk and the block cache ran while those teams were tearing the same objects down. No network share was mounted. The HP CMOS error only followed the forced power-off after that hang.
+
+What changed: system_shutdown() now syncs, runs the shutdown hooks, then resets or powers off. A restart and power off use that same order. Teams are not killed. distro/kernel/src/system/kernel/shutdown.cpp.
+
+Limits: A restart that passes sync() and the hooks is only proven on the 5625U.
+
+Tested: not on hardware in this change. The jam and one short QEMU boot follow the five parts and do not restart a 5625U.
+
 ## 2026-11-19 - GFX9 interrupt ring (IH): barrier, carve-out read, overflow handling, and re-read counters
 
 Problem (`generated/boot-5625u-53/syslog`, 5625U): while RADV/Zink ran, `radeon_hd` logged `ih client 0 src 0 ring 0 vmid 0 0000b514 ...` about once a second. Dword 0 `0x0000b514` decodes to CP (`0x14`), EOP (`181`), ring 0 — a normal end-of-pipe interrupt that `r5_gfx9_ih_parse()` decodes correctly. That means `r5_gfx9_ih_parse()` read zero before the GPU's write was visible, and the entry had landed by the time `dprintf()` printed it.

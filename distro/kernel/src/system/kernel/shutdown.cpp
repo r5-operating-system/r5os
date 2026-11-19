@@ -161,9 +161,6 @@ call_shutdown_hooks(bool reboot)
 status_t
 system_shutdown(bool reboot)
 {
-	int32 cookie = 0;
-	team_info info;
-
 	gKernelShutdown = true;
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
@@ -171,26 +168,18 @@ system_shutdown(bool reboot)
 	r5_shutdown_trail(reboot ? "enter reboot=1" : "enter reboot=0", true);
 // SPDX-SnippetEnd
 
-	// Now shutdown all system services!
-	// TODO: Once we are sure we can shutdown the system on all hardware
-	// checking reboot may not be necessary anymore.
-	if (reboot) {
-// SPDX-SnippetBegin
-// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
-// SPDX-License-Identifier: MIT
-		team_id currentTeam = team_get_current_team_id();
-// SPDX-SnippetEnd
-		while (get_next_team_info(&cookie, &info) == B_OK) {
-			if (info.team == B_SYSTEM_TEAM || info.team == currentTeam)
-				continue;
-			kill_team(info.team);
-		}
-// SPDX-SnippetBegin
-// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
-// SPDX-License-Identifier: MIT
-		r5_shutdown_trail("teams_killed", false);
-// SPDX-SnippetEnd
-	}
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Restart used to kill_team() every other team, then sync(). kill_team()
+	// only signals the team's main thread and does not wait, so sync() walked
+	// vnodes and the block cache while those teams were tearing them down.
+	// The next boot's trail stopped at "teams_killed": sync() never returned.
+	// Power off never killed teams and did reach the end. Both paths now
+	// sync, run the shutdown hooks, then reset or power off. A team is not
+	// killed: a dying app can take a lock sync() needs, or touch a device
+	// the hook just stopped.
+	// SPDX-SnippetEnd
 
 	sync();
 // SPDX-SnippetBegin
