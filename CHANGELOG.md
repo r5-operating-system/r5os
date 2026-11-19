@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - M13 follow-up, part 3: Lavapipe's vector width follows the CPU
+
+Problem: Lavapipe's vector width stayed at Mesa's own choice unless the radeon_hd setting named 128 or 256. On a CPU with AVX2 that leaves the wider vectors unused. On a plain x86-64-v2 CPU a forced 256 would be wrong.
+
+What changed: When the CPU has AVX2 and `LP_NATIVE_VECTOR_WIDTH` is not set yet, app_server sets it to 256 before Lavapipe starts. A CPU without AVX2 sets nothing. `gpu_lavapipe_vector` still overwrites either choice, and a value already in the environment is left as it is.
+
+Limits: Not measured. The line `lavapipe vector width 256 (avx2)` is the check. QEMU's virtual CPU may or may not advertise AVX2.
+
 ## 2026-11-19 - M13 follow-up, part 2: 2 MB pages for the GPU areas
 
 Problem: `amd64_large_pages` is on by default, and on the 5625U no real area was logged as using a 2 MB page. The GFX9 pool starts at an offset that is not a multiple of 2 MB. The GART CPU area is 1 MB. A GTT buffer is rounded to 4 KB, so the full-lock path, which asks for a 2 MB run only when the size is a multiple of 2 MB, never sees it. There was no line that said, once per area, whether that area got 2 MB pages.

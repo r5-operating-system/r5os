@@ -864,6 +864,17 @@ Compositor::Create(Desktop* desktop, HWInterface* screen)
 		snprintf(value, sizeof(value), "%d", options.lavapipeVector);
 		setenv("LP_NATIVE_VECTOR_WIDTH", value, 1);
 		log_line("lavapipe vector width %d (setting)", options.lavapipeVector);
+	} else if (getenv("LP_NATIVE_VECTOR_WIDTH") == NULL) {
+#if defined(__x86_64__)
+		/* x86-64-v2 stays the baseline. AVX2 picks Lavapipe's 256-bit
+		 * vectors; a CPU without it leaves Mesa's own choice. An
+		 * environment value already set is left alone, and the setting
+		 * above wins over both. */
+		if ((r5_x86_cpu_flags() & R5_CPU_AVX2) != 0
+			&& setenv("LP_NATIVE_VECTOR_WIDTH", "256", 0) == 0) {
+			log_line("lavapipe vector width 256 (avx2)");
+		}
+#endif
 	}
 	compositor->fWantScanout = options.scanout;
 	compositor->fZeroCopyOff = options.noZeroCopy ? 1 : 0;
