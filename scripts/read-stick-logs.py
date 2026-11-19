@@ -394,6 +394,18 @@ def copy_logs(bfs, dest, list_root):
         written[name] = path
         print("copied %s (%u bytes) from %s" % (name, len(data), path))
     copy_m10(bfs, dest)
+    # Screenshots the owner took on the stick (Haiku saves them in ~).
+    home = bfs.walk("home")
+    if home is not None:
+        for entry, _block in bfs.list_dir(home):
+            if not entry.lower().endswith(".png"):
+                continue
+            inode = bfs.walk("home/" + entry)
+            if inode is None:
+                continue
+            data = bfs.read_file(inode)
+            (dest / entry).write_bytes(data)
+            print("copied %s (%u bytes) from home" % (entry, len(data)))
     if "syslog" not in written and "radeon_hd" not in written:
         die("neither the syslog nor the radeon_hd settings were on the volume")
     print("logs: %s" % dest)
