@@ -210,8 +210,12 @@ ServerApp::_LaunchAddOnServer()
 	err |= entry.SetTo(&dir, "media_addon_server");
 	err |= entry.GetRef(&ref);
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
 	if (err == B_OK)
-		be_roster->Launch(&ref);
+		err = be_roster->Launch(&ref);
+	// SPDX-SnippetEnd
 	if (err == B_OK)
 		return;
 
@@ -268,6 +272,24 @@ ServerApp::_QuitAddOnServer()
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+template<typename T>
+static bool
+validate_message_size(const void* data, size_t size, const T*& out)
+{
+	if (size < sizeof(T)) {
+		ERROR("media_server: message too small (%zu < %zu)\n", size,
+			sizeof(T));
+		return false;
+	}
+	out = static_cast<const T*>(data);
+	return true;
+}
+// SPDX-SnippetEnd
+
+
 void
 ServerApp::_HandleMessage(int32 code, const void* data, size_t size)
 {
@@ -275,20 +297,20 @@ ServerApp::_HandleMessage(int32 code, const void* data, size_t size)
 	switch (code) {
 		case SERVER_CHANGE_FLAVOR_INSTANCES_COUNT:
 		{
-			const server_change_flavor_instances_count_request& request
-				= *static_cast<
-					const server_change_flavor_instances_count_request*>(data);
+			const server_change_flavor_instances_count_request* request;
+			if (!validate_message_size(data, size, request))
+				break;
 			server_change_flavor_instances_count_reply reply;
 			status_t status = B_BAD_VALUE;
 
-			if (request.delta == 1) {
+			if (request->delta == 1) {
 				status = gNodeManager->IncrementFlavorInstancesCount(
-					request.add_on_id, request.flavor_id, request.team);
-			} else if (request.delta == -1) {
+					request->add_on_id, request->flavor_id, request->team);
+			} else if (request->delta == -1) {
 				status = gNodeManager->DecrementFlavorInstancesCount(
-					request.add_on_id, request.flavor_id, request.team);
+					request->add_on_id, request->flavor_id, request->team);
 			}
-			request.SendReply(status, &reply, sizeof(reply));
+			request->SendReply(status, &reply, sizeof(reply));
 			break;
 		}
 
@@ -300,77 +322,84 @@ ServerApp::_HandleMessage(int32 code, const void* data, size_t size)
 
 		case SERVER_REGISTER_APP:
 		{
-			const server_register_app_request& request = *static_cast<
-				const server_register_app_request*>(data);
+			const server_register_app_request* request;
+			if (!validate_message_size(data, size, request))
+				break;
 			server_register_app_reply reply;
 
-			status_t status = gAppManager->RegisterTeam(request.team,
-				request.messenger);
-			request.SendReply(status, &reply, sizeof(reply));
+			status_t status = gAppManager->RegisterTeam(request->team,
+				request->messenger);
+			request->SendReply(status, &reply, sizeof(reply));
 			break;
 		}
 
 		case SERVER_UNREGISTER_APP:
 		{
-			const server_unregister_app_request& request = *static_cast<
-				const server_unregister_app_request*>(data);
+			const server_unregister_app_request* request;
+			if (!validate_message_size(data, size, request))
+				break;
 			server_unregister_app_reply reply;
 
-			status_t status = gAppManager->UnregisterTeam(request.team);
-			request.SendReply(status, &reply, sizeof(reply));
+			status_t status = gAppManager->UnregisterTeam(request->team);
+			request->SendReply(status, &reply, sizeof(reply));
 			break;
 		}
 
 		case SERVER_GET_ADD_ON_REF:
 		{
-			const server_get_add_on_ref_request& request = *static_cast<
-				const server_get_add_on_ref_request*>(data);
+			const server_get_add_on_ref_request* request;
+			if (!validate_message_size(data, size, request))
+				break;
 			server_get_add_on_ref_reply reply;
 
 			entry_ref ref;
-			reply.result = gNodeManager->GetAddOnRef(request.add_on_id, &ref);
+			reply.result = gNodeManager->GetAddOnRef(request->add_on_id, &ref);
 			reply.ref = ref;
 
-			request.SendReply(reply.result, &reply, sizeof(reply));
+			request->SendReply(reply.result, &reply, sizeof(reply));
 			break;
 		}
 
 		case SERVER_NODE_ID_FOR:
 		{
-			const server_node_id_for_request& request
-				= *static_cast<const server_node_id_for_request*>(data);
+			const server_node_id_for_request* request;
+			if (!validate_message_size(data, size, request))
+				break;
 			server_node_id_for_reply reply;
 
-			status_t status = gNodeManager->FindNodeID(request.port,
+			status_t status = gNodeManager->FindNodeID(request->port,
 				&reply.node_id);
-			request.SendReply(status, &reply, sizeof(reply));
+			request->SendReply(status, &reply, sizeof(reply));
 			break;
 		}
 
 		case SERVER_GET_LIVE_NODE_INFO:
 		{
-			const server_get_live_node_info_request& request = *static_cast<
-				const server_get_live_node_info_request*>(data);
+			const server_get_live_node_info_request* request;
+			if (!validate_message_size(data, size, request))
+				break;
 			server_get_live_node_info_reply reply;
 
-			status_t status = gNodeManager->GetLiveNodeInfo(request.node,
+			status_t status = gNodeManager->GetLiveNodeInfo(request->node,
 				&reply.live_info);
-			request.SendReply(status, &reply, sizeof(reply));
+			request->SendReply(status, &reply, sizeof(reply));
 			break;
 		}
 
 		case SERVER_GET_LIVE_NODES:
 		{
-			const server_get_live_nodes_request& request
-				= *static_cast<const server_get_live_nodes_request*>(data);
+			const server_get_live_nodes_request* request;
+			if (!validate_message_size(data, size, request))
+				break;
 			server_get_live_nodes_reply reply;
 			LiveNodeList nodes;
 
 			status_t status = gNodeManager->GetLiveNodes(nodes,
-				request.max_count,
-				request.has_input ? &request.input_format : NULL,
-				request.has_output ? &request.output_format : NULL,
-				request.has_name ? request.name : NULL, request.require_kinds);
+				request->max_count,
+				request->has_input ? &request->input_format : NULL,
+				request->has_output ? &request->output_format : NULL,
+				request->has_name ? request->name : NULL,
+				request->require_kinds);
 
 			reply.count = nodes.size();
 			reply.area = -1;
@@ -380,11 +409,12 @@ ServerApp::_HandleMessage(int32 code, const void* data, size_t size)
 
 			if (reply.count > MAX_LIVE_INFO) {
 				// We create an area here, and transfer it to the client
-				size_t size = (reply.count * sizeof(live_node_info)
+				size_t areaSize = (reply.count * sizeof(live_node_info)
 					+ B_PAGE_SIZE - 1) & ~(B_PAGE_SIZE - 1);
 
 				area = create_area("get live nodes", (void**)&infos,
-					B_ANY_ADDRESS, size, B_NO_LOCK, B_READ_AREA | B_WRITE_AREA);
+					B_ANY_ADDRESS, areaSize, B_NO_LOCK,
+					B_READ_AREA | B_WRITE_AREA);
 				if (area < 0) {
 					reply.area = area;
 					reply.count = 0;
@@ -397,288 +427,352 @@ ServerApp::_HandleMessage(int32 code, const void* data, size_t size)
 			if (area >= 0) {
 				// transfer the area to the target team
 				reply.area = _kern_transfer_area(area, &reply.address,
-					B_ANY_ADDRESS, request.team);
+					B_ANY_ADDRESS, request->team);
 				if (reply.area < 0) {
 					delete_area(area);
 					reply.count = 0;
 				}
 			}
 
-			status = request.SendReply(status, &reply, sizeof(reply));
-			if (status != B_OK && reply.area >= 0) {
-				// if we couldn't send the message, delete the area
-				delete_area(reply.area);
-			}
+			request->SendReply(status, &reply, sizeof(reply));
 			break;
 		}
 
 		case SERVER_GET_NODE_FOR:
 		{
-			const server_get_node_for_request& request
-				= *static_cast<const server_get_node_for_request*>(data);
+			const server_get_node_for_request* request;
+			if (!validate_message_size(data, size, request))
+				break;
 			server_get_node_for_reply reply;
 
-			status_t status = gNodeManager->GetCloneForID(request.node_id,
-				request.team, &reply.clone);
-			request.SendReply(status, &reply, sizeof(reply));
+			status_t status = gNodeManager->GetCloneForID(request->node_id,
+				request->team, &reply.clone);
+			request->SendReply(status, &reply, sizeof(reply));
 			break;
 		}
 
 		case SERVER_RELEASE_NODE:
 		{
-			const server_release_node_request& request
-				= *static_cast<const server_release_node_request*>(data);
+			const server_release_node_request* request;
+			if (!validate_message_size(data, size, request))
+				break;
 			server_release_node_reply reply;
 
-			status_t status = gNodeManager->ReleaseNode(request.node,
-				request.team);
-			request.SendReply(status, &reply, sizeof(reply));
+			status_t status = gNodeManager->ReleaseNode(request->node,
+				request->team);
+			request->SendReply(status, &reply, sizeof(reply));
 			break;
 		}
 
 		case SERVER_RELEASE_NODE_ALL:
 		{
-			const server_release_node_request& request
-				= *static_cast<const server_release_node_request*>(data);
+			const server_release_node_request* request;
+			if (!validate_message_size(data, size, request))
+				break;
 			server_release_node_reply reply;
 
-			status_t status = gNodeManager->ReleaseNodeAll(request.node.node);
-			request.SendReply(status, &reply, sizeof(reply));
+			status_t status = gNodeManager->ReleaseNodeAll(request->node.node);
+			request->SendReply(status, &reply, sizeof(reply));
 			break;
 		}
 
 		case SERVER_REGISTER_NODE:
 		{
-			const server_register_node_request& request
-				= *static_cast<const server_register_node_request*>(data);
+			const server_register_node_request* request;
+			if (!validate_message_size(data, size, request))
+				break;
 			server_register_node_reply reply;
 
-			status_t status = gNodeManager->RegisterNode(request.add_on_id,
-				request.flavor_id, request.name, request.kinds, request.port,
-				request.team, request.timesource_id, &reply.node_id);
-			request.SendReply(status, &reply, sizeof(reply));
+			status_t status = gNodeManager->RegisterNode(request->add_on_id,
+				request->flavor_id, request->name, request->kinds,
+				request->port, request->team, request->timesource_id,
+				&reply.node_id);
+			request->SendReply(status, &reply, sizeof(reply));
 			break;
 		}
 
 		case SERVER_UNREGISTER_NODE:
 		{
-			const server_unregister_node_request& request
-				= *static_cast<const server_unregister_node_request*>(data);
+			const server_unregister_node_request* request;
+			if (!validate_message_size(data, size, request))
+				break;
 			server_unregister_node_reply reply;
 
-			status_t status = gNodeManager->UnregisterNode(request.node_id,
-				request.team, &reply.add_on_id, &reply.flavor_id);
-			request.SendReply(status, &reply, sizeof(reply));
+			status_t status = gNodeManager->UnregisterNode(request->node_id,
+				request->team, &reply.add_on_id, &reply.flavor_id);
+			request->SendReply(status, &reply, sizeof(reply));
 			break;
 		}
 
 		case SERVER_PUBLISH_INPUTS:
 		{
-			const server_publish_inputs_request& request
-				= *static_cast<const server_publish_inputs_request*>(data);
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			const server_publish_inputs_request* request;
+			if (!validate_message_size(data, size, request))
+				break;
 			server_publish_inputs_reply reply;
 			status_t status;
 
-			if (request.count <= MAX_INPUTS) {
-				status = gNodeManager->PublishInputs(request.node,
-					request.inputs, request.count);
+			if (request->count < 0) {
+				status = B_BAD_VALUE;
+			} else if (request->count <= MAX_INPUTS) {
+				status = gNodeManager->PublishInputs(request->node,
+					request->inputs, request->count);
 			} else {
 				media_input* inputs;
 				area_id clone;
 				clone = clone_area("media_inputs clone", (void**)&inputs,
-					B_ANY_ADDRESS, B_READ_AREA | B_WRITE_AREA, request.area);
+					B_ANY_ADDRESS, B_READ_AREA | B_WRITE_AREA, request->area);
 				if (clone < B_OK) {
 					ERROR("SERVER_PUBLISH_INPUTS: failed to clone area, "
 						"error %#" B_PRIx32 "\n", clone);
 					status = clone;
 				} else {
-					status = gNodeManager->PublishInputs(request.node, inputs,
-						request.count);
+					area_info areaInfo;
+					if (get_area_info(clone, &areaInfo) != B_OK
+						|| (size_t)request->count
+							> areaInfo.size / sizeof(media_input)) {
+						status = B_BAD_VALUE;
+					} else {
+						status = gNodeManager->PublishInputs(request->node,
+							inputs, request->count);
+					}
 					delete_area(clone);
 				}
 			}
-			request.SendReply(status, &reply, sizeof(reply));
+			request->SendReply(status, &reply, sizeof(reply));
+			// SPDX-SnippetEnd
 			break;
 		}
 
 		case SERVER_PUBLISH_OUTPUTS:
 		{
-			const server_publish_outputs_request& request
-				= *static_cast<const server_publish_outputs_request*>(data);
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			const server_publish_outputs_request* request;
+			if (!validate_message_size(data, size, request))
+				break;
 			server_publish_outputs_reply reply;
 			status_t status;
 
-			if (request.count <= MAX_OUTPUTS) {
-				status = gNodeManager->PublishOutputs(request.node,
-					request.outputs, request.count);
+			if (request->count < 0) {
+				status = B_BAD_VALUE;
+			} else if (request->count <= MAX_OUTPUTS) {
+				status = gNodeManager->PublishOutputs(request->node,
+					request->outputs, request->count);
 			} else {
 				media_output* outputs;
 				area_id clone;
 				clone = clone_area("media_outputs clone", (void**)&outputs,
-					B_ANY_ADDRESS, B_READ_AREA | B_WRITE_AREA, request.area);
+					B_ANY_ADDRESS, B_READ_AREA | B_WRITE_AREA, request->area);
 				if (clone < B_OK) {
 					ERROR("SERVER_PUBLISH_OUTPUTS: failed to clone area, "
 						"error %#" B_PRIx32 "\n", clone);
 					status = clone;
 				} else {
-					status = gNodeManager->PublishOutputs(request.node, outputs,
-						request.count);
+					area_info areaInfo;
+					if (get_area_info(clone, &areaInfo) != B_OK
+						|| (size_t)request->count
+							> areaInfo.size / sizeof(media_output)) {
+						status = B_BAD_VALUE;
+					} else {
+						status = gNodeManager->PublishOutputs(request->node,
+							outputs, request->count);
+					}
 					delete_area(clone);
 				}
 			}
-			request.SendReply(status, &reply, sizeof(reply));
+			request->SendReply(status, &reply, sizeof(reply));
+			// SPDX-SnippetEnd
 			break;
 		}
 
 		case SERVER_GET_NODE:
 		{
-			const server_get_node_request& request
-				= *static_cast<const server_get_node_request*>(data);
+			const server_get_node_request* request;
+			if (!validate_message_size(data, size, request))
+				break;
 			server_get_node_reply reply;
 
-			status_t status = gNodeManager->GetClone(request.type, request.team,
-				&reply.node, reply.input_name, &reply.input_id);
-			request.SendReply(status, &reply, sizeof(reply));
+			status_t status = gNodeManager->GetClone(request->type,
+				request->team, &reply.node, reply.input_name, &reply.input_id);
+			request->SendReply(status, &reply, sizeof(reply));
 			break;
 		}
 
 		case SERVER_SET_NODE:
 		{
-			const server_set_node_request& request
-				= *static_cast<const server_set_node_request*>(data);
+			const server_set_node_request* request;
+			if (!validate_message_size(data, size, request))
+				break;
 			server_set_node_reply reply;
 
-			status_t status = gNodeManager->SetDefaultNode(request.type,
-				request.use_node ? &request.node : NULL,
-				request.use_dni ? &request.dni : NULL,
-				request.use_input ?  &request.input : NULL);
-			request.SendReply(status, &reply, sizeof(reply));
+			status_t status = gNodeManager->SetDefaultNode(request->type,
+				request->use_node ? &request->node : NULL,
+				request->use_dni ? &request->dni : NULL,
+				request->use_input ?  &request->input : NULL);
+			request->SendReply(status, &reply, sizeof(reply));
 			break;
 		}
 
 		case SERVER_GET_DORMANT_NODE_FOR:
 		{
-			const server_get_dormant_node_for_request& request
-				= *static_cast<const server_get_dormant_node_for_request*>(
-					data);
+			const server_get_dormant_node_for_request* request;
+			if (!validate_message_size(data, size, request))
+				break;
 			server_get_dormant_node_for_reply reply;
 
-			status_t status = gNodeManager->GetDormantNodeInfo(request.node,
+			status_t status = gNodeManager->GetDormantNodeInfo(request->node,
 				&reply.node_info);
-			request.SendReply(status, &reply, sizeof(reply));
+			request->SendReply(status, &reply, sizeof(reply));
 			break;
 		}
 
 		case SERVER_GET_INSTANCES_FOR:
 		{
-			const server_get_instances_for_request& request
-				= *static_cast<const server_get_instances_for_request*>(data);
+			const server_get_instances_for_request* request;
+			if (!validate_message_size(data, size, request))
+				break;
 			server_get_instances_for_reply reply;
 
-			status_t status = gNodeManager->GetInstances(request.add_on_id,
-				request.flavor_id, reply.node_id, &reply.count,
-				min_c(request.max_count, MAX_NODE_ID));
+			status_t status = gNodeManager->GetInstances(request->add_on_id,
+				request->flavor_id, reply.node_id, &reply.count,
+				min_c(request->max_count, MAX_NODE_ID));
 			if (reply.count == MAX_NODE_ID
-				&& request.max_count > MAX_NODE_ID) {
+				&& request->max_count > MAX_NODE_ID) {
 				// TODO: might be fixed by using an area
 				PRINT(1, "Warning: SERVER_GET_INSTANCES_FOR: returning "
 					"possibly truncated list of node id's\n");
 			}
-			request.SendReply(status, &reply, sizeof(reply));
+			request->SendReply(status, &reply, sizeof(reply));
 			break;
 		}
 
 		case SERVER_SET_NODE_TIMESOURCE:
 		{
-			const server_set_node_timesource_request& request
-				= *static_cast<const server_set_node_timesource_request*>(data);
+			const server_set_node_timesource_request* request;
+			if (!validate_message_size(data, size, request))
+				break;
 			server_set_node_timesource_reply reply;
-			status_t result = gNodeManager->SetNodeTimeSource(request.node_id,
-				request.timesource_id);
-			request.SendReply(result, &reply, sizeof(reply));
+			status_t result = gNodeManager->SetNodeTimeSource(request->node_id,
+				request->timesource_id);
+			request->SendReply(result, &reply, sizeof(reply));
 			break;
 		}
 
 		case SERVER_REGISTER_ADD_ON:
 		{
-			const server_register_add_on_request& request = *static_cast<
-				const server_register_add_on_request*>(data);
+			const server_register_add_on_request* request;
+			if (!validate_message_size(data, size, request))
+				break;
 			server_register_add_on_reply reply;
 
-			gNodeManager->RegisterAddOn(request.ref, &reply.add_on_id);
-			request.SendReply(B_OK, &reply, sizeof(reply));
+			gNodeManager->RegisterAddOn(request->ref, &reply.add_on_id);
+			request->SendReply(B_OK, &reply, sizeof(reply));
 			break;
 		}
 
 		case SERVER_UNREGISTER_ADD_ON:
 		{
-			const server_unregister_add_on_command& request = *static_cast<
-				const server_unregister_add_on_command*>(data);
-			gNodeManager->UnregisterAddOn(request.add_on_id);
+			const server_unregister_add_on_command* request;
+			if (!validate_message_size(data, size, request))
+				break;
+			gNodeManager->UnregisterAddOn(request->add_on_id);
 			break;
 		}
 
 		case SERVER_REGISTER_DORMANT_NODE:
 		{
-			const server_register_dormant_node_command& command
-				= *static_cast<const server_register_dormant_node_command*>(
-					data);
-			if (command.purge_id > 0)
-				gNodeManager->InvalidateDormantFlavorInfo(command.purge_id);
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			const server_register_dormant_node_command* command;
+			if (!validate_message_size(data, size, command))
+				break;
+			if (command->flattened_size < 0
+				|| (size_t)command->flattened_size > size - sizeof(*command)) {
+				ERROR("SERVER_REGISTER_DORMANT_NODE: invalid flattened_size\n");
+				break;
+			}
+			if (command->purge_id > 0)
+				gNodeManager->InvalidateDormantFlavorInfo(command->purge_id);
 
-			dormant_flavor_info dormantFlavorInfo;
-			status_t status = dormantFlavorInfo.Unflatten(command.type,
-				command.flattened_data, command.flattened_size);
-			if (status == B_OK)
-				gNodeManager->AddDormantFlavorInfo(dormantFlavorInfo);
+			if (command->flattened_size > 0) {
+				dormant_flavor_info dormantFlavorInfo;
+				status_t status = dormantFlavorInfo.Unflatten(command->type,
+					command->flattened_data, command->flattened_size);
+				if (status == B_OK)
+					gNodeManager->AddDormantFlavorInfo(dormantFlavorInfo);
+			}
+			// SPDX-SnippetEnd
 			break;
 		}
 
 		case SERVER_GET_DORMANT_NODES:
 		{
-			const server_get_dormant_nodes_request& request
-				= *static_cast<const server_get_dormant_nodes_request*>(data);
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			const server_get_dormant_nodes_request* request;
+			if (!validate_message_size(data, size, request))
+				break;
 
 			server_get_dormant_nodes_reply reply;
-			reply.count = request.max_count;
+			if (request->max_count < 0) {
+				reply.count = 0;
+				reply.result = B_BAD_VALUE;
+				request->SendReply(reply.result, &reply, sizeof(reply));
+				break;
+			}
+			if (request->max_count == 0) {
+				reply.count = 0;
+				reply.result = B_OK;
+				request->SendReply(B_OK, &reply, sizeof(reply));
+				break;
+			}
+			reply.count = request->max_count;
 
 			dormant_node_info* infos
 				= new(std::nothrow) dormant_node_info[reply.count];
 			if (infos != NULL) {
 				reply.result = gNodeManager->GetDormantNodes(infos,
 					&reply.count,
-					request.has_input ? &request.input_format : NULL,
-					request.has_output ? &request.output_format : NULL,
-					request.has_name ? request.name : NULL,
-					request.require_kinds, request.deny_kinds);
+					request->has_input ? &request->input_format : NULL,
+					request->has_output ? &request->output_format : NULL,
+					request->has_name ? request->name : NULL,
+					request->require_kinds, request->deny_kinds);
 			} else
 				reply.result = B_NO_MEMORY;
 
 			if (reply.result != B_OK)
 				reply.count = 0;
 
-			request.SendReply(reply.result, &reply, sizeof(reply));
+			request->SendReply(reply.result, &reply, sizeof(reply));
 			if (reply.count > 0) {
-				write_port(request.reply_port, 0, infos,
+				write_port(request->reply_port, 0, infos,
 					reply.count * sizeof(dormant_node_info));
 			}
 			delete[] infos;
+			// SPDX-SnippetEnd
 			break;
 		}
 
 		case SERVER_GET_DORMANT_FLAVOR_INFO:
 		{
-			const server_get_dormant_flavor_info_request& request
-				= *static_cast<const server_get_dormant_flavor_info_request*>(
-					data);
+			const server_get_dormant_flavor_info_request* request;
+			if (!validate_message_size(data, size, request))
+				break;
 			dormant_flavor_info dormantFlavorInfo;
 
 			status_t status = gNodeManager->GetDormantFlavorInfoFor(
-				request.add_on_id, request.flavor_id, &dormantFlavorInfo);
+				request->add_on_id, request->flavor_id, &dormantFlavorInfo);
 			if (status != B_OK) {
 				server_get_dormant_flavor_info_reply reply;
 				reply.result = status;
-				request.SendReply(reply.result, &reply, sizeof(reply));
+				request->SendReply(reply.result, &reply, sizeof(reply));
 			} else {
 				size_t replySize
 					= sizeof(server_get_dormant_flavor_info_reply)
@@ -692,12 +786,12 @@ ServerApp::_HandleMessage(int32 code, const void* data, size_t size)
 					reply->result = dormantFlavorInfo.Flatten(
 						reply->flattened_data, reply->flattened_size);
 
-					request.SendReply(reply->result, reply, replySize);
+					request->SendReply(reply->result, reply, replySize);
 					free(reply);
 				} else {
 					server_get_dormant_flavor_info_reply reply;
 					reply.result = B_NO_MEMORY;
-					request.SendReply(reply.result, &reply, sizeof(reply));
+					request->SendReply(reply.result, &reply, sizeof(reply));
 				}
 			}
 			break;
@@ -705,73 +799,84 @@ ServerApp::_HandleMessage(int32 code, const void* data, size_t size)
 
 		case SERVER_SET_NODE_CREATOR:
 		{
-			const server_set_node_creator_request& request
-				= *static_cast<const server_set_node_creator_request*>(data);
+			const server_set_node_creator_request* request;
+			if (!validate_message_size(data, size, request))
+				break;
 			server_set_node_creator_reply reply;
-			status_t status = gNodeManager->SetNodeCreator(request.node,
-				request.creator);
-			request.SendReply(status, &reply, sizeof(reply));
+			status_t status = gNodeManager->SetNodeCreator(request->node,
+				request->creator);
+			request->SendReply(status, &reply, sizeof(reply));
 			break;
 		}
 
 		case SERVER_GET_SHARED_BUFFER_AREA:
 		{
-			const server_get_shared_buffer_area_request& request
-				= *static_cast<const server_get_shared_buffer_area_request*>(
-					data);
+			const server_get_shared_buffer_area_request* request;
+			if (!validate_message_size(data, size, request))
+				break;
 			server_get_shared_buffer_area_reply reply;
 
 			reply.area = gBufferManager->SharedBufferListArea();
-			request.SendReply(reply.area >= 0 ? B_OK : reply.area, &reply,
+			request->SendReply(reply.area >= 0 ? B_OK : reply.area, &reply,
 				sizeof(reply));
 			break;
 		}
 
 		case SERVER_REGISTER_BUFFER:
 		{
-			const server_register_buffer_request& request
-				= *static_cast<const server_register_buffer_request*>(data);
+			const server_register_buffer_request* request;
+			if (!validate_message_size(data, size, request))
+				break;
 			server_register_buffer_reply reply;
 			status_t status;
 
-			if (request.info.buffer == 0) {
-				reply.info = request.info;
+			if (request->info.buffer == 0) {
+				reply.info = request->info;
 				// size, offset, flags, area is kept
 				// get a new beuffer id into reply.info.buffer
-				status = gBufferManager->RegisterBuffer(request.team,
-					request.info.size, request.info.flags,
-					request.info.offset, request.info.area,
+				status = gBufferManager->RegisterBuffer(request->team,
+					request->info.size, request->info.flags,
+					request->info.offset, request->info.area,
 					&reply.info.buffer);
 			} else {
-				reply.info = request.info; // buffer id is kept
-				status = gBufferManager->RegisterBuffer(request.team,
-					request.info.buffer, &reply.info.size, &reply.info.flags,
+				reply.info = request->info; // buffer id is kept
+				status = gBufferManager->RegisterBuffer(request->team,
+					request->info.buffer, &reply.info.size, &reply.info.flags,
 					&reply.info.offset, &reply.info.area);
 			}
-			request.SendReply(status, &reply, sizeof(reply));
+			request->SendReply(status, &reply, sizeof(reply));
 			break;
 		}
 
 		case SERVER_UNREGISTER_BUFFER:
 		{
-			const server_unregister_buffer_command& request = *static_cast<
-				const server_unregister_buffer_command*>(data);
+			const server_unregister_buffer_command* request;
+			if (!validate_message_size(data, size, request))
+				break;
 
-			gBufferManager->UnregisterBuffer(request.team, request.buffer_id);
+			gBufferManager->UnregisterBuffer(request->team,
+				request->buffer_id);
 			break;
 		}
 
 		case SERVER_GET_MEDIA_FILE_TYPES:
 		{
-			const server_get_media_types_request& request
-				= *static_cast<const server_get_media_types_request*>(data);
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			const server_get_media_types_request* request;
+			if (!validate_message_size(data, size, request))
+				break;
 
 			server_get_media_types_reply reply;
+			reply.area = B_ERROR;
+			reply.count = 0;
+			reply.address = NULL;
 			area_id area = gMediaFilesManager->GetTypesArea(reply.count);
 			if (area >= 0) {
 				// transfer the area to the target team
 				reply.area = _kern_transfer_area(area, &reply.address,
-					B_ANY_ADDRESS, request.team);
+					B_ANY_ADDRESS, request->team);
 				if (reply.area < 0) {
 					delete_area(area);
 					reply.area = B_ERROR;
@@ -779,27 +884,28 @@ ServerApp::_HandleMessage(int32 code, const void* data, size_t size)
 				}
 			}
 
-			status_t status = request.SendReply(
-				reply.area < 0 ? reply.area : B_OK, &reply, sizeof(reply));
-			if (status != B_OK) {
-				// if we couldn't send the message, delete the area
-				delete_area(reply.area);
-			}
+			request->SendReply(reply.area < 0 ? reply.area : B_OK, &reply,
+				sizeof(reply));
+			// SPDX-SnippetEnd
 			break;
 		}
 
 		case SERVER_GET_MEDIA_FILE_ITEMS:
 		{
-			const server_get_media_items_request& request
-				= *static_cast<const server_get_media_items_request*>(data);
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			const server_get_media_items_request* request;
+			if (!validate_message_size(data, size, request))
+				break;
 
 			server_get_media_items_reply reply;
-			area_id area = gMediaFilesManager->GetItemsArea(request.type,
+			area_id area = gMediaFilesManager->GetItemsArea(request->type,
 				reply.count);
 			if (area >= 0) {
 				// transfer the area to the target team
 				reply.area = _kern_transfer_area(area, &reply.address,
-					B_ANY_ADDRESS, request.team);
+					B_ANY_ADDRESS, request->team);
 				if (reply.area < 0) {
 					delete_area(area);
 					reply.area = B_ERROR;
@@ -808,89 +914,92 @@ ServerApp::_HandleMessage(int32 code, const void* data, size_t size)
 			} else
 				reply.area = area;
 
-			status_t status = request.SendReply(
-				reply.area < 0 ? reply.area : B_OK, &reply, sizeof(reply));
-			if (status != B_OK) {
-				// if we couldn't send the message, delete the area
-				delete_area(reply.area);
-			}
+			request->SendReply(reply.area < 0 ? reply.area : B_OK, &reply,
+				sizeof(reply));
+			// SPDX-SnippetEnd
 			break;
 		}
 
 		case SERVER_GET_REF_FOR:
 		{
-			const server_get_ref_for_request& request
-				= *static_cast<const server_get_ref_for_request*>(data);
+			const server_get_ref_for_request* request;
+			if (!validate_message_size(data, size, request))
+				break;
 			server_get_ref_for_reply reply;
 			entry_ref* ref;
 
-			status_t status = gMediaFilesManager->GetRefFor(request.type,
-				request.item, &ref);
+			status_t status = gMediaFilesManager->GetRefFor(request->type,
+				request->item, &ref);
 			if (status == B_OK)
 				reply.ref = *ref;
 
-			request.SendReply(status, &reply, sizeof(reply));
+			request->SendReply(status, &reply, sizeof(reply));
 			break;
 		}
 
 		case SERVER_SET_REF_FOR:
 		{
-			const server_set_ref_for_request& request
-				= *static_cast<const server_set_ref_for_request*>(data);
+			const server_set_ref_for_request* request;
+			if (!validate_message_size(data, size, request))
+				break;
 			server_set_ref_for_reply reply;
-			entry_ref ref = request.ref;
+			entry_ref ref = request->ref;
 
-			status_t status = gMediaFilesManager->SetRefFor(request.type,
-				request.item, ref);
-			request.SendReply(status, &reply, sizeof(reply));
+			status_t status = gMediaFilesManager->SetRefFor(request->type,
+				request->item, ref);
+			request->SendReply(status, &reply, sizeof(reply));
 			break;
 		}
 
 		case SERVER_INVALIDATE_MEDIA_ITEM:
 		{
-			const server_invalidate_item_request& request
-				= *static_cast<const server_invalidate_item_request*>(data);
+			const server_invalidate_item_request* request;
+			if (!validate_message_size(data, size, request))
+				break;
 			server_invalidate_item_reply reply;
 
-			status_t status = gMediaFilesManager->InvalidateItem(request.type,
-				request.item);
-			request.SendReply(status, &reply, sizeof(reply));
+			status_t status = gMediaFilesManager->InvalidateItem(request->type,
+				request->item);
+			request->SendReply(status, &reply, sizeof(reply));
 			break;
 		}
 
 		case SERVER_REMOVE_MEDIA_ITEM:
 		{
-			const server_remove_media_item_request& request
-				= *static_cast<const server_remove_media_item_request*>(data);
+			const server_remove_media_item_request* request;
+			if (!validate_message_size(data, size, request))
+				break;
 			server_remove_media_item_reply reply;
 
-			status_t status = gMediaFilesManager->RemoveItem(request.type,
-				request.item);
-			request.SendReply(status, &reply, sizeof(reply));
+			status_t status = gMediaFilesManager->RemoveItem(request->type,
+				request->item);
+			request->SendReply(status, &reply, sizeof(reply));
 			break;
 		}
 
 		case SERVER_GET_ITEM_AUDIO_GAIN:
 		{
-			const server_get_item_audio_gain_request& request
-				= *static_cast<const server_get_item_audio_gain_request*>(data);
+			const server_get_item_audio_gain_request* request;
+			if (!validate_message_size(data, size, request))
+				break;
 			server_get_item_audio_gain_reply reply;
 
-			status_t status = gMediaFilesManager->GetAudioGainFor(request.type,
-				request.item, &reply.gain);
-			request.SendReply(status, &reply, sizeof(reply));
+			status_t status = gMediaFilesManager->GetAudioGainFor(request->type,
+				request->item, &reply.gain);
+			request->SendReply(status, &reply, sizeof(reply));
 			break;
 		}
 
 		case SERVER_SET_ITEM_AUDIO_GAIN:
 		{
-			const server_set_item_audio_gain_request& request
-				= *static_cast<const server_set_item_audio_gain_request*>(data);
+			const server_set_item_audio_gain_request* request;
+			if (!validate_message_size(data, size, request))
+				break;
 			server_set_ref_for_reply reply;
 
-			status_t status = gMediaFilesManager->SetAudioGainFor(request.type,
-				request.item, request.gain);
-			request.SendReply(status, &reply, sizeof(reply));
+			status_t status = gMediaFilesManager->SetAudioGainFor(request->type,
+				request->item, request->gain);
+			request->SendReply(status, &reply, sizeof(reply));
 			break;
 		}
 
@@ -911,10 +1020,19 @@ ServerApp::_ControlThread(void* _server)
 	char data[B_MEDIA_MESSAGE_SIZE] __attribute__((aligned(8)));
 	ssize_t size;
 	int32 code;
-	while ((size = read_port_etc(server->_ControlPort(), &code, data,
-			sizeof(data), 0, 0)) > 0) {
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	while (true) {
+		size = read_port_etc(server->_ControlPort(), &code, data,
+			sizeof(data), 0, 0);
+		if (size == B_INTERRUPTED)
+			continue;
+		if (size <= 0)
+			break;
 		server->_HandleMessage(code, data, size);
 	}
+	// SPDX-SnippetEnd
 
 	return B_OK;
 }

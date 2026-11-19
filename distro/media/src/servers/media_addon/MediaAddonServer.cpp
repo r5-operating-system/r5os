@@ -445,6 +445,14 @@ MediaAddonServer::_HandleMessage(int32 code, const void* data, size_t size)
 	switch (code) {
 		case ADD_ON_SERVER_INSTANTIATE_DORMANT_NODE:
 		{
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			if (size < sizeof(add_on_server_instantiate_dormant_node_request)) {
+				ERROR("media_addon_server: message too small\n");
+				break;
+			}
+			// SPDX-SnippetEnd
 			const add_on_server_instantiate_dormant_node_request* request
 				= static_cast<
 					const add_on_server_instantiate_dormant_node_request*>(
@@ -475,6 +483,10 @@ MediaAddonServer::_HandleMessage(int32 code, const void* data, size_t size)
 			// SPDX-License-Identifier: MIT
 			// The rescan reads and changes fInfoMap. Only the application
 			// looper touches that map, so the work is done there.
+			if (size < sizeof(add_on_server_rescan_flavors_command)) {
+				ERROR("media_addon_server: message too small\n");
+				break;
+			}
 			const add_on_server_rescan_flavors_command* command = static_cast<
 				const add_on_server_rescan_flavors_command*>(data);
 			BMessage rescan(kMsgRescanFlavors);
@@ -511,9 +523,19 @@ MediaAddonServer::_ControlThread(void* _server)
 	char data[B_MEDIA_MESSAGE_SIZE] __attribute__((aligned(8)));
 	ssize_t size;
 	int32 code;
-	while ((size = read_port_etc(server->_ControlPort(), &code, data,
-			sizeof(data), 0, 0)) > 0)
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	while (true) {
+		size = read_port_etc(server->_ControlPort(), &code, data,
+			sizeof(data), 0, 0);
+		if (size == B_INTERRUPTED)
+			continue;
+		if (size <= 0)
+			break;
 		server->_HandleMessage(code, data, size);
+	}
+	// SPDX-SnippetEnd
 
 	return B_OK;
 }
@@ -544,6 +566,12 @@ MediaAddonServer::_ScanAddOnFlavors(BMediaAddOn* addon)
 	TRACE("%" B_PRId32 " old flavors, %" B_PRId32 " new flavors\n",
 		oldFlavorCount, newFlavorCount);
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	bool purged = false;
+	bool allocFailed = false;
+	// SPDX-SnippetEnd
 	// during the first update (i == 0), the server removes old dormant_flavor_infos
 	for (int i = 0; i < newFlavorCount; i++) {
 		const flavor_info* flavorInfo;
@@ -570,13 +598,15 @@ MediaAddonServer::_ScanAddOnFlavors(BMediaAddOn* addon)
 			+ sizeof(server_register_dormant_node_command);
 		server_register_dormant_node_command* message
 			= (server_register_dormant_node_command*)malloc(messageSize);
-		if (message == NULL)
+		if (message == NULL) {
+			allocFailed = true;
 			break;
+		}
 
 		// The server should remove previously registered "dormant_flavor_info"s
 		// during the first update, but after  the first iteration, we don't
 		// want the server to anymore remove old dormant_flavor_infos
-		message->purge_id = i == 0 ? addonID : 0;
+		message->purge_id = !purged ? addonID : 0;
 
 		message->type = dormantFlavorInfo.TypeCode();
 		message->flattened_size = flattenedSize;
@@ -587,10 +617,27 @@ MediaAddonServer::_ScanAddOnFlavors(BMediaAddOn* addon)
 		if (status != B_OK) {
 			ERROR("MediaAddonServer::_ScanAddOnFlavors: couldn't register "
 				"dormant node: %s\n", strerror(status));
-		}
+		} else
+			purged = true;
 
 		free(message);
 	}
+
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	if (!purged && !allocFailed && newFlavorCount <= 0) {
+		server_register_dormant_node_command cmd = {};
+		cmd.purge_id = addonID;
+		cmd.flattened_size = 0;
+		status_t status = SendToServer(SERVER_REGISTER_DORMANT_NODE,
+			&cmd, sizeof(cmd));
+		if (status != B_OK) {
+			ERROR("MediaAddonServer::_ScanAddOnFlavors: couldn't purge "
+				"dormant nodes: %s\n", strerror(status));
+		}
+	}
+	// SPDX-SnippetEnd
 
 	// TODO: we currently pretend that all old flavors have been removed, this
 	// could probably be done in a smarter way
@@ -694,13 +741,11 @@ MediaAddonServer::_DestroyInstantiatedFlavors(AddOnInfo& info)
 			&& (fMediaRoster->StopTimeSource(node, 0, true) != B_OK)) {
 			printf("MediaAddonServer::_DestroyInstantiatedFlavors couldn't stop "
 				"timesource\n");
-			continue;
 		}
 
 		if (fMediaRoster->StopNode(node, 0, true) != B_OK) {
 			printf("MediaAddonServer::_DestroyInstantiatedFlavors couldn't stop "
 				"node\n");
-			continue;
 		}
 
 		if ((node.kind & B_BUFFER_CONSUMER) != 0) {
@@ -710,7 +755,7 @@ MediaAddonServer::_DestroyInstantiatedFlavors(AddOnInfo& info)
 					!= B_OK) {
 				printf("MediaAddonServer::_DestroyInstantiatedFlavors couldn't "
 					"get connected inputs\n");
-				continue;
+				count = 0;
 			}
 
 			for (int32 i = 0; i < count; i++) {
@@ -738,7 +783,7 @@ MediaAddonServer::_DestroyInstantiatedFlavors(AddOnInfo& info)
 					&count) != B_OK) {
 				printf("MediaAddonServer::_DestroyInstantiatedFlavors couldn't "
 					"get connected outputs\n");
-				continue;
+				count = 0;
 			}
 
 			for (int32 i = 0; i < count; i++) {
@@ -889,7 +934,11 @@ MediaAddonServer::_InstantiatePhysicalInputsAndOutputs(AddOnInfo& info)
 			dormant_node_info dormantNodeInfo;
 			dormantNodeInfo.addon = info.id;
 			dormantNodeInfo.flavor_id = flavorinfo->internal_id;
-			strcpy(dormantNodeInfo.name, flavorinfo->name);
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			strlcpy(dormantNodeInfo.name, flavorinfo->name, B_MEDIA_NAME_LENGTH);
+			// SPDX-SnippetEnd
 
 			TRACE("MediaAddonServer::InstantiatePhysialInputsAndOutputs: "
 				"\"%s\" is a physical input/output\n", flavorinfo->name);

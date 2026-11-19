@@ -50,14 +50,22 @@ private:
 			static int32		rescan_thread(void *arg);
 			void				_RescanThread();
 
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
 			// savedOnly leaves *id alone when the saved device is absent.
-			void				_FindPhysical(volatile media_node_id *id,
+			void				_FindPhysical(media_node_id *id,
 									uint32 default_type, bool isInput,
-									media_type type, bool savedOnly = false);
-			void				_FindAudioMixer();
-			void				_FindTimeSource();
+									media_type type, bool savedOnly = false,
+									int32 *inputID = NULL);
+			media_node_id		_FindAudioMixer();
+			media_node_id		_FindTimeSource(media_node_id physicalAudioOut);
 
-			status_t			_ConnectMixerToOutput();
+			status_t			_ConnectMixerToOutput(media_node_id audioMixer,
+									media_node_id physicalAudioOut,
+									int32 inputID, media_output& newOutput,
+									media_input& newInput);
+			// SPDX-SnippetEnd
 
 			// See _FindPhysical().
 			static	int32		_TypeIndex(uint32 defaultType);
@@ -73,22 +81,28 @@ private:
 			bool				_IsFallback(uint32 defaultType) const;
 			void				_SetFallback(uint32 defaultType,
 									bool fallback);
-			void				_RestoreSaved(volatile media_node_id* id,
+			void				_RestoreSaved(media_node_id* id,
 									uint32 defaultType, bool isInput,
-									media_type type);
+									media_type type, int32* inputID = NULL);
 			void				_DisconnectMixerFromOutput();
 			// SPDX-SnippetEnd
 
 private:
-			volatile bool 		fMixerConnected;
-			volatile media_node_id fPhysicalVideoOut;
-			volatile media_node_id fPhysicalVideoIn;
-			volatile media_node_id fPhysicalAudioOut;
-			volatile media_node_id fPhysicalAudioIn;
-			volatile media_node_id fSystemTimeSource;
-			volatile media_node_id fTimeSource;
-			volatile media_node_id fAudioMixer;
-			volatile int32 		fPhysicalAudioOutInputID;
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+	mutable	BLocker				fLock;
+			uint32				fAudioOutGeneration;
+			bool		 		fMixerConnected;
+			media_node_id		fPhysicalVideoOut;
+			media_node_id		fPhysicalVideoIn;
+			media_node_id		fPhysicalAudioOut;
+			media_node_id		fPhysicalAudioIn;
+			media_node_id		fSystemTimeSource;
+			media_node_id		fTimeSource;
+			media_node_id		fAudioMixer;
+			int32		 		fPhysicalAudioOutInputID;
+			// SPDX-SnippetEnd
 			char fPhysicalAudioOutInputName[B_MEDIA_NAME_LENGTH];
 
 			media_output 		fMixerToPhysicalAudioOut;

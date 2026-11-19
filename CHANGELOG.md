@@ -11,6 +11,19 @@ What changed:
 
 Limits: compile-tested via `scripts/build-locked.sh` (`jam_exit=0`); runtime QEMU/hardware Deskbar UI interactions (expander click, clock settings, auto-hide) were not booted or exercised here.
 
+## 2026-11-19 - Media server and media_addon_server robustness fixes
+
+Problem: code review of `media_server` and `media_addon_server` found synchronization races in `DefaultManager` between `_RescanThread()` and `Set()`/`Get()`/`SaveState()`, missing port-message size/count validation and invalid cross-team `delete_area()` calls in `media_server.cpp`, `NotificationManager` holding `fLocker` across blocking `BMessenger::SendMessage()`, unpurged dormant flavors when an add-on rescans to 0 flavors, `ReleaseNodeAll()` skipped on error in `_DestroyInstantiatedFlavors()`, and `MediaFilePlayer::PlayFunction()` leaving trailing EOF buffer bytes unpadded / `fFinished` non-atomic / `fPlayTrack` unreleased.
+
+What changed:
+- `distro/media/src/servers/media/DefaultManager.h` & `DefaultManager.cpp`: added `fLock` and `fAudioOutGeneration` to synchronize `_RescanThread()`, `Set()`, `Get()`, and `SaveState()`, snapshotting state before `_ConnectMixerToOutput()` IPC; replaced `strcpy` on `fPhysicalAudioOutInputName` with `strlcpy(..., B_MEDIA_NAME_LENGTH)`; ensured `SaveState()` always calls `ReleaseNodeReference()` on cloned nodes and frees `list` items on early error; waited for `fRescanThread` and freed `fMsgList` in `~DefaultManager()`.
+- `distro/media/src/servers/media/media_server.cpp`: validated message sizes in `_HandleMessage()`, `flattened_size` in `SERVER_REGISTER_DORMANT_NODE`, `count` and cloned area sizes in `SERVER_PUBLISH_INPUTS`/`OUTPUTS`, and `max_count` (`< 0` -> `B_BAD_VALUE`, `== 0` -> `B_OK` with count 0, keeping blocking `write_port` for the dormant-node list) in `SERVER_GET_DORMANT_NODES`; initialized `reply` fields in `SERVER_GET_MEDIA_FILE_TYPES`; removed invalid `delete_area(reply.area)` after `_kern_transfer_area()`; assigned `err = be_roster->Launch(&ref)` in `_LaunchAddOnServer()`; continued `_ControlThread()` on `B_INTERRUPTED`.
+- `distro/media/src/servers/media/NotificationManager.cpp`: copied matching `BMessenger` targets under `fLocker` before sending notifications with `TIMEOUT`, and checked `FindMessenger`/`FindInt32` return values.
+- `distro/media/src/servers/media_addon/MediaAddonServer.cpp`: validated message sizes in `_HandleMessage()`; continued `_ControlThread()` on `B_INTERRUPTED`; purged dormant nodes in `_ScanAddOnFlavors()` only when `!purged && !allocFailed && newFlavorCount <= 0`; avoided skipping `ReleaseNodeAll(node)` in `_DestroyInstantiatedFlavors()`; replaced `strcpy` with `strlcpy(..., B_MEDIA_NAME_LENGTH)`.
+- `distro/media/src/servers/media_addon/MediaFilePlayer.h` & `MediaFilePlayer.cpp`: padded trailing buffer bytes on short read/EOF in `PlayFunction()` (`0x80` for `B_AUDIO_UCHAR`, `0` otherwise), made `fFinished` atomic via `atomic_set`/`atomic_get`, and released `fPlayTrack` in `~MediaFilePlayer()`.
+
+Limits: compile-tested via `scripts/build-locked.sh` (`jam_exit=0`); runtime QEMU/hardware audio playback and hot-unplug behavior were not booted or exercised here.
+
 Tested: `scripts/build-locked.sh` in WSL after merging `origin/main` (`jam_exit=0`).
 
 ## 2026-11-19 - AMD64 review: dispatch races, kernel NT guard, shutdown trail, Information GPU state
