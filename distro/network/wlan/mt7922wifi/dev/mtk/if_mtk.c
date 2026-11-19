@@ -617,7 +617,10 @@ mtk_join_prepare(struct mtk_softc* sc, struct ieee80211_node* ni)
 		sc->sc_ap_added = 1;
 	}
 
-	return mtk_roc(sc, ni->ni_chan, 1000);
+	/* SAE commit and confirm are sent after this returns. A one-second
+	 * stay ended before a slow access point answered.
+	 */
+	return mtk_roc(sc, ni->ni_chan, 4000);
 }
 
 

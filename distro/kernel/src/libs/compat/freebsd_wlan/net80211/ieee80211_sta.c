@@ -91,6 +91,20 @@ struct r5_sae_q {
 
 static struct r5_sae_q r5_sae_q[R5_SAE_VAPS];
 
+/* One authentication the supplicant already built, held until the station
+ * is in AUTH. ieee80211_sta_join() only queues that transition, and the
+ * MediaTek join (stay-on-channel) finishes inside it. A frame sent before
+ * that is transmitted while the radio is still on the scan channel.
+ */
+struct r5_sae_pending {
+	struct ieee80211vap *vap;
+	uint8_t mac[IEEE80211_ADDR_LEN];
+	uint16_t len;
+	uint8_t body[IEEE80211_SAE_MAX];
+};
+
+static struct r5_sae_pending r5_sae_pending;
+
 static struct r5_sae_q *
 r5_sae_find(struct ieee80211vap *vap, int create)
 {
@@ -122,6 +136,38 @@ r5_sae_reset(struct ieee80211vap *vap)
 	if (q != NULL)
 		memset(q, 0, sizeof(*q));
 	IEEE80211_UNLOCK(vap->iv_ic);
+}
+
+static void
+r5_sae_pending_clear(struct ieee80211vap *vap)
+{
+	IEEE80211_LOCK(vap->iv_ic);
+	if (r5_sae_pending.vap == vap)
+		memset(&r5_sae_pending, 0, sizeof(r5_sae_pending));
+	IEEE80211_UNLOCK(vap->iv_ic);
+}
+
+static int r5_sae_transmit(struct ieee80211vap *vap, const uint8_t *mac,
+	const uint8_t *body, int len);
+
+static void
+r5_sae_pending_send(struct ieee80211vap *vap)
+{
+	uint8_t mac[IEEE80211_ADDR_LEN];
+	uint8_t body[IEEE80211_SAE_MAX];
+	uint16_t len;
+
+	IEEE80211_LOCK(vap->iv_ic);
+	if (r5_sae_pending.vap != vap || r5_sae_pending.len < 6) {
+		IEEE80211_UNLOCK(vap->iv_ic);
+		return;
+	}
+	memcpy(mac, r5_sae_pending.mac, IEEE80211_ADDR_LEN);
+	len = r5_sae_pending.len;
+	memcpy(body, r5_sae_pending.body, len);
+	memset(&r5_sae_pending, 0, sizeof(r5_sae_pending));
+	IEEE80211_UNLOCK(vap->iv_ic);
+	(void) r5_sae_transmit(vap, mac, body, len);
 }
 
 void
@@ -350,6 +396,7 @@ sta_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 		callout_stop(&vap->iv_swbmiss);
 	switch (nstate) {
 	case IEEE80211_S_INIT:
+		r5_sae_pending_clear(vap);
 		switch (ostate) {
 		case IEEE80211_S_SLEEP:
 			/* XXX wakeup */
@@ -385,6 +432,7 @@ sta_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 		/* SPDX-SnippetEnd */
 		break;
 	case IEEE80211_S_SCAN:
+		r5_sae_pending_clear(vap);
 		switch (ostate) {
 		case IEEE80211_S_INIT:
 			/*
@@ -458,6 +506,8 @@ sta_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 			if (ni->ni_authmode != IEEE80211_AUTH_SAE)
 				IEEE80211_SEND_MGMT(ni,
 				    IEEE80211_FC0_SUBTYPE_AUTH, 1);
+			else
+				r5_sae_pending_send(vap);
 /* SPDX-SnippetEnd */
 			break;
 		case IEEE80211_S_AUTH:
@@ -2301,8 +2351,8 @@ sta_recv_ctl(struct ieee80211_node *ni, struct mbuf *m, int subtype)
  * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
  * SPDX-License-Identifier: MIT
  */
-int
-ieee80211_send_sae_auth(struct ieee80211vap *vap, const uint8_t *mac,
+static int
+r5_sae_transmit(struct ieee80211vap *vap, const uint8_t *mac,
 	const uint8_t *body, int len)
 {
 	struct ieee80211_node *ni;
@@ -2310,15 +2360,6 @@ ieee80211_send_sae_auth(struct ieee80211vap *vap, const uint8_t *mac,
 	struct mbuf *m;
 	struct ieee80211_bpf_params params;
 	uint8_t *frm;
-	uint16_t algo;
-
-	if (vap == NULL || vap->iv_bss == NULL || mac == NULL || body == NULL)
-		return EINVAL;
-	if (len < 6 || len > IEEE80211_SAE_MAX)
-		return EINVAL;
-	algo = (uint16_t)body[0] | ((uint16_t)body[1] << 8);
-	if (algo != IEEE80211_AUTH_ALG_SAE)
-		return EINVAL;
 
 	ni = vap->iv_bss;
 	if (!IEEE80211_ADDR_EQ(ni->ni_macaddr, mac)
@@ -2347,8 +2388,41 @@ ieee80211_send_sae_auth(struct ieee80211vap *vap, const uint8_t *mac,
 		params.ibp_try0 = ni->ni_txparms->maxretry;
 	}
 	params.ibp_power = ni->ni_txpower;
+	net80211_vap_printf(vap, "sae: transmit authentication (%d bytes)\n",
+	    len);
 	return ieee80211_mgmt_output(ni, m, IEEE80211_FC0_SUBTYPE_AUTH,
 	    &params);
+}
+
+int
+ieee80211_send_sae_auth(struct ieee80211vap *vap, const uint8_t *mac,
+	const uint8_t *body, int len)
+{
+	uint16_t algo;
+
+	if (vap == NULL || vap->iv_bss == NULL || mac == NULL || body == NULL)
+		return EINVAL;
+	if (len < 6 || len > IEEE80211_SAE_MAX)
+		return EINVAL;
+	algo = (uint16_t)body[0] | ((uint16_t)body[1] << 8);
+	if (algo != IEEE80211_AUTH_ALG_SAE)
+		return EINVAL;
+	/* The join that tunes the radio is still queued, or still inside
+	 * mtk_join_prepare(). Keep the body and send it on the way into AUTH.
+	 */
+	if (vap->iv_state != IEEE80211_S_AUTH
+	    && vap->iv_state != IEEE80211_S_ASSOC) {
+		IEEE80211_LOCK(vap->iv_ic);
+		r5_sae_pending.vap = vap;
+		IEEE80211_ADDR_COPY(r5_sae_pending.mac, mac);
+		r5_sae_pending.len = (uint16_t)len;
+		memcpy(r5_sae_pending.body, body, len);
+		IEEE80211_UNLOCK(vap->iv_ic);
+		net80211_vap_printf(vap, "sae: hold authentication until the "
+		    "radio is on the channel (%d bytes)\n", len);
+		return 0;
+	}
+	return r5_sae_transmit(vap, mac, body, len);
 }
 
 int

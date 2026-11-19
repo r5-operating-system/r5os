@@ -1,5 +1,17 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-19 - SAE authentication is sent after the radio is on the channel
+
+Problem: On the 5625U a WPA3 join of "Skynet Guest" selected SAE and management-frame protection, derived the password element, and logged Event EXTERNAL_AUTH. The commit scalar was computed and then "Authentication with ... timed out" after 10 seconds. No SAE Authentication frame left the machine. wpa_supplicant does call send_mlme, and that ioctl calls ieee80211_send_sae_auth(). The join that tunes the MT7921 (stay-on-channel) is only queued by ieee80211_sta_join(), so the commit was handed to the firmware while the radio was still on the scan channel. The access point never answered.
+
+`ioctl[SIOCS80211, op=20, val=0, arg_len=7]: Invalid Argument` is bsd_del_key for key index 4 and 5 at interface start. Those indexes are IGTK slots. The group-key array has four slots (IEEE80211_WEP_NKID), so the delete returned EINVAL. Indexes 0 to 3 succeed. It is not the SAE failure.
+
+What changed: An SAE body that arrives before the station is in AUTH is kept and transmitted when the state machine enters AUTH, which is after mtk_join_prepare() has been granted the channel. The stay is 4 seconds so the commit and the confirm fit. Deleting key index 4 or 5 is a no-op success. WPA2 still uses slots 0 to 3 and the same associate path.
+
+Limits: That "Skynet Guest" completes SAE, associates, and passes traffic is only proven on the 5625U. QEMU has no MT7921.
+
+Tested: not on the 5625U.
+
 ## 2026-11-19 - Kernel (AMD64): 2 MB pages on by default
 
 Problem: `amd64_large_pages` (#4435) was off unless the kernel settings said `amd64_large_pages true`. On the 5625U the self-test passed (sticks 53 and 56) and whole sessions ran with it on, without a fault.
