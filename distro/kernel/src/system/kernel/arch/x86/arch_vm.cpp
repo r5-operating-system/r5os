@@ -1132,12 +1132,15 @@ arch_vm_init_end(kernel_args *args)
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 #ifdef __x86_64__
+	// On by default since 19 Nov 2026 (owner); "amd64_large_pages false" in
+	// the kernel settings turns it off.
+	bool enabled = true;
 	if (void* handle = load_driver_settings("kernel")) {
-		bool enabled = get_driver_boolean_parameter(handle,
-			"amd64_large_pages", false, false);
-		X86PagingMethod64Bit::SetLargePagesEnabled(enabled);
+		enabled = get_driver_boolean_parameter(handle,
+			"amd64_large_pages", true, true);
 		unload_driver_settings(handle);
 	}
+	X86PagingMethod64Bit::SetLargePagesEnabled(enabled);
 #endif
 // SPDX-SnippetEnd
 

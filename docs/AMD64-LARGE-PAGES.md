@@ -166,10 +166,11 @@ File references are in `haiku/src/system/kernel/arch/x86/paging/64bit/X86VMTrans
 
 ## 5. Kernel Setting Switch and Boot Self-Test
 
-### 5.1 Kernel Setting (Off by Default)
+### 5.1 Kernel Setting (On by Default since 19 Nov 2026)
 
-- Read boolean driver setting `amd64_large_pages` from the `"kernel"` driver settings file (`get_driver_boolean_parameter(handle, "amd64_large_pages", false, false)`) during `X86PagingMethod64Bit::InitPostArea()` (`X86PagingMethod64Bit.cpp:90`).
-- **Default**: `false` (off). When `false`, `X86VMTranslationMap64Bit` uses 4 KB PTEs exclusively, preserving 100% identical behavior to current builds.
+- Read boolean driver setting `amd64_large_pages` from the `"kernel"` driver settings file (`get_driver_boolean_parameter(handle, "amd64_large_pages", true, true)`) in `arch_vm_init_end()` and `arch_vm_init_post_modules()` (`arch_vm.cpp`).
+- **Default**: `true` (on), owner decision of 19 Nov 2026 after sticks 53 and 56 passed the self-test. `amd64_large_pages false` turns it off; then `X86VMTranslationMap64Bit` uses 4 KB PTEs exclusively, identical to the builds before #4435.
+- Limit: on the 5625U no real area used 2 MB pages yet (no `R5 VM: 2MB map` line on those sticks); aligning the GPU areas is M13 step 3 (`docs/M13-PLAN.md`).
 - Log the state at boot: `dprintf("R5 VM: amd64_large_pages %s\n", sUseLargePages ? "enabled" : "disabled");`.
 
 ### 5.2 Self-Test (4 MB Contiguous Area: Map, Protect Half, Unmap)
