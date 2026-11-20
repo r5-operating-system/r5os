@@ -28,7 +28,7 @@ A driver loads the module with `get_module()` and must work when that fails. It 
 
 ## Path
 
-1. **Loader** (`src/system/boot/platform/efi/r5_efi_runtime.cpp`, called from `start.cpp`): before `main()` clones the boot volume message, it allocates a 24 KiB block in kernel_args memory and stores its physical address under `_boot_efi r5 runtime`. It copies the EFI memory attributes table and the runtime properties mask into the block.
+1. **Loader** (`src/system/boot/platform/efi/r5_efi_runtime.cpp`, called from `platform_load_ucode()` in `cpu.cpp`, where SMBIOS is handed over too): before the loader clones the boot volume message, it allocates a 24 KiB block in kernel_args memory and stores its physical address under `_boot_efi r5 runtime`. It copies the EFI memory attributes table and the runtime properties mask into the block.
 2. **Loader, x86_64** (`arch/x86_64/arch_mmu.cpp`, `arch_start.cpp`): every `EFI_MEMORY_RUNTIME` range gets `VirtualStart = PhysicalStart` before `SetVirtualAddressMap`. Haiku did this only for the runtime code and data types. Runtime MMIO ranges, such as the flash that holds the variables, kept the firmware's value. After the call, the runtime descriptors of the final map go into the block, with the call's status.
 3. **Kernel** (`arch/x86/arch_platform.cpp`): in `arch_platform_init_post_vm` it copies the block into the heap and publishes it as the boot item `R5_EFI_RUNTIME`. This is the same route the ACPI root takes.
 4. **Module** (`src/add-ons/kernel/generic/efi`): checks the block, reads the runtime services table through its physical address, and builds the firmware's address space.

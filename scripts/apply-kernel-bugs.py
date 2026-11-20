@@ -467,7 +467,7 @@ def install_efi_runtime() -> None:
         "headers/os/drivers/EFI.h",
         "headers/private/kernel/boot/r5_efi_runtime.h",
         "src/system/boot/platform/efi/Jamfile",
-        "src/system/boot/platform/efi/start.cpp",
+        "src/system/boot/platform/efi/cpu.cpp",
         "src/system/boot/platform/efi/r5_efi_runtime.cpp",
         "src/system/boot/platform/efi/r5_efi_runtime.h",
         "src/system/boot/platform/efi/arch/x86_64/arch_start.cpp",

@@ -13,7 +13,8 @@
 
 // Before ExitBootServices: allocate the hand-over block, copy the memory
 // attributes table and the runtime properties, and store the block in the
-// boot volume message. Must run before the loader clones that message.
+// boot volume message. Must run after heap_init and before the loader
+// clones that message (platform_load_ucode).
 void r5_efi_runtime_init();
 
 // What SetVirtualAddressMap returned (set in arch_mmu.cpp).
