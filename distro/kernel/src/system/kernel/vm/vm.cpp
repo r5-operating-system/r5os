@@ -721,6 +721,11 @@ map_page(VMArea* area, vm_page* page, addr_t address, uint32 protection,
 static inline bool
 unmap_page(VMArea* area, addr_t virtualAddress)
 {
+	uint32 type = area->MemoryType();
+	if (type != 0 && type != B_WRITE_BACK_MEMORY) {
+		arch_vm_direct_map_release_range(area, virtualAddress, B_PAGE_SIZE);
+		return true;
+	}
 	return area->address_space->TranslationMap()->UnmapPage(area,
 		virtualAddress, true);
 }
@@ -730,6 +735,11 @@ unmap_page(VMArea* area, addr_t virtualAddress)
 static inline void
 unmap_pages(VMArea* area, addr_t base, size_t size)
 {
+	uint32 type = area->MemoryType();
+	if (type != 0 && type != B_WRITE_BACK_MEMORY) {
+		arch_vm_direct_map_release_range(area, base, size);
+		return;
+	}
 	area->address_space->TranslationMap()->UnmapPages(area, base, size, true);
 }
 
@@ -2745,7 +2755,20 @@ vm_clone_area(team_id team, const char* name, void** address,
 		&& sourceMemoryType != B_WRITE_BACK_MEMORY
 		&& (sourceWiring == B_FULL_LOCK || sourceWiring == B_CONTIGUOUS);
 	if (directRam) {
-		status = arch_vm_direct_map_prepare(sourceSize, &directFinish.cookie);
+		uint32 tables = 1;
+		// One page-table page per 2 MiB region, counted before the write lock.
+		const size_t kRegionBytes = 32768;
+		void* bits = malloc(kRegionBytes);
+		if (bits != NULL) {
+			AddressSpaceReadLocker regionLocker;
+			VMArea* regionArea = NULL;
+			if (regionLocker.SetFromArea(sourceID, regionArea) == B_OK)
+				tables = r5_wc_count_regions(regionArea, bits, kRegionBytes);
+			free(bits);
+		} else
+			tables = (uint32)(sourceSize / B_PAGE_SIZE);
+		status = arch_vm_direct_map_prepare(sourceSize, tables,
+			&directFinish.cookie);
 		if (status != B_OK)
 			return status;
 	}
@@ -3142,8 +3165,6 @@ delete_area(VMAddressSpace* addressSpace, VMArea* area,
 {
 	ASSERT(!area->IsWired());
 
-	arch_vm_direct_map_release(area);
-
 	if (area->id >= 0 && !alreadyRemoved)
 		VMAreas::Remove(area);
 
@@ -3164,6 +3185,9 @@ delete_area(VMAddressSpace* addressSpace, VMArea* area,
 		bool ignoreTopCachePageFlags
 			= topCache->temporary && topCache->RefCount() == 2;
 
+		// The write-combined mapping goes away before the physical map
+		// returns to write-back. UnmapArea then finds the pages gone.
+		arch_vm_direct_map_release(area);
 		area->address_space->TranslationMap()->UnmapArea(area,
 			deletingAddressSpace, ignoreTopCachePageFlags);
 	}
@@ -5031,12 +5055,54 @@ arch_vm_flush_memory_type_range(addr_t address, size_t bytes)
 
 
 extern "C" __attribute__((weak, noinline)) status_t
-arch_vm_direct_map_prepare(size_t bytes, void** cookie)
+arch_vm_direct_map_prepare(size_t bytes, uint32 tables, void** cookie)
 {
 	(void)bytes;
+	(void)tables;
 	if (cookie != NULL)
 		*cookie = NULL;
 	return B_OK;
+}
+
+
+extern "C" __attribute__((weak, noinline)) status_t
+arch_vm_direct_map_note(struct VMArea* area, void* cookie)
+{
+	(void)area;
+	(void)cookie;
+	return B_OK;
+}
+
+
+extern "C" __attribute__((weak, noinline)) void
+arch_vm_direct_map_drain(void)
+{
+}
+
+
+extern "C" __attribute__((weak, noinline)) void
+arch_vm_direct_map_flush(void* cookie)
+{
+	(void)cookie;
+}
+
+
+extern "C" __attribute__((weak, noinline)) void
+arch_vm_direct_map_release_range(struct VMArea* area, addr_t base, size_t size)
+{
+	(void)area;
+	(void)base;
+	(void)size;
+}
+
+
+extern "C" __attribute__((weak, noinline)) uint32
+r5_wc_count_regions(struct VMArea* area, void* bits, size_t bitBytes)
+{
+	(void)area;
+	(void)bits;
+	(void)bitBytes;
+	return 0;
 }
 
 
@@ -5087,8 +5153,20 @@ vm_set_area_page_memory_type(area_id id, uint32 type)
 	if (status != B_OK)
 		return status;
 
+	uint32 tables = 1;
+	const size_t kRegionBytes = 32768;
+	void* bits = malloc(kRegionBytes);
+	if (bits != NULL) {
+		AddressSpaceReadLocker regionLocker;
+		VMArea* regionArea = NULL;
+		if (regionLocker.SetFromArea(id, regionArea) == B_OK)
+			tables = r5_wc_count_regions(regionArea, bits, kRegionBytes);
+		free(bits);
+	} else
+		tables = (uint32)(info.size / B_PAGE_SIZE);
+
 	void* cookie = NULL;
-	status = arch_vm_direct_map_prepare(info.size, &cookie);
+	status = arch_vm_direct_map_prepare(info.size, tables, &cookie);
 	if (status != B_OK)
 		return status;
 
@@ -5101,33 +5179,53 @@ vm_set_area_page_memory_type(area_id id, uint32 type)
 			if (type != oldType && area->Size() > info.size)
 				status = B_NO_MEMORY;
 			else if (type != oldType) {
-				VMTranslationMap* map
-					= area->address_space->TranslationMap();
+				// Linux set_pages_array_wc() changes the direct map, flushes
+				// the TLB and then the caches, and only then hands out the
+				// write-combined mapping. The area is unmapped first so it
+				// is not a second type while that happens.
+				AreaCacheLocker cacheLocker(area);
+				VMCache* cache = cacheLocker.Get();
 				addr_t base = area->Base();
 				addr_t end = base + area->Size();
-				map->Lock();
-				area->SetMemoryType(type);
-				map->ProtectArea(area, area->protection);
-				for (addr_t virtualAddress = base; virtualAddress < end;
-						virtualAddress += B_PAGE_SIZE) {
-					phys_addr_t physicalAddress;
-					uint32 flags;
-					if (map->Query(virtualAddress, &physicalAddress, &flags)
-							!= B_OK) {
-						continue;
+				bool toWriteCombined = type != 0
+					&& type != B_WRITE_BACK_MEMORY;
+				status = arch_vm_direct_map_note(area, cookie);
+				if (status == B_OK) {
+					VMTranslationMap* map
+						= area->address_space->TranslationMap();
+					size_t reservePages = map->MaxPagesNeededToMap(base,
+						end - 1);
+					vm_page_reservation reservation;
+					vm_page_reserve_pages(&reservation, reservePages,
+						area->address_space == VMAddressSpace::Kernel()
+							? VM_PRIORITY_SYSTEM : VM_PRIORITY_USER);
+					map->UnmapPages(area, base, area->Size(), true);
+					if (!toWriteCombined)
+						arch_vm_direct_map_drain();
+					status = arch_vm_direct_map_apply(area, type, oldType,
+						cookie);
+					if (status == B_OK && toWriteCombined)
+						arch_vm_direct_map_flush(cookie);
+					if (status != B_OK)
+						area->SetMemoryType(oldType);
+					else
+						area->SetMemoryType(type);
+					for (VMCachePagesTree::Iterator it
+							= cache->pages.GetIterator();
+							vm_page* page = it.Next();) {
+						if (page->busy)
+							continue;
+						addr_t pageAddress = area->Base()
+							+ ((page->cache_offset << PAGE_SHIFT)
+								- area->cache_offset);
+						if (pageAddress < base || pageAddress >= end)
+							continue;
+						DEBUG_PAGE_ACCESS_START(page);
+						map_page(area, page, pageAddress, area->protection,
+							&reservation);
+						DEBUG_PAGE_ACCESS_END(page);
 					}
-					arch_vm_flush_memory_type_range(
-						(addr_t)physicalAddress, B_PAGE_SIZE);
-				}
-				map->Unlock();
-
-				status = arch_vm_direct_map_apply(area, type, oldType,
-					cookie);
-				if (status != B_OK) {
-					map->Lock();
-					area->SetMemoryType(oldType);
-					map->ProtectArea(area, area->protection);
-					map->Unlock();
+					vm_page_unreserve_pages(&reservation);
 				}
 			}
 		}

@@ -1159,14 +1159,17 @@ arch_vm_init_post_modules(kernel_args *args)
 #ifdef __x86_64__
 	bool largePages = X86PagingMethod64Bit::LargePagesEnabled();
 	bool runSelfTest = false;
-	bool runWcTest = true;
+	// Off unless the kernel settings say true. gfx9_wc_gtt and gpu_debug
+	// are read later, by the graphics driver, and this runs on every AMD64
+	// machine. The stick runs /system/bin/r5_wc_gtt instead.
+	bool runWcTest = false;
 	if (void* handle = load_driver_settings("kernel")) {
 		largePages = get_driver_boolean_parameter(handle,
 			"amd64_large_pages", largePages, largePages);
 		runSelfTest = get_driver_boolean_parameter(handle,
 			"amd64_large_pages_selftest", false, false);
 		runWcTest = get_driver_boolean_parameter(handle,
-			"r5_wc_direct_map_test", true, true);
+			"r5_wc_direct_map_test", false, false);
 		unload_driver_settings(handle);
 	}
 	X86PagingMethod64Bit::SetLargePagesEnabled(largePages);

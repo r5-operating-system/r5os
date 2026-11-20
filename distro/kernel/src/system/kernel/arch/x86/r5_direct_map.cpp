@@ -59,8 +59,11 @@ struct r5_direct_job {
 	phys_addr_t*		pages;
 	uint8*				created;
 	uint32				capacity;
+	uint32				count;
+	uint32				tables;
 	vm_page_reservation	reservation;
 	bool				reserved;
+	bool				filled;
 };
 
 static r5_ref* sRefs = NULL;
@@ -82,27 +85,27 @@ r5_ref_index(phys_addr_t page, uint32 slots)
 
 
 static status_t
-r5_ref_account(uint32 extra)
+r5_ref_account(uint32 pages, uint32 tables)
 {
-	if (extra > UINT32_MAX - sRefReserved)
+	if (pages > UINT32_MAX - sRefReserved)
 		return B_NO_MEMORY;
-	if (extra > UINT32_MAX - sOwnedReserved)
+	if (tables > UINT32_MAX - sOwnedReserved)
 		return B_NO_MEMORY;
-	sRefReserved += extra;
-	sOwnedReserved += extra;
+	sRefReserved += pages;
+	sOwnedReserved += tables;
 	return B_OK;
 }
 
 
 static void
-r5_ref_unaccount(uint32 extra)
+r5_ref_unaccount(uint32 pages, uint32 tables)
 {
-	if (sRefReserved >= extra)
-		sRefReserved -= extra;
+	if (sRefReserved >= pages)
+		sRefReserved -= pages;
 	else
 		sRefReserved = 0;
-	if (sOwnedReserved >= extra)
-		sOwnedReserved -= extra;
+	if (sOwnedReserved >= tables)
+		sOwnedReserved -= tables;
 	else
 		sOwnedReserved = 0;
 }
@@ -354,6 +357,29 @@ r5_free_table(phys_addr_t tablePhys)
 }
 
 
+static bool
+r5_refuse_1gb(X86VMTranslationMap64Bit* kernelMap, addr_t va)
+{
+	uint64* pml4 = kernelMap->PagingStructures64Bit()->VirtualPMLTop();
+	uint64 pml4e = pml4[VADDR_TO_PML4E(va)];
+	if ((pml4e & X86_64_PML4E_PRESENT) == 0)
+		return false;
+	uint64* pdpt = (uint64*)((addr_t)KERNEL_PMAP_BASE
+		+ (addr_t)(pml4e & X86_64_PML4E_ADDRESS_MASK));
+	uint64 pdpte = pdpt[VADDR_TO_PDPTE(va)];
+	if ((pdpte & X86_64_PDPTE_PRESENT) == 0
+		|| (pdpte & X86_64_PDPTE_LARGE_PAGE) == 0) {
+		return false;
+	}
+	static int32 sOnce = 0;
+	if (atomic_add(&sOnce, 1) == 0) {
+		dprintf("R5 VM: wc direct map refuses a 1 GiB physical-map page at %#"
+			B_PRIxADDR "\n", va);
+	}
+	return true;
+}
+
+
 /*!	The caller holds sDirectLock. A 2 MiB direct-map page is split before one
  *	4 KiB entry changes. Write-back is restored in place, and a table this
  *	code allocated is collapsed when all 512 entries are write-back again.
@@ -375,6 +401,11 @@ r5_direct_install(phys_addr_t phys, uint32 type, vm_page_reservation* reservatio
 	int32 dummy = 0;
 	kernelMap->Lock();
 	ThreadCPUPinner pinner(thread_get_current_thread());
+
+	if (r5_refuse_1gb(kernelMap, va)) {
+		kernelMap->Unlock();
+		return B_NOT_SUPPORTED;
+	}
 
 	uint64* pde = X86PagingMethod64Bit::PageDirectoryEntryForAddress(
 		kernelMap->PagingStructures64Bit()->VirtualPMLTop(), va, true,
@@ -539,7 +570,7 @@ r5_direct_drop(phys_addr_t phys, bool* created, bool* changed)
 
 
 extern "C" status_t
-arch_vm_direct_map_prepare(size_t bytes, void** cookie)
+arch_vm_direct_map_prepare(size_t bytes, uint32 tables, void** cookie)
 {
 	if (cookie == NULL)
 		return B_BAD_VALUE;
@@ -550,10 +581,14 @@ arch_vm_direct_map_prepare(size_t bytes, void** cookie)
 	uint32 pages = (uint32)(bytes / B_PAGE_SIZE);
 	if ((size_t)pages != bytes / B_PAGE_SIZE)
 		return B_NO_MEMORY;
+	if (tables == 0)
+		tables = 1;
+	if (tables > pages)
+		tables = pages;
 
-	// One table per page. A FULL_LOCK buffer is not contiguous, so each page
-	// can sit in a different 2 MiB direct-map region. pages/512 is that count
-	// only when the pages are one run.
+	// `tables` is the number of 2 MiB direct-map regions the pages fall in.
+	// One split consumes one page-table page. Reserving one page per buffer
+	// page holds back as much RAM as the buffer.
 	r5_direct_job* job = (r5_direct_job*)malloc(sizeof(r5_direct_job));
 	if (job == NULL)
 		return B_NO_MEMORY;
@@ -568,15 +603,18 @@ arch_vm_direct_map_prepare(size_t bytes, void** cookie)
 	}
 	memset(job->created, 0, pages);
 	job->capacity = pages;
+	job->count = 0;
+	job->tables = tables;
+	job->filled = false;
 	job->reservation.count = 0;
-	vm_page_reserve_pages(&job->reservation, pages, VM_PRIORITY_SYSTEM);
+	vm_page_reserve_pages(&job->reservation, tables, VM_PRIORITY_SYSTEM);
 	job->reserved = true;
 
 	status_t status = B_OK;
 	bool accounted = false;
 	{
 		MutexLocker locker(sDirectLock);
-		status = r5_ref_account(pages);
+		status = r5_ref_account(pages, tables);
 		accounted = status == B_OK;
 	}
 	if (status == B_OK)
@@ -586,7 +624,7 @@ arch_vm_direct_map_prepare(size_t bytes, void** cookie)
 	if (status != B_OK) {
 		if (accounted) {
 			MutexLocker locker(sDirectLock);
-			r5_ref_unaccount(pages);
+			r5_ref_unaccount(pages, tables);
 		}
 		vm_page_unreserve_pages(&job->reservation);
 		free(job->pages);
@@ -608,7 +646,7 @@ arch_vm_direct_map_finish(void* cookie)
 		return;
 	{
 		MutexLocker locker(sDirectLock);
-		r5_ref_unaccount(job->capacity);
+		r5_ref_unaccount(job->capacity, job->tables);
 	}
 	if (job->reserved)
 		vm_page_unreserve_pages(&job->reservation);
@@ -650,16 +688,60 @@ r5_direct_collect(VMArea* area, r5_direct_job* job, uint32* _count)
 
 
 extern "C" status_t
+arch_vm_direct_map_note(VMArea* area, void* cookie)
+{
+	r5_direct_job* job = (r5_direct_job*)cookie;
+	if (job == NULL || area == NULL || job->filled)
+		return B_OK;
+	status_t status = r5_direct_collect(area, job, &job->count);
+	if (status == B_OK)
+		job->filled = true;
+	return status;
+}
+
+
+extern "C" void
+arch_vm_direct_map_flush(void* cookie)
+{
+	r5_direct_job* job = (r5_direct_job*)cookie;
+	if (job == NULL)
+		return;
+	for (uint32 i = 0; i < job->count; i++) {
+		arch_vm_flush_memory_type_range((addr_t)job->pages[i], B_PAGE_SIZE);
+	}
+}
+
+
+static void
+r5_sfence_one(void* cookie, int cpu)
+{
+	(void)cookie;
+	(void)cpu;
+	asm volatile("sfence" ::: "memory");
+}
+
+
+extern "C" void
+arch_vm_direct_map_drain(void)
+{
+	call_all_cpus_sync(&r5_sfence_one, NULL);
+}
+
+
+extern "C" status_t
 arch_vm_direct_map_apply(VMArea* area, uint32 type, uint32 oldType, void* cookie)
 {
 	r5_direct_job* job = (r5_direct_job*)cookie;
 	if (job == NULL || area == NULL)
 		return B_OK;
 
-	uint32 count = 0;
-	status_t status = r5_direct_collect(area, job, &count);
-	if (status != B_OK)
-		return status;
+	status_t status = B_OK;
+	if (!job->filled) {
+		status = arch_vm_direct_map_note(area, cookie);
+		if (status != B_OK)
+			return status;
+	}
+	uint32 count = job->count;
 
 	bool adding = type != 0 && type != B_WRITE_BACK_MEMORY;
 	if (!adding && (oldType == 0 || oldType == B_WRITE_BACK_MEMORY))
@@ -702,21 +784,21 @@ arch_vm_direct_map_apply(VMArea* area, uint32 type, uint32 oldType, void* cookie
 
 
 extern "C" void
-arch_vm_direct_map_release(VMArea* area)
+arch_vm_direct_map_release_range(VMArea* area, addr_t base, size_t size)
 {
-	if (area == NULL)
+	if (area == NULL || size == 0)
 		return;
 	uint32 type = area->MemoryType();
 	if (type == 0 || type == B_WRITE_BACK_MEMORY)
 		return;
 
 	VMTranslationMap* map = area->address_space->TranslationMap();
-	addr_t base = area->Base();
-	addr_t end = base + area->Size();
+	addr_t end = base + size;
 	static int32 sReleaseFail = 0;
 
 	for (addr_t va = base; va < end; ) {
 		phys_addr_t batch[32];
+		addr_t batchVa[32];
 		uint32 count = 0;
 		map->Lock();
 		for (; count < 32 && va < end; va += B_PAGE_SIZE) {
@@ -726,9 +808,22 @@ arch_vm_direct_map_release(VMArea* area)
 				continue;
 			if ((flags & PAGE_PRESENT) == 0)
 				continue;
-			batch[count++] = phys;
+			batchVa[count] = va;
+			batch[count] = phys;
+			count++;
 		}
 		map->Unlock();
+		if (count == 0)
+			continue;
+
+		// The write-combined area entries go away, every CPU drains its
+		// write-combining buffers, and only then does this batch return to
+		// write-back. UnmapPages clears PTEs that are no longer present on
+		// a second call, so delete_area's later UnmapArea does not free them
+		// twice.
+		map->UnmapPages(area, batchVa[0],
+			(batchVa[count - 1] + B_PAGE_SIZE) - batchVa[0], true);
+		arch_vm_direct_map_drain();
 
 		MutexLocker locker(sDirectLock);
 		bool changed = false;
@@ -744,6 +839,61 @@ arch_vm_direct_map_release(VMArea* area)
 		if (changed)
 			r5_direct_shootdown();
 	}
+}
+
+
+extern "C" void
+arch_vm_direct_map_release(VMArea* area)
+{
+	if (area == NULL)
+		return;
+	arch_vm_direct_map_release_range(area, area->Base(), area->Size());
+}
+
+
+extern "C" uint32
+r5_wc_count_regions(VMArea* area, void* bits, size_t bitBytes)
+{
+	if (area == NULL || bits == NULL || bitBytes == 0)
+		return 1;
+	memset(bits, 0, bitBytes);
+	const phys_addr_t kRegion = 0x200000;
+	uint32 limit = (uint32)(KERNEL_PMAP_SIZE / kRegion);
+	uint32 bitCount = (uint32)(bitBytes * 8);
+	if (bitCount < limit)
+		limit = bitCount;
+
+	VMTranslationMap* map = area->address_space->TranslationMap();
+	addr_t base = area->Base();
+	addr_t end = base + area->Size();
+	uint32 count = 0;
+	bool overflow = false;
+	map->Lock();
+	for (addr_t va = base; va < end; va += B_PAGE_SIZE) {
+		phys_addr_t phys;
+		uint32 flags;
+		if (map->Query(va, &phys, &flags) != B_OK)
+			continue;
+		if ((flags & PAGE_PRESENT) == 0 || phys >= KERNEL_PMAP_SIZE)
+			continue;
+		uint32 region = (uint32)(phys / kRegion);
+		if (region >= limit) {
+			overflow = true;
+			continue;
+		}
+		uint8* byte = (uint8*)bits + (region >> 3);
+		uint8 mask = (uint8)(1u << (region & 7));
+		if ((*byte & mask) == 0) {
+			*byte |= mask;
+			count++;
+		}
+	}
+	map->Unlock();
+	if (overflow)
+		return (uint32)(area->Size() / B_PAGE_SIZE);
+	if (count == 0)
+		return 1;
+	return count;
 }
 
 
@@ -767,6 +917,10 @@ r5_pte_expect(addr_t va, bool wantWc)
 		VMAddressSpace::Kernel()->TranslationMap());
 	int32 dummy = 0;
 	kernelMap->Lock();
+	if (r5_refuse_1gb(kernelMap, va)) {
+		kernelMap->Unlock();
+		return B_ERROR;
+	}
 	uint64* pde = X86PagingMethod64Bit::PageDirectoryEntryForAddress(
 		kernelMap->PagingStructures64Bit()->VirtualPMLTop(), va, true,
 		false, NULL,

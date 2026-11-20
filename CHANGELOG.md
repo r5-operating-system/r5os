@@ -1,5 +1,21 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-20 - Write-combined direct map: unmap first, then change the type
+
+Review of `b2fa05bcce`. Turning write-combining on set the area's type and flushed through the physical map while that map was still write-back, so a prefetch could fill the line again before the physical map became write-combined. Releasing wrote write-back back into the physical map while the area's write-combined entries were still present, and other CPUs were not drained first. The reservation held one page-table page per buffer page for the whole call. The 32-area check ran on every AMD64 boot. A 1 GiB physical-map page would have been walked as a page directory.
+
+What changed: `vm_set_area_page_memory_type()` unmaps the area and notes the physical pages, changes the physical map, shoots that TLB entry down, and runs `clflush` after the shootdown. Only then is the area mapped again. Leaving write-combining runs `sfence` on every CPU before the physical map returns to write-back. `delete_area()` does that release after the cache lock is held and before `UnmapArea`. A shrink, a cut, and `vm_unmap_address_range()` go through `unmap_pages()` and `unmap_page()`, which release the same way: unmap the batch, `sfence` on every CPU, then drop the count. `vm_delete_areas()` calls `delete_area()`. A failed clone puts the type back before `delete_area()`, so that release does nothing; the apply already dropped the counts it added.
+
+The reservation is one page-table page per 2 MiB region the pages fall in. A 64 MiB run is 32 pages, not another 64 MiB. If the region bitmap cannot be allocated, the call reserves one page per buffer page. A 1 GiB physical-map page is refused and logged once (`R5 VM: wc direct map refuses a 1 GiB physical-map page`). It is not split. The EFI loader builds this map with 2 MiB pages.
+
+The boot check is off unless the kernel setting `r5_wc_direct_map_test` is `true`. `gfx9_wc_gtt` and `gpu_debug` are graphics-driver settings, read after this init, and the check would split physical-map pages on VirtualBox, QEMU, the X1, and a machine with no GPU. The stick boots are unchanged: the default on, then `/system/bin/r5_wc_gtt` (48 areas), and a second boot with `gfx9_wc_gtt false`.
+
+Compiled: `scripts/build-locked.sh` exited 0 on 20 Nov 2026, about 13:40 Europe/Amsterdam.
+
+QEMU, a private copy, KVM, host CPU, 2 CPUs, no display. With the product default the serial showed `using PAT for memory type configuration` and no `wc direct map` line, and the boot reached `package_daemon`. The same image, with only `r5_wc_direct_map_test true` added to its kernel settings file, printed `R5 VM: wc direct map ok (32 areas)` and reached `package_daemon`. No panic, and no 1 GiB refusal. `/system/bin/r5_wc_gtt` was not started. QEMU has no `radeon_hd`. The 5625U has not run it.
+
+A page that is not fully locked can be faulted in after the call. GTT areas are fully locked. A 1 GiB page is refused rather than split.
+
 ## 2026-11-20 - Write-combined direct map: review fixes
 
 The first QEMU boot of this path passed 8 areas. Two reviews of that diff found the same holes. A freed hash slot was a tombstone, and the next insert used it only when the probe also saw an empty slot, so after one wave every later buffer failed. `malloc` and `free` of that table ran while its lock was held, and the kernel heap takes the address-space lock, which `apply` and `release` already hold. The page-table reservation was `pages / 512 + 2`, which is one run, not a scattered buffer. A failed call left a count it had only incremented. `Query()` of a hole returns physical address 0, and that was treated as RAM page 0. A fully locked write-combined RAM clone was mapped write-back and took no count.
