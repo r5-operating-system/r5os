@@ -8,11 +8,17 @@
 
 /*!	EFI runtime services for kernel drivers.
 
-	INTERFACE ONLY: the module that implements it is not built yet. A
-	driver loads it with get_module() and must work without it (get_module()
-	fails today). When the module lands, drivers that use this header work
-	without a change. The contract is in docs/EFI.md. Calls are only ever
-	added at the end of efi_module_info.
+	A driver loads the module with get_module() and must work without it:
+	get_module() fails on a legacy BIOS start, in safe mode, on a CPU without
+	a backend, and when the firmware's runtime map is unusable. The contract
+	is in docs/EFI.md, the implementation in docs/EFI-RUNTIME.md. Calls are
+	only ever added at the end of efi_module_info.
+
+	Thread context only. A call may block on the module lock and then runs
+	the firmware with interrupts off for the length of that one call (well
+	under a millisecond for a read in QEMU; flash-backed firmware can take
+	longer). Never call from an interrupt handler, with interrupts off (the
+	call is refused with B_NOT_ALLOWED), or with a spinlock held.
 */
 
 

@@ -50,6 +50,7 @@ static const size_t kMaxDataSize = 64 * 1024;
 
 static mutex sLock = MUTEX_INITIALIZER("efi runtime");
 static bool sBroken = false;
+static bigtime_t sLongestCall = 0;
 static uint32 sSupported = 0;
 static uint64 sGetVariable = 0;
 static uint64 sGetNextVariableName = 0;
@@ -96,7 +97,17 @@ call_firmware(uint64 function, uint64 arg1, uint64 arg2, uint64 arg3,
 	if (sBroken)
 		return B_NOT_SUPPORTED;
 
+	bigtime_t start = system_time();
 	uint64 efiStatus = efi_arch_call(function, arg1, arg2, arg3, arg4, arg5);
+	bigtime_t duration = system_time() - start;
+	if (duration > sLongestCall) {
+		// Interrupts were off for this long; log each new maximum above 1 ms.
+		sLongestCall = duration;
+		if (duration > 1000) {
+			dprintf("efi: a firmware call kept interrupts off for %" B_PRIdBIGTIME
+				" us\n", duration);
+		}
+	}
 	if (efiStatus == EFI_ARCH_FAULTED) {
 		sBroken = true;
 		ERROR("the firmware faulted; EFI runtime services are off until the "
@@ -206,6 +217,21 @@ ucs2_to_utf8(const uint16* source, size_t sourceChars, char* target,
 //	#pragma mark - module API
 
 
+/*!	The calls may block on the module lock and then keep interrupts off for
+	one firmware call. Thread context only: never from an interrupt handler,
+	with interrupts off, or with a spinlock held.
+*/
+static bool
+caller_allowed(const char* call)
+{
+	if (are_interrupts_enabled())
+		return true;
+
+	ERROR("%s called with interrupts off, refused\n", call);
+	return false;
+}
+
+
 static status_t
 efi_get_variable(const char* name, const efi_vendor_guid* vendor,
 	void* buffer, size_t* _size, uint32* _attributes)
@@ -216,6 +242,8 @@ efi_get_variable(const char* name, const efi_vendor_guid* vendor,
 	}
 	if ((sSupported & R5_EFI_RT_GET_VARIABLE) == 0)
 		return B_NOT_SUPPORTED;
+	if (!caller_allowed("get_variable"))
+		return B_NOT_ALLOWED;
 
 	MutexLocker locker(sLock);
 
@@ -262,6 +290,8 @@ efi_get_next_variable_name(char* name, size_t nameSize,
 		return B_BAD_VALUE;
 	if ((sSupported & R5_EFI_RT_GET_NEXT_VARIABLE_NAME) == 0)
 		return B_NOT_SUPPORTED;
+	if (!caller_allowed("get_next_variable_name"))
+		return B_NOT_ALLOWED;
 
 	MutexLocker locker(sLock);
 

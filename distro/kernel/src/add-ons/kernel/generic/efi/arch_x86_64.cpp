@@ -12,13 +12,15 @@
 	so the firmware gets its own PML4: the lower half holds only the runtime
 	ranges (supervisor pages, never global), the upper half is a copy of the
 	kernel half, taken before each call. A call switches CR3 to it, with
-	interrupts off, on a 64 KiB stack of its own, with the x87/SSE state saved.
+	interrupts off, on a 64 KiB stack of its own, with the FPU state saved
+	(XSAVE with the kernel mask, or FXSAVE).
 	The firmware never sees user memory.
 */
 
 
 #include "efi_arch.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 #include <KernelExport.h>
@@ -62,7 +64,66 @@ static uint32 sTablesUsed = 0;
 static area_id sStackArea = -1;
 static uint64 sStackTop = 0;
 
-static uint8 sFPUState[512] __attribute__((aligned(16)));
+// The FPU state of the calling thread. With XSAVE, the kernel's own mask
+// (gXsaveMask, the XCR0 that the interrupt and context switch paths save) and
+// a buffer of the size CPUID leaf 0xD reports for it, 64-byte aligned, so
+// AVX and AVX-512 registers survive firmware that uses them. Without XSAVE,
+// FXSAVE (x87 and SSE are all there is).
+extern uint64 gXsaveMask;
+extern bool gHasXsave;
+
+static void* sFPUBuffer = NULL;
+static uint8* sFPUState = NULL;
+static size_t sFPUSize = 0;
+
+
+static void
+save_fpu()
+{
+	if (gHasXsave) {
+		// XSAVE leaves the header's reserved bytes alone; XRSTOR faults
+		// unless they are zero.
+		memset(sFPUState + 512, 0, 64);
+		asm volatile("xsave64 (%0)" : : "r" (sFPUState),
+			"a" ((uint32)gXsaveMask), "d" ((uint32)(gXsaveMask >> 32))
+			: "memory");
+	} else
+		asm volatile("fxsave64 (%0)" : : "r" (sFPUState) : "memory");
+}
+
+
+static void
+restore_fpu()
+{
+	if (gHasXsave) {
+		asm volatile("xrstor64 (%0)" : : "r" (sFPUState),
+			"a" ((uint32)gXsaveMask), "d" ((uint32)(gXsaveMask >> 32))
+			: "memory");
+	} else
+		asm volatile("fxrstor64 (%0)" : : "r" (sFPUState) : "memory");
+}
+
+
+static status_t
+init_fpu_buffer()
+{
+	sFPUSize = 512;
+	if (gHasXsave) {
+		cpuid_info cpuid;
+		get_current_cpuid(&cpuid, IA32_CPUID_LEAF_XSTATE, 0);
+		// EBX: bytes for the features enabled in XCR0 now.
+		sFPUSize = cpuid.regs.ebx;
+		if (sFPUSize < 576)
+			return B_ERROR;
+	}
+
+	sFPUBuffer = malloc(sFPUSize + 63);
+	if (sFPUBuffer == NULL)
+		return B_NO_MEMORY;
+	sFPUState = (uint8*)(((addr_t)sFPUBuffer + 63) & ~(addr_t)63);
+	memset(sFPUState, 0, sFPUSize);
+	return B_OK;
+}
 
 
 static inline const efi_memory_descriptor*
@@ -193,6 +254,18 @@ page_flags(const r5_efi_runtime_args* args,
 status_t
 efi_arch_init(const r5_efi_runtime_args* args)
 {
+	// The CR3 switch below writes no PCID. R5 does not set CR4.PCIDE and has
+	// no KPTI; if that changes, this must change first.
+	if ((x86_read_cr4() & IA32_CR4_PCIDE) != 0) {
+		ERROR("CR4.PCIDE is set; the firmware address space does not handle "
+			"PCIDs yet\n");
+		return B_NOT_SUPPORTED;
+	}
+
+	status_t fpuStatus = init_fpu_buffer();
+	if (fpuStatus != B_OK)
+		return fpuStatus;
+
 	// Count the tables we may need: one PML4, and per range one PDPT, PD and
 	// PT for every 512 GiB, 1 GiB and 2 MiB window it touches.
 	uint64 tableCount = 1;
@@ -280,6 +353,9 @@ efi_arch_uninit()
 	if (sTableArea >= 0)
 		delete_area(sTableArea);
 	sStackArea = sTableArea = -1;
+	free(sFPUBuffer);
+	sFPUBuffer = NULL;
+	sFPUState = NULL;
 	sTables = NULL;
 	sTablesUsed = sTableCount = 0;
 }
@@ -306,27 +382,21 @@ efi_arch_call(uint64 function, uint64 arg1, uint64 arg2, uint64 arg3,
 	Thread* thread = thread_get_current_thread();
 	void (*oldFaultHandler)(void) = thread->fault_handler;
 	thread->fault_handler = efi_call_fault;
-		// a page fault with interrupts off lands there (arch_int.cpp)
+		// any fault in the firmware lands there (r5_firmware_fault() in
+		// arch_int.cpp)
 
-	asm volatile("fxsave64 %0" : "=m" (sFPUState));
+	save_fpu();
 	uint32 mxcsr = 0x1f80;
 	asm volatile("fninit; ldmxcsr %0" : : "m" (mxcsr));
 
-	// With SMAP, a protection fault on a present page is reported as a SMAP
-	// violation unless AC is set. The firmware's address space has no user
-	// pages, so AC opens nothing; it only lets such a fault be recovered.
-	bool smap = (x86_read_cr4() & IA32_CR4_SMAP) != 0;
-	if (smap)
-		asm volatile("stac" : : : "cc");
-
+	// No PCID (checked in efi_arch_init): a plain CR3 write flushes the
+	// non-global entries, which are all the firmware's pages.
 	x86_write_cr3(sTablesPhysical);
 	uint64 status = efi_call5(function, arg1, arg2, arg3, arg4, arg5,
 		sStackTop);
 	x86_write_cr3(kernelCR3);
 
-	if (smap)
-		asm volatile("clac" : : : "cc");
-	asm volatile("fxrstor64 %0" : : "m" (sFPUState));
+	restore_fpu();
 
 	thread->fault_handler = oldFaultHandler;
 	restore_interrupts(state);

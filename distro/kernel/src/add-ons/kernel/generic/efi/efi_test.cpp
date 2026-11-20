@@ -48,10 +48,13 @@ run_tests()
 	uint8 data[256];
 	uint32 attributes = 0;
 	size = sizeof(data);
+	bigtime_t start = system_time();
 	status = efi->get_variable("BootOrder", &kGlobalVariable, data, &size,
 		&attributes);
-	dprintf("efi_test: BootOrder: %s, %lu bytes, attributes %#" B_PRIx32,
-		strerror(status), (unsigned long)size, attributes);
+	bigtime_t duration = system_time() - start;
+	dprintf("efi_test: BootOrder: %s, %lu bytes, attributes %#" B_PRIx32
+		", %" B_PRIdBIGTIME " us,", strerror(status), (unsigned long)size,
+		attributes, duration);
 	for (size_t i = 0; status == B_OK && i + 1 < size && i < 16; i += 2)
 		dprintf(" %04x", data[i] | (data[i + 1] << 8));
 	dprintf("\n");
@@ -66,6 +69,14 @@ run_tests()
 	status = efi->get_variable("R5NoSuchVariable", &kGlobalVariable, data,
 		&size, NULL);
 	dprintf("efi_test: missing variable: %s\n", strerror(status));
+
+	// A call with interrupts off must be refused, not run.
+	size = sizeof(data);
+	cpu_status state = disable_interrupts();
+	status = efi->get_variable("BootOrder", &kGlobalVariable, data, &size,
+		NULL);
+	restore_interrupts(state);
+	dprintf("efi_test: with interrupts off: %s\n", strerror(status));
 
 	char name[256] = "";
 	efi_vendor_guid vendor;

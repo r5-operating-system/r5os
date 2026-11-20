@@ -473,6 +473,7 @@ def install_efi_runtime() -> None:
         "src/system/boot/platform/efi/arch/x86_64/arch_start.cpp",
         "src/system/boot/platform/efi/arch/x86_64/arch_mmu.cpp",
         "src/system/kernel/arch/x86/arch_platform.cpp",
+        "src/system/kernel/arch/x86/arch_int.cpp",
         "src/add-ons/kernel/generic/efi/Jamfile",
         "src/add-ons/kernel/generic/efi/efi.cpp",
         "src/add-ons/kernel/generic/efi/efi_arch.h",
