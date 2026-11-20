@@ -12,8 +12,9 @@
 #include <string.h>
 #include <syslog.h>
 
-#include <FindDirectory.h>
 #include <OS.h>
+
+#include <driver_settings.h>
 
 #include <AutoDeleter.h>
 
@@ -99,23 +100,12 @@ private:
 static void
 warm_up_settle()
 {
-	char path[B_PATH_NAME_LENGTH];
-	if (find_directory(B_USER_SETTINGS_DIRECTORY, -1, false, path,
-			sizeof(path)) != B_OK)
+	void* settings = load_driver_settings("radeon_hd");
+	if (settings == NULL)
 		return;
-	if (strlcat(path, "/kernel/drivers/radeon_hd", sizeof(path))
-			>= sizeof(path))
-		return;
-	FILE* file = fopen(path, "r");
-	if (file == NULL)
-		return;
-	bool settle = false;
-	char line[256];
-	while (fgets(line, sizeof(line), file) != NULL) {
-		if (strncmp(line, "gpu_draw_settle true", 20) == 0)
-			settle = true;
-	}
-	fclose(file);
+	bool settle = get_driver_boolean_parameter(settings, "gpu_draw_settle",
+		false, false);
+	unload_driver_settings(settings);
 	if (!settle)
 		return;
 	const bigtime_t kSettleUs = 8000000;

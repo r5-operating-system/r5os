@@ -158,9 +158,9 @@ void r5_gfx9_ih_counts(uint32* msi, uint32* early, uint32* eop);
 void r5_gfx9_ih_ptrs(uint32* rptr, uint32* wptr);
 /* Once a boot, with gpu_debug, when a submit gives up on ring room. */
 void r5_gfx9_debug_wait(void);
-/* The GFX ring after a cache flush, for that dump. Kernel only. */
+/* The GFX ring as the CPU mapping returns it. Volatile reads. Kernel only. */
 uint32 r5_gfx9_debug_ring(uint32* words, uint32 cap, uint32* rptrIndex);
-/* The read pointer, the writeback and the user fence, after a flush. */
+/* The register, the writeback and the user fence. Volatile reads. */
 void r5_gfx9_debug_cache(uint32* mmio, uint64* wb, uint64* poolFence);
 /* The BAR window. The K sequence and the HDP probe write use it. */
 uint8* r5_gfx9_vram_bar(uint64 offset);

@@ -4186,8 +4186,9 @@ r5_ring_rptr()
 	uint32 reg = Read32(OUT, radeon_gfx9_byte(kGfx9Seg0, mmCP_RB0_RPTR));
 	if (sRadeonGfx9Ring.fenceAddress == NULL)
 		return reg;
-	/* No clflush here. A dirty line would be written back over the
-	 * GPU's copy. The room check compares the two values as they are. */
+	/* The fence page is the visible pool, mapped write-combining
+	 * (map_pool). A clflush or an mfence would drain a combining
+	 * buffer onto that line. The room check only reads. */
 	uint64 wb = *(volatile uint64*)(sRadeonGfx9Ring.fenceAddress + 256);
 	uint32 dwords = 0;
 	if (sRadeonGfx9Ring.ringBytes >= sizeof(uint32))
@@ -4267,9 +4268,6 @@ r5_gfx9_debug_room()
 	if (sLastRoom != 0 && now - sLastRoom < 1000000)
 		return;
 	sLastRoom = now;
-	uint64 wbCpu = 0;
-	if (sRadeonGfx9Ring.fenceAddress != NULL)
-		wbCpu = *(volatile uint64*)(sRadeonGfx9Ring.fenceAddress + 256);
 	uint32 mmio = 0;
 	uint64 wb = 0;
 	r5_gfx9_debug_cache(&mmio, &wb, NULL);
@@ -4282,28 +4280,17 @@ r5_gfx9_debug_room()
 	if (dwords >= 2 && (dwords & (dwords - 1u)) == 0) {
 		uint64 fromMmio = r5_gfx9_rptr_count(dwords, wptr, mmio);
 		uint64 fromWb = r5_gfx9_rptr_count(dwords, wptr,
-			wbCpu != 0 ? wbCpu : (uint64)mmio);
+			wb != 0 ? wb : (uint64)mmio);
 		freeMmio = r5_gfx9_ring_space(dwords, wptr, fromMmio);
 		freeWb = r5_gfx9_ring_space(dwords, wptr, fromWb);
 	}
 	uint32 cp = Read32(OUT, radeon_gfx9_byte(kGfx9Seg0, mmCP_STAT));
 	sHost->log(sHost->cookie,
-		"radeon_hd: room mmio %08lx wb %llx wb_mem %llx wptr %llu "
-		"free_mmio %llu free_wb %llu cp %08lx\n",
-		(unsigned long)mmio, (unsigned long long)wbCpu,
-		(unsigned long long)wb, (unsigned long long)wptr,
-		(unsigned long long)freeMmio, (unsigned long long)freeWb,
-		(unsigned long)cp);
-}
-
-
-static void
-r5_flush_line(volatile char* line)
-{
-	if (line == NULL)
-		return;
-	asm volatile("clflush %0" : "+m" (*line) : : "memory");
-	asm volatile("mfence" ::: "memory");
+		"radeon_hd: room mmio %08lx wb %llx wptr %llu free_mmio %llu "
+		"free_wb %llu cp %08lx\n",
+		(unsigned long)mmio, (unsigned long long)wb,
+		(unsigned long long)wptr, (unsigned long long)freeMmio,
+		(unsigned long long)freeWb, (unsigned long)cp);
 }
 
 
@@ -4315,14 +4302,12 @@ r5_gfx9_debug_cache(uint32* mmio, uint64* wb, uint64* poolFence)
 	uint64 pool = 0;
 	if (sHost != NULL && sHost->read32 != NULL)
 		reg = Read32(OUT, radeon_gfx9_byte(kGfx9Seg0, mmCP_RB0_RPTR));
+	/* Same mapping as the ring: write-combining visible pool. A flush
+	 * here would drain a combining buffer. The user-fence line also
+	 * holds the cond-exec store, so a drain can write that line back
+	 * over the value the PFP polls. These are loads only. */
 	if (sRadeonGfx9Ring.fenceAddress != NULL) {
-		volatile char* rptrLine = (volatile char*)(sRadeonGfx9Ring.fenceAddress
-			+ 256);
-		r5_flush_line(rptrLine);
 		writeback = *(volatile uint64*)(sRadeonGfx9Ring.fenceAddress + 256);
-		volatile char* fenceLine = (volatile char*)(sRadeonGfx9Ring.fenceAddress
-			+ kR5UserFenceOffset);
-		r5_flush_line(fenceLine);
 		pool = *(volatile uint64*)(sRadeonGfx9Ring.fenceAddress
 			+ kR5UserFenceOffset);
 	}
@@ -4354,9 +4339,12 @@ r5_gfx9_debug_ring(uint32* words, uint32 cap, uint32* rptrIndex)
 	uint32 n = dwords;
 	if (n > cap)
 		n = cap;
-	for (uint32 byte = 0; byte < n * sizeof(uint32); byte += 64)
-		r5_flush_line((volatile char*)(sRadeonGfx9Ring.ringAddress + byte));
-	memcpy(words, sRadeonGfx9Ring.ringAddress, n * sizeof(uint32));
+	/* The ring is write-combining. Copying it must not drain a
+	 * combining buffer onto packets the command processor has not
+	 * read yet. */
+	const volatile uint32* ring = (const volatile uint32*)sRadeonGfx9Ring.ringAddress;
+	for (uint32 i = 0; i < n; i++)
+		words[i] = ring[i];
 	return n;
 }
 

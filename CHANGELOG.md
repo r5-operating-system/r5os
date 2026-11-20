@@ -1,5 +1,17 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-20 - Debug reads of the GFX ring must not drain write-combining
+
+Problem: the dump added on 19 Nov flushed the read-pointer line, the user-fence line and the whole ring with `clflush` and `mfence`. The comment on the room check said a flush would write a dirty line back over the GPU's copy, and the dump did that flush anyway.
+
+What the mapping is: the ring and the fence page come from `kvram()` (`gfx9_k12.cpp`). The pointer is `kernel_window`, the visible pool. `map_pool()` maps that window with `vm_set_area_memory_type(..., B_WRITE_COMBINING_MEMORY)`. It is not write-back and it is not uncached. The carve-out used by `r5_gfx9_vram_cpu()` is the same type. CPU stores into that page are the ring packets, a zero at the read-pointer slot when the ring is programmed (`fenceAddress + 256`), the poll slot at `+ 512`, and the cond-exec dword at `kR5CondExecOffset` (2080). That dword shares its 64-byte line with the user fence at `kR5UserFenceOffset` (2048), which the PFP polls. `radeon_gfx9_flush_visible()` only reads. A `clflush` or an `mfence` drains a write-combining buffer, and a drain of the user-fence line can write the cond-exec store back over the fence. The command processor does not write the ring packets, so a drain of a ring line can also write a combining buffer over packets it has not read.
+
+What changed: `r5_gfx9_debug_cache()` and `r5_gfx9_debug_ring()` only load. No `clflush`, no `mfence`. The room line is `mmio`, `wb`, `wptr`, `free_mmio`, `free_wb`, `cp` again. `wb` is the volatile load. The choice of read pointer in `r5_ring_rptr()` is unchanged and is waiting for an explicit OK. `gpu_draw_settle` is read with `load_driver_settings("radeon_hd")` and `get_driver_boolean_parameter`. Same file, same key. The ring program, the PSP load, the page tables, the reset and the stop at shutdown are unchanged.
+
+Tested: `scripts/build-locked.sh` from `R5OS-gpu-stall`, shared WSL tree not reset. `jam_exit=0`, `mesa_exit=0`. `gfx9_start.o` and `SkiaOffscreen.o` rebuilt 20 Nov 2026, 09:34 Europe/Amsterdam. `r5-os.image` written 09:36.
+
+QEMU, KVM, private copy `/home/nickr/r5-os-gpu-stall.image` (the disk that already had a signed-in session), GTK window, no other QEMU, `scripts/run-qemu-r5.sh` not used. The desktop came up: Deskbar, Tracker, home and Trash. 20 Nov 2026, about 09:37–09:38 Europe/Amsterdam. Lavapipe. No `radeon_hd`, so the room check and the dump did not run. The 5625U has not run this.
+
 ## 2026-11-19 - Skia warm-up stall on the 5625U: stale read pointer, and the wait dump
 
 Problem: sticks 61 and 63 on the 5625U (Try R5, boot 1, `gpu_draw` / `gpu_debug` / `gpu_selftest` / `gpu_m13_boot 1`) stopped during the first Skia warm-up. The last accepted submits were the 24-dword buffer and the 1712-dword buffer. `CS_SUBMIT` then returned `B_BUSY` (`0x8000000e`, ring room). Stick 61 at 10.825 s, stick 63 at 10.833 s. app_server left RADV. Stick 60 (e0f8560010, no radeon_hd settings) finished in 2570 ms. Stick 62 (92e9856b40, the same settings as 61, including the room log from #4471) finished in 1815 ms and kept submitting that 1712-dword buffer through `ps2_hid`, `wacom` and `h2generic`.
