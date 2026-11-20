@@ -255,6 +255,18 @@ M13_BOOTS = {
     "done": None,
 }
 
+# The M13 follow-up stick (boot-next m13f): defaults with gpu_debug, then
+# scanout, write-combined GTT, gpu false, and the 8 s warm-up wait (#4475).
+M13F_BOOTS = {
+    "1": ["gpu_debug true", "gpu_m13f_boot 1"],
+    "2": ["gpu_debug true", "gpu_app_server true", "gpu_compositor_scanout true",
+          "gpu_m13f_boot 2"],
+    "3": ["gpu_debug true", "gfx9_wc_gtt true", "gpu_m13f_boot 3"],
+    "4": ["gpu_debug true", "gpu false", "gpu_m13f_boot 4"],
+    "5": ["gpu_debug true", "gpu_draw_settle true", "gpu_m13f_boot 5"],
+    "done": None,
+}
+
 
 # What the M13 stick's app_server must be built with (steps 2 and 3).
 M13_STRINGS = {
@@ -326,6 +338,44 @@ def check_m13_boots(commit: str) -> None:
         print(f"m13 boot {boot} settings ok")
 
 
+def check_m13f_boots(commit: str) -> None:
+    """The M13f order from a planted boot 1: 2, 3, 4, 5, done, in WSL."""
+    stage = ROOT / "generated" / "_pre-stick-m13f"
+    stage.mkdir(parents=True, exist_ok=True)
+    data = blob(commit, "distro/graphics/boot/boot-next").replace(b"\r\n", b"\n")
+    (stage / "boot-next").write_bytes(data)
+    first = "\\n".join(M13F_BOOTS["1"])
+    script = ["#!/bin/sh", "set -u", "T=/tmp/r5-pre-stick-m13f", "rm -rf $T",
+              "mkdir -p $T/home $T/us/kernel/drivers $T/ss $T/cache",
+              "echo 'selftest done' > $T/cache/r5-gpu-selftest.txt",
+              "echo x > $T/syslog",
+              "export R5_HOME=$T/home R5_USER_SETTINGS=$T/us R5_SYSTEM_SETTINGS=$T/ss",
+              "export R5_SYSLOG=$T/syslog R5_CACHE=$T/cache CHECK_WAIT=0 CHECK_LIVE=0",
+              "export BOOT_NEXT_YES=0", 'D="$(dirname "$0")"',
+              f"printf '{first}\\n' > $T/us/kernel/drivers/radeon_hd"]
+    for i in range(5):
+        script.append(f'sh "$D/boot-next" > /dev/null || echo "step {i} boot-next failed"')
+        script.append(f'echo "== step {i} next $(cat $T/home/m13f/next)"')
+        script.append("cat $T/us/kernel/drivers/radeon_hd 2>/dev/null || echo '(none)'")
+    (stage / "run.sh").write_text("\n".join(script) + "\n", encoding="utf-8", newline="\n")
+    path = wsl(f"wslpath -u '{stage / 'run.sh'}'").strip()
+    out = wsl(f"sh '{path}'")
+    blocks = out.split("== step ")[1:]
+    if len(blocks) != 5:
+        die(f"m13f boot-next sandbox: {out}")
+    for block in blocks:
+        lines = [line for line in block.strip().splitlines() if line]
+        boot = lines[0].split("next ", 1)[1]
+        got = lines[1:]
+        want = M13F_BOOTS.get(boot, "unknown")
+        if want is None:
+            if got != ["(none)"]:
+                die(f"m13f: after boot 5 a settings file stays: {got}")
+        elif got != want:
+            die(f"m13f boot {boot}: boot-next wrote {got}, want {want}")
+        print(f"m13f boot {boot} settings ok")
+
+
 def check_m12_sources(commit: str) -> None:
     check = blob(commit, "distro/graphics/boot/check").decode("utf-8")
     for pattern, text, path in M12_LINES:
@@ -336,8 +386,9 @@ def check_m12_sources(commit: str) -> None:
     # M13 stick: the planted boot 1 is M13's (an M12 stick had M12's)
     settings = blob(commit, "distro/graphics/boot/radeon_hd").decode("utf-8").split()
     if " ".join(settings) not in (" ".join(" ".join(M12_BOOTS["1"]).split()),
-            " ".join(" ".join(M13_BOOTS["1"]).split())):
-        die(f"distro/graphics/boot/radeon_hd is not M12 or M13 boot 1: {settings}")
+            " ".join(" ".join(M13_BOOTS["1"]).split()),
+            " ".join(" ".join(M13F_BOOTS["1"]).split())):
+        die(f"distro/graphics/boot/radeon_hd is not M12, M13 or M13f boot 1: {settings}")
     print(f"m12 lines {len(M12_LINES)} have a source at {commit}")
 
 
@@ -696,6 +747,7 @@ def main() -> int:
     check_m12_boots(commit)
     check_m13_sources(commit)
     check_m13_boots(commit)
+    check_m13f_boots(commit)
     if sys.argv[1] == "--paper":
         # M11: the lines and the settings per boot, before an image exists.
         print(f"pre-stick paper ok {commit}")

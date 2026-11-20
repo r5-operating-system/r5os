@@ -90,6 +90,8 @@ This is the sequence in the code after the test scaffolding came out. The 08:11 
 7. Before the ME is unhalted, the driver reads those registers back. Every mismatch is logged as `GFX9 ring contract:`. A mismatch restores the ring and does not ring the doorbell. `VM_L2_CNTL` is compared with mask `0x03fc0103` and expected `0x00080003`, which is the set of bits step 5 writes. `SH_MEM_BASES` is in that readback as well. The doorbell range upper is written `0x0ffffffc` and is not part of the readback mask.
 8. One doorbell of write pointer 914. Success leaves the CP and MEC running.
 
+The fence page is not cleared as a page. Programming the ring stores 0 at `+256` (read-pointer writeback, 64 bit) and `+512` (poll, 64 bit). Since the owner OK of 20 Nov 2026 it also stores 0 at `+2048` (user fence, 64 bit) and `+2064` (irq fence, 32 bit), before the same visible flush of that page. The cond-exec dword at `+2080` is not written. The sequence slot at `+1088` is not cleared here. `r5_next_sequence` returns one more than the low 32 bits it finds, and K1, the K2 DMA and the K2 indirect buffer each take one. A zero page ends at 3 (sticks 60 and 62). All ones wrap in those 32 bits, so the first boot ends at 2 and each later boot that keeps the page adds 3: stick 64 was 2, then 5, 8 and 11. Stick 61 ended at 16843012 (`0x01010104`, three above `0x01010101`). Stick 63 ended at 3132733624 (`0xBABABAB8`). On every stick 64 boot the user fence read `0xffffffffffffffff` before any user job. The first pipeline sync waits for 0 there. This clear has not been booted on the 5625U.
+
 The ring is off unless `/boot/home/config/settings/kernel/drivers/radeon_hd` contains `gfx9_ring true`. Userland `load_driver_settings("radeon_hd")` opens `B_USER_SETTINGS_DIRECTORY` plus `/kernel/drivers/` plus the driver name (`src/system/libroot/os/driver_settings.cpp`). The image does not ship that file. Tonga through Vega 20 are not claimed. The IP-discovery row is not compiled in. A DCN chip with no boot framebuffer returns `B_ERROR` from `radeon_hd_init`. `device_open` returns that error. `AccelerantHWInterface` then asks for the next graphics device, and once the index passes the published devices it opens VESA or the framebuffer.
 
 Tested: the 08:11 stick, the repeat boot, boot 1 on 5 Nov 2026 with `gfx9_ring true` (`GFX9 ring contract verified`, `fence landed`), and boot 2 the same morning without that file (`GFX9 ring off`, no mode 2, no PSP load). Changing this sequence requires a new boot on the 5625U that lands the fence, recorded in CHANGELOG.md.
@@ -275,7 +277,7 @@ The GDS switch, the PASID mapping and the SPM VMID update are the VMID-switch pa
 
 ## Submission (draft)
 
-`CS_SUBMIT` takes one context, one ring, and at most eight indirect buffers. Stick 19's two teapots both submitted the 24-dword and 752-dword buffers named above. The `clflush` of a GTT indirect buffer at submit is still there. It does not cover a chained buffer. It stays until a stick shows the write-combined mapping is enough.
+`CS_SUBMIT` takes one context, one ring, and at most eight indirect buffers. Stick 19's two teapots both submitted the 24-dword and 752-dword buffers named above. The `clflush` at submit covers the indirect buffer, a VRAM buffer that has a kernel mapping, and one chained buffer found in it. A second chain is not flushed. Write-combined GTT stays off until `gfx9_wc_gtt`.
 
 ## Fence by interrupt (draft)
 

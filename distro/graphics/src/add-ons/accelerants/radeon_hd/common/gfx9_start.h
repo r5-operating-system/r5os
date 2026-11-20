@@ -154,6 +154,14 @@ void r5_gfx9_free_user_vram(uint64 offset);
 /* VMID 1 and later. The pointer is the carveout window, not the BAR. */
 uint8* r5_gfx9_vram_cpu(uint64 offset);
 void r5_gfx9_ih_counts(uint32* msi, uint32* early, uint32* eop);
+/* Read only. The interrupt ring's read and write pointers. */
+void r5_gfx9_ih_ptrs(uint32* rptr, uint32* wptr);
+/* Once a boot, with gpu_debug, when a submit gives up on ring room. */
+void r5_gfx9_debug_wait(void);
+/* The GFX ring as the CPU mapping returns it. Volatile reads. Kernel only. */
+uint32 r5_gfx9_debug_ring(uint32* words, uint32 cap, uint32* rptrIndex);
+/* The register, the writeback and the user fence. Volatile reads. */
+void r5_gfx9_debug_cache(uint32* mmio, uint64* wb, uint64* poolFence);
 /* The BAR window. The K sequence and the HDP probe write use it. */
 uint8* r5_gfx9_vram_bar(uint64 offset);
 void r5_gfx9_copy_firmware(uint32* version, uint32* feature, uint32 count);

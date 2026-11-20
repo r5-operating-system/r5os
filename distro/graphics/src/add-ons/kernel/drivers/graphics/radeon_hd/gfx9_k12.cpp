@@ -513,6 +513,235 @@ r5_gfx9_ih_counts(uint32* msi, uint32* early, uint32* eop)
 }
 
 
+void
+r5_gfx9_ih_ptrs(uint32* rptr, uint32* wptr)
+{
+	uint32 rp = 0;
+	uint32 wp = 0;
+	if (sInfo != NULL) {
+		rp = kread(sInfo, oss_byte(mmIH_RB_RPTR));
+		wp = kread(sInfo, oss_byte(mmIH_RB_WPTR));
+	}
+	if (rptr != NULL)
+		*rptr = rp;
+	if (wptr != NULL)
+		*wptr = wp;
+}
+
+
+/* One packet walk. prefer < 0 keeps the last WAIT_REG_MEM. prefer >= 0
+ * keeps the last one at or before that dword, or the last one if none
+ * sits that early. A chained indirect buffer is recorded, not followed
+ * past the first level the caller copies. */
+static void
+r5_walk_pkts(const uint32* words, uint32 count, uint32 base, int prefer,
+	int* found, uint32* atOut, uint32 pkt[6], uint64* chainVa,
+	uint32* chainDw, int* chains)
+{
+	uint32 i = 0;
+	int covered = 0;
+	while (i < count) {
+		uint32 header = words[i];
+		if ((header >> 30) != 3u) {
+			i++;
+			continue;
+		}
+		uint32 n = (header >> 16) & 0x3fffu;
+		uint32 step = n + 2u;
+		if (step < 2u || i + step > count)
+			break;
+		uint32 op = (header >> 8) & 0xffu;
+		if (op == 0x3cu && n >= 5u && found != NULL && atOut != NULL
+			&& pkt != NULL) {
+			uint32 at = base + i;
+			int covers = prefer >= 0 && (int)at <= prefer;
+			if (!*found || prefer < 0 || covers || !covered) {
+				if (!(covered && !covers)) {
+					*found = 1;
+					*atOut = at;
+					for (int k = 0; k < 6; k++)
+						pkt[k] = words[i + 1u + k];
+					if (covers)
+						covered = 1;
+				}
+			}
+		}
+		if (op == 0x3fu && n >= 2u && chains != NULL && *chains < 4
+			&& chainVa != NULL && chainDw != NULL) {
+			chainVa[*chains] = r5_cs_ib_va(words[i + 1u], words[i + 2u]);
+			chainDw[*chains] = words[i + 3u] & 0xfffffu;
+			(*chains)++;
+		}
+		i += step;
+	}
+}
+
+
+static void
+r5_log_wait(const char* where, uint32 at, const uint32 pkt[6], uint64 fence)
+{
+	uint32 ctrl = pkt[0];
+	dprintf("radeon_hd: wait %s at %lu ctrl %08lx fn %lu space %lu eng %lu "
+		"ref %08lx mask %08lx\n",
+		where, (unsigned long)at, (unsigned long)ctrl,
+		(unsigned long)(ctrl & 7u), (unsigned long)((ctrl >> 4) & 3u),
+		(unsigned long)((ctrl >> 8) & 1u), (unsigned long)pkt[3],
+		(unsigned long)pkt[4]);
+	if (((ctrl >> 4) & 3u) == 1u) {
+		uint64 va = r5_cs_ib_va(pkt[1], pkt[2]);
+		uint32 value = 0;
+		uint32 got = r5_gfx9_vmid1_copy(va, &value, 1);
+		dprintf("radeon_hd: wait mem %llx got %lu value %08lx "
+			"fence %llx\n",
+			(unsigned long long)va, (unsigned long)got,
+			(unsigned long)value, (unsigned long long)fence);
+	} else {
+		dprintf("radeon_hd: wait reg %08lx %08lx\n",
+			(unsigned long)pkt[1], (unsigned long)pkt[2]);
+	}
+}
+
+
+static int
+r5_copy_ib(uint64 va, uint32 dwords, uint32* dest, uint32 cap)
+{
+	uint32 have = 0;
+	if (va == 0 || dwords == 0 || dest == NULL || cap == 0)
+		return 0;
+	if (dwords > cap)
+		dwords = cap;
+	while (have < dwords) {
+		uint32 want = dwords - have;
+		if (want > 1024u)
+			want = 1024u;
+		uint32 got = r5_gfx9_vmid1_copy(va + (uint64)have * 4u,
+			dest + have, want);
+		if (got == 0)
+			break;
+		have += got;
+		if (got < want)
+			break;
+	}
+	return (int)have;
+}
+
+
+void
+r5_gfx9_debug_wait(void)
+{
+	static int sOnce = 0;
+	if (sOnce)
+		return;
+	sOnce = 1;
+	uint32 mmio = 0;
+	uint64 wb = 0;
+	uint64 pool = 0;
+	r5_gfx9_debug_cache(&mmio, &wb, &pool);
+	uint64 seen = r5_gfx9_user_seen();
+	uint64 fence = r5_gfx9_user_fence_mc();
+	uint32 cp = 0;
+	uint32 fault = 0;
+	uint32 faultLo = 0;
+	uint32 faultHi = 0;
+	if (sInfo != NULL) {
+		cp = kread(sInfo, gc_byte(mmCP_STAT));
+		fault = kread(sInfo, gc_byte(mmVM_L2_PROTECTION_FAULT_STATUS));
+		faultLo = kread(sInfo, gc_byte(mmVM_L2_PROTECTION_FAULT_ADDR_LO32));
+		faultHi = kread(sInfo, gc_byte(mmVM_L2_PROTECTION_FAULT_ADDR_HI32));
+	}
+	dprintf("radeon_hd: wait mmio %08lx wb %llx seen %llx pool %llx "
+		"fence %llx cp %08lx fault %08lx addr %08lx%08lx\n",
+		(unsigned long)mmio, (unsigned long long)wb,
+		(unsigned long long)seen, (unsigned long long)pool,
+		(unsigned long long)fence, (unsigned long)cp,
+		(unsigned long)fault, (unsigned long)faultHi,
+		(unsigned long)faultLo);
+	r5_gfx9_pipe_log("wait");
+
+	static uint32 sRing[1024];
+	uint32 rptr = 0;
+	uint32 n = r5_gfx9_debug_ring(sRing, 1024, &rptr);
+	uint32 show[8];
+	memset(show, 0, sizeof(show));
+	for (uint32 i = 0; i < 8 && n != 0 && rptr != 0xffffffffu; i++)
+		show[i] = sRing[(rptr + i) % n];
+	dprintf("radeon_hd: wait ring %lu %08lx %08lx %08lx %08lx "
+		"%08lx %08lx %08lx %08lx\n",
+		(unsigned long)rptr, (unsigned long)show[0],
+		(unsigned long)show[1], (unsigned long)show[2],
+		(unsigned long)show[3], (unsigned long)show[4],
+		(unsigned long)show[5], (unsigned long)show[6],
+		(unsigned long)show[7]);
+	if (n != 0 && rptr != 0xffffffffu) {
+		uint32 before[8];
+		memset(before, 0, sizeof(before));
+		for (uint32 i = 0; i < 8; i++)
+			before[i] = sRing[(rptr + n - 8u + i) % n];
+		dprintf("radeon_hd: wait before %08lx %08lx %08lx %08lx "
+			"%08lx %08lx %08lx %08lx\n",
+			(unsigned long)before[0], (unsigned long)before[1],
+			(unsigned long)before[2], (unsigned long)before[3],
+			(unsigned long)before[4], (unsigned long)before[5],
+			(unsigned long)before[6], (unsigned long)before[7]);
+	}
+
+	int found = 0;
+	uint32 at = 0;
+	uint32 pkt[6];
+	uint64 chainVa[4];
+	uint32 chainDw[4];
+	int chains = 0;
+	memset(pkt, 0, sizeof(pkt));
+	/* The wait at or before the read pointer is the one the command
+	 * processor has reached. A later one is still queued. */
+	r5_walk_pkts(sRing, n, 0, rptr == 0xffffffffu ? -1 : (int)rptr,
+		&found, &at, pkt, chainVa, chainDw, &chains);
+
+	r5_gfx9_ib_now ib1;
+	r5_gfx9_ib_now ib2;
+	memset(&ib1, 0, sizeof(ib1));
+	memset(&ib2, 0, sizeof(ib2));
+	r5_gfx9_ib_regs(&ib1, &ib2);
+	dprintf("radeon_hd: wait ib1 %llx sz %lu off %lu ib2 %llx sz %lu "
+		"off %lu\n",
+		(unsigned long long)ib1.base, (unsigned long)ib1.size,
+		(unsigned long)ib1.offset, (unsigned long long)ib2.base,
+		(unsigned long)ib2.size, (unsigned long)ib2.offset);
+
+	static uint32 sIb[2048];
+	int ibFound = 0;
+	uint32 ibAt = 0;
+	uint32 ibPkt[6];
+	memset(ibPkt, 0, sizeof(ibPkt));
+	uint32 ibWords = 0;
+	if (ib1.size != 0 && ib1.size <= 65536u && ib1.base != 0) {
+		ibWords = (uint32)r5_copy_ib(ib1.base, ib1.size, sIb, 2048);
+		if (ibWords != 0)
+			r5_walk_pkts(sIb, ibWords, 0, (int)ib1.offset, &ibFound,
+				&ibAt, ibPkt, NULL, NULL, NULL);
+	}
+	if (!ibFound) {
+		for (int c = chains - 1; c >= 0 && !ibFound; c--) {
+			if (chainDw[c] == 0 || chainDw[c] > 65536u)
+				continue;
+			ibWords = (uint32)r5_copy_ib(chainVa[c], chainDw[c], sIb,
+				2048);
+			if (ibWords == 0)
+				continue;
+			r5_walk_pkts(sIb, ibWords, 0, -1, &ibFound, &ibAt, ibPkt,
+				NULL, NULL, NULL);
+		}
+	}
+	if (ibFound)
+		r5_log_wait("ib", ibAt, ibPkt, fence);
+	else if (found)
+		r5_log_wait("ring", at, pkt, fence);
+	else
+		dprintf("radeon_hd: wait packet none (ib copied %lu)\n",
+			(unsigned long)ibWords);
+}
+
+
 static int32
 ih_handler(void* data)
 {
@@ -597,10 +826,13 @@ ih_handler(void* data)
 		sLastRing = entry.ring;
 		if (entry.client == kClientCp && entry.source == kSourceEop
 			&& entry.ring == 0) {
+			/* Count first. release_sem wakes the K1 waiter, and that
+			 * waiter reads sEopCount. A count after the release loses
+			 * the race: the waiter sees 0 and reports K1 failed. */
+			sEopCount++;
 			if (sEopSem >= 0)
 				release_sem_etc(sEopSem, 1, B_DO_NOT_RESCHEDULE);
 			r5_gpu_retire_wake();
-			sEopCount++;
 			woke = true;
 		} else {
 			if (entry.client == kClientCp && (entry.source == 184

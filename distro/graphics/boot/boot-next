@@ -70,7 +70,9 @@ m12note=$home/m12/next
 # defaults (Skia on, 2 MB areas). Boot 2 adds gpu_compositor_scanout, and
 # gpu_app_server because scanout copies that back buffer. Boot 3 turns
 # scanout off and adds gfx9_wc_gtt. Boot 4 is gpu false (Lavapipe and
-# Skia). gpu_debug is on every boot so m13-measure can read the 10 s lines.
+# Skia). Boot 5 is the defaults again, and the warm-up waits 8 s
+# (gpu_draw_settle) so it starts after the USB drivers. gpu_debug is on
+# every boot so m13-measure can read the 10 s lines.
 if [ "$1" = m13f ]; then
 	stick=m13f
 	start11=1
@@ -131,7 +133,8 @@ if [ "$stick" = m13f ]; then
 		1) next=2 ;;
 		2) next=3 ;;
 		3) next=4 ;;
-		4) next=done ;;
+		4) next=5 ;;
+		5) next=done ;;
 		*)
 			echo "FAIL no M13 follow-up boot follows $cur; run boot-next m13f"
 			exit 1
@@ -231,9 +234,12 @@ gpu_m13f_boot 3" ;;
 	4) lines="$m13f
 gpu false
 gpu_m13f_boot 4" ;;
+	5) lines="$m13f
+gpu_draw_settle true
+gpu_m13f_boot 5" ;;
 	done) lines= ;;
 	*)
-		echo "FAIL unknown M13 follow-up boot $next (1, 2, 3, 4 or done)"
+		echo "FAIL unknown M13 follow-up boot $next (1, 2, 3, 4, 5 or done)"
 		exit 1
 		;;
 	esac
@@ -365,6 +371,7 @@ if [ "$stick" = m13f ]; then
 	2) echo "boot-next: next boot adds scanout (and the GPU back buffer it copies)" ;;
 	3) echo "boot-next: next boot is write-combined GTT, scanout off" ;;
 	4) echo "boot-next: next boot is gpu false (Lavapipe and Skia)" ;;
+	5) echo "boot-next: next boot waits 8 s before the Skia warm-up" ;;
 	done) echo "boot-next: next boot clears the settings" ;;
 	esac
 	echo "boot-next: settings file $file"

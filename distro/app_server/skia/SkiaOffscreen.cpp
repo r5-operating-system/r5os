@@ -12,6 +12,10 @@
 #include <string.h>
 #include <syslog.h>
 
+#include <OS.h>
+
+#include <driver_settings.h>
+
 #include <AutoDeleter.h>
 
 #include <Autolock.h>
@@ -90,9 +94,34 @@ private:
 };
 
 
+/* Opt-in. The first Skia warm-up on the 5625U starts in the same
+ * second as the USB and Bluetooth drivers. This waits that out. The
+ * default warm-up does not. */
+static void
+warm_up_settle()
+{
+	void* settings = load_driver_settings("radeon_hd");
+	if (settings == NULL)
+		return;
+	bool settle = get_driver_boolean_parameter(settings, "gpu_draw_settle",
+		false, false);
+	unload_driver_settings(settings);
+	if (!settle)
+		return;
+	const bigtime_t kSettleUs = 8000000;
+	snooze(kSettleUs);
+	fprintf(stderr, "app_server: gpu draw warm up settled %" B_PRId64
+		" ms\n", kSettleUs / 1000);
+	syslog(LOG_INFO, "app_server: gpu draw warm up settled %" B_PRId64
+		" ms\n", kSettleUs / 1000);
+}
+
+
 void
 skia_warm_up()
 {
+	warm_up_settle();
+
 	// M13 step 4: on Lavapipe the warm-up competed with the first real
 	// drawing (5625U stick 3: a run of 19.5 s, and the warm-up ran into two
 	// Finish() timeouts, 10160 ms). There it starts after the first run
