@@ -18,6 +18,7 @@ def install_kernel_sources() -> None:
         "src/system/kernel/arch/x86/timers/x86_apic.cpp",
         "src/system/kernel/arch/x86/arch_cpu.cpp",
         "src/system/kernel/arch/x86/arch_vm.cpp",
+        "src/system/kernel/arch/x86/r5_direct_map.cpp",
         "src/system/kernel/arch/x86/paging/64bit/paging.h",
         "src/system/kernel/arch/x86/paging/64bit/X86PagingMethod64Bit.h",
         "src/system/kernel/arch/x86/paging/64bit/X86PagingMethod64Bit.cpp",
@@ -285,7 +286,7 @@ def install_pstate() -> None:
         HAIKU / "src/bin/r5_string_fuzz.cpp",
         "string fuzz",
     )
-    for test in ("r5_fpu_test", "r5_timer_test", "r5_usercopy_test"):
+    for test in ("r5_fpu_test", "r5_timer_test", "r5_usercopy_test", "r5_wc_gtt"):
         install_file(
             root / f"distro/cpu/{test}.cpp",
             HAIKU / f"src/bin/{test}.cpp",
@@ -303,6 +304,13 @@ def install_pstate() -> None:
         "\tr5_pstate.cpp\n\tarch_timer.cpp\n",
         "\tr5_pstate.cpp\n",
         "kernel Jamfile",
+    )
+    insert_once(
+        HAIKU / "src/system/kernel/arch/x86/Jamfile",
+        "\tr5_pstate.cpp\n",
+        "\tr5_pstate.cpp\n\tr5_direct_map.cpp\n",
+        "\tr5_direct_map.cpp\n",
+        "kernel Jamfile direct map",
     )
     insert_once(
         HAIKU / "src/bin/Jamfile",
@@ -374,6 +382,20 @@ def install_pstate() -> None:
         "\tx86_64 @{\n\t\tr5_fpu_test\n\t}@ # x86_64\n",
         "\tr5_usercopy_test\n",
         "image bins amd64 tests",
+    )
+    insert_once(
+        HAIKU / "src/bin/Jamfile",
+        "\t\tr5_fpu_test.cpp\n",
+        "\t\tr5_fpu_test.cpp\n\t\tr5_wc_gtt.cpp\n",
+        "\tr5_wc_gtt.cpp\n",
+        "bin Jamfile wc gtt",
+    )
+    insert_once(
+        HAIKU / "build/jam/images/definitions/minimum",
+        "\t\tr5_fpu_test\n",
+        "\t\tr5_fpu_test\n\t\tr5_wc_gtt\n",
+        "\tr5_wc_gtt\n",
+        "image bins wc gtt",
     )
     insert_once(
         HAIKU / "data/launch/system",

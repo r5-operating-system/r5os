@@ -27,6 +27,7 @@
 #include <arch/x86/arch_cpu.h>
 #include <arch/x86/timer.h>
 #include <r5_pstate_info.h>
+#include <arch/vm.h>
 #ifdef __x86_64__
 #include "paging/64bit/X86PagingMethod64Bit.h"
 #endif
@@ -322,6 +323,8 @@ static status_t
 r5_pstate_control(void* cookie, uint32 op, void* data, size_t length)
 {
 	(void)cookie;
+	if (op == R5_PSTATE_WC_DIRECT_MAP)
+		return r5_wc_direct_map_selftest(48);
 	if (op != R5_PSTATE_GET_KERNEL_INFO)
 		return B_BAD_VALUE;
 	if (data == NULL || length < sizeof(r5_pstate_kernel_info)

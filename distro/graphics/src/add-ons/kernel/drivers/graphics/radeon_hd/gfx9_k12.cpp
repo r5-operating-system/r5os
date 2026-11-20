@@ -2538,6 +2538,7 @@ r5_gfx9_kernel_start(radeon_info& info)
 	sFaultIrq = irq;
 	sVmids = r5_gpu_switch_named(settings, "gfx9_vmids") != 0;
 	sVmidPerFile = r5_gpu_switch_named(settings, "gfx9_vmid_per_file") != 0;
+	sWcGtt = r5_gpu_switch_named(settings, "gfx9_wc_gtt") != 0;
 	if (settings != NULL) {
 		workload = get_driver_boolean_parameter(settings, "gfx9_workload",
 			false, true);
@@ -2548,8 +2549,6 @@ r5_gfx9_kernel_start(radeon_info& info)
 		sInvRange = get_driver_boolean_parameter(settings, "gfx9_inv_range",
 			true, true);
 		sHubLinux = get_driver_boolean_parameter(settings, "gfx9_hub_linux",
-			false, true);
-		sWcGtt = get_driver_boolean_parameter(settings, "gfx9_wc_gtt",
 			false, true);
 		r5_gfx9_set_ce_meta(get_driver_boolean_parameter(settings,
 			"gfx9_ce_meta", false, true) ? 1 : 0);

@@ -1,5 +1,21 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-20 - Write-combined GTT has no write-back alias, and is the default on the 5625U
+
+Problem: a write-combined RAM area on AMD64 kept a write-back translation in the kernel physical map. Two memory types for one physical page are not allowed, and one clean boot does not prove otherwise. `gfx9_wc_gtt` stayed off for that reason. Stick 65 boot 3 ran it once, with the alias still there.
+
+What changed: on AMD64, `vm_set_area_page_memory_type()` now follows Linux `set_pages_array_wc()`. After the existing `clflush` of the still write-back direct map, a 2 MiB direct-map page is split and those RAM pages become write-combined. A count per page covers the kernel area and the user clone. The last release writes the direct map back to write-back, shoots the TLB down, and collapses a table this code allocated when all 512 entries are write-back. A TTM-style pool was not used, because it needs the same change and must not return a write-combined page to the allocator. If the split cannot allocate, the area type is put back and the driver clears `R5_GPU_BO_WC`. The GPU page-table entry stays `MTYPE_NC` and snooped. ARM64, RISC-V and 32-bit x86 are unchanged.
+
+`gfx9_wc_gtt` now uses `r5_gpu_switch_named`. On a release-supported GPU (the 5625U, `0x15e7`) it is on unless the setting says `false`. Every other GPU stays off unless the setting says `true`. `gpu false` still turns it off.
+
+The boot check allocates and frees eight areas (4 KiB through 2 MiB plus one page, then a clone of one page), checks the bytes, and checks the direct-map type. The line is `R5 VM: wc direct map ok`. `r5_wc_direct_map_test false` skips it. `/system/bin/r5_wc_gtt` runs the same check for 48 areas. It is on the image. It was not started in the guest.
+
+Compiled: `scripts/build-locked.sh` exited 0 on 20 Nov 2026, about 12:34 Europe/Amsterdam. The image is `generated.x86_64/r5-os.image`. The known translator header errors are still printed; jam still exited 0.
+
+QEMU: a private copy of that image, KVM, host CPU, 2 CPUs, no display. Serial showed `using PAT for memory type configuration`, `R5 VM: amd64_large_pages enabled`, then `R5 VM: wc direct map ok (8 areas)`. The boot continued into `package_daemon`. No panic. QEMU has no `radeon_hd`, so this does not show a write-combined GTT buffer on the GPU. The 5625U has not run it.
+
+Stick boots, not a change to `boot-next m13f`: one boot with no `gfx9_wc_gtt` line, and one with `gfx9_wc_gtt false`. Both should print `r5_wc_gtt PASS`. On the first, a USWC buffer is write-combined. On the second, it stays cached.
+
 ## 2026-11-20 - Direct scanout and the GPU copy are on by default on the 5625U
 
 Problem: the compositor still copied every frame with the CPU on its way to the screen unless the radeon_hd settings said `gpu_app_server true` and `gpu_compositor_scanout true`. Stick 65 ran both clean on the 5625U (boot 2 of `boot-next m13f`).

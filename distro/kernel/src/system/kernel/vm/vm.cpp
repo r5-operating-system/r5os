@@ -3080,6 +3080,8 @@ delete_area(VMAddressSpace* addressSpace, VMArea* area,
 {
 	ASSERT(!area->IsWired());
 
+	arch_vm_direct_map_release(area);
+
 	if (area->id >= 0 && !alreadyRemoved)
 		VMAreas::Remove(area);
 
@@ -4966,37 +4968,111 @@ arch_vm_flush_memory_type_range(addr_t address, size_t bytes)
 }
 
 
+extern "C" __attribute__((weak, noinline)) status_t
+arch_vm_direct_map_prepare(size_t bytes, void** cookie)
+{
+	(void)bytes;
+	if (cookie != NULL)
+		*cookie = NULL;
+	return B_OK;
+}
+
+
+extern "C" __attribute__((weak, noinline)) status_t
+arch_vm_direct_map_apply(struct VMArea* area, uint32 type, uint32 oldType,
+	void* cookie)
+{
+	(void)area;
+	(void)type;
+	(void)oldType;
+	(void)cookie;
+	return B_OK;
+}
+
+
+extern "C" __attribute__((weak, noinline)) void
+arch_vm_direct_map_finish(void* cookie)
+{
+	(void)cookie;
+}
+
+
+extern "C" __attribute__((weak, noinline)) void
+arch_vm_direct_map_release(struct VMArea* area)
+{
+	(void)area;
+}
+
+
+extern "C" __attribute__((weak, noinline)) status_t
+r5_wc_direct_map_selftest(int rounds)
+{
+	(void)rounds;
+	return B_OK;
+}
+
+
 status_t
 vm_set_area_page_memory_type(area_id id, uint32 type)
 {
-	AddressSpaceWriteLocker locker;
-	VMArea* area;
-	status_t status = locker.SetFromArea(id, area);
+	if (type != 0 && type != B_WRITE_BACK_MEMORY
+		&& !arch_vm_page_memory_type_supported(type)) {
+		return B_NOT_SUPPORTED;
+	}
+
+	area_info info;
+	status_t status = get_area_info(id, &info);
 	if (status != B_OK)
 		return status;
 
-	uint32 oldType = area->MemoryType();
-	if (type == oldType)
-		return B_OK;
-	if (!arch_vm_page_memory_type_supported(type))
-		return B_NOT_SUPPORTED;
+	void* cookie = NULL;
+	status = arch_vm_direct_map_prepare(info.size, &cookie);
+	if (status != B_OK)
+		return status;
 
-	VMTranslationMap* map = area->address_space->TranslationMap();
-	addr_t base = area->Base();
-	addr_t end = base + area->Size();
-	map->Lock();
-	area->SetMemoryType(type);
-	map->ProtectArea(area, area->protection);
-	for (addr_t virtualAddress = base; virtualAddress < end;
-			virtualAddress += B_PAGE_SIZE) {
-		phys_addr_t physicalAddress;
-		uint32 flags;
-		if (map->Query(virtualAddress, &physicalAddress, &flags) != B_OK)
-			continue;
-		arch_vm_flush_memory_type_range((addr_t)physicalAddress, B_PAGE_SIZE);
+	{
+		AddressSpaceWriteLocker locker;
+		VMArea* area;
+		status = locker.SetFromArea(id, area);
+		if (status == B_OK) {
+			uint32 oldType = area->MemoryType();
+			if (type != oldType && area->Size() > info.size)
+				status = B_NO_MEMORY;
+			else if (type != oldType) {
+				VMTranslationMap* map
+					= area->address_space->TranslationMap();
+				addr_t base = area->Base();
+				addr_t end = base + area->Size();
+				map->Lock();
+				area->SetMemoryType(type);
+				map->ProtectArea(area, area->protection);
+				for (addr_t virtualAddress = base; virtualAddress < end;
+						virtualAddress += B_PAGE_SIZE) {
+					phys_addr_t physicalAddress;
+					uint32 flags;
+					if (map->Query(virtualAddress, &physicalAddress, &flags)
+							!= B_OK) {
+						continue;
+					}
+					arch_vm_flush_memory_type_range(
+						(addr_t)physicalAddress, B_PAGE_SIZE);
+				}
+				map->Unlock();
+
+				status = arch_vm_direct_map_apply(area, type, oldType,
+					cookie);
+				if (status != B_OK) {
+					map->Lock();
+					area->SetMemoryType(oldType);
+					map->ProtectArea(area, area->protection);
+					map->Unlock();
+				}
+			}
+		}
 	}
-	map->Unlock();
-	return B_OK;
+
+	arch_vm_direct_map_finish(cookie);
+	return status;
 }
 /* SPDX-SnippetEnd */
 
