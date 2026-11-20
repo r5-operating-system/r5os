@@ -1,36 +1,5 @@
 # R5OS changelog (lokaal)
 
-## 2026-11-20 - EFI runtime services for kernel drivers (generic/efi/v1)
-
-Problem: the kernel dropped the UEFI runtime services after boot, so a driver could not read a firmware variable such as the CS35L41 factory calibration (#4482). The owner chose real runtime services for every UEFI computer, not a list of variables read by the boot loader.
-
-What changed:
-- **The module.** New MIT kernel module `generic/efi/v1`, built the Haiku way like ACPI, with `get_variable` and `get_next_variable_name`. `EFI.h` is byte-identical to the header in #4482.
-- **Hand-over.** The EFI loader passes the runtime services table, the runtime ranges of the final memory map, the memory attributes table and the runtime properties to the kernel. It does this in one kernel_args block (`<boot/r5_efi_runtime.h>`), from `platform_load_ucode()` beside SMBIOS. The kernel publishes the block as a boot item, the same route as the ACPI root.
-- **Loader fix (x86_64).** Before `SetVirtualAddressMap` only runtime code and data got `VirtualStart = PhysicalStart`. Runtime MMIO, such as the variable flash, kept the firmware's value. Every `EFI_MEMORY_RUNTIME` range is now identity mapped.
-- **How the firmware runs.** It gets its own PML4: only the runtime ranges in the lower half, and the kernel half copied before each call. One call runs at a time, with interrupts off, on a 64 KiB stack of its own. The x87/SSE state is saved, and NX and RO come from the attributes table.
-- **Fault handling.** A page fault in the firmware switches the module off for that start instead of crashing.
-- **Test driver.** `efi_test`, in no package.
-
-Mistake: the first hand-over ran in `efi_main`, before the loader heap existed ("no memory for the hand-over block"). It moved to `platform_load_ucode()`.
-
-Limits:
-- Read-only: no `SetVariable`, no userland interface.
-- An instruction-fetch fault under SMEP, or a #GP/#UD in the firmware, still panics (needs `arch_int.cpp`).
-- arm64 and riscv64 build `arch_none.cpp` and do not load the module. The arm64 loader also does not set `VirtualStart` (`docs/EFI-RUNTIME.md`). arm64 was not built.
-
-Tested on 20 Nov 2026: `scripts/build-locked.sh @r5-anyboot`, jam exit 0. Then own copies of the anyboot image in QEMU (KVM, `-cpu host`, SMAP/SMEP on):
-- **OVMF** (`OVMF_CODE_4M.fd`, pflash variables):
-  - `efi: runtime services ready, revision 2.70, 5 ranges, attributes table yes`;
-  - `BootOrder` read, 16 bytes, attributes 0x7;
-  - the size query gave `B_BUFFER_OVERFLOW` with 16;
-  - `SmartAmpCalibrationData` and a missing variable gave `B_ENTRY_NOT_FOUND`;
-  - 28 variables listed;
-  - no panic, app_server started.
-- **SeaBIOS**, legacy boot of the same image: `get_module` gives `B_ENTRY_NOT_FOUND` and the boot continues (input drivers, package_daemon).
-
-Not tested: real hardware (the 5625U stick), the fault recovery, arm64.
-
 ## 2026-11-20 - Stick 67: write-combined GTT on the 5625U, and M13 closes
 
 Stick 67 is the head of #4478 (`84deb90fee`, merged as `25da2f35a3`), the regular stick settings (`gpu_draw`, `gpu_debug`, `gpu_selftest`) and no `gfx9_wc_gtt` line, so write-combined GTT was on by default. Boot 1: `gpu available`, K1 ok, scratch `0xDEADBEEF`, K2 seq 3, compositor, Skia and scanout on RADV. The 10 s lines counted write-combined buffer creates (`wc 12`, `wc 5`, `wc 175`, `wc 51`, `wc 42`). `/system/bin/r5_wc_gtt` printed PASS and the syslog has `R5 VM: wc direct map ok (48 areas)`. No panic, no page fault, no `radeon_hd: wait` line, no `left radv` and no `gpu copy off`. Boot 2 was meant to run with `gfx9_wc_gtt false`, but the settings file on the stick did not have that line, so boot 2 repeated boot 1 (K2 seq 6, `wc 37`, `wc 155`, `wc direct map ok (48 areas)`, no fault).
@@ -243,6 +212,37 @@ QEMU, KVM, a private copy of `r5-os.image`, no other QEMU was running. A GTK win
 Limits: the warm-up hang is not fixed. A and B stay unproven until a stick. The lost device is leaked for the rest of the boot; the ring is not reset here.
 
 ## 2026-11-19 - mesa_radv 25.3.6-11 repacked with the real package tool
+
+## 2026-11-20 - EFI runtime services for kernel drivers (generic/efi/v1)
+
+Problem: the kernel dropped the UEFI runtime services after boot, so a driver could not read a firmware variable such as the CS35L41 factory calibration (#4482). The owner chose real runtime services for every UEFI computer, not a list of variables read by the boot loader.
+
+What changed:
+- **The module.** New MIT kernel module `generic/efi/v1`, built the Haiku way like ACPI, with `get_variable` and `get_next_variable_name`. `EFI.h` is byte-identical to the header in #4482.
+- **Hand-over.** The EFI loader passes the runtime services table, the runtime ranges of the final memory map, the memory attributes table and the runtime properties to the kernel. It does this in one kernel_args block (`<boot/r5_efi_runtime.h>`), from `platform_load_ucode()` beside SMBIOS. The kernel publishes the block as a boot item, the same route as the ACPI root.
+- **Loader fix (x86_64).** Before `SetVirtualAddressMap` only runtime code and data got `VirtualStart = PhysicalStart`. Runtime MMIO, such as the variable flash, kept the firmware's value. Every `EFI_MEMORY_RUNTIME` range is now identity mapped.
+- **How the firmware runs.** It gets its own PML4: only the runtime ranges in the lower half, and the kernel half copied before each call. One call runs at a time, with interrupts off, on a 64 KiB stack of its own. The x87/SSE state is saved, and NX and RO come from the attributes table.
+- **Fault handling.** A page fault in the firmware switches the module off for that start instead of crashing.
+- **Test driver.** `efi_test`, in no package.
+
+Mistake: the first hand-over ran in `efi_main`, before the loader heap existed ("no memory for the hand-over block"). It moved to `platform_load_ucode()`.
+
+Limits:
+- Read-only: no `SetVariable`, no userland interface.
+- An instruction-fetch fault under SMEP, or a #GP/#UD in the firmware, still panics (needs `arch_int.cpp`).
+- arm64 and riscv64 build `arch_none.cpp` and do not load the module. The arm64 loader also does not set `VirtualStart` (`docs/EFI-RUNTIME.md`). arm64 was not built.
+
+Tested on 20 Nov 2026: `scripts/build-locked.sh @r5-anyboot`, jam exit 0. Then own copies of the anyboot image in QEMU (KVM, `-cpu host`, SMAP/SMEP on):
+- **OVMF** (`OVMF_CODE_4M.fd`, pflash variables):
+  - `efi: runtime services ready, revision 2.70, 5 ranges, attributes table yes`;
+  - `BootOrder` read, 16 bytes, attributes 0x7;
+  - the size query gave `B_BUFFER_OVERFLOW` with 16;
+  - `SmartAmpCalibrationData` and a missing variable gave `B_ENTRY_NOT_FOUND`;
+  - 28 variables listed;
+  - no panic, app_server started.
+- **SeaBIOS**, legacy boot of the same image: `get_module` gives `B_ENTRY_NOT_FOUND` and the boot continues (input drivers, package_daemon).
+
+Not tested: real hardware (the 5625U stick), the fault recovery, arm64.
 
 Problem: the -11 package from #4468 was made without Haiku's `package` tool. Four scripts were right (`boot-next`, `check`, `check-user`, `m13-measure`), but nine had the right size and the wrong content: `boot2.sh`, `check.sh`, `m8-run`, `m8-boot2`, `m8-show`, `m11-vulkan`, `m11-scroll`, `m12-measure` and `m12-scenario`. The m13f stick did not use them, but `check-pre-stick.py` compares every script and would fail.
 
