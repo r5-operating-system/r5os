@@ -1,5 +1,17 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-20 - Stick 64: the first pipeline sync waits on an uncleared fence, and K1 loses the EOP count
+
+Stick 64 is `0c08a6c012` with mesa_radv 25.3.6-11, `boot-next m13f`, five boots. Boots 2, 3 and 5 (RADV) each stopped at about 10.8 s with the PFP in `WAIT_REG_MEM`. Boot 4 (`gpu false`) warmed up in 1778 ms. Boot 1 reported `gpu not available: selftest`.
+
+The user fence at `kR5UserFenceOffset` (2048) read `0xffffffffffffffff` on every boot, including the K2 baseline line `seen 18446744073709551615`, before any user job. The ring program cleared the read pointer at `+ 256` and the poll slot at `+ 512` and did not clear this slot. The first VM flush's pipeline sync is `WAIT_REG_MEM` control `0x113`, memory, equal, reference `sUserSequence`. That sequence starts at 0. The low 32 bits of the slot are `0xffffffff`, so the compare does not match and the PFP stays there. The logged wait at ring index 785, control `0x143`, reference `0x007c0040`, is the invalidate of a later job. The walker kept the last `WAIT_REG_MEM` in the ring, and the read pointer was still at `0x50`. `gpu_draw_settle` slept inside `skia_warm_up`. The compositor had already submitted. The line `gpu draw warm up settled 8000 ms` is 8 s after `left radv`.
+
+Boot 1's K1 interrupt did arrive. The fail line is `client 20 src 181 ring 0`, which is the CP end-of-pipe, and `k1_wait_us` is 175, not the 200 ms timeout. The handler released the semaphore and then incremented `sEopCount`. The waiter woke, read 0, and `r5_gpu_check_reason` reported `selftest`. Boots 2, 3 and 5 won the other way and printed `k1 ok`. This is not the userspace self-test file, and `boot-next` is unchanged.
+
+What changed: the ring program stores 0 in the user fence and in the 32-bit irq fence at 2064 before the same `flush_visible` of that page. The cond-exec dword at 2080 is not written. `sEopCount` is incremented before `release_sem_etc`. The stall dump keeps the `WAIT_REG_MEM` at or before the read pointer, and prints the eight dwords before it. The ring program, the PSP load, the page tables, the invalidate word, the reset and the stop are unchanged. `scripts/check-pre-stick.py` from `2a36e5d9ff` knows the m13f order. `8afb3f1712` is not taken.
+
+Tested: `scripts/build-locked.sh` from `R5OS-gpu-stall`, shared WSL tree not reset. The shell exited 0. `gfx9_k12.o` and the accelerant `gfx9_start.o` were rebuilt 20 Nov 2026, 10:54 Europe/Amsterdam. The captured jam log was cut before the `jam_exit` line; the script exits with that status, and a mesa install failure exits 1. QEMU was not started: it has no `radeon_hd`. The 5625U has not run this.
+
 ## 2026-11-20 - The GFX room check reads CP_RB0_RPTR only
 
 The read pointer for free space is `CP_RB0_RPTR`. The writeback is not part of that choice. `0xffffffff` is not a read pointer. `r5_ring_has_room()` returns false, so the submit does not run and does not mask that value down to a ring offset. The dump prints the register as `0xffffffff` and does not use it as an index into the ring. The ring program is unchanged.

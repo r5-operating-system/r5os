@@ -672,6 +672,18 @@ r5_gfx9_debug_wait(void)
 		(unsigned long)show[3], (unsigned long)show[4],
 		(unsigned long)show[5], (unsigned long)show[6],
 		(unsigned long)show[7]);
+	if (n != 0 && rptr != 0xffffffffu) {
+		uint32 before[8];
+		memset(before, 0, sizeof(before));
+		for (uint32 i = 0; i < 8; i++)
+			before[i] = sRing[(rptr + n - 8u + i) % n];
+		dprintf("radeon_hd: wait before %08lx %08lx %08lx %08lx "
+			"%08lx %08lx %08lx %08lx\n",
+			(unsigned long)before[0], (unsigned long)before[1],
+			(unsigned long)before[2], (unsigned long)before[3],
+			(unsigned long)before[4], (unsigned long)before[5],
+			(unsigned long)before[6], (unsigned long)before[7]);
+	}
 
 	int found = 0;
 	uint32 at = 0;
@@ -680,8 +692,10 @@ r5_gfx9_debug_wait(void)
 	uint32 chainDw[4];
 	int chains = 0;
 	memset(pkt, 0, sizeof(pkt));
-	r5_walk_pkts(sRing, n, 0, -1, &found, &at, pkt, chainVa, chainDw,
-		&chains);
+	/* The wait at or before the read pointer is the one the command
+	 * processor has reached. A later one is still queued. */
+	r5_walk_pkts(sRing, n, 0, rptr == 0xffffffffu ? -1 : (int)rptr,
+		&found, &at, pkt, chainVa, chainDw, &chains);
 
 	r5_gfx9_ib_now ib1;
 	r5_gfx9_ib_now ib2;
@@ -812,10 +826,13 @@ ih_handler(void* data)
 		sLastRing = entry.ring;
 		if (entry.client == kClientCp && entry.source == kSourceEop
 			&& entry.ring == 0) {
+			/* Count first. release_sem wakes the K1 waiter, and that
+			 * waiter reads sEopCount. A count after the release loses
+			 * the race: the waiter sees 0 and reports K1 failed. */
+			sEopCount++;
 			if (sEopSem >= 0)
 				release_sem_etc(sEopSem, 1, B_DO_NOT_RESCHEDULE);
 			r5_gpu_retire_wake();
-			sEopCount++;
 			woke = true;
 		} else {
 			if (entry.client == kClientCp && (entry.source == 184

@@ -3893,6 +3893,13 @@ radeon_gfx9_cp_start()
 	uint64 pollGpu = fenceGpu + 512;
 	*(volatile uint64*)(sRadeonGfx9Ring.fenceAddress + 256) = 0;
 	*(volatile uint64*)(sRadeonGfx9Ring.fenceAddress + 512) = 0;
+	/* The first pipeline sync waits for sUserSequence, which is 0.
+	 * This slot is not cleared with the read pointer. On the 5625U it
+	 * read back as all ones, so that wait never matches. Eight bytes
+	 * here, and the 32-bit irq fence. The cond-exec dword at 2080
+	 * stays as it is. */
+	*(volatile uint64*)(sRadeonGfx9Ring.fenceAddress + kR5UserFenceOffset) = 0;
+	*(volatile uint32*)(sRadeonGfx9Ring.fenceAddress + kR5UserIrqOffset) = 0;
 	radeon_gfx9_flush_visible(sRadeonGfx9Ring.ringAddress,
 		sRadeonGfx9Ring.ringBytes);
 	radeon_gfx9_flush_visible(sRadeonGfx9Ring.fenceAddress, 4096);
