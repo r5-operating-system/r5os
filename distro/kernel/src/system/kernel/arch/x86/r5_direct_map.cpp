@@ -23,6 +23,7 @@
 #include <vm/vm_page.h>
 #include <vm/VMAddressSpace.h>
 #include <vm/VMArea.h>
+#include <vm/VMCache.h>
 
 #include <arch/cpu.h>
 #include <arch/vm.h>
@@ -788,6 +789,13 @@ arch_vm_direct_map_release_range(VMArea* area, addr_t base, size_t size)
 {
 	if (area == NULL || size == 0)
 		return;
+	// A framebuffer or an MMIO area is device memory. Its pages are not in
+	// the physical map, so unmapping it must not broadcast sfence or shoot
+	// the TLB down. The caller unmaps it. The same is true of a null cache.
+	if (area->cache_type == CACHE_TYPE_DEVICE
+		|| area->cache_type == CACHE_TYPE_NULL) {
+		return;
+	}
 	uint32 type = area->MemoryType();
 	if (type == 0 || type == B_WRITE_BACK_MEMORY)
 		return;

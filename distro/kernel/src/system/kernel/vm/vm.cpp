@@ -721,11 +721,15 @@ map_page(VMArea* area, vm_page* page, addr_t address, uint32 protection,
 static inline bool
 unmap_page(VMArea* area, addr_t virtualAddress)
 {
-	uint32 type = area->MemoryType();
-	if (type != 0 && type != B_WRITE_BACK_MEMORY) {
-		arch_vm_direct_map_release_range(area, virtualAddress, B_PAGE_SIZE);
-		return true;
-	}
+// SPDX-SnippetBegin
+// SPDX-License-Identifier: MIT
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// AMD64: for write-combined RAM this unmaps, drains every CPU, and
+	// restores the physical map. A device area, and every other
+	// architecture, leaves that call empty. The translation map unmaps
+	// either way. A second unmap finds the entries already gone.
+	arch_vm_direct_map_release_range(area, virtualAddress, B_PAGE_SIZE);
+// SPDX-SnippetEnd
 	return area->address_space->TranslationMap()->UnmapPage(area,
 		virtualAddress, true);
 }
@@ -735,11 +739,11 @@ unmap_page(VMArea* area, addr_t virtualAddress)
 static inline void
 unmap_pages(VMArea* area, addr_t base, size_t size)
 {
-	uint32 type = area->MemoryType();
-	if (type != 0 && type != B_WRITE_BACK_MEMORY) {
-		arch_vm_direct_map_release_range(area, base, size);
-		return;
-	}
+// SPDX-SnippetBegin
+// SPDX-License-Identifier: MIT
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	arch_vm_direct_map_release_range(area, base, size);
+// SPDX-SnippetEnd
 	area->address_space->TranslationMap()->UnmapPages(area, base, size, true);
 }
 

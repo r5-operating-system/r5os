@@ -1,5 +1,17 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-20 - A non-write-back area is unmapped on every architecture
+
+`unmap_page()` and `unmap_pages()` returned after `arch_vm_direct_map_release_range()` for every area that was not write-back. On AMD64 that function unmaps write-combined RAM itself. On ARM64, RISC-V and 32-bit x86 it is the empty stub, so a cut, a shrink, `vm_unmap_address_range()`, discarding a range, or `vm_change_cache_of_clones()` left a write-combined, uncached or device area mapped. On AMD64 the same path also ran `sfence` on every CPU for a framebuffer or an MMIO area, which has no physical-map entry to restore.
+
+`unmap_page()` and `unmap_pages()` now always call the translation map. The direct-map release runs first, and only for a RAM or file area whose type is not write-back: it unmaps, drains every CPU, then restores write-back. The translation-map call then finds those entries gone. A device area, including a framebuffer, returns from the release without a drain or a shootdown, and the translation map unmaps it. On the other architectures the release is the empty stub, and `UnmapPage` / `UnmapPages` of that architecture unmap the area. `delete_area()` still releases and then calls `UnmapArea`.
+
+Callers of `unmap_page()`: the copy-on-write fault. Callers of `unmap_pages()`: cutting the end, the head or the middle of an area, discarding a range, `vm_change_cache_of_clones()`, and shrinking an area. `vm_unmap_address_range()` cuts the area. `vm_delete_areas()` calls `delete_area()`.
+
+Compiled: `scripts/build-locked.sh` exited 0 on 20 Nov 2026, about 14:05 Europe/Amsterdam. ARM64 and RISC-V were not built. The shared change is the call that was already how those architectures unmapped a write-back area.
+
+QEMU, a private copy, KVM, host CPU, 2 CPUs, no display. With the product default the serial showed `using PAT for memory type configuration`, no `wc direct map` line, and `package_daemon`. The same image with only `r5_wc_direct_map_test true` in its kernel settings printed `R5 VM: wc direct map ok (32 areas)` and reached `package_daemon`. No panic. `/system/bin/r5_wc_gtt` was not started. QEMU has no `radeon_hd`. The 5625U has not run it.
+
 ## 2026-11-20 - Write-combined direct map: unmap first, then change the type
 
 Review of `b2fa05bcce`. Turning write-combining on set the area's type and flushed through the physical map while that map was still write-back, so a prefetch could fill the line again before the physical map became write-combined. Releasing wrote write-back back into the physical map while the area's write-combined entries were still present, and other CPUs were not drained first. The reservation held one page-table page per buffer page for the whole call. The 32-area check ran on every AMD64 boot. A 1 GiB physical-map page would have been walked as a page directory.
