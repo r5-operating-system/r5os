@@ -1,5 +1,9 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-20 - GFX9 ring contract records the user-fence clear
+
+The owner OK for the stores in `acf812183a` is now in `docs/GRAPHICS.md`, `GFX9 ring on GC 9.3 (fixed)`. Programming the ring stores 0 at `+2048` (user fence, 64 bit) and `+2064` (irq fence, 32 bit). The cond-exec dword at `+2080` is not written. The sequence slot at `+1088` is not cleared. `r5_next_sequence` is one more than the low 32 bits there, and K1, the K2 DMA and the K2 indirect buffer each take one. Sticks 60 and 62 ended at 3. Stick 61 ended at 16843012 (`0x01010104`). Stick 63 ended at 3132733624 (`0xBABABAB8`). Stick 64's four boots were 2, 5, 8 and 11, three apart, from an all-ones slot that wrapped. The user fence on those boots read `0xffffffffffffffff`. The 5625U has not booted the clear.
+
 ## 2026-11-20 - Stick 64: the first pipeline sync waits on an uncleared fence, and K1 loses the EOP count
 
 Stick 64 is `0c08a6c012` with mesa_radv 25.3.6-11, `boot-next m13f`, five boots. Boots 2, 3 and 5 (RADV) each stopped at about 10.8 s with the PFP in `WAIT_REG_MEM`. Boot 4 (`gpu false`) warmed up in 1778 ms. Boot 1 reported `gpu not available: selftest`.
