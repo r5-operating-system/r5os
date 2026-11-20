@@ -60,6 +60,10 @@ static acpi_module_info* sACPI;
 #define AMD_PIN_STATE		(1u << 16)
 #define AMD_OUTPUT_VALUE	(1u << 22)
 #define AMD_OUTPUT_ENABLE	(1u << 23)
+// Interrupt status (bit 28) and wake status (bit 29) are write-1-to-clear.
+// A read-modify-write must not write back a set status bit, or it clears
+// a pending interrupt or wake on that pin.
+#define AMD_STATUS_BITS		((1u << 28) | (1u << 29))
 
 
 static uint32
@@ -79,7 +83,7 @@ amd_read(volatile uint32* reg)
 static void
 amd_write(volatile uint32* reg, bool high)
 {
-	uint32 value = *reg;
+	uint32 value = *reg & ~AMD_STATUS_BITS;
 	if (high)
 		value |= AMD_OUTPUT_VALUE;
 	else
@@ -91,7 +95,7 @@ amd_write(volatile uint32* reg, bool high)
 static void
 amd_set_output(volatile uint32* reg, bool enabled)
 {
-	uint32 value = *reg;
+	uint32 value = *reg & ~AMD_STATUS_BITS;
 	if (enabled)
 		value |= AMD_OUTPUT_ENABLE;
 	else

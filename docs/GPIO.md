@@ -28,6 +28,6 @@ Rules: calls are only added at the end of `gpio_module_info`; a call that shippe
 
 | Controller | ACPI IDs | Register |
 |---|---|---|
-| AMD FCH | `AMD0030`, `AMDI0030` | One 32-bit register per pin at MMIO base + pin × 4: pin state bit 16, output value bit 22, output enable bit 23 |
+| AMD FCH | `AMD0030`, `AMDI0030` | One 32-bit register per pin at MMIO base + pin × 4: pin state bit 16, output value bit 22, output enable bit 23. Interrupt status (bit 28) and wake status (bit 29) are write-1-to-clear: `write_pin()` and `set_output_enabled()` write those two bits as 0, so a pending interrupt or wake on the pin is not cleared |
 
 R5's `i2c_hid` (`InputReadyLine.cpp`) still reads its interrupt line from the same AMD registers itself. It can move to this module later; it was left unchanged in this round. Intel (for the X1 Carbon) is a later vendor part; interrupts on GPIO pins are not part of this interface yet.

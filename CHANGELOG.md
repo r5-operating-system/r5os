@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-20 - GPIO module: keep AMD interrupt and wake status
+
+Problem (review of #4482): `write_pin()` and `set_output_enabled()` in `generic/gpio/v1` read the AMD FCH pin register and wrote it back whole. Bits 28 (interrupt status) and 29 (wake status) are write-1-to-clear, so a set bit written back cleared a pending interrupt or wake on that pin.
+
+What changed: both calls mask those two bits out of the value they write. `docs/GPIO.md` says so.
+
+Limits: not jammed on its own (stick 68 was being built from 46ef9b8837 in the shared tree); the next build is the compile check. Stick 68 does not have this fix. For the CS35L41 reset pin, which is an output, the old code would only have cleared status bits nobody waits for.
+
 ## 2026-11-20 - CS35L41 phase 2: speaker protection firmware, opt-in
 
 Problem: phase 1 plays in DSP bypass without speaker protection, so its gain is capped at the lowest step.
