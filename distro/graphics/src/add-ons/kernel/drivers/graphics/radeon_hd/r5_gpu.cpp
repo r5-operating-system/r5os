@@ -225,6 +225,11 @@ gpu_get_info(gpu_client* client, void* buffer, size_t length)
 		out.capabilities |= R5_GPU_CAP_GUILTY;
 	if (sAvailable && !sGpuOff)
 		out.capabilities |= R5_GPU_CAP_AVAILABLE;
+	/* NULL settings: the default of a switch, on only on a
+	 * release-supported GPU without "gpu false" (r5_gpu_checks.h). */
+	if (sAvailable && !sGpuOff
+		&& r5_gpu_switch_named(NULL, "gpu_release") != 0)
+		out.capabilities |= R5_GPU_CAP_RELEASE;
 	out.va_offset = R5_GPU_VA_OFFSET;
 	out.va_max = R5_GPU_VA_MAX;
 	/* amdgpu_kms.c for this VM: the hole ends at AMDGPU_GMC_HOLE_END

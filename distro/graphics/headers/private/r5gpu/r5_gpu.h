@@ -78,6 +78,11 @@ enum {
  * when this bit is set (Zink for OpenGL, RADV presenting). Older callers
  * ignore it. A caller may read only the first 32 bytes of GET_INFO. */
 #define R5_GPU_CAP_AVAILABLE 8u
+/* M13: the device is release-supported for R5 (the r5Level of its table
+ * row) and "gpu false" is not set. Set only together with
+ * R5_GPU_CAP_AVAILABLE. app_server turns on its tested GPU paths by
+ * default only when both bits are set. Older callers ignore it. */
+#define R5_GPU_CAP_RELEASE 16u
 
 static inline int
 r5_gpu_query_guilty(uint32_t caps)

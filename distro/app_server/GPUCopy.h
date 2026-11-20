@@ -2,8 +2,9 @@
  * SPDX-FileCopyrightText: 2026 R5OS Contributors
  * SPDX-License-Identifier: MIT
  *
- * The last copy from the back buffer to the screen. Off unless
- * gpu_app_server is set. A failure stays on the CPU copy.
+ * The last copy from the back buffer to the screen. On by default on a
+ * release-supported GPU (M13), otherwise only when gpu_app_server is set.
+ * gpu_app_server false turns it off. A failure stays on the CPU copy.
  */
 
 #ifndef GPU_COPY_H
@@ -40,6 +41,10 @@ public:
 	// on another thread still copies.
 	static	void				SetFrontCurrent(bool current);
 	static	bool				FrontCurrent();
+	// M13: the GPU passed its checks and is release-supported
+	// (R5_GPU_CAP_AVAILABLE and R5_GPU_CAP_RELEASE). The default of the
+	// GPU paths that were tested on that GPU.
+	static	bool				ReleaseDefault();
 };
 
 #endif

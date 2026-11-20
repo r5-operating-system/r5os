@@ -125,8 +125,9 @@ struct settings {
 	bool	fail;
 	bool	debug;
 	// M11 step 3b, decision 4: the frame is the back buffer and one
-	// vkCmdCopyBuffer puts it on the scanout. Opt-in until the stick has
-	// measured both ways.
+	// vkCmdCopyBuffer puts it on the scanout. M13 (stick 65): on by
+	// default on a release-supported GPU, otherwise opt-in.
+	// gpu_compositor_scanout false turns it off.
 	bool	scanout;
 	// M11 stick: gpu_compositor_zero_copy false, a test switch. Every
 	// program keeps the copy path, so the stick can measure both ways in
@@ -169,6 +170,7 @@ load_settings(settings& out)
 	// On by default (user, 15 Nov 2026): RADV when the GPU passed its
 	// checks, Lavapipe otherwise. gpu_compositor false is the opt-out.
 	out.want = true;
+	out.scanout = GPUCopy::ReleaseDefault();
 	char path[B_PATH_NAME_LENGTH];
 	if (find_directory(B_USER_SETTINGS_DIRECTORY, -1, false, path,
 			sizeof(path)) != B_OK)
@@ -199,6 +201,8 @@ load_settings(settings& out)
 			out.noCull = true;
 		if (strncmp(line, "gpu_compositor_scanout true", 27) == 0)
 			out.scanout = true;
+		if (strncmp(line, "gpu_compositor_scanout false", 28) == 0)
+			out.scanout = false;
 		if (strncmp(line, "gpu_compositor_zero_copy false", 30) == 0)
 			out.noZeroCopy = true;
 		if (strncmp(line, "gpu_draw true", 13) == 0)
