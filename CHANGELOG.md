@@ -1,5 +1,25 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-20 - CS35L41 speaker amplifiers, phase 1: DSP bypass with a hard limit
+
+Problem: the internal speakers of the HP ENVY x360 15-ey0xxx (Ryzen 5 5625U, HDA `1002:1637`, codec subsystem `103c:8a31`) sit behind two Cirrus Logic CS35L41 amplifiers on I²C (ACPI `CSC3551`). Nothing powered them, so the speakers were silent; only the headphone jack played.
+
+What changed:
+
+- A vendor-neutral kernel interface between HD Audio and speaker amplifiers: `audio_amp.h` and the module `generic/audio_amp/v1` (MIT, `docs/AUDIO-AMP.md`). An amplifier driver registers per codec subsystem. The R5 `hda` copy calls prepare before the playback stream runs, start after, stop before it stops and unprepare after; it mutes the amplifiers while the headphone jack senses a plug, and offers only the rates the amplifiers accept (48 kHz). Codecs without an analog output (HDMI) never call it. No Cirrus names on the HDA side.
+- A new MIT driver `cs35l41` (`drivers/audio/hmulti`, x86_64). Haiku's `pch_i2c` registers a node for the first `I2cSerialBus` of an ACPI device only, so the driver reads every address from `_CRS` and talks to each amplifier through `i2c_bus_interface::exec_command()` with its own address. GPIO 0 of `_CRS` (the shared reset) is driven low and high once on an AMD FCH GPIO controller, GPIO 1 (speaker ID) is logged. `_SUB` selects the machine table (boost 1000 nH, 24 µF, 4100 mA; slots 0 and 1); an unknown machine leaves the amplifiers off.
+- Power-up per amplifier: soft reset, OTP boot wait, chip ID and revision check, errata for 0xA0 or 0xB0/0xB2 (others are left off), the full OTP trim (99 fields, map A or B by OTP ID), initial mute, boost, chip GPIO pads, TDM slot. Playback uses the DSP bypass path. Faults (boost, temperature, short) are polled every 100 ms while playing; a fault mutes that amplifier until the next stream, three faults turn it off until restart. Each stop logs `0x00010010` and releases latched faults.
+- The ACPI mute override (`_DSM` function 5, Notify `0x91`) mutes both amplifiers while it is set.
+- Hard limit: without the DSP firmware there is no speaker protection. The PCM gain field of `0x00006C04` (bits 9:5) is written as 0, its lowest step, instead of the bypass default 4 (named 4.5 dB in the spec). The spec does not give the step size, so no dB value is claimed for the cap. No setting raises it. The driver logs once per boot that it runs in bypass with the cap.
+
+Clean room: written from `generated/CS35L41-SPEC.md` and `CS35L41-SPEC-2.md` (reader Gemini, from Linux v7.3.5, facts only), `generated/CS35L41-DESIGN.md`, R5's `distro/` and Haiku's own code. No Linux code was opened by the builder. `docs/LICENSING.md` describes the method.
+
+Limits: phase 1 has no DSP firmware, no speaker protection, no calibration, no suspend or resume. The firmware in `distro/firmware/cirrus` stays uninstalled. The first boot also decides whether the device manager probes the driver when media_server opens `/dev/audio/hmulti`, whether the reset GPIO is driven correctly, and whether the Realtek codec feeds the amplifiers without extra verbs. Volume is the codec's; only the amplifier's own gain is capped.
+
+Mistake on the way: the first jam failed in `Driver.cpp` (`hmulti_audio.h` and the kernel `lock.h` both define `ASSERT`, and `ByteOrder.h` was missing). The rate now comes from `Amplifier.cpp`, which does not include `lock.h`.
+
+Tested: built with `scripts/build-locked.sh` on AMD64 (jam exit 0; `cs35l41` and `audio_amp` are in `haiku.hpkg`). QEMU (KVM, `intel-hda` + `hda-duplex`, own copy of the image): boots to the first-start window, no panic; the serial log has `hda: 0 speaker amplifiers for subsystem 1af40022`. QEMU has no I²C controller and no `CSC3551`, so the CS35L41 driver itself never ran and no playback with amplifiers ran. The 5625U has not booted this. ARM64 and RISC-V were not built (the driver is packaged for x86_64 only).
+
 ## 2026-11-20 - Stick 67: write-combined GTT on the 5625U, and M13 closes
 
 Stick 67 is the head of #4478 (`84deb90fee`, merged as `25da2f35a3`), the regular stick settings (`gpu_draw`, `gpu_debug`, `gpu_selftest`) and no `gfx9_wc_gtt` line, so write-combined GTT was on by default. Boot 1: `gpu available`, K1 ok, scratch `0xDEADBEEF`, K2 seq 3, compositor, Skia and scanout on RADV. The 10 s lines counted write-combined buffer creates (`wc 12`, `wc 5`, `wc 175`, `wc 51`, `wc 42`). `/system/bin/r5_wc_gtt` printed PASS and the syslog has `R5 VM: wc direct map ok (48 areas)`. No panic, no page fault, no `radeon_hd: wait` line, no `left radv` and no `gpu copy off`. Boot 2 was meant to run with `gfx9_wc_gtt false`, but the settings file on the stick did not have that line, so boot 2 repeated boot 1 (K2 seq 6, `wc 37`, `wc 155`, `wc direct map ok (48 areas)`, no fault).

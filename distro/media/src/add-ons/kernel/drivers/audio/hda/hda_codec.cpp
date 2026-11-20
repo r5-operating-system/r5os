@@ -12,6 +12,16 @@
 #include "driver.h"
 #include "hda_codec_defs.h"
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// Speaker amplifier calls, in hda_multi_audio.cpp.
+extern void hda_amp_get();
+extern void hda_amp_put();
+extern void hda_amp_set_mute(hda_audio_group* audioGroup, bool mute);
+extern void hda_amp_codec_closing(hda_codec* codec);
+// SPDX-SnippetEnd
+
 
 #undef TRACE
 #define TRACE_CODEC
@@ -1317,6 +1327,15 @@ hda_audio_group_check_sense(hda_audio_group* audioGroup, bool disable)
 			VID_SET_PIN_WIDGET_CONTROL, disable ? 0 : ctrl);
 		hda_send_verbs(audioGroup->codec, &verb, NULL, 1);
 	}
+
+	/* SPDX-SnippetBegin
+	 * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	 * SPDX-License-Identifier: MIT
+	 * Speaker amplifiers follow the speaker pins: muted while
+	 * headphones are in.
+	 */
+	hda_amp_set_mute(audioGroup, disable);
+	/* SPDX-SnippetEnd */
 }
 
 
@@ -1558,11 +1577,24 @@ hda_codec_delete(hda_codec* codec)
 	int32 result;
 	wait_for_thread(codec->unsol_response_thread, &result);
 
+	/* SPDX-SnippetBegin
+	 * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	 * SPDX-License-Identifier: MIT
+	 */
+	hda_amp_codec_closing(codec);
+	/* SPDX-SnippetEnd */
+
 	for (uint32 i = 0; i < codec->num_audio_groups; i++) {
 		hda_codec_delete_audio_group(codec->audio_groups[i]);
 		codec->audio_groups[i] = NULL;
 	}
 
+	/* SPDX-SnippetBegin
+	 * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	 * SPDX-License-Identifier: MIT
+	 */
+	hda_amp_put();
+	/* SPDX-SnippetEnd */
 	free(codec);
 }
 
@@ -1583,6 +1615,14 @@ hda_codec_new(hda_controller* controller, uint32 codecAddress)
 
 	codec->controller = controller;
 	codec->addr = codecAddress;
+	/* SPDX-SnippetBegin
+	 * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	 * SPDX-License-Identifier: MIT
+	 * One reference to the speaker amplifier module per codec, released
+	 * in hda_codec_delete().
+	 */
+	hda_amp_get();
+	/* SPDX-SnippetEnd */
 	codec->response_sem = create_sem(0, "hda_codec_response_sem");
 	if (codec->response_sem < B_OK) {
 		ERROR("Failed to create semaphore\n");

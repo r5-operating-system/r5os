@@ -22,6 +22,95 @@ extern bool hda_group_has_analog_output(hda_audio_group* group);
 
 #include <kernel.h>
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+//
+// Speaker amplifiers behind the codec (audio_amp.h, docs/AUDIO-AMP.md).
+// Each codec holds one reference to the module from hda_codec_new() to
+// hda_codec_delete(). Only a codec with an analog output drives them.
+#include <audio_amp.h>
+#include <lock.h>
+#include <util/AutoLock.h>
+
+static mutex sAudioAmpLock = MUTEX_INITIALIZER("hda audio amp");
+static audio_amp_module_info* sAudioAmp = NULL;
+static int32 sAudioAmpReferences = 0;
+
+
+void
+hda_amp_get()
+{
+	MutexLocker locker(sAudioAmpLock);
+	audio_amp_module_info* module;
+	if (get_module(AUDIO_AMP_MODULE_NAME, (module_info**)&module) == B_OK) {
+		sAudioAmp = module;
+		sAudioAmpReferences++;
+	}
+}
+
+
+void
+hda_amp_put()
+{
+	MutexLocker locker(sAudioAmpLock);
+	if (sAudioAmpReferences == 0)
+		return;
+	put_module(AUDIO_AMP_MODULE_NAME);
+	if (--sAudioAmpReferences == 0)
+		sAudioAmp = NULL;
+}
+
+
+/*!	Returns the amplifier module if \a audioGroup drives amplifiers. */
+static audio_amp_module_info*
+hda_amp_for(hda_audio_group* audioGroup, uint32* _subsystem)
+{
+	if (sAudioAmp == NULL || audioGroup == NULL || audioGroup->codec == NULL
+		|| !hda_group_has_analog_output(audioGroup)) {
+		return NULL;
+	}
+	*_subsystem = audioGroup->codec->subsystem_id;
+	int32 count = sAudioAmp->count(*_subsystem);
+
+	// One line per change of the count, not per call.
+	static int32 sLoggedCount = -1;
+	if (atomic_get_and_set(&sLoggedCount, count) != count) {
+		dprintf("hda: %" B_PRId32 " speaker amplifiers for subsystem %08"
+			B_PRIx32 "\n", count, *_subsystem);
+	}
+	return count > 0 ? sAudioAmp : NULL;
+}
+
+
+void
+hda_amp_set_mute(hda_audio_group* audioGroup, bool mute)
+{
+	// Also without amplifiers yet: the module keeps the state for one that
+	// registers later.
+	if (sAudioAmp == NULL || audioGroup == NULL || audioGroup->codec == NULL
+		|| !hda_group_has_analog_output(audioGroup)) {
+		return;
+	}
+	sAudioAmp->set_mute(audioGroup->codec->subsystem_id, mute);
+}
+
+
+void
+hda_amp_codec_closing(hda_codec* codec)
+{
+	for (uint32 i = 0; i < codec->num_audio_groups; i++) {
+		uint32 subsystem;
+		audio_amp_module_info* amp = hda_amp_for(codec->audio_groups[i],
+			&subsystem);
+		if (amp != NULL) {
+			amp->stop(subsystem);
+			amp->unprepare(subsystem);
+		}
+	}
+}
+// SPDX-SnippetEnd
+
 
 //#define TRACE_MULTI_AUDIO
 #ifdef TRACE_MULTI_AUDIO
@@ -201,6 +290,20 @@ get_description(hda_audio_group* audioGroup, multi_description* data)
 	// force existance of 48kHz if variable rates are not supported
 	if (data->output_rates == 0)
 		data->output_rates = B_SR_48000;
+
+	/* SPDX-SnippetBegin
+	 * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	 * SPDX-License-Identifier: MIT
+	 * Offer only the rates the speaker amplifiers accept.
+	 */
+	{
+		uint32 subsystem;
+		audio_amp_module_info* amp = hda_amp_for(audioGroup, &subsystem);
+		uint32 ampRates = amp != NULL ? amp->rates(subsystem) : 0;
+		if ((data->output_rates & ampRates) != 0)
+			data->output_rates &= ampRates;
+	}
+	/* SPDX-SnippetEnd */
 	if (data->input_rates == 0)
 		data->input_rates = B_SR_48000;
 
@@ -1125,8 +1228,26 @@ buffer_exchange(hda_audio_group* audioGroup, multi_buffer_info* data)
 		return B_ERROR;
 
 	if (!audioGroup->playback_stream->running) {
+		/* SPDX-SnippetBegin
+		 * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		 * SPDX-License-Identifier: MIT
+		 * Amplifiers are prepared before the stream runs and started
+		 * after it runs.
+		 */
+		uint32 subsystem;
+		audio_amp_module_info* amp = hda_amp_for(audioGroup, &subsystem);
+		if (amp != NULL) {
+			audio_amp_format format;
+			format.rate = audioGroup->playback_stream->sample_rate;
+			format.format = audioGroup->playback_stream->sample_format;
+			format.channels = audioGroup->playback_stream->num_channels;
+			amp->prepare(subsystem, &format);
+		}
 		hda_stream_start(audioGroup->codec->controller,
 			audioGroup->playback_stream);
+		if (amp != NULL)
+			amp->start(subsystem);
+		/* SPDX-SnippetEnd */
 	}
 	if (audioGroup->record_stream && !audioGroup->record_stream->running) {
 		hda_stream_start(audioGroup->codec->controller,
@@ -1195,8 +1316,21 @@ static status_t
 buffer_force_stop(hda_audio_group* audioGroup)
 {
 	if (audioGroup->playback_stream != NULL) {
+		/* SPDX-SnippetBegin
+		 * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		 * SPDX-License-Identifier: MIT
+		 * Amplifiers are stopped before the stream stops and powered
+		 * down after it stopped.
+		 */
+		uint32 subsystem;
+		audio_amp_module_info* amp = hda_amp_for(audioGroup, &subsystem);
+		if (amp != NULL)
+			amp->stop(subsystem);
 		hda_stream_stop(audioGroup->codec->controller,
 			audioGroup->playback_stream);
+		if (amp != NULL)
+			amp->unprepare(subsystem);
+		/* SPDX-SnippetEnd */
 	}
 	if (audioGroup->record_stream != NULL) {
 		hda_stream_stop(audioGroup->codec->controller,

@@ -50,6 +50,15 @@ FILES = (
     "src/add-ons/kernel/drivers/audio/hda/hda_codec_defs.h",
     "src/add-ons/kernel/drivers/audio/hda/hda_controller.cpp",
     "src/add-ons/kernel/drivers/audio/hda/hda_multi_audio.cpp",
+    "headers/private/audio/audio_amp.h",
+    "src/add-ons/kernel/generic/audio_amp/Jamfile",
+    "src/add-ons/kernel/generic/audio_amp/audio_amp.cpp",
+    "src/add-ons/kernel/drivers/audio/cs35l41/Jamfile",
+    "src/add-ons/kernel/drivers/audio/cs35l41/Amplifier.cpp",
+    "src/add-ons/kernel/drivers/audio/cs35l41/Amplifier.h",
+    "src/add-ons/kernel/drivers/audio/cs35l41/Driver.cpp",
+    "src/add-ons/kernel/drivers/audio/cs35l41/OtpMap.h",
+    "src/add-ons/kernel/drivers/audio/cs35l41/Registers.h",
     "headers/os/drivers/usb/USB_audio.h",
     "src/preferences/media/MediaViews.cpp",
     "src/preferences/media/MediaViews.h",
@@ -145,6 +154,47 @@ def main() -> None:
     hook_midi2test(haiku)
     hook_webcam(haiku)
     hook_mixer(haiku)
+    hook_audio_amp(haiku)
+
+
+def insert_after(path: pathlib.Path, anchor: str, line: str, tag: str) -> None:
+    """Insert line after anchor once. Fails loudly if the anchor is gone."""
+    text = path.read_text(encoding="utf-8")
+    if line in text:
+        print(f"already {tag}")
+        return
+    if text.count(anchor) != 1:
+        raise SystemExit(f"{path}: anchor for {tag} not found once")
+    path.write_text(text.replace(anchor, anchor + line, 1), encoding="utf-8")
+    print(f"hooked {tag}")
+
+
+def hook_audio_amp(haiku: pathlib.Path) -> None:
+    """Build and package the speaker amplifier module and the CS35L41
+    driver (MIT, R5-only; docs/AUDIO-AMP.md)."""
+    generic = haiku / "src/add-ons/kernel/generic/Jamfile"
+    audio = haiku / "src/add-ons/kernel/drivers/audio/Jamfile"
+    package = haiku / "build/jam/packages/Haiku"
+    insert_after(generic,
+        "SubInclude HAIKU_TOP src add-ons kernel generic dpc ;\n",
+        "SubInclude HAIKU_TOP src add-ons kernel generic audio_amp ;\n",
+        "audio_amp jam")
+    insert_after(audio,
+        "SubInclude HAIKU_TOP src add-ons kernel drivers audio hda ;\n",
+        "SubInclude HAIKU_TOP src add-ons kernel drivers audio cs35l41 ;\n",
+        "cs35l41 jam")
+    insert_after(package, "AddFilesToPackage add-ons kernel generic :\n",
+        "\taudio_amp\n", "audio_amp package")
+    insert_after(package, "AddNewDriversToPackage audio hmulti :\n",
+        "\tcs35l41@x86_64\n", "cs35l41 package")
+    for path, line in (
+        (generic, "generic audio_amp ;"),
+        (audio, "audio cs35l41 ;"),
+        (package, "\taudio_amp\n"),
+        (package, "\tcs35l41@x86_64\n"),
+    ):
+        if path.read_text(encoding="utf-8").count(line) != 1:
+            raise SystemExit(f"{path}: {line.strip()} is not there exactly once")
 
 
 def hook_mixer(haiku: pathlib.Path) -> None:
