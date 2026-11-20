@@ -31,6 +31,7 @@
 #include <AudioAmp.h>
 #include <device_manager.h>
 #include <i2c.h>
+#include <driver_settings.h>
 #include <lock.h>
 #include <util/AutoLock.h>
 
@@ -39,6 +40,7 @@ extern "C" {
 }
 
 #include "Amplifier.h"
+#include "Firmware.h"
 
 
 #define TRACE_ALWAYS(a...)	dprintf("cs35l41: " a)
@@ -62,7 +64,11 @@ static const machine_info kMachines[] = {
 	{
 		0x103c8a31, "HP ENVY x360 15", 2, { 0, 1 },
 		1000, 24, 4100,			// 1.0 uH, 24 uF, 4100 mA
-		0x4924, 0x0, 0x75
+		0x4924, 0x0, 0x75,
+		// The firmware files Windows uses on this laptop are named
+		// 103c8a29; their bytes match the Windows driver here
+		// (THIRD_PARTY_NOTICES.md, CHANGELOG 19 Nov 2026).
+		"103c8a29"
 	},
 };
 
@@ -473,11 +479,13 @@ cs35l41_init_driver(device_node* node, void** _cookie)
 		TRACE_ALWAYS("reset gpio: %s, not driven\n", strerror(gpioStatus));
 	}
 
+	int32 speakerID = -1;
 	gpioStatus = sGPIO->get_acpi_pin(driver->handle, 1, &driver->speaker_id);
 	if (gpioStatus == B_OK) {
 		bool high = false;
 		sGPIO->read_pin(driver->speaker_id, &high);
-		TRACE_ALWAYS("speaker id %d\n", high ? 1 : 0);
+		speakerID = high ? 1 : 0;
+		TRACE_ALWAYS("speaker id %" B_PRId32 "\n", speakerID);
 	} else {
 		driver->speaker_id = NULL;
 		TRACE_ALWAYS("speaker id gpio: %s\n", strerror(gpioStatus));
@@ -493,8 +501,49 @@ cs35l41_init_driver(device_node* node, void** _cookie)
 		amp->PowerUp();
 	}
 
-	TRACE_ALWAYS("DSP bypass: no speaker protection, PCM gain capped at its"
-		" lowest step\n");
+	// The speaker protection firmware only runs when the driver settings
+	// ask for it (cs35l41_firmware true), until a boot proves it.
+	bool useFirmware = false;
+	void* settings = load_driver_settings("cs35l41");
+	if (settings != NULL) {
+		useFirmware = get_driver_boolean_parameter(settings,
+			"cs35l41_firmware", false, true);
+		unload_driver_settings(settings);
+	}
+
+	bool anyFirmware = false;
+	for (uint32 i = 0; useFirmware && i < driver->amp_count; i++) {
+		Amplifier* amp = driver->amps[i];
+		if (!amp->IsReady())
+			continue;
+		firmware_file program = {};
+		firmware_file tuning = {};
+		const char* suffix = i == 0 ? "l0" : "r0";
+		if (find_firmware(driver->machine->firmware_id, speakerID, suffix,
+				&program, &tuning) != B_OK) {
+			TRACE_ALWAYS("amp %" B_PRIu32 ": no firmware for %s spkid %"
+				B_PRId32 " %s; DSP bypass\n", i, driver->machine->firmware_id,
+				speakerID, suffix);
+			continue;
+		}
+		if (amp->StartFirmware(program, tuning) == B_OK)
+			anyFirmware = true;
+		free_firmware(&program);
+		free_firmware(&tuning);
+	}
+
+	if (useFirmware) {
+		// The factory calibration lives in an EFI variable. The R5 kernel
+		// does not keep the EFI runtime services after boot, so it cannot
+		// be read; the firmware runs with its default calibration.
+		TRACE_ALWAYS("no factory calibration: EFI variables are not"
+			" readable after boot\n");
+	}
+	if (!anyFirmware) {
+		TRACE_ALWAYS("DSP bypass%s: no speaker protection, PCM gain capped"
+			" at its lowest step\n", useFirmware ? "" : " (cs35l41_firmware"
+				" is off)");
+	}
 
 	driver->events = create_sem(0, "cs35l41 events");
 	apply_acpi_mute(driver, true);

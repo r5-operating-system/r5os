@@ -46,6 +46,15 @@ static const uint32 kPdmGain = 4;
 static const uint32 kCappedGain = (kPcmGainCap << AMP_GAIN_PCM_SHIFT)
 	| kPdmGain;
 
+/*!	The gain with the speaker protection firmware running: the tuned gain
+	in bits 9:5 and the default PDM gain (CS35L41-SPEC-2.md section 4). No
+	tuning configuration file is installed, so the tuned gain is the
+	default PCM gain, 4.
+*/
+static const uint32 kDefaultPcmGain = 4;
+static const uint32 kFirmwareGain = (kDefaultPcmGain << AMP_GAIN_PCM_SHIFT)
+	| kPdmGain;
+
 
 struct register_value {
 	uint32	address;
@@ -85,8 +94,8 @@ static const register_value kErrataB0[] = {
 	{ 0x00004c2c, 0x00000000 },
 };
 
-// Playback in DSP bypass (spec section 4, "Stream prepare").
-static const register_value kBypassPrepare[] = {
+// Playback setup shared by both paths (spec section 4, "Stream prepare").
+static const register_value kPrepareCommon[] = {
 	{ REG_PLL_CLOCK, 0x00000430 },		// reference = 3.072 MHz BCLK
 	{ REG_DSP_CLOCK, 0x00000003 },
 	{ REG_GLOBAL_RATE, 0x00000003 },	// 48 kHz
@@ -98,6 +107,10 @@ static const register_value kBypassPrepare[] = {
 	{ REG_ROUTE_ASP_TX2, 0x00000019 },	// IMON
 	{ REG_ROUTE_DSP_RX3, 0x00000018 },	// VMON
 	{ REG_ROUTE_DSP_RX4, 0x00000019 },	// IMON
+};
+
+// DSP bypass.
+static const register_value kPrepareBypass[] = {
 	{ REG_ASP_CONTROL, 0x00000002 },
 	{ REG_ROUTE_DAC, 0x00000008 },		// DAC = ASP RX1
 	{ REG_ROUTE_ASP_TX3, 0x00000000 },
@@ -105,6 +118,20 @@ static const register_value kBypassPrepare[] = {
 	{ REG_ROUTE_DSP_RX5, 0x00000020 },
 	{ REG_ROUTE_DSP_RX6, 0x00000021 },
 	{ REG_ASP_ENABLES, 0x00010000 },	// ASP RX1
+};
+
+// DSP firmware running.
+static const register_value kPrepareDsp[] = {
+	{ REG_ASP_CONTROL, 0x00000003 },
+	{ REG_ROUTE_DAC, 0x00000032 },		// DAC = DSP1 TX1
+	{ REG_ROUTE_ASP_TX3, 0x00000028 },	// VPMON
+	{ REG_ROUTE_ASP_TX4, 0x00000029 },	// VBSTMON
+	{ REG_ROUTE_DSP_RX5, 0x00000028 },	// VPMON, internal boost
+	{ REG_ROUTE_DSP_RX6, 0x00000029 },	// VBSTMON
+	{ REG_ASP_ENABLES, 0x00010001 },	// ASP RX1 and TX1
+};
+
+static const register_value kPrepareFinal[] = {
 	{ REG_ROUTE_DSP_RX1, 0x00000008 },
 	{ REG_ROUTE_DSP_RX2, 0x00000008 },
 };
@@ -152,7 +179,11 @@ Amplifier::Amplifier(const i2c_link& link, const machine_info& machine,
 	fAcpiMuted(false),
 	fFaulted(false),
 	fFaultCount(0),
-	fFaultsSeen(0)
+	fFaultsSeen(0),
+	fDspRunning(false),
+	fBlockSize(16),
+	fFirmwareID(0),
+	fAlgorithmCount(0)
 {
 }
 
@@ -499,14 +530,35 @@ Amplifier::Prepare(uint32 rate)
 		return B_BAD_VALUE;
 	}
 
-	for (size_t i = 0; i < B_COUNT_OF(kBypassPrepare); i++) {
-		status_t status = _Write(kBypassPrepare[i].address,
-			kBypassPrepare[i].value);
+	status_t status = _WriteTable(kPrepareCommon,
+		B_COUNT_OF(kPrepareCommon));
+	if (status != B_OK)
+		return status;
+
+	if (fDspRunning) {
+		status = _WriteTable(kPrepareDsp, B_COUNT_OF(kPrepareDsp));
+		if (status == B_OK)
+			status = _WriteTable(kPrepareFinal, B_COUNT_OF(kPrepareFinal));
+		if (status == B_OK) {
+			status = _Update(REG_POWER_BLOCKS, POWER_VMON_IMON,
+				POWER_VMON_IMON);
+		}
+		if (status == B_OK)
+			status = _Mailbox(MAILBOX_RESUME, MAILBOX_STATUS_RUNNING);
+		if (status != B_OK) {
+			_Update(REG_POWER_BLOCKS, POWER_VMON_IMON, 0);
+			_FallBackToBypass("DSP did not resume");
+		}
+	}
+	if (!fDspRunning) {
+		status = _WriteTable(kPrepareBypass, B_COUNT_OF(kPrepareBypass));
+		if (status == B_OK)
+			status = _WriteTable(kPrepareFinal, B_COUNT_OF(kPrepareFinal));
 		if (status != B_OK)
 			return status;
 	}
-	status_t status = _Update(REG_POWER_BLOCKS, POWER_AMP_ENABLE,
-		POWER_AMP_ENABLE);
+
+	status = _Update(REG_POWER_BLOCKS, POWER_AMP_ENABLE, POWER_AMP_ENABLE);
 	if (status != B_OK)
 		return status;
 
@@ -570,13 +622,31 @@ Amplifier::Unprepare()
 	fPrepared = false;
 
 	_Update(REG_POWER_BLOCKS, POWER_AMP_ENABLE, 0);
+	if (fDspRunning) {
+		if (_Mailbox(MAILBOX_PAUSE, MAILBOX_STATUS_PAUSED) != B_OK)
+			_FallBackToBypass("DSP did not pause");
+		_Update(REG_POWER_BLOCKS, POWER_VMON_IMON, 0);
+	}
 
 	uint32 status = 0;
 	_Read(REG_IRQ_STATUS_1, &status);
 	uint32 released = _ReleaseFaults();
 	TRACE_ALWAYS("amp %" B_PRIu32 " (%s) stop: status %#010" B_PRIx32
-		"%s\n", fIndex, Side(), status, released != 0 ? ", faults released"
-			: "");
+		"%s, %s\n", fIndex, Side(), status,
+		released != 0 ? ", faults released" : "",
+		fDspRunning ? "DSP paused" : "bypass");
+}
+
+
+status_t
+Amplifier::_WriteTable(const register_value* table, size_t count)
+{
+	for (size_t i = 0; i < count; i++) {
+		status_t status = _Write(table[i].address, table[i].value);
+		if (status != B_OK)
+			return status;
+	}
+	return B_OK;
 }
 
 
@@ -669,7 +739,7 @@ Amplifier::_ApplyMute()
 		&& fFaultCount < kMaxFaults;
 	if (play) {
 		_Write(REG_DIGITAL_VOLUME, DIGITAL_VOLUME_0DB);
-		_Write(REG_AMP_GAIN, kCappedGain);
+		_Write(REG_AMP_GAIN, fDspRunning ? kFirmwareGain : kCappedGain);
 	} else {
 		_Write(REG_AMP_GAIN, AMP_GAIN_MUTE);
 		_Write(REG_DIGITAL_VOLUME, DIGITAL_VOLUME_MUTE);
@@ -682,6 +752,10 @@ Amplifier::Shutdown()
 {
 	Stop();
 	Unprepare();
+	if (fDspRunning) {
+		_StopCore();
+		fDspRunning = false;
+	}
 	if (fReady) {
 		_Write(REG_AMP_GAIN, AMP_GAIN_MUTE);
 		_Write(REG_DIGITAL_VOLUME, DIGITAL_VOLUME_MUTE);

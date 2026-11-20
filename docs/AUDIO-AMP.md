@@ -52,4 +52,19 @@ The HP ENVY x360 15 (Ryzen 5 5625U, HDA subsystem `103c:8a31`) has two CS35L41 a
 
 **Hard limit.** Without the DSP firmware there is no speaker protection. The PCM gain field of `REG_AMP_GAIN` (bits 9:5) is written as 0, its lowest step; the bypass default would be 4 (4.5 dB). The size of a step is not in the specification, so no dB figure is claimed. Nothing raises it in phase 1.
 
-Phase 2 (DSP firmware with speaker protection, calibration, suspend) is not built.
+## CS35L41, phase 2: speaker protection firmware
+
+Off by default until a boot proves it. A driver settings file `cs35l41` (in `~/config/settings/kernel/drivers` or `/boot/system/settings/kernel/drivers`) with the line
+
+```
+cs35l41_firmware true
+```
+
+turns it on. Without it, or when anything below fails, the amplifiers run in DSP bypass with the hard limit above.
+
+- Files: `system/non-packaged/data/firmware/cirrus` (installed by `scripts/apply-cirrus-fw.py`, unmodified, sha256 checked). The search order is the specification's, with the machine's firmware ID: `103c8a29` for subsystem `103c:8a31`, the files Windows uses on this laptop. The program is also reachable as `cs35l41-dsp1-spk-prot-103c8a29.wmfw`, a symlink to `halo_cspl_RAM_revB2_29.63.1.wmfw`. The tuning is `...-spkid<N>-l0.bin` or `-r0.bin`, with N read from the speaker ID GPIO.
+- Load at start: program blocks, the algorithm table from DSP memory, tuning blocks, the 16 stream rates, memory protection, core start, then the firmware state must read 2 (running) within 15 ms and the mailbox must report running or paused; then the firmware is paused.
+- Playback: DSP routing, VMON/IMON on, mailbox resume before the stream runs; pause and VMON/IMON off after it stopped. The gain with the firmware running is the default PCM gain (4, 4.5 dB): no tuning configuration file is installed.
+- Any failure (missing file, bad format, state not 2, mailbox error, no resume or pause) stops the DSP core and falls back to bypass with the cap, with a log line.
+- Factory calibration: the specification reads it from an EFI variable. The R5 kernel does not keep the EFI runtime services after boot, so it cannot be read; the firmware runs with its default calibration and the driver logs that.
+- Suspend and resume are not built.

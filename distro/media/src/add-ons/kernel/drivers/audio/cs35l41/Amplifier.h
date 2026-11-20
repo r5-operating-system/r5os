@@ -26,7 +26,31 @@ struct machine_info {
 	uint32		boost_loop;			// REG_BOOST_LOOP bits 15:0
 	uint32		boost_inductor;		// REG_BOOST_SLOPE bits 1:0
 	uint32		boost_slope;		// REG_BOOST_SLOPE bits 15:8
+	// The ID in the speaker protection firmware names ("103c8a29").
+	const char*	firmware_id;
 };
+
+
+// A firmware file read into memory (Firmware.cpp).
+struct firmware_file {
+	uint8*		data;
+	size_t		size;
+	char		name[96];
+};
+
+
+// The location of one algorithm in DSP memory, from the algorithm table.
+struct dsp_algorithm {
+	uint32		id;
+	uint32		version;
+	uint32		xm_base;			// word offsets
+	uint32		ym_base;
+};
+
+#define MAX_DSP_ALGORITHMS	16
+
+
+struct register_value;
 
 
 struct i2c_link {
@@ -49,6 +73,11 @@ public:
 			void				Stop();
 			void				Unprepare();
 
+			status_t			StartFirmware(const firmware_file& program,
+									const firmware_file& tuning);
+			bool				IsFirmwareRunning() const
+									{ return fDspRunning; }
+
 			void				SetCodecMute(bool mute);
 			void				SetAcpiMute(bool mute);
 			void				CheckFaults();
@@ -66,6 +95,8 @@ public:
 private:
 			status_t			_Read(uint32 reg, uint32* value);
 			status_t			_Write(uint32 reg, uint32 value);
+			status_t			_WriteTable(const register_value* table,
+									size_t count);
 			status_t			_Update(uint32 reg, uint32 mask,
 									uint32 value);
 			status_t			_WaitFor(uint32 reg, uint32 bits,
@@ -78,6 +109,20 @@ private:
 			status_t			_SetupPads();
 			void				_ApplyMute();
 			uint32				_ReleaseFaults();
+
+			// DSP firmware (AmplifierDsp.cpp)
+			status_t			_WriteBlock(uint32 reg, const uint8* data,
+									size_t size);
+			status_t			_LoadProgram(const firmware_file& file);
+			status_t			_ReadAlgorithms();
+			status_t			_LoadTuning(const firmware_file& file);
+			status_t			_FindControl(const firmware_file& file,
+									uint32 algorithm, const char* name,
+									uint32* _offset);
+			const dsp_algorithm* _Algorithm(uint32 id) const;
+			status_t			_Mailbox(uint32 command, uint32 expected);
+			void				_StopCore();
+			void				_FallBackToBypass(const char* reason);
 
 			i2c_link			fLink;
 			const machine_info&	fMachine;
@@ -93,6 +138,12 @@ private:
 			bool				fFaulted;
 			uint32				fFaultCount;
 			uint32				fFaultsSeen;
+
+			bool				fDspRunning;
+			uint32				fBlockSize;
+			uint32				fFirmwareID;
+			dsp_algorithm		fAlgorithms[MAX_DSP_ALGORITHMS];
+			uint32				fAlgorithmCount;
 };
 
 

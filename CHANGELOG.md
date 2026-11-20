@@ -1,5 +1,24 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-20 - CS35L41 phase 2: speaker protection firmware, opt-in
+
+Problem: phase 1 plays in DSP bypass without speaker protection, so its gain is capped at the lowest step.
+
+What changed:
+
+- The cs35l41 driver can load and start the Cirrus speaker protection firmware (`CS35L41-SPEC.md` section 3, `CS35L41-SPEC-2.md` sections 2 and 4): it reads the `.wmfw` program and the `.bin` tuning, writes their blocks into DSP memory (XM/YM unpacked and packed, PM packed, absolute), reads the algorithm table, finds the firmware state control `HALO_STATE` in the program's descriptors, writes the stream rates, opens the DSP memory protection, starts the core, waits for state 2 (running, 15 ms), checks the mailbox and pauses the firmware. Playback resumes it with the DSP routing and VMON/IMON on, and pauses it after the stream. With the firmware running the gain is the default PCM gain (0x84; no tuning configuration file exists). Shutdown stops the core (watchdog off, core off, soft reset).
+- Off by default: a `cs35l41` driver settings file with `cs35l41_firmware true` turns it on. Any failure falls back to bypass with the phase 1 cap and a log line.
+- File search order from the spec, with firmware ID `103c8a29` for subsystem `103c:8a31` (the files Windows uses on this laptop) and the speaker ID from the GPIO. `scripts/apply-cirrus-fw.py` installs `distro/firmware/cirrus` unmodified (sha256 checked against `THIRD_PARTY_NOTICES.md`) with `LICENSE.cirrus`, and a symlink `cs35l41-dsp1-spk-prot-103c8a29.wmfw` to `halo_cspl_RAM_revB2_29.63.1.wmfw`.
+- Factory calibration is not applied: it lives in an EFI variable, and the R5 kernel does not keep the EFI runtime services after boot (only the EFI loader uses them). The driver logs this once. No workaround was added.
+
+Interpretations of the spec, to check on the stick: the DSP memory protection writes 0xFFFFFFFF to every 32-bit register of the union of the two ranges the spec gives (0x02BC3000-0x02BC305C); the DSP clock (0x2C08 = 3) is set before the download; a `.bin` block's DSP word is the algorithm base plus the block offset, then the region formula; a `.bin` absolute block at offset 0 for the firmware ID (the spec's "global region base", no address given) is skipped and logged. Firmware blocks go out in transfers of 16 data bytes (4 if the I²C controller refuses).
+
+The firmware formats were also checked against the stored files on the host: the `.wmfw` has 4 XM packed, 1 YM packed, 1 PM packed and 3 descriptor blocks, `HALO_STATE` is control 0 of algorithm 0x400A4 in XM, and each tuning `.bin` has one YM packed and one YM unpacked block for algorithm 0xCD at word offsets that are multiples of 4.
+
+Limits: not booted on the 5625U; the DSP path has never run. Calibration, suspend and resume are missing. QEMU has no CS35L41.
+
+Tested: built with `scripts/build-locked.sh` (jam exit 0); the image holds the nine Cirrus files and the symlink (their names are in `r5-os.image`). QEMU boots to the first-start window, no panic, `hda: 0 speaker amplifiers for subsystem 1af40022`.
+
 ## 2026-11-20 - CS35L41 speaker amplifiers, phase 1: DSP bypass with a hard limit
 
 Problem: the internal speakers of the HP ENVY x360 15-ey0xxx (Ryzen 5 5625U, HDA `1002:1637`, codec subsystem `103c:8a31`) sit behind two Cirrus Logic CS35L41 amplifiers on I²C (ACPI `CSC3551`). Nothing powered them, so the speakers were silent; only the headphone jack played.

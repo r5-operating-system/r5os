@@ -13,5 +13,7 @@ UsePrivateKernelHeaders ;
 
 KernelAddon cs35l41 :
 	Amplifier.cpp
+	AmplifierDsp.cpp
 	Driver.cpp
+	Firmware.cpp
 ;
