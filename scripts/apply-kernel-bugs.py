@@ -458,12 +458,14 @@ def install_usb_stability() -> None:
 
 
 def install_gpio() -> None:
-    """The GPIO module (generic/gpio/v1, MIT, docs/GPIO.md) and its header.
+    """The GPIO module (generic/gpio/v1, MIT, docs/GPIO.md) and its header,
+    and the EFI interface header (docs/EFI.md, interface only).
     The package line is in distro/desktop/build/jam/packages/Haiku."""
     root = pathlib.Path(__file__).resolve().parents[1]
     (HAIKU / "src/add-ons/kernel/generic/gpio").mkdir(exist_ok=True)
     for relative in (
         "headers/os/drivers/GPIO.h",
+        "headers/os/drivers/EFI.h",
         "src/add-ons/kernel/generic/gpio/Jamfile",
         "src/add-ons/kernel/generic/gpio/gpio.cpp",
     ):

@@ -31,6 +31,7 @@
 #include <AudioAmp.h>
 #include <device_manager.h>
 #include <i2c.h>
+#include <EFI.h>
 #include <driver_settings.h>
 #include <lock.h>
 #include <util/AutoLock.h>
@@ -226,6 +227,61 @@ acpi_notify(acpi_handle device, uint32 value, void* context)
 		return;
 	atomic_set(&driver->notify_pending, 1);
 	release_sem_etc(driver->events, 1, B_DO_NOT_RESCHEDULE);
+}
+
+
+/*!	Reads the factory speaker calibration from EFI (CS35L41-SPEC-2.md,
+	round 3), through the EFI module when it exists. Without it the
+	firmware runs with its default calibration.
+*/
+static void
+read_calibration(uint8** _data, size_t* _size)
+{
+	*_data = NULL;
+	*_size = 0;
+
+	efi_module_info* efi;
+	if (get_module(B_EFI_MODULE_NAME, (module_info**)&efi) != B_OK) {
+		TRACE_ALWAYS("no factory calibration: %s is not available\n",
+			B_EFI_MODULE_NAME);
+		return;
+	}
+
+	static const struct {
+		const char*		name;
+		efi_vendor_guid	vendor;
+	} kVariables[] = {
+		{ "SmartAmpCalibrationData", { 0x53559579, 0x8753, 0x4f5c,
+			{ 0x91, 0x30, 0xe8, 0x2a, 0xcf, 0xb8, 0xd8, 0x93 } } },
+		{ "CirrusSmartAmpCalibrationData", { 0x02f9af02, 0x7734, 0x4233,
+			{ 0xb4, 0x3d, 0x93, 0xfe, 0x5a, 0xa3, 0x5d, 0xb3 } } },
+	};
+
+	for (size_t i = 0; i < B_COUNT_OF(kVariables) && *_data == NULL; i++) {
+		size_t size = 0;
+		status_t status = efi->get_variable(kVariables[i].name,
+			&kVariables[i].vendor, NULL, &size, NULL);
+		if (status != B_OK && status != B_BUFFER_OVERFLOW)
+			continue;
+		if (size < 8 || size > 8 + 128 * 20)
+			continue;
+		uint8* data = (uint8*)malloc(size);
+		if (data == NULL)
+			break;
+		if (efi->get_variable(kVariables[i].name, &kVariables[i].vendor,
+				data, &size, NULL) != B_OK) {
+			free(data);
+			continue;
+		}
+		*_data = data;
+		*_size = size;
+		TRACE_ALWAYS("factory calibration from EFI %s, %" B_PRIuSIZE
+			" bytes\n", kVariables[i].name, size);
+	}
+	if (*_data == NULL)
+		TRACE_ALWAYS("no factory calibration: no EFI calibration variable\n");
+
+	put_module(B_EFI_MODULE_NAME);
 }
 
 
@@ -511,6 +567,11 @@ cs35l41_init_driver(device_node* node, void** _cookie)
 		unload_driver_settings(settings);
 	}
 
+	uint8* calibration = NULL;
+	size_t calibrationSize = 0;
+	if (useFirmware)
+		read_calibration(&calibration, &calibrationSize);
+
 	bool anyFirmware = false;
 	for (uint32 i = 0; useFirmware && i < driver->amp_count; i++) {
 		Amplifier* amp = driver->amps[i];
@@ -526,19 +587,14 @@ cs35l41_init_driver(device_node* node, void** _cookie)
 				speakerID, suffix);
 			continue;
 		}
-		if (amp->StartFirmware(program, tuning) == B_OK)
+		if (amp->StartFirmware(program, tuning, calibration,
+				calibrationSize) == B_OK) {
 			anyFirmware = true;
+		}
 		free_firmware(&program);
 		free_firmware(&tuning);
 	}
-
-	if (useFirmware) {
-		// The factory calibration lives in an EFI variable. The R5 kernel
-		// does not keep the EFI runtime services after boot, so it cannot
-		// be read; the firmware runs with its default calibration.
-		TRACE_ALWAYS("no factory calibration: EFI variables are not"
-			" readable after boot\n");
-	}
+	free(calibration);
 	if (!anyFirmware) {
 		TRACE_ALWAYS("DSP bypass%s: no speaker protection, PCM gain capped"
 			" at its lowest step\n", useFirmware ? "" : " (cs35l41_firmware"

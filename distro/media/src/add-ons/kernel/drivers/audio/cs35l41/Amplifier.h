@@ -74,7 +74,9 @@ public:
 			void				Unprepare();
 
 			status_t			StartFirmware(const firmware_file& program,
-									const firmware_file& tuning);
+									const firmware_file& tuning,
+									const uint8* calibration,
+									size_t calibrationSize);
 			bool				IsFirmwareRunning() const
 									{ return fDspRunning; }
 
@@ -120,6 +122,9 @@ private:
 									uint32 algorithm, const char* name,
 									uint32* _offset);
 			const dsp_algorithm* _Algorithm(uint32 id) const;
+			status_t			_ApplyCalibration(
+									const firmware_file& program,
+									const uint8* data, size_t size);
 			status_t			_Mailbox(uint32 command, uint32 expected);
 			void				_StopCore();
 			void				_FallBackToBypass(const char* reason);

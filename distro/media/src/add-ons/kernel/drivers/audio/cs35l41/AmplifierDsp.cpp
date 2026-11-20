@@ -392,6 +392,93 @@ Amplifier::_FindControl(const firmware_file& file, uint32 algorithm,
 }
 
 
+/*!	Applies the factory calibration from the EFI variable's contents
+	(CS35L41-SPEC-2.md, round 3): an 8-byte header (total size, entry
+	count) and 20-byte entries (silicon ID, calibration time, ambient
+	temperature, status, speaker resistance), all little-endian. The entry
+	is found by the amplifier's silicon ID, or by the amplifier's index.
+*/
+status_t
+Amplifier::_ApplyCalibration(const firmware_file& program, const uint8* data,
+	size_t size)
+{
+	if (size < 8)
+		return B_BAD_DATA;
+	uint32 total = read_le32(data);
+	uint32 count = read_le32(data + 4);
+	if (total != 0 && total < size)
+		size = total;
+	count = min_c(count, (uint32)128);
+	count = min_c(count, (uint32)((size - 8) / 20));
+
+	uint32 idLow = 0;
+	uint32 idHigh = 0;
+	_Read(REG_SILICON_ID_LOW, &idLow);
+	_Read(REG_SILICON_ID_HIGH, &idHigh);
+	uint64 siliconID = ((uint64)idHigh << 32) | idLow;
+
+	const uint8* chosen = NULL;
+	if (siliconID != 0) {
+		for (uint32 i = 0; i < count && chosen == NULL; i++) {
+			const uint8* entry = data + 8 + i * 20;
+			uint64 id = ((uint64)read_le32(entry + 4) << 32)
+				| read_le32(entry);
+			uint64 time = ((uint64)read_le32(entry + 12) << 32)
+				| read_le32(entry + 8);
+			if (time != 0 && id != 0 && id == siliconID)
+				chosen = entry;
+		}
+	}
+	if (chosen == NULL && fIndex < count) {
+		const uint8* entry = data + 8 + fIndex * 20;
+		uint64 id = ((uint64)read_le32(entry + 4) << 32) | read_le32(entry);
+		uint64 time = ((uint64)read_le32(entry + 12) << 32)
+			| read_le32(entry + 8);
+		if (time != 0 && (id == 0 || siliconID == 0))
+			chosen = entry;
+	}
+	if (chosen == NULL) {
+		TRACE_ALWAYS("amp %" B_PRIu32 " (%s): no calibration entry for"
+			" silicon id %#" B_PRIx64 " (%" B_PRIu32 " entries)\n", fIndex,
+			Side(), siliconID, count);
+		return B_ENTRY_NOT_FOUND;
+	}
+
+	int32 ambient = (int8)chosen[16];
+	uint32 calStatus = chosen[17];
+	uint32 resistance = read_le16(chosen + 18);
+
+	const dsp_algorithm* algorithm = _Algorithm(CALIBRATION_ALGORITHM);
+	if (algorithm == NULL)
+		return B_NAME_NOT_FOUND;
+	static const char* const kControls[] = {
+		"CAL_AMBIENT", "CAL_R", "CAL_STATUS", "CAL_CHECKSUM"
+	};
+	uint32 values[] = {
+		(uint32)ambient, resistance, calStatus, resistance + 1
+	};
+	for (size_t i = 0; i < B_COUNT_OF(kControls); i++) {
+		uint32 offset;
+		status_t status = _FindControl(program, CALIBRATION_ALGORITHM,
+			kControls[i], &offset);
+		if (status == B_OK) {
+			status = _Write(DSP_XM_UNPACKED
+				+ (algorithm->xm_base + offset) * 4, values[i]);
+		}
+		if (status != B_OK) {
+			TRACE_ALWAYS("amp %" B_PRIu32 ": calibration control %s: %s\n",
+				fIndex, kControls[i], strerror(status));
+			return status;
+		}
+	}
+
+	TRACE_ALWAYS("amp %" B_PRIu32 " (%s): factory calibration applied,"
+		" resistance %" B_PRIu32 ", ambient %" B_PRId32 ", status %" B_PRIu32
+		"\n", fIndex, Side(), resistance, ambient, calStatus);
+	return B_OK;
+}
+
+
 /*!	Writes \a command to the firmware mailbox and waits for \a expected in
 	the status.
 */
@@ -448,7 +535,8 @@ Amplifier::_FallBackToBypass(const char* reason)
 */
 status_t
 Amplifier::StartFirmware(const firmware_file& program,
-	const firmware_file& tuning)
+	const firmware_file& tuning, const uint8* calibration,
+	size_t calibrationSize)
 {
 	if (!fReady)
 		return B_NO_INIT;
@@ -468,6 +556,8 @@ Amplifier::StartFirmware(const firmware_file& program,
 		_FallBackToBypass("download failed");
 		return status;
 	}
+	if (calibration != NULL)
+		_ApplyCalibration(program, calibration, calibrationSize);
 
 	uint32 stateOffset;
 	const dsp_algorithm* firmware = _Algorithm(FIRMWARE_ALGORITHM);

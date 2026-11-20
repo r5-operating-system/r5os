@@ -142,6 +142,14 @@
 #define MAILBOX_STATUS_RUNNING		0
 #define MAILBOX_STATUS_PAUSED		1
 
+// Silicon unique ID (OTP die status), selects the factory calibration
+#define REG_SILICON_ID_LOW			0x00017040
+#define REG_SILICON_ID_HIGH			0x00017044
+
+// Calibration algorithm (controls CAL_AMBIENT, CAL_R, CAL_STATUS,
+// CAL_CHECKSUM in XM)
+#define CALIBRATION_ALGORITHM		0x000000cd
+
 // Firmware state control values (algorithm 0x000400a4, "HALO_STATE")
 #define FIRMWARE_ALGORITHM			0x000400a4
 #define FIRMWARE_STATE_RUNNING		2
