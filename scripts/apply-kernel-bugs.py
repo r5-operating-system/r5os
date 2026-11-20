@@ -457,11 +457,47 @@ def install_usb_stability() -> None:
         print(f"copied {relative}")
 
 
+def install_efi_runtime() -> None:
+    """EFI runtime services (generic/efi/v1, MIT, docs/EFI-RUNTIME.md): the
+    EFI.h header, the loader hand-over, the kernel boot item and the module.
+    The package line is in distro/desktop/build/jam/packages/Haiku."""
+    root = pathlib.Path(__file__).resolve().parents[1]
+    (HAIKU / "src/add-ons/kernel/generic/efi").mkdir(exist_ok=True)
+    for relative in (
+        "headers/os/drivers/EFI.h",
+        "headers/private/kernel/boot/r5_efi_runtime.h",
+        "src/system/boot/platform/efi/Jamfile",
+        "src/system/boot/platform/efi/start.cpp",
+        "src/system/boot/platform/efi/r5_efi_runtime.cpp",
+        "src/system/boot/platform/efi/r5_efi_runtime.h",
+        "src/system/boot/platform/efi/arch/x86_64/arch_start.cpp",
+        "src/system/boot/platform/efi/arch/x86_64/arch_mmu.cpp",
+        "src/system/kernel/arch/x86/arch_platform.cpp",
+        "src/add-ons/kernel/generic/efi/Jamfile",
+        "src/add-ons/kernel/generic/efi/efi.cpp",
+        "src/add-ons/kernel/generic/efi/efi_arch.h",
+        "src/add-ons/kernel/generic/efi/arch_x86_64.cpp",
+        "src/add-ons/kernel/generic/efi/efi_call_x86_64.S",
+        "src/add-ons/kernel/generic/efi/arch_none.cpp",
+    ):
+        install_file(root / "distro/kernel" / relative, HAIKU / relative,
+            "efi")
+    jam = HAIKU / "src/add-ons/kernel/generic/Jamfile"
+    anchor = "SubInclude HAIKU_TOP src add-ons kernel generic dpc ;
+"
+    line = "SubInclude HAIKU_TOP src add-ons kernel generic efi ;
+"
+    insert_once(jam, anchor, anchor + line, line, "efi jam")
+    if jam.read_text(encoding="utf-8").count(line) != 1:
+        raise SystemExit(f"{jam}: efi SubInclude is not there exactly once")
+
+
 def main() -> int:
     install_smp_boot()
     install_kernel_sources()
     install_pstate()
     install_usb_stability()
+    install_efi_runtime()
     # i2c_hid (RenkuOS b37a078925) and x86_acpi_cstates (air/OS 2c48d1ae0)
     # are listed in the native build/jam/packages/Haiku in distro/desktop.
     return 0

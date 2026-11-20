@@ -1,0 +1,20 @@
+SubDir HAIKU_TOP src add-ons kernel generic efi ;
+
+# Copyright 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+
+SubDirC++Flags -fno-rtti ;
+
+UsePrivateKernelHeaders ;
+UsePrivateSystemHeaders ;
+UsePrivateHeaders [ FDirName kernel platform ] ;
+
+local archSources = arch_none.cpp ;
+if $(TARGET_ARCH) = x86_64 {
+	archSources = arch_x86_64.cpp efi_call_x86_64.S ;
+}
+
+KernelAddon efi :
+	efi.cpp
+	$(archSources)
+;
