@@ -43,8 +43,6 @@
 #define ERROR(x...) dprintf("efi: " x)
 
 
-#define EFI_RUNTIME_SERVICES_SIGNATURE	0x56524553544e5552ULL
-
 static const size_t kMaxNameChars = 1024;
 	// UCS-2 characters, terminator included
 static const size_t kMaxDataSize = 64 * 1024;

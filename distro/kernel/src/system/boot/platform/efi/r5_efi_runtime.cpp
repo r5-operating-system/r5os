@@ -14,13 +14,12 @@
 #include <string.h>
 
 #include <boot/r5_efi_runtime.h>
+#include <boot/platform.h>
 #include <boot/stage2.h>
 #include <boot/stdio.h>
 
 #include "efi_platform.h"
 
-
-#define EFI_RUNTIME_SERVICES_SIGNATURE	0x56524553544e5552ULL
 
 
 struct efi_memory_attributes_table {

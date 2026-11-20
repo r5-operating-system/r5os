@@ -479,14 +479,13 @@ def install_efi_runtime() -> None:
         "src/add-ons/kernel/generic/efi/arch_x86_64.cpp",
         "src/add-ons/kernel/generic/efi/efi_call_x86_64.S",
         "src/add-ons/kernel/generic/efi/arch_none.cpp",
+        "src/add-ons/kernel/generic/efi/efi_test.cpp",
     ):
         install_file(root / "distro/kernel" / relative, HAIKU / relative,
             "efi")
     jam = HAIKU / "src/add-ons/kernel/generic/Jamfile"
-    anchor = "SubInclude HAIKU_TOP src add-ons kernel generic dpc ;
-"
-    line = "SubInclude HAIKU_TOP src add-ons kernel generic efi ;
-"
+    anchor = "SubInclude HAIKU_TOP src add-ons kernel generic dpc ;\n"
+    line = "SubInclude HAIKU_TOP src add-ons kernel generic efi ;\n"
     insert_once(jam, anchor, anchor + line, line, "efi jam")
     if jam.read_text(encoding="utf-8").count(line) != 1:
         raise SystemExit(f"{jam}: efi SubInclude is not there exactly once")

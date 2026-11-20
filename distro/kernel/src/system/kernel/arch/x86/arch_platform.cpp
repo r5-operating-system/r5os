@@ -48,8 +48,7 @@ r5_publish_efi_runtime(KMessage& bootVolume)
 		|| header.size < sizeof(header)
 		|| header.size > R5_EFI_RUNTIME_BLOCK_SIZE) {
 		dprintf("efi runtime: hand-over block at %#" B_PRIxPHYSADDR
-			" is not valid
-", block);
+			" is not valid\n", block);
 		return;
 	}
 

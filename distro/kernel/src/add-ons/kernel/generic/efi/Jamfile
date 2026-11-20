@@ -18,3 +18,8 @@ KernelAddon efi :
 	efi.cpp
 	$(archSources)
 ;
+
+# Test driver only, in no package (docs/EFI-RUNTIME.md): jam -q efi_test
+KernelAddon efi_test :
+	efi_test.cpp
+;

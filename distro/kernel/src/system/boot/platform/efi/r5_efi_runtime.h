@@ -6,6 +6,8 @@
 #define R5_EFI_RUNTIME_LOADER_H
 
 
+#include <SupportDefs.h>
+
 #include <efi/boot-services.h>
 
 
