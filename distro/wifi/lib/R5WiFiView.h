@@ -1,6 +1,6 @@
 /*
- * Copyright 2026, Haiku, Inc.
- * Distributed under the terms of the MIT License.
+ * SPDX-FileCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
  */
 #ifndef R5_WIFI_VIEW_H
 #define R5_WIFI_VIEW_H
