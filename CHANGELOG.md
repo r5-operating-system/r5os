@@ -1,5 +1,11 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-20 - Write-combined memory only for a wired RAM area
+
+Review of #4478 (Jarvis): the physical map follows only the pages an area has when it becomes write-combined. A RAM area that is not wired (`B_FULL_LOCK` or `B_CONTIGUOUS`) can get a page later through a fault or copy on write, and `map_page()` takes no direct-map reference for it, so that page would keep a write-back alias. `vm_set_area_page_memory_type()` now refuses a special type for such an area with `B_NOT_SUPPORTED`, as `vm_clone_area()` already only carries the direct map for wired areas. Device areas are unchanged. Every caller in the tree uses a wired area: the GPU buffers and their user clones (`B_FULL_LOCK`), the direct-map self-test (`B_FULL_LOCK`) and the large-page self-test (`B_CONTIGUOUS`).
+
+Tested: compiled with `scripts/build-locked.sh`. Not booted.
+
 ## 2026-11-20 - A non-write-back area is unmapped on every architecture
 
 `unmap_page()` and `unmap_pages()` returned after `arch_vm_direct_map_release_range()` for every area that was not write-back. On AMD64 that function unmaps write-combined RAM itself. On ARM64, RISC-V and 32-bit x86 it is the empty stub, so a cut, a shrink, `vm_unmap_address_range()`, discarding a range, or `vm_change_cache_of_clones()` left a write-combined, uncached or device area mapped. On AMD64 the same path also ran `sfence` on every CPU for a framebuffer or an MMIO area, which has no physical-map entry to restore.

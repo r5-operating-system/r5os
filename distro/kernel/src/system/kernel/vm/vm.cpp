@@ -5180,7 +5180,18 @@ vm_set_area_page_memory_type(area_id id, uint32 type)
 		status = locker.SetFromArea(id, area);
 		if (status == B_OK) {
 			uint32 oldType = area->MemoryType();
-			if (type != oldType && area->Size() > info.size)
+			// The direct map follows only the pages present now. A RAM area
+			// that is not wired can get a page later (a fault, copy on
+			// write) that map_page() gives no direct-map reference, so that
+			// page would keep a write-back alias. Refuse it, as the clone
+			// path does.
+			bool wired = area->wiring == B_FULL_LOCK
+				|| area->wiring == B_CONTIGUOUS;
+			bool special = type != 0 && type != B_WRITE_BACK_MEMORY;
+			if (type != oldType && special && !wired
+				&& area->cache_type != CACHE_TYPE_DEVICE) {
+				status = B_NOT_SUPPORTED;
+			} else if (type != oldType && area->Size() > info.size)
 				status = B_NO_MEMORY;
 			else if (type != oldType) {
 				// Linux set_pages_array_wc() changes the direct map, flushes
