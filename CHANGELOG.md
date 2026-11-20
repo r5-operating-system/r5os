@@ -1,5 +1,15 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-20 - Direct scanout and the GPU copy are on by default on the 5625U
+
+Problem: the compositor still copied every frame with the CPU on its way to the screen unless the radeon_hd settings said `gpu_app_server true` and `gpu_compositor_scanout true`. Stick 65 ran both clean on the 5625U (boot 2 of `boot-next m13f`).
+
+What changed: `GET_INFO` has a new capability bit, `R5_GPU_CAP_RELEASE` (16), added at the end. The kernel sets it only together with `R5_GPU_CAP_AVAILABLE`, on a release-supported GPU (the default of a GPU switch, `r5_gpu_switch_named(NULL, ...)`), and never with `gpu false`. `GPUCopy::ReleaseDefault()` reads both bits and no `R5_GPU_CAP_LOST`. `gpu_app_server` and `gpu_compositor_scanout` now default to that value; `false` in the settings turns either off, and `true` still turns it on on any GPU. On every other GPU and on Lavapipe nothing changes. This replaces M10 decision 1 (the GPU copy stays opt-in) for release-supported GPUs, by the owner's choice of 20 Nov 2026.
+
+`gfx9_wc_gtt` stays opt-in, although stick 65 boot 3 ran it clean: the kernel direct map stays write-back, so a write-combined area keeps a write-back alias (`docs/KERNEL.md`). It becomes the default after that is covered.
+
+Limits: not compiled yet; the stick build is the compile check. Not booted. The proof is one boot on the 5625U without radeon_hd settings that logs `scanout through vulkan` and no `gpu copy off`.
+
 ## 2026-11-20 - Stick 65: the user-fence clear holds on the 5625U
 
 Stick 65 is the head of #4475 (`56f8512a63`, merged as `3aa387f809`) with mesa_radv 25.3.6-11 repacked from it, `boot-next m13f`, five boots on the 5625U. On every boot K1 was ok (`client 20 src 181 ring 0`), scratch `0xDEADBEEF` landed, and the K2 fence landed (`k2_ib wb deadbeef seq N seen N`). The sequence started at 16777218 and then went to 21, 24 and 27, so the fence page still held old values from earlier boots. That is the case that stalled on sticks 61, 63 and 64.

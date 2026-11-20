@@ -107,12 +107,36 @@ off(const char* reason)
 }
 
 
+/*!	M13 (stick 65): the GPU passed its checks and is release-supported
+	(R5_GPU_CAP_AVAILABLE and R5_GPU_CAP_RELEASE). Lost or off is false.
+*/
+bool
+release_default()
+{
+	int fd = open("/dev/gpu/radeon_hd/0", O_RDWR);
+	if (fd < 0)
+		return false;
+	r5_gpu_info info;
+	memset(&info, 0, sizeof(info));
+	info.size = sizeof(info);
+	info.version = 1;
+	bool ok = ioctl(fd, R5_GPU_GET_INFO, &info, sizeof(info)) == 0;
+	close(fd);
+	const uint32 wanted = R5_GPU_CAP_AVAILABLE | R5_GPU_CAP_RELEASE;
+	return ok && (info.capabilities & wanted) == wanted
+		&& (info.capabilities & R5_GPU_CAP_LOST) == 0;
+}
+
+
 void
 load_settings()
 {
 	if (sLoaded)
 		return;
 	sLoaded = true;
+	// M13: on by default on a release-supported GPU (the back buffer for
+	// the compositor's scanout). gpu_app_server false turns it off.
+	sWant = release_default();
 	char path[B_PATH_NAME_LENGTH];
 	if (find_directory(B_USER_SETTINGS_DIRECTORY, -1, false, path,
 			sizeof(path)) != B_OK)
@@ -127,6 +151,8 @@ load_settings()
 	while (fgets(line, sizeof(line), file) != NULL) {
 		if (strncmp(line, "gpu_app_server true", 19) == 0)
 			sWant = true;
+		if (strncmp(line, "gpu_app_server false", 20) == 0)
+			sWant = false;
 		if (strncmp(line, "gpu_app_server_fail true", 24) == 0)
 			sForceFail = true;
 		if (strncmp(line, "gpu_copy_debug true", 19) == 0)
@@ -736,6 +762,13 @@ uint32
 GPUCopy::Generation()
 {
 	return sGeneration;
+}
+
+
+bool
+GPUCopy::ReleaseDefault()
+{
+	return release_default();
 }
 
 

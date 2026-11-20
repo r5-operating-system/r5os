@@ -24,8 +24,8 @@ Step 3, item by item:
 | `gpu_lavapipe_threads` | Built. Default 2. A line sets another count. |
 | `gpu_lavapipe_msaa 1\|4` | Built, opt-in. The default stays 4. `1` measured worse. |
 | `gpu_lavapipe_vector 128\|256` | Built. The setting wins. With no setting and no environment variable, AVX2 sets 256 (19 Nov 2026); a plain x86-64-v2 CPU sets nothing. |
-| `gpu_compositor_scanout` | Built, opt-in. Refused on Lavapipe. |
-| `gfx9_wc_gtt` | Built, opt-in. The PTE stays snooped. |
+| `gpu_compositor_scanout` | Built. On by default with `gpu_app_server` on a release-supported GPU (`R5_GPU_CAP_RELEASE`, after stick 65). `false` turns it off. Refused on Lavapipe. |
+| `gfx9_wc_gtt` | Built, opt-in. The PTE stays snooped. Stick 65 ran it clean, but it stays opt-in until the direct map follows the write-combined type (`docs/KERNEL.md`). |
 | Userland EOP fence page | **Not built.** |
 | 2 MB pages for the GPU areas | Built 19 Nov 2026, on when `amd64_large_pages` is on (the default). `false` is 4 KB. Not yet shown on the 5625U. |
 | Fragment shader for the blur | **Not built.** |
