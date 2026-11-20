@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-20 - Stick 67: write-combined GTT on the 5625U, and M13 closes
+
+Stick 67 is the head of #4478 (`84deb90fee`, merged as `25da2f35a3`), the regular stick settings (`gpu_draw`, `gpu_debug`, `gpu_selftest`) and no `gfx9_wc_gtt` line, so write-combined GTT was on by default. Boot 1: `gpu available`, K1 ok, scratch `0xDEADBEEF`, K2 seq 3, compositor, Skia and scanout on RADV. The 10 s lines counted write-combined buffer creates (`wc 12`, `wc 5`, `wc 175`, `wc 51`, `wc 42`). `/system/bin/r5_wc_gtt` printed PASS and the syslog has `R5 VM: wc direct map ok (48 areas)`. No panic, no page fault, no `radeon_hd: wait` line, no `left radv` and no `gpu copy off`. Boot 2 was meant to run with `gfx9_wc_gtt false`, but the settings file on the stick did not have that line, so boot 2 repeated boot 1 (K2 seq 6, `wc 37`, `wc 155`, `wc direct map ok (48 areas)`, no fault).
+
+Limits: `gfx9_wc_gtt false` has not been booted. It uses the same `r5_gpu_switch_named` path as the other GPU switches. One laptop, two boots. The gain of write-combined GTT is not measured. ARM64 and RISC-V were not built.
+
+M13 is closed (`docs/M13-PLAN.md`). The Lavapipe warm-up stays open as its own item.
+
 ## 2026-11-20 - Write-combined memory only for a wired RAM area
 
 Review of #4478 (Jarvis): the physical map follows only the pages an area has when it becomes write-combined. A RAM area that is not wired (`B_FULL_LOCK` or `B_CONTIGUOUS`) can get a page later through a fault or copy on write, and `map_page()` takes no direct-map reference for it, so that page would keep a write-back alias. `vm_set_area_page_memory_type()` now refuses a special type for such an area with `B_NOT_SUPPORTED`, as `vm_clone_area()` already only carries the direct map for wired areas. Device areas are unchanged. Every caller in the tree uses a wired area: the GPU buffers and their user clones (`B_FULL_LOCK`), the direct-map self-test (`B_FULL_LOCK`) and the large-page self-test (`B_CONTIGUOUS`).

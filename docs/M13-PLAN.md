@@ -5,6 +5,10 @@
 
 M12 made Skia work as the drawing engine; it closed on correctness, not speed (owner, 16 Nov 2026). M13 makes R5 fast, and then turns Skia on by default: window drag, scroll and resize at 60 fps on the Ryzen 5 5625U (RADV), and smooth on Lavapipe (about 8 ms or less per full frame). This plan is the owner's performance advice (16 Nov 2026) with the R5 corrections and the M13 items that were already agreed. Rules: `AGENTS.md` and `docs/GPU-ARCHITECTURE.md`.
 
+## Closed (20 Nov 2026)
+
+M13 closed on 20 Nov 2026 (owner). Its last items are on by default on the 5625U: direct scanout and the GPU copy (#4477, stick 66) and write-combined GTT with a write-combined direct map (#4478, stick 67), after the warm-up stall fix (#4475, stick 65). The Lavapipe warm-up (about 28 s on stick 65) is the open follow-up, not a part of M13.
+
 ## Status (19 Nov 2026)
 
 | Step | State |
@@ -25,7 +29,7 @@ Step 3, item by item:
 | `gpu_lavapipe_msaa 1\|4` | Built, opt-in. The default stays 4. `1` measured worse. |
 | `gpu_lavapipe_vector 128\|256` | Built. The setting wins. With no setting and no environment variable, AVX2 sets 256 (19 Nov 2026); a plain x86-64-v2 CPU sets nothing. |
 | `gpu_compositor_scanout` | Built. On by default with `gpu_app_server` on a release-supported GPU (`R5_GPU_CAP_RELEASE`, after stick 65). `false` turns it off. Refused on Lavapipe. |
-| `gfx9_wc_gtt` | Built. The default on a release-supported GPU (20 Nov 2026). `false` turns it off. The GPU PTE stays snooped. The AMD64 direct map of those RAM pages is write-combined for the same lifetime (`docs/KERNEL.md`). Not yet booted on the 5625U. |
+| `gfx9_wc_gtt` | Built. The default on a release-supported GPU (20 Nov 2026). `false` turns it off. The GPU PTE stays snooped. The AMD64 direct map of those RAM pages is write-combined for the same lifetime (`docs/KERNEL.md`). Booted on the 5625U on stick 67 with the default on. `gfx9_wc_gtt false` was not booted. |
 | Userland EOP fence page | **Not built.** |
 | 2 MB pages for the GPU areas | Built 19 Nov 2026, on when `amd64_large_pages` is on (the default). `false` is 4 KB. Not yet shown on the 5625U. |
 | Fragment shader for the blur | **Not built.** |
