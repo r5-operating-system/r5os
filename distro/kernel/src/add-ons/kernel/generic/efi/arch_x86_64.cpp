@@ -109,10 +109,12 @@ init_fpu_buffer()
 {
 	sFPUSize = 512;
 	if (gHasXsave) {
-		cpuid_info cpuid;
-		get_current_cpuid(&cpuid, IA32_CPUID_LEAF_XSTATE, 0);
-		// EBX: bytes for the features enabled in XCR0 now.
-		sFPUSize = cpuid.regs.ebx;
+		// CPUID leaf 0xD, subleaf 0, EBX: bytes for the features enabled in
+		// XCR0 now (the kernel's gXsaveMask).
+		uint32 eax, ebx, ecx, edx;
+		asm volatile("cpuid" : "=a" (eax), "=b" (ebx), "=c" (ecx), "=d" (edx)
+			: "a" (IA32_CPUID_LEAF_XSTATE), "c" (0));
+		sFPUSize = ebx;
 		if (sFPUSize < 576)
 			return B_ERROR;
 	}

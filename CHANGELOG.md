@@ -213,6 +213,35 @@ Limits: the warm-up hang is not fixed. A and B stay unproven until a stick. The 
 
 ## 2026-11-19 - mesa_radv 25.3.6-11 repacked with the real package tool
 
+## 2026-11-20 - EFI runtime services: review round 1 (#4483)
+
+Review by Jarvis:
+- **FPU.** `fxsave64` saved only x87/SSE. Firmware that uses AVX could clobber the YMM upper halves of the thread. The module now saves with `xsave64`/`xrstor64` and the kernel's own `gXsaveMask`, the XCR0 that the interrupt and context-switch paths in `interrupts.S` save. The buffer has the size CPUID leaf 0xD reports, is 64-byte aligned, and gets its header zeroed. `fxsave64` stays for CPUs without XSAVE. The kernel's code-patched XSAVE sequence is inline and cannot be called.
+- **Faults.** Only a page fault reached the recovery; a #GP, #UD or an NX fetch under SMEP panicked. `r5_firmware_fault()` in `arch_int.cpp` now sends any kernel-mode fault at a lower-half instruction pointer, with interrupts off and a thread fault handler set, to that handler. Only the firmware runs like that. It is checked first in `x86_page_fault_exception` (before the SMEP/SMAP panics) and in `x86_unexpected_exception`. The `stac` workaround is gone.
+- **Callers.** The module refuses a call with interrupts already off (`B_NOT_ALLOWED`, one log line). `EFI.h` and `docs/EFI-RUNTIME.md` say: thread context only, may block, no spinlock. The longest firmware call above 1 ms is logged.
+- **PCID.** R5 does not set CR4.PCIDE and has no KPTI. If CR4.PCIDE is ever set, the module refuses to load. Documented.
+- **Quirks.** `docs/EFI-RUNTIME.md` now has a quirk table, and says that a failed `SetVirtualAddressMap` or a non-identity range leaves the module absent with one log line. No vendor-specific workaround.
+
+`EFI.h` now has the caller rules in its comment, so #4482 should take the same file.
+
+Mistake: the first build of this round called `get_current_cpuid()`, which is not exported to modules. The module now runs `cpuid` itself.
+
+Tested on 20 Nov 2026: `scripts/build-locked.sh @r5-anyboot` gave jam exit 0. Then QEMU with KVM, `-cpu host` (Ryzen: AVX2, XSAVEC, SMAP, SMEP; the kernel logs `enable XSAVEC 0x7 832`):
+- **OVMF:**
+  - `BootOrder` read, 16 bytes, in 4 us;
+  - the size query, the missing variable and `SmartAmpCalibrationData` as before;
+  - a call with interrupts off gave `B_NOT_ALLOWED`;
+  - 28 variables listed;
+  - no panic, app_server started.
+- **SeaBIOS:** module absent, boot continues.
+
+Not tested:
+- the fault recovery (no firmware fault was provoked);
+- AVX-512 (the host CPU has none);
+- firmware that really uses AVX;
+- real hardware;
+- arm64.
+
 ## 2026-11-20 - EFI runtime services for kernel drivers (generic/efi/v1)
 
 Problem: the kernel dropped the UEFI runtime services after boot, so a driver could not read a firmware variable such as the CS35L41 factory calibration (#4482). The owner chose real runtime services for every UEFI computer, not a list of variables read by the boot loader.
