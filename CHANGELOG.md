@@ -213,6 +213,31 @@ Limits: the warm-up hang is not fixed. A and B stay unproven until a stick. The 
 
 ## 2026-11-19 - mesa_radv 25.3.6-11 repacked with the real package tool
 
+## 2026-11-20 - EFI runtime services: review round 2 (#4483), fault recovery only for the firmware
+
+**Problem (review by Jarvis).** `r5_firmware_fault()` redirected any kernel-mode fault at a lower-half instruction pointer with interrupts off to *any* `thread->fault_handler`. `user_memcpy()` also sets that handler. A kernel bug inside such a section would then have been "recovered" into the wrong handler instead of panicking.
+
+**What changed.**
+- **The hook.** The kernel now has its own hook, `gR5FirmwareFaultHandler` and `gR5FirmwareCallCPU` in `arch_int.cpp`. `efi_arch_call()` sets it right before `efi_call5()`, with interrupts off, and clears it right after.
+- **When it redirects.** `r5_firmware_fault()` redirects only on that CPU, while the hook is set, and only for kernel mode, a lower-half instruction pointer and interrupts off.
+- **The module.** It no longer touches `thread->fault_handler`. Every other fault keeps the normal panic path.
+- **Fault test.** With `fault_test true` in `~/config/settings/kernel/drivers/efi`, the module jumps once into an unmapped page of the firmware address space and logs whether that call came back.
+- **Docs.** `docs/EFI-RUNTIME.md` lists which faults are recovered.
+
+**Tested on 20 Nov 2026.** `scripts/build-locked.sh @r5-anyboot`: jam exit 0. QEMU with KVM, `-cpu host`, SMAP/SMEP on:
+- **OVMF:** as in round 1. `BootOrder` read in 3 us, a call with interrupts off refused, 28 variables listed, no panic, app_server started.
+- **OVMF with `fault_test true`:**
+  - `efi: fault test: jump to 0x7ff000000000 recovered`. That is an instruction-fetch page fault under SMEP, which used to panic.
+  - After it the module stayed usable: `BootOrder` read and 28 variables listed. No panic, app_server started.
+- **SeaBIOS:** module absent, boot continues.
+
+**Not tested.**
+- A #GP or #UD inside the firmware: only the page-fault path was provoked. The exception path runs the same check.
+- AVX-512: the host CPU has none.
+- Firmware that really uses AVX.
+- Real hardware.
+- arm64.
+
 ## 2026-11-20 - EFI runtime services: review round 1 (#4483)
 
 Review by Jarvis:

@@ -86,16 +86,32 @@ Format of the block: `headers/private/kernel/boot/r5_efi_runtime.h`.
 
 ## Faults
 
-During the call the thread's `fault_handler` points at `efi_call_fault`.
+The kernel has a hook for the firmware: `gR5FirmwareFaultHandler` and `gR5FirmwareCallCPU` in `kernel/arch/x86/arch_int.cpp`. `efi_arch_call()` sets them right before `efi_call5()`, with interrupts already off, and clears them right after. The hook is set only during that call, and only one firmware call runs at a time.
 
-1. `r5_firmware_fault()` in `kernel/arch/x86/arch_int.cpp` recognises firmware code: kernel mode, an instruction pointer in the lower half, interrupts off, and a fault handler set. Only the firmware runs like that.
-2. It is checked first in `x86_page_fault_exception`, before the SMEP and SMAP panics. It is also checked first in `x86_unexpected_exception`, which takes #DE, #UD, #GP, #SS, #MF, #XF and the others routed there.
-3. Every such fault therefore returns to `efi_call_fault`. The saved registers, the kernel CR3 and the FPU state come back, and the call returns `B_NOT_SUPPORTED`.
-4. The module then refuses all further calls until the next start, with one syslog line.
+`r5_firmware_fault()` redirects a fault only when all of these hold:
 
-The check sits in the kernel, not only in the module, because otherwise every fault except a page fault would panic the machine for a firmware bug.
+- the hook is set,
+- the fault is on the CPU that runs the firmware,
+- the CPU was in kernel mode,
+- the instruction pointer is in the lower half,
+- interrupts were off.
 
-Not recovered: a double fault (#DF, which has its own IST handler), an NMI, and a machine check. Nothing here can catch a firmware bug that corrupts kernel memory.
+How a fault is handled:
+
+1. The check runs first in `x86_page_fault_exception`, before the SMEP and SMAP panics. It also runs first in `x86_unexpected_exception`, which handles #DE, #UD, #GP, #SS, #MF, #XF and the other exceptions routed there.
+2. A fault that meets every condition returns to `efi_call_fault`. The saved registers, the kernel CR3 and the FPU state come back, and the call returns `B_NOT_SUPPORTED`.
+3. The module then refuses all further calls until the next start, with one syslog line.
+
+Every other fault keeps its normal path and panics as before. That includes a kernel bug inside a `user_memcpy()` section: the thread's `fault_handler` is not used for the firmware.
+
+The check sits in the kernel, not only in the module. Without it, every fault in the firmware except a page fault would panic the machine.
+
+Recovered: any of the exceptions above when the firmware itself faults (its instruction pointer is in the firmware's lower half). Not recovered:
+
+- a fault while the instruction pointer is in the kernel half;
+- a double fault (#DF, which has its own IST handler);
+- an NMI or a machine check;
+- a firmware bug that corrupts kernel memory, which nothing here can catch.
 
 ## Firmware quirks
 
@@ -122,7 +138,10 @@ The design names no vendors that misbehave with a 1:1 map, and no vendor-specifi
 `efi_test.cpp` is a test driver in no package (`jam -q efi_test`). Loading it, by opening `/dev/misc/efi_test`, logs `efi_test:` lines:
 
 - the `BootOrder` size query,
-- `BootOrder` itself,
+- `BootOrder` itself, with the time it took,
 - `SmartAmpCalibrationData` (`53559579-8753-4f5c-9130-e82acfb8d893`),
 - a missing variable,
+- a call with interrupts off (must be refused),
 - the first 12 variable names and the count.
+
+Fault test: put `fault_test true` in `~/config/settings/kernel/drivers/efi` (test images only). When the module loads, it makes one call into an unmapped page of the firmware address space (`0x7ff000000000`), as broken firmware would. It then logs `efi: fault test: ... recovered`. That instruction-fetch page fault, under SMEP, would otherwise panic. The module keeps working after this test; a real fault turns it off.

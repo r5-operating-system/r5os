@@ -29,6 +29,7 @@
 #include <arch/x86/arch_cpuasm.h>
 #include <efi/types.h>
 #include <efi/boot-services.h>
+#include <smp.h>
 #include <thread.h>
 #include <vm/vm.h>
 
@@ -53,6 +54,10 @@ static const uint32 kMaxTablePages = 2048;
 extern "C" uint64 efi_call5(uint64 function, uint64 arg1, uint64 arg2,
 	uint64 arg3, uint64 arg4, uint64 arg5, uint64 stackTop);
 extern "C" void efi_call_fault(void);
+
+// The kernel's firmware-fault hook (kernel/arch/x86/arch_int.cpp).
+extern void (*gR5FirmwareFaultHandler)(void);
+extern int32 gR5FirmwareCallCPU;
 
 
 static area_id sTableArea = -1;
@@ -381,15 +386,16 @@ efi_arch_call(uint64 function, uint64 arg1, uint64 arg2, uint64 arg3,
 	}
 
 	cpu_status state = disable_interrupts();
-	Thread* thread = thread_get_current_thread();
-	void (*oldFaultHandler)(void) = thread->fault_handler;
-	thread->fault_handler = efi_call_fault;
-		// any fault in the firmware lands there (r5_firmware_fault() in
-		// arch_int.cpp)
 
 	save_fpu();
 	uint32 mxcsr = 0x1f80;
 	asm volatile("fninit; ldmxcsr %0" : : "m" (mxcsr));
+
+	// Only while the firmware runs on this CPU does a fault go to
+	// efi_call_fault (r5_firmware_fault() in arch_int.cpp); everything else,
+	// even under a thread fault handler, keeps its normal path.
+	gR5FirmwareCallCPU = smp_get_current_cpu();
+	gR5FirmwareFaultHandler = efi_call_fault;
 
 	// No PCID (checked in efi_arch_init): a plain CR3 write flushes the
 	// non-global entries, which are all the firmware's pages.
@@ -398,9 +404,10 @@ efi_arch_call(uint64 function, uint64 arg1, uint64 arg2, uint64 arg3,
 		sStackTop);
 	x86_write_cr3(kernelCR3);
 
-	restore_fpu();
+	gR5FirmwareFaultHandler = NULL;
+	gR5FirmwareCallCPU = -1;
 
-	thread->fault_handler = oldFaultHandler;
+	restore_fpu();
 	restore_interrupts(state);
 	return status;
 }

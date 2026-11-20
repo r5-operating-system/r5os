@@ -59,8 +59,9 @@ FUNCTION(efi_call5):
 FUNCTION_END(efi_call5)
 
 
-/*	The page fault handler jumps here (thread::fault_handler) when the
-	firmware faults; the firmware's stack is dropped. */
+/*	The kernel fault handlers jump here (r5_firmware_fault() in arch_int.cpp,
+	through gR5FirmwareFaultHandler) when the firmware faults; the firmware's
+	stack is dropped. */
 FUNCTION(efi_call_fault):
 	mov		$-1, %rax
 	jmp		.Lrestore

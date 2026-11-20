@@ -357,6 +357,32 @@ efi_disabled_by_settings()
 }
 
 
+/*!	Test only (docs/EFI-RUNTIME.md): with "fault_test true" in
+	~/config/settings/kernel/drivers/efi, jump once into an unmapped page of
+	the firmware address space, as broken firmware would, and log whether
+	the kernel's firmware-fault hook brought the call back. The module keeps
+	working afterwards; a real fault turns it off.
+*/
+static void
+run_fault_test()
+{
+	void* handle = load_driver_settings("efi");
+	if (handle == NULL)
+		return;
+	bool test = get_driver_boolean_parameter(handle, "fault_test", false,
+		false);
+	unload_driver_settings(handle);
+	if (!test)
+		return;
+
+	// Far above any physical address, so never a runtime range.
+	const uint64 kUnmapped = 0x00007ff000000000ULL;
+	uint64 result = efi_arch_call(kUnmapped, 0, 0, 0, 0, 0);
+	dprintf("efi: fault test: jump to %#" B_PRIx64 " %s\n", kUnmapped,
+		result == EFI_ARCH_FAULTED ? "recovered" : "NOT recovered");
+}
+
+
 static status_t
 efi_init()
 {
@@ -425,6 +451,8 @@ efi_init()
 		ERROR("no runtime address space: %s\n", strerror(status));
 		return status;
 	}
+
+	run_fault_test();
 
 	sBroken = false;
 	dprintf("efi: runtime services ready, revision %" B_PRIu32 ".%" B_PRIu32

@@ -111,25 +111,30 @@ x86_fatal_exception(iframe* frame)
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 /*!	A fault in EFI runtime firmware (generic/efi, docs/EFI-RUNTIME.md).
-	The firmware is the only code that runs in kernel mode at a lower-half
-	address, always with interrupts off and with the thread's fault handler
-	set by the module. Such a fault, of any kind, returns to that handler,
-	which drops the firmware's stack; the module then stops using the
-	firmware. Everything else keeps its normal path.
+
+	The module sets both variables right before it enters the firmware, with
+	interrupts off, and clears them right after; only one firmware call runs
+	at a time. A fault on that CPU, in kernel mode, at a lower-half address,
+	with interrupts off, is the firmware's: of any kind, it returns to the
+	module's recovery entry, which drops the firmware's stack, and the module
+	stops using the firmware. Every other fault, including one under a
+	thread fault handler (user_memcpy()), keeps its normal path.
 */
+void (*gR5FirmwareFaultHandler)(void) = NULL;
+int32 gR5FirmwareCallCPU = -1;
+
+
 static bool
 r5_firmware_fault(iframe* frame)
 {
-	if (IFRAME_IS_USER(frame) || frame->ip >= KERNEL_BASE
+	void (*handler)(void) = gR5FirmwareFaultHandler;
+	if (handler == NULL || gR5FirmwareCallCPU != smp_get_current_cpu()
+		|| IFRAME_IS_USER(frame) || frame->ip >= KERNEL_BASE
 		|| (frame->flags & X86_EFLAGS_INTERRUPT) != 0) {
 		return false;
 	}
 
-	Thread* thread = thread_get_current_thread();
-	if (thread == NULL || thread->fault_handler == NULL)
-		return false;
-
-	frame->ip = reinterpret_cast<uintptr_t>(thread->fault_handler);
+	frame->ip = reinterpret_cast<uintptr_t>(handler);
 	return true;
 }
 // SPDX-SnippetEnd
