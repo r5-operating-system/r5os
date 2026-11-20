@@ -663,7 +663,7 @@ r5_gfx9_debug_wait(void)
 	uint32 n = r5_gfx9_debug_ring(sRing, 1024, &rptr);
 	uint32 show[8];
 	memset(show, 0, sizeof(show));
-	for (uint32 i = 0; i < 8 && n != 0; i++)
+	for (uint32 i = 0; i < 8 && n != 0 && rptr != 0xffffffffu; i++)
 		show[i] = sRing[(rptr + i) % n];
 	dprintf("radeon_hd: wait ring %lu %08lx %08lx %08lx %08lx "
 		"%08lx %08lx %08lx %08lx\n",
