@@ -1175,7 +1175,7 @@ arch_vm_init_post_modules(kernel_args *args)
 	if (largePages && runSelfTest)
 		r5_amd64_large_pages_selftest();
 	if (runWcTest)
-		r5_wc_direct_map_selftest(8);
+		r5_wc_direct_map_selftest(32);
 #endif
 // SPDX-SnippetEnd
 

@@ -1,5 +1,15 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-20 - Write-combined direct map: review fixes
+
+The first QEMU boot of this path passed 8 areas. Two reviews of that diff found the same holes. A freed hash slot was a tombstone, and the next insert used it only when the probe also saw an empty slot, so after one wave every later buffer failed. `malloc` and `free` of that table ran while its lock was held, and the kernel heap takes the address-space lock, which `apply` and `release` already hold. The page-table reservation was `pages / 512 + 2`, which is one run, not a scattered buffer. A failed call left a count it had only incremented. `Query()` of a hole returns physical address 0, and that was treated as RAM page 0. A fully locked write-combined RAM clone was mapped write-back and took no count.
+
+A freed slot is reused. A prepare reserves hash and table space for its own pages before the next prepare, and grows that storage without holding the lock across `malloc` or `free`. The reservation is one page-table page per RAM page. A failed call drops every count it added. A hole is skipped. `vm_clone_area()` maps a fully locked or contiguous write-combined RAM clone with that type and takes its own count. The boot check is now 32 areas, two waves, and the clone's own page table must already be write-combined.
+
+Compiled: `scripts/build-locked.sh` exited 0 on 20 Nov 2026, about 13:20 Europe/Amsterdam.
+
+QEMU, on a private copy of that image (KVM, host CPU, 2 CPUs, no display): serial showed `using PAT for memory type configuration`, `R5 VM: amd64_large_pages enabled`, then `R5 VM: wc direct map ok (32 areas)`. The boot continued into `package_daemon`. No panic. `/system/bin/r5_wc_gtt` was not started in the guest. QEMU has no `radeon_hd`. The 5625U has not run it.
+
 ## 2026-11-20 - Write-combined GTT has no write-back alias, and is the default on the 5625U
 
 Problem: a write-combined RAM area on AMD64 kept a write-back translation in the kernel physical map. Two memory types for one physical page are not allowed, and one clean boot does not prove otherwise. `gfx9_wc_gtt` stayed off for that reason. Stick 65 boot 3 ran it once, with the alias still there.

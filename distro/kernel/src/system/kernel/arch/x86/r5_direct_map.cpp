@@ -66,9 +66,11 @@ struct r5_direct_job {
 static r5_ref* sRefs = NULL;
 static uint32 sRefSlots = 0;
 static uint32 sRefLive = 0;
+static uint32 sRefReserved = 0;
 static phys_addr_t* sOwned = NULL;
 static uint32 sOwnedCount = 0;
 static uint32 sOwnedSlots = 0;
+static uint32 sOwnedReserved = 0;
 static mutex sDirectLock = MUTEX_INITIALIZER("r5 direct map");
 
 
@@ -80,60 +82,165 @@ r5_ref_index(phys_addr_t page, uint32 slots)
 
 
 static status_t
-r5_grow_refs(uint32 extra)
+r5_ref_account(uint32 extra)
 {
-	uint32 need = sRefLive + extra * 2;
-	if (need < sRefLive)
+	if (extra > UINT32_MAX - sRefReserved)
 		return B_NO_MEMORY;
-	if (sRefSlots >= need && sRefSlots > 0)
-		return B_OK;
-
-	uint32 slots = 16;
-	while (slots < need) {
-		if (slots > (1u << 31))
-			return B_NO_MEMORY;
-		slots <<= 1;
-	}
-
-	r5_ref* grown = (r5_ref*)malloc(sizeof(r5_ref) * slots);
-	if (grown == NULL)
+	if (extra > UINT32_MAX - sOwnedReserved)
 		return B_NO_MEMORY;
-	memset(grown, 0, sizeof(r5_ref) * slots);
-
-	for (uint32 i = 0; i < sRefSlots; i++) {
-		if (sRefs[i].state != kSlotLive)
-			continue;
-		uint32 slot = r5_ref_index(sRefs[i].page, slots);
-		while (grown[slot].state == kSlotLive)
-			slot = (slot + 1) & (slots - 1);
-		grown[slot] = sRefs[i];
-	}
-
-	free(sRefs);
-	sRefs = grown;
-	sRefSlots = slots;
+	sRefReserved += extra;
+	sOwnedReserved += extra;
 	return B_OK;
 }
 
 
-static status_t
-r5_grow_owned(uint32 extra)
+static void
+r5_ref_unaccount(uint32 extra)
 {
-	if (sOwnedSlots - sOwnedCount >= extra)
-		return B_OK;
+	if (sRefReserved >= extra)
+		sRefReserved -= extra;
+	else
+		sRefReserved = 0;
+	if (sOwnedReserved >= extra)
+		sOwnedReserved -= extra;
+	else
+		sOwnedReserved = 0;
+}
 
-	uint32 slots = sOwnedCount + extra;
-	if (slots < sOwnedCount)
-		return B_NO_MEMORY;
-	phys_addr_t* grown = (phys_addr_t*)malloc(sizeof(phys_addr_t) * slots);
-	if (grown == NULL)
-		return B_NO_MEMORY;
-	if (sOwnedCount > 0)
-		memcpy(grown, sOwned, sizeof(phys_addr_t) * sOwnedCount);
-	free(sOwned);
-	sOwned = grown;
-	sOwnedSlots = slots;
-	return B_OK;
+
+/*!	The hash has to hold every live page plus every page a prepare has
+ *	reserved but not inserted yet. malloc runs without sDirectLock: the
+ *	caller of apply() already holds the address-space write lock, and the
+ *	kernel heap takes that same lock when it grows.
+ */
+static status_t
+r5_ensure_refs()
+{
+	for (;;) {
+		uint32 need = 16;
+		{
+			MutexLocker locker(sDirectLock);
+			uint64 sum = (uint64)sRefLive + (uint64)sRefReserved;
+			if (sum > 0x40000000u)
+				return B_NO_MEMORY;
+			uint32 twice = (uint32)(sum * 2);
+			if (twice > need)
+				need = twice;
+			if (sRefSlots >= need)
+				return B_OK;
+		}
+
+		uint32 slots = 16;
+		while (slots < need) {
+			if (slots > 0x40000000u)
+				return B_NO_MEMORY;
+			slots <<= 1;
+		}
+
+		r5_ref* grown = (r5_ref*)malloc(sizeof(r5_ref) * slots);
+		if (grown == NULL)
+			return B_NO_MEMORY;
+		memset(grown, 0, sizeof(r5_ref) * slots);
+
+		r5_ref* retired = NULL;
+		bool publish = false;
+		bool done = false;
+		bool retry = false;
+		{
+			MutexLocker locker(sDirectLock);
+			uint64 sum = (uint64)sRefLive + (uint64)sRefReserved;
+			if (sum > 0x40000000u) {
+				retired = grown;
+			} else {
+				uint32 needNow = (uint32)(sum * 2);
+				if (needNow < 16)
+					needNow = 16;
+				if (sRefSlots >= needNow) {
+					retired = grown;
+					done = true;
+				} else if (slots < needNow) {
+					retired = grown;
+					retry = true;
+				} else {
+					for (uint32 i = 0; i < sRefSlots; i++) {
+						if (sRefs[i].state != kSlotLive)
+							continue;
+						uint32 slot = r5_ref_index(sRefs[i].page, slots);
+						while (grown[slot].state == kSlotLive)
+							slot = (slot + 1) & (slots - 1);
+						grown[slot] = sRefs[i];
+					}
+					retired = sRefs;
+					sRefs = grown;
+					sRefSlots = slots;
+					publish = true;
+				}
+			}
+		}
+		free(retired);
+		if (publish || done)
+			return B_OK;
+		if (!retry)
+			return B_NO_MEMORY;
+	}
+}
+
+
+static status_t
+r5_ensure_owned()
+{
+	for (;;) {
+		uint32 need = 0;
+		{
+			MutexLocker locker(sDirectLock);
+			uint64 sum = (uint64)sOwnedCount + (uint64)sOwnedReserved;
+			if (sum > 0x40000000u)
+				return B_NO_MEMORY;
+			need = (uint32)sum;
+			if (sOwnedSlots >= need)
+				return B_OK;
+		}
+
+		phys_addr_t* grown
+			= (phys_addr_t*)malloc(sizeof(phys_addr_t) * need);
+		if (grown == NULL)
+			return B_NO_MEMORY;
+
+		phys_addr_t* retired = NULL;
+		bool publish = false;
+		bool done = false;
+		bool retry = false;
+		{
+			MutexLocker locker(sDirectLock);
+			uint64 sum = (uint64)sOwnedCount + (uint64)sOwnedReserved;
+			if (sum > 0x40000000u)
+				retired = grown;
+			else {
+				uint32 needNow = (uint32)sum;
+				if (sOwnedSlots >= needNow) {
+					retired = grown;
+					done = true;
+				} else if (need < needNow) {
+					retired = grown;
+					retry = true;
+				} else {
+					if (sOwnedCount > 0) {
+						memcpy(grown, sOwned,
+							sizeof(phys_addr_t) * sOwnedCount);
+					}
+					retired = sOwned;
+					sOwned = grown;
+					sOwnedSlots = need;
+					publish = true;
+				}
+			}
+		}
+		free(retired);
+		if (publish || done)
+			return B_OK;
+		if (!retry)
+			return B_NO_MEMORY;
+	}
 }
 
 
@@ -164,6 +271,18 @@ r5_ref_find(phys_addr_t page, bool insert)
 		else if (entry->state == kSlotLive && entry->page == page)
 			return entry;
 		slot = (slot + 1) & mask;
+	}
+
+	// A full probe that never saw an empty slot still did not find the page.
+	// A tombstone from an earlier free is a free slot. Leaving it unused fills
+	// the table after one wave of buffers and every later insert fails.
+	if (insert && tomb != NULL) {
+		tomb->state = kSlotLive;
+		tomb->page = page;
+		tomb->count = 0;
+		tomb->type = 0;
+		sRefLive++;
+		return tomb;
 	}
 	return NULL;
 }
@@ -385,9 +504,9 @@ r5_direct_add(phys_addr_t phys, uint32 type, vm_page_reservation* reservation,
 			return status;
 		}
 		entry->type = type;
-		*created = true;
 	}
 	entry->count++;
+	*created = true;
 	return B_OK;
 }
 
@@ -404,6 +523,7 @@ r5_direct_drop(phys_addr_t phys, bool* created, bool* changed)
 		return B_OK;
 	if (entry->count > 1) {
 		entry->count--;
+		*created = true;
 		return B_OK;
 	}
 
@@ -430,8 +550,10 @@ arch_vm_direct_map_prepare(size_t bytes, void** cookie)
 	uint32 pages = (uint32)(bytes / B_PAGE_SIZE);
 	if ((size_t)pages != bytes / B_PAGE_SIZE)
 		return B_NO_MEMORY;
-	uint32 tables = pages / k64BitTableEntryCount + 2;
 
+	// One table per page. A FULL_LOCK buffer is not contiguous, so each page
+	// can sit in a different 2 MiB direct-map region. pages/512 is that count
+	// only when the pages are one run.
 	r5_direct_job* job = (r5_direct_job*)malloc(sizeof(r5_direct_job));
 	if (job == NULL)
 		return B_NO_MEMORY;
@@ -447,17 +569,25 @@ arch_vm_direct_map_prepare(size_t bytes, void** cookie)
 	memset(job->created, 0, pages);
 	job->capacity = pages;
 	job->reservation.count = 0;
-	vm_page_reserve_pages(&job->reservation, tables, VM_PRIORITY_SYSTEM);
+	vm_page_reserve_pages(&job->reservation, pages, VM_PRIORITY_SYSTEM);
 	job->reserved = true;
 
 	status_t status = B_OK;
+	bool accounted = false;
 	{
 		MutexLocker locker(sDirectLock);
-		status = r5_grow_refs(pages);
-		if (status == B_OK)
-			status = r5_grow_owned(tables);
+		status = r5_ref_account(pages);
+		accounted = status == B_OK;
 	}
+	if (status == B_OK)
+		status = r5_ensure_refs();
+	if (status == B_OK)
+		status = r5_ensure_owned();
 	if (status != B_OK) {
+		if (accounted) {
+			MutexLocker locker(sDirectLock);
+			r5_ref_unaccount(pages);
+		}
 		vm_page_unreserve_pages(&job->reservation);
 		free(job->pages);
 		free(job->created);
@@ -476,6 +606,10 @@ arch_vm_direct_map_finish(void* cookie)
 	r5_direct_job* job = (r5_direct_job*)cookie;
 	if (job == NULL)
 		return;
+	{
+		MutexLocker locker(sDirectLock);
+		r5_ref_unaccount(job->capacity);
+	}
 	if (job->reserved)
 		vm_page_unreserve_pages(&job->reservation);
 	free(job->pages);
@@ -499,6 +633,9 @@ r5_direct_collect(VMArea* area, r5_direct_job* job, uint32* _count)
 		phys_addr_t phys;
 		uint32 flags;
 		if (map->Query(va, &phys, &flags) != B_OK)
+			continue;
+		// Query() returns B_OK and physical 0 when the page is not present.
+		if ((flags & PAGE_PRESENT) == 0)
 			continue;
 		if (phys >= KERNEL_PMAP_SIZE
 			|| vm_lookup_page(phys / B_PAGE_SIZE) == NULL) {
@@ -587,6 +724,8 @@ arch_vm_direct_map_release(VMArea* area)
 			uint32 flags;
 			if (map->Query(va, &phys, &flags) != B_OK)
 				continue;
+			if ((flags & PAGE_PRESENT) == 0)
+				continue;
 			batch[count++] = phys;
 		}
 		map->Unlock();
@@ -622,11 +761,8 @@ r5_virt_phys(addr_t va, phys_addr_t* _phys)
 
 
 static status_t
-r5_direct_expect(phys_addr_t phys, bool wantWc)
+r5_pte_expect(addr_t va, bool wantWc)
 {
-	if (phys >= KERNEL_PMAP_SIZE)
-		return B_ERROR;
-	addr_t va = (addr_t)KERNEL_PMAP_BASE + (addr_t)phys;
 	X86VMTranslationMap64Bit* kernelMap = static_cast<X86VMTranslationMap64Bit*>(
 		VMAddressSpace::Kernel()->TranslationMap());
 	int32 dummy = 0;
@@ -662,6 +798,15 @@ r5_direct_expect(phys_addr_t phys, bool wantWc)
 	if ((entry & mask) != 0)
 		return B_ERROR;
 	return B_OK;
+}
+
+
+static status_t
+r5_direct_expect(phys_addr_t phys, bool wantWc)
+{
+	if (phys >= KERNEL_PMAP_SIZE)
+		return B_ERROR;
+	return r5_pte_expect((addr_t)KERNEL_PMAP_BASE + (addr_t)phys, wantWc);
 }
 
 
@@ -780,8 +925,7 @@ r5_wc_clone()
 		B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA, REGION_NO_PRIVATE_MAP, id,
 		true);
 	if (clone < 0 || cloneBase == NULL
-		|| vm_set_area_page_memory_type(clone, B_WRITE_COMBINING_MEMORY)
-			!= B_OK) {
+		|| r5_pte_expect((addr_t)cloneBase, true) != B_OK) {
 		dprintf("R5 VM: wc direct map FAIL at step clone\n");
 		if (clone >= 0)
 			vm_delete_area(VMAddressSpace::KernelID(), clone, true);

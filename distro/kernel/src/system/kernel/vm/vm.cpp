@@ -2690,6 +2690,10 @@ vm_clone_area(team_id team, const char* name, void** address,
 
 	// Check whether the source area exists and is cloneable. If so, mark it
 	// B_SHARED_AREA, so that we don't get problems with copy-on-write.
+	size_t sourceSize = 0;
+	uint32 sourceMemoryType = 0;
+	uint32 sourceCacheType = CACHE_TYPE_NULL;
+	uint32 sourceWiring = 0;
 	{
 		AddressSpaceWriteLocker locker;
 		VMArea* sourceArea;
@@ -2702,6 +2706,14 @@ vm_clone_area(team_id team, const char* name, void** address,
 
 		sourceArea->protection |= B_SHARED_AREA;
 		protection |= B_SHARED_AREA;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		sourceSize = sourceArea->Size();
+		sourceMemoryType = sourceArea->MemoryType();
+		sourceCacheType = sourceArea->cache_type;
+		sourceWiring = sourceArea->wiring;
+// SPDX-SnippetEnd
 	}
 
 	// Now lock both address spaces and actually do the cloning.
@@ -2716,6 +2728,28 @@ vm_clone_area(team_id team, const char* name, void** address,
 	status = locker.AddTeam(team, true, &targetAddressSpace);
 	if (status != B_OK)
 		return status;
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// A write-combined RAM clone must take its own direct-map reference.
+	// prepare() allocates before the address-space lock. malloc under that
+	// lock can deadlock on the kernel heap.
+	struct DirectMapFinish {
+		void* cookie;
+		DirectMapFinish() : cookie(NULL) {}
+		~DirectMapFinish() { arch_vm_direct_map_finish(cookie); }
+	} directFinish;
+	bool directRam = sourceCacheType != CACHE_TYPE_DEVICE
+		&& sourceMemoryType != 0
+		&& sourceMemoryType != B_WRITE_BACK_MEMORY
+		&& (sourceWiring == B_FULL_LOCK || sourceWiring == B_CONTIGUOUS);
+	if (directRam) {
+		status = arch_vm_direct_map_prepare(sourceSize, &directFinish.cookie);
+		if (status != B_OK)
+			return status;
+	}
+// SPDX-SnippetEnd
 
 	status = locker.Lock();
 	if (status != B_OK)
@@ -2859,6 +2893,16 @@ vm_clone_area(team_id team, const char* name, void** address,
 				ASSERT_ALWAYS(status == B_OK);
 			}
 		} else {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			bool inheritDirect = directFinish.cookie != NULL
+				&& sourceArea->cache_type != CACHE_TYPE_DEVICE
+				&& sourceArea->MemoryType() != 0
+				&& sourceArea->MemoryType() != B_WRITE_BACK_MEMORY;
+			if (inheritDirect)
+				newArea->SetMemoryType(sourceArea->MemoryType());
+// SPDX-SnippetEnd
 			VMTranslationMap* map = targetAddressSpace->TranslationMap();
 			size_t reservePages = map->MaxPagesNeededToMap(
 				newArea->Base(), newArea->Base() + (newArea->Size() - 1));
@@ -2961,6 +3005,24 @@ vm_clone_area(team_id team, const char* name, void** address,
 			// TODO: B_FULL_LOCK means that all pages are locked. We are not
 			// ensuring that!
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			if (inheritDirect) {
+				status = arch_vm_direct_map_apply(newArea,
+					sourceArea->MemoryType(), 0, directFinish.cookie);
+				if (status != B_OK) {
+					newArea->SetMemoryType(0);
+					map->Lock();
+					map->ProtectArea(newArea, newArea->protection);
+					map->Unlock();
+					vm_page_unreserve_pages(&reservation);
+					cacheLocker.Unlock();
+					delete_area(targetAddressSpace, newArea, false, false);
+					return status;
+				}
+			}
+// SPDX-SnippetEnd
 			vm_page_unreserve_pages(&reservation);
 		}
 	}
