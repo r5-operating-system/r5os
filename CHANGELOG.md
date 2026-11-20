@@ -1,5 +1,65 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-20 - Write-combined memory only for a wired RAM area
+
+Review of #4478 (Jarvis): the physical map follows only the pages an area has when it becomes write-combined. A RAM area that is not wired (`B_FULL_LOCK` or `B_CONTIGUOUS`) can get a page later through a fault or copy on write, and `map_page()` takes no direct-map reference for it, so that page would keep a write-back alias. `vm_set_area_page_memory_type()` now refuses a special type for such an area with `B_NOT_SUPPORTED`, as `vm_clone_area()` already only carries the direct map for wired areas. Device areas are unchanged. Every caller in the tree uses a wired area: the GPU buffers and their user clones (`B_FULL_LOCK`), the direct-map self-test (`B_FULL_LOCK`) and the large-page self-test (`B_CONTIGUOUS`).
+
+Tested: compiled with `scripts/build-locked.sh`. Not booted.
+
+## 2026-11-20 - A non-write-back area is unmapped on every architecture
+
+`unmap_page()` and `unmap_pages()` returned after `arch_vm_direct_map_release_range()` for every area that was not write-back. On AMD64 that function unmaps write-combined RAM itself. On ARM64, RISC-V and 32-bit x86 it is the empty stub, so a cut, a shrink, `vm_unmap_address_range()`, discarding a range, or `vm_change_cache_of_clones()` left a write-combined, uncached or device area mapped. On AMD64 the same path also ran `sfence` on every CPU for a framebuffer or an MMIO area, which has no physical-map entry to restore.
+
+`unmap_page()` and `unmap_pages()` now always call the translation map. The direct-map release runs first, and only for a RAM or file area whose type is not write-back: it unmaps, drains every CPU, then restores write-back. The translation-map call then finds those entries gone. A device area, including a framebuffer, returns from the release without a drain or a shootdown, and the translation map unmaps it. On the other architectures the release is the empty stub, and `UnmapPage` / `UnmapPages` of that architecture unmap the area. `delete_area()` still releases and then calls `UnmapArea`.
+
+Callers of `unmap_page()`: the copy-on-write fault. Callers of `unmap_pages()`: cutting the end, the head or the middle of an area, discarding a range, `vm_change_cache_of_clones()`, and shrinking an area. `vm_unmap_address_range()` cuts the area. `vm_delete_areas()` calls `delete_area()`.
+
+Compiled: `scripts/build-locked.sh` exited 0 on 20 Nov 2026, about 14:05 Europe/Amsterdam. ARM64 and RISC-V were not built. The shared change is the call that was already how those architectures unmapped a write-back area.
+
+QEMU, a private copy, KVM, host CPU, 2 CPUs, no display. With the product default the serial showed `using PAT for memory type configuration`, no `wc direct map` line, and `package_daemon`. The same image with only `r5_wc_direct_map_test true` in its kernel settings printed `R5 VM: wc direct map ok (32 areas)` and reached `package_daemon`. No panic. `/system/bin/r5_wc_gtt` was not started. QEMU has no `radeon_hd`. The 5625U has not run it.
+
+## 2026-11-20 - Write-combined direct map: unmap first, then change the type
+
+Review of `b2fa05bcce`. Turning write-combining on set the area's type and flushed through the physical map while that map was still write-back, so a prefetch could fill the line again before the physical map became write-combined. Releasing wrote write-back back into the physical map while the area's write-combined entries were still present, and other CPUs were not drained first. The reservation held one page-table page per buffer page for the whole call. The 32-area check ran on every AMD64 boot. A 1 GiB physical-map page would have been walked as a page directory.
+
+What changed: `vm_set_area_page_memory_type()` unmaps the area and notes the physical pages, changes the physical map, shoots that TLB entry down, and runs `clflush` after the shootdown. Only then is the area mapped again. Leaving write-combining runs `sfence` on every CPU before the physical map returns to write-back. `delete_area()` does that release after the cache lock is held and before `UnmapArea`. A shrink, a cut, and `vm_unmap_address_range()` go through `unmap_pages()` and `unmap_page()`, which release the same way: unmap the batch, `sfence` on every CPU, then drop the count. `vm_delete_areas()` calls `delete_area()`. A failed clone puts the type back before `delete_area()`, so that release does nothing; the apply already dropped the counts it added.
+
+The reservation is one page-table page per 2 MiB region the pages fall in. A 64 MiB run is 32 pages, not another 64 MiB. If the region bitmap cannot be allocated, the call reserves one page per buffer page. A 1 GiB physical-map page is refused and logged once (`R5 VM: wc direct map refuses a 1 GiB physical-map page`). It is not split. The EFI loader builds this map with 2 MiB pages.
+
+The boot check is off unless the kernel setting `r5_wc_direct_map_test` is `true`. `gfx9_wc_gtt` and `gpu_debug` are graphics-driver settings, read after this init, and the check would split physical-map pages on VirtualBox, QEMU, the X1, and a machine with no GPU. The stick boots are unchanged: the default on, then `/system/bin/r5_wc_gtt` (48 areas), and a second boot with `gfx9_wc_gtt false`.
+
+Compiled: `scripts/build-locked.sh` exited 0 on 20 Nov 2026, about 13:40 Europe/Amsterdam.
+
+QEMU, a private copy, KVM, host CPU, 2 CPUs, no display. With the product default the serial showed `using PAT for memory type configuration` and no `wc direct map` line, and the boot reached `package_daemon`. The same image, with only `r5_wc_direct_map_test true` added to its kernel settings file, printed `R5 VM: wc direct map ok (32 areas)` and reached `package_daemon`. No panic, and no 1 GiB refusal. `/system/bin/r5_wc_gtt` was not started. QEMU has no `radeon_hd`. The 5625U has not run it.
+
+A page that is not fully locked can be faulted in after the call. GTT areas are fully locked. A 1 GiB page is refused rather than split.
+
+## 2026-11-20 - Write-combined direct map: review fixes
+
+The first QEMU boot of this path passed 8 areas. Two reviews of that diff found the same holes. A freed hash slot was a tombstone, and the next insert used it only when the probe also saw an empty slot, so after one wave every later buffer failed. `malloc` and `free` of that table ran while its lock was held, and the kernel heap takes the address-space lock, which `apply` and `release` already hold. The page-table reservation was `pages / 512 + 2`, which is one run, not a scattered buffer. A failed call left a count it had only incremented. `Query()` of a hole returns physical address 0, and that was treated as RAM page 0. A fully locked write-combined RAM clone was mapped write-back and took no count.
+
+A freed slot is reused. A prepare reserves hash and table space for its own pages before the next prepare, and grows that storage without holding the lock across `malloc` or `free`. The reservation is one page-table page per RAM page. A failed call drops every count it added. A hole is skipped. `vm_clone_area()` maps a fully locked or contiguous write-combined RAM clone with that type and takes its own count. The boot check is now 32 areas, two waves, and the clone's own page table must already be write-combined.
+
+Compiled: `scripts/build-locked.sh` exited 0 on 20 Nov 2026, about 13:20 Europe/Amsterdam.
+
+QEMU, on a private copy of that image (KVM, host CPU, 2 CPUs, no display): serial showed `using PAT for memory type configuration`, `R5 VM: amd64_large_pages enabled`, then `R5 VM: wc direct map ok (32 areas)`. The boot continued into `package_daemon`. No panic. `/system/bin/r5_wc_gtt` was not started in the guest. QEMU has no `radeon_hd`. The 5625U has not run it.
+
+## 2026-11-20 - Write-combined GTT has no write-back alias, and is the default on the 5625U
+
+Problem: a write-combined RAM area on AMD64 kept a write-back translation in the kernel physical map. Two memory types for one physical page are not allowed, and one clean boot does not prove otherwise. `gfx9_wc_gtt` stayed off for that reason. Stick 65 boot 3 ran it once, with the alias still there.
+
+What changed: on AMD64, `vm_set_area_page_memory_type()` now follows Linux `set_pages_array_wc()`. After the existing `clflush` of the still write-back direct map, a 2 MiB direct-map page is split and those RAM pages become write-combined. A count per page covers the kernel area and the user clone. The last release writes the direct map back to write-back, shoots the TLB down, and collapses a table this code allocated when all 512 entries are write-back. A TTM-style pool was not used, because it needs the same change and must not return a write-combined page to the allocator. If the split cannot allocate, the area type is put back and the driver clears `R5_GPU_BO_WC`. The GPU page-table entry stays `MTYPE_NC` and snooped. ARM64, RISC-V and 32-bit x86 are unchanged.
+
+`gfx9_wc_gtt` now uses `r5_gpu_switch_named`. On a release-supported GPU (the 5625U, `0x15e7`) it is on unless the setting says `false`. Every other GPU stays off unless the setting says `true`. `gpu false` still turns it off.
+
+The boot check allocates and frees eight areas (4 KiB through 2 MiB plus one page, then a clone of one page), checks the bytes, and checks the direct-map type. The line is `R5 VM: wc direct map ok`. `r5_wc_direct_map_test false` skips it. `/system/bin/r5_wc_gtt` runs the same check for 48 areas. It is on the image. It was not started in the guest.
+
+Compiled: `scripts/build-locked.sh` exited 0 on 20 Nov 2026, about 12:34 Europe/Amsterdam. The image is `generated.x86_64/r5-os.image`. The known translator header errors are still printed; jam still exited 0.
+
+QEMU: a private copy of that image, KVM, host CPU, 2 CPUs, no display. Serial showed `using PAT for memory type configuration`, `R5 VM: amd64_large_pages enabled`, then `R5 VM: wc direct map ok (8 areas)`. The boot continued into `package_daemon`. No panic. QEMU has no `radeon_hd`, so this does not show a write-combined GTT buffer on the GPU. The 5625U has not run it.
+
+Stick boots, not a change to `boot-next m13f`: one boot with no `gfx9_wc_gtt` line, and one with `gfx9_wc_gtt false`. Both should print `r5_wc_gtt PASS`. On the first, a USWC buffer is write-combined. On the second, it stays cached.
+
 ## 2026-11-20 - Direct scanout and the GPU copy are on by default on the 5625U
 
 Problem: the compositor still copied every frame with the CPU on its way to the screen unless the radeon_hd settings said `gpu_app_server true` and `gpu_compositor_scanout true`. Stick 65 ran both clean on the 5625U (boot 2 of `boot-next m13f`).

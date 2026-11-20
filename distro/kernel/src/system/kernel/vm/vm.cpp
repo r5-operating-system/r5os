@@ -721,6 +721,15 @@ map_page(VMArea* area, vm_page* page, addr_t address, uint32 protection,
 static inline bool
 unmap_page(VMArea* area, addr_t virtualAddress)
 {
+// SPDX-SnippetBegin
+// SPDX-License-Identifier: MIT
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// AMD64: for write-combined RAM this unmaps, drains every CPU, and
+	// restores the physical map. A device area, and every other
+	// architecture, leaves that call empty. The translation map unmaps
+	// either way. A second unmap finds the entries already gone.
+	arch_vm_direct_map_release_range(area, virtualAddress, B_PAGE_SIZE);
+// SPDX-SnippetEnd
 	return area->address_space->TranslationMap()->UnmapPage(area,
 		virtualAddress, true);
 }
@@ -730,6 +739,11 @@ unmap_page(VMArea* area, addr_t virtualAddress)
 static inline void
 unmap_pages(VMArea* area, addr_t base, size_t size)
 {
+// SPDX-SnippetBegin
+// SPDX-License-Identifier: MIT
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	arch_vm_direct_map_release_range(area, base, size);
+// SPDX-SnippetEnd
 	area->address_space->TranslationMap()->UnmapPages(area, base, size, true);
 }
 
@@ -2690,6 +2704,10 @@ vm_clone_area(team_id team, const char* name, void** address,
 
 	// Check whether the source area exists and is cloneable. If so, mark it
 	// B_SHARED_AREA, so that we don't get problems with copy-on-write.
+	size_t sourceSize = 0;
+	uint32 sourceMemoryType = 0;
+	uint32 sourceCacheType = CACHE_TYPE_NULL;
+	uint32 sourceWiring = 0;
 	{
 		AddressSpaceWriteLocker locker;
 		VMArea* sourceArea;
@@ -2702,6 +2720,14 @@ vm_clone_area(team_id team, const char* name, void** address,
 
 		sourceArea->protection |= B_SHARED_AREA;
 		protection |= B_SHARED_AREA;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		sourceSize = sourceArea->Size();
+		sourceMemoryType = sourceArea->MemoryType();
+		sourceCacheType = sourceArea->cache_type;
+		sourceWiring = sourceArea->wiring;
+// SPDX-SnippetEnd
 	}
 
 	// Now lock both address spaces and actually do the cloning.
@@ -2716,6 +2742,41 @@ vm_clone_area(team_id team, const char* name, void** address,
 	status = locker.AddTeam(team, true, &targetAddressSpace);
 	if (status != B_OK)
 		return status;
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// A write-combined RAM clone must take its own direct-map reference.
+	// prepare() allocates before the address-space lock. malloc under that
+	// lock can deadlock on the kernel heap.
+	struct DirectMapFinish {
+		void* cookie;
+		DirectMapFinish() : cookie(NULL) {}
+		~DirectMapFinish() { arch_vm_direct_map_finish(cookie); }
+	} directFinish;
+	bool directRam = sourceCacheType != CACHE_TYPE_DEVICE
+		&& sourceMemoryType != 0
+		&& sourceMemoryType != B_WRITE_BACK_MEMORY
+		&& (sourceWiring == B_FULL_LOCK || sourceWiring == B_CONTIGUOUS);
+	if (directRam) {
+		uint32 tables = 1;
+		// One page-table page per 2 MiB region, counted before the write lock.
+		const size_t kRegionBytes = 32768;
+		void* bits = malloc(kRegionBytes);
+		if (bits != NULL) {
+			AddressSpaceReadLocker regionLocker;
+			VMArea* regionArea = NULL;
+			if (regionLocker.SetFromArea(sourceID, regionArea) == B_OK)
+				tables = r5_wc_count_regions(regionArea, bits, kRegionBytes);
+			free(bits);
+		} else
+			tables = (uint32)(sourceSize / B_PAGE_SIZE);
+		status = arch_vm_direct_map_prepare(sourceSize, tables,
+			&directFinish.cookie);
+		if (status != B_OK)
+			return status;
+	}
+// SPDX-SnippetEnd
 
 	status = locker.Lock();
 	if (status != B_OK)
@@ -2859,6 +2920,16 @@ vm_clone_area(team_id team, const char* name, void** address,
 				ASSERT_ALWAYS(status == B_OK);
 			}
 		} else {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			bool inheritDirect = directFinish.cookie != NULL
+				&& sourceArea->cache_type != CACHE_TYPE_DEVICE
+				&& sourceArea->MemoryType() != 0
+				&& sourceArea->MemoryType() != B_WRITE_BACK_MEMORY;
+			if (inheritDirect)
+				newArea->SetMemoryType(sourceArea->MemoryType());
+// SPDX-SnippetEnd
 			VMTranslationMap* map = targetAddressSpace->TranslationMap();
 			size_t reservePages = map->MaxPagesNeededToMap(
 				newArea->Base(), newArea->Base() + (newArea->Size() - 1));
@@ -2961,6 +3032,24 @@ vm_clone_area(team_id team, const char* name, void** address,
 			// TODO: B_FULL_LOCK means that all pages are locked. We are not
 			// ensuring that!
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			if (inheritDirect) {
+				status = arch_vm_direct_map_apply(newArea,
+					sourceArea->MemoryType(), 0, directFinish.cookie);
+				if (status != B_OK) {
+					newArea->SetMemoryType(0);
+					map->Lock();
+					map->ProtectArea(newArea, newArea->protection);
+					map->Unlock();
+					vm_page_unreserve_pages(&reservation);
+					cacheLocker.Unlock();
+					delete_area(targetAddressSpace, newArea, false, false);
+					return status;
+				}
+			}
+// SPDX-SnippetEnd
 			vm_page_unreserve_pages(&reservation);
 		}
 	}
@@ -3100,6 +3189,9 @@ delete_area(VMAddressSpace* addressSpace, VMArea* area,
 		bool ignoreTopCachePageFlags
 			= topCache->temporary && topCache->RefCount() == 2;
 
+		// The write-combined mapping goes away before the physical map
+		// returns to write-back. UnmapArea then finds the pages gone.
+		arch_vm_direct_map_release(area);
 		area->address_space->TranslationMap()->UnmapArea(area,
 			deletingAddressSpace, ignoreTopCachePageFlags);
 	}
@@ -4966,37 +5058,196 @@ arch_vm_flush_memory_type_range(addr_t address, size_t bytes)
 }
 
 
+extern "C" __attribute__((weak, noinline)) status_t
+arch_vm_direct_map_prepare(size_t bytes, uint32 tables, void** cookie)
+{
+	(void)bytes;
+	(void)tables;
+	if (cookie != NULL)
+		*cookie = NULL;
+	return B_OK;
+}
+
+
+extern "C" __attribute__((weak, noinline)) status_t
+arch_vm_direct_map_note(struct VMArea* area, void* cookie)
+{
+	(void)area;
+	(void)cookie;
+	return B_OK;
+}
+
+
+extern "C" __attribute__((weak, noinline)) void
+arch_vm_direct_map_drain(void)
+{
+}
+
+
+extern "C" __attribute__((weak, noinline)) void
+arch_vm_direct_map_flush(void* cookie)
+{
+	(void)cookie;
+}
+
+
+extern "C" __attribute__((weak, noinline)) void
+arch_vm_direct_map_release_range(struct VMArea* area, addr_t base, size_t size)
+{
+	(void)area;
+	(void)base;
+	(void)size;
+}
+
+
+extern "C" __attribute__((weak, noinline)) uint32
+r5_wc_count_regions(struct VMArea* area, void* bits, size_t bitBytes)
+{
+	(void)area;
+	(void)bits;
+	(void)bitBytes;
+	return 0;
+}
+
+
+extern "C" __attribute__((weak, noinline)) status_t
+arch_vm_direct_map_apply(struct VMArea* area, uint32 type, uint32 oldType,
+	void* cookie)
+{
+	(void)area;
+	(void)type;
+	(void)oldType;
+	(void)cookie;
+	return B_OK;
+}
+
+
+extern "C" __attribute__((weak, noinline)) void
+arch_vm_direct_map_finish(void* cookie)
+{
+	(void)cookie;
+}
+
+
+extern "C" __attribute__((weak, noinline)) void
+arch_vm_direct_map_release(struct VMArea* area)
+{
+	(void)area;
+}
+
+
+extern "C" __attribute__((weak, noinline)) status_t
+r5_wc_direct_map_selftest(int rounds)
+{
+	(void)rounds;
+	return B_OK;
+}
+
+
 status_t
 vm_set_area_page_memory_type(area_id id, uint32 type)
 {
-	AddressSpaceWriteLocker locker;
-	VMArea* area;
-	status_t status = locker.SetFromArea(id, area);
+	if (type != 0 && type != B_WRITE_BACK_MEMORY
+		&& !arch_vm_page_memory_type_supported(type)) {
+		return B_NOT_SUPPORTED;
+	}
+
+	area_info info;
+	status_t status = get_area_info(id, &info);
 	if (status != B_OK)
 		return status;
 
-	uint32 oldType = area->MemoryType();
-	if (type == oldType)
-		return B_OK;
-	if (!arch_vm_page_memory_type_supported(type))
-		return B_NOT_SUPPORTED;
+	uint32 tables = 1;
+	const size_t kRegionBytes = 32768;
+	void* bits = malloc(kRegionBytes);
+	if (bits != NULL) {
+		AddressSpaceReadLocker regionLocker;
+		VMArea* regionArea = NULL;
+		if (regionLocker.SetFromArea(id, regionArea) == B_OK)
+			tables = r5_wc_count_regions(regionArea, bits, kRegionBytes);
+		free(bits);
+	} else
+		tables = (uint32)(info.size / B_PAGE_SIZE);
 
-	VMTranslationMap* map = area->address_space->TranslationMap();
-	addr_t base = area->Base();
-	addr_t end = base + area->Size();
-	map->Lock();
-	area->SetMemoryType(type);
-	map->ProtectArea(area, area->protection);
-	for (addr_t virtualAddress = base; virtualAddress < end;
-			virtualAddress += B_PAGE_SIZE) {
-		phys_addr_t physicalAddress;
-		uint32 flags;
-		if (map->Query(virtualAddress, &physicalAddress, &flags) != B_OK)
-			continue;
-		arch_vm_flush_memory_type_range((addr_t)physicalAddress, B_PAGE_SIZE);
+	void* cookie = NULL;
+	status = arch_vm_direct_map_prepare(info.size, tables, &cookie);
+	if (status != B_OK)
+		return status;
+
+	{
+		AddressSpaceWriteLocker locker;
+		VMArea* area;
+		status = locker.SetFromArea(id, area);
+		if (status == B_OK) {
+			uint32 oldType = area->MemoryType();
+			// The direct map follows only the pages present now. A RAM area
+			// that is not wired can get a page later (a fault, copy on
+			// write) that map_page() gives no direct-map reference, so that
+			// page would keep a write-back alias. Refuse it, as the clone
+			// path does.
+			bool wired = area->wiring == B_FULL_LOCK
+				|| area->wiring == B_CONTIGUOUS;
+			bool special = type != 0 && type != B_WRITE_BACK_MEMORY;
+			if (type != oldType && special && !wired
+				&& area->cache_type != CACHE_TYPE_DEVICE) {
+				status = B_NOT_SUPPORTED;
+			} else if (type != oldType && area->Size() > info.size)
+				status = B_NO_MEMORY;
+			else if (type != oldType) {
+				// Linux set_pages_array_wc() changes the direct map, flushes
+				// the TLB and then the caches, and only then hands out the
+				// write-combined mapping. The area is unmapped first so it
+				// is not a second type while that happens.
+				AreaCacheLocker cacheLocker(area);
+				VMCache* cache = cacheLocker.Get();
+				addr_t base = area->Base();
+				addr_t end = base + area->Size();
+				bool toWriteCombined = type != 0
+					&& type != B_WRITE_BACK_MEMORY;
+				status = arch_vm_direct_map_note(area, cookie);
+				if (status == B_OK) {
+					VMTranslationMap* map
+						= area->address_space->TranslationMap();
+					size_t reservePages = map->MaxPagesNeededToMap(base,
+						end - 1);
+					vm_page_reservation reservation;
+					vm_page_reserve_pages(&reservation, reservePages,
+						area->address_space == VMAddressSpace::Kernel()
+							? VM_PRIORITY_SYSTEM : VM_PRIORITY_USER);
+					map->UnmapPages(area, base, area->Size(), true);
+					if (!toWriteCombined)
+						arch_vm_direct_map_drain();
+					status = arch_vm_direct_map_apply(area, type, oldType,
+						cookie);
+					if (status == B_OK && toWriteCombined)
+						arch_vm_direct_map_flush(cookie);
+					if (status != B_OK)
+						area->SetMemoryType(oldType);
+					else
+						area->SetMemoryType(type);
+					for (VMCachePagesTree::Iterator it
+							= cache->pages.GetIterator();
+							vm_page* page = it.Next();) {
+						if (page->busy)
+							continue;
+						addr_t pageAddress = area->Base()
+							+ ((page->cache_offset << PAGE_SHIFT)
+								- area->cache_offset);
+						if (pageAddress < base || pageAddress >= end)
+							continue;
+						DEBUG_PAGE_ACCESS_START(page);
+						map_page(area, page, pageAddress, area->protection,
+							&reservation);
+						DEBUG_PAGE_ACCESS_END(page);
+					}
+					vm_page_unreserve_pages(&reservation);
+				}
+			}
+		}
 	}
-	map->Unlock();
-	return B_OK;
+
+	arch_vm_direct_map_finish(cookie);
+	return status;
 }
 /* SPDX-SnippetEnd */
 

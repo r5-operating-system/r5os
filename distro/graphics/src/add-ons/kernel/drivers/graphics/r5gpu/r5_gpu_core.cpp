@@ -1115,7 +1115,8 @@ gpu_bo_fill(gpu_client* client, gpu_bo* bo, r5_gpu_bo* request, uint64 bytes)
 		bo->backing->kernel = kernel;
 	}
 	/* The reply carries the flags that were used. Write-combined GTT
-	 * needs gfx9_wc_gtt. Otherwise the page stays cached and snooped. */
+	 * follows gfx9_wc_gtt. If that is off, or the direct map cannot be
+	 * changed, the page stays cached and snooped. */
 	{
 		uint32 used = in.flags;
 		if ((used & R5_GPU_BO_WC) != 0) {

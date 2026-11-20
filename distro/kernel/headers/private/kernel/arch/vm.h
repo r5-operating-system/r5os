@@ -43,6 +43,22 @@ void arch_vm_unset_memory_type(struct VMArea *area);
  */
 bool arch_vm_page_memory_type_supported(uint32 type);
 void arch_vm_flush_memory_type_range(addr_t address, size_t bytes);
+/* The AMD64 physical map of a write-combined RAM page is changed for
+ * the life of that mapping and restored on the last release. Other
+ * architectures leave the cookie empty and do nothing.
+ */
+status_t arch_vm_direct_map_prepare(size_t bytes, uint32 tables, void** cookie);
+status_t arch_vm_direct_map_note(struct VMArea* area, void* cookie);
+status_t arch_vm_direct_map_apply(struct VMArea* area, uint32 type,
+	uint32 oldType, void* cookie);
+void arch_vm_direct_map_finish(void* cookie);
+void arch_vm_direct_map_drain(void);
+void arch_vm_direct_map_flush(void* cookie);
+void arch_vm_direct_map_release(struct VMArea* area);
+void arch_vm_direct_map_release_range(struct VMArea* area, addr_t base,
+	size_t size);
+uint32 r5_wc_count_regions(struct VMArea* area, void* bits, size_t bitBytes);
+status_t r5_wc_direct_map_selftest(int rounds);
 /* SPDX-SnippetEnd */
 
 #ifdef __cplusplus
