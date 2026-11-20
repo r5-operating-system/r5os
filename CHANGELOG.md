@@ -8,7 +8,9 @@ What changed: `GET_INFO` has a new capability bit, `R5_GPU_CAP_RELEASE` (16), ad
 
 `gfx9_wc_gtt` stays opt-in, although stick 65 boot 3 ran it clean: the kernel direct map stays write-back, so a write-combined area keeps a write-back alias (`docs/KERNEL.md`). It becomes the default after that is covered.
 
-Limits: not compiled yet; the stick build is the compile check. Not booted. The proof is one boot on the 5625U without radeon_hd settings that logs `scanout through vulkan` and no `gpu copy off`.
+`GPUCopy::ReleaseDefault()` asks `GET_INFO` once per app_server start and keeps the answer. The compositor reads its settings again every 10 s for the M11 zero-copy test switch, and without that cache every read would also open the render node. A GPU that is lost later is handled by the copy and the compositor themselves, as before.
+
+Tested: stick 66 (`88ce792b1d`), one cold boot on the 5625U with the stick settings (`gpu_draw`, `gpu_debug`, `gpu_selftest`) and no scanout or app_server line: `gpu available`, K1 ok, scratch `0xDEADBEEF`, K2 seq 3, `gpu compositor on radv`, `gpu draw on ... RADV RENOIR ... skia`, `scanout through vulkan 1920x1080`, `gpu copy on scanout`, warm-up 2086 ms, the self-test done with no failure, GLTeapot, VulkanTeapot and vkcube `device lost no`, no `left radv` and no `gpu copy off`. The cache was added after that stick; `scripts/build-locked.sh app_server` compiled it, and it has not been booted. One laptop, one boot.
 
 ## 2026-11-20 - Stick 65: the user-fence clear holds on the 5625U
 

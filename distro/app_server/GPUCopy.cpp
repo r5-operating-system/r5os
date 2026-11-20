@@ -109,22 +109,31 @@ off(const char* reason)
 
 /*!	M13 (stick 65): the GPU passed its checks and is release-supported
 	(R5_GPU_CAP_AVAILABLE and R5_GPU_CAP_RELEASE). Lost or off is false.
+	Asked once per app_server start: the checks run at boot, and a GPU
+	lost later is handled by the copy and the compositor themselves.
 */
 bool
 release_default()
 {
+	static int32 sRelease = -1;
+	int32 known = atomic_get(&sRelease);
+	if (known >= 0)
+		return known != 0;
+	bool release = false;
 	int fd = open("/dev/gpu/radeon_hd/0", O_RDWR);
-	if (fd < 0)
-		return false;
-	r5_gpu_info info;
-	memset(&info, 0, sizeof(info));
-	info.size = sizeof(info);
-	info.version = 1;
-	bool ok = ioctl(fd, R5_GPU_GET_INFO, &info, sizeof(info)) == 0;
-	close(fd);
-	const uint32 wanted = R5_GPU_CAP_AVAILABLE | R5_GPU_CAP_RELEASE;
-	return ok && (info.capabilities & wanted) == wanted
-		&& (info.capabilities & R5_GPU_CAP_LOST) == 0;
+	if (fd >= 0) {
+		r5_gpu_info info;
+		memset(&info, 0, sizeof(info));
+		info.size = sizeof(info);
+		info.version = 1;
+		bool ok = ioctl(fd, R5_GPU_GET_INFO, &info, sizeof(info)) == 0;
+		close(fd);
+		const uint32 wanted = R5_GPU_CAP_AVAILABLE | R5_GPU_CAP_RELEASE;
+		release = ok && (info.capabilities & wanted) == wanted
+			&& (info.capabilities & R5_GPU_CAP_LOST) == 0;
+	}
+	atomic_set(&sRelease, release ? 1 : 0);
+	return release;
 }
 
 
