@@ -5,11 +5,11 @@
 
 
 /*!	The list of speaker amplifiers behind HD Audio codecs.
-	See audio_amp.h and docs/AUDIO-AMP.md.
+	See AudioAmp.h and docs/AUDIO-AMP.md.
 */
 
 
-#include <audio_amp.h>
+#include <AudioAmp.h>
 
 #include <stdio.h>
 #include <string.h>

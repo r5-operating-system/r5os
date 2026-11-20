@@ -26,10 +26,10 @@ extern bool hda_group_has_analog_output(hda_audio_group* group);
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 //
-// Speaker amplifiers behind the codec (audio_amp.h, docs/AUDIO-AMP.md).
+// Speaker amplifiers behind the codec (AudioAmp.h, docs/AUDIO-AMP.md).
 // Each codec holds one reference to the module from hda_codec_new() to
 // hda_codec_delete(). Only a codec with an analog output drives them.
-#include <audio_amp.h>
+#include <AudioAmp.h>
 #include <lock.h>
 #include <util/AutoLock.h>
 

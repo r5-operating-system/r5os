@@ -128,7 +128,7 @@ AI-assisted development is allowed. Generated code is not assumed to be public d
 
 ### Clean room: the CS35L41 amplifier driver
 
-The CS35L41 speaker amplifier driver (`distro/media/src/add-ons/kernel/drivers/audio/cs35l41`, MIT) has no public datasheet, and the only full implementation is the GPL-2.0 Linux driver. It was written clean room. A reader (Gemini, 20 Nov 2026) read Linux v7.3.5 and wrote facts only, no code: register addresses, values, sequences and file formats (`CS35L41-SPEC.md`, `CS35L41-SPEC-2.md`, outside the repository, with the Linux files read listed in them). A second person (Jarvis) checked the specs for code and replaced code-like names with plain words. The builder (Claude) never opened Linux source for cs35l41, cs_dsp, wm_adsp or HD Audio side codecs; it used only those specs, R5's `distro/` tree and Haiku's own MIT code. Names, structure and comments are R5's own. The generic interface `audio_amp.h` and its module are MIT and vendor-neutral.
+The CS35L41 speaker amplifier driver (`distro/media/src/add-ons/kernel/drivers/audio/cs35l41`, MIT) has no public datasheet, and the only full implementation is the GPL-2.0 Linux driver. It was written clean room. A reader (Gemini, 20 Nov 2026) read Linux v7.3.5 and wrote facts only, no code: register addresses, values, sequences and file formats (`CS35L41-SPEC.md`, `CS35L41-SPEC-2.md`, outside the repository, with the Linux files read listed in them). A second person (Jarvis) checked the specs for code and replaced code-like names with plain words. The builder (Claude) never opened Linux source for cs35l41, cs_dsp, wm_adsp or HD Audio side codecs; it used only those specs, R5's `distro/` tree and Haiku's own MIT code. Names, structure and comments are R5's own. The generic interface `AudioAmp.h` and its module are MIT and vendor-neutral.
 
 ## SPDX, REUSE, and license texts
 
@@ -199,7 +199,8 @@ Checked file by file on 2026-10-31. A header was added only where the file is on
 
 | Path | SPDX | Why |
 |---|---|---|
-| `distro/media/src/add-ons/kernel/drivers/audio/cs35l41/`, `distro/media/src/add-ons/kernel/generic/audio_amp/`, `distro/media/headers/private/audio/audio_amp.h` | MIT | CS35L41 driver and the speaker amplifier interface. Copyright 2026 R5OS Contributors. Clean room, see above |
+| `distro/kernel/src/add-ons/kernel/generic/gpio/`, `distro/kernel/headers/os/drivers/GPIO.h` | MIT | GPIO module for kernel drivers. Copyright 2026 R5OS Contributors |
+| `distro/media/src/add-ons/kernel/drivers/audio/cs35l41/`, `distro/media/src/add-ons/kernel/generic/audio_amp/`, `distro/media/headers/os/drivers/AudioAmp.h` | MIT | CS35L41 driver and the speaker amplifier interface. Copyright 2026 R5OS Contributors. Clean room, see above |
 | `distro/ui/` | MIT | `libr5ui.so` and `<R5UI.h>`. Copyright 2026 R5OS Contributors. Applications link this library, so the C++ is MIT |
 | `distro/vulkan/include/vulkan/vulkan_r5.h` | MIT | Public header for `VK_RFIVE_view_surface`. Copyright 2026 R5OS Contributors. Applications include it |
 | `distro/vulkan/include/vulkan/vk_icd.h` | Apache-2.0 OR MIT | Vulkan-Headers 1.4.367, unmodified except two placeholders. Those lines are Apache-2.0 snippets, copyright 2026 R5OS Contributors |

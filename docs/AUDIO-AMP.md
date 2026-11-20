@@ -6,12 +6,12 @@ those chips must be powered, unmuted and stopped around every stream. R5 has
 a small kernel interface for that, so the HD Audio driver needs no vendor
 code.
 
-- Header: `distro/media/headers/private/audio/audio_amp.h` (MIT).
+- Header: `distro/media/headers/os/drivers/AudioAmp.h` (MIT).
 - Module: `generic/audio_amp/v1`, source `distro/media/src/add-ons/kernel/generic/audio_amp` (MIT).
 - First user: the CS35L41 driver, `distro/media/src/add-ons/kernel/drivers/audio/cs35l41` (MIT), installed as `drivers/audio/hmulti/cs35l41` on x86_64.
 - The HD Audio side: SPDX-Snippet blocks in the R5 copy of `hda` (`hda_codec.cpp`, `hda_multi_audio.cpp`).
 
-It is a kernel interface, not part of a LibR5 library, and not part of `libbe`.
+It is a kernel module in the Haiku way (`module_info`, `std_ops`, `get_module()`), like the ACPI module; not part of a LibR5 library, and not part of `libbe`.
 
 ## Contract
 
@@ -44,7 +44,7 @@ Rules: calls and fields are only added at the end of these structures (both carr
 The HP ENVY x360 15 (Ryzen 5 5625U, HDA subsystem `103c:8a31`) has two CS35L41 amplifiers under one ACPI device, `CSC3551`.
 
 - Haiku's I²C controller registers a node for the first `I2cSerialBus` of an ACPI device only. The driver reads every address from `_CRS` and talks to each amplifier through `i2c_bus_interface::exec_command()` with that address.
-- `_CRS` GPIO 0 is the shared reset line (driven once on an AMD FCH GPIO controller), GPIO 1 the speaker ID (logged).
+- `_CRS` GPIO 0 is the shared reset line, GPIO 1 the speaker ID, both through the GPIO module (`docs/GPIO.md`). The reset is pulsed low for 2 ms unless the firmware already drives it high; its state is logged once either way. The software reset of each amplifier always follows.
 - `_SUB` gives the subsystem. The boost parts and TDM slots are not in ACPI, so they come from a machine table in `Driver.cpp`. An unknown machine leaves the amplifiers off.
 - Power-up, errata, OTP trim, boost, pads and the DSP bypass playback path follow the R5 clean-room specification (see `docs/LICENSING.md`).
 - The ACPI mute override (`_DSM` function 5, Notify `0x91`) mutes both amplifiers while it is set.

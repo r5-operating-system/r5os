@@ -50,7 +50,7 @@ FILES = (
     "src/add-ons/kernel/drivers/audio/hda/hda_codec_defs.h",
     "src/add-ons/kernel/drivers/audio/hda/hda_controller.cpp",
     "src/add-ons/kernel/drivers/audio/hda/hda_multi_audio.cpp",
-    "headers/private/audio/audio_amp.h",
+    "headers/os/drivers/AudioAmp.h",
     "src/add-ons/kernel/generic/audio_amp/Jamfile",
     "src/add-ons/kernel/generic/audio_amp/audio_amp.cpp",
     "src/add-ons/kernel/drivers/audio/cs35l41/Jamfile",
@@ -170,8 +170,9 @@ def insert_after(path: pathlib.Path, anchor: str, line: str, tag: str) -> None:
 
 
 def hook_audio_amp(haiku: pathlib.Path) -> None:
-    """Build and package the speaker amplifier module and the CS35L41
-    driver (MIT, R5-only; docs/AUDIO-AMP.md)."""
+    """Build the speaker amplifier module and the CS35L41 driver (MIT,
+    R5-only; docs/AUDIO-AMP.md). The package lines are in the native
+    distro/desktop/build/jam/packages/Haiku."""
     generic = haiku / "src/add-ons/kernel/generic/Jamfile"
     audio = haiku / "src/add-ons/kernel/drivers/audio/Jamfile"
     package = haiku / "build/jam/packages/Haiku"
@@ -183,10 +184,6 @@ def hook_audio_amp(haiku: pathlib.Path) -> None:
         "SubInclude HAIKU_TOP src add-ons kernel drivers audio hda ;\n",
         "SubInclude HAIKU_TOP src add-ons kernel drivers audio cs35l41 ;\n",
         "cs35l41 jam")
-    insert_after(package, "AddFilesToPackage add-ons kernel generic :\n",
-        "\taudio_amp\n", "audio_amp package")
-    insert_after(package, "AddNewDriversToPackage audio hmulti :\n",
-        "\tcs35l41@x86_64\n", "cs35l41 package")
     for path, line in (
         (generic, "generic audio_amp ;"),
         (audio, "audio cs35l41 ;"),

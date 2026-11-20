@@ -27,7 +27,8 @@
 #include <ACPI.h>
 #include <KernelExport.h>
 #include <ByteOrder.h>
-#include <audio_amp.h>
+#include <GPIO.h>
+#include <AudioAmp.h>
 #include <device_manager.h>
 #include <i2c.h>
 #include <lock.h>
@@ -46,7 +47,6 @@ extern "C" {
 #define ACPI_NAME_CS35L41	"CSC3551"
 
 #define MAX_AMPS			2
-#define MAX_GPIOS			4
 
 // ACPI Notify on the amplifier device: the mute override changed.
 #define NOTIFY_MUTE_CHANGED	0x91
@@ -67,46 +67,10 @@ static const machine_info kMachines[] = {
 };
 
 
-// AMD FCH GPIO pin register (AMD Processor Programming Reference, GPIO
-// bank): pin state bit 16, output value bit 22, output enable bit 23.
-#define AMD_GPIO_PIN_STATE		(1u << 16)
-#define AMD_GPIO_OUTPUT_VALUE	(1u << 22)
-#define AMD_GPIO_OUTPUT_ENABLE	(1u << 23)
-
-static const char* const kAmdGpioControllers[] = { "AMD0030", "AMDI0030" };
-
-
-struct gpio_resource {
-	char		controller[128];
-	uint16		pin;
-	uint8		type;			// ACPI_RESOURCE_GPIO_TYPE_*
-	uint8		restriction;
-};
-
-
 struct crs_info {
 	uint32			address_count;
 	i2c_addr		addresses[MAX_AMPS + 2];
 	uint32			gpio_count;
-	gpio_resource	gpios[MAX_GPIOS];
-};
-
-
-class GpioPin {
-public:
-								GpioPin();
-								~GpioPin();
-
-			status_t			Init(acpi_module_info* acpi,
-									const gpio_resource& resource);
-			bool				IsValid() const { return fRegister != NULL; }
-			bool				Level() const;
-			bool				IsOutput() const;
-			void				Drive(bool high);
-
-private:
-			area_id				fArea;
-			volatile uint32*	fRegister;
 };
 
 
@@ -123,8 +87,8 @@ struct cs35l41_driver {
 	int32				amp_ids[MAX_AMPS];
 	uint32				amp_count;
 
-	GpioPin				reset;
-	GpioPin				speaker_id;
+	gpio_pin			reset;
+	gpio_pin			speaker_id;
 
 	sem_id				events;
 	thread_id			worker;
@@ -137,113 +101,7 @@ struct cs35l41_driver {
 static device_manager_info* sDeviceManager;
 static acpi_module_info* sACPI;
 static audio_amp_module_info* sAudioAmp;
-
-
-//	#pragma mark - GPIO
-
-
-static acpi_status
-find_memory(ACPI_RESOURCE* resource, void* context)
-{
-	uint32* base = (uint32*)context;
-	if (base[0] != 0)
-		return AE_OK;
-	if (resource->Type == ACPI_RESOURCE_TYPE_FIXED_MEMORY32) {
-		base[0] = resource->Data.FixedMemory32.Address;
-		base[1] = resource->Data.FixedMemory32.AddressLength;
-	} else if (resource->Type == ACPI_RESOURCE_TYPE_MEMORY32) {
-		base[0] = resource->Data.Memory32.Minimum;
-		base[1] = resource->Data.Memory32.AddressLength;
-	}
-	return AE_OK;
-}
-
-
-GpioPin::GpioPin()
-	:
-	fArea(-1),
-	fRegister(NULL)
-{
-}
-
-
-GpioPin::~GpioPin()
-{
-	if (fArea >= 0)
-		delete_area(fArea);
-}
-
-
-status_t
-GpioPin::Init(acpi_module_info* acpi, const gpio_resource& resource)
-{
-	char* hid = NULL;
-	if (acpi->get_device_info(resource.controller, &hid, NULL, 0, NULL, NULL)
-			!= B_OK || hid == NULL) {
-		return B_ENTRY_NOT_FOUND;
-	}
-	bool amd = false;
-	for (size_t i = 0; i < B_COUNT_OF(kAmdGpioControllers); i++) {
-		if (strcmp(hid, kAmdGpioControllers[i]) == 0)
-			amd = true;
-	}
-	free(hid);
-	if (!amd)
-		return B_NOT_SUPPORTED;
-
-	acpi_handle controller;
-	if (acpi->get_handle(NULL, resource.controller, &controller) != B_OK)
-		return B_ENTRY_NOT_FOUND;
-	uint32 memory[2] = { 0, 0 };
-	if (acpi->walk_resources(controller, (char*)"_CRS", find_memory, memory)
-			!= B_OK || memory[0] == 0) {
-		return B_ENTRY_NOT_FOUND;
-	}
-
-	// One 32-bit register per pin.
-	uint32 offset = (uint32)resource.pin * 4;
-	if (offset + sizeof(uint32) > memory[1])
-		return B_BAD_VALUE;
-
-	phys_addr_t address = (phys_addr_t)memory[0] + offset;
-	phys_addr_t page = address & ~(phys_addr_t)(B_PAGE_SIZE - 1);
-	void* mapped;
-	fArea = map_physical_memory("cs35l41 gpio", page, B_PAGE_SIZE,
-		B_ANY_KERNEL_ADDRESS, B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA,
-		&mapped);
-	if (fArea < 0)
-		return fArea;
-	fRegister = (volatile uint32*)((addr_t)mapped + (address - page));
-	return B_OK;
-}
-
-
-bool
-GpioPin::Level() const
-{
-	return fRegister != NULL && (*fRegister & AMD_GPIO_PIN_STATE) != 0;
-}
-
-
-bool
-GpioPin::IsOutput() const
-{
-	return fRegister != NULL && (*fRegister & AMD_GPIO_OUTPUT_ENABLE) != 0;
-}
-
-
-void
-GpioPin::Drive(bool high)
-{
-	if (fRegister == NULL)
-		return;
-	uint32 value = *fRegister | AMD_GPIO_OUTPUT_ENABLE;
-	if (high)
-		value |= AMD_GPIO_OUTPUT_VALUE;
-	else
-		value &= ~AMD_GPIO_OUTPUT_VALUE;
-	*fRegister = value;
-}
+static gpio_module_info* sGPIO;
 
 
 //	#pragma mark - ACPI
@@ -261,18 +119,8 @@ parse_crs(ACPI_RESOURCE* resource, void* context)
 			info->addresses[info->address_count++] = B_LENDIAN_TO_HOST_INT16(
 				resource->Data.I2cSerialBus.SlaveAddress);
 		}
-	} else if (resource->Type == ACPI_RESOURCE_TYPE_GPIO) {
-		ACPI_RESOURCE_GPIO& gpio = resource->Data.Gpio;
-		if (info->gpio_count < MAX_GPIOS && gpio.PinTableLength > 0
-			&& gpio.ResourceSource.StringPtr != NULL) {
-			gpio_resource& entry = info->gpios[info->gpio_count++];
-			strlcpy(entry.controller, gpio.ResourceSource.StringPtr,
-				sizeof(entry.controller));
-			entry.pin = gpio.PinTable[0];
-			entry.type = gpio.ConnectionType;
-			entry.restriction = gpio.IoRestriction;
-		}
-	}
+	} else if (resource->Type == ACPI_RESOURCE_TYPE_GPIO)
+		info->gpio_count++;
 	return AE_OK;
 }
 
@@ -507,6 +355,8 @@ free_driver(cs35l41_driver* driver)
 		delete driver->amps[i];
 	if (driver->events >= 0)
 		delete_sem(driver->events);
+	sGPIO->put_pin(driver->reset);
+	sGPIO->put_pin(driver->speaker_id);
 	mutex_destroy(&driver->lock);
 	delete driver;
 }
@@ -533,6 +383,8 @@ cs35l41_init_driver(device_node* node, void** _cookie)
 	driver->quit = false;
 	driver->notify_pending = 0;
 	driver->notify_installed = false;
+	driver->reset = NULL;
+	driver->speaker_id = NULL;
 	mutex_init(&driver->lock, "cs35l41");
 
 	// node -> I2C device node (ACPI handle) -> I2C bus node.
@@ -588,31 +440,47 @@ cs35l41_init_driver(device_node* node, void** _cookie)
 	}
 
 	// GPIO 0 is the shared reset line, GPIO 1 the speaker ID.
-	if (crs.gpio_count > 0) {
-		const gpio_resource& reset = crs.gpios[0];
-		status_t gpioStatus = B_BAD_TYPE;
-		if (reset.type == ACPI_RESOURCE_GPIO_TYPE_IO
-			&& reset.restriction != ACPI_IO_RESTRICT_INPUT) {
-			gpioStatus = driver->reset.Init(sACPI, reset);
+	// Spec section 2 step 1: one hardware reset, shared by every amplifier.
+	// When the firmware already drives the line high (released), it is
+	// only logged; the software reset of each amplifier follows anyway.
+	status_t gpioStatus = sGPIO->get_acpi_pin(driver->handle, 0,
+		&driver->reset);
+	if (gpioStatus == B_OK) {
+		gpio_pin_info info = {};
+		info.size = sizeof(info);
+		sGPIO->get_pin_info(driver->reset, &info);
+		bool high = false;
+		sGPIO->read_pin(driver->reset, &high);
+		const char* action;
+		if (info.connection != B_GPIO_CONNECTION_IO
+			|| info.restriction == B_GPIO_RESTRICT_INPUT) {
+			action = "not an output, not driven";
+		} else if (info.output_enabled && high) {
+			action = "released, not driven";
+		} else {
+			sGPIO->write_pin(driver->reset, false);
+			sGPIO->set_output_enabled(driver->reset, true);
+			snooze(2000);
+			sGPIO->write_pin(driver->reset, true);
+			snooze(2000);
+			action = "pulsed low for 2 ms";
 		}
-		TRACE_ALWAYS("reset gpio %s pin %u: %s, level %d\n", reset.controller,
-			reset.pin, gpioStatus == B_OK ? "usable" : strerror(gpioStatus),
-			driver->reset.Level() ? 1 : 0);
-	}
-	if (crs.gpio_count > 1) {
-		const gpio_resource& id = crs.gpios[1];
-		status_t gpioStatus = driver->speaker_id.Init(sACPI, id);
-		TRACE_ALWAYS("speaker id gpio pin %u: %s, speaker id %d\n", id.pin,
-			gpioStatus == B_OK ? "read" : strerror(gpioStatus),
-			driver->speaker_id.Level() ? 1 : 0);
+		TRACE_ALWAYS("reset gpio %s pin %" B_PRIu32 ": output %d level %d, %s\n",
+			info.controller, info.pin, info.output_enabled ? 1 : 0,
+			high ? 1 : 0, action);
+	} else {
+		driver->reset = NULL;
+		TRACE_ALWAYS("reset gpio: %s, not driven\n", strerror(gpioStatus));
 	}
 
-	// Spec section 2 step 1: one hardware reset for every amplifier.
-	if (driver->reset.IsValid()) {
-		driver->reset.Drive(false);
-		snooze(2000);
-		driver->reset.Drive(true);
-		snooze(2000);
+	gpioStatus = sGPIO->get_acpi_pin(driver->handle, 1, &driver->speaker_id);
+	if (gpioStatus == B_OK) {
+		bool high = false;
+		sGPIO->read_pin(driver->speaker_id, &high);
+		TRACE_ALWAYS("speaker id %d\n", high ? 1 : 0);
+	} else {
+		driver->speaker_id = NULL;
+		TRACE_ALWAYS("speaker id gpio: %s\n", strerror(gpioStatus));
 	}
 
 	uint32 count = min_c(crs.address_count, (uint32)MAX_AMPS);
@@ -731,6 +599,7 @@ module_dependency module_dependencies[] = {
 	{ B_DEVICE_MANAGER_MODULE_NAME, (module_info**)&sDeviceManager },
 	{ B_ACPI_MODULE_NAME, (module_info**)&sACPI },
 	{ AUDIO_AMP_MODULE_NAME, (module_info**)&sAudioAmp },
+	{ B_GPIO_MODULE_NAME, (module_info**)&sGPIO },
 	{}
 };
 
