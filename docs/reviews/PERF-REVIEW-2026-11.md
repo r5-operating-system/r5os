@@ -56,7 +56,7 @@ Gesorteerd op winst per moeite. Winst is een schatting. Zekerheid staat erbij. M
 | 9 | meting | C-toestanden | onbekend tot er residutijd is | laag | 1 | laag als het alleen een teller is | meten eerst |
 | 10 | prestatie | AHCI lege poorten (opstart) | 2,8–3,0 s op elke start (USB én NVMe; 3,03 s van de 5,1 s tot BFS zijn twee lege AHCI-controllers) | hoog (stick 68/69/70 + `ahci_port.cpp`) | 1 | laag tot middel | ja |
 | 11 | prestatie | LTO of x86-64-v3 voor alles | klein tegenover 2 | middel dat v3 voor de kernel fout is | veel | hoog | niet doen |
-| 12 | bug | luidsprekers CS35L41 | geen geluid, geen snelheid (NB: stick 70 toont 2,68 s synchrone I2C-firmwarelaadtijd bij opstart) | hoog, al beschreven | apart project | licentie GPL-2.0 van het Linux-stuurprogramma | niet in deze ronde |
+| 12 | prestatie | luidsprekers CS35L41 | 2,68 s synchrone I2C-firmwarelaadtijd bij opstart (stick 70); asynchroon laden haalt dat uit de opstart | hoog (stick 70) | 1 | laag; de MIT-driver (clean room) staat in #4482 | na #4482 |
 | 13 | prestatie | `r5_pstate_log` | 1,0 s 100% CPU-spin (`burn_cpu`) + vier keer `fsync` van tot 1,2 MiB syslog plus hardwarelog, elke start | hoog | 1 | laag | ja |
 | 14 | bug en prestatie | Skia-pipelinebestand | elke `store()` herschrijft en hasht alles (tot 804 KB), én één bestandsnaam wist RADV-cache na Lavapipe-start | hoog | 1 | laag | ja |
 | 15 | geen snelheidswinst | scheduler | start altijd in low latency, quantum 1 ms | hoog dat het zo staat, laag dat power-saving de desktop sneller maakt | — | middel als je het omzet | niet voor snelheid |
@@ -195,7 +195,7 @@ De kernel naar `x86-64-v3` tillen zou AVX in kernelcode toelaten. Dat hoort niet
 
 **Lettertypen.** Stick 57 liep vast in FreeType omdat twee draden dezelfde face liepen, vanuit WebPositive. De bron heeft nu één slot `sCharIndexLock` om elke tekenindex (`FontCacheEntry.cpp` 286–302). Latere sticks in deze reeks noemen die fout niet. Beschouwen als gerepareerd in de bron, niet opnieuw als open bug, tot een stick het tegendeel laat zien.
 
-**Geluid.** De luidsprekers blijven stil tot er een CS35L41-stuurprogramma is. Het changelog van 19 nov 2026 zegt dat het Linux-stuurprogramma GPL-2.0 is en niet als bron is gebruikt. De firmware ligt er, ongeladen. Dat is een bug voor de eigenaar en geen prestatiepunt. De hoofdtelefoon is het pad zonder die versterkers.
+**Geluid.** De luidsprekers hebben een eigen MIT-stuurprogramma, clean room gebouwd uit een specificatie zonder Linux-code (#4482, nog niet gemerged; aangevuld door Jarvis op 21 nov 2026). In bypass speelt het op stick 68; de firmware met speakerbescherming laadt sinds stick 70 en wacht op de laatste stap. Het enige prestatiepunt is dat het laden van de firmware over I2C 2,68 s van de opstart kost (zie rij 12).
 
 **Media.** Stick 68 koppelt de mixer om 09:51:45, één seconde na app_server. Geen wachttijd die de opstart domineert.
 
