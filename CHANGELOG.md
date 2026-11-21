@@ -1,5 +1,29 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-21 - Perf round 1 Part B: graphics, Lavapipe warm-up, libdrm-2.4.124-5
+
+Problem: from docs/reviews/PERF-REVIEW-2026-11.md (#4484):
+- libdrm-2.4.124-4-x86_64.hpkg still shipped an older libdrm.so without gpu_trace, so debug sticks logged 221,596+ successful ioctls unbuffered to an endlessly growing app_server-stderr.log (12.4 MB on stick 68).
+- On Lavapipe, skia_warm_up() waited up to 30 s for WindowRunDone() before starting, did not log per-part durations or Mesa disk-cache before/after counts, and the boot splash did not wait for Lavapipe shader precompilation.
+- PipelineStorage used one filename (skia-pipelines) for every device, so a Lavapipe start overwrote RADV cache with Lavapipe 312-byte stub header; store() also rewrote and rehashed even when unchanged.
+- Compositor::_ReadZeroCopySwitch() opened radeon_hd settings from disk and logged every 10 s on the urgent compose thread even without gpu_debug.
+- Compositor::NoteInput() used a 400 ms window, attributing idle mouse moves to unrelated 250 ms cursor blinks (inflating reported input latency).
+- Lavapipe thread/vector/MSAA settings were not logged together for measurement.
+- r5_gpu_core.cpp gpu_retire_thread woke every 1000 ms even when no GPU jobs were in flight.
+
+What changed:
+- Rebuilt libdrm.so.2.124.0 and libdrm_amdgpu.so.1.124.0 from distro/graphics/libdrm-r5 and packed distro/packages/x86_64/libdrm-2.4.124-5-x86_64.hpkg (verified by extracting lib/libdrm.so.2.124.0 from the .hpkg: sha256 16a193fddcda1146, pkg sha256 f6cfd26acb35838b, strings contain both gpu_debug and gpu_trace); updated build-gpu-packages.py, install-mesa-packages.sh, pin-mesa-packages.sh, check-egl-vendor.py, and distro/gpu/COMPAT.
+- distro/app_server/Compositor.cpp: rotate app_server-stderr.log to .old per session (open mode w) with line buffering (_IOLBF); unset MESA_SHADER_CACHE_DISABLE before loading Vulkan; hold boot splash on Lavapipe until fSkia->WarmUpDone() (RADV unchanged); gate _ReadZeroCopySwitch() behind fDebug; tighten NoteInput() damage attribution window to 50 ms; log active Lavapipe threads/vector/msaa configuration.
+- distro/app_server/skia/SkiaGpu.{h,cpp}: add WarmUpDone()/SetWarmUpDone(); key PipelineStorage file per vendor/device (skia-pipelines-<vendor>-<device>), skip load/store on CPU/Lavapipe (where lvp_CreatePipelineCache is a stub), and skip store() when size and FNV-1a checksum match.
+- distro/app_server/skia/SkiaOffscreen.cpp: start Lavapipe warm-up immediately while the splash holds (no 30 s wait), log all 8 part durations and /boot/system/cache/app_server/mesa file/KB counts before and after warm-up, then call SetWarmUpDone(). RADV path unchanged.
+- distro/graphics/src/add-ons/kernel/drivers/graphics/r5gpu/r5_gpu_core.cpp: sleep with B_INFINITE_TIMEOUT in gpu_retire_thread() when no GPU jobs are in flight (woken immediately on job submit via r5_gpu_retire_wake()); keep 1 s watchdog timeout while jobs are live. Owner-approved (21 Nov 2026) pending 5625U stick verification with gpu_hang_test proving a hang is still detected and reset; documented in docs/GRAPHICS.md (GFX9 reset section). GFX9 ring/PSP/PTE/reset frame/stop contracts untouched.
+
+Tested:
+- Built AMD64 with scripts/build-locked.sh (jam_exit=0, mesa_exit=0, mesa_packages_ok, ok package paths, ok egl vendor).
+- Booted private copy /home/nickr/r5-os-perf-b.image in QEMU (-machine q35,accel=kvm -cpu host -m 2048 -smp 2 -display none): Lavapipe desktop reached (R5 tracker: Tracker from distro, R5 deskbar: BarApp from distro); no panic/KDL.
+
+Limits: the 5625U has not run this (RADV, libdrm-2.4.124-5 on hardware, and second-boot Lavapipe Mesa disk-cache hit rate need stick boots). ARM64 and RISC-V were not built (app_server and r5_gpu_core changes are arch-independent; libdrm-2.4.124-5 package is x86_64).
+
 ## 2026-11-21 - EFI runtime services on the 5625U
 
 Sticks 69 and 70 carried this branch (`11dd98fc7d`) together with the CS35L41 driver (#4482), on the stick branch only, and booted on the HP ENVY x360 15 (Ryzen 5 5625U) through UEFI. Both boots: `efi: 37383 pages identity mapped, 80 of 104 page tables, NX on` and `efi: runtime services ready, revision 2.70, 11 ranges, attributes table yes`. The CS35L41 driver read `CirrusSmartAmpCalibrationData` through `get_variable` (48 bytes: the header and one entry per amplifier), and on stick 70 applied it (left resistance 10050, right 10336). No fault, no "called with interrupts off", and the boot loader change started the system normally.
