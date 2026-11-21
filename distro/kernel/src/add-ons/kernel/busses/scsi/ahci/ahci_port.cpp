@@ -265,11 +265,11 @@ AHCIPort::PortReset()
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
 	// Empty ports report SStatus.DET == 0 and TFD == 0x7f/0xff (BSY set).
-	// Waiting 1 s for BSY to clear before COMRESET and another 500 ms for
-	// link-up burns 1.5 s per empty controller on every boot (3.03 s on
-	// AMD FCH with two empty AHCI controllers). Skip the BSY wait when no
-	// device is detected and shorten the post-COMRESET wait unless a PHY
-	// presence signal appears.
+	// Waiting 1 s for BSY to clear before COMRESET burns 1.0 s per empty
+	// controller on every boot (2.0 s on AMD FCH with two empty AHCI
+	// controllers). Skip the BSY wait when no device is detected before
+	// reset, while keeping the full 500 ms post-COMRESET link-up wait so
+	// slow or cold SATA drives are never missed.
 	bool noDeviceBeforeReset
 		= (fRegs->ssts & HBA_PORT_DET_MASK) == SSTS_PORT_DET_NODEV;
 	if (noDeviceBeforeReset
@@ -294,22 +294,11 @@ AHCIPort::PortReset()
 
 	Enable();
 
-	// SPDX-SnippetBegin
-	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
-	// SPDX-License-Identifier: MIT
-	bigtime_t detTimeout = noDeviceBeforeReset ? 100000 : 500000;
-	if (wait_until_set(&fRegs->ssts, SSTS_PORT_DET_PRESENT, detTimeout)
-		< B_OK) {
-		if (!noDeviceBeforeReset
-			|| (fRegs->ssts & HBA_PORT_DET_MASK) == SSTS_PORT_DET_NODEV
-			|| wait_until_set(&fRegs->ssts, SSTS_PORT_DET_PRESENT, 400000)
-				< B_OK) {
-			TRACE("%s: port %d: no device detected\n", __func__, fIndex);
-			fDevicePresent = false;
-			return B_OK;
-		}
+	if (wait_until_set(&fRegs->ssts, SSTS_PORT_DET_PRESENT, 500000) < B_OK) {
+		TRACE("%s: port %d: no device detected\n", __func__, fIndex);
+		fDevicePresent = false;
+		return B_OK;
 	}
-	// SPDX-SnippetEnd
 
 	return Probe();
 }

@@ -13,7 +13,7 @@ Problem: from docs/reviews/PERF-REVIEW-2026-11.md (#4484):
 - C-state residency and decoded AMD CPPC EPP values were not logged.
 
 What changed:
-- distro/kernel/src/add-ons/kernel/busses/scsi/ahci/ahci_port.cpp: skip the 1.0 s TFD.BSY wait when SStatus.DET == SSTS_PORT_DET_NODEV before reset, and shorten the post-COMRESET wait on an empty port to 100 ms (extending to 500 ms if a PHY presence appears).
+- distro/kernel/src/add-ons/kernel/busses/scsi/ahci/ahci_port.cpp: skip the 1.0 s TFD.BSY wait when SStatus.DET == SSTS_PORT_DET_NODEV before reset (saves 2.0 s across the two empty AMD FCH AHCI controllers), while keeping the full 500 ms post-COMRESET link-up wait so slow or cold SATA drives are never missed.
 - distro/kernel/src/add-ons/kernel/busses/scsi/ahci/ahci.c: probe BAR5 CAP.S64A in ahci_register_device() and set B_DMA_HIGH_ADDRESS to UINT64_MAX when 64-bit addressing is supported.
 - distro/cpu/r5_pstate_log.cpp: gate execution behind kernel setting r5_pstate_log true or CLI --run/--now (and --watch for repeated passes); remove KERN: from line_matters().
 - distro/kernel/src/add-ons/kernel/drivers/input/i2c_hid/HIDDevice.cpp and i2c_elan/ELANDevice.{h,cpp}: adaptive poll backoff (1 ms active -> 4 ms after 200 ms idle -> 16 ms after 1 s idle; GPIO interrupts remain the longer-term fix).
