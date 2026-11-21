@@ -96,9 +96,11 @@ set_normal_pstate(void* /* dummy */, int cpu)
 		sAvoidBoost ? AMD_CPPC_EPP_BALANCE_PERFORMANCE : AMD_CPPC_EPP_PERFORMANCE);
 	x86_write_msr(MSR_AMD_CPPC_REQ, request & 0xffffffff);
 
+	uint64 actualReq = x86_read_msr(MSR_AMD_CPPC_REQ);
 	dprintf("R5 CPPC: cpu %d cap1 0x%08" B_PRIx64 " request 0x%08" B_PRIx64
-		"\n", cpu, cap1 & 0xffffffff,
-		x86_read_msr(MSR_AMD_CPPC_REQ) & 0xffffffff);
+		" epp %" B_PRIu64 " min %" B_PRIu64 " max %" B_PRIu64 "\n",
+		cpu, cap1 & 0xffffffff, actualReq & 0xffffffff,
+		(actualReq >> 24) & 0xff, actualReq & 0xff, (actualReq >> 8) & 0xff);
 // SPDX-SnippetEnd
 }
 

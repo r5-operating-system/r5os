@@ -13,6 +13,7 @@
 
 #include <ACPI.h>
 #include <Drivers.h>
+#include <driver_settings.h>
 #include <Errors.h>
 #include <KernelExport.h>
 
@@ -104,6 +105,17 @@ struct acpi_cpuidle_driver_info {
 static acpi_cpuidle_driver_info *sAcpiProcessor[SMP_MAX_CPUS];
 static device_manager_info *sDeviceManager;
 static acpi_module_info *sAcpi;
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// Opt-in C-state residency counter (kernel setting: r5_cstate_stats true).
+// Measurement only; C-state selection is unchanged.
+static bool sCstateStats = false;
+static int64 sCstateEntries[MAX_CSTATES];
+static int64 sCstateResidencyUs[MAX_CSTATES];
+static bigtime_t sCstateLastReport = 0;
+// SPDX-SnippetEnd
 
 // the deepest state the scheduler mode allows
 static int32 sStateIndex = -1;
@@ -357,7 +369,35 @@ acpi_cstate_idle()
 		if (pi->flags & ACPI_FLAG_C_ARB)
 			sAcpi->write_bit_register(ACPI_BITREG_ARB_DISABLE, 0);
 	}
-	sIdleTime[cpu].time = (expected + system_time() - start) / 2;
+	bigtime_t spent = system_time() - start;
+	sIdleTime[cpu].time = (expected + spent) / 2;
+
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	if (sCstateStats && stateIndex >= 0 && stateIndex < MAX_CSTATES) {
+		atomic_add64(&sCstateEntries[stateIndex], 1);
+		if (spent > 0)
+			atomic_add64(&sCstateResidencyUs[stateIndex], spent);
+		if (cpu == 0) {
+			bigtime_t now = system_time();
+			if (now - sCstateLastReport >= 30000000LL) {
+				sCstateLastReport = now;
+				char buf[256];
+				int pos = snprintf(buf, sizeof(buf), "R5 C-states:");
+				for (int32 i = 0; i < pi->state_count && i < MAX_CSTATES
+						&& pos > 0 && (size_t)pos < sizeof(buf) - 1; i++) {
+					int64 entries = atomic_get64(&sCstateEntries[i]);
+					int64 us = atomic_get64(&sCstateResidencyUs[i]);
+					pos += snprintf(buf + pos, sizeof(buf) - pos,
+						" %s=%" B_PRId64 " (%" B_PRId64 " ms)",
+						pi->states[i].name, entries, us / 1000);
+				}
+				dprintf("%s\n", buf);
+			}
+		}
+	}
+	// SPDX-SnippetEnd
 }
 
 
@@ -704,6 +744,21 @@ acpi_cpuidle_init()
 	if (status == B_OK) {
 		acpi_cstate_set_scheduler_mode(SCHEDULER_MODE_LOW_LATENCY);
 		dprintf("using x86 ACPI idle\n");
+
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		void* settings = load_driver_settings("kernel");
+		if (settings != NULL) {
+			sCstateStats = get_driver_boolean_parameter(settings,
+				"r5_cstate_stats", false, false);
+			unload_driver_settings(settings);
+			if (sCstateStats) {
+				sCstateLastReport = system_time();
+				dprintf("R5 C-states: residency stats enabled\n");
+			}
+		}
+		// SPDX-SnippetEnd
 
 		// AMD's MWAIT only enters C1: deeper states (the cores' CC6) are
 		// only to be had through _CST, so on AMD this module comes before
