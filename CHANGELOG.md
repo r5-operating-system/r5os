@@ -1,5 +1,11 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-21 - EFI runtime services on the 5625U
+
+Sticks 69 and 70 carried this branch (`11dd98fc7d`) together with the CS35L41 driver (#4482), on the stick branch only, and booted on the HP ENVY x360 15 (Ryzen 5 5625U) through UEFI. Both boots: `efi: 37383 pages identity mapped, 80 of 104 page tables, NX on` and `efi: runtime services ready, revision 2.70, 11 ranges, attributes table yes`. The CS35L41 driver read `CirrusSmartAmpCalibrationData` through `get_variable` (48 bytes: the header and one entry per amplifier), and on stick 70 applied it (left resistance 10050, right 10336). No fault, no "called with interrupts off", and the boot loader change started the system normally.
+
+Limits: one laptop and one firmware vendor. AVX-512 is not present on the 5625U. ARM64 and RISC-V get the module absent (`arch_none.cpp`); they were not built. The fault recovery was shown in QEMU only. SetVariable is not implemented.
+
 ## 2026-11-20 - Stick 67: write-combined GTT on the 5625U, and M13 closes
 
 Stick 67 is the head of #4478 (`84deb90fee`, merged as `25da2f35a3`), the regular stick settings (`gpu_draw`, `gpu_debug`, `gpu_selftest`) and no `gfx9_wc_gtt` line, so write-combined GTT was on by default. Boot 1: `gpu available`, K1 ok, scratch `0xDEADBEEF`, K2 seq 3, compositor, Skia and scanout on RADV. The 10 s lines counted write-combined buffer creates (`wc 12`, `wc 5`, `wc 175`, `wc 51`, `wc 42`). `/system/bin/r5_wc_gtt` printed PASS and the syslog has `R5 VM: wc direct map ok (48 areas)`. No panic, no page fault, no `radeon_hd: wait` line, no `left radv` and no `gpu copy off`. Boot 2 was meant to run with `gfx9_wc_gtt false`, but the settings file on the stick did not have that line, so boot 2 repeated boot 1 (K2 seq 6, `wc 37`, `wc 155`, `wc direct map ok (48 areas)`, no fault).
