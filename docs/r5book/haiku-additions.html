@@ -37,6 +37,7 @@
 				<li><a href="#decorator">Decorator hooks</a> &mdash; R5 decorator ABI version and window hooks.</li>
 				<li><a href="#wheel-phase">input_wheel_phase</a> &mdash; Touchpad scroll phase on wheel messages.</li>
 				<li><a href="#usb-speed">B_USB_IOCTL_GET_DEVICE_SPEED</a> &mdash; Querying negotiated USB speed.</li>
+				<li><a href="#efi">EFI variables for drivers</a> &mdash; Reading UEFI variables from a kernel driver.</li>
 			</ul>
 		</nav>
 
@@ -333,6 +334,66 @@ instantiate_decor_addon(image_id id, <span class="k">const char</span>* name)
 	highSpeed = speed &gt;= B_USB_SPEED_HIGH;
 <span class="k">else</span>
 	highSpeed = guess_from_descriptors();	<span class="c">// your own fallback</span></pre>
+		</section>
+
+		<!-- EFI variables -->
+		<section class="entry" id="efi">
+			<div class="entry-header"><h2>EFI variables for drivers</h2><span class="kind">EFI (drivers)</span></div>
+			<table class="facts">
+				<tr><th>Declared in</th><td>&lt;EFI.h&gt;</td></tr>
+				<tr><th>Module</th><td>generic/efi/v1 (<code class="inline">B_EFI_MODULE_NAME</code>)</td></tr>
+				<tr><th>For</th><td>Kernel drivers</td></tr>
+			</table>
+
+			<p>On a machine that starts through UEFI, a kernel driver can read firmware variables, for example
+			factory calibration that the vendor stores in EFI. The module is a normal kernel module, used like the
+			ACPI module: <code class="inline">get_module()</code>, the calls, <code class="inline">put_module()</code>.
+			The firmware runs in an address space of its own and never sees the caller's memory.</p>
+
+			<div class="note"><strong>The module may be absent.</strong> <code class="inline">get_module()</code> fails on a
+			legacy BIOS start, in safe mode, on an architecture without a backend (today only x86_64 has one), and when
+			the firmware's runtime map is unusable. A driver must work without it.</div>
+
+			<div class="member"><div class="sig">status_t get_variable(const char* name, const efi_vendor_guid* vendor, void* buffer, size_t* _size, uint32* _attributes);</div>
+				<p>Reads the variable <code class="inline">name</code> (UTF-8) of <code class="inline">vendor</code>.
+				<code class="inline">*_size</code> is the size of <code class="inline">buffer</code> on entry and the size
+				of the variable on return. <code class="inline">B_BUFFER_OVERFLOW</code> when the buffer is too small (the
+				size is still set); pass <code class="inline">NULL</code> and <code class="inline">*_size</code> 0 to ask
+				for the size. <code class="inline">B_ENTRY_NOT_FOUND</code> when the variable does not exist.
+				<code class="inline">_attributes</code> may be <code class="inline">NULL</code>; otherwise it gets
+				<code class="inline">B_EFI_VARIABLE_NON_VOLATILE</code>, <code class="inline">_BOOTSERVICE_ACCESS</code> and
+				<code class="inline">_RUNTIME_ACCESS</code> as the firmware reports them.</p></div>
+
+			<div class="member"><div class="sig">status_t get_next_variable_name(char* name, size_t nameSize, efi_vendor_guid* vendor);</div>
+				<p>Steps through all variable names. Start with an empty <code class="inline">name</code>; each call
+				returns the next name and its vendor GUID. <code class="inline">B_ENTRY_NOT_FOUND</code> after the last
+				one.</p></div>
+
+			<h3>When you may call</h3>
+			<p>Only from a thread, never from an interrupt handler, with interrupts off, or with a spinlock held. A
+			call can wait for another caller and then runs the firmware with interrupts off for that one call; a read
+			takes well under a millisecond on the machines tested, but flash-backed firmware can take longer. A call
+			with interrupts off is refused with <code class="inline">B_NOT_ALLOWED</code>. If the firmware faults, the
+			call fails and the module stops calling the firmware until the next start.</p>
+
+<pre class="code"><span class="k">static const</span> efi_vendor_guid kGlobalVariable = { 0x8be4df61, 0x93ca, 0x11d2,
+	{ 0xaa, 0x0d, 0x00, 0xe0, 0x98, 0x03, 0x2b, 0x8c } };
+
+efi_module_info* efi;
+<span class="k">if</span> (get_module(B_EFI_MODULE_NAME, (module_info**)&amp;efi) == B_OK) {
+	uint16 order[32];
+	size_t size = <span class="k">sizeof</span>(order);
+	<span class="k">if</span> (efi-&gt;get_variable(<span class="s">"BootOrder"</span>, &amp;kGlobalVariable, order, &amp;size,
+			NULL) == B_OK)
+		dprintf(<span class="s">"%u boot entries\n"</span>, (<span class="k">unsigned</span>)(size / 2));
+	put_module(B_EFI_MODULE_NAME);
+} <span class="k">else</span> {
+	<span class="c">// no EFI runtime services: use your own defaults</span>
+}</pre>
+
+			<p>Writing variables (<code class="inline">SetVariable</code>) is not available yet. Calls are only ever
+			added at the end of <code class="inline">efi_module_info</code>, so a driver built against this version
+			keeps working.</p>
 		</section>
 	</main>
 </div>

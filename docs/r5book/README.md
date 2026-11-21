@@ -37,7 +37,7 @@ Open `index.html` directly in a browser. Everything is static HTML, CSS (`r5book
 ### Reference
 | Page | Covers | Source of truth |
 |---|---|---|
-| `haiku-additions.html` | Public calls R5 added to Haiku classes and modules, plus decorator hooks | `SPDX-Snippet` parts of public headers in `distro/` |
+| `haiku-additions.html` | Public calls R5 added to Haiku classes and modules, plus decorator hooks and the EFI module for drivers | `SPDX-Snippet` parts of public headers in `distro/`; `distro/kernel/headers/os/drivers/EFI.h` |
 | `class-index.html` | Alphabetical index of every class, function, struct, and enum in R5Book | Generated from `R5_SEARCH_INDEX` in `r5book.js` |
 
 ## Pictures

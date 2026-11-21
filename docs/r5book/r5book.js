@@ -235,6 +235,7 @@
 						["haiku-additions.html#decorator", "Decorator hooks"],
 						["haiku-additions.html#wheel-phase", "input_wheel_phase"],
 						["haiku-additions.html#usb-speed", "USB device speed"],
+						["haiku-additions.html#efi", "EFI variables"],
 					],
 				},
 				{
@@ -286,6 +287,7 @@
 		{ name: "WiFiController", kind: "class", where: "Wi-Fi Kit", header: "<R5WiFi.h>", lib: "libr5wifi.so", href: "wifi-kit.html#controller", desc: "Drives Wi-Fi scanning, joining, and link state." },
 		{ name: "WiFiState", kind: "struct", where: "Wi-Fi Kit", header: "<R5WiFi.h>", lib: "libr5wifi.so", href: "wifi-kit.html#state", desc: "Snapshot of Wi-Fi interface, scan list, and link." },
 		{ name: "WiFiView", kind: "class", where: "Wi-Fi Kit", header: "<R5WiFiView.h>", lib: "libr5wifi.so", href: "wifi-kit.html#view", desc: "Embeddable Wi-Fi settings panel." },
+		{ name: "efi_module_info", kind: "struct", where: "Haiku kits", header: "<EFI.h>", lib: "kernel / generic/efi/v1", href: "haiku-additions.html#efi", desc: "Reads UEFI variables from a kernel driver." },
 		{ name: "input_wheel_phase", kind: "enum", where: "Haiku kits", header: "<InterfaceDefs.h>", lib: "libbe.so", href: "haiku-additions.html#wheel-phase", desc: "Touchpad scroll gesture phase on wheel messages." },
 		{ name: "r5_admin_send()", kind: "function", where: "Admin Kit", header: "<R5Admin.h>", lib: "libr5admin.so", href: "admin-kit.html#client", desc: "Sends a privileged request to a service admin port." },
 		{ name: "r5_avatar_draw()", kind: "function", where: "Appearance: Functions", header: "<R5UI.h>", lib: "libr5ui.so", href: "appearance-effects.html#functions", desc: "Draws a circular user avatar badge." },
