@@ -5,13 +5,13 @@
 
 # Prestatie- en bugreview van R5 Operating System (21 nov 2026)
 
-Alleen gelezen. Bron is `origin/main` op `ec81d57163` (20 nov 2026, 14:37 Europe/Amsterdam, merge van #4481, M13 dicht). Logs: `generated/boot-5625u-60` tot en met `68` op de referentie-laptop (HP ENVY x360 15, Ryzen 5 5625U). Stick 69 is er niet. Geen jam, geen `apply-overlay.sh`, geen QEMU, geen stick, geen wijziging aan code of aan de gedeelde WSL-boom. Die boom is alleen gelezen voor de compilerregels in `build/jam/ArchitectureRules` en `BuildSetup`.
+Alleen gelezen. Bron is `origin/main` op `ec81d57163` (20 nov 2026, 14:37 Europe/Amsterdam, merge van #4481, M13 dicht). Logs: `generated/boot-5625u-60` tot en met `68` op de referentie-laptop (HP ENVY x360 15, Ryzen 5 5625U). Stick 69 is er niet. Geen jam, geen `apply-overlay.sh`, geen QEMU, geen stick, geen wijziging aan code of aan de gedeelde WSL-boom. Die boom is alleen gelezen: compilerregels in `build/jam/ArchitectureRules` en `BuildSetup`, `block_cache_create` en de lage-geheugenhandler in `src/system/kernel/cache/block_cache.cpp`, `src/servers/notification/NotificationServer.cpp`, `#define hz 1000LL` in `src/libs/compat/freebsd_network/compat/sys/kernel.h`, en een zoektocht naar `snooze` en `BMessageRunner` onder `src/servers`.
 
 Regels die hier gelden, uit `AGENTS.md`: de softwareweg (Painter, llvmpipe, Lavapipe) blijft; de GFX9-ring, PSP, paginatabellen, reset en stop bij afsluiten veranderen niet zonder een gevraagde stick-proef; de Settings-indeling blijft; `libbe` en de Haiku-ABI blijven; Mesa en Skia houden hun eigen licentie; een nieuwe R5-helper hoort in een `libr5*`-bibliotheek en blijft MIT. M13 is dicht (`docs/M13-PLAN.md`, 20 nov 2026). De Lavapipe-opwarming is het open punt, geen reden om M13 opnieuw open te trekken. Skia is de standaard, ook op Lavapipe, en Painter alleen in veilige modus (eigenaar, 19 nov 2026). Op Lavapipe is Skia nog trager dan Painter. Die keuze blijft staan.
 
 De stick-sessies draaien met `gpu_draw`, `gpu_debug` en `gpu_selftest` aan. Dat is de proefstick, niet de stille standaard. Cijfers uit die sessies tellen de debug-log mee.
 
-De eerste versie van dit rapport leunde op `docs/M13-PLAN.md` en oudere reviews voor wat "al gedaan" was. Deze versie houdt alleen stand waar de bron of de syslog het zelf laat zien. Paden die nog niet regel voor regel gelezen zijn, staan in sectie 6 en zijn geen bevinding.
+De eerste versie van dit rapport leunde op `docs/M13-PLAN.md` en oudere reviews voor wat "al gedaan" was. Deze versie houdt alleen stand waar de bron of de syslog het zelf laat zien. Deskbar, de notificatieserver, Terminal, het Wi-Fi-stuurprogramma, de BFS-blokcache en de pictogramweg van Tracker staan in sectie 4.10. Wat daarna nog open is, staat in sectie 6 en is geen bevinding.
 
 ## 1. Samenvatting
 
@@ -26,6 +26,8 @@ Afsluiten is niet afgemaakt in het spoor. Op sticks 64, 65, 67 en 68 staat bij d
 Elke verse stick mist het activatiebestand van de pakketten en doet first-boot van 137 pakketten (stick 68: van 7,55 s naar 9,08 s kerneltijd). Bij de tweede start van stick 68 ontbreekt dat bestand nog steeds.
 
 WebPositive is het pakket `haikuwebkit-1.10.0-2` (WebKit rond 625). Dat is de dagelijkse traagheid in de browser. Aomi is het plan in `docs/AOMI.md`. Geen kleine patch.
+
+De rest van de desktop heeft geen tweede wachttijd van die orde. Deskbar tekent de klok één keer per seconde en alleen als de tekst verandert. De notificatieserver wacht op een bericht en zet daarna één timer voor het verdwijnen. Terminal tekent een scroll al samen per 100 ms zodra er meer dan een scherm aan regels binnenkomt. Wat wel blijft draaien: de vensterlijst van Deskbar elke 150 ms, en het Wi-Fi-stuurprogramma elke 10 ms zolang de interface open is. Geen van beide is een seconde op de opstart. De invoermethode van Terminal slaapt 100 ms per wijziging, met het commentaar `TODO: Debug only`.
 
 Eerst doen, in deze volgorde:
 
@@ -55,6 +57,10 @@ Gesorteerd op winst per moeite. Winst is een schatting. Zekerheid staat erbij. M
 | 13 | prestatie | `r5_pstate_log` | vier keer `fsync` van tot 1,2 MiB syslog plus een hardwarelog, op de opstartschijf, elke start | hoog | 1 | laag | ja |
 | 14 | prestatie | Skia-pipelinebestand | elke `store()` herschrijft het hele bestand en hasht elke byte; stick 68 doet dat meerdere keren, tot 804 KB | hoog | 1 | laag | ja |
 | 15 | geen snelheidswinst | scheduler | start altijd in low latency, quantum 1 ms | hoog dat het zo staat, laag dat power-saving de desktop sneller maakt | — | middel als je het omzet | niet voor snelheid |
+| 16 | bug | Terminal, invoermethode | 100 ms `snooze` per wijziging van de invoermethode | hoog in de code, niet gemeten | 1 | laag | ja, klein |
+| 17 | prestatie | Deskbar-vensterlijst | een draad op lage prioriteit, elke 150 ms, zolang de balk er is | hoog dat hij loopt, laag hoeveel CPU dat is | 2 | middel, titels mogen niet blijven hangen | meten eerst |
+| 18 | prestatie | mt7922, lege ringen | een ontvangstdraad elke 10 ms zolang de interface open is; leeg is drie descriptoren | hoog dat hij loopt, laag dat het een procent is | 1–2 | middel, de ringen liepen vol toen de tik wegviel | meten eerst |
+| 19 | geheugen | BFS-blokcache | geen vaste grootte; krimpt pas bij weinig geheugen | hoog voor het mechanisme, geen telling op de stick | 1 om te tellen | middel als je een plafond zet | meten eerst |
 
 ## 3. In één sessie
 
@@ -64,6 +70,7 @@ Gesorteerd op winst per moeite. Winst is een schatting. Zekerheid staat erbij. M
 - Eén herstart op de 5625U met het afsluitspoor in de volgende syslog: de regels `sync_done`, `hooks_start`, `hooks_done` moeten er staan, met de wandklok erbij. Eén keer met Bluetooth aan, één keer uit. Geen wijziging aan de GFX9-stop.
 - Nakijken waarom `activated-packages` bij de tweede start van stick 68 nog ontbreekt.
 - Een teller voor C-residutijd, uit, tot de eigenaar hem aan zet. Geen wijziging aan de C-toestand zelf in die sessie.
+- De `snooze(100000)` in `TermView::_HandleInputMethodChanged` weghalen. Het commentaar erboven zegt `TODO: Debug only`. Gewone toetsen en het scrollen gaan daar niet doorheen.
 
 ## 4. Bevindingen
 
@@ -202,7 +209,25 @@ Dit zijn paden die voor deze aanvulling in de bron zijn gelezen, niet in een pla
 
 **Geluid.** De mixerlog op stick 68 zegt `48000 Hz 2 ch fmt 0x4 buf 16384`. `buffer_size` in die regel (`DefaultManager.cpp` rond 1430) is het veld uit `media_raw_audio_format`. `default_buffer_length_for_rate()` in `hda_multi_audio.cpp` (regel 945) geeft bij 48000 het getal 2048, in frames. 2048 frames, twee kanalen, vier bytes, is 16384 bytes, ongeveer 43 ms. Dat is de bedoelde latentie naast 2048 frames op 44100 Hz, niet een buffer van 16384 frames.
 
-**Pictogrammen.** `IconCache.cpp` beschrijft zelf, in het commentaar boven de includes, dat de MIME-weg een `BBitmap` en `SetBits` gebruikt en daarmee app_server bezet houdt. Hoe vaak dat op de 5625U gebeurt, staat niet in de syslog. Geen rang tot er een telling is.
+**Pictogrammen.** De cache zelf staat in sectie 4.10. Het commentaar boven de includes klopt met de aanroep: een type dat nog niet in de cache zit haalt het pictogram via `BMimeType::GetIcon` in een `BBitmap` (`IconCache.cpp` regel 442).
+
+## 4.10 Deskbar, meldingen, Terminal, Wi-Fi, BFS, Tracker
+
+Dit zijn de paden die de vorige versie nog niet gelezen had. De periodieke wachten onder `src/servers` zijn in de toegepaste boom opgezocht. Alleen de functies hieronder zijn in de bron nagelopen.
+
+**Deskbar.** `TReplicantTray::AttachedToWindow` zet de vensterpuls op 1000000 µs (`StatusView.cpp` regel 204). `TTimeView::Pulse` (regel 332) herlaadt de landinstelling alleen als de 24-uurskeuze of de conventie-id verandert, en tekent opnieuw als de tijdtekst anders is. De `snooze(25000)` in `TDragRegion::MouseDown` (regel 1629) zit in de lus die de muis volgt zolang de knop ingedrukt is. `InlineScrollView` slaapt 5 ms alleen tijdens een scrollanimatie. Wat wel blijft lopen is `TExpandoMenuBar::monitor_team_windows` (regel 1022): een draad op `B_LOW_PRIORITY`, gestart in `StartMonitoringWindows` (regel 1001), die de vensterlijst naloopt en daarna `snooze(150000)` (regel 1189). Dat is de staande kost van de balk, niet de klok.
+
+**Meldingen.** `NotificationServer.cpp` is 128 regels. `MessageReceived` (regel 53) handelt een bericht af en geeft de rest aan `BApplication`. Het enige tijdmechanisme in die server is één `BMessageRunner` in `NotificationView.cpp` regel 140, met het timeout van die melding en een telling van 1. Geen poller.
+
+**Terminal.** `kSyncUpdateGranularity` is 100000 µs (`TermView.cpp` regel 98). `_SynchronizeWithTextBuffer` (regel 2262) tekent meteen zolang er in dat venster niet meer dan `fRows` regels zijn verschoven. Pas daarboven start hij een `BMessageRunner` op die 100 ms, zodat een stortvloed niet per regel het scherm bijwerkt. Dat pad is al een rem. `_HandleInputMethodChanged` (regel 3130) doet daarna `Invalidate()` en `snooze(100000)`, met het commentaar `TODO: Debug only` (regels 3151–3153). Elke wijziging van de invoermethode wacht een tiende seconde op de draad van het venster. Een gewone letter gaat daar niet doorheen.
+
+**Wi-Fi.** Zolang de interface open is zet `mtk_parent` een callout op `hz / 100` (`if_mtk.c` regel 972). De compat-laag definieert `hz` als 1000, dus 10 ms. `mtk_tick` (regel 1359) plant zichzelf opnieuw (regel 1395) en zet elke tik de ontvangsttaak in de wachtrij. Het commentaar zegt dat de ringen volliepen toen commando's elke tik meegingen, en dat legen goedkoop moet blijven. `mtk_rxwork` (regel 1167) neemt het slot en roept `mtk_receive` aan (`mtk_tx.c` regel 770). Op een lege ring leest die één descriptorwoord per ring en stopt (`mtk_tx.c` regels 794–799). De onderbrekingsweg `mtk_intr` (regel 1402) leest dezelfde ringen als de kaart iets meldt. De 10 ms blijft dus ook als er geen frame is. Geen voorstel om die tik te schrappen zonder een telling van `sc_beat` tegen `sc_received` op de 5625U: de vorige keer dat de wachtrij een tik miste, liepen de ringen vol.
+
+**BFS.** `Volume.cpp` regel 231 geeft `opener.InitCache(NumBlocks(), fBlockSize)` het aantal blokken van het volume, niet een RAM-plafond. `DeviceOpener::InitCache` geeft dat door aan `block_cache_create` (`src/add-ons/kernel/file_systems/shared/DeviceOpener.cpp` regels 84–87). `block_cache_create` (`block_cache.cpp` regel 3727) bewaart dat aantal als `max_blocks`: het adresbereik, niet het aantal blokken in RAM. Een ongebruikt blok blijft in de lijst tot `_LowMemoryHandler` (regel 1864). Bij `B_NO_LOW_RESOURCE` geeft die meteen terug. Bij een notitie maakt hij een kwart vrij dat ouder is dan 120 s, bij een waarschuwing de helft ouder dan 10 s, bij kritiek alles behalve één. Op een laptop met vrij geheugen groeit de cache met wat gelezen is en krimpt hij niet. Er is geen syslogregel met `unused_block_count`. Geen plafond voorstellen tot die telling er is.
+
+**Tracker.** `BPoseView::AddPoses` (regel 1396) vult een map op een eigen draad, in stukken van `kMaxAddPosesChunk` (50, regel 119). Een type dat de pictogramcache nog niet heeft, gaat via `GetIconFromMetaMime` naar `BMimeType::GetIcon` op een `BBitmap` (`IconCache.cpp` regel 442) en blijft daarna in `fSharedCache`. De eerste map betaalt die rondgang naar de registrar en app_server. Een tweede keer hetzelfde type niet. Hoeveel unieke types de bureaubladmap op de 5625U heeft, staat niet in de log.
+
+**Andere diensten, alleen de wacht.** In de toegepaste boom: de invoerserver herhaalt een mislukte start na 2 s (`InputServer.cpp` 435). De registrar slaapt in de afleverherhaling en in de afsluitanimatie, niet in een vaste poller. `net_server` wacht tot 20 keer 50 ms tot de messenger van `wpa_supplicant` geldig is, alleen na een start van die helper (`NetServer.cpp` rond 1427). De media-addon-server heeft een puls van 1 s. De indexserver ook. Mail plant zijn eigen controle. Het Bluetooth-pictogram in de balk polt elke 5 s (`BluetoothDeskbar.cpp` regel 60). De Bluetooth-server controleert SMP- en ATT-timeouts elke 5 s (`BluetoothServer.cpp` regel 279). Geen van die wachten is een opstart van seconden.
 
 ## 5. Metingen die er nog niet zijn
 
@@ -216,7 +241,10 @@ De sticks hebben kerneltijd tot de root, een opwarming in milliseconden, en elke
 - de grootte van `/boot/system/cache/app_server/mesa` na start 1 en de opwarming van start 2 op dezelfde image, RADV en Lavapipe apart;
 - bytes geschreven naar de stick per sessie (stderr, syslog, packagefs);
 - een geïnstalleerde start op de interne schijf, naast de USB-stick;
-- een paginalading in WebPositive met een vaste lokale pagina, zodat een latere engine te vergelijken is.
+- een paginalading in WebPositive met een vaste lokale pagina, zodat een latere engine te vergelijken is;
+- `unused_block_count` van de BFS-cache na een koude start en na een minuut bladermap;
+- CPU van `Expando Window Watcher` en van de mt7922-ontvangstdraad over 30 s nietsdoen, met de interface open en dicht;
+- een invoermethode-wijziging in Terminal, voor en na het weghalen van de 100 ms `snooze`.
 
 `m13-measure` leest een deel hiervan al uit de syslog. De afsluiting, de C-toestand en de pakketscan zitten er niet in.
 
@@ -224,7 +252,7 @@ De sticks hebben kerneltijd tot de root, een opwarming in milliseconden, en elke
 
 Een QEMU-start is voor deze review niet gedraaid. De 42 seconden komen uit het changelog van 19 nov 2026, niet uit een start in deze sessie.
 
-Nog niet regel voor regel gelezen, en dus hier geen bevinding: Deskbar, de notificatieserver, de scrollweg van Terminal, het Wi-Fi-stuurprogramma zelf (alleen `_MaybeScan` in `WiFiController.cpp`), de grootte van de BFS-blokcache (`InitCache` is aangeroepen in `Volume.cpp` regel 231; de functie die de grootte kiest is niet gevonden in `distro/`), en waarom de addon `launch_speedup` niet op de stick staat. Tracker is alleen tot het commentaar in `IconCache.cpp` gelezen.
+Nog niet nagelopen, en dus hier geen bevinding: waarom de addon `launch_speedup` niet op de stick staat (de Jamfile noemt hem, de syslog vindt de module niet; een zoektocht door `generated.x86_64` is niet afgemaakt), de inhoud van WebKit zelf, en elke berichtafhandelaar van de registrar buiten de wachten die in sectie 4.10 staan. Het framepad na de ring in `mtk_receive_frame` is niet regel voor regel gelezen; de lege-ringweg wel.
 
 | Vraag | Wat hem beantwoordt |
 |---|---|
