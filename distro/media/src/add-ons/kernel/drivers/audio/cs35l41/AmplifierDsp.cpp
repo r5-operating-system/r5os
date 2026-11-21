@@ -74,9 +74,9 @@ round_up_4(uint32 value)
 }
 
 
-/*!	The register address of DSP word \a word in \a region. Packed regions
-	hold four 24-bit words in three registers, so a block must start at a
-	multiple of four words.
+/*!	The register address of DSP word \a word in \a region. Packed XM and
+	YM hold four 24-bit words in three registers; the address is rounded
+	down to a register (CS35L41-SPEC-2.md section 2).
 */
 static status_t
 region_address(uint32 region, uint32 word, uint32* _address)
@@ -93,8 +93,6 @@ region_address(uint32 region, uint32 word, uint32* _address)
 			return B_OK;
 		case WMFW_XM_PACKED:
 		case WMFW_YM_PACKED:
-			if ((word % 4) != 0)
-				return B_BAD_DATA;
 			*_address = ((region == WMFW_XM_PACKED ? DSP_XM_PACKED
 				: DSP_YM_PACKED) + word * 3) & ~(uint32)3;
 			return B_OK;
@@ -103,15 +101,25 @@ region_address(uint32 region, uint32 word, uint32* _address)
 }
 
 
-/*!	Writes \a size bytes to consecutive registers from \a reg. The chip
-	steps the address by itself; each transfer is the 4-byte big-endian
-	address and up to fBlockSize bytes of data.
+/*!	Writes \a size bytes from \a reg as one raw byte stream. The chip steps
+	the address by itself, so a block that starts on a register and has a
+	length of whole registers is split into transfers of up to fBlockSize
+	data bytes, each with its own address. A block that does not start on
+	a register or is not whole registers cannot be split that way; the
+	specification writes it in one bus transfer, so it is sent in one
+	transfer, which works only while it fits the controller's FIFO.
 */
 status_t
 Amplifier::_WriteBlock(uint32 reg, const uint8* data, size_t size)
 {
-	if ((size % 4) != 0)
-		return B_BAD_DATA;
+	bool aligned = (reg % 4) == 0 && (size % 4) == 0;
+	if (!aligned && size > fBlockSize) {
+		TRACE_ALWAYS("amp %" B_PRIu32 ": block of %" B_PRIuSIZE " bytes at %08"
+			B_PRIx32 " is not register aligned and longer than one I2C"
+			" transfer (%" B_PRIu32 " bytes); not written\n", fIndex, size, reg,
+			fBlockSize);
+		return B_NOT_SUPPORTED;
+	}
 
 	size_t done = 0;
 	while (done < size) {
@@ -132,7 +140,7 @@ Amplifier::_WriteBlock(uint32 reg, const uint8* data, size_t size)
 		}
 		fLink.bus->release_bus(fLink.cookie);
 
-		if (status == B_BAD_VALUE && fBlockSize > 4) {
+		if (status == B_BAD_VALUE && fBlockSize > 4 && aligned) {
 			// The controller FIFO is smaller than the transfer.
 			fBlockSize = 4;
 			continue;
@@ -262,7 +270,8 @@ Amplifier::_LoadTuning(const firmware_file& file)
 	}
 
 	size_t position = headerSize;
-	while (position + 20 <= file.size) {
+	uint32 index = 0;
+	for (; position + 20 <= file.size; index++) {
 		const uint8* block = data + position;
 		uint32 offset = read_le16(block);
 		uint32 type = read_le16(block + 2);
@@ -297,8 +306,8 @@ Amplifier::_LoadTuning(const firmware_file& file)
 			}
 			const dsp_algorithm* algorithm = _Algorithm(algorithmID);
 			if (algorithm == NULL) {
-				TRACE_ALWAYS("%s: no algorithm %#" B_PRIx32 " in the program\n",
-					file.name, algorithmID);
+				TRACE_ALWAYS("%s: block %" B_PRIu32 ": no algorithm %#" B_PRIx32
+					" in the program\n", file.name, index, algorithmID);
 				return B_BAD_DATA;
 			}
 			if ((version >> 8) != algorithm->version) {
@@ -317,20 +326,26 @@ Amplifier::_LoadTuning(const firmware_file& file)
 					base = algorithm->ym_base;
 					break;
 				default:
-					TRACE_ALWAYS("%s: block type %#" B_PRIx32 " skipped\n",
-						file.name, type);
-					continue;
+					// PM and unknown regions have no algorithm region.
+					TRACE_ALWAYS("%s: block %" B_PRIu32 " type %#" B_PRIx32
+						": no algorithm region\n", file.name, index, type);
+					return B_BAD_DATA;
 			}
-			if (region_address(region, base + offset, &address) != B_OK) {
-				TRACE_ALWAYS("%s: block at word %" B_PRIu32 " is not aligned\n",
-					file.name, base + offset);
+			// The algorithm's base word goes through the region formula;
+			// the block offset is in bytes of register address and is
+			// added as it is (CS35L41-SPEC-2.md, round 4).
+			if (region_address(region, base, &address) != B_OK)
 				return B_BAD_DATA;
-			}
+			address += offset;
 		}
 
 		status_t status = _WriteBlock(address, payload, length);
-		if (status != B_OK)
+		if (status != B_OK) {
+			TRACE_ALWAYS("%s: block %" B_PRIu32 " (type %#" B_PRIx32 ", %"
+				B_PRIu32 " bytes at %08" B_PRIx32 ") failed: %s\n", file.name,
+				index, type, length, address, strerror(status));
 			return status;
+		}
 	}
 	return B_OK;
 }

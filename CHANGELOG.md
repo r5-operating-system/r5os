@@ -1,5 +1,15 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-21 - CS35L41 tuning file: block offsets in register bytes
+
+Problem: on stick 69 with `cs35l41_firmware true` the program loaded on both amplifiers and the EFI calibration was read, but the tuning file failed with `cs35l41-dsp1-spk-prot-103c8a29-spkid1-l0.bin: block at word 322 is not aligned` (and r0), so the driver fell back to bypass with the cap. The loader treated a `.bin` block offset as DSP words and added it before the region formula.
+
+What changed (from `CS35L41-SPEC-2.md`, "Round 4 answers"): the algorithm's base word goes through the region formula (packed XM/YM: region base + base word × 3, rounded down to 4) and the block offset, in bytes of register address, is added to that address as it is. Alignment is no longer an error, in the `.bin` or the `.wmfw` loader. A `.bin` block for PM or an unknown region is an error ("no algorithm region"), as the spec says; it was skipped before. A failing block is logged with its index, type, length and address.
+
+I²C: a block that starts on a register and has whole registers is still split into transfers of 16 data bytes, each with its own address. A block that does not start on a register or is not whole registers cannot be split that way; it goes out in one transfer, which works only while it fits the controller FIFO; a longer one is logged and not written (falls back to bypass). The stored tuning files do not have such blocks: on the host, with the YM base word 14 from the stick 69 log, every block lands register-aligned (YM packed 0x02C0015C, 3000 bytes; YM unpacked 0x03401170, 12 bytes), inside the spec's YM ranges.
+
+Tested: built with `scripts/build-locked.sh` (jam exit 0). Host check of the target addresses as above. Not booted; the next stick shows whether the tuning loads and the DSP reaches state 2.
+
 ## 2026-11-20 - GPIO module: keep AMD interrupt and wake status
 
 Problem (review of #4482): `write_pin()` and `set_output_enabled()` in `generic/gpio/v1` read the AMD FCH pin register and wrote it back whole. Bits 28 (interrupt status) and 29 (wake status) are write-1-to-clear, so a set bit written back cleared a pending interrupt or wake on that pin.
