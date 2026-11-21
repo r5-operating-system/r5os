@@ -43,6 +43,8 @@ WANTED = (
     ("system/settings/kernel/drivers/radeon_hd", "radeon_hd"),
     ("home/config/settings/kernel/drivers/radeon_hd", "radeon_hd-home"),
     ("home/config/settings/kernel/drivers/mt7922wifi", "mt7922wifi-home"),
+    # CS35L41 speaker stick: boot-next cs35l41 writes it (#4482).
+    ("home/config/settings/kernel/drivers/cs35l41", "cs35l41-home"),
     ("system/settings/kernel/drivers/mt7922wifi", "mt7922wifi"),
     # Deskbar's add-on list (TReplicantTray). The M10 stick crashed in it.
     ("home/config/settings/deskbar/replicants", "deskbar-replicants"),
@@ -361,8 +363,8 @@ def copy_m10(bfs, dest):
     the M12 stick ~/m12, the M13 stick ~/m13 and the compare images in
     ~/draw-compare, the Wi-Fi stick ~/wifi-stick."""
     users = bfs.walk("home/users")
-    for stick in ("m10", "m11", "m12", "m13", "m13f", "draw-compare",
-                  "wifi-stick"):
+    for stick in ("m10", "m11", "m12", "m13", "m13f", "cs35l41",
+                  "draw-compare", "wifi-stick"):
         total = copy_tree(bfs, "home/%s" % stick, dest / stick)
         if users is not None and (bfs.mode(users) & 0o170000) == 0o040000:
             for name, _block in bfs.list_dir(users):

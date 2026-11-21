@@ -94,9 +94,11 @@ AddFilesToPackage add-ons kernel file_systems
 	: $(SYSTEM_ADD_ONS_FILE_SYSTEMS) ;
 AddFilesToPackage add-ons kernel generic :
 	ata_adapter
+	audio_amp
 	bios@x86,x86_64
 	dpc
 	efi@x86_64
+	gpio@x86_64
 	mpu401
 	scsi_periph
 	smbios@x86,x86_64
@@ -169,6 +171,7 @@ AddNewDriversToPackage display :
 #	display_adapter@x86
 	;
 AddNewDriversToPackage audio hmulti :
+	cs35l41@x86_64
 #	virtio_sound
 	;
 AddNewDriversToPackage hyperv :
