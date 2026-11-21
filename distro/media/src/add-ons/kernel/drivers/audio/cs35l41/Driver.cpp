@@ -102,6 +102,10 @@ struct cs35l41_driver {
 	bool				quit;
 	int32				notify_pending;
 	bool				notify_installed;
+
+	bool				use_firmware;
+	int32				speaker_number;
+	thread_id			loader;
 };
 
 
@@ -307,6 +311,74 @@ worker_thread(void* data)
 }
 
 
+/*!	Loads the speaker protection firmware after boot, one amplifier after
+	the other: they share one I2C bus, so loading them in parallel would
+	not be faster. An amplifier is loaded only while it does not play; the
+	protected path applies from its next stream.
+*/
+static status_t
+firmware_thread(void* data)
+{
+	cs35l41_driver* driver = (cs35l41_driver*)data;
+	bigtime_t start = system_time();
+
+	uint8* calibration = NULL;
+	size_t calibrationSize = 0;
+	read_calibration(&calibration, &calibrationSize);
+
+	uint32 loaded = 0;
+	for (uint32 i = 0; i < driver->amp_count; i++) {
+		Amplifier* amp = driver->amps[i];
+		firmware_file program = {};
+		firmware_file tuning = {};
+		const char* suffix = i == 0 ? "l0" : "r0";
+		if (find_firmware(driver->machine->firmware_id, driver->speaker_number,
+				suffix, &program, &tuning) != B_OK) {
+			TRACE_ALWAYS("amp %" B_PRIu32 ": no firmware for %s spkid %"
+				B_PRId32 " %s; DSP bypass\n", i, driver->machine->firmware_id,
+				driver->speaker_number, suffix);
+			continue;
+		}
+
+		// Wait until the amplifier does not play.
+		bool quit = false;
+		while (true) {
+			mutex_lock(&driver->lock);
+			quit = driver->quit;
+			if (quit || !amp->IsReady() || !amp->IsPrepared())
+				break;
+			mutex_unlock(&driver->lock);
+			snooze(100000);
+		}
+		if (!quit && amp->IsReady()) {
+			bigtime_t ampStart = system_time();
+			if (amp->StartFirmware(program, tuning, calibration,
+					calibrationSize) == B_OK) {
+				loaded++;
+				TRACE_ALWAYS("amp %" B_PRIu32 " (%s): speaker protection on"
+					" from the next stream, loaded in %" B_PRIdBIGTIME " ms\n",
+					i, amp->Side(), (system_time() - ampStart) / 1000);
+			}
+		}
+		mutex_unlock(&driver->lock);
+		free_firmware(&program);
+		free_firmware(&tuning);
+		if (quit)
+			break;
+	}
+	free(calibration);
+
+	if (loaded == 0) {
+		TRACE_ALWAYS("DSP bypass stays: no speaker protection, PCM gain"
+			" capped at its lowest step\n");
+	}
+	TRACE_ALWAYS("firmware thread done: %" B_PRIu32 " of %" B_PRIu32
+		" amplifiers protected, %" B_PRIdBIGTIME " ms after start\n", loaded,
+		driver->amp_count, (system_time() - start) / 1000);
+	return B_OK;
+}
+
+
 //	#pragma mark - amplifier hooks
 
 
@@ -445,6 +517,9 @@ cs35l41_init_driver(device_node* node, void** _cookie)
 	driver->quit = false;
 	driver->notify_pending = 0;
 	driver->notify_installed = false;
+	driver->use_firmware = false;
+	driver->speaker_number = -1;
+	driver->loader = -1;
 	driver->reset = NULL;
 	driver->speaker_id = NULL;
 	mutex_init(&driver->lock, "cs35l41");
@@ -567,39 +642,11 @@ cs35l41_init_driver(device_node* node, void** _cookie)
 		unload_driver_settings(settings);
 	}
 
-	uint8* calibration = NULL;
-	size_t calibrationSize = 0;
-	if (useFirmware)
-		read_calibration(&calibration, &calibrationSize);
-
-	bool anyFirmware = false;
-	for (uint32 i = 0; useFirmware && i < driver->amp_count; i++) {
-		Amplifier* amp = driver->amps[i];
-		if (!amp->IsReady())
-			continue;
-		firmware_file program = {};
-		firmware_file tuning = {};
-		const char* suffix = i == 0 ? "l0" : "r0";
-		if (find_firmware(driver->machine->firmware_id, speakerID, suffix,
-				&program, &tuning) != B_OK) {
-			TRACE_ALWAYS("amp %" B_PRIu32 ": no firmware for %s spkid %"
-				B_PRId32 " %s; DSP bypass\n", i, driver->machine->firmware_id,
-				speakerID, suffix);
-			continue;
-		}
-		if (amp->StartFirmware(program, tuning, calibration,
-				calibrationSize) == B_OK) {
-			anyFirmware = true;
-		}
-		free_firmware(&program);
-		free_firmware(&tuning);
-	}
-	free(calibration);
-	if (!anyFirmware) {
-		TRACE_ALWAYS("DSP bypass%s: no speaker protection, PCM gain capped"
-			" at its lowest step\n", useFirmware ? "" : " (cs35l41_firmware"
-				" is off)");
-	}
+	driver->use_firmware = useFirmware;
+	driver->speaker_number = speakerID;
+	TRACE_ALWAYS("DSP bypass%s: no speaker protection, PCM gain capped at its"
+		" lowest step\n", useFirmware ? " until the firmware is loaded"
+			: " (cs35l41_firmware is off)");
 
 	driver->events = create_sem(0, "cs35l41 events");
 	apply_acpi_mute(driver, true);
@@ -616,6 +663,16 @@ cs35l41_init_driver(device_node* node, void** _cookie)
 	}
 
 	sDriver = driver;
+
+	// The firmware download takes seconds over I2C, so it runs after boot
+	// in its own thread; the amplifiers play in bypass until then.
+	if (useFirmware) {
+		driver->loader = spawn_kernel_thread(firmware_thread,
+			"cs35l41 firmware", B_LOW_PRIORITY, driver);
+		if (driver->loader >= 0)
+			resume_thread(driver->loader);
+	}
+
 	for (uint32 i = 0; i < driver->amp_count; i++) {
 		driver->amp_ids[i] = -1;
 		if (!driver->amps[i]->IsReady())
@@ -655,6 +712,10 @@ cs35l41_uninit_driver(void* cookie)
 	mutex_lock(&driver->lock);
 	driver->quit = true;
 	mutex_unlock(&driver->lock);
+	if (driver->loader >= 0) {
+		status_t result;
+		wait_for_thread(driver->loader, &result);
+	}
 	if (driver->worker >= 0) {
 		release_sem(driver->events);
 		status_t result;

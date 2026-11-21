@@ -1,5 +1,17 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-21 - CS35L41 firmware loads after boot
+
+Problem: the performance review (`docs/reviews/PERF-REVIEW-2026-11.md`, row 12) measured on stick 70 that the CS35L41 firmware download over I²C took about 2.68 s of the boot, synchronously, amplifier 0 then amplifier 1, before the driver finished probing.
+
+What changed: the probe only powers the amplifiers up in bypass with the cap, as before, so the speakers play at once. With `cs35l41_firmware true` a low-priority thread then reads the EFI calibration and loads program, tuning and calibration into each amplifier while that amplifier is not playing (it waits while a stream runs). When the DSP reaches state 2 the amplifier switches to the protected path from its next stream. Logged: `DSP bypass until the firmware is loaded`, per amplifier `speaker protection on from the next stream, loaded in N ms`, and `firmware thread done: N of M amplifiers protected`. Any failure keeps bypass with the cap. Shutdown waits for the thread.
+
+Not in parallel: both amplifiers sit on one I²C bus, so two loaders would only take turns on it. Instead each transfer now carries up to 32 data bytes instead of 16 (halved on the controller's refusal down to 4), which lowers the share of address bytes.
+
+Limits: a stream that starts during the download of an amplifier waits until that amplifier is loaded (about 1.3 s, measured on stick 70), once per boot. Not booted.
+
+Tested: built with `scripts/build-locked.sh` (jam exit 0). QEMU boots, no panic, `hda: 0 speaker amplifiers` (no CS35L41 there).
+
 ## 2026-11-21 - CS35L41 firmware: the firmware's own algorithm and its state control
 
 Problem: stick 70 stopped at `firmware off (no firmware state control)`. The runtime table lists 2 algorithms, but the state control belongs to the firmware's own algorithm (ID = firmware ID 0x400a4), which is not in that table.

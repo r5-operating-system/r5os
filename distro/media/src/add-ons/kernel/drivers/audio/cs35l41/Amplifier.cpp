@@ -181,7 +181,7 @@ Amplifier::Amplifier(const i2c_link& link, const machine_info& machine,
 	fFaultCount(0),
 	fFaultsSeen(0),
 	fDspRunning(false),
-	fBlockSize(16),
+	fBlockSize(32),
 	fFirmwareID(0),
 	fAlgorithmCount(0)
 {

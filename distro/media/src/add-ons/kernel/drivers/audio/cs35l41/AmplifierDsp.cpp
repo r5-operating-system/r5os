@@ -144,8 +144,8 @@ Amplifier::_WriteBlock(uint32 reg, const uint8* data, size_t size)
 		fLink.bus->release_bus(fLink.cookie);
 
 		if (status == B_BAD_VALUE && fBlockSize > 4 && aligned) {
-			// The controller FIFO is smaller than the transfer.
-			fBlockSize = 4;
+			// The controller FIFO is smaller than the transfer: halve it.
+			fBlockSize /= 2;
 			continue;
 		}
 		if (status != B_OK) {

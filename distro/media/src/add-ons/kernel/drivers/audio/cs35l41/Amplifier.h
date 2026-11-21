@@ -86,6 +86,7 @@ public:
 
 			bool				IsReady() const { return fReady; }
 			bool				IsRunning() const { return fRunning; }
+			bool				IsPrepared() const { return fPrepared; }
 			uint32				Index() const { return fIndex; }
 			i2c_addr			Address() const { return fAddress; }
 			const char*			Side() const;
