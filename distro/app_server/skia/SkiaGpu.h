@@ -166,6 +166,11 @@ public:
 			bool				WindowRunDone()
 									{ return atomic_get(&fWindowRunDone)
 										!= 0; }
+			bool				WarmUpDone()
+									{ return atomic_get(&fWarmUpDone)
+										!= 0; }
+			void				SetWarmUpDone()
+									{ atomic_set(&fWarmUpDone, 1); }
 	// Shutdown(), then the Graphite context and its allocator go; before
 	// the Vulkan device is destroyed. The object itself stays, so engines
 	// of windows that close later can still remove their targets.
@@ -251,6 +256,7 @@ private:
 			bool				fWaitingUnlocked;
 			bool				fOnCpu;
 			int32				fWindowRunDone;
+			int32				fWarmUpDone;
 			void*				fContext;
 			void*				fBackend;
 			bool				fForceFail;
