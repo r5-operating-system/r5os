@@ -545,6 +545,12 @@ struct mtk_softc {
 	uint32_t		sc_received;
 	uint32_t		sc_sent;
 	uint32_t		sc_refused;
+	/* R5 (MIT): empty-ring tick counters and adaptive idle backoff */
+	uint32_t		sc_tick_total;
+	uint32_t		sc_tick_empty;
+	uint32_t		sc_idle_ticks;
+	uint32_t		sc_last_rx_seen;
+	uint32_t		sc_last_tx_seen;
 	uint32_t		sc_mgmt;
 	uint32_t		sc_beacons;
 	uint32_t		sc_data;

@@ -16,6 +16,7 @@
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+#include <poll.h>
 #include <sys/time.h>
 
 #include "SDPRecords.h"
@@ -26,6 +27,7 @@ SDPServer::SDPServer()
 	:
 	fThreadID(-1),
 	fServerSocket(-1),
+	fClientSocket(-1),
 	fIsShuttingDown(false)
 {
 }
@@ -74,6 +76,16 @@ SDPServer::Stop()
 			close(fServerSocket);
 			fServerSocket = -1;
 		}
+
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// Unblock an active client recv() immediately so shutdown does not
+		// sit for the 30 s idle timeout.
+		int32 client = atomic_get_and_set(&fClientSocket, -1);
+		if (client >= 0)
+			shutdown(client, SHUT_RDWR);
+		// SPDX-SnippetEnd
 
 		status_t threadReturnStatus;
 		wait_for_thread(fThreadID, &threadReturnStatus);
@@ -169,21 +181,39 @@ SDPServer::_Run()
 		// answered, so a headset that looks first waited until its timeout
 		// (docs/BLUETOOTH.md, step 5). The other side closes the channel;
 		// a silent one is dropped after 30 s.
-		struct timeval timeout = { 30, 0 };
+		atomic_set(&fClientSocket, client);
+		struct timeval timeout = { 1, 0 };
 		setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &timeout,
 			sizeof(timeout));
 		ssize_t receivedSize;
 		uint8 request[672];	// the default L2CAP MTU
 		uint8 answer[672];
+		bigtime_t idleDeadline = system_time() + 30000000LL;
 		while (!fIsShuttingDown) {
+			struct pollfd pfd;
+			pfd.fd = client;
+			pfd.events = POLLIN;
+			pfd.revents = 0;
+			int ready = poll(&pfd, 1, 500);
+			if (fIsShuttingDown)
+				break;
+			if (ready == 0) {
+				if (system_time() >= idleDeadline)
+					break;
+				continue;
+			}
+			if (ready < 0)
+				break;
 			receivedSize = recv(client, request, sizeof(request), 0);
 			if (receivedSize <= 0)
 				break;
+			idleDeadline = system_time() + 30000000LL;
 			size_t length = r5sdp::HandleRequest(request, receivedSize,
 				answer, sizeof(answer));
 			if (length > 0 && send(client, answer, length, 0) < 0)
 				break;
 		}
+		atomic_set(&fClientSocket, -1);
 		(void)buffer;
 		// SPDX-SnippetEnd
 
@@ -192,6 +222,8 @@ SDPServer::_Run()
 		// SPDX-License-Identifier: MIT
 		// Every accepted connection used to leak its descriptor.
 		close(client);
+		if (fIsShuttingDown)
+			break;
 		// SPDX-SnippetEnd
 
 		snooze(50000);

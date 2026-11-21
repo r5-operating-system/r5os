@@ -44,6 +44,13 @@ All rights reserved.
 #include "ExpandoMenuBar.h"
 
 #include <strings.h>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <syslog.h>
+
+#include <driver_settings.h>
+// SPDX-SnippetEnd
 
 #include <map>
 
@@ -1024,6 +1031,28 @@ TExpandoMenuBar::monitor_team_windows(void* arg)
 {
 	TExpandoMenuBar* teamMenu = (TExpandoMenuBar*)arg;
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// Opt-in measurement of Deskbar's 150 ms window watcher (kernel setting:
+	// r5_deskbar_stats true). Measurement only; polling interval unchanged.
+	bool logStats = false;
+	if (void* settings = load_driver_settings("kernel")) {
+		logStats = get_driver_boolean_parameter(settings, "r5_deskbar_stats",
+			false, false);
+		unload_driver_settings(settings);
+	}
+	int32 statIters = 0;
+	int32 statModified = 0;
+	bigtime_t statStart = system_time();
+	bigtime_t statCpuStart = 0;
+	if (logStats) {
+		thread_info info;
+		if (get_thread_info(find_thread(NULL), &info) == B_OK)
+			statCpuStart = info.user_time + info.kernel_time;
+	}
+// SPDX-SnippetEnd
+
 	while (teamMenu->sDoMonitor) {
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
@@ -1180,6 +1209,25 @@ TExpandoMenuBar::monitor_team_windows(void* arg)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+			if (logStats) {
+				statIters++;
+				if (itemModified || resize)
+					statModified++;
+				bigtime_t now = system_time();
+				if (now - statStart >= 30000000LL) {
+					bigtime_t cpuNow = statCpuStart;
+					thread_info info;
+					if (get_thread_info(find_thread(NULL), &info) == B_OK)
+						cpuNow = info.user_time + info.kernel_time;
+					syslog(LOG_INFO, "Deskbar: window watcher iters %" B_PRId32
+						" changed %" B_PRId32 " cpu %" B_PRId64 " us per 30 s\n",
+						statIters, statModified, cpuNow - statCpuStart);
+					statIters = 0;
+					statModified = 0;
+					statStart = now;
+					statCpuStart = cpuNow;
+				}
+			}
 			sMonLocker.Unlock();
 			window->Unlock();
 		}

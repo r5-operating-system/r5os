@@ -601,7 +601,7 @@ listen_thread(void*)
 			pfd[n].events = POLLIN;
 			n++;
 		}
-		if (poll(pfd, n, 1000) <= 0)
+		if (poll(pfd, n, -1) <= 0)
 			continue;
 		for (int i = 0; i < n; i++) {
 			if ((pfd[i].revents & POLLIN) == 0)
