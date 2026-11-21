@@ -235,6 +235,10 @@ Amplifier::_ReadAlgorithms()
 		algorithm.version = entry[1];
 		algorithm.xm_base = entry[2];
 		algorithm.ym_base = entry[4];
+		TRACE_ALWAYS("amp %" B_PRIu32 " runtime algorithm %" B_PRIu32 ": id %#"
+			B_PRIx32 " version %#" B_PRIx32 " xm base %#" B_PRIx32 " size %#"
+			B_PRIx32 " ym base %#" B_PRIx32 " size %#" B_PRIx32 "\n", fIndex, i,
+			entry[0], entry[1], entry[2], entry[3], entry[4], entry[5]);
 	}
 
 	TRACE_ALWAYS("amp %" B_PRIu32 " (%s): firmware id %#" B_PRIx32
@@ -351,8 +355,70 @@ Amplifier::_LoadTuning(const firmware_file& file)
 }
 
 
+/*!	Logs every algorithm and control of the program's descriptor blocks
+	(type 0xF2), once per boot.
+*/
+void
+Amplifier::_LogDescriptors(const firmware_file& file)
+{
+	const uint8* data = file.data;
+	size_t position = read_le32(data + 4);
+
+	while (position + 8 <= file.size) {
+		const uint8* block = data + position;
+		uint32 type = block[3];
+		uint32 length = read_le32(block + 4);
+		if (length > file.size - position - 8)
+			return;
+		const uint8* payload = block + 8;
+		position += 8 + length;
+		if (type != WMFW_DESCRIPTORS || length < 8)
+			continue;
+
+		size_t at = 4;
+		uint32 id = read_le32(payload);
+		uint32 nameLength = payload[at];
+		char name[64] = "";
+		if (at + 1 + nameLength <= length) {
+			memcpy(name, payload + at + 1, min_c(nameLength,
+				(uint32)sizeof(name) - 1));
+		}
+		at += round_up_4(nameLength + 1);
+		if (at + 2 > length)
+			continue;
+		at += round_up_4(read_le16(payload + at) + 2);
+		if (at + 4 > length)
+			continue;
+		uint32 count = read_le32(payload + at);
+		at += 4;
+		TRACE_ALWAYS("%s: descriptor algorithm %#" B_PRIx32 " \"%s\", %"
+			B_PRIu32 " controls\n", file.name, id, name, count);
+
+		for (uint32 i = 0; i < count && at + 9 <= length; i++) {
+			size_t start = at;
+			uint32 offset = read_le16(payload + at);
+			uint32 region = read_le16(payload + at + 2);
+			uint32 size = read_le32(payload + at + 4);
+			uint32 controlLength = payload[at + 8];
+			char control[64] = "";
+			if (start + 9 + controlLength <= length) {
+				memcpy(control, payload + start + 9, min_c(controlLength,
+					(uint32)sizeof(control) - 1));
+			}
+			TRACE_ALWAYS("  algorithm %#" B_PRIx32 " control \"%s\" offset %"
+				B_PRIu32 " region %#" B_PRIx32 "\n", id, control, offset,
+				region);
+			at = start + 8 + size;
+		}
+	}
+}
+
+
 /*!	The word offset of control \a name of \a algorithm, from the program's
 	descriptor blocks (CS35L41-SPEC-2.md section 2, type 0xF2).
+	B_ENTRY_NOT_FOUND: the algorithm has no descriptor block.
+	B_NAME_NOT_FOUND: the algorithm has no control of that name.
+	B_BAD_TYPE: the control is not in XM (unpacked).
 */
 status_t
 Amplifier::_FindControl(const firmware_file& file, uint32 algorithm,
@@ -361,6 +427,7 @@ Amplifier::_FindControl(const firmware_file& file, uint32 algorithm,
 	const uint8* data = file.data;
 	size_t position = read_le32(data + 4);
 	size_t nameLength = strlen(name);
+	bool algorithmFound = false;
 
 	while (position + 8 <= file.size) {
 		const uint8* block = data + position;
@@ -386,6 +453,7 @@ Amplifier::_FindControl(const firmware_file& file, uint32 algorithm,
 		at += 4;
 		if (id != algorithm)
 			continue;
+		algorithmFound = true;
 
 		for (uint32 i = 0; i < count && at + 9 <= length; i++) {
 			size_t start = at;
@@ -395,15 +463,16 @@ Amplifier::_FindControl(const firmware_file& file, uint32 algorithm,
 			uint32 controlLength = payload[at + 8];
 			if (start + 9 + controlLength <= length
 				&& controlLength == nameLength
-				&& memcmp(payload + start + 9, name, nameLength) == 0
-				&& region == WMFW_XM_UNPACKED) {
+				&& memcmp(payload + start + 9, name, nameLength) == 0) {
+				if (region != WMFW_XM_UNPACKED)
+					return B_BAD_TYPE;
 				*_offset = offset;
 				return B_OK;
 			}
 			at = start + 8 + size;
 		}
 	}
-	return B_NAME_NOT_FOUND;
+	return algorithmFound ? B_NAME_NOT_FOUND : B_ENTRY_NOT_FOUND;
 }
 
 
@@ -574,10 +643,28 @@ Amplifier::StartFirmware(const firmware_file& program,
 	if (calibration != NULL)
 		_ApplyCalibration(program, calibration, calibrationSize);
 
-	uint32 stateOffset;
+	if (fIndex == 0)
+		_LogDescriptors(program);
+
+	uint32 stateOffset = 0;
 	const dsp_algorithm* firmware = _Algorithm(FIRMWARE_ALGORITHM);
-	if (firmware == NULL || _FindControl(program, FIRMWARE_ALGORITHM,
-			"HALO_STATE", &stateOffset) != B_OK) {
+	status_t found = _FindControl(program, FIRMWARE_ALGORITHM, "HALO_STATE",
+		&stateOffset);
+	if (firmware == NULL || found != B_OK) {
+		const char* step;
+		if (firmware == NULL)
+			step = "algorithm not in the runtime table";
+		else if (found == B_ENTRY_NOT_FOUND)
+			step = "algorithm not in the descriptors";
+		else if (found == B_NAME_NOT_FOUND)
+			step = "control name not found";
+		else if (found == B_BAD_TYPE)
+			step = "region mismatch";
+		else
+			step = strerror(found);
+		TRACE_ALWAYS("amp %" B_PRIu32 " (%s): state control of algorithm %#"
+			B_PRIx32 " \"HALO_STATE\": %s\n", fIndex, Side(),
+			(uint32)FIRMWARE_ALGORITHM, step);
 		_FallBackToBypass("no firmware state control");
 		return B_BAD_DATA;
 	}

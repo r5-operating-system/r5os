@@ -122,6 +122,7 @@ private:
 									uint32 algorithm, const char* name,
 									uint32* _offset);
 			const dsp_algorithm* _Algorithm(uint32 id) const;
+			void				_LogDescriptors(const firmware_file& file);
 			status_t			_ApplyCalibration(
 									const firmware_file& program,
 									const uint8* data, size_t size);

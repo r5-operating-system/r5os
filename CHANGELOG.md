@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-21 - CS35L41 firmware: log the algorithms and the state lookup
+
+Problem: on stick 70 the tuning file and the factory calibration loaded on both amplifiers (left resistance 10050, right 10336, ambient 0, status 1), but both stopped at `firmware off (no firmware state control)` and fell back to bypass with the cap. The runtime table reported 2 algorithms and firmware id 0x400a4, the same number as the firmware algorithm, so the state control's algorithm base is the open question.
+
+What changed: diagnostics only, no rule changed. When the firmware loads the driver logs once: every algorithm in the runtime table (id, version, XM and YM base and size), and for amplifier 0 every algorithm and control from the program's 0xF2 descriptors (id, name, control name, offset, region). The state lookup now says which step failed: algorithm not in the runtime table, algorithm not in the descriptors, control name not found, or region mismatch. Where the base of algorithm 0x400a4 comes from waits for the reader's answer (spec round 5); no rule is guessed.
+
+Tested: built with `scripts/build-locked.sh` (jam exit 0). Not booted (no stick for now).
+
 ## 2026-11-21 - CS35L41 tuning file: block offsets in register bytes
 
 Problem: on stick 69 with `cs35l41_firmware true` the program loaded on both amplifiers and the EFI calibration was read, but the tuning file failed with `cs35l41-dsp1-spk-prot-103c8a29-spkid1-l0.bin: block at word 322 is not aligned` (and r0), so the driver fell back to bypass with the cap. The loader treated a `.bin` block offset as DSP words and added it before the region formula.
