@@ -26,8 +26,8 @@
 static const char* kShutdownTrailPath = "/boot/system/var/log/r5-shutdown-trail";
 
 
-void
-r5_shutdown_trail(const char* step, bool reset)
+static void
+r5_shutdown_trail_step(const char* step, bool reset, bool flushVolume)
 {
 	if (step == NULL || step[0] == '\0')
 		return;
@@ -49,6 +49,18 @@ r5_shutdown_trail(const char* step, bool reset)
 		_kern_fsync(fd, false);
 	}
 	_kern_close(fd);
+	// BFS Inode::Sync() (called by _kern_fsync) flushes file data pages but
+	// does not flush the BFS metadata journal. Commit the journal so the
+	// updated file size survives an immediate reset or power-off.
+	if (flushVolume)
+		sync();
+}
+
+
+void
+r5_shutdown_trail(const char* step, bool reset)
+{
+	r5_shutdown_trail_step(step, reset, false);
 }
 
 
@@ -165,7 +177,9 @@ system_shutdown(bool reboot)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-	r5_shutdown_trail(reboot ? "enter reboot=1" : "enter reboot=0", true);
+	bigtime_t shutdownStart = system_time();
+	r5_shutdown_trail_step(reboot ? "enter reboot=1" : "enter reboot=0",
+		true, false);
 // SPDX-SnippetEnd
 
 	// SPDX-SnippetBegin
@@ -185,15 +199,18 @@ system_shutdown(bool reboot)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-	r5_shutdown_trail("sync_done", false);
-// SPDX-SnippetEnd
+	char stepBuf[64];
+	snprintf(stepBuf, sizeof(stepBuf), "sync_done +%lldms",
+		(long long)((system_time() - shutdownStart) / 1000));
+	r5_shutdown_trail_step(stepBuf, false, true);
 
-// SPDX-SnippetBegin
-// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
-// SPDX-License-Identifier: MIT
-	r5_shutdown_trail("hooks_start", false);
+	snprintf(stepBuf, sizeof(stepBuf), "hooks_start +%lldms",
+		(long long)((system_time() - shutdownStart) / 1000));
+	r5_shutdown_trail_step(stepBuf, false, false);
 	call_shutdown_hooks(reboot);
-	r5_shutdown_trail("hooks_done", false);
+	snprintf(stepBuf, sizeof(stepBuf), "hooks_done +%lldms",
+		(long long)((system_time() - shutdownStart) / 1000));
+	r5_shutdown_trail_step(stepBuf, false, true);
 // SPDX-SnippetEnd
 
 	return arch_cpu_shutdown(reboot);

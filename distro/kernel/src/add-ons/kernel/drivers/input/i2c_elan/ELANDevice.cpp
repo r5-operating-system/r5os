@@ -66,7 +66,11 @@
 // How often the input ready line is checked, and how often the touchpad is
 // read when there is no such line.
 static const bigtime_t kInputReadyPollInterval = 1000;
+static const bigtime_t kInputReadyWarmInterval = 4000;
+static const bigtime_t kInputReadyIdleInterval = 16000;
 static const bigtime_t kBlindPollInterval = 8000;
+static const bigtime_t kInputWarmThreshold = 200000;
+static const bigtime_t kInputIdleThreshold = 1000000;
 
 // A touch of two or more fingers that ends within this time, without moving
 // or pressing the pad, is a tap for the right (or middle) button.
@@ -93,6 +97,7 @@ ELANDevice::ELANDevice(device_node* parent, i2c_device_interface* i2c,
 		fMaxY(0),
 		fPressureAdjustment(0),
 		fBadReports(0),
+		fLastReportTime(0),
 		fFingerMask(0),
 		fLastFingerMask(0),
 		fPositionX(0),
@@ -378,8 +383,19 @@ ELANDevice::_ReadReport(touchpad_movement* movement, bigtime_t timeout)
 			if (now >= deadline)
 				return B_TIMED_OUT;
 
-			bigtime_t interval = fInputReady != NULL
-				? kInputReadyPollInterval : kBlindPollInterval;
+			bigtime_t idleTime = now - fLastReportTime;
+			bigtime_t interval;
+			if (fInputReady != NULL) {
+				if (idleTime > kInputIdleThreshold)
+					interval = kInputReadyIdleInterval;
+				else if (idleTime > kInputWarmThreshold)
+					interval = kInputReadyWarmInterval;
+				else
+					interval = kInputReadyPollInterval;
+			} else {
+				interval = idleTime > kInputIdleThreshold
+					? kInputReadyIdleInterval : kBlindPollInterval;
+			}
 			if (deadline - now < interval)
 				interval = deadline - now;
 
@@ -407,6 +423,8 @@ ELANDevice::_ReadReport(touchpad_movement* movement, bigtime_t timeout)
 		uint16 length = fReport[0] | (fReport[1] << 8);
 		if (length == 0 || length == 0xffff)
 			continue;
+
+		fLastReportTime = system_time();
 
 		uint8 id = fReport[ETP_REPORT_ID_OFFSET];
 		if (id != ETP_REPORT_ID && id != ETP_REPORT_ID2) {
