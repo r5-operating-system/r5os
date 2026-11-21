@@ -73,6 +73,11 @@ Limits: phase 1 has no DSP firmware, no speaker protection, no calibration, no s
 Mistake on the way: the first jam failed in `Driver.cpp` (`hmulti_audio.h` and the kernel `lock.h` both define `ASSERT`, and `ByteOrder.h` was missing). The rate now comes from `Amplifier.cpp`, which does not include `lock.h`.
 
 Tested: built with `scripts/build-locked.sh` on AMD64 (jam exit 0; `cs35l41` and `audio_amp` are in `haiku.hpkg`). QEMU (KVM, `intel-hda` + `hda-duplex`, own copy of the image): boots to the first-start window, no panic; the serial log has `hda: 0 speaker amplifiers for subsystem 1af40022`. QEMU has no I²C controller and no `CSC3551`, so the CS35L41 driver itself never ran and no playback with amplifiers ran. The 5625U has not booted this. ARM64 and RISC-V were not built (the driver is packaged for x86_64 only).
+## 2026-11-21 - EFI runtime services on the 5625U
+
+Sticks 69 and 70 carried this branch (`11dd98fc7d`) together with the CS35L41 driver (#4482), on the stick branch only, and booted on the HP ENVY x360 15 (Ryzen 5 5625U) through UEFI. Both boots: `efi: 37383 pages identity mapped, 80 of 104 page tables, NX on` and `efi: runtime services ready, revision 2.70, 11 ranges, attributes table yes`. The CS35L41 driver read `CirrusSmartAmpCalibrationData` through `get_variable` (48 bytes: the header and one entry per amplifier), and on stick 70 applied it (left resistance 10050, right 10336). No fault, no "called with interrupts off", and the boot loader change started the system normally.
+
+Limits: one laptop and one firmware vendor. AVX-512 is not present on the 5625U. ARM64 and RISC-V get the module absent (`arch_none.cpp`); they were not built. The fault recovery was shown in QEMU only. SetVariable is not implemented.
 
 ## 2026-11-20 - Stick 67: write-combined GTT on the 5625U, and M13 closes
 
@@ -286,6 +291,99 @@ QEMU, KVM, a private copy of `r5-os.image`, no other QEMU was running. A GTK win
 Limits: the warm-up hang is not fixed. A and B stay unproven until a stick. The lost device is leaked for the rest of the boot; the ring is not reset here.
 
 ## 2026-11-19 - mesa_radv 25.3.6-11 repacked with the real package tool
+
+Problem: the -11 package from #4468 was made without Haiku's `package` tool. Four scripts were right (`boot-next`, `check`, `check-user`, `m13-measure`), but nine had the right size and the wrong content: `boot2.sh`, `check.sh`, `m8-run`, `m8-boot2`, `m8-show`, `m11-vulkan`, `m11-scroll`, `m12-measure` and `m12-scenario`. The m13f stick did not use them, but `check-pre-stick.py` compares every script and would fail.
+
+What changed: `distro/mesa/pack-radv.py --tools-only` was run in WSL with the tree's `package` tool. The library is byte-identical to -10. The version stays 25.3.6-11.
+
+Tested: all 13 scripts were extracted from the new package and match `distro/graphics/boot`. In a WSL sandbox, `boot-next m13f` gives boots 1 to 4 and then clears the settings. Not on a stick.
+
+## 2026-11-19 - mesa_radv 25.3.6-11 repacked with the real package tool
+
+## 2026-11-20 - EFI runtime services: review round 2 (#4483), fault recovery only for the firmware
+
+**Problem (review by Jarvis).** `r5_firmware_fault()` redirected any kernel-mode fault at a lower-half instruction pointer with interrupts off to *any* `thread->fault_handler`. `user_memcpy()` also sets that handler. A kernel bug inside such a section would then have been "recovered" into the wrong handler instead of panicking.
+
+**What changed.**
+- **The hook.** The kernel now has its own hook, `gR5FirmwareFaultHandler` and `gR5FirmwareCallCPU` in `arch_int.cpp`. `efi_arch_call()` sets it right before `efi_call5()`, with interrupts off, and clears it right after.
+- **When it redirects.** `r5_firmware_fault()` redirects only on that CPU, while the hook is set, and only for kernel mode, a lower-half instruction pointer and interrupts off.
+- **The module.** It no longer touches `thread->fault_handler`. Every other fault keeps the normal panic path.
+- **Fault test.** With `fault_test true` in `~/config/settings/kernel/drivers/efi`, the module jumps once into an unmapped page of the firmware address space and logs whether that call came back.
+- **Docs.** `docs/EFI-RUNTIME.md` lists which faults are recovered.
+
+**Tested on 20 Nov 2026.** `scripts/build-locked.sh @r5-anyboot`: jam exit 0. QEMU with KVM, `-cpu host`, SMAP/SMEP on:
+- **OVMF:** as in round 1. `BootOrder` read in 3 us, a call with interrupts off refused, 28 variables listed, no panic, app_server started.
+- **OVMF with `fault_test true`:**
+  - `efi: fault test: jump to 0x7ff000000000 recovered`. That is an instruction-fetch page fault under SMEP, which used to panic.
+  - After it the module stayed usable: `BootOrder` read and 28 variables listed. No panic, app_server started.
+- **SeaBIOS:** module absent, boot continues.
+
+**Not tested.**
+- A #GP or #UD inside the firmware: only the page-fault path was provoked. The exception path runs the same check.
+- AVX-512: the host CPU has none.
+- Firmware that really uses AVX.
+- Real hardware.
+- arm64.
+
+## 2026-11-20 - EFI runtime services: review round 1 (#4483)
+
+Review by Jarvis:
+- **FPU.** `fxsave64` saved only x87/SSE. Firmware that uses AVX could clobber the YMM upper halves of the thread. The module now saves with `xsave64`/`xrstor64` and the kernel's own `gXsaveMask`, the XCR0 that the interrupt and context-switch paths in `interrupts.S` save. The buffer has the size CPUID leaf 0xD reports, is 64-byte aligned, and gets its header zeroed. `fxsave64` stays for CPUs without XSAVE. The kernel's code-patched XSAVE sequence is inline and cannot be called.
+- **Faults.** Only a page fault reached the recovery; a #GP, #UD or an NX fetch under SMEP panicked. `r5_firmware_fault()` in `arch_int.cpp` now sends any kernel-mode fault at a lower-half instruction pointer, with interrupts off and a thread fault handler set, to that handler. Only the firmware runs like that. It is checked first in `x86_page_fault_exception` (before the SMEP/SMAP panics) and in `x86_unexpected_exception`. The `stac` workaround is gone.
+- **Callers.** The module refuses a call with interrupts already off (`B_NOT_ALLOWED`, one log line). `EFI.h` and `docs/EFI-RUNTIME.md` say: thread context only, may block, no spinlock. The longest firmware call above 1 ms is logged.
+- **PCID.** R5 does not set CR4.PCIDE and has no KPTI. If CR4.PCIDE is ever set, the module refuses to load. Documented.
+- **Quirks.** `docs/EFI-RUNTIME.md` now has a quirk table, and says that a failed `SetVirtualAddressMap` or a non-identity range leaves the module absent with one log line. No vendor-specific workaround.
+
+`EFI.h` now has the caller rules in its comment, so #4482 should take the same file.
+
+Mistake: the first build of this round called `get_current_cpuid()`, which is not exported to modules. The module now runs `cpuid` itself.
+
+Tested on 20 Nov 2026: `scripts/build-locked.sh @r5-anyboot` gave jam exit 0. Then QEMU with KVM, `-cpu host` (Ryzen: AVX2, XSAVEC, SMAP, SMEP; the kernel logs `enable XSAVEC 0x7 832`):
+- **OVMF:**
+  - `BootOrder` read, 16 bytes, in 4 us;
+  - the size query, the missing variable and `SmartAmpCalibrationData` as before;
+  - a call with interrupts off gave `B_NOT_ALLOWED`;
+  - 28 variables listed;
+  - no panic, app_server started.
+- **SeaBIOS:** module absent, boot continues.
+
+Not tested:
+- the fault recovery (no firmware fault was provoked);
+- AVX-512 (the host CPU has none);
+- firmware that really uses AVX;
+- real hardware;
+- arm64.
+
+## 2026-11-20 - EFI runtime services for kernel drivers (generic/efi/v1)
+
+Problem: the kernel dropped the UEFI runtime services after boot, so a driver could not read a firmware variable such as the CS35L41 factory calibration (#4482). The owner chose real runtime services for every UEFI computer, not a list of variables read by the boot loader.
+
+What changed:
+- **The module.** New MIT kernel module `generic/efi/v1`, built the Haiku way like ACPI, with `get_variable` and `get_next_variable_name`. `EFI.h` is byte-identical to the header in #4482.
+- **Hand-over.** The EFI loader passes the runtime services table, the runtime ranges of the final memory map, the memory attributes table and the runtime properties to the kernel. It does this in one kernel_args block (`<boot/r5_efi_runtime.h>`), from `platform_load_ucode()` beside SMBIOS. The kernel publishes the block as a boot item, the same route as the ACPI root.
+- **Loader fix (x86_64).** Before `SetVirtualAddressMap` only runtime code and data got `VirtualStart = PhysicalStart`. Runtime MMIO, such as the variable flash, kept the firmware's value. Every `EFI_MEMORY_RUNTIME` range is now identity mapped.
+- **How the firmware runs.** It gets its own PML4: only the runtime ranges in the lower half, and the kernel half copied before each call. One call runs at a time, with interrupts off, on a 64 KiB stack of its own. The x87/SSE state is saved, and NX and RO come from the attributes table.
+- **Fault handling.** A page fault in the firmware switches the module off for that start instead of crashing.
+- **Test driver.** `efi_test`, in no package.
+
+Mistake: the first hand-over ran in `efi_main`, before the loader heap existed ("no memory for the hand-over block"). It moved to `platform_load_ucode()`.
+
+Limits:
+- Read-only: no `SetVariable`, no userland interface.
+- An instruction-fetch fault under SMEP, or a #GP/#UD in the firmware, still panics (needs `arch_int.cpp`).
+- arm64 and riscv64 build `arch_none.cpp` and do not load the module. The arm64 loader also does not set `VirtualStart` (`docs/EFI-RUNTIME.md`). arm64 was not built.
+
+Tested on 20 Nov 2026: `scripts/build-locked.sh @r5-anyboot`, jam exit 0. Then own copies of the anyboot image in QEMU (KVM, `-cpu host`, SMAP/SMEP on):
+- **OVMF** (`OVMF_CODE_4M.fd`, pflash variables):
+  - `efi: runtime services ready, revision 2.70, 5 ranges, attributes table yes`;
+  - `BootOrder` read, 16 bytes, attributes 0x7;
+  - the size query gave `B_BUFFER_OVERFLOW` with 16;
+  - `SmartAmpCalibrationData` and a missing variable gave `B_ENTRY_NOT_FOUND`;
+  - 28 variables listed;
+  - no panic, app_server started.
+- **SeaBIOS**, legacy boot of the same image: `get_module` gives `B_ENTRY_NOT_FOUND` and the boot continues (input drivers, package_daemon).
+
+Not tested: real hardware (the 5625U stick), the fault recovery, arm64.
 
 Problem: the -11 package from #4468 was made without Haiku's `package` tool. Four scripts were right (`boot-next`, `check`, `check-user`, `m13-measure`), but nine had the right size and the wrong content: `boot2.sh`, `check.sh`, `m8-run`, `m8-boot2`, `m8-show`, `m11-vulkan`, `m11-scroll`, `m12-measure` and `m12-scenario`. The m13f stick did not use them, but `check-pre-stick.py` compares every script and would fail.
 

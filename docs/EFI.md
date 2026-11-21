@@ -1,11 +1,9 @@
 # EFI runtime services for kernel drivers
 
-**Interface only. The module is not implemented yet.**
-
-The R5 kernel does not keep the EFI runtime services after boot; only the EFI boot loader uses them. Some drivers need EFI variables, for example the factory speaker calibration of the CS35L41 amplifiers. R5 will get a kernel module for that as its own task, built the Haiku way like the ACPI module. This change only fixes its public interface, so drivers can be written against it now and work unchanged when the module lands.
+Some drivers need EFI variables after boot, for example the factory speaker calibration of the CS35L41 amplifiers. R5 offers them through a kernel module built the Haiku way, like the ACPI module. This page is the contract for drivers; how the module works is in `docs/EFI-RUNTIME.md`.
 
 - Header: `distro/kernel/headers/os/drivers/EFI.h`, installed as `headers/os/drivers/EFI.h` (MIT).
-- Module name: `B_EFI_MODULE_NAME` = `"generic/efi/v1"`. Not built, not in the image.
+- Module name: `B_EFI_MODULE_NAME` = `"generic/efi/v1"`.
 
 ## Calls
 
@@ -18,6 +16,6 @@ The R5 kernel does not keep the EFI runtime services after boot; only the EFI bo
 
 ## Using it
 
-A driver calls `get_module(B_EFI_MODULE_NAME, ...)` and must work when that fails, as it does today. It must not list the module in `module_dependencies`, or the driver would not load at all.
+A driver calls `get_module(B_EFI_MODULE_NAME, ...)` and must work when that fails: on a legacy BIOS start, in safe mode, on a CPU without a backend, or when the firmware's runtime map is unusable. It must not list the module in `module_dependencies`, or the driver would not load at all. Calls are for thread context only, never from an interrupt handler, with interrupts off or with a spinlock held (see `EFI.h`).
 
 First user: the CS35L41 driver reads `SmartAmpCalibrationData` (GUID `53559579-8753-4f5c-9130-e82acfb8d893`) and then `CirrusSmartAmpCalibrationData` (`02f9af02-7734-4233-b43d-93fe5aa35db3`). Without the module it logs `no factory calibration: generic/efi/v1 is not available` once and runs the firmware with its default calibration.

@@ -97,6 +97,7 @@ AddFilesToPackage add-ons kernel generic :
 	audio_amp
 	bios@x86,x86_64
 	dpc
+	efi@x86_64
 	gpio@x86_64
 	mpu401
 	scsi_periph
