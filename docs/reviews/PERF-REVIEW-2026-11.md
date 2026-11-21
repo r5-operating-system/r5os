@@ -5,7 +5,7 @@
 
 # Prestatie- en bugreview van R5 Operating System (21 nov 2026)
 
-Alleen gelezen. Bron is `origin/main` op `ec81d57163` (20 nov 2026, 14:37 Europe/Amsterdam, merge van #4481, M13 dicht). Logs: `generated/boot-5625u-60` tot en met `68` op de referentie-laptop (HP ENVY x360 15, Ryzen 5 5625U). Stick 69 is er niet. Geen jam, geen `apply-overlay.sh`, geen QEMU, geen stick, geen wijziging aan code of aan de gedeelde WSL-boom. Die boom is alleen gelezen: compilerregels in `build/jam/ArchitectureRules` en `BuildSetup`, `block_cache_create` en de lage-geheugenhandler in `src/system/kernel/cache/block_cache.cpp`, `src/servers/notification/NotificationServer.cpp`, `#define hz 1000LL` in `src/libs/compat/freebsd_network/compat/sys/kernel.h`, en een zoektocht naar `snooze` en `BMessageRunner` onder `src/servers`.
+Alleen gelezen. Bron is `origin/main` op `ec81d57163` (20 nov 2026, 14:37 Europe/Amsterdam, merge van #4481, M13 dicht). Logs: `generated/boot-5625u-60` tot en met `68` op de referentie-laptop (HP ENVY x360 15, Ryzen 5 5625U), plus ter vergelijking `boot-5625u-69` en `70` (van de tak `r5/stick-70` met `cs35l41`). Geen jam, geen `apply-overlay.sh`, geen QEMU, geen stick, geen wijziging aan code of aan de gedeelde WSL-boom. Die boom en de reeds gebouwde pakketten/bronnen (`/home/nickr/r5os/haiku`, `/home/nickr/r5os/mesa-build/mesa-25.3.6`) zijn alleen gelezen: compilerregels in `build/jam/ArchitectureRules` en `BuildSetup`, `block_cache_create` en de lage-geheugenhandler in `src/system/kernel/cache/block_cache.cpp`, `src/servers/notification/NotificationServer.cpp`, `#define hz 1000LL` in `src/libs/compat/freebsd_network/compat/sys/kernel.h`, `src/add-ons/kernel/busses/scsi/ahci/ahci_port.cpp` en `ahci.c`, `src/add-ons/kernel/drivers/disk/usb/usb_disk/usb_disk.cpp`, `src/system/libroot/posix/malloc/openbsd/malloc.c`, Mesa's `lp_screen.c`, `lvp_pipeline_cache.c`, `lp_bld_init.c` en `lp_bld_passmgr.c`, `libdrm-2.4.124-4-x86_64.hpkg`, `haikuwebkit-1.10.0-2-x86_64.hpkg`, en een zoektocht naar `snooze` en `BMessageRunner` onder `src/servers`.
 
 Regels die hier gelden, uit `AGENTS.md`: de softwareweg (Painter, llvmpipe, Lavapipe) blijft; de GFX9-ring, PSP, paginatabellen, reset en stop bij afsluiten veranderen niet zonder een gevraagde stick-proef; de Settings-indeling blijft; `libbe` en de Haiku-ABI blijven; Mesa en Skia houden hun eigen licentie; een nieuwe R5-helper hoort in een `libr5*`-bibliotheek en blijft MIT. M13 is dicht (`docs/M13-PLAN.md`, 20 nov 2026). De Lavapipe-opwarming is het open punt, geen reden om M13 opnieuw open te trekken. Skia is de standaard, ook op Lavapipe, en Painter alleen in veilige modus (eigenaar, 19 nov 2026). Op Lavapipe is Skia nog trager dan Painter. Die keuze blijft staan.
 
@@ -31,10 +31,13 @@ De rest van de desktop heeft geen tweede wachttijd van die orde. Deskbar tekent 
 
 Eerst doen, in deze volgorde:
 
-1. De stderr-log van app_server niet meer ongebufferd en eindeloos laten groeien, en nakijken dat een geslaagde ioctl alleen met `gpu_trace` op stderr komt. Daarna één getimede herstart, met en zonder die log.
-2. De Lavapipe-shadercache meten: wat er na een `gpu false`-start in `/boot/system/cache/app_server/mesa` staat, en of een tweede start van dezelfde image onder de 28 seconden duikt. De ring, de PSP en de paginatabellen blijven dicht.
-3. Het afsluitspoor moet `sync_done` en `hooks_done` laten zien. Pas daarna Bluetooth inkorten.
-4. WebKit en `-march=x86-64-v3` voor de hele boom niet nu. De boom is al `-O2` en `x86-64-v2`. De kernel hoort geen AVX te draaien.
+1. **AHCI lege poorten (3,03 s winst op elke start, ook op NVMe!)**: de eerste 5,1 s tot BFS zijn *niet* vooral de USB-stick; 3,03 s daarvan zijn twee lege AMD AHCI-controllers (`1022:7901`) die elk 1,0 s + 0,5 s wachten in `AHCIPort::PortReset()`.
+2. **`libdrm-2.4.124-4` opnieuw bouwen + app_server-stderr begrenzen**: het pakket in `generated.x86_64/download` bevat nog de oude `libdrm.so` zonder `gpu_trace`, daarom loggen sticks 68, 69 en 70 nog steeds miljoenen regels ongebufferd.
+3. **`i2c_hid` touchpad-polling (1000 Hz) terugschroeven**: `HIDDevice.cpp` polt nu elke 1 ms voor altijd, wat op laptops diepe C-toestanden en accuduur blokkeert.
+4. **Lavapipe-opwarming meten en versnellen**: `lvp_pipeline_cache.c` is een lege stub; alle schijfcache loopt via `llvmpipe`'s `lp_disk_cache_create`. Meten wat er na een `gpu false`-start in `/boot/system/cache/app_server/mesa` staat, plus een tweede start en eventueel `GALLIVM_PERF=no_opt` / MSAA 1 als test. De ring, PSP en paginatabellen blijven dicht.
+5. **WC direct-map vrijgeven in één batch** (`r5_direct_map.cpp`): nu 3 SMP-IPI's per 32 pagina's (96 globale IPI's bij het vrijgeven van één 4 MiB GTT-buffer).
+6. **Het afsluitspoor (`sync_done`, `hooks_done`) + `r5_pstate_log` (`burn_cpu` 1 s + 4× `fsync`)** achter debug of op verzoek zetten, en `PipelineStorage` per apparaat opslaan met checksum-check. Pas na het afsluitspoor Bluetooth SDP inkorten.
+7. **WebKit en `-march=x86-64-v3` voor de hele boom niet nu.** `haikuwebkit-1.10.0-2` heeft JIT aan (6438 DFG/FTL/JIT-symbolen), de boom is al `-O2` en `x86-64-v2`, en de kernel hoort geen AVX te draaien.
 
 ## 2. Ranglijst
 
@@ -51,22 +54,34 @@ Gesorteerd op winst per moeite. Winst is een schatting. Zekerheid staat erbij. M
 | 7 | prestatie | browser | de dagelijkse app | hoog dat 1.10 traag is, laag hoeveel een nieuwere engine wint | veel | hoog, licentie en pakket | later, `docs/AOMI.md` |
 | 8 | prestatie | vermogen, EPP | accu, niet snelheid; boost werkt al | middel | 1 | middel, boost niet weghalen op netstroom | meten eerst |
 | 9 | meting | C-toestanden | onbekend tot er residutijd is | laag | 1 | laag als het alleen een teller is | meten eerst |
-| 10 | prestatie | USB-opstart tot BFS | de eerste 5,1 s | hoog dat de stick dat is | n.v.t. | — | niet optimaliseren op de stick |
+| 10 | prestatie | AHCI lege poorten (opstart) | 2,8–3,0 s op elke start (USB én NVMe; 3,03 s van de 5,1 s tot BFS zijn twee lege AHCI-controllers) | hoog (stick 68/69/70 + `ahci_port.cpp`) | 1 | laag tot middel | ja |
 | 11 | prestatie | LTO of x86-64-v3 voor alles | klein tegenover 2 | middel dat v3 voor de kernel fout is | veel | hoog | niet doen |
-| 12 | bug | luidsprekers CS35L41 | geen geluid, geen snelheid | hoog, al beschreven | apart project | licentie GPL-2.0 van het Linux-stuurprogramma | niet in deze ronde |
-| 13 | prestatie | `r5_pstate_log` | vier keer `fsync` van tot 1,2 MiB syslog plus een hardwarelog, op de opstartschijf, elke start | hoog | 1 | laag | ja |
-| 14 | prestatie | Skia-pipelinebestand | elke `store()` herschrijft het hele bestand en hasht elke byte; stick 68 doet dat meerdere keren, tot 804 KB | hoog | 1 | laag | ja |
+| 12 | bug | luidsprekers CS35L41 | geen geluid, geen snelheid (NB: stick 70 toont 2,68 s synchrone I2C-firmwarelaadtijd bij opstart) | hoog, al beschreven | apart project | licentie GPL-2.0 van het Linux-stuurprogramma | niet in deze ronde |
+| 13 | prestatie | `r5_pstate_log` | 1,0 s 100% CPU-spin (`burn_cpu`) + vier keer `fsync` van tot 1,2 MiB syslog plus hardwarelog, elke start | hoog | 1 | laag | ja |
+| 14 | bug en prestatie | Skia-pipelinebestand | elke `store()` herschrijft en hasht alles (tot 804 KB), én één bestandsnaam wist RADV-cache na Lavapipe-start | hoog | 1 | laag | ja |
 | 15 | geen snelheidswinst | scheduler | start altijd in low latency, quantum 1 ms | hoog dat het zo staat, laag dat power-saving de desktop sneller maakt | — | middel als je het omzet | niet voor snelheid |
 | 16 | bug | Terminal, invoermethode | 100 ms `snooze` per wijziging van de invoermethode | hoog in de code, niet gemeten | 1 | laag | ja, klein |
 | 17 | prestatie | Deskbar-vensterlijst | een draad op lage prioriteit, elke 150 ms, zolang de balk er is | hoog dat hij loopt, laag hoeveel CPU dat is | 2 | middel, titels mogen niet blijven hangen | meten eerst |
 | 18 | prestatie | mt7922, lege ringen | een ontvangstdraad elke 10 ms zolang de interface open is; leeg is drie descriptoren | hoog dat hij loopt, laag dat het een procent is | 1–2 | middel, de ringen liepen vol toen de tik wegviel | meten eerst |
 | 19 | geheugen | BFS-blokcache | geen vaste grootte; krimpt pas bij weinig geheugen | hoog voor het mechanisme, geen telling op de stick | 1 om te tellen | middel als je een plafond zet | meten eerst |
+| 20 | prestatie en vermogen | `i2c_hid` / `i2c_elan` 1000 Hz poll | stopt 1000 timer-wakeups/s in rust; diepe C-toestanden en accuduur op laptops (5625U, X1) | hoog in de code (`HIDDevice.cpp:32,251`) | 1 (backoff) / 2–3 (GPIO IRQ) | laag | ja |
+| 21 | prestatie | WC direct-map vrijgeven (`r5_direct_map.cpp`) | 96 globale SMP-IPI's → 2 IPI's bij vrijgeven van een 4 MiB WC GTT-buffer (AMD64) | hoog in de code (`batch[32]`) | 1 | middel (PAT/TLB-volgorde) | ja |
+| 22 | bug en prestatie | `libdrm-2.4.124-4` pakket verouderd | neemt 221.596 ioctl-regels (12,4 MB) op debug-sticks weg; pakket mist `gpu_trace` uit `r5_translate.c` | hoog (bevestigd in `.hpkg`) | 1 | laag | ja, samen met 1 |
+| 23 | prestatie | `Compositor::_ReadZeroCopySwitch()` | stopt elke 10 s schijf-open + stderr/syslog-log op de urgente compositordraad | hoog in de code (`Compositor.cpp:6442`) | 1 | laag | ja |
+| 24 | prestatie | 32-bit DMA-limiet in `usb_disk` en `ahci` | vermijdt SCSI bounce-buffer kopieën boven 4 GiB RAM op 16 GiB-systemen (60+ hits in stick 68) | hoog in de code + syslog | 1–2 | middel (64-bit DMA-paden testen) | na 10 |
+| 25 | meting-bug | `Compositor::NoteInput()` | voorkomt verkeerde `input latency` (60–200 ms mediaan / 248 ms p95 door ongerelateerde 250 ms cursor-blink) | hoog in de code + stick 68 | 1 | laag | ja |
+| 26 | vermogen | 1 Hz wakeups in rust (`gpu_retire_thread`, `AirPlayServer`) | minder periodieke wakeups als GPU en AirPlay inactief zijn | hoog in de code, klein effect | 1 | laag | laagste prio |
 
 ## 3. In één sessie
 
-- Stderr van app_server: niet `append` zonder plafond, niet `_IONBF` op het submit-pad. Geslaagde ioctls blijven achter `gpu_trace`. Fouten blijven, met een plafond.
-- `r5_pstate_log` één keer laten schrijven, of alleen op verzoek. `KERN:` uit `line_matters()` halen, anders is het hardwarebestand de PCI-dump.
-- `PipelineStorage::store()` niet schrijven als de checksum gelijk is aan het bestand dat er al ligt.
+- **AHCI lege poorten (`ahci_port.cpp:264-286`)**: sla de 1,0 s `TFD.BSY`-wachttijd over als `SStatus.DET == 0` en de controller geen staggered spin-up heeft, en verkort de lege-poort COMRESET-wachttijd. Scheelt ~3,0 s op elke start van de 5625U (USB én NVMe).
+- **`libdrm-2.4.124-4` opnieuw verpakken + app_server-stderr begrenzen**: `libdrm.so.2.124.0` in het huidige `.hpkg` mist `gpu_trace` nog. Daarna `app_server-stderr.log` niet meer `append` zonder plafond en niet `_IONBF` op het submit-pad.
+- **`i2c_hid` adaptieve poll-backoff (`HIDDevice.cpp:32,251`)**: van vast 1 ms (1000 Hz) naar 1 ms bij activiteit en 8–16 ms na 200 ms rust (tot GPIO-interrupts zijn aangesloten).
+- **WC direct-map vrijgeven in één batch (`r5_direct_map.cpp:807-849`)**: één `UnmapPages`, één `arch_vm_direct_map_drain()` en één `r5_direct_shootdown()` per bereik in plaats van per 32 pagina's.
+- **`r5_pstate_log` achter een instelling of op verzoek**: schakelt zowel de 1,0 s `burn_cpu()`-lus als de vier `fsync`-passen uit op normale starts; `KERN:` uit `line_matters()` halen.
+- **`PipelineStorage::store()` (`SkiaGpu.cpp:291,325`)**: bestandsnaam per apparaat/driver (zodat Lavapipe de RADV-cache niet wist), niets wegschrijven op Lavapipe (waar `lvp_CreatePipelineCache` een stub is), en overslaan als de checksum gelijk is.
+- **`Compositor::_ReadZeroCopySwitch()` (`Compositor.cpp:6442`)**: niet elke 10 s van schijf lezen en loggen als `gpu_debug` uit staat.
+- **`Compositor::NoteInput()` (`Compositor.cpp:2650,3131`)**: alleen meten als een muisbeweging daadwerkelijk vensterschade veroorzaakt, niet bij een willekeurige 250 ms cursor-blink.
 - Eén herstart op de 5625U met het afsluitspoor in de volgende syslog: de regels `sync_done`, `hooks_start`, `hooks_done` moeten er staan, met de wandklok erbij. Eén keer met Bluetooth aan, één keer uit. Geen wijziging aan de GFX9-stop.
 - Nakijken waarom `activated-packages` bij de tweede start van stick 68 nog ontbreekt.
 - Een teller voor C-residutijd, uit, tot de eigenaar hem aan zet. Geen wijziging aan de C-toestand zelf in die sessie.
@@ -229,6 +244,73 @@ Dit zijn de paden die de vorige versie nog niet gelezen had. De periodieke wacht
 
 **Andere diensten, alleen de wacht.** In de toegepaste boom: de invoerserver herhaalt een mislukte start na 2 s (`InputServer.cpp` 435). De registrar slaapt in de afleverherhaling en in de afsluitanimatie, niet in een vaste poller. `net_server` wacht tot 20 keer 50 ms tot de messenger van `wpa_supplicant` geldig is, alleen na een start van die helper (`NetServer.cpp` rond 1427). De media-addon-server heeft een puls van 1 s. De indexserver ook. Mail plant zijn eigen controle. Het Bluetooth-pictogram in de balk polt elke 5 s (`BluetoothDeskbar.cpp` regel 60). De Bluetooth-server controleert SMP- en ATT-timeouts elke 5 s (`BluetoothServer.cpp` regel 279). Geen van die wachten is een opstart van seconden.
 
+### 4.11 Tweede doorloop: AHCI-opstart, I2C-touchpad, WC-shootdowns, DMA, Lavapipe/Mesa-details en opgeloste open vragen
+
+Deze bevindingen komen uit directe inspectie van de kernel-, driver-, Mesa-, pakket- en stick-68/69/70-logs na de eerste versie van dit rapport.
+
+**1. Twee lege AHCI-controllers kosten 3,03 s op elke start — ook op interne NVMe (Prestatie, Opstarten, AMD64/alle doelen met AHCI).**
+- **Wat.** In `boot-5625u-68/syslog` (regels 475–555; zelfde patroon in sticks 69 en 70): de eerste 5,1 s tot BFS zijn *niet* grotendeels de USB-stick. AMD FCH exposeert twee lege AHCI-controllers (`1022:7901`, `5:0:0` en `5:0:1`), elk met 1 poort en `Supports Staggered Spin-up: no`. Controller 1 wacht van `[2.022]` tot `[3.026]` (1,004 s) en doet daarna `COMRESET` tot `[3.529]` (0,503 s). Controller 2 herhaalt dat exact van `[3.540]` tot `[4.544]` (1,004 s) en `[4.544]` tot `[5.047]` (0,503 s). Pas op `[5.056]` koppelt `nvme_disk`, en op `[5.11]` mount BFS.
+- **Waarom.** `AHCIPort::PortReset()` (`src/add-ons/kernel/busses/scsi/ahci/ahci_port.cpp:264-286`) wacht eerst `wait_until_clear(&fRegs->tfd, ATA_STATUS_BUSY | ATA_STATUS_DATA_REQUEST, 1000000)` (1,0 s) op een lege poort waar `TFD` `0x7f`/`0xff` is, voert dan `COMRESET` uit en wacht vervolgens `wait_until_set(&fRegs->ssts, SSTS_PORT_DET_PRESENT, 500000)` (0,5 s). Dit gebeurt synchroon voor beide controllers vóórdat `nvme_disk` of `bfs` opkomt.
+- **Winst.** **2,8–3,0 seconden snellere start op elke boot** (USB-stick én geïnstalleerde NVMe op de 5625U en vergelijkbare Ryzen-laptops). Zekerheid: **hoog**.
+- **Voorstel.** Als `SStatus.DET == 0` vóór reset en de HBA geen staggered spin-up ondersteunt, sla de 1,0 s `TFD.BSY`-wacht over (direct naar COMRESET of korte detectie), en verkort de post-COMRESET wachttijd voor een lege poort (SATA PHY-detectie duurt ≤ 10 ms; Linux wacht 10–100 ms in plaats van 500 ms), of probeer AHCI-controllers parallel.
+- **Moeite en risico.** 1 sessie; risico laag tot middel (echte SATA-schijf op oudere hardware moet blijven detecteren). **Regels.** Kopieer `ahci_port.cpp` naar `distro/` met originele MIT-header + SPDX-Snippet.
+
+**2. `i2c_hid` (en `i2c_elan`) touchpad-stuurprogramma polt continu op 1000 Hz (Prestatie/Vermogen, Invoer, AMD64-laptops / ARM64 / RISC-V met I2C-HID).**
+- **Wat.** `distro/kernel/src/add-ons/kernel/drivers/input/i2c_hid/HIDDevice.cpp:32` zet `kInputReadyPollInterval = 1000` (1 ms) en regels 245–257 lussen `while (!fInputReady->IsAsserted()) snooze_etc(kInputReadyPollInterval, ...)`. Hetzelfde geldt voor `distro/kernel/src/add-ons/kernel/drivers/input/i2c_elan/ELANDevice.cpp:68, 382`.
+- **Waarom.** Zelfs wanneer de gebruiker het touchpad niet aanraakt, wekt een kerneldraad de CPU **1000 keer per seconde** om de GPIO-lijn uit te lezen. Op laptops (HP ENVY x360 15, Lenovo X1 Carbon Gen 8) verhindert een 1 kHz-timer dat de CPU-package diep in CC6/PC6 slaapt en kost dit merkbaar accuduur.
+- **Winst.** Lager rustverbruik, hogere C-toestand-residutijd en minder timer-jitter op laptops. Zekerheid: **hoog** dat hij 1000 Hz polt, **middel** voor exacte watt-winst tot er gemeten wordt.
+- **Voorstel.** Snelle winst (1 sessie): adaptieve backoff — 1 ms zolang er recent (bijv. laatste 200 ms) een rapport was, daarna opschalen naar 8–16 ms in rust. Structurele oplossing (2–3 sessies): GPIO-interrupt aansluiten zodat er 0 wakeups zijn in rust.
+- **Moeite en risico.** 1 sessie (backoff) / 2–3 (GPIO IRQ); risico laag. **Regels.** MIT-code in `distro/`.
+
+**3. `arch_vm_direct_map_release_range()` stuurt 3 SMP-IPI's per 32 pagina's (128 KiB) bij het vrijgeven van WC GTT-buffers (Prestatie, Kernel VM / GPU, AMD64).**
+- **Wat.** `distro/kernel/src/system/kernel/arch/x86/r5_direct_map.cpp:807-849` loopt in blokken van `batch[32]` (128 KiB) door het bereik en roept *binnen elke iteratie* `map->UnmapPages(...)`, `arch_vm_direct_map_drain()` (SMP-IPI `sfence` op alle 12 kernen) en `r5_direct_shootdown()` (SMP-IPI TLB-shootdown op alle 12 kernen) aan.
+- **Waarom.** Het vrijgeven van één 4 MiB write-combined GTT-buffer (1024 pagina's = 32 blokken) veroorzaakt **96 globale SMP-IPI-broadcasts** over alle 12 CPU-threads (en 384 IPI's voor een 16 MiB-buffer). Stick 67 logde `wc 175` in 10 s, dus WC-buffers worden actief aangemaakt en vrijgegeven.
+- **Winst.** Merkbaar lagere kernel-CPU en minder IPI-verstoring op alle 12 kernen bij venster-resize, schalen en GPU-bufferverloop. Zekerheid: **hoog** voor het mechanisme, **middel** voor het percentage van de totale CPU.
+- **Voorstel.** Unmap het hele bereik in één `map->UnmapPages(area, base, size, true)`, doe daarna één `arch_vm_direct_map_drain()`, loop vervolgens de pagina's af om de direct-map-referenties te verlagen (met een grotere stapel- of tijdelijke lijst), en sluit af met één `r5_direct_shootdown()` (2 IPI's in plaats van `3 × (pagina's / 32)`).
+- **Moeite en risico.** 1 sessie; risico middel (PAT/WC-volgorde en `r5_wc_gtt`-zelftest moeten blijven slagen). **Regels.** AMD64-specifiek; GFX9-ring en PTE-vlaggen blijven onaangeraakt.
+
+**4. Oorzaak van 221.596 `r5 libdrm:`-regels in `app_server-stderr.log` opgelost: `libdrm-2.4.124-4-x86_64.hpkg` is verouderd (Bug en prestatie, Pakketbouw, AMD64).**
+- **Wat.** Uitpakken en inspecteren (`strings`) van `libdrm.so.2.124.0` in `/home/nickr/r5os/haiku/generated.x86_64/download/libdrm-2.4.124-4-x86_64.hpkg` laat zien dat het binaire bestand wél `gpu_debug` bevat, maar **geen `gpu_trace`**. Hoewel `distro/graphics/libdrm-r5/r5_translate.c` op 19 nov is aangepast om geslaagde ioctls achter `gpu_trace` te zetten, is het `.hpkg` nooit opnieuw gebouwd. Daarom schreven ook sticks 68 (12,4 MB), 69 (2,7 MB) en 70 (3,0 MB) nog elke ioctl ongebufferd naar stderr.
+- **Winst.** Neemt direct megabytes ongebufferde schrijf-I/O van het submit-pad en uit `sync()` op debug-sticks weg. Zekerheid: **hoog**.
+- **Voorstel.** `libdrm` opnieuw bouwen en als `-5` verpakken uit `distro/graphics/libdrm-r5`, samen met het begrenzen/bufferen van `app_server-stderr.log`.
+- **Moeite en risico.** 1 sessie; risico laag. **Regels.** `libdrm-r5` blijft MIT; symboolcheck volgens `docs/GPU-ARCHITECTURE.md`.
+
+**5. Lavapipe- en Mesa 25.3.6-diepteanalyse (Prestatie, Software-rendering, AMD64 en toekomstige doelen).**
+- **Wat.** Direct uit `/home/nickr/r5os/mesa-build/mesa-25.3.6` en `build-radv/build.ninja`:
+  - `src/gallium/frontends/lavapipe/lvp_pipeline_cache.c` is een volledige no-op stub: `VkPipelineCache` slaat niets op. Alle schijfcache voor Lavapipe komt dus uitsluitend van `llvmpipe`'s `lp_disk_cache_create()` (`lp_screen.c:845-864`). Die is wél meegecompileerd (`-DENABLE_SHADER_CACHE -DHAVE_DLADDR -DGALLIVM_USE_ORCJIT=0`) en sleutelt via `dladdr()` + `stat(dli_fname).st_mtime` (wat op Haiku via `dlfcn.c:78` ondersteund is).
+  - `gallivm` (`lp_bld_passmgr.c:149-160`, `lp_bld_init.c:155-166`) draait standaard **twee** LLVM 21-pass-runs (`default<O0>` gevolgd door `sroa,early-cse,simplifycfg,reassociate,mem2reg,instsimplify,instcombine<no-verify-fixpoint>`) plus `CodeGenOpt::Default` (`-O2`) op *elke* shader-variant. Met `GALLIVM_PERF=no_opt` valt dat terug op alleen `mem2reg` + `CodeGenOpt::None`.
+  - `SkiaOffscreen.cpp:176-209` compileert 80 pijplijncombinaties (2× opaque × 4 blend-modi × 10 primitieven) met 4× MSAA (`SkiaGpu.cpp:652-654`) **serieel op één draad** met `B_LOW_PRIORITY`.
+  - `build-radv/build.ninja` bouwt Mesa zelf zonder `-march=x86-64-v2` (alleen baseline `x86-64` met handgeschreven `-DUSE_SSE41`-paden; de LLVM-JIT kiest wel AVX2 op runtime).
+- **Voorstel.** (1) Eerst meten of `/boot/system/cache/app_server/mesa` na een `gpu false`-start daadwerkelijk gevuld is en of start 2 daalt. (2) Op Lavapipe `GALLIVM_PERF=no_opt` benchmarken (opwarmtijd vs. sleep-frametijd) naast `gpu_lavapipe_msaa 1`. (3) Overwegen om `-march=x86-64-v2` aan `distro/mesa/haiku-cross.txt` toe te voegen bij de volgende Mesa-rebuild (kleine winst, zelfde CPU-vloer als de rest van R5).
+- **Regels.** Lavapipe en Skia blijven; Mesa houdt zijn eigen licentie.
+
+**6. `r5_pstate_log` verbrandt 1,0 s lang 100% van één CPU-kern op elke start (Prestatie/Vermogen, Opstarten, AMD64).**
+- **Wat.** Naast de vier `fsync`-passen uit sectie 4.9 draait `distro/cpu/r5_pstate_log.cpp:48-74` de functie `burn_cpu()`: `while (system_time() - start < 1000000) sink += 1;`. Dat verschijnt in `boot-5625u-68/syslog` als `R5 time check: busy thread wall=1000000 us user=999779 us ...`, tijdens het opkomen van de desktop, zonder `gpu_debug`.
+- **Winst.** 1 volledige CPU-seconde minder belasting, warmte en accuverbruik bij elke boot (plus de 4× `fsync` uit #13). Zekerheid: **hoog**.
+- **Voorstel.** `r5_pstate_log` alleen starten als een diagnostische instelling aan staat of op expliciet verzoek. Moeite: 1 sessie; risico laag.
+
+**7. `PipelineStorage` gebruikt één bestandsnaam voor alle GPU-drivers, waardoor Lavapipe de RADV-cache wist (Bug en prestatie, app_server, alle doelen).**
+- **Wat.** `distro/app_server/skia/SkiaGpu.cpp:291` gebruikt altijd `/boot/system/cache/app_server/skia-pipelines`. In `boot-5625u-65/syslog:10849` logde start 5 (RADV) `gpu draw pipeline cache ignored` direct nadat start 4 (`gpu false`, Lavapipe) het bestand had overschreven met Lavapipe's 312-byte kop.
+- **Winst.** Voorkomt een koude RADV-opwarming (~2 s) na een enkele veilige/softwarestart, en voorkomt nutteloze schrijf- en hash-acties op Lavapipe. Zekerheid: **hoog**.
+- **Voorstel.** Apparaat-/drivernaam of vendor/device-id in de bestandsnaam opnemen, `store()` overslaan als de checksum niet veranderd is, en op Lavapipe niet opslaan zolang `lvp_CreatePipelineCache` een stub is. Moeite: 1 sessie; risico laag.
+
+**8. `Compositor::_ReadZeroCopySwitch()` opent elke 10 s het instellingenbestand en logt op de urgente compositordraad (Prestatie, app_server, alle doelen).**
+- **Wat.** `distro/app_server/Compositor.cpp:6442-6454`, aangeroepen vanuit `_Report()` (regel 6540), roept elke 10 s `load_settings(options)` aan. Dat opent `/boot/home/config/settings/kernel/drivers/radeon_hd` van schijf en schrijft `app_server: radeon_hd settings ...` naar zowel `stderr` als `syslog` (`boot-5625u-65/syslog:11631`), óók als `gpu_debug` uit staat.
+- **Voorstel.** Alleen uitvoeren als `fDebug` aan staat (of via `watch_node`), en alleen loggen bij verandering. Moeite: 1 sessie; risico laag.
+
+**9. 32-bit DMA-limiet in `usb_disk` en `ahci` dwingt SCSI bounce-buffers af boven 4 GiB RAM (Prestatie, Opslag, AMD64/ARM64/RISC-V met > 4 GiB RAM).**
+- **Wat.** `src/add-ons/kernel/drivers/disk/usb/usb_disk/usb_disk.cpp:999` zet hard `restrictions.high_address = UINT32_MAX;`. `src/add-ons/kernel/busses/scsi/ahci/ahci.c:280` zet hard `B_DMA_HIGH_ADDRESS = 0x100000000LL`, zelfs wanneer de AHCI-controller `Supports 64-bit Addressing: yes` meldt (`boot-5625u-68/syslog:502`). In `boot-5625u-68/syslog:523-565` leidt dit tot 60+ meldingen `SCSI -- is_sg_list_dma_safe: S/G-entry above high address @1001800c0`, en `usb_disk` krijgt `DMAResource: low/high 0/ffffffff` (terwijl `nvme_disk` wel 64-bit `0/ffffffffffffffff` gebruikt).
+- **Winst.** Vermijdt kernel bounce-buffer-allocaties en extra `memcpy` voor USB- en SATA-I/O boven 4 GiB fysiek geheugen. Zekerheid: **hoog** dat het gebeurt, **laag tot middel** voor de totale doorvoersnelheidswinst op een USB-stick.
+- **Voorstel.** In `ahci.c` 64-bit DMA aanzetten wanneer `CAP.S64A` gezet is; in `usb_disk` de 64-bit DMA-capaciteit van de USB-hostcontroller (xHCI `HCCPARAMS1.AC64`) opvragen. Moeite: 1–2 sessies; risico middel.
+
+**10. Overige gecontroleerde punten (inclusief opgeloste open vragen):**
+- **Twee fysieke xHCI-controllers:** `boot-5625u-68/r5-hardware.txt` (regels 65–67 en 85–87) bevestigt twee fysieke `1022:1639` Renoir/Cezanne xHCI-controllers. Controller 0 doet BIOS-handoff (`xhci.cpp:470`, `snooze(50000)`), start (`101 ms`) en somt zijn poorten synchroon op (`0,626 → 1,575 s`) vóór controller 1 start (`1,576 → 1,732 s`).
+- **`launch_speedup`:** `src/add-ons/kernel/file_cache/Jamfile` definieert `KernelAddon launch_speedup`, maar geen enkele Jamfile onder `build/jam/` neemt hem op in het `haiku`-pakket (`generated.x86_64/objects/.../file_cache/` is leeg). Dat verklaart `Search for file_cache/launch_speedup/v1 failed` op elke start.
+- **`Compositor::NoteInput()` meetfout (`Compositor.cpp:82-83, 2650-2652, 3131-3139`):** slaat een muisbeweging op die geen vensterschade veroorzaakt en schrijft daarna het eerstvolgende ongerelateerde frame (zoals een 250 ms cursor-blink) toe als invoerlatentie. Dat verklaart de vertekende waarden in stick 68 (`input latency median 60–200 ms, p95 ~248 ms`).
+- **JavaScriptCore JIT & `libroot` malloc:** in `haikuwebkit-1.10.0-2` zijn 6438 DFG/FTL/JIT-symbolen aanwezig in `libJavaScriptCore.so.18.7.4` (JIT staat dus niet uit). In `src/system/libroot/posix/malloc/openbsd/malloc.c:550-564` heeft R5 `mopts.malloc_mutexes = r5_heap_pool_count()` al gezet en `def_malloc_junk` staat op Haiku al uit (`#ifndef __HAIKU__`).
+- **Kleine 1 Hz-wakeups in rust:** `gpu_retire_thread` (`r5_gpu_core.cpp:635`) en `AirPlayServer.cpp:604` worden elke 1000 ms wakker, ook zonder lopende GPU-submits of AirPlay-sessies. `VBoxClip.cpp:76-80` probeert 30 × 200 ms (6 s) `pc_serial1` te openen en stopt daarna netjes op bare metal.
+- **Vooruitblik stick 69/70 (`r5/stick-70`, `cs35l41`):** op stick 70 laadt `cs35l41` de firmware van amp 0 en amp 1 synchroon na elkaar over I2C van `[6.008]` tot `[8.692]` (**2,68 s extra opstarttijd**). Bij het landen van die driver loont het om het laden asynchroon (na boot-mount) of parallel te doen.
+
 ## 5. Metingen die er nog niet zijn
 
 De sticks hebben kerneltijd tot de root, een opwarming in milliseconden, en elke 10 seconden een mediaan. Ze hebben geen:
@@ -244,7 +326,10 @@ De sticks hebben kerneltijd tot de root, een opwarming in milliseconden, en elke
 - een paginalading in WebPositive met een vaste lokale pagina, zodat een latere engine te vergelijken is;
 - `unused_block_count` van de BFS-cache na een koude start en na een minuut bladermap;
 - CPU van `Expando Window Watcher` en van de mt7922-ontvangstdraad over 30 s nietsdoen, met de interface open en dicht;
-- een invoermethode-wijziging in Terminal, voor en na het weghalen van de 100 ms `snooze`.
+- een invoermethode-wijziging in Terminal, voor en na het weghalen van de 100 ms `snooze`;
+- een zuivere `input latency`-meting (alleen muisbewegingen die direct schade veroorzaken, na het repareren van `Compositor::NoteInput()`);
+- aantal timer-wakeups/s in rust (met `i2c_hid` op 1000 Hz vs. adaptieve backoff/IRQ);
+- een vergelijking op Lavapipe met en zonder `GALLIVM_PERF=no_opt` (opwarmtijd vs. sleep-frametijd).
 
 `m13-measure` leest een deel hiervan al uit de syslog. De afsluiting, de C-toestand en de pakketscan zitten er niet in.
 
@@ -252,17 +337,20 @@ De sticks hebben kerneltijd tot de root, een opwarming in milliseconden, en elke
 
 Een QEMU-start is voor deze review niet gedraaid. De 42 seconden komen uit het changelog van 19 nov 2026, niet uit een start in deze sessie.
 
-Nog niet nagelopen, en dus hier geen bevinding: waarom de addon `launch_speedup` niet op de stick staat (de Jamfile noemt hem, de syslog vindt de module niet; een zoektocht door `generated.x86_64` is niet afgemaakt), de inhoud van WebKit zelf, en elke berichtafhandelaar van de registrar buiten de wachten die in sectie 4.10 staan. Het framepad na de ring in `mtk_receive_frame` is niet regel voor regel gelezen; de lege-ringweg wel.
+Opgelost in de tweede doorloop (sectie 4.11):
+- **Waarom 221.596 geslaagde ioctls zonder `gpu_trace`:** `libdrm-2.4.124-4-x86_64.hpkg` bevat nog de oude `libdrm.so.2.124.0` zonder `gpu_trace`.
+- **Tweede xHCI:** `r5-hardware.txt` bevestigt twee fysieke `1022:1639` xHCI-controllers.
+- **`launch_speedup`:** staat wel in `src/add-ons/kernel/file_cache/Jamfile`, maar niet in een pakket-Jamfile onder `build/jam/`.
+
+Nog niet nagelopen, en dus hier geen bevinding: de inhoud van WebKit zelf (buiten de controle dat JIT-symbolen aanwezig zijn), en elke berichtafhandelaar van de registrar buiten de wachten die in sectie 4.10 staan. Het framepad na de ring in `mtk_receive_frame` is niet regel voor regel gelezen; de lege-ringweg wel.
 
 | Vraag | Wat hem beantwoordt |
 |---|---|
 | Hangt `sync()` of wordt de laptop eerder uitgezet? | Eén herstart laten uitlopen. De volgende syslog moet `sync_done` bevatten. De wandklok van het verzoek en van het donkere scherm erbij. |
 | Maakt Bluetooth dat lang zonder headset? | Dezelfde herstart met de radio aan en uit, zonder gekoppeld apparaat, en één keer met een headset die SDP open laat. |
-| Waarom 221596 geslaagde ioctls terwijl de instellingen geen `gpu_trace` hebben? | De libdrm van dat stick-beeld naast `r5_translate.c` van `ec81d571`. Als het beeld ouder is, is de 12 MB de oude log. De `append` blijft dan nog steeds een bug. |
 | Blijft de Mesa-cache op de stick, en daalt de Lavapipe-opwarming bij start 2? | `gpu false` twee keer op dezelfde stick, zonder het cachebestand te wissen. Grootte van de cache na beide starts. |
-| Is de tweede xHCI een tweede controller? | `listdev` in `r5-hardware.txt` van stick 68 naast de twee starten op 0,47 s en 1,58 s. |
-| Gaan de kernen C3 in na de mislukte `_OSC`? | Een residuteller, of een bestaande ACPI-teller, over 30 s nietsdoen. |
+| Gaan de kernen C3 in na de mislukte `_OSC` (en na het temmen van `i2c_hid` 1000 Hz)? | Een residuteller, of een bestaande ACPI-teller, over 30 s nietsdoen. |
 | Hoe traag is WebPositive in seconden? | Eén lokale pagina, koude en warme start. Geen enginewissel in die meting. |
-| Hoe snel is een start van de interne schijf? | Eén installatie, dezelfde tijdlijn als sectie 4.4. De stick van 5,1 s tot BFS geldt dan niet. |
+| Hoe snel is een start van de interne schijf (met en zonder de AHCI-fix)? | Eén installatie, dezelfde tijdlijn als sectie 4.4. De 3,03 s van AHCI telt daar net zo hard mee. |
 
 Niet doen naar aanleiding van deze review: de GFX9-ring, de PSP, de PTE-vlaggen, de reset, de stop bij afsluiten, de Settings-indeling, de Haiku-ABI, of Skia uit als standaard.
