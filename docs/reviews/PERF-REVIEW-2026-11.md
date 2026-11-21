@@ -11,6 +11,8 @@ Regels die hier gelden, uit `AGENTS.md`: de softwareweg (Painter, llvmpipe, Lava
 
 De stick-sessies draaien met `gpu_draw`, `gpu_debug` en `gpu_selftest` aan. Dat is de proefstick, niet de stille standaard. Cijfers uit die sessies tellen de debug-log mee.
 
+De eerste versie van dit rapport leunde op `docs/M13-PLAN.md` en oudere reviews voor wat "al gedaan" was. Deze versie houdt alleen stand waar de bron of de syslog het zelf laat zien. Paden die nog niet regel voor regel gelezen zijn, staan in sectie 6 en zijn geen bevinding.
+
 ## 1. Samenvatting
 
 De desktop op de 5625U met de GPU aan is na de eerste twee seconden al vlot. Op stick 68 duurt de Skia-opwarming 2032 ms, de volgende start van dezelfde stick 72 ms, en het samenstellen van het scherm zit daarna rond een halve tot anderhalve milliseconde. Daar hoeft de ring niet meer open.
@@ -50,10 +52,15 @@ Gesorteerd op winst per moeite. Winst is een schatting. Zekerheid staat erbij. M
 | 10 | prestatie | USB-opstart tot BFS | de eerste 5,1 s | hoog dat de stick dat is | n.v.t. | — | niet optimaliseren op de stick |
 | 11 | prestatie | LTO of x86-64-v3 voor alles | klein tegenover 2 | middel dat v3 voor de kernel fout is | veel | hoog | niet doen |
 | 12 | bug | luidsprekers CS35L41 | geen geluid, geen snelheid | hoog, al beschreven | apart project | licentie GPL-2.0 van het Linux-stuurprogramma | niet in deze ronde |
+| 13 | prestatie | `r5_pstate_log` | vier keer `fsync` van tot 1,2 MiB syslog plus een hardwarelog, op de opstartschijf, elke start | hoog | 1 | laag | ja |
+| 14 | prestatie | Skia-pipelinebestand | elke `store()` herschrijft het hele bestand en hasht elke byte; stick 68 doet dat meerdere keren, tot 804 KB | hoog | 1 | laag | ja |
+| 15 | geen snelheidswinst | scheduler | start altijd in low latency, quantum 1 ms | hoog dat het zo staat, laag dat power-saving de desktop sneller maakt | — | middel als je het omzet | niet voor snelheid |
 
 ## 3. In één sessie
 
 - Stderr van app_server: niet `append` zonder plafond, niet `_IONBF` op het submit-pad. Geslaagde ioctls blijven achter `gpu_trace`. Fouten blijven, met een plafond.
+- `r5_pstate_log` één keer laten schrijven, of alleen op verzoek. `KERN:` uit `line_matters()` halen, anders is het hardwarebestand de PCI-dump.
+- `PipelineStorage::store()` niet schrijven als de checksum gelijk is aan het bestand dat er al ligt.
 - Eén herstart op de 5625U met het afsluitspoor in de volgende syslog: de regels `sync_done`, `hooks_start`, `hooks_done` moeten er staan, met de wandklok erbij. Eén keer met Bluetooth aan, één keer uit. Geen wijziging aan de GFX9-stop.
 - Nakijken waarom `activated-packages` bij de tweede start van stick 68 nog ontbreekt.
 - Een teller voor C-residutijd, uit, tot de eigenaar hem aan zet. Geen wijziging aan de C-toestand zelf in die sessie.
@@ -179,6 +186,24 @@ De kernel naar `x86-64-v3` tillen zou AVX in kernelcode toelaten. Dat hoort niet
 - `gpu_debug` telt submits in de syslog in plaats van een regel per submit (19 nov 2026). De stderr van libdrm is het gat dat overblijft.
 - Grote pagina's en de ACPI-idle-module zijn gebouwd en op stick 68 geladen.
 
+### 4.9 Wat de code doet buiten de grafische weg
+
+Dit zijn paden die voor deze aanvulling in de bron zijn gelezen, niet in een plan.
+
+**Diagnostische log op elke start.** `data/launch/system` (de boom die de image bouwt) heeft `job x-vnd.R5OS-cpu-log`: `/system/bin/r5_pstate_log` op `initial_volumes_mounted`. `distro/cpu/r5_pstate_log.cpp` `main` (rond regel 266) schrijft meteen, en daarna nog drie keer, met tussenpozen van 15 s, 45 s en 120 s. Elke pas roept `write_boot_logs` aan. Die doet `fsync` op het CPU-rapport, daarna `write_hardware` (`listdev`, `listimage 1`, en syslogregels, ook met `fsync`), en `copy_tail` van de syslog tot 1200 × 1024 bytes, ook met `fsync` (regels 90–134 en 251–263). `line_matters()` (regel 184) houdt een regel als hij `KERN:` bevat. Bijna elke kernelregel in de syslog begint zo, en de functie stopt pas na 4000 bewaarde regels. Op stick 68 is `r5-hardware.txt` 319833 bytes. Vier passen op een USB-stick zijn vier keer die schrijf- en sync-stroom, terwijl de desktop opkomt. Dit staat niet achter `gpu_debug`.
+
+**Pipelinebestand.** `PipelineStorage::store()` in `SkiaGpu.cpp` (regel 325) berekent een FNV-1a over elke byte (regel 361) en schrijft het hele bestand via een tijdelijk bestand en `rename`. Er is geen vergelijking met de checksum die `load()` net gelezen heeft. Stick 68, 21 nov 2026: 25 KB om 09:51:44, 529 KB om 09:51:54, 531 KB om 09:52:04, 682 KB om 09:52:40 en 09:52:54, 683 KB om 09:53:04 en 09:54:04, 804 KB om 09:54:45 en opnieuw om 09:57:45. De tweede start logt `pipeline cache loaded` en meteen daarna weer `stored 804 KB`. Dat is schijf op de opstartvolume, ook als de inhoud niet veranderd is. De hash van 800 KB op de CPU komt er elke keer bij.
+
+**Scheduler.** `scheduler_init()` zet `SCHEDULER_MODE_LOW_LATENCY` (`scheduler.cpp` regel 892). De modus in `low_latency.cpp` (regel 322) heeft `base_quantum` 1000 µs, `minimal_quantum` 100 µs, vermenigvuldigers 2 en 5, `maximum_latency` 5000 µs. `gSchedulerPowerSavingMode` bestaat (2000 µs, 500 µs, maximum 20000 µs) en wordt bij het starten niet gekozen. `acpi_cpuidle.cpp` regel 705 zet de modus daarna nog eens op low latency. Een omschakeling naar power saving zou de desktop niet sneller maken. Het is een accuknop, en die is nu niet de startstand. Geen voorstel om dat zonder meting om te zetten.
+
+**`launch_speedup` wordt gevraagd en niet gevonden.** `file_cache_init_post_boot_device()` in de kern (`src/system/kernel/cache/file_cache.cpp` rond regel 1250) doet `get_module("file_cache/launch_speedup/v1")` en print alleen bij succes `opened launch speedup`. Stick 68, twee starts, kerneltijd 5,625 s: `module: Search for file_cache/launch_speedup/v1 failed.` De succesregel staat er niet. De addon staat in de Jamfile van `src/add-ons/kernel/file_cache`. Waarom het bestand niet op de stick staat, is niet nagelopen: een `find` over `generated.x86_64` was niet af. Geen winst claimen tot dat bestand er is of aantoonbaar ontbreekt in het pakket.
+
+**Kopiëren.** `_arch_cpu_user_memcpy` in `arch.S` (regel 135) zet een fault-handler en gebruikt `rep movsb` vanaf 64 bytes. Er zit daar geen `setjmp` op dat pad. `memcpy` in gebruikersruimte (`libroot/.../memcpy.cpp`) kiest ERMS als de CPU het heeft, en wijkt uit naar SSE bij een pagina-alias van minder dan 32 bytes. Dat is de huidige code. Geen open voorstel om die paden opnieuw te schrijven op basis van de review van 12 november.
+
+**Geluid.** De mixerlog op stick 68 zegt `48000 Hz 2 ch fmt 0x4 buf 16384`. `buffer_size` in die regel (`DefaultManager.cpp` rond 1430) is het veld uit `media_raw_audio_format`. `default_buffer_length_for_rate()` in `hda_multi_audio.cpp` (regel 945) geeft bij 48000 het getal 2048, in frames. 2048 frames, twee kanalen, vier bytes, is 16384 bytes, ongeveer 43 ms. Dat is de bedoelde latentie naast 2048 frames op 44100 Hz, niet een buffer van 16384 frames.
+
+**Pictogrammen.** `IconCache.cpp` beschrijft zelf, in het commentaar boven de includes, dat de MIME-weg een `BBitmap` en `SetBits` gebruikt en daarmee app_server bezet houdt. Hoe vaak dat op de 5625U gebeurt, staat niet in de syslog. Geen rang tot er een telling is.
+
 ## 5. Metingen die er nog niet zijn
 
 De sticks hebben kerneltijd tot de root, een opwarming in milliseconden, en elke 10 seconden een mediaan. Ze hebben geen:
@@ -197,7 +222,9 @@ De sticks hebben kerneltijd tot de root, een opwarming in milliseconden, en elke
 
 ## 6. Open vragen
 
-Een QEMU-start is voor deze review niet gedraaid. De 42 seconden komen uit het changelog van 19 nov 2026.
+Een QEMU-start is voor deze review niet gedraaid. De 42 seconden komen uit het changelog van 19 nov 2026, niet uit een start in deze sessie.
+
+Nog niet regel voor regel gelezen, en dus hier geen bevinding: Deskbar, de notificatieserver, de scrollweg van Terminal, het Wi-Fi-stuurprogramma zelf (alleen `_MaybeScan` in `WiFiController.cpp`), de grootte van de BFS-blokcache (`InitCache` is aangeroepen in `Volume.cpp` regel 231; de functie die de grootte kiest is niet gevonden in `distro/`), en waarom de addon `launch_speedup` niet op de stick staat. Tracker is alleen tot het commentaar in `IconCache.cpp` gelezen.
 
 | Vraag | Wat hem beantwoordt |
 |---|---|
