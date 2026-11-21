@@ -148,7 +148,8 @@ private:
 			bool				fDspRunning;
 			uint32				fBlockSize;
 			uint32				fFirmwareID;
-			dsp_algorithm		fAlgorithms[MAX_DSP_ALGORITHMS];
+			// The table entries plus the firmware's own algorithm.
+			dsp_algorithm		fAlgorithms[MAX_DSP_ALGORITHMS + 1];
 			uint32				fAlgorithmCount;
 };
 

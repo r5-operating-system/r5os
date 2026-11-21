@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-21 - CS35L41 firmware: the firmware's own algorithm and its state control
+
+Problem: stick 70 stopped at `firmware off (no firmware state control)`. The runtime table lists 2 algorithms, but the state control belongs to the firmware's own algorithm (ID = firmware ID 0x400a4), which is not in that table.
+
+What changed (from `CS35L41-SPEC-2.md`, "Round 5 answers"): after the program loads, the driver registers the firmware's own algorithm from the ID header at 0x02800000: XM base from bytes 20-23, YM base from bytes 28-31. It is not a table entry and not counted in the table's "number of algorithms". A control now matches on algorithm, region type and its first stored name (case-sensitive, stored length); acked controls (type 0x1000) with the system flag (0x8000) are skipped. The state address stays 0x02800000 + (XM base + control offset) x 4, polled every 1 ms up to 15 ms for 2. The logging from the previous entry and the fallback to bypass stay. The firmware's own algorithm base also applies to tuning blocks and calibration controls that name it.
+
+Tested: built with `scripts/build-locked.sh` (jam exit 0). Not booted (no stick for now).
+
 ## 2026-11-21 - CS35L41 firmware: log the algorithms and the state lookup
 
 Problem: on stick 70 the tuning file and the factory calibration loaded on both amplifiers (left resistance 10050, right 10336, ambient 0, status 1), but both stopped at `firmware off (no firmware state control)` and fell back to bypass with the cap. The runtime table reported 2 algorithms and firmware id 0x400a4, the same number as the firmware algorithm, so the state control's algorithm base is the open question.

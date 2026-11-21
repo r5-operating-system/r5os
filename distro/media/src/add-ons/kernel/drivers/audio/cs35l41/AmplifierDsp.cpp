@@ -41,6 +41,9 @@
 #define BIN_INFO				0xff00
 #define BIN_METADATA			0xfc00
 
+#define CONTROL_TYPE_ACKED		0x1000
+#define CONTROL_FLAG_SYSTEM		0x8000
+
 #define WMFW_HEADER_SIZE		40
 #define WMFW_CORE_HALO			4
 #define WMFW_FORMAT_VERSION		3
@@ -213,6 +216,20 @@ Amplifier::_ReadAlgorithms()
 	}
 	fFirmwareID = header[3];
 
+	// The firmware's own algorithm (ID = firmware ID) is not a table entry
+	// and not counted in header[9]; its XM base is header word 5 (bytes
+	// 20-23) and its YM base header word 7 (bytes 28-31)
+	// (CS35L41-SPEC-2.md, round 5).
+	fAlgorithmCount = 0;
+	dsp_algorithm& own = fAlgorithms[fAlgorithmCount++];
+	own.id = fFirmwareID;
+	own.version = header[4];
+	own.xm_base = header[5];
+	own.ym_base = header[7];
+	TRACE_ALWAYS("amp %" B_PRIu32 " firmware algorithm %#" B_PRIx32 ": xm base"
+		" %#" B_PRIx32 " ym base %#" B_PRIx32 " (header)\n", fIndex, own.id,
+		own.xm_base, own.ym_base);
+
 	uint32 count = header[9];
 	if (count > MAX_DSP_ALGORITHMS) {
 		TRACE_ALWAYS("amp %" B_PRIu32 ": %" B_PRIu32 " algorithms, using the"
@@ -220,7 +237,6 @@ Amplifier::_ReadAlgorithms()
 		count = MAX_DSP_ALGORITHMS;
 	}
 
-	fAlgorithmCount = 0;
 	for (uint32 i = 0; i < count; i++) {
 		uint32 entry[6];
 		for (uint32 j = 0; j < 6; j++) {
@@ -244,7 +260,7 @@ Amplifier::_ReadAlgorithms()
 	TRACE_ALWAYS("amp %" B_PRIu32 " (%s): firmware id %#" B_PRIx32
 		" version %#" B_PRIx32 ", %" B_PRIu32 " algorithms\n", fIndex, Side(),
 		fFirmwareID, header[4], fAlgorithmCount);
-	return fAlgorithmCount > 0 ? B_OK : B_BAD_DATA;
+	return B_OK;
 }
 
 
@@ -414,11 +430,14 @@ Amplifier::_LogDescriptors(const firmware_file& file)
 }
 
 
-/*!	The word offset of control \a name of \a algorithm, from the program's
-	descriptor blocks (CS35L41-SPEC-2.md section 2, type 0xF2).
+/*!	The word offset of control \a name of \a algorithm in XM (unpacked),
+	from the program's descriptor blocks (CS35L41-SPEC-2.md section 2 and
+	round 5). A control matches on algorithm, region and its first stored
+	name, case-sensitive over the stored length. Acked controls (type
+	0x1000) with the system flag (0x8000) are skipped.
 	B_ENTRY_NOT_FOUND: the algorithm has no descriptor block.
 	B_NAME_NOT_FOUND: the algorithm has no control of that name.
-	B_BAD_TYPE: the control is not in XM (unpacked).
+	B_BAD_TYPE: the name exists, but not in XM (unpacked).
 */
 status_t
 Amplifier::_FindControl(const firmware_file& file, uint32 algorithm,
@@ -428,6 +447,7 @@ Amplifier::_FindControl(const firmware_file& file, uint32 algorithm,
 	size_t position = read_le32(data + 4);
 	size_t nameLength = strlen(name);
 	bool algorithmFound = false;
+	bool otherRegion = false;
 
 	while (position + 8 <= file.size) {
 		const uint8* block = data + position;
@@ -461,17 +481,42 @@ Amplifier::_FindControl(const firmware_file& file, uint32 algorithm,
 			uint32 region = read_le16(payload + at + 2);
 			uint32 size = read_le32(payload + at + 4);
 			uint32 controlLength = payload[at + 8];
-			if (start + 9 + controlLength <= length
-				&& controlLength == nameLength
-				&& memcmp(payload + start + 9, name, nameLength) == 0) {
-				if (region != WMFW_XM_UNPACKED)
-					return B_BAD_TYPE;
-				*_offset = offset;
-				return B_OK;
-			}
 			at = start + 8 + size;
+
+			// Name, short name, description, then type and flags.
+			size_t field = start + 8;
+			if (field + 1 + controlLength > length)
+				break;
+			bool nameMatches = controlLength == nameLength
+				&& memcmp(payload + field + 1, name, nameLength) == 0;
+			field += round_up_4(controlLength + 1);
+			if (field + 1 > length)
+				break;
+			field += round_up_4(payload[field] + 1);
+			if (field + 2 > length)
+				break;
+			field += round_up_4(read_le16(payload + field) + 2);
+			if (field + 4 > length)
+				break;
+			uint32 controlType = read_le16(payload + field);
+			uint32 flags = read_le16(payload + field + 2);
+			if (controlType == CONTROL_TYPE_ACKED
+				&& (flags & CONTROL_FLAG_SYSTEM) != 0) {
+				continue;
+			}
+
+			if (!nameMatches)
+				continue;
+			if (region != WMFW_XM_UNPACKED) {
+				otherRegion = true;
+				continue;
+			}
+			*_offset = offset;
+			return B_OK;
 		}
 	}
+	if (otherRegion)
+		return B_BAD_TYPE;
 	return algorithmFound ? B_NAME_NOT_FOUND : B_ENTRY_NOT_FOUND;
 }
 
