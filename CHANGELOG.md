@@ -1,5 +1,34 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-21 - Perf round 1 Part A: boot, shutdown, kernel and drivers
+
+Problem: from docs/reviews/PERF-REVIEW-2026-11.md (#4484):
+- Two empty AMD FCH AHCI controllers (1022:7901) burned 3.03 s on every boot in AHCIPort::PortReset() waiting 1.0 s for TFD.BSY and 0.5 s for COMRESET.
+- ahci.c hardcoded a 32-bit B_DMA_HIGH_ADDRESS even when CAP.S64A was set, forcing SCSI bounce buffers above 4 GiB. usb_disk also caps at 32-bit because usb_disk_do_io passes physical addresses directly to UHCI/OHCI/EHCI/xHCI without a per-HCD 64-bit DMA query (and xhci.cpp:1036 requires 32-bit DMA); usb_disk stays 32-bit to avoid DMA corruption on 32-bit USB controllers.
+- r5_pstate_log ran a 1.0 s 100% CPU spin (burn_cpu) and four fsync passes (with KERN: in line_matters()) on every normal boot.
+- i2c_hid and i2c_elan polled continuously at 1000 Hz (1 ms) when idle.
+- r5_shutdown_trail never showed sync_done, hooks_start, or hooks_done on the next boot because BFS Inode::Sync() (_kern_fsync) flushes file data pages but not the BFS metadata journal (Volume::Sync()).
+- package_daemon first-boot processing (CommitTransactionHandler::_PrepareFirstBootPackages) never wrote administrative/activated-packages, so boot 2+ fell back to scanning all 137 packages.
+- arch_vm_direct_map_release_range() released write-combined RAM in 32-page (128 KiB) batches, broadcasting 3 SMP IPIs per batch (96 IPIs for a 4 MiB buffer).
+- C-state residency and decoded AMD CPPC EPP values were not logged.
+
+What changed:
+- distro/kernel/src/add-ons/kernel/busses/scsi/ahci/ahci_port.cpp: skip the 1.0 s TFD.BSY wait when SStatus.DET == SSTS_PORT_DET_NODEV before reset, and shorten the post-COMRESET wait on an empty port to 100 ms (extending to 500 ms if a PHY presence appears).
+- distro/kernel/src/add-ons/kernel/busses/scsi/ahci/ahci.c: probe BAR5 CAP.S64A in ahci_register_device() and set B_DMA_HIGH_ADDRESS to UINT64_MAX when 64-bit addressing is supported.
+- distro/cpu/r5_pstate_log.cpp: gate execution behind kernel setting r5_pstate_log true or CLI --run/--now (and --watch for repeated passes); remove KERN: from line_matters().
+- distro/kernel/src/add-ons/kernel/drivers/input/i2c_hid/HIDDevice.cpp and i2c_elan/ELANDevice.{h,cpp}: adaptive poll backoff (1 ms active -> 4 ms after 200 ms idle -> 16 ms after 1 s idle; GPIO interrupts remain the longer-term fix).
+- distro/kernel/src/system/kernel/shutdown.cpp: add +Nms elapsed timestamps to shutdown trail steps and call sync() after sync_done and hooks_done so BFS commits the journal before reset/power-off.
+- distro/rest/src/servers/package/CommitTransactionHandler.cpp: write initial administrative/activated-packages during _PrepareFirstBootPackages() on writable volumes (non-fatal on read-only media).
+- distro/kernel/src/system/kernel/arch/x86/r5_direct_map.cpp: increase release batch to a static 1024-page (4 MiB) buffer under sReleaseBufLock (zero malloc() while address-space lock is held), preserving the #4478 unmap -> drain -> write-back -> shootdown order.
+- distro/kernel/src/add-ons/kernel/power/cpuidle/x86_acpi_cstates/acpi_cpuidle.cpp: opt-in C-state residency counter (r5_cstate_stats true in kernel settings, 30 s summary from CPU 0, measurement only).
+- distro/kernel/src/add-ons/kernel/power/cpufreq/amd_pstates/amd_pstates.cpp: include decoded epp, min, and max in the existing R5 CPPC: log line (measurement only).
+
+Tested:
+- Built AMD64 with scripts/build-locked.sh (jam_exit=0, mesa_exit=0).
+- Booted private copy /home/nickr/r5-os-perf-a.image in QEMU (-machine q35,accel=kvm -cpu host -m 2048 -smp 2 -display none): Intel ICH9 AHCI 6-port controller probed real disk on port 0 (1.5Gb/s, Supports 64-bit Addressing: yes, zero SCSI bounce-buffer warnings) and reset 4 empty ports without hang; r5_pstate_log did not run burn_cpu; reached desktop (R5 tracker: Tracker from distro); no panic/KDL.
+
+Limits: the 5625U has not run this. usb_disk remains 32-bit DMA until the USB bus exposes per-HCD 64-bit DMA capability. ARM64 and RISC-V were not built (AHCI, i2c_hid, package_daemon, and shutdown.cpp are arch-independent; r5_direct_map.cpp, acpi_cpuidle.cpp, and amd_pstates.cpp are AMD64/x86 only).
+
 ## 2026-11-21 - EFI runtime services on the 5625U
 
 Sticks 69 and 70 carried this branch (`11dd98fc7d`) together with the CS35L41 driver (#4482), on the stick branch only, and booted on the HP ENVY x360 15 (Ryzen 5 5625U) through UEFI. Both boots: `efi: 37383 pages identity mapped, 80 of 104 page tables, NX on` and `efi: runtime services ready, revision 2.70, 11 ranges, attributes table yes`. The CS35L41 driver read `CirrusSmartAmpCalibrationData` through `get_variable` (48 bytes: the header and one entry per amplifier), and on stick 70 applied it (left resistance 10050, right 10336). No fault, no "called with interrupts off", and the boot loader change started the system normally.
