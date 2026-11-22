@@ -126,8 +126,16 @@ def apply_r5ui(haiku: pathlib.Path | None = None) -> None:
         replace_once(jamfile, r5ui_line, admin_line + r5ui_line,
             "r5admin jam")
     for profile in ("regular", "minimum"):
+        # 22 Nov 2026: other applies insert their libraries right after
+        # libr5ui.so, so the pair below is gone on a second apply in the
+        # same tree and libr5admin.so was added again; apply-power.py
+        # then found its anchor twice. Check the line itself.
+        definitions = tree / "build" / "jam" / "images" / "definitions" / profile
+        if "\t\t\tlibr5admin.so\n" in definitions.read_text(encoding="utf-8"):
+            print(f"already {definitions.name} (libr5admin.so on {profile})")
+            continue
         replace_once(
-            tree / "build" / "jam" / "images" / "definitions" / profile,
+            definitions,
             "\t\t\tlibr5ui.so\n",
             "\t\t\tlibr5ui.so\n\t\t\tlibr5admin.so\n",
             "libr5admin.so on " + profile,

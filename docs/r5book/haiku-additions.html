@@ -198,6 +198,21 @@ endpoint-&gt;StopIsochronousStream();</pre>
 				<code class="inline">B_NOT_H_RESIZABLE</code>, <code class="inline">B_NOT_V_RESIZABLE</code>), and
 				classify the margin in <code class="inline">RegionAt()</code> as a border or a corner.</p></div>
 
+			<div class="member"><div class="sig">virtual int32 GetOutline(window_outline_rect* rects, int32 maxCount);</div>
+				<p>ABI 2. The window's outline with round corners: up to <code class="inline">maxCount</code>
+				rectangles in screen coordinates, the frame first and then the tabs, each with the radius of its four
+				corners in pixels (<code class="inline">leftTop</code>, <code class="inline">rightTop</code>,
+				<code class="inline">leftBottom</code>, <code class="inline">rightBottom</code>; 0 is square). Return
+				how many you wrote. The default returns 0: the window keeps its square footprint, pixel for pixel. The
+				corners outside the arc stop being part of the window, in the CPU mode as a stepped arc and on the GPU
+				anti-aliased, and the content is clipped there too.</p></div>
+
+			<div class="member"><div class="sig">virtual bool GetEdgeLine(rgb_color* color, float* width);</div>
+				<p>ABI 2. The colour and width of the line your decorator draws along the outer edge of the window.
+				When the window has round corners, app_server carries that line round the arc in the same colour, so
+				it does not stop where the corner begins. Return <code class="inline">false</code> (the default) when
+				your decorator draws no such line.</p></div>
+
 			<div class="member"><div class="sig">bool InputMarginContains(BPoint where);</div>
 				<p>Not a hook: whether <code class="inline">where</code> lies in the input margin, outside the border.
 				app_server uses it to find the window under the mouse.</p></div>
@@ -206,11 +221,12 @@ endpoint-&gt;StopIsochronousStream();</pre>
 			<p>The hooks change the layout of <code class="inline">Decorator</code>, so an add-on built before them
 			would crash app_server. Every decorator add-on therefore exports the ABI version it was built with. Put
 			<code class="inline">R5_DECORATOR_ABI_EXPORT</code> in one source file of the add-on. app_server loads
-			only an add-on with the current version (<code class="inline">R5_DECORATOR_ABI_VERSION</code>, now 1).
+			only an add-on with the current version (<code class="inline">R5_DECORATOR_ABI_VERSION</code>, now 2).
 			Any other add-on is refused with one line in the syslog, and the default decorator is used:</p>
-<pre class="code">app_server: decorator OldDecorator refused: abi 0, need 1</pre>
-			<p>Rebuild an old decorator against the R5 headers to fix that. A new hook comes after these three, and
-			the version goes up by one.</p>
+<pre class="code">app_server: decorator OldDecorator refused: abi 1, need 2</pre>
+			<p>Rebuild an old decorator against the R5 headers to fix that. A new hook comes after the last one, and
+			the version goes up by one: version 2 added <code class="inline">GetOutline()</code> and
+			<code class="inline">GetEdgeLine()</code>.</p>
 
 			<h3>The default decorator</h3>
 			<p>On R5 the R5 decorator is the default. app_server loads it when no decorator was chosen, and

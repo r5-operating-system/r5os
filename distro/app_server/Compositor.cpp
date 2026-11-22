@@ -57,6 +57,7 @@
 #include "WindowBuffer.h"
 #include "WindowHWInterface.h"
 #include "WindowEffectLevels.h"
+#include "WindowOutline.h"
 #include "decorator/Decorator.h"
 
 #include <WindowPrivate.h>
@@ -471,7 +472,8 @@ enum {
 	kEffectUp = 2,
 	kEffectGlass = 3,
 	kEffectWindow = 4,
-	kEffectSlide = 5
+	kEffectSlide = 5,
+	kEffectCorner = 6
 };
 
 static const uint32 kEffectFixedGlass = 0x100;
@@ -621,12 +623,43 @@ struct Compositor::Entry : public BReferenceable {
 /*!	M11 step 4b: a window that closed, drawn from its last buffer while it
 	fades and shrinks. Under fAnimLock.
 */
+/*!	The round outline of a layer (WindowOutline.h), kept as one value so a
+	copy of the layer (the compose thread's snapshot, a closing ghost) takes
+	all of it. Review, 22 Nov 2026: the snapshot copied field by field and
+	left these out, so no corner was ever drawn round.
+*/
+struct layer_round {
+	layer_round()
+		:
+		cornerCount(0),
+		edgeColor(0),
+		edgeWidth(0)
+	{
+	}
+
+	bool IsRound() const { return cornerCount > 0; }
+
+	// the pixels the arc crosses: they do not hide what lies below
+	BRegion			edge;
+	// every pixel in a corner's square: drawn by _RecordCorners() (mode 6)
+	// or, for glass, _RecordGlass() (mode 3)
+	BRegion			area;
+	int32			cornerCount;
+	window_corner	corners[R5_WINDOW_OUTLINE_MAX_RECTS * 4];
+	// the decorator's line along the outer edge (Decorator::GetEdgeLine()),
+	// as a frame word; width 0: none
+	uint32			edgeColor;
+	int32			edgeWidth;
+};
+
+
 struct Compositor::Ghost {
 	BReference<Entry>			entry;
 	BReference<WindowBuffer>	buffer;
 	int32						left;
 	int32						top;
 	BRegion						shape;
+	layer_round					round;
 	BRegion						area;
 	bigtime_t					start;
 	float						from;
@@ -779,6 +812,10 @@ struct Compositor::Layer {
 	// not animating)
 	bool						animatable;
 	float						visible;
+
+	// The round outline (WindowOutline.h); the cut corners are already out
+	// of shape.
+	layer_round					round;
 };
 
 
@@ -2338,6 +2375,13 @@ Compositor::ClippingChanged()
 			outlined->GetFootprintWithoutOutline(&full);
 			full.Include(window->Frame());
 		}
+		// The round outline: the cut corners are not the window's (the
+		// full region above has them out already, the outline's has not);
+		// the arc's pixels are blended over what lies behind.
+		window_outline rounded;
+		window->GetOutline(&rounded, true);
+		if (!rounded.IsSquare())
+			full.Exclude(&rounded.cut);
 		if (!full.Frame().IsValid())
 			continue;
 		clipping_rect bounds = full.FrameInt();
@@ -2424,6 +2468,34 @@ Compositor::ClippingChanged()
 		layer->top = bounds.top;
 		layer->shape = full;
 		layer->outline = outline;
+		if (!rounded.IsSquare()) {
+			layer_round& round = layer->round;
+			round.edge = rounded.edge;
+			round.edge.IntersectWith(&full);
+			round.area = rounded.area;
+			round.area.IntersectWith(&full);
+			round.cornerCount = rounded.cornerCount;
+			memcpy(round.corners, rounded.corners,
+				sizeof(window_corner) * rounded.cornerCount);
+			// the decorator's own edge line, carried round the arc; none
+			// for a window without one (review: no colour guessed from
+			// the window's pixels)
+			::Decorator* edgeDecorator = window->Decorator();
+			rgb_color edgeColor;
+			float edgeWidth = 0;
+			if (edgeDecorator != NULL
+				&& edgeDecorator->GetEdgeLine(&edgeColor, &edgeWidth)
+				&& edgeWidth > 0) {
+				round.edgeColor = (uint32)edgeColor.blue
+					| ((uint32)edgeColor.green << 8)
+					| ((uint32)edgeColor.red << 16)
+					| ((uint32)edgeColor.alpha << 24);
+				round.edgeWidth = (int32)ceilf(edgeWidth);
+			}
+		}
+		// what hides the windows below: the shape without the arc
+		BRegion solid(full);
+		solid.Exclude(&layer->round.edge);
 
 		// M11 step 4: the shadow and the glass of this window, from its
 		// decorator's hooks (decision 10) and the glass views.
@@ -2440,7 +2512,11 @@ Compositor::ClippingChanged()
 			int32 extentTop;
 			int32 extentRight;
 			int32 extentBottom;
-			if (decorator != NULL) {
+			// A round window gets the full soft shadow of the step, not a
+			// decorator's short one (review: Haiku's bordered look cut a
+			// 15 px blur at 1 to 2 px, a hard edge round the arc). The
+			// blur of its round shape fades out round by itself.
+			if (decorator != NULL && rounded.IsSquare()) {
 				BRect extent;
 				decorator->GetShadowExtent(&extent);
 				extentLeft = (int32)extent.left;
@@ -2462,7 +2538,8 @@ Compositor::ClippingChanged()
 				bounds.bottom + extentBottom);
 			if (area.left <= area.right && area.top <= area.bottom) {
 				layer->shadowArea.Set(area);
-				layer->shadowArea.Exclude(&full);
+				// under the arc too: its pixels are blended over the shadow
+				layer->shadowArea.Exclude(&solid);
 			}
 			layer->shadow = layer->shadowArea.CountRects() > 0;
 		}
@@ -2547,7 +2624,11 @@ Compositor::ClippingChanged()
 			&& before->shadowSmall == after->shadowSmall
 			&& before->shadowArea == after->shadowArea
 			&& before->glassFixed == after->glassFixed
-			&& before->glassAlpha == after->glassAlpha) {
+			&& before->glassAlpha == after->glassAlpha
+			// the round outline: its corners and its edge line
+			&& before->round.area == after->round.area
+			&& before->round.edgeColor == after->round.edgeColor
+			&& before->round.edgeWidth == after->round.edgeWidth) {
 			// M13 step 4 (review): a step of the outline alone damages
 			// where it was and where it is, not the window
 			if (!(before->outline == after->outline)) {
@@ -2583,6 +2664,7 @@ Compositor::ClippingChanged()
 					ghost->left = layer->left;
 					ghost->top = layer->top;
 					ghost->shape = layer->shape;
+					ghost->round = layer->round;
 					ghost->area = area;
 					ghost->start = system_time();
 					// from where a running open animation is
@@ -3014,6 +3096,8 @@ Compositor::_ComposeLoop()
 				copy->glassFixed = source->glassFixed;
 				copy->glassAlpha = source->glassAlpha;
 				copy->animatable = source->animatable;
+				// the round outline, as one value (review: left out before)
+				copy->round = source->round;
 				// M13 step 2: the image this frame samples, kept until its
 				// fence even when the window shows a newer one meanwhile
 				if (copy->buffer.IsSet()) {
@@ -3291,6 +3375,8 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 			BRegion glass(upper->glassFixed);
 			glass.Include(&upper->glassAlpha);
 			plain.Exclude(&glass);
+			// the arc of a round corner is blended over what lies below
+			plain.Exclude(&upper->round.edge);
 			over.Include(&plain);
 			if (glass.CountRects() > 0) {
 				BRegion grown = grow_region(glass, reach);
@@ -3309,6 +3395,8 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 		bool withEffects = effects && layer != NULL && layer->HasEffects()
 			&& layer->HasPixels();
 		BRegion glassPart;
+		// the arc of a round corner, blended after the plain part
+		BRegion edgePart;
 		if (layer != NULL && layer->visible >= 0 && layer->HasPixels()) {
 			// M11 step 4b: opening, scaled and faded, without its effects
 			_RecordWindowAnimation(layer, damage, (uint64)frameInfo.buffer,
@@ -3325,12 +3413,18 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 			if (!layer->HasPixels())
 				continue;
 			part.IntersectWith(&layer->shape);
+			if (layer->round.area.CountRects() > 0) {
+				edgePart = part;
+				edgePart.IntersectWith(&layer->round.area);
+				part.Exclude(&edgePart);
+			}
 			bool shadowHit = withEffects && layer->shadow
 				&& damage.Intersects(layer->shadowArea.Frame());
 			// M13 step 4: an outline outside the window is drawn too
 			bool outlineHit = layer->outline.CountRects() > 0
 				&& damage.Intersects(layer->outline.Frame());
-			if (part.CountRects() == 0 && !shadowHit && !outlineHit)
+			if (part.CountRects() == 0 && edgePart.CountRects() == 0
+				&& !shadowHit && !outlineHit)
 				continue;
 		}
 		if (withEffects) {
@@ -3348,8 +3442,13 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 			}
 			glassPart = layer->glassFixed;
 			glassPart.Include(&layer->glassAlpha);
-			glassPart.IntersectWith(&part);
+			// glass in a round corner is drawn by _RecordGlass() with the
+			// corner's coverage
+			BRegion both(part);
+			both.Include(&edgePart);
+			glassPart.IntersectWith(&both);
 			part.Exclude(&glassPart);
+			edgePart.Exclude(&glassPart);
 			vk->vkCmdBindPipeline(vk->commands,
 				VK_PIPELINE_BIND_POINT_COMPUTE, vk->pipeline);
 		}
@@ -3418,6 +3517,16 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 				VK_PIPELINE_BIND_POINT_COMPUTE, vk->pipeline);
 			// a shared view below is drawn over all of the window's part
 			part.Include(&glassPart);
+		}
+		if (edgePart.CountRects() > 0) {
+			// on other pixels than the copy and the glass: no barrier
+			_RecordCorners(layer, edgePart, (uint64)frameInfo.buffer,
+				rect.frameStride);
+			vk->vkCmdBindPipeline(vk->commands,
+				VK_PIPELINE_BIND_POINT_COMPUTE, vk->pipeline);
+			// a shared view below is drawn over the corners too, so a
+			// zero-copy view keeps its corner pixels (review)
+			part.Include(&edgePart);
 		}
 		// the next layer writes over this one
 		vk->vkCmdPipelineBarrier(vk->commands,
@@ -4647,6 +4756,24 @@ dispatch_effect(CompositorVulkan* vk, const effect_rect& effect)
 }
 
 
+/*!	The corner's circle (shape[0]) and the decorator's edge line (shape[1]:
+	its colour as a frame word, its width) for effects modes 3 and 6.
+*/
+static void
+set_corner(effect_rect& effect, const window_corner& corner,
+	const layer_round& round)
+{
+	effect.shape[0] = corner.centerX;
+	effect.shape[1] = corner.centerY;
+	effect.shape[2] = corner.radius;
+	effect.shape[3] = 1;
+	effect.shape[4] = (int32)round.edgeColor;
+	effect.shape[5] = round.edgeWidth;
+	effect.shape[6] = 0;
+	effect.shape[7] = 0;
+}
+
+
 static void
 effect_barrier(CompositorVulkan* vk)
 {
@@ -4902,7 +5029,10 @@ Compositor::_RecordGlass(Layer* layer, const BRegion& damage, uint64 frame,
 	effect.mode = kEffectGlass | (fromImage ? kEffectFromImage : 0);
 	effect.targetStride = frameStride;
 	effect.sourceStride = layer->buffer->Width();
-	BRegion pixels(layer->PixelRect());
+	BRect pixelRect = layer->PixelRect();
+	effect.sourceWidth = pixelRect.IntegerWidth() + 1;
+	effect.sourceHeight = pixelRect.IntegerHeight() + 1;
+	BRegion pixels(pixelRect);
 
 	uint32 cacheOffset = 0;
 	const BRegion& glass = entry->glassShape;
@@ -4922,20 +5052,94 @@ Compositor::_RecordGlass(Layer* layer, const BRegion& damage, uint64 frame,
 			effect.amount = geometry.seeThrough
 				| (kind == 0 ? kEffectFixedGlass : 0);
 			effect.auxStride = areaWidth;
-			for (int32 i = 0; i < part.CountRects(); i++) {
-				clipping_rect r = part.RectAtInt(i);
-				effect.width = r.right - r.left + 1;
-				effect.height = r.bottom - r.top + 1;
-				effect.targetX = r.left;
-				effect.targetY = r.top;
-				effect.sourceX = r.left - layer->SourceLeft();
-				effect.sourceY = r.top - layer->SourceTop();
-				effect.auxX = cacheOffset + (r.left - area.left);
-				effect.auxY = r.top - area.top;
-				dispatch_effect(vk, effect);
+			// The round outline: glass in a corner's square is drawn with
+			// that corner (index c), the rest plain (c = -1).
+			BRegion rest(part);
+			for (int32 c = -1; c < layer->round.cornerCount; c++) {
+				BRegion here;
+				if (c < 0) {
+					here = rest;
+					here.Exclude(&layer->round.area);
+					effect.shape[3] = 0;
+				} else {
+					BRegion square;
+					square.Set(layer->round.corners[c].square);
+					here = rest;
+					here.IntersectWith(&square);
+					set_corner(effect, layer->round.corners[c],
+						layer->round);
+				}
+				rest.Exclude(&here);
+				for (int32 i = 0; i < here.CountRects(); i++) {
+					clipping_rect r = here.RectAtInt(i);
+					effect.width = r.right - r.left + 1;
+					effect.height = r.bottom - r.top + 1;
+					effect.targetX = r.left;
+					effect.targetY = r.top;
+					effect.sourceX = r.left - layer->SourceLeft();
+					effect.sourceY = r.top - layer->SourceTop();
+					effect.auxX = cacheOffset + (r.left - area.left);
+					effect.auxY = r.top - area.top;
+					dispatch_effect(vk, effect);
+				}
 			}
 		}
 		cacheOffset += areaWidth * (area.bottom - area.top + 1);
+	}
+}
+
+
+/*!	The round outline: \a part of the pixels in the corners' squares, drawn
+	with the window's edge line carried round the arc and blended over what
+	is composed below by their coverage (mode 6, the formula of
+	WindowOutline.h). Every such pixel lies in one corner's square; the
+	shader gets that corner.
+*/
+void
+Compositor::_RecordCorners(Layer* layer, const BRegion& part, uint64 frame,
+	uint32 frameStride)
+{
+	CompositorVulkan* vk = fVulkan;
+	if (!layer->HasPixels() || !layer->round.IsRound())
+		return;
+	vk->vkCmdBindPipeline(vk->commands, VK_PIPELINE_BIND_POINT_COMPUTE,
+		vk->effectsPipeline);
+	bool fromImage = layer->image.IsSet();
+	push_effect_buffers(vk, fromImage
+			? (VkBuffer)frame : (VkBuffer)layer->buffer->VulkanBuffer(),
+		(VkBuffer)frame, (VkBuffer)frame,
+		fromImage ? (VkImageView)layer->image->View() : VK_NULL_HANDLE);
+	effect_rect effect;
+	memset(&effect, 0, sizeof(effect));
+	effect.mode = kEffectCorner | (fromImage ? kEffectFromImage : 0);
+	effect.targetStride = frameStride;
+	effect.sourceStride = layer->buffer->Width();
+	BRect pixelRect = layer->PixelRect();
+	effect.sourceWidth = pixelRect.IntegerWidth() + 1;
+	effect.sourceHeight = pixelRect.IntegerHeight() + 1;
+	BRegion pixels(pixelRect);
+	BRegion rest(part);
+	rest.IntersectWith(&pixels);
+
+	for (int32 c = 0; c < layer->round.cornerCount && rest.CountRects() > 0;
+			c++) {
+		const window_corner& corner = layer->round.corners[c];
+		BRegion square;
+		square.Set(corner.square);
+		BRegion here(rest);
+		here.IntersectWith(&square);
+		rest.Exclude(&here);
+		set_corner(effect, corner, layer->round);
+		for (int32 i = 0; i < here.CountRects(); i++) {
+			clipping_rect r = here.RectAtInt(i);
+			effect.width = r.right - r.left + 1;
+			effect.height = r.bottom - r.top + 1;
+			effect.targetX = r.left;
+			effect.targetY = r.top;
+			effect.sourceX = r.left - layer->SourceLeft();
+			effect.sourceY = r.top - layer->SourceTop();
+			dispatch_effect(vk, effect);
+		}
 	}
 }
 
@@ -5369,6 +5573,7 @@ Compositor::_AnimationFrame(LayerList& layers, bigtime_t now)
 			layer->left = ghost->left;
 			layer->top = ghost->top;
 			layer->shape = ghost->shape;
+			layer->round = ghost->round;
 			layer->visible = ghost->visible;
 			if (layer->buffer.IsSet()) {
 				layer->image.SetTo(layer->buffer->AcquireImage(
@@ -5446,6 +5651,19 @@ Compositor::_RecordWindowAnimation(const Layer* layer,
 		effect.shape[i * 4 + 2] = 0;
 	}
 	int32 count = shape.CountRects();
+	// A round window: its bounding box with its four corners' radii,
+	// anti-aliased in the shader (review: one radius, stepped, before).
+	int32 radii[4] = { 0, 0, 0, 0 };
+	if (layer->round.IsRound()) {
+		count = 5;
+		effect.auxStride = 1;
+		for (int32 c = 0; c < layer->round.cornerCount; c++) {
+			const window_corner& corner = layer->round.corners[c];
+			int32 kind = corner.kind;
+			if (kind >= 0 && kind < 4 && corner.radius > radii[kind])
+				radii[kind] = corner.radius;
+		}
+	}
 	for (int32 i = 0; i < count && i < 4; i++) {
 		clipping_rect r = count > 4 ? shape.FrameInt() : shape.RectAtInt(i);
 		effect.shape[i * 4] = r.left - left;
@@ -5454,6 +5672,12 @@ Compositor::_RecordWindowAnimation(const Layer* layer,
 		effect.shape[i * 4 + 3] = r.bottom - top;
 		if (count > 4)
 			break;
+	}
+	if (effect.auxStride != 0) {
+		effect.shape[4] = radii[0];
+		effect.shape[5] = radii[1];
+		effect.shape[6] = radii[2];
+		effect.shape[7] = radii[3];
 	}
 	for (int32 i = 0; i < part.CountRects(); i++) {
 		clipping_rect r = part.RectAtInt(i);

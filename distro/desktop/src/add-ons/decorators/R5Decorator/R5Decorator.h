@@ -35,6 +35,7 @@ public:
 	virtual	void				GetShadowExtent(BRect* extent);
 	virtual	void				GetGlassRegion(BRegion* region);
 	virtual	void				GetInputMargin(BRect* margin);
+	virtual	bool				GetEdgeLine(rgb_color* color, float* width);
 
 protected:
 	virtual	void				GetComponentColors(Component component,

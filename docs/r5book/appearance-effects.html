@@ -124,6 +124,26 @@ MyWindow::MyWindow()
 	BAppearanceKit::set_window_glass(<span class="k">this</span>, <span class="k">true</span>);
 }</pre>
 
+			<div class="member"><div class="sig">status_t set_window_corner_radius(BWindow* window, float radius);</div>
+				<p>A program rounds the corners of its own window, the radius in pixels (0 is square, the default;
+				at most 64). Use it for a window without a title tab, such as a panel or a floating bar; a titled
+				window gets its corners from the decorator the user chose. The window's frame stays the same
+				rectangle: the corners are only taken out of what the window shows and what it gets clicks for.
+				With the GPU the arc is smooth; without it (Lavapipe without effects, Safe mode) the arc is
+				stepped, and the desktop behind shows in the corner either way. Content in a corner is clipped. A
+				round window gets the full soft shadow of the chosen effect step, and the line its window frame
+				draws along the edge runs on round the corner.
+				Scale the radius with the font size, like other R5 measures: 18 at 12 points.</p></div>
+
+<pre class="code"><span class="k">#include</span> &lt;WindowEffects.h&gt;
+
+PanelWindow::PanelWindow()
+	: BWindow(BRect(100, 100, 400, 160), <span class="s">"Panel"</span>, B_BORDERED_WINDOW, 0)
+{
+	<span class="k">float</span> radius = roundf(18.0f * be_plain_font-&gt;Size() / 12.0f);
+	BAppearanceKit::set_window_corner_radius(<span class="k">this</span>, radius);
+}</pre>
+
 			<div class="see-also">
 				<strong>See also</strong>
 				<a href="haiku-additions.html#decorator">Decorator hooks</a>

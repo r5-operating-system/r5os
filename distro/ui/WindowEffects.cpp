@@ -140,4 +140,19 @@ gpu_draws_text()
 }
 
 
+status_t
+set_window_corner_radius(BWindow* window, float radius)
+{
+	if (window == NULL || !(radius >= 0.0f))
+		return B_BAD_VALUE;
+	BPrivate::AppServerLink link;
+	link.StartMessage(AS_R5_SET_WINDOW_CORNER_RADIUS);
+	link.Attach<int32>(_get_object_token_(window));
+	link.Attach<float>(radius);
+	int32 code;
+	status_t status = link.FlushWithReply(code);
+	return status == B_OK ? code : status;
+}
+
+
 }	// namespace BAppearanceKit

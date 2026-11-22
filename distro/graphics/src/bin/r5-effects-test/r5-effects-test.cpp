@@ -17,18 +17,32 @@
  * draws a moving bar every 16 ms, so there is damage under the glass.
  * slide is a plain window that moves itself across the others every 16 ms,
  * the way a drag moves it (Desktop::MoveWindowBy).
+ *
+ *   r5-effects-test round [radius] [seconds]
+ *
+ * round (the window outline, 22 Nov 2026) opens three bordered windows, the
+ * kind Deskbar uses, each with set_window_corner_radius(): one whose colour
+ * bars reach every edge and a bar that moves (damage in the corners), one
+ * with a text view and both scroll bars meeting in the bottom-right corner,
+ * and one with glass. The radius is in pixels; without one, 18 scaled with
+ * the font size. Radius 0 opens the same windows square, for the compare.
  */
 
 
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include <algorithm>
 
 #include <Application.h>
 #include <InterfaceDefs.h>
 #include <MessageRunner.h>
 #include <Screen.h>
+#include <ScrollView.h>
 #include <String.h>
+#include <TextView.h>
 #include <View.h>
 #include <Window.h>
 
@@ -142,6 +156,71 @@ private:
 };
 
 
+/*!	Colour bars that reach every edge of the window, so the cut corners
+	show, and a bar that moves through the bottom corners every 16 ms.
+*/
+class EdgeView : public BView {
+public:
+	EdgeView(BRect frame)
+		:
+		BView(frame, "edges", B_FOLLOW_ALL, B_WILL_DRAW),
+		fPosition(0),
+		fRunner(NULL)
+	{
+		SetViewColor(B_TRANSPARENT_COLOR);
+	}
+
+	virtual ~EdgeView()
+	{
+		delete fRunner;
+	}
+
+	virtual void AttachedToWindow()
+	{
+		BMessage tick(kMsgTick);
+		fRunner = new BMessageRunner(BMessenger(this), &tick, 16000);
+	}
+
+	virtual void MessageReceived(BMessage* message)
+	{
+		if (message->what == kMsgTick) {
+			fPosition = (fPosition + 3) % (int32)Bounds().Width();
+			Invalidate();
+			return;
+		}
+		BView::MessageReceived(message);
+	}
+
+	virtual void Draw(BRect)
+	{
+		BRect bounds = Bounds();
+		const rgb_color colors[] = {
+			{ 230, 60, 60, 255 }, { 240, 180, 40, 255 },
+			{ 60, 170, 90, 255 }, { 40, 120, 230, 255 }
+		};
+		float band = ceilf(bounds.Height() / 4);
+		for (int32 i = 0; i < 4; i++) {
+			SetHighColor(colors[i]);
+			FillRect(BRect(bounds.left, bounds.top + i * band, bounds.right,
+				std::min(bounds.bottom, bounds.top + (i + 1) * band - 1)));
+		}
+		SetHighColor(20, 30, 50);
+		FillRect(BRect(fPosition, bounds.bottom - 30, fPosition + 50,
+			bounds.bottom));
+		SetHighColor(255, 255, 255);
+		BFont font;
+		GetFont(&font);
+		font.SetSize(18);
+		SetFont(&font);
+		DrawString("R5 round", BPoint(bounds.left + 40, bounds.top + 40));
+	}
+
+private:
+	int32			fPosition;
+	BMessageRunner*	fRunner;
+};
+
+
 class TestApp : public BApplication {
 public:
 	TestApp(int argc, char** argv)
@@ -214,6 +293,9 @@ private:
 			return _Check(set_window_effects(effects));
 		}
 
+		if (strcmp(what, "round") == 0)
+			return _Round(value, fArgc > 3 ? fArgv[3] : NULL);
+
 		bool glass = strcmp(what, "glass") == 0;
 		bool full = strcmp(what, "full") == 0;
 		bool tick = strcmp(what, "tick") == 0;
@@ -264,6 +346,67 @@ private:
 		return result;
 	}
 
+	int _Round(const char* radiusArg, const char* secondsArg)
+	{
+		float radius = roundf(18.0f * be_plain_font->Size() / 12.0f);
+		if (radiusArg != NULL)
+			radius = atof(radiusArg);
+		fWindowSeconds = secondsArg != NULL ? atoi(secondsArg) : 60;
+		if (fWindowSeconds <= 0)
+			fWindowSeconds = 60;
+		uint32 flags = B_QUIT_ON_WINDOW_CLOSE | B_ASYNCHRONOUS_CONTROLS;
+		int result = 0;
+
+		BWindow* edges = new BWindow(BRect(80, 100, 460, 380), "Round edges",
+			B_BORDERED_WINDOW_LOOK, B_NORMAL_WINDOW_FEEL, flags);
+		edges->AddChild(new EdgeView(edges->Bounds()));
+		edges->Show();
+		if (_Check(set_window_corner_radius(edges, radius)) != 0)
+			result = 1;
+
+		BWindow* text = new BWindow(BRect(520, 100, 900, 380), "Round text",
+			B_BORDERED_WINDOW_LOOK, B_NORMAL_WINDOW_FEEL, flags);
+		BRect inner = text->Bounds();
+		inner.right -= B_V_SCROLL_BAR_WIDTH;
+		inner.bottom -= B_H_SCROLL_BAR_HEIGHT;
+		BRect textRect = inner.OffsetToCopy(B_ORIGIN);
+		textRect.InsetBy(4, 4);
+		BTextView* textView = new BTextView(inner, "text", textRect,
+			B_FOLLOW_ALL, B_WILL_DRAW);
+		BString lines;
+		for (int32 i = 1; i <= 60; i++) {
+			lines << "Line " << i << ": the corners of this window are"
+				" round, and so is its content.\n";
+		}
+		textView->SetText(lines.String());
+		textView->SetWordWrap(false);
+		text->AddChild(new BScrollView("scroll", textView, B_FOLLOW_ALL, 0,
+			true, true, B_NO_BORDER));
+		text->Show();
+		if (_Check(set_window_corner_radius(text, radius)) != 0)
+			result = 1;
+
+		BWindow* glass = new BWindow(BRect(300, 300, 680, 560), "Round glass",
+			B_BORDERED_WINDOW_LOOK, B_NORMAL_WINDOW_FEEL, flags);
+		TextView* glassView = new TextView(glass->Bounds(), true, false);
+		glass->AddChild(glassView);
+		glass->Show();
+		if (_Check(set_window_glass(glass, true)) != 0)
+			result = 1;
+		if (glass->Lock()) {
+			if (_Check(set_view_glass(glassView, true)) != 0)
+				result = 1;
+			glass->Unlock();
+		}
+		if (_Check(set_window_corner_radius(glass, radius)) != 0)
+			result = 1;
+
+		printf("r5-effects-test: round, radius %g, %" B_PRId32 " s\n", radius,
+			fWindowSeconds);
+		SetPulseRate(fWindowSeconds * 1000000LL);
+		return result;
+	}
+
 	virtual void Pulse()
 	{
 		PostMessage(B_QUIT_REQUESTED);
@@ -284,7 +427,8 @@ private:
 			"       r5-effects-test shadow|frosted|animations on|off\n"
 			"       r5-effects-test strength quiet|balanced|glassy\n"
 			"       r5-effects-test workspace <index>\n"
-			"       r5-effects-test glass|plain|full|tick|slide [seconds]\n");
+			"       r5-effects-test glass|plain|full|tick|slide [seconds]\n"
+			"       r5-effects-test round [radius] [seconds]\n");
 		return 2;
 	}
 

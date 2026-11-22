@@ -141,6 +141,11 @@ r5_screen_change_allowed(team_id team)
 // SPDX-SnippetEnd
 #include "View.h"
 #include "WindowEffectLevels.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include "WindowOutline.h"
+// SPDX-SnippetEnd
 
 
 /*!	M11 step 4: one line when the user changes a window effect, in both
@@ -3944,6 +3949,64 @@ ServerApp::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 					Compositor* compositor = fDesktop->GetCompositor();
 					if (compositor != NULL)
 						compositor->GlassViewChanged(view->Window(), view);
+				}
+				fDesktop->UnlockAllWindows();
+			}
+			fLink.StartMessage(status);
+			fLink.Flush();
+			break;
+		}
+
+		case AS_R5_SET_WINDOW_CORNER_RADIUS:
+		{
+			// The round outline of one of this team's own windows. The
+			// window keeps its frame; its corners leave its regions.
+			int32 token = -1;
+			float radius = 0.0f;
+			link.Read<int32>(&token);
+			status_t status = link.Read<float>(&radius);
+			if (status == B_OK && !(radius >= 0.0f))
+				status = B_BAD_VALUE;
+			// compared as the window keeps it (review: a radius above the
+			// largest rebuilt the clipping at every call)
+			if (radius > R5_WINDOW_CORNER_MAX_RADIUS)
+				radius = R5_WINDOW_CORNER_MAX_RADIUS;
+			if (status == B_OK && !fDesktop->LockAllWindows())
+				status = B_ERROR;
+			if (status == B_OK) {
+				Window* found = NULL;
+				for (Window* window = fDesktop->AllWindows().FirstWindow();
+						window != NULL;
+						window = window->NextWindow(kAllWindowList)) {
+					if (window->ServerWindow()->App() == this
+						&& window->ServerWindow()->ClientToken() == token) {
+						found = window;
+						break;
+					}
+				}
+				if (found == NULL)
+					status = B_BAD_VALUE;
+				else if (found->CornerRadius() != radius) {
+					BRegion dirty;
+					found->GetFullRegion(&dirty);
+					found->SetCornerRadius(radius);
+					BRegion after;
+					found->GetFullRegion(&after);
+					dirty.Include(&after);
+					// the shadow's reach changes with the outline too
+					BRect reach = dirty.Frame();
+					reach.InsetBy(-R5_WINDOW_CORNER_MAX_RADIUS,
+						-R5_WINDOW_CORNER_MAX_RADIUS);
+					fDesktop->RebuildAndRedrawAfterWindowChange(found, dirty);
+					// GPU mode: the whole window is composed again, its
+					// corners' arc and edge line too, not only what the
+					// clipping revealed (22 Nov 2026, QEMU: the top
+					// corners kept the square picture)
+					Compositor* compositor = fDesktop->GetCompositor();
+					if (compositor != NULL && compositor->IsActive()) {
+						compositor->ClippingChanged();
+						compositor->Damage(BRegion(reach));
+					}
 				}
 				fDesktop->UnlockAllWindows();
 			}

@@ -82,7 +82,27 @@ Decorators stay Haiku add-ons in `/system/add-ons/decorators`, subclasses of `De
 - `GetGlassRegion(BRegion* region)`: the part of the footprint that is glass (the tab and the frame line for the R5 decorator). Default: empty, so a Haiku decorator has no glass.
 - `GetInputMargin(...)`: the resize margin above. Default: 0 on every side.
 
-The R5 decorator implements all three. app_server adds the glass views of the window (`set_view_glass()`) to the decorator's glass region. How the hooks are added without breaking a decorator add-on built earlier: [Decided after step 0](#decided-after-step-0-12-nov-2026), point 2.
+- `GetOutline(window_outline_rect* rects, int32 maxCount)` (decorator ABI 2, 22 Nov 2026): the outline with round corners, see "The window outline" below. Default: 0 rectangles, a square window.
+- `GetEdgeLine(rgb_color* color, float* width)` (decorator ABI 2): the line the decorator draws along the outer edge, which a round corner carries round the arc. Default: false, no line.
+
+The R5 decorator implements the first three. app_server adds the glass views of the window (`set_view_glass()`) to the decorator's glass region. How the hooks are added without breaking a decorator add-on built earlier: [Decided after step 0](#decided-after-step-0-12-nov-2026), point 2.
+
+## The window outline (22 Nov 2026)
+
+Step 1 of `docs/design/R5-MODERN-DECORATOR.md` and the base of the round Deskbar (`docs/design/DESKBAR-STYLES.md`), combined at the owner's request.
+
+- **Where it comes from:** `Window::GetOutline()` asks the decorator (`GetOutline()`, ABI 2) for up to `R5_WINDOW_OUTLINE_MAX_RECTS` (4) rectangles with a radius per corner. A decorator that returns none uses the radius the program set with `set_window_corner_radius()` (libr5ui, `AS_R5_SET_WINDOW_CORNER_RADIUS`) on the decorator's border rectangle (`Decorator::BorderRect()`, not the footprint's bounding box, so a tab beside it does not leave the frame's own corner square), or on the frame without a decorator. Both are 0 by default, so every existing window keeps its regions pixel for pixel. The outline lives on `Window`, not only in the decorator, because Deskbar's round look must not depend on the window decorator the user chose.
+- **Built once:** `Window` keeps the outline's regions (`window_outline_cache` in `WindowOutline.h`) and builds them again only when the rectangles, the radii or the mode change.
+- **One formula** (`WindowOutline.h`, and `effects.comp`): a corner is a circle of radius r around an integer point. Inside the corner's square its distance d = distance - r is the signed distance of the rounded rectangle. A pixel's coverage is `clamp(0.5 - d, 0, 1)`. The radius is capped at 64 and at half the rectangle's width and height.
+- **cut** (corner pixels that are not the window's) leaves `GetFullRegion()` and the content region. So `VisibleRegion()`, the clipping rebuild, `Desktop::WindowAt()` and the direct-window clip list follow the outline with no code of their own: the windows and the desktop behind draw in the corner, and a click there goes to them. Content in a corner is clipped (owner, 22 Nov 2026).
+- **CPU mode (Painter):** no edge. A pixel at least half covered is the window's, the rest is cut: a stepped arc, about one rectangle per pixel row per corner band (roughly 40 extra rectangles for a frame with four corners at r 18). The decorator's line does not yet follow the stepped arc.
+- **GPU mode:** every pixel of the window in a corner's square (`area`) is drawn by the compositor itself, after the plain copy: effects mode 6, or mode 3 for glass (with the blur). The decorator's edge line (`Decorator::GetEdgeLine()`, ABI 2: colour and width; the R5 decorator returns its 1 px frame colour for the thin frame and the bordered look; none for a window without a line) is carried round the arc: it covers a pixel by `clamp(d + width + 0.5, 0, 1)`, fully up to the outer edge, so the content never shows through it. The result is blended over what lies below by the coverage, in linear light (a 2.2 power). The pixels the arc crosses (`edge`) do not hide what lies below (`covered`).
+- **The data:** a layer keeps all of it as one value, `layer_round` in `Compositor.cpp`, so the compose thread's snapshot and a closing ghost copy it whole.
+- **Shadow:** a round window gets the full soft shadow of the effect step (`window_shadow_extent()`), not the decorator's short one (Haiku's bordered look has 1 to 2 px). The shadow mask is the blur of the round shape, so it fades out round the corner by itself. The shadow is drawn under the arc too.
+- **Shared (zero-copy) views** are drawn over the corner pixels as well, so they keep their corners.
+- **Open and close animation (mode 4):** a round window is drawn as its bounding box with the four radii of its corners, anti-aliased (`auxStride` 1, radii in `shape[1]`).
+- **Limits:** the open animation uses the bounding box, so a tab's corners are approximated. After a switch from the GPU to the CPU mode in a session, a round window keeps its GPU regions (one step wider) until its next clipping rebuild. Radius at most 64.
+- **Review, 22 Nov 2026:** the first version took the line colour from the window's own pixels, drew the line as a symmetric ring and clipped the shadow to the bordered look's 1 to 2 px; and the compose thread's snapshot left the corner data out, so no corner was drawn round at all in QEMU. All four are replaced as above.
 
 ## Window buffer life cycle (decision 5)
 

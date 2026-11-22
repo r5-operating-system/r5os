@@ -1275,6 +1275,30 @@ Decorator::GetInputMargin(BRect* margin)
 }
 
 
+/*!	ABI 2: the outline with round corners. The default is none, so the
+	window keeps its square footprint, pixel for pixel.
+*/
+int32
+Decorator::GetOutline(window_outline_rect* rects, int32 maxCount)
+{
+	(void)rects;
+	(void)maxCount;
+	return 0;
+}
+
+
+/*!	ABI 2: the line along the outer edge, for the round corners. The
+	default is none.
+*/
+bool
+Decorator::GetEdgeLine(rgb_color* color, float* width)
+{
+	(void)color;
+	(void)width;
+	return false;
+}
+
+
 /*!	Whether \a where lies in the input margin, outside the border rect. */
 bool
 Decorator::InputMarginContains(BPoint where)

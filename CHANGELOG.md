@@ -7,6 +7,58 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-22 - Round window corners: the review fixes (edge line, soft shadow, the missing copy)
+
+Problem: in QEMU the owner found the round corners pixelated: the 1 px edge line stopped where the arc began, the shadow had a hard edge round the corner, and glass had a light ring on the arc. Two more rounds of changes (the line carried round the arc with a colour sampled from the window's pixels, a round reach for the shadow) did not help at the top corners, also with animations off. A second look (a review, read only) found the cause: `Compositor::_ComposeThread()` copies each layer field by field for the frame and left all the new corner fields out, so the corner pass never ran and every corner was the region's hard stepped cut. It also found that the sampled colour, a symmetric line ring that let the content through, and the bordered look's 1 to 2 px shadow would stay rough even after that fix.
+
+What changed (all points of the review):
+- `layer_round` in `Compositor.cpp`: the round outline of a layer as one value; the snapshot, the closing ghost and the change check copy or compare it whole.
+- Decorator ABI 2 also has `GetEdgeLine(rgb_color*, float*)`: the line along the outer edge. The R5 decorator returns its 1 px frame colour for the thin frame and the bordered look; the default is none. The compositor no longer reads window pixels for it.
+- `effects.comp`: the line covers a pixel by `clamp(d + width + 0.5, 0, 1)`, fully up to the outer edge, so the content does not show through; the edge is blended in linear light (a 2.2 power). Mode 4 (open and close animation) rounds with all four radii, anti-aliased.
+- A round window gets the full soft shadow of the effect step; the clipped round reach and its corner fade are removed.
+- Shared (zero-copy) views are drawn over the corner pixels too. A client radius rounds the decorator's border rectangle, not the footprint's bounding box (a tab beside it). The radius is compared as clamped (no rebuild at every call above 64). `Window` keeps the outline's regions and builds them only when the shape changes.
+- `compositor_shaders.h` regenerated; `kComposeSpirv` byte-identical. Docs: `docs/APP-SERVER-COMPOSITOR.md` ("The window outline", "Decorator hooks"), `docs/LIBR5.md`, R5Book `haiku-additions.html` and `appearance-effects.html`.
+
+Limits: Safe mode (Painter) keeps the stepped arc without the decorator's line along it. The open animation rounds the bounding box, so a tab's corners are approximated.
+
+Tested: built AMD64 with `scripts/build-locked.sh` from the worktree (`jam_exit=0`, `mesa_exit=0`, no failed target, no warning in the changed files), and again after merging `origin/main` (`jam_exit=0`, `mesa_exit=0`). QEMU (KVM, `-machine pc`, 2 CPUs, 2 GB, GTK window at 100 %, a private copy of that image, no other QEMU), 22 Nov 2026 about 21:13 guest time, animations on, the owner typing `r5-effects-test round 18 300`: the edge line runs round all four corners of each window (also the top corners that had none before), the arc is anti-aliased, the shadow is wide and soft round the corners, glass reaches into the corner with the line through it. The owner: "zo hoort het". Not done: the pixel compare mode for Default (R5) and Classic (Haiku), a resize or move of a round window, Safe mode with these fixes.
+
+Build fix found on the way: after the merge the apply stopped at `libr5power image regular anchor not found once`. `apply-r5ui.py` added `libr5admin.so` to the image lists again on a second apply in the same tree (other applies insert their libraries right after `libr5ui.so`, so its check for the pair failed), and the new `apply-power.py` needs that line once. `apply-r5ui.py` now checks the line itself; the duplicate in the shared WSL tree was removed under the build lock.
+
+## 2026-11-22 - The Be, Flat, Mac and Win decorators are no longer built
+
+Problem: R5 goes on with its own decorators (owner, 22 Nov 2026). The four Haiku decorators had R5 copies in `distro/` that every decorator ABI change has to rebuild, and they were not in the image (only `R5Decorator` is packaged).
+
+What changed: their `distro/desktop/src/add-ons/decorators/` copies are removed, `decorators/Jamfile` no longer includes them, and `distro/desktop/build/jam/packages/HaikuExtras` (a copy of Haiku's, SPDX snippet) no longer lists Be and Flat for `haiku_extras.hpkg`. Haiku's originals under `haiku/` are untouched. Default (R5) and the built-in Classic (Haiku) stay.
+
+Limits: a user who chose one of the four earlier gets the default decorator; that fallback was not tested. Old copies of these files in the shared WSL tree stay there but are no longer built.
+
+Tested: the jam of the entry above passed without the four add-ons (`jam_exit=0`); the QEMU boots of that entry (Lavapipe and Safe mode) ran with Default (R5) as the decorator. The fallback for a user who had chosen one of the four was not tested.
+
+## 2026-11-22 - Round window corners: the outline under Default (R5 Modern) and the round Deskbar
+
+Problem: the round decorator Default (R5 Modern) and the round Deskbar of Default (R5) both need a window that is not a rectangle. A decorator could only add pixels to the frame (`Window::GetFullRegion()` always held the whole frame), the content region was square, and the compose copied every window pixel opaque, with no coverage at an edge. Step 0 reports: `generated/STEP0-REPORT-R5-MODERN.md` and `generated/STEP0-REPORT-DESKBAR.md` (local). The owner chose to combine step 1 of both briefs.
+
+What changed:
+- Decorator ABI 1 to 2: `Decorator::GetOutline(window_outline_rect*, int32)` at the end of the R5 hooks, default 0 rectangles (square). `R5DecoratorAbiTest` exports nothing and stays refused.
+- New `distro/desktop/src/servers/app/WindowOutline.h` (MIT): one coverage formula for a corner circle, the cut region (corner pixels that are not the window's) and the edge region (pixels the arc crosses, GPU mode only).
+- `Window::GetOutline()` takes the decorator's outline, or the radius a program set; `GetFullRegion()` and the content region leave out the cut. Visible region, clipping, `WindowAt()` and the direct-window clip list follow from that. Content in a corner is clipped (owner choice).
+- CPU mode (Painter): a stepped arc, a pixel at least half covered is the window's.
+- Compositor: the edge stays out of what hides the windows below, out of the plain copy and out of the glass; effects mode 6 blends it by coverage over what lies below. The shadow is drawn under the arc. The open and close animation (mode 4) steps the corners of a round window. `compositor_shaders.h` regenerated with `scripts/gen-compositor-shaders.sh` (glslang 16.6.0); `kComposeSpirv` is byte-identical.
+- libr5ui: `BAppearanceKit::set_window_corner_radius(BWindow*, float)` at the end of `<WindowEffects.h>`, code `AS_R5_SET_WINDOW_CORNER_RADIUS` at the end of `ServerProtocol.h`. Only a team's own window. Nothing in `libbe`.
+- Docs: `docs/APP-SERVER-COMPOSITOR.md` ("Decorator hooks", new "The window outline"), `docs/LIBR5.md`, `docs/APPEARANCE-KIT.md`, R5Book `haiku-additions.html` (ABI 2, `GetOutline()`) and `appearance-effects.html` (the new call, an example).
+
+Limits: no decorator returns an outline yet and nothing calls the new libr5ui function, so every window looks as before; Default (R5 Modern) and the round Deskbar are later steps. The arc pixels of glass are blended opaque, without the blur. After a switch from the GPU to the CPU mode in a session, a round window keeps its GPU regions (one step wider) until its next clipping rebuild. Radius at most 64.
+
+Test tool: `r5-effects-test round [radius] [seconds]` opens three bordered windows (the kind Deskbar uses) with `set_window_corner_radius()`: colour bars to every edge with a moving bar through the bottom corners, a text view with both scroll bars meeting in the bottom-right corner, and a glass window. Without a radius it uses 18 scaled with the font size; `round 0` opens them square for the compare.
+
+Tested: built AMD64 with `scripts/build-locked.sh` from the worktree (`jam_exit=0`, `mesa_exit=0`, 10420 targets, `r5-os.image` written, no failed target; the missing-header lines of the image translators are not from this change and fail no target). QEMU (KVM, `-machine pc`, 2 CPUs, 2 GB, GTK window, a private copy at `/home/nickr/r5os/eager-bell/round.image`, no other QEMU running, `scripts/run-qemu-r5.sh` not used), 22 Nov 2026, about 19:55 to 20:05 guest time, the owner typing in the guest:
+- Lavapipe (`gpu compositor on lavapipe: no render node`): `r5-effects-test round` showed all three windows with round corners, the arc blended with what lies behind, the desktop in the cut corners, the scroll-bar corner clipped, the shadow under the arc and the glass up to the round corner. Correction, same day: the arc was not blended. A review found that the compose thread's copy of the layers left the corner data out, so the corner pass never ran; what showed was the region cut alone, a hard stepped arc (see the entry above). `round 0` opened the same windows square. Terminal (Default (R5)) and Deskbar looked as before (by eye, not the compare mode).
+- Safe mode from the boot menu (`gpu compositor off: safe mode`): the same command showed stepped corners with the desktop behind, no shadow, no glass.
+- The syslog has no crash and no `decorator ... refused`: the R5 decorator loaded with ABI 2. `R5DecoratorAbiTest` is not packaged, so its refusal was not seen in this boot.
+- Seen: a bordered window's 1 px line runs only along the straight edges, not along the arc (its decorator does not know the program's radius). For later, with the Deskbar's edge line.
+Not done: the pixel compare mode (`gpu_debug`) for Default (R5) and Classic (Haiku), and a resize or move of a round window. Screenshots: `generated/round-corners-qemu/` in the worktree (local).
+
 ## 2026-11-22 - Power after stick 74: no brightness hang on DCN, the right AC state, the battery in the Deskbar
 
 Problem (stick 74, 5625U, `generated/boot-5625u-74/` in the stick worktree):

@@ -402,6 +402,14 @@ enum {
 	AS_R5_GPU_DRAWS_TEXT,
 // SPDX-SnippetEnd
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// The round outline of a program's own window (libr5ui,
+	// set_window_corner_radius(); docs/APP-SERVER-COMPOSITOR.md).
+	AS_R5_SET_WINDOW_CORNER_RADIUS,
+// SPDX-SnippetEnd
+
 	AS_LAST_CODE
 };
 
