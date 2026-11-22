@@ -24,6 +24,8 @@ Tested: `scripts/build-locked.sh` jam 0, every Jam line once after apply. Host c
 
 Limits: no family has booted on hardware with this change. Owner tests proposed: the 5625U still logs `updated from revision 0xa50000f to 0xa500012` (or `already at revision`); the X1 Carbon Gen 8 logs `ucode_load: …intel-ucode/06-8e-0c` and `updated from revision … to …` on CPU 0. If the X1's BIOS is newer than the file, the log shows `no update found (revision …)`: that proves the loader, not the update. QEMU and VirtualBox apply nothing (hypervisor). No SHA-256 check of AMD patches as Linux 6.14 and newer do; the files are taken unmodified from linux-firmware.
 
+Tested on the 5625U (stick 75, 22 Nov 2026, branch `r5/stick-75` = main + #4499 + #4496 + this PR; `generated/boot-5625u-75/`): `ucode_load: system/non-packaged/data/firmware/amd-ucode/microcode_amd_fam19h.bin`, then CPUs 3, 4, 6, 8 and 10 `updated from revision 0xa50000f to 0xa500012` and CPUs 1, 2, 5, 7, 9 and 11 `already at revision 0xa500012` (the second thread of each core). CPU 0 loads before the syslog starts; its sibling CPU 1 reports the new revision. The stick planted `syslog_buffer_size 262144`; with the default 64 KiB, stick 74 lost these lines. The X1 Carbon was not booted on this stick.
+
 ## 2026-11-22 - README: highlights up front, and owner results on the 5625U
 
 Problem: the README only told what R5 can do after several long sections, still listed Skia drawing, Wi-Fi 6, WPA3 and the AMD64 CPU work as coming next, and showed build 10064.
