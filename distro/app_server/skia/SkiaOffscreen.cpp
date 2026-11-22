@@ -173,6 +173,9 @@ skia_warm_up()
 	}
 
 	bigtime_t start = system_time();
+	int64 profBefore[SkiaGpu::kProfileCount];
+	if (inParts && SkiaGpu::Debug())
+		SkiaGpu::PeekProfile(profBefore);
 	BReference<UtilityBitmap> bitmap(new(std::nothrow) UtilityBitmap(
 		BRect(0, 0, 63, 63), B_RGBA32, 0), true);
 	if (bitmap == NULL) {
@@ -277,6 +280,32 @@ skia_warm_up()
 			" files (%" B_PRIu64 " KB) after %" B_PRId32 " files (%" B_PRIu64
 			" KB)\n", cacheFilesBefore, cacheBytesBefore / 1024,
 			cacheFilesAfter, cacheBytesAfter / 1024);
+		if (SkiaGpu::Debug()) {
+			int64 profAfter[SkiaGpu::kProfileCount];
+			SkiaGpu::PeekProfile(profAfter);
+			int64 dPipes = profAfter[SkiaGpu::kCountPipelines]
+				- profBefore[SkiaGpu::kCountPipelines];
+			int64 dPipeMs = (profAfter[SkiaGpu::kTimePipelines]
+				- profBefore[SkiaGpu::kTimePipelines]) / 1000;
+			int64 dShad = profAfter[SkiaGpu::kCountShaders]
+				- profBefore[SkiaGpu::kCountShaders];
+			int64 dShadMs = (profAfter[SkiaGpu::kTimeShaders]
+				- profBefore[SkiaGpu::kTimeShaders]) / 1000;
+			int64 dSnapMs = (profAfter[SkiaGpu::kTimeSnap]
+				- profBefore[SkiaGpu::kTimeSnap]) / 1000;
+			int64 dFenceMs = (profAfter[SkiaGpu::kTimeFenceWait]
+				- profBefore[SkiaGpu::kTimeFenceWait]) / 1000;
+			fprintf(stderr, "app_server: gpu draw warm-up detail"
+				" pipelines %" B_PRId64 " (%" B_PRId64 " ms)"
+				" shaders %" B_PRId64 " (%" B_PRId64 " ms)"
+				" snap %" B_PRId64 " ms fence_wait %" B_PRId64 " ms\n",
+				dPipes, dPipeMs, dShad, dShadMs, dSnapMs, dFenceMs);
+			syslog(LOG_INFO, "app_server: gpu draw warm-up detail"
+				" pipelines %" B_PRId64 " (%" B_PRId64 " ms)"
+				" shaders %" B_PRId64 " (%" B_PRId64 " ms)"
+				" snap %" B_PRId64 " ms fence_wait %" B_PRId64 " ms\n",
+				dPipes, dPipeMs, dShad, dShadMs, dSnapMs, dFenceMs);
+		}
 	}
 	if (finishStatus != B_OK) {
 		// M13 step 4: a timeout is late, not failed (M11 decision 14)

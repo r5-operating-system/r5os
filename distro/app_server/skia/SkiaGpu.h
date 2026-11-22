@@ -197,10 +197,32 @@ public:
 		kCountCoverage,		// coverage images drawn for the R5 shader
 		kCountUpload,		// textures made from CPU memory
 		kCountRuns,			// RunWork() calls with work
+		// Perf round 2 (gpu_debug only): split snap and deliver
+		kCountTargets,
+		kCountPipelines,
+		kTimePipelines,
+		kCountComputePipelines,
+		kTimeComputePipelines,
+		kCountShaders,
+		kTimeShaders,
+		kCountAllocMem,
+		kTimeAllocMem,
+		kTimeFenceWait,
+		kTimeAsyncCheck,
+		kTimeUpload,
+		kCountText,
+		kTimeText,
+		kCountPath,
+		kTimePath,
+		kCountBitmap,
+		kTimeBitmap,
 		kProfileCount
 	};
+	static	void				SetDebug(bool debug);
+	static	bool				Debug();
 	static	void				Profile(int which, int64 value = 1);
 			void				TakeProfile(int64 values[kProfileCount]);
+	static	void				PeekProfile(int64 values[kProfileCount]);
 
 	// gpu_debug: draw times, one median line per 10 s.
 			void				AddDrawSample(bigtime_t time);

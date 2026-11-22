@@ -1003,6 +1003,7 @@ Compositor::_InitSkia(bool forceFail)
 	}
 	if (samples != 4)
 		log_line("lavapipe msaa %d (setting)", samples);
+	SkiaGpu::SetDebug(fDebug);
 	fSkia = SkiaGpu::Create(device, forceFail, samples, &reason);
 	if (fSkia == NULL) {
 		log_line("gpu draw off: %s", reason);
@@ -6553,6 +6554,35 @@ Compositor::_Report()
 			" direct %" B_PRId64 " upload %" B_PRId64,
 			p[SkiaGpu::kCountComposite], p[SkiaGpu::kCountCoverage],
 			p[SkiaGpu::kCountDirect], p[SkiaGpu::kCountUpload]);
+		int64 snapOther = p[SkiaGpu::kTimeSnap] - p[SkiaGpu::kTimePipelines]
+			- p[SkiaGpu::kTimeComputePipelines] - p[SkiaGpu::kTimeShaders];
+		if (snapOther < 0)
+			snapOther = 0;
+		log_line("draw profile snap_parts targets %" B_PRId64
+			" pipelines %" B_PRId64 " (%" B_PRId64 " us)"
+			" compute %" B_PRId64 " (%" B_PRId64 " us)"
+			" shaders %" B_PRId64 " (%" B_PRId64 " us)"
+			" alloc %" B_PRId64 " (%" B_PRId64 " us)"
+			" other %" B_PRId64 " us",
+			p[SkiaGpu::kCountTargets],
+			p[SkiaGpu::kCountPipelines], p[SkiaGpu::kTimePipelines],
+			p[SkiaGpu::kCountComputePipelines],
+			p[SkiaGpu::kTimeComputePipelines],
+			p[SkiaGpu::kCountShaders], p[SkiaGpu::kTimeShaders],
+			p[SkiaGpu::kCountAllocMem], p[SkiaGpu::kTimeAllocMem],
+			snapOther);
+		log_line("draw profile ops text %" B_PRId64 " (%" B_PRId64 " us)"
+			" path %" B_PRId64 " (%" B_PRId64 " us)"
+			" bitmap %" B_PRId64 " (%" B_PRId64 " us)"
+			" upload %" B_PRId64 " (%" B_PRId64 " us)",
+			p[SkiaGpu::kCountText], p[SkiaGpu::kTimeText],
+			p[SkiaGpu::kCountPath], p[SkiaGpu::kTimePath],
+			p[SkiaGpu::kCountBitmap], p[SkiaGpu::kTimeBitmap],
+			p[SkiaGpu::kCountUpload], p[SkiaGpu::kTimeUpload]);
+		log_line("draw profile deliver_parts fence_wait %" B_PRId64
+			" us async_check %" B_PRId64 " us",
+			p[SkiaGpu::kTimeFenceWait] / runs,
+			p[SkiaGpu::kTimeAsyncCheck] / runs);
 	} else {
 		bigtime_t drawMedian = 0;
 		int32 drawCount = 0;

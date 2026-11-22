@@ -142,6 +142,71 @@ locked_queue_bind_sparse(VkQueue queue, uint32_t count,
 }
 
 
+static bool sDebugProfile = false;
+static PFN_vkCreateGraphicsPipelines sRawCreateGraphicsPipelines;
+static PFN_vkCreateComputePipelines sRawCreateComputePipelines;
+static PFN_vkCreateShaderModule sRawCreateShaderModule;
+static PFN_vkAllocateMemory sRawVulkanAllocateMemory;
+
+
+static VkResult VKAPI_CALL
+profiled_create_graphics_pipelines(VkDevice device,
+	VkPipelineCache pipelineCache, uint32_t createInfoCount,
+	const VkGraphicsPipelineCreateInfo* pCreateInfos,
+	const VkAllocationCallbacks* pAllocator, VkPipeline* pPipelines)
+{
+	bigtime_t start = system_time();
+	VkResult result = sRawCreateGraphicsPipelines(device, pipelineCache,
+		createInfoCount, pCreateInfos, pAllocator, pPipelines);
+	SkiaGpu::Profile(SkiaGpu::kCountPipelines, createInfoCount);
+	SkiaGpu::Profile(SkiaGpu::kTimePipelines, system_time() - start);
+	return result;
+}
+
+
+static VkResult VKAPI_CALL
+profiled_create_compute_pipelines(VkDevice device,
+	VkPipelineCache pipelineCache, uint32_t createInfoCount,
+	const VkComputePipelineCreateInfo* pCreateInfos,
+	const VkAllocationCallbacks* pAllocator, VkPipeline* pPipelines)
+{
+	bigtime_t start = system_time();
+	VkResult result = sRawCreateComputePipelines(device, pipelineCache,
+		createInfoCount, pCreateInfos, pAllocator, pPipelines);
+	SkiaGpu::Profile(SkiaGpu::kCountComputePipelines, createInfoCount);
+	SkiaGpu::Profile(SkiaGpu::kTimeComputePipelines, system_time() - start);
+	return result;
+}
+
+
+static VkResult VKAPI_CALL
+profiled_create_shader_module(VkDevice device,
+	const VkShaderModuleCreateInfo* pCreateInfo,
+	const VkAllocationCallbacks* pAllocator, VkShaderModule* pShaderModule)
+{
+	bigtime_t start = system_time();
+	VkResult result = sRawCreateShaderModule(device, pCreateInfo, pAllocator,
+		pShaderModule);
+	SkiaGpu::Profile(SkiaGpu::kCountShaders, 1);
+	SkiaGpu::Profile(SkiaGpu::kTimeShaders, system_time() - start);
+	return result;
+}
+
+
+static VkResult VKAPI_CALL
+profiled_allocate_memory(VkDevice device,
+	const VkMemoryAllocateInfo* pAllocateInfo,
+	const VkAllocationCallbacks* pAllocator, VkDeviceMemory* pMemory)
+{
+	bigtime_t start = system_time();
+	VkResult result = sRawVulkanAllocateMemory(device, pAllocateInfo,
+		pAllocator, pMemory);
+	SkiaGpu::Profile(SkiaGpu::kCountAllocMem, 1);
+	SkiaGpu::Profile(SkiaGpu::kTimeAllocMem, system_time() - start);
+	return result;
+}
+
+
 static PFN_vkVoidFunction
 get_proc(const char* name, VkInstance instance, VkDevice device)
 {
@@ -165,6 +230,24 @@ get_proc(const char* name, VkInstance instance, VkDevice device)
 	if (strcmp(name, "vkQueueBindSparse") == 0) {
 		sQueueBindSparse = (PFN_vkQueueBindSparse)function;
 		return (PFN_vkVoidFunction)locked_queue_bind_sparse;
+	}
+	if (sDebugProfile) {
+		if (strcmp(name, "vkCreateGraphicsPipelines") == 0) {
+			sRawCreateGraphicsPipelines = (PFN_vkCreateGraphicsPipelines)function;
+			return (PFN_vkVoidFunction)profiled_create_graphics_pipelines;
+		}
+		if (strcmp(name, "vkCreateComputePipelines") == 0) {
+			sRawCreateComputePipelines = (PFN_vkCreateComputePipelines)function;
+			return (PFN_vkVoidFunction)profiled_create_compute_pipelines;
+		}
+		if (strcmp(name, "vkCreateShaderModule") == 0) {
+			sRawCreateShaderModule = (PFN_vkCreateShaderModule)function;
+			return (PFN_vkVoidFunction)profiled_create_shader_module;
+		}
+		if (strcmp(name, "vkAllocateMemory") == 0) {
+			sRawVulkanAllocateMemory = (PFN_vkAllocateMemory)function;
+			return (PFN_vkVoidFunction)profiled_allocate_memory;
+		}
 	}
 	return function;
 }
@@ -692,6 +775,20 @@ static int64 sProfile[SkiaGpu::kProfileCount];
 
 
 /*static*/ void
+SkiaGpu::SetDebug(bool debug)
+{
+	sDebugProfile = debug;
+}
+
+
+/*static*/ bool
+SkiaGpu::Debug()
+{
+	return sDebugProfile;
+}
+
+
+/*static*/ void
 SkiaGpu::Profile(int which, int64 value)
 {
 	if (which >= 0 && which < kProfileCount)
@@ -704,6 +801,14 @@ SkiaGpu::TakeProfile(int64 values[kProfileCount])
 {
 	for (int i = 0; i < kProfileCount; i++)
 		values[i] = atomic_get_and_set64(&sProfile[i], 0);
+}
+
+
+/*static*/ void
+SkiaGpu::PeekProfile(int64 values[kProfileCount])
+{
+	for (int i = 0; i < kProfileCount; i++)
+		values[i] = atomic_get64(&sProfile[i]);
 }
 
 
@@ -1125,6 +1230,7 @@ SkiaGpu::RunWork(const char** _reason)
 	bigtime_t profileSnapped = system_time();
 	if (!items.empty()) {
 		Profile(kCountRuns);
+		Profile(kCountTargets, (int64)items.size());
 		Profile(kTimeSnap, profileSnapped - profileStart);
 	}
 	bool ok = true;
@@ -1323,8 +1429,14 @@ SkiaGpu::RunWork(const char** _reason)
 			}
 			// read_done() copies into the bitmaps from here (DestroyContext()
 			// waits for fWaitingUnlocked, so the context is still there)
+			bigtime_t fenceDone = system_time();
+			if (sDebugProfile)
+				Profile(kTimeFenceWait, fenceDone - submitTime);
 			context->checkAsyncWorkCompletion();
-			Profile(kTimeDeliver, system_time() - submitTime);
+			bigtime_t deliverDone = system_time();
+			if (sDebugProfile)
+				Profile(kTimeAsyncCheck, deliverDone - fenceDone);
+			Profile(kTimeDeliver, deliverDone - submitTime);
 		}
 		if (context->isDeviceLost()) {
 			*_reason = "device lost";

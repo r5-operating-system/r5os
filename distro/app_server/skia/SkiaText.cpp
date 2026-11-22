@@ -217,6 +217,17 @@ SkiaPainter::DrawString(const char* string, uint32 length, BPoint baseLine,
 		|| fTarget == NULL || !fTarget->HasSurface())
 		return BRect(0, 0, -1, -1);
 
+	struct TextProf {
+		bigtime_t start;
+		TextProf() : start(SkiaGpu::Debug() ? system_time() : 0) {}
+		~TextProf() {
+			if (start != 0) {
+				SkiaGpu::Profile(SkiaGpu::kCountText);
+				SkiaGpu::Profile(SkiaGpu::kTimeText, system_time() - start);
+			}
+		}
+	} textProf;
+
 	sk_sp<SkTypeface> typeface = typeface_for(fFont);
 	if (typeface == nullptr)
 		return BRect(0, 0, -1, -1);
