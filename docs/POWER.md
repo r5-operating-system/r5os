@@ -102,6 +102,7 @@ The service is Haiku's own `power_daemon` (`src/servers/power/`, MIT): the launc
 - Brightness uses Haiku's existing call, `BScreen::SetBrightness()` and `GetBrightness()`, which reaches the accelerant hooks `B_SET_BRIGHTNESS` and `B_GET_BRIGHTNESS`. There is no new R5 GPU interface call for it.
 - The page and the service call `BScreen`. The service keeps the value for dimming and puts it back after a wake.
 - Where the accelerant has no hook (the firmware picture, VESA), the service tries ACPI `_BCM`. Where neither exists, the slider is hidden.
+- An accelerant reports a brightness only where its path works. radeon_hd's AtomBIOS backlight path is DCE only, for an attached LVDS or eDP panel with a mode set; on DCN (Renoir and later) it reports none, so the 5625U has no slider until step 3 (stick 74: the DCE path hung the desktop and every later start). app_server sets a brightness only when the accelerant can read one, and turns brightness off for the session after a failing call or one slower than a second, so the restore at start cannot stop app_server.
 - Brightness is not part of the machine file, and it needs no lock.
 
 ### The Power Kit: `libr5power.so`

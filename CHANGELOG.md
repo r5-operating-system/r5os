@@ -7,6 +7,31 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-22 - Power after stick 74: no brightness hang on DCN, the right AC state, the battery in the Deskbar
+
+Problem (stick 74, 5625U, `generated/boot-5625u-74/` in the stick worktree):
+- Moving the brightness slider froze the desktop for about 30 s each time: `radeon_set_brightness (0.590000)`, `brightness level = ffffffff`, `transmitter_dig_setup: connector 0, pixelClock: 0`, `AtomBIOS stuck in loop for more then 5 seconds`, `parser was aborted in table DIG1TransmitterControl (UNIPHY)`. Every later GPU start hung at the boot screen after `radeon_set_brightness (1.000000)`.
+- Cause (sure: the log shows each step, and the code has no DCN check there): `radeon_set_brightness()` is Haiku's DCE path. On DCN it read and wrote the DCE scratch register `0x172c` (it read `ffffffff`, not a DCE scratch value) and ran AtomBIOS `DIG1TransmitterControl` twice per call with pixel clock 0 (the DCN path keeps the firmware scanout and never sets a PLL), and each call ran into the AtomBIOS 5 s loop guard. `Desktop.cpp` ("Restore brightness") calls `SetBrightness()` at every start when a stored screen configuration exists, and a configuration without a brightness reads as 1.0, so the restore ran into the same call with the Desktop not yet up.
+- `power_daemon: profile 1 (on battery)` at every start with the charger in; pulling the charger changed nothing; the Power page did not follow. Cause (sure: Haiku's driver code shows it): `acpi_ac` set `last_status` to 0 when it started and only read `_PSR` on a notification, so every reader got "offline" until the first change. The daemon, `BPowerRoster::IsOnAC()` and the page's profile line all read that device.
+- No battery in the Deskbar: R5's first-login script adds no Deskbar items, and PowerStatus is not started anywhere.
+
+What changed:
+- `radeon_hd` (`mode.cpp`, R5 snippets): `radeon_set_brightness()` and `radeon_get_brightness()` return `B_NOT_SUPPORTED` unless the chip is DCE, display 0 is attached, its connector is LVDS or eDP, and a mode with a pixel clock is set. The Power page already hides the slider when `GetBrightness()` fails. Chosen path for DCN: report no brightness now. ACPI `_BCM`/`_BCL` stays in Power step 3 as planned (it is the general fallback for every GPU, but firmware that sees a Windows 8 or later `_OSI` often leaves `_BCM` to the GPU driver, so it may not work on the 5625U either). A DCN backlight path is GPU display work that needs its own clean-room source (no Linux amdgpu display code), so it is not started here.
+- `app_server` (`AccelerantHWInterface.cpp`, R5 snippets): `SetBrightness()` only calls the accelerant when its `GetBrightness()` works, skips a value that is already set, and after a call that fails or takes more than 1 s turns brightness off for the session (`app_server: brightness off for this session (...)` in the syslog). So the restore at start can cost at most one slow call on any GPU, and a later slider move costs none.
+- `acpi_ac` copied into `distro/kernel` (Haiku, MIT; R5 snippets; in `scripts/apply-kernel-bugs.py`): reads `_PSR` when the driver starts and on every read. The `acpi_ac: status` line is logged only when the state changes, since the daemon reads every 5 s.
+- `default_deskbar_items.sh` (first sign-in, once per person): starts `PowerStatus --deskbar` when `/dev/power/acpi_battery` has an entry. PowerStatus adds its item without asking, and quits quietly without a battery or when the item is there. A person who removes it keeps it removed. What's new of build 10067 says so.
+- Checked and left: the Power page does follow AC and battery changes: `libr5power.so`'s watcher reads both every 2 s and sends `B_POWER_AC_CHANGED` and `B_POWER_BATTERY_CHANGED`. With `acpi_ac` stuck at 0, the AC change it saw was wrong; the battery line follows `_BST`, which the driver reads fresh.
+
+Limits:
+- The 5625U has no brightness control until step 3 (`_BCM`) or a DCN backlight path. intel_extreme and DCE radeon keep their paths, with the app_server guard.
+- A user who already signed in once (an existing home) does not get the Deskbar battery: the first-login script has run for them. A new stick image has a new home.
+- Whether `_BST` follows the charger at once on the 5625U is not shown; the stick boot below shows it.
+
+Tested (22 Nov 2026):
+- Compiled: `scripts/build-locked.sh` on `r5/power-step2` (merged with `origin/main`), `jam_exit=0`, `mesa_exit=0`; `mode.o`, `AccelerantHWInterface.o` and `acpi_ac` were rebuilt from the `distro/` copies.
+- QEMU (KVM, `-cpu host,+smap,+smep`, `-vga std`, own copy of the image): first start and Sign in, desktop. Settings, System, Power: QEMU's VESA accelerant reports a brightness, so the slider shows at 100 %. Moved it to about 40 %: no freeze, Revert turned on. Restart from the Deskbar: the start with the stored brightness reached Sign in and the desktop. No battery item in the Deskbar (QEMU has no battery).
+- Not shown in QEMU: the DCN path (QEMU has no radeon_hd), `acpi_ac` (QEMU's `pc` machine has no `ACPI0003`), and PowerStatus in the Deskbar with a battery. These need the 5625U.
+
 ## 2026-11-22 - Power, step 2: profiles, the power service and the Power page (build 10067)
 
 Problem: R5 had only the scheduler mode (two states, no settings file) to steer the processor, no AMD path without the CPPC MSR, a power button that shut down without asking, no display timeout, and battery reading private to PowerStatus (`docs/POWER.md`, section 1).
