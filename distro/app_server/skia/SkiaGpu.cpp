@@ -19,10 +19,13 @@
 #include <FindDirectory.h>
 
 #include <algorithm>
+#include <deque>
+#include <functional>
 #include <memory>
 #include <vector>
 
 #include "include/core/SkData.h"
+#include "include/core/SkExecutor.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkMilestone.h"
 #include "include/core/SkSurface.h"
@@ -483,10 +486,122 @@ private:
 };
 
 
+/*!	Perf round 2: parallel Graphite pipeline compilation on Lavapipe.
+	SkSL->SPIR-V and Lavapipe's SPIR-V->NIR->optimize stages run lock-free
+	across worker threads instead of serialising on the draw thread.
+*/
+class PipelineExecutor : public SkExecutor {
+public:
+	PipelineExecutor(int32 threadCount)
+		:
+		fLock("skia pipeline executor"),
+		fSem(create_sem(0, "skia pipeline work")),
+		fQuit(false)
+	{
+		if (fSem < 0)
+			return;
+		for (int32 i = 0; i < threadCount; i++) {
+			char name[32];
+			snprintf(name, sizeof(name), "skia compile %" B_PRId32, i);
+			thread_id tid = spawn_thread(_Worker, name, B_NORMAL_PRIORITY,
+				this);
+			if (tid >= 0) {
+				fThreads.push_back(tid);
+				resume_thread(tid);
+			}
+		}
+	}
+
+	~PipelineExecutor() override
+	{
+		{
+			BAutolock _(fLock);
+			fQuit = true;
+		}
+		if (fSem >= 0 && !fThreads.empty())
+			release_sem_etc(fSem, (int32)fThreads.size(), 0);
+		for (size_t i = 0; i < fThreads.size(); i++) {
+			status_t result;
+			wait_for_thread(fThreads[i], &result);
+		}
+		if (fSem >= 0)
+			delete_sem(fSem);
+	}
+
+	bool Ready() const { return fSem >= 0 && !fThreads.empty(); }
+	int32 ThreadCount() const { return (int32)fThreads.size(); }
+
+	void add(std::function<void()> work) override
+	{
+		{
+			BAutolock _(fLock);
+			if (fQuit) {
+				work();
+				return;
+			}
+			fQueue.push_back(std::move(work));
+		}
+		release_sem_etc(fSem, 1, B_DO_NOT_RESCHEDULE);
+	}
+
+	void borrow() override
+	{
+		std::function<void()> work;
+		{
+			BAutolock _(fLock);
+			if (fQueue.empty())
+				return;
+			work = std::move(fQueue.front());
+			fQueue.pop_front();
+		}
+		if (work)
+			work();
+	}
+
+private:
+	static status_t _Worker(void* data)
+	{
+		((PipelineExecutor*)data)->_Run();
+		return B_OK;
+	}
+
+	void _Run()
+	{
+		while (true) {
+			status_t status = acquire_sem(fSem);
+			if (status == B_INTERRUPTED)
+				continue;
+			if (status != B_OK)
+				break;
+			std::function<void()> work;
+			{
+				BAutolock _(fLock);
+				if (!fQueue.empty()) {
+					work = std::move(fQueue.front());
+					fQueue.pop_front();
+				} else if (fQuit) {
+					break;
+				}
+			}
+			if (work)
+				work();
+		}
+	}
+
+	BLocker								fLock;
+	sem_id								fSem;
+	bool								fQuit;
+	std::deque<std::function<void()>>	fQueue;
+	std::vector<thread_id>				fThreads;
+};
+
+
 struct SkiaBackend {
 	skgpu::VulkanExtensions			extensions;
 	VkPhysicalDeviceFeatures2		features;
 	skgpu::VulkanBackendContext		backend;
+	// Perf round 2: outlives the Graphite context (ContextOptions::fExecutor)
+	std::unique_ptr<PipelineExecutor> executor;
 	// M13 step 2: outlives the context (ContextOptions)
 	std::unique_ptr<PipelineStorage> pipelines;
 };
@@ -749,6 +864,26 @@ SkiaGpu::Create(const skia_vulkan_device& device, bool forceFail,
 		backend->pipelines.reset(new(std::nothrow) PipelineStorage(
 			properties));
 		options.fPersistentPipelineStorage = backend->pipelines.get();
+		if (gpu->fOnCpu) {
+			// Perf round 2 (Lavapipe only; RADV untouched):
+			// 1. RunWork() always inserts each Recorder's Recordings in strict
+			//    FIFO order, so Graphite can skip per-snap cache flushes.
+			options.fRequireOrderedRecordings = true;
+			// 2. Compile Skia pipelines in parallel across CPU cores so
+			//    SkSL->SPIR-V and Lavapipe SPIR-V->NIR->optimize do not
+			//    serialise on the draw thread.
+			system_info sysInfo;
+			int32 cpus = get_system_info(&sysInfo) == B_OK
+				? (int32)sysInfo.cpu_count : 2;
+			int32 workers = std::min((int32)4, std::max((int32)2, cpus / 2));
+			backend->executor.reset(new(std::nothrow) PipelineExecutor(workers));
+			if (backend->executor && backend->executor->Ready()) {
+				options.fExecutor = backend->executor.get();
+				syslog(LOG_INFO, "app_server: lavapipe pipeline executor "
+					"%" B_PRId32 " threads (ordered recordings)\n",
+					backend->executor->ThreadCount());
+			}
+		}
 	}
 
 	// Q3: curved shapes on the GPU with 4x MSAA, no CPU path atlas
