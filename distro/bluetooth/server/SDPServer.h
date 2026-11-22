@@ -25,6 +25,11 @@ private:
 
         thread_id           fThreadID;
 		int                 fServerSocket;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		int32               fClientSocket;
+// SPDX-SnippetEnd
 
         bool                fIsShuttingDown;
 };

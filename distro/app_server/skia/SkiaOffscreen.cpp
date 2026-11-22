@@ -8,10 +8,13 @@
 
 #include "SkiaOffscreen.h"
 
+#include <dirent.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <syslog.h>
 
+#include <FindDirectory.h>
 #include <OS.h>
 
 #include <driver_settings.h>
@@ -117,48 +120,75 @@ warm_up_settle()
 }
 
 
+static void
+measure_mesa_cache(const char* path, int32& _files, uint64& _bytes)
+{
+	DIR* dir = opendir(path);
+	if (dir == NULL)
+		return;
+	struct dirent* ent;
+	while ((ent = readdir(dir)) != NULL) {
+		if (ent->d_name[0] == '.'
+			&& (ent->d_name[1] == '\0'
+				|| (ent->d_name[1] == '.' && ent->d_name[2] == '\0')))
+			continue;
+		char child[B_PATH_NAME_LENGTH];
+		snprintf(child, sizeof(child), "%s/%s", path, ent->d_name);
+		struct stat st;
+		if (lstat(child, &st) != 0)
+			continue;
+		if (S_ISDIR(st.st_mode))
+			measure_mesa_cache(child, _files, _bytes);
+		else if (S_ISREG(st.st_mode)) {
+			_files++;
+			_bytes += (uint64)st.st_size;
+		}
+	}
+	closedir(dir);
+}
+
+
 void
 skia_warm_up()
 {
 	warm_up_settle();
 
-	// M13 step 4: on Lavapipe the warm-up competed with the first real
-	// drawing (5625U stick 3: a run of 19.5 s, and the warm-up ran into two
-	// Finish() timeouts, 10160 ms). There it starts after the first run
-	// that drew a window, or after 30 s without one.
-	// After stick 4 (10448 ms, the same two timeouts): the cost is the
-	// warm-up's own work, Lavapipe compiling its shaders while it runs
-	// (two runs of 9.1 s each on the GPU). So on Lavapipe it is drawn in
-	// parts, one Finish() per drawing mode, each waiting up to 30 s: a
-	// window's drawing waits for one part at most, not for all of it.
+	// On Lavapipe, precompile the common Skia shaders immediately while the
+	// compositor holds the pulsing boot splash (lavapipe-warmup-next), in 8
+	// parts so any window draw waits for one part at most. Measure the Mesa
+	// disk shader cache before and after warm-up. RADV is unchanged.
 	SkiaGpu* gpu = SkiaGpu::Current();
 	bool inParts = gpu != NULL && gpu->OnCpu();
+	char mesaCacheDir[B_PATH_NAME_LENGTH];
+	mesaCacheDir[0] = '\0';
+	int32 cacheFilesBefore = 0;
+	uint64 cacheBytesBefore = 0;
 	if (inParts) {
-		bigtime_t waitStart = system_time();
-		while (system_time() - waitStart < 30000000) {
-			gpu = SkiaGpu::Current();
-			if (gpu == NULL || gpu->IsShutDown() || gpu->WindowRunDone())
-				break;
-			snooze(100000);
+		if (find_directory(B_SYSTEM_CACHE_DIRECTORY, -1, false, mesaCacheDir,
+				sizeof(mesaCacheDir)) == B_OK) {
+			strlcat(mesaCacheDir, "/app_server/mesa", sizeof(mesaCacheDir));
+			measure_mesa_cache(mesaCacheDir, cacheFilesBefore,
+				cacheBytesBefore);
 		}
-		bigtime_t waited = (system_time() - waitStart) / 1000;
-		fprintf(stderr, "app_server: gpu draw warm up after %" B_PRId64
-			" ms (lavapipe)\n", waited);
-		syslog(LOG_INFO, "app_server: gpu draw warm up after %" B_PRId64
-			" ms (lavapipe)\n", waited);
 	}
 
 	bigtime_t start = system_time();
 	BReference<UtilityBitmap> bitmap(new(std::nothrow) UtilityBitmap(
 		BRect(0, 0, 63, 63), B_RGBA32, 0), true);
-	if (bitmap == NULL)
+	if (bitmap == NULL) {
+		if (gpu != NULL)
+			gpu->SetWarmUpDone();
 		return;
+	}
 	BitmapHWInterface lock(bitmap);
 	lock.Initialize();
 	ObjectDeleter<DrawingEngine> engine(skia_offscreen_engine(&lock, bitmap,
 		IntRect(0, 0, 63, 63)));
-	if (!engine.IsSet())
+	if (!engine.IsSet()) {
+		if (gpu != NULL)
+			gpu->SetWarmUpDone();
 		return;
+	}
 	BReference<UtilityBitmap> image(new(std::nothrow) UtilityBitmap(
 		BRect(0, 0, 7, 7), B_RGBA32, 0), true);
 	BRegion clip(BRect(0, 0, 63, 63));
@@ -173,6 +203,7 @@ skia_warm_up()
 	const bigtime_t kPartTimeout = 30000000;
 	int32 parts = 0;
 	bigtime_t longestPart = 0;
+	bigtime_t partMs[8] = {};
 	for (int pass = 0; pass < 2; pass++) {
 		// pass 0: an opaque image (Skia's own blending), 1: not opaque
 		static_cast<SkiaDrawingEngine*>(engine.Get())->SetOpaque(pass == 0);
@@ -201,7 +232,10 @@ skia_warm_up()
 				bigtime_t partStart = system_time();
 				status_t status = static_cast<SkiaDrawingEngine*>(
 					engine.Get())->Finish(kPartTimeout);
-				longestPart = max_c(longestPart, system_time() - partStart);
+				bigtime_t elapsed = system_time() - partStart;
+				if (parts < 8)
+					partMs[parts] = elapsed / 1000;
+				longestPart = max_c(longestPart, elapsed);
 				parts++;
 				if (status != B_OK && finishStatus == B_OK)
 					finishStatus = status;
@@ -211,16 +245,38 @@ skia_warm_up()
 		if (status != B_OK && finishStatus == B_OK)
 			finishStatus = status;
 	}
+	if (gpu != NULL)
+		gpu->SetWarmUpDone();
 	// as Compositor.cpp's log_line(): stderr and the syslog
 	bigtime_t took = (system_time() - start) / 1000;
 	fprintf(stderr, "app_server: gpu draw warm up %" B_PRId64 " ms\n", took);
 	syslog(LOG_INFO, "app_server: gpu draw warm up %" B_PRId64 " ms\n", took);
 	if (inParts) {
+		int32 cacheFilesAfter = 0;
+		uint64 cacheBytesAfter = 0;
+		if (mesaCacheDir[0] != '\0')
+			measure_mesa_cache(mesaCacheDir, cacheFilesAfter, cacheBytesAfter);
 		// "warm-up", so the checks that read the line above skip this one
 		fprintf(stderr, "app_server: gpu draw warm-up parts %" B_PRId32
-			", longest %" B_PRId64 " ms\n", parts, longestPart / 1000);
+			", longest %" B_PRId64 " ms (%" B_PRId64 " %" B_PRId64 " %" B_PRId64
+			" %" B_PRId64 " | %" B_PRId64 " %" B_PRId64 " %" B_PRId64
+			" %" B_PRId64 ")\n", parts, longestPart / 1000,
+			partMs[0], partMs[1], partMs[2], partMs[3],
+			partMs[4], partMs[5], partMs[6], partMs[7]);
 		syslog(LOG_INFO, "app_server: gpu draw warm-up parts %" B_PRId32
-			", longest %" B_PRId64 " ms\n", parts, longestPart / 1000);
+			", longest %" B_PRId64 " ms (%" B_PRId64 " %" B_PRId64 " %" B_PRId64
+			" %" B_PRId64 " | %" B_PRId64 " %" B_PRId64 " %" B_PRId64
+			" %" B_PRId64 ")\n", parts, longestPart / 1000,
+			partMs[0], partMs[1], partMs[2], partMs[3],
+			partMs[4], partMs[5], partMs[6], partMs[7]);
+		fprintf(stderr, "app_server: lavapipe mesa cache before %" B_PRId32
+			" files (%" B_PRIu64 " KB) after %" B_PRId32 " files (%" B_PRIu64
+			" KB)\n", cacheFilesBefore, cacheBytesBefore / 1024,
+			cacheFilesAfter, cacheBytesAfter / 1024);
+		syslog(LOG_INFO, "app_server: lavapipe mesa cache before %" B_PRId32
+			" files (%" B_PRIu64 " KB) after %" B_PRId32 " files (%" B_PRIu64
+			" KB)\n", cacheFilesBefore, cacheBytesBefore / 1024,
+			cacheFilesAfter, cacheBytesAfter / 1024);
 	}
 	if (finishStatus != B_OK) {
 		// M13 step 4: a timeout is late, not failed (M11 decision 14)

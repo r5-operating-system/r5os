@@ -270,6 +270,10 @@ SkiaGpu::UnlockQueue()
 class PipelineStorage : public skgpu::graphite::PersistentPipelineStorage {
 public:
 	PipelineStorage(const VkPhysicalDeviceProperties& properties)
+		:
+		fIsCpu(properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU),
+		fLastSize(0),
+		fLastChecksum(0)
 	{
 		snprintf(fKey, sizeof(fKey), "r5 skia %s vendor %#" B_PRIx32
 			" device %#" B_PRIx32 " driver %#" B_PRIx32 " %s uuid ",
@@ -288,13 +292,17 @@ public:
 				sizeof(directory)) == B_OK) {
 			strlcat(directory, "/app_server", sizeof(directory));
 			mkdir(directory, 0755);
-			snprintf(fPath, sizeof(fPath), "%s/skia-pipelines", directory);
+			// Separate cache file per vendor/device so a Lavapipe start never
+			// overwrites or invalidates the RADV pipeline cache.
+			snprintf(fPath, sizeof(fPath), "%s/skia-pipelines-%04" B_PRIx32
+				"-%04" B_PRIx32, directory, (uint32)properties.vendorID,
+				(uint32)properties.deviceID);
 		}
 	}
 
 	sk_sp<SkData> load() override
 	{
-		if (fPath[0] == '\0')
+		if (fIsCpu || fPath[0] == '\0')
 			return nullptr;
 		int fd = open(fPath, O_RDONLY);
 		if (fd < 0) {
@@ -313,8 +321,11 @@ public:
 				&& memcmp(header.magic, kMagic, sizeof(header.magic)) == 0
 				&& strncmp(header.key, fKey, sizeof(header.key)) == 0
 				&& header.size == size
-				&& header.checksum == _Checksum(bytes->data(), size))
+				&& header.checksum == _Checksum(bytes->data(), size)) {
 				data = bytes;
+				fLastSize = size;
+				fLastChecksum = header.checksum;
+			}
 		}
 		close(fd);
 		syslog(LOG_INFO, "app_server: gpu draw pipeline cache %s\n",
@@ -324,14 +335,20 @@ public:
 
 	void store(const SkData& data) override
 	{
-		if (fPath[0] == '\0' || data.size() == 0 || data.size() > kLargest)
+		// Lavapipe's VkPipelineCache is a no-op stub (312-byte header only);
+		// its on-disk caching is handled by Mesa's llvmpipe disk cache.
+		if (fIsCpu || fPath[0] == '\0' || data.size() == 0
+			|| data.size() > kLargest)
+			return;
+		uint64 checksum = _Checksum(data.data(), data.size());
+		if (data.size() == fLastSize && checksum == fLastChecksum)
 			return;
 		Header header;
 		memset(&header, 0, sizeof(header));
 		memcpy(header.magic, kMagic, sizeof(header.magic));
 		strlcpy(header.key, fKey, sizeof(header.key));
 		header.size = data.size();
-		header.checksum = _Checksum(data.data(), data.size());
+		header.checksum = checksum;
 		// a new file, renamed over the old one: a crash leaves the old
 		// file or the new one, never half of one
 		char temporary[B_PATH_NAME_LENGTH + 8];
@@ -346,6 +363,8 @@ public:
 			unlink(temporary);
 			return;
 		}
+		fLastSize = data.size();
+		fLastChecksum = checksum;
 		syslog(LOG_INFO, "app_server: gpu draw pipeline cache stored %zu KB\n",
 			data.size() / 1024);
 	}
@@ -373,6 +392,9 @@ private:
 	static const size_t	kLargest = 64 * 1024 * 1024;
 	static constexpr char kMagic[8] = {'R', '5', 'S', 'K', 'P', 'C', '1',
 		'\0'};
+			bool				fIsCpu;
+			size_t				fLastSize;
+			uint64				fLastChecksum;
 			char				fKey[256];
 			char				fPath[B_PATH_NAME_LENGTH];
 };
@@ -434,6 +456,7 @@ SkiaGpu::SkiaGpu()
 	fWaitingUnlocked(false),
 	fOnCpu(false),
 	fWindowRunDone(0),
+	fWarmUpDone(0),
 	fContext(NULL),
 	fBackend(NULL),
 	fForceFail(false),

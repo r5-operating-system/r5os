@@ -838,17 +838,25 @@ Compositor::Create(Desktop* desktop, HWInterface* screen)
 	compositor->fForceFail = options.fail;
 	// 5625U stick, 17 Nov 2026: RADV and the R5 DRM library print their
 	// errors on stderr, which did not reach the syslog. With gpu_debug
-	// app_server's stderr goes to a file next to it.
+	// app_server's stderr goes to a file next to it. Rotate any prior log
+	// instead of unbounded append, and use line buffering off the submit path.
 	if (options.debug) {
 		char path[B_PATH_NAME_LENGTH];
 		if (find_directory(B_SYSTEM_LOG_DIRECTORY, -1, true, path,
 				sizeof(path)) == B_OK
 			&& strlcat(path, "/app_server-stderr.log", sizeof(path))
-				< sizeof(path)
-			&& freopen(path, "a", stderr) != NULL) {
-			setvbuf(stderr, NULL, _IONBF, 0);
-			fprintf(stderr, "app_server: stderr of this session\n");
-			log_line("stderr into %s", path);
+				< sizeof(path)) {
+			struct stat st;
+			if (stat(path, &st) == 0 && st.st_size > 0) {
+				char oldPath[B_PATH_NAME_LENGTH + 8];
+				snprintf(oldPath, sizeof(oldPath), "%s.old", path);
+				rename(path, oldPath);
+			}
+			if (freopen(path, "w", stderr) != NULL) {
+				setvbuf(stderr, NULL, _IOLBF, 0);
+				fprintf(stderr, "app_server: stderr of this session\n");
+				log_line("stderr into %s", path);
+			}
 		}
 	}
 	compositor->fLavapipeMsaa = options.lavapipeMsaa;
@@ -987,6 +995,12 @@ Compositor::_InitSkia(bool forceFail)
 	const char* reason = NULL;
 	// M13 step 3: gpu_lavapipe_msaa, on Lavapipe only
 	int samples = fOnLavapipe && fLavapipeMsaa > 0 ? fLavapipeMsaa : 4;
+	if (fOnLavapipe) {
+		const char* thr = getenv("LP_NUM_THREADS");
+		const char* vec = getenv("LP_NATIVE_VECTOR_WIDTH");
+		log_line("lavapipe config threads=%s vector=%s msaa=%d",
+			thr != NULL ? thr : "auto", vec != NULL ? vec : "auto", samples);
+	}
 	if (samples != 4)
 		log_line("lavapipe msaa %d (setting)", samples);
 	fSkia = SkiaGpu::Create(device, forceFail, samples, &reason);
@@ -1276,6 +1290,7 @@ Compositor::_InitVulkan(bool radv, const char** _reason)
 			mkdir(cache, 0755);
 			strlcat(cache, "/mesa", sizeof(cache));
 			mkdir(cache, 0755);
+			unsetenv("MESA_SHADER_CACHE_DISABLE");
 			setenv("MESA_SHADER_CACHE_DIR", cache, 0);
 		}
 	}
@@ -2646,9 +2661,11 @@ Compositor::Damage(const BRegion& region, WindowHWInterface* source)
 		return;
 	BAutolock _(fDamageLock);
 	fDamage.Include(&region);
-	// M13 step 0: the mouse move this damage answers, if it is recent
+	// M13 step 0: the mouse move this damage answers, if it is recent.
+	// Use a 50 ms window so an idle mouse move is not attributed to an
+	// unrelated 250 ms cursor blink.
 	int64 input = atomic_get_and_set64(&sInputWhen, 0);
-	if (input != 0 && fFrameInput == 0 && system_time() - input < kInputWindow)
+	if (input != 0 && fFrameInput == 0 && system_time() - input < 50000)
 		fFrameInput = input;
 	// M11 step 4: who changed it, for the kept blur of the glass
 	if (source != NULL)
@@ -5212,6 +5229,13 @@ Compositor::_SplashDone(const LayerList& layers, bigtime_t now,
 		*_reason = "time";
 		return true;
 	}
+	// On Lavapipe, keep the pulsing splash up while Skia precompiles its
+	// common shaders so the first screen does not draw half-built. RADV is
+	// unchanged.
+	if (fOnLavapipe && fSkia != NULL && !fSkia->IsShutDown()
+		&& !fSkia->WarmUpDone()) {
+		return false;
+	}
 	if (atomic_get(&fSplashAsked) == 0)
 		return false;
 	if (fSkia != NULL && !fSkia->IsShutDown()) {
@@ -6441,6 +6465,8 @@ Compositor::ShareEnd(team_id team, int32 viewToken, int32 shareId)
 void
 Compositor::_ReadZeroCopySwitch()
 {
+	if (!fDebug)
+		return;
 	static bigtime_t sLastRead = 0;
 	bigtime_t now = system_time();
 	if (now - sLastRead < kReportInterval)

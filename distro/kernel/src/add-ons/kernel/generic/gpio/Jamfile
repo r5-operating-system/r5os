@@ -1,0 +1,14 @@
+SubDir HAIKU_TOP src add-ons kernel generic gpio ;
+
+# Copyright 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+
+SubDirC++Flags -fno-rtti ;
+
+SubDirHdrs [ FDirName $(HAIKU_TOP) src add-ons kernel bus_managers acpi acpica include ] ;
+SubDirHdrs [ FDirName $(HAIKU_TOP) src add-ons kernel bus_managers acpi acpica include platform ] ;
+UsePrivateKernelHeaders ;
+
+KernelAddon gpio :
+	gpio.cpp
+;

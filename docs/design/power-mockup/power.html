@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>R5 Settings – Power (mockup, 22 Nov 2026)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:'Manrope',system-ui,sans-serif}
+.bar{display:flex;gap:8px;align-items:center;padding:10px 16px;background:#0f172a;color:#e2e8f0;font-size:13px}
+.bar button{font-family:inherit;font-size:12.5px;padding:5px 12px;border:1px solid #475569;background:#1e293b;color:#e2e8f0;cursor:pointer}
+.bar button[aria-pressed="true"]{background:#0084ff;border-color:#0084ff;color:#fff;font-weight:700}
+.bar .note{margin-left:12px;color:#94a3b8}
+.desk{width:1190px;height:770px;position:relative;overflow:hidden;background:#c9dbf6;color:#141414}
+.win{width:1030px;height:584px;box-sizing:border-box;border:1px solid #8c8c8c;padding:12px;display:flex;gap:14px}
+.glass .win{background:rgba(237,237,237,0.72);backdrop-filter:blur(18px) saturate(1.2);box-shadow:inset 1px 1px 0 rgba(255,255,255,.8),0 24px 48px rgba(15,23,42,.22),0 4px 12px rgba(15,23,42,.1)}
+.classic .win{background:#ededed;box-shadow:inset 1px 1px 0 #fff}
+.panel{background:#fff;border:1px solid #c4c4c4}
+.glass .panel{background:rgba(255,255,255,.82)}
+fieldset.box{margin:0;background:#e4e4e4;border:1px solid #c4c4c4;padding:6px 14px 12px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.glass fieldset.box{background:rgba(228,228,228,.7)}
+legend{padding:0 4px;font-size:12.5px;font-weight:700}
+.menu{display:inline-flex;align-items:center;justify-content:space-between;gap:6px;height:24px;min-width:96px;box-sizing:border-box;padding:0 8px;background:#f4f4f4;border:1px solid #8c8c8c;box-shadow:inset 1px 1px 0 #fff;font-size:12px}
+.menu::after{content:"";width:6px;height:6px;border-right:2px solid #334155;border-bottom:2px solid #334155;transform:rotate(45deg) translateY(-2px)}
+.grid{display:grid;grid-template-columns:1fr auto auto;align-items:center;column-gap:10px;row-gap:6px;font-size:12px}
+.grid .head{font-size:11px;font-weight:700;color:#64748b;text-align:left}
+.chk{display:flex;align-items:center;gap:7px;font-size:12px}
+.chk i{width:13px;height:13px;box-sizing:border-box;border:1px solid #8c8c8c;background:#fff;display:inline-flex;align-items:center;justify-content:center}
+.chk i.on::after{content:"";width:7px;height:4px;border-left:2px solid #0058b0;border-bottom:2px solid #0058b0;transform:rotate(-45deg) translateY(-1px)}
+.off{opacity:.45}
+.hint{font-size:11.5px;color:#64748b;line-height:1.45}
+.btn{height:34px;padding:0 16px;background:#f4f4f4;border:1px solid #8c8c8c;box-shadow:inset 1px 1px 0 #fff;font-family:inherit;font-size:13px;color:#141414}
+.nav a{display:flex;align-items:center;gap:9px;height:36px;padding:0 8px;border-radius:4px;color:#141414;text-decoration:none;font-size:13px;font-weight:600}
+.nav a.sub{height:27px;margin:0 4px 0 32px;color:#334155;font-size:12.5px;font-weight:500}
+.nav a.cur{background:#0084ff;color:#fff;font-weight:700}
+</style>
+</head>
+<body>
+<div class="bar">
+  <strong>Power page mockup</strong>
+  <button type="button" id="b-glass" aria-pressed="true">Glass (GPU, or Lavapipe without one)</button>
+  <button type="button" id="b-classic" aria-pressed="false">Classic (Safe mode)</button>
+  <span class="note">Sleep, Wake gray until sleep works · icon on R5: App_PowerStatus + wrench</span>
+</div>
+
+<div class="desk glass" id="desk">
+  <svg aria-hidden="true" width="1190" height="770" viewBox="0 0 1190 770" style="position:absolute;left:0;top:0">
+    <path d="M0,250 C220,190 420,250 620,330 C820,410 1000,420 1190,380 L1190,770 L0,770 Z" fill="#a9c4f0"></path>
+    <path d="M0,450 C260,400 470,470 700,560 C900,640 1060,640 1190,610 L1190,770 L0,770 Z" fill="#86a8e6"></path>
+  </svg>
+
+  <div style="position:absolute;left:80px;top:96px;width:1030px">
+    <div style="display:inline-flex;align-items:center;gap:8px;height:26px;box-sizing:border-box;padding:0 18px 0 8px;background:#f8cc26;border:1px solid #a88200;border-bottom:none;font-size:13px;font-weight:700">
+      <span style="width:11px;height:11px;box-sizing:border-box;background:#ffe88a;border:1px solid #a88200"></span>
+      <span>Settings</span><span style="width:120px"></span>
+    </div>
+
+    <div class="win">
+      <!-- The list and Search: 200 wide. System is unfolded; pages alphabetical, Information first. -->
+      <div style="width:200px;flex-shrink:0;display:flex;flex-direction:column;gap:10px">
+        <nav class="panel nav" aria-label="Settings pages" style="flex:1;padding:8px 6px;display:flex;flex-direction:column;gap:2px;box-sizing:border-box">
+          <a href="#"><img src="../settings-mockup/icons/r5-symbol.svg" alt="" width="22" height="22" style="margin:0 1px">Home</a>
+          <div style="height:1px;background:#e2e2e2;margin:6px 4px"></div>
+          <a href="#"><img src="../settings-mockup/icons/appearance.svg" alt="" width="24" height="24"><span style="flex:1">Personalization</span><span style="font-size:11px;color:#64748b">4</span></a>
+          <div style="background:#f3f6fb;border-radius:6px;padding-bottom:4px">
+            <a href="#" style="font-weight:700"><img src="../settings-mockup/icons/screen.svg" alt="" width="24" height="24"><span style="flex:1">System</span>
+              <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2.6" stroke-linecap="round"><path d="M6 9l6 6 6-6"></path></svg></a>
+            <a href="#" class="sub">Information</a>
+            <a href="#" class="sub">Display</a>
+            <a href="#" class="sub">Notifications</a>
+            <a href="#" class="sub cur" aria-current="page">Power</a>
+            <a href="#" class="sub">Virtual memory</a>
+          </div>
+          <a href="#"><img src="../settings-mockup/icons/devices.svg" alt="" width="24" height="24"><span style="flex:1">Devices</span><span style="font-size:11px;color:#64748b">4</span></a>
+          <a href="#"><img src="../settings-mockup/icons/network.svg" alt="" width="24" height="24"><span style="flex:1">Network</span><span style="font-size:11px;color:#64748b">2</span></a>
+          <a href="#"><img src="../settings-mockup/icons/people.svg" alt="" width="24" height="24"><span style="flex:1">Accounts</span><span style="font-size:11px;color:#64748b">1</span></a>
+        </nav>
+        <label class="panel" style="display:flex;align-items:center;gap:8px;height:34px;box-sizing:border-box;padding:0 10px;border-color:#aaa">
+          <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
+          <input type="search" placeholder="Search" aria-label="Search settings" style="flex:1;min-width:0;border:none;outline:none;background:transparent;font-family:inherit;font-size:13px">
+        </label>
+      </div>
+
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:12px">
+        <!-- Title block, icon at the right with the preferences wrench -->
+        <div class="panel" style="padding:12px 16px;display:flex;align-items:center;gap:14px">
+          <div style="flex:1">
+            <div style="font-size:12px;font-weight:600;color:#64748b">System</div>
+            <div style="font-size:22px;font-weight:800;letter-spacing:-.015em;line-height:1.2">Power</div>
+            <div style="font-size:12.5px;color:#475569;margin-top:2px">Battery, performance and sleep</div>
+          </div>
+          <span style="position:relative;width:48px;height:48px">
+            <svg aria-hidden="true" width="48" height="48" viewBox="0 0 48 48"><rect x="6" y="14" width="32" height="20" rx="4" fill="#f8fafc" stroke="#334155" stroke-width="2.4"></rect><rect x="38" y="20" width="4" height="8" rx="1.5" fill="#334155"></rect><rect x="10" y="18" width="18" height="12" rx="1.5" fill="#22a35a"></rect></svg>
+            <img src="../settings-mockup/icons/prefs-wrench.svg" alt="" width="48" height="48" style="position:absolute;left:0;top:0">
+          </span>
+        </div>
+
+        <!-- Page content: the only part that changes, scrolls when taller -->
+        <div style="flex:1;min-height:0;display:flex;gap:12px">
+          <div style="flex:1.15;min-width:0;display:flex;flex-direction:column;gap:12px">
+
+            <!-- Hidden on a computer without a battery -->
+            <fieldset class="box">
+              <legend>Battery</legend>
+              <div style="display:flex;align-items:center;gap:12px">
+                <!-- R5_LEVEL_BATTERY (libr5icons, docs/ICONS.md): body, cap on the right,
+                     four segments; filled steps in the text color, empty ones a faint tint. 78 % = 3 of 4. -->
+                <svg aria-hidden="true" width="64" height="30" viewBox="0 0 64 30"><rect x="1.5" y="1.5" width="56" height="27" rx="4" fill="none" stroke="#334155" stroke-width="2.4"></rect><rect x="58.5" y="9" width="4.5" height="12" rx="1.5" fill="#334155"></rect><rect x="6" y="6" width="10" height="18" rx="1" fill="#334155"></rect><rect x="18.5" y="6" width="10" height="18" rx="1" fill="#334155"></rect><rect x="31" y="6" width="10" height="18" rx="1" fill="#334155"></rect><rect x="43.5" y="6" width="10" height="18" rx="1" fill="#cbd5e1"></rect></svg>
+                <div style="display:flex;flex-direction:column;gap:2px">
+                  <span style="font-size:20px;font-weight:800">78 %</span>
+                  <span style="font-size:12px;color:#334155">On battery · about 3 h 40 min left</span>
+                </div>
+              </div>
+              <span class="hint">Battery health 92 % of its design capacity.</span>
+            </fieldset>
+
+            <fieldset class="box">
+              <legend>Sleep</legend>
+              <div class="grid">
+                <span></span><span class="head">On battery</span><span class="head">Plugged in</span>
+                <span style="font-weight:600">Turn off the display after</span><span class="menu">5 minutes</span><span class="menu">10 minutes</span>
+                <span style="font-weight:600" class="off">Put the computer to sleep after</span><span class="menu off">15 minutes</span><span class="menu off">30 minutes</span>
+              </div>
+              <div class="grid" style="grid-template-columns:1fr auto">
+                <span style="font-weight:600">When the lid is closed</span><span class="menu" style="min-width:150px">Turn off the display</span>
+                <span style="font-weight:600">When the power button is pressed</span><span class="menu" style="min-width:150px">Ask</span>
+              </div>
+              <span class="chk"><i class="on"></i>Keep working with an external display</span>
+              <span class="hint" style="display:flex;gap:6px;align-items:flex-start"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10" fill="#94a3b8"></circle><path d="M12 7v6M12 16v1" stroke="#fff" stroke-width="2.4" stroke-linecap="round"></path></svg>Sleep is not available on this computer yet. Until it is, "Sleep" is gray in these menus.</span>
+            </fieldset>
+          </div>
+
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:12px">
+            <fieldset class="box">
+              <legend>Performance</legend>
+              <div class="grid">
+                <span></span><span class="head">On battery</span><span class="head">Plugged in</span>
+                <span style="font-weight:600">Profile</span><span class="menu">Balanced</span><span class="menu">Performance</span>
+              </div>
+              <span class="hint">Balanced: fast when you work, slower when the computer waits. Power saver keeps the processor below its boost. Performance always allows the boost.</span>
+              <div style="display:flex;align-items:center;gap:10px;font-size:12px;margin-top:2px">
+                <span style="font-weight:600">Brightness</span>
+                <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><circle cx="12" cy="12" r="4"></circle></svg>
+                <span style="flex:1;position:relative;height:6px;background:#cbd5e1;border-radius:3px"><span style="position:absolute;left:0;top:0;width:65%;height:6px;background:#0084ff;border-radius:3px"></span><span style="position:absolute;left:calc(65% - 7px);top:-5px;width:14px;height:14px;border-radius:50%;background:#fff;border:1px solid #8c8c8c"></span></span>
+                <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#334155" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"></path></svg>
+              </div>
+              <span class="chk"><i class="on"></i>Dim the display on battery</span>
+            </fieldset>
+
+            <fieldset class="box off">
+              <legend>Wake</legend>
+              <span class="chk"><i class="on"></i>Wake when the lid is opened</span>
+              <span class="chk"><i class="on"></i>Wake with the keyboard</span>
+              <span class="chk"><i></i>Wake with the mouse or touchpad</span>
+              <span class="hint">This computer sleeps with Modern Standby (S0ix).</span>
+            </fieldset>
+          </div>
+        </div>
+
+        <!-- Bottom row: lock, Revert, Defaults. Machine-wide values: gray until the lock is open. -->
+        <div style="height:34px;display:flex;align-items:center;gap:6px">
+          <button type="button" aria-label="Lock: open" class="btn" style="width:38px;padding:0;display:flex;align-items:center;justify-content:center"><img src="../settings-mockup/icons/unlocked.svg" alt="" width="22" height="22"></button>
+          <span style="flex:1"></span>
+          <button type="button" class="btn">Revert</button>
+          <button type="button" class="btn">Defaults</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const desk = document.getElementById('desk');
+const g = document.getElementById('b-glass'), c = document.getElementById('b-classic');
+function pick(glass){ desk.className = 'desk ' + (glass ? 'glass' : 'classic'); g.setAttribute('aria-pressed', glass); c.setAttribute('aria-pressed', !glass); }
+g.onclick = () => pick(true); c.onclick = () => pick(false);
+if (location.hash === '#classic') pick(false);
+</script>
+</body>
+</html>

@@ -1390,9 +1390,31 @@ mtk_tick(void* arg)
 		sc->sc_join_giveup = 1;
 		taskqueue_enqueue(sc->sc_tq, &sc->sc_work);
 	}
-/* SPDX-SnippetEnd */
 
-	callout_reset(&sc->sc_poll, hz / 100, mtk_tick, sc);
+	sc->sc_tick_total++;
+	if (sc->sc_received == sc->sc_last_rx_seen
+		&& sc->sc_sent == sc->sc_last_tx_seen
+		&& sc->sc_hwscanning == 0 && sc->sc_joining == 0) {
+		sc->sc_tick_empty++;
+		if (sc->sc_idle_ticks < 100)
+			sc->sc_idle_ticks++;
+	} else {
+		sc->sc_last_rx_seen = sc->sc_received;
+		sc->sc_last_tx_seen = sc->sc_sent;
+		sc->sc_idle_ticks = 0;
+	}
+
+	if (sc->sc_tick_total % 3000 == 0) {
+		MTK_DEBUG(sc, "rx tick stats: total %u empty %u rx %u intr %u\n",
+			sc->sc_tick_total, sc->sc_tick_empty, sc->sc_received,
+			sc->sc_interrupts);
+	}
+
+	/* Back off from 10 ms to 50 ms when idle with no RX/TX and no scan/join;
+	 * mtk_intr() resets sc_idle_ticks and drains immediately on traffic. */
+	int next_ticks = (sc->sc_idle_ticks >= 20) ? (hz / 20) : (hz / 100);
+	callout_reset(&sc->sc_poll, next_ticks, mtk_tick, sc);
+/* SPDX-SnippetEnd */
 }
 
 
@@ -1412,6 +1434,7 @@ mtk_intr(void* arg)
 	if (sc->sc_interrupts++ == 0)
 		device_printf(sc->sc_dev, "the card is talking to us (%#x)\n", status);
 
+	sc->sc_idle_ticks = 0;
 	mtk_write(sc, MTK_WFDMA0_HOST_INT_STA, status);
 
 	/* One reader at a time: a command waiting for its answer drains the

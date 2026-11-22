@@ -6,48 +6,62 @@ R5 modernizes a Haiku-based desktop without waiting on upstream schedules. Compa
 
 ## Where R5 stands (November 2026)
 
-Tree `2026.1-dev`, build 10047. There is no public release yet. The details, build by build, are in `distro/WHATSNEW` (user language) and `CHANGELOG.md` (technical).
+Tree `2026.1-dev`, build 10066 (checked against `origin/main` on 22 Nov 2026). There is no public release yet. The details, build by build, are in `distro/WHATSNEW` (user language) and `CHANGELOG.md` (technical).
 
 | Area | In the image now |
 |---|---|
-| Desktop | R5 branding, dark mode, the Settings window (`docs/SETTINGS.md`), notifications with a placement choice |
+| Desktop | R5 branding, dark mode, the R5 window frame, the Settings window (`docs/SETTINGS.md`) with pages for Display, Appearance, Desktop and Deskbar, Notifications, Virtual memory, Wi-Fi, Network, Bluetooth and Game controllers; Device Manager; CPU Info; R5Book on disk |
 | Accounts | Sign in, Log out, Lock screen, Users & Accounts, private home folders, the administrator off uid 0 after the first Sign in, locked machine settings (`docs/MULTIUSER.md`) |
-| Network | Wi-Fi join and remember, IPv6 (link-local, SLAAC, DAD, DHCPv6), AirPrint/IPP, AirPlay 1 to speakers, the network tray |
-| Sound and MIDI | Better resampling, a latency choice, USB channel layouts, HDMI output names, virtual surround, MIDI 2.0 (`docs/MIDI2.md`) |
-| Graphics | Software OpenGL (llvmpipe) and Vulkan (Lavapipe). On the Ryzen 5 5625U, M0–M4 are done and the GPU stays opt-in: the kernel owns the ring, and `vulkaninfo` plus VulkanTeapot use RADV when the radeon_hd settings are on (`docs/GRAPHICS.md`, `docs/GPU-ARCHITECTURE.md`). The desktop picture is still software |
+| Network | Wi-Fi join and remember on the 5625U's MediaTek MT7921/MT7922 (WPA2 joined; WPA3 fixed, not yet on record), the Connections and Discovery pages, IPv6 (link-local, SLAAC, DAD, DHCPv6), `.local` next to DHCP DNS, SMB network shares mounted from Tracker, AirPrint/IPP, AirPlay 1 to speakers, the network tray |
+| Bluetooth | Classic and Low Energy, pairing, HID (mice, keyboards, game controllers), A2DP headphones and speakers, HFP battery and buttons, the Bluetooth page and Deskbar item. Tested on real hardware (18 Nov 2026, and the owner on 22 Nov 2026). The headset microphone stays off until it is tested |
+| Sound and MIDI | Better resampling, a latency choice, USB channel layouts, steadier USB audio and MIDI (RenkuOS fixes), HDMI output names, virtual surround, MIDI 2.0 (`docs/MIDI2.md`), MIDI Monitor, USB webcams (UVC) |
+| Graphics | On the Ryzen 5 5625U (`0x15e7`, release-supported since M10) the GPU is the default: RADV for Vulkan, Zink for OpenGL, app_server composes the desktop on the GPU (shadows, frosted glass, animations), and windows are drawn with Skia on the GPU (build 10066). A start-up check falls back to software, and a hang resets the GPU. M0–M11 and M13 are done on the 5625U (`docs/GPU-ARCHITECTURE.md`, `docs/M13-PLAN.md`). Every other computer gets the same desktop on llvmpipe and Lavapipe; Safe mode gives the classic drawing. Display modesetting (DCN) is not done; the picture is still the firmware one |
+| CPU and kernel | AMD CPPC frequency control, SMT and cache topology on Zen, a speed per core for hybrid CPUs, ACPI deep idle, 2 MB pages, TSC-deadline timer, XSAVEC, MWAIT wake, EFI runtime services, release and debug kernel profiles |
+| Input | Touchpads and TrackPoint (RenkuOS), I2C HID |
 | Virtual machines | VirtualBox 7.2.22 Guest Additions (`docs/VBOX-GUEST.md`) |
-| Licensing | Multi-license policy, notices, and licenses in About (`docs/LICENSING.md`) |
+| Licensing | Multi-license policy, notices, and licenses in About (`docs/LICENSING.md`); R5's own code is MIT since 12 Nov 2026 |
 
 Started is not done. A feature counts as done only after a test on the hardware or the network it is meant for (`AGENTS.md`, "Tracker and changelog" and "Networking claims").
 
 ## Near term (user-visible)
 
-The order is impact, not ticket number.
+The order is impact, not ticket number. `[x]` is done and tested where it is meant to run; `[~]` is in the image but not tested there yet; `[ ]` is open.
 
 1. **GPU on the reference machine.** Following `docs/GPU-ARCHITECTURE.md`:
-   - **M3 is done:** the kernel driver owns the GPU, with interrupts and GART. The keys stay opt-in.
-   - **M4 is done:** the R5 GPU interface, the R5 DRM library, and RADV on the 5625U. Experimental and opt-in. The M4 row in `docs/GPU-ARCHITECTURE.md` has the evidence.
-   - **M5 is done on the 5625U**, with two gaps: the driver's fault line, and the GPU staying up after a guilty job. The M5 row in `docs/GPU-ARCHITECTURE.md` has the evidence.
-   - **The goal:** when a supported GPU passes its checks, R5 renders on the GPU by default; otherwise in software. Haiku applications stay unchanged.
-   - Display (DCN modesetting, more than one screen, vsync) is a separate track. Today the picture is still the firmware one.
-2. **Finish multi-user** ([#63](https://github.com/r5-operating-system/r5os/issues/63)).
-   - The lock screen is done ([#64](https://github.com/r5-operating-system/r5os/issues/64), build 10013).
-   - Open: the keyboard shortcut for the lock screen ([#72](https://github.com/r5-operating-system/r5os/issues/72)), and guest plus Public/Shared ([#65](https://github.com/r5-operating-system/r5os/issues/65)).
+   - [x] M0–M5: the kernel driver owns the GPU, the R5 GPU interface, the R5 DRM library, RADV, an address space per program.
+   - [x] M6–M11: the RADV workload, Vulkan in a window, the GPU copy, Zink for OpenGL, release-supported on the 5625U (M10), the desktop composed on the GPU (M11).
+   - [x] M13 (20 Nov 2026, sticks 65–67): direct scanout, write-combined GTT and the GPU copy on by default on the 5625U.
+   - [~] M12, the GPU draws everything: Skia drawing is on by default since build 10066, but the M12 row in `docs/GPU-ARCHITECTURE.md` has no pass line yet.
+   - [x] The goal: on a supported GPU that passes its checks, R5 renders on the GPU by default, otherwise in software. Haiku applications are unchanged.
+   - [ ] The Lavapipe warm-up, and the other open points in `AFTER-M13.md`.
+   - [ ] Display (DCN modesetting, more than one screen, vsync) is a separate track. Today the picture is still the firmware one.
+   - [ ] Intel as the second vendor (step I0 in `docs/GPU-ARCHITECTURE.md`).
+2. **Finish multi-user** ([#63](https://github.com/r5-operating-system/r5os/issues/63), open).
+   - [x] The lock screen ([#64](https://github.com/r5-operating-system/r5os/issues/64), build 10013).
+   - [ ] The keyboard shortcut for the lock screen ([#72](https://github.com/r5-operating-system/r5os/issues/72), open).
+   - [ ] Guest plus Public/Shared ([#65](https://github.com/r5-operating-system/r5os/issues/65), open).
    - Still one graphical session at a time. Do not skip isolation, and do not treat a list of names as "done".
-3. **Other hardware on the Ryzen 5 5625U:** Wi-Fi on the laptop's own card, backlight, sleep and resume, and HiDPI without breaking the layout. None of these has been shown on the metal yet.
-4. **Browser:** a current WebKit or Qt browser in the image. WebPositive is the weak daily application.
+3. **Other hardware on the Ryzen 5 5625U:**
+   - [x] Wi-Fi on the laptop's own card (MediaTek MT7961): the owner joined a WPA2 network on stick 51.
+   - [~] WPA3 (SAE): fixes after sticks 59 and 60 (19 Nov 2026); a WPA3 join on the 5625U is not on record yet.
+   - [~] The speakers (CS35L41): EFI runtime services read the calibration (stick 69); the tuning file still stops on one block. PR #4482 is open.
+   - [ ] Backlight and brightness keys.
+   - [ ] Sleep and resume (see "Platform").
+   - [ ] HiDPI without breaking the layout.
+4. **Browser:**
+   - [~] Aomi, a WebPositive copy on haikuwebkit 1.10.0-2: the plan is merged (`docs/AOMI.md`, #4467); nothing is built yet.
 5. **Network, what is left:**
-   1. IPv6: more LAN tests. DHCPv6 IA_NA still needs a LAN with a DHCPv6 server.
-   2. DNS that uses the DHCP servers and still resolves `.local`.
-   3. Captive portal.
-   4. SMB in Tracker.
-   5. A simple firewall, with incoming connections closed by default.
-   6. WireGuard.
-   7. HTTP/2 (owner, 19 Nov 2026). HTTP/2 under `libnetservices` and `libnetservices2` is for the programs that use those kits (WebPositive's own downloads, HaikuDepot, the package kit). Web pages in WebKit already go through libcurl, and curl-8.21.0-1 already requires libnghttp2. That path is unproven until a page shows HTTP/2. Aomi's engine plan is in `docs/AOMI.md`.
-   8. LAN tests: VirtualBox bridged (`docs/vbox.md`), or QEMU bridged/tap. QEMU usernet is not a LAN.
-6. **Dark mode in the remaining system applications** and Deskbar (Haiku #18970). The dark color scheme exists; some applications still keep their own look.
-7. **Bluetooth and game controllers** (owner, 16 Nov 2026). Bluetooth follows `docs/BLUETOOTH.md`: step 4 (classic HID, with the owner's 8BitDo M30 and PS5 DualSense) on a stick, then Low Energy (steps 1c and 6) before audio (step 5). Game controllers follow `docs/GAME-CONTROLLERS.md`, option B: right after step 4 is merged, in parallel with Low Energy, tested over a USB cable in VirtualBox; their Bluetooth part rides on the Low Energy stick.
-8. **Polish:** screenshots, emoji and fonts, the image clipboard. Rounder windows and Deskbar: `docs/LOOK.md`, not while multi-user is still open.
+   1. [~] IPv6: the review fixes are in (DHCPv6, SLAAC, the resolver, the default route). More LAN tests; DHCPv6 IA_NA still needs a LAN with a DHCPv6 server.
+   2. [~] DNS from DHCP next to `.local`: in the image since the Network pages (#4240), with mDNS fixes on 17 Nov 2026. Not tested on a LAN.
+   3. [ ] Captive portal.
+   4. [~] SMB in Tracker: smbfs and libsmb2 from air/OS, mounted from the Network shares page and the Mount menu (build 10050). No LAN test recorded.
+   5. [ ] A simple firewall, with incoming connections closed by default.
+   6. [ ] WireGuard.
+   7. [ ] HTTP/2 (owner, 19 Nov 2026). HTTP/2 under `libnetservices` and `libnetservices2` is for the programs that use those kits (WebPositive's own downloads, HaikuDepot, the package kit). Web pages in WebKit already go through libcurl, and curl-8.21.0-1 already requires libnghttp2. That path is unproven until a page shows HTTP/2. Aomi's engine plan is in `docs/AOMI.md`.
+   8. [ ] LAN tests: VirtualBox bridged (`docs/vbox.md`), or QEMU bridged/tap. QEMU usernet is not a LAN.
+6. [ ] **Dark mode in the remaining system applications** and Deskbar (Haiku #18970). The dark color scheme exists; some applications still keep their own look.
+7. [x] **Bluetooth and game controllers** (`docs/BLUETOOTH.md`, `docs/GAME-CONTROLLERS.md`). Classic HID (step 4), Low Energy (steps 1c and 6), audio (step 5, A2DP), HFP (step 7) and the Game controllers page are in. Tested on real hardware on 18 Nov 2026, and confirmed by the owner over Bluetooth on 22 Nov 2026. Still open: the headset microphone (off until tested), and resolving private addresses in the host for a radio without LL Privacy.
+8. [ ] **Polish:** screenshots, emoji and fonts, the image clipboard. Rounder windows and Deskbar: `docs/LOOK.md`, not while multi-user is still open. The R5 window frame is the default since 13 Nov 2026; round corners are a later decorator.
 
 Zeroconf, AirPrint, AirPlay 1 and the network tray exist. They are not "done" until LAN tests exist.
 
@@ -63,9 +77,9 @@ Do not start these during an unrelated bugfix.
 
 | Name | Intent | Status |
 |---|---|---|
-| **R5 Hub** | One place for settings: devices, display, audio, network, printers, updates | Started: the Settings window brings the main pages together (`docs/SETTINGS.md`) |
+| **R5 Hub** | One place for settings: devices, display, audio, network, printers, updates | Started: the Settings window has Display, Appearance, Desktop and Deskbar, Notifications, Virtual memory, Wi-Fi, Network, Bluetooth and Game controllers (`docs/SETTINGS.md`). Not yet: power, audio, printers, updates, storage |
 | **R5 Quicklaunch** | Keyboard launch, and search for applications, files and system items | Not started |
-| **R5 Connect** | Device discovery (AirPrint, AirPlay, later SMB and printers) | The building blocks exist (zeroconf, AirPrint, AirPlay 1); no product yet |
+| **R5 Connect** | Device discovery (AirPrint, AirPlay, later SMB and printers) | Started: Network > Discovery lists printers, AirPlay speakers and other computers; SMB shares mount from Tracker. No product yet |
 | **R5 Store** | Installing software from Haiku packages | Not started |
 | **R5 SafeUpdate** | Validated updates and recovery *before* disruptive changes | Not started |
 | **R5 Doctor** | Logs, crashes, drivers, common failures | Not started |
@@ -158,14 +172,14 @@ What the kernel knows and does about the processor and the firmware. The audit o
 
 | Item | Where R5 stands | What it takes | Test hardware |
 |---|---|---|---|
-| **P-states (CPU frequency)** | Haiku has `amd_pstates` and `intel_pstates` (cpufreq) and two C-state drivers. Whether they load and change the frequency on the 5625U and the X1 Carbon has not been checked. R5's `r5_pstate` only reads the state; it does not write one | First measure what the existing drivers do on both machines. Then the modern paths: AMD CPPC (as amd-pstate) and Intel HWP, where the CPU chooses its own frequency within limits the OS sets. A power profile (balanced, performance, saver) on top | Ryzen 5 5625U, X1 Carbon Gen 8 |
-| **Sleep and resume** | Open (see "Near term", item 3) | Many current laptops have no classic S3 any more, only S0ix ("Modern Standby"). Find out which the two machines offer, then make that path work, including the GPU, Wi-Fi and USB coming back | Ryzen 5 5625U, X1 Carbon Gen 8 |
+| **P-states (CPU frequency)** | AMD: R5's copy of `amd_pstates` turns on CPPC and writes a request per CPU (min = lowest non-linear, max = highest, EPP performance; in power-saving mode max = nominal, EPP balance-performance). Stick 49 logs `R5 CPPC:` on all twelve cores of the 5625U. AMD without the CPPC MSR (older Zen, shared-memory `_CPC`) has no cpufreq module. Intel: Haiku's `intel_pstates` uses HWP with EPP where the CPU has it, otherwise a model list; not tested on the X1. The only switch is the scheduler mode (ProcessController); there is no profile in Settings. ARM64 and RISC-V have no cpufreq module. CPU Info shows CPPC and HWP (`r5_pstate` ioctl). Deep idle: `x86_acpi_cstates` on the 5625U (stick 49) | A power profile (balanced, performance, saver) that sets EPP and limits on every vendor; shared-memory CPPC for AMD; the X1 measured; ARM64 (SCMI/CPPC/OPP) and RISC-V (SBI/OPP) when those targets boot | Ryzen 5 5625U, X1 Carbon Gen 8 |
+| **Sleep and resume** | Open (see "Near term", item 3). air/OS has S3 and suspend to idle for AMD (LPS0 `_DSM`, the PMC hint), device power hooks in xHCI, NVMe, PCI and the network drivers, and `power_daemon` with lid actions; no Intel S0ix and no GPU or audio resume there | Many current laptops have no classic S3 any more, only S0ix ("Modern Standby"). Find out which the two machines offer, then make that path work, including the GPU, Wi-Fi and USB coming back | Ryzen 5 5625U, X1 Carbon Gen 8 |
 | **Battery, thermal, backlight, embedded controller** | Partly through Haiku's ACPI drivers; not checked on the two machines | The ordinary laptop functions, read from ACPI: charge level, temperatures and fan, brightness keys | Ryzen 5 5625U, X1 Carbon Gen 8 |
-| **CPU topology (ACPI PPTT)** | The kernel reads SMT and core levels from CPUID (`docs/KERNEL.md`) | Read which cores share a cache or a cluster, and let the scheduler use that | Any current CPU |
-| **Hybrid cores (P and E)** | `get_hybrid_cpu_type()` reads the core type; the scheduler does not use it (`docs/KERNEL.md`, item 7) | Heavy threads on performance cores, background work on efficient cores. Later Intel Thread Director (HFI). AMD has "preferred cores" through CPPC and dense Zen 5c cores | A 12th-generation Intel or newer. The X1 Carbon Gen 8 has no E-cores |
+| **CPU topology (ACPI PPTT)** | SMT and cores on AMD Zen from CPUID `0x8000001E` (stick 47), and the scheduler uses the cache domains (18 Nov 2026). ACPI PPTT is not read | Read PPTT where CPUID does not tell (ARM64 servers, clusters), and let the scheduler use that | Any current CPU |
+| **Hybrid cores (P and E)** | Each CPU has a speed (`cpu_ent::capacity`: P 1024, E 600, Zen 5c 768) and the scheduler prefers the faster cores (air/OS, build 10059). Not tested: no hybrid machine | Later Intel Thread Director (HFI), and AMD preferred cores from the CPPC highest value (stick 49 shows 166 to 186 on the 5625U) | A 12th-generation Intel or newer. The X1 Carbon Gen 8 has no E-cores |
 | **More than 64 logical CPUs** | `SMP_MAX_CPUS` is 64 on both AMD64 boot platforms (`docs/KERNEL.md`, finding 2). The BIOS loader cannot start x2APIC processors (finding 3) | Larger CPU sets and per-CPU tables in the kernel, x2APIC on every boot path, and a check of the public API for structs with a fixed CPU count | QEMU with many virtual CPUs first, then a large Ryzen, Threadripper or EPYC |
 | **NUMA (ACPI SRAT and SLIT)** | Not present | Keep a program and its memory on the same node, in the allocator and the scheduler. Only useful on machines with more than one memory node | Multi-socket or Threadripper/EPYC hardware |
-| **Memory types for RAM (PAT only)** | AMD64 flushes with `wbinvd` before the page tables change, and a range inside the boot RAM MTRR is not a second MTRR when PAT is on. `vm_set_area_page_memory_type()` sets the page type only, for a buffer that is not one physical range. A clone copies the area's memory type. Device memory outside RAM still gets an MTRR. Write-combined GTT follows `gfx9_wc_gtt` (`docs/KERNEL.md`): on for a release-supported GPU, and the AMD64 direct map matches. ARM64 and RISC-V still use the empty flush. The 5625U has not run the direct-map change | The page type is in place on AMD64. The other two architectures follow in their own trees. A boot on the 5625U still has to show the PAT line and a write-combined GTT buffer on the default, and a cached one with `gfx9_wc_gtt false` | QEMU or VirtualBox, then the 5625U |
+| **Memory types for RAM (PAT only)** | AMD64 flushes with `wbinvd` before the page tables change, and a range inside the boot RAM MTRR is not a second MTRR when PAT is on. `vm_set_area_page_memory_type()` sets the page type only, for a buffer that is not one physical range. A clone copies the area's memory type. Device memory outside RAM still gets an MTRR. Write-combined GTT follows `gfx9_wc_gtt` (`docs/KERNEL.md`): on for a release-supported GPU, and the AMD64 direct map matches. ARM64 and RISC-V still use the empty flush. Stick 67 (20 Nov 2026) booted write-combined GTT on by default on the 5625U | The other two architectures follow in their own trees. A boot with `gfx9_wc_gtt false` is still to come (`AFTER-M13.md`) | QEMU or VirtualBox, then the 5625U |
 
 The order follows what R5 is today, a laptop and desktop system: first P-states, sleep and the laptop functions, then topology, then hybrid cores, and only for workstation or server use more than 64 CPUs and NUMA.
 
@@ -263,17 +277,25 @@ The user went through RenkuOS's own commits since mid-September 2026. Added to "
    - the VM randomisation underflow (`f1967012d9`);
    - no driver scan while the node tree is built (`c039b25536`).
 
-#### Import state (11 Nov 2026)
+#### Import state (checked 22 Nov 2026)
 
-One branch per track, in this order. Each is built and booted in QEMU; the hardware check rides on the next stick.
+One branch per track. Each is built and booted in QEMU; the hardware check rides on the next stick.
 
-| Track | Source | Branch | State |
-|---|---|---|---|
-| Input: `i2c_hid` input-ready line, TrackPoint, Elan | RenkuOS | `cursor/input-renku` | brief written |
-| USB audio and MIDI | RenkuOS | `cursor/audio-renku` | inventory first, then the user picks per item |
-| USB webcams (UVC) | air/OS `6d877da057`, `a314c835a9`, `d0df427f16` | `cursor/webcam-airos` | in progress; the xHCI high-bandwidth isochronous part is in |
-| USB host controllers | RenkuOS | `cursor/usb-renku` | in progress. xHCI and USB stack fixes (STALL reset, contiguous isochronous packets, descriptor checks, allocator race) now; EHCI, UHCI and OHCI only after the user agrees; arm64, Bay Trail and 32-bit skipped |
-| Audio device in the Deskbar | air/OS `122b4ad42e` and follow-ups | none yet | touches `multi_audio`, HDA and `media_server`, where R5 has its own code |
+| Track | Source | State |
+|---|---|---|
+| Input: `i2c_hid` input-ready line, TrackPoint, Elan | RenkuOS | [x] merged (11 Nov 2026) |
+| USB audio and MIDI | RenkuOS | [x] merged (builds 10057 and 10058) |
+| USB webcams (UVC) | air/OS `6d877da057`, `a314c835a9`, `d0df427f16` | [~] merged, booted in QEMU; no camera test on record |
+| USB host controllers | RenkuOS | [x] merged (9 Nov 2026): xHCI and USB stack fixes, isochronous transfers on EHCI, UHCI and OHCI |
+| CPU topology, scheduler, deep idle | air/OS | [x] merged (build 10059), deep idle on the 5625U (stick 49) |
+| Wi-Fi panel and MediaTek driver | air/OS | [x] merged (build 10060), joined on the 5625U |
+| Bluetooth Low Energy, HID, A2DP | air/OS, R5's own steps | [x] merged, tested on hardware (18 Nov 2026) |
+| SMB network shares | air/OS | [~] merged (build 10050); no LAN test on record |
+| x86-64 fixes from haiku-pi | haiku-pi | [~] a first set (BFS, VM, signals, TLS, I/O) on 9 Nov 2026; the rest of the ★ list is open |
+| Audio device in the Deskbar | air/OS `122b4ad42e` and follow-ups | [ ] not started; touches `multi_audio`, HDA and `media_server`, where R5 has its own code |
+| Power: `power_daemon`, lid, suspend to idle, the Power preferences | air/OS | [ ] not started; see "Platform" |
+| Syscall filter, public `BAboutWindow`, live control look, `BMarkdownView`, `pkgman autoremove`, eMMC | RenkuOS | [ ] not started |
+| Installer for one whole disk (UEFI) | air/OS | [ ] not started |
 
 The USB host fixes come before the USB audio imports, which rely on them.
 
