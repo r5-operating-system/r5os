@@ -6554,23 +6554,17 @@ Compositor::_Report()
 			" direct %" B_PRId64 " upload %" B_PRId64,
 			p[SkiaGpu::kCountComposite], p[SkiaGpu::kCountCoverage],
 			p[SkiaGpu::kCountDirect], p[SkiaGpu::kCountUpload]);
-		int64 snapOther = p[SkiaGpu::kTimeSnap] - p[SkiaGpu::kTimePipelines]
-			- p[SkiaGpu::kTimeComputePipelines] - p[SkiaGpu::kTimeShaders];
-		if (snapOther < 0)
-			snapOther = 0;
 		log_line("draw profile snap_parts targets %" B_PRId64
-			" pipelines %" B_PRId64 " (%" B_PRId64 " us)"
+			" pipelines %" B_PRId64 " (%" B_PRId64 " us cpu)"
 			" compute %" B_PRId64 " (%" B_PRId64 " us)"
 			" shaders %" B_PRId64 " (%" B_PRId64 " us)"
-			" alloc %" B_PRId64 " (%" B_PRId64 " us)"
-			" other %" B_PRId64 " us",
+			" alloc %" B_PRId64 " (%" B_PRId64 " us)",
 			p[SkiaGpu::kCountTargets],
 			p[SkiaGpu::kCountPipelines], p[SkiaGpu::kTimePipelines],
 			p[SkiaGpu::kCountComputePipelines],
 			p[SkiaGpu::kTimeComputePipelines],
 			p[SkiaGpu::kCountShaders], p[SkiaGpu::kTimeShaders],
-			p[SkiaGpu::kCountAllocMem], p[SkiaGpu::kTimeAllocMem],
-			snapOther);
+			p[SkiaGpu::kCountAllocMem], p[SkiaGpu::kTimeAllocMem]);
 		log_line("draw profile ops text %" B_PRId64 " (%" B_PRId64 " us)"
 			" path %" B_PRId64 " (%" B_PRId64 " us)"
 			" bitmap %" B_PRId64 " (%" B_PRId64 " us)"

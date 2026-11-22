@@ -209,11 +209,11 @@ skia_warm_up()
 	bigtime_t partMs[8] = {};
 	// On Lavapipe, Pass 1 (SetOpaque(false)) compiled 0 new pipelines in
 	// measurement (1 ms per part cold and warm), while Pass 0 omitted opaque
-	// alpha=255 solid fills (setColor fast path) and ran each mode in its own
-	// serial Finish(). Batch Pass 0 into 2 Finish() calls on Lavapipe (direct
-	// copy/over + opaque fills, then B_OP_ALPHA overlay/composite) so the
-	// parallel PipelineExecutor compiles all pipelines in each batch together.
-	// RADV keeps the original 2-pass loop unchanged.
+	// alpha=255 solid fills (setColor fast path). Skip Pass 1 on Lavapipe and
+	// keep 4 Finish() calls in Pass 0 so no single cold-boot part exceeds
+	// kPartTimeout (30 s); within each part, PipelineExecutor compiles the
+	// pipelines in parallel across CPU cores. RADV keeps the original 2-pass
+	// loop unchanged.
 	int passLimit = inParts ? 1 : 2;
 	for (int pass = 0; pass < passLimit; pass++) {
 		// pass 0: an opaque image (Skia's own blending), 1: not opaque
@@ -247,7 +247,7 @@ skia_warm_up()
 				engine->DrawBitmap(image, image->Bounds(), BRect(8, 8, 31, 31),
 					B_FILTER_BITMAP_BILINEAR);
 			}
-			if (inParts && (m == 1 || m == 3)) {
+			if (inParts) {
 				bigtime_t partStart = system_time();
 				status_t status = static_cast<SkiaDrawingEngine*>(
 					engine.Get())->Finish(kPartTimeout);

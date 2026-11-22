@@ -1,5 +1,30 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-22 - Perf round 2 Part A: Lavapipe breakdown counters, parallel pipeline compilation, ordered recordings
+
+Problem:
+- On stick 73 boots 3 and 4 (5625U, `gpu false`, Lavapipe), cold warm-up took 30.2 s (part 1 alone 20.0 s, part 3 9.5 s), warm-cache warm-up took 1.44 s, and the first 10 s of desktop use averaged 10.7 ms/run in `snap` and 4.8 ms/run in `deliver`.
+- Measuring with new `gpu_debug`-gated counters in QEMU (`-smp 6`, Lavapipe, 256-bit AVX2) showed:
+  - 97.4% of `snap` in the first 10 s of desktop use (`4.89 s` out of `5.03 s`) and 82% of warm-cache warm-up (`3.30 s` out of `4.01 s`) was synchronous `vkCreateGraphicsPipelines` on one thread (SkSL->SPIR-V + Lavapipe uncached SPIR-V->NIR->optimize), while steady-state `snap` CPU recording was only `98-144 us/run`.
+  - Cold warm-up was dominated by llvmpipe `lp_state_fs.c` `generate_variant()` MCJIT inside `fence_wait` (~29 s serialized on `device->queue`).
+  - Shipping a precompiled Mesa llvmpipe disk cache in the OS image cannot match arbitrary machines: `lp_disk_cache_create()` hashes `util_cpu_caps_t`'s first 4 dwords (`nr_cpus`, `max_cpus`, `x86_cpu_type`, `cacheline`, full ISA feature bitmask) plus `libvulkan_lvp.so` and `libLLVM.so` build-IDs and `GALLIVM_PERF`.
+  - Benchmarking `gpu_lavapipe_threads` 2, 4, 6, 8 on 6 vCPUs (warm cache) showed 2 threads stays fastest: warm-up 4005 ms (2) vs 4921 ms (4), 5318 ms (6), 6029 ms (8); scroll 27.0 ms (2) vs 27.7 ms (6), 29.5 ms (8); drag compose ~9.4-9.7 ms across all. Default stays 2.
+
+What changed (Lavapipe only; RADV and Painter untouched):
+- `distro/app_server/skia/SkiaGpu.{h,cpp}`, `SkiaPainter.cpp`, `SkiaText.cpp`, `SkiaOffscreen.cpp`, `Compositor.cpp`: add `gpu_debug`-only counters (`snap_parts`: targets, graphics/compute pipelines, shader modules, memory allocations; `ops`: text, path, bitmap, texture upload; `deliver_parts`: `fence_wait` vs `async_check`; and `gpu draw warm-up detail`). Zero wrapper overhead when `gpu_debug` is off.
+- `distro/app_server/skia/SkiaGpu.cpp`: on CPU/Lavapipe devices (`fOnCpu`), enable `options.fRequireOrderedRecordings = true` (avoiding per-snap Recorder cache flushes; `RunWork()` always inserts FIFO) and attach a Haiku-threaded `PipelineExecutor : public SkExecutor` (`min(4, max(2, cpu_count / 2))` threads, `borrow()` supported) to `options.fExecutor` so SkSL->SPIR-V and Lavapipe's lock-free SPIR-V->NIR->optimize compile in parallel across cores.
+- `distro/app_server/skia/SkiaOffscreen.cpp`: on Lavapipe, skip Pass 1 (`SetOpaque(false)`, which compiled 0 pipelines in measurement: 1 ms/part on 5625U, 3-4 ms/part in QEMU) and warm up opaque `alpha=255` `setColor` paths in Pass 0 (`m == 0`).
+
+Measured (QEMU `-machine q35,accel=kvm -cpu host -m 2048 -smp 6`, `qemu-m13-measure.py`, cold + warm `--again`):
+- Warm-cache warm-up: `4005 ms` -> `2964 ms` (**-26%**, 12 pipelines in 3208 ms CPU time across 3 threads).
+- Cold warm-up: `47895 ms` -> `44064 ms` (**-8%**; remaining ~29 s is llvmpipe fragment-variant MCJIT inside `fence_wait`).
+- First 10 s desktop `snap + insert`: `5.17 s` -> `3.81 s` (**-26%**); `text` 38.7 -> 18.6 ms, `bitmap` 479.4 -> 148.5 ms, `upload` 135.5 -> 41.4 ms.
+- Cold drag `draw`: `4.9 ms` -> `3.3 ms`; cold resize p95: `38.8 ms` -> `37.0 ms` (input p95 `39.6 ms` -> `29.8 ms`).
+- Also booted QEMU with `gpu false` in `/boot/home/config/settings/kernel/drivers/radeon_hd`: desktop reached cleanly, no panic/KDL.
+
+Limits:
+- Measured in QEMU (`-smp 6`), not yet on the 5625U (6 cores / 12 threads); `gpu_lavapipe_threads` 2 vs 4 and cold/warm warm-up on real hardware need stick verification. llvmpipe fragment-variant JIT in `fence_wait` remains serialized inside Mesa. ARM64 and RISC-V were not built.
+
 ## 2026-11-21 - Perf round 1 Part B: graphics, Lavapipe warm-up, libdrm-2.4.124-5
 
 Problem: from docs/reviews/PERF-REVIEW-2026-11.md (#4484):
