@@ -381,6 +381,7 @@ protected:
 			void				_ExcludeOutlineCut(BRegion* region);
 			int32				_OutlineRects(window_outline_rect* rects);
 			const window_outline* _CachedOutline(bool blended);
+			const window_outline* _SteppedRim(rgb_color* color);
 			bool				_OutlineBlended();
 // SPDX-SnippetEnd
 

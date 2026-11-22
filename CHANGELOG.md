@@ -7,6 +7,23 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-22 - Round window corners, step 1.5: the line in Safe mode, a clean resize, the checks
+
+Problem: after PR #4557 three things were open: in Safe mode (Painter) the decorator's edge line stopped where the stepped corner began; the pixel compare of square windows and a move and resize of a round window had not been checked. The resize check then showed black bits of edge line where the smaller window's corner had been: that corner was cut, never drawn, and after the window grew the old picture was kept there.
+
+What changed:
+- `WindowOutline.h`: in the CPU mode the outline also has a `rim`, the window's outermost pixels along the steps (a 4-connected line). `Window::GetBorderRegion()` adds it when the decorator has an edge line, the content region leaves it out, and `Window::_DrawBorder()` paints it in the `GetEdgeLine()` colour after the decorator. The GPU mode is unchanged.
+- `Window::ResizeBy()`: the corners from before a resize (the cut and the rim) are added to the dirty region, so they are drawn after the resize.
+- `r5-effects-test round-move [radius] [seconds]`: one round bordered window that moves itself every 16 ms and grows and shrinks every second. The colour bars now reach the last row (a row was left unpainted, and the moving bar's trace stayed there).
+- `docs/APP-SERVER-COMPOSITOR.md`, "The window outline": the CPU line and the resize.
+
+Limits: the Safe mode line is stepped like the corner (no anti-aliasing without the compositor).
+
+Tested (QEMU, KVM, `-machine pc`, 2 CPUs, 2 GB, GTK at 100 %, a private image copy with `gpu_debug true` planted in the radeon_hd settings, no other QEMU; the owner typing, 22 Nov 2026 about 21:30 to 21:40 guest time):
+- Compare (Lavapipe, shadow, frosted glass and animations off, Terminal and Deskbar, with Default (R5) and with Haiku's built-in decorator): every `app_server: compose compare` line `ok`, `grep -c "compare MISMATCH"` 0.
+- `round-move` (effects on): the round corners, the edge line and the soft shadow stay while the window moves and resizes. Seen: black bits of edge line after it grew, fixed above; the fix is built (see below) but not yet looked at again.
+- Safe mode from the boot menu, `r5-effects-test round`: the grey edge line follows the steps round every corner of the three windows.
+- Built with `scripts/build-locked.sh` before the resize fix (`jam_exit=0`, `mesa_exit=0`).
 ## 2026-11-22 - Compositor: split Compositor.cpp, Layer::CopySnapshotFrom(), and round-corner follow-ups
 
 Problem: `distro/app_server/Compositor.cpp` had grown to 6,859 lines, and `_ComposeLoop()` copied `Compositor::Layer` snapshot fields by hand 600 lines away from `ClippingChanged()`, which made it easy to miss new fields (as happened with the round-corner fields). Two minor follow-up items from the PR #4557 review also remained: `R5Decorator::GetEdgeLine()` did not acquire `AutoReadLocker _(fLocker)`, and zero-copy Vulkan views reaching into a rounded corner were drawn raw with `compose.comp` instead of blended through the corner shader.
