@@ -7,6 +7,16 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-22 - README: highlights up front, and owner results on the 5625U
+
+Problem: the README only told what R5 can do after several long sections, still listed Skia drawing, Wi-Fi 6, WPA3 and the AMD64 CPU work as coming next, and showed build 10064.
+
+What changed: `README.md` opens with an "At a glance" list in a cheekier tone, and the feature sections are shorter. Skia window drawing (build 10066), the R5 window frame, Wi-Fi 6 with WPA3, game controller rumble and trigger effects, and the AMD64 CPU tuning (ongoing) are described as what R5 does now. "What's coming next" lists HiDPI, the Deskbar redesign, Bluetooth LE Audio and Auracast, and more GPUs and Wi-Fi cards. MIDI is described as "MIDI 2.0 support", not "full": the open points are #4519 (no real USB MIDI 2.0 device tested), #4520 (MIDI 1.0 devices as UMP for MIDI 2.0 programs) and #4521 (Appendix D.2.8 messages). Current build is 10066.
+
+Tested (owner, 22 Nov 2026, Ryzen 5 5625U): Wi-Fi 6 works on the MT7921; game controller rumble works; DualSense trigger effects work. Motion sensing was not reported and the README does not claim it.
+
+Limits: text only. No speed numbers for the CPU work.
+
 ## 2026-11-22 - CPU Info's icon is sharp again
 
 Problem: the icon in CPU Info's heading looked jagged. CPU Info rendered it at `ComposeIconSize(40).Width()` (39 pixels at the default font), and `BPageHeader` draws its icon in a square of 48 units, so the bitmap was stretched. CPU Info followed `docs/LIBR5.md` and R5Book, which said `ComposeIconSize(40)`; the class has drawn at 48 units all along.
