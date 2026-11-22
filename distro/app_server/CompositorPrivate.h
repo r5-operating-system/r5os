@@ -733,7 +733,7 @@ set_corner(effect_rect& effect, const window_corner& corner,
 	effect.shape[2] = corner.radius;
 	effect.shape[3] = 1;
 	effect.shape[4] = (int32)round.edgeColor;
-	effect.shape[5] = round.edgeWidth;
+	effect.shape[5] = corner.lined ? round.edgeWidth : 0;
 	effect.shape[6] = 0;
 	effect.shape[7] = 0;
 }

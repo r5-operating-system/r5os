@@ -74,6 +74,9 @@ struct window_corner {
 	clipping_rect	square;		// the radius x radius pixels of the corner
 	int32			kind;		// 0 left top, 1 right top, 2 left bottom,
 								// 3 right bottom
+	int32			lined;		// carries the decorator's edge line: the
+								// frame's corners (the first rectangle)
+								// do, a tab's do not
 };
 
 
@@ -160,6 +163,7 @@ window_outline_corner(const clipping_rect& rect, int32 kind, float radius,
 	bool bottom = kind >= 2;
 	corner.radius = r;
 	corner.kind = kind;
+	corner.lined = true;
 	corner.centerX = right ? rect.right + 1 - r : rect.left + r;
 	corner.centerY = bottom ? rect.bottom + 1 - r : rect.top + r;
 	corner.square.left = right ? rect.right - r + 1 : rect.left;
@@ -247,9 +251,13 @@ window_outline_build(const window_outline_rect* rects, int32 count,
 			window_corner corner;
 			if (!window_outline_corner(rect, kind, radii[kind], corner))
 				continue;
+			// The edge line runs along the frame, the first rectangle; a
+			// tab draws its own edge, if it has one (Default (R5 Modern),
+			// 22 Nov 2026).
+			corner.lined = i == 0;
 			outline.corners[outline.cornerCount++] = corner;
 			squares[i].Include(corner.square);
-			if (!blended)
+			if (!blended && corner.lined)
 				window_outline_add_rim(rect, corner, outline.rim);
 			bool right = kind == 1 || kind == 3;
 			for (int32 y = corner.square.top; y <= corner.square.bottom;

@@ -7,6 +7,18 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-22 - Windows, Default (R5 Modern) step B: the edge line runs along the frame only
+
+Problem: a window outline has the frame first and then the tabs (`Decorator::GetOutline()`, decorator ABI 2). The compositor carried the decorator's edge line (`GetEdgeLine()`) round every round corner, the tab's too, and Safe mode painted the stepped line (`rim`) there as well. Default (R5 Modern)'s tab has no line along its straight edges (board 4 of the mockup), so its round top corners would have had a line that stops where the corner ends.
+
+What changed: `window_corner` (`WindowOutline.h`) knows whether it carries the line (`lined`): the corners of the first rectangle do, a tab's do not. In the GPU mode `set_corner()` (`CompositorPrivate.h`) gives the shader line width 0 for a tab corner; in the CPU mode only the frame's corners get a `rim`. A tab draws its own edge, if it has one. No decorator ABI change: the order of the rectangles was already the frame first.
+
+Limits: a decorator that wants a line round its tab draws it itself.
+
+Unchanged: a window with one rectangle (`set_window_corner_radius()`, the round Deskbar) and every square window.
+
+Tested: see the step C entry (the build, the compare and the QEMU pictures).
+
 ## 2026-11-22 - Windows, Default (R5 Modern) step A: the R5 frame's code shared
 
 Problem: Default (R5 Modern) (`docs/design/R5-MODERN-DECORATOR.md`, owner 22 Nov 2026: a separate add-on that shares the code of `R5Decorator`) needs the R5 frame class, but `R5Decorator.cpp` also held the add-on entry (`instantiate_decor_addon`, the ABI export), so a second add-on could not build it.
