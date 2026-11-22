@@ -7,6 +7,16 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-22 - Settings - Desktop and Deskbar: Style, Layout, Corners and Floating (Deskbar styles, step 4)
+
+Problem: the Deskbar styles need their choices on the Settings page Desktop and Deskbar.
+
+What changed: the Window box of the page gains Style (Default (R5), Classic (Haiku)), Layout (Vertical, Compact, Horizontal), Corners (Rounded, Square) and the check box "Keep away from the screen edges". Place stays on the screen picture, which now shows the pill, the margin and round corners. Classic (Haiku) hides Corners and Floating and disables Compact. An edge on the picture is the Horizontal layout, a corner Vertical or Compact; choosing Horizontal moves the place to the edge of its corner. The page sends Deskbar's private code `'R5ds'` with absolute values and does not write Deskbar's file; Revert and Defaults cover the new choices (Defaults: Default (R5), Vertical, Rounded, floating, top right). The page keeps its place, title and description.
+
+Limits: the page is taller; its content scrolls in the Settings window at 1030 by 610 (as the frame allows).
+
+Tested: QEMU, `Settings --page deskbar`: the page shows the four new controls with Default (R5), Vertical, Rounded and the check box on. The controls were not clicked in QEMU; the same message drove every layout in the test (`scripts/deskbar-styles-guest.sh`).
+
 ## 2026-11-22 - Deskbar styles, steps 1 to 3: Default (R5) and Classic (Haiku)
 
 Problem: the owner chose Deskbar styles on 22 Nov 2026 (`docs/design/DESKBAR-STYLES.md`, mockup boards A to D, option E "Hollow"): Classic (Haiku) as today, and Default (R5) as the new default with three layouts.
