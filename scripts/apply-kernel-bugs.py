@@ -77,6 +77,9 @@ def install_kernel_sources() -> None:
         # R5: shutdown hooks, so radeon_hd stops the GPU before a restart
         "headers/private/kernel/r5_shutdown.h",
         "src/system/kernel/shutdown.cpp",
+        # R5: AHCI fast empty-port reset and 64-bit DMA when CAP.S64A is set
+        "src/add-ons/kernel/busses/scsi/ahci/ahci.c",
+        "src/add-ons/kernel/busses/scsi/ahci/ahci_port.cpp",
         # R5: no USB modules in the BIOS CD floppy archive (size limit)
         "build/jam/images/FloppyBootImage",
         # R5: the AMD CPPC values stay per CPU (no shared globals)
