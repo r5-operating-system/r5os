@@ -7,6 +7,16 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-23 - Windows, Default (R5 Modern): fixes from the second review
+
+Problem: a second independent review (a new agent, code and docs only, on the code after the first review's fixes) found that a new title, new flags or an added or removed tab can change the width of the tab card, so the card may come to lie behind a top corner of the window or no longer. The wedge rows were not in the update region, and `Window` kept its cached content region (which leaves the decorator's footprint out) and its views' screen clipping, so wedge pixels could stay on screen or stay undrawn.
+
+What changed: `R5ModernDecorator` overrides `_SetTitle()`, `_SetFlags()`, `_AddTab()` and `_RemoveTab()` and adds the rows of the window's top corners to the update region (`_IncludeWedgeRows()`, also used by `_SetTabLocation()` and `_MoveTab()`). New `Window::_DecoratorShapeChanged()` drops the content, visible content and drawing regions and the top view's screen clipping; called from `SetTitle()`, `SetFlags()`, `SetLook()` and `ReloadDecor()`.
+
+Also noted by the review, not changed: in the GPU mode the edge line round the window's top arcs, where the card lies behind them, is about half a pixel thinner than round the bottom arcs (the compositor's line reaches one pixel into the content there, and those pixels are the window's own); a resize or Stack and Tile highlight colours the straight sides, not the arcs; the sort in Appearance is by bytes, not by locale; "Classic (Haiku)" is matched by its translated name.
+
+Tested: build 10 (`jam_exit=0`); QEMU run 7 (see the PR). A title change that moves the card over a corner was not tested in QEMU.
+
 ## 2026-11-23 - Windows, Default (R5 Modern): fixes from the first review
 
 Problem: an independent review of the branch (a fresh agent, code and docs only) found: the wedge in the footprint depended on the mode, and the footprint is cached, so after a fall back from the GPU to the CPU mode in a session some wedge pixels were drawn by nobody; wedge pixels between half and fully covered were in the footprint but returned no region, so a click there did nothing; reordering stacked tabs (`_MoveTab`) did not redraw the wedge; `_DrawWedges()` made one rectangle and one colour lookup per pixel.

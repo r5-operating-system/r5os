@@ -601,10 +601,8 @@ R5ModernDecorator::_SetTabLocation(Decorator::Tab* tab, float location,
 	if (_IsModern()) {
 		_LayoutAllItems();
 		// the wedge follows the card
-		if (updateRegion != NULL && result) {
-			updateRegion->Include(BRect(fBorderRect.left, fBorderRect.top,
-				fBorderRect.right, fBorderRect.top + fRadius));
-		}
+		if (result)
+			_IncludeWedgeRows(updateRegion);
 	}
 	return result;
 }
@@ -618,11 +616,54 @@ R5ModernDecorator::_MoveTab(int32 from, int32 to, bool isMoving,
 	if (_IsModern()) {
 		_LayoutAllItems();
 		// review 1: the wedge takes the colour of the tab now behind it
-		if (updateRegion != NULL) {
-			updateRegion->Include(BRect(fBorderRect.left, fBorderRect.top,
-				fBorderRect.right, fBorderRect.top + fRadius));
-		}
+		_IncludeWedgeRows(updateRegion);
 	}
+	return result;
+}
+
+
+// Review 2: a new title, flags or tab can change the width of the card, so
+// the card may now lie behind a top corner of the window, or no longer.
+// The wedge rows are drawn again; Window drops its content region.
+
+
+void
+R5ModernDecorator::_SetTitle(Decorator::Tab* tab, const char* string,
+	BRegion* updateRegion)
+{
+	R5Decorator::_SetTitle(tab, string, updateRegion);
+	if (_IsModern())
+		_IncludeWedgeRows(updateRegion);
+}
+
+
+void
+R5ModernDecorator::_SetFlags(Decorator::Tab* tab, uint32 flags,
+	BRegion* updateRegion)
+{
+	R5Decorator::_SetFlags(tab, flags, updateRegion);
+	if (_IsModern())
+		_IncludeWedgeRows(updateRegion);
+}
+
+
+bool
+R5ModernDecorator::_AddTab(DesktopSettings& settings, int32 index,
+	BRegion* updateRegion)
+{
+	bool result = R5Decorator::_AddTab(settings, index, updateRegion);
+	if (_IsModern())
+		_IncludeWedgeRows(updateRegion);
+	return result;
+}
+
+
+bool
+R5ModernDecorator::_RemoveTab(int32 index, BRegion* updateRegion)
+{
+	bool result = R5Decorator::_RemoveTab(index, updateRegion);
+	if (_IsModern())
+		_IncludeWedgeRows(updateRegion);
 	return result;
 }
 
@@ -729,6 +770,17 @@ R5ModernDecorator::_LayoutAllItems()
 		return;
 	for (int32 i = 0; i < fTabList.CountItems(); i++)
 		_LayoutItems(fTabList.ItemAt(i));
+}
+
+
+//!	The rows of the window's top corners, where the wedge can be.
+void
+R5ModernDecorator::_IncludeWedgeRows(BRegion* region) const
+{
+	if (region == NULL || !fBorderRect.IsValid())
+		return;
+	region->Include(BRect(fBorderRect.left, fBorderRect.top,
+		fBorderRect.right, fBorderRect.top + fRadius));
 }
 
 

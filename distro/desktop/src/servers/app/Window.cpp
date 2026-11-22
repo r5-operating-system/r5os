@@ -865,15 +865,8 @@ Window::ReloadDecor()
 	// outline out; both change with the decorator (Default (R5 Modern) to
 	// Default (R5) left its wedge and its cut corners undrawn, QEMU, 22 Nov
 	// 2026).
-	for (int32 i = 0; i < stack->CountWindows(); i++) {
-		Window* window = stack->WindowAt(i);
-		window->fContentRegionValid = false;
-		window->fVisibleContentRegionValid = false;
-		window->fEffectiveDrawingRegionValid = false;
-		// the views keep their clipping cut to the old content region
-		if (window->fTopView.IsSet())
-			window->fTopView->InvalidateScreenClipping();
-	}
+	for (int32 i = 0; i < stack->CountWindows(); i++)
+		stack->WindowAt(i)->_DecoratorShapeChanged();
 // SPDX-SnippetEnd
 
 	fWindowBehaviour.SetTo(windowBehaviour);
@@ -1308,6 +1301,13 @@ Window::SetTitle(const char* name, BRegion& dirty)
 	if (decorator) {
 		int32 index = PositionInStack();
 		decorator->SetTitle(index, name, &dirty);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// a decorator's footprint may reach into the frame (Default (R5
+		// Modern)'s wedge) and change with the width of the tab
+		_DecoratorShapeChanged();
+// SPDX-SnippetEnd
 	}
 }
 
@@ -1541,6 +1541,11 @@ Window::SetLook(window_look look, BRegion* updateRegion)
 	fEffectiveDrawingRegionValid = false;
 		// ...and therefore the drawing region is
 		// likely not valid anymore either
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	_DecoratorShapeChanged();
+// SPDX-SnippetEnd
 
 	if (!fCurrentStack.IsSet())
 		return;
@@ -1614,6 +1619,11 @@ Window::SetFlags(uint32 flags, BRegion* updateRegion)
 
 	int32 stackPosition = PositionInStack();
 	decorator->SetFlags(stackPosition, flags, updateRegion);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	_DecoratorShapeChanged();
+// SPDX-SnippetEnd
 
 	// we might need to resize the window!
 	decorator->GetSizeLimits(&fMinWidth, &fMinHeight, &fMaxWidth, &fMaxHeight);
@@ -2401,6 +2411,22 @@ Window::SetCornerRadius(float radius)
 	fContentRegionValid = false;
 	fVisibleContentRegionValid = false;
 	fEffectiveDrawingRegionValid = false;
+}
+
+
+/*!	The decorator's footprint or outline changed (a new decorator, title,
+	look, flags or tab): the content region leaves them out and the views
+	keep their clipping cut to it, so both are made again (review 2,
+	22 Nov 2026).
+*/
+void
+Window::_DecoratorShapeChanged()
+{
+	fContentRegionValid = false;
+	fVisibleContentRegionValid = false;
+	fEffectiveDrawingRegionValid = false;
+	if (fTopView.IsSet())
+		fTopView->InvalidateScreenClipping();
 }
 
 

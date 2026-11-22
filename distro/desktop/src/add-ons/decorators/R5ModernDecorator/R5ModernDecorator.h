@@ -59,8 +59,19 @@ protected:
 									BRegion* updateRegion = NULL);
 	virtual	bool				_MoveTab(int32 from, int32 to, bool isMoving,
 									BRegion* updateRegion = NULL);
+	virtual	void				_SetTitle(Decorator::Tab* tab,
+									const char* string,
+									BRegion* updateRegion = NULL);
+	virtual	void				_SetFlags(Decorator::Tab* tab, uint32 flags,
+									BRegion* updateRegion = NULL);
+	virtual	bool				_AddTab(DesktopSettings& settings,
+									int32 index = -1,
+									BRegion* updateRegion = NULL);
+	virtual	bool				_RemoveTab(int32 index,
+									BRegion* updateRegion = NULL);
 
 private:
+			void				_IncludeWedgeRows(BRegion* region) const;
 			bool				_IsModern() const;
 			bool				_Blended() const;
 			bool				_Soft() const;
