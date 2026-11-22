@@ -7,6 +7,14 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-22 - Windows: a change of decorator redraws the old round corners
+
+Problem: in QEMU, choosing Default (R5) in Appearance while Default (R5 Modern) was active left black bits in every window's old round corners and a bit of yellow tab in the top left corner, until the window was drawn again for another reason. `Window::ReloadDecor()` swapped the decorator but kept the cached content region, which still left the old footprint (the tab card's wedge) and the old cut corners out; and `Desktop::ReloadDecor()` redrew the old and the new border only, not the old cut corners.
+
+What changed: `Window::ReloadDecor()` invalidates the content, visible content and drawing regions of the stack's windows; `Desktop::ReloadDecor()` adds the old outline's `cut` and `rim` to the region it redraws.
+
+Tested: see the step C entry (QEMU, the switch from Default (R5 Modern) to Default (R5)).
+
 ## 2026-11-22 - Compositor: a new window gets its shadow at once
 
 Problem: in QEMU (Lavapipe, shadow on) a window that had just opened showed no shadow, or only a few dark pixels round its corners, until it was moved or lost the focus; the Appearance window stayed so for minutes. A new window's layer has no buffer memory at its first compose (`Layer::HasPixels()` false), so the window and its shadow are skipped; the window's first drawing then damages only its own pixels, so the shadow area outside it was never composed. Found while testing Default (R5 Modern); the code is the same for every decorator, so it is not clear whether it came with the compositor split (#4558). Listed in the shared `COMPOSITOR-FIXES.md` of tonight's sessions.

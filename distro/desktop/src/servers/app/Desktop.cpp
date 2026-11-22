@@ -72,6 +72,11 @@
 #include "SystemPalette.h"
 #include "WindowPrivate.h"
 #include "Window.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include "WindowOutline.h"
+// SPDX-SnippetEnd
 #include "Workspace.h"
 #include "WorkspacesView.h"
 // SPDX-SnippetBegin
@@ -2551,6 +2556,17 @@ Desktop::ReloadDecor(DecorAddOn* oldDecor)
 			window = window->NextWindow(kAllWindowList)) {
 		BRegion oldBorder;
 		window->GetBorderRegion(&oldBorder);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// the round corners of the decorator before: with a square one they
+		// lie inside the window and are drawn (QEMU, 22 Nov 2026)
+		window_outline outline;
+		window->GetOutline(&outline,
+			fCompositor != NULL && fCompositor->IsActive());
+		oldBorder.Include(&outline.cut);
+		oldBorder.Include(&outline.rim);
+// SPDX-SnippetEnd
 
 		if (!window->ReloadDecor()) {
 			// prevent unloading previous add-on

@@ -858,6 +858,21 @@ Window::ReloadDecor()
 
 	stack->SetDecorator(decorator);
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// The content region leaves the decorator's footprint and the round
+	// outline out; both change with the decorator (Default (R5 Modern) to
+	// Default (R5) left its wedge and its cut corners undrawn, QEMU, 22 Nov
+	// 2026).
+	for (int32 i = 0; i < stack->CountWindows(); i++) {
+		Window* window = stack->WindowAt(i);
+		window->fContentRegionValid = false;
+		window->fVisibleContentRegionValid = false;
+		window->fEffectiveDrawingRegionValid = false;
+	}
+// SPDX-SnippetEnd
+
 	fWindowBehaviour.SetTo(windowBehaviour);
 
 	// set the correct focus and top layer tab
