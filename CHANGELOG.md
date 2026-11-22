@@ -7,6 +7,63 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-22 - Card reader after stick 75: SD 2.0 timing on the RTS5228, failed commands in the log, a bounded card scan
+
+Problem (stick 75, 5625U, `generated/boot-5625u-75/` in the stick worktree): the RTS5228 attached and saw the card, but `CMD0` passed, `CMD8` ended after exactly one second with neither "done" nor "failed" from the chip, and `MMC CMD1 failed`; no `/dev/disk/mmc`. After the card went out and in again: four times `cannot power the card slot`, then `Card did not enter ACMD mode` / `Card is busy` 489 times. The owner notes that this reader also works badly in Windows.
+
+Causes:
+- `CMD8` (likely, not proven): the RTS5228 power-on sequence (spec section 3.2, step 11) leaves the SD engine in SD 3.0 mode (`SD_CFG1` bits `0x18`) with the CRC clock from variable-phase clock 0 (`0xFC2E` = `0x21`), which only SDR50 and SDR104 set up. The RTS5228 branch of `rtsx_bus_clock()` skipped OpenBSD's `rtsx_switch_sd_clock()`, which puts every other chip in SD 2.0 timing. `CMD0` needs no answer, so it completed; `CMD8` waits for an answer and its CRC, and the chip never ended it. The earlier `docs/RTSX.md` already named this as the first place to look. It fits the log; only the next stick shows whether it was the cause.
+- 489 tries (sure: the code shows it): Haiku's `mmc_bus` ignored a failed `CMD55` or `ACMD41` and looped on with an old or uninitialized OCR, every 100 ms, also after the card was gone. A failed scan ended with `break` or `return`, which stopped the scan thread for good, and a card put in later got no `CMD0`.
+- `cannot power the card slot` after the reinsert: not known; the log did not say which step failed.
+
+What changed:
+- `rtsx.cpp` (R5 snippet): on the RTS5228, every clock change first sets OpenBSD's SD 2.0 timing: SD 2.0 mode, clock source `0x24` (CRC on the fixed clock), RX on the rising edge, TX on the falling edge (spec section 7.9: the SD path is the same as on the older chips).
+- `rtsx_haiku.cpp`: a failed command is logged with its argument and one line of chip state (`bipr`, `bier`, SD configuration, status and transfer registers, clock registers, and on the RTS5228 the LDO and overcurrent status): every failure up to 32, then one in 256; a removed card is not logged. "cannot power the card slot" names the power or clock step and prints the same state.
+- `rtsx_5228.cpp`: a failing step names its line.
+- `mmc_bus.cpp` copied into `distro/kernel` (Haiku, MIT; R5 snippets; in `install_rtsx()` of `scripts/apply-kernel-bugs.py`): `CMD0` at the start of every scan; `CMD1` and `ACMD41` stop after 20 tries (2 s; the SD specification gives the card 1 s); a failed `CMD55` or `ACMD41` ends the scan; `ocr` starts at 0; a failed scan, a card outside the voltage range and a card that does not enter the data state wait for the next card instead of ending the thread. This also applies to sdhci readers.
+- `docs/RTSX.md`: sections "SD 2.0 timing on the RTS5228", "Diagnostics" and "mmc_bus".
+
+Limits: the SD 2.0 timing is a fix by reasoning from the log, the spec and OpenBSD; it is not shown on the 5625U. If `CMD8` still fails, the state line now says where. The slot power failure after a reinsert is not fixed, only logged. The reader works badly in Windows too, so the card or the slot may share the blame; a second card is worth trying.
+
+Tested (22 Nov 2026): compiled (`scripts/build-locked.sh`, `jam_exit=0`; `mmc_bus.o`, `rtsx.o`, `rtsx_5228.o` and `rtsx_haiku.o` rebuilt, no warnings). QEMU (KVM, own copy of the image) with an emulated sdhci reader and a 64 MiB FAT card: `mmc_bus` ran `CMD0`, `CMD8`, one `CMD55`/`ACMD41`, got RCA `664f`, `mmc_disk` set 4-bit mode and published `disk/mmc/0/raw`, with no errors; the desktop started, no panic. QEMU has no RTS5228; a card removal and a reinsert in the loop were not run in QEMU.
+
+Tested on the 5625U (stick 76, 22 Nov 2026, branch `r5/stick-76` = stick 75 + this entry; `generated/boot-5625u-76/` in the stick worktree, a card in before the start): the SD 2.0 timing worked. `CMD0`, `CMD8`, `ACMD41` (one "busy"), `Voltage range: ff8000`, `RCA: 1 Status: 520`, `SDHC card found`, `disk/mmc/0/raw` published; no failed command and no `cannot power the card slot`. Card out: `rtsx: card removed` (57.7 s); back in: `rtsx: card inserted` (61.1 s) and the new scan found it again (`RCA: 1`). Then `mmc_disk` stopped at `unknown CSD version 125`, so `dd` on the raw device gave "Operation not supported" and nothing was mounted.
+
+Fixed after stick 76 (`rtsx_haiku.cpp`): `mmc_bus` and `mmc_disk` take an R2 answer (CID, CSD) as sdhci gives it, bits 127 to 8 with the top byte 0. The chip reads back 15 answer bytes plus `SD_CMD5`; the 16th byte came from past the end of the read-back (`0xdf`). It is now cleared. With it, the stick 76 CSD (`3a4097f800a4000 df400e00325b5900`) reads as version 2 (SDHC), 512-byte blocks, `C_SIZE` `0x3a409`, about 116.5 GiB. Compiled (`jam_exit=0`) after a merge of `origin/main`; not booted. Mounting, reading and writing a card are not shown yet.
+
+## 2026-11-22 - Card reader: a register timeout is reported as one
+
+Problem: the countdown loops taken from OpenBSD (`while (tries--)`) end with the counter at -1 when they run out and at 0 when the last try succeeds. The checks tested `== 0`, so a real timeout in `rtsx_read()`, `rtsx_read_cfg()`, `rtsx_read_phy()` and `rtsx_write_phy()` was taken as success, and a success on the last try as a timeout. Found on the paper check for stick 75. The loops are bounded either way, so this never hung.
+
+What changed: those four checks test `< 0` (R5 snippets in `rtsx.cpp`).
+
+Limits: not on stick 75 (built before this fix); it only changes the error case. `rtsx_read_cfg()` also has `func & 0x03 << 4` (`func & 0x30`), as OpenBSD; the only caller passes 0, so it is left as it is.
+
+Tested: compiled (`scripts/build-locked.sh`, `jam_exit=0`, `rtsx.o` rebuilt). Not booted.
+
+## 2026-11-22 - Card reader after stick 74: the RTS5228 is probed
+
+Problem: on stick 74 (5625U, SD card in before power on, then out and in again) there was no `rtsx` or `mmc` line in the syslog and no `/dev/disk/mmc`, although the add-on was in the image. The reader is `10ec:5228`, class `ff/00/00`, subsystem `103c:8a31`.
+
+Cause (sure: the device manager code shows it, and no `rtsx` line at all means `supports_device()` never ran or never matched; the attach always logs one line): a PCI device node is `B_FIND_CHILD_ON_DEMAND`. It is only probed when `devfs` scans a directory, and `device_node::Probe()` matches the path against a short list of PCI classes. For `disk` that list was mass storage and the two SD host classes, so a class `0xff` node was never probed. The R5 snippet in `_GetNextDriverPath()` that adds `busses/mmc` for class `0xff` was therefore never reached. `supports_device()` (Realtek, class `0xff`, a chip in `kChips`), the module names and the package lines were correct, and the device_manager copy was in the built kernel (`install_rtsx()` in `scripts/apply-kernel-bugs.py` on the stick branch).
+
+What changed: `device_manager.cpp` (R5 snippet): `Probe("disk")` also matches a PCI device of class `0xff` (`PCI_undefined`). Such a node then gets the paths `drivers`, `busses/virtio` and `busses/mmc` once per scan; drivers there check their own vendor and device IDs. `docs/RTSX.md` says so.
+
+Limits: insert and remove, and a read and write on a FAT card, can only be shown on the 5625U; QEMU has no RTS5228. Removing a card does not take its disk away yet (`mmc_bus` cannot unpublish a card; the old disk only returns errors), as already noted in the driver; a card put back in is announced to `mmc_bus` again.
+
+Tested (22 Nov 2026): compiled with `scripts/build-locked.sh` on `claude/rtsx-card-reader` (merged with `origin/main`), `jam_exit=0`; `device_manager.o` and the kernel were rebuilt. QEMU (KVM, own copy of the image): first start, Sign in and the desktop, no panic and no KDL in the serial log. QEMU has no RTS5228, so attach, insert, remove, read and write were not run.
+
+Tested on the 5625U (stick 75, 22 Nov 2026, branch `r5/stick-75`, SD card in before the start; `generated/boot-5625u-75/`): the probe fix works. `rtsx: RTS5228 (10ec:5228), MSI vector 58`, `rtsx: RTS5228 version B, ASPM 0x2, L1SS 0x5, LTR 1`, `mmc_bus` created, `rtsx: card inserted` at 2.15 s, and `rtsx: card removed` when the owner took it out. The card did not come up: `CMD0` passed, then `Card does not implement CMD8` and `MMC CMD1 failed` (every SD card since version 2 answers CMD8, so a command or its answer is lost), no `/dev/disk/mmc`. After the card went back in: four times `rtsx: cannot power the card slot`, then `Card did not enter ACMD mode` / `Card is busy` 489 times. The reason is not in the log: a failed command is only logged with `TRACE_RTSX`. The owner notes that this reader works badly in Windows too, so the card or the slot may share the blame. Next: log every failed command with its status (not only under `TRACE_RTSX`), stop the `mmc_bus` retry loop after a bounded number of tries, find why the slot power fails after a removal, and try a second card. Insert, remove, read and write on a card are not shown.
+
+## 2026-11-22 - SD cards in Realtek card readers, including the RTS5228
+
+Problem: the HP ENVY x360 15 (Ryzen 5 5625U) has a Realtek RTS5228 card reader (PCI `10ec:5228`, class `0xff`) and R5 had no driver for it. The closed PR #4118 had an OpenBSD base but its 5228 part came from the GPL Linux driver.
+
+What changed: new `busses/mmc/rtsx` driver. The base is OpenBSD rtsx(4) (ISC) on Haiku's `mmc_bus_interface`, with one device table: the OpenBSD chips (RTS5209, 5227, 5229, 522A, 5249, 525A, RTL8402, 8411, 8411B, exactly the list of OpenBSD `rtsx_pci.c` 1.16, their code paths unchanged) and the RTS5228. The RTS5228 part (init, slot power, clock and SSC, card detect, overcurrent, shutdown hook) is MIT, written clean room from `RTS5228-SPEC.md`; no Linux source and no Linux-derived file of #4118 was read. `device_manager.cpp` (copied into `distro/kernel`, MIT snippet) now searches `busses/mmc` for PCI class `0xff`. The driver is in the system package (regular and minimum image) and is a boot module. Attach logs the chip once; the OpenBSD chips say `(experimental)`. Docs: `docs/RTSX.md`, `docs/LICENSING.md`, `THIRD_PARTY_NOTICES.md`, About credits.
+
+Limits: 400 kHz and 25 MHz, 4-bit, 3.3 V only; no high speed, UHS-I, SDIO, suspend or runtime power management (the RTS5228 keeps ASPM forced off). `mmc_bus` does not unpublish a removed card: the old disk stays and returns errors; unmount before removing. A card pulled out during `mmc_bus`'s ACMD41 loop can leave that loop running until a card is inserted. The RTS5228 write path does not compare the echoed byte (the spec does not promise it). The OpenBSD chips are experimental: buildable, not tested on R5. Later work: RTS5208, 5260, 5261, 5264, RTS5765DL (neither OpenBSD nor the spec covers them).
+
+Tested: `scripts/build-locked.sh` jam exit 0, no warnings in `rtsx`; `rtsx` and its boot-module link are in `haiku.hpkg`. QEMU (no Realtek reader) boots to the first-start window, no rtsx line in the serial log, no panic. Not tested: the RTS5228 on the 5625U (card at boot, inserted later, removed, read and write); that needs the stick.
 ## 2026-11-22 - Microcode for every CPU R5 supports (#4550)
 
 Problem: the image only had the AMD family 19h microcode. Every other AMD and Intel processor kept its BIOS microcode. The Intel loader is Haiku code that never ran on R5. Two faults showed up in the review and on the host: a Zen 5 (family 1Ah) patch is 14368 bytes and did not fit the 8192-byte aligned copy, so Zen 5 would never update (the old code missed all 9 Zen 5 entries in the host check), and an Intel file with `total_size` 0 kept `find_microcode_intel()` on the same patch forever (the host run of the old code hung until the timeout).

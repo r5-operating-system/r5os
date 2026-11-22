@@ -51,6 +51,7 @@ AddFilesToPackage add-ons kernel busses i2c :
 	pch_i2c@x86,x86_64
 	;
 AddFilesToPackage add-ons kernel busses mmc :
+	rtsx
 	sdhci
 	;
 AddFilesToPackage add-ons kernel busses pci :
@@ -372,6 +373,7 @@ AddBootModuleSymlinksToPackage
 	scsi_disk
 	scsi_periph
 	silicon_image_3112
+	rtsx
 	smbios@x86,x86_64
 	sdhci
 	ufshci

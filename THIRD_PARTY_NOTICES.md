@@ -289,6 +289,18 @@ Skia, branch `chrome/m158`, commit `707e33875fb45f2997a4d781128bec122fb777b4` (1
 
 R5 patch: `distro/skia/patches/gcc13-to-array.patch` removes `const` from the two members of one constant table in `src/ports/SkFontHost_FreeType.cpp`, because GCC 13.3's `std::to_array` cannot build it. Nothing else of Skia is changed. The licence texts, unmodified: `LICENSES/Skia-BSD-3-Clause.txt`, `LICENSES/skcms-BSD-3-Clause.txt`, `LICENSES/VulkanMemoryAllocator-MIT.txt`; the package also carries them and `AUTHORS` in `documentation/skia`. A release ships the three texts with this list and on the Licenses tab of About. No source offer is required. Skia's licence does not allow the names of Google or the contributors to be used to endorse or promote R5.
 
+### Realtek card readers (OpenBSD rtsx)
+
+Location: `distro/kernel/src/add-ons/kernel/busses/mmc/rtsx`, installed as `busses/mmc/rtsx` in the system package.
+
+`rtsx.cpp`, `rtsxreg.h` and `rtsxvar.h` are from OpenBSD rtsx(4) (`sys/dev/ic/rtsx.c` 1.22, `rtsxreg.h` 1.5, `rtsxvar.h` 1.6, and the device list and flags of `sys/dev/pci/rtsx_pci.c` 1.16). Copyright (c) 2006 Uwe Stuehler, Copyright (c) 2012 Stefan Sperling. License: ISC, the notice is kept in each file:
+
+> Permission to use, copy, modify, and distribute this software for any purpose with or without fee is hereby granted, provided that the above copyright notice and this permission notice appear in all copies.
+>
+> THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+The R5 lines in those files, and the RTS5228 part and Haiku attachment beside them, are copyright 2026 R5OS Contributors, MIT. The RTS5228 part contains no Linux code (clean room, `docs/LICENSING.md`).
+
 ## Built outside this repository, not in the image
 
 ### VirtualBox Guest Additions 7.2.22
