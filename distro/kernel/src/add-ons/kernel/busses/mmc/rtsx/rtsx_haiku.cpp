@@ -27,6 +27,7 @@
 #include "mmc.h"
 #include "rtsxreg.h"
 #include "rtsx.h"
+#include "rtsx_5228.h"
 
 
 #define RTSX_DEVICE_MODULE_NAME	"busses/mmc/rtsx/driver_v1"
@@ -124,6 +125,56 @@ response_type(uint8 command, card_type type)
 }
 
 
+/*
+ * The state of the SD engine, the clock and the slot power in one line,
+ * for a failed command or power-on (stick 75: CMD8 failed with no line to
+ * say why). Only plain register reads.
+ */
+static void
+dump_state(rtsx_softc* sc, const char* why)
+{
+	static const struct {
+		const char*	name;
+		uint16		reg;
+	} kRegs[] = {
+		{ "sd_cfg1", RTSX_SD_CFG1 },
+		{ "sd_cfg2", RTSX_SD_CFG2 },
+		{ "sd_stat1", RTSX_SD_STAT1 },
+		{ "sd_stat2", RTSX_SD_STAT2 },
+		{ "sd_bus", RTSX_SD_BUS_STAT },
+		{ "sd_xfer", RTSX_SD_TRANSFER },
+		{ "clk_en", RTSX_CARD_CLK_EN },
+		{ "oe", RTSX_CARD_OE },
+		{ "clk_ctl", RTSX_CLK_CTL },
+		{ "clk_div", RTSX_CLK_DIV },
+		{ "ssc1", RTSX_SSC_CTL1 },
+		{ "ssc_n", RTSX_SSC_DIV_N_0 },
+		{ "ldo", RTS5228_LDO_CTL },
+		{ "ocp", RTS5228_OCP_STAT },
+	};
+	// The last two are RTS5228 registers.
+	size_t count = B_COUNT_OF(kRegs);
+	if ((sc->flags & RTSX_F_5228) == 0)
+		count -= 2;
+
+	char line[320];
+	size_t length = snprintf(line, sizeof(line), "bipr %08" B_PRIx32
+		" bier %08" B_PRIx32, rtsx_read4(sc, RTSX_BIPR),
+		rtsx_read4(sc, RTSX_BIER));
+	for (size_t i = 0; i < count && length < sizeof(line); i++) {
+		uint8 value;
+		if (rtsx_read(sc, kRegs[i].reg, &value) != 0) {
+			length += snprintf(line + length, sizeof(line) - length,
+				" %s ?", kRegs[i].name);
+		} else {
+			length += snprintf(line + length, sizeof(line) - length,
+				" %s %02x", kRegs[i].name, value);
+		}
+	}
+	ERROR("%s: %s\n", why, line);
+}
+
+
 // #pragma mark - card power and detection
 
 
@@ -132,13 +183,21 @@ static void
 card_power_on(rtsx_softc* sc)
 {
 	if (!sc->powered && !sc->oc_tripped) {
-		if (rtsx_bus_power(sc, true) == 0
-			&& rtsx_bus_clock(sc, 400) == 0) {
+		int error = rtsx_bus_power(sc, true);
+		const char* step = "power";
+		if (error == 0) {
+			error = rtsx_bus_clock(sc, 400);
+			step = "clock";
+		}
+		if (error == 0) {
 			sc->powered = true;
 			(void)rtsx_led_enable(sc);
 			dprintf("rtsx: card inserted\n");
-		} else
-			ERROR("cannot power the card slot\n");
+		} else {
+			ERROR("cannot power the card slot (%s: %s)\n", step,
+				strerror(error));
+			dump_state(sc, "slot");
+		}
 	}
 
 	if (sc->powered && !sc->announced && sc->scan_sem >= 0) {
@@ -511,7 +570,18 @@ execute_command(void* controller, uint8_t command, uint32_t argument,
 	locker.Unlock();
 
 	if (status != B_OK) {
-		TRACE("command %u failed: %s\n", command, strerror(status));
+		// Every failure up to 32, then one in 256, with the state of the
+		// chip. A removed card is not an error.
+		if (status != B_DEV_NO_MEDIA && status != ENODEV) {
+			int32 failures = atomic_add(&sc->command_failures, 1);
+			if (failures < 32 || failures % 256 == 0) {
+				char why[64];
+				snprintf(why, sizeof(why), "CMD%u (arg %08" B_PRIx32
+					") failed: %s", command, argument, strerror(status));
+				MutexLocker dumpLocker(sc->lock);
+				dump_state(sc, why);
+			}
+		}
 		return status;
 	}
 

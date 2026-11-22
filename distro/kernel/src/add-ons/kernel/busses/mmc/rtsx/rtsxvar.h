@@ -107,6 +107,7 @@ struct rtsx_softc {
 	bool			announced;		/* mmc_bus told about the current card */
 	bool			oc_tripped;		/* overcurrent: off until reinserted */
 	bool			shutdown_hook;
+	int32			command_failures;	/* logged with the chip state */
 
 	rtsx_5228_state	r5228;
 	// SPDX-SnippetEnd

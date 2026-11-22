@@ -546,6 +546,8 @@ def install_rtsx() -> None:
     (HAIKU / "src/add-ons/kernel/busses/mmc/rtsx").mkdir(exist_ok=True)
     for relative in (
         "src/system/kernel/device_manager/device_manager.cpp",
+        # mmc_bus: a bounded card scan that waits for the next card
+        "src/add-ons/kernel/bus_managers/mmc/mmc_bus.cpp",
         "src/add-ons/kernel/busses/mmc/rtsx/Jamfile",
         "src/add-ons/kernel/busses/mmc/rtsx/rtsx.cpp",
         "src/add-ons/kernel/busses/mmc/rtsx/rtsx.h",

@@ -15,17 +15,24 @@
 
 #include <KernelExport.h>
 #include <errno.h>
+#include <string.h>
 
 #include "rtsxreg.h"
 #include "rtsx.h"
 #include "rtsx_5228.h"
 
 
+// A failed step names its source line, so the stick log shows which
+// register access of a sequence failed (stick 75: "cannot power the card
+// slot" with nothing else).
 #define CHECK(x) \
 	do { \
 		int _error = (x); \
-		if (_error != 0) \
+		if (_error != 0) { \
+			dprintf("rtsx: RTS5228 step at line %d failed: %s\n", \
+				__LINE__, strerror(_error)); \
 			return _error; \
+		} \
 	} while (0)
 
 
