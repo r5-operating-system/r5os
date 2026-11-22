@@ -79,6 +79,14 @@ def install_kernel_sources() -> None:
         # R5: shutdown hooks, so radeon_hd stops the GPU before a restart
         "headers/private/kernel/r5_shutdown.h",
         "src/system/kernel/shutdown.cpp",
+        # R5: va_copy in syslog() LOG_CONS fallback (fixes app_server crash at
+        # shutdown after syslog_daemon exits) and EFI previous_syslog recovery
+        "src/system/libroot/posix/syslog.cpp",
+        "src/system/boot/platform/efi/efi_platform.h",
+        "src/system/boot/platform/efi/mmu.cpp",
+        "src/system/boot/platform/efi/debug.cpp",
+        "src/system/boot/platform/efi/start.cpp",
+        "src/system/kernel/debug/debug.cpp",
         # R5: AHCI fast empty-port reset and 64-bit DMA when CAP.S64A is set
         "src/add-ons/kernel/busses/scsi/ahci/ahci.c",
         "src/add-ons/kernel/busses/scsi/ahci/ahci_port.cpp",
