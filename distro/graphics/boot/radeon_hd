@@ -1,4 +1,1 @@
-gpu_draw true
-gpu_debug true
-gpu_selftest true
-gpu_m13_boot 1
+r5_round3_boot 1

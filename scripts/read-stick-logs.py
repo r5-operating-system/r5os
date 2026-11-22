@@ -364,7 +364,7 @@ def copy_m10(bfs, dest):
     the M12 stick ~/m12, the M13 stick ~/m13 and the compare images in
     ~/draw-compare, the Wi-Fi stick ~/wifi-stick."""
     users = bfs.walk("home/users")
-    for stick in ("m10", "m11", "m12", "m13", "m13f", "cs35l41",
+    for stick in ("m10", "m11", "m12", "m13", "m13f", "cs35l41", "round2", "round3",
                   "draw-compare", "wifi-stick"):
         total = copy_tree(bfs, "home/%s" % stick, dest / stick)
         if users is not None and (bfs.mode(users) & 0o170000) == 0o040000:
