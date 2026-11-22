@@ -14,10 +14,11 @@ UseLibraryHeaders agg ;
 
 AddResources R5Decorator : resources.rdef ;
 
-Includes [ FGristFiles R5Decorator.cpp ]
+Includes [ FGristFiles R5Decorator.cpp R5DecoratorAddOn.cpp ]
 	: [ BuildFeatureAttribute freetype : headers ] ;
 
 Addon R5Decorator :
 	R5Decorator.cpp
+	R5DecoratorAddOn.cpp
 	: be <nogrist>app_server [ TargetLibstdc++ ] [ TargetLibsupc++ ]
 ;

@@ -7,6 +7,14 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-22 - Windows, Default (R5 Modern) step A: the R5 frame's code shared
+
+Problem: Default (R5 Modern) (`docs/design/R5-MODERN-DECORATOR.md`, owner 22 Nov 2026: a separate add-on that shares the code of `R5Decorator`) needs the R5 frame class, but `R5Decorator.cpp` also held the add-on entry (`instantiate_decor_addon`, the ABI export), so a second add-on could not build it.
+
+What changed: the add-on class and the entry moved word for word into `R5DecoratorAddOn.cpp`; `R5Decorator.cpp` keeps only the frame class. `fThinFrame` and `fHaikuBorderWidth` are protected, so a subclass can use them. The Jamfile builds both files; `scripts/check-pre-stick.py` looks for "decorator: r5 loaded" in the new file. No functional change for Default (R5).
+
+Tested: see the step C entry (the build, and the compare with Default (R5) in QEMU).
+
 ## 2026-11-22 - Round window corners, step 1.5: the line in Safe mode, a clean resize, the checks
 
 Problem: after PR #4557 three things were open: in Safe mode (Painter) the decorator's edge line stopped where the stepped corner began; the pixel compare of square windows and a move and resize of a round window had not been checked. The resize check then showed black bits of edge line where the smaller window's corner had been: that corner was cut, never drawn, and after the window grew the old picture was kept there.
