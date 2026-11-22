@@ -31,8 +31,11 @@ def main() -> int:
     copy("GPUCopyBands.h", local / "GPUCopyBands.h")
     copy("r5_span_avx.h", local / "r5_span_avx.h")
     copy("local-Jamfile", local / "Jamfile")
-    for name in ("Compositor.cpp", "Compositor.h", "WindowBuffer.cpp",
-            "WindowBuffer.h", "WindowHWInterface.cpp", "WindowHWInterface.h"):
+    for name in ("Compositor.cpp", "Compositor.h", "CompositorPrivate.h",
+            "CompositorVulkan.cpp", "CompositorEffects.cpp",
+            "CompositorAnimations.cpp", "CompositorShare.cpp",
+            "WindowBuffer.cpp", "WindowBuffer.h",
+            "WindowHWInterface.cpp", "WindowHWInterface.h"):
         copy(name, local / name)
     copy("compositor/compositor_shaders.h", local / "compositor_shaders.h")
     # M12 steps 2-5: Skia draws the windows (gpu_draw true). The Skia code

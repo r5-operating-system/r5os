@@ -7,6 +7,20 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-22 - Compositor: split Compositor.cpp, Layer::CopySnapshotFrom(), and round-corner follow-ups
+
+Problem: `distro/app_server/Compositor.cpp` had grown to 6,859 lines, and `_ComposeLoop()` copied `Compositor::Layer` snapshot fields by hand 600 lines away from `ClippingChanged()`, which made it easy to miss new fields (as happened with the round-corner fields). Two minor follow-up items from the PR #4557 review also remained: `R5Decorator::GetEdgeLine()` did not acquire `AutoReadLocker _(fLocker)`, and zero-copy Vulkan views reaching into a rounded corner were drawn raw with `compose.comp` instead of blended through the corner shader.
+
+What changed:
+- Split `distro/app_server/Compositor.cpp` along its existing sections into `CompositorPrivate.h` (shared structs and inline helpers), `Compositor.cpp` (lifecycle, windows, clipping, compose loop, reporting), `CompositorVulkan.cpp` (Vulkan init/teardown, buffer allocation, direct scanout), `CompositorEffects.cpp` (shadow, blur, glass, resize outline, round corners), `CompositorAnimations.cpp` (start splash and open/close/workspace animations), and `CompositorShare.cpp` (direct-access pause/resume and zero-copy shared views).
+- Added `Compositor::Layer::CopySnapshotFrom()` in `CompositorPrivate.h` so `_ComposeLoop()` copies the snapshot in one place next to the field declarations.
+- Added `Compositor::_RecordShareCorners()` in `CompositorEffects.cpp` and wired it in `_Compose()`: when a zero-copy Vulkan view intersects `layer->round.area`, `_RecordCorners()` skips those pixels (avoiding double-blending) and `_RecordShareCorners()` blends the shared view's buffer with the corner coverage and decorator edge line (effects mode 6).
+- Added `AutoReadLocker _(fLocker)` to `R5Decorator::GetEdgeLine()` (`distro/desktop/src/add-ons/decorators/R5Decorator/R5Decorator.cpp`).
+- Marked `r5_span_copy` / `r5_span_blend` and their helpers `static inline` in `distro/app_server/r5_span_avx.h` so including the header in split translation units does not trigger `-Werror=unused-function`.
+- Updated `distro/app_server/local-Jamfile`, `scripts/apply-app-server.py`, and `scripts/check-pre-stick.py` (`M11_LINES` paths).
+
+Tested: built AMD64 from worktree with `scripts/build-locked.sh` (`jam_exit=0`, `mesa_exit=0`, 0 failed targets, 0 warnings in changed files); verified all 36 `M11_LINES` patterns in `scripts/check-pre-stick.py`. Not tested: QEMU boot or RADV zero-copy Vulkan view inside a rounded corner.
+
 ## 2026-11-22 - Round window corners: the review fixes (edge line, soft shadow, the missing copy)
 
 Problem: in QEMU the owner found the round corners pixelated: the 1 px edge line stopped where the arc began, the shadow had a hard edge round the corner, and glass had a light ring on the arc. Two more rounds of changes (the line carried round the arc with a colour sampled from the window's pixels, a round reach for the shadow) did not help at the top corners, also with animations off. A second look (a review, read only) found the cause: `Compositor::_ComposeThread()` copies each layer field by field for the frame and left all the new corner fields out, so the corner pass never ran and every corner was the region's hard stepped cut. It also found that the sampled colour, a symmetric line ring that let the content through, and the bordered look's 1 to 2 px shadow would stay rough even after that fix.
