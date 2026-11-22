@@ -228,6 +228,23 @@ Other defaults:
 4. Sleep and wake on the 5625U (its own round, the owner's go first), then Intel on the X1 Carbon.
 5. ARM64 and RISC-V, in their own trees, when those targets boot.
 
+### R5Book and the other documentation
+
+Every step that ships something a developer can use updates R5Book (`docs/r5book/`) in the same change. A step is not done while R5Book still describes the old state.
+
+- **A new page `power-kit.html`,** in the layout of `bluetooth-kit.html` and `game-kit.html`. It covers:
+  - `BPowerRoster`, with every call, the watch messages and their fields, and a short example (a program that pauses its work on "will sleep" and resumes on "did wake");
+  - how brightness goes through `BScreen::SetBrightness()`;
+  - what a program gets on a computer without a battery, in Safe mode, and before sleep works.
+- **Links to that page** from `index.html`, `class-index.html` (`BPowerRoster`) and the page table in `docs/r5book/README.md`.
+- **`admin-kit.html`:** the power service as an example of a service that takes admin requests.
+- **`docs/LIBR5.md`:** `libr5power.so` and its calls (`AGENTS.md`, LibR5), in the same change as the code.
+- **`docs/SETTINGS.md`:** the Power page, with its fixed place, description and lock rules.
+- **Step by step:**
+  - step 2 writes the page with `BPowerRoster`, the profile and the watch messages;
+  - step 3 adds the battery, brightness and the low-battery notification;
+  - step 4 adds "will sleep" and "did wake", with the example.
+
 ## 9. Not in this contract
 
 - Battery charge limits.
