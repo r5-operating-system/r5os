@@ -21,7 +21,9 @@ What changed (all points of the review):
 
 Limits: Safe mode (Painter) keeps the stepped arc without the decorator's line along it. The open animation rounds the bounding box, so a tab's corners are approximated.
 
-Tested: built AMD64 with `scripts/build-locked.sh` from the worktree (`jam_exit=0`, `mesa_exit=0`, no failed target, no warning in the changed files). Not booted yet with these fixes; the owner's reviewer reads the PR first.
+Tested: built AMD64 with `scripts/build-locked.sh` from the worktree (`jam_exit=0`, `mesa_exit=0`, no failed target, no warning in the changed files), and again after merging `origin/main` (`jam_exit=0`, `mesa_exit=0`). Not booted yet with these fixes; the owner's reviewer reads the PR first.
+
+Build fix found on the way: after the merge the apply stopped at `libr5power image regular anchor not found once`. `apply-r5ui.py` added `libr5admin.so` to the image lists again on a second apply in the same tree (other applies insert their libraries right after `libr5ui.so`, so its check for the pair failed), and the new `apply-power.py` needs that line once. `apply-r5ui.py` now checks the line itself; the duplicate in the shared WSL tree was removed under the build lock.
 
 ## 2026-11-22 - The Be, Flat, Mac and Win decorators are no longer built
 
