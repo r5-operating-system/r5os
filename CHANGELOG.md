@@ -15,7 +15,7 @@ What changed: their `distro/desktop/src/add-ons/decorators/` copies are removed,
 
 Limits: a user who chose one of the four earlier gets the default decorator; that fallback was not tested. Old copies of these files in the shared WSL tree stay there but are no longer built.
 
-Tested: the jam of the entry above passed without the four add-ons (`jam_exit=0`). Not booted.
+Tested: the jam of the entry above passed without the four add-ons (`jam_exit=0`); the QEMU boots of that entry (Lavapipe and Safe mode) ran with Default (R5) as the decorator. The fallback for a user who had chosen one of the four was not tested.
 
 ## 2026-11-22 - Round window corners: the outline under Default (R5 Modern) and the round Deskbar
 
@@ -34,7 +34,12 @@ Limits: no decorator returns an outline yet and nothing calls the new libr5ui fu
 
 Test tool: `r5-effects-test round [radius] [seconds]` opens three bordered windows (the kind Deskbar uses) with `set_window_corner_radius()`: colour bars to every edge with a moving bar through the bottom corners, a text view with both scroll bars meeting in the bottom-right corner, and a glass window. Without a radius it uses 18 scaled with the font size; `round 0` opens them square for the compare.
 
-Tested: built AMD64 with `scripts/build-locked.sh` from the worktree (`jam_exit=0`, `mesa_exit=0`, 10420 targets, `r5-os.image` written, no failed target; the missing-header lines of the image translators are not from this change and fail no target). Not booted yet. Still needed: a QEMU boot (Lavapipe and Safe mode) with `r5-effects-test round`, and the compare mode for Default (R5) and Classic (Haiku) unchanged.
+Tested: built AMD64 with `scripts/build-locked.sh` from the worktree (`jam_exit=0`, `mesa_exit=0`, 10420 targets, `r5-os.image` written, no failed target; the missing-header lines of the image translators are not from this change and fail no target). QEMU (KVM, `-machine pc`, 2 CPUs, 2 GB, GTK window, a private copy at `/home/nickr/r5os/eager-bell/round.image`, no other QEMU running, `scripts/run-qemu-r5.sh` not used), 22 Nov 2026, about 19:55 to 20:05 guest time, the owner typing in the guest:
+- Lavapipe (`gpu compositor on lavapipe: no render node`): `r5-effects-test round` showed all three windows with round corners, the arc blended with what lies behind, the desktop in the cut corners, the scroll-bar corner clipped, the shadow under the arc and the glass up to the round corner. `round 0` opened the same windows square. Terminal (Default (R5)) and Deskbar looked as before (by eye, not the compare mode).
+- Safe mode from the boot menu (`gpu compositor off: safe mode`): the same command showed stepped corners with the desktop behind, no shadow, no glass.
+- The syslog has no crash and no `decorator ... refused`: the R5 decorator loaded with ABI 2. `R5DecoratorAbiTest` is not packaged, so its refusal was not seen in this boot.
+- Seen: a bordered window's 1 px line runs only along the straight edges, not along the arc (its decorator does not know the program's radius). For later, with the Deskbar's edge line.
+Not done: the pixel compare mode (`gpu_debug`) for Default (R5) and Classic (Haiku), and a resize or move of a round window. Screenshots: `generated/round-corners-qemu/` in the worktree (local).
 
 ## 2026-11-22 - Warm restart no longer hangs in OVMF firmware
 
