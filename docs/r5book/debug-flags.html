@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<!--
+  SPDX-FileCopyrightText: 2026 R5OS Contributors
+  SPDX-License-Identifier: MIT
+-->
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Debug flags</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
+	<link rel="stylesheet" href="r5book.css" />
+</head>
+<body data-page="debug-flags">
+
+<div class="book">
+	<aside class="toc"></aside>
+
+	<main class="page">
+		<div class="breadcrumb"><a href="index.html">R5Book</a> &rsaquo; <a href="index.html#reference">Reference</a> &rsaquo; Debug flags</div>
+
+		<section class="page-hero">
+			<span class="kit-label">Reference</span>
+			<h1>Debug flags</h1>
+			<p>The switches R5 reads from settings files and environment variables: extra logging, tests,
+			tuning, and the few normal on/off settings that live next to them. They are for developers and
+			test sticks. A normal installation needs none of them.</p>
+		</section>
+
+		<nav class="on-this-page" aria-label="On this page">
+			<h3>What is in this page</h3>
+			<ul>
+				<li><a href="#how">How the settings files work</a> &mdash; where they live, defaults, the release default.</li>
+				<li><a href="#radeon_hd">radeon_hd</a> &mdash; GPU, compositor, Skia drawing, Lavapipe.</li>
+				<li><a href="#kernel">kernel</a> &mdash; memory, power, cache and boot reports, the syslog.</li>
+				<li><a href="#efi">efi and safe mode</a> &mdash; EFI runtime services.</li>
+				<li><a href="#audio">Audio</a> &mdash; speaker amplifiers, USB audio, HD Audio, the mixer.</li>
+				<li><a href="#network">Wi-Fi, Bluetooth and the network</a> &mdash; mt7922wifi, h2generic, WiFi_debug, discovery.</li>
+				<li><a href="#env">Environment variables</a> &mdash; Lavapipe, Mesa, tests.</li>
+			</ul>
+		</nav>
+
+		<div class="note"><strong>Test switches change behaviour.</strong> A switch marked <em>test</em> runs a test
+		or forces a failure on purpose (a GPU hang, a failed submit). Use it on a test stick, not on a machine
+		you work on.</div>
+
+		<section class="entry" id="how">
+			<div class="entry-header"><h2>How the settings files work</h2><span class="kind">Settings files</span></div>
+
+			<p>A kernel driver reads <code class="inline">~/config/settings/kernel/drivers/&lt;name&gt;</code> with
+			<code class="inline">load_driver_settings("&lt;name&gt;")</code>. One switch per line, for example
+			<code class="inline">gpu_debug true</code>. A change takes effect on the next start unless the table says
+			otherwise.</p>
+
+			<table class="spec">
+				<tr><th>Term</th><th>Meaning</th></tr>
+				<tr><td>default</td><td>The value when the line is not in the file.</td></tr>
+				<tr><td>bare</td><td>The value when the key is there without a value. Switches with <em>bare = false</em> need an explicit <code>true</code>.</td></tr>
+				<tr><td>release default</td><td>Read through the GPU switch rule: the file's value if it names one; otherwise on, but only on a release-supported GPU (today the Ryzen 5 5625U, <code>0x15e7</code>) without <code>gpu false</code>; and always off with <code>gpu false</code>.</td></tr>
+				<tr><td>exact form</td><td>app_server, Login and the R5 DRM library read the <code>radeon_hd</code> file line by line and only understand the exact form shown, for example <code>gpu_debug true</code>. Comments and bare keys do not work there.</td></tr>
+			</table>
+
+			<p>Kinds: <em>debug</em> and <em>trace</em> only add logging; <em>test</em> runs a test or forces a failure;
+			<em>tuning</em> changes behaviour or speed; <em>feature</em> is a normal on/off setting.</p>
+		</section>
+
+		<section class="entry" id="radeon_hd">
+			<div class="entry-header"><h2>radeon_hd</h2><span class="kind">~/config/settings/kernel/drivers/radeon_hd</span></div>
+
+			<h3>Whole GPU and GFX9</h3>
+			<table class="spec">
+				<tr><th>Switch</th><th>Values and default</th><th>What it does</th><th>Kind</th></tr>
+				<tr><td><code>gpu</code></td><td>default true</td><td><code>gpu false</code> turns every GPU switch and path off: the desktop uses Lavapipe or the CPU.</td><td>feature</td></tr>
+				<tr><td><code>gfx9_ring</code></td><td>release default</td><td>Starts the GFX9 ring on GC 9.3.</td><td>feature</td></tr>
+				<tr><td><code>gfx9_kernel</code></td><td>release default</td><td>The kernel owns the GFX9 stage. The render node needs it, <code>gfx9_irq</code> and <code>gfx9_gart</code>.</td><td>feature</td></tr>
+				<tr><td><code>gfx9_irq</code></td><td>release default</td><td>The GFX9 interrupt and the fault interrupt.</td><td>feature</td></tr>
+				<tr><td><code>gfx9_gart</code></td><td>release default</td><td>The GART.</td><td>feature</td></tr>
+				<tr><td><code>gfx9_vmids</code></td><td>release default</td><td>Sets up VMIDs 1&ndash;15.</td><td>tuning</td></tr>
+				<tr><td><code>gfx9_vmid_per_file</code></td><td>release default</td><td>Each open file gets its own page-table root and VMID. Needs <code>gfx9_vmids</code>.</td><td>tuning</td></tr>
+				<tr><td><code>gfx9_pasid_map</code></td><td>release default</td><td>Writes the PASID mapping packet on a PASID change.</td><td>tuning</td></tr>
+				<tr><td><code>gfx9_wc_gtt</code></td><td>release default</td><td>Write-combined CPU mapping of GTT buffers that ask for USWC; the kernel direct map follows.</td><td>tuning</td></tr>
+				<tr><td><code>gpu_render</code></td><td>release default</td><td>Without it the render node only answers GET_INFO.</td><td>feature</td></tr>
+				<tr><td><code>gfx9_workload</code></td><td>default false, bare true</td><td>Runs the GFX9 workload (DMA fill) stage after the first fence.</td><td>test</td></tr>
+				<tr><td><code>gfx9_compute</code></td><td>default false, bare true</td><td>Runs the GFX9 compute dispatch stage.</td><td>test</td></tr>
+				<tr><td><code>gfx9_inv_range</code></td><td>default true</td><td>Writes the invalidation range of all hub engines.</td><td>tuning</td></tr>
+				<tr><td><code>gfx9_hub_linux</code></td><td>default false</td><td>Adds the extra gfxhub register writes (AGP, identity aperture).</td><td>tuning</td></tr>
+				<tr><td><code>gfx9_ce_meta</code>, <code>gfx9_flush_fence</code>, <code>gfx9_cond_exec</code>, <code>gfx9_gds_switch</code></td><td>default false</td><td>Extra packets in or after the job prefix (CE/DE meta, a fence after the VM flush, COND_EXEC, the GDS switch).</td><td>tuning</td></tr>
+				<tr><td><code>gfx9_deferred_free</code></td><td>default false</td><td>Keeps a freed VRAM range out of the allocator until the next VM-flush fence.</td><td>tuning</td></tr>
+			</table>
+
+			<h3>Logging and tests</h3>
+			<table class="spec">
+				<tr><th>Switch</th><th>Values and default</th><th>What it does</th><th>Kind</th></tr>
+				<tr><td><code>gpu_debug</code></td><td>default false</td><td>Kernel: a 10-second summary of submits, maps, buffers and CU reads (the first 20 of each in full). app_server: <code>/var/log/app_server-stderr.log</code> (size-capped, one older copy), compose and draw profiles. R5 DRM library: failed calls.</td><td>debug</td></tr>
+				<tr><td><code>gpu_trace</code></td><td>default false</td><td>Every submit, map, buffer and ioctl line, not just a summary.</td><td>trace</td></tr>
+				<tr><td><code>gpu_submit_log</code></td><td>default false</td><td>Logs each user job with its first ring dwords.</td><td>trace</td></tr>
+				<tr><td><code>gpu_selftest</code></td><td>default false</td><td>Allows the self-test calls, and Login starts <code>/system/bin/r5-gpu-selftest</code> once per boot.</td><td>test</td></tr>
+				<tr><td><code>gpu_hang_test</code></td><td>n, default 0</td><td>After the self-test, submits <em>n</em> jobs that never finish, to prove hang detection and reset.</td><td>test</td></tr>
+				<tr><td><code>gpu_isolation_test</code></td><td>true, default off</td><td>The self-test also runs the isolation and kill stages.</td><td>test</td></tr>
+			</table>
+
+			<h3>OpenGL and Vulkan presenting</h3>
+			<table class="spec">
+				<tr><th>Switch</th><th>Values and default</th><th>What it does</th><th>Kind</th></tr>
+				<tr><td><code>gpu_opengl</code></td><td>default: the GPU availability bit</td><td>Lets Mesa EGL pick Zink on the GPU. <code>false</code> keeps the software renderer.</td><td>feature</td></tr>
+				<tr><td><code>gpu_present</code></td><td>default: the GPU availability bit</td><td>Lets RADV present into a window. <code>false</code> sends windows to Lavapipe.</td><td>feature</td></tr>
+				<tr><td><code>gpu_opengl_fail</code>, <code>gpu_present_fail</code></td><td>default false</td><td>Force the GPU choice to fail, to test the fallback.</td><td>test</td></tr>
+			</table>
+
+			<h3>Compositor, GPU copy and Skia (exact form)</h3>
+			<table class="spec">
+				<tr><th>Switch</th><th>Values and default</th><th>What it does</th><th>Kind</th></tr>
+				<tr><td><code>gpu_compositor</code></td><td>true/false, default true</td><td>The GPU compositor (RADV when the GPU passed its checks, otherwise Lavapipe).</td><td>feature</td></tr>
+				<tr><td><code>gpu_compositor_scanout</code></td><td>true/false; default on with a release-supported GPU</td><td>Puts the frame on the scanout with one copy.</td><td>feature</td></tr>
+				<tr><td><code>gpu_app_server</code></td><td>true/false; default on with a release-supported GPU</td><td>app_server's GPU copy, the back buffer the scanout needs.</td><td>feature</td></tr>
+				<tr><td><code>gpu_draw</code></td><td>true/false, default true</td><td>Skia draws the windows. <code>false</code> leaves Painter.</td><td>feature</td></tr>
+				<tr><td><code>gpu_draw_classic</code></td><td>true, default off</td><td>Keeps the classic look in Skia drawing.</td><td>feature</td></tr>
+				<tr><td><code>gpu_draw_hardware_blend</code></td><td>false, default on</td><td><code>false</code> turns Skia hardware blending off.</td><td>tuning</td></tr>
+				<tr><td><code>gpu_draw_linear_edges</code></td><td>true, default off</td><td>Linear-light anti-aliased edges.</td><td>tuning</td></tr>
+				<tr><td><code>gpu_draw_settle</code></td><td>true, default off</td><td>Waits 8 s before the first Skia warm-up.</td><td>tuning</td></tr>
+				<tr><td><code>gpu_lavapipe_threads</code></td><td>0&ndash;64; absent = 2; 0 = Mesa's own count</td><td>Lavapipe's thread count (<code>LP_NUM_THREADS</code>).</td><td>tuning</td></tr>
+				<tr><td><code>gpu_lavapipe_vector</code></td><td>128 or 256; absent = 256 with AVX2</td><td>Lavapipe's vector width (<code>LP_NATIVE_VECTOR_WIDTH</code>).</td><td>tuning</td></tr>
+				<tr><td><code>gpu_lavapipe_msaa</code></td><td>1 or 4; absent = 4</td><td>Skia's sample count for paths on Lavapipe.</td><td>tuning</td></tr>
+				<tr><td><code>gpu_compositor_lavapipe</code></td><td>true, default off</td><td>Forces the compositor onto Lavapipe.</td><td>test</td></tr>
+				<tr><td><code>gpu_compositor_fail</code>, <code>gpu_draw_fail</code>, <code>gpu_app_server_fail</code></td><td>true, default off</td><td>Force the compositor submit, the Skia start or the GPU copy to fail, to test the fallback.</td><td>test</td></tr>
+				<tr><td><code>gpu_compositor_cull</code></td><td>false, default on</td><td><code>false</code> turns occlusion culling off.</td><td>test</td></tr>
+				<tr><td><code>gpu_compositor_zero_copy</code></td><td>false, default on</td><td><code>false</code> keeps every program on the copy path, to compare.</td><td>test</td></tr>
+				<tr><td><code>gpu_copy_debug</code></td><td>true, default off</td><td>Extra logging of the GPU copy.</td><td>debug</td></tr>
+			</table>
+		</section>
+
+		<section class="entry" id="kernel">
+			<div class="entry-header"><h2>kernel</h2><span class="kind">~/config/settings/kernel/drivers/kernel</span></div>
+			<table class="spec">
+				<tr><th>Switch</th><th>Values and default</th><th>What it does</th><th>Kind</th></tr>
+				<tr><td><code>amd64_large_pages</code></td><td>default true</td><td>AMD64 kernel areas may use 2 MB pages. <code>false</code> keeps 4 KB pages.</td><td>tuning</td></tr>
+				<tr><td><code>amd64_large_pages_selftest</code></td><td>default false, bare false</td><td>Runs the large-page self-test at boot.</td><td>test</td></tr>
+				<tr><td><code>r5_wc_direct_map_test</code></td><td>default false, bare false</td><td>Runs the write-combined direct-map check at boot.</td><td>test</td></tr>
+				<tr><td><code>r5_cstate_stats</code></td><td>default false, bare false</td><td>C-state residency counters in the syslog.</td><td>debug</td></tr>
+				<tr><td><code>r5_bfs_cache_stats</code></td><td>default false, bare false</td><td>The block cache size every 30 s.</td><td>debug</td></tr>
+				<tr><td><code>r5_deskbar_stats</code></td><td>default false, bare false</td><td>Measures Deskbar's window watcher (read by Deskbar).</td><td>debug</td></tr>
+				<tr><td><code>r5_pstate_log</code></td><td>default false, bare false</td><td>At boot, writes <code>r5-cpu.txt</code>, <code>r5-hardware.txt</code> and <code>r5-syslog.txt</code> to the home folder.</td><td>debug</td></tr>
+				<tr><td><code>efi_runtime</code></td><td>default true</td><td><code>false</code> turns the EFI runtime module off.</td><td>feature</td></tr>
+				<tr><td><code>syslog_time_stamps</code></td><td>default false</td><td>A time stamp on every syslog line.</td><td>debug</td></tr>
+				<tr><td><code>syslog_max_size</code></td><td>size with k or M, default 512 KB</td><td>The largest syslog file before it rotates.</td><td>tuning</td></tr>
+				<tr><td><code>syslog_max_history</code></td><td>default 1</td><td>How many old syslog files are kept.</td><td>tuning</td></tr>
+			</table>
+		</section>
+
+		<section class="entry" id="efi">
+			<div class="entry-header"><h2>efi and safe mode</h2><span class="kind">efi, safe mode settings</span></div>
+			<table class="spec">
+				<tr><th>Switch</th><th>File</th><th>What it does</th><th>Kind</th></tr>
+				<tr><td><code>fault_test</code></td><td><code>efi</code>, default false</td><td>Jumps once into an unmapped firmware page and logs whether the fault was recovered.</td><td>test</td></tr>
+				<tr><td><code>safemode</code>, <code>disable_efi_runtime</code></td><td>safe mode settings</td><td>Either one turns the EFI runtime module off.</td><td>feature</td></tr>
+				<tr><td><code>ehci_polling</code></td><td>safe mode settings</td><td>EHCI polls instead of using interrupts (from Haiku).</td><td>tuning</td></tr>
+			</table>
+		</section>
+
+		<section class="entry" id="audio">
+			<div class="entry-header"><h2>Audio</h2><span class="kind">cs35l41, usb_audio, hda.settings, virtual_surround</span></div>
+			<table class="spec">
+				<tr><th>Switch</th><th>File, values and default</th><th>What it does</th><th>Kind</th></tr>
+				<tr><td><code>cs35l41_firmware</code></td><td><code>cs35l41</code>, default false, bare true</td><td>Loads the speaker protection firmware. Off means bypass with the volume capped at its lowest step.</td><td>feature</td></tr>
+				<tr><td><code>channel_layout</code></td><td><code>usb_audio</code>, <code>auto</code> or 1&ndash;16, default auto</td><td>Preferred channel count of a USB audio device.</td><td>tuning</td></tr>
+				<tr><td><code>play_buffer_frames</code>, <code>record_buffer_frames</code></td><td><code>usb_audio</code>, 32&ndash;8192, default 2048</td><td>Frames per USB audio buffer (latency).</td><td>tuning</td></tr>
+				<tr><td><code>play_buffer_frames</code>/<code>_count</code>, <code>record_buffer_frames</code>/<code>_count</code></td><td><code>hda.settings</code></td><td>HD Audio buffer sizes and counts (from Haiku).</td><td>tuning</td></tr>
+				<tr><td><code>virtual_surround on</code></td><td><code>virtual_surround</code>, default off</td><td>The mixer's virtual surround.</td><td>feature</td></tr>
+			</table>
+		</section>
+
+		<section class="entry" id="network">
+			<div class="entry-header"><h2>Wi-Fi, Bluetooth and the network</h2><span class="kind">mt7922wifi, h2generic, WiFi_debug, discovery</span></div>
+			<table class="spec">
+				<tr><th>Switch</th><th>File, values and default</th><th>What it does</th><th>Kind</th></tr>
+				<tr><td><code>debug</code></td><td><code>mt7922wifi</code>, default false, bare true</td><td>Association messages and the driver's debug lines.</td><td>debug</td></tr>
+				<tr><td><code>ht_vht</code></td><td><code>mt7922wifi</code>, default false</td><td>Turns on HT and VHT.</td><td>feature</td></tr>
+				<tr><td><code>he</code></td><td><code>mt7922wifi</code>, default false</td><td>Turns on HE; only together with HT.</td><td>feature</td></tr>
+				<tr><td><code>attach_at_boot</code>, <code>attach_at_boot_until</code></td><td><code>mt7922wifi</code>, default true / unset</td><td><code>false</code> leaves the card alone for 2 minutes (<code>rescan mt7922wifi</code> brings it in); <code>_until</code> attaches during boot only until a time, so a hung boot recovers.</td><td>test</td></tr>
+				<tr><td><code>bt_voice</code></td><td><code>h2generic</code>, default false, bare true</td><td>SCO/eSCO voice links and <code>/dev/bluetooth/voice/&lt;n&gt;</code>.</td><td>feature</td></tr>
+				<tr><td>file exists</td><td><code>~/config/settings/WiFi_debug</code></td><td>Verbose Wi-Fi diagnostics in the syslog, rechecked every few seconds; wpa_supplicant logs at debug level.</td><td>debug</td></tr>
+				<tr><td><code>discoverable</code></td><td><code>/boot/system/settings/network/discovery</code>, default true</td><td>Whether other devices find this computer (mDNS). Settings &rsaquo; Network changes it.</td><td>feature</td></tr>
+			</table>
+		</section>
+
+		<section class="entry" id="env">
+			<div class="entry-header"><h2>Environment variables</h2><span class="kind">Programs and tests</span></div>
+			<table class="spec">
+				<tr><th>Variable</th><th>Set by, default</th><th>What it does</th><th>Kind</th></tr>
+				<tr><td><code>LP_NUM_THREADS</code></td><td>app_server sets 2 if unset</td><td>Lavapipe's thread count; an existing value wins.</td><td>tuning</td></tr>
+				<tr><td><code>LP_NATIVE_VECTOR_WIDTH</code></td><td>app_server sets 256 with AVX2 if unset</td><td>Lavapipe's vector width.</td><td>tuning</td></tr>
+				<tr><td><code>MESA_SHADER_CACHE_DIR</code></td><td>app_server, the system cache</td><td>Where Mesa keeps compiled shaders for app_server.</td><td>tuning</td></tr>
+				<tr><td><code>WIFI_DEBUG</code></td><td>unset</td><td>Same as the <code>WiFi_debug</code> file.</td><td>debug</td></tr>
+				<tr><td><code>R5_GL_TRACE</code></td><td>unset; <code>1</code></td><td>R5's EGL lines also go to stderr.</td><td>trace</td></tr>
+				<tr><td><code>LIBGL_ALWAYS_SOFTWARE</code>, <code>GALLIUM_DRIVER</code></td><td>unset</td><td>A program's own driver choice wins over R5's Zink choice.</td><td>test</td></tr>
+				<tr><td><code>R5_BLUETOOTH_PREVIEW</code></td><td>unset; <code>1</code></td><td>Adds a made-up game controller to My devices, for layout checks in QEMU.</td><td>test</td></tr>
+				<tr><td><code>DISABLE_ASLR</code>, <code>MALLOC_OPTIONS</code></td><td>unset (from Haiku)</td><td>Turns address-space randomisation off for a team; malloc options.</td><td>debug</td></tr>
+			</table>
+		</section>
+	</main>
+</div>
+
+<script src="r5book.js"></script>
+</body>
+</html>
