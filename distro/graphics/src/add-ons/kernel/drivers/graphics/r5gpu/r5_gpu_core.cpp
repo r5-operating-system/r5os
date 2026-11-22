@@ -627,19 +627,37 @@ gpu_copy_user(void* local, uint64 address, size_t bytes)
 }
 
 
+static bool
+gpu_retire_has_work()
+{
+	if (sHangTest != 0 && sHangTestArmed)
+		return true;
+	uint64 seen = gpu_hw_seen();
+	for (uint32 i = 0; i < kMaxJob; i++) {
+		if (sJobs[i].live && !r5_fence_reached(seen, sJobs[i].sequence))
+			return true;
+	}
+	return false;
+}
+
+
 static status_t
 gpu_retire_thread(void* data)
 {
 	(void)data;
 	while (sReady) {
-		status_t got = acquire_sem_etc(sRetireSem, 1, B_RELATIVE_TIMEOUT,
-			1000000);
+		gpu_lock();
+		bool busy = gpu_retire_has_work();
+		gpu_unlock();
+		status_t got = busy
+			? acquire_sem_etc(sRetireSem, 1, B_RELATIVE_TIMEOUT, 1000000)
+			: acquire_sem(sRetireSem);
 		if (!sReady)
 			break;
 		if (got != B_OK && got != B_TIMED_OUT)
 			break;
 		gpu_lock();
-		/* The one-second timeout is the check when no interrupt arrives.
+		/* The one-second timeout is active only while jobs are in flight.
 		 * Retire from the user fence first, then look at what is left. */
 		r5_gpu_eop();
 		gpu_fault_retire();
@@ -2362,6 +2380,7 @@ gpu_submit(gpu_client* client, void* buffer, size_t length)
 	}
 	job->live = true;
 	client->lastSequence = sequence;
+	r5_gpu_retire_wake();
 	if (gpu_hw_seen() >= sequence)
 		r5_gpu_eop();
 	in.sequence = sequence;
