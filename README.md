@@ -15,169 +15,125 @@ pleasure to use, with plenty of personality of its own.
 
 <p align="center"><img src="docs/screenshots/about-r5.png" alt="The R5 desktop with About R5 open" width="800"></p>
 
+## At a glance
+
+- **Your graphics chip finally has a job.** A sleek new R5 window frame,
+  soft shadows, frosted glass and smooth animations, with every window
+  drawn on the GPU (thanks, Skia). Pick Quiet, Balanced or Glassy. Dark
+  mode? Obviously.
+- **Speaks Vulkan and OpenGL, no Linux required.** RADV for Vulkan,
+  OpenGL on top. Yes, really.
+- **Settings that don't send you on a treasure hunt.** Display,
+  Appearance, Wi-Fi, Network, Bluetooth, Notifications, Game controllers
+  and more, all in one window. Change it, see it, done.
+- **Your account, your stuff.** User accounts, a sign-in screen, screen
+  locking and separate home folders.
+- **Wi-Fi 6 and WPA3.** On selected cards, plus IPv6, network discovery
+  and shared folders with Windows.
+- **Print it. Play it.** AirPrint and IPP printing, and play your music
+  on AirPlay 1 speakers.
+- **Game controllers? So welcome.** PlayStation, Xbox, Nintendo and
+  8BitDo, over USB or Bluetooth. Rumble and DualSense trigger effects
+  included. No, we're not kidding.
+- **Sound, sorted.** Steadier USB audio, HDMI and surround, lower
+  latencies when you want them, and MIDI 2.0 support with a built-in
+  MIDI monitor.
+- **Tuned for 64-bit processors.** Optimised for modern 64-bit AMD and
+  Intel processors: AVX2 and FMA where your CPU has them, a quicker
+  start, and fast cores doing the fast work. And we're not done tuning.
+- **Your Haiku apps? Still here.** Same APIs, same apps, no drama.
+
+Tried and tested on a real AMD Ryzen 5 5625U laptop. Other computers get
+the same desktop drawn in software. VirtualBox and QEMU are welcome too.
+
 ## A desktop with personality
 
 **Same soul. Whole new attitude.**
 
-We gave the desktop room to shine. Think floating windows, soft shadows,
-frosted glass and animations that make everything feel right at home.
-And yes, your graphics hardware is doing the heavy lifting. This isn't a
-desktop pretending to be modern. It's R5 taking a big, beautiful step
-forward.
-
-Want a subtle look? Something with a little more depth? Or the full
-glass treatment? R5 gives you three visual styles to make the desktop
-feel like yours: Quiet, Balanced and Glassy.
-
-We've also polished the everyday details. Dark mode, a more capable
-notification system, improved Deskbar and Tracker behaviour, and better
-touchpad support all help make the desktop feel more at home on modern
-hardware.
-
-And finding your way around system settings shouldn't be an adventure.
-R5 brings them together in one place, neatly organised and easy to use.
-Change something, see the result straight away, and keep it, or
-switch back if you change your mind.
+Floating windows in a sleek new R5 frame, soft shadows, frosted glass,
+animations that feel just right, and your GPU doing the heavy lifting.
+This isn't a desktop pretending to be modern. Want it subtle or full
+glass? Quiet, Balanced or Glassy: your call. And every setting lives in
+one tidy window. Change something, see it straight away, and change your
+mind whenever you like.
 
 ## Make yourself at home
 
 **Your computer. Your space. Your rules.**
 
-A computer is personal. It should feel that way, even when you share it.
+Everyone gets their own user account, their own files and their own
+settings. Stepping away? Lock the screen. Done for the day? Log out. The
+important system settings stay behind a lock, and an administrator's
+password opens it.
 
-R5 brings proper user accounts to the desktop, complete with a sign-in
-screen, screen locking and separate home folders. Everyone gets their
-own space, their own files and their own settings. Step away? Lock your
-screen. Finished for the day? Log out. Simple.
+## Everything a little more connected
 
-And because not everyone needs the keys to the whole house, important
-system settings stay protected. The administrator can manage the
-computer without handing out unrestricted system access.
+**Your devices should get along. R5 plays matchmaker.**
 
-## Everything just a little more connected
-
-**Your devices should get along. R5 helps make that happen.**
-
-Connect to Wi-Fi, find other computers on your network, print a document
-or send music to a compatible speaker. R5 is bringing the pieces of your
-digital world closer together.
-
-Network discovery makes it easier to find nearby devices and services.
-Shared folders let you reach files on other computers, while support for
-AirPrint and IPP makes network printing more straightforward. And when
-you want your music somewhere else, R5 can send audio to AirPlay 1
-speakers. AirPlay 2 is not supported yet.
-
-Under the hood, networking has had a serious upgrade too. R5 supports
-modern IPv4 and IPv6 networking, flexible DNS configuration, and Wi-Fi
-drivers for MediaTek MT7921 and MT7922 hardware.
-
-**Ready to play.** Game controllers are here! Say hello to them on R5,
-over USB and Bluetooth. Plug in or pair your favourite controller and
-pick up where you left off, with buttons, sticks, triggers, rumble and
-even motion working the way you'd expect.
+Wi-Fi 6 with WPA3 on selected cards, modern IPv4 and IPv6, and DNS your
+way. Find other computers nearby, open their shared folders, print with
+AirPrint or IPP, and send your music to AirPlay 1 speakers. Plug in or
+pair your favourite game controller, feel the rumble, and pick up where
+you left off.
 
 ## Sound that feels right
 
-**From a quick video to a serious session, sound matters.**
+**From a quick video to a serious session.**
 
-Audio should be something you enjoy, not something you have to
-troubleshoot.
-
-R5 brings more reliable USB audio, improved audio mixing and resampling,
-and better handling of connected sound devices. Whether you're listening
-through headphones, using HDMI audio or connecting surround speakers,
-there's more room to make things sound the way you want.
-
-And if you're particular about latency, you're in control. Choose Normal
-for everyday use, Low latency when responsiveness matters, or Pro audio
-for more demanding audio work.
-
-There's attention for music makers too, with MIDI improvements, MIDI 2.0
-support and a built-in MIDI monitor.
+More reliable USB audio, better mixing, and HDMI and surround that
+behave. Picky about latency? Choose Normal, Low latency or Pro audio.
+Music makers get MIDI 2.0 and a MIDI monitor that shows exactly what
+your keyboard is saying.
 
 ## More of your hardware, put to work
 
 **A modern desktop deserves modern graphics.**
 
-R5 is bringing modern graphics technology to the party, with native
-Vulkan support and OpenGL support built on top of it. No Linux kernel
-required.
-
-The new desktop compositor already puts the GPU to work, making those
-shadows, glass effects and smooth animations possible. On supported
-hardware, that means a desktop with more depth and a more fluid feel.
-
-There's still work to do. GPU compositor support has so far been tested
-on an AMD Ryzen 5 5625U system. Other graphics hardware may use software
-rendering instead, and performance can vary. We're expanding support as
-development moves forward.
-
-And don't worry about your existing apps: Haiku applications continue to
-work unchanged.
+Native Vulkan, OpenGL on top, and a desktop and windows that are finally
+drawn on the GPU. No Linux kernel required. Something not right? Safe
+mode in the boot menu always brings back the classic drawing. For now
+the GPU path is tested on specific hardware; other hardware gets the
+same look in software, just with your processor working a bit harder.
 
 ## Under the hood
 
 **The little things add up.**
 
-A great desktop isn't just about what you see. It's also about how well
-everything works together.
-
-R5 supports AMD and Intel processors, includes AMD microcode updates and
-makes smarter use of available CPU cores. It favours real and faster
-cores when scheduling work, and makes better use of deeper sleep states
-when your computer is idle.
-
-It's the kind of work you might never notice directly. That's rather the
-point.
+R5 is optimised for modern AMD64 processors, and we keep at it. It loves
+AMD and Intel CPUs, loads AMD microcode updates, and uses AVX2 and FMA
+when your CPU has them. Fast cores get the fast work, idle cores get to
+sleep, and start-up and shutdown are quicker. You'll probably never
+notice any of it. That's rather the point.
 
 ## Bring R5 along for the ride
 
-**At home on real hardware. Happy to visit a virtual machine too.**
+**At home on real hardware. Happy to visit a virtual machine.**
 
-Want to give R5 a spin without dedicating a whole computer to it? R5
-includes VirtualBox Guest Additions 7.2.22 to improve the experience
-when running in a virtual machine.
-
-Existing Haiku applications continue to run unchanged, so there's no
-need to leave familiar software behind.
-
-R5 is currently developed primarily for AMD64 systems. ARM64 and RISC-V
-are on the horizon, but aren't supported targets yet.
+Want a spin without giving up a whole computer? R5 comes with VirtualBox
+Guest Additions. AMD64 is home for now. ARM64 and RISC-V are on the
+horizon.
 
 ## What's coming next?
 
 **We're not done dreaming. Not even close.**
 
-One of the big things we're working on is GPU-powered drawing inside
-application windows, using Skia.
+**Sharper on every screen.** With windows drawn on the GPU, the next
+step is HiDPI: REAL scaling that keeps text and icons crisp on
+high-resolution displays.
 
-The goal? Crisp text, smoother drawing and a more consistent visual
-experience across supported hardware. It's also an important step
-towards future HiDPI support.
+**A more modern Deskbar.** We've been redesigning Deskbar… and oh boy,
+you're going to love this.
 
-This is still a work in progress, not a feature of the current build.
-But it's a good glimpse of where we're heading.
+**Bluetooth that keeps up.** You can already pair your mouse, keyboard
+or headset in Settings, and soon a lot more. Next up is LE Audio, the
+new standard for wireless earbuds and headphones, with better sound at
+lower power, and Auracast, so you can tune in to shared audio streams.
 
-We're also optimising R5 for modern processors. R5 is built to use the
-modern instruction sets in your CPU, such as AVX2 and FMA, and picks
-the fastest path your processor supports when it starts. From the
-kernel and the scheduler to memory, text and drawing, the goal is a
-system that gets more out of the hardware you already have.
+**More hardware.** GPU drawing on more graphics chips, starting with
+Intel, and Wi-Fi 6 on more cards than MediaTek alone.
 
-None of this changes how your apps work. They should just feel a little
-quicker. We'll share real numbers once we've measured them on real
-hardware.
-
-**Wi-Fi, the modern way.** R5 is working towards full Wi-Fi 6 support
-on supported cards, with WPA3 for the security today's networks expect.
-We're also freshening up the dialogs you use to connect to Wi-Fi, with
-the glass look of the rest of the desktop.
-
-**Bluetooth that keeps up.** Pair your mouse, keyboard or headset in
-Settings, and soon a lot more. Next up is LE Audio, the new standard
-for wireless earbuds and headphones, with better sound at lower power,
-and Auracast, so you can tune in to shared audio streams.
+These are plans, not features of the current build. But they're a good
+glimpse of where we're heading.
 
 ## Project status
 
@@ -186,14 +142,14 @@ and Auracast, so you can tune in to shared audio streams.
 R5 is under active development. There's no public release just yet, but
 development is moving forward.
 
--   **Current build:** 10064
+-   **Current build:** 10066
 -   **Version:** 2026.1-dev
 -   **Primary architecture:** AMD64
 -   **Minimum processor:** a 64-bit AMD or Intel CPU with x86-64-v2
     (Intel Nehalem, AMD Bulldozer or newer)
 
 Some features are still evolving, and hardware support varies. GPU
-compositor testing is currently limited to the AMD Ryzen 5 5625U system
+drawing is so far only tested on the AMD Ryzen 5 5625U system
 mentioned above. Vulkan and OpenGL support are also under active
 development.
 
