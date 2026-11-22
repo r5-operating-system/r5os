@@ -127,7 +127,8 @@ MyWindow::MyWindow()
 			<div class="member"><div class="sig">status_t set_window_corner_radius(BWindow* window, float radius);</div>
 				<p>A program rounds the corners of its own window, the radius in pixels (0 is square, the default;
 				at most 64). Use it for a window without a title tab, such as a panel or a floating bar; a titled
-				window gets its corners from the decorator the user chose. The window's frame stays the same
+				window gets its corners from the decorator the user chose (Default (R5 Modern) rounds every
+				titled window, radius 18 at the default font size). The window's frame stays the same
 				rectangle: the corners are only taken out of what the window shows and what it gets clicks for.
 				With the GPU the arc is smooth; without it (Lavapipe without effects, Safe mode) the arc is
 				stepped, and the desktop behind shows in the corner either way. Content in a corner is clipped. A

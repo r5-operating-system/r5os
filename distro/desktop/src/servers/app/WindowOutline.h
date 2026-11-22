@@ -330,6 +330,50 @@ window_outline_build(const window_outline_rect* rects, int32 count,
 }
 
 
+/*!	Input: the corner of the first rectangle (the frame) whose cut holds
+	 where, 0 to 3 as window_corner::kind; -1 when the point is not in a
+	cut corner of the frame, or lies inside one of the other rectangles.
+	Cut means less than half covered, in both modes (Default (R5 Modern):
+	that wedge is the resize corner, 22 Nov 2026).
+*/
+static inline int32
+window_outline_cut_corner(const window_outline_rect* rects, int32 count,
+	BPoint where)
+{
+	if (count <= 0 || !rects[0].rect.IsValid())
+		return -1;
+	int32 x = (int32)floorf(where.x);
+	int32 y = (int32)floorf(where.y);
+	clipping_rect frame = window_outline_clipping_rect(rects[0].rect);
+	if (x < frame.left || x > frame.right || y < frame.top
+		|| y > frame.bottom)
+		return -1;
+	float radii[4] = { rects[0].leftTop, rects[0].rightTop,
+		rects[0].leftBottom, rects[0].rightBottom };
+	for (int32 kind = 0; kind < 4; kind++) {
+		window_corner corner;
+		if (!window_outline_corner(frame, kind, radii[kind], corner))
+			continue;
+		if (x < corner.square.left || x > corner.square.right
+			|| y < corner.square.top || y > corner.square.bottom)
+			continue;
+		if (window_corner_coverage(corner, x, y) >= 0.5f)
+			return -1;
+		for (int32 i = 1; i < count && i < R5_WINDOW_OUTLINE_MAX_RECTS;
+				i++) {
+			if (!rects[i].rect.IsValid())
+				continue;
+			clipping_rect other = window_outline_clipping_rect(rects[i].rect);
+			if (x >= other.left && x <= other.right && y >= other.top
+				&& y <= other.bottom)
+				return -1;
+		}
+		return kind;
+	}
+	return -1;
+}
+
+
 /*!	A window's outline, kept until its rectangles, radii or mode change, so
 	the regions are built once and not at every clipping rebuild.
 */

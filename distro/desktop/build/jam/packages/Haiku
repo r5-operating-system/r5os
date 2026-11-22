@@ -419,8 +419,9 @@ AddFilesToPackage add-ons media : $(SYSTEM_ADD_ONS_MEDIA) ;
 # SPDX-SnippetBegin
 # SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 # SPDX-License-Identifier: MIT
-# The R5 window frame. The Haiku decorators are built, not installed.
-AddFilesToPackage add-ons decorators : R5Decorator ;
+# The R5 window frames, Default (R5) and Default (R5 Modern). The Haiku
+# decorators are built, not installed.
+AddFilesToPackage add-ons decorators : R5Decorator R5ModernDecorator ;
 # SPDX-SnippetEnd
 
 AddFilesToPackage add-ons Network\ Settings :
