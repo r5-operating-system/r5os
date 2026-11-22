@@ -715,10 +715,18 @@ amd_cppc_acpi_init()
 
 	// Loaded here, not in module_dependencies: a computer that has the
 	// CPPC MSR never needs them (docs/POWER.md, the EFI rule does the same)
-	if (get_module(B_ACPI_MODULE_NAME, (module_info**)&sACPI) != B_OK)
+	// One line when this path gives up, so a boot log says why a computer
+	// without the CPPC MSR has no profiles.
+	dprintf("R5 CPPC: no CPPC MSR, trying the ACPI _CPC registers\n");
+	if (get_module(B_ACPI_MODULE_NAME, (module_info**)&sACPI) != B_OK) {
+		dprintf("R5 CPPC: no ACPI module, no _CPC\n");
+		sACPI = NULL;
 		return B_NOT_SUPPORTED;
+	}
 	if (get_module(B_DEVICE_MANAGER_MODULE_NAME,
 			(module_info**)&sDeviceManager) != B_OK) {
+		dprintf("R5 CPPC: no device manager, no _CPC\n");
+		sDeviceManager = NULL;
 		put_module(B_ACPI_MODULE_NAME);
 		sACPI = NULL;
 		return B_NOT_SUPPORTED;

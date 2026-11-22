@@ -16,7 +16,11 @@ What changed (`docs/POWER.md`, section 8, step 2):
 
 Limits: a processor with only ACPI `_PSS` has no profile yet (gray menus). The `_CPC` path was not run on any computer: the 5625U has the MSR and QEMU has no `_CPC`. "Keep working with an external display" can only count screens; R5's app_server cannot tell the built-in panel apart. Dimming on battery, `_BCM`, thermal trips and the low-battery notification are step 3. `SetDPMS()` and `SetBrightness()` only act where the accelerant has the hook.
 
-Tested: not yet. The compile, the QEMU boot and the stick follow.
+Mistakes found on the way: the first jam failed in `PowerModule.cpp` (`B_SAFEMODE_SAFE_MODE` is in `<driver_settings.h>`, not `<safemode_defs.h>`; `PowerView::Show(const BMessage&)` hid `BView::Show()`, now `ShowSettings()`). The first QEMU boot ran an image another session had rebuilt in the shared tree after this jam (no Power page); the image is now copied inside the build lock. In QEMU the Performance box was cut off under the profile text (a `BTextView` gives no height for wrapped text in a layout); it now asks for four lines. The `_CPC` path was silent when it gave up; it now logs why.
+
+Tested (22 Nov 2026): compiled (`build-locked.sh`, jam_exit=0, mesa_exit=0). QEMU with KVM, `-cpu host,+smap,+smep` (SMAP on in CPU Info), own copy of the image, window: no panic. Serial: `R5 CPPC: no CPPC MSR, trying the ACPI _CPC registers`, `R5 CPPC: _CPC found for 0 of 2 CPUs`, no cpufreq module (QEMU has no CPPC). Settings, System, Power (owner watching): no Battery box and no lid row (QEMU has neither), one column, profile menus gray with the no-speed line, Sleep and Wake gray, Wake says S3 (QEMU offers `_S3_`), the button on Ask. "Turn off the display after" set to 1 minute: the service logged `power_daemon: settings changed` and wrote `/boot/system/settings/power` with `display_off_on_ac 1`; Revert and Defaults turned on. CPU Info: "Balanced, no speed control, profiles off, sleep: S3 offered, not working yet", so the service set Balanced through the new syscall (the kernel's own start is Performance).
+
+Not shown in QEMU: that the display goes off (QEMU's display and the timer were not watched long enough), the brightness (QEMU reports a brightness, so the slider shows at 100 %, but nothing visible changes), the profile on real hardware (the stick: `R5 CPPC:` lines with `profile`, and CPU Info, on the 5625U), PowerStatus with a battery.
 
 ## 2026-11-22 - The desktop leaves RADV instead of crashing after a GPU reset
 

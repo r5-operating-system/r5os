@@ -42,6 +42,7 @@
 
 #include <PowerProtocol.h>
 
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
@@ -555,8 +556,17 @@ PowerView::PowerView(PowerModule* module, SettingsContext* context)
 	fProfileText->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
 	rgb_color hintColor = hint_color();
 	fProfileText->SetFontAndColor(be_plain_font, B_FONT_ALL, &hintColor);
+	// A BTextView does not ask for the height of its wrapped text in a
+	// layout: without a height the box under it was cut off in QEMU (the
+	// brightness slider and the bottom border were gone). Room for four
+	// lines, the longest explanation at the narrowest width.
+	font_height fontHeight;
+	be_plain_font->GetHeight(&fontHeight);
+	float lines = 4 * ceilf(fontHeight.ascent + fontHeight.descent
+		+ fontHeight.leading);
 	fProfileText->SetExplicitMinSize(BSize(be_plain_font->StringWidth(
-		"Balanced: fast when you work, slower when"), B_SIZE_UNSET));
+		"Balanced: fast when you work, slower when"), lines));
+	fProfileText->SetExplicitPreferredSize(BSize(B_SIZE_UNSET, lines));
 	fNoSpeed = hint("no speed",
 		"This processor does not let R5 change its speed.");
 	fBrightness = new BSlider("brightness", "Brightness",
