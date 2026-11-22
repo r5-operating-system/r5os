@@ -14,6 +14,11 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <string.h>
+// SPDX-SnippetEnd
 
 #include <Alert.h>
 #include <Alignment.h>
@@ -333,7 +338,14 @@ LookAndFeelSettingsView::_SetDecor(DecorInfo* decorInfo)
 	if (fDecorUtility.SetDecorator(decorInfo) == B_OK) {
 		fCurrentDecor = fDecorUtility.CurrentDecorator()->ShortcutName();
 		BString decorName = fDecorUtility.CurrentDecorator()->Name();
-		fDecorMenu->FindItem(_DecorLabel(decorName))->SetMarked(true);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		BMenuItem* item = fDecorMenu->FindItem(
+			_DecorLabel(decorName).String());
+		if (item != NULL)
+			item->SetMarked(true);
+// SPDX-SnippetEnd
 		appearance_notify(this);
 	}
 }
@@ -346,6 +358,12 @@ LookAndFeelSettingsView::_BuildDecorMenu()
 
 	// collect the current system decor settings
 	int32 count = fDecorUtility.CountDecorators();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// The add-ons by name (Default (R5 Modern), Default (R5)), then Haiku's
+	// built-in Classic (Haiku) (owner, 22 Nov 2026).
+	BObjectList<DecorInfo> decors(20);
 	for (int32 i = 0; i < count; ++i) {
 		DecorInfo* decor = fDecorUtility.DecoratorAt(i);
 		if (decor == NULL) {
@@ -353,24 +371,47 @@ LookAndFeelSettingsView::_BuildDecorMenu()
 				" / %" B_PRId32 "\n", i, count);
 			continue;
 		}
+		if (decor->IsDefault())
+			continue;
+		int32 index = 0;
+		while (index < decors.CountItems()
+			&& strcmp(decors.ItemAt(index)->Name().String(),
+				decor->Name().String()) <= 0)
+			index++;
+		decors.AddItem(decor, index);
+	}
+	for (int32 i = 0; i < count; ++i) {
+		DecorInfo* decor = fDecorUtility.DecoratorAt(i);
+		if (decor != NULL && decor->IsDefault())
+			decors.AddItem(decor);
+	}
 
+	for (int32 i = 0; i < decors.CountItems(); ++i) {
+		DecorInfo* decor = decors.ItemAt(i);
 		BMessage* message = new BMessage(kMsgSetDecor);
 		message->AddString("decor", decor->ShortcutName());
 
-		BMenuItem* item = new BMenuItem(_DecorLabel(decor->Name()), message);
+		BMenuItem* item = new BMenuItem(_DecorLabel(decor->Name()).String(),
+			message);
 		fDecorMenu->AddItem(item);
 		if (decor->ShortcutName() == fCurrentDecor)
 			item->SetMarked(true);
 	}
+// SPDX-SnippetEnd
 }
 
 
-const char*
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+BString
 LookAndFeelSettingsView::_DecorLabel(const BString& name)
 {
 	BString label(name);
-	return label.RemoveLast("Decorator").Trim().String();
+	label.RemoveLast("Decorator").Trim();
+	return label;
 }
+// SPDX-SnippetEnd
 
 
 void

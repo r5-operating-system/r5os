@@ -205,17 +205,26 @@ endpoint-&gt;StopIsochronousStream();</pre>
 				<code class="inline">leftBottom</code>, <code class="inline">rightBottom</code>; 0 is square). Return
 				how many you wrote. The default returns 0: the window keeps its square footprint, pixel for pixel. The
 				corners outside the arc stop being part of the window, in the CPU mode as a stepped arc and on the GPU
-				anti-aliased, and the content is clipped there too.</p></div>
+				anti-aliased, and the content is clipped there too. Where another rectangle (a tab) lies behind a
+				cut corner of the frame, the pixels stay the window's: the tab card of Default (R5 Modern) reaches
+				14 px under the window, so its colour shows in the window's round top corners, and the decorator
+				draws those pixels itself (they are part of its footprint).</p></div>
 
 			<div class="member"><div class="sig">virtual bool GetEdgeLine(rgb_color* color, float* width);</div>
 				<p>ABI 2. The colour and width of the line your decorator draws along the outer edge of the window.
 				When the window has round corners, app_server carries that line round the arc in the same colour, so
 				it does not stop where the corner begins. Return <code class="inline">false</code> (the default) when
-				your decorator draws no such line.</p></div>
+				your decorator draws no such line. The line runs round the corners of the frame, the first rectangle
+				of <code class="inline">GetOutline()</code>, not round a tab's: a tab that wants an edge draws it.
+				On the GPU the colour's alpha counts: white at alpha 191 is a light line over the window's own
+				pixels.</p></div>
 
 			<div class="member"><div class="sig">bool InputMarginContains(BPoint where);</div>
-				<p>Not a hook: whether <code class="inline">where</code> lies in the input margin, outside the border.
-				app_server uses it to find the window under the mouse.</p></div>
+				<p>Not a hook: whether <code class="inline">where</code> lies in the input margin, outside the border,
+				or, with an outline, in a cut corner of the frame (outside the arc). app_server uses it to find the
+				window under the mouse, so the round corner of a window that can be resized is its resize corner and
+				not the window behind. Return that corner from <code class="inline">RegionAt()</code>. The cut top
+				corners of a tab still let a click through to what lies behind.</p></div>
 
 			<h3>The ABI version</h3>
 			<p>The hooks change the layout of <code class="inline">Decorator</code>, so an add-on built before them
@@ -234,6 +243,22 @@ endpoint-&gt;StopIsochronousStream();</pre>
 			so Defaults in Appearance picks it. <code class="inline">"Default"</code> still names Haiku's built-in
 			decorator; a program that sets it gets Haiku's look. When the R5 decorator is missing, both fall back to
 			the built-in one.</p>
+
+			<h3>The decorators of R5 and their names</h3>
+			<p>Appearance (Look and feel, in Settings and in the separate Appearance program) lists the decorators by
+			the name in their <code class="inline">be:decor:info</code> resource, the add-ons sorted by name and
+			Haiku's built-in decorator last:</p>
+			<table class="info">
+				<tr><th>Default (R5 Modern)</th><td><code class="inline">R5ModernDecorator</code>: round corners
+				(18 px), a soft tab card behind the window, Haiku's buttons with a glass finish.</td></tr>
+				<tr><th>Default (R5)</th><td><code class="inline">R5Decorator</code>, the default: Haiku's tab and
+				buttons with a 1 px frame.</td></tr>
+				<tr><th>Classic (Haiku)</th><td>The built-in decorator (<code class="inline">"Default"</code>), exactly
+				as in Haiku.</td></tr>
+			</table>
+			<p>Give your add-on a name the same way (<code class="inline">"name"</code> in the resource); without one
+			the file name is shown. <code class="inline">DecorInfoUtility::FindDecorator()</code> finds a decorator by
+			its path, its name or its file name.</p>
 
 			<h3>Resizing by the edge</h3>
 			<p>On R5, dragging a border or a corner with the primary button resizes the window on that side, with every
