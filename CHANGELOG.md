@@ -1,5 +1,29 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-21 - Perf round 1 Part C: servers, apps, Wi-Fi and Bluetooth
+
+Problem: from docs/reviews/PERF-REVIEW-2026-11.md (#4484):
+- Bluetooth SDPServer::Stop() closed only the listening socket while an active client recv() sat in a 30 s SO_RCVTIMEO, blocking shutdown for up to 30 s when a client stayed silent.
+- TermView::_HandleInputMethodChanged() had a legacy debug-only snooze(100000) (100 ms) on every input-method update.
+- Deskbar ExpandoMenuBar::monitor_team_windows() polled every 150 ms with no CPU/change measurement.
+- mt7922wifi mtk_tick() polled RX rings every 10 ms even when completely idle with no frames and no scan/join active, with no empty-tick ratio counter.
+- AirPlayServer listen_thread() woke every 1000 ms (poll timeout 1000) while idle.
+- BFS block_cache had no measurement of unused_block_count / cached KiB.
+
+What changed:
+- distro/bluetooth/server/SDPServer.{h,cpp}: track active client socket (fClientSocket), call shutdown(SHUT_RDWR) in Stop(), poll in 500 ms steps up to the 30 s idle deadline while checking fIsShuttingDown, and skip the trailing snooze(50000) on shutdown.
+- distro/apps/terminal/src/apps/terminal/TermView.cpp: remove the debug-only snooze(100000) in _HandleInputMethodChanged().
+- distro/desktop/src/apps/deskbar/ExpandoMenuBar.cpp: add opt-in 30 s measurement (kernel setting r5_deskbar_stats true) logging iteration count, modified count, and thread CPU us; 150 ms interval unchanged pending numbers.
+- distro/network/wlan/mt7922wifi/dev/mtk/if_mtkvar.h and if_mtk.c: count total/empty ticks, log periodic stats under MTK_DEBUG, and back off poll interval from 10 ms (hz/100) to 50 ms (hz/20) after 20 idle ticks with no RX/TX and no scan/join; mtk_intr() and traffic immediately reset back to 10 ms.
+- distro/airplay/AirPlayServer.cpp: change listen_thread() poll(pfd, n, 1000) to poll(pfd, n, -1) (zero idle wakeups).
+- distro/kernel/src/system/kernel/cache/block_cache.cpp (registered in scripts/apply-kernel-bugs.py): add opt-in 30 s measurement (kernel setting r5_bfs_cache_stats true) logging unused_block_count and unused KiB on block_cache_sync() (measurement only; no cache cap changed).
+
+Tested:
+- Built AMD64 with scripts/build-locked.sh (jam_exit=0, mesa_exit=0).
+- Booted private copy /home/nickr/r5-os-perf-c.image in QEMU (-machine q35,accel=kvm -cpu host -m 2048 -smp 2 -display none): reached desktop (R5 tracker: Tracker from distro, R5 deskbar: BarApp from distro); no panic/KDL.
+
+Limits: the 5625U has not run this (mt7922wifi, Bluetooth SDP with a real headset, and BFS cache stats need hardware). ARM64 and RISC-V were not built (all changes are arch-independent).
+
 ## 2026-11-21 - Perf round 1 Part A: boot, shutdown, kernel and drivers
 
 Problem: from docs/reviews/PERF-REVIEW-2026-11.md (#4484):

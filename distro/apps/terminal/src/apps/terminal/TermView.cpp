@@ -3149,8 +3149,11 @@ TermView::_HandleInputMethodChanged(BMessage *message)
 	fInline->SetString("");
 
 	Invalidate();
-	// TODO: Debug only
-	snooze(100000);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Removed legacy debug-only snooze(100000) that stalled input-method edits.
+	// SPDX-SnippetEnd
 
 	fInline->SetString(string);
 	fInline->ResetClauses();
