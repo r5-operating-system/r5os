@@ -2,6 +2,8 @@
 
 The contract for power management: CPU performance profiles, the Power page in Settings, battery, brightness, sleep and wake. It covers every R5 target: AMD and Intel on AMD64, then ARM64 and RISC-V 64. The mockup is `docs/design/power-mockup/` (owner, 22 Nov 2026). The work order is in the Platform section of `docs/ROADMAP.md`.
 
+**Every processor R5 runs on.** On AMD64 everything in this contract (profiles, battery, brightness, sleep and wake) is for every processor that meets R5's baseline, x86-64-v2 (`CHANGELOG.md`, 18 Nov 2026), from any vendor and generation. The 5625U and the X1 Carbon are where it is tested first, not what it is written for. Paths are chosen by what the processor and the firmware report (CPUID, ACPI), never by a list of known models. A table of device IDs is allowed only for an optional vendor extra, and a processor that is not in it still gets the generic path.
+
 Nothing in this document is built yet unless it says so. "Exists" means it is on `main`; "planned" means this contract describes it and the owner must still say "build it".
 
 ## 1. What exists (22 Nov 2026, build 10066)
@@ -192,17 +194,40 @@ Where power work uses the UEFI runtime services:
   6. Take the other CPUs offline.
   7. Enter S0ix or S3.
 - **Wake:** the reverse order.
-- **S0ix on AMD.** air/OS's `arch_s2idle` is the basis: LPS0 `_DSM` with the AMD and Microsoft UUIDs, and the PMC OS hint. Renoir (the 5625U) is added to its table from the hardware and a cited source.
-- **S0ix on Intel.** Its own module, with the Intel LPS0 UUID and the Intel PMC.
-- **S3.** Only where the firmware offers it and S0ix does not.
+### Every x86-64-v2 processor
+
+Sleep is written for every AMD64 computer that meets the x86-64-v2 baseline, AMD and Intel, of any generation. The 5625U is the first test machine, not the target.
+
+- **Which sleep state.** It comes from the firmware alone:
+  - the FADT low-power-S0 flag plus an LPS0 device means suspend to idle (S0ix);
+  - `_S3_` means suspend to RAM (S3);
+  - neither means "This computer cannot sleep".
+- **S0ix: one generic path for every vendor.** air/OS's `arch_s2idle` is the basis, made generic:
+  - the LPS0 `_DSM` with the Microsoft UUID, plus the AMD or Intel UUID when the firmware offers it (the `_DSM` reports which functions it has);
+  - the deepest idle state that `x86_acpi_cstates` or `x86_cstates` already chose;
+  - the wake through the SCI.
+  - air/OS's table of root-device IDs gates the whole path; in R5 it gates only the optional AMD extras. A processor that is not in such a table still sleeps through the generic path.
+- **Vendor extras, optional.** Each extra is its own small part, used when the processor reports it. If an extra is missing or fails, the generic path still runs. The extras:
+  - the AMD PMC OS hint over SMN, and the S0i3 blocker log, for AMD families that have that PMC;
+  - the Intel PMC and its residency counters, for Intel parts that have it.
+- **S3: one generic path.** The ACPI sleep sequence with a real-mode wake trampoline, from air/OS's `arch_suspend`, for every firmware that offers `_S3_` and no S0ix.
+- **Device hooks are not processor-specific.** xHCI, NVMe, PCI, the network and Wi-Fi drivers, HDA and USB audio suspend the same way on every CPU.
 - **ARM64 and RISC-V.** PSCI `SYSTEM_SUSPEND` and SBI SUSP, designed here and built when those targets boot.
-- **GPU and display.** A design in `docs/GRAPHICS.md` first. The fixed GFX9 sequences and the stop at shutdown are not changed without the owner's go and a 5625U boot, as `AGENTS.md` requires.
+
+### GPU, wake sources, and when sleep is offered
+
+- **GPU and display.** A design in `docs/GRAPHICS.md` first. The fixed GFX9 sequences and the stop at shutdown are not changed without the owner's go and a 5625U boot, as `AGENTS.md` requires. A GPU without a resume path keeps the computer awake, and the page says why.
 - **Wake sources.** Lid, power button and keyboard, plus the mouse or touchpad where the firmware offers it. A wake only counts when a wake source reported it or the lid is open, as air/OS does.
-- **"Sleep works on this computer".** This means the sleep path for this machine's sleep state is built and passed its test. The kernel reports it through the profile call's information block. Until then the page grays Sleep and Wake (section 2).
-- **Pass rule on the 5625U:**
-  - close and open the lid five times, with no panic;
-  - the desktop, Wi-Fi, Bluetooth, USB and sound come back each time;
-  - the battery drain over one hour is recorded in `CHANGELOG.md`.
+- **When sleep is offered.** A sleep state is offered on every x86-64-v2 computer whose firmware reports it, once the generic path for that state has passed its test:
+  - S3 in QEMU and on one laptop;
+  - S0ix on the 5625U (AMD) and the X1 Carbon (Intel).
+
+  The kernel reports this through the profile call's information block. Until then the page grays Sleep and Wake (section 2).
+- **A failed wake turns sleep off on that computer.** The next start sees it in the shutdown trail that R5 already keeps. Sleep is then off on that computer until an administrator turns it on again, and the page says why.
+- **Pass rules:**
+  - **QEMU.** The generic S3 path sleeps and wakes, with no panic, on every boot of the smoke test.
+  - **5625U (AMD S0ix) and X1 Carbon (Intel).** On each: close and open the lid five times, with no panic. The desktop, Wi-Fi, Bluetooth, USB and sound come back each time. The battery drain over one hour is recorded in `CHANGELOG.md`.
+  - **Any other x86-64-v2 computer.** A result from an owner or tester goes in `CHANGELOG.md`. A failure is fixed in the generic path or in an extra, never with a model check.
 
 ## 7. Defaults
 
@@ -225,7 +250,7 @@ Other defaults:
 1. This contract and the mockup (done 22 Nov 2026, waiting for "build it").
 2. Haiku's `power_daemon` in `distro/` with air/OS's policy and the admin port, `libr5power.so` with `BPowerRoster`, the profile syscall and the new cpufreq interface on AMD (MSR and shared memory) and Intel, and the Power page with Sleep and Wake gray. Stick: the profile visible in `R5 CPPC:` lines and CPU Info on the 5625U.
 3. Battery, thermal, the low-battery notification and brightness (`BScreen` first) on the 5625U. PowerStatus and its Deskbar replicant move to `BPowerRoster`.
-4. Sleep and wake on the 5625U (its own round, the owner's go first), then Intel on the X1 Carbon.
+4. Sleep and wake for every x86-64-v2 computer (its own round, the owner's go first): the generic S0ix and S3 paths with the vendor extras, tested in QEMU (S3), on the 5625U (AMD) and on the X1 Carbon (Intel).
 5. ARM64 and RISC-V, in their own trees, when those targets boot.
 
 ### R5Book and the other documentation
