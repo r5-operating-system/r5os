@@ -486,6 +486,11 @@ private:
 };
 
 
+// libskia.a is built with -fno-rtti while app_server uses RTTI; emit the
+// base class typeinfo here so PipelineExecutor links cleanly.
+template class SkExecutorBase<std::function<void()>>;
+
+
 /*!	Perf round 2: parallel Graphite pipeline compilation on Lavapipe.
 	SkSL->SPIR-V and Lavapipe's SPIR-V->NIR->optimize stages run lock-free
 	across worker threads instead of serialising on the draw thread.
@@ -530,6 +535,8 @@ public:
 
 	bool Ready() const { return fSem >= 0 && !fThreads.empty(); }
 	int32 ThreadCount() const { return (int32)fThreads.size(); }
+
+	using SkExecutor::add;
 
 	void add(std::function<void()> work) override
 	{
