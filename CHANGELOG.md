@@ -7,6 +7,16 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-23 - Windows, Default (R5 Modern): fixes from the first review
+
+Problem: an independent review of the branch (a fresh agent, code and docs only) found: the wedge in the footprint depended on the mode, and the footprint is cached, so after a fall back from the GPU to the CPU mode in a session some wedge pixels were drawn by nobody; wedge pixels between half and fully covered were in the footprint but returned no region, so a click there did nothing; reordering stacked tabs (`_MoveTab`) did not redraw the wedge; `_DrawWedges()` made one rectangle and one colour lookup per pixel.
+
+What changed (`R5ModernDecorator.cpp`): the wedge is the same in both modes (every pixel the arc does not fully cover); in the CPU mode the decorator paints the pixels at least half covered in the plain edge colour, the same line Window paints as its rim; `RegionAt()` gives every wedge pixel to the tab (`_InWedge()`); `_MoveTab()` adds the top strip to the update region; the wedge is filled one run per row.
+
+Also noted by the review, not changed (owner's choice, in the PR's "Open keuzes"): the active tab without glass, floating windows with the full card, the 12 % lighter tab colour, the edge colour over the panel colour. `DecorInfo` (libbe) now returns the add-on's own name from `Name()` and "Classic (Haiku)" for the built-in decorator: a visible change in a libbe class, no ABI change; "Default" and the file names still find the decorators.
+
+Tested: see the step C entry and the PR (QEMU run 6 on build 9).
+
 ## 2026-11-22 - Windows, Default (R5 Modern) step C: the round decorator, its name in Appearance, clicks in the round corners
 
 Problem: the owner chose a round window decorator, "Default (R5 Modern)", from board 4 "Soft" of the mockup (`docs/design/R5-MODERN-DECORATOR.md`, 22 Nov 2026). Steps 1 and 2 (the window outline in the compositor and in Safe mode) were on `main`; the decorator itself, its name in Appearance and the clicks in a round corner were not. Appearance also showed decorators by file name ("R5", "Default"), and `_DecorLabel()` returned the text of a `BString` that no longer existed.

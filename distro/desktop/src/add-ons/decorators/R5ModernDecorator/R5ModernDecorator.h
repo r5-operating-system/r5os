@@ -68,8 +68,8 @@ private:
 			void				_LayoutItems(Decorator::Tab* tab);
 			void				_LayoutAllItems();
 			BRect				_TabCard() const;
-			void				_WedgePixels(BRegion* region,
-									bool blended) const;
+			void				_WedgePixels(BRegion* region) const;
+			bool				_InWedge(BPoint where) const;
 			rgb_color			_TabColorAt(Decorator::Tab* tab,
 									float y) const;
 			Decorator::Tab*		_TabAtX(float x) const;

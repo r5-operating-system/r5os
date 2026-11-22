@@ -189,19 +189,22 @@ R5ModernDecorator::RegionAt(BPoint where, int32& tab) const
 	// tab card it is the tab (the wedge); otherwise it is the resize
 	// corner (step 0: Decorator::InputMarginContains() gives it to this
 	// window).
+	// Review 1: every pixel of the wedge (the footprint's), not only the
+	// ones less than half covered.
+	if (_InWedge(where)) {
+		Decorator::Tab* hit = _TabAtX(where.x);
+		tab = fTabList.IndexOf(hit);
+		return REGION_TAB;
+	}
 	window_outline_rect frame;
 	frame.rect = fBorderRect;
 	frame.leftTop = frame.rightTop = frame.leftBottom = frame.rightBottom
 		= fRadius;
 	int32 kind = window_outline_cut_corner(&frame, 1, where);
-	if (kind < 0)
+	if (kind < 0 || (kind < 2 && fTitleBarRect.IsValid()
+			&& _TabCard().Contains(where)))
 		return R5Decorator::RegionAt(where, tab);
 
-	if (kind < 2 && fTitleBarRect.IsValid() && _TabCard().Contains(where)) {
-		Decorator::Tab* hit = _TabAtX(where.x);
-		tab = fTabList.IndexOf(hit);
-		return REGION_TAB;
-	}
 	if ((fTopTab->flags & B_NOT_RESIZABLE) != 0)
 		return REGION_NONE;
 	switch (kind) {
@@ -240,7 +243,7 @@ R5ModernDecorator::GetGlassRegion(BRegion* region)
 	}
 	if (fTopTab != NULL && !fTopTab->buttonFocus) {
 		BRegion wedge;
-		_WedgePixels(&wedge, _Blended());
+		_WedgePixels(&wedge);
 		region->Include(&wedge);
 	}
 }
@@ -538,7 +541,7 @@ R5ModernDecorator::_GetFootprint(BRegion* region)
 
 	// the wedge: the card where the window's top corners are cut
 	BRegion wedge;
-	_WedgePixels(&wedge, _Blended());
+	_WedgePixels(&wedge);
 	region->Include(&wedge);
 }
 
@@ -612,8 +615,14 @@ R5ModernDecorator::_MoveTab(int32 from, int32 to, bool isMoving,
 	BRegion* updateRegion)
 {
 	bool result = R5Decorator::_MoveTab(from, to, isMoving, updateRegion);
-	if (_IsModern())
+	if (_IsModern()) {
 		_LayoutAllItems();
+		// review 1: the wedge takes the colour of the tab now behind it
+		if (updateRegion != NULL) {
+			updateRegion->Include(BRect(fBorderRect.left, fBorderRect.top,
+				fBorderRect.right, fBorderRect.top + fRadius));
+		}
+	}
 	return result;
 }
 
@@ -732,13 +741,15 @@ R5ModernDecorator::_TabCard() const
 }
 
 
-/*!	The wedge: pixels of the frame's top corners that lie outside its arc
-	and on the card. \a blended (the compositor draws): every pixel the arc
-	does not fully cover; otherwise (Painter) those less than half covered,
-	the stepped arc, whose edge line Window paints along the steps.
+/*!	The wedge: pixels of the frame's top corners that the arc does not
+	fully cover, on the card. The same in both modes (review 1: a footprint
+	that depended on the mode stayed the GPU one after a fall back to the
+	CPU mode, and pixels were drawn by nobody). In the CPU mode the pixels
+	at least half covered are the stepped edge (Window's rim, the same
+	colour).
 */
 void
-R5ModernDecorator::_WedgePixels(BRegion* region, bool blended) const
+R5ModernDecorator::_WedgePixels(BRegion* region) const
 {
 	if (!fTitleBarRect.IsValid() || !fBorderRect.IsValid())
 		return;
@@ -756,10 +767,7 @@ R5ModernDecorator::_WedgePixels(BRegion* region, bool blended) const
 				if (x < card.left || x > card.right)
 					continue;
 				float coverage = window_corner_coverage(corner, x, y);
-				bool mine = blended
-					? coverage < 1.0f - kWindowCornerEpsilon
-					: coverage < 0.5f;
-				if (mine)
+				if (coverage < 1.0f - kWindowCornerEpsilon)
 					window_outline_add_run(*region, x, x, y);
 			}
 		}
@@ -785,6 +793,30 @@ R5ModernDecorator::_TabColorAt(Decorator::Tab* tab, float y) const
 	float height = fTabVisible + fTabUnder - 1;
 	float position = height > 0 ? (y - fTitleBarRect.top) / height : 0;
 	return mix_color(top, bottom, position);
+}
+
+
+//!	Whether \a where is a pixel of the wedge (_WedgePixels()).
+bool
+R5ModernDecorator::_InWedge(BPoint where) const
+{
+	if (!fTitleBarRect.IsValid() || !fBorderRect.IsValid()
+		|| !_TabCard().Contains(where))
+		return false;
+	int32 x = (int32)floorf(where.x);
+	int32 y = (int32)floorf(where.y);
+	clipping_rect frame = window_outline_clipping_rect(fBorderRect);
+	for (int32 kind = 0; kind < 2; kind++) {
+		window_corner corner;
+		if (!window_outline_corner(frame, kind, fRadius, corner))
+			continue;
+		if (x < corner.square.left || x > corner.square.right
+			|| y < corner.square.top || y > corner.square.bottom)
+			continue;
+		return window_corner_coverage(corner, x, y)
+			< 1.0f - kWindowCornerEpsilon;
+	}
+	return false;
 }
 
 
@@ -814,7 +846,10 @@ R5ModernDecorator::_StraightEdgeColor() const
 
 
 /*!	Paints the wedge: the card, and with the compositor the arc's edge line
-	over it by coverage (as the compositor blends the line elsewhere).
+	over it by coverage (as the compositor blends the line elsewhere); in
+	the CPU mode the pixels at least half covered in the plain edge colour
+	(the stepped line Window paints as its rim). One run of rectangles per
+	row (review 1: a rectangle and a colour lookup per pixel).
 */
 void
 R5ModernDecorator::_DrawWedges(BRect rect)
@@ -837,19 +872,34 @@ R5ModernDecorator::_DrawWedges(BRect rect)
 		if (!rect.Intersects(BRect(left, corner.square.top, right,
 				corner.square.bottom)))
 			continue;
+		rgb_color row[R5_WINDOW_CORNER_MAX_RADIUS];
 		for (int32 y = corner.square.top; y <= corner.square.bottom
 				&& y <= card.bottom; y++) {
-			for (int32 x = left; x <= right; x++) {
-				float coverage = window_corner_coverage(corner, x, y);
-				bool mine = blended
-					? coverage < 1.0f - kWindowCornerEpsilon
-					: coverage < 0.5f;
-				if (!mine)
-					continue;
-				rgb_color color = _TabColorAt(_TabAtX(x), y);
-				if (blended)
-					color = mix_color(color, edge, coverage);
-				fDrawingEngine->FillRect(BRect(x, y, x, y), color);
+			Decorator::Tab* lastTab = NULL;
+			rgb_color tabColor = kWhite;
+			int32 start = -1;
+			for (int32 x = left; x <= right + 1; x++) {
+				float coverage = x <= right
+					? window_corner_coverage(corner, x, y) : 1.0f;
+				bool mine = coverage < 1.0f - kWindowCornerEpsilon;
+				if (mine) {
+					Decorator::Tab* tab = _TabAtX(x);
+					if (tab != lastTab) {
+						tabColor = _TabColorAt(tab, y);
+						lastTab = tab;
+					}
+					rgb_color color;
+					if (blended)
+						color = mix_color(tabColor, edge, coverage);
+					else
+						color = coverage < 0.5f ? tabColor : edge;
+					if (start < 0)
+						start = x;
+					row[x - start] = color;
+				} else if (start >= 0) {
+					fill_row(fDrawingEngine, row, x - start, start, y);
+					start = -1;
+				}
 			}
 		}
 	}
