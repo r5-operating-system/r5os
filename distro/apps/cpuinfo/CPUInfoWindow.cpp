@@ -250,8 +250,10 @@ CPUInfoWindow::CPUInfoWindow()
 	header->SetTitle("CPU Info");
 	header->SetSubtitle("Processor hardware and R5 runtime paths");
 
-	float iconSize = be_control_look != NULL
-		? be_control_look->ComposeIconSize(40).Width() : 40.0f;
+	// BPageHeader draws its icon in a square of 48 units, as Settings
+	// renders it (SettingsWindow). A smaller bitmap was stretched to that
+	// square and lost its sharp edges.
+	float iconSize = be_plain_font->Size() / 13.0f * 48.0f;
 	BBitmap* icon = r5_mime_icon_bitmap(
 		"application/x-vnd.Haiku-ActivityMonitor", iconSize);
 	if (icon != NULL) {

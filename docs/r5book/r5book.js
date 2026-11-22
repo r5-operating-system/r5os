@@ -239,6 +239,19 @@
 					],
 				},
 				{
+					file: "debug-flags.html",
+					label: "Debug flags",
+					items: [
+						["debug-flags.html#how", "How the files work"],
+						["debug-flags.html#radeon_hd", "radeon_hd"],
+						["debug-flags.html#kernel", "kernel"],
+						["debug-flags.html#efi", "efi and safe mode"],
+						["debug-flags.html#audio", "Audio"],
+						["debug-flags.html#network", "Wi-Fi, Bluetooth, network"],
+						["debug-flags.html#env", "Environment variables"],
+					],
+				},
+				{
 					file: "class-index.html",
 					label: "Class & call index",
 					items: [],

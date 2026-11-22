@@ -38,6 +38,7 @@ Open `index.html` directly in a browser. Everything is static HTML, CSS (`r5book
 | Page | Covers | Source of truth |
 |---|---|---|
 | `haiku-additions.html` | Public calls R5 added to Haiku classes and modules, plus decorator hooks and the EFI module for drivers | `SPDX-Snippet` parts of public headers in `distro/`; `distro/kernel/headers/os/drivers/EFI.h` |
+| `debug-flags.html` | Every debug, trace, test and tuning switch R5 reads from settings files and environment variables, with defaults | `get_driver_*` and line reads under `distro/` (radeon_hd, kernel, efi, cs35l41, mt7922wifi, h2generic, usb_audio, WiFi_debug) |
 | `class-index.html` | Alphabetical index of every class, function, struct, and enum in R5Book | Generated from `R5_SEARCH_INDEX` in `r5book.js` |
 
 ## Pictures

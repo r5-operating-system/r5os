@@ -682,6 +682,7 @@ SkiaGpu::SkiaGpu()
 	fQueueFamily(0),
 	fRunFence(0),
 	fRunInFlight(false),
+	fRunSubmitted(false),
 	fPipelinesSynced(0)
 {
 	fDoneSem = create_sem(0, "skia done");
@@ -1254,6 +1255,17 @@ SkiaGpu::Wake()
 
 
 bool
+SkiaGpu::_RunFenceBroken()
+{
+	if (fRunFence == 0 || !fRunSubmitted || sWaitForFences == NULL)
+		return false;
+	VkFence fence = (VkFence)fRunFence;
+	VkResult result = sWaitForFences(sDevice, 1, &fence, VK_TRUE, 0);
+	return result != VK_SUCCESS && result != VK_TIMEOUT;
+}
+
+
+bool
 SkiaGpu::RunWork(const char** _reason)
 {
 	BAutolock _(fLock);
@@ -1332,6 +1344,18 @@ SkiaGpu::RunWork(const char** _reason)
 			_ReleaseWaiters();
 			return false;
 		}
+	}
+	// Stick 72: after a GPU reset that another client caused (the hang
+	// test), the fence waits of this device fail with an error RADV does
+	// not turn into VK_ERROR_DEVICE_LOST, and Graphite aborts when it polls
+	// its own fences below. Ask the run fence first; anything but signalled
+	// or not yet means the device is gone, and the desktop leaves RADV the
+	// way a failed submit does (#4471).
+	if (_RunFenceBroken()) {
+		*_reason = "device lost";
+		atomic_set64(&fDone, ticket);
+		_ReleaseWaiters();
+		return false;
 	}
 	// finished work calls Graphite's release procs (the window images it
 	// let go of) here
@@ -1493,6 +1517,7 @@ SkiaGpu::RunWork(const char** _reason)
 					submitted = false;
 				} else {
 					fRunInFlight = true;
+					fRunSubmitted = true;
 					if (semaphore != VK_NULL_HANDLE)
 						fSignalled.push_back((uint64)semaphore);
 				}
@@ -1570,11 +1595,13 @@ SkiaGpu::RunWork(const char** _reason)
 				return false;
 			}
 			// read_done() copies into the bitmaps from here (DestroyContext()
-			// waits for fWaitingUnlocked, so the context is still there)
+			// waits for fWaitingUnlocked, so the context is still there).
+			// Not after a failed wait: Graphite would poll lost fences.
 			bigtime_t fenceDone = system_time();
 			if (sDebugProfile)
 				Profile(kTimeFenceWait, fenceDone - submitTime);
-			context->checkAsyncWorkCompletion();
+			if (ok)
+				context->checkAsyncWorkCompletion();
 			bigtime_t deliverDone = system_time();
 			if (sDebugProfile)
 				Profile(kTimeAsyncCheck, deliverDone - fenceDone);
