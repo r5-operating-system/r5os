@@ -15,7 +15,7 @@ What changed: their `distro/desktop/src/add-ons/decorators/` copies are removed,
 
 Limits: a user who chose one of the four earlier gets the default decorator; that fallback was not tested. Old copies of these files in the shared WSL tree stay there but are no longer built.
 
-Tested: nothing yet; checked by the same jam as the entry above.
+Tested: the jam of the entry above passed without the four add-ons (`jam_exit=0`). Not booted.
 
 ## 2026-11-22 - Round window corners: the outline under Default (R5 Modern) and the round Deskbar
 
@@ -34,7 +34,7 @@ Limits: no decorator returns an outline yet and nothing calls the new libr5ui fu
 
 Test tool: `r5-effects-test round [radius] [seconds]` opens three bordered windows (the kind Deskbar uses) with `set_window_corner_radius()`: colour bars to every edge with a moving bar through the bottom corners, a text view with both scroll bars meeting in the bottom-right corner, and a glass window. Without a radius it uses 18 scaled with the font size; `round 0` opens them square for the compare.
 
-Tested: nothing yet. Not built, not booted. Needs `scripts/build-locked.sh`, then a QEMU boot (Lavapipe and Safe mode) with `r5-effects-test round`, and the compare mode for Default (R5) and Classic (Haiku) unchanged.
+Tested: built AMD64 with `scripts/build-locked.sh` from the worktree (`jam_exit=0`, `mesa_exit=0`, 10420 targets, `r5-os.image` written, no failed target; the missing-header lines of the image translators are not from this change and fail no target). Not booted yet. Still needed: a QEMU boot (Lavapipe and Safe mode) with `r5-effects-test round`, and the compare mode for Default (R5) and Classic (Haiku) unchanged.
 
 ## 2026-11-22 - Warm restart no longer hangs in OVMF firmware
 
