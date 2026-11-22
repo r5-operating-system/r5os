@@ -162,7 +162,7 @@ card->AddTag("Display");
 
 The title uses `be_bold_font` at 8 points above that font's size. The subtitle uses `be_plain_font`, mixed so that 70 percent is the document text and 30 percent is the document background. Each line is cut with an ellipsis in the width left of the icon.
 
-The icon is `ComposeIconSize(40)`, vertically centered, `DefaultItemSpacing()` from the right edge. The caller draws any wrench before `SetIcon()`. The preferred height follows the lines and the icon. The maximum width is unlimited and the maximum height is the preferred height.
+The icon is drawn in a square of 48 units (`be_plain_font` size / 13 * 48), vertically centered, 16 units from the right edge. Hand in a bitmap of exactly that size, as Settings does: a bitmap of another size is stretched to the square and loses its sharp edges (CPU Info did that until 22 Nov 2026). The caller draws any wrench before `SetIcon()`. The preferred height follows the lines and the icon. The maximum width is unlimited and the maximum height is the preferred height.
 
 `Invalidate()` runs on `B_COLORS_UPDATED` and `B_FONTS_UPDATED`. `Archive()` and `Instantiate()` keep the three lines and the icon. The archived class name is `BAppearanceKit::BPageHeader`.
 
