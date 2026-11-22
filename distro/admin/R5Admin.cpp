@@ -8,9 +8,13 @@
 
 #include <R5Admin.h>
 
+#include <grp.h>
 #include <new>
+#include <pwd.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 
 static const int32 kRequestCode = 'r5AR';
@@ -276,4 +280,38 @@ r5_admin_send(const BMessenger& service, BMessage* request, BMessage* reply,
 	status = code == kReplyCode ? reply->Unflatten(replyBuffer) : B_ERROR;
 	free(replyBuffer);
 	return status;
+}
+
+
+bool
+r5_admin_sender_allowed(const r5_admin_sender& sender)
+{
+	// The kernel named this sender (admin port): uid, team and the grant
+	// are its own, not a reply address it chose.
+	if (sender.uid == 0)
+		return true;
+
+	struct passwd* account = getpwuid(sender.uid);
+	struct group* admin = getgrnam("admin");
+	if (account != NULL && account->pw_name != NULL && admin != NULL
+		&& admin->gr_mem != NULL) {
+		for (int32 i = 0; admin->gr_mem[i] != NULL; i++) {
+			if (strcmp(admin->gr_mem[i], account->pw_name) == 0)
+				return true;
+		}
+	}
+
+	FILE* grants = fopen("/boot/system/settings/r5-machine-unlock", "r");
+	if (grants == NULL)
+		return false;
+	bool granted = false;
+	long grantTeam;
+	long long until;
+	time_t now = time(NULL);
+	while (!granted
+		&& fscanf(grants, " team %ld until %lld", &grantTeam, &until) == 2) {
+		granted = grantTeam == (long)sender.team && until > (long long)now;
+	}
+	fclose(grants);
+	return granted;
 }

@@ -150,6 +150,18 @@
 					],
 				},
 				{
+					file: "power-kit.html",
+					label: "Power Kit",
+					items: [
+						["power-kit.html#roster", "BPowerRoster"],
+						["power-kit.html#watching", "Watching"],
+						["power-kit.html#example", "Example"],
+						["power-kit.html#brightness", "Brightness"],
+						["power-kit.html#cases", "No battery, Safe mode, sleep"],
+						["power-kit.html#settings", "Where people see it"],
+					],
+				},
+				{
 					file: "wifi-kit.html",
 					label: "Wi-Fi Kit",
 					items: [
@@ -282,6 +294,7 @@
 		{ name: "BNetworkRoster", kind: "addition", where: "Wi-Fi Kit", header: "<NetworkRoster.h>", lib: "libbnetapi.so", href: "wifi-kit.html#roster", desc: "R5 additions for Wi-Fi scan and connection details." },
 		{ name: "BPageHeader", kind: "class", where: "Appearance: Settings", header: "<R5UI.h>", lib: "libr5ui.so", href: "appearance-settings.html#BPageHeader", desc: "Settings page title, subtitle, and icon header." },
 		{ name: "BPasswordControl", kind: "class", where: "Appearance: Controls", header: "<R5UI.h>", lib: "libr5ui.so", href: "appearance-controls.html#BPasswordControl", desc: "Password input field with show/hide eye glyph." },
+		{ name: "BPowerRoster", kind: "class", where: "Power Kit", header: "<PowerRoster.h>", lib: "libr5power.so", href: "power-kit.html#roster", desc: "Batteries, power source, processor profile, sleep, and power messages." },
 		{ name: "BScreenArrangement", kind: "class", where: "Appearance: Controls", header: "<R5UI.h>", lib: "libr5ui.so", href: "appearance-controls.html#BScreenArrangement", desc: "Interactive screen placement and selection view." },
 		{ name: "BSidebar", kind: "class", where: "Appearance: Settings", header: "<R5UI.h>", lib: "libr5ui.so", href: "appearance-settings.html#BSidebar", desc: "Category and page list for the Settings window." },
 		{ name: "BSidebarItem", kind: "class", where: "Appearance: Settings", header: "<R5UI.h>", lib: "libr5ui.so", href: "appearance-settings.html#BSidebarItem", desc: "One row inside a BSidebar." },

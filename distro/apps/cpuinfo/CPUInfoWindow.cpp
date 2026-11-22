@@ -288,6 +288,8 @@ CPUInfoWindow::CPUInfoWindow()
 	add_row(r5Layout, 1, "User-space paths", fReport.userSpacePaths.String());
 	add_row(r5Layout, 2, "XCR0", fReport.xcr0.String());
 	add_row(r5Layout, 3, "Kernel", fReport.kernelLine.String(), true);
+	add_row(r5Layout, 4, "Power profile", fReport.powerProfile.String(),
+		true);
 	BLayoutBuilder::Group<>((BGroupLayout*)r5Card->GetLayout())
 		.Add(r5Grid);
 

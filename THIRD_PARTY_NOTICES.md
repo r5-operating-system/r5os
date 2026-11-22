@@ -268,6 +268,14 @@ Two joystick fixes are from RenkuOS (RenkuOS/Source), copyright atomozero, MIT, 
 
 Device Manager is MIT. It builds Haiku's Devices code unchanged from `src/apps/devices` (`dm_wrapper.c`, `Device*.cpp`, `DriverUtils.cpp`): MIT, copyright 2006-2026 Haiku, Inc., authors Pieter Panman and Leo Rouleau as named in those files. Its icon is the Devices icon, MIT, copyright Haiku, Inc. Hardware names come from the lists in Haiku's `src/data/ids`, the same ones Devices uses. The PCI ID list (Martin Mares and Albert Pool, pci-ids.ucw.cz) may be distributed under GPL-2.0-or-later or BSD-3-Clause; Device Manager uses it under BSD-3-Clause. The USB ID list (maintained by Stephen J. Gowdy, linux-usb.org) states no license in the file; it is not yet reviewed beyond that. ACPI and PnP names come from the UEFI registry files Haiku ships in the same folder. The R5 parts are copyright 2026 R5OS Contributors, MIT.
 
+### Power service
+
+`distro/power/server/` is Haiku's `power_daemon` (`src/servers/power/`), as air/OS (airos-works/haiku) changed it. Copyright the Haiku authors named in each file (Jérôme Duval, Rene Gollent, Nathan Whitehorn and others). License: MIT. The headers stay.
+
+air/OS's `power_policy.cpp`, `power_policy.h` and its changes to the AC, lid and power-button monitors and to `power_daemon.cpp` are from the air/OS tree as R5 has it (`a4ddc48124a9`, one squashed commit of jmgasper's work; the commits it squashes are not in that clone). Copyright jmgasper. The policy files carry air/OS's own header, "Copyright 2026, Haiku, Inc.", which stays. License: MIT. R5 kept the settings file, the profile per power source and the lid handling at start, and left out the sleep, the deep sleep, the wired-network handling, the app_server display layout and the thermal trip monitor (step 3 of `docs/POWER.md`). R5's changes are MIT `SPDX-Snippet` blocks, copyright 2026 R5OS Contributors.
+
+`distro/power/lib/PowerBattery.cpp` and `PowerBattery.h` are PowerStatus's `ACPIDriverInterface` (Haiku `src/apps/powerstatus`), moved into `libr5power.so`. Copyright 2009-2015 Haiku, Inc., Axel Dörfler and Clemens Zeidler. License: MIT. The headers stay.
+
 ### Skia (in app_server)
 
 Skia, branch `chrome/m158`, commit `707e33875fb45f2997a4d781128bec122fb777b4` (13 Nov 2026), built from R5's recipe `distro/skia` into the build-only package `skia_devel-158.0-1` (`libskia.a` and its headers). M12 links it statically into `/system/servers/app_server`; until that step app_server does not contain it, and the package itself is never installed in the image. Built with its Graphite Vulkan backend only; no codecs, no ICU, no HarfBuzz.
@@ -363,15 +371,25 @@ The blobs are unmodified. sha256: `rtl8761cu_fw.bin` `525bfa5ab9a3ed74b788f9ac49
 
 The Realtek loader in `h2generic` (`h2realtek.cpp`, `h2rtkfw.h`) is R5's own MIT code, written from the protocol and file format of FreeBSD's `usr.sbin/bluetooth/rtlbtfw`. Two of its tables, the chip table and the project ids in `h2rtkfw.h`, are FreeBSD's data and are marked as a `BSD-2-Clause` snippet. Copyright (c) 2013 Adrian Chadd, (c) 2019 Vladimir Kondratyev, (c) 2023 Future Crew LLC. License: BSD-2-Clause, text in `LICENSES/rtlbtfw-BSD-2-Clause.txt`. No GPL source (Linux `btrtl`, `btusb`) was read.
 
-### AMD family 19h microcode
+### AMD CPU microcode
 
 Location: `distro/firmware/amd-ucode`. Installed on the boot volume at `system/non-packaged/data/firmware/amd-ucode/`.
 
 | Piece | Project | License |
 |---|---|---|
-| `microcode_amd_fam19h.bin` | Advanced Micro Devices, Inc., 2010-2025, via linux-firmware | AMD microcode license |
+| `microcode_amd_fam15h.bin`, `microcode_amd_fam16h.bin`, `microcode_amd_fam17h.bin`, `microcode_amd_fam19h.bin`, `microcode_amd_fam1ah.bin` | Advanced Micro Devices, Inc., 2010-2025, via linux-firmware tag `20261019` | AMD microcode license |
 
-The blob is unmodified. sha256 `c614d6db8056c5c67a9189b225124127d56990a190305bcb3927d50e132de7dd`. `LICENSE.amd-ucode` is the unmodified AMD text and is installed beside the blob. Redistribution of the binary is allowed when that notice stays with it. This is not an open-source license. AMD does not endorse R5.
+The blobs are unmodified. sha256: `microcode_amd_fam15h.bin` `9d4a668410e72a4bdb86dc23e4261eca04daa83456ada02504115223f356981a`, `microcode_amd_fam16h.bin` `e02ad653b39c975d6c52674b50f23727bb6706bab7b4e5b391a4ce229e7ff121`, `microcode_amd_fam17h.bin` `966e4b796ec689c618868d08f8a37f347b0e7bfce4ae9df793e08471d363b7d0`, `microcode_amd_fam19h.bin` `c614d6db8056c5c67a9189b225124127d56990a190305bcb3927d50e132de7dd`, `microcode_amd_fam1ah.bin` `a6b22566f5aac770bdeae5610d417ee35ffd4af13eeaa624a2995f57e2d5b274`. `LICENSE.amd-ucode` is the unmodified AMD text and is installed beside the blobs. Redistribution of the binaries is allowed when that notice stays with them. This is not an open-source license. AMD does not endorse R5.
+
+### Intel CPU microcode
+
+Location: `distro/firmware/intel-ucode`. Installed on the boot volume at `system/non-packaged/data/firmware/intel-ucode/`.
+
+| Piece | Project | License |
+|---|---|---|
+| `06-1a-04` to `06-dd-01` (97 files, family 06 from Nehalem, Atom from Silvermont) | Intel Corporation, 2018-2021, via `intel/Intel-Linux-Processor-Microcode-Data-Files` release `microcode-20261110` | Intel microcode license |
+
+The files are unmodified (18,821,120 bytes). `LICENSE.intel-ucode` is the unmodified Intel text and is installed beside them; it is also in `LICENSES/`. Redistribution is allowed in binary form without modification, with the copyright notice and disclaimer reproduced. Reverse engineering is not allowed. This is not an open-source license. Intel does not endorse R5.
 
 ### AMD Renoir graphics firmware
 

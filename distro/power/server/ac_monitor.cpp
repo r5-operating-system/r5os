@@ -1,0 +1,47 @@
+/*
+ * Copyright 2013, 2026, Jérôme Duval, jerome.duval@gmail.com.
+ * Copyright 2005, Nathan Whitehorn.
+ *
+ * Distributed under the terms of the MIT License.
+ */
+
+
+#include "ac_monitor.h"
+
+#include "power_policy.h"
+
+#include <Messenger.h>
+#include <Roster.h>
+
+#include <syslog.h>
+
+
+ACMonitor::ACMonitor(PowerPolicy* policy)
+	:
+	fPolicy(policy)
+{
+	int fd = open("/dev/power/acpi_ac/0", O_RDONLY);
+	if (fd > 0) {
+		fFDs.insert(fd);
+		HandleEvent(fd);
+	}
+}
+
+
+ACMonitor::~ACMonitor()
+{
+	for (std::set<int>::iterator it = fFDs.begin(); it != fFDs.end(); ++it)
+		close(*it);
+}
+
+
+void
+ACMonitor::HandleEvent(int fd)
+{
+	uint8 status;
+	if (read(fd, &status, 1) != 1)
+		return;
+
+	fPolicy->SetOnAC(status != 0);
+	syslog(LOG_INFO, "AC adapter %s", status == 1 ? "online" : "offline");
+}
