@@ -229,6 +229,8 @@ R5Decorator::GetInputMargin(BRect* margin)
 bool
 R5Decorator::GetEdgeLine(rgb_color* color, float* width)
 {
+	AutoReadLocker _(fLocker);
+
 	if (fTopTab == NULL)
 		return false;
 	if (!fThinFrame && fTopTab->look != B_BORDERED_WINDOW_LOOK)

@@ -18,7 +18,7 @@
 #include <r5_x86_cpu.h>
 
 
-static void __attribute__((target("avx2")))
+static inline void __attribute__((target("avx2")))
 r5_span_copy_avx(void* dst, const void* src, size_t bytes)
 {
 	uint8_t* out = (uint8_t*)dst;
@@ -34,14 +34,14 @@ r5_span_copy_avx(void* dst, const void* src, size_t bytes)
 }
 
 
-static void
+static inline void
 r5_span_copy_c(void* dst, const void* src, size_t bytes)
 {
 	memcpy(dst, src, bytes);
 }
 
 
-static void
+static inline void
 r5_span_copy(void* dst, const void* src, size_t bytes)
 {
 	static void (*copy)(void*, const void*, size_t);
@@ -56,7 +56,7 @@ r5_span_copy(void* dst, const void* src, size_t bytes)
 }
 
 
-static void __attribute__((target("avx2")))
+static inline void __attribute__((target("avx2")))
 r5_span_blend_avx(uint32_t* bits, uint64_t pixels)
 {
 	const __m256i mask = _mm256_set1_epi32(0x7f7f7f7f);
@@ -77,7 +77,7 @@ r5_span_blend_avx(uint32_t* bits, uint64_t pixels)
 }
 
 
-static void
+static inline void
 r5_span_blend(uint32_t* bits, uint64_t pixels)
 {
 	static int useAvx = -1;
@@ -96,14 +96,14 @@ r5_span_blend(uint32_t* bits, uint64_t pixels)
 	}
 }
 #else
-static void
+static inline void
 r5_span_copy(void* dst, const void* src, size_t bytes)
 {
 	memcpy(dst, src, bytes);
 }
 
 
-static void
+static inline void
 r5_span_blend(uint32_t* bits, uint64_t pixels)
 {
 	for (uint64_t i = 0; i < pixels; i++) {

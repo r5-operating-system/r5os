@@ -110,6 +110,9 @@ STRINGS = (b"gpu_isolation_test", b"window vkcube")
 # M11 part of check looks for: the pattern as check has it, and the text
 # and the source file that print it.
 COMPOSITOR = "distro/app_server/Compositor.cpp"
+COMPOSITOR_VULKAN = "distro/app_server/CompositorVulkan.cpp"
+COMPOSITOR_ANIM = "distro/app_server/CompositorAnimations.cpp"
+COMPOSITOR_SHARE = "distro/app_server/CompositorShare.cpp"
 KERNEL = "distro/graphics/src/add-ons/kernel/drivers/graphics/r5gpu/r5_gpu_core.cpp"
 SHARE = "distro/graphics/src/bin/r5-share-check/r5-share-check.cpp"
 M11_LINES = (
@@ -137,18 +140,18 @@ M11_LINES = (
     ("compose effects shadow on frosted on", "compose effects shadow %s frosted %s",
      COMPOSITOR),
     ("app_server: window memory [0-9]+ MB", "window memory %", COMPOSITOR),
-    ("app_server: window memory type", "window memory type %", COMPOSITOR),
-    ("app_server: window buffer write fill", "window buffer write fill %", COMPOSITOR),
-    ("zero-copy on", "\" zero-copy on\"", COMPOSITOR),
-    ("zero-copy off: setting", '"setting"', COMPOSITOR),
-    ("zero-copy off: lavapipe", '"lavapipe"', COMPOSITOR),
+    ("app_server: window memory type", "window memory type %", COMPOSITOR_VULKAN),
+    ("app_server: window buffer write fill", "window buffer write fill %", COMPOSITOR_VULKAN),
+    ("zero-copy on", "\" zero-copy on\"", COMPOSITOR_SHARE),
+    ("zero-copy off: setting", '"setting"', COMPOSITOR_SHARE),
+    ("zero-copy off: lavapipe", '"lavapipe"', COMPOSITOR_SHARE),
     ("app_server: zero-copy setting off", "zero-copy setting %s", COMPOSITOR),
     ("app_server: team cpu", "team cpu %", COMPOSITOR),
     ("app_server: animation $a [0-9]+ ms frames [0-9]+", "animation workspace %",
-     COMPOSITOR),
+     COMPOSITOR_ANIM),
     ("app_server: compositor paused: direct window", "compositor paused: direct window",
-     COMPOSITOR),
-    ("app_server: compositor resumed", "compositor resumed", COMPOSITOR),
+     COMPOSITOR_SHARE),
+    ("app_server: compositor resumed", "compositor resumed", COMPOSITOR_SHARE),
     ("app_server: $e off", "app_server: %s %s",
      "distro/rest/src/servers/app/ServerApp.cpp"),
     ("second import of the same number refused", "second import of the same number refused",

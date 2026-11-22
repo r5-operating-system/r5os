@@ -242,6 +242,9 @@ private:
 			void				_RecordCorners(Layer* layer,
 									const BRegion& part, uint64 frame,
 									uint32 frameStride);
+			void				_RecordShareCorners(const Layer* layer,
+									const ShareDraw* draw, const BRegion& part,
+									uint64 frame, uint32 frameStride);
 			// M13 step 4: the outline of a resize on Lavapipe
 			bool				_RecordOutline(Layer* layer,
 									const BRegion& damage, uint64 frame,
