@@ -74,7 +74,8 @@ messages the running Deskbar at once, without writing Deskbar's settings file.
   the pill (or above it at the bottom) over the whole width, so nothing ever hides behind
   Deskbar. A real full-screen window (`BWindowScreen`, a full-screen video, a game) covers
   Deskbar as today. Step 0 checks `BWindow::Zoom()` for each layout and place, and says where
-  the frame or margin must come from.
+  the frame or margin must come from. In Classic (Haiku) nothing changes: it does not float
+  and has no Compact layout, so zooming stays exactly as it is now.
 - **As now (block):** top to bottom the wave pebble (menu), the tray with the clock, the
   application list with icon, name and window count.
 - **Pill:** 54 px high, one row: wave pebble | running applications as **icons only** (a small
