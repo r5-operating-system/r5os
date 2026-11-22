@@ -621,6 +621,7 @@ struct Compositor::Layer {
 		top(0),
 		shadow(false),
 		shadowSmall(false),
+		shadowFlat(false),
 		belowHash(0),
 		animatable(false),
 		visible(-1)
@@ -645,6 +646,7 @@ struct Compositor::Layer {
 		shape = source.shape;
 		shadow = source.shadow;
 		shadowSmall = source.shadowSmall;
+		shadowFlat = source.shadowFlat;
 		shadowArea = source.shadowArea;
 		outline = source.outline;
 		glassFixed = source.glassFixed;
@@ -694,6 +696,9 @@ struct Compositor::Layer {
 	// glass of the tab and frame line (fixed) and of glass views (alpha).
 	bool						shadow;
 	bool						shadowSmall;
+	// Deskbar styles: set_window_shadow() kind 2, the shadow without its
+	// offset, for a window against a screen edge
+	bool						shadowFlat;
 	BRegion						shadowArea;
 	// M13 step 4: the outline of a resize on Lavapipe (screen coordinates),
 	// drawn over the window by _RecordOutline(); not part of shape

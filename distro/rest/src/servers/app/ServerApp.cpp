@@ -4016,6 +4016,114 @@ ServerApp::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 		}
 // SPDX-SnippetEnd
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		case AS_R5_SET_WINDOW_SHADOW:
+		{
+			// The shadow of one of this team's own windows (libr5ui,
+			// set_window_shadow(); docs/design/DESKBAR-STYLES.md): 0 as the
+			// decorator gives it, 1 the full shadow of the step whatever the
+			// focus, 2 the same without the offset (against a screen edge).
+			int32 token = -1;
+			int32 kind = 0;
+			link.Read<int32>(&token);
+			status_t status = link.Read<int32>(&kind);
+			if (status == B_OK && (kind < 0 || kind > 2))
+				status = B_BAD_VALUE;
+			if (status == B_OK && !fDesktop->LockAllWindows())
+				status = B_ERROR;
+			if (status == B_OK) {
+				Window* found = NULL;
+				for (Window* window = fDesktop->AllWindows().FirstWindow();
+						window != NULL;
+						window = window->NextWindow(kAllWindowList)) {
+					if (window->ServerWindow()->App() == this
+						&& window->ServerWindow()->ClientToken() == token) {
+						found = window;
+						break;
+					}
+				}
+				if (found == NULL)
+					status = B_BAD_VALUE;
+				else if (found->ShadowKind() != kind) {
+					found->SetShadowKind(kind);
+					Compositor* compositor = fDesktop->GetCompositor();
+					if (compositor != NULL && compositor->IsActive()) {
+						BRegion full;
+						found->GetFullRegion(&full);
+						BRect reach = full.Frame();
+						// the largest step's shadow reaches less than this
+						reach.InsetBy(-64, -64);
+						compositor->ClippingChanged();
+						compositor->Damage(BRegion(reach));
+					}
+				}
+				fDesktop->UnlockAllWindows();
+			}
+			fLink.StartMessage(status);
+			fLink.Flush();
+			break;
+		}
+
+		case AS_R5_SET_WINDOW_EDGE_LINE:
+		{
+			// The line along the outer edge of one of this team's own
+			// windows, carried round the arc of its round corners (libr5ui,
+			// set_window_edge_line()). A decorator's own line comes first.
+			int32 token = -1;
+			rgb_color color = make_color(0, 0, 0);
+			float width = 0.0f;
+			link.Read<int32>(&token);
+			link.Read<rgb_color>(&color);
+			status_t status = link.Read<float>(&width);
+			if (status == B_OK && !(width >= 0.0f && width <= 4.0f))
+				status = B_BAD_VALUE;
+			if (status == B_OK && !fDesktop->LockAllWindows())
+				status = B_ERROR;
+			if (status == B_OK) {
+				Window* found = NULL;
+				for (Window* window = fDesktop->AllWindows().FirstWindow();
+						window != NULL;
+						window = window->NextWindow(kAllWindowList)) {
+					if (window->ServerWindow()->App() == this
+						&& window->ServerWindow()->ClientToken() == token) {
+						found = window;
+						break;
+					}
+				}
+				if (found == NULL)
+					status = B_BAD_VALUE;
+				else {
+					found->SetEdgeLine(color, width);
+					BRegion dirty;
+					found->GetFullRegion(&dirty);
+					fDesktop->RebuildAndRedrawAfterWindowChange(found, dirty);
+					Compositor* compositor = fDesktop->GetCompositor();
+					if (compositor != NULL && compositor->IsActive()) {
+						compositor->ClippingChanged();
+						compositor->Damage(dirty);
+					}
+				}
+				fDesktop->UnlockAllWindows();
+			}
+			fLink.StartMessage(status);
+			fLink.Flush();
+			break;
+		}
+
+		case AS_R5_WINDOW_EFFECTS_ACTIVE:
+		{
+			// Whether the window effects show now: the compositor composes
+			// the screen (the GPU mode). False in the CPU mode.
+			Compositor* compositor = fDesktop->GetCompositor();
+			fLink.StartMessage(B_OK);
+			fLink.Attach<bool>(compositor != NULL && compositor->IsActive());
+			fLink.Flush();
+			break;
+		}
+// SPDX-SnippetEnd
+
 		default:
 			printf("ServerApp %s received unhandled message code %" B_PRId32
 				"\n", Signature(), code);

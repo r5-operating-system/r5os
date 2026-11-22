@@ -33,6 +33,18 @@ Application Example :
 
 Adding a function keeps old programs working. Changing a function's arguments, or removing a function, breaks programs already built against that soname. Do that only with a written note in this file and in `CHANGELOG.md`. The same rule is in `AGENTS.md`.
 
+## Floating margin and tray style
+
+Added 22 Nov 2026 for the Deskbar styles (`docs/design/DESKBAR-STYLES.md`), at the end of `<R5UI.h>`:
+
+| Call | What it does |
+|---|---|
+| `r5_floating_margin()` | The margin, in pixels, a floating part of the desktop keeps from the screen edges: 14 at the default font size of 12, scaled with `be_plain_font`. Deskbar's "Keep away from the screen edges" uses it, so the margin is one R5 value, not a constant in Deskbar |
+| `r5_deskbar_tray_style()`, `r5_deskbar_tray_color()` | How R5's own tray items draw their symbol: `R5_TRAY_STYLE_CLASSIC` (0, their own icon) or `R5_TRAY_STYLE_SYMBOLS` (1, one-colour line symbols in the colour returned). Read in the item's `Draw()`; outside Deskbar always classic |
+| `r5_set_deskbar_tray_style(style, color)` | Deskbar sets it in its own process, then sends `R5_DESKBAR_TRAY_STYLE_CHANGED` (`'r5ts'`) to every tray view. Not for other programs |
+
+The rule for tray symbols, with an example, is in `docs/ICONS.md` ("Tray symbols").
+
 ## Screen picture
 
 `r5_screen_draw()` draws the frame Settings uses for a screen. Notifications, Desktop and Deskbar, and Display all call it. The caller draws anything that sits on the glass, and any label outside the frame.
@@ -432,6 +444,9 @@ The shadow and the frosted glass of windows, in the GPU mode (`docs/APP-SERVER-C
 | `set_window_glass(window, glass)` | The window's background is glass: its top view gets the background of a glass view (below). Call it after the `BWindow` constructor |
 | `set_view_glass(view, glass)` | One view's background is glass. The view must be attached and its window locked; the call syncs the window first, so app_server knows the view. `B_BAD_VALUE` for a view of another team or one that is not attached |
 | `gpu_draws_text()` | M12 (Q13 of `docs/APP-SERVER-GPU-DRAWING.md`): `true` while the GPU draws the letters (Skia, `gpu_draw` on and the GPU mode active). Skia's own subpixel filter has no "average weight", so the Antialiasing tab of Settings and Appearance hides that slider then. `false` while Painter draws the letters, and when app_server cannot be asked. Code `AS_R5_GPU_DRAWS_TEXT`. Added at the end; nothing before it changed |
+| `set_window_shadow(window, kind)` | Deskbar styles (22 Nov 2026). The shadow of the program's own window, GPU mode only: `B_WINDOW_SHADOW_DEFAULT` (0, as the decorator gives it, the default), `B_WINDOW_SHADOW_FULL` (1, the full soft shadow of the effect step whatever the focus, also for a window without a decorator), `B_WINDOW_SHADOW_EDGE` (2, the same without the offset down, for a window against a screen edge). `B_BAD_VALUE` for another kind or a window of another team. Code `AS_R5_SET_WINDOW_SHADOW`. Added at the end; nothing before it changed |
+| `window_effects_active()` | True while the compositor shows the effects (the GPU mode); false in the CPU mode (Safe mode, no GPU) and when app_server cannot be asked. Deskbar asks it to choose between glass and its opaque surface. Code `AS_R5_WINDOW_EFFECTS_ACTIVE`. Added at the end |
+| `set_window_edge_line(window, color, width)` | The line along the outer edge of the program's own window, carried round the arc of its round corners by the compositor (stepped in the CPU mode), for a window without a decorator line such as Deskbar's borderless window; the program draws the straight sides. A decorator's own line comes first. Width 0 (the default) is none, at most 4. Code `AS_R5_SET_WINDOW_EDGE_LINE`. Added at the end |
 | `set_window_corner_radius(window, radius)` | Rounds the four corners of the program's own window, radius in pixels (0 square, the default; at most 64). The frame stays the same rectangle; the corners leave what the window shows and gets clicks for, in both modes (blended in the GPU mode, stepped in the CPU mode), and content in a corner is clipped. A window whose decorator returns an outline (decorator ABI 2) uses the decorator's. A round window gets the full soft shadow of the effect step, and the decorator's edge line runs on round the corner. Scale with the font size (18 at 12 points). `B_BAD_VALUE` for a negative radius or a window of another team. Code `AS_R5_SET_WINDOW_CORNER_RADIUS`. Added at the end; nothing before it changed |
 
 What glass means for the pixels: app_server fills the view's background with its view colour and alpha 0. What the program draws on it with `B_OP_ALPHA` and `B_ALPHA_COMPOSITE` keeps its alpha (Painter's composite modes are made for a transparent target); every other drawing mode writes alpha 255 and stays opaque, as on a normal view, with antialiased edges blended against the view colour. The compose shows the view colour with the blur behind it showing through by the step's "see-through" value, and composite pixels over the blur by their alpha. Child views with their own colour stay opaque. In a window that has a glass view, a bitmap with alpha 0 drawn with `B_OP_COPY` is see-through there too, because the compose uses the alpha of the whole content area of such a window.

@@ -98,6 +98,9 @@ Window::Window(const BRect& frame, const char *name,
 // SPDX-License-Identifier: MIT
 	fDrawableWarned(false),
 	fCornerRadius(0.0f),
+	fShadowKind(0),
+	fEdgeColor(make_color(0, 0, 0)),
+	fEdgeWidth(0.0f),
 	fOutlineCache(NULL),
 // SPDX-SnippetEnd
 	fDirtyRegion(),
@@ -2408,15 +2411,32 @@ Window::_SteppedRim(rgb_color* color)
 {
 	if (_OutlineBlended())
 		return NULL;
-	::Decorator* decorator = Decorator();
 	float width = 0;
-	if (decorator == NULL || !decorator->GetEdgeLine(color, &width)
-		|| width <= 0)
+	if (!GetEdgeLine(color, &width) || width <= 0)
 		return NULL;
 	const window_outline* outline = _CachedOutline(false);
 	if (outline == NULL || outline->rim.CountRects() == 0)
 		return NULL;
 	return outline;
+}
+
+
+/*!	The line along the outer edge: the decorator's, else the program's own
+	(set_window_edge_line(), for a window without a decorator line, such as
+	Deskbar in Default (R5)).
+*/
+bool
+Window::GetEdgeLine(rgb_color* color, float* width)
+{
+	::Decorator* decorator = Decorator();
+	if (decorator != NULL && decorator->GetEdgeLine(color, width)
+		&& *width > 0)
+		return true;
+	if (fEdgeWidth <= 0)
+		return false;
+	*color = fEdgeColor;
+	*width = fEdgeWidth;
+	return true;
 }
 
 

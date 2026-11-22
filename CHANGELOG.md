@@ -7,6 +7,16 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-22 - Window effects: a program's own shadow and edge line, and whether effects show
+
+Problem: Deskbar in Default (R5) needs the full soft shadow also when it is square or not focused, a softer shadow against a screen edge, a light line round the arc of its borderless round window, and to know whether glass can show (GPU mode).
+
+What changed (additive): libr5ui `set_window_shadow(window, kind)` (`B_WINDOW_SHADOW_DEFAULT`, `_FULL`, `_EDGE`), `window_effects_active()` and `set_window_edge_line(window, color, width)` at the end of `<WindowEffects.h>`, and `r5_floating_margin()` at the end of `<R5UI.h>` (14 at 12 points, owner's choice 5); app_server codes `AS_R5_SET_WINDOW_SHADOW`, `AS_R5_WINDOW_EFFECTS_ACTIVE`, `AS_R5_SET_WINDOW_EDGE_LINE` at the end of `ServerProtocol.h`; `Window::ShadowKind()`, `Window::GetEdgeLine()` (the decorator's line first, then the program's); the compositor uses the full step for kinds 1 and 2, the offset 0 for kind 2 (`Layer::shadowFlat`, copied in `CopySnapshotFrom()` and compared in the layer diff), and `Window::GetEdgeLine()` for the arc and the CPU rim. Every window that does not call these composes as before. `docs/LIBR5.md`, `docs/APP-SERVER-COMPOSITOR.md`, R5Book `appearance-effects.html`.
+
+Limits: the edge shadow uses the same strength as the floating one (one table, as the brief asks); the mockup's 0.22 to 0.32 is not copied.
+
+Tested: QEMU (Lavapipe, GPU mode): the floating Deskbar, pill and bar show the soft shadow whether focused or not; against an edge the bar's shadow has no offset. The compare (`gpu_debug`) printed no `compose compare` line in this run, so "square windows unchanged" is not proven by it.
+
 ## 2026-11-22 - Round window corners, step 1.5: the line in Safe mode, a clean resize, the checks
 
 Problem: after PR #4557 three things were open: in Safe mode (Painter) the decorator's edge line stopped where the stepped corner began; the pixel compare of square windows and a move and resize of a round window had not been checked. The resize check then showed black bits of edge line where the smaller window's corner had been: that corner was cut, never drawn, and after the window grew the old picture was kept there.

@@ -168,6 +168,19 @@ public:
 			void				SetCornerRadius(float radius);
 			float				CornerRadius() const
 									{ return fCornerRadius; }
+			// The shadow a program asked for its own window
+			// (set_window_shadow(); 0: as the decorator gives it).
+			void				SetShadowKind(int32 kind)
+									{ fShadowKind = kind; }
+			int32				ShadowKind() const
+									{ return fShadowKind; }
+			// The line along the outer edge, carried round the arc: the
+			// decorator's (Decorator::GetEdgeLine()), else the one the
+			// program asked for (set_window_edge_line()).
+			bool				GetEdgeLine(rgb_color* color, float* width);
+			void				SetEdgeLine(rgb_color color, float width)
+									{ fEdgeColor = color;
+									  fEdgeWidth = width; }
 // SPDX-SnippetEnd
 
 			void				ScrollViewBy(View* view, int32 dx, int32 dy);
@@ -413,6 +426,9 @@ protected:
 			BPoint				fOutlinesShift;
 			// The radius a program asked for (set_window_corner_radius()).
 			float				fCornerRadius;
+			int32				fShadowKind;
+			rgb_color			fEdgeColor;
+			float				fEdgeWidth;
 			// the outline's regions, built once per shape (WindowOutline.h)
 			window_outline_cache* fOutlineCache;
 // SPDX-SnippetEnd

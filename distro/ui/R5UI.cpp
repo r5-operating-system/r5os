@@ -25,9 +25,11 @@
 #include "R5UI.h"
 
 #include <Bitmap.h>
+#include <Font.h>
 #include <InterfaceDefs.h>
 #include <View.h>
 
+#include <algorithm>
 #include <math.h>
 #include <new>
 #include <string.h>
@@ -172,4 +174,44 @@ r5_avatar_draw(BView* view, BRect circle, const BBitmap* icon,
 	}
 
 	view->PopState();
+}
+
+
+// #pragma mark - Deskbar styles
+
+
+float
+r5_floating_margin()
+{
+	// 14 px at 12 points (docs/design/DESKBAR-STYLES.md, Floating)
+	float size = be_plain_font != NULL ? be_plain_font->Size() : 12.0f;
+	return floorf(14.0f * std::max(size, 12.0f) / 12.0f + 0.5f);
+}
+
+
+static enum r5_tray_style sTrayStyle = R5_TRAY_STYLE_CLASSIC;
+static rgb_color sTrayColor = { 0x1d, 0x2a, 0x40, 255 };
+
+
+enum r5_tray_style
+r5_deskbar_tray_style()
+{
+	return sTrayStyle;
+}
+
+
+rgb_color
+r5_deskbar_tray_color()
+{
+	return sTrayColor;
+}
+
+
+void
+r5_set_deskbar_tray_style(enum r5_tray_style style, rgb_color color)
+{
+	sTrayStyle = style == R5_TRAY_STYLE_SYMBOLS ? style
+		: R5_TRAY_STYLE_CLASSIC;
+	color.alpha = 255;
+	sTrayColor = color;
 }
