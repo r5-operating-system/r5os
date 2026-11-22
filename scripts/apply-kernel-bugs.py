@@ -47,6 +47,8 @@ def install_kernel_sources() -> None:
         "src/system/libroot/posix/pthread/pthread.cpp",
         "src/system/libroot/posix/time/timer_support.cpp",
         "src/add-ons/kernel/bus_managers/pci/pci.cpp",
+        # R5: the AC state is read at start and on every read (stick 74)
+        "src/add-ons/kernel/drivers/power/acpi_ac/acpi_ac.cpp",
         "src/add-ons/kernel/busses/pci/ecam/ECAMPCIControllerACPI.cpp",
         "src/add-ons/kernel/busses/pci/x86/X86PCIController.cpp",
         "src/add-ons/kernel/busses/pci/x86/X86PCIController.h",
