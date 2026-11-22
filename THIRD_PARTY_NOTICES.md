@@ -359,15 +359,25 @@ The blobs are unmodified. sha256: `rtl8761cu_fw.bin` `525bfa5ab9a3ed74b788f9ac49
 
 The Realtek loader in `h2generic` (`h2realtek.cpp`, `h2rtkfw.h`) is R5's own MIT code, written from the protocol and file format of FreeBSD's `usr.sbin/bluetooth/rtlbtfw`. Two of its tables, the chip table and the project ids in `h2rtkfw.h`, are FreeBSD's data and are marked as a `BSD-2-Clause` snippet. Copyright (c) 2013 Adrian Chadd, (c) 2019 Vladimir Kondratyev, (c) 2023 Future Crew LLC. License: BSD-2-Clause, text in `LICENSES/rtlbtfw-BSD-2-Clause.txt`. No GPL source (Linux `btrtl`, `btusb`) was read.
 
-### AMD family 19h microcode
+### AMD CPU microcode
 
 Location: `distro/firmware/amd-ucode`. Installed on the boot volume at `system/non-packaged/data/firmware/amd-ucode/`.
 
 | Piece | Project | License |
 |---|---|---|
-| `microcode_amd_fam19h.bin` | Advanced Micro Devices, Inc., 2010-2025, via linux-firmware | AMD microcode license |
+| `microcode_amd_fam15h.bin`, `microcode_amd_fam16h.bin`, `microcode_amd_fam17h.bin`, `microcode_amd_fam19h.bin`, `microcode_amd_fam1ah.bin` | Advanced Micro Devices, Inc., 2010-2025, via linux-firmware tag `20261019` | AMD microcode license |
 
-The blob is unmodified. sha256 `c614d6db8056c5c67a9189b225124127d56990a190305bcb3927d50e132de7dd`. `LICENSE.amd-ucode` is the unmodified AMD text and is installed beside the blob. Redistribution of the binary is allowed when that notice stays with it. This is not an open-source license. AMD does not endorse R5.
+The blobs are unmodified. sha256: `microcode_amd_fam15h.bin` `9d4a668410e72a4bdb86dc23e4261eca04daa83456ada02504115223f356981a`, `microcode_amd_fam16h.bin` `e02ad653b39c975d6c52674b50f23727bb6706bab7b4e5b391a4ce229e7ff121`, `microcode_amd_fam17h.bin` `966e4b796ec689c618868d08f8a37f347b0e7bfce4ae9df793e08471d363b7d0`, `microcode_amd_fam19h.bin` `c614d6db8056c5c67a9189b225124127d56990a190305bcb3927d50e132de7dd`, `microcode_amd_fam1ah.bin` `a6b22566f5aac770bdeae5610d417ee35ffd4af13eeaa624a2995f57e2d5b274`. `LICENSE.amd-ucode` is the unmodified AMD text and is installed beside the blobs. Redistribution of the binaries is allowed when that notice stays with them. This is not an open-source license. AMD does not endorse R5.
+
+### Intel CPU microcode
+
+Location: `distro/firmware/intel-ucode`. Installed on the boot volume at `system/non-packaged/data/firmware/intel-ucode/`.
+
+| Piece | Project | License |
+|---|---|---|
+| `06-1a-04` to `06-dd-01` (97 files, family 06 from Nehalem, Atom from Silvermont) | Intel Corporation, 2018-2021, via `intel/Intel-Linux-Processor-Microcode-Data-Files` release `microcode-20261110` | Intel microcode license |
+
+The files are unmodified (18,821,120 bytes). `LICENSE.intel-ucode` is the unmodified Intel text and is installed beside them; it is also in `LICENSES/`. Redistribution is allowed in binary form without modification, with the copyright notice and disclaimer reproduced. Reverse engineering is not allowed. This is not an open-source license. Intel does not endorse R5.
 
 ### AMD Renoir graphics firmware
 
