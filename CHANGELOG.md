@@ -29,6 +29,77 @@ Tested (22 Nov 2026): compiled (`build-locked.sh`, jam_exit=0, mesa_exit=0). QEM
 
 Not shown in QEMU: that the display goes off (QEMU's display and the timer were not watched long enough), the brightness (QEMU reports a brightness, so the slider shows at 100 %, but nothing visible changes), the profile on real hardware (the stick: `R5 CPPC:` lines with `profile`, and CPU Info, on the 5625U), PowerStatus with a battery.
 
+## 2026-11-22 - Shutdown: fix app_server syslog crash after syslog_daemon exits, preserve EFI panic logs
+
+Problem:
+- On stick 73 boot 5 (5625U, RADV), shutdown stopped before `enter reboot` and opened the CLI debugger on screen (`debugger for team 108 on interface Local (r5os)` / `[thread stopped: 141 "compositor"]`). The last syslog lines were `hda` freeing MSI vectors 62 and 63 (normal `media_addon_server` exit, also present in boot 6), and `app_server-stderr.old.log` ended right after `compose median 308 us cpu 161 ms per 10 s` (`Compositor::_Report()`).
+- Root cause: `haiku/src/system/libroot/posix/syslog.cpp` (`send_syslog_message`) passes `va_list args` to `vsnprintf` without `va_copy`, then—when `write_port` fails after `syslog_daemon` exits in `BACKGROUND_APP_TERMINATION_PHASE` and `LOG_CONS` is set (the default `sTeamContext` inherited by `app_server`'s `"compositor"` thread)—passes the already-consumed `args` to `message_to_console` (`vfprintf`). On x86_64 SysV ABI this dereferences a garbage `%s` pointer and triggers `SIGSEGV`. `debug_server` then stops `app_server` in the CLI debugger, blocking `ShutdownProcess` before `_kern_shutdown()`.
+- Separately, on UEFI boots `efi/debug.cpp` allocated a fresh random 1 MiB debug ring buffer on every boot and never recovered `previous_debug_output` (unlike `bios_ia32/debug.cpp`), and `syslog_init_post_modules()` only wrote `/var/log/previous_syslog` without logging any previous panic into the new boot's `syslog` or pulling it in `read-stick-logs.py`.
+
+What changed:
+- `distro/kernel/src/system/libroot/posix/syslog.cpp` (copied from Haiku, R5 change marked SPDX-Snippet MIT, wired in `scripts/apply-kernel-bugs.py`): use `va_copy` / `va_end` before `vsnprintf` and before both `message_to_console` paths (`LOG_PERROR`/`port < 0` and the `write_port` failure `LOG_CONS` fallback).
+- `distro/kernel/src/system/boot/platform/efi/{efi_platform.h,mmu.cpp,debug.cpp,start.cpp}` (copied from Haiku, SPDX-Snippet MIT): add `platform_allocate_region_at()` and mirror `bios_ia32/debug.cpp` by trying the fixed 63 MiB physical address for the 1 MiB debug syslog ring buffer (falling back to any address if occupied), recovering `previous_debug_output` on warm reboot, and fixing up `gKernelArgs.previous_debug_output` in `convert_kernel_args()`.
+- `distro/kernel/src/system/kernel/debug/debug.cpp` (copied from Haiku, SPDX-Snippet MIT): in `syslog_init_post_modules()`, after writing `/var/log/previous_syslog`, scan the recovered buffer for `PANIC:`, `Welcome to Kernel Debugging Land`, or (if no kernel panic) `debug_server: Thread `, and log up to 4 KiB / 64 lines via `dprintf("r5 previous panic: ...")` into the new boot's `syslog` without changing KDL itself.
+- `scripts/read-stick-logs.py`: add `system/var/log/previous_syslog` to `WANTED`.
+
+Tested:
+- Built AMD64 with `scripts/build-locked.sh` (`jam_exit=0`).
+- Booted private copy `/home/nickr/r5-os-part-b.image` in QEMU (`-machine q35,accel=kvm -cpu host -m 2048 -smp 4 -display none`): reached desktop (`R5 tracker: Tracker from distro`, `R5 deskbar: BarApp from distro`), then ACPI `system_powerdown` completed cleanly through `r5 shutdown: enter reboot=0 -> sync_done +80ms -> hooks_start +95ms -> hooks_done +97ms -> acpi_poweroff` with no crash or KDL.
+
+Limits:
+- Tested on BIOS QEMU only; UEFI 63 MiB warm-reboot persistence on the 5625U (whether HP firmware preserves 63 MiB across warm reset; cold power-off clears RAM) and real 5625U RADV shutdown with `gpu_debug true` need a stick test. ARM64 and RISC-V were not built.
+
+## 2026-11-22 - Perf round 2 Part A: Lavapipe breakdown counters, parallel pipeline compilation, ordered recordings
+
+Problem:
+- On stick 73 boots 3 and 4 (5625U, `gpu false`, Lavapipe), cold warm-up took 30.2 s (part 1 alone 20.0 s, part 3 9.5 s), warm-cache warm-up took 1.44 s, and the first 10 s of desktop use averaged 10.7 ms/run in `snap` and 4.8 ms/run in `deliver`.
+- Measuring with new `gpu_debug`-gated counters in QEMU (`-smp 6`, Lavapipe, 256-bit AVX2) showed:
+  - 97.4% of `snap` in the first 10 s of desktop use (`4.89 s` out of `5.03 s`) and 82% of warm-cache warm-up (`3.30 s` out of `4.01 s`) was synchronous `vkCreateGraphicsPipelines` on one thread (SkSL->SPIR-V + Lavapipe uncached SPIR-V->NIR->optimize), while steady-state `snap` CPU recording was only `98-144 us/run`.
+  - Cold warm-up was dominated by llvmpipe `lp_state_fs.c` `generate_variant()` MCJIT inside `fence_wait` (~29 s serialized on `device->queue`).
+  - Shipping a precompiled Mesa llvmpipe disk cache in the OS image cannot match arbitrary machines: `lp_disk_cache_create()` hashes `util_cpu_caps_t`'s first 4 dwords (`nr_cpus`, `max_cpus`, `x86_cpu_type`, `cacheline`, full ISA feature bitmask) plus `libvulkan_lvp.so` and `libLLVM.so` build-IDs and `GALLIVM_PERF`.
+  - Benchmarking `gpu_lavapipe_threads` 2, 4, 6, 8 on 6 vCPUs (warm cache) showed 2 threads stays fastest: warm-up 4005 ms (2) vs 4921 ms (4), 5318 ms (6), 6029 ms (8); scroll 27.0 ms (2) vs 27.7 ms (6), 29.5 ms (8); drag compose ~9.4-9.7 ms across all. Default stays 2.
+
+What changed (Lavapipe only; RADV and Painter untouched):
+- `distro/app_server/skia/SkiaGpu.{h,cpp}`, `SkiaPainter.cpp`, `SkiaText.cpp`, `SkiaOffscreen.cpp`, `Compositor.cpp`: add `gpu_debug`-only counters (`snap_parts`: targets, graphics/compute pipelines, shader modules, memory allocations; `ops`: text, path, bitmap, texture upload; `deliver_parts`: `fence_wait` vs `async_check`; and `gpu draw warm-up detail`). Zero wrapper overhead when `gpu_debug` is off.
+- `distro/app_server/skia/SkiaGpu.cpp`: on CPU/Lavapipe devices (`fOnCpu`), enable `options.fRequireOrderedRecordings = true` (avoiding per-snap Recorder cache flushes; `RunWork()` always inserts FIFO) and attach a Haiku-threaded `PipelineExecutor : public SkExecutor` (`min(4, max(2, cpu_count / 2))` threads, `borrow()` supported) to `options.fExecutor` so SkSL->SPIR-V and Lavapipe's lock-free SPIR-V->NIR->optimize compile in parallel across cores.
+- `distro/app_server/skia/SkiaOffscreen.cpp`: on Lavapipe, skip Pass 1 (`SetOpaque(false)`, which compiled 0 pipelines in measurement: 1 ms/part on 5625U, 3-4 ms/part in QEMU) and warm up opaque `alpha=255` `setColor` paths in Pass 0 (`m == 0`).
+
+Measured (QEMU `-machine q35,accel=kvm -cpu host -m 2048 -smp 6`, `qemu-m13-measure.py`, cold + warm `--again`):
+- Warm-cache warm-up: `4005 ms` -> `2964 ms` (**-26%**, 12 pipelines in 3208 ms CPU time across 3 threads).
+- Cold warm-up: `47895 ms` -> `44064 ms` (**-8%**; remaining ~29 s is llvmpipe fragment-variant MCJIT inside `fence_wait`).
+- First 10 s desktop `snap + insert`: `5.17 s` -> `3.81 s` (**-26%**); `text` 38.7 -> 18.6 ms, `bitmap` 479.4 -> 148.5 ms, `upload` 135.5 -> 41.4 ms.
+- Cold drag `draw`: `4.9 ms` -> `3.3 ms`; cold resize p95: `38.8 ms` -> `37.0 ms` (input p95 `39.6 ms` -> `29.8 ms`).
+- Also booted QEMU with `gpu false` in `/boot/home/config/settings/kernel/drivers/radeon_hd`: desktop reached cleanly, no panic/KDL.
+
+Limits:
+- Measured in QEMU (`-smp 6`), not yet on the 5625U (6 cores / 12 threads); `gpu_lavapipe_threads` 2 vs 4 and cold/warm warm-up on real hardware need stick verification. llvmpipe fragment-variant JIT in `fence_wait` remains serialized inside Mesa. ARM64 and RISC-V were not built.
+
+## 2026-11-22 - Warm restart no longer hangs in OVMF firmware
+
+Problem: under QEMU + OVMF (`edk2-stable202511`+, Ubuntu `OVMF_CODE_4M.fd`), a warm reset (`system_reset`, RAM preserved) after R5 had booted hung inside OVMF's `CpuMpPei` (`RIP=0x7bee35d3`, `IoRead32(0x608)` inside `TimedWaitForApFinish` with timeout `0xFFFFFFFF` us ≈ 71 min), even though all 5 APs were already awake and parked in `HLT` (`FinishedCount == 5`). Disassembly and a GDB watchpoint on OVMF's PEI PCD database (`0x00814b00`, `PcdCpuBootLogicalProcessorNumber`) traced this to an upstream OVMF IGVM bug: `PlatformPei` reads physical `0x008120c0` (IGVM `VpCount`, inside the 4 KiB IGVM Parameter Area at `0x00812000`, plus `0x00812000` for `MemoryMap` and `0x00813000` for IGVM HOBs), yet OVMF's EFI memory map hands `0x0080c000-0x00814000` (32 KiB) to the OS as `EfiConventionalMemory` and does not zero it on warm reset. When R5's VM allocator used physical page `0x00812000` and left a non-zero value `<= 0xffff` at `0x008120c0` (observed `0x00000800` = 2048 and `0x000001b8` = 440 on stick 74), `PlatformPei` skipped `fw_cfg` and set `PcdCpuBootLogicalProcessorNumber` to that stale value. On clean `main` without #4498, `0x008120c0` happened to remain `0x00000000` at 25-60 s because physical allocations shifted without the 1 MiB 63 MiB ring, so `main` did not trigger it in 8 test resets, though `0x00812000` was still exposed as usable RAM.
+
+What changed: `distro/kernel/src/system/boot/platform/efi/arch/x86_64/arch_mmu.cpp` adds `reserve_ovmf_memfd_holes()`, called from `arch_mmu_post_efi_setup()`. When `kSystemTable->FirmwareVendor` is `"EDK II"` and the EFI memory map has OVMF's `EfiACPIMemoryNVS` MEMFD blocks covering `0x00800000` and `0x00820000`, any `EfiConventionalMemory` holes inside `0x00800000-0x00820000` (44 KiB total: `0x00808000-0x0080b000` and `0x0080c000-0x00814000`) are removed from `gKernelArgs.physical_memory_range` so the kernel never writes to them.
+
+Limits: x86_64 EFI workaround for an upstream OVMF bug; non-EDK II firmware (such as the 5625U) is untouched. ARM64 and RISC-V were not changed or tested. Note on #4498 (tested separately, not in this change): once the OVMF hang is fixed, #4498 still does not recover `/var/log/previous_syslog` or log `r5 previous panic:` because `distro/kernel/src/system/boot/platform/efi/debug.cpp` computes `recover` in `allocate_ring_buffer()` without setting `gKernelArgs.previous_debug_size`, so `debug_cleanup()` skips reading the ring.
+
+Tested:
+- Built AMD64 anyboot via `scripts/build-locked.sh @r5-anyboot` (`jam_exit=0`, `mesa_exit=0`). `tree-owner.sh` cleanly restored 790 paths (including `headers/private/system/syscalls.h`) when switching from `R5OS-amd64-stick` to this worktree.
+- QEMU (`-machine q35,accel=kvm -cpu host -m 4096 -smp 6`, `OVMF_CODE_4M.fd` + fresh `OVMF_VARS_4M.fd`, `-vga std -display none`):
+  - Clean `main` control (without #4498): 2 runs of 60 s + `system_reset` passed, plus 6 consecutive warm resets passed (`0x008120c0 == 0`).
+  - Stick 74 (`r5-74-anyboot.iso`) repro: hung in `CpuMpPei` on 5/8 first-attempt warm resets (`0x008120c0` = `0x800` or `0x1b8`).
+  - Fixed `main` (`r5-fix-main.iso`): 2 runs of 60 s without KDL + 2 runs of 60 s with `Alt+SysRq+D` KDL all passed (`BdsDxe: starting` x2, `ps2: keyboard found` x2, `0x008120c0 == 0`).
+  - Temporary test build of #4498 + this fix (`r5-fix-4498.iso`, reverted from branch): 2 runs without KDL + 2 runs with KDL all passed OVMF warm reset with `0x008120c0 == 0` (the 2nd KDL run was still mid-kernel-boot at the 25 s cutoff).
+
+## 2026-11-22 - README: highlights up front, and owner results on the 5625U
+
+Problem: the README only told what R5 can do after several long sections, still listed Skia drawing, Wi-Fi 6, WPA3 and the AMD64 CPU work as coming next, and showed build 10064.
+
+What changed: `README.md` opens with an "At a glance" list in a cheekier tone, and the feature sections are shorter. Skia window drawing (build 10066), the R5 window frame, Wi-Fi 6 with WPA3, game controller rumble and trigger effects, and the AMD64 CPU tuning (ongoing) are described as what R5 does now. "What's coming next" lists HiDPI, the Deskbar redesign, Bluetooth LE Audio and Auracast, and more GPUs and Wi-Fi cards. MIDI is described as "MIDI 2.0 support", not "full": the open points are #4519 (no real USB MIDI 2.0 device tested), #4520 (MIDI 1.0 devices as UMP for MIDI 2.0 programs) and #4521 (Appendix D.2.8 messages). Current build is 10066.
+
+Tested (owner, 22 Nov 2026, Ryzen 5 5625U): Wi-Fi 6 works on the MT7921; game controller rumble works; DualSense trigger effects work. Motion sensing was not reported and the README does not claim it.
+
+Limits: text only. No speed numbers for the CPU work.
+
 ## 2026-11-22 - CPU Info's icon is sharp again
 
 Problem: the icon in CPU Info's heading looked jagged. CPU Info rendered it at `ComposeIconSize(40).Width()` (39 pixels at the default font), and `BPageHeader` draws its icon in a square of 48 units, so the bitmap was stretched. CPU Info followed `docs/LIBR5.md` and R5Book, which said `ComposeIconSize(40)`; the class has drawn at 48 units all along.
