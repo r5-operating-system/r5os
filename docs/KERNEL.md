@@ -221,6 +221,25 @@ QEMU, 2026-10-31 about 16:00 Europe/Amsterdam. TCG, `-cpu qemu64`, `-display non
 
 Still open: boot the 5625U and record the idle and busy samples. Write one P-state only after that, with safemode leaving the registers alone. Intel HWP on hardware was not executed.
 
+## Microcode
+
+R5 loads CPU microcode at every boot, for each processor it supports (x86-64-v2):
+
+| Vendor | Families | Files |
+|---|---|---|
+| AMD | 15h (Bulldozer to Excavator), 16h (Jaguar, Puma), 17h (Zen 1, Zen 2), 19h (Zen 3, Zen 4), 1Ah (Zen 5) | `amd-ucode/microcode_amd_fam15h.bin` … `microcode_amd_fam1ah.bin` |
+| Intel | family 06 from model 0x1A (Nehalem) up; Atom from Silvermont (0x37) | `intel-ucode/<family>-<model>-<stepping>`, 97 files |
+
+Not shipped: AMD `microcode_amd.bin` (10h to 14h) and Intel family 0F or family 06 below 0x1A, all below x86-64-v2, and the Atoms before Silvermont (0x1C, 0x26). Intel's `06-4f-01` is in Intel's folder with caveats and is not shipped.
+
+Where: `distro/firmware/amd-ucode` and `distro/firmware/intel-ucode`, installed unmodified with their licenses in `system/non-packaged/data/firmware/` of the regular and the minimum image (`scripts/apply-amd-ucode.py`). The boot loader (`distro/boot/arch/x86/arch_cpu.cpp`, `ucode_load()`) reads the one file for the boot CPU before packagefs exists, into a 16-byte aligned buffer in the kernel args. The kernel (`arch_cpu.cpp`, `load_microcode()`) applies it on every CPU in `arch_cpu_init_percpu()`, before the second CPU detection. Under a hypervisor nothing is applied; QEMU and VirtualBox only show `ucode_load:` lines.
+
+Log lines: `CPU n: updated from revision 0x… to 0x…`, `CPU n: already at revision 0x…` (the second thread of a core, or a BIOS at the file's level), `CPU n: no update found` (Intel adds the current revision, so a newer BIOS shows), `CPU n: update failed`. An Intel update counts as loaded only when IA32_BIOS_SIGN_ID reports the patch's own revision (SDM Vol. 3A, "Microcode Update Facilities").
+
+Parser rules: the Intel walk stops on a total size below the header and data or not in whole dwords, reads the extended signature table only when all of it lies inside `total_size`, and moves a patch that is not 16-byte aligned to the aligned start of the buffer. The AMD path copies an unaligned patch to a 16 KiB aligned buffer (Zen 5 patches are 14368 bytes). `scripts/fuzz-microcode.sh [seconds]` checks that every shipped file is found for its own signature and fuzzes both parsers under AddressSanitizer, 60 s each by default.
+
+Update: copy the newer files unmodified (AMD from a linux-firmware tag, Intel from a `microcode-YYYYMMDD` release, the same selection), record the tag or release (and the AMD hashes) in `docs/LICENSING.md` and `THIRD_PARTY_NOTICES.md`, run `scripts/fuzz-microcode.sh`, and build. A file that the check cannot find for its own signature fails the check.
+
 ## Memory types
 
 AMD64 turns PAT on unless safemode disables it or the CPU is one of the Pentium parts whose PAT is left off. The boot line is `using PAT for memory type configuration`. A write-combined page then uses the PAT bit in the page table. Uncached is PCD and PWT. Write-back leaves those bits clear.

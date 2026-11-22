@@ -361,6 +361,16 @@ Location: `distro/firmware/amd-ucode`. Installed on the boot volume at `system/n
 
 The blobs are unmodified. sha256: `microcode_amd_fam15h.bin` `9d4a668410e72a4bdb86dc23e4261eca04daa83456ada02504115223f356981a`, `microcode_amd_fam16h.bin` `e02ad653b39c975d6c52674b50f23727bb6706bab7b4e5b391a4ce229e7ff121`, `microcode_amd_fam17h.bin` `966e4b796ec689c618868d08f8a37f347b0e7bfce4ae9df793e08471d363b7d0`, `microcode_amd_fam19h.bin` `c614d6db8056c5c67a9189b225124127d56990a190305bcb3927d50e132de7dd`, `microcode_amd_fam1ah.bin` `a6b22566f5aac770bdeae5610d417ee35ffd4af13eeaa624a2995f57e2d5b274`. `LICENSE.amd-ucode` is the unmodified AMD text and is installed beside the blobs. Redistribution of the binaries is allowed when that notice stays with them. This is not an open-source license. AMD does not endorse R5.
 
+### Intel CPU microcode
+
+Location: `distro/firmware/intel-ucode`. Installed on the boot volume at `system/non-packaged/data/firmware/intel-ucode/`.
+
+| Piece | Project | License |
+|---|---|---|
+| `06-1a-04` to `06-dd-01` (97 files, family 06 from Nehalem, Atom from Silvermont) | Intel Corporation, 2018-2021, via `intel/Intel-Linux-Processor-Microcode-Data-Files` release `microcode-20261110` | Intel microcode license |
+
+The files are unmodified (18,821,120 bytes). `LICENSE.intel-ucode` is the unmodified Intel text and is installed beside them; it is also in `LICENSES/`. Redistribution is allowed in binary form without modification, with the copyright notice and disclaimer reproduced. Reverse engineering is not allowed. This is not an open-source license. Intel does not endorse R5.
+
 ### AMD Renoir graphics firmware
 
 Location: `distro/firmware/amdgpu`. Installed at `system/non-packaged/data/firmware/amdgpu/`.
