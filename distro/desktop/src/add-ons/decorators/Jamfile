@@ -1,9 +1,12 @@
 SubDir HAIKU_TOP src add-ons decorators ;
 
-SubInclude HAIKU_TOP src add-ons decorators BeDecorator ;
-SubInclude HAIKU_TOP src add-ons decorators FlatDecorator ;
-SubInclude HAIKU_TOP src add-ons decorators MacDecorator ;
-SubInclude HAIKU_TOP src add-ons decorators WinDecorator ;
+# SPDX-SnippetBegin
+# SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+# Haiku's Be, Flat, Mac and Win decorators are no longer built (owner,
+# 22 Nov 2026): R5 ships its own decorators and the built-in
+# Classic (Haiku).
+# SPDX-SnippetEnd
 
 # SPDX-SnippetBegin
 # SPDX-SnippetCopyrightText: 2026 R5OS Contributors

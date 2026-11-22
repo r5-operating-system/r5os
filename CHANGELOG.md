@@ -7,6 +7,16 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-22 - The Be, Flat, Mac and Win decorators are no longer built
+
+Problem: R5 goes on with its own decorators (owner, 22 Nov 2026). The four Haiku decorators had R5 copies in `distro/` that every decorator ABI change has to rebuild, and they were not in the image (only `R5Decorator` is packaged).
+
+What changed: their `distro/desktop/src/add-ons/decorators/` copies are removed, `decorators/Jamfile` no longer includes them, and `distro/desktop/build/jam/packages/HaikuExtras` (a copy of Haiku's, SPDX snippet) no longer lists Be and Flat for `haiku_extras.hpkg`. Haiku's originals under `haiku/` are untouched. Default (R5) and the built-in Classic (Haiku) stay.
+
+Limits: a user who chose one of the four earlier gets the default decorator; that fallback was not tested. Old copies of these files in the shared WSL tree stay there but are no longer built.
+
+Tested: nothing yet; checked by the same jam as the entry above.
+
 ## 2026-11-22 - Warm restart no longer hangs in OVMF firmware
 
 Problem: under QEMU + OVMF (`edk2-stable202511`+, Ubuntu `OVMF_CODE_4M.fd`), a warm reset (`system_reset`, RAM preserved) after R5 had booted hung inside OVMF's `CpuMpPei` (`RIP=0x7bee35d3`, `IoRead32(0x608)` inside `TimedWaitForApFinish` with timeout `0xFFFFFFFF` us ≈ 71 min), even though all 5 APs were already awake and parked in `HLT` (`FinishedCount == 5`). Disassembly and a GDB watchpoint on OVMF's PEI PCD database (`0x00814b00`, `PcdCpuBootLogicalProcessorNumber`) traced this to an upstream OVMF IGVM bug: `PlatformPei` reads physical `0x008120c0` (IGVM `VpCount`, inside the 4 KiB IGVM Parameter Area at `0x00812000`, plus `0x00812000` for `MemoryMap` and `0x00813000` for IGVM HOBs), yet OVMF's EFI memory map hands `0x0080c000-0x00814000` (32 KiB) to the OS as `EfiConventionalMemory` and does not zero it on warm reset. When R5's VM allocator used physical page `0x00812000` and left a non-zero value `<= 0xffff` at `0x008120c0` (observed `0x00000800` = 2048 and `0x000001b8` = 440 on stick 74), `PlatformPei` skipped `fw_cfg` and set `PcdCpuBootLogicalProcessorNumber` to that stale value. On clean `main` without #4498, `0x008120c0` happened to remain `0x00000000` at 25-60 s because physical allocations shifted without the 1 MiB 63 MiB ring, so `main` did not trigger it in 8 test resets, though `0x00812000` was still exposed as usable RAM.

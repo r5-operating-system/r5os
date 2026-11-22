@@ -1,0 +1,45 @@
+local architecture = $(HAIKU_PACKAGING_ARCHS[1]) ;
+
+local extrasPackage = haiku_extras.hpkg ;
+HaikuPackage $(extrasPackage) ;
+
+## Apps Oddities
+
+AddFilesToPackage bin :
+	acpi_call
+	;
+AddFilesToPackage apps :
+	TV
+	;
+AddSymlinkToPackage data deskbar menu Applications : ../../../../apps/TV : TV ;
+
+
+## Driver Oddities
+
+# kernel modules
+AddFilesToPackage add-ons kernel partitioning_systems :
+	amiga_rdb@!m68k
+	apple@!ppc
+	sun@!sparc
+	;
+
+
+## Visual Oddities
+
+# MacDecorator WinDecorator need improved stack and tile support
+
+# Control Looks
+AddFilesToPackage add-ons control_look :
+	BeControlLook
+	FlatControlLook
+	;
+
+# SPDX-SnippetBegin
+# SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+# Decorators: none. R5 ships only its own decorators (owner, 22 Nov 2026);
+# Be, Flat, Mac and Win are no longer built.
+# SPDX-SnippetEnd
+
+
+BuildHaikuPackage $(extrasPackage) : haiku_extras ;
