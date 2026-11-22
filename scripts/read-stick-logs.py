@@ -33,6 +33,7 @@ WANTED = (
     ("home/config/cache/r5-gpu-selftest.old.txt", "r5-gpu-selftest.old.txt"),
     ("home/r5-session.log", "r5-session.log"),
     ("system/var/log/syslog", "syslog"),
+    ("system/var/log/previous_syslog", "previous_syslog"),
     # M13 stick: app_server's stderr with gpu_debug (RADV, R5 DRM library)
     ("system/var/log/app_server-stderr.log", "app_server-stderr.log"),
     ("system/var/log/syslog.old", "syslog.old"),
