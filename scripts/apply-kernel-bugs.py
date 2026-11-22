@@ -538,6 +538,33 @@ def install_efi_runtime() -> None:
         raise SystemExit(f"{jam}: efi SubInclude is not there exactly once")
 
 
+def install_rtsx() -> None:
+    """Realtek card readers (busses/mmc/rtsx: OpenBSD rtsx ISC, RTS5228 MIT,
+    docs/RTSX.md) and the device_manager path for PCI class 0xff. The
+    package lines are in distro/desktop/build/jam/packages/Haiku."""
+    root = pathlib.Path(__file__).resolve().parents[1]
+    (HAIKU / "src/add-ons/kernel/busses/mmc/rtsx").mkdir(exist_ok=True)
+    for relative in (
+        "src/system/kernel/device_manager/device_manager.cpp",
+        "src/add-ons/kernel/busses/mmc/rtsx/Jamfile",
+        "src/add-ons/kernel/busses/mmc/rtsx/rtsx.cpp",
+        "src/add-ons/kernel/busses/mmc/rtsx/rtsx.h",
+        "src/add-ons/kernel/busses/mmc/rtsx/rtsx_5228.cpp",
+        "src/add-ons/kernel/busses/mmc/rtsx/rtsx_5228.h",
+        "src/add-ons/kernel/busses/mmc/rtsx/rtsx_haiku.cpp",
+        "src/add-ons/kernel/busses/mmc/rtsx/rtsxreg.h",
+        "src/add-ons/kernel/busses/mmc/rtsx/rtsxvar.h",
+    ):
+        install_file(root / "distro/kernel" / relative, HAIKU / relative,
+            "rtsx")
+    jam = HAIKU / "src/add-ons/kernel/busses/mmc/Jamfile"
+    anchor = "\tsdhci_pci.cpp\n;\n"
+    line = "SubInclude HAIKU_TOP src add-ons kernel busses mmc rtsx ;\n"
+    insert_once(jam, anchor, anchor + "\n" + line, line, "rtsx jam")
+    if jam.read_text(encoding="utf-8").count(line) != 1:
+        raise SystemExit(f"{jam}: rtsx SubInclude is not there exactly once")
+
+
 def main() -> int:
     install_smp_boot()
     install_kernel_sources()
@@ -545,6 +572,7 @@ def main() -> int:
     install_usb_stability()
     install_gpio()
     install_efi_runtime()
+    install_rtsx()
     # i2c_hid (RenkuOS b37a078925) and x86_acpi_cstates (air/OS 2c48d1ae0)
     # are listed in the native build/jam/packages/Haiku in distro/desktop.
     return 0

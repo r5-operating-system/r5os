@@ -45,3 +45,9 @@ Interface typeface designed by Mikhail Sharanda.
 
 License: OFL-1.1
 Source: https://github.com/googlefonts/manrope
+
+# Card readers
+Realtek SD card readers, based on the OpenBSD rtsx driver by Uwe Stuehler and Stefan Sperling.
+
+License: ISC
+Source: https://www.openbsd.org
