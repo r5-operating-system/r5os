@@ -537,9 +537,9 @@ def install_rtsx() -> None:
         install_file(root / "distro/kernel" / relative, HAIKU / relative,
             "rtsx")
     jam = HAIKU / "src/add-ons/kernel/busses/mmc/Jamfile"
-    anchor = "KernelAddon sdhci :\n"
+    anchor = "\tsdhci_pci.cpp\n;\n"
     line = "SubInclude HAIKU_TOP src add-ons kernel busses mmc rtsx ;\n"
-    insert_once(jam, anchor, line + "\n" + anchor, line, "rtsx jam")
+    insert_once(jam, anchor, anchor + "\n" + line, line, "rtsx jam")
     if jam.read_text(encoding="utf-8").count(line) != 1:
         raise SystemExit(f"{jam}: rtsx SubInclude is not there exactly once")
 
