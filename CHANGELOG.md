@@ -32,7 +32,9 @@ What changed:
 
 Limits: no decorator returns an outline yet and nothing calls the new libr5ui function, so every window looks as before; Default (R5 Modern) and the round Deskbar are later steps. The arc pixels of glass are blended opaque, without the blur. After a switch from the GPU to the CPU mode in a session, a round window keeps its GPU regions (one step wider) until its next clipping rebuild. Radius at most 64.
 
-Tested: nothing yet. Not built, not booted. Needs `scripts/build-locked.sh`, then a QEMU boot (Lavapipe and Safe mode) with a test window that calls `set_window_corner_radius()`, and the compare mode for Default (R5) and Classic (Haiku) unchanged.
+Test tool: `r5-effects-test round [radius] [seconds]` opens three bordered windows (the kind Deskbar uses) with `set_window_corner_radius()`: colour bars to every edge with a moving bar through the bottom corners, a text view with both scroll bars meeting in the bottom-right corner, and a glass window. Without a radius it uses 18 scaled with the font size; `round 0` opens them square for the compare.
+
+Tested: nothing yet. Not built, not booted. Needs `scripts/build-locked.sh`, then a QEMU boot (Lavapipe and Safe mode) with `r5-effects-test round`, and the compare mode for Default (R5) and Classic (Haiku) unchanged.
 
 ## 2026-11-22 - Warm restart no longer hangs in OVMF firmware
 
