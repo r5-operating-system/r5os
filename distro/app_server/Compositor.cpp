@@ -1628,6 +1628,19 @@ Compositor::_ComposeLoop()
 				layer->contentDamage = layer->entry->takenDamage;
 				layer->entry->takenDamage.MakeEmpty();
 				effects |= layer->HasEffects();
+				// A window's first pixels: its shadow is composed too. It
+				// was skipped while the window had none, and the window's
+				// drawing damages only its own pixels (22 Nov 2026: a new
+				// window showed no shadow until it moved).
+				bool hasPixels = layer->HasPixels();
+				if (hasPixels != layer->entry->hadPixels) {
+					layer->entry->hadPixels = hasPixels;
+					if (hasPixels && layer->shadow && !splash) {
+						BRegion area(layer->shadowArea);
+						area.IntersectWith(&screen);
+						damage.Include(&area);
+					}
+				}
 			}
 		}
 		// M11 step 4b: where each animation is in this frame

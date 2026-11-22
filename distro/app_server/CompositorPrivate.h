@@ -443,7 +443,8 @@ struct Compositor::Entry : public BReferenceable {
 		animOpen(false),
 		animStart(0),
 		animFrom(0),
-		animFrames(0)
+		animFrames(0),
+		hadPixels(false)
 	{
 	}
 
@@ -498,6 +499,11 @@ struct Compositor::Entry : public BReferenceable {
 	bigtime_t			animStart;
 	float				animFrom;
 	int32				animFrames;
+
+	// The compose thread's: the window had pixels at the last compose. A
+	// new window's first compose has none and skips its shadow; its first
+	// drawing damages only its own pixels (22 Nov 2026).
+	bool				hadPixels;
 	BRegion				animArea;
 };
 

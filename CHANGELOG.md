@@ -7,6 +7,16 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-22 - Compositor: a new window gets its shadow at once
+
+Problem: in QEMU (Lavapipe, shadow on) a window that had just opened showed no shadow, or only a few dark pixels round its corners, until it was moved or lost the focus; the Appearance window stayed so for minutes. A new window's layer has no buffer memory at its first compose (`Layer::HasPixels()` false), so the window and its shadow are skipped; the window's first drawing then damages only its own pixels, so the shadow area outside it was never composed. Found while testing Default (R5 Modern); the code is the same for every decorator, so it is not clear whether it came with the compositor split (#4558). Listed in the shared `COMPOSITOR-FIXES.md` of tonight's sessions.
+
+What changed: `Compositor::Entry::hadPixels`; when a layer has pixels for the first time (or again), `_ComposeLoop()` adds its shadow area to the frame's damage. `distro/app_server/Compositor.cpp`, `CompositorPrivate.h`.
+
+Limits: only the shadow; glass already had its own catch-up (`glassStale`).
+
+Tested: see the step C entry (QEMU, the new window's shadow right after it opened).
+
 ## 2026-11-22 - Windows, Default (R5 Modern) step B: the edge line runs along the frame only
 
 Problem: a window outline has the frame first and then the tabs (`Decorator::GetOutline()`, decorator ABI 2). The compositor carried the decorator's edge line (`GetEdgeLine()`) round every round corner, the tab's too, and Safe mode painted the stepped line (`rim`) there as well. Default (R5 Modern)'s tab has no line along its straight edges (board 4 of the mockup), so its round top corners would have had a line that stops where the corner ends.
