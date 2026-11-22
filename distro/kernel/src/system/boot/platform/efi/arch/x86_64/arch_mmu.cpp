@@ -69,6 +69,88 @@ long_gdt_init()
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+static bool
+is_edk2_firmware()
+{
+	if (kSystemTable == NULL || kSystemTable->FirmwareVendor == NULL)
+		return false;
+
+	static const char16_t kEdk2Vendor[] = u"EDK II";
+	const char16_t* vendor = kSystemTable->FirmwareVendor;
+	for (size_t i = 0; i < sizeof(kEdk2Vendor) / sizeof(kEdk2Vendor[0]); i++) {
+		if (vendor[i] != kEdk2Vendor[i])
+			return false;
+	}
+	return true;
+}
+
+
+/*!	OVMF (edk2-stable202511+) places its fixed MEMFD at 0x00800000-0x00900000,
+	leaving holes such as 0x0080c000-0x00814000 as EfiConventionalMemory.
+	On a warm reset (RAM preserved), PlatformPei re-reads the IGVM parameter
+	page at 0x00812000 (MemoryMap at +0x00, VpCount at +0xc0) and the IGVM HOB
+	at 0x00813000 without clearing them first. If the OS allocated 0x00812000
+	and left a value in 1..0xffff at 0x008120c0, PlatformPei skips fw_cfg and
+	sets PcdCpuBootLogicalProcessorNumber to that value, hanging CpuMpPei in
+	TimedWaitForApFinish (0xFFFFFFFF us). Exclude those conventional holes on
+	OVMF so the kernel never writes to them.
+*/
+static void
+reserve_ovmf_memfd_holes(size_t memoryMapSize,
+	efi_memory_descriptor* memoryMap, size_t descriptorSize)
+{
+	if (!is_edk2_firmware())
+		return;
+
+	static const uint64_t kOvmfMemfdBase = 0x00800000;
+	static const uint64_t kOvmfPeiFvBase = 0x00820000;
+
+	bool hasLowNvs = false;
+	bool hasPeiFvNvs = false;
+	addr_t addr = (addr_t)memoryMap;
+	for (size_t i = 0; i < memoryMapSize / descriptorSize; ++i) {
+		efi_memory_descriptor* entry
+			= (efi_memory_descriptor*)(addr + i * descriptorSize);
+		if (entry->Type != EfiACPIMemoryNVS)
+			continue;
+		uint64_t base = entry->PhysicalStart;
+		uint64_t end = base + entry->NumberOfPages * 4096;
+		if (base <= kOvmfMemfdBase && end > kOvmfMemfdBase)
+			hasLowNvs = true;
+		if (base <= kOvmfPeiFvBase && end > kOvmfPeiFvBase)
+			hasPeiFvNvs = true;
+	}
+
+	if (!hasLowNvs || !hasPeiFvNvs)
+		return;
+
+	uint64_t reservedBytes = 0;
+	for (size_t i = 0; i < memoryMapSize / descriptorSize; ++i) {
+		efi_memory_descriptor* entry
+			= (efi_memory_descriptor*)(addr + i * descriptorSize);
+		if (entry->Type != EfiConventionalMemory)
+			continue;
+		uint64_t base = entry->PhysicalStart;
+		uint64_t end = base + entry->NumberOfPages * 4096;
+		uint64_t start = max_c(base, kOvmfMemfdBase);
+		uint64_t stop = min_c(end, kOvmfPeiFvBase);
+		if (start < stop) {
+			remove_physical_memory_range(start, stop - start);
+			reservedBytes += stop - start;
+		}
+	}
+
+	if (reservedBytes > 0) {
+		dprintf("efi: reserved %" B_PRIu64 " KiB of OVMF MEMFD holes "
+			"(0x00800000-0x00820000)\n", reservedBytes / 1024);
+	}
+}
+// SPDX-SnippetEnd
+
+
 // Called after EFI boot services exit.
 // Currently assumes that the memory map is sane... Sorted and no overlapping
 // regions.
@@ -155,6 +237,12 @@ arch_mmu_post_efi_setup(size_t memory_map_size,
 			remove_physical_memory_range(base, end - base);
 		}
 	}
+
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	reserve_ovmf_memfd_holes(memory_map_size, memory_map, descriptor_size);
+	// SPDX-SnippetEnd
 
 	gKernelArgs.ignored_physical_memory
 		+= initialPhysicalMemory - total_physical_memory();
