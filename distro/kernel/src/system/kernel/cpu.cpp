@@ -16,6 +16,16 @@
 // SPDX-License-Identifier: MIT
 #include <r5_shutdown.h>
 // SPDX-SnippetEnd
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <stddef.h>
+
+#include <ACPI.h>
+#include <kernel.h>
+#include <lock.h>
+#include <r5_power_profile.h>
+// SPDX-SnippetEnd
 #include <arch/cpu.h>
 #include <arch/system_info.h>
 
@@ -41,6 +51,13 @@ static cpu_topology_node sCPUTopology;
 
 static cpufreq_module_info* sCPUPerformanceModule;
 static cpuidle_module_info* sCPUIdleModule;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+static int32 sPowerProfile = -1;
+	// R5_POWER_PROFILE_*, -1 until something set it
+static mutex sPowerProfileLock = MUTEX_INITIALIZER("power profile");
+// SPDX-SnippetEnd
 
 static spinlock sSetCpuLock;
 
@@ -323,7 +340,178 @@ cpu_set_scheduler_mode(enum scheduler_mode mode)
 		sCPUPerformanceModule->cpufreq_set_scheduler_mode(mode);
 	if (sCPUIdleModule != NULL)
 		sCPUIdleModule->cpuidle_set_scheduler_mode(mode);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// A scheduler mode set on its own (ProcessController, an old program)
+	// is the profile a version 2 module maps it to: power saving is Power
+	// saver, low latency keeps the boost and EPP performance it always had.
+	atomic_set(&sPowerProfile, mode == SCHEDULER_MODE_POWER_SAVING
+		? R5_POWER_PROFILE_SAVER : R5_POWER_PROFILE_PERFORMANCE);
+// SPDX-SnippetEnd
 }
+
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+//	#pragma mark - processor profile (docs/POWER.md, section 4)
+
+
+static cpufreq_module_info_v2*
+cpufreq_v2_module()
+{
+	if (sCPUPerformanceModule == NULL)
+		return NULL;
+
+	// A version 2 module says so in its name; the first part of its
+	// module_info is the version 1 structure.
+	const char* name = sCPUPerformanceModule->info.name;
+	size_t length = strlen(name);
+	size_t suffixLength = strlen(CPUFREQ_MODULE_V2_SUFFIX);
+	if (length < suffixLength
+		|| strcmp(name + length - suffixLength, CPUFREQ_MODULE_V2_SUFFIX) != 0)
+		return NULL;
+
+	return (cpufreq_module_info_v2*)sCPUPerformanceModule;
+}
+
+
+/*!	Sets the processor profile: the scheduler mode (Power saver is power
+	saving, Balanced and Performance are low latency), the idle module's
+	mode, and the profile of a version 2 cpufreq module. A version 1 module
+	follows the scheduler mode, as before.
+*/
+static status_t
+cpu_set_power_profile(int32 profile)
+{
+	if (profile < 0 || profile >= R5_POWER_PROFILE_COUNT)
+		return B_BAD_VALUE;
+
+	MutexLocker locker(sPowerProfileLock);
+
+	scheduler_mode mode = profile == R5_POWER_PROFILE_SAVER
+		? SCHEDULER_MODE_POWER_SAVING : SCHEDULER_MODE_LOW_LATENCY;
+	status_t status = scheduler_set_operation_mode(mode);
+	if (status != B_OK)
+		return status;
+
+	cpufreq_module_info_v2* module = cpufreq_v2_module();
+	if (module == NULL) {
+		cpu_set_scheduler_mode(mode);
+		atomic_set(&sPowerProfile, profile);
+		return B_OK;
+	}
+
+	// Not the module's version 1 hook: that would apply the scheduler
+	// mode's profile on every CPU, too, at the same time as this one.
+	if (sCPUIdleModule != NULL)
+		sCPUIdleModule->cpuidle_set_scheduler_mode(mode);
+
+	status = module->cpufreq_set_profile(profile);
+	if (status == B_OK)
+		atomic_set(&sPowerProfile, profile);
+	return status;
+}
+
+
+/*!	What the firmware offers for sleep (docs/POWER.md, section 5): suspend
+	to idle needs the FADT low-power S0 flag and an LPS0 device, suspend to
+	RAM an _S3_ object. Read once; the ACPI module is loaded only for this
+	and put again.
+*/
+static uint32
+cpu_sleep_flags()
+{
+	static int32 sFlags = -1;
+	int32 flags = atomic_get(&sFlags);
+	if (flags >= 0)
+		return (uint32)flags;
+
+	flags = 0;
+	acpi_module_info* acpi;
+	if (get_module(B_ACPI_MODULE_NAME, (module_info**)&acpi) == B_OK) {
+		// FADT: the flags are at byte 112; bit 21 is "low power S0 idle
+		// capable" (ACPI 6.x, table 5.10)
+		const uint32 kFADTFlagsOffset = 112;
+		const uint32 kLowPowerS0Idle = 1u << 21;
+		void* table = NULL;
+		bool lowPowerS0 = false;
+		if (acpi->get_table("FACP", 0, &table) == B_OK && table != NULL) {
+			uint32 tableLength;
+			memcpy(&tableLength, (uint8*)table + 4, sizeof(tableLength));
+			if (tableLength >= kFADTFlagsOffset + sizeof(uint32)) {
+				uint32 fadtFlags;
+				memcpy(&fadtFlags, (uint8*)table + kFADTFlagsOffset,
+					sizeof(fadtFlags));
+				lowPowerS0 = (fadtFlags & kLowPowerS0Idle) != 0;
+			}
+		}
+
+		char path[256];
+		if (lowPowerS0
+			&& acpi->get_device("PNP0D80", 0, path, sizeof(path)) == B_OK)
+			flags |= R5_POWER_F_S0IX;
+
+		acpi_handle handle;
+		if (acpi->get_handle(NULL, "\\_S3_", &handle) == B_OK)
+			flags |= R5_POWER_F_S3;
+
+		put_module(B_ACPI_MODULE_NAME);
+	}
+
+	atomic_set(&sFlags, flags);
+	return (uint32)flags;
+}
+
+
+status_t
+_user_r5_set_power_profile(int32 profile)
+{
+	// Only the power service sets it (docs/POWER.md, section 4); programs
+	// go through BPowerRoster and the service's admin port.
+	if (geteuid() != 0)
+		return B_PERMISSION_DENIED;
+
+	return cpu_set_power_profile(profile);
+}
+
+
+status_t
+_user_r5_get_power_info(r5_power_info* userInfo, size_t size)
+{
+	if (size < offsetof(r5_power_info, reserved))
+		return B_BAD_VALUE;
+	if (userInfo == NULL || !IS_USER_ADDRESS(userInfo))
+		return B_BAD_ADDRESS;
+
+	r5_power_info info = {};
+	info.size = (uint32)min_c(size, sizeof(r5_power_info));
+
+	int32 profile = atomic_get(&sPowerProfile);
+	if (profile < 0) {
+		// nothing set yet: the profile the scheduler mode stands for
+		profile = _user_get_scheduler_mode() == SCHEDULER_MODE_POWER_SAVING
+			? R5_POWER_PROFILE_SAVER : R5_POWER_PROFILE_PERFORMANCE;
+	}
+	info.profile = (uint32)profile;
+
+	cpufreq_module_info_v2* module = cpufreq_v2_module();
+	if (module != NULL) {
+		info.method = module->cpufreq_method();
+		if (info.method != R5_POWER_METHOD_NONE)
+			info.flags |= R5_POWER_F_PROFILES;
+	} else if (sCPUPerformanceModule != NULL)
+		info.method = R5_POWER_METHOD_SCHEDULER;
+	else
+		info.method = R5_POWER_METHOD_NONE;
+
+	info.flags |= cpu_sleep_flags();
+		// R5_POWER_F_SLEEP_WORKS stays off until step 4
+
+	return user_memcpy(userInfo, &info, info.size);
+}
+// SPDX-SnippetEnd
 
 
 status_t

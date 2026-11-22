@@ -146,6 +146,14 @@ cpu_pause(void)
 void _user_clear_caches(void *address, size_t length, uint32 flags);
 bool _user_cpu_enabled(int32 cpu);
 status_t _user_set_cpu_enabled(int32 cpu, bool enabled);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// The processor profile (docs/POWER.md, section 4, <r5_power_profile.h>).
+struct r5_power_info;
+status_t _user_r5_set_power_profile(int32 profile);
+status_t _user_r5_get_power_info(struct r5_power_info* info, size_t size);
+// SPDX-SnippetEnd
 
 #ifdef __cplusplus
 }

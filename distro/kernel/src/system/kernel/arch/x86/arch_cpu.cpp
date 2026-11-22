@@ -1021,6 +1021,11 @@ find_microcode_intel(addr_t data, size_t size, uint32 patchLevel)
 	// 9.11.4 Platform Identification
 	uint64 platformBits = (x86_read_msr(IA32_MSR_PLATFORM_ID) >> 50) & 0x7;
 	uint64 mask = 1 << platformBits;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	const addr_t start = data;
+// SPDX-SnippetEnd
 
 	while (size > 0) {
 		if (size < sizeof(struct intel_microcode_header)) {
@@ -1037,6 +1042,19 @@ find_microcode_intel(addr_t data, size_t size, uint32 patchLevel)
 			totalSize = sizeof(struct intel_microcode_header)
 				+ dataSize;
 		}
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// A total size below the header and data (0 kept this loop on the
+		// same patch forever) or not in whole dwords cannot be walked: stop,
+		// as Linux does (arch/x86/kernel/cpu/microcode/intel.c).
+		if (totalSize < sizeof(struct intel_microcode_header)
+			|| dataSize > totalSize - sizeof(struct intel_microcode_header)
+			|| (totalSize % 4) != 0 || (dataSize % 4) != 0) {
+			dprintf("find_microcode_intel update size invalid\n");
+			break;
+		}
+// SPDX-SnippetEnd
 		if (totalSize > size) {
 			dprintf("find_microcode_intel update is too small for data\n");
 			break;
@@ -1051,12 +1069,6 @@ find_microcode_intel(addr_t data, size_t size, uint32 patchLevel)
 			dprintf("find_microcode_intel incorrect loader version\n");
 			continue;
 		}
-		// 9.11.6 The microcode update data requires a 16-byte boundary
-		// alignment.
-		if (((addr_t)header % 16) != 0) {
-			dprintf("find_microcode_intel incorrect alignment\n");
-			continue;
-		}
 		uint32 sum = 0;
 		for (uint32 i = 0; i < totalSize / 4; i++) {
 			sum += dwords[i];
@@ -1069,25 +1081,62 @@ find_microcode_intel(addr_t data, size_t size, uint32 patchLevel)
 			dprintf("find_microcode_intel update_revision is lower\n");
 			continue;
 		}
-		if (signature == header->processor_signature
-			&& (mask & header->processor_flags) != 0) {
-			return header;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		bool found = signature == header->processor_signature
+			&& (mask & header->processor_flags) != 0;
+		// The extended signature table fills the rest of total_size. Its
+		// count is read only when the table header fits, and the entries are
+		// read only when all of them fit.
+		uint32 tableSize = totalSize - sizeof(struct intel_microcode_header)
+			- dataSize;
+		if (!found && tableSize
+				> sizeof(struct intel_microcode_extended_signature_header)) {
+			struct intel_microcode_extended_signature_header* extSigHeader
+				= (struct intel_microcode_extended_signature_header*)
+					((addr_t)header + sizeof(struct intel_microcode_header)
+						+ dataSize);
+			struct intel_microcode_extended_signature* extended_signature
+				= (struct intel_microcode_extended_signature*)
+					((addr_t)extSigHeader
+						+ sizeof(struct intel_microcode_extended_signature_header));
+			uint32 count = extSigHeader->extended_signature_count;
+			if (count > (tableSize
+					- sizeof(struct intel_microcode_extended_signature_header))
+					/ sizeof(struct intel_microcode_extended_signature)) {
+				dprintf("find_microcode_intel extended table too large\n");
+				continue;
+			}
+			for (uint32 i = 0; i < count; i++) {
+				if (signature == extended_signature[i].processor_signature
+					&& (mask & extended_signature[i].processor_flags) != 0) {
+					found = true;
+					break;
+				}
+			}
 		}
-		if (totalSize <= (sizeof(struct intel_microcode_header) + dataSize
-			+ sizeof(struct intel_microcode_extended_signature_header))) {
+		if (!found)
 			continue;
+
+		// 9.11.6 The microcode update data requires a 16-byte boundary
+		// alignment. The boot loader reads the file to a 16-byte aligned
+		// buffer and Intel's total sizes are multiples of 1024, so this is
+		// a fallback. A patch can be 1.6 MB, too large for a static copy:
+		// it moves to the start of the buffer, which is before it, so a
+		// later search from the start finds it again.
+		if (((addr_t)header % 16) != 0) {
+			if ((start % 16) != 0) {
+				dprintf("find_microcode_intel incorrect alignment\n");
+				continue;
+			}
+			memmove((void*)start, header, totalSize);
+			header = (struct intel_microcode_header*)start;
+			dprintf("find_microcode_intel patch moved to an aligned "
+				"address\n");
 		}
-		struct intel_microcode_extended_signature_header* extSigHeader =
-			(struct intel_microcode_extended_signature_header*)((addr_t)header
-				+ sizeof(struct intel_microcode_header) + dataSize);
-		struct intel_microcode_extended_signature* extended_signature =
-			(struct intel_microcode_extended_signature*)((addr_t)extSigHeader
-				+ sizeof(struct intel_microcode_extended_signature_header));
-		for (uint32 i = 0; i < extSigHeader->extended_signature_count; i++) {
-			if (signature == extended_signature[i].processor_signature
-				&& (mask & extended_signature[i].processor_flags) != 0)
-				return header;
-		}
+		return header;
+// SPDX-SnippetEnd
 	}
 	return NULL;
 }
@@ -1106,15 +1155,35 @@ load_microcode_intel(int currentCPU, cpu_ent* cpu)
 		update = find_microcode_intel((addr_t)sUcodeData, sUcodeDataSize,
 			revision);
 	}
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
 	if (update == NULL) {
-		dprintf("CPU %d: no update found\n", currentCPU);
-	} else if (update->update_revision != revision) {
+		// With the revision, a BIOS that is newer than the file shows.
+		dprintf("CPU %d: no update found (revision 0x%" B_PRIx32 ")\n",
+			currentCPU, revision);
+	} else if (revision >= update->update_revision) {
+		// The second thread of a core already reports the level the first
+		// one loaded; a BIOS update may also be at or past the file.
+		dprintf("CPU %d: already at revision 0x%" B_PRIx32 "\n", currentCPU,
+			revision);
+// SPDX-SnippetEnd
+	} else {
 		addr_t data = (addr_t)update + sizeof(struct intel_microcode_header);
 		wbinvd();
 		x86_write_msr(IA32_MSR_UCODE_WRITE, data);
 		detect_intel_patch_level(cpu);
-		if (revision == cpu->arch.patch_level) {
-			dprintf("CPU %d: update failed\n", currentCPU);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// SDM Vol. 3A, "Microcode Update Facilities": the update loaded when
+		// IA32_BIOS_SIGN_ID, read after CPUID leaf 1, reports the update's
+		// own revision. Linux checks the same (intel.c, apply_microcode).
+		if (cpu->arch.patch_level != update->update_revision) {
+			dprintf("CPU %d: update failed (revision 0x%" B_PRIx32 ", update "
+				"0x%" B_PRIx32 ")\n", currentCPU, cpu->arch.patch_level,
+				update->update_revision);
+// SPDX-SnippetEnd
 		} else {
 			if (sLoadedUcodeUpdate == NULL)
 				sLoadedUcodeUpdate = update;
@@ -1230,7 +1299,9 @@ find_microcode_amd(addr_t data, size_t size, uint32 patchLevel)
 			// it (arch/x86/kernel/cpu/microcode/amd.c); here it goes into
 			// one aligned buffer that lives as long as the kernel, since
 			// sLoadedUcodeUpdate keeps pointing at it for the other cores.
-			static uint8 sAlignedPatch[8192] __attribute__((aligned(16)));
+			// 16 KiB: family 1Ah (Zen 5) patches are 14368 bytes in
+			// linux-firmware 20261019, the earlier 8192 did not fit them.
+			static uint8 sAlignedPatch[16384] __attribute__((aligned(16)));
 			if (section->size > sizeof(sAlignedPatch)) {
 				dprintf("find_microcode_amd patch too large to align: %"
 					B_PRIu32 "\n", (uint32)section->size);

@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+#
+# libr5power.so: the R5 Power Kit (<PowerRoster.h>), BPowerRoster.
+# docs/POWER.md, section 3, and docs/LIBR5.md, "Power Kit".
+
+SubDir HAIKU_TOP src preferences r5power ;
+
+# <device/power_managment.h> (the ACPI battery driver), <syscalls.h> and
+# <r5_power_profile.h> (the processor profile), <R5Admin.h>.
+UsePrivateHeaders device power ;
+UsePrivateSystemHeaders ;
+
+SharedLibrary [ MultiArchDefaultGristFiles libr5power.so ] :
+	PowerBattery.cpp
+	PowerRoster.cpp
+	: be libr5admin.so [ TargetLibstdc++ ]
+	;
