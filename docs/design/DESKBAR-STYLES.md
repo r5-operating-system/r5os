@@ -30,8 +30,22 @@ A **Style** choice for Deskbar, on the Settings page Desktop and Deskbar:
 | **Classic** | Deskbar exactly as it is now (not the default). **Form:** as now (vertical block) or bar (Haiku's horizontal mode). **Place:** which corner or which edge. |
 | **Default (R5)** (the default) | **Form:** as now, pill, or bar. **Corners:** round (18 px) or square. **Floating:** on or off, for every form. **Place:** which corner or which edge. **Effect:** follows Quiet, Balanced or Glassy from Appearance (no Deskbar switch). |
 
-Default values of Default (R5), confirmed by the owner (22 Nov 2026): form as now, corners
-round, floating on, top right.
+**Names in Settings** (owner, 22 Nov 2026). In this brief "as now", "pill" and "bar" are
+working names; the user sees these:
+
+| Setting | Values |
+|---|---|
+| Style | Default (R5) · Classic (Haiku) |
+| Layout | Vertical (as now) · Compact (the pill) · Horizontal (the bar) |
+| Corners | Rounded · Square |
+| Floating | a check box, "Keep away from the screen edges" |
+| Place | no label: chosen on the screen picture |
+| Effect | no Deskbar setting: follows Window effects in Appearance |
+
+Classic (Haiku) offers Layout (Vertical, Horizontal) and Place only.
+
+Default values of Default (R5), confirmed by the owner (22 Nov 2026): Layout Vertical,
+Corners Rounded, Floating on, top right.
 
 Classic keeps every existing Haiku Deskbar option and its look. Default (R5) keeps the
 existing Haiku options that still apply (always on top, auto-raise, auto-hide, icon size,
