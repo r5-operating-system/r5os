@@ -41,6 +41,7 @@
 
 class BBitmap;
 class BView;
+class BWindow;
 
 
 namespace R5Deskbar {
@@ -66,6 +67,8 @@ const uint32 kMsgSetStyle = 'R5ds';
 const uint32 kMsgAnimate = 'R5da';
 // The chevron of the pill: show or hide the tray symbols.
 const uint32 kMsgToggleUnfold = 'R5df';
+// Repaint the whole window after a style change.
+const uint32 kMsgRepaint = 'R5dr';
 
 
 // The settings (desk_settings in BarSettings.h)
@@ -124,6 +127,9 @@ const BBitmap*	Pebble(float side);
 // The window's only child in Default (R5) and Classic, TBarView inside it:
 // it draws the 1 px edge (DeskbarStyleViews.cpp).
 BView*			CreateEdgeView(BRect frame);
+
+// The corners, shadow and edge of the Deskbar menu's window, once.
+void			StyleMenuWindow(BWindow* window);
 
 // The ease of the growing pill: CSS cubic-bezier(.2, .9, .3, 1.25).
 float			Ease(float progress);

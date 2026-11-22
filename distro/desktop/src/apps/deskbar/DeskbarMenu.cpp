@@ -143,11 +143,7 @@ TDeskbarMenu::AttachedToWindow()
 			Parent()->SetViewColor(surface);
 			set_view_glass(Parent(), glass);
 		}
-		float radius = R5Deskbar::ButtonRadius();
-		set_window_corner_radius(Window(), radius);
-		set_window_shadow(Window(), B_WINDOW_SHADOW_FULL);
-		set_window_edge_line(Window(), R5Deskbar::EdgeColor(),
-			radius > 0 ? 1 : 0);
+		R5Deskbar::StyleMenuWindow(Window());
 	}
 // SPDX-SnippetEnd
 }

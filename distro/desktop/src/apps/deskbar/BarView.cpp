@@ -329,6 +329,12 @@ TBarView::MessageReceived(BMessage* message)
 			_GrowStep();
 			break;
 
+		case R5Deskbar::kMsgRepaint:
+			if (Parent() != NULL)
+				Parent()->Invalidate();
+			Invalidate();
+			break;
+
 		case R5Deskbar::kMsgToggleUnfold:
 			R5Deskbar::SetUnfolded(!R5Deskbar::Unfolded());
 			UpdatePlacement();

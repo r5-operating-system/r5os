@@ -1172,6 +1172,11 @@ TBarApp::FetchTeamIcon(team_id team, int32 size)
 	for (int32 i = 0; i < teamCount; i++) {
 		BarTeamInfo* barInfo = (BarTeamInfo*)sBarTeamInfoList.ItemAt(i);
 		if (barInfo->teams->HasItem((void*)(addr_t)team)) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			BBitmap* previous = barInfo->icon;
+// SPDX-SnippetEnd
 			_CacheTeamIcon(barInfo, size);
 			BBitmap* icon = barInfo->icon;
 
@@ -1180,6 +1185,14 @@ TBarApp::FetchTeamIcon(team_id team, int32 size)
 				int32 index = (fSettings.iconSize - kMinimumIconSize)
 					/ kIconSizeInterval;
 				barInfo->icon = barInfo->iconCache[index];
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+				// Default (R5)'s icon of the layout is not in that cache
+				// (QEMU, 22 Nov 2026: NULL here, and Deskbar crashed)
+				if (barInfo->icon == NULL)
+					barInfo->icon = previous;
+// SPDX-SnippetEnd
 			}
 
 			return icon;
@@ -1635,7 +1648,11 @@ BarTeamInfo::BarTeamInfo(const BarTeamInfo &info)
 	flags(info.flags),
 	sig(strdup(info.sig)),
 	name(strdup(info.name)),
-	icon(new BBitmap(*info.icon))
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	icon(info.icon != NULL ? new BBitmap(*info.icon) : NULL)
+// SPDX-SnippetEnd
 {
 	_Init();
 }

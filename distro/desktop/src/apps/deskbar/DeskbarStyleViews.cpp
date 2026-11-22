@@ -279,6 +279,11 @@ TBarView::ApplyStyle()
 	set_window_edge_line(window, EdgeColor(), WindowRadius() > 0 ? 1 : 0);
 	if (root != this)
 		root->Invalidate();
+	// once more a moment later: the outline changes on the application's
+	// link, the drawing on the window's, and corners that come back from a
+	// round outline were drawn before it (QEMU, 22 Nov: dark specks)
+	BMessage repaint(kMsgRepaint);
+	BMessageRunner::StartSending(BMessenger(this), &repaint, 150000, 1);
 }
 
 
@@ -1073,6 +1078,40 @@ TDragRegion::_DrawModern()
 // #pragma mark - TDeskbarMenu
 
 
+static status_t
+style_menu_window(void* data)
+{
+	// The corners, the shadow and the edge of the menu panel. From a thread
+	// of its own, a moment after the menu attached: the window is on screen
+	// then (set in AttachedToWindow() they did not show the first time),
+	// and the menu's thread never waits for app_server while it draws (set
+	// in Draw() they could deadlock, QEMU 22 Nov 2026).
+	snooze(30000);
+	BWindow* window = (BWindow*)data;
+	float radius = ButtonRadius();
+	BAppearanceKit::set_window_corner_radius(window, radius);
+	BAppearanceKit::set_window_shadow(window,
+		BAppearanceKit::B_WINDOW_SHADOW_FULL);
+	BAppearanceKit::set_window_edge_line(window, EdgeColor(),
+		radius > 0 ? 1 : 0);
+	return B_OK;
+}
+
+
+void
+R5Deskbar::StyleMenuWindow(BWindow* window)
+{
+	static BWindow* sStyled = NULL;
+	if (window == NULL || window == sStyled)
+		return;
+	sStyled = window;
+	thread_id thread = spawn_thread(style_menu_window, "deskbar menu style",
+		B_NORMAL_PRIORITY, window);
+	if (thread >= 0)
+		resume_thread(thread);
+}
+
+
 BPoint
 TDeskbarMenu::_ModernLocation()
 {
@@ -1110,19 +1149,6 @@ TDeskbarMenu::DrawBackground(BRect updateRect)
 	if (!Modern()) {
 		BNavMenu::DrawBackground(updateRect);
 		return;
-	}
-	// the corners, the shadow and the edge of the panel, once per menu
-	// window, here: the window is on screen now (set in AttachedToWindow()
-	// they did not show, QEMU 22 Nov 2026)
-	static BWindow* sStyledWindow = NULL;
-	if (Window() != NULL && Window() != sStyledWindow) {
-		sStyledWindow = Window();
-		float radius = ButtonRadius();
-		BAppearanceKit::set_window_corner_radius(Window(), radius);
-		BAppearanceKit::set_window_shadow(Window(),
-			BAppearanceKit::B_WINDOW_SHADOW_FULL);
-		BAppearanceKit::set_window_edge_line(Window(), EdgeColor(),
-			radius > 0 ? 1 : 0);
 	}
 	// the glass panel: its own colour, and the edge where it is square
 	if (ButtonRadius() <= 0) {
