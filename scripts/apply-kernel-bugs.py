@@ -79,6 +79,9 @@ def install_kernel_sources() -> None:
         # R5: shutdown hooks, so radeon_hd stops the GPU before a restart
         "headers/private/kernel/r5_shutdown.h",
         "src/system/kernel/shutdown.cpp",
+        # R5: AHCI fast empty-port reset and 64-bit DMA when CAP.S64A is set
+        "src/add-ons/kernel/busses/scsi/ahci/ahci.c",
+        "src/add-ons/kernel/busses/scsi/ahci/ahci_port.cpp",
         # R5: no USB modules in the BIOS CD floppy archive (size limit)
         "build/jam/images/FloppyBootImage",
         # R5: the AMD CPPC values stay per CPU (no shared globals)
@@ -459,6 +462,26 @@ def install_usb_stability() -> None:
         print(f"copied {relative}")
 
 
+def install_gpio() -> None:
+    """The GPIO module (generic/gpio/v1, MIT, docs/GPIO.md) and its header.
+    The package line is in distro/desktop/build/jam/packages/Haiku."""
+    root = pathlib.Path(__file__).resolve().parents[1]
+    (HAIKU / "src/add-ons/kernel/generic/gpio").mkdir(exist_ok=True)
+    for relative in (
+        "headers/os/drivers/GPIO.h",
+        "src/add-ons/kernel/generic/gpio/Jamfile",
+        "src/add-ons/kernel/generic/gpio/gpio.cpp",
+    ):
+        install_file(root / "distro/kernel" / relative, HAIKU / relative,
+            "gpio")
+    jam = HAIKU / "src/add-ons/kernel/generic/Jamfile"
+    anchor = "SubInclude HAIKU_TOP src add-ons kernel generic dpc ;\n"
+    line = "SubInclude HAIKU_TOP src add-ons kernel generic gpio ;\n"
+    insert_once(jam, anchor, anchor + line, line, "gpio jam")
+    if jam.read_text(encoding="utf-8").count(line) != 1:
+        raise SystemExit(f"{jam}: gpio SubInclude is not there exactly once")
+
+
 def install_efi_runtime() -> None:
     """EFI runtime services (generic/efi/v1, MIT, docs/EFI-RUNTIME.md): the
     EFI.h header, the loader hand-over, the kernel boot item and the module.
@@ -499,6 +522,7 @@ def main() -> int:
     install_kernel_sources()
     install_pstate()
     install_usb_stability()
+    install_gpio()
     install_efi_runtime()
     # i2c_hid (RenkuOS b37a078925) and x86_acpi_cstates (air/OS 2c48d1ae0)
     # are listed in the native build/jam/packages/Haiku in distro/desktop.

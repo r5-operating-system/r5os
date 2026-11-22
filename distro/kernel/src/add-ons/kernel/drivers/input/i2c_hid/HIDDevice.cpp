@@ -30,6 +30,16 @@
 
 // Poll interval of the input ready line while no report is ready.
 static const bigtime_t kInputReadyPollInterval = 1000;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// Adaptive back-off while idle so polling does not hold laptops at 1000 Hz
+// wakeups (GPIO interrupts are the longer-term replacement).
+static const bigtime_t kInputReadyWarmInterval = 4000;
+static const bigtime_t kInputReadyIdleInterval = 16000;
+static const bigtime_t kInputWarmThreshold = 200000;
+static const bigtime_t kInputIdleThreshold = 1000000;
+// SPDX-SnippetEnd
 
 
 HIDDevice::HIDDevice(uint16 descriptorAddress, i2c_device_interface* i2c,
@@ -248,13 +258,25 @@ HIDDevice::MaybeScheduleTransfer(HIDReport *report)
 				return B_DEV_NOT_READY;
 			}
 
-			status_t status = snooze_etc(kInputReadyPollInterval,
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			bigtime_t idleTime = system_time() - fTransferLastschedule;
+			bigtime_t interval = kInputReadyPollInterval;
+			if (idleTime > kInputIdleThreshold)
+				interval = kInputReadyIdleInterval;
+			else if (idleTime > kInputWarmThreshold)
+				interval = kInputReadyWarmInterval;
+
+			status_t status = snooze_etc(interval,
 				B_SYSTEM_TIMEBASE, B_RELATIVE_TIMEOUT | B_CAN_INTERRUPT);
+			// SPDX-SnippetEnd
 			if (status == B_INTERRUPTED) {
 				atomic_set(&fTransferScheduled, 0);
 				return status;
 			}
 		}
+		fTransferLastschedule = system_time();
 	}
 
 	status_t status = _FetchBuffer((uint8*)&fDescriptor.wInputRegister,

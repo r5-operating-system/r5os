@@ -15,6 +15,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <driver_settings.h>
 #include <OS.h>
 
 
@@ -187,7 +188,8 @@ line_matters(const char* line)
 	static const char* keys[] = {
 		"radeon", "Radeon", "vesa", "VESA", "framebuffer", "frame buffer",
 		"VGA", "vga", "PCI", "display", "Display", "app_server", "panic",
-		"intel_extreme", "KERN:", "vmware", "virtio_gpu", NULL
+		"intel_extreme", "vmware", "virtio_gpu", "R5 ", "cpuidle", "CPPC",
+		NULL
 	};
 	for (int i = 0; keys[i] != NULL; i++) {
 		if (strstr(line, keys[i]) != NULL)
@@ -264,9 +266,35 @@ write_boot_logs(const char* report, int pass)
 }
 
 
-int
-main()
+static bool
+boot_log_enabled()
 {
+	void* settings = load_driver_settings("kernel");
+	if (settings == NULL)
+		return false;
+	bool enabled = get_driver_boolean_parameter(settings, "r5_pstate_log",
+		false, false);
+	unload_driver_settings(settings);
+	return enabled;
+}
+
+
+int
+main(int argc, char** argv)
+{
+	bool explicitRun = false;
+	bool watch = false;
+	for (int i = 1; i < argc; i++) {
+		if (strcmp(argv[i], "--run") == 0 || strcmp(argv[i], "--now") == 0)
+			explicitRun = true;
+		else if (strcmp(argv[i], "--watch") == 0) {
+			explicitRun = true;
+			watch = true;
+		}
+	}
+	if (!explicitRun && !boot_log_enabled())
+		return 0;
+
 	char idle[4096];
 	char busy[4096];
 	strcpy(idle, "R5 CPU: device missing\n");
@@ -299,12 +327,12 @@ main()
 		(long long)kernelDelta, (long long)(userDelta + kernelDelta));
 	write_boot_logs(report, 0);
 
-	// Later passes still run if the desktop has not appeared. They write
-	// the BeFS files again and do not mount a disk.
-	const bigtime_t waits[] = { 15000000, 45000000, 120000000 };
-	for (int pass = 0; pass < 3; pass++) {
-		snooze(waits[pass]);
-		write_boot_logs(report, pass + 1);
+	if (watch) {
+		const bigtime_t waits[] = { 15000000, 45000000, 120000000 };
+		for (int pass = 0; pass < 3; pass++) {
+			snooze(waits[pass]);
+			write_boot_logs(report, pass + 1);
+		}
 	}
 	return 0;
 }

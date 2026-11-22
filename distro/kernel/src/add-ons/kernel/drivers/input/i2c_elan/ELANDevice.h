@@ -98,6 +98,7 @@ private:
 			uint8				fReport[ELAN_MAX_REPORT_LENGTH];
 			uint8				fLastReport[ELAN_MAX_REPORT_LENGTH];
 			uint32				fBadReports;
+			bigtime_t			fLastReportTime;
 
 			elan_finger			fFingers[ELAN_MAX_FINGERS];
 			elan_finger			fLastFingers[ELAN_MAX_FINGERS];
