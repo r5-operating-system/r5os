@@ -586,9 +586,15 @@ execute_command(void* controller, uint8_t command, uint32_t argument,
 	}
 
 	if (response != NULL) {
-		if (cmd.rsp_type == RTSX_SD_RSP_TYPE_R2)
+		if (cmd.rsp_type == RTSX_SD_RSP_TYPE_R2) {
+			// mmc_bus and mmc_disk take an R2 answer as sdhci gives it:
+			// bits 127 to 8 of the CID or CSD, the top byte 0. The chip
+			// reads back 15 answer bytes plus SD_CMD5; the 16th byte comes
+			// from past the end of the read-back (stick 76: 0xdf, so
+			// mmc_disk read "CSD version 125" and gave up).
 			memcpy(response, cmd.resp, sizeof(cmd.resp));
-		else if (cmd.rsp_type != RTSX_SD_RSP_TYPE_R0)
+			response[3] &= 0x00ffffff;
+		} else if (cmd.rsp_type != RTSX_SD_RSP_TYPE_R0)
 			response[0] = cmd.resp[0];
 	}
 	return B_OK;
