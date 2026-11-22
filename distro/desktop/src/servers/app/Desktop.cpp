@@ -2578,6 +2578,21 @@ Desktop::ReloadDecor(DecorAddOn* oldDecor)
 
 		border.Include(&oldBorder);
 		RebuildAndRedrawAfterWindowChange(window, border);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// GPU mode: the whole window is composed again, with its shadow,
+		// as for set_window_corner_radius() (ServerApp): a round outline
+		// that became square kept the old picture in its corners (QEMU,
+		// 22 Nov 2026)
+		if (fCompositor != NULL && fCompositor->IsActive()
+			&& window->IsVisible()) {
+			BRect reach = border.Frame() | window->Frame();
+			reach.InsetBy(-R5_WINDOW_CORNER_MAX_RADIUS,
+				-R5_WINDOW_CORNER_MAX_RADIUS);
+			fCompositor->Damage(BRegion(reach));
+		}
+// SPDX-SnippetEnd
 	}
 
 	// register new listeners

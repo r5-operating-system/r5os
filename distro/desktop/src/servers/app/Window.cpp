@@ -870,6 +870,9 @@ Window::ReloadDecor()
 		window->fContentRegionValid = false;
 		window->fVisibleContentRegionValid = false;
 		window->fEffectiveDrawingRegionValid = false;
+		// the views keep their clipping cut to the old content region
+		if (window->fTopView.IsSet())
+			window->fTopView->InvalidateScreenClipping();
 	}
 // SPDX-SnippetEnd
 
