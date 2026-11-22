@@ -26,6 +26,13 @@
  * with a text view and both scroll bars meeting in the bottom-right corner,
  * and one with glass. The radius is in pixels; without one, 18 scaled with
  * the font size. Radius 0 opens the same windows square, for the compare.
+ *
+ *   r5-effects-test round-move [radius] [seconds]
+ *
+ * round-move (step 1.5, 22 Nov 2026) opens one round bordered window with
+ * the colour bars that moves itself sideways every 16 ms and grows and
+ * shrinks every second, so a move and a resize of a round window can be
+ * watched (a bordered window has no tab to drag).
  */
 
 
@@ -201,8 +208,12 @@ public:
 		float band = ceilf(bounds.Height() / 4);
 		for (int32 i = 0; i < 4; i++) {
 			SetHighColor(colors[i]);
+			// the last band reaches the last row (step 1.5: a row was left
+			// unpainted, and the moving bar's trace stayed there)
+			float bottom = i == 3 ? bounds.bottom
+				: std::min(bounds.bottom, bounds.top + (i + 1) * band - 1);
 			FillRect(BRect(bounds.left, bounds.top + i * band, bounds.right,
-				std::min(bounds.bottom, bounds.top + (i + 1) * band - 1)));
+				bottom));
 		}
 		SetHighColor(20, 30, 50);
 		FillRect(BRect(fPosition, bounds.bottom - 30, fPosition + 50,
@@ -217,6 +228,52 @@ public:
 
 private:
 	int32			fPosition;
+	BMessageRunner*	fRunner;
+};
+
+
+/*!	A bordered window that moves itself sideways every 16 ms, the way a drag
+	moves it, and grows and shrinks every second, the way a resize does.
+*/
+class MovingWindow : public BWindow {
+public:
+	MovingWindow(BRect frame)
+		:
+		BWindow(frame, "Round moving", B_BORDERED_WINDOW_LOOK,
+			B_NORMAL_WINDOW_FEEL, B_QUIT_ON_WINDOW_CLOSE),
+		fStep(4),
+		fTicks(0),
+		fRunner(NULL)
+	{
+		BMessage slide(kMsgSlide);
+		fRunner = new BMessageRunner(BMessenger(this), &slide, 16000);
+	}
+
+	virtual ~MovingWindow()
+	{
+		delete fRunner;
+	}
+
+	virtual void MessageReceived(BMessage* message)
+	{
+		if (message->what != kMsgSlide) {
+			BWindow::MessageReceived(message);
+			return;
+		}
+		BRect frame = Frame();
+		if (frame.left + fStep < 40 || frame.right + fStep > 900)
+			fStep = -fStep;
+		MoveBy(fStep, 0);
+		// every second: 40 x 30 larger, the next second back
+		if (++fTicks % 60 == 0) {
+			float grow = (fTicks / 60) % 2 == 1 ? 1 : -1;
+			ResizeBy(40 * grow, 30 * grow);
+		}
+	}
+
+private:
+	float			fStep;
+	int32			fTicks;
 	BMessageRunner*	fRunner;
 };
 
@@ -295,6 +352,8 @@ private:
 
 		if (strcmp(what, "round") == 0)
 			return _Round(value, fArgc > 3 ? fArgv[3] : NULL);
+		if (strcmp(what, "round-move") == 0)
+			return _RoundMove(value, fArgc > 3 ? fArgv[3] : NULL);
 
 		bool glass = strcmp(what, "glass") == 0;
 		bool full = strcmp(what, "full") == 0;
@@ -342,6 +401,24 @@ private:
 				window->Unlock();
 			}
 		}
+		SetPulseRate(fWindowSeconds * 1000000LL);
+		return result;
+	}
+
+	int _RoundMove(const char* radiusArg, const char* secondsArg)
+	{
+		float radius = roundf(18.0f * be_plain_font->Size() / 12.0f);
+		if (radiusArg != NULL)
+			radius = atof(radiusArg);
+		fWindowSeconds = secondsArg != NULL ? atoi(secondsArg) : 60;
+		if (fWindowSeconds <= 0)
+			fWindowSeconds = 60;
+		BWindow* window = new MovingWindow(BRect(80, 200, 400, 420));
+		window->AddChild(new EdgeView(window->Bounds()));
+		window->Show();
+		int result = _Check(set_window_corner_radius(window, radius));
+		printf("r5-effects-test: round-move, radius %g, %" B_PRId32 " s\n",
+			radius, fWindowSeconds);
 		SetPulseRate(fWindowSeconds * 1000000LL);
 		return result;
 	}
@@ -428,7 +505,8 @@ private:
 			"       r5-effects-test strength quiet|balanced|glassy\n"
 			"       r5-effects-test workspace <index>\n"
 			"       r5-effects-test glass|plain|full|tick|slide [seconds]\n"
-			"       r5-effects-test round [radius] [seconds]\n");
+			"       r5-effects-test round [radius] [seconds]\n"
+			"       r5-effects-test round-move [radius] [seconds]\n");
 		return 2;
 	}
 

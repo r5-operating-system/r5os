@@ -284,6 +284,16 @@ Window::GetBorderRegion(BRegion* region)
 		*region = decorator->GetFootprint();
 	else
 		region->MakeEmpty();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// CPU mode: the decorator's edge line along a stepped round corner
+	// belongs to the border (it is painted in _DrawBorder())
+	rgb_color color;
+	const window_outline* rim = _SteppedRim(&color);
+	if (rim != NULL)
+		region->Include(&rim->rim);
+// SPDX-SnippetEnd
 }
 
 
@@ -478,6 +488,21 @@ Window::ResizeBy(int32 x, int32 y, BRegion* dirtyRegion, bool resizeStack)
 	if (x == 0 && y == 0)
 		return;
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// A round window: its corners before the resize were never drawn (cut)
+	// or were the edge line (CPU rim); after it they may lie inside the
+	// window and must be drawn, not kept from the old picture (step 1.5,
+	// QEMU: black bits of edge line where the smaller window's corner was)
+	BRegion oldCorners;
+	const window_outline* before = _CachedOutline(_OutlineBlended());
+	if (before != NULL) {
+		oldCorners = before->cut;
+		oldCorners.Include(&before->rim);
+	}
+// SPDX-SnippetEnd
+
 	fFrame.right += x;
 	fFrame.bottom += y;
 
@@ -492,6 +517,17 @@ Window::ResizeBy(int32 x, int32 y, BRegion* dirtyRegion, bool resizeStack)
 	::Decorator* decorator = Decorator();
 	if (decorator && resizeStack)
 		decorator->ResizeBy(x, y, dirtyRegion);
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (dirtyRegion != NULL && oldCorners.CountRects() > 0) {
+		BRegion full;
+		GetFullRegion(&full);
+		oldCorners.IntersectWith(&full);
+		dirtyRegion->Include(&oldCorners);
+	}
+// SPDX-SnippetEnd
 
 	if (resizeStack && stack) {
 		for (int32 i = 0; i < stack->CountWindows(); i++) {
@@ -2009,6 +2045,20 @@ Window::_DrawBorder()
 		engine->SetCopyToFrontEnabled(false);
 
 		decorator->Draw(dirtyBorderRegion->Frame());
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// CPU mode: the decorator's edge line carried along the stepped
+		// round corner, in its own colour (step 1.5, 22 Nov 2026)
+		rgb_color rimColor;
+		const window_outline* rim = _SteppedRim(&rimColor);
+		if (rim != NULL) {
+			BRegion line(rim->rim);
+			line.IntersectWith(dirtyBorderRegion);
+			if (line.CountRects() > 0)
+				engine->FillRegion(line, rimColor);
+		}
+// SPDX-SnippetEnd
 
 		engine->SetCopyToFrontEnabled(copyToFrontEnabled);
 		engine->CopyToFront(*dirtyBorderRegion);
@@ -2234,6 +2284,11 @@ Window::_UpdateContentRegion()
 // SPDX-License-Identifier: MIT
 	// The content is clipped to the round outline too (owner, 22 Nov 2026).
 	_ExcludeOutlineCut(&fContentRegion);
+	// CPU mode: the edge line along the stepped corner is the border's
+	rgb_color rimColor;
+	const window_outline* rim = _SteppedRim(&rimColor);
+	if (rim != NULL)
+		fContentRegion.Exclude(&rim->rim);
 // SPDX-SnippetEnd
 
 	fContentRegionValid = true;
@@ -2340,6 +2395,28 @@ Window::_ExcludeOutlineCut(BRegion* region)
 	const window_outline* outline = _CachedOutline(_OutlineBlended());
 	if (outline != NULL && outline->cut.CountRects() > 0)
 		region->Exclude(&outline->cut);
+}
+
+
+/*!	CPU mode: the stepped round outline when the decorator draws an edge
+	line (Decorator::GetEdgeLine()), with that line's colour in \a color;
+	NULL otherwise (the GPU mode, a square window, no line). Its rim is
+	the line along the steps.
+*/
+const window_outline*
+Window::_SteppedRim(rgb_color* color)
+{
+	if (_OutlineBlended())
+		return NULL;
+	::Decorator* decorator = Decorator();
+	float width = 0;
+	if (decorator == NULL || !decorator->GetEdgeLine(color, &width)
+		|| width <= 0)
+		return NULL;
+	const window_outline* outline = _CachedOutline(false);
+	if (outline == NULL || outline->rim.CountRects() == 0)
+		return NULL;
+	return outline;
 }
 
 

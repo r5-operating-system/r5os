@@ -40,6 +40,10 @@
 	  for glass): the window's pixel, the decorator's edge line
 	  (Decorator::GetEdgeLine()) carried round the arc, and the whole
 	  blended over what lies behind by its coverage.
+	- rim (CPU mode only): the window's outermost pixels along the stepped
+	  arc, a 4-connected line. With a decorator edge line the window keeps
+	  them out of its content and paints them in the line's colour, so the
+	  line follows the stepped corner (step 1.5, 22 Nov 2026).
 	In the CPU mode there is no edge and no area: a pixel more than half
 	covered is the window's, the rest is cut (a stepped arc).
 
@@ -88,6 +92,7 @@ struct window_outline {
 		cut.MakeEmpty();
 		edge.MakeEmpty();
 		area.MakeEmpty();
+		rim.MakeEmpty();
 	}
 
 	int32				cornerCount;
@@ -95,6 +100,7 @@ struct window_outline {
 	BRegion				cut;
 	BRegion				edge;
 	BRegion				area;
+	BRegion				rim;
 };
 
 
@@ -176,6 +182,45 @@ window_outline_clipping_rect(const BRect& frame)
 }
 
 
+/*!	CPU mode: whether pixel (x, y) of \a rect is the window's, with
+	\a corner the corner whose square holds it (a pixel more than half
+	covered). Outside the square every pixel of the rectangle is.
+*/
+static inline bool
+window_outline_kept(const clipping_rect& rect, const window_corner& corner,
+	int32 x, int32 y)
+{
+	if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom)
+		return false;
+	if (x < corner.square.left || x > corner.square.right
+		|| y < corner.square.top || y > corner.square.bottom)
+		return true;
+	return window_corner_coverage(corner, x, y) >= 0.5f;
+}
+
+
+/*!	CPU mode: the outermost pixels of the stepped arc in \a corner's square,
+	those with a neighbour (left, right, above, below) that is not the
+	window's: a line without gaps along the steps.
+*/
+static inline void
+window_outline_add_rim(const clipping_rect& rect, const window_corner& corner,
+	BRegion& rim)
+{
+	for (int32 y = corner.square.top; y <= corner.square.bottom; y++) {
+		for (int32 x = corner.square.left; x <= corner.square.right; x++) {
+			if (!window_outline_kept(rect, corner, x, y))
+				continue;
+			if (!window_outline_kept(rect, corner, x - 1, y)
+				|| !window_outline_kept(rect, corner, x + 1, y)
+				|| !window_outline_kept(rect, corner, x, y - 1)
+				|| !window_outline_kept(rect, corner, x, y + 1))
+				window_outline_add_run(rim, x, x, y);
+		}
+	}
+}
+
+
 /*!	Builds \a outline from \a count rectangles. \a blended: the GPU mode,
 	where the compositor blends the edge; otherwise the arc is stepped.
 	A pixel cut by one rectangle but inside another stays.
@@ -204,6 +249,8 @@ window_outline_build(const window_outline_rect* rects, int32 count,
 				continue;
 			outline.corners[outline.cornerCount++] = corner;
 			squares[i].Include(corner.square);
+			if (!blended)
+				window_outline_add_rim(rect, corner, outline.rim);
 			bool right = kind == 1 || kind == 3;
 			for (int32 y = corner.square.top; y <= corner.square.bottom;
 					y++) {
@@ -271,6 +318,7 @@ window_outline_build(const window_outline_rect* rects, int32 count,
 	outline.cut.Exclude(&solid);
 	outline.cut.Exclude(&outline.edge);
 	outline.area.Exclude(&outline.cut);
+	outline.rim.Exclude(&outline.cut);
 }
 
 
