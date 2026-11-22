@@ -206,7 +206,7 @@ void SetSubtitle(const char* text);
 void SetIcon(const BBitmap* icon);</div>
 				<p>An empty eyebrow hides that line without leaving a gap. The title is bold, 8 points above the
 				bold font; the subtitle is plain at 70 percent text color. Each line ends with an ellipsis when it
-				does not fit. The icon is <code class="inline">ComposeIconSize(40)</code>; draw any wrench on it
+				does not fit. The icon is drawn in a square of 48 units (<code class="inline">be_plain_font</code> size / 13 &times; 48); render it at exactly that size, or it is stretched and loses its sharp edges. Draw any wrench on it
 				before <code class="inline">SetIcon()</code>, which keeps a copy.</p></div>
 
 <pre class="code">BAppearanceKit::BPageHeader* heading = <span class="k">new</span> BAppearanceKit::BPageHeader(<span class="s">"heading"</span>);

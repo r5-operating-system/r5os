@@ -7,6 +7,16 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-22 - CPU Info's icon is sharp again
+
+Problem: the icon in CPU Info's heading looked jagged. CPU Info rendered it at `ComposeIconSize(40).Width()` (39 pixels at the default font), and `BPageHeader` draws its icon in a square of 48 units, so the bitmap was stretched. CPU Info followed `docs/LIBR5.md` and R5Book, which said `ComposeIconSize(40)`; the class has drawn at 48 units all along.
+
+What changed: CPU Info renders the icon at `be_plain_font` size / 13 * 48, as Settings does. `docs/LIBR5.md` (Page header) and R5Book `appearance-settings.html` now say what `BPageHeader` does and that a bitmap of another size is stretched. `BPageHeader` itself is unchanged.
+
+Limits: `BPageHeader` still stretches a bitmap of the wrong size, and places the icon on a fractional row when the heading height is odd; drawing it pixel for pixel is left for the owner's go (`libr5ui.so`).
+
+Tested: compiled in the next build; seen in QEMU (owner) before the fix.
+
 ## 2026-11-22 - The changelog is split per week
 
 Problem: `CHANGELOG.md` had grown to 1.3 MB (392 entries), too large to read or search comfortably.
