@@ -130,7 +130,9 @@ MyWindow::MyWindow()
 				window gets its corners from the decorator the user chose. The window's frame stays the same
 				rectangle: the corners are only taken out of what the window shows and what it gets clicks for.
 				With the GPU the arc is smooth; without it (Lavapipe without effects, Safe mode) the arc is
-				stepped, and the desktop behind shows in the corner either way. Content in a corner is clipped.
+				stepped, and the desktop behind shows in the corner either way. Content in a corner is clipped. A
+				round window gets the full soft shadow of the chosen effect step, and the line its window frame
+				draws along the edge runs on round the corner.
 				Scale the radius with the font size, like other R5 measures: 18 at 12 points.</p></div>
 
 <pre class="code"><span class="k">#include</span> &lt;WindowEffects.h&gt;

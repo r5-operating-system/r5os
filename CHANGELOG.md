@@ -7,6 +7,22 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-22 - Round window corners: the review fixes (edge line, soft shadow, the missing copy)
+
+Problem: in QEMU the owner found the round corners pixelated: the 1 px edge line stopped where the arc began, the shadow had a hard edge round the corner, and glass had a light ring on the arc. Two more rounds of changes (the line carried round the arc with a colour sampled from the window's pixels, a round reach for the shadow) did not help at the top corners, also with animations off. A second look (a review, read only) found the cause: `Compositor::_ComposeThread()` copies each layer field by field for the frame and left all the new corner fields out, so the corner pass never ran and every corner was the region's hard stepped cut. It also found that the sampled colour, a symmetric line ring that let the content through, and the bordered look's 1 to 2 px shadow would stay rough even after that fix.
+
+What changed (all points of the review):
+- `layer_round` in `Compositor.cpp`: the round outline of a layer as one value; the snapshot, the closing ghost and the change check copy or compare it whole.
+- Decorator ABI 2 also has `GetEdgeLine(rgb_color*, float*)`: the line along the outer edge. The R5 decorator returns its 1 px frame colour for the thin frame and the bordered look; the default is none. The compositor no longer reads window pixels for it.
+- `effects.comp`: the line covers a pixel by `clamp(d + width + 0.5, 0, 1)`, fully up to the outer edge, so the content does not show through; the edge is blended in linear light (a 2.2 power). Mode 4 (open and close animation) rounds with all four radii, anti-aliased.
+- A round window gets the full soft shadow of the effect step; the clipped round reach and its corner fade are removed.
+- Shared (zero-copy) views are drawn over the corner pixels too. A client radius rounds the decorator's border rectangle, not the footprint's bounding box (a tab beside it). The radius is compared as clamped (no rebuild at every call above 64). `Window` keeps the outline's regions and builds them only when the shape changes.
+- `compositor_shaders.h` regenerated; `kComposeSpirv` byte-identical. Docs: `docs/APP-SERVER-COMPOSITOR.md` ("The window outline", "Decorator hooks"), `docs/LIBR5.md`, R5Book `haiku-additions.html` and `appearance-effects.html`.
+
+Limits: Safe mode (Painter) keeps the stepped arc without the decorator's line along it. The open animation rounds the bounding box, so a tab's corners are approximated.
+
+Tested: built AMD64 with `scripts/build-locked.sh` from the worktree (`jam_exit=0`, `mesa_exit=0`, no failed target, no warning in the changed files). Not booted yet with these fixes; the owner's reviewer reads the PR first.
+
 ## 2026-11-22 - The Be, Flat, Mac and Win decorators are no longer built
 
 Problem: R5 goes on with its own decorators (owner, 22 Nov 2026). The four Haiku decorators had R5 copies in `distro/` that every decorator ABI change has to rebuild, and they were not in the image (only `R5Decorator` is packaged).
@@ -35,7 +51,7 @@ Limits: no decorator returns an outline yet and nothing calls the new libr5ui fu
 Test tool: `r5-effects-test round [radius] [seconds]` opens three bordered windows (the kind Deskbar uses) with `set_window_corner_radius()`: colour bars to every edge with a moving bar through the bottom corners, a text view with both scroll bars meeting in the bottom-right corner, and a glass window. Without a radius it uses 18 scaled with the font size; `round 0` opens them square for the compare.
 
 Tested: built AMD64 with `scripts/build-locked.sh` from the worktree (`jam_exit=0`, `mesa_exit=0`, 10420 targets, `r5-os.image` written, no failed target; the missing-header lines of the image translators are not from this change and fail no target). QEMU (KVM, `-machine pc`, 2 CPUs, 2 GB, GTK window, a private copy at `/home/nickr/r5os/eager-bell/round.image`, no other QEMU running, `scripts/run-qemu-r5.sh` not used), 22 Nov 2026, about 19:55 to 20:05 guest time, the owner typing in the guest:
-- Lavapipe (`gpu compositor on lavapipe: no render node`): `r5-effects-test round` showed all three windows with round corners, the arc blended with what lies behind, the desktop in the cut corners, the scroll-bar corner clipped, the shadow under the arc and the glass up to the round corner. `round 0` opened the same windows square. Terminal (Default (R5)) and Deskbar looked as before (by eye, not the compare mode).
+- Lavapipe (`gpu compositor on lavapipe: no render node`): `r5-effects-test round` showed all three windows with round corners, the arc blended with what lies behind, the desktop in the cut corners, the scroll-bar corner clipped, the shadow under the arc and the glass up to the round corner. Correction, same day: the arc was not blended. A review found that the compose thread's copy of the layers left the corner data out, so the corner pass never ran; what showed was the region cut alone, a hard stepped arc (see the entry above). `round 0` opened the same windows square. Terminal (Default (R5)) and Deskbar looked as before (by eye, not the compare mode).
 - Safe mode from the boot menu (`gpu compositor off: safe mode`): the same command showed stepped corners with the desktop behind, no shadow, no glass.
 - The syslog has no crash and no `decorator ... refused`: the R5 decorator loaded with ABI 2. `R5DecoratorAbiTest` is not packaged, so its refusal was not seen in this boot.
 - Seen: a bordered window's 1 px line runs only along the straight edges, not along the arc (its decorator does not know the program's radius). For later, with the Deskbar's edge line.

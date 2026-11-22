@@ -13,9 +13,13 @@
 //   4 window: a window scaled about its centre and faded, for the open and
 //             close animations (step 4b)
 //   5 slide:  the workspace switch, the old picture and the new side by side
-//   6 corner: the arc of a round window corner, blended by its coverage
-//             (shape[0]: the circle's centre x, y and radius); mode 4 cuts
-//             a round window's corners when auxStride holds the radius
+//   6 corner: a round window's corner: the window's pixel with the
+//             decorator's edge line round the arc, blended by coverage
+//             (shape[0]: the circle's centre x, y and radius; shape[1]:
+//             the line's colour as a frame word and its width); mode 3
+//             does the same for glass when shape[0].w is 1, and mode 4
+//             rounds a window's corners when auxStride is 1 (shape[1]:
+//             the four radii)
 //
 // M13 step 2: with 0x10 in the mode, modes 3 and 4 read the window from its
 // image (binding 3) instead of the source buffer: a window that Skia draws.
@@ -121,12 +125,10 @@ cornerCoverage(ivec2 at, ivec2 c, int r)
 }
 
 
-// The window's pixel at `at` in its buffer (or image), clamped to it.
+// The window's pixel at `at` in its buffer (or image).
 vec4
 windowPixel(ivec2 at)
 {
-	at = clamp(at, ivec2(0), ivec2(int(effect.sourceWidth) - 1,
-		int(effect.sourceHeight) - 1));
 	if (fromImage())
 		return imageTexel(at);
 	return unpack(source.pixels[uint(at.y) * effect.sourceStride
@@ -134,32 +136,48 @@ windowPixel(ivec2 at)
 }
 
 
-// The window's own edge line where its straight edges meet the arc
-// (shape[1], in buffer coordinates): the colour carried round the corner.
-vec4
-edgeLinePixel()
+// Blending at the arc in linear light (review, 22 Nov 2026: in sRGB a
+// high-contrast edge came out darker and harsher). An approximation with
+// the 2.2 power, enough for one pixel of edge.
+vec3
+blendLinear(vec3 a, vec3 b, float t)
 {
-	return (windowPixel(effect.shape[1].xy) + windowPixel(effect.shape[1].zw))
-		* 0.5;
+	vec3 mixed = mix(pow(a, vec3(2.2)), pow(b, vec3(2.2)), t);
+	return pow(max(mixed, vec3(0.0)), vec3(1.0 / 2.2));
 }
 
 
-// How much of pixel `at` the edge line covers: the outermost pixel ring of
-// the corner, one pixel wide, as on a straight edge.
+// The signed distance of pixel `at` from a corner's arc (shape[0]: the
+// circle): negative inside. Inside the corner's square this is the
+// distance of the rounded rectangle.
 float
-edgeLineCoverage(ivec2 at)
+cornerDistance(ivec2 at)
 {
 	vec2 d = vec2(at) + 0.5 - vec2(effect.shape[0].xy);
-	return clamp(1.0 - abs(length(d) - (float(effect.shape[0].z) - 0.5)),
-		0.0, 1.0);
+	return length(d) - float(effect.shape[0].z);
 }
 
 
-// The pixel with the edge line over it.
-vec3
-withEdgeLine(vec3 pixel, ivec2 at)
+// How much of the pixel the decorator's edge line covers (shape[1].y: its
+// width, 0: none): all of it up to the outer edge, fading only inwards, so
+// the content never shows through the line (review: a symmetric ring let
+// half of the content through at the outermost pixel).
+float
+edgeLineMix(float distance)
 {
-	return mix(pixel, edgeLinePixel().rgb, edgeLineCoverage(at));
+	float width = float(effect.shape[1].y);
+	if (width <= 0.0)
+		return 0.0;
+	float alpha = unpack(uint(effect.shape[1].x)).a;
+	return clamp(distance + width + 0.5, 0.0, 1.0) * alpha;
+}
+
+
+// The decorator's edge line colour (shape[1].x, a frame word).
+vec3
+edgeLineColor()
+{
+	return unpack(uint(effect.shape[1].x)).rgb;
 }
 
 
@@ -196,14 +214,8 @@ main()
 		uint dim = mask * effect.amount;
 		if (dim == 0u)
 			return;
-		float shade = float(dim) / 65025.0;
-		// a round window's shadow fades out round the corner of its reach
-		if (effect.shape[0].w == 1) {
-			shade *= cornerCoverage(ivec2(effect.targetX + at.x,
-				effect.targetY + at.y), effect.shape[0].xy, effect.shape[0].z);
-		}
 		vec4 color = unpack(target.pixels[index]);
-		color.rgb *= 1.0 - shade;
+		color.rgb *= 1.0 - float(dim) / 65025.0;
 		color.a = 1.0;
 		target.pixels[index] = pack(color);
 		return;
@@ -247,7 +259,10 @@ main()
 		vec2 from = centre + (here - centre) / effect.offset - 0.5;
 		ivec2 nearest = ivec2(floor(from + 0.5));
 		bool inside = false;
-		for (int i = 0; i < 4; i++) {
+		// a round window has its bounding box in shape[0], its radii in
+		// shape[1]
+		int rects = effect.auxStride != 0u ? 1 : 4;
+		for (int i = 0; i < rects; i++) {
 			ivec4 r = effect.shape[i];
 			if (r.x <= r.z && nearest.x >= r.x && nearest.x <= r.z
 				&& nearest.y >= r.y && nearest.y <= r.w)
@@ -255,17 +270,24 @@ main()
 		}
 		if (!inside)
 			return;
-		// A round window (auxStride: the radius): the corners of its
-		// bounding box, stepped like the CPU mode.
-		if (effect.auxStride > 0u) {
+		// A round window (auxStride 1): the corners of its bounding box,
+		// each with its own radius (shape[1]: left top, right top, left
+		// bottom, right bottom), anti-aliased.
+		float cover = 1.0;
+		if (effect.auxStride != 0u) {
 			ivec4 box = effect.shape[0];
-			int r = int(effect.auxStride);
-			ivec2 c = ivec2(nearest.x < box.x + r ? box.x + r
-					: nearest.x > box.z - r ? box.z + 1 - r : nearest.x,
-				nearest.y < box.y + r ? box.y + r
-					: nearest.y > box.w - r ? box.w + 1 - r : nearest.y);
-			if (cornerCoverage(nearest, c, r) < 0.5)
-				return;
+			bool right = nearest.x * 2 > box.x + box.z;
+			bool bottom = nearest.y * 2 > box.y + box.w;
+			ivec4 radii = effect.shape[1];
+			int r = bottom ? (right ? radii.w : radii.z)
+				: (right ? radii.y : radii.x);
+			if (r > 0) {
+				ivec2 c = ivec2(clamp(nearest.x, box.x + r, box.z + 1 - r),
+					clamp(nearest.y, box.y + r, box.w + 1 - r));
+				cover = cornerCoverage(nearest, c, r);
+				if (cover <= 0.0)
+					return;
+			}
 		}
 		vec4 window;
 		if (fromImage()) {
@@ -274,7 +296,7 @@ main()
 		} else
 			window = sampleBilinear(from);
 		vec4 below = unpack(target.pixels[index]);
-		float alpha = float(effect.amount) / 255.0;
+		float alpha = float(effect.amount) / 255.0 * cover;
 		target.pixels[index] = pack(vec4(mix(below.rgb, window.rgb, alpha),
 			1.0));
 		return;
@@ -298,18 +320,19 @@ main()
 	}
 
 	if (mode == 6u) {
-		// A round corner (shape[0]: the circle, shape[1]: where the straight
-		// edges start): the window's pixel with its edge line carried round
+		// A round corner (shape[0]: the circle, shape[1]: the decorator's
+		// edge line): the window's pixel with the edge line carried round
 		// the arc, over what lies below by the pixel's coverage.
 		ivec2 here = ivec2(effect.targetX + at.x, effect.targetY + at.y);
+		float distance = cornerDistance(here);
 		vec4 pixel = windowPixel(ivec2(effect.sourceX + at.x,
 			effect.sourceY + at.y));
-		vec3 color = withEdgeLine(pixel.rgb, here);
-		float coverage = cornerCoverage(here, effect.shape[0].xy,
-			effect.shape[0].z);
+		vec3 color = blendLinear(pixel.rgb, edgeLineColor(),
+			edgeLineMix(distance));
+		float coverage = clamp(0.5 - distance, 0.0, 1.0);
 		vec4 below = unpack(target.pixels[index]);
-		target.pixels[index] = pack(vec4(mix(below.rgb, color, coverage),
-			1.0));
+		target.pixels[index] = pack(vec4(blendLinear(below.rgb, color,
+			coverage), 1.0));
 		return;
 	}
 
@@ -335,17 +358,14 @@ main()
 		color = mix(blur.rgb, pixel.rgb, pixel.a);
 	}
 	if (effect.shape[0].w == 1) {
-		// glass in a round corner: the edge line round the arc (as glass
-		// when the line is glass), then blended by the pixel's coverage
+		// glass in a round corner: the decorator's edge line round the
+		// arc, then blended by the pixel's coverage
 		ivec2 here = ivec2(effect.targetX + at.x, effect.targetY + at.y);
-		vec4 line = edgeLinePixel();
-		vec3 lineColor = fixedGlass || line.a == 0.0
-			? mix(line.rgb, blur.rgb, seeThrough) : line.rgb;
-		color = mix(color, lineColor, edgeLineCoverage(here));
-		float coverage = cornerCoverage(here, effect.shape[0].xy,
-			effect.shape[0].z);
+		float distance = cornerDistance(here);
+		color = blendLinear(color, edgeLineColor(), edgeLineMix(distance));
+		float coverage = clamp(0.5 - distance, 0.0, 1.0);
 		vec4 below = unpack(target.pixels[index]);
-		color = mix(below.rgb, color, coverage);
+		color = blendLinear(below.rgb, color, coverage);
 	}
 	target.pixels[index] = pack(vec4(color, 1.0));
 }

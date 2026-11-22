@@ -329,6 +329,10 @@ public:
 	// Returns how many it wrote. The default is 0: a square window.
 	virtual	int32				GetOutline(window_outline_rect* rects,
 									int32 maxCount);
+	// ABI 2: the colour and width of the line the decorator draws along
+	// the outer edge, so a round corner carries it round the arc. False:
+	// no such line (the default).
+	virtual	bool				GetEdgeLine(rgb_color* color, float* width);
 
 			bool				InputMarginContains(BPoint where);
 

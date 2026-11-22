@@ -205,7 +205,13 @@ endpoint-&gt;StopIsochronousStream();</pre>
 				<code class="inline">leftBottom</code>, <code class="inline">rightBottom</code>; 0 is square). Return
 				how many you wrote. The default returns 0: the window keeps its square footprint, pixel for pixel. The
 				corners outside the arc stop being part of the window, in the CPU mode as a stepped arc and on the GPU
-				anti-aliased, and the content is clipped there too. Draw your border line along the same arc.</p></div>
+				anti-aliased, and the content is clipped there too.</p></div>
+
+			<div class="member"><div class="sig">virtual bool GetEdgeLine(rgb_color* color, float* width);</div>
+				<p>ABI 2. The colour and width of the line your decorator draws along the outer edge of the window.
+				When the window has round corners, app_server carries that line round the arc in the same colour, so
+				it does not stop where the corner begins. Return <code class="inline">false</code> (the default) when
+				your decorator draws no such line.</p></div>
 
 			<div class="member"><div class="sig">bool InputMarginContains(BPoint where);</div>
 				<p>Not a hook: whether <code class="inline">where</code> lies in the input margin, outside the border.
@@ -219,7 +225,8 @@ endpoint-&gt;StopIsochronousStream();</pre>
 			Any other add-on is refused with one line in the syslog, and the default decorator is used:</p>
 <pre class="code">app_server: decorator OldDecorator refused: abi 1, need 2</pre>
 			<p>Rebuild an old decorator against the R5 headers to fix that. A new hook comes after the last one, and
-			the version goes up by one: version 2 added <code class="inline">GetOutline()</code>.</p>
+			the version goes up by one: version 2 added <code class="inline">GetOutline()</code> and
+			<code class="inline">GetEdgeLine()</code>.</p>
 
 			<h3>The default decorator</h3>
 			<p>On R5 the R5 decorator is the default. app_server loads it when no decorator was chosen, and

@@ -221,6 +221,27 @@ R5Decorator::GetInputMargin(BRect* margin)
 }
 
 
+/*!	Decorator ABI 2: the 1 px line along the outer edge, in the colour
+	_DrawFrame() draws it with (the thin frame) and Haiku's bordered look
+	(DefaultDecorator::_DrawFrame(), StrokeRect with colors[5]). A round
+	corner carries it round the arc.
+*/
+bool
+R5Decorator::GetEdgeLine(rgb_color* color, float* width)
+{
+	if (fTopTab == NULL)
+		return false;
+	if (!fThinFrame && fTopTab->look != B_BORDERED_WINDOW_LOOK)
+		return false;
+	ComponentColors colors;
+	GetComponentColors(COMPONENT_LEFT_BORDER,
+		RegionHighlight(REGION_LEFT_BORDER), colors, fTopTab);
+	*color = colors[5];
+	*width = kFrameWidth;
+	return true;
+}
+
+
 void
 R5Decorator::GetComponentColors(Component component, uint8 highlight,
 	ComponentColors _colors, Decorator::Tab* tab)

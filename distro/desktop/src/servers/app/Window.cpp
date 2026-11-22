@@ -98,6 +98,7 @@ Window::Window(const BRect& frame, const char *name,
 // SPDX-License-Identifier: MIT
 	fDrawableWarned(false),
 	fCornerRadius(0.0f),
+	fOutlineCache(NULL),
 // SPDX-SnippetEnd
 	fDirtyRegion(),
 
@@ -199,6 +200,9 @@ Window::~Window()
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+	delete fOutlineCache;
+	fOutlineCache = NULL;
+
 	// The compositor owns this window's interface; the engine must go
 	// first, because it unregisters from that interface. (An offscreen
 	// window has already detached its engine in its own destructor.)
@@ -2242,23 +2246,48 @@ Window::_UpdateContentRegion()
 /*!	The round outline of the window (WindowOutline.h). The decorator's comes
 	first (decorator ABI 2); without one, the radius the program asked for
 	with set_window_corner_radius() rounds the four corners of the window's
-	footprint and frame together. \a blended: the GPU mode, where the
-	compositor blends the arc; otherwise the arc is stepped.
+	border rectangle. \a blended: the GPU mode, where the compositor blends
+	the arc; otherwise the arc is stepped.
 */
 void
 Window::GetOutline(window_outline* outline, bool blended)
 {
-	window_outline_rect rects[R5_WINDOW_OUTLINE_MAX_RECTS];
-	int32 count = _OutlineRects(rects);
-	if (count <= 0) {
-		outline->cornerCount = 0;
-		outline->rectCount = 0;
-		outline->cut.MakeEmpty();
-		outline->edge.MakeEmpty();
-		outline->area.MakeEmpty();
+	const window_outline* cached = _CachedOutline(blended);
+	if (cached == NULL) {
+		outline->MakeSquare();
 		return;
 	}
-	window_outline_build(rects, count, blended, *outline);
+	*outline = *cached;
+}
+
+
+/*!	The outline, built again only when its rectangles, radii or mode
+	changed (review, 22 Nov 2026: it was built up to four times per
+	clipping rebuild). NULL for a square window.
+*/
+const window_outline*
+Window::_CachedOutline(bool blended)
+{
+	window_outline_rect rects[R5_WINDOW_OUTLINE_MAX_RECTS];
+	int32 count = _OutlineRects(rects);
+	if (count <= 0)
+		return NULL;
+	if (fOutlineCache == NULL) {
+		fOutlineCache = new(std::nothrow) window_outline_cache;
+		if (fOutlineCache == NULL)
+			return NULL;
+	}
+	window_outline_cache& cache = *fOutlineCache;
+	if (!cache.valid || cache.count != count || cache.blended != blended
+		|| !window_outline_rects_equal(cache.rects, rects, count)) {
+		for (int32 i = 0; i < count; i++)
+			cache.rects[i] = rects[i];
+		cache.count = count;
+		cache.blended = blended;
+		window_outline_build(rects, count, blended, cache.outline);
+		cache.valid = true;
+	}
+	return &cache.outline;
 }
 
 
@@ -2271,9 +2300,11 @@ Window::_OutlineRects(window_outline_rect* rects)
 	if (decorator != NULL)
 		count = decorator->GetOutline(rects, R5_WINDOW_OUTLINE_MAX_RECTS);
 	if (count <= 0 && fCornerRadius > 0.0f) {
+		// the border rectangle, not the footprint's bounding box: a tab
+		// beside it would leave the frame's own corner square (review)
 		BRect frame = fFrame;
-		if (decorator != NULL)
-			frame = frame | decorator->GetFootprint().Frame();
+		if (decorator != NULL && decorator->BorderRect().IsValid())
+			frame = decorator->BorderRect();
 		rects[0].rect = frame;
 		rects[0].leftTop = rects[0].rightTop = fCornerRadius;
 		rects[0].leftBottom = rects[0].rightBottom = fCornerRadius;
@@ -2306,14 +2337,9 @@ Window::SetCornerRadius(float radius)
 void
 Window::_ExcludeOutlineCut(BRegion* region)
 {
-	window_outline_rect rects[R5_WINDOW_OUTLINE_MAX_RECTS];
-	int32 count = _OutlineRects(rects);
-	if (count <= 0)
-		return;
-	window_outline outline;
-	window_outline_build(rects, count, _OutlineBlended(), outline);
-	if (outline.cut.CountRects() > 0)
-		region->Exclude(&outline.cut);
+	const window_outline* outline = _CachedOutline(_OutlineBlended());
+	if (outline != NULL && outline->cut.CountRects() > 0)
+		region->Exclude(&outline->cut);
 }
 
 

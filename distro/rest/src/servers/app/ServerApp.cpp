@@ -3967,6 +3967,10 @@ ServerApp::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 			status_t status = link.Read<float>(&radius);
 			if (status == B_OK && !(radius >= 0.0f))
 				status = B_BAD_VALUE;
+			// compared as the window keeps it (review: a radius above the
+			// largest rebuilt the clipping at every call)
+			if (radius > R5_WINDOW_CORNER_MAX_RADIUS)
+				radius = R5_WINDOW_CORNER_MAX_RADIUS;
 			if (status == B_OK && !fDesktop->LockAllWindows())
 				status = B_ERROR;
 			if (status == B_OK) {

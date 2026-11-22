@@ -37,16 +37,18 @@
 	  window but do not hide what lies behind: the compositor blends them.
 	- area: every pixel of the window inside a corner's square (GPU mode
 	  only). The compositor draws these itself (effects mode 6, or mode 3
-	  for glass): the window's pixel, the window's own edge line carried
-	  round the arc, and the edge blended by its coverage.
+	  for glass): the window's pixel, the decorator's edge line
+	  (Decorator::GetEdgeLine()) carried round the arc, and the whole
+	  blended over what lies behind by its coverage.
 	In the CPU mode there is no edge and no area: a pixel more than half
 	covered is the window's, the rest is cut (a stepped arc).
 
 	One formula decides all of it, here and in effects.comp: a corner is a
-	circle around an integer point, and a pixel's coverage is
-	clamp(radius + 0.5 - distance of the pixel's centre, 0, 1). The edge line
-	is the outermost pixel ring, as on a straight edge; its colour is taken
-	from the window's own pixels where the straight edges meet the arc.
+	circle around an integer point. Inside a corner's square that circle is
+	the signed distance of the rounded rectangle, d = distance - radius, and
+	a pixel's coverage is clamp(0.5 - d, 0, 1). The edge line covers a pixel
+	by clamp(d + width + 0.5, 0, 1): fully up to the outer edge, fading only
+	inwards, so the content does not show through it.
 */
 
 
@@ -66,30 +68,30 @@ struct window_corner {
 	int32			centerY;
 	int32			radius;
 	clipping_rect	square;		// the radius x radius pixels of the corner
-	// Where the straight edges start next to the arc: a pixel of the top
-	// or bottom edge, and one of the left or right edge (screen).
-	int32			edgeX1;
-	int32			edgeY1;
-	int32			edgeX2;
-	int32			edgeY2;
+	int32			kind;		// 0 left top, 1 right top, 2 left bottom,
+								// 3 right bottom
 };
 
 
 struct window_outline {
 	window_outline()
 		:
-		cornerCount(0),
-		rectCount(0)
+		cornerCount(0)
 	{
 	}
 
 	bool IsSquare() const { return cornerCount == 0; }
 
+	void MakeSquare()
+	{
+		cornerCount = 0;
+		cut.MakeEmpty();
+		edge.MakeEmpty();
+		area.MakeEmpty();
+	}
+
 	int32				cornerCount;
 	window_corner		corners[R5_WINDOW_OUTLINE_MAX_RECTS * 4];
-	// the rectangles it was built from (for the shadow's reach)
-	int32				rectCount;
-	window_outline_rect	rects[R5_WINDOW_OUTLINE_MAX_RECTS];
 	BRegion				cut;
 	BRegion				edge;
 	BRegion				area;
@@ -151,17 +153,13 @@ window_outline_corner(const clipping_rect& rect, int32 kind, float radius,
 	bool right = kind == 1 || kind == 3;
 	bool bottom = kind >= 2;
 	corner.radius = r;
+	corner.kind = kind;
 	corner.centerX = right ? rect.right + 1 - r : rect.left + r;
 	corner.centerY = bottom ? rect.bottom + 1 - r : rect.top + r;
 	corner.square.left = right ? rect.right - r + 1 : rect.left;
 	corner.square.right = corner.square.left + r - 1;
 	corner.square.top = bottom ? rect.bottom - r + 1 : rect.top;
 	corner.square.bottom = corner.square.top + r - 1;
-	// the first pixel of the straight edges, just outside the square
-	corner.edgeX1 = right ? corner.square.left - 1 : corner.square.right + 1;
-	corner.edgeY1 = bottom ? rect.bottom : rect.top;
-	corner.edgeX2 = right ? rect.right : rect.left;
-	corner.edgeY2 = bottom ? corner.square.top - 1 : corner.square.bottom + 1;
 	return true;
 }
 
@@ -186,11 +184,7 @@ static inline void
 window_outline_build(const window_outline_rect* rects, int32 count,
 	bool blended, window_outline& outline)
 {
-	outline.cornerCount = 0;
-	outline.rectCount = 0;
-	outline.cut.MakeEmpty();
-	outline.edge.MakeEmpty();
-	outline.area.MakeEmpty();
+	outline.MakeSquare();
 	if (count > R5_WINDOW_OUTLINE_MAX_RECTS)
 		count = R5_WINDOW_OUTLINE_MAX_RECTS;
 
@@ -199,7 +193,6 @@ window_outline_build(const window_outline_rect* rects, int32 count,
 	for (int32 i = 0; i < count; i++) {
 		if (!rects[i].rect.IsValid())
 			continue;
-		outline.rects[outline.rectCount++] = rects[i];
 		clipping_rect rect = window_outline_clipping_rect(rects[i].rect);
 		float radii[4] = { rects[i].leftTop, rects[i].rightTop,
 			rects[i].leftBottom, rects[i].rightBottom };
@@ -278,6 +271,42 @@ window_outline_build(const window_outline_rect* rects, int32 count,
 	outline.cut.Exclude(&solid);
 	outline.cut.Exclude(&outline.edge);
 	outline.area.Exclude(&outline.cut);
+}
+
+
+/*!	A window's outline, kept until its rectangles, radii or mode change, so
+	the regions are built once and not at every clipping rebuild.
+*/
+struct window_outline_cache {
+	window_outline_cache()
+		:
+		count(0),
+		blended(false),
+		valid(false)
+	{
+	}
+
+	window_outline_rect	rects[R5_WINDOW_OUTLINE_MAX_RECTS];
+	int32				count;
+	bool				blended;
+	bool				valid;
+	window_outline		outline;
+};
+
+
+//!	Whether two outlines come from the same rectangles and radii.
+static inline bool
+window_outline_rects_equal(const window_outline_rect* a,
+	const window_outline_rect* b, int32 count)
+{
+	for (int32 i = 0; i < count; i++) {
+		if (a[i].rect != b[i].rect || a[i].leftTop != b[i].leftTop
+			|| a[i].rightTop != b[i].rightTop
+			|| a[i].leftBottom != b[i].leftBottom
+			|| a[i].rightBottom != b[i].rightBottom)
+			return false;
+	}
+	return true;
 }
 
 

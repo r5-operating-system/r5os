@@ -39,6 +39,7 @@ class Window;
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 struct window_outline;
+struct window_outline_cache;
 struct window_outline_rect;
 // SPDX-SnippetEnd
 
@@ -379,6 +380,7 @@ protected:
 // SPDX-License-Identifier: MIT
 			void				_ExcludeOutlineCut(BRegion* region);
 			int32				_OutlineRects(window_outline_rect* rects);
+			const window_outline* _CachedOutline(bool blended);
 			bool				_OutlineBlended();
 // SPDX-SnippetEnd
 
@@ -410,6 +412,8 @@ protected:
 			BPoint				fOutlinesShift;
 			// The radius a program asked for (set_window_corner_radius()).
 			float				fCornerRadius;
+			// the outline's regions, built once per shape (WindowOutline.h)
+			window_outline_cache* fOutlineCache;
 // SPDX-SnippetEnd
 
 			// Our part of the "global" dirty region (what needs to be redrawn).
