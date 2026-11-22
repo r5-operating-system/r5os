@@ -65,7 +65,16 @@ messages the running Deskbar at once, without writing Deskbar's settings file.
   windows; highlights inside 10 px. Square = 0 everywhere, highlights too.
 - **Floating:** a margin from the screen edges (14 px in the mockup; from the R5 look settings,
   not a constant in Deskbar), a 1 px light edge all round. Against an edge: a 1 px line only on
-  the sides that face the desktop. Maximised windows keep clear of Deskbar plus its margin.
+  the sides that face the desktop.
+- **Zoomed and full-screen windows** (owner, 22 Nov 2026). `BWindow::Zoom()` in `libbe` already
+  takes the zoom area from `BDeskbar::Frame()` and `Location()` (none with auto-hide or Shift).
+  That path stays; no change in `libbe`. Deskbar reports its frame so that a zoomed window
+  keeps clear of Deskbar **plus its margin** when floating; the shadow does not count. The
+  Compact layout (the pill) **keeps its strip free** (option A): a zoomed window starts below
+  the pill (or above it at the bottom) over the whole width, so nothing ever hides behind
+  Deskbar. A real full-screen window (`BWindowScreen`, a full-screen video, a game) covers
+  Deskbar as today. Step 0 checks `BWindow::Zoom()` for each layout and place, and says where
+  the frame or margin must come from.
 - **As now (block):** top to bottom the wave pebble (menu), the tray with the clock, the
   application list with icon, name and window count.
 - **Pill:** 54 px high, one row: wave pebble | running applications as **icons only** (a small
@@ -142,6 +151,9 @@ bump until the owner has seen it.
   round and square, floating and against the edge, one with the menu open, one in Safe mode.
   Not `scripts/run-qemu-r5.sh` while another session may run QEMU.
 - Classic pixel-identical to before. A third-party tray replicant still loads.
+- For each layout, floating and against the edge: zoom a window (it ends at Deskbar plus the
+  margin, never under it); zoom with Shift and with auto-hide (whole screen); play a video
+  full screen (Deskbar covered, back afterwards).
 - No stick and no 5625U claim: the owner decides when this goes on a stick.
 
 ## Out of scope
