@@ -2,7 +2,7 @@
 
 The contract for power management: CPU performance profiles, the Power page in Settings, battery, brightness, sleep and wake. It covers every R5 target: AMD and Intel on AMD64, then ARM64 and RISC-V 64. The mockup is `docs/design/power-mockup/` (owner, 22 Nov 2026). The work order is in the Platform section of `docs/ROADMAP.md`.
 
-**Every processor R5 runs on.** On AMD64 everything in this contract (profiles, battery, brightness, sleep and wake) is for every processor that meets R5's baseline, x86-64-v2 (`CHANGELOG.md`, 18 Nov 2026), from any vendor and generation. The 5625U and the X1 Carbon are where it is tested first, not what it is written for. Paths are chosen by what the processor and the firmware report (CPUID, ACPI), never by a list of known models. A table of device IDs is allowed only for an optional vendor extra, and a processor that is not in it still gets the generic path.
+**Every processor R5 runs on.** On AMD64 everything in this contract (profiles, battery, brightness, sleep and wake) is for every processor that meets R5's baseline, x86-64-v2 (`CHANGELOG.md`, 18 Nov 2026), from any vendor and generation. The 5625U and the X1 Carbon are where it is tested first, not what it is written for. Paths are chosen by what the processor and the firmware report (CPUID, ACPI), never by a list of known models. A vendor part (such as the AMD or Intel PMC) is used on every processor that has the hardware for it, found from CPUID, PCI and ACPI; a processor without it still gets the generic path.
 
 Nothing in this document is built yet unless it says so. "Exists" means it is on `main`; "planned" means this contract describes it and the owner must still say "build it".
 
@@ -203,13 +203,23 @@ Sleep is written for every AMD64 computer that meets the x86-64-v2 baseline, AMD
   - `_S3_` means suspend to RAM (S3);
   - neither means "This computer cannot sleep".
 - **S0ix: one generic path for every vendor.** air/OS's `arch_s2idle` is the basis, made generic:
-  - the LPS0 `_DSM` with the Microsoft UUID, plus the AMD or Intel UUID when the firmware offers it (the `_DSM` reports which functions it has);
+  - the LPS0 `_DSM` with the Microsoft UUID, plus the AMD or Intel UUID when the firmware offers it. R5 calls every function the `_DSM` reports: display off and on, and sleep entry and exit, in the order the ACPI and Microsoft documents give;
   - the deepest idle state that `x86_acpi_cstates` or `x86_cstates` already chose;
   - the wake through the SCI.
-  - air/OS's table of root-device IDs gates the whole path; in R5 it gates only the optional AMD extras. A processor that is not in such a table still sleeps through the generic path.
-- **Vendor extras, optional.** Each extra is its own small part, used when the processor reports it. If an extra is missing or fails, the generic path still runs. The extras:
-  - the AMD PMC OS hint over SMN, and the S0i3 blocker log, for AMD families that have that PMC;
-  - the Intel PMC and its residency counters, for Intel parts that have it.
+  - In air/OS a table of root-device IDs gates the whole path. In R5 nothing gates it: every processor runs the generic path, and the vendor part below is added on top.
+- **The vendor parts, built in the same step (owner, 22 Nov 2026: complete, not later).** They are not left for later. Each one is used on every processor that has the hardware for it, found from CPUID, PCI and ACPI. Only a processor without that hardware runs the generic path alone.
+  - **AMD:**
+    - the PMC OS hint over SMN before entry and after exit;
+    - the S0i3 counters, to show whether the deepest state was reached and for how long;
+    - the blocker log: which device kept the computer out of S0i3.
+  - **Intel:**
+    - the PMC (`pmc_core` in Linux terms, read as a reference only);
+    - the SLP_S0 and package C10 residency counters;
+    - the list of IP blocks that were not power-gated, which is Intel's form of the blocker log.
+  - **Both:**
+    - after every wake the service logs one line with the state reached, the time in it and any blocker;
+    - CPU Info shows the last sleep.
+  - **When it fails:** a vendor part that fails at run time logs that once and stops for that start. The generic path still runs, so a missing or broken extra never stops sleep.
 - **S3: one generic path.** The ACPI sleep sequence with a real-mode wake trampoline, from air/OS's `arch_suspend`, for every firmware that offers `_S3_` and no S0ix.
 - **Device hooks are not processor-specific.** xHCI, NVMe, PCI, the network and Wi-Fi drivers, HDA and USB audio suspend the same way on every CPU.
 - **ARM64 and RISC-V.** PSCI `SYSTEM_SUSPEND` and SBI SUSP, designed here and built when those targets boot.
@@ -250,7 +260,7 @@ Other defaults:
 1. This contract and the mockup (done 22 Nov 2026, waiting for "build it").
 2. Haiku's `power_daemon` in `distro/` with air/OS's policy and the admin port, `libr5power.so` with `BPowerRoster`, the profile syscall and the new cpufreq interface on AMD (MSR and shared memory) and Intel, and the Power page with Sleep and Wake gray. Stick: the profile visible in `R5 CPPC:` lines and CPU Info on the 5625U.
 3. Battery, thermal, the low-battery notification and brightness (`BScreen` first) on the 5625U. PowerStatus and its Deskbar replicant move to `BPowerRoster`.
-4. Sleep and wake for every x86-64-v2 computer (its own round, the owner's go first): the generic S0ix and S3 paths with the vendor extras, tested in QEMU (S3), on the 5625U (AMD) and on the X1 Carbon (Intel).
+4. Sleep and wake for every x86-64-v2 computer (its own round, the owner's go first): the generic S0ix and S3 paths and the AMD and Intel vendor parts together, tested in QEMU (S3), on the 5625U (AMD) and on the X1 Carbon (Intel).
 5. ARM64 and RISC-V, in their own trees, when those targets boot.
 
 ### R5Book and the other documentation
