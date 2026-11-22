@@ -1404,6 +1404,7 @@ module_icon(const char* moduleId)
 		{ "information", "application/x-vnd.Haiku-About" },
 		{ "notifications", "application/x-vnd.Haiku-Notifications" },
 		{ "virtualmemory", "application/x-vnd.Haiku-VirtualMemory" },
+		{ "power", "application/x-vnd.Haiku-PowerStatus" },
 		{ "display", "application/x-vnd.Haiku-Screen" },
 		{ "sound", "application/x-vnd.Haiku-Sounds" },
 		{ "keyboard", "application/x-vnd.Haiku-Keymap" },

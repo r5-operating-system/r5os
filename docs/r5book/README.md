@@ -24,6 +24,7 @@ Open `index.html` directly in a browser. Everything is static HTML, CSS (`r5book
 | `game-kit.html` | `libr5game.so`: `BGameController`, `BGameControllerView`, `PictureBitmap()`, rumble, triggers, motion | `distro/game/lib/*.h`, `docs/LIBR5.md`, `docs/GAME-CONTROLLERS.md` |
 | `icons-kit.html` | `libr5icons.so`: predefined icons, icon bitmaps, icon buttons, line glyphs | `distro/icons/R5Icons.h`, `docs/ICONS.md` |
 | `midi2-kit.html` | `libmidi2.so`: MIDI 2.0 UMP, Property Exchange, Profiles, discovery | `distro/media/headers/os/midi2`, `docs/MIDI2.md` |
+| `power-kit.html` | `libr5power.so`: `BPowerRoster`, the watch messages, brightness through `BScreen`, no battery, Safe mode | `distro/power/lib/PowerRoster.h`, `docs/LIBR5.md`, `docs/POWER.md` |
 | `wifi-kit.html` | `libr5wifi.so`: `WiFiView`, `WiFiController`, `WiFiState`, glyphs, `BNetworkRoster`, link details | `distro/wifi/lib/*.h`, `docs/LIBR5.md` |
 
 ### Guides (reading order)
@@ -47,7 +48,7 @@ Open `index.html` directly in a browser. Everything is static HTML, CSS (`r5book
 
 ## How to add or update an entry
 
-A change that adds or changes a public call in `libr5admin.so`, `libr5ui.so`, `libr5bt.so`, `libr5game.so`, `libr5icons.so`, `libmidi2.so`, `libr5wifi.so`, `vulkan_r5.h`, `SettingsModule.h`, or a public Haiku header in `distro/` updates the matching R5Book page in the same change.
+A change that adds or changes a public call in `libr5admin.so`, `libr5ui.so`, `libr5bt.so`, `libr5game.so`, `libr5icons.so`, `libr5power.so`, `libmidi2.so`, `libr5wifi.so`, `vulkan_r5.h`, `SettingsModule.h`, or a public Haiku header in `distro/` updates the matching R5Book page in the same change.
 
 ### 1. Choose where it goes
 - **Existing kit or guide:** add the entry to that kit's page (alphabetical on kit pages, reading order on guides). For `libr5ui.so` (Appearance Kit), place it in the matching subpage (`appearance-cards.html`, `appearance-controls.html`, `appearance-settings.html`, or `appearance-effects.html`).

@@ -259,6 +259,7 @@ Other defaults:
 
 1. This contract and the mockup (done 22 Nov 2026, waiting for "build it").
 2. Haiku's `power_daemon` in `distro/` with air/OS's policy and the admin port, `libr5power.so` with `BPowerRoster`, the profile syscall and the new cpufreq interface on AMD (MSR and shared memory) and Intel, and the Power page with Sleep and Wake gray. Stick: the profile visible in `R5 CPPC:` lines and CPU Info on the 5625U.
+   - Built 22 Nov 2026 (build 10067). The owner moved two parts of step 3 into it: PowerStatus and its Deskbar item read the battery through `libr5power.so`, and the brightness slider (`BScreen::SetBrightness()`) is on the page. Dimming on battery, the `_BCM` fallback, thermal and the low-battery notification stay in step 3. A processor with only ACPI `_PSS` gets gray profile menus until `_PSS` is built. The state of the tests is in `CHANGELOG.md`.
 3. Battery, thermal, the low-battery notification and brightness (`BScreen` first) on the 5625U. PowerStatus and its Deskbar replicant move to `BPowerRoster`.
 4. Sleep and wake for every x86-64-v2 computer (its own round, the owner's go first): the generic S0ix and S3 paths and the AMD and Intel vendor parts together, tested in QEMU (S3), on the 5625U (AMD) and on the X1 Carbon (Intel).
 5. ARM64 and RISC-V, in their own trees, when those targets boot.

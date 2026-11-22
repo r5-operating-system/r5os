@@ -11,6 +11,7 @@
 #include "InformationModule.h"
 #include "NotificationsModule.h"
 #include "VirtualMemoryModule.h"
+#include "PowerModule.h"
 #include "LegacyPages.h"
 #include "SettingsManager.h"
 #include "SettingsMessages.h"
@@ -53,6 +54,7 @@ SettingsApp::SettingsApp()
 	register_deskbar_page(fManager);
 	register_notifications_page(fManager);
 	register_virtual_memory_page(fManager);
+	register_power_page(fManager);
 	register_wallpaper_page(fManager);
 	register_information_page(fManager);
 	register_wifi_page(fManager);

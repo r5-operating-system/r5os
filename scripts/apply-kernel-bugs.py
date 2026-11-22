@@ -86,6 +86,17 @@ def install_kernel_sources() -> None:
         "build/jam/images/FloppyBootImage",
         # R5: the AMD CPPC values stay per CPU (no shared globals)
         "src/add-ons/kernel/power/cpufreq/amd_pstates/amd_pstates.cpp",
+        # R5: processor profiles (docs/POWER.md, section 4): the profile
+        # syscalls, the cpufreq interface version 2, AMD (CPPC MSR and the
+        # ACPI _CPC registers) and Intel (HWP and the P-state ratio)
+        "headers/os/drivers/cpufreq.h",
+        "headers/private/system/syscalls.h",
+        "headers/private/system/r5_power_profile.h",
+        "src/add-ons/kernel/power/cpufreq/amd_pstates/amd_cppc_acpi.cpp",
+        "src/add-ons/kernel/power/cpufreq/amd_pstates/amd_cppc_acpi.h",
+        "src/add-ons/kernel/power/cpufreq/amd_pstates/Jamfile",
+        "src/add-ons/kernel/power/cpufreq/intel_pstates/intel_pstates.cpp",
+        "src/add-ons/kernel/power/cpufreq/intel_pstates/Jamfile",
         # air/OS 6178b691d2: memcpy leaves rep movsb under 4K aliasing
         "src/system/libroot/posix/string/arch/x86_64/memcpy.cpp",
         "src/system/libroot/posix/string/arch/x86_64/memset.cpp",

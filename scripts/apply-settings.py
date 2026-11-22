@@ -68,6 +68,8 @@ SOURCES = (
     "NotificationsModule.h",
     "VirtualMemoryModule.cpp",
     "VirtualMemoryModule.h",
+    "PowerModule.cpp",
+    "PowerModule.h",
     "WiFiModule.cpp",
     "WiFiModule.h",
     "BluetoothModule.cpp",
