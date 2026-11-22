@@ -1,5 +1,25 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-22 - Shutdown: fix app_server syslog crash after syslog_daemon exits, preserve EFI panic logs
+
+Problem:
+- On stick 73 boot 5 (5625U, RADV), shutdown stopped before `enter reboot` and opened the CLI debugger on screen (`debugger for team 108 on interface Local (r5os)` / `[thread stopped: 141 "compositor"]`). The last syslog lines were `hda` freeing MSI vectors 62 and 63 (normal `media_addon_server` exit, also present in boot 6), and `app_server-stderr.old.log` ended right after `compose median 308 us cpu 161 ms per 10 s` (`Compositor::_Report()`).
+- Root cause: `haiku/src/system/libroot/posix/syslog.cpp` (`send_syslog_message`) passes `va_list args` to `vsnprintf` without `va_copy`, then—when `write_port` fails after `syslog_daemon` exits in `BACKGROUND_APP_TERMINATION_PHASE` and `LOG_CONS` is set (the default `sTeamContext` inherited by `app_server`'s `"compositor"` thread)—passes the already-consumed `args` to `message_to_console` (`vfprintf`). On x86_64 SysV ABI this dereferences a garbage `%s` pointer and triggers `SIGSEGV`. `debug_server` then stops `app_server` in the CLI debugger, blocking `ShutdownProcess` before `_kern_shutdown()`.
+- Separately, on UEFI boots `efi/debug.cpp` allocated a fresh random 1 MiB debug ring buffer on every boot and never recovered `previous_debug_output` (unlike `bios_ia32/debug.cpp`), and `syslog_init_post_modules()` only wrote `/var/log/previous_syslog` without logging any previous panic into the new boot's `syslog` or pulling it in `read-stick-logs.py`.
+
+What changed:
+- `distro/kernel/src/system/libroot/posix/syslog.cpp` (copied from Haiku, R5 change marked SPDX-Snippet MIT, wired in `scripts/apply-kernel-bugs.py`): use `va_copy` / `va_end` before `vsnprintf` and before both `message_to_console` paths (`LOG_PERROR`/`port < 0` and the `write_port` failure `LOG_CONS` fallback).
+- `distro/kernel/src/system/boot/platform/efi/{efi_platform.h,mmu.cpp,debug.cpp,start.cpp}` (copied from Haiku, SPDX-Snippet MIT): add `platform_allocate_region_at()` and mirror `bios_ia32/debug.cpp` by trying the fixed 63 MiB physical address for the 1 MiB debug syslog ring buffer (falling back to any address if occupied), recovering `previous_debug_output` on warm reboot, and fixing up `gKernelArgs.previous_debug_output` in `convert_kernel_args()`.
+- `distro/kernel/src/system/kernel/debug/debug.cpp` (copied from Haiku, SPDX-Snippet MIT): in `syslog_init_post_modules()`, after writing `/var/log/previous_syslog`, scan the recovered buffer for `PANIC:`, `Welcome to Kernel Debugging Land`, or (if no kernel panic) `debug_server: Thread `, and log up to 4 KiB / 64 lines via `dprintf("r5 previous panic: ...")` into the new boot's `syslog` without changing KDL itself.
+- `scripts/read-stick-logs.py`: add `system/var/log/previous_syslog` to `WANTED`.
+
+Tested:
+- Built AMD64 with `scripts/build-locked.sh` (`jam_exit=0`).
+- Booted private copy `/home/nickr/r5-os-part-b.image` in QEMU (`-machine q35,accel=kvm -cpu host -m 2048 -smp 4 -display none`): reached desktop (`R5 tracker: Tracker from distro`, `R5 deskbar: BarApp from distro`), then ACPI `system_powerdown` completed cleanly through `r5 shutdown: enter reboot=0 -> sync_done +80ms -> hooks_start +95ms -> hooks_done +97ms -> acpi_poweroff` with no crash or KDL.
+
+Limits:
+- Tested on BIOS QEMU only; UEFI 63 MiB warm-reboot persistence on the 5625U (whether HP firmware preserves 63 MiB across warm reset; cold power-off clears RAM) and real 5625U RADV shutdown with `gpu_debug true` need a stick test. ARM64 and RISC-V were not built.
+
 ## 2026-11-21 - Perf round 1 Part B: graphics, Lavapipe warm-up, libdrm-2.4.124-5
 
 Problem: from docs/reviews/PERF-REVIEW-2026-11.md (#4484):

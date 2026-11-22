@@ -113,7 +113,8 @@ allocate_ring_buffer(void)
 	bool recover = fixed
 		&& memcmp(buffer, kDebugSyslogSignature, signatureLength) == 0;
 
-	size_t headerSize = ROUNDUP(signatureLength, sizeof(void*));
+	size_t headerSize = (signatureLength + sizeof(void*) - 1)
+		& ~(sizeof(void*) - 1);
 	size -= headerSize;
 	buffer = (uint8*)buffer + headerSize;
 
