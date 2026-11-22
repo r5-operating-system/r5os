@@ -7,6 +7,21 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-22 - Stick tools: a one-boot round with boot-next, the early kernel lines kept, the card test finds the card
+
+Problem: the stick tools of sticks 75 and 76 lived only on the stick branches (`r5/stick-75`, `r5/stick-76`). On stick 74 the syslog lost every kernel line before 0.35 s (`<DROP>`), the microcode lines with them, and the card write test of round 2 could never find a mounted card, because R5's `df` prints the mount point on its own line.
+
+What changed (the stick-only commits of stick 75, unchanged):
+- `boot-next round3`: one boot with every GPU switch at its default. A planted `radeon_hd` file with only `r5_round3_boot 1` makes a plain `boot-next` save the microcode, power and card results of the running boot in `~/round3/<n>-*.txt` (`n` counts the runs, so a second computer does not overwrite the first), without a restart. `distro/graphics/boot/radeon_hd` (the planted boot 1) is that marker now.
+- The card test mounts the first partition itself when nothing is mounted, finds the mount point in the two-line `df` output, and keeps a volume name with a space ("NO NAME").
+- `scripts/plant-m10-stick.sh` also plants `syslog_buffer_size 262144` (the kernel's own buffer, at most 256 KiB, default 64 KiB).
+- `scripts/check-pre-stick.py`: a round 3 sandbox (two saves, the settings kept, no restart) and a check of the planted kernel settings in the image. `scripts/read-stick-logs.py` copies `~/round2` and `~/round3`.
+- `mesa_radv-25.3.6-11` repacked with these scripts (`distro/mesa/pack-radv.py --tools-only`); the RADV library is the same file as before (`f54e2bb9be714168`).
+
+Tested: sticks 75 and 76 on the 5625U ran it (`generated/boot-5625u-75/` and `-76/` in the stick worktree): `boot-next` saved the three files and printed `PASS`, and the microcode lines from 0.169 s were in the syslog. On this branch: `check-pre-stick.py --paper` passed, and the 13 scripts in the package are the same as in `distro/graphics/boot`. No image was built for this PR; the scripts are unchanged from the stick 75 and 76 images.
+
+Limits: the card test's own mount and its write test have not run on a card yet (no card was mounted on sticks 75 and 76).
+
 ## 2026-11-22 - Card reader after stick 75: SD 2.0 timing on the RTS5228, failed commands in the log, a bounded card scan
 
 Problem (stick 75, 5625U, `generated/boot-5625u-75/` in the stick worktree): the RTS5228 attached and saw the card, but `CMD0` passed, `CMD8` ended after exactly one second with neither "done" nor "failed" from the chip, and `MMC CMD1 failed`; no `/dev/disk/mmc`. After the card went out and in again: four times `cannot power the card slot`, then `Card did not enter ACMD mode` / `Card is busy` 489 times. The owner notes that this reader also works badly in Windows.
