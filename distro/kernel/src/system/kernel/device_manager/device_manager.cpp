@@ -2076,6 +2076,15 @@ device_node::Probe(const char* devicePath, uint32 updateCycle)
 					|| (type == PCI_base_peripheral
 						&& (subType == PCI_sd_host
 							|| subType == PCI_system_peripheral_other));
+				// SPDX-SnippetBegin
+				// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+				// SPDX-License-Identifier: MIT
+				// Realtek card readers (busses/mmc/rtsx) report the
+				// vendor-specific class 0xff. Without this a PCI node is
+				// never probed for "disk", so _GetNextDriverPath() never
+				// reaches busses/mmc for them.
+				matches = matches || type == PCI_undefined;
+				// SPDX-SnippetEnd
 			} else if (!strcmp(devicePath, "audio")) {
 				matches = type == PCI_multimedia
 					&& (subType == PCI_audio || subType == PCI_hd_audio);
