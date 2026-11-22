@@ -1,0 +1,19 @@
+SubDir HAIKU_TOP src add-ons kernel drivers audio cs35l41 ;
+
+# Copyright 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+
+SubDirC++Flags -fno-rtti ;
+
+SubDirSysHdrs $(HAIKU_TOP) headers os drivers ;
+SubDirHdrs [ FDirName $(HAIKU_TOP) src add-ons kernel bus_managers acpi acpica include ] ;
+SubDirHdrs [ FDirName $(HAIKU_TOP) src add-ons kernel bus_managers acpi acpica include platform ] ;
+UsePrivateHeaders [ FDirName kernel util ] audio drivers device i2c ;
+UsePrivateKernelHeaders ;
+
+KernelAddon cs35l41 :
+	Amplifier.cpp
+	AmplifierDsp.cpp
+	Driver.cpp
+	Firmware.cpp
+;

@@ -60,6 +60,76 @@ file=${R5_USER_SETTINGS:-$(fd B_USER_SETTINGS_DIRECTORY "$home/config/settings")
 sysfile=${R5_SYSTEM_SETTINGS:-$(fd B_SYSTEM_SETTINGS_DIRECTORY /boot/system/settings)/kernel/drivers/radeon_hd}
 mkdir -p "$m10"
 
+# CS35L41 speaker stick (#4482): "boot-next cs35l41" starts it, and a
+# cs35l41 settings file with a cs35l41_boot line continues it. Boot 1 is
+# the DSP bypass with the volume cap, boot 2 the speaker protection
+# firmware (cs35l41_firmware true); after boot 2 the file is removed. The
+# radeon_hd settings are not touched. The note is ~/cs35l41/next.
+ampfile=$(dirname "$file")/cs35l41
+if [ "$1" = cs35l41 ] || { [ -z "$1" ] && [ -f "$ampfile" ] \
+		&& grep -q '^cs35l41_boot' "$ampfile"; }; then
+	mkdir -p "$home/cs35l41" "$(dirname "$ampfile")"
+	cur=1
+	if [ "$1" = cs35l41 ]; then
+		next=1
+	else
+		cur=$(sed -n 's/^cs35l41_boot[[:space:]]*\([12]\).*/\1/p' \
+			"$ampfile" | head -n 1)
+		case $cur in
+		1) next=2 ;;
+		2) next=done ;;
+		*)
+			echo "FAIL cs35l41: unknown boot '$cur' in $ampfile"
+			exit 1
+			;;
+		esac
+	fi
+	rm -f "$ampfile"
+	case $next in
+	1) printf 'cs35l41_firmware false\ncs35l41_boot 1\n' > "$ampfile" ;;
+	2) printf 'cs35l41_firmware true\ncs35l41_boot 2\n' > "$ampfile" ;;
+	esac
+	# Read the file back: a typo here is a lost boot.
+	case $next in
+	1) want=false ;;
+	2) want=true ;;
+	done) want= ;;
+	esac
+	if [ -n "$want" ]; then
+		if ! grep -q "^cs35l41_firmware $want\$" "$ampfile"; then
+			echo "FAIL cs35l41: $ampfile does not say cs35l41_firmware $want"
+			exit 1
+		fi
+	elif [ -f "$ampfile" ]; then
+		echo "FAIL cs35l41: $ampfile is still there"
+		exit 1
+	fi
+	echo "$next" > "$home/cs35l41/next"
+	case $next in
+	1) echo "boot-next: next boot is cs35l41 boot 1 (bypass, volume cap)" ;;
+	2) echo "boot-next: next boot is cs35l41 boot 2 (speaker protection firmware)" ;;
+	done) echo "boot-next: cs35l41 stick done, settings file removed" ;;
+	esac
+	echo "boot-next: settings file $ampfile"
+	if [ "${BOOT_NEXT_YES:-1}" = 0 ]; then
+		echo PASS
+		exit 0
+	fi
+	printf 'boot-next: restart? [y] '
+	read ans
+	if [ "$ans" != y ]; then
+		echo "FAIL not restarted (the settings are written)"
+		exit 1
+	fi
+	echo PASS
+	sync
+	if ! shutdown -r; then
+		echo "FAIL shutdown -r did not start"
+		exit 1
+	fi
+	exit 0
+fi
+
 # M11: the settings of the boot that just ran say so, or "boot-next m11".
 # M12 first: its boots 2 and 3 have no gpu_compositor line, boot 4 does.
 stick=m10
