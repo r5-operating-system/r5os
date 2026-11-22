@@ -1,5 +1,15 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-22 - SD cards in Realtek card readers, including the RTS5228
+
+Problem: the HP ENVY x360 15 (Ryzen 5 5625U) has a Realtek RTS5228 card reader (PCI `10ec:5228`, class `0xff`) and R5 had no driver for it. The closed PR #4118 had an OpenBSD base but its 5228 part came from the GPL Linux driver.
+
+What changed: new `busses/mmc/rtsx` driver. The base is OpenBSD rtsx(4) (ISC) on Haiku's `mmc_bus_interface`, with one device table: the OpenBSD chips (RTS5209, 5227, 5229, 522A, 5249, 525A, RTL8402, 8411, 8411B, exactly the list of OpenBSD `rtsx_pci.c` 1.16, their code paths unchanged) and the RTS5228. The RTS5228 part (init, slot power, clock and SSC, card detect, overcurrent, shutdown hook) is MIT, written clean room from `RTS5228-SPEC.md`; no Linux source and no Linux-derived file of #4118 was read. `device_manager.cpp` (copied into `distro/kernel`, MIT snippet) now searches `busses/mmc` for PCI class `0xff`. The driver is in the system package (regular and minimum image) and is a boot module. Attach logs the chip once; the OpenBSD chips say `(experimental)`. Docs: `docs/RTSX.md`, `docs/LICENSING.md`, `THIRD_PARTY_NOTICES.md`, About credits.
+
+Limits: 400 kHz and 25 MHz, 4-bit, 3.3 V only; no high speed, UHS-I, SDIO, suspend or runtime power management (the RTS5228 keeps ASPM forced off). `mmc_bus` does not unpublish a removed card: the old disk stays and returns errors; unmount before removing. A card pulled out during `mmc_bus`'s ACMD41 loop can leave that loop running until a card is inserted. The RTS5228 write path does not compare the echoed byte (the spec does not promise it). The OpenBSD chips are experimental: buildable, not tested on R5. Later work: RTS5208, 5260, 5261, 5264, RTS5765DL (neither OpenBSD nor the spec covers them).
+
+Tested: `scripts/build-locked.sh` jam exit 0, no warnings in `rtsx`; `rtsx` and its boot-module link are in `haiku.hpkg`. QEMU (no Realtek reader) boots to the first-start window, no rtsx line in the serial log, no panic. Not tested: the RTS5228 on the 5625U (card at boot, inserted later, removed, read and write); that needs the stick.
+
 ## 2026-11-22 - The desktop leaves RADV instead of crashing after a GPU reset
 
 Problem: on stick 72 boot 2 (the GPU hang test), the hang was detected and reset (`gpu reset mode2 ok`, `gpu selftest after reset ok`), and then app_server stopped in the debugger: Skia Graphite `VulkanCommandBuffer::isFinished` called `abort()`, from `SkiaGpu::RunWork` → `checkAsyncWorkCompletion` on the compositor draw thread. After a reset that another client caused, app_server's fence waits fail (`DRM_IOCTL_SYNCOBJ_WAIT` returns `ECANCELED` in app_server-stderr.log), RADV reports that as an error other than `VK_ERROR_DEVICE_LOST`, and Graphite aborts on an unexpected fence status. The fallback of #4471 only ran when app_server's own submit failed.
