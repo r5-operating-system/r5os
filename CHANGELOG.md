@@ -7,6 +7,16 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-22 - I2C touch screens stay powered (HP ENVY x360 15)
+
+Problem: the touch screen of the 5625U machine (HP ENVY x360 15, a convertible) does nothing at all; the owner tried it several times. The syslog shows that `i2c_hid` finds it (input-ready on `\_SB.GPIO` pin 12, published as `input/tablet/i2c/0` and `/1`), and the touchpad on the same driver works. `HIDDevice::Close()` sent SET_POWER sleep on every close of any of a device's published nodes, and `Open()` never woke the device again. A touch screen has several nodes (finger and pen), so one close put the whole screen to sleep while the others stayed open. The touchpad escaped because it has been published as one node since 12 Nov. air/OS met the same sleep problem on the Framework 13 touchpad and keeps I2C HID devices powered, as Linux does.
+
+What changed: `Close()` only counts down; I2C HID devices stay powered after `_Reset()`. For diagnosis, each device logs once which vendor:product sits at which address with how many handlers, and its first 20 input reports (length and first 8 bytes) go to the syslog.
+
+Limits: the cause is found by reading the code and the boot log, not proven. If the screen still does nothing, the new lines show whether it sends reports (then `TabletProtocolHandler` reads the wrong fields of a multi-touch report) or not (then it needs another wake-up). No finger gestures, no multi-touch, no tablet mode; the AMD Sensor Fusion Hub (hinge angle) has no driver. Slightly more power use while the devices are idle.
+
+Tested: not yet; compiled in the next stick build, then a touch on the 5625U.
+
 ## 2026-11-22 - CPU Info's icon is sharp again
 
 Problem: the icon in CPU Info's heading looked jagged. CPU Info rendered it at `ComposeIconSize(40).Width()` (39 pixels at the default font), and `BPageHeader` draws its icon in a square of 48 units, so the bitmap was stretched. CPU Info followed `docs/LIBR5.md` and R5Book, which said `ComposeIconSize(40)`; the class has drawn at 48 units all along.
