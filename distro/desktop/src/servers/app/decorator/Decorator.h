@@ -44,12 +44,25 @@ class BRegion;
 // The decorator add-on ABI. It goes up by one when the Decorator class
 // changes its layout. DecorManager loads only an add-on that exports this
 // version, through R5_DECORATOR_ABI_EXPORT in one of its source files.
-#define R5_DECORATOR_ABI_VERSION	1
+#define R5_DECORATOR_ABI_VERSION	2
 #define R5_DECORATOR_ABI_SYMBOL		"r5_decorator_abi_version"
 #define R5_DECORATOR_ABI_EXPORT \
 	extern "C" { \
 		_EXPORT int32 r5_decorator_abi_version = R5_DECORATOR_ABI_VERSION; \
 	}
+
+// ABI 2: one part of a window's outline, a rectangle in screen coordinates
+// with the radius of each corner in pixels (0: square). The frame comes
+// first, then the tabs. See Decorator::GetOutline() and WindowOutline.h.
+struct window_outline_rect {
+	BRect	rect;
+	float	leftTop;
+	float	rightTop;
+	float	leftBottom;
+	float	rightBottom;
+};
+
+#define R5_WINDOW_OUTLINE_MAX_RECTS	4
 // SPDX-SnippetEnd
 
 
@@ -312,6 +325,10 @@ public:
 	virtual	void				GetShadowExtent(BRect* extent);
 	virtual	void				GetGlassRegion(BRegion* region);
 	virtual	void				GetInputMargin(BRect* margin);
+	// ABI 2: the outline with round corners, at most maxCount rectangles.
+	// Returns how many it wrote. The default is 0: a square window.
+	virtual	int32				GetOutline(window_outline_rect* rects,
+									int32 maxCount);
 
 			bool				InputMarginContains(BPoint where);
 

@@ -40,7 +40,7 @@ Not every part of the kit is a class. These are free functions in `BAppearanceKi
 
 | Header | Use it for | Do not use it for | First user |
 |---|---|---|---|
-| `<WindowEffects.h>` | The user's window effects (`window_effects()` / `set_window_effects()` with `B_WINDOW_SHADOW`, `B_WINDOW_FROSTED_GLASS`, `B_WINDOW_ANIMATIONS`; `window_effect_strength()` / `set_window_effect_strength()` with Quiet, Balanced, Glassy), and a glass background behind a program's own window or view (`set_window_glass()`, `set_view_glass()`). The calls and an example are in `docs/LIBR5.md`, "Window effects" | `B_TRANSPARENT_COLOR`, which keeps meaning "do not erase". A program setting the user's choice: only Settings and the Appearance program call the two setters | The "Window effects" box on Look and feel, in Settings and in the Appearance program |
+| `<WindowEffects.h>` | The user's window effects (`window_effects()` / `set_window_effects()` with `B_WINDOW_SHADOW`, `B_WINDOW_FROSTED_GLASS`, `B_WINDOW_ANIMATIONS`; `window_effect_strength()` / `set_window_effect_strength()` with Quiet, Balanced, Glassy), a glass background behind a program's own window or view (`set_window_glass()`, `set_view_glass()`), and round corners for a program's own window without a title tab (`set_window_corner_radius()`). The calls and an example are in `docs/LIBR5.md`, "Window effects" | `B_TRANSPARENT_COLOR`, which keeps meaning "do not erase". A program setting the user's choice: only Settings and the Appearance program call the two setters | The "Window effects" box on Look and feel, in Settings and in the Appearance program |
 
 ```cpp
 #include <WindowEffects.h>

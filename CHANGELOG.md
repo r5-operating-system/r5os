@@ -17,6 +17,23 @@ Limits: a user who chose one of the four earlier gets the default decorator; tha
 
 Tested: nothing yet; checked by the same jam as the entry above.
 
+## 2026-11-22 - Round window corners: the outline under Default (R5 Modern) and the round Deskbar
+
+Problem: the round decorator Default (R5 Modern) and the round Deskbar of Default (R5) both need a window that is not a rectangle. A decorator could only add pixels to the frame (`Window::GetFullRegion()` always held the whole frame), the content region was square, and the compose copied every window pixel opaque, with no coverage at an edge. Step 0 reports: `generated/STEP0-REPORT-R5-MODERN.md` and `generated/STEP0-REPORT-DESKBAR.md` (local). The owner chose to combine step 1 of both briefs.
+
+What changed:
+- Decorator ABI 1 to 2: `Decorator::GetOutline(window_outline_rect*, int32)` at the end of the R5 hooks, default 0 rectangles (square). `R5DecoratorAbiTest` exports nothing and stays refused.
+- New `distro/desktop/src/servers/app/WindowOutline.h` (MIT): one coverage formula for a corner circle, the cut region (corner pixels that are not the window's) and the edge region (pixels the arc crosses, GPU mode only).
+- `Window::GetOutline()` takes the decorator's outline, or the radius a program set; `GetFullRegion()` and the content region leave out the cut. Visible region, clipping, `WindowAt()` and the direct-window clip list follow from that. Content in a corner is clipped (owner choice).
+- CPU mode (Painter): a stepped arc, a pixel at least half covered is the window's.
+- Compositor: the edge stays out of what hides the windows below, out of the plain copy and out of the glass; effects mode 6 blends it by coverage over what lies below. The shadow is drawn under the arc. The open and close animation (mode 4) steps the corners of a round window. `compositor_shaders.h` regenerated with `scripts/gen-compositor-shaders.sh` (glslang 16.6.0); `kComposeSpirv` is byte-identical.
+- libr5ui: `BAppearanceKit::set_window_corner_radius(BWindow*, float)` at the end of `<WindowEffects.h>`, code `AS_R5_SET_WINDOW_CORNER_RADIUS` at the end of `ServerProtocol.h`. Only a team's own window. Nothing in `libbe`.
+- Docs: `docs/APP-SERVER-COMPOSITOR.md` ("Decorator hooks", new "The window outline"), `docs/LIBR5.md`, `docs/APPEARANCE-KIT.md`, R5Book `haiku-additions.html` (ABI 2, `GetOutline()`) and `appearance-effects.html` (the new call, an example).
+
+Limits: no decorator returns an outline yet and nothing calls the new libr5ui function, so every window looks as before; Default (R5 Modern) and the round Deskbar are later steps. The arc pixels of glass are blended opaque, without the blur. After a switch from the GPU to the CPU mode in a session, a round window keeps its GPU regions (one step wider) until its next clipping rebuild. Radius at most 64.
+
+Tested: nothing yet. Not built, not booted. Needs `scripts/build-locked.sh`, then a QEMU boot (Lavapipe and Safe mode) with a test window that calls `set_window_corner_radius()`, and the compare mode for Default (R5) and Classic (Haiku) unchanged.
+
 ## 2026-11-22 - Warm restart no longer hangs in OVMF firmware
 
 Problem: under QEMU + OVMF (`edk2-stable202511`+, Ubuntu `OVMF_CODE_4M.fd`), a warm reset (`system_reset`, RAM preserved) after R5 had booted hung inside OVMF's `CpuMpPei` (`RIP=0x7bee35d3`, `IoRead32(0x608)` inside `TimedWaitForApFinish` with timeout `0xFFFFFFFF` us ≈ 71 min), even though all 5 APs were already awake and parked in `HLT` (`FinishedCount == 5`). Disassembly and a GDB watchpoint on OVMF's PEI PCD database (`0x00814b00`, `PcdCpuBootLogicalProcessorNumber`) traced this to an upstream OVMF IGVM bug: `PlatformPei` reads physical `0x008120c0` (IGVM `VpCount`, inside the 4 KiB IGVM Parameter Area at `0x00812000`, plus `0x00812000` for `MemoryMap` and `0x00813000` for IGVM HOBs), yet OVMF's EFI memory map hands `0x0080c000-0x00814000` (32 KiB) to the OS as `EfiConventionalMemory` and does not zero it on warm reset. When R5's VM allocator used physical page `0x00812000` and left a non-zero value `<= 0xffff` at `0x008120c0` (observed `0x00000800` = 2048 and `0x000001b8` = 440 on stick 74), `PlatformPei` skipped `fw_cfg` and set `PcdCpuBootLogicalProcessorNumber` to that stale value. On clean `main` without #4498, `0x008120c0` happened to remain `0x00000000` at 25-60 s because physical allocations shifted without the 1 MiB 63 MiB ring, so `main` did not trigger it in 8 test resets, though `0x00812000` was still exposed as usable RAM.

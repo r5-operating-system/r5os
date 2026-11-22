@@ -69,6 +69,14 @@ status_t	set_window_effect_strength(
 // mode and when app_server cannot be asked.
 bool		gpu_draws_text();
 
+// A program rounds the corners of its own window, radius in pixels (0:
+// square, the default; at most 64). The corners leave the window in both
+// modes: blended in the GPU mode, stepped in the CPU mode. Content in a
+// corner is clipped. For a window whose decorator draws round corners
+// itself, the decorator's outline counts. Scale the radius with the font
+// size, like other R5 measures (18 at 12 points).
+status_t	set_window_corner_radius(BWindow* window, float radius);
+
 
 }	// namespace BAppearanceKit
 

@@ -3951,6 +3951,47 @@ ServerApp::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 			fLink.Flush();
 			break;
 		}
+
+		case AS_R5_SET_WINDOW_CORNER_RADIUS:
+		{
+			// The round outline of one of this team's own windows. The
+			// window keeps its frame; its corners leave its regions.
+			int32 token = -1;
+			float radius = 0.0f;
+			link.Read<int32>(&token);
+			status_t status = link.Read<float>(&radius);
+			if (status == B_OK && !(radius >= 0.0f))
+				status = B_BAD_VALUE;
+			if (status == B_OK && !fDesktop->LockAllWindows())
+				status = B_ERROR;
+			if (status == B_OK) {
+				Window* found = NULL;
+				for (Window* window = fDesktop->AllWindows().FirstWindow();
+						window != NULL;
+						window = window->NextWindow(kAllWindowList)) {
+					if (window->ServerWindow()->App() == this
+						&& window->ServerWindow()->ClientToken() == token) {
+						found = window;
+						break;
+					}
+				}
+				if (found == NULL)
+					status = B_BAD_VALUE;
+				else if (found->CornerRadius() != radius) {
+					BRegion dirty;
+					found->GetFullRegion(&dirty);
+					found->SetCornerRadius(radius);
+					BRegion after;
+					found->GetFullRegion(&after);
+					dirty.Include(&after);
+					fDesktop->RebuildAndRedrawAfterWindowChange(found, dirty);
+				}
+				fDesktop->UnlockAllWindows();
+			}
+			fLink.StartMessage(status);
+			fLink.Flush();
+			break;
+		}
 // SPDX-SnippetEnd
 
 		default:

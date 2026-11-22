@@ -13,6 +13,9 @@
 //   4 window: a window scaled about its centre and faded, for the open and
 //             close animations (step 4b)
 //   5 slide:  the workspace switch, the old picture and the new side by side
+//   6 corner: the arc of a round window corner, blended by its coverage
+//             (shape[0]: the circle's centre x, y and radius); mode 4 cuts
+//             a round window's corners when auxStride holds the radius
 //
 // M13 step 2: with 0x10 in the mode, modes 3 and 4 read the window from its
 // image (binding 3) instead of the source buffer: a window that Skia draws.
@@ -108,6 +111,16 @@ texel(int x, int y)
 }
 
 
+// The share of pixel `at` inside the circle of radius r around the point c
+// (between pixels): the formula of WindowOutline.h in app_server.
+float
+cornerCoverage(ivec2 at, ivec2 c, int r)
+{
+	vec2 d = vec2(at) + 0.5 - vec2(c);
+	return clamp(float(r) + 0.5 - length(d), 0.0, 1.0);
+}
+
+
 // Bilinear filtering of the source level at a position in texel-centre
 // coordinates (texel i is at i), clamped to the level's edge.
 vec4
@@ -194,6 +207,18 @@ main()
 		}
 		if (!inside)
 			return;
+		// A round window (auxStride: the radius): the corners of its
+		// bounding box, stepped like the CPU mode.
+		if (effect.auxStride > 0u) {
+			ivec4 box = effect.shape[0];
+			int r = int(effect.auxStride);
+			ivec2 c = ivec2(nearest.x < box.x + r ? box.x + r
+					: nearest.x > box.z - r ? box.z + 1 - r : nearest.x,
+				nearest.y < box.y + r ? box.y + r
+					: nearest.y > box.w - r ? box.w + 1 - r : nearest.y);
+			if (cornerCoverage(nearest, c, r) < 0.5)
+				return;
+		}
 		vec4 window;
 		if (fromImage()) {
 			// the sampler filters; texel centres are at i + 0.5
@@ -221,6 +246,22 @@ main()
 			int other = effect.offset > 0.0 ? moved - width : moved + width;
 			target.pixels[index] = aux.pixels[row + uint(other)];
 		}
+		return;
+	}
+
+	if (mode == 6u) {
+		// The arc of a round corner: the window's pixel over what lies
+		// below, by the share of the pixel inside the corner's circle.
+		vec4 pixel = fromImage()
+			? imageTexel(ivec2(effect.sourceX + at.x, effect.sourceY + at.y))
+			: unpack(source.pixels[(effect.sourceY + at.y)
+				* effect.sourceStride + effect.sourceX + at.x]);
+		ivec2 here = ivec2(effect.targetX + at.x, effect.targetY + at.y);
+		float coverage = cornerCoverage(here, effect.shape[0].xy,
+			effect.shape[0].z);
+		vec4 below = unpack(target.pixels[index]);
+		target.pixels[index] = pack(vec4(mix(below.rgb, pixel.rgb, coverage),
+			1.0));
 		return;
 	}
 

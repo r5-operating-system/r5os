@@ -41,6 +41,7 @@
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 #include "Compositor.h"
+#include "WindowOutline.h"
 #include <syslog.h>
 // SPDX-SnippetEnd
 #include "DrawingEngine.h"
@@ -96,6 +97,7 @@ Window::Window(const BRect& frame, const char *name,
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 	fDrawableWarned(false),
+	fCornerRadius(0.0f),
 // SPDX-SnippetEnd
 	fDirtyRegion(),
 
@@ -258,6 +260,12 @@ Window::GetFullRegion(BRegion* region)
 	// start from the decorator border, extend to use the frame
 	GetBorderRegion(region);
 	region->Include(fFrame);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// The round outline: its cut corners are not the window's.
+	_ExcludeOutlineCut(region);
+// SPDX-SnippetEnd
 }
 
 
@@ -2217,8 +2225,105 @@ Window::_UpdateContentRegion()
 	if (decorator)
 		fContentRegion.Exclude(&decorator->GetFootprint());
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// The content is clipped to the round outline too (owner, 22 Nov 2026).
+	_ExcludeOutlineCut(&fContentRegion);
+// SPDX-SnippetEnd
+
 	fContentRegionValid = true;
 }
+
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+/*!	The round outline of the window (WindowOutline.h). The decorator's comes
+	first (decorator ABI 2); without one, the radius the program asked for
+	with set_window_corner_radius() rounds the four corners of the window's
+	footprint and frame together. \a blended: the GPU mode, where the
+	compositor blends the arc; otherwise the arc is stepped.
+*/
+void
+Window::GetOutline(window_outline* outline, bool blended)
+{
+	window_outline_rect rects[R5_WINDOW_OUTLINE_MAX_RECTS];
+	int32 count = _OutlineRects(rects);
+	if (count <= 0) {
+		outline->cornerCount = 0;
+		outline->cut.MakeEmpty();
+		outline->edge.MakeEmpty();
+		return;
+	}
+	window_outline_build(rects, count, blended, *outline);
+}
+
+
+//!	The rectangles of the outline; 0 for a square window (the fast path).
+int32
+Window::_OutlineRects(window_outline_rect* rects)
+{
+	int32 count = 0;
+	::Decorator* decorator = Decorator();
+	if (decorator != NULL)
+		count = decorator->GetOutline(rects, R5_WINDOW_OUTLINE_MAX_RECTS);
+	if (count <= 0 && fCornerRadius > 0.0f) {
+		BRect frame = fFrame;
+		if (decorator != NULL)
+			frame = frame | decorator->GetFootprint().Frame();
+		rects[0].rect = frame;
+		rects[0].leftTop = rects[0].rightTop = fCornerRadius;
+		rects[0].leftBottom = rects[0].rightBottom = fCornerRadius;
+		count = 1;
+	}
+	return count < 0 ? 0 : count;
+}
+
+
+/*!	A program's own radius for its window (set_window_corner_radius()). The
+	caller has all windows locked and rebuilds the clipping.
+*/
+void
+Window::SetCornerRadius(float radius)
+{
+	if (radius < 0.0f)
+		radius = 0.0f;
+	if (radius > R5_WINDOW_CORNER_MAX_RADIUS)
+		radius = R5_WINDOW_CORNER_MAX_RADIUS;
+	fCornerRadius = radius;
+	fContentRegionValid = false;
+	fVisibleContentRegionValid = false;
+	fEffectiveDrawingRegionValid = false;
+}
+
+
+/*!	Takes the cut corners of the round outline out of \a region. Nothing
+	happens for a square window, so its regions stay what they were.
+*/
+void
+Window::_ExcludeOutlineCut(BRegion* region)
+{
+	window_outline_rect rects[R5_WINDOW_OUTLINE_MAX_RECTS];
+	int32 count = _OutlineRects(rects);
+	if (count <= 0)
+		return;
+	window_outline outline;
+	window_outline_build(rects, count, _OutlineBlended(), outline);
+	if (outline.cut.CountRects() > 0)
+		region->Exclude(&outline.cut);
+}
+
+
+//!	Whether the compositor blends the arc (the GPU mode).
+bool
+Window::_OutlineBlended()
+{
+	return !IsOffscreenWindow() && fDesktop != NULL
+		&& fDesktop->GetCompositor() != NULL
+		&& fDesktop->GetCompositor()->IsActive();
+}
+// SPDX-SnippetEnd
 
 
 void

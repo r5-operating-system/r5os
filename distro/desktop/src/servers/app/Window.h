@@ -35,6 +35,12 @@
 
 
 class Window;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+struct window_outline;
+struct window_outline_rect;
+// SPDX-SnippetEnd
 
 
 typedef	BObjectList<Window>	StackWindows;
@@ -153,6 +159,14 @@ public:
 			void				SetOutlinesDelta(BPoint delta,
 									BRegion* dirtyRegion, bool left,
 									bool top);
+
+			// The round outline (WindowOutline.h): from the decorator, or
+			// the radius the program asked for. \a blended: the GPU mode.
+			void				GetOutline(window_outline* outline,
+									bool blended);
+			void				SetCornerRadius(float radius);
+			float				CornerRadius() const
+									{ return fCornerRadius; }
 // SPDX-SnippetEnd
 
 			void				ScrollViewBy(View* view, int32 dx, int32 dy);
@@ -360,6 +374,13 @@ protected:
 			void				_SendUpdateMessage();
 
 			void				_UpdateContentRegion();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			void				_ExcludeOutlineCut(BRegion* region);
+			int32				_OutlineRects(window_outline_rect* rects);
+			bool				_OutlineBlended();
+// SPDX-SnippetEnd
 
 			void				_ObeySizeLimits();
 			void				_PropagatePosition();
@@ -387,6 +408,8 @@ protected:
 			bool				fDrawableWarned;
 			// M13 step 4: how far the outline was moved to the left and up
 			BPoint				fOutlinesShift;
+			// The radius a program asked for (set_window_corner_radius()).
+			float				fCornerRadius;
 // SPDX-SnippetEnd
 
 			// Our part of the "global" dirty region (what needs to be redrawn).
