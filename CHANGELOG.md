@@ -7,6 +7,22 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-22 - Warm restart no longer hangs in OVMF firmware
+
+Problem: under QEMU + OVMF (`edk2-stable202511`+, Ubuntu `OVMF_CODE_4M.fd`), a warm reset (`system_reset`, RAM preserved) after R5 had booted hung inside OVMF's `CpuMpPei` (`RIP=0x7bee35d3`, `IoRead32(0x608)` inside `TimedWaitForApFinish` with timeout `0xFFFFFFFF` us ≈ 71 min), even though all 5 APs were already awake and parked in `HLT` (`FinishedCount == 5`). Disassembly and a GDB watchpoint on OVMF's PEI PCD database (`0x00814b00`, `PcdCpuBootLogicalProcessorNumber`) traced this to an upstream OVMF IGVM bug: `PlatformPei` reads physical `0x008120c0` (IGVM `VpCount`, inside the 4 KiB IGVM Parameter Area at `0x00812000`, plus `0x00812000` for `MemoryMap` and `0x00813000` for IGVM HOBs), yet OVMF's EFI memory map hands `0x0080c000-0x00814000` (32 KiB) to the OS as `EfiConventionalMemory` and does not zero it on warm reset. When R5's VM allocator used physical page `0x00812000` and left a non-zero value `<= 0xffff` at `0x008120c0` (observed `0x00000800` = 2048 and `0x000001b8` = 440 on stick 74), `PlatformPei` skipped `fw_cfg` and set `PcdCpuBootLogicalProcessorNumber` to that stale value. On clean `main` without #4498, `0x008120c0` happened to remain `0x00000000` at 25-60 s because physical allocations shifted without the 1 MiB 63 MiB ring, so `main` did not trigger it in 8 test resets, though `0x00812000` was still exposed as usable RAM.
+
+What changed: `distro/kernel/src/system/boot/platform/efi/arch/x86_64/arch_mmu.cpp` adds `reserve_ovmf_memfd_holes()`, called from `arch_mmu_post_efi_setup()`. When `kSystemTable->FirmwareVendor` is `"EDK II"` and the EFI memory map has OVMF's `EfiACPIMemoryNVS` MEMFD blocks covering `0x00800000` and `0x00820000`, any `EfiConventionalMemory` holes inside `0x00800000-0x00820000` (44 KiB total: `0x00808000-0x0080b000` and `0x0080c000-0x00814000`) are removed from `gKernelArgs.physical_memory_range` so the kernel never writes to them.
+
+Limits: x86_64 EFI workaround for an upstream OVMF bug; non-EDK II firmware (such as the 5625U) is untouched. ARM64 and RISC-V were not changed or tested. Note on #4498 (tested separately, not in this change): once the OVMF hang is fixed, #4498 still does not recover `/var/log/previous_syslog` or log `r5 previous panic:` because `distro/kernel/src/system/boot/platform/efi/debug.cpp` computes `recover` in `allocate_ring_buffer()` without setting `gKernelArgs.previous_debug_size`, so `debug_cleanup()` skips reading the ring.
+
+Tested:
+- Built AMD64 anyboot via `scripts/build-locked.sh @r5-anyboot` (`jam_exit=0`, `mesa_exit=0`). `tree-owner.sh` cleanly restored 790 paths (including `headers/private/system/syscalls.h`) when switching from `R5OS-amd64-stick` to this worktree.
+- QEMU (`-machine q35,accel=kvm -cpu host -m 4096 -smp 6`, `OVMF_CODE_4M.fd` + fresh `OVMF_VARS_4M.fd`, `-vga std -display none`):
+  - Clean `main` control (without #4498): 2 runs of 60 s + `system_reset` passed, plus 6 consecutive warm resets passed (`0x008120c0 == 0`).
+  - Stick 74 (`r5-74-anyboot.iso`) repro: hung in `CpuMpPei` on 5/8 first-attempt warm resets (`0x008120c0` = `0x800` or `0x1b8`).
+  - Fixed `main` (`r5-fix-main.iso`): 2 runs of 60 s without KDL + 2 runs of 60 s with `Alt+SysRq+D` KDL all passed (`BdsDxe: starting` x2, `ps2: keyboard found` x2, `0x008120c0 == 0`).
+  - Temporary test build of #4498 + this fix (`r5-fix-4498.iso`, reverted from branch): 2 runs without KDL + 2 runs with KDL all passed OVMF warm reset with `0x008120c0 == 0` (the 2nd KDL run was still mid-kernel-boot at the 25 s cutoff).
+
 ## 2026-11-22 - README: highlights up front, and owner results on the 5625U
 
 Problem: the README only told what R5 can do after several long sections, still listed Skia drawing, Wi-Fi 6, WPA3 and the AMD64 CPU work as coming next, and showed build 10064.
