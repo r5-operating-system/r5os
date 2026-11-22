@@ -130,6 +130,108 @@ if [ "$1" = cs35l41 ] || { [ -z "$1" ] && [ -f "$ampfile" ] \
 	exit 0
 fi
 
+# Round 3 stick (stick 75: #4499 Power, #4496 card reader, #4553
+# microcode): one boot with every GPU switch at its default. The planted
+# radeon_hd file only has r5_round3_boot, so a plain "boot-next" saves the
+# results of the boot that runs now in ~/round3/<n>-*.txt (n counts the
+# runs, so a second computer does not overwrite the first) and does not
+# restart. The file stays: a later "boot-next" on this stick only saves
+# again. "boot-next round3" writes the marker again.
+if [ "$1" = round3 ] || { [ -z "$1" ] && [ -f "$file" ] \
+		&& grep -q '^r5_round3_boot' "$file"; }; then
+	r3=$home/round3
+	mkdir -p "$r3" "$(dirname "$file")"
+	if [ "$1" = round3 ]; then
+		rm -f "$file"
+		printf 'r5_round3_boot 1\n' > "$file"
+		if ! grep -q '^r5_round3_boot 1$' "$file"; then
+			echo "FAIL round3: $file does not say r5_round3_boot 1"
+			exit 1
+		fi
+		echo "boot-next: round 3 marker written; start again, then boot-next"
+		echo PASS
+		exit 0
+	fi
+	n=1
+	while [ -e "$r3/$n-power.txt" ]; do
+		n=$((n + 1))
+	done
+	log=${R5_SYSLOG:-/var/log/syslog}
+	{
+		echo "== computer"
+		sysinfo -cpu 2>&1 | head -n 8
+		echo "== syslog"
+		grep -E 'ucode|microcode|revision 0x' "$log" 2>/dev/null | head -n 40
+	} > "$r3/$n-ucode.txt"
+	{
+		echo "== syslog"
+		grep -E 'acpi_ac|acpi_battery|power_daemon|R5 CPPC|brightness|transmitter_dig_setup|AtomBIOS stuck|parser was aborted' \
+			"$log" 2>/dev/null | tail -n 80
+		echo "== AC now (1 is plugged in)"
+		od -An -tu1 -N1 /dev/power/acpi_ac/0 2>&1
+		echo "== Deskbar items"
+		reps=$home/config/settings/deskbar/replicants
+		if [ -f "$reps" ]; then
+			tr -c '[:print:]' '\n' < "$reps" | grep -E '^/' | head -n 20
+		else
+			echo "no $reps"
+		fi
+		echo "== /boot/system/settings/power"
+		cat /boot/system/settings/power 2>&1
+		echo "== /dev/power"
+		ls -R /dev/power 2>&1
+	} > "$r3/$n-power.txt"
+	{
+		echo "== syslog"
+		grep -E 'rtsx|mmc' "$log" 2>/dev/null | tail -n 60
+		echo "== /dev/disk/mmc"
+		ls -R /dev/disk/mmc 2>&1
+		for raw in /dev/disk/mmc/*/raw; do
+			[ -e "$raw" ] || continue
+			echo "== read 8 MB from $raw"
+			start=$(date +%s)
+			dd if="$raw" of=/dev/null bs=1048576 count=8 2>&1
+			echo "read seconds $(( $(date +%s) - start ))"
+		done
+		# Removable volumes are mounted on insert; if not, mount the first
+		# partition here.
+		if ! df 2>/dev/null | grep -q '/dev/disk/mmc'; then
+			for part in /dev/disk/mmc/*/[0-9]*; do
+				[ -e "$part" ] || continue
+				mkdir -p /r5card
+				echo "== mount $part on /r5card"
+				mount "$part" /r5card 2>&1 && break
+			done
+		fi
+		echo "== df"
+		df 2>&1
+		# R5's df prints the mount point on its own line (in bold) and the
+		# device on the next one.
+		# A FAT card is often "NO NAME": keep the whole line.
+		df 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' \
+			| awk '/^\// {vol = $0; sub(/[ \t]+$/, "", vol)}
+				$NF ~ /^\/dev\/disk\/mmc/ {print vol}' > "$r3/volumes"
+		while IFS= read -r vol; do
+			t=$vol/r5-card-test.txt
+			echo "== write test on $vol"
+			if dd if=/dev/urandom of="$t" bs=1048576 count=1 2>/dev/null \
+					&& sync && cp "$t" "$r3/card.bin" && cmp "$t" "$r3/card.bin"; then
+				echo "card write+read ok"
+			else
+				echo "card write+read FAIL"
+			fi
+			rm -f "$t" "$r3/card.bin"
+		done < "$r3/volumes"
+		rm -f "$r3/volumes"
+	} > "$r3/$n-card.txt" 2>&1
+	sync
+	echo "boot-next: round 3 results saved as ~/round3/$n-*.txt"
+	grep -h -E 'updated from|already at|no update found' "$r3/$n-ucode.txt" | head -n 2
+	grep -h -E 'card write\+read' "$r3/$n-card.txt"
+	echo "PASS (shut down when you like)"
+	exit 0
+fi
+
 # M11: the settings of the boot that just ran say so, or "boot-next m11".
 # M12 first: its boots 2 and 3 have no gpu_compositor line, boot 4 does.
 stick=m10

@@ -24,8 +24,11 @@ WINROOT=$(wslpath -w "$ROOT")
 # Haiku's own switches (kernel debug.cpp, syslog_daemon syslog_output.cpp):
 # a time on every syslog line, and room for a whole stick run (round 5 lost
 # boot 1 when the 512 KiB log rotated). "true" must be written out.
+# The kernel's own buffer (debug.cpp, at most 256 KiB, default 64 KiB):
+# stick 74 lost every line before 0.35 s, the microcode lines with them.
 printf 'syslog_time_stamps true
 syslog_max_size 4M
+syslog_buffer_size 262144
 ' > "$STAGE/kernel"
 "$BFS" --start-offset 6291456 "$IMG" <<EOT
 mkdir myfs/home/config
