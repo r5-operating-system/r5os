@@ -29,6 +29,91 @@ Tested:
 
 Limits: the 5625U has not run this. usb_disk remains 32-bit DMA until the USB bus exposes per-HCD 64-bit DMA capability. ARM64 and RISC-V were not built (AHCI, i2c_hid, package_daemon, and shutdown.cpp are arch-independent; r5_direct_map.cpp, acpi_cpuidle.cpp, and amd_pstates.cpp are AMD64/x86 only).
 
+## 2026-11-21 - CS35L41 firmware loads after boot
+
+Problem: the performance review (`docs/reviews/PERF-REVIEW-2026-11.md`, row 12) measured on stick 70 that the CS35L41 firmware download over I²C took about 2.68 s of the boot, synchronously, amplifier 0 then amplifier 1, before the driver finished probing.
+
+What changed: the probe only powers the amplifiers up in bypass with the cap, as before, so the speakers play at once. With `cs35l41_firmware true` a low-priority thread then reads the EFI calibration and loads program, tuning and calibration into each amplifier while that amplifier is not playing (it waits while a stream runs). When the DSP reaches state 2 the amplifier switches to the protected path from its next stream. Logged: `DSP bypass until the firmware is loaded`, per amplifier `speaker protection on from the next stream, loaded in N ms`, and `firmware thread done: N of M amplifiers protected`. Any failure keeps bypass with the cap. Shutdown waits for the thread.
+
+Not in parallel: both amplifiers sit on one I²C bus, so two loaders would only take turns on it. Instead each transfer now carries up to 32 data bytes instead of 16 (halved on the controller's refusal down to 4), which lowers the share of address bytes.
+
+Limits: a stream that starts during the download of an amplifier waits until that amplifier is loaded (about 1.3 s, measured on stick 70), once per boot. Not booted.
+
+Tested: built with `scripts/build-locked.sh` (jam exit 0). QEMU boots, no panic, `hda: 0 speaker amplifiers` (no CS35L41 there).
+
+## 2026-11-21 - CS35L41 firmware: the firmware's own algorithm and its state control
+
+Problem: stick 70 stopped at `firmware off (no firmware state control)`. The runtime table lists 2 algorithms, but the state control belongs to the firmware's own algorithm (ID = firmware ID 0x400a4), which is not in that table.
+
+What changed (from `CS35L41-SPEC-2.md`, "Round 5 answers"): after the program loads, the driver registers the firmware's own algorithm from the ID header at 0x02800000: XM base from bytes 20-23, YM base from bytes 28-31. It is not a table entry and not counted in the table's "number of algorithms". A control now matches on algorithm, region type and its first stored name (case-sensitive, stored length); acked controls (type 0x1000) with the system flag (0x8000) are skipped. The state address stays 0x02800000 + (XM base + control offset) x 4, polled every 1 ms up to 15 ms for 2. The logging from the previous entry and the fallback to bypass stay. The firmware's own algorithm base also applies to tuning blocks and calibration controls that name it.
+
+Tested: built with `scripts/build-locked.sh` (jam exit 0). Not booted (no stick for now).
+
+## 2026-11-21 - CS35L41 firmware: log the algorithms and the state lookup
+
+Problem: on stick 70 the tuning file and the factory calibration loaded on both amplifiers (left resistance 10050, right 10336, ambient 0, status 1), but both stopped at `firmware off (no firmware state control)` and fell back to bypass with the cap. The runtime table reported 2 algorithms and firmware id 0x400a4, the same number as the firmware algorithm, so the state control's algorithm base is the open question.
+
+What changed: diagnostics only, no rule changed. When the firmware loads the driver logs once: every algorithm in the runtime table (id, version, XM and YM base and size), and for amplifier 0 every algorithm and control from the program's 0xF2 descriptors (id, name, control name, offset, region). The state lookup now says which step failed: algorithm not in the runtime table, algorithm not in the descriptors, control name not found, or region mismatch. Where the base of algorithm 0x400a4 comes from waits for the reader's answer (spec round 5); no rule is guessed.
+
+Tested: built with `scripts/build-locked.sh` (jam exit 0). Not booted (no stick for now).
+
+## 2026-11-21 - CS35L41 tuning file: block offsets in register bytes
+
+Problem: on stick 69 with `cs35l41_firmware true` the program loaded on both amplifiers and the EFI calibration was read, but the tuning file failed with `cs35l41-dsp1-spk-prot-103c8a29-spkid1-l0.bin: block at word 322 is not aligned` (and r0), so the driver fell back to bypass with the cap. The loader treated a `.bin` block offset as DSP words and added it before the region formula.
+
+What changed (from `CS35L41-SPEC-2.md`, "Round 4 answers"): the algorithm's base word goes through the region formula (packed XM/YM: region base + base word × 3, rounded down to 4) and the block offset, in bytes of register address, is added to that address as it is. Alignment is no longer an error, in the `.bin` or the `.wmfw` loader. A `.bin` block for PM or an unknown region is an error ("no algorithm region"), as the spec says; it was skipped before. A failing block is logged with its index, type, length and address.
+
+I²C: a block that starts on a register and has whole registers is still split into transfers of 16 data bytes, each with its own address. A block that does not start on a register or is not whole registers cannot be split that way; it goes out in one transfer, which works only while it fits the controller FIFO; a longer one is logged and not written (falls back to bypass). The stored tuning files do not have such blocks: on the host, with the YM base word 14 from the stick 69 log, every block lands register-aligned (YM packed 0x02C0015C, 3000 bytes; YM unpacked 0x03401170, 12 bytes), inside the spec's YM ranges.
+
+Tested: built with `scripts/build-locked.sh` (jam exit 0). Host check of the target addresses as above. Not booted; the next stick shows whether the tuning loads and the DSP reaches state 2.
+
+## 2026-11-20 - GPIO module: keep AMD interrupt and wake status
+
+Problem (review of #4482): `write_pin()` and `set_output_enabled()` in `generic/gpio/v1` read the AMD FCH pin register and wrote it back whole. Bits 28 (interrupt status) and 29 (wake status) are write-1-to-clear, so a set bit written back cleared a pending interrupt or wake on that pin.
+
+What changed: both calls mask those two bits out of the value they write. `docs/GPIO.md` says so.
+
+Limits: not jammed on its own (stick 68 was being built from 46ef9b8837 in the shared tree); the next build is the compile check. Stick 68 does not have this fix. For the CS35L41 reset pin, which is an output, the old code would only have cleared status bits nobody waits for.
+
+## 2026-11-20 - CS35L41 phase 2: speaker protection firmware, opt-in
+
+Problem: phase 1 plays in DSP bypass without speaker protection, so its gain is capped at the lowest step.
+
+What changed:
+
+- The cs35l41 driver can load and start the Cirrus speaker protection firmware (`CS35L41-SPEC.md` section 3, `CS35L41-SPEC-2.md` sections 2 and 4): it reads the `.wmfw` program and the `.bin` tuning, writes their blocks into DSP memory (XM/YM unpacked and packed, PM packed, absolute), reads the algorithm table, finds the firmware state control `HALO_STATE` in the program's descriptors, writes the stream rates, opens the DSP memory protection, starts the core, waits for state 2 (running, 15 ms), checks the mailbox and pauses the firmware. Playback resumes it with the DSP routing and VMON/IMON on, and pauses it after the stream. With the firmware running the gain is the default PCM gain (0x84; no tuning configuration file exists). Shutdown stops the core (watchdog off, core off, soft reset).
+- Off by default: a `cs35l41` driver settings file with `cs35l41_firmware true` turns it on. Any failure falls back to bypass with the phase 1 cap and a log line.
+- File search order from the spec, with firmware ID `103c8a29` for subsystem `103c:8a31` (the files Windows uses on this laptop) and the speaker ID from the GPIO. `scripts/apply-cirrus-fw.py` installs `distro/firmware/cirrus` unmodified (sha256 checked against `THIRD_PARTY_NOTICES.md`) with `LICENSE.cirrus`, and a symlink `cs35l41-dsp1-spk-prot-103c8a29.wmfw` to `halo_cspl_RAM_revB2_29.63.1.wmfw`.
+- Factory calibration: the driver reads the EFI variable `SmartAmpCalibrationData` or `CirrusSmartAmpCalibrationData`, picks the entry by silicon ID or amplifier index, and writes `CAL_AMBIENT`, `CAL_R`, `CAL_STATUS` and `CAL_CHECKSUM` (resistance + 1) before the core starts. It reads the variable through `generic/efi/v1`, whose public header `EFI.h` is added now as an interface only (`docs/EFI.md`). The R5 kernel does not keep the EFI runtime services after boot, so the module does not exist yet: today the driver logs `no factory calibration: generic/efi/v1 is not available` once and runs with the firmware's default calibration. When the module lands, calibration works without a driver change. No boot-loader workaround was added.
+
+Interpretations of the spec, to check on the stick: the DSP memory protection writes 0xFFFFFFFF to every 32-bit register of the union of the two ranges the spec gives (0x02BC3000-0x02BC305C); the DSP clock (0x2C08 = 3) is set before the download; a `.bin` block's DSP word is the algorithm base plus the block offset, then the region formula; a `.bin` absolute block at offset 0 for the firmware ID (the spec's "global region base", no address given) is skipped and logged. Firmware blocks go out in transfers of 16 data bytes (4 if the I²C controller refuses).
+
+The firmware formats were also checked against the stored files on the host: the `.wmfw` has 4 XM packed, 1 YM packed, 1 PM packed and 3 descriptor blocks, `HALO_STATE` is control 0 of algorithm 0x400A4 in XM, and each tuning `.bin` has one YM packed and one YM unpacked block for algorithm 0xCD at word offsets that are multiples of 4.
+
+Limits: not booted on the 5625U; the DSP path has never run. Calibration, suspend and resume are missing. QEMU has no CS35L41.
+
+Tested: built with `scripts/build-locked.sh` (jam exit 0, also after the calibration and `EFI.h` were added); the image holds the nine Cirrus files and the symlink (their names are in `r5-os.image`). QEMU boots to the first-start window, no panic, `hda: 0 speaker amplifiers for subsystem 1af40022`.
+
+## 2026-11-20 - CS35L41 speaker amplifiers, phase 1: DSP bypass with a hard limit
+
+Problem: the internal speakers of the HP ENVY x360 15-ey0xxx (Ryzen 5 5625U, HDA `1002:1637`, codec subsystem `103c:8a31`) sit behind two Cirrus Logic CS35L41 amplifiers on I²C (ACPI `CSC3551`). Nothing powered them, so the speakers were silent; only the headphone jack played.
+
+What changed:
+
+- A vendor-neutral kernel interface between HD Audio and speaker amplifiers: `AudioAmp.h` and the module `generic/audio_amp/v1` (MIT, `docs/AUDIO-AMP.md`). An amplifier driver registers per codec subsystem. The R5 `hda` copy calls prepare before the playback stream runs, start after, stop before it stops and unprepare after; it mutes the amplifiers while the headphone jack senses a plug, and offers only the rates the amplifiers accept (48 kHz). Codecs without an analog output (HDMI) never call it. No Cirrus names on the HDA side.
+- A new MIT driver `cs35l41` (`drivers/audio/hmulti`, x86_64). Haiku's `pch_i2c` registers a node for the first `I2cSerialBus` of an ACPI device only, so the driver reads every address from `_CRS` and talks to each amplifier through `i2c_bus_interface::exec_command()` with its own address. GPIO 0 of `_CRS` (the shared reset) is pulsed low for 2 ms unless the firmware already drives it high, and its state is logged once; GPIO 1 (speaker ID) is logged. `_SUB` selects the machine table (boost 1000 nH, 24 µF, 4100 mA; slots 0 and 1); an unknown machine leaves the amplifiers off.
+- Power-up per amplifier: soft reset, OTP boot wait, chip ID and revision check, errata for 0xA0 or 0xB0/0xB2 (others are left off), the full OTP trim (99 fields, map A or B by OTP ID), initial mute, boost, chip GPIO pads, TDM slot. Playback uses the DSP bypass path. Faults (boost, temperature, short) are polled every 100 ms while playing; a fault mutes that amplifier until the next stream, three faults turn it off until restart. Each stop logs `0x00010010` and releases latched faults.
+- A GPIO module for kernel drivers, the Haiku way: `generic/gpio/v1` with `GPIO.h` next to `ACPI.h` (MIT, `docs/GPIO.md`). It resolves a GpioIo or GpioInt resource from `_CRS` to a pin and reads it, drives it and sets its output enable. The vendor part is AMD FCH (same registers as `i2c_hid`'s interrupt line). The CS35L41 driver has no controller code of its own. `i2c_hid` is unchanged and can move to it later; Intel is a later item.
+- The ACPI mute override (`_DSM` function 5, Notify `0x91`) mutes both amplifiers while it is set.
+- Hard limit: without the DSP firmware there is no speaker protection. The PCM gain field of `0x00006C04` (bits 9:5) is written as 0, its lowest step, instead of the bypass default 4 (named 4.5 dB in the spec). The spec does not give the step size, so no dB value is claimed for the cap. No setting raises it. The driver logs once per boot that it runs in bypass with the cap.
+
+Clean room: written from `generated/CS35L41-SPEC.md` and `CS35L41-SPEC-2.md` (reader Gemini, from Linux v7.3.5, facts only), `generated/CS35L41-DESIGN.md`, R5's `distro/` and Haiku's own code. No Linux code was opened by the builder. `docs/LICENSING.md` describes the method.
+
+Limits: phase 1 has no DSP firmware, no speaker protection, no calibration, no suspend or resume. The firmware in `distro/firmware/cirrus` stays uninstalled. The first boot also decides whether the device manager probes the driver when media_server opens `/dev/audio/hmulti`, whether the reset GPIO is driven correctly, and whether the Realtek codec feeds the amplifiers without extra verbs. Volume is the codec's; only the amplifier's own gain is capped.
+
+Mistake on the way: the first jam failed in `Driver.cpp` (`hmulti_audio.h` and the kernel `lock.h` both define `ASSERT`, and `ByteOrder.h` was missing). The rate now comes from `Amplifier.cpp`, which does not include `lock.h`.
+
+Tested: built with `scripts/build-locked.sh` on AMD64 (jam exit 0; `cs35l41` and `audio_amp` are in `haiku.hpkg`). QEMU (KVM, `intel-hda` + `hda-duplex`, own copy of the image): boots to the first-start window, no panic; the serial log has `hda: 0 speaker amplifiers for subsystem 1af40022`. QEMU has no I²C controller and no `CSC3551`, so the CS35L41 driver itself never ran and no playback with amplifiers ran. The 5625U has not booted this. ARM64 and RISC-V were not built (the driver is packaged for x86_64 only).
 ## 2026-11-21 - EFI runtime services on the 5625U
 
 Sticks 69 and 70 carried this branch (`11dd98fc7d`) together with the CS35L41 driver (#4482), on the stick branch only, and booted on the HP ENVY x360 15 (Ryzen 5 5625U) through UEFI. Both boots: `efi: 37383 pages identity mapped, 80 of 104 page tables, NX on` and `efi: runtime services ready, revision 2.70, 11 ranges, attributes table yes`. The CS35L41 driver read `CirrusSmartAmpCalibrationData` through `get_variable` (48 bytes: the header and one entry per amplifier), and on stick 70 applied it (left resistance 10050, right 10336). No fault, no "called with interrupts off", and the boot loader change started the system normally.
@@ -245,6 +330,14 @@ Tested: `scripts/build-locked.sh` on this machine (WSL). `jam` exited 0 (`...upd
 QEMU, KVM, a private copy of `r5-os.image`, no other QEMU was running. A GTK window wedged WSL, so this boot used `-display none` and sent Enter over QMP. Lavapipe (`gpu compositor on lavapipe: no render node`, `gpu draw on llvmpipe`). The desktop came up (Tracker and Deskbar). The session then opened a Tracker folder, Terminal and About, moved About (`hey` set the frame, error 0) and closed it (`hey` quit returned true). The syslog has `gpu draw warm up 42246 ms` and has no `left radv` and no `device lost`. 19 Nov 2026, 19:37–19:45 Europe/Amsterdam. No stick. Why the PFP stopped in `WAIT_REG_MEM` is still open; the `gpu_debug` room line stays so the next stick can show what that wait was polling.
 
 Limits: the warm-up hang is not fixed. A and B stay unproven until a stick. The lost device is leaked for the rest of the boot; the ring is not reset here.
+
+## 2026-11-19 - mesa_radv 25.3.6-11 repacked with the real package tool
+
+Problem: the -11 package from #4468 was made without Haiku's `package` tool. Four scripts were right (`boot-next`, `check`, `check-user`, `m13-measure`), but nine had the right size and the wrong content: `boot2.sh`, `check.sh`, `m8-run`, `m8-boot2`, `m8-show`, `m11-vulkan`, `m11-scroll`, `m12-measure` and `m12-scenario`. The m13f stick did not use them, but `check-pre-stick.py` compares every script and would fail.
+
+What changed: `distro/mesa/pack-radv.py --tools-only` was run in WSL with the tree's `package` tool. The library is byte-identical to -10. The version stays 25.3.6-11.
+
+Tested: all 13 scripts were extracted from the new package and match `distro/graphics/boot`. In a WSL sandbox, `boot-next m13f` gives boots 1 to 4 and then clears the settings. Not on a stick.
 
 ## 2026-11-19 - mesa_radv 25.3.6-11 repacked with the real package tool
 
