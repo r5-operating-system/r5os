@@ -71,6 +71,7 @@ const float kHiddenDimension = 1.0f;
 const float kMaxPreventHidingDist = 80.0f;
 
 
+class BMessageRunner;
 class BShelf;
 class TBarApp;
 class TBarMenuBar;
@@ -181,6 +182,17 @@ public:
 
 			float			TeamMenuItemHeight() const;
 			float			TabHeight() const { return fTabHeight; };
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			// Deskbar styles (DeskbarStyle.h, DeskbarStyleViews.cpp)
+			void			ApplyStyle();
+			BRect			EdgeInsets() const;
+			void			StartGrow(TTeamMenuItem* item);
+			float			GrowProgress(const TTeamMenuItem* item) const;
+			BRect			ChevronFrame() const;
+			void			StyleView(BView* view);
+// SPDX-SnippetEnd
 
 private:
 	friend class TBarApp;
@@ -195,6 +207,18 @@ private:
 			void			PlaceApplicationBar();
 
 			void			_ChangeState(BMessage* message);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			void			_PlaceModernMenu();
+			void			_PlaceModernTray();
+			void			_PlaceModernApps();
+			void			_ModernWindowSize(BRect screenFrame, float* width,
+								float* height);
+			void			_DrawModern(BRect updateRect);
+			void			_GrowStep();
+			void			_StyleViews(BView* view, bool glass);
+// SPDX-SnippetEnd
 
 			TBarApp*			fBarApp;
 			TBarWindow*			fBarWindow;
@@ -223,6 +247,14 @@ private:
 			BMessageFilter*	fMouseFilter;
 
 			float			fTabHeight;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			BMessageRunner*	fGrowRunner;
+			TTeamMenuItem*	fGrowItem;
+			bigtime_t		fGrowStart;
+			float			fGrowProgress;
+// SPDX-SnippetEnd
 };
 
 

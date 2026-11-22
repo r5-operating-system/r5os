@@ -65,6 +65,12 @@ All rights reserved.
 #include "MountMenu.h"
 #include "RecentItems.h"
 #include "StatusView.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include "DeskbarStyle.h"
+#include <WindowEffects.h>
+// SPDX-SnippetEnd
 
 #include "tracker_private.h"
 
@@ -122,6 +128,28 @@ TDeskbarMenu::AttachedToWindow()
 	}
 
 	BNavMenu::AttachedToWindow();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// Default (R5): a glass panel with the corners of Deskbar
+	if (R5Deskbar::Modern() && Window() != NULL) {
+		using namespace BAppearanceKit;
+		rgb_color surface = R5Deskbar::SurfaceColor();
+		SetViewColor(surface);
+		SetLowColor(surface);
+		bool glass = R5Deskbar::EffectsActive();
+		set_view_glass(this, glass);
+		if (Parent() != NULL) {
+			Parent()->SetViewColor(surface);
+			set_view_glass(Parent(), glass);
+		}
+		float radius = R5Deskbar::ButtonRadius();
+		set_window_corner_radius(Window(), radius);
+		set_window_shadow(Window(), B_WINDOW_SHADOW_FULL);
+		set_window_edge_line(Window(), R5Deskbar::EdgeColor(),
+			radius > 0 ? 1 : 0);
+	}
+// SPDX-SnippetEnd
 }
 
 
@@ -480,6 +508,13 @@ TDeskbarMenu::ResetTargets()
 BPoint
 TDeskbarMenu::ScreenLocation()
 {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (R5Deskbar::Modern())
+		return _ModernLocation();
+// SPDX-SnippetEnd
+
 	bool vertical = fBarView->Vertical();
 	int32 expando = fBarView->ExpandoState();
 	bool left = fBarView->Left();

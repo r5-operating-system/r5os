@@ -42,6 +42,11 @@ All rights reserved.
 
 
 #include "TeamMenuItem.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include "DeskbarStyle.h"
+// SPDX-SnippetEnd
 
 #include <string.h>
 #include <stdio.h>
@@ -257,6 +262,7 @@ TTeamMenuItem::RefreshListedWindowsIfChanged()
 	fTokenCount = totalCount;
 	fTokenHash = hash;
 	fHasListedWindows = false;
+	fListedWindowCount = 0;
 
 	for (int32 i = 0; i < teamCount; i++) {
 		team_id team = (addr_t)fTeam->ItemAt(i);
@@ -271,9 +277,9 @@ TTeamMenuItem::RefreshListedWindowsIfChanged()
 			bool listed = TWindowMenu::WindowShouldBeListed(info);
 			free(info);
 			if (listed) {
-				free(tokens);
+				// Default (R5) shows how many (board A: "2")
 				fHasListedWindows = true;
-				return true;
+				fListedWindowCount++;
 			}
 		}
 		free(tokens);
@@ -330,6 +336,14 @@ TTeamMenuItem::GetContentSize(float* width, float* height)
 {
 	BMenuItem::GetContentSize(width, height);
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (R5Deskbar::Modern()) {
+		_ModernContentSize(width, height);
+		return;
+	}
+// SPDX-SnippetEnd
 	if (fOverrideWidth != -1.0f)
 		*width = fOverrideWidth;
 	else {
@@ -361,6 +375,14 @@ TTeamMenuItem::GetContentSize(float* width, float* height)
 void
 TTeamMenuItem::Draw()
 {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (R5Deskbar::Modern()) {
+		_DrawModern();
+		return;
+	}
+// SPDX-SnippetEnd
 	BRect frame = Frame();
 	BMenu* menu = Menu();
 
@@ -687,6 +709,7 @@ TTeamMenuItem::_Init(BList* team, BBitmap* icon, char* name, char* signature,
 	fHasListedWindows = false;
 	fTokenHash = 0;
 	fTokenCount = -1;
+	fListedWindowCount = 0;
 	UpdateHasListedWindows();
 // SPDX-SnippetEnd
 }

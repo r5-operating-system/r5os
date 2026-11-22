@@ -28,6 +28,8 @@
  * the font size. Radius 0 opens the same windows square, for the compare.
  *
  *   r5-effects-test round-move [radius] [seconds]
+ *   r5-effects-test zoom [autohide]
+ *   r5-effects-test deskbar-add <path>
  *
  * round-move (step 1.5, 22 Nov 2026) opens one round bordered window with
  * the colour bars that moves itself sideways every 16 ms and grows and
@@ -44,6 +46,8 @@
 #include <algorithm>
 
 #include <Application.h>
+#include <Deskbar.h>
+#include <Entry.h>
 #include <InterfaceDefs.h>
 #include <MessageRunner.h>
 #include <Screen.h>
@@ -354,6 +358,10 @@ private:
 			return _Round(value, fArgc > 3 ? fArgv[3] : NULL);
 		if (strcmp(what, "round-move") == 0)
 			return _RoundMove(value, fArgc > 3 ? fArgv[3] : NULL);
+		if (strcmp(what, "zoom") == 0)
+			return _Zoom(value != NULL && strcmp(value, "autohide") == 0);
+		if (strcmp(what, "deskbar-add") == 0 && value != NULL)
+			return _DeskbarAdd(value);
 
 		bool glass = strcmp(what, "glass") == 0;
 		bool full = strcmp(what, "full") == 0;
@@ -484,6 +492,58 @@ private:
 		return result;
 	}
 
+	int _Zoom(bool autoHide)
+	{
+		// Deskbar styles (docs/design/DESKBAR-STYLES.md): BWindow::Zoom()
+		// as a program calls it, with Deskbar's frame and place as BDeskbar
+		// answers them; the caller holds Shift for the Shift test
+		BDeskbar deskbar;
+		bool wasAutoHide = deskbar.IsAutoHide();
+		if (autoHide && !wasAutoHide) {
+			deskbar.SetAutoHide(true);
+			snooze(1500000);
+		}
+		BWindow* window = new BWindow(BRect(200, 200, 500, 400), "Zoom",
+			B_TITLED_WINDOW, B_ASYNCHRONOUS_CONTROLS);
+		window->Show();
+		snooze(500000);
+		BRect zoomed;
+		if (window->Lock()) {
+			window->Zoom();
+			zoomed = window->Frame();
+			window->Unlock();
+		}
+		bool expanded = false;
+		deskbar_location location = deskbar.Location(&expanded);
+		BRect frame = deskbar.Frame();
+		printf("window %.0f %.0f %.0f %.0f deskbar %.0f %.0f %.0f %.0f "
+			"location %d expanded %d shift %d autohide %d\n", zoomed.left,
+			zoomed.top, zoomed.right, zoomed.bottom, frame.left, frame.top,
+			frame.right, frame.bottom, (int)location, expanded ? 1 : 0,
+			(modifiers() & B_SHIFT_KEY) != 0 ? 1 : 0,
+			deskbar.IsAutoHide() ? 1 : 0);
+		snooze(1500000);
+		if (window->Lock())
+			window->Quit();
+		if (autoHide && !wasAutoHide)
+			deskbar.SetAutoHide(false);
+		return 0;
+	}
+
+	int _DeskbarAdd(const char* path)
+	{
+		// a tray item of another program, as BDeskbar adds one
+		BEntry entry(path);
+		entry_ref ref;
+		status_t status = entry.GetRef(&ref);
+		int32 id = -1;
+		if (status == B_OK)
+			status = BDeskbar().AddItem(&ref, &id);
+		printf("deskbar-add %s: %s, id %" B_PRId32 "\n", path,
+			strerror(status), id);
+		return status == B_OK ? 0 : 1;
+	}
+
 	virtual void Pulse()
 	{
 		PostMessage(B_QUIT_REQUESTED);
@@ -506,7 +566,9 @@ private:
 			"       r5-effects-test workspace <index>\n"
 			"       r5-effects-test glass|plain|full|tick|slide [seconds]\n"
 			"       r5-effects-test round [radius] [seconds]\n"
-			"       r5-effects-test round-move [radius] [seconds]\n");
+			"       r5-effects-test round-move [radius] [seconds]\n"
+			"       r5-effects-test zoom [autohide]\n"
+			"       r5-effects-test deskbar-add <path>\n");
 		return 2;
 	}
 

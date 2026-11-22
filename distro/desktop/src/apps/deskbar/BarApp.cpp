@@ -106,7 +106,11 @@ namespace BPrivate {
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 #include "BarSettings.h"
+#include "DeskbarStyle.h"
+#include "ExpandoMenuBar.h"
 #include "ShowHideMenuItem.h"
+#include <algorithm>
+#include <strings.h>
 // SPDX-SnippetEnd
 #include "StatusView.h"
 #include "Switcher.h"
@@ -161,7 +165,16 @@ TBarApp::TBarApp()
 	fBarWindow = new TBarWindow();
 	fBarView = fBarWindow->BarView();
 
-	be_roster->StartWatching(this);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// B_SOME_APP_ACTIVATED gives the front application of Default (R5)
+	be_roster->StartWatching(this, B_REQUEST_LAUNCHED | B_REQUEST_QUIT
+		| B_REQUEST_ACTIVATED);
+	app_info activeInfo;
+	if (be_roster->GetActiveAppInfo(&activeInfo) == B_OK)
+		R5Deskbar::SetFrontTeam(activeInfo.team);
+// SPDX-SnippetEnd
 
 	gLocalizedNamePreferred
 		= BLocaleRoster::Default()->IsFilesystemTranslationPreferred();
@@ -197,6 +210,11 @@ TBarApp::TBarApp()
 
 	fBarWindow->Lock();
 	fBarView->UpdatePlacement();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	fBarView->ApplyStyle();
+// SPDX-SnippetEnd
 	fBarWindow->Unlock();
 
 	// this messenger now targets the barview instead of the
@@ -282,6 +300,15 @@ TBarApp::SaveSettings()
 		prefs.AddBool("alwaysOnTop", fSettings.alwaysOnTop);
 		prefs.AddBool("autoRaise", fSettings.autoRaise);
 		prefs.AddBool("autoHide", fSettings.autoHide);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// Deskbar styles: new keys at the end (docs/design/DESKBAR-STYLES.md)
+		prefs.AddInt32("style", fSettings.style);
+		prefs.AddInt32("layout", fSettings.layout);
+		prefs.AddBool("rounded", fSettings.rounded);
+		prefs.AddBool("floating", fSettings.floating);
+// SPDX-SnippetEnd
 
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
@@ -365,6 +392,20 @@ TBarApp::InitSettings()
 	settings.alwaysOnTop = fDefaultSettings.alwaysOnTop = false;
 	settings.autoRaise = fDefaultSettings.autoRaise = false;
 	settings.autoHide = fDefaultSettings.autoHide = false;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// Default (R5): Vertical, Rounded, Floating, top right (owner, 22 Nov
+	// 2026). A file without the "style" key is Default (R5) too: everyone
+	// gets it, keeping the form they had.
+	settings.style = fDefaultSettings.style = R5Deskbar::kStyleR5;
+	settings.layout = fDefaultSettings.layout = R5Deskbar::kLayoutVertical;
+	settings.rounded = fDefaultSettings.rounded = true;
+	settings.floating = fDefaultSettings.floating = true;
+	// the width of the mockup (board A), when the file has none
+	settings.width = fDefaultSettings.width
+		= std::max(gMinimumWindowWidth, R5Deskbar::Size(210));
+// SPDX-SnippetEnd
 
 	clock_settings clock;
 	clock.showSeconds = false;
@@ -439,6 +480,25 @@ TBarApp::InitSettings()
 				fDefaultSettings.autoRaise);
 			settings.autoHide = prefs.GetBool("autoHide",
 				fDefaultSettings.autoHide);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			settings.style = prefs.GetInt32("style",
+				fDefaultSettings.style);
+			if (settings.style != R5Deskbar::kStyleClassic)
+				settings.style = R5Deskbar::kStyleR5;
+			settings.layout = prefs.GetInt32("layout",
+				settings.vertical ? R5Deskbar::kLayoutVertical
+					: R5Deskbar::kLayoutHorizontal);
+			if (settings.layout < R5Deskbar::kLayoutVertical
+				|| settings.layout > R5Deskbar::kLayoutHorizontal) {
+				settings.layout = R5Deskbar::kLayoutVertical;
+			}
+			settings.rounded = prefs.GetBool("rounded",
+				fDefaultSettings.rounded);
+			settings.floating = prefs.GetBool("floating",
+				fDefaultSettings.floating);
+// SPDX-SnippetEnd
 		}
 
 		// constrain width setting within limits
@@ -473,6 +533,35 @@ void
 TBarApp::MessageReceived(BMessage* message)
 {
 	switch (message->what) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		case R5Deskbar::kMsgSetStyle:
+			_SetStyle(message);
+			break;
+
+		case B_SOME_APP_ACTIVATED:
+		{
+			// The front application (Default (R5): the blue line). Deskbar
+			// itself never counts.
+			team_id team = -1;
+			const char* signature = NULL;
+			if (message->FindInt32("be:team", &team) != B_OK)
+				break;
+			if (message->FindString("be:signature", &signature) == B_OK
+				&& strcasecmp(signature, kDeskbarSignature) == 0) {
+				break;
+			}
+			R5Deskbar::SetFrontTeam(team);
+			if (R5Deskbar::Modern() && fBarWindow->Lock()) {
+				if (fBarView->ExpandoMenuBar() != NULL)
+					fBarView->ExpandoMenuBar()->Invalidate();
+				fBarWindow->Unlock();
+			}
+			break;
+		}
+
+// SPDX-SnippetEnd
 		// BDeskbar originating messages we can handle
 		case kMsgIsAlwaysOnTop:
 		{
@@ -1283,6 +1372,17 @@ TBarApp::TeamIconSize()
 		iconSize = saved;
 	}
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// Default (R5): the icon size of the layout (board A 20, C 22, B 30),
+	// unless the user chose larger icons
+	if (R5Deskbar::Modern()) {
+		float layoutSize = R5Deskbar::Size(R5Deskbar::Compact() ? 30
+			: fSettings.vertical ? 20 : 22);
+		return std::max(composed, (int32)layoutSize);
+	}
+// SPDX-SnippetEnd
 	return composed;
 }
 
@@ -1324,8 +1424,77 @@ TBarApp::_CacheTeamIcon(BarTeamInfo* barInfo)
 	if (barInfo == NULL)
 		return B_BAD_VALUE;
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// Default (R5): the pixel size of the layout (20, 22 or 30 at 12
+	// points), drawn from the vector icon, not a smaller one scaled up
+	if (R5Deskbar::Modern()) {
+		int32 pixels = TeamIconSize();
+		int32 composed = be_control_look->ComposeIconSize(
+			fSettings.iconSize).IntegerWidth() + 1;
+		if (pixels != composed)
+			return _CacheModernIcon(barInfo, pixels);
+	}
+	// back from Default (R5): its own icon is not in the cache
+	bool cached = barInfo->icon == NULL;
+	for (int32 i = 0; i < kIconCacheCount; i++) {
+		if (barInfo->iconCache[i] == barInfo->icon)
+			cached = true;
+	}
+	if (!cached) {
+		delete barInfo->icon;
+		barInfo->icon = NULL;
+	}
+// SPDX-SnippetEnd
 	return _CacheTeamIcon(barInfo, fSettings.iconSize);
 }
+
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+status_t
+TBarApp::_CacheModernIcon(BarTeamInfo* barInfo, int32 pixels)
+{
+	if (barInfo->icon != NULL
+		&& barInfo->icon->Bounds().IntegerWidth() + 1 == pixels) {
+		return B_OK;
+	}
+	BBitmap* icon = new(std::nothrow) BBitmap(BRect(0, 0, pixels - 1,
+		pixels - 1), B_RGBA32);
+	if (icon == NULL || icon->InitCheck() != B_OK) {
+		delete icon;
+		return B_NO_MEMORY;
+	}
+	status_t status = B_ERROR;
+	app_info appInfo;
+	if (be_roster->GetAppInfo(barInfo->sig, &appInfo) == B_OK) {
+		BFile file(&appInfo.ref, B_READ_ONLY);
+		BAppFileInfo appMime(&file);
+		status = appMime.GetIcon(icon, (icon_size)pixels);
+	}
+	if (status != B_OK) {
+		BMimeType defaultAppMime(B_APP_MIME_TYPE);
+		status = defaultAppMime.GetIcon(icon, (icon_size)pixels);
+	}
+	if (status != B_OK) {
+		// the cached icon of Haiku's size, as before
+		delete icon;
+		return _CacheTeamIcon(barInfo, fSettings.iconSize);
+	}
+	// an icon of an earlier layout that is not in the cache is ours
+	bool cached = false;
+	for (int32 i = 0; i < kIconCacheCount; i++) {
+		if (barInfo->iconCache[i] == barInfo->icon)
+			cached = true;
+	}
+	if (!cached)
+		delete barInfo->icon;
+	barInfo->icon = icon;
+	return B_OK;
+}
+// SPDX-SnippetEnd
 
 
 status_t
@@ -1534,3 +1703,54 @@ WindowIconCache::_Init()
 	for (int32 i = 0; i < kWindowIconCacheCount; i++)
 		iconCache[i] = NULL;
 }
+
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+void
+TBarApp::_SetStyle(BMessage* message)
+{
+	// From the Settings page: absolute values, each field optional
+	// (DeskbarStyle.h, kMsgSetStyle)
+	int32 value;
+	bool flag;
+	if (message->FindInt32("style", &value) == B_OK) {
+		fSettings.style = value == R5Deskbar::kStyleClassic
+			? R5Deskbar::kStyleClassic : R5Deskbar::kStyleR5;
+	}
+	if (message->FindInt32("layout", &value) == B_OK
+		&& value >= R5Deskbar::kLayoutVertical
+		&& value <= R5Deskbar::kLayoutHorizontal) {
+		fSettings.layout = value;
+	}
+	if (message->FindBool("rounded", &flag) == B_OK)
+		fSettings.rounded = flag;
+	if (message->FindBool("floating", &flag) == B_OK)
+		fSettings.floating = flag;
+
+	// Classic (Haiku) has no Compact layout: its bar instead
+	int32 layout = fSettings.layout;
+	if (fSettings.style == R5Deskbar::kStyleClassic
+		&& layout == R5Deskbar::kLayoutCompact) {
+		layout = R5Deskbar::kLayoutHorizontal;
+	}
+	bool vertical = layout == R5Deskbar::kLayoutVertical;
+	int32 state = kExpandoState;
+	if (vertical) {
+		if (fSettings.vertical)
+			state = fSettings.state;
+		else if (!fSettings.top)
+			state = kMiniState;
+	}
+
+	// the icons have the size of the layout
+	ResizeTeamIcons();
+	if (fBarWindow->Lock()) {
+		fBarView->ChangeState(vertical, fSettings.left, fSettings.top, state);
+		fBarView->ApplyStyle();
+		fBarWindow->Unlock();
+	}
+	SaveSettings();
+}
+// SPDX-SnippetEnd

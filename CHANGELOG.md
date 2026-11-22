@@ -7,6 +7,28 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-22 - Deskbar styles, steps 1 to 3: Default (R5) and Classic (Haiku)
+
+Problem: the owner chose Deskbar styles on 22 Nov 2026 (`docs/design/DESKBAR-STYLES.md`, mockup boards A to D, option E "Hollow"): Classic (Haiku) as today, and Default (R5) as the new default with three layouts.
+
+What changed:
+- Deskbar's new settings `style`, `layout`, `rounded`, `floating` (new keys at the end of its file; a file without them is Default (R5) in the form it had, owner's choice 4). Defaults: Vertical, Rounded, floating, top right; a new Vertical Deskbar is 210 wide at 12 points.
+- Default (R5) in two new MIT files, `DeskbarStyle.{h,cpp}` and `DeskbarStyleViews.cpp`, called from SPDX snippets in the Haiku files; Classic keeps Haiku's code paths. Deskbar's window is borderless in Default (R5); an edge view around `TBarView` draws the 1 px edge.
+- Vertical (board A): the wave pebble in a 42 row, the tray row of 34 with the clock (14 bold), rows of 34 with 20 px icons, a hover shade `rgba(30,45,70,.07)`, the front application bold with a 3 by 16 line in `#1d7bf5`, the window count when an application has two or more windows; floating with the margin, glass, corners of 18 and a light edge, or in the corner flat and opaque (`#eef1f5`, lines `#8c97a8`, board A3).
+- Compact (board B): a pill 54 high, the pebble and the applications as 42 by 42 buttons with 30 px icons, a dot under each, an 18 by 3 line under the front one, the clock with its symbol (17 bold), the chevron, which shows or hides the tray symbols. With the compositor and Animations on, the pill grows and the new icon pops in over 0.34 s (cubic-bezier(.2,.9,.3,1.25)), Deskbar resizing itself with a `BMessageRunner` (owner's choice 2).
+- Horizontal (board C): a bar 48 high, floating or against the top or bottom edge, the pebble in a 48 by 40 button, applications with icon, name and window count, a 24 by 3 line under the front one, the tray, a separator and the clock (15 bold).
+- The pebble with its menu open is the Hollow (`rgba(30,45,70,.12)`, an inset shadow, an inner line). The menu opens beside the pebble (8 px gap, top level with it) or under the bar, as a glass panel with Deskbar's corners.
+- Zoom (owner's choice 1, A): Deskbar answers `BDeskbar::Frame()` with its frame grown by the margin when floating, and the pill answers `Location()` with `B_DESKBAR_TOP` or `B_DESKBAR_BOTTOM`, so `BWindow::Zoom()` (unchanged) keeps the pill's strip free. Classic unchanged.
+- The front application comes from the roster (`B_SOME_APP_ACTIVATED`); team icons are drawn from the vector icon at the layout's size.
+- Without the GPU (`window_effects_active()` false) the surface is opaque `#eef2f8` with a `#9fb0c8` edge.
+- Tests: `scripts/qemu-deskbar-styles.py` and `scripts/deskbar-styles-guest.sh`; `r5-effects-test zoom [autohide]` and `r5-effects-test deskbar-add <path>`.
+
+Mistakes on the way (found in QEMU and fixed): `BMenu::SetFont()` in the item drawing laid the menu out again and drew again, a redraw loop that ran the guest out of memory (now `BView::SetFont()`); the clock drew over the old time (now `Invalidate()`); Haiku's size limits pinned the bar and the pill to the full screen width; the scroll view under the list painted a grey strip; team icons were scaled up from 16 px.
+
+Limits: the Deskbar menu's items keep the control look's highlight (not the mockup's light blue tint with corners of 10), and its submenus keep Haiku's look; the menu frame keeps BMenuFrame's dark line. Dragging the pill keeps it a pill. A Vertical Deskbar at a bottom corner stays Haiku's mini form. Fonts are R5's (Noto Sans, bold for the mockup's 600).
+
+Tested: see the test entry below.
+
 ## 2026-11-22 - Window effects: a program's own shadow and edge line, and whether effects show
 
 Problem: Deskbar in Default (R5) needs the full soft shadow also when it is square or not focused, a softer shadow against a screen edge, a light line round the arc of its borderless round window, and to know whether glass can show (GPU mode).

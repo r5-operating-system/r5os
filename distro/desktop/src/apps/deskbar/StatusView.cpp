@@ -42,6 +42,11 @@ All rights reserved.
 
 
 #include "StatusView.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include "DeskbarStyle.h"
+// SPDX-SnippetEnd
 
 #include <errno.h>
 #include <stdio.h>
@@ -249,6 +254,15 @@ TReplicantTray::DetachedFromWindow()
 void
 TReplicantTray::GetPreferredSize(float* preferredWidth, float* preferredHeight)
 {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (R5Deskbar::Modern()) {
+		_ModernPreferredSize(preferredWidth, preferredHeight);
+		return;
+	}
+// SPDX-SnippetEnd
+
 	float width = 0;
 	float height = fMinTrayHeight;
 
@@ -455,6 +469,16 @@ TReplicantTray::MouseDown(BPoint where)
 	uint32 buttons;
 
 	Window()->CurrentMessage()->FindInt32("buttons", (int32*)&buttons);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// the chevron of the pill shows or hides the tray symbols
+	if (R5Deskbar::Compact() && buttons == B_PRIMARY_MOUSE_BUTTON
+		&& fBarView->ChevronFrame().Contains(where)) {
+		BMessenger(fBarView).SendMessage(R5Deskbar::kMsgToggleUnfold);
+		return;
+	}
+// SPDX-SnippetEnd
 	if (buttons == B_SECONDARY_MOUSE_BUTTON) {
 		ShowReplicantMenu(where);
 	} else {
@@ -1055,6 +1079,13 @@ TReplicantTray::AddIcon(BMessage* archive, int32* id, const entry_ref* addOn)
 	BView* view;
 	fShelf->ReplicantAt(count - 1, &view, (uint32*)id, NULL);
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// a later item takes the look of Default (R5) too
+	if (view != NULL)
+		fBarView->StyleView(view);
+// SPDX-SnippetEnd
 	if (view != NULL && originalBounds != view->Bounds()) {
 		// The replicant changed its size when added to the window, so we need
 		// to recompute all over again (it's already done once via
@@ -1244,6 +1275,13 @@ TReplicantTray::AcceptAddon(BRect replicantFrame, BMessage* message)
 BPoint
 TReplicantTray::LocationForReplicant(int32 index, float replicantWidth)
 {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (R5Deskbar::Modern())
+		return _ModernLocation(index, replicantWidth);
+// SPDX-SnippetEnd
+
 	BPoint loc(fTrayPadding, 0);
 	if (fBarView->Vertical() || fBarView->MiniState()) {
 		if (fBarView->Vertical() && !fBarView->Left())
@@ -1390,6 +1428,16 @@ TReplicantTray::RealignReplicants(int32 startIndex)
 		fShelf->ReplicantAt(index, &view);
 		if (view == NULL)
 			continue;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// the folded pill shows the clock only (board B)
+		bool folded = R5Deskbar::Compact() && !R5Deskbar::Unfolded();
+		if (folded && !view->IsHidden(view))
+			view->Hide();
+		else if (!folded && view->IsHidden(view))
+			view->Show();
+// SPDX-SnippetEnd
 
 		float replicantWidth = view->Frame().Width();
 		BPoint loc = LocationForReplicant(index, replicantWidth);
@@ -1471,6 +1519,19 @@ void
 TDragRegion::GetPreferredSize(float* width, float* height)
 {
 	fReplicantTray->ResizeToPreferred();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (R5Deskbar::Modern()) {
+		// the tray, and in Vertical the lines above and below it
+		*width = fReplicantTray->Bounds().Width();
+		*height = fReplicantTray->Bounds().Height();
+		if (fBarView->Vertical() && !R5Deskbar::Compact())
+			*height += 2;
+		return;
+	}
+// SPDX-SnippetEnd
+
 	*width = fReplicantTray->Bounds().Width();
 	*height = fReplicantTray->Bounds().Height();
 
@@ -1489,6 +1550,15 @@ TDragRegion::GetPreferredSize(float* width, float* height)
 void
 TDragRegion::Draw(BRect updateRect)
 {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (R5Deskbar::Modern()) {
+		_DrawModern();
+		return;
+	}
+// SPDX-SnippetEnd
+
 	rgb_color menuColor = ViewColor();
 	rgb_color hilite = tint_color(menuColor, B_DARKEN_1_TINT);
 	rgb_color ldark = tint_color(menuColor, 1.02);
@@ -1526,7 +1596,8 @@ TDragRegion::DrawAfterChildren(BRect updateRect)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-	if (fDragLocation != kDontDrawDragRegion && fDragLocation != kNoDragRegion)
+	if (fDragLocation != kDontDrawDragRegion && fDragLocation != kNoDragRegion
+		&& !R5Deskbar::Modern())
 // SPDX-SnippetEnd
 		DrawDragger();
 }
@@ -1887,6 +1958,13 @@ TResizeControl::Draw(BRect updateRect)
 {
 	if (!fBarView->Vertical())
 		return;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (R5Deskbar::Modern())
+		return;
+// SPDX-SnippetEnd
+
 
 	BRect dragRegion(Bounds());
 
