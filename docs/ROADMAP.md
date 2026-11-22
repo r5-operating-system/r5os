@@ -31,7 +31,7 @@ The order is impact, not ticket number. `[x]` is done and tested where it is mea
    - [x] M0–M5: the kernel driver owns the GPU, the R5 GPU interface, the R5 DRM library, RADV, an address space per program.
    - [x] M6–M11: the RADV workload, Vulkan in a window, the GPU copy, Zink for OpenGL, release-supported on the 5625U (M10), the desktop composed on the GPU (M11).
    - [x] M13 (20 Nov 2026, sticks 65–67): direct scanout, write-combined GTT and the GPU copy on by default on the 5625U.
-   - [~] M12, the GPU draws everything: Skia drawing is on by default since build 10066, but the M12 row in `docs/GPU-ARCHITECTURE.md` has no pass line yet.
+   - [x] M12, the GPU draws everything: Skia drawing is on by default since build 10066. Done on the 5625U (owner, 22 Nov 2026); stick 73 logs `gpu draw on AMD Radeon Graphics (RADV RENOIR) skia` with no panic.
    - [x] The goal: on a supported GPU that passes its checks, R5 renders on the GPU by default, otherwise in software. Haiku applications are unchanged.
    - [ ] The Lavapipe warm-up, and the other open points in `AFTER-M13.md`.
    - [ ] Display (DCN modesetting, more than one screen, vsync) is a separate track. Today the picture is still the firmware one.
@@ -44,7 +44,7 @@ The order is impact, not ticket number. `[x]` is done and tested where it is mea
 3. **Other hardware on the Ryzen 5 5625U:**
    - [x] Wi-Fi on the laptop's own card (MediaTek MT7961): the owner joined a WPA2 network on stick 51.
    - [~] WPA3 (SAE): fixes after sticks 59 and 60 (19 Nov 2026); a WPA3 join on the 5625U is not on record yet.
-   - [~] The speakers (CS35L41): EFI runtime services read the calibration (stick 69); the tuning file still stops on one block. PR #4482 is open.
+   - [x] The speakers (CS35L41, #4482): on stick 73 (22 Nov 2026) both amplifiers run the speaker-protection firmware (`DSP state 2 (running)`) with the factory calibration from EFI. The owner confirmed sound on 22 Nov 2026.
    - [ ] Backlight and brightness keys.
    - [ ] Sleep and resume (see "Platform").
    - [ ] HiDPI without breaking the layout.
