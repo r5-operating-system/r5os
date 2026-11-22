@@ -242,6 +242,9 @@ public:
 private:
 								SkiaGpu();
 			void				_ReleaseWaiters();
+			// stick 72: true when the run fence reports anything but
+			// signalled or not yet (the device was lost under us)
+			bool				_RunFenceBroken();
 			uint64				_Signal();
 			void				_DestroySemaphores();
 
@@ -291,6 +294,8 @@ private:
 			uint64				fRunFence;
 			// one run on the GPU at a time
 			bool				fRunInFlight;
+			// the run fence has been submitted at least once
+			bool				fRunSubmitted;
 			// M13 step 2: the pipeline cache's last store
 			bigtime_t			fPipelinesSynced;
 };

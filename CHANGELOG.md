@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-22 - The desktop leaves RADV instead of crashing after a GPU reset
+
+Problem: on stick 72 boot 2 (the GPU hang test), the hang was detected and reset (`gpu reset mode2 ok`, `gpu selftest after reset ok`), and then app_server stopped in the debugger: Skia Graphite `VulkanCommandBuffer::isFinished` called `abort()`, from `SkiaGpu::RunWork` → `checkAsyncWorkCompletion` on the compositor draw thread. After a reset that another client caused, app_server's fence waits fail (`DRM_IOCTL_SYNCOBJ_WAIT` returns `ECANCELED` in app_server-stderr.log), RADV reports that as an error other than `VK_ERROR_DEVICE_LOST`, and Graphite aborts on an unexpected fence status. The fallback of #4471 only ran when app_server's own submit failed.
+
+What changed: `SkiaGpu::RunWork` asks its run fence (a zero-timeout wait) before Graphite polls its fences. Anything but signalled or not yet means the device is gone: the run returns "device lost" and the compositor leaves RADV the way a failed submit does. After a failed run-fence wait, Graphite is not polled either.
+
+Limits: compiled only; not booted. The deeper cause (a lost client's syncobj wait returning `ECANCELED`, where Linux returns success and reports the loss through the context query) is in the R5 DRM library and kernel and is left for its own change. Proof: the next stick's hang-test boot must show "left radv" and no debugger.
+
 ## 2026-11-21 - Perf round 1 Part B: graphics, Lavapipe warm-up, libdrm-2.4.124-5
 
 Problem: from docs/reviews/PERF-REVIEW-2026-11.md (#4484):
