@@ -22,8 +22,11 @@ The node layout follows `sdhci`: PCI node, controller node
 with `mmc_bus` as fixed child.
 
 Realtek readers use PCI class `0xff`. `device_manager.cpp` (a copy in
-`distro/kernel`, R5 snippet) adds `busses/mmc` to the search path of a
-class `0xff` PCI device. The driver only claims class `0xff`, as OpenBSD does,
+`distro/kernel`, R5 snippets) probes a class `0xff` PCI device when
+`/dev/disk` is scanned (`device_node::Probe("disk")`; a PCI node is only
+probed on demand, and only for the classes listed there) and adds
+`busses/mmc` to its search path. Stick 74 had only the second part: the
+reader was never probed. The driver only claims class `0xff`, as OpenBSD does,
 so a reader that also shows as a standard SD host stays with `sdhci`.
 
 ## Chips

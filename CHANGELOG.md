@@ -7,6 +7,18 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-22 - Card reader after stick 74: the RTS5228 is probed
+
+Problem: on stick 74 (5625U, SD card in before power on, then out and in again) there was no `rtsx` or `mmc` line in the syslog and no `/dev/disk/mmc`, although the add-on was in the image. The reader is `10ec:5228`, class `ff/00/00`, subsystem `103c:8a31`.
+
+Cause (sure: the device manager code shows it, and no `rtsx` line at all means `supports_device()` never ran or never matched; the attach always logs one line): a PCI device node is `B_FIND_CHILD_ON_DEMAND`. It is only probed when `devfs` scans a directory, and `device_node::Probe()` matches the path against a short list of PCI classes. For `disk` that list was mass storage and the two SD host classes, so a class `0xff` node was never probed. The R5 snippet in `_GetNextDriverPath()` that adds `busses/mmc` for class `0xff` was therefore never reached. `supports_device()` (Realtek, class `0xff`, a chip in `kChips`), the module names and the package lines were correct, and the device_manager copy was in the built kernel (`install_rtsx()` in `scripts/apply-kernel-bugs.py` on the stick branch).
+
+What changed: `device_manager.cpp` (R5 snippet): `Probe("disk")` also matches a PCI device of class `0xff` (`PCI_undefined`). Such a node then gets the paths `drivers`, `busses/virtio` and `busses/mmc` once per scan; drivers there check their own vendor and device IDs. `docs/RTSX.md` says so.
+
+Limits: insert and remove, and a read and write on a FAT card, can only be shown on the 5625U; QEMU has no RTS5228. Removing a card does not take its disk away yet (`mmc_bus` cannot unpublish a card; the old disk only returns errors), as already noted in the driver; a card put back in is announced to `mmc_bus` again.
+
+Tested (22 Nov 2026): compiled with `scripts/build-locked.sh` on `claude/rtsx-card-reader` (merged with `origin/main`), `jam_exit=0`; `device_manager.o` and the kernel were rebuilt. QEMU (KVM, own copy of the image): first start, Sign in and the desktop, no panic and no KDL in the serial log. QEMU has no RTS5228, so attach, insert, remove, read and write were not run.
+
 ## 2026-11-22 - SD cards in Realtek card readers, including the RTS5228
 
 Problem: the HP ENVY x360 15 (Ryzen 5 5625U) has a Realtek RTS5228 card reader (PCI `10ec:5228`, class `0xff`) and R5 had no driver for it. The closed PR #4118 had an OpenBSD base but its 5228 part came from the GPL Linux driver.
