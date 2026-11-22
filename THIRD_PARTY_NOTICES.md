@@ -268,6 +268,14 @@ Two joystick fixes are from RenkuOS (RenkuOS/Source), copyright atomozero, MIT, 
 
 Device Manager is MIT. It builds Haiku's Devices code unchanged from `src/apps/devices` (`dm_wrapper.c`, `Device*.cpp`, `DriverUtils.cpp`): MIT, copyright 2006-2026 Haiku, Inc., authors Pieter Panman and Leo Rouleau as named in those files. Its icon is the Devices icon, MIT, copyright Haiku, Inc. Hardware names come from the lists in Haiku's `src/data/ids`, the same ones Devices uses. The PCI ID list (Martin Mares and Albert Pool, pci-ids.ucw.cz) may be distributed under GPL-2.0-or-later or BSD-3-Clause; Device Manager uses it under BSD-3-Clause. The USB ID list (maintained by Stephen J. Gowdy, linux-usb.org) states no license in the file; it is not yet reviewed beyond that. ACPI and PnP names come from the UEFI registry files Haiku ships in the same folder. The R5 parts are copyright 2026 R5OS Contributors, MIT.
 
+### Power service
+
+`distro/power/server/` is Haiku's `power_daemon` (`src/servers/power/`), as air/OS (airos-works/haiku) changed it. Copyright the Haiku authors named in each file (Jérôme Duval, Rene Gollent, Nathan Whitehorn and others). License: MIT. The headers stay.
+
+air/OS's `power_policy.cpp`, `power_policy.h` and its changes to the AC, lid and power-button monitors and to `power_daemon.cpp` are from the air/OS tree as R5 has it (`a4ddc48124a9`, one squashed commit of jmgasper's work; the commits it squashes are not in that clone). Copyright jmgasper. The policy files carry air/OS's own header, "Copyright 2026, Haiku, Inc.", which stays. License: MIT. R5 kept the settings file, the profile per power source and the lid handling at start, and left out the sleep, the deep sleep, the wired-network handling, the app_server display layout and the thermal trip monitor (step 3 of `docs/POWER.md`). R5's changes are MIT `SPDX-Snippet` blocks, copyright 2026 R5OS Contributors.
+
+`distro/power/lib/PowerBattery.cpp` and `PowerBattery.h` are PowerStatus's `ACPIDriverInterface` (Haiku `src/apps/powerstatus`), moved into `libr5power.so`. Copyright 2009-2015 Haiku, Inc., Axel Dörfler and Clemens Zeidler. License: MIT. The headers stay.
+
 ### Skia (in app_server)
 
 Skia, branch `chrome/m158`, commit `707e33875fb45f2997a4d781128bec122fb777b4` (13 Nov 2026), built from R5's recipe `distro/skia` into the build-only package `skia_devel-158.0-1` (`libskia.a` and its headers). M12 links it statically into `/system/servers/app_server`; until that step app_server does not contain it, and the package itself is never installed in the image. Built with its Graphite Vulkan backend only; no codecs, no ICU, no HarfBuzz.

@@ -465,6 +465,37 @@ radeon_get_backlight_register()
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+/*!	The AtomBIOS backlight path below only works on DCE, for a built-in panel
+	that has a mode set by this driver. On DCN the scratch register is not
+	the DCE one and DIG1TransmitterControl runs into the AtomBIOS loop guard
+	(5 s per call, stick 74), and every later start hung at the restore in
+	Desktop. Anything else reports no brightness, so the slider is hidden
+	and app_server's restore never calls in.
+*/
+static bool
+r5_brightness_supported()
+{
+	if (!radeon_hd_uses_dce(gInfo->shared_info->chipsetID))
+		return false;
+
+	uint8 crtcID = 0;
+	if (gDisplay[crtcID] == NULL || !gDisplay[crtcID]->attached)
+		return false;
+
+	connector_info* connector = gConnector[gDisplay[crtcID]->connectorIndex];
+	if (connector == NULL
+		|| (connector->type != VIDEO_CONNECTOR_LVDS
+			&& connector->type != VIDEO_CONNECTOR_EDP))
+		return false;
+
+	return connector->encoder.pll.pixelClock != 0;
+}
+// SPDX-SnippetEnd
+
+
 status_t
 radeon_set_brightness(float brightness)
 {
@@ -472,6 +503,13 @@ radeon_set_brightness(float brightness)
 
 	if (brightness < 0 || brightness > 1)
 		return B_BAD_VALUE;
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (!r5_brightness_supported())
+		return B_NOT_SUPPORTED;
+// SPDX-SnippetEnd
 
 	uint32_t backlightReg = radeon_get_backlight_register();
 	uint8_t brightnessRaw = (uint8_t)ceilf(brightness * 255);
@@ -508,6 +546,13 @@ radeon_get_brightness(float* brightness)
 
 	if (brightness == NULL)
 		return B_BAD_VALUE;
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (!r5_brightness_supported())
+		return B_NOT_SUPPORTED;
+// SPDX-SnippetEnd
 
 	uint32_t backlightReg = Read32(OUT, radeon_get_backlight_register());
 	uint8_t brightnessRaw = ((backlightReg & ATOM_S2_CURRENT_BL_LEVEL_MASK) >>

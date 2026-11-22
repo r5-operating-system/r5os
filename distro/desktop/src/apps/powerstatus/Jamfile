@@ -1,0 +1,38 @@
+SubDir HAIKU_TOP src apps powerstatus ;
+
+UsePrivateHeaders interface shared ;
+UsePrivateSystemHeaders ;
+# SPDX-SnippetBegin
+# SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+# The battery reader is in libr5power.so (<PowerBattery.h>, docs/POWER.md,
+# section 3); <device/power_managment.h> for its types.
+UsePrivateHeaders device power ;
+# SPDX-SnippetEnd
+
+Application PowerStatus :
+	ACPIDriverInterface.cpp
+	APMDriverInterface.cpp
+	DriverInterface.cpp
+	ExtendedInfoWindow.cpp
+	PowerStatusWindow.cpp
+	PowerStatusView.cpp
+	PowerStatus.cpp
+	: be translation shared [ TargetLibsupc++ ] localestub
+# SPDX-SnippetBegin
+# SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+	libr5power.so
+# SPDX-SnippetEnd
+	: PowerStatus.rdef
+;
+
+DoCatalogs PowerStatus :
+	x-vnd.Haiku-PowerStatus
+	:
+	ACPIDriverInterface.cpp
+	ExtendedInfoWindow.cpp
+	PowerStatus.cpp
+	PowerStatusView.cpp
+	PowerStatusWindow.cpp
+;

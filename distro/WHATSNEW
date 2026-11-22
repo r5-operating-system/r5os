@@ -1,3 +1,6 @@
+R5 2026.1-dev Build 10067 - Power in Settings
+Settings has a Power page under System. It shows your battery: how full it is, how long it lasts and how healthy it is. Choose how fast the processor may run, separately on battery and plugged in: Power saver, Balanced or Performance. Balanced is the new standard. Set when the screen turns off after you stop using the computer, what closing the lid does, and what the power button does; by default it now asks before it shuts down. A slider sets the brightness of the screen, where the screen allows it. Only an administrator changes these settings, and they count for everyone on the computer; anyone can change the brightness. Sleep is not there yet, so its choices are gray for now. PowerStatus and CPU Info show the same information, and CPU Info also shows the profile in use. On a computer with a battery, the battery is in the Deskbar from the first sign-in.
+
 R5 2026.1-dev Build 10066 - Windows are drawn on the graphics chip
 Windows are now drawn on the graphics chip when the computer has one R5 supports. On any other computer, and in a virtual machine, the same drawing runs on the processor and uses more of it. Safe mode in the boot menu keeps the classic drawing.
 
