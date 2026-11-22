@@ -108,6 +108,14 @@ Haiku's icon set has no power symbol, no circular arrow, no clock face for a sma
 | `R5_GLYPH_CIRCLE` | 9 | A ring (the right face button) |
 | `R5_GLYPH_SQUARE` | 10 | A square outline (the left face button) |
 | `R5_GLYPH_TRIANGLE` | 11 | A triangle outline, point up (the upper face button) |
+| `R5_GLYPH_WIFI` | 12 | The Wi-Fi symbol: a dot and three arcs (a tray symbol, below) |
+| `R5_GLYPH_VOLUME` | 13 | A filled speaker with one sound wave |
+| `R5_GLYPH_VOLUME_OFF` | 14 | The speaker with a cross where the wave was (muted) |
+| `R5_GLYPH_NETWORK` | 15 | Three boxes on a wire (a wired network) |
+| `R5_GLYPH_NETWORK_OFF` | 16 | The same with a slash through it (no connection) |
+| `R5_GLYPH_AIRPLAY` | 17 | A screen open at the bottom, with a triangle under it |
+| `R5_GLYPH_MAIL` | 18 | An envelope |
+| `R5_GLYPH_MAIL_NEW` | 19 | A smaller envelope with a filled dot at its corner (new mail) |
 
 The numbers are part of the contract, the same as `r5_icon`. A new glyph is added at the end of `enum r5_glyph`, with a row in this table.
 
@@ -128,6 +136,8 @@ A level glyph shows how full something is: a signal strength or a battery charge
 |---|---|---|
 | `R5_LEVEL_SIGNAL` | 1 | Four bars of rising height, left to right |
 | `R5_LEVEL_BATTERY` | 2 | A battery body with a cap on the right and four segments inside |
+| `R5_LEVEL_WIFI` | 3 | The Wi-Fi symbol, a line symbol: the dot and the three arcs are the four steps (a tray symbol, below) |
+| `R5_LEVEL_BATTERY_SYMBOL` | 4 | A round battery with a cap line and a fill that grows in four steps, a line symbol (a tray symbol, below) |
 
 | Style | Number | Look |
 |---|---|---|
@@ -138,6 +148,48 @@ A level glyph shows how full something is: a signal strength or a battery charge
 The numbers are part of the contract, the same as `r5_glyph`. A new level glyph or style is added at the end, with a row here.
 
 - `r5_level_glyph_draw(view, which, frame, level, foreground, background, style)` draws into a view, with `level` of the four steps filled; a level below 0 or above 4 is clamped. The view's state is the same afterwards.
+
+## Tray symbols
+
+Added 22 Nov 2026 for the Deskbar style Default (R5) (`docs/design/DESKBAR-STYLES.md`, step 5). In Default (R5), R5's own tray items draw a plain line symbol in one colour, the Deskbar text colour (`#1d2a40` on the light glass), with 2 px lines on the 24 grid (a pen of 2 units, the stroke of the mockup), at the size of the item and on the baseline of the clock. No colours of their own: no green, no red, no coloured fills, no bevels. A state shows in the shape: fewer arcs, an empty battery, a cross through the speaker, a slash through the network, a dot on the envelope. Only a warning may use a colour: the battery under 15 % that is not charging is drawn in `B_FAILURE_COLOR`. In Classic (Haiku) every tray item draws its own icon as before. Application icons are never changed: they stay the real Haiku icons.
+
+How an item knows the style: Deskbar sets it in its own process with `r5_set_deskbar_tray_style()` (`<R5UI.h>`, libr5ui), and sends `R5_DESKBAR_TRAY_STYLE_CHANGED` (`'r5ts'`) to every tray view when it changes. A tray item is a replicant inside Deskbar, so it reads the same value with `r5_deskbar_tray_style()` and `r5_deskbar_tray_color()` when it draws; outside Deskbar (in its own program) the style is always classic. A view that does not know the message ignores it, as any `BView` does, so `BDeskbar` and `instantiate_deskbar_item` are unchanged and other programs' items keep drawing themselves.
+
+| Item | Symbol in Default (R5) |
+|---|---|
+| Network, wired | `R5_GLYPH_NETWORK`, `R5_GLYPH_NETWORK_OFF` when it is down |
+| Network, Wi-Fi | `R5_LEVEL_WIFI` with the lit arcs (1 while connecting, 0 when off) |
+| Volume (desklink) | `R5_GLYPH_VOLUME`, `R5_GLYPH_VOLUME_OFF` when muted |
+| Battery (PowerStatus) | `R5_LEVEL_BATTERY_SYMBOL`, the fill in four steps; the label in the tray colour |
+| Bluetooth | `R5_GLYPH_BLUETOOTH` in the tray colour, faint when off |
+| AirPlay | `R5_GLYPH_AIRPLAY` |
+| Mail | `R5_GLYPH_MAIL`, `R5_GLYPH_MAIL_NEW` with new mail |
+| ProcessController | its bars, in the tray colour, the empty part a faint tint of it |
+
+```cpp
+void
+MyTrayView::Draw(BRect)
+{
+	if (r5_deskbar_tray_style() == R5_TRAY_STYLE_SYMBOLS) {
+		r5_glyph_draw(this, R5_GLYPH_MAIL, Bounds(),
+			r5_deskbar_tray_color());
+		return;
+	}
+	// the item's own icon
+}
+
+void
+MyTrayView::MessageReceived(BMessage* message)
+{
+	if (message->what == R5_DESKBAR_TRAY_STYLE_CHANGED) {
+		Invalidate();
+		return;
+	}
+	BView::MessageReceived(message);
+}
+```
+
+Such an item links `libr5ui.so` and `libr5icons.so`. A program for Haiku that does not do this keeps its own icon in every style.
 
 `DrawWiFiSignalBars()` in `<R5WiFiGlyphs.h>` calls it with `R5_LEVEL_SIGNAL`; its bars are the same pixels as before the move. `libr5wifi.so` and NetworkStatus link `libr5icons.so` for it.
 

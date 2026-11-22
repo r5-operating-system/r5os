@@ -7,6 +7,20 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-22 - Deskbar styles, step 5: R5's tray items as one-colour line symbols
+
+Problem: in the new Default (R5) Deskbar the tray items still drew their own coloured icons (a blue "A" for AirPlay, a green and red network, bevelled battery and speaker pictures), which the mockup (board A, "R5 Deskbar styles", 22 Nov 2026) replaces with plain line symbols in one colour.
+
+What changed:
+- `libr5icons`: glyphs 12 to 19 at the end of `enum r5_glyph` (`R5_GLYPH_WIFI`, `VOLUME`, `VOLUME_OFF`, `NETWORK`, `NETWORK_OFF`, `AIRPLAY`, `MAIL`, `MAIL_NEW`) and level glyphs 3 and 4 (`R5_LEVEL_WIFI`, `R5_LEVEL_BATTERY_SYMBOL`), drawn on the 24 grid with a pen of 2, the mockup's paths for Wi-Fi, the speaker and the battery.
+- `libr5ui`: `r5_deskbar_tray_style()`, `r5_deskbar_tray_color()`, `r5_set_deskbar_tray_style()` and the message `R5_DESKBAR_TRAY_STYLE_CHANGED` (`'r5ts'`). Deskbar sets the style in its own process and sends the message to every tray view; R5's items read it in `Draw()`.
+- The items: NetworkStatus (wired, Wi-Fi arcs), PowerStatus (the battery, its label in the tray colour, `B_FAILURE_COLOR` under 15 % when not charging), Bluetooth, AirPlay, mail_daemon, desklink's volume (`MediaReplicant.cpp` and its Jamfile copied into `distro/desktop/src/bin/desklink`) and ProcessController (copied into `distro/desktop/src/apps/processcontroller`, its bars in the tray colour, owner's choice 3). Each links `libr5ui.so` and `libr5icons.so`. In Classic (Haiku) every item draws as before; other programs' items are not touched.
+- `docs/ICONS.md` ("Tray symbols", the rule for developers), `docs/STYLE.md`, `docs/LIBR5.md`, R5Book `icons-kit.html#tray-symbols`.
+
+Limits: no charging mark on the battery symbol (the fill shows the level only); the Wi-Fi symbol is not drawn on a real Wi-Fi adapter here (QEMU has none).
+
+Tested: QEMU (see the Deskbar styles test entry): volume, ProcessController, Bluetooth, AirPlay and wired network show as line symbols in `#1d2a40` in Default (R5), and as their own icons in Classic (Haiku). Battery, Wi-Fi and mail not seen (no battery, no Wi-Fi, no mail account in QEMU).
+
 ## 2026-11-22 - Settings - Desktop and Deskbar: Style, Layout, Corners and Floating (Deskbar styles, step 4)
 
 Problem: the Deskbar styles need their choices on the Settings page Desktop and Deskbar.

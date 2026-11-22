@@ -19,6 +19,14 @@
 
 #include "PowerStatusView.h"
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <R5Icons.h>
+#include <R5UI.h>
+#include <math.h>
+// SPDX-SnippetEnd
+
 #include <algorithm>
 #include <stdio.h>
 #include <stdlib.h>
@@ -169,6 +177,14 @@ PowerStatusView::MessageReceived(BMessage *message)
 			Update();
 			break;
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		case R5_DESKBAR_TRAY_STYLE_CHANGED:
+			Invalidate();
+			break;
+// SPDX-SnippetEnd
+
 		default:
 			BView::MessageReceived(message);
 			break;
@@ -179,6 +195,22 @@ PowerStatusView::MessageReceived(BMessage *message)
 void
 PowerStatusView::_DrawBattery(BView* view, BRect rect)
 {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// Default (R5) Deskbar: the battery as a line symbol in one colour,
+	// its fill in four steps; almost empty in the warning colour
+	if (fInDeskbar && r5_deskbar_tray_style() == R5_TRAY_STYLE_SYMBOLS) {
+		rgb_color color = r5_deskbar_tray_color();
+		int32 level = fHasBattery ? (int32)ceil(fPercent * 4 - 0.01) : 4;
+		if (fHasBattery && fPercent <= kLowBatteryPercentage
+			&& (fBatteryInfo.state & BATTERY_CHARGING) == 0)
+			color = ui_color(B_FAILURE_COLOR);
+		r5_level_glyph_draw(view, R5_LEVEL_BATTERY_SYMBOL, rect, level, color,
+			view->ViewColor(), R5_LEVEL_STYLE_NORMAL);
+		return;
+	}
+// SPDX-SnippetEnd
 	BRect lightningRect = rect;
 	BRect pauseRect = rect;
 	float margin = floorf((rect.Height() + 1) / 4.5f);
@@ -393,6 +425,12 @@ PowerStatusView::DrawTo(BView* view, BRect rect)
 			view->DrawString(text, BPoint(point.x + 1, point.y + 1));
 		}
 		view->SetHighUIColor(B_CONTROL_TEXT_COLOR);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		if (fInDeskbar && r5_deskbar_tray_style() == R5_TRAY_STYLE_SYMBOLS)
+			view->SetHighColor(r5_deskbar_tray_color());
+// SPDX-SnippetEnd
 
 		view->DrawString(text, point);
 	}

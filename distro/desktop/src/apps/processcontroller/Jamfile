@@ -1,0 +1,47 @@
+# R5OS modifications in this file are MIT, like the original work. They are
+# wrapped in SPDX-Snippet markers.
+
+SubDir HAIKU_TOP src apps processcontroller ;
+
+UsePrivateSystemHeaders ;
+UsePrivateHeaders app interface shared ;
+
+Application ProcessController :
+	AutoIcon.cpp
+	IconMenuItem.cpp
+	KernelMemoryBarMenuItem.cpp
+	MemoryBarMenu.cpp
+	MemoryBarMenuItem.cpp
+	NoiseBarMenuItem.cpp
+	ProcessController.cpp
+	PCWindow.cpp
+	PCWorld.cpp
+	Preferences.cpp
+	PriorityMenu.cpp
+	QuitMenu.cpp
+	TeamBarMenu.cpp
+	TeamBarMenuItem.cpp
+	ThreadBarMenu.cpp
+	ThreadBarMenuItem.cpp
+	Utilities.cpp
+	: be shared [ TargetLibsupc++ ] localestub
+# SPDX-SnippetBegin
+# SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+	# the tray look of the Default (R5) Deskbar
+	libr5ui.so
+# SPDX-SnippetEnd
+	: ProcessController.rdef
+;
+
+DoCatalogs ProcessController :
+	x-vnd.Haiku-ProcessController
+	:
+	KernelMemoryBarMenuItem.cpp
+	NoiseBarMenuItem.cpp
+	PCWindow.cpp
+	PCWorld.cpp
+	Preferences.cpp
+	PriorityMenu.cpp
+	ProcessController.cpp
+;

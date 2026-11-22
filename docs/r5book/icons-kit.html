@@ -36,6 +36,7 @@
 				<li><a href="#icon-buttons">Icon buttons</a> &mdash; <code class="inline">r5_button_set_icon()</code> and <code class="inline">r5_button_set_lock()</code>.</li>
 				<li><a href="#r5_glyph">r5_glyph</a> &mdash; Monochrome line glyphs (power, restart, eye, Bluetooth).</li>
 				<li><a href="#r5_level_glyph">r5_level_glyph</a> &mdash; Multi-level line glyphs (battery, volume, signal).</li>
+				<li><a href="#tray-symbols">Tray symbols</a> &mdash; How an item in the Deskbar tray draws itself in Default (R5).</li>
 				<li><a href="#r5_icon">r5_icon</a> &mdash; Predefined icon IDs (Back, Forward, Up, Home, Lock).</li>
 			</ul>
 		</nav>
@@ -165,6 +166,14 @@ status_t r5_button_set_mime_icon(BButton* button, const char* type, float button
 				<tr><td><code>R5_GLYPH_CIRCLE</code></td><td>9</td><td>A ring: the right face button</td></tr>
 				<tr><td><code>R5_GLYPH_SQUARE</code></td><td>10</td><td>A square: the left face button</td></tr>
 				<tr><td><code>R5_GLYPH_TRIANGLE</code></td><td>11</td><td>A triangle, point up: the upper face button</td></tr>
+				<tr><td><code>R5_GLYPH_WIFI</code></td><td>12</td><td>The Wi-Fi symbol: a dot and three arcs</td></tr>
+				<tr><td><code>R5_GLYPH_VOLUME</code></td><td>13</td><td>A filled speaker with one sound wave</td></tr>
+				<tr><td><code>R5_GLYPH_VOLUME_OFF</code></td><td>14</td><td>The speaker with a cross (muted)</td></tr>
+				<tr><td><code>R5_GLYPH_NETWORK</code></td><td>15</td><td>Three boxes on a wire (a wired network)</td></tr>
+				<tr><td><code>R5_GLYPH_NETWORK_OFF</code></td><td>16</td><td>The same with a slash (no connection)</td></tr>
+				<tr><td><code>R5_GLYPH_AIRPLAY</code></td><td>17</td><td>A screen open at the bottom with a triangle under it</td></tr>
+				<tr><td><code>R5_GLYPH_MAIL</code></td><td>18</td><td>An envelope</td></tr>
+				<tr><td><code>R5_GLYPH_MAIL_NEW</code></td><td>19</td><td>A smaller envelope with a filled dot (new mail)</td></tr>
 			</table>
 
 			<div class="member">
@@ -200,6 +209,8 @@ r5_button_set_glyph(restart, R5_GLYPH_RESTART);</pre>
 				<tr><th>Value</th><th>Number</th><th>Picture</th></tr>
 				<tr><td><code>R5_LEVEL_SIGNAL</code></td><td>1</td><td>Four bars of rising height, left to right</td></tr>
 				<tr><td><code>R5_LEVEL_BATTERY</code></td><td>2</td><td>A battery body with a cap on the right, four segments inside</td></tr>
+				<tr><td><code>R5_LEVEL_WIFI</code></td><td>3</td><td>The Wi-Fi symbol as a line symbol: the dot and the three arcs are the four steps</td></tr>
+				<tr><td><code>R5_LEVEL_BATTERY_SYMBOL</code></td><td>4</td><td>A round battery with a cap line, its fill growing in four steps (a line symbol)</td></tr>
 			</table>
 			<table class="spec">
 				<tr><th>r5_level_style</th><th>Number</th><th>Use</th></tr>
@@ -219,6 +230,65 @@ r5_button_set_glyph(restart, R5_GLYPH_RESTART);</pre>
 <pre class="code">r5_level_glyph_draw(<span class="k">this</span>, R5_LEVEL_SIGNAL, barsFrame, 3,
 	ui_color(B_LIST_ITEM_TEXT_COLOR), ui_color(B_LIST_BACKGROUND_COLOR),
 	R5_LEVEL_STYLE_NORMAL);</pre>
+		</section>
+
+		<!-- tray symbols -->
+		<section class="entry" id="tray-symbols">
+			<div class="entry-header"><h2 class="plain">Tray symbols</h2><span class="kind">rule and functions</span></div>
+			<p>In the Deskbar style Default (R5), R5's own tray items draw a plain line symbol in one colour,
+			the Deskbar text colour, with 2 px lines, at the size and on the baseline of the clock. No colours of
+			their own: no green or red, no coloured fills, no bevels. A state shows in the shape: fewer arcs,
+			an empty battery, a cross through the speaker, a slash through the network, a dot on the envelope.
+			Only a warning may use a colour (a battery almost empty). In Classic (Haiku) every item keeps its own
+			icon, and application icons always stay the real Haiku icons.</p>
+
+			<div class="figure" role="img" aria-label="The tray symbols of Default (R5): Wi-Fi, volume, battery, network, Bluetooth, AirPlay and mail, and the clock">
+				<svg width="340" height="40" viewBox="0 0 340 40" aria-hidden="true">
+					<rect x="0" y="0" width="340" height="40" rx="10" fill="#f0f5fc" stroke="#ffffff"></rect>
+					<g transform="translate(12,11)" fill="none" stroke="#1d2a40" stroke-width="2" stroke-linecap="round"><path d="M2.5 9a14 14 0 0 1 19 0M5.5 12.5a9.5 9.5 0 0 1 13 0M8.7 16a5 5 0 0 1 6.6 0"></path><circle cx="12" cy="19.2" r="1.4" fill="#1d2a40" stroke="none"></circle></g>
+					<g transform="translate(44,11)"><path d="M4 9.5h4l5-4v13l-5-4H4z" fill="#1d2a40"></path><path d="M16.5 9a4.5 4.5 0 0 1 0 6" fill="none" stroke="#1d2a40" stroke-width="2" stroke-linecap="round"></path></g>
+					<g transform="translate(76,8)"><rect x="2.5" y="7" width="17" height="10" rx="2" fill="none" stroke="#1d2a40" stroke-width="2"></rect><rect x="5" y="9.5" width="10" height="5" rx="1" fill="#1d2a40"></rect><path d="M21.5 10.5v3" stroke="#1d2a40" stroke-width="2" stroke-linecap="round"></path></g>
+					<g transform="translate(110,8)" fill="none" stroke="#1d2a40" stroke-width="2" stroke-linecap="round"><path d="M9 2.5h6v6H9zM2.5 15.5h6v6h-6zM15.5 15.5h6v6h-6zM12 8.5V12M5.5 12h13M5.5 12v3.5M18.5 12v3.5"></path></g>
+					<g transform="translate(142,8)" fill="none" stroke="#1d2a40" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7.5l10 9-5 4.5V3l5 4.5-10 9"></path></g>
+					<g transform="translate(174,8)" fill="none" stroke="#1d2a40" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 17H3V4h18v13h-3"></path><path d="M12 14.5l5 6H7z"></path></g>
+					<g transform="translate(206,8)" fill="none" stroke="#1d2a40" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 5.5h19v14h-19z"></path><path d="M2.5 7l9.5 6 9.5-6"></path></g>
+					<text x="250" y="25" font-family="Noto Sans, sans-serif" font-size="14" font-weight="700" fill="#1d2a40">10:54</text>
+				</svg>
+			</div>
+
+			<p>Deskbar sets the style in its own process with <code class="inline">r5_set_deskbar_tray_style()</code>
+			(<code class="inline">&lt;R5UI.h&gt;</code>) and sends <code class="inline">R5_DESKBAR_TRAY_STYLE_CHANGED</code>
+			to every tray view. An item is a replicant inside Deskbar, so it reads the same value when it draws.
+			A view that does not know the message ignores it: <code class="inline">BDeskbar</code> and
+			<code class="inline">instantiate_deskbar_item</code> are unchanged, and other programs' items keep
+			drawing themselves.</p>
+
+			<div class="member">
+				<div class="sig">r5_tray_style r5_deskbar_tray_style();<br>rgb_color r5_deskbar_tray_color();</div>
+				<p><code class="inline">R5_TRAY_STYLE_CLASSIC</code> (0, the item's own icon) or
+				<code class="inline">R5_TRAY_STYLE_SYMBOLS</code> (1, a line symbol in the colour returned). Outside
+				Deskbar always classic. Link <code class="inline">libr5ui.so</code>.</p>
+			</div>
+
+<pre class="code"><span class="k">void</span>
+MyTrayView::Draw(BRect)
+{
+	<span class="k">if</span> (r5_deskbar_tray_style() == R5_TRAY_STYLE_SYMBOLS) {
+		r5_glyph_draw(<span class="k">this</span>, R5_GLYPH_MAIL, Bounds(), r5_deskbar_tray_color());
+		<span class="k">return</span>;
+	}
+	<span class="c">// the item's own icon</span>
+}
+
+<span class="k">void</span>
+MyTrayView::MessageReceived(BMessage* message)
+{
+	<span class="k">if</span> (message-&gt;what == R5_DESKBAR_TRAY_STYLE_CHANGED) {
+		Invalidate();
+		<span class="k">return</span>;
+	}
+	BView::MessageReceived(message);
+}</pre>
 		</section>
 
 		<!-- r5_icon -->

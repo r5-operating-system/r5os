@@ -38,6 +38,7 @@
 
 #include <AdminLock.h>
 #include <R5Icons.h>
+#include <R5UI.h>
 
 #include <bluetoothserver_p.h>
 
@@ -212,10 +213,16 @@ public:
 	{
 		(void)updateRect;
 		rgb_color color = ui_color(B_PANEL_TEXT_COLOR);
+		rgb_color background = ui_color(B_PANEL_BACKGROUND_COLOR);
+		// Default (R5) Deskbar: the tray's one colour (docs/ICONS.md)
+		if (r5_deskbar_tray_style() == R5_TRAY_STYLE_SYMBOLS) {
+			color = r5_deskbar_tray_color();
+			background = ViewColor();
+		}
 		if (!fReached || !fEnabled || fRadios == 0) {
 			// Faint: half way to the Deskbar background, as Deskbar's own
 			// items do.
-			color = mix_color(color, ui_color(B_PANEL_BACKGROUND_COLOR), 160);
+			color = mix_color(color, background, 160);
 		}
 
 		BRect frame = Bounds().InsetByCopy(1, 1);
@@ -244,6 +251,10 @@ public:
 		switch (message->what) {
 			case kMsgPoll:
 				_Poll();
+				break;
+
+			case R5_DESKBAR_TRAY_STYLE_CHANGED:
+				Invalidate();
 				break;
 
 			case kMsgToggle:
