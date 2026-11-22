@@ -566,7 +566,13 @@ rtsx_read(struct rtsx_softc *sc, uint16 addr, uint8 *val)
 	}
 
 	*val = (reg & 0xff);
-	return (tries == 0) ? ETIMEDOUT : 0;
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// while (n--) leaves n at -1 when it runs out, and at 0 when the
+	// last try succeeds.
+	return (tries < 0) ? ETIMEDOUT : 0;
+	// SPDX-SnippetEnd
 }
 
 int
@@ -616,8 +622,14 @@ rtsx_read_phy(struct rtsx_softc *sc, uint8 addr, uint16 *val)
 			break;
 	}
 
-	if (timeout == 0)
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// while (n--) leaves n at -1 when it runs out, and at 0 when the
+	// last try succeeds.
+	if (timeout < 0)
 		return ETIMEDOUT;
+	// SPDX-SnippetEnd
 
 	RTSX_READ(sc, RTSX_PHY_DATA0, &data0);
 	RTSX_READ(sc, RTSX_PHY_DATA1, &data1);
@@ -643,8 +655,14 @@ rtsx_write_phy(struct rtsx_softc *sc, uint8 addr, uint16 val)
 			break;
 	}
 
-	if (timeout == 0)
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// while (n--) leaves n at -1 when it runs out, and at 0 when the
+	// last try succeeds.
+	if (timeout < 0)
 		return ETIMEDOUT;
+	// SPDX-SnippetEnd
 
 	return 0;
 }
@@ -666,8 +684,14 @@ rtsx_read_cfg(struct rtsx_softc *sc, uint8 func, uint16 addr,
 			break;
 	}
 
-	if (tries == 0)
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// while (n--) leaves n at -1 when it runs out, and at 0 when the
+	// last try succeeds.
+	if (tries < 0)
 		return EIO;
+	// SPDX-SnippetEnd
 
 	RTSX_READ(sc, RTSX_CFGDATA0, &data0);
 	RTSX_READ(sc, RTSX_CFGDATA1, &data1);
