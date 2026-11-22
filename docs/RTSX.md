@@ -30,20 +30,21 @@ so a reader that also shows as a standard SD host stays with `sdhci`.
 
 One table, `kChips` in `rtsx_haiku.cpp`. The OpenBSD chips are the list of
 OpenBSD `rtsx_pci.c` 1.16, with its flags and BARs. The driver logs the chip
-name once at attach (`rtsx: Realtek RTS5228 card reader (10ec:5228), …`).
+name once at attach: `rtsx: RTS5228 (10ec:5228), …` for the tested chip,
+`rtsx: RTS5229 (experimental) (10ec:5229), …` for the OpenBSD chips.
 
 | PCI id | Chip | Source | Level on R5 |
 |---|---|---|---|
 | `10ec:5228` | RTS5228 | clean-room spec | buildable; the 5625U boots are still to do |
-| `10ec:5209` | RTS5209 | OpenBSD | buildable, not tested on R5 |
-| `10ec:5227` | RTS5227 | OpenBSD | buildable, not tested on R5 |
-| `10ec:5229` | RTS5229 | OpenBSD | buildable, not tested on R5 |
-| `10ec:522a` | RTS522A | OpenBSD | buildable, not tested on R5 |
-| `10ec:5249` | RTS5249 | OpenBSD | buildable, not tested on R5 |
-| `10ec:525a` | RTS525A | OpenBSD (registers in BAR 1) | buildable, not tested on R5 |
-| `10ec:5286` | RTL8402 | OpenBSD | buildable, not tested on R5 |
-| `10ec:5287` | RTL8411B | OpenBSD | buildable, not tested on R5 |
-| `10ec:5289` | RTL8411 | OpenBSD | buildable, not tested on R5 |
+| `10ec:5209` | RTS5209 | OpenBSD | experimental: buildable, not tested on R5 |
+| `10ec:5227` | RTS5227 | OpenBSD | experimental: buildable, not tested on R5 |
+| `10ec:5229` | RTS5229 | OpenBSD | experimental: buildable, not tested on R5 |
+| `10ec:522a` | RTS522A | OpenBSD | experimental: buildable, not tested on R5 |
+| `10ec:5249` | RTS5249 | OpenBSD | experimental: buildable, not tested on R5 |
+| `10ec:525a` | RTS525A | OpenBSD (registers in BAR 1) | experimental: buildable, not tested on R5 |
+| `10ec:5286` | RTL8402 | OpenBSD | experimental: buildable, not tested on R5 |
+| `10ec:5287` | RTL8411B | OpenBSD | experimental: buildable, not tested on R5 |
+| `10ec:5289` | RTL8411 | OpenBSD | experimental: buildable, not tested on R5 |
 
 Possible later work, not in the driver: RTS5208, RTS5260, RTS5261, RTS5264
 and the RTS5765DL. Neither OpenBSD's driver nor the spec covers them.

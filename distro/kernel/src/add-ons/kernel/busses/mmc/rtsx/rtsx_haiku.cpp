@@ -424,9 +424,10 @@ init_bus(device_node* node, void** _cookie)
 	}
 	sc->irq_installed = true;
 
-	dprintf("rtsx: Realtek %s card reader (%04x:%04x), %s %" B_PRIu32 "\n",
-		chip->name, vendor, deviceID, sc->msi ? "MSI vector" : "IRQ",
-		sc->irq);
+	// Only the RTS5228 is tested; the OpenBSD chips are experimental on R5.
+	dprintf("rtsx: %s%s (%04x:%04x), %s %" B_PRIu32 "\n", chip->name,
+		(chip->flags & RTSX_F_5228) != 0 ? "" : " (experimental)", vendor,
+		deviceID, sc->msi ? "MSI vector" : "IRQ", sc->irq);
 
 	mutex_lock(&sc->lock);
 	int error = rtsx_attach(sc, 1);
