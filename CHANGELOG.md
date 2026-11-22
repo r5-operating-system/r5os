@@ -7,6 +7,16 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-22 - Card reader: a register timeout is reported as one
+
+Problem: the countdown loops taken from OpenBSD (`while (tries--)`) end with the counter at -1 when they run out and at 0 when the last try succeeds. The checks tested `== 0`, so a real timeout in `rtsx_read()`, `rtsx_read_cfg()`, `rtsx_read_phy()` and `rtsx_write_phy()` was taken as success, and a success on the last try as a timeout. Found on the paper check for stick 75. The loops are bounded either way, so this never hung.
+
+What changed: those four checks test `< 0` (R5 snippets in `rtsx.cpp`).
+
+Limits: not on stick 75 (built before this fix); it only changes the error case. `rtsx_read_cfg()` also has `func & 0x03 << 4` (`func & 0x30`), as OpenBSD; the only caller passes 0, so it is left as it is.
+
+Tested: compiled (`scripts/build-locked.sh`, `jam_exit=0`, `rtsx.o` rebuilt). Not booted.
+
 ## 2026-11-22 - Card reader after stick 74: the RTS5228 is probed
 
 Problem: on stick 74 (5625U, SD card in before power on, then out and in again) there was no `rtsx` or `mmc` line in the syslog and no `/dev/disk/mmc`, although the add-on was in the image. The reader is `10ec:5228`, class `ff/00/00`, subsystem `103c:8a31`.
