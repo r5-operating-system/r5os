@@ -329,7 +329,7 @@ The blobs are unmodified. sha256 starts: `WIFI_MT7961_patch_mcu_1_2_hdr.bin` `a2
 
 ### Cirrus CS35L41 speaker firmware
 
-Location: `distro/firmware/cirrus`. Not installed on the image. Nothing loads these files yet. The speakers on the HP ENVY x360 15-ey0xxx stay silent until a driver exists.
+Location: `distro/firmware/cirrus`, installed unmodified in `system/non-packaged/data/firmware/cirrus` on the regular image together with `LICENSE.cirrus`, plus a symlink `cs35l41-dsp1-spk-prot-103c8a29.wmfw` to the program. The cs35l41 driver loads them only when its settings say `cs35l41_firmware true`.
 
 | Piece | Project | License |
 |---|---|---|

@@ -803,21 +803,30 @@ arch_vm_direct_map_release_range(VMArea* area, addr_t base, size_t size)
 	VMTranslationMap* map = area->address_space->TranslationMap();
 	addr_t end = base + size;
 	static int32 sReleaseFail = 0;
+	// Static 1024-page (4 MiB) scratch buffer avoids heap allocation while the
+	// address-space lock is held and collapses a 4 MiB WC release from 96
+	// global SMP IPIs (32-page batches) down to 1 unmap + 1 drain + 1 shootdown.
+	static mutex sReleaseBufLock = MUTEX_INITIALIZER("r5 wc release buf");
+	static const uint32 kReleaseBatch = 1024;
+	static phys_addr_t sReleaseBatch[kReleaseBatch];
 
+	MutexLocker bufLocker(sReleaseBufLock);
 	for (addr_t va = base; va < end; ) {
-		phys_addr_t batch[32];
-		addr_t batchVa[32];
+		addr_t firstVa = 0;
+		addr_t lastVa = 0;
 		uint32 count = 0;
 		map->Lock();
-		for (; count < 32 && va < end; va += B_PAGE_SIZE) {
+		for (; count < kReleaseBatch && va < end; va += B_PAGE_SIZE) {
 			phys_addr_t phys;
 			uint32 flags;
 			if (map->Query(va, &phys, &flags) != B_OK)
 				continue;
 			if ((flags & PAGE_PRESENT) == 0)
 				continue;
-			batchVa[count] = va;
-			batch[count] = phys;
+			if (count == 0)
+				firstVa = va;
+			lastVa = va;
+			sReleaseBatch[count] = phys;
 			count++;
 		}
 		map->Unlock();
@@ -829,19 +838,19 @@ arch_vm_direct_map_release_range(VMArea* area, addr_t base, size_t size)
 		// write-back. UnmapPages clears PTEs that are no longer present on
 		// a second call, so delete_area's later UnmapArea does not free them
 		// twice.
-		map->UnmapPages(area, batchVa[0],
-			(batchVa[count - 1] + B_PAGE_SIZE) - batchVa[0], true);
+		map->UnmapPages(area, firstVa, (lastVa + B_PAGE_SIZE) - firstVa, true);
 		arch_vm_direct_map_drain();
 
 		MutexLocker locker(sDirectLock);
 		bool changed = false;
 		for (uint32 i = 0; i < count; i++) {
 			bool created = false;
-			status_t status = r5_direct_drop(batch[i], &created, &changed);
+			status_t status = r5_direct_drop(sReleaseBatch[i], &created,
+				&changed);
 			if (status != B_OK && atomic_add(&sReleaseFail, 1) < 4) {
 				dprintf("R5 VM: wc direct map release failed %#"
-					B_PRIxPHYSADDR " status 0x%" B_PRIx32 "\n", batch[i],
-					(uint32)status);
+					B_PRIxPHYSADDR " status 0x%" B_PRIx32 "\n",
+					sReleaseBatch[i], (uint32)status);
 			}
 		}
 		if (changed)
