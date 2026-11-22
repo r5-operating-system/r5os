@@ -121,6 +121,48 @@ cornerCoverage(ivec2 at, ivec2 c, int r)
 }
 
 
+// The window's pixel at `at` in its buffer (or image), clamped to it.
+vec4
+windowPixel(ivec2 at)
+{
+	at = clamp(at, ivec2(0), ivec2(int(effect.sourceWidth) - 1,
+		int(effect.sourceHeight) - 1));
+	if (fromImage())
+		return imageTexel(at);
+	return unpack(source.pixels[uint(at.y) * effect.sourceStride
+		+ uint(at.x)]);
+}
+
+
+// The window's own edge line where its straight edges meet the arc
+// (shape[1], in buffer coordinates): the colour carried round the corner.
+vec4
+edgeLinePixel()
+{
+	return (windowPixel(effect.shape[1].xy) + windowPixel(effect.shape[1].zw))
+		* 0.5;
+}
+
+
+// How much of pixel `at` the edge line covers: the outermost pixel ring of
+// the corner, one pixel wide, as on a straight edge.
+float
+edgeLineCoverage(ivec2 at)
+{
+	vec2 d = vec2(at) + 0.5 - vec2(effect.shape[0].xy);
+	return clamp(1.0 - abs(length(d) - (float(effect.shape[0].z) - 0.5)),
+		0.0, 1.0);
+}
+
+
+// The pixel with the edge line over it.
+vec3
+withEdgeLine(vec3 pixel, ivec2 at)
+{
+	return mix(pixel, edgeLinePixel().rgb, edgeLineCoverage(at));
+}
+
+
 // Bilinear filtering of the source level at a position in texel-centre
 // coordinates (texel i is at i), clamped to the level's edge.
 vec4
@@ -154,8 +196,14 @@ main()
 		uint dim = mask * effect.amount;
 		if (dim == 0u)
 			return;
+		float shade = float(dim) / 65025.0;
+		// a round window's shadow fades out round the corner of its reach
+		if (effect.shape[0].w == 1) {
+			shade *= cornerCoverage(ivec2(effect.targetX + at.x,
+				effect.targetY + at.y), effect.shape[0].xy, effect.shape[0].z);
+		}
 		vec4 color = unpack(target.pixels[index]);
-		color.rgb *= 1.0 - float(dim) / 65025.0;
+		color.rgb *= 1.0 - shade;
 		color.a = 1.0;
 		target.pixels[index] = pack(color);
 		return;
@@ -250,17 +298,17 @@ main()
 	}
 
 	if (mode == 6u) {
-		// The arc of a round corner: the window's pixel over what lies
-		// below, by the share of the pixel inside the corner's circle.
-		vec4 pixel = fromImage()
-			? imageTexel(ivec2(effect.sourceX + at.x, effect.sourceY + at.y))
-			: unpack(source.pixels[(effect.sourceY + at.y)
-				* effect.sourceStride + effect.sourceX + at.x]);
+		// A round corner (shape[0]: the circle, shape[1]: where the straight
+		// edges start): the window's pixel with its edge line carried round
+		// the arc, over what lies below by the pixel's coverage.
 		ivec2 here = ivec2(effect.targetX + at.x, effect.targetY + at.y);
+		vec4 pixel = windowPixel(ivec2(effect.sourceX + at.x,
+			effect.sourceY + at.y));
+		vec3 color = withEdgeLine(pixel.rgb, here);
 		float coverage = cornerCoverage(here, effect.shape[0].xy,
 			effect.shape[0].z);
 		vec4 below = unpack(target.pixels[index]);
-		target.pixels[index] = pack(vec4(mix(below.rgb, pixel.rgb, coverage),
+		target.pixels[index] = pack(vec4(mix(below.rgb, color, coverage),
 			1.0));
 		return;
 	}
@@ -285,6 +333,19 @@ main()
 	} else {
 		// what a program drew with B_ALPHA_COMPOSITE on a glass view
 		color = mix(blur.rgb, pixel.rgb, pixel.a);
+	}
+	if (effect.shape[0].w == 1) {
+		// glass in a round corner: the edge line round the arc (as glass
+		// when the line is glass), then blended by the pixel's coverage
+		ivec2 here = ivec2(effect.targetX + at.x, effect.targetY + at.y);
+		vec4 line = edgeLinePixel();
+		vec3 lineColor = fixedGlass || line.a == 0.0
+			? mix(line.rgb, blur.rgb, seeThrough) : line.rgb;
+		color = mix(color, lineColor, edgeLineCoverage(here));
+		float coverage = cornerCoverage(here, effect.shape[0].xy,
+			effect.shape[0].z);
+		vec4 below = unpack(target.pixels[index]);
+		color = mix(below.rgb, color, coverage);
 	}
 	target.pixels[index] = pack(vec4(color, 1.0));
 }

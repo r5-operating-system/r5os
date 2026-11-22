@@ -141,6 +141,11 @@ r5_screen_change_allowed(team_id team)
 // SPDX-SnippetEnd
 #include "View.h"
 #include "WindowEffectLevels.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include "WindowOutline.h"
+// SPDX-SnippetEnd
 
 
 /*!	M11 step 4: one line when the user changes a window effect, in both
@@ -3984,7 +3989,20 @@ ServerApp::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 					BRegion after;
 					found->GetFullRegion(&after);
 					dirty.Include(&after);
+					// the shadow's reach changes with the outline too
+					BRect reach = dirty.Frame();
+					reach.InsetBy(-R5_WINDOW_CORNER_MAX_RADIUS,
+						-R5_WINDOW_CORNER_MAX_RADIUS);
 					fDesktop->RebuildAndRedrawAfterWindowChange(found, dirty);
+					// GPU mode: the whole window is composed again, its
+					// corners' arc and edge line too, not only what the
+					// clipping revealed (22 Nov 2026, QEMU: the top
+					// corners kept the square picture)
+					Compositor* compositor = fDesktop->GetCompositor();
+					if (compositor != NULL && compositor->IsActive()) {
+						compositor->ClippingChanged();
+						compositor->Damage(BRegion(reach));
+					}
 				}
 				fDesktop->UnlockAllWindows();
 			}

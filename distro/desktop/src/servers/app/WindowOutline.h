@@ -29,18 +29,24 @@
 	corner: from its decorator (Decorator::GetOutline(), decorator ABI 2) or,
 	for a program's own window, from set_window_corner_radius() in libr5ui.
 
-	From it come two regions in screen coordinates:
+	From it come these regions in screen coordinates:
 	- cut: the corner pixels that are not part of the window. They leave the
 	  window's full region and its content region, so the windows and the
 	  desktop behind draw there, in the CPU mode and in the GPU mode.
 	- edge: the pixels the arc crosses (GPU mode only). They stay in the
-	  window; the compositor blends them over what lies behind with the
-	  coverage below. In the CPU mode there is no edge: a pixel more than half
-	  covered is the window's, the rest is cut (a stepped arc).
+	  window but do not hide what lies behind: the compositor blends them.
+	- area: every pixel of the window inside a corner's square (GPU mode
+	  only). The compositor draws these itself (effects mode 6, or mode 3
+	  for glass): the window's pixel, the window's own edge line carried
+	  round the arc, and the edge blended by its coverage.
+	In the CPU mode there is no edge and no area: a pixel more than half
+	covered is the window's, the rest is cut (a stepped arc).
 
-	One formula decides both, here and in effects.comp (mode 6): a corner is a
+	One formula decides all of it, here and in effects.comp: a corner is a
 	circle around an integer point, and a pixel's coverage is
-	clamp(radius + 0.5 - distance of the pixel's centre, 0, 1).
+	clamp(radius + 0.5 - distance of the pixel's centre, 0, 1). The edge line
+	is the outermost pixel ring, as on a straight edge; its colour is taken
+	from the window's own pixels where the straight edges meet the arc.
 */
 
 
@@ -60,22 +66,33 @@ struct window_corner {
 	int32			centerY;
 	int32			radius;
 	clipping_rect	square;		// the radius x radius pixels of the corner
+	// Where the straight edges start next to the arc: a pixel of the top
+	// or bottom edge, and one of the left or right edge (screen).
+	int32			edgeX1;
+	int32			edgeY1;
+	int32			edgeX2;
+	int32			edgeY2;
 };
 
 
 struct window_outline {
 	window_outline()
 		:
-		cornerCount(0)
+		cornerCount(0),
+		rectCount(0)
 	{
 	}
 
 	bool IsSquare() const { return cornerCount == 0; }
 
-	int32			cornerCount;
-	window_corner	corners[R5_WINDOW_OUTLINE_MAX_RECTS * 4];
-	BRegion			cut;
-	BRegion			edge;
+	int32				cornerCount;
+	window_corner		corners[R5_WINDOW_OUTLINE_MAX_RECTS * 4];
+	// the rectangles it was built from (for the shadow's reach)
+	int32				rectCount;
+	window_outline_rect	rects[R5_WINDOW_OUTLINE_MAX_RECTS];
+	BRegion				cut;
+	BRegion				edge;
+	BRegion				area;
 };
 
 
@@ -140,7 +157,24 @@ window_outline_corner(const clipping_rect& rect, int32 kind, float radius,
 	corner.square.right = corner.square.left + r - 1;
 	corner.square.top = bottom ? rect.bottom - r + 1 : rect.top;
 	corner.square.bottom = corner.square.top + r - 1;
+	// the first pixel of the straight edges, just outside the square
+	corner.edgeX1 = right ? corner.square.left - 1 : corner.square.right + 1;
+	corner.edgeY1 = bottom ? rect.bottom : rect.top;
+	corner.edgeX2 = right ? rect.right : rect.left;
+	corner.edgeY2 = bottom ? corner.square.top - 1 : corner.square.bottom + 1;
 	return true;
+}
+
+
+static inline clipping_rect
+window_outline_clipping_rect(const BRect& frame)
+{
+	clipping_rect rect;
+	rect.left = (int32)floorf(frame.left);
+	rect.top = (int32)floorf(frame.top);
+	rect.right = (int32)floorf(frame.right);
+	rect.bottom = (int32)floorf(frame.bottom);
+	return rect;
 }
 
 
@@ -153,30 +187,30 @@ window_outline_build(const window_outline_rect* rects, int32 count,
 	bool blended, window_outline& outline)
 {
 	outline.cornerCount = 0;
+	outline.rectCount = 0;
 	outline.cut.MakeEmpty();
 	outline.edge.MakeEmpty();
+	outline.area.MakeEmpty();
 	if (count > R5_WINDOW_OUTLINE_MAX_RECTS)
 		count = R5_WINDOW_OUTLINE_MAX_RECTS;
 
-	BRegion solid;
+	BRegion inside[R5_WINDOW_OUTLINE_MAX_RECTS];
+	BRegion squares[R5_WINDOW_OUTLINE_MAX_RECTS];
 	for (int32 i = 0; i < count; i++) {
 		if (!rects[i].rect.IsValid())
 			continue;
-		clipping_rect rect;
-		rect.left = (int32)floorf(rects[i].rect.left);
-		rect.top = (int32)floorf(rects[i].rect.top);
-		rect.right = (int32)floorf(rects[i].rect.right);
-		rect.bottom = (int32)floorf(rects[i].rect.bottom);
+		outline.rects[outline.rectCount++] = rects[i];
+		clipping_rect rect = window_outline_clipping_rect(rects[i].rect);
 		float radii[4] = { rects[i].leftTop, rects[i].rightTop,
 			rects[i].leftBottom, rects[i].rightBottom };
 
-		BRegion inside;
-		inside.Set(rect);
+		inside[i].Set(rect);
 		for (int32 kind = 0; kind < 4; kind++) {
 			window_corner corner;
 			if (!window_outline_corner(rect, kind, radii[kind], corner))
 				continue;
 			outline.corners[outline.cornerCount++] = corner;
+			squares[i].Include(corner.square);
 			bool right = kind == 1 || kind == 3;
 			for (int32 y = corner.square.top; y <= corner.square.bottom;
 					y++) {
@@ -220,15 +254,30 @@ window_outline_build(const window_outline_rect* rects, int32 count,
 				BRegion row;
 				window_outline_add_run(row, cut.left, cut.right, y);
 				window_outline_add_run(row, edge.left, edge.right, y);
-				inside.Exclude(&row);
+				inside[i].Exclude(&row);
 			}
 		}
-		solid.Include(&inside);
 	}
 
+	// A corner pixel that lies inside another rectangle is that one's, and
+	// is drawn as a plain pixel.
+	BRegion solid;
+	for (int32 i = 0; i < count; i++)
+		solid.Include(&inside[i]);
+	for (int32 i = 0; i < count && blended; i++) {
+		BRegion others;
+		for (int32 j = 0; j < count; j++) {
+			if (j != i)
+				others.Include(&inside[j]);
+		}
+		BRegion area(squares[i]);
+		area.Exclude(&others);
+		outline.area.Include(&area);
+	}
 	outline.edge.Exclude(&solid);
 	outline.cut.Exclude(&solid);
 	outline.cut.Exclude(&outline.edge);
+	outline.area.Exclude(&outline.cut);
 }
 
 

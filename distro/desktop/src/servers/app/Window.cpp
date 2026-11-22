@@ -2252,8 +2252,10 @@ Window::GetOutline(window_outline* outline, bool blended)
 	int32 count = _OutlineRects(rects);
 	if (count <= 0) {
 		outline->cornerCount = 0;
+		outline->rectCount = 0;
 		outline->cut.MakeEmpty();
 		outline->edge.MakeEmpty();
+		outline->area.MakeEmpty();
 		return;
 	}
 	window_outline_build(rects, count, blended, *outline);
