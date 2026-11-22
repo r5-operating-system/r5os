@@ -76,12 +76,39 @@ and the RTS5765DL. Neither OpenBSD's driver nor the spec covers them.
 - `mmc_bus` does not unpublish a card that is gone. After a removal the old
   disk stays in `/dev/disk/mmc/` and only returns errors; a new card gets a
   new node. Unmount before removing the card.
-- `mmc_bus` repeats ACMD41 until the card is ready. If the card is pulled out
-  during that loop, the loop can keep running until a card is inserted again.
-  That is in `mmc_bus`, not in this driver.
 - No suspend or runtime power management (Haiku has neither here).
-- The RTS5228 bits the spec leaves open: after the 74 init clocks the driver
-  stops the clock toggle again; at 25 MHz it keeps the SD 3.0 clock sources
-  of the power-on sequence and does not switch to OpenBSD's SD 2.0 setup.
-  If CMD0 or the first read fails on the 5625U, those are the first two
-  places to look.
+- The RTS5228 bit the spec leaves open: after the 74 init clocks the driver
+  stops the clock toggle again.
+
+## SD 2.0 timing on the RTS5228
+
+The RTS5228 power-on sequence (spec section 3.2, step 11) leaves the SD
+engine in SD 3.0 mode with the CRC clock from variable-phase clock 0, which
+only SDR50 and SDR104 set up. Stick 75 showed what that does: CMD0 (no
+answer) completed, CMD8 ended with no interrupt at all. Every clock change
+on the RTS5228 now first sets OpenBSD's SD 2.0 timing, as
+`rtsx_switch_sd_clock()` does for the other chips (spec section 7.9: the SD
+path is the same): SD 2.0 mode, clock source `0x24`, RX on the rising edge,
+TX on the falling edge.
+
+## Diagnostics
+
+- A failed command is logged with its argument and one line of chip state
+  (`bipr`, `bier`, the SD configuration, status and transfer registers, the
+  clock registers, and on the RTS5228 the LDO and overcurrent status): every
+  failure up to 32, then one in 256. A removed card is not logged.
+- "cannot power the card slot" says whether the power or the clock step
+  failed, with the same state line, and every RTS5228 step that fails names
+  its line in `rtsx_5228.cpp`.
+
+## mmc_bus
+
+R5 has its own copy of `mmc_bus.cpp` (`distro/kernel/src/add-ons/kernel/
+bus_managers/mmc/`, Haiku MIT, R5 snippets). Every scan sends CMD0 first, so
+a card put in later is reset too. CMD1 and ACMD41 stop after 20 tries (two
+seconds; the SD specification gives the card one), and a failed CMD55 or
+ACMD41 ends the scan; until now the loop went on with an old OCR, also after
+the card was gone (stick 75: 489 tries). A failed scan, a card outside the
+voltage range, and a card that does not enter the data state now wait for
+the next card instead of ending the scan thread. This also applies to sdhci
+readers.

@@ -202,6 +202,22 @@ MMCBus::_WorkerThread(void* cookie)
 		bus->SetClock(400);
 		bus->SetBusWidth(1);
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// A card put in after the first scan gets its own CMD0 (the one
+		// above only ran for the card present at the start).
+		bus->ExecuteCommand(0, GO_IDLE_STATE, 0, NULL);
+		snooze(30000);
+
+		// The card must be ready within one second (SD physical layer,
+		// ACMD41); give it two, then wait for the next card instead of
+		// asking forever (stick 75: hundreds of tries, also after the card
+		// was gone).
+		static const int kMaxReadyTries = 20;
+		bool scanFailed = false;
+// SPDX-SnippetEnd
+
 		// Probe the voltage range
 		enum {
 			// Table 4-40 in physical layer specification v8.00
@@ -218,7 +234,13 @@ MMCBus::_WorkerThread(void* cookie)
 		// If ACMD41 also does not work, it may be an SDIO card, too
 		uint32_t probe = (HOST_27_36V << 8) | kVoltageCheckPattern;
 		uint32_t hcs = 1 << 30;
-		uint32_t ocr;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// Was read uninitialized when CMD1 or ACMD41 failed.
+		uint32_t ocr = 0;
+		int tries = 0;
+// SPDX-SnippetEnd
 		status_t status = bus->ExecuteCommand(0, SD_SEND_IF_COND, probe, &response);
 		if (status != B_OK) {
 			TRACE("Card does not implement CMD8, may be a V1 SD or MMC card\n");
@@ -235,6 +257,15 @@ MMCBus::_WorkerThread(void* cookie)
 				}
 				if ((ocr & (1 << 31)) == 0) {
 					TRACE("MMC card is busy\n");
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+					if (++tries >= kMaxReadyTries) {
+						ERROR("MMC card did not get ready\n");
+						status = B_TIMED_OUT;
+						break;
+					}
+// SPDX-SnippetEnd
 					snooze(100000);
 				}
 			} while ((ocr & (1 << 31)) == 0);
@@ -249,34 +280,70 @@ MMCBus::_WorkerThread(void* cookie)
 		} else if (response != probe) {
 			ERROR("Card does not support voltage range (expected %x, "
 				"reply %x)\n", probe, response);
-			bus->_TerminateBus();
-			bus->ReleaseBus();
-			return B_ERROR;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			// Wait for another card; ending the thread left the slot dead
+			// until the next start.
+			bus->_AcquireScanSemaphore();
+			continue;
+// SPDX-SnippetEnd
 		}
 
 		// Probe OCR, waiting for card to become ready
 		// We keep repeating ACMD41 until the card replies that it is
 		// initialized. For MMC we already probed using CMD1 above.
 		if ((cardType != CARD_TYPE_MMC) && (cardType != CARD_TYPE_MMC_EXTENDED_CAPACITY)) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			// A failed CMD55 or ACMD41 (no card, no answer) ends this scan;
+			// until now it was ignored and the loop went on with an old OCR.
+			tries = 0;
 			do {
-				uint32_t cardStatus;
-				while (bus->ExecuteCommand(0, SD_APP_CMD, 0, &cardStatus) == B_BUSY) {
+				uint32_t cardStatus = 0;
+				while ((status = bus->ExecuteCommand(0, SD_APP_CMD, 0,
+						&cardStatus)) == B_BUSY) {
 					ERROR("Card locked after CMD8...\n");
+					if (++tries >= kMaxReadyTries)
+						break;
 					snooze(1000000);
+				}
+				if (status != B_OK) {
+					ERROR("CMD55 failed: %s\n", strerror(status));
+					scanFailed = true;
+					break;
 				}
 				if ((cardStatus & 0xFFFF8000) != 0)
 					ERROR("SD card reports error %x\n", cardStatus);
 				if ((cardStatus & (1 << 5)) == 0)
 					ERROR("Card did not enter ACMD mode\n");
 
-				bus->ExecuteCommand(0, SD_SEND_OP_COND, hcs | 0xFF8000, &ocr);
+				status = bus->ExecuteCommand(0, SD_SEND_OP_COND,
+					hcs | 0xFF8000, &ocr);
+				if (status != B_OK) {
+					ERROR("ACMD41 failed: %s\n", strerror(status));
+					scanFailed = true;
+					break;
+				}
 
 				if ((ocr & (1 << 31)) == 0) {
 					TRACE("Card is busy\n");
+					if (++tries >= kMaxReadyTries) {
+						ERROR("SD card did not get ready\n");
+						scanFailed = true;
+						break;
+					}
 					snooze(100000);
 				}
 			} while ((ocr & (1 << 31)) == 0);
 		}
+
+		if (scanFailed) {
+			bus->_AcquireScanSemaphore();
+			continue;
+		}
+// SPDX-SnippetEnd
 
 		// FIXME this should be asked to each card, when there are multiple
 		// ones. So ACMD41 should be moved inside the probing loop below?
@@ -344,9 +411,15 @@ MMCBus::_WorkerThread(void* cookie)
 
 			if ((response & 0xFF00) != 0x500) {
 				TRACE("Card did not enter data state\n");
-				// This probably means there are no more cards to scan on the
-				// bus, so exit the loop.
-				break;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+				// Wait for the next card. "break" ended the scan thread, so
+				// no card in this slot was seen again until the next start.
+				ERROR("Card did not enter data state\n");
+				bus->_AcquireScanSemaphore();
+				continue;
+// SPDX-SnippetEnd
 			}
 
 			// The card now has an RCA and it entered the data phase, which

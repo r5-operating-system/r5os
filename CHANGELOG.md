@@ -7,6 +7,26 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-22 - Card reader after stick 75: SD 2.0 timing on the RTS5228, failed commands in the log, a bounded card scan
+
+Problem (stick 75, 5625U, `generated/boot-5625u-75/` in the stick worktree): the RTS5228 attached and saw the card, but `CMD0` passed, `CMD8` ended after exactly one second with neither "done" nor "failed" from the chip, and `MMC CMD1 failed`; no `/dev/disk/mmc`. After the card went out and in again: four times `cannot power the card slot`, then `Card did not enter ACMD mode` / `Card is busy` 489 times. The owner notes that this reader also works badly in Windows.
+
+Causes:
+- `CMD8` (likely, not proven): the RTS5228 power-on sequence (spec section 3.2, step 11) leaves the SD engine in SD 3.0 mode (`SD_CFG1` bits `0x18`) with the CRC clock from variable-phase clock 0 (`0xFC2E` = `0x21`), which only SDR50 and SDR104 set up. The RTS5228 branch of `rtsx_bus_clock()` skipped OpenBSD's `rtsx_switch_sd_clock()`, which puts every other chip in SD 2.0 timing. `CMD0` needs no answer, so it completed; `CMD8` waits for an answer and its CRC, and the chip never ended it. The earlier `docs/RTSX.md` already named this as the first place to look. It fits the log; only the next stick shows whether it was the cause.
+- 489 tries (sure: the code shows it): Haiku's `mmc_bus` ignored a failed `CMD55` or `ACMD41` and looped on with an old or uninitialized OCR, every 100 ms, also after the card was gone. A failed scan ended with `break` or `return`, which stopped the scan thread for good, and a card put in later got no `CMD0`.
+- `cannot power the card slot` after the reinsert: not known; the log did not say which step failed.
+
+What changed:
+- `rtsx.cpp` (R5 snippet): on the RTS5228, every clock change first sets OpenBSD's SD 2.0 timing: SD 2.0 mode, clock source `0x24` (CRC on the fixed clock), RX on the rising edge, TX on the falling edge (spec section 7.9: the SD path is the same as on the older chips).
+- `rtsx_haiku.cpp`: a failed command is logged with its argument and one line of chip state (`bipr`, `bier`, SD configuration, status and transfer registers, clock registers, and on the RTS5228 the LDO and overcurrent status): every failure up to 32, then one in 256; a removed card is not logged. "cannot power the card slot" names the power or clock step and prints the same state.
+- `rtsx_5228.cpp`: a failing step names its line.
+- `mmc_bus.cpp` copied into `distro/kernel` (Haiku, MIT; R5 snippets; in `install_rtsx()` of `scripts/apply-kernel-bugs.py`): `CMD0` at the start of every scan; `CMD1` and `ACMD41` stop after 20 tries (2 s; the SD specification gives the card 1 s); a failed `CMD55` or `ACMD41` ends the scan; `ocr` starts at 0; a failed scan, a card outside the voltage range and a card that does not enter the data state wait for the next card instead of ending the thread. This also applies to sdhci readers.
+- `docs/RTSX.md`: sections "SD 2.0 timing on the RTS5228", "Diagnostics" and "mmc_bus".
+
+Limits: the SD 2.0 timing is a fix by reasoning from the log, the spec and OpenBSD; it is not shown on the 5625U. If `CMD8` still fails, the state line now says where. The slot power failure after a reinsert is not fixed, only logged. The reader works badly in Windows too, so the card or the slot may share the blame; a second card is worth trying.
+
+Tested (22 Nov 2026): compiled (`scripts/build-locked.sh`, `jam_exit=0`; `mmc_bus.o`, `rtsx.o`, `rtsx_5228.o` and `rtsx_haiku.o` rebuilt, no warnings). QEMU (KVM, own copy of the image) with an emulated sdhci reader and a 64 MiB FAT card: `mmc_bus` ran `CMD0`, `CMD8`, one `CMD55`/`ACMD41`, got RCA `664f`, `mmc_disk` set 4-bit mode and published `disk/mmc/0/raw`, with no errors; the desktop started, no panic. QEMU has no RTS5228; a card removal and a reinsert in the loop were not run in QEMU.
+
 ## 2026-11-22 - Card reader: a register timeout is reported as one
 
 Problem: the countdown loops taken from OpenBSD (`while (tries--)`) end with the counter at -1 when they run out and at 0 when the last try succeeds. The checks tested `== 0`, so a real timeout in `rtsx_read()`, `rtsx_read_cfg()`, `rtsx_read_phy()` and `rtsx_write_phy()` was taken as success, and a success on the last try as a timeout. Found on the paper check for stick 75. The loops are bounded either way, so this never hung.

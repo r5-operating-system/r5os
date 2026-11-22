@@ -499,8 +499,24 @@ rtsx_bus_clock(struct rtsx_softc *sc, int freq)
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
-	if (sc->flags & RTSX_F_5228)
+	if (sc->flags & RTSX_F_5228) {
+		/*
+		 * SD 2.0 timing, as rtsx_switch_sd_clock() below sets it for
+		 * every other chip (the SD path is the same, RTS5228 spec
+		 * section 7.9). The RTS5228 power-on leaves SD 3.0 mode and a
+		 * CRC clock from variable-phase clock 0, which only SDR50 and
+		 * SDR104 set up; a command with a response then never ended
+		 * (stick 75: CMD0 done, CMD8 no interrupt within 1 s).
+		 */
+		RTSX_CLR(sc, RTSX_SD_CFG1, RTSX_SD_MODE_MASK);
+		RTSX_SET(sc, RTSX_CLK_CTL, RTSX_CLK_LOW_FREQ);
+		RTSX_WRITE(sc, RTSX_CARD_CLK_SOURCE,
+		    RTSX_CRC_FIX_CLK | RTSX_SD30_VAR_CLK0 | RTSX_SAMPLE_VAR_CLK1);
+		RTSX_CLR(sc, RTSX_SD_SAMPLE_POINT_CTL, RTSX_SD20_RX_SEL_MASK);
+		RTSX_WRITE(sc, RTSX_SD_PUSH_POINT_CTL, RTSX_SD20_TX_NEG_EDGE);
+		RTSX_CLR(sc, RTSX_CLK_CTL, RTSX_CLK_LOW_FREQ);
 		return rtsx_5228_set_clock(sc, freq);
+	}
 	// SPDX-SnippetEnd
 
 	/* Round down to a supported frequency (kHz, as OpenBSD's sdmmc). */
