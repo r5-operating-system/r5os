@@ -1,5 +1,13 @@
 # R5OS changelog (lokaal)
 
+## 2026-11-22 - The desktop leaves RADV instead of crashing after a GPU reset
+
+Problem: on stick 72 boot 2 (the GPU hang test), the hang was detected and reset (`gpu reset mode2 ok`, `gpu selftest after reset ok`), and then app_server stopped in the debugger: Skia Graphite `VulkanCommandBuffer::isFinished` called `abort()`, from `SkiaGpu::RunWork` → `checkAsyncWorkCompletion` on the compositor draw thread. After a reset that another client caused, app_server's fence waits fail (`DRM_IOCTL_SYNCOBJ_WAIT` returns `ECANCELED` in app_server-stderr.log), RADV reports that as an error other than `VK_ERROR_DEVICE_LOST`, and Graphite aborts on an unexpected fence status. The fallback of #4471 only ran when app_server's own submit failed.
+
+What changed: `SkiaGpu::RunWork` asks its run fence (a zero-timeout wait) before Graphite polls its fences. Anything but signalled or not yet means the device is gone: the run returns "device lost" and the compositor leaves RADV the way a failed submit does. After a failed run-fence wait, Graphite is not polled either.
+
+Limits: compiled only; not booted. The deeper cause (a lost client's syncobj wait returning `ECANCELED`, where Linux returns success and reports the loss through the context query) is in the R5 DRM library and kernel and is left for its own change. Proof: the next stick's hang-test boot must show "left radv" and no debugger.
+
 ## 2026-11-21 - EFI runtime services on the 5625U
 
 Sticks 69 and 70 carried this branch (`11dd98fc7d`) together with the CS35L41 driver (#4482), on the stick branch only, and booted on the HP ENVY x360 15 (Ryzen 5 5625U) through UEFI. Both boots: `efi: 37383 pages identity mapped, 80 of 104 page tables, NX on` and `efi: runtime services ready, revision 2.70, 11 ranges, attributes table yes`. The CS35L41 driver read `CirrusSmartAmpCalibrationData` through `get_variable` (48 bytes: the header and one entry per amplifier), and on stick 70 applied it (left resistance 10050, right 10336). No fault, no "called with interrupts off", and the boot loader change started the system normally.
