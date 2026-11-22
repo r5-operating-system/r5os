@@ -22,6 +22,8 @@ struct CpuReport {
 	BString userSpacePaths;
 	BString xcr0;
 	BString kernelLine;
+	BString powerProfile;
+		// docs/POWER.md, section 4: the profile and how it is set
 };
 
 

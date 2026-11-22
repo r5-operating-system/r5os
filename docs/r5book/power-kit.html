@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<!--
+  SPDX-FileCopyrightText: 2026 R5OS Contributors
+  SPDX-License-Identifier: MIT
+-->
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Power Kit</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
+	<link rel="stylesheet" href="r5book.css" />
+</head>
+<body data-page="power">
+
+<div class="book">
+	<aside class="toc"></aside>
+
+	<main class="page">
+		<div class="breadcrumb"><a href="index.html">R5Book</a> &rsaquo; <a href="index.html#kits">Kits</a> &rsaquo; Power Kit</div>
+
+		<section class="page-hero">
+			<span class="kit-label">libr5power.so</span>
+			<h1>The Power Kit</h1>
+			<p>R5's <code class="inline">libr5power.so</code> tells a program about the batteries, the power
+			source, the processor's profile and sleep, and sends it a message when one of them changes. It
+			sits next to <code class="inline">libbe</code> and is not part of it. Reading needs no rights;
+			the machine's power settings are changed through the power service, which checks who asks. The
+			code is R5's own and MIT; the battery reading is the code PowerStatus always used, moved into
+			the library.</p>
+		</section>
+
+		<nav class="on-this-page" aria-label="On this page">
+			<h3>What is in this page</h3>
+			<ul>
+				<li><a href="#roster">BPowerRoster</a> &mdash; Batteries, power source, profile, sleep, settings.</li>
+				<li><a href="#watching">Watching</a> &mdash; The kMsgPowerChanged message and its fields.</li>
+				<li><a href="#example">Example</a> &mdash; A program that follows the battery and the profile.</li>
+				<li><a href="#brightness">Brightness</a> &mdash; Haiku's BScreen call.</li>
+				<li><a href="#cases">Without a battery, in Safe mode, before sleep</a> &mdash; What a program gets.</li>
+				<li><a href="#settings">Where people see it</a> &mdash; The Power page in Settings.</li>
+			</ul>
+		</nav>
+
+		<table class="facts">
+			<tr><th>Declared in</th><td>&lt;PowerRoster.h&gt;</td></tr>
+			<tr><th>Library</th><td>libr5power.so (link be and libr5power.so)</td></tr>
+			<tr><th>Source</th><td>distro/power/lib</td></tr>
+			<tr><th>Contract</th><td>docs/LIBR5.md, docs/POWER.md</td></tr>
+		</table>
+
+		<div class="note"><strong>Who does what.</strong> The kernel sets the processor's speed: a
+		profile, written to the processor's own registers (AMD CPPC, Intel HWP). The power service, Haiku's
+		<code class="inline">power_daemon</code>, chooses the profile for the power source, turns the display
+		off after the time the person chose, and handles the lid and the power button. A program only reads
+		and watches. The values come from the processor and the firmware (ACPI), never from a list of
+		models.</div>
+
+		<section class="entry" id="roster">
+			<div class="entry-header"><h2>BPowerRoster</h2><span class="kind">class</span></div>
+			<table class="facts">
+				<tr><th>Declared in</th><td>&lt;PowerRoster.h&gt;</td></tr>
+			</table>
+			<div class="member"><div class="sig">BPowerRoster();<br>~BPowerRoster();</div>
+				<p>A roster finds the batteries under <code class="inline">/dev/power</code> when it is made.
+				Make one where you need it; it is cheap.</p></div>
+			<div class="member"><div class="sig">int32 CountBatteries() const;<br>status_t GetBatteryInfo(int32 index, power_battery_info* info) const;</div>
+				<p>The batteries, read again on every call. <code class="inline">power_battery_info</code> holds
+				<code class="inline">state</code> (<code class="inline">B_POWER_BATTERY_DISCHARGING</code>,
+				<code class="inline">_CHARGING</code>, <code class="inline">_CRITICAL</code>,
+				<code class="inline">_NOT_CHARGING</code>), <code class="inline">percent</code> (0 to 100),
+				<code class="inline">time_left</code> in seconds until empty or full,
+				<code class="inline">health</code> (the full charge in percent of the design capacity), the
+				three capacities and <code class="inline">in_mah</code>. A value the firmware does not report
+				is -1.</p></div>
+			<div class="member"><div class="sig">bool IsOnAC() const;</div>
+				<p>True when the computer is plugged in, and on a computer without a battery. From the ACPI
+				AC adapter, or from the batteries when there is none.</p></div>
+			<div class="member"><div class="sig">power_profile Profile() const;<br>bool CanChangeProfile() const;</div>
+				<p>The processor's profile: <code class="inline">B_POWER_PROFILE_SAVER</code> (stays below its
+				boost, leans toward energy), <code class="inline">B_POWER_PROFILE_BALANCED</code> or
+				<code class="inline">B_POWER_PROFILE_PERFORMANCE</code>. <code class="inline">CanChangeProfile()</code>
+				is false on a processor that offers R5 no speed control; the profile then does nothing.</p></div>
+			<div class="member"><div class="sig">bool CanSleep(power_sleep_state* state = NULL) const;</div>
+				<p>Whether sleep works on this computer, and the state the firmware offers:
+				<code class="inline">B_POWER_SLEEP_S0IX</code> (Modern Standby),
+				<code class="inline">B_POWER_SLEEP_S3</code> (suspend to RAM) or
+				<code class="inline">B_POWER_SLEEP_NONE</code>. Until R5's sleep has passed its tests it is
+				false everywhere.</p></div>
+			<div class="member"><div class="sig">status_t GetSettings(BMessage* settings) const;<br>status_t SetSettings(const BMessage&amp; settings);</div>
+				<p>The machine's power settings, the ones on the Power page. Reading needs no rights.
+				<code class="inline">SetSettings()</code> is an <a href="admin-kit.html">admin request</a>: the
+				power service checks that the sender is an administrator, uid 0 or a program the lock was
+				opened for, and writes the file itself. Both return <code class="inline">B_NO_INIT</code> when
+				the service does not run (Safe mode). Most programs do not need these.</p></div>
+		</section>
+
+		<section class="entry" id="watching">
+			<div class="entry-header"><h2>Watching</h2><span class="kind">messages</span></div>
+			<div class="member"><div class="sig">static status_t StartWatching(BMessenger target);<br>static status_t StopWatching(BMessenger target);</div>
+				<p>The target gets <code class="inline">kMsgPowerChanged</code> whenever something changes, so a
+				program never polls. Stop watching before the target goes away. One looper per team does the
+				work, the way <code class="inline">BGameController</code> watches controllers.</p></div>
+			<table class="spec">
+				<tr><th>int32 "change"</th><th>Other fields</th><th>When</th></tr>
+				<tr><td><code>B_POWER_BATTERY_CHANGED</code></td><td>&mdash;</td><td>A battery's charge, state or time left changed, or a battery came or went. Read <code>GetBatteryInfo()</code> again.</td></tr>
+				<tr><td><code>B_POWER_AC_CHANGED</code></td><td>bool "on ac"</td><td>Plugged in or unplugged.</td></tr>
+				<tr><td><code>B_POWER_PROFILE_CHANGED</code></td><td>int32 "profile"</td><td>The power service set another profile.</td></tr>
+				<tr><td><code>B_POWER_SETTINGS_CHANGED</code></td><td>&mdash;</td><td>Someone changed the machine's power settings.</td></tr>
+				<tr><td><code>B_POWER_WILL_SLEEP</code>, <code>B_POWER_DID_WAKE</code></td><td>&mdash;</td><td>Reserved for sleep. Not sent yet.</td></tr>
+			</table>
+		</section>
+
+		<section class="entry" id="example">
+			<div class="entry-header"><h2 class="plain">Example</h2></div>
+			<p>A view that shows the charge and the profile, and follows both.</p>
+<pre><code>#include &lt;PowerRoster.h&gt;
+#include &lt;StringView.h&gt;
+
+class PowerLine : public BStringView {
+public:
+	PowerLine() : BStringView("power", "") {}
+
+	void AttachedToWindow()
+	{
+		BStringView::AttachedToWindow();
+		BPowerRoster::StartWatching(BMessenger(this));
+		_Update();
+	}
+
+	void DetachedFromWindow()
+	{
+		BPowerRoster::StopWatching(BMessenger(this));
+		BStringView::DetachedFromWindow();
+	}
+
+	void MessageReceived(BMessage* message)
+	{
+		if (message-&gt;what == kMsgPowerChanged) {
+			_Update();
+			return;
+		}
+		BStringView::MessageReceived(message);
+	}
+
+private:
+	void _Update()
+	{
+		BPowerRoster roster;
+		BString text;
+		power_battery_info info;
+		if (roster.CountBatteries() &gt; 0
+			&amp;&amp; roster.GetBatteryInfo(0, &amp;info) == B_OK)
+			text &lt;&lt; info.percent &lt;&lt; " %, ";
+		text &lt;&lt; (roster.IsOnAC() ? "plugged in" : "on battery");
+		if (roster.Profile() == B_POWER_PROFILE_SAVER)
+			text &lt;&lt; ", power saver";
+		SetText(text.String());
+	}
+};</code></pre>
+			<p>Link <code class="inline">be libr5power.so</code>.</p>
+		</section>
+
+		<section class="entry" id="brightness">
+			<div class="entry-header"><h2 class="plain">Brightness</h2></div>
+			<p>Brightness is Haiku's own call, <code class="inline">BScreen::SetBrightness()</code> and
+			<code class="inline">GetBrightness()</code>, from 0 to 1. It reaches the graphics driver
+			(the accelerant's <code class="inline">B_SET_BRIGHTNESS</code> hook, in radeon_hd and
+			intel_extreme). Where the driver has none, the call fails: hide the control then, as the Power
+			page does. Anyone may change the brightness; it is not a machine setting.</p>
+		</section>
+
+		<section class="entry" id="cases">
+			<div class="entry-header"><h2 class="plain">Without a battery, in Safe mode, before sleep</h2></div>
+			<ul>
+				<li><strong>No battery.</strong> <code class="inline">CountBatteries()</code> is 0,
+				<code class="inline">IsOnAC()</code> is true, and no battery message comes. The profile and the
+				watch messages work as usual.</li>
+				<li><strong>Safe mode.</strong> The power service does not run: the profile stays as the
+				kernel started it, <code class="inline">GetSettings()</code> and
+				<code class="inline">SetSettings()</code> return <code class="inline">B_NO_INIT</code>, and
+				no profile or settings message comes. The batteries are read in the program itself, so the
+				battery messages still come.</li>
+				<li><strong>Before sleep works.</strong> <code class="inline">CanSleep()</code> is false and
+				"will sleep" and "did wake" are not sent. A program that wants to prepare for sleep can watch
+				for them already.</li>
+			</ul>
+		</section>
+
+		<section class="entry" id="settings">
+			<div class="entry-header"><h2 class="plain">Where people see it</h2></div>
+			<p>Settings, System, Power: Battery and Sleep on the left, Performance and Wake on the right.
+			The profile for battery and for plugged in, "Turn off the display after", the lid and the power
+			button need the administrator lock; the battery and the brightness do not. Sleep and Wake stay
+			gray until sleep works. PowerStatus and its Deskbar item read the battery through this library.
+			CPU Info shows the profile and how the processor's speed is set.</p>
+			<div class="note"><strong>Limits.</strong> Dimming on battery, the low-battery notification and
+			the thermal shutdown come with the next step. "Keep working with an external display" can only
+			tell that a second screen is there, not which one is the built-in panel.</div>
+		</section>
+	</main>
+</div>
+
+<script src="r5book.js"></script>
+</body>
+</html>

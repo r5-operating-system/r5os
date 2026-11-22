@@ -3,6 +3,9 @@
 SubDir HAIKU_TOP src preferences settings ;
 
 UsePrivateHeaders interface shared app net r5gpu ;
+# The Power page: <PowerProtocol.h>, <syscalls.h> and <driver_settings.h>.
+UsePrivateHeaders power ;
+UsePrivateSystemHeaders ;
 
 # Connections and Discovery use the address field, the link speed and the
 # service add-on classes of the Network program, unchanged
@@ -26,6 +29,7 @@ Application Settings :
 	DeskbarModule.cpp
 	NotificationsModule.cpp
 	VirtualMemoryModule.cpp
+	PowerModule.cpp
 	InformationModule.cpp
 	DisplayModule.cpp
 	DisplayScreens.cpp
@@ -39,6 +43,7 @@ Application Settings :
 	ServiceView.cpp
 	: <src!bin!network!ifconfig>MediaTypes.o
 		be tracker translation shared libr5icons.so libr5ui.so libr5wifi.so
+		libr5power.so
 		bnetapi network [ TargetLibstdc++ ] localestub
 	: Settings.rdef
 	;

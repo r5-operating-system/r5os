@@ -84,12 +84,39 @@ target_info(int32 width, int32 height)
 }
 
 
+struct ScopedProfile {
+	ScopedProfile(int countKey, int timeKey)
+		:
+		fCountKey(countKey),
+		fTimeKey(timeKey),
+		fStart(SkiaGpu::Debug() ? system_time() : 0)
+	{
+	}
+
+	~ScopedProfile()
+	{
+		if (fStart != 0) {
+			SkiaGpu::Profile(fCountKey);
+			SkiaGpu::Profile(fTimeKey, system_time() - fStart);
+		}
+	}
+
+	int			fCountKey;
+	int			fTimeKey;
+	bigtime_t	fStart;
+};
+
+
 //! A texture from CPU memory (counted for the step 5c profile).
 static sk_sp<SkImage>
 upload_texture(skgpu::graphite::Recorder* recorder, sk_sp<SkImage> image)
 {
 	SkiaGpu::Profile(SkiaGpu::kCountUpload);
-	return SkImages::TextureFromImage(recorder, image.get());
+	bigtime_t start = SkiaGpu::Debug() ? system_time() : 0;
+	sk_sp<SkImage> result = SkImages::TextureFromImage(recorder, image.get());
+	if (start != 0)
+		SkiaGpu::Profile(SkiaGpu::kTimeUpload, system_time() - start);
+	return result;
 }
 
 
@@ -1547,6 +1574,7 @@ skia_join(join_mode mode)
 BRect
 SkiaPainter::_FillPath(const SkPath& _path, const BGradient* gradient)
 {
+	ScopedProfile prof(SkiaGpu::kCountPath, SkiaGpu::kTimePath);
 	SkPath path(_path);
 	path.setFillType(fFillRule == B_EVEN_ODD ? SkPathFillType::kEvenOdd
 		: SkPathFillType::kWinding);
@@ -1561,6 +1589,7 @@ BRect
 SkiaPainter::_StrokePath(const SkPath& path, cap_mode cap,
 	const BGradient* gradient)
 {
+	ScopedProfile prof(SkiaGpu::kCountPath, SkiaGpu::kTimePath);
 	SkPaint paint;
 	paint.setStyle(SkPaint::kStroke_Style);
 	paint.setStrokeWidth(fPenSize);
@@ -2276,6 +2305,7 @@ SkiaPainter::DrawBitmap(const ServerBitmap* bitmap, BRect bitmapRect,
 	BRect viewRect, uint32 options)
 {
 	CHECK_CLIPPING
+	ScopedProfile prof(SkiaGpu::kCountBitmap, SkiaGpu::kTimeBitmap);
 
 	BRect touched = TransformAlignAndClipRect(viewRect);
 	if (!touched.IsValid() || bitmap == NULL || !bitmap->IsValid())

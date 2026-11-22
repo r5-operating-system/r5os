@@ -47,6 +47,7 @@
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 #include <Locker.h>
+#include <string.h>
 #include "Compositor.h"
 // SPDX-SnippetEnd
 #include <Path.h>
@@ -1117,6 +1118,18 @@ AccelerantHWInterface::DPMSCapabilities()
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// Set once a brightness call failed or took too long. Desktop restores the
+// stored brightness at every start, so a hook that hangs once must not be
+// called again in this session (stick 74: 30 s per slider move, and a start
+// that never got past the restore).
+static int32 sBrightnessOff = 0;
+static const bigtime_t kBrightnessSlow = 1000000;
+// SPDX-SnippetEnd
+
+
 status_t
 AccelerantHWInterface::SetBrightness(float brightness)
 {
@@ -1125,7 +1138,31 @@ AccelerantHWInterface::SetBrightness(float brightness)
 	if (!fAccSetBrightness)
 		return B_UNSUPPORTED;
 
-	return fAccSetBrightness(brightness);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (atomic_get(&sBrightnessOff) != 0)
+		return B_UNSUPPORTED;
+
+	// An accelerant that cannot report a brightness is not asked to set one.
+	float current;
+	if (!fAccGetBrightness || fAccGetBrightness(&current) != B_OK)
+		return B_UNSUPPORTED;
+	if (current == brightness)
+		return B_OK;
+
+	bigtime_t start = system_time();
+	status_t status = fAccSetBrightness(brightness);
+	bigtime_t elapsed = system_time() - start;
+	if ((status != B_OK && status != B_BAD_VALUE)
+		|| elapsed > kBrightnessSlow) {
+		atomic_set(&sBrightnessOff, 1);
+		syslog(LOG_WARNING, "app_server: brightness off for this session "
+			"(%s, %" B_PRIdBIGTIME " ms)\n", strerror(status),
+			elapsed / 1000);
+	}
+	return status;
+// SPDX-SnippetEnd
 }
 
 
@@ -1136,6 +1173,13 @@ AccelerantHWInterface::GetBrightness(float* brightness)
 
 	if (!fAccGetBrightness)
 		return B_UNSUPPORTED;
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (atomic_get(&sBrightnessOff) != 0)
+		return B_UNSUPPORTED;
+// SPDX-SnippetEnd
 
 	return fAccGetBrightness(brightness);
 }

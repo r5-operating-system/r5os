@@ -14,6 +14,9 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <r5_power_profile.h>
+#include <syscalls.h>
+
 #ifdef __x86_64__
 #include <r5_pstate_info.h>
 #include <r5_x86_cpu.h>
@@ -371,11 +374,63 @@ collect_x86_64(CpuReport& report)
 #endif
 
 
+// docs/POWER.md, section 4: the processor profile, how it is set, and the
+// sleep state the firmware offers.
+static void
+collect_power_profile(BString& out)
+{
+	r5_power_info info = {};
+	info.size = sizeof(info);
+	if (_kern_r5_get_power_info(&info, sizeof(info)) != B_OK) {
+		out = "Not reported";
+		return;
+	}
+
+	static const char* const kProfiles[] = { "Power saver", "Balanced",
+		"Performance" };
+	out = info.profile < 3 ? kProfiles[info.profile] : "Unknown";
+
+	const char* method = "no speed control";
+	switch (info.method) {
+		case R5_POWER_METHOD_SCHEDULER:
+			method = "scheduler mode only";
+			break;
+		case R5_POWER_METHOD_AMD_CPPC_MSR:
+			method = "AMD CPPC (MSR)";
+			break;
+		case R5_POWER_METHOD_AMD_CPPC_ACPI:
+			method = "AMD CPPC (ACPI _CPC)";
+			break;
+		case R5_POWER_METHOD_INTEL_HWP:
+			method = "Intel HWP";
+			break;
+		case R5_POWER_METHOD_INTEL_PSTATE:
+			method = "Intel P-states";
+			break;
+	}
+	append_item(out, method);
+	if ((info.flags & R5_POWER_F_PROFILES) == 0)
+		append_item(out, "profiles off");
+
+	const char* sleep = "sleep: none offered";
+	if ((info.flags & R5_POWER_F_S0IX) != 0)
+		sleep = "sleep: S0ix offered";
+	else if ((info.flags & R5_POWER_F_S3) != 0)
+		sleep = "sleep: S3 offered";
+	append_item(out, sleep);
+	if ((info.flags & (R5_POWER_F_S0IX | R5_POWER_F_S3)) != 0) {
+		append_item(out, (info.flags & R5_POWER_F_SLEEP_WORKS) != 0
+			? "works" : "not working yet");
+	}
+}
+
+
 void
 CollectCpuReport(CpuReport& report)
 {
 	collect_cores_threads(report.coresThreads);
 	collect_kernel_line(report.kernelLine);
+	collect_power_profile(report.powerProfile);
 
 #ifdef __x86_64__
 	collect_x86_64(report);
@@ -411,5 +466,6 @@ FormatCpuReport(const CpuReport& report)
 	out << "  User-space paths: " << report.userSpacePaths << "\n";
 	out << "  XCR0:             " << report.xcr0 << "\n";
 	out << "  Kernel:           " << report.kernelLine << "\n";
+	out << "  Power profile:    " << report.powerProfile << "\n";
 	return out;
 }

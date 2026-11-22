@@ -19,10 +19,13 @@
 #include <FindDirectory.h>
 
 #include <algorithm>
+#include <deque>
+#include <functional>
 #include <memory>
 #include <vector>
 
 #include "include/core/SkData.h"
+#include "include/core/SkExecutor.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkMilestone.h"
 #include "include/core/SkSurface.h"
@@ -142,6 +145,71 @@ locked_queue_bind_sparse(VkQueue queue, uint32_t count,
 }
 
 
+static bool sDebugProfile = false;
+static PFN_vkCreateGraphicsPipelines sRawCreateGraphicsPipelines;
+static PFN_vkCreateComputePipelines sRawCreateComputePipelines;
+static PFN_vkCreateShaderModule sRawCreateShaderModule;
+static PFN_vkAllocateMemory sRawVulkanAllocateMemory;
+
+
+static VkResult VKAPI_CALL
+profiled_create_graphics_pipelines(VkDevice device,
+	VkPipelineCache pipelineCache, uint32_t createInfoCount,
+	const VkGraphicsPipelineCreateInfo* pCreateInfos,
+	const VkAllocationCallbacks* pAllocator, VkPipeline* pPipelines)
+{
+	bigtime_t start = system_time();
+	VkResult result = sRawCreateGraphicsPipelines(device, pipelineCache,
+		createInfoCount, pCreateInfos, pAllocator, pPipelines);
+	SkiaGpu::Profile(SkiaGpu::kCountPipelines, createInfoCount);
+	SkiaGpu::Profile(SkiaGpu::kTimePipelines, system_time() - start);
+	return result;
+}
+
+
+static VkResult VKAPI_CALL
+profiled_create_compute_pipelines(VkDevice device,
+	VkPipelineCache pipelineCache, uint32_t createInfoCount,
+	const VkComputePipelineCreateInfo* pCreateInfos,
+	const VkAllocationCallbacks* pAllocator, VkPipeline* pPipelines)
+{
+	bigtime_t start = system_time();
+	VkResult result = sRawCreateComputePipelines(device, pipelineCache,
+		createInfoCount, pCreateInfos, pAllocator, pPipelines);
+	SkiaGpu::Profile(SkiaGpu::kCountComputePipelines, createInfoCount);
+	SkiaGpu::Profile(SkiaGpu::kTimeComputePipelines, system_time() - start);
+	return result;
+}
+
+
+static VkResult VKAPI_CALL
+profiled_create_shader_module(VkDevice device,
+	const VkShaderModuleCreateInfo* pCreateInfo,
+	const VkAllocationCallbacks* pAllocator, VkShaderModule* pShaderModule)
+{
+	bigtime_t start = system_time();
+	VkResult result = sRawCreateShaderModule(device, pCreateInfo, pAllocator,
+		pShaderModule);
+	SkiaGpu::Profile(SkiaGpu::kCountShaders, 1);
+	SkiaGpu::Profile(SkiaGpu::kTimeShaders, system_time() - start);
+	return result;
+}
+
+
+static VkResult VKAPI_CALL
+profiled_allocate_memory(VkDevice device,
+	const VkMemoryAllocateInfo* pAllocateInfo,
+	const VkAllocationCallbacks* pAllocator, VkDeviceMemory* pMemory)
+{
+	bigtime_t start = system_time();
+	VkResult result = sRawVulkanAllocateMemory(device, pAllocateInfo,
+		pAllocator, pMemory);
+	SkiaGpu::Profile(SkiaGpu::kCountAllocMem, 1);
+	SkiaGpu::Profile(SkiaGpu::kTimeAllocMem, system_time() - start);
+	return result;
+}
+
+
 static PFN_vkVoidFunction
 get_proc(const char* name, VkInstance instance, VkDevice device)
 {
@@ -165,6 +233,24 @@ get_proc(const char* name, VkInstance instance, VkDevice device)
 	if (strcmp(name, "vkQueueBindSparse") == 0) {
 		sQueueBindSparse = (PFN_vkQueueBindSparse)function;
 		return (PFN_vkVoidFunction)locked_queue_bind_sparse;
+	}
+	if (sDebugProfile) {
+		if (strcmp(name, "vkCreateGraphicsPipelines") == 0) {
+			sRawCreateGraphicsPipelines = (PFN_vkCreateGraphicsPipelines)function;
+			return (PFN_vkVoidFunction)profiled_create_graphics_pipelines;
+		}
+		if (strcmp(name, "vkCreateComputePipelines") == 0) {
+			sRawCreateComputePipelines = (PFN_vkCreateComputePipelines)function;
+			return (PFN_vkVoidFunction)profiled_create_compute_pipelines;
+		}
+		if (strcmp(name, "vkCreateShaderModule") == 0) {
+			sRawCreateShaderModule = (PFN_vkCreateShaderModule)function;
+			return (PFN_vkVoidFunction)profiled_create_shader_module;
+		}
+		if (strcmp(name, "vkAllocateMemory") == 0) {
+			sRawVulkanAllocateMemory = (PFN_vkAllocateMemory)function;
+			return (PFN_vkVoidFunction)profiled_allocate_memory;
+		}
 	}
 	return function;
 }
@@ -400,10 +486,129 @@ private:
 };
 
 
+// libskia.a is built with -fno-rtti while app_server uses RTTI; emit the
+// base class typeinfo here so PipelineExecutor links cleanly.
+template class SkExecutorBase<std::function<void()>>;
+
+
+/*!	Perf round 2: parallel Graphite pipeline compilation on Lavapipe.
+	SkSL->SPIR-V and Lavapipe's SPIR-V->NIR->optimize stages run lock-free
+	across worker threads instead of serialising on the draw thread.
+*/
+class PipelineExecutor : public SkExecutor {
+public:
+	PipelineExecutor(int32 threadCount)
+		:
+		fLock("skia pipeline executor"),
+		fSem(create_sem(0, "skia pipeline work")),
+		fQuit(false)
+	{
+		if (fSem < 0)
+			return;
+		for (int32 i = 0; i < threadCount; i++) {
+			char name[32];
+			snprintf(name, sizeof(name), "skia compile %" B_PRId32, i);
+			thread_id tid = spawn_thread(_Worker, name, B_NORMAL_PRIORITY,
+				this);
+			if (tid >= 0) {
+				fThreads.push_back(tid);
+				resume_thread(tid);
+			}
+		}
+	}
+
+	~PipelineExecutor() override
+	{
+		{
+			BAutolock _(fLock);
+			fQuit = true;
+		}
+		if (fSem >= 0 && !fThreads.empty())
+			release_sem_etc(fSem, (int32)fThreads.size(), 0);
+		for (size_t i = 0; i < fThreads.size(); i++) {
+			status_t result;
+			wait_for_thread(fThreads[i], &result);
+		}
+		if (fSem >= 0)
+			delete_sem(fSem);
+	}
+
+	bool Ready() const { return fSem >= 0 && !fThreads.empty(); }
+	int32 ThreadCount() const { return (int32)fThreads.size(); }
+
+	using SkExecutor::add;
+
+	void add(std::function<void()> work) override
+	{
+		{
+			BAutolock _(fLock);
+			if (fQuit) {
+				work();
+				return;
+			}
+			fQueue.push_back(std::move(work));
+		}
+		release_sem_etc(fSem, 1, B_DO_NOT_RESCHEDULE);
+	}
+
+	void borrow() override
+	{
+		std::function<void()> work;
+		{
+			BAutolock _(fLock);
+			if (fQueue.empty())
+				return;
+			work = std::move(fQueue.front());
+			fQueue.pop_front();
+		}
+		if (work)
+			work();
+	}
+
+private:
+	static status_t _Worker(void* data)
+	{
+		((PipelineExecutor*)data)->_Run();
+		return B_OK;
+	}
+
+	void _Run()
+	{
+		while (true) {
+			status_t status = acquire_sem(fSem);
+			if (status == B_INTERRUPTED)
+				continue;
+			if (status != B_OK)
+				break;
+			std::function<void()> work;
+			{
+				BAutolock _(fLock);
+				if (!fQueue.empty()) {
+					work = std::move(fQueue.front());
+					fQueue.pop_front();
+				} else if (fQuit) {
+					break;
+				}
+			}
+			if (work)
+				work();
+		}
+	}
+
+	BLocker								fLock;
+	sem_id								fSem;
+	bool								fQuit;
+	std::deque<std::function<void()>>	fQueue;
+	std::vector<thread_id>				fThreads;
+};
+
+
 struct SkiaBackend {
 	skgpu::VulkanExtensions			extensions;
 	VkPhysicalDeviceFeatures2		features;
 	skgpu::VulkanBackendContext		backend;
+	// Perf round 2: outlives the Graphite context (ContextOptions::fExecutor)
+	std::unique_ptr<PipelineExecutor> executor;
 	// M13 step 2: outlives the context (ContextOptions)
 	std::unique_ptr<PipelineStorage> pipelines;
 };
@@ -667,6 +872,26 @@ SkiaGpu::Create(const skia_vulkan_device& device, bool forceFail,
 		backend->pipelines.reset(new(std::nothrow) PipelineStorage(
 			properties));
 		options.fPersistentPipelineStorage = backend->pipelines.get();
+		if (gpu->fOnCpu) {
+			// Perf round 2 (Lavapipe only; RADV untouched):
+			// 1. RunWork() always inserts each Recorder's Recordings in strict
+			//    FIFO order, so Graphite can skip per-snap cache flushes.
+			options.fRequireOrderedRecordings = true;
+			// 2. Compile Skia pipelines in parallel across CPU cores so
+			//    SkSL->SPIR-V and Lavapipe SPIR-V->NIR->optimize do not
+			//    serialise on the draw thread.
+			system_info sysInfo;
+			int32 cpus = get_system_info(&sysInfo) == B_OK
+				? (int32)sysInfo.cpu_count : 2;
+			int32 workers = std::min((int32)4, std::max((int32)2, cpus / 2));
+			backend->executor.reset(new(std::nothrow) PipelineExecutor(workers));
+			if (backend->executor && backend->executor->Ready()) {
+				options.fExecutor = backend->executor.get();
+				syslog(LOG_INFO, "app_server: lavapipe pipeline executor "
+					"%" B_PRId32 " threads (ordered recordings)\n",
+					backend->executor->ThreadCount());
+			}
+		}
 	}
 
 	// Q3: curved shapes on the GPU with 4x MSAA, no CPU path atlas
@@ -693,6 +918,20 @@ static int64 sProfile[SkiaGpu::kProfileCount];
 
 
 /*static*/ void
+SkiaGpu::SetDebug(bool debug)
+{
+	sDebugProfile = debug;
+}
+
+
+/*static*/ bool
+SkiaGpu::Debug()
+{
+	return sDebugProfile;
+}
+
+
+/*static*/ void
 SkiaGpu::Profile(int which, int64 value)
 {
 	if (which >= 0 && which < kProfileCount)
@@ -705,6 +944,14 @@ SkiaGpu::TakeProfile(int64 values[kProfileCount])
 {
 	for (int i = 0; i < kProfileCount; i++)
 		values[i] = atomic_get_and_set64(&sProfile[i], 0);
+}
+
+
+/*static*/ void
+SkiaGpu::PeekProfile(int64 values[kProfileCount])
+{
+	for (int i = 0; i < kProfileCount; i++)
+		values[i] = atomic_get64(&sProfile[i]);
 }
 
 
@@ -1149,6 +1396,7 @@ SkiaGpu::RunWork(const char** _reason)
 	bigtime_t profileSnapped = system_time();
 	if (!items.empty()) {
 		Profile(kCountRuns);
+		Profile(kCountTargets, (int64)items.size());
 		Profile(kTimeSnap, profileSnapped - profileStart);
 	}
 	bool ok = true;
@@ -1349,9 +1597,15 @@ SkiaGpu::RunWork(const char** _reason)
 			// read_done() copies into the bitmaps from here (DestroyContext()
 			// waits for fWaitingUnlocked, so the context is still there).
 			// Not after a failed wait: Graphite would poll lost fences.
+			bigtime_t fenceDone = system_time();
+			if (sDebugProfile)
+				Profile(kTimeFenceWait, fenceDone - submitTime);
 			if (ok)
 				context->checkAsyncWorkCompletion();
-			Profile(kTimeDeliver, system_time() - submitTime);
+			bigtime_t deliverDone = system_time();
+			if (sDebugProfile)
+				Profile(kTimeAsyncCheck, deliverDone - fenceDone);
+			Profile(kTimeDeliver, deliverDone - submitTime);
 		}
 		if (context->isDeviceLost()) {
 			*_reason = "device lost";
