@@ -457,10 +457,10 @@ public:
 private:
 	bool _Round() const
 	{
-		float left = 1, top = 1, right = 1, bottom = 1;
-		be_control_look->GetBackgroundInsets(BControlLook::B_MENU_BACKGROUND,
-			0, left, top, right, bottom);
-		return left > 1;
+		float left = 0, top = 0, right = 0, bottom = 0;
+		be_control_look->GetBackgroundInsets(
+			BControlLook::B_MENU_BAR_BACKGROUND, 0, left, top, right, bottom);
+		return left > 6;
 	}
 
 	float _Radius() const
@@ -564,10 +564,10 @@ SearchField::DrawAfterChildren(BRect updateRect)
 	(void)updateRect;
 	if (be_control_look == NULL)
 		return;
-	float left = 1, top = 1, right = 1, bottom = 1;
-	be_control_look->GetBackgroundInsets(BControlLook::B_MENU_BACKGROUND, 0,
-		left, top, right, bottom);
-	if (left <= 1)
+	float left = 0, top = 0, right = 0, bottom = 0;
+	be_control_look->GetBackgroundInsets(BControlLook::B_MENU_BAR_BACKGROUND,
+		0, left, top, right, bottom);
+	if (left <= 6)
 		return;
 
 	BRect frame(Bounds());

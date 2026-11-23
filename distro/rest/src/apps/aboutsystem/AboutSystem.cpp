@@ -2056,6 +2056,8 @@ AboutView::_CreateInfoTabs()
 		B_PLAIN_BORDER);
 
 	fTabView = new BTabView("aboutTabs", B_WIDTH_FROM_LABEL);
+	fTabView->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
+	fTabView->SetLowUIColor(B_PANEL_BACKGROUND_COLOR);
 	fTabView->AddTab(newsScroller);
 	fTabView->TabAt(0)->SetLabel(B_TRANSLATE("What's new"));
 	fTabView->AddTab(credits);

@@ -271,6 +271,9 @@ public:
 									uint32 flags = 0,
 									float tint = B_DARKEN_MAX_TINT);
 
+	virtual	void				GetFrameInsets(frame_type frameType,
+									uint32 flags, float& _left, float& _top,
+									float& _right, float& _bottom);
 	virtual	void				GetBackgroundInsets(
 									background_type backgroundType,
 									uint32 flags, float& _left, float& _top,

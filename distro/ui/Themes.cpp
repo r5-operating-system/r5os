@@ -38,6 +38,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include <Application.h>
 #include <DecorInfo.h>
@@ -546,11 +548,17 @@ write_theme(const char* path, const theme_info* info, uint32 parts)
 
 	BFile file(path, B_WRITE_ONLY | B_CREATE_FILE | B_ERASE_FILE);
 	status_t status = file.InitCheck();
+	if (status == B_PERMISSION_DENIED) {
+		unlink(path);
+		status = file.SetTo(path, B_WRITE_ONLY | B_CREATE_FILE | B_ERASE_FILE);
+	}
 	if (status != B_OK)
 		return status;
 	ssize_t written = file.Write(text.String(), text.Length());
 	if (written < 0)
 		return static_cast<status_t>(written);
+	if (geteuid() == 0)
+		chmod(path, 0666);
 	return written == text.Length() ? B_OK : B_IO_ERROR;
 }
 
@@ -563,7 +571,7 @@ read_theme(const char* path, theme_info* info)
 		return B_ENTRY_NOT_FOUND;
 
 	// what a file does not hold stays as R5 has it by default
-	built_in_theme(1, info);
+	built_in_theme(0, info);
 	info->parts = 0;
 	info->base[0] = '\0';
 
@@ -652,7 +660,10 @@ make_settings_directory(const char* leaf)
 	status_t status = settings_path(leaf, path);
 	if (status != B_OK)
 		return status;
-	return create_directory(path.Path(), 0755);
+	status = create_directory(path.Path(), geteuid() == 0 ? 0777 : 0755);
+	if (status == B_OK && geteuid() == 0)
+		chmod(path.Path(), 0777);
+	return status;
 }
 
 
@@ -681,7 +692,7 @@ read_deskbar_settings(theme_info* info)
 	if (info->deskbar_layout < B_THEME_DESKBAR_VERTICAL
 		|| info->deskbar_layout > B_THEME_DESKBAR_HORIZONTAL)
 		info->deskbar_layout = B_THEME_DESKBAR_VERTICAL;
-	info->deskbar_rounded = settings.GetBool("rounded", true);
+	info->deskbar_rounded = settings.GetBool("rounded", false);
 	info->deskbar_floating = settings.GetBool("floating", true);
 }
 
@@ -690,7 +701,7 @@ read_deskbar_settings(theme_info* info)
 static void
 system_theme(theme_info* info)
 {
-	built_in_theme(1, info);
+	built_in_theme(0, info);
 	info->parts = B_THEME_ALL_PARTS;
 
 	BPrivate::DecorInfoUtility decorators;
@@ -735,6 +746,16 @@ system_theme(theme_info* info)
 			strlcpy(info->base, builtIn.name, sizeof(info->base));
 			return;
 		}
+	}
+	// Fallback base from decorator/control look when a part (e.g. Deskbar
+	// layout) was customized
+	if (strcasecmp(info->decorator, kR5ModernDecorator) == 0
+		|| strcmp(info->control_look, kR5ModernControlLook) == 0) {
+		strlcpy(info->name, kR5Modern, sizeof(info->name));
+		strlcpy(info->base, kR5Modern, sizeof(info->base));
+	} else if (info->decorator[0] == '\0' && info->control_look[0] == '\0') {
+		strlcpy(info->name, kClassic, sizeof(info->name));
+		strlcpy(info->base, kClassic, sizeof(info->base));
 	}
 }
 
@@ -880,7 +901,28 @@ apply_deskbar(const theme_info* info)
 {
 	BMessenger deskbar(kDeskbarSignature);
 	if (!deskbar.IsValid()) {
-		// Deskbar is not running: nothing to set, and nothing kept
+		// Deskbar is not running yet (e.g. during FirstBootPrompt / Try R5):
+		// persist the chosen Deskbar style so Deskbar starts with it.
+		if (make_settings_directory("deskbar") == B_OK) {
+			BPath path;
+			if (settings_path("deskbar/settings", path) == B_OK) {
+				BMessage prefs;
+				BFile readFile(path.Path(), B_READ_ONLY);
+				if (readFile.InitCheck() == B_OK)
+					prefs.Unflatten(&readFile);
+				prefs.SetInt32("style", info->deskbar_style);
+				prefs.SetInt32("layout", info->deskbar_layout);
+				prefs.SetBool("rounded", info->deskbar_rounded);
+				prefs.SetBool("floating", info->deskbar_floating);
+				BFile writeFile(path.Path(),
+					B_WRITE_ONLY | B_CREATE_FILE | B_ERASE_FILE);
+				if (writeFile.InitCheck() == B_OK) {
+					prefs.Flatten(&writeFile);
+					if (geteuid() == 0)
+						chmod(path.Path(), 0666);
+				}
+			}
+		}
 		return B_NAME_NOT_FOUND;
 	}
 	BMessage message(kSetDeskbarStyle);

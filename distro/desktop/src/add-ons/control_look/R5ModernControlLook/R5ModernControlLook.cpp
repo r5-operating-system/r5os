@@ -428,8 +428,9 @@ R5ModernControlLook::_ButtonColors(BView* view, const rgb_color& base,
 		if ((flags & B_FOCUSED) != 0 && (flags & B_DEFAULT_BUTTON) == 0)
 			line = accent_color();
 	} else {
-		fill = disable_color(fill, background);
-		line = disable_color(line, background);
+		// Subtle, clean disabled button tinted against its real backdrop
+		fill = blend(background, background.IsLight() ? kInk : kWhite, 0.04f);
+		line = blend(background, background.IsLight() ? kInk : kWhite, 0.14f);
 	}
 	return true;
 }
@@ -452,8 +453,7 @@ R5ModernControlLook::_FillButtonInside(BView* view, const BRect& rect,
 	if (!_ButtonColors(view, base, flags, fill, line))
 		return;
 
-	float inset = (flags & B_DEFAULT_BUTTON) != 0 ? 5 : 2;
-	inset = ceilf(inset * scale());
+	float inset = ceilf(2 * scale());
 	float r = std::max(0.0f, radius(7) - inset);
 
 	BRect shape = open_sides(rect, borders, r + 1);
@@ -1511,10 +1511,12 @@ R5ModernControlLook::DrawTabFrame(BView* view, BRect& rect,
 	if (!ShouldDraw(view, rect, updateRect))
 		return;
 
-	// the line under the tabs; the tab view's own frame runs on from it
-	view->SetHighColor(base);
+	// the line under the tabs; always use the window's panel background so
+	// the tab strip matches the surrounding window in light and dark mode
+	rgb_color panel = ui_color(B_PANEL_BACKGROUND_COLOR);
+	view->SetHighColor(panel);
 	view->FillRect(rect);
-	view->SetHighColor(line_color(base));
+	view->SetHighColor(line_color(panel));
 	if (side == B_TOP_BORDER)
 		view->StrokeLine(rect.LeftBottom(), rect.RightBottom());
 	else if (side == B_BOTTOM_BORDER)
@@ -1770,6 +1772,19 @@ R5ModernControlLook::GetScrollBarWidth(orientation orientation)
 	and the item padding.
 */
 void
+R5ModernControlLook::GetFrameInsets(frame_type frameType, uint32 flags,
+	float& _left, float& _top, float& _right, float& _bottom)
+{
+	// Default buttons have no thick Haiku outer ring, so keep them the exact
+	// same height and inset as regular buttons.
+	if (frameType == B_BUTTON_FRAME)
+		flags &= ~B_DEFAULT_BUTTON;
+	HaikuControlLook::GetFrameInsets(frameType, flags, _left, _top, _right,
+		_bottom);
+}
+
+
+void
 R5ModernControlLook::GetBackgroundInsets(background_type backgroundType,
 	uint32 flags, float& _left, float& _top, float& _right, float& _bottom)
 {
@@ -1790,13 +1805,12 @@ R5ModernControlLook::GetBackgroundInsets(background_type backgroundType,
 		_top += floorf(extra / 2);
 		_bottom += extra - floorf(extra / 2);
 	}
-#ifndef R5_SQUARE_CONTROLS
 	else if (backgroundType == B_MENU_BACKGROUND) {
-		// more than 1 asks R5's BMenu for the R5 menu style: 5 inside the
-		// menu window (mockup M6)
+		// Both R5 (square) and R5 Modern (rounded) use the clean R5 menu
+		// style (5 px inside the menu window); square vs rounded is told by
+		// B_MENU_BAR_BACKGROUND left > 6.
 		_left = _top = _right = _bottom = roundf(5 * scale());
 	}
-#endif
 	else if (backgroundType == B_MENU_ITEM_BACKGROUND) {
 		// the padding round an item's content in that style: 11 at the left
 		// (R5's BMenu adds 16 for the mark column when a menu has marks),
@@ -1826,6 +1840,13 @@ R5ModernControlLook::DrawLabel(BView* view, const char* label,
 	if ((flags & B_DEFAULT_BUTTON) != 0 && (flags & B_DISABLED) == 0) {
 		HaikuControlLook::DrawLabel(view, label, icon, rect, updateRect,
 			accent_color(), flags, alignment, &kWhite);
+		return;
+	}
+	if ((flags & B_DISABLED) != 0 && textColor == NULL) {
+		rgb_color bg = panel_color(view);
+		rgb_color muted = blend(bg, ui_color(B_CONTROL_TEXT_COLOR), 0.45f);
+		HaikuControlLook::DrawLabel(view, label, icon, rect, updateRect,
+			bg, flags & ~B_DISABLED, alignment, &muted);
 		return;
 	}
 
