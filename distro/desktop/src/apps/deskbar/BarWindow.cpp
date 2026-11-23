@@ -802,13 +802,17 @@ TBarWindow::SetSizeLimits()
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 		// Default (R5): the floating bar keeps its margin and the pill is
-		// as wide as its content (QEMU, 22 Nov: the full screen width here
-		// pushed both off the screen's right edge)
-		if (R5Deskbar::Modern() && !fBarView->Vertical()) {
-			minWidth = 1;
-			maxWidth = B_SIZE_UNLIMITED;
-			minHeight = 1;
-			maxHeight = B_SIZE_UNLIMITED;
+		// as wide as its content; normal (Vertical) uses a fixed width
+		// shared across R5 and R5 Modern.
+		if (R5Deskbar::Modern()) {
+			if (!fBarView->Vertical()) {
+				minWidth = 1;
+				maxWidth = B_SIZE_UNLIMITED;
+				minHeight = 1;
+				maxHeight = B_SIZE_UNLIMITED;
+			} else {
+				minWidth = maxWidth = R5Deskbar::Size(228);
+			}
 		}
 // SPDX-SnippetEnd
 		BWindow::SetSizeLimits(minWidth, maxWidth, minHeight, maxHeight);

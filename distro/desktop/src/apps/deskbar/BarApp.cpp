@@ -404,9 +404,9 @@ TBarApp::InitSettings()
 	settings.layout = fDefaultSettings.layout = R5Deskbar::kLayoutVertical;
 	settings.rounded = fDefaultSettings.rounded = true;
 	settings.floating = fDefaultSettings.floating = true;
-	// the width of the mockup (board A), when the file has none
+	// Fixed normal (Vertical) width for Default (R5)
 	settings.width = fDefaultSettings.width
-		= std::max(gMinimumWindowWidth, R5Deskbar::Size(210));
+		= std::max(gMinimumWindowWidth, R5Deskbar::Size(228));
 // SPDX-SnippetEnd
 
 	clock_settings clock;

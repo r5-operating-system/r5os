@@ -74,34 +74,35 @@ using namespace R5Deskbar;
 // #pragma mark - the measures of the mockup
 
 
-// Vertical (board A): the leaf row, a tray row, the list rows, the list's
-// padding (none in the corner, board A3)
-static float VerticalLeafHeight() { return Size(42) + (FlatCorner() ? 1 : 0); }
-static float TrayRowHeight() { return Size(34); }
-static float VerticalRowHeight() { return Size(34) + (FlatCorner() ? 1 : 0); }
+// Vertical (board A): fixed width for both R5 and R5 Modern, leaf row,
+// tray row, list rows, list padding (none in the corner, board A3)
+static float VerticalFixedWidth() { return Size(228); }
+static float VerticalLeafHeight() { return Size(36) + (FlatCorner() ? 1 : 0); }
+static float TrayRowHeight() { return Size(30); }
+static float VerticalRowHeight() { return Size(30) + (FlatCorner() ? 1 : 0); }
 // the rows keep clear of the round outer corners (external review A4)
 static float ListPadding()
 {
 	return FlatCorner() ? 0 : Rounded() ? Size(7) : Size(4);
 }
 
-// The bar (board C) is 48 high and the pill (board B) 54, with its 1 px
+// The bar (board C) is 42 high and the pill (board B) 44, with its 1 px
 // edge; the content is what is inside the edge.
 static float
 ContentHeight(const TBarView* view)
 {
 	BRect edges = view->EdgeInsets();
-	float total = Compact() ? Size(54) : Size(48);
+	float total = Compact() ? Size(44) : Size(42);
 	return total - edges.top - edges.bottom;
 }
 
-// the pill: padding 0 10 0 12, a 42 button, a gap of 6, separators with a
+// the pill: padding 0 10 0 10, a 34 button, a gap of 6, separators with a
 // margin of 6
-static float CompactMenuWidth() { return Size(12) + Size(42) + Size(6); }
+static float CompactMenuWidth() { return Size(10) + Size(34) + Size(6); }
 static float CompactAppsLeft() { return CompactMenuWidth() + Size(13) + Size(6); }
-static float CompactAppWidth() { return Size(6) + Size(42); }
-// the bar: padding 0 8, a 48 leaf, a gap of 6, a separator with a margin of 4
-static float BarMenuWidth() { return Size(8) + Size(48) + Size(6); }
+static float CompactAppWidth() { return Size(6) + Size(34); }
+// the bar: padding 0 8, a 42 leaf, a gap of 6, a separator with a margin of 4
+static float BarMenuWidth() { return Size(8) + Size(42) + Size(6); }
 static float BarAppsLeft() { return BarMenuWidth() + Size(9) + Size(6); }
 
 
@@ -235,18 +236,42 @@ TBarView::_StyleViews(BView* view, bool glass)
 }
 
 
+static rgb_color sLastTrayMenu = { 0, 0, 0, 0 };
+static rgb_color sLastTraySurface = { 0, 0, 0, 0 };
+
+
 bool
 TBarView::_TookDeskbarColor(rgb_color color) const
 {
 	// the colours Deskbar's tray has had: Haiku's menu colour (also the
-	// drag region's tint of it) and the surfaces of Default (R5)
+	// drag region's tint of it), the previous theme's colours, and the
+	// surfaces of Default (R5)
 	rgb_color menu = ui_color(B_MENU_BACKGROUND_COLOR);
-	return color == menu || color == tint_color(menu, 1.1)
-		|| color == make_color(240, 245, 252)
-		|| color == make_color(0xee, 0xf1, 0xf5)
-		|| color == make_color(0xee, 0xf2, 0xf8)
-		|| color == make_color(0x16, 0x1a, 0x22)
-		|| color == make_color(0x1c, 0x20, 0x29);
+	static const rgb_color kKnown[] = {
+		{ 216, 216, 216, 255 },	// Haiku Classic
+		{ 247, 248, 250, 255 },	// R5 Modern Light menu
+		{ 238, 241, 245, 255 },	// R5 Modern Light panel
+		{ 240, 245, 252, 255 },	// R5 glass light
+		{ 238, 242, 248, 255 },	// R5 flat light
+		{ 0x26, 0x2b, 0x34, 255 },	// R5 Modern Dark menu
+		{ 0x1f, 0x23, 0x2b, 255 },	// R5 Modern Dark panel
+		{ 0x16, 0x1a, 0x22, 255 },	// R5 glass dark
+		{ 0x1c, 0x20, 0x29, 255 },	// R5 flat dark
+		{ 0x1e, 0x22, 0x2a, 255 }
+	};
+	if (color == menu || color == tint_color(menu, 1.1)
+		|| color == SurfaceColor())
+		return true;
+	if (sLastTrayMenu.alpha > 0 && (color == sLastTrayMenu
+		|| color == tint_color(sLastTrayMenu, 1.1)))
+		return true;
+	if (sLastTraySurface.alpha > 0 && color == sLastTraySurface)
+		return true;
+	for (size_t i = 0; i < sizeof(kKnown) / sizeof(kKnown[0]); i++) {
+		if (color == kKnown[i] || color == tint_color(kKnown[i], 1.1))
+			return true;
+	}
+	return false;
 }
 
 
@@ -280,10 +305,15 @@ TBarView::ApplyStyle()
 	window->SetLook(modern ? B_NO_BORDER_WINDOW_LOOK
 		: B_BORDERED_WINDOW_LOOK);
 
-	// fonts of the layout (boards A, B, C)
+	// Fixed normal (Vertical) width: shared between R5 and R5 Modern,
+	// reset to Haiku's default width when switching back to Classic.
+	fBarApp->Settings()->width = modern ? VerticalFixedWidth()
+		: gMinimumWindowWidth;
+
+	// fonts of the layout: match menu font (12 pt)
 	BFont font;
 	if (modern) {
-		set_size(&font, 14, false);
+		set_size(&font, 12, false);
 		fExpandoMenuBar->SetFont(&font);
 	} else
 		fExpandoMenuBar->SetFont(be_plain_font);
@@ -296,6 +326,8 @@ TBarView::ApplyStyle()
 
 	BView* root = Parent() != NULL ? Parent() : this;
 	_StyleViews(root, Glass());
+	sLastTrayMenu = ui_color(B_MENU_BACKGROUND_COLOR);
+	sLastTraySurface = SurfaceColor();
 
 	BMessage changed(R5_DESKBAR_TRAY_STYLE_CHANGED);
 	changed.AddInt32("style", (int32)r5_deskbar_tray_style());
@@ -382,11 +414,8 @@ TBarView::_PlaceModernTray()
 
 	if (Vertical() && !Compact()) {
 		fDragRegion->MoveTo(0, fBarMenuBar->Frame().bottom + 1);
-		fResizeControl->ResizeTo(gDragWidth, fDragRegion->Bounds().Height() - 2);
-		fResizeControl->MoveTo(
-			Left() ? fDragRegion->Bounds().right - gDragWidth : 0, 1);
-		if (fResizeControl->IsHidden())
-			fResizeControl->Show();
+		if (!fResizeControl->IsHidden())
+			fResizeControl->Hide();
 	} else {
 		if (!fResizeControl->IsHidden())
 			fResizeControl->Hide();
@@ -655,28 +684,28 @@ TBarMenuTitle::_DrawModern()
 	// its rounded rectangle; none is taller than its row
 	bool vertical = !Compact() && fBarView != NULL && fBarView->Vertical();
 	if (Compact()) {
-		// the 42 x 42 circle of the pill, fitted in the pill's height
-		float side = std::min(Size(42), frame.Height() + 1 - Size(4));
+		// the 34 x 34 circle of the pill, fitted in the pill's height
+		float side = std::min(Size(34), frame.Height() + 1 - Size(4));
 		float top = frame.top + floorf((frame.Height() + 1 - side) / 2);
-		button.Set(frame.left + Size(12), top, frame.left + Size(12) + side
+		button.Set(frame.left + Size(10), top, frame.left + Size(10) + side
 			- 1, top + side - 1);
 		radius = std::min(ButtonRadius(), floorf(side / 2));
-		iconSide = std::min(Size(30), side - Size(8));
+		iconSide = std::min(Size(24), side - Size(6));
 	} else if (vertical) {
 		// the strip above the separator, with the Deskbar's top corners
 		button = frame;
 		// inside the floating Deskbar's 1 px edge: its radius less that
 		radius = std::max(0.0f, WindowRadius()
 			- (fBarView != NULL ? fBarView->EdgeInsets().top : 0));
-		iconSide = std::min(Size(30), frame.Height() + 1 - Size(8));
+		iconSide = std::min(Size(24), frame.Height() + 1 - Size(8));
 	} else {
-		// the bar's leaf: 48 x 40, corners of 10, never taller than the bar
-		float height = std::min(Size(40), frame.Height() + 1 - Size(2));
+		// the bar's leaf: 42 x 34, corners of 10, never taller than the bar
+		float height = std::min(Size(34), frame.Height() + 1 - Size(2));
 		float top = frame.top + floorf((frame.Height() + 1 - height) / 2);
-		button.Set(frame.left + Size(8), top, frame.left + Size(8 + 48) - 1,
+		button.Set(frame.left + Size(8), top, frame.left + Size(8 + 42) - 1,
 			top + height - 1);
 		radius = HighlightRadius();
-		iconSide = std::min(Size(28), height - Size(8));
+		iconSide = std::min(Size(24), height - Size(8));
 	}
 
 	bool open = IsSelected();
@@ -787,14 +816,17 @@ TTeamMenuItem::_ModernContentSize(float* width, float* height)
 		*height = VerticalRowHeight() - 1;
 		return;
 	}
-	// the bar: padding 0 12 0 8, icon 22, gap 8, the name, the count
+	// the bar: measure with bold so activating a window never truncates
+	// its label (e.g. "Tracker" -> "Track...")
 	BFont font;
-	set_size(&font, 14, IsFront());
+	set_size(&font, 12, true);
 	float labelWidth = ceilf(font.StringWidth(Label()));
-	float buttonWidth = Size(8) + Size(22) + Size(8) + labelWidth + Size(12);
+	float iconSide = fIcon != NULL ? fIcon->Bounds().Width() + 1 : Size(20);
+	float buttonWidth = Size(8) + std::max(Size(20), iconSide) + Size(8)
+		+ labelWidth + Size(14);
 	if (fListedWindowCount > 1) {
 		BFont small;
-		set_size(&small, 12, false);
+		set_size(&small, 11, false);
 		char count[16];
 		snprintf(count, sizeof(count), "%" B_PRId32, fListedWindowCount);
 		buttonWidth += Size(8) + ceilf(small.StringWidth(count));
@@ -822,7 +854,7 @@ TTeamMenuItem::_DrawModern()
 	float radius;
 	float iconSide = fIcon != NULL ? fIcon->Bounds().Width() + 1 : Size(20);
 	if (Compact()) {
-		float side = Size(42);
+		float side = Size(34);
 		float grow = fBarView->GrowProgress(this);
 		float top = frame.top + floorf((frame.Height() + 1 - side) / 2);
 		button.Set(frame.left + Size(6), top, frame.left + Size(6) + side - 1,
@@ -836,18 +868,18 @@ TTeamMenuItem::_DrawModern()
 		}
 		// the icon pops in: from 0.3 of its size to its size
 		float scale = grow >= 0 ? 0.3f + 0.7f * grow : 1.0f;
-		float side30 = floorf(Size(30) * scale + 0.5f);
-		if (side30 >= 2 && fIcon != NULL) {
-			float x = button.left + floorf((side - side30) / 2);
-			float y = button.top + floorf((side - side30) / 2);
-			DrawIcon(menu, fIcon, BRect(x, y, x + side30 - 1, y + side30 - 1));
+		float side24 = floorf(Size(24) * scale + 0.5f);
+		if (side24 >= 2 && fIcon != NULL) {
+			float x = button.left + floorf((side - side24) / 2);
+			float y = button.top + floorf((side - side24) / 2);
+			DrawIcon(menu, fIcon, BRect(x, y, x + side24 - 1, y + side24 - 1));
 		}
 		if (grow < 0) {
 			// a dot under every running application, a line under the front
 			float center = button.left + floorf(side / 2);
 			if (front) {
-				BRect line(center - Size(9), button.bottom - Size(3) + 1,
-					center + Size(9) - 1, button.bottom);
+				BRect line(center - Size(8), button.bottom - Size(3) + 1,
+					center + Size(8) - 1, button.bottom);
 				DrawFrontLine(menu, line);
 			} else {
 				BRect dot(center - Size(2), button.bottom - Size(1) - Size(4)
@@ -865,20 +897,20 @@ TTeamMenuItem::_DrawModern()
 	}
 
 	BFont font;
-	set_size(&font, 14, front);
+	set_size(&font, 12, front);
 	font_height fontHeight;
 	font.GetHeight(&fontHeight);
 	char count[16] = "";
 	if (fListedWindowCount > 1)
 		snprintf(count, sizeof(count), "%" B_PRId32, fListedWindowCount);
 	BFont small;
-	set_size(&small, 12, false);
+	set_size(&small, 11, false);
 
 	if (fBarView->Vertical()) {
-		// a row of 34 in the list's padding of 4 (board A)
+		// a row of 30 in the list's padding (board A)
 		float padding = ListPadding();
 		button.Set(frame.left + padding, frame.top, frame.right - padding,
-			frame.top + Size(34) - 1);
+			frame.top + Size(30) - 1);
 		radius = RowRadius();
 		if (FlatCorner()) {
 			DrawLine(menu, BPoint(frame.left, frame.bottom),
@@ -887,9 +919,9 @@ TTeamMenuItem::_DrawModern()
 					: make_color(0xd5, 0xdb, 0xe4));
 		}
 	} else {
-		// a button of 36 on the bar, a gap of 6 after it (board C)
-		float top = frame.top + floorf((frame.Height() + 1 - Size(36)) / 2);
-		button.Set(frame.left, top, frame.right - Size(6), top + Size(36) - 1);
+		// a button of 32 on the bar, a gap of 6 after it (board C)
+		float top = frame.top + floorf((frame.Height() + 1 - Size(32)) / 2);
+		button.Set(frame.left, top, frame.right - Size(6), top + Size(32) - 1);
 		radius = HighlightRadius();
 	}
 
@@ -979,7 +1011,7 @@ TReplicantTray::ApplyStyle()
 {
 	BFont font;
 	if (Modern()) {
-		float size = Compact() ? 17 : R5Deskbar::Layout() == kLayoutHorizontal ? 15 : 14;
+		float size = Compact() ? 13 : 12;
 		set_size(&font, size, true);
 	} else
 		font = *be_plain_font;
@@ -1190,6 +1222,7 @@ R5Deskbar::StyleMenuWindow(BWindow* window)
 		BAppearanceKit::B_WINDOW_SHADOW_FULL);
 	BAppearanceKit::set_window_edge_line(window, EdgeColor(),
 		radius > 0 ? 1 : 0);
+	window->Sync();
 }
 
 
