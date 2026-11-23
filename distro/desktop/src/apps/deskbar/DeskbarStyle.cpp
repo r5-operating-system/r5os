@@ -278,7 +278,7 @@ CountColor()
 rgb_color
 FrontColor()
 {
-	// the theme's accent (#0084ff, dark #2f95ff with the default Blue;
+	// the theme's accent (#0084ff, dark #1f85f5 with the default Blue;
 	// external review 2.2: Teal, Purple and the others follow)
 	return ui_color(B_CONTROL_HIGHLIGHT_COLOR);
 }

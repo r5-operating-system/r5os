@@ -246,7 +246,7 @@ Wallpaper page's and is not part of a theme.
 - Dark, R5 Modern and R5 (A2, B1, B2): panel `#1f232b`, text `#e6e9ef`,
   fields `#15181e`, lists `#1b1f26`, controls `#2a2f39` with `#454c59`, menus
   `#262b34`, thumb `#4f5664`, tab `#e8b923` with `#1a1a1a`, inactive tab
-  `#2e333d` with `#a3abb8`, frame `#4a515e`, selection the accent (`#2f95ff`)
+  `#2e333d` with `#a3abb8`, frame `#4a515e`, selection the accent (`#1f85f5`; the mockup's `#2f95ff` was over Haiku's `IsLight()` line, external review 1.3)
   with white text; Haiku's own dark link colours.
 - The accent sets `B_CONTROL_HIGHLIGHT_COLOR`, `B_CONTROL_MARK_COLOR`,
   `B_NAVIGATION_BASE_COLOR`, `B_STATUS_BAR_COLOR`, and in R5 Modern and dark
@@ -391,6 +391,16 @@ Every point of the review (`1.7` was left out by the owner: the mockup draws an 
 - 2.6: `DrawTextControlBorder()`: the unused variables are gone.
 - 2.7: Theme card thumbnail: the mini Deskbar is round only when the theme's Deskbar is rounded.
 - 3: For the owner (the `AGENTS.md` bullet for the Theme page was in the brief and stays).
+
+### Owner's addendum to the review (23 Nov 2026)
+
+- 1.3 (rest): The dark accents are under Haiku's `IsLight()` line (brightness 127): Blue `#1f85f5` (was the mockup's `#2f95ff`), Purple `#8a5fe3`, Pink `#d94f82`, Orange `#c96d12`, Graphite `#777e8b`; Teal stays. Code that picks the text colour by `IsLight()` now puts white text on them.
+- A1: Deskbar: the round leaf button is never taller than its row (42, or the row less 4), so the pressed and hover circle is not cut flat; the pebble follows.
+- A2: Deskbar pebble: a white disc under the icon fills the wave's cut-out, so the wave is white on the dark surface too; the disc stays inside the pebble's ring.
+- A3: The same point as 1.14, handled there.
+- A4: Deskbar rows: 7 from the sides and the bottom with rounded corners (was 4), clear of the outer corners; a row under the pointer or pressed has the full label colour (`#e6e9ef` dark).
+- A5: Tray: the vertical Deskbar's tray has padding 8 and gaps of 5 (was 10 and 7), so five items and the clock share one row. The network and AirPlay glyphs (libr5icons; the same numbers, `docs/ICONS.md`) have a 1.6 line, the tray's weight; the network boxes are larger so they stay open. Not changed: the Workspaces replicant (Haiku's, a picture of the workspaces, not a glyph).
+- A6: Deskbar menu: with the R5 menu style its surface is the menu colour, opaque, like its submenus (no glass); the Deskbar's own corners stay.
 
 ## The Theme Kit (owner's addition, 23 Nov 2026)
 

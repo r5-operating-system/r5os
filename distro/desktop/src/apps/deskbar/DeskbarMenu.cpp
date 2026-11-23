@@ -70,6 +70,7 @@ All rights reserved.
 // SPDX-License-Identifier: MIT
 #include "DeskbarStyle.h"
 #include <WindowEffects.h>
+#include <ControlLook.h>
 // SPDX-SnippetEnd
 
 #include "tracker_private.h"
@@ -135,9 +136,19 @@ TDeskbarMenu::AttachedToWindow()
 	if (R5Deskbar::Modern() && Window() != NULL) {
 		using namespace BAppearanceKit;
 		rgb_color surface = R5Deskbar::SurfaceColor();
+		bool glass = R5Deskbar::Glass();
+		// with the R5 menu style (the R5 Modern controls) its submenus are
+		// opaque in the menu colour: the Deskbar menu is too, so the two
+		// match (external review A6)
+		float menuInset = 1, top = 1, right = 1, bottom = 1;
+		be_control_look->GetBackgroundInsets(BControlLook::B_MENU_BACKGROUND,
+			0, menuInset, top, right, bottom);
+		if (menuInset > 1) {
+			surface = ui_color(B_MENU_BACKGROUND_COLOR);
+			glass = false;
+		}
 		SetViewColor(surface);
 		SetLowColor(surface);
-		bool glass = R5Deskbar::Glass();
 		set_view_glass(this, glass);
 		if (Parent() != NULL) {
 			Parent()->SetViewColor(surface);

@@ -111,9 +111,9 @@ Haiku's icon set has no power symbol, no circular arrow, no clock face for a sma
 | `R5_GLYPH_WIFI` | 12 | The Wi-Fi symbol: a dot and three arcs (a tray symbol, below) |
 | `R5_GLYPH_VOLUME` | 13 | A filled speaker with one sound wave |
 | `R5_GLYPH_VOLUME_OFF` | 14 | The speaker with a cross where the wave was (muted) |
-| `R5_GLYPH_NETWORK` | 15 | Three boxes on a wire (a wired network) |
+| `R5_GLYPH_NETWORK` | 15 | Three boxes on a wire (a wired network); a 1.6 line and boxes of 7, so they stay open at tray size (23 Nov 2026) |
 | `R5_GLYPH_NETWORK_OFF` | 16 | The same with a slash through it (no connection) |
-| `R5_GLYPH_AIRPLAY` | 17 | A screen open at the bottom, with a triangle under it |
+| `R5_GLYPH_AIRPLAY` | 17 | A screen open at the bottom, with a triangle under it; a 1.6 line, the tray's weight (23 Nov 2026) |
 | `R5_GLYPH_MAIL` | 18 | An envelope |
 | `R5_GLYPH_MAIL_NEW` | 19 | A smaller envelope with a filled dot at its corner (new mail) |
 | `R5_GLYPH_SUN` | 20 | A ring with eight short rays (the Light button of the Theme page, 23 Nov 2026) |

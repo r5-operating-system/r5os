@@ -131,7 +131,7 @@ accent_color()
 }
 
 
-//! The edge of an accent face (#0070db on #0084ff, #1f7ee0 on #2f95ff).
+//! The edge of an accent face (#0070db on #0084ff, about #1b73d6 on #1f85f5).
 static rgb_color
 accent_line_color()
 {

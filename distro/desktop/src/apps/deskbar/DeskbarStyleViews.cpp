@@ -79,7 +79,11 @@ using namespace R5Deskbar;
 static float VerticalLeafHeight() { return Size(42) + (FlatCorner() ? 1 : 0); }
 static float TrayRowHeight() { return Size(34); }
 static float VerticalRowHeight() { return Size(34) + (FlatCorner() ? 1 : 0); }
-static float ListPadding() { return FlatCorner() ? 0 : Size(4); }
+// the rows keep clear of the round outer corners (external review A4)
+static float ListPadding()
+{
+	return FlatCorner() ? 0 : Rounded() ? Size(7) : Size(4);
+}
 
 // The bar (board C) is 48 high and the pill (board B) 54, with its 1 px
 // edge; the content is what is inside the edge.
@@ -647,14 +651,16 @@ TBarMenuTitle::_DrawModern()
 	float radius;
 	float iconSide;
 	if (Compact() || (fBarView != NULL && fBarView->Vertical())) {
-		// the 42 x 42 button of the pill, also the leaf of the vertical one
-		float side = Size(42);
+		// the 42 x 42 button of the pill, also the leaf of the vertical one;
+		// never taller than the row, so the circle is not cut flat
+		// (external review A1)
+		float side = std::min(Size(42), frame.Height() + 1 - Size(4));
 		float left = Compact() ? frame.left + Size(12)
 			: frame.left + floorf((frame.Width() + 1 - side) / 2);
 		float top = frame.top + floorf((frame.Height() + 1 - side) / 2);
 		button.Set(left, top, left + side - 1, top + side - 1);
 		radius = ButtonRadius();
-		iconSide = Size(30);
+		iconSide = std::min(Size(30), side - Size(8));
 	} else {
 		// the bar's leaf: 48 x 40, corners of 10
 		float top = frame.top + floorf((frame.Height() + 1 - Size(40)) / 2);
@@ -678,7 +684,19 @@ TBarMenuTitle::_DrawModern()
 		float x = button.left + floorf((button.Width() + 1 - width) / 2);
 		float y = button.top + floorf((button.Height() + 1 - height) / 2)
 			+ (open ? 1 : 0);
-		DrawIcon(menu, icon, BRect(x, y, x + width - 1, y + height - 1));
+		BRect iconRect(x, y, x + width - 1, y + height - 1);
+		if (pebble) {
+			// the pebble's wave is a cut-out: a white disc under it makes
+			// it a crisp white wave on the dark surface too (external
+			// review A2); the disc stays inside the pebble's ring
+			menu->PushState();
+			menu->SetDrawingMode(B_OP_ALPHA);
+			menu->SetHighColor(255, 255, 255);
+			menu->FillEllipse(iconRect.InsetByCopy(floorf(width * 0.14f),
+				floorf(height * 0.14f)));
+			menu->PopState();
+		}
+		DrawIcon(menu, icon, iconRect);
 	}
 }
 
@@ -882,7 +900,10 @@ TTeamMenuItem::_DrawModern()
 		- (fontHeight.ascent + fontHeight.descent)) / 2 + fontHeight.ascent);
 	menu->SetDrawingMode(B_OP_OVER);
 	menu->SetLowColor(SurfaceColor());
-	menu->SetHighColor(front ? LabelColor() : RowTextColor());
+	// a row under the pointer or pressed has the full label colour, as
+	// the front row (external review A4)
+	menu->SetHighColor(front || hover || selected ? LabelColor()
+		: RowTextColor());
 	// BView::SetFont(): BMenu::SetFont() lays the menu out again, which
 	// draws again (QEMU, 22 Nov: a redraw loop that ran out of memory)
 	menu->BView::SetFont(&font);
@@ -1036,12 +1057,13 @@ TReplicantTray::_ModernLocation(int32 index, float replicantWidth)
 				location.x += view->Frame().Width() + 1 + Size(7);
 		}
 	} else if (fBarView->Vertical()) {
-		// padding 10, gaps of 7, rows of 34; the clock in the first row
-		float right = Bounds().right + 1 - Size(10);
+		// padding 8, gaps of 5, rows of 34; the clock in the first row (five
+		// items and the clock on one row: external review A5)
+		float right = Bounds().right + 1 - Size(8);
 		float rowRight = right;
 		if (!fTime->IsHidden(fTime))
-			rowRight = right - fTime->Frame().Width() - 1 - Size(7);
-		location.x = Size(10);
+			rowRight = right - fTime->Frame().Width() - 1 - Size(5);
+		location.x = Size(8);
 		for (int32 i = 0; i < index; i++) {
 			BView* view = NULL;
 			fShelf->ReplicantAt(i, &view);
@@ -1049,14 +1071,14 @@ TReplicantTray::_ModernLocation(int32 index, float replicantWidth)
 				continue;
 			if (view->Frame().top > location.y + 1) {
 				location.y = view->Frame().top;
-				location.x = Size(10);
+				location.x = Size(8);
 				rowRight = right;
 			}
-			location.x = view->Frame().right + 1 + Size(7);
+			location.x = view->Frame().right + 1 + Size(5);
 		}
-		if (location.x + replicantWidth > rowRight && location.x > Size(10)) {
+		if (location.x + replicantWidth > rowRight && location.x > Size(8)) {
 			location.y += TrayRowHeight();
-			location.x = Size(10);
+			location.x = Size(8);
 		}
 	} else {
 		location.x = Size(12);

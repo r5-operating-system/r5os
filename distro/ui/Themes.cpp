@@ -102,13 +102,16 @@ struct accent {
 };
 
 // mockup A1 (the Accent swatches) and A2 (blue a little lighter on dark)
+// The dark accents stay under Haiku's rgb_color::IsLight() line (a
+// brightness of 127), so code that picks the text by it puts white text on
+// them (external review 1.3; the mockup's dark blue was #2f95ff, 131).
 static const accent kAccents[] = {
-	{ "Blue",		0x0084ff, 0x2f95ff },
+	{ "Blue",		0x0084ff, 0x1f85f5 },
 	{ "Teal",		0x0f9488, 0x14a89b },
-	{ "Purple",		0x7c4ddb, 0x8f63e6 },
-	{ "Pink",		0xd6457a, 0xe0598b },
-	{ "Orange",		0xe07b1a, 0xea8a2c },
-	{ "Graphite",	0x6b7280, 0x8a919e }
+	{ "Purple",		0x7c4ddb, 0x8a5fe3 },
+	{ "Pink",		0xd6457a, 0xd94f82 },
+	{ "Orange",		0xe07b1a, 0xc96d12 },
+	{ "Graphite",	0x6b7280, 0x777e8b }
 };
 static const int32 kAccentCount = sizeof(kAccents) / sizeof(kAccents[0]);
 

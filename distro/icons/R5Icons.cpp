@@ -487,15 +487,17 @@ glyph_paint(BView* view, r5_glyph which, BRect frame)
 		case R5_GLYPH_NETWORK:
 		case R5_GLYPH_NETWORK_OFF:
 		{
-			view->SetPenSize(std::max(1.0f, space.Size(2)));
-			// three boxes on a wire, the common wired-network symbol
-			glyph_box(view, space, 9, 2.5f, 15, 8.5f);
-			glyph_box(view, space, 2.5f, 15.5f, 8.5f, 21.5f);
-			glyph_box(view, space, 15.5f, 15.5f, 21.5f, 21.5f);
-			glyph_line(view, space, 12, 8.5f, 12, 12);
+			// three boxes on a wire, the common wired-network symbol; a
+			// thinner line and larger boxes, so they stay open at tray size
+			// (external review A5)
+			view->SetPenSize(std::max(1.0f, space.Size(1.6f)));
+			glyph_box(view, space, 8.5f, 2, 15.5f, 9);
+			glyph_box(view, space, 2, 15, 9, 22);
+			glyph_box(view, space, 15, 15, 22, 22);
+			glyph_line(view, space, 12, 9, 12, 12);
 			glyph_line(view, space, 5.5f, 12, 18.5f, 12);
-			glyph_line(view, space, 5.5f, 12, 5.5f, 15.5f);
-			glyph_line(view, space, 18.5f, 12, 18.5f, 15.5f);
+			glyph_line(view, space, 5.5f, 12, 5.5f, 15);
+			glyph_line(view, space, 18.5f, 12, 18.5f, 15);
 			if (which == R5_GLYPH_NETWORK_OFF)
 				glyph_line(view, space, 2.5f, 2.5f, 21.5f, 21.5f);
 			break;
@@ -503,7 +505,8 @@ glyph_paint(BView* view, r5_glyph which, BRect frame)
 
 		case R5_GLYPH_AIRPLAY:
 		{
-			view->SetPenSize(std::max(1.0f, space.Size(2)));
+			// the tray's line weight (external review A5)
+			view->SetPenSize(std::max(1.0f, space.Size(1.6f)));
 			// a screen open at the bottom, and the triangle under it
 			BPoint screen[6] = {
 				space.Map(6, 17), space.Map(3, 17), space.Map(3, 4),
