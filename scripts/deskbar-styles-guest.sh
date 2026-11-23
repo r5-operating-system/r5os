@@ -43,6 +43,27 @@ sleep 3
 sleep 8
 say "ready"
 
+if [ "$1" = quick ]; then
+	# the style Deskbar starts with (no settings file yet), then the compare
+	shot quick-start
+	r5-effects-test shadow off > /tmp/dstest-fx.txt 2>&1; echo "rc $?" >> /tmp/dstest-fx.txt
+	r5-effects-test frosted off >> /tmp/dstest-fx.txt 2>&1
+	r5-effects-test animations off >> /tmp/dstest-fx.txt 2>&1
+	r5-effects-test get >> /tmp/dstest-fx.txt 2>&1
+	say "effects $(tr '
+' ' ' < /tmp/dstest-fx.txt)"
+	sleep 2; say "compare default start"
+	r5-effects-test round-move 18 20 > /dev/null 2>&1 &
+	sleep 23; say "compare default"
+	style 1 0 1 1; place 3; sleep 2; say "compare classic start"
+	r5-effects-test round-move 18 20 > /dev/null 2>&1 &
+	sleep 23; say "compare classic"
+	r5-effects-test shadow on; r5-effects-test frosted on
+	r5-effects-test animations on
+	say "done"
+	exit 0
+fi
+
 if [ "$1" = count ]; then
 	# Default (R5) Horizontal: the window count of one program follows its
 	# windows (external review, point 10)

@@ -19,7 +19,8 @@ Run in WSL. It works on its own copy of the image (never the shared one):
 
 --safe boots in Safe mode (the CPU mode) and runs the short guest list.
 --count runs only the window count of Default (R5) Horizontal.
-Usage: scripts/qemu-deskbar-styles.py IMAGE OUT [--safe | --count]
+--quick takes the style Deskbar starts with and runs the compare.
+Usage: scripts/qemu-deskbar-styles.py IMAGE OUT [--safe | --count | --quick]
 """
 
 import json
@@ -174,6 +175,9 @@ def main():
     count = "--count" in args
     if count:
         args.remove("--count")
+    quick = "--quick" in args
+    if quick:
+        args.remove("--quick")
     if len(args) != 2:
         print(__doc__)
         return 2
@@ -197,7 +201,8 @@ def main():
         "kernel": "syslog_time_stamps true\nsyslog_max_size 4M\n",
         "UserBootscript": "#!/bin/sh\n/bin/sh /boot/home/dstest %s"
                           " > /boot/home/dstest.txt 2>&1 &\n"
-                          % ("safe" if safe else "count" if count else ""),
+                          % ("safe" if safe else "count" if count
+                             else "quick" if quick else ""),
         "dstest": guest,
     }
     for name, text in files.items():
