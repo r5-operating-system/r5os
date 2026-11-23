@@ -8,6 +8,15 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-23 - Themes: tested on the 5625U
+
+The owner's three screenshots from the 5625U on 23 Nov (about 22:43) show the theming on hardware:
+- Sign in: the light sign-in window.
+- Dark mode: the Settings home is fully dark, with the category labels coloured per category, and the Deskbar is a dark menu expanded at the top right.
+- R5 Modern, light: the Theme page has the theme cards (R5, R5 Modern, Classic (Haiku), Save as theme…), Mode, Accent and the Parts box. The Deskbar is a floating white glass pill with a shadow, and the Settings window has round corners.
+
+These are screenshots only. The stick number and boot logs are not recorded here, and the syslog was not checked for crashes. Not shown: an open pop-up menu field, Custom colors, and Save as theme….
+
 ## 2026-11-23 - Card reader: #4572 and #4573 tested on the 5625U
 
 Tested on the 5625U (stick 80, main after #4573, `generated/boot-5625u-80/` in the stick worktree): the SD card went in and out three times. Each time: `rtsx: card inserted`, a scan, `SDHC card found`, a new disk (`disk/mmc/0/raw`, `/1/raw`, `/2/raw`), the 4 bit bus and 25 reads without an error; on removal `rtsx: card removed`, a scan and `No card in the slot` at once. No `CMD7` timeout (stick 77 and 79), no rtsx or exFAT error, no crash.
