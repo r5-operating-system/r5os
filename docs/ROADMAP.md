@@ -62,6 +62,15 @@ The order is impact, not ticket number. `[x]` is done and tested where it is mea
 6. [ ] **Dark mode in the remaining system applications** and Deskbar ([#3342](https://github.com/r5-operating-system/r5os/issues/3342), Haiku #18970). The dark color scheme exists; some applications still keep their own look.
 7. [x] **Bluetooth and game controllers** (`docs/BLUETOOTH.md`, `docs/GAME-CONTROLLERS.md`). Classic HID (step 4), Low Energy (steps 1c and 6), audio (step 5, A2DP), HFP (step 7) and the Game controllers page are in. Tested on real hardware on 18 Nov 2026, and confirmed by the owner over Bluetooth on 22 Nov 2026. Still open: the headset microphone (off until tested), and resolving private addresses in the host for a radio without LL Privacy.
 8. [ ] **Polish** ([#4513](https://github.com/r5-operating-system/r5os/issues/4513)): screenshots, emoji and fonts, the image clipboard. Rounder windows and Deskbar: `docs/LOOK.md`, not while multi-user is still open. The R5 window frame is the default since 13 Nov 2026; round corners are a later decorator.
+9. **Download, installer next to Windows, and Software update** (owner, 23 Nov 2026). Design: `docs/design/INSTALL-UPDATE.md`. Brief: `docs/briefs/INSTALL-UPDATE.md`. First for testers and enthusiasts. One PR per step.
+   - [x] The image has no Haiku system repository, so Software Update cannot replace R5's system with plain Haiku (#4570). Built and checked in the image; not booted.
+   - [ ] Step 0: report (Windows from the boot loader, R5 versions above Haiku's, what SoftwareUpdater offers, NTFS hibernation and BitLocker checks).
+   - [ ] Step 1: R5's own package repository on GitHub Pages (deployed by GitHub Actions), the last 3 builds; an R5 domain on top later.
+   - [ ] Step 2: the Software update page in Settings (System), per change, Installed list, "Go back to before <date>".
+   - [ ] Step 3: the installer: erase the disk (from air/OS), the read-only live stick, language, keyboard and Wi-Fi carried over.
+   - [ ] Step 4: the installer next to Windows: the checks, `ntfsresize` (GPL-2.0-or-later, a separate program), 64 GB suggested, the backup tick.
+   - [ ] Step 5: the boot menu with "R5 Operating System", "Windows", the previous state and Safe mode.
+   - [ ] Step 6: the ISO download, compressed on a GitHub Release with its checksum.
 
 Zeroconf, AirPrint, AirPlay 1 and the network tray exist. They are not "done" until LAN tests exist.
 
@@ -81,7 +90,7 @@ Do not start these during an unrelated bugfix.
 | **R5 Quicklaunch** | Keyboard launch, and search for applications, files and system items | Not started |
 | **R5 Connect** | Device discovery (AirPrint, AirPlay, later SMB and printers) | Started: Network > Discovery lists printers, AirPlay speakers and other computers; SMB shares mount from Tracker. No product yet |
 | **R5 Store** | Installing software from Haiku packages | Not started |
-| **R5 SafeUpdate** | Validated updates and recovery *before* disruptive changes | Not started |
+| **R5 SafeUpdate** | Validated updates and recovery *before* disruptive changes | Designed (23 Nov 2026): the Software update page, R5's own package repository and "Go back to before <date>", Near term item 9. Not built |
 | **R5 Doctor** | Logs, crashes, drivers, common failures | Not started |
 
 ## Graphics and media

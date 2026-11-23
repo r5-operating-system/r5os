@@ -73,9 +73,14 @@ and the RTS5765DL. Neither OpenBSD's driver nor the spec covers them.
 
 ## Limits
 
-- `mmc_bus` does not unpublish a card that is gone. After a removal the old
-  disk stays in `/dev/disk/mmc/` and only returns errors; a new card gets a
-  new node. Unmount before removing the card.
+- A card that is taken out is removed at once: rtsx wakes the `mmc_bus`
+  scan, which finds the slot empty and removes the card's node. A volume on
+  it is not unmounted. A disk that is still open (a mounted volume) stays
+  until it is closed, returns `B_DEV_NO_MEDIA`, and its I/O does not reach a
+  new card; the new card gets a new number. Unmount before removing the
+  card: what was not written yet is lost.
+- The write-protect switch is not read; a card is always writable.
+- Default speed only (25 MHz, 4 bit); no high speed or UHS-I.
 - No suspend or runtime power management (Haiku has neither here).
 - The RTS5228 bit the spec leaves open: after the 74 init clocks the driver
   stops the clock toggle again.
@@ -112,3 +117,20 @@ the card was gone (stick 75: 489 tries). A failed scan, a card outside the
 voltage range, and a card that does not enter the data state now wait for
 the next card instead of ending the scan thread. This also applies to sdhci
 readers.
+
+CMD0 puts every card in the idle state: none is selected, and the RCA and the
+4 bit bus are gone. So a scan first forgets the selected card (no CMD7 to
+deselect it, which a card put in again does not answer) and removes the node
+it published for the last card. rtsx also wakes the scan when a card is
+taken out; CMD0 then returns `B_DEV_NO_MEDIA`, and the scan waits for the
+next card with the old node already removed. The card found now gets a new node, and
+`mmc_disk` reads its size and sets the 4 bit bus again. `mmc_disk` has its own
+copy too (`distro/kernel/src/add-ons/kernel/drivers/disk/mmc/`): after its
+node is removed it fails every I/O and trim with `B_DEV_NO_MEDIA` and says so
+for `B_GET_MEDIA_STATUS`, and a trim ends at its last block (CMD33 takes the
+last block; `offset + length` also erased the block after the range).
+
+In rtsx, CMD7 with RCA 0 has no response (SD physical layer; OpenBSD sdmmc
+sends it without one), an erase (CMD38) may stay busy for 10 seconds instead
+of one, and a transfer end that arrives after its waiter gave up is cleared
+before the next command starts.

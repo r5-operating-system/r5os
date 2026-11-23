@@ -24,6 +24,12 @@ MMCBus::MMCBus(device_node* node)
 {
 	CALLED();
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	fCardNode = NULL;
+// SPDX-SnippetEnd
+
 	// Get the parent info, it includes the API to send commands to the hardware
 	device_node* parent = gDeviceManager->get_parent_node(node);
 	fStatus = gDeviceManager->get_driver(parent,
@@ -158,6 +164,39 @@ MMCBus::_TerminateBus()
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+/*
+ * Forget the card of the last scan. A scan starts when a card is put in, and
+ * its CMD0 puts every card back in the idle state: no card is selected, the
+ * RCA and the 4 bit bus are gone (SD physical layer, CMD0). So the node of
+ * the last card no longer matches a card. It is removed, so that the card
+ * found now gets a new node and mmc_disk reads its size and sets its bus
+ * again; mmc_disk then fails the I/O of the old node. Bus lock held.
+ */
+void
+MMCBus::_RemoveCard()
+{
+	// Without this the CMD0 below first sent CMD7 to deselect the old card,
+	// and a card put in again does not answer that.
+	fActiveDevice = 0;
+
+	if (fCardNode == NULL)
+		return;
+
+	device_node* node = fCardNode;
+	fCardNode = NULL;
+
+	// mmc_disk may wait for the bus with an I/O; do not hold the bus while
+	// its node and driver go away.
+	ReleaseBus();
+	gDeviceManager->unregister_node(node);
+	AcquireBus();
+}
+// SPDX-SnippetEnd
+
+
 status_t
 MMCBus::_WorkerThread(void* cookie)
 {
@@ -207,7 +246,14 @@ MMCBus::_WorkerThread(void* cookie)
 // SPDX-License-Identifier: MIT
 		// A card put in after the first scan gets its own CMD0 (the one
 		// above only ran for the card present at the start).
-		bus->ExecuteCommand(0, GO_IDLE_STATE, 0, NULL);
+		bus->_RemoveCard();
+		if (bus->ExecuteCommand(0, GO_IDLE_STATE, 0, NULL) == B_DEV_NO_MEDIA) {
+			// The controller woke the scan for a removal (rtsx): the
+			// card's node is gone now; wait for the next card.
+			TRACE("No card in the slot\n");
+			bus->_AcquireScanSemaphore();
+			continue;
+		}
 		snooze(30000);
 
 		// The card must be ready within one second (SD physical layer,
@@ -452,8 +498,14 @@ MMCBus::_WorkerThread(void* cookie)
 			};
 
 			// publish child device for the card
-			gDeviceManager->register_node(bus->fNode, MMC_BUS_MODULE_NAME,
-				attrs, NULL, NULL);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			// Kept, so that the next scan can remove it (_RemoveCard).
+			if (gDeviceManager->register_node(bus->fNode, MMC_BUS_MODULE_NAME,
+					attrs, NULL, &bus->fCardNode) != B_OK)
+				bus->fCardNode = NULL;
+// SPDX-SnippetEnd
 		}
 
 		// TODO if there is a single card active, check if it supports CMD6

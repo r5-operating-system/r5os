@@ -8,6 +8,7 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+<<<<<<< HEAD
 ## 2026-11-23 - Themes - Round 2B fixes from 5625U stick test (permissions, equal-height buttons, rounded inputs, Deskbar tray chevron, Tracker desktop offset)
 
 - Problem: testing the Round 2 USB stick on the Ryzen 5 5625U uncovered: (1) `FirstBootPrompt` (`Try R5`, uid 0) created `~/config/settings/r5/theme` owned by root (`0644`), silently blocking `user` (uid 1000) from saving theme changes in Settings so the blue selection always snapped back to `R5 (changed)` and switching Deskbar to Compact reverted to square `R5`; (2) default blue buttons (`Try R5`, `Save`, `OK`) were taller than adjacent normal buttons; (3) disabled buttons on cards (e.g. Bluetooth `Disconnect`/`Forget`) had harsh washed-out contrast; (4) `About R5` tab strip background differed from the window panel; (5) `BTextControl` inputs across apps (Network Connections, Tracker path bar) had clipped square inner corners in `R5 Modern`; (6) flat toolbar buttons (`← → ↑` in Tracker's `BNavigator`) showed a mismatched background rectangle; (7) Deskbar's Compact pill left an empty gap after closing an app; (8) `ProcessController` on 12-thread CPUs was twice as wide as other tray icons, and Vertical Deskbar needed a fold chevron when more than 4 tray icons sit next to the clock; (9) switching Deskbar to top Horizontal left existing desktop icons (`R5`, `home`, `Trash`) hidden behind the bar.
@@ -28,6 +29,34 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
   - Fixes: locked superMenu->Window() in Menu.cpp::_CalcFrame(); quoted ccent and posted 
 5:control_look directly to e_app windows in Themes.cpp, forced light colors when kept.mode != now.mode (Dark -> Classic) and applied Deskbar style after UI colors; filled parent backdrop in Card.cpp/ActionCard.cpp (0 px in square themes, 8 px in R5 Modern); filled BSidebar::Draw() with B_LIST_BACKGROUND_COLOR, updated scrollbar on category expand, and relayed out SearchField on B_COLORS_UPDATED; used ase in R5ModernControlLook::DrawActiveTab/DrawInactiveTab, updated What's new/Licenses runs on B_COLORS_UPDATED in AboutSystem.cpp, and inset Tracker CountView and DraggableContainerIcon under rounded menu bars; gave Default (R5) Deskbar a fixed normal width (228 px scaled) shared by R5 and R5 Modern (resetting to gMinimumWindowWidth for Classic), 12 pt font, slimmer Compact pill, bold horizontal label sizing, and remembered previous tray/menu colors in _TookDeskbarColor().
 - Tested (23 Nov 2026): AMD64 scripts/build-locked.sh (jam_exit=0, mesa_exit=0). Verified in QEMU on private image copies in both GPU Lavapipe mode (qemu-theming.py, MISMATCH: 0) and Safe/CPU mode (qemu-theming.py --safe), zero crashes. Visually verified square R5 default, R5 Modern light & dark, Classic (Haiku) light Deskbar & StyledEdit, Settings Theme page with collapsed Custom colors and no Look and Feel duplicate, and clean BCard/BPageHeader corners. Not yet booted on physical 5625U hardware (final Themes.cpp color-before-Deskbar ordering tweak committed after the last QEMU run).
+=======
+## 2026-11-23 - Card reader: a card that is taken out is removed at once
+
+Problem (stick 78, 5625U, main with #4572, `generated/boot-5625u-78/` in the stick worktree): a card put in after the start was found (`SDHC card found`, 4 bit, 25 reads without an error). After `rtsx: card removed` its volume and disk stayed; the owner unmounted it by hand. With #4572 the card's node was only removed by the scan of the next card.
+
+Changed: `rtsx_haiku.cpp`: `card_power_off()` wakes the `mmc_bus` scan when the card had been announced to it. `mmc_bus.cpp`: the scan removes the card's node first (`_RemoveCard()`, as before), and when CMD0 returns `B_DEV_NO_MEDIA` (rtsx with the slot off) it waits for the next card instead of going on with CMD8, CMD1 and CMD55. sdhci does not wake the scan on a removal and is unchanged.
+
+Limits: a mounted volume is not unmounted; it stays until it is unmounted and its I/O returns `B_DEV_NO_MEDIA`. Whether Haiku's disk device manager does anything with the removed node or the media status was not checked. A removal followed quickly by an insertion can run two scans; the second removes the node of the first and publishes the card again.
+
+Tested: stick 78 tested #4572 only for a first insertion (found, read). This change is not booted yet.
+
+## 2026-11-23 - Card reader: an SD card put in again is found
+
+Problem (stick 77, 5625U, main `a08d00b67c`, `generated/boot-5625u-77/` in the stick worktree): the SD card that was in at power on was found (`SDHC card found`), read, and shown in the mount menu. After the card was taken out and put in again, every command failed: `rtsx: CMD7 (arg 00000000) failed: Operation timed out` three times, then `CMD55 failed`, and the card was not found again. Mounting the exFAT volume then failed with `read of 512 bytes at 16777216 failed: Operation timed out` and an I/O error.
+
+Cause: mmc_bus remembers the selected card (RCA 1). Before each bus command (RCA 0) for the new card it first sends CMD7 with RCA 0 to deselect the old one. No card answers CMD7 with RCA 0 (SD physical layer; OpenBSD sdmmc sends it without a response), but rtsx waited for an R1b answer. The timeout made `_ActivateDevice()` fail, so mmc_bus sent neither CMD0 nor any other command to the new card. At the first scan no card was selected yet, so no CMD7 was sent.
+
+Changed, after a review of the whole card path (rtsx, mmc_bus, mmc_disk) against the SD physical layer:
+
+- rtsx (`rtsx_haiku.cpp`): `response_type()` takes the argument; CMD7 with RCA 0 has no response (`RTSX_SD_RSP_TYPE_R0`), CMD7 with an RCA stays R1b.
+- mmc_bus (`mmc_bus.cpp`, and `mmc_bus.h` now copied into `distro/`, Haiku MIT with R5 snippets): CMD0 puts every card in the idle state (no card selected, RCA and 4 bit bus gone). Each scan now first forgets the selected card, so no CMD7 is sent on any host (sdhci too), and removes the node it published for the last card (`_RemoveCard()`, `unregister_node` with the bus lock released). Before, a card put in again came back on its old node (the device manager found the same attributes), so `mmc_disk` never read its size or set the 4 bit bus again (1 bit after the scan's CMD0, and the old size for a different card).
+- mmc_disk (copied into `distro/`, Haiku MIT with R5 snippets; `scripts/apply-kernel-bugs.py` installs both new copies): a `device_removed` hook marks a removed node; its I/O and trim then return `B_DEV_NO_MEDIA`, so a volume still mounted from the old card cannot write to the new one, and `B_GET_MEDIA_STATUS` says `B_DEV_NO_MEDIA` instead of always `B_OK`. A trim ended at `offset + length`, but CMD33 takes the last block to erase, so it also erased the block after the range; it now ends at the last block (one sector, or 512 bytes on a byte-addressed card).
+- rtsx (`rtsx.cpp`, R5 snippets in the ISC file): a transfer end that arrives after its waiter gave up (timeout, soft reset) is cleared right before the next command or DMA starts; before, the next command could return at once with the answer of no command. An erase (CMD38) may stay busy for 10 s instead of 1 s (SD erase timeout).
+
+Limits: a removed card's node goes when the next card is put in, not at once (the rtsx driver has no call to tell mmc_bus about a removal); an open disk stays until it is closed. A short window remains in which an I/O that passed the check just before the removal waits for the bus during the scan of the new card. The write-protect switch is not read. Default speed only. Writing a file is not proven on hardware: the driver logs only reads. sdhci itself is unchanged (it also sends CMD7 with RCA 0 as R1b; mmc_bus no longer sends that on a scan, but `mmc_disk` still deselects before CMD9 when a card was selected).
+
+Tested: not built and not booted yet; it goes on the next stick (card in, out and in again, mount, copy a file to it and read it back).
+>>>>>>> origin/main
 
 ## 2026-11-23 - Updates - Haiku's system repository is no longer in the R5 image
 

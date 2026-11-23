@@ -36,6 +36,8 @@ struct rtsx_command {
 	uint32					arg;
 	uint8					rsp_type;	/* RTSX_SD_RSP_TYPE_* */
 	uint32					resp[4];
+	/* Longest wait for the answer and the busy end, 0 for one second. */
+	uint8					busy_secs;
 
 	/* Data phase: physical vectors from the I/O scheduler. */
 	bool					read;
