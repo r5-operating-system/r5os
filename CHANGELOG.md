@@ -8,6 +8,16 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-23 - Windows - a round window that grows is drawn in full
+
+Problem: in QEMU (Lavapipe, Default (R5 Modern)) the Appearance window, which grows right after it opens, stayed black below and to the right of its first size; the part it did draw had round bottom corners at that first size. Seen on main after #4560 and #4561, and also on the #4560 merge alone (that build's shared tree still held #4561's Deskbar files, so that check is not fully clean). Not seen in #4560's own runs, whose shot was probably taken later.
+
+Cause: `Window::ResizeBy()` resizes the views (`fTopView->ResizeBy()`) before the decorator (`decorator->ResizeBy()`). The views can build the content region, and their screen clipping from it, in between; the round outline then comes from the decorator's old frame, so the content stayed cut at the old corners and the new area was never drawn.
+
+What changed: after the decorator is resized, a window with a round outline (before or after) makes its content region, visible content region, drawing region and the views' screen clipping again (`_DecoratorShapeChanged()`). Square windows are unchanged.
+
+Tested: QEMU (KVM, 1280 by 800), build of 23 Nov about 08:05 with `scripts/build-locked.sh` (`jam_exit=0`, `mesa_exit=0`), `scripts/qemu-r5modern.py`: Appearance 8 s after opening covers its whole new size (plain panel, no black, no cut corners); the resize test is fine; 5 times `compose compare ok`, no `MISMATCH`. The Appearance controls themselves were not drawn yet at that moment; 40 s later they are; that the app was still busy is a guess, not checked. Safe mode (`--safe`, same build): boots, windows, stepped corners and the tab and resize steps as before, no crash. Not on a real machine.
+
 ## 2026-11-23 - Deskbar - tray symbols without colored fringes in Safe mode
 
 Problem: in Safe mode (the CPU mode) the volume and network symbols in the Deskbar tray had colored fringes (cyan and yellow along the lines); with the GPU they were clean. `r5_glyph_draw()` drew the glyph's shapes straight into the view, and app_server's Painter draws every filled shape with subpixel antialiasing when the subpixel setting is on (`Painter::_RasterizePath()`, `gSubpixelAntialiasing`). The Bluetooth item, which uses `r5_glyph_bitmap()`, had no fringes.
