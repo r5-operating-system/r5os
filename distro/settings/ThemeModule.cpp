@@ -838,6 +838,15 @@ ThemeCards::_DrawThumb(const theme_info& theme, BRect thumb)
 }
 
 
+static BRect
+delete_badge(BRect frame)
+{
+	float side = px(18);
+	return BRect(frame.right - px(4) - side + 1, frame.top + px(4),
+		frame.right - px(4), frame.top + px(4) + side - 1);
+}
+
+
 void
 ThemeCards::_DrawCard(int32 index, BRect frame)
 {
@@ -857,6 +866,24 @@ ThemeCards::_DrawCard(int32 index, BRect frame)
 	thumb.InsetBy(px(6), px(6));
 	thumb.bottom = thumb.top + px(78) - 1;
 	_DrawThumb(theme, thumb);
+
+	// Red X badge in the top-right corner of user-saved themes for direct delete
+	if (!is_built_in_theme(theme.name)) {
+		BRect badge = delete_badge(frame);
+		PushState();
+		SetDrawingMode(B_OP_ALPHA);
+		SetHighColor(make_color(220, 38, 38, 255));
+		FillEllipse(badge);
+		SetHighColor(kWhite);
+		SetPenSize(std::max(1.5f, px(1.8f)));
+		SetLineMode(B_ROUND_CAP, B_ROUND_JOIN);
+		BPoint c((badge.left + badge.right + 1) / 2,
+			(badge.top + badge.bottom + 1) / 2);
+		float arm = px(3.5f);
+		StrokeLine(BPoint(c.x - arm, c.y - arm), BPoint(c.x + arm, c.y + arm));
+		StrokeLine(BPoint(c.x + arm, c.y - arm), BPoint(c.x - arm, c.y + arm));
+		PopState();
+	}
 
 	const BFont* bold = r5_settings_bold_font();
 	const BFont* plain = r5_settings_plain_font();
@@ -975,10 +1002,18 @@ void
 ThemeCards::MouseDown(BPoint where)
 {
 	for (int32 i = 0; i <= (int32)fThemes.size(); i++) {
-		if (!_Card(i).Contains(where))
+		BRect card = _Card(i);
+		if (!card.Contains(where))
 			continue;
 		if (i == (int32)fThemes.size()) {
 			fTarget.SendMessage(kMsgSaveTheme);
+			return;
+		}
+		if (!is_built_in_theme(fThemes[i].name)
+			&& delete_badge(card).Contains(where)) {
+			BMessage del(kMsgDeleteTheme);
+			del.AddString("name", fThemes[i].name);
+			fTarget.SendMessage(&del);
 			return;
 		}
 		BMessage message(kMsgPickTheme);
@@ -1434,8 +1469,6 @@ private:
 			BMessage			fOpenedColors;
 			theme_info			fCurrent;
 
-			BButton*			fSaveButton;
-			BButton*			fDeleteButton;
 			ThemeCards*			fCards;
 			SegmentedControl*	fMode;
 			AccentControl*		fAccent;
@@ -1546,10 +1579,6 @@ ThemePage::ThemePage(ThemeModule* module)
 		if (which != B_NO_COLOR)
 			fOpenedColors.AddColor(name, ui_color(which));
 	}
-
-	BStringView* title = new BStringView("theme title", "Theme");
-	fSaveButton = new BButton("Save as theme…", new BMessage(kMsgSaveTheme));
-	fDeleteButton = new BButton("Delete", new BMessage(kMsgDeleteTheme));
 
 	fCards = new ThemeCards();
 
@@ -1693,16 +1722,10 @@ ThemePage::ThemePage(ThemeModule* module)
 	fColorsBox->AddChild(fColors);
 	fColorsBox->Hide();
 
-	// room under the Parts box for its bottom line and corners, fitting the
-	// default 1030x610 Settings window without clipping or scrolling
-	BLayoutBuilder::Group<>(this, B_VERTICAL, px(6))
+	// Fits the default 1030x610 Settings window without a scrollbar
+	// (Save is on the "+" card, Delete is the red X badge on custom themes).
+	BLayoutBuilder::Group<>(this, B_VERTICAL, px(8))
 		.SetInsets(0, 0, 0, px(4))
-		.AddGroup(B_HORIZONTAL, px(10))
-			.Add(title)
-			.AddGlue()
-			.Add(fSaveButton)
-			.Add(fDeleteButton)
-		.End()
 		.Add(fCards)
 		.AddGroup(B_HORIZONTAL, px(22))
 			.AddGroup(B_HORIZONTAL, px(10))
@@ -1724,7 +1747,6 @@ ThemePage::ThemePage(ThemeModule* module)
 		.AddGlue();
 
 	r5_settings_apply_plain(this);
-	title->SetFont(r5_settings_bold_font());
 	BFont semibold(r5_settings_bold_font());
 	modeLabel->SetFont(&semibold);
 	modeLabel->SetExplicitSize(BSize(px(52), B_SIZE_UNSET));
@@ -1744,8 +1766,6 @@ ThemePage::AttachedToWindow()
 {
 	BGroupView::AttachedToWindow();
 
-	fSaveButton->SetTarget(this);
-	fDeleteButton->SetTarget(this);
 	fCards->SetTarget(this);
 	fMode->SetTarget(this);
 	fAccent->SetTarget(this);
@@ -1976,10 +1996,6 @@ ThemePage::_Update()
 	fGlass->SetValue((fCurrent.effects & B_WINDOW_FROSTED_GLASS) != 0);
 	fAnimations->SetValue((fCurrent.effects & B_WINDOW_ANIMATIONS) != 0);
 	mark_number(fStrengthMenu, fCurrent.effect_strength);
-
-	theme_info saved;
-	fDeleteButton->SetEnabled(!is_built_in_theme(fCurrent.base)
-		&& find_theme(fCurrent.base, &saved) == B_OK);
 }
 
 
@@ -2258,22 +2274,31 @@ ThemePage::MessageReceived(BMessage* message)
 
 		case kMsgDeleteTheme:
 		{
-			if (is_built_in_theme(fCurrent.base))
+			const char* targetName = fCurrent.base;
+			const char* fromCard = NULL;
+			if (message->FindString("name", &fromCard) == B_OK
+				&& fromCard != NULL && fromCard[0] != '\0')
+				targetName = fromCard;
+			if (is_built_in_theme(targetName))
 				break;
 			BString text;
-			text << "Delete the theme \"" << fCurrent.base << "\"? What you "
+			text << "Delete the theme \"" << targetName << "\"? What you "
 				"see now stays as it is.";
 			BAlert* alert = new BAlert("Delete", text.String(), "Cancel",
 				"Delete", NULL, B_WIDTH_AS_USUAL, B_WARNING_ALERT);
 			alert->SetShortcut(0, B_ESCAPE);
 			if (alert->Go() != 1)
 				break;
-			if (remove_theme(fCurrent.base) == B_OK) {
-				// what is on screen stays; it is a changed R5 now
-				theme_info info = fCurrent;
-				strlcpy(info.name, "R5", sizeof(info.name));
-				strlcpy(info.base, "R5", sizeof(info.base));
-				_Apply(info, 0);
+			if (remove_theme(targetName) == B_OK) {
+				if (strcmp(fCurrent.base, targetName) == 0) {
+					// what is on screen stays; it is a changed R5 now
+					theme_info info = fCurrent;
+					strlcpy(info.name, "R5", sizeof(info.name));
+					strlcpy(info.base, "R5", sizeof(info.base));
+					_Apply(info, 0);
+				} else {
+					_Update();
+				}
 			}
 			break;
 		}
