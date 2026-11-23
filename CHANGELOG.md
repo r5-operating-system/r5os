@@ -66,6 +66,23 @@ Tested (QEMU, KVM, `-machine pc`, 2 CPUs, 2 GB, 1280 by 800, builds of 23 Nov wi
 Not proven: a real screen, the 5625U, a stick; saving a theme by typing a name and clicking Save (the dialog was opened, not filled in); Delete; the accent swatches by click; Revert and Defaults by click (the calls run from the test tool, not the buttons); themes of other users; a program without a window at the moment of a switch (it keeps the old look until it restarts, by design). The first screenshot of run 3 showed the Controls window before its first draw; run 4 waits longer and shows it drawn. `ExampleControlLook` compiled (`jam -q ExampleControlLook`, rc 0); it was not loaded in QEMU. A theme file copied in by hand and `B_THEME_CHANGED` received by a program were not exercised.
 
 Limits and differences from the mockup: "No arrows" is not offered (Haiku's `scroll_bar_info` has single and double only; it needs a change in `BScrollBar`). The R5 theme keeps Haiku's controls, so R5 dark has Haiku's light scroll bar thumbs and status bar (B2 shows R5 Modern style scroll bars). The Settings frame is the existing one (the mockup's white page card and tab strip are not drawn); fields use the button line `#b4bcc8` (the mockup's `#b8c0cc` is one step lighter); StyledEdit's text area is the document colour `#15181e`, the mockup shows the window body. The theme cards are the page's own view, not `BCardStrip` (reason in THEMING.md).
+## 2026-11-23 - Build - the translators' catalog keys are collected without "fatal error" lines
+
+Problem: every jam printed "fatal error: avif/avif.h", "jpeglib.h", "png.h", "jasper/jasper.h", "icns.h", "tiffio.h", "webp/…" and "bitmap_compression.h" for eight translators (noted since late October as known and harmless; jam still exited 0). They come from collecting the catalog keys (`ExtractCatalogEntries`, `build/jam/LocaleRules`), not from compiling: each translator's Jamfile adds the build feature headers inside `on $(architectureObject) { … }`, so only the object files see them, and `DoCatalogs`, outside that block, ran the preprocessor without them. The preprocessor stopped at the first include, so those catalogs could miss strings.
+
+What changed: the Jamfiles of avif, jpeg, jpeg2000, png, icns, tiff, webp and wonderbrush are copied into `distro/rest/src/add-ons/translators/` with one R5 snippet (MIT) before `DoCatalogs`: the same `UseBuildFeatureHeaders` lines for the subdirectory (and wonderbrush's `support` folder). The translators themselves are built as before.
+
+Tested: `scripts/build-locked.sh` from `origin/main` plus this change, 23 Nov 2026: `jam_exit=0`, `mesa_exit=0`, 0 "fatal error" lines in the log (before: one or more per translator in every build). The `en.catkeys` of the eight translators have 7 to 25 lines each. Not measured: how many keys they had before. Not booted (no code in the image changes besides the catalogs).
+
+## 2026-11-23 - Windows - a round window that grows is drawn in full
+
+Problem: in QEMU (Lavapipe, Default (R5 Modern)) the Appearance window, which grows right after it opens, stayed black below and to the right of its first size; the part it did draw had round bottom corners at that first size. Seen on main after #4560 and #4561, and also on the #4560 merge alone (that build's shared tree still held #4561's Deskbar files, so that check is not fully clean). Not seen in #4560's own runs, whose shot was probably taken later.
+
+Cause: `Window::ResizeBy()` resizes the views (`fTopView->ResizeBy()`) before the decorator (`decorator->ResizeBy()`). The views can build the content region, and their screen clipping from it, in between; the round outline then comes from the decorator's old frame, so the content stayed cut at the old corners and the new area was never drawn.
+
+What changed: after the decorator is resized, a window with a round outline (before or after) makes its content region, visible content region, drawing region and the views' screen clipping again (`_DecoratorShapeChanged()`). Square windows are unchanged.
+
+Tested: QEMU (KVM, 1280 by 800), build of 23 Nov about 08:05 with `scripts/build-locked.sh` (`jam_exit=0`, `mesa_exit=0`), `scripts/qemu-r5modern.py`: Appearance 8 s after opening covers its whole new size (plain panel, no black, no cut corners); the resize test is fine; 5 times `compose compare ok`, no `MISMATCH`. The Appearance controls themselves were not drawn yet at that moment; 40 s later they are; that the app was still busy is a guess, not checked. Safe mode (`--safe`, same build): boots, windows, stepped corners and the tab and resize steps as before, no crash. Not on a real machine.
 
 ## 2026-11-23 - Deskbar - tray symbols without colored fringes in Safe mode
 
