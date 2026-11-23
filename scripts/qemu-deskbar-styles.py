@@ -155,6 +155,9 @@ def act(qmp, name, margin, frame, out):
     elif name == "menu-h":
         qmp.click(left + 1 + 8 + 24, middle)
         time.sleep(1.5)
+    elif name == "hover-pebble-h":
+        qmp.move(left + 1 + 8 + 24, middle)
+        time.sleep(1.2)
     qmp.dump(path)
     to_png(path)
     if name.startswith("menu"):
