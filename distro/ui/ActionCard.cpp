@@ -24,12 +24,15 @@
 
 #include "ActionCard.h"
 
+#include "R5ModernStyle.h"
+
 #include <Bitmap.h>
 #include <ControlLook.h>
 #include <InterfaceDefs.h>
 #include <Message.h>
 #include <Window.h>
 
+#include <math.h>
 #include <new>
 #include <stdio.h>
 
@@ -217,7 +220,17 @@ BActionCard::Draw(BRect updateRect)
 	else if ((flags & BControlLook::B_HOVER) != 0)
 		base = mix_color(base, accent, 10);
 	SetLowColor(base);
-	float radius = be_plain_font->Size() * 0.25f;
+	rgb_color backdrop = panel;
+	if (Parent() != NULL) {
+		rgb_color parentColor = Parent()->ViewColor();
+		if (parentColor.alpha > 0)
+			backdrop = parentColor;
+	}
+	SetHighColor(backdrop);
+	FillRect(Bounds());
+	float radius = r5ui_modern_controls()
+		? roundf(be_plain_font->Size() * 8 / 12)
+		: be_plain_font->Size() * 0.25f;
 	SetHighColor(base);
 	FillRoundRect(Bounds(), radius, radius);
 	rgb_color border = tint_color(panel, B_DARKEN_2_TINT);

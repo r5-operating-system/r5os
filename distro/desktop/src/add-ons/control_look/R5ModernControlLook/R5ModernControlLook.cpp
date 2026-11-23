@@ -1588,6 +1588,9 @@ R5ModernControlLook::DrawActiveTab(BView* view, BRect& rect,
 	if (!ShouldDraw(view, rect, updateRect))
 		return;
 
+	view->SetHighColor(base);
+	view->FillRect(rect);
+
 	rgb_color fill = base;
 	draw_tab(view, rect, fill, line_color(base), side, true);
 	// the label goes where Haiku's goes
@@ -1609,8 +1612,7 @@ R5ModernControlLook::DrawInactiveTab(BView* view, BRect& rect,
 		: blend(base, make_color(0, 0, 0), 0.17f);
 	if ((flags & B_HOVER) != 0)
 		fill = blend(fill, base, 0.5f);
-	rgb_color background = view->LowColor();
-	view->SetHighColor(background);
+	view->SetHighColor(base);
 	view->FillRect(rect);
 
 	BRect tab(rect);

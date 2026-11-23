@@ -3324,6 +3324,17 @@ BContainerWindow::_AddFolderIcon()
 	fDraggableIcon = new(std::nothrow) DraggableContainerIcon(BSize(iconSize - 1, iconSize - 1));
 	if (fDraggableIcon != NULL) {
 		fMenuContainer->GroupLayout()->AddView(fDraggableIcon);
+		// SPDX-SnippetBegin
+		// SPDX-FileCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		float menuLeft = 0, menuTop = 0, menuRight = 0, menuBottom = 0;
+		be_control_look->GetBackgroundInsets(BControlLook::B_MENU_BAR_BACKGROUND,
+			0, menuLeft, menuTop, menuRight, menuBottom);
+		if (menuLeft > 6) {
+			fMenuContainer->SetViewUIColor(B_MENU_BACKGROUND_COLOR);
+			fMenuContainer->GroupLayout()->SetInsets(0, 0, menuLeft - 4, 0);
+		}
+		// SPDX-SnippetEnd
 		fMenuBar->SetBorders(
 			BControlLook::B_ALL_BORDERS & ~BControlLook::B_RIGHT_BORDER);
 	}

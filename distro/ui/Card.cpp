@@ -140,6 +140,14 @@ BCard::Draw(BRect updateRect)
 {
 	(void)updateRect;
 	BRect bounds = Bounds();
+	rgb_color backdrop = ui_color(B_PANEL_BACKGROUND_COLOR);
+	if (Parent() != NULL) {
+		rgb_color parentColor = Parent()->ViewColor();
+		if (parentColor.alpha > 0)
+			backdrop = parentColor;
+	}
+	SetHighColor(backdrop);
+	FillRect(bounds);
 	// R5 Modern: the mockup's round card (8 at 12 points); R5 and Classic
 	// keep the small corner (owner's S1)
 	float radius = r5ui_modern_controls() ? roundf(be_plain_font->Size() * 8 / 12)
