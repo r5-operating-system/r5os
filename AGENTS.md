@@ -8,7 +8,7 @@ Haiku is a codebase and a source of fixes, not the product owner. Do not open PR
 
 GitHub PRs on `origin` target **`main`**. Do not stack PRs unless the user asks.
 
-Create PRs with Cursor `ManagePullRequest`. If that fails (GitHub App missing), give the compare URL. Do not silently use `gh pr create` unless the user asks.
+Create PRs with Cursor `ManagePullRequest` or with `gh pr create`. If neither works, give the compare URL. A push and a PR still need the user's OK first (Development loop, step 7).
 
 Roadmap (R5 Hub, Store, Vulkan, …): `docs/ROADMAP.md`. Do not implement unrelated roadmap items during a focused fix.
 
