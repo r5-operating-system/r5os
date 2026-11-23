@@ -852,22 +852,25 @@ DeskbarView::DeskbarView(DeskbarModule* module)
 
 	BBox* window = new BBox("window");
 	window->SetLabel(r5_settings_box_title("Window"));
-	BGroupView* windowInner = new BGroupView(B_HORIZONTAL,
+	BGroupView* windowInner = new BGroupView(B_VERTICAL,
 		B_USE_DEFAULT_SPACING);
 	BLayoutBuilder::Group<>(windowInner)
 		.SetInsets(B_USE_DEFAULT_SPACING)
-		.Add(fPlace)
-		.AddGroup(B_VERTICAL, B_USE_SMALL_SPACING)
-			.Add(fShowApplications)
-			.Add(fAlwaysOnTop)
-			.Add(fAutoRaise)
-			.Add(fAutoHide)
-			.AddStrut(B_USE_SMALL_SPACING)
-			.Add(themeNote)
-			.AddGroup(B_HORIZONTAL, 0)
-				.Add(openTheme)
+		.AddGroup(B_HORIZONTAL, B_USE_DEFAULT_SPACING)
+			.Add(fPlace)
+			.AddGroup(B_VERTICAL, B_USE_SMALL_SPACING)
+				.Add(fShowApplications)
+				.Add(fAlwaysOnTop)
+				.Add(fAutoRaise)
+				.Add(fAutoHide)
 				.AddGlue()
 				.End()
+			.AddGlue()
+			.End()
+		.Add(themeNote)
+		.AddGroup(B_HORIZONTAL, 0)
+			.Add(openTheme)
+			.AddGlue()
 			.End()
 		.AddGlue();
 	window->AddChild(windowInner);
@@ -876,10 +879,13 @@ DeskbarView::DeskbarView(DeskbarModule* module)
 
 	BLayoutBuilder::Group<>(this)
 		.AddGroup(B_HORIZONTAL, B_USE_DEFAULT_SPACING)
-			.Add(applications)
-			.Add(menu)
+			.AddGroup(B_VERTICAL, B_USE_DEFAULT_SPACING)
+				.Add(applications)
+				.Add(menu)
+				.AddGlue()
+				.End()
+			.Add(window)
 			.End()
-		.Add(window)
 		.AddGlue();
 
 	if (fModule != NULL)

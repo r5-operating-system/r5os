@@ -210,8 +210,9 @@ BActionCard::Draw(BRect updateRect)
 		flags |= BControlLook::B_ACTIVATED;
 	if (IsFocus())
 		flags |= BControlLook::B_FOCUSED;
-	rgb_color base = ui_color(B_DOCUMENT_BACKGROUND_COLOR);
 	rgb_color panel = ui_color(B_PANEL_BACKGROUND_COLOR);
+	rgb_color base = panel.IsLight() ? ui_color(B_DOCUMENT_BACKGROUND_COLOR)
+		: mix_color(panel, make_color(255, 255, 255), 14);
 	// The mockup's hover is #f5f9ff with a #0084ff border and a soft blue
 	// ring: the selection blue of the list, B_STATUS_BAR_COLOR.
 	rgb_color accent = ui_color(B_STATUS_BAR_COLOR);
@@ -272,8 +273,7 @@ BActionCard::Draw(BRect updateRect)
 	SetFont(&body);
 	font_height bodyHeight;
 	body.GetHeight(&bodyHeight);
-	SetHighColor(mix_color(ui_color(B_DOCUMENT_BACKGROUND_COLOR),
-		ui_color(B_DOCUMENT_TEXT_COLOR), 160));
+	SetHighColor(mix_color(base, ui_color(B_DOCUMENT_TEXT_COLOR), 175));
 	y = padY + titleHeight.ascent + titleHeight.descent + u * 3.0f
 		+ bodyHeight.ascent;
 	if (fLineOne.Length() > 0)
@@ -290,10 +290,11 @@ BActionCard::Draw(BRect updateRect)
 	for (int32 i = 0; i < fTagFrames.CountItems(); i++) {
 		BRect* frame = (BRect*)fTagFrames.ItemAt(i);
 		BString* label = (BString*)fTags.ItemAt(i);
-		SetHighColor(mix_color(ui_color(B_DOCUMENT_BACKGROUND_COLOR),
-			fTagColor, 30));
+		SetHighColor(mix_color(base, fTagColor, panel.IsLight() ? 30 : 65));
 		FillRoundRect(*frame, frame->Height() / 2, frame->Height() / 2);
-		SetHighColor(tint_color(fTagColor, B_DARKEN_3_TINT));
+		SetHighColor(panel.IsLight()
+			? tint_color(fTagColor, B_DARKEN_3_TINT)
+			: mix_color(fTagColor, make_color(255, 255, 255), 135));
 		font_height tagHeight;
 		tagFont.GetHeight(&tagHeight);
 		DrawString(label->String(), BPoint(frame->left + u * 8.0f,

@@ -2364,10 +2364,81 @@ BPoseView::MessageReceived(BMessage* message)
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 		case 'R5db':
-			if (IsDesktopView() && Window() != NULL) {
+			if (IsDesktopView() && Window() != NULL
+				&& ViewMode() != kListMode) {
 				fLastDeskbarFrameCheckTime = LONGLONG_MIN;
-				BRect frame = Window()->Frame();
-				CheckPoseVisibility(&frame);
+
+				struct DisplacedPose {
+					node_ref	node;
+					BPoint		original;
+					BPoint		displaced;
+				};
+				static BObjectList<DisplacedPose, true> sDisplaced(8);
+
+				// First restore any icons that were pushed aside by Deskbar
+				// once their original spot is clear again (unless the user
+				// moved them manually).
+				for (int32 i = sDisplaced.CountItems() - 1; i >= 0; i--) {
+					DisplacedPose* entry = sDisplaced.ItemAt(i);
+					BPose* pose = FindPose(&entry->node);
+					if (pose == NULL
+						|| pose->Location(this) != entry->displaced) {
+						sDisplaced.RemoveItemAt(i);
+						continue;
+					}
+					BRect currentRect = pose->CalcRect(this);
+					BRect origRect = currentRect;
+					origRect.OffsetBy(entry->original - entry->displaced);
+					origRect.InsetBy(-3, 0);
+					if (IsValidLocation(origRect)) {
+						Invalidate(currentRect);
+						RemoveFromVSList(pose);
+						pose->SetLocation(entry->original, this);
+						AddToVSList(pose);
+						Invalidate(pose->CalcRect(this));
+						sDisplaced.RemoveItemAt(i);
+					}
+				}
+
+				// Now push aside any icons currently covered by Deskbar,
+				// remembering their original spot.
+				BRect bounds(Bounds());
+				bounds.InsetBy(20, 20);
+				int32 poseCount = fPoseList->CountItems();
+				for (int32 i = 0; i < poseCount; i++) {
+					BPose* pose = fPoseList->ItemAt(i);
+					if (pose == NULL || IsValidLocation(pose))
+						continue;
+					BPoint orig = pose->Location(this);
+					BRect oldRect = pose->CalcRect(this);
+					Invalidate(oldRect);
+					RemoveFromVSList(pose);
+					fHintLocation = orig;
+					PlacePose(pose, bounds);
+					AddToVSList(pose);
+					Invalidate(pose->CalcRect(this));
+
+					const node_ref* nref = pose->TargetModel() != NULL
+						? pose->TargetModel()->NodeRef() : NULL;
+					if (nref != NULL) {
+						DisplacedPose* existing = NULL;
+						for (int32 j = 0; j < sDisplaced.CountItems(); j++) {
+							if (sDisplaced.ItemAt(j)->node == *nref) {
+								existing = sDisplaced.ItemAt(j);
+								break;
+							}
+						}
+						if (existing != NULL) {
+							existing->displaced = pose->Location(this);
+						} else {
+							DisplacedPose* added = new DisplacedPose;
+							added->node = *nref;
+							added->original = orig;
+							added->displaced = pose->Location(this);
+							sDisplaced.AddItem(added);
+						}
+					}
+				}
 			}
 			break;
 // SPDX-SnippetEnd
