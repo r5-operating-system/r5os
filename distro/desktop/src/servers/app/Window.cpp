@@ -530,6 +530,13 @@ Window::ResizeBy(int32 x, int32 y, BRegion* dirtyRegion, bool resizeStack)
 		oldCorners.IntersectWith(&full);
 		dirtyRegion->Include(&oldCorners);
 	}
+	// fTopView->ResizeBy() above can build the content region, and the
+	// views' screen clipping from it, while the decorator still has its old
+	// size: cut to the old outline. Made again now that the decorator is
+	// resized (QEMU, 23 Nov 2026: Appearance grew after it opened and its
+	// views stayed cut at the old size, the rest black).
+	if (before != NULL || _CachedOutline(_OutlineBlended()) != NULL)
+		_DecoratorShapeChanged();
 // SPDX-SnippetEnd
 
 	if (resizeStack && stack) {
