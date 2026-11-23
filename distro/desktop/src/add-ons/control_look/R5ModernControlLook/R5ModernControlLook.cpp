@@ -450,8 +450,15 @@ R5ModernControlLook::_FillButtonInside(BView* view, const BRect& rect,
 
 	rgb_color fill;
 	rgb_color line;
-	if (!_ButtonColors(view, base, flags, fill, line))
+	if (!_ButtonColors(view, base, flags, fill, line)) {
+		if ((flags & B_FLAT) != 0 && view->Parent() != NULL) {
+			view->PushState();
+			view->SetHighColor(view->Parent()->ViewColor());
+			view->FillRect(rect);
+			view->PopState();
+		}
 		return;
+	}
 
 	float inset = ceilf(2 * scale());
 	float r = std::max(0.0f, radius(7) - inset);
@@ -509,6 +516,11 @@ R5ModernControlLook::DrawButtonFrame(BView* view, BRect& rect,
 		view->ClipToRect(face);
 		_DrawFace(view, open_sides(face, borders, radius(7) + 1),
 			radius(7) - 1, fill, line);
+		view->PopState();
+	} else if ((flags & B_FLAT) != 0 && view->Parent() != NULL) {
+		view->PushState();
+		view->SetHighColor(view->Parent()->ViewColor());
+		view->FillRect(rect);
 		view->PopState();
 	}
 

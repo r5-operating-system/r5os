@@ -566,8 +566,9 @@ BTextView::Draw(BRect updateRect)
 			BControlLook::B_MENU_BAR_BACKGROUND, 0, left, top, right, bottom);
 		if (left > 6) {
 			BRect inner = Bounds();
-			BRect border = inner.InsetByCopy(-2, -2);
+			BRect border = inner.InsetByCopy(-1, -1);
 			float r = roundf(7 * be_plain_font->Size() / 12.0f);
+			float br = std::max(0.0f, r - 1);
 			float ir = std::max(0.0f, r - 2);
 			rgb_color panel = Parent()->ViewColor();
 			if (panel.alpha == 0)
@@ -591,13 +592,16 @@ BTextView::Draw(BRect updateRect)
 				MovePenTo(B_ORIGIN);
 				FillShape(&wedge);
 			}
-			bool focused = IsFocus() && Window() != NULL && Window()->IsActive();
+			bool focused = IsEditable() && IsFocus() && Window() != NULL
+				&& Window()->IsActive();
 			rgb_color line = focused ? ui_color(B_KEYBOARD_NAVIGATION_COLOR)
 				: (panel.IsLight()
-					? mix_color(panel, make_color(15, 23, 42), 45)
-					: mix_color(panel, make_color(255, 255, 255), 40));
+					? mix_color(panel, make_color(15, 23, 42),
+						IsEditable() ? 45 : 28)
+					: mix_color(panel, make_color(255, 255, 255),
+						IsEditable() ? 40 : 24));
 			SetHighColor(line);
-			StrokeRoundRect(border, r, r);
+			StrokeRoundRect(border, br, br);
 			PopState();
 		}
 	}

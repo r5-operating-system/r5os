@@ -2360,6 +2360,18 @@ BPoseView::MessageReceived(BMessage* message)
 		return;
 
 	switch (message->what) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		case 'R5db':
+			if (IsDesktopView() && Window() != NULL) {
+				fLastDeskbarFrameCheckTime = LONGLONG_MIN;
+				BRect frame = Window()->Frame();
+				CheckPoseVisibility(&frame);
+			}
+			break;
+// SPDX-SnippetEnd
+
 		case kAddNewPoses:
 		{
 			AddPosesResult* currentPoses;

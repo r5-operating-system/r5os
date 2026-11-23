@@ -845,8 +845,7 @@ TBarView::PositionWindow(BRect screenFrame)
 		if (!Top())
 			location.y = screenFrame.bottom - height - margin;
 		Window()->MoveTo(location);
-		return;
-	}
+	} else {
 // SPDX-SnippetEnd
 	BPoint moveLoc(0, 0);
 	// right, expanded, mini, or full
@@ -858,6 +857,22 @@ TBarView::PositionWindow(BRect screenFrame)
 		moveLoc.y = screenFrame.bottom - windowHeight;
 
 	Window()->MoveTo(moveLoc);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	}
+
+	static BRect sLastNotifiedFrame;
+	BRect frame = Window()->Frame();
+	if (frame != sLastNotifiedFrame) {
+		sLastNotifiedFrame = frame;
+		BMessenger tracker("application/x-vnd.Be-TRAK");
+		if (tracker.IsValid()) {
+			BMessage notify('R5db');
+			tracker.SendMessage(&notify, (BHandler*)NULL, 0);
+		}
+	}
+// SPDX-SnippetEnd
 }
 
 
