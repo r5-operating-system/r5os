@@ -189,7 +189,9 @@ public:
 			void			ApplyStyle();
 			BRect			EdgeInsets() const;
 			void			StartGrow(TTeamMenuItem* item);
+			void			StopGrow(const TTeamMenuItem* item);
 			float			GrowProgress(const TTeamMenuItem* item) const;
+			void			SyncCompactApps();
 			BRect			ChevronFrame() const;
 			void			StyleView(BView* view);
 // SPDX-SnippetEnd

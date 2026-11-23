@@ -585,12 +585,50 @@ TBarView::StartGrow(TTeamMenuItem* item)
 }
 
 
+void
+TBarView::StopGrow(const TTeamMenuItem* item)
+{
+	if (item == NULL || item != fGrowItem)
+		return;
+	delete fGrowRunner;
+	fGrowRunner = NULL;
+	fGrowItem = NULL;
+	fGrowProgress = -1;
+}
+
+
 float
 TBarView::GrowProgress(const TTeamMenuItem* item) const
 {
 	if (item == NULL || item != fGrowItem)
 		return -1;
 	return fGrowProgress;
+}
+
+
+void
+TBarView::SyncCompactApps()
+{
+	if (!Compact() || fExpandoMenuBar == NULL)
+		return;
+	fExpandoMenuBar->InvalidateLayout();
+	float appsWidth = fExpandoMenuBar->ModernItemsWidth();
+	float height = ContentHeight(this);
+	float left = CompactAppsLeft() - Size(6);
+	if (appsWidth > 0) {
+		if (fInlineScrollView->IsHidden())
+			fInlineScrollView->Show();
+		fInlineScrollView->MoveTo(left, 0);
+		fInlineScrollView->ResizeTo(appsWidth - 1, height - 1);
+		fExpandoMenuBar->ResizeTo(appsWidth - 1, height - 1);
+	} else {
+		if (!fInlineScrollView->IsHidden())
+			fInlineScrollView->Hide();
+	}
+	float trayLeft = appsWidth > 0 ? left + appsWidth + Size(6 + 13 + 6)
+		: CompactAppsLeft();
+	fDragRegion->MoveTo(trayLeft, 0);
+	Invalidate();
 }
 
 
@@ -628,12 +666,20 @@ TBarView::_GrowStep()
 BRect
 TBarView::ChevronFrame() const
 {
-	// in the tray's coordinates: 30 wide, 36 high, before the padding of 10
 	BRect bounds = fReplicantTray->Bounds();
-	float height = Size(36);
-	float top = floorf((bounds.Height() + 1 - height) / 2);
-	return BRect(bounds.right - Size(10) - Size(30) + 1, top,
-		bounds.right - Size(10), top + height - 1);
+	if (Compact()) {
+		// in the tray's coordinates: 30 wide, 36 high, before the padding of 10
+		float height = Size(36);
+		float top = floorf((bounds.Height() + 1 - height) / 2);
+		return BRect(bounds.right - Size(10) - Size(30) + 1, top,
+			bounds.right - Size(10), top + height - 1);
+	}
+	// Vertical: on row 1, right before the clock
+	float width = Size(20);
+	float height = TrayRowHeight();
+	float clockLeft = fReplicantTray->_ModernClockLeft();
+	float right = clockLeft - Size(4);
+	return BRect(right - width + 1, 0, right, height - 1);
 }
 
 
@@ -1112,28 +1158,55 @@ TReplicantTray::_ModernLocation(int32 index, float replicantWidth)
 				location.x += view->Frame().Width() + 1 + Size(7);
 		}
 	} else if (fBarView->Vertical()) {
-		// padding 8, gaps of 5, rows of 34; the clock in the first row (five
-		// items and the clock on one row: external review A5)
+		// Row 1 holds at most 4 icons next to the clock; any extra icons
+		// fold behind a chevron and expand onto row 2+ when unfolded.
+		const int32 kMaxRow1Icons = 4;
+		int32 count = ReplicantCount();
+		bool hasOverflow = count > kMaxRow1Icons || index >= kMaxRow1Icons;
+		if (hasOverflow && index >= kMaxRow1Icons && !Unfolded())
+			return BPoint(Size(8), top);
+
 		float right = Bounds().right + 1 - Size(8);
-		float rowRight = right;
-		if (!fTime->IsHidden(fTime))
-			rowRight = right - fTime->Frame().Width() - 1 - Size(5);
-		location.x = Size(8);
-		for (int32 i = 0; i < index; i++) {
-			BView* view = NULL;
-			fShelf->ReplicantAt(i, &view);
-			if (view == NULL)
-				continue;
-			if (view->Frame().top > location.y + 1) {
-				location.y = view->Frame().top;
-				location.x = Size(8);
-				rowRight = right;
-			}
-			location.x = view->Frame().right + 1 + Size(5);
-		}
-		if (location.x + replicantWidth > rowRight && location.x > Size(8)) {
-			location.y += TrayRowHeight();
+		if (hasOverflow && index >= kMaxRow1Icons) {
+			location.y = top + TrayRowHeight();
 			location.x = Size(8);
+			for (int32 i = kMaxRow1Icons; i < index; i++) {
+				BView* view = NULL;
+				fShelf->ReplicantAt(i, &view);
+				if (view == NULL)
+					continue;
+				if (view->Frame().top > location.y + 1) {
+					location.y = view->Frame().top;
+					location.x = Size(8);
+				}
+				location.x = view->Frame().right + 1 + Size(5);
+			}
+			if (location.x + replicantWidth > right && location.x > Size(8)) {
+				location.y += TrayRowHeight();
+				location.x = Size(8);
+			}
+		} else {
+			float rowRight = right;
+			if (!fTime->IsHidden(fTime))
+				rowRight = right - fTime->Frame().Width() - 1 - Size(5);
+			location.x = Size(8);
+			for (int32 i = 0; i < index; i++) {
+				BView* view = NULL;
+				fShelf->ReplicantAt(i, &view);
+				if (view == NULL)
+					continue;
+				if (view->Frame().top > location.y + 1) {
+					location.y = view->Frame().top;
+					location.x = Size(8);
+					rowRight = right;
+				}
+				location.x = view->Frame().right + 1 + Size(5);
+			}
+			if (!hasOverflow && location.x + replicantWidth > rowRight
+				&& location.x > Size(8)) {
+				location.y += TrayRowHeight();
+				location.x = Size(8);
+			}
 		}
 	} else {
 		location.x = Size(12);
@@ -1182,6 +1255,15 @@ TReplicantTray::Draw(BRect updateRect)
 		float top = floorf((height - line) / 2);
 		float x = _ModernClockLeft() - Size(8) - Size(6) - Size(4) - 1;
 		DrawSeparator(this, x, top, top + line - 1);
+	} else if (ReplicantCount() > 4) {
+		BRect chevron = fBarView->ChevronFrame();
+		float chevronSide = Size(14);
+		float x = chevron.left
+			+ floorf((chevron.Width() + 1 - chevronSide) / 2);
+		float y = chevron.top
+			+ floorf((chevron.Height() + 1 - chevronSide) / 2);
+		DrawChevron(this, BRect(x, y, x + chevronSide - 1,
+			y + chevronSide - 1), Unfolded());
 	}
 }
 

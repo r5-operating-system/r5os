@@ -154,8 +154,13 @@ ProcessController::ComposeSize(float maxWidth, float maxHeight)
 	int width = 4;
 	if (info.cpu_count > 4)
 		width = info.cpu_count;
-	if (info.cpu_count <= 16)
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// Keep 6-16 core tray meters compact (1 px per core, matching other tray icons)
+	if (info.cpu_count <= 4)
 		width *= 2;
+// SPDX-SnippetEnd
 
 	// For the memory bar
 	width += 8;
