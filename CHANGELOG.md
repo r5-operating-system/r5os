@@ -11,9 +11,11 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 
 Problem: the Deskbar styles had to be checked without the owner, against the mockup.
 
-What changed: `scripts/qemu-deskbar-styles.py` (WSL) boots its own copy of the image with `scripts/deskbar-styles-guest.sh` as a UserBootscript job; the guest sets each style with Deskbar's own `'R5ds'` message (`hey`), says on the serial port what is on screen, and the host takes screendumps, moves and clicks the mouse (hover, menu, chevron) and holds Shift. Pictures: `docs/design/screens/deskbar-styles/`.
+What changed: two independent code reviews (fresh agents, given only the code and the docs) and their fixes, listed below; `scripts/qemu-deskbar-styles.py` (WSL) boots its own copy of the image with `scripts/deskbar-styles-guest.sh` as a UserBootscript job; the guest sets each style with Deskbar's own `'R5ds'` message (`hey`), says on the serial port what is on screen, and the host takes screendumps, moves and clicks the mouse (hover, menu, chevron) and holds Shift. Pictures: `docs/design/screens/deskbar/` (every test at 1280 by 800 from QMP `screendump` in `full/`, and crops enlarged with nearest-neighbour next to the mockup rendered at 100 % from its own CSS and images in `crops/`).
 
-Tested (QEMU, KVM, `-machine pc`, 2 CPUs, 2 GB, Lavapipe GPU mode, 1280 by 800, build of 23 Nov about 00:30, the image copied while the build lock was held; run 8, the whole list, no hang):
+Review 1 fixes: `FetchTeamIcon()` keeps the R5 icon; tray items follow Deskbar's colour only when they took it, nothing below a replicant is touched, Classic resets the low colour; the tray message carries `"style"` and `"color"`; Classic keeps Haiku's default width and its first-hit window check; the edge-line request only rebuilds on a change. Review 2 fixes: Classic after Default (R5) gives the bar's shared menu window and the drag region's views Haiku's look back; the folded pill only shows what it hid; icons take the new layout's size after the state change; an uncached icon is freed on the fallback; a pill on the left stays left on the Settings page; no program edge line in the CPU mode (painting its rim in `Window::_DrawBorder()` crashed app_server in Safe mode in QEMU, so that attempt was reverted). Also: a radius change exposes the old cut corners and rim (as `ResizeBy()`), and the hover and the Hollow were tuned against the 100 % mockup crops.
+
+Tested (QEMU, KVM, `-machine pc`, 2 CPUs, 2 GB, Lavapipe GPU mode, 1280 by 800, build of 23 Nov about 01:35, the image copied while the build lock was held; run 11, the whole list, no hang; Safe mode run 4 on the same build):
 - Board A: Vertical floating round (210 wide, margin 14), square, and in the corner flat; hover shade on the pebble; the Hollow with the menu open beside it (8 px gap, top level); front application bold with the blue line; 20 px icons.
 - Board B: the pill 54 high, margin 14; menu beside it; hover; chevron; square; against the edge; the grow (a new application: the pill grows, the icon pops in, then its blue line).
 - Board C: the bar 48 high, top and bottom, floating (margin on both sides) and against the edge, square; the menu under the pebble.
@@ -21,7 +23,9 @@ Tested (QEMU, KVM, `-machine pc`, 2 CPUs, 2 GB, Lavapipe GPU mode, 1280 by 800, 
 - A third-party tray item: `deskbar-add /boot/system/apps/Workspaces` "No error", and it draws itself.
 - The Settings page with its four new controls; Classic (Haiku) vertical and horizontal as Haiku draws them.
 
-Not proven: Safe mode (the key sequence did not open the boot menu in this run, so every picture is the GPU mode); the compare (one `compose compare ok` line, from before the Classic step, none during it); a real screen, the 5625U, a Wi-Fi adapter, a battery.
+- Safe mode (`gpu compositor off: safe mode` in the syslog): Vertical, Compact and Classic with the opaque `#eef2f8` surface and stepped corners, no glass, no shadow; no crash.
+
+Not proven: the compare (run 11 logged no `compose compare` line; run 10, before the last fix, logged one `MISMATCH at 1009,14`, 2 px left of the Classic Deskbar during the Classic step after Default (R5), not explained); in Safe mode the network and volume items kept their own icons (Bluetooth and AirPlay drew symbols), not explained; dark specks in the bottom corners of the square floating Vertical after round to square remain; a real screen, the 5625U, a Wi-Fi adapter, a battery.
 
 ## 2026-11-22 - Deskbar styles, step 5: R5's tray items as one-colour line symbols
 
