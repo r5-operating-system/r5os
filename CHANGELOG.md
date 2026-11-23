@@ -7,6 +7,22 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-23 - Deskbar styles - the QEMU test
+
+Problem: the Deskbar styles had to be checked without the owner, against the mockup.
+
+What changed: `scripts/qemu-deskbar-styles.py` (WSL) boots its own copy of the image with `scripts/deskbar-styles-guest.sh` as a UserBootscript job; the guest sets each style with Deskbar's own `'R5ds'` message (`hey`), says on the serial port what is on screen, and the host takes screendumps, moves and clicks the mouse (hover, menu, chevron) and holds Shift. Pictures: `docs/design/screens/deskbar-styles/`.
+
+Tested (QEMU, KVM, `-machine pc`, 2 CPUs, 2 GB, Lavapipe GPU mode, 1280 by 800, build of 23 Nov about 00:30, the image copied while the build lock was held; run 8, the whole list, no hang):
+- Board A: Vertical floating round (210 wide, margin 14), square, and in the corner flat; hover shade on the pebble; the Hollow with the menu open beside it (8 px gap, top level); front application bold with the blue line; 20 px icons.
+- Board B: the pill 54 high, margin 14; menu beside it; hover; chevron; square; against the edge; the grow (a new application: the pill grows, the icon pops in, then its blue line).
+- Board C: the bar 48 high, top and bottom, floating (margin on both sides) and against the edge, square; the menu under the pebble.
+- Zoom (`r5-effects-test zoom`, the window frame then Deskbar's reported frame): Vertical in the corner 1066 < 1069; Vertical floating 1038 < 1041 (Deskbar 1055 plus the margin); Compact top 108 > 81 over the full width; Horizontal top floating 102 > 75, bottom 721 < 724, top against the edge 74 > 47; with Shift and with auto-hide the whole screen; Classic vertical 1008 < 1011 as before.
+- A third-party tray item: `deskbar-add /boot/system/apps/Workspaces` "No error", and it draws itself.
+- The Settings page with its four new controls; Classic (Haiku) vertical and horizontal as Haiku draws them.
+
+Not proven: Safe mode (the key sequence did not open the boot menu in this run, so every picture is the GPU mode); the compare (one `compose compare ok` line, from before the Classic step, none during it); a real screen, the 5625U, a Wi-Fi adapter, a battery.
+
 ## 2026-11-22 - Deskbar styles, step 5: R5's tray items as one-colour line symbols
 
 Problem: in the new Default (R5) Deskbar the tray items still drew their own coloured icons (a blue "A" for AirPlay, a green and red network, bevelled battery and speaker pictures), which the mockup (board A, "R5 Deskbar styles", 22 Nov 2026) replaces with plain line symbols in one colour.
@@ -19,7 +35,7 @@ What changed:
 
 Limits: no charging mark on the battery symbol (the fill shows the level only); the Wi-Fi symbol is not drawn on a real Wi-Fi adapter here (QEMU has none).
 
-Tested: QEMU (see the Deskbar styles test entry): volume, ProcessController, Bluetooth, AirPlay and wired network show as line symbols in `#1d2a40` in Default (R5), and as their own icons in Classic (Haiku). Battery, Wi-Fi and mail not seen (no battery, no Wi-Fi, no mail account in QEMU).
+Tested: QEMU (the entry "Deskbar styles - the QEMU test"): volume, ProcessController, Bluetooth, AirPlay and wired network show as line symbols in `#1d2a40` in Default (R5), and as their own icons in Classic (Haiku). Battery, Wi-Fi and mail not seen (no battery, no Wi-Fi, no mail account in QEMU).
 
 ## 2026-11-22 - Settings - Desktop and Deskbar: Style, Layout, Corners and Floating (Deskbar styles, step 4)
 
@@ -51,7 +67,7 @@ Mistakes on the way (found in QEMU and fixed): `BMenu::SetFont()` in the item dr
 
 Limits: the Deskbar menu's items keep the control look's highlight (not the mockup's light blue tint with corners of 10), and its submenus keep Haiku's look; the menu frame keeps BMenuFrame's dark line. Dragging the pill keeps it a pill. A Vertical Deskbar at a bottom corner stays Haiku's mini form. Fonts are R5's (Noto Sans, bold for the mockup's 600).
 
-Tested: see the test entry below.
+Tested: see the entry "Deskbar styles - the QEMU test".
 
 ## 2026-11-22 - Window effects: a program's own shadow and edge line, and whether effects show
 
