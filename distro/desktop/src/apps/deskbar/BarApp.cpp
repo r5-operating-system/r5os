@@ -494,6 +494,12 @@ TBarApp::InitSettings()
 				|| settings.layout > R5Deskbar::kLayoutHorizontal) {
 				settings.layout = R5Deskbar::kLayoutVertical;
 			}
+			// Classic (Haiku) keeps Haiku's width when the file has none
+			// (review 1, 23 Nov 2026)
+			if (!prefs.HasFloat("width")
+				&& settings.style == R5Deskbar::kStyleClassic) {
+				settings.width = gMinimumWindowWidth;
+			}
 			settings.rounded = prefs.GetBool("rounded",
 				fDefaultSettings.rounded);
 			settings.floating = prefs.GetBool("floating",
@@ -1189,8 +1195,9 @@ TBarApp::FetchTeamIcon(team_id team, int32 size)
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 				// Default (R5)'s icon of the layout is not in that cache
-				// (QEMU, 22 Nov 2026: NULL here, and Deskbar crashed)
-				if (barInfo->icon == NULL)
+				// (QEMU, 22 Nov 2026: NULL here, and Deskbar crashed; review
+				// 1: a cached Haiku-size icon here lost the R5 one)
+				if (R5Deskbar::Modern() || barInfo->icon == NULL)
 					barInfo->icon = previous;
 // SPDX-SnippetEnd
 			}

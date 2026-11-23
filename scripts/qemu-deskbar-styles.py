@@ -237,7 +237,10 @@ def main():
         time.sleep(1)
         qmp = Qmp(qmp_path)
         if safe:
-            # the boot menu: Space while it starts, then Safe mode
+            # the boot menu: a reset, Space while it starts, then Safe mode
+            # (the recipe of the shared notes; Space from a cold start did
+            # not reach the menu)
+            qmp.call("system_reset")
             end = time.time() + 8
             while time.time() < end:
                 qmp.key("spc")

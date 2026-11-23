@@ -166,6 +166,9 @@ public:
 			void				GetOutline(window_outline* outline,
 									bool blended);
 			void				SetCornerRadius(float radius);
+			// the cut corners and the CPU rim of the outline now (empty
+			// for a square window), for a radius change (as ResizeBy())
+			void				GetOutlineCorners(BRegion* corners);
 			float				CornerRadius() const
 									{ return fCornerRadius; }
 			// The shadow a program asked for its own window
@@ -178,9 +181,12 @@ public:
 			// decorator's (Decorator::GetEdgeLine()), else the one the
 			// program asked for (set_window_edge_line()).
 			bool				GetEdgeLine(rgb_color* color, float* width);
-			void				SetEdgeLine(rgb_color color, float width)
-									{ fEdgeColor = color;
-									  fEdgeWidth = width; }
+			bool				SetEdgeLine(rgb_color color, float width)
+									{ bool changed = fEdgeWidth != width
+										|| (width > 0 && fEdgeColor != color);
+									  fEdgeColor = color;
+									  fEdgeWidth = width;
+									  return changed; }
 // SPDX-SnippetEnd
 
 			void				ScrollViewBy(View* view, int32 dx, int32 dy);

@@ -193,29 +193,47 @@ TBarView::_StyleViews(BView* view, bool glass)
 	bool modern = Modern();
 	rgb_color surface = SurfaceColor();
 	bool tray = view->Parent() == fReplicantTray && view != fReplicantTray->fTime;
-	if (!tray) {
-		if (modern) {
-			view->SetViewColor(surface);
-			view->SetLowColor(surface);
-		} else if (view == fDragRegion)
-			view->SetViewUIColor(B_MENU_BACKGROUND_COLOR, 1.1);
-		else
-			view->SetViewUIColor(B_MENU_BACKGROUND_COLOR);
-	} else {
-		// a tray item: only one that took Deskbar's colour gets the new one
+	if (tray) {
+		// A tray item, maybe another program's: it only follows when it took
+		// Deskbar's colour (review 1, 23 Nov 2026), and nothing below it is
+		// touched; it draws itself.
 		rgb_color own = view->ViewColor();
-		rgb_color parent = fReplicantTray->ViewColor();
-		if (own == parent || modern) {
-			if (modern && own != B_TRANSPARENT_COLOR) {
-				view->SetViewColor(surface);
-				view->SetLowColor(surface);
-			}
-		}
+		if (!_TookDeskbarColor(own))
+			return;
+		rgb_color color = modern ? surface : ui_color(B_MENU_BACKGROUND_COLOR);
+		view->SetViewColor(color);
+		view->SetLowColor(color);
+		BAppearanceKit::set_view_glass(view, glass);
+		view->Invalidate();
+		return;
+	}
+	if (modern) {
+		view->SetViewColor(surface);
+		view->SetLowColor(surface);
+	} else if (view == fDragRegion) {
+		view->SetViewUIColor(B_MENU_BACKGROUND_COLOR, 1.1);
+		view->SetLowUIColor(B_MENU_BACKGROUND_COLOR, 1.1);
+	} else {
+		view->SetViewUIColor(B_MENU_BACKGROUND_COLOR);
+		view->SetLowUIColor(B_MENU_BACKGROUND_COLOR);
 	}
 	BAppearanceKit::set_view_glass(view, glass);
 	view->Invalidate();
 	for (int32 i = 0; i < view->CountChildren(); i++)
 		_StyleViews(view->ChildAt(i), glass);
+}
+
+
+bool
+TBarView::_TookDeskbarColor(rgb_color color) const
+{
+	// the colours Deskbar's tray has had: Haiku's menu colour (also the
+	// drag region's tint of it) and the surfaces of Default (R5)
+	rgb_color menu = ui_color(B_MENU_BACKGROUND_COLOR);
+	return color == menu || color == tint_color(menu, 1.1)
+		|| color == make_color(240, 245, 252)
+		|| color == make_color(0xee, 0xf1, 0xf5)
+		|| color == make_color(0xee, 0xf2, 0xf8);
 }
 
 
@@ -258,6 +276,8 @@ TBarView::ApplyStyle()
 	_StyleViews(root, Glass());
 
 	BMessage changed(R5_DESKBAR_TRAY_STYLE_CHANGED);
+	changed.AddInt32("style", (int32)r5_deskbar_tray_style());
+	changed.AddColor("color", r5_deskbar_tray_color());
 	for (int32 i = 0; i < fReplicantTray->CountChildren(); i++) {
 		BView* item = fReplicantTray->ChildAt(i);
 		if (item != fReplicantTray->fTime)
@@ -374,6 +394,8 @@ TBarView::StyleView(BView* view)
 		return;
 	_StyleViews(view, Glass());
 	BMessage changed(R5_DESKBAR_TRAY_STYLE_CHANGED);
+	changed.AddInt32("style", (int32)r5_deskbar_tray_style());
+	changed.AddColor("color", r5_deskbar_tray_color());
 	Window()->PostMessage(&changed, view);
 }
 

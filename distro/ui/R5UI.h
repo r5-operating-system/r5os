@@ -87,8 +87,9 @@ enum r5_tray_style {
 		// one-colour 2 px line symbols in r5_deskbar_tray_color()
 };
 
-// Deskbar sends this to every tray view when the style changes. A view
-// that does not know it ignores it, as any BView does.
+// Deskbar sends this to every tray view when the style changes, with
+// int32 "style" and the colour "color". A view that does not know it
+// ignores it, as any BView does.
 #define R5_DESKBAR_TRAY_STYLE_CHANGED 'r5ts'
 
 enum r5_tray_style r5_deskbar_tray_style();

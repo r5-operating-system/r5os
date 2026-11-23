@@ -3989,15 +3989,23 @@ ServerApp::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 				else if (found->CornerRadius() != radius) {
 					BRegion dirty;
 					found->GetFullRegion(&dirty);
+					// the corners of the old outline come back into the
+					// window and are drawn by the program again (as
+					// Window::ResizeBy(), step 1.5; Deskbar styles)
+					BRegion corners;
+					found->GetOutlineCorners(&corners);
 					found->SetCornerRadius(radius);
 					BRegion after;
 					found->GetFullRegion(&after);
 					dirty.Include(&after);
+					corners.IntersectWith(&after);
 					// the shadow's reach changes with the outline too
 					BRect reach = dirty.Frame();
 					reach.InsetBy(-R5_WINDOW_CORNER_MAX_RADIUS,
 						-R5_WINDOW_CORNER_MAX_RADIUS);
 					fDesktop->RebuildAndRedrawAfterWindowChange(found, dirty);
+					if (corners.CountRects() > 0)
+						found->ProcessDirtyRegion(corners);
 					// GPU mode: the whole window is composed again, its
 					// corners' arc and edge line too, not only what the
 					// clipping revealed (22 Nov 2026, QEMU: the top
@@ -4094,8 +4102,8 @@ ServerApp::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 				}
 				if (found == NULL)
 					status = B_BAD_VALUE;
-				else {
-					found->SetEdgeLine(color, width);
+				else if (found->SetEdgeLine(color, width)) {
+					// only a change rebuilds the clipping (review 1)
 					BRegion dirty;
 					found->GetFullRegion(&dirty);
 					fDesktop->RebuildAndRedrawAfterWindowChange(found, dirty);

@@ -277,9 +277,14 @@ TTeamMenuItem::RefreshListedWindowsIfChanged()
 			bool listed = TWindowMenu::WindowShouldBeListed(info);
 			free(info);
 			if (listed) {
-				// Default (R5) shows how many (board A: "2")
+				// Default (R5) shows how many (board A: "2"); Classic
+				// stops at the first, as Haiku did (review 1)
 				fHasListedWindows = true;
 				fListedWindowCount++;
+				if (!R5Deskbar::Modern()) {
+					free(tokens);
+					return true;
+				}
 			}
 		}
 		free(tokens);

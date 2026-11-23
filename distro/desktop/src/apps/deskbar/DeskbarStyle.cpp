@@ -310,8 +310,10 @@ FillShade(BView* view, BRect rect, float radius, uint8 alpha)
 void
 DrawHover(BView* view, BRect rect, float radius)
 {
-	// rgba(30,45,70,.07)
-	FillShade(view, rect, radius, 18);
+	// rgba(30,45,70,.07) over the surface; on glass the shade's pixels
+	// keep the step's see-through, so it is stronger there to look the same
+	// (compared at 100 % with the mockup, 23 Nov 2026)
+	FillShade(view, rect, radius, Glass() ? 26 : 18);
 }
 
 
@@ -320,17 +322,16 @@ DrawHollow(BView* view, BRect rect, float radius)
 {
 	// rgba(30,45,70,.12), the inset shadow 0 2px 4px rgba(0,20,60,.28) and
 	// an inner line rgba(30,45,70,.10) (board D, option E)
-	FillShade(view, rect, radius, 31);
-	// No clipping to the round shape: a clip set inside PushState() stayed
-	// for the pebble drawn after it (QEMU, 22 Nov 2026). Rings inside the
-	// edge, darker at the top, stand for the inset shadow.
+	FillShade(view, rect, radius, Glass() ? 44 : 31);
+	// The inset shadow as rings inside the edge, darker at the top: each
+	// ring a whole round rectangle (arcs of single pixels left a dotted
+	// line, 23 Nov 2026), and the upper rings once more a pixel lower.
 	view->PushState();
 	view->SetDrawingMode(B_OP_ALPHA);
 	view->SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_OVERLAY);
-	static const uint8 kRing[] = { 30, 16, 7 };
-	static const uint8 kTop[] = { 34, 22, 10 };
+	static const uint8 kRing[] = { 34, 18, 8 };
 	for (int32 i = 0; i < 3; i++) {
-		BRect ring = rect.InsetByCopy(i + 0.5f, i + 0.5f);
+		BRect ring = rect.InsetByCopy(i, i);
 		float r = std::max(0.0f, std::min(radius - i,
 			std::min(ring.Width(), ring.Height()) / 2));
 		view->SetHighColor(make_color(0, 20, 60, kRing[i]));
@@ -338,19 +339,14 @@ DrawHollow(BView* view, BRect rect, float radius)
 			view->StrokeRect(ring);
 		else
 			view->StrokeRoundRect(ring, r, r);
-		// the offset of 2: the upper edge once more, one pixel lower
-		BRect top = ring.OffsetByCopy(0, 1);
+	}
+	// the offset of 2: a soft band under the top edge, inside the corners
+	float inner = std::max(radius, 0.0f) * 0.6f;
+	static const uint8 kTop[] = { 30, 16 };
+	for (int32 i = 0; i < 2; i++) {
 		view->SetHighColor(make_color(0, 20, 60, kTop[i]));
-		if (r <= 0) {
-			view->StrokeLine(top.LeftTop(), top.RightTop());
-		} else {
-			view->StrokeArc(BRect(top.left, top.top, top.left + 2 * r,
-				top.top + 2 * r), 90, 60);
-			view->StrokeArc(BRect(top.right - 2 * r, top.top, top.right,
-				top.top + 2 * r), 30, 60);
-			view->StrokeLine(BPoint(top.left + r, top.top),
-				BPoint(top.right - r, top.top));
-		}
+		view->StrokeLine(BPoint(rect.left + inner, rect.top + 1 + i),
+			BPoint(rect.right - inner, rect.top + 1 + i));
 	}
 	view->PopState();
 	view->PushState();

@@ -41,7 +41,7 @@ Added 22 Nov 2026 for the Deskbar styles (`docs/design/DESKBAR-STYLES.md`), at t
 |---|---|
 | `r5_floating_margin()` | The margin, in pixels, a floating part of the desktop keeps from the screen edges: 14 at the default font size of 12, scaled with `be_plain_font`. Deskbar's "Keep away from the screen edges" uses it, so the margin is one R5 value, not a constant in Deskbar |
 | `r5_deskbar_tray_style()`, `r5_deskbar_tray_color()` | How R5's own tray items draw their symbol: `R5_TRAY_STYLE_CLASSIC` (0, their own icon) or `R5_TRAY_STYLE_SYMBOLS` (1, one-colour line symbols in the colour returned). Read in the item's `Draw()`; outside Deskbar always classic |
-| `r5_set_deskbar_tray_style(style, color)` | Deskbar sets it in its own process, then sends `R5_DESKBAR_TRAY_STYLE_CHANGED` (`'r5ts'`) to every tray view. Not for other programs |
+| `r5_set_deskbar_tray_style(style, color)` | Deskbar sets it in its own process, then sends `R5_DESKBAR_TRAY_STYLE_CHANGED` (`'r5ts'`, with int32 `"style"` and the colour `"color"`, so an item can keep its own copy) to every tray view. Not for other programs |
 
 The rule for tray symbols, with an example, is in `docs/ICONS.md` ("Tray symbols").
 

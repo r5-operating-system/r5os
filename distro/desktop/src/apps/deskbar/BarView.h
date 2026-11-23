@@ -218,6 +218,7 @@ private:
 			void			_DrawModern(BRect updateRect);
 			void			_GrowStep();
 			void			_StyleViews(BView* view, bool glass);
+			bool			_TookDeskbarColor(rgb_color color) const;
 // SPDX-SnippetEnd
 
 			TBarApp*			fBarApp;

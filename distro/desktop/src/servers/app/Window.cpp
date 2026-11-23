@@ -2389,6 +2389,22 @@ Window::SetCornerRadius(float radius)
 }
 
 
+/*!	The corners of the outline now: what is cut and, in the CPU mode, the
+	rim. A radius change exposes them again (Deskbar styles: dark specks in
+	the corners after round to square, as ResizeBy() had in step 1.5).
+*/
+void
+Window::GetOutlineCorners(BRegion* corners)
+{
+	corners->MakeEmpty();
+	const window_outline* outline = _CachedOutline(_OutlineBlended());
+	if (outline != NULL) {
+		corners->Include(&outline->cut);
+		corners->Include(&outline->rim);
+	}
+}
+
+
 /*!	Takes the cut corners of the round outline out of \a region. Nothing
 	happens for a square window, so its regions stay what they were.
 */
