@@ -71,6 +71,13 @@ The order is impact, not ticket number. `[x]` is done and tested where it is mea
    - [ ] Step 4: the installer next to Windows: the checks, `ntfsresize` (GPL-2.0-or-later, a separate program), 64 GB suggested, the backup tick.
    - [ ] Step 5: the boot menu with "R5 Operating System", "Windows", the previous state and Safe mode.
    - [ ] Step 6: the ISO download, compressed on a GitHub Release with its checksum.
+10. **Appsolutely, the app store** (owner, 23 Nov 2026, [#4576](https://github.com/r5-operating-system/r5os/issues/4576)). Design: `docs/design/APPSOLUTELY.md`. A real store instead of HaikuDepot: HaikuDepot (MIT) copied into `distro/`, its engine kept and its face replaced. HaikuPorts apps and R5's own apps ("Enhanced for R5 Operating System"); an automatic front page; free apps only for now. No brief yet.
+   - [ ] Step 0: report (engine and face, server data, data for R5's own apps).
+   - [ ] Step 1: HaikuDepot in `distro/` as Appsolutely, unchanged in behaviour.
+   - [ ] Step 2: the store face in the R5 Modern look.
+   - [ ] Step 3: R5's own apps from the R5 package repository.
+   - [ ] Step 4: the icon (G2) as HVIF.
+   - [ ] Step 5: HaikuDepot removed from the image; the Welcome page and links updated.
 
 Zeroconf, AirPrint, AirPlay 1 and the network tray exist. They are not "done" until LAN tests exist.
 
@@ -89,7 +96,7 @@ Do not start these during an unrelated bugfix.
 | **R5 Hub** | One place for settings: devices, display, audio, network, printers, updates | Started: the Settings window has Display, Appearance, Desktop and Deskbar, Notifications, Virtual memory, Wi-Fi, Network, Bluetooth and Game controllers (`docs/SETTINGS.md`). Not yet: power, audio, printers, updates, storage |
 | **R5 Quicklaunch** | Keyboard launch, and search for applications, files and system items | Not started |
 | **R5 Connect** | Device discovery (AirPrint, AirPlay, later SMB and printers) | Started: Network > Discovery lists printers, AirPlay speakers and other computers; SMB shares mount from Tracker. No product yet |
-| **R5 Store** | Installing software from Haiku packages | Not started |
+| **Appsolutely** (was "R5 Store") | A real app store for HaikuPorts and R5 apps | Designed (23 Nov 2026): Near term item 10, [#4576](https://github.com/r5-operating-system/r5os/issues/4576). Not built |
 | **R5 SafeUpdate** | Validated updates and recovery *before* disruptive changes | Designed (23 Nov 2026): the Software update page, R5's own package repository and "Go back to before <date>", Near term item 9. Not built |
 | **R5 Doctor** | Logs, crashes, drivers, common failures | Not started |
 
@@ -273,7 +280,7 @@ The user went through RenkuOS's own commits since mid-September 2026. Added to "
    Compare with R5's own USB audio work first, as for the other audio imports.
    The other RenkuOS USB audio and MIDI fixes (UAC2 streams, 64 to 128 channels, capture across transfers, the MIDI error cap) are judged with them: first an inventory per commit against `distro/media`, then only the items the user approves. `183073129f`, which replaces the whole driver, is not taken as a whole.
 3. **Buttons in notifications:** `BNotification` actions (`ade5789ad1`, `28b2c9a4c2`). It is an additive API. Network shares are the first user ("not reachable – Try again").
-4. **Cleaning up packages:** removing dependencies nobody needs on uninstall, `pkgman autoremove`, `mark-auto` and `mark-explicit` (`47eaecbfd8`, `a66a779566`, `64c4b84e96`, `347c732de1`, `04b3721f7a`). Before the R5 Store.
+4. **Cleaning up packages:** removing dependencies nobody needs on uninstall, `pkgman autoremove`, `mark-auto` and `mark-explicit` (`47eaecbfd8`, `a66a779566`, `64c4b84e96`, `347c732de1`, `04b3721f7a`). Before Appsolutely (the app store).
 5. **Bluetooth stability:** atomozero's `l2cap`, `h2generic` and SDP fixes, before air/OS's Low Energy, HID and A2DP work.
 6. **Also wanted:**
    - eMMC as a disk, and booting from it (`06e55a8212`, `a0bb867239`, `eb7eb2a994`);
