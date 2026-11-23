@@ -1,0 +1,53 @@
+SubDir HAIKU_TOP src add-ons translators jpeg ;
+
+SubDirSysHdrs [ FDirName $(SUBDIR) $(DOTDOT) raw ] ;
+	# for TIFF.h and ReadHelper.h
+
+SubDirHdrs [ FDirName $(SUBDIR) $(DOTDOT) shared ] ;
+	#for BaseTranslator.h and friends
+
+AddResources JPEGTranslator : JPEGTranslator.rdef ;
+
+local architectureObject ;
+for architectureObject in [ MultiArchSubDirSetup ] {
+	on $(architectureObject) {
+		UseBuildFeatureHeaders jpeg ;
+
+		Translator [ MultiArchDefaultGristFiles JPEGTranslator ] :
+			be_jdatadst.cpp
+			be_jdatasrc.cpp
+			be_jerror.cpp
+			exif_parser.cpp
+			JPEGTranslator.cpp
+			: be translation
+			[ MultiArchDefaultGristFiles libtranslatorsutils.a ]
+			[ BuildFeatureAttribute jpeg : library ]
+			[ TargetLibstdc++ ] localestub
+			: true
+			;
+
+		Includes [ FGristFiles be_jdatadst.cpp be_jdatasrc.cpp be_jerror.cpp
+				JPEGTranslator.cpp ]
+			: [ BuildFeatureAttribute jpeg : headers ] ;
+	}
+}
+
+# SPDX-SnippetBegin
+# SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+# The catalog keys are collected with the subdirectory's headers, not
+# with the ones of the objects above: give them the build feature
+# headers too, or the preprocessor stops at the first include (R5).
+UseBuildFeatureHeaders jpeg ;
+# SPDX-SnippetEnd
+
+DoCatalogs JPEGTranslator :
+	x-vnd.Haiku-JPEGTranslator
+	:
+	JPEGTranslator.h
+	JPEGTranslator.cpp
+	exif_parser.cpp
+	be_jerror.cpp
+;
+
+
