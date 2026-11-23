@@ -18,6 +18,8 @@ Run in WSL on a private copy of r5-os.image:
 
 --safe boots in Safe mode (the CPU mode, Painter) and runs the short list.
 --menu runs only the menu bar check (R5 Modern and R5, a menu open).
+--menus runs the R5 menu style check (Deskbar, StyledEdit, Tracker menus,
+light and dark); with --safe, in Safe mode.
 Usage: scripts/qemu-theming.py IMAGE OUT [--safe] [--menu] [--save-at=X,Y]
 """
 
@@ -118,6 +120,9 @@ def main():
     menu = "--menu" in args
     if menu:
         args.remove("--menu")
+    menus = "--menus" in args
+    if menus:
+        args.remove("--menus")
     # --save-at X,Y: where the "Save as theme…" button is on screen (read
     # from a screendump of an earlier run); the guest asks with "click-save"
     save_at = None
@@ -148,7 +153,8 @@ def main():
         "kernel": "syslog_time_stamps true\nsyslog_max_size 4M\n",
         "UserBootscript": "#!/bin/sh\n/bin/sh /boot/home/thtest %s"
                           " > /boot/home/thtest.txt 2>&1 &\n"
-                          % ("safe" if safe else "menu" if menu else ""),
+                          % (("safe-menus" if safe else "menus") if menus
+                             else "safe" if safe else "menu" if menu else ""),
         "thtest": guest,
     }
     for name, text in files.items():

@@ -29,6 +29,9 @@
 #include <string.h>
 
 #include <Bitmap.h>
+#include <Menu.h>
+#include <MenuBar.h>
+#include <OS.h>
 #include <FindDirectory.h>
 #include <driver_settings.h>
 #include <Control.h>
@@ -37,6 +40,9 @@
 #include <Region.h>
 #include <View.h>
 
+#include <AppServerLink.h>
+#include <ServerProtocol.h>
+
 
 namespace BPrivate {
 
@@ -44,6 +50,7 @@ namespace BPrivate {
 static const float kButtonPopUpIndicatorWidth = 11;
 
 static const rgb_color kWhite = { 255, 255, 255, 255 };
+static const rgb_color kBlack = { 0, 0, 0, 255 };
 static const rgb_color kInk = { 15, 23, 42, 255 };
 	// the mockup's shadow and line colour (#0f172a)
 
@@ -127,6 +134,59 @@ static rgb_color
 accent_line_color()
 {
 	return blend(accent_color(), kInk, 0.15f);
+}
+
+
+// #pragma mark - menus
+
+
+/*!	A menu in the R5 menu style: R5's BMenu gives its view the menu colour
+	(the window is glass with the GPU), so app_server erases it and the look
+	does not paint over it. Haiku's menus keep B_TRANSPARENT_COLOR.
+*/
+static bool
+r5_menu(BView* view)
+{
+	return view != NULL && dynamic_cast<BMenu*>(view) != NULL
+		&& dynamic_cast<BMenuBar*>(view) == NULL
+		&& view->ViewColor() != B_TRANSPARENT_COLOR;
+}
+
+
+/*!	True while the compositor shows the window effects (the GPU mode). The
+	answer of app_server (AS_R5_WINDOW_EFFECTS_ACTIVE, the call behind
+	libr5ui's window_effects_active()) is kept for a second. Without effects
+	the highlight and the pill are square, as in Safe mode (mockup M3, M6).
+*/
+static bool
+effects_active()
+{
+	static bigtime_t sAsked = -1;
+	static bool sActive = false;
+	bigtime_t now = system_time();
+	if (sAsked < 0 || now - sAsked > 1000000) {
+		BPrivate::AppServerLink link;
+		link.StartMessage(AS_R5_WINDOW_EFFECTS_ACTIVE);
+		int32 code;
+		bool active = false;
+		if (link.FlushWithReply(code) == B_OK && code == B_OK)
+			link.Read<bool>(&active);
+		sActive = active;
+		sAsked = now;
+	}
+	return sActive;
+}
+
+
+/*!	The line round a menu, the same as R5's BMenu gives the compositor for
+	the round corners: #b8c0cc on #f7f8fa, #3a404c on #262b34.
+*/
+static rgb_color
+menu_edge_color(const rgb_color& base)
+{
+	if (base.IsLight())
+		return blend(base, kInk, 0.25f);
+	return blend(base, kWhite, 0.10f);
 }
 
 
@@ -712,8 +772,24 @@ R5ModernControlLook::DrawMenuBackground(BView* view, BRect& rect,
 	if (!ShouldDraw(view, rect, updateRect))
 		return;
 
-	view->SetHighColor(base);
-	view->FillRect(rect);
+	if (r5_menu(view)) {
+		// app_server erased the view (glass with the GPU); the straight
+		// sides of the line, the compositor draws it round the corners
+		view->PushState();
+		view->SetHighColor(menu_edge_color(base));
+		if ((borders & B_LEFT_BORDER) != 0)
+			view->StrokeLine(rect.LeftTop(), rect.LeftBottom());
+		if ((borders & B_RIGHT_BORDER) != 0)
+			view->StrokeLine(rect.RightTop(), rect.RightBottom());
+		if ((borders & B_TOP_BORDER) != 0)
+			view->StrokeLine(rect.LeftTop(), rect.RightTop());
+		if ((borders & B_BOTTOM_BORDER) != 0)
+			view->StrokeLine(rect.LeftBottom(), rect.RightBottom());
+		view->PopState();
+	} else {
+		view->SetHighColor(base);
+		view->FillRect(rect);
+	}
 	// Haiku's bevel takes one pixel on each side asked for
 	inset_sides(rect, 1, 1, 1, 1, borders);
 }
@@ -727,6 +803,44 @@ R5ModernControlLook::DrawMenuItemBackground(BView* view, BRect& rect,
 {
 	if (!ShouldDraw(view, rect, updateRect))
 		return;
+
+	const bool round = effects_active();
+
+	if (dynamic_cast<BMenuBar*>(view) != NULL) {
+		// a title of a menu bar: a quiet pill (mockup M4, M6); the text
+		// keeps its colour (R5's BMenuItem)
+		rgb_color bar = ui_color(B_MENU_BACKGROUND_COLOR);
+		view->SetHighColor(bar);
+		view->FillRect(rect);
+		rgb_color pill = bar.IsLight() ? blend(bar, kBlack, 0.07f)
+			: blend(bar, kWhite, 0.10f);
+		BRect face(rect);
+		face.InsetBy(0, std::min(radius(2), floorf(rect.Height() / 4)));
+		view->PushState();
+		view->SetDrawingMode(B_OP_ALPHA);
+		view->SetHighColor(pill);
+		float r = round ? radius(6) : 0;
+		view->FillRoundRect(BRect(face.left, face.top, face.right + 1,
+			face.bottom + 1), r, r);
+		view->PopState();
+		return;
+	}
+
+	if (r5_menu(view)) {
+		// the R5 menu style: the row is the highlight, radius 6 (square
+		// without effects); the background is app_server's
+		rgb_color fill = base;
+		if ((flags & B_DISABLED) != 0)
+			fill = disable_color(fill, ui_color(B_MENU_BACKGROUND_COLOR));
+		view->PushState();
+		view->SetDrawingMode(B_OP_ALPHA);
+		view->SetHighColor(fill);
+		float r = round ? std::min(radius(6), floorf(rect.Height() / 2)) : 0;
+		view->FillRoundRect(BRect(rect.left, rect.top, rect.right + 1,
+			rect.bottom + 1), r, r);
+		view->PopState();
+		return;
+	}
 
 	rgb_color background = view->ViewColor();
 	if (background == B_TRANSPARENT_COLOR)
@@ -746,6 +860,39 @@ R5ModernControlLook::DrawMenuItemBackground(BView* view, BRect& rect,
 	view->SetHighColor(fill);
 	view->FillRoundRect(BRect(face.left, face.top, face.right + 1,
 		face.bottom + 1), radius(5), radius(5));
+	view->PopState();
+}
+
+
+/*!	The submenu chevron of the R5 menu style: the mockup's
+	"M3.5 1.8 6.8 5 3.5 8.2" in a 10 px box, stroke 1.6, in the colour the
+	item gives. Every other arrow is Haiku's.
+*/
+void
+R5ModernControlLook::DrawArrowShape(BView* view, BRect& rect,
+	const BRect& updateRect, const rgb_color& base, uint32 direction,
+	uint32 flags, float tint)
+{
+	if (direction != B_RIGHT_ARROW || !r5_menu(view)) {
+		HaikuControlLook::DrawArrowShape(view, rect, updateRect, base,
+			direction, flags, tint);
+		return;
+	}
+	if (!rect.IsValid() || !rect.Intersects(updateRect))
+		return;
+
+	float unit = (rect.Width() + 1) / 10;
+	BPoint origin(rect.left, rect.top);
+	view->PushState();
+	view->SetDrawingMode(B_OP_ALPHA);
+	view->SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_OVERLAY);
+	view->SetHighColor(base);
+	view->SetPenSize(std::max(1.0f, roundf(1.6f * unit * 4) / 4));
+	view->SetLineMode(B_ROUND_CAP, B_ROUND_JOIN);
+	view->StrokeLine(origin + BPoint(3.5f * unit, 1.8f * unit),
+		origin + BPoint(6.8f * unit, 5 * unit));
+	view->StrokeLine(origin + BPoint(6.8f * unit, 5 * unit),
+		origin + BPoint(3.5f * unit, 8.2f * unit));
 	view->PopState();
 }
 
@@ -1512,7 +1659,9 @@ R5ModernControlLook::GetScrollBarWidth(orientation orientation)
 /*!	Haiku's insets, and 8 more on the left of a menu bar (at 12 points):
 	R5's BMenuBar starts its first title there when the bar is on the left
 	edge of a window with a frame, so the title and its menu clear the
-	round corner of the R5 Modern window.
+	round corner of the R5 Modern window. For menus, the R5 menu style
+	(docs/design/THEMING.md, "Menus"): more than 1 for B_MENU_BACKGROUND,
+	and the item padding.
 */
 void
 R5ModernControlLook::GetBackgroundInsets(background_type backgroundType,
@@ -1522,6 +1671,23 @@ R5ModernControlLook::GetBackgroundInsets(background_type backgroundType,
 		_right, _bottom);
 	if (backgroundType == B_MENU_BAR_BACKGROUND)
 		_left += roundf(8 * scale());
+	else if (backgroundType == B_MENU_BACKGROUND) {
+		// more than 1 asks R5's BMenu for the R5 menu style: 5 inside the
+		// menu window (mockup M6)
+		_left = _top = _right = _bottom = roundf(5 * scale());
+	} else if (backgroundType == B_MENU_ITEM_BACKGROUND) {
+		// the padding round an item's content in that style: 11 at the left
+		// (R5's BMenu adds 16 for the mark column when a menu has marks),
+		// 9 at the right, and a row of 26 (mockup M4, M6)
+		font_height height;
+		be_plain_font->GetHeight(&height);
+		float text = ceilf(height.ascent + height.descent);
+		float extra = std::max(0.0f, roundf(26 * scale()) - text);
+		_left = roundf(11 * scale());
+		_right = roundf(9 * scale());
+		_top = floorf(extra / 2);
+		_bottom = extra - _top;
+	}
 }
 
 

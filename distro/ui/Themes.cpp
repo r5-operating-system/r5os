@@ -223,7 +223,8 @@ static const color_value kModernLightColors[] = {
 	{ B_CONTROL_BACKGROUND_COLOR,		0xf7f8fa },
 	{ B_CONTROL_TEXT_COLOR,				0x141414 },
 	{ B_CONTROL_BORDER_COLOR,			0xb4bcc8 },
-	{ B_MENU_BACKGROUND_COLOR,			0xffffff },
+	{ B_MENU_BACKGROUND_COLOR,			0xf7f8fa },
+		// menu mockup M1, M6: the opaque menu, the glass tint
 	{ B_MENU_ITEM_TEXT_COLOR,			0x141414 },
 	{ B_MENU_SELECTED_ITEM_TEXT_COLOR,	0xffffff },
 	{ B_LIST_BACKGROUND_COLOR,			0xffffff },

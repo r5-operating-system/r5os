@@ -265,6 +265,12 @@ public:
 
 	virtual	float				GetScrollBarWidth(
 									orientation orientation = B_VERTICAL);
+	virtual	void				DrawArrowShape(BView* view,
+									BRect& rect, const BRect& updateRect,
+									const rgb_color& base, uint32 direction,
+									uint32 flags = 0,
+									float tint = B_DARKEN_MAX_TINT);
+
 	virtual	void				GetBackgroundInsets(
 									background_type backgroundType,
 									uint32 flags, float& _left, float& _top,

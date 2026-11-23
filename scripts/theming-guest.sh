@@ -52,6 +52,41 @@ if [ "$1" = safe ]; then
 	exit 0
 fi
 
+if [ "$1" = menus ] || [ "$1" = safe-menus ]; then
+	# the R5 menu style (docs/design/THEMING.md, "Menus"): the Deskbar
+	# menu with a submenu, StyledEdit's Document menu (marks, shortcuts),
+	# a Tracker window's File menu; light and dark
+	p=""
+	[ "$1" = safe-menus ] && p="safe-" && note "safemode $(safemode)"
+	/boot/system/apps/StyledEdit > /dev/null 2>&1 &
+	sleep 3
+	open /boot/home
+	sleep 4
+	for mode in light dark; do
+		theme "R5 Modern" $mode; sleep 2
+		say "click 1159 36"; sleep 3; shot ${p}menus-deskbar-$mode
+		say "key down"; say "key down"; say "key down"; say "key down"
+		say "key down"; say "key down"; sleep 1; say "key right"; sleep 3
+		shot ${p}menus-deskbar-sub-$mode
+		say "key esc"; say "key esc"; say "key esc"; sleep 2
+		hey -s application/x-vnd.Haiku-StyledEdit set Active of Window 0 			to true > /dev/null 2>&1
+		sleep 2
+		say "keys alt esc"; sleep 1; say "key right"; say "key right"
+		say "key right"; sleep 2; shot ${p}menus-styled-document-$mode
+		say "key esc"; say "key esc"; sleep 2
+		hey -s application/x-vnd.Be-TRAK set Active of Window home 			to true > /dev/null 2>&1
+		sleep 2
+		say "keys alt esc"; sleep 2; shot ${p}menus-tracker-file-$mode
+		say "key esc"; say "key esc"; sleep 2
+	done
+	theme "R5" light; sleep 2
+	say "click 1159 36"; sleep 3; shot ${p}menus-deskbar-r5-light
+	say "key esc"; sleep 2
+	$T theme get >> "$out/notes.txt" 2>&1
+	say "done"
+	exit 0
+fi
+
 if [ "$1" = menu ]; then
 	# the first menu bar title clears the round corner in R5 Modern, and
 	# stays where it was in R5; Alt+Escape opens the File menu
