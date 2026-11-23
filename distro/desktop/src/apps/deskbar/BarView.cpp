@@ -318,11 +318,9 @@ TBarView::MessageReceived(BMessage* message)
 // SPDX-License-Identifier: MIT
 		case B_COLORS_UPDATED:
 			SetViewUIColor(B_MENU_BACKGROUND_COLOR);
-			// Default (R5) keeps its own surface, light or dark (a theme's
-			// dark mode, docs/design/THEMING.md): the whole style again, so
-			// the tray symbols and the edge take the new colours too
-			if (R5Deskbar::Modern())
-				ApplyStyle();
+			// Re-apply style in both Default (R5) and Classic (Haiku) so
+			// tray symbols and colors update when switching out of Dark Mode.
+			ApplyStyle();
 			Invalidate();
 			break;
 
@@ -596,9 +594,17 @@ TBarView::PlaceTray(bool vertSwap, bool leftSwap)
 	} else if (fReplicantTray->IsHidden())
 		fReplicantTray->Show();
 
-	fReplicantTray->RealignReplicants();
-	fDragRegion->ResizeToPreferred();
-		// also resizes replicant tray
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// Two passes: ResizeToPreferred() shrinks the tray back to Classic's
+	// width after Default (R5), then the second RealignReplicants() places
+	// the clock and tray icons inside the new width.
+	for (int32 pass = 0; pass < 2; pass++) {
+		fReplicantTray->RealignReplicants();
+		fDragRegion->ResizeToPreferred();
+	}
+// SPDX-SnippetEnd
 
 	if (Vertical()) {
 		if (fResizeControl->IsHidden())
