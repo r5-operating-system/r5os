@@ -120,6 +120,30 @@ def drag(qmp, x0, y0, dx, dy, steps=60, shot=None):
     time.sleep(2)
 
 
+def shift(qmp, down):
+    qmp.call("input-send-event", events=[
+        {"type": "key", "data": {"down": down,
+                                 "key": {"type": "qcode", "data": "shift"}}}])
+
+
+def tab_steps(qmp, out, left, top, right, bottom, prefix=""):
+    """The window's outer edge is left..right by top..bottom (the tab's top
+    to the frame's bottom): Shift-drag the tab from the left top corner to
+    the right one, then make the window narrower than its tab by its round
+    bottom right corner (external review, 23 Nov 2026)."""
+    shift(qmp, True)
+    time.sleep(0.3)
+    drag(qmp, left + 190, top + 16, right - left, 0,
+         shot=os.path.join(out, prefix + "tab-dragging.ppm"))
+    shift(qmp, False)
+    time.sleep(1)
+    qmp.shot(os.path.join(out, prefix + "tab-right.ppm"))
+    drag(qmp, right - 1, bottom - 1, -(right - left - 120), 0,
+         shot=os.path.join(out, prefix + "narrowing.ppm"))
+    time.sleep(2)
+    qmp.shot(os.path.join(out, prefix + "narrow.ppm"))
+
+
 def main():
     args = sys.argv[1:]
     safe = "--safe" in args
@@ -214,6 +238,7 @@ def main():
             return 1
         time.sleep(3)
         qmp.shot(os.path.join(out, "safe.ppm"))
+        tab_steps(qmp, out, 60, 58, 619, 419, "safe-")
         print("safe done; QEMU keeps running")
         return 0
 
@@ -247,6 +272,7 @@ def main():
          shot=os.path.join(out, "resizing.ppm"))
     time.sleep(2)
     qmp.shot(os.path.join(out, "resized.ppm"))
+    tab_steps(qmp, out, 60 + 90, 58 + 60, 619 + 90 + 80, 419 + 60 + 60)
     if wait_serial(serial, "r5modern: appearance", 240):
         time.sleep(4)
         qmp.shot(os.path.join(out, "appearance.ppm"))

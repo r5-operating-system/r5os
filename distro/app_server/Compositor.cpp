@@ -1632,10 +1632,18 @@ Compositor::_ComposeLoop()
 				// was skipped while the window had none, and the window's
 				// drawing damages only its own pixels (22 Nov 2026: a new
 				// window showed no shadow until it moved).
+				// External review, 23 Nov 2026: not while it opens; the
+				// animation damages the shadow every frame, the last one
+				// included (animArea).
 				bool hasPixels = layer->HasPixels();
+				bool opening;
+				{
+					BAutolock animLock(fAnimLock);
+					opening = layer->entry->animOpen;
+				}
 				if (hasPixels != layer->entry->hadPixels) {
 					layer->entry->hadPixels = hasPixels;
-					if (hasPixels && layer->shadow && !splash) {
+					if (hasPixels && layer->shadow && !splash && !opening) {
 						BRegion area(layer->shadowArea);
 						area.IntersectWith(&screen);
 						damage.Include(&area);

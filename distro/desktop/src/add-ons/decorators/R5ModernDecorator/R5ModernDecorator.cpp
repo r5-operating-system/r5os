@@ -229,12 +229,15 @@ R5ModernDecorator::RegionAt(BPoint where, int32& tab) const
 void
 R5ModernDecorator::GetGlassRegion(BRegion* region)
 {
+	// external review, 23 Nov 2026: _IsModern() reads the top tab, so the
+	// lock comes first; the base class takes it itself
+	AutoReadLocker locker(fLocker);
 	if (!_IsModern()) {
+		locker.Unlock();
 		R5Decorator::GetGlassRegion(region);
 		return;
 	}
 
-	AutoReadLocker _(fLocker);
 	region->MakeEmpty();
 	for (int32 i = 0; i < fTabList.CountItems(); i++) {
 		Decorator::Tab* tab = fTabList.ItemAt(i);
@@ -281,10 +284,12 @@ R5ModernDecorator::GetOutline(window_outline_rect* rects, int32 maxCount)
 bool
 R5ModernDecorator::GetEdgeLine(rgb_color* color, float* width)
 {
-	if (!_IsModern())
+	AutoReadLocker locker(fLocker);
+	if (!_IsModern()) {
+		locker.Unlock();
 		return R5Decorator::GetEdgeLine(color, width);
+	}
 
-	AutoReadLocker _(fLocker);
 	if (_Soft()) {
 		*color = kWhite;
 		color->alpha = kSoftEdgeAlpha;
@@ -377,10 +382,13 @@ R5ModernDecorator::_DoTabLayout()
 		tabRect.Set(fBorderRect.left, fBorderRect.top - fTabVisible,
 			fBorderRect.left + tabSize, fBorderRect.top - 1);
 
+		// External review, 23 Nov 2026: a window narrower than its tab
+		// made the room negative, and the cast to uint32 wrapped.
+		float room = max_c(0.0f, windowWidth - tabRect.Width());
 		tab->tabOffset = (uint32)tabOffset;
 		if (tab->tabLocation != 0.0 && fTabList.CountItems() == 1
-			&& tab->tabOffset > (windowWidth - tabRect.Width())) {
-			tab->tabOffset = uint32(windowWidth - tabRect.Width());
+			&& tab->tabOffset > room) {
+			tab->tabOffset = (uint32)room;
 		}
 		tabRect.OffsetBy(tab->tabOffset, 0);
 		tabOffset += tabRect.Width();

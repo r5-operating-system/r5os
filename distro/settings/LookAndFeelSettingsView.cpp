@@ -337,14 +337,22 @@ LookAndFeelSettingsView::_SetDecor(DecorInfo* decorInfo)
 {
 	if (fDecorUtility.SetDecorator(decorInfo) == B_OK) {
 		fCurrentDecor = fDecorUtility.CurrentDecorator()->ShortcutName();
-		BString decorName = fDecorUtility.CurrentDecorator()->Name();
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-		BMenuItem* item = fDecorMenu->FindItem(
-			_DecorLabel(decorName).String());
-		if (item != NULL)
-			item->SetMarked(true);
+		// by the add-on (ShortcutName()), not by the name it shows: the
+		// built-in one is no longer called "Default" (external review,
+		// 23 Nov 2026)
+		for (int32 i = 0; i < fDecorMenu->CountItems(); i++) {
+			BMenuItem* item = fDecorMenu->ItemAt(i);
+			const char* shortcut = NULL;
+			if (item->Message() != NULL
+				&& item->Message()->FindString("decor", &shortcut) == B_OK
+				&& fCurrentDecor == shortcut) {
+				item->SetMarked(true);
+				break;
+			}
+		}
 // SPDX-SnippetEnd
 		appearance_notify(this);
 	}

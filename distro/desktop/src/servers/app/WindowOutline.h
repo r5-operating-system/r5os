@@ -321,6 +321,16 @@ window_outline_build(const window_outline_rect* rects, int32 count,
 		BRegion area(squares[i]);
 		area.Exclude(&others);
 		outline.area.Include(&area);
+		// The edge line reaches into the frame's own pixels inside its arc;
+		// where another rectangle lies behind the corner (Default (R5
+		// Modern)'s tab card) those stay in the area too, so the line is as
+		// wide as at the other corners (external review, 23 Nov 2026). The
+		// pixels the arc does not fully cover stay the other rectangle's.
+		if (i == 0) {
+			BRegion own(squares[i]);
+			own.IntersectWith(&inside[i]);
+			outline.area.Include(&own);
+		}
 	}
 	outline.edge.Exclude(&solid);
 	outline.cut.Exclude(&solid);
