@@ -66,6 +66,12 @@ switch $(HAIKU_BUILD_PROFILE) {
 		HAIKU_REPOSITORIES += $(r5OpenGL:G=repository) ;
 		HAIKU_REPOSITORY_CACHE_FILE on $(r5OpenGL:G=repository)
 			= [ FDirName $(r5Download) r5-opengl.repo ] ;
+
+		# No Haiku system repository in the image, so SoftwareUpdater cannot
+		# replace R5's system with Haiku's. HaikuPorts stays.
+		# distro/image/r5_late_image, copied by scripts/apply-overlay.sh.
+		HAIKU_IMAGE_LATE_USER_SCRIPTS
+			+= [ FDirName $(HAIKU_TOP) build scripts r5_late_image ] ;
 	}
 }
 

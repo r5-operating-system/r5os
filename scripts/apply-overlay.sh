@@ -23,6 +23,11 @@ trap 'bash "$ROOT/scripts/tree-owner.sh" end "$ROOT"' EXIT
 tr -d '\r' < "$ROOT/distro/UserBuildConfig" | sed "s/^HAIKU_REVISION = .*/HAIKU_REVISION = ${REV} ;/" > "$DEST"
 echo "Wrote $DEST (HAIKU_REVISION=${REV})"
 
+# Late image script named in UserBuildConfig (no Haiku repository in the image).
+lateImage="$ROOT/haiku/build/scripts/r5_late_image"
+tr -d '\r' < "$ROOT/distro/image/r5_late_image" > "$lateImage"
+echo "Wrote $lateImage"
+
 hdr="$ROOT/haiku/headers/private/system/r5_os_version.h"
 printf '%s\n' \
 	'#ifndef R5_OS_VERSION_H' \

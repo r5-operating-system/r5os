@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: MIT
+# Copyright 2026 R5OS Contributors
+#
+# Late image script for R5 images (HAIKU_IMAGE_LATE_USER_SCRIPTS in
+# distro/UserBuildConfig). build_haiku_image sources it while it populates
+# the image, so $rm and $tPrefix are the image's own commands and path.
+#
+# Haiku's build installs a config for every repository in HAIKU_REPOSITORIES,
+# including Haiku's own system repository on Haiku's server. On an installed
+# R5, SoftwareUpdater would then offer Haiku's "haiku" package as soon as its
+# version sorts above R5's (Haiku r1~beta7 or R1), and replace R5's system.
+# R5 keeps HaikuPorts for HaikuDepot, and drops the Haiku repository, as
+# air/OS does. The build itself still uses the repository's cache on the host
+# to resolve packages; only the copy in the image is removed.
+
+echo "R5: removing Haiku's system package repository from the image"
+$rm -f "${tPrefix}system/settings/package-repositories/Haiku"
+$rm -f "${tPrefix}system/cache/package-repositories/Haiku"
