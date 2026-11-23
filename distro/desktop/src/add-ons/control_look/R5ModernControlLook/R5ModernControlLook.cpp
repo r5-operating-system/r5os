@@ -300,7 +300,8 @@ R5ModernControlLook::R5ModernControlLook()
 	const char* style = get_driver_parameter(handle, "scroll_bars", NULL,
 		NULL);
 	bool ours = controls != NULL
-		&& strcmp(controls, "R5ModernControlLook") == 0;
+		&& (strcmp(controls, "R5ModernControlLook") == 0
+			|| strcmp(controls, "R5ControlLook") == 0);
 	fHaikuScrollBars = ours && style != NULL && strcmp(style, "haiku") == 0;
 	// the theme's scroll bar width (8 to 32 at 12 points); 0 is Haiku's
 	const char* width = get_driver_parameter(handle, "scroll_bar_width", NULL,
