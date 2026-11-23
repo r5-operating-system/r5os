@@ -16,7 +16,7 @@ Cause: `Window::ResizeBy()` resizes the views (`fTopView->ResizeBy()`) before th
 
 What changed: after the decorator is resized, a window with a round outline (before or after) makes its content region, visible content region, drawing region and the views' screen clipping again (`_DecoratorShapeChanged()`). Square windows are unchanged.
 
-Tested: QEMU (KVM, 1280 by 800), build of 23 Nov about 08:05 with `scripts/build-locked.sh` (`jam_exit=0`, `mesa_exit=0`), `scripts/qemu-r5modern.py`: Appearance 8 s after opening covers its whole new size (plain panel, no black, no cut corners); the resize test is fine; 5 times `compose compare ok`, no `MISMATCH`. The Appearance controls themselves were not drawn yet at that moment; 40 s later they are; that the app was still busy is a guess, not checked. Safe mode not run for this change. Not on a real machine.
+Tested: QEMU (KVM, 1280 by 800), build of 23 Nov about 08:05 with `scripts/build-locked.sh` (`jam_exit=0`, `mesa_exit=0`), `scripts/qemu-r5modern.py`: Appearance 8 s after opening covers its whole new size (plain panel, no black, no cut corners); the resize test is fine; 5 times `compose compare ok`, no `MISMATCH`. The Appearance controls themselves were not drawn yet at that moment; 40 s later they are; that the app was still busy is a guess, not checked. Safe mode (`--safe`, same build): boots, windows, stepped corners and the tab and resize steps as before, no crash. Not on a real machine.
 
 ## 2026-11-23 - Deskbar - tray symbols without colored fringes in Safe mode
 
