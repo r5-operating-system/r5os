@@ -55,7 +55,7 @@ protected:
 	virtual	bool				_MoveTab(int32 from, int32 to, bool isMoving,
 									BRegion* updateRegion = NULL);
 
-private:
+protected:
 			bool				fThinFrame;
 			int32				fHaikuBorderWidth;
 };

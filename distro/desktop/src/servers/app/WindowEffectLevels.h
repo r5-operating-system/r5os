@@ -168,6 +168,9 @@ static const float kOpenAnimationScale = 0.95f;
 // loads or stores the appearance file. Read by the R5 decorator for its
 // shadow extent.
 extern int32 gWindowEffectStrength;
+// The effects (kWindowEffectShadow and the others) set now, the same way;
+// read by Default (R5 Modern) for its soft look (22 Nov 2026).
+extern uint32 gWindowEffects;
 
 
 #endif	// WINDOW_EFFECT_LEVELS_H

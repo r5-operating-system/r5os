@@ -50,24 +50,6 @@ has_tab(window_look look)
 }
 
 
-//	#pragma mark - R5DecorAddOn
-
-
-R5DecorAddOn::R5DecorAddOn(image_id id, const char* name)
-	:
-	DecorAddOn(id, name)
-{
-}
-
-
-Decorator*
-R5DecorAddOn::_AllocateDecorator(DesktopSettings& settings, BRect rect,
-	Desktop* desktop)
-{
-	return new (std::nothrow) R5Decorator(settings, rect, desktop);
-}
-
-
 //	#pragma mark - R5Decorator
 
 
@@ -434,18 +416,4 @@ R5Decorator::_MoveTab(int32 from, int32 to, bool isMoving,
 	bool result = SATDecorator::_MoveTab(from, to, isMoving, updateRegion);
 	fBorderWidth = borderWidth;
 	return result;
-}
-
-
-//	#pragma mark - add-on entry
-
-
-R5_DECORATOR_ABI_EXPORT
-
-
-extern "C" DecorAddOn*
-(instantiate_decor_addon)(image_id id, const char* name)
-{
-	syslog(LOG_INFO, "decorator: r5 loaded\n");
-	return new (std::nothrow) R5DecorAddOn(id, name);
 }

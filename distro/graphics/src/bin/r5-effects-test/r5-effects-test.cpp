@@ -35,6 +35,16 @@
  * the colour bars that moves itself sideways every 16 ms and grows and
  * shrinks every second, so a move and a resize of a round window can be
  * watched (a bordered window has no tab to drag).
+ *
+ *   r5-effects-test decorator list|<name>
+ *   r5-effects-test soft [seconds]
+ *
+ * decorator (Default (R5 Modern), 22 Nov 2026) lists the window decorators
+ * in the order and with the names Appearance shows, or chooses one by its
+ * name or file name, as Appearance does. soft opens the two windows of
+ * board 4 "Soft" of the mockup at its places: an ordinary active window
+ * with white content ("StyledEdit") and an inactive one that asks for
+ * glass ("Sign in"), for the comparison with the mockup.
  */
 
 
@@ -46,6 +56,7 @@
 #include <algorithm>
 
 #include <Application.h>
+#include <Button.h>
 #include <Deskbar.h>
 #include <Entry.h>
 #include <InterfaceDefs.h>
@@ -53,11 +64,15 @@
 #include <Screen.h>
 #include <ScrollView.h>
 #include <String.h>
+#include <StringView.h>
+#include <TextControl.h>
 #include <TextView.h>
 #include <View.h>
 #include <Window.h>
 
 #include <WindowEffects.h>
+
+#include <DecorInfo.h>
 
 
 using namespace BAppearanceKit;
@@ -354,6 +369,10 @@ private:
 			return _Check(set_window_effects(effects));
 		}
 
+		if (strcmp(what, "decorator") == 0 && value != NULL)
+			return _Decorator(value);
+		if (strcmp(what, "soft") == 0)
+			return _Soft(value);
 		if (strcmp(what, "round") == 0)
 			return _Round(value, fArgc > 3 ? fArgv[3] : NULL);
 		if (strcmp(what, "round-move") == 0)
@@ -409,6 +428,108 @@ private:
 				window->Unlock();
 			}
 		}
+		SetPulseRate(fWindowSeconds * 1000000LL);
+		return result;
+	}
+
+	int _Decorator(const char* name)
+	{
+		BPrivate::DecorInfoUtility utility;
+		if (strcmp(name, "list") != 0) {
+			BPrivate::DecorInfo* decor = utility.FindDecorator(name);
+			if (decor == NULL) {
+				fprintf(stderr, "r5-effects-test: no decorator %s\n", name);
+				return 1;
+			}
+			int result = _Check(utility.SetDecorator(decor));
+			printf("r5-effects-test: decorator %s\n",
+				decor->Name().String());
+			return result;
+		}
+		// the order of Appearance: the add-ons by name, then the built-in
+		BPrivate::DecorInfo* current = utility.CurrentDecorator();
+		int32 count = utility.CountDecorators();
+		for (int32 pass = 0; pass < 2; pass++) {
+			BObjectList<BPrivate::DecorInfo> list(20);
+			for (int32 i = 0; i < count; i++) {
+				BPrivate::DecorInfo* decor = utility.DecoratorAt(i);
+				if (decor == NULL || decor->IsDefault() != (pass == 1))
+					continue;
+				int32 index = 0;
+				while (index < list.CountItems()
+					&& strcmp(list.ItemAt(index)->Name().String(),
+						decor->Name().String()) <= 0)
+					index++;
+				list.AddItem(decor, index);
+			}
+			for (int32 i = 0; i < list.CountItems(); i++) {
+				BPrivate::DecorInfo* decor = list.ItemAt(i);
+				printf("decorator: %s%s (%s)\n", decor->Name().String(),
+					current != NULL && current->Path() == decor->Path()
+						? " [current]" : "", decor->Path().String());
+			}
+		}
+		return 0;
+	}
+
+	int _Soft(const char* secondsArg)
+	{
+		fWindowSeconds = secondsArg != NULL ? atoi(secondsArg) : 120;
+		if (fWindowSeconds <= 0)
+			fWindowSeconds = 120;
+		uint32 flags = B_QUIT_ON_WINDOW_CLOSE | B_ASYNCHRONOUS_CONTROLS;
+		int result = 0;
+
+		// Board 4: the outer edge of a window at (60, 58) and (700, 148),
+		// 560 x (46 + 330 - 14) and 500 x (46 + 300 - 14); the content is
+		// inside the 1 px line, under the 32 px of the tab.
+		BWindow* glass = new BWindow(BRect(701, 181, 1198, 478), "Sign in",
+			B_TITLED_WINDOW_LOOK, B_NORMAL_WINDOW_FEEL, flags);
+		BView* panel = new BView(glass->Bounds(), "panel", B_FOLLOW_ALL,
+			B_WILL_DRAW);
+		panel->SetViewColor(232, 238, 247);
+		glass->AddChild(panel);
+		BStringView* label = new BStringView(BRect(40, 26, 440, 44),
+			"label", "Password");
+		panel->AddChild(label);
+		BTextControl* field = new BTextControl(BRect(40, 50, 457, 80),
+			"password", NULL, "", NULL);
+		field->TextView()->HideTyping(true);
+		panel->AddChild(field);
+		BButton* button = new BButton(BRect(40, 96, 457, 130), "signin",
+			"Sign in", NULL);
+		panel->AddChild(button);
+		BStringView* note = new BStringView(BRect(40, 150, 457, 168), "note",
+			"The glass body is only for a program that asks for it.");
+		note->SetAlignment(B_ALIGN_CENTER);
+		panel->AddChild(note);
+		glass->Show();
+		if (_Check(set_window_glass(glass, true)) != 0)
+			result = 1;
+		if (glass->Lock()) {
+			if (_Check(set_view_glass(panel, true)) != 0)
+				result = 1;
+			glass->Unlock();
+		}
+
+		BWindow* plain = new BWindow(BRect(61, 91, 618, 418), "StyledEdit",
+			B_TITLED_WINDOW_LOOK, B_NORMAL_WINDOW_FEEL, flags);
+		BRect textRect = plain->Bounds().InsetByCopy(20, 16);
+		textRect.OffsetTo(20, 16);
+		BTextView* text = new BTextView(plain->Bounds(), "text",
+			textRect, B_FOLLOW_ALL, B_WILL_DRAW);
+		text->SetViewColor(255, 255, 255);
+		text->SetText("Same soul. Fresh pixels.\n\n"
+			"The tab is a soft yellow card with large round corners. It sits"
+			" behind the window, which overlaps its lower edge.\n\n"
+			"Haiku's own close and zoom buttons: close on the left, zoom on"
+			" the right of the tab. The window is resized by its edge.");
+		text->MakeEditable(false);
+		plain->AddChild(text);
+		plain->Show();
+		plain->Activate();
+
+		printf("r5-effects-test: soft, %" B_PRId32 " s\n", fWindowSeconds);
 		SetPulseRate(fWindowSeconds * 1000000LL);
 		return result;
 	}
@@ -568,7 +689,9 @@ private:
 			"       r5-effects-test round [radius] [seconds]\n"
 			"       r5-effects-test round-move [radius] [seconds]\n"
 			"       r5-effects-test zoom [autohide]\n"
-			"       r5-effects-test deskbar-add <path>\n");
+			"       r5-effects-test deskbar-add <path>\n"
+			"       r5-effects-test decorator list|<name>\n"
+			"       r5-effects-test soft [seconds]\n");
 		return 2;
 	}
 

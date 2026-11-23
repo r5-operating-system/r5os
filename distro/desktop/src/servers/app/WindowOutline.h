@@ -74,6 +74,9 @@ struct window_corner {
 	clipping_rect	square;		// the radius x radius pixels of the corner
 	int32			kind;		// 0 left top, 1 right top, 2 left bottom,
 								// 3 right bottom
+	int32			lined;		// carries the decorator's edge line: the
+								// frame's corners (the first rectangle)
+								// do, a tab's do not
 };
 
 
@@ -160,6 +163,7 @@ window_outline_corner(const clipping_rect& rect, int32 kind, float radius,
 	bool bottom = kind >= 2;
 	corner.radius = r;
 	corner.kind = kind;
+	corner.lined = true;
 	corner.centerX = right ? rect.right + 1 - r : rect.left + r;
 	corner.centerY = bottom ? rect.bottom + 1 - r : rect.top + r;
 	corner.square.left = right ? rect.right - r + 1 : rect.left;
@@ -247,9 +251,13 @@ window_outline_build(const window_outline_rect* rects, int32 count,
 			window_corner corner;
 			if (!window_outline_corner(rect, kind, radii[kind], corner))
 				continue;
+			// The edge line runs along the frame, the first rectangle; a
+			// tab draws its own edge, if it has one (Default (R5 Modern),
+			// 22 Nov 2026).
+			corner.lined = i == 0;
 			outline.corners[outline.cornerCount++] = corner;
 			squares[i].Include(corner.square);
-			if (!blended)
+			if (!blended && corner.lined)
 				window_outline_add_rim(rect, corner, outline.rim);
 			bool right = kind == 1 || kind == 3;
 			for (int32 y = corner.square.top; y <= corner.square.bottom;
@@ -313,12 +321,66 @@ window_outline_build(const window_outline_rect* rects, int32 count,
 		BRegion area(squares[i]);
 		area.Exclude(&others);
 		outline.area.Include(&area);
+		// The edge line reaches into the frame's own pixels inside its arc;
+		// where another rectangle lies behind the corner (Default (R5
+		// Modern)'s tab card) those stay in the area too, so the line is as
+		// wide as at the other corners (external review, 23 Nov 2026). The
+		// pixels the arc does not fully cover stay the other rectangle's.
+		if (i == 0) {
+			BRegion own(squares[i]);
+			own.IntersectWith(&inside[i]);
+			outline.area.Include(&own);
+		}
 	}
 	outline.edge.Exclude(&solid);
 	outline.cut.Exclude(&solid);
 	outline.cut.Exclude(&outline.edge);
 	outline.area.Exclude(&outline.cut);
 	outline.rim.Exclude(&outline.cut);
+}
+
+
+/*!	Input: the corner of the first rectangle (the frame) whose cut holds
+	 where, 0 to 3 as window_corner::kind; -1 when the point is not in a
+	cut corner of the frame, or lies inside one of the other rectangles.
+	Cut means less than half covered, in both modes (Default (R5 Modern):
+	that wedge is the resize corner, 22 Nov 2026).
+*/
+static inline int32
+window_outline_cut_corner(const window_outline_rect* rects, int32 count,
+	BPoint where)
+{
+	if (count <= 0 || !rects[0].rect.IsValid())
+		return -1;
+	int32 x = (int32)floorf(where.x);
+	int32 y = (int32)floorf(where.y);
+	clipping_rect frame = window_outline_clipping_rect(rects[0].rect);
+	if (x < frame.left || x > frame.right || y < frame.top
+		|| y > frame.bottom)
+		return -1;
+	float radii[4] = { rects[0].leftTop, rects[0].rightTop,
+		rects[0].leftBottom, rects[0].rightBottom };
+	for (int32 kind = 0; kind < 4; kind++) {
+		window_corner corner;
+		if (!window_outline_corner(frame, kind, radii[kind], corner))
+			continue;
+		if (x < corner.square.left || x > corner.square.right
+			|| y < corner.square.top || y > corner.square.bottom)
+			continue;
+		if (window_corner_coverage(corner, x, y) >= 0.5f)
+			return -1;
+		for (int32 i = 1; i < count && i < R5_WINDOW_OUTLINE_MAX_RECTS;
+				i++) {
+			if (!rects[i].rect.IsValid())
+				continue;
+			clipping_rect other = window_outline_clipping_rect(rects[i].rect);
+			if (x >= other.left && x <= other.right && y >= other.top
+				&& y <= other.bottom)
+				return -1;
+		}
+		return kind;
+	}
+	return -1;
 }
 
 

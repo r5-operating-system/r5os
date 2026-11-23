@@ -4,7 +4,7 @@
  */
 
 resource("be:decor:info") message('deco') {
-	"name"				= "R5",
+	"name"				= "Default (R5)",
 	"authors"			= "R5OS Contributors",
 	"short_descr"		= "Haiku's tab with a thin frame",
 	"long_descr"		= "",

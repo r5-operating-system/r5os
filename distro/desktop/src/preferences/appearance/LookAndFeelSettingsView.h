@@ -46,7 +46,12 @@ private:
 			void				_SetDecor(const BString& name);
 			void				_SetDecor(BPrivate::DecorInfo* decorInfo);
 			void				_BuildDecorMenu();
-			const char*			_DecorLabel(const BString& name);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			// a BString: the label of a temporary was returned before
+			BString				_DecorLabel(const BString& name);
+// SPDX-SnippetEnd
 
 			void				_SetControlLook(const BString& path);
 			void				_BuildControlLookMenu();

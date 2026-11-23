@@ -72,6 +72,11 @@
 #include "SystemPalette.h"
 #include "WindowPrivate.h"
 #include "Window.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include "WindowOutline.h"
+// SPDX-SnippetEnd
 #include "Workspace.h"
 #include "WorkspacesView.h"
 // SPDX-SnippetBegin
@@ -2551,6 +2556,17 @@ Desktop::ReloadDecor(DecorAddOn* oldDecor)
 			window = window->NextWindow(kAllWindowList)) {
 		BRegion oldBorder;
 		window->GetBorderRegion(&oldBorder);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// the round corners of the decorator before: with a square one they
+		// lie inside the window and are drawn (QEMU, 22 Nov 2026)
+		window_outline outline;
+		window->GetOutline(&outline,
+			fCompositor != NULL && fCompositor->IsActive());
+		oldBorder.Include(&outline.cut);
+		oldBorder.Include(&outline.rim);
+// SPDX-SnippetEnd
 
 		if (!window->ReloadDecor()) {
 			// prevent unloading previous add-on
@@ -2562,6 +2578,21 @@ Desktop::ReloadDecor(DecorAddOn* oldDecor)
 
 		border.Include(&oldBorder);
 		RebuildAndRedrawAfterWindowChange(window, border);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// GPU mode: the whole window is composed again, with its shadow,
+		// as for set_window_corner_radius() (ServerApp): a round outline
+		// that became square kept the old picture in its corners (QEMU,
+		// 22 Nov 2026)
+		if (fCompositor != NULL && fCompositor->IsActive()
+			&& window->IsVisible()) {
+			BRect reach = border.Frame() | window->Frame();
+			reach.InsetBy(-R5_WINDOW_CORNER_MAX_RADIUS,
+				-R5_WINDOW_CORNER_MAX_RADIUS);
+			fCompositor->Damage(BRegion(reach));
+		}
+// SPDX-SnippetEnd
 	}
 
 	// register new listeners

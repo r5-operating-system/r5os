@@ -403,6 +403,8 @@ protected:
 			const window_outline* _SteppedRim(rgb_color* color);
 			void				_DrawProgramRim();
 			bool				_OutlineBlended();
+			void				_DecoratorShapeChanged();
+			void				_StackShapeChanged();
 // SPDX-SnippetEnd
 
 			void				_ObeySizeLimits();
