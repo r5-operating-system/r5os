@@ -1716,7 +1716,8 @@ r5_send_window_setting(int32 code, int32 token, const void* value,
 	opaque: with the menu view as glass, a menu window that moved to the
 	next title of a menu bar kept the old picture (QEMU, 23 Nov 2026). A
 	window that was styled goes back to Haiku's when the look no longer asks
-	for the style. \a windowRadius keeps what the window was given (-1 for
+	for the style. A menu with a view colour of the program's own keeps its
+	colour and its window. \a windowRadius keeps what the window was given (-1 for
 	a new window), so app_server is asked only when it changes. The window
 	is locked.
 */
@@ -1727,6 +1728,13 @@ r5_style_menu_window(BMenuWindow* window, BMenu* menu, bool* viewColorSet,
 	// an empty menu is Haiku's "<empty>" item in Haiku's frame
 	bool r5Style = menu->CountItems() > 0
 		&& BPrivate::MenuPrivate(menu).R5Style();
+	if (r5Style && !*viewColorSet
+		&& menu->ViewColor() != B_TRANSPARENT_COLOR) {
+		// the program gave the menu its own colour and window (Deskbar's
+		// glass panel in Default (R5)): it keeps them, the style only lays
+		// out and draws the items
+		return;
+	}
 	if (r5Style) {
 		rgb_color background = ui_color(B_MENU_BACKGROUND_COLOR);
 		if (menu->ViewColor() != background)
@@ -2862,7 +2870,7 @@ BMenu::_ComputeColumnLayout(int32 index, bool bestFit, bool moveItems,
 		}
 		fHasSubmenus = submenu;
 
-		frame.Set(0, 0, ceilf(width + 2 * r5Margin) - 1,
+		frame.Set(0, 0, ceilf(width + 2 * r5Margin),
 			top + r5Margin - 1);
 		if (overrideFrame != NULL)
 			frame.right = std::max(frame.right, overrideFrame->right);

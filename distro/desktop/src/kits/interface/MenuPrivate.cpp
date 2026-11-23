@@ -507,7 +507,8 @@ MenuPrivate::R5ShortcutLabel(char shortcut, uint32 modifiers, char* buffer,
 	const char* symbol = key;
 	uint8 character = static_cast<uint8>(shortcut);
 	if (character == B_DELETE)
-		symbol = "\xe2\x8c\xa6";
+		symbol = "Del";
+			// Haiku's symbol (U+2326) is not in every font
 	else if (character <= B_SPACE && kUTF8ControlMap[character] != NULL)
 		symbol = kUTF8ControlMap[character];
 	else

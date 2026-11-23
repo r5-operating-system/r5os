@@ -134,11 +134,18 @@ lay out and draw the items.
   `GetBackgroundInsets()` returns. Any control look that returns more than 1
   for `B_MENU_BACKGROUND` gets the style; Haiku's looks and the add-ons
   that ship with Haiku return 1.
+- A menu whose program sets its own view colour keeps that colour and its
+  own window style (Deskbar's glass panel in its Default (R5) style); the
+  R5 style then only lays out and draws the items. The Delete key is
+  written "Del" (Haiku's symbol, U+2326, is not in R5's font).
 - Limits: a menu that is open while the colours change keeps the old menu
   colour until it opens again; a program's own view colour on a menu is
   replaced while the style is on, and becomes `B_TRANSPARENT_COLOR` again
   (Haiku's) when the look no longer asks for it; a pop-up field that gains
   its mark column while open keeps its place until it opens again.
+  A window that is open while the theme changes can keep a grey patch behind
+  a menu bar title it opened (the bar's low colour from before the change;
+  QEMU, StyledEdit started before the switch); a new window has none.
 - The window: round corners (10 at 12 points) and the full shadow, through
   the existing window effects path (`AS_R5_SET_WINDOW_CORNER_RADIUS` and
   `AS_R5_SET_WINDOW_SHADOW`, the messages behind libr5ui's
