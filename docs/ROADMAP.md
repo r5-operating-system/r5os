@@ -65,12 +65,12 @@ The order is impact, not ticket number. `[x]` is done and tested where it is mea
 9. **Download, installer next to Windows, and Software update** (owner, 23 Nov 2026). Design: `docs/design/INSTALL-UPDATE.md`. Brief: `docs/briefs/INSTALL-UPDATE.md`. First for testers and enthusiasts. One PR per step.
    - [x] The image has no Haiku system repository, so Software Update cannot replace R5's system with plain Haiku (#4570). Built and checked in the image; not booted.
    - [ ] Step 0: report (Windows from the boot loader, R5 versions above Haiku's, what SoftwareUpdater offers, NTFS hibernation and BitLocker checks).
-   - [ ] Step 1: R5's own package repository on Cloudflare R2 under an R5 domain, the last 3 builds. Waits for the owner's domain and account.
+   - [ ] Step 1: R5's own package repository on GitHub Pages (deployed by GitHub Actions), the last 3 builds; an R5 domain on top later.
    - [ ] Step 2: the Software update page in Settings (System), per change, Installed list, "Go back to before <date>".
    - [ ] Step 3: the installer: erase the disk (from air/OS), the read-only live stick, language, keyboard and Wi-Fi carried over.
    - [ ] Step 4: the installer next to Windows: the checks, `ntfsresize` (GPL-2.0-or-later, a separate program), 64 GB suggested, the backup tick.
-   - [ ] Step 5: the boot menu with R5, Windows, the previous state and Safe mode.
-   - [ ] Step 6: the ISO download, with a checksum on the GitHub Release.
+   - [ ] Step 5: the boot menu with "R5 Operating System", "Windows", the previous state and Safe mode.
+   - [ ] Step 6: the ISO download, compressed on a GitHub Release with its checksum.
 
 Zeroconf, AirPrint, AirPlay 1 and the network tray exist. They are not "done" until LAN tests exist.
 

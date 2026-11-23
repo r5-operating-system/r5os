@@ -8,17 +8,17 @@ Owner decisions, 23 Nov 2026. On the roadmap since 23 Nov 2026 (`docs/ROADMAP.md
 |---|---|
 | First audience | Testers and enthusiasts |
 | Download | The USB-stick ISO only (`r5-os-anyboot.iso`) |
-| Where | Cloudflare R2, under R5's own domain name. GitHub Releases gets the version, the checksums and a link |
+| Where | GitHub (owner, 23 Nov 2026, replacing Cloudflare R2): the package repository on GitHub Pages, deployed by a GitHub Actions workflow (not committed to git, so the repository does not grow by about 126 MB per build); the ISO compressed on a GitHub Release with its checksum. Later an R5 domain on top of Pages, so the `baseurl` in R5 can move to another host without breaking installed systems |
 | Installer | Next to Windows: R5 shrinks the Windows partition itself (as Ubuntu does). Erase the disk stays as the second choice |
 | BitLocker on | R5 does not touch the disk. It explains how to shrink Windows in Disk Management, then you start the installer again. Windows stays encrypted |
-| Start | R5's own boot menu: R5, Windows, "R5, previous state" |
+| Start | R5's own boot menu with the entries "R5 Operating System", "Windows", "R5 Operating System, previous state…", "Safe mode…". The product name is written in full (owner, 23 Nov 2026) |
 | Updates | R5's own package server, with only R5's own packages (system, drivers, R5 apps, Mesa/RADV). Only changed packages are downloaded, never the ISO |
 | Other software | Stays on HaikuPorts through HaikuDepot. The update page does **not** update HaikuPorts software |
 | Update page | Settings, under System: "Software update". Only an administrator installs (gray until the lock is open); every account sees the "updates ready" notice |
 | Download in the background | On by default, and can be turned off. Install and restart only after a click |
 | Shown per change | The page lists what changed in user language (one line per change, an icon and a size), not per build. The build number stays in small text. The lines come from What's new (`distro/WHATSNEW`), which is already user language |
 | Choosing changes | No: every change in an update is installed together, because that is the set R5 tested |
-| Installed list | A second view, "Installed", with installed changes by date and a button "Go back to before <date>…" (R5 starts in that earlier state; your files stay). The boot menu keeps "R5, previous state" too |
+| Installed list | A second view, "Installed", with installed changes by date and a button "Go back to before <date>…" (R5 starts in that earlier state; your files stay). The boot menu keeps "R5 Operating System, previous state…" too |
 | Security fixes | Separate and at once, marked red, without waiting for the next update |
 | Online | The last 3 builds; an installed system keeps its own previous state for the boot menu |
 
@@ -34,12 +34,14 @@ The final mockups (Software update, both views, and the six installer screens) u
 6. **Done:** "take out the USB stick", Restart.
 
 - **Settings carried over from the USB session:** language, keyboard and Wi-Fi, including the password of the network you are joined to. Note: R5's key store is still plain text (`docs/VPN-KIT.md`), so the copied password is stored the same way as any Wi-Fi password today.
-- **Boot menu:** a dark text menu in R5 colours: R5 Operating System, Windows, "R5, previous state…", "Safe mode…", starts R5 after 5 seconds, arrow keys. It works without a graphics driver.
+- **Boot menu:** a dark text menu in R5 colours with "R5 Operating System", "Windows", "R5 Operating System, previous state…", "Safe mode…", starts R5 Operating System after 5 seconds, arrow keys. It works without a graphics driver.
 
 ## Facts behind the choices
 
 - ISO size of the current build: 2,156,724,224 bytes, which is over GitHub's 2 GiB limit per file (2,147,483,648 bytes) ([GitHub docs](https://docs.github.com/en/repositories/working-with-files/managing-large-files/about-large-files-on-github)).
-- R2: 10 GB per month free, then $0.015 per GB per month, and downloads are free ([Cloudflare R2 pricing](https://developers.cloudflare.com/r2/pricing)).
+- GitHub Pages: a published site is at most 1 GB, a soft limit of 100 GB of traffic per month, rate limits may apply; deploys through Actions ([Pages limits](https://docs.github.com/en/pages/getting-started-with-github-pages/github-pages-limits)). A file in git is blocked above 100 MiB ([large files](https://docs.github.com/en/repositories/working-with-files/managing-large-files/about-large-files-on-github)).
+- Why not GitHub Releases for the packages: Haiku fetches packages from `<baseurl>/packages/<file>` (`haiku/src/kits/package/RepositoryConfig.cpp:265`), and a Release has no subfolders.
+- Earlier choice, replaced: Cloudflare R2 (10 GB per month free, then $0.015 per GB per month, downloads free; [R2 pricing](https://developers.cloudflare.com/r2/pricing)).
 - Ubuntu shrinks Windows itself but cannot do that with BitLocker on ([Ubuntu docs](https://documentation.ubuntu.com/desktop/en/latest/reference/bitlocker-during-ubuntu-installation)).
 - Haiku's boot loader already reads older package states (`haiku/src/system/boot/loader/package_support.cpp`).
 - Haiku's Installer has an "Install EFI loader" menu, but partitioning happens separately in DriveSetup (`haiku/src/apps/installer/InstallerWindow.cpp`).
@@ -48,7 +50,7 @@ The final mockups (Software update, both views, and the six installer screens) u
 ## Open
 
 1. A domain name for R5 (not found in the repo).
-2. A Cloudflare account: the owner creates it.
+2. No Cloudflare account needed any more (GitHub hosting, 23 Nov 2026). A domain stays advised, for the custom domain on Pages.
 3. A licence check of `ntfsresize` (ntfs-3g, GPL) before it is used (AGENTS.md, Licensing).
 4. Done: 3 builds (packages and ISOs) are about 6.9 GB, under the free 10 GB.
 5. Done: BitLocker is off on the 5625U (owner, 23 Nov 2026).
@@ -80,6 +82,8 @@ From the shared WSL build tree and `distro/packages/x86_64` on `origin/main`: `h
 
 Sum of the latest of each package above: about 126 MB per build, of which `llvm21_runtime` (56.4 MB) rarely changes. Three builds of packages: at most about 380 MB. Three ISOs: about 6.5 GB (2.16 GB each). Together about 6.9 GB, under R2's free 10 GB per month. A typical update downloads mostly `haiku.hpkg` (about 47 MB), because almost every R5 change lands in that package. Shrinking that further would mean splitting the system package, which is a later question.
 
+On GitHub: three builds of packages (about 380 MB) fit in the 1 GB Pages site; the largest package (`llvm21_runtime`, 56.4 MB) is under 100 MiB; 100 GB per month is roughly 2,000 updates of 47 MB. The ISO (2,156,724,224 bytes) is over the 2 GiB Release limit, so it ships compressed; its compressed size is not measured yet.
+
 ## Licence check: shrinking Windows (23 Nov 2026)
 
 | Question | Finding | Source |
@@ -104,5 +108,5 @@ Verdict: allowed, as a separate GPL-2.0-or-later program with the source and not
 2. BitLocker on: shrink in Windows, then start again.
 3. Share the disk with a slider (Windows / R5).
 4. Confirm, with "back up your files first".
-5. Boot menu: R5, Windows, R5 previous state, starts R5 after 5 seconds.
+5. Boot menu: "R5 Operating System", "Windows", "R5 Operating System, previous state…", "Safe mode…", starts R5 Operating System after 5 seconds.
 6. Update notice, and the Software update page: build, changed packages with their size, "Install and restart", options, then the lock, Revert and Defaults. Update after these choices: the HaikuPorts checkbox is gone.
