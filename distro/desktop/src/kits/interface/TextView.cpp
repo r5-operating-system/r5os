@@ -912,14 +912,20 @@ BTextView::MessageReceived(BMessage* message)
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 		case B_COLORS_UPDATED:
-			// Plain text keeps one run. Styled runs stay put: a run does not
-			// record which UI color it came from. Haiku #20372 plain text color
+		{
+			// Update view/high/low colors first, then propagate the new
+			// plain-text color directly from the message to the run array
+			// (BTextView does not bind HighUIColor to B_DOCUMENT_TEXT_COLOR).
+			// Styled runs stay put. Haiku #20372
+			BView::MessageReceived(message);
+			rgb_color textColor;
 			if (!fStylable
-				&& message->HasColor(ui_color_name(B_DOCUMENT_TEXT_COLOR))) {
-				rgb_color textColor = HighColor();
+				&& message->FindColor(ui_color_name(B_DOCUMENT_TEXT_COLOR),
+					&textColor) == B_OK) {
 				SetFontAndColor(0, fText->Length(), NULL, 0, &textColor);
 			}
 			break;
+		}
 
 // SPDX-SnippetEnd
 		case B_INPUT_METHOD_EVENT:
@@ -4680,6 +4686,11 @@ BTextView::_DrawLines(int32 startLine, int32 endLine, int32 startOffset,
 	BRect eraseRect = clipRect;
 	int32 startEraseLine = startLine;
 	STELine* line = (*fLines)[startLine];
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	const int32 drawnFromOffset = startOffset;
+// SPDX-SnippetEnd
 
 	if (erase && startOffset != -1 && fAlignment == B_ALIGN_LEFT) {
 		// erase only to the right of startOffset
@@ -4718,25 +4729,30 @@ BTextView::_DrawLines(int32 startLine, int32 endLine, int32 startOffset,
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 			if (fSelectable && r5_dark_selection(this, fOffscreen)) {
-				// only over the lines drawn (and erased) now, so the alpha
-				// never lands twice on a line (external review of the fixes)
-				BRegion selection;
-				GetTextRegion(fSelStart, fSelEnd, &selection);
-				BRect drawn(clipRect);
-				drawn.top = std::max(drawn.top,
-					(*fLines)[startLine]->origin + fTextRect.top);
-				drawn.bottom = std::min(drawn.bottom,
-					(*fLines)[endLine + 1]->origin + fTextRect.top - 1);
-				BRegion lines(drawn);
-				selection.IntersectWith(&lines);
-				rgb_color accent = ui_color(B_CONTROL_HIGHLIGHT_COLOR);
-				accent.alpha = 115;
-				PushState();
-				SetDrawingMode(B_OP_ALPHA);
-				SetBlendingMode(B_CONSTANT_ALPHA, B_ALPHA_OVERLAY);
-				SetHighColor(accent);
-				FillRegion(&selection);
-				PopState();
+				// only over the lines and characters drawn (and erased) now,
+				// so the alpha never lands twice on a line or prefix
+				int32 selStart = (drawnFromOffset >= 0
+					&& drawnFromOffset > fSelStart)
+					? drawnFromOffset : fSelStart;
+				if (selStart < fSelEnd) {
+					BRegion selection;
+					GetTextRegion(selStart, fSelEnd, &selection);
+					BRect drawn(clipRect);
+					drawn.top = std::max(drawn.top,
+						(*fLines)[startLine]->origin + fTextRect.top);
+					drawn.bottom = std::min(drawn.bottom,
+						(*fLines)[endLine + 1]->origin + fTextRect.top - 1);
+					BRegion lines(drawn);
+					selection.IntersectWith(&lines);
+					rgb_color accent = ui_color(B_CONTROL_HIGHLIGHT_COLOR);
+					accent.alpha = 115;
+					PushState();
+					SetDrawingMode(B_OP_ALPHA);
+					SetBlendingMode(B_CONSTANT_ALPHA, B_ALPHA_OVERLAY);
+					SetHighColor(accent);
+					FillRegion(&selection);
+					PopState();
+				}
 			} else
 // SPDX-SnippetEnd
 			if (fSelectable)

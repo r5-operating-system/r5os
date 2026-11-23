@@ -176,8 +176,7 @@ static void
 fill_round(BView* view, BRect rect, float radius, rgb_color color)
 {
 	view->SetHighColor(color);
-	view->FillRoundRect(BRect(rect.left, rect.top, rect.right + 1,
-		rect.bottom + 1), radius, radius);
+	view->FillRoundRect(rect, radius, radius);
 }
 
 
@@ -1285,7 +1284,8 @@ SaveThemeWindow::SaveThemeWindow(BWindow* parent, BHandler* target,
 	fSave = new BButton("Save", new BMessage(kMsgSaveConfirm));
 
 	float spacing = px(14);
-	BLayoutBuilder::Group<>(this, B_VERTICAL, spacing)
+	BGroupView* root = new BGroupView("save-root", B_VERTICAL, spacing);
+	BLayoutBuilder::Group<>(root)
 		.SetInsets(px(22), px(20), px(22), px(20))
 		.AddGroup(B_VERTICAL, px(8))
 			.Add(nameLabel)
@@ -1307,14 +1307,15 @@ SaveThemeWindow::SaveThemeWindow(BWindow* parent, BHandler* target,
 			.Add(cancel)
 			.Add(fSave)
 		.End();
+	BLayoutBuilder::Group<>(this, B_VERTICAL, 0)
+		.Add(root);
 
 	SetDefaultButton(fSave);
 	fSave->SetEnabled(suggestion.Length() > 0);
 	// the white page of mockup A3 (the document colour; external review
-	// 1.13): every view of the dialog, as they adopted the panel colour
-	// when they were attached
-	set_page_colors(ChildAt(0));
-	r5_settings_apply_plain(ChildAt(0));
+	// 1.13): the root group and every child view on the document colour
+	set_page_colors(root);
+	r5_settings_apply_plain(root);
 	nameLabel->SetFont(r5_settings_bold_font());
 	keepLabel->SetFont(r5_settings_bold_font());
 	note->SetFont(&small);
@@ -1621,8 +1622,8 @@ ThemePage::ThemePage(ThemeModule* module)
 
 	fPartsGrid = new BView("parts grid", 0);
 	fPartsGrid->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
-	BLayoutBuilder::Grid<>(fPartsGrid, px(12), px(10))
-		.SetInsets(px(14), px(6), px(14), px(14))
+	BLayoutBuilder::Grid<>(fPartsGrid, px(12), px(7))
+		.SetInsets(px(14), px(4), px(14), px(10))
 		.Add(row_label("Windows"), 0, 0)
 		.AddGroup(B_HORIZONTAL, px(8), 1, 0)
 			.Add(fWindows)
@@ -1672,10 +1673,10 @@ ThemePage::ThemePage(ThemeModule* module)
 	fPartsBox->SetLabel(fPartsLabel);
 	fPartsBox->AddChild(fPartsGrid);
 
-	// room under the Parts box for its bottom line and corners (external
-	// review 1.13)
-	BLayoutBuilder::Group<>(this, B_VERTICAL, px(14))
-		.SetInsets(0, 0, 0, px(14))
+	// room under the Parts box for its bottom line and corners, fitting the
+	// default 1030x610 Settings window without clipping
+	BLayoutBuilder::Group<>(this, B_VERTICAL, px(10))
+		.SetInsets(0, 0, 0, px(6))
 		.AddGroup(B_HORIZONTAL, px(10))
 			.Add(title)
 			.AddGlue()

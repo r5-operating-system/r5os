@@ -225,6 +225,17 @@ static pthread_mutex_t sR5ControlLookLock = PTHREAD_MUTEX_INITIALIZER;
 static int64 sR5ControlLookSerial = 0;
 
 
+static void
+r5_invalidate_tree(BView* view)
+{
+	if (view == NULL)
+		return;
+	view->Invalidate();
+	for (int32 i = 0; i < view->CountChildren(); i++)
+		r5_invalidate_tree(view->ChildAt(i));
+}
+
+
 static bool
 r5_reload_control_look(const BMessage* message)
 {
@@ -1466,7 +1477,7 @@ FrameMoved(origin);
 			if (r5_reload_control_look(message)) {
 				// another look may have other sizes (Be, Flat)
 				InvalidateLayout(true);
-				fTopView->Invalidate();
+				r5_invalidate_tree(fTopView);
 			}
 // SPDX-SnippetEnd
 			fTopView->_ColorsUpdated(message);
