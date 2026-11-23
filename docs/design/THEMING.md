@@ -121,7 +121,14 @@ lay out and draw the items.
   mockup's path. A menu with a marked item, or a radio menu, keeps a 12 px
   column for the check mark or the dot after 7 (M6), and the label moves 16
   more; other menus start the label at 11 (M4). A submenu opens beside its
-  menu with a gap of 3, its first row level with the item.
+  menu with 4 between the two lines (M1, M4), its first row level with the
+  item; only a submenu of a menu that has the style itself.
+- Haiku's inset contract holds for the hooks: in the style,
+  `DrawMenuBackground()` gives the rect back by the margin and
+  `DrawMenuItemBackground()` by the item padding, the values
+  `GetBackgroundInsets()` returns. Any control look that returns more than 1
+  for `B_MENU_BACKGROUND` gets the style; Haiku's looks and the add-ons
+  that ship with Haiku return 1.
 - The window: round corners (10 at 12 points) and the full shadow, through
   the existing window effects path (`AS_R5_SET_WINDOW_CORNER_RADIUS` and
   `AS_R5_SET_WINDOW_SHADOW`, the messages behind libr5ui's
@@ -328,7 +335,15 @@ in QEMU without the owner.
    parts board (after 7); the Tracker "Open with" board puts it after 11.
    The pop-up field keeps radius 7 in Safe mode (the parts board shows 3), as
    every other field does. Headings inside a menu (the parts board's "Wrap")
-   are not a Haiku menu item and are not drawn.
+   are not a Haiku menu item and are not drawn. The menu bar is the menu
+   colour (`#f7f8fa`, as Haiku draws a bar in `B_MENU_BACKGROUND_COLOR`);
+   the mockup's bar is the panel colour (`#eef1f5`), and its open title is
+   600 weight (here regular, for the same reason as the rows). The colours
+   are mixed from `ui_color` and land near the boards' values, not on
+   them (a separator about `#d7d9dd` for `#d3d8e0`, the shortcut about
+   `#6f6f70` for `#6b7380`). The measures follow the plain font size, as
+   every R5 Modern measure does; a menu font of another size keeps rows of
+   26 at the plain size.
 
 ## The Theme Kit (owner's addition, 23 Nov 2026)
 

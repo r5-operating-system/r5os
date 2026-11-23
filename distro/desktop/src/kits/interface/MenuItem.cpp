@@ -330,7 +330,9 @@ BMenuItem::SetMarked(bool mark)
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 	// The R5 menu style keeps room for the mark only while a menu has one.
-	float markColumn = fSuper != NULL ? MenuPrivate(fSuper).R5MarkColumn() : 0;
+	bool r5Style = fSuper != NULL && fMark != mark
+		&& MenuPrivate(fSuper).R5Style();
+	float markColumn = r5Style ? MenuPrivate(fSuper).R5MarkColumn() : 0;
 // SPDX-SnippetEnd
 	fMark = mark;
 
@@ -341,9 +343,11 @@ BMenuItem::SetMarked(bool mark)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-	if (fSuper != NULL && MenuPrivate(fSuper).R5Style()
-		&& MenuPrivate(fSuper).R5MarkColumn() != markColumn) {
+	if (r5Style && MenuPrivate(fSuper).R5MarkColumn() != markColumn
+		&& fSuper->LockLooper()) {
 		fSuper->InvalidateLayout();
+		fSuper->Invalidate();
+		fSuper->UnlockLooper();
 	}
 // SPDX-SnippetEnd
 }
@@ -518,6 +522,31 @@ BMenuItem::DrawContent()
 	float maxContentWidth = fSuper->MaxContentWidth();
 	float frameWidth = maxContentWidth > 0 ? maxContentWidth
 		: fSuper->Frame().Width() - padding.left - padding.right;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// The R5 menu style: the label ends where the shortcut and the chevron
+	// begin (the room the layout gave them).
+	BRect r5Padding;
+	if (menuPrivate.R5Style(&r5Padding)) {
+		const float scale = MenuPrivate::R5Scale();
+		float end = fBounds.right - r5Padding.right;
+		if (fSubmenu != NULL)
+			end -= roundf(10 * scale) + roundf(6 * scale);
+		if (fShortcutChar != 0) {
+			char label[64];
+			MenuPrivate::R5ShortcutLabel(fShortcutChar, fModifiers, label,
+				sizeof(label));
+			BFont font;
+			fSuper->GetFont(&font);
+			font.SetSize(menuPrivate.R5ShortcutFontSize());
+			end -= roundf(16 * scale) + ceilf(font.StringWidth(label));
+		}
+		float room = end - ContentLocation().x;
+		frameWidth = maxContentWidth > 0 ? std::min(maxContentWidth, room)
+			: room;
+	}
+// SPDX-SnippetEnd
 
 	if (roundf(frameWidth) >= roundf(labelWidth))
 		fSuper->DrawString(fLabel);

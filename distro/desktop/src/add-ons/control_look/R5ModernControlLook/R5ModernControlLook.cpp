@@ -41,6 +41,8 @@
 #include <View.h>
 
 #include <AppServerLink.h>
+#include <BMCPrivate.h>
+#include <MenuPrivate.h>
 #include <ServerProtocol.h>
 
 
@@ -140,16 +142,16 @@ accent_line_color()
 // #pragma mark - menus
 
 
-/*!	A menu in the R5 menu style: R5's BMenu gives its view the menu colour,
-	so app_server erases it and the look does not paint over it. Haiku's
-	menus keep B_TRANSPARENT_COLOR.
+/*!	A menu in the R5 menu style (R5's BMenu: a column menu in a menu
+	window while this look asks for the style). BMenu gives its view the
+	menu colour, so app_server erases it and the look does not paint over
+	it.
 */
 static bool
 r5_menu(BView* view)
 {
-	return view != NULL && dynamic_cast<BMenu*>(view) != NULL
-		&& dynamic_cast<BMenuBar*>(view) == NULL
-		&& view->ViewColor() != B_TRANSPARENT_COLOR;
+	BMenu* menu = dynamic_cast<BMenu*>(view);
+	return menu != NULL && BPrivate::MenuPrivate(menu).R5Style();
 }
 
 
@@ -161,20 +163,22 @@ r5_menu(BView* view)
 static bool
 effects_active()
 {
-	static bigtime_t sAsked = -1;
-	static bool sActive = false;
+	// shared by every window thread: the time and the answer are atomic
+	static int64 sAsked = -1;
+	static int32 sActive = 0;
 	bigtime_t now = system_time();
-	if (sAsked < 0 || now - sAsked > 1000000) {
+	int64 asked = atomic_get64(&sAsked);
+	if (asked < 0 || now - asked > 1000000) {
 		BPrivate::AppServerLink link;
 		link.StartMessage(AS_R5_WINDOW_EFFECTS_ACTIVE);
 		int32 code;
 		bool active = false;
 		if (link.FlushWithReply(code) == B_OK && code == B_OK)
 			link.Read<bool>(&active);
-		sActive = active;
-		sAsked = now;
+		atomic_set(&sActive, active ? 1 : 0);
+		atomic_set64(&sAsked, now);
 	}
-	return sActive;
+	return atomic_get(&sActive) != 0;
 }
 
 
@@ -761,11 +765,15 @@ R5ModernControlLook::DrawMenuBackground(BView* view, BRect& rect,
 		return;
 
 	// the R5 menu style: app_server erased the view in the menu colour,
-	// and the window's line is the decorator's
-	if (!r5_menu(view)) {
-		view->SetHighColor(base);
-		view->FillRect(rect);
+	// and the window's line is the decorator's; the rect comes back by the
+	// margin GetBackgroundInsets() gives
+	if (r5_menu(view)) {
+		float margin = roundf(5 * scale());
+		inset_sides(rect, margin, margin, margin, margin, borders);
+		return;
 	}
+	view->SetHighColor(base);
+	view->FillRect(rect);
 	// Haiku's bevel takes one pixel on each side asked for
 	inset_sides(rect, 1, 1, 1, 1, borders);
 }
@@ -788,6 +796,15 @@ R5ModernControlLook::DrawMenuItemBackground(BView* view, BRect& rect,
 	view->PushState();
 	menu_item_background(view, rect, base, flags);
 	view->PopState();
+
+	// the R5 menu style: the rect comes back by the item padding
+	// GetBackgroundInsets() gives (the content of the row)
+	if (r5_menu(view)) {
+		float left, top, right, bottom;
+		GetBackgroundInsets(B_MENU_ITEM_BACKGROUND, flags, left, top, right,
+			bottom);
+		inset_sides(rect, left, top, right, bottom, borders);
+	}
 }
 
 
@@ -797,12 +814,15 @@ menu_item_background(BView* view, const BRect& rect, const rgb_color& base,
 {
 	const bool round = effects_active();
 
+	if (dynamic_cast<_BMCMenuBar_*>(view) != NULL) {
+		// the bar inside a pop-up field: the field draws its own face
+		return;
+	}
 	if (dynamic_cast<BMenuBar*>(view) != NULL) {
-		// a title of a menu bar: a quiet pill (mockup M4, M6); the text
-		// keeps its colour (R5's BMenuItem)
+		// a title of a menu bar: a quiet pill (mockup M4, M6) on the bar,
+		// which BMenuBar::Draw() painted; the text keeps its colour (R5's
+		// BMenuItem)
 		rgb_color bar = ui_color(B_MENU_BACKGROUND_COLOR);
-		view->SetHighColor(bar);
-		view->FillRect(rect);
 		rgb_color pill = bar.IsLight() ? blend(bar, kBlack, 0.07f)
 			: blend(bar, kWhite, 0.10f);
 		BRect face(rect);

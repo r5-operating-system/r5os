@@ -110,11 +110,28 @@ public:
 	// allows us to draw submenus in the same direction as their parents.
 	bool				frameShiftedLeft;
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// The corner radius the R5 menu style last gave this menu's cached
+	// menu window (-1: none yet), so a menu that opens again in it does not
+	// wait for app_server.
+	float				r5WindowRadius;
+	// True while this menu's view has the menu colour of the R5 menu style.
+	bool				r5ViewColor;
+// SPDX-SnippetEnd
+
 	ExtraMenuData()
 	{
 		trackingHook = NULL;
 		trackingState = NULL;
 		frameShiftedLeft = false;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		r5WindowRadius = -1;
+		r5ViewColor = false;
+// SPDX-SnippetEnd
 	}
 };
 
@@ -1699,22 +1716,35 @@ r5_send_window_setting(int32 code, int32 token, const void* value,
 	opaque: with the menu view as glass, a menu window that moved to the
 	next title of a menu bar kept the old picture (QEMU, 23 Nov 2026). A
 	window that was styled goes back to Haiku's when the look no longer asks
-	for the style. The window is locked.
+	for the style. \a windowRadius keeps what the window was given (-1 for
+	a new window), so app_server is asked only when it changes. The window
+	is locked.
 */
 static void
-r5_style_menu_window(BMenuWindow* window, BMenu* menu)
+r5_style_menu_window(BMenuWindow* window, BMenu* menu, bool* viewColorSet,
+	float* windowRadius)
 {
 	bool r5Style = BPrivate::MenuPrivate(menu).R5Style();
-	bool styled = menu->ViewColor() != B_TRANSPARENT_COLOR;
-	if (!r5Style && !styled)
-		return;
+	if (r5Style) {
+		rgb_color background = ui_color(B_MENU_BACKGROUND_COLOR);
+		if (menu->ViewColor() != background)
+			menu->SetViewColor(background);
+		*viewColorSet = true;
+	} else if (*viewColorSet) {
+		// Haiku's menus: B_TRANSPARENT_COLOR, as BMenu's constructor
+		menu->SetViewColor(B_TRANSPARENT_COLOR);
+		*viewColorSet = false;
+	}
 
-	rgb_color background = ui_color(B_MENU_BACKGROUND_COLOR);
-	menu->SetViewColor(r5Style ? background : B_TRANSPARENT_COLOR);
-
-	int32 windowToken = _get_object_token_(window);
 	float radius = r5Style
 		? roundf(10 * BPrivate::MenuPrivate::R5Scale()) : 0.0f;
+	if (*windowRadius == radius || (*windowRadius < 0 && !r5Style)) {
+		*windowRadius = radius;
+		return;
+	}
+	*windowRadius = radius;
+
+	int32 windowToken = _get_object_token_(window);
 	r5_send_window_setting(AS_R5_SET_WINDOW_CORNER_RADIUS, windowToken,
 		&radius, sizeof(radius));
 	int32 shadow = r5Style ? 1 : 0;
@@ -1773,6 +1803,16 @@ BMenu::_Show(bool selectFirstItem, bool keyDown)
 			ItemAt(0)->GetContentSize(&width, &height);
 
 			window->SetSmallStep(ceilf(height));
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			// the R5 menu style: one row (laid out again when it is shown)
+			BRect r5Padding;
+			if (BPrivate::MenuPrivate(this).R5Style(&r5Padding)) {
+				window->SetSmallStep(ceilf(height) + r5Padding.top
+					+ r5Padding.bottom);
+			}
+// SPDX-SnippetEnd
 		}
 
 		// Menu didn't have the time to add its items: aborting...
@@ -1790,7 +1830,11 @@ BMenu::_Show(bool selectFirstItem, bool keyDown)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-		r5_style_menu_window(window, this);
+		// a window of our own is new; a cached one is the supermenu's
+		float newWindowRadius = -1;
+		r5_style_menu_window(window, this, &fExtraMenuData->r5ViewColor,
+			ourWindow ? &newWindowRadius
+				: &fSuper->fExtraMenuData->r5WindowRadius);
 // SPDX-SnippetEnd
 		_UpdateWindowViewSize(true);
 		window->Show();
@@ -2793,6 +2837,8 @@ BMenu::_ComputeColumnLayout(int32 index, bool bestFit, bool moveItems,
 			if (dynamic_cast<BSeparatorItem*>(item) != NULL)
 				rowHeight = separator;
 
+			if (fMaxContentWidth > 0)
+				itemWidth = std::min(itemWidth, fMaxContentWidth);
 			float rowWidth = itemWidth + r5Padding.left + markColumn
 				+ r5Padding.right;
 			if (item->fShortcutChar != 0) {
@@ -2818,8 +2864,6 @@ BMenu::_ComputeColumnLayout(int32 index, bool bestFit, bool moveItems,
 			top + r5Margin - 1);
 		if (overrideFrame != NULL)
 			frame.right = std::max(frame.right, overrideFrame->right);
-		if (fMaxContentWidth > 0)
-			frame.right = std::min(frame.right, fMaxContentWidth);
 		frame.right = ceilf(frame.right);
 
 		if (moveItems) {
@@ -3098,8 +3142,9 @@ BMenu::_CalcFrame(BPoint where, bool* scrollOn)
 	float r5Margin = 0;
 	bool r5Style = BPrivate::MenuPrivate(this).R5Style(&r5Padding, &r5Margin);
 	if (inMenuField && r5Style) {
-		frame.OffsetBy(std::min(0.0f,
-			fPad.left - 8.0f - r5Margin - r5Padding.left), 0.0f);
+		frame.OffsetBy(std::min(0.0f, fPad.left - 8.0f - r5Margin
+			- r5Padding.left - BPrivate::MenuPrivate(this).R5MarkColumn()),
+			0.0f);
 	} else
 // SPDX-SnippetEnd
 	if (inMenuField)
@@ -3122,16 +3167,17 @@ BMenu::_CalcFrame(BPoint where, bool* scrollOn)
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 	} else if (superMenu->Layout() == B_ITEMS_IN_COLUMN && r5Style
-		&& superMenu->Window() != NULL) {
-		// The R5 menu style: beside the menu window with a small gap, the
-		// first row level with the item that opened it.
-		const float gap = roundf(3 * BPrivate::MenuPrivate::R5Scale());
+		&& BPrivate::MenuPrivate(superMenu).R5Style()) {
+		// The R5 menu style: beside the menu window, 4 between the two
+		// windows' lines (mockup M1, M4; each 1 px line lies outside its
+		// window's frame), the first row level with the item that opened it.
+		const float gap = roundf(4 * BPrivate::MenuPrivate::R5Scale());
 		BRect superFrame = superMenu->Window()->Frame();
 		BRect itemFrame = superMenu->ConvertToScreen(superItem->Frame());
-		frame.OffsetTo(superFrame.right + 1 + gap, itemFrame.top - r5Margin);
+		frame.OffsetTo(superFrame.right + 3 + gap, itemFrame.top - r5Margin);
 		if (frame.right > screenFrame.right
 				|| superMenu->fExtraMenuData->frameShiftedLeft) {
-			frame.OffsetTo(superFrame.left - gap - 1 - frame.Width(),
+			frame.OffsetTo(superFrame.left - 3 - gap - frame.Width(),
 				frame.top);
 			fExtraMenuData->frameShiftedLeft = true;
 		}

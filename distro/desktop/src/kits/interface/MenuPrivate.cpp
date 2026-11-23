@@ -534,7 +534,7 @@ MenuPrivate::R5Blend(const rgb_color& from, const rgb_color& to,
 }
 
 
-//! A separator: #d3d8e0 on #f7f8fa (light), #3a404c on #262b34 (dark).
+//! A separator: about #d3d8e0 on #f7f8fa (light), #3a404c on #262b34 (dark).
 /* static */
 rgb_color
 MenuPrivate::R5SeparatorColor(const rgb_color& background)

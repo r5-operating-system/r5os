@@ -316,8 +316,8 @@ R5ModernDecorator::UpdateColors(DesktopSettings& settings)
 
 
 /*!	A menu (a bordered window that avoids the focus: menus and tool tips)
-	has its line in the menu's edge colour of the menu mockup, #b8c0cc on
-	#f7f8fa, #3a404c on #262b34 (docs/design/THEMING.md, "Menus"); the
+	has its line in about the menu's edge colour of the menu mockup, #b8c0cc
+	on #f7f8fa, #3a404c on #262b34 (docs/design/THEMING.md, "Menus"); the
 	compositor carries it round the round corners R5's BMenu asks for.
 */
 void
