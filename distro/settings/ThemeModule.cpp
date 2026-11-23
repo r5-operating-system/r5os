@@ -53,6 +53,7 @@
 #include <Themes.h>
 #include <WindowEffects.h>
 
+#include "ColorsView.h"
 #include "SettingsFont.h"
 #include "SettingsManager.h"
 #include "SettingsModule.h"
@@ -70,6 +71,7 @@ static const uint32 kMsgDeleteTheme = 'thDl';
 static const uint32 kMsgMode = 'thMd';
 static const uint32 kMsgAccent = 'thAc';
 static const uint32 kMsgParts = 'thPt';
+static const uint32 kMsgCustomColors = 'thCc';
 static const uint32 kMsgWindows = 'thWn';
 static const uint32 kMsgWindowsAbout = 'thWa';
 static const uint32 kMsgControls = 'thCt';
@@ -781,8 +783,8 @@ ThemeCards::_DrawThumb(const theme_info& theme, BRect thumb)
 	bool classic = is_classic(theme);
 	bool darkTheme = !classic && theme.mode == B_THEME_DARK;
 	bool modern = strcmp(theme.decorator, "R5ModernDecorator") == 0;
-	bool modernControls = strcmp(theme.control_look,
-		"R5ModernControlLook") == 0;
+	bool modernControls = strcmp(theme.control_look, "R5ModernControlLook") == 0
+		|| strcmp(theme.control_look, "R5ControlLook") == 0;
 	float r = modern ? px(6) : 0;
 
 	// the mockup's colours for each theme
@@ -836,6 +838,15 @@ ThemeCards::_DrawThumb(const theme_info& theme, BRect thumb)
 }
 
 
+static BRect
+delete_badge(BRect frame)
+{
+	float side = px(18);
+	return BRect(frame.right - px(4) - side + 1, frame.top + px(4),
+		frame.right - px(4), frame.top + px(4) + side - 1);
+}
+
+
 void
 ThemeCards::_DrawCard(int32 index, BRect frame)
 {
@@ -855,6 +866,24 @@ ThemeCards::_DrawCard(int32 index, BRect frame)
 	thumb.InsetBy(px(6), px(6));
 	thumb.bottom = thumb.top + px(78) - 1;
 	_DrawThumb(theme, thumb);
+
+	// Red X badge in the top-right corner of user-saved themes for direct delete
+	if (!is_built_in_theme(theme.name)) {
+		BRect badge = delete_badge(frame);
+		PushState();
+		SetDrawingMode(B_OP_ALPHA);
+		SetHighColor(make_color(220, 38, 38, 255));
+		FillEllipse(badge);
+		SetHighColor(kWhite);
+		SetPenSize(std::max(1.5f, px(1.8f)));
+		SetLineMode(B_ROUND_CAP, B_ROUND_JOIN);
+		BPoint c((badge.left + badge.right + 1) / 2,
+			(badge.top + badge.bottom + 1) / 2);
+		float arm = px(3.5f);
+		StrokeLine(BPoint(c.x - arm, c.y - arm), BPoint(c.x + arm, c.y + arm));
+		StrokeLine(BPoint(c.x + arm, c.y - arm), BPoint(c.x - arm, c.y + arm));
+		PopState();
+	}
 
 	const BFont* bold = r5_settings_bold_font();
 	const BFont* plain = r5_settings_plain_font();
@@ -973,10 +1002,18 @@ void
 ThemeCards::MouseDown(BPoint where)
 {
 	for (int32 i = 0; i <= (int32)fThemes.size(); i++) {
-		if (!_Card(i).Contains(where))
+		BRect card = _Card(i);
+		if (!card.Contains(where))
 			continue;
 		if (i == (int32)fThemes.size()) {
 			fTarget.SendMessage(kMsgSaveTheme);
+			return;
+		}
+		if (!is_built_in_theme(fThemes[i].name)
+			&& delete_badge(card).Contains(where)) {
+			BMessage del(kMsgDeleteTheme);
+			del.AddString("name", fThemes[i].name);
+			fTarget.SendMessage(&del);
 			return;
 		}
 		BMessage message(kMsgPickTheme);
@@ -993,7 +1030,8 @@ ThemeCards::MouseDown(BPoint where)
 //! The label of the Parts box: a chevron that folds the box, and "Parts".
 class PartsLabel : public BView {
 public:
-								PartsLabel();
+								PartsLabel(const char* label = "Parts",
+									uint32 what = kMsgParts, bool open = true);
 
 			void				SetOpen(bool open);
 			bool				IsOpen() const { return fOpen; }
@@ -1006,15 +1044,19 @@ public:
 	virtual	BSize				PreferredSize();
 
 private:
+			BString				fLabel;
+			uint32				fWhat;
 			bool				fOpen;
 			BMessenger			fTarget;
 };
 
 
-PartsLabel::PartsLabel()
+PartsLabel::PartsLabel(const char* label, uint32 what, bool open)
 	:
 	BView("parts label", B_WILL_DRAW),
-	fOpen(true)
+	fLabel(label),
+	fWhat(what),
+	fOpen(open)
 {
 	SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
 	SetLowUIColor(B_PANEL_BACKGROUND_COLOR);
@@ -1042,8 +1084,9 @@ PartsLabel::PreferredSize()
 	const BFont* bold = r5_settings_bold_font();
 	font_height height;
 	bold->GetHeight(&height);
-	return BSize(px(6) + px(11) + px(6) + ceilf(bold->StringWidth("Parts"))
-		+ px(6), ceilf(height.ascent + height.descent) + 2);
+	return BSize(px(6) + px(11) + px(6)
+		+ ceilf(bold->StringWidth(fLabel.String())) + px(6),
+		ceilf(height.ascent + height.descent) + 2);
 }
 
 
@@ -1093,14 +1136,15 @@ PartsLabel::Draw(BRect updateRect)
 			BPoint(x + q, middle + q * 1.5f));
 	}
 	PopState();
-	draw_text(this, "Parts", BPoint(x + side + px(6), baseline), bold, text);
+	draw_text(this, fLabel.String(), BPoint(x + side + px(6), baseline),
+		bold, text);
 }
 
 
 void
 PartsLabel::MouseDown(BPoint where)
 {
-	fTarget.SendMessage(kMsgParts);
+	fTarget.SendMessage(fWhat);
 }
 
 
@@ -1425,14 +1469,15 @@ private:
 			BMessage			fOpenedColors;
 			theme_info			fCurrent;
 
-			BButton*			fSaveButton;
-			BButton*			fDeleteButton;
 			ThemeCards*			fCards;
 			SegmentedControl*	fMode;
 			AccentControl*		fAccent;
 			PartsLabel*			fPartsLabel;
 			BBox*				fPartsBox;
 			BView*				fPartsGrid;
+			PartsLabel*			fColorsLabel;
+			BBox*				fColorsBox;
+			ColorsView*			fColors;
 
 			BPopUpMenu*			fWindowsMenu;
 			BMenuField*			fWindows;
@@ -1534,10 +1579,6 @@ ThemePage::ThemePage(ThemeModule* module)
 		if (which != B_NO_COLOR)
 			fOpenedColors.AddColor(name, ui_color(which));
 	}
-
-	BStringView* title = new BStringView("theme title", "Theme");
-	fSaveButton = new BButton("Save as theme…", new BMessage(kMsgSaveTheme));
-	fDeleteButton = new BButton("Delete", new BMessage(kMsgDeleteTheme));
 
 	fCards = new ThemeCards();
 
@@ -1668,21 +1709,23 @@ ThemePage::ThemePage(ThemeModule* module)
 		grid->SetColumnWeight(1, 1.0f);
 	}
 
-	fPartsLabel = new PartsLabel();
+	fPartsLabel = new PartsLabel("Parts", kMsgParts, true);
 	fPartsBox = new BBox("parts");
+	fPartsBox->SetFlags(fPartsBox->Flags() | B_FULL_UPDATE_ON_RESIZE);
 	fPartsBox->SetLabel(fPartsLabel);
 	fPartsBox->AddChild(fPartsGrid);
 
-	// room under the Parts box for its bottom line and corners, fitting the
-	// default 1030x610 Settings window without clipping
-	BLayoutBuilder::Group<>(this, B_VERTICAL, px(10))
-		.SetInsets(0, 0, 0, px(6))
-		.AddGroup(B_HORIZONTAL, px(10))
-			.Add(title)
-			.AddGlue()
-			.Add(fSaveButton)
-			.Add(fDeleteButton)
-		.End()
+	fColorsLabel = new PartsLabel("Custom colors", kMsgCustomColors, false);
+	fColorsBox = new BBox("custom colors");
+	fColorsBox->SetFlags(fColorsBox->Flags() | B_FULL_UPDATE_ON_RESIZE);
+	fColors = new ColorsView("colors");
+	fColorsBox->AddChild(fColors);
+	fColorsBox->Hide();
+
+	// Fits the default 1030x610 Settings window without a scrollbar
+	// (Save is on the "+" card, Delete is the red X badge on custom themes).
+	BLayoutBuilder::Group<>(this, B_VERTICAL, px(8))
+		.SetInsets(0, 0, 0, px(4))
 		.Add(fCards)
 		.AddGroup(B_HORIZONTAL, px(22))
 			.AddGroup(B_HORIZONTAL, px(10))
@@ -1696,10 +1739,14 @@ ThemePage::ThemePage(ThemeModule* module)
 			.AddGlue()
 		.End()
 		.Add(fPartsBox)
+		.AddGroup(B_HORIZONTAL, 0)
+			.Add(fColorsLabel)
+			.AddGlue()
+		.End()
+		.Add(fColorsBox)
 		.AddGlue();
 
 	r5_settings_apply_plain(this);
-	title->SetFont(r5_settings_bold_font());
 	BFont semibold(r5_settings_bold_font());
 	modeLabel->SetFont(&semibold);
 	modeLabel->SetExplicitSize(BSize(px(52), B_SIZE_UNSET));
@@ -1719,12 +1766,11 @@ ThemePage::AttachedToWindow()
 {
 	BGroupView::AttachedToWindow();
 
-	fSaveButton->SetTarget(this);
-	fDeleteButton->SetTarget(this);
 	fCards->SetTarget(this);
 	fMode->SetTarget(this);
 	fAccent->SetTarget(this);
 	fPartsLabel->SetTarget(this);
+	fColorsLabel->SetTarget(this);
 	fWindowsMenu->SetTargetForItems(this);
 	fControlsMenu->SetTargetForItems(this);
 	fScrollMenu->SetTargetForItems(this);
@@ -1803,13 +1849,18 @@ ThemePage::_BuildControlsMenu()
 		}
 	}
 	leaves.Sort();
-	// R5 Modern first, then the others by name
+	// R5 first, then R5 Modern, then the others by name
+	if (leaves.HasString("R5ControlLook")) {
+		add_item(fControlsMenu, "R5", kMsgControls, "look",
+			"R5ControlLook");
+	}
 	if (leaves.HasString("R5ModernControlLook")) {
 		add_item(fControlsMenu, "R5 Modern", kMsgControls, "look",
 			"R5ModernControlLook");
 	}
 	for (int32 i = 0; i < leaves.CountStrings(); i++) {
-		if (leaves.StringAt(i) == "R5ModernControlLook")
+		if (leaves.StringAt(i) == "R5ControlLook"
+			|| leaves.StringAt(i) == "R5ModernControlLook")
 			continue;
 		add_item(fControlsMenu,
 			control_look_label(leaves.StringAt(i).String()).String(),
@@ -1902,7 +1953,8 @@ ThemePage::_Update()
 	fMode->SetSegmentEnabled(1, !classic);
 
 	int32 accent = -1;
-	bool modern = strcmp(fCurrent.control_look, "R5ModernControlLook") == 0;
+	bool modern = strcmp(fCurrent.control_look, "R5ModernControlLook") == 0
+		|| strcmp(fCurrent.control_look, "R5ControlLook") == 0;
 	if (fCurrent.accent.alpha == 0) {
 		if (fCurrent.mode == B_THEME_DARK || modern)
 			accent = 0;
@@ -1944,10 +1996,6 @@ ThemePage::_Update()
 	fGlass->SetValue((fCurrent.effects & B_WINDOW_FROSTED_GLASS) != 0);
 	fAnimations->SetValue((fCurrent.effects & B_WINDOW_ANIMATIONS) != 0);
 	mark_number(fStrengthMenu, fCurrent.effect_strength);
-
-	theme_info saved;
-	fDeleteButton->SetEnabled(!is_built_in_theme(fCurrent.base)
-		&& find_theme(fCurrent.base, &saved) == B_OK);
 }
 
 
@@ -2093,6 +2141,17 @@ ThemePage::MessageReceived(BMessage* message)
 			break;
 		}
 
+		case kMsgCustomColors:
+		{
+			bool open = !fColorsLabel->IsOpen();
+			fColorsLabel->SetOpen(open);
+			if (open)
+				fColorsBox->Show();
+			else
+				fColorsBox->Hide();
+			break;
+		}
+
 		case kMsgWindows:
 		{
 			const char* decor;
@@ -2110,9 +2169,10 @@ ThemePage::MessageReceived(BMessage* message)
 				break;
 			strlcpy(fCurrent.control_look, look,
 				sizeof(fCurrent.control_look));
-			// the R5 Modern controls come with their scroll bars
+			// the R5 and R5 Modern controls come with their scroll bars
 			fCurrent.modern_scroll_bars
-				= strcmp(look, "R5ModernControlLook") == 0;
+				= strcmp(look, "R5ModernControlLook") == 0
+				|| strcmp(look, "R5ControlLook") == 0;
 			_ApplyPart(B_THEME_CONTROLS | B_THEME_SCROLL_BARS);
 			break;
 		}
@@ -2214,22 +2274,31 @@ ThemePage::MessageReceived(BMessage* message)
 
 		case kMsgDeleteTheme:
 		{
-			if (is_built_in_theme(fCurrent.base))
+			const char* targetName = fCurrent.base;
+			const char* fromCard = NULL;
+			if (message->FindString("name", &fromCard) == B_OK
+				&& fromCard != NULL && fromCard[0] != '\0')
+				targetName = fromCard;
+			if (is_built_in_theme(targetName))
 				break;
 			BString text;
-			text << "Delete the theme \"" << fCurrent.base << "\"? What you "
+			text << "Delete the theme \"" << targetName << "\"? What you "
 				"see now stays as it is.";
 			BAlert* alert = new BAlert("Delete", text.String(), "Cancel",
 				"Delete", NULL, B_WIDTH_AS_USUAL, B_WARNING_ALERT);
 			alert->SetShortcut(0, B_ESCAPE);
 			if (alert->Go() != 1)
 				break;
-			if (remove_theme(fCurrent.base) == B_OK) {
-				// what is on screen stays; it is a changed R5 now
-				theme_info info = fCurrent;
-				strlcpy(info.name, "R5", sizeof(info.name));
-				strlcpy(info.base, "R5", sizeof(info.base));
-				_Apply(info, 0);
+			if (remove_theme(targetName) == B_OK) {
+				if (strcmp(fCurrent.base, targetName) == 0) {
+					// what is on screen stays; it is a changed R5 now
+					theme_info info = fCurrent;
+					strlcpy(info.name, "R5", sizeof(info.name));
+					strlcpy(info.base, "R5", sizeof(info.base));
+					_Apply(info, 0);
+				} else {
+					_Update();
+				}
 			}
 			break;
 		}

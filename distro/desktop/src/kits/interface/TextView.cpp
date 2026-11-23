@@ -55,6 +55,13 @@
 #include <PropertyInfo.h>
 #include <Region.h>
 #include <ScrollBar.h>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <math.h>
+#include <Shape.h>
+#include <TextControl.h>
+// SPDX-SnippetEnd
 #include <SystemCatalog.h>
 #include <Window.h>
 
@@ -548,6 +555,57 @@ BTextView::Draw(BRect updateRect)
 	int32 endLine = _LineAt(BPoint(0.0, updateRect.bottom));
 
 	_DrawLines(startLine, endLine, -1, true);
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (be_control_look != NULL && Parent() != NULL
+		&& dynamic_cast<BTextControl*>(Parent()) != NULL) {
+		float left = 0, top = 0, right = 0, bottom = 0;
+		be_control_look->GetBackgroundInsets(
+			BControlLook::B_MENU_BAR_BACKGROUND, 0, left, top, right, bottom);
+		if (left > 6) {
+			BRect inner = Bounds();
+			BRect border = inner.InsetByCopy(-1, -1);
+			float r = roundf(7 * be_plain_font->Size() / 12.0f);
+			float br = std::max(0.0f, r - 1);
+			float ir = std::max(0.0f, r - 2);
+			rgb_color panel = Parent()->ViewColor();
+			if (panel.alpha == 0)
+				panel = ui_color(B_PANEL_BACKGROUND_COLOR);
+			PushState();
+			SetDrawingMode(B_OP_ALPHA);
+			SetHighColor(panel);
+			for (int32 i = 0; i < 4; i++) {
+				bool isLeft = i == 0 || i == 2;
+				bool isTop = i < 2;
+				float x = isLeft ? inner.left : inner.right + 1;
+				float y = isTop ? inner.top : inner.bottom + 1;
+				float dx = isLeft ? ir : -ir;
+				float dy = isTop ? ir : -ir;
+				BShape wedge;
+				wedge.MoveTo(BPoint(x, y));
+				wedge.LineTo(BPoint(x + dx, y));
+				wedge.ArcTo(ir, ir, 0, false, isLeft == isTop,
+					BPoint(x, y + dy));
+				wedge.Close();
+				MovePenTo(B_ORIGIN);
+				FillShape(&wedge);
+			}
+			bool focused = IsEditable() && IsFocus() && Window() != NULL
+				&& Window()->IsActive();
+			rgb_color line = focused ? ui_color(B_KEYBOARD_NAVIGATION_COLOR)
+				: (panel.IsLight()
+					? mix_color(panel, make_color(15, 23, 42),
+						IsEditable() ? 45 : 28)
+					: mix_color(panel, make_color(255, 255, 255),
+						IsEditable() ? 40 : 24));
+			SetHighColor(line);
+			StrokeRoundRect(border, br, br);
+			PopState();
+		}
+	}
+// SPDX-SnippetEnd
 }
 
 

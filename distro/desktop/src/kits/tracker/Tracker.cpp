@@ -725,6 +725,21 @@ TTracker::MessageReceived(BMessage* message)
 		default:
 			_inherited::MessageReceived(message);
 			break;
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		case 'R5db':
+		{
+			BDeskWindow* desktop = GetDeskWindow();
+			if (desktop != NULL && desktop->Lock()) {
+				if (desktop->PoseView() != NULL)
+					desktop->PostMessage(message, desktop->PoseView());
+				desktop->Unlock();
+			}
+			break;
+		}
+// SPDX-SnippetEnd
 	}
 }
 

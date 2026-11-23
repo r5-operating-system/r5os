@@ -146,6 +146,7 @@ paint_glass_square(rgb_color* pixels, int32 width, int32 left, int32 top,
 
 //	#pragma mark - R5ModernDecorAddOn
 
+#ifndef R5_SQUARE_DECORATOR
 
 R5ModernDecorAddOn::R5ModernDecorAddOn(image_id id, const char* name)
 	:
@@ -158,21 +159,24 @@ Decorator*
 R5ModernDecorAddOn::_AllocateDecorator(DesktopSettings& settings, BRect rect,
 	Desktop* desktop)
 {
-	return new (std::nothrow) R5ModernDecorator(settings, rect, desktop);
+	return new (std::nothrow) R5ModernDecorator(settings, rect, desktop, false);
 }
+
+#endif
 
 
 //	#pragma mark - R5ModernDecorator
 
 
 R5ModernDecorator::R5ModernDecorator(DesktopSettings& settings, BRect frame,
-	Desktop* desktop)
+	Desktop* desktop, bool square)
 	:
 	R5Decorator(settings, frame, desktop),
 	fModernDesktop(desktop),
-	fRadius(kRadius),
+	fSquare(square),
+	fRadius(square ? 0 : kRadius),
 	fTabVisible(kTabVisible),
-	fTabUnder(kTabUnder)
+	fTabUnder(square ? 0 : kTabUnder)
 {
 	fPanelColor = settings.UIColor(B_PANEL_BACKGROUND_COLOR);
 	fMenuColor = settings.UIColor(B_MENU_BACKGROUND_COLOR);
@@ -187,7 +191,7 @@ R5ModernDecorator::~R5ModernDecorator()
 Decorator::Region
 R5ModernDecorator::RegionAt(BPoint where, int32& tab) const
 {
-	if (!_IsModern())
+	if (!_IsModern() || fSquare || fRadius <= 0)
 		return R5Decorator::RegionAt(where, tab);
 
 	// A point outside the arc of one of the frame's round corners: on the
@@ -266,7 +270,7 @@ R5ModernDecorator::GetOutline(window_outline_rect* rects, int32 maxCount)
 {
 	AutoReadLocker _(fLocker);
 
-	if (!_IsModern() || maxCount < 1 || !fBorderRect.IsValid())
+	if (!_IsModern() || fSquare || maxCount < 1 || !fBorderRect.IsValid())
 		return 0;
 
 	rects[0].rect = fBorderRect;
@@ -290,7 +294,7 @@ bool
 R5ModernDecorator::GetEdgeLine(rgb_color* color, float* width)
 {
 	AutoReadLocker locker(fLocker);
-	if (!_IsModern()) {
+	if (!_IsModern() || fSquare) {
 		locker.Unlock();
 		return R5Decorator::GetEdgeLine(color, width);
 	}
@@ -340,9 +344,9 @@ void
 R5ModernDecorator::_DoLayout()
 {
 	float scale = _Scale();
-	fRadius = roundf(kRadius * scale);
+	fRadius = fSquare ? 0 : roundf(kRadius * scale);
 	fTabVisible = roundf(kTabVisible * scale);
-	fTabUnder = roundf(kTabUnder * scale);
+	fTabUnder = fSquare ? 0 : roundf(kTabUnder * scale);
 
 	// The R5 frame first; it calls _DoTabLayout() below.
 	R5Decorator::_DoLayout();
@@ -1026,6 +1030,15 @@ R5ModernDecorator::_DrawTabBackground(Decorator::Tab* tab, BRect rect)
 				tab->tabRect.right, y), mix_color(color, dark, 0.35f));
 		}
 	}
+	if (fSquare) {
+		// Square R5 tab: crisp 1 px border matching the window frame
+		rgb_color edge = _StraightEdgeColor();
+		const BRect& t = tab->tabRect;
+		fDrawingEngine->SetHighColor(edge);
+		fDrawingEngine->StrokeLine(t.LeftTop(), t.RightTop());
+		fDrawingEngine->StrokeLine(t.LeftTop(), t.LeftBottom());
+		fDrawingEngine->StrokeLine(t.RightTop(), t.RightBottom());
+	}
 }
 
 
@@ -1109,6 +1122,7 @@ R5ModernDecorator::_DrawGlassButton(Decorator::Tab* tab, BRect rect,
 
 //	#pragma mark - add-on entry
 
+#ifndef R5_SQUARE_DECORATOR
 
 R5_DECORATOR_ABI_EXPORT
 
@@ -1119,3 +1133,5 @@ extern "C" DecorAddOn*
 	syslog(LOG_INFO, "decorator: r5 modern loaded\n");
 	return new (std::nothrow) R5ModernDecorAddOn(id, name);
 }
+
+#endif

@@ -803,6 +803,13 @@ TExpandoMenuBar::RemoveTeam(team_id team, bool partial)
 			if (item == fLastClickedItem)
 				fLastClickedItem = NULL;
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			if (fBarView != NULL)
+				fBarView->StopGrow(item);
+// SPDX-SnippetEnd
+
 			delete item;
 			while ((windowItem = dynamic_cast<TWindowMenuItem*>(
 					ItemAt(i))) != NULL) {
@@ -1033,6 +1040,13 @@ TExpandoMenuBar::SizeWindow(int32 delta)
 	// wherever window sizing is done
 	if (fBarView == NULL || Window() == NULL)
 		return;
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (R5Deskbar::Compact())
+		fBarView->SyncCompactApps();
+// SPDX-SnippetEnd
 
 	BRect screenFrame = (BScreen(Window())).Frame();
 	fBarView->SizeWindow(screenFrame);

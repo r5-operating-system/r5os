@@ -197,7 +197,7 @@ def main() -> int:
     # The Bluetooth page of Settings is an add-on, regular image only; the
     # minimum image's Settings runs without it.
     insert_once(HAIKU / "build" / "jam" / "images" / "definitions" / "regular",
-        "SYSTEM_ADD_ONS_SETTINGS += settings_look ;\n",
+        "SYSTEM_ADD_ONS_SETTINGS += settings_fonts ;\n",
         "SYSTEM_ADD_ONS_SETTINGS += settings_bluetooth ;\n",
         "settings_bluetooth image")
     # bluetooth_server as a system service from boot (uid 0), regular image

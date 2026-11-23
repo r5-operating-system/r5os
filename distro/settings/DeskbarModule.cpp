@@ -13,9 +13,11 @@
 
 #include "SettingsFont.h"
 #include "SettingsManager.h"
+#include "SettingsMessages.h"
 #include "SettingsModule.h"
 
 #include <AppDefs.h>
+#include <Application.h>
 #include <Box.h>
 #include <Button.h>
 #include <CheckBox.h>
@@ -46,6 +48,7 @@
 static const uint32 kMsgChanged = 'r5dc';
 static const uint32 kMsgPlace = 'r5dp';
 static const uint32 kMsgEditTracker = 'r5dt';
+static const uint32 kMsgOpenTheme = 'r5ot';
 
 // Deskbar's own application messages. They are not in a public header.
 // Sort, Tracker, expanders, labels, and the window flags toggle.
@@ -191,10 +194,10 @@ default_choices()
 	choices.alwaysOnTop = false;
 	choices.autoRaise = false;
 	choices.autoHide = false;
-	// Default (R5): Vertical, Rounded, Floating, top right (owner, 22 Nov)
+	// Default (R5): Vertical, Square, Floating, top right
 	choices.style = kStyleR5;
 	choices.layout = kLayoutVertical;
-	choices.rounded = true;
+	choices.rounded = false;
 	choices.floating = true;
 	return choices;
 }
@@ -797,43 +800,13 @@ DeskbarView::DeskbarView(DeskbarModule* module)
 	BButton* edit = new BButton("edit", "Edit in Tracker" B_UTF8_ELLIPSIS,
 		new BMessage(kMsgEditTracker));
 
-	// Style, Layout, Corners and Floating (docs/design/DESKBAR-STYLES.md);
-	// the place stays on the screen picture
-	struct { const char* label; int32 value; } styles[] = {
-		{ "Default (R5)", kStyleR5 }, { "Classic (Haiku)", kStyleClassic } };
-	struct { const char* label; int32 value; } layouts[] = {
-		{ "Vertical", kLayoutVertical }, { "Compact", kLayoutCompact },
-		{ "Horizontal", kLayoutHorizontal } };
-	struct { const char* label; int32 value; } corners[] = {
-		{ "Rounded", 1 }, { "Square", 0 } };
-	BPopUpMenu* styleMenu = new BPopUpMenu("style");
-	for (size_t i = 0; i < sizeof(styles) / sizeof(styles[0]); i++) {
-		BMessage* message = new BMessage(kMsgChanged);
-		message->AddInt32("value", styles[i].value);
-		styleMenu->AddItem(new BMenuItem(styles[i].label, message));
-	}
-	BPopUpMenu* layoutMenu = new BPopUpMenu("layout");
-	for (size_t i = 0; i < sizeof(layouts) / sizeof(layouts[0]); i++) {
-		BMessage* message = new BMessage(kMsgChanged);
-		message->AddInt32("value", layouts[i].value);
-		BMenuItem* item = new BMenuItem(layouts[i].label, message);
-		if (layouts[i].value == kLayoutCompact)
-			fCompactItem = item;
-		layoutMenu->AddItem(item);
-	}
-	BPopUpMenu* cornersMenu = new BPopUpMenu("corners");
-	for (size_t i = 0; i < sizeof(corners) / sizeof(corners[0]); i++) {
-		BMessage* message = new BMessage(kMsgChanged);
-		message->AddInt32("value", corners[i].value);
-		cornersMenu->AddItem(new BMenuItem(corners[i].label, message));
-	}
-	fStyle = new BMenuField("style", "Style:", styleMenu);
-	fLayout = new BMenuField("layout", "Layout:", layoutMenu);
-	fCorners = new BMenuField("corners", "Corners:", cornersMenu);
-	fFloating = new BCheckBox("floating", "Keep away from the screen edges",
-		new BMessage(kMsgChanged));
-	fCornersLabel = fCorners->CreateLabelLayoutItem();
-	fCornersMenu = fCorners->CreateMenuBarLayoutItem();
+	// Deskbar appearance (style, layout, corners, floating) lives in Theme
+	// so there are no duplicate controls here.
+	BStringView* themeNote = new BStringView("theme note",
+		"Deskbar appearance (style, layout, corners, floating) is set in Theme.");
+	themeNote->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
+	BButton* openTheme = new BButton("open theme",
+		"Open Theme" B_UTF8_ELLIPSIS, new BMessage(kMsgOpenTheme));
 
 	BBox* applications = new BBox("applications");
 	applications->SetLabel(r5_settings_box_title("Applications"));
@@ -884,21 +857,17 @@ DeskbarView::DeskbarView(DeskbarModule* module)
 	BLayoutBuilder::Group<>(windowInner)
 		.SetInsets(B_USE_DEFAULT_SPACING)
 		.Add(fPlace)
-		.AddGroup(B_VERTICAL, 0)
-			.AddGrid(B_USE_SMALL_SPACING, B_USE_SMALL_SPACING)
-				.Add(fStyle->CreateLabelLayoutItem(), 0, 0)
-				.Add(fStyle->CreateMenuBarLayoutItem(), 1, 0)
-				.Add(fLayout->CreateLabelLayoutItem(), 0, 1)
-				.Add(fLayout->CreateMenuBarLayoutItem(), 1, 1)
-				.Add(fCornersLabel, 0, 2)
-				.Add(fCornersMenu, 1, 2)
-				.Add(fFloating, 1, 3)
-				.End()
-			.AddStrut(B_USE_SMALL_SPACING)
+		.AddGroup(B_VERTICAL, B_USE_SMALL_SPACING)
 			.Add(fShowApplications)
 			.Add(fAlwaysOnTop)
 			.Add(fAutoRaise)
 			.Add(fAutoHide)
+			.AddStrut(B_USE_SMALL_SPACING)
+			.Add(themeNote)
+			.AddGroup(B_HORIZONTAL, 0)
+				.Add(openTheme)
+				.AddGlue()
+				.End()
 			.End()
 		.AddGlue();
 	window->AddChild(windowInner);
@@ -1180,11 +1149,18 @@ DeskbarView::MessageReceived(BMessage* message)
 			}
 			// an edge is the bar, a corner is not (Compact stays Compact)
 			DeskbarChoices placed = _Read();
-			_Mark(fLayout, layout_for_place(placed.layout,
-				static_cast<deskbar_location>(location)));
+			placed.layout = layout_for_place(placed.layout,
+				static_cast<deskbar_location>(location));
 			fUpdating = false;
-			fModule->UserEdited(_Read());
+			fModule->UserEdited(placed);
 			_SyncEnabled();
+			break;
+		}
+		case kMsgOpenTheme:
+		{
+			BMessage open(kMsgOpenPage);
+			open.AddString("module", "theme");
+			be_app->PostMessage(&open);
 			break;
 		}
 		case kMsgChanged:

@@ -1747,25 +1747,38 @@ AboutView::MessageReceived(BMessage* message)
 				rgb_color newRedColor = mix_color(newTextColor, kIdealBeOSRed, 191);
 				rgb_color newBlueColor = mix_color(newTextColor, kIdealBeOSBlue, 191);
 
-				text_run_array* runArray = fCreditsView->RunArray(0, INT32_MAX);
-				for (int32 i = 0; i < runArray->count; i++) {
-					if (runArray->runs[i].color == fTextColor)
-						runArray->runs[i].color = newTextColor;
-					else if (runArray->runs[i].color == fLinkColor)
-						runArray->runs[i].color = newLinkColor;
-					else if (runArray->runs[i].color == kIdealHaikuOrange)
-						runArray->runs[i].color = newOrangeColor;
-					else if (runArray->runs[i].color == kIdealHaikuGreen)
-						runArray->runs[i].color = newGreenColor;
-					else if (runArray->runs[i].color == kIdealHaikuYellow)
-						runArray->runs[i].color = newYellowColor;
-					else if (runArray->runs[i].color == kIdealBeOSRed)
-						runArray->runs[i].color = newRedColor;
-					else if (runArray->runs[i].color == kIdealBeOSBlue)
-						runArray->runs[i].color = newBlueColor;
+				BTextView* styledViews[] = { fCreditsView, fWhatsNewView,
+					fLicensesView };
+				for (size_t v = 0; v < sizeof(styledViews) / sizeof(styledViews[0]); v++) {
+					if (styledViews[v] == NULL)
+						continue;
+					text_run_array* runArray = styledViews[v]->RunArray(0, INT32_MAX);
+					if (runArray == NULL)
+						continue;
+					for (int32 i = 0; i < runArray->count; i++) {
+						if (runArray->runs[i].color == fTextColor)
+							runArray->runs[i].color = newTextColor;
+						else if (runArray->runs[i].color == fLinkColor)
+							runArray->runs[i].color = newLinkColor;
+						else if (runArray->runs[i].color == fHaikuOrangeColor
+							|| runArray->runs[i].color == kIdealHaikuOrange)
+							runArray->runs[i].color = newOrangeColor;
+						else if (runArray->runs[i].color == fHaikuGreenColor
+							|| runArray->runs[i].color == kIdealHaikuGreen)
+							runArray->runs[i].color = newGreenColor;
+						else if (runArray->runs[i].color == fHaikuYellowColor
+							|| runArray->runs[i].color == kIdealHaikuYellow)
+							runArray->runs[i].color = newYellowColor;
+						else if (runArray->runs[i].color == fBeOSRedColor
+							|| runArray->runs[i].color == kIdealBeOSRed)
+							runArray->runs[i].color = newRedColor;
+						else if (runArray->runs[i].color == fBeOSBlueColor
+							|| runArray->runs[i].color == kIdealBeOSBlue)
+							runArray->runs[i].color = newBlueColor;
+					}
+					styledViews[v]->SetRunArray(0, INT32_MAX, runArray);
+					styledViews[v]->FreeRunArray(runArray);
 				}
-				fCreditsView->SetRunArray(0, INT32_MAX, runArray);
-				fCreditsView->FreeRunArray(runArray);
 
 				fTextColor = newTextColor;
 				fLinkColor = newLinkColor;
@@ -2023,7 +2036,7 @@ AboutView::_CreateInfoTabs()
 	fLicensesView->SetStylable(true);
 	fLicensesView->MakeEditable(false);
 	fLicensesView->SetWordWrap(true);
-	fLicensesView->SetInsets(5, 5, 5, 5);
+	fLicensesView->SetInsets(8, 8, 8, 8);
 	fLicensesView->SetViewUIColor(B_DOCUMENT_BACKGROUND_COLOR);
 	_FillLicenses();
 
@@ -2034,7 +2047,7 @@ AboutView::_CreateInfoTabs()
 	fWhatsNewView->SetStylable(true);
 	fWhatsNewView->MakeEditable(false);
 	fWhatsNewView->SetWordWrap(true);
-	fWhatsNewView->SetInsets(5, 5, 5, 5);
+	fWhatsNewView->SetInsets(8, 8, 8, 8);
 	fWhatsNewView->SetViewUIColor(B_DOCUMENT_BACKGROUND_COLOR);
 	_FillWhatsNew();
 
@@ -2043,6 +2056,8 @@ AboutView::_CreateInfoTabs()
 		B_PLAIN_BORDER);
 
 	fTabView = new BTabView("aboutTabs", B_WIDTH_FROM_LABEL);
+	fTabView->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
+	fTabView->SetLowUIColor(B_PANEL_BACKGROUND_COLOR);
 	fTabView->AddTab(newsScroller);
 	fTabView->TabAt(0)->SetLabel(B_TRANSLATE("What's new"));
 	fTabView->AddTab(credits);

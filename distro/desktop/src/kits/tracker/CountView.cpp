@@ -176,6 +176,16 @@ BCountView::TextRect() const
 	result.InsetBy(be_control_look->ComposeSpacing(B_USE_SMALL_SPACING) / 2,
 		floorf(result.Height() * 0.25f));
 
+	// SPDX-SnippetBegin
+	// SPDX-FileCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	float menuLeft = 0, menuTop = 0, menuRight = 0, menuBottom = 0;
+	be_control_look->GetBackgroundInsets(BControlLook::B_MENU_BAR_BACKGROUND,
+		0, menuLeft, menuTop, menuRight, menuBottom);
+	if (menuLeft > 6)
+		result.left += menuLeft - 4;
+	// SPDX-SnippetEnd
+
 	if (fShowingBarberPole)
 		result.right -= 10;
 

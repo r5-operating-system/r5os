@@ -147,7 +147,16 @@ TBarMenuTitle::DrawContent()
 
 	menu->SetDrawingMode(B_OP_ALPHA);
 
-	const BRect frame(Frame());
+	BRect frame(Frame());
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (menu->Window() != NULL) {
+		BRect windowBounds = menu->Window()->Bounds();
+		if (frame.right > windowBounds.right)
+			frame.right = windowBounds.right;
+	}
+// SPDX-SnippetEnd
 	BRect iconRect(fIcon->Bounds().OffsetToCopy(frame.LeftTop()));
 
 	float widthOffset = rintf((frame.Width() - iconRect.Width()) / 2);

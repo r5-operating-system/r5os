@@ -38,6 +38,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include <Application.h>
 #include <DecorInfo.h>
@@ -56,6 +58,7 @@
 #include <Roster.h>
 #include <String.h>
 #include <StringList.h>
+#include <Window.h>
 #include <driver_settings.h>
 
 #include "WindowEffects.h"
@@ -78,6 +81,7 @@ static const char* kClassic = "Classic (Haiku)";
 static const char* kR5ModernDecorator = "R5ModernDecorator";
 static const char* kR5Decorator = "R5Decorator";
 static const char* kR5ModernControlLook = "R5ModernControlLook";
+static const char* kR5ControlLook = "R5ControlLook";
 
 
 static rgb_color
@@ -242,7 +246,8 @@ static const color_value kModernLightColors[] = {
 static bool
 modern_controls(const theme_info* info)
 {
-	return strcmp(info->control_look, kR5ModernControlLook) == 0;
+	return strcmp(info->control_look, kR5ModernControlLook) == 0
+		|| strcmp(info->control_look, kR5ControlLook) == 0;
 }
 
 
@@ -355,16 +360,23 @@ built_in_theme(int32 index, theme_info* info)
 {
 	switch (index) {
 		case 0:
+			// R5 (default): square modern windows, controls, and Deskbar
+			init_theme(info, kR5);
+			strlcpy(info->decorator, kR5Decorator, sizeof(info->decorator));
+			strlcpy(info->control_look, kR5ControlLook,
+				sizeof(info->control_look));
+			info->modern_scroll_bars = true;
+			info->deskbar_rounded = false;
+			break;
+		case 1:
+			// R5 Modern: rounded windows, controls, and Deskbar
 			init_theme(info, kR5Modern);
 			strlcpy(info->decorator, kR5ModernDecorator,
 				sizeof(info->decorator));
 			strlcpy(info->control_look, kR5ModernControlLook,
 				sizeof(info->control_look));
 			info->modern_scroll_bars = true;
-			break;
-		case 1:
-			init_theme(info, kR5);
-			strlcpy(info->decorator, kR5Decorator, sizeof(info->decorator));
+			info->deskbar_rounded = true;
 			break;
 		default:
 			init_theme(info, kClassic);
@@ -516,7 +528,8 @@ write_theme(const char* path, const theme_info* info, uint32 parts)
 			char accent[16];
 			snprintf(accent, sizeof(accent), "#%02x%02x%02x",
 				info->accent.red, info->accent.green, info->accent.blue);
-			text << "accent " << accent << "\n";
+			// Quote #rrggbb: driver_settings treats an unquoted # as a comment.
+			text << "accent \"" << accent << "\"\n";
 		} else
 			text << "accent default\n";
 	}
@@ -535,11 +548,17 @@ write_theme(const char* path, const theme_info* info, uint32 parts)
 
 	BFile file(path, B_WRITE_ONLY | B_CREATE_FILE | B_ERASE_FILE);
 	status_t status = file.InitCheck();
+	if (status == B_PERMISSION_DENIED) {
+		unlink(path);
+		status = file.SetTo(path, B_WRITE_ONLY | B_CREATE_FILE | B_ERASE_FILE);
+	}
 	if (status != B_OK)
 		return status;
 	ssize_t written = file.Write(text.String(), text.Length());
 	if (written < 0)
 		return static_cast<status_t>(written);
+	if (geteuid() == 0)
+		chmod(path, 0666);
 	return written == text.Length() ? B_OK : B_IO_ERROR;
 }
 
@@ -552,7 +571,7 @@ read_theme(const char* path, theme_info* info)
 		return B_ENTRY_NOT_FOUND;
 
 	// what a file does not hold stays as R5 has it by default
-	built_in_theme(1, info);
+	built_in_theme(0, info);
 	info->parts = 0;
 	info->base[0] = '\0';
 
@@ -641,7 +660,10 @@ make_settings_directory(const char* leaf)
 	status_t status = settings_path(leaf, path);
 	if (status != B_OK)
 		return status;
-	return create_directory(path.Path(), 0755);
+	status = create_directory(path.Path(), geteuid() == 0 ? 0777 : 0755);
+	if (status == B_OK && geteuid() == 0)
+		chmod(path.Path(), 0777);
+	return status;
 }
 
 
@@ -670,7 +692,7 @@ read_deskbar_settings(theme_info* info)
 	if (info->deskbar_layout < B_THEME_DESKBAR_VERTICAL
 		|| info->deskbar_layout > B_THEME_DESKBAR_HORIZONTAL)
 		info->deskbar_layout = B_THEME_DESKBAR_VERTICAL;
-	info->deskbar_rounded = settings.GetBool("rounded", true);
+	info->deskbar_rounded = settings.GetBool("rounded", false);
 	info->deskbar_floating = settings.GetBool("floating", true);
 }
 
@@ -679,7 +701,7 @@ read_deskbar_settings(theme_info* info)
 static void
 system_theme(theme_info* info)
 {
-	built_in_theme(1, info);
+	built_in_theme(0, info);
 	info->parts = B_THEME_ALL_PARTS;
 
 	BPrivate::DecorInfoUtility decorators;
@@ -724,6 +746,16 @@ system_theme(theme_info* info)
 			strlcpy(info->base, builtIn.name, sizeof(info->base));
 			return;
 		}
+	}
+	// Fallback base from decorator/control look when a part (e.g. Deskbar
+	// layout) was customized
+	if (strcasecmp(info->decorator, kR5ModernDecorator) == 0
+		|| strcmp(info->control_look, kR5ModernControlLook) == 0) {
+		strlcpy(info->name, kR5Modern, sizeof(info->name));
+		strlcpy(info->base, kR5Modern, sizeof(info->base));
+	} else if (info->decorator[0] == '\0' && info->control_look[0] == '\0') {
+		strlcpy(info->name, kClassic, sizeof(info->name));
+		strlcpy(info->base, kClassic, sizeof(info->base));
 	}
 }
 
@@ -869,7 +901,28 @@ apply_deskbar(const theme_info* info)
 {
 	BMessenger deskbar(kDeskbarSignature);
 	if (!deskbar.IsValid()) {
-		// Deskbar is not running: nothing to set, and nothing kept
+		// Deskbar is not running yet (e.g. during FirstBootPrompt / Try R5):
+		// persist the chosen Deskbar style so Deskbar starts with it.
+		if (make_settings_directory("deskbar") == B_OK) {
+			BPath path;
+			if (settings_path("deskbar/settings", path) == B_OK) {
+				BMessage prefs;
+				BFile readFile(path.Path(), B_READ_ONLY);
+				if (readFile.InitCheck() == B_OK)
+					prefs.Unflatten(&readFile);
+				prefs.SetInt32("style", info->deskbar_style);
+				prefs.SetInt32("layout", info->deskbar_layout);
+				prefs.SetBool("rounded", info->deskbar_rounded);
+				prefs.SetBool("floating", info->deskbar_floating);
+				BFile writeFile(path.Path(),
+					B_WRITE_ONLY | B_CREATE_FILE | B_ERASE_FILE);
+				if (writeFile.InitCheck() == B_OK) {
+					prefs.Flatten(&writeFile);
+					if (geteuid() == 0)
+						chmod(path.Path(), 0666);
+				}
+			}
+		}
 		return B_NAME_NOT_FOUND;
 	}
 	BMessage message(kSetDeskbarStyle);
@@ -931,14 +984,6 @@ set_theme(const theme_info* info, uint32 parts)
 				!= roundf(info->scroll_bar_width))
 			lookChanged = true;
 	}
-	if ((parts & B_THEME_DESKBAR) != 0) {
-		status_t status = apply_deskbar(info);
-		if (status != B_OK) {
-			applied &= ~B_THEME_DESKBAR;
-			if (status != B_NAME_NOT_FOUND && result == B_OK)
-				result = status;
-		}
-	}
 	if ((parts & B_THEME_EFFECTS) != 0) {
 		status_t status = set_window_effects(info->effects);
 		if (status == B_OK) {
@@ -991,7 +1036,7 @@ set_theme(const theme_info* info, uint32 parts)
 	// the controls alone sets them only while the colours are still the
 	// set of the theme before, so colours of the user's own (Appearance >
 	// Colors) stay.
-	bool setColors = (parts & B_THEME_COLORS) != 0;
+	bool setColors = (parts & B_THEME_COLORS) != 0 || kept.mode != now.mode;
 	if (!setColors && (applied & B_THEME_CONTROLS) != 0) {
 		BMessage before;
 		get_theme_colors(&now, &before);
@@ -1017,13 +1062,31 @@ set_theme(const theme_info* info, uint32 parts)
 		if (get_theme_colors(&kept, &colors) == B_OK)
 			set_ui_colors(&colors);
 	}
+	// Apply Deskbar style after UI colors so switching from Dark Mode to
+	// Classic (Haiku) picks up the light B_MENU_ITEM_TEXT_COLOR immediately.
+	if ((parts & B_THEME_DESKBAR) != 0) {
+		status_t status = apply_deskbar(&kept);
+		if (status != B_OK && status != B_NAME_NOT_FOUND && result == B_OK)
+			result = status;
+	}
 
-	if (lookChanged && be_roster != NULL) {
+	if (lookChanged) {
 		// live switching: every window of every program loads the control
-		// look again (Window.cpp, r5_reload_control_look())
+		// look again (Window.cpp, r5_reload_control_look()). Post directly
+		// to our own windows too so the caller (Settings) switches live even
+		// if BRoster::Broadcast skips or delays the calling team.
 		BMessage message(B_COLORS_UPDATED);
 		message.AddInt64("r5:control_look", system_time());
-		be_roster->Broadcast(&message);
+		if (be_roster != NULL)
+			be_roster->Broadcast(&message);
+		if (be_app != NULL) {
+			int32 count = be_app->CountWindows();
+			for (int32 i = 0; i < count; i++) {
+				BWindow* window = be_app->WindowAt(i);
+				if (window != NULL)
+					window->PostMessage(&message);
+			}
+		}
 	}
 
 	if (be_roster != NULL) {

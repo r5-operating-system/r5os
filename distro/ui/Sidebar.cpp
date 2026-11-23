@@ -122,6 +122,9 @@ BSidebar::Archive(BMessage* archive, bool deep) const
 void
 BSidebar::Draw(BRect updateRect)
 {
+	SetLowColor(ui_color(B_LIST_BACKGROUND_COLOR));
+	FillRect(updateRect, B_SOLID_LOW);
+
 	int32 count = CountItems();
 	BRect itemFrame(0, 0, Bounds().right, -1);
 	BRect group;

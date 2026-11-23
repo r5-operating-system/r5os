@@ -472,8 +472,11 @@ TReplicantTray::MouseDown(BPoint where)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-	// the chevron of the pill shows or hides the tray symbols
-	if (R5Deskbar::Compact() && buttons == B_PRIMARY_MOUSE_BUTTON
+	// the chevron of the pill (or Vertical tray overflow) shows or hides tray symbols
+	bool hasChevron = R5Deskbar::Compact()
+		|| (R5Deskbar::Modern() && fBarView->Vertical()
+			&& ReplicantCount() > 4);
+	if (hasChevron && buttons == B_PRIMARY_MOUSE_BUTTON
 		&& fBarView->ChevronFrame().Contains(where)) {
 		BMessenger(fBarView).SendMessage(R5Deskbar::kMsgToggleUnfold);
 		return;
@@ -1431,10 +1434,13 @@ TReplicantTray::RealignReplicants(int32 startIndex)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-		// the folded pill shows the clock only (board B)
+		// the folded pill (or Vertical tray with >4 icons) hides overflow symbols
 		// (review 2: only what the pill hid is shown again; a replicant
 		// that hid itself stays hidden)
-		bool folded = R5Deskbar::Compact() && !R5Deskbar::Unfolded();
+		bool folded = (R5Deskbar::Compact() && !R5Deskbar::Unfolded())
+			|| (R5Deskbar::Modern() && fBarView->Vertical()
+				&& !R5Deskbar::Compact() && replicantCount > 4
+				&& index >= 4 && !R5Deskbar::Unfolded());
 		bool hiddenByPill = view->Name() != NULL
 			&& fHiddenByPill.HasString(view->Name());
 		if (folded && !view->IsHidden(view)) {
