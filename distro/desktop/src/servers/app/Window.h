@@ -383,6 +383,8 @@ protected:
 			const window_outline* _CachedOutline(bool blended);
 			const window_outline* _SteppedRim(rgb_color* color);
 			bool				_OutlineBlended();
+			void				_DecoratorShapeChanged();
+			void				_StackShapeChanged();
 // SPDX-SnippetEnd
 
 			void				_ObeySizeLimits();

@@ -1,5 +1,9 @@
 # Brief: Default (R5 Modern), the round R5 decorator
 
+Status, 22 Nov 2026: steps 1 and 2 are on `main` (the window outline, PRs #4557 and #4559). Step 3 (the
+decorator `R5ModernDecorator`, its name in Appearance, hit testing on the round corners) is built on the
+branch `claude/r5-modern-decorator-aa4e66`, for the owner's review; `CHANGELOG.md` has what was tested.
+
 Owner decision, 22 Nov 2026. Design: Design canvas "R5 window decorators – mockup", board 4 "Soft"
 (https://claude.ai/artifact/GYVvNRWPUHqCnpKiwAZ1dD#artboard-Soft). Board 5 (button studies) was
 declined: the buttons stay as on board 4.

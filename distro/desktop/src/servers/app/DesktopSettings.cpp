@@ -37,6 +37,8 @@
 
 // M11 step 4: the strength in use, for the R5 decorator's shadow extent.
 int32 gWindowEffectStrength = kWindowEffectsBalanced;
+// Default (R5 Modern): the effects in use, for its soft look.
+uint32 gWindowEffects = kWindowEffectsAll;
 // SPDX-SnippetEnd
 
 
@@ -75,6 +77,7 @@ DesktopSettingsPrivate::_SetDefaults()
 		| kWindowEffectAnimations;
 	fWindowEffectStrength = kWindowEffectsBalanced;
 	gWindowEffectStrength = fWindowEffectStrength;
+	gWindowEffects = fWindowEffects;
 // SPDX-SnippetEnd
 
 	// init scrollbar info
@@ -348,6 +351,7 @@ DesktopSettingsPrivate::_Load()
 				else
 					fWindowEffects &= ~(uint32)kWindowEffectAnimations;
 			}
+			gWindowEffects = fWindowEffects;
 			int32 strength;
 			if (settings.FindInt32("window effect strength", &strength)
 					== B_OK) {
@@ -883,6 +887,7 @@ status_t
 DesktopSettingsPrivate::SetWindowEffects(uint32 effects)
 {
 	fWindowEffects = effects & kWindowEffectsAll;
+	gWindowEffects = fWindowEffects;
 	return Save(kAppearanceSettings);
 }
 

@@ -443,7 +443,8 @@ struct Compositor::Entry : public BReferenceable {
 		animOpen(false),
 		animStart(0),
 		animFrom(0),
-		animFrames(0)
+		animFrames(0),
+		hadPixels(false)
 	{
 	}
 
@@ -498,6 +499,11 @@ struct Compositor::Entry : public BReferenceable {
 	bigtime_t			animStart;
 	float				animFrom;
 	int32				animFrames;
+
+	// The compose thread's: the window had pixels at the last compose. A
+	// new window's first compose has none and skips its shadow; its first
+	// drawing damages only its own pixels (22 Nov 2026).
+	bool				hadPixels;
 	BRegion				animArea;
 };
 
@@ -733,7 +739,7 @@ set_corner(effect_rect& effect, const window_corner& corner,
 	effect.shape[2] = corner.radius;
 	effect.shape[3] = 1;
 	effect.shape[4] = (int32)round.edgeColor;
-	effect.shape[5] = round.edgeWidth;
+	effect.shape[5] = corner.lined ? round.edgeWidth : 0;
 	effect.shape[6] = 0;
 	effect.shape[7] = 0;
 }

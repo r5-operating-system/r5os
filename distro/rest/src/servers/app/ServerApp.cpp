@@ -3899,6 +3899,14 @@ ServerApp::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 				}
 				log_window_effects(before, after, strengthBefore,
 					strengthAfter);
+				// Default (R5 Modern) draws its tab and edge softly with
+				// shadow or glass and plainly without: its frames are
+				// drawn again when that changes.
+				const uint32 soft = kWindowEffectShadow
+					| kWindowEffectFrostedGlass;
+				if (((before ^ after) & soft) != 0
+					&& ((before & soft) == 0 || (after & soft) == 0))
+					fDesktop->Redraw();
 				// M11 review: the value is applied and on screen; a failed
 				// save is logged, not reported, or the Settings box and
 				// the screen would disagree.

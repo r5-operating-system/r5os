@@ -117,7 +117,7 @@ KERNEL = "distro/graphics/src/add-ons/kernel/drivers/graphics/r5gpu/r5_gpu_core.
 SHARE = "distro/graphics/src/bin/r5-share-check/r5-share-check.cpp"
 M11_LINES = (
     ("decorator: r5 loaded", "decorator: r5 loaded",
-     "distro/desktop/src/add-ons/decorators/R5Decorator/R5Decorator.cpp"),
+     "distro/desktop/src/add-ons/decorators/R5Decorator/R5DecoratorAddOn.cpp"),
     ("radeon_hd: gpu available", "radeon_hd: gpu available", KERNEL),
     ("radeon_hd: bo domain .* snooped 1", "bytes %llu snooped %d", KERNEL),
     ("radeon_hd: gpu hang ring", "radeon_hd: gpu hang ring", KERNEL),

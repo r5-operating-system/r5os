@@ -858,6 +858,17 @@ Window::ReloadDecor()
 
 	stack->SetDecorator(decorator);
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// The content region leaves the decorator's footprint and the round
+	// outline out; both change with the decorator (Default (R5 Modern) to
+	// Default (R5) left its wedge and its cut corners undrawn, QEMU, 22 Nov
+	// 2026).
+	for (int32 i = 0; i < stack->CountWindows(); i++)
+		stack->WindowAt(i)->_DecoratorShapeChanged();
+// SPDX-SnippetEnd
+
 	fWindowBehaviour.SetTo(windowBehaviour);
 
 	// set the correct focus and top layer tab
@@ -1290,6 +1301,13 @@ Window::SetTitle(const char* name, BRegion& dirty)
 	if (decorator) {
 		int32 index = PositionInStack();
 		decorator->SetTitle(index, name, &dirty);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// a decorator's footprint may reach into the frame (Default (R5
+		// Modern)'s wedge) and change with the width of the tab
+		_DecoratorShapeChanged();
+// SPDX-SnippetEnd
 	}
 }
 
@@ -1439,7 +1457,17 @@ Window::SetTabLocation(float location, bool isShifting, BRegion& dirty)
 	::Decorator* decorator = Decorator();
 	if (decorator) {
 		int32 index = PositionInStack();
-		return decorator->SetTabLocation(index, location, isShifting, &dirty);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// the tab card moves from one top corner to the other (external
+		// review, 23 Nov 2026)
+		bool changed = decorator->SetTabLocation(index, location, isShifting,
+			&dirty);
+		if (changed)
+			_StackShapeChanged();
+		return changed;
+// SPDX-SnippetEnd
 	}
 
 	return false;
@@ -1470,8 +1498,17 @@ Window::SetDecoratorSettings(const BMessage& settings, BRegion& dirty)
 	}
 
 	::Decorator* decorator = Decorator();
-	if (decorator)
-		return decorator->SetSettings(settings, &dirty);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (decorator) {
+		// the settings may move the tab
+		bool changed = decorator->SetSettings(settings, &dirty);
+		if (changed)
+			_StackShapeChanged();
+		return changed;
+	}
+// SPDX-SnippetEnd
 
 	return false;
 }
@@ -1523,6 +1560,11 @@ Window::SetLook(window_look look, BRegion* updateRegion)
 	fEffectiveDrawingRegionValid = false;
 		// ...and therefore the drawing region is
 		// likely not valid anymore either
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	_DecoratorShapeChanged();
+// SPDX-SnippetEnd
 
 	if (!fCurrentStack.IsSet())
 		return;
@@ -1596,6 +1638,11 @@ Window::SetFlags(uint32 flags, BRegion* updateRegion)
 
 	int32 stackPosition = PositionInStack();
 	decorator->SetFlags(stackPosition, flags, updateRegion);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	_DecoratorShapeChanged();
+// SPDX-SnippetEnd
 
 	// we might need to resize the window!
 	decorator->GetSizeLimits(&fMinWidth, &fMinHeight, &fMaxWidth, &fMaxHeight);
@@ -2386,6 +2433,40 @@ Window::SetCornerRadius(float radius)
 }
 
 
+/*!	The decorator's footprint or outline changed (a new decorator, title,
+	look, flags or tab): the content region leaves them out and the views
+	keep their clipping cut to it, so both are made again (review 2,
+	22 Nov 2026).
+*/
+void
+Window::_DecoratorShapeChanged()
+{
+	fContentRegionValid = false;
+	fVisibleContentRegionValid = false;
+	fEffectiveDrawingRegionValid = false;
+	if (fTopView.IsSet())
+		fTopView->InvalidateScreenClipping();
+}
+
+
+/*!	_DecoratorShapeChanged() for every window of the stack: they share the
+	decorator, and a tab that moves, comes or goes lays out all tabs again
+	(external review, 23 Nov 2026: after a Shift-drag of the tab from the
+	left top corner to the right one the content region kept the old
+	corner).
+*/
+void
+Window::_StackShapeChanged()
+{
+	if (!fCurrentStack.IsSet()) {
+		_DecoratorShapeChanged();
+		return;
+	}
+	for (int32 i = 0; i < fCurrentStack->CountWindows(); i++)
+		fCurrentStack->WindowAt(i)->_DecoratorShapeChanged();
+}
+
+
 /*!	Takes the cut corners of the round outline out of \a region. Nothing
 	happens for a square window, so its regions stay what they were.
 */
@@ -2556,9 +2637,20 @@ Window::DetachFromWindowStack(bool ownStackNeeded)
 		remainingTop->SetLook(remainingTop->Look(), NULL);
 	}
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// the remaining tabs are laid out again (external review, 23 Nov 2026)
+	_StackShapeChanged();
+// SPDX-SnippetEnd
 	fCurrentStack = NULL;
 	if (ownStackNeeded == true)
 		_InitWindowStack();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	_DecoratorShapeChanged();
+// SPDX-SnippetEnd
 	// propagate focus to the new decorator
 	SetFocus(IsFocus());
 
@@ -2616,6 +2708,11 @@ Window::AddWindowToStack(Window* window)
 	}
 
 	window->SetLook(window->Look(), &dirty);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	_StackShapeChanged();
+// SPDX-SnippetEnd
 	fDesktop->RebuildAndRedrawAfterWindowChange(TopLayerStackWindow(), dirty);
 	window->SetFocus(window->IsFocus());
 	return true;
@@ -2682,6 +2779,11 @@ Window::MoveToStackPosition(int32 to, bool isMoving)
 	::Decorator* decorator = Decorator();
 	if (decorator && decorator->MoveTab(index, to, isMoving, &dirty) == false)
 		return false;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	_StackShapeChanged();
+// SPDX-SnippetEnd
 
 	fDesktop->RebuildAndRedrawAfterWindowChange(this, dirty);
 	return true;

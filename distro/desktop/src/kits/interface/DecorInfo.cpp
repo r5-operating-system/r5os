@@ -278,8 +278,14 @@ DecorInfo::_Init(bool isUpdate)
 		fVersion = 0.5;
 		fInitStatus = B_OK;
 
-		fName = gSystemCatalog.GetString(B_TRANSLATE_MARK("Default"),
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// On R5 Haiku's built-in decorator is not the default (owner,
+		// 22 Nov 2026): its name in Appearance is Classic (Haiku).
+		fName = gSystemCatalog.GetString(B_TRANSLATE_MARK("Classic (Haiku)"),
 			B_TRANSLATION_CONTEXT);
+// SPDX-SnippetEnd
 		fShortDescription = gSystemCatalog.GetString(B_TRANSLATE_MARK(
 				"Default Haiku window decorator."),
 			B_TRANSLATION_CONTEXT);
@@ -351,7 +357,14 @@ DecorInfo::_Init(bool isUpdate)
 	}
 
 	fInitStatus = B_OK;
-	fName = fRef.name;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// The add-on's own name (be:decor:info), such as "Default (R5)"; the
+	// file name only when it has none (owner, 22 Nov 2026).
+	if (fName.Length() == 0)
+		fName = fRef.name;
+// SPDX-SnippetEnd
 }
 
 
@@ -507,6 +520,11 @@ DecorInfoUtility::FindDecorator(const BString& string)
 
 	if (string == "Default")
 		return fList.ItemAt(0);
+	// and by its name in Appearance, Classic (Haiku): the search by name
+	// below starts after it
+	DecorInfo* builtIn = fList.ItemAt(0);
+	if (builtIn != NULL && string.ICompare(builtIn->Name()) == 0)
+		return builtIn;
 // SPDX-SnippetEnd
 
 	// search by path
@@ -519,6 +537,13 @@ DecorInfoUtility::FindDecorator(const BString& string)
 		decor = fList.ItemAt(i);
 		if (string.ICompare(decor->Name()) == 0)
 			return decor;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// the file name, which was the name before the add-on's own
+		if (string.ICompare(decor->ShortcutName()) == 0)
+			return decor;
+// SPDX-SnippetEnd
 	}
 
 	return NULL;

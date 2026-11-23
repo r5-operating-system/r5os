@@ -7,6 +7,105 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-23 - Windows, Default (R5 Modern): fixes from the external review
+
+Problem: an external review of the branch named five points; each was checked against the code first.
+1. A tab that moves (Shift-drag, `SetTabLocation()`, decorator settings), or a stacked tab that is moved, added or removed, did not make `Window` drop its content region and its views' screen clipping, so after a Shift-drag of the tab from the left top corner to the right one the old corner could stay cut out of the content.
+2. `_DoTabLayout()`: with a window narrower than its tab and the tab not at the left, the room for the tab was negative and the cast to `uint32` wrapped.
+3. In the GPU mode the edge line round the window's top arcs, where the tab card lies behind them, was about half a pixel thinner than at the bottom: `window_outline_build()` left the frame's own pixels inside the arc out of `area` there, so the compositor did not carry the line into them.
+4. `GetGlassRegion()` and `GetEdgeLine()` read the top tab (`_IsModern()`) before taking the decorator's lock.
+5. `Compositor.cpp`: a window that gets its first pixels while it opens damaged its shadow once more. The reviewer's check (`layer->visible < 0`) does not work at that point: the frame's visibility is set later, by `_AnimationFrame()`. The damage was not wrong either, only redundant: the animation damages `animArea`, which holds the shadow, every frame, the last one included.
+
+What changed: new `Window::_StackShapeChanged()` (every window of the stack drops its content region and clipping), called from `SetTabLocation()`, `SetDecoratorSettings()`, `AddWindowToStack()`, `DetachFromWindowStack()` and `MoveToStackPosition()`. `_DoTabLayout()` keeps the room at 0 or more. `window_outline_build()` keeps the first rectangle's own pixels in its corner squares in `area` also where another rectangle lies behind them. The two decorator calls take the lock first and give it back before they call the base class. The compositor skips that shadow damage while the window opens (`animOpen`). Also (reviewer's answer B1): the Appearance program and the Settings page mark the current decorator by its `ShortcutName()`, not by the name it shows; no other code in the tree compares a decorator by its name (`setdecor` and `r5-effects-test` find one with `FindDecorator()`, which also takes "Default" and the file name).
+
+Limits: in QEMU StyledEdit cannot be made narrower than its narrowest tab (68 px at 12 pt, the two buttons), so the case of point 2 was not reached by a drag; the guard stays for a window whose size limits allow it. The QEMU driver's narrow step drags to 120 px; the 68 px shot was taken by an extra drag on the running Safe mode QEMU.
+
+Tested: build 12 (`jam_exit=0`, `mesa_exit=0`; build 11 the same without the Appearance change). QEMU run 9 with Lavapipe: the compare (`gpu_debug`) prints only `ok` lines, no `MISMATCH`, while Default (R5), Classic (Haiku) and Default (R5 Modern) are on; the tab Shift-dragged into the right corner and the window narrowed. The left top corner is round afterwards, the right one shows the card. Without effects the top arc's line now has the same inner pixel as the bottom arcs (before and after crops, run 7 and run 9). QEMU run 8 in Safe mode: the same two steps, and the narrowest window. Run 8's normal boot stopped at the first-boot SSH key step and was repeated as run 9. In run 9 the Appearance window was caught half drawn while it started (run 5 caught it still empty at the same moment); not looked into further. Not tested: the 5625U (RADV), a stick, stacked windows (Stack and Tile).
+
+## 2026-11-23 - Windows, Default (R5 Modern): fixes from the second review
+
+Problem: a second independent review (a new agent, code and docs only, on the code after the first review's fixes) found that a new title, new flags or an added or removed tab can change the width of the tab card, so the card may come to lie behind a top corner of the window or no longer. The wedge rows were not in the update region, and `Window` kept its cached content region (which leaves the decorator's footprint out) and its views' screen clipping, so wedge pixels could stay on screen or stay undrawn.
+
+What changed: `R5ModernDecorator` overrides `_SetTitle()`, `_SetFlags()`, `_AddTab()` and `_RemoveTab()` and adds the rows of the window's top corners to the update region (`_IncludeWedgeRows()`, also used by `_SetTabLocation()` and `_MoveTab()`). New `Window::_DecoratorShapeChanged()` drops the content, visible content and drawing regions and the top view's screen clipping; called from `SetTitle()`, `SetFlags()`, `SetLook()` and `ReloadDecor()`.
+
+Also noted by the review, not changed: in the GPU mode the edge line round the window's top arcs, where the card lies behind them, is about half a pixel thinner than round the bottom arcs (the compositor's line reaches one pixel into the content there, and those pixels are the window's own); a resize or Stack and Tile highlight colours the straight sides, not the arcs; the sort in Appearance is by bytes, not by locale; "Classic (Haiku)" is matched by its translated name.
+
+Tested: build 10 (`jam_exit=0`); QEMU run 7 (see the PR). A title change that moves the card over a corner was not tested in QEMU.
+
+## 2026-11-23 - Windows, Default (R5 Modern): fixes from the first review
+
+Problem: an independent review of the branch (a fresh agent, code and docs only) found: the wedge in the footprint depended on the mode, and the footprint is cached, so after a fall back from the GPU to the CPU mode in a session some wedge pixels were drawn by nobody; wedge pixels between half and fully covered were in the footprint but returned no region, so a click there did nothing; reordering stacked tabs (`_MoveTab`) did not redraw the wedge; `_DrawWedges()` made one rectangle and one colour lookup per pixel.
+
+What changed (`R5ModernDecorator.cpp`): the wedge is the same in both modes (every pixel the arc does not fully cover); in the CPU mode the decorator paints the pixels at least half covered in the plain edge colour, the same line Window paints as its rim; `RegionAt()` gives every wedge pixel to the tab (`_InWedge()`); `_MoveTab()` adds the top strip to the update region; the wedge is filled one run per row.
+
+Also noted by the review, not changed (owner's choice, in the PR's "Open keuzes"): the active tab without glass, floating windows with the full card, the 12 % lighter tab colour, the edge colour over the panel colour. `DecorInfo` (libbe) now returns the add-on's own name from `Name()` and "Classic (Haiku)" for the built-in decorator: a visible change in a libbe class, no ABI change; "Default" and the file names still find the decorators.
+
+Tested: see the step C entry and the PR (QEMU run 6 on build 9).
+
+## 2026-11-22 - Windows, Default (R5 Modern) step C: the round decorator, its name in Appearance, clicks in the round corners
+
+Problem: the owner chose a round window decorator, "Default (R5 Modern)", from board 4 "Soft" of the mockup (`docs/design/R5-MODERN-DECORATOR.md`, 22 Nov 2026). Steps 1 and 2 (the window outline in the compositor and in Safe mode) were on `main`; the decorator itself, its name in Appearance and the clicks in a round corner were not. Appearance also showed decorators by file name ("R5", "Default"), and `_DecorLabel()` returned the text of a `BString` that no longer existed.
+
+What changed:
+- New add-on `R5ModernDecorator` (`distro/desktop/src/add-ons/decorators/R5ModernDecorator/`), a subclass of `R5Decorator` built from the same source (step A), installed next to it in the base package. Numbers from board 4 at 12 pt, times font size / 12 like Haiku: the frame's four corners round 18 px (`GetOutline()`); a tab card behind the window, 32 px visible, 14 px under the window, at least 250 px wide, padding 10 and 8, gap 10, title bold (the tab font) after the close button; close on the left (15 px), zoom on the right (16 px: 9 px square behind a 12 px one); buttons in the "glass" finish with square corners (white 55 %, the back square 35 %, a line of the tab's dark yellow at 35 %, a white highlight; inactive: black line 20 %, white 60 %), blended against the tab by the decorator itself, so they are opaque in every mode. With the compositor's shadow or glass on the tab has the soft gradient (the tab colour 27 % towards white at the top of the card, 12 % at the bottom: board 4's #ffdb45 to #ffcf1f from Haiku's yellow) and the edge is white at 75 % (`GetEdgeLine()` white with alpha 191; the straight line is that white over the panel colour); without them the tab is one colour (#ffd21f) and the edge #9fb0c8. Glass is the tab (`GetGlassRegion()`), not the line. No resize knob; the R5 input margin. Shadow and glass are the existing effect steps.
+- The wedge: where the card lies behind the window's round top corners those pixels stay the window's (the outline's second rectangle reaches under the window); they are in the decorator's footprint and it paints them (the card, and on the compositor the edge by the corner's coverage). In Safe mode Window paints the stepped edge (`rim`) along them as before.
+- Glass is the tab of an inactive window only: on the active tab glass let the desktop wash the yellow out, and board 4's active tab is opaque (QEMU). The button line is the tab colour 65 % towards black (board 4: `rgba(90,65,0,.35)` over Haiku's yellow).
+- Clicks: `Decorator::InputMarginContains()` also holds a cut corner of the frame (outside the arc) of a window that can be resized, so the click and the resize cursor there go to this window and not to the one behind; `RegionAt()` returns the resize corner there, and the tab for the wedge. The tab's own round corners let a click through (as advised in step 0). New `window_outline_cut_corner()` in `WindowOutline.h`.
+- `gWindowEffects` next to `gWindowEffectStrength` (`WindowEffectLevels.h`); `AS_R5_SET_WINDOW_EFFECTS` redraws the desktop when shadow and glass both go off or one comes on, so the tab and the edge follow.
+- Appearance (the Settings page and the separate program): the names come from the add-on's `be:decor:info` resource (`DecorInfo`; the file name only without one), "Default (R5)" for `R5Decorator`, "Default (R5 Modern)" for the new one, "Classic (Haiku)" for the built-in decorator; the menu lists the add-ons by name and the built-in one last. `DecorInfoUtility::FindDecorator()` also finds a decorator by its file name. `_DecorLabel()` returns a `BString`, and a missing menu item no longer crashes `_SetDecor()`. The default stays Default (R5). The Settings window layout is unchanged.
+- `r5-effects-test decorator list|<name>` and `r5-effects-test soft [seconds]` (board 4's two windows at its places) for the test without the owner.
+
+Limits: floating windows use the same card (no number on the board); a window with its tab on the left (`kLeftTitledWindowLook`) keeps the Default (R5) look, square. The title uses R5's bold tab font at its size (12 pt), not the board's 15 px Noto Sans. A switch between the GPU and the CPU mode in a session keeps the wedge of the mode before until the window's next layout. The tab's own round corners let clicks through.
+
+Tested (QEMU, KVM, `-machine pc`, 2 CPUs, 2 GB, `-vga std` at 1280x800, Lavapipe with `gpu_compositor_lavapipe true` and `gpu_debug true` planted in a private image copy, no owner; `scripts/qemu-r5modern.py` with `scripts/r5modern-test.sh`, 22 to 23 Nov 2026, runs 1 to 5 on builds 4 to 8, each built with `scripts/build-locked.sh`, `jam_exit=0`, `mesa_exit=0`):
+- Board 4 rendered from the mockup's own HTML and CSS (Edge, headless, 1280x680) and compared with screendumps of the same two windows at the same places (`r5-effects-test soft`): the tab (x 60 to 309, 32 px visible, round 18), the wedge in the window's top corners, the buttons (close 15 px at x 70, y 67; zoom 16 px) and the four round corners match to the pixel; the colours are within 2 to 7 levels (tab middle 255 214 55 against 251 210 55, button line 197 179 107 against 194 173 105). Pictures in `docs/design/screens/r5-modern/`.
+- Without effects (shadow and glass off, Lavapipe): solid tab (255 209 31 against the board's 255 210 31) and the edge 159 176 200 as on the "no GPU" board.
+- Compare (`gpu_debug`, effects off) with Default (R5), then Classic (Haiku), then Default (R5 Modern) chosen with `r5-effects-test decorator`: every `app_server: compose compare` line `ok`, 0 `MISMATCH`, in runs 1 to 5 (5 compare lines per run: 2 with Default (R5), 1 or 2 with Classic, 2 with Modern). The pictures of Default (R5) and Classic look as before.
+- `r5-effects-test decorator list` and the Appearance program (Look and feel, Decorator menu): "Default (R5 Modern)", "Default (R5)", "Classic (Haiku)", in that order; choosing Default (R5) in the menu switched the windows and marked it (run 2). Run 1 found that "Classic (Haiku)" could not be found by name; fixed in `FindDecorator()`.
+- A window moved by its tab and resized by dragging in the cut wedge of its round bottom right corner (the resize cursor shows there; the window grew by 80 x 60).
+- Safe mode from the boot menu (`[x] Safe mode` checked in a screendump): the decorator with stepped round corners, the plain line along the steps, also over the tab card in the window's top corners, no line round the tab's own corners, solid tab, no shadow.
+- Found and fixed on the way (their own entries): the shadow of a new window (Compositor), and the old round corners after a change of decorator (Windows).
+
+Not tested: a real GPU (RADV on the 5625U), a stick, other font sizes than 12, stacked tabs (Stack and Tile) and floating windows with this decorator.
+
+## 2026-11-22 - Windows: a change of decorator redraws the old round corners
+
+Problem: in QEMU, choosing Default (R5) in Appearance while Default (R5 Modern) was active left black bits in every window's old round corners and a bit of yellow tab in the top left corner, until the window was drawn again for another reason. `Window::ReloadDecor()` swapped the decorator but kept the cached content region, which still left the old footprint (the tab card's wedge) and the old cut corners out; and `Desktop::ReloadDecor()` redrew the old and the new border only, not the old cut corners.
+
+What changed: `Window::ReloadDecor()` invalidates the content, visible content and drawing regions of the stack's windows and the screen clipping of their views (`View::InvalidateScreenClipping()`: the views kept their clipping cut to the old content region; without this the first two changes did not help, run 4); `Desktop::ReloadDecor()` adds the old outline's `cut` and `rim` to the region it redraws and, in the GPU mode, damages the whole window and its shadow in the compositor, as `set_window_corner_radius()` does.
+
+Tested (QEMU, Lavapipe, `r5-effects-test decorator "Default (R5)"` with the soft windows and Appearance open): runs 3 and 4 still showed the black corners and the yellow bit; run 5 (build 8, all three changes) shows clean square corners (`docs/design/screens/r5-modern/switch-back-to-default-r5.png`, before: `switch-back-before-fix.png`).
+
+## 2026-11-22 - Compositor: a new window gets its shadow at once
+
+Problem: in QEMU (Lavapipe, shadow on) a window that had just opened showed no shadow, or only a few dark pixels round its corners, until it was moved or lost the focus; the Appearance window stayed so for minutes. A new window's layer has no buffer memory at its first compose (`Layer::HasPixels()` false), so the window and its shadow are skipped; the window's first drawing then damages only its own pixels, so the shadow area outside it was never composed. Found while testing Default (R5 Modern); the code is the same for every decorator, so it is not clear whether it came with the compositor split (#4558). Listed in the shared `COMPOSITOR-FIXES.md` of tonight's sessions.
+
+What changed: `Compositor::Entry::hadPixels`; when a layer has pixels for the first time (or again), `_ComposeLoop()` adds its shadow area to the frame's damage. `distro/app_server/Compositor.cpp`, `CompositorPrivate.h`.
+
+Limits: only the shadow; glass already had its own catch-up (`glassStale`).
+
+Tested: see the step C entry (QEMU, the new window's shadow right after it opened).
+
+## 2026-11-22 - Windows, Default (R5 Modern) step B: the edge line runs along the frame only
+
+Problem: a window outline has the frame first and then the tabs (`Decorator::GetOutline()`, decorator ABI 2). The compositor carried the decorator's edge line (`GetEdgeLine()`) round every round corner, the tab's too, and Safe mode painted the stepped line (`rim`) there as well. Default (R5 Modern)'s tab has no line along its straight edges (board 4 of the mockup), so its round top corners would have had a line that stops where the corner ends.
+
+What changed: `window_corner` (`WindowOutline.h`) knows whether it carries the line (`lined`): the corners of the first rectangle do, a tab's do not. In the GPU mode `set_corner()` (`CompositorPrivate.h`) gives the shader line width 0 for a tab corner; in the CPU mode only the frame's corners get a `rim`. A tab draws its own edge, if it has one. No decorator ABI change: the order of the rectangles was already the frame first.
+
+Limits: a decorator that wants a line round its tab draws it itself.
+
+Unchanged: a window with one rectangle (`set_window_corner_radius()`, the round Deskbar) and every square window.
+
+Tested: see the step C entry (the build, the compare and the QEMU pictures).
+
+## 2026-11-22 - Windows, Default (R5 Modern) step A: the R5 frame's code shared
+
+Problem: Default (R5 Modern) (`docs/design/R5-MODERN-DECORATOR.md`, owner 22 Nov 2026: a separate add-on that shares the code of `R5Decorator`) needs the R5 frame class, but `R5Decorator.cpp` also held the add-on entry (`instantiate_decor_addon`, the ABI export), so a second add-on could not build it.
+
+What changed: the add-on class and the entry moved word for word into `R5DecoratorAddOn.cpp`; `R5Decorator.cpp` keeps only the frame class. `fThinFrame` and `fHaikuBorderWidth` are protected, so a subclass can use them. The Jamfile builds both files; `scripts/check-pre-stick.py` looks for "decorator: r5 loaded" in the new file. No functional change for Default (R5).
+
+Tested: see the step C entry (the build, and the compare with Default (R5) in QEMU).
+
 ## 2026-11-22 - Round window corners, step 1.5: the line in Safe mode, a clean resize, the checks
 
 Problem: after PR #4557 three things were open: in Safe mode (Painter) the decorator's edge line stopped where the stepped corner began; the pixel compare of square windows and a move and resize of a round window had not been checked. The resize check then showed black bits of edge line where the smaller window's corner had been: that corner was cut, never drawn, and after the window grew the old picture was kept there.
