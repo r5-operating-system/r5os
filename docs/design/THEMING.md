@@ -165,9 +165,11 @@ Wallpaper page's and is not part of a theme.
   `B_NAVIGATION_BASE_COLOR`, `B_STATUS_BAR_COLOR`, and in R5 Modern and dark
   also the menu and list selection.
 
-Custom colours from Appearance > Colors stay until a theme, the mode, the
-accent or the controls are chosen on the Theme page; "Save as theme" keeps
-the mode and the accent, not a full colour list.
+Custom colours from Appearance > Colors stay until a theme, the mode or the
+accent is chosen on the Theme page. A change of the controls alone swaps the
+colour set only while the colours are still the set of the theme before;
+custom colours stay. "Save as theme" keeps the mode and the accent, not a
+full colour list.
 
 ### Dark mode of the other parts
 
@@ -203,8 +205,9 @@ the Deskbar look". The page content is A1 without the Appearance tab strip
    (style, layout, Rounded, Away from the screen edges), Effects (Shadow,
    Frosted glass, Animations, Strength).
 
-A change is applied at once. Revert puts back the theme from when the page
-was opened (with the effects); Defaults chooses R5, light. The page is not
+A change is applied at once. Revert puts back the theme and every colour
+from when the page was opened (with the effects); Defaults chooses R5,
+light, with the factory effects (all on, Balanced). The page is not
 locked. The segmented control is local to the page: Haiku has no such
 control and libr5ui had none.
 
@@ -247,8 +250,25 @@ in QEMU without the owner.
    changes the highlight, the check marks and the focus colour, and keeps
    Haiku's grey selection with black text; R5 Modern and dark select with the
    accent and white text.
-5. **Custom colours.** Choosing a theme, the mode, the accent or the controls
-   replaces custom colours from Appearance > Colors with the theme's set.
+5. **Custom colours.** Choosing a theme, the mode or the accent replaces
+   custom colours from Appearance > Colors with the theme's set (the controls
+   alone do not, see above).
+6. **Scroll bar width.** A theme can set it (8 to 32 at 12 points; the page
+   offers Thin 10, Haiku width, Wide 18), through Haiku's
+   `BControlLook::GetScrollBarWidth()`. Only the R5 Modern look reads it from
+   the theme (another add-on gives its own width). `BScrollBar` and
+   `BScrollView` ask it; a program that places scroll bars with
+   `B_V_SCROLL_BAR_WIDTH` keeps Haiku's width and still works.
+
+## The Theme Kit (owner's addition, 23 Nov 2026)
+
+For theme makers: the calls in `<Themes.h>` (list, read, apply, save,
+remove, `B_THEME_CHANGED`), the versioned file format (`format 1`, keys only
+added; `docs/LIBR5.md`, "Theme files"), the rules for an add-on that fits a
+theme, the control look template
+`distro/desktop/src/add-ons/control_look/ExampleControlLook/` (compiled by
+the system build, not installed), the sample theme `docs/theme-kit/Evening`,
+and the R5Book chapter "Making themes" (`docs/r5book/making-themes.html`).
 
 ## Later
 

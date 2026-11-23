@@ -485,15 +485,37 @@ Added 23 Nov 2026 (`docs/design/THEMING.md`). The header is `<Themes.h>`, namesp
 | `count_themes()`, `get_theme_at(index, info)` | The built-in themes first (R5 Modern, R5, Classic (Haiku)), then the saved ones by name |
 | `find_theme(name, info)` | A built-in or saved theme by name; `B_ENTRY_NOT_FOUND` |
 | `is_built_in_theme(name)` | True for the three built-in names, in any case |
-| `save_theme(info, parts)` | Writes `parts` of `info` to `~/config/settings/r5/themes/<info->name>`, replacing a saved theme of that name. `B_NOT_ALLOWED` for a built-in name; `B_BAD_VALUE` for an empty name, one with `/`, `"` or `\`, or no parts |
+| `save_theme(info, parts)` | Writes `parts` of `info` to `~/config/settings/r5/themes/<info->name>`, replacing a saved theme of that name. `B_NOT_ALLOWED` for a built-in name; `B_BAD_VALUE` for an empty name, `.`, `..`, a name with `/`, `"`, `\` or a control character, or no parts |
 | `remove_theme(name)` | Deletes a saved theme; `B_NOT_ALLOWED` for a built-in one |
 | `theme_matches(theme, base)` | True when `theme` shows the same as `base` for every part `base` holds; the Theme page shows "(changed)" when it is false |
 | `get_theme_colors(info, colors)` | The `ui_color` set of a theme's mode, accent and controls, as `set_ui_colors()` takes it. Every colour a theme sets is in it, so one set replaces another completely; the desktop colour is not |
 | `count_theme_accents()`, `theme_accent_at(index, mode)`, `theme_accent_name(index)` | The accent swatches of the Theme page (Blue, Teal, Purple, Pink, Orange, Graphite), a little lighter in dark mode |
+| `B_THEME_CHANGED` (`'r5th'`) | Sent to every program (`BRoster::Broadcast()`) after `set_theme()`: string `"name"`, string `"base"`, uint32 `"parts"` (what was applied), int32 `"mode"`. It reaches the application's looper. A program that draws with `ui_color` and `be_control_look` need not handle it; one that shows the theme (a theme picker) reads `get_theme()` again |
+| `B_THEME_FORMAT_VERSION` | The version of the theme file format this library writes (1) |
+| `B_THEME_SCROLL_BAR_THIN`, `B_THEME_SCROLL_BAR_WIDE` | The scroll bar widths the Theme page offers, 10 and 18 at 12 points |
 
-`theme_info` fields: `name`, `base` (the theme it started from), `parts`, `decorator` (the add-on's file name, `""` for Haiku's built-in Classic (Haiku)), `control_look` (the add-on's file name, `""` for Haiku's controls), `modern_scroll_bars`, `double_arrows`, `deskbar_style` (`B_THEME_DESKBAR_R5`, `B_THEME_DESKBAR_CLASSIC`), `deskbar_layout` (`B_THEME_DESKBAR_VERTICAL`, `_COMPACT`, `_HORIZONTAL`), `deskbar_rounded`, `deskbar_floating`, `mode` (`B_THEME_LIGHT`, `B_THEME_DARK`), `accent` (alpha 0: the colour set's own), `effects`, `effect_strength`.
+`theme_info` fields (the struct keeps `_reserved[15]` at the end for later fields; fill one with `get_theme()`, `find_theme()` or `get_theme_at()` and change what you need, so a later field is never garbage): `name`, `base` (the theme it started from), `parts`, `decorator` (the add-on's file name, `""` for Haiku's built-in Classic (Haiku)), `control_look` (the add-on's file name, `""` for Haiku's controls), `modern_scroll_bars`, `double_arrows`, `deskbar_style` (`B_THEME_DESKBAR_R5`, `B_THEME_DESKBAR_CLASSIC`), `deskbar_layout` (`B_THEME_DESKBAR_VERTICAL`, `_COMPACT`, `_HORIZONTAL`), `deskbar_rounded`, `deskbar_floating`, `mode` (`B_THEME_LIGHT`, `B_THEME_DARK`), `accent` (alpha 0: the colour set's own), `effects`, `effect_strength`, `scroll_bar_width` (at 12 points; 0 is the look's own width).
 
-The file is driver settings text (`name`, `base`, `windows`, `controls`, `scroll_bars`, `arrows`, `deskbar_style`, `deskbar_layout`, `deskbar_rounded`, `deskbar_floating`, `mode`, `accent`, `shadow`, `glass`, `animations`, `strength`); a key that is not there is a part the theme does not hold.
+### Theme files
+
+A theme file is driver settings text (`<driver_settings.h>`), one key per line, `#` for a comment, a value with spaces in double quotes. Saved themes are in `~/config/settings/r5/themes/` (one file per theme, named after it); a file copied in by hand is found by the `name` inside it. The theme in use is `~/config/settings/r5/theme`. The sample is `docs/theme-kit/Evening`.
+
+| Key | Values | Part |
+|---|---|---|
+| `format` | the format version; 1 now | |
+| `name`, `base` | the theme's name; the theme it started from | |
+| `windows` | a decorator add-on's file name in `add-ons/decorators`, `""` for Classic (Haiku) | `B_THEME_WINDOWS` |
+| `controls` | a control look add-on's file name in `add-ons/control_look`, `""` for Haiku's | `B_THEME_CONTROLS` |
+| `scroll_bars`, `arrows`, `scroll_bar_width` | `modern` or `haiku`; `single` or `double`; 8 to 32 at 12 points (left out: the look's own) | `B_THEME_SCROLL_BARS` |
+| `deskbar_style`, `deskbar_layout`, `deskbar_rounded`, `deskbar_floating` | `r5` or `classic`; `vertical`, `compact` or `horizontal`; `true` or `false` | `B_THEME_DESKBAR` |
+| `mode`, `accent` | `light` or `dark`; `#rrggbb` or `default` | `B_THEME_COLORS` |
+| `shadow`, `glass`, `animations`, `strength` | `true` or `false`; `quiet`, `balanced` or `glassy` | `B_THEME_EFFECTS` |
+
+A key that is not there is a part the theme does not hold; applying the theme leaves that part as it is. Versioning: keys are only ever added, never renamed or given a new meaning; a reader takes every older format and the keys it knows of a newer one, and ignores the rest. An add-on name with a `/` is refused, so a theme file can only name add-ons in the add-ons folders (system, home, non-packaged).
+
+### Making an add-on that fits a theme
+
+A control look is a `BControlLook` add-on with `extern "C" BControlLook* instantiate_control_look(image_id)` in `add-ons/control_look`; the template is `distro/desktop/src/add-ons/control_look/ExampleControlLook/` (on top of `HaikuControlLook`, like Haiku's FlatControlLook and R5 Modern). Draw with the colours the control passes and `ui_color()` only, so the light and dark sets work; scale with `be_plain_font`; inset the rect in every `Draw*()` method exactly as Haiku does, on the sides in `borders`; give the scroll bar width through `GetScrollBarWidth()` (Haiku's hook, which `BScrollBar` and `BScrollView` ask). A decorator follows the same colour rule (`DesktopSettings::UIColor()`), and decides light or dark with the panel colour. R5Book, "Making themes", has the whole recipe.
 
 Live switching: after it set the control look, `set_theme()` sends `B_COLORS_UPDATED` with an int64 `"r5:control_look"` to every program (`BRoster::Broadcast()`). R5's `BWindow` loads the control look app_server names when it sees a new value, and draws again. The previous look stays in memory until the program quits. A program does not have to do anything.
 

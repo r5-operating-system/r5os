@@ -55,9 +55,13 @@ fi
 # 1. the controls window before any theme (R5, light, the Haiku controls),
 #    then live: it stays open while the theme changes
 $T controls 1500 > /dev/null 2>&1 &
-sleep 6; shot controls-r5-light
+sleep 12; shot controls-r5-light
 theme "R5 Modern" light; shot controls-modern-light-live
 theme mode dark; shot controls-modern-dark-live
+# the scroll bar width of a theme (Haiku's hook), live
+$T theme width 18 >> "$out/notes.txt" 2>&1; sleep 4; shot controls-width-wide
+$T theme get >> "$out/notes.txt" 2>&1
+$T theme width 0 >> "$out/notes.txt" 2>&1; sleep 3
 $T theme get >> "$out/notes.txt" 2>&1
 
 # 2. the Theme page, dark (A2) and light (A1)

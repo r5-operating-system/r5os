@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<!--
+  SPDX-FileCopyrightText: 2026 R5OS Contributors
+  SPDX-License-Identifier: MIT
+-->
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Making themes — Appearance Kit — R5Book</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
+	<link rel="stylesheet" href="r5book.css" />
+</head>
+<body data-page="appearance">
+
+<div class="book">
+	<aside class="toc"></aside>
+
+	<main class="page">
+		<div class="breadcrumb"><a href="index.html">R5Book</a> &rsaquo; <a href="appearance-kit.html">Appearance Kit</a> &rsaquo; Making themes</div>
+
+		<section class="page-hero">
+			<span class="kit-label">The Theme Kit &middot; libr5ui.so &middot; &lt;Themes.h&gt;</span>
+			<h1>Making themes</h1>
+			<p>How to make a theme of your own, and the parts that go in one: a theme file, a control look
+			add-on, a decorator. A theme combines parts that already exist; it never draws anything itself.
+			Read <a href="appearance-themes.html">Theming</a> first for what a theme is and how a program
+			follows one.</p>
+		</section>
+
+		<nav class="on-this-page" aria-label="On this page">
+			<h3>What is in this page</h3>
+			<ul>
+				<li><a href="#what">What a theme is</a> &mdash; parts, not drawing rules.</li>
+				<li><a href="#file">The theme file</a> &mdash; the format and its version.</li>
+				<li><a href="#controls">A control look</a> &mdash; the template add-on.</li>
+				<li><a href="#scrollbars">The scroll bar width</a> &mdash; <code class="inline">GetScrollBarWidth()</code>.</li>
+				<li><a href="#decorator">A window decorator</a> &mdash; the frame and the tab.</li>
+				<li><a href="#colours">Light and dark</a> &mdash; <code class="inline">ui_color</code>, never fixed colours.</li>
+				<li><a href="#api">The calls</a> &mdash; list, read, apply, save, and the notification.</li>
+				<li><a href="#test">Testing</a> &mdash; with the GPU and in Safe mode.</li>
+				<li><a href="#share">Sharing a theme</a> &mdash; one small file.</li>
+			</ul>
+		</nav>
+
+		<section class="entry" id="what">
+			<div class="entry-header"><h2 class="plain">What a theme is</h2><span class="kind">guide</span></div>
+			<p>A theme names its parts: the window decorator, the control look, the scroll bar style, width
+			and arrows, the Deskbar style, light or dark with an accent, and the window effects. Each part is
+			a normal Haiku add-on or setting, so every program keeps working unchanged. A theme may hold only
+			some parts; applying it leaves the others as they are. R5 has three built-in themes (R5 Modern,
+			R5, Classic (Haiku)); the user's own are on the Theme page of Settings next to them.</p>
+		</section>
+
+		<section class="entry" id="file">
+			<div class="entry-header"><h2 class="plain">The theme file</h2><span class="kind">format 1</span></div>
+			<p>Driver settings text, one key per line. The sample is <code class="inline">docs/theme-kit/Evening</code>
+			in the source tree. Put a file in <code class="inline">~/config/settings/r5/themes/</code> and it
+			is a card on the Theme page.</p>
+<pre class="code"><span class="c"># R5 theme</span>
+format 1
+name <span class="s">"Evening"</span>
+windows <span class="s">"R5ModernDecorator"</span>
+controls <span class="s">"R5ModernControlLook"</span>
+scroll_bars modern
+arrows single
+scroll_bar_width 10
+deskbar_style r5
+deskbar_layout vertical
+deskbar_rounded true
+deskbar_floating true
+mode dark
+accent #8f63e6</pre>
+			<table class="facts">
+				<tr><th>format</th><td>The version, 1. Keys are only ever added; a reader takes older formats and the keys it knows of a newer one.</td></tr>
+				<tr><th>windows, controls</th><td>An add-on's file name in <code class="inline">add-ons/decorators</code> or <code class="inline">add-ons/control_look</code> (system, home or non-packaged); <code class="inline">""</code> is Haiku's own. A path is refused.</td></tr>
+				<tr><th>scroll_bars, arrows, scroll_bar_width</th><td><code class="inline">modern</code> or <code class="inline">haiku</code>; <code class="inline">single</code> or <code class="inline">double</code>; 8 to 32 at 12 points.</td></tr>
+				<tr><th>deskbar_*</th><td>Style <code class="inline">r5</code> or <code class="inline">classic</code>, layout, rounded, away from the screen edges.</td></tr>
+				<tr><th>mode, accent</th><td><code class="inline">light</code> or <code class="inline">dark</code>; <code class="inline">#rrggbb</code> or <code class="inline">default</code>.</td></tr>
+				<tr><th>shadow, glass, animations, strength</th><td>The window effects.</td></tr>
+			</table>
+			<p>The full table is in <code class="inline">docs/LIBR5.md</code>, "Theme files".</p>
+		</section>
+
+		<section class="entry" id="controls">
+			<div class="entry-header"><h2 class="plain">A control look</h2><span class="kind">add-on</span></div>
+			<p>A control look is a <code class="inline">BControlLook</code> add-on, the same kind Haiku has
+			(Be, Flat). Start from the template <code class="inline">ExampleControlLook</code>
+			(<code class="inline">distro/desktop/src/add-ons/control_look/ExampleControlLook/</code>): a class on
+			top of <code class="inline">HaikuControlLook</code> that overrides only what it draws differently,
+			and the entry point:</p>
+<pre class="code"><span class="k">extern</span> <span class="s">"C"</span> BControlLook*
+instantiate_control_look(image_id id)
+{
+	<span class="k">return new</span>(std::nothrow) BPrivate::ExampleControlLook();
+}</pre>
+			<ul>
+				<li><strong>Keep the sizes.</strong> Every <code class="inline">Draw*()</code> method insets
+				<code class="inline">rect</code> exactly as Haiku's does, and only on the sides in
+				<code class="inline">borders</code> (a spinner's buttons and a tab view's plain border name some
+				sides only). Then a window lays out the same with every look, and nothing moves on a switch.</li>
+				<li><strong>Colours from the caller and <code class="inline">ui_color()</code>.</strong> The
+				face is the <code class="inline">base</code> the control passes; lines are
+				<code class="inline">B_CONTROL_BORDER_COLOR</code>, fields <code class="inline">B_DOCUMENT_BACKGROUND_COLOR</code>,
+				the accent <code class="inline">B_CONTROL_HIGHLIGHT_COLOR</code>.</li>
+				<li><strong>Scale with the font.</strong> Radii and widths at 12 points times
+				<code class="inline">be_plain_font-&gt;Size() / 12</code>.</li>
+				<li><strong>No GPU.</strong> Draw with the <code class="inline">BView</code> calls; Painter draws
+				the same shapes in Safe mode.</li>
+			</ul>
+			<p>Build it with an <code class="inline">Addon</code> rule linking <code class="inline">be</code>,
+			copy it to <code class="inline">~/config/non-packaged/add-ons/control_look/</code>, and choose it
+			under Parts &rsaquo; Controls. Running programs switch to it at once.</p>
+		</section>
+
+		<section class="entry" id="scrollbars">
+			<div class="entry-header"><h2 class="plain">The scroll bar width</h2><span class="kind">BControlLook</span></div>
+			<div class="member"><div class="sig">virtual float GetScrollBarWidth(orientation orientation = B_VERTICAL);</div>
+				<p>Haiku's hook; <code class="inline">BScrollBar</code> and <code class="inline">BScrollView</code>
+				ask it for their size, so the width of every scroll bar laid out by them follows your look.
+				Scale it with the font. R5 Modern reads <code class="inline">scroll_bar_width</code> from the theme
+				(Thin 10, Haiku's 14, Wide 18 on the page); a program that places scroll bars with the
+				constant <code class="inline">B_V_SCROLL_BAR_WIDTH</code> keeps Haiku's width and still works.</p></div>
+		</section>
+
+		<section class="entry" id="decorator">
+			<div class="entry-header"><h2 class="plain">A window decorator</h2><span class="kind">add-on</span></div>
+			<p>The window frame and tab are an app_server decorator add-on in
+			<code class="inline">add-ons/decorators</code> (Default (R5), Default (R5 Modern)). Take the colours
+			from <code class="inline">DesktopSettings::UIColor()</code> (<code class="inline">B_WINDOW_TAB_COLOR</code>,
+			<code class="inline">B_WINDOW_BORDER_COLOR</code>, the inactive ones) and decide light or dark from
+			<code class="inline">B_PANEL_BACKGROUND_COLOR</code>, so a theme's dark set gives a dark frame. Round
+			corners, the edge line and glass go through the decorator hooks: see
+			<a href="haiku-additions.html#decorator">Decorator hooks</a>.</p>
+		</section>
+
+		<section class="entry" id="colours">
+			<div class="entry-header"><h2 class="plain">Light and dark</h2><span class="kind">guide</span></div>
+			<p>Dark mode is a <code class="inline">ui_color</code> set. A part that uses only named colours is
+			dark the moment the set is. Where a part needs a colour of its own (a shade, a glass tint), test
+			<code class="inline">ui_color(B_PANEL_BACKGROUND_COLOR).IsDark()</code> and pick the light or dark
+			value; never a fixed grey or white that stays light in dark mode.</p>
+		</section>
+
+		<section class="entry" id="api">
+			<div class="entry-header"><h2 class="plain">The calls</h2><span class="kind">&lt;Themes.h&gt;</span></div>
+			<table class="facts">
+				<tr><th>List</th><td><code class="inline">count_themes()</code>, <code class="inline">get_theme_at()</code>, <code class="inline">is_built_in_theme()</code></td></tr>
+				<tr><th>Read</th><td><code class="inline">find_theme()</code>, <code class="inline">get_theme()</code> (the one in use), <code class="inline">theme_matches()</code></td></tr>
+				<tr><th>Apply</th><td><code class="inline">set_theme(info, parts)</code>: at once, in every running program</td></tr>
+				<tr><th>Save</th><td><code class="inline">save_theme(info, parts)</code>, <code class="inline">remove_theme()</code></td></tr>
+				<tr><th>Notification</th><td><code class="inline">B_THEME_CHANGED</code> (<code class="inline">'r5th'</code>) to every program after a change: <code class="inline">"name"</code>, <code class="inline">"base"</code>, <code class="inline">"parts"</code>, <code class="inline">"mode"</code></td></tr>
+			</table>
+<pre class="code"><span class="k">void</span>
+PickerApp::MessageReceived(BMessage* message)
+{
+	<span class="k">switch</span> (message-&gt;what) {
+		<span class="k">case</span> BAppearanceKit::B_THEME_CHANGED:
+			fPicker-&gt;Reload();	<span class="c">// get_theme() again</span>
+			<span class="k">break</span>;
+		<span class="k">default</span>:
+			BApplication::MessageReceived(message);
+	}
+}</pre>
+			<p>The full list: <a href="appearance-themes.html#api">Theming, Themes.h</a> and
+			<code class="inline">docs/LIBR5.md</code>, "Themes".</p>
+		</section>
+
+		<section class="entry" id="test">
+			<div class="entry-header"><h2 class="plain">Testing</h2><span class="kind">checklist</span></div>
+			<ul>
+				<li>Light and dark: <code class="inline">r5-effects-test theme mode dark</code>, then light.</li>
+				<li>With the GPU (shadow, glass) and in Safe mode (the CPU, Painter, opaque surfaces).</li>
+				<li>At font size 12 and 18 (Appearance &rsaquo; Fonts).</li>
+				<li>A window of every control: <code class="inline">r5-effects-test controls</code>; switch while it is open.</li>
+				<li>Spinners, tab views, menus, lists with scroll bars, a default button, a disabled control.</li>
+				<li>The scroll bar width: <code class="inline">r5-effects-test theme width 18</code>.</li>
+			</ul>
+		</section>
+
+		<section class="entry" id="share">
+			<div class="entry-header"><h2 class="plain">Sharing a theme</h2><span class="kind">guide</span></div>
+			<p>A theme is one small text file: send it, and the other person copies it to
+			<code class="inline">~/config/settings/r5/themes/</code>. If the theme uses an add-on of your own,
+			send the add-on too, for <code class="inline">~/config/non-packaged/add-ons/</code>. A theme that
+			names an add-on the other computer does not have leaves that part as it is. Export and Import on the
+			Theme page, and themes in HaikuDepot, are later steps.</p>
+			<div class="see-also">
+				<strong>See also</strong>
+				<a href="appearance-themes.html">Theming</a>
+				<a href="appearance-effects.html#window-effects">Window effects</a>
+				<a href="haiku-additions.html#decorator">Decorator hooks</a>
+			</div>
+		</section>
+	</main>
+</div>
+
+<script src="r5book.js"></script>
+</body>
+</html>

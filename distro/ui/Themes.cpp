@@ -34,6 +34,7 @@
 #include "Themes.h"
 
 #include <ctype.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -419,7 +420,26 @@ valid_leaf(const char* leaf)
 		return false;
 	if (strcmp(leaf, ".") == 0 || strcmp(leaf, "..") == 0)
 		return false;
-	return strchr(leaf, '/') == NULL;
+	for (const char* c = leaf; *c != '\0'; c++) {
+		if (*c == '/' || *c == '"' || *c == '\\'
+			|| static_cast<uint8>(*c) < 0x20)
+			return false;
+	}
+	return true;
+}
+
+
+static bool
+parse_accent(const char* value, rgb_color* color)
+{
+	if (value == NULL || value[0] != '#' || strlen(value) != 7)
+		return false;
+	for (int i = 1; i < 7; i++) {
+		if (!isxdigit(static_cast<unsigned char>(value[i])))
+			return false;
+	}
+	*color = hex(strtoul(value + 1, NULL, 16));
+	return true;
 }
 
 
@@ -454,7 +474,8 @@ strength_name(int32 strength)
 static status_t
 write_theme(const char* path, const theme_info* info, uint32 parts)
 {
-	BString text("# R5 theme (docs/design/THEMING.md)\n");
+	BString text("# R5 theme (docs/LIBR5.md, \"Theme files\")\n");
+	text << "format " << static_cast<int32>(B_THEME_FORMAT_VERSION) << "\n";
 	text << "name \"" << info->name << "\"\n";
 	if (info->base[0] != '\0')
 		text << "base \"" << info->base << "\"\n";
@@ -467,6 +488,10 @@ write_theme(const char* path, const theme_info* info, uint32 parts)
 			<< "\n";
 		text << "arrows " << (info->double_arrows ? "double" : "single")
 			<< "\n";
+		if (info->scroll_bar_width > 0) {
+			text << "scroll_bar_width "
+				<< static_cast<int32>(roundf(info->scroll_bar_width)) << "\n";
+		}
 	}
 	if ((parts & B_THEME_DESKBAR) != 0) {
 		text << "deskbar_style "
@@ -533,7 +558,7 @@ read_theme(const char* path, theme_info* info)
 	strlcpy(info->name, value, sizeof(info->name));
 
 	value = get_driver_parameter(handle, "base", NULL, NULL);
-	if (value != NULL)
+	if (value != NULL && valid_name(value))
 		strlcpy(info->base, value, sizeof(info->base));
 
 	value = get_driver_parameter(handle, "windows", NULL, "");
@@ -551,6 +576,13 @@ read_theme(const char* path, theme_info* info)
 		info->modern_scroll_bars = strcmp(value, "modern") == 0;
 		value = get_driver_parameter(handle, "arrows", "single", "single");
 		info->double_arrows = strcmp(value, "double") == 0;
+		value = get_driver_parameter(handle, "scroll_bar_width", NULL, NULL);
+		info->scroll_bar_width = 0;
+		if (value != NULL) {
+			int width = atoi(value);
+			if (width >= 8 && width <= 32)
+				info->scroll_bar_width = width;
+		}
 		info->parts |= B_THEME_SCROLL_BARS;
 	}
 	value = get_driver_parameter(handle, "deskbar_style", NULL, NULL);
@@ -573,12 +605,7 @@ read_theme(const char* path, theme_info* info)
 		info->mode = strcmp(value, "dark") == 0 ? B_THEME_DARK : B_THEME_LIGHT;
 		value = get_driver_parameter(handle, "accent", "default", "default");
 		info->accent.alpha = 0;
-		if (value[0] == '#' && strlen(value) == 7) {
-			char* end = NULL;
-			uint32 rgb = strtoul(value + 1, &end, 16);
-			if (end != NULL && *end == '\0')
-				info->accent = hex(rgb);
-		}
+		parse_accent(value, &info->accent);
 		info->parts |= B_THEME_COLORS;
 	}
 	value = get_driver_parameter(handle, "strength", NULL, NULL);
@@ -710,7 +737,9 @@ theme_matches(const theme_info* theme, const theme_info* base)
 		return false;
 	if ((parts & B_THEME_SCROLL_BARS) != 0
 		&& (theme->modern_scroll_bars != base->modern_scroll_bars
-			|| theme->double_arrows != base->double_arrows))
+			|| theme->double_arrows != base->double_arrows
+			|| roundf(theme->scroll_bar_width)
+				!= roundf(base->scroll_bar_width)))
 		return false;
 	if ((parts & B_THEME_DESKBAR) != 0
 		&& (theme->deskbar_style != base->deskbar_style
@@ -756,11 +785,29 @@ get_theme(theme_info* info)
 
 	strlcpy(info->name, kept.name, sizeof(info->name));
 	strlcpy(info->base, kept.base, sizeof(info->base));
+
+	// Deskbar writes its own file a moment after it took a style; until
+	// then the theme file is the newer word on the Deskbar part. Desktop and
+	// Deskbar changes go to Deskbar's file, which is then the newer one.
+	BPath deskbarPath;
+	time_t themeTime = 0;
+	time_t deskbarTime = 0;
+	BEntry(path.Path()).GetModificationTime(&themeTime);
+	if (settings_path("deskbar/settings", deskbarPath) == B_OK)
+		BEntry(deskbarPath.Path()).GetModificationTime(&deskbarTime);
+	if ((kept.parts & B_THEME_DESKBAR) != 0 && themeTime >= deskbarTime) {
+		info->deskbar_style = kept.deskbar_style;
+		info->deskbar_layout = kept.deskbar_layout;
+		info->deskbar_rounded = kept.deskbar_rounded;
+		info->deskbar_floating = kept.deskbar_floating;
+	}
 	if ((kept.parts & B_THEME_COLORS) != 0 && kept.mode == info->mode)
 		info->accent = kept.accent;
 	if ((kept.parts & B_THEME_SCROLL_BARS) != 0
-		&& strcmp(kept.control_look, info->control_look) == 0)
+		&& strcmp(kept.control_look, info->control_look) == 0) {
 		info->modern_scroll_bars = kept.modern_scroll_bars;
+		info->scroll_bar_width = kept.scroll_bar_width;
+	}
 	return B_OK;
 }
 
@@ -815,8 +862,10 @@ static status_t
 apply_deskbar(const theme_info* info)
 {
 	BMessenger deskbar(kDeskbarSignature);
-	if (!deskbar.IsValid())
-		return B_OK;
+	if (!deskbar.IsValid()) {
+		// Deskbar is not running: nothing to set, and nothing kept
+		return B_NAME_NOT_FOUND;
+	}
 	BMessage message(kSetDeskbarStyle);
 	message.AddInt32("style", info->deskbar_style);
 	message.AddInt32("layout", info->deskbar_layout);
@@ -863,13 +912,18 @@ set_theme(const theme_info* info, uint32 parts)
 			scrollBars.double_arrows = info->double_arrows;
 			set_scroll_bar_info(&scrollBars);
 		}
-		if (now.modern_scroll_bars != info->modern_scroll_bars)
+		if (now.modern_scroll_bars != info->modern_scroll_bars
+			|| roundf(now.scroll_bar_width)
+				!= roundf(info->scroll_bar_width))
 			lookChanged = true;
 	}
 	if ((parts & B_THEME_DESKBAR) != 0) {
 		status_t status = apply_deskbar(info);
-		if (status != B_OK && result == B_OK)
-			result = status;
+		if (status != B_OK) {
+			applied &= ~B_THEME_DESKBAR;
+			if (status != B_NAME_NOT_FOUND && result == B_OK)
+				result = status;
+		}
 	}
 	if ((parts & B_THEME_EFFECTS) != 0) {
 		status_t status = set_window_effects(info->effects);
@@ -894,8 +948,9 @@ set_theme(const theme_info* info, uint32 parts)
 	if ((parts & B_THEME_SCROLL_BARS) != 0) {
 		kept.modern_scroll_bars = info->modern_scroll_bars;
 		kept.double_arrows = info->double_arrows;
+		kept.scroll_bar_width = info->scroll_bar_width;
 	}
-	if ((parts & B_THEME_DESKBAR) != 0) {
+	if ((applied & B_THEME_DESKBAR) != 0) {
 		kept.deskbar_style = info->deskbar_style;
 		kept.deskbar_layout = info->deskbar_layout;
 		kept.deskbar_rounded = info->deskbar_rounded;
@@ -918,8 +973,32 @@ set_theme(const theme_info* info, uint32 parts)
 	}
 
 	// The colours follow the mode, the accent and the controls (R5 Modern
-	// light has its own set). Set them when one of those changed.
-	if ((parts & (B_THEME_COLORS | B_THEME_CONTROLS)) != 0) {
+	// light has its own set). The mode and the accent set them. A change of
+	// the controls alone sets them only while the colours are still the
+	// set of the theme before, so colours of the user's own (Appearance >
+	// Colors) stay.
+	bool setColors = (parts & B_THEME_COLORS) != 0;
+	if (!setColors && (applied & B_THEME_CONTROLS) != 0) {
+		BMessage before;
+		get_theme_colors(&now, &before);
+		setColors = true;
+		char* name;
+		type_code type;
+		rgb_color color;
+		for (int32 i = 0; before.GetInfo(B_RGB_32_BIT_TYPE, i, &name, &type)
+				== B_OK; i++) {
+			color_which which = which_ui_color(name);
+			if (which == B_NO_COLOR || before.FindColor(name, &color) != B_OK)
+				continue;
+			rgb_color current = ui_color(which);
+			if (current.red != color.red || current.green != color.green
+				|| current.blue != color.blue) {
+				setColors = false;
+				break;
+			}
+		}
+	}
+	if (setColors) {
 		BMessage colors;
 		if (get_theme_colors(&kept, &colors) == B_OK)
 			set_ui_colors(&colors);
@@ -931,6 +1010,17 @@ set_theme(const theme_info* info, uint32 parts)
 		BMessage message(B_COLORS_UPDATED);
 		message.AddInt64("r5:control_look", system_time());
 		be_roster->Broadcast(&message);
+	}
+
+	if (be_roster != NULL) {
+		// the Theme Kit's notification, for programs and pages that show
+		// the theme (docs/LIBR5.md, "Themes")
+		BMessage changed(B_THEME_CHANGED);
+		changed.AddString("name", kept.name);
+		changed.AddString("base", kept.base);
+		changed.AddUInt32("parts", parts);
+		changed.AddInt32("mode", kept.mode);
+		be_roster->Broadcast(&changed);
 	}
 
 	return result;

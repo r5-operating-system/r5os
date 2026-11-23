@@ -48,6 +48,7 @@
 						"appearance-settings.html",
 						"appearance-effects.html",
 						"appearance-themes.html",
+						"making-themes.html",
 					],
 					subpages: [
 						{
@@ -101,6 +102,18 @@
 								["appearance-themes.html#dark", "Dark mode"],
 								["appearance-themes.html#live", "Live switching"],
 								["appearance-themes.html#api", "Themes.h"],
+							],
+						},
+						{
+							file: "making-themes.html",
+							label: "Making themes",
+							items: [
+								["making-themes.html#file", "The theme file"],
+								["making-themes.html#controls", "A control look"],
+								["making-themes.html#scrollbars", "Scroll bar width"],
+								["making-themes.html#decorator", "A decorator"],
+								["making-themes.html#api", "The calls"],
+								["making-themes.html#share", "Sharing a theme"],
 							],
 						},
 					],
@@ -341,6 +354,8 @@
 		{ name: "vkCreateViewSurfaceRFIVE()", kind: "function", where: "Vulkan", header: "<vulkan/vulkan_r5.h>", lib: "vulkan", href: "vulkan.html#surface", desc: "Creates a VkSurfaceKHR for a Haiku BView." },
 		{ name: "set_theme()", kind: "function", where: "Appearance: Theming", header: "<Themes.h>", lib: "libr5ui.so", href: "appearance-themes.html#api", desc: "Applies the parts of a theme at once, live." },
 		{ name: "theme_info", kind: "struct", where: "Appearance: Theming", header: "<Themes.h>", lib: "libr5ui.so", href: "appearance-themes.html#api", desc: "A saved combination of decorator, controls, Deskbar, mode and effects." },
+		{ name: "B_THEME_CHANGED", kind: "constant", where: "Appearance: Making themes", header: "<Themes.h>", lib: "libr5ui.so", href: "making-themes.html#api", desc: "Sent to every program after a theme change." },
+		{ name: "Making themes", kind: "guide", where: "Appearance: Making themes", header: "<Themes.h>", lib: "libr5ui.so", href: "making-themes.html", desc: "Theme files, a control look add-on, the scroll bar width, sharing." },
 		{ name: "Theming", kind: "guide", where: "Appearance: Theming", header: "<Themes.h>", lib: "libr5ui.so", href: "appearance-themes.html#rules", desc: "Draw with be_control_look and ui_color so every theme works." },
 		{ name: "Window effects", kind: "guide", where: "Appearance: Effects", header: "<Window.h>", lib: "app_server", href: "appearance-effects.html#window-effects", desc: "Alpha-ready drawing and glass window hints." },
 		// Guides & concepts

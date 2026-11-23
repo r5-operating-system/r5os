@@ -75,6 +75,7 @@ static const uint32 kMsgControls = 'thCt';
 static const uint32 kMsgControlsAbout = 'thCa';
 static const uint32 kMsgScrollBars = 'thSb';
 static const uint32 kMsgArrows = 'thAr';
+static const uint32 kMsgScrollWidth = 'thSw';
 static const uint32 kMsgDeskbarStyle = 'thDs';
 static const uint32 kMsgDeskbarLayout = 'thDy';
 static const uint32 kMsgDeskbarCheck = 'thDc';
@@ -1318,7 +1319,13 @@ SaveThemeWindow::MessageReceived(BMessage* message)
 				alert->Go(NULL);
 				break;
 			}
-			if (name.FindFirst('/') >= 0 || name.FindFirst('"') >= 0
+			bool control = false;
+			for (int32 i = 0; i < name.Length(); i++) {
+				if (static_cast<uint8>(name[i]) < 0x20)
+					control = true;
+			}
+			if (control || name == "." || name == ".."
+				|| name.FindFirst('/') >= 0 || name.FindFirst('"') >= 0
 				|| name.FindFirst('\\') >= 0) {
 				BAlert* alert = new BAlert("Save as theme",
 					"A theme name cannot contain / \\ or \".", "OK");
@@ -1391,6 +1398,8 @@ private:
 			BPopUpMenu*			fScrollMenu;
 			BMenuField*			fScroll;
 			SegmentedControl*	fArrows;
+			BPopUpMenu*			fWidthMenu;
+			BMenuField*			fWidth;
 			ScrollBarPreview*	fPreview;
 			BPopUpMenu*			fStyleMenu;
 			BMenuField*			fStyle;
@@ -1516,6 +1525,14 @@ ThemePage::ThemePage(ThemeModule* module)
 	fArrows = new SegmentedControl("arrows", new BMessage(kMsgArrows), 22, 10);
 	fArrows->AddSegment("Single");
 	fArrows->AddSegment("Double");
+	// the width a theme gives its scroll bars (Haiku's stays the default)
+	fWidthMenu = new BPopUpMenu("scroll bar width");
+	add_item(fWidthMenu, "Thin", kMsgScrollWidth, NULL, NULL,
+		B_THEME_SCROLL_BAR_THIN);
+	add_item(fWidthMenu, "Haiku width", kMsgScrollWidth, NULL, NULL, 0);
+	add_item(fWidthMenu, "Wide", kMsgScrollWidth, NULL, NULL,
+		B_THEME_SCROLL_BAR_WIDE);
+	fWidth = new BMenuField("scroll bar width", NULL, fWidthMenu);
 	fPreview = new ScrollBarPreview();
 
 	fStyleMenu = new BPopUpMenu("deskbar style");
@@ -1558,6 +1575,7 @@ ThemePage::ThemePage(ThemeModule* module)
 	fStyle->SetExplicitSize(BSize(px(140), B_SIZE_UNSET));
 	fLayout->SetExplicitSize(BSize(px(110), B_SIZE_UNSET));
 	fStrength->SetExplicitSize(BSize(px(104), B_SIZE_UNSET));
+	fWidth->SetExplicitSize(BSize(px(118), B_SIZE_UNSET));
 
 	fPartsGrid = new BView("parts grid", 0);
 	fPartsGrid->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
@@ -1579,6 +1597,7 @@ ThemePage::ThemePage(ThemeModule* module)
 		.AddGroup(B_HORIZONTAL, px(12), 1, 2)
 			.Add(fScroll)
 			.Add(fArrows)
+			.Add(fWidth)
 			.Add(fPreview)
 			.AddGlue()
 		.End()
@@ -1665,6 +1684,7 @@ ThemePage::AttachedToWindow()
 	fControlsMenu->SetTargetForItems(this);
 	fScrollMenu->SetTargetForItems(this);
 	fArrows->SetTarget(this);
+	fWidthMenu->SetTargetForItems(this);
 	fStyleMenu->SetTargetForItems(this);
 	fLayoutMenu->SetTargetForItems(this);
 	fRounded->SetTarget(this);
@@ -1859,6 +1879,11 @@ ThemePage::_Update()
 	mark_number(fScrollMenu, modern && fCurrent.modern_scroll_bars ? 1 : 0);
 	fScroll->SetEnabled(modern);
 	fArrows->SetValue(fCurrent.double_arrows ? 1 : 0);
+	int32 width = static_cast<int32>(roundf(fCurrent.scroll_bar_width));
+	if (width != B_THEME_SCROLL_BAR_THIN && width != B_THEME_SCROLL_BAR_WIDE)
+		width = 0;
+	mark_number(fWidthMenu, modern ? width : 0);
+	fWidth->SetEnabled(modern);
 	fPreview->Invalidate();
 
 	mark_number(fStyleMenu, fCurrent.deskbar_style);
@@ -2057,6 +2082,11 @@ ThemePage::MessageReceived(BMessage* message)
 			_ApplyPart(B_THEME_SCROLL_BARS);
 			break;
 
+		case kMsgScrollWidth:
+			fCurrent.scroll_bar_width = message->GetInt32("value", 0);
+			_ApplyPart(B_THEME_SCROLL_BARS);
+			break;
+
 		case kMsgDeskbarStyle:
 			fCurrent.deskbar_style = message->GetInt32("value",
 				B_THEME_DESKBAR_R5);
@@ -2185,9 +2215,11 @@ ThemePage::Revert()
 void
 ThemePage::Defaults()
 {
+	// R5, light, with the factory effects (all on, Balanced)
 	theme_info info;
 	find_theme("R5", &info);
 	info.mode = B_THEME_LIGHT;
+	info.parts |= B_THEME_EFFECTS;
 	_Apply(info, info.parts);
 }
 
@@ -2208,6 +2240,7 @@ ThemePage::CanDefaults() const
 	theme_info info;
 	find_theme("R5", &info);
 	info.mode = B_THEME_LIGHT;
+	info.parts |= B_THEME_EFFECTS;
 	return strcmp(fCurrent.base, "R5") != 0
 		|| !theme_matches(&fCurrent, &info);
 }

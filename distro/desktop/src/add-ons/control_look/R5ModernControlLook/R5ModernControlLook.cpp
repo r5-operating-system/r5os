@@ -102,6 +102,19 @@ control_line_color(const rgb_color& base)
 }
 
 
+/*!	The line of fields, check boxes and radio buttons: in light the mockup's
+	#b8c0cc, one step lighter than the button line (#b4bcc8).
+*/
+static rgb_color
+field_line_color(const rgb_color& base)
+{
+	rgb_color line = control_line_color(base);
+	if (line.IsDark() || base.IsDark())
+		return line;
+	return blend(line, kWhite, 0.03f);
+}
+
+
 static rgb_color
 accent_color()
 {
@@ -198,7 +211,8 @@ open_sides(BRect rect, uint32 borders, float grow)
 R5ModernControlLook::R5ModernControlLook()
 	:
 	HaikuControlLook(),
-	fHaikuScrollBars(false)
+	fHaikuScrollBars(false),
+	fScrollBarWidth(0)
 {
 	char path[B_PATH_NAME_LENGTH];
 	if (find_directory(B_USER_SETTINGS_DIRECTORY, -1, false, path,
@@ -216,9 +230,17 @@ R5ModernControlLook::R5ModernControlLook()
 		NULL);
 	const char* style = get_driver_parameter(handle, "scroll_bars", NULL,
 		NULL);
-	fHaikuScrollBars = controls != NULL
-		&& strcmp(controls, "R5ModernControlLook") == 0
-		&& style != NULL && strcmp(style, "haiku") == 0;
+	bool ours = controls != NULL
+		&& strcmp(controls, "R5ModernControlLook") == 0;
+	fHaikuScrollBars = ours && style != NULL && strcmp(style, "haiku") == 0;
+	// the theme's scroll bar width (8 to 32 at 12 points); 0 is Haiku's
+	const char* width = get_driver_parameter(handle, "scroll_bar_width", NULL,
+		NULL);
+	if (ours && width != NULL) {
+		int value = atoi(width);
+		if (value >= 8 && value <= 32)
+			fScrollBarWidth = value;
+	}
 	unload_driver_settings(handle);
 }
 
@@ -277,7 +299,9 @@ R5ModernControlLook::_DrawChevron(BView* view, BRect rect,
 	float size = radius(10);
 	BPoint center(roundf((rect.left + rect.right) / 2) + 0.5f,
 		roundf((rect.top + rect.bottom) / 2) + 0.5f);
-	float half = size * 0.25f;
+	// "M6 9l6 6 6-6" on 24: 6 of 24 wide each way, 3 of 24 high each way
+	float halfWidth = size * 6 / 24;
+	float halfHeight = size * 3 / 24;
 
 	view->PushState();
 	view->SetDrawingMode(B_OP_ALPHA);
@@ -285,10 +309,10 @@ R5ModernControlLook::_DrawChevron(BView* view, BRect rect,
 	view->SetHighColor(color);
 	view->SetPenSize(std::max(1.0f, roundf(1.25f * scale() * 4) / 4));
 	view->SetLineMode(B_ROUND_CAP, B_ROUND_JOIN);
-	view->StrokeLine(BPoint(center.x - half * 2, center.y - half),
-		BPoint(center.x, center.y + half));
-	view->StrokeLine(BPoint(center.x, center.y + half),
-		BPoint(center.x + half * 2, center.y - half));
+	view->StrokeLine(BPoint(center.x - halfWidth, center.y - halfHeight),
+		BPoint(center.x, center.y + halfHeight));
+	view->StrokeLine(BPoint(center.x, center.y + halfHeight),
+		BPoint(center.x + halfWidth, center.y - halfHeight));
 	view->PopState();
 }
 
@@ -531,8 +555,9 @@ R5ModernControlLook::DrawMenuBarBackground(BView* view, BRect& rect,
 	if ((borders & B_BOTTOM_BORDER) != 0) {
 		view->SetHighColor(line_color(base));
 		view->StrokeLine(rect.LeftBottom(), rect.RightBottom());
-		rect.bottom--;
 	}
+	// Haiku's bevel takes one pixel on each side asked for
+	inset_sides(rect, 1, 1, 1, 1, borders);
 }
 
 
@@ -545,7 +570,7 @@ R5ModernControlLook::_DrawField(BView* view, BRect& rect,
 		background = view->Parent()->ViewColor();
 
 	rgb_color fill = field_color();
-	rgb_color line = control_line_color(background);
+	rgb_color line = field_line_color(background);
 	if ((flags & B_DISABLED) != 0) {
 		fill = disable_color(fill, background);
 		line = disable_color(line, background);
@@ -689,6 +714,8 @@ R5ModernControlLook::DrawMenuBackground(BView* view, BRect& rect,
 
 	view->SetHighColor(base);
 	view->FillRect(rect);
+	// Haiku's bevel takes one pixel on each side asked for
+	inset_sides(rect, 1, 1, 1, 1, borders);
 }
 
 
@@ -768,7 +795,7 @@ R5ModernControlLook::DrawCheckBox(BView* view, BRect& rect,
 	bool on = (flags & (B_ACTIVATED | B_PARTIALLY_ACTIVATED)) != 0;
 
 	rgb_color fill = on ? accent_color() : field_color();
-	rgb_color line = on ? accent_color() : control_line_color(background);
+	rgb_color line = on ? accent_color() : field_line_color(background);
 	if (!disabled && (flags & B_FOCUSED) != 0 && !on)
 		line = accent_color();
 	if (!disabled && (flags & B_CLICKED) != 0)
@@ -837,7 +864,7 @@ R5ModernControlLook::DrawRadioButton(BView* view, BRect& rect,
 	bool on = (flags & B_ACTIVATED) != 0;
 
 	rgb_color fill = on ? accent_color() : field_color();
-	rgb_color line = on ? accent_color() : control_line_color(background);
+	rgb_color line = on ? accent_color() : field_line_color(background);
 	if (!disabled && (flags & B_FOCUSED) != 0 && !on)
 		line = accent_color();
 	if (!disabled && (flags & B_CLICKED) != 0)
@@ -1150,9 +1177,11 @@ R5ModernControlLook::DrawSliderBar(BView* view, BRect rect,
 		rightFillColor = disable_color(rightFillColor, base);
 	}
 
+	// a vertical slider's value runs from the bottom (Haiku: "position is
+	// reverse of coords")
 	float split = orientation == B_HORIZONTAL
 		? floorf(rect.left + rect.Width() * sliderScale)
-		: floorf(rect.top + rect.Height() * sliderScale);
+		: floorf(rect.top + rect.Height() * (1.0f - sliderScale));
 	BRect shape(bar.left, bar.top, bar.right + 1, bar.bottom + 1);
 	float r = floorf(thickness / 2);
 
@@ -1165,8 +1194,9 @@ R5ModernControlLook::DrawSliderBar(BView* view, BRect rect,
 		leftPart.right = split;
 		rightPart.left = split;
 	} else {
-		leftPart.bottom = split;
-		rightPart.top = split;
+		// the filled part (leftFillColor) is below the split
+		leftPart.top = split;
+		rightPart.bottom = split;
 	}
 
 	BRegion clip(leftPart);
@@ -1208,7 +1238,7 @@ R5ModernControlLook::DrawSliderThumb(BView* view, BRect& rect,
 	rgb_color background = view->LowColor();
 	rgb_color fill = field_color().IsLight() ? kWhite
 		: blend(ui_color(B_CONTROL_BACKGROUND_COLOR), kWhite, 0.15f);
-	rgb_color line = control_line_color(background);
+	rgb_color line = field_line_color(background);
 	if ((flags & B_FOCUSED) != 0)
 		line = accent_color();
 	if ((flags & B_DISABLED) != 0) {
@@ -1433,16 +1463,8 @@ R5ModernControlLook::DrawGroupFrame(BView* view, BRect& rect,
 		shape.bottom - 1), r, r);
 	view->PopState();
 
-	float left, top, right, bottom;
-	GetFrameInsets(B_GROUP_FRAME, 0, left, top, right, bottom);
-	if ((borders & B_LEFT_BORDER) != 0)
-		rect.left += left;
-	if ((borders & B_TOP_BORDER) != 0)
-		rect.top += top;
-	if ((borders & B_RIGHT_BORDER) != 0)
-		rect.right -= right;
-	if ((borders & B_BOTTOM_BORDER) != 0)
-		rect.bottom -= bottom;
+	// Haiku draws three pixels here whatever the font size
+	inset_sides(rect, 3, 3, 3, 3, borders);
 }
 
 
@@ -1468,8 +1490,22 @@ R5ModernControlLook::DrawTextControlBorder(BView* view, BRect& rect,
 	}
 
 	float left, top, right, bottom;
-	GetFrameInsets(B_TEXT_CONTROL_FRAME, flags, left, top, right, bottom);
-	inset_sides(rect, left, top, right, bottom, borders);
+	// Haiku draws two pixels here whatever the font size
+	inset_sides(rect, 2, 2, 2, 2, borders);
+}
+
+
+/*!	The theme's scroll bar width, scaled with the font like Haiku's; Haiku's
+	own width when the theme sets none. BScrollBar and BScrollView ask this
+	(Haiku's hook), so a program that lays out with them follows; one that
+	uses B_V_SCROLL_BAR_WIDTH keeps Haiku's width.
+*/
+float
+R5ModernControlLook::GetScrollBarWidth(orientation orientation)
+{
+	if (fScrollBarWidth <= 0)
+		return HaikuControlLook::GetScrollBarWidth(orientation);
+	return roundf(fScrollBarWidth * scale());
 }
 
 

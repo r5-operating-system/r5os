@@ -85,7 +85,34 @@ struct theme_info {
 	int32		effect_strength;
 		// window_effect_strength
 
-	uint32		_reserved[16];
+	float		scroll_bar_width;
+		// the scroll bar width at 12 points, scaled with the font by the
+		// control look (BControlLook::GetScrollBarWidth()); 0 is the
+		// look's own width (Haiku's 14)
+
+	uint32		_reserved[15];
+};
+
+// The version of the theme file format this library writes. A reader takes
+// every older format and the keys it knows of a newer one; keys are only
+// ever added (docs/LIBR5.md, "Theme files").
+enum {
+	B_THEME_FORMAT_VERSION	= 1
+};
+
+// Sent to every program (BRoster::Broadcast()) after set_theme() applied a
+// theme: string "name", string "base", uint32 "parts" (what changed), int32
+// "mode". It reaches the application's looper; a program that draws with
+// ui_color and be_control_look need not do anything with it.
+enum {
+	B_THEME_CHANGED		= 'r5th'
+};
+
+// The scroll bar widths the Theme page offers (at 12 points); a theme may
+// hold any width from 8 to 32.
+enum {
+	B_THEME_SCROLL_BAR_THIN		= 10,
+	B_THEME_SCROLL_BAR_WIDE		= 18
 };
 
 // The theme in use now: what was applied last, or, before any theme was

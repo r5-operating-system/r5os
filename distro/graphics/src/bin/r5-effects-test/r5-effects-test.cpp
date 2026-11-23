@@ -74,6 +74,7 @@
 #include <Themes.h>
 
 #include <CheckBox.h>
+#include <ControlLook.h>
 #include <LayoutBuilder.h>
 #include <ListView.h>
 #include <MenuBar.h>
@@ -700,17 +701,28 @@ private:
 				return 1;
 			printf("name \"%s\" base \"%s\" windows \"%s\" controls \"%s\" "
 				"scrollbars %s arrows %s deskbar %d/%d rounded %d floating %d "
-				"mode %s panel #%02x%02x%02x\n", info.name, info.base,
+				"mode %s width %d bar %d panel #%02x%02x%02x\n", info.name,
+				info.base,
 				info.decorator, info.control_look,
 				info.modern_scroll_bars ? "modern" : "haiku",
 				info.double_arrows ? "double" : "single",
 				(int)info.deskbar_style, (int)info.deskbar_layout,
 				info.deskbar_rounded ? 1 : 0, info.deskbar_floating ? 1 : 0,
 				info.mode == B_THEME_DARK ? "dark" : "light",
+				static_cast<int>(info.scroll_bar_width),
+				static_cast<int>(be_control_look->GetScrollBarWidth(
+					B_VERTICAL)),
 				ui_color(B_PANEL_BACKGROUND_COLOR).red,
 				ui_color(B_PANEL_BACKGROUND_COLOR).green,
 				ui_color(B_PANEL_BACKGROUND_COLOR).blue);
 			return 0;
+		}
+		if (strcmp(name, "width") == 0 && mode != NULL) {
+			// the scroll bar width of the theme in use (0: Haiku's)
+			if (get_theme(&info) != B_OK)
+				return 1;
+			info.scroll_bar_width = atoi(mode);
+			return _Check(set_theme(&info, B_THEME_SCROLL_BARS));
 		}
 		if (strcmp(name, "mode") == 0 && mode != NULL) {
 			if (get_theme(&info) != B_OK)
@@ -872,7 +884,7 @@ private:
 			"       r5-effects-test deskbar-add <path>\n"
 			"       r5-effects-test decorator list|<name>\n"
 			"       r5-effects-test soft [seconds]\n"
-			"       r5-effects-test theme list|get|mode light|dark\n"
+			"       r5-effects-test theme list|get|mode light|dark|width <n>\n"
 			"       r5-effects-test theme <name> [light|dark]\n"
 			"       r5-effects-test controls [seconds]\n");
 		return 2;

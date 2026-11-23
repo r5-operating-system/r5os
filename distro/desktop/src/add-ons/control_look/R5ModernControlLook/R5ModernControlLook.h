@@ -263,6 +263,9 @@ public:
 									const rgb_color& base, uint32 flags = 0,
 									uint32 borders = B_ALL_BORDERS);
 
+	virtual	float				GetScrollBarWidth(
+									orientation orientation = B_VERTICAL);
+
 	virtual	void				DrawLabel(BView* view, const char* label,
 									const BBitmap* icon, BRect rect,
 									const BRect& updateRect,
@@ -272,6 +275,7 @@ public:
 
 private:
 			bool				fHaikuScrollBars;
+			float				fScrollBarWidth;
 
 			void				_DrawFace(BView* view, BRect rect,
 									float radius, const rgb_color& fill,
