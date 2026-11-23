@@ -8,6 +8,14 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-23 - Build - the translators' catalog keys are collected without "fatal error" lines
+
+Problem: every jam printed "fatal error: avif/avif.h", "jpeglib.h", "png.h", "jasper/jasper.h", "icns.h", "tiffio.h", "webp/…" and "bitmap_compression.h" for eight translators (noted since late October as known and harmless; jam still exited 0). They come from collecting the catalog keys (`ExtractCatalogEntries`, `build/jam/LocaleRules`), not from compiling: each translator's Jamfile adds the build feature headers inside `on $(architectureObject) { … }`, so only the object files see them, and `DoCatalogs`, outside that block, ran the preprocessor without them. The preprocessor stopped at the first include, so those catalogs could miss strings.
+
+What changed: the Jamfiles of avif, jpeg, jpeg2000, png, icns, tiff, webp and wonderbrush are copied into `distro/rest/src/add-ons/translators/` with one R5 snippet (MIT) before `DoCatalogs`: the same `UseBuildFeatureHeaders` lines for the subdirectory (and wonderbrush's `support` folder). The translators themselves are built as before.
+
+Tested: `scripts/build-locked.sh` from `origin/main` plus this change, 23 Nov 2026: `jam_exit=0`, `mesa_exit=0`, 0 "fatal error" lines in the log (before: one or more per translator in every build). The `en.catkeys` of the eight translators have 7 to 25 lines each. Not measured: how many keys they had before. Not booted (no code in the image changes besides the catalogs).
+
 ## 2026-11-23 - Windows - a round window that grows is drawn in full
 
 Problem: in QEMU (Lavapipe, Default (R5 Modern)) the Appearance window, which grows right after it opens, stayed black below and to the right of its first size; the part it did draw had round bottom corners at that first size. Seen on main after #4560 and #4561, and also on the #4560 merge alone (that build's shared tree still held #4561's Deskbar files, so that check is not fully clean). Not seen in #4560's own runs, whose shot was probably taken later.
