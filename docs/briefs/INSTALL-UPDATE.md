@@ -24,7 +24,7 @@ Owner's go to write this brief: 23 Nov 2026. Design and every choice: `docs/desi
 - How to tell from R5 that an NTFS volume is hibernated (Fast Startup) or BitLocker-encrypted, before anything is written.
 - The licence report for `ntfsresize` (the design doc has it; confirm the version you would take).
 
-**Step 1, the R5 package repository (no upload yet).** A script that builds the R5 repository from a build's packages, with a `baseurl` placeholder until the owner picks the domain; keep the last 3 builds; the per-change file. The installed image gets this repository's config. No Cloudflare upload until the owner has the account and the domain.
+**Step 1, the R5 package repository on GitHub Pages.** A script that builds the R5 repository (`repo`, `repo.info`, `repo.sha256`, `packages/`) from a build's packages, the per-change file, and the last 3 builds; a GitHub Actions workflow that deploys it to GitHub Pages (never commit packages to git). The `baseurl` is the Pages address until the owner has a domain, then the custom domain. The installed image gets this repository's config.
 
 **Step 2, the Software update page.** Settings, System, "Software update", as the mockup: Available and Installed (segmented control), changes in user language with icon and size, "Install and restart", "Go back to before <date>…", the options, the lock (administrator only), Revert and Defaults. A notification when updates are ready. Downloading in the background is on by default. Security fixes come on their own, marked red. Add the page icon in `module_icon()`.
 
@@ -32,9 +32,9 @@ Owner's go to write this brief: 23 Nov 2026. Design and every choice: `docs/desi
 
 **Step 4, the installer: next to Windows.** The checks (BitLocker off, enough free space, Windows shut down fully), then shrink NTFS with `ntfsresize` as a separate GPL-2.0-or-later program (source and notices as `docs/LICENSING.md` asks), R5 suggests 64 GB, Windows keeps at least what it uses plus 20 GB, the backup tick before Install works, the progress screen. With BitLocker on: never touch the disk.
 
-**Step 5, the boot menu.** A dark text menu in R5 colours: R5, Windows, "R5, previous state…", "Safe mode…", R5 after 5 seconds. Works without a graphics driver.
+**Step 5, the boot menu.** A dark text menu in R5 colours with the entries "R5 Operating System", "Windows", "R5 Operating System, previous state…", "Safe mode…" (the product name in full), and R5 Operating System after 5 seconds. Works without a graphics driver.
 
-**Step 6, the download.** The anyboot ISO on R2 with a checksum; the GitHub Release gives the version, the checksum and the link.
+**Step 6, the download.** The anyboot ISO compressed on a GitHub Release (each file under 2 GiB), with its checksum and the version.
 
 ## Tests
 
