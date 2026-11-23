@@ -368,7 +368,7 @@ in QEMU without the owner.
 
 ## External review of PR 4564 (23 Nov 2026)
 
-Every point of the review (`1.7` was left out by the owner: the mockup draws an empty ring on the Save card):
+Every point of the review. `1.7`, the owner's decision: the "Save as theme…" card has a plus inside its ring (two bars of 10, pen 2, round ends, the ring's colour), and the mockup (`docs/design/theme-mockup/Main.dc.html`, the Save card's `winStyle`) has it too.
 
 - 1.1: Menu fields: the inside is the frame's round face again, clipped to the inside, on the panel (the bar of a menu field does not erase itself, so a square fill covered the arcs and a round fill left the corners unpainted); the focus ring stays; the chevron is the mockup's (6 by 3, stroke 1.6), its box 10 from the field's edge, in the middle of the inside's height.
 - 1.2: Buttons: the face was drawn one pixel past its rect (a "+1" in `_DrawFace()`, while Painter's `FillRoundRect()` already covers the rect's right and bottom pixels), and the clip to the rect cut that pixel. The face is now inside its rect and the clip stays the rect: all four sides of the line show, and the focus ring of fields is no longer covered on the right and bottom.
@@ -401,6 +401,11 @@ Every point of the review (`1.7` was left out by the owner: the mockup draws an 
 - A4: Deskbar rows: 7 from the sides and the bottom with rounded corners (was 4), clear of the outer corners; a row under the pointer or pressed has the full label colour (`#e6e9ef` dark).
 - A5: Tray: the vertical Deskbar's tray has padding 8 and gaps of 5 (was 10 and 7), so five items and the clock share one row. Every tray glyph of libr5icons (Bluetooth, Wi-Fi, Volume, Network, AirPlay, Mail; the same numbers, `docs/ICONS.md`) has a line of 1.6 on the 24 grid; the network boxes are larger so they stay open. Not changed: the Workspaces replicant (Haiku's, a picture of the workspaces, not a glyph).
 - A6: Deskbar menu: with the R5 menu style its surface is the menu colour, opaque, like its submenus (no glass), and its square edge is the menu's edge colour; the Deskbar's own corners stay.
+
+### Menu bar gap and height (owner, M1 and M2, 23 Nov 2026)
+
+- M1: a menu of a program's menu bar opens 4 under the bar's line (mockup M4, M5), in R5's `BMenu::ScreenLocation()`.
+- M2: a program's menu bar is 28 at 12 points (mockup M4, M5): R5 Modern returns more than 1 on the top and the bottom for `B_MENU_BAR_BACKGROUND` (the difference to Haiku's bar), R5's `BMenu` adds it to a menu bar's height and moves the titles down by the top part. Only a menu bar of a window with a frame; the bar inside a menu field and Deskbar's bars keep their height. The open title's pill is 3 in from the top and the bottom. Haiku's and R5's controls return 1: their menu bars are unchanged. A program that places views under a menu bar at a fixed position may have them covered by the taller bar; see the PR for the programs checked.
 
 ### Owner's review of the dark glass Deskbar (23 Nov 2026)
 

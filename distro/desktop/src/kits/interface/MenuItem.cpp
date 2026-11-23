@@ -669,8 +669,17 @@ BMenuItem::ContentLocation() const
 	}
 // SPDX-SnippetEnd
 	const BRect& padding = MenuPrivate(fSuper).Padding();
-
-	return BPoint(fBounds.left + padding.left, fBounds.top + padding.top);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// the R5 menu bar: the title lower by the bar's extra top
+	float r5BarTop = 0;
+	float r5BarBottom = 0;
+	if (fSuper != NULL)
+		MenuPrivate(fSuper).R5BarExtra(&r5BarTop, &r5BarBottom);
+	return BPoint(fBounds.left + padding.left,
+		fBounds.top + padding.top + r5BarTop);
+// SPDX-SnippetEnd
 }
 
 

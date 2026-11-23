@@ -940,6 +940,17 @@ ThemeCards::_DrawSaveCard(BRect frame)
 	BRect ring(circle);
 	ring.InsetBy(px(1), px(1));
 	StrokeEllipse(BRect(ring.left, ring.top, ring.right + 1, ring.bottom + 1));
+	// the plus inside the ring (owner's decision on review point 1.7): two
+	// bars of 10, round ends, the ring's colour
+	SetDrawingMode(B_OP_ALPHA);
+	SetLineMode(B_ROUND_CAP, B_ROUND_JOIN);
+	BPoint center((circle.left + circle.right + 1) / 2,
+		(circle.top + circle.bottom + 1) / 2);
+	float arm = px(10) / 2;
+	StrokeLine(BPoint(center.x - arm, center.y),
+		BPoint(center.x + arm, center.y));
+	StrokeLine(BPoint(center.x, center.y - arm),
+		BPoint(center.x, center.y + arm));
 	PopState();
 
 	const BFont* bold = r5_settings_bold_font();

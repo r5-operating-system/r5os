@@ -24,6 +24,8 @@
 #include <MenuItem.h>
 #include <Window.h>
 
+#include <BMCPrivate.h>
+#include <MenuBar.h>
 #include <MenuWindow.h>
 
 #include <algorithm>
@@ -426,6 +428,40 @@ MenuPrivate::R5MarkColumn() const
 	for (int32 i = 0; !marks && i < fMenu->CountItems(); i++)
 		marks = fMenu->ItemAt(i)->IsMarked();
 	return marks ? roundf(16 * R5Scale()) : 0;
+}
+
+
+/*!	The R5 menu bar (external review M2): a look that returns more than
+	Haiku's 1 on the top and the bottom for B_MENU_BAR_BACKGROUND makes a
+	program's menu bar taller by the difference, the titles in the middle.
+	Only a menu bar of a window with a frame, not the bar inside a menu
+	field and not Deskbar's bars (bordered or borderless windows).
+*/
+bool
+MenuPrivate::R5BarExtra(float* top, float* bottom) const
+{
+	*top = 0;
+	*bottom = 0;
+	if (fMenu == NULL || be_control_look == NULL
+		|| dynamic_cast<BMenuBar*>(fMenu) == NULL
+		|| dynamic_cast<_BMCMenuBar_*>(fMenu) != NULL
+		|| fMenu->Window() == NULL)
+		return false;
+	switch (fMenu->Window()->Look()) {
+		case B_TITLED_WINDOW_LOOK:
+		case B_DOCUMENT_WINDOW_LOOK:
+		case B_FLOATING_WINDOW_LOOK:
+		case B_MODAL_WINDOW_LOOK:
+			break;
+		default:
+			return false;
+	}
+	float left = 1, insetTop = 1, right = 1, insetBottom = 1;
+	be_control_look->GetBackgroundInsets(BControlLook::B_MENU_BAR_BACKGROUND,
+		0, left, insetTop, right, insetBottom);
+	*top = std::max(0.0f, floorf(insetTop - 1));
+	*bottom = std::max(0.0f, floorf(insetBottom - 1));
+	return *top > 0 || *bottom > 0;
 }
 
 

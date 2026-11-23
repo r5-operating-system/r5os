@@ -87,6 +87,7 @@ public:
 									float* margin = NULL);
 	static	float				R5Scale();
 			float				R5MarkColumn() const;
+			bool				R5BarExtra(float* top, float* bottom) const;
 			float				R5ShortcutFontSize() const;
 	static	void				R5ShortcutLabel(char shortcut,
 									uint32 modifiers, char* buffer,

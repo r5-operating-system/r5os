@@ -3031,6 +3031,12 @@ BMenu::_ComputeRowLayout(int32 index, bool bestFit, bool moveItems,
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 	frame.right = r5_menu_bar_start(this);
+	// the R5 menu bar: taller by the look's extra on the top and the bottom
+	// (external review M2)
+	float r5BarTop = 0;
+	float r5BarBottom = 0;
+	BPrivate::MenuPrivate(this).R5BarExtra(&r5BarTop, &r5BarBottom);
+	frame.bottom += r5BarTop + r5BarBottom;
 // SPDX-SnippetEnd
 
 	for (int32 i = 0; i < fItems.CountItems(); i++) {
@@ -3045,7 +3051,13 @@ BMenu::_ComputeRowLayout(int32 index, bool bestFit, bool moveItems,
 			+ fPad.right;
 
 		frame.right = item->Frame().right + 1.0f;
-		frame.bottom = std::max(frame.bottom, height + fPad.top + fPad.bottom);
+		frame.bottom = std::max(frame.bottom, height + fPad.top + fPad.bottom
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			+ r5BarTop + r5BarBottom
+// SPDX-SnippetEnd
+			);
 	}
 
 	if (moveItems) {
@@ -3104,6 +3116,20 @@ BMenu::ScreenLocation()
 		point = superItem->Frame().RightTop() + BPoint(1.0f, 1.0f);
 	else
 		point = superItem->Frame().LeftBottom() + BPoint(1.0f, 1.0f);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// the R5 menu style: a menu of a program's menu bar floats 4 under the
+	// bar's line (mockup M4, M5; external review M1)
+	float r5BarTop = 0;
+	float r5BarBottom = 0;
+	if (superMenu->Layout() == B_ITEMS_IN_ROW
+		&& BPrivate::MenuPrivate::R5LookStyle()
+		&& BPrivate::MenuPrivate(superMenu).R5BarExtra(&r5BarTop,
+			&r5BarBottom)) {
+		point.y += roundf(4 * BPrivate::MenuPrivate::R5Scale());
+	}
+// SPDX-SnippetEnd
 
 	superMenu->ConvertToScreen(&point);
 

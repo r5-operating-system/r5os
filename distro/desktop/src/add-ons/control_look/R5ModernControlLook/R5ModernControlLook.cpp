@@ -863,7 +863,8 @@ menu_item_background(BView* view, const BRect& rect, const rgb_color& base,
 		rgb_color pill = bar.IsLight() ? blend(bar, kBlack, 0.07f)
 			: blend(bar, kWhite, 0.10f);
 		BRect face(rect);
-		face.InsetBy(0, std::min(radius(2), floorf(rect.Height() / 4)));
+		// the mockup's 3 above and below the pill (M4, M6)
+		face.InsetBy(0, std::min(radius(3), floorf(rect.Height() / 4)));
 		view->PushState();
 		view->SetDrawingMode(B_OP_ALPHA);
 		view->SetHighColor(pill);
@@ -1740,8 +1741,19 @@ R5ModernControlLook::GetBackgroundInsets(background_type backgroundType,
 {
 	HaikuControlLook::GetBackgroundInsets(backgroundType, flags, _left, _top,
 		_right, _bottom);
-	if (backgroundType == B_MENU_BAR_BACKGROUND)
+	if (backgroundType == B_MENU_BAR_BACKGROUND) {
 		_left += roundf(8 * scale());
+		// a program's menu bar of 28 at 12 points (mockup M4, M5; external
+		// review M2): Haiku's bar is the text and a sixth of the font size
+		// above and below
+		font_height height;
+		be_plain_font->GetHeight(&height);
+		float pad = ceilf(be_plain_font->Size() / 6.0f);
+		float haiku = ceilf(height.ascent + height.descent) + 2 * pad;
+		float extra = std::max(0.0f, roundf(28 * scale()) - haiku);
+		_top += floorf(extra / 2);
+		_bottom += extra - floorf(extra / 2);
+	}
 	else if (backgroundType == B_MENU_BACKGROUND) {
 		// more than 1 asks R5's BMenu for the R5 menu style: 5 inside the
 		// menu window (mockup M6)
