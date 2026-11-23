@@ -8,6 +8,14 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-23 - Card reader: #4572 and #4573 tested on the 5625U
+
+Tested on the 5625U (stick 80, main after #4573, `generated/boot-5625u-80/` in the stick worktree): the SD card went in and out three times. Each time: `rtsx: card inserted`, a scan, `SDHC card found`, a new disk (`disk/mmc/0/raw`, `/1/raw`, `/2/raw`), the 4 bit bus and 25 reads without an error; on removal `rtsx: card removed`, a scan and `No card in the slot` at once. No `CMD7` timeout (stick 77 and 79), no rtsx or exFAT error, no crash.
+
+Stick 79 still showed the stick 77 failure: it was built from a branch that did not have #4572 and #4573 yet.
+
+Not tested: writing a file (the driver logs no writes, and no copy was tried), a mounted volume while the card is taken out, a trim, and the kept syslog after a restart (no restart in this session).
+
 ## 2026-11-23 - Themes - Round 2C polish (R5 Light first-boot defaults, transparent About R5 tabs, BCard button halo fix, Deskbar page layout, desktop icon restore, Slate Dark mode)
 
 - Problem: second 5625U stick test uncovered: (1) `app_server` still booted into Haiku Classic `#d8d8d8` grey until the first theme switch; (2) `About R5`'s `BTabView` painted an opaque `#eef1f5` strip over the frosted-glass window; (3) `BButton` on dark-grey `BCard` surfaces (Bluetooth `Disconnect`/`Forget`) showed a 1 px white rectangular halo from `BButton`'s default `B_PANEL_BACKGROUND_COLOR`; (4) Settings → `Desktop and Deskbar` needed an unnecessary scrollbar because `Window` sat below `Applications` and `Menu`; (5) desktop icons pushed down by a top Horizontal Deskbar stayed down after Deskbar moved away; (6) Dark mode (`#1f232b` window / `#15181e` cards) was too dark and inverted card elevation.
