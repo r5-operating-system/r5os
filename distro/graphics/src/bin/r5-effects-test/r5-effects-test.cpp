@@ -71,6 +71,19 @@
 #include <Window.h>
 
 #include <WindowEffects.h>
+#include <Themes.h>
+
+#include <CheckBox.h>
+#include <LayoutBuilder.h>
+#include <ListView.h>
+#include <MenuBar.h>
+#include <MenuField.h>
+#include <MenuItem.h>
+#include <PopUpMenu.h>
+#include <RadioButton.h>
+#include <Slider.h>
+#include <StatusBar.h>
+#include <TabView.h>
 
 #include <DecorInfo.h>
 
@@ -381,6 +394,10 @@ private:
 			return _Zoom(value != NULL && strcmp(value, "autohide") == 0);
 		if (strcmp(what, "deskbar-add") == 0 && value != NULL)
 			return _DeskbarAdd(value);
+		if (strcmp(what, "theme") == 0 && value != NULL)
+			return _Theme(value, fArgc > 3 ? fArgv[3] : NULL);
+		if (strcmp(what, "controls") == 0)
+			return _Controls(value);
 
 		bool glass = strcmp(what, "glass") == 0;
 		bool full = strcmp(what, "full") == 0;
@@ -665,6 +682,169 @@ private:
 		return status == B_OK ? 0 : 1;
 	}
 
+	int _Theme(const char* name, const char* mode)
+	{
+		// Themes (docs/design/THEMING.md): list them, show the one in use,
+		// or apply one, as the Theme page of Settings does
+		if (strcmp(name, "list") == 0) {
+			for (int32 i = 0; i < count_themes(); i++) {
+				theme_info info;
+				if (get_theme_at(i, &info) == B_OK)
+					printf("%s\n", info.name);
+			}
+			return 0;
+		}
+		theme_info info;
+		if (strcmp(name, "get") == 0) {
+			if (get_theme(&info) != B_OK)
+				return 1;
+			printf("name \"%s\" base \"%s\" windows \"%s\" controls \"%s\" "
+				"scrollbars %s arrows %s deskbar %d/%d rounded %d floating %d "
+				"mode %s panel #%02x%02x%02x\n", info.name, info.base,
+				info.decorator, info.control_look,
+				info.modern_scroll_bars ? "modern" : "haiku",
+				info.double_arrows ? "double" : "single",
+				(int)info.deskbar_style, (int)info.deskbar_layout,
+				info.deskbar_rounded ? 1 : 0, info.deskbar_floating ? 1 : 0,
+				info.mode == B_THEME_DARK ? "dark" : "light",
+				ui_color(B_PANEL_BACKGROUND_COLOR).red,
+				ui_color(B_PANEL_BACKGROUND_COLOR).green,
+				ui_color(B_PANEL_BACKGROUND_COLOR).blue);
+			return 0;
+		}
+		if (strcmp(name, "mode") == 0 && mode != NULL) {
+			if (get_theme(&info) != B_OK)
+				return 1;
+			info.mode = strcmp(mode, "dark") == 0 ? B_THEME_DARK
+				: B_THEME_LIGHT;
+			return _Check(set_theme(&info, B_THEME_COLORS));
+		}
+		if (find_theme(name, &info) != B_OK) {
+			fprintf(stderr, "r5-effects-test: no theme \"%s\"\n", name);
+			return 1;
+		}
+		uint32 parts = info.parts;
+		if (mode != NULL) {
+			info.mode = strcmp(mode, "dark") == 0 ? B_THEME_DARK
+				: B_THEME_LIGHT;
+			parts |= B_THEME_COLORS;
+		}
+		return _Check(set_theme(&info, parts));
+	}
+
+	int _Controls(const char* secondsArg)
+	{
+		// every control the R5 Modern look draws, in one window, for the
+		// screenshots next to the mockup (docs/design/THEMING.md)
+		fWindowSeconds = secondsArg != NULL ? atoi(secondsArg) : 60;
+		if (fWindowSeconds <= 0)
+			fWindowSeconds = 60;
+
+		BWindow* window = new BWindow(BRect(60, 70, 700, 560), "Controls",
+			B_TITLED_WINDOW, B_QUIT_ON_WINDOW_CLOSE | B_ASYNCHRONOUS_CONTROLS
+				| B_AUTO_UPDATE_SIZE_LIMITS);
+
+		BMenuBar* bar = new BMenuBar("menu bar");
+		BMenu* file = new BMenu("File");
+		file->AddItem(new BMenuItem("New", NULL, 'N'));
+		file->AddItem(new BMenuItem("Open" B_UTF8_ELLIPSIS, NULL, 'O'));
+		file->AddSeparatorItem();
+		file->AddItem(new BMenuItem("Quit", new BMessage(B_QUIT_REQUESTED),
+			'Q'));
+		bar->AddItem(file);
+		bar->AddItem(new BMenu("Edit"));
+		bar->AddItem(new BMenu("View"));
+
+		BButton* save = new BButton("Save", NULL);
+		BButton* cancel = new BButton("Cancel", NULL);
+		BButton* off = new BButton("Disabled", NULL);
+		off->SetEnabled(false);
+		BTextControl* name = new BTextControl("Name", "Evening", NULL);
+		BTextControl* empty = new BTextControl("Place", "", NULL);
+		BPopUpMenu* sizes = new BPopUpMenu("sizes");
+		sizes->AddItem(new BMenuItem("Balanced", NULL));
+		sizes->AddItem(new BMenuItem("Quiet", NULL));
+		sizes->ItemAt(0)->SetMarked(true);
+		BMenuField* menu = new BMenuField("Strength", sizes);
+		BCheckBox* checkOn = new BCheckBox("Rounded");
+		checkOn->SetValue(B_CONTROL_ON);
+		BCheckBox* checkOff = new BCheckBox("Animations");
+		BCheckBox* checkPartly = new BCheckBox("Some");
+		checkPartly->SetValue(B_CONTROL_PARTIALLY_ON);
+		BRadioButton* radioOn = new BRadioButton("Light", NULL);
+		radioOn->SetValue(B_CONTROL_ON);
+		BRadioButton* radioOff = new BRadioButton("Dark", NULL);
+		BSlider* slider = new BSlider("slider", "Volume", NULL, 0, 100,
+			B_HORIZONTAL);
+		slider->SetValue(60);
+		BStatusBar* status = new BStatusBar("status", "Copying");
+		status->SetMaxValue(100);
+		status->Update(45);
+
+		BListView* list = new BListView("list");
+		const char* items[] = { "Tracker", "Settings", "StyledEdit",
+			"Terminal", "WebPositive", "Mail", "People", "Icon-O-Matic",
+			"MediaPlayer", "ShowImage", "Pe", "Debugger" };
+		for (uint32 i = 0; i < sizeof(items) / sizeof(items[0]); i++)
+			list->AddItem(new BStringItem(items[i]));
+		list->Select(1);
+		BScrollView* listScroll = new BScrollView("list scroll", list, 0,
+			false, true);
+
+		BTabView* tabs = new BTabView("tabs");
+		BView* page = new BView("Controls", 0);
+		page->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
+		BLayoutBuilder::Group<>(page, B_HORIZONTAL, B_USE_DEFAULT_SPACING)
+			.SetInsets(B_USE_DEFAULT_SPACING)
+			.AddGroup(B_VERTICAL, B_USE_SMALL_SPACING)
+				.AddGroup(B_HORIZONTAL)
+					.Add(save)
+					.Add(cancel)
+					.Add(off)
+				.End()
+				.Add(name)
+				.Add(empty)
+				.Add(menu)
+				.AddGroup(B_HORIZONTAL)
+					.Add(checkOn)
+					.Add(checkOff)
+					.Add(checkPartly)
+				.End()
+				.AddGroup(B_HORIZONTAL)
+					.Add(radioOn)
+					.Add(radioOff)
+				.End()
+				.Add(slider)
+				.Add(status)
+				.AddGlue()
+			.End()
+			.Add(listScroll);
+		tabs->AddTab(page);
+		BView* second = new BView("Text", 0);
+		second->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
+		tabs->AddTab(second);
+		BView* third = new BView("More", 0);
+		third->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
+		tabs->AddTab(third);
+
+		BLayoutBuilder::Group<>(window, B_VERTICAL, 0)
+			.Add(bar)
+			.AddGroup(B_VERTICAL)
+				.SetInsets(B_USE_WINDOW_SPACING)
+				.Add(tabs)
+			.End();
+		window->SetDefaultButton(save);
+		window->Show();
+		if (window->Lock()) {
+			name->MakeFocus(true);
+			window->Unlock();
+		}
+
+		printf("r5-effects-test: controls, %" B_PRId32 " s\n", fWindowSeconds);
+		SetPulseRate(fWindowSeconds * 1000000LL);
+		return 0;
+	}
+
 	virtual void Pulse()
 	{
 		PostMessage(B_QUIT_REQUESTED);
@@ -691,7 +871,10 @@ private:
 			"       r5-effects-test zoom [autohide]\n"
 			"       r5-effects-test deskbar-add <path>\n"
 			"       r5-effects-test decorator list|<name>\n"
-			"       r5-effects-test soft [seconds]\n");
+			"       r5-effects-test soft [seconds]\n"
+			"       r5-effects-test theme list|get|mode light|dark\n"
+			"       r5-effects-test theme <name> [light|dark]\n"
+			"       r5-effects-test controls [seconds]\n");
 		return 2;
 	}
 
