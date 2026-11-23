@@ -316,6 +316,36 @@ glyph_eye(BView* view, const glyph_space& space)
 
 
 static void
+glyph_box(BView* view, const glyph_space& space, float left, float top,
+	float right, float bottom)
+{
+	BPoint points[4] = { space.Map(left, top), space.Map(right, top),
+		space.Map(right, bottom), space.Map(left, bottom) };
+	view->StrokePolygon(points, 4, true);
+}
+
+
+static void
+glyph_wifi(BView* view, const glyph_space& space, int32 steps)
+{
+	// the dot and three arcs of the mockup: M2.5 9a14 14 0 0 1 19 0,
+	// M5.5 12.5a9.5 9.5 0 0 1 13 0, M8.7 16a5 5 0 0 1 6.6 0, and a dot of
+	// 1.4 at (12, 19.2); \a steps of them, the dot first
+	if (steps >= 1) {
+		BPoint center = space.Map(12, 19.2f);
+		float radius = space.Size(1.4f);
+		view->FillEllipse(center, radius, radius);
+	}
+	if (steps >= 2)
+		glyph_arc(view, space, 12, 19.76f, 5, 48.7f, 82.6f);
+	if (steps >= 3)
+		glyph_arc(view, space, 12, 19.43f, 9.5f, 46.8f, 86.4f);
+	if (steps >= 4)
+		glyph_arc(view, space, 12, 19.28f, 14, 47.3f, 85.4f);
+}
+
+
+static void
 glyph_paint(BView* view, r5_glyph which, BRect frame)
 {
 	glyph_space space;
@@ -426,37 +456,103 @@ glyph_paint(BView* view, r5_glyph which, BRect frame)
 			break;
 		}
 
+		// The Deskbar tray symbols: a pen of 2 on the grid, as the mockup
+		// (Design canvas "R5 Deskbar styles", 22 Nov 2026) draws them
+		case R5_GLYPH_WIFI:
+			view->SetPenSize(std::max(1.0f, space.Size(2)));
+			glyph_wifi(view, space, 4);
+			break;
+
+		case R5_GLYPH_VOLUME:
+		case R5_GLYPH_VOLUME_OFF:
+		{
+			view->SetPenSize(std::max(1.0f, space.Size(2)));
+			// the speaker: M4 9.5h4l5-4v13l-5-4H4z, filled
+			BPoint body[6] = {
+				space.Map(4, 9.5f), space.Map(8, 9.5f), space.Map(13, 5.5f),
+				space.Map(13, 18.5f), space.Map(8, 14.5f), space.Map(4, 14.5f)
+			};
+			view->FillPolygon(body, 6);
+			if (which == R5_GLYPH_VOLUME) {
+				// one wave: M16.5 9a4.5 4.5 0 0 1 0 6
+				glyph_arc(view, space, 13.15f, 12, 4.5f, -41.8f, 83.6f);
+			} else {
+				// muted: a cross where the wave was
+				glyph_line(view, space, 16, 9.5f, 21, 14.5f);
+				glyph_line(view, space, 21, 9.5f, 16, 14.5f);
+			}
+			break;
+		}
+
+		case R5_GLYPH_NETWORK:
+		case R5_GLYPH_NETWORK_OFF:
+		{
+			view->SetPenSize(std::max(1.0f, space.Size(2)));
+			// three boxes on a wire, the common wired-network symbol
+			glyph_box(view, space, 9, 2.5f, 15, 8.5f);
+			glyph_box(view, space, 2.5f, 15.5f, 8.5f, 21.5f);
+			glyph_box(view, space, 15.5f, 15.5f, 21.5f, 21.5f);
+			glyph_line(view, space, 12, 8.5f, 12, 12);
+			glyph_line(view, space, 5.5f, 12, 18.5f, 12);
+			glyph_line(view, space, 5.5f, 12, 5.5f, 15.5f);
+			glyph_line(view, space, 18.5f, 12, 18.5f, 15.5f);
+			if (which == R5_GLYPH_NETWORK_OFF)
+				glyph_line(view, space, 2.5f, 2.5f, 21.5f, 21.5f);
+			break;
+		}
+
+		case R5_GLYPH_AIRPLAY:
+		{
+			view->SetPenSize(std::max(1.0f, space.Size(2)));
+			// a screen open at the bottom, and the triangle under it
+			BPoint screen[6] = {
+				space.Map(6, 17), space.Map(3, 17), space.Map(3, 4),
+				space.Map(21, 4), space.Map(21, 17), space.Map(18, 17)
+			};
+			view->StrokePolygon(screen, 6, false);
+			BPoint triangle[3] = {
+				space.Map(12, 14.5f), space.Map(17, 20.5f), space.Map(7, 20.5f)
+			};
+			view->StrokePolygon(triangle, 3, true);
+			break;
+		}
+
+		case R5_GLYPH_MAIL:
+		case R5_GLYPH_MAIL_NEW:
+		{
+			view->SetPenSize(std::max(1.0f, space.Size(2)));
+			float right = which == R5_GLYPH_MAIL_NEW ? 19.5f : 21.5f;
+			float top = which == R5_GLYPH_MAIL_NEW ? 7.5f : 5.5f;
+			glyph_box(view, space, 2.5f, top, right, 19.5f);
+			BPoint flap[3] = {
+				space.Map(2.5f, top + 1.5f), space.Map((2.5f + right) / 2,
+					top + 7.5f), space.Map(right, top + 1.5f)
+			};
+			view->StrokePolygon(flap, 3, false);
+			if (which == R5_GLYPH_MAIL_NEW) {
+				// a new message: a filled dot at the corner
+				BPoint center = space.Map(19.5f, 5.5f);
+				float radius = space.Size(3.5f);
+				view->FillEllipse(center, radius, radius);
+			}
+			break;
+		}
+
 		default:
 			break;
 	}
 }
 
 
-void
-r5_glyph_draw(BView* view, r5_glyph which, BRect frame, rgb_color color)
+// Paints the glyph into `paint` of a new transparent B_RGBA32 bitmap of
+// `bounds`. The coverage stays in the alpha channel.
+static BBitmap*
+glyph_render(r5_glyph which, BRect paint, BRect bounds, rgb_color color)
 {
-	if (view == NULL || !frame.IsValid())
-		return;
-
-	view->PushState();
-	color.alpha = 255;
-	view->SetHighColor(color);
-	view->SetDrawingMode(B_OP_ALPHA);
-	view->SetBlendingMode(B_CONSTANT_ALPHA, B_ALPHA_OVERLAY);
-	glyph_paint(view, which, frame);
-	view->PopState();
-}
-
-
-BBitmap*
-r5_glyph_bitmap(r5_glyph which, float side, rgb_color color)
-{
-	int32 pixels = icon_pixels(side);
 	// The last glyph of enum r5_glyph; update it with every new glyph.
-	if (pixels < 1 || which < R5_GLYPH_POWER || which > R5_GLYPH_TRIANGLE)
+	if (which < R5_GLYPH_POWER || which > R5_GLYPH_MAIL_NEW)
 		return NULL;
 
-	BRect bounds(0, 0, pixels - 1, pixels - 1);
 	BBitmap* bitmap = new(std::nothrow) BBitmap(bounds,
 		B_BITMAP_ACCEPTS_VIEWS, B_RGBA32);
 	if (bitmap == NULL || bitmap->InitCheck() != B_OK) {
@@ -474,7 +570,7 @@ r5_glyph_bitmap(r5_glyph which, float side, rgb_color color)
 		// edges stay smooth on any background.
 		view->SetDrawingMode(B_OP_ALPHA);
 		view->SetBlendingMode(B_CONSTANT_ALPHA, B_ALPHA_COMPOSITE);
-		glyph_paint(view, which, BRect(0, 0, pixels, pixels));
+		glyph_paint(view, which, paint);
 		view->Sync();
 		bitmap->RemoveChild(view);
 		bitmap->Unlock();
@@ -482,6 +578,54 @@ r5_glyph_bitmap(r5_glyph which, float side, rgb_color color)
 		bitmap->RemoveChild(view);
 	delete view;
 	return bitmap;
+}
+
+
+void
+r5_glyph_draw(BView* view, r5_glyph which, BRect frame, rgb_color color)
+{
+	if (view == NULL || !frame.IsValid())
+		return;
+
+	color.alpha = 255;
+
+	// The glyph is painted into a bitmap first and drawn from there. Drawn
+	// straight into the view, its shapes take the subpixel antialiasing
+	// of the CPU mode (app_server Painter, with the subpixel setting on)
+	// and get colored fringes; the bitmap's alpha composite does not.
+	BPoint origin(floorf(frame.left), floorf(frame.top));
+	BRect bounds(0, 0, ceilf(frame.right) - origin.x,
+		ceilf(frame.bottom) - origin.y);
+	BBitmap* bitmap = glyph_render(which,
+		frame.OffsetByCopy(-origin.x, -origin.y), bounds, color);
+	if (bitmap != NULL) {
+		view->PushState();
+		view->SetDrawingMode(B_OP_ALPHA);
+		view->SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_COMPOSITE);
+		view->DrawBitmap(bitmap, origin);
+		view->PopState();
+		delete bitmap;
+		return;
+	}
+
+	view->PushState();
+	view->SetHighColor(color);
+	view->SetDrawingMode(B_OP_ALPHA);
+	view->SetBlendingMode(B_CONSTANT_ALPHA, B_ALPHA_OVERLAY);
+	glyph_paint(view, which, frame);
+	view->PopState();
+}
+
+
+BBitmap*
+r5_glyph_bitmap(r5_glyph which, float side, rgb_color color)
+{
+	int32 pixels = icon_pixels(side);
+	if (pixels < 1)
+		return NULL;
+
+	return glyph_render(which, BRect(0, 0, pixels, pixels),
+		BRect(0, 0, pixels - 1, pixels - 1), color);
 }
 
 
@@ -615,6 +759,50 @@ level_battery(BView* view, BRect frame, int32 level, rgb_color filled,
 }
 
 
+static void
+level_symbol(BView* view, r5_level_glyph which, BRect frame, int32 level,
+	rgb_color filled, rgb_color empty)
+{
+	// line symbols in the pen of the tray glyphs: the empty steps faint
+	glyph_space space;
+	float side = std::min(frame.Width(), frame.Height());
+	space.scale = side / kGlyphGrid;
+	space.frame = BRect(frame.left + (frame.Width() - side) / 2,
+		frame.top + (frame.Height() - side) / 2, 0, 0);
+	space.frame.right = space.frame.left + side;
+	space.frame.bottom = space.frame.top + side;
+	view->SetDrawingMode(B_OP_ALPHA);
+	view->SetBlendingMode(B_CONSTANT_ALPHA, B_ALPHA_OVERLAY);
+	view->SetPenSize(std::max(1.0f, space.Size(2)));
+	view->SetLineMode(B_ROUND_CAP, B_ROUND_JOIN);
+
+	if (which == R5_LEVEL_WIFI) {
+		// the faint arcs first, then the filled ones over them
+		view->SetHighColor(empty);
+		glyph_wifi(view, space, kLevelSteps);
+		view->SetHighColor(filled);
+		glyph_wifi(view, space, level);
+		return;
+	}
+
+	// the battery of the mockup: a body of 17 x 10 with corners of 2, a cap
+	// line, and a fill of up to 10 x 5 inside
+	view->SetHighColor(filled);
+	BRect body(space.Map(2.5f, 7).x, space.Map(2.5f, 7).y,
+		space.Map(19.5f, 17).x, space.Map(19.5f, 17).y);
+	float radius = space.Size(2);
+	view->StrokeRoundRect(body, radius, radius);
+	glyph_line(view, space, 21.5f, 10.5f, 21.5f, 13.5f);
+	if (level > 0) {
+		float width = 12.0f * level / kLevelSteps;
+		BRect fill(space.Map(5, 9.5f).x, space.Map(5, 9.5f).y,
+			space.Map(5 + width, 14.5f).x, space.Map(5, 14.5f).y);
+		float inner = space.Size(1);
+		view->FillRoundRect(fill, inner, inner);
+	}
+}
+
+
 void
 r5_level_glyph_draw(BView* view, r5_level_glyph which, BRect frame,
 	int32 level, rgb_color foreground, rgb_color background,
@@ -640,6 +828,10 @@ r5_level_glyph_draw(BView* view, r5_level_glyph which, BRect frame,
 			break;
 		case R5_LEVEL_BATTERY:
 			level_battery(view, frame, level, filled, empty, outline);
+			break;
+		case R5_LEVEL_WIFI:
+		case R5_LEVEL_BATTERY_SYMBOL:
+			level_symbol(view, which, frame, level, filled, empty);
 			break;
 	}
 	view->PopState();

@@ -18,6 +18,7 @@ The R5Book (`docs/r5book/index.html`) shows each part with a picture, what it is
 | `libr5admin.so` | `<R5Admin.h>` | `distro/admin` | Admin requests: a request that changes the machine goes to a service's own port, where the kernel names the sender (uid, group, team). Login, bluetooth_server, `libr5ui.so`, `libr5bt.so`, Users and bluetooth_audio use it. Both images. See "Admin requests" below |
 | `libr5bt.so` | `<R5Bluetooth.h>` | `distro/bluetooth/lib` | The Bluetooth panel (`BluetoothView`), its controller (`BluetoothController`) and state. R5's own, MIT. Regular image only, because it needs `libbluetooth.so`. It links `libr5icons.so` (the Bluetooth glyph and the signal bars) and `libr5ui.so` (`BCard`). See "Bluetooth Kit" below |
 | `libr5game.so` | `<GameController.h>`, `<GameControllerView.h>`, `<GameControllerMotionView.h>` | `distro/game/lib` | Game controllers: `BGameController` (the standard layout, name, vendor and product ID, battery, button labels, plug and unplug messages, rumble, trigger effects and motion), `BGameControllerView` (the live picture) and `BGameControllerMotionView` (tilt and turn). R5's own, MIT. Both images; the mapping database only in the regular image. It links `libr5icons.so` (the PlayStation glyphs) and `libr5ui.so` (`BTiltLevel`, `BAxisBar`). See "Game Kit" below |
+| `libr5power.so` | `<PowerRoster.h>` | `distro/power/lib` | The Power Kit: `BPowerRoster` (batteries, the power source, the processor profile, sleep, the machine's power settings) and its watch message `kMsgPowerChanged`. R5's own, MIT; the battery reading is PowerStatus's former `ACPIDriverInterface`, moved here. Both images. It links `libr5admin.so` for the settings request. See "Power Kit" below |
 
 `scripts/apply-icons.py` and `scripts/apply-r5ui.py` copy the sources into the Haiku tree, copy the header to `headers/os/interface/`, and add the library to the regular image and the minimum image. On a running system the files are `/system/lib/libr5icons.so` and `/system/lib/libr5ui.so`. The soname is the file name, with no version suffix, the same way `libbe.so` is named.
 
@@ -31,6 +32,19 @@ Application Example :
 `SubInclude` for `src preferences r5ui` has to come before the program that links it.
 
 Adding a function keeps old programs working. Changing a function's arguments, or removing a function, breaks programs already built against that soname. Do that only with a written note in this file and in `CHANGELOG.md`. The same rule is in `AGENTS.md`.
+
+## Floating margin and tray style
+
+Added 22 Nov 2026 for the Deskbar styles (`docs/design/DESKBAR-STYLES.md`), at the end of `<R5UI.h>`:
+
+| Call | What it does |
+|---|---|
+| `r5_floating_margin()` | The margin, in pixels, a floating part of the desktop keeps from the screen edges: 14 at the default font size of 12, scaled with `be_plain_font`. Deskbar's "Keep away from the screen edges" uses it, so the margin is one R5 value, not a constant in Deskbar |
+| `r5_deskbar_tray_style()`, `r5_deskbar_tray_color()` | How R5's own tray items draw their symbol: `R5_TRAY_STYLE_CLASSIC` (0, their own icon) or `R5_TRAY_STYLE_SYMBOLS` (1, one-colour line symbols in the colour returned). Read in the item's `Draw()`; outside Deskbar always classic |
+| `r5_set_deskbar_tray_style(style, color)` | Deskbar sets it in its own process, then sends `R5_DESKBAR_TRAY_STYLE_CHANGED` (`'r5ts'`, with int32 `"style"` and the colour `"color"`, so an item can keep its own copy) to every tray view. Not for other programs |
+| `r5_deskbar_tray_look()`, `r5_tray_look_update(look, message)` | External review, 23 Nov 2026. `struct r5_tray_look` holds the style and the colour together. A tray item takes `r5_deskbar_tray_look()` in `AttachedToWindow()`, then `r5_tray_look_update()` with each `R5_DESKBAR_TRAY_STYLE_CHANGED` (true when the message changed its copy), and draws from its own copy. The values behind all these calls change under one lock. Added at the end; nothing before it changed |
+
+The rule for tray symbols, with an example, is in `docs/ICONS.md` ("Tray symbols").
 
 ## Screen picture
 
@@ -413,9 +427,10 @@ Since November 2026 every one of these calls reaches Login through `r5_admin_sen
 | `r5_admin_sender` | `uid`, `gid`, `team` of the sender, from the kernel |
 | `r5_admin_port_reply(message, port)` | Service, in `MessageReceived()`: answers `R5_ADMIN_PORT_REQUEST` (`'r5AP'`) with int32 `"port"`. False for any other message |
 | `r5_admin_port_stop(port)` | Service: deletes the port and waits for its thread. Not while holding the lock the handler takes |
+| `r5_admin_sender_allowed(sender)` | Service: true for uid 0, a member of group `admin`, or a team with Login's grant (`/boot/system/settings/r5-machine-unlock`). The rule Login and bluetooth_server's switch use. Added 22 Nov 2026, at the end, for the power service |
 | `r5_admin_send(service, request, reply, timeout)` | Client: asks `service` for its admin port, checks that the port belongs to the service's team, sends the request (at most 64 KB) and waits for the reply. The sent copy is cleared (it may hold a password) |
 
-Services: Login (accounts, unlock, relock, clock, time zone, driver blocking and driver settings; its normal messenger only answers the query) and bluetooth_server (`BT_MSG_R5_SET_RADIO`, administrator or grant; `BT_MSG_R5_AUDIO_*`, uid 0). The R5Book page is `docs/r5book/admin-kit.html`.
+Services: Login (accounts, unlock, relock, clock, time zone, driver blocking and driver settings; its normal messenger only answers the query) and bluetooth_server (`BT_MSG_R5_SET_RADIO`, administrator or grant; `BT_MSG_R5_AUDIO_*`, uid 0) and the power service (`kMsgPowerSetSettings`, administrator or grant, through `BPowerRoster::SetSettings()`). The R5Book page is `docs/r5book/admin-kit.html`.
 
 ## Window effects
 
@@ -430,6 +445,11 @@ The shadow and the frosted glass of windows, in the GPU mode (`docs/APP-SERVER-C
 | `set_window_glass(window, glass)` | The window's background is glass: its top view gets the background of a glass view (below). Call it after the `BWindow` constructor |
 | `set_view_glass(view, glass)` | One view's background is glass. The view must be attached and its window locked; the call syncs the window first, so app_server knows the view. `B_BAD_VALUE` for a view of another team or one that is not attached |
 | `gpu_draws_text()` | M12 (Q13 of `docs/APP-SERVER-GPU-DRAWING.md`): `true` while the GPU draws the letters (Skia, `gpu_draw` on and the GPU mode active). Skia's own subpixel filter has no "average weight", so the Antialiasing tab of Settings and Appearance hides that slider then. `false` while Painter draws the letters, and when app_server cannot be asked. Code `AS_R5_GPU_DRAWS_TEXT`. Added at the end; nothing before it changed |
+| `set_window_shadow(window, kind)` | Deskbar styles (22 Nov 2026). The shadow of the program's own window, GPU mode only: `B_WINDOW_SHADOW_DEFAULT` (0, as the decorator gives it, the default), `B_WINDOW_SHADOW_FULL` (1, the full soft shadow of the effect step whatever the focus, also for a window without a decorator), `B_WINDOW_SHADOW_EDGE` (2, the same without the offset down, for a window against a screen edge). `B_BAD_VALUE` for another kind or a window of another team. Code `AS_R5_SET_WINDOW_SHADOW`. Added at the end; nothing before it changed |
+| `window_effects_active()` | True while the compositor shows the effects (the GPU mode); false in the CPU mode (Safe mode, no GPU) and when app_server cannot be asked. Deskbar asks it to choose between glass and its opaque surface. Code `AS_R5_WINDOW_EFFECTS_ACTIVE`. Added at the end |
+| `B_WINDOW_EFFECTS_CHANGED` (`'r5we'`) | External review, 23 Nov 2026. app_server sends this message to every program when the effects change (`set_window_effects()`, `set_window_effect_strength()`) or when the compositor turns off (from the GPU to the CPU mode), as Haiku sends `B_COLORS_UPDATED` for colours. Fields: bool `"active"` (as `window_effects_active()`) and uint32 `"effects"` (as `window_effects()`). It reaches the application's looper; Deskbar draws its style again on it. Added at the end |
+| `set_window_edge_line(window, color, width)` | The line along the outer edge of the program's own window, carried round the arc of its round corners by the compositor (stepped in the CPU mode, where app_server paints the stepped rim of a window without a decorator), for a window without a decorator line such as Deskbar's borderless window; the program draws the straight sides. A decorator's own line comes first. Width 0 (the default) is none, at most 4. Code `AS_R5_SET_WINDOW_EDGE_LINE`. Added at the end |
+| `set_window_corner_radius(window, radius)` | Rounds the four corners of the program's own window, radius in pixels (0 square, the default; at most 64). The frame stays the same rectangle; the corners leave what the window shows and gets clicks for, in both modes (blended in the GPU mode, stepped in the CPU mode), and content in a corner is clipped. A window whose decorator returns an outline (decorator ABI 2) uses the decorator's. A round window gets the full soft shadow of the effect step, and the decorator's edge line runs on round the corner. Scale with the font size (18 at 12 points). `B_BAD_VALUE` for a negative radius or a window of another team. Code `AS_R5_SET_WINDOW_CORNER_RADIUS`. Added at the end; nothing before it changed |
 
 What glass means for the pixels: app_server fills the view's background with its view colour and alpha 0. What the program draws on it with `B_OP_ALPHA` and `B_ALPHA_COMPOSITE` keeps its alpha (Painter's composite modes are made for a transparent target); every other drawing mode writes alpha 255 and stays opaque, as on a normal view, with antialiased edges blended against the view colour. The compose shows the view colour with the blur behind it showing through by the step's "see-through" value, and composite pixels over the blur by their alpha. Child views with their own colour stay opaque. In a window that has a glass view, a bitmap with alpha 0 drawn with `B_OP_COPY` is see-through there too, because the compose uses the alpha of the whole content area of such a window.
 
@@ -601,3 +621,21 @@ Limits: the Joy-Cons over USB (only in the charging grip, `057E:200E`) and as a 
 `BGameControllerMotionView` (`<GameControllerMotionView.h>`): the controller's motion as a `BTiltLevel` ("Tilt") and three `BAxisBar`s ("Pitch", "Roll", "Yaw" over "Turn"), from the Appearance Kit. `SetMotion(const game_controller_motion&)` shows a sample: the level from the acceleration's x and z, the bars from the rotation, full at `TurnRange()` degrees per second (360 unless `SetTurnRange()` changed it). `Reset()` puts everything back in the middle. `SetEnabled(false)` draws the level, the bars and their labels gray, as a disabled control (the Game controllers page does this for its example without a controller); `IsEnabled()` reads it back. The program reads the controller; the view only shows. A private data pointer, four reserved virtual functions and `_reserved[4]`. The library now links `libr5ui.so`.
 
 `gamecontroller_feel_test` (regular image, `/bin`) is the test without hardware: a virtual DualSense on bluetooth_hid with report IDs and the full report `0x31` in and out, the three driver calls (and what they refuse, kernel addresses included), the buttons and motion from full reports only, the exact rumble and trigger reports with their CRC in bluetooth_hid's output queue, a timed rumble that stops, `Close()` freeing the triggers, the two widgets drawing, `PictureBitmap()`, and `BCardStrip` (items, selection by `Select()` and the keys, the selection message, the archive, the drawing with cards and empty). `scripts/test-game-feel.sh` runs the host unit test of the report builders, the CRC, the motion parser, the short report and the PID reports; `scripts/fuzz-bt.sh hid` fuzzes the descriptor parser and the report code.
+
+## Power Kit
+
+`libr5power.so`, header `<PowerRoster.h>` (`headers/os/app`), source `distro/power/lib`, MIT, in both images. The contract is `docs/POWER.md`; the R5Book page is `docs/r5book/power-kit.html`. Added 22 Nov 2026 (POWER.md step 2).
+
+| Call | What it does |
+|---|---|
+| `BPowerRoster()` | Finds the batteries under `/dev/power` (ACPI `_BST`, `_BIX`/`_BIF`) |
+| `CountBatteries()`, `GetBatteryInfo(index, power_battery_info*)` | The batteries, read again on every call: `state` (`B_POWER_BATTERY_DISCHARGING`, `_CHARGING`, `_CRITICAL`, `_NOT_CHARGING`), `percent`, `time_left` in seconds (to empty or to full), `health` (full charge in percent of the design capacity), `capacity`, `full_capacity`, `design_capacity`, `in_mah`. -1 is "not reported" |
+| `IsOnAC()` | The ACPI AC adapter (`/dev/power/acpi_ac/0`); without one, true unless a battery discharges |
+| `Profile()`, `CanChangeProfile()` | `B_POWER_PROFILE_SAVER`, `_BALANCED`, `_PERFORMANCE`, from the kernel (`_kern_r5_get_power_info()`); false when the processor offers no speed control |
+| `CanSleep(power_sleep_state*)` | Whether sleep works (false before POWER.md step 4) and the state the firmware offers: `B_POWER_SLEEP_S0IX`, `_S3`, `_NONE` |
+| `GetSettings(BMessage*)`, `SetSettings(const BMessage&)` | The machine's power settings from the power service. Setting is an admin request (`r5_admin_send()`); the service checks the sender and writes `B_SYSTEM_SETTINGS_DIRECTORY/power` itself. `B_NO_INIT` without the service (Safe mode). The field names are in the private `<PowerProtocol.h>` |
+| `static StartWatching(BMessenger)`, `static StopWatching(BMessenger)` | `kMsgPowerChanged` (`'r5pw'`) with int32 `"change"`: `B_POWER_BATTERY_CHANGED`, `B_POWER_AC_CHANGED` (bool `"on ac"`), `B_POWER_PROFILE_CHANGED` (int32 `"profile"`), `B_POWER_SETTINGS_CHANGED`; `B_POWER_WILL_SLEEP` and `B_POWER_DID_WAKE` are reserved for step 4. One looper per team reads the batteries and AC every two seconds (PowerStatus's former thread) and passes on what the service sends; the last `StopWatching()` quits it, and so does unloading the library |
+
+The class has a private data pointer and `_reserved[8]`; new calls go at the end. PowerStatus links the library and reads through the private `BPrivate::BatteryReader` (`<PowerBattery.h>`, `headers/private/power`); its Deskbar item loads the library with it. The Power page in Settings and the power service link it too.
+
+The kernel side is private: `_kern_r5_set_power_profile()` (uid 0 only; the power service) and `_kern_r5_get_power_info()` in `<syscalls.h>`, with `<r5_power_profile.h>`, and version 2 of the cpufreq module interface (`cpufreq_module_info_v2` in `<cpufreq.h>`, a name ending in `/v2`). The existing `cpufreq_module_info` did not change.

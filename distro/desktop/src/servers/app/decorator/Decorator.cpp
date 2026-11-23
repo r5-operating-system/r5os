@@ -32,6 +32,11 @@
 #include "Desktop.h"
 #include "DesktopSettings.h"
 #include "DrawingEngine.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include "WindowOutline.h"
+// SPDX-SnippetEnd
 
 
 Decorator::Tab::Tab()
@@ -1275,6 +1280,30 @@ Decorator::GetInputMargin(BRect* margin)
 }
 
 
+/*!	ABI 2: the outline with round corners. The default is none, so the
+	window keeps its square footprint, pixel for pixel.
+*/
+int32
+Decorator::GetOutline(window_outline_rect* rects, int32 maxCount)
+{
+	(void)rects;
+	(void)maxCount;
+	return 0;
+}
+
+
+/*!	ABI 2: the line along the outer edge, for the round corners. The
+	default is none.
+*/
+bool
+Decorator::GetEdgeLine(rgb_color* color, float* width)
+{
+	(void)color;
+	(void)width;
+	return false;
+}
+
+
 /*!	Whether \a where lies in the input margin, outside the border rect. */
 bool
 Decorator::InputMarginContains(BPoint where)
@@ -1287,8 +1316,16 @@ Decorator::InputMarginContains(BPoint where)
 	}
 
 	BRect border = BorderRect();
-	if (!border.IsValid() || border.Contains(where))
+	if (!border.IsValid())
 		return false;
+	if (border.Contains(where)) {
+		// Decorator ABI 2: outside the arc of the frame's round corner is
+		// the resize corner, not the window behind (Default (R5 Modern)).
+		window_outline_rect rects[R5_WINDOW_OUTLINE_MAX_RECTS];
+		int32 count = GetOutline(rects, R5_WINDOW_OUTLINE_MAX_RECTS);
+		return count > 0
+			&& window_outline_cut_corner(rects, count, where) >= 0;
+	}
 
 	BRect outer(border.left - margin.left, border.top - margin.top,
 		border.right + margin.right, border.bottom + margin.bottom);

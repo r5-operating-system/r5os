@@ -102,6 +102,7 @@ The service is Haiku's own `power_daemon` (`src/servers/power/`, MIT): the launc
 - Brightness uses Haiku's existing call, `BScreen::SetBrightness()` and `GetBrightness()`, which reaches the accelerant hooks `B_SET_BRIGHTNESS` and `B_GET_BRIGHTNESS`. There is no new R5 GPU interface call for it.
 - The page and the service call `BScreen`. The service keeps the value for dimming and puts it back after a wake.
 - Where the accelerant has no hook (the firmware picture, VESA), the service tries ACPI `_BCM`. Where neither exists, the slider is hidden.
+- An accelerant reports a brightness only where its path works. radeon_hd's AtomBIOS backlight path is DCE only, for an attached LVDS or eDP panel with a mode set; on DCN (Renoir and later) it reports none, so the 5625U has no slider until step 3 (stick 74: the DCE path hung the desktop and every later start). app_server sets a brightness only when the accelerant can read one, and turns brightness off for the session after a failing call or one slower than a second, so the restore at start cannot stop app_server.
 - Brightness is not part of the machine file, and it needs no lock.
 
 ### The Power Kit: `libr5power.so`
@@ -259,6 +260,7 @@ Other defaults:
 
 1. This contract and the mockup (done 22 Nov 2026, waiting for "build it").
 2. Haiku's `power_daemon` in `distro/` with air/OS's policy and the admin port, `libr5power.so` with `BPowerRoster`, the profile syscall and the new cpufreq interface on AMD (MSR and shared memory) and Intel, and the Power page with Sleep and Wake gray. Stick: the profile visible in `R5 CPPC:` lines and CPU Info on the 5625U.
+   - Built 22 Nov 2026 (build 10067). The owner moved two parts of step 3 into it: PowerStatus and its Deskbar item read the battery through `libr5power.so`, and the brightness slider (`BScreen::SetBrightness()`) is on the page. Dimming on battery, the `_BCM` fallback, thermal and the low-battery notification stay in step 3. A processor with only ACPI `_PSS` gets gray profile menus until `_PSS` is built. The state of the tests is in `CHANGELOG.md`.
 3. Battery, thermal, the low-battery notification and brightness (`BScreen` first) on the 5625U. PowerStatus and its Deskbar replicant move to `BPowerRoster`.
 4. Sleep and wake for every x86-64-v2 computer (its own round, the owner's go first): the generic S0ix and S3 paths and the AMD and Intel vendor parts together, tested in QEMU (S3), on the 5625U (AMD) and on the X1 Carbon (Intel).
 5. ARM64 and RISC-V, in their own trees, when those targets boot.

@@ -26,5 +26,5 @@ AddResources airplay_deskbar : AirPlayDeskbar.rdef ;
 
 Application airplay_deskbar :
 	AirPlayDeskbar.cpp
-	: be network bnetapi [ TargetLibstdc++ ]
+	: be network bnetapi libr5ui.so libr5icons.so [ TargetLibstdc++ ]
 	;

@@ -44,6 +44,11 @@ All rights reserved.
 #include "BarApp.h"
 #include "BarView.h"
 #include "BarWindow.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include "DeskbarStyle.h"
+// SPDX-SnippetEnd
 
 
 TBarMenuTitle::TBarMenuTitle(float width, float height, const BBitmap* icon,
@@ -55,7 +60,12 @@ TBarMenuTitle::TBarMenuTitle(float width, float height, const BBitmap* icon,
 	fIcon(icon),
 	fMenu(menu),
 	fBarView(barView),
-	fInitStatus(B_NO_INIT)
+	fInitStatus(B_NO_INIT),
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	fHover(false)
+// SPDX-SnippetEnd
 {
 	if (fIcon == NULL || fMenu == NULL || fBarView == NULL)
 		fInitStatus = B_BAD_VALUE;
@@ -89,6 +99,16 @@ void
 TBarMenuTitle::Draw()
 {
 	BMenu* menu = Menu();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (menu != NULL && R5Deskbar::Modern()) {
+		menu->PushState();
+		_DrawModern();
+		menu->PopState();
+		return;
+	}
+// SPDX-SnippetEnd
 	if (fInitStatus != B_OK || menu == NULL)
 		return;
 

@@ -64,6 +64,12 @@
 #include <new>
 #include <OS.h>
 #include <R5WiFi.h>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <R5Icons.h>
+#include <R5UI.h>
+// SPDX-SnippetEnd
 #include <R5WiFiGlyphs.h>
 #include <R5WiFiNetworkList.h>
 // SPDX-SnippetEnd
@@ -286,6 +292,11 @@ void
 NetworkStatusView::AttachedToWindow()
 {
 	BView::AttachedToWindow();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	fTrayLook = r5_deskbar_tray_look();
+// SPDX-SnippetEnd
 
 	SetViewColor(B_TRANSPARENT_COLOR);
 
@@ -378,6 +389,16 @@ NetworkStatusView::MessageReceived(BMessage* message)
 			_AboutRequested();
 			break;
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		case R5_DESKBAR_TRAY_STYLE_CHANGED:
+			// its own copy (external review, 23 Nov 2026)
+			r5_tray_look_update(&fTrayLook, message);
+			Invalidate();
+			break;
+
+// SPDX-SnippetEnd
 		case B_QUIT_REQUESTED:
 			_Quit();
 			break;
@@ -410,6 +431,33 @@ NetworkStatusView::Draw(BRect updateRect)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+	// Default (R5) Deskbar: one-colour line symbols (docs/ICONS.md, "Tray
+	// symbols"): the Wi-Fi arcs that are lit, or the wired network with a
+	// slash when it is down
+	if (fTrayLook.style == R5_TRAY_STYLE_SYMBOLS) {
+		rgb_color color = fTrayLook.color;
+		BRect frame = Bounds();
+		if (fWirelessInterface.Length() > 0) {
+			int32 wifiStatus = kStatusUnknown;
+			std::map<BString, int32>::const_iterator found
+				= fInterfaceStatuses.find(fWirelessInterface);
+			if (found != fInterfaceStatuses.end())
+				wifiStatus = found->second;
+			int32 level = 0;
+			if (wifiStatus == kStatusReady)
+				level = std::max((int32)1, std::min((int32)4, fWirelessBars));
+			else if (wifiStatus == kStatusConnecting
+				|| wifiStatus == kStatusLinkNoConfig)
+				level = 1;
+			r5_level_glyph_draw(this, R5_LEVEL_WIFI, frame, level, color,
+				ViewColor(), R5_LEVEL_STYLE_NORMAL);
+		} else {
+			r5_glyph_draw(this, status == kStatusReady ? R5_GLYPH_NETWORK
+				: R5_GLYPH_NETWORK_OFF, frame, color);
+		}
+		return;
+	}
+
 	// With a Wi-Fi adapter the tray shows the Wi-Fi arcs (the same glyph as
 	// the WiFi program), whatever else is connected; otherwise the wired
 	// network icon.

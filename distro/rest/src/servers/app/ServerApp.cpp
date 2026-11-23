@@ -141,6 +141,11 @@ r5_screen_change_allowed(team_id team)
 // SPDX-SnippetEnd
 #include "View.h"
 #include "WindowEffectLevels.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include "WindowOutline.h"
+// SPDX-SnippetEnd
 
 
 /*!	M11 step 4: one line when the user changes a window effect, in both
@@ -1679,6 +1684,29 @@ ServerApp::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 			SendMessageToClient(&update);
 			break;
 		}
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		case kMsgWindowEffectsChanged:
+		{
+			// To the program: whether the effects show now, and which are on
+			// (BAppearanceKit::B_WINDOW_EFFECTS_CHANGED, docs/LIBR5.md)
+			uint32 effects = 0;
+			if (fDesktop->LockSingleWindow()) {
+				DesktopSettings settings(fDesktop);
+				effects = settings.WindowEffects();
+				fDesktop->UnlockSingleWindow();
+			}
+			Compositor* compositor = fDesktop->GetCompositor();
+			BMessage update(kWindowEffectsChangedMessage);
+			update.AddBool("active", compositor != NULL
+				&& compositor->IsActive());
+			update.AddUInt32("effects", effects);
+			SendMessageToClient(&update);
+			break;
+		}
+// SPDX-SnippetEnd
 
 		/* font messages */
 
@@ -3894,6 +3922,17 @@ ServerApp::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 				}
 				log_window_effects(before, after, strengthBefore,
 					strengthAfter);
+				// Default (R5 Modern) draws its tab and edge softly with
+				// shadow or glass and plainly without: its frames are
+				// drawn again when that changes.
+				const uint32 soft = kWindowEffectShadow
+					| kWindowEffectFrostedGlass;
+				if (((before ^ after) & soft) != 0
+					&& ((before & soft) == 0 || (after & soft) == 0))
+					fDesktop->Redraw();
+				// the programs that follow the effects (Deskbar)
+				if (before != after || strengthBefore != strengthAfter)
+					fDesktop->BroadcastToAllApps(kMsgWindowEffectsChanged);
 				// M11 review: the value is applied and on screen; a failed
 				// save is logged, not reported, or the Settings box and
 				// the screen would disagree.
@@ -3948,6 +3987,180 @@ ServerApp::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 				fDesktop->UnlockAllWindows();
 			}
 			fLink.StartMessage(status);
+			fLink.Flush();
+			break;
+		}
+
+		case AS_R5_SET_WINDOW_CORNER_RADIUS:
+		{
+			// The round outline of one of this team's own windows. The
+			// window keeps its frame; its corners leave its regions.
+			int32 token = -1;
+			float radius = 0.0f;
+			link.Read<int32>(&token);
+			status_t status = link.Read<float>(&radius);
+			if (status == B_OK && !(radius >= 0.0f))
+				status = B_BAD_VALUE;
+			// compared as the window keeps it (review: a radius above the
+			// largest rebuilt the clipping at every call)
+			if (radius > R5_WINDOW_CORNER_MAX_RADIUS)
+				radius = R5_WINDOW_CORNER_MAX_RADIUS;
+			if (status == B_OK && !fDesktop->LockAllWindows())
+				status = B_ERROR;
+			if (status == B_OK) {
+				Window* found = NULL;
+				for (Window* window = fDesktop->AllWindows().FirstWindow();
+						window != NULL;
+						window = window->NextWindow(kAllWindowList)) {
+					if (window->ServerWindow()->App() == this
+						&& window->ServerWindow()->ClientToken() == token) {
+						found = window;
+						break;
+					}
+				}
+				if (found == NULL)
+					status = B_BAD_VALUE;
+				else if (found->CornerRadius() != radius) {
+					BRegion dirty;
+					found->GetFullRegion(&dirty);
+					// the corners of the old outline come back into the
+					// window and are drawn by the program again (as
+					// Window::ResizeBy(), step 1.5; Deskbar styles)
+					BRegion corners;
+					found->GetOutlineCorners(&corners);
+					found->SetCornerRadius(radius);
+					BRegion after;
+					found->GetFullRegion(&after);
+					dirty.Include(&after);
+					corners.IntersectWith(&after);
+					// the shadow's reach changes with the outline too
+					BRect reach = dirty.Frame();
+					reach.InsetBy(-R5_WINDOW_CORNER_MAX_RADIUS,
+						-R5_WINDOW_CORNER_MAX_RADIUS);
+					fDesktop->RebuildAndRedrawAfterWindowChange(found, dirty);
+					if (corners.CountRects() > 0)
+						found->ProcessDirtyRegion(corners);
+					// GPU mode: the whole window is composed again, its
+					// corners' arc and edge line too, not only what the
+					// clipping revealed (22 Nov 2026, QEMU: the top
+					// corners kept the square picture)
+					Compositor* compositor = fDesktop->GetCompositor();
+					if (compositor != NULL && compositor->IsActive()) {
+						compositor->ClippingChanged();
+						compositor->Damage(BRegion(reach));
+					}
+				}
+				fDesktop->UnlockAllWindows();
+			}
+			fLink.StartMessage(status);
+			fLink.Flush();
+			break;
+		}
+// SPDX-SnippetEnd
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		case AS_R5_SET_WINDOW_SHADOW:
+		{
+			// The shadow of one of this team's own windows (libr5ui,
+			// set_window_shadow(); docs/design/DESKBAR-STYLES.md): 0 as the
+			// decorator gives it, 1 the full shadow of the step whatever the
+			// focus, 2 the same without the offset (against a screen edge).
+			int32 token = -1;
+			int32 kind = 0;
+			link.Read<int32>(&token);
+			status_t status = link.Read<int32>(&kind);
+			if (status == B_OK && (kind < 0 || kind > 2))
+				status = B_BAD_VALUE;
+			if (status == B_OK && !fDesktop->LockAllWindows())
+				status = B_ERROR;
+			if (status == B_OK) {
+				Window* found = NULL;
+				for (Window* window = fDesktop->AllWindows().FirstWindow();
+						window != NULL;
+						window = window->NextWindow(kAllWindowList)) {
+					if (window->ServerWindow()->App() == this
+						&& window->ServerWindow()->ClientToken() == token) {
+						found = window;
+						break;
+					}
+				}
+				if (found == NULL)
+					status = B_BAD_VALUE;
+				else if (found->ShadowKind() != kind) {
+					found->SetShadowKind(kind);
+					Compositor* compositor = fDesktop->GetCompositor();
+					if (compositor != NULL && compositor->IsActive()) {
+						BRegion full;
+						found->GetFullRegion(&full);
+						BRect reach = full.Frame();
+						// the largest step's shadow reaches less than this
+						reach.InsetBy(-64, -64);
+						compositor->ClippingChanged();
+						compositor->Damage(BRegion(reach));
+					}
+				}
+				fDesktop->UnlockAllWindows();
+			}
+			fLink.StartMessage(status);
+			fLink.Flush();
+			break;
+		}
+
+		case AS_R5_SET_WINDOW_EDGE_LINE:
+		{
+			// The line along the outer edge of one of this team's own
+			// windows, carried round the arc of its round corners (libr5ui,
+			// set_window_edge_line()). A decorator's own line comes first.
+			int32 token = -1;
+			rgb_color color = make_color(0, 0, 0);
+			float width = 0.0f;
+			link.Read<int32>(&token);
+			link.Read<rgb_color>(&color);
+			status_t status = link.Read<float>(&width);
+			if (status == B_OK && !(width >= 0.0f && width <= 4.0f))
+				status = B_BAD_VALUE;
+			if (status == B_OK && !fDesktop->LockAllWindows())
+				status = B_ERROR;
+			if (status == B_OK) {
+				Window* found = NULL;
+				for (Window* window = fDesktop->AllWindows().FirstWindow();
+						window != NULL;
+						window = window->NextWindow(kAllWindowList)) {
+					if (window->ServerWindow()->App() == this
+						&& window->ServerWindow()->ClientToken() == token) {
+						found = window;
+						break;
+					}
+				}
+				if (found == NULL)
+					status = B_BAD_VALUE;
+				else if (found->SetEdgeLine(color, width)) {
+					// only a change rebuilds the clipping (review 1)
+					BRegion dirty;
+					found->GetFullRegion(&dirty);
+					fDesktop->RebuildAndRedrawAfterWindowChange(found, dirty);
+					Compositor* compositor = fDesktop->GetCompositor();
+					if (compositor != NULL && compositor->IsActive()) {
+						compositor->ClippingChanged();
+						compositor->Damage(dirty);
+					}
+				}
+				fDesktop->UnlockAllWindows();
+			}
+			fLink.StartMessage(status);
+			fLink.Flush();
+			break;
+		}
+
+		case AS_R5_WINDOW_EFFECTS_ACTIVE:
+		{
+			// Whether the window effects show now: the compositor composes
+			// the screen (the GPU mode). False in the CPU mode.
+			Compositor* compositor = fDesktop->GetCompositor();
+			fLink.StartMessage(B_OK);
+			fLink.Attach<bool>(compositor != NULL && compositor->IsActive());
 			fLink.Flush();
 			break;
 		}

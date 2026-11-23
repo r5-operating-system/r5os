@@ -47,6 +47,8 @@ def install_kernel_sources() -> None:
         "src/system/libroot/posix/pthread/pthread.cpp",
         "src/system/libroot/posix/time/timer_support.cpp",
         "src/add-ons/kernel/bus_managers/pci/pci.cpp",
+        # R5: the AC state is read at start and on every read (stick 74)
+        "src/add-ons/kernel/drivers/power/acpi_ac/acpi_ac.cpp",
         "src/add-ons/kernel/busses/pci/ecam/ECAMPCIControllerACPI.cpp",
         "src/add-ons/kernel/busses/pci/x86/X86PCIController.cpp",
         "src/add-ons/kernel/busses/pci/x86/X86PCIController.h",
@@ -79,6 +81,14 @@ def install_kernel_sources() -> None:
         # R5: shutdown hooks, so radeon_hd stops the GPU before a restart
         "headers/private/kernel/r5_shutdown.h",
         "src/system/kernel/shutdown.cpp",
+        # R5: va_copy in syslog() LOG_CONS fallback (fixes app_server crash at
+        # shutdown after syslog_daemon exits) and EFI previous_syslog recovery
+        "src/system/libroot/posix/syslog.cpp",
+        "src/system/boot/platform/efi/efi_platform.h",
+        "src/system/boot/platform/efi/mmu.cpp",
+        "src/system/boot/platform/efi/debug.cpp",
+        "src/system/boot/platform/efi/start.cpp",
+        "src/system/kernel/debug/debug.cpp",
         # R5: AHCI fast empty-port reset and 64-bit DMA when CAP.S64A is set
         "src/add-ons/kernel/busses/scsi/ahci/ahci.c",
         "src/add-ons/kernel/busses/scsi/ahci/ahci_port.cpp",
@@ -86,6 +96,17 @@ def install_kernel_sources() -> None:
         "build/jam/images/FloppyBootImage",
         # R5: the AMD CPPC values stay per CPU (no shared globals)
         "src/add-ons/kernel/power/cpufreq/amd_pstates/amd_pstates.cpp",
+        # R5: processor profiles (docs/POWER.md, section 4): the profile
+        # syscalls, the cpufreq interface version 2, AMD (CPPC MSR and the
+        # ACPI _CPC registers) and Intel (HWP and the P-state ratio)
+        "headers/os/drivers/cpufreq.h",
+        "headers/private/system/syscalls.h",
+        "headers/private/system/r5_power_profile.h",
+        "src/add-ons/kernel/power/cpufreq/amd_pstates/amd_cppc_acpi.cpp",
+        "src/add-ons/kernel/power/cpufreq/amd_pstates/amd_cppc_acpi.h",
+        "src/add-ons/kernel/power/cpufreq/amd_pstates/Jamfile",
+        "src/add-ons/kernel/power/cpufreq/intel_pstates/intel_pstates.cpp",
+        "src/add-ons/kernel/power/cpufreq/intel_pstates/Jamfile",
         # air/OS 6178b691d2: memcpy leaves rep movsb under 4K aliasing
         "src/system/libroot/posix/string/arch/x86_64/memcpy.cpp",
         "src/system/libroot/posix/string/arch/x86_64/memset.cpp",
@@ -517,6 +538,35 @@ def install_efi_runtime() -> None:
         raise SystemExit(f"{jam}: efi SubInclude is not there exactly once")
 
 
+def install_rtsx() -> None:
+    """Realtek card readers (busses/mmc/rtsx: OpenBSD rtsx ISC, RTS5228 MIT,
+    docs/RTSX.md) and the device_manager path for PCI class 0xff. The
+    package lines are in distro/desktop/build/jam/packages/Haiku."""
+    root = pathlib.Path(__file__).resolve().parents[1]
+    (HAIKU / "src/add-ons/kernel/busses/mmc/rtsx").mkdir(exist_ok=True)
+    for relative in (
+        "src/system/kernel/device_manager/device_manager.cpp",
+        # mmc_bus: a bounded card scan that waits for the next card
+        "src/add-ons/kernel/bus_managers/mmc/mmc_bus.cpp",
+        "src/add-ons/kernel/busses/mmc/rtsx/Jamfile",
+        "src/add-ons/kernel/busses/mmc/rtsx/rtsx.cpp",
+        "src/add-ons/kernel/busses/mmc/rtsx/rtsx.h",
+        "src/add-ons/kernel/busses/mmc/rtsx/rtsx_5228.cpp",
+        "src/add-ons/kernel/busses/mmc/rtsx/rtsx_5228.h",
+        "src/add-ons/kernel/busses/mmc/rtsx/rtsx_haiku.cpp",
+        "src/add-ons/kernel/busses/mmc/rtsx/rtsxreg.h",
+        "src/add-ons/kernel/busses/mmc/rtsx/rtsxvar.h",
+    ):
+        install_file(root / "distro/kernel" / relative, HAIKU / relative,
+            "rtsx")
+    jam = HAIKU / "src/add-ons/kernel/busses/mmc/Jamfile"
+    anchor = "\tsdhci_pci.cpp\n;\n"
+    line = "SubInclude HAIKU_TOP src add-ons kernel busses mmc rtsx ;\n"
+    insert_once(jam, anchor, anchor + "\n" + line, line, "rtsx jam")
+    if jam.read_text(encoding="utf-8").count(line) != 1:
+        raise SystemExit(f"{jam}: rtsx SubInclude is not there exactly once")
+
+
 def main() -> int:
     install_smp_boot()
     install_kernel_sources()
@@ -524,6 +574,7 @@ def main() -> int:
     install_usb_stability()
     install_gpio()
     install_efi_runtime()
+    install_rtsx()
     # i2c_hid (RenkuOS b37a078925) and x86_acpi_cstates (air/OS 2c48d1ae0)
     # are listed in the native build/jam/packages/Haiku in distro/desktop.
     return 0

@@ -66,5 +66,12 @@ bool		r5_admin_port_reply(BMessage* message, port_id port);
 status_t	r5_admin_send(const BMessenger& service, BMessage* request,
 				BMessage* reply, bigtime_t timeout = 5000000);
 
+// Service side, added 22 Nov 2026 for the power service: true when the
+// sender may change a machine-wide setting: uid 0, a member of group
+// "admin", or a team Login gave a grant (the administrator lock opened by a
+// standard account, /boot/system/settings/r5-machine-unlock). The same rule
+// as bluetooth_server's radio switch and Login's own check.
+bool		r5_admin_sender_allowed(const r5_admin_sender& sender);
+
 
 #endif	// R5_ADMIN_H

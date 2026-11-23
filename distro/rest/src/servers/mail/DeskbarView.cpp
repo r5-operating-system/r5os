@@ -52,6 +52,12 @@
 #include <MailPrivate.h>
 
 #include "DeskbarViewIcons.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <R5Icons.h>
+#include <R5UI.h>
+// SPDX-SnippetEnd
 
 
 #undef B_TRANSLATION_CONTEXT
@@ -122,6 +128,11 @@ DeskbarView::~DeskbarView()
 void DeskbarView::AttachedToWindow()
 {
 	BView::AttachedToWindow();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	fTrayLook = r5_deskbar_tray_look();
+// SPDX-SnippetEnd
 	AdoptParentColors();
 
 	if (ViewUIColor() == B_NO_COLOR)
@@ -210,6 +221,17 @@ status_t DeskbarView::Archive(BMessage *data,bool deep) const
 void
 DeskbarView::Draw(BRect /*updateRect*/)
 {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// Default (R5) Deskbar: an envelope, with a dot for new mail, in the
+	// tray's one colour (docs/ICONS.md, "Tray symbols")
+	if (fTrayLook.style == R5_TRAY_STYLE_SYMBOLS) {
+		r5_glyph_draw(this, fStatus == kStatusNewMail ? R5_GLYPH_MAIL_NEW
+			: R5_GLYPH_MAIL, Bounds(), fTrayLook.color);
+		return;
+	}
+// SPDX-SnippetEnd
 	if (fBitmaps[fStatus] == NULL)
 		return;
 
@@ -223,6 +245,16 @@ void
 DeskbarView::MessageReceived(BMessage* message)
 {
 	switch (message->what) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		case R5_DESKBAR_TRAY_STYLE_CHANGED:
+			// its own copy (external review, 23 Nov 2026)
+			r5_tray_look_update(&fTrayLook, message);
+			Invalidate();
+			break;
+// SPDX-SnippetEnd
+
 		case MD_CHECK_SEND_NOW:
 			// also happens in DeskbarView::MouseUp() with
 			// B_TERTIARY_MOUSE_BUTTON pressed

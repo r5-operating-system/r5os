@@ -42,6 +42,11 @@ All rights reserved.
 
 
 #include "ExpandoMenuBar.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include "DeskbarStyle.h"
+// SPDX-SnippetEnd
 
 #include <strings.h>
 // SPDX-SnippetBegin
@@ -128,8 +133,14 @@ TExpandoMenuBar::AttachedToWindow()
 
 	fTeamList.MakeEmpty();
 
-	if (Vertical())
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// also Default (R5) Horizontal (its window count)
+	if (R5Deskbar::WatchWindows(Vertical()))
 		StartMonitoringWindows();
+// SPDX-SnippetEnd
+
 }
 
 
@@ -401,7 +412,7 @@ TExpandoMenuBar::MouseMoved(BPoint where, uint32 code, const BMessage* message)
 			TTeamMenuItem* teamItem = TeamItemAtPoint(where, (BMenuItem**)&item);
 
 			if (item == NULL) {
-				fLastMousedOverItem = NULL;
+				SetHoverItem(NULL);
 				SetToolTip((const char*)NULL);
 			} else if (item != fLastMousedOverItem) {
 				if ((static_cast<TBarApp*>(be_app)->Settings()->hideLabels
@@ -411,9 +422,16 @@ TExpandoMenuBar::MouseMoved(BPoint where, uint32 code, const BMessage* message)
 				} else
 					SetToolTip((const char*)NULL);
 
-				fLastMousedOverItem = item;
+				SetHoverItem(item);
 			}
 		}
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// Default (R5): no hover shade once the mouse left
+		if (code == B_EXITED_VIEW && R5Deskbar::Modern())
+			SetHoverItem(NULL);
+// SPDX-SnippetEnd
 
 		BMenuBar::MouseMoved(where, code, message);
 		return;
@@ -717,6 +735,13 @@ TExpandoMenuBar::AddTeam(BList* team, BBitmap* icon, char* name,
 	} else
 		AddItem(item);
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// the pill grows and the new icon pops in
+	fBarView->StartGrow(item);
+// SPDX-SnippetEnd
+
 	if (Vertical() && settings != NULL && settings->superExpando
 		&& settings->expandNewTeams) {
 		item->ToggleExpandState(false);
@@ -805,6 +830,15 @@ TExpandoMenuBar::CheckItemSizes(int32 delta, bool reset)
 	// horizontal only
 	if (fBarView == NULL || Vertical())
 		return;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// Default (R5): every item has its own width (board C) or the
+	// pill's button (board B)
+	if (R5Deskbar::Modern())
+		return;
+// SPDX-SnippetEnd
+
 
 	// minimum two items before size overrun can occur
 	int32 itemCount = CountItems();
@@ -919,6 +953,13 @@ TExpandoMenuBar::DrawBackground(BRect updateRect)
 {
 	if (Vertical())
 		return;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (R5Deskbar::Modern())
+		return;
+// SPDX-SnippetEnd
+
 
 	SetHighColor(tint_color(ui_color(B_MENU_BACKGROUND_COLOR), 1.22));
 	StrokeLine(Bounds().RightTop(), Bounds().RightBottom());
@@ -954,6 +995,13 @@ TExpandoMenuBar::CheckForSizeOverrunHorizontal()
 {
 	if (fBarView == NULL || Vertical())
 		return false;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (R5Deskbar::Modern())
+		return false;
+// SPDX-SnippetEnd
+
 
 	// minimum two items before size overrun can occur
 	int32 itemCount = CountItems();
@@ -1170,9 +1218,18 @@ TExpandoMenuBar::monitor_team_windows(void* arg)
 					}
 				} else {
 					bool hadListed = teamItem->HasListedWindows();
+					int32 hadCount = teamItem->ListedWindowCount();
 					if (teamItem->RefreshListedWindowsIfChanged()
-						&& teamItem->HasListedWindows() != hadListed) {
+						&& (teamItem->HasListedWindows() != hadListed
+							|| teamItem->ListedWindowCount() != hadCount)) {
 						itemModified = true;
+						// Default (R5) Horizontal: the count widens the
+						// item (QEMU, 23 Nov 2026: "Style… 2")
+						if (!teamMenu->Vertical()
+							&& teamItem->ListedWindowCount() != hadCount) {
+							teamMenu->InvalidateLayout();
+							resize = true;
+						}
 					}
 				}
 // SPDX-SnippetEnd

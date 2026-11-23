@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+#
+# Realtek card readers: OpenBSD rtsx(4) (ISC) with the RTS5228 part (MIT).
+
+SubDir HAIKU_TOP src add-ons kernel busses mmc rtsx ;
+
+SubDirC++Flags -fno-rtti ;
+
+UsePrivateKernelHeaders ;
+UsePrivateHeaders drivers ;
+SubDirHdrs $(HAIKU_TOP) src system kernel device_manager ;
+
+KernelAddon rtsx :
+	rtsx.cpp
+	rtsx_5228.cpp
+	rtsx_haiku.cpp
+;

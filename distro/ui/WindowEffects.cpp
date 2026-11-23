@@ -140,4 +140,65 @@ gpu_draws_text()
 }
 
 
+status_t
+set_window_corner_radius(BWindow* window, float radius)
+{
+	if (window == NULL || !(radius >= 0.0f))
+		return B_BAD_VALUE;
+	BPrivate::AppServerLink link;
+	link.StartMessage(AS_R5_SET_WINDOW_CORNER_RADIUS);
+	link.Attach<int32>(_get_object_token_(window));
+	link.Attach<float>(radius);
+	int32 code;
+	status_t status = link.FlushWithReply(code);
+	return status == B_OK ? code : status;
+}
+
+
+status_t
+set_window_shadow(BWindow* window, enum window_shadow_kind kind)
+{
+	if (window == NULL || kind < B_WINDOW_SHADOW_DEFAULT
+		|| kind > B_WINDOW_SHADOW_EDGE) {
+		return B_BAD_VALUE;
+	}
+	BPrivate::AppServerLink link;
+	link.StartMessage(AS_R5_SET_WINDOW_SHADOW);
+	link.Attach<int32>(_get_object_token_(window));
+	link.Attach<int32>((int32)kind);
+	int32 code;
+	status_t status = link.FlushWithReply(code);
+	return status == B_OK ? code : status;
+}
+
+
+bool
+window_effects_active()
+{
+	BPrivate::AppServerLink link;
+	link.StartMessage(AS_R5_WINDOW_EFFECTS_ACTIVE);
+	int32 code;
+	bool active = false;
+	if (link.FlushWithReply(code) == B_OK && code == B_OK)
+		link.Read<bool>(&active);
+	return active;
+}
+
+
+status_t
+set_window_edge_line(BWindow* window, rgb_color color, float width)
+{
+	if (window == NULL || !(width >= 0.0f && width <= 4.0f))
+		return B_BAD_VALUE;
+	BPrivate::AppServerLink link;
+	link.StartMessage(AS_R5_SET_WINDOW_EDGE_LINE);
+	link.Attach<int32>(_get_object_token_(window));
+	link.Attach<rgb_color>(color);
+	link.Attach<float>(width);
+	int32 code;
+	status_t status = link.FlushWithReply(code);
+	return status == B_OK ? code : status;
+}
+
+
 }	// namespace BAppearanceKit

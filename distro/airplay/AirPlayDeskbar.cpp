@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: MIT
  */
 #include "AirPlayLog.h"
+#include <R5Icons.h>
+#include <R5UI.h>
 #include "AirPlayMessages.h"
 
 #include <Application.h>
@@ -73,11 +75,19 @@ public:
 		r5_airplay_log("replicant", "AttachedToWindow frame %.0fx%.0f",
 			Bounds().Width() + 1, Bounds().Height() + 1);
 		SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
+		fTrayLook = r5_deskbar_tray_look();
 		BView::AttachedToWindow();
 	}
 
 	virtual void Draw(BRect)
 	{
+		// Default (R5) Deskbar: the AirPlay line symbol in the tray's one
+		// colour (docs/ICONS.md, "Tray symbols"); the blue "A" otherwise
+		if (fTrayLook.style == R5_TRAY_STYLE_SYMBOLS) {
+			r5_glyph_draw(this, R5_GLYPH_AIRPLAY, Bounds(),
+				fTrayLook.color);
+			return;
+		}
 		BRect r = Bounds();
 		SetHighColor(0, 140, 210);
 		FillEllipse(r.InsetByCopy(1, 1));
@@ -94,6 +104,16 @@ public:
 		GetFontHeight(&fh);
 		DrawString(label, BPoint((r.Width() - w) / 2,
 			(r.Height() + fh.ascent - fh.descent) / 2));
+	}
+
+	virtual void MessageReceived(BMessage* message)
+	{
+		if (message->what == R5_DESKBAR_TRAY_STYLE_CHANGED) {
+			r5_tray_look_update(&fTrayLook, message);
+			Invalidate();
+			return;
+		}
+		BView::MessageReceived(message);
 	}
 
 	virtual void MouseDown(BPoint where)
@@ -139,6 +159,10 @@ public:
 		ConvertToScreen(&where);
 		menu->Go(where, true, true, true);
 	}
+
+private:
+	// the tray look, its own copy (external review, 23 Nov 2026)
+	struct r5_tray_look	fTrayLook;
 };
 
 

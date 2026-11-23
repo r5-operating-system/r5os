@@ -41,6 +41,7 @@
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 #include "Compositor.h"
+#include "WindowOutline.h"
 #include <syslog.h>
 // SPDX-SnippetEnd
 #include "DrawingEngine.h"
@@ -96,6 +97,11 @@ Window::Window(const BRect& frame, const char *name,
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 	fDrawableWarned(false),
+	fCornerRadius(0.0f),
+	fShadowKind(0),
+	fEdgeColor(make_color(0, 0, 0)),
+	fEdgeWidth(0.0f),
+	fOutlineCache(NULL),
 // SPDX-SnippetEnd
 	fDirtyRegion(),
 
@@ -197,6 +203,9 @@ Window::~Window()
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+	delete fOutlineCache;
+	fOutlineCache = NULL;
+
 	// The compositor owns this window's interface; the engine must go
 	// first, because it unregisters from that interface. (An offscreen
 	// window has already detached its engine in its own destructor.)
@@ -258,6 +267,12 @@ Window::GetFullRegion(BRegion* region)
 	// start from the decorator border, extend to use the frame
 	GetBorderRegion(region);
 	region->Include(fFrame);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// The round outline: its cut corners are not the window's.
+	_ExcludeOutlineCut(region);
+// SPDX-SnippetEnd
 }
 
 
@@ -272,6 +287,16 @@ Window::GetBorderRegion(BRegion* region)
 		*region = decorator->GetFootprint();
 	else
 		region->MakeEmpty();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// CPU mode: the decorator's edge line along a stepped round corner
+	// belongs to the border (it is painted in _DrawBorder())
+	rgb_color color;
+	const window_outline* rim = _SteppedRim(&color);
+	if (rim != NULL)
+		region->Include(&rim->rim);
+// SPDX-SnippetEnd
 }
 
 
@@ -466,6 +491,21 @@ Window::ResizeBy(int32 x, int32 y, BRegion* dirtyRegion, bool resizeStack)
 	if (x == 0 && y == 0)
 		return;
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// A round window: its corners before the resize were never drawn (cut)
+	// or were the edge line (CPU rim); after it they may lie inside the
+	// window and must be drawn, not kept from the old picture (step 1.5,
+	// QEMU: black bits of edge line where the smaller window's corner was)
+	BRegion oldCorners;
+	const window_outline* before = _CachedOutline(_OutlineBlended());
+	if (before != NULL) {
+		oldCorners = before->cut;
+		oldCorners.Include(&before->rim);
+	}
+// SPDX-SnippetEnd
+
 	fFrame.right += x;
 	fFrame.bottom += y;
 
@@ -480,6 +520,24 @@ Window::ResizeBy(int32 x, int32 y, BRegion* dirtyRegion, bool resizeStack)
 	::Decorator* decorator = Decorator();
 	if (decorator && resizeStack)
 		decorator->ResizeBy(x, y, dirtyRegion);
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (dirtyRegion != NULL && oldCorners.CountRects() > 0) {
+		BRegion full;
+		GetFullRegion(&full);
+		oldCorners.IntersectWith(&full);
+		dirtyRegion->Include(&oldCorners);
+	}
+	// fTopView->ResizeBy() above can build the content region, and the
+	// views' screen clipping from it, while the decorator still has its old
+	// size: cut to the old outline. Made again now that the decorator is
+	// resized (QEMU, 23 Nov 2026: Appearance grew after it opened and its
+	// views stayed cut at the old size, the rest black).
+	if (before != NULL || _CachedOutline(_OutlineBlended()) != NULL)
+		_DecoratorShapeChanged();
+// SPDX-SnippetEnd
 
 	if (resizeStack && stack) {
 		for (int32 i = 0; i < stack->CountWindows(); i++) {
@@ -809,6 +867,17 @@ Window::ReloadDecor()
 	}
 
 	stack->SetDecorator(decorator);
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// The content region leaves the decorator's footprint and the round
+	// outline out; both change with the decorator (Default (R5 Modern) to
+	// Default (R5) left its wedge and its cut corners undrawn, QEMU, 22 Nov
+	// 2026).
+	for (int32 i = 0; i < stack->CountWindows(); i++)
+		stack->WindowAt(i)->_DecoratorShapeChanged();
+// SPDX-SnippetEnd
 
 	fWindowBehaviour.SetTo(windowBehaviour);
 
@@ -1242,6 +1311,13 @@ Window::SetTitle(const char* name, BRegion& dirty)
 	if (decorator) {
 		int32 index = PositionInStack();
 		decorator->SetTitle(index, name, &dirty);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// a decorator's footprint may reach into the frame (Default (R5
+		// Modern)'s wedge) and change with the width of the tab
+		_DecoratorShapeChanged();
+// SPDX-SnippetEnd
 	}
 }
 
@@ -1391,7 +1467,17 @@ Window::SetTabLocation(float location, bool isShifting, BRegion& dirty)
 	::Decorator* decorator = Decorator();
 	if (decorator) {
 		int32 index = PositionInStack();
-		return decorator->SetTabLocation(index, location, isShifting, &dirty);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// the tab card moves from one top corner to the other (external
+		// review, 23 Nov 2026)
+		bool changed = decorator->SetTabLocation(index, location, isShifting,
+			&dirty);
+		if (changed)
+			_StackShapeChanged();
+		return changed;
+// SPDX-SnippetEnd
 	}
 
 	return false;
@@ -1422,8 +1508,17 @@ Window::SetDecoratorSettings(const BMessage& settings, BRegion& dirty)
 	}
 
 	::Decorator* decorator = Decorator();
-	if (decorator)
-		return decorator->SetSettings(settings, &dirty);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (decorator) {
+		// the settings may move the tab
+		bool changed = decorator->SetSettings(settings, &dirty);
+		if (changed)
+			_StackShapeChanged();
+		return changed;
+	}
+// SPDX-SnippetEnd
 
 	return false;
 }
@@ -1475,6 +1570,11 @@ Window::SetLook(window_look look, BRegion* updateRegion)
 	fEffectiveDrawingRegionValid = false;
 		// ...and therefore the drawing region is
 		// likely not valid anymore either
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	_DecoratorShapeChanged();
+// SPDX-SnippetEnd
 
 	if (!fCurrentStack.IsSet())
 		return;
@@ -1548,6 +1648,11 @@ Window::SetFlags(uint32 flags, BRegion* updateRegion)
 
 	int32 stackPosition = PositionInStack();
 	decorator->SetFlags(stackPosition, flags, updateRegion);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	_DecoratorShapeChanged();
+// SPDX-SnippetEnd
 
 	// we might need to resize the window!
 	decorator->GetSizeLimits(&fMinWidth, &fMinHeight, &fMaxWidth, &fMaxHeight);
@@ -1973,8 +2078,14 @@ Window::_DrawBorder()
 	// in respond to a REDRAW message having been received, the
 	// clipping lock is held for reading
 	::Decorator* decorator = Decorator();
-	if (!decorator)
+	if (!decorator) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		_DrawProgramRim();
+// SPDX-SnippetEnd
 		return;
+	}
 
 	// construct the region of the border that needs redrawing
 	BRegion* dirtyBorderRegion = fRegionPool.GetRegion();
@@ -1997,6 +2108,20 @@ Window::_DrawBorder()
 		engine->SetCopyToFrontEnabled(false);
 
 		decorator->Draw(dirtyBorderRegion->Frame());
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// CPU mode: the decorator's edge line carried along the stepped
+		// round corner, in its own colour (step 1.5, 22 Nov 2026)
+		rgb_color rimColor;
+		const window_outline* rim = _SteppedRim(&rimColor);
+		if (rim != NULL) {
+			BRegion line(rim->rim);
+			line.IntersectWith(dirtyBorderRegion);
+			if (line.CountRects() > 0)
+				engine->FillRegion(line, rimColor);
+		}
+// SPDX-SnippetEnd
 
 		engine->SetCopyToFrontEnabled(copyToFrontEnabled);
 		engine->CopyToFront(*dirtyBorderRegion);
@@ -2217,8 +2342,258 @@ Window::_UpdateContentRegion()
 	if (decorator)
 		fContentRegion.Exclude(&decorator->GetFootprint());
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// The content is clipped to the round outline too (owner, 22 Nov 2026).
+	_ExcludeOutlineCut(&fContentRegion);
+	// CPU mode: the edge line along the stepped corner is the border's
+	rgb_color rimColor;
+	const window_outline* rim = _SteppedRim(&rimColor);
+	if (rim != NULL)
+		fContentRegion.Exclude(&rim->rim);
+// SPDX-SnippetEnd
+
 	fContentRegionValid = true;
 }
+
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+/*!	The round outline of the window (WindowOutline.h). The decorator's comes
+	first (decorator ABI 2); without one, the radius the program asked for
+	with set_window_corner_radius() rounds the four corners of the window's
+	border rectangle. \a blended: the GPU mode, where the compositor blends
+	the arc; otherwise the arc is stepped.
+*/
+void
+Window::GetOutline(window_outline* outline, bool blended)
+{
+	const window_outline* cached = _CachedOutline(blended);
+	if (cached == NULL) {
+		outline->MakeSquare();
+		return;
+	}
+	*outline = *cached;
+}
+
+
+/*!	The outline, built again only when its rectangles, radii or mode
+	changed (review, 22 Nov 2026: it was built up to four times per
+	clipping rebuild). NULL for a square window.
+*/
+const window_outline*
+Window::_CachedOutline(bool blended)
+{
+	window_outline_rect rects[R5_WINDOW_OUTLINE_MAX_RECTS];
+	int32 count = _OutlineRects(rects);
+	if (count <= 0)
+		return NULL;
+	if (fOutlineCache == NULL) {
+		fOutlineCache = new(std::nothrow) window_outline_cache;
+		if (fOutlineCache == NULL)
+			return NULL;
+	}
+	window_outline_cache& cache = *fOutlineCache;
+	if (!cache.valid || cache.count != count || cache.blended != blended
+		|| !window_outline_rects_equal(cache.rects, rects, count)) {
+		for (int32 i = 0; i < count; i++)
+			cache.rects[i] = rects[i];
+		cache.count = count;
+		cache.blended = blended;
+		window_outline_build(rects, count, blended, cache.outline);
+		cache.valid = true;
+	}
+	return &cache.outline;
+}
+
+
+//!	The rectangles of the outline; 0 for a square window (the fast path).
+int32
+Window::_OutlineRects(window_outline_rect* rects)
+{
+	int32 count = 0;
+	::Decorator* decorator = Decorator();
+	if (decorator != NULL)
+		count = decorator->GetOutline(rects, R5_WINDOW_OUTLINE_MAX_RECTS);
+	if (count <= 0 && fCornerRadius > 0.0f) {
+		// the border rectangle, not the footprint's bounding box: a tab
+		// beside it would leave the frame's own corner square (review)
+		BRect frame = fFrame;
+		if (decorator != NULL && decorator->BorderRect().IsValid())
+			frame = decorator->BorderRect();
+		rects[0].rect = frame;
+		rects[0].leftTop = rects[0].rightTop = fCornerRadius;
+		rects[0].leftBottom = rects[0].rightBottom = fCornerRadius;
+		count = 1;
+	}
+	return count < 0 ? 0 : count;
+}
+
+
+/*!	A program's own radius for its window (set_window_corner_radius()). The
+	caller has all windows locked and rebuilds the clipping.
+*/
+void
+Window::SetCornerRadius(float radius)
+{
+	if (radius < 0.0f)
+		radius = 0.0f;
+	if (radius > R5_WINDOW_CORNER_MAX_RADIUS)
+		radius = R5_WINDOW_CORNER_MAX_RADIUS;
+	fCornerRadius = radius;
+	// the regions and the views' screen clipping, cut to the old outline,
+	// are made again (external review, 23 Nov 2026: the specks after round
+	// to square, the round top corners of Classic in Safe mode)
+	_DecoratorShapeChanged();
+}
+
+
+/*!	CPU mode: the rim of a window without a decorator that asked for an
+	edge line (set_window_edge_line(), Deskbar in Default (R5)). It is in
+	the border region (GetBorderRegion()) and nobody else paints it. As in
+	_DrawBorder(): the clipping is a region of the pool, never NULL (the
+	Painter keeps the pointer and reads it; NULL crashed app_server, external
+	review B10), and the draw state is synced again afterwards.
+*/
+void
+Window::_DrawProgramRim()
+{
+	rgb_color rimColor;
+	const window_outline* rim = _SteppedRim(&rimColor);
+	DrawingEngine* engine = GetDrawingEngine();
+	if (rim == NULL || engine == NULL)
+		return;
+	BRegion* line = fRegionPool.GetRegion(rim->rim);
+	if (line == NULL)
+		return;
+	line->IntersectWith(&DrawableRegion());
+	line->IntersectWith(&fDirtyRegion);
+	if (line->CountRects() > 0 && engine->LockParallelAccess()) {
+		engine->ConstrainClippingRegion(line);
+		bool copyToFrontEnabled = engine->CopyToFrontEnabled();
+		engine->SetCopyToFrontEnabled(false);
+		engine->FillRegion(*line, rimColor);
+		engine->SetCopyToFrontEnabled(copyToFrontEnabled);
+		engine->CopyToFront(*line);
+		fWindow->ResyncDrawState();
+		engine->UnlockParallelAccess();
+	}
+	fRegionPool.Recycle(line);
+}
+
+
+/*!	The corners of the outline now: what is cut and, in the CPU mode, the
+	rim. A radius change exposes them again (Deskbar styles: dark specks in
+	the corners after round to square, as ResizeBy() had in step 1.5).
+*/
+void
+Window::GetOutlineCorners(BRegion* corners)
+{
+	corners->MakeEmpty();
+	const window_outline* outline = _CachedOutline(_OutlineBlended());
+	if (outline != NULL) {
+		corners->Include(&outline->cut);
+		corners->Include(&outline->rim);
+	}
+}
+
+
+/*!	The decorator's footprint or outline changed (a new decorator, title,
+	look, flags or tab): the content region leaves them out and the views
+	keep their clipping cut to it, so both are made again (review 2,
+	22 Nov 2026).
+*/
+void
+Window::_DecoratorShapeChanged()
+{
+	fContentRegionValid = false;
+	fVisibleContentRegionValid = false;
+	fEffectiveDrawingRegionValid = false;
+	if (fTopView.IsSet())
+		fTopView->InvalidateScreenClipping();
+}
+
+
+/*!	_DecoratorShapeChanged() for every window of the stack: they share the
+	decorator, and a tab that moves, comes or goes lays out all tabs again
+	(external review, 23 Nov 2026: after a Shift-drag of the tab from the
+	left top corner to the right one the content region kept the old
+	corner).
+*/
+void
+Window::_StackShapeChanged()
+{
+	if (!fCurrentStack.IsSet()) {
+		_DecoratorShapeChanged();
+		return;
+	}
+	for (int32 i = 0; i < fCurrentStack->CountWindows(); i++)
+		fCurrentStack->WindowAt(i)->_DecoratorShapeChanged();
+}
+
+
+/*!	Takes the cut corners of the round outline out of \a region. Nothing
+	happens for a square window, so its regions stay what they were.
+*/
+void
+Window::_ExcludeOutlineCut(BRegion* region)
+{
+	const window_outline* outline = _CachedOutline(_OutlineBlended());
+	if (outline != NULL && outline->cut.CountRects() > 0)
+		region->Exclude(&outline->cut);
+}
+
+
+/*!	CPU mode: the stepped round outline when the decorator draws an edge
+	line (Decorator::GetEdgeLine()), with that line's colour in \a color;
+	NULL otherwise (the GPU mode, a square window, no line). Its rim is
+	the line along the steps.
+*/
+const window_outline*
+Window::_SteppedRim(rgb_color* color)
+{
+	if (_OutlineBlended())
+		return NULL;
+	float width = 0;
+	if (!GetEdgeLine(color, &width) || width <= 0)
+		return NULL;
+	const window_outline* outline = _CachedOutline(false);
+	if (outline == NULL || outline->rim.CountRects() == 0)
+		return NULL;
+	return outline;
+}
+
+
+/*!	The line along the outer edge: the decorator's, else the program's own
+	(set_window_edge_line(), for a window without a decorator line, such as
+	Deskbar in Default (R5)).
+*/
+bool
+Window::GetEdgeLine(rgb_color* color, float* width)
+{
+	::Decorator* decorator = Decorator();
+	if (decorator != NULL && decorator->GetEdgeLine(color, width)
+		&& *width > 0)
+		return true;
+	if (fEdgeWidth <= 0)
+		return false;
+	*color = fEdgeColor;
+	*width = fEdgeWidth;
+	return true;
+}
+
+
+//!	Whether the compositor blends the arc (the GPU mode).
+bool
+Window::_OutlineBlended()
+{
+	return !IsOffscreenWindow() && fDesktop != NULL
+		&& fDesktop->GetCompositor() != NULL
+		&& fDesktop->GetCompositor()->IsActive();
+}
+// SPDX-SnippetEnd
 
 
 void
@@ -2346,9 +2721,20 @@ Window::DetachFromWindowStack(bool ownStackNeeded)
 		remainingTop->SetLook(remainingTop->Look(), NULL);
 	}
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// the remaining tabs are laid out again (external review, 23 Nov 2026)
+	_StackShapeChanged();
+// SPDX-SnippetEnd
 	fCurrentStack = NULL;
 	if (ownStackNeeded == true)
 		_InitWindowStack();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	_DecoratorShapeChanged();
+// SPDX-SnippetEnd
 	// propagate focus to the new decorator
 	SetFocus(IsFocus());
 
@@ -2406,6 +2792,11 @@ Window::AddWindowToStack(Window* window)
 	}
 
 	window->SetLook(window->Look(), &dirty);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	_StackShapeChanged();
+// SPDX-SnippetEnd
 	fDesktop->RebuildAndRedrawAfterWindowChange(TopLayerStackWindow(), dirty);
 	window->SetFocus(window->IsFocus());
 	return true;
@@ -2472,6 +2863,11 @@ Window::MoveToStackPosition(int32 to, bool isMoving)
 	::Decorator* decorator = Decorator();
 	if (decorator && decorator->MoveTab(index, to, isMoving, &dirty) == false)
 		return false;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	_StackShapeChanged();
+// SPDX-SnippetEnd
 
 	fDesktop->RebuildAndRedrawAfterWindowChange(this, dirty);
 	return true;

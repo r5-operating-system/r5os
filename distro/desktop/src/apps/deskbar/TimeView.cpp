@@ -42,6 +42,11 @@ All rights reserved.
 
 
 #include "TimeView.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include "DeskbarStyle.h"
+// SPDX-SnippetEnd
 
 #include <algorithm>
 
@@ -206,9 +211,16 @@ TTimeView::Draw(BRect /*updateRect*/)
 // SPDX-License-Identifier: MIT
 	SetLowUIColor(B_MENU_BACKGROUND_COLOR);
 	SetHighUIColor(B_MENU_BACKGROUND_COLOR);
+	if (R5Deskbar::Modern()) {
+		// Default (R5): the tray's surface or glass is the background
+		SetLowColor(ViewColor());
+		SetDrawingMode(B_OP_OVER);
+		SetHighColor(R5Deskbar::TextColor());
+	} else {
+		FillRect(Bounds());
+		SetHighUIColor(B_MENU_ITEM_TEXT_COLOR);
+	}
 // SPDX-SnippetEnd
-	FillRect(Bounds());
-	SetHighUIColor(B_MENU_ITEM_TEXT_COLOR);
 
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
@@ -380,6 +392,15 @@ TTimeView::Pulse()
 		fMinute = ct->tm_min;
 		fHour = ct->tm_hour;
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// Default (R5) draws on the tray's surface or glass without a fill of
+		// its own: app_server clears the old time first
+		if (R5Deskbar::Modern())
+			Invalidate();
+		else
+// SPDX-SnippetEnd
 		Draw(Bounds());
 		fNeedToUpdate = false;
 	}

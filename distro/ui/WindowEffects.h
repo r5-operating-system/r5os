@@ -24,6 +24,7 @@
 #define _WINDOW_EFFECTS_H
 
 
+#include <GraphicsDefs.h>
 #include <SupportDefs.h>
 
 
@@ -68,6 +69,49 @@ status_t	set_window_effect_strength(
 // filter). Painter's average weight then has no effect. False in the CPU
 // mode and when app_server cannot be asked.
 bool		gpu_draws_text();
+
+// A program rounds the corners of its own window, radius in pixels (0:
+// square, the default; at most 64). The corners leave the window in both
+// modes: blended in the GPU mode, stepped in the CPU mode. Content in a
+// corner is clipped. For a window whose decorator draws round corners
+// itself, the decorator's outline counts. Scale the radius with the font
+// size, like other R5 measures (18 at 12 points).
+status_t	set_window_corner_radius(BWindow* window, float radius);
+
+// Deskbar styles (22 Nov 2026). The shadow of the program's own window,
+// GPU mode only: B_WINDOW_SHADOW_DEFAULT as the decorator gives it (the
+// default), B_WINDOW_SHADOW_FULL the full soft shadow of the effect step
+// whatever the focus, also without a decorator, B_WINDOW_SHADOW_EDGE the
+// same without the offset down, for a window against a screen edge.
+enum window_shadow_kind {
+	B_WINDOW_SHADOW_DEFAULT	= 0,
+	B_WINDOW_SHADOW_FULL	= 1,
+	B_WINDOW_SHADOW_EDGE	= 2
+};
+
+status_t	set_window_shadow(BWindow* window,
+				enum window_shadow_kind kind);
+
+// True while the compositor shows the window effects (the GPU mode):
+// glass, shadow and animations can show. False in the CPU mode (Safe
+// mode, no GPU) and when app_server cannot be asked.
+bool		window_effects_active();
+
+// The line along the outer edge of the program's own window, carried round
+// the arc of its round corners by the compositor (stepped in the CPU mode).
+// For a window without a decorator line, such as a borderless one; the
+// program draws the straight sides itself. Width 0 (the default) is no
+// line; at most 4.
+status_t	set_window_edge_line(BWindow* window, rgb_color color,
+				float width);
+
+// External review, 23 Nov 2026. app_server sends this to every program when
+// the window effects change or the compositor turns off (the GPU to the CPU
+// mode), as B_COLORS_UPDATED for colours: bool "active" (as
+// window_effects_active()) and uint32 "effects" (as window_effects()).
+enum {
+	B_WINDOW_EFFECTS_CHANGED	= 'r5we'
+};
 
 
 }	// namespace BAppearanceKit

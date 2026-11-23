@@ -35,6 +35,13 @@
 
 
 class Window;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+struct window_outline;
+struct window_outline_cache;
+struct window_outline_rect;
+// SPDX-SnippetEnd
 
 
 typedef	BObjectList<Window>	StackWindows;
@@ -153,6 +160,33 @@ public:
 			void				SetOutlinesDelta(BPoint delta,
 									BRegion* dirtyRegion, bool left,
 									bool top);
+
+			// The round outline (WindowOutline.h): from the decorator, or
+			// the radius the program asked for. \a blended: the GPU mode.
+			void				GetOutline(window_outline* outline,
+									bool blended);
+			void				SetCornerRadius(float radius);
+			// the cut corners and the CPU rim of the outline now (empty
+			// for a square window), for a radius change (as ResizeBy())
+			void				GetOutlineCorners(BRegion* corners);
+			float				CornerRadius() const
+									{ return fCornerRadius; }
+			// The shadow a program asked for its own window
+			// (set_window_shadow(); 0: as the decorator gives it).
+			void				SetShadowKind(int32 kind)
+									{ fShadowKind = kind; }
+			int32				ShadowKind() const
+									{ return fShadowKind; }
+			// The line along the outer edge, carried round the arc: the
+			// decorator's (Decorator::GetEdgeLine()), else the one the
+			// program asked for (set_window_edge_line()).
+			bool				GetEdgeLine(rgb_color* color, float* width);
+			bool				SetEdgeLine(rgb_color color, float width)
+									{ bool changed = fEdgeWidth != width
+										|| (width > 0 && fEdgeColor != color);
+									  fEdgeColor = color;
+									  fEdgeWidth = width;
+									  return changed; }
 // SPDX-SnippetEnd
 
 			void				ScrollViewBy(View* view, int32 dx, int32 dy);
@@ -360,6 +394,18 @@ protected:
 			void				_SendUpdateMessage();
 
 			void				_UpdateContentRegion();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			void				_ExcludeOutlineCut(BRegion* region);
+			int32				_OutlineRects(window_outline_rect* rects);
+			const window_outline* _CachedOutline(bool blended);
+			const window_outline* _SteppedRim(rgb_color* color);
+			void				_DrawProgramRim();
+			bool				_OutlineBlended();
+			void				_DecoratorShapeChanged();
+			void				_StackShapeChanged();
+// SPDX-SnippetEnd
 
 			void				_ObeySizeLimits();
 			void				_PropagatePosition();
@@ -387,6 +433,13 @@ protected:
 			bool				fDrawableWarned;
 			// M13 step 4: how far the outline was moved to the left and up
 			BPoint				fOutlinesShift;
+			// The radius a program asked for (set_window_corner_radius()).
+			float				fCornerRadius;
+			int32				fShadowKind;
+			rgb_color			fEdgeColor;
+			float				fEdgeWidth;
+			// the outline's regions, built once per shape (WindowOutline.h)
+			window_outline_cache* fOutlineCache;
 // SPDX-SnippetEnd
 
 			// Our part of the "global" dirty region (what needs to be redrawn).

@@ -110,11 +110,14 @@ STRINGS = (b"gpu_isolation_test", b"window vkcube")
 # M11 part of check looks for: the pattern as check has it, and the text
 # and the source file that print it.
 COMPOSITOR = "distro/app_server/Compositor.cpp"
+COMPOSITOR_VULKAN = "distro/app_server/CompositorVulkan.cpp"
+COMPOSITOR_ANIM = "distro/app_server/CompositorAnimations.cpp"
+COMPOSITOR_SHARE = "distro/app_server/CompositorShare.cpp"
 KERNEL = "distro/graphics/src/add-ons/kernel/drivers/graphics/r5gpu/r5_gpu_core.cpp"
 SHARE = "distro/graphics/src/bin/r5-share-check/r5-share-check.cpp"
 M11_LINES = (
     ("decorator: r5 loaded", "decorator: r5 loaded",
-     "distro/desktop/src/add-ons/decorators/R5Decorator/R5Decorator.cpp"),
+     "distro/desktop/src/add-ons/decorators/R5Decorator/R5DecoratorAddOn.cpp"),
     ("radeon_hd: gpu available", "radeon_hd: gpu available", KERNEL),
     ("radeon_hd: bo domain .* snooped 1", "bytes %llu snooped %d", KERNEL),
     ("radeon_hd: gpu hang ring", "radeon_hd: gpu hang ring", KERNEL),
@@ -137,18 +140,18 @@ M11_LINES = (
     ("compose effects shadow on frosted on", "compose effects shadow %s frosted %s",
      COMPOSITOR),
     ("app_server: window memory [0-9]+ MB", "window memory %", COMPOSITOR),
-    ("app_server: window memory type", "window memory type %", COMPOSITOR),
-    ("app_server: window buffer write fill", "window buffer write fill %", COMPOSITOR),
-    ("zero-copy on", "\" zero-copy on\"", COMPOSITOR),
-    ("zero-copy off: setting", '"setting"', COMPOSITOR),
-    ("zero-copy off: lavapipe", '"lavapipe"', COMPOSITOR),
+    ("app_server: window memory type", "window memory type %", COMPOSITOR_VULKAN),
+    ("app_server: window buffer write fill", "window buffer write fill %", COMPOSITOR_VULKAN),
+    ("zero-copy on", "\" zero-copy on\"", COMPOSITOR_SHARE),
+    ("zero-copy off: setting", '"setting"', COMPOSITOR_SHARE),
+    ("zero-copy off: lavapipe", '"lavapipe"', COMPOSITOR_SHARE),
     ("app_server: zero-copy setting off", "zero-copy setting %s", COMPOSITOR),
     ("app_server: team cpu", "team cpu %", COMPOSITOR),
     ("app_server: animation $a [0-9]+ ms frames [0-9]+", "animation workspace %",
-     COMPOSITOR),
+     COMPOSITOR_ANIM),
     ("app_server: compositor paused: direct window", "compositor paused: direct window",
-     COMPOSITOR),
-    ("app_server: compositor resumed", "compositor resumed", COMPOSITOR),
+     COMPOSITOR_SHARE),
+    ("app_server: compositor resumed", "compositor resumed", COMPOSITOR_SHARE),
     ("app_server: $e off", "app_server: %s %s",
      "distro/rest/src/servers/app/ServerApp.cpp"),
     ("second import of the same number refused", "second import of the same number refused",
@@ -267,6 +270,11 @@ M13F_BOOTS = {
     "done": None,
 }
 
+# The round 3 stick (stick 75, boot-next round3): one boot with every GPU
+# switch at its default; boot-next only saves the results and never writes
+# other settings or restarts.
+R3_BOOT = ["r5_round3_boot 1"]
+
 
 # What the M13 stick's app_server must be built with (steps 2 and 3).
 M13_STRINGS = {
@@ -376,6 +384,39 @@ def check_m13f_boots(commit: str) -> None:
         print(f"m13f boot {boot} settings ok")
 
 
+def check_r3_boots(commit: str) -> None:
+    """Round 3 from the planted file: boot-next saves twice (5625U, then a
+    second computer), keeps the file as it is and restarts nothing."""
+    stage = ROOT / "generated" / "_pre-stick-r3"
+    stage.mkdir(parents=True, exist_ok=True)
+    data = blob(commit, "distro/graphics/boot/boot-next").replace(b"\r\n", b"\n")
+    (stage / "boot-next").write_bytes(data)
+    script = ["#!/bin/sh", "set -u", "T=/tmp/r5-pre-stick-r3", "rm -rf $T",
+              "mkdir -p $T/home $T/us/kernel/drivers $T/ss",
+              "printf 'KERN: CPU 0: updated from revision 0x1 to 0x2\\n' > $T/syslog",
+              "export R5_HOME=$T/home R5_USER_SETTINGS=$T/us R5_SYSTEM_SETTINGS=$T/ss",
+              "export R5_SYSLOG=$T/syslog BOOT_NEXT_YES=0", 'D="$(dirname "$0")"',
+              "printf '" + "\\n".join(R3_BOOT) + "\\n' > $T/us/kernel/drivers/radeon_hd"]
+    for i in (1, 2):
+        script.append(f'sh "$D/boot-next" > $T/out{i} 2>&1 || echo "step {i} boot-next failed"')
+        script.append(f'grep -q "^PASS" $T/out{i} || echo "step {i} no PASS"')
+        script.append(f'grep -q "updated from" $T/out{i} || echo "step {i} no microcode line"')
+        for kind in ("power", "card", "ucode"):
+            script.append(f'test -s $T/home/round3/{i}-{kind}.txt || echo "no collect {i}-{kind}"')
+    script.append('echo "== settings"')
+    script.append("cat $T/us/kernel/drivers/radeon_hd 2>/dev/null || echo '(none)'")
+    (stage / "run.sh").write_text("\n".join(script) + "\n", encoding="utf-8", newline="\n")
+    path = wsl(f"wslpath -u '{stage / 'run.sh'}'").strip()
+    out = wsl(f"sh '{path}'")
+    head, _, tail = out.partition("== settings")
+    if head.strip():
+        die(f"round3 boot-next sandbox: {out}")
+    got = [line for line in tail.strip().splitlines() if line]
+    if got != R3_BOOT:
+        die(f"round3: boot-next changed the settings to {got}, want {R3_BOOT}")
+    print("round3 boot-next saves twice, settings kept, no restart")
+
+
 def check_m12_sources(commit: str) -> None:
     check = blob(commit, "distro/graphics/boot/check").decode("utf-8")
     for pattern, text, path in M12_LINES:
@@ -387,8 +428,9 @@ def check_m12_sources(commit: str) -> None:
     settings = blob(commit, "distro/graphics/boot/radeon_hd").decode("utf-8").split()
     if " ".join(settings) not in (" ".join(" ".join(M12_BOOTS["1"]).split()),
             " ".join(" ".join(M13_BOOTS["1"]).split()),
-            " ".join(" ".join(M13F_BOOTS["1"]).split())):
-        die(f"distro/graphics/boot/radeon_hd is not M12, M13 or M13f boot 1: {settings}")
+            " ".join(" ".join(M13F_BOOTS["1"]).split()),
+            " ".join(R3_BOOT)):
+        die(f"distro/graphics/boot/radeon_hd is not M12, M13, M13f or round 3 boot 1: {settings}")
     print(f"m12 lines {len(M12_LINES)} have a source at {commit}")
 
 
@@ -641,6 +683,7 @@ def extract(iso_wsl: str, out: str) -> None:
         + "".join(
             f"cp myfs/home/{name} :{out}/home/{name}\n" for name in HOME)
         + f"cp myfs/home/config/settings/kernel/drivers/radeon_hd :{out}/home/radeon_hd\n"
+        + f"cp myfs/home/config/settings/kernel/drivers/kernel :{out}/home/kernel\n"
         "quit\nEOF\n",
         encoding="utf-8", newline="\n")
     wsl_script = wsl(f"wslpath -u '{script}'").strip()
@@ -709,6 +752,13 @@ def check_image(commit: str, iso: str) -> None:
             f"boot 1 settings are not {commit}: "
             f"image {settings} branch {wanted}")
     print(f"home radeon_hd {settings}")
+    kernel = Path(wsl(f"wslpath -w '{out}/home/kernel'").strip()).read_text(
+        encoding="utf-8", errors="replace").split()
+    for key, value in (("syslog_time_stamps", "true"), ("syslog_max_size", "4M"),
+            ("syslog_buffer_size", "262144")):
+        if key not in kernel or kernel[kernel.index(key) + 1] != value:
+            die(f"planted kernel settings have no {key} {value}: {kernel}")
+    print("home kernel syslog_buffer_size 262144")
     check_m11_image(out)
 
 
@@ -748,6 +798,7 @@ def main() -> int:
     check_m13_sources(commit)
     check_m13_boots(commit)
     check_m13f_boots(commit)
+    check_r3_boots(commit)
     if sys.argv[1] == "--paper":
         # M11: the lines and the settings per boot, before an image exists.
         print(f"pre-stick paper ok {commit}")

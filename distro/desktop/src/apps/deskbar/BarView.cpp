@@ -60,6 +60,12 @@ All rights reserved.
 #include "BarMenuBar.h"
 #include "BarWindow.h"
 #include "DeskbarMenu.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include "DeskbarStyle.h"
+#include <MessageRunner.h>
+// SPDX-SnippetEnd
 #include "DeskbarUtils.h"
 #include "ExpandoMenuBar.h"
 #include "FSUtils.h"
@@ -156,7 +162,15 @@ TBarView::TBarView(BRect frame, bool vertical, bool left, bool top,
 	fMaxRecentApps(kDefaultRecentAppCount),
 	fLastDragItem(NULL),
 	fMouseFilter(NULL),
-	fTabHeight(kMenuBarHeight)
+	fTabHeight(kMenuBarHeight),
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	fGrowRunner(NULL),
+	fGrowItem(NULL),
+	fGrowStart(0),
+	fGrowProgress(-1)
+// SPDX-SnippetEnd
 {
 	// get window tab height
 	BWindow* tmpWindow = new(std::nothrow) BWindow(BRect(), NULL,
@@ -218,6 +232,11 @@ TBarView::TBarView(BRect frame, bool vertical, bool left, bool top,
 
 TBarView::~TBarView()
 {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	delete fGrowRunner;
+// SPDX-SnippetEnd
 	delete fDragMessage;
 	delete fCachedTypesList;
 	delete fBarMenuBar;
@@ -258,13 +277,17 @@ TBarView::DetachedFromWindow()
 
 
 void
-TBarView::Draw(BRect)
+TBarView::Draw(BRect updateRect)
 {
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 	if (IsHidden())
 		return;
+	if (R5Deskbar::Modern()) {
+		_DrawModern(updateRect);
+		return;
+	}
 
 // SPDX-SnippetEnd
 	BRect bounds(Bounds());
@@ -295,7 +318,26 @@ TBarView::MessageReceived(BMessage* message)
 // SPDX-License-Identifier: MIT
 		case B_COLORS_UPDATED:
 			SetViewUIColor(B_MENU_BACKGROUND_COLOR);
+			// Default (R5) keeps its own surface
+			if (R5Deskbar::Modern())
+				_StyleViews(Parent() != NULL ? Parent() : this,
+					R5Deskbar::Glass());
 			Invalidate();
+			break;
+
+		case R5Deskbar::kMsgAnimate:
+			_GrowStep();
+			break;
+
+		case R5Deskbar::kMsgRepaint:
+			if (Parent() != NULL)
+				Parent()->Invalidate();
+			Invalidate();
+			break;
+
+		case R5Deskbar::kMsgToggleUnfold:
+			R5Deskbar::SetUnfolded(!R5Deskbar::Unfolded());
+			UpdatePlacement();
 			break;
 
 // SPDX-SnippetEnd
@@ -478,6 +520,14 @@ TBarView::MouseUp(BPoint where)
 void
 TBarView::PlaceDeskbarMenu()
 {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (R5Deskbar::Modern()) {
+		_PlaceModernMenu();
+		return;
+	}
+// SPDX-SnippetEnd
 	float width = 0;
 	float height = 0;
 
@@ -528,6 +578,14 @@ TBarView::PlaceDeskbarMenu()
 void
 TBarView::PlaceTray(bool vertSwap, bool leftSwap)
 {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (R5Deskbar::Modern()) {
+		_PlaceModernTray();
+		return;
+	}
+// SPDX-SnippetEnd
 	BPoint statusLoc;
 	if (fTrayLocation == 0) {
 		// no replicant tray mode, not used
@@ -604,6 +662,14 @@ TBarView::PlaceTray(bool vertSwap, bool leftSwap)
 void
 TBarView::PlaceApplicationBar()
 {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (R5Deskbar::Modern()) {
+		_PlaceModernApps();
+		return;
+	}
+// SPDX-SnippetEnd
 	BRect screenFrame = (BScreen(Window())).Frame();
 	if (State() == kMiniState) {
 		if (!fInlineScrollView->IsHidden())
@@ -669,6 +735,8 @@ TBarView::GetPreferredWindowSize(BRect screenFrame, float* width,
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 		windowWidth = kHiddenDimension;
+	} else if (R5Deskbar::Modern()) {
+		_ModernWindowSize(screenFrame, &windowWidth, &windowHeight);
 // SPDX-SnippetEnd
 	} else if (Vertical()) {
 		if (State() == kFullState) {
@@ -715,6 +783,21 @@ TBarView::SizeWindow(BRect screenFrame)
 	float windowWidth;
 	float windowHeight;
 	GetPreferredWindowSize(screenFrame, &windowWidth, &windowHeight);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// Default (R5): the window adds the 1 px edge around TBarView
+	BRect edges = EdgeInsets();
+	if (fBarApp->Settings()->autoHide && IsHidden())
+		edges.Set(0, 0, 0, 0);
+	if (R5Deskbar::Modern() || Frame().LeftTop() != B_ORIGIN) {
+		Window()->ResizeTo(windowWidth + edges.left + edges.right,
+			windowHeight + edges.top + edges.bottom);
+		ResizeTo(windowWidth, windowHeight);
+		MoveTo(edges.left, edges.top);
+		return;
+	}
+// SPDX-SnippetEnd
 	Window()->ResizeTo(windowWidth, windowHeight);
 	ResizeTo(windowWidth, windowHeight);
 }
@@ -727,6 +810,25 @@ TBarView::PositionWindow(BRect screenFrame)
 	float windowHeight;
 	GetPreferredWindowSize(screenFrame, &windowWidth, &windowHeight);
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// Default (R5): the margin of Floating, and the edge
+	if (R5Deskbar::Modern()
+		&& !(fBarApp->Settings()->autoHide && IsHidden())) {
+		BRect edges = EdgeInsets();
+		float margin = R5Deskbar::Margin();
+		float width = windowWidth + edges.left + edges.right;
+		float height = windowHeight + edges.top + edges.bottom;
+		BPoint location(screenFrame.left + margin, screenFrame.top + margin);
+		if (!Left() && (Vertical() || R5Deskbar::Compact()))
+			location.x = screenFrame.right - width - margin;
+		if (!Top())
+			location.y = screenFrame.bottom - height - margin;
+		Window()->MoveTo(location);
+		return;
+	}
+// SPDX-SnippetEnd
 	BPoint moveLoc(0, 0);
 	// right, expanded, mini, or full
 	if (!Left() && (Vertical() || State() == kMiniState))
@@ -794,6 +896,15 @@ TBarView::_ChangeState(BMessage* message)
 	bool left = message->FindBool("left");
 	bool top = message->FindBool("top");
 	int32 state = message->FindInt32("state");
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// the pill is a row in a corner, whatever was dragged
+	if (R5Deskbar::Compact()) {
+		vertical = false;
+		state = kExpandoState;
+	}
+// SPDX-SnippetEnd
 
 	bool vertSwap = (Vertical() != vertical);
 	bool leftSwap = (Left() != left);
@@ -823,7 +934,14 @@ TBarView::_ChangeState(BMessage* message)
 		} else {
 			fInlineScrollView->SetOrientation(B_HORIZONTAL);
 			fExpandoMenuBar->SetMenuLayout(B_ITEMS_IN_ROW);
-			fExpandoMenuBar->StopMonitoringWindows();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			// Default (R5) Horizontal keeps it (its window count)
+			if (!R5Deskbar::WatchWindows(false))
+				fExpandoMenuBar->StopMonitoringWindows();
+// SPDX-SnippetEnd
+
 		}
 	}
 

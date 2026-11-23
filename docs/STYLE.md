@@ -21,3 +21,7 @@ The Users list stays two lines: the name in bold, then the username and the role
 - The signed-in person can edit their own name, email, picture, and password while the machine lock is on. The lock is for the computer and for other people.
 - A standard account does not see the people list, Add, Disable, or Delete until Unlock. An administrator sees them immediately.
 - Sign in still lists every account that can sign in.
+
+## Deskbar tray symbols
+
+In the Deskbar style Default (R5) a tray item draws a plain line symbol in one colour, the Deskbar text colour, 2 px lines, the size and baseline of the clock. No colours of its own, no bevels; a state shows in the shape (fewer arcs, an empty battery, a cross through the speaker). Only a warning (a battery almost empty) may use the warning colour. Application icons stay the real Haiku icons. In Classic (Haiku) every item keeps its own icon. The calls and an example are in `docs/ICONS.md`, "Tray symbols".

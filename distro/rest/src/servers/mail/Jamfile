@@ -1,0 +1,39 @@
+# R5OS modifications in this file are MIT, like the original work. They are
+# wrapped in SPDX-Snippet markers.
+
+SubDir HAIKU_TOP src servers mail ;
+
+if $(TARGET_PLATFORM) != haiku {
+	UsePublicHeaders mail ;
+}
+
+UsePublicHeaders [ FDirName add-ons mail_daemon ] ;
+UsePrivateHeaders app mail shared tracker ;
+SubDirHdrs $(HAIKU_TOP) src kits tracker ;
+
+AddResources mail_daemon : mail_daemon.rdef DeskbarViewIcons.rdef ;
+
+Application mail_daemon :
+	DeskbarView.cpp
+	ErrorLogWindow.cpp
+	LEDAnimation.cpp
+	MailDaemonApplication.cpp
+	main.cpp
+	DefaultNotifier.cpp
+	: be libmail.so tracker localestub [ TargetLibstdc++ ]
+		$(TARGET_NETWORK_LIBS)
+# SPDX-SnippetBegin
+# SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+	# the tray symbol of the Default (R5) Deskbar
+	libr5ui.so libr5icons.so
+# SPDX-SnippetEnd
+;
+
+DoCatalogs mail_daemon :
+	x-vnd.Be-POST
+	:
+	DeskbarView.cpp
+	MailDaemonApplication.cpp
+	DefaultNotifier.cpp
+;

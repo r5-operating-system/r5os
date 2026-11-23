@@ -40,3 +40,13 @@ The design for the Settings window, chosen by the user on 9 Nov 2026. It uses th
 
 Interactive mockup for the Sign in window (`sign-in.html`), adapting the Settings window aesthetic (yellow tab, square BeOS close/zoom boxes, panel gray body, R5 wave desktop, authentic icons) to the login screen with multi-user selection, password reveal toggle, live clock, and power actions. Addresses issue [#71](https://github.com/r5-operating-system/r5os/issues/71).
 
+
+## `R5-MODERN-DECORATOR.md`
+
+The build brief for **Default (R5 Modern)**, the round R5 window decorator chosen on 22 Nov 2026 after the sign-in reference above: a soft yellow tab behind the window, 18 px corners, Haiku's close and zoom buttons in glass, close on the left and zoom on the right. It sits next to Default (R5) and Classic (Haiku). Step 0 of the brief is a report; nothing is built before the owner's go.
+
+## `DESKBAR-STYLES.md`
+
+The build brief for the Deskbar styles chosen on 22 Nov 2026: **Classic** (Deskbar as it is now) and **Default (R5)** (as now, pill or bar; round or square; floating or against the edge; following the window-effect steps). It also sets the hover and click states, the line under the front application, and one-colour line symbols for R5's own tray items. Step 0 of the brief is a report; nothing is built before the owner's go.
+
+The mockups for both are private design canvases of the owner, linked from the briefs.

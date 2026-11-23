@@ -35,7 +35,7 @@
 				<li><a href="#why">Why not ReturnAddress()</a> &mdash; Why reply messengers cannot prove who sent a message.</li>
 				<li><a href="#service">Service side</a> &mdash; Opening an admin port and checking the sender's uid/team.</li>
 				<li><a href="#client">Client side</a> &mdash; Sending a request with <code class="inline">r5_admin_send()</code>.</li>
-				<li><a href="#services">Where it is used</a> &mdash; Login, <code class="inline">bluetooth_server</code>, and <code class="inline">libr5ui.so</code>.</li>
+				<li><a href="#services">Where it is used</a> &mdash; Login, <code class="inline">bluetooth_server</code>, the power service, and <code class="inline">libr5ui.so</code>.</li>
 			</ul>
 		</nav>
 
@@ -43,7 +43,7 @@
 			<tr><th>Declared in</th><td>&lt;R5Admin.h&gt;</td></tr>
 			<tr><th>Library</th><td>libr5admin.so (link be and libr5admin.so), in the regular and the minimum image</td></tr>
 			<tr><th>Source</th><td>distro/admin</td></tr>
-			<tr><th>Used by</th><td>Login, bluetooth_server, libr5ui (the administrator lock), libr5bt, Users, bluetooth_audio</td></tr>
+			<tr><th>Used by</th><td>Login, bluetooth_server, the power service, libr5ui (the administrator lock), libr5bt, libr5power, Users, bluetooth_audio</td></tr>
 			<tr><th>Contract</th><td>docs/LIBR5.md, "Admin requests"</td></tr>
 		</table>
 
@@ -76,6 +76,10 @@
 				<p>In the service's <code class="inline">MessageReceived()</code>: answers
 				<code class="inline">R5_ADMIN_PORT_REQUEST</code> with the port, so clients can find it. Returns
 				false for any other message.</p></div>
+			<div class="member"><div class="sig">bool r5_admin_sender_allowed(const r5_admin_sender&amp; sender);</div>
+				<p>True when the sender may change a machine-wide setting: uid 0, a member of the group admin, or
+				a program the administrator lock was opened for (Login's grant). The same rule Login and the
+				Bluetooth switch use. Added 22 Nov 2026 for the power service.</p></div>
 			<div class="member"><div class="sig">void r5_admin_port_stop(port_id port);</div>
 				<p>Deletes the port and waits for its thread. Call it without holding the lock the handler takes.</p></div>
 <pre><code>static void
@@ -115,6 +119,25 @@ status_t status = r5_admin_send(BMessenger(BLUETOOTH_SIGNATURE), &amp;request, &
 			for example Settings and every page in it.</p>
 			<p><strong>bluetooth_server</strong> takes the Bluetooth switch and the requests of bluetooth_audio
 			only on its admin port. The switch needs an administrator or a grant; the audio requests need uid 0.</p>
+			<p><strong>The power service</strong> (<code class="inline">power_daemon</code>) writes the machine's
+			power settings, the ones on the Power page, only after an admin request. Its handler checks the sender
+			with <code class="inline">r5_admin_sender_allowed()</code> and writes the file itself; the page
+			never writes it. Reading the settings and watching need no rights and go to its normal messenger.
+			A program sends through <a href="power-kit.html">BPowerRoster::SetSettings()</a>.</p>
+<pre><code>static void
+admin_request(BMessage* request, const r5_admin_sender&amp; sender,
+	BMessage* reply, void* cookie)
+{
+	PowerManagementDaemon* self = (PowerManagementDaemon*)cookie;
+	status_t status;
+	if (request-&gt;what != kMsgPowerSetSettings)
+		status = B_BAD_VALUE;
+	else if (!r5_admin_sender_allowed(sender))
+		status = B_PERMISSION_DENIED;
+	else
+		status = self-&gt;Policy().SetSettings(*request);
+	reply-&gt;AddInt32("status", status);
+}</code></pre>
 		</section>
 	</main>
 </div>

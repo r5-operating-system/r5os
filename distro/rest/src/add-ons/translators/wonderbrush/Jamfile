@@ -1,0 +1,58 @@
+SubDir HAIKU_TOP src add-ons translators wonderbrush ;
+
+SubDirHdrs [ FDirName $(SUBDIR) $(DOTDOT) shared ] ;
+
+AddResources WonderBrushTranslator : WonderBrushTranslator.rdef ;
+
+
+local architectureObject ;
+for architectureObject in [ MultiArchSubDirSetup ] {
+	on $(architectureObject) {
+		# Include support sub folder
+		SEARCH_SOURCE += [ FDirName $(HAIKU_TOP) src add-ons translators wonderbrush support ] ;
+
+		UseBuildFeatureHeaders zlib ;
+
+		Includes [ FGristFiles bitmap_compression.cpp ]
+			: [ BuildFeatureAttribute zlib : headers ] ;
+
+		Translator [ MultiArchDefaultGristFiles WonderBrushTranslator ] :
+			Canvas.cpp
+			Layer.cpp
+			WonderBrushImage.cpp
+			WonderBrushMain.cpp
+			WonderBrushTranslator.cpp
+			WonderBrushView.cpp
+
+			# support
+			bitmap_compression.cpp
+			blending.cpp
+			lab_convert.cpp
+
+			: be translation
+			[ BuildFeatureAttribute zlib : library ]
+			[ MultiArchDefaultGristFiles libtranslatorsutils.a ]
+			[ TargetLibsupc++ ] localestub
+			: true
+		;
+	}
+}
+
+# SPDX-SnippetBegin
+# SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+# The catalog keys are collected with the subdirectory's headers, not
+# with the ones of the objects above: give them the build feature
+# headers too, or the preprocessor stops at the first include (R5).
+UseBuildFeatureHeaders zlib ;
+SubDirHdrs [ FDirName $(HAIKU_TOP) src add-ons translators wonderbrush support ] ;
+# SPDX-SnippetEnd
+
+DoCatalogs WonderBrushTranslator :
+	x-vnd.Haiku-WonderBrushTranslator
+	:
+	Layer.cpp
+	WonderBrushMain.cpp
+	WonderBrushTranslator.cpp
+	WonderBrushView.cpp
+;

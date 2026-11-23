@@ -1,0 +1,13 @@
+SubDir HAIKU_TOP src add-ons kernel power cpufreq intel_pstates ;
+
+UsePrivateKernelHeaders ;
+# SPDX-SnippetBegin
+# SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+# <r5_power_profile.h>: the processor profile (docs/POWER.md, section 4)
+UsePrivateSystemHeaders ;
+# SPDX-SnippetEnd
+
+KernelAddon intel_pstates :
+	intel_pstates.cpp
+	;

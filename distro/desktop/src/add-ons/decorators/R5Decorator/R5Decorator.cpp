@@ -50,24 +50,6 @@ has_tab(window_look look)
 }
 
 
-//	#pragma mark - R5DecorAddOn
-
-
-R5DecorAddOn::R5DecorAddOn(image_id id, const char* name)
-	:
-	DecorAddOn(id, name)
-{
-}
-
-
-Decorator*
-R5DecorAddOn::_AllocateDecorator(DesktopSettings& settings, BRect rect,
-	Desktop* desktop)
-{
-	return new (std::nothrow) R5Decorator(settings, rect, desktop);
-}
-
-
 //	#pragma mark - R5Decorator
 
 
@@ -218,6 +200,29 @@ R5Decorator::GetInputMargin(BRect* margin)
 		margin->top = width;
 		margin->bottom = width;
 	}
+}
+
+
+/*!	Decorator ABI 2: the 1 px line along the outer edge, in the colour
+	_DrawFrame() draws it with (the thin frame) and Haiku's bordered look
+	(DefaultDecorator::_DrawFrame(), StrokeRect with colors[5]). A round
+	corner carries it round the arc.
+*/
+bool
+R5Decorator::GetEdgeLine(rgb_color* color, float* width)
+{
+	AutoReadLocker _(fLocker);
+
+	if (fTopTab == NULL)
+		return false;
+	if (!fThinFrame && fTopTab->look != B_BORDERED_WINDOW_LOOK)
+		return false;
+	ComponentColors colors;
+	GetComponentColors(COMPONENT_LEFT_BORDER,
+		RegionHighlight(REGION_LEFT_BORDER), colors, fTopTab);
+	*color = colors[5];
+	*width = kFrameWidth;
+	return true;
 }
 
 
@@ -411,18 +416,4 @@ R5Decorator::_MoveTab(int32 from, int32 to, bool isMoving,
 	bool result = SATDecorator::_MoveTab(from, to, isMoving, updateRegion);
 	fBorderWidth = borderWidth;
 	return result;
-}
-
-
-//	#pragma mark - add-on entry
-
-
-R5_DECORATOR_ABI_EXPORT
-
-
-extern "C" DecorAddOn*
-(instantiate_decor_addon)(image_id id, const char* name)
-{
-	syslog(LOG_INFO, "decorator: r5 loaded\n");
-	return new (std::nothrow) R5DecorAddOn(id, name);
 }
