@@ -48,6 +48,12 @@
 #include <Window.h>
 
 #include <AppServerLink.h>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <AppMisc.h>
+#include <SeparatorItem.h>
+// SPDX-SnippetEnd
 #include <AutoDeleter.h>
 #include <binary_compatibility/Interface.h>
 #include <BMCPrivate.h>
@@ -104,11 +110,28 @@ public:
 	// allows us to draw submenus in the same direction as their parents.
 	bool				frameShiftedLeft;
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// The corner radius the R5 menu style last gave this menu's cached
+	// menu window (-1: none yet), so a menu that opens again in it does not
+	// wait for app_server.
+	float				r5WindowRadius;
+	// True while this menu's view has the menu colour of the R5 menu style.
+	bool				r5ViewColor;
+// SPDX-SnippetEnd
+
 	ExtraMenuData()
 	{
 		trackingHook = NULL;
 		trackingState = NULL;
 		frameShiftedLeft = false;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		r5WindowRadius = -1;
+		r5ViewColor = false;
+// SPDX-SnippetEnd
 	}
 };
 
@@ -1665,6 +1688,83 @@ BMenu::_InitData(BMessage* archive)
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+static status_t
+r5_send_window_setting(int32 code, int32 token, const void* value,
+	size_t size)
+{
+	BPrivate::AppServerLink link;
+	link.StartMessage(code);
+	link.Attach<int32>(token);
+	link.Attach(value, size);
+	int32 reply;
+	status_t status = link.FlushWithReply(reply);
+	return status == B_OK ? reply : status;
+}
+
+
+/*!	The window of a menu in the R5 menu style: round corners (10 at 12
+	points; stepped in the CPU mode) and the full shadow (GPU mode), through
+	the messages behind libr5ui's <WindowEffects.h>, sent here because libbe
+	does not link libr5ui. The menu view gets the menu colour, so app_server
+	erases it and a highlight leaves nothing behind. The window keeps
+	Haiku's bordered look, whose line the R5 Modern decorator draws in the
+	menu's edge colour and the compositor carries round the corners: a menu
+	window without a border did not show (QEMU, 23 Nov 2026). The menus are
+	opaque: with the menu view as glass, a menu window that moved to the
+	next title of a menu bar kept the old picture (QEMU, 23 Nov 2026). A
+	window that was styled goes back to Haiku's when the look no longer asks
+	for the style. A menu with a view colour of the program's own keeps its
+	colour and its window. \a windowRadius keeps what the window was given (-1 for
+	a new window), so app_server is asked only when it changes. The window
+	is locked.
+*/
+static void
+r5_style_menu_window(BMenuWindow* window, BMenu* menu, bool* viewColorSet,
+	float* windowRadius)
+{
+	// an empty menu is Haiku's "<empty>" item in Haiku's frame
+	bool r5Style = menu->CountItems() > 0
+		&& BPrivate::MenuPrivate(menu).R5Style();
+	if (r5Style && !*viewColorSet
+		&& menu->ViewColor() != B_TRANSPARENT_COLOR) {
+		// the program gave the menu its own colour and window (Deskbar's
+		// glass panel in Default (R5)): it keeps them, the style only lays
+		// out and draws the items
+		return;
+	}
+	if (r5Style) {
+		rgb_color background = ui_color(B_MENU_BACKGROUND_COLOR);
+		if (menu->ViewColor() != background)
+			menu->SetViewColor(background);
+		*viewColorSet = true;
+	} else if (*viewColorSet) {
+		// Haiku's menus: B_TRANSPARENT_COLOR, as BMenu's constructor
+		menu->SetViewColor(B_TRANSPARENT_COLOR);
+		*viewColorSet = false;
+	}
+
+	float radius = r5Style
+		? roundf(10 * BPrivate::MenuPrivate::R5Scale()) : 0.0f;
+	if (*windowRadius == radius || (*windowRadius < 0 && !r5Style)) {
+		*windowRadius = radius;
+		return;
+	}
+	*windowRadius = radius;
+
+	int32 windowToken = _get_object_token_(window);
+	r5_send_window_setting(AS_R5_SET_WINDOW_CORNER_RADIUS, windowToken,
+		&radius, sizeof(radius));
+	int32 shadow = r5Style ? 1 : 0;
+		// B_WINDOW_SHADOW_FULL, or B_WINDOW_SHADOW_DEFAULT
+	r5_send_window_setting(AS_R5_SET_WINDOW_SHADOW, windowToken, &shadow,
+		sizeof(shadow));
+}
+// SPDX-SnippetEnd
+
+
 bool
 BMenu::_Show(bool selectFirstItem, bool keyDown)
 {
@@ -1713,6 +1813,16 @@ BMenu::_Show(bool selectFirstItem, bool keyDown)
 			ItemAt(0)->GetContentSize(&width, &height);
 
 			window->SetSmallStep(ceilf(height));
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			// the R5 menu style: one row (laid out again when it is shown)
+			BRect r5Padding;
+			if (BPrivate::MenuPrivate(this).R5Style(&r5Padding)) {
+				window->SetSmallStep(ceilf(height) + r5Padding.top
+					+ r5Padding.bottom);
+			}
+// SPDX-SnippetEnd
 		}
 
 		// Menu didn't have the time to add its items: aborting...
@@ -1727,6 +1837,15 @@ BMenu::_Show(bool selectFirstItem, bool keyDown)
 			return false;
 		}
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// a window of our own is new; a cached one is the supermenu's
+		float newWindowRadius = -1;
+		r5_style_menu_window(window, this, &fExtraMenuData->r5ViewColor,
+			ourWindow ? &newWindowRadius
+				: &fSuper->fExtraMenuData->r5WindowRadius);
+// SPDX-SnippetEnd
 		_UpdateWindowViewSize(true);
 		window->Show();
 
@@ -2694,6 +2813,77 @@ void
 BMenu::_ComputeColumnLayout(int32 index, bool bestFit, bool moveItems,
 	BRect* overrideFrame, BRect& frame)
 {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// The R5 menu style: the margin inside the window, rows of the look's
+	// padding (26 at 12 points), the shortcut as text after a gap, a
+	// chevron for a submenu, and thin separators. Every item is laid out
+	// again, so the index does not matter.
+	BRect r5Padding;
+	float r5Margin = 0;
+	if (fItems.CountItems() > 0
+		&& BPrivate::MenuPrivate(this).R5Style(&r5Padding, &r5Margin)) {
+		const float scale = BPrivate::MenuPrivate::R5Scale();
+		BFont shortcutFont;
+		GetFont(&shortcutFont);
+		shortcutFont.SetSize(BPrivate::MenuPrivate(this).R5ShortcutFontSize());
+		const float gap = roundf(16 * scale);
+		const float chevron = roundf(10 * scale) + roundf(6 * scale);
+		const float separator = std::max(3.0f, roundf(9 * scale));
+		const float markColumn = BPrivate::MenuPrivate(this).R5MarkColumn();
+
+		bool submenu = false;
+		float width = 0;
+		float top = r5Margin;
+		for (int32 i = 0; i < fItems.CountItems(); i++) {
+			BMenuItem* item = ItemAt(i);
+			float itemWidth;
+			float itemHeight;
+			item->GetContentSize(&itemWidth, &itemHeight);
+
+			float rowHeight = ceilf(itemHeight) + r5Padding.top
+				+ r5Padding.bottom;
+			if (dynamic_cast<BSeparatorItem*>(item) != NULL)
+				rowHeight = separator;
+
+			if (fMaxContentWidth > 0)
+				itemWidth = std::min(itemWidth, fMaxContentWidth);
+			float rowWidth = itemWidth + r5Padding.left + markColumn
+				+ r5Padding.right;
+			if (item->fShortcutChar != 0) {
+				char label[64];
+				BPrivate::MenuPrivate::R5ShortcutLabel(item->fShortcutChar,
+					item->fModifiers, label, sizeof(label));
+				rowWidth += gap + ceilf(shortcutFont.StringWidth(label));
+			}
+			if (item->fSubmenu != NULL) {
+				submenu = true;
+				rowWidth += chevron;
+			}
+
+			item->fBounds.left = r5Margin;
+			item->fBounds.top = top;
+			item->fBounds.bottom = top + rowHeight - 1;
+			top += rowHeight;
+			width = std::max(width, rowWidth);
+		}
+		fHasSubmenus = submenu;
+
+		frame.Set(0, 0, ceilf(width + 2 * r5Margin),
+			top + r5Margin - 1);
+		if (overrideFrame != NULL)
+			frame.right = std::max(frame.right, overrideFrame->right);
+		frame.right = ceilf(frame.right);
+
+		if (moveItems) {
+			for (int32 i = 0; i < fItems.CountItems(); i++)
+				ItemAt(i)->fBounds.right = frame.right - r5Margin;
+		}
+		return;
+	}
+// SPDX-SnippetEnd
+
 	bool command = false;
 	bool control = false;
 	bool shift = false;
@@ -2784,6 +2974,51 @@ BMenu::_ComputeColumnLayout(int32 index, bool bestFit, bool moveItems,
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+/*!	Where the first title of a menu bar starts. A control look that returns
+	a left inset larger than Haiku's 1 for B_MENU_BAR_BACKGROUND moves the
+	titles in by the difference, so they clear a round window corner (R5
+	Modern). Only for a menu bar on the left edge of a window with a frame;
+	every other menu, and every look that returns 1, starts at 0 as before.
+*/
+static float
+r5_menu_bar_start(BMenu* menu)
+{
+	if (dynamic_cast<BMenuBar*>(menu) == NULL || be_control_look == NULL)
+		return 0.0f;
+
+	BWindow* window = menu->Window();
+	if (window == NULL)
+		return 0.0f;
+
+	switch (window->Look()) {
+		case B_TITLED_WINDOW_LOOK:
+		case B_DOCUMENT_WINDOW_LOOK:
+		case B_FLOATING_WINDOW_LOOK:
+		case B_MODAL_WINDOW_LOOK:
+			break;
+		default:
+			return 0.0f;
+	}
+
+	BPoint origin(0.0f, 0.0f);
+	if (menu->Parent() != NULL)
+		origin = menu->Parent()->ConvertToScreen(menu->Frame().LeftTop());
+	else
+		origin = menu->ConvertToScreen(origin);
+	if (origin.x > window->Frame().left + 0.5f)
+		return 0.0f;
+
+	float left = 1.0f, top = 0.0f, right = 0.0f, bottom = 0.0f;
+	be_control_look->GetBackgroundInsets(BControlLook::B_MENU_BAR_BACKGROUND,
+		0, left, top, right, bottom);
+	return std::max(0.0f, floorf(left - 1.0f));
+}
+// SPDX-SnippetEnd
+
+
 void
 BMenu::_ComputeRowLayout(int32 index, bool bestFit, bool moveItems,
 	BRect& frame)
@@ -2792,6 +3027,17 @@ BMenu::_ComputeRowLayout(int32 index, bool bestFit, bool moveItems,
 	GetFontHeight(&fh);
 	frame.Set(0.0f, 0.0f, 0.0f, ceilf(fh.ascent + fh.descent + fPad.top
 		+ fPad.bottom));
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	frame.right = r5_menu_bar_start(this);
+	// the R5 menu bar: taller by the look's extra on the top and the bottom
+	// (external review M2)
+	float r5BarTop = 0;
+	float r5BarBottom = 0;
+	BPrivate::MenuPrivate(this).R5BarExtra(&r5BarTop, &r5BarBottom);
+	frame.bottom += r5BarTop + r5BarBottom;
+// SPDX-SnippetEnd
 
 	for (int32 i = 0; i < fItems.CountItems(); i++) {
 		BMenuItem* item = ItemAt(i);
@@ -2805,7 +3051,13 @@ BMenu::_ComputeRowLayout(int32 index, bool bestFit, bool moveItems,
 			+ fPad.right;
 
 		frame.right = item->Frame().right + 1.0f;
-		frame.bottom = std::max(frame.bottom, height + fPad.top + fPad.bottom);
+		frame.bottom = std::max(frame.bottom, height + fPad.top + fPad.bottom
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			+ r5BarTop + r5BarBottom
+// SPDX-SnippetEnd
+			);
 	}
 
 	if (moveItems) {
@@ -2864,6 +3116,20 @@ BMenu::ScreenLocation()
 		point = superItem->Frame().RightTop() + BPoint(1.0f, 1.0f);
 	else
 		point = superItem->Frame().LeftBottom() + BPoint(1.0f, 1.0f);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// the R5 menu style: a menu of a program's menu bar floats 4 under the
+	// bar's line (mockup M4, M5; external review M1)
+	float r5BarTop = 0;
+	float r5BarBottom = 0;
+	if (superMenu->Layout() == B_ITEMS_IN_ROW
+		&& BPrivate::MenuPrivate::R5LookStyle()
+		&& BPrivate::MenuPrivate(superMenu).R5BarExtra(&r5BarTop,
+			&r5BarBottom)) {
+		point.y += roundf(4 * BPrivate::MenuPrivate::R5Scale());
+	}
+// SPDX-SnippetEnd
 
 	superMenu->ConvertToScreen(&point);
 
@@ -2903,8 +3169,21 @@ BMenu::_CalcFrame(BPoint where, bool* scrollOn)
 	// Offset the menu field menu window left by the width of the checkmark
 	// so that the text when the menu is closed lines up with the text when
 	// the menu is open.
-	if (inMenuField)
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// The R5 menu style: the label of an item sits at the margin and the
+	// padding, so move by that much more to keep the text in line.
+	BRect r5Padding;
+	float r5Margin = 0;
+	bool r5Style = BPrivate::MenuPrivate(this).R5Style(&r5Padding, &r5Margin);
+	if (inMenuField && r5Style) {
+		frame.OffsetBy(std::min(0.0f, fPad.left - 8.0f - r5Margin
+			- r5Padding.left - BPrivate::MenuPrivate(this).R5MarkColumn()),
+			0.0f);
+	} else if (inMenuField)
 		frame.OffsetBy(-8.0f, 0.0f);
+// SPDX-SnippetEnd
 
 	if (superMenu == NULL || superItem == NULL || inMenuField) {
 		// just move the window on screen
@@ -2919,6 +3198,31 @@ BMenu::_CalcFrame(BPoint where, bool* scrollOn)
 		}
 		else if (frame.left < screenFrame.left)
 			frame.OffsetBy(-frame.left, 0);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	} else if (superMenu->Layout() == B_ITEMS_IN_COLUMN && r5Style
+		&& BPrivate::MenuPrivate(superMenu).R5Style()) {
+		// The R5 menu style: beside the menu window, 4 between the two
+		// windows' lines (mockup M1, M4; each 1 px line lies outside its
+		// window's frame), the first row level with the item that opened it.
+		const float gap = roundf(4 * BPrivate::MenuPrivate::R5Scale());
+		BRect superFrame = superMenu->Window()->Frame();
+		BRect itemFrame = superMenu->ConvertToScreen(superItem->Frame());
+		frame.OffsetTo(superFrame.right + 3 + gap, itemFrame.top - r5Margin);
+		if (frame.right > screenFrame.right
+				|| superMenu->fExtraMenuData->frameShiftedLeft) {
+			frame.OffsetTo(superFrame.left - 3 - gap - frame.Width(),
+				frame.top);
+			fExtraMenuData->frameShiftedLeft = true;
+		}
+		if (frame.left < screenFrame.left)
+			frame.OffsetBy(screenFrame.left - frame.left, 0);
+		if (frame.bottom > screenFrame.bottom)
+			frame.OffsetBy(0, screenFrame.bottom - frame.bottom);
+		if (frame.top < screenFrame.top)
+			frame.OffsetBy(0, screenFrame.top - frame.top);
+// SPDX-SnippetEnd
 	} else if (superMenu->Layout() == B_ITEMS_IN_COLUMN) {
 		if (frame.right > screenFrame.right
 				|| superMenu->fExtraMenuData->frameShiftedLeft) {
@@ -3077,6 +3381,12 @@ BMenu::_MenuWindow()
 		char windowName[64];
 		snprintf(windowName, 64, "%s cached menu", Name());
 		fCachedMenuWindow = new (nothrow) BMenuWindow(windowName);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// a new window has no round corners yet (the R5 menu style)
+		fExtraMenuData->r5WindowRadius = -1;
+// SPDX-SnippetEnd
 	}
 
 	return fCachedMenuWindow;

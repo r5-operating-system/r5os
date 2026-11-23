@@ -79,7 +79,11 @@ using namespace R5Deskbar;
 static float VerticalLeafHeight() { return Size(42) + (FlatCorner() ? 1 : 0); }
 static float TrayRowHeight() { return Size(34); }
 static float VerticalRowHeight() { return Size(34) + (FlatCorner() ? 1 : 0); }
-static float ListPadding() { return FlatCorner() ? 0 : Size(4); }
+// the rows keep clear of the round outer corners (external review A4)
+static float ListPadding()
+{
+	return FlatCorner() ? 0 : Rounded() ? Size(7) : Size(4);
+}
 
 // The bar (board C) is 48 high and the pill (board B) 54, with its 1 px
 // edge; the content is what is inside the edge.
@@ -142,7 +146,7 @@ public:
 		BRect bounds = Bounds();
 		rgb_color color = Floating() ? EdgeColor() : EdgeLineColor();
 		PushState();
-		SetDrawingMode(B_OP_COPY);
+		SetDrawingMode(color.alpha < 255 ? B_OP_ALPHA : B_OP_COPY);
 		SetHighColor(color);
 		if (edges.left > 0)
 			StrokeLine(bounds.LeftTop(), bounds.LeftBottom());
@@ -240,7 +244,9 @@ TBarView::_TookDeskbarColor(rgb_color color) const
 	return color == menu || color == tint_color(menu, 1.1)
 		|| color == make_color(240, 245, 252)
 		|| color == make_color(0xee, 0xf1, 0xf5)
-		|| color == make_color(0xee, 0xf2, 0xf8);
+		|| color == make_color(0xee, 0xf2, 0xf8)
+		|| color == make_color(0x16, 0x1a, 0x22)
+		|| color == make_color(0x1c, 0x20, 0x29);
 }
 
 
@@ -630,9 +636,12 @@ TBarMenuTitle::_DrawModern()
 	if (FlatCorner()) {
 		// board A3: the leaf row has its own shade and a line under it
 		menu->PushState();
-		menu->SetHighColor(make_color(0xe3, 0xe8, 0xef));
+		// dark: a step lighter than the surface, the line #3a404c
+		menu->SetHighColor(Dark() ? make_color(0x23, 0x28, 0x33)
+			: make_color(0xe3, 0xe8, 0xef));
 		menu->FillRect(frame);
-		menu->SetHighColor(make_color(0xb9, 0xc2, 0xcf));
+		menu->SetHighColor(Dark() ? make_color(0x3a, 0x40, 0x4c)
+			: make_color(0xb9, 0xc2, 0xcf));
 		menu->StrokeLine(frame.LeftBottom(), frame.RightBottom());
 		menu->PopState();
 		frame.bottom--;
@@ -641,29 +650,52 @@ TBarMenuTitle::_DrawModern()
 	BRect button;
 	float radius;
 	float iconSide;
-	if (Compact() || (fBarView != NULL && fBarView->Vertical())) {
-		// the 42 x 42 button of the pill, also the leaf of the vertical one
-		float side = Size(42);
-		float left = Compact() ? frame.left + Size(12)
-			: frame.left + floorf((frame.Width() + 1 - side) / 2);
+	// external review A1 (the owner's version): the pill keeps its circle,
+	// the vertical Deskbar's whole top strip is the button, the bar keeps
+	// its rounded rectangle; none is taller than its row
+	bool vertical = !Compact() && fBarView != NULL && fBarView->Vertical();
+	if (Compact()) {
+		// the 42 x 42 circle of the pill, fitted in the pill's height
+		float side = std::min(Size(42), frame.Height() + 1 - Size(4));
 		float top = frame.top + floorf((frame.Height() + 1 - side) / 2);
-		button.Set(left, top, left + side - 1, top + side - 1);
-		radius = ButtonRadius();
-		iconSide = Size(30);
+		button.Set(frame.left + Size(12), top, frame.left + Size(12) + side
+			- 1, top + side - 1);
+		radius = std::min(ButtonRadius(), floorf(side / 2));
+		iconSide = std::min(Size(30), side - Size(8));
+	} else if (vertical) {
+		// the strip above the separator, with the Deskbar's top corners
+		button = frame;
+		// inside the floating Deskbar's 1 px edge: its radius less that
+		radius = std::max(0.0f, WindowRadius()
+			- (fBarView != NULL ? fBarView->EdgeInsets().top : 0));
+		iconSide = std::min(Size(30), frame.Height() + 1 - Size(8));
 	} else {
-		// the bar's leaf: 48 x 40, corners of 10
-		float top = frame.top + floorf((frame.Height() + 1 - Size(40)) / 2);
+		// the bar's leaf: 48 x 40, corners of 10, never taller than the bar
+		float height = std::min(Size(40), frame.Height() + 1 - Size(2));
+		float top = frame.top + floorf((frame.Height() + 1 - height) / 2);
 		button.Set(frame.left + Size(8), top, frame.left + Size(8 + 48) - 1,
-			top + Size(40) - 1);
+			top + height - 1);
 		radius = HighlightRadius();
-		iconSide = Size(28);
+		iconSide = std::min(Size(28), height - Size(8));
 	}
 
 	bool open = IsSelected();
-	if (open)
-		DrawHollow(menu, button, radius);
-	else if (fHover)
-		DrawHover(menu, button, radius);
+	if (open || fHover) {
+		menu->PushState();
+		BRect shade(button);
+		if (vertical) {
+			// round only at the top: the strip runs on under the separator
+			// by the radius and is cut at the row
+			shade.bottom += radius;
+			BRegion clip(frame);
+			menu->ConstrainClippingRegion(&clip);
+		}
+		if (open)
+			DrawHollow(menu, shade, radius);
+		else
+			DrawHover(menu, shade, radius);
+		menu->PopState();
+	}
 
 	const BBitmap* icon = pebble ? Pebble(iconSide) : fIcon;
 	if (icon != NULL) {
@@ -673,7 +705,19 @@ TBarMenuTitle::_DrawModern()
 		float x = button.left + floorf((button.Width() + 1 - width) / 2);
 		float y = button.top + floorf((button.Height() + 1 - height) / 2)
 			+ (open ? 1 : 0);
-		DrawIcon(menu, icon, BRect(x, y, x + width - 1, y + height - 1));
+		BRect iconRect(x, y, x + width - 1, y + height - 1);
+		if (pebble) {
+			// the pebble's wave is a cut-out: a white disc under it makes
+			// it a crisp white wave on the dark surface too (external
+			// review A2); the disc stays inside the pebble's ring
+			menu->PushState();
+			menu->SetDrawingMode(B_OP_ALPHA);
+			menu->SetHighColor(255, 255, 255);
+			menu->FillEllipse(iconRect.InsetByCopy(floorf(width * 0.14f),
+				floorf(height * 0.14f)));
+			menu->PopState();
+		}
+		DrawIcon(menu, icon, iconRect);
 	}
 }
 
@@ -839,7 +883,8 @@ TTeamMenuItem::_DrawModern()
 		if (FlatCorner()) {
 			DrawLine(menu, BPoint(frame.left, frame.bottom),
 				BPoint(frame.right, frame.bottom),
-				make_color(0xd5, 0xdb, 0xe4));
+				Dark() ? make_color(0x2a, 0x2f, 0x39)
+					: make_color(0xd5, 0xdb, 0xe4));
 		}
 	} else {
 		// a button of 36 on the bar, a gap of 6 after it (board C)
@@ -852,6 +897,10 @@ TTeamMenuItem::_DrawModern()
 		FillShade(menu, button, radius, 31);
 	else if (hover)
 		DrawHover(menu, button, radius);
+	else if (front && Dark()) {
+		// dark: the front row rgba(255,255,255,.07) (mockup B1)
+		FillShade(menu, button, radius, 18);
+	}
 
 	float iconLeft = button.left + (fBarView->Vertical() ? Size(10) : Size(8));
 	if (fIcon != NULL) {
@@ -870,9 +919,12 @@ TTeamMenuItem::_DrawModern()
 
 	float baseline = button.top + floorf((button.Height() + 1
 		- (fontHeight.ascent + fontHeight.descent)) / 2 + fontHeight.ascent);
-	menu->SetDrawingMode(B_OP_OVER);
+	SetTextMode(menu);
 	menu->SetLowColor(SurfaceColor());
-	menu->SetHighColor(LabelColor());
+	// a row under the pointer or pressed has the full label colour, as
+	// the front row (external review A4)
+	menu->SetHighColor(front || hover || selected ? LabelColor()
+		: RowTextColor());
 	// BView::SetFont(): BMenu::SetFont() lays the menu out again, which
 	// draws again (QEMU, 22 Nov: a redraw loop that ran out of memory)
 	menu->BView::SetFont(&font);
@@ -1026,12 +1078,13 @@ TReplicantTray::_ModernLocation(int32 index, float replicantWidth)
 				location.x += view->Frame().Width() + 1 + Size(7);
 		}
 	} else if (fBarView->Vertical()) {
-		// padding 10, gaps of 7, rows of 34; the clock in the first row
-		float right = Bounds().right + 1 - Size(10);
+		// padding 8, gaps of 5, rows of 34; the clock in the first row (five
+		// items and the clock on one row: external review A5)
+		float right = Bounds().right + 1 - Size(8);
 		float rowRight = right;
 		if (!fTime->IsHidden(fTime))
-			rowRight = right - fTime->Frame().Width() - 1 - Size(7);
-		location.x = Size(10);
+			rowRight = right - fTime->Frame().Width() - 1 - Size(5);
+		location.x = Size(8);
 		for (int32 i = 0; i < index; i++) {
 			BView* view = NULL;
 			fShelf->ReplicantAt(i, &view);
@@ -1039,14 +1092,14 @@ TReplicantTray::_ModernLocation(int32 index, float replicantWidth)
 				continue;
 			if (view->Frame().top > location.y + 1) {
 				location.y = view->Frame().top;
-				location.x = Size(10);
+				location.x = Size(8);
 				rowRight = right;
 			}
-			location.x = view->Frame().right + 1 + Size(7);
+			location.x = view->Frame().right + 1 + Size(5);
 		}
-		if (location.x + replicantWidth > rowRight && location.x > Size(10)) {
+		if (location.x + replicantWidth > rowRight && location.x > Size(8)) {
 			location.y += TrayRowHeight();
-			location.x = Size(10);
+			location.x = Size(8);
 		}
 	} else {
 		location.x = Size(12);
@@ -1109,7 +1162,9 @@ TDragRegion::_DrawModern()
 	if (!fBarView->Vertical() || Compact())
 		return;
 	BRect bounds = Bounds();
-	rgb_color line = make_color(30, 45, 70, 46);
+	// dark: rgba(255,255,255,.08) (mockup B1)
+	rgb_color line = Dark() ? make_color(255, 255, 255, 20)
+		: make_color(30, 45, 70, 46);
 	DrawLine(this, bounds.LeftTop(), bounds.RightTop(), line);
 	DrawLine(this, bounds.LeftBottom(), bounds.RightBottom(), line);
 }
@@ -1199,7 +1254,21 @@ TDeskbarMenu::DrawBackground(BRect updateRect)
 	// the glass panel: its own colour, and the edge where it is square
 	if (ButtonRadius() <= 0) {
 		PushState();
-		SetHighColor(Glass() ? EdgeColor() : make_color(0x9f, 0xb0, 0xc8));
+		rgb_color color = Glass() || Dark() ? EdgeColor()
+			: make_color(0x9f, 0xb0, 0xc8);
+		float menuInset = 1, top = 1, right = 1, bottom = 1;
+		be_control_look->GetBackgroundInsets(BControlLook::B_MENU_BACKGROUND,
+			0, menuInset, top, right, bottom);
+		if (menuInset > 1) {
+			// opaque in the R5 menu style (A6): the menu's edge colour, not
+			// the glass's, which is nearly white on the light menu
+			rgb_color menu = ui_color(B_MENU_BACKGROUND_COLOR);
+			color = menu.IsLight()
+				? mix_color(menu, make_color(15, 23, 42), 64)
+				: mix_color(menu, make_color(255, 255, 255), 26);
+		}
+		SetDrawingMode(color.alpha < 255 ? B_OP_ALPHA : B_OP_COPY);
+		SetHighColor(color);
 		StrokeRect(Bounds());
 		PopState();
 	}

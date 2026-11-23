@@ -34,6 +34,8 @@ The R5 interface classes: what exists, and when to use it. The exact calls, colo
 | `BAxisBar` | `<AxisBar.h>` | A value from -1 to 1 with a centre, filled from the middle: a turn rate, a stick axis. `SetEnabled(false)` draws it gray | Progress (that is `BStatusBar`, from the left). A value the user drags (that is `BSlider`) | `BGameControllerMotionView` (Pitch, Roll, Yaw). The Game controllers page in Settings is the second user |
 | `BCardStrip`, `BCardStripItem` | `<CardStrip.h>`, `<CardStripItem.h>` | A horizontal row of cards of which one is chosen: a picture (handed in), a title and one subtitle line per card. Mouse and arrow keys, one selection, a message with `"index"`, sideways scrolling when full, and a dashed card with a text and an optional button while it is empty | A list the user reads row by row (that is `BListView` or `BSidebar`). A card with its own controls (that is `BCard`). One card the user clicks (that is `BActionCard`) | The Game controllers page in Settings, one card per controller. Possible second users: Bluetooth devices, Sound outputs |
 
+Cards and the sidebar follow the control look: with R5 Modern (any look that asks for the R5 style) a card has corners of 8 and the sidebar's open category and selection are round and inset; with Haiku's and R5's controls they are as before. Nothing moves. See `docs/LIBR5.md`, "Following the controls".
+
 ## Functions
 
 Not every part of the kit is a class. These are free functions in `BAppearanceKit`, the way Haiku has `ui_color()` beside its classes.
@@ -41,6 +43,7 @@ Not every part of the kit is a class. These are free functions in `BAppearanceKi
 | Header | Use it for | Do not use it for | First user |
 |---|---|---|---|
 | `<WindowEffects.h>` | The user's window effects (`window_effects()` / `set_window_effects()` with `B_WINDOW_SHADOW`, `B_WINDOW_FROSTED_GLASS`, `B_WINDOW_ANIMATIONS`; `window_effect_strength()` / `set_window_effect_strength()` with Quiet, Balanced, Glassy), a glass background behind a program's own window or view (`set_window_glass()`, `set_view_glass()`), and round corners for a program's own window without a title tab (`set_window_corner_radius()`). The calls and an example are in `docs/LIBR5.md`, "Window effects" | `B_TRANSPARENT_COLOR`, which keeps meaning "do not erase". A program setting the user's choice: only Settings and the Appearance program call the two setters | The "Window effects" box on Look and feel, in Settings and in the Appearance program |
+| `<Themes.h>` | Themes (23 Nov 2026, `docs/design/THEMING.md`): a `theme_info` with the parts (decorator, control look, scroll bars, Deskbar style, mode and accent, effects) and `get_theme()`, `set_theme()`, `find_theme()`, `save_theme()`, `remove_theme()`, `get_theme_colors()`. `set_theme()` switches every running program live. A theme is a saved combination of parts, not a drawing engine. The calls are in `docs/LIBR5.md`, "Themes" | A program's own look: a program follows every theme by drawing with `be_control_look` and naming colours with `ui_color()` (R5Book, Theming). Only Settings and test tools choose a theme | The Theme page in Settings |
 
 ```cpp
 #include <WindowEffects.h>

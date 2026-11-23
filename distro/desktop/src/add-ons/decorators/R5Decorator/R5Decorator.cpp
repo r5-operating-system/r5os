@@ -232,8 +232,20 @@ R5Decorator::GetComponentColors(Component component, uint8 highlight,
 {
 	SATDecorator::GetComponentColors(component, highlight, _colors, tab);
 
-	if (component != COMPONENT_TAB)
+	if (component != COMPONENT_TAB) {
+		// Dark mode (a theme's dark ui colours, docs/design/THEMING.md,
+		// mockup B2): the 1 px line is the border colour itself (#4a515e),
+		// not three tints darker, which would sink into the dark panel. A
+		// light border colour (Haiku's and R5's light sets) is unchanged.
+		rgb_color frame = tab != NULL && tab->buttonFocus ? fFocusFrameColor
+			: fNonFocusFrameColor;
+		// the border colours run from the inner bevel (0) to the outer
+		// line (5), as TabDecorator fills them
+		const int32 kOuterLine = 5;
+		if (frame.IsDark() && highlight != HIGHLIGHT_RESIZE_BORDER)
+			_colors[kOuterLine] = frame;
 		return;
+	}
 	if (highlight == HIGHLIGHT_STACK_AND_TILE
 		&& (tab == NULL || tab->isHighlighted)) {
 		// the stack and tile colours stay

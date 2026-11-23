@@ -1099,7 +1099,8 @@ TBarApp::MessageReceived(BMessage* message)
 
 		case B_COLORS_UPDATED:
 			if (fBarWindow != NULL && fBarWindow->Lock()) {
-				if (fBarView != NULL) {
+				// Default (R5) keeps its own surface (TBarView restyles it)
+				if (fBarView != NULL && !R5Deskbar::Modern()) {
 					fBarView->SetViewUIColor(B_MENU_BACKGROUND_COLOR);
 					fBarView->Invalidate();
 				}

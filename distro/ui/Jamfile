@@ -46,5 +46,6 @@ SharedLibrary [ MultiArchDefaultGristFiles libr5ui.so ] :
 	AxisBar.cpp
 	CardStripItem.cpp
 	CardStrip.cpp
+	Themes.cpp
 	: be libr5icons.so libr5admin.so [ TargetLibstdc++ ]
 	;

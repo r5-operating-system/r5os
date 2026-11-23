@@ -574,6 +574,7 @@ Compositor::Compositor(Desktop* desktop, HWInterface* screen)
 	fEffects(kWindowEffectShadow | kWindowEffectFrostedGlass
 		| kWindowEffectAnimations),
 	fStrength(kWindowEffectsBalanced),
+	fDarkGlass(0),
 	fEffectsLogged(false),
 	fAnimLock("compositor animations"),
 	fGhosts(4),
@@ -1290,6 +1291,13 @@ Compositor::Damage(const BRegion& region, WindowHWInterface* source)
 
 
 //	#pragma mark - window effects (M11 step 4)
+
+
+void
+Compositor::SetDarkGlass(bool dark)
+{
+	atomic_set(&fDarkGlass, dark ? 1 : 0);
+}
 
 
 void

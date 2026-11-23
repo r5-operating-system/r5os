@@ -64,6 +64,8 @@ SOURCES = (
     "DisplayScreens.h",
     "DeskbarModule.cpp",
     "DeskbarModule.h",
+    "ThemeModule.cpp",
+    "ThemeModule.h",
     "NotificationsModule.cpp",
     "NotificationsModule.h",
     "VirtualMemoryModule.cpp",

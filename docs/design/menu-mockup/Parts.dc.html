@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>R5 menu parts</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1280px; height: 640px; box-sizing: border-box; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); font-family: 'Manrope', system-ui, sans-serif">
+  <sc-for list="{{ cols }}" as="col" hint-placeholder-count="4">
+    <div style="{{ col.panel }}">
+      <div style="font-size: 13px; font-weight: 800">{{ col.title }}</div>
+      <div style="{{ col.sub }}">{{ col.note }}</div>
+      <div style="{{ col.bar }}">
+        <span style="{{ col.barHot }}">File</span>
+        <span style="padding: 0 9px">Edit</span>
+        <span style="padding: 0 9px">View</span>
+      </div>
+      <label style="display: flex; align-items: center; gap: 8px; font-size: 12.5px">Size
+        <span style="{{ col.field }}"><span style="flex: 1">12 pt</span><svg aria-hidden="true" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3.8 5 6.8 8 3.8"></path></svg></span>
+      </label>
+      <div style="{{ col.menu }}">
+        <sc-for list="{{ col.items }}" as="it" hint-placeholder-count="10">
+          <sc-if value="{{ it.sep }}" hint-placeholder-val="{{ false }}"><div style="{{ col.sep }}"></div></sc-if>
+          <sc-if value="{{ it.head }}" hint-placeholder-val="{{ false }}"><div style="{{ col.head }}">{{ it.label }}</div></sc-if>
+          <sc-if value="{{ it.isRow }}" hint-placeholder-val="{{ true }}">
+            <div style="{{ it.row }}">
+              <span style="width: 12px; display: flex; justify-content: center">
+                <sc-if value="{{ it.check }}" hint-placeholder-val="{{ false }}"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6.3 4.8 9 10 3"></path></svg></sc-if>
+                <sc-if value="{{ it.radio }}" hint-placeholder-val="{{ false }}"><span style="width: 6px; height: 6px; border-radius: 3px; background: currentColor"></span></sc-if>
+              </span>
+              <span style="flex: 1">{{ it.label }}</span>
+              <span style="{{ it.key }}">{{ it.short }}</span>
+              <sc-if value="{{ it.subm }}" hint-placeholder-val="{{ false }}"><svg aria-hidden="true" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 1.8 6.8 5 3.5 8.2"></path></svg></sc-if>
+            </div>
+          </sc-if>
+        </sc-for>
+      </div>
+      <div style="{{ col.sub }}">{{ col.legend }}</div>
+    </div>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":640}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const stepped = 'clip-path: polygon(0 6px, 2px 6px, 2px 3px, 3px 3px, 3px 2px, 6px 2px, 6px 0, calc(100% - 6px) 0, calc(100% - 6px) 2px, calc(100% - 3px) 2px, calc(100% - 3px) 3px, calc(100% - 2px) 3px, calc(100% - 2px) 6px, 100% 6px, 100% calc(100% - 6px), calc(100% - 2px) calc(100% - 6px), calc(100% - 2px) calc(100% - 3px), calc(100% - 3px) calc(100% - 3px), calc(100% - 3px) calc(100% - 2px), calc(100% - 6px) calc(100% - 2px), calc(100% - 6px) 100%, 6px 100%, 6px calc(100% - 2px), 3px calc(100% - 2px), 3px calc(100% - 3px), 2px calc(100% - 3px), 2px calc(100% - 6px), 0 calc(100% - 6px));';
+    const L = { bg: '#e3e9f1', text: '#1a1d23', dim: '#9aa1ad', key: '#6b7380', note: '#4c5462', accent: '#0084ff', glass: 'rgba(250,251,253,0.86)', opaque: '#f7f8fa', line: 'rgba(0,0,0,0.10)', lineSafe: '#b8c0cc', sep: 'rgba(0,0,0,0.09)', sepSafe: '#d3d8e0', bar: '#eef1f5', barLine: '#d3d8e0', barHot: 'rgba(0,0,0,0.07)', field: '#f7f8fa', fieldLine: '#b4bcc8', shadow: '0 14px 34px rgba(20,30,50,0.22), 0 2px 6px rgba(20,30,50,0.14)' };
+    const D = { bg: '#17202f', text: '#e6e9ef', dim: '#6f7888', key: '#9aa3b0', note: '#a3abb8', accent: '#2f95ff', glass: 'rgba(30,34,43,0.84)', opaque: '#262b34', line: 'rgba(255,255,255,0.10)', lineSafe: '#3a404c', sep: 'rgba(255,255,255,0.10)', sepSafe: '#3a404c', bar: '#262b34', barLine: '#3a404c', barHot: 'rgba(255,255,255,0.10)', field: '#2a2f39', fieldLine: '#454c59', shadow: '0 14px 34px rgba(0,0,0,0.50), 0 2px 6px rgba(0,0,0,0.35)' };
+    const make = (c, safe, title, note) => {
+      const rowStyle = (hot, dis) => 'height: 26px; display: flex; align-items: center; gap: 8px; padding: 0 9px 0 7px; border-radius: ' + (safe ? '0' : '6px') + '; ' + (hot ? 'background: ' + c.accent + '; color: #ffffff; font-weight: 600' : 'color: ' + (dis ? c.dim : c.text));
+      const keyStyle = (hot) => 'font-size: 11.5px; font-weight: 500; color: ' + (hot ? 'rgba(255,255,255,0.85)' : c.key);
+      const mk = (label, short, o) => { o = o || {}; return { isRow: true, sep: false, head: false, label: label, short: short || '', subm: !!o.subm, check: !!o.check, radio: !!o.radio, row: rowStyle(o.hot, o.dis), key: keyStyle(o.hot) }; };
+      const S = { sep: true, isRow: false, head: false };
+      const H = (t) => ({ head: true, isRow: false, sep: false, label: t });
+      return {
+        title: title, note: note,
+        legend: 'Rows: normal, highlighted, shortcut, disabled, check mark, radio group with heading, submenu.',
+        panel: 'box-sizing: border-box; height: 640px; padding: 26px 24px; display: flex; flex-direction: column; gap: 14px; background: ' + c.bg + '; color: ' + c.text,
+        sub: 'font-size: 11.5px; line-height: 1.5; color: ' + c.note,
+        bar: 'height: 28px; display: flex; align-items: center; gap: 2px; padding: 0 8px; background: ' + c.bar + '; border: 1px solid ' + c.barLine + '; border-radius: ' + (safe ? '0' : '8px') + '; font-size: 12.5px',
+        barHot: 'padding: 3px 9px; border-radius: ' + (safe ? '0' : '6px') + '; background: ' + c.barHot + '; font-weight: 600',
+        field: 'width: 120px; height: 28px; box-sizing: border-box; display: flex; align-items: center; padding: 0 10px; border-radius: ' + (safe ? '3px' : '7px') + '; background: ' + c.field + '; border: 1px solid ' + c.fieldLine + '; font-size: 12.5px',
+        menu: safe
+          ? 'width: 232px; box-sizing: border-box; padding: 5px; background: ' + c.opaque + '; border: 1px solid ' + c.lineSafe + '; font-size: 13px; ' + stepped
+          : 'width: 232px; box-sizing: border-box; padding: 5px; background: ' + c.glass + '; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-radius: 10px; box-shadow: inset 0 0 0 1px ' + c.line + ', ' + c.shadow + '; font-size: 13px',
+        sep: 'height: 1px; margin: 4px 8px; background: ' + (safe ? c.sepSafe : c.sep),
+        head: 'height: 22px; display: flex; align-items: flex-end; padding: 0 9px 3px 27px; font-size: 11px; font-weight: 700; letter-spacing: 0.02em; color: ' + c.key,
+        items: [
+          mk('Undo', 'Alt+Z'), mk('Copy', 'Alt+C', { hot: true }), mk('Paste', 'Alt+V', { dis: true }), S,
+          mk('Show ruler', '', { check: true }), H('Wrap'), mk('No wrap', '', { radio: false }), mk('Wrap at window', '', { radio: true }), S,
+          mk('Insert', '', { subm: true })
+        ]
+      };
+    };
+    return {
+      cols: [
+        make(L, false, 'Light · GPU', 'Frosted glass, soft shadow, radius 10 (scales with the font).'),
+        make(D, false, 'Dark · GPU', 'The same shapes; glass over the dark slate.'),
+        make(L, true, 'Light · Safe mode (CPU)', 'Opaque, stepped corners, square highlight, no blur or shadow.'),
+        make(D, true, 'Dark · Safe mode (CPU)', 'Opaque dark, the same colours as with the GPU.')
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

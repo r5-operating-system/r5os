@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+# The Theme Kit template (R5Book, "Making themes"). Built as a compile check;
+# not in a package.
+SubDir HAIKU_TOP src add-ons control_look ExampleControlLook ;
+
+UsePrivateHeaders interface ;
+
+Addon ExampleControlLook :
+	ExampleControlLook.cpp
+	: be [ TargetLibstdc++ ] [ TargetLibsupc++ ]
+;
