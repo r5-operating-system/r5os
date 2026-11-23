@@ -1400,6 +1400,7 @@ module_icon(const char* moduleId)
 		{ "fonts", "application/x-vnd.Haiku-Appearance" },
 		{ "look", "application/x-vnd.Haiku-Appearance" },
 		{ "deskbar", "application/x-vnd.Haiku-DeskbarPreferences" },
+		{ "theme", "application/x-vnd.Haiku-Appearance" },
 		{ "wallpaper", "application/x-vnd.Haiku-Backgrounds" },
 		{ "information", "application/x-vnd.Haiku-About" },
 		{ "notifications", "application/x-vnd.Haiku-Notifications" },

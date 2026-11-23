@@ -126,7 +126,10 @@ enum r5_glyph {
 	R5_GLYPH_NETWORK_OFF = 16,
 	R5_GLYPH_AIRPLAY = 17,
 	R5_GLYPH_MAIL = 18,
-	R5_GLYPH_MAIL_NEW = 19
+	R5_GLYPH_MAIL_NEW = 19,
+	// The Light and Dark buttons of the Theme page (docs/design/THEMING.md).
+	R5_GLYPH_SUN = 20,
+	R5_GLYPH_MOON = 21
 };
 
 // Draws the glyph inside `frame` of `view`, in `color`. The view's

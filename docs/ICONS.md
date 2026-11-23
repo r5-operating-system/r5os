@@ -116,6 +116,8 @@ Haiku's icon set has no power symbol, no circular arrow, no clock face for a sma
 | `R5_GLYPH_AIRPLAY` | 17 | A screen open at the bottom, with a triangle under it |
 | `R5_GLYPH_MAIL` | 18 | An envelope |
 | `R5_GLYPH_MAIL_NEW` | 19 | A smaller envelope with a filled dot at its corner (new mail) |
+| `R5_GLYPH_SUN` | 20 | A ring with eight short rays (the Light button of the Theme page, 23 Nov 2026) |
+| `R5_GLYPH_MOON` | 21 | A crescent (the Dark button of the Theme page, 23 Nov 2026) |
 
 The numbers are part of the contract, the same as `r5_icon`. A new glyph is added at the end of `enum r5_glyph`, with a row in this table.
 

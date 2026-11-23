@@ -27,6 +27,7 @@ Application Settings :
 	LegacyPages.cpp
 	WallpaperModule.cpp
 	DeskbarModule.cpp
+	ThemeModule.cpp
 	NotificationsModule.cpp
 	VirtualMemoryModule.cpp
 	PowerModule.cpp

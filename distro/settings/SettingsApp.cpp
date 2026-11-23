@@ -15,6 +15,7 @@
 #include "LegacyPages.h"
 #include "SettingsManager.h"
 #include "SettingsMessages.h"
+#include "ThemeModule.h"
 #include "WallpaperModule.h"
 #include "WiFiModule.h"
 #include "SettingsStorage.h"
@@ -52,6 +53,7 @@ SettingsApp::SettingsApp()
 	register_legacy_pages(fManager);
 	register_display_page(fManager);
 	register_deskbar_page(fManager);
+	register_theme_page(fManager);
 	register_notifications_page(fManager);
 	register_virtual_memory_page(fManager);
 	register_power_page(fManager);

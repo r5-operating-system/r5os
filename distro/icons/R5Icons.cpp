@@ -538,6 +538,37 @@ glyph_paint(BView* view, r5_glyph which, BRect frame)
 			break;
 		}
 
+		case R5_GLYPH_SUN:
+		{
+			// the mockup's sun: a ring of 4 and eight rays of 2
+			view->SetPenSize(std::max(1.0f, space.Size(2.2f)));
+			glyph_arc(view, space, 12, 12, 4, 0, 360);
+			glyph_line(view, space, 12, 2, 12, 4);
+			glyph_line(view, space, 12, 20, 12, 22);
+			glyph_line(view, space, 4.9f, 4.9f, 6.3f, 6.3f);
+			glyph_line(view, space, 17.7f, 17.7f, 19.1f, 19.1f);
+			glyph_line(view, space, 2, 12, 4, 12);
+			glyph_line(view, space, 20, 12, 22, 12);
+			glyph_line(view, space, 4.9f, 19.1f, 6.3f, 17.7f);
+			glyph_line(view, space, 17.7f, 6.3f, 19.1f, 4.9f);
+			break;
+		}
+
+		case R5_GLYPH_MOON:
+		{
+			// the mockup's crescent: M20 14.5 A8 8 0 0 1 9.5 4
+			// a8 8 0 1 0 10.5 10.5 z
+			view->SetPenSize(std::max(1.0f, space.Size(2.2f)));
+			float radius = space.Size(8);
+			BShape moon;
+			moon.MoveTo(space.Map(20, 14.5f));
+			moon.ArcTo(radius, radius, 0, false, false, space.Map(9.5f, 4));
+			moon.ArcTo(radius, radius, 0, true, true, space.Map(20, 14.5f));
+			moon.Close();
+			view->StrokeShape(&moon);
+			break;
+		}
+
 		default:
 			break;
 	}
@@ -565,7 +596,7 @@ r5_glyph_bitmap(r5_glyph which, float side, rgb_color color)
 {
 	int32 pixels = icon_pixels(side);
 	// The last glyph of enum r5_glyph; update it with every new glyph.
-	if (pixels < 1 || which < R5_GLYPH_POWER || which > R5_GLYPH_MAIL_NEW)
+	if (pixels < 1 || which < R5_GLYPH_POWER || which > R5_GLYPH_MOON)
 		return NULL;
 
 	BRect bounds(0, 0, pixels - 1, pixels - 1);
