@@ -942,14 +942,6 @@ set_theme(const theme_info* info, uint32 parts)
 				!= roundf(info->scroll_bar_width))
 			lookChanged = true;
 	}
-	if ((parts & B_THEME_DESKBAR) != 0) {
-		status_t status = apply_deskbar(info);
-		if (status != B_OK) {
-			applied &= ~B_THEME_DESKBAR;
-			if (status != B_NAME_NOT_FOUND && result == B_OK)
-				result = status;
-		}
-	}
 	if ((parts & B_THEME_EFFECTS) != 0) {
 		status_t status = set_window_effects(info->effects);
 		if (status == B_OK) {
@@ -1027,6 +1019,13 @@ set_theme(const theme_info* info, uint32 parts)
 		BMessage colors;
 		if (get_theme_colors(&kept, &colors) == B_OK)
 			set_ui_colors(&colors);
+	}
+	// Apply Deskbar style after UI colors so switching from Dark Mode to
+	// Classic (Haiku) picks up the light B_MENU_ITEM_TEXT_COLOR immediately.
+	if ((parts & B_THEME_DESKBAR) != 0) {
+		status_t status = apply_deskbar(&kept);
+		if (status != B_OK && status != B_NAME_NOT_FOUND && result == B_OK)
+			result = status;
 	}
 
 	if (lookChanged) {
