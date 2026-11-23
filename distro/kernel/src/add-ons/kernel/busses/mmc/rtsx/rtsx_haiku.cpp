@@ -220,15 +220,19 @@ card_power_off(rtsx_softc* sc)
 {
 	atomic_and(&sc->flags, ~RTSX_F_CARD_PRESENT);
 	bool wasPowered = sc->powered;
+	bool wasAnnounced = sc->announced;
 	sc->powered = false;
 	sc->announced = false;
 	sc->oc_tripped = false;
 	(void)rtsx_bus_power(sc, false);
 	(void)rtsx_led_disable(sc);
-	if (wasPowered) {
-		// mmc_bus cannot unpublish a card yet; its disk only gets errors.
+	if (wasPowered)
 		dprintf("rtsx: card removed\n");
-	}
+
+	// Wake mmc_bus, so that its scan finds the slot empty and removes the
+	// card's node at once, not only when the next card is put in.
+	if (wasAnnounced && sc->scan_sem >= 0)
+		release_sem_etc(sc->scan_sem, 1, B_DO_NOT_RESCHEDULE);
 }
 
 

@@ -8,6 +8,16 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-23 - Card reader: a card that is taken out is removed at once
+
+Problem (stick 78, 5625U, main with #4572, `generated/boot-5625u-78/` in the stick worktree): a card put in after the start was found (`SDHC card found`, 4 bit, 25 reads without an error). After `rtsx: card removed` its volume and disk stayed; the owner unmounted it by hand. With #4572 the card's node was only removed by the scan of the next card.
+
+Changed: `rtsx_haiku.cpp`: `card_power_off()` wakes the `mmc_bus` scan when the card had been announced to it. `mmc_bus.cpp`: the scan removes the card's node first (`_RemoveCard()`, as before), and when CMD0 returns `B_DEV_NO_MEDIA` (rtsx with the slot off) it waits for the next card instead of going on with CMD8, CMD1 and CMD55. sdhci does not wake the scan on a removal and is unchanged.
+
+Limits: a mounted volume is not unmounted; it stays until it is unmounted and its I/O returns `B_DEV_NO_MEDIA`. Whether Haiku's disk device manager does anything with the removed node or the media status was not checked. A removal followed quickly by an insertion can run two scans; the second removes the node of the first and publishes the card again.
+
+Tested: stick 78 tested #4572 only for a first insertion (found, read). This change is not booted yet.
+
 ## 2026-11-23 - Card reader: an SD card put in again is found
 
 Problem (stick 77, 5625U, main `a08d00b67c`, `generated/boot-5625u-77/` in the stick worktree): the SD card that was in at power on was found (`SDHC card found`), read, and shown in the mount menu. After the card was taken out and put in again, every command failed: `rtsx: CMD7 (arg 00000000) failed: Operation timed out` three times, then `CMD55 failed`, and the card was not found again. Mounting the exFAT volume then failed with `read of 512 bytes at 16777216 failed: Operation timed out` and an I/O error.

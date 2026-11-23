@@ -247,7 +247,13 @@ MMCBus::_WorkerThread(void* cookie)
 		// A card put in after the first scan gets its own CMD0 (the one
 		// above only ran for the card present at the start).
 		bus->_RemoveCard();
-		bus->ExecuteCommand(0, GO_IDLE_STATE, 0, NULL);
+		if (bus->ExecuteCommand(0, GO_IDLE_STATE, 0, NULL) == B_DEV_NO_MEDIA) {
+			// The controller woke the scan for a removal (rtsx): the
+			// card's node is gone now; wait for the next card.
+			TRACE("No card in the slot\n");
+			bus->_AcquireScanSemaphore();
+			continue;
+		}
 		snooze(30000);
 
 		// The card must be ready within one second (SD physical layer,

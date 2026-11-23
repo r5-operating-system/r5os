@@ -73,12 +73,12 @@ and the RTS5765DL. Neither OpenBSD's driver nor the spec covers them.
 
 ## Limits
 
-- A card that is taken out is removed when the next card is put in (the scan
-  of the new card removes the node of the old one), not at once. Until then
-  the old disk stays in `/dev/disk/mmc/` and only returns errors. A disk that
-  is still open stays until it is closed, returns `B_DEV_NO_MEDIA`, and its
-  I/O does not reach the new card; the new card gets a new number. Unmount
-  before removing the card.
+- A card that is taken out is removed at once: rtsx wakes the `mmc_bus`
+  scan, which finds the slot empty and removes the card's node. A volume on
+  it is not unmounted. A disk that is still open (a mounted volume) stays
+  until it is closed, returns `B_DEV_NO_MEDIA`, and its I/O does not reach a
+  new card; the new card gets a new number. Unmount before removing the
+  card: what was not written yet is lost.
 - The write-protect switch is not read; a card is always writable.
 - Default speed only (25 MHz, 4 bit); no high speed or UHS-I.
 - No suspend or runtime power management (Haiku has neither here).
@@ -121,7 +121,9 @@ readers.
 CMD0 puts every card in the idle state: none is selected, and the RCA and the
 4 bit bus are gone. So a scan first forgets the selected card (no CMD7 to
 deselect it, which a card put in again does not answer) and removes the node
-it published for the last card. The card found now gets a new node, and
+it published for the last card. rtsx also wakes the scan when a card is
+taken out; CMD0 then returns `B_DEV_NO_MEDIA`, and the scan waits for the
+next card with the old node already removed. The card found now gets a new node, and
 `mmc_disk` reads its size and sets the 4 bit bus again. `mmc_disk` has its own
 copy too (`distro/kernel/src/add-ons/kernel/drivers/disk/mmc/`): after its
 node is removed it fails every I/O and trim with `B_DEV_NO_MEDIA` and says so
