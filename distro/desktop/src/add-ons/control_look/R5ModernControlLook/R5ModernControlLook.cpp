@@ -140,9 +140,9 @@ accent_line_color()
 // #pragma mark - menus
 
 
-/*!	A menu in the R5 menu style: R5's BMenu gives its view the menu colour
-	(the window is glass with the GPU), so app_server erases it and the look
-	does not paint over it. Haiku's menus keep B_TRANSPARENT_COLOR.
+/*!	A menu in the R5 menu style: R5's BMenu gives its view the menu colour,
+	so app_server erases it and the look does not paint over it. Haiku's
+	menus keep B_TRANSPARENT_COLOR.
 */
 static bool
 r5_menu(BView* view)
@@ -175,18 +175,6 @@ effects_active()
 		sAsked = now;
 	}
 	return sActive;
-}
-
-
-/*!	The line round a menu, the same as R5's BMenu gives the compositor for
-	the round corners: #b8c0cc on #f7f8fa, #3a404c on #262b34.
-*/
-static rgb_color
-menu_edge_color(const rgb_color& base)
-{
-	if (base.IsLight())
-		return blend(base, kInk, 0.25f);
-	return blend(base, kWhite, 0.10f);
 }
 
 
@@ -772,27 +760,19 @@ R5ModernControlLook::DrawMenuBackground(BView* view, BRect& rect,
 	if (!ShouldDraw(view, rect, updateRect))
 		return;
 
-	if (r5_menu(view)) {
-		// app_server erased the view (glass with the GPU); the straight
-		// sides of the line, the compositor draws it round the corners
-		view->PushState();
-		view->SetHighColor(menu_edge_color(base));
-		if ((borders & B_LEFT_BORDER) != 0)
-			view->StrokeLine(rect.LeftTop(), rect.LeftBottom());
-		if ((borders & B_RIGHT_BORDER) != 0)
-			view->StrokeLine(rect.RightTop(), rect.RightBottom());
-		if ((borders & B_TOP_BORDER) != 0)
-			view->StrokeLine(rect.LeftTop(), rect.RightTop());
-		if ((borders & B_BOTTOM_BORDER) != 0)
-			view->StrokeLine(rect.LeftBottom(), rect.RightBottom());
-		view->PopState();
-	} else {
+	// the R5 menu style: app_server erased the view in the menu colour,
+	// and the window's line is the decorator's
+	if (!r5_menu(view)) {
 		view->SetHighColor(base);
 		view->FillRect(rect);
 	}
 	// Haiku's bevel takes one pixel on each side asked for
 	inset_sides(rect, 1, 1, 1, 1, borders);
 }
+
+
+static void menu_item_background(BView* view, const BRect& rect,
+	const rgb_color& base, uint32 flags);
 
 
 //! A selected menu item: the accent, round, a little inside the row.
@@ -804,6 +784,17 @@ R5ModernControlLook::DrawMenuItemBackground(BView* view, BRect& rect,
 	if (!ShouldDraw(view, rect, updateRect))
 		return;
 
+	// BMenuItem set the colour of its label before this call
+	view->PushState();
+	menu_item_background(view, rect, base, flags);
+	view->PopState();
+}
+
+
+static void
+menu_item_background(BView* view, const BRect& rect, const rgb_color& base,
+	uint32 flags)
+{
 	const bool round = effects_active();
 
 	if (dynamic_cast<BMenuBar*>(view) != NULL) {
@@ -830,7 +821,7 @@ R5ModernControlLook::DrawMenuItemBackground(BView* view, BRect& rect,
 		// the R5 menu style: the row is the highlight, radius 6 (square
 		// without effects); the background is app_server's
 		rgb_color fill = base;
-		if ((flags & B_DISABLED) != 0)
+		if ((flags & BControlLook::B_DISABLED) != 0)
 			fill = disable_color(fill, ui_color(B_MENU_BACKGROUND_COLOR));
 		view->PushState();
 		view->SetDrawingMode(B_OP_ALPHA);
@@ -850,7 +841,7 @@ R5ModernControlLook::DrawMenuItemBackground(BView* view, BRect& rect,
 	view->FillRect(rect);
 
 	rgb_color fill = base;
-	if ((flags & B_DISABLED) != 0)
+	if ((flags & BControlLook::B_DISABLED) != 0)
 		fill = disable_color(fill, background);
 
 	BRect face(rect);

@@ -54,34 +54,38 @@ fi
 
 if [ "$1" = menus ] || [ "$1" = safe-menus ]; then
 	# the R5 menu style (docs/design/THEMING.md, "Menus"): the Deskbar
-	# menu with a submenu, StyledEdit's Document menu (marks, shortcuts),
-	# a Tracker window's File menu; light and dark
+	# menu with a submenu, StyledEdit's File and Document menus (marks,
+	# shortcuts), a Tracker window's File menu; light and dark. The first
+	# shot tells the host the screen size before it clicks.
 	p=""
 	[ "$1" = safe-menus ] && p="safe-" && note "safemode $(safemode)"
-	/boot/system/apps/StyledEdit > /dev/null 2>&1 &
-	sleep 3
 	open /boot/home
 	sleep 4
+	/boot/system/apps/StyledEdit > /dev/null 2>&1 &
+	sleep 4
+	shot ${p}menus-start
 	for mode in light dark; do
 		theme "R5 Modern" $mode; sleep 2
+		# StyledEdit is in front: File, then Document (the fifth title)
+		say "keys alt esc"; sleep 3; shot ${p}menus-styled-file-$mode
+		for n in 1 2 3 4; do say "key right"; sleep 1; done
+		sleep 3; shot ${p}menus-styled-document-$mode
+		say "key esc"; say "key esc"; sleep 2
+		# the Deskbar menu, then the pointer on Applications opens it
 		say "click 1159 36"; sleep 3; shot ${p}menus-deskbar-$mode
-		say "key down"; say "key down"; say "key down"; say "key down"
-		say "key down"; say "key down"; sleep 1; say "key right"; sleep 3
-		shot ${p}menus-deskbar-sub-$mode
+		say "move 960 370"; sleep 3; shot ${p}menus-deskbar-sub-$mode
 		say "key esc"; say "key esc"; say "key esc"; sleep 2
-		hey -s application/x-vnd.Haiku-StyledEdit set Active of Window 0 			to true > /dev/null 2>&1
-		sleep 2
-		say "keys alt esc"; sleep 1; say "key right"; say "key right"
-		say "key right"; sleep 2; shot ${p}menus-styled-document-$mode
+		# Tracker's home window in front, then its File menu
+		open /boot/home; sleep 4
+		say "keys alt esc"; sleep 3; shot ${p}menus-tracker-file-$mode
 		say "key esc"; say "key esc"; sleep 2
-		hey -s application/x-vnd.Be-TRAK set Active of Window home 			to true > /dev/null 2>&1
-		sleep 2
-		say "keys alt esc"; sleep 2; shot ${p}menus-tracker-file-$mode
-		say "key esc"; say "key esc"; sleep 2
+		# StyledEdit in front again: a new window
+		/boot/system/apps/StyledEdit > /dev/null 2>&1 &
+		sleep 4
 	done
 	theme "R5" light; sleep 2
-	say "click 1159 36"; sleep 3; shot ${p}menus-deskbar-r5-light
-	say "key esc"; sleep 2
+	say "keys alt esc"; sleep 3; shot ${p}menus-styled-file-r5-light
+	say "key esc"; say "key esc"; sleep 2
 	$T theme get >> "$out/notes.txt" 2>&1
 	say "done"
 	exit 0

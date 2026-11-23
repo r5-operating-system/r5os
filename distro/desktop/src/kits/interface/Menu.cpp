@@ -1688,30 +1688,29 @@ r5_send_window_setting(int32 code, int32 token, const void* value,
 }
 
 
-/*!	The window of a menu in the R5 menu style: no border, round corners
-	(10 at 12 points; stepped in the CPU mode), the full shadow, a thin line
-	round the corners (the control look draws the straight sides), and the
-	menu's background as glass, shown with the GPU only. These are the
-	calls of libr5ui's <WindowEffects.h>, sent here because libbe does not
-	link libr5ui. A window that was styled goes back to Haiku's when the
-	look no longer asks for the style. The window is locked.
+/*!	The window of a menu in the R5 menu style: round corners (10 at 12
+	points; stepped in the CPU mode) and the full shadow (GPU mode), through
+	the messages behind libr5ui's <WindowEffects.h>, sent here because libbe
+	does not link libr5ui. The menu view gets the menu colour, so app_server
+	erases it and a highlight leaves nothing behind. The window keeps
+	Haiku's bordered look, whose line the R5 Modern decorator draws in the
+	menu's edge colour and the compositor carries round the corners: a menu
+	window without a border did not show (QEMU, 23 Nov 2026). The menus are
+	opaque: with the menu view as glass, a menu window that moved to the
+	next title of a menu bar kept the old picture (QEMU, 23 Nov 2026). A
+	window that was styled goes back to Haiku's when the look no longer asks
+	for the style. The window is locked.
 */
 static void
 r5_style_menu_window(BMenuWindow* window, BMenu* menu)
 {
 	bool r5Style = BPrivate::MenuPrivate(menu).R5Style();
-	bool styled = window->Look() == B_NO_BORDER_WINDOW_LOOK;
+	bool styled = menu->ViewColor() != B_TRANSPARENT_COLOR;
 	if (!r5Style && !styled)
 		return;
 
 	rgb_color background = ui_color(B_MENU_BACKGROUND_COLOR);
-	window_look look = r5Style ? B_NO_BORDER_WINDOW_LOOK
-		: B_BORDERED_WINDOW_LOOK;
-	if (window->Look() != look)
-		window->SetLook(look);
 	menu->SetViewColor(r5Style ? background : B_TRANSPARENT_COLOR);
-	// app_server must know the menu view before the glass call
-	window->Sync();
 
 	int32 windowToken = _get_object_token_(window);
 	float radius = r5Style
@@ -1722,18 +1721,6 @@ r5_style_menu_window(BMenuWindow* window, BMenu* menu)
 		// B_WINDOW_SHADOW_FULL, or B_WINDOW_SHADOW_DEFAULT
 	r5_send_window_setting(AS_R5_SET_WINDOW_SHADOW, windowToken, &shadow,
 		sizeof(shadow));
-
-	BPrivate::AppServerLink link;
-	link.StartMessage(AS_R5_SET_WINDOW_EDGE_LINE);
-	link.Attach<int32>(windowToken);
-	link.Attach<rgb_color>(BPrivate::MenuPrivate::R5EdgeColor(background));
-	link.Attach<float>(r5Style ? 1.0f : 0.0f);
-	int32 reply;
-	link.FlushWithReply(reply);
-
-	bool glass = r5Style;
-	r5_send_window_setting(AS_R5_SET_VIEW_GLASS, _get_object_token_(menu),
-		&glass, sizeof(glass));
 }
 // SPDX-SnippetEnd
 

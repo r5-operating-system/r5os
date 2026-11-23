@@ -38,6 +38,7 @@
 				<li><a href="#controls">A control look</a> &mdash; the template add-on.</li>
 				<li><a href="#scrollbars">The scroll bar width</a> &mdash; <code class="inline">GetScrollBarWidth()</code>.</li>
 				<li><a href="#menubar">Where a menu bar starts</a> &mdash; <code class="inline">GetBackgroundInsets()</code>.</li>
+				<li><a href="#menus">The R5 menu style</a> &mdash; <code class="inline">GetBackgroundInsets()</code> for menus.</li>
 				<li><a href="#decorator">A window decorator</a> &mdash; the frame and the tab.</li>
 				<li><a href="#colours">Light and dark</a> &mdash; <code class="inline">ui_color</code>, never fixed colours.</li>
 				<li><a href="#api">The calls</a> &mdash; list, read, apply, save, and the notification.</li>
@@ -135,6 +136,19 @@ instantiate_control_look(image_id id)
 				<code class="inline">BMenuBar</code>, when the bar is on the left edge of a window with a frame; the
 				open menu follows its title. R5 Modern returns 8 more at 12 points, so the titles clear its round
 				window corner. Return Haiku's value when your windows have square corners.</p></div>
+		</section>
+
+		<section class="entry" id="menus">
+			<div class="entry-header"><h2 class="plain">The R5 menu style</h2><span class="kind">BControlLook</span></div>
+			<p>Return more than 1 for <code class="inline">B_MENU_BACKGROUND</code> and R5's
+			<code class="inline">BMenu</code> lays out its menus in the R5 menu style: that inset is the space
+			inside the menu window, and the <code class="inline">B_MENU_ITEM_BACKGROUND</code> inset is the
+			padding round an item's content (R5 Modern: 5, and 11, 9 and a row of 26 at 12 points). The menu
+			window gets round corners and the shadow with the GPU; its view has the menu colour, so
+			<code class="inline">DrawMenuBackground()</code> draws nothing (the line is the decorator's), and
+			<code class="inline">DrawMenuItemBackground()</code> only the highlight. The shortcut is text, the
+			check mark and the dot are drawn by <code class="inline">BMenuItem</code>, the submenu arrow by your
+			<code class="inline">DrawArrowShape()</code>. Return Haiku's 1 and menus stay Haiku's.</p>
 		</section>
 
 		<section class="entry" id="decorator">

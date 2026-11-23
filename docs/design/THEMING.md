@@ -99,6 +99,52 @@ haiku_extras.
   symbol is added to libbe; the change is inside `BMenu`, like the live
   switch in `BWindow`.
 
+### Menus (owner's approval of the menu mockup, 23 Nov 2026)
+
+The reference is the menu mockup in `docs/design/menu-mockup/` (boards M1
+to M6; `scripts/render-menu-mockup.py` renders them). One menu look for
+every program with the R5 Modern controls, drawn by the control look;
+`BMenu` and `BMenuItem` keep Haiku's API, and R5's copies of their sources
+lay out and draw the items.
+
+- The R5 menu style is asked for by the control look, through Haiku's
+  `GetBackgroundInsets()`: more than 1 for `B_MENU_BACKGROUND` (R5 Modern
+  returns 5, the space inside the menu window), and `B_MENU_ITEM_BACKGROUND`
+  is the padding round an item's content (11 at the left, 9 at the right,
+  and a row of 26 at 12 points). Haiku's looks return 1, so their menus do
+  not move. Only a column menu in a menu window takes the style; a menu
+  bar, and a menu inside an ordinary window (Deskbar's own bars), do not.
+- Rows are 26, the highlight is the accent with white text and radius 6;
+  separators are one line, 8 in from each side; the shortcut is text at the
+  right ("Shift+Alt+W": the modifiers by the key they are on, as Haiku's key
+  caps), a little smaller (11.5 to 13) and muted; the submenu chevron is the
+  mockup's path. A menu with a marked item, or a radio menu, keeps a 12 px
+  column for the check mark or the dot after 7 (M6), and the label moves 16
+  more; other menus start the label at 11 (M4). A submenu opens beside its
+  menu with a gap of 3, its first row level with the item.
+- The window: round corners (10 at 12 points) and the full shadow, through
+  the existing window effects path (`AS_R5_SET_WINDOW_CORNER_RADIUS` and
+  `AS_R5_SET_WINDOW_SHADOW`, the messages behind libr5ui's
+  `<WindowEffects.h>`; libbe sends them itself because it does not link
+  libr5ui). The menu window keeps Haiku's bordered look: a borderless menu
+  window did not show in QEMU. Its line is the decorator's: R5 Modern draws
+  a bordered window that avoids the focus (menus, tool tips) in the menu's
+  edge colour (`#b8c0cc` light, `#3a404c` dark), and the compositor carries
+  it round the corners.
+- Chosen: the menus are opaque, the menu colour, with the GPU too. Glass
+  through `AS_R5_SET_VIEW_GLASS` was tried: a menu window that moved to the
+  next title of a menu bar kept the old picture (QEMU, 23 Nov 2026). The
+  menu's view gets the menu colour, so app_server erases it and a highlight
+  leaves nothing behind.
+- Without effects or in Safe mode the same colours and no shadow; the
+  corners are stepped, and the highlight and the menu bar pill are square
+  (the look asks app_server whether the effects show, at most once a
+  second).
+- The menu bar keeps choice A and Haiku's height; its open title is a quiet
+  pill (black 7 % light, white 10 % dark, radius 6) with the text in its own
+  colour.
+- R5 Modern light's menu colour is the mockup's `#f7f8fa` (was white).
+
 ### Live switching
 
 A running program takes new controls and colours without a restart.
@@ -273,6 +319,16 @@ in QEMU without the owner.
    the theme (another add-on gives its own width). `BScrollBar` and
    `BScrollView` ask it; a program that places scroll bars with
    `B_V_SCROLL_BAR_WIDTH` keeps Haiku's width and still works.
+
+7. **Menus: what differs from the mockup.** The selected row keeps the
+   regular weight (the mockup has 600): a bold label would be wider than the
+   width the menu was laid out for. The menu bar keeps Haiku's height (the
+   mockup's bar is 28). The Deskbar menu's icons start at 11, the Tracker
+   board's text inset (the Deskbar board has 9). The mark column follows the
+   parts board (after 7); the Tracker "Open with" board puts it after 11.
+   The pop-up field keeps radius 7 in Safe mode (the parts board shows 3), as
+   every other field does. Headings inside a menu (the parts board's "Wrap")
+   are not a Haiku menu item and are not drawn.
 
 ## The Theme Kit (owner's addition, 23 Nov 2026)
 

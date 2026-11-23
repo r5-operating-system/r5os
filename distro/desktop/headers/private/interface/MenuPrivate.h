@@ -93,7 +93,6 @@ public:
 									size_t size);
 	static	rgb_color			R5Blend(const rgb_color& from,
 									const rgb_color& to, float amount);
-	static	rgb_color			R5EdgeColor(const rgb_color& background);
 	static	rgb_color			R5SeparatorColor(
 									const rgb_color& background);
 // SPDX-SnippetEnd

@@ -175,6 +175,7 @@ R5ModernDecorator::R5ModernDecorator(DesktopSettings& settings, BRect frame,
 	fTabUnder(kTabUnder)
 {
 	fPanelColor = settings.UIColor(B_PANEL_BACKGROUND_COLOR);
+	fMenuColor = settings.UIColor(B_MENU_BACKGROUND_COLOR);
 }
 
 
@@ -310,6 +311,28 @@ R5ModernDecorator::UpdateColors(DesktopSettings& settings)
 {
 	R5Decorator::UpdateColors(settings);
 	fPanelColor = settings.UIColor(B_PANEL_BACKGROUND_COLOR);
+	fMenuColor = settings.UIColor(B_MENU_BACKGROUND_COLOR);
+}
+
+
+/*!	A menu (a bordered window that avoids the focus: menus and tool tips)
+	has its line in the menu's edge colour of the menu mockup, #b8c0cc on
+	#f7f8fa, #3a404c on #262b34 (docs/design/THEMING.md, "Menus"); the
+	compositor carries it round the round corners R5's BMenu asks for.
+*/
+void
+R5ModernDecorator::GetComponentColors(Component component, uint8 highlight,
+	ComponentColors _colors, Decorator::Tab* tab)
+{
+	R5Decorator::GetComponentColors(component, highlight, _colors, tab);
+	if (component == COMPONENT_TAB || highlight != 0 || tab == NULL
+		|| tab->look != B_BORDERED_WINDOW_LOOK
+		|| (tab->flags & B_AVOID_FOCUS) == 0) {
+		return;
+	}
+	static const rgb_color kInk = { 15, 23, 42, 255 };
+	_colors[5] = fMenuColor.IsLight() ? mix_color(fMenuColor, kInk, 0.25f)
+		: mix_color(fMenuColor, kWhite, 0.10f);
 }
 
 

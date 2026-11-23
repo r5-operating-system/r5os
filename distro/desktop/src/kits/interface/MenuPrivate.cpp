@@ -21,6 +21,7 @@
 // SPDX-License-Identifier: MIT
 #include <ControlLook.h>
 #include <Font.h>
+#include <MenuItem.h>
 #include <Window.h>
 
 #include <MenuWindow.h>
@@ -506,7 +507,7 @@ MenuPrivate::R5ShortcutLabel(char shortcut, uint32 modifiers, char* buffer,
 	const char* symbol = key;
 	uint8 character = static_cast<uint8>(shortcut);
 	if (character == B_DELETE)
-		symbol = "â¦";
+		symbol = "\xe2\x8c\xa6";
 	else if (character <= B_SPACE && kUTF8ControlMap[character] != NULL)
 		symbol = kUTF8ControlMap[character];
 	else
@@ -530,19 +531,6 @@ MenuPrivate::R5Blend(const rgb_color& from, const rgb_color& to,
 		+ (to.blue - from.blue) * amount));
 	color.alpha = 255;
 	return color;
-}
-
-
-/*!	The line round a menu: #b8c0cc on #f7f8fa (light), #3a404c on #262b34
-	(dark). The control look draws the straight sides with the same colour.
-*/
-/* static */
-rgb_color
-MenuPrivate::R5EdgeColor(const rgb_color& background)
-{
-	if (background.IsLight())
-		return R5Blend(background, kR5Ink, 0.25f);
-	return R5Blend(background, kR5White, 0.10f);
 }
 
 
