@@ -302,8 +302,10 @@ TBarView::ApplyStyle()
 			fExpandoMenuBar->StopMonitoringWindows();
 	}
 
-	window->SetLook(modern ? B_NO_BORDER_WINDOW_LOOK
-		: B_BORDERED_WINDOW_LOOK);
+	window_look wantLook = modern ? B_NO_BORDER_WINDOW_LOOK
+		: B_BORDERED_WINDOW_LOOK;
+	if (window->Look() != wantLook)
+		window->SetLook(wantLook);
 
 	// Fixed normal (Vertical) width: shared between R5 and R5 Modern,
 	// reset to Haiku's default width when switching back to Classic.

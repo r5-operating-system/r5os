@@ -63,6 +63,7 @@ All rights reserved.
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+#include <R5UI.h>
 #include "DeskbarStyle.h"
 #include <MessageRunner.h>
 // SPDX-SnippetEnd
@@ -318,9 +319,20 @@ TBarView::MessageReceived(BMessage* message)
 // SPDX-License-Identifier: MIT
 		case B_COLORS_UPDATED:
 			SetViewUIColor(B_MENU_BACKGROUND_COLOR);
-			// Re-apply style in both Default (R5) and Classic (Haiku) so
-			// tray symbols and colors update when switching out of Dark Mode.
-			ApplyStyle();
+			if (R5Deskbar::Modern()) {
+				ApplyStyle();
+			} else if (Window() != NULL && fReplicantTray != NULL) {
+				rgb_color text = ui_color(B_MENU_ITEM_TEXT_COLOR);
+				r5_set_deskbar_tray_style(R5_TRAY_STYLE_CLASSIC, text);
+				BMessage changed(R5_DESKBAR_TRAY_STYLE_CHANGED);
+				changed.AddInt32("style", (int32)R5_TRAY_STYLE_CLASSIC);
+				changed.AddColor("color", text);
+				for (int32 i = 0; i < fReplicantTray->CountChildren(); i++) {
+					BView* item = fReplicantTray->ChildAt(i);
+					if (item != fReplicantTray->fTime)
+						Window()->PostMessage(&changed, item);
+				}
+			}
 			Invalidate();
 			break;
 
