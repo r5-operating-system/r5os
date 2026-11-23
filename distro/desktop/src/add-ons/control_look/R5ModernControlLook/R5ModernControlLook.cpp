@@ -429,8 +429,8 @@ R5ModernControlLook::_ButtonColors(BView* view, const rgb_color& base,
 			line = accent_color();
 	} else {
 		// Subtle, clean disabled button tinted against its real backdrop
-		fill = blend(background, background.IsLight() ? kInk : kWhite, 0.04f);
-		line = blend(background, background.IsLight() ? kInk : kWhite, 0.14f);
+		fill = blend(background, background.IsLight() ? kInk : kWhite, 0.06f);
+		line = blend(background, background.IsLight() ? kInk : kWhite, 0.20f);
 	}
 	return true;
 }
@@ -509,6 +509,17 @@ R5ModernControlLook::DrawButtonFrame(BView* view, BRect& rect,
 	rgb_color fill;
 	rgb_color line;
 	if (_ButtonColors(view, base, flags, fill, line)) {
+		// Fill the outer 1 px and rounded corners with the real parent
+		// backdrop so buttons placed on BCard surfaces never show a 1 px
+		// rectangular halo from BButton's default B_PANEL_BACKGROUND_COLOR.
+		rgb_color backdrop = view->Parent() != NULL
+			? view->Parent()->ViewColor() : background;
+		if (backdrop.alpha > 0) {
+			view->PushState();
+			view->SetHighColor(backdrop);
+			view->FillRect(rect);
+			view->PopState();
+		}
 		// the frame owns the outer pixel: Haiku's outer recessed edge
 		BRect face(rect);
 		inset_sides(face, 1, 1, 1, 1, borders);
@@ -1526,8 +1537,10 @@ R5ModernControlLook::DrawTabFrame(BView* view, BRect& rect,
 	// the line under the tabs; always use the window's panel background so
 	// the tab strip matches the surrounding window in light and dark mode
 	rgb_color panel = ui_color(B_PANEL_BACKGROUND_COLOR);
-	view->SetHighColor(panel);
-	view->FillRect(rect);
+	if (view->ViewColor() != B_TRANSPARENT_COLOR) {
+		view->SetHighColor(panel);
+		view->FillRect(rect);
+	}
 	view->SetHighColor(line_color(panel));
 	if (side == B_TOP_BORDER)
 		view->StrokeLine(rect.LeftBottom(), rect.RightBottom());
@@ -1857,7 +1870,7 @@ R5ModernControlLook::DrawLabel(BView* view, const char* label,
 	if ((flags & B_DISABLED) != 0 && textColor == NULL) {
 		rgb_color bg = view->Parent() != NULL ? view->Parent()->ViewColor()
 			: view->LowColor();
-		rgb_color muted = blend(bg, ui_color(B_CONTROL_TEXT_COLOR), 0.45f);
+		rgb_color muted = blend(bg, ui_color(B_CONTROL_TEXT_COLOR), 0.55f);
 		HaikuControlLook::DrawLabel(view, label, icon, rect, updateRect,
 			bg, flags & ~B_DISABLED, alignment, &muted);
 		return;

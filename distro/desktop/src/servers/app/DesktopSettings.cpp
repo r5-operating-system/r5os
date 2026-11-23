@@ -106,6 +106,46 @@ DesktopSettingsPrivate::_SetDefaults()
 		sizeof(color_map));
 	memcpy((void*)fShared.colors, BPrivate::kDefaultColors,
 		sizeof(rgb_color) * kColorWhichCount);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// Default R5 Light palette from first boot (matches Themes.cpp
+	// kModernLightColors + Blue accent so FirstBootPrompt and menus
+	// start in R5 Light without waiting for a theme switch).
+	static const struct {
+		color_which	which;
+		rgb_color	color;
+	} kR5LightDefaults[] = {
+		{ B_PANEL_BACKGROUND_COLOR,			{ 0xee, 0xf1, 0xf5, 255 } },
+		{ B_PANEL_TEXT_COLOR,				{ 0x14, 0x14, 0x14, 255 } },
+		{ B_DOCUMENT_BACKGROUND_COLOR,		{ 0xff, 0xff, 0xff, 255 } },
+		{ B_DOCUMENT_TEXT_COLOR,			{ 0x14, 0x14, 0x14, 255 } },
+		{ B_CONTROL_BACKGROUND_COLOR,		{ 0xf7, 0xf8, 0xfa, 255 } },
+		{ B_CONTROL_TEXT_COLOR,				{ 0x14, 0x14, 0x14, 255 } },
+		{ B_CONTROL_BORDER_COLOR,			{ 0xb4, 0xbc, 0xc8, 255 } },
+		{ B_CONTROL_HIGHLIGHT_COLOR,		{ 0x00, 0x84, 0xff, 255 } },
+		{ B_CONTROL_MARK_COLOR,				{ 0x00, 0x84, 0xff, 255 } },
+		{ B_NAVIGATION_BASE_COLOR,			{ 0x00, 0x84, 0xff, 255 } },
+		{ B_MENU_BACKGROUND_COLOR,			{ 0xf7, 0xf8, 0xfa, 255 } },
+		{ B_MENU_SELECTED_BACKGROUND_COLOR,	{ 0x00, 0x84, 0xff, 255 } },
+		{ B_MENU_ITEM_TEXT_COLOR,			{ 0x14, 0x14, 0x14, 255 } },
+		{ B_MENU_SELECTED_ITEM_TEXT_COLOR,	{ 0xff, 0xff, 0xff, 255 } },
+		{ B_MENU_SELECTED_BORDER_COLOR,		{ 0x00, 0x84, 0xff, 255 } },
+		{ B_LIST_BACKGROUND_COLOR,			{ 0xff, 0xff, 0xff, 255 } },
+		{ B_LIST_SELECTED_BACKGROUND_COLOR,	{ 0x00, 0x84, 0xff, 255 } },
+		{ B_LIST_ITEM_TEXT_COLOR,			{ 0x14, 0x14, 0x14, 255 } },
+		{ B_LIST_SELECTED_ITEM_TEXT_COLOR,	{ 0xff, 0xff, 0xff, 255 } },
+		{ B_SCROLL_BAR_THUMB_COLOR,			{ 0xb6, 0xbe, 0xc9, 255 } },
+		{ B_STATUS_BAR_COLOR,				{ 0x00, 0x84, 0xff, 255 } }
+	};
+	for (size_t i = 0; i < sizeof(kR5LightDefaults) / sizeof(kR5LightDefaults[0]);
+		i++) {
+		int32 index = color_which_to_index(kR5LightDefaults[i].which);
+		if (index >= 0 && index < kColorWhichCount)
+			fShared.colors[index] = kR5LightDefaults[i].color;
+	}
+	fMenuInfo.background_color.set_to(0xf7, 0xf8, 0xfa);
+// SPDX-SnippetEnd
 
 	gSubpixelAntialiasing = true;
 	gDefaultHintingMode = HINTING_MODE_ON;

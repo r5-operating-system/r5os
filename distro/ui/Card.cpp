@@ -47,10 +47,12 @@ static const char* kCardClassName = "BAppearanceKit::BCard";
 static rgb_color
 card_fill(card_style style)
 {
+	rgb_color panel = ui_color(B_PANEL_BACKGROUND_COLOR);
 	if (style == B_CARD_PANEL) {
-		return tint_color(ui_color(B_PANEL_BACKGROUND_COLOR),
-			B_DARKEN_1_TINT);
+		return tint_color(panel, B_DARKEN_1_TINT);
 	}
+	if (!panel.IsLight())
+		return mix_color(panel, make_color(255, 255, 255), 14);
 	return ui_color(B_DOCUMENT_BACKGROUND_COLOR);
 }
 
@@ -62,9 +64,14 @@ card_fill(card_style style)
 static void
 apply_card_view_color(BView* view, card_style style)
 {
+	rgb_color panel = ui_color(B_PANEL_BACKGROUND_COLOR);
 	if (style == B_CARD_PANEL) {
 		view->SetViewUIColor(B_PANEL_BACKGROUND_COLOR, B_DARKEN_1_TINT);
 		view->SetLowUIColor(B_PANEL_BACKGROUND_COLOR, B_DARKEN_1_TINT);
+	} else if (!panel.IsLight()) {
+		rgb_color elevated = mix_color(panel, make_color(255, 255, 255), 14);
+		view->SetViewColor(elevated);
+		view->SetLowColor(elevated);
 	} else {
 		view->SetViewUIColor(B_DOCUMENT_BACKGROUND_COLOR);
 		view->SetLowUIColor(B_DOCUMENT_BACKGROUND_COLOR);
@@ -75,7 +82,10 @@ apply_card_view_color(BView* view, card_style style)
 static rgb_color
 card_border()
 {
-	return tint_color(ui_color(B_PANEL_BACKGROUND_COLOR), B_DARKEN_2_TINT);
+	rgb_color panel = ui_color(B_PANEL_BACKGROUND_COLOR);
+	if (!panel.IsLight())
+		return mix_color(panel, make_color(255, 255, 255), 34);
+	return tint_color(panel, B_DARKEN_2_TINT);
 }
 
 

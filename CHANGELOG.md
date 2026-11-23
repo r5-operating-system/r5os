@@ -8,7 +8,16 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
-<<<<<<< HEAD
+## 2026-11-23 - Themes - Round 2C polish (R5 Light first-boot defaults, transparent About R5 tabs, BCard button halo fix, Deskbar page layout, desktop icon restore, Slate Dark mode)
+
+- Problem: second 5625U stick test uncovered: (1) `app_server` still booted into Haiku Classic `#d8d8d8` grey until the first theme switch; (2) `About R5`'s `BTabView` painted an opaque `#eef1f5` strip over the frosted-glass window; (3) `BButton` on dark-grey `BCard` surfaces (Bluetooth `Disconnect`/`Forget`) showed a 1 px white rectangular halo from `BButton`'s default `B_PANEL_BACKGROUND_COLOR`; (4) Settings → `Desktop and Deskbar` needed an unnecessary scrollbar because `Window` sat below `Applications` and `Menu`; (5) desktop icons pushed down by a top Horizontal Deskbar stayed down after Deskbar moved away; (6) Dark mode (`#1f232b` window / `#15181e` cards) was too dark and inverted card elevation.
+- Changed:
+  - `distro/desktop/src/servers/app/DesktopSettings.cpp`: initialized default `app_server` palette and `fMenuInfo.background_color` to R5 Light + Blue accent from first boot.
+  - `distro/rest/src/apps/aboutsystem/AboutSystem.cpp`, `distro/desktop/src/add-ons/control_look/R5ModernControlLook/R5ModernControlLook.cpp`: set `fTabView` to `B_TRANSPARENT_COLOR` and skipped `DrawTabFrame()` `FillRect()` on transparent views so frosted glass shows through behind the tabs; filled the outer 1 px of `DrawButtonFrame()` with `Parent()->ViewColor()` to eliminate the 1 px halo on `BCard` buttons, and refined disabled button contrast.
+  - `distro/settings/DeskbarModule.cpp`: stacked `Applications` and `Menu` in the left column with `Window` beside them so the page fits 1030×610 without a scrollbar.
+  - `distro/desktop/src/kits/tracker/PoseView.cpp`: remembered original positions (by `node_ref`) of desktop icons displaced by Deskbar and restored them automatically when Deskbar moves away (unless moved manually).
+  - `distro/ui/Themes.cpp`, `Card.cpp`, `ActionCard.cpp`: updated Dark mode to **Slate** (`#2c323e` panel, `#353c4a` elevated cards, `#272c37` sidebar/list, `#222732` document, `#3d4556` controls) with readable pastel tag pills on dark action cards.
+
 ## 2026-11-23 - Themes - Round 2B fixes from 5625U stick test (permissions, equal-height buttons, rounded inputs, Deskbar tray chevron, Tracker desktop offset)
 
 - Problem: testing the Round 2 USB stick on the Ryzen 5 5625U uncovered: (1) `FirstBootPrompt` (`Try R5`, uid 0) created `~/config/settings/r5/theme` owned by root (`0644`), silently blocking `user` (uid 1000) from saving theme changes in Settings so the blue selection always snapped back to `R5 (changed)` and switching Deskbar to Compact reverted to square `R5`; (2) default blue buttons (`Try R5`, `Save`, `OK`) were taller than adjacent normal buttons; (3) disabled buttons on cards (e.g. Bluetooth `Disconnect`/`Forget`) had harsh washed-out contrast; (4) `About R5` tab strip background differed from the window panel; (5) `BTextControl` inputs across apps (Network Connections, Tracker path bar) had clipped square inner corners in `R5 Modern`; (6) flat toolbar buttons (`← → ↑` in Tracker's `BNavigator`) showed a mismatched background rectangle; (7) Deskbar's Compact pill left an empty gap after closing an app; (8) `ProcessController` on 12-thread CPUs was twice as wide as other tray icons, and Vertical Deskbar needed a fold chevron when more than 4 tray icons sit next to the clock; (9) switching Deskbar to top Horizontal left existing desktop icons (`R5`, `home`, `Trash`) hidden behind the bar.
@@ -29,7 +38,7 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
   - Fixes: locked superMenu->Window() in Menu.cpp::_CalcFrame(); quoted ccent and posted 
 5:control_look directly to e_app windows in Themes.cpp, forced light colors when kept.mode != now.mode (Dark -> Classic) and applied Deskbar style after UI colors; filled parent backdrop in Card.cpp/ActionCard.cpp (0 px in square themes, 8 px in R5 Modern); filled BSidebar::Draw() with B_LIST_BACKGROUND_COLOR, updated scrollbar on category expand, and relayed out SearchField on B_COLORS_UPDATED; used ase in R5ModernControlLook::DrawActiveTab/DrawInactiveTab, updated What's new/Licenses runs on B_COLORS_UPDATED in AboutSystem.cpp, and inset Tracker CountView and DraggableContainerIcon under rounded menu bars; gave Default (R5) Deskbar a fixed normal width (228 px scaled) shared by R5 and R5 Modern (resetting to gMinimumWindowWidth for Classic), 12 pt font, slimmer Compact pill, bold horizontal label sizing, and remembered previous tray/menu colors in _TookDeskbarColor().
 - Tested (23 Nov 2026): AMD64 scripts/build-locked.sh (jam_exit=0, mesa_exit=0). Verified in QEMU on private image copies in both GPU Lavapipe mode (qemu-theming.py, MISMATCH: 0) and Safe/CPU mode (qemu-theming.py --safe), zero crashes. Visually verified square R5 default, R5 Modern light & dark, Classic (Haiku) light Deskbar & StyledEdit, Settings Theme page with collapsed Custom colors and no Look and Feel duplicate, and clean BCard/BPageHeader corners. Not yet booted on physical 5625U hardware (final Themes.cpp color-before-Deskbar ordering tweak committed after the last QEMU run).
-=======
+
 ## 2026-11-23 - Card reader: a card that is taken out is removed at once
 
 Problem (stick 78, 5625U, main with #4572, `generated/boot-5625u-78/` in the stick worktree): a card put in after the start was found (`SDHC card found`, 4 bit, 25 reads without an error). After `rtsx: card removed` its volume and disk stayed; the owner unmounted it by hand. With #4572 the card's node was only removed by the scan of the next card.
@@ -56,7 +65,6 @@ Changed, after a review of the whole card path (rtsx, mmc_bus, mmc_disk) against
 Limits: a removed card's node goes when the next card is put in, not at once (the rtsx driver has no call to tell mmc_bus about a removal); an open disk stays until it is closed. A short window remains in which an I/O that passed the check just before the removal waits for the bus during the scan of the new card. The write-protect switch is not read. Default speed only. Writing a file is not proven on hardware: the driver logs only reads. sdhci itself is unchanged (it also sends CMD7 with RCA 0 as R1b; mmc_bus no longer sends that on a scan, but `mmc_disk` still deselects before CMD9 when a card was selected).
 
 Tested: not built and not booted yet; it goes on the next stick (card in, out and in again, mount, copy a file to it and read it back).
->>>>>>> origin/main
 
 ## 2026-11-23 - Updates - Haiku's system repository is no longer in the R5 image
 
