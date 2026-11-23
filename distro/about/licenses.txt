@@ -51,3 +51,9 @@ Realtek SD card readers, based on the OpenBSD rtsx driver by Uwe Stuehler and St
 
 License: ISC
 Source: https://www.openbsd.org
+
+# NTFS
+Reading and writing Windows disks, using NTFS-3G by Anton Altaparmakov, Szabolcs Szakacsits, Jean-Pierre Andre and others.
+
+License: GPL-2.0-or-later
+Source: https://github.com/tuxera/ntfs-3g

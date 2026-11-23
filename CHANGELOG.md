@@ -8,6 +8,13 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-23 - Licenses - the NTFS driver (NTFS-3G, GPL-2.0-or-later) is credited
+
+- Problem: the NTFS kernel add-on that R5 ships in the regular and the minimum image (Haiku's `file_systems/ntfs`, `minimum` image definition) links `libntfs` and `utils.c` from NTFS-3G, which are GPL-2.0-or-later in every file header. Neither `THIRD_PARTY_NOTICES.md`, `docs/LICENSING.md` nor the Licenses tab of About mentioned it (a search for "ntfs" had no hits). Found while checking the licence of `ntfsresize` for the installer design (`generated/INSTALL-UPDATE-DESIGN.md`).
+- Changed: a section in `THIRD_PARTY_NOTICES.md`, a row in the inventory of `docs/LICENSING.md`, and an "NTFS" block in `distro/about/licenses.txt`. The driver itself is unchanged. The add-on as shipped is GPL-2.0-or-later; Haiku's `kernel_interface.cpp` keeps its MIT header, and the disk system add-on `disk_systems/ntfs` is MIT and does not link the library.
+- Limits: not a file-by-file audit of the add-on. The GPL v2 text is Haiku's `data/licenses/GNU GPL v2`, already in the image; no copy was added to `LICENSES/`. The source offer for a release is still the open release item in `docs/LICENSING.md`.
+- Tested: text only. No build; the About text is copied by `scripts/apply-about.py` unchanged in form (same block layout as the other parts).
+
 ## 2026-11-23 - Themes - fixes from the external review of PR 4564
 
 - Problem: an external review of the pull request found square corners on menu fields, buttons without their right and bottom line, dark text on the accent in the Settings sidebar, an unreadable dark text selection, a dark Deskbar edge that was too heavy, white buttons on an inactive dark tab, a slider without the accent, a stub on the last tab, a square end on the progress bar, a fixed-height scroll bar preview, a clipped Parts box, the Save dialog's colour, a Save button with no parts, hand-copied themes that could not be deleted, a dropped scroll bar error, a non-atomic look swap, and a Deskbar front bar that ignored the accent.
