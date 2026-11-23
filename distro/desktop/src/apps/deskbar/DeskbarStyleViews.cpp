@@ -303,7 +303,10 @@ TBarView::ApplyStyle()
 			: B_WINDOW_SHADOW_EDGE;
 	}
 	set_window_shadow(window, shadow);
-	set_window_edge_line(window, EdgeColor(), WindowRadius() > 0 ? 1 : 0);
+	// the line round the arc in the GPU mode only: in the CPU mode a
+	// borderless window's rim would have nobody to paint it (review 2)
+	set_window_edge_line(window, EdgeColor(),
+		WindowRadius() > 0 && EffectsActive() ? 1 : 0);
 	if (root != this)
 		root->Invalidate();
 	// once more a moment later: the outline changes on the application's
@@ -1123,7 +1126,7 @@ R5Deskbar::StyleMenuWindow(BWindow* window)
 	BAppearanceKit::set_window_shadow(window,
 		BAppearanceKit::B_WINDOW_SHADOW_FULL);
 	BAppearanceKit::set_window_edge_line(window, EdgeColor(),
-		radius > 0 ? 1 : 0);
+		radius > 0 && EffectsActive() ? 1 : 0);
 }
 
 
