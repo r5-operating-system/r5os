@@ -18,7 +18,8 @@ Run in WSL. It works on its own copy of the image (never the shared one):
   3. stops its own QEMU and copies the syslog to OUT.
 
 --safe boots in Safe mode (the CPU mode) and runs the short guest list.
-Usage: scripts/qemu-deskbar-styles.py IMAGE OUT [--safe]
+--count runs only the window count of Default (R5) Horizontal.
+Usage: scripts/qemu-deskbar-styles.py IMAGE OUT [--safe | --count]
 """
 
 import json
@@ -170,6 +171,9 @@ def main():
     safe = "--safe" in args
     if safe:
         args.remove("--safe")
+    count = "--count" in args
+    if count:
+        args.remove("--count")
     if len(args) != 2:
         print(__doc__)
         return 2
@@ -193,7 +197,7 @@ def main():
         "kernel": "syslog_time_stamps true\nsyslog_max_size 4M\n",
         "UserBootscript": "#!/bin/sh\n/bin/sh /boot/home/dstest %s"
                           " > /boot/home/dstest.txt 2>&1 &\n"
-                          % ("safe" if safe else ""),
+                          % ("safe" if safe else "count" if count else ""),
         "dstest": guest,
     }
     for name, text in files.items():

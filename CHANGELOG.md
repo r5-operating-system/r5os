@@ -7,6 +7,28 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-23 - Deskbar styles - the external review (points 6 to 12)
+
+Problem: an external review of PR #4561 found seven points; each was checked against the code first, and all seven held.
+
+What changed:
+- 6: `Window::SetCornerRadius()` now invalidates the views' screen clipping. The views kept the clipping cut to the old outline, so after round to square the corners were never drawn again (the dark specks), and Classic kept round top corners in Safe mode.
+- 7: the compositor's pixel compare leaves out the blended corners of round layers (`layer_round.area`); it compared them with the raw pixels (the `MISMATCH` beside the Deskbar). The guest script now moves a round window with the effects off, so the compare runs during the Classic step (it compares every 100th composed frame).
+- 8: Deskbar's glass needs frosted glass on in Appearance. app_server sends `BAppearanceKit::B_WINDOW_EFFECTS_CHANGED` (libr5ui, `'r5we'`, bool `"active"`, uint32 `"effects"`) to every program when the effects change or the compositor turns off, as Haiku does with `B_COLORS_UPDATED`; Deskbar applies its style again on it.
+- 9: in the CPU mode app_server paints the stepped rim of a window without a decorator (`Window::_DrawProgramRim()`); the clipping is a region of the pool, never NULL (`ConstrainClippingRegion(NULL)` was the earlier crash). Deskbar asks for its edge line in both modes again.
+- 10: the window watcher also runs for Default (R5) Horizontal; a changed count repaints and lays the bar out again (the first test showed "Style… 2": the item did not widen).
+- 11: each R5 tray item keeps its own style and colour (`struct r5_tray_look`, `r5_deskbar_tray_look()`, `r5_tray_look_update()`, added at the end of libr5ui); the values behind the getters change under one lock. Headers copied from Haiku for this: PowerStatusView.h, ProcessController.h, mail DeskbarView.h.
+- 12: the earlier claim was wrong. In Safe mode the network and volume items do draw the line symbols; what looked like their own coloured icons are colour fringes of the subpixel smoothing on the symbols in the CPU mode.
+
+Checked and left as it was: the menu corners (reviewer's B11) are set in `TDeskbarMenu::AttachedToWindow()`, before the menu window is shown and before Track; no call from Draw and no thread remains. Compact shows no count, so the watcher stays off there.
+
+Tested (QEMU, KVM, `-machine pc`, 2 CPUs, 2 GB, 1280 by 800; builds of 23 Nov about 05:53 and 06:14 with `scripts/build-locked.sh`, `jam_exit=0`, `mesa_exit=0`, the image copied under the held lock):
+- the whole list (run 12, GPU mode, Lavapipe): no hang; the compare ran 8 times, `compose compare ok` each time, 4 of them during the Classic step, no `MISMATCH`; the square floating Vertical after round has clean corners (no specks); the zoom numbers as before.
+- Safe mode (safe 5, `gpu compositor off: safe mode`): no crash with the CPU edge line; Classic after Default (R5) has square top corners; the stepped grey line runs round the Default (R5) corners.
+- the window count (count 3, Horizontal at the bottom): StyledEdit with 1, 2, 3, 2 and 1 windows shows no count, 2, 3, 2 and none, with the full name.
+
+Not proven: the frosted glass switch and a GPU to CPU fallback while Deskbar runs (the message is sent; no run switched them while watching Deskbar); a real screen, the 5625U, Wi-Fi, a battery, mail. Found, not fixed: in Safe mode the Classic Deskbar's logo button is empty (it was in the earlier Safe mode picture too); the subpixel colour fringes on the tray symbols in the CPU mode.
+
 ## 2026-11-23 - Deskbar styles - the QEMU test
 
 Problem: the Deskbar styles had to be checked without the owner, against the mockup.

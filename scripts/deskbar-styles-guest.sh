@@ -43,6 +43,27 @@ sleep 3
 sleep 8
 say "ready"
 
+if [ "$1" = count ]; then
+	# Default (R5) Horizontal: the window count of one program follows its
+	# windows (external review, point 10)
+	SE=application/x-vnd.Haiku-StyledEdit
+	# at the bottom: the windows open at the top and would hide the items
+	style 0 2 1 1; place 1; shot count-one
+	/boot/system/apps/StyledEdit > /dev/null 2>&1 &
+	sleep 4; shot count-two
+	/boot/system/apps/StyledEdit > /dev/null 2>&1 &
+	sleep 4; shot count-three
+	# by title: index 0 is not always a document window
+	hey -s $SE quit Window "Untitled 3" > /tmp/dstest-quit.txt 2>&1
+	sleep 4; shot count-back-two
+	hey -s $SE quit Window "Untitled 2" >> /tmp/dstest-quit.txt 2>&1
+	sleep 4; shot count-back-one
+	say "quit $(tr '
+' ' ' < /tmp/dstest-quit.txt)"
+	say "done"
+	exit 0
+fi
+
 if [ "$1" = safe ]; then
 	style 0 0 1 1; place 3; shot safe-vertical-round
 	style 0 1 1 1; place 3; shot safe-compact-round

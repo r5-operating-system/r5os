@@ -1223,6 +1223,13 @@ TExpandoMenuBar::monitor_team_windows(void* arg)
 						&& (teamItem->HasListedWindows() != hadListed
 							|| teamItem->ListedWindowCount() != hadCount)) {
 						itemModified = true;
+						// Default (R5) Horizontal: the count widens the
+						// item (QEMU, 23 Nov 2026: "Style… 2")
+						if (!teamMenu->Vertical()
+							&& teamItem->ListedWindowCount() != hadCount) {
+							teamMenu->InvalidateLayout();
+							resize = true;
+						}
 					}
 				}
 // SPDX-SnippetEnd
