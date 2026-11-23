@@ -584,6 +584,12 @@ BMenuItem::Draw()
 {
 	const color_which lowColor = fSuper->LowUIColor();
 	const color_which highColor = fSuper->HighUIColor();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	const rgb_color savedLow = fSuper->LowColor();
+	const rgb_color savedHigh = fSuper->HighColor();
+// SPDX-SnippetEnd
 
 	fSuper->SetLowColor(_LowColor());
 	fSuper->SetHighColor(_HighColor());
@@ -611,8 +617,14 @@ BMenuItem::Draw()
 		r5_draw_item_symbols(fSuper, Frame(), r5Padding, IsMarked(),
 			shortcut, modifiers, Submenu() != NULL, _HighColor(),
 			_LowColor(), _IsActivated());
-		fSuper->SetLowUIColor(lowColor);
-		fSuper->SetHighUIColor(highColor);
+		if (lowColor != B_NO_COLOR)
+			fSuper->SetLowUIColor(lowColor);
+		else
+			fSuper->SetLowColor(savedLow);
+		if (highColor != B_NO_COLOR)
+			fSuper->SetHighUIColor(highColor);
+		else
+			fSuper->SetHighColor(savedHigh);
 		return;
 	}
 // SPDX-SnippetEnd
@@ -631,8 +643,18 @@ BMenuItem::Draw()
 	}
 
 	// restore the parent menu's low color and high color
-	fSuper->SetLowUIColor(lowColor);
-	fSuper->SetHighUIColor(highColor);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (lowColor != B_NO_COLOR)
+		fSuper->SetLowUIColor(lowColor);
+	else
+		fSuper->SetLowColor(savedLow);
+	if (highColor != B_NO_COLOR)
+		fSuper->SetHighUIColor(highColor);
+	else
+		fSuper->SetHighColor(savedHigh);
+// SPDX-SnippetEnd
 }
 
 

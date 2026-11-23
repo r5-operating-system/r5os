@@ -278,6 +278,7 @@ enum {
 };
 
 static const uint32 kEffectFixedGlass = 0x100;
+static const uint32 kEffectDarkGlass = 0x200;
 
 
 struct compose_rect {
