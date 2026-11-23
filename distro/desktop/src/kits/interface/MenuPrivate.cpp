@@ -442,9 +442,12 @@ MenuPrivate::R5BarExtra(float* top, float* bottom) const
 {
 	*top = 0;
 	*bottom = 0;
+	// a row bar that sizes itself: a bar of a fixed height keeps its
+	// titles where they were (review of the external fixes)
 	if (fMenu == NULL || be_control_look == NULL
 		|| dynamic_cast<BMenuBar*>(fMenu) == NULL
 		|| dynamic_cast<_BMCMenuBar_*>(fMenu) != NULL
+		|| fMenu->fLayout != B_ITEMS_IN_ROW || !fMenu->fResizeToFit
 		|| fMenu->Window() == NULL)
 		return false;
 	switch (fMenu->Window()->Look()) {

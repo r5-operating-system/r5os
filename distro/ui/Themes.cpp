@@ -101,7 +101,7 @@ struct accent {
 	uint32		dark;
 };
 
-// mockup A1 (the Accent swatches) and A2 (blue a little lighter on dark)
+// mockup A1 (the Accent swatches) and A2 (on dark each a little deeper, under IsLight() (the dark Blue is darker than the light one))
 // The dark accents stay under Haiku's rgb_color::IsLight() line: a
 // Brightness() (the HSP formula, sqrt(.299 r2 + .587 g2 + .114 b2)) of 127
 // or less, so code that picks the text by it puts white text on them

@@ -65,6 +65,11 @@ scale()
 }
 
 
+// Painter's FillRect(), FillRoundRect() and FillEllipse() cover the rect's
+// right and bottom pixels: every shape here is given its rect as it is
+// (reviews of the external fixes: a "+1" drew one pixel too far).
+
+
 static float
 radius(float pixels)
 {
@@ -444,8 +449,7 @@ R5ModernControlLook::_FillButtonInside(BView* view, const BRect& rect,
 	view->ClipToRect(rect);
 	view->SetDrawingMode(B_OP_ALPHA);
 	view->SetHighColor(fill);
-	view->FillRoundRect(BRect(shape.left, shape.top, shape.right + 1,
-		shape.bottom + 1), r, r);
+	view->FillRoundRect(shape, r, r);
 	view->PopState();
 }
 
@@ -764,6 +768,8 @@ R5ModernControlLook::_FillFieldInside(BView* view, const BRect& rect,
 	rgb_color line = field_line_color(background);
 	if ((flags & B_DISABLED) != 0)
 		line = disable_color(line, background);
+	else if ((flags & B_INVALID) != 0)
+		line = ui_color(B_FAILURE_COLOR);
 	else if ((flags & B_FOCUSED) != 0)
 		line = accent_color();
 
@@ -771,8 +777,10 @@ R5ModernControlLook::_FillFieldInside(BView* view, const BRect& rect,
 	view->ClipToRect(rect);
 	view->SetHighColor(background);
 	view->FillRect(rect);
+	// the bar is 2 in from the field's frame (kVMargin), whose face is 1
+	// in: the face is the bar grown by 1
 	BRect face(rect);
-	face.InsetBy(-2, -2);
+	face.InsetBy(-1, -1);
 	_DrawFace(view, face, radius(7) - 1, fill, line);
 	view->PopState();
 }
@@ -869,8 +877,7 @@ menu_item_background(BView* view, const BRect& rect, const rgb_color& base,
 		view->SetDrawingMode(B_OP_ALPHA);
 		view->SetHighColor(pill);
 		float r = round ? radius(6) : 0;
-		view->FillRoundRect(BRect(face.left, face.top, face.right + 1,
-			face.bottom + 1), r, r);
+		view->FillRoundRect(face, r, r);
 		view->PopState();
 		return;
 	}
@@ -885,8 +892,7 @@ menu_item_background(BView* view, const BRect& rect, const rgb_color& base,
 		view->SetDrawingMode(B_OP_ALPHA);
 		view->SetHighColor(fill);
 		float r = round ? std::min(radius(6), floorf(rect.Height() / 2)) : 0;
-		view->FillRoundRect(BRect(rect.left, rect.top, rect.right + 1,
-			rect.bottom + 1), r, r);
+		view->FillRoundRect(rect, r, r);
 		view->PopState();
 		return;
 	}
@@ -907,8 +913,7 @@ menu_item_background(BView* view, const BRect& rect, const rgb_color& base,
 	view->PushState();
 	view->SetDrawingMode(B_OP_ALPHA);
 	view->SetHighColor(fill);
-	view->FillRoundRect(BRect(face.left, face.top, face.right + 1,
-		face.bottom + 1), radius(5), radius(5));
+	view->FillRoundRect(face, radius(5), radius(5));
 	view->PopState();
 }
 
@@ -958,7 +963,7 @@ R5ModernControlLook::DrawStatusBar(BView* view, BRect& rect,
 	view->FillRect(rect);
 
 	float r = std::min(radius(4), floorf(rect.Height() / 2));
-	BRect track(rect.left, rect.top, rect.right + 1, rect.bottom + 1);
+	BRect track(rect);
 	view->PushState();
 	view->SetDrawingMode(B_OP_ALPHA);
 	view->SetHighColor(blend(base, base.IsLight() ? kInk : kWhite, 0.08f));
@@ -1070,7 +1075,7 @@ R5ModernControlLook::DrawRadioButton(BView* view, BRect& rect,
 		line = disable_color(line, background);
 	}
 
-	BRect outer(rect.left, rect.top, rect.right + 1, rect.bottom + 1);
+	BRect outer(rect);
 	view->PushState();
 	view->SetDrawingMode(B_OP_ALPHA);
 	view->SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_OVERLAY);
@@ -1153,8 +1158,7 @@ R5ModernControlLook::DrawScrollBarButton(BView* view, BRect rect,
 		fill = pressed_color(fill);
 	view->SetDrawingMode(B_OP_ALPHA);
 	view->SetHighColor(fill);
-	view->FillRoundRect(BRect(face.left, face.top, face.right + 1,
-		face.bottom + 1), radius(4), radius(4));
+	view->FillRoundRect(face, radius(4), radius(4));
 
 	rgb_color arrow = ui_color(B_PANEL_TEXT_COLOR);
 	arrow = blend(fill, arrow, (flags & B_DISABLED) != 0 ? 0.3f : 0.6f);
@@ -1187,8 +1191,7 @@ R5ModernControlLook::_FillTrackPart(BView* view, BRect part, BRect track,
 		? floorf((face.Height() + 1) / 2) : floorf((face.Width() + 1) / 2);
 	view->SetDrawingMode(B_OP_ALPHA);
 	view->SetHighColor(track_color(base));
-	view->FillRoundRect(BRect(face.left, face.top, face.right + 1,
-		face.bottom + 1), r, r);
+	view->FillRoundRect(face, r, r);
 	view->PopState();
 }
 
@@ -1271,8 +1274,7 @@ R5ModernControlLook::DrawScrollBarThumb(BView* view, BRect& rect,
 	view->ClipToRect(rect);
 	view->SetDrawingMode(B_OP_ALPHA);
 	view->SetHighColor(thumb);
-	view->FillRoundRect(BRect(face.left, face.top, face.right + 1,
-		face.bottom + 1), r, r);
+	view->FillRoundRect(face, r, r);
 	view->PopState();
 }
 
@@ -1356,8 +1358,14 @@ R5ModernControlLook::DrawSliderBar(BView* view, BRect rect,
 	// the value side is the accent and the rest a muted track when the
 	// program kept BSlider's default bar colour and set no fill colour
 	// (external review 1.8; a colour of the program's own stays)
-	if (leftFillColor == rightFillColor
-		&& leftFillColor == SliderBarColor(ui_color(B_PANEL_BACKGROUND_COLOR))) {
+	// BSlider takes its default once, for the panel of that moment (and an
+	// archived slider a tint of it): any grey bar colour counts as the
+	// default, so a live Light or Dark switch keeps the accent (review of
+	// the external fixes); a coloured one is the program's
+	int32 spread = std::max(leftFillColor.red, std::max(leftFillColor.green,
+		leftFillColor.blue)) - std::min(leftFillColor.red,
+		std::min(leftFillColor.green, leftFillColor.blue));
+	if (leftFillColor == rightFillColor && spread < 24) {
 		leftFillColor = accent_color();
 		rightFillColor = SliderBarColor(base);
 	}
@@ -1398,7 +1406,7 @@ R5ModernControlLook::_DrawSliderBar(BView* view, BRect rect,
 	float split = orientation == B_HORIZONTAL
 		? floorf(rect.left + rect.Width() * sliderScale)
 		: floorf(rect.top + rect.Height() * (1.0f - sliderScale));
-	BRect shape(bar.left, bar.top, bar.right + 1, bar.bottom + 1);
+	BRect shape(bar);
 	float r = floorf(thickness / 2);
 
 	view->PushState();
@@ -1665,7 +1673,7 @@ R5ModernControlLook::DrawGroupFrame(BView* view, BRect& rect,
 	const BRect& updateRect, const rgb_color& base, uint32 borders)
 {
 	float r = radius(8);
-	BRect shape(rect.left, rect.top, rect.right + 1, rect.bottom + 1);
+	BRect shape(rect);
 	if ((borders & B_TOP_BORDER) == 0)
 		shape.top -= r;
 	if ((borders & B_BOTTOM_BORDER) == 0)

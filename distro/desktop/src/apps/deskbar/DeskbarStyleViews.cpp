@@ -665,7 +665,9 @@ TBarMenuTitle::_DrawModern()
 	} else if (vertical) {
 		// the strip above the separator, with the Deskbar's top corners
 		button = frame;
-		radius = WindowRadius();
+		// inside the floating Deskbar's 1 px edge: its radius less that
+		radius = std::max(0.0f, WindowRadius()
+			- (fBarView != NULL ? fBarView->EdgeInsets().top : 0));
 		iconSide = std::min(Size(30), frame.Height() + 1 - Size(8));
 	} else {
 		// the bar's leaf: 48 x 40, corners of 10, never taller than the bar
