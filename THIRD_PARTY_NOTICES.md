@@ -301,6 +301,14 @@ Location: `distro/kernel/src/add-ons/kernel/busses/mmc/rtsx`, installed as `buss
 
 The R5 lines in those files, and the RTS5228 part and Haiku attachment beside them, are copyright 2026 R5OS Contributors, MIT. The RTS5228 part contains no Linux code (clean room, `docs/LICENSING.md`).
 
+### NTFS file system (ntfs-3g)
+
+Location: `haiku/src/add-ons/kernel/file_systems/ntfs`, installed as the kernel add-on `file_systems/ntfs` in the regular and the minimum image (Haiku's `minimum` image definition, `SYSTEM_ADD_ONS_FILE_SYSTEMS`). It came with Haiku; R5 has not changed it.
+
+`libntfs/` and `utils/` (`utils.c`, `mkntfs.c`, `attrdef.c`, `boot.c`, `sd.c`) and `lowntfs.c` are from the NTFS-3G project (originally Linux-NTFS), https://github.com/tuxera/ntfs-3g. License: GPL-2.0-or-later ("either version 2 of the License, or (at your option) any later version", in each file header). Copyright holders named in those headers include Anton Altaparmakov, Szabolcs Szakacsits, Richard Russon, Yura Pakhuchiy, Yuval Fledel, Erik Larsson, Lode Leroy, Erik Sornes and Jean-Pierre Andre; each file lists its own. Haiku's `kernel_interface.cpp` is MIT (Haiku, Inc., 2021), but it is linked with `libntfs.a` and `utils.c` into one add-on, so the add-on as shipped is GPL-2.0-or-later. The disk system add-on `disk_systems/ntfs` (`NTFSAddOn.cpp`, `InitializeParameterEditor.cpp`, MIT) does not link that library.
+
+The image already ships the unmodified GNU GPL version 2 text as `GNU GPL v2` in the Haiku package's `data/licenses` (`haiku/data/system/data/licenses/GNU GPL v2`). A release must also offer the corresponding source of this add-on for that exact build; it is in this repository under the path above. Not a file-by-file audit of the add-on.
+
 ## Built outside this repository, not in the image
 
 ### VirtualBox Guest Additions 7.2.22
