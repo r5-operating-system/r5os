@@ -8,6 +8,23 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-23 - Card reader: an SD card put in again is found
+
+Problem (stick 77, 5625U, main `a08d00b67c`, `generated/boot-5625u-77/` in the stick worktree): the SD card that was in at power on was found (`SDHC card found`), read, and shown in the mount menu. After the card was taken out and put in again, every command failed: `rtsx: CMD7 (arg 00000000) failed: Operation timed out` three times, then `CMD55 failed`, and the card was not found again. Mounting the exFAT volume then failed with `read of 512 bytes at 16777216 failed: Operation timed out` and an I/O error.
+
+Cause: mmc_bus remembers the selected card (RCA 1). Before each bus command (RCA 0) for the new card it first sends CMD7 with RCA 0 to deselect the old one. No card answers CMD7 with RCA 0 (SD physical layer; OpenBSD sdmmc sends it without a response), but rtsx waited for an R1b answer. The timeout made `_ActivateDevice()` fail, so mmc_bus sent neither CMD0 nor any other command to the new card. At the first scan no card was selected yet, so no CMD7 was sent.
+
+Changed, after a review of the whole card path (rtsx, mmc_bus, mmc_disk) against the SD physical layer:
+
+- rtsx (`rtsx_haiku.cpp`): `response_type()` takes the argument; CMD7 with RCA 0 has no response (`RTSX_SD_RSP_TYPE_R0`), CMD7 with an RCA stays R1b.
+- mmc_bus (`mmc_bus.cpp`, and `mmc_bus.h` now copied into `distro/`, Haiku MIT with R5 snippets): CMD0 puts every card in the idle state (no card selected, RCA and 4 bit bus gone). Each scan now first forgets the selected card, so no CMD7 is sent on any host (sdhci too), and removes the node it published for the last card (`_RemoveCard()`, `unregister_node` with the bus lock released). Before, a card put in again came back on its old node (the device manager found the same attributes), so `mmc_disk` never read its size or set the 4 bit bus again (1 bit after the scan's CMD0, and the old size for a different card).
+- mmc_disk (copied into `distro/`, Haiku MIT with R5 snippets; `scripts/apply-kernel-bugs.py` installs both new copies): a `device_removed` hook marks a removed node; its I/O and trim then return `B_DEV_NO_MEDIA`, so a volume still mounted from the old card cannot write to the new one, and `B_GET_MEDIA_STATUS` says `B_DEV_NO_MEDIA` instead of always `B_OK`. A trim ended at `offset + length`, but CMD33 takes the last block to erase, so it also erased the block after the range; it now ends at the last block (one sector, or 512 bytes on a byte-addressed card).
+- rtsx (`rtsx.cpp`, R5 snippets in the ISC file): a transfer end that arrives after its waiter gave up (timeout, soft reset) is cleared right before the next command or DMA starts; before, the next command could return at once with the answer of no command. An erase (CMD38) may stay busy for 10 s instead of 1 s (SD erase timeout).
+
+Limits: a removed card's node goes when the next card is put in, not at once (the rtsx driver has no call to tell mmc_bus about a removal); an open disk stays until it is closed. A short window remains in which an I/O that passed the check just before the removal waits for the bus during the scan of the new card. The write-protect switch is not read. Default speed only. Writing a file is not proven on hardware: the driver logs only reads. sdhci itself is unchanged (it also sends CMD7 with RCA 0 as R1b; mmc_bus no longer sends that on a scan, but `mmc_disk` still deselects before CMD9 when a card was selected).
+
+Tested: not built and not booted yet; it goes on the next stick (card in, out and in again, mount, copy a file to it and read it back).
+
 ## 2026-11-23 - Updates - Haiku's system repository is no longer in the R5 image
 
 - Problem: Haiku's build installs a config for every repository in `HAIKU_REPOSITORIES` (`haiku/build/jam/images/definitions/minimum`, lines 436 to 448), including Haiku's own system repository (`baseurl https://eu.hpkg.haiku-os.org/haiku/master/x86_64/current`). R5's system package is `haiku-r1~beta6_r5_2026.1_dev-1`; Haiku's server serves `r1~beta6_hrev60455` (23 Nov 2026). `BPackageVersion::Compare()` uses `NaturalCompare`, so R5's version sorts higher today, but once Haiku's master moves to `r1~beta7` or a final `r1`, SoftwareUpdater on an installed R5 would offer Haiku's `haiku` package and could replace R5's system with plain Haiku. That is reasoning from the code, not a test.

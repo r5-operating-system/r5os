@@ -87,7 +87,7 @@ find_chip(uint16 vendor, uint16 device)
 
 /* SD response type per command, as sdhci chooses its reply types. */
 static uint8
-response_type(uint8 command, card_type type)
+response_type(uint8 command, uint32 argument, card_type type)
 {
 	bool mmc = type == CARD_TYPE_MMC
 		|| type == CARD_TYPE_MMC_EXTENDED_CAPACITY;
@@ -108,6 +108,13 @@ response_type(uint8 command, card_type type)
 		case SD_SEND_IF_COND:
 			return mmc ? RTSX_SD_RSP_TYPE_R1 : RTSX_SD_RSP_TYPE_R7;
 		case SELECT_DESELECT_CARD:
+			// RCA 0 deselects every card, and no card answers it (SD physical
+			// layer, CMD7; OpenBSD sdmmc sends it without a response).
+			// Waiting for an R1b answer timed out, and mmc_bus then sent no
+			// command at all to a card put in again (stick 77).
+			if ((argument >> 16) == 0)
+				return RTSX_SD_RSP_TYPE_R0;
+			return RTSX_SD_RSP_TYPE_R1B;
 		case SD_STOP_TRANSMISSION:
 		case SD_ERASE:
 			return RTSX_SD_RSP_TYPE_R1B;
@@ -557,11 +564,15 @@ execute_command(void* controller, uint8_t command, uint32_t argument,
 	memset(&cmd, 0, sizeof(cmd));
 	cmd.opcode = command;
 	cmd.arg = argument;
-	cmd.rsp_type = response_type(command, sc->type);
+	cmd.rsp_type = response_type(command, cmd.arg, sc->type);
 	if (cmd.rsp_type == 0) {
 		ERROR("unknown command %u\n", command);
 		return B_BAD_DATA;
 	}
+	// The card is busy until the erase is done; that takes longer than a
+	// write (SD physical layer, erase timeout). The data path's 10 s.
+	if (command == SD_ERASE)
+		cmd.busy_secs = 10;
 
 	MutexLocker locker(sc->lock);
 	if (!sc->powered)
@@ -618,7 +629,7 @@ do_io(void* controller, uint8_t command, IOOperation* operation,
 	memset(&cmd, 0, sizeof(cmd));
 	cmd.opcode = command;
 	cmd.arg = offsetAsSectors ? offset / RTSX_BLOCK_SIZE : offset;
-	cmd.rsp_type = response_type(command, sc->type);
+	cmd.rsp_type = response_type(command, cmd.arg, sc->type);
 	cmd.read = !operation->IsWrite();
 	cmd.datalen = length;
 	cmd.blklen = RTSX_BLOCK_SIZE;
