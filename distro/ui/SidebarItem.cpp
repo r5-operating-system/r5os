@@ -285,13 +285,14 @@ BSidebarItem::DrawItem(BView* owner, BRect frame, bool complete)
 		BRect picture = dest;
 		picture.InsetBy((circle - glyph) / 2, (circle - glyph) / 2);
 		if (fEmphasized) {
-			// The pebble's wave is a hole. Fill the circle first, then
-			// draw the bitmap with alpha so the hole stays white.
-			owner->SetDrawingMode(B_OP_COPY);
-			owner->SetHighColor(ui_color(B_LIST_BACKGROUND_COLOR));
-			owner->FillEllipse(dest);
+			// The pebble's wave is a hole. Fill a white disc inside the
+			// pebble's ring first, then draw the bitmap with alpha so the
+			// wave stays bright white in dark mode too without white fringes.
+			BRect disc = picture.InsetByCopy(1.5f, 1.5f);
 			owner->SetDrawingMode(B_OP_ALPHA);
 			owner->SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_OVERLAY);
+			owner->SetHighColor(make_color(255, 255, 255));
+			owner->FillEllipse(disc);
 			owner->DrawBitmap(fIcon, fIcon->Bounds(), picture);
 		} else {
 			owner->SetDrawingMode(B_OP_ALPHA);
@@ -320,9 +321,11 @@ BSidebarItem::DrawItem(BView* owner, BRect frame, bool complete)
 			float side = u * 11.0f;
 			BRect arrow(right - side, row.top, right, row.top + side);
 			arrow.OffsetBy(0, (row.Height() - arrow.Height()) / 2);
-			be_control_look->DrawArrowShape(owner, arrow, row,
-				selected ? ui_color(B_STATUS_BAR_COLOR) : background,
-				BControlLook::B_DOWN_ARROW, 0, B_DARKEN_2_TINT);
+			rgb_color arrowBase = selected ? ui_color(B_STATUS_BAR_COLOR)
+				: background;
+			be_control_look->DrawArrowShape(owner, arrow, row, arrowBase,
+				BControlLook::B_DOWN_ARROW, 0,
+				arrowBase.IsDark() ? B_LIGHTEN_2_TINT : B_DARKEN_2_TINT);
 			right = arrow.left - u * 6.0f;
 		} else {
 			BFont countFont(be_plain_font);

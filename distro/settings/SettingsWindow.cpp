@@ -545,7 +545,13 @@ SearchField::DoLayout()
 	// The text view fills the field inside its frame, so the frame and
 	// the text are centred on the u * 34 height.
 	if (TextView() != NULL) {
-		BRect inner = Bounds().InsetByCopy(2, 2);
+		float left = 1, top = 1, right = 1, bottom = 1;
+		if (be_control_look != NULL) {
+			be_control_look->GetBackgroundInsets(
+				BControlLook::B_MENU_BACKGROUND, 0, left, top, right, bottom);
+		}
+		float insetX = left > 1 ? 5.0f : 2.0f;
+		BRect inner = Bounds().InsetByCopy(insetX, 2);
 		TextView()->MoveTo(inner.LeftTop());
 		TextView()->ResizeTo(inner.Width(), inner.Height());
 	}
