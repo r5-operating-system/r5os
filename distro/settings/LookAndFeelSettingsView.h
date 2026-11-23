@@ -55,7 +55,11 @@ private:
 
 			void				_SetControlLook(const BString& path);
 			void				_BuildControlLookMenu();
-			const char*			_ControlLookLabel(const char* name);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			BString				_ControlLookLabel(const char* name);
+// SPDX-SnippetEnd
 
 			bool				_DoubleScrollBarArrows();
 			void				_SetDoubleScrollBarArrows(bool doubleArrows);

@@ -1,0 +1,14 @@
+/*
+ * SPDX-FileCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ */
+
+resource app_version {
+	major = 1,
+	middle = 0,
+	minor = 0,
+	variety = B_APPV_FINAL,
+	internal = 0,
+	short_info = "R5 Modern",
+	long_info = "R5 Modern controls of R5 Operating System. MIT."
+};

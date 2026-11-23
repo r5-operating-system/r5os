@@ -1,0 +1,1437 @@
+/*
+ * SPDX-FileCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ */
+
+
+/*!	R5 Modern controls (docs/design/THEMING.md, mockup A1/A2).
+
+	A BControlLook add-on on top of HaikuControlLook, like Haiku's own
+	FlatControlLook. It changes how a control is painted, never its size:
+	every frame and background inset is Haiku's, so a window lays out the same
+	with either look. The numbers come from the mockup at 12 pt and scale with
+	the plain font (radius 7 on buttons and fields, 4 on check boxes, 8 on
+	frames and tabs). Every colour is a ui_color: the light and the dark
+	colour set of a theme give light and dark controls, and the accent is
+	B_CONTROL_HIGHLIGHT_COLOR.
+
+	Painter (CPU) draws the same shapes antialiased; nothing here needs the
+	GPU.
+*/
+
+
+#include "R5ModernControlLook.h"
+
+#include <algorithm>
+#include <math.h>
+#include <new>
+#include <stdlib.h>
+#include <string.h>
+
+#include <Bitmap.h>
+#include <FindDirectory.h>
+#include <driver_settings.h>
+#include <Control.h>
+#include <Font.h>
+#include <InterfaceDefs.h>
+#include <Region.h>
+#include <View.h>
+
+
+namespace BPrivate {
+
+
+static const float kButtonPopUpIndicatorWidth = 11;
+
+static const rgb_color kWhite = { 255, 255, 255, 255 };
+static const rgb_color kInk = { 15, 23, 42, 255 };
+	// the mockup's shadow and line colour (#0f172a)
+
+
+static float
+scale()
+{
+	float size = be_plain_font != NULL ? be_plain_font->Size() : 12.0f;
+	return std::max(size, 9.0f) / 12.0f;
+}
+
+
+static float
+radius(float pixels)
+{
+	return roundf(pixels * scale());
+}
+
+
+static rgb_color
+blend(const rgb_color& from, const rgb_color& to, float amount)
+{
+	rgb_color color;
+	color.red = (uint8)roundf(from.red + (to.red - from.red) * amount);
+	color.green = (uint8)roundf(from.green + (to.green - from.green) * amount);
+	color.blue = (uint8)roundf(from.blue + (to.blue - from.blue) * amount);
+	color.alpha = 255;
+	return color;
+}
+
+
+/*!	The thin line of frames, lists and tabs: #d5dae2 on #eef1f5 (light),
+	#3a404c on #1f232b (dark).
+*/
+static rgb_color
+line_color(const rgb_color& base)
+{
+	if (base.IsLight())
+		return blend(base, kInk, 0.11f);
+	return blend(base, kWhite, 0.13f);
+}
+
+
+//! The line of fields, buttons and check boxes (#b4bcc8, dark #454c59).
+static rgb_color
+control_line_color(const rgb_color& base)
+{
+	rgb_color line = ui_color(B_CONTROL_BORDER_COLOR);
+	// a colour set that keeps Haiku's mid-grey border on a dark panel
+	if (base.IsDark() && line.IsLight())
+		return blend(base, kWhite, 0.2f);
+	return line;
+}
+
+
+static rgb_color
+accent_color()
+{
+	return ui_color(B_CONTROL_HIGHLIGHT_COLOR);
+}
+
+
+//! The edge of an accent face (#0070db on #0084ff, #1f7ee0 on #2f95ff).
+static rgb_color
+accent_line_color()
+{
+	return blend(accent_color(), kInk, 0.15f);
+}
+
+
+//! The track of a scroll bar (#e9edf3 on #eef1f5, #23272f on #1f232b).
+static rgb_color
+track_color(const rgb_color& base)
+{
+	if (base.IsLight())
+		return blend(base, kInk, 0.025f);
+	return blend(base, kWhite, 0.02f);
+}
+
+
+static rgb_color
+field_color()
+{
+	return ui_color(B_DOCUMENT_BACKGROUND_COLOR);
+}
+
+
+static rgb_color
+hover_color(const rgb_color& face)
+{
+	if (face.IsLight())
+		return blend(face, kWhite, 0.6f);
+	return blend(face, kWhite, 0.06f);
+}
+
+
+static rgb_color
+pressed_color(const rgb_color& face)
+{
+	if (face.IsLight())
+		return blend(face, kInk, 0.08f);
+	return blend(face, kWhite, 0.12f);
+}
+
+
+/*!	The scroll bar style is a part of a theme of its own (Haiku's or R5
+	Modern's, docs/design/THEMING.md). The theme in use says which, in
+	~/config/settings/r5/theme ("scroll_bars haiku"); a program reads it
+	when it loads the look, at start and on a live switch.
+*/
+R5ModernControlLook::R5ModernControlLook()
+	:
+	HaikuControlLook(),
+	fHaikuScrollBars(false)
+{
+	char path[B_PATH_NAME_LENGTH];
+	if (find_directory(B_USER_SETTINGS_DIRECTORY, -1, false, path,
+			sizeof(path)) != B_OK
+		|| strlcat(path, "/r5/theme", sizeof(path)) >= sizeof(path))
+		return;
+
+	void* handle = load_driver_settings(path);
+	if (handle == NULL)
+		return;
+	const char* style = get_driver_parameter(handle, "scroll_bars", NULL,
+		NULL);
+	fHaikuScrollBars = style != NULL && strcmp(style, "haiku") == 0;
+	unload_driver_settings(handle);
+}
+
+
+R5ModernControlLook::~R5ModernControlLook()
+{
+}
+
+
+// #pragma mark - shapes
+
+
+/*!	A round face: \a fill inside a 1 px \a line, both inside \a rect. The
+	line sits on the outer pixel row, like a CSS border.
+*/
+void
+R5ModernControlLook::_DrawFace(BView* view, BRect rect, float radius,
+	const rgb_color& fill, const rgb_color& line)
+{
+	if (!rect.IsValid())
+		return;
+
+	view->PushState();
+	view->SetDrawingMode(B_OP_ALPHA);
+	view->SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_OVERLAY);
+
+	if (radius <= 0) {
+		view->SetHighColor(line);
+		view->StrokeRect(rect);
+		rect.InsetBy(1, 1);
+		if (rect.IsValid()) {
+			view->SetHighColor(fill);
+			view->FillRect(rect);
+		}
+	} else {
+		// the line is the outer ring of a filled round rect, the fill the
+		// inner one, so the arc has no gap between the two
+		BRect outer(rect.left, rect.top, rect.right + 1, rect.bottom + 1);
+		view->SetHighColor(line);
+		view->FillRoundRect(outer, radius, radius);
+		outer.InsetBy(1, 1);
+		view->SetHighColor(fill);
+		view->FillRoundRect(outer, std::max(radius - 1, 0.0f),
+			std::max(radius - 1, 0.0f));
+	}
+
+	view->PopState();
+}
+
+
+//! A down chevron, the mockup's "M6 9l6 6 6-6" at 10 px.
+void
+R5ModernControlLook::_DrawChevron(BView* view, BRect rect,
+	const rgb_color& color)
+{
+	float size = radius(10);
+	BPoint center(roundf((rect.left + rect.right) / 2) + 0.5f,
+		roundf((rect.top + rect.bottom) / 2) + 0.5f);
+	float half = size * 0.25f;
+
+	view->PushState();
+	view->SetDrawingMode(B_OP_ALPHA);
+	view->SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_OVERLAY);
+	view->SetHighColor(color);
+	view->SetPenSize(std::max(1.0f, roundf(1.25f * scale() * 4) / 4));
+	view->SetLineMode(B_ROUND_CAP, B_ROUND_JOIN);
+	view->StrokeLine(BPoint(center.x - half * 2, center.y - half),
+		BPoint(center.x, center.y + half));
+	view->StrokeLine(BPoint(center.x, center.y + half),
+		BPoint(center.x + half * 2, center.y - half));
+	view->PopState();
+}
+
+
+// #pragma mark - buttons
+
+
+/*!	The colours of a button face for \a flags: \a base (the accent on a
+	default button), lighter under the mouse, darker when pressed. Returns
+	false for a flat button that is not hovered, which has no face.
+*/
+bool
+R5ModernControlLook::_ButtonColors(BView* view, const rgb_color& base,
+	uint32 flags, rgb_color& fill, rgb_color& line)
+{
+	bool disabled = (flags & B_DISABLED) != 0;
+	bool flat = (flags & B_FLAT) != 0
+		&& (flags & (B_ACTIVATED | B_PARTIALLY_ACTIVATED)) == 0
+		&& ((flags & (B_HOVER | B_FOCUSED)) == 0 || disabled);
+	if (flat)
+		return false;
+
+	rgb_color background = view->LowColor();
+	if (view->Parent() != NULL)
+		background = view->Parent()->ViewColor();
+
+	fill = base;
+	line = control_line_color(base);
+
+	if ((flags & B_DEFAULT_BUTTON) != 0 && !disabled) {
+		fill = accent_color();
+		line = accent_line_color();
+	}
+
+	if (!disabled) {
+		if ((flags & (B_ACTIVATED | B_CLICKED)) != 0)
+			fill = pressed_color(fill);
+		else if ((flags & B_HOVER) != 0)
+			fill = hover_color(fill);
+		if ((flags & B_FOCUSED) != 0 && (flags & B_DEFAULT_BUTTON) == 0)
+			line = accent_color();
+	} else {
+		fill = disable_color(fill, background);
+		line = disable_color(line, background);
+	}
+	return true;
+}
+
+
+/*!	Fills \a rect (a button inside its frame's inset) with the face colour,
+	round so it meets the face's arc: the face is round 7 - 1 at an inset of
+	1, so the inside at an inset of n is round 7 - n.
+*/
+void
+R5ModernControlLook::_FillButtonInside(BView* view, const BRect& rect,
+	const BRect& updateRect, const rgb_color& base, uint32 flags)
+{
+	if (!rect.IsValid() || !rect.Intersects(updateRect))
+		return;
+
+	rgb_color fill;
+	rgb_color line;
+	if (!_ButtonColors(view, base, flags, fill, line))
+		return;
+
+	float inset = (flags & B_DEFAULT_BUTTON) != 0 ? 5 : 2;
+	inset = ceilf(inset * scale());
+	float r = std::max(0.0f, radius(7) - inset);
+
+	view->PushState();
+	view->SetDrawingMode(B_OP_ALPHA);
+	view->SetHighColor(fill);
+	view->FillRoundRect(BRect(rect.left, rect.top, rect.right + 1,
+		rect.bottom + 1), r, r);
+	view->PopState();
+}
+
+
+void
+R5ModernControlLook::DrawButtonFrame(BView* view, BRect& rect,
+	const BRect& updateRect, const rgb_color& base,
+	const rgb_color& background, uint32 flags, uint32 borders)
+{
+	DrawButtonFrame(view, rect, updateRect, 0, 0, 0, 0, base, background,
+		flags, borders);
+}
+
+
+void
+R5ModernControlLook::DrawButtonFrame(BView* view, BRect& rect,
+	const BRect& updateRect, float, const rgb_color& base,
+	const rgb_color& background, uint32 flags, uint32 borders)
+{
+	DrawButtonFrame(view, rect, updateRect, 0, 0, 0, 0, base, background,
+		flags, borders);
+}
+
+
+void
+R5ModernControlLook::DrawButtonFrame(BView* view, BRect& rect,
+	const BRect& updateRect, float, float, float, float,
+	const rgb_color& base, const rgb_color& background, uint32 flags,
+	uint32 borders)
+{
+	if (!ShouldDraw(view, rect, updateRect)) {
+		float left, top, right, bottom;
+		GetFrameInsets(B_BUTTON_FRAME, flags, left, top, right, bottom);
+		rect.left += left;
+		rect.top += top;
+		rect.right -= right;
+		rect.bottom -= bottom;
+		return;
+	}
+
+	rgb_color fill;
+	rgb_color line;
+	if (_ButtonColors(view, base, flags, fill, line)) {
+		// the frame owns the outer pixel: Haiku's outer recessed edge
+		BRect face(rect);
+		face.InsetBy(1, 1);
+		_DrawFace(view, face, radius(7) - 1, fill, line);
+	}
+
+	float left, top, right, bottom;
+	GetFrameInsets(B_BUTTON_FRAME, flags, left, top, right, bottom);
+	rect.left += left;
+	rect.top += top;
+	rect.right -= right;
+	rect.bottom -= bottom;
+}
+
+
+void
+R5ModernControlLook::DrawButtonBackground(BView* view, BRect& rect,
+	const BRect& updateRect, const rgb_color& base, uint32 flags,
+	uint32 borders, orientation orientation)
+{
+	DrawButtonBackground(view, rect, updateRect, 0, 0, 0, 0, base, flags,
+		borders, orientation);
+}
+
+
+void
+R5ModernControlLook::DrawButtonBackground(BView* view, BRect& rect,
+	const BRect& updateRect, float, const rgb_color& base, uint32 flags,
+	uint32 borders, orientation orientation)
+{
+	DrawButtonBackground(view, rect, updateRect, 0, 0, 0, 0, base, flags,
+		borders, orientation);
+}
+
+
+/*!	The frame painted the whole face; the background paints it again inside
+	the frame's inset, round on the same centres, so a caller that draws a
+	background without a frame (a column title, a tool bar) still gets a
+	face. Then the inset, as Haiku's.
+*/
+void
+R5ModernControlLook::DrawButtonBackground(BView* view, BRect& rect,
+	const BRect& updateRect, float, float, float, float,
+	const rgb_color& base, uint32 flags, uint32 borders,
+	orientation orientation)
+{
+	_FillButtonInside(view, rect, updateRect, base, flags);
+
+	float left, top, right, bottom;
+	GetBackgroundInsets(B_BUTTON_BACKGROUND, flags, left, top, right, bottom);
+	rect.left += left;
+	rect.top += top;
+	rect.right -= right;
+	rect.bottom -= bottom;
+}
+
+
+void
+R5ModernControlLook::DrawButtonWithPopUpBackground(BView* view, BRect& rect,
+	const BRect& updateRect, const rgb_color& base, uint32 flags,
+	uint32 borders, orientation orientation)
+{
+	DrawButtonWithPopUpBackground(view, rect, updateRect, 0, 0, 0, 0, base,
+		flags, borders, orientation);
+}
+
+
+void
+R5ModernControlLook::DrawButtonWithPopUpBackground(BView* view, BRect& rect,
+	const BRect& updateRect, float, const rgb_color& base, uint32 flags,
+	uint32 borders, orientation orientation)
+{
+	DrawButtonWithPopUpBackground(view, rect, updateRect, 0, 0, 0, 0, base,
+		flags, borders, orientation);
+}
+
+
+void
+R5ModernControlLook::DrawButtonWithPopUpBackground(BView* view, BRect& rect,
+	const BRect& updateRect, float, float, float, float,
+	const rgb_color& base, uint32 flags, uint32 borders,
+	orientation orientation)
+{
+	_FillButtonInside(view, rect, updateRect, base, flags);
+
+	BRect marker(rect);
+	marker.left = marker.right - ComposeSpacing(kButtonPopUpIndicatorWidth);
+	if (ShouldDraw(view, marker, updateRect)) {
+		rgb_color text = ui_color(B_CONTROL_TEXT_COLOR);
+		if ((flags & B_DISABLED) != 0)
+			text = disable_color(text, base);
+		_DrawChevron(view, marker, text);
+	}
+
+	float left, top, right, bottom;
+	GetBackgroundInsets(B_BUTTON_WITH_POP_UP_BACKGROUND, flags, left, top,
+		right, bottom);
+	rect.left += left;
+	rect.top += top;
+	rect.right -= right;
+	rect.bottom -= bottom;
+}
+
+
+// #pragma mark - menus
+
+
+void
+R5ModernControlLook::DrawMenuBarBackground(BView* view, BRect& rect,
+	const BRect& updateRect, const rgb_color& base, uint32 flags,
+	uint32 borders)
+{
+	if (!ShouldDraw(view, rect, updateRect))
+		return;
+
+	if ((flags & (B_ACTIVATED | B_FOCUSED)) != 0) {
+		// the open title of a menu bar: the selected item's face
+		DrawMenuItemBackground(view, rect, updateRect,
+			ui_color(B_MENU_SELECTED_BACKGROUND_COLOR), flags | B_ACTIVATED,
+			borders);
+		return;
+	}
+
+	view->SetHighColor(base);
+	view->FillRect(rect);
+
+	if ((borders & B_BOTTOM_BORDER) != 0) {
+		view->SetHighColor(line_color(base));
+		view->StrokeLine(rect.LeftBottom(), rect.RightBottom());
+		rect.bottom--;
+	}
+}
+
+
+void
+R5ModernControlLook::_DrawField(BView* view, BRect& rect,
+	const BRect& updateRect, uint32 flags, float inset)
+{
+	rgb_color background = view->LowColor();
+	if (view->Parent() != NULL)
+		background = view->Parent()->ViewColor();
+
+	rgb_color fill = field_color();
+	rgb_color line = control_line_color(background);
+	if ((flags & B_DISABLED) != 0) {
+		fill = disable_color(fill, background);
+		line = disable_color(line, background);
+	} else if ((flags & B_INVALID) != 0)
+		line = ui_color(B_FAILURE_COLOR);
+	else if ((flags & B_FOCUSED) != 0)
+		line = accent_color();
+
+	BRect face(rect);
+	face.InsetBy(inset, inset);
+	_DrawFace(view, face, radius(7) - inset, fill, line);
+
+	if ((flags & B_FOCUSED) != 0 && (flags & B_DISABLED) == 0
+		&& inset > 0) {
+		// the soft accent ring of the mockup's focused field (A3)
+		rgb_color ring = blend(background, accent_color(), 0.18f);
+		view->PushState();
+		view->SetHighColor(ring);
+		BRect outer(rect.left, rect.top, rect.right + 1, rect.bottom + 1);
+		BRegion clip(outer);
+		BRect inner(outer);
+		inner.InsetBy(inset, inset);
+		clip.Exclude(inner);
+		view->ConstrainClippingRegion(&clip);
+		view->SetDrawingMode(B_OP_ALPHA);
+		view->FillRoundRect(outer, radius(7), radius(7));
+		view->PopState();
+	}
+}
+
+
+void
+R5ModernControlLook::DrawMenuFieldFrame(BView* view, BRect& rect,
+	const BRect& updateRect, const rgb_color& base,
+	const rgb_color& background, uint32 flags, uint32 borders)
+{
+	DrawMenuFieldFrame(view, rect, updateRect, 0, 0, 0, 0, base, background,
+		flags, borders);
+}
+
+
+void
+R5ModernControlLook::DrawMenuFieldFrame(BView* view, BRect& rect,
+	const BRect& updateRect, float, const rgb_color& base,
+	const rgb_color& background, uint32 flags, uint32 borders)
+{
+	DrawMenuFieldFrame(view, rect, updateRect, 0, 0, 0, 0, base, background,
+		flags, borders);
+}
+
+
+void
+R5ModernControlLook::DrawMenuFieldFrame(BView* view, BRect& rect,
+	const BRect& updateRect, float, float, float, float,
+	const rgb_color& base, const rgb_color& background, uint32 flags,
+	uint32 borders)
+{
+	if (ShouldDraw(view, rect, updateRect))
+		_DrawField(view, rect, updateRect, flags & ~B_FOCUSED, 1);
+
+	float left, top, right, bottom;
+	GetFrameInsets(B_MENU_FIELD_FRAME, flags, left, top, right, bottom);
+	rect.left += left;
+	rect.top += top;
+	rect.right -= right;
+	rect.bottom -= bottom;
+}
+
+
+void
+R5ModernControlLook::DrawMenuFieldBackground(BView* view, BRect& rect,
+	const BRect& updateRect, const rgb_color& base, bool popupIndicator,
+	uint32 flags)
+{
+	DrawMenuFieldBackground(view, rect, updateRect, 0, 0, 0, 0, base,
+		popupIndicator, flags);
+}
+
+
+void
+R5ModernControlLook::DrawMenuFieldBackground(BView* view, BRect& rect,
+	const BRect& updateRect, float, const rgb_color& base,
+	bool popupIndicator, uint32 flags)
+{
+	DrawMenuFieldBackground(view, rect, updateRect, 0, 0, 0, 0, base,
+		popupIndicator, flags);
+}
+
+
+/*!	The inside of a menu field: the field colour, and the chevron where Haiku
+	draws its pop-up triangle. The frame already drew the round face.
+*/
+void
+R5ModernControlLook::DrawMenuFieldBackground(BView* view, BRect& rect,
+	const BRect& updateRect, float, float, float, float,
+	const rgb_color& base, bool popupIndicator, uint32 flags)
+{
+	if (!ShouldDraw(view, rect, updateRect))
+		return;
+
+	rgb_color fill = field_color();
+	rgb_color text = ui_color(B_CONTROL_TEXT_COLOR);
+	if ((flags & B_DISABLED) != 0) {
+		fill = disable_color(fill, base);
+		text = disable_color(text, fill);
+	}
+
+	// the round face is the frame's; the inside at Haiku's inset of 3 is
+	// clear of its arc
+	view->SetHighColor(fill);
+	view->FillRect(rect);
+
+	if (popupIndicator) {
+		BRect marker(rect);
+		marker.left = marker.right - ComposeSpacing(kButtonPopUpIndicatorWidth);
+		_DrawChevron(view, marker, text);
+		rect.right = marker.left - 1;
+	}
+}
+
+
+void
+R5ModernControlLook::DrawMenuFieldBackground(BView* view, BRect& rect,
+	const BRect& updateRect, const rgb_color& base, uint32 flags,
+	uint32 borders)
+{
+	if (!ShouldDraw(view, rect, updateRect))
+		return;
+
+	rgb_color fill = field_color();
+	if ((flags & B_DISABLED) != 0)
+		fill = disable_color(fill, base);
+	view->SetHighColor(fill);
+	view->FillRect(rect);
+}
+
+
+void
+R5ModernControlLook::DrawMenuBackground(BView* view, BRect& rect,
+	const BRect& updateRect, const rgb_color& base, uint32 flags,
+	uint32 borders)
+{
+	if (!ShouldDraw(view, rect, updateRect))
+		return;
+
+	view->SetHighColor(base);
+	view->FillRect(rect);
+}
+
+
+//! A selected menu item: the accent, round, a little inside the row.
+void
+R5ModernControlLook::DrawMenuItemBackground(BView* view, BRect& rect,
+	const BRect& updateRect, const rgb_color& base, uint32 flags,
+	uint32 borders)
+{
+	if (!ShouldDraw(view, rect, updateRect))
+		return;
+
+	rgb_color background = view->ViewColor();
+	if (background == B_TRANSPARENT_COLOR)
+		background = ui_color(B_MENU_BACKGROUND_COLOR);
+
+	view->SetHighColor(background);
+	view->FillRect(rect);
+
+	rgb_color fill = base;
+	if ((flags & B_DISABLED) != 0)
+		fill = disable_color(fill, background);
+
+	BRect face(rect);
+	face.InsetBy(std::min(radius(3), floorf(rect.Width() / 4)), 1);
+	view->PushState();
+	view->SetDrawingMode(B_OP_ALPHA);
+	view->SetHighColor(fill);
+	view->FillRoundRect(BRect(face.left, face.top, face.right + 1,
+		face.bottom + 1), radius(5), radius(5));
+	view->PopState();
+}
+
+
+void
+R5ModernControlLook::DrawStatusBar(BView* view, BRect& rect,
+	const BRect& updateRect, const rgb_color& base, const rgb_color& barColor,
+	float progressPosition)
+{
+	if (!ShouldDraw(view, rect, updateRect))
+		return;
+
+	view->SetHighColor(base);
+	view->FillRect(rect);
+
+	float r = std::min(radius(4), floorf(rect.Height() / 2));
+	BRect track(rect.left, rect.top, rect.right + 1, rect.bottom + 1);
+	view->PushState();
+	view->SetDrawingMode(B_OP_ALPHA);
+	view->SetHighColor(blend(base, base.IsLight() ? kInk : kWhite, 0.08f));
+	view->FillRoundRect(track, r, r);
+
+	if (progressPosition > rect.left) {
+		BRect filled(track);
+		filled.right = std::min(track.right, progressPosition);
+		BRegion clip(filled);
+		view->ConstrainClippingRegion(&clip);
+		view->SetHighColor(barColor);
+		view->FillRoundRect(track, r, r);
+	}
+	view->PopState();
+}
+
+
+// #pragma mark - check boxes and radio buttons
+
+
+void
+R5ModernControlLook::DrawCheckBox(BView* view, BRect& rect,
+	const BRect& updateRect, const rgb_color& base, uint32 flags)
+{
+	if (!ShouldDraw(view, rect, updateRect))
+		return;
+
+	rgb_color background = view->LowColor();
+	bool disabled = (flags & B_DISABLED) != 0;
+	bool on = (flags & (B_ACTIVATED | B_PARTIALLY_ACTIVATED)) != 0;
+
+	rgb_color fill = on ? accent_color() : field_color();
+	rgb_color line = on ? accent_color() : control_line_color(background);
+	if (!disabled && (flags & B_FOCUSED) != 0 && !on)
+		line = accent_color();
+	if (!disabled && (flags & B_CLICKED) != 0)
+		fill = pressed_color(fill);
+	if (disabled) {
+		fill = disable_color(fill, background);
+		line = disable_color(line, background);
+	}
+
+	_DrawFace(view, rect, radius(4), fill, line);
+
+	if ((flags & B_FOCUSED) != 0 && on && !disabled) {
+		// focus on a checked box: a ring of the accent around it
+		view->PushState();
+		view->SetDrawingMode(B_OP_ALPHA);
+		view->SetHighColor(blend(background, accent_color(), 0.35f));
+		BRect ring(rect.left - 1, rect.top - 1, rect.right + 2,
+			rect.bottom + 2);
+		BRegion clip(ring);
+		BRect inner(ring);
+		inner.InsetBy(1, 1);
+		clip.Exclude(inner);
+		view->ConstrainClippingRegion(&clip);
+		view->FillRoundRect(ring, radius(4) + 1, radius(4) + 1);
+		view->PopState();
+	}
+
+	if (!on)
+		return;
+
+	// the tick "M5 12l5 5 9-10" of a 24 unit box, at 10/16 of the box
+	rgb_color mark = kWhite;
+	if (disabled)
+		mark = disable_color(mark, fill);
+
+	float size = rect.Width() + 1;
+	float unit = size * 10.0f / 16.0f / 24.0f;
+	BPoint origin(rect.left + (size - 24 * unit) / 2,
+		rect.top + (size - 24 * unit) / 2);
+
+	view->PushState();
+	view->SetDrawingMode(B_OP_ALPHA);
+	view->SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_OVERLAY);
+	view->SetHighColor(mark);
+	view->SetPenSize(std::max(1.5f, 4 * unit));
+	view->SetLineMode(B_ROUND_CAP, B_ROUND_JOIN);
+	if ((flags & B_PARTIALLY_ACTIVATED) != 0) {
+		view->StrokeLine(BPoint(origin.x + 6 * unit, origin.y + 12 * unit),
+			BPoint(origin.x + 18 * unit, origin.y + 12 * unit));
+	} else {
+		BPoint points[3] = {
+			BPoint(origin.x + 5 * unit, origin.y + 12 * unit),
+			BPoint(origin.x + 10 * unit, origin.y + 17 * unit),
+			BPoint(origin.x + 19 * unit, origin.y + 7 * unit)
+		};
+		view->StrokePolygon(points, 3, false);
+	}
+	view->PopState();
+}
+
+
+void
+R5ModernControlLook::DrawRadioButton(BView* view, BRect& rect,
+	const BRect& updateRect, const rgb_color& base, uint32 flags)
+{
+	if (!ShouldDraw(view, rect, updateRect))
+		return;
+
+	rgb_color background = view->LowColor();
+	bool disabled = (flags & B_DISABLED) != 0;
+	bool on = (flags & B_ACTIVATED) != 0;
+
+	rgb_color fill = on ? accent_color() : field_color();
+	rgb_color line = on ? accent_color() : control_line_color(background);
+	if (!disabled && (flags & B_FOCUSED) != 0 && !on)
+		line = accent_color();
+	if (!disabled && (flags & B_CLICKED) != 0)
+		fill = pressed_color(fill);
+	if (disabled) {
+		fill = disable_color(fill, background);
+		line = disable_color(line, background);
+	}
+
+	BRect outer(rect.left, rect.top, rect.right + 1, rect.bottom + 1);
+	view->PushState();
+	view->SetDrawingMode(B_OP_ALPHA);
+	view->SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_OVERLAY);
+	view->SetHighColor(line);
+	view->FillEllipse(outer);
+	outer.InsetBy(1, 1);
+	view->SetHighColor(fill);
+	view->FillEllipse(outer);
+
+	if (on) {
+		rgb_color mark = disabled ? disable_color(kWhite, fill) : kWhite;
+		float inset = roundf(rect.Width() * 0.3f);
+		outer.InsetBy(inset - 1, inset - 1);
+		view->SetHighColor(mark);
+		view->FillEllipse(outer);
+	}
+	view->PopState();
+}
+
+
+// #pragma mark - scroll bars
+
+
+/*!	No line round the bar: the track sits on the panel. The bar keeps its
+	Haiku width and its border pixel, painted in the panel colour.
+*/
+void
+R5ModernControlLook::DrawScrollBarBorder(BView* view, BRect rect,
+	const BRect& updateRect, const rgb_color& base, uint32 flags,
+	orientation orientation)
+{
+	if (fHaikuScrollBars) {
+		HaikuControlLook::DrawScrollBarBorder(view, rect, updateRect, base,
+			flags, orientation);
+		return;
+	}
+	if (!ShouldDraw(view, rect, updateRect))
+		return;
+
+	view->PushState();
+	view->SetHighColor(base);
+	view->StrokeRect(rect);
+	if ((flags & B_FOCUSED) != 0 && (flags & B_DISABLED) == 0) {
+		// the scroll target has the focus: a thin accent line on the side
+		// that faces it, as Haiku marks it
+		view->SetHighColor(accent_color());
+		if (orientation == B_HORIZONTAL)
+			view->StrokeLine(rect.LeftTop(), rect.RightTop());
+		else
+			view->StrokeLine(rect.LeftTop(), rect.LeftBottom());
+	}
+	view->PopState();
+}
+
+
+//! An arrow: no button face, the arrow on the track.
+void
+R5ModernControlLook::DrawScrollBarButton(BView* view, BRect rect,
+	const BRect& updateRect, const rgb_color& base, const rgb_color& text,
+	uint32 flags, int32 direction, orientation orientation, bool down)
+{
+	if (fHaikuScrollBars) {
+		HaikuControlLook::DrawScrollBarButton(view, rect, updateRect, base,
+			text, flags, direction, orientation, down);
+		return;
+	}
+	if (!ShouldDraw(view, rect, updateRect))
+		return;
+
+	rgb_color panel = ui_color(B_PANEL_BACKGROUND_COLOR);
+	view->PushState();
+	view->ClipToRect(rect);
+	view->SetHighColor(panel);
+	view->FillRect(rect);
+
+	BRect face(rect);
+	face.InsetBy(1, 1);
+	rgb_color fill = track_color(panel);
+	if (down)
+		fill = pressed_color(fill);
+	view->SetDrawingMode(B_OP_ALPHA);
+	view->SetHighColor(fill);
+	view->FillRoundRect(BRect(face.left, face.top, face.right + 1,
+		face.bottom + 1), radius(4), radius(4));
+
+	rgb_color arrow = ui_color(B_PANEL_TEXT_COLOR);
+	arrow = blend(fill, arrow, (flags & B_DISABLED) != 0 ? 0.3f : 0.6f);
+	BRect arrowRect(rect);
+	arrowRect.InsetBy(-1, -1);
+	HaikuControlLook::DrawArrowShape(view, arrowRect, updateRect, arrow,
+		direction, flags, 1.0f);
+	view->PopState();
+}
+
+
+/*!	Paints the panel and the round track; \a part limits the pixels to one
+	piece of the bar, \a track is the whole track so its ends are round.
+*/
+void
+R5ModernControlLook::_FillTrackPart(BView* view, BRect part, BRect track,
+	const rgb_color& base, orientation orientation)
+{
+	if (!part.IsValid())
+		return;
+
+	view->PushState();
+	view->ClipToRect(part);
+	view->SetHighColor(base);
+	view->FillRect(part);
+
+	BRect face(track);
+	face.InsetBy(1, 1);
+	float r = orientation == B_HORIZONTAL
+		? floorf((face.Height() + 1) / 2) : floorf((face.Width() + 1) / 2);
+	view->SetDrawingMode(B_OP_ALPHA);
+	view->SetHighColor(track_color(base));
+	view->FillRoundRect(BRect(face.left, face.top, face.right + 1,
+		face.bottom + 1), r, r);
+	view->PopState();
+}
+
+
+void
+R5ModernControlLook::DrawScrollBarBackground(BView* view, BRect& rect1,
+	BRect& rect2, const BRect& updateRect, const rgb_color& base,
+	uint32 flags, orientation orientation)
+{
+	if (fHaikuScrollBars) {
+		HaikuControlLook::DrawScrollBarBackground(view, rect1, rect2,
+			updateRect, base, flags, orientation);
+		return;
+	}
+
+	BRect track = rect1 | rect2;
+	if (!rect1.IsValid())
+		track = rect2;
+	else if (!rect2.IsValid())
+		track = rect1;
+
+	// the track runs on under the thumb, which is drawn on top
+	BRect all(track);
+	if (ShouldDraw(view, all, updateRect))
+		_FillTrackPart(view, all, track, base, orientation);
+}
+
+
+void
+R5ModernControlLook::DrawScrollBarBackground(BView* view, BRect& rect,
+	const BRect& updateRect, const rgb_color& base, uint32 flags,
+	orientation orientation)
+{
+	if (fHaikuScrollBars) {
+		HaikuControlLook::DrawScrollBarBackground(view, rect, updateRect,
+			base, flags, orientation);
+		return;
+	}
+	if (ShouldDraw(view, rect, updateRect))
+		_FillTrackPart(view, rect, rect, base, orientation);
+}
+
+
+//! The thumb: a round bar, 2 px inside the track on each side.
+void
+R5ModernControlLook::DrawScrollBarThumb(BView* view, BRect& rect,
+	const BRect& updateRect, const rgb_color& base, uint32 flags,
+	orientation orientation, uint32 knobStyle)
+{
+	if (fHaikuScrollBars) {
+		HaikuControlLook::DrawScrollBarThumb(view, rect, updateRect, base,
+			flags, orientation, knobStyle);
+		return;
+	}
+	if (!ShouldDraw(view, rect, updateRect))
+		return;
+
+	rgb_color panel = ui_color(B_PANEL_BACKGROUND_COLOR);
+	rgb_color thumb = base;
+	// a colour set whose thumb colour is the panel's (Haiku's factory
+	// colours) still gets a visible thumb
+	if (abs((int)thumb.Brightness() - (int)panel.Brightness()) < 24)
+		thumb = blend(panel, panel.IsLight() ? kInk : kWhite, 0.25f);
+	if ((flags & B_DISABLED) != 0)
+		thumb = blend(thumb, track_color(panel), 0.6f);
+
+	BRect face(rect);
+	if (orientation == B_HORIZONTAL)
+		face.InsetBy(0, 3);
+	else
+		face.InsetBy(3, 0);
+	if (!face.IsValid())
+		return;
+
+	float r = orientation == B_HORIZONTAL
+		? floorf((face.Height() + 1) / 2) : floorf((face.Width() + 1) / 2);
+
+	view->PushState();
+	view->ClipToRect(rect);
+	view->SetDrawingMode(B_OP_ALPHA);
+	view->SetHighColor(thumb);
+	view->FillRoundRect(BRect(face.left, face.top, face.right + 1,
+		face.bottom + 1), r, r);
+	view->PopState();
+}
+
+
+void
+R5ModernControlLook::DrawScrollViewFrame(BView* view, BRect& rect,
+	const BRect& updateRect, BRect verticalScrollBarFrame,
+	BRect horizontalScrollBarFrame, const rgb_color& base,
+	border_style borderStyle, uint32 flags, uint32 borders)
+{
+	BRect corner(rect.right, rect.bottom, rect.right, rect.bottom);
+	if (horizontalScrollBarFrame.IsValid())
+		corner.left = horizontalScrollBarFrame.right + 1;
+	if (verticalScrollBarFrame.IsValid())
+		corner.top = verticalScrollBarFrame.bottom + 1;
+
+	if (borderStyle == B_NO_BORDER) {
+		if (corner.IsValid()) {
+			view->SetHighColor(base);
+			view->FillRect(corner);
+		}
+		return;
+	}
+
+	rgb_color line = (flags & B_FOCUSED) != 0
+		? accent_color() : line_color(base);
+
+	if (borderStyle == B_FANCY_BORDER) {
+		// Haiku's two pixels: the outer one is the panel, the inner one the
+		// line, round at the corners
+		view->PushState();
+		view->SetHighColor(base);
+		view->StrokeRect(rect);
+		view->PopState();
+		rect.InsetBy(1, 1);
+	}
+
+	view->PushState();
+	view->SetDrawingMode(B_OP_ALPHA);
+	BRegion clip(BRect(rect.left, rect.top, rect.right + 1, rect.bottom + 1));
+	BRect inner(rect);
+	inner.InsetBy(1, 1);
+	clip.Exclude(BRect(inner.left, inner.top, inner.right + 1,
+		inner.bottom + 1));
+	view->ConstrainClippingRegion(&clip);
+	view->SetHighColor(line);
+	view->FillRoundRect(BRect(rect.left, rect.top, rect.right + 1,
+		rect.bottom + 1), radius(3), radius(3));
+	view->PopState();
+	rect.InsetBy(1, 1);
+
+	if (corner.IsValid()) {
+		view->SetHighColor(base);
+		view->FillRect(corner);
+	}
+}
+
+
+// #pragma mark - sliders
+
+
+rgb_color
+R5ModernControlLook::SliderBarColor(const rgb_color& base)
+{
+	return track_color(base).IsLight()
+		? blend(base, kInk, 0.12f) : blend(base, kWhite, 0.14f);
+}
+
+
+void
+R5ModernControlLook::DrawSliderBar(BView* view, BRect rect,
+	const BRect& updateRect, const rgb_color& base, rgb_color leftFillColor,
+	rgb_color rightFillColor, float sliderScale, uint32 flags,
+	orientation orientation)
+{
+	if (!ShouldDraw(view, rect, updateRect))
+		return;
+
+	// a 4 px round bar in the middle of Haiku's bar rect
+	BRect bar(rect);
+	float thickness = std::max(3.0f, radius(4));
+	if (orientation == B_HORIZONTAL) {
+		float middle = floorf((rect.top + rect.bottom) / 2);
+		bar.top = middle - floorf(thickness / 2) + 1;
+		bar.bottom = bar.top + thickness - 1;
+	} else {
+		float middle = floorf((rect.left + rect.right) / 2);
+		bar.left = middle - floorf(thickness / 2) + 1;
+		bar.right = bar.left + thickness - 1;
+	}
+
+	if ((flags & B_DISABLED) != 0) {
+		leftFillColor = disable_color(leftFillColor, base);
+		rightFillColor = disable_color(rightFillColor, base);
+	}
+
+	float split = orientation == B_HORIZONTAL
+		? floorf(rect.left + rect.Width() * sliderScale)
+		: floorf(rect.top + rect.Height() * sliderScale);
+	BRect shape(bar.left, bar.top, bar.right + 1, bar.bottom + 1);
+	float r = floorf(thickness / 2);
+
+	view->PushState();
+	view->SetDrawingMode(B_OP_ALPHA);
+
+	BRect leftPart(shape);
+	BRect rightPart(shape);
+	if (orientation == B_HORIZONTAL) {
+		leftPart.right = split;
+		rightPart.left = split;
+	} else {
+		leftPart.bottom = split;
+		rightPart.top = split;
+	}
+
+	BRegion clip(leftPart);
+	view->ConstrainClippingRegion(&clip);
+	view->SetHighColor(leftFillColor);
+	view->FillRoundRect(shape, r, r);
+	clip.Set(rightPart);
+	view->ConstrainClippingRegion(&clip);
+	view->SetHighColor(rightFillColor);
+	view->FillRoundRect(shape, r, r);
+	view->PopState();
+}
+
+
+void
+R5ModernControlLook::DrawSliderBar(BView* view, BRect rect,
+	const BRect& updateRect, const rgb_color& base, rgb_color fillColor,
+	uint32 flags, orientation orientation)
+{
+	DrawSliderBar(view, rect, updateRect, base, fillColor, fillColor, 1.0f,
+		flags, orientation);
+}
+
+
+//! The thumb: a white disc with the control line, as tall as Haiku's.
+void
+R5ModernControlLook::DrawSliderThumb(BView* view, BRect& rect,
+	const BRect& updateRect, const rgb_color& base, uint32 flags,
+	orientation orientation)
+{
+	if (!ShouldDraw(view, rect, updateRect))
+		return;
+
+	float size = std::min(rect.Width(), rect.Height()) + 1;
+	BRect disc(0, 0, size, size);
+	disc.OffsetTo(roundf((rect.left + rect.right + 1 - size) / 2),
+		roundf((rect.top + rect.bottom + 1 - size) / 2));
+
+	rgb_color background = view->LowColor();
+	rgb_color fill = field_color().IsLight() ? kWhite
+		: blend(ui_color(B_CONTROL_BACKGROUND_COLOR), kWhite, 0.15f);
+	rgb_color line = control_line_color(background);
+	if ((flags & B_FOCUSED) != 0)
+		line = accent_color();
+	if ((flags & B_DISABLED) != 0) {
+		fill = disable_color(fill, background);
+		line = disable_color(line, background);
+	}
+
+	view->PushState();
+	view->SetDrawingMode(B_OP_ALPHA);
+	view->SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_OVERLAY);
+	// a soft shadow under the disc, one pixel down
+	rgb_color shadow = kInk;
+	shadow.alpha = (flags & B_DISABLED) != 0 ? 0 : 38;
+	view->SetHighColor(shadow);
+	view->FillEllipse(disc.OffsetByCopy(0, 1));
+	view->SetHighColor(line);
+	view->FillEllipse(disc);
+	disc.InsetBy(1, 1);
+	view->SetHighColor(fill);
+	view->FillEllipse(disc);
+	view->PopState();
+}
+
+
+// #pragma mark - tabs
+
+
+void
+R5ModernControlLook::DrawTabFrame(BView* view, BRect& rect,
+	const BRect& updateRect, const rgb_color& base, uint32 flags,
+	uint32 borders, border_style borderStyle, uint32 side)
+{
+	if (!ShouldDraw(view, rect, updateRect))
+		return;
+
+	// the line under the tabs; the tab view's own frame runs on from it
+	view->SetHighColor(base);
+	view->FillRect(rect);
+	view->SetHighColor(line_color(base));
+	if (side == B_TOP_BORDER)
+		view->StrokeLine(rect.LeftBottom(), rect.RightBottom());
+	else if (side == B_BOTTOM_BORDER)
+		view->StrokeLine(rect.LeftTop(), rect.RightTop());
+	else if (side == B_LEFT_BORDER)
+		view->StrokeLine(rect.RightTop(), rect.RightBottom());
+	else
+		view->StrokeLine(rect.LeftTop(), rect.LeftBottom());
+}
+
+
+static void
+draw_tab(BView* view, BRect rect, const rgb_color& fill,
+	const rgb_color& line, uint32 side, bool active)
+{
+	float r = radius(8);
+	BRect shape(rect.left, rect.top, rect.right + 1, rect.bottom + 1);
+	// round on the side away from the content only: grow the shape past
+	// the content side by the radius and clip it back
+	switch (side) {
+		case BControlLook::B_TOP_BORDER:
+			shape.bottom += r;
+			break;
+		case BControlLook::B_BOTTOM_BORDER:
+			shape.top -= r;
+			break;
+		case BControlLook::B_LEFT_BORDER:
+			shape.right += r;
+			break;
+		default:
+			shape.left -= r;
+			break;
+	}
+
+	view->PushState();
+	BRegion clip(BRect(rect.left, rect.top, rect.right + 1, rect.bottom + 1));
+	view->ConstrainClippingRegion(&clip);
+	view->SetDrawingMode(B_OP_ALPHA);
+	view->SetHighColor(line);
+	view->FillRoundRect(shape, r, r);
+	BRect inner(shape);
+	inner.InsetBy(1, 1);
+	view->SetHighColor(fill);
+	view->FillRoundRect(inner, r - 1, r - 1);
+
+	if (!active) {
+		// an inactive tab stands on the line
+		view->SetHighColor(line);
+		if (side == BControlLook::B_TOP_BORDER)
+			view->StrokeLine(rect.LeftBottom(), rect.RightBottom());
+		else if (side == BControlLook::B_BOTTOM_BORDER)
+			view->StrokeLine(rect.LeftTop(), rect.RightTop());
+		else if (side == BControlLook::B_LEFT_BORDER)
+			view->StrokeLine(rect.RightTop(), rect.RightBottom());
+		else
+			view->StrokeLine(rect.LeftTop(), rect.LeftBottom());
+	}
+	view->PopState();
+}
+
+
+void
+R5ModernControlLook::DrawActiveTab(BView* view, BRect& rect,
+	const BRect& updateRect, const rgb_color& base, uint32 flags,
+	uint32 borders, uint32 side, int32 index, int32 selected, int32 first,
+	int32 last)
+{
+	if (!ShouldDraw(view, rect, updateRect))
+		return;
+
+	rgb_color fill = base;
+	draw_tab(view, rect, fill, line_color(base), side, true);
+	rect.InsetBy(1, 1);
+}
+
+
+void
+R5ModernControlLook::DrawInactiveTab(BView* view, BRect& rect,
+	const BRect& updateRect, const rgb_color& base, uint32 flags,
+	uint32 borders, uint32 side, int32 index, int32 selected, int32 first,
+	int32 last)
+{
+	if (!ShouldDraw(view, rect, updateRect))
+		return;
+
+	// #e6eaf0 under #ffffff, #20242c under #262b34 (A1, A2)
+	rgb_color fill = base.IsLight() ? blend(base, kInk, 0.06f)
+		: blend(base, kInk, 0.25f);
+	if ((flags & B_HOVER) != 0)
+		fill = blend(fill, base, 0.5f);
+	rgb_color background = view->LowColor();
+	view->SetHighColor(background);
+	view->FillRect(rect);
+
+	BRect tab(rect);
+	// inactive tabs are one pixel lower than the active one
+	if (side == B_TOP_BORDER)
+		tab.top += 1;
+	else if (side == B_BOTTOM_BORDER)
+		tab.bottom -= 1;
+	draw_tab(view, tab, fill, line_color(base), side, false);
+	rect.InsetBy(1, 1);
+}
+
+
+// #pragma mark - borders
+
+
+void
+R5ModernControlLook::DrawBorder(BView* view, BRect& rect,
+	const BRect& updateRect, const rgb_color& base, border_style borderStyle,
+	uint32 flags, uint32 borders)
+{
+	if (borderStyle == B_NO_BORDER)
+		return;
+
+	rgb_color line = (flags & B_FOCUSED) != 0
+		? accent_color() : line_color(base);
+	if (borderStyle == B_FANCY_BORDER) {
+		view->SetHighColor(base);
+		view->StrokeRect(rect);
+		rect.InsetBy(1, 1);
+	}
+	view->SetHighColor(line);
+	view->StrokeRect(rect);
+	rect.InsetBy(1, 1);
+}
+
+
+void
+R5ModernControlLook::DrawRaisedBorder(BView* view, BRect& rect,
+	const BRect& updateRect, const rgb_color& base, uint32 flags,
+	uint32 borders)
+{
+	DrawBorder(view, rect, updateRect, base, B_PLAIN_BORDER, flags, borders);
+}
+
+
+//! A box: one line, round 8 (the mockup's Parts box).
+void
+R5ModernControlLook::DrawGroupFrame(BView* view, BRect& rect,
+	const BRect& updateRect, const rgb_color& base, uint32 borders)
+{
+	float r = radius(8);
+	BRect shape(rect.left, rect.top, rect.right + 1, rect.bottom + 1);
+	if ((borders & B_TOP_BORDER) == 0)
+		shape.top -= r;
+	if ((borders & B_BOTTOM_BORDER) == 0)
+		shape.bottom += r;
+	if ((borders & B_LEFT_BORDER) == 0)
+		shape.left -= r;
+	if ((borders & B_RIGHT_BORDER) == 0)
+		shape.right += r;
+
+	view->PushState();
+	BRegion clip(BRect(rect.left, rect.top, rect.right + 1, rect.bottom + 1));
+	BRect inner(shape);
+	inner.InsetBy(1, 1);
+	clip.Exclude(inner);
+	view->ConstrainClippingRegion(&clip);
+	view->SetDrawingMode(B_OP_ALPHA);
+	view->SetHighColor(line_color(base));
+	view->FillRoundRect(shape, r, r);
+	view->PopState();
+
+	float left, top, right, bottom;
+	GetFrameInsets(B_GROUP_FRAME, 0, left, top, right, bottom);
+	if ((borders & B_LEFT_BORDER) != 0)
+		rect.left += left;
+	if ((borders & B_TOP_BORDER) != 0)
+		rect.top += top;
+	if ((borders & B_RIGHT_BORDER) != 0)
+		rect.right -= right;
+	if ((borders & B_BOTTOM_BORDER) != 0)
+		rect.bottom -= bottom;
+}
+
+
+/*!	A text field: the field colour inside the control line, round 7; the
+	accent line and a soft ring when it has the focus (A3).
+*/
+void
+R5ModernControlLook::DrawTextControlBorder(BView* view, BRect& rect,
+	const BRect& updateRect, const rgb_color& base, uint32 flags,
+	uint32 borders)
+{
+	if (ShouldDraw(view, rect, updateRect))
+		_DrawField(view, rect, updateRect, flags, 1);
+
+	float left, top, right, bottom;
+	GetFrameInsets(B_TEXT_CONTROL_FRAME, flags, left, top, right, bottom);
+	rect.left += left;
+	rect.top += top;
+	rect.right -= right;
+	rect.bottom -= bottom;
+}
+
+
+// #pragma mark - labels
+
+
+//! The label of a default button is white on the accent.
+void
+R5ModernControlLook::DrawLabel(BView* view, const char* label,
+	const BBitmap* icon, BRect rect, const BRect& updateRect,
+	const rgb_color& base, uint32 flags, const BAlignment& alignment,
+	const rgb_color* textColor)
+{
+	if ((flags & B_DEFAULT_BUTTON) != 0 && (flags & B_DISABLED) == 0) {
+		HaikuControlLook::DrawLabel(view, label, icon, rect, updateRect,
+			accent_color(), flags, alignment, &kWhite);
+		return;
+	}
+
+	HaikuControlLook::DrawLabel(view, label, icon, rect, updateRect, base,
+		flags, alignment, textColor);
+}
+
+
+}	// namespace BPrivate
+
+
+extern "C" BControlLook*
+instantiate_control_look(image_id id)
+{
+	return new(std::nothrow) BPrivate::R5ModernControlLook();
+}
