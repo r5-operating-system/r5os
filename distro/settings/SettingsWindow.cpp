@@ -216,6 +216,7 @@ public:
 								SearchField();
 	virtual	void				AttachedToWindow();
 	virtual	void				DoLayout();
+	virtual	void				DrawAfterChildren(BRect updateRect);
 	virtual	void				FrameResized(float width, float height);
 	virtual	void				MessageReceived(BMessage* message);
 	virtual	void				KeyDown(const char* bytes, int32 numBytes);
@@ -520,6 +521,7 @@ SearchField::SearchField()
 	fGlass(NULL),
 	fWatch(NULL)
 {
+	SetFlags(Flags() | B_DRAW_ON_CHILDREN | B_FULL_UPDATE_ON_RESIZE);
 	SetDivider(0);
 	fHint = new SearchHint(TextView());
 	AddChild(fHint);
@@ -544,20 +546,59 @@ void
 SearchField::DoLayout()
 {
 	BTextControl::DoLayout();
-	// The text view fills the field inside its frame, so the frame and
-	// the text are centred on the u * 34 height.
+	// Keep TextView at the full inner width so the border aligns with the
+	// 200 px sidebar above; DrawAfterChildren() masks the rounded corners
+	// under R5 Modern so TextView/SearchGlass/SearchHint never clip the arc.
 	if (TextView() != NULL) {
-		float left = 1, top = 1, right = 1, bottom = 1;
-		if (be_control_look != NULL) {
-			be_control_look->GetBackgroundInsets(
-				BControlLook::B_MENU_BACKGROUND, 0, left, top, right, bottom);
-		}
-		float insetX = left > 1 ? 6.0f : 2.0f;
-		BRect inner = Bounds().InsetByCopy(insetX, 2);
+		BRect inner = Bounds().InsetByCopy(2, 2);
 		TextView()->MoveTo(inner.LeftTop());
 		TextView()->ResizeTo(inner.Width(), inner.Height());
 	}
 	_SyncHint();
+}
+
+
+void
+SearchField::DrawAfterChildren(BRect updateRect)
+{
+	(void)updateRect;
+	if (be_control_look == NULL)
+		return;
+	float left = 1, top = 1, right = 1, bottom = 1;
+	be_control_look->GetBackgroundInsets(BControlLook::B_MENU_BACKGROUND, 0,
+		left, top, right, bottom);
+	if (left <= 1)
+		return;
+
+	BRect frame(Bounds());
+	float r = roundf(7 * be_plain_font->Size() / 12.0f);
+	rgb_color panel = ui_color(B_PANEL_BACKGROUND_COLOR);
+	PushState();
+	SetDrawingMode(B_OP_ALPHA);
+	SetHighColor(panel);
+	for (int32 i = 0; i < 4; i++) {
+		bool isLeft = i == 0 || i == 2;
+		bool isTop = i < 2;
+		float x = isLeft ? frame.left : frame.right + 1;
+		float y = isTop ? frame.top : frame.bottom + 1;
+		float dx = isLeft ? r : -r;
+		float dy = isTop ? r : -r;
+		BShape wedge;
+		wedge.MoveTo(BPoint(x, y));
+		wedge.LineTo(BPoint(x + dx, y));
+		wedge.ArcTo(r, r, 0, false, isLeft == isTop, BPoint(x, y + dy));
+		wedge.Close();
+		MovePenTo(B_ORIGIN);
+		FillShape(&wedge);
+	}
+	bool focused = TextView() != NULL && TextView()->IsFocus();
+	rgb_color line = focused ? ui_color(B_KEYBOARD_NAVIGATION_COLOR)
+		: (panel.IsLight()
+			? mix_color(panel, make_color(15, 23, 42), 45)
+			: mix_color(panel, make_color(255, 255, 255), 40));
+	SetHighColor(line);
+	StrokeRoundRect(frame, r, r);
+	PopState();
 }
 
 
