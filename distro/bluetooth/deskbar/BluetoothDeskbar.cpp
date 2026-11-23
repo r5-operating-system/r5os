@@ -190,6 +190,7 @@ public:
 	virtual void AttachedToWindow()
 	{
 		BView::AttachedToWindow();
+		fTrayLook = r5_deskbar_tray_look();
 		SetViewColor(B_TRANSPARENT_COLOR);
 		BMessage poll(kMsgPoll);
 		fRunner = new BMessageRunner(BMessenger(this), &poll, kPollInterval);
@@ -215,8 +216,8 @@ public:
 		rgb_color color = ui_color(B_PANEL_TEXT_COLOR);
 		rgb_color background = ui_color(B_PANEL_BACKGROUND_COLOR);
 		// Default (R5) Deskbar: the tray's one colour (docs/ICONS.md)
-		if (r5_deskbar_tray_style() == R5_TRAY_STYLE_SYMBOLS) {
-			color = r5_deskbar_tray_color();
+		if (fTrayLook.style == R5_TRAY_STYLE_SYMBOLS) {
+			color = fTrayLook.color;
 			background = ViewColor();
 		}
 		if (!fReached || !fEnabled || fRadios == 0) {
@@ -254,6 +255,7 @@ public:
 				break;
 
 			case R5_DESKBAR_TRAY_STYLE_CHANGED:
+				r5_tray_look_update(&fTrayLook, message);
 				Invalidate();
 				break;
 
@@ -410,6 +412,8 @@ private:
 	rgb_color		fGlyphColor;
 	float			fGlyphSide;
 	BMessage		fPaired;
+	// the tray look, its own copy (external review, 23 Nov 2026)
+	struct r5_tray_look	fTrayLook;
 };
 
 

@@ -105,6 +105,8 @@ namespace BPrivate {
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+#include <WindowEffects.h>
+
 #include "BarSettings.h"
 #include "DeskbarStyle.h"
 #include "ExpandoMenuBar.h"
@@ -544,6 +546,15 @@ TBarApp::MessageReceived(BMessage* message)
 // SPDX-License-Identifier: MIT
 		case R5Deskbar::kMsgSetStyle:
 			_SetStyle(message);
+			break;
+
+		case BAppearanceKit::B_WINDOW_EFFECTS_CHANGED:
+			// app_server: the effects changed, or the compositor turned off
+			// (external review, 23 Nov 2026); ApplyStyle() asks again
+			if (fBarWindow != NULL && fBarWindow->Lock()) {
+				fBarView->ApplyStyle();
+				fBarWindow->Unlock();
+			}
 			break;
 
 		case B_SOME_APP_ACTIVATED:

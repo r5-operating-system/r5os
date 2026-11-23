@@ -154,6 +154,12 @@ private:
 			MixerControl*	fMixerControl;
 			BBitmap*		fIcon;
 			BBitmap*		fMutedIcon;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			// the tray look, its own copy (external review, 23 Nov 2026)
+			struct r5_tray_look	fTrayLook;
+// SPDX-SnippetEnd
 };
 
 
@@ -217,6 +223,11 @@ MediaReplicant::AttachedToWindow()
 {
 	AdoptParentColors();
 	SetDrawingMode(B_OP_OVER);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	fTrayLook = r5_deskbar_tray_look();
+// SPDX-SnippetEnd
 
 	_ConnectMixer();
 
@@ -236,9 +247,9 @@ MediaReplicant::Draw(BRect rect)
 // SPDX-License-Identifier: MIT
 	// Default (R5) Deskbar: the speaker as a line symbol in the tray's one
 	// colour, a cross when muted (docs/ICONS.md, "Tray symbols")
-	if (r5_deskbar_tray_style() == R5_TRAY_STYLE_SYMBOLS) {
+	if (fTrayLook.style == R5_TRAY_STYLE_SYMBOLS) {
 		r5_glyph_draw(this, isMuted ? R5_GLYPH_VOLUME_OFF : R5_GLYPH_VOLUME,
-			Bounds(), r5_deskbar_tray_color());
+			Bounds(), fTrayLook.color);
 		return;
 	}
 // SPDX-SnippetEnd
@@ -311,6 +322,8 @@ MediaReplicant::MessageReceived(BMessage* message)
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 		case R5_DESKBAR_TRAY_STYLE_CHANGED:
+			// its own copy (external review, 23 Nov 2026)
+			r5_tray_look_update(&fTrayLook, message);
 			Invalidate();
 			break;
 

@@ -100,11 +100,18 @@ zoom classic-vertical
 style 1 2 1 1; place 0; shot classic-horizontal
 style 1 0 1 1; place 3
 
-# the compare: effects off, Classic, then Default (R5)
+# the compare: effects off, Classic, then Default (R5). The compositor
+# compares every 100th composed frame, and only the damage of that frame:
+# a round window that moves (r5-effects-test round-move) gives about 60
+# frames a second with round corners in the damage (external review B7).
 r5-effects-test shadow off; r5-effects-test frosted off
 r5-effects-test animations off
-sleep 8; say "compare classic"
-style 0 0 1 1; sleep 8; say "compare default"
+sleep 2; say "compare classic start"
+r5-effects-test round-move 18 20 > /dev/null 2>&1 &
+sleep 23; say "compare classic"
+style 0 0 1 1; sleep 3; say "compare default start"
+r5-effects-test round-move 18 20 > /dev/null 2>&1 &
+sleep 23; say "compare default"
 r5-effects-test shadow on; r5-effects-test frosted on
 r5-effects-test animations on
 

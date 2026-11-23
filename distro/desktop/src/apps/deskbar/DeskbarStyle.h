@@ -80,11 +80,16 @@ bool			Floating();
 bool			Unfolded();
 void			SetUnfolded(bool unfolded);
 
-// Whether the compositor shows effects (the GPU mode); asked at start
-// and when the screen changes.
+// Whether the compositor shows effects (the GPU mode), and which are on;
+// asked at start, on each style change and when app_server says they
+// changed (BAppearanceKit::B_WINDOW_EFFECTS_CHANGED).
 void			UpdateEffects();
 bool			EffectsActive();
 bool			AnimationsAllowed();
+
+// Whether the window watcher runs: Vertical, as in Haiku, and Default
+// (R5) Horizontal, whose items show the window count (external review).
+bool			WatchWindows(bool vertical);
 
 // Board A3: Vertical against the edge is flat and opaque, without glass.
 bool			FlatCorner();

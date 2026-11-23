@@ -133,8 +133,14 @@ TExpandoMenuBar::AttachedToWindow()
 
 	fTeamList.MakeEmpty();
 
-	if (Vertical())
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// also Default (R5) Horizontal (its window count)
+	if (R5Deskbar::WatchWindows(Vertical()))
 		StartMonitoringWindows();
+// SPDX-SnippetEnd
+
 }
 
 
@@ -1212,8 +1218,10 @@ TExpandoMenuBar::monitor_team_windows(void* arg)
 					}
 				} else {
 					bool hadListed = teamItem->HasListedWindows();
+					int32 hadCount = teamItem->ListedWindowCount();
 					if (teamItem->RefreshListedWindowsIfChanged()
-						&& teamItem->HasListedWindows() != hadListed) {
+						&& (teamItem->HasListedWindows() != hadListed
+							|| teamItem->ListedWindowCount() != hadCount)) {
 						itemModified = true;
 					}
 				}

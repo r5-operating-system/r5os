@@ -2024,8 +2024,14 @@ Window::_DrawBorder()
 	// in respond to a REDRAW message having been received, the
 	// clipping lock is held for reading
 	::Decorator* decorator = Decorator();
-	if (!decorator)
+	if (!decorator) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		_DrawProgramRim();
+// SPDX-SnippetEnd
 		return;
+	}
 
 	// construct the region of the border that needs redrawing
 	BRegion* dirtyBorderRegion = fRegionPool.GetRegion();
@@ -2386,6 +2392,45 @@ Window::SetCornerRadius(float radius)
 	fContentRegionValid = false;
 	fVisibleContentRegionValid = false;
 	fEffectiveDrawingRegionValid = false;
+	// the views keep their screen clipping, cut to the old outline, until
+	// it is invalidated (external review, 23 Nov 2026: the specks after
+	// round to square, the round top corners of Classic in Safe mode)
+	if (fTopView.IsSet())
+		fTopView->InvalidateScreenClipping();
+}
+
+
+/*!	CPU mode: the rim of a window without a decorator that asked for an
+	edge line (set_window_edge_line(), Deskbar in Default (R5)). It is in
+	the border region (GetBorderRegion()) and nobody else paints it. As in
+	_DrawBorder(): the clipping is a region of the pool, never NULL (the
+	Painter keeps the pointer and reads it; NULL crashed app_server, external
+	review B10), and the draw state is synced again afterwards.
+*/
+void
+Window::_DrawProgramRim()
+{
+	rgb_color rimColor;
+	const window_outline* rim = _SteppedRim(&rimColor);
+	DrawingEngine* engine = GetDrawingEngine();
+	if (rim == NULL || engine == NULL)
+		return;
+	BRegion* line = fRegionPool.GetRegion(rim->rim);
+	if (line == NULL)
+		return;
+	line->IntersectWith(&DrawableRegion());
+	line->IntersectWith(&fDirtyRegion);
+	if (line->CountRects() > 0 && engine->LockParallelAccess()) {
+		engine->ConstrainClippingRegion(line);
+		bool copyToFrontEnabled = engine->CopyToFrontEnabled();
+		engine->SetCopyToFrontEnabled(false);
+		engine->FillRegion(*line, rimColor);
+		engine->SetCopyToFrontEnabled(copyToFrontEnabled);
+		engine->CopyToFront(*line);
+		fWindow->ResyncDrawState();
+		engine->UnlockParallelAccess();
+	}
+	fRegionPool.Recycle(line);
 }
 
 

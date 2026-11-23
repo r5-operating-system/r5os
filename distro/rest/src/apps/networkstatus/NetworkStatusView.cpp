@@ -292,6 +292,11 @@ void
 NetworkStatusView::AttachedToWindow()
 {
 	BView::AttachedToWindow();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	fTrayLook = r5_deskbar_tray_look();
+// SPDX-SnippetEnd
 
 	SetViewColor(B_TRANSPARENT_COLOR);
 
@@ -388,6 +393,8 @@ NetworkStatusView::MessageReceived(BMessage* message)
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 		case R5_DESKBAR_TRAY_STYLE_CHANGED:
+			// its own copy (external review, 23 Nov 2026)
+			r5_tray_look_update(&fTrayLook, message);
 			Invalidate();
 			break;
 
@@ -427,8 +434,8 @@ NetworkStatusView::Draw(BRect updateRect)
 	// Default (R5) Deskbar: one-colour line symbols (docs/ICONS.md, "Tray
 	// symbols"): the Wi-Fi arcs that are lit, or the wired network with a
 	// slash when it is down
-	if (r5_deskbar_tray_style() == R5_TRAY_STYLE_SYMBOLS) {
-		rgb_color color = r5_deskbar_tray_color();
+	if (fTrayLook.style == R5_TRAY_STYLE_SYMBOLS) {
+		rgb_color color = fTrayLook.color;
 		BRect frame = Bounds();
 		if (fWirelessInterface.Length() > 0) {
 			int32 wifiStatus = kStatusUnknown;

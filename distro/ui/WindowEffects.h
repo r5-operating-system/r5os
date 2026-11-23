@@ -105,6 +105,14 @@ bool		window_effects_active();
 status_t	set_window_edge_line(BWindow* window, rgb_color color,
 				float width);
 
+// External review, 23 Nov 2026. app_server sends this to every program when
+// the window effects change or the compositor turns off (the GPU to the CPU
+// mode), as B_COLORS_UPDATED for colours: bool "active" (as
+// window_effects_active()) and uint32 "effects" (as window_effects()).
+enum {
+	B_WINDOW_EFFECTS_CHANGED	= 'r5we'
+};
+
 
 }	// namespace BAppearanceKit
 

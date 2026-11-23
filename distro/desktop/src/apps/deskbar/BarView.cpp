@@ -934,7 +934,14 @@ TBarView::_ChangeState(BMessage* message)
 		} else {
 			fInlineScrollView->SetOrientation(B_HORIZONTAL);
 			fExpandoMenuBar->SetMenuLayout(B_ITEMS_IN_ROW);
-			fExpandoMenuBar->StopMonitoringWindows();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			// Default (R5) Horizontal keeps it (its window count)
+			if (!R5Deskbar::WatchWindows(false))
+				fExpandoMenuBar->StopMonitoringWindows();
+// SPDX-SnippetEnd
+
 		}
 	}
 

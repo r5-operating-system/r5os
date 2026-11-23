@@ -1685,6 +1685,29 @@ ServerApp::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 			break;
 		}
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		case kMsgWindowEffectsChanged:
+		{
+			// To the program: whether the effects show now, and which are on
+			// (BAppearanceKit::B_WINDOW_EFFECTS_CHANGED, docs/LIBR5.md)
+			uint32 effects = 0;
+			if (fDesktop->LockSingleWindow()) {
+				DesktopSettings settings(fDesktop);
+				effects = settings.WindowEffects();
+				fDesktop->UnlockSingleWindow();
+			}
+			Compositor* compositor = fDesktop->GetCompositor();
+			BMessage update(kWindowEffectsChangedMessage);
+			update.AddBool("active", compositor != NULL
+				&& compositor->IsActive());
+			update.AddUInt32("effects", effects);
+			SendMessageToClient(&update);
+			break;
+		}
+// SPDX-SnippetEnd
+
 		/* font messages */
 
 		case AS_ADD_FONT_FILE:
@@ -3899,6 +3922,9 @@ ServerApp::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 				}
 				log_window_effects(before, after, strengthBefore,
 					strengthAfter);
+				// the programs that follow the effects (Deskbar)
+				if (before != after || strengthBefore != strengthAfter)
+					fDesktop->BroadcastToAllApps(kMsgWindowEffectsChanged);
 				// M11 review: the value is applied and on screen; a failed
 				// save is logged, not reported, or the Settings box and
 				// the screen would disagree.

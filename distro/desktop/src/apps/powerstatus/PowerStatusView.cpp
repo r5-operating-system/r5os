@@ -151,6 +151,11 @@ void
 PowerStatusView::AttachedToWindow()
 {
 	BView::AttachedToWindow();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	fTrayLook = r5_deskbar_tray_look();
+// SPDX-SnippetEnd
 
 	SetViewColor(B_TRANSPARENT_COLOR);
 
@@ -181,6 +186,8 @@ PowerStatusView::MessageReceived(BMessage *message)
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 		case R5_DESKBAR_TRAY_STYLE_CHANGED:
+			// its own copy (external review, 23 Nov 2026)
+			r5_tray_look_update(&fTrayLook, message);
 			Invalidate();
 			break;
 // SPDX-SnippetEnd
@@ -200,8 +207,8 @@ PowerStatusView::_DrawBattery(BView* view, BRect rect)
 // SPDX-License-Identifier: MIT
 	// Default (R5) Deskbar: the battery as a line symbol in one colour,
 	// its fill in four steps; almost empty in the warning colour
-	if (fInDeskbar && r5_deskbar_tray_style() == R5_TRAY_STYLE_SYMBOLS) {
-		rgb_color color = r5_deskbar_tray_color();
+	if (fInDeskbar && fTrayLook.style == R5_TRAY_STYLE_SYMBOLS) {
+		rgb_color color = fTrayLook.color;
 		int32 level = fHasBattery ? (int32)ceil(fPercent * 4 - 0.01) : 4;
 		if (fHasBattery && fPercent <= kLowBatteryPercentage
 			&& (fBatteryInfo.state & BATTERY_CHARGING) == 0)
@@ -428,8 +435,8 @@ PowerStatusView::DrawTo(BView* view, BRect rect)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-		if (fInDeskbar && r5_deskbar_tray_style() == R5_TRAY_STYLE_SYMBOLS)
-			view->SetHighColor(r5_deskbar_tray_color());
+		if (fInDeskbar && fTrayLook.style == R5_TRAY_STYLE_SYMBOLS)
+			view->SetHighColor(fTrayLook.color);
 // SPDX-SnippetEnd
 
 		view->DrawString(text, point);

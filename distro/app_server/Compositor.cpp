@@ -2694,6 +2694,14 @@ Compositor::_Compare(const BRegion& damage, const LayerList& layers,
 	}
 	BRegion checked(damage);
 	checked.Exclude(&shared);
+	// The corners of a round layer are blended with what lies below (mode
+	// 6, glass mode 3); the copy above has the raw pixels. Left out
+	// (external review, 23 Nov 2026: the MISMATCH beside the Deskbar).
+	for (int32 l = 0; l < layers.CountItems(); l++) {
+		Layer* layer = layers.ItemAt(l);
+		if (layer->round.IsRound())
+			checked.Exclude(&layer->round.area);
+	}
 	for (int32 i = 0; i < checked.CountRects(); i++) {
 		clipping_rect r = checked.RectAtInt(i);
 		for (int32 y = r.top; y <= r.bottom; y++) {
@@ -2830,6 +2838,9 @@ Compositor::_TurnOff(const char* reason)
 
 	fDesktop->CompositorTurnedOff();
 	fDesktop->UnlockAllWindows();
+	// the programs that follow the effects drop them (external review,
+	// 23 Nov 2026: Deskbar kept its glass look after a fall back)
+	fDesktop->BroadcastToAllApps(kMsgWindowEffectsChanged);
 	// The back buffer is the last frame the CPU still has. Copy it to the
 	// front now, on this thread, so a striped scanout does not stay up
 	// until the window threads have redrawn.

@@ -401,6 +401,7 @@ protected:
 			int32				_OutlineRects(window_outline_rect* rects);
 			const window_outline* _CachedOutline(bool blended);
 			const window_outline* _SteppedRim(rgb_color* color);
+			void				_DrawProgramRim();
 			bool				_OutlineBlended();
 // SPDX-SnippetEnd
 

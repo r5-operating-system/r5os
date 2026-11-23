@@ -48,6 +48,7 @@ namespace R5Deskbar {
 
 
 static bool sEffectsActive = false;
+static uint32 sEffects = 0;
 static bool sEffectsKnown = false;
 static bool sUnfolded = false;
 static team_id sFrontTeam = -1;
@@ -122,6 +123,7 @@ void
 UpdateEffects()
 {
 	sEffectsActive = BAppearanceKit::window_effects_active();
+	sEffects = BAppearanceKit::window_effects();
 	sEffectsKnown = true;
 }
 
@@ -138,8 +140,15 @@ EffectsActive()
 bool
 AnimationsAllowed()
 {
-	return EffectsActive() && (BAppearanceKit::window_effects()
-		& BAppearanceKit::B_WINDOW_ANIMATIONS) != 0;
+	return EffectsActive()
+		&& (sEffects & BAppearanceKit::B_WINDOW_ANIMATIONS) != 0;
+}
+
+
+bool
+WatchWindows(bool vertical)
+{
+	return vertical || (Modern() && Layout() == kLayoutHorizontal);
 }
 
 
@@ -153,7 +162,10 @@ FlatCorner()
 bool
 Glass()
 {
-	return Modern() && EffectsActive() && !FlatCorner();
+	// frosted glass on in Appearance (external review, 23 Nov 2026)
+	return Modern() && EffectsActive()
+		&& (sEffects & BAppearanceKit::B_WINDOW_FROSTED_GLASS) != 0
+		&& !FlatCorner();
 }
 
 

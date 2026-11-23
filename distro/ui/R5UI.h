@@ -29,6 +29,7 @@
 
 
 class BBitmap;
+class BMessage;
 class BView;
 
 
@@ -95,5 +96,17 @@ enum r5_tray_style {
 enum r5_tray_style r5_deskbar_tray_style();
 rgb_color r5_deskbar_tray_color();
 void r5_set_deskbar_tray_style(enum r5_tray_style style, rgb_color color);
+
+// External review, 23 Nov 2026: the style and the colour together, as one
+// tray item keeps them. It takes r5_deskbar_tray_look() when it is attached,
+// then r5_tray_look_update() with each R5_DESKBAR_TRAY_STYLE_CHANGED (true
+// when the message changed it), and draws from its own copy.
+struct r5_tray_look {
+	enum r5_tray_style	style;
+	rgb_color			color;
+};
+
+struct r5_tray_look r5_deskbar_tray_look();
+bool r5_tray_look_update(struct r5_tray_look* look, const BMessage* message);
 
 #endif

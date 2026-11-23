@@ -343,6 +343,8 @@ ProcessController::MessageReceived(BMessage *message)
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 		case R5_DESKBAR_TRAY_STYLE_CHANGED:
+			// its own copy (external review, 23 Nov 2026)
+			r5_tray_look_update(&fTrayLook, message);
 			Invalidate();
 			break;
 
@@ -600,6 +602,11 @@ void
 ProcessController::AttachedToWindow()
 {
 	BView::AttachedToWindow();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	fTrayLook = r5_deskbar_tray_look();
+// SPDX-SnippetEnd
 	if (Parent())
 		SetViewColor(B_TRANSPARENT_COLOR);
 	else
@@ -677,8 +684,8 @@ ProcessController::DoDraw(bool force)
 	rgb_color savedIdle = idle_color;
 	rgb_color savedMemory = memory_color;
 	rgb_color savedSwap = swap_color;
-	if (gInDeskbar && r5_deskbar_tray_style() == R5_TRAY_STYLE_SYMBOLS) {
-		rgb_color color = r5_deskbar_tray_color();
+	if (gInDeskbar && fTrayLook.style == R5_TRAY_STYLE_SYMBOLS) {
+		rgb_color color = fTrayLook.color;
 		rgb_color background = Parent() != NULL ? Parent()->ViewColor()
 			: ViewColor();
 		frame_color = color;

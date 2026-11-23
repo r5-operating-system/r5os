@@ -75,6 +75,7 @@ public:
 		r5_airplay_log("replicant", "AttachedToWindow frame %.0fx%.0f",
 			Bounds().Width() + 1, Bounds().Height() + 1);
 		SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
+		fTrayLook = r5_deskbar_tray_look();
 		BView::AttachedToWindow();
 	}
 
@@ -82,9 +83,9 @@ public:
 	{
 		// Default (R5) Deskbar: the AirPlay line symbol in the tray's one
 		// colour (docs/ICONS.md, "Tray symbols"); the blue "A" otherwise
-		if (r5_deskbar_tray_style() == R5_TRAY_STYLE_SYMBOLS) {
+		if (fTrayLook.style == R5_TRAY_STYLE_SYMBOLS) {
 			r5_glyph_draw(this, R5_GLYPH_AIRPLAY, Bounds(),
-				r5_deskbar_tray_color());
+				fTrayLook.color);
 			return;
 		}
 		BRect r = Bounds();
@@ -108,6 +109,7 @@ public:
 	virtual void MessageReceived(BMessage* message)
 	{
 		if (message->what == R5_DESKBAR_TRAY_STYLE_CHANGED) {
+			r5_tray_look_update(&fTrayLook, message);
 			Invalidate();
 			return;
 		}
@@ -157,6 +159,10 @@ public:
 		ConvertToScreen(&where);
 		menu->Go(where, true, true, true);
 	}
+
+private:
+	// the tray look, its own copy (external review, 23 Nov 2026)
+	struct r5_tray_look	fTrayLook;
 };
 
 

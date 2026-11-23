@@ -128,6 +128,11 @@ DeskbarView::~DeskbarView()
 void DeskbarView::AttachedToWindow()
 {
 	BView::AttachedToWindow();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	fTrayLook = r5_deskbar_tray_look();
+// SPDX-SnippetEnd
 	AdoptParentColors();
 
 	if (ViewUIColor() == B_NO_COLOR)
@@ -221,9 +226,9 @@ DeskbarView::Draw(BRect /*updateRect*/)
 // SPDX-License-Identifier: MIT
 	// Default (R5) Deskbar: an envelope, with a dot for new mail, in the
 	// tray's one colour (docs/ICONS.md, "Tray symbols")
-	if (r5_deskbar_tray_style() == R5_TRAY_STYLE_SYMBOLS) {
+	if (fTrayLook.style == R5_TRAY_STYLE_SYMBOLS) {
 		r5_glyph_draw(this, fStatus == kStatusNewMail ? R5_GLYPH_MAIL_NEW
-			: R5_GLYPH_MAIL, Bounds(), r5_deskbar_tray_color());
+			: R5_GLYPH_MAIL, Bounds(), fTrayLook.color);
 		return;
 	}
 // SPDX-SnippetEnd
@@ -244,6 +249,8 @@ DeskbarView::MessageReceived(BMessage* message)
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 		case R5_DESKBAR_TRAY_STYLE_CHANGED:
+			// its own copy (external review, 23 Nov 2026)
+			r5_tray_look_update(&fTrayLook, message);
 			Invalidate();
 			break;
 // SPDX-SnippetEnd
