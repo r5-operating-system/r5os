@@ -52,6 +52,7 @@ HIDDevice::HIDDevice(uint16 descriptorAddress, i2c_device_interface* i2c,
 		fInputReady(inputReady),
 		fOpenCount(0),
 		fRemoved(false),
+		fLoggedInputs(0),
 		fParser(this),
 		fProtocolHandlerCount(0),
 		fProtocolHandlerList(NULL),
@@ -191,6 +192,14 @@ HIDDevice::HIDDevice(uint16 descriptorAddress, i2c_device_interface* i2c,
 
 	ProtocolHandler::AddHandlers(*this, fProtocolHandlerList,
 		fProtocolHandlerCount);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Which device is which, for the input lines below.
+	TRACE_ALWAYS("%04x:%04x at 0x%02x: %" B_PRIu32 " handlers\n",
+		fDescriptor.wVendorID, fDescriptor.wProductID, fDescriptorAddress,
+		fProtocolHandlerCount);
+	// SPDX-SnippetEnd
 	fStatus = B_OK;
 }
 
@@ -221,10 +230,16 @@ HIDDevice::Open(ProtocolHandler *handler, uint32 flags)
 status_t
 HIDDevice::Close(ProtocolHandler *handler)
 {
-	// TODO what's the use for fOpenCount? It's not referenced anywhere and this function powers
-	// the device off in any case.
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// The device stays powered, as on Linux. A touch screen is published
+	// as several devices (finger and pen); closing one of them put the
+	// whole screen to sleep while the others stayed open, and Open()
+	// never woke it again. Some devices also do not wake from a SET_POWER
+	// sleep the way the specification says.
 	atomic_add(&fOpenCount, -1);
-	_SetPower(I2C_HID_POWER_OFF);
+	// SPDX-SnippetEnd
 
 	return B_OK;
 }
@@ -293,6 +308,25 @@ HIDDevice::MaybeScheduleTransfer(HIDReport *report)
 		actualLength = 0;
 	else
 		actualLength -= 2;
+
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// The first input reports of each device go to the syslog, so a boot
+	// shows whether a device (a touch screen) sends anything at all.
+	if (actualLength > 0 && report->Type() == HID_REPORT_TYPE_INPUT
+		&& atomic_add(&fLoggedInputs, 1) < 20) {
+		uint16 readable = fDescriptor.wMaxInputLength > 2
+			? fDescriptor.wMaxInputLength - 2 : 0;
+		uint16 count = min_c(min_c(actualLength, readable), 8);
+		char bytes[3 * 8 + 1] = "";
+		for (uint16 i = 0; i < count; i++)
+			snprintf(bytes + 3 * i, 4, " %02x", fTransferBuffer[2 + i]);
+		TRACE_ALWAYS("%04x:%04x: input of %u bytes:%s\n",
+			fDescriptor.wVendorID, fDescriptor.wProductID, actualLength,
+			bytes);
+	}
+	// SPDX-SnippetEnd
 
 	atomic_set(&fTransferScheduled, 0);
 
