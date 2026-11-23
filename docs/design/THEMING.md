@@ -402,6 +402,13 @@ Every point of the review (`1.7` was left out by the owner: the mockup draws an 
 - A5: Tray: the vertical Deskbar's tray has padding 8 and gaps of 5 (was 10 and 7), so five items and the clock share one row. Every tray glyph of libr5icons (Bluetooth, Wi-Fi, Volume, Network, AirPlay, Mail; the same numbers, `docs/ICONS.md`) has a line of 1.6 on the 24 grid; the network boxes are larger so they stay open. Not changed: the Workspaces replicant (Haiku's, a picture of the workspaces, not a glyph).
 - A6: Deskbar menu: with the R5 menu style its surface is the menu colour, opaque, like its submenus (no glass), and its square edge is the menu's edge colour; the Deskbar's own corners stay.
 
+### Owner's review of the dark glass Deskbar (23 Nov 2026)
+
+- Dark halo round text and the clock: on glass the Deskbar draws its labels, counts and clock with `B_OP_ALPHA` and `B_ALPHA_COMPOSITE` (`R5Deskbar::SetTextMode()`), so a letter's antialiased edge keeps its coverage instead of being mixed with the opaque surface colour. Opaque surfaces (no GPU, Safe mode) draw with `B_OP_OVER` as before.
+- Fringes on icons and glyphs: icons (`DrawIcon()`) and the libr5icons glyphs (`r5_glyph_draw()`) were already composited this way; with the deeper dark glass below, their edges sit on a dark surface. Checked on the QEMU crops; see the PR.
+- Black rings round the open or pressed row: in dark the hollow is a fill of white at 8 % and a line of white at 6 % (mockup B1), not the light theme's dark inset shadow. The rows' inset from the round corners is A4.
+- Grey glass with a black edge: the compositor shows half the blur through the view colour of dark glass (a theme's dark colours; the step's see-through, 28 % at Balanced, becomes 14 %), so the dark surface stays a deep slate over a light wallpaper; glass of pixels with their own alpha is unchanged. The edge is 1.5. Safe mode and no GPU: opaque, unchanged.
+
 ## The Theme Kit (owner's addition, 23 Nov 2026)
 
 For theme makers: the calls in `<Themes.h>` (list, read, apply, save,

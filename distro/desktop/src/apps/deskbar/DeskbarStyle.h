@@ -129,6 +129,7 @@ team_id			FrontTeam();
 // view's background glass; the blue line and icons are opaque.
 void			FillShade(BView* view, BRect rect, float radius, uint8 alpha);
 void			DrawHover(BView* view, BRect rect, float radius);
+void			SetTextMode(BView* view);
 void			DrawHollow(BView* view, BRect rect, float radius);
 void			DrawFrontLine(BView* view, BRect line);
 void			DrawSeparator(BView* view, float x, float top, float bottom);

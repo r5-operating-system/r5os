@@ -9,6 +9,8 @@
 
 #include "CompositorPrivate.h"
 
+#include "DesktopSettings.h"
+
 
 //	#pragma mark - effects (M11 step 4, decision 16)
 
@@ -634,6 +636,17 @@ Compositor::_RecordGlass(Layer* layer, const BRegion& damage, uint64 frame,
 	if (!entry->glass.IsSet())
 		return;
 	window_glass_geometry geometry = window_glass_for(entry->glassStrength);
+	// Dark glass (a theme's dark colours) shows half the blur through the
+	// view colour: over a light wallpaper the dark surface stays a deep
+	// slate instead of a flat grey (owner's review of the dark Deskbar,
+	// 23 Nov 2026; mockup B1). The glass of pixels with their own alpha is
+	// unchanged.
+	int32 fixedSeeThrough = geometry.seeThrough;
+	{
+		DesktopSettings settings(fDesktop);
+		if (settings.UIColor(B_PANEL_BACKGROUND_COLOR).IsDark())
+			fixedSeeThrough /= 2;
+	}
 	vk->vkCmdBindPipeline(vk->commands, VK_PIPELINE_BIND_POINT_COMPUTE,
 		vk->effectsPipeline);
 	// M13 step 2: a window that Skia draws is read from its image
@@ -667,7 +680,8 @@ Compositor::_RecordGlass(Layer* layer, const BRegion& damage, uint64 frame,
 			else
 				part.IntersectWith(&layer->glassAlpha);
 			part.IntersectWith(&pixels);
-			effect.amount = geometry.seeThrough
+			effect.amount = (kind == 0 ? fixedSeeThrough
+					: geometry.seeThrough)
 				| (kind == 0 ? kEffectFixedGlass : 0);
 			effect.auxStride = areaWidth;
 			// The round outline: glass in a corner's square is drawn with

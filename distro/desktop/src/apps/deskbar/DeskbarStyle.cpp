@@ -384,8 +384,43 @@ DrawHover(BView* view, BRect rect, float radius)
 
 
 void
+SetTextMode(BView* view)
+{
+	// On glass, a letter's antialiased edge keeps its coverage (composite)
+	// instead of being mixed with the opaque surface colour, which left a
+	// dark rim round every letter over a lighter glass (owner's review of
+	// the dark Deskbar). Opaque surfaces draw as before.
+	if (Glass()) {
+		view->SetDrawingMode(B_OP_ALPHA);
+		view->SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_COMPOSITE);
+	} else
+		view->SetDrawingMode(B_OP_OVER);
+}
+
+
+void
 DrawHollow(BView* view, BRect rect, float radius)
 {
+	if (Dark()) {
+		// dark (mockup B1, owner's review): a light fill of white at 8 %
+		// and a line of white at 6 %, no black rings
+		view->PushState();
+		view->SetDrawingMode(B_OP_ALPHA);
+		view->SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_OVERLAY);
+		float r = std::max(0.0f, std::min(radius,
+			std::min(rect.Width(), rect.Height()) / 2));
+		view->SetHighColor(make_color(255, 255, 255, 20));
+		fill_round(view, rect, r);
+		view->SetHighColor(make_color(255, 255, 255, 15));
+		if (r <= 0)
+			view->StrokeRect(rect);
+		else {
+			view->StrokeRoundRect(rect.InsetByCopy(0.5f, 0.5f), r - 0.5f,
+				r - 0.5f);
+		}
+		view->PopState();
+		return;
+	}
 	// rgba(30,45,70,.12), the inset shadow 0 2px 4px rgba(0,20,60,.28) and
 	// an inner line rgba(30,45,70,.10) (board D, option E)
 	FillShade(view, rect, radius, Glass() ? 44 : 31);

@@ -917,7 +917,7 @@ TTeamMenuItem::_DrawModern()
 
 	float baseline = button.top + floorf((button.Height() + 1
 		- (fontHeight.ascent + fontHeight.descent)) / 2 + fontHeight.ascent);
-	menu->SetDrawingMode(B_OP_OVER);
+	SetTextMode(menu);
 	menu->SetLowColor(SurfaceColor());
 	// a row under the pointer or pressed has the full label colour, as
 	// the front row (external review A4)
