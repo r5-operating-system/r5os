@@ -24,10 +24,12 @@
 
 #include "Card.h"
 
+#include <ControlLook.h>
 #include <InterfaceDefs.h>
 #include <Layout.h>
 #include <Message.h>
 
+#include <math.h>
 #include <new>
 
 
@@ -132,12 +134,32 @@ BCard::Archive(BMessage* archive, bool deep) const
 }
 
 
+/*!	True while the control look is R5 Modern, or another look that asks for
+	the R5 style: it returns more than Haiku's 1 for B_MENU_BACKGROUND
+	(docs/LIBR5.md, "Following the controls"). Haiku's and R5's controls
+	return 1.
+*/
+static bool
+r5_modern_controls()
+{
+	if (be_control_look == NULL)
+		return false;
+	float left = 1, top = 1, right = 1, bottom = 1;
+	be_control_look->GetBackgroundInsets(BControlLook::B_MENU_BACKGROUND, 0,
+		left, top, right, bottom);
+	return left > 1;
+}
+
+
 void
 BCard::Draw(BRect updateRect)
 {
 	(void)updateRect;
 	BRect bounds = Bounds();
-	float radius = be_plain_font->Size() * 0.25f;
+	// R5 Modern: the mockup's round card (8 at 12 points); R5 and Classic
+	// keep the small corner (owner's S1)
+	float radius = r5_modern_controls() ? roundf(be_plain_font->Size() * 8 / 12)
+		: be_plain_font->Size() * 0.25f;
 	SetHighColor(card_fill(fStyle));
 	FillRoundRect(bounds, radius, radius);
 	SetHighColor(card_border());

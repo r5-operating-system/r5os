@@ -411,6 +411,12 @@ Every point of the review. `1.7`, the owner's decision: the "Save as theme…" c
 
 Two fresh reviews of the fixes found: every shape of the R5 Modern look was drawn one pixel past its rect on the right and the bottom (a "+1", while Painter's fills cover those pixels already); the menu field's inside used the wrong face; BSlider's default bar colour is taken once for the panel of that moment (now any grey bar colour counts as the default, so a live Light/Dark switch keeps the accent, and a coloured bar colour is the program's); the dark accents by Haiku's HSP brightness; `remove_theme()` by the name inside; the vertical leaf's shade inside the 1 px edge; the taller menu bar only for a row bar that sizes itself. All fixed. The menu bar height and the menu measures follow the plain font size (a menu font of another size keeps rows and the bar at the plain size's measures).
 
+### Settings card, tabs and sidebar (owner, S1 to S3, 23 Nov 2026)
+
+- S1: `BCard` (and so the Settings page header) has corners of 8 at 12 points with R5 Modern; R5 and Classic keep the small corner.
+- S2: R5 Modern tabs stand 1 in at the start and 2 at the end, a gap of 3 between two tabs; the line under the inactive tabs runs on under the gap.
+- S3: the Settings sidebar with R5 Modern: the open category block is 6 in from the list's sides with corners of 8, and the selected row a pill 4 further in, corners of 6. The list and Search stay 200 wide; the rows and their text do not move. R5 and Classic unchanged. libr5ui, `docs/LIBR5.md` "Following the controls".
+
 ### Owner's review of the dark glass Deskbar (23 Nov 2026)
 
 - Dark halo round text and the clock: on glass the Deskbar draws its labels, counts and clock with `B_OP_ALPHA` and `B_ALPHA_COMPOSITE` (`R5Deskbar::SetTextMode()`), so a letter's antialiased edge keeps its coverage instead of being mixed with the opaque surface colour. Opaque surfaces (no GPU, Safe mode) draw with `B_OP_OVER` as before.

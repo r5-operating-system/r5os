@@ -34,6 +34,8 @@ The R5 interface classes: what exists, and when to use it. The exact calls, colo
 | `BAxisBar` | `<AxisBar.h>` | A value from -1 to 1 with a centre, filled from the middle: a turn rate, a stick axis. `SetEnabled(false)` draws it gray | Progress (that is `BStatusBar`, from the left). A value the user drags (that is `BSlider`) | `BGameControllerMotionView` (Pitch, Roll, Yaw). The Game controllers page in Settings is the second user |
 | `BCardStrip`, `BCardStripItem` | `<CardStrip.h>`, `<CardStripItem.h>` | A horizontal row of cards of which one is chosen: a picture (handed in), a title and one subtitle line per card. Mouse and arrow keys, one selection, a message with `"index"`, sideways scrolling when full, and a dashed card with a text and an optional button while it is empty | A list the user reads row by row (that is `BListView` or `BSidebar`). A card with its own controls (that is `BCard`). One card the user clicks (that is `BActionCard`) | The Game controllers page in Settings, one card per controller. Possible second users: Bluetooth devices, Sound outputs |
 
+Cards and the sidebar follow the control look: with R5 Modern (any look that asks for the R5 style) a card has corners of 8 and the sidebar's open category and selection are round and inset; with Haiku's and R5's controls they are as before. Nothing moves. See `docs/LIBR5.md`, "Following the controls".
+
 ## Functions
 
 Not every part of the kit is a class. These are free functions in `BAppearanceKit`, the way Haiku has `ui_color()` beside its classes.

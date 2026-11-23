@@ -1523,19 +1523,31 @@ draw_tab(BView* view, BRect rect, const rgb_color& fill,
 	// rect, as the clip (review 2 of the external fixes)
 	BRect shape(rect);
 	// round on the side away from the content only: grow the shape past
-	// the content side by the radius and clip it back
+	// the content side by the radius and clip it back; 1 in at the start
+	// and 2 at the end, a gap of 3 between two tabs (owner's S2), the line
+	// under an inactive tab runs on under the gap
+	float start = radius(1);
+	float end = radius(2);
 	switch (side) {
 		case BControlLook::B_TOP_BORDER:
 			shape.bottom += r;
+			shape.left += start;
+			shape.right -= end;
 			break;
 		case BControlLook::B_BOTTOM_BORDER:
 			shape.top -= r;
+			shape.left += start;
+			shape.right -= end;
 			break;
 		case BControlLook::B_LEFT_BORDER:
 			shape.right += r;
+			shape.top += start;
+			shape.bottom -= end;
 			break;
 		default:
 			shape.left -= r;
+			shape.top += start;
+			shape.bottom -= end;
 			break;
 	}
 

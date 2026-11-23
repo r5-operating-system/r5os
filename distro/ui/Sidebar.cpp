@@ -30,6 +30,7 @@
 #include <ScrollView.h>
 #include <Window.h>
 
+#include <math.h>
 #include <new>
 #include <string.h>
 #include <vector>
@@ -117,6 +118,23 @@ BSidebar::Archive(BMessage* archive, bool deep) const
 }
 
 
+/*!	True while the control look is R5 Modern, or another look that asks for
+	the R5 style: it returns more than Haiku's 1 for B_MENU_BACKGROUND
+	(docs/LIBR5.md, "Following the controls"). Haiku's and R5's controls
+	return 1.
+*/
+static bool
+r5_modern_controls()
+{
+	if (be_control_look == NULL)
+		return false;
+	float left = 1, top = 1, right = 1, bottom = 1;
+	be_control_look->GetBackgroundInsets(BControlLook::B_MENU_BACKGROUND, 0,
+		left, top, right, bottom);
+	return left > 1;
+}
+
+
 void
 BSidebar::Draw(BRect updateRect)
 {
@@ -161,9 +179,18 @@ BSidebar::Draw(BRect updateRect)
 			paint.bottom = itemFrame.bottom;
 		if (haveGroup && item != NULL && item->fLast) {
 			float radius = be_plain_font->Size() * 0.25f;
+			BRect block(paint);
+			if (r5_modern_controls()) {
+				// R5 Modern (mockups A1, A2; owner's S3): the open category
+				// inside the list, 6 from the sides, round 8; the rows stay
+				// where they are
+				float u = be_plain_font->Size() / 13.0f;
+				block.InsetBy(roundf(u * 6.0f), 0);
+				radius = roundf(be_plain_font->Size() * 8 / 12);
+			}
 			SetHighColor(mix_color(ui_color(B_LIST_BACKGROUND_COLOR),
 				ui_color(B_CONTROL_HIGHLIGHT_COLOR), 40));
-			FillRoundRect(paint, radius, radius);
+			FillRoundRect(block, radius, radius);
 			haveGroup = false;
 		}
 		itemFrame.top = itemFrame.bottom + 1;
