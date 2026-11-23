@@ -79,6 +79,9 @@ if [ "$1" = menus ] || [ "$1" = safe-menus ]; then
 		open /boot/home; sleep 4
 		say "keys alt esc"; sleep 3; shot ${p}menus-tracker-file-$mode
 		say "key esc"; say "key esc"; sleep 2
+		# a context menu in the window (its empty part)
+		say "rclick 400 240"; sleep 3; shot ${p}menus-tracker-context-$mode
+		say "key esc"; sleep 2
 		# StyledEdit in front again: a new window
 		/boot/system/apps/StyledEdit > /dev/null 2>&1 &
 		sleep 4

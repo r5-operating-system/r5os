@@ -95,6 +95,14 @@ class Qmp:
                 {"type": "btn", "data": {"button": "left", "down": down}}])
             time.sleep(0.1)
 
+    def rclick(self, x, y):
+        self.move(x, y)
+        time.sleep(0.4)
+        for down in (True, False):
+            self.call("input-send-event", events=[
+                {"type": "btn", "data": {"button": "right", "down": down}}])
+            time.sleep(0.1)
+
     def dump(self, path):
         self.call("screendump", filename=path)
         time.sleep(0.3)
@@ -242,6 +250,8 @@ def main():
                     to_png(path)
                 elif kind == "click" and len(words) >= 3:
                     qmp.click(float(words[1]), float(words[2]))
+                elif kind == "rclick" and len(words) >= 3:
+                    qmp.rclick(float(words[1]), float(words[2]))
                 elif kind == "click-save" and save_at is not None:
                     qmp.click(save_at[0], save_at[1])
                 elif kind == "move" and len(words) >= 3:
