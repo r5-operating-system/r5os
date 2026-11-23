@@ -1670,6 +1670,7 @@ ThemePage::ThemePage(ThemeModule* module)
 
 	fPartsLabel = new PartsLabel();
 	fPartsBox = new BBox("parts");
+	fPartsBox->SetFlags(fPartsBox->Flags() | B_FULL_UPDATE_ON_RESIZE);
 	fPartsBox->SetLabel(fPartsLabel);
 	fPartsBox->AddChild(fPartsGrid);
 

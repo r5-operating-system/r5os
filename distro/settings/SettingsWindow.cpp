@@ -296,6 +296,7 @@ SettingsList::MouseDown(BPoint where)
 	if (item->OutlineLevel() == 0 && CountItemsUnder(item, true) > 0) {
 		Select(index);
 		ExpandOnly(item);
+		UpdateScrollBar();
 		BMessage message(kMsgOpenCategory);
 		message.AddString("category", item->Id());
 		Window()->PostMessage(&message);
@@ -304,6 +305,7 @@ SettingsList::MouseDown(BPoint where)
 	if (strcmp(item->Id(), "home") == 0) {
 		Select(index);
 		ExpandOnly(NULL);
+		UpdateScrollBar();
 		Window()->PostMessage(kMsgOpenHome);
 		return;
 	}
@@ -550,7 +552,7 @@ SearchField::DoLayout()
 			be_control_look->GetBackgroundInsets(
 				BControlLook::B_MENU_BACKGROUND, 0, left, top, right, bottom);
 		}
-		float insetX = left > 1 ? 5.0f : 2.0f;
+		float insetX = left > 1 ? 6.0f : 2.0f;
 		BRect inner = Bounds().InsetByCopy(insetX, 2);
 		TextView()->MoveTo(inner.LeftTop());
 		TextView()->ResizeTo(inner.Width(), inner.Height());
@@ -572,6 +574,12 @@ SearchField::MessageReceived(BMessage* message)
 {
 	if (message->what == 'shnt') {
 		_SyncHint();
+		return;
+	}
+	if (message->what == B_COLORS_UPDATED) {
+		BTextControl::MessageReceived(message);
+		DoLayout();
+		Invalidate();
 		return;
 	}
 	BTextControl::MessageReceived(message);
@@ -854,6 +862,7 @@ SettingsWindow::SettingsWindow(SettingsManager* manager,
 	// the R5 Modern controls (external review 1.14)
 	BScrollView* scrollView = new BScrollView("nav-scroll", fList, 0, false,
 		true, B_NO_BORDER);
+	scrollView->SetViewUIColor(B_LIST_BACKGROUND_COLOR);
 	BView* scroll = new ListFrame(scrollView);
 
 	fLock = new BButton("lock", NULL, new BMessage(kMsgLockButton));

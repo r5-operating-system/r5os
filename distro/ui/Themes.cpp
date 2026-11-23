@@ -56,6 +56,7 @@
 #include <Roster.h>
 #include <String.h>
 #include <StringList.h>
+#include <Window.h>
 #include <driver_settings.h>
 
 #include "WindowEffects.h"
@@ -516,7 +517,8 @@ write_theme(const char* path, const theme_info* info, uint32 parts)
 			char accent[16];
 			snprintf(accent, sizeof(accent), "#%02x%02x%02x",
 				info->accent.red, info->accent.green, info->accent.blue);
-			text << "accent " << accent << "\n";
+			// Quote #rrggbb: driver_settings treats an unquoted # as a comment.
+			text << "accent \"" << accent << "\"\n";
 		} else
 			text << "accent default\n";
 	}
@@ -1018,12 +1020,23 @@ set_theme(const theme_info* info, uint32 parts)
 			set_ui_colors(&colors);
 	}
 
-	if (lookChanged && be_roster != NULL) {
+	if (lookChanged) {
 		// live switching: every window of every program loads the control
-		// look again (Window.cpp, r5_reload_control_look())
+		// look again (Window.cpp, r5_reload_control_look()). Post directly
+		// to our own windows too so the caller (Settings) switches live even
+		// if BRoster::Broadcast skips or delays the calling team.
 		BMessage message(B_COLORS_UPDATED);
 		message.AddInt64("r5:control_look", system_time());
-		be_roster->Broadcast(&message);
+		if (be_roster != NULL)
+			be_roster->Broadcast(&message);
+		if (be_app != NULL) {
+			int32 count = be_app->CountWindows();
+			for (int32 i = 0; i < count; i++) {
+				BWindow* window = be_app->WindowAt(i);
+				if (window != NULL)
+					window->PostMessage(&message);
+			}
+		}
 	}
 
 	if (be_roster != NULL) {

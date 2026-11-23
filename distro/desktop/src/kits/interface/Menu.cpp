@@ -3206,9 +3206,22 @@ BMenu::_CalcFrame(BPoint where, bool* scrollOn)
 		// The R5 menu style: beside the menu window, 4 between the two
 		// windows' lines (mockup M1, M4; each 1 px line lies outside its
 		// window's frame), the first row level with the item that opened it.
+		// Lock superMenu's window before ConvertToScreen(): a dynamic submenu
+		// (e.g. ProcessController's MemoryBarMenu::Pulse() -> _RemoveItems())
+		// calls _CalcFrame() from its own window thread while superMenu's
+		// looper is unlocked.
 		const float gap = roundf(4 * BPrivate::MenuPrivate::R5Scale());
-		BRect superFrame = superMenu->Window()->Frame();
-		BRect itemFrame = superMenu->ConvertToScreen(superItem->Frame());
+		BRect superFrame = fSuperbounds;
+		BRect itemFrame(where, where);
+		BWindow* superWindow = superMenu->Window();
+		if (superWindow != NULL
+			&& superWindow->LockWithTimeout(50000) == B_OK) {
+			superFrame = superWindow->Frame();
+			itemFrame = superMenu->ConvertToScreen(superItem->Frame());
+			superWindow->Unlock();
+		} else {
+			itemFrame.top = where.y;
+		}
 		frame.OffsetTo(superFrame.right + 3 + gap, itemFrame.top - r5Margin);
 		if (frame.right > screenFrame.right
 				|| superMenu->fExtraMenuData->frameShiftedLeft) {
