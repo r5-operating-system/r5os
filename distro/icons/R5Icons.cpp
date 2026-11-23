@@ -575,31 +575,15 @@ glyph_paint(BView* view, r5_glyph which, BRect frame)
 }
 
 
-void
-r5_glyph_draw(BView* view, r5_glyph which, BRect frame, rgb_color color)
+// Paints the glyph into `paint` of a new transparent B_RGBA32 bitmap of
+// `bounds`. The coverage stays in the alpha channel.
+static BBitmap*
+glyph_render(r5_glyph which, BRect paint, BRect bounds, rgb_color color)
 {
-	if (view == NULL || !frame.IsValid())
-		return;
-
-	view->PushState();
-	color.alpha = 255;
-	view->SetHighColor(color);
-	view->SetDrawingMode(B_OP_ALPHA);
-	view->SetBlendingMode(B_CONSTANT_ALPHA, B_ALPHA_OVERLAY);
-	glyph_paint(view, which, frame);
-	view->PopState();
-}
-
-
-BBitmap*
-r5_glyph_bitmap(r5_glyph which, float side, rgb_color color)
-{
-	int32 pixels = icon_pixels(side);
 	// The last glyph of enum r5_glyph; update it with every new glyph.
-	if (pixels < 1 || which < R5_GLYPH_POWER || which > R5_GLYPH_MOON)
+	if (which < R5_GLYPH_POWER || which > R5_GLYPH_MOON)
 		return NULL;
 
-	BRect bounds(0, 0, pixels - 1, pixels - 1);
 	BBitmap* bitmap = new(std::nothrow) BBitmap(bounds,
 		B_BITMAP_ACCEPTS_VIEWS, B_RGBA32);
 	if (bitmap == NULL || bitmap->InitCheck() != B_OK) {
@@ -617,7 +601,7 @@ r5_glyph_bitmap(r5_glyph which, float side, rgb_color color)
 		// edges stay smooth on any background.
 		view->SetDrawingMode(B_OP_ALPHA);
 		view->SetBlendingMode(B_CONSTANT_ALPHA, B_ALPHA_COMPOSITE);
-		glyph_paint(view, which, BRect(0, 0, pixels, pixels));
+		glyph_paint(view, which, paint);
 		view->Sync();
 		bitmap->RemoveChild(view);
 		bitmap->Unlock();
@@ -625,6 +609,54 @@ r5_glyph_bitmap(r5_glyph which, float side, rgb_color color)
 		bitmap->RemoveChild(view);
 	delete view;
 	return bitmap;
+}
+
+
+void
+r5_glyph_draw(BView* view, r5_glyph which, BRect frame, rgb_color color)
+{
+	if (view == NULL || !frame.IsValid())
+		return;
+
+	color.alpha = 255;
+
+	// The glyph is painted into a bitmap first and drawn from there. Drawn
+	// straight into the view, its shapes take the subpixel antialiasing
+	// of the CPU mode (app_server Painter, with the subpixel setting on)
+	// and get colored fringes; the bitmap's alpha composite does not.
+	BPoint origin(floorf(frame.left), floorf(frame.top));
+	BRect bounds(0, 0, ceilf(frame.right) - origin.x,
+		ceilf(frame.bottom) - origin.y);
+	BBitmap* bitmap = glyph_render(which,
+		frame.OffsetByCopy(-origin.x, -origin.y), bounds, color);
+	if (bitmap != NULL) {
+		view->PushState();
+		view->SetDrawingMode(B_OP_ALPHA);
+		view->SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_COMPOSITE);
+		view->DrawBitmap(bitmap, origin);
+		view->PopState();
+		delete bitmap;
+		return;
+	}
+
+	view->PushState();
+	view->SetHighColor(color);
+	view->SetDrawingMode(B_OP_ALPHA);
+	view->SetBlendingMode(B_CONSTANT_ALPHA, B_ALPHA_OVERLAY);
+	glyph_paint(view, which, frame);
+	view->PopState();
+}
+
+
+BBitmap*
+r5_glyph_bitmap(r5_glyph which, float side, rgb_color color)
+{
+	int32 pixels = icon_pixels(side);
+	if (pixels < 1)
+		return NULL;
+
+	return glyph_render(which, BRect(0, 0, pixels, pixels),
+		BRect(0, 0, pixels - 1, pixels - 1), color);
 }
 
 
