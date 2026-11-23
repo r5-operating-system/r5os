@@ -29,6 +29,7 @@
 
 
 class BBitmap;
+class BMessage;
 class BView;
 
 
@@ -69,5 +70,43 @@ void r5_avatar_draw(BView* view, BRect circle, const BBitmap* icon,
 // The icon side, in pixels, that r5_avatar_draw() draws without
 // filtering inside a plate of `circleSide` pixels.
 float r5_avatar_icon_side(float circleSide);
+
+// Deskbar styles (docs/design/DESKBAR-STYLES.md, 22 Nov 2026).
+//
+// The margin, in pixels, that a floating part of the desktop keeps from
+// the screen edges: 14 at the default font size of 12, scaled with
+// be_plain_font. Deskbar's "Keep away from the screen edges" uses it.
+float r5_floating_margin();
+
+// How R5's own Deskbar tray items draw their symbol. Deskbar sets it in
+// its own process; a tray item (a replicant inside Deskbar) reads it when
+// it draws. Elsewhere, and before Deskbar sets it, it is classic.
+enum r5_tray_style {
+	R5_TRAY_STYLE_CLASSIC = 0,
+		// the item's own icon, as in Haiku
+	R5_TRAY_STYLE_SYMBOLS = 1
+		// one-colour 2 px line symbols in r5_deskbar_tray_color()
+};
+
+// Deskbar sends this to every tray view when the style changes, with
+// int32 "style" and the colour "color". A view that does not know it
+// ignores it, as any BView does.
+#define R5_DESKBAR_TRAY_STYLE_CHANGED 'r5ts'
+
+enum r5_tray_style r5_deskbar_tray_style();
+rgb_color r5_deskbar_tray_color();
+void r5_set_deskbar_tray_style(enum r5_tray_style style, rgb_color color);
+
+// External review, 23 Nov 2026: the style and the colour together, as one
+// tray item keeps them. It takes r5_deskbar_tray_look() when it is attached,
+// then r5_tray_look_update() with each R5_DESKBAR_TRAY_STYLE_CHANGED (true
+// when the message changed it), and draws from its own copy.
+struct r5_tray_look {
+	enum r5_tray_style	style;
+	rgb_color			color;
+};
+
+struct r5_tray_look r5_deskbar_tray_look();
+bool r5_tray_look_update(struct r5_tray_look* look, const BMessage* message);
 
 #endif

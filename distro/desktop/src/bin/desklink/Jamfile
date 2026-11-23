@@ -1,0 +1,32 @@
+# R5OS modifications in this file are MIT, like the original work. They are
+# wrapped in SPDX-Snippet markers.
+
+SubDir HAIKU_TOP src bin desklink ;
+
+UsePrivateHeaders app interface locale shared ;
+
+Application desklink :
+	desklink.cpp
+	DeskButton.cpp
+	MediaReplicant.cpp
+	MixerControl.cpp
+	VolumeControl.cpp
+	VolumeWindow.cpp
+
+	: be libmedia.so localestub [ TargetLibsupc++ ]
+# SPDX-SnippetBegin
+# SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+	# the tray symbol of the Default (R5) Deskbar
+	libr5ui.so libr5icons.so
+# SPDX-SnippetEnd
+	: desklink.rdef SpeakerBox.rdef
+;
+
+DoCatalogs desklink :
+	x-vnd.Haiku-desklink
+	:
+	DeskButton.cpp
+	MediaReplicant.cpp
+	VolumeControl.cpp
+;

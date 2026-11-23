@@ -116,7 +116,17 @@ enum r5_glyph {
 	R5_GLYPH_CROSS = 8,
 	R5_GLYPH_CIRCLE = 9,
 	R5_GLYPH_SQUARE = 10,
-	R5_GLYPH_TRIANGLE = 11
+	R5_GLYPH_TRIANGLE = 11,
+	// Deskbar tray symbols (docs/design/DESKBAR-STYLES.md, step 5): one
+	// colour, 2 px lines on the 24 grid, the state in the shape.
+	R5_GLYPH_WIFI = 12,
+	R5_GLYPH_VOLUME = 13,
+	R5_GLYPH_VOLUME_OFF = 14,
+	R5_GLYPH_NETWORK = 15,
+	R5_GLYPH_NETWORK_OFF = 16,
+	R5_GLYPH_AIRPLAY = 17,
+	R5_GLYPH_MAIL = 18,
+	R5_GLYPH_MAIL_NEW = 19
 };
 
 // Draws the glyph inside `frame` of `view`, in `color`. The view's
@@ -140,8 +150,14 @@ status_t r5_button_set_glyph(BButton* button, r5_glyph which);
 enum r5_level_glyph {
 	R5_LEVEL_SIGNAL = 1,
 		// Four bars of rising height, left to right
-	R5_LEVEL_BATTERY = 2
+	R5_LEVEL_BATTERY = 2,
 		// A battery body with a cap on the right, four segments inside
+	R5_LEVEL_WIFI = 3,
+		// The Wi-Fi symbol: a dot and three arcs, one step each (a line
+		// symbol in the pen of r5_glyph_draw(), for the Deskbar tray)
+	R5_LEVEL_BATTERY_SYMBOL = 4
+		// A round battery with a cap and a fill that grows in four steps
+		// (a line symbol, for the Deskbar tray)
 };
 
 enum r5_level_style {

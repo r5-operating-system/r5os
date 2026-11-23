@@ -70,6 +70,13 @@ All rights reserved.
 #include "DeskbarMenu.h"
 #include "ExpandoMenuBar.h"
 #include "StatusView.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <PropertyInfo.h>
+#include <string.h>
+#include "DeskbarStyle.h"
+// SPDX-SnippetEnd
 
 
 #undef B_TRANSLATION_CONTEXT
@@ -109,7 +116,15 @@ TBarWindow::TBarWindow()
 
 	fBarView = new TBarView(Bounds(), settings->vertical, settings->left,
 		settings->top, settings->state, settings->width);
-	AddChild(fBarView);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// TBarView in the edge view, which draws the 1 px edge of Default (R5)
+	BView* edgeView = R5Deskbar::CreateEdgeView(Bounds());
+	AddChild(edgeView);
+	edgeView->AddChild(fBarView);
+// SPDX-SnippetEnd
+
 
 	RemoveShortcut('H', B_COMMAND_KEY | B_CONTROL_KEY);
 	AddShortcut('F', B_COMMAND_KEY, new BMessage(kFindButton));
@@ -240,6 +255,15 @@ TBarWindow::MessageReceived(BMessage* message)
 			GetIconFrame(message);
 			break;
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		case B_GET_PROPERTY:
+			if (!_ReplyFrame(message))
+				BWindow::MessageReceived(message);
+			break;
+// SPDX-SnippetEnd
+
 		default:
 			BWindow::MessageReceived(message);
 			break;
@@ -338,10 +362,15 @@ TBarWindow::ScreenChanged(BRect size, color_space depth)
 	BWindow::ScreenChanged(size, depth);
 
 	SetSizeLimits();
-
 	if (fBarView != NULL) {
 		fBarView->DragRegion()->CalculateRegions();
 		fBarView->UpdatePlacement();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// the GPU mode may have changed
+		fBarView->ApplyStyle();
+// SPDX-SnippetEnd
 	}
 }
 
@@ -419,7 +448,16 @@ void
 TBarWindow::GetLocation(BMessage* message)
 {
 	BMessage reply('rply');
-	reply.AddInt32("location", (int32)DeskbarLocation());
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// The pill keeps its strip free (option A, owner 22 Nov 2026):
+	// BWindow::Zoom() trims the top or the bottom for these two.
+	deskbar_location location = DeskbarLocation();
+	if (R5Deskbar::Compact())
+		location = fBarView->Top() ? B_DESKBAR_TOP : B_DESKBAR_BOTTOM;
+	reply.AddInt32("location", (int32)location);
+// SPDX-SnippetEnd
 	reply.AddBool("expanded", fBarView->ExpandoState());
 
 	message->SendReply(&reply);
@@ -760,6 +798,19 @@ TBarWindow::SetSizeLimits()
 			}
 		}
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// Default (R5): the floating bar keeps its margin and the pill is
+		// as wide as its content (QEMU, 22 Nov: the full screen width here
+		// pushed both off the screen's right edge)
+		if (R5Deskbar::Modern() && !fBarView->Vertical()) {
+			minWidth = 1;
+			maxWidth = B_SIZE_UNLIMITED;
+			minHeight = 1;
+			maxHeight = B_SIZE_UNLIMITED;
+		}
+// SPDX-SnippetEnd
 		BWindow::SetSizeLimits(minWidth, maxWidth, minHeight, maxHeight);
 	}
 }
@@ -779,3 +830,40 @@ TBarWindow::_IsFocusMessage(BMessage* message)
 
 	return true;
 }
+
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+/*!	BDeskbar::Frame() (get_deskbar_frame()) asks for the window's "Frame".
+	Floating in Default (R5), the answer includes the margin, so a zoomed
+	window (BWindow::Zoom()) and Tracker's icons keep clear of Deskbar and
+	its margin; the shadow does not count (docs/design/DESKBAR-STYLES.md).
+*/
+bool
+TBarWindow::_ReplyFrame(BMessage* message)
+{
+	if (!R5Deskbar::Modern())
+		return false;
+	int32 index;
+	BMessage specifier;
+	int32 what;
+	const char* property;
+	if (message->GetCurrentSpecifier(&index, &specifier, &what, &property)
+			!= B_OK
+		|| property == NULL || strcmp(property, "Frame") != 0) {
+		return false;
+	}
+	BRect frame = Frame();
+	float margin = R5Deskbar::Margin();
+	if (margin > 0) {
+		frame.InsetBy(-margin, -margin);
+		frame = frame & BScreen(this).Frame();
+	}
+	BMessage reply(B_REPLY);
+	reply.AddRect("result", frame);
+	reply.AddInt32("error", B_OK);
+	message->SendReply(&reply);
+	return true;
+}
+// SPDX-SnippetEnd

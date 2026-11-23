@@ -106,6 +106,14 @@ private:
 // SPDX-License-Identifier: MIT
 			float			fSymbolWidth;
 // SPDX-SnippetEnd
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+public:
+			TBarMenuTitle*	DeskbarMenuItem() const { return fDeskbarMenuItem; }
+			TBarMenuTitle*	AppListMenuItem() const { return fAppListMenuItem; }
+			void			SetHoverAt(BPoint where);
+// SPDX-SnippetEnd
 };
 
 

@@ -13,6 +13,11 @@
 #include <Notification.h>
 #include <ObjectList.h>
 #include <View.h>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <R5UI.h>
+// SPDX-SnippetEnd
 
 #include <map>
 
@@ -71,6 +76,8 @@ class NetworkStatusView : public BView {
 // SPDX-License-Identifier: MIT
 		BString			fWirelessInterface;
 		int32			fWirelessBars;
+		// the tray look, its own copy (external review, 23 Nov 2026)
+		struct r5_tray_look	fTrayLook;
 // SPDX-SnippetEnd
 };
 

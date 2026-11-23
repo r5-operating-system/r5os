@@ -112,6 +112,20 @@ protected:
 			void				Draw();
 			void				DrawContent();
 			void				DrawExpanderArrow();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+public:
+			int32				ListedWindowCount() const
+									{ return fListedWindowCount; }
+			bool				IsFront() const;
+			void				ModernSize(float* width, float* height)
+									{ _ModernContentSize(width, height); }
+private:
+			void				_DrawModern();
+			void				_ModernContentSize(float* width,
+									float* height);
+// SPDX-SnippetEnd
 
 private:
 			void				_Init(BList* team, BBitmap* icon,
@@ -144,6 +158,7 @@ private:
 			bool				fHasListedWindows;
 			uint64				fTokenHash;
 			int32				fTokenCount;
+			int32				fListedWindowCount;
 // SPDX-SnippetEnd
 };
 

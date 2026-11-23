@@ -25,11 +25,15 @@
 #include "R5UI.h"
 
 #include <Bitmap.h>
+#include <Font.h>
 #include <InterfaceDefs.h>
+#include <Message.h>
 #include <View.h>
 
+#include <algorithm>
 #include <math.h>
 #include <new>
+#include <pthread.h>
 #include <string.h>
 
 
@@ -172,4 +176,81 @@ r5_avatar_draw(BView* view, BRect circle, const BBitmap* icon,
 	}
 
 	view->PopState();
+}
+
+
+// #pragma mark - Deskbar styles
+
+
+float
+r5_floating_margin()
+{
+	// 14 px at 12 points (docs/design/DESKBAR-STYLES.md, Floating)
+	float size = be_plain_font != NULL ? be_plain_font->Size() : 12.0f;
+	return floorf(14.0f * std::max(size, 12.0f) / 12.0f + 0.5f);
+}
+
+
+static enum r5_tray_style sTrayStyle = R5_TRAY_STYLE_CLASSIC;
+static rgb_color sTrayColor = { 0x1d, 0x2a, 0x40, 255 };
+// style and colour change together (external review, 23 Nov 2026)
+static pthread_mutex_t sTrayLock = PTHREAD_MUTEX_INITIALIZER;
+
+
+enum r5_tray_style
+r5_deskbar_tray_style()
+{
+	return r5_deskbar_tray_look().style;
+}
+
+
+rgb_color
+r5_deskbar_tray_color()
+{
+	return r5_deskbar_tray_look().color;
+}
+
+
+void
+r5_set_deskbar_tray_style(enum r5_tray_style style, rgb_color color)
+{
+	color.alpha = 255;
+	pthread_mutex_lock(&sTrayLock);
+	sTrayStyle = style == R5_TRAY_STYLE_SYMBOLS ? style
+		: R5_TRAY_STYLE_CLASSIC;
+	sTrayColor = color;
+	pthread_mutex_unlock(&sTrayLock);
+}
+
+
+struct r5_tray_look
+r5_deskbar_tray_look()
+{
+	struct r5_tray_look look;
+	pthread_mutex_lock(&sTrayLock);
+	look.style = sTrayStyle;
+	look.color = sTrayColor;
+	pthread_mutex_unlock(&sTrayLock);
+	return look;
+}
+
+
+bool
+r5_tray_look_update(struct r5_tray_look* look, const BMessage* message)
+{
+	if (look == NULL || message == NULL
+		|| message->what != R5_DESKBAR_TRAY_STYLE_CHANGED)
+		return false;
+	struct r5_tray_look before = *look;
+	int32 style;
+	if (message->FindInt32("style", &style) == B_OK) {
+		look->style = style == R5_TRAY_STYLE_SYMBOLS ? R5_TRAY_STYLE_SYMBOLS
+			: R5_TRAY_STYLE_CLASSIC;
+	}
+	rgb_color color;
+	if (message->FindColor("color", &color) == B_OK) {
+		color.alpha = 255;
+		look->color = color;
+	}
+	return look->style != before.style || look->color != before.color;
 }

@@ -26,6 +26,10 @@
 #include <FindDirectory.h>
 #include <StringView.h>
 #include <GroupView.h>
+#include <LayoutItem.h>
+#include <MenuField.h>
+#include <MenuItem.h>
+#include <PopUpMenu.h>
 #include <LayoutBuilder.h>
 #include <Message.h>
 #include <Messenger.h>
@@ -53,6 +57,14 @@ static const uint32 kExpandNewTeams = 'ExTm';
 static const uint32 kHideLabels = 'hLbs';
 static const uint32 kResizeTeamIcons = 'RTIs';
 static const uint32 kUpdateRecentCounts = 'upct';
+// Deskbar styles (docs/design/DESKBAR-STYLES.md): the copy of Deskbar's
+// private code (DeskbarStyle.h, kMsgSetStyle); absolute values
+static const uint32 kSetDeskbarStyle = 'R5ds';
+static const int32 kStyleR5 = 0;
+static const int32 kStyleClassic = 1;
+static const int32 kLayoutVertical = 0;
+static const int32 kLayoutCompact = 1;
+static const int32 kLayoutHorizontal = 2;
 
 static const char* kDeskbarSignature = "application/x-vnd.Be-TSKB";
 static const char* kTrackerSignature = "application/x-vnd.Be-TRAK";
@@ -82,6 +94,10 @@ struct DeskbarChoices {
 	bool				alwaysOnTop;
 	bool				autoRaise;
 	bool				autoHide;
+	int32				style;
+	int32				layout;
+	bool				rounded;
+	bool				floating;
 };
 
 
@@ -104,7 +120,11 @@ choices_equal(const DeskbarChoices& a, const DeskbarChoices& b)
 		&& a.showApplications == b.showApplications
 		&& a.alwaysOnTop == b.alwaysOnTop
 		&& a.autoRaise == b.autoRaise
-		&& a.autoHide == b.autoHide;
+		&& a.autoHide == b.autoHide
+		&& a.style == b.style
+		&& a.layout == b.layout
+		&& a.rounded == b.rounded
+		&& a.floating == b.floating;
 }
 
 
@@ -171,7 +191,43 @@ default_choices()
 	choices.alwaysOnTop = false;
 	choices.autoRaise = false;
 	choices.autoHide = false;
+	// Default (R5): Vertical, Rounded, Floating, top right (owner, 22 Nov)
+	choices.style = kStyleR5;
+	choices.layout = kLayoutVertical;
+	choices.rounded = true;
+	choices.floating = true;
 	return choices;
+}
+
+
+//!	The layout the place implies: an edge is the bar, a corner is not.
+static int32
+layout_for_place(int32 layout, deskbar_location location)
+{
+	bool edge = location == B_DESKBAR_TOP || location == B_DESKBAR_BOTTOM;
+	if (edge)
+		return kLayoutHorizontal;
+	if (layout == kLayoutHorizontal)
+		return kLayoutVertical;
+	return layout;
+}
+
+
+//!	The place a layout keeps: the bar on the edge of the corner it was in.
+static deskbar_location
+place_for_layout(int32 layout, deskbar_location location)
+{
+	bool edge = location == B_DESKBAR_TOP || location == B_DESKBAR_BOTTOM;
+	if (layout == kLayoutHorizontal && !edge) {
+		return location == B_DESKBAR_LEFT_BOTTOM
+			|| location == B_DESKBAR_RIGHT_BOTTOM
+			? B_DESKBAR_BOTTOM : B_DESKBAR_TOP;
+	}
+	if (layout != kLayoutHorizontal && edge) {
+		return location == B_DESKBAR_BOTTOM ? B_DESKBAR_RIGHT_BOTTOM
+			: B_DESKBAR_RIGHT_TOP;
+	}
+	return location;
 }
 
 
@@ -206,6 +262,7 @@ static DeskbarChoices
 load_choices()
 {
 	DeskbarChoices choices = default_choices();
+	bool pillLeft = false;
 	BPath path;
 	if (find_directory(B_USER_SETTINGS_DIRECTORY, &path) == B_OK
 		&& path.Append("deskbar/settings") == B_OK) {
@@ -237,6 +294,7 @@ load_choices()
 				"recentAppsCount", choices.recentAppsCount));
 			bool vertical = prefs.GetBool("vertical", true);
 			bool left = prefs.GetBool("left", false);
+			pillLeft = left;
 			bool top = prefs.GetBool("top", true);
 			int32 state = prefs.GetInt32("state", 1);
 			choices.location = location_from_file(vertical, left, top, state,
@@ -245,6 +303,16 @@ load_choices()
 				choices.alwaysOnTop);
 			choices.autoRaise = prefs.GetBool("autoRaise", choices.autoRaise);
 			choices.autoHide = prefs.GetBool("autoHide", choices.autoHide);
+			// a file without the keys is Default (R5), in the form it had
+			choices.style = prefs.GetInt32("style", kStyleR5) == kStyleClassic
+				? kStyleClassic : kStyleR5;
+			choices.layout = prefs.GetInt32("layout", vertical
+				? kLayoutVertical : kLayoutHorizontal);
+			if (choices.layout < kLayoutVertical
+				|| choices.layout > kLayoutHorizontal)
+				choices.layout = kLayoutVertical;
+			choices.rounded = prefs.GetBool("rounded", choices.rounded);
+			choices.floating = prefs.GetBool("floating", choices.floating);
 		}
 	}
 
@@ -261,6 +329,21 @@ load_choices()
 		choices.autoRaise = bar.IsAutoRaise();
 		choices.autoHide = bar.IsAutoHide();
 	}
+	// the pill answers a top or bottom place to BDeskbar (zoom); its side
+	// is in Deskbar's file (review 2: a pill on the left came back right)
+	if (choices.layout == kLayoutCompact && choices.style == kStyleR5) {
+		bool top = choices.location != B_DESKBAR_BOTTOM
+			&& choices.location != B_DESKBAR_LEFT_BOTTOM
+			&& choices.location != B_DESKBAR_RIGHT_BOTTOM;
+		if (pillLeft)
+			choices.location = top ? B_DESKBAR_LEFT_TOP : B_DESKBAR_LEFT_BOTTOM;
+		else
+			choices.location = top ? B_DESKBAR_RIGHT_TOP
+				: B_DESKBAR_RIGHT_BOTTOM;
+	}
+	if (choices.style == kStyleClassic && choices.layout == kLayoutCompact)
+		choices.layout = kLayoutHorizontal;
+	choices.layout = layout_for_place(choices.layout, choices.location);
 	return choices;
 }
 
@@ -293,6 +376,8 @@ public:
 			deskbar_location	Location() const { return fLocation; }
 			bool				Expanded() const { return fExpanded; }
 			void				SetHandler(BHandler* handler);
+			void				SetStyle(int32 style, int32 layout,
+									bool rounded, bool floating);
 	virtual	void				Draw(BRect updateRect);
 	virtual	void				MouseDown(BPoint where);
 	virtual	void				MouseUp(BPoint where);
@@ -308,6 +393,10 @@ private:
 			bool				fExpanded;
 			bool				fTracking;
 			BMessenger			fHandler;
+			int32				fStyle;
+			int32				fLayout;
+			bool				fRounded;
+			bool				fFloating;
 };
 
 
@@ -327,6 +416,8 @@ private:
 			void				_SyncEnabled();
 			void				_EditTracker();
 			void				_SetTargets(BView* view);
+			int32				_Marked(BMenuField* field) const;
+			void				_Mark(BMenuField* field, int32 value);
 
 			DeskbarModule*		fModule;
 			bool				fUpdating;
@@ -347,6 +438,13 @@ private:
 			BCheckBox*			fAlwaysOnTop;
 			BCheckBox*			fAutoRaise;
 			BCheckBox*			fAutoHide;
+			BMenuField*			fStyle;
+			BMenuField*			fLayout;
+			BMenuField*			fCorners;
+			BCheckBox*			fFloating;
+			BLayoutItem*		fCornersLabel;
+			BLayoutItem*		fCornersMenu;
+			BMenuItem*			fCompactItem;
 };
 
 
@@ -397,7 +495,11 @@ DeskbarPlace::DeskbarPlace()
 	BView("place", B_WILL_DRAW | B_NAVIGABLE | B_FULL_UPDATE_ON_RESIZE),
 	fLocation(B_DESKBAR_RIGHT_TOP),
 	fExpanded(true),
-	fTracking(false)
+	fTracking(false),
+	fStyle(kStyleR5),
+	fLayout(kLayoutVertical),
+	fRounded(true),
+	fFloating(true)
 {
 	SetExplicitMinSize(BSize(168, 112));
 	SetExplicitMaxSize(BSize(168, 112));
@@ -421,6 +523,20 @@ void
 DeskbarPlace::SetHandler(BHandler* handler)
 {
 	fHandler = BMessenger(handler);
+}
+
+
+void
+DeskbarPlace::SetStyle(int32 style, int32 layout, bool rounded, bool floating)
+{
+	if (fStyle == style && fLayout == layout && fRounded == rounded
+		&& fFloating == floating)
+		return;
+	fStyle = style;
+	fLayout = layout;
+	fRounded = rounded;
+	fFloating = floating;
+	Invalidate();
 }
 
 
@@ -449,8 +565,33 @@ DeskbarPlace::Draw(BRect updateRect)
 	BRect inner = r5_screen_draw(this, _Screen(),
 		ui_color(B_CONTROL_BACKGROUND_COLOR));
 
-	BRect bar = inner.InsetByCopy(3, 3);
+	bool modern = fStyle == kStyleR5;
+	// Default (R5) floating: the margin on the picture too
+	BRect bar = inner.InsetByCopy(modern && fFloating ? 6 : 3,
+		modern && fFloating ? 6 : 3);
 	float thickness = 8;
+	if (modern && fLayout == kLayoutCompact) {
+		// the pill: a short row in the corner
+		float width = bar.Width() * 0.42f;
+		bool left = fLocation == B_DESKBAR_LEFT_TOP
+			|| fLocation == B_DESKBAR_LEFT_BOTTOM;
+		bool top = fLocation == B_DESKBAR_LEFT_TOP
+			|| fLocation == B_DESKBAR_RIGHT_TOP;
+		if (left)
+			bar.right = bar.left + width;
+		else
+			bar.left = bar.right - width;
+		if (top)
+			bar.bottom = bar.top + thickness;
+		else
+			bar.top = bar.bottom - thickness;
+		SetHighColor(ui_color(B_CONTROL_TEXT_COLOR));
+		if (fRounded)
+			FillRoundRect(bar, 3, 3);
+		else
+			FillRect(bar);
+		return;
+	}
 	switch (fLocation) {
 		case B_DESKBAR_TOP:
 			bar.bottom = bar.top + thickness;
@@ -478,7 +619,10 @@ DeskbarPlace::Draw(BRect updateRect)
 			break;
 	}
 	SetHighColor(ui_color(B_CONTROL_TEXT_COLOR));
-	FillRect(bar);
+	if (modern && fRounded && fFloating)
+		FillRoundRect(bar, 3, 3);
+	else
+		FillRect(bar);
 }
 
 
@@ -597,7 +741,14 @@ DeskbarView::DeskbarView(DeskbarModule* module)
 	fShowApplications(NULL),
 	fAlwaysOnTop(NULL),
 	fAutoRaise(NULL),
-	fAutoHide(NULL)
+	fAutoHide(NULL),
+	fStyle(NULL),
+	fLayout(NULL),
+	fCorners(NULL),
+	fFloating(NULL),
+	fCornersLabel(NULL),
+	fCornersMenu(NULL),
+	fCompactItem(NULL)
 {
 	fSort = new BCheckBox("sort", "Sort applications by name",
 		new BMessage(kMsgChanged));
@@ -645,6 +796,44 @@ DeskbarView::DeskbarView(DeskbarModule* module)
 		new BMessage(kMsgChanged));
 	BButton* edit = new BButton("edit", "Edit in Tracker" B_UTF8_ELLIPSIS,
 		new BMessage(kMsgEditTracker));
+
+	// Style, Layout, Corners and Floating (docs/design/DESKBAR-STYLES.md);
+	// the place stays on the screen picture
+	struct { const char* label; int32 value; } styles[] = {
+		{ "Default (R5)", kStyleR5 }, { "Classic (Haiku)", kStyleClassic } };
+	struct { const char* label; int32 value; } layouts[] = {
+		{ "Vertical", kLayoutVertical }, { "Compact", kLayoutCompact },
+		{ "Horizontal", kLayoutHorizontal } };
+	struct { const char* label; int32 value; } corners[] = {
+		{ "Rounded", 1 }, { "Square", 0 } };
+	BPopUpMenu* styleMenu = new BPopUpMenu("style");
+	for (size_t i = 0; i < sizeof(styles) / sizeof(styles[0]); i++) {
+		BMessage* message = new BMessage(kMsgChanged);
+		message->AddInt32("value", styles[i].value);
+		styleMenu->AddItem(new BMenuItem(styles[i].label, message));
+	}
+	BPopUpMenu* layoutMenu = new BPopUpMenu("layout");
+	for (size_t i = 0; i < sizeof(layouts) / sizeof(layouts[0]); i++) {
+		BMessage* message = new BMessage(kMsgChanged);
+		message->AddInt32("value", layouts[i].value);
+		BMenuItem* item = new BMenuItem(layouts[i].label, message);
+		if (layouts[i].value == kLayoutCompact)
+			fCompactItem = item;
+		layoutMenu->AddItem(item);
+	}
+	BPopUpMenu* cornersMenu = new BPopUpMenu("corners");
+	for (size_t i = 0; i < sizeof(corners) / sizeof(corners[0]); i++) {
+		BMessage* message = new BMessage(kMsgChanged);
+		message->AddInt32("value", corners[i].value);
+		cornersMenu->AddItem(new BMenuItem(corners[i].label, message));
+	}
+	fStyle = new BMenuField("style", "Style:", styleMenu);
+	fLayout = new BMenuField("layout", "Layout:", layoutMenu);
+	fCorners = new BMenuField("corners", "Corners:", cornersMenu);
+	fFloating = new BCheckBox("floating", "Keep away from the screen edges",
+		new BMessage(kMsgChanged));
+	fCornersLabel = fCorners->CreateLabelLayoutItem();
+	fCornersMenu = fCorners->CreateMenuBarLayoutItem();
 
 	BBox* applications = new BBox("applications");
 	applications->SetLabel(r5_settings_box_title("Applications"));
@@ -696,6 +885,16 @@ DeskbarView::DeskbarView(DeskbarModule* module)
 		.SetInsets(B_USE_DEFAULT_SPACING)
 		.Add(fPlace)
 		.AddGroup(B_VERTICAL, 0)
+			.AddGrid(B_USE_SMALL_SPACING, B_USE_SMALL_SPACING)
+				.Add(fStyle->CreateLabelLayoutItem(), 0, 0)
+				.Add(fStyle->CreateMenuBarLayoutItem(), 1, 0)
+				.Add(fLayout->CreateLabelLayoutItem(), 0, 1)
+				.Add(fLayout->CreateMenuBarLayoutItem(), 1, 1)
+				.Add(fCornersLabel, 0, 2)
+				.Add(fCornersMenu, 1, 2)
+				.Add(fFloating, 1, 3)
+				.End()
+			.AddStrut(B_USE_SMALL_SPACING)
 			.Add(fShowApplications)
 			.Add(fAlwaysOnTop)
 			.Add(fAutoRaise)
@@ -748,6 +947,41 @@ DeskbarView::AttachedToWindow()
 	_SetTargets(this);
 	if (fPlace != NULL)
 		fPlace->SetHandler(this);
+	BMenuField* fields[3] = { fStyle, fLayout, fCorners };
+	for (int32 i = 0; i < 3; i++) {
+		if (fields[i] != NULL)
+			fields[i]->Menu()->SetTargetForItems(this);
+	}
+	_SyncEnabled();
+}
+
+
+int32
+DeskbarView::_Marked(BMenuField* field) const
+{
+	if (field == NULL)
+		return -1;
+	BMenuItem* item = field->Menu()->FindMarked();
+	if (item == NULL || item->Message() == NULL)
+		return -1;
+	return item->Message()->GetInt32("value", -1);
+}
+
+
+void
+DeskbarView::_Mark(BMenuField* field, int32 value)
+{
+	if (field == NULL)
+		return;
+	BMenu* menu = field->Menu();
+	for (int32 i = 0; i < menu->CountItems(); i++) {
+		BMenuItem* item = menu->ItemAt(i);
+		if (item->Message() != NULL
+			&& item->Message()->GetInt32("value", -2) == value) {
+			item->SetMarked(true);
+			return;
+		}
+	}
 }
 
 
@@ -791,6 +1025,14 @@ DeskbarView::_Read() const
 		choices.autoRaise = fAutoRaise->Value() == B_CONTROL_ON;
 	if (fAutoHide != NULL)
 		choices.autoHide = fAutoHide->Value() == B_CONTROL_ON;
+	if (_Marked(fStyle) >= 0)
+		choices.style = _Marked(fStyle);
+	if (_Marked(fLayout) >= 0)
+		choices.layout = _Marked(fLayout);
+	if (_Marked(fCorners) >= 0)
+		choices.rounded = _Marked(fCorners) == 1;
+	if (fFloating != NULL)
+		choices.floating = fFloating->Value() == B_CONTROL_ON;
 	return choices;
 }
 
@@ -800,6 +1042,26 @@ DeskbarView::_SyncEnabled()
 {
 	DeskbarChoices choices = _Read();
 	bool corners = corner_honors_expand(choices.location);
+	// Classic (Haiku) offers Layout (Vertical, Horizontal) and Place only
+	bool modern = choices.style == kStyleR5;
+	if (fCornersLabel != NULL)
+		fCornersLabel->SetVisible(modern);
+	if (fCornersMenu != NULL)
+		fCornersMenu->SetVisible(modern);
+	if (fFloating != NULL && fFloating->IsHidden(fFloating) == modern) {
+		if (modern)
+			fFloating->Show();
+		else
+			fFloating->Hide();
+	}
+	if (fCompactItem != NULL)
+		fCompactItem->SetEnabled(modern);
+	if (choices.layout == kLayoutCompact)
+		corners = false;
+	if (fPlace != NULL) {
+		fPlace->SetStyle(choices.style, choices.layout, choices.rounded,
+			choices.floating);
+	}
 	if (fShowApplications != NULL)
 		fShowApplications->SetEnabled(corners);
 	if (fExpanders != NULL)
@@ -865,6 +1127,11 @@ DeskbarView::ApplyState(const DeskbarChoices& choices)
 		fAutoRaise->SetValue(choices.autoRaise ? B_CONTROL_ON : B_CONTROL_OFF);
 	if (fAutoHide != NULL)
 		fAutoHide->SetValue(choices.autoHide ? B_CONTROL_ON : B_CONTROL_OFF);
+	_Mark(fStyle, choices.style);
+	_Mark(fLayout, choices.layout);
+	_Mark(fCorners, choices.rounded ? 1 : 0);
+	if (fFloating != NULL)
+		fFloating->SetValue(choices.floating ? B_CONTROL_ON : B_CONTROL_OFF);
 	fUpdating = false;
 	_SyncEnabled();
 }
@@ -911,6 +1178,10 @@ DeskbarView::MessageReceived(BMessage* message)
 				fShowApplications->SetValue(expand
 					? B_CONTROL_ON : B_CONTROL_OFF);
 			}
+			// an edge is the bar, a corner is not (Compact stays Compact)
+			DeskbarChoices placed = _Read();
+			_Mark(fLayout, layout_for_place(placed.layout,
+				static_cast<deskbar_location>(location)));
 			fUpdating = false;
 			fModule->UserEdited(_Read());
 			_SyncEnabled();
@@ -921,6 +1192,20 @@ DeskbarView::MessageReceived(BMessage* message)
 			if (fUpdating || fModule == NULL)
 				break;
 			DeskbarChoices choices = _Read();
+			// Classic has no Compact layout; a layout keeps a fitting place
+			if (choices.style == kStyleClassic
+				&& choices.layout == kLayoutCompact) {
+				choices.layout = kLayoutHorizontal;
+				fUpdating = true;
+				_Mark(fLayout, choices.layout);
+				fUpdating = false;
+			}
+			deskbar_location place = place_for_layout(choices.layout,
+				choices.location);
+			if (place != choices.location) {
+				choices.location = place;
+				choices.showApplications = true;
+			}
 			if (fPlace != NULL)
 				fPlace->SetPlace(choices.location, choices.showApplications);
 			fModule->UserEdited(choices);
@@ -1041,7 +1326,26 @@ DeskbarModule::_ApplyChoices(const DeskbarChoices& target)
 	if (!bar.IsRunning())
 		return B_NAME_NOT_FOUND;
 
-	status_t status = toggle_deskbar(fCommitted.sort, target.sort,
+	status_t status = B_OK;
+	// the style first, so the place that follows takes its layout
+	if (fCommitted.style != target.style || fCommitted.layout != target.layout
+		|| fCommitted.rounded != target.rounded
+		|| fCommitted.floating != target.floating) {
+		BMessage message(kSetDeskbarStyle);
+		message.AddInt32("style", target.style);
+		message.AddInt32("layout", target.layout);
+		message.AddBool("rounded", target.rounded);
+		message.AddBool("floating", target.floating);
+		status = post_deskbar(message);
+		if (status != B_OK)
+			return status;
+	}
+	fCommitted.style = target.style;
+	fCommitted.layout = target.layout;
+	fCommitted.rounded = target.rounded;
+	fCommitted.floating = target.floating;
+
+	status = toggle_deskbar(fCommitted.sort, target.sort,
 		kSortRunningApps);
 	if (status != B_OK)
 		return status;

@@ -17,6 +17,11 @@
 
 
 #include "InlineScrollView.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include "DeskbarStyle.h"
+// SPDX-SnippetEnd
 
 #include <ControlLook.h>
 #include <Debug.h>
@@ -433,6 +438,13 @@ TInlineScrollView::DetachedFromWindow()
 void
 TInlineScrollView::Draw(BRect updateRect)
 {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// Default (R5): the list's own surface (or glass) is the background
+	if (R5Deskbar::Modern())
+		return;
+// SPDX-SnippetEnd
 	BRect frame = Bounds();
 	be_control_look->DrawButtonBackground(this, frame, updateRect,
 		ui_color(B_MENU_BACKGROUND_COLOR));

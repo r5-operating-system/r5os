@@ -38,6 +38,7 @@
 
 #include <AdminLock.h>
 #include <R5Icons.h>
+#include <R5UI.h>
 
 #include <bluetoothserver_p.h>
 
@@ -189,6 +190,7 @@ public:
 	virtual void AttachedToWindow()
 	{
 		BView::AttachedToWindow();
+		fTrayLook = r5_deskbar_tray_look();
 		SetViewColor(B_TRANSPARENT_COLOR);
 		BMessage poll(kMsgPoll);
 		fRunner = new BMessageRunner(BMessenger(this), &poll, kPollInterval);
@@ -212,10 +214,16 @@ public:
 	{
 		(void)updateRect;
 		rgb_color color = ui_color(B_PANEL_TEXT_COLOR);
+		rgb_color background = ui_color(B_PANEL_BACKGROUND_COLOR);
+		// Default (R5) Deskbar: the tray's one colour (docs/ICONS.md)
+		if (fTrayLook.style == R5_TRAY_STYLE_SYMBOLS) {
+			color = fTrayLook.color;
+			background = ViewColor();
+		}
 		if (!fReached || !fEnabled || fRadios == 0) {
 			// Faint: half way to the Deskbar background, as Deskbar's own
 			// items do.
-			color = mix_color(color, ui_color(B_PANEL_BACKGROUND_COLOR), 160);
+			color = mix_color(color, background, 160);
 		}
 
 		BRect frame = Bounds().InsetByCopy(1, 1);
@@ -244,6 +252,11 @@ public:
 		switch (message->what) {
 			case kMsgPoll:
 				_Poll();
+				break;
+
+			case R5_DESKBAR_TRAY_STYLE_CHANGED:
+				r5_tray_look_update(&fTrayLook, message);
+				Invalidate();
 				break;
 
 			case kMsgToggle:
@@ -399,6 +412,8 @@ private:
 	rgb_color		fGlyphColor;
 	float			fGlyphSide;
 	BMessage		fPaired;
+	// the tray look, its own copy (external review, 23 Nov 2026)
+	struct r5_tray_look	fTrayLook;
 };
 
 

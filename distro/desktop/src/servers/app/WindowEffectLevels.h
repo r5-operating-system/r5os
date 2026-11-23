@@ -23,6 +23,14 @@ enum {
 	kWindowEffectsAll			= 0x00000007
 };
 
+// External review, 23 Nov 2026: app_server's broadcast to every
+// application (Desktop::BroadcastToAllApps()) when the effects change or the
+// compositor turns off; each ServerApp then sends its program
+// kWindowEffectsChangedMessage, which is BAppearanceKit::
+// B_WINDOW_EFFECTS_CHANGED in libr5ui's <WindowEffects.h>.
+static const int32 kMsgWindowEffectsChanged = '_r5e';
+static const uint32 kWindowEffectsChangedMessage = 'r5we';
+
 enum {
 	kWindowEffectsQuiet		= 1,
 	kWindowEffectsBalanced	= 2,

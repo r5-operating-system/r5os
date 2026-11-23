@@ -145,9 +145,40 @@ PanelWindow::PanelWindow()
 	BAppearanceKit::set_window_corner_radius(<span class="k">this</span>, radius);
 }</pre>
 
+			<div class="member"><div class="sig">status_t set_window_shadow(BWindow* window, enum window_shadow_kind kind);</div>
+				<p>The shadow of the program's own window, with the GPU only.
+				<code class="inline">B_WINDOW_SHADOW_DEFAULT</code> is the shadow the decorator gives (the default);
+				<code class="inline">B_WINDOW_SHADOW_FULL</code> is the full soft shadow of the chosen effect step
+				whether the window has the focus or not, also for a window without a border;
+				<code class="inline">B_WINDOW_SHADOW_EDGE</code> is the same without the offset down, for a window
+				against a screen edge. Deskbar in Default (R5) uses the full shadow when it floats and the edge
+				shadow against an edge.</p></div>
+
+			<div class="member"><div class="sig">status_t set_window_edge_line(BWindow* window, rgb_color color, float width);</div>
+				<p>The line along the outer edge of a window without a border line of its own, carried round the
+				arc of its round corners (smooth with the GPU, stepped without). The program draws the straight
+				sides itself. Width 0 is no line, the default.</p></div>
+
+			<div class="member"><div class="sig">bool window_effects_active();</div>
+				<p>True while the effects can show: the GPU composes the screen. False in Safe mode and without a
+				GPU, where a program draws an opaque surface instead of glass.</p></div>
+
+<pre class="code"><span class="k">#include</span> &lt;R5UI.h&gt;
+<span class="k">#include</span> &lt;WindowEffects.h&gt;
+
+<span class="c">// a floating panel, as Deskbar floats: the R5 margin, round, the full shadow</span>
+<span class="k">float</span> margin = r5_floating_margin();
+BAppearanceKit::set_window_corner_radius(panel, roundf(18.0f * be_plain_font-&gt;Size() / 12.0f));
+BAppearanceKit::set_window_shadow(panel, BAppearanceKit::B_WINDOW_SHADOW_FULL);
+BAppearanceKit::set_window_edge_line(panel, make_color(238, 243, 251), 1);</pre>
+
+			<p><code class="inline">r5_floating_margin()</code> (<code class="inline">&lt;R5UI.h&gt;</code>) is the margin a
+			floating part of the desktop keeps from the screen edges: 14 at 12 points, scaled with the font.</p>
+
 			<div class="see-also">
 				<strong>See also</strong>
 				<a href="haiku-additions.html#decorator">Decorator hooks</a>
+				<a href="icons-kit.html#tray-symbols">Tray symbols</a>
 			</div>
 		</section>
 	</main>

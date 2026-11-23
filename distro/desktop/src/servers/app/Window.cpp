@@ -98,6 +98,9 @@ Window::Window(const BRect& frame, const char *name,
 // SPDX-License-Identifier: MIT
 	fDrawableWarned(false),
 	fCornerRadius(0.0f),
+	fShadowKind(0),
+	fEdgeColor(make_color(0, 0, 0)),
+	fEdgeWidth(0.0f),
 	fOutlineCache(NULL),
 // SPDX-SnippetEnd
 	fDirtyRegion(),
@@ -2068,8 +2071,14 @@ Window::_DrawBorder()
 	// in respond to a REDRAW message having been received, the
 	// clipping lock is held for reading
 	::Decorator* decorator = Decorator();
-	if (!decorator)
+	if (!decorator) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		_DrawProgramRim();
+// SPDX-SnippetEnd
 		return;
+	}
 
 	// construct the region of the border that needs redrawing
 	BRegion* dirtyBorderRegion = fRegionPool.GetRegion();
@@ -2427,9 +2436,60 @@ Window::SetCornerRadius(float radius)
 	if (radius > R5_WINDOW_CORNER_MAX_RADIUS)
 		radius = R5_WINDOW_CORNER_MAX_RADIUS;
 	fCornerRadius = radius;
-	fContentRegionValid = false;
-	fVisibleContentRegionValid = false;
-	fEffectiveDrawingRegionValid = false;
+	// the regions and the views' screen clipping, cut to the old outline,
+	// are made again (external review, 23 Nov 2026: the specks after round
+	// to square, the round top corners of Classic in Safe mode)
+	_DecoratorShapeChanged();
+}
+
+
+/*!	CPU mode: the rim of a window without a decorator that asked for an
+	edge line (set_window_edge_line(), Deskbar in Default (R5)). It is in
+	the border region (GetBorderRegion()) and nobody else paints it. As in
+	_DrawBorder(): the clipping is a region of the pool, never NULL (the
+	Painter keeps the pointer and reads it; NULL crashed app_server, external
+	review B10), and the draw state is synced again afterwards.
+*/
+void
+Window::_DrawProgramRim()
+{
+	rgb_color rimColor;
+	const window_outline* rim = _SteppedRim(&rimColor);
+	DrawingEngine* engine = GetDrawingEngine();
+	if (rim == NULL || engine == NULL)
+		return;
+	BRegion* line = fRegionPool.GetRegion(rim->rim);
+	if (line == NULL)
+		return;
+	line->IntersectWith(&DrawableRegion());
+	line->IntersectWith(&fDirtyRegion);
+	if (line->CountRects() > 0 && engine->LockParallelAccess()) {
+		engine->ConstrainClippingRegion(line);
+		bool copyToFrontEnabled = engine->CopyToFrontEnabled();
+		engine->SetCopyToFrontEnabled(false);
+		engine->FillRegion(*line, rimColor);
+		engine->SetCopyToFrontEnabled(copyToFrontEnabled);
+		engine->CopyToFront(*line);
+		fWindow->ResyncDrawState();
+		engine->UnlockParallelAccess();
+	}
+	fRegionPool.Recycle(line);
+}
+
+
+/*!	The corners of the outline now: what is cut and, in the CPU mode, the
+	rim. A radius change exposes them again (Deskbar styles: dark specks in
+	the corners after round to square, as ResizeBy() had in step 1.5).
+*/
+void
+Window::GetOutlineCorners(BRegion* corners)
+{
+	corners->MakeEmpty();
+	const window_outline* outline = _CachedOutline(_OutlineBlended());
+	if (outline != NULL) {
+		corners->Include(&outline->cut);
+		corners->Include(&outline->rim);
+	}
 }
 
 
@@ -2489,15 +2549,32 @@ Window::_SteppedRim(rgb_color* color)
 {
 	if (_OutlineBlended())
 		return NULL;
-	::Decorator* decorator = Decorator();
 	float width = 0;
-	if (decorator == NULL || !decorator->GetEdgeLine(color, &width)
-		|| width <= 0)
+	if (!GetEdgeLine(color, &width) || width <= 0)
 		return NULL;
 	const window_outline* outline = _CachedOutline(false);
 	if (outline == NULL || outline->rim.CountRects() == 0)
 		return NULL;
 	return outline;
+}
+
+
+/*!	The line along the outer edge: the decorator's, else the program's own
+	(set_window_edge_line(), for a window without a decorator line, such as
+	Deskbar in Default (R5)).
+*/
+bool
+Window::GetEdgeLine(rgb_color* color, float* width)
+{
+	::Decorator* decorator = Decorator();
+	if (decorator != NULL && decorator->GetEdgeLine(color, width)
+		&& *width > 0)
+		return true;
+	if (fEdgeWidth <= 0)
+		return false;
+	*color = fEdgeColor;
+	*width = fEdgeWidth;
+	return true;
 }
 
 

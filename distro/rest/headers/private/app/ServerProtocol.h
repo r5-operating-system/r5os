@@ -410,6 +410,17 @@ enum {
 	AS_R5_SET_WINDOW_CORNER_RADIUS,
 // SPDX-SnippetEnd
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// Deskbar styles (docs/design/DESKBAR-STYLES.md, libr5ui): the shadow a
+	// program asks for its own window, and whether the compositor shows
+	// the window effects now (the GPU mode).
+	AS_R5_SET_WINDOW_SHADOW,
+	AS_R5_WINDOW_EFFECTS_ACTIVE,
+	AS_R5_SET_WINDOW_EDGE_LINE,
+// SPDX-SnippetEnd
+
 	AS_LAST_CODE
 };
 

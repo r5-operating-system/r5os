@@ -75,6 +75,7 @@ All rights reserved.
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 #include "BarSettings.h"
+#include "DeskbarStyle.h"
 // SPDX-SnippetEnd
 #include "BarView.h"
 #include "BarWindow.h"
@@ -206,7 +207,8 @@ TBarMenuBar::SmartResize(float width, float height)
 		// The button is only the mark. Do not stretch it to the wide slot.
 		// A vertical bar and the mini team menu keep the width they were given.
 		if (fSymbolWidth > 0 && fAppListMenuItem == NULL
-			&& fBarView != NULL && !fBarView->Vertical()) {
+			&& fBarView != NULL && !fBarView->Vertical()
+			&& !R5Deskbar::Modern()) {
 			width = fSymbolWidth;
 			if (fSeparatorItem != NULL)
 				width += kSepItemWidth;
@@ -323,6 +325,13 @@ TBarMenuBar::Draw(BRect updateRect)
 void
 TBarMenuBar::DrawBackground(BRect updateRect)
 {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// Default (R5): the view's own colour (or glass) is the background
+	if (R5Deskbar::Modern())
+		return;
+// SPDX-SnippetEnd
 	BMenu::DrawBackground(updateRect);
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
@@ -353,7 +362,15 @@ void
 TBarMenuBar::MouseMoved(BPoint where, uint32 code, const BMessage* message)
 {
 	// the following code parallels that in ExpandoMenuBar for DnD tracking
-
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// Default (R5): the hover shade on the wave pebble
+	if (R5Deskbar::Modern() && message == NULL) {
+		SetHoverAt(code == B_EXITED_VIEW || code == B_OUTSIDE_VIEW
+			? BPoint(-1, -1) : where);
+	}
+// SPDX-SnippetEnd
 	if (!message) {
 		// force a cleanup
 		fBarView->DragStop(true);

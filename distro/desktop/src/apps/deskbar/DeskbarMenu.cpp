@@ -65,6 +65,12 @@ All rights reserved.
 #include "MountMenu.h"
 #include "RecentItems.h"
 #include "StatusView.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include "DeskbarStyle.h"
+#include <WindowEffects.h>
+// SPDX-SnippetEnd
 
 #include "tracker_private.h"
 
@@ -122,6 +128,36 @@ TDeskbarMenu::AttachedToWindow()
 	}
 
 	BNavMenu::AttachedToWindow();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// Default (R5): a glass panel with the corners of Deskbar
+	if (R5Deskbar::Modern() && Window() != NULL) {
+		using namespace BAppearanceKit;
+		rgb_color surface = R5Deskbar::SurfaceColor();
+		SetViewColor(surface);
+		SetLowColor(surface);
+		bool glass = R5Deskbar::Glass();
+		set_view_glass(this, glass);
+		if (Parent() != NULL) {
+			Parent()->SetViewColor(surface);
+			set_view_glass(Parent(), glass);
+		}
+		R5Deskbar::StyleMenuWindow(Window());
+	} else if (Window() != NULL) {
+		// Classic: the menu window is the bar's, shared with its other
+		// menus; it loses what Default (R5) gave it (review 2)
+		if (R5Deskbar::UnstyleMenuWindow(Window())) {
+			BAppearanceKit::set_view_glass(this, false);
+			SetViewUIColor(B_MENU_BACKGROUND_COLOR);
+			SetLowUIColor(B_MENU_BACKGROUND_COLOR);
+			if (Parent() != NULL) {
+				BAppearanceKit::set_view_glass(Parent(), false);
+				Parent()->SetViewUIColor(B_MENU_BACKGROUND_COLOR);
+			}
+		}
+	}
+// SPDX-SnippetEnd
 }
 
 
@@ -480,6 +516,13 @@ TDeskbarMenu::ResetTargets()
 BPoint
 TDeskbarMenu::ScreenLocation()
 {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (R5Deskbar::Modern())
+		return _ModernLocation();
+// SPDX-SnippetEnd
+
 	bool vertical = fBarView->Vertical();
 	int32 expando = fBarView->ExpandoState();
 	bool left = fBarView->Left();

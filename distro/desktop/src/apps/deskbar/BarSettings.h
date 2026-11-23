@@ -69,6 +69,16 @@ struct desk_settings {
 	bool alwaysOnTop;
 	bool autoRaise;
 	bool autoHide;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// Deskbar styles (DeskbarStyle.h): Default (R5) or Classic (Haiku),
+	// the layout of Default (R5), round corners, floating
+	int32 style;
+	int32 layout;
+	bool rounded;
+	bool floating;
+// SPDX-SnippetEnd
 };
 
 // SPDX-SnippetBegin

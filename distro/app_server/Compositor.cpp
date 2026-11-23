@@ -994,11 +994,11 @@ Compositor::ClippingChanged()
 			// the decorator's own edge line, carried round the arc; none
 			// for a window without one (review: no colour guessed from
 			// the window's pixels)
-			::Decorator* edgeDecorator = window->Decorator();
+			// (Deskbar styles: else the program's own line,
+			// set_window_edge_line())
 			rgb_color edgeColor;
 			float edgeWidth = 0;
-			if (edgeDecorator != NULL
-				&& edgeDecorator->GetEdgeLine(&edgeColor, &edgeWidth)
+			if (window->GetEdgeLine(&edgeColor, &edgeWidth)
 				&& edgeWidth > 0) {
 				round.edgeColor = (uint32)edgeColor.blue
 					| ((uint32)edgeColor.green << 8)
@@ -1017,11 +1017,19 @@ Compositor::ClippingChanged()
 		int32 strength = fStrength;
 		::Decorator* decorator = window->Decorator();
 		bool menu = window->Feel() == kMenuWindowFeel;
+		// Deskbar styles (set_window_shadow()): 1 the full shadow whatever
+		// the focus, 2 the same without the offset; also for a window
+		// without a decorator
+		int32 shadowKind = window->ShadowKind();
 		if ((effects & kWindowEffectShadow) != 0
-			&& (decorator != NULL || menu)) {
-			layer->shadowSmall = !window->IsFocus() || menu;
+			&& (decorator != NULL || menu || shadowKind != 0)) {
+			layer->shadowSmall = shadowKind == 0
+				&& (!window->IsFocus() || menu);
+			layer->shadowFlat = shadowKind == 2;
 			window_shadow_geometry shadow = window_shadow_for(strength,
 				layer->shadowSmall);
+			if (layer->shadowFlat)
+				shadow.offset = 0;
 			int32 extentLeft;
 			int32 extentTop;
 			int32 extentRight;
@@ -1030,7 +1038,7 @@ Compositor::ClippingChanged()
 			// decorator's short one (review: Haiku's bordered look cut a
 			// 15 px blur at 1 to 2 px, a hard edge round the arc). The
 			// blur of its round shape fades out round by itself.
-			if (decorator != NULL && rounded.IsSquare()) {
+			if (decorator != NULL && rounded.IsSquare() && shadowKind == 0) {
 				BRect extent;
 				decorator->GetShadowExtent(&extent);
 				extentLeft = (int32)extent.left;
@@ -1040,6 +1048,10 @@ Compositor::ClippingChanged()
 			} else {
 				window_shadow_extent(strength, &extentLeft, &extentTop,
 					&extentRight, &extentBottom);
+				if (layer->shadowFlat) {
+					extentTop = shadow.reach;
+					extentBottom = shadow.reach;
+				}
 			}
 			clipping_rect area;
 			area.left = max_c(bounds.left - shadow.reach,
@@ -1136,6 +1148,7 @@ Compositor::ClippingChanged()
 			&& before->shape == after->shape
 			&& before->shadow == after->shadow
 			&& before->shadowSmall == after->shadowSmall
+			&& before->shadowFlat == after->shadowFlat
 			&& before->shadowArea == after->shadowArea
 			&& before->glassFixed == after->glassFixed
 			&& before->glassAlpha == after->glassAlpha
@@ -2702,6 +2715,14 @@ Compositor::_Compare(const BRegion& damage, const LayerList& layers,
 	}
 	BRegion checked(damage);
 	checked.Exclude(&shared);
+	// The corners of a round layer are blended with what lies below (mode
+	// 6, glass mode 3); the copy above has the raw pixels. Left out
+	// (external review, 23 Nov 2026: the MISMATCH beside the Deskbar).
+	for (int32 l = 0; l < layers.CountItems(); l++) {
+		Layer* layer = layers.ItemAt(l);
+		if (layer->round.IsRound())
+			checked.Exclude(&layer->round.area);
+	}
 	for (int32 i = 0; i < checked.CountRects(); i++) {
 		clipping_rect r = checked.RectAtInt(i);
 		for (int32 y = r.top; y <= r.bottom; y++) {
@@ -2838,6 +2859,9 @@ Compositor::_TurnOff(const char* reason)
 
 	fDesktop->CompositorTurnedOff();
 	fDesktop->UnlockAllWindows();
+	// the programs that follow the effects drop them (external review,
+	// 23 Nov 2026: Deskbar kept its glass look after a fall back)
+	fDesktop->BroadcastToAllApps(kMsgWindowEffectsChanged);
 	// The back buffer is the last frame the CPU still has. Copy it to the
 	// front now, on this thread, so a striped scanout does not stay up
 	// until the window threads have redrawn.

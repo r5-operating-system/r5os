@@ -164,3 +164,35 @@ bar, the long bar with names in the pill form, window animations other than the 
 Do not push or open a PR without asking.
 
 Report at the end: **Veranderd / Getest / Onbewezen / Documentatie**.
+
+## Built (night of 22 to 23 Nov 2026)
+
+Steps 1 to 5 in one branch, for the owner's review (one PR, not merged).
+
+- **Where it lives.** Deskbar's R5 look is in two new MIT files,
+  `distro/desktop/src/apps/deskbar/DeskbarStyle.{h,cpp}` (the settings, the numbers of the
+  mockup, the colours, the drawing helpers) and `DeskbarStyleViews.cpp` (the three layouts, the
+  hover and the hollow, the front line, the growing pill, the tray symbols' placement). The Haiku
+  files call into them from SPDX snippets; Classic (Haiku) keeps Haiku's code paths. The window is
+  borderless in Default (R5); a new edge view around `TBarView` draws the 1 px edge.
+- **Settings.** `desk_settings` gained `style`, `layout`, `rounded`, `floating` (new keys at the end
+  of Deskbar's file; a file without them is Default (R5) in the form it had). The Settings page sends
+  `'R5ds'` with absolute values; Deskbar applies and saves.
+- **New calls, additive.** libr5ui: `set_window_shadow()`, `window_effects_active()`,
+  `set_window_edge_line()` (`<WindowEffects.h>`), `r5_floating_margin()` and the tray style
+  (`<R5UI.h>`); app_server codes at the end of `ServerProtocol.h`; the compositor honours the shadow
+  kind and the program's edge line (`Compositor.cpp`, `CompositorEffects.cpp`). libr5icons: glyphs
+  12 to 19 and level glyphs 3 and 4 for the tray.
+- **Zoom.** `TBarWindow` answers BDeskbar's "Frame" with the margin; the pill answers
+  `B_DESKBAR_TOP` or `B_DESKBAR_BOTTOM`. `BWindow::Zoom()` in libbe is unchanged.
+- **Tests.** `scripts/qemu-deskbar-styles.py` with `scripts/deskbar-styles-guest.sh`, and
+  `r5-effects-test zoom [autohide]` and `deskbar-add <path>`.
+
+Educated guesses (owner to confirm; also in the PR under "Open keuzes"): the chevron of the pill
+shows or hides the tray symbols (the pill shows only the clock folded); a layout against the edge is
+square; the vertical leaf row uses the pill's 42 x 42 button for its hover and hollow; a vertical row
+hovers with corners of 9 (board A1's `.row`); the edge shadow uses the same step as the floating one
+(the mockup's 0.22 to 0.32 is a second set of numbers, which the brief rules out); the battery warning
+colour is `B_FAILURE_COLOR`; the Deskbar menu's items keep the control look's highlight (the light
+blue tint with corners of 10 needs every Tracker menu item class to change); the default width of a
+new Vertical Deskbar is 210 at 12 points.

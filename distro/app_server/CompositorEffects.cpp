@@ -535,6 +535,9 @@ Compositor::_RecordShadow(Layer* layer, const BRegion& damage, uint64 frame,
 		return;
 	window_shadow_geometry shadow = window_shadow_for(entry->maskStrength,
 		entry->maskSmall);
+	// Deskbar styles: a window against a screen edge, no offset
+	if (layer->shadowFlat)
+		shadow.offset = 0;
 	int32 maskLeft = layer->left - shadow.reach;
 	int32 maskTop = layer->top - shadow.reach + shadow.offset;
 

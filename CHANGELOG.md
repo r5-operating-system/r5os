@@ -7,6 +7,49 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-23 - Deskbar styles - the external review (points 6 to 12)
+
+Problem: an external review of PR #4561 found seven points; each was checked against the code first, and all seven held.
+
+What changed:
+- 6: `Window::SetCornerRadius()` now invalidates the views' screen clipping. The views kept the clipping cut to the old outline, so after round to square the corners were never drawn again (the dark specks), and Classic kept round top corners in Safe mode.
+- 7: the compositor's pixel compare leaves out the blended corners of round layers (`layer_round.area`); it compared them with the raw pixels (the `MISMATCH` beside the Deskbar). The guest script now moves a round window with the effects off, so the compare runs during the Classic step (it compares every 100th composed frame).
+- 8: Deskbar's glass needs frosted glass on in Appearance. app_server sends `BAppearanceKit::B_WINDOW_EFFECTS_CHANGED` (libr5ui, `'r5we'`, bool `"active"`, uint32 `"effects"`) to every program when the effects change or the compositor turns off, as Haiku does with `B_COLORS_UPDATED`; Deskbar applies its style again on it.
+- 9: in the CPU mode app_server paints the stepped rim of a window without a decorator (`Window::_DrawProgramRim()`); the clipping is a region of the pool, never NULL (`ConstrainClippingRegion(NULL)` was the earlier crash). Deskbar asks for its edge line in both modes again.
+- 10: the window watcher also runs for Default (R5) Horizontal; a changed count repaints and lays the bar out again (the first test showed "Style… 2": the item did not widen).
+- 11: each R5 tray item keeps its own style and colour (`struct r5_tray_look`, `r5_deskbar_tray_look()`, `r5_tray_look_update()`, added at the end of libr5ui); the values behind the getters change under one lock. Headers copied from Haiku for this: PowerStatusView.h, ProcessController.h, mail DeskbarView.h.
+- 12: the earlier claim was wrong. In Safe mode the network and volume items do draw the line symbols; what looked like their own coloured icons are colour fringes of the subpixel smoothing on the symbols in the CPU mode.
+
+Checked and left as it was: the menu corners (reviewer's B11) are set in `TDeskbarMenu::AttachedToWindow()`, before the menu window is shown and before Track; no call from Draw and no thread remains. Compact shows no count, so the watcher stays off there.
+
+Tested (QEMU, KVM, `-machine pc`, 2 CPUs, 2 GB, 1280 by 800; builds of 23 Nov about 05:53 and 06:14 with `scripts/build-locked.sh`, `jam_exit=0`, `mesa_exit=0`, the image copied under the held lock):
+- the whole list (run 12, GPU mode, Lavapipe): no hang; the compare ran 8 times, `compose compare ok` each time, 4 of them during the Classic step, no `MISMATCH`; the square floating Vertical after round has clean corners (no specks); the zoom numbers as before.
+- Safe mode (safe 5, `gpu compositor off: safe mode`): no crash with the CPU edge line; Classic after Default (R5) has square top corners; the stepped grey line runs round the Default (R5) corners.
+- the window count (count 3, Horizontal at the bottom): StyledEdit with 1, 2, 3, 2 and 1 windows shows no count, 2, 3, 2 and none, with the full name.
+- after merging main with #4560 (R5 Modern; `SetCornerRadius()` now calls its `_DecoratorShapeChanged()`), build of 23 Nov about 07:05, `scripts/qemu-deskbar-styles.py --quick`: Deskbar starts in Default (R5), round and floating, beside the R5 Modern windows; with effects off the compare ran twice, `compose compare ok`, during the Default (R5) step, none fell in the Classic step of that short run. In the first quick run the effects did not switch off (the compositor kept "shadow on frosted on", so no compare ran); the second run, the same build and the command's output logged, switched them (`rc 0`). Not explained, not seen again.
+
+Not proven: the frosted glass switch and a GPU to CPU fallback while Deskbar runs (the message is sent; no run switched them while watching Deskbar); a real screen, the 5625U, Wi-Fi, a battery, mail. Found, not fixed: in Safe mode the Classic Deskbar's logo button is empty (it was in the earlier Safe mode picture too); the subpixel colour fringes on the tray symbols in the CPU mode.
+
+## 2026-11-23 - Deskbar styles - the QEMU test
+
+Problem: the Deskbar styles had to be checked without the owner, against the mockup.
+
+What changed: two independent code reviews (fresh agents, given only the code and the docs) and their fixes, listed below; `scripts/qemu-deskbar-styles.py` (WSL) boots its own copy of the image with `scripts/deskbar-styles-guest.sh` as a UserBootscript job; the guest sets each style with Deskbar's own `'R5ds'` message (`hey`), says on the serial port what is on screen, and the host takes screendumps, moves and clicks the mouse (hover, menu, chevron) and holds Shift. Pictures: `docs/design/screens/deskbar/` (every test at 1280 by 800 from QMP `screendump` in `full/`, and crops enlarged with nearest-neighbour next to the mockup rendered at 100 % from its own CSS and images in `crops/`).
+
+Review 1 fixes: `FetchTeamIcon()` keeps the R5 icon; tray items follow Deskbar's colour only when they took it, nothing below a replicant is touched, Classic resets the low colour; the tray message carries `"style"` and `"color"`; Classic keeps Haiku's default width and its first-hit window check; the edge-line request only rebuilds on a change. Review 2 fixes: Classic after Default (R5) gives the bar's shared menu window and the drag region's views Haiku's look back; the folded pill only shows what it hid; icons take the new layout's size after the state change; an uncached icon is freed on the fallback; a pill on the left stays left on the Settings page; no program edge line in the CPU mode (painting its rim in `Window::_DrawBorder()` crashed app_server in Safe mode in QEMU, so that attempt was reverted). Also: a radius change exposes the old cut corners and rim (as `ResizeBy()`), and the hover and the Hollow were tuned against the 100 % mockup crops.
+
+Tested (QEMU, KVM, `-machine pc`, 2 CPUs, 2 GB, Lavapipe GPU mode, 1280 by 800, build of 23 Nov about 01:35, the image copied while the build lock was held; run 11, the whole list, no hang; Safe mode run 4 on the same build):
+- Board A: Vertical floating round (210 wide, margin 14), square, and in the corner flat; hover shade on the pebble; the Hollow with the menu open beside it (8 px gap, top level); front application bold with the blue line; 20 px icons.
+- Board B: the pill 54 high, margin 14; menu beside it; hover; chevron; square; against the edge; the grow (a new application: the pill grows, the icon pops in, then its blue line).
+- Board C: the bar 48 high, top and bottom, floating (margin on both sides) and against the edge, square; the menu under the pebble.
+- Zoom (`r5-effects-test zoom`, the window frame then Deskbar's reported frame): Vertical in the corner 1066 < 1069; Vertical floating 1038 < 1041 (Deskbar 1055 plus the margin); Compact top 108 > 81 over the full width; Horizontal top floating 102 > 75, bottom 721 < 724, top against the edge 74 > 47; with Shift and with auto-hide the whole screen; Classic vertical 1008 < 1011 as before.
+- A third-party tray item: `deskbar-add /boot/system/apps/Workspaces` "No error", and it draws itself.
+- The Settings page with its four new controls; Classic (Haiku) vertical and horizontal as Haiku draws them.
+
+- Safe mode (`gpu compositor off: safe mode` in the syslog): Vertical, Compact and Classic with the opaque `#eef2f8` surface and stepped corners, no glass, no shadow; no crash.
+
+Not proven: the compare (run 11 logged no `compose compare` line; run 10, before the last fix, logged one `MISMATCH at 1009,14`, 2 px left of the Classic Deskbar during the Classic step after Default (R5), not explained); in Safe mode the network and volume items kept their own icons (Bluetooth and AirPlay drew symbols), not explained; dark specks in the bottom corners of the square floating Vertical after round to square remain; a real screen, the 5625U, a Wi-Fi adapter, a battery.
+
 ## 2026-11-23 - Windows, Default (R5 Modern): fixes from the external review
 
 Problem: an external review of the branch named five points; each was checked against the code first.
@@ -41,6 +84,62 @@ What changed (`R5ModernDecorator.cpp`): the wedge is the same in both modes (eve
 Also noted by the review, not changed (owner's choice, in the PR's "Open keuzes"): the active tab without glass, floating windows with the full card, the 12 % lighter tab colour, the edge colour over the panel colour. `DecorInfo` (libbe) now returns the add-on's own name from `Name()` and "Classic (Haiku)" for the built-in decorator: a visible change in a libbe class, no ABI change; "Default" and the file names still find the decorators.
 
 Tested: see the step C entry and the PR (QEMU run 6 on build 9).
+
+## 2026-11-22 - Deskbar styles, step 5: R5's tray items as one-colour line symbols
+
+Problem: in the new Default (R5) Deskbar the tray items still drew their own coloured icons (a blue "A" for AirPlay, a green and red network, bevelled battery and speaker pictures), which the mockup (board A, "R5 Deskbar styles", 22 Nov 2026) replaces with plain line symbols in one colour.
+
+What changed:
+- `libr5icons`: glyphs 12 to 19 at the end of `enum r5_glyph` (`R5_GLYPH_WIFI`, `VOLUME`, `VOLUME_OFF`, `NETWORK`, `NETWORK_OFF`, `AIRPLAY`, `MAIL`, `MAIL_NEW`) and level glyphs 3 and 4 (`R5_LEVEL_WIFI`, `R5_LEVEL_BATTERY_SYMBOL`), drawn on the 24 grid with a pen of 2, the mockup's paths for Wi-Fi, the speaker and the battery.
+- `libr5ui`: `r5_deskbar_tray_style()`, `r5_deskbar_tray_color()`, `r5_set_deskbar_tray_style()` and the message `R5_DESKBAR_TRAY_STYLE_CHANGED` (`'r5ts'`). Deskbar sets the style in its own process and sends the message to every tray view; R5's items read it in `Draw()`.
+- The items: NetworkStatus (wired, Wi-Fi arcs), PowerStatus (the battery, its label in the tray colour, `B_FAILURE_COLOR` under 15 % when not charging), Bluetooth, AirPlay, mail_daemon, desklink's volume (`MediaReplicant.cpp` and its Jamfile copied into `distro/desktop/src/bin/desklink`) and ProcessController (copied into `distro/desktop/src/apps/processcontroller`, its bars in the tray colour, owner's choice 3). Each links `libr5ui.so` and `libr5icons.so`. In Classic (Haiku) every item draws as before; other programs' items are not touched.
+- `docs/ICONS.md` ("Tray symbols", the rule for developers), `docs/STYLE.md`, `docs/LIBR5.md`, R5Book `icons-kit.html#tray-symbols`.
+
+Limits: no charging mark on the battery symbol (the fill shows the level only); the Wi-Fi symbol is not drawn on a real Wi-Fi adapter here (QEMU has none).
+
+Tested: QEMU (the entry "Deskbar styles - the QEMU test"): volume, ProcessController, Bluetooth, AirPlay and wired network show as line symbols in `#1d2a40` in Default (R5), and as their own icons in Classic (Haiku). Battery, Wi-Fi and mail not seen (no battery, no Wi-Fi, no mail account in QEMU).
+
+## 2026-11-22 - Settings - Desktop and Deskbar: Style, Layout, Corners and Floating (Deskbar styles, step 4)
+
+Problem: the Deskbar styles need their choices on the Settings page Desktop and Deskbar.
+
+What changed: the Window box of the page gains Style (Default (R5), Classic (Haiku)), Layout (Vertical, Compact, Horizontal), Corners (Rounded, Square) and the check box "Keep away from the screen edges". Place stays on the screen picture, which now shows the pill, the margin and round corners. Classic (Haiku) hides Corners and Floating and disables Compact. An edge on the picture is the Horizontal layout, a corner Vertical or Compact; choosing Horizontal moves the place to the edge of its corner. The page sends Deskbar's private code `'R5ds'` with absolute values and does not write Deskbar's file; Revert and Defaults cover the new choices (Defaults: Default (R5), Vertical, Rounded, floating, top right). The page keeps its place, title and description.
+
+Limits: the page is taller; its content scrolls in the Settings window at 1030 by 610 (as the frame allows).
+
+Tested: QEMU, `Settings --page deskbar`: the page shows the four new controls with Default (R5), Vertical, Rounded and the check box on. The controls were not clicked in QEMU; the same message drove every layout in the test (`scripts/deskbar-styles-guest.sh`).
+
+## 2026-11-22 - Deskbar styles, steps 1 to 3: Default (R5) and Classic (Haiku)
+
+Problem: the owner chose Deskbar styles on 22 Nov 2026 (`docs/design/DESKBAR-STYLES.md`, mockup boards A to D, option E "Hollow"): Classic (Haiku) as today, and Default (R5) as the new default with three layouts.
+
+What changed:
+- Deskbar's new settings `style`, `layout`, `rounded`, `floating` (new keys at the end of its file; a file without them is Default (R5) in the form it had, owner's choice 4). Defaults: Vertical, Rounded, floating, top right; a new Vertical Deskbar is 210 wide at 12 points.
+- Default (R5) in two new MIT files, `DeskbarStyle.{h,cpp}` and `DeskbarStyleViews.cpp`, called from SPDX snippets in the Haiku files; Classic keeps Haiku's code paths. Deskbar's window is borderless in Default (R5); an edge view around `TBarView` draws the 1 px edge.
+- Vertical (board A): the wave pebble in a 42 row, the tray row of 34 with the clock (14 bold), rows of 34 with 20 px icons, a hover shade `rgba(30,45,70,.07)`, the front application bold with a 3 by 16 line in `#1d7bf5`, the window count when an application has two or more windows; floating with the margin, glass, corners of 18 and a light edge, or in the corner flat and opaque (`#eef1f5`, lines `#8c97a8`, board A3).
+- Compact (board B): a pill 54 high, the pebble and the applications as 42 by 42 buttons with 30 px icons, a dot under each, an 18 by 3 line under the front one, the clock with its symbol (17 bold), the chevron, which shows or hides the tray symbols. With the compositor and Animations on, the pill grows and the new icon pops in over 0.34 s (cubic-bezier(.2,.9,.3,1.25)), Deskbar resizing itself with a `BMessageRunner` (owner's choice 2).
+- Horizontal (board C): a bar 48 high, floating or against the top or bottom edge, the pebble in a 48 by 40 button, applications with icon, name and window count, a 24 by 3 line under the front one, the tray, a separator and the clock (15 bold).
+- The pebble with its menu open is the Hollow (`rgba(30,45,70,.12)`, an inset shadow, an inner line). The menu opens beside the pebble (8 px gap, top level with it) or under the bar, as a glass panel with Deskbar's corners.
+- Zoom (owner's choice 1, A): Deskbar answers `BDeskbar::Frame()` with its frame grown by the margin when floating, and the pill answers `Location()` with `B_DESKBAR_TOP` or `B_DESKBAR_BOTTOM`, so `BWindow::Zoom()` (unchanged) keeps the pill's strip free. Classic unchanged.
+- The front application comes from the roster (`B_SOME_APP_ACTIVATED`); team icons are drawn from the vector icon at the layout's size.
+- Without the GPU (`window_effects_active()` false) the surface is opaque `#eef2f8` with a `#9fb0c8` edge.
+- Tests: `scripts/qemu-deskbar-styles.py` and `scripts/deskbar-styles-guest.sh`; `r5-effects-test zoom [autohide]` and `r5-effects-test deskbar-add <path>`.
+
+Mistakes on the way (found in QEMU and fixed): `BMenu::SetFont()` in the item drawing laid the menu out again and drew again, a redraw loop that ran the guest out of memory (now `BView::SetFont()`); the clock drew over the old time (now `Invalidate()`); Haiku's size limits pinned the bar and the pill to the full screen width; the scroll view under the list painted a grey strip; team icons were scaled up from 16 px; drawn at the layout's size they left `FetchTeamIcon()` restoring a NULL icon, and Deskbar crashed at start (the R5 icon is kept, and `BarTeamInfo`'s copy accepts NULL); the menu's corners and shadow, set from its `Draw()` or from a helper thread, hung Deskbar while the menu opened (now set when the menu attaches, as in the run that never hung, so the first opening can still be square); a clip set for the hollow stayed for the pebble drawn after it (now rings, no clip); after round to square the corners showed dark specks (a repaint 150 ms later).
+
+Limits: the Deskbar menu's items keep the control look's highlight (not the mockup's light blue tint with corners of 10), and its submenus keep Haiku's look; the menu frame keeps BMenuFrame's dark line. Dragging the pill keeps it a pill. A Vertical Deskbar at a bottom corner stays Haiku's mini form. Fonts are R5's (Noto Sans, bold for the mockup's 600).
+
+Tested: see the entry "Deskbar styles - the QEMU test".
+
+## 2026-11-22 - Window effects: a program's own shadow and edge line, and whether effects show
+
+Problem: Deskbar in Default (R5) needs the full soft shadow also when it is square or not focused, a softer shadow against a screen edge, a light line round the arc of its borderless round window, and to know whether glass can show (GPU mode).
+
+What changed (additive): libr5ui `set_window_shadow(window, kind)` (`B_WINDOW_SHADOW_DEFAULT`, `_FULL`, `_EDGE`), `window_effects_active()` and `set_window_edge_line(window, color, width)` at the end of `<WindowEffects.h>`, and `r5_floating_margin()` at the end of `<R5UI.h>` (14 at 12 points, owner's choice 5); app_server codes `AS_R5_SET_WINDOW_SHADOW`, `AS_R5_WINDOW_EFFECTS_ACTIVE`, `AS_R5_SET_WINDOW_EDGE_LINE` at the end of `ServerProtocol.h`; `Window::ShadowKind()`, `Window::GetEdgeLine()` (the decorator's line first, then the program's); the compositor uses the full step for kinds 1 and 2, the offset 0 for kind 2 (`Layer::shadowFlat`, copied in `CopySnapshotFrom()` and compared in the layer diff), and `Window::GetEdgeLine()` for the arc and the CPU rim. Every window that does not call these composes as before. `docs/LIBR5.md`, `docs/APP-SERVER-COMPOSITOR.md`, R5Book `appearance-effects.html`.
+
+Limits: the edge shadow uses the same strength as the floating one (one table, as the brief asks); the mockup's 0.22 to 0.32 is not copied.
+
+Tested: QEMU (Lavapipe, GPU mode): the floating Deskbar, pill and bar show the soft shadow whether focused or not; against an edge the bar's shadow has no offset. The compare (`gpu_debug`) printed no `compose compare` line in this run, so "square windows unchanged" is not proven by it.
 
 ## 2026-11-22 - Windows, Default (R5 Modern) step C: the round decorator, its name in Appearance, clicks in the round corners
 
