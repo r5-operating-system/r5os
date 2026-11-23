@@ -8,6 +8,13 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-23 - Themes - R5 Modern menu bars start clear of the round window corner
+
+- Problem: in R5 Modern the first menu title started on the window's left edge, under the round corner (18 px). The corner cut the top left of the File highlight, and the open menu started in the curve.
+- Changed (owner's choice A of the mockup `docs/design/screens/theme/mockup-menu-bar-choices.png`): R5 Modern returns 8 more on the left (at 12 pt) for `B_MENU_BAR_BACKGROUND` in Haiku's `GetBackgroundInsets()`. R5's `BMenu` row layout starts a `BMenuBar` there, minus Haiku's 1, when the bar is on the left edge of a titled, document, floating or modal window. The open menu follows its title.
+- Not changed: Haiku and R5 controls return 1, so their menu bars stay where they were; Deskbar's bars (bordered or borderless window) do not move. No call, field or symbol added to libbe.
+- Tested: QEMU (Lavapipe GPU), build of 23 Nov with `scripts/build-locked.sh` (`jam_exit=0`, `mesa_exit=0`); StyledEdit with File opened by Alt+Escape in R5 Modern light and dark and in R5 light (`scripts/qemu-theming.py --menu`). Screens: `qemu-gpu-menu-*.png` and `compare-menu-bar.png` in `docs/design/screens/theme/`. Not tested: Safe mode, a menu bar in a program that places it away from x 0, a stick or the 5625U.
+
 ## 2026-11-23 - Themes - R5 Modern controls, dark mode, live switching, a Theme page in Settings and the Theme Kit
 
 Problem: the owner approved a theming plan and mockups (`docs/design/THEMING.md`, `docs/design/theme-mockup/`: A1 and A2 the Theme page light and dark, A3 Save as theme, B1 R5 Modern dark with the GPU, B2 Default (R5) dark without effects and in Safe mode). R5 had no dark mode, no round controls, and a new control look only reached a program after a restart.

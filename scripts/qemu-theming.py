@@ -17,7 +17,8 @@ Run in WSL on a private copy of r5-os.image:
   3. stops its own QEMU and copies the syslog and the guest's notes to OUT.
 
 --safe boots in Safe mode (the CPU mode, Painter) and runs the short list.
-Usage: scripts/qemu-theming.py IMAGE OUT [--safe] [--save-at=X,Y]
+--menu runs only the menu bar check (R5 Modern and R5, a menu open).
+Usage: scripts/qemu-theming.py IMAGE OUT [--safe] [--menu] [--save-at=X,Y]
 """
 
 import json
@@ -114,6 +115,9 @@ def main():
     safe = "--safe" in args
     if safe:
         args.remove("--safe")
+    menu = "--menu" in args
+    if menu:
+        args.remove("--menu")
     # --save-at X,Y: where the "Save as theme…" button is on screen (read
     # from a screendump of an earlier run); the guest asks with "click-save"
     save_at = None
@@ -144,7 +148,7 @@ def main():
         "kernel": "syslog_time_stamps true\nsyslog_max_size 4M\n",
         "UserBootscript": "#!/bin/sh\n/bin/sh /boot/home/thtest %s"
                           " > /boot/home/thtest.txt 2>&1 &\n"
-                          % ("safe" if safe else ""),
+                          % ("safe" if safe else "menu" if menu else ""),
         "thtest": guest,
     }
     for name, text in files.items():
@@ -238,6 +242,10 @@ def main():
                     qmp.move(float(words[1]), float(words[2]))
                 elif kind == "key" and len(words) >= 2:
                     qmp.key(words[1])
+                elif kind == "keys" and len(words) >= 2:
+                    # a combination, pressed together: "keys alt esc"
+                    qmp.call("send-key", keys=[{"type": "qcode", "data": k}
+                        for k in words[1:]])
                 elif kind == "done":
                     result = 0
                     deadline = 0

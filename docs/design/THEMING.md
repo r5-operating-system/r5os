@@ -88,6 +88,16 @@ haiku_extras.
   `modern` in `~/config/settings/r5/theme`; the look reads it when a program
   loads it (at start and on a live switch). With `haiku` it calls
   `HaikuControlLook` for the scroll bars.
+- The menu bar (owner's choice A, 23 Nov 2026): the first title starts 8 px
+  further in at 12 points, so the title, its highlight and the open menu
+  clear the round window corner (18 px). R5 Modern returns 8 more for
+  `B_MENU_BAR_BACKGROUND` in Haiku's `GetBackgroundInsets()`; R5's `BMenu`
+  row layout starts a `BMenuBar` there, minus Haiku's 1, when the bar is on
+  the left edge of a titled, document, floating or modal window. Haiku and
+  R5 controls return 1, so their menu bars do not move; Deskbar's bars (a
+  bordered or borderless window) do not move either. No call, field or
+  symbol is added to libbe; the change is inside `BMenu`, like the live
+  switch in `BWindow`.
 
 ### Live switching
 

@@ -37,6 +37,7 @@
 				<li><a href="#file">The theme file</a> &mdash; the format and its version.</li>
 				<li><a href="#controls">A control look</a> &mdash; the template add-on.</li>
 				<li><a href="#scrollbars">The scroll bar width</a> &mdash; <code class="inline">GetScrollBarWidth()</code>.</li>
+				<li><a href="#menubar">Where a menu bar starts</a> &mdash; <code class="inline">GetBackgroundInsets()</code>.</li>
 				<li><a href="#decorator">A window decorator</a> &mdash; the frame and the tab.</li>
 				<li><a href="#colours">Light and dark</a> &mdash; <code class="inline">ui_color</code>, never fixed colours.</li>
 				<li><a href="#api">The calls</a> &mdash; list, read, apply, save, and the notification.</li>
@@ -123,6 +124,17 @@ instantiate_control_look(image_id id)
 				Scale it with the font. R5 Modern reads <code class="inline">scroll_bar_width</code> from the theme
 				(Thin 10, Haiku's 14, Wide 18 on the page); a program that places scroll bars with the
 				constant <code class="inline">B_V_SCROLL_BAR_WIDTH</code> keeps Haiku's width and still works.</p></div>
+		</section>
+
+		<section class="entry" id="menubar">
+			<div class="entry-header"><h2 class="plain">Where a menu bar starts</h2><span class="kind">BControlLook</span></div>
+			<div class="member"><div class="sig">virtual void GetBackgroundInsets(background_type backgroundType, uint32 flags,
+	float&amp; _left, float&amp; _top, float&amp; _right, float&amp; _bottom);</div>
+				<p>Haiku's hook. For <code class="inline">B_MENU_BAR_BACKGROUND</code> Haiku returns 1 on each side.
+				A larger left inset moves the first title of a menu bar in by the difference, in R5's
+				<code class="inline">BMenuBar</code>, when the bar is on the left edge of a window with a frame; the
+				open menu follows its title. R5 Modern returns 8 more at 12 points, so the titles clear its round
+				window corner. Return Haiku's value when your windows have square corners.</p></div>
 		</section>
 
 		<section class="entry" id="decorator">

@@ -52,6 +52,24 @@ if [ "$1" = safe ]; then
 	exit 0
 fi
 
+if [ "$1" = menu ]; then
+	# the first menu bar title clears the round corner in R5 Modern, and
+	# stays where it was in R5; Alt+Escape opens the File menu
+	/boot/system/apps/StyledEdit > /dev/null 2>&1 &
+	theme "R5 Modern" light; sleep 2; shot menu-modern-light
+	say "keys alt esc"; sleep 2; shot menu-modern-light-open
+	say "key esc"; sleep 1
+	theme mode dark; shot menu-modern-dark
+	say "keys alt esc"; sleep 2; shot menu-modern-dark-open
+	say "key esc"; sleep 1
+	theme "R5" light; shot menu-r5-light
+	say "keys alt esc"; sleep 2; shot menu-r5-light-open
+	say "key esc"; sleep 1
+	$T theme get >> "$out/notes.txt" 2>&1
+	say "done"
+	exit 0
+fi
+
 # 1. the controls window before any theme (R5, light, the Haiku controls),
 #    then live: it stays open while the theme changes
 $T controls 1500 > /dev/null 2>&1 &
