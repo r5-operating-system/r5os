@@ -8,6 +8,18 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-23 - Card reader: an SD card put in again is found
+
+Problem (stick 77, 5625U, main `a08d00b67c`, `generated/boot-5625u-77/` in the stick worktree): the SD card that was in at power on was found (`SDHC card found`), read, and shown in the mount menu. After the card was taken out and put in again, every command failed: `rtsx: CMD7 (arg 00000000) failed: Operation timed out` three times, then `CMD55 failed`, and the card was not found again. Mounting the exFAT volume then failed with `read of 512 bytes at 16777216 failed: Operation timed out` and an I/O error.
+
+Cause: mmc_bus remembers the selected card (RCA 1). Before each bus command (RCA 0) for the new card it first sends CMD7 with RCA 0 to deselect the old one. No card answers CMD7 with RCA 0 (SD physical layer; OpenBSD sdmmc sends it without a response), but rtsx waited for an R1b answer. The timeout made `_ActivateDevice()` fail, so mmc_bus sent neither CMD0 nor any other command to the new card. At the first scan no card was selected yet, so no CMD7 was sent.
+
+Changed: `distro/kernel/src/add-ons/kernel/busses/mmc/rtsx/rtsx_haiku.cpp`: `response_type()` takes the argument; CMD7 with RCA 0 has no response (`RTSX_SD_RSP_TYPE_R0`), CMD7 with an RCA stays R1b. sdhci is unchanged.
+
+Limits: mmc_bus still cannot unpublish a card that is gone (Haiku's FIXME). The same card comes back on its old disk node (the device manager finds the same attributes); a different card with another RCA or serial gets a new node, and the old one stays and returns errors. Writing a file is not proven on hardware: the driver logs only reads.
+
+Tested: not built and not booted yet; it goes on the next stick (card in, out and in again, mount, copy a file to it and read it back).
+
 ## 2026-11-23 - Updates - Haiku's system repository is no longer in the R5 image
 
 - Problem: Haiku's build installs a config for every repository in `HAIKU_REPOSITORIES` (`haiku/build/jam/images/definitions/minimum`, lines 436 to 448), including Haiku's own system repository (`baseurl https://eu.hpkg.haiku-os.org/haiku/master/x86_64/current`). R5's system package is `haiku-r1~beta6_r5_2026.1_dev-1`; Haiku's server serves `r1~beta6_hrev60455` (23 Nov 2026). `BPackageVersion::Compare()` uses `NaturalCompare`, so R5's version sorts higher today, but once Haiku's master moves to `r1~beta7` or a final `r1`, SoftwareUpdater on an installed R5 would offer Haiku's `haiku` package and could replace R5's system with plain Haiku. That is reasoning from the code, not a test.
