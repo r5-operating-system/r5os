@@ -416,7 +416,8 @@ glyph_paint(BView* view, r5_glyph which, BRect frame)
 		case R5_GLYPH_BLUETOOTH:
 		{
 			// The Bluetooth rune: the stem, and the two arrow heads that
-			// cross it, as one line.
+			// cross it, as one line, in the tray's weight.
+			view->SetPenSize(std::max(1.0f, space.Size(1.6f)));
 			BPoint points[6] = {
 				space.Map(7, 7.5f), space.Map(17, 16.5f), space.Map(12, 21),
 				space.Map(12, 3), space.Map(17, 7.5f), space.Map(7, 16.5f)
@@ -459,14 +460,14 @@ glyph_paint(BView* view, r5_glyph which, BRect frame)
 		// The Deskbar tray symbols: a pen of 2 on the grid, as the mockup
 		// (Design canvas "R5 Deskbar styles", 22 Nov 2026) draws them
 		case R5_GLYPH_WIFI:
-			view->SetPenSize(std::max(1.0f, space.Size(2)));
+			view->SetPenSize(std::max(1.0f, space.Size(1.6f)));
 			glyph_wifi(view, space, 4);
 			break;
 
 		case R5_GLYPH_VOLUME:
 		case R5_GLYPH_VOLUME_OFF:
 		{
-			view->SetPenSize(std::max(1.0f, space.Size(2)));
+			view->SetPenSize(std::max(1.0f, space.Size(1.6f)));
 			// the speaker: M4 9.5h4l5-4v13l-5-4H4z, filled
 			BPoint body[6] = {
 				space.Map(4, 9.5f), space.Map(8, 9.5f), space.Map(13, 5.5f),
@@ -505,7 +506,7 @@ glyph_paint(BView* view, r5_glyph which, BRect frame)
 
 		case R5_GLYPH_AIRPLAY:
 		{
-			// the tray's line weight (external review A5)
+			// the tray's line weight, 1.6 (external review A5)
 			view->SetPenSize(std::max(1.0f, space.Size(1.6f)));
 			// a screen open at the bottom, and the triangle under it
 			BPoint screen[6] = {
@@ -523,7 +524,7 @@ glyph_paint(BView* view, r5_glyph which, BRect frame)
 		case R5_GLYPH_MAIL:
 		case R5_GLYPH_MAIL_NEW:
 		{
-			view->SetPenSize(std::max(1.0f, space.Size(2)));
+			view->SetPenSize(std::max(1.0f, space.Size(1.6f)));
 			float right = which == R5_GLYPH_MAIL_NEW ? 19.5f : 21.5f;
 			float top = which == R5_GLYPH_MAIL_NEW ? 7.5f : 5.5f;
 			glyph_box(view, space, 2.5f, top, right, 19.5f);

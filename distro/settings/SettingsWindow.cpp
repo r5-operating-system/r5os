@@ -91,6 +91,7 @@ class SettingsList : public BAppearanceKit::BSidebar {
 public:
 								SettingsList();
 	virtual	void				FrameResized(float width, float height);
+	virtual	void				ScrollTo(BPoint where);
 	virtual	void				MouseDown(BPoint where);
 	virtual	void				KeyDown(const char* bytes, int32 numBytes);
 			void				UpdateScrollBar();
@@ -257,6 +258,30 @@ SettingsList::FrameResized(float width, float height)
 {
 	BAppearanceKit::BSidebar::FrameResized(width, height);
 	UpdateScrollBar();
+}
+
+
+/*!	Scrolling copies pixels, the masked corners of the list's frame
+	("nav-frame", ListFrame below) with them: the frame draws its corners
+	again (review of the external fixes).
+*/
+void
+SettingsList::ScrollTo(BPoint where)
+{
+	BAppearanceKit::BSidebar::ScrollTo(where);
+	BView* frame = Parent() != NULL ? Parent()->Parent() : NULL;
+	if (frame == NULL || strcmp(frame->Name(), "nav-frame") != 0)
+		return;
+	BRect bounds = frame->Bounds();
+	float r = roundf(8 * be_plain_font->Size() / 12.0f) + 1;
+	frame->Invalidate(BRect(bounds.left, bounds.top, bounds.left + r,
+		bounds.top + r));
+	frame->Invalidate(BRect(bounds.right - r, bounds.top, bounds.right,
+		bounds.top + r));
+	frame->Invalidate(BRect(bounds.left, bounds.bottom - r, bounds.left + r,
+		bounds.bottom));
+	frame->Invalidate(BRect(bounds.right - r, bounds.bottom - r,
+		bounds.right, bounds.bottom));
 }
 
 

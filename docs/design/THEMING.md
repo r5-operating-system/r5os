@@ -246,7 +246,7 @@ Wallpaper page's and is not part of a theme.
 - Dark, R5 Modern and R5 (A2, B1, B2): panel `#1f232b`, text `#e6e9ef`,
   fields `#15181e`, lists `#1b1f26`, controls `#2a2f39` with `#454c59`, menus
   `#262b34`, thumb `#4f5664`, tab `#e8b923` with `#1a1a1a`, inactive tab
-  `#2e333d` with `#a3abb8`, frame `#4a515e`, selection the accent (`#1f85f5`; the mockup's `#2f95ff` was over Haiku's `IsLight()` line, external review 1.3)
+  `#2e333d` with `#a3abb8`, frame `#4a515e`, selection the accent (`#287fda`; the mockup's `#2f95ff` was over Haiku's `IsLight()` line, external review 1.3)
   with white text; Haiku's own dark link colours.
 - The accent sets `B_CONTROL_HIGHLIGHT_COLOR`, `B_CONTROL_MARK_COLOR`,
   `B_NAVIGATION_BASE_COLOR`, `B_STATUS_BAR_COLOR`, and in R5 Modern and dark
@@ -370,37 +370,37 @@ in QEMU without the owner.
 
 Every point of the review (`1.7` was left out by the owner: the mockup draws an empty ring on the Save card):
 
-- 1.1: Menu fields: the inside is filled round on the frame's centres (no square corners over the arcs), the focus ring stays, the chevron is the mockup's (6 by 3, stroke 1.6) 10 px from the field's right edge, centred on the field's height.
-- 1.2: Buttons: `ClipToRect()` keeps the area up to the rect's right and bottom edges, not their pixels; the clips of the button frame, the button inside and an open-sided text field now include the last column and row, so all four sides of the line show.
-- 1.3: Settings sidebar: the selected row's text is the list colour on a light list and white on a dark one (it was the dark list colour on the blue). The dark menu bar title was the look overwriting the label colour, fixed with the R5 menu style (the highlight keeps the label colour).
-- 1.4: Dark text selection: in a dark text view the selection is the accent at 45 % laid over the text, drawn with the lines; Haiku's inversion stays for light views (R5's `BTextView`, `Highlight()` and `_DrawLines()`).
+- 1.1: Menu fields: the inside is the frame's round face again, clipped to the inside, on the panel (the bar of a menu field does not erase itself, so a square fill covered the arcs and a round fill left the corners unpainted); the focus ring stays; the chevron is the mockup's (6 by 3, stroke 1.6), its box 10 from the field's edge, in the middle of the inside's height.
+- 1.2: Buttons: the face was drawn one pixel past its rect (a "+1" in `_DrawFace()`, while Painter's `FillRoundRect()` already covers the rect's right and bottom pixels), and the clip to the rect cut that pixel. The face is now inside its rect and the clip stays the rect: all four sides of the line show, and the focus ring of fields is no longer covered on the right and bottom.
+- 1.3: Settings sidebar: the selected row's text is the list colour on a light list and white on a dark one. The dark menu bar title was the look overwriting the label colour, fixed with the R5 menu style.
+- 1.4: Dark text selection: in a dark text view the selection is the accent at 45 % laid over the text, drawn with the lines; Haiku's inversion stays for light views (R5's `BTextView`, `Highlight()` and `_DrawLines()`). Limit: in a dark view `Highlight()` asks for a redraw instead of inverting; a subclass that calls it from its own `Draw()` would draw again and again.
 - 1.5: Deskbar dark glass edge: white at 10 % on the glass (drawn with `B_OP_ALPHA`, and the compositor's edge line keeps the alpha); `#3a404c` without the GPU.
 - 1.6: Inactive dark window tab: the buttons are a line of white at 25 % and white at 12 % (was white at 60 %).
-- 1.8: Slider: the value side is the accent and the rest a muted track (`#3a404c`-ish dark) unless the program chose its own fill colour; the dark thumb is the control text colour (`#e6e9ef`).
-- 1.9: Tabs: the clipping region is the tab rect itself (a region is in pixels), no stub at the right or over the baseline.
+- 1.8: Slider: when the program keeps `BSlider`'s default bar colour and sets no fill colour, the value side is the accent and the rest a muted track (`#3a404c`-ish dark); a colour of the program's own, and the one-colour call (`BChannelSlider`'s groove), stay as given. The dark thumb is the control text colour (`#e6e9ef`).
+- 1.9: Tabs: the shape is the tab rect itself, as the clip (Painter's `FillRoundRect()` covers the right and bottom pixels): no stub past the rect, and the last tab keeps its right line.
 - 1.10: Progress bar: the filled part is its own round shape, round at the leading end too (at least twice the radius wide).
 - 1.11: Dark pop-up menus: done by the R5 menu style in this pull request: shortcuts are text in the menu's muted colour (no light key caps), and the menu has its line (the decorator's, in the menu edge colour).
-- 1.12: Scroll bar preview: its height is the look's `GetScrollBarWidth(B_HORIZONTAL)`; the window lays out again on a look or width change (the live switch).
+- 1.12: Scroll bar preview: its height is the look's `GetScrollBarWidth(B_HORIZONTAL)` (Haiku's 14 at Haiku width); the window lays out again on a look or width change (the live switch).
 - 1.13: Theme page: 14 under the Parts box so its bottom line and corners show. Save as theme: every view on the document colour (white, A3), 8 between the Name label and its field. The button row keeps its place at the right inset.
-- 1.14: Settings sidebar corners: the list sits in a frame view of its own (one pixel round the scroll view, as `B_PLAIN_BORDER`, so nothing moves). With the R5 Modern controls the frame is round (8 at 12 points): the line is drawn round, and after the list has drawn its corners outside the arc take the panel colour again (`B_DRAW_ON_CHILDREN`, `DrawAfterChildren()`), which a scroll view's own frame cannot do from the control look. With other controls it is the look's plain scroll view frame. Other scroll views keep the look's radius 3: a larger arc would be cut by the rectangular child.
+- 1.14: Settings sidebar corners: the list sits in a frame view of its own (one pixel round the scroll view, as `B_PLAIN_BORDER`, so nothing moves). With the R5 Modern controls the frame is round (8 at 12 points): the line is drawn round, and after the list has drawn its corners outside the arc take the panel colour again (`B_DRAW_ON_CHILDREN`, `DrawAfterChildren()`); scrolling the list redraws the corners (a scroll copies pixels). When the scroll bar shows, the right corners cut its arrows a little. With other controls it is the look's plain scroll view frame. Other scroll views keep the look's radius 3: a larger arc would be cut by the rectangular child. The frame decides by the R5 style signal (more than 1 for `B_MENU_BACKGROUND`).
 - 2.1: Live switching: the new look is published with a release store (`__atomic_store_n(..., __ATOMIC_RELEASE)`), so another window thread sees it fully built; the readers are Haiku's plain loads.
 - 2.2: Deskbar front-program bar: `FrontColor()` is `ui_color(B_CONTROL_HIGHLIGHT_COLOR)`, the theme's accent.
 - 2.3: Save as theme: the part check boxes update the Save button, which needs a name and at least one part; the name alert closes with Escape.
-- 2.4: `remove_theme()` finds a hand-copied file by the name inside it, as `find_theme()` does.
-- 2.5: `set_theme()`: a failed `get_scroll_bar_info()`/`set_scroll_bar_info()` is the scroll bar part's error and drops the part from `applied`.
+- 2.4: `remove_theme()` deletes a file only when the name inside it matches: the file named after the theme first, then any file in the folder, as `find_theme()` finds it.
+- 2.5: `set_theme()`: a failed `get_scroll_bar_info()`/`set_scroll_bar_info()` is the scroll bar part's error; the part is dropped from `applied`, and the theme file then keeps the scroll bar values from before.
 - 2.6: `DrawTextControlBorder()`: the unused variables are gone.
 - 2.7: Theme card thumbnail: the mini Deskbar is round only when the theme's Deskbar is rounded.
 - 3: For the owner (the `AGENTS.md` bullet for the Theme page was in the brief and stays).
 
 ### Owner's addendum to the review (23 Nov 2026)
 
-- 1.3 (rest): The dark accents are under Haiku's `IsLight()` line (brightness 127): Blue `#1f85f5` (was the mockup's `#2f95ff`), Purple `#8a5fe3`, Pink `#d94f82`, Orange `#c96d12`, Graphite `#777e8b`; Teal stays. Code that picks the text colour by `IsLight()` now puts white text on them.
-- A1: Deskbar: the round leaf button is never taller than its row (42, or the row less 4), so the pressed and hover circle is not cut flat; the pebble follows.
+- 1.3 (rest): The dark accents are under Haiku's `IsLight()` line: `Brightness()` is the HSP formula, `sqrt(.299 r2 + .587 g2 + .114 b2)`, and each dark accent is the mockup's colour scaled to 124: Blue `#287fda` (the mockup's `#2f95ff` is 145), Teal `#12958a`, Purple `#855cd5`, Pink `#bc4b75`, Orange `#ae6721`, Graphite `#767c88`. Code that picks the text colour by `IsLight()` (Haiku's `BColumnListView`, `BStatusBar`, `BButton`) now puts white text on them. Limit: the light accents keep the mockup's values (Blue `#0084ff` is 133), so that code still picks dark text on them in light mode.
+- A1: Deskbar leaf, the owner's version: the pill (Compact) keeps its circle, fitted in the pill's height; in the vertical Deskbar the whole top strip above the separator is the hover and open highlight, round at the top with the Deskbar's corner radius and cut at the row; the bar (Horizontal) keeps its rounded rectangle, never taller than the bar. The pebble icon is never larger than its button.
 - A2: Deskbar pebble: a white disc under the icon fills the wave's cut-out, so the wave is white on the dark surface too; the disc stays inside the pebble's ring.
 - A3: The same point as 1.14, handled there.
 - A4: Deskbar rows: 7 from the sides and the bottom with rounded corners (was 4), clear of the outer corners; a row under the pointer or pressed has the full label colour (`#e6e9ef` dark).
-- A5: Tray: the vertical Deskbar's tray has padding 8 and gaps of 5 (was 10 and 7), so five items and the clock share one row. The network and AirPlay glyphs (libr5icons; the same numbers, `docs/ICONS.md`) have a 1.6 line, the tray's weight; the network boxes are larger so they stay open. Not changed: the Workspaces replicant (Haiku's, a picture of the workspaces, not a glyph).
-- A6: Deskbar menu: with the R5 menu style its surface is the menu colour, opaque, like its submenus (no glass); the Deskbar's own corners stay.
+- A5: Tray: the vertical Deskbar's tray has padding 8 and gaps of 5 (was 10 and 7), so five items and the clock share one row. Every tray glyph of libr5icons (Bluetooth, Wi-Fi, Volume, Network, AirPlay, Mail; the same numbers, `docs/ICONS.md`) has a line of 1.6 on the 24 grid; the network boxes are larger so they stay open. Not changed: the Workspaces replicant (Haiku's, a picture of the workspaces, not a glyph).
+- A6: Deskbar menu: with the R5 menu style its surface is the menu colour, opaque, like its submenus (no glass), and its square edge is the menu's edge colour; the Deskbar's own corners stay.
 
 ## The Theme Kit (owner's addition, 23 Nov 2026)
 

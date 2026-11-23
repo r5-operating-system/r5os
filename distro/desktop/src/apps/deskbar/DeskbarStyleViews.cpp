@@ -650,31 +650,50 @@ TBarMenuTitle::_DrawModern()
 	BRect button;
 	float radius;
 	float iconSide;
-	if (Compact() || (fBarView != NULL && fBarView->Vertical())) {
-		// the 42 x 42 button of the pill, also the leaf of the vertical one;
-		// never taller than the row, so the circle is not cut flat
-		// (external review A1)
+	// external review A1 (the owner's version): the pill keeps its circle,
+	// the vertical Deskbar's whole top strip is the button, the bar keeps
+	// its rounded rectangle; none is taller than its row
+	bool vertical = !Compact() && fBarView != NULL && fBarView->Vertical();
+	if (Compact()) {
+		// the 42 x 42 circle of the pill, fitted in the pill's height
 		float side = std::min(Size(42), frame.Height() + 1 - Size(4));
-		float left = Compact() ? frame.left + Size(12)
-			: frame.left + floorf((frame.Width() + 1 - side) / 2);
 		float top = frame.top + floorf((frame.Height() + 1 - side) / 2);
-		button.Set(left, top, left + side - 1, top + side - 1);
-		radius = ButtonRadius();
+		button.Set(frame.left + Size(12), top, frame.left + Size(12) + side
+			- 1, top + side - 1);
+		radius = std::min(ButtonRadius(), floorf(side / 2));
 		iconSide = std::min(Size(30), side - Size(8));
+	} else if (vertical) {
+		// the strip above the separator, with the Deskbar's top corners
+		button = frame;
+		radius = WindowRadius();
+		iconSide = std::min(Size(30), frame.Height() + 1 - Size(8));
 	} else {
-		// the bar's leaf: 48 x 40, corners of 10
-		float top = frame.top + floorf((frame.Height() + 1 - Size(40)) / 2);
+		// the bar's leaf: 48 x 40, corners of 10, never taller than the bar
+		float height = std::min(Size(40), frame.Height() + 1 - Size(2));
+		float top = frame.top + floorf((frame.Height() + 1 - height) / 2);
 		button.Set(frame.left + Size(8), top, frame.left + Size(8 + 48) - 1,
-			top + Size(40) - 1);
+			top + height - 1);
 		radius = HighlightRadius();
-		iconSide = Size(28);
+		iconSide = std::min(Size(28), height - Size(8));
 	}
 
 	bool open = IsSelected();
-	if (open)
-		DrawHollow(menu, button, radius);
-	else if (fHover)
-		DrawHover(menu, button, radius);
+	if (open || fHover) {
+		menu->PushState();
+		BRect shade(button);
+		if (vertical) {
+			// round only at the top: the strip runs on under the separator
+			// by the radius and is cut at the row
+			shade.bottom += radius;
+			BRegion clip(frame);
+			menu->ConstrainClippingRegion(&clip);
+		}
+		if (open)
+			DrawHollow(menu, shade, radius);
+		else
+			DrawHover(menu, shade, radius);
+		menu->PopState();
+	}
 
 	const BBitmap* icon = pebble ? Pebble(iconSide) : fIcon;
 	if (icon != NULL) {
@@ -1235,6 +1254,17 @@ TDeskbarMenu::DrawBackground(BRect updateRect)
 		PushState();
 		rgb_color color = Glass() || Dark() ? EdgeColor()
 			: make_color(0x9f, 0xb0, 0xc8);
+		float menuInset = 1, top = 1, right = 1, bottom = 1;
+		be_control_look->GetBackgroundInsets(BControlLook::B_MENU_BACKGROUND,
+			0, menuInset, top, right, bottom);
+		if (menuInset > 1) {
+			// opaque in the R5 menu style (A6): the menu's edge colour, not
+			// the glass's, which is nearly white on the light menu
+			rgb_color menu = ui_color(B_MENU_BACKGROUND_COLOR);
+			color = menu.IsLight()
+				? mix_color(menu, make_color(15, 23, 42), 64)
+				: mix_color(menu, make_color(255, 255, 255), 26);
+		}
 		SetDrawingMode(color.alpha < 255 ? B_OP_ALPHA : B_OP_COPY);
 		SetHighColor(color);
 		StrokeRect(Bounds());

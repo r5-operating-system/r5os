@@ -131,7 +131,7 @@ accent_color()
 }
 
 
-//! The edge of an accent face (#0070db on #0084ff, about #1b73d6 on #1f85f5).
+//! The edge of an accent face (#0070db on #0084ff, about #226cb9 on #287fda).
 static rgb_color
 accent_line_color()
 {
@@ -329,8 +329,10 @@ R5ModernControlLook::_DrawFace(BView* view, BRect rect, float radius,
 		}
 	} else {
 		// the line is the outer ring of a filled round rect, the fill the
-		// inner one, so the arc has no gap between the two
-		BRect outer(rect.left, rect.top, rect.right + 1, rect.bottom + 1);
+		// inner one, so the arc has no gap between the two; FillRoundRect()
+		// covers the rect's right and bottom pixels too (review 2 of the
+		// external fixes: the face was one pixel outside its rect)
+		BRect outer(rect);
 		view->SetHighColor(line);
 		view->FillRoundRect(outer, radius, radius);
 		outer.InsetBy(1, 1);
@@ -439,8 +441,7 @@ R5ModernControlLook::_FillButtonInside(BView* view, const BRect& rect,
 
 	BRect shape = open_sides(rect, borders, r + 1);
 	view->PushState();
-	view->ClipToRect(BRect(rect.left, rect.top, rect.right + 1,
-		rect.bottom + 1));
+	view->ClipToRect(rect);
 	view->SetDrawingMode(B_OP_ALPHA);
 	view->SetHighColor(fill);
 	view->FillRoundRect(BRect(shape.left, shape.top, shape.right + 1,
@@ -489,11 +490,7 @@ R5ModernControlLook::DrawButtonFrame(BView* view, BRect& rect,
 		BRect face(rect);
 		inset_sides(face, 1, 1, 1, 1, borders);
 		view->PushState();
-		// ClipToRect() keeps the area up to the rect's right and bottom
-		// edges, not their pixels; the face's line is on those pixels
-		// (external review 1.2)
-		view->ClipToRect(BRect(face.left, face.top, face.right + 1,
-			face.bottom + 1));
+		view->ClipToRect(face);
 		_DrawFace(view, open_sides(face, borders, radius(7) + 1),
 			radius(7) - 1, fill, line);
 		view->PopState();
@@ -733,27 +730,51 @@ R5ModernControlLook::DrawMenuFieldBackground(BView* view, BRect& rect,
 		text = disable_color(text, fill);
 	}
 
-	// the round face is the frame's (radius 7 - 1 at an inset of 1); the
-	// inside is round on the same centres, so the face's arcs stay
-	// (external review 1.1)
-	float r = std::max(0.0f, radius(7) - 3);
-	view->PushState();
-	view->SetDrawingMode(B_OP_ALPHA);
-	view->SetHighColor(fill);
-	view->FillRoundRect(BRect(rect.left, rect.top, rect.right + 1,
-		rect.bottom + 1), r, r);
-	view->PopState();
+	_FillFieldInside(view, rect, flags, fill);
 
 	if (popupIndicator) {
-		// the mockup: a 10 px chevron 10 from the field's right edge, in the
-		// middle of the field's height
-		BRect field = view->Bounds();
+		// the mockup: a 10 px chevron 10 from the field's edge (the inside
+		// is 3 in from it), in the middle of the inside's height
 		float size = radius(10);
-		BRect marker(rect.right + 3 - radius(10) - size, field.top,
-			rect.right + 3 - radius(10), field.bottom);
+		float right = rect.right - std::max(0.0f, radius(10) - 3);
+		BRect marker(right - size + 1, rect.top, right, rect.bottom);
 		_DrawChevron(view, marker, text);
 		rect.right = marker.left - 1;
 	}
+}
+
+
+/*!	The inside of a menu field at Haiku's inset of 3: the frame's round
+	face again (radius 7 - 1 at an inset of 1), clipped to the inside, on
+	the panel. The bar of a menu field does not erase itself
+	(B_TRANSPARENT_COLOR), so its corners must be the frame's: square fill
+	painted over the arcs (external review 1.1) and unpainted corners
+	(review 2 of the fixes) were both wrong.
+*/
+void
+R5ModernControlLook::_FillFieldInside(BView* view, const BRect& rect,
+	uint32 flags, const rgb_color& fill)
+{
+	rgb_color background = ui_color(B_PANEL_BACKGROUND_COLOR);
+	BView* parent = view->Parent();
+	if (parent != NULL && parent->Parent() != NULL)
+		background = parent->Parent()->ViewColor();
+	else if (parent != NULL)
+		background = parent->ViewColor();
+	rgb_color line = field_line_color(background);
+	if ((flags & B_DISABLED) != 0)
+		line = disable_color(line, background);
+	else if ((flags & B_FOCUSED) != 0)
+		line = accent_color();
+
+	view->PushState();
+	view->ClipToRect(rect);
+	view->SetHighColor(background);
+	view->FillRect(rect);
+	BRect face(rect);
+	face.InsetBy(-2, -2);
+	_DrawFace(view, face, radius(7) - 1, fill, line);
+	view->PopState();
 }
 
 
@@ -768,13 +789,7 @@ R5ModernControlLook::DrawMenuFieldBackground(BView* view, BRect& rect,
 	rgb_color fill = field_color();
 	if ((flags & B_DISABLED) != 0)
 		fill = disable_color(fill, base);
-	float r = std::max(0.0f, radius(7) - 3);
-	view->PushState();
-	view->SetDrawingMode(B_OP_ALPHA);
-	view->SetHighColor(fill);
-	view->FillRoundRect(BRect(rect.left, rect.top, rect.right + 1,
-		rect.bottom + 1), r, r);
-	view->PopState();
+	_FillFieldInside(view, rect, flags, fill);
 }
 
 
@@ -1337,6 +1352,25 @@ R5ModernControlLook::DrawSliderBar(BView* view, BRect rect,
 	rgb_color rightFillColor, float sliderScale, uint32 flags,
 	orientation orientation)
 {
+	// the value side is the accent and the rest a muted track when the
+	// program kept BSlider's default bar colour and set no fill colour
+	// (external review 1.8; a colour of the program's own stays)
+	if (leftFillColor == rightFillColor
+		&& leftFillColor == SliderBarColor(ui_color(B_PANEL_BACKGROUND_COLOR))) {
+		leftFillColor = accent_color();
+		rightFillColor = SliderBarColor(base);
+	}
+	_DrawSliderBar(view, rect, updateRect, base, leftFillColor,
+		rightFillColor, sliderScale, flags, orientation);
+}
+
+
+void
+R5ModernControlLook::_DrawSliderBar(BView* view, BRect rect,
+	const BRect& updateRect, const rgb_color& base, rgb_color leftFillColor,
+	rgb_color rightFillColor, float sliderScale, uint32 flags,
+	orientation orientation)
+{
 	if (!ShouldDraw(view, rect, updateRect))
 		return;
 
@@ -1353,13 +1387,6 @@ R5ModernControlLook::DrawSliderBar(BView* view, BRect rect,
 		bar.right = bar.left + thickness - 1;
 	}
 
-	// the track is muted on either panel; the value side is the accent
-	// unless the program chose its own fill colour (external review 1.8)
-	rgb_color track = SliderBarColor(base);
-	if (leftFillColor == rightFillColor) {
-		leftFillColor = accent_color();
-		rightFillColor = track;
-	}
 	if ((flags & B_DISABLED) != 0) {
 		leftFillColor = disable_color(leftFillColor, base);
 		rightFillColor = disable_color(rightFillColor, base);
@@ -1404,7 +1431,8 @@ R5ModernControlLook::DrawSliderBar(BView* view, BRect rect,
 	const BRect& updateRect, const rgb_color& base, rgb_color fillColor,
 	uint32 flags, orientation orientation)
 {
-	DrawSliderBar(view, rect, updateRect, base, fillColor, fillColor, 1.0f,
+	// one colour (BChannelSlider's groove): the colour as given
+	_DrawSliderBar(view, rect, updateRect, base, fillColor, fillColor, 1.0f,
 		flags, orientation);
 }
 
@@ -1482,7 +1510,9 @@ draw_tab(BView* view, BRect rect, const rgb_color& fill,
 	const rgb_color& line, uint32 side, bool active)
 {
 	float r = radius(8);
-	BRect shape(rect.left, rect.top, rect.right + 1, rect.bottom + 1);
+	// FillRoundRect() covers the right and bottom pixels: the shape is the
+	// rect, as the clip (review 2 of the external fixes)
+	BRect shape(rect);
 	// round on the side away from the content only: grow the shape past
 	// the content side by the radius and clip it back
 	switch (side) {
@@ -1671,8 +1701,7 @@ R5ModernControlLook::DrawTextControlBorder(BView* view, BRect& rect,
 		else {
 			BRect field(rect);
 			view->PushState();
-			view->ClipToRect(BRect(rect.left, rect.top, rect.right + 1,
-				rect.bottom + 1));
+			view->ClipToRect(rect);
 			field = open_sides(field, borders, radius(7) + 1);
 			_DrawField(view, field, updateRect, flags, 1);
 			view->PopState();

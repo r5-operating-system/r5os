@@ -30,7 +30,6 @@
 #include <ControlLook.h>
 #include <DecorInfo.h>
 #include <Directory.h>
-#include <TextView.h>
 #include <Entry.h>
 #include <File.h>
 #include <GroupView.h>
@@ -47,6 +46,7 @@
 #include <StringList.h>
 #include <StringView.h>
 #include <TextControl.h>
+#include <TextView.h>
 #include <Window.h>
 
 #include <R5Icons.h>
@@ -1123,7 +1123,7 @@ ScrollBarPreview::PreferredSize()
 	float height = be_control_look != NULL
 		? be_control_look->GetScrollBarWidth(B_HORIZONTAL)
 		: B_H_SCROLL_BAR_HEIGHT;
-	return BSize(px(150) - 1, height - 1);
+	return BSize(px(150) - 1, height);
 }
 
 

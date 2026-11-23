@@ -298,6 +298,16 @@ private:
 									const BRect& updateRect,
 									const rgb_color& base, uint32 flags,
 									uint32 borders);
+			void				_FillFieldInside(BView* view,
+									const BRect& rect, uint32 flags,
+									const rgb_color& fill);
+			void				_DrawSliderBar(BView* view, BRect rect,
+									const BRect& updateRect,
+									const rgb_color& base,
+									rgb_color leftFillColor,
+									rgb_color rightFillColor,
+									float sliderScale, uint32 flags,
+									orientation orientation);
 			void				_DrawChevron(BView* view, BRect rect,
 									const rgb_color& color);
 			void				_DrawField(BView* view, BRect& rect,

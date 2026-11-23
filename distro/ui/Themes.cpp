@@ -102,16 +102,18 @@ struct accent {
 };
 
 // mockup A1 (the Accent swatches) and A2 (blue a little lighter on dark)
-// The dark accents stay under Haiku's rgb_color::IsLight() line (a
-// brightness of 127), so code that picks the text by it puts white text on
-// them (external review 1.3; the mockup's dark blue was #2f95ff, 131).
+// The dark accents stay under Haiku's rgb_color::IsLight() line: a
+// Brightness() (the HSP formula, sqrt(.299 r2 + .587 g2 + .114 b2)) of 127
+// or less, so code that picks the text by it puts white text on them
+// (external review 1.3). Each is the mockup's colour scaled to 124; the
+// mockup's dark blue #2f95ff is 145.
 static const accent kAccents[] = {
-	{ "Blue",		0x0084ff, 0x1f85f5 },
-	{ "Teal",		0x0f9488, 0x14a89b },
-	{ "Purple",		0x7c4ddb, 0x8a5fe3 },
-	{ "Pink",		0xd6457a, 0xd94f82 },
-	{ "Orange",		0xe07b1a, 0xc96d12 },
-	{ "Graphite",	0x6b7280, 0x777e8b }
+	{ "Blue",		0x0084ff, 0x287fda },
+	{ "Teal",		0x0f9488, 0x12958a },
+	{ "Purple",		0x7c4ddb, 0x855cd5 },
+	{ "Pink",		0xd6457a, 0xbc4b75 },
+	{ "Orange",		0xe07b1a, 0xae6721 },
+	{ "Graphite",	0x6b7280, 0x767c88 }
 };
 static const int32 kAccentCount = sizeof(kAccents) / sizeof(kAccents[0]);
 
@@ -957,7 +959,7 @@ set_theme(const theme_info* info, uint32 parts)
 		strlcpy(kept.decorator, info->decorator, sizeof(kept.decorator));
 	if ((applied & B_THEME_CONTROLS) != 0)
 		strlcpy(kept.control_look, info->control_look, sizeof(kept.control_look));
-	if ((parts & B_THEME_SCROLL_BARS) != 0) {
+	if ((applied & B_THEME_SCROLL_BARS) != 0) {
 		kept.modern_scroll_bars = info->modern_scroll_bars;
 		kept.double_arrows = info->double_arrows;
 		kept.scroll_bar_width = info->scroll_bar_width;
@@ -1176,8 +1178,11 @@ remove_theme(const char* name)
 	if (status != B_OK)
 		return status;
 	BEntry entry(path.Path());
-	if (entry.Exists())
+	theme_info inside;
+	if (entry.Exists() && read_theme(path.Path(), &inside) == B_OK
+		&& strcasecmp(inside.name, name) == 0) {
 		return entry.Remove();
+	}
 
 	// a file copied in by hand may have another file name: the name inside
 	// it counts, as for find_theme() (external review 2.4)
@@ -1186,10 +1191,9 @@ remove_theme(const char* name)
 	BDirectory directory(path.Path());
 	while (directory.GetNextEntry(&entry) == B_OK) {
 		BPath file;
-		theme_info info;
 		if (entry.GetPath(&file) == B_OK
-			&& read_theme(file.Path(), &info) == B_OK
-			&& strcasecmp(info.name, name) == 0)
+			&& read_theme(file.Path(), &inside) == B_OK
+			&& strcasecmp(inside.name, name) == 0)
 			return entry.Remove();
 	}
 	return B_ENTRY_NOT_FOUND;
