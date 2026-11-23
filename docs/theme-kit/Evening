@@ -1,0 +1,17 @@
+# R5 theme (docs/LIBR5.md, "Theme files")
+# A sample theme of the Theme Kit (R5Book, "Making themes"). Copy it to
+# ~/config/settings/r5/themes/ and it is a card on the Theme page.
+format 1
+name "Evening"
+base "Evening"
+windows "R5ModernDecorator"
+controls "R5ModernControlLook"
+scroll_bars modern
+arrows single
+scroll_bar_width 10
+deskbar_style r5
+deskbar_layout vertical
+deskbar_rounded true
+deskbar_floating true
+mode dark
+accent #8f63e6

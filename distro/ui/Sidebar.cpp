@@ -24,12 +24,14 @@
 
 #include "Sidebar.h"
 
-#include <ControlLook.h>
+#include "R5ModernStyle.h"
+
 #include <InterfaceDefs.h>
 #include <Message.h>
 #include <ScrollView.h>
 #include <Window.h>
 
+#include <math.h>
 #include <new>
 #include <string.h>
 #include <vector>
@@ -161,9 +163,18 @@ BSidebar::Draw(BRect updateRect)
 			paint.bottom = itemFrame.bottom;
 		if (haveGroup && item != NULL && item->fLast) {
 			float radius = be_plain_font->Size() * 0.25f;
+			BRect block(paint);
+			if (r5ui_modern_controls()) {
+				// R5 Modern (mockups A1, A2; owner's S3): the open category
+				// inside the list, 6 from the sides, round 8; the rows stay
+				// where they are
+				float u = be_plain_font->Size() / 13.0f;
+				block.InsetBy(roundf(u * 6.0f), 0);
+				radius = roundf(be_plain_font->Size() * 8 / 12);
+			}
 			SetHighColor(mix_color(ui_color(B_LIST_BACKGROUND_COLOR),
 				ui_color(B_CONTROL_HIGHLIGHT_COLOR), 40));
-			FillRoundRect(paint, radius, radius);
+			FillRoundRect(block, radius, radius);
 			haveGroup = false;
 		}
 		itemFrame.top = itemFrame.bottom + 1;

@@ -702,6 +702,8 @@ Desktop::Init()
 	if (fCompositor != NULL) {
 		fCompositor->SetInitialEffects(fSettings->WindowEffects(),
 			fSettings->WindowEffectStrength());
+		fCompositor->SetDarkGlass(
+			fSettings->UIColor(B_PANEL_BACKGROUND_COLOR).IsDark());
 	}
 // SPDX-SnippetEnd
 
@@ -3279,6 +3281,17 @@ Desktop::_FlushPendingColors()
 
 	// Notify client applications
 	BroadcastToAllClients(&clientMessage);
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// dark glass follows the panel colour (the compositor's thread does not
+	// read the settings)
+	if (fCompositor != NULL) {
+		fCompositor->SetDarkGlass(
+			settings.UIColor(B_PANEL_BACKGROUND_COLOR).IsDark());
+	}
+// SPDX-SnippetEnd
 
 	fPendingColors.MakeEmpty();
 }

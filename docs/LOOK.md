@@ -44,7 +44,11 @@ Each chunk is one bootable change. Stop after the chunk. Look at Tracker, one pr
 
 6. **Shadow.** Extra frame margin, a short alpha gradient, clicks pass through. Only after chunks 1 and 2 are stable. If dragging leaves dirt on the desktop, drop the shadow and keep the rounds.
 
-7. **Color pass.** Only if the gray still feels harsh after the shapes exist. Tune the existing Appearance colors (panel, border, list). Do not build a theme engine. Dark mode stays the separate roadmap item.
+7. **Color pass.** Only if the gray still feels harsh after the shapes exist. Tune the existing Appearance colors (panel, border, list).
+
+## Themes
+
+A theme is a saved combination of the parts above (decorator, control look, scroll bars, Deskbar style, a `ui_color` set for light or dark with an accent, effects), not a drawing engine: no drawing rules, no CSS, no second way to paint a control. Each part stays a Haiku add-on or setting, and a program keeps the `libbe` ABI and only looks different, through `BControlLook` and `ui_color`. The plan, the owner's decisions of 23 Nov 2026 and how it is built are in `docs/design/THEMING.md`; the calls are in `docs/LIBR5.md` ("Themes"). Dark mode is part of it: every part decides light or dark from the panel colour.
 
 ## Not in these chunks
 

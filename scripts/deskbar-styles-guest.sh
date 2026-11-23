@@ -87,8 +87,14 @@ fi
 
 if [ "$1" = safe ]; then
 	style 0 0 1 1; place 3; shot safe-vertical-round
+	act hover-pebble-v
+	act menu-v
 	style 0 1 1 1; place 3; shot safe-compact-round
+	act hover-pebble-c
+	act menu-c
 	style 0 2 1 1; place 0; shot safe-horizontal-top
+	act hover-pebble-h
+	act menu-h
 	style 1 0 1 1; place 3; shot safe-classic
 	style 0 0 1 1; place 3
 	say "done"
@@ -123,6 +129,7 @@ sleep 6; shot b-grow-end
 # Board C: Horizontal (TOP 0, BOTTOM 1)
 style 0 2 1 1; place 0; shot c6-horizontal-top
 zoom horizontal-top-floating
+act hover-pebble-h
 act menu-h
 place 1; shot c7-horizontal-bottom
 zoom horizontal-bottom-floating

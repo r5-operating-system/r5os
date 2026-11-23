@@ -1,0 +1,10 @@
+SubDir HAIKU_TOP src add-ons control_look ;
+
+SubInclude HAIKU_TOP src add-ons control_look BeControlLook ;
+SubInclude HAIKU_TOP src add-ons control_look FlatControlLook ;
+# SPDX-SnippetBegin
+# SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+SubInclude HAIKU_TOP src add-ons control_look R5ModernControlLook ;
+SubInclude HAIKU_TOP src add-ons control_look ExampleControlLook ;
+# SPDX-SnippetEnd

@@ -111,13 +111,17 @@ Haiku's icon set has no power symbol, no circular arrow, no clock face for a sma
 | `R5_GLYPH_WIFI` | 12 | The Wi-Fi symbol: a dot and three arcs (a tray symbol, below) |
 | `R5_GLYPH_VOLUME` | 13 | A filled speaker with one sound wave |
 | `R5_GLYPH_VOLUME_OFF` | 14 | The speaker with a cross where the wave was (muted) |
-| `R5_GLYPH_NETWORK` | 15 | Three boxes on a wire (a wired network) |
+| `R5_GLYPH_NETWORK` | 15 | Three boxes on a wire (a wired network); boxes of 7, so they stay open at tray size |
 | `R5_GLYPH_NETWORK_OFF` | 16 | The same with a slash through it (no connection) |
 | `R5_GLYPH_AIRPLAY` | 17 | A screen open at the bottom, with a triangle under it |
 | `R5_GLYPH_MAIL` | 18 | An envelope |
 | `R5_GLYPH_MAIL_NEW` | 19 | A smaller envelope with a filled dot at its corner (new mail) |
+| `R5_GLYPH_SUN` | 20 | A ring with eight short rays (the Light button of the Theme page, 23 Nov 2026) |
+| `R5_GLYPH_MOON` | 21 | A crescent (the Dark button of the Theme page, 23 Nov 2026) |
 
 The numbers are part of the contract, the same as `r5_icon`. A new glyph is added at the end of `enum r5_glyph`, with a row in this table.
+
+The tray glyphs (Bluetooth, Wi-Fi, Volume, Network, AirPlay, Mail) are drawn with a line of 1.6 on the 24 grid, one weight for the Deskbar tray; the other glyphs with 2 to 2.2 (23 Nov 2026).
 
 - `r5_glyph_draw(view, which, frame, color)` draws into a view. The view's state is the same afterwards.
 - `r5_glyph_bitmap(which, side, color)` returns a new `B_RGBA32` bitmap with the glyph on a transparent background. The caller deletes it.

@@ -424,6 +424,14 @@ AddFilesToPackage add-ons media : $(SYSTEM_ADD_ONS_MEDIA) ;
 AddFilesToPackage add-ons decorators : R5Decorator R5ModernDecorator ;
 # SPDX-SnippetEnd
 
+# SPDX-SnippetBegin
+# SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+# The R5 Modern controls (docs/design/THEMING.md), part of the built-in
+# R5 Modern theme. Be and Flat stay in haiku_extras.
+AddFilesToPackage add-ons control_look : R5ModernControlLook ;
+# SPDX-SnippetEnd
+
 AddFilesToPackage add-ons Network\ Settings :
 	IPv4Interface
 	IPv6Interface

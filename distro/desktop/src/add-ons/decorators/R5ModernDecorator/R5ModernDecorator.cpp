@@ -70,6 +70,10 @@ static const float kTabBottomLight = 0.12f;
 // The edge (board 4): white at 75 % with the effects, #9fb0c8 without.
 static const rgb_color kPlainEdge = { 0x9f, 0xb0, 0xc8, 255 };
 static const uint8 kSoftEdgeAlpha = 191;
+// Dark mode (a theme's dark ui colours, docs/design/THEMING.md; mockup B1
+// and B2): white at 10 % with the effects, #4a515e without.
+static const rgb_color kDarkPlainEdge = { 0x4a, 0x51, 0x5e, 255 };
+static const uint8 kDarkSoftEdgeAlpha = 26;
 
 static const rgb_color kWhite = { 255, 255, 255, 255 };
 static const rgb_color kBlack = { 0, 0, 0, 255 };
@@ -171,6 +175,7 @@ R5ModernDecorator::R5ModernDecorator(DesktopSettings& settings, BRect frame,
 	fTabUnder(kTabUnder)
 {
 	fPanelColor = settings.UIColor(B_PANEL_BACKGROUND_COLOR);
+	fMenuColor = settings.UIColor(B_MENU_BACKGROUND_COLOR);
 }
 
 
@@ -290,11 +295,12 @@ R5ModernDecorator::GetEdgeLine(rgb_color* color, float* width)
 		return R5Decorator::GetEdgeLine(color, width);
 	}
 
+	bool dark = _Dark();
 	if (_Soft()) {
 		*color = kWhite;
-		color->alpha = kSoftEdgeAlpha;
+		color->alpha = dark ? kDarkSoftEdgeAlpha : kSoftEdgeAlpha;
 	} else
-		*color = kPlainEdge;
+		*color = dark ? kDarkPlainEdge : kPlainEdge;
 	*width = 1;
 	return true;
 }
@@ -305,6 +311,28 @@ R5ModernDecorator::UpdateColors(DesktopSettings& settings)
 {
 	R5Decorator::UpdateColors(settings);
 	fPanelColor = settings.UIColor(B_PANEL_BACKGROUND_COLOR);
+	fMenuColor = settings.UIColor(B_MENU_BACKGROUND_COLOR);
+}
+
+
+/*!	A menu (a bordered window that avoids the focus: menus and tool tips)
+	has its line in about the menu's edge colour of the menu mockup, #b8c0cc
+	on #f7f8fa, #3a404c on #262b34 (docs/design/THEMING.md, "Menus"); the
+	compositor carries it round the round corners R5's BMenu asks for.
+*/
+void
+R5ModernDecorator::GetComponentColors(Component component, uint8 highlight,
+	ComponentColors _colors, Decorator::Tab* tab)
+{
+	R5Decorator::GetComponentColors(component, highlight, _colors, tab);
+	if (component == COMPONENT_TAB || highlight != 0 || tab == NULL
+		|| tab->look != B_BORDERED_WINDOW_LOOK
+		|| (tab->flags & B_AVOID_FOCUS) == 0) {
+		return;
+	}
+	static const rgb_color kInk = { 15, 23, 42, 255 };
+	_colors[5] = fMenuColor.IsLight() ? mix_color(fMenuColor, kInk, 0.25f)
+		: mix_color(fMenuColor, kWhite, 0.10f);
 }
 
 
@@ -899,9 +927,21 @@ R5ModernDecorator::_TabAtX(float x) const
 rgb_color
 R5ModernDecorator::_StraightEdgeColor() const
 {
+	bool dark = _Dark();
 	if (!_Soft())
-		return kPlainEdge;
-	return mix_color(fPanelColor, kWhite, kSoftEdgeAlpha / 255.0f);
+		return dark ? kDarkPlainEdge : kPlainEdge;
+	return mix_color(fPanelColor, kWhite,
+		(dark ? kDarkSoftEdgeAlpha : kSoftEdgeAlpha) / 255.0f);
+}
+
+
+/*!	Dark mode: the panel colour is dark (THEMING.md: a theme in dark mode
+	sets the dark ui colours; UpdateColors() keeps fPanelColor current).
+*/
+bool
+R5ModernDecorator::_Dark() const
+{
+	return fPanelColor.IsDark();
 }
 
 
@@ -992,7 +1032,8 @@ R5ModernDecorator::_DrawTabBackground(Decorator::Tab* tab, BRect rect)
 /*!	A button of board 4 (finish "glass", square corners). Active: white at
 	55 % (the zoom's back square 35 %), a line of the tab's dark yellow at
 	35 % and a white highlight at 90 % under the top line. Inactive: a line
-	of black at 20 % and white at 60 %. Pressed (not on the board): less
+	of black at 20 % and white at 60 %; dark, a line of white at 25 % and
+	white at 12 %. Pressed (not on the board): less
 	white, a stronger line, no highlight. Everything is blended against the
 	tab here, so the button is opaque in every mode.
 */
@@ -1020,12 +1061,19 @@ R5ModernDecorator::_DrawGlassButton(Decorator::Tab* tab, BRect rect,
 	ComponentColors colors;
 	GetComponentColors(COMPONENT_TAB, RegionHighlight(REGION_TAB), colors,
 		tab);
-	rgb_color line = active ? mix_color(colors[COLOR_TAB], kBlack, 0.65f)
-		: kBlack;
-	float lineAlpha = active ? 0.35f : 0.20f;
-	float fill = active ? 0.55f : 0.60f;
-	float backFill = active ? 0.35f : 0.60f;
-	float highlight = 0.90f;
+	// dark (mockup B1): rgba(60, 40, 0, .55) over the deeper yellow and a
+	// white of 45 %
+	bool dark = _Dark();
+	rgb_color line = active ? mix_color(colors[COLOR_TAB], kBlack,
+			dark ? 0.75f : 0.65f)
+		: (dark ? kWhite : kBlack);
+	float lineAlpha = active ? (dark ? 0.55f : 0.35f)
+		: (dark ? 0.25f : 0.20f);
+	// an inactive dark tab is dark: a faint light button on it, not white
+	// at 60 % (external review 1.6)
+	float fill = active ? (dark ? 0.45f : 0.55f) : (dark ? 0.12f : 0.60f);
+	float backFill = active ? 0.35f : (dark ? 0.08f : 0.60f);
+	float highlight = !active && dark ? 0.15f : 0.90f;
 	if (pressed) {
 		lineAlpha += 0.20f;
 		fill = 0.25f;

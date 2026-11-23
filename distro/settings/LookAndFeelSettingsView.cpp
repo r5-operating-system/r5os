@@ -17,6 +17,11 @@
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+#include <ctype.h>
+// SPDX-SnippetEnd
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
 #include <string.h>
 // SPDX-SnippetEnd
 
@@ -430,8 +435,14 @@ LookAndFeelSettingsView::_SetControlLook(const BString& path)
 
 	if (path.Length() > 0) {
 		BEntry entry(path.String());
-		const char* label = _ControlLookLabel(entry.Name());
-		fControlLookMenu->FindItem(label)->SetMarked(true);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		BMenuItem* item = fControlLookMenu->FindItem(
+			_ControlLookLabel(entry.Name()).String());
+		if (item != NULL)
+			item->SetMarked(true);
+// SPDX-SnippetEnd
 	} else
 		fControlLookMenu->FindItem(B_TRANSLATE("Default"))->SetMarked(true);
 
@@ -470,7 +481,8 @@ LookAndFeelSettingsView::_BuildControlLookMenu()
 			message = new BMessage(kMsgSetControlLook);
 			message->AddString("control_look", path.Path());
 
-			item = new BMenuItem(_ControlLookLabel(entry.Name()), message);
+			item = new BMenuItem(_ControlLookLabel(entry.Name()).String(),
+				message);
 			fControlLookMenu->AddItem(item);
 			if (BString(path.Path()) == fCurrentControlLook)
 				item->SetMarked(true);
@@ -479,12 +491,21 @@ LookAndFeelSettingsView::_BuildControlLookMenu()
 }
 
 
-const char*
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// A BString, not the String() of a temporary (as _DecorLabel(), 22 Nov
+// 2026); "R5ModernControlLook" reads "R5 Modern".
+BString
 LookAndFeelSettingsView::_ControlLookLabel(const char* name)
 {
 	BString label(name);
-	return label.RemoveLast("ControlLook").Trim().String();
+	label.RemoveLast("ControlLook").Trim();
+	if (label.StartsWith("R5") && label.Length() > 2 && isupper(label[2]))
+		label.Insert(" ", 2);
+	return label;
 }
+// SPDX-SnippetEnd
 
 
 bool

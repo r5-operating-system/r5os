@@ -59,6 +59,16 @@
 #include <UnicodeChar.h>
 #include <WindowPrivate.h>
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <ControlLook.h>
+#include <HaikuControlLook.h>
+#include <InterfacePrivate.h>
+#include <image.h>
+#include <new>
+#include <pthread.h>
+// SPDX-SnippetEnd
 #include <binary_compatibility/Interface.h>
 #include <input_globals.h>
 #include <tracker_private.h>
@@ -192,6 +202,65 @@ static value_info sWindowValueInfo[] = {
 
 	{ 0 }
 };
+
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+/*!	Live switching of the control look (docs/design/THEMING.md). A theme
+	change (r5_theme_apply() in libr5ui) sets the control look in the
+	app_server and broadcasts B_COLORS_UPDATED with an int64
+	"r5:control_look" serial. The first window of a team that sees a new
+	serial loads the add-on the app_server names now and makes it
+	be_control_look, as _init_interface_kit_() does at start; the other
+	windows only draw again.
+
+	The previous look and its add-on stay loaded: another window thread may
+	be inside one of its methods, the reason Haiku gives for having no live
+	switching (_fini_interface_kit_()). One small object per switch stays in
+	memory until the team quits. No call, no field and no symbol is added;
+	a program that never gets the serial behaves as before.
+*/
+static pthread_mutex_t sR5ControlLookLock = PTHREAD_MUTEX_INITIALIZER;
+static int64 sR5ControlLookSerial = 0;
+
+
+static bool
+r5_reload_control_look(const BMessage* message)
+{
+	int64 serial;
+	if (message->FindInt64("r5:control_look", &serial) != B_OK)
+		return false;
+
+	pthread_mutex_lock(&sR5ControlLookLock);
+	if (serial != sR5ControlLookSerial) {
+		sR5ControlLookSerial = serial;
+
+		BControlLook* look = NULL;
+		BString path;
+		if (BPrivate::get_control_look(path) && path.Length() > 0) {
+			image_id image = load_add_on(path.String());
+			BControlLook* (*instantiate)(image_id);
+			if (image >= 0 && get_image_symbol(image,
+					"instantiate_control_look", B_SYMBOL_TYPE_TEXT,
+					reinterpret_cast<void**>(&instantiate)) == B_OK) {
+				look = instantiate(image);
+			}
+			if (look == NULL && image >= 0)
+				unload_add_on(image);
+		}
+		if (look == NULL)
+			look = new(std::nothrow) BPrivate::HaikuControlLook();
+		// a release store: another window thread that reads the pointer
+		// sees the look fully built (external review 2.1; the readers are
+		// Haiku's plain loads, ordered by the data dependency)
+		if (look != NULL)
+			__atomic_store_n(&be_control_look, look, __ATOMIC_RELEASE);
+	}
+	pthread_mutex_unlock(&sR5ControlLookLock);
+	return true;
+}
+// SPDX-SnippetEnd
 
 
 void
@@ -1391,6 +1460,15 @@ FrameMoved(origin);
 
 		case B_COLORS_UPDATED:
 		{
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			if (r5_reload_control_look(message)) {
+				// another look may have other sizes (Be, Flat)
+				InvalidateLayout(true);
+				fTopView->Invalidate();
+			}
+// SPDX-SnippetEnd
 			fTopView->_ColorsUpdated(message);
 			target->MessageReceived(message);
 			break;

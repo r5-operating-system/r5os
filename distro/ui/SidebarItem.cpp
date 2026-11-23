@@ -24,8 +24,9 @@
 
 #include "SidebarItem.h"
 
+#include "R5ModernStyle.h"
+
 #include <Bitmap.h>
-#include <ControlLook.h>
 #include <Font.h>
 #include <InterfaceDefs.h>
 #include <Mime.h>
@@ -33,6 +34,7 @@
 #include <R5Icons.h>
 #include <View.h>
 
+#include <math.h>
 #include <new>
 #include <string.h>
 
@@ -244,11 +246,24 @@ BSidebarItem::DrawItem(BView* owner, BRect frame, bool complete)
 	}
 	if (selected) {
 		// B_LIST_SELECTED_BACKGROUND_COLOR is gray. The row is the
-		// status-bar blue, with light text, and a small corner.
+		// status-bar blue, with light text, and a small corner. R5 Modern:
+		// a round pill inside the open category's block, which is 6 in
+		// (owner's S3); the text stays where it is.
 		BRect mark = row.InsetByCopy(padX, 0);
+		float corner = u * 4.0f;
+		if (r5ui_modern_controls()) {
+			if (fInGroup)
+				mark = row.InsetByCopy(padX + roundf(u * 4.0f), 0);
+			corner = roundf(be_plain_font->Size() * 6 / 12);
+		}
 		owner->SetHighColor(ui_color(B_STATUS_BAR_COLOR));
-		owner->FillRoundRect(mark, u * 4.0f, u * 4.0f);
+		owner->FillRoundRect(mark, corner, corner);
+		// light text: the list colour on a light list, white on a dark one
+		// (the dark list colour on the blue was unreadable; external review
+		// 1.3)
 		text = ui_color(B_LIST_BACKGROUND_COLOR);
+		if (text.IsDark())
+			text = make_color(255, 255, 255);
 	}
 
 	if (_IsSeparator()) {

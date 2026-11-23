@@ -212,9 +212,10 @@ TTimeView::Draw(BRect /*updateRect*/)
 	SetLowUIColor(B_MENU_BACKGROUND_COLOR);
 	SetHighUIColor(B_MENU_BACKGROUND_COLOR);
 	if (R5Deskbar::Modern()) {
-		// Default (R5): the tray's surface or glass is the background
+		// Default (R5): the tray's surface or glass is the background; on
+		// glass the letters keep their coverage (owner's review)
 		SetLowColor(ViewColor());
-		SetDrawingMode(B_OP_OVER);
+		R5Deskbar::SetTextMode(this);
 		SetHighColor(R5Deskbar::TextColor());
 	} else {
 		FillRect(Bounds());
