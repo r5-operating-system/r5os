@@ -13,7 +13,7 @@ hardware support and the features you need to make yourself at home.
 No unnecessary clutter. No complicated nonsense. Just a desktop that's a
 pleasure to use, with plenty of personality of its own.
 
-<p align="center"><img src="docs/screenshots/about-r5.png" alt="The R5 desktop with About R5 open" width="800"></p>
+<p align="center"><img src="docs/screenshots/settings-game-controllers.png" alt="The R5 desktop with Settings open on Game controllers" width="800"></p>
 
 ## At a glance
 
