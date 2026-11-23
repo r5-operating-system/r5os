@@ -569,6 +569,10 @@ execute_command(void* controller, uint8_t command, uint32_t argument,
 		ERROR("unknown command %u\n", command);
 		return B_BAD_DATA;
 	}
+	// The card is busy until the erase is done; that takes longer than a
+	// write (SD physical layer, erase timeout). The data path's 10 s.
+	if (command == SD_ERASE)
+		cmd.busy_secs = 10;
 
 	MutexLocker locker(sc->lock);
 	if (!sc->powered)

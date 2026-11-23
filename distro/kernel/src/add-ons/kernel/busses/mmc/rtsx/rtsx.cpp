@@ -733,9 +733,30 @@ rtsx_hostcmd(uint32 *cmdbuf, int *n, uint8 cmd, uint16 reg,
 	    ((uint32)data));
 }
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+/*
+ * Forget a transfer end that arrived after its waiter gave up. Otherwise the
+ * next command saw it at once and returned before the chip had run it, with
+ * the answer of no command. Called right before the chip is started.
+ */
+static void
+rtsx_clear_trans(struct rtsx_softc *sc)
+{
+	cpu_status state = disable_interrupts();
+	acquire_spinlock(&sc->intr_lock);
+	sc->intr_status &= ~(RTSX_TRANS_OK_INT | RTSX_TRANS_FAIL_INT);
+	release_spinlock(&sc->intr_lock);
+	restore_interrupts(state);
+}
+// SPDX-SnippetEnd
+
 static int
 rtsx_hostcmd_send(struct rtsx_softc *sc, int ncmd)
 {
+	rtsx_clear_trans(sc);
+
 	/* Tell the chip where the command buffer is and run the commands. */
 	WRITE4(sc, RTSX_HCBAR, (uint32)sc->dma_phys);
 	WRITE4(sc, RTSX_HCBCTLR,
@@ -747,6 +768,8 @@ rtsx_hostcmd_send(struct rtsx_softc *sc, int ncmd)
 static int
 rtsx_xfer_exec(struct rtsx_softc *sc, uint32 dmaaddr, uint32 dmaflags)
 {
+	rtsx_clear_trans(sc);
+
 	/* Tell the chip where the data buffer is and run the transfer. */
 	WRITE4(sc, RTSX_HDBAR, dmaaddr);
 	WRITE4(sc, RTSX_HDBCTLR, dmaflags);
@@ -967,8 +990,15 @@ rtsx_exec_command(struct rtsx_softc *sc, struct rtsx_command *cmd)
 
 	/* Run the command queue and wait for completion. */
 	error = rtsx_hostcmd_send(sc, ncmd);
-	if (error == 0)
-		error = rtsx_wait_intr(sc, RTSX_TRANS_OK_INT, 1);
+	if (error == 0) {
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		/* An erase stays busy longer than the one second of OpenBSD. */
+		error = rtsx_wait_intr(sc, RTSX_TRANS_OK_INT,
+		    cmd->busy_secs != 0 ? cmd->busy_secs : 1);
+		// SPDX-SnippetEnd
+	}
 	if (error)
 		return error;
 

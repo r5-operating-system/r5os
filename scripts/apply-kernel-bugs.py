@@ -548,6 +548,10 @@ def install_rtsx() -> None:
         "src/system/kernel/device_manager/device_manager.cpp",
         # mmc_bus: a bounded card scan that waits for the next card
         "src/add-ons/kernel/bus_managers/mmc/mmc_bus.cpp",
+        # mmc_bus.h: the published card node, removed at the next scan
+        "src/add-ons/kernel/bus_managers/mmc/mmc_bus.h",
+        # mmc_disk: the last block of a trim, no I/O after its node is removed
+        "src/add-ons/kernel/drivers/disk/mmc/mmc_disk.cpp",
         "src/add-ons/kernel/busses/mmc/rtsx/Jamfile",
         "src/add-ons/kernel/busses/mmc/rtsx/rtsx.cpp",
         "src/add-ons/kernel/busses/mmc/rtsx/rtsx.h",
