@@ -137,13 +137,25 @@ TDeskbarMenu::AttachedToWindow()
 		rgb_color surface = R5Deskbar::SurfaceColor();
 		SetViewColor(surface);
 		SetLowColor(surface);
-		bool glass = R5Deskbar::EffectsActive();
+		bool glass = R5Deskbar::Glass();
 		set_view_glass(this, glass);
 		if (Parent() != NULL) {
 			Parent()->SetViewColor(surface);
 			set_view_glass(Parent(), glass);
 		}
 		R5Deskbar::StyleMenuWindow(Window());
+	} else if (Window() != NULL) {
+		// Classic: the menu window is the bar's, shared with its other
+		// menus; it loses what Default (R5) gave it (review 2)
+		if (R5Deskbar::UnstyleMenuWindow(Window())) {
+			BAppearanceKit::set_view_glass(this, false);
+			SetViewUIColor(B_MENU_BACKGROUND_COLOR);
+			SetLowUIColor(B_MENU_BACKGROUND_COLOR);
+			if (Parent() != NULL) {
+				BAppearanceKit::set_view_glass(Parent(), false);
+				Parent()->SetViewUIColor(B_MENU_BACKGROUND_COLOR);
+			}
+		}
 	}
 // SPDX-SnippetEnd
 }

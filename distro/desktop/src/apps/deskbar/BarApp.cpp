@@ -1185,6 +1185,16 @@ TBarApp::FetchTeamIcon(team_id team, int32 size)
 // SPDX-SnippetEnd
 			_CacheTeamIcon(barInfo, size);
 			BBitmap* icon = barInfo->icon;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			// Default (R5): its icon of the layout comes back whatever the
+			// size asked for (review 2)
+			if (R5Deskbar::Modern() && previous != NULL) {
+				barInfo->icon = previous;
+				return icon;
+			}
+// SPDX-SnippetEnd
 
 			// restore icon pointer back to setting
 			if (size != fSettings.iconSize) {
@@ -1499,8 +1509,18 @@ TBarApp::_CacheModernIcon(BarTeamInfo* barInfo, int32 pixels)
 		status = defaultAppMime.GetIcon(icon, (icon_size)pixels);
 	}
 	if (status != B_OK) {
-		// the cached icon of Haiku's size, as before
+		// the cached icon of Haiku's size, as before; an uncached one of an
+		// earlier layout is ours to free (review 2)
 		delete icon;
+		bool inCache = barInfo->icon == NULL;
+		for (int32 i = 0; i < kIconCacheCount; i++) {
+			if (barInfo->iconCache[i] == barInfo->icon)
+				inCache = true;
+		}
+		if (!inCache) {
+			delete barInfo->icon;
+			barInfo->icon = NULL;
+		}
 		return _CacheTeamIcon(barInfo, fSettings.iconSize);
 	}
 	// an icon of an earlier layout that is not in the cache is ours
@@ -1768,10 +1788,14 @@ TBarApp::_SetStyle(BMessage* message)
 			state = kMiniState;
 	}
 
-	// the icons have the size of the layout
-	ResizeTeamIcons();
 	if (fBarWindow->Lock()) {
 		fBarView->ChangeState(vertical, fSettings.left, fSettings.top, state);
+		fBarWindow->Unlock();
+	}
+	// the icons have the size of the layout, known now that the state
+	// changed (review 2: before it they took the old orientation's size)
+	ResizeTeamIcons();
+	if (fBarWindow->Lock()) {
 		fBarView->ApplyStyle();
 		fBarWindow->Unlock();
 	}

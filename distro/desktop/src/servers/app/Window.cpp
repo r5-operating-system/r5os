@@ -2024,8 +2024,30 @@ Window::_DrawBorder()
 	// in respond to a REDRAW message having been received, the
 	// clipping lock is held for reading
 	::Decorator* decorator = Decorator();
-	if (!decorator)
+	if (!decorator) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// CPU mode: a window without a decorator that asked for an edge
+		// line (set_window_edge_line(), Deskbar in Default (R5)) has the
+		// rim in its border region; nobody else paints it (review 2)
+		rgb_color rimColor;
+		const window_outline* rim = _SteppedRim(&rimColor);
+		DrawingEngine* engine = GetDrawingEngine();
+		if (rim != NULL && engine != NULL) {
+			BRegion line(rim->rim);
+			line.IntersectWith(&DrawableRegion());
+			line.IntersectWith(&fDirtyRegion);
+			if (line.CountRects() > 0 && engine->LockParallelAccess()) {
+				engine->ConstrainClippingRegion(&line);
+				engine->FillRegion(line, rimColor);
+				engine->ConstrainClippingRegion(NULL);
+				engine->UnlockParallelAccess();
+			}
+		}
+// SPDX-SnippetEnd
 		return;
+	}
 
 	// construct the region of the border that needs redrawing
 	BRegion* dirtyBorderRegion = fRegionPool.GetRegion();

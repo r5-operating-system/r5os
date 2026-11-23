@@ -130,6 +130,9 @@ BView*			CreateEdgeView(BRect frame);
 
 // The corners, shadow and edge of the Deskbar menu's window, once.
 void			StyleMenuWindow(BWindow* window);
+// Classic: the same window square, with the decorator's shadow, once it
+// had the R5 look.
+bool			UnstyleMenuWindow(BWindow* window);
 
 // The ease of the growing pill: CSS cubic-bezier(.2, .9, .3, 1.25).
 float			Ease(float progress);

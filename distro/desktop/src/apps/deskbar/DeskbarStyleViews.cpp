@@ -200,9 +200,14 @@ TBarView::_StyleViews(BView* view, bool glass)
 		rgb_color own = view->ViewColor();
 		if (!_TookDeskbarColor(own))
 			return;
-		rgb_color color = modern ? surface : ui_color(B_MENU_BACKGROUND_COLOR);
-		view->SetViewColor(color);
-		view->SetLowColor(color);
+		if (modern) {
+			view->SetViewColor(surface);
+			view->SetLowColor(surface);
+		} else {
+			// back to the tray's colour, as AdoptParentColors() gave it
+			view->SetViewUIColor(B_MENU_BACKGROUND_COLOR, 1.1);
+			view->SetLowUIColor(B_MENU_BACKGROUND_COLOR, 1.1);
+		}
 		BAppearanceKit::set_view_glass(view, glass);
 		view->Invalidate();
 		return;
@@ -210,7 +215,9 @@ TBarView::_StyleViews(BView* view, bool glass)
 	if (modern) {
 		view->SetViewColor(surface);
 		view->SetLowColor(surface);
-	} else if (view == fDragRegion) {
+	} else if (view == fDragRegion || view->Parent() == fDragRegion) {
+		// the drag region, the tray and the resize control: Haiku's tint
+		// (review 2)
 		view->SetViewUIColor(B_MENU_BACKGROUND_COLOR, 1.1);
 		view->SetLowUIColor(B_MENU_BACKGROUND_COLOR, 1.1);
 	} else {
@@ -1109,12 +1116,34 @@ R5Deskbar::StyleMenuWindow(BWindow* window)
 	// 2026); here they never did. The first opening may still be square.
 	if (window == NULL)
 		return;
+	UnstyleMenuWindow(window);
+		// remembers that the menu window had the R5 look
 	float radius = ButtonRadius();
 	BAppearanceKit::set_window_corner_radius(window, radius);
 	BAppearanceKit::set_window_shadow(window,
 		BAppearanceKit::B_WINDOW_SHADOW_FULL);
 	BAppearanceKit::set_window_edge_line(window, EdgeColor(),
 		radius > 0 ? 1 : 0);
+}
+
+
+bool
+R5Deskbar::UnstyleMenuWindow(BWindow* window)
+{
+	static bool sStyled = false;
+	if (window == NULL)
+		return false;
+	if (Modern()) {
+		sStyled = true;
+		return false;
+	}
+	if (!sStyled)
+		return false;
+	BAppearanceKit::set_window_corner_radius(window, 0);
+	BAppearanceKit::set_window_shadow(window,
+		BAppearanceKit::B_WINDOW_SHADOW_DEFAULT);
+	BAppearanceKit::set_window_edge_line(window, make_color(0, 0, 0), 0);
+	return true;
 }
 
 

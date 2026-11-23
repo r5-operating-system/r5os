@@ -1432,11 +1432,20 @@ TReplicantTray::RealignReplicants(int32 startIndex)
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 		// the folded pill shows the clock only (board B)
+		// (review 2: only what the pill hid is shown again; a replicant
+		// that hid itself stays hidden)
 		bool folded = R5Deskbar::Compact() && !R5Deskbar::Unfolded();
-		if (folded && !view->IsHidden(view))
+		bool hiddenByPill = view->Name() != NULL
+			&& fHiddenByPill.HasString(view->Name());
+		if (folded && !view->IsHidden(view)) {
 			view->Hide();
-		else if (!folded && view->IsHidden(view))
-			view->Show();
+			if (view->Name() != NULL)
+				fHiddenByPill.Add(view->Name());
+		} else if (!folded && hiddenByPill) {
+			if (view->IsHidden(view))
+				view->Show();
+			fHiddenByPill.Remove(view->Name());
+		}
 // SPDX-SnippetEnd
 
 		float replicantWidth = view->Frame().Width();

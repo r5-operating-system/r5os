@@ -47,6 +47,11 @@ All rights reserved.
 #include <Region.h>
 #include <Query.h>
 #include <Shelf.h>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <StringList.h>
+// SPDX-SnippetEnd
 #include <View.h>
 
 #include "BarView.h"
@@ -184,6 +189,13 @@ private:
 				TBarView*			fBarView;
 				TReplicantShelf*	fShelf;
 				BRect				fRightBottomReplicant;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+				// the tray items the folded pill hid (Default (R5))
+				BStringList			fHiddenByPill;
+// SPDX-SnippetEnd
+
 				int32				fLastReplicant;
 				float				fMaxReplicantWidth;
 				float				fMaxReplicantHeight;

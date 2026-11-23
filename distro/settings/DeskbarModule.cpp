@@ -262,6 +262,7 @@ static DeskbarChoices
 load_choices()
 {
 	DeskbarChoices choices = default_choices();
+	bool pillLeft = false;
 	BPath path;
 	if (find_directory(B_USER_SETTINGS_DIRECTORY, &path) == B_OK
 		&& path.Append("deskbar/settings") == B_OK) {
@@ -293,6 +294,7 @@ load_choices()
 				"recentAppsCount", choices.recentAppsCount));
 			bool vertical = prefs.GetBool("vertical", true);
 			bool left = prefs.GetBool("left", false);
+			pillLeft = left;
 			bool top = prefs.GetBool("top", true);
 			int32 state = prefs.GetInt32("state", 1);
 			choices.location = location_from_file(vertical, left, top, state,
@@ -327,12 +329,17 @@ load_choices()
 		choices.autoRaise = bar.IsAutoRaise();
 		choices.autoHide = bar.IsAutoHide();
 	}
-	// the pill answers a top or bottom place to BDeskbar (zoom)
+	// the pill answers a top or bottom place to BDeskbar (zoom); its side
+	// is in Deskbar's file (review 2: a pill on the left came back right)
 	if (choices.layout == kLayoutCompact && choices.style == kStyleR5) {
-		if (choices.location == B_DESKBAR_TOP)
-			choices.location = B_DESKBAR_RIGHT_TOP;
-		else if (choices.location == B_DESKBAR_BOTTOM)
-			choices.location = B_DESKBAR_RIGHT_BOTTOM;
+		bool top = choices.location != B_DESKBAR_BOTTOM
+			&& choices.location != B_DESKBAR_LEFT_BOTTOM
+			&& choices.location != B_DESKBAR_RIGHT_BOTTOM;
+		if (pillLeft)
+			choices.location = top ? B_DESKBAR_LEFT_TOP : B_DESKBAR_LEFT_BOTTOM;
+		else
+			choices.location = top ? B_DESKBAR_RIGHT_TOP
+				: B_DESKBAR_RIGHT_BOTTOM;
 	}
 	if (choices.style == kStyleClassic && choices.layout == kLayoutCompact)
 		choices.layout = kLayoutHorizontal;
