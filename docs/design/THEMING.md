@@ -45,6 +45,9 @@ overwritten; it keeps the effects as they are.
   round; (3) the default stays R5, light; (4) the dark tab is the deeper
   yellow `#e8b923`; (5) Desktop and Deskbar stays, and the Theme page shows
   the same values.
+- Live switching inside libbe, accepted by the owner on 23 Nov 2026: the
+  internal handler in R5's `BWindow`, with no new call, field or symbol and
+  no ABI change (open choice 1 below).
 
 ## How it is built
 
@@ -101,7 +104,7 @@ A running program takes new controls and colours without a restart.
   then draws again.
 - No call, field or symbol is added to libbe, and the ABI is unchanged: it
   is an internal handler of a message libbe already handles. This is the one
-  change inside libbe (see "Open choices").
+  change inside libbe, accepted by the owner on 23 Nov 2026.
 - The old look and its add-on stay loaded, because another window thread may
   still be inside one of its methods (the reason Haiku gives in
   `_fini_interface_kit_()` for having no live switching). One small object
@@ -233,7 +236,8 @@ in QEMU without the owner.
    use `BCardStrip` and accept its look, or add those three things to
    `BCardStrip` at the end of its API.
 
-1. **Live switching inside libbe.** The handler in `BWindow` is new
+1. **Live switching inside libbe** (decided: accepted by the owner on
+   23 Nov 2026). The handler in `BWindow` is new
    behaviour in libbe, though no call, field or symbol is added. Without it a
    running program keeps its controls until it restarts. The alternative,
    with nothing in libbe, is that live switching works only between looks
