@@ -83,13 +83,13 @@ using BPrivate::MenuPrivate;
 	chevron at the right, drawn by the control look.
 */
 static void
-r5_draw_item_symbols(BMenu* menu, BRect frame, bool marked, char shortcut,
-	uint32 modifiers, bool submenu, rgb_color text, rgb_color background,
-	bool selected)
+r5_draw_item_symbols(BMenu* menu, BRect frame, const BRect& padding,
+	bool marked, char shortcut, uint32 modifiers, bool submenu,
+	rgb_color text, rgb_color background, bool selected)
 {
 	const float scale = MenuPrivate::R5Scale();
 	const float pad = roundf(7 * scale);
-	const float right = frame.right - roundf(9 * scale);
+	const float right = frame.right - padding.right;
 	const float middle = floorf((frame.top + frame.bottom + 1) / 2);
 
 	menu->PushState();
@@ -542,7 +542,7 @@ BMenuItem::DrawContent()
 			font.SetSize(menuPrivate.R5ShortcutFontSize());
 			end -= roundf(16 * scale) + ceilf(font.StringWidth(label));
 		}
-		float room = end - ContentLocation().x;
+		float room = end - fSuper->PenLocation().x;
 		frameWidth = maxContentWidth > 0 ? std::min(maxContentWidth, room)
 			: room;
 	}
@@ -608,9 +608,9 @@ BMenuItem::Draw()
 	if (privateAccessor.R5Style(&r5Padding)) {
 		uint32 modifiers = 0;
 		char shortcut = Shortcut(&modifiers);
-		r5_draw_item_symbols(fSuper, Frame(), IsMarked(), shortcut,
-			modifiers, Submenu() != NULL, _HighColor(), _LowColor(),
-			_IsActivated());
+		r5_draw_item_symbols(fSuper, Frame(), r5Padding, IsMarked(),
+			shortcut, modifiers, Submenu() != NULL, _HighColor(),
+			_LowColor(), _IsActivated());
 		fSuper->SetLowUIColor(lowColor);
 		fSuper->SetHighUIColor(highColor);
 		return;

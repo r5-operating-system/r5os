@@ -1724,7 +1724,9 @@ static void
 r5_style_menu_window(BMenuWindow* window, BMenu* menu, bool* viewColorSet,
 	float* windowRadius)
 {
-	bool r5Style = BPrivate::MenuPrivate(menu).R5Style();
+	// an empty menu is Haiku's "<empty>" item in Haiku's frame
+	bool r5Style = menu->CountItems() > 0
+		&& BPrivate::MenuPrivate(menu).R5Style();
 	if (r5Style) {
 		rgb_color background = ui_color(B_MENU_BACKGROUND_COLOR);
 		if (menu->ViewColor() != background)
@@ -3145,10 +3147,9 @@ BMenu::_CalcFrame(BPoint where, bool* scrollOn)
 		frame.OffsetBy(std::min(0.0f, fPad.left - 8.0f - r5Margin
 			- r5Padding.left - BPrivate::MenuPrivate(this).R5MarkColumn()),
 			0.0f);
-	} else
-// SPDX-SnippetEnd
-	if (inMenuField)
+	} else if (inMenuField)
 		frame.OffsetBy(-8.0f, 0.0f);
+// SPDX-SnippetEnd
 
 	if (superMenu == NULL || superItem == NULL || inMenuField) {
 		// just move the window on screen
@@ -3346,6 +3347,12 @@ BMenu::_MenuWindow()
 		char windowName[64];
 		snprintf(windowName, 64, "%s cached menu", Name());
 		fCachedMenuWindow = new (nothrow) BMenuWindow(windowName);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// a new window has no round corners yet (the R5 menu style)
+		fExtraMenuData->r5WindowRadius = -1;
+// SPDX-SnippetEnd
 	}
 
 	return fCachedMenuWindow;

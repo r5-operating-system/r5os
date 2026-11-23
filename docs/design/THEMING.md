@@ -123,12 +123,22 @@ lay out and draw the items.
   more; other menus start the label at 11 (M4). A submenu opens beside its
   menu with 4 between the two lines (M1, M4), its first row level with the
   item; only a submenu of a menu that has the style itself.
+- From the look: the margin, the row height and the left and right
+  padding. Fixed in R5's `BMenu`: the mark column (12 after 7, then 8), the
+  gap of 16 before a shortcut, the chevron box (10, and 6 before it), the
+  separator row (9, 8 in), the window radius (10) and the submenu gap (4).
+  An empty menu keeps Haiku's "<empty>" item and window.
 - Haiku's inset contract holds for the hooks: in the style,
   `DrawMenuBackground()` gives the rect back by the margin and
   `DrawMenuItemBackground()` by the item padding, the values
   `GetBackgroundInsets()` returns. Any control look that returns more than 1
   for `B_MENU_BACKGROUND` gets the style; Haiku's looks and the add-ons
   that ship with Haiku return 1.
+- Limits: a menu that is open while the colours change keeps the old menu
+  colour until it opens again; a program's own view colour on a menu is
+  replaced while the style is on, and becomes `B_TRANSPARENT_COLOR` again
+  (Haiku's) when the look no longer asks for it; a pop-up field that gains
+  its mark column while open keeps its place until it opens again.
 - The window: round corners (10 at 12 points) and the full shadow, through
   the existing window effects path (`AS_R5_SET_WINDOW_CORNER_RADIUS` and
   `AS_R5_SET_WINDOW_SHADOW`, the messages behind libr5ui's
@@ -136,8 +146,8 @@ lay out and draw the items.
   libr5ui). The menu window keeps Haiku's bordered look: a borderless menu
   window did not show in QEMU. Its line is the decorator's: R5 Modern draws
   a bordered window that avoids the focus (menus, tool tips) in the menu's
-  edge colour (`#b8c0cc` light, `#3a404c` dark), and the compositor carries
-  it round the corners.
+  edge colour (about `#b8c0cc` light, `#3a404c` dark), and the compositor
+  carries it round the corners.
 - Chosen: the menus are opaque, the menu colour, with the GPU too. Glass
   through `AS_R5_SET_VIEW_GLASS` was tried: a menu window that moved to the
   next title of a menu bar kept the old picture (QEMU, 23 Nov 2026). The
@@ -166,8 +176,12 @@ A running program takes new controls and colours without a restart.
   `be_control_look`, as `_init_interface_kit_()` does at start; every window
   then draws again.
 - No call, field or symbol is added to libbe, and the ABI is unchanged: it
-  is an internal handler of a message libbe already handles. This is the one
-  change inside libbe, accepted by the owner on 23 Nov 2026.
+  is an internal handler of a message libbe already handles, accepted by
+  the owner on 23 Nov 2026. The other R5 changes inside libbe are the menu
+  bar start (choice A) and the R5 menu style ("Menus" above: `BMenu`,
+  `BMenuItem`, `BSeparatorItem`, `MenuPrivate`), both internal and asked
+  for by the control look; neither adds a call, a field or a symbol to the
+  public API.
 - The old look and its add-on stay loaded, because another window thread may
   still be inside one of its methods (the reason Haiku gives in
   `_fini_interface_kit_()` for having no live switching). One small object
