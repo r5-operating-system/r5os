@@ -399,7 +399,7 @@ private:
 			// compose thread once per frame.
 	volatile uint32				fEffects;
 	volatile int32				fStrength;
-	volatile int32				fDarkGlass;
+	int32						fDarkGlass;
 			BRegion				fGenericDamage;
 			bool				fEffectsLogged;
 

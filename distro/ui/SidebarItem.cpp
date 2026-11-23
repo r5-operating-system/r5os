@@ -251,7 +251,7 @@ BSidebarItem::DrawItem(BView* owner, BRect frame, bool complete)
 		// (owner's S3); the text stays where it is.
 		BRect mark = row.InsetByCopy(padX, 0);
 		float corner = u * 4.0f;
-		if (Private::r5_modern_controls()) {
+		if (r5ui_modern_controls()) {
 			if (fInGroup)
 				mark = row.InsetByCopy(padX + roundf(u * 4.0f), 0);
 			corner = roundf(be_plain_font->Size() * 6 / 12);

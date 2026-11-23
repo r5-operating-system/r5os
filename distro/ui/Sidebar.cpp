@@ -164,7 +164,7 @@ BSidebar::Draw(BRect updateRect)
 		if (haveGroup && item != NULL && item->fLast) {
 			float radius = be_plain_font->Size() * 0.25f;
 			BRect block(paint);
-			if (Private::r5_modern_controls()) {
+			if (r5ui_modern_controls()) {
 				// R5 Modern (mockups A1, A2; owner's S3): the open category
 				// inside the list, 6 from the sides, round 8; the rows stay
 				// where they are

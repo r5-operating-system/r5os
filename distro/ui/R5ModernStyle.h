@@ -10,7 +10,6 @@
 
 
 namespace BAppearanceKit {
-namespace Private {
 
 
 /*!	True while the control look is R5 Modern, or another look that asks for
@@ -19,7 +18,7 @@ namespace Private {
 	return 1. Inside libr5ui only; not installed.
 */
 static inline bool
-r5_modern_controls()
+r5ui_modern_controls()
 {
 	if (be_control_look == NULL)
 		return false;
@@ -30,7 +29,6 @@ r5_modern_controls()
 }
 
 
-}	// namespace Private
 }	// namespace BAppearanceKit
 
 
