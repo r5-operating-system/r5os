@@ -205,7 +205,7 @@ def main():
         seen = 0
         next_enter = time.time() + 30
         started = False
-        deadline = time.time() + 420
+        deadline = time.time() + 900
         while time.time() < deadline:
             time.sleep(0.3)
             try:

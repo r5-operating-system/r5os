@@ -239,8 +239,11 @@ R5Decorator::GetComponentColors(Component component, uint8 highlight,
 		// light border colour (Haiku's and R5's light sets) is unchanged.
 		rgb_color frame = tab != NULL && tab->buttonFocus ? fFocusFrameColor
 			: fNonFocusFrameColor;
+		// the border colours run from the inner bevel (0) to the outer
+		// line (5), as TabDecorator fills them
+		const int32 kOuterLine = 5;
 		if (frame.IsDark() && highlight != HIGHLIGHT_RESIZE_BORDER)
-			_colors[5] = frame;
+			_colors[kOuterLine] = frame;
 		return;
 	}
 	if (highlight == HIGHLIGHT_STACK_AND_TILE

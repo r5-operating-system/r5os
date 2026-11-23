@@ -106,9 +106,12 @@ static rgb_color
 blend(const rgb_color& from, const rgb_color& to, float amount)
 {
 	rgb_color color;
-	color.red = (uint8)roundf(from.red + (to.red - from.red) * amount);
-	color.green = (uint8)roundf(from.green + (to.green - from.green) * amount);
-	color.blue = (uint8)roundf(from.blue + (to.blue - from.blue) * amount);
+	color.red = static_cast<uint8>(roundf(from.red
+		+ (to.red - from.red) * amount));
+	color.green = static_cast<uint8>(roundf(from.green
+		+ (to.green - from.green) * amount));
+	color.blue = static_cast<uint8>(roundf(from.blue
+		+ (to.blue - from.blue) * amount));
 	color.alpha = 255;
 	return color;
 }
@@ -117,8 +120,8 @@ blend(const rgb_color& from, const rgb_color& to, float amount)
 static rgb_color
 hex(uint32 value)
 {
-	rgb_color color = { (uint8)(value >> 16), (uint8)(value >> 8),
-		(uint8)value, 255 };
+	rgb_color color = { static_cast<uint8>(value >> 16),
+		static_cast<uint8>(value >> 8), static_cast<uint8>(value), 255 };
 	return color;
 }
 
@@ -176,19 +179,15 @@ fill_round(BView* view, BRect rect, float radius, rgb_color color)
 }
 
 
-//! A 1 px line round \a rect, as a CSS border.
+//! A 1 px line round \a rect, on its outer pixels, as a CSS border.
 static void
 stroke_round(BView* view, BRect rect, float radius, rgb_color color)
 {
 	view->PushState();
-	BRect outer(rect.left, rect.top, rect.right + 1, rect.bottom + 1);
-	BRegion clip(outer);
-	BRect inner(outer);
-	inner.InsetBy(1, 1);
-	clip.Exclude(inner);
-	view->ConstrainClippingRegion(&clip);
+	view->SetDrawingMode(B_OP_ALPHA);
 	view->SetHighColor(color);
-	view->FillRoundRect(outer, radius, radius);
+	view->SetPenSize(1);
+	view->StrokeRoundRect(rect, radius, radius);
 	view->PopState();
 }
 
@@ -204,6 +203,25 @@ draw_text(BView* view, const char* text, BPoint where, const BFont* font,
 	view->DrawString(text, where);
 	view->PopState();
 }
+
+
+/*!	A label in the second text colour, worked out when it draws, so it
+	follows a change to dark (the mockup's row labels and notes).
+*/
+class QuietLabel : public BStringView {
+public:
+	QuietLabel(const char* name, const char* text)
+		:
+		BStringView(name, text)
+	{
+	}
+
+	virtual void Draw(BRect updateRect)
+	{
+		SetHighColor(text2_color());
+		BStringView::Draw(updateRect);
+	}
+};
 
 
 static BString
@@ -456,12 +474,14 @@ public:
 
 	virtual	void				Draw(BRect updateRect);
 	virtual	void				MouseDown(BPoint where);
+	virtual	void				KeyDown(const char* bytes, int32 numBytes);
 	virtual	BSize				MinSize();
 	virtual	BSize				MaxSize();
 	virtual	BSize				PreferredSize();
 
 private:
 			BRect				_Swatch(int32 index) const;
+			void				_Choose(int32 index);
 
 			int32				fMode;
 };
@@ -544,7 +564,26 @@ AccentControl::Draw(BRect updateRect)
 		SetHighColor(color);
 		FillEllipse(BRect(swatch.left, swatch.top, swatch.right + 1,
 			swatch.bottom + 1));
+		if (IsFocus() && Window()->IsActive()
+			&& (Value() == i || (Value() < 0 && i == 0))) {
+			// the keyboard mark: a ring in the navigation colour
+			BRect ring(swatch);
+			ring.InsetBy(-px(4) - 1, -px(4) - 1);
+			SetHighColor(ui_color(B_KEYBOARD_NAVIGATION_COLOR));
+			StrokeEllipse(BRect(ring.left, ring.top, ring.right + 1,
+				ring.bottom + 1));
+		}
 	}
+}
+
+
+void
+AccentControl::_Choose(int32 index)
+{
+	if (index < 0 || index >= count_theme_accents() || index == Value())
+		return;
+	SetValue(index);
+	Invoke();
 }
 
 
@@ -557,13 +596,25 @@ AccentControl::MouseDown(BPoint where)
 		BRect hit(_Swatch(i));
 		hit.InsetBy(-px(3), -px(3));
 		if (hit.Contains(where)) {
-			if (Value() != i) {
-				SetValue(i);
-				Invoke();
-			}
+			_Choose(i);
 			return;
 		}
 	}
+}
+
+
+void
+AccentControl::KeyDown(const char* bytes, int32 numBytes)
+{
+	if (numBytes == 1 && bytes[0] == B_LEFT_ARROW) {
+		_Choose(Value() <= 0 ? 0 : Value() - 1);
+		return;
+	}
+	if (numBytes == 1 && bytes[0] == B_RIGHT_ARROW) {
+		_Choose(Value() + 1);
+		return;
+	}
+	BControl::KeyDown(bytes, numBytes);
 }
 
 
@@ -1190,12 +1241,11 @@ SaveThemeWindow::SaveThemeWindow(BWindow* parent, BHandler* target,
 		fParts[i]->SetValue(i < 5 ? B_CONTROL_ON : B_CONTROL_OFF);
 	}
 
-	BStringView* note = new BStringView("note",
+	BStringView* note = new QuietLabel("note",
 		"Saved in your own settings. The built-in themes stay as they are.");
 	BFont small(r5_settings_plain_font());
 	small.SetSize(small.Size() * 12.0f / 12.5f);
 	note->SetFont(&small);
-	note->SetHighColor(text2_color());
 
 	BButton* cancel = new BButton("Cancel", new BMessage(B_QUIT_REQUESTED));
 	fSave = new BButton("Save", new BMessage(kMsgSaveConfirm));
@@ -1322,6 +1372,7 @@ private:
 
 			ThemeModule*		fModule;
 			theme_info			fOpened;
+			BMessage			fOpenedColors;
 			theme_info			fCurrent;
 
 			BButton*			fSaveButton;
@@ -1404,9 +1455,8 @@ add_item(BPopUpMenu* menu, const char* label, uint32 what,
 static BStringView*
 row_label(const char* text)
 {
-	BStringView* label = new BStringView(text, text);
+	BStringView* label = new QuietLabel(text, text);
 	label->SetAlignment(B_ALIGN_RIGHT);
-	label->SetHighColor(text2_color());
 	label->SetExplicitAlignment(BAlignment(B_ALIGN_RIGHT,
 		B_ALIGN_VERTICAL_CENTER));
 	return label;
@@ -1420,6 +1470,18 @@ ThemePage::ThemePage(ThemeModule* module)
 {
 	get_theme(&fCurrent);
 	fOpened = fCurrent;
+	// the colours as they are now, also ones set in Appearance > Colors:
+	// Revert puts them back (every colour a theme sets)
+	BMessage names;
+	get_theme_colors(&fCurrent, &names);
+	char* name;
+	type_code type;
+	for (int32 i = 0; names.GetInfo(B_RGB_32_BIT_TYPE, i, &name, &type)
+			== B_OK; i++) {
+		color_which which = which_ui_color(name);
+		if (which != B_NO_COLOR)
+			fOpenedColors.AddColor(name, ui_color(which));
+	}
 
 	BStringView* title = new BStringView("theme title", "Theme");
 	fSaveButton = new BButton("Save as theme…", new BMessage(kMsgSaveTheme));
@@ -1479,8 +1541,7 @@ ThemePage::ThemePage(ThemeModule* module)
 	fGlass = new BCheckBox("glass", "Frosted glass", new BMessage(kMsgEffects));
 	fAnimations = new BCheckBox("animations", "Animations",
 		new BMessage(kMsgEffects));
-	BStringView* strengthLabel = new BStringView("strength label", "Strength");
-	strengthLabel->SetHighColor(text2_color());
+	BStringView* strengthLabel = new QuietLabel("strength label", "Strength");
 	fStrengthMenu = new BPopUpMenu("strength");
 	add_item(fStrengthMenu, "Quiet", kMsgStrength, NULL, NULL,
 		B_WINDOW_EFFECTS_QUIET);
@@ -1824,8 +1885,21 @@ void
 ThemePage::_Apply(const theme_info& info, uint32 parts)
 {
 	theme_info next = info;
-	set_theme(&next, parts);
-	get_theme(&fCurrent);
+	status_t status = set_theme(&next, parts);
+	if (status != B_OK) {
+		BString text("Not every part of the theme could be set: ");
+		text << strerror(status);
+		BAlert* alert = new BAlert("Theme", text.String(), "OK");
+		alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
+		alert->Go(NULL);
+		get_theme(&fCurrent);
+	} else {
+		// app_server sets the colours a moment later, so the mode is not
+		// read back now; B_COLORS_UPDATED brings the page up to date
+		fCurrent = next;
+		if (is_classic(fCurrent))
+			fCurrent.mode = B_THEME_LIGHT;
+	}
 	_Update();
 	if (fModule != NULL)
 		fModule->Touch();
@@ -2086,10 +2160,10 @@ ThemePage::MessageReceived(BMessage* message)
 		}
 
 		case B_COLORS_UPDATED:
-		case B_WINDOW_EFFECTS_CHANGED:
-			// another program (Appearance, the Colors tab) changed a part
-			if (message->what == B_WINDOW_EFFECTS_CHANGED)
-				_Update();
+			// the theme changed elsewhere (another program, the test tool,
+			// Appearance); the page shows what is in use
+			get_theme(&fCurrent);
+			_Update();
 			BGroupView::MessageReceived(message);
 			break;
 
@@ -2104,6 +2178,7 @@ void
 ThemePage::Revert()
 {
 	_Apply(fOpened, B_THEME_ALL_PARTS);
+	set_ui_colors(&fOpenedColors);
 }
 
 

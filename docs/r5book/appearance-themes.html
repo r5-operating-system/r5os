@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<!--
+  SPDX-FileCopyrightText: 2026 R5OS Contributors
+  SPDX-License-Identifier: MIT
+-->
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Theming — Appearance Kit — R5Book</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
+	<link rel="stylesheet" href="r5book.css" />
+	<style>
+		.shots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+		.shots img { width: 100%; border-radius: 6px; border: 1px solid rgba(15,23,42,0.12); }
+	</style>
+</head>
+<body data-page="appearance">
+
+<div class="book">
+	<aside class="toc"></aside>
+
+	<main class="page">
+		<div class="breadcrumb"><a href="index.html">R5Book</a> &rsaquo; <a href="appearance-kit.html">Appearance Kit</a> &rsaquo; Theming</div>
+
+		<section class="page-hero">
+			<span class="kit-label">libr5ui.so &middot; namespace BAppearanceKit &middot; &lt;Themes.h&gt;</span>
+			<h1>Theming</h1>
+			<p>A theme is a saved combination of parts that already exist: the window frame, the controls, the
+			scroll bars, the Deskbar, light or dark with an accent colour, and the window effects. There is no
+			drawing engine. A program that draws with <code class="inline">be_control_look</code> and
+			<code class="inline">ui_color()</code> follows every theme, light and dark, without a line of theme
+			code.</p>
+		</section>
+
+		<nav class="on-this-page" aria-label="On this page">
+			<h3>What is in this page</h3>
+			<ul>
+				<li><a href="#rules">For developers</a> &mdash; what a program does so it looks right in every theme.</li>
+				<li><a href="#parts">The parts</a> &mdash; what a theme combines, and where each part lives.</li>
+				<li><a href="#r5modern">The R5 Modern controls</a> &mdash; the control look add-on.</li>
+				<li><a href="#dark">Dark mode</a> &mdash; how the parts decide light or dark.</li>
+				<li><a href="#live">Live switching</a> &mdash; running programs take a new theme at once.</li>
+				<li><a href="#api">Themes.h</a> &mdash; <code class="inline">theme_info</code> and its calls.</li>
+				<li><a href="#files">Theme files</a> &mdash; the format of a saved theme.</li>
+			</ul>
+		</nav>
+
+		<section class="entry" id="rules">
+			<div class="entry-header"><h2 class="plain">For developers</h2><span class="kind">guide</span></div>
+			<p>R5 themes work the BeOS and Haiku way: the system draws the controls, and the colours are named,
+			not fixed. Do these four things and a program looks right in R5 Modern, R5 and Classic (Haiku), light
+			and dark, with the GPU and in Safe mode:</p>
+			<ul>
+				<li><strong>Use the system controls.</strong> <code class="inline">BButton</code>,
+				<code class="inline">BTextControl</code>, <code class="inline">BCheckBox</code>,
+				<code class="inline">BMenuField</code>, <code class="inline">BListView</code> in a
+				<code class="inline">BScrollView</code>, <code class="inline">BSlider</code>,
+				<code class="inline">BTabView</code>. A theme changes how they are painted, never their size.</li>
+				<li><strong>Draw your own parts with <code class="inline">be_control_look</code>.</strong> A view
+				that paints a button face, a frame or a check mark itself calls the same
+				<code class="inline">BControlLook</code> method the system control calls
+				(<code class="inline">DrawButtonFrame()</code>, <code class="inline">DrawTextControlBorder()</code>,
+				<code class="inline">DrawCheckBox()</code>&hellip;), and asks it for the insets.</li>
+				<li><strong>Name colours with <code class="inline">ui_color()</code>.</strong>
+				<code class="inline">SetViewUIColor(B_PANEL_BACKGROUND_COLOR)</code>,
+				<code class="inline">SetHighUIColor(B_PANEL_TEXT_COLOR)</code>; a list or a document uses
+				<code class="inline">B_LIST_*</code> or <code class="inline">B_DOCUMENT_*</code>. Never a fixed
+				grey or white: in dark mode it stays light.</li>
+				<li><strong>Decide light or dark from the panel.</strong> When a colour of your own must differ
+				(a picture, a shade), test <code class="inline">ui_color(B_PANEL_BACKGROUND_COLOR).IsDark()</code>,
+				and draw again on <code class="inline">B_COLORS_UPDATED</code> (a view gets it, and is invalidated,
+				on its own).</li>
+			</ul>
+<pre class="code"><span class="k">void</span>
+SwatchView::Draw(BRect updateRect)
+{
+	rgb_color panel = ui_color(B_PANEL_BACKGROUND_COLOR);
+	<span class="c">// a thin line that reads in light and in dark</span>
+	SetHighColor(tint_color(panel, panel.IsDark() ? B_LIGHTEN_1_TINT : B_DARKEN_2_TINT));
+	StrokeRect(Bounds());
+
+	BRect frame(10, 10, 110, 34);
+	be_control_look-&gt;DrawButtonFrame(<span class="k">this</span>, frame, updateRect,
+		ui_color(B_CONTROL_BACKGROUND_COLOR), panel);
+	be_control_look-&gt;DrawButtonBackground(<span class="k">this</span>, frame, updateRect,
+		ui_color(B_CONTROL_BACKGROUND_COLOR));
+}</pre>
+			<p>A program does not link <code class="inline">libr5ui.so</code> for this. Only a program that
+			chooses a theme (Settings, a test tool) calls <a href="#api">Themes.h</a>.</p>
+		</section>
+
+		<section class="entry" id="parts">
+			<div class="entry-header"><h2 class="plain">The parts</h2><span class="kind">overview</span></div>
+			<table class="facts">
+				<tr><th>Windows</th><td>A decorator add-on: Default (R5 Modern), Default (R5), or Haiku's built-in Classic (Haiku). See <a href="haiku-additions.html#decorator">Decorator hooks</a>.</td></tr>
+				<tr><th>Controls</th><td>A <code class="inline">BControlLook</code> add-on: R5 Modern, or Haiku's built-in controls (Be and Flat are in haiku_extras).</td></tr>
+				<tr><th>Scrollbars</th><td>The R5 Modern scroll bars or Haiku's, with Haiku's single or double arrows (<code class="inline">scroll_bar_info</code>). The width stays Haiku's.</td></tr>
+				<tr><th>Deskbar</th><td>Default (R5) (Vertical, Compact or Horizontal, rounded, away from the screen edges) or Classic (Haiku).</td></tr>
+				<tr><th>Mode and accent</th><td>Light or dark, and the accent: a <code class="inline">ui_color</code> set.</td></tr>
+				<tr><th>Effects</th><td>Shadow, frosted glass, animations and their strength (<a href="appearance-effects.html#window-effects">Window effects</a>).</td></tr>
+			</table>
+			<p>Built-in themes: <strong>R5 Modern</strong> and <strong>R5</strong>, light and dark, and
+			<strong>Classic (Haiku)</strong>, light only, exactly as Haiku. The default is R5, light. The user
+			chooses on the Theme page of Settings (Personalization), and can save a combination as a theme of
+			their own.</p>
+		</section>
+
+		<section class="entry" id="r5modern">
+			<div class="entry-header"><h2 class="plain">The R5 Modern controls</h2><span class="kind">control look</span></div>
+			<table class="facts">
+				<tr><th>Add-on</th><td>/system/add-ons/control_look/R5ModernControlLook</td></tr>
+				<tr><th>Class</th><td>BPrivate::R5ModernControlLook, on top of HaikuControlLook (like Haiku's FlatControlLook)</td></tr>
+				<tr><th>License</th><td>MIT</td></tr>
+			</table>
+			<p>Flat faces with round corners that follow the font size: buttons and fields round 7 at 12 points,
+			check boxes round 4 filled with the accent and a white tick, radio buttons a white dot on the accent,
+			boxes and tabs round 8, a selected menu item a round accent face, the scroll bar a round track with a
+			round thumb, the slider a thin round bar with a white disc. The default button is the accent with a
+			white label; a focused field has the accent line and a soft ring. Every frame and background inset is
+			Haiku's, so a window lays out the same with either look. Every colour is a
+			<code class="inline">ui_color</code>.</p>
+			<div class="shots">
+				<img src="../design/screens/theme/controls-modern-light-live.png" alt="The R5 Modern controls, light, in QEMU" />
+				<img src="../design/screens/theme/controls-modern-dark-live.png" alt="The R5 Modern controls, dark, in QEMU" />
+			</div>
+		</section>
+
+		<section class="entry" id="dark">
+			<div class="entry-header"><h2 class="plain">Dark mode</h2><span class="kind">guide</span></div>
+			<p>Dark mode is a <code class="inline">ui_color</code> set: the panel <code class="inline">#1f232b</code>,
+			text <code class="inline">#e6e9ef</code>, fields <code class="inline">#15181e</code>, controls
+			<code class="inline">#2a2f39</code>, the window tab the deeper yellow <code class="inline">#e8b923</code>.
+			Every part decides with the panel colour: the controls draw with the colours they are given, the
+			decorators read the tab and border colours (Default (R5 Modern) also softens its edge line), and
+			Deskbar's Default (R5) style takes dark glass with the GPU and an opaque <code class="inline">#1c2029</code>
+			without it. In Safe mode the colours are the same, the surfaces opaque, the corners stepped.</p>
+		</section>
+
+		<section class="entry" id="live">
+			<div class="entry-header"><h2 class="plain">Live switching</h2><span class="kind">behaviour</span></div>
+			<p>A new theme reaches running programs at once. Colours always did (<code class="inline">B_COLORS_UPDATED</code>).
+			For the controls, <code class="inline">set_theme()</code> sends <code class="inline">B_COLORS_UPDATED</code>
+			with an int64 <code class="inline">"r5:control_look"</code> to every program; each program's windows
+			load the control look app_server names now and draw again. Nothing is added to the
+			<code class="inline">libbe</code> API or ABI. The previous look stays in memory until the program
+			quits, because another window may still be drawing with it.</p>
+		</section>
+
+		<section class="entry" id="api">
+			<div class="entry-header"><h2 class="plain">Themes.h</h2><span class="kind">&lt;Themes.h&gt;</span></div>
+			<table class="facts">
+				<tr><th>Declared in</th><td>&lt;Themes.h&gt;</td></tr>
+				<tr><th>Library</th><td>libr5ui.so</td></tr>
+				<tr><th>First user</th><td>Settings, the Theme page; r5-effects-test</td></tr>
+			</table>
+			<p>A <code class="inline">theme_info</code> struct and free functions, the way Haiku has
+			<code class="inline">menu_info</code> with <code class="inline">get_menu_info()</code>.</p>
+			<div class="member"><div class="sig">status_t get_theme(theme_info* info);</div>
+				<p>The theme in use, with what the system shows for the parts it does not hold.</p></div>
+			<div class="member"><div class="sig">status_t set_theme(const theme_info* info, uint32 parts = B_THEME_ALL_PARTS);</div>
+				<p>Applies the parts (<code class="inline">B_THEME_WINDOWS</code>, <code class="inline">B_THEME_CONTROLS</code>,
+				<code class="inline">B_THEME_SCROLL_BARS</code>, <code class="inline">B_THEME_DESKBAR</code>,
+				<code class="inline">B_THEME_COLORS</code>, <code class="inline">B_THEME_EFFECTS</code>) at once.</p></div>
+			<div class="member"><div class="sig">int32 count_themes(); status_t get_theme_at(int32 index, theme_info* info);<br />status_t find_theme(const char* name, theme_info* info); bool is_built_in_theme(const char* name);</div>
+				<p>The built-in themes first, then the saved ones by name.</p></div>
+			<div class="member"><div class="sig">status_t save_theme(const theme_info* info, uint32 parts); status_t remove_theme(const char* name);</div>
+				<p>A theme of the user's own; a built-in name gives <code class="inline">B_NOT_ALLOWED</code>.</p></div>
+			<div class="member"><div class="sig">bool theme_matches(const theme_info* theme, const theme_info* base);<br />status_t get_theme_colors(const theme_info* info, BMessage* colors);</div>
+				<p>Whether a theme still shows its base ("(changed)" on the page), and the colour set of a theme.</p></div>
+<pre class="code"><span class="k">#include</span> &lt;Themes.h&gt;
+
+<span class="k">using namespace</span> BAppearanceKit;
+
+theme_info theme;
+<span class="k">if</span> (find_theme(<span class="s">"R5 Modern"</span>, &amp;theme) == B_OK) {
+	theme.mode = B_THEME_DARK;
+	set_theme(&amp;theme, theme.parts | B_THEME_COLORS);
+}</pre>
+		</section>
+
+		<section class="entry" id="files">
+			<div class="entry-header"><h2 class="plain">Theme files</h2><span class="kind">format</span></div>
+			<p>A saved theme is driver settings text in <code class="inline">~/config/settings/r5/themes/</code>,
+			short enough to mail. A key that is not there is a part the theme does not hold.</p>
+<pre class="code">name <span class="s">"Evening"</span>
+windows <span class="s">"R5ModernDecorator"</span>
+controls <span class="s">"R5ModernControlLook"</span>
+scroll_bars modern
+arrows single
+deskbar_style r5
+deskbar_layout vertical
+mode dark
+accent #7c4ddb</pre>
+			<div class="see-also">
+				<strong>See also</strong>
+				<a href="appearance-effects.html#window-effects">Window effects</a>
+				<a href="haiku-additions.html#decorator">Decorator hooks</a>
+				<a href="appearance-settings.html">Settings &amp; accounts</a>
+			</div>
+		</section>
+	</main>
+</div>
+
+<script src="r5book.js"></script>
+</body>
+</html>

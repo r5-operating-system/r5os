@@ -24,7 +24,13 @@ settings() {
 quit_settings() { hey -s $S quit > /dev/null 2>&1; sleep 2; }
 
 say start
-sleep 12
+# the desktop first: Deskbar answers once it runs
+n=0
+while [ $n -lt 30 ] && ! hey -s application/x-vnd.Be-TSKB get Frame of \
+		Window 0 > /dev/null 2>&1; do
+	sleep 2; n=$((n + 1))
+done
+sleep 15
 note "start $(date)"
 $T theme get >> "$out/notes.txt" 2>&1
 

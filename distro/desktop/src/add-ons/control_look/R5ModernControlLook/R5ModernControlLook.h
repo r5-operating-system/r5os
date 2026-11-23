@@ -282,7 +282,8 @@ private:
 			void				_FillButtonInside(BView* view,
 									const BRect& rect,
 									const BRect& updateRect,
-									const rgb_color& base, uint32 flags);
+									const rgb_color& base, uint32 flags,
+									uint32 borders);
 			void				_DrawChevron(BView* view, BRect rect,
 									const rgb_color& color);
 			void				_DrawField(BView* view, BRect& rect,

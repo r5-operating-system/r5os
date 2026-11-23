@@ -400,10 +400,26 @@ valid_name(const char* name)
 	if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
 		return false;
 	for (const char* c = name; *c != '\0'; c++) {
-		if (*c == '/' || *c == '"' || *c == '\\' || (uint8)*c < 0x20)
+		if (*c == '/' || *c == '"' || *c == '\\'
+			|| static_cast<uint8>(*c) < 0x20)
 			return false;
 	}
 	return true;
+}
+
+
+/*!	An add-on's file name from a theme file: a plain name in the add-ons
+	folders (no path), so a theme from somewhere else cannot point a program
+	at another file.
+*/
+static bool
+valid_leaf(const char* leaf)
+{
+	if (leaf == NULL || strlen(leaf) >= B_FILE_NAME_LENGTH)
+		return false;
+	if (strcmp(leaf, ".") == 0 || strcmp(leaf, "..") == 0)
+		return false;
+	return strchr(leaf, '/') == NULL;
 }
 
 
@@ -492,7 +508,7 @@ write_theme(const char* path, const theme_info* info, uint32 parts)
 		return status;
 	ssize_t written = file.Write(text.String(), text.Length());
 	if (written < 0)
-		return (status_t)written;
+		return static_cast<status_t>(written);
 	return written == text.Length() ? B_OK : B_IO_ERROR;
 }
 
@@ -521,12 +537,12 @@ read_theme(const char* path, theme_info* info)
 		strlcpy(info->base, value, sizeof(info->base));
 
 	value = get_driver_parameter(handle, "windows", NULL, "");
-	if (value != NULL) {
+	if (value != NULL && valid_leaf(value)) {
 		strlcpy(info->decorator, value, sizeof(info->decorator));
 		info->parts |= B_THEME_WINDOWS;
 	}
 	value = get_driver_parameter(handle, "controls", NULL, "");
-	if (value != NULL) {
+	if (value != NULL && valid_leaf(value)) {
 		strlcpy(info->control_look, value, sizeof(info->control_look));
 		info->parts |= B_THEME_CONTROLS;
 	}
@@ -726,41 +742,25 @@ get_theme(theme_info* info)
 	if (info == NULL)
 		return B_BAD_VALUE;
 
-	BPath path;
-	if (settings_path(kCurrentTheme, path) == B_OK
-		&& read_theme(path.Path(), info) == B_OK) {
-		// the parts the file does not hold are what the system shows
-		uint32 held = info->parts;
-		theme_info now;
-		system_theme(&now);
-		if ((held & B_THEME_WINDOWS) == 0)
-			strlcpy(info->decorator, now.decorator, sizeof(info->decorator));
-		if ((held & B_THEME_CONTROLS) == 0) {
-			strlcpy(info->control_look, now.control_look,
-				sizeof(info->control_look));
-		}
-		if ((held & B_THEME_SCROLL_BARS) == 0) {
-			info->modern_scroll_bars = now.modern_scroll_bars;
-			info->double_arrows = now.double_arrows;
-		}
-		if ((held & B_THEME_DESKBAR) == 0) {
-			info->deskbar_style = now.deskbar_style;
-			info->deskbar_layout = now.deskbar_layout;
-			info->deskbar_rounded = now.deskbar_rounded;
-			info->deskbar_floating = now.deskbar_floating;
-		}
-		if ((held & B_THEME_COLORS) == 0) {
-			info->mode = now.mode;
-			info->accent = now.accent;
-		}
-		// the effects are always the system's: Appearance changes them too
-		info->effects = now.effects;
-		info->effect_strength = now.effect_strength;
-		info->parts = B_THEME_ALL_PARTS;
-		return B_OK;
-	}
-
+	// What every part shows now: Appearance, Desktop and Deskbar and the
+	// Colors tab change the parts too, so the system is the truth for
+	// them. The file adds what the system does not know: the theme's name
+	// and base, its accent and the R5 Modern scroll bar style.
 	system_theme(info);
+
+	BPath path;
+	theme_info kept;
+	if (settings_path(kCurrentTheme, path) != B_OK
+		|| read_theme(path.Path(), &kept) != B_OK)
+		return B_OK;
+
+	strlcpy(info->name, kept.name, sizeof(info->name));
+	strlcpy(info->base, kept.base, sizeof(info->base));
+	if ((kept.parts & B_THEME_COLORS) != 0 && kept.mode == info->mode)
+		info->accent = kept.accent;
+	if ((kept.parts & B_THEME_SCROLL_BARS) != 0
+		&& strcmp(kept.control_look, info->control_look) == 0)
+		info->modern_scroll_bars = kept.modern_scroll_bars;
 	return B_OK;
 }
 
@@ -771,6 +771,8 @@ get_theme(theme_info* info)
 static status_t
 apply_decorator(const char* name)
 {
+	if (!valid_leaf(name))
+		return B_BAD_VALUE;
 	BPrivate::DecorInfoUtility decorators;
 	BPrivate::DecorInfo* decorator = decorators.FindDecorator(
 		name[0] != '\0' ? BString(name) : BString("Default"));
@@ -785,6 +787,8 @@ apply_decorator(const char* name)
 static status_t
 apply_control_look(const char* leaf, bool* changed)
 {
+	if (!valid_leaf(leaf))
+		return B_BAD_VALUE;
 	BString path;
 	if (leaf[0] != '\0') {
 		BPath found;
@@ -833,16 +837,24 @@ set_theme(const theme_info* info, uint32 parts)
 
 	bool lookChanged = false;
 	status_t result = B_OK;
+	// a part that could not be set is not kept as the one in use
+	uint32 applied = parts;
 
 	if ((parts & B_THEME_WINDOWS) != 0) {
 		status_t status = apply_decorator(info->decorator);
-		if (status != B_OK)
-			result = status;
+		if (status != B_OK) {
+			applied &= ~B_THEME_WINDOWS;
+			if (result == B_OK)
+				result = status;
+		}
 	}
 	if ((parts & B_THEME_CONTROLS) != 0) {
 		status_t status = apply_control_look(info->control_look, &lookChanged);
-		if (status != B_OK)
-			result = status;
+		if (status != B_OK) {
+			applied &= ~B_THEME_CONTROLS;
+			if (result == B_OK)
+				result = status;
+		}
 	}
 	if ((parts & B_THEME_SCROLL_BARS) != 0) {
 		scroll_bar_info scrollBars;
@@ -854,12 +866,20 @@ set_theme(const theme_info* info, uint32 parts)
 		if (now.modern_scroll_bars != info->modern_scroll_bars)
 			lookChanged = true;
 	}
-	if ((parts & B_THEME_DESKBAR) != 0)
-		apply_deskbar(info);
+	if ((parts & B_THEME_DESKBAR) != 0) {
+		status_t status = apply_deskbar(info);
+		if (status != B_OK && result == B_OK)
+			result = status;
+	}
 	if ((parts & B_THEME_EFFECTS) != 0) {
-		set_window_effects(info->effects);
-		set_window_effect_strength(
-			(enum window_effect_strength)info->effect_strength);
+		status_t status = set_window_effects(info->effects);
+		if (status == B_OK) {
+			status = set_window_effect_strength(
+				static_cast<enum window_effect_strength>(
+					info->effect_strength));
+		}
+		if (status != B_OK && result == B_OK)
+			result = status;
 	}
 
 	// The theme in use, before the broadcast: the R5 Modern controls read
@@ -867,9 +887,9 @@ set_theme(const theme_info* info, uint32 parts)
 	theme_info kept = now;
 	strlcpy(kept.name, info->name, sizeof(kept.name));
 	strlcpy(kept.base, info->base, sizeof(kept.base));
-	if ((parts & B_THEME_WINDOWS) != 0)
+	if ((applied & B_THEME_WINDOWS) != 0)
 		strlcpy(kept.decorator, info->decorator, sizeof(kept.decorator));
-	if ((parts & B_THEME_CONTROLS) != 0)
+	if ((applied & B_THEME_CONTROLS) != 0)
 		strlcpy(kept.control_look, info->control_look, sizeof(kept.control_look));
 	if ((parts & B_THEME_SCROLL_BARS) != 0) {
 		kept.modern_scroll_bars = info->modern_scroll_bars;
@@ -995,12 +1015,25 @@ find_theme(const char* name, theme_info* info)
 			return B_OK;
 	}
 
-	// a file is named after its theme; look in the files for another
-	// spelling
+	// a file is named after its theme; a file copied in by hand may have
+	// another file name, so look at the names inside the files too
 	BPath path;
 	if (theme_file_path(name, path) == B_OK
-		&& read_theme(path.Path(), info) == B_OK)
+		&& read_theme(path.Path(), info) == B_OK
+		&& strcasecmp(info->name, name) == 0)
 		return B_OK;
+
+	if (settings_path(kThemesDirectory, path) != B_OK)
+		return B_ENTRY_NOT_FOUND;
+	BDirectory directory(path.Path());
+	BEntry entry;
+	while (directory.GetNextEntry(&entry) == B_OK) {
+		BPath file;
+		if (entry.GetPath(&file) == B_OK
+			&& read_theme(file.Path(), info) == B_OK
+			&& strcasecmp(info->name, name) == 0)
+			return B_OK;
+	}
 	return B_ENTRY_NOT_FOUND;
 }
 

@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>R5 dark desktop</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+Mono&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font-family:inherit}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; position: relative; overflow: hidden; background: #17202f; font-family: 'Manrope', system-ui, sans-serif; color: #e6e9ef">
+  <svg aria-hidden="true" width="1280" height="800" viewBox="0 0 1280 800" style="position: absolute; left: 0; top: 0">
+    <path d="M0,245 C240,190 450,250 660,330 C880,410 1070,420 1280,380 L1280,800 L0,800 Z" fill="#1e2a3f"></path>
+    <path d="M0,450 C280,400 500,470 750,565 C960,640 1130,640 1280,600 L1280,800 L0,800 Z" fill="#24344f"></path>
+  </svg>
+
+  <div style="position: absolute; left: 10px; top: 12px; display: flex; gap: 22px">
+    <div style="width: 56px; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px"><span style="width: 40px; height: 40px; border-radius: 6px; background: linear-gradient(135deg, #e4e7ec, #9aa3b0)"></span>R5</div>
+    <div style="width: 56px; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px"><span style="width: 40px; height: 34px; margin-top: 6px; border-radius: 4px; background: linear-gradient(#f3c66a, #d99a2b)"></span>home</div>
+    <div style="width: 56px; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px"><span style="width: 32px; height: 40px; border-radius: 4px 4px 8px 8px; background: linear-gradient(#3fd19b, #12936a)"></span>Trash</div>
+  </div>
+
+  <div style="{{ s.deskbar }}">
+    <div style="height: 42px; display: flex; align-items: center; justify-content: center">
+      <svg aria-hidden="true" width="24" height="24" viewBox="0 0 100 100"><circle cx="50" cy="50" r="42" fill="#2f95ff"></circle><path d="M54,24 C42,24 37,32 43,42 C49,51 46,62 35,66 C26,69 27,77 41,77 C64,77 77,64 77,48 C77,33 66,24 54,24 Z" fill="#ffffff"></path></svg>
+    </div>
+    <div style="height: 1px; background: rgba(255,255,255,0.08)"></div>
+    <div style="height: 34px; display: flex; align-items: center; gap: 13px; padding: 0 14px; color: #e6e9ef">
+      <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 9h4l5-4v14l-5-4H4z"></path><path d="M17 9.5c1 1.4 1 3.6 0 5"></path></svg>
+      <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="3" width="12" height="18" rx="1"></rect><path d="M12 3v18"></path></svg>
+      <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 3l10 9-5 4.5V21l-5-4.5L17 12 7 3z"></path></svg>
+      <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="5"></rect><rect x="3" y="16" width="6" height="5"></rect><rect x="15" y="16" width="6" height="5"></rect><path d="M12 8v4M6 16v-4h12v4"></path></svg>
+      <span style="flex: 1"></span>
+      <span style="font-size: 12.5px; font-weight: 700">9:41 PM</span>
+    </div>
+    <div style="height: 1px; background: rgba(255,255,255,0.08)"></div>
+    <div style="padding: 6px">
+      <div style="height: 32px; display: flex; align-items: center; gap: 9px; padding: 0 10px; font-size: 13px; color: #c9cfd9"><span style="width: 18px; height: 18px; border-radius: 4px; background: #b98b4e"></span>Tracker</div>
+      <div style="height: 32px; display: flex; align-items: center; gap: 9px; padding: 0 10px 0 5px; border-radius: {{ s.rowRadius }}; background: rgba(255,255,255,0.07); font-size: 13px; font-weight: 700"><span style="width: 3px; height: 18px; border-radius: 2px; background: #2f95ff"></span><span style="width: 18px; height: 18px; border-radius: 4px; background: #e8c34a"></span>StyledEdit</div>
+      <div style="height: 32px; display: flex; align-items: center; gap: 9px; padding: 0 10px; font-size: 13px; color: #c9cfd9"><span style="width: 18px; height: 18px; border-radius: 4px; background: #5b6b84"></span>Terminal</div>
+    </div>
+  </div>
+
+  <div style="{{ s.tab1 }}">
+    <span style="{{ s.box }}"></span>
+    <span style="font-size: 13px; font-weight: 700">StyledEdit</span>
+    <span style="flex: 1"></span>
+    <span style="position: relative; width: 15px; height: 14px; margin-top: 1px">
+      <span style="{{ s.zoomA }}"></span>
+      <span style="{{ s.zoomB }}"></span>
+    </span>
+  </div>
+  <div style="{{ s.win1 }}">
+    <div style="height: 26px; display: flex; align-items: center; gap: 18px; padding: 0 12px; background: #262b34; border-bottom: 1px solid #3a404c; font-size: 12.5px; border-radius: {{ s.menuRadius }}"><span>File</span><span>Edit</span><span>Font</span><span>Document</span></div>
+    <div style="padding: 14px 18px; font-size: 13px; line-height: 1.6; color: #e6e9ef">Same soul. Fresh pixels.<br><br>Dark keeps the BeOS yellow tab, a little deeper so it does not glare. The window body is a dark slate, the edge line a soft white.<br><br>Text and lists use the light text color; the accent stays blue.</div>
+    <span aria-hidden="true" style="position: absolute; right: 4px; top: 32px; bottom: 8px; width: 10px; border-radius: 5px; background: #23272f"><span style="position: absolute; left: 2px; top: 4px; width: 6px; height: 120px; border-radius: 3px; background: #4f5664"></span></span>
+  </div>
+
+  <div style="{{ s.tab2 }}">
+    <span style="{{ s.box2 }}"></span>
+    <span style="font-size: 13px; font-weight: 700; color: #a3abb8">Sign in</span>
+  </div>
+  <div style="{{ s.win2 }}">
+    <label style="display: flex; flex-direction: column; gap: 7px; font-size: 12.5px; font-weight: 700">Password
+      <input type="password" value="secret" aria-label="Password" style="height: 34px; box-sizing: border-box; padding: 0 12px; border-radius: {{ s.ctlRadius }}; border: 1px solid #454c59; background: #15181e; color: #e6e9ef; font-family: inherit; font-size: 14px; outline: none">
+    </label>
+    <button style="height: 34px; border-radius: {{ s.ctlRadius }}; border: 1px solid #1f7ee0; background: #2f95ff; color: #ffffff; font-size: 13px; font-weight: 700">Sign in</button>
+    <div style="display: flex; gap: 10px">
+      <button style="flex: 1; height: 32px; border-radius: {{ s.ctlRadius }}; border: 1px solid #454c59; background: #2a2f39; color: #e6e9ef; font-size: 12.5px; font-weight: 600">Restart</button>
+      <button style="flex: 1; height: 32px; border-radius: {{ s.ctlRadius }}; border: 1px solid #454c59; background: #2a2f39; color: #e6e9ef; font-size: 12.5px; font-weight: 600">Shut down</button>
+    </div>
+    <div style="font-size: 12px; color: #a3abb8; text-align: center">{{ caption }}</div>
+  </div>
+
+  <div style="position: absolute; left: 24px; bottom: 22px; font-size: 12px; color: #a3abb8; max-width: 560px">{{ footer }}</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"modern":{"editor":"boolean","default":true},"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const m = this.props.modern ?? true;
+    const tabDark = 'linear-gradient(#f0c63a, #e8b923)';
+    const s = m ? {
+      deskbar: 'position: absolute; right: 14px; top: 14px; width: 214px; box-sizing: border-box; background: rgba(22,26,34,0.72); backdrop-filter: blur(18px) saturate(1.2); -webkit-backdrop-filter: blur(18px) saturate(1.2); border: 1px solid rgba(255,255,255,0.08); border-radius: 18px; box-shadow: 0 12px 30px rgba(0,0,0,0.45), 0 2px 6px rgba(0,0,0,0.30); overflow: hidden',
+      rowRadius: '9px', menuRadius: '14px 14px 0 0', ctlRadius: '8px',
+      tab1: 'position: absolute; left: 60px; top: 108px; width: 250px; height: 44px; box-sizing: border-box; border-radius: 14px 14px 0 0; background: ' + tabDark + '; border: 1px solid rgba(60,40,0,0.55); display: flex; align-items: flex-start; gap: 9px; padding: 9px 12px 0 12px; color: #1a1a1a',
+      box: 'width: 13px; height: 13px; box-sizing: border-box; margin-top: 1px; border-radius: 3px; background: rgba(255,255,255,0.45); border: 1px solid rgba(60,40,0,0.55)',
+      zoomA: 'position: absolute; left: 0; top: 0; width: 10px; height: 9px; box-sizing: border-box; border-radius: 2px; background: rgba(255,255,255,0.45); border: 1px solid rgba(60,40,0,0.55)',
+      zoomB: 'position: absolute; left: 5px; top: 5px; width: 10px; height: 9px; box-sizing: border-box; border-radius: 2px; background: rgba(255,255,255,0.45); border: 1px solid rgba(60,40,0,0.55)',
+      win1: 'position: absolute; left: 60px; top: 140px; width: 560px; height: 330px; box-sizing: border-box; background: #1f232b; border-radius: 14px; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.10), 0 0 0 1px rgba(0,0,0,0.55), 0 20px 44px rgba(0,0,0,0.50), 0 4px 10px rgba(0,0,0,0.35); overflow: hidden',
+      tab2: 'position: absolute; left: 700px; top: 268px; width: 240px; height: 42px; box-sizing: border-box; border-radius: 14px 14px 0 0; background: rgba(38,43,52,0.70); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid rgba(255,255,255,0.08); display: flex; align-items: flex-start; gap: 9px; padding: 9px 12px 0 12px',
+      box2: 'width: 13px; height: 13px; box-sizing: border-box; margin-top: 1px; border-radius: 3px; border: 1px solid #5d6573',
+      win2: 'position: absolute; left: 700px; top: 298px; width: 500px; height: 300px; box-sizing: border-box; background: rgba(31,35,43,0.70); backdrop-filter: blur(22px) saturate(1.2); -webkit-backdrop-filter: blur(22px) saturate(1.2); border-radius: 14px; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.10), 0 0 0 1px rgba(0,0,0,0.45), 0 18px 40px rgba(0,0,0,0.45); padding: 34px 40px; display: flex; flex-direction: column; gap: 16px'
+    } : {
+      deskbar: 'position: absolute; right: 14px; top: 14px; width: 214px; box-sizing: border-box; background: #1c2029; border: 1px solid #3a404c; border-radius: 0; overflow: hidden; clip-path: polygon(0 6px, 2px 6px, 2px 3px, 3px 3px, 3px 2px, 6px 2px, 6px 0, calc(100% - 6px) 0, calc(100% - 6px) 2px, calc(100% - 3px) 2px, calc(100% - 3px) 3px, calc(100% - 2px) 3px, calc(100% - 2px) 6px, 100% 6px, 100% calc(100% - 6px), calc(100% - 2px) calc(100% - 6px), calc(100% - 2px) calc(100% - 3px), calc(100% - 3px) calc(100% - 3px), calc(100% - 3px) calc(100% - 2px), calc(100% - 6px) calc(100% - 2px), calc(100% - 6px) 100%, 6px 100%, 6px calc(100% - 2px), 3px calc(100% - 2px), 3px calc(100% - 3px), 2px calc(100% - 3px), 2px calc(100% - 6px), 0 calc(100% - 6px))',
+      rowRadius: '0', menuRadius: '0', ctlRadius: '3px',
+      tab1: 'position: absolute; left: 60px; top: 114px; width: 220px; height: 27px; box-sizing: border-box; background: #e8b923; border: 1px solid #8a6a00; border-bottom: none; display: flex; align-items: center; gap: 9px; padding: 0 10px; color: #1a1a1a',
+      box: 'width: 12px; height: 12px; box-sizing: border-box; background: #f3d672; border: 1px solid #8a6a00',
+      zoomA: 'position: absolute; left: 0; top: 0; width: 10px; height: 9px; box-sizing: border-box; background: #f3d672; border: 1px solid #8a6a00',
+      zoomB: 'position: absolute; left: 5px; top: 5px; width: 10px; height: 9px; box-sizing: border-box; background: #f3d672; border: 1px solid #8a6a00',
+      win1: 'position: absolute; left: 60px; top: 140px; width: 560px; height: 330px; box-sizing: border-box; background: #1f232b; border: 1px solid #4a515e; overflow: hidden',
+      tab2: 'position: absolute; left: 700px; top: 272px; width: 200px; height: 27px; box-sizing: border-box; background: #2e333d; border: 1px solid #4a515e; border-bottom: none; display: flex; align-items: center; gap: 9px; padding: 0 10px',
+      box2: 'width: 12px; height: 12px; box-sizing: border-box; border: 1px solid #5d6573',
+      win2: 'position: absolute; left: 700px; top: 298px; width: 500px; height: 300px; box-sizing: border-box; background: #262b34; border: 1px solid #4a515e; padding: 34px 40px; display: flex; flex-direction: column; gap: 16px'
+    };
+    return {
+      s,
+      caption: m ? 'Glass only for a program that asks for it.' : 'Without effects or in Safe mode: the same colors, opaque.',
+      footer: m ? 'Default (R5 Modern), dark · GPU with shadow and frosted glass · Deskbar Default (R5), dark glass' : 'Default (R5), dark · without effects / Safe mode (CPU) · Deskbar opaque #1c2029 with stepped corners, no shadow'
+    };
+  }
+}
+</script>
+</body>
+</html>

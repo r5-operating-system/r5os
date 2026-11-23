@@ -67,9 +67,12 @@ static rgb_color
 blend(const rgb_color& from, const rgb_color& to, float amount)
 {
 	rgb_color color;
-	color.red = (uint8)roundf(from.red + (to.red - from.red) * amount);
-	color.green = (uint8)roundf(from.green + (to.green - from.green) * amount);
-	color.blue = (uint8)roundf(from.blue + (to.blue - from.blue) * amount);
+	color.red = static_cast<uint8>(roundf(from.red
+		+ (to.red - from.red) * amount));
+	color.green = static_cast<uint8>(roundf(from.green
+		+ (to.green - from.green) * amount));
+	color.blue = static_cast<uint8>(roundf(from.blue
+		+ (to.blue - from.blue) * amount));
 	color.alpha = 255;
 	return color;
 }
@@ -154,6 +157,44 @@ pressed_color(const rgb_color& face)
 	~/config/settings/r5/theme ("scroll_bars haiku"); a program reads it
 	when it loads the look, at start and on a live switch.
 */
+/*!	Haiku's contract: a frame or background insets \a rect only on the sides
+	in \a borders (a spinner's buttons and a tab view's plain border name
+	some sides only).
+*/
+static void
+inset_sides(BRect& rect, float left, float top, float right, float bottom,
+	uint32 borders)
+{
+	if ((borders & BControlLook::B_LEFT_BORDER) != 0)
+		rect.left += left;
+	if ((borders & BControlLook::B_TOP_BORDER) != 0)
+		rect.top += top;
+	if ((borders & BControlLook::B_RIGHT_BORDER) != 0)
+		rect.right -= right;
+	if ((borders & BControlLook::B_BOTTOM_BORDER) != 0)
+		rect.bottom -= bottom;
+}
+
+
+/*!	A face that is open on the sides not in \a borders: the shape grows past
+	those sides by \a grow, and the caller clips it back to the rect, so the
+	corners there are cut off and the line on that side is not drawn.
+*/
+static BRect
+open_sides(BRect rect, uint32 borders, float grow)
+{
+	if ((borders & BControlLook::B_LEFT_BORDER) == 0)
+		rect.left -= grow;
+	if ((borders & BControlLook::B_TOP_BORDER) == 0)
+		rect.top -= grow;
+	if ((borders & BControlLook::B_RIGHT_BORDER) == 0)
+		rect.right += grow;
+	if ((borders & BControlLook::B_BOTTOM_BORDER) == 0)
+		rect.bottom += grow;
+	return rect;
+}
+
+
 R5ModernControlLook::R5ModernControlLook()
 	:
 	HaikuControlLook(),
@@ -168,9 +209,16 @@ R5ModernControlLook::R5ModernControlLook()
 	void* handle = load_driver_settings(path);
 	if (handle == NULL)
 		return;
+	// the file's scroll bar style belongs to its controls: after a theme
+	// with other controls, R5 Modern chosen elsewhere (Appearance) keeps
+	// its own scroll bars
+	const char* controls = get_driver_parameter(handle, "controls", NULL,
+		NULL);
 	const char* style = get_driver_parameter(handle, "scroll_bars", NULL,
 		NULL);
-	fHaikuScrollBars = style != NULL && strcmp(style, "haiku") == 0;
+	fHaikuScrollBars = controls != NULL
+		&& strcmp(controls, "R5ModernControlLook") == 0
+		&& style != NULL && strcmp(style, "haiku") == 0;
 	unload_driver_settings(handle);
 }
 
@@ -296,7 +344,8 @@ R5ModernControlLook::_ButtonColors(BView* view, const rgb_color& base,
 */
 void
 R5ModernControlLook::_FillButtonInside(BView* view, const BRect& rect,
-	const BRect& updateRect, const rgb_color& base, uint32 flags)
+	const BRect& updateRect, const rgb_color& base, uint32 flags,
+	uint32 borders)
 {
 	if (!rect.IsValid() || !rect.Intersects(updateRect))
 		return;
@@ -310,11 +359,13 @@ R5ModernControlLook::_FillButtonInside(BView* view, const BRect& rect,
 	inset = ceilf(inset * scale());
 	float r = std::max(0.0f, radius(7) - inset);
 
+	BRect shape = open_sides(rect, borders, r + 1);
 	view->PushState();
+	view->ClipToRect(rect);
 	view->SetDrawingMode(B_OP_ALPHA);
 	view->SetHighColor(fill);
-	view->FillRoundRect(BRect(rect.left, rect.top, rect.right + 1,
-		rect.bottom + 1), r, r);
+	view->FillRoundRect(BRect(shape.left, shape.top, shape.right + 1,
+		shape.bottom + 1), r, r);
 	view->PopState();
 }
 
@@ -345,13 +396,10 @@ R5ModernControlLook::DrawButtonFrame(BView* view, BRect& rect,
 	const rgb_color& base, const rgb_color& background, uint32 flags,
 	uint32 borders)
 {
+	float left, top, right, bottom;
+	GetFrameInsets(B_BUTTON_FRAME, flags, left, top, right, bottom);
 	if (!ShouldDraw(view, rect, updateRect)) {
-		float left, top, right, bottom;
-		GetFrameInsets(B_BUTTON_FRAME, flags, left, top, right, bottom);
-		rect.left += left;
-		rect.top += top;
-		rect.right -= right;
-		rect.bottom -= bottom;
+		inset_sides(rect, left, top, right, bottom, borders);
 		return;
 	}
 
@@ -360,16 +408,15 @@ R5ModernControlLook::DrawButtonFrame(BView* view, BRect& rect,
 	if (_ButtonColors(view, base, flags, fill, line)) {
 		// the frame owns the outer pixel: Haiku's outer recessed edge
 		BRect face(rect);
-		face.InsetBy(1, 1);
-		_DrawFace(view, face, radius(7) - 1, fill, line);
+		inset_sides(face, 1, 1, 1, 1, borders);
+		view->PushState();
+		view->ClipToRect(face);
+		_DrawFace(view, open_sides(face, borders, radius(7) + 1),
+			radius(7) - 1, fill, line);
+		view->PopState();
 	}
 
-	float left, top, right, bottom;
-	GetFrameInsets(B_BUTTON_FRAME, flags, left, top, right, bottom);
-	rect.left += left;
-	rect.top += top;
-	rect.right -= right;
-	rect.bottom -= bottom;
+	inset_sides(rect, left, top, right, bottom, borders);
 }
 
 
@@ -404,14 +451,11 @@ R5ModernControlLook::DrawButtonBackground(BView* view, BRect& rect,
 	const rgb_color& base, uint32 flags, uint32 borders,
 	orientation orientation)
 {
-	_FillButtonInside(view, rect, updateRect, base, flags);
+	_FillButtonInside(view, rect, updateRect, base, flags, borders);
 
 	float left, top, right, bottom;
 	GetBackgroundInsets(B_BUTTON_BACKGROUND, flags, left, top, right, bottom);
-	rect.left += left;
-	rect.top += top;
-	rect.right -= right;
-	rect.bottom -= bottom;
+	inset_sides(rect, left, top, right, bottom, borders);
 }
 
 
@@ -441,7 +485,7 @@ R5ModernControlLook::DrawButtonWithPopUpBackground(BView* view, BRect& rect,
 	const rgb_color& base, uint32 flags, uint32 borders,
 	orientation orientation)
 {
-	_FillButtonInside(view, rect, updateRect, base, flags);
+	_FillButtonInside(view, rect, updateRect, base, flags, borders);
 
 	BRect marker(rect);
 	marker.left = marker.right - ComposeSpacing(kButtonPopUpIndicatorWidth);
@@ -510,26 +554,22 @@ R5ModernControlLook::_DrawField(BView* view, BRect& rect,
 	else if ((flags & B_FOCUSED) != 0)
 		line = accent_color();
 
+	view->PushState();
+	view->SetHighColor(background);
+	view->StrokeRect(rect);
+	if ((flags & B_FOCUSED) != 0 && (flags & B_DISABLED) == 0
+		&& inset > 0) {
+		// the soft accent ring of the mockup's focused field (A3), on the
+		// outer pixel the face leaves free
+		view->SetDrawingMode(B_OP_ALPHA);
+		view->SetHighColor(blend(background, accent_color(), 0.25f));
+		view->StrokeRoundRect(rect, radius(7), radius(7));
+	}
+	view->PopState();
+
 	BRect face(rect);
 	face.InsetBy(inset, inset);
 	_DrawFace(view, face, radius(7) - inset, fill, line);
-
-	if ((flags & B_FOCUSED) != 0 && (flags & B_DISABLED) == 0
-		&& inset > 0) {
-		// the soft accent ring of the mockup's focused field (A3)
-		rgb_color ring = blend(background, accent_color(), 0.18f);
-		view->PushState();
-		view->SetHighColor(ring);
-		BRect outer(rect.left, rect.top, rect.right + 1, rect.bottom + 1);
-		BRegion clip(outer);
-		BRect inner(outer);
-		inner.InsetBy(inset, inset);
-		clip.Exclude(inner);
-		view->ConstrainClippingRegion(&clip);
-		view->SetDrawingMode(B_OP_ALPHA);
-		view->FillRoundRect(outer, radius(7), radius(7));
-		view->PopState();
-	}
 }
 
 
@@ -745,14 +785,9 @@ R5ModernControlLook::DrawCheckBox(BView* view, BRect& rect,
 		view->PushState();
 		view->SetDrawingMode(B_OP_ALPHA);
 		view->SetHighColor(blend(background, accent_color(), 0.35f));
-		BRect ring(rect.left - 1, rect.top - 1, rect.right + 2,
-			rect.bottom + 2);
-		BRegion clip(ring);
-		BRect inner(ring);
-		inner.InsetBy(1, 1);
-		clip.Exclude(inner);
-		view->ConstrainClippingRegion(&clip);
-		view->FillRoundRect(ring, radius(4) + 1, radius(4) + 1);
+		BRect ring(rect);
+		ring.InsetBy(-1, -1);
+		view->StrokeRoundRect(ring, radius(4) + 1, radius(4) + 1);
 		view->PopState();
 	}
 
@@ -992,7 +1027,8 @@ R5ModernControlLook::DrawScrollBarThumb(BView* view, BRect& rect,
 	rgb_color thumb = base;
 	// a colour set whose thumb colour is the panel's (Haiku's factory
 	// colours) still gets a visible thumb
-	if (abs((int)thumb.Brightness() - (int)panel.Brightness()) < 24)
+	if (abs(static_cast<int>(thumb.Brightness())
+			- static_cast<int>(panel.Brightness())) < 24)
 		thumb = blend(panel, panel.IsLight() ? kInk : kWhite, 0.25f);
 	if ((flags & B_DISABLED) != 0)
 		thumb = blend(thumb, track_color(panel), 0.6f);
@@ -1024,6 +1060,15 @@ R5ModernControlLook::DrawScrollViewFrame(BView* view, BRect& rect,
 	BRect horizontalScrollBarFrame, const rgb_color& base,
 	border_style borderStyle, uint32 flags, uint32 borders)
 {
+	if ((borders & B_ALL_BORDERS) != B_ALL_BORDERS) {
+		// a scroll view that shares sides with its neighbours keeps
+		// Haiku's square frame
+		HaikuControlLook::DrawScrollViewFrame(view, rect, updateRect,
+			verticalScrollBarFrame, horizontalScrollBarFrame, base,
+			borderStyle, flags, borders);
+		return;
+	}
+
 	BRect corner(rect.right, rect.bottom, rect.right, rect.bottom);
 	if (horizontalScrollBarFrame.IsValid())
 		corner.left = horizontalScrollBarFrame.right + 1;
@@ -1052,16 +1097,11 @@ R5ModernControlLook::DrawScrollViewFrame(BView* view, BRect& rect,
 	}
 
 	view->PushState();
+	view->SetHighColor(base);
+	view->StrokeRect(rect);
 	view->SetDrawingMode(B_OP_ALPHA);
-	BRegion clip(BRect(rect.left, rect.top, rect.right + 1, rect.bottom + 1));
-	BRect inner(rect);
-	inner.InsetBy(1, 1);
-	clip.Exclude(BRect(inner.left, inner.top, inner.right + 1,
-		inner.bottom + 1));
-	view->ConstrainClippingRegion(&clip);
 	view->SetHighColor(line);
-	view->FillRoundRect(BRect(rect.left, rect.top, rect.right + 1,
-		rect.bottom + 1), radius(3), radius(3));
+	view->StrokeRoundRect(rect, radius(3), radius(3));
 	view->PopState();
 	rect.InsetBy(1, 1);
 
@@ -1280,7 +1320,8 @@ R5ModernControlLook::DrawActiveTab(BView* view, BRect& rect,
 
 	rgb_color fill = base;
 	draw_tab(view, rect, fill, line_color(base), side, true);
-	rect.InsetBy(1, 1);
+	// the label goes where Haiku's goes
+	inset_sides(rect, 3, 3, 3, 3, borders);
 }
 
 
@@ -1295,7 +1336,7 @@ R5ModernControlLook::DrawInactiveTab(BView* view, BRect& rect,
 
 	// #e6eaf0 under #ffffff, #20242c under #262b34 (A1, A2)
 	rgb_color fill = base.IsLight() ? blend(base, kInk, 0.06f)
-		: blend(base, kInk, 0.25f);
+		: blend(base, make_color(0, 0, 0), 0.17f);
 	if ((flags & B_HOVER) != 0)
 		fill = blend(fill, base, 0.5f);
 	rgb_color background = view->LowColor();
@@ -1309,7 +1350,22 @@ R5ModernControlLook::DrawInactiveTab(BView* view, BRect& rect,
 	else if (side == B_BOTTOM_BORDER)
 		tab.bottom -= 1;
 	draw_tab(view, tab, fill, line_color(base), side, false);
-	rect.InsetBy(1, 1);
+	// the label goes where Haiku's goes: 4 away from the open side, then 2
+	switch (side) {
+		case B_TOP_BORDER:
+			rect.top += 4;
+			break;
+		case B_BOTTOM_BORDER:
+			rect.bottom -= 4;
+			break;
+		case B_LEFT_BORDER:
+			rect.left += 4;
+			break;
+		default:
+			rect.right -= 4;
+			break;
+	}
+	inset_sides(rect, 2, 2, 2, 2, borders);
 }
 
 
@@ -1326,14 +1382,21 @@ R5ModernControlLook::DrawBorder(BView* view, BRect& rect,
 
 	rgb_color line = (flags & B_FOCUSED) != 0
 		? accent_color() : line_color(base);
-	if (borderStyle == B_FANCY_BORDER) {
-		view->SetHighColor(base);
-		view->StrokeRect(rect);
-		rect.InsetBy(1, 1);
+	rgb_color colors[2] = { base, line };
+	int32 first = borderStyle == B_FANCY_BORDER ? 0 : 1;
+	for (int32 i = first; i < 2; i++) {
+		view->BeginLineArray(4);
+		if ((borders & B_LEFT_BORDER) != 0)
+			view->AddLine(rect.LeftTop(), rect.LeftBottom(), colors[i]);
+		if ((borders & B_TOP_BORDER) != 0)
+			view->AddLine(rect.LeftTop(), rect.RightTop(), colors[i]);
+		if ((borders & B_RIGHT_BORDER) != 0)
+			view->AddLine(rect.RightTop(), rect.RightBottom(), colors[i]);
+		if ((borders & B_BOTTOM_BORDER) != 0)
+			view->AddLine(rect.LeftBottom(), rect.RightBottom(), colors[i]);
+		view->EndLineArray();
+		inset_sides(rect, 1, 1, 1, 1, borders);
 	}
-	view->SetHighColor(line);
-	view->StrokeRect(rect);
-	rect.InsetBy(1, 1);
 }
 
 
@@ -1363,14 +1426,11 @@ R5ModernControlLook::DrawGroupFrame(BView* view, BRect& rect,
 		shape.right += r;
 
 	view->PushState();
-	BRegion clip(BRect(rect.left, rect.top, rect.right + 1, rect.bottom + 1));
-	BRect inner(shape);
-	inner.InsetBy(1, 1);
-	clip.Exclude(inner);
-	view->ConstrainClippingRegion(&clip);
+	view->ClipToRect(rect);
 	view->SetDrawingMode(B_OP_ALPHA);
 	view->SetHighColor(line_color(base));
-	view->FillRoundRect(shape, r, r);
+	view->StrokeRoundRect(BRect(shape.left, shape.top, shape.right - 1,
+		shape.bottom - 1), r, r);
 	view->PopState();
 
 	float left, top, right, bottom;
@@ -1394,15 +1454,22 @@ R5ModernControlLook::DrawTextControlBorder(BView* view, BRect& rect,
 	const BRect& updateRect, const rgb_color& base, uint32 flags,
 	uint32 borders)
 {
-	if (ShouldDraw(view, rect, updateRect))
-		_DrawField(view, rect, updateRect, flags, 1);
+	if (ShouldDraw(view, rect, updateRect)) {
+		if ((borders & B_ALL_BORDERS) == B_ALL_BORDERS)
+			_DrawField(view, rect, updateRect, flags, 1);
+		else {
+			BRect field(rect);
+			view->PushState();
+			view->ClipToRect(rect);
+			field = open_sides(field, borders, radius(7) + 1);
+			_DrawField(view, field, updateRect, flags, 1);
+			view->PopState();
+		}
+	}
 
 	float left, top, right, bottom;
 	GetFrameInsets(B_TEXT_CONTROL_FRAME, flags, left, top, right, bottom);
-	rect.left += left;
-	rect.top += top;
-	rect.right -= right;
-	rect.bottom -= bottom;
+	inset_sides(rect, left, top, right, bottom, borders);
 }
 
 

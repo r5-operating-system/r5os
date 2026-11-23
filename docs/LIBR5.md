@@ -474,6 +474,45 @@ MyView::Draw(BRect)
 
 Link `libr5ui.so`. `r5-effects-test` (in `/system/bin`) is a small user of every call: `r5-effects-test shadow off`, `r5-effects-test strength glassy`, `r5-effects-test glass 30`.
 
+## Themes
+
+Added 23 Nov 2026 (`docs/design/THEMING.md`). The header is `<Themes.h>`, namespace `BAppearanceKit`, in `libr5ui.so`. A theme is a saved combination of parts that exist on their own (the decorator, the control look, the scroll bars, the Deskbar style, the mode with an accent, the window effects); applying one sets each part the way Appearance and Desktop and Deskbar do. There is no drawing engine. A `theme_info` struct with free functions, in the style of Haiku's `menu_info` and `scroll_bar_info`; the struct has reserved space at the end. Nothing is in `libbe`.
+
+| Call | What it does |
+|---|---|
+| `get_theme(info)` | The theme in use. Every part is read from the system (another page or program may have changed it); `~/config/settings/r5/theme`, written by `set_theme()`, adds the theme's name and base, its accent (while the mode is the same) and the R5 Modern scroll bar style (while the controls are the same). Before any theme was applied, the name is the built-in theme the system matches, else "R5" |
+| `set_theme(info, parts)` | Applies `parts` (`B_THEME_WINDOWS`, `B_THEME_CONTROLS`, `B_THEME_SCROLL_BARS`, `B_THEME_DESKBAR`, `B_THEME_COLORS`, `B_THEME_EFFECTS`, `B_THEME_ALL_PARTS`) at once and keeps `info` as the theme in use. The colours are set when the colours or the controls change. When the controls or the scroll bar style change, every running program takes the new look without a restart (below). `B_BAD_VALUE` for a bad name; otherwise the first error of a part (the other parts are still applied, and a part that failed is not kept as the one in use). An add-on name with a `/` is refused, so a theme file can only name add-ons in the add-ons folders |
+| `count_themes()`, `get_theme_at(index, info)` | The built-in themes first (R5 Modern, R5, Classic (Haiku)), then the saved ones by name |
+| `find_theme(name, info)` | A built-in or saved theme by name; `B_ENTRY_NOT_FOUND` |
+| `is_built_in_theme(name)` | True for the three built-in names, in any case |
+| `save_theme(info, parts)` | Writes `parts` of `info` to `~/config/settings/r5/themes/<info->name>`, replacing a saved theme of that name. `B_NOT_ALLOWED` for a built-in name; `B_BAD_VALUE` for an empty name, one with `/`, `"` or `\`, or no parts |
+| `remove_theme(name)` | Deletes a saved theme; `B_NOT_ALLOWED` for a built-in one |
+| `theme_matches(theme, base)` | True when `theme` shows the same as `base` for every part `base` holds; the Theme page shows "(changed)" when it is false |
+| `get_theme_colors(info, colors)` | The `ui_color` set of a theme's mode, accent and controls, as `set_ui_colors()` takes it. Every colour a theme sets is in it, so one set replaces another completely; the desktop colour is not |
+| `count_theme_accents()`, `theme_accent_at(index, mode)`, `theme_accent_name(index)` | The accent swatches of the Theme page (Blue, Teal, Purple, Pink, Orange, Graphite), a little lighter in dark mode |
+
+`theme_info` fields: `name`, `base` (the theme it started from), `parts`, `decorator` (the add-on's file name, `""` for Haiku's built-in Classic (Haiku)), `control_look` (the add-on's file name, `""` for Haiku's controls), `modern_scroll_bars`, `double_arrows`, `deskbar_style` (`B_THEME_DESKBAR_R5`, `B_THEME_DESKBAR_CLASSIC`), `deskbar_layout` (`B_THEME_DESKBAR_VERTICAL`, `_COMPACT`, `_HORIZONTAL`), `deskbar_rounded`, `deskbar_floating`, `mode` (`B_THEME_LIGHT`, `B_THEME_DARK`), `accent` (alpha 0: the colour set's own), `effects`, `effect_strength`.
+
+The file is driver settings text (`name`, `base`, `windows`, `controls`, `scroll_bars`, `arrows`, `deskbar_style`, `deskbar_layout`, `deskbar_rounded`, `deskbar_floating`, `mode`, `accent`, `shadow`, `glass`, `animations`, `strength`); a key that is not there is a part the theme does not hold.
+
+Live switching: after it set the control look, `set_theme()` sends `B_COLORS_UPDATED` with an int64 `"r5:control_look"` to every program (`BRoster::Broadcast()`). R5's `BWindow` loads the control look app_server names when it sees a new value, and draws again. The previous look stays in memory until the program quits. A program does not have to do anything.
+
+Dark mode for a program: use `ui_color()` (and `SetViewUIColor()`, `SetHighUIColor()`) and `be_control_look`, and avoid fixed colours; where a colour of its own is needed, decide light or dark with `ui_color(B_PANEL_BACKGROUND_COLOR).IsDark()`. The Settings pages and the controls use `ui_color`; Deskbar's Default (R5) style and the R5 decorators decide with `IsDark()` and then use the mockup's own light or dark values.
+
+```cpp
+#include <Themes.h>
+
+using namespace BAppearanceKit;
+
+theme_info theme;
+if (find_theme("R5 Modern", &theme) == B_OK) {
+	theme.mode = B_THEME_DARK;
+	set_theme(&theme, theme.parts | B_THEME_COLORS);
+}
+```
+
+Link `libr5ui.so`. `r5-effects-test theme list|get`, `theme <name> [light|dark]`, `theme mode light|dark` use these calls.
+
 ## Level glyphs
 
 `libr5icons.so`, `<R5Icons.h>`. The full contract with the pictures is in `docs/ICONS.md` ("Level glyphs"); the R5Book page is `docs/r5book/icons-kit.html#r5_level_glyph`.

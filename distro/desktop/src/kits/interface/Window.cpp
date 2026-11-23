@@ -243,7 +243,7 @@ r5_reload_control_look(const BMessage* message)
 			BControlLook* (*instantiate)(image_id);
 			if (image >= 0 && get_image_symbol(image,
 					"instantiate_control_look", B_SYMBOL_TYPE_TEXT,
-					(void**)&instantiate) == B_OK) {
+					reinterpret_cast<void**>(&instantiate)) == B_OK) {
 				look = instantiate(image);
 			}
 			if (look == NULL && image >= 0)
@@ -1460,8 +1460,11 @@ FrameMoved(origin);
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-			if (r5_reload_control_look(message))
+			if (r5_reload_control_look(message)) {
+				// another look may have other sizes (Be, Flat)
+				InvalidateLayout(true);
 				fTopView->Invalidate();
+			}
 // SPDX-SnippetEnd
 			fTopView->_ColorsUpdated(message);
 			target->MessageReceived(message);
