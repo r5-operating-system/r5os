@@ -24,7 +24,8 @@
 
 #include "Sidebar.h"
 
-#include <ControlLook.h>
+#include "R5ModernStyle.h"
+
 #include <InterfaceDefs.h>
 #include <Message.h>
 #include <ScrollView.h>
@@ -118,23 +119,6 @@ BSidebar::Archive(BMessage* archive, bool deep) const
 }
 
 
-/*!	True while the control look is R5 Modern, or another look that asks for
-	the R5 style: it returns more than Haiku's 1 for B_MENU_BACKGROUND
-	(docs/LIBR5.md, "Following the controls"). Haiku's and R5's controls
-	return 1.
-*/
-static bool
-r5_modern_controls()
-{
-	if (be_control_look == NULL)
-		return false;
-	float left = 1, top = 1, right = 1, bottom = 1;
-	be_control_look->GetBackgroundInsets(BControlLook::B_MENU_BACKGROUND, 0,
-		left, top, right, bottom);
-	return left > 1;
-}
-
-
 void
 BSidebar::Draw(BRect updateRect)
 {
@@ -180,7 +164,7 @@ BSidebar::Draw(BRect updateRect)
 		if (haveGroup && item != NULL && item->fLast) {
 			float radius = be_plain_font->Size() * 0.25f;
 			BRect block(paint);
-			if (r5_modern_controls()) {
+			if (Private::r5_modern_controls()) {
 				// R5 Modern (mockups A1, A2; owner's S3): the open category
 				// inside the list, 6 from the sides, round 8; the rows stay
 				// where they are

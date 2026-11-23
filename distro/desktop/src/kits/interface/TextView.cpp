@@ -4718,8 +4718,17 @@ BTextView::_DrawLines(int32 startLine, int32 endLine, int32 startOffset,
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 			if (fSelectable && r5_dark_selection(this, fOffscreen)) {
+				// only over the lines drawn (and erased) now, so the alpha
+				// never lands twice on a line (external review of the fixes)
 				BRegion selection;
 				GetTextRegion(fSelStart, fSelEnd, &selection);
+				BRect drawn(clipRect);
+				drawn.top = std::max(drawn.top,
+					(*fLines)[startLine]->origin + fTextRect.top);
+				drawn.bottom = std::min(drawn.bottom,
+					(*fLines)[endLine + 1]->origin + fTextRect.top - 1);
+				BRegion lines(drawn);
+				selection.IntersectWith(&lines);
 				rgb_color accent = ui_color(B_CONTROL_HIGHLIGHT_COLOR);
 				accent.alpha = 115;
 				PushState();

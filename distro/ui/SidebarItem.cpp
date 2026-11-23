@@ -24,8 +24,9 @@
 
 #include "SidebarItem.h"
 
+#include "R5ModernStyle.h"
+
 #include <Bitmap.h>
-#include <ControlLook.h>
 #include <Font.h>
 #include <InterfaceDefs.h>
 #include <Mime.h>
@@ -217,23 +218,6 @@ BSidebarItem::Update(BView* owner, const BFont* font)
 }
 
 
-/*!	True while the control look is R5 Modern, or another look that asks for
-	the R5 style: it returns more than Haiku's 1 for B_MENU_BACKGROUND
-	(docs/LIBR5.md, "Following the controls"). Haiku's and R5's controls
-	return 1.
-*/
-static bool
-r5_modern_controls()
-{
-	if (be_control_look == NULL)
-		return false;
-	float left = 1, top = 1, right = 1, bottom = 1;
-	be_control_look->GetBackgroundInsets(BControlLook::B_MENU_BACKGROUND, 0,
-		left, top, right, bottom);
-	return left > 1;
-}
-
-
 void
 BSidebarItem::DrawItem(BView* owner, BRect frame, bool complete)
 {
@@ -267,7 +251,7 @@ BSidebarItem::DrawItem(BView* owner, BRect frame, bool complete)
 		// (owner's S3); the text stays where it is.
 		BRect mark = row.InsetByCopy(padX, 0);
 		float corner = u * 4.0f;
-		if (r5_modern_controls()) {
+		if (Private::r5_modern_controls()) {
 			if (fInGroup)
 				mark = row.InsetByCopy(padX + roundf(u * 4.0f), 0);
 			corner = roundf(be_plain_font->Size() * 6 / 12);

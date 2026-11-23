@@ -417,6 +417,14 @@ Two fresh reviews of the fixes found: every shape of the R5 Modern look was draw
 - S2: R5 Modern tabs stand 1 in at the start and 2 at the end, a gap of 3 between two tabs; the line under the inactive tabs runs on under the gap.
 - S3: the Settings sidebar with R5 Modern: the open category block is 6 in from the list's sides with corners of 8, and the selected row a pill 4 further in, corners of 6. The list and Search stay 200 wide; the rows and their text do not move. R5 and Classic unchanged. libr5ui, `docs/LIBR5.md` "Following the controls".
 
+### External review of the commits e7a190231d..b114dedc7f (23 Nov 2026)
+
+- 2.1: the sidebar frame's line is stroked on the frame's own pixels (`StrokeRoundRect(frame)`), so the right and bottom lines show. The corner wedges are kept as they are: `BShape::ArcTo()`'s flag is `counterClockWise`, and from the top point to the left point round the corner's centre is counter-clockwise on the screen (the earlier review checked Painter's mapping); the QEMU crop of the sidebar shows it.
+- 2.2: the dark selection is laid only over the lines drawn now (intersected with them), so its alpha never lands twice; `fOffscreen` is never set in this tree (`USE_DOUBLEBUFFERING` 0).
+- 2.3: the compositor no longer reads the settings: the desktop thread sets a dark-glass flag (`Compositor::SetDarkGlass()`) at start and after a colour change, and `_RecordGlass()` reads it atomically.
+- 2.4: checked on the QEMU crops of the dark Deskbar.
+- 2.5: one helper, `R5ModernStyle.h` in `distro/ui` (inside libr5ui only, not installed).
+
 ### Owner's review of the dark glass Deskbar (23 Nov 2026)
 
 - Dark halo round text and the clock: on glass the Deskbar draws its labels, counts and clock with `B_OP_ALPHA` and `B_ALPHA_COMPOSITE` (`R5Deskbar::SetTextMode()`), so a letter's antialiased edge keeps its coverage instead of being mixed with the opaque surface colour. Opaque surfaces (no GPU, Safe mode) draw with `B_OP_OVER` as before.

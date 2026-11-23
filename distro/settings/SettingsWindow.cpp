@@ -477,8 +477,7 @@ private:
 		PushState();
 		SetDrawingMode(B_OP_ALPHA);
 		SetHighColor(line);
-		StrokeRoundRect(BRect(frame.left + 0.5f, frame.top + 0.5f,
-			frame.right + 0.5f, frame.bottom + 0.5f), r, r);
+		StrokeRoundRect(frame, r, r);
 		PopState();
 	}
 };

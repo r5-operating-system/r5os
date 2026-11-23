@@ -53,6 +53,7 @@ FILES = (
     "CardStrip.h",
     "Themes.cpp",
     "Themes.h",
+    "R5ModernStyle.h",
 )
 
 

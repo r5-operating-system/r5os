@@ -9,8 +9,6 @@
 
 #include "CompositorPrivate.h"
 
-#include "DesktopSettings.h"
-
 
 //	#pragma mark - effects (M11 step 4, decision 16)
 
@@ -642,11 +640,8 @@ Compositor::_RecordGlass(Layer* layer, const BRegion& damage, uint64 frame,
 	// 23 Nov 2026; mockup B1). The glass of pixels with their own alpha is
 	// unchanged.
 	int32 fixedSeeThrough = geometry.seeThrough;
-	{
-		DesktopSettings settings(fDesktop);
-		if (settings.UIColor(B_PANEL_BACKGROUND_COLOR).IsDark())
-			fixedSeeThrough /= 2;
-	}
+	if (atomic_get(&fDarkGlass) != 0)
+		fixedSeeThrough /= 2;
 	vk->vkCmdBindPipeline(vk->commands, VK_PIPELINE_BIND_POINT_COMPUTE,
 		vk->effectsPipeline);
 	// M13 step 2: a window that Skia draws is read from its image

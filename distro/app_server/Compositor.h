@@ -104,6 +104,10 @@ public:
 			void				SetInitialEffects(uint32 effects,
 									int32 strength);
 			void				SetEffects(uint32 effects, int32 strength);
+	// Dark glass shows half the blur (a theme's dark colours). Set by the
+	// desktop thread at start and when the colours change, so the
+	// compositor thread never takes the settings lock.
+			void				SetDarkGlass(bool dark);
 	// Whether a glass view's background is drawn with alpha 0 now.
 			bool				GlassActive() const;
 	// M13 step 4 (owner, 17 Nov 2026): on Lavapipe a resize shows only the
@@ -395,6 +399,7 @@ private:
 			// compose thread once per frame.
 	volatile uint32				fEffects;
 	volatile int32				fStrength;
+	volatile int32				fDarkGlass;
 			BRegion				fGenericDamage;
 			bool				fEffectsLogged;
 
