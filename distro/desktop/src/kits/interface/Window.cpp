@@ -251,8 +251,11 @@ r5_reload_control_look(const BMessage* message)
 		}
 		if (look == NULL)
 			look = new(std::nothrow) BPrivate::HaikuControlLook();
+		// a release store: another window thread that reads the pointer
+		// sees the look fully built (external review 2.1; the readers are
+		// Haiku's plain loads, ordered by the data dependency)
 		if (look != NULL)
-			be_control_look = look;
+			__atomic_store_n(&be_control_look, look, __ATOMIC_RELEASE);
 	}
 	pthread_mutex_unlock(&sR5ControlLookLock);
 	return true;

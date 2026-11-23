@@ -1032,7 +1032,8 @@ R5ModernDecorator::_DrawTabBackground(Decorator::Tab* tab, BRect rect)
 /*!	A button of board 4 (finish "glass", square corners). Active: white at
 	55 % (the zoom's back square 35 %), a line of the tab's dark yellow at
 	35 % and a white highlight at 90 % under the top line. Inactive: a line
-	of black at 20 % and white at 60 %. Pressed (not on the board): less
+	of black at 20 % and white at 60 %; dark, a line of white at 25 % and
+	white at 12 %. Pressed (not on the board): less
 	white, a stronger line, no highlight. Everything is blended against the
 	tab here, so the button is opaque in every mode.
 */
@@ -1065,11 +1066,14 @@ R5ModernDecorator::_DrawGlassButton(Decorator::Tab* tab, BRect rect,
 	bool dark = _Dark();
 	rgb_color line = active ? mix_color(colors[COLOR_TAB], kBlack,
 			dark ? 0.75f : 0.65f)
-		: kBlack;
-	float lineAlpha = active ? (dark ? 0.55f : 0.35f) : 0.20f;
-	float fill = active ? (dark ? 0.45f : 0.55f) : 0.60f;
-	float backFill = active ? 0.35f : 0.60f;
-	float highlight = 0.90f;
+		: (dark ? kWhite : kBlack);
+	float lineAlpha = active ? (dark ? 0.55f : 0.35f)
+		: (dark ? 0.25f : 0.20f);
+	// an inactive dark tab is dark: a faint light button on it, not white
+	// at 60 % (external review 1.6)
+	float fill = active ? (dark ? 0.45f : 0.55f) : (dark ? 0.12f : 0.60f);
+	float backFill = active ? 0.35f : (dark ? 0.08f : 0.60f);
+	float highlight = !active && dark ? 0.15f : 0.90f;
 	if (pressed) {
 		lineAlpha += 0.20f;
 		fill = 0.25f;

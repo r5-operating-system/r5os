@@ -278,10 +278,9 @@ CountColor()
 rgb_color
 FrontColor()
 {
-	// dark: the dark accent #2f95ff (mockup B1)
-	if (Dark())
-		return make_color(0x2f, 0x95, 0xff);
-	return make_color(0x1d, 0x7b, 0xf5);
+	// the theme's accent (#0084ff, dark #2f95ff with the default Blue;
+	// external review 2.2: Teal, Purple and the others follow)
+	return ui_color(B_CONTROL_HIGHLIGHT_COLOR);
 }
 
 
@@ -293,9 +292,14 @@ EdgeColor()
 	// the border over the background)
 	// dark: rgba(255,255,255,.08) over #161a22 on the glass, #3a404c
 	// without GPU (mockup B1/B2)
-	if (Dark())
-		return Glass() ? make_color(0x29, 0x2d, 0x34)
-			: make_color(0x3a, 0x40, 0x4c);
+	if (Dark()) {
+		// on the glass a light hairline, white at 10 % (as the R5 Modern
+		// decorator's dark glass edge; external review 1.5): drawn with
+		// B_OP_ALPHA, and the compositor's edge line keeps the alpha
+		if (Glass())
+			return make_color(255, 255, 255, 26);
+		return make_color(0x3a, 0x40, 0x4c);
+	}
 	if (Glass())
 		return make_color(238, 243, 251);
 	return make_color(0x9f, 0xb0, 0xc8);

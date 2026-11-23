@@ -142,7 +142,7 @@ public:
 		BRect bounds = Bounds();
 		rgb_color color = Floating() ? EdgeColor() : EdgeLineColor();
 		PushState();
-		SetDrawingMode(B_OP_COPY);
+		SetDrawingMode(color.alpha < 255 ? B_OP_ALPHA : B_OP_COPY);
 		SetHighColor(color);
 		if (edges.left > 0)
 			StrokeLine(bounds.LeftTop(), bounds.LeftBottom());
@@ -1211,8 +1211,10 @@ TDeskbarMenu::DrawBackground(BRect updateRect)
 	// the glass panel: its own colour, and the edge where it is square
 	if (ButtonRadius() <= 0) {
 		PushState();
-		SetHighColor(Glass() || Dark() ? EdgeColor()
-			: make_color(0x9f, 0xb0, 0xc8));
+		rgb_color color = Glass() || Dark() ? EdgeColor()
+			: make_color(0x9f, 0xb0, 0xc8);
+		SetDrawingMode(color.alpha < 255 ? B_OP_ALPHA : B_OP_COPY);
+		SetHighColor(color);
 		StrokeRect(Bounds());
 		PopState();
 	}

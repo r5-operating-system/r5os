@@ -248,7 +248,12 @@ BSidebarItem::DrawItem(BView* owner, BRect frame, bool complete)
 		BRect mark = row.InsetByCopy(padX, 0);
 		owner->SetHighColor(ui_color(B_STATUS_BAR_COLOR));
 		owner->FillRoundRect(mark, u * 4.0f, u * 4.0f);
+		// light text: the list colour on a light list, white on a dark one
+		// (the dark list colour on the blue was unreadable; external review
+		// 1.3)
 		text = ui_color(B_LIST_BACKGROUND_COLOR);
+		if (text.IsDark())
+			text = make_color(255, 255, 255);
 	}
 
 	if (_IsSeparator()) {

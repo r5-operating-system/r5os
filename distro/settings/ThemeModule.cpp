@@ -30,6 +30,7 @@
 #include <ControlLook.h>
 #include <DecorInfo.h>
 #include <Directory.h>
+#include <TextView.h>
 #include <Entry.h>
 #include <File.h>
 #include <GroupView.h>
@@ -813,9 +814,10 @@ ThemeCards::_DrawThumb(const theme_info& theme, BRect thumb)
 	rgb_color shadow = hex(0x000000);
 	shadow.alpha = 46;
 	SetHighColor(shadow);
-	FillRoundRect(deskbar.OffsetByCopy(0, 2), classicBar ? 0 : px(6),
-		classicBar ? 0 : px(6));
-	fill_round(this, deskbar, classicBar ? 0 : px(6), bar);
+	// round only when the theme's Deskbar is (external review 2.7)
+	float deskbarRadius = !classicBar && theme.deskbar_rounded ? px(6) : 0;
+	FillRoundRect(deskbar.OffsetByCopy(0, 2), deskbarRadius, deskbarRadius);
+	fill_round(this, deskbar, deskbarRadius, bar);
 
 	// the window: left 12, top 22, 70 by 44, and its tab of 40 by 10
 	BRect win(thumb.left + px(12), thumb.top + px(22),
@@ -1116,7 +1118,12 @@ ScrollBarPreview::ScrollBarPreview()
 BSize
 ScrollBarPreview::PreferredSize()
 {
-	return BSize(px(150) - 1, B_H_SCROLL_BAR_HEIGHT);
+	// the look's width (Thin, Haiku width, Wide): the window lays out again
+	// when the look or its width changes (external review 1.12)
+	float height = be_control_look != NULL
+		? be_control_look->GetScrollBarWidth(B_HORIZONTAL)
+		: B_H_SCROLL_BAR_HEIGHT;
+	return BSize(px(150) - 1, height - 1);
 }
 
 
@@ -1186,6 +1193,21 @@ static const uint32 kPartBits[6] = {
 };
 
 
+//! The views of a dialog on the document colour, as mockup A3.
+static void
+set_page_colors(BView* view)
+{
+	if (view == NULL)
+		return;
+	if (dynamic_cast<BTextView*>(view) == NULL) {
+		view->SetViewUIColor(B_DOCUMENT_BACKGROUND_COLOR);
+		view->SetLowUIColor(B_DOCUMENT_BACKGROUND_COLOR);
+	}
+	for (int32 i = 0; i < view->CountChildren(); i++)
+		set_page_colors(view->ChildAt(i));
+}
+
+
 SaveThemeWindow::SaveThemeWindow(BWindow* parent, BHandler* target,
 	const theme_info& theme, const char* windowsLabel,
 	const char* controlsLabel)
@@ -1238,7 +1260,7 @@ SaveThemeWindow::SaveThemeWindow(BWindow* parent, BHandler* target,
 
 	for (int32 i = 0; i < 6; i++) {
 		fParts[i] = new BCheckBox(labels[i].String(), labels[i].String(),
-			NULL);
+			new BMessage(kMsgSaveNameChanged));
 		fParts[i]->SetValue(i < 5 ? B_CONTROL_ON : B_CONTROL_OFF);
 	}
 
@@ -1254,7 +1276,7 @@ SaveThemeWindow::SaveThemeWindow(BWindow* parent, BHandler* target,
 	float spacing = px(14);
 	BLayoutBuilder::Group<>(this, B_VERTICAL, spacing)
 		.SetInsets(px(22), px(20), px(22), px(20))
-		.AddGroup(B_VERTICAL, px(6))
+		.AddGroup(B_VERTICAL, px(8))
 			.Add(nameLabel)
 			.Add(fName)
 		.End()
@@ -1277,6 +1299,10 @@ SaveThemeWindow::SaveThemeWindow(BWindow* parent, BHandler* target,
 
 	SetDefaultButton(fSave);
 	fSave->SetEnabled(suggestion.Length() > 0);
+	// the white page of mockup A3 (the document colour; external review
+	// 1.13): every view of the dialog, as they adopted the panel colour
+	// when they were attached
+	set_page_colors(ChildAt(0));
 	r5_settings_apply_plain(ChildAt(0));
 	nameLabel->SetFont(r5_settings_bold_font());
 	keepLabel->SetFont(r5_settings_bold_font());
@@ -1296,7 +1322,11 @@ SaveThemeWindow::MessageReceived(BMessage* message)
 		{
 			BString name(fName->Text());
 			name.Trim();
-			fSave->SetEnabled(name.Length() > 0);
+			// a name, and at least one part (external review 2.3)
+			bool parts = false;
+			for (int32 i = 0; i < 6; i++)
+				parts = parts || fParts[i]->Value() == B_CONTROL_ON;
+			fSave->SetEnabled(name.Length() > 0 && parts);
 			break;
 		}
 
@@ -1329,6 +1359,7 @@ SaveThemeWindow::MessageReceived(BMessage* message)
 				|| name.FindFirst('\\') >= 0) {
 				BAlert* alert = new BAlert("Save as theme",
 					"A theme name cannot contain / \\ or \".", "OK");
+				alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
 				alert->Go(NULL);
 				break;
 			}
@@ -1630,8 +1661,10 @@ ThemePage::ThemePage(ThemeModule* module)
 	fPartsBox->SetLabel(fPartsLabel);
 	fPartsBox->AddChild(fPartsGrid);
 
+	// room under the Parts box for its bottom line and corners (external
+	// review 1.13)
 	BLayoutBuilder::Group<>(this, B_VERTICAL, px(14))
-		.SetInsets(0, 0, 0, px(4))
+		.SetInsets(0, 0, 0, px(14))
 		.AddGroup(B_HORIZONTAL, px(10))
 			.Add(title)
 			.AddGlue()

@@ -2253,6 +2253,22 @@ BTextView::ScrollToSelection()
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+/*!	A dark text view (a dark theme): the selection is the accent laid over
+	the text, drawn with the lines, not an inversion. Inverting a dark field
+	made a light block with light text on it (external review 1.4).
+*/
+static bool
+r5_dark_selection(BView* view, BBitmap* offscreen)
+{
+	return offscreen == NULL && view->ViewColor() != B_TRANSPARENT_COLOR
+		&& view->ViewColor().IsDark();
+}
+// SPDX-SnippetEnd
+
+
 void
 BTextView::Highlight(int32 startOffset, int32 endOffset)
 {
@@ -2272,6 +2288,15 @@ BTextView::Highlight(int32 startOffset, int32 endOffset)
 	BRegion selRegion;
 	GetTextRegion(startOffset, endOffset, &selRegion);
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (r5_dark_selection(this, fOffscreen)) {
+		// drawn again with the lines, in the state of the selection then
+		Invalidate(&selRegion);
+		return;
+	}
+// SPDX-SnippetEnd
 	SetDrawingMode(B_OP_INVERT);
 	FillRegion(&selRegion, B_SOLID_HIGH);
 	SetDrawingMode(B_OP_COPY);
@@ -4689,6 +4714,22 @@ BTextView::_DrawLines(int32 startLine, int32 endLine, int32 startOffset,
 	// draw the caret/hilite the selection
 	if (fActive) {
 		if (fSelStart != fSelEnd) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			if (fSelectable && r5_dark_selection(this, fOffscreen)) {
+				BRegion selection;
+				GetTextRegion(fSelStart, fSelEnd, &selection);
+				rgb_color accent = ui_color(B_CONTROL_HIGHLIGHT_COLOR);
+				accent.alpha = 115;
+				PushState();
+				SetDrawingMode(B_OP_ALPHA);
+				SetBlendingMode(B_CONSTANT_ALPHA, B_ALPHA_OVERLAY);
+				SetHighColor(accent);
+				FillRegion(&selection);
+				PopState();
+			} else
+// SPDX-SnippetEnd
 			if (fSelectable)
 				Highlight(fSelStart, fSelEnd);
 		} else {

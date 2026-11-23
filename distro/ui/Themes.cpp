@@ -908,10 +908,18 @@ set_theme(const theme_info* info, uint32 parts)
 	}
 	if ((parts & B_THEME_SCROLL_BARS) != 0) {
 		scroll_bar_info scrollBars;
-		if (get_scroll_bar_info(&scrollBars) == B_OK
+		status_t status = get_scroll_bar_info(&scrollBars);
+		if (status == B_OK
 			&& scrollBars.double_arrows != info->double_arrows) {
 			scrollBars.double_arrows = info->double_arrows;
-			set_scroll_bar_info(&scrollBars);
+			status = set_scroll_bar_info(&scrollBars);
+		}
+		// the first error counts, as for the other parts (external review
+		// 2.5)
+		if (status != B_OK) {
+			applied &= ~B_THEME_SCROLL_BARS;
+			if (result == B_OK)
+				result = status;
 		}
 		if (now.modern_scroll_bars != info->modern_scroll_bars
 			|| roundf(now.scroll_bar_width)
@@ -1165,9 +1173,23 @@ remove_theme(const char* name)
 	if (status != B_OK)
 		return status;
 	BEntry entry(path.Path());
-	if (!entry.Exists())
+	if (entry.Exists())
+		return entry.Remove();
+
+	// a file copied in by hand may have another file name: the name inside
+	// it counts, as for find_theme() (external review 2.4)
+	if (settings_path(kThemesDirectory, path) != B_OK)
 		return B_ENTRY_NOT_FOUND;
-	return entry.Remove();
+	BDirectory directory(path.Path());
+	while (directory.GetNextEntry(&entry) == B_OK) {
+		BPath file;
+		theme_info info;
+		if (entry.GetPath(&file) == B_OK
+			&& read_theme(file.Path(), &info) == B_OK
+			&& strcasecmp(info.name, name) == 0)
+			return entry.Remove();
+	}
+	return B_ENTRY_NOT_FOUND;
 }
 
 

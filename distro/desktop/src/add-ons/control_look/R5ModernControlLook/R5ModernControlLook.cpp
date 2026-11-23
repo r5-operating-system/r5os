@@ -343,23 +343,25 @@ R5ModernControlLook::_DrawFace(BView* view, BRect rect, float radius,
 }
 
 
-//! A down chevron, the mockup's "M6 9l6 6 6-6" at 10 px.
+/*!	A down chevron centred in \a rect, the mockup's field chevron
+	"M2 3.8 5 6.8 8 3.8" in a 10 px box (M6; external review 1.1).
+*/
 void
 R5ModernControlLook::_DrawChevron(BView* view, BRect rect,
 	const rgb_color& color)
 {
 	float size = radius(10);
-	BPoint center(roundf((rect.left + rect.right) / 2) + 0.5f,
-		roundf((rect.top + rect.bottom) / 2) + 0.5f);
-	// "M6 9l6 6 6-6" on 24: 6 of 24 wide each way, 3 of 24 high each way
-	float halfWidth = size * 6 / 24;
-	float halfHeight = size * 3 / 24;
+	BPoint center(floorf((rect.left + rect.right + 1) / 2),
+		floorf((rect.top + rect.bottom + 1) / 2));
+	// 6 of 10 wide, 3 of 10 high
+	float halfWidth = size * 3 / 10;
+	float halfHeight = size * 1.5f / 10;
 
 	view->PushState();
 	view->SetDrawingMode(B_OP_ALPHA);
 	view->SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_OVERLAY);
 	view->SetHighColor(color);
-	view->SetPenSize(std::max(1.0f, roundf(1.25f * scale() * 4) / 4));
+	view->SetPenSize(std::max(1.0f, roundf(1.6f * scale() * 4) / 4));
 	view->SetLineMode(B_ROUND_CAP, B_ROUND_JOIN);
 	view->StrokeLine(BPoint(center.x - halfWidth, center.y - halfHeight),
 		BPoint(center.x, center.y + halfHeight));
@@ -437,7 +439,8 @@ R5ModernControlLook::_FillButtonInside(BView* view, const BRect& rect,
 
 	BRect shape = open_sides(rect, borders, r + 1);
 	view->PushState();
-	view->ClipToRect(rect);
+	view->ClipToRect(BRect(rect.left, rect.top, rect.right + 1,
+		rect.bottom + 1));
 	view->SetDrawingMode(B_OP_ALPHA);
 	view->SetHighColor(fill);
 	view->FillRoundRect(BRect(shape.left, shape.top, shape.right + 1,
@@ -486,7 +489,11 @@ R5ModernControlLook::DrawButtonFrame(BView* view, BRect& rect,
 		BRect face(rect);
 		inset_sides(face, 1, 1, 1, 1, borders);
 		view->PushState();
-		view->ClipToRect(face);
+		// ClipToRect() keeps the area up to the rect's right and bottom
+		// edges, not their pixels; the face's line is on those pixels
+		// (external review 1.2)
+		view->ClipToRect(BRect(face.left, face.top, face.right + 1,
+			face.bottom + 1));
 		_DrawFace(view, open_sides(face, borders, radius(7) + 1),
 			radius(7) - 1, fill, line);
 		view->PopState();
@@ -677,7 +684,7 @@ R5ModernControlLook::DrawMenuFieldFrame(BView* view, BRect& rect,
 	uint32 borders)
 {
 	if (ShouldDraw(view, rect, updateRect))
-		_DrawField(view, rect, updateRect, flags & ~B_FOCUSED, 1);
+		_DrawField(view, rect, updateRect, flags, 1);
 
 	float left, top, right, bottom;
 	GetFrameInsets(B_MENU_FIELD_FRAME, flags, left, top, right, bottom);
@@ -726,14 +733,24 @@ R5ModernControlLook::DrawMenuFieldBackground(BView* view, BRect& rect,
 		text = disable_color(text, fill);
 	}
 
-	// the round face is the frame's; the inside at Haiku's inset of 3 is
-	// clear of its arc
+	// the round face is the frame's (radius 7 - 1 at an inset of 1); the
+	// inside is round on the same centres, so the face's arcs stay
+	// (external review 1.1)
+	float r = std::max(0.0f, radius(7) - 3);
+	view->PushState();
+	view->SetDrawingMode(B_OP_ALPHA);
 	view->SetHighColor(fill);
-	view->FillRect(rect);
+	view->FillRoundRect(BRect(rect.left, rect.top, rect.right + 1,
+		rect.bottom + 1), r, r);
+	view->PopState();
 
 	if (popupIndicator) {
-		BRect marker(rect);
-		marker.left = marker.right - ComposeSpacing(kButtonPopUpIndicatorWidth);
+		// the mockup: a 10 px chevron 10 from the field's right edge, in the
+		// middle of the field's height
+		BRect field = view->Bounds();
+		float size = radius(10);
+		BRect marker(rect.right + 3 - radius(10) - size, field.top,
+			rect.right + 3 - radius(10), field.bottom);
 		_DrawChevron(view, marker, text);
 		rect.right = marker.left - 1;
 	}
@@ -751,8 +768,13 @@ R5ModernControlLook::DrawMenuFieldBackground(BView* view, BRect& rect,
 	rgb_color fill = field_color();
 	if ((flags & B_DISABLED) != 0)
 		fill = disable_color(fill, base);
+	float r = std::max(0.0f, radius(7) - 3);
+	view->PushState();
+	view->SetDrawingMode(B_OP_ALPHA);
 	view->SetHighColor(fill);
-	view->FillRect(rect);
+	view->FillRoundRect(BRect(rect.left, rect.top, rect.right + 1,
+		rect.bottom + 1), r, r);
+	view->PopState();
 }
 
 
@@ -927,12 +949,12 @@ R5ModernControlLook::DrawStatusBar(BView* view, BRect& rect,
 	view->FillRoundRect(track, r, r);
 
 	if (progressPosition > rect.left) {
+		// round at its leading end too (external review 1.10)
 		BRect filled(track);
-		filled.right = std::min(track.right, progressPosition);
-		BRegion clip(filled);
-		view->ConstrainClippingRegion(&clip);
+		filled.right = std::min(track.right,
+			std::max(track.left + 2 * r, progressPosition));
 		view->SetHighColor(barColor);
-		view->FillRoundRect(track, r, r);
+		view->FillRoundRect(filled, r, r);
 	}
 	view->PopState();
 }
@@ -1303,8 +1325,9 @@ R5ModernControlLook::DrawScrollViewFrame(BView* view, BRect& rect,
 rgb_color
 R5ModernControlLook::SliderBarColor(const rgb_color& base)
 {
-	return track_color(base).IsLight()
-		? blend(base, kInk, 0.12f) : blend(base, kWhite, 0.14f);
+	// #d5dae2-ish on a light panel, #3a404c-ish on a dark one
+	return base.IsLight() ? blend(base, kInk, 0.12f)
+		: blend(base, kWhite, 0.12f);
 }
 
 
@@ -1330,6 +1353,13 @@ R5ModernControlLook::DrawSliderBar(BView* view, BRect rect,
 		bar.right = bar.left + thickness - 1;
 	}
 
+	// the track is muted on either panel; the value side is the accent
+	// unless the program chose its own fill colour (external review 1.8)
+	rgb_color track = SliderBarColor(base);
+	if (leftFillColor == rightFillColor) {
+		leftFillColor = accent_color();
+		rightFillColor = track;
+	}
 	if ((flags & B_DISABLED) != 0) {
 		leftFillColor = disable_color(leftFillColor, base);
 		rightFillColor = disable_color(rightFillColor, base);
@@ -1379,7 +1409,7 @@ R5ModernControlLook::DrawSliderBar(BView* view, BRect rect,
 }
 
 
-//! The thumb: a white disc with the control line, as tall as Haiku's.
+//! The thumb: a white disc with the control line (#e6e9ef in dark).
 void
 R5ModernControlLook::DrawSliderThumb(BView* view, BRect& rect,
 	const BRect& updateRect, const rgb_color& base, uint32 flags,
@@ -1395,7 +1425,7 @@ R5ModernControlLook::DrawSliderThumb(BView* view, BRect& rect,
 
 	rgb_color background = view->LowColor();
 	rgb_color fill = field_color().IsLight() ? kWhite
-		: blend(ui_color(B_CONTROL_BACKGROUND_COLOR), kWhite, 0.15f);
+		: ui_color(B_CONTROL_TEXT_COLOR);
 	rgb_color line = field_line_color(background);
 	if ((flags & B_FOCUSED) != 0)
 		line = accent_color();
@@ -1471,7 +1501,8 @@ draw_tab(BView* view, BRect rect, const rgb_color& fill,
 	}
 
 	view->PushState();
-	BRegion clip(BRect(rect.left, rect.top, rect.right + 1, rect.bottom + 1));
+	// a region is in pixels: the rect itself (external review 1.9)
+	BRegion clip(rect);
 	view->ConstrainClippingRegion(&clip);
 	view->SetDrawingMode(B_OP_ALPHA);
 	view->SetHighColor(line);
@@ -1640,14 +1671,14 @@ R5ModernControlLook::DrawTextControlBorder(BView* view, BRect& rect,
 		else {
 			BRect field(rect);
 			view->PushState();
-			view->ClipToRect(rect);
+			view->ClipToRect(BRect(rect.left, rect.top, rect.right + 1,
+				rect.bottom + 1));
 			field = open_sides(field, borders, radius(7) + 1);
 			_DrawField(view, field, updateRect, flags, 1);
 			view->PopState();
 		}
 	}
 
-	float left, top, right, bottom;
 	// Haiku draws two pixels here whatever the font size
 	inset_sides(rect, 2, 2, 2, 2, borders);
 }
