@@ -1002,7 +1002,7 @@ set_theme(const theme_info* info, uint32 parts)
 	// the controls alone sets them only while the colours are still the
 	// set of the theme before, so colours of the user's own (Appearance >
 	// Colors) stay.
-	bool setColors = (parts & B_THEME_COLORS) != 0;
+	bool setColors = (parts & B_THEME_COLORS) != 0 || kept.mode != now.mode;
 	if (!setColors && (applied & B_THEME_CONTROLS) != 0) {
 		BMessage before;
 		get_theme_colors(&now, &before);

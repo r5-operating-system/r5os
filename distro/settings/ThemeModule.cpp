@@ -1689,15 +1689,14 @@ ThemePage::ThemePage(ThemeModule* module)
 	fColorsLabel = new PartsLabel("Custom colors", kMsgCustomColors, false);
 	fColorsBox = new BBox("custom colors");
 	fColorsBox->SetFlags(fColorsBox->Flags() | B_FULL_UPDATE_ON_RESIZE);
-	fColorsBox->SetLabel(fColorsLabel);
 	fColors = new ColorsView("colors");
 	fColorsBox->AddChild(fColors);
-	fColors->Hide();
+	fColorsBox->Hide();
 
 	// room under the Parts box for its bottom line and corners, fitting the
-	// default 1030x610 Settings window without clipping
-	BLayoutBuilder::Group<>(this, B_VERTICAL, px(10))
-		.SetInsets(0, 0, 0, px(6))
+	// default 1030x610 Settings window without clipping or scrolling
+	BLayoutBuilder::Group<>(this, B_VERTICAL, px(6))
+		.SetInsets(0, 0, 0, px(4))
 		.AddGroup(B_HORIZONTAL, px(10))
 			.Add(title)
 			.AddGlue()
@@ -1717,6 +1716,10 @@ ThemePage::ThemePage(ThemeModule* module)
 			.AddGlue()
 		.End()
 		.Add(fPartsBox)
+		.AddGroup(B_HORIZONTAL, 0)
+			.Add(fColorsLabel)
+			.AddGlue()
+		.End()
 		.Add(fColorsBox)
 		.AddGlue();
 
@@ -2127,9 +2130,9 @@ ThemePage::MessageReceived(BMessage* message)
 			bool open = !fColorsLabel->IsOpen();
 			fColorsLabel->SetOpen(open);
 			if (open)
-				fColors->Show();
+				fColorsBox->Show();
 			else
-				fColors->Hide();
+				fColorsBox->Hide();
 			break;
 		}
 
