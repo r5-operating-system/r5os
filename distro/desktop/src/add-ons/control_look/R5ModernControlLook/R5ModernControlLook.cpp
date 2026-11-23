@@ -71,9 +71,21 @@ scale()
 
 
 static float
-radius(float pixels)
+scaled(float pixels)
 {
 	return roundf(pixels * scale());
+}
+
+
+static float
+radius(float pixels)
+{
+#ifdef R5_SQUARE_CONTROLS
+	(void)pixels;
+	return 0.0f;
+#else
+	return roundf(pixels * scale());
+#endif
 }
 
 
@@ -357,7 +369,7 @@ void
 R5ModernControlLook::_DrawChevron(BView* view, BRect rect,
 	const rgb_color& color)
 {
-	float size = radius(10);
+	float size = scaled(10);
 	BPoint center(floorf((rect.left + rect.right + 1) / 2),
 		floorf((rect.top + rect.bottom + 1) / 2));
 	// 6 of 10 wide, 3 of 10 high
@@ -739,8 +751,8 @@ R5ModernControlLook::DrawMenuFieldBackground(BView* view, BRect& rect,
 	if (popupIndicator) {
 		// the mockup: a 10 px chevron 10 from the field's edge (the inside
 		// is 3 in from it), in the middle of the inside's height
-		float size = radius(10);
-		float right = rect.right - std::max(0.0f, radius(10) - 3);
+		float size = scaled(10);
+		float right = rect.right - std::max(0.0f, scaled(10) - 3);
 		BRect marker(right - size + 1, rect.top, right, rect.bottom);
 		_DrawChevron(view, marker, text);
 		rect.right = marker.left - 1;
@@ -1383,9 +1395,9 @@ R5ModernControlLook::_DrawSliderBar(BView* view, BRect rect,
 	if (!ShouldDraw(view, rect, updateRect))
 		return;
 
-	// a 4 px round bar in the middle of Haiku's bar rect
+	// a 4 px bar in the middle of Haiku's bar rect
 	BRect bar(rect);
-	float thickness = std::max(3.0f, radius(4));
+	float thickness = std::max(3.0f, scaled(4));
 	if (orientation == B_HORIZONTAL) {
 		float middle = floorf((rect.top + rect.bottom) / 2);
 		bar.top = middle - floorf(thickness / 2) + 1;
@@ -1526,8 +1538,8 @@ draw_tab(BView* view, BRect rect, const rgb_color& fill,
 	// the content side by the radius and clip it back; 1 in at the start
 	// and 2 at the end, a gap of 3 between two tabs (owner's S2), the line
 	// under an inactive tab runs on under the gap
-	float start = radius(1);
-	float end = radius(2);
+	float start = scaled(1);
+	float end = scaled(2);
 	switch (side) {
 		case BControlLook::B_TOP_BORDER:
 			shape.bottom += r;
@@ -1764,7 +1776,9 @@ R5ModernControlLook::GetBackgroundInsets(background_type backgroundType,
 	HaikuControlLook::GetBackgroundInsets(backgroundType, flags, _left, _top,
 		_right, _bottom);
 	if (backgroundType == B_MENU_BAR_BACKGROUND) {
+#ifndef R5_SQUARE_CONTROLS
 		_left += roundf(8 * scale());
+#endif
 		// a program's menu bar of 28 at 12 points (mockup M4, M5; external
 		// review M2): Haiku's bar is the text and a sixth of the font size
 		// above and below
@@ -1776,11 +1790,14 @@ R5ModernControlLook::GetBackgroundInsets(background_type backgroundType,
 		_top += floorf(extra / 2);
 		_bottom += extra - floorf(extra / 2);
 	}
+#ifndef R5_SQUARE_CONTROLS
 	else if (backgroundType == B_MENU_BACKGROUND) {
 		// more than 1 asks R5's BMenu for the R5 menu style: 5 inside the
 		// menu window (mockup M6)
 		_left = _top = _right = _bottom = roundf(5 * scale());
-	} else if (backgroundType == B_MENU_ITEM_BACKGROUND) {
+	}
+#endif
+	else if (backgroundType == B_MENU_ITEM_BACKGROUND) {
 		// the padding round an item's content in that style: 11 at the left
 		// (R5's BMenu adds 16 for the mark column when a menu has marks),
 		// 9 at the right, and a row of 26 (mockup M4, M6)

@@ -229,8 +229,7 @@ BActionCard::Draw(BRect updateRect)
 	SetHighColor(backdrop);
 	FillRect(Bounds());
 	float radius = r5ui_modern_controls()
-		? roundf(be_plain_font->Size() * 8 / 12)
-		: be_plain_font->Size() * 0.25f;
+		? roundf(be_plain_font->Size() * 8 / 12) : 0.0f;
 	SetHighColor(base);
 	FillRoundRect(Bounds(), radius, radius);
 	rgb_color border = tint_color(panel, B_DARKEN_2_TINT);

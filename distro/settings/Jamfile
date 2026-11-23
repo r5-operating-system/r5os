@@ -28,6 +28,8 @@ Application Settings :
 	WallpaperModule.cpp
 	DeskbarModule.cpp
 	ThemeModule.cpp
+	ColorsView.cpp
+	Colors.cpp
 	NotificationsModule.cpp
 	VirtualMemoryModule.cpp
 	PowerModule.cpp
@@ -75,16 +77,5 @@ Addon settings_fonts :
 	FontSelectionView.cpp
 	AntialiasingSettingsView.cpp
 	SettingsFont.cpp
-	: be shared localestub libr5ui.so [ TargetLibstdc++ ]
-	;
-
-Addon settings_look :
-	LookModule.cpp
-	LookAndFeelSettingsView.cpp
-	FakeScrollBar.cpp
-	ColorsView.cpp
-	Colors.cpp
-	SettingsFont.cpp
-	WindowEffectsBox.cpp
 	: be shared localestub libr5ui.so [ TargetLibstdc++ ]
 	;

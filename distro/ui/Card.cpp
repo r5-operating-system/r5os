@@ -149,9 +149,9 @@ BCard::Draw(BRect updateRect)
 	SetHighColor(backdrop);
 	FillRect(bounds);
 	// R5 Modern: the mockup's round card (8 at 12 points); R5 and Classic
-	// keep the small corner (owner's S1)
+	// are square (0 px)
 	float radius = r5ui_modern_controls() ? roundf(be_plain_font->Size() * 8 / 12)
-		: be_plain_font->Size() * 0.25f;
+		: 0.0f;
 	SetHighColor(card_fill(fStyle));
 	FillRoundRect(bounds, radius, radius);
 	SetHighColor(card_border());

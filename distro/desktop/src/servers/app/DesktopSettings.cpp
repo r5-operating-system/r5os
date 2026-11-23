@@ -253,6 +253,7 @@ DesktopSettingsPrivate::_Load()
 	path = basePath;
 	path.Append("appearance");
 
+	bool hasControlLook = false;
 	status = file.SetTo(path.Path(), B_READ_ONLY);
 	if (status == B_OK) {
 		BMessage settings;
@@ -326,6 +327,7 @@ DesktopSettingsPrivate::_Load()
 			const char* controlLook;
 			if (settings.FindString("control look", &controlLook) == B_OK) {
 				fControlLook = controlLook;
+				hasControlLook = true;
 			}
 
 // SPDX-SnippetBegin
@@ -373,6 +375,19 @@ DesktopSettingsPrivate::_Load()
 			}
 		}
 	}
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// Default R5 theme: square modern controls when no control look was saved.
+	if (!hasControlLook) {
+		BPath lookPath;
+		if (find_directory(B_SYSTEM_ADDONS_DIRECTORY, &lookPath) == B_OK
+			&& lookPath.Append("control_look/R5ControlLook") == B_OK) {
+			fControlLook = lookPath.Path();
+		}
+	}
+// SPDX-SnippetEnd
 
 	// read dragger settings
 

@@ -4,15 +4,14 @@
  */
 
 
-/*!	The add-on entry of the R5 window frame (Default (R5)). The class itself
-	is in R5Decorator.cpp, which Default (R5 Modern) builds as well.
+/*!	The add-on entry of the R5 window frame (Default (R5)): the square
+	counterpart to R5 Modern (0 px corners and square tab in the R5 Modern
+	style).
 */
 
 
-#include "R5Decorator.h"
-
-#include <new>
-#include <syslog.h>
+#define R5_SQUARE_DECORATOR 1
+#include "../R5ModernDecorator/R5ModernDecorator.cpp"
 
 
 //	#pragma mark - R5DecorAddOn
@@ -29,7 +28,7 @@ Decorator*
 R5DecorAddOn::_AllocateDecorator(DesktopSettings& settings, BRect rect,
 	Desktop* desktop)
 {
-	return new (std::nothrow) R5Decorator(settings, rect, desktop);
+	return new (std::nothrow) R5ModernDecorator(settings, rect, desktop, true);
 }
 
 

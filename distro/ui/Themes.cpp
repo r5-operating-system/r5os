@@ -79,6 +79,7 @@ static const char* kClassic = "Classic (Haiku)";
 static const char* kR5ModernDecorator = "R5ModernDecorator";
 static const char* kR5Decorator = "R5Decorator";
 static const char* kR5ModernControlLook = "R5ModernControlLook";
+static const char* kR5ControlLook = "R5ControlLook";
 
 
 static rgb_color
@@ -243,7 +244,8 @@ static const color_value kModernLightColors[] = {
 static bool
 modern_controls(const theme_info* info)
 {
-	return strcmp(info->control_look, kR5ModernControlLook) == 0;
+	return strcmp(info->control_look, kR5ModernControlLook) == 0
+		|| strcmp(info->control_look, kR5ControlLook) == 0;
 }
 
 
@@ -356,16 +358,23 @@ built_in_theme(int32 index, theme_info* info)
 {
 	switch (index) {
 		case 0:
+			// R5 (default): square modern windows, controls, and Deskbar
+			init_theme(info, kR5);
+			strlcpy(info->decorator, kR5Decorator, sizeof(info->decorator));
+			strlcpy(info->control_look, kR5ControlLook,
+				sizeof(info->control_look));
+			info->modern_scroll_bars = true;
+			info->deskbar_rounded = false;
+			break;
+		case 1:
+			// R5 Modern: rounded windows, controls, and Deskbar
 			init_theme(info, kR5Modern);
 			strlcpy(info->decorator, kR5ModernDecorator,
 				sizeof(info->decorator));
 			strlcpy(info->control_look, kR5ModernControlLook,
 				sizeof(info->control_look));
 			info->modern_scroll_bars = true;
-			break;
-		case 1:
-			init_theme(info, kR5);
-			strlcpy(info->decorator, kR5Decorator, sizeof(info->decorator));
+			info->deskbar_rounded = true;
 			break;
 		default:
 			init_theme(info, kClassic);

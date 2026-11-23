@@ -37,10 +37,18 @@
 #include <ListView.h>
 #include <Locale.h>
 #include <Menu.h>
+#include <MenuField.h>
+#include <MenuItem.h>
 #include <MutableLocaleRoster.h>
 #include <ObjectList.h>
 #include <Path.h>
+#include <PopUpMenu.h>
 #include <Roster.h>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <Themes.h>
+// SPDX-SnippetEnd
 #include <Screen.h>
 #include <ScrollView.h>
 #include <SeparatorView.h>
@@ -222,6 +230,23 @@ BootPromptWindow::BootPromptWindow()
 	fKeymapsMenuField = new BMenuField("", "", new BMenu(""));
 	fKeymapsMenuField->Menu()->SetLabelFromMarked(true);
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	BPopUpMenu* themeMenu = new BPopUpMenu("theme");
+	static const char* const kThemes[] = { "R5", "R5 Modern", "Classic (Haiku)" };
+	for (size_t i = 0; i < sizeof(kThemes) / sizeof(kThemes[0]); i++) {
+		BMessage* msg = new BMessage(MSG_THEME_SELECTED);
+		msg->AddString("theme", kThemes[i]);
+		BMenuItem* item = new BMenuItem(kThemes[i], msg);
+		if (i == 0)
+			item->SetMarked(true);
+		themeMenu->AddItem(item);
+	}
+	fThemeMenuField = new BMenuField("theme", B_TRANSLATE("Theme:"), themeMenu);
+	themeMenu->SetTargetForItems(this);
+// SPDX-SnippetEnd
+
 	_InitCatalog(true);
 	_PopulateLanguages();
 	_PopulateKeymaps();
@@ -247,6 +272,14 @@ BootPromptWindow::BootPromptWindow()
 		.AddGroup(B_VERTICAL)
 			.SetInsets(0)
 			.Add(fInfoTextView)
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			.AddGroup(B_HORIZONTAL)
+				.Add(fThemeMenuField)
+				.AddGlue()
+			.End()
+// SPDX-SnippetEnd
 			.AddGroup(B_HORIZONTAL)
 				.SetInsets(0)
 				.AddGlue()
@@ -298,6 +331,29 @@ BootPromptWindow::MessageReceived(BMessage* message)
 		case MSG_KEYMAP_SELECTED:
 			_ActivateKeymap(message);
 			break;
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		case MSG_THEME_SELECTED:
+		{
+			const char* name = NULL;
+			if (message->FindString("theme", &name) == B_OK) {
+				BAppearanceKit::theme_info info;
+				if (BAppearanceKit::find_theme(name, &info) == B_OK)
+					BAppearanceKit::set_theme(&info);
+			}
+			break;
+		}
+
+		case B_COLORS_UPDATED:
+		{
+			rgb_color textColor = ui_color(B_PANEL_TEXT_COLOR);
+			fInfoTextView->SetFontAndColor(be_plain_font, B_FONT_ALL,
+				&textColor);
+			break;
+		}
+// SPDX-SnippetEnd
 
 		default:
 			BWindow::MessageReceived(message);

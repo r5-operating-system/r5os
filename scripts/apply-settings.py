@@ -195,29 +195,28 @@ def patch_jams() -> None:
         )
     # The Settings add-ons, settings fonts and ui fonts are packaged by the
     # native build/jam/packages/Haiku in distro/desktop.
-    split = (
-        "SYSTEM_ADD_ONS_SETTINGS += settings_fonts ;\n"
-        "SYSTEM_ADD_ONS_SETTINGS += settings_look ;\n"
-    )
+    # Look and Feel was merged into Theme; only settings_fonts stays.
+    split = "SYSTEM_ADD_ONS_SETTINGS += settings_fonts ;\n"
     appearance = "SYSTEM_ADD_ONS_SETTINGS += settings_appearance ;\n"
+    look_line = "SYSTEM_ADD_ONS_SETTINGS += settings_look ;\n"
     for rel in (
         "build/jam/images/definitions/regular",
         "build/jam/images/definitions/minimum",
     ):
         path = HAIKU / rel
         text = path.read_text(encoding="utf-8")
-        if "settings_fonts" in text and "settings_look" in text:
-            updated = text.replace(appearance, "")
+        if "settings_fonts" in text:
+            updated = text.replace(appearance, "").replace(look_line, "")
             if updated != text:
                 path.write_text(updated, encoding="utf-8")
-                print(f"removed appearance addon from {path.name}")
+                print(f"cleaned legacy addons from {path.name}")
             else:
-                print(f"already {path.name} (fonts and look)")
+                print(f"already {path.name} (fonts)")
             continue
         if appearance not in text:
             raise SystemExit(f"appearance addon line missing in {path}")
         path.write_text(text.replace(appearance, split, 1), encoding="utf-8")
-        print(f"patched {path.name} (fonts and look)")
+        print(f"patched {path.name} (fonts)")
 
 
 def main() -> None:

@@ -53,6 +53,7 @@
 #include <Themes.h>
 #include <WindowEffects.h>
 
+#include "ColorsView.h"
 #include "SettingsFont.h"
 #include "SettingsManager.h"
 #include "SettingsModule.h"
@@ -70,6 +71,7 @@ static const uint32 kMsgDeleteTheme = 'thDl';
 static const uint32 kMsgMode = 'thMd';
 static const uint32 kMsgAccent = 'thAc';
 static const uint32 kMsgParts = 'thPt';
+static const uint32 kMsgCustomColors = 'thCc';
 static const uint32 kMsgWindows = 'thWn';
 static const uint32 kMsgWindowsAbout = 'thWa';
 static const uint32 kMsgControls = 'thCt';
@@ -781,8 +783,8 @@ ThemeCards::_DrawThumb(const theme_info& theme, BRect thumb)
 	bool classic = is_classic(theme);
 	bool darkTheme = !classic && theme.mode == B_THEME_DARK;
 	bool modern = strcmp(theme.decorator, "R5ModernDecorator") == 0;
-	bool modernControls = strcmp(theme.control_look,
-		"R5ModernControlLook") == 0;
+	bool modernControls = strcmp(theme.control_look, "R5ModernControlLook") == 0
+		|| strcmp(theme.control_look, "R5ControlLook") == 0;
 	float r = modern ? px(6) : 0;
 
 	// the mockup's colours for each theme
@@ -993,7 +995,8 @@ ThemeCards::MouseDown(BPoint where)
 //! The label of the Parts box: a chevron that folds the box, and "Parts".
 class PartsLabel : public BView {
 public:
-								PartsLabel();
+								PartsLabel(const char* label = "Parts",
+									uint32 what = kMsgParts, bool open = true);
 
 			void				SetOpen(bool open);
 			bool				IsOpen() const { return fOpen; }
@@ -1006,15 +1009,19 @@ public:
 	virtual	BSize				PreferredSize();
 
 private:
+			BString				fLabel;
+			uint32				fWhat;
 			bool				fOpen;
 			BMessenger			fTarget;
 };
 
 
-PartsLabel::PartsLabel()
+PartsLabel::PartsLabel(const char* label, uint32 what, bool open)
 	:
 	BView("parts label", B_WILL_DRAW),
-	fOpen(true)
+	fLabel(label),
+	fWhat(what),
+	fOpen(open)
 {
 	SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
 	SetLowUIColor(B_PANEL_BACKGROUND_COLOR);
@@ -1042,8 +1049,9 @@ PartsLabel::PreferredSize()
 	const BFont* bold = r5_settings_bold_font();
 	font_height height;
 	bold->GetHeight(&height);
-	return BSize(px(6) + px(11) + px(6) + ceilf(bold->StringWidth("Parts"))
-		+ px(6), ceilf(height.ascent + height.descent) + 2);
+	return BSize(px(6) + px(11) + px(6)
+		+ ceilf(bold->StringWidth(fLabel.String())) + px(6),
+		ceilf(height.ascent + height.descent) + 2);
 }
 
 
@@ -1093,14 +1101,15 @@ PartsLabel::Draw(BRect updateRect)
 			BPoint(x + q, middle + q * 1.5f));
 	}
 	PopState();
-	draw_text(this, "Parts", BPoint(x + side + px(6), baseline), bold, text);
+	draw_text(this, fLabel.String(), BPoint(x + side + px(6), baseline),
+		bold, text);
 }
 
 
 void
 PartsLabel::MouseDown(BPoint where)
 {
-	fTarget.SendMessage(kMsgParts);
+	fTarget.SendMessage(fWhat);
 }
 
 
@@ -1433,6 +1442,9 @@ private:
 			PartsLabel*			fPartsLabel;
 			BBox*				fPartsBox;
 			BView*				fPartsGrid;
+			PartsLabel*			fColorsLabel;
+			BBox*				fColorsBox;
+			ColorsView*			fColors;
 
 			BPopUpMenu*			fWindowsMenu;
 			BMenuField*			fWindows;
@@ -1668,11 +1680,19 @@ ThemePage::ThemePage(ThemeModule* module)
 		grid->SetColumnWeight(1, 1.0f);
 	}
 
-	fPartsLabel = new PartsLabel();
+	fPartsLabel = new PartsLabel("Parts", kMsgParts, true);
 	fPartsBox = new BBox("parts");
 	fPartsBox->SetFlags(fPartsBox->Flags() | B_FULL_UPDATE_ON_RESIZE);
 	fPartsBox->SetLabel(fPartsLabel);
 	fPartsBox->AddChild(fPartsGrid);
+
+	fColorsLabel = new PartsLabel("Custom colors", kMsgCustomColors, false);
+	fColorsBox = new BBox("custom colors");
+	fColorsBox->SetFlags(fColorsBox->Flags() | B_FULL_UPDATE_ON_RESIZE);
+	fColorsBox->SetLabel(fColorsLabel);
+	fColors = new ColorsView("colors");
+	fColorsBox->AddChild(fColors);
+	fColors->Hide();
 
 	// room under the Parts box for its bottom line and corners, fitting the
 	// default 1030x610 Settings window without clipping
@@ -1697,6 +1717,7 @@ ThemePage::ThemePage(ThemeModule* module)
 			.AddGlue()
 		.End()
 		.Add(fPartsBox)
+		.Add(fColorsBox)
 		.AddGlue();
 
 	r5_settings_apply_plain(this);
@@ -1726,6 +1747,7 @@ ThemePage::AttachedToWindow()
 	fMode->SetTarget(this);
 	fAccent->SetTarget(this);
 	fPartsLabel->SetTarget(this);
+	fColorsLabel->SetTarget(this);
 	fWindowsMenu->SetTargetForItems(this);
 	fControlsMenu->SetTargetForItems(this);
 	fScrollMenu->SetTargetForItems(this);
@@ -1804,13 +1826,18 @@ ThemePage::_BuildControlsMenu()
 		}
 	}
 	leaves.Sort();
-	// R5 Modern first, then the others by name
+	// R5 first, then R5 Modern, then the others by name
+	if (leaves.HasString("R5ControlLook")) {
+		add_item(fControlsMenu, "R5", kMsgControls, "look",
+			"R5ControlLook");
+	}
 	if (leaves.HasString("R5ModernControlLook")) {
 		add_item(fControlsMenu, "R5 Modern", kMsgControls, "look",
 			"R5ModernControlLook");
 	}
 	for (int32 i = 0; i < leaves.CountStrings(); i++) {
-		if (leaves.StringAt(i) == "R5ModernControlLook")
+		if (leaves.StringAt(i) == "R5ControlLook"
+			|| leaves.StringAt(i) == "R5ModernControlLook")
 			continue;
 		add_item(fControlsMenu,
 			control_look_label(leaves.StringAt(i).String()).String(),
@@ -1903,7 +1930,8 @@ ThemePage::_Update()
 	fMode->SetSegmentEnabled(1, !classic);
 
 	int32 accent = -1;
-	bool modern = strcmp(fCurrent.control_look, "R5ModernControlLook") == 0;
+	bool modern = strcmp(fCurrent.control_look, "R5ModernControlLook") == 0
+		|| strcmp(fCurrent.control_look, "R5ControlLook") == 0;
 	if (fCurrent.accent.alpha == 0) {
 		if (fCurrent.mode == B_THEME_DARK || modern)
 			accent = 0;
@@ -2094,6 +2122,17 @@ ThemePage::MessageReceived(BMessage* message)
 			break;
 		}
 
+		case kMsgCustomColors:
+		{
+			bool open = !fColorsLabel->IsOpen();
+			fColorsLabel->SetOpen(open);
+			if (open)
+				fColors->Show();
+			else
+				fColors->Hide();
+			break;
+		}
+
 		case kMsgWindows:
 		{
 			const char* decor;
@@ -2111,9 +2150,10 @@ ThemePage::MessageReceived(BMessage* message)
 				break;
 			strlcpy(fCurrent.control_look, look,
 				sizeof(fCurrent.control_look));
-			// the R5 Modern controls come with their scroll bars
+			// the R5 and R5 Modern controls come with their scroll bars
 			fCurrent.modern_scroll_bars
-				= strcmp(look, "R5ModernControlLook") == 0;
+				= strcmp(look, "R5ModernControlLook") == 0
+				|| strcmp(look, "R5ControlLook") == 0;
 			_ApplyPart(B_THEME_CONTROLS | B_THEME_SCROLL_BARS);
 			break;
 		}

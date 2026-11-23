@@ -397,12 +397,10 @@ TBarApp::InitSettings()
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-	// Default (R5): Vertical, Rounded, Floating, top right (owner, 22 Nov
-	// 2026). A file without the "style" key is Default (R5) too: everyone
-	// gets it, keeping the form they had.
+	// Default (R5): Vertical, Square (0 px), Floating, top right.
 	settings.style = fDefaultSettings.style = R5Deskbar::kStyleR5;
 	settings.layout = fDefaultSettings.layout = R5Deskbar::kLayoutVertical;
-	settings.rounded = fDefaultSettings.rounded = true;
+	settings.rounded = fDefaultSettings.rounded = false;
 	settings.floating = fDefaultSettings.floating = true;
 	// Fixed normal (Vertical) width for Default (R5)
 	settings.width = fDefaultSettings.width

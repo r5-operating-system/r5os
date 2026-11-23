@@ -28,7 +28,8 @@ protected:
 class R5ModernDecorator : public R5Decorator {
 public:
 								R5ModernDecorator(DesktopSettings& settings,
-									BRect frame, Desktop* desktop);
+									BRect frame, Desktop* desktop,
+									bool square = false);
 	virtual						~R5ModernDecorator();
 
 	virtual	Region				RegionAt(BPoint where, int32& tab) const;
@@ -98,6 +99,7 @@ private:
 
 private:
 			Desktop*			fModernDesktop;
+			bool				fSquare;
 			float				fRadius;
 			float				fTabVisible;
 			float				fTabUnder;
