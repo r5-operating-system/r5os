@@ -409,16 +409,22 @@ int4 blendPixel(int4 d, int cov, float2 p, float2 px) {
 					&& a16 != 0) {
 					int a = a16 / 256;
 					r = int4((d.rgb * (255 - a)) / 256 + (c3 * a) / 256, d.a);
-				} else
+				} else {
 					r = alpha16(d, c3, a16, alphaKind);
+					if (solid != 0 && alphaKind == 0 && d.a == 0 && H.a < 255)
+						r.a = 0;
+				}
 			} else {
 				int a16 = ca * cov;
 				if (solid != 0 && alphaKind == 2 && cov == 255 && a16 != 65025
 					&& a16 != 0) {
 					int a = a16 / 256;
 					r = int4((d.rgb * (255 - a)) / 256 + (c3 * a) / 256, d.a);
-				} else
+				} else {
 					r = alpha16(d, c3, a16, alphaKind == 3 ? 1 : 0);
+					if (solid != 0 && alphaKind == 2 && d.a == 0 && ca < 255)
+						r.a = 0;
+				}
 			}
 		}
 		return r;
