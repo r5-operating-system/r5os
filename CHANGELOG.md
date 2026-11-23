@@ -3,22 +3,11 @@
 <!-- changelog-archive: begin -->
 Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday), moved word for word by `scripts/changelog-archive.py`. Search there too (`grep -r <term> CHANGELOG.md docs/changelog/`).
 
-- [2026-W47](docs/changelog/2026-W47.md): 2026-11-16 to 2026-11-22, 238 entries
+- [2026-W47](docs/changelog/2026-W47.md): 2026-11-16 to 2026-11-22, 239 entries
 - [2026-W46](docs/changelog/2026-W46.md): 2026-11-09 to 2026-11-15, 183 entries
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
-## 2026-11-22 - I2C touch screens stay powered (HP ENVY x360 15)
-
-Problem: the touch screen of the 5625U machine (HP ENVY x360 15, a convertible) does nothing at all; the owner tried it several times. The syslog shows that `i2c_hid` finds it (input-ready on `\_SB.GPIO` pin 12, published as `input/tablet/i2c/0` and `/1`), and the touchpad on the same driver works. `HIDDevice::Close()` sent SET_POWER sleep on every close of any of a device's published nodes, and `Open()` never woke the device again. A touch screen has several nodes (finger and pen), so one close put the whole screen to sleep while the others stayed open. The touchpad escaped because it has been published as one node since 12 Nov. air/OS met the same sleep problem on the Framework 13 touchpad and keeps I2C HID devices powered, as Linux does.
-
-What changed: `Close()` only counts down; I2C HID devices stay powered after `_Reset()`. For diagnosis, each device logs once which vendor:product sits at which address with how many handlers, and its first 20 input reports (length and first 8 bytes) go to the syslog.
-
-Limits: the cause is found by reading the code and the boot log, not proven. If the screen still does nothing, the new lines show whether it sends reports (then `TabletProtocolHandler` reads the wrong fields of a multi-touch report) or not (then it needs another wake-up). No finger gestures, no multi-touch, no tablet mode; the AMD Sensor Fusion Hub (hinge angle) has no driver. Slightly more power use while the devices are idle.
-
-Tested: not yet; compiled in the next stick build, then a touch on the 5625U.
-
-## 2026-11-22 - CPU Info's icon is sharp again
 ## 2026-11-23 - Themes - fixes from the external review of PR 4564
 
 - Problem: an external review of the pull request found square corners on menu fields, buttons without their right and bottom line, dark text on the accent in the Settings sidebar, an unreadable dark text selection, a dark Deskbar edge that was too heavy, white buttons on an inactive dark tab, a slider without the accent, a stub on the last tab, a square end on the progress bar, a fixed-height scroll bar preview, a clipped Parts box, the Save dialog's colour, a Save button with no parts, hand-copied themes that could not be deleted, a dropped scroll bar error, a non-atomic look swap, and a Deskbar front bar that ignored the accent.
