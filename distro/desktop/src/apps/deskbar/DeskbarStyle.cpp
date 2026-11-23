@@ -32,6 +32,7 @@
 #include <Application.h>
 #include <Bitmap.h>
 #include <Font.h>
+#include <InterfaceDefs.h>
 #include <View.h>
 
 #include <R5Icons.h>
@@ -169,6 +170,16 @@ Glass()
 }
 
 
+bool
+Dark()
+{
+	// a theme in dark mode sets the dark ui_color set (docs/design/
+	// THEMING.md); ui_color() reads the shared colours, so this follows a
+	// change at once
+	return Modern() && ui_color(B_PANEL_BACKGROUND_COLOR).IsDark();
+}
+
+
 float
 Scale()
 {
@@ -225,6 +236,10 @@ SurfaceColor()
 	// rgba(240,245,252) under the glass of the effect step; opaque
 	// #eef1f5 in the corner (board A3) and against an edge without GPU,
 	// #eef2f8 floating without GPU (the brief, "Without GPU").
+	// Dark (mockup B1/B2): #161a22 under the glass, opaque #1c2029.
+	if (Dark())
+		return Glass() ? make_color(0x16, 0x1a, 0x22)
+			: make_color(0x1c, 0x20, 0x29);
 	if (Glass())
 		return make_color(240, 245, 252);
 	if (FlatCorner() || !Floating())
@@ -236,6 +251,8 @@ SurfaceColor()
 rgb_color
 TextColor()
 {
+	if (Dark())
+		return make_color(0xe6, 0xe9, 0xef);
 	return make_color(0x1d, 0x2a, 0x40);
 }
 
@@ -243,6 +260,8 @@ TextColor()
 rgb_color
 LabelColor()
 {
+	if (Dark())
+		return make_color(0xe6, 0xe9, 0xef);
 	return make_color(0x16, 0x23, 0x3a);
 }
 
@@ -250,6 +269,8 @@ LabelColor()
 rgb_color
 CountColor()
 {
+	if (Dark())
+		return make_color(0xa3, 0xab, 0xb8);
 	return make_color(0x4d, 0x5b, 0x70);
 }
 
@@ -257,6 +278,9 @@ CountColor()
 rgb_color
 FrontColor()
 {
+	// dark: the dark accent #2f95ff (mockup B1)
+	if (Dark())
+		return make_color(0x2f, 0x95, 0xff);
 	return make_color(0x1d, 0x7b, 0xf5);
 }
 
@@ -267,6 +291,11 @@ EdgeColor()
 	// floating: rgba(255,255,255,.75) on the glass, #9fb0c8 without GPU
 	// (opaque: white at .75 over the step's glass, as the browser draws
 	// the border over the background)
+	// dark: rgba(255,255,255,.08) over #161a22 on the glass, #3a404c
+	// without GPU (mockup B1/B2)
+	if (Dark())
+		return Glass() ? make_color(0x29, 0x2d, 0x34)
+			: make_color(0x3a, 0x40, 0x4c);
 	if (Glass())
 		return make_color(238, 243, 251);
 	return make_color(0x9f, 0xb0, 0xc8);
@@ -277,7 +306,28 @@ rgb_color
 EdgeLineColor()
 {
 	// against an edge: the line on the sides that face the desktop
+	if (Dark())
+		return make_color(0x3a, 0x40, 0x4c);
 	return make_color(0x8c, 0x97, 0xa8);
+}
+
+
+rgb_color
+ShadeColor(uint8 alpha)
+{
+	// dark: white, as the front row's rgba(255,255,255,.07) (mockup B1)
+	if (Dark())
+		return make_color(255, 255, 255, alpha);
+	return make_color(30, 45, 70, alpha);
+}
+
+
+rgb_color
+RowTextColor()
+{
+	if (Dark())
+		return make_color(0xc9, 0xcf, 0xd9);
+	return LabelColor();
 }
 
 
@@ -313,7 +363,7 @@ FillShade(BView* view, BRect rect, float radius, uint8 alpha)
 	view->PushState();
 	view->SetDrawingMode(B_OP_ALPHA);
 	view->SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_OVERLAY);
-	view->SetHighColor(make_color(30, 45, 70, alpha));
+	view->SetHighColor(ShadeColor(alpha));
 	fill_round(view, rect, radius);
 	view->PopState();
 }
@@ -346,7 +396,8 @@ DrawHollow(BView* view, BRect rect, float radius)
 		BRect ring = rect.InsetByCopy(i, i);
 		float r = std::max(0.0f, std::min(radius - i,
 			std::min(ring.Width(), ring.Height()) / 2));
-		view->SetHighColor(make_color(0, 20, 60, kRing[i]));
+		view->SetHighColor(Dark() ? make_color(0, 0, 0, kRing[i] * 2)
+			: make_color(0, 20, 60, kRing[i]));
 		if (r <= 0)
 			view->StrokeRect(ring);
 		else
@@ -356,7 +407,8 @@ DrawHollow(BView* view, BRect rect, float radius)
 	float inner = std::max(radius, 0.0f) * 0.6f;
 	static const uint8 kTop[] = { 30, 16 };
 	for (int32 i = 0; i < 2; i++) {
-		view->SetHighColor(make_color(0, 20, 60, kTop[i]));
+		view->SetHighColor(Dark() ? make_color(0, 0, 0, kTop[i] * 2)
+			: make_color(0, 20, 60, kTop[i]));
 		view->StrokeLine(BPoint(rect.left + inner, rect.top + 1 + i),
 			BPoint(rect.right - inner, rect.top + 1 + i));
 	}
@@ -364,7 +416,7 @@ DrawHollow(BView* view, BRect rect, float radius)
 	view->PushState();
 	view->SetDrawingMode(B_OP_ALPHA);
 	view->SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_OVERLAY);
-	view->SetHighColor(make_color(30, 45, 70, 26));
+	view->SetHighColor(ShadeColor(26));
 	if (radius <= 0)
 		view->StrokeRect(rect);
 	else {
@@ -393,7 +445,7 @@ DrawSeparator(BView* view, float x, float top, float bottom)
 {
 	// 1 px, rgba(30,45,70,.22)
 	DrawLine(view, BPoint(x, top), BPoint(x, bottom),
-		make_color(30, 45, 70, 56));
+		Dark() ? make_color(255, 255, 255, 20) : make_color(30, 45, 70, 56));
 }
 
 

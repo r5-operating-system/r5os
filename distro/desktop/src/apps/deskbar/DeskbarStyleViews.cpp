@@ -240,7 +240,9 @@ TBarView::_TookDeskbarColor(rgb_color color) const
 	return color == menu || color == tint_color(menu, 1.1)
 		|| color == make_color(240, 245, 252)
 		|| color == make_color(0xee, 0xf1, 0xf5)
-		|| color == make_color(0xee, 0xf2, 0xf8);
+		|| color == make_color(0xee, 0xf2, 0xf8)
+		|| color == make_color(0x16, 0x1a, 0x22)
+		|| color == make_color(0x1c, 0x20, 0x29);
 }
 
 
@@ -630,9 +632,12 @@ TBarMenuTitle::_DrawModern()
 	if (FlatCorner()) {
 		// board A3: the leaf row has its own shade and a line under it
 		menu->PushState();
-		menu->SetHighColor(make_color(0xe3, 0xe8, 0xef));
+		// dark: a step lighter than the surface, the line #3a404c
+		menu->SetHighColor(Dark() ? make_color(0x23, 0x28, 0x33)
+			: make_color(0xe3, 0xe8, 0xef));
 		menu->FillRect(frame);
-		menu->SetHighColor(make_color(0xb9, 0xc2, 0xcf));
+		menu->SetHighColor(Dark() ? make_color(0x3a, 0x40, 0x4c)
+			: make_color(0xb9, 0xc2, 0xcf));
 		menu->StrokeLine(frame.LeftBottom(), frame.RightBottom());
 		menu->PopState();
 		frame.bottom--;
@@ -839,7 +844,8 @@ TTeamMenuItem::_DrawModern()
 		if (FlatCorner()) {
 			DrawLine(menu, BPoint(frame.left, frame.bottom),
 				BPoint(frame.right, frame.bottom),
-				make_color(0xd5, 0xdb, 0xe4));
+				Dark() ? make_color(0x2a, 0x2f, 0x39)
+					: make_color(0xd5, 0xdb, 0xe4));
 		}
 	} else {
 		// a button of 36 on the bar, a gap of 6 after it (board C)
@@ -852,6 +858,10 @@ TTeamMenuItem::_DrawModern()
 		FillShade(menu, button, radius, 31);
 	else if (hover)
 		DrawHover(menu, button, radius);
+	else if (front && Dark()) {
+		// dark: the front row rgba(255,255,255,.07) (mockup B1)
+		FillShade(menu, button, radius, 18);
+	}
 
 	float iconLeft = button.left + (fBarView->Vertical() ? Size(10) : Size(8));
 	if (fIcon != NULL) {
@@ -872,7 +882,7 @@ TTeamMenuItem::_DrawModern()
 		- (fontHeight.ascent + fontHeight.descent)) / 2 + fontHeight.ascent);
 	menu->SetDrawingMode(B_OP_OVER);
 	menu->SetLowColor(SurfaceColor());
-	menu->SetHighColor(LabelColor());
+	menu->SetHighColor(front ? LabelColor() : RowTextColor());
 	// BView::SetFont(): BMenu::SetFont() lays the menu out again, which
 	// draws again (QEMU, 22 Nov: a redraw loop that ran out of memory)
 	menu->BView::SetFont(&font);
@@ -1109,7 +1119,9 @@ TDragRegion::_DrawModern()
 	if (!fBarView->Vertical() || Compact())
 		return;
 	BRect bounds = Bounds();
-	rgb_color line = make_color(30, 45, 70, 46);
+	// dark: rgba(255,255,255,.08) (mockup B1)
+	rgb_color line = Dark() ? make_color(255, 255, 255, 20)
+		: make_color(30, 45, 70, 46);
 	DrawLine(this, bounds.LeftTop(), bounds.RightTop(), line);
 	DrawLine(this, bounds.LeftBottom(), bounds.RightBottom(), line);
 }
@@ -1199,7 +1211,8 @@ TDeskbarMenu::DrawBackground(BRect updateRect)
 	// the glass panel: its own colour, and the edge where it is square
 	if (ButtonRadius() <= 0) {
 		PushState();
-		SetHighColor(Glass() ? EdgeColor() : make_color(0x9f, 0xb0, 0xc8));
+		SetHighColor(Glass() || Dark() ? EdgeColor()
+			: make_color(0x9f, 0xb0, 0xc8));
 		StrokeRect(Bounds());
 		PopState();
 	}

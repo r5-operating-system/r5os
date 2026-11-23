@@ -95,6 +95,9 @@ bool			WatchWindows(bool vertical);
 bool			FlatCorner();
 // The surfaces are glass (GPU mode, not the flat corner).
 bool			Glass();
+// Dark mode (THEMING-CONTRACT: the panel colour is dark): a theme sets the
+// dark ui_color set, and Default (R5) follows it. Classic needs nothing.
+bool			Dark();
 
 float			Scale();
 float			Size(float pixels);
@@ -111,6 +114,11 @@ rgb_color		CountColor();
 rgb_color		FrontColor();
 rgb_color		EdgeColor();
 rgb_color		EdgeLineColor();
+// The colour of shades, hover and separators: navy on light, white on
+// dark, with \a alpha.
+rgb_color		ShadeColor(uint8 alpha);
+// The text of the other (not front) rows: #c9cfd9 on dark (mockup B1).
+rgb_color		RowTextColor();
 
 // The team of the front application (the roster's active application),
 // or -1.

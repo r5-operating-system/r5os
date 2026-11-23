@@ -70,6 +70,10 @@ static const float kTabBottomLight = 0.12f;
 // The edge (board 4): white at 75 % with the effects, #9fb0c8 without.
 static const rgb_color kPlainEdge = { 0x9f, 0xb0, 0xc8, 255 };
 static const uint8 kSoftEdgeAlpha = 191;
+// Dark mode (a theme's dark ui colours, docs/design/THEMING.md; mockup B1
+// and B2): white at 10 % with the effects, #4a515e without.
+static const rgb_color kDarkPlainEdge = { 0x4a, 0x51, 0x5e, 255 };
+static const uint8 kDarkSoftEdgeAlpha = 26;
 
 static const rgb_color kWhite = { 255, 255, 255, 255 };
 static const rgb_color kBlack = { 0, 0, 0, 255 };
@@ -290,11 +294,12 @@ R5ModernDecorator::GetEdgeLine(rgb_color* color, float* width)
 		return R5Decorator::GetEdgeLine(color, width);
 	}
 
+	bool dark = _Dark();
 	if (_Soft()) {
 		*color = kWhite;
-		color->alpha = kSoftEdgeAlpha;
+		color->alpha = dark ? kDarkSoftEdgeAlpha : kSoftEdgeAlpha;
 	} else
-		*color = kPlainEdge;
+		*color = dark ? kDarkPlainEdge : kPlainEdge;
 	*width = 1;
 	return true;
 }
@@ -899,9 +904,21 @@ R5ModernDecorator::_TabAtX(float x) const
 rgb_color
 R5ModernDecorator::_StraightEdgeColor() const
 {
+	bool dark = _Dark();
 	if (!_Soft())
-		return kPlainEdge;
-	return mix_color(fPanelColor, kWhite, kSoftEdgeAlpha / 255.0f);
+		return dark ? kDarkPlainEdge : kPlainEdge;
+	return mix_color(fPanelColor, kWhite,
+		(dark ? kDarkSoftEdgeAlpha : kSoftEdgeAlpha) / 255.0f);
+}
+
+
+/*!	Dark mode: the panel colour is dark (THEMING.md: a theme in dark mode
+	sets the dark ui colours; UpdateColors() keeps fPanelColor current).
+*/
+bool
+R5ModernDecorator::_Dark() const
+{
+	return fPanelColor.IsDark();
 }
 
 
@@ -1020,10 +1037,14 @@ R5ModernDecorator::_DrawGlassButton(Decorator::Tab* tab, BRect rect,
 	ComponentColors colors;
 	GetComponentColors(COMPONENT_TAB, RegionHighlight(REGION_TAB), colors,
 		tab);
-	rgb_color line = active ? mix_color(colors[COLOR_TAB], kBlack, 0.65f)
+	// dark (mockup B1): rgba(60, 40, 0, .55) over the deeper yellow and a
+	// white of 45 %
+	bool dark = _Dark();
+	rgb_color line = active ? mix_color(colors[COLOR_TAB], kBlack,
+			dark ? 0.75f : 0.65f)
 		: kBlack;
-	float lineAlpha = active ? 0.35f : 0.20f;
-	float fill = active ? 0.55f : 0.60f;
+	float lineAlpha = active ? (dark ? 0.55f : 0.35f) : 0.20f;
+	float fill = active ? (dark ? 0.45f : 0.55f) : 0.60f;
 	float backFill = active ? 0.35f : 0.60f;
 	float highlight = 0.90f;
 	if (pressed) {

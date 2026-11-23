@@ -318,10 +318,11 @@ TBarView::MessageReceived(BMessage* message)
 // SPDX-License-Identifier: MIT
 		case B_COLORS_UPDATED:
 			SetViewUIColor(B_MENU_BACKGROUND_COLOR);
-			// Default (R5) keeps its own surface
+			// Default (R5) keeps its own surface, light or dark (a theme's
+			// dark mode, docs/design/THEMING.md): the whole style again, so
+			// the tray symbols and the edge take the new colours too
 			if (R5Deskbar::Modern())
-				_StyleViews(Parent() != NULL ? Parent() : this,
-					R5Deskbar::Glass());
+				ApplyStyle();
 			Invalidate();
 			break;
 

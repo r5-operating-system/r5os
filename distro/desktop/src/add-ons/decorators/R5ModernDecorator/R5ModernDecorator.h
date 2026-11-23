@@ -85,6 +85,7 @@ private:
 									float y) const;
 			Decorator::Tab*		_TabAtX(float x) const;
 			rgb_color			_StraightEdgeColor() const;
+			bool				_Dark() const;
 			void				_DrawWedges(BRect rect);
 			void				_DrawTabBackground(Decorator::Tab* tab,
 									BRect rect);
