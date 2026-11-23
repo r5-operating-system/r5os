@@ -1855,7 +1855,8 @@ R5ModernControlLook::DrawLabel(BView* view, const char* label,
 		return;
 	}
 	if ((flags & B_DISABLED) != 0 && textColor == NULL) {
-		rgb_color bg = panel_color(view);
+		rgb_color bg = view->Parent() != NULL ? view->Parent()->ViewColor()
+			: view->LowColor();
 		rgb_color muted = blend(bg, ui_color(B_CONTROL_TEXT_COLOR), 0.45f);
 		HaikuControlLook::DrawLabel(view, label, icon, rect, updateRect,
 			bg, flags & ~B_DISABLED, alignment, &muted);
