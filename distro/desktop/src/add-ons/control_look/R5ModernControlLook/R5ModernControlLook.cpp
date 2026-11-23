@@ -1509,6 +1509,22 @@ R5ModernControlLook::GetScrollBarWidth(orientation orientation)
 }
 
 
+/*!	Haiku's insets, and 8 more on the left of a menu bar (at 12 points):
+	R5's BMenuBar starts its first title there when the bar is on the left
+	edge of a window with a frame, so the title and its menu clear the
+	round corner of the R5 Modern window.
+*/
+void
+R5ModernControlLook::GetBackgroundInsets(background_type backgroundType,
+	uint32 flags, float& _left, float& _top, float& _right, float& _bottom)
+{
+	HaikuControlLook::GetBackgroundInsets(backgroundType, flags, _left, _top,
+		_right, _bottom);
+	if (backgroundType == B_MENU_BAR_BACKGROUND)
+		_left += roundf(8 * scale());
+}
+
+
 // #pragma mark - labels
 
 

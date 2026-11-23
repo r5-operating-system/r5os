@@ -265,6 +265,10 @@ public:
 
 	virtual	float				GetScrollBarWidth(
 									orientation orientation = B_VERTICAL);
+	virtual	void				GetBackgroundInsets(
+									background_type backgroundType,
+									uint32 flags, float& _left, float& _top,
+									float& _right, float& _bottom);
 
 	virtual	void				DrawLabel(BView* view, const char* label,
 									const BBitmap* icon, BRect rect,

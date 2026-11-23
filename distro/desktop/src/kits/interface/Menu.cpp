@@ -2784,6 +2784,51 @@ BMenu::_ComputeColumnLayout(int32 index, bool bestFit, bool moveItems,
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+/*!	Where the first title of a menu bar starts. A control look that returns
+	a left inset larger than Haiku's 1 for B_MENU_BAR_BACKGROUND moves the
+	titles in by the difference, so they clear a round window corner (R5
+	Modern). Only for a menu bar on the left edge of a window with a frame;
+	every other menu, and every look that returns 1, starts at 0 as before.
+*/
+static float
+r5_menu_bar_start(BMenu* menu)
+{
+	if (dynamic_cast<BMenuBar*>(menu) == NULL || be_control_look == NULL)
+		return 0.0f;
+
+	BWindow* window = menu->Window();
+	if (window == NULL)
+		return 0.0f;
+
+	switch (window->Look()) {
+		case B_TITLED_WINDOW_LOOK:
+		case B_DOCUMENT_WINDOW_LOOK:
+		case B_FLOATING_WINDOW_LOOK:
+		case B_MODAL_WINDOW_LOOK:
+			break;
+		default:
+			return 0.0f;
+	}
+
+	BPoint origin(0.0f, 0.0f);
+	if (menu->Parent() != NULL)
+		origin = menu->Parent()->ConvertToScreen(menu->Frame().LeftTop());
+	else
+		origin = menu->ConvertToScreen(origin);
+	if (origin.x > window->Frame().left + 0.5f)
+		return 0.0f;
+
+	float left = 1.0f, top = 0.0f, right = 0.0f, bottom = 0.0f;
+	be_control_look->GetBackgroundInsets(BControlLook::B_MENU_BAR_BACKGROUND,
+		0, left, top, right, bottom);
+	return std::max(0.0f, floorf(left - 1.0f));
+}
+// SPDX-SnippetEnd
+
+
 void
 BMenu::_ComputeRowLayout(int32 index, bool bestFit, bool moveItems,
 	BRect& frame)
@@ -2792,6 +2837,11 @@ BMenu::_ComputeRowLayout(int32 index, bool bestFit, bool moveItems,
 	GetFontHeight(&fh);
 	frame.Set(0.0f, 0.0f, 0.0f, ceilf(fh.ascent + fh.descent + fPad.top
 		+ fPad.bottom));
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	frame.right = r5_menu_bar_start(this);
+// SPDX-SnippetEnd
 
 	for (int32 i = 0; i < fItems.CountItems(); i++) {
 		BMenuItem* item = ItemAt(i);
