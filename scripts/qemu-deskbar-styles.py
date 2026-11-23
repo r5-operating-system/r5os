@@ -156,6 +156,10 @@ def act(qmp, name, margin, frame, out):
     qmp.dump(path)
     to_png(path)
     if name.startswith("menu"):
+        # twice: a menu that opens late (Lavapipe under load) still closes,
+        # else Deskbar keeps tracking it and the guest's hey waits
+        qmp.key("esc")
+        time.sleep(2.5)
         qmp.key("esc")
         time.sleep(0.5)
     qmp.move(qmp.width / 2, qmp.height * 0.7)
@@ -267,7 +271,7 @@ def main():
                 kind = words[0]
                 if kind == "start":
                     started = True
-                    deadline = time.time() + 900
+                    deadline = time.time() + 1500
                 elif kind == "shot":
                     path = os.path.join(out, words[1] + ".ppm")
                     qmp.dump(path)
