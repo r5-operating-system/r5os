@@ -8,6 +8,12 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-23 - Themes - fixes from the external review of PR 4564
+
+- Problem: an external review of the pull request found square corners on menu fields, buttons without their right and bottom line, dark text on the accent in the Settings sidebar, an unreadable dark text selection, a dark Deskbar edge that was too heavy, white buttons on an inactive dark tab, a slider without the accent, a stub on the last tab, a square end on the progress bar, a fixed-height scroll bar preview, a clipped Parts box, the Save dialog's colour, a Save button with no parts, hand-copied themes that could not be deleted, a dropped scroll bar error, a non-atomic look swap, and a Deskbar front bar that ignored the accent.
+- Changed, per point: see `docs/design/THEMING.md`, "External review of PR 4564". In short: round field insides and the mockup's chevron; button clips that keep the last pixel row; light text on the sidebar's blue; the accent laid over a dark selection (R5's `BTextView`); a white 10 % Deskbar edge on dark glass; faint buttons on an inactive dark tab; an accent slider with a muted track and a light dark thumb; tab and progress shapes; the preview at the look's width; room under Parts; the document colour in Save as theme; Save needs a part; `remove_theme()` by the name inside; the scroll bar error kept; a release store for the new look; `FrontColor()` from the accent. Point 1.11 is the R5 menu style. Point 1.14 (the owner's addition): the Settings sidebar list has a round frame of its own with the R5 Modern controls, one pixel as before, its corners masked after the list draws. Point 3 is for the owner.
+- Tested: see the next lines of this entry once the QEMU runs are in.
+
 ## 2026-11-23 - Themes - R5 Modern menus: round, 26 px rows, shortcuts as text, light and dark
 
 - Problem: menus kept Haiku's look under the R5 Modern controls. The owner approved a menu mockup (`docs/design/menu-mockup/`, boards M1 to M6) and asked for it in this pull request.

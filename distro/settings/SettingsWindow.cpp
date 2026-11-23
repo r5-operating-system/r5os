@@ -42,6 +42,7 @@
 #include <Roster.h>
 #include <ScrollBar.h>
 #include <ScrollView.h>
+#include <Shape.h>
 #include <String.h>
 #include <StringView.h>
 #include <TextControl.h>
@@ -357,6 +358,105 @@ SettingsList::UpdateScrollBar()
 		Parent()->InvalidateLayout();
 	fUpdatingBar = false;
 }
+
+
+/*!	The frame of the list (external review 1.14, mockups A1 and A2): one
+	pixel round the scroll view, as B_PLAIN_BORDER gives, so nothing moves.
+	With the R5 Modern controls the frame is round (8 at 12 points): the
+	line is drawn round, and after the list has drawn, its corners outside
+	the arc take the panel colour again (B_DRAW_ON_CHILDREN), which a scroll
+	view's own frame cannot do. With other controls it is the look's plain
+	scroll view frame, as before. The R5 Modern look answers more than 1
+	for B_MENU_BACKGROUND (docs/design/THEMING.md, "Menus").
+*/
+class ListFrame : public BView {
+public:
+	ListFrame(BView* child)
+		:
+		BView("nav-frame", B_WILL_DRAW | B_DRAW_ON_CHILDREN
+			| B_FULL_UPDATE_ON_RESIZE)
+	{
+		SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
+		SetLowUIColor(B_PANEL_BACKGROUND_COLOR);
+		BGroupLayout* layout = new BGroupLayout(B_VERTICAL, 0);
+		SetLayout(layout);
+		layout->SetInsets(1, 1, 1, 1);
+		layout->AddView(child);
+	}
+
+	virtual void Draw(BRect updateRect)
+	{
+		BRect frame(Bounds());
+		if (!_Round()) {
+			be_control_look->DrawScrollViewFrame(this, frame, updateRect,
+				BRect(), BRect(), ViewColor(), B_PLAIN_BORDER);
+			return;
+		}
+		SetHighColor(ViewColor());
+		FillRect(frame);
+		_StrokeLine();
+	}
+
+	virtual void DrawAfterChildren(BRect updateRect)
+	{
+		if (!_Round())
+			return;
+		// the corners outside the arc: the panel again, then the line
+		BRect frame(Bounds());
+		float r = _Radius();
+		PushState();
+		SetDrawingMode(B_OP_ALPHA);
+		SetHighColor(ViewColor());
+		for (int32 i = 0; i < 4; i++) {
+			bool left = i == 0 || i == 2;
+			bool top = i < 2;
+			float x = left ? frame.left : frame.right + 1;
+			float y = top ? frame.top : frame.bottom + 1;
+			float dx = left ? r : -r;
+			float dy = top ? r : -r;
+			BShape wedge;
+			wedge.MoveTo(BPoint(x, y));
+			wedge.LineTo(BPoint(x + dx, y));
+			wedge.ArcTo(r, r, 0, false, left == top, BPoint(x, y + dy));
+			wedge.Close();
+			MovePenTo(B_ORIGIN);
+			FillShape(&wedge);
+		}
+		PopState();
+		_StrokeLine();
+	}
+
+private:
+	bool _Round() const
+	{
+		float left = 1, top = 1, right = 1, bottom = 1;
+		be_control_look->GetBackgroundInsets(BControlLook::B_MENU_BACKGROUND,
+			0, left, top, right, bottom);
+		return left > 1;
+	}
+
+	float _Radius() const
+	{
+		return roundf(8 * be_plain_font->Size() / 12.0f);
+	}
+
+	void _StrokeLine()
+	{
+		// the R5 Modern line on the panel: #d5dae2 light, #3a404c dark
+		rgb_color panel = ViewColor();
+		rgb_color line = panel.IsLight()
+			? mix_color(panel, make_color(15, 23, 42), 28)
+			: mix_color(panel, make_color(255, 255, 255), 33);
+		BRect frame(Bounds());
+		float r = _Radius();
+		PushState();
+		SetDrawingMode(B_OP_ALPHA);
+		SetHighColor(line);
+		StrokeRoundRect(BRect(frame.left + 0.5f, frame.top + 0.5f,
+			frame.right + 0.5f, frame.bottom + 0.5f), r, r);
+		PopState();
+	}
+};
 
 
 class SearchWatch : public BMessageFilter {
@@ -720,8 +820,11 @@ SettingsWindow::SettingsWindow(SettingsManager* manager,
 	fSearch->SetModificationMessage(new BMessage(kMsgSearch));
 
 	fList = new SettingsList();
-	BScrollView* scroll = new BScrollView("nav-scroll", fList, 0, false, true,
-		B_PLAIN_BORDER);
+	// the frame is ListFrame's (one pixel, as B_PLAIN_BORDER): round with
+	// the R5 Modern controls (external review 1.14)
+	BScrollView* scrollView = new BScrollView("nav-scroll", fList, 0, false,
+		true, B_NO_BORDER);
+	BView* scroll = new ListFrame(scrollView);
 
 	fLock = new BButton("lock", NULL, new BMessage(kMsgLockButton));
 	fHeader = new BAppearanceKit::BPageHeader("heading");

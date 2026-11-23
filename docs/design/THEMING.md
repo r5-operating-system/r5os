@@ -366,6 +366,32 @@ in QEMU without the owner.
    every R5 Modern measure does; a menu font of another size keeps rows of
    26 at the plain size.
 
+## External review of PR 4564 (23 Nov 2026)
+
+Every point of the review (`1.7` was left out by the owner: the mockup draws an empty ring on the Save card):
+
+- 1.1: Menu fields: the inside is filled round on the frame's centres (no square corners over the arcs), the focus ring stays, the chevron is the mockup's (6 by 3, stroke 1.6) 10 px from the field's right edge, centred on the field's height.
+- 1.2: Buttons: `ClipToRect()` keeps the area up to the rect's right and bottom edges, not their pixels; the clips of the button frame, the button inside and an open-sided text field now include the last column and row, so all four sides of the line show.
+- 1.3: Settings sidebar: the selected row's text is the list colour on a light list and white on a dark one (it was the dark list colour on the blue). The dark menu bar title was the look overwriting the label colour, fixed with the R5 menu style (the highlight keeps the label colour).
+- 1.4: Dark text selection: in a dark text view the selection is the accent at 45 % laid over the text, drawn with the lines; Haiku's inversion stays for light views (R5's `BTextView`, `Highlight()` and `_DrawLines()`).
+- 1.5: Deskbar dark glass edge: white at 10 % on the glass (drawn with `B_OP_ALPHA`, and the compositor's edge line keeps the alpha); `#3a404c` without the GPU.
+- 1.6: Inactive dark window tab: the buttons are a line of white at 25 % and white at 12 % (was white at 60 %).
+- 1.8: Slider: the value side is the accent and the rest a muted track (`#3a404c`-ish dark) unless the program chose its own fill colour; the dark thumb is the control text colour (`#e6e9ef`).
+- 1.9: Tabs: the clipping region is the tab rect itself (a region is in pixels), no stub at the right or over the baseline.
+- 1.10: Progress bar: the filled part is its own round shape, round at the leading end too (at least twice the radius wide).
+- 1.11: Dark pop-up menus: done by the R5 menu style in this pull request: shortcuts are text in the menu's muted colour (no light key caps), and the menu has its line (the decorator's, in the menu edge colour).
+- 1.12: Scroll bar preview: its height is the look's `GetScrollBarWidth(B_HORIZONTAL)`; the window lays out again on a look or width change (the live switch).
+- 1.13: Theme page: 14 under the Parts box so its bottom line and corners show. Save as theme: every view on the document colour (white, A3), 8 between the Name label and its field. The button row keeps its place at the right inset.
+- 1.14: Settings sidebar corners: the list sits in a frame view of its own (one pixel round the scroll view, as `B_PLAIN_BORDER`, so nothing moves). With the R5 Modern controls the frame is round (8 at 12 points): the line is drawn round, and after the list has drawn its corners outside the arc take the panel colour again (`B_DRAW_ON_CHILDREN`, `DrawAfterChildren()`), which a scroll view's own frame cannot do from the control look. With other controls it is the look's plain scroll view frame. Other scroll views keep the look's radius 3: a larger arc would be cut by the rectangular child.
+- 2.1: Live switching: the new look is published with a release store (`__atomic_store_n(..., __ATOMIC_RELEASE)`), so another window thread sees it fully built; the readers are Haiku's plain loads.
+- 2.2: Deskbar front-program bar: `FrontColor()` is `ui_color(B_CONTROL_HIGHLIGHT_COLOR)`, the theme's accent.
+- 2.3: Save as theme: the part check boxes update the Save button, which needs a name and at least one part; the name alert closes with Escape.
+- 2.4: `remove_theme()` finds a hand-copied file by the name inside it, as `find_theme()` does.
+- 2.5: `set_theme()`: a failed `get_scroll_bar_info()`/`set_scroll_bar_info()` is the scroll bar part's error and drops the part from `applied`.
+- 2.6: `DrawTextControlBorder()`: the unused variables are gone.
+- 2.7: Theme card thumbnail: the mini Deskbar is round only when the theme's Deskbar is rounded.
+- 3: For the owner (the `AGENTS.md` bullet for the Theme page was in the brief and stays).
+
 ## The Theme Kit (owner's addition, 23 Nov 2026)
 
 For theme makers: the calls in `<Themes.h>` (list, read, apply, save,
