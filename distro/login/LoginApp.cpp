@@ -848,8 +848,11 @@ LoginApp::_StartAndUnlockKeyStore(const char* login, const char* password)
 	// existing protector refused it (e.g. password changed via passwd in
 	// Terminal), move the current store aside as .old* and initialize a fresh
 	// store with this password, triggering "Do you still know your old
-	// password?" in keystore_server.
-	if (hasProtector && ksStatus == B_NOT_ALLOWED) {
+	// password?" in keystore_server. keystore_server answers
+	// B_PERMISSION_DENIED only when the protector itself does not open; a
+	// damaged database or a refused sender (B_NOT_ALLOWED) is not a mismatch
+	// and must not move the store aside.
+	if (hasProtector && ksStatus == B_PERMISSION_DENIED) {
 		uint8 freshSalt[16];
 		BSecurityKit::BPasswordHash::Parameters freshParams
 			= BSecurityKit::BPasswordHash::DefaultParameters();
@@ -888,7 +891,8 @@ LoginApp::_StartAndUnlockKeyStore(const char* login, const char* password)
 			if (status == B_OK) {
 				ksStatus = recoverReply.GetInt32(BPrivate::kR5KSFieldStatus,
 					B_ERROR);
-			}
+			} else
+				ksStatus = status;
 			r5_session_log("keystore_server: mismatch recovery %s",
 				strerror(ksStatus));
 			return;

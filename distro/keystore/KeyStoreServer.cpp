@@ -54,6 +54,7 @@ using namespace BSecurityKit;
 static const char* kLoginAppSignature = "application/x-vnd.Haiku-Login";
 static const uint32 kMsgShowOldKeyStorePrompt = 'r5OP';
 static const uint32 kMsgShowMissingProtectorAlert = 'r5MP';
+static const uint32 kMsgShowLockedAlert = 'r5LA';
 
 static void
 wipe_message_raw_field(BMessage& msg, const char* name)
@@ -184,6 +185,16 @@ KeyStoreServer::MessageReceived(BMessage* message)
 				"encrypted database was kept as a backup and a new empty "
 				"key store was created.",
 				"OK", NULL, NULL, B_WIDTH_AS_USUAL, B_WARNING_ALERT);
+			alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
+			alert->Go(NULL);
+		}
+		return;
+	}
+	if (message->what == kMsgShowLockedAlert) {
+		const char* text = message->GetString("text", NULL);
+		if (!message->IsSourceRemote() && text != NULL) {
+			BAlert* alert = new BAlert("Key store", text, "OK", NULL, NULL,
+				B_WIDTH_AS_USUAL, B_WARNING_ALERT);
 			alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
 			alert->Go(NULL);
 		}
@@ -1154,6 +1165,12 @@ KeyStoreServer::_UnlockWithKek(const BSecureBuffer& kek,
 	if (hasProtector && !recoverMismatch) {
 		status_t status = R5KeyStoreCrypto::UnwrapMasterKey(
 			fProtectorsPath.String(), kek, fMasterKey, fKeyStoreId);
+		// Only a protector that does not open with this password is a
+		// mismatch; Login moves the store aside for that case alone
+		// (B_PERMISSION_DENIED). A damaged database below is not a mismatch:
+		// moving it aside would ask for an old password that cannot help.
+		if (status == B_NOT_ALLOWED)
+			return B_PERMISSION_DENIED;
 		if (status != B_OK)
 			return status;
 
@@ -1164,6 +1181,9 @@ KeyStoreServer::_UnlockWithKek(const BSecureBuffer& kek,
 			status = _ReadKeyStoreDatabase();
 			if (status != B_OK) {
 				_LockStore();
+				_PostLockedAlert("Your saved passwords could not be read: the "
+					"key store file is damaged. It was left as it is, and "
+					"apps cannot use saved passwords in this session.");
 				return status;
 			}
 		} else {
@@ -1190,8 +1210,11 @@ KeyStoreServer::_UnlockWithKek(const BSecureBuffer& kek,
 		if (hasProtector && recoverMismatch) {
 			status_t moveStatus = R5KeyStoreCrypto::PreserveCurrentAsOld(
 				fKeyStoreDir.String(), true);
-			if (moveStatus != B_OK && moveStatus != B_ENTRY_NOT_FOUND)
+			if (moveStatus != B_OK && moveStatus != B_ENTRY_NOT_FOUND) {
+				if (moveStatus == B_DEVICE_FULL)
+					_PostSlotsFullAlert();
 				return moveStatus;
+			}
 		} else {
 			// Check for an existing database when keystore_protectors is absent:
 			// migrate a valid legacy plaintext database once; if it is already
@@ -1229,6 +1252,8 @@ KeyStoreServer::_UnlockWithKek(const BSecureBuffer& kek,
 							fKeyStoreDir.String(), false);
 					if (moveStatus != B_OK) {
 						_LockStore();
+						if (moveStatus == B_DEVICE_FULL)
+							_PostSlotsFullAlert();
 						return moveStatus;
 					}
 					missingProtectorBackup = true;
@@ -1305,6 +1330,30 @@ KeyStoreServer::_LockStore()
 	BSecureBuffer::WipeMemory(fKeyStoreId, sizeof(fKeyStoreId));
 	fKeyrings.MakeEmpty();
 	fMasterKeyring = NULL;
+}
+
+
+/*
+ * Tell the user why saved passwords are not available in this session,
+ * instead of only a line in the session log (review of PR #4592).
+ */
+void
+KeyStoreServer::_PostLockedAlert(const char* text)
+{
+	BMessage message(kMsgShowLockedAlert);
+	message.AddString("text", text);
+	PostMessage(&message);
+}
+
+
+void
+KeyStoreServer::_PostSlotsFullAlert()
+{
+	_PostLockedAlert("Your saved passwords cannot be opened with your current "
+		"password, and all 16 backup places for older key stores are in use, "
+		"so nothing was moved. Saved passwords stay locked in this session. "
+		"Recover or remove an older key store (keystore_database.old*) in "
+		"~/config/settings/system/keystore to make room.");
 }
 
 

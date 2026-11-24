@@ -25,6 +25,13 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
     - Boot 1 (no password): `keystore list passwords` returned `Operation not allowed` (`B_NOT_ALLOWED`) and no plaintext `keystore_database` was created.
     - Boot 2 (Sign in with password): `keystore_server` ran as `user` (uid 1001), created `keystore_protectors` (mode `0600`) and `keystore_database` (mode `0600`, magic `R5KS`, no plaintext `"Master"`), and no password appeared in `serial.log`.
 - Limits / Not tested in QEMU yet: Interactive GUI click-through of `OldKeyStoreWindow` and own password change dialogs (the new Settings dialogs arrive in Step 3).
+- Review fixes, second round (Claude, 24 Nov 2026, from an independent review of `b06747d193`):
+  - Only a protector that does not open is a mismatch: `keystore_server` now answers `B_PERMISSION_DENIED` for that case alone, and Login moves the store aside only on that code. Before, a damaged `keystore_database` (or a refused sender, `B_NOT_ALLOWED`) also moved the store aside and asked for an "old password" that could not help, using up a `.old*` slot each sign-in. A damaged database now stays in place and the user gets an alert.
+  - All 16 `.old*` slots full (`B_DEVICE_FULL`): the user now gets an alert that explains why saved passwords stay locked and where the older key stores are, instead of only a session-log line.
+  - Own password change: a failed rollback rewrap after a failed `/etc/shadow` write is checked, logged at `LOG_ERR`, and the error tells the user to enter the new password if later asked for the old one.
+  - Login logs the real status when the mismatch-recovery send fails.
+  - Not changed (nits from that review): database-only `.old*` slots are not cleaned up; a crash between the two renames of `PreserveCurrentAsOld` can leave a lone `keystore_database.oldN`; `RecoverOldKeyStore` derives up to 16 keys under the looper lock.
+- Tested (Claude, 24 Nov 2026): `scripts/build-locked.sh` before and after these fixes (`jam_exit=0`, `mesa_exit=0`; `KeyStoreServer.o`, `LoginApp.o`, `AccountAdmin.o` recompiled, no warnings in key store, Login or Users). `distro/keystore/tests/keystore_crypto_test.cpp` built with the Haiku cross compiler against the built `libbe.so` and `libr5security.so` and run inside R5 in QEMU (KVM, own image copy, a one-time launch job): `ALL KEYSTORE CRYPTO TESTS PASSED`, no panic in the serial log. Not tested: Sign in, a password change and an administrator reset by hand in the GUI.
 
 ## 2026-11-24 - What's new: builds 10068 to 10070
 

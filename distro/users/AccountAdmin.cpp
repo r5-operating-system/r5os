@@ -1771,13 +1771,24 @@ update_profile(BMessage* request, BString& error)
 		}
 
 		if (set_shadow_password(account, hash.String()) != B_OK) {
+			error = "The password could not be saved.";
 			if (rewrapped) {
-				rewrap_keystore_for_account(home, uid, gid, newKek, oldKek,
-					oldParams.salt, oldParams.kdf);
+				status_t rollback = rewrap_keystore_for_account(home, uid,
+					gid, newKek, oldKek, oldParams.salt, oldParams.kdf);
+				if (rollback != B_OK) {
+					// The key store now opens with the new password, which
+					// was not applied. At the next sign-in it is moved aside
+					// and the "old password" question needs the new one.
+					syslog(LOG_ERR, "AccountAdmin: keystore rollback after a "
+						"failed password change failed: %s",
+						strerror(rollback));
+					error = "The password could not be saved. If you are "
+						"later asked for your old password for saved "
+						"passwords, enter the new password you just typed.";
+				}
 			}
 			oldKek.Clear();
 			newKek.Clear();
-			error = "The password could not be saved.";
 			return B_ERROR;
 		}
 		oldKek.Clear();

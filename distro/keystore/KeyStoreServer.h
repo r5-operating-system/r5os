@@ -94,6 +94,8 @@ private:
 										const BSecurityKit::BPasswordHash::Parameters& newParams);
 		void						_LockStore();
 		bool						_HasOldKeyStore() const;
+		void						_PostLockedAlert(const char* text);
+		void						_PostSlotsFullAlert();
 // SPDX-SnippetEnd
 
 		Keyring*					fMasterKeyring;
