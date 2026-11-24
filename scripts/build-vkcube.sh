@@ -1,7 +1,10 @@
 #!/bin/bash
 # Cross-build vkcube from Vulkan-Tools 1.4.367 and put it in vulkan_tools.
 # Also refreshes r5-wsi-window-test.sh and r5-gl-test inside the vulkanteapot
-# package (1.0.0-5). r5-gl-test links libglvnd (libEGL, libGL).
+# package (1.0.0-6). r5-gl-test links libglvnd (libEGL, libGL).
+# VulkanTeapot gets its resources (icon, signature) from VulkanTeapot.rdef,
+# and the package links it into the Deskbar's Demos menu, as Haiku does for
+# GLTeapot.
 # TEAPOT_ONLY=1 repacks only vulkanteapot and leaves vulkan_tools as it is.
 # Apache-2.0 for cube.c. The window file is MIT.
 set -eu
@@ -13,6 +16,12 @@ CC="$BIN/x86_64-unknown-haiku-gcc"
 CXX="$BIN/x86_64-unknown-haiku-g++"
 STRIP="$BIN/x86_64-unknown-haiku-strip"
 PKG="$HAIKU/generated.x86_64/objects/linux/x86_64/release/tools/package/package"
+TOOLDIR="$HAIKU/generated.x86_64/objects/linux/x86_64/release/tools"
+RC="$TOOLDIR/rc/rc"
+XRES="$TOOLDIR/xres"
+MIMESET="$TOOLDIR/mimeset"
+MIMEDB="$HAIKU/generated.x86_64/objects/common/data/mime_db/mime_db"
+export LD_LIBRARY_PATH="$HAIKU/generated.x86_64/objects/linux/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 TARBALL="$SRCROOT/Vulkan-Tools-1.4.367.tar.gz"
 CUBE_SRC="$SRCROOT/Vulkan-Tools-1.4.367/cube"
 SYS="$SRCROOT/sysroot"
@@ -22,7 +31,7 @@ STAGE="$SRCROOT/vkcube-out"
 TOOLS_SRC="$REPO/distro/packages/x86_64/vulkan_tools-1.4.367-1-x86_64.hpkg"
 TEAPOT_SRC="$REPO/distro/packages/x86_64/vulkanteapot-1.0.0-1-x86_64.hpkg"
 TOOLS="$REPO/distro/packages/x86_64/vulkan_tools-1.4.367-2-x86_64.hpkg"
-TEAPOT="$REPO/distro/packages/x86_64/vulkanteapot-1.0.0-5-x86_64.hpkg"
+TEAPOT="$REPO/distro/packages/x86_64/vulkanteapot-1.0.0-6-x86_64.hpkg"
 
 if [[ ! -f "$CUBE_SRC/cube.c" ]]; then
 	if [[ ! -f "$TARBALL" ]]; then
@@ -71,6 +80,8 @@ TEA="$REPO/distro/apps/vulkanteapot"
 	"$STAGE/VulkanTeapot.o" "$STAGE/VulkanWindow.o" "$STAGE/r5_pixels.o" \
 	-L"$SYS/develop/lib" -lvulkan -lbe
 "$STRIP" "$STAGE/VulkanTeapot"
+"$RC" -o "$STAGE/VulkanTeapot.rsrc" "$TEA/VulkanTeapot.rdef"
+"$XRES" -o "$STAGE/VulkanTeapot" "$STAGE/VulkanTeapot.rsrc"
 if strings "$STAGE/VulkanTeapot" | grep -F -q /home/nickr; then
 	echo "VulkanTeapot contains a host path" >&2
 	exit 1
@@ -126,6 +137,10 @@ add_script() {
 	mkdir -p "$1/bin"
 	cp -a "$STAGE/VulkanTeapot" "$1/bin/VulkanTeapot"
 	chmod 755 "$1/bin/VulkanTeapot"
+	# The icon and the signature become attributes, as jam's MimeSet does.
+	"$MIMESET" -f --mimedb "$MIMEDB" "$1/bin/VulkanTeapot"
+	mkdir -p "$1/data/deskbar/menu/Demos"
+	ln -sfn ../../../../bin/VulkanTeapot "$1/data/deskbar/menu/Demos/VulkanTeapot"
 	cp -a "$STAGE/r5-gl-test" "$1/bin/r5-gl-test"
 	chmod 755 "$1/bin/r5-gl-test"
 	python3 - "$REPO/distro/graphics/src/bin/r5-wsi-window-test/r5-wsi-window-test.sh" "$1/bin/r5-wsi-window-test.sh" <<'PY'
@@ -138,8 +153,8 @@ PY
 import pathlib, sys
 path = pathlib.Path(sys.argv[1])
 text = path.read_text()
-text = text.replace("version\t\t\t1.0.0-1", "version\t\t\t1.0.0-5")
-text = text.replace("vulkanteapot = 1.0.0-1", "vulkanteapot = 1.0.0-5")
+text = text.replace("version\t\t\t1.0.0-1", "version\t\t\t1.0.0-6")
+text = text.replace("vulkanteapot = 1.0.0-1", "vulkanteapot = 1.0.0-6")
 path.write_text(text)
 PY
 }
