@@ -1,0 +1,18 @@
+/*
+ * SPDX-FileCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ */
+
+resource app_signature "application/x-vnd.R5-OnlineStorage";
+
+resource app_version {
+	major  = 1,
+	middle = 0,
+	minor  = 0,
+	variety = B_APPV_DEVELOPMENT,
+	internal = 0,
+	short_info = "Online Storage",
+	long_info = "Online Storage © 2026 R5OS Contributors. MIT license."
+};
+
+resource app_flags B_SINGLE_LAUNCH;

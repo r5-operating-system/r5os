@@ -309,6 +309,12 @@ Location: `haiku/src/add-ons/kernel/file_systems/ntfs`, installed as the kernel 
 
 The image already ships the unmodified GNU GPL version 2 text as `GNU GPL v2` in the Haiku package's `data/licenses` (`haiku/data/system/data/licenses/GNU GPL v2`). A release must also offer the corresponding source of this add-on for that exact build; it is in this repository under the path above. Not a file-by-file audit of the add-on.
 
+### rclone (Online Storage, translated)
+
+Online Storage (`distro/apps/onlinestorage`) translates parts of rclone into C++. rclone is MIT, Copyright (C) 2012 by Nick Craig-Wood, https://github.com/rclone/rclone. The commit read is `c0cef5e872f937727c89bfab71d6be11480f4d40` (23 Nov 2026). The translated files name the rclone file they come from and keep that copyright. R5's own files in that directory are MIT, Copyright 2026 R5OS Contributors.
+
+Translated: `lib/oauthutil/oauthutil.go`, `lib/rest/rest.go` (redirects), `fs/fserrors/error.go` (retry), `backend/onedrive/onedrive.go`, `backend/onedrive/api/types.go`, `backend/dropbox/dropbox.go`, `backend/dropbox/batcher.go`. No Go source and no Go runtime are copied. rclone's client id and client secret are not copied. The app is not in the image. The MIT text is `LICENSES/MIT.txt`.
+
 ## Built outside this repository, not in the image
 
 ### VirtualBox Guest Additions 7.2.22

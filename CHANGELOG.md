@@ -8,6 +8,50 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-24 - Online Storage: review fixes (no data loss on a new folder pair, large-delete check, streamed downloads, quit, sign-in)
+
+Problem (code review of PR #4588, 24 Nov 2026):
+
+- One state file (`~/config/settings/onlinestorage-state`) served every service, cloud folder and local folder. After a sync, choosing another local folder made every saved file look deleted locally, so the next sync deleted them in the cloud; another cloud folder deleted the local files.
+- Nothing stopped a run that deletes almost everything on one side (an unplugged disk with an empty folder at its mount point).
+- A download was held in memory as one BString (an int32 length), so a file over 2 GB could not download and a large one used as much RAM. The conflict copy read the whole file into memory too.
+- Quit waited for the whole sync, and up to five minutes in a Retry-After wait.
+- Sign-in accepted only the first connection on the loopback port; a silent connection (a browser's speculative connection, another program) blocked it.
+- With both accounts signed in, Dropbox could not be chosen.
+
+Changed:
+
+- One state file per service + cloud folder + local folder: `~/config/settings/OnlineStorage/state-<SHA-256 of the three>` (mode 0700 folder). A new pair starts as a first sync, which keeps both sides.
+- `SyncEngine` refuses, before it changes anything, a run that would delete at least 3 files on one side and more than half of the files it last synced (`kLargeDeleteMinimum`; renames are not counted). It returns `B_NOT_ALLOWED` with `pendingDeletes`; the window asks "Delete files" or "Cancel", and only a confirmed run goes ahead (`SetAllowLargeDelete`).
+- Downloads stream into `<file>.r5partial` through `BHttpSession::Execute()` with a `BFile` target (`HttpExchange::responseFile`, `CallIntoFile()`), and are moved onto the file only for a 2xx status. An error page is read back up to 1 MiB. The conflict copy is streamed in 64 KiB blocks.
+- `SyncEngine::SetStopFlag()`: the window's stop flag is checked between files; a stopped run returns `B_CANCELED` and keeps the previous state file. The Retry-After wait sleeps in 200 ms steps and stops with it.
+- Sign-in keeps the loopback port open until a connection brings the code with the right state. A connection that stays silent for 5 seconds (`kLoopbackIdleLimit`) gets `B_TIMED_OUT` and is dropped.
+- A "Sync with" menu chooses OneDrive or Dropbox.
+
+Not changed: tokens stay in memory; nothing was tested against Microsoft or Dropbox; the host tests still use the stand-ins in `host/include`, not Haiku's own kits.
+
+Tested: the host tests (`host/run-host-tests.sh`, WSL) pass, with new tests for the large-delete check (an emptied folder is refused, a rename of every file is not, a confirmed run deletes), a stop that keeps the state file, and a silent loopback connection followed by the real one. `scripts/build-locked.sh` from this branch: `jam_exit=0`, `mesa_exit=0`, `OnlineStorage` linked, no warnings in the app. Not booted; the window, the streamed download and the confirmation dialog have not run on R5.
+
+## 2026-11-23 - Online Storage, standalone app (not in the image)
+
+Problem: there was no way to sign in to OneDrive or Dropbox and keep one cloud folder and one home folder in step, both ways.
+
+Changed: `distro/apps/onlinestorage` is an ordinary Haiku application. The engine is C++ translated from rclone `c0cef5e872f937727c89bfab71d6be11480f4d40` (MIT, Copyright (C) 2012 by Nick Craig-Wood): OAuth for a public desktop client, Microsoft Graph, and Dropbox. It is not linked into the image. There is no shared library, no background service, and no Settings page.
+
+Choices made without a live service to try them on:
+
+- The client id is a placeholder (`00000000-0000-0000-0000-000000000000` for OneDrive, `r5-placeholder` for Dropbox) until the apps are registered. rclone's client id and secret are not copied. There is no client secret. PKCE S256 is always on. The redirect and the listener are `http://127.0.0.1:53682/`, not rclone's `localhost` string.
+- OneDrive scopes are Files.ReadWrite and offline_access. Dropbox scopes are files.metadata.write, files.content.write and files.content.read, with `token_access_type=offline`.
+- Tokens stay in memory. Signing in is required again after a restart. The encrypted key store in `docs/VPN-KIT.md` is still plaintext, so it is not used.
+- A conflict keeps both copies. The cloud bytes keep the original name. The local bytes are saved as `name (conflict).ext` and uploaded under that name. An upload checks the cloud revision again, then OneDrive sends the eTag as If-Match and Dropbox commits with mode update. If the item changed, nothing is written over it. Names that differ only by letter case are one file on these services: the cloud spelling is kept.
+- Deleting a folder on one side deletes it on the other, including files the service did not list one by one. A file that cannot be read locally stops the sync. It is not treated as a delete.
+- Content is compared by SHA-256. A Retry-After up to five minutes is waited in full (a longer value waits five minutes, so a bad header cannot stall Quit for hours). Dropbox upload chunks are 4 MiB so a resume can be tested.
+- A redirect of 301, 302 or 303 is sent again as a GET with no body. A 307 or 308 keeps the body only on the same host. The scheme check ignores letter case, so `HTTP://` is still a downgrade.
+- The first sync lists the folder. Later syncs continue from that listing's cursor. A cursor taken after the uploads is not used, so an edit that arrives during the sync is still seen next time. If the listing fails, the previous cursor is kept.
+- If both accounts are signed in, Sync now uses OneDrive. The cloud folder is typed as a path under the account root. The local folder is a directory panel.
+
+Limits: nothing was tested against Microsoft or Dropbox. The simulated tests ran on the build host (WSL), not in QEMU. The window was not booted. Google Drive was not started. National clouds, SharePoint, Dropbox Paper and shared-folder mounting are not implemented.
+
 ## 2026-11-23 - Themes: code-review bug fixes (live switch fan-out, open menus, R5 scroll bars, BCard live color, desktop icon save, settings permissions)
 
 - Problem: code review (`1-THEMING-BUGS.md`, 23 Nov 2026) on `origin/main` (`fe96ea5926`) found 7 real issues: (1–2) `Themes.cpp:set_theme()` looped `be_app->CountWindows()`/`WindowAt()` without holding the looper-list lock (potential use-after-free on closing windows) and skipped `BMenuWindow`s in the calling app; (3) `'R5db'` desktop icon displacement left `fNeedsSaveLocation` set on temporary pushed spots so quitting Tracker persisted the pushed coordinates; (4) `R5ModernControlLook` only read `scroll_bars`/`scroll_bar_width` when `r5/theme` named `R5ModernControlLook`, ignoring Thin/Wide/Haiku scroll bars on the default `R5` (`R5ControlLook`) theme; (5) `BCard::MessageReceived(B_COLORS_UPDATED)` did not re-run `apply_card_view_color()`, leaving stale dark/light `ViewColor()` on document cards after a live mode switch; (6) open `BMenuWindow`s were not restyled on `B_COLORS_UPDATED`; (7) `Themes.cpp` wrote `r5/`, `r5/theme`, and `deskbar/settings` world-writable (`0777`/`0666`) when run as uid 0 in `FirstBootPrompt`.
@@ -28,7 +72,6 @@ The owner's three screenshots from the 5625U on 23 Nov (about 22:43) show the th
 - R5 Modern, light: the Theme page has the theme cards (R5, R5 Modern, Classic (Haiku), Save as theme…), Mode, Accent and the Parts box. The Deskbar is a floating white glass pill with a shadow, and the Settings window has round corners.
 
 These are screenshots only. The stick number and boot logs are not recorded here, and the syslog was not checked for crashes. Not shown: an open pop-up menu field, Custom colors, and Save as theme….
-
 ## 2026-11-23 - Card reader: #4572 and #4573 tested on the 5625U
 
 Tested on the 5625U (stick 80, main after #4573, `generated/boot-5625u-80/` in the stick worktree): the SD card went in and out three times. Each time: `rtsx: card inserted`, a scan, `SDHC card found`, a new disk (`disk/mmc/0/raw`, `/1/raw`, `/2/raw`), the 4 bit bus and 25 reads without an error; on removal `rtsx: card removed`, a scan and `No card in the slot` at once. No `CMD7` timeout (stick 77 and 79), no rtsx or exFAT error, no crash.
