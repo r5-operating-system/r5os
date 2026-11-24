@@ -174,6 +174,10 @@ After a task, report **Veranderd / Getest / Onbewezen / Documentatie**. Tracker 
 
 GitHub issues on `origin` are the lead, including open Haiku Trac tickets. Those are labeled `haiku` and mapped in `tracker/github.tsv` (`<!-- haiku-ticket:ID -->` in the body). Multi-user: [#63](https://github.com/r5-operating-system/r5os/issues/63). Mixxx: [#55](https://github.com/r5-operating-system/r5os/issues/55). After a new Trac CSV: `scripts/tracker-import.py`, then `scripts/sync-github-issues.py`. The sync creates missing issues and closes ones already `fixed` on `origin/main`, with a comment that quotes the status note. It does not reopen a closed issue because Trac still lists it. When a change lands: comment on the matching issue with build, limits, and how/where it was tested; close it if that request is done. If only part shipped, comment and leave it open. Do not mark CHANGELOG/STATUS done while the GitHub issue stays open, or the reverse. What's new stays user language. The build link belongs on the GitHub issue.
 
+## Website
+
+The site is https://r5-operating-system.github.io/, repository `r5-operating-system/r5-operating-system.github.io`. Texts are in `content.toml` there, screenshots in `screenshots/`. It takes What's new, the build number, the merged pull requests and the R5Book from `main` here every day, so `distro/WHATSNEW` must stay current. `docs/website/` here keeps only the brand kit. GitHub Pages of r5os stays free for the package repository.
+
 ## Versioning
 
 Public: **R5 YYYY.N**, in full R5 Operating System YYYY.N (`2026.1`, …). New year resets N to 1. Unreleased: `YYYY.N-dev` in `distro/VERSION`.
