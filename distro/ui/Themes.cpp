@@ -557,8 +557,6 @@ write_theme(const char* path, const theme_info* info, uint32 parts)
 	ssize_t written = file.Write(text.String(), text.Length());
 	if (written < 0)
 		return static_cast<status_t>(written);
-	if (geteuid() == 0)
-		chmod(path, 0666);
 	return written == text.Length() ? B_OK : B_IO_ERROR;
 }
 
@@ -660,10 +658,7 @@ make_settings_directory(const char* leaf)
 	status_t status = settings_path(leaf, path);
 	if (status != B_OK)
 		return status;
-	status = create_directory(path.Path(), geteuid() == 0 ? 0777 : 0755);
-	if (status == B_OK && geteuid() == 0)
-		chmod(path.Path(), 0777);
-	return status;
+	return create_directory(path.Path(), 0755);
 }
 
 
@@ -916,11 +911,8 @@ apply_deskbar(const theme_info* info)
 				prefs.SetBool("floating", info->deskbar_floating);
 				BFile writeFile(path.Path(),
 					B_WRITE_ONLY | B_CREATE_FILE | B_ERASE_FILE);
-				if (writeFile.InitCheck() == B_OK) {
+				if (writeFile.InitCheck() == B_OK)
 					prefs.Flatten(&writeFile);
-					if (geteuid() == 0)
-						chmod(path.Path(), 0666);
-				}
 			}
 		}
 		return B_NAME_NOT_FOUND;
@@ -1072,21 +1064,16 @@ set_theme(const theme_info* info, uint32 parts)
 
 	if (lookChanged) {
 		// live switching: every window of every program loads the control
-		// look again (Window.cpp, r5_reload_control_look()). Post directly
-		// to our own windows too so the caller (Settings) switches live even
-		// if BRoster::Broadcast skips or delays the calling team.
+		// look again (Window.cpp, r5_reload_control_look()). BRoster::Broadcast
+		// skips the calling team, so also post to be_app; BApplication forwards
+		// B_COLORS_UPDATED under the looper-list lock to every window including
+		// BMenuWindow.
 		BMessage message(B_COLORS_UPDATED);
 		message.AddInt64("r5:control_look", system_time());
 		if (be_roster != NULL)
 			be_roster->Broadcast(&message);
-		if (be_app != NULL) {
-			int32 count = be_app->CountWindows();
-			for (int32 i = 0; i < count; i++) {
-				BWindow* window = be_app->WindowAt(i);
-				if (window != NULL)
-					window->PostMessage(&message);
-			}
-		}
+		if (be_app != NULL)
+			be_app->PostMessage(&message);
 	}
 
 	if (be_roster != NULL) {

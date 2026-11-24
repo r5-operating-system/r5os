@@ -100,6 +100,19 @@ own_directory(const struct passwd* pwd, const char* path)
 
 
 static void
+own_file_if_present(const struct passwd* pwd, const char* path)
+{
+	struct stat st;
+	if (lstat(path, &st) != 0 || !S_ISREG(st.st_mode))
+		return;
+	if (chown(path, pwd->pw_uid, pwd->pw_gid) != 0)
+		r5_session_log("settings chown %s: %s", path, strerror(errno));
+	if (chmod(path, 0644) != 0)
+		r5_session_log("settings chmod %s: %s", path, strerror(errno));
+}
+
+
+static void
 ensure_user_settings(const struct passwd* pwd)
 {
 	if (pwd->pw_dir == NULL || pwd->pw_dir[0] == '\0')
@@ -126,6 +139,8 @@ ensure_user_settings(const struct passwd* pwd)
 		"/config/settings/system",
 		"/config/settings/kernel",
 		"/config/settings/kernel/drivers",
+		"/config/settings/r5",
+		"/config/settings/deskbar",
 		NULL
 	};
 	for (int i = 0; suffixes[i] != NULL; i++) {
@@ -135,6 +150,19 @@ ensure_user_settings(const struct passwd* pwd)
 		if (written <= 0 || (size_t)written >= sizeof(path))
 			return;
 		own_directory(pwd, path);
+	}
+	const char* files[] = {
+		"/config/settings/r5/theme",
+		"/config/settings/deskbar/settings",
+		NULL
+	};
+	for (int i = 0; files[i] != NULL; i++) {
+		char path[B_PATH_NAME_LENGTH];
+		int written = snprintf(path, sizeof(path), "%s%s", pwd->pw_dir,
+			files[i]);
+		if (written <= 0 || (size_t)written >= sizeof(path))
+			return;
+		own_file_if_present(pwd, path);
 	}
 }
 

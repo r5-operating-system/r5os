@@ -514,6 +514,14 @@ BMenu::Draw(BRect updateRect)
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+static void r5_style_menu_window(BMenuWindow* window, BMenu* menu,
+	bool* viewColorSet, float* windowRadius);
+// SPDX-SnippetEnd
+
+
 void
 BMenu::MessageReceived(BMessage* message)
 {
@@ -574,6 +582,27 @@ BMenu::MessageReceived(BMessage* message)
 
 			BView::MessageReceived(message);
 			break;
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		case B_COLORS_UPDATED:
+		{
+			BMenuWindow* menuWindow = dynamic_cast<BMenuWindow*>(Window());
+			if (menuWindow != NULL && fExtraMenuData != NULL) {
+				float* radius = fSuper != NULL
+					&& fSuper->fExtraMenuData != NULL
+					? &fSuper->fExtraMenuData->r5WindowRadius
+					: &fExtraMenuData->r5WindowRadius;
+				r5_style_menu_window(menuWindow, this,
+					&fExtraMenuData->r5ViewColor, radius);
+				InvalidateLayout();
+				Invalidate();
+			}
+			BView::MessageReceived(message);
+			break;
+		}
+// SPDX-SnippetEnd
 
 		default:
 			BView::MessageReceived(message);

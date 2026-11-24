@@ -8,6 +8,18 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-23 - Themes: code-review bug fixes (live switch fan-out, open menus, R5 scroll bars, BCard live color, desktop icon save, settings permissions)
+
+- Problem: code review (`1-THEMING-BUGS.md`, 23 Nov 2026) on `origin/main` (`fe96ea5926`) found 7 real issues: (1–2) `Themes.cpp:set_theme()` looped `be_app->CountWindows()`/`WindowAt()` without holding the looper-list lock (potential use-after-free on closing windows) and skipped `BMenuWindow`s in the calling app; (3) `'R5db'` desktop icon displacement left `fNeedsSaveLocation` set on temporary pushed spots so quitting Tracker persisted the pushed coordinates; (4) `R5ModernControlLook` only read `scroll_bars`/`scroll_bar_width` when `r5/theme` named `R5ModernControlLook`, ignoring Thin/Wide/Haiku scroll bars on the default `R5` (`R5ControlLook`) theme; (5) `BCard::MessageReceived(B_COLORS_UPDATED)` did not re-run `apply_card_view_color()`, leaving stale dark/light `ViewColor()` on document cards after a live mode switch; (6) open `BMenuWindow`s were not restyled on `B_COLORS_UPDATED`; (7) `Themes.cpp` wrote `r5/`, `r5/theme`, and `deskbar/settings` world-writable (`0777`/`0666`) when run as uid 0 in `FirstBootPrompt`.
+- Changed:
+  - `distro/ui/Themes.cpp`: replaced the unlocked `CountWindows()`/`WindowAt()` loop with `be_app->PostMessage(&message)` so `BApplication::_MessageAllWindows()` fans out `B_COLORS_UPDATED` under the looper-list lock to every window including `BMenuWindow`; removed `0777`/`0666` world-writable `chmod` calls.
+  - `distro/login/R5Desktop.cpp`: added `/config/settings/r5` and `/config/settings/deskbar` (`0700`) plus `/config/settings/r5/theme` and `/config/settings/deskbar/settings` (`0644`, if present) to `ensure_user_settings()` so `r5-desktop` chowns them to the signed-in user before dropping uid.
+  - `distro/desktop/src/add-ons/control_look/R5ModernControlLook/R5ModernControlLook.cpp`: accepted both `R5ModernControlLook` and `R5ControlLook` when reading `scroll_bars` and `scroll_bar_width`.
+  - `distro/ui/Card.cpp`: called `apply_card_view_color(this, fStyle)` on `B_COLORS_UPDATED` before `Invalidate()`.
+  - `distro/desktop/src/kits/interface/Menu.cpp`: called `r5_style_menu_window()` + `InvalidateLayout()` on `B_COLORS_UPDATED` when attached to a `BMenuWindow`.
+  - `distro/desktop/src/kits/tracker/PoseView.cpp`: cleared `fNeedsSaveLocation` after temporarily displacing a desktop icon under Deskbar (if it wasn't already dirty) and marked `SetSaveLocation()` on restore.
+- Not changed: finding 8 (bounded previous `BControlLook` leak on live switch in `Window.cpp`) stays as-is by design to avoid cross-thread draw use-after-free.
+
 ## 2026-11-23 - Themes: tested on the 5625U
 
 The owner's three screenshots from the 5625U on 23 Nov (about 22:43) show the theming on hardware:

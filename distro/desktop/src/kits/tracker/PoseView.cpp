@@ -2394,6 +2394,7 @@ BPoseView::MessageReceived(BMessage* message)
 						Invalidate(currentRect);
 						RemoveFromVSList(pose);
 						pose->SetLocation(entry->original, this);
+						pose->SetSaveLocation();
 						AddToVSList(pose);
 						Invalidate(pose->CalcRect(this));
 						sDisplaced.RemoveItemAt(i);
@@ -2401,7 +2402,8 @@ BPoseView::MessageReceived(BMessage* message)
 				}
 
 				// Now push aside any icons currently covered by Deskbar,
-				// remembering their original spot.
+				// remembering their original spot without saving the
+				// temporary pushed position to disk.
 				BRect bounds(Bounds());
 				bounds.InsetBy(20, 20);
 				int32 poseCount = fPoseList->CountItems();
@@ -2410,11 +2412,14 @@ BPoseView::MessageReceived(BMessage* message)
 					if (pose == NULL || IsValidLocation(pose))
 						continue;
 					BPoint orig = pose->Location(this);
+					bool hadSave = pose->NeedsSaveLocation();
 					BRect oldRect = pose->CalcRect(this);
 					Invalidate(oldRect);
 					RemoveFromVSList(pose);
 					fHintLocation = orig;
 					PlacePose(pose, bounds);
+					if (!hadSave)
+						pose->ClearSaveLocation();
 					AddToVSList(pose);
 					Invalidate(pose->CalcRect(this));
 
