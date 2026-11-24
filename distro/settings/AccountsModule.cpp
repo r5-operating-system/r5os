@@ -515,14 +515,17 @@ AccountsView::AccountsView(AccountsModule* module)
 	BStringView* passwordLabel = new BStringView("password label",
 		"Password");
 
+	fPicture->SetExplicitAlignment(
+		BAlignment(B_ALIGN_LEFT, B_ALIGN_VERTICAL_CENTER));
+
 	fCard = new BCard("account card", BAppearanceKit::B_CARD_DOCUMENT);
 	BGroupLayout* cardLayout = (BGroupLayout*)fCard->GetLayout();
 	cardLayout->SetSpacing(px(10));
 	BLayoutBuilder::Group<>(cardLayout)
 		.SetInsets(px(18), px(14), px(18), px(14))
-		.AddGroup(B_HORIZONTAL, px(14))
-			.Add(fPicture)
-			.AddGroup(B_VERTICAL, px(3))
+		.AddGrid(px(14), px(6))
+			.Add(fPicture, 0, 0)
+			.AddGroup(B_VERTICAL, px(3), 1, 0)
 				.AddGlue()
 				.Add(fHeadName)
 				.Add(fHeadLine)
@@ -531,18 +534,17 @@ AccountsView::AccountsView(AccountsModule* module)
 					.Add(fChoose)
 					.AddGlue()
 				.End()
+				.AddStrut(px(4))
 				.AddGlue()
 			.End()
-		.End()
-		.AddGrid(px(14), px(6))
-			.Add(nameLabel, 0, 0)
-			.Add(fName, 1, 0)
-			.Add(emailLabel, 0, 1)
-			.Add(fEmail, 1, 1)
-			.Add(typeLabel, 0, 2)
-			.Add(fType, 1, 2)
-			.Add(passwordLabel, 0, 3)
-			.AddGroup(B_HORIZONTAL, 0, 1, 3)
+			.Add(nameLabel, 0, 1)
+			.Add(fName, 1, 1)
+			.Add(emailLabel, 0, 2)
+			.Add(fEmail, 1, 2)
+			.Add(typeLabel, 0, 3)
+			.Add(fType, 1, 3)
+			.Add(passwordLabel, 0, 4)
+			.AddGroup(B_HORIZONTAL, 0, 1, 4)
 				.Add(fPassword)
 				.AddGlue()
 			.End()
@@ -906,7 +908,8 @@ AccountsView::_SaveName()
 		return false;
 	}
 	fShown.real = real;
-	fModule->Touched(name.String());
+	if (fModule != NULL)
+		fModule->Touched(name.String());
 	return true;
 }
 
@@ -932,7 +935,8 @@ AccountsView::_SaveEmail()
 		return;
 	}
 	fShownEmail = email;
-	fModule->Touched(name.String());
+	if (fModule != NULL)
+		fModule->Touched(name.String());
 }
 
 
@@ -956,7 +960,8 @@ AccountsView::_SetType(BMessage* message)
 		(fShown.admin ? fTypeAdmin : fTypeStandard)->SetMarked(true);
 		return;
 	}
-	fModule->Touched(name.String());
+	if (fModule != NULL)
+		fModule->Touched(name.String());
 	// Your own type may have changed: the window asks Login about the
 	// lock again.
 	if (Window() != NULL)
@@ -990,7 +995,8 @@ AccountsView::_SetPicture(BMessage* message)
 			: "The picture could not be saved.");
 		return;
 	}
-	fModule->Touched(name);
+	if (fModule != NULL)
+		fModule->Touched(name);
 	Reload(name);
 }
 
@@ -1009,7 +1015,7 @@ AccountsView::_DisableOrEnable()
 	if (account_ask_login(request, reply, error) != B_OK) {
 		show_error(error.Length() > 0 ? error.String()
 			: "The account could not be changed.");
-	} else
+	} else if (fModule != NULL)
 		fModule->Touched(name.String());
 	Reload(name.String());
 }
@@ -1147,8 +1153,12 @@ AccountsModule::RevertSettings(SettingsContext* context)
 	account_ask_login(listRequest, list, error);
 
 	BString failed;
+	bool adminTypeChanged = false;
 	char* name = NULL;
 	type_code type;
+
+	// Pass 1: restore profiles, and re-enable / re-promote accounts before
+	// any demotion or disable so we never hit "last administrator".
 	for (int32 i = 0; fTouched.GetInfo(B_BOOL_TYPE, i, &name, &type)
 			== B_OK; i++) {
 		BMessage values;
@@ -1185,24 +1195,78 @@ AccountsModule::RevertSettings(SettingsContext* context)
 
 		if (!managing)
 			continue;
-		bool admin = values.GetBool("admin", false);
-		if (admin != list.GetBool("admin", index, false)) {
+		bool wasAdmin = values.GetBool("admin", false);
+		if (wasAdmin && !list.GetBool("admin", index, false)) {
 			BMessage request(kMsgAdminSetAccountType);
 			request.AddString("name", name);
-			request.AddBool("admin", admin);
+			request.AddBool("admin", true);
 			if (account_ask_login(request, reply, text) != B_OK)
 				failed << "\n" << name << ": " << text;
+			else
+				adminTypeChanged = true;
 		}
-		bool disabled = values.GetBool("disabled", false);
-		if (disabled != list.GetBool("disabled", index, false)) {
+		bool wasDisabled = values.GetBool("disabled", false);
+		if (!wasDisabled && list.GetBool("disabled", index, false)) {
 			BMessage request(kMsgAdminSetDisabled);
 			request.AddString("name", name);
-			request.AddBool("disable", disabled);
+			request.AddBool("disable", false);
 			if (account_ask_login(request, reply, text) != B_OK)
 				failed << "\n" << name << ": " << text;
 		}
 	}
+
+	// Pass 2: demotions and disables, non-self first so demoting yourself
+	// cannot block reverting another account.
+	if (managing) {
+		for (int32 pass = 0; pass < 2; pass++) {
+			bool wantSelf = (pass == 1);
+			for (int32 i = 0; fTouched.GetInfo(B_BOOL_TYPE, i, &name, &type)
+					== B_OK; i++) {
+				BMessage values;
+				if (fOpened.FindMessage(name, &values) != B_OK)
+					continue;
+				int32 index = -1;
+				const char* listed = NULL;
+				for (int32 j = 0; list.FindString("name", j, &listed) == B_OK;
+						j++) {
+					if (strcmp(listed, name) == 0) {
+						index = j;
+						break;
+					}
+				}
+				if (index < 0)
+					continue;
+				bool self = (uid_t)list.GetInt32("uid", index, -1) == getuid();
+				if (self != wantSelf)
+					continue;
+
+				BMessage reply;
+				BString text;
+				bool wasAdmin = values.GetBool("admin", false);
+				if (!wasAdmin && list.GetBool("admin", index, false)) {
+					BMessage request(kMsgAdminSetAccountType);
+					request.AddString("name", name);
+					request.AddBool("admin", false);
+					if (account_ask_login(request, reply, text) != B_OK)
+						failed << "\n" << name << ": " << text;
+					else
+						adminTypeChanged = true;
+				}
+				bool wasDisabled = values.GetBool("disabled", false);
+				if (wasDisabled && !list.GetBool("disabled", index, false)) {
+					BMessage request(kMsgAdminSetDisabled);
+					request.AddString("name", name);
+					request.AddBool("disable", true);
+					if (account_ask_login(request, reply, text) != B_OK)
+						failed << "\n" << name << ": " << text;
+				}
+			}
+		}
+	}
+
 	fTouched.MakeEmpty();
+	if (adminTypeChanged && fView != NULL && fView->Window() != NULL)
+		fView->Window()->PostMessage(kMsgAdminLockChanged);
 	if (fView != NULL)
 		fView->Reload();
 	if (failed.Length() > 0) {

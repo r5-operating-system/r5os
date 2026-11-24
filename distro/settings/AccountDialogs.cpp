@@ -89,6 +89,15 @@ panel_hint_color()
 }
 
 
+static void
+secure_zero(void* ptr, size_t length)
+{
+	volatile unsigned char* p = static_cast<volatile unsigned char*>(ptr);
+	while (length-- > 0)
+		*p++ = 0;
+}
+
+
 void
 account_wipe(BString& text)
 {
@@ -97,7 +106,7 @@ account_wipe(BString& text)
 		return;
 	char* buffer = text.LockBuffer(length);
 	if (buffer != NULL)
-		memset(buffer, 0, length);
+		secure_zero(buffer, (size_t)length);
 	text.UnlockBuffer(length);
 	text.Truncate(0);
 }
@@ -111,7 +120,7 @@ wipe_field(BMessage& message, const char* field)
 	for (int32 i = 0; message.FindData(field, B_STRING_TYPE, i, &data, &size)
 			== B_OK; i++) {
 		if (data != NULL && size > 0)
-			memset(const_cast<void*>(data), 0, size);
+			secure_zero(const_cast<void*>(data), (size_t)size);
 	}
 }
 
@@ -214,7 +223,14 @@ account_add_picture_blob(const BBitmap* picture, BMessage& message)
 	int32 height = picture->Bounds().IntegerHeight() + 1;
 	int32 bpr = picture->BytesPerRow();
 	int32 space = picture->ColorSpace();
-	size_t size = 16 + (size_t)bpr * height;
+	if (width < 1 || height < 1 || width > 512 || height > 512)
+		return B_BAD_VALUE;
+	if (space != B_RGBA32 && space != B_RGB32)
+		return B_BAD_VALUE;
+	if (bpr < width * 4 || bpr > width * 4 + 64)
+		return B_BAD_VALUE;
+	size_t pixels = (size_t)bpr * (size_t)height;
+	size_t size = 16 + pixels;
 	char* blob = new(std::nothrow) char[size];
 	if (blob == NULL)
 		return B_NO_MEMORY;
@@ -222,7 +238,7 @@ account_add_picture_blob(const BBitmap* picture, BMessage& message)
 	memcpy(blob + 4, &height, 4);
 	memcpy(blob + 8, &bpr, 4);
 	memcpy(blob + 12, &space, 4);
-	memcpy(blob + 16, picture->Bits(), (size_t)bpr * height);
+	memcpy(blob + 16, picture->Bits(), pixels);
 	status_t status = message.AddData("picture", B_RAW_TYPE, blob, size);
 	delete[] blob;
 	return status;
@@ -983,13 +999,20 @@ AccountTextField::MakeFocus(bool focus)
 
 
 void
-AccountTextField::SetEnabled(bool enabled)
+AccountTextField::MessageReceived(BMessage* message)
 {
-	if (enabled == IsEnabled())
+	if (message->what == B_COLORS_UPDATED) {
+		_ApplyColors();
 		return;
-	BControl::SetEnabled(enabled);
-	fTextView->MakeEditable(enabled);
-	fTextView->MakeSelectable(enabled);
+	}
+	BControl::MessageReceived(message);
+}
+
+
+void
+AccountTextField::_ApplyColors()
+{
+	bool enabled = IsEnabled();
 	rgb_color text = ui_color(B_DOCUMENT_TEXT_COLOR);
 	if (!enabled)
 		text = mix_color(text, ui_color(B_DOCUMENT_BACKGROUND_COLOR), 128);
@@ -1002,6 +1025,18 @@ AccountTextField::SetEnabled(bool enabled)
 	fTextView->SetFontAndColor(&font, B_FONT_ALL, &text);
 	fTextView->Invalidate();
 	Invalidate();
+}
+
+
+void
+AccountTextField::SetEnabled(bool enabled)
+{
+	if (enabled == IsEnabled())
+		return;
+	BControl::SetEnabled(enabled);
+	fTextView->MakeEditable(enabled);
+	fTextView->MakeSelectable(enabled);
+	_ApplyColors();
 }
 
 
@@ -1397,7 +1432,7 @@ set_match_line(BStringView* line, const char* first, const char* second)
 		line->SetText("\xe2\x9c\x93 The passwords match");
 		line->SetHighColor(ui_color(B_SUCCESS_COLOR));
 	} else {
-		line->SetText("The passwords don't match yet");
+		line->SetText("\xc3\x97 The passwords don't match yet");
 		line->SetHighColor(ui_color(B_FAILURE_COLOR));
 	}
 }
@@ -1408,8 +1443,6 @@ clear_password(BPasswordControl* control)
 {
 	if (control == NULL)
 		return;
-	BString text(control->Text());
-	account_wipe(text);
 	control->SetText("");
 }
 

@@ -119,6 +119,7 @@ public:
 			void				EditingDone();
 
 	virtual	void				AttachedToWindow();
+	virtual	void				MessageReceived(BMessage* message);
 	virtual	void				FrameResized(float width, float height);
 	virtual	void				Draw(BRect updateRect);
 	virtual	void				MouseDown(BPoint where);
@@ -131,6 +132,7 @@ public:
 
 private:
 			void				_LayoutText();
+			void				_ApplyColors();
 
 			BTextView*			fTextView;
 			BString				fPlaceholder;
