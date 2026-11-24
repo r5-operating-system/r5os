@@ -112,6 +112,9 @@ public:
 									{ return fPlaceholder.String(); }
 			void				SetRightHint(const char* text);
 			void				SetModificationMessage(BMessage* message);
+			// A lower field (30 instead of 38 mockup pixels), for a form on a
+			// Settings page beside menus and buttons.
+			void				SetCompact(bool compact);
 			void				TextChanged();
 			void				EditingDone();
 
@@ -134,6 +137,7 @@ private:
 			BString				fRightHint;
 			BString				fLastSent;
 			BMessage*			fModification;
+			bool				fCompact;
 };
 
 

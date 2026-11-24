@@ -15,7 +15,6 @@
 
 #include "AccountAdmin.h"
 
-#include <AccentButton.h>
 #include <Alert.h>
 #include <Bitmap.h>
 #include <Button.h>
@@ -42,7 +41,6 @@
 #include <string.h>
 
 
-using BAppearanceKit::BAccentButton;
 using BAppearanceKit::BPasswordControl;
 
 
@@ -765,7 +763,8 @@ AccountTextField::AccountTextField(const char* name, BMessage* message)
 	BControl(name, NULL, message, B_WILL_DRAW | B_FRAME_EVENTS
 		| B_FULL_UPDATE_ON_RESIZE),
 	fTextView(NULL),
-	fModification(NULL)
+	fModification(NULL),
+	fCompact(false)
 {
 	SetViewColor(B_TRANSPARENT_COLOR);
 	fTextView = new FieldTextView(this);
@@ -819,6 +818,16 @@ AccountTextField::SetModificationMessage(BMessage* message)
 {
 	delete fModification;
 	fModification = message;
+}
+
+
+void
+AccountTextField::SetCompact(bool compact)
+{
+	if (fCompact == compact)
+		return;
+	fCompact = compact;
+	InvalidateLayout();
 }
 
 
@@ -1008,7 +1017,8 @@ BSize
 AccountTextField::MinSize()
 {
 	float u = account_unit();
-	return BSize(140.0f * u, floorf(38.0f * u) + 2 * ring_width() - 1);
+	return BSize(140.0f * u, floorf((fCompact ? 30.0f : 38.0f) * u)
+		+ 2 * ring_width() - 1);
 }
 
 
@@ -1483,7 +1493,7 @@ AddAccountWindow::AddAccountWindow(BWindow* parent, const BMessenger& page)
 
 	BButton* cancel = new BButton("cancel", "Cancel",
 		new BMessage(B_QUIT_REQUESTED));
-	fAdd = new BAccentButton("add", "Add account", new BMessage(kMsgSubmit));
+	fAdd = new BButton("add", "Add account", new BMessage(kMsgSubmit));
 	fAdd->SetEnabled(false);
 
 	BLayoutBuilder::Group<>(this, B_VERTICAL, px(6))
@@ -1770,7 +1780,7 @@ PasswordWindow::PasswordWindow(BWindow* parent, const BMessenger& page,
 	fNext = new BPasswordControl("new", NULL);
 	fRepeat = new BPasswordControl("repeat", NULL);
 	fMatch = small_label("match", " ");
-	fChange = new BAccentButton("change", "Change password",
+	fChange = new BButton("change", "Change password",
 		new BMessage(kMsgSubmit));
 	fChange->SetEnabled(false);
 	BButton* cancel = new BButton("cancel", "Cancel",

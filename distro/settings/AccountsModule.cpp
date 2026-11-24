@@ -488,6 +488,8 @@ AccountsView::AccountsView(AccountsModule* module)
 	fName = new AccountTextField("name", new BMessage(kMsgName));
 	fEmail = new AccountTextField("email", new BMessage(kMsgEmail));
 	fEmail->SetPlaceholder("name@example.com");
+	fName->SetCompact(true);
+	fEmail->SetCompact(true);
 	BPopUpMenu* menu = new BPopUpMenu("type");
 	BMessage* adminMessage = new BMessage(kMsgType);
 	adminMessage->AddBool("admin", true);
@@ -515,16 +517,16 @@ AccountsView::AccountsView(AccountsModule* module)
 
 	fCard = new BCard("account card", BAppearanceKit::B_CARD_DOCUMENT);
 	BGroupLayout* cardLayout = (BGroupLayout*)fCard->GetLayout();
-	cardLayout->SetSpacing(px(14));
+	cardLayout->SetSpacing(px(10));
 	BLayoutBuilder::Group<>(cardLayout)
-		.SetInsets(px(18), px(16), px(18), px(16))
+		.SetInsets(px(18), px(14), px(18), px(14))
 		.AddGroup(B_HORIZONTAL, px(14))
 			.Add(fPicture)
 			.AddGroup(B_VERTICAL, px(3))
 				.AddGlue()
 				.Add(fHeadName)
 				.Add(fHeadLine)
-				.AddStrut(px(4))
+				.AddStrut(px(2))
 				.AddGroup(B_HORIZONTAL)
 					.Add(fChoose)
 					.AddGlue()
@@ -532,7 +534,7 @@ AccountsView::AccountsView(AccountsModule* module)
 				.AddGlue()
 			.End()
 		.End()
-		.AddGrid(px(14), px(8))
+		.AddGrid(px(14), px(6))
 			.Add(nameLabel, 0, 0)
 			.Add(fName, 1, 0)
 			.Add(emailLabel, 0, 1)
@@ -556,10 +558,10 @@ AccountsView::AccountsView(AccountsModule* module)
 	infoText->SetTextColor(mix_color(ui_color(B_PANEL_BACKGROUND_COLOR),
 		ui_color(B_PANEL_TEXT_COLOR), 160));
 	BLayoutBuilder::Group<>((BGroupLayout*)info->GetLayout())
-		.SetInsets(px(14), px(10), px(14), px(10))
+		.SetInsets(px(14), px(8), px(14), px(8))
 		.Add(infoText);
 
-	BGroupView* right = new BGroupView(B_VERTICAL, px(8));
+	BGroupView* right = new BGroupView(B_VERTICAL, px(6));
 	BLayoutBuilder::Group<>(right)
 		.Add(fCaption)
 		.Add(fCard)
