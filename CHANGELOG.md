@@ -19,6 +19,20 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - Not tested: not booted. The menu entry and the icon have not been seen in QEMU or on the 5625U. The binary was rebuilt from the same source as `-5`, so a stick run of VulkanTeapot is still owed.
 - Not changed: the package's `license` field still says GNU GPL v3, while the VulkanTeapot source is MIT.
 
+## 2026-11-24 - Security Kit: Monocypher 4.0.2 and `libr5security.so` (Step 1)
+
+- Problem: R5 had no shared cryptographic library for Argon2id password hashing/key derivation, authenticated file/buffer sealing, wiped secret buffers, or secure random bytes (`generated/GUEST-SHARED-DESIGN.md`, Step 1).
+- Changed:
+  - Vendored unmodified Monocypher 4.0.2 (`distro/security/monocypher/monocypher.c` and `monocypher.h`, `BSD-2-Clause OR CC0-1.0`, taken under `CC0-1.0`) with version, tag, and SHA-256 hashes in `distro/security/monocypher/SOURCE.md`, and notices in `THIRD_PARTY_NOTICES.md`, `docs/LICENSING.md`, and `distro/about/licenses.txt`.
+  - Added R5's MIT C++ Security Kit `libr5security.so` (`distro/security/`, header `<R5Security.h>` in `headers/os/app`, namespace `BSecurityKit`): `BSecureBuffer` (non-copyable secret buffer wiped via `crypto_wipe()`), `BRandom` (`/dev/urandom`, `O_CLOEXEC`, no `rand()` fallback), `BPasswordHash` (Argon2id key derivation and standard PHC `$argon2id$v=19$...` encode/verify/NeedsRehash; default 64 MiB, 3 passes, 1 lane), and `BSealedData` (XChaCha20-Poly1305 authenticated encryption in the `R5SD` wire format with atomic `0600` `SealToFile`/`OpenFromFile`).
+  - Added `scripts/apply-security.py` and hooked it into `scripts/apply-overlay.sh` to install `libr5security.so` (soname without version suffix) on both regular and minimum images without touching `libbe`.
+  - Added host unit tests (`distro/security/tests/security_test.cpp`) verifying the RFC 9106 §5.3 Argon2id vector, the draft-irtf-cfrg-xchacha-03 §A.3.1 XChaCha20-Poly1305 vector, single-bit tampering across every byte of sealed blobs and files, wrong key/AAD refusal, malformed PHC rejection, and buffer wiping.
+  - Documented the kit in `docs/LIBR5.md` and added the R5Book chapter (`docs/r5book/security-kit.html`, indexed in `docs/r5book/index.html` and `docs/r5book/r5book.js`).
+- Tested (24 Nov 2026):
+  - Host unit tests (`security_test.cpp` compiled against the exact `distro/security/*.cpp` and `monocypher.c` with `-O2 -Wall -Wextra`): all checks passed (`ALL SECURITY KIT TESTS PASSED`); default Argon2id cost (64 MiB, 3 passes, 1 lane) measured 157 ms on the build host.
+  - AMD64 full image build via `scripts/build-locked.sh` (`jam_exit=0`, `mesa_exit=0`).
+- Limits / Not tested: Not yet booted in QEMU/VirtualBox or benchmarked on the Ryzen 5 5625U hardware (Step 1 is library-only; keystore integration begins in Step 2).
+
 ## 2026-11-23 - Themes: code-review bug fixes (live switch fan-out, open menus, R5 scroll bars, BCard live color, desktop icon save, settings permissions)
 
 - Problem: code review (`1-THEMING-BUGS.md`, 23 Nov 2026) on `origin/main` (`fe96ea5926`) found 7 real issues: (1–2) `Themes.cpp:set_theme()` looped `be_app->CountWindows()`/`WindowAt()` without holding the looper-list lock (potential use-after-free on closing windows) and skipped `BMenuWindow`s in the calling app; (3) `'R5db'` desktop icon displacement left `fNeedsSaveLocation` set on temporary pushed spots so quitting Tracker persisted the pushed coordinates; (4) `R5ModernControlLook` only read `scroll_bars`/`scroll_bar_width` when `r5/theme` named `R5ModernControlLook`, ignoring Thin/Wide/Haiku scroll bars on the default `R5` (`R5ControlLook`) theme; (5) `BCard::MessageReceived(B_COLORS_UPDATED)` did not re-run `apply_card_view_color()`, leaving stale dark/light `ViewColor()` on document cards after a live mode switch; (6) open `BMenuWindow`s were not restyled on `B_COLORS_UPDATED`; (7) `Themes.cpp` wrote `r5/`, `r5/theme`, and `deskbar/settings` world-writable (`0777`/`0666`) when run as uid 0 in `FirstBootPrompt`.
