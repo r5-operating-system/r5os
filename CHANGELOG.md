@@ -8,6 +8,13 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-24 - What's new: builds 10068 to 10070
+
+- Problem: `distro/WHATSNEW` and `distro/BUILD` stopped at build 10067 (Power, 22 Nov), while 43 pull requests merged after it. The website shows both from `main`.
+- Changed: three What's new sections, text approved by the owner on 24 Nov: 10068 round windows (Default (R5 Modern)) and the Deskbar styles (#4557, #4559, #4560, #4561, #4562, #4563); 10069 themes, the Theme page and dark mode (#4564, #4569, #4575, #4580, #4587); 10070 SD cards in Realtek readers (#4496, #4572, #4573), microcode (#4553), the NTFS credit (#4567) and no Haiku system repository (#4570). `distro/BUILD` 10067 to 10070.
+- Left out on purpose: the touch screen fix (#4518, not tested on the 5625U), VulkanTeapot in Demos (#4591, not booted), Lavapipe speed (#4515, measured in QEMU only), the OVMF warm restart (#4552, virtual machine only), the Security Kit (#4590, library only), and "Save as theme…" (saving with a typed name not proven). The laptop speakers (#4482) merged before build 10067 and still have no What's new section.
+- Tested: text only; claims checked against the entries in this file and in `docs/changelog/2026-W47.md`. No build. About reads the build from `distro/BUILD` through `scripts/r5-version.sh`; no build number is hardcoded elsewhere in `distro/` or `scripts/`.
+
 ## 2026-11-24 - VulkanTeapot: in Demos, with a blue teapot icon
 
 - Problem: VulkanTeapot was not in the Deskbar's Demos menu, although What's new for build 10048 says so. The 5 Nov entry in `docs/changelog/2026-W46.md` describes a `data/deskbar/menu/Demos/VulkanTeapot` link, but none of the committed packages `vulkanteapot-1.0.0-1` to `-5` contain it (checked with `package list`); they hold only `bin/`. The binary also had no resources, so Tracker and Deskbar showed the generic application icon.
