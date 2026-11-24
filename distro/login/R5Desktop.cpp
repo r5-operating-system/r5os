@@ -222,16 +222,37 @@ main(int argc, char** argv)
 		return 1;
 	}
 
+	int reportTeamFd = -1;
+	const char* reportFdEnv = getenv("R5_REPORT_TEAM_FD");
+	if (reportFdEnv != NULL && reportFdEnv[0] != '\0') {
+		char* end = NULL;
+		long parsed = strtol(reportFdEnv, &end, 10);
+		if (end != reportFdEnv && *end == '\0' && parsed >= 3 && parsed < 1024)
+			reportTeamFd = static_cast<int>(parsed);
+		unsetenv("R5_REPORT_TEAM_FD");
+	}
+	if (reportTeamFd >= 0)
+		fcntl(reportTeamFd, F_SETFD, FD_CLOEXEC);
+
 	r5_session_log("dropped uid=%d euid=%d, load_image %s", (int)getuid(),
 		(int)geteuid(), argv[1]);
 
 	thread_id thread = load_image(argc - 1, (const char**)(argv + 1),
 		(const char**)environ);
 	if (thread < B_OK) {
+		if (reportTeamFd >= 0)
+			close(reportTeamFd);
 		r5_session_log("load_image %s: %s", argv[1], strerror(thread));
 		syslog(LOG_ERR, "r5-desktop: load_image %s: %s", argv[1],
 			strerror(thread));
 		return 1;
+	}
+	if (reportTeamFd >= 0) {
+		thread_info info;
+		team_id launchedTeam = (get_thread_info(thread, &info) == B_OK)
+			? info.team : -1;
+		write(reportTeamFd, &launchedTeam, sizeof(launchedTeam));
+		close(reportTeamFd);
 	}
 	resume_thread(thread);
 	r5_session_log("started team thread %d for %s", (int)thread, argv[1]);

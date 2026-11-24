@@ -9,11 +9,17 @@
 #include "AccountAdmin.h"
 
 #include "HomeLock.h"
+#include "KeyStoreCrypto.h"
+#include "KeyStoreProtocol.h"
 
 #include <fs_attr.h>
 #include <Message.h>
 #include <Node.h>
 #include <OS.h>
+#include <Path.h>
+#include <R5Admin.h>
+#include <R5Security.h>
+#include <Roster.h>
 #include <String.h>
 
 #include <RegistrarDefs.h>
@@ -34,6 +40,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <syslog.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -1029,6 +1036,17 @@ create_account(const char* name, const char* real, const char* password,
 		}
 	}
 
+	struct passwd* created = getpwnam(name);
+	if (created != NULL && created->pw_dir != NULL
+		&& created->pw_dir[0] != '\0') {
+		status_t ksStatus = BPrivate::R5KeyStoreCrypto::CreateAccountKeyStore(
+			created->pw_dir, created->pw_uid, created->pw_gid, password);
+		if (ksStatus != B_OK) {
+			syslog(LOG_ERR, "AccountAdmin: CreateAccountKeyStore failed: %s",
+				strerror(ksStatus));
+		}
+	}
+
 	return B_OK;
 }
 
@@ -1636,8 +1654,8 @@ update_profile(BMessage* request, BString& error)
 	const char* password = request->GetString("password", NULL);
 	if (password != NULL && password[0] != '\0') {
 		pwd = getpwnam(account);
-		if (self && !account_password_matches(pwd,
-			request->GetString("current", ""))) {
+		const char* current = request->GetString("current", "");
+		if (self && !account_password_matches(pwd, current)) {
 			error = "That password is not right.";
 			return B_PERMISSION_DENIED;
 		}
@@ -1650,6 +1668,118 @@ update_profile(BMessage* request, BString& error)
 		if (set_shadow_password(account, hash.String()) != B_OK) {
 			error = "The password could not be saved.";
 			return B_ERROR;
+		}
+
+		// Update the encrypted key store protector for this account using
+		// saved local home/uid/gid (not pwd, which set_shadow_password may
+		// invalidate via getpwnam).
+		if (home.Length() > 0) {
+			if (self) {
+				BPrivate::R5PasswordProtectorParams oldParams;
+				status_t protStatus = BPrivate::R5KeyStoreCrypto::
+					ReadAccountPasswordProtectorParams(home.String(), uid,
+						oldParams);
+				if (protStatus == B_OK) {
+					BSecurityKit::BSecureBuffer oldKek;
+					BSecurityKit::BSecureBuffer newKek;
+					uint8 newSalt[16];
+					BSecurityKit::BPasswordHash::Parameters newParams
+						= BSecurityKit::BPasswordHash::DefaultParameters();
+					status_t rewrapStatus = B_ERROR;
+					if (BSecurityKit::BRandom::Fill(newSalt, sizeof(newSalt))
+							== B_OK
+						&& BSecurityKit::BPasswordHash::DeriveKey(current,
+							strlen(current), oldParams.salt,
+							sizeof(oldParams.salt), oldParams.kdf, oldKek,
+							BSecurityKit::BSealedData::kKeySize) == B_OK
+						&& BSecurityKit::BPasswordHash::DeriveKey(password,
+							strlen(password), newSalt, sizeof(newSalt),
+							newParams, newKek,
+							BSecurityKit::BSealedData::kKeySize) == B_OK) {
+						bool sentToServer = false;
+						static const char* kKeyStoreSig
+							= "application/x-vnd.Haiku-keystore_server";
+						team_id ksTeam = be_roster->TeamFor(kKeyStoreSig);
+						team_info tInfo;
+						app_info appInfo;
+						if (ksTeam >= 0
+							&& get_team_info(ksTeam, &tInfo) == B_OK
+							&& tInfo.uid == uid && tInfo.uid != 0
+							&& be_roster->GetRunningAppInfo(ksTeam, &appInfo)
+								== B_OK) {
+							BPath imgPath(&appInfo.ref);
+							if (imgPath.InitCheck() == B_OK
+								&& (strcmp(imgPath.Path(),
+									"/boot/system/servers/keystore_server") == 0
+								|| strcmp(imgPath.Path(),
+									"/system/servers/keystore_server") == 0)) {
+								BMessage rewrap(BPrivate::kMsgR5KeyStoreRewrap);
+								rewrap.AddData(BPrivate::kR5KSFieldOldKek,
+									B_RAW_TYPE, oldKek.Data(), oldKek.Size());
+								rewrap.AddData(BPrivate::kR5KSFieldNewKek,
+									B_RAW_TYPE, newKek.Data(), newKek.Size());
+								rewrap.AddData(BPrivate::kR5KSFieldSalt,
+									B_RAW_TYPE, newSalt, sizeof(newSalt));
+								rewrap.AddUInt32(BPrivate::kR5KSFieldMemKiB,
+									newParams.memoryKiB);
+								rewrap.AddUInt32(BPrivate::kR5KSFieldPasses,
+									newParams.passes);
+								rewrap.AddUInt32(BPrivate::kR5KSFieldLanes,
+									newParams.lanes);
+								BMessage ksReply;
+								if (r5_admin_send(BMessenger(NULL, ksTeam),
+										&rewrap, &ksReply) == B_OK
+									&& ksReply.GetInt32(
+										BPrivate::kR5KSFieldStatus, B_ERROR)
+										== B_OK) {
+									sentToServer = true;
+									rewrapStatus = B_OK;
+								}
+								const void* raw = NULL;
+								ssize_t rawSize = 0;
+								if (rewrap.FindData(BPrivate::kR5KSFieldOldKek,
+										B_RAW_TYPE, &raw, &rawSize) == B_OK
+									&& raw != NULL && rawSize > 0) {
+									BSecurityKit::BSecureBuffer::WipeMemory(
+										const_cast<void*>(raw),
+										static_cast<size_t>(rawSize));
+								}
+								if (rewrap.FindData(BPrivate::kR5KSFieldNewKek,
+										B_RAW_TYPE, &raw, &rawSize) == B_OK
+									&& raw != NULL && rawSize > 0) {
+									BSecurityKit::BSecureBuffer::WipeMemory(
+										const_cast<void*>(raw),
+										static_cast<size_t>(rawSize));
+								}
+								rewrap.MakeEmpty();
+							}
+						}
+						if (!sentToServer) {
+							rewrapStatus = BPrivate::R5KeyStoreCrypto::
+								RewrapAccountPasswordProtector(home.String(),
+									uid, gid, oldKek, newKek, newSalt,
+									newParams);
+						}
+					}
+					oldKek.Clear();
+					newKek.Clear();
+					if (rewrapStatus != B_OK) {
+						syslog(LOG_ERR,
+							"AccountAdmin: keystore rewrap failed: %s",
+							strerror(rewrapStatus));
+					}
+				}
+			} else {
+				// Administrator password reset: keep old keystore as .old
+				// and create a new empty encrypted keystore with the new password.
+				status_t resetStatus = BPrivate::R5KeyStoreCrypto::
+					ResetAccountKeyStore(home.String(), uid, gid, password);
+				if (resetStatus != B_OK) {
+					syslog(LOG_ERR,
+						"AccountAdmin: ResetAccountKeyStore failed: %s",
+						strerror(resetStatus));
+				}
+			}
 		}
 	}
 

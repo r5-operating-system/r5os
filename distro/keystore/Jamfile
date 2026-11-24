@@ -1,0 +1,26 @@
+SubDir HAIKU_TOP src servers keystore ;
+
+UsePrivateHeaders app ;
+UsePrivateHeaders shared ;
+
+# SPDX-SnippetBegin
+# SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+Application keystore_server :
+	AppAccessRequestWindow.cpp
+	KeyRequestWindow.cpp
+	Keyring.cpp
+	KeyStoreCrypto.cpp
+	KeyStoreServer.cpp
+	OldKeyStoreWindow.cpp
+	: be libr5admin.so libr5security.so localestub shared [ TargetLibstdc++ ]
+	: keystore_server.rdef
+;
+# SPDX-SnippetEnd
+
+DoCatalogs keystore_server :
+    x-vnd.Haiku-keystore_server
+    :
+	AppAccessRequestWindow.cpp
+	KeyRequestWindow.cpp
+;

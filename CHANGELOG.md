@@ -8,6 +8,24 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-24 - Encrypted key store: per-account master key, password protector, and Login key handoff (Step 2)
+
+- Problem: Haiku's `keystore_server` stored keyrings in plaintext (`Keyring.cpp:496` `// TODO: Actually encrypt...`), ran on demand without per-session lifecycle management, and stayed running across logouts (`generated/GUEST-SHARED-DESIGN.md`, Step 2).
+- Changed:
+  - Copied Haiku's `keystore_server` into `distro/keystore/` (original MIT headers preserved, R5 additions in `SPDX-Snippet` blocks) and added MIT helpers `KeyStoreProtocol.h`, `KeyStoreCrypto.{h,cpp}`, and `OldKeyStoreWindow.{h,cpp}`.
+  - Implemented `R5KS` v2 encrypted database (`~/config/settings/system/keystore/keystore_database`, mode `0600`) sealed under a random 32-byte per-account master key via `BSealedData` (XChaCha20-Poly1305, AAD `"R5KS:v2:" || keystore_id`) and `R5KP` v1 protector file (`keystore_protectors`, mode `0600`) wrapping the master key under an Argon2id-derived KEK (extensible for future TPM `#4589` or recovery protectors without re-encrypting the store).
+  - Locked-by-default behavior: without a password handoff from Login (e.g. autologin / live session), `keystore_server` stays locked, returns `B_NOT_ALLOWED` to all `BKeyStore` calls, and never writes a plaintext database. Existing plaintext Haiku databases are migrated and encrypted once at the first Sign in with a password.
+  - Wired `Login` (`distro/login/LoginApp.{h,cpp}`, `R5Desktop.cpp`): at Sign in with a password, `Login` starts `keystore_server` as the signed-in user via `r5-desktop` (reporting the exact spawned `team_id` over a pipe), verifies the exact `team_id`, session `uid` (≠ 0), and `/system/servers/keystore_server` image path, derives the 32-byte KEK into a `BSecureBuffer`, and hands only the KEK to `keystore_server`'s `libr5admin` port (which verifies kernel-named `sender.uid == 0` and `sender.team == Login`). Excluded `keystore_server` from `keep_team()` and stopped it at Log out so its master key is wiped.
+  - Added volatile receive/send buffer wiping in `distro/admin/R5Admin.cpp` so passwords and derived keys do not linger in freed heap memory.
+  - Wired `distro/users/AccountAdmin.cpp`: new accounts get an empty encrypted key store (`CreateAccountKeyStore`); own password change rewraps only the password protector (`kMsgR5KeyStoreRewrap` or offline `RewrapPasswordProtector`); administrator password reset preserves existing files as `.old` and creates a new empty encrypted store, triggering `OldKeyStoreWindow` ("Do you still know your old password?") at the user's next Sign in.
+  - Kept the public `BKeyStore` API (`<KeyStore.h>`) unchanged. Wi-Fi passwords remain in `/boot/system/settings/network/wireless_networks` (not in `BKeyStore`, deferred to `#4589`).
+- Tested (24 Nov 2026):
+  - AMD64 full image build via `scripts/build-locked.sh` (`jam_exit=0`, `mesa_exit=0`); verified `keystore_server` links `libr5admin.so` and `libr5security.so`.
+  - QEMU KVM two-boot test on a private copy of `r5-os.image`:
+    - Boot 1 (no password): `keystore list passwords` returned `Operation not allowed` (`B_NOT_ALLOWED`) and no plaintext `keystore_database` was created.
+    - Boot 2 (Sign in with password): `keystore_server` ran as `user` (uid 1001), created `keystore_protectors` (mode `0600`) and `keystore_database` (mode `0600`, magic `R5KS`, no plaintext `"Master"`), and no password appeared in `serial.log`.
+- Limits / Not tested in QEMU yet: Interactive own password change rewrap, administrator password reset + `OldKeyStoreWindow` recovery, and legacy plaintext migration were verified by code review and build, not yet interactively clicked through in QEMU (the UI dialogs for Change password arrive in Step 3).
+
 ## 2026-11-24 - Security Kit: Monocypher 4.0.2 and `libr5security.so` (Step 1)
 
 - Problem: R5 had no shared cryptographic library for Argon2id password hashing/key derivation, authenticated file/buffer sealing, wiped secret buffers, or secure random bytes (`generated/GUEST-SHARED-DESIGN.md`, Step 1).

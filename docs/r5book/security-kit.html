@@ -51,9 +51,13 @@
 
 		<div class="note"><strong>Key storage stays BKeyStore.</strong> To store application passwords or
 		tokens for the signed-in account, continue to use Haiku's <code class="inline">BKeyStore</code>
-		(<code class="inline">&lt;KeyStore.h&gt;</code>). The Security Kit provides the cryptographic
-		building blocks underneath R5's keystore and sign-in password hashing, and is available to any
-		program that needs Argon2id or authenticated encryption.</div>
+		(<code class="inline">&lt;KeyStore.h&gt;</code>). R5's <code class="inline">keystore_server</code>
+		encrypts each account's key store on disk (<code class="inline">R5KS</code> v2) with a random
+		master key wrapped by a password protector (<code class="inline">R5KP</code> v1, Argon2id) and
+		unlocked by Login at Sign in; without a password (autologin or live session) the key store stays
+		locked and returns <code class="inline">B_NOT_ALLOWED</code>. Note that machine-wide Wi-Fi
+		credentials are stored separately by <code class="inline">net_server</code> and are not in
+		<code class="inline">BKeyStore</code>.</div>
 
 		<section class="entry" id="BSecureBuffer">
 			<div class="entry-header"><h2>BSecureBuffer</h2><span class="kind">class</span></div>

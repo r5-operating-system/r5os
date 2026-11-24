@@ -11,7 +11,9 @@ UsePrivateHeaders shared ;
 Application Users :
 	AccountAdmin.cpp
 	HomeLock.cpp
+	KeyStoreCrypto.cpp
 	Users.cpp
-	: be tracker translation libr5ui.so libr5admin.so [ TargetLibstdc++ ]
+	: be tracker translation libr5ui.so libr5admin.so libr5security.so
+		[ TargetLibstdc++ ]
 	: Users.rdef
 ;

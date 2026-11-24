@@ -20,6 +20,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 HAIKU = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else ROOT / "haiku")
 SECURITY = ROOT / "distro" / "security"
+KEYSTORE = ROOT / "distro" / "keystore"
 
 LIB_FILES = (
     "Jamfile",
@@ -30,6 +31,23 @@ LIB_FILES = (
     "SecureBuffer.cpp",
 )
 MONOCYPHER_FILES = ("monocypher.c", "monocypher.h")
+KEYSTORE_FILES = (
+    "AppAccessRequestWindow.cpp",
+    "AppAccessRequestWindow.h",
+    "Jamfile",
+    "KeyRequestWindow.cpp",
+    "KeyRequestWindow.h",
+    "KeyStoreCrypto.cpp",
+    "KeyStoreCrypto.h",
+    "KeyStoreProtocol.h",
+    "KeyStoreServer.cpp",
+    "KeyStoreServer.h",
+    "Keyring.cpp",
+    "Keyring.h",
+    "OldKeyStoreWindow.cpp",
+    "OldKeyStoreWindow.h",
+    "keystore_server.rdef",
+)
 
 
 def install(source: pathlib.Path, dest: pathlib.Path, preserve_bytes: bool = False) -> bool:
@@ -97,6 +115,13 @@ def main() -> int:
             "\t\t\tlibr5security.so\n",
             "libr5security image " + profile,
         )
+
+    # Encrypted keystore_server (Step 2)
+    ks_dest = HAIKU / "src/servers/keystore"
+    install_all(
+        [(KEYSTORE / name, ks_dest / name) for name in KEYSTORE_FILES],
+        "keystore_server",
+    )
     return 0
 
 
