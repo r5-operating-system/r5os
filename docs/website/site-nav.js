@@ -19,7 +19,7 @@
   const active = getActivePage();
 
   const navHtml = `
-    <a href="index.html" class="brand-lockup">
+    <a href="https://r5-operating-system.github.io/" class="brand-lockup">
       <svg viewBox="0 0 100 100" width="28" height="28">
         <defs>
           <linearGradient id="r5-shared-nav-grad" x1="12%" y1="12%" x2="88%" y2="88%">
@@ -39,20 +39,20 @@
     </a>
 
     <nav class="nav-links">
-      <a href="index.html#overview" class="text-link ${active === "home" ? "active" : ""}">Overview</a>
-      <a href="index.html#beyond-haiku" class="text-link">Features</a>
-      <a href="prs.html" class="text-link ${active === "prs" ? "active" : ""}">Pull Requests</a>
+      <a href="https://r5-operating-system.github.io/" class="text-link ${active === "home" ? "active" : ""}">Overview</a>
+      <a href="https://r5-operating-system.github.io/" class="text-link">Features</a>
+      <a href="https://r5-operating-system.github.io/whats-new/changes/" class="text-link ${active === "prs" ? "active" : ""}">Pull Requests</a>
       <a href="wallpapers.html" class="text-link ${active === "wallpapers" ? "active" : ""}">Wallpapers</a>
       <a href="brand-guide.html" class="text-link ${active === "brand-guide" ? "active" : ""}">Brand Guide</a>
-      <a href="index.html#download" class="nav-pill">Download</a>
+      <a href="https://r5-operating-system.github.io/download/" class="nav-pill">Download</a>
     </nav>
   `;
 
   const footerHtml = `
     <div><strong>R5 Operating System</strong> &nbsp;&bull;&nbsp; Version 2026.1-dev Build 10049</div>
     <div>
-      <a href="index.html">Home</a>
-      <a href="prs.html">Pull Requests</a>
+      <a href="https://r5-operating-system.github.io/">Home</a>
+      <a href="https://r5-operating-system.github.io/whats-new/changes/">Pull Requests</a>
       <a href="wallpapers.html">Wallpapers</a>
       <a href="brand-guide.html">Visual Brand Guide</a>
       <a href="https://github.com/r5-operating-system/r5os" target="_blank" rel="noopener">GitHub</a>
