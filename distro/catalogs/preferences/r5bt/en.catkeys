@@ -1,0 +1,61 @@
+1	english	x-vnd.R5OS-libr5bt	821375785
+My devices	BluetoothView		My devices
+Address:	BluetoothView		Address:
+Use for sound	BluetoothView		Use for sound
+Uses:	BluetoothView		Uses:
+Only an administrator can turn Bluetooth on or off.	BluetoothView		Only an administrator can turn Bluetooth on or off.
+Pair one under Devices nearby.	BluetoothView		Pair one under Devices nearby.
+Bluetooth is off.	BluetoothView		Bluetooth is off.
+Test buttons…	BluetoothView		Test buttons…
+Headset	BluetoothController		Headset
+No Bluetooth radio was found.	BluetoothView		No Bluetooth radio was found.
+Battery:	BluetoothView		Battery:
+Pair	BluetoothView		Pair
+Bluetooth is off	BluetoothView		Bluetooth is off
+Keyboard	BluetoothController		Keyboard
+Looking for devices…	BluetoothView		Looking for devices…
+Computer	BluetoothController		Computer
+Input device	BluetoothController		Input device
+Phone	BluetoothController		Phone
+Bluetooth is not available: the service could not be started.	BluetoothView		Bluetooth is not available: the service could not be started.
+Remote control	BluetoothController		Remote control
+Bluetooth Classic	BluetoothView		Bluetooth Classic
+No radio	BluetoothView		No radio
+Bluetooth radio	BluetoothView		Bluetooth radio
+Bluetooth on	BluetoothView		Bluetooth on
+Paired with %name%.	BluetoothView		Paired with %name%.
+Bluetooth could not be turned on or off.	BluetoothView		Bluetooth could not be turned on or off.
+Printer or camera	BluetoothController		Printer or camera
+Make sure the other device can be found, then press Scan.	BluetoothView		Make sure the other device can be found, then press Scan.
+Car audio	BluetoothController		Car audio
+Pairing with %name%…	BluetoothView		Pairing with %name%…
+Game controller	BluetoothController		Game controller
+Network access point	BluetoothController		Network access point
+Not connected	BluetoothView		Not connected
+Wearable	BluetoothController		Wearable
+Microphone	BluetoothController		Microphone
+Scan	BluetoothView		Scan
+Keyboard and mouse	BluetoothController		Keyboard and mouse
+the device	BluetoothView		the device
+Status:	BluetoothView		Status:
+Health device	BluetoothController		Health device
+Audio device	BluetoothController		Audio device
+Disconnect	BluetoothView		Disconnect
+%name% is forgotten. Pair it again to use it.	BluetoothView		%name% is forgotten. Pair it again to use it.
+Speaker	BluetoothController		Speaker
+{0, plural, =0{No new devices found.} one{# new device found.} other{# new devices found.}}	BluetoothView		{0, plural, =0{No new devices found.} one{# new device found.} other{# new devices found.}}
+Mouse	BluetoothController		Mouse
+Headphones	BluetoothController		Headphones
+%name% was not paired.	BluetoothView		%name% was not paired.
+Starting Bluetooth…	BluetoothView		Starting Bluetooth…
+Forget	BluetoothView		Forget
+Bluetooth is not available: the service stopped.	BluetoothView		Bluetooth is not available: the service stopped.
+Connected	BluetoothView		Connected
+Choose a device.	BluetoothView		Choose a device.
+Toy	BluetoothController		Toy
+Devices nearby	BluetoothView		Devices nearby
+Pairing with %name% did not work.	BluetoothView		Pairing with %name% did not work.
+Bluetooth Low Energy	BluetoothView		Bluetooth Low Energy
+Bluetooth device	BluetoothView		Bluetooth device
+No paired devices	BluetoothView		No paired devices
+Stop	BluetoothView		Stop

@@ -1,0 +1,61 @@
+1	german	x-vnd.R5OS-libr5bt	821375785
+My devices	BluetoothView		
+Address:	BluetoothView		
+Use for sound	BluetoothView		
+Uses:	BluetoothView		
+Only an administrator can turn Bluetooth on or off.	BluetoothView		
+Pair one under Devices nearby.	BluetoothView		
+Bluetooth is off.	BluetoothView		
+Test buttons…	BluetoothView		
+Headset	BluetoothController		
+No Bluetooth radio was found.	BluetoothView		
+Battery:	BluetoothView		
+Pair	BluetoothView		
+Bluetooth is off	BluetoothView		
+Keyboard	BluetoothController		
+Looking for devices…	BluetoothView		
+Computer	BluetoothController		
+Input device	BluetoothController		
+Phone	BluetoothController		
+Bluetooth is not available: the service could not be started.	BluetoothView		
+Remote control	BluetoothController		
+Bluetooth Classic	BluetoothView		
+No radio	BluetoothView		
+Bluetooth radio	BluetoothView		
+Bluetooth on	BluetoothView		
+Paired with %name%.	BluetoothView		
+Bluetooth could not be turned on or off.	BluetoothView		
+Printer or camera	BluetoothController		
+Make sure the other device can be found, then press Scan.	BluetoothView		
+Car audio	BluetoothController		
+Pairing with %name%…	BluetoothView		
+Game controller	BluetoothController		
+Network access point	BluetoothController		
+Not connected	BluetoothView		
+Wearable	BluetoothController		
+Microphone	BluetoothController		
+Scan	BluetoothView		
+Keyboard and mouse	BluetoothController		
+the device	BluetoothView		
+Status:	BluetoothView		
+Health device	BluetoothController		
+Audio device	BluetoothController		
+Disconnect	BluetoothView		
+%name% is forgotten. Pair it again to use it.	BluetoothView		
+Speaker	BluetoothController		
+{0, plural, =0{No new devices found.} one{# new device found.} other{# new devices found.}}	BluetoothView		
+Mouse	BluetoothController		
+Headphones	BluetoothController		
+%name% was not paired.	BluetoothView		
+Starting Bluetooth…	BluetoothView		
+Forget	BluetoothView		
+Bluetooth is not available: the service stopped.	BluetoothView		
+Connected	BluetoothView		
+Choose a device.	BluetoothView		
+Toy	BluetoothController		
+Devices nearby	BluetoothView		
+Pairing with %name% did not work.	BluetoothView		
+Bluetooth Low Energy	BluetoothView		
+Bluetooth device	BluetoothView		
+No paired devices	BluetoothView		
+Stop	BluetoothView		

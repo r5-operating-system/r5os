@@ -1,0 +1,94 @@
+1	english	x-vnd.R5OS-libr5wifi	107263549
+Other networks	WiFiView		Other networks
+Enter the password.	WiFiConnectWindow		Enter the password.
+The network service is not responding; saved networks are unavailable.	WiFiView		The network service is not responding; saved networks are unavailable.
+Couldn't reach %name%. Your password wasn't checked. Move closer to the router or try again.	WiFiConnectWindow		Couldn't reach %name%. Your password wasn't checked. Move closer to the router or try again.
+Open	WiFiConnectWindow		Open
+Disconnect	WiFiView		Disconnect
+Strong signal	WiFiConnectWindow		Strong signal
+Automatic	WiFiConnectWindow		Automatic
+Fair signal	WiFiConnectWindow		Fair signal
+Could not connect to “%name%”. The password may be incorrect.	WiFiController		Could not connect to “%name%”. The password may be incorrect.
+Cancel	WiFiView		Cancel
+Encrypted	WiFiController		Encrypted
+Adapter:	WiFiView		Adapter:
+Connect to Wi-Fi	WiFiConnectWindow		Connect to Wi-Fi
+Looking for Wi-Fi adapters…	WiFiView		Looking for Wi-Fi adapters…
+Wi-Fi	WiFiConnectWindow		Wi-Fi
+None	JoinOtherWindow		None
+WPA3 Personal	WiFiConnectWindow		WPA3 Personal
+Choose a network to join.	WiFiView		Choose a network to join.
+Connected, obtaining an IP address…	WiFiView		Connected, obtaining an IP address…
+Could not connect.	WiFiView		Could not connect.
+Could not connect to “%name%”: the network service is not responding.	WiFiController		Could not connect to “%name%”: the network service is not responding.
+Connected, but the network could not be remembered: %error%	WiFiController		Connected, but the network could not be remembered: %error%
+Forget the Wi-Fi network “%name%”?\n\nIts saved password is removed and it will no longer be joined automatically.	WiFiView		Forget the Wi-Fi network “%name%”?\n\nIts saved password is removed and it will no longer be joined automatically.
+None	WiFiController		None
+Advanced…	WiFiView		Advanced…
+WPA2/WPA3	WiFiConnectWindow		WPA2/WPA3
+Could not connect to “%name%”: %error%	WiFiController		Could not connect to “%name%”: %error%
+Wi-Fi	WiFiView		Wi-Fi
+Good signal	WiFiConnectWindow		Good signal
+Could not connect to “%name%”. The network did not respond.	WiFiController		Could not connect to “%name%”. The network did not respond.
+Security	WiFiConnectWindow		Security
+Show password	JoinOtherWindow		Show password
+Could not forget “%name%”: %error%	WiFiController		Could not forget “%name%”: %error%
+Wi-Fi was turned off.	WiFiController		Wi-Fi was turned off.
+There is no Wi-Fi adapter.	WiFiView		There is no Wi-Fi adapter.
+Join	JoinOtherWindow		Join
+Forget network	WiFiView		Forget network
+WPA Enterprise	WiFiController		WPA Enterprise
+Connecting…	WiFiConnectWindow		Connecting…
+%name% didn't accept this password. Check it and try again.	WiFiConnectWindow		%name% didn't accept this password. Check it and try again.
+Security:	JoinOtherWindow		Security:
+%name% didn't accept this password.	WiFiController		%name% didn't accept this password.
+Saved network	NetworkListView		Saved network
+WPA2 Personal	WiFiConnectWindow		WPA2 Personal
+Remember this network	JoinOtherWindow		Remember this network
+Connect automatically	WiFiConnectWindow		Connect automatically
+WEP	JoinOtherWindow		WEP
+Join other network…	WiFiView		Join other network…
+Weak signal	WiFiConnectWindow		Weak signal
+Connecting…	WiFiView		Connecting…
+Could not start the Wi-Fi monitor.	WiFiView		Could not start the Wi-Fi monitor.
+%count% access points	NetworkListView		%count% access points
+There is no Wi-Fi adapter.	WiFiController		There is no Wi-Fi adapter.
+Open network	NetworkListView		Open network
+Cancel	WiFiConnectWindow		Cancel
+WPA2 Personal	JoinOtherWindow		WPA2 Personal
+Join	WiFiView		Join
+Join other network	JoinOtherWindow		Join other network
+Try again	WiFiConnectWindow		Try again
+› Other options	WiFiConnectWindow		› Other options
+Connected, no Internet (%address%)	WiFiView		Connected, no Internet (%address%)
+Connected	NetworkListView		Connected
+Cancel	JoinOtherWindow		Cancel
+Known networks	WiFiView		Known networks
+WEP	WiFiConnectWindow		WEP
+Forget…	WiFiView		Forget…
+Connected (%address%)	WiFiView		Connected (%address%)
+Not in range	NetworkListView		Not in range
+Your router supports %standard%.	WiFiView		Your router supports %standard%.
+Password	WiFiConnectWindow		Password
+WPA Personal	WiFiConnectWindow		WPA Personal
+Forget	WiFiView		Forget
+“%name%” requires a password.	WiFiController		“%name%” requires a password.
+Could not connect to “%name%”. A password is required.	WiFiController		Could not connect to “%name%”. A password is required.
+Security: %mode%	NetworkListView		Security: %mode%
+WPA Personal	JoinOtherWindow		WPA Personal
+Scanning…	WiFiView		Scanning…
+Router: %standard%	WiFiView		Router: %standard%
+WPA3 Personal	JoinOtherWindow		WPA3 Personal
+Connecting to %name%… checking the password	WiFiConnectWindow		Connecting to %name%… checking the password
+⌄ Other options	WiFiConnectWindow		⌄ Other options
+Signal: %percent%% (%dBm% dBm)	NetworkListView		Signal: %percent%% (%dBm% dBm)
+Connect	WiFiConnectWindow		Connect
+Password:	JoinOtherWindow		Password:
+Turn Wi-Fi on to see nearby networks.	WiFiView		Turn Wi-Fi on to see nearby networks.
+Could not connect to “%name%”. Check the password and try again.	WiFiController		Could not connect to “%name%”. Check the password and try again.
+Wi-Fi is off	WiFiView		Wi-Fi is off
+Network name:	JoinOtherWindow		Network name:
+No Wi-Fi adapter found	WiFiView		No Wi-Fi adapter found
+Not connected	WiFiView		Not connected
+No signal	WiFiConnectWindow		No signal
+The Wi-Fi adapter is no longer available.	WiFiController		The Wi-Fi adapter is no longer available.
