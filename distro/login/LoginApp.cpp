@@ -19,6 +19,9 @@
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 #include <R5Admin.h>
+#include <R5Security.h>
+#include "KeyStoreCrypto.h"
+#include "KeyStoreProtocol.h"
 // SPDX-SnippetEnd
 
 #include <Alert.h>
@@ -34,6 +37,7 @@
 #include <StringList.h>
 
 #include <errno.h>
+#include <fcntl.h>
 #include <image.h>
 #include <pwd.h>
 #include <shadow.h>
@@ -68,6 +72,14 @@ keep_team(const app_info& info, team_id self)
 		return true;
 	if (strcmp(signature, "application/x-vnd.R5OS-airplay") == 0)
 		return true;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// keystore_server runs per-session as the signed-in account and must stop
+	// at Log out so its master key is wiped from memory.
+	if (strcmp(signature, "application/x-vnd.Haiku-keystore_server") == 0)
+		return false;
+// SPDX-SnippetEnd
 	if (strstr(signature, "server") != NULL
 		|| strstr(signature, "daemon") != NULL
 		|| strstr(signature, "launch") != NULL
@@ -387,6 +399,11 @@ LoginApp::TryLogin(BMessage* message)
 			}
 			if (status == B_OK) {
 				r5_session_log("sign-in %s", login);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+				_StartAndUnlockKeyStore(login, password);
+// SPDX-SnippetEnd
 				_EnableDesktopJobs();
 				status = _WaitGone("application/x-vnd.Be-TRAK");
 				if (status == B_OK)
@@ -552,6 +569,11 @@ LoginApp::Logout()
 	_WaitGone("application/x-vnd.R5OS-vbox-clip");
 	_WaitGone("application/x-vnd.Oracle-VBoxGuest");
 	stop_team_named("VBoxService");
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	_WaitGone("application/x-vnd.Haiku-keystore_server");
+// SPDX-SnippetEnd
 	_WaitGone("application/x-vnd.Be-TRAK");
 	_WaitGone("application/x-vnd.Be-TSKB");
 	_ShowLogin();
@@ -639,6 +661,248 @@ LoginApp::_LaunchSessionApp(const char* program, const char* argument,
 	r5_session_log("r5-desktop %s ok", program);
 	return B_OK;
 }
+
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+status_t
+LoginApp::_LaunchSessionAppGetTeam(const char* program, team_id* _outTeam)
+{
+	if (_outTeam != NULL)
+		*_outTeam = -1;
+	if (program == NULL || program[0] == '\0' || _outTeam == NULL)
+		return B_BAD_VALUE;
+
+	int fds[2];
+	if (pipe(fds) != 0)
+		return B_ERROR;
+	fcntl(fds[0], F_SETFD, FD_CLOEXEC);
+
+	// Build a private environment array for this single load_image() call so
+	// Login's own environ is never mutated and no other child inherits the var.
+	char envEntry[36];
+	snprintf(envEntry, sizeof(envEntry), "R5_REPORT_TEAM_FD=%d", fds[1]);
+
+	size_t envCount = 0;
+	if (environ != NULL) {
+		while (environ[envCount] != NULL)
+			envCount++;
+	}
+	const char** childEnv = static_cast<const char**>(
+		malloc((envCount + 2) * sizeof(const char*)));
+	if (childEnv == NULL) {
+		close(fds[0]);
+		close(fds[1]);
+		return B_NO_MEMORY;
+	}
+	size_t outIdx = 0;
+	for (size_t i = 0; i < envCount; i++) {
+		if (strncmp(environ[i], "R5_REPORT_TEAM_FD=", 18) == 0)
+			continue;
+		childEnv[outIdx++] = environ[i];
+	}
+	childEnv[outIdx++] = envEntry;
+	childEnv[outIdx] = NULL;
+
+	const char* args[] = {
+		"/system/apps/r5-desktop",
+		program,
+		NULL
+	};
+	r5_session_log("launch %s", program);
+	thread_id thread = load_image(2, args, childEnv);
+	free(childEnv);
+	close(fds[1]);
+	if (thread < B_OK) {
+		close(fds[0]);
+		r5_session_log("load_image r5-desktop %s: %s", program,
+			strerror(thread));
+		return thread;
+	}
+	resume_thread(thread);
+
+	status_t result = B_ERROR;
+	wait_for_thread(thread, &result);
+
+	team_id launchedTeam = -1;
+	ssize_t n = read(fds[0], &launchedTeam, sizeof(launchedTeam));
+	close(fds[0]);
+
+	if (result != B_OK) {
+		r5_session_log("r5-desktop %s: %s", program, strerror(result));
+		return result < B_OK ? result : B_ERROR;
+	}
+	if (n != static_cast<ssize_t>(sizeof(launchedTeam)) || launchedTeam < 0)
+		return B_ERROR;
+
+	*_outTeam = launchedTeam;
+	return B_OK;
+}
+
+
+void
+LoginApp::_StartAndUnlockKeyStore(const char* login, const char* password)
+{
+	// No password (e.g. autologin / live session): leave keystore locked.
+	if (login == NULL || password == NULL || password[0] == '\0')
+		return;
+
+	struct passwd* pwd = getpwnam(login);
+	if (pwd == NULL || pwd->pw_uid == 0 || pwd->pw_dir == NULL
+		|| pwd->pw_dir[0] == '\0')
+		return;
+
+	static const char* kKeyStoreSig
+		= "application/x-vnd.Haiku-keystore_server";
+	_WaitGone(kKeyStoreSig);
+
+	team_id launchedTeam = -1;
+	if (_LaunchSessionAppGetTeam("/system/servers/keystore_server",
+			&launchedTeam) != B_OK || launchedTeam < 0) {
+		r5_session_log("keystore_server: launch failed");
+		return;
+	}
+
+	// Wait until the exact team Login started registers with the roster.
+	const bigtime_t deadline = system_time() + 5000000LL;
+	app_info appInfo;
+	bool ready = false;
+	while (system_time() < deadline) {
+		if (be_roster->GetRunningAppInfo(launchedTeam, &appInfo) == B_OK
+			&& strcmp(appInfo.signature, kKeyStoreSig) == 0) {
+			ready = true;
+			break;
+		}
+		snooze(50000);
+	}
+	if (!ready) {
+		r5_session_log("keystore_server: team %d did not register",
+			(int)launchedTeam);
+		return;
+	}
+
+	// Verify uid, image path, and exact team started by Login.
+	team_info tInfo;
+	BPath imgPath(&appInfo.ref);
+	if (get_team_info(launchedTeam, &tInfo) != B_OK
+		|| tInfo.uid != pwd->pw_uid || tInfo.uid == 0
+		|| imgPath.InitCheck() != B_OK
+		|| (strcmp(imgPath.Path(), "/boot/system/servers/keystore_server") != 0
+			&& strcmp(imgPath.Path(), "/system/servers/keystore_server") != 0)) {
+		r5_session_log("keystore_server: team verification failed");
+		return;
+	}
+
+	BPrivate::R5PasswordProtectorParams protParams;
+	bool hasProtector = (BPrivate::R5KeyStoreCrypto::
+		ReadAccountPasswordProtectorParams(pwd->pw_dir, pwd->pw_uid,
+			protParams) == B_OK);
+	if (!hasProtector) {
+		protParams.kdf = BSecurityKit::BPasswordHash::DefaultParameters();
+		if (BSecurityKit::BRandom::Fill(protParams.salt,
+				sizeof(protParams.salt)) != B_OK)
+			return;
+	}
+
+	BSecurityKit::BSecureBuffer kek;
+	status_t status = BSecurityKit::BPasswordHash::DeriveKey(password,
+		strlen(password), protParams.salt, sizeof(protParams.salt),
+		protParams.kdf, kek, BSecurityKit::BSealedData::kKeySize);
+	if (status != B_OK) {
+		r5_session_log("keystore_server: key derivation failed");
+		return;
+	}
+
+	BMessage unlockMsg(BPrivate::kMsgR5KeyStoreUnlock);
+	unlockMsg.AddData(BPrivate::kR5KSFieldKek, B_RAW_TYPE, kek.Data(),
+		kek.Size());
+	if (!hasProtector) {
+		unlockMsg.AddData(BPrivate::kR5KSFieldSalt, B_RAW_TYPE,
+			protParams.salt, sizeof(protParams.salt));
+		unlockMsg.AddUInt32(BPrivate::kR5KSFieldMemKiB,
+			protParams.kdf.memoryKiB);
+		unlockMsg.AddUInt32(BPrivate::kR5KSFieldPasses, protParams.kdf.passes);
+		unlockMsg.AddUInt32(BPrivate::kR5KSFieldLanes, protParams.kdf.lanes);
+	}
+	kek.Clear();
+
+	BMessage reply;
+	status = r5_admin_send(BMessenger(NULL, launchedTeam), &unlockMsg, &reply);
+	const void* msgKek = NULL;
+	ssize_t msgKekSize = 0;
+	if (unlockMsg.FindData(BPrivate::kR5KSFieldKek, B_RAW_TYPE, &msgKek,
+			&msgKekSize) == B_OK && msgKek != NULL && msgKekSize > 0) {
+		BSecurityKit::BSecureBuffer::WipeMemory(const_cast<void*>(msgKek),
+			static_cast<size_t>(msgKekSize));
+	}
+	unlockMsg.MakeEmpty();
+	if (status != B_OK) {
+		r5_session_log("keystore_server: unlock handoff failed: %s",
+			strerror(status));
+		return;
+	}
+	int32 ksStatus = reply.GetInt32(BPrivate::kR5KSFieldStatus, B_ERROR);
+
+	// Safety net: Login already verified the sign-in password, so if the
+	// existing protector refused it (e.g. password changed via passwd in
+	// Terminal), move the current store aside as .old* and initialize a fresh
+	// store with this password, triggering "Do you still know your old
+	// password?" in keystore_server. keystore_server answers
+	// B_PERMISSION_DENIED only when the protector itself does not open; a
+	// damaged database or a refused sender (B_NOT_ALLOWED) is not a mismatch
+	// and must not move the store aside.
+	if (hasProtector && ksStatus == B_PERMISSION_DENIED) {
+		uint8 freshSalt[16];
+		BSecurityKit::BPasswordHash::Parameters freshParams
+			= BSecurityKit::BPasswordHash::DefaultParameters();
+		BSecurityKit::BSecureBuffer freshKek;
+		if (BSecurityKit::BRandom::Fill(freshSalt, sizeof(freshSalt)) == B_OK
+			&& BSecurityKit::BPasswordHash::DeriveKey(password,
+				strlen(password), freshSalt, sizeof(freshSalt), freshParams,
+				freshKek, BSecurityKit::BSealedData::kKeySize) == B_OK) {
+			BMessage recoverMsg(BPrivate::kMsgR5KeyStoreUnlock);
+			recoverMsg.AddBool(BPrivate::kR5KSFieldRecoverMismatch, true);
+			recoverMsg.AddData(BPrivate::kR5KSFieldKek, B_RAW_TYPE,
+				freshKek.Data(), freshKek.Size());
+			recoverMsg.AddData(BPrivate::kR5KSFieldSalt, B_RAW_TYPE,
+				freshSalt, sizeof(freshSalt));
+			recoverMsg.AddUInt32(BPrivate::kR5KSFieldMemKiB,
+				freshParams.memoryKiB);
+			recoverMsg.AddUInt32(BPrivate::kR5KSFieldPasses,
+				freshParams.passes);
+			recoverMsg.AddUInt32(BPrivate::kR5KSFieldLanes,
+				freshParams.lanes);
+			freshKek.Clear();
+
+			BMessage recoverReply;
+			status = r5_admin_send(BMessenger(NULL, launchedTeam),
+				&recoverMsg, &recoverReply);
+			const void* recKek = NULL;
+			ssize_t recKekSize = 0;
+			if (recoverMsg.FindData(BPrivate::kR5KSFieldKek, B_RAW_TYPE,
+					&recKek, &recKekSize) == B_OK
+				&& recKek != NULL && recKekSize > 0) {
+				BSecurityKit::BSecureBuffer::WipeMemory(
+					const_cast<void*>(recKek),
+					static_cast<size_t>(recKekSize));
+			}
+			recoverMsg.MakeEmpty();
+			if (status == B_OK) {
+				ksStatus = recoverReply.GetInt32(BPrivate::kR5KSFieldStatus,
+					B_ERROR);
+			} else
+				ksStatus = status;
+			r5_session_log("keystore_server: mismatch recovery %s",
+				strerror(ksStatus));
+			return;
+		}
+		freshKek.Clear();
+	}
+
+	r5_session_log("keystore_server: unlock %s", strerror(ksStatus));
+}
+// SPDX-SnippetEnd
 
 
 void

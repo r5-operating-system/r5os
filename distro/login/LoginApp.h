@@ -48,6 +48,14 @@ private:
 						const char* argument2 = NULL,
 						const char* argument3 = NULL,
 						const char* argument4 = NULL);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	status_t		_LaunchSessionAppGetTeam(const char* program,
+						team_id* _outTeam);
+	void			_StartAndUnlockKeyStore(const char* login,
+						const char* password);
+// SPDX-SnippetEnd
 	void			_LaunchSessionHooks();
 	void			_StartVirtualBoxGuest();
 	status_t		_SessionHome(BPath& path) const;

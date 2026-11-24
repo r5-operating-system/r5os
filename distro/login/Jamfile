@@ -23,14 +23,15 @@ Application Login :
 	DriverSettingsAdmin.cpp
 	DriverUtils.cpp
 	HomeLock.cpp
+	KeyStoreCrypto.cpp
 	LockWindow.cpp
 	LoginApp.cpp
 	LoginWindow.cpp
 	LoginView.cpp
 	SignInBackground.cpp
 	main.cpp
-	: be tracker translation libr5ui.so libr5icons.so libr5admin.so shared
-		package
+	: be tracker translation libr5ui.so libr5icons.so libr5admin.so
+		libr5security.so shared package
 		[ TargetLibstdc++ ] localestub
 	: Login.rdef
 ;

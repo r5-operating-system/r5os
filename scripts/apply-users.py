@@ -46,6 +46,16 @@ def copy_sources() -> None:
         (dest / name).touch()
         print(f"copied {name} -> {dest}")
 
+    keystore = ROOT / "distro" / "keystore"
+    for name in (
+        "KeyStoreCrypto.cpp",
+        "KeyStoreCrypto.h",
+        "KeyStoreProtocol.h",
+    ):
+        shutil.copy2(keystore / name, dest / name)
+        (dest / name).touch()
+        print(f"copied {name} -> {dest}")
+
 
 def patch_jams() -> None:
     replace_once(

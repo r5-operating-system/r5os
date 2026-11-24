@@ -27,6 +27,15 @@ static const ssize_t kMaxRequest = 64 * 1024;
 namespace {
 
 
+static void
+wipe_memory(void* data, size_t size)
+{
+	volatile uint8* p = static_cast<volatile uint8*>(data);
+	for (size_t i = 0; i < size; i++)
+		p[i] = 0;
+}
+
+
 struct admin_port {
 	port_id				port;
 	thread_id			thread;
@@ -104,12 +113,17 @@ read_requests(void* data)
 			break;
 		if (buffer == NULL || read != (ssize_t)info.size
 			|| code != kRequestCode) {
-			free(buffer);
+			if (buffer != NULL) {
+				wipe_memory(buffer, info.size);
+				free(buffer);
+			}
 			continue;
 		}
 
 		BMessage request;
 		status = request.Unflatten(buffer);
+		// Requests may hold a password or derived key: wipe before freeing.
+		wipe_memory(buffer, info.size);
 		free(buffer);
 		if (status != B_OK)
 			continue;
@@ -250,8 +264,8 @@ r5_admin_send(const BMessenger& service, BMessage* request, BMessage* reply,
 		status = write_port_etc(port, kRequestCode, buffer, size,
 			B_RELATIVE_TIMEOUT, timeout);
 	}
-	// The request may hold a password: it does not stay in memory.
-	memset(buffer, 0, size);
+	// The request may hold a password or derived key: wipe before freeing.
+	wipe_memory(buffer, size);
 	free(buffer);
 	if (status != B_OK) {
 		delete_port(replyPort);
