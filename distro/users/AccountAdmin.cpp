@@ -55,6 +55,10 @@ static const char* kHome = "/boot/home";
 static const char* kUsersRoot = "/boot/home/users";
 static const char* kSessionPath = "/boot/system/settings/r5-desktop-session";
 static const char* kGuestEnabledPath = "/boot/system/settings/r5-guest-enabled";
+// The uid of the guest account that ensure_guest_account() made. Only that
+// account is the guest; an older person who happens to be called "guest" is
+// not, and is never locked or wiped.
+static const char* kGuestUidPath = "/boot/system/settings/r5-guest-uid";
 static const char* kSystemRootName = "root";
 
 
@@ -72,10 +76,81 @@ group_has_member(const char* groupName, const char* user)
 }
 
 
+static bool
+read_guest_uid(uid_t& uid)
+{
+	struct stat st;
+	if (lstat(kGuestUidPath, &st) != 0 || !S_ISREG(st.st_mode)
+		|| st.st_uid != 0 || (st.st_mode & (S_IWGRP | S_IWOTH)) != 0)
+		return false;
+	FILE* file = fopen(kGuestUidPath, "r");
+	if (file == NULL)
+		return false;
+	long value = -1;
+	bool ok = fscanf(file, "%ld", &value) == 1;
+	fclose(file);
+	if (!ok || value < (long)kMinPersonUid)
+		return false;
+	uid = (uid_t)value;
+	return true;
+}
+
+
+static bool
+write_guest_uid(uid_t uid)
+{
+	FILE* file = fopen(kGuestUidPath, "w");
+	if (file == NULL)
+		return false;
+	bool ok = fprintf(file, "%d\n", (int)uid) > 0;
+	if (fclose(file) != 0)
+		ok = false;
+	chown(kGuestUidPath, 0, 0);
+	chmod(kGuestUidPath, 0644);
+	return ok;
+}
+
+
+static bool
+is_system_guest(const struct passwd* pwd)
+{
+	uid_t guestUid;
+	return pwd != NULL && pwd->pw_name != NULL
+		&& strcmp(pwd->pw_name, kGuestAccountName) == 0
+		&& pwd->pw_dir != NULL && strcmp(pwd->pw_dir, kGuestHomePath) == 0
+		&& read_guest_uid(guestUid) && pwd->pw_uid == guestUid;
+}
+
+
 bool
 is_guest_account(const char* name)
 {
-	return name != NULL && strcmp(name, kGuestAccountName) == 0;
+	if (name == NULL || strcmp(name, kGuestAccountName) != 0)
+		return false;
+	// getpwnam_r(): a caller may still hold a getpwnam() result.
+	struct passwd entry;
+	struct passwd* pwd = NULL;
+	char buffer[1024];
+	if (getpwnam_r(name, &entry, buffer, sizeof(buffer), &pwd) != 0
+		|| pwd == NULL)
+		return false;
+	return is_system_guest(pwd);
+}
+
+
+bool
+guest_session_active()
+{
+	uid_t guestUid;
+	if (!read_guest_uid(guestUid))
+		return false;
+	int32 cookie = 0;
+	team_info info;
+	while (get_next_team_info(&cookie, &info) == B_OK) {
+		if (info.uid == guestUid && info.team > 0)
+			return true;
+	}
+	return false;
 }
 
 
@@ -88,7 +163,7 @@ is_listed_account(const struct passwd* pwd)
 		|| strcmp(pwd->pw_name, "ftp") == 0
 		|| strcmp(pwd->pw_name, "nobody") == 0
 		|| strcmp(pwd->pw_name, "root") == 0
-		|| strcmp(pwd->pw_name, kGuestAccountName) == 0)
+		|| is_system_guest(pwd))
 		return false;
 
 	const char* home = pwd->pw_dir;
@@ -185,6 +260,9 @@ valid_username(const char* name)
 	if (name == NULL || name[0] == '\0' || strlen(name) > 31)
 		return false;
 	if (!islower((unsigned char)name[0]) && name[0] != '_')
+		return false;
+	// The guest account's name is reserved.
+	if (strcmp(name, kGuestAccountName) == 0)
 		return false;
 	for (const char* p = name; *p != '\0'; p++) {
 		if (!islower((unsigned char)*p) && !isdigit((unsigned char)*p)
@@ -1083,9 +1161,14 @@ ensure_guest_account(BString& error)
 
 	struct passwd* pwd = getpwnam(kGuestAccountName);
 	if (pwd != NULL) {
-		if (pwd->pw_uid < kMinPersonUid || pwd->pw_uid == 0
-			|| pwd->pw_dir == NULL
-			|| strcmp(pwd->pw_dir, kGuestHomePath) != 0) {
+		if (!is_system_guest(pwd)) {
+			// A person made before the name was reserved. Never lock or wipe
+			// that account.
+			error = "An account named \"guest\" already exists. Rename it "
+				"first.";
+			return B_NOT_ALLOWED;
+		}
+		if (pwd->pw_uid < kMinPersonUid || pwd->pw_uid == 0) {
 			error = "The existing guest account has an unexpected setup.";
 			return B_NOT_ALLOWED;
 		}
@@ -1111,6 +1194,10 @@ ensure_guest_account(BString& error)
 		return status;
 	}
 	endpwent();
+	if (!write_guest_uid(uid)) {
+		error = "Could not save the guest account.";
+		return B_ERROR;
+	}
 	return B_OK;
 }
 
@@ -1213,8 +1300,11 @@ wipe_guest_home()
 	struct passwd* pwd = getpwnam(kGuestAccountName);
 	if (pwd == NULL)
 		return B_OK;
-	if (strcmp(pwd->pw_name, kGuestAccountName) != 0
-		|| pwd->pw_uid < kMinPersonUid || pwd->pw_uid == 0
+	if (!is_system_guest(pwd)) {
+		// No guest made by R5, or a person called "guest": nothing to wipe.
+		return B_OK;
+	}
+	if (pwd->pw_uid < kMinPersonUid || pwd->pw_uid == 0
 		|| pwd->pw_dir == NULL
 		|| strcmp(pwd->pw_dir, kGuestHomePath) != 0) {
 		syslog(LOG_ERR, "Login: refusing to wipe guest home (invalid passwd)");
@@ -1278,6 +1368,12 @@ set_guest_enabled(bool enabled, BString& error)
 		error = "Guest setting requires the sign-in helper.";
 		return B_PERMISSION_DENIED;
 	}
+	if (guest_session_active()) {
+		// Turning the guest off while a guest session runs would leave it
+		// running; turning it on would wipe a live home.
+		error = "Log out Guest first.";
+		return B_BUSY;
+	}
 	if (enabled) {
 		status_t status = ensure_guest_account(error);
 		if (status != B_OK)
@@ -1299,8 +1395,13 @@ set_guest_enabled(bool enabled, BString& error)
 	}
 	chmod(kGuestEnabledPath, 0644);
 	chown(kGuestEnabledPath, 0, 0);
-	if (enabled)
-		wipe_guest_home();
+	if (enabled) {
+		status_t status = wipe_guest_home();
+		if (status != B_OK) {
+			error = "The guest's old files could not be removed.";
+			return status;
+		}
+	}
 	return B_OK;
 }
 

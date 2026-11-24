@@ -273,7 +273,10 @@ LoginApp::ReadyToRun()
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 	ensure_shared_folder();
-	wipe_guest_home();
+	// A restarted Login must not wipe a guest session that still runs; its
+	// home is wiped at that session's log out.
+	if (!guest_session_active())
+		wipe_guest_home();
 // SPDX-SnippetEnd
 	refresh_machine_settings_access();
 // SPDX-SnippetBegin

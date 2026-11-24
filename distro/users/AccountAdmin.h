@@ -81,6 +81,8 @@ status_t migrate_admin_off_root();
 status_t ensure_shared_folder();
 status_t ensure_guest_account(BString& error);
 status_t wipe_guest_home();
+// True while a team of the guest account runs (a guest session).
+bool guest_session_active();
 status_t write_desktop_session(const char* login);
 status_t clear_desktop_session();
 status_t signed_in_name(BString& name);

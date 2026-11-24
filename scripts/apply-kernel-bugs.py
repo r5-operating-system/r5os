@@ -575,12 +575,11 @@ def install_bfs_sticky() -> None:
     """Enforce POSIX S_ISVTX (sticky bit) on BFS unlink, rmdir, and rename
     for /boot/home/Shared (mode 1777)."""
     root = pathlib.Path(__file__).resolve().parents[1]
-    for relative in (
-        "src/add-ons/kernel/file_systems/bfs/Inode.cpp",
-        "src/add-ons/kernel/file_systems/bfs/kernel_interface.cpp",
-    ):
-        install_file(root / "distro/kernel" / relative, HAIKU / relative,
-            "bfs sticky")
+    # kernel_interface.cpp (the rename check) is already in the list of
+    # install_kernel_sources().
+    relative = "src/add-ons/kernel/file_systems/bfs/Inode.cpp"
+    install_file(root / "distro/kernel" / relative, HAIKU / relative,
+        "bfs sticky")
 
 
 def main() -> int:
