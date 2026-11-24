@@ -13,6 +13,9 @@ UsePrivateSystemHeaders ;
 UsePublicHeaders [ FDirName add-ons network_settings ] ;
 SubDirHdrs $(HAIKU_TOP) src preferences network ;
 SubDirHdrs $(HAIKU_TOP) src bin network ifconfig ;
+# Users and Accounts uses the request codes of AccountAdmin.h (src/preferences
+# users); only the header, no code of that program.
+SubDirHdrs $(HAIKU_TOP) src preferences users ;
 SEARCH_SOURCE += [ FDirName $(HAIKU_TOP) src preferences network ] ;
 
 Application Settings :
@@ -44,9 +47,11 @@ Application Settings :
 	NetworkSettingsAddOn.cpp
 	ServiceListItem.cpp
 	ServiceView.cpp
+	AccountsModule.cpp
+	AccountDialogs.cpp
 	: <src!bin!network!ifconfig>MediaTypes.o
 		be tracker translation shared libr5icons.so libr5ui.so libr5wifi.so
-		libr5power.so
+		libr5power.so libr5admin.so
 		bnetapi network [ TargetLibstdc++ ] localestub
 	: Settings.rdef
 	;

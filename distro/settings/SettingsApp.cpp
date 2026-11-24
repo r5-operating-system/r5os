@@ -4,6 +4,7 @@
  */
 
 
+#include "AccountsModule.h"
 #include "DeskbarModule.h"
 #include "ConnectionsModule.h"
 #include "DisplayModule.h"
@@ -62,6 +63,7 @@ SettingsApp::SettingsApp()
 	register_wifi_page(fManager);
 	register_connections_page(fManager);
 	register_discovery_page(fManager);
+	register_accounts_page(fManager);
 }
 
 

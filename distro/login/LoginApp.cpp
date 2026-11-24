@@ -200,6 +200,8 @@ LoginApp::_AdminRequest(BMessage* request, const r5_admin_sender& sender,
 		case kMsgAdminSetClockGmt:
 		case kMsgAdminGetProfile:
 		case kMsgAdminSetProfile:
+		case kMsgAdminListAccounts:
+		case kMsgAdminSetAccountType:
 			handle_admin_message(request, *reply);
 			break;
 		case kMsgAdminSetDriverBlocked:
@@ -333,6 +335,12 @@ LoginApp::MessageReceived(BMessage* message)
 		case kMsgAdminSetClockGmt:
 		case kMsgAdminGetProfile:
 		case kMsgAdminSetProfile:
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		case kMsgAdminListAccounts:
+		case kMsgAdminSetAccountType:
+// SPDX-SnippetEnd
 			// New account messages must be listed here. An unhandled
 			// message still gets an empty reply, and Users treats a missing
 			// "error" field as failure.

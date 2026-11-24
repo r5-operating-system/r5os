@@ -82,6 +82,10 @@ SOURCES = (
     "DiscoveryModule.h",
     "NetworkPage.cpp",
     "NetworkPage.h",
+    "AccountsModule.cpp",
+    "AccountsModule.h",
+    "AccountDialogs.cpp",
+    "AccountDialogs.h",
 )
 
 
