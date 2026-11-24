@@ -83,6 +83,12 @@ public:
 			}
 			return;
 		}
+		if (numBytes == 1 && bytes[0] == B_TAB) {
+			// Tab moves to the next field, as in BTextControl; a password
+			// never holds a tab (QEMU, 24 Nov 2026).
+			BView::KeyDown(bytes, numBytes);
+			return;
+		}
 		BTextView::KeyDown(bytes, numBytes);
 	}
 

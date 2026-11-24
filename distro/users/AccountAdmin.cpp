@@ -1152,6 +1152,9 @@ is_session_home(const struct passwd* pwd)
 }
 
 
+static void own_shared_folder(uid_t uid, gid_t gid);
+
+
 status_t
 write_desktop_session(const char* login)
 {
@@ -1211,6 +1214,16 @@ write_desktop_session(const char* login)
 
 	lock_private_homes();
 	ensure_shared_folder();
+
+	struct passwd entry;
+	struct passwd* signedIn = NULL;
+	char buffer[1024];
+	if (!guestAllowed
+		&& getpwuid_r(uid, &entry, buffer, sizeof(buffer), &signedIn) == 0
+		&& signedIn != NULL && strcmp(signedIn->pw_name, name) == 0
+		&& is_admin_user(signedIn)) {
+		own_shared_folder(uid, gid);
+	}
 	return B_OK;
 }
 
@@ -1233,6 +1246,27 @@ is_guest_enabled()
 		enabled = (buf[0] == '1');
 	fclose(file);
 	return enabled;
+}
+
+
+// 24 Nov 2026: the sticky bit on Shared lets only uid 0, the owner of a file
+// and the owner of Shared delete there; group admin does not count. One
+// graphical session runs at a time, so the administrator who signs in becomes
+// the owner of Shared (the folder only, never what is in it) and can delete
+// any file there. A standard account or the guest leaves the owner as it is.
+static void
+own_shared_folder(uid_t uid, gid_t gid)
+{
+	int fd = open(kSharedFolderPath, O_RDONLY | O_DIRECTORY | O_NOFOLLOW
+		| O_CLOEXEC);
+	if (fd < 0)
+		return;
+	struct stat st;
+	if (fstat(fd, &st) == 0 && S_ISDIR(st.st_mode)) {
+		fchown(fd, uid, gid);
+		fchmod(fd, 01777);
+	}
+	close(fd);
 }
 
 

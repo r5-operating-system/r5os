@@ -137,8 +137,7 @@
 				<li>Recognise the guest with <a href="admin-kit.html#service"><code class="inline">r5_admin_is_system_guest(getuid())</code></a>,
 				never by the name: an older account may be called "guest" too. The guest has no lock screen.</li>
 				<li><code class="inline">/boot/home/Shared</code> is for everyone (mode 01777). Anyone can put a file there;
-				only its owner, the first administrator and the system can delete it. A second administrator cannot delete
-				someone else's file there.</li>
+				only its owner, the administrator who is signed in and the system can delete it.</li>
 				<li>The protection holds for Shared itself, as with <code class="inline">/tmp</code>. A folder made inside Shared
 				belongs to its maker, who can delete what others put in it.</li>
 			</ul>
