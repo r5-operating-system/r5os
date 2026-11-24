@@ -21,6 +21,7 @@
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+#include <Alert.h>
 #include <DataIO.h>
 // SPDX-SnippetEnd
 #include <Directory.h>
@@ -52,6 +53,7 @@ using namespace BSecurityKit;
 
 static const char* kLoginAppSignature = "application/x-vnd.Haiku-Login";
 static const uint32 kMsgShowOldKeyStorePrompt = 'r5OP';
+static const uint32 kMsgShowMissingProtectorAlert = 'r5MP';
 
 static void
 wipe_message_raw_field(BMessage& msg, const char* name)
@@ -173,6 +175,18 @@ KeyStoreServer::MessageReceived(BMessage* message)
 	if (message->what == kMsgShowOldKeyStorePrompt) {
 		if (!message->IsSourceRemote() && fStoreUnlocked && _HasOldKeyStore())
 			(new OldKeyStoreWindow(this))->Show();
+		return;
+	}
+	if (message->what == kMsgShowMissingProtectorAlert) {
+		if (!message->IsSourceRemote()) {
+			BAlert* alert = new BAlert("Key store",
+				"Your key store protector file was missing. The previous "
+				"encrypted database was kept as a backup and a new empty "
+				"key store was created.",
+				"OK", NULL, NULL, B_WIDTH_AS_USUAL, B_WARNING_ALERT);
+			alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
+			alert->Go(NULL);
+		}
 		return;
 	}
 // SPDX-SnippetEnd
@@ -931,10 +945,12 @@ KeyStoreServer::_AdminRequest(BMessage* request, const r5_admin_sender& sender,
 				hasInitParams = true;
 			}
 
+			bool recoverMismatch = request->GetBool(kR5KSFieldRecoverMismatch,
+				false);
 			bool hasOld = false;
 			status = server->_UnlockWithKek(kek,
 				hasInitParams ? initSalt : NULL, hasInitParams, initParams,
-				&hasOld);
+				recoverMismatch, &hasOld);
 			kek.Clear();
 			reply->AddBool(kR5KSFieldHasOld, hasOld);
 			break;
@@ -1122,7 +1138,8 @@ KeyStoreServer::_MergeKeyringsFromMessage(const BMessage& oldKeystore)
 status_t
 KeyStoreServer::_UnlockWithKek(const BSecureBuffer& kek,
 	const uint8* initSalt, bool hasInitParams,
-	const BPasswordHash::Parameters& initParams, bool* _hasOld)
+	const BPasswordHash::Parameters& initParams, bool recoverMismatch,
+	bool* _hasOld)
 {
 	if (_hasOld != NULL)
 		*_hasOld = false;
@@ -1134,7 +1151,7 @@ KeyStoreServer::_UnlockWithKek(const BSecureBuffer& kek,
 	struct stat protSt;
 	bool hasProtector = (lstat(fProtectorsPath.String(), &protSt) == 0);
 
-	if (hasProtector) {
+	if (hasProtector && !recoverMismatch) {
 		status_t status = R5KeyStoreCrypto::UnwrapMasterKey(
 			fProtectorsPath.String(), kek, fMasterKey, fKeyStoreId);
 		if (status != B_OK)
@@ -1163,53 +1180,69 @@ KeyStoreServer::_UnlockWithKek(const BSecureBuffer& kek,
 			}
 		}
 	} else {
-		// First sign in with a password (fresh install or one-time migration
-		// of a legacy plaintext Haiku keystore_database).
+		// First sign in with a password, mismatch recovery after an
+		// out-of-band password change (e.g. passwd in Terminal), or missing
+		// protector recovery.
 		if (!hasInitParams || initSalt == NULL)
 			return B_BAD_VALUE;
+
+		bool missingProtectorBackup = false;
+		if (hasProtector && recoverMismatch) {
+			status_t moveStatus = R5KeyStoreCrypto::PreserveCurrentAsOld(
+				fKeyStoreDir.String(), true);
+			if (moveStatus != B_OK && moveStatus != B_ENTRY_NOT_FOUND)
+				return moveStatus;
+		} else {
+			// Check for an existing database when keystore_protectors is absent:
+			// migrate a valid legacy plaintext database once; if it is already
+			// encrypted (R5KS) or unparseable, preserve it aside as .old* and
+			// notify the user rather than staying permanently locked.
+			uint8* legacyData = NULL;
+			size_t legacySize = 0;
+			status_t readStatus = R5KeyStoreCrypto::ReadFileBounded(
+				fDatabasePath.String(), &legacyData, &legacySize);
+			if (readStatus == B_OK) {
+				bool needBackup = R5KeyStoreCrypto::IsEncryptedDatabase(
+					legacyData, legacySize);
+				if (!needBackup && legacySize > 0) {
+					BMessage legacyMsg;
+					BMemoryIO legacyIo(legacyData, legacySize);
+					if (legacyMsg.Unflatten(&legacyIo) == B_OK) {
+						status_t loadStatus
+							= _LoadKeyringsFromMessage(legacyMsg);
+						if (loadStatus != B_OK) {
+							BSecureBuffer::WipeMemory(legacyData, legacySize);
+							free(legacyData);
+							_LockStore();
+							return loadStatus;
+						}
+					} else {
+						needBackup = true;
+					}
+				}
+				BSecureBuffer::WipeMemory(legacyData, legacySize);
+				free(legacyData);
+
+				if (needBackup) {
+					status_t moveStatus
+						= R5KeyStoreCrypto::PreserveCurrentAsOld(
+							fKeyStoreDir.String(), false);
+					if (moveStatus != B_OK) {
+						_LockStore();
+						return moveStatus;
+					}
+					missingProtectorBackup = true;
+				}
+			} else if (readStatus != B_ENTRY_NOT_FOUND) {
+				_LockStore();
+				return readStatus;
+			}
+		}
 
 		if (BRandom::Fill(fKeyStoreId, sizeof(fKeyStoreId)) != B_OK
 			|| BRandom::Fill(fMasterKey, BSealedData::kKeySize) != B_OK) {
 			_LockStore();
 			return B_ERROR;
-		}
-
-		// If a legacy plaintext keystore_database exists, load it once so its
-		// keys are migrated into the new encrypted database. Refuse to
-		// overwrite an existing encrypted or unparseable non-empty database
-		// when keystore_protectors is missing.
-		uint8* legacyData = NULL;
-		size_t legacySize = 0;
-		status_t readStatus = R5KeyStoreCrypto::ReadFileBounded(
-			fDatabasePath.String(), &legacyData, &legacySize);
-		if (readStatus == B_OK) {
-			if (R5KeyStoreCrypto::IsEncryptedDatabase(legacyData, legacySize)) {
-				BSecureBuffer::WipeMemory(legacyData, legacySize);
-				free(legacyData);
-				_LockStore();
-				return B_BAD_DATA;
-			}
-			if (legacySize > 0) {
-				BMessage legacyMsg;
-				BMemoryIO legacyIo(legacyData, legacySize);
-				status_t unflattenStatus = legacyMsg.Unflatten(&legacyIo);
-				BSecureBuffer::WipeMemory(legacyData, legacySize);
-				free(legacyData);
-				if (unflattenStatus != B_OK) {
-					_LockStore();
-					return B_BAD_DATA;
-				}
-				status_t loadStatus = _LoadKeyringsFromMessage(legacyMsg);
-				if (loadStatus != B_OK) {
-					_LockStore();
-					return loadStatus;
-				}
-			} else {
-				free(legacyData);
-			}
-		} else if (readStatus != B_ENTRY_NOT_FOUND) {
-			_LockStore();
-			return readStatus;
 		}
 
 		if (fMasterKeyring == NULL) {
@@ -1237,6 +1270,9 @@ KeyStoreServer::_UnlockWithKek(const BSecureBuffer& kek,
 			_LockStore();
 			return status;
 		}
+
+		if (missingProtectorBackup)
+			PostMessage(kMsgShowMissingProtectorAlert);
 	}
 
 	bool hasOld = _HasOldKeyStore();
@@ -1275,11 +1311,24 @@ KeyStoreServer::_LockStore()
 bool
 KeyStoreServer::_HasOldKeyStore() const
 {
-	if (fOldDatabasePath.IsEmpty() || fOldProtectorsPath.IsEmpty())
+	if (fKeyStoreDir.IsEmpty())
 		return false;
-	struct stat st;
-	return lstat(fOldDatabasePath.String(), &st) == 0
-		&& lstat(fOldProtectorsPath.String(), &st) == 0;
+	for (int32 slot = 1; slot <= kR5KSMaxOldBackups; slot++) {
+		BString dbName;
+		BString protName;
+		R5KeyStoreCrypto::OldBackupNames(slot, dbName, protName);
+		BString dbPath;
+		BString protPath;
+		dbPath.SetToFormat("%s/%s", fKeyStoreDir.String(), dbName.String());
+		protPath.SetToFormat("%s/%s", fKeyStoreDir.String(), protName.String());
+		struct stat dbSt;
+		struct stat protSt;
+		if (lstat(dbPath.String(), &dbSt) == 0 && S_ISREG(dbSt.st_mode)
+			&& lstat(protPath.String(), &protSt) == 0
+			&& S_ISREG(protSt.st_mode))
+			return true;
+	}
+	return false;
 }
 
 
@@ -1291,58 +1340,83 @@ KeyStoreServer::RecoverOldKeyStore(const char* oldPassword)
 	if (!Lock())
 		return B_ERROR;
 
-	status_t status = B_OK;
 	if (!fStoreUnlocked || !_HasOldKeyStore()) {
 		Unlock();
 		return B_ENTRY_NOT_FOUND;
 	}
 
-	R5PasswordProtectorParams oldParams;
-	status = R5KeyStoreCrypto::ReadPasswordProtectorParams(
-		fOldProtectorsPath.String(), oldParams);
-	if (status != B_OK) {
-		Unlock();
-		return status;
-	}
+	int32 recovered = 0;
+	status_t lastError = B_NOT_ALLOWED;
+	for (int32 slot = 1; slot <= kR5KSMaxOldBackups; slot++) {
+		BString dbName;
+		BString protName;
+		R5KeyStoreCrypto::OldBackupNames(slot, dbName, protName);
+		BString dbPath;
+		BString protPath;
+		dbPath.SetToFormat("%s/%s", fKeyStoreDir.String(), dbName.String());
+		protPath.SetToFormat("%s/%s", fKeyStoreDir.String(), protName.String());
 
-	BSecureBuffer oldKek;
-	status = BPasswordHash::DeriveKey(oldPassword, strlen(oldPassword),
-		oldParams.salt, sizeof(oldParams.salt), oldParams.kdf, oldKek,
-		BSealedData::kKeySize);
-	if (status != B_OK) {
-		Unlock();
-		return status;
-	}
+		struct stat dbSt;
+		struct stat protSt;
+		if (lstat(dbPath.String(), &dbSt) != 0 || !S_ISREG(dbSt.st_mode)
+			|| lstat(protPath.String(), &protSt) != 0
+			|| !S_ISREG(protSt.st_mode))
+			continue;
 
-	BSecureBuffer oldMasterKey;
-	uint8 oldKeystoreId[kR5KSIdSize];
-	status = R5KeyStoreCrypto::UnwrapMasterKey(fOldProtectorsPath.String(),
-		oldKek, oldMasterKey, oldKeystoreId);
-	oldKek.Clear();
-	if (status != B_OK) {
-		Unlock();
-		return status;
-	}
+		R5PasswordProtectorParams oldParams;
+		status_t status = R5KeyStoreCrypto::ReadPasswordProtectorParams(
+			protPath.String(), oldParams);
+		if (status != B_OK) {
+			lastError = status;
+			continue;
+		}
 
-	BMessage oldKeystore;
-	status = R5KeyStoreCrypto::ReadEncryptedDatabase(
-		fOldDatabasePath.String(), oldKeystoreId, oldMasterKey, oldKeystore);
-	oldMasterKey.Clear();
-	if (status != B_OK) {
-		Unlock();
-		return status;
-	}
+		BSecureBuffer oldKek;
+		status = BPasswordHash::DeriveKey(oldPassword, strlen(oldPassword),
+			oldParams.salt, sizeof(oldParams.salt), oldParams.kdf, oldKek,
+			BSealedData::kKeySize);
+		if (status != B_OK) {
+			lastError = status;
+			continue;
+		}
 
-	status = _MergeKeyringsFromMessage(oldKeystore);
-	if (status == B_OK)
+		BSecureBuffer oldMasterKey;
+		uint8 oldKeystoreId[kR5KSIdSize];
+		status = R5KeyStoreCrypto::UnwrapMasterKey(protPath.String(),
+			oldKek, oldMasterKey, oldKeystoreId);
+		oldKek.Clear();
+		if (status != B_OK) {
+			lastError = status;
+			continue;
+		}
+
+		BMessage oldKeystore;
+		status = R5KeyStoreCrypto::ReadEncryptedDatabase(dbPath.String(),
+			oldKeystoreId, oldMasterKey, oldKeystore);
+		oldMasterKey.Clear();
+		if (status != B_OK) {
+			lastError = status;
+			continue;
+		}
+
+		status = _MergeKeyringsFromMessage(oldKeystore);
+		if (status != B_OK) {
+			lastError = status;
+			continue;
+		}
 		status = _WriteKeyStoreDatabase();
-	if (status == B_OK) {
-		unlink(fOldDatabasePath.String());
-		unlink(fOldProtectorsPath.String());
+		if (status != B_OK) {
+			lastError = status;
+			continue;
+		}
+
+		unlink(dbPath.String());
+		unlink(protPath.String());
+		recovered++;
 	}
 
 	Unlock();
-	return status;
+	return recovered > 0 ? B_OK : lastError;
 }
 // SPDX-SnippetEnd
 

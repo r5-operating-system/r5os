@@ -126,6 +126,18 @@ public:
 									uid_t uid, gid_t gid,
 									const char* newPassword);
 
+	// Move current keystore_database (and optionally keystore_protectors) into
+	// the next free .old / .old2 .. .old16 slot inside dirPath. Returns
+	// B_DEVICE_FULL if all backup slots are occupied (never overwrites).
+	static	status_t			PreserveCurrentAsOld(const char* dirPath,
+									bool moveProtector,
+									BString* _outSuffix = NULL);
+
+	// Format backup file names for slot 1..kR5KSMaxOldBackups (slot 1 -> ".old",
+	// slot 2 -> ".old2", ...).
+	static	void				OldBackupNames(int32 slot, BString& outDbName,
+									BString& outProtName);
+
 	// Build ~/config/settings/system/keystore directory path for a home dir.
 	static	status_t			BuildKeyStorePaths(const char* homeDir,
 									BString& outDir, BString& outDatabase,

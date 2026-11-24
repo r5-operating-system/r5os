@@ -85,6 +85,7 @@ private:
 										const uint8* initSalt,
 										bool hasInitParams,
 										const BSecurityKit::BPasswordHash::Parameters& initParams,
+										bool recoverMismatch,
 										bool* _hasOld);
 		status_t					_RewrapPasswordProtector(
 										const BSecurityKit::BSecureBuffer& oldKek,

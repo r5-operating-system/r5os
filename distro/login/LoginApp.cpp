@@ -679,9 +679,31 @@ LoginApp::_LaunchSessionAppGetTeam(const char* program, team_id* _outTeam)
 		return B_ERROR;
 	fcntl(fds[0], F_SETFD, FD_CLOEXEC);
 
-	char fdStr[16];
-	snprintf(fdStr, sizeof(fdStr), "%d", fds[1]);
-	setenv("R5_REPORT_TEAM_FD", fdStr, 1);
+	// Build a private environment array for this single load_image() call so
+	// Login's own environ is never mutated and no other child inherits the var.
+	char envEntry[36];
+	snprintf(envEntry, sizeof(envEntry), "R5_REPORT_TEAM_FD=%d", fds[1]);
+
+	size_t envCount = 0;
+	if (environ != NULL) {
+		while (environ[envCount] != NULL)
+			envCount++;
+	}
+	const char** childEnv = static_cast<const char**>(
+		malloc((envCount + 2) * sizeof(const char*)));
+	if (childEnv == NULL) {
+		close(fds[0]);
+		close(fds[1]);
+		return B_NO_MEMORY;
+	}
+	size_t outIdx = 0;
+	for (size_t i = 0; i < envCount; i++) {
+		if (strncmp(environ[i], "R5_REPORT_TEAM_FD=", 18) == 0)
+			continue;
+		childEnv[outIdx++] = environ[i];
+	}
+	childEnv[outIdx++] = envEntry;
+	childEnv[outIdx] = NULL;
 
 	const char* args[] = {
 		"/system/apps/r5-desktop",
@@ -689,8 +711,8 @@ LoginApp::_LaunchSessionAppGetTeam(const char* program, team_id* _outTeam)
 		NULL
 	};
 	r5_session_log("launch %s", program);
-	thread_id thread = load_image(2, args, (const char**)environ);
-	unsetenv("R5_REPORT_TEAM_FD");
+	thread_id thread = load_image(2, args, childEnv);
+	free(childEnv);
 	close(fds[1]);
 	if (thread < B_OK) {
 		close(fds[0]);
@@ -821,6 +843,59 @@ LoginApp::_StartAndUnlockKeyStore(const char* login, const char* password)
 		return;
 	}
 	int32 ksStatus = reply.GetInt32(BPrivate::kR5KSFieldStatus, B_ERROR);
+
+	// Safety net: Login already verified the sign-in password, so if the
+	// existing protector refused it (e.g. password changed via passwd in
+	// Terminal), move the current store aside as .old* and initialize a fresh
+	// store with this password, triggering "Do you still know your old
+	// password?" in keystore_server.
+	if (hasProtector && ksStatus == B_NOT_ALLOWED) {
+		uint8 freshSalt[16];
+		BSecurityKit::BPasswordHash::Parameters freshParams
+			= BSecurityKit::BPasswordHash::DefaultParameters();
+		BSecurityKit::BSecureBuffer freshKek;
+		if (BSecurityKit::BRandom::Fill(freshSalt, sizeof(freshSalt)) == B_OK
+			&& BSecurityKit::BPasswordHash::DeriveKey(password,
+				strlen(password), freshSalt, sizeof(freshSalt), freshParams,
+				freshKek, BSecurityKit::BSealedData::kKeySize) == B_OK) {
+			BMessage recoverMsg(BPrivate::kMsgR5KeyStoreUnlock);
+			recoverMsg.AddBool(BPrivate::kR5KSFieldRecoverMismatch, true);
+			recoverMsg.AddData(BPrivate::kR5KSFieldKek, B_RAW_TYPE,
+				freshKek.Data(), freshKek.Size());
+			recoverMsg.AddData(BPrivate::kR5KSFieldSalt, B_RAW_TYPE,
+				freshSalt, sizeof(freshSalt));
+			recoverMsg.AddUInt32(BPrivate::kR5KSFieldMemKiB,
+				freshParams.memoryKiB);
+			recoverMsg.AddUInt32(BPrivate::kR5KSFieldPasses,
+				freshParams.passes);
+			recoverMsg.AddUInt32(BPrivate::kR5KSFieldLanes,
+				freshParams.lanes);
+			freshKek.Clear();
+
+			BMessage recoverReply;
+			status = r5_admin_send(BMessenger(NULL, launchedTeam),
+				&recoverMsg, &recoverReply);
+			const void* recKek = NULL;
+			ssize_t recKekSize = 0;
+			if (recoverMsg.FindData(BPrivate::kR5KSFieldKek, B_RAW_TYPE,
+					&recKek, &recKekSize) == B_OK
+				&& recKek != NULL && recKekSize > 0) {
+				BSecurityKit::BSecureBuffer::WipeMemory(
+					const_cast<void*>(recKek),
+					static_cast<size_t>(recKekSize));
+			}
+			recoverMsg.MakeEmpty();
+			if (status == B_OK) {
+				ksStatus = recoverReply.GetInt32(BPrivate::kR5KSFieldStatus,
+					B_ERROR);
+			}
+			r5_session_log("keystore_server: mismatch recovery %s",
+				strerror(ksStatus));
+			return;
+		}
+		freshKek.Clear();
+	}
+
 	r5_session_log("keystore_server: unlock %s", strerror(ksStatus));
 }
 // SPDX-SnippetEnd

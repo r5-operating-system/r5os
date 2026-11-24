@@ -592,6 +592,59 @@ write_encrypted_database_at(int dirFd, const char* pathOrLeaf,
 
 
 static status_t
+preserve_current_as_old_at(int dirFd, bool moveProtector, BString* _outSuffix)
+{
+	if (_outSuffix != NULL)
+		_outSuffix->Truncate(0);
+
+	struct stat dbSt;
+	if (fstatat(dirFd, kR5KSDatabaseFile, &dbSt, AT_SYMLINK_NOFOLLOW) != 0
+		|| !S_ISREG(dbSt.st_mode))
+		return B_ENTRY_NOT_FOUND;
+
+	if (moveProtector) {
+		struct stat protSt;
+		if (fstatat(dirFd, kR5KSProtectorsFile, &protSt,
+				AT_SYMLINK_NOFOLLOW) != 0 || !S_ISREG(protSt.st_mode))
+			return B_ENTRY_NOT_FOUND;
+	}
+
+	for (int32 slot = 1; slot <= kR5KSMaxOldBackups; slot++) {
+		BString oldDb;
+		BString oldProt;
+		R5KeyStoreCrypto::OldBackupNames(slot, oldDb, oldProt);
+
+		struct stat checkSt;
+		if (fstatat(dirFd, oldDb.String(), &checkSt, AT_SYMLINK_NOFOLLOW) == 0
+			|| errno != ENOENT)
+			continue;
+		if (fstatat(dirFd, oldProt.String(), &checkSt,
+				AT_SYMLINK_NOFOLLOW) == 0 || errno != ENOENT)
+			continue;
+
+		if (renameat(dirFd, kR5KSDatabaseFile, dirFd, oldDb.String()) != 0)
+			return B_IO_ERROR;
+		if (moveProtector) {
+			if (renameat(dirFd, kR5KSProtectorsFile, dirFd,
+					oldProt.String()) != 0) {
+				renameat(dirFd, oldDb.String(), dirFd, kR5KSDatabaseFile);
+				return B_IO_ERROR;
+			}
+		}
+		if (_outSuffix != NULL) {
+			if (slot == 1)
+				_outSuffix->SetTo(".old");
+			else
+				_outSuffix->SetToFormat(".old%" B_PRId32, slot);
+		}
+		return B_OK;
+	}
+
+	return B_DEVICE_FULL;
+}
+
+
+static status_t
 create_keystore_in_dirfd(int dirFd, uid_t uid, gid_t gid, const char* password)
 {
 	uint8 keystoreId[kR5KSIdSize];
@@ -837,6 +890,41 @@ R5KeyStoreCrypto::ReadEncryptedDatabase(const char* databasePath,
 }
 
 
+/* static */ void
+R5KeyStoreCrypto::OldBackupNames(int32 slot, BString& outDbName,
+	BString& outProtName)
+{
+	if (slot <= 1) {
+		outDbName.SetTo(kR5KSOldDatabaseFile);
+		outProtName.SetTo(kR5KSOldProtectorsFile);
+	} else {
+		outDbName.SetToFormat("%s.old%" B_PRId32, kR5KSDatabaseFile, slot);
+		outProtName.SetToFormat("%s.old%" B_PRId32, kR5KSProtectorsFile, slot);
+	}
+}
+
+
+/* static */ status_t
+R5KeyStoreCrypto::PreserveCurrentAsOld(const char* dirPath, bool moveProtector,
+	BString* _outSuffix)
+{
+	if (dirPath == NULL || dirPath[0] == '\0')
+		return B_BAD_VALUE;
+
+	int dirFd;
+	do {
+		dirFd = open(dirPath, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+	} while (dirFd < 0 && errno == EINTR);
+	if (dirFd < 0)
+		return errno == ENOENT ? B_ENTRY_NOT_FOUND : B_NOT_ALLOWED;
+
+	status_t status = preserve_current_as_old_at(dirFd, moveProtector,
+		_outSuffix);
+	close(dirFd);
+	return status;
+}
+
+
 /* static */ status_t
 R5KeyStoreCrypto::BuildKeyStorePaths(const char* homeDir, BString& outDir,
 	BString& outDatabase, BString& outProtectors)
@@ -880,32 +968,20 @@ R5KeyStoreCrypto::ResetAccountKeyStore(const char* homeDir, uid_t uid,
 	if (status != B_OK)
 		return status;
 
-	struct stat oldDbSt;
-	struct stat oldProtSt;
-	bool hasOldBackup = (fstatat(dirFd, kR5KSOldDatabaseFile, &oldDbSt,
-			AT_SYMLINK_NOFOLLOW) == 0 && S_ISREG(oldDbSt.st_mode)
-		&& fstatat(dirFd, kR5KSOldProtectorsFile, &oldProtSt,
-			AT_SYMLINK_NOFOLLOW) == 0 && S_ISREG(oldProtSt.st_mode));
-
+	// Move any existing keystore pair into the next free .old / .old2 .. .old16
+	// slot so consecutive resets never lose data. Refuse if all slots are full.
 	struct stat curDbSt;
 	struct stat curProtSt;
-	bool hasCurrent = (fstatat(dirFd, kR5KSDatabaseFile, &curDbSt,
-			AT_SYMLINK_NOFOLLOW) == 0 && S_ISREG(curDbSt.st_mode)
-		&& fstatat(dirFd, kR5KSProtectorsFile, &curProtSt,
-			AT_SYMLINK_NOFOLLOW) == 0 && S_ISREG(curProtSt.st_mode));
+	bool hasCurrentDb = (fstatat(dirFd, kR5KSDatabaseFile, &curDbSt,
+		AT_SYMLINK_NOFOLLOW) == 0 && S_ISREG(curDbSt.st_mode));
+	bool hasCurrentProt = (fstatat(dirFd, kR5KSProtectorsFile, &curProtSt,
+		AT_SYMLINK_NOFOLLOW) == 0 && S_ISREG(curProtSt.st_mode));
 
-	if (hasCurrent && !hasOldBackup) {
-		if (renameat(dirFd, kR5KSDatabaseFile, dirFd,
-				kR5KSOldDatabaseFile) != 0) {
+	if (hasCurrentDb) {
+		status = preserve_current_as_old_at(dirFd, hasCurrentProt, NULL);
+		if (status != B_OK) {
 			close(dirFd);
-			return B_IO_ERROR;
-		}
-		if (renameat(dirFd, kR5KSProtectorsFile, dirFd,
-				kR5KSOldProtectorsFile) != 0) {
-			// Roll back the first rename so the pair stays consistent.
-			renameat(dirFd, kR5KSOldDatabaseFile, dirFd, kR5KSDatabaseFile);
-			close(dirFd);
-			return B_IO_ERROR;
+			return status;
 		}
 	}
 

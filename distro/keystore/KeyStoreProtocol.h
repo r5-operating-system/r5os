@@ -30,6 +30,9 @@ static const char* const kR5KSFieldPasses     = "kdf_passes";
 static const char* const kR5KSFieldLanes      = "kdf_lanes";
 static const char* const kR5KSFieldStatus     = "status";
 static const char* const kR5KSFieldHasOld     = "has_old";
+static const char* const kR5KSFieldRecoverMismatch = "recover_mismatch";
+
+static const int32 kR5KSMaxOldBackups = 16;
 
 // File names under ~/config/settings/system/keystore/
 static const char* const kR5KSDatabaseFile    = "keystore_database";
