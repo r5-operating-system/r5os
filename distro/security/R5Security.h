@@ -153,4 +153,21 @@ public:
 }	// namespace BSecurityKit
 
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* Accounts step 5: the crypt() back end for an Argon2id PHC setting.
+ * libroot's crypt() calls it through dlopen() for a setting that starts with
+ * "$argon2id$". Returns buffer holding setting when key matches it, "*" when
+ * it does not, or NULL with errno set when setting cannot be read or does
+ * not fit. */
+char*	r5_security_crypt(const char* key, const char* setting,
+			char* buffer, size_t bufferSize);
+
+#ifdef __cplusplus
+}
+#endif
+
+
 #endif	// _R5_SECURITY_H

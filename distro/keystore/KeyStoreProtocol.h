@@ -31,6 +31,10 @@ static const char* const kR5KSFieldLanes      = "kdf_lanes";
 static const char* const kR5KSFieldStatus     = "status";
 static const char* const kR5KSFieldHasOld     = "has_old";
 static const char* const kR5KSFieldRecoverMismatch = "recover_mismatch";
+// Accounts step 5: Try R5 (the live medium) has no password. Login asks for a
+// key store that lives in memory only; nothing is read from or written to
+// disk, and everything in it is gone at log out or shut down.
+static const char* const kR5KSFieldMemoryOnly = "memory_only";
 
 static const int32 kR5KSMaxOldBackups = 16;
 

@@ -232,8 +232,37 @@ account_password_matches(const struct passwd* pwd, const char* plain)
 	if (required[0] == '!' || plain[0] == '\0')
 		return false;
 
+	// Accounts step 5: a hash made by R5 is Argon2id through the Security
+	// Kit. An older scrypt ("$s$") or DES hash still goes through crypt().
+	if (is_kit_password_hash(required)) {
+		BString hash(required);
+			// getspnam() keeps its result in a static buffer.
+		bool matches = false;
+		return BSecurityKit::BPasswordHash::Verify(plain, hash.String(),
+				&matches) == B_OK && matches;
+	}
+
 	char* encrypted = crypt(plain, required);
 	return encrypted != NULL && strcmp(encrypted, required) == 0;
+}
+
+
+bool
+is_kit_password_hash(const char* hash)
+{
+	static const char kPrefix[] = "$argon2id$";
+	return hash != NULL && strncmp(hash, kPrefix, sizeof(kPrefix) - 1) == 0;
+}
+
+
+status_t
+make_password_hash(const char* password, BString& outHash)
+{
+	outHash.Truncate(0);
+	if (password == NULL || password[0] == '\0')
+		return B_BAD_VALUE;
+	return BSecurityKit::BPasswordHash::Hash(password, outHash,
+		BSecurityKit::BPasswordHash::DefaultParameters());
 }
 
 
@@ -323,6 +352,110 @@ set_shadow_password(const char* user, const char* encrypted)
 
 	BPrivate::KMessage reply;
 	return BPrivate::send_authentication_request_to_registrar(message, reply);
+}
+
+
+// Accounts step 5. The R5 image (the live medium, "Try R5") carries this
+// file; the Installer does not copy it (distro/rest/src/apps/installer/
+// WorkerThread.cpp), so an installed R5 does not have it.
+static const char* kLiveMediumPath = "/boot/system/settings/r5-live-medium";
+
+
+bool
+is_live_medium()
+{
+	struct stat st;
+	return lstat(kLiveMediumPath, &st) == 0 && S_ISREG(st.st_mode)
+		&& st.st_uid == 0;
+}
+
+
+bool
+account_has_no_password(const struct passwd* pwd)
+{
+	if (pwd == NULL || pwd->pw_name == NULL)
+		return false;
+	const char* required = pwd->pw_passwd;
+	if (required != NULL && strcmp(required, "x") == 0) {
+		struct spwd* shadow = getspnam(pwd->pw_name);
+		if (shadow == NULL)
+			return false;
+		required = shadow->sp_pwdp;
+	}
+	return required == NULL || required[0] == '\0';
+}
+
+
+bool
+needs_first_password(const char* login)
+{
+	if (login == NULL || is_guest_account(login) || is_live_medium())
+		return false;
+	struct passwd* pwd = getpwnam(login);
+	return pwd != NULL && is_listed_account(pwd)
+		&& account_has_no_password(pwd);
+}
+
+
+status_t
+set_first_password(const char* login, const char* realName,
+	const char* password, BString& error)
+{
+	if (geteuid() != 0) {
+		error = "Only the sign-in helper can set this password.";
+		return B_PERMISSION_DENIED;
+	}
+	if (!needs_first_password(login)) {
+		error = "This account already has a password.";
+		return B_NOT_ALLOWED;
+	}
+	if (password == NULL || password[0] == '\0') {
+		error = "Please enter a password.";
+		return B_BAD_VALUE;
+	}
+	if (realName != NULL && (strchr(realName, ':') != NULL
+			|| strchr(realName, '\n') != NULL
+			|| strchr(realName, '\r') != NULL)) {
+		error = "The name cannot contain a colon or a new line.";
+		return B_BAD_VALUE;
+	}
+	if (realName != NULL && strlen(realName) > 80) {
+		error = "That name is too long.";
+		return B_BAD_VALUE;
+	}
+
+	struct passwd* pwd = getpwnam(login);
+	if (pwd == NULL) {
+		error = "That account does not exist.";
+		return ENOENT;
+	}
+	uid_t uid = pwd->pw_uid;
+
+	BString hash;
+	if (make_password_hash(password, hash) != B_OK) {
+		error = "Could not encrypt the password.";
+		return B_ERROR;
+	}
+	status_t status = set_shadow_password(login, hash.String());
+	if (status != B_OK) {
+		error = "The password could not be saved.";
+		return status;
+	}
+
+	if (realName != NULL && realName[0] != '\0') {
+		BPrivate::KMessage message(BPrivate::B_REG_UPDATE_USER);
+		if (message.AddInt32("uid", uid) == B_OK
+			&& message.AddString("real name", realName) == B_OK) {
+			BPrivate::KMessage reply;
+			if (BPrivate::send_authentication_request_to_registrar(message,
+					reply) != B_OK) {
+				// The password is set; only the name is missing.
+				syslog(LOG_WARNING, "Login: the name of %s was not saved",
+					login);
+			}
+		}
+	}
+	return B_OK;
 }
 
 
@@ -1471,12 +1604,12 @@ create_account(const char* name, const char* real, const char* password,
 
 	create_home(home.String(), pwd->pw_uid, pwd->pw_gid);
 
-	char* encrypted = crypt(password, NULL);
-	if (encrypted == NULL) {
+	BString encrypted;
+	if (make_password_hash(password, encrypted) != B_OK) {
 		error = "Could not encrypt the password.";
 		return B_ERROR;
 	}
-	if (set_shadow_password(name, encrypted) != B_OK) {
+	if (set_shadow_password(name, encrypted.String()) != B_OK) {
 		error = "The account exists, but the password was not set.";
 		return B_ERROR;
 	}
@@ -2176,12 +2309,11 @@ update_profile(BMessage* request, BString& error)
 			error = "That password is not right.";
 			return B_PERMISSION_DENIED;
 		}
-		char* encrypted = crypt(password, NULL);
-		if (encrypted == NULL) {
+		BString hash;
+		if (make_password_hash(password, hash) != B_OK) {
 			error = "Could not encrypt the password.";
 			return B_ERROR;
 		}
-		BString hash(encrypted);
 
 		// For own password change, rewrap the key store protector BEFORE
 		// updating /etc/shadow so a rewrap failure never leaves the sign-in

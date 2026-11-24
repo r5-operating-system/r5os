@@ -25,6 +25,7 @@
 
 
 #include <Control.h>
+#include <View.h>
 
 
 class BTextView;
@@ -93,6 +94,36 @@ private:
 			struct Data;
 			Data*				fData;
 			uint32				_reserved[4];
+};
+
+
+// Accounts step 5 (24 Nov 2026): the strength hint under a new password, as
+// in "Add account" and on the first-start screen of Sign in. Four parts, lit
+// from the left as far as the strength goes. StrengthOf() gives 0 (empty)
+// to 4 (strong); HintFor() the line shown under the bar.
+class BPasswordStrengthBar : public BView {
+public:
+								BPasswordStrengthBar(const char* name);
+	virtual						~BPasswordStrengthBar();
+
+			void				SetStrength(int32 strength);
+			int32				Strength() const;
+
+	static	int32				StrengthOf(const char* password);
+	static	const char*			HintFor(int32 strength);
+
+	virtual	void				Draw(BRect updateRect);
+
+private:
+	virtual	void				_ReservedPasswordStrengthBar1();
+	virtual	void				_ReservedPasswordStrengthBar2();
+
+								BPasswordStrengthBar(
+									const BPasswordStrengthBar&);
+			BPasswordStrengthBar& operator=(const BPasswordStrengthBar&);
+
+			int32				fStrength;
+			uint32				_reserved[3];
 };
 
 

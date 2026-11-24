@@ -8,6 +8,62 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-24 - A password before the first desktop, and Try R5 keeps sign-ins in memory (accounts step 5, part 2)
+
+- Problem: the image ships `user` without a password. The owner decided (24 Nov 2026, `generated/GUEST-SHARED-DESIGN.md`):
+  - an installed R5 asks for a name and a password once, before the first desktop, and the key store gets its password protector then;
+  - Try R5 keeps `user` without a password, with a key store in memory only and the notice "Sign-ins are forgotten when you shut down."
+  Until now the key store of an account without a password stayed locked, and nothing told an installed R5 from Try R5.
+- Changed:
+  - **Try R5 or installed.** `distro/image/r5_late_image` puts `/boot/system/settings/r5-live-medium` in the image. The Installer leaves it out: a copy of Haiku's `src/apps/installer/WorkerThread.cpp` in `distro/rest`, with an SPDX snippet in its ignore list. `is_live_medium()` in `AccountAdmin.cpp` checks the file (a regular file, owned by root).
+  - **First-start screen** (`distro/login/LoginView.cpp`, `LoginWindow.cpp`). On an installed R5, an account without a password (not the guest) shows "Choose a password for this account.", "Your name", the password twice with the eye, and the strength hint. The button is "Save and sign in". The hint updates after every key (`LoginWindow::DispatchMessage()`, as in "Add account"). The two copies of the password are wiped after use.
+  - **Login** (`LoginApp::TryLogin()`). `needs_first_password()` decides. Without a new password Login refuses ("Choose a password first."). With one, `set_first_password()` checks again that the account still has no password, writes an Argon2id hash and the name, and signs in with the new password, so the key store gets its protector at that sign-in. The check is in Login (uid 0), not only in the window.
+  - **Try R5 key store.** `keystore_server` has a memory-only unlock (`kR5KSFieldMemoryOnly`, `KeyStoreServer::_UnlockInMemory()`): a random master key, an empty master keyring, no file read or written, and no rewrap. Login asks for it when the account has no password on the live medium (not for the guest), after the same team, uid and image checks as the password handoff. Sign in shows no password field there, and shows the note "Sign-ins are forgotten when you shut down."
+  - **Strength hint in libr5ui.** `BAppearanceKit::BPasswordStrengthBar` (`<PasswordControl.h>`, with `StrengthOf()` and `HintFor()`) replaces the private `StrengthBar`, `account_password_strength()` and `account_strength_text()` of `distro/settings/AccountDialogs.cpp`, so Settings and Login share one. The rule and the texts are unchanged.
+  - **Docs:** `docs/MULTIUSER.md` ("Try R5 and an installed R5"), `docs/LIBR5.md` and `docs/APPEARANCE-KIT.md`. `distro/BUILD` 10072, and What's new.
+- Choices made alone:
+  - The marker file instead of a flag at "Try R5" in FirstBootPrompt. A stick that was set up once boots without FirstBootPrompt, but it is still the live medium.
+  - The QEMU and VirtualBox images are the R5 image, so they count as Try R5. A test of the first-start screen removes the marker from a copy.
+  - The first-start screen also covers a standard account without a password. "Add account" always sets one, so that only happens with accounts made outside R5.
+- Tested (24 Nov 2026):
+  - AMD64 image with `scripts/build-locked.sh` (`jam_exit=0`, `mesa_exit=0`, no warning in the changed files; the build log shows "R5: marking the image as the live medium").
+  - In QEMU the image holds `/boot/system/settings/r5-live-medium`, owned by uid 0. Moving the administrator off uid 0 changes only `/boot/home` (`chown_tree(kHome, ...)`), so the marker keeps uid 0.
+- Review: an independent reviewer saw only the diff, the prompt, the design and `AGENTS.md`. It found no security hole. Fixed:
+  - (medium) After the first password was saved but the desktop did not start, Sign in stayed on the first-start screen, and the next try failed with "Please enter your password." It now switches back to the normal password field when the account has a password.
+  - (medium) Enter or a double click in the account list put the focus in the hidden password field on the first-start screen and in Try R5. The focus now follows the mode (`LoginView::_FocusField()`).
+  - (medium) `su` and `login` crashed when `crypt()` returned NULL: `strcmp()` without a check in `src/bin/multiuser/multiuser_utils.cpp`. That can now happen for a malformed Argon2id hash or a missing Kit. A copy in `distro/rest` with an SPDX snippet refuses instead.
+  - (nit) Recovering an old key store into a store in memory could have removed the `.old` files after a merge that never reached the disk. That recovery now refuses in memory-only mode.
+  - (nit) The password fields of the sign-in message are wiped when `TryLogin()` returns.
+  - (nit) An orphan comment in `AccountDialogs.h`.
+  - (nit) The unlit parts of `BPasswordStrengthBar` now take the view's own background.
+  Left as is: every QEMU or VirtualBox run of `r5-os.image` counts as Try R5 (as designed; see `docs/MULTIUSER.md`), and a directory build made by a host user counts as installed.
+- Not tested:
+  - The first-start screen and the Try R5 key store in QEMU or on the 5625U. No one has clicked through the Sign in window.
+  - An install through the Installer that leaves out the marker.
+
+## 2026-11-24 - Sign in says "account", and new passwords are stored as Argon2id (accounts step 5, part 1)
+
+- Problem: Sign in still said "SELECT PERSON" and "Choose a person first." (the owner chose "account" everywhere, `generated/GUEST-SHARED-DESIGN.md`). New sign-in passwords were stored as Haiku's scrypt (`$s$`, `crypt()` in libroot), while the design asks for Argon2id through the Security Kit (`generated/GEMINI-ACCOUNTS-SECURITY-PROMPT.md`, step 5).
+- Changed:
+  - `distro/login/LoginView.cpp`: "SELECT ACCOUNT" and "Choose an account first." (inside the existing R5 snippets).
+  - `distro/users/AccountAdmin.cpp`: `make_password_hash()` writes new hashes with `BPasswordHash::Hash()` (Argon2id, 64 MiB, 3 passes, 1 lane), for Add account and for a password change or reset. `account_password_matches()` checks an `$argon2id$` hash with `BPasswordHash::Verify()` and anything else with `crypt()` as before, so existing scrypt and DES hashes keep working. `is_kit_password_hash()` tells them apart. A sign-in does not rewrite an older hash.
+  - libroot's `crypt()`: a copy of Haiku's `src/system/libroot/posix/crypt/crypt.cpp` in `distro/kernel` (Haiku MIT header kept, R5 parts as SPDX snippets, installed by `install_kit_crypt()` in `scripts/apply-kernel-bugs.py`). A setting that starts with `$argon2id$` goes to the Kit through `dlopen("/system/lib/libr5security.so")`, so `su`, the `login` command and `sshd` accept the new hashes. Without that, an account with a new hash could only sign in through Login. `crypt(key, NULL)` (used by `passwd`) still makes scrypt.
+  - New Kit call `r5_security_crypt()` at the end of `<R5Security.h>`: it returns the setting when the key matches, `"*"` when it does not, and `NULL` with `EINVAL` or `ERANGE` otherwise. It uses `BPasswordHash::Verify()`, so the Kit stays the only Argon2id code.
+  - `docs/LIBR5.md` (the new C call) and `docs/MULTIUSER.md` ("Password hashes").
+- Choices made alone:
+  - The libroot bridge: libroot cannot link `libr5security.so`, and a second Argon2id in libroot would duplicate the Kit, so `crypt()` loads the Kit only for an Argon2id setting. The absolute path keeps `LIBRARY_PATH` out of it.
+  - `passwd` keeps making scrypt: changing the default of `crypt(key, NULL)` would make every libroot caller load the Kit.
+- Tested (24 Nov 2026):
+  - `distro/security/tests/security_test.cpp` built for Linux with `tests/host_compat` (`g++`): "ALL SECURITY KIT TESTS PASSED". That includes the new `r5_security_crypt` checks: right password, wrong password, empty password, malformed setting, buffer too small, NULL key.
+  - AMD64 image with `scripts/build-locked.sh` (`jam_exit=0`, `mesa_exit=0`, no warning in the changed files).
+  - QEMU KVM on a private copy of that image, with a test program that links only libroot (`crypt_kit_test`, started by a launch job planted with `bfs_shell`): "ALL CRYPT KIT TESTS PASSED". It checks that:
+    - the right password gives the stored Argon2id hash, through `dlopen` of the Kit;
+    - a wrong password does not;
+    - a malformed `$argon2id$` setting is refused;
+    - `crypt(key, NULL)` still makes `$s$`;
+    - an existing scrypt hash still matches.
+- Not tested: a sign-in through the Sign in window with a new hash, `su` and `sshd` themselves.
+
 ## 2026-11-24 - Guest account and Shared folder (accounts step 4)
 
 - Problem: R5 had no temporary guest account and no shared folder reachable by every account while keeping individual homes private (`generated/GUEST-SHARED-DESIGN.md`, issue #65). Haiku's BFS also did not enforce the POSIX sticky bit (`S_ISVTX`) on unlink, rmdir, or rename, and Deskbar's `Log out` and `Lock screen` requests to Login were dropped after commit `63e8e0eb2d` added `IsSourceRemote()` filtering on `LoginApp::MessageReceived`.

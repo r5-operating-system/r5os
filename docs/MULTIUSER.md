@@ -35,6 +35,29 @@ Admin vs standard: POSIX groups (not only a checkbox). Privileged work through a
 
 Detect actual layout. Typical live disk: one `user` and `/boot/home` already full of files. Map that identity to the first administrator. Back up before chown/move. Fresh install: first-boot create-admin is a later step. If the layout is unknown, refuse destructive changes.
 
+## Password hashes (accounts step 5, 24 Nov 2026)
+
+- A password set through Login (Add account, Change password, an administrator reset) is stored in `/etc/shadow` as an Argon2id PHC string, `$argon2id$v=19$m=65536,t=3,p=1$<salt>$<hash>`, made by the Security Kit (`BPasswordHash::Hash()`, `make_password_hash()` in `distro/users/AccountAdmin.cpp`).
+- `account_password_matches()` checks such a hash with `BPasswordHash::Verify()`. An older hash, scrypt (`$s$`) or DES, still goes through `crypt()` and keeps working. A sign-in does not rewrite an older hash.
+- libroot's `crypt()` (`distro/kernel/src/system/libroot/posix/crypt/crypt.cpp`, an R5 snippet) hands a `$argon2id$` setting to the Kit's `r5_security_crypt()`, so `su`, `login` and `sshd` accept the new hashes too. `crypt(key, NULL)`, which `passwd` uses, still makes scrypt.
+- `/etc/shadow` holds no colon in either format, and `!` in front of either one still means a disabled account.
+
+## Try R5 and an installed R5 (accounts step 5, 24 Nov 2026)
+
+The R5 image is the live medium. `distro/image/r5_late_image` puts `/boot/system/settings/r5-live-medium` (root-owned) in the image. The Installer leaves that file out (`distro/rest/src/apps/installer/WorkerThread.cpp`), so an installed R5 does not have it. `is_live_medium()` in `distro/users/AccountAdmin.cpp` checks for it.
+
+**Try R5 (the live medium).**
+- The account keeps no password. Sign in shows no password field, and shows the note "Sign-ins are forgotten when you shut down."
+- Login starts `keystore_server` for the session and asks for a key store in memory only (`kR5KSFieldMemoryOnly`). The master key is random, nothing is read from or written to disk, and everything in it is gone at log out or shut down.
+- "Keep my things on this stick" waits until it is proven that the stick keeps changes after a restart (`generated/GUEST-SHARED-DESIGN.md`, "The live USB session").
+
+**An installed R5.**
+- An account without a password (not the guest) gets the first-start screen on Sign in, once, before its first desktop: "Your name", a password twice with the eye, and the strength hint (`BPasswordStrengthBar`).
+- Login checks again that the account still has no password, then writes an Argon2id hash and the name (`set_first_password()`). It signs in with the new password, so the key store gets its password protector at that sign-in.
+- Without a new password Login refuses the sign-in ("Choose a password first."). An existing install whose account has no password gets the same screen at its next Sign in.
+
+The QEMU and VirtualBox images are the R5 image, so they count as Try R5. To test the first-start screen, remove `/boot/system/settings/r5-live-medium` from a copy of the image.
+
 ## Who the people are
 
 The image has **one administrator**: login name `user`, gecos R5OS, home `/boot/home`. That is who should work at the desktop after Sign in.

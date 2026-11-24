@@ -1,3 +1,6 @@
+R5 2026.1-dev Build 10072 - A password for every account
+On an installed R5, an account without a password now chooses one before its first desktop: the Sign in screen asks for your name and a new password, twice, with a hint how strong it is. New passwords are stored in a stronger form, and existing passwords keep working. When you try R5 from the USB stick you still start without a password; mail and online storage can remember their sign-ins during that session and forget them when you shut down. The Sign in screen now says account instead of person.
+
 R5 2026.1-dev Build 10071 - Guest account and Shared folder
 An administrator can now turn on Guest sign-in in Settings under Accounts, Users and Accounts (off by default). When turned on, Guest appears on the Sign in screen without a password; everything created during a Guest session is deleted automatically when Guest logs out or if the computer is switched off. A Guest session cannot be locked, and its Deskbar menu offers Shared folder and Log out Guest and delete files. Every account, including Guest, can read and write files in the Shared folder on the desktop, while only the file's owner or the administrator can remove a file placed there.
 

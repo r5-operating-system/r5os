@@ -428,15 +428,81 @@ LoginApp::ArgvReceived(int32 argc, char** argv)
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// Accounts step 5: wipe the password fields of a sign-in message when
+// TryLogin() returns, on every path.
+struct SignInMessageWiper {
+	SignInMessageWiper(BMessage* message)
+		:
+		fMessage(message)
+	{
+	}
+
+	~SignInMessageWiper()
+	{
+		static const char* kFields[] = { "password", "new password", NULL };
+		for (int32 i = 0; kFields[i] != NULL; i++) {
+			const void* data = NULL;
+			ssize_t size = 0;
+			if (fMessage->FindData(kFields[i], B_STRING_TYPE, &data, &size)
+					== B_OK && data != NULL && size > 0) {
+				BSecurityKit::BSecureBuffer::WipeMemory(
+					const_cast<void*>(data), static_cast<size_t>(size));
+			}
+		}
+	}
+
+	BMessage* fMessage;
+};
+// SPDX-SnippetEnd
+
+
 void
 LoginApp::TryLogin(BMessage* message)
 {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	SignInMessageWiper wiper(message);
+// SPDX-SnippetEnd
 	BMessage reply(kLoginBad);
 	status_t status = B_BAD_VALUE;
 
 	const char* login = NULL;
 	if (message->FindString("login", &login) == B_OK) {
 		const char* password = message->GetString("password");
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// Accounts step 5: on an installed R5 an account without a password
+		// sets one (and its name) before its first desktop. Try R5 keeps the
+		// account without a password.
+		if (needs_first_password(login)) {
+			const char* newPassword = message->GetString("new password",
+				NULL);
+			if (newPassword == NULL || newPassword[0] == '\0') {
+				reply.AddInt32("error", B_NOT_ALLOWED);
+				reply.AddBool("needs password", true);
+				reply.AddString("text", "Choose a password first.");
+				message->SendReply(&reply);
+				return;
+			}
+			BString error;
+			status_t setStatus = set_first_password(login,
+				message->GetString("real name", NULL), newPassword, error);
+			if (setStatus != B_OK) {
+				reply.AddInt32("error", setStatus);
+				reply.AddBool("needs password", true);
+				reply.AddString("text", error.String());
+				message->SendReply(&reply);
+				return;
+			}
+			r5_session_log("first password set for %s", login);
+			password = newPassword;
+		}
+// SPDX-SnippetEnd
 		status = ValidateLogin(login, password);
 		if (status == B_OK) {
 			status = migrate_admin_off_root();
@@ -833,9 +899,18 @@ LoginApp::_LaunchSessionAppGetTeam(const char* program, team_id* _outTeam)
 void
 LoginApp::_StartAndUnlockKeyStore(const char* login, const char* password)
 {
-	// No password (e.g. autologin / live session): leave keystore locked.
-	if (login == NULL || password == NULL || password[0] == '\0')
+	if (login == NULL)
 		return;
+	// Accounts step 5: no password. Try R5 (the live medium) gets a key store
+	// in memory only, so mail and online storage can keep their sign-ins for
+	// this session; they are forgotten at log out or shut down. Elsewhere
+	// (the guest, an autologin) the key store stays locked.
+	bool memoryOnly = false;
+	if (password == NULL || password[0] == '\0') {
+		if (!is_live_medium() || is_guest_account(login))
+			return;
+		memoryOnly = true;
+	}
 
 	struct passwd* pwd = getpwnam(login);
 	if (pwd == NULL || pwd->pw_uid == 0 || pwd->pw_dir == NULL
@@ -880,6 +955,21 @@ LoginApp::_StartAndUnlockKeyStore(const char* login, const char* password)
 		|| (strcmp(imgPath.Path(), "/boot/system/servers/keystore_server") != 0
 			&& strcmp(imgPath.Path(), "/system/servers/keystore_server") != 0)) {
 		r5_session_log("keystore_server: team verification failed");
+		return;
+	}
+
+	if (memoryOnly) {
+		BMessage memoryMsg(BPrivate::kMsgR5KeyStoreUnlock);
+		memoryMsg.AddBool(BPrivate::kR5KSFieldMemoryOnly, true);
+		BMessage memoryReply;
+		status_t memoryStatus = r5_admin_send(BMessenger(NULL, launchedTeam),
+			&memoryMsg, &memoryReply);
+		if (memoryStatus == B_OK) {
+			memoryStatus = memoryReply.GetInt32(BPrivate::kR5KSFieldStatus,
+				B_ERROR);
+		}
+		r5_session_log("keystore_server: in memory (Try R5) %s",
+			strerror(memoryStatus));
 		return;
 	}
 

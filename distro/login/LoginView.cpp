@@ -32,6 +32,7 @@
 #include <ScrollView.h>
 #include <String.h>
 #include <StringView.h>
+#include <TextControl.h>
 #include <UserCard.h>
 #include <UserListItem.h>
 #include <Window.h>
@@ -47,6 +48,7 @@ using BAppearanceKit::BAccentButton;
 using BAppearanceKit::BCard;
 using BAppearanceKit::BIconView;
 using BAppearanceKit::BPasswordControl;
+using BAppearanceKit::BPasswordStrengthBar;
 using BAppearanceKit::BUserCard;
 using BAppearanceKit::BUserListItem;
 
@@ -274,6 +276,15 @@ LoginView::LoginView()
 	fPasswordControl(NULL),
 	fPasswordGroup(NULL),
 	fGuestNote(NULL),
+	fSetupGroup(NULL),
+	fSetupName(NULL),
+	fSetupPassword(NULL),
+	fSetupRepeat(NULL),
+	fSetupStrength(NULL),
+	fSetupHint(NULL),
+	fLiveNote(NULL),
+	fSetupMode(false),
+	fLiveMode(false),
 	fLoginButton(NULL),
 	fInfoView(NULL),
 	fInfoIsError(false),
@@ -329,7 +340,7 @@ LoginView::LoginView()
 	fUserSection = new BGroupView(B_VERTICAL, px(6));
 	fUserSection->SetViewUIColor(panel);
 
-	fSelectPersonLabel = make_label("personLabel", "SELECT PERSON",
+	fSelectPersonLabel = make_label("personLabel", "SELECT ACCOUNT",
 		font_px(be_bold_font, 11.5f), panel);
 	fAccountCountLabel = make_label("accountCount", "",
 		font_px(be_plain_font, 11), panel);
@@ -418,6 +429,40 @@ LoginView::LoginView()
 		"Save what you want to keep on a USB stick or in the Shared folder.");
 	fGuestNote->Hide();
 
+	// Accounts step 5: an installed R5 asks an account without a password
+	// for its name and a password once, before its first desktop.
+	fSetupName = new BTextControl("setupName", NULL, "", NULL);
+	fSetupPassword = new BPasswordControl("setupPassword", "", "",
+		new BMessage(kAttemptLogin));
+	fSetupPassword->SetPlaceholder("New password");
+	fSetupRepeat = new BPasswordControl("setupRepeat", "", "",
+		new BMessage(kAttemptLogin));
+	fSetupRepeat->SetPlaceholder("Repeat password");
+	fSetupStrength = new BPasswordStrengthBar("setupStrength");
+	fSetupStrength->SetViewUIColor(document);
+	fSetupHint = make_label("setupHint", BPasswordStrengthBar::HintFor(0),
+		font_px(be_plain_font, 11.5f), document);
+	fSetupGroup = new BGroupView(B_VERTICAL, px(5) - ring);
+	fSetupGroup->SetViewUIColor(document);
+	BLayoutBuilder::Group<>(fSetupGroup)
+		.Add(make_label("setupIntro", "Choose a password for this account.",
+			font_px(be_plain_font, 12.5f), document))
+		.Add(make_label("setupNameLabel", "Your name",
+			font_px(be_bold_font, 12), document))
+		.Add(fSetupName)
+		.Add(make_label("setupPasswordLabel", "Password",
+			font_px(be_bold_font, 12), document))
+		.Add(fSetupPassword)
+		.Add(fSetupRepeat)
+		.Add(fSetupStrength)
+		.Add(fSetupHint);
+	fSetupGroup->Hide();
+
+	// Try R5: the account has no password and its key store is in memory.
+	fLiveNote = new GuestNoteView(
+		"Sign-ins are forgotten when you shut down.");
+	fLiveNote->Hide();
+
 	BGroupLayout* formLayout = (BGroupLayout*)fFormCard->GetLayout();
 	formLayout->SetSpacing(px(12));
 	BLayoutBuilder::Group<>(formLayout)
@@ -425,7 +470,9 @@ LoginView::LoginView()
 		.Add(fSingleBanner)
 		.Add(fActiveLine)
 		.Add(fPasswordGroup)
+		.Add(fSetupGroup)
 		.Add(fGuestNote)
+		.Add(fLiveNote)
 		.AddGroup(B_VERTICAL, 0)
 			.SetInsets(ring, 0, ring, 0)
 			.Add(fLoginButton)
@@ -532,7 +579,7 @@ LoginView::MessageReceived(BMessage* message)
 					item->Role());
 			}
 			if (message->what == kUserInvoked)
-				fPasswordControl->MakeFocus(true);
+				_FocusField();
 			break;
 		}
 		case kAttemptLogin:
@@ -544,9 +591,18 @@ LoginView::MessageReceived(BMessage* message)
 			if (message->FindString("text", &text) != B_OK || text == NULL)
 				text = "That password is not right.";
 			fPasswordControl->SetText("");
+			// Accounts step 5: the first password may be saved while the
+			// sign-in itself failed (the desktop did not start). Then the
+			// account has a password, and the next try uses the plain field.
+			if (fSetupMode && !needs_first_password(fSelectedLogin.String())) {
+				fSetupMode = false;
+				_SetVisible(fSetupGroup, false);
+				_SetVisible(fPasswordGroup, true);
+				fLoginButton->SetLabel("Sign in");
+			}
 			_SetFeedback(text, true);
 			_EnableControls(true);
-			fPasswordControl->MakeFocus(true);
+			_FocusField();
 			break;
 		}
 		case kLoginOk:
@@ -735,9 +791,31 @@ LoginView::_ShowSelected(const char* login, const char* displayName,
 	fActiveBadge->SetText(badge.String());
 
 	bool guest = is_guest_account(login);
-	_SetVisible(fPasswordGroup, !guest);
+	// Accounts step 5: the first-start screen of an installed R5, and Try R5
+	// (an account without a password on the live medium).
+	fSetupMode = !guest && needs_first_password(login);
+	bool live = false;
+	if (!guest && !fSetupMode && is_live_medium()) {
+		struct passwd* pwd = getpwnam(login);
+		live = pwd != NULL && account_has_no_password(pwd);
+	}
+	fLiveMode = live;
+	_SetVisible(fPasswordGroup, !guest && !fSetupMode && !live);
+	_SetVisible(fSetupGroup, fSetupMode);
 	_SetVisible(fGuestNote, guest);
-	fLoginButton->SetLabel(guest ? "Sign in as Guest" : "Sign in");
+	_SetVisible(fLiveNote, live);
+	if (fSetupMode) {
+		fSetupName->SetText(display);
+		fSetupPassword->SetText("");
+		fSetupRepeat->SetText("");
+		_UpdateSetup();
+	}
+	if (guest)
+		fLoginButton->SetLabel("Sign in as Guest");
+	else if (fSetupMode)
+		fLoginButton->SetLabel("Save and sign in");
+	else
+		fLoginButton->SetLabel("Sign in");
 
 	_ApplyColors();
 
@@ -745,15 +823,13 @@ LoginView::_ShowSelected(const char* login, const char* displayName,
 	BString ready;
 	if (guest)
 		ready = "Ready to sign in as Guest";
+	else if (fSetupMode)
+		ready = "This account has no password yet.";
 	else
 		ready.SetToFormat("Ready to sign in as %s", display);
 	_SetFeedback(ready.String(), false);
-	if (Window() != NULL && !Window()->IsHidden()) {
-		if (guest)
-			fLoginButton->MakeFocus(true);
-		else
-			fPasswordControl->MakeFocus(true);
-	}
+	if (Window() != NULL && !Window()->IsHidden())
+		_FocusField();
 }
 
 
@@ -772,7 +848,7 @@ void
 LoginView::_AttemptLogin()
 {
 	if (fSelectedLogin.Length() == 0) {
-		_SetFeedback("Choose a person first.", true);
+		_SetFeedback("Choose an account first.", true);
 		return;
 	}
 
@@ -783,7 +859,29 @@ LoginView::_AttemptLogin()
 
 	BMessage* message = new BMessage(kAttemptLogin);
 	message->AddString("login", fSelectedLogin.String());
-	message->AddString("password", password);
+	if (fSetupMode) {
+		BString newPassword(fSetupPassword->Text());
+		BString repeat(fSetupRepeat->Text());
+		bool empty = newPassword.Length() == 0;
+		bool ok = !empty && newPassword == repeat;
+		if (ok) {
+			message->AddString("password", "");
+			message->AddString("new password", newPassword.String());
+			message->AddString("real name", fSetupName->Text());
+		}
+		newPassword.SetTo('\0', newPassword.Length());
+		repeat.SetTo('\0', repeat.Length());
+		if (!ok) {
+			delete message;
+			_SetFeedback(empty ? "Choose a password first."
+				: "The two passwords are not the same.", true);
+			return;
+		}
+		fSetupPassword->SetText("");
+		fSetupRepeat->SetText("");
+		_UpdateSetup();
+	} else
+		message->AddString("password", password);
 	fPasswordControl->SetText("");
 	_EnableControls(false);
 	_SetFeedback(is_guest_account(fSelectedLogin.String())
@@ -797,6 +895,13 @@ void
 LoginView::_EnableControls(bool enable)
 {
 	fPasswordControl->SetEnabled(enable);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	fSetupName->SetEnabled(enable);
+	fSetupPassword->SetEnabled(enable);
+	fSetupRepeat->SetEnabled(enable);
+// SPDX-SnippetEnd
 	fLoginButton->SetEnabled(enable);
 	fHaltButton->SetEnabled(enable);
 	fRebootButton->SetEnabled(enable);
@@ -806,6 +911,44 @@ LoginView::_EnableControls(bool enable)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+void
+LoginView::_FocusField()
+{
+	// The field a key goes to: none for the guest and Try R5 (the button),
+	// the new password on the first-start screen, else the password.
+	if (is_guest_account(fSelectedLogin.String()) || fLiveMode)
+		fLoginButton->MakeFocus(true);
+	else if (fSetupMode)
+		fSetupPassword->MakeFocus(true);
+	else
+		fPasswordControl->MakeFocus(true);
+}
+
+
+void
+LoginView::FieldsChanged()
+{
+	if (fSetupMode)
+		_UpdateSetup();
+}
+
+
+void
+LoginView::_UpdateSetup()
+{
+	BString password(fSetupPassword->Text());
+	BString repeat(fSetupRepeat->Text());
+	int32 strength = BPasswordStrengthBar::StrengthOf(password.String());
+	fSetupStrength->SetStrength(strength);
+	if (repeat.Length() > 0 && password != repeat)
+		fSetupHint->SetText("The two passwords are not the same.");
+	else
+		fSetupHint->SetText(BPasswordStrengthBar::HintFor(strength));
+	password.SetTo('\0', password.Length());
+	repeat.SetTo('\0', repeat.Length());
+}
+
+
 void
 LoginView::_ApplyColors()
 {
@@ -829,6 +972,7 @@ LoginView::_ApplyColors()
 	fActiveCaption->SetHighColor(soft);
 	fActiveName->SetHighColor(documentText);
 	fPasswordLabel->SetHighColor(mix_color(documentText, document, 60));
+	fSetupHint->SetHighColor(soft);
 	if (fInfoIsError)
 		fInfoView->SetHighUIColor(B_FAILURE_COLOR);
 	else

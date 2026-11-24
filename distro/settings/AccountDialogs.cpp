@@ -42,6 +42,7 @@
 
 
 using BAppearanceKit::BPasswordControl;
+using BAppearanceKit::BPasswordStrengthBar;
 
 
 static const char* kLoginSignature = "application/x-vnd.Haiku-Login";
@@ -378,58 +379,6 @@ account_draw_picture(BView* view, BRect circle, const BBitmap* photo,
 	BBitmap* icon = person_icon(r5_avatar_icon_side(side));
 	r5_avatar_draw(view, circle, icon, admin);
 	delete icon;
-}
-
-
-int32
-account_password_strength(const char* password)
-{
-	if (password == NULL || password[0] == '\0')
-		return 0;
-	int32 length = strlen(password);
-	bool lower = false;
-	bool upper = false;
-	bool digit = false;
-	bool other = false;
-	for (const char* c = password; *c != '\0'; c++) {
-		unsigned char ch = (unsigned char)*c;
-		if (islower(ch))
-			lower = true;
-		else if (isupper(ch))
-			upper = true;
-		else if (isdigit(ch))
-			digit = true;
-		else
-			other = true;
-	}
-	int32 kinds = (lower ? 1 : 0) + (upper ? 1 : 0) + (digit ? 1 : 0)
-		+ (other ? 1 : 0);
-	if (length < 8)
-		return 1;
-	int32 strength = 2;
-	if (length >= 12 || kinds >= 3)
-		strength = 3;
-	if (length >= 16 && kinds >= 2)
-		strength = 4;
-	return strength;
-}
-
-
-const char*
-account_strength_text(int32 strength)
-{
-	switch (strength) {
-		case 1:
-			return "Weak. Use at least 8 characters.";
-		case 2:
-			return "Fair. Add another word or a number.";
-		case 3:
-			return "Good. A longer phrase is stronger.";
-		case 4:
-			return "Strong.";
-		default:
-			return "A phrase of a few words is easy to remember.";
-	}
 }
 
 
@@ -1097,57 +1046,6 @@ small_label(const char* name, const char* text)
 }
 
 
-// Four parts, lit from the left as far as the hint goes.
-class StrengthBar : public BView {
-public:
-	StrengthBar()
-		:
-		BView("strength", B_WILL_DRAW | B_FULL_UPDATE_ON_RESIZE),
-		fStrength(0)
-	{
-		SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
-		float height = px(4);
-		SetExplicitMinSize(BSize(px(80), height));
-		SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, height));
-	}
-
-	void SetStrength(int32 strength)
-	{
-		if (strength == fStrength)
-			return;
-		fStrength = strength;
-		Invalidate();
-	}
-
-	virtual void Draw(BRect updateRect)
-	{
-		(void)updateRect;
-		BRect bounds = Bounds();
-		float gap = px(4);
-		float width = (bounds.Width() + 1 - 3 * gap) / 4;
-		rgb_color off = mix_color(ui_color(B_PANEL_BACKGROUND_COLOR),
-			ui_color(B_PANEL_TEXT_COLOR), 40);
-		rgb_color on;
-		if (fStrength <= 1)
-			on = ui_color(B_FAILURE_COLOR);
-		else if (fStrength == 2)
-			on = mix_color(ui_color(B_FAILURE_COLOR),
-				ui_color(B_SUCCESS_COLOR), 128);
-		else
-			on = ui_color(B_SUCCESS_COLOR);
-		for (int32 i = 0; i < 4; i++) {
-			BRect part(bounds.left + i * (width + gap), bounds.top,
-				bounds.left + i * (width + gap) + width - 1, bounds.bottom);
-			SetHighColor(i < fStrength ? on : off);
-			FillRoundRect(part, bounds.Height() / 2, bounds.Height() / 2);
-		}
-	}
-
-private:
-	int32	fStrength;
-};
-
-
 // Two side-by-side choices (Standard, Administrator), each with a bold name
 // and one line. Value 0 is Standard, 1 is Administrator.
 class TypeChoice : public BControl {
@@ -1472,7 +1370,7 @@ private:
 			BStringView*		fUserError;
 			TypeChoice*			fType;
 			BPasswordControl*	fPassword;
-			StrengthBar*		fStrength;
+			BPasswordStrengthBar*	fStrength;
 			BStringView*		fStrengthText;
 			BPasswordControl*	fRepeat;
 			BStringView*		fMatch;
@@ -1519,8 +1417,8 @@ AddAccountWindow::AddAccountWindow(BWindow* parent, const BMessenger& page)
 	fType->SetValue(0);
 
 	fPassword = new BPasswordControl("password", NULL);
-	fStrength = new StrengthBar();
-	fStrengthText = small_label("strength text", account_strength_text(0));
+	fStrength = new BPasswordStrengthBar("strength");
+	fStrengthText = small_label("strength text", BPasswordStrengthBar::HintFor(0));
 	fRepeat = new BPasswordControl("repeat", NULL);
 	fMatch = small_label("match", " ");
 
@@ -1680,9 +1578,9 @@ AddAccountWindow::_Update()
 
 	BString password(fPassword->Text());
 	BString repeat(fRepeat->Text());
-	int32 strength = account_password_strength(password.String());
+	int32 strength = BPasswordStrengthBar::StrengthOf(password.String());
 	fStrength->SetStrength(strength);
-	fStrengthText->SetText(account_strength_text(strength));
+	fStrengthText->SetText(BPasswordStrengthBar::HintFor(strength));
 	set_match_line(fMatch, password.String(), repeat.String());
 	bool passwordOk = password.Length() > 0 && password == repeat;
 	account_wipe(password);
@@ -1764,7 +1662,7 @@ private:
 			bool				fSelf;
 			BPasswordControl*	fCurrent;
 			BPasswordControl*	fNext;
-			StrengthBar*		fStrength;
+			BPasswordStrengthBar*	fStrength;
 			BStringView*		fStrengthText;
 			BPasswordControl*	fRepeat;
 			BStringView*		fMatch;
@@ -1835,9 +1733,9 @@ PasswordWindow::PasswordWindow(BWindow* parent, const BMessenger& page,
 
 	if (self) {
 		fCurrent = new BPasswordControl("current", NULL);
-		fStrength = new StrengthBar();
+		fStrength = new BPasswordStrengthBar("strength");
 		fStrengthText = small_label("strength text",
-			account_strength_text(0));
+			BPasswordStrengthBar::HintFor(0));
 		BLayoutBuilder::Group<>(layout)
 			.Add(field_label("current label", "Current password"))
 			.Add(fCurrent)
@@ -1918,9 +1816,9 @@ PasswordWindow::_Update()
 	BString next(fNext->Text());
 	BString repeat(fRepeat->Text());
 	if (fStrength != NULL) {
-		int32 strength = account_password_strength(next.String());
+		int32 strength = BPasswordStrengthBar::StrengthOf(next.String());
 		fStrength->SetStrength(strength);
-		fStrengthText->SetText(account_strength_text(strength));
+		fStrengthText->SetText(BPasswordStrengthBar::HintFor(strength));
 	}
 	set_match_line(fMatch, next.String(), repeat.String());
 	fChange->SetEnabled(next.Length() > 0 && next == repeat);

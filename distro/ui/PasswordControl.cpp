@@ -16,7 +16,9 @@
 #include <TextView.h>
 #include <Window.h>
 
+#include <ctype.h>
 #include <math.h>
+#include <string.h>
 #include <new>
 
 
@@ -577,6 +579,138 @@ BPasswordControl::_ReservedPasswordControl3()
 
 void
 BPasswordControl::_ReservedPasswordControl4()
+{
+}
+
+
+//	#pragma mark - BPasswordStrengthBar
+
+
+BPasswordStrengthBar::BPasswordStrengthBar(const char* name)
+	:
+	BView(name, B_WILL_DRAW | B_FULL_UPDATE_ON_RESIZE),
+	fStrength(0)
+{
+	SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
+	float height = floorf(4 * unit() + 0.5f);
+	SetExplicitMinSize(BSize(floorf(80 * unit()), height));
+	SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, height));
+}
+
+
+BPasswordStrengthBar::~BPasswordStrengthBar()
+{
+}
+
+
+void
+BPasswordStrengthBar::SetStrength(int32 strength)
+{
+	if (strength < 0)
+		strength = 0;
+	if (strength > 4)
+		strength = 4;
+	if (strength == fStrength)
+		return;
+	fStrength = strength;
+	Invalidate();
+}
+
+
+int32
+BPasswordStrengthBar::Strength() const
+{
+	return fStrength;
+}
+
+
+/* static */ int32
+BPasswordStrengthBar::StrengthOf(const char* password)
+{
+	if (password == NULL || password[0] == '\0')
+		return 0;
+	int32 length = strlen(password);
+	bool lower = false;
+	bool upper = false;
+	bool digit = false;
+	bool other = false;
+	for (const char* c = password; *c != '\0'; c++) {
+		unsigned char ch = (unsigned char)*c;
+		if (islower(ch))
+			lower = true;
+		else if (isupper(ch))
+			upper = true;
+		else if (isdigit(ch))
+			digit = true;
+		else
+			other = true;
+	}
+	int32 kinds = (lower ? 1 : 0) + (upper ? 1 : 0) + (digit ? 1 : 0)
+		+ (other ? 1 : 0);
+	if (length < 8)
+		return 1;
+	int32 strength = 2;
+	if (length >= 12 || kinds >= 3)
+		strength = 3;
+	if (length >= 16 && kinds >= 2)
+		strength = 4;
+	return strength;
+}
+
+
+/* static */ const char*
+BPasswordStrengthBar::HintFor(int32 strength)
+{
+	switch (strength) {
+		case 1:
+			return "Weak. Use at least 8 characters.";
+		case 2:
+			return "Fair. Add another word or a number.";
+		case 3:
+			return "Good. A longer phrase is stronger.";
+		case 4:
+			return "Strong.";
+		default:
+			return "A phrase of a few words is easy to remember.";
+	}
+}
+
+
+void
+BPasswordStrengthBar::Draw(BRect updateRect)
+{
+	(void)updateRect;
+	BRect bounds = Bounds();
+	float gap = floorf(4 * unit() + 0.5f);
+	float width = (bounds.Width() + 1 - 3 * gap) / 4;
+	// The unlit parts take the view's own background (panel in a window,
+	// the document color on Sign in).
+	rgb_color off = mix_color(ViewColor(), ui_color(B_PANEL_TEXT_COLOR), 40);
+	rgb_color on;
+	if (fStrength <= 1)
+		on = ui_color(B_FAILURE_COLOR);
+	else if (fStrength == 2) {
+		on = mix_color(ui_color(B_FAILURE_COLOR), ui_color(B_SUCCESS_COLOR),
+			128);
+	} else
+		on = ui_color(B_SUCCESS_COLOR);
+	for (int32 i = 0; i < 4; i++) {
+		BRect part(bounds.left + i * (width + gap), bounds.top,
+			bounds.left + i * (width + gap) + width - 1, bounds.bottom);
+		SetHighColor(i < fStrength ? on : off);
+		FillRoundRect(part, bounds.Height() / 2, bounds.Height() / 2);
+	}
+}
+
+
+void
+BPasswordStrengthBar::_ReservedPasswordStrengthBar1()
+{
+}
+
+
+void
+BPasswordStrengthBar::_ReservedPasswordStrengthBar2()
 {
 }
 
