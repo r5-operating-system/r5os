@@ -1914,7 +1914,8 @@ list_accounts(BMessage* request, BMessage& reply)
 		reply.AddBool("first", is_first_home_admin(pwd));
 	}
 	endpwent();
-	reply.AddInt32("admins", admin_count());
+	if (all)
+		reply.AddInt32("admins", admin_count());
 }
 
 

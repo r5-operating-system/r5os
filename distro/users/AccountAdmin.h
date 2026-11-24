@@ -46,8 +46,8 @@ const uint32 kMsgAdminSetDriverSetting = 'r5ds';
 // the repeated fields "name", "real" and "home" (strings), "uid" (int32),
 // "admin", "disabled" and "first" (bools, "first" for the administrator
 // whose home is /boot/home), plus "admins" (int32, the enabled
-// administrators). An administrator, or a team with a grant, gets every
-// account; any other sender only its own.
+// administrators; only with every account). An administrator, or a team
+// with a grant, gets every account; any other sender only its own.
 const uint32 kMsgAdminListAccounts = 'r5ay';
 // Make an account an administrator or a standard account. Fields "name"
 // (string) and "admin" (bool). Needs an administrator. The first

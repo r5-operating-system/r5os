@@ -24,6 +24,7 @@
 #include "SettingsMessages.h"
 #include "SettingsModule.h"
 
+#include <AdminLock.h>
 #include <Alert.h>
 #include <Bitmap.h>
 #include <Button.h>
@@ -400,8 +401,8 @@ private:
 			void				_ShowSelected();
 			void				_ShowAccount(const AccountInfo& info);
 			void				_SyncEnabled();
-			void				_SetName(BMessage* message);
-			void				_SetEmail(BMessage* message);
+			bool				_SaveName();
+			void				_SaveEmail();
 			void				_SetType(BMessage* message);
 			void				_SetPicture(BMessage* message);
 			void				_DisableOrEnable();
@@ -431,6 +432,7 @@ private:
 			BButton*			fPassword;
 			BFilePanel*			fPanel;
 			AccountInfo			fShown;
+			BString				fShownEmail;
 			bool				fHasShown;
 			int32				fAdmins;
 			bool				fManaging;
@@ -480,7 +482,6 @@ AccountsView::AccountsView(AccountsModule* module)
 	fHeadLine = new BStringView("head line", "");
 	fHeadLine->SetHighColor(mix_color(ui_color(B_DOCUMENT_BACKGROUND_COLOR),
 		ui_color(B_DOCUMENT_TEXT_COLOR), 140));
-	fHeadLine->SetExplicitMinSize(BSize(px(120), B_SIZE_UNSET));
 	fChoose = new BButton("choose", "Choose picture…",
 		new BMessage(kMsgChoose));
 
@@ -523,10 +524,13 @@ AccountsView::AccountsView(AccountsModule* module)
 				.AddGlue()
 				.Add(fHeadName)
 				.Add(fHeadLine)
+				.AddStrut(px(4))
+				.AddGroup(B_HORIZONTAL)
+					.Add(fChoose)
+					.AddGlue()
+				.End()
 				.AddGlue()
 			.End()
-			.AddGlue()
-			.Add(fChoose)
 		.End()
 		.AddGrid(px(14), px(8))
 			.Add(nameLabel, 0, 0)
@@ -714,6 +718,17 @@ void
 AccountsView::_ShowSelected()
 {
 	AccountItem* item = _Selected();
+	// A Name or Email typed for the account on the card is saved before
+	// another one is shown: its message may come after the selection.
+	bool renamed = false;
+	if (fHasShown && (item == NULL || item->Info().name != fShown.name)) {
+		renamed = _SaveName();
+		_SaveEmail();
+	}
+	if (renamed && item != NULL) {
+		Reload(item->Info().name.String());
+		return;
+	}
 	if (item != NULL)
 		_ShowAccount(item->Info());
 	else
@@ -743,6 +758,7 @@ AccountsView::_ShowAccount(const AccountInfo& info)
 	fName->Message()->RemoveName("name");
 	fName->Message()->AddString("name", info.name.String());
 	fEmail->SetText("");
+	fShownEmail = "";
 	fEmail->Message()->RemoveName("name");
 	fEmail->Message()->AddString("name", info.name.String());
 	(info.admin ? fTypeAdmin : fTypeStandard)->SetMarked(true);
@@ -760,6 +776,7 @@ AccountsView::_ShowAccount(const AccountInfo& info)
 		const char* email = NULL;
 		if (reply.FindString("email", &email) == B_OK && email != NULL) {
 			fEmail->SetText(email);
+			fShownEmail = email;
 			values.AddString("email", email);
 		}
 		const void* data = NULL;
@@ -826,10 +843,13 @@ AccountsView::MessageReceived(BMessage* message)
 			_Delete();
 			break;
 		case kMsgName:
-			_SetName(message);
+			if (fHasShown && fShown.name == message->GetString("name", "")
+				&& _SaveName())
+				Reload(fShown.name.String());
 			break;
 		case kMsgEmail:
-			_SetEmail(message);
+			if (fHasShown && fShown.name == message->GetString("name", ""))
+				_SaveEmail();
 			break;
 		case kMsgType:
 			_SetType(message);
@@ -862,17 +882,18 @@ AccountsView::MessageReceived(BMessage* message)
 }
 
 
-void
-AccountsView::_SetName(BMessage* message)
+// Saves a changed Name of the account on the card. True when it changed.
+bool
+AccountsView::_SaveName()
 {
-	const char* name = message->GetString("name", NULL);
-	if (name == NULL || !fHasShown || fShown.name != name)
-		return;
+	if (!fHasShown)
+		return false;
 	BString real(fName->Text());
 	if (real == fShown.real)
-		return;
+		return false;
+	BString name(fShown.name);
 	BMessage request(kMsgAdminSetProfile);
-	request.AddString("name", name);
+	request.AddString("name", name.String());
 	request.AddString("real", real.String());
 	BMessage reply;
 	BString error;
@@ -880,30 +901,36 @@ AccountsView::_SetName(BMessage* message)
 		show_error(error.Length() > 0 ? error.String()
 			: "The name could not be saved.");
 		fName->SetText(fShown.real.String());
-		return;
+		return false;
 	}
-	fModule->Touched(name);
-	Reload(name);
+	fShown.real = real;
+	fModule->Touched(name.String());
+	return true;
 }
 
 
 void
-AccountsView::_SetEmail(BMessage* message)
+AccountsView::_SaveEmail()
 {
-	const char* name = message->GetString("name", NULL);
-	if (name == NULL || !fHasShown || fShown.name != name)
+	if (!fHasShown)
 		return;
+	BString email(fEmail->Text());
+	if (email == fShownEmail)
+		return;
+	BString name(fShown.name);
 	BMessage request(kMsgAdminSetProfile);
-	request.AddString("name", name);
-	request.AddString("email", fEmail->Text());
+	request.AddString("name", name.String());
+	request.AddString("email", email.String());
 	BMessage reply;
 	BString error;
 	if (account_ask_login(request, reply, error) != B_OK) {
 		show_error(error.Length() > 0 ? error.String()
 			: "The email address could not be saved.");
+		fEmail->SetText(fShownEmail.String());
 		return;
 	}
-	fModule->Touched(name);
+	fShownEmail = email;
+	fModule->Touched(name.String());
 }
 
 
@@ -928,6 +955,10 @@ AccountsView::_SetType(BMessage* message)
 		return;
 	}
 	fModule->Touched(name.String());
+	// Your own type may have changed: the window asks Login about the
+	// lock again.
+	if (Window() != NULL)
+		Window()->PostMessage(kMsgAdminLockChanged);
 	Reload(name.String());
 }
 
