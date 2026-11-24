@@ -8,6 +8,13 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-24 - Every administrator can delete in Shared
+
+- Problem: `/boot/home/Shared` (mode 01777) was owned by the first administrator. The sticky bit lets only uid 0, the owner of a file and the owner of the folder delete there, so a second administrator could not remove someone else's file. The review of #4601 found it; #4603 recorded it as a limit.
+- Changed: `write_desktop_session()` in `distro/users/AccountAdmin.cpp`, the step of Sign in that writes the session, makes the administrator who signs in the owner of Shared (`own_shared_folder()`: the folder only, opened with `O_NOFOLLOW`, mode 01777 again). A standard account and the guest leave the owner as it is. One graphical session runs at a time, so the administrator who is signed in can delete any file there. No change to BFS. `docs/MULTIUSER.md` and R5Book (`accounts.html`) say so now.
+- Limits: an administrator signed in over SSH while another administrator has the desktop is not the owner. Folders made inside Shared still have no sticky bit of their own.
+- Tested (24 Nov 2026): the AMD64 build with `scripts/build-locked.sh`. Not tested: a second administrator deleting in Shared, and the 5625U.
+
 ## 2026-11-24 - Fixes from the review of accounts steps 1 to 4
 
 - Problem: a review of #4590, #4592, #4595 and #4601 on `main` found:
