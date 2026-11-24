@@ -12,7 +12,8 @@
 
 HttpExchange::HttpExchange()
 	:
-	status(0)
+	status(0),
+	responseInFile(false)
 {
 }
 
@@ -23,6 +24,7 @@ HttpExchange::ClearResponse()
 	status = 0;
 	responseHeaders.MakeEmpty();
 	responseBody.SetTo("");
+	responseInFile = false;
 }
 
 

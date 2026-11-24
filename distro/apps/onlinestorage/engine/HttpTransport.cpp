@@ -20,11 +20,15 @@
 #include "Url.h"
 
 #include <DataIO.h>
+#include <ExclusiveBorrow.h>
+#include <File.h>
 #include <HttpFields.h>
 #include <HttpRequest.h>
 #include <HttpResult.h>
 #include <HttpSession.h>
 #include <Url.h>
+
+#include <stdio.h>
 
 #include <memory>
 #include <string_view>
@@ -35,6 +39,32 @@ using BPrivate::Network::BHttpFields;
 using BPrivate::Network::BHttpMethod;
 using BPrivate::Network::BHttpRequest;
 using BPrivate::Network::BHttpSession;
+using BPrivate::Network::BBorrow;
+using BPrivate::Network::BExclusiveBorrow;
+using BPrivate::Network::make_exclusive_borrow;
+
+
+/* An error page is small; never read more of it than this into memory. */
+static const off_t kMaxErrorBody = 1024 * 1024;
+
+
+static void
+read_error_body(const char* path, BString& out)
+{
+	out.SetTo("");
+	FILE* file = fopen(path, "rb");
+	if (file == NULL)
+		return;
+	char buffer[8192];
+	off_t total = 0;
+	size_t n;
+	while (total < kMaxErrorBody
+		&& (n = fread(buffer, 1, sizeof(buffer), file)) > 0) {
+		out.Append(buffer, (int32)n);
+		total += (off_t)n;
+	}
+	fclose(file);
+}
 
 
 static BHttpMethod
@@ -91,13 +121,37 @@ HttpTransport::Exchange(HttpExchange& exchange)
 				request.SetRequestBody(std::move(input),
 					mime != NULL ? mime : "application/octet-stream", size);
 			}
+			/*
+			 * A download streams into exchange.responseFile, so a large file
+			 * is never one BString (whose length is an int32).
+			 */
+			bool toFile = exchange.responseFile.Length() > 0;
+			BExclusiveBorrow<BFile> target;
+			if (toFile) {
+				target = make_exclusive_borrow<BFile>(
+					exchange.responseFile.String(),
+					B_WRITE_ONLY | B_CREATE_FILE | B_ERASE_FILE);
+				if (target->InitCheck() != B_OK)
+					return B_IO_ERROR;
+			}
 			BHttpSession session;
-			BPrivate::Network::BHttpResult result = session.Execute(
-				std::move(request));
+			BPrivate::Network::BHttpResult result = toFile
+				? session.Execute(std::move(request), BBorrow<BDataIO>(target))
+				: session.Execute(std::move(request));
 			exchange.status = result.Status().code;
 			exchange.responseBody.SetTo("");
-			if (result.Body().text.has_value())
-				exchange.responseBody = result.Body().text.value();
+			exchange.responseInFile = false;
+			/* Body() waits until the whole response is in. */
+			const BPrivate::Network::BHttpBody& body = result.Body();
+			if (toFile) {
+				if (exchange.status >= 200 && exchange.status <= 299)
+					exchange.responseInFile = true;
+				else {
+					read_error_body(exchange.responseFile.String(),
+						exchange.responseBody);
+				}
+			} else if (body.text.has_value())
+				exchange.responseBody = body.text.value();
 			exchange.responseHeaders.MakeEmpty();
 			const BHttpFields& responseFields = result.Fields();
 			for (BHttpFields::ConstIterator it = responseFields.begin();

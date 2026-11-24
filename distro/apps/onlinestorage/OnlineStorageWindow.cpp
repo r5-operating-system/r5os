@@ -10,9 +10,11 @@
 #include "HttpTransport.h"
 #include "OAuth.h"
 #include "OneDrive.h"
+#include "Sha256.h"
 #include "SyncEngine.h"
 #include "TokenStore.h"
 
+#include <Alert.h>
 #include <Application.h>
 #include <OS.h>
 #include <Button.h>
@@ -20,10 +22,16 @@
 #include <FilePanel.h>
 #include <FindDirectory.h>
 #include <LayoutBuilder.h>
+#include <MenuField.h>
+#include <MenuItem.h>
+#include <PopUpMenu.h>
 #include <Path.h>
 #include <Roster.h>
 #include <StringView.h>
 #include <TextControl.h>
+
+#include <errno.h>
+#include <sys/stat.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -39,7 +47,10 @@ enum {
 	kMsgFolder = 'fold',
 	kMsgSync = 'sync',
 	kMsgProgress = 'prog',
-	kMsgState = 'stat'
+	kMsgState = 'stat',
+	kMsgService = 'srvc',
+	kMsgLargeDelete = 'ldel',
+	kMsgLargeDeleteAnswer = 'ldan'
 };
 
 
@@ -55,6 +66,26 @@ struct SyncRequest {
 	BString					cloudFolder;
 	BString					localFolder;
 	BString					statePath;
+	bool					allowLargeDelete;
+};
+
+
+/* Waits in 200 ms steps, so Quit does not wait out a Retry-After. */
+class StoppableSleeper : public Sleeper {
+public:
+						StoppableSleeper(volatile bool* stop)
+							: fStop(stop) {}
+	virtual	void		WaitSeconds(int32 seconds)
+						{
+							for (int32 i = 0; i < seconds * 5; i++) {
+								if (fStop != NULL && *fStop)
+									return;
+								snooze(200000);
+							}
+						}
+
+private:
+	volatile bool*		fStop;
 };
 
 
@@ -108,7 +139,13 @@ sign_in_thread(void* data)
 		post_state(request->window, "Open the sign-in page in the browser.", false);
 	else
 		post_state(request->window, "Waiting for the browser.", false);
-	int client = -1;
+	/*
+	 * Keep listening until one connection brings the code with our state.
+	 * A silent connection, a request for another path or a wrong state
+	 * (another program on this computer) is answered and dropped.
+	 */
+	BString code;
+	status = B_CANCELED;
 	while (!request->window->_StopRequested()) {
 		fd_set ready;
 		FD_ZERO(&ready);
@@ -117,35 +154,22 @@ sign_in_thread(void* data)
 		wait.tv_sec = 0;
 		wait.tv_usec = 200000;
 		int selected = select(fd + 1, &ready, NULL, NULL, &wait);
-		if (selected > 0) {
-			client = accept(fd, NULL, NULL);
+		if (selected <= 0)
+			continue;
+		int client = accept(fd, NULL, NULL);
+		if (client < 0)
+			continue;
+		status = ReadLoopbackCode(client, oauth.State(), code,
+			&request->window->fStop);
+		close(client);
+		if (status == B_OK || status == B_CANCELED)
 			break;
-		}
 	}
 	close(fd);
-	if (request->window->_StopRequested()) {
-		if (client >= 0)
-			close(client);
+	if (request->window->_StopRequested() || status != B_OK) {
+		code.SetTo("");
 		delete request;
 		return B_CANCELED;
-	}
-	if (client < 0) {
-		post_state(request->window, "Error: sign-in was interrupted.", true);
-		delete request;
-		return B_CANCELED;
-	}
-	BString code;
-	status = ReadLoopbackCode(client, oauth.State(), code,
-		&request->window->fStop);
-	close(client);
-	if (request->window->_StopRequested()) {
-		delete request;
-		return B_CANCELED;
-	}
-	if (status != B_OK) {
-		post_state(request->window, "Error: the sign-in page was not accepted.", true);
-		delete request;
-		return status;
 	}
 	HttpTransport transport;
 	status = oauth.ExchangeCode(transport, code, log);
@@ -161,12 +185,12 @@ sign_in_thread(void* data)
 }
 
 
-static status_t
+status_t
 sync_thread(void* data)
 {
 	SyncRequest* request = (SyncRequest*)data;
 	StderrLog log;
-	RealSleeper sleep;
+	StoppableSleeper sleep(&request->window->fStop);
 	HttpTransport transport;
 	OAuthConfig config = request->provider == "dropbox"
 		? DropboxOAuthConfig() : OneDriveOAuthConfig();
@@ -182,14 +206,26 @@ sync_thread(void* data)
 		DropboxProvider remote(transport, oauth, sleep, log,
 			request->cloudFolder.String());
 		SyncEngine engine(remote);
+		engine.SetStopFlag(&request->window->fStop);
+		engine.SetAllowLargeDelete(request->allowLargeDelete);
 		status = engine.Sync(request->localFolder.String(),
 			request->statePath.String(), result);
 	} else {
 		OneDriveProvider remote(transport, oauth, sleep, log,
 			request->cloudFolder.String());
 		SyncEngine engine(remote);
+		engine.SetStopFlag(&request->window->fStop);
+		engine.SetAllowLargeDelete(request->allowLargeDelete);
 		status = engine.Sync(request->localFolder.String(),
 			request->statePath.String(), result);
+	}
+	if (status == B_NOT_ALLOWED && result.pendingDeletes > 0) {
+		BMessage ask(kMsgLargeDelete);
+		ask.AddInt32("count", result.pendingDeletes);
+		ask.AddBool("cloud", result.pendingDeletesInCloud);
+		request->window->PostMessage(&ask);
+		delete request;
+		return status;
 	}
 	if (status == B_OK)
 		post_state(request->window, "Up to date", true);
@@ -214,6 +250,12 @@ OnlineStorageWindow::OnlineStorageWindow()
 		new BMessage(kMsgOneDrive));
 	fDropboxButton = new BButton("dropbox", "Sign in…",
 		new BMessage(kMsgDropbox));
+	BPopUpMenu* services = new BPopUpMenu("service");
+	BMenuItem* onedrive = new BMenuItem("OneDrive", new BMessage(kMsgService));
+	services->AddItem(onedrive);
+	services->AddItem(new BMenuItem("Dropbox", new BMessage(kMsgService)));
+	onedrive->SetMarked(true);
+	fService = new BMenuField("service", "Sync with:", services);
 	fCloudFolder = new BTextControl("cloud", "Cloud folder:", "", NULL);
 	fLocalFolder = new BTextControl("local", "Local folder:", "", NULL);
 	fState = new BStringView("state", "Not synced yet");
@@ -230,6 +272,7 @@ OnlineStorageWindow::OnlineStorageWindow()
 			.Add(new BStringView("db", "Dropbox"))
 			.Add(fDropboxButton)
 		.End()
+		.Add(fService)
 		.Add(fCloudFolder)
 		.AddGroup(B_HORIZONTAL)
 			.Add(fLocalFolder)
@@ -275,8 +318,37 @@ OnlineStorageWindow::_SignIn(const char* provider)
 }
 
 
+/*
+ * One state file per service, cloud folder and local folder. A snapshot
+ * of one pair must never be compared with another pair: every path in it
+ * would look deleted on one side.
+ */
+static status_t
+state_path_for(const BString& provider, const BString& cloudFolder,
+	const BString& localFolder, BString& out)
+{
+	BPath settings;
+	status_t status = find_directory(B_USER_SETTINGS_DIRECTORY, &settings);
+	if (status != B_OK)
+		return status;
+	BString dir;
+	dir << settings.Path() << "/OnlineStorage";
+	if (mkdir(dir.String(), 0700) != 0 && errno != EEXIST)
+		return B_IO_ERROR;
+	BString key;
+	key << provider << "\n" << cloudFolder << "\n" << localFolder;
+	BString hex;
+	status = Sha256Bytes(key.String(), (size_t)key.Length(), hex);
+	if (status != B_OK)
+		return status;
+	out.SetTo("");
+	out << dir << "/state-" << hex;
+	return B_OK;
+}
+
+
 void
-OnlineStorageWindow::_Sync()
+OnlineStorageWindow::_Sync(bool allowLargeDelete)
 {
 	if (fWorker > 0)
 		return;
@@ -284,21 +356,19 @@ OnlineStorageWindow::_Sync()
 		_SetState("Error: choose both folders.");
 		return;
 	}
-	BPath settings;
-	if (find_directory(B_USER_SETTINGS_DIRECTORY, &settings) != B_OK)
-		settings.SetTo("/tmp");
-	BString state;
-	state << settings.Path() << "/onlinestorage-state";
 	SyncRequest* request = new SyncRequest();
 	request->window = this;
-	request->provider = "onedrive";
-	BMessage token;
-	if (gTokens.Load("dropbox", token) == B_OK
-		&& gTokens.Load("onedrive", token) != B_OK)
-		request->provider = "dropbox";
+	request->provider = fService->Menu()->IndexOf(
+		fService->Menu()->FindMarked()) == 1 ? "dropbox" : "onedrive";
 	request->cloudFolder = fCloudFolder->Text();
 	request->localFolder = fLocalFolder->Text();
-	request->statePath = state;
+	request->allowLargeDelete = allowLargeDelete;
+	if (state_path_for(request->provider, request->cloudFolder,
+			request->localFolder, request->statePath) != B_OK) {
+		delete request;
+		_SetState("Error: could not save the sync state.");
+		return;
+	}
 	_SetState("Syncing");
 	fWorker = spawn_thread(sync_thread, "sync", B_NORMAL_PRIORITY, request);
 	if (fWorker < 0) {
@@ -349,6 +419,36 @@ OnlineStorageWindow::MessageReceived(BMessage* message)
 				wait_for_thread(fWorker, &outcome);
 				fWorker = -1;
 			}
+			break;
+		case kMsgLargeDelete:
+		{
+			if (fWorker > 0) {
+				status_t outcome = B_OK;
+				wait_for_thread(fWorker, &outcome);
+				fWorker = -1;
+			}
+			int32 count = message->GetInt32("count", 0);
+			bool cloud = message->GetBool("cloud", true);
+			BString text;
+			text << "This sync would delete " << count << " files "
+				<< (cloud ? "in the cloud" : "on this computer")
+				<< ", more than half of the folder. Nothing has been changed yet."
+				"\n\nIs the right folder chosen? Delete them only if you meant to.";
+			_SetState("Waiting for your answer.");
+			BAlert* alert = new BAlert("Online Storage", text.String(),
+				"Cancel", "Delete files", NULL, B_WIDTH_AS_USUAL,
+				B_WARNING_ALERT);
+			alert->SetShortcut(0, B_ESCAPE);
+			alert->Go(new BInvoker(new BMessage(kMsgLargeDeleteAnswer), this));
+			break;
+		}
+		case kMsgLargeDeleteAnswer:
+			if (message->GetInt32("which", 0) == 1)
+				_Sync(true);
+			else
+				_SetState("Not synced: nothing was deleted.");
+			break;
+		case kMsgService:
 			break;
 		default:
 			BWindow::MessageReceived(message);

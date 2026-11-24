@@ -19,6 +19,14 @@ struct HttpExchange {
 	int32				status;
 	BMessage			responseHeaders;
 	BString				responseBody;
+	/*
+	 * When set, a transport that can stream writes a 2xx body to this
+	 * file and sets responseInFile, so a large download is never held in
+	 * memory. Any other body still goes to responseBody. A transport that
+	 * cannot stream ignores it (the test transports).
+	 */
+	BString				responseFile;
+	bool				responseInFile;
 
 						HttpExchange();
 	void				ClearResponse();
@@ -61,6 +69,7 @@ public:
 
 
 const char*		HeaderValue(const BMessage& headers, const char* name);
+
 status_t		SetHeader(BMessage& headers, const char* name,
 					const char* value);
 

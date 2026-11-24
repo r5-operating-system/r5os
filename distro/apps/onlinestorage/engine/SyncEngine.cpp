@@ -38,7 +38,9 @@ SyncResult::SyncResult()
 	uploaded(0),
 	downloaded(0),
 	deleted(0),
-	conflicts(0)
+	conflicts(0),
+	pendingDeletes(0),
+	pendingDeletesInCloud(false)
 {
 }
 
@@ -359,26 +361,42 @@ from_cloud(const CloudItem& item)
 static status_t
 copy_file(const char* from, const char* to)
 {
+	/* Streamed: a conflict copy of a large file must not be held in memory. */
+	status_t status = LocalMakeParents(to);
+	if (status != B_OK)
+		return status;
 	FILE* in = fopen(from, "rb");
 	if (in == NULL)
 		return B_ENTRY_NOT_FOUND;
-	std::vector<char> data;
-	char buffer[8192];
+	BString temp;
+	temp << to << ".r5partial";
+	FILE* out = fopen(temp.String(), "wb");
+	if (out == NULL) {
+		fclose(in);
+		return B_IO_ERROR;
+	}
+	char buffer[65536];
+	status = B_OK;
 	for (;;) {
 		size_t n = fread(buffer, 1, sizeof(buffer), in);
-		if (n > 0)
-			data.insert(data.end(), buffer, buffer + n);
+		if (n > 0 && fwrite(buffer, 1, n, out) != n) {
+			status = B_IO_ERROR;
+			break;
+		}
 		if (n < sizeof(buffer)) {
-			if (ferror(in)) {
-				fclose(in);
-				return B_IO_ERROR;
-			}
+			if (ferror(in))
+				status = B_IO_ERROR;
 			break;
 		}
 	}
 	fclose(in);
-	const void* bytes = data.empty() ? (const void*)"" : (const void*)&data[0];
-	return LocalWriteAtomic(to, bytes, data.size());
+	if (fclose(out) != 0)
+		status = B_IO_ERROR;
+	if (status == B_OK && rename(temp.String(), to) != 0)
+		status = B_IO_ERROR;
+	if (status != B_OK)
+		remove(temp.String());
+	return status;
 }
 
 
@@ -398,8 +416,31 @@ find_id_path(const std::map<BString, Entry>& view, const BString& id)
 
 SyncEngine::SyncEngine(CloudProvider& provider)
 	:
-	fProvider(provider)
+	fProvider(provider),
+	fStop(NULL),
+	fAllowLargeDelete(false)
 {
+}
+
+
+void
+SyncEngine::SetStopFlag(volatile bool* stop)
+{
+	fStop = stop;
+}
+
+
+void
+SyncEngine::SetAllowLargeDelete(bool allow)
+{
+	fAllowLargeDelete = allow;
+}
+
+
+bool
+SyncEngine::_Stopped() const
+{
+	return fStop != NULL && *fStop;
 }
 
 
@@ -436,9 +477,65 @@ SyncEngine::Sync(const char* localRoot, const char* statePath, SyncResult& resul
 		return status;
 	}
 
+	/*
+	 * Large-delete guard, before anything is changed. A file that was
+	 * synced, is unchanged on one side and missing on the other is about
+	 * to be deleted on the side where it is still present.
+	 */
+	{
+		/* A rename is not a delete: the same bytes under a new local
+		 * name, or the same id under a new cloud path. */
+		std::map<BString, int32> newLocalBytes;
+		for (std::map<BString, Entry>::iterator it = local.begin();
+				it != local.end(); it++) {
+			if (!it->second.isFolder && saved.find(it->first) == saved.end())
+				newLocalBytes[it->second.sha]++;
+		}
+		std::map<BString, bool> remoteIds;
+		for (std::map<BString, Entry>::iterator it = remote.begin();
+				it != remote.end(); it++) {
+			if (it->second.id.Length() > 0)
+				remoteIds[it->second.id] = true;
+		}
+		int32 savedFiles = 0;
+		int32 deleteInCloud = 0;
+		int32 deleteLocally = 0;
+		for (std::map<BString, Entry>::iterator it = saved.begin();
+				it != saved.end(); it++) {
+			if (it->second.isFolder)
+				continue;
+			savedFiles++;
+			std::map<BString, Entry>::iterator l = local.find(it->first);
+			std::map<BString, Entry>::iterator r = remote.find(it->first);
+			if (l == local.end() && r != remote.end()
+				&& r->second.revision == it->second.revision
+				&& newLocalBytes.find(it->second.sha) == newLocalBytes.end())
+				deleteInCloud++;
+			else if (r == remote.end() && l != local.end()
+				&& l->second.sha == it->second.sha
+				&& (it->second.id.Length() == 0
+					|| remoteIds.find(it->second.id) == remoteIds.end()))
+				deleteLocally++;
+		}
+		int32 worst = deleteInCloud > deleteLocally ? deleteInCloud : deleteLocally;
+		if (!fAllowLargeDelete && worst >= kLargeDeleteMinimum
+			&& worst * 2 > savedFiles) {
+			result.pendingDeletes = worst;
+			result.pendingDeletesInCloud = deleteInCloud >= deleteLocally;
+			result.error = result.pendingDeletesInCloud
+				? "This would delete many files in the cloud. Nothing was changed."
+				: "This would delete many files on this computer. Nothing was changed.";
+			return B_NOT_ALLOWED;
+		}
+	}
+
 	/* Remote renames: same id, new path, local copy still the old bytes. */
 	for (std::map<BString, Entry>::iterator it = remote.begin();
 			it != remote.end(); it++) {
+		if (_Stopped()) {
+			result.error = "Stopped.";
+			return B_CANCELED;
+		}
 		if (it->second.id.Length() == 0)
 			continue;
 		BString oldPath = find_id_path(saved, it->second.id);
@@ -485,6 +582,10 @@ SyncEngine::Sync(const char* localRoot, const char* statePath, SyncResult& resul
 	}
 	std::vector<bool> used(appeared.size(), false);
 	for (size_t v = 0; v < vanished.size(); v++) {
+		if (_Stopped()) {
+			result.error = "Stopped.";
+			return B_CANCELED;
+		}
 		int matches = 0;
 		size_t match = 0;
 		for (size_t a = 0; a < appeared.size(); a++) {
@@ -526,6 +627,10 @@ SyncEngine::Sync(const char* localRoot, const char* statePath, SyncResult& resul
 
 	for (std::map<BString, bool>::iterator it = seen.begin();
 			it != seen.end(); it++) {
+		if (_Stopped()) {
+			result.error = "Stopped.";
+			return B_CANCELED;
+		}
 		const BString& path = it->first;
 		bool inLocal = local.find(path) != local.end();
 		bool inRemote = remote.find(path) != remote.end();

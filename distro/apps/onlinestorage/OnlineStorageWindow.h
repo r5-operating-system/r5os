@@ -11,6 +11,7 @@
 
 class BButton;
 class BFilePanel;
+class BMenuField;
 class BStringView;
 class BTextControl;
 
@@ -25,12 +26,13 @@ public:
 
 private:
 			void				_SignIn(const char* provider);
-			void				_Sync();
+			void				_Sync(bool allowLargeDelete = false);
 			void				_SetState(const char* text);
 			bool				_StopRequested() const;
 
 			BButton*			fOneDriveButton;
 			BButton*			fDropboxButton;
+			BMenuField*			fService;
 			BTextControl*		fCloudFolder;
 			BTextControl*		fLocalFolder;
 			BStringView*		fState;
@@ -40,6 +42,7 @@ private:
 			volatile bool		fStop;
 
 			friend status_t		sign_in_thread(void* data);
+			friend status_t		sync_thread(void* data);
 };
 
 

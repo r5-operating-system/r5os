@@ -355,13 +355,25 @@ ReadLoopbackCode(int client, const BString& expectState, BString& code,
 	setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &wait, sizeof(wait));
 	char buffer[8192];
 	size_t used = 0;
+	/*
+	 * A connection that sends nothing (a browser's speculative
+	 * connection, another program) must not hold up the sign-in: give it
+	 * kLoopbackIdleLimit polls of 200 ms, then let the caller accept the
+	 * next one.
+	 */
+	int32 idle = 0;
 	while (used + 1 < sizeof(buffer)) {
 		if (stop != NULL && *stop)
 			return B_CANCELED;
 		ssize_t n = recv(client, buffer + used, sizeof(buffer) - 1 - used, 0);
 		if (n < 0) {
-			if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
+			if (errno == EINTR)
 				continue;
+			if (errno == EAGAIN || errno == EWOULDBLOCK) {
+				if (++idle >= kLoopbackIdleLimit)
+					return B_TIMED_OUT;
+				continue;
+			}
 			break;
 		}
 		if (n == 0)

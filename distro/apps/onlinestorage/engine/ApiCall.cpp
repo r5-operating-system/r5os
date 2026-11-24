@@ -10,9 +10,12 @@
 
 #include "ApiCall.h"
 
+#include "LocalFile.h"
+
 #include "Retry.h"
 #include "Url.h"
 
+#include <stdio.h>
 #include <string.h>
 #include <sys/time.h>
 
@@ -115,4 +118,33 @@ AccountSession::Call(HttpExchange& exchange)
 		return B_OK;
 	}
 	return B_NOT_ALLOWED;
+}
+
+
+status_t
+CallIntoFile(AccountSession& session, HttpExchange& exchange,
+	const char* localFile)
+{
+	status_t status = LocalMakeParents(localFile);
+	if (status != B_OK)
+		return status;
+	BString temp;
+	temp << localFile << ".r5partial";
+	exchange.responseFile = temp;
+	status = session.Call(exchange);
+	bool ok = status == B_OK && exchange.status >= 200 && exchange.status <= 299;
+	if (!ok) {
+		remove(temp.String());
+		return status;
+	}
+	if (exchange.responseInFile) {
+		if (rename(temp.String(), localFile) != 0) {
+			remove(temp.String());
+			return B_IO_ERROR;
+		}
+		return B_OK;
+	}
+	remove(temp.String());
+	return LocalWriteAtomic(localFile, exchange.responseBody.String(),
+		(size_t)exchange.responseBody.Length());
 }

@@ -32,4 +32,16 @@ private:
 };
 
 
+/*
+ * For a download: asks the transport to stream the body into
+ * "<localFile>.r5partial" and moves it onto localFile only for a 2xx
+ * status, so a large file is never held in memory and a failed download
+ * never replaces the old copy. A transport that cannot stream (the test
+ * transports) returns the body in memory; it is then written the same way.
+ * exchange.status is left for the caller's own status checks.
+ */
+status_t		CallIntoFile(AccountSession& session, HttpExchange& exchange,
+					const char* localFile);
+
+
 #endif

@@ -230,15 +230,14 @@ DropboxProvider::Download(const BString& path, const char* localFile)
 	AppendJsonString(arg, _ApiPath(path).String());
 	arg << "}";
 	SetHeader(exchange.requestHeaders, "dropbox-api-arg", arg.String());
-	status_t status = fSession.Call(exchange);
+	status_t status = CallIntoFile(fSession, exchange, localFile);
 	if (status != B_OK)
 		return status;
 	if (exchange.status == 409)
 		return B_ENTRY_NOT_FOUND;
 	if (exchange.status < 200 || exchange.status > 299)
 		return B_IO_ERROR;
-	return LocalWriteAtomic(localFile, exchange.responseBody.String(),
-		(size_t)exchange.responseBody.Length());
+	return B_OK;
 }
 
 

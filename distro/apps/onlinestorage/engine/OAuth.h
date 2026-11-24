@@ -84,6 +84,9 @@ status_t		BindLoopback(int& fd, uint16 port, uint16& boundPort);
  * stop is checked between receives. NULL means read until the header
  * ends. A timed-out receive is tried again until stop is set.
  */
+/* 200 ms polls a loopback connection may stay silent (5 seconds). */
+const int32		kLoopbackIdleLimit = 25;
+
 status_t		ReadLoopbackCode(int client, const BString& expectState,
 					BString& code, volatile bool* stop = NULL);
 

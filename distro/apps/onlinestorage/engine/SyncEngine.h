@@ -22,6 +22,10 @@ struct SyncResult {
 	int32				downloaded;
 	int32				deleted;
 	int32				conflicts;
+	/* Set when the run stopped before deleting many files (see
+	 * SetAllowLargeDelete). Nothing was changed on either side. */
+	int32				pendingDeletes;
+	bool				pendingDeletesInCloud;
 
 						SyncResult();
 };
@@ -39,8 +43,29 @@ public:
 			status_t			Sync(const char* localRoot,
 									const char* statePath, SyncResult& result);
 
+	/*
+	 * When *stop becomes true, Sync() returns B_CANCELED between two
+	 * files and does not write the state file.
+	 */
+			void				SetStopFlag(volatile bool* stop);
+
+	/*
+	 * By default Sync() refuses a run that would delete at least
+	 * kLargeDeleteMinimum files on one side and more than half of the
+	 * files it last synced (an empty or unmounted local folder, a wrong
+	 * cloud folder). It returns B_NOT_ALLOWED with result.pendingDeletes
+	 * set, and changes nothing. Allow it after the user has confirmed.
+	 */
+			void				SetAllowLargeDelete(bool allow);
+
+	static	const int32			kLargeDeleteMinimum = 3;
+
 private:
+			bool				_Stopped() const;
+
 			CloudProvider&		fProvider;
+			volatile bool*		fStop;
+			bool				fAllowLargeDelete;
 };
 
 

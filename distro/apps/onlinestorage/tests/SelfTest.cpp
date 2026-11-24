@@ -438,6 +438,125 @@ sync_case(const char* provider)
 }
 
 
+/*
+ * Review fixes, 24 Nov 2026: an emptied local folder or a wrong pair must
+ * not delete the other side without a confirmation, and a stop must
+ * leave the state file alone.
+ */
+static void
+test_large_delete_and_stop()
+{
+	char local[] = "/tmp/r5os-guardXXXXXX";
+	CHECK(mkdtemp(local) != NULL);
+	BString state;
+	state << local << ".state";
+	MemoryCloud cloud("onedrive", "Cloud");
+	MemoryTokenStore store;
+	BMessage token;
+	TokenSet(token, "access-token", "refresh-token",
+		4LL * 1000 * 1000 * 1000 * 1000 * 1000);
+	store.Save("onedrive", token);
+	NoSleep sleep;
+	CaptureLog log;
+	OAuthConfig config = OneDriveOAuthConfig();
+	config.account = "onedrive";
+	OAuthClient oauth(config, store);
+	OneDriveProvider remote(cloud, oauth, sleep, log, "Cloud");
+	SyncEngine engine(remote);
+	SyncResult result;
+
+	write_text(local, "a.txt", "a");
+	write_text(local, "b.txt", "b");
+	write_text(local, "c.txt", "c");
+	write_text(local, "d.txt", "d");
+	CHECK(engine.Sync(local, state.String(), result) == B_OK);
+	CHECK(cloud.Has("d.txt"));
+
+	/* The local folder is emptied (an unplugged disk, a new empty folder). */
+	const char* names[] = { "a.txt", "b.txt", "c.txt", "d.txt" };
+	for (int i = 0; i < 4; i++)
+		unlink((BString(local) << "/" << names[i]).String());
+	CHECK(engine.Sync(local, state.String(), result) == B_NOT_ALLOWED);
+	CHECK(result.pendingDeletes == 4);
+	CHECK(result.pendingDeletesInCloud);
+	for (int i = 0; i < 4; i++)
+		CHECK(cloud.Has(names[i]));
+
+	/* A local rename of every file is not a delete. */
+	write_text(local, "a2.txt", "a");
+	write_text(local, "b2.txt", "b");
+	write_text(local, "c2.txt", "c");
+	write_text(local, "d2.txt", "d");
+	CHECK(engine.Sync(local, state.String(), result) == B_OK);
+	CHECK(cloud.Read("a2.txt") == "a");
+	CHECK(!cloud.Has("a.txt"));
+
+	/* After the user confirms, the deletes go ahead. */
+	const char* renamed[] = { "a2.txt", "b2.txt", "c2.txt", "d2.txt" };
+	for (int i = 0; i < 4; i++)
+		unlink((BString(local) << "/" << renamed[i]).String());
+	CHECK(engine.Sync(local, state.String(), result) == B_NOT_ALLOWED);
+	engine.SetAllowLargeDelete(true);
+	CHECK(engine.Sync(local, state.String(), result) == B_OK);
+	CHECK(!cloud.Has("a2.txt"));
+	engine.SetAllowLargeDelete(false);
+
+	/* A stop returns B_CANCELED and keeps the previous state file. */
+	write_text(local, "e.txt", "e");
+	FILE* before = fopen(state.String(), "rb");
+	char oldState[4096];
+	size_t oldLength = before != NULL ? fread(oldState, 1, sizeof(oldState), before) : 0;
+	if (before != NULL)
+		fclose(before);
+	volatile bool stop = true;
+	engine.SetStopFlag(&stop);
+	CHECK(engine.Sync(local, state.String(), result) == B_CANCELED);
+	CHECK(!cloud.Has("e.txt"));
+	FILE* after = fopen(state.String(), "rb");
+	char newState[4096];
+	size_t newLength = after != NULL ? fread(newState, 1, sizeof(newState), after) : 0;
+	if (after != NULL)
+		fclose(after);
+	CHECK(oldLength == newLength && memcmp(oldState, newState, oldLength) == 0);
+	stop = false;
+	CHECK(engine.Sync(local, state.String(), result) == B_OK);
+	CHECK(cloud.Read("e.txt") == "e");
+}
+
+
+/* A silent connection must not hold up the sign-in. */
+static void
+test_loopback_idle()
+{
+	int fd = -1;
+	uint16 port = 0;
+	CHECK(BindLoopback(fd, 0, port) == B_OK);
+	struct sockaddr_in address;
+	memset(&address, 0, sizeof(address));
+	address.sin_family = AF_INET;
+	address.sin_port = htons(port);
+	inet_pton(AF_INET, "127.0.0.1", &address.sin_addr);
+	int silent = socket(AF_INET, SOCK_STREAM, 0);
+	CHECK(connect(silent, (struct sockaddr*)&address, sizeof(address)) == 0);
+	int accepted = accept(fd, NULL, NULL);
+	BString code;
+	CHECK(ReadLoopbackCode(accepted, "right-state", code) == B_TIMED_OUT);
+	close(accepted);
+	close(silent);
+
+	int client = socket(AF_INET, SOCK_STREAM, 0);
+	CHECK(connect(client, (struct sockaddr*)&address, sizeof(address)) == 0);
+	const char* good = "GET /?code=late-code&state=right-state HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+	send(client, good, strlen(good), 0);
+	accepted = accept(fd, NULL, NULL);
+	CHECK(ReadLoopbackCode(accepted, "right-state", code) == B_OK);
+	CHECK(code == "late-code");
+	close(accepted);
+	close(client);
+	close(fd);
+}
+
+
 static void
 test_token_memory()
 {
@@ -465,6 +584,8 @@ RunOnlineStorageTests()
 	test_token_memory();
 	sync_case("onedrive");
 	sync_case("dropbox");
+	test_large_delete_and_stop();
+	test_loopback_idle();
 	if (gFailed == 0)
 		printf("onlinestorage tests passed\n");
 	else

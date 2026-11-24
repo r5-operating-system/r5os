@@ -8,6 +8,30 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-24 - Online Storage: review fixes (no data loss on a new folder pair, large-delete check, streamed downloads, quit, sign-in)
+
+Problem (code review of PR #4588, 24 Nov 2026):
+
+- One state file (`~/config/settings/onlinestorage-state`) served every service, cloud folder and local folder. After a sync, choosing another local folder made every saved file look deleted locally, so the next sync deleted them in the cloud; another cloud folder deleted the local files.
+- Nothing stopped a run that deletes almost everything on one side (an unplugged disk with an empty folder at its mount point).
+- A download was held in memory as one BString (an int32 length), so a file over 2 GB could not download and a large one used as much RAM. The conflict copy read the whole file into memory too.
+- Quit waited for the whole sync, and up to five minutes in a Retry-After wait.
+- Sign-in accepted only the first connection on the loopback port; a silent connection (a browser's speculative connection, another program) blocked it.
+- With both accounts signed in, Dropbox could not be chosen.
+
+Changed:
+
+- One state file per service + cloud folder + local folder: `~/config/settings/OnlineStorage/state-<SHA-256 of the three>` (mode 0700 folder). A new pair starts as a first sync, which keeps both sides.
+- `SyncEngine` refuses, before it changes anything, a run that would delete at least 3 files on one side and more than half of the files it last synced (`kLargeDeleteMinimum`; renames are not counted). It returns `B_NOT_ALLOWED` with `pendingDeletes`; the window asks "Delete files" or "Cancel", and only a confirmed run goes ahead (`SetAllowLargeDelete`).
+- Downloads stream into `<file>.r5partial` through `BHttpSession::Execute()` with a `BFile` target (`HttpExchange::responseFile`, `CallIntoFile()`), and are moved onto the file only for a 2xx status. An error page is read back up to 1 MiB. The conflict copy is streamed in 64 KiB blocks.
+- `SyncEngine::SetStopFlag()`: the window's stop flag is checked between files; a stopped run returns `B_CANCELED` and keeps the previous state file. The Retry-After wait sleeps in 200 ms steps and stops with it.
+- Sign-in keeps the loopback port open until a connection brings the code with the right state. A connection that stays silent for 5 seconds (`kLoopbackIdleLimit`) gets `B_TIMED_OUT` and is dropped.
+- A "Sync with" menu chooses OneDrive or Dropbox.
+
+Not changed: tokens stay in memory; nothing was tested against Microsoft or Dropbox; the host tests still use the stand-ins in `host/include`, not Haiku's own kits.
+
+Tested: the host tests (`host/run-host-tests.sh`, WSL) pass, with new tests for the large-delete check (an emptied folder is refused, a rename of every file is not, a confirmed run deletes), a stop that keeps the state file, and a silent loopback connection followed by the real one. `scripts/build-locked.sh` from this branch: `jam_exit=0`, `mesa_exit=0`, `OnlineStorage` linked, no warnings in the app. Not booted; the window, the streamed download and the confirmation dialog have not run on R5.
+
 ## 2026-11-23 - Online Storage, standalone app (not in the image)
 
 Problem: there was no way to sign in to OneDrive or Dropbox and keep one cloud folder and one home folder in step, both ways.
