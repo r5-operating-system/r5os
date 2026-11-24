@@ -16,3 +16,6 @@
 echo "R5: removing Haiku's system package repository from the image"
 $rm -f "${tPrefix}system/settings/package-repositories/Haiku"
 $rm -f "${tPrefix}system/cache/package-repositories/Haiku"
+
+echo "R5: creating /boot/home/Shared"
+$mkdir -p "${tPrefix}home/Shared"

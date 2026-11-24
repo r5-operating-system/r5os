@@ -571,6 +571,18 @@ def install_rtsx() -> None:
         raise SystemExit(f"{jam}: rtsx SubInclude is not there exactly once")
 
 
+def install_bfs_sticky() -> None:
+    """Enforce POSIX S_ISVTX (sticky bit) on BFS unlink, rmdir, and rename
+    for /boot/home/Shared (mode 1777)."""
+    root = pathlib.Path(__file__).resolve().parents[1]
+    for relative in (
+        "src/add-ons/kernel/file_systems/bfs/Inode.cpp",
+        "src/add-ons/kernel/file_systems/bfs/kernel_interface.cpp",
+    ):
+        install_file(root / "distro/kernel" / relative, HAIKU / relative,
+            "bfs sticky")
+
+
 def main() -> int:
     install_smp_boot()
     install_kernel_sources()
@@ -579,6 +591,7 @@ def main() -> int:
     install_gpio()
     install_efi_runtime()
     install_rtsx()
+    install_bfs_sticky()
     # i2c_hid (RenkuOS b37a078925) and x86_acpi_cstates (air/OS 2c48d1ae0)
     # are listed in the native build/jam/packages/Haiku in distro/desktop.
     return 0

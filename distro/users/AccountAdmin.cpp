@@ -35,6 +35,7 @@
 #include <limits.h>
 #include <pwd.h>
 #include <shadow.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -47,10 +48,13 @@
 
 const char* kR5LoginSignature = "application/x-vnd.Haiku-Login";
 const char* kAdminGroupName = "admin";
+const char* kGuestAccountName = "guest";
+const char* kGuestHomePath = "/boot/home/users/guest";
 
 static const char* kHome = "/boot/home";
 static const char* kUsersRoot = "/boot/home/users";
 static const char* kSessionPath = "/boot/system/settings/r5-desktop-session";
+static const char* kGuestEnabledPath = "/boot/system/settings/r5-guest-enabled";
 static const char* kSystemRootName = "root";
 
 
@@ -69,6 +73,13 @@ group_has_member(const char* groupName, const char* user)
 
 
 bool
+is_guest_account(const char* name)
+{
+	return name != NULL && strcmp(name, kGuestAccountName) == 0;
+}
+
+
+bool
 is_listed_account(const struct passwd* pwd)
 {
 	if (pwd == NULL || pwd->pw_name == NULL || pwd->pw_name[0] == '\0')
@@ -76,7 +87,8 @@ is_listed_account(const struct passwd* pwd)
 	if (strcmp(pwd->pw_name, "sshd") == 0
 		|| strcmp(pwd->pw_name, "ftp") == 0
 		|| strcmp(pwd->pw_name, "nobody") == 0
-		|| strcmp(pwd->pw_name, "root") == 0)
+		|| strcmp(pwd->pw_name, "root") == 0
+		|| strcmp(pwd->pw_name, kGuestAccountName) == 0)
 		return false;
 
 	const char* home = pwd->pw_dir;
@@ -563,6 +575,18 @@ chown_tree(const char* path, uid_t uid, gid_t gid, dev_t homeDevice)
 		snprintf(child, sizeof(child), "%s/%s", path, entry->d_name);
 		if (is_other_person_home(child))
 			continue;
+		if (strcmp(child, kSharedFolderPath) == 0) {
+			// Own /boot/home/Shared itself by the first administrator so the
+			// sticky bit lets them delete any file, but never chown files inside.
+			struct stat sharedStat;
+			if (lstat(child, &sharedStat) == 0 && S_ISDIR(sharedStat.st_mode)
+				&& !S_ISLNK(sharedStat.st_mode)
+				&& sharedStat.st_dev == homeDevice) {
+				lchown(child, uid, gid);
+				chmod(child, 01777);
+			}
+			continue;
+		}
 		chown_tree(child, uid, gid, homeDevice);
 	}
 	closedir(dir);
@@ -587,6 +611,14 @@ ensure_desktop_links(const char* home)
 	if (home == NULL)
 		return;
 	ensure_desktop_link(home, "Home", home);
+	ensure_desktop_link(home, "Shared", kSharedFolderPath);
+	if (strcmp(home, kHome) != 0) {
+		BString homeShared;
+		homeShared.SetToFormat("%s/Shared", home);
+		struct stat st;
+		if (lstat(homeShared.String(), &st) != 0)
+			symlink(kSharedFolderPath, homeShared.String());
+	}
 }
 
 
@@ -890,6 +922,7 @@ migrate_admin_off_root()
 	ensure_person_dirs(newUid, newGid);
 	adopt_trash(newUid, newGid);
 	lock_private_homes();
+	ensure_shared_folder();
 	return B_OK;
 }
 
@@ -915,13 +948,15 @@ write_desktop_session(const char* login)
 		return B_PERMISSION_DENIED;
 	if (login == NULL || login[0] == '\0')
 		return B_BAD_VALUE;
-	if (is_disabled_user(login))
+	bool guestAllowed = is_guest_account(login) && is_guest_enabled();
+	if (!guestAllowed && is_disabled_user(login))
 		return B_NOT_ALLOWED;
 
 	struct passwd* pwd = getpwnam(login);
 	if (pwd == NULL || strcmp(pwd->pw_name, login) != 0)
 		return ENOENT;
-	if (!is_listed_account(pwd) || !is_session_home(pwd))
+	bool allowedAccount = is_listed_account(pwd) || guestAllowed;
+	if (!allowedAccount || !is_session_home(pwd))
 		return B_NOT_ALLOWED;
 	if (pwd->pw_uid == 0)
 		return B_NOT_ALLOWED;
@@ -964,6 +999,308 @@ write_desktop_session(const char* login)
 		return errno;
 
 	lock_private_homes();
+	ensure_shared_folder();
+	return B_OK;
+}
+
+
+bool
+is_guest_enabled()
+{
+	FILE* file = fopen(kGuestEnabledPath, "r");
+	if (file == NULL)
+		return false;
+	char buf[16];
+	bool enabled = false;
+	if (fgets(buf, sizeof(buf), file) != NULL)
+		enabled = (buf[0] == '1');
+	fclose(file);
+	return enabled;
+}
+
+
+status_t
+ensure_shared_folder()
+{
+	if (geteuid() != 0)
+		return B_PERMISSION_DENIED;
+
+	struct stat st;
+	if (lstat(kSharedFolderPath, &st) != 0) {
+		if (mkdir(kSharedFolderPath, 01777) != 0 && errno != EEXIST)
+			return errno;
+		if (lstat(kSharedFolderPath, &st) != 0)
+			return errno;
+	}
+	if (!S_ISDIR(st.st_mode) || S_ISLNK(st.st_mode))
+		return B_NOT_A_DIRECTORY;
+
+	int fd = open(kSharedFolderPath, O_RDONLY | O_DIRECTORY | O_NOFOLLOW
+		| O_CLOEXEC);
+	if (fd < 0)
+		return errno;
+	struct stat fstatBuf;
+	if (fstat(fd, &fstatBuf) != 0 || !S_ISDIR(fstatBuf.st_mode)) {
+		close(fd);
+		return B_NOT_A_DIRECTORY;
+	}
+
+	uid_t ownerUid = 0;
+	gid_t ownerGid = 0;
+	setpwent();
+	for (;;) {
+		struct passwd* pwd = getpwent();
+		if (pwd == NULL)
+			break;
+		if (is_first_home_admin(pwd) && pwd->pw_uid >= kMinPersonUid) {
+			ownerUid = pwd->pw_uid;
+			ownerGid = pwd->pw_gid;
+			break;
+		}
+	}
+	endpwent();
+
+	fchown(fd, ownerUid, ownerGid);
+	fchmod(fd, 01777);
+	close(fd);
+
+	struct stat desktopStat;
+	if (lstat("/boot/home/Desktop", &desktopStat) == 0
+		&& S_ISDIR(desktopStat.st_mode)) {
+		ensure_desktop_link(kHome, "Shared", kSharedFolderPath);
+	}
+	return B_OK;
+}
+
+
+status_t
+ensure_guest_account(BString& error)
+{
+	if (geteuid() != 0) {
+		error = "Guest account setup requires the sign-in helper.";
+		return B_PERMISSION_DENIED;
+	}
+
+	struct passwd* pwd = getpwnam(kGuestAccountName);
+	if (pwd != NULL) {
+		if (pwd->pw_uid < kMinPersonUid || pwd->pw_uid == 0
+			|| pwd->pw_dir == NULL
+			|| strcmp(pwd->pw_dir, kGuestHomePath) != 0) {
+			error = "The existing guest account has an unexpected setup.";
+			return B_NOT_ALLOWED;
+		}
+		// Never allow guest in admin or wheel, and keep shadow locked so only
+		// LoginApp::ValidateLogin() (when enabled) can start a guest session.
+		BString detail;
+		remove_from_group(kAdminGroupName, kGuestAccountName, detail);
+		remove_from_group("wheel", kGuestAccountName, detail);
+		if (!is_disabled_user(kGuestAccountName))
+			set_shadow_password(kGuestAccountName, "!");
+		return B_OK;
+	}
+
+	uid_t uid = (getpwuid(kGuestUid) == NULL) ? kGuestUid
+		: first_free_person_uid();
+	gid_t gid = users_gid();
+	// Lock the shadow entry ("!") so su/login/sshd cannot authenticate as
+	// guest without a password; LoginApp::ValidateLogin() gates guest sign-in.
+	status_t status = add_unix_user(kGuestAccountName, uid, gid,
+		kGuestHomePath, "/bin/sh", "Guest", "!");
+	if (status != B_OK) {
+		error = "Could not create the guest account.";
+		return status;
+	}
+	endpwent();
+	return B_OK;
+}
+
+
+static void
+kill_guest_teams(uid_t guestUid)
+{
+	if (guestUid < kMinPersonUid || guestUid == 0)
+		return;
+	bool any = false;
+	int32 cookie = 0;
+	team_info info;
+	while (get_next_team_info(&cookie, &info) == B_OK) {
+		if (info.uid == guestUid && info.team > 0) {
+			send_signal(info.team, SIGTERM);
+			any = true;
+		}
+	}
+	if (!any)
+		return;
+	snooze(500000);
+	cookie = 0;
+	while (get_next_team_info(&cookie, &info) == B_OK) {
+		if (info.uid == guestUid && info.team > 0)
+			send_signal(info.team, SIGKILL);
+	}
+	snooze(200000);
+}
+
+
+static status_t
+remove_dir_contents_nofollow(int dirFd, dev_t rootDev)
+{
+	int dupFd = dup(dirFd);
+	if (dupFd < 0)
+		return errno;
+	DIR* dir = fdopendir(dupFd);
+	if (dir == NULL) {
+		int err = errno;
+		close(dupFd);
+		return err;
+	}
+
+	status_t result = B_OK;
+	while (struct dirent* entry = readdir(dir)) {
+		if (strcmp(entry->d_name, ".") == 0
+			|| strcmp(entry->d_name, "..") == 0)
+			continue;
+
+		struct stat st;
+		if (fstatat(dirFd, entry->d_name, &st, AT_SYMLINK_NOFOLLOW) != 0) {
+			if (errno != ENOENT && result == B_OK)
+				result = errno;
+			continue;
+		}
+		// Never follow symlinks or cross mount points out of the guest home.
+		if (S_ISDIR(st.st_mode) && !S_ISLNK(st.st_mode)) {
+			if (st.st_dev != rootDev)
+				continue;
+			int subFd = openat(dirFd, entry->d_name,
+				O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+			if (subFd < 0) {
+				if (errno != ENOENT && result == B_OK)
+					result = errno;
+				continue;
+			}
+			struct stat subStat;
+			if (fstat(subFd, &subStat) != 0 || subStat.st_dev != rootDev) {
+				close(subFd);
+				if (result == B_OK)
+					result = B_NOT_ALLOWED;
+				continue;
+			}
+			status_t subStatus = remove_dir_contents_nofollow(subFd, rootDev);
+			close(subFd);
+			if (subStatus != B_OK && result == B_OK)
+				result = subStatus;
+			if (unlinkat(dirFd, entry->d_name, AT_REMOVEDIR) != 0
+				&& errno != ENOENT && result == B_OK) {
+				result = errno;
+			}
+		} else {
+			if (unlinkat(dirFd, entry->d_name, 0) != 0
+				&& errno != ENOENT && result == B_OK) {
+				result = errno;
+			}
+		}
+	}
+	closedir(dir);
+	return result;
+}
+
+
+status_t
+wipe_guest_home()
+{
+	if (geteuid() != 0)
+		return B_PERMISSION_DENIED;
+
+	struct passwd* pwd = getpwnam(kGuestAccountName);
+	if (pwd == NULL)
+		return B_OK;
+	if (strcmp(pwd->pw_name, kGuestAccountName) != 0
+		|| pwd->pw_uid < kMinPersonUid || pwd->pw_uid == 0
+		|| pwd->pw_dir == NULL
+		|| strcmp(pwd->pw_dir, kGuestHomePath) != 0) {
+		syslog(LOG_ERR, "Login: refusing to wipe guest home (invalid passwd)");
+		return B_NOT_ALLOWED;
+	}
+
+	uid_t guestUid = pwd->pw_uid;
+	gid_t guestGid = pwd->pw_gid;
+
+	// Stop any leftover background processes owned by guest before wiping.
+	kill_guest_teams(guestUid);
+
+	struct stat st;
+	if (lstat(kGuestHomePath, &st) == 0) {
+		if (!S_ISDIR(st.st_mode) || S_ISLNK(st.st_mode)) {
+			syslog(LOG_ERR,
+				"Login: refusing to wipe %s (not a real directory)",
+				kGuestHomePath);
+			return B_NOT_ALLOWED;
+		}
+		if (st.st_uid != guestUid && st.st_uid != 0) {
+			syslog(LOG_ERR,
+				"Login: refusing to wipe %s (unexpected owner uid %d)",
+				kGuestHomePath, (int)st.st_uid);
+			return B_NOT_ALLOWED;
+		}
+		int fd = open(kGuestHomePath,
+			O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+		if (fd < 0)
+			return errno;
+		struct stat fstatBuf;
+		if (fstat(fd, &fstatBuf) != 0 || fstatBuf.st_ino != st.st_ino
+			|| fstatBuf.st_dev != st.st_dev) {
+			close(fd);
+			return B_NOT_ALLOWED;
+		}
+		status_t wipeStatus = remove_dir_contents_nofollow(fd,
+			fstatBuf.st_dev);
+		close(fd);
+		if (wipeStatus != B_OK) {
+			syslog(LOG_ERR, "Login: guest wipe failed: %s",
+				strerror(wipeStatus));
+			return wipeStatus;
+		}
+		if (rmdir(kGuestHomePath) != 0 && errno != ENOENT) {
+			status_t err = errno;
+			syslog(LOG_ERR, "Login: rmdir %s failed: %s", kGuestHomePath,
+				strerror(err));
+			return err;
+		}
+	}
+
+	return create_home(kGuestHomePath, guestUid, guestGid);
+}
+
+
+static status_t
+set_guest_enabled(bool enabled, BString& error)
+{
+	if (geteuid() != 0) {
+		error = "Guest setting requires the sign-in helper.";
+		return B_PERMISSION_DENIED;
+	}
+	if (enabled) {
+		status_t status = ensure_guest_account(error);
+		if (status != B_OK)
+			return status;
+	}
+	FILE* file = fopen(kGuestEnabledPath, "w");
+	if (file == NULL) {
+		error = "Could not save the guest setting.";
+		return errno;
+	}
+	if (fprintf(file, "%d\n", enabled ? 1 : 0) < 0) {
+		fclose(file);
+		error = "Could not save the guest setting.";
+		return EIO;
+	}
+	if (fclose(file) != 0) {
+		error = "Could not save the guest setting.";
+		return errno;
+	}
+	chmod(kGuestEnabledPath, 0644);
+	chown(kGuestEnabledPath, 0, 0);
+	if (enabled)
+		wipe_guest_home();
 	return B_OK;
 }
 
@@ -2070,6 +2407,10 @@ handle_admin_message(BMessage* request, BMessage& reply)
 			list_accounts(request, reply);
 			reply.AddInt32("error", B_OK);
 			return B_OK;
+		case kMsgAdminGetGuestEnabled:
+			reply.AddBool("enabled", is_guest_enabled());
+			reply.AddInt32("error", B_OK);
+			return B_OK;
 		case kMsgAdminSetProfile:
 			status = update_profile(request, error);
 			if (status != B_OK) {
@@ -2169,6 +2510,12 @@ handle_admin_message(BMessage* request, BMessage& reply)
 			const char* name = NULL;
 			request->FindString("name", &name);
 			status = set_account_type(name, request->GetBool("admin", false),
+				error);
+			break;
+		}
+		case kMsgAdminSetGuestEnabled:
+		{
+			status = set_guest_enabled(request->GetBool("enabled", false),
 				error);
 			break;
 		}

@@ -388,23 +388,41 @@ B_TRANSLATE_MARK_VOID("About R5")
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-	item = new BMenuItem(B_TRANSLATE("Lock screen"),
-		new BMessage(kLockSession));
-	item->SetEnabled(!dragging);
-	item->SetTarget(be_app);
-	AddItem(item);
-
-	BString logoutLabel(B_TRANSLATE("Log out"));
 	struct passwd* sessionUser = getpwuid(getuid());
-	if (sessionUser != NULL && sessionUser->pw_name != NULL
-		&& sessionUser->pw_name[0] != '\0') {
-		logoutLabel << ' ' << sessionUser->pw_name;
+	bool isGuest = sessionUser != NULL && sessionUser->pw_name != NULL
+		&& strcmp(sessionUser->pw_name, "guest") == 0;
+
+	if (isGuest) {
+		item = new BMenuItem(B_TRANSLATE("Shared folder"),
+			new BMessage(kOpenSharedFolder));
+		item->SetEnabled(!dragging);
+		item->SetTarget(be_app);
+		AddItem(item);
+
+		item = new BMenuItem(
+			B_TRANSLATE("Log out Guest and delete files" B_UTF8_ELLIPSIS),
+			new BMessage(kLogoutSession));
+		item->SetEnabled(!dragging);
+		item->SetTarget(be_app);
+		AddItem(item);
+	} else {
+		item = new BMenuItem(B_TRANSLATE("Lock screen"),
+			new BMessage(kLockSession));
+		item->SetEnabled(!dragging);
+		item->SetTarget(be_app);
+		AddItem(item);
+
+		BString logoutLabel(B_TRANSLATE("Log out"));
+		if (sessionUser != NULL && sessionUser->pw_name != NULL
+			&& sessionUser->pw_name[0] != '\0') {
+			logoutLabel << ' ' << sessionUser->pw_name;
+		}
+		item = new BMenuItem(logoutLabel.String(),
+			new BMessage(kLogoutSession));
+		item->SetEnabled(!dragging);
+		item->SetTarget(be_app);
+		AddItem(item);
 	}
-	item = new BMenuItem(logoutLabel.String(),
-		new BMessage(kLogoutSession));
-	item->SetEnabled(!dragging);
-	item->SetTarget(be_app);
-	AddItem(item);
 
 	// Same words as the shutdown question (Haiku #18667).
 	BMenu* shutdownMenu = new BMenu(B_TRANSLATE("Shut down" B_UTF8_ELLIPSIS));
@@ -509,6 +527,7 @@ TDeskbarMenu::ResetTargets()
 // SPDX-License-Identifier: MIT
 				case kLogoutSession:
 				case kLockSession:
+				case kOpenSharedFolder:
 // SPDX-SnippetEnd
 				case kRealignReplicants:
 				case kShowHideTime:

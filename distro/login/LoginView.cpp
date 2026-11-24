@@ -117,6 +117,119 @@ private:
 };
 
 
+class GuestNoteView : public BView {
+public:
+	GuestNoteView(const char* text)
+		:
+		BView("guestNote", B_WILL_DRAW | B_FULL_UPDATE_ON_RESIZE),
+		fText(text)
+	{
+		BFont font = font_px(be_plain_font, 12.0f);
+		SetFont(&font);
+		SetFlags(Flags() | B_SUPPORTS_LAYOUT);
+		SetViewColor(B_TRANSPARENT_COLOR);
+	}
+
+	virtual void Draw(BRect updateRect)
+	{
+		(void)updateRect;
+		BRect bounds = Bounds();
+		rgb_color doc = ui_color(B_DOCUMENT_BACKGROUND_COLOR);
+		rgb_color fill = mix_color(doc, ui_color(B_WINDOW_TAB_COLOR), 60);
+		rgb_color border = mix_color(fill, ui_color(B_WINDOW_TAB_COLOR), 160);
+		float radius = floorf(px(6));
+
+		SetHighColor(fill);
+		FillRoundRect(bounds, radius, radius);
+		SetHighColor(border);
+		StrokeRoundRect(bounds, radius, radius);
+
+		BFont font;
+		GetFont(&font);
+		font_height fh;
+		font.GetHeight(&fh);
+		float lineH = ceilf(fh.ascent + fh.descent + fh.leading) + 2;
+		float padX = px(12);
+		float padY = px(10);
+		float avail = bounds.Width() - padX * 2;
+
+		SetHighColor(ui_color(B_DOCUMENT_TEXT_COLOR));
+		SetLowColor(fill);
+		SetDrawingMode(B_OP_OVER);
+		BString lines[6];
+		int32 count = _Wrap(avail, lines, 6);
+		float y = padY + fh.ascent;
+		for (int32 i = 0; i < count; i++) {
+			DrawString(lines[i].String(), BPoint(padX, y));
+			y += lineH;
+		}
+		SetDrawingMode(B_OP_COPY);
+	}
+
+	virtual BSize MinSize()
+	{
+		return PreferredSize();
+	}
+
+	virtual BSize MaxSize()
+	{
+		return BSize(B_SIZE_UNLIMITED, PreferredSize().height);
+	}
+
+	virtual BSize PreferredSize()
+	{
+		float w = px(376);
+		BFont font;
+		GetFont(&font);
+		font_height fh;
+		font.GetHeight(&fh);
+		float lineH = ceilf(fh.ascent + fh.descent + fh.leading) + 2;
+		BString lines[6];
+		int32 count = _Wrap(w - px(24), lines, 6);
+		return BSize(w, ceilf(px(20) + count * lineH));
+	}
+
+private:
+	int32 _Wrap(float maxWidth, BString* out, int32 maxLines) const
+	{
+		if (maxWidth < 40)
+			maxWidth = 40;
+		BFont font;
+		GetFont(&font);
+		int32 count = 0;
+		const char* p = fText.String();
+		while (*p != '\0' && count < maxLines) {
+			while (*p == ' ')
+				p++;
+			if (*p == '\0')
+				break;
+			BString line;
+			while (*p != '\0') {
+				const char* wordEnd = p;
+				while (*wordEnd != '\0' && *wordEnd != ' ')
+					wordEnd++;
+				BString candidate(line);
+				if (candidate.Length() > 0)
+					candidate << ' ';
+				candidate.Append(p, wordEnd - p);
+				if (line.Length() > 0
+					&& font.StringWidth(candidate.String()) > maxWidth) {
+					break;
+				}
+				line = candidate;
+				p = wordEnd;
+				while (*p == ' ')
+					p++;
+			}
+			out[count++] = line;
+		}
+		return count > 0 ? count : 1;
+	}
+
+	BString			fText;
+};
+
+
 static bool
 is_valid_shell(const struct passwd* pwd)
 {
@@ -159,6 +272,8 @@ LoginView::LoginView()
 	fActiveBadge(NULL),
 	fPasswordLabel(NULL),
 	fPasswordControl(NULL),
+	fPasswordGroup(NULL),
+	fGuestNote(NULL),
 	fLoginButton(NULL),
 	fInfoView(NULL),
 	fInfoIsError(false),
@@ -292,16 +407,25 @@ LoginView::LoginView()
 	// The password field keeps room for its focus ring around the field.
 	// The button is inset by the same ring so both line up.
 	float ring = floorf(px(2) + 0.5f);
+	fPasswordGroup = new BGroupView(B_VERTICAL, px(5) - ring);
+	fPasswordGroup->SetViewUIColor(document);
+	BLayoutBuilder::Group<>(fPasswordGroup)
+		.Add(fPasswordLabel)
+		.Add(fPasswordControl);
+
+	fGuestNote = new GuestNoteView(
+		"Everything you make as Guest is deleted when you log out. "
+		"Save what you want to keep on a USB stick or in the Shared folder.");
+	fGuestNote->Hide();
+
 	BGroupLayout* formLayout = (BGroupLayout*)fFormCard->GetLayout();
 	formLayout->SetSpacing(px(12));
 	BLayoutBuilder::Group<>(formLayout)
 		.SetInsets(px(16), px(16), px(16), px(16))
 		.Add(fSingleBanner)
 		.Add(fActiveLine)
-		.AddGroup(B_VERTICAL, px(5) - ring)
-			.Add(fPasswordLabel)
-			.Add(fPasswordControl)
-		.End()
+		.Add(fPasswordGroup)
+		.Add(fGuestNote)
 		.AddGroup(B_VERTICAL, 0)
 			.SetInsets(ring, 0, ring, 0)
 			.Add(fLoginButton)
@@ -502,6 +626,14 @@ LoginView::_FillUsers()
 	}
 	endpwent();
 
+	if (is_guest_enabled()) {
+		AccountInfo guest;
+		guest.login = kGuestAccountName;
+		guest.displayName = "Guest";
+		guest.role = "No password";
+		accounts.push_back(guest);
+	}
+
 	while (fUserCardsGrid->CountChildren() > 0) {
 		BView* child = fUserCardsGrid->ChildAt(0);
 		fUserCardsGrid->RemoveChild(child);
@@ -602,14 +734,26 @@ LoginView::_ShowSelected(const char* login, const char* displayName,
 	badge.SetToFormat("@%s", login);
 	fActiveBadge->SetText(badge.String());
 
+	bool guest = is_guest_account(login);
+	_SetVisible(fPasswordGroup, !guest);
+	_SetVisible(fGuestNote, guest);
+	fLoginButton->SetLabel(guest ? "Sign in as Guest" : "Sign in");
+
 	_ApplyColors();
 
 	fPasswordControl->SetText("");
 	BString ready;
-	ready.SetToFormat("Ready to sign in as %s", display);
+	if (guest)
+		ready = "Ready to sign in as Guest";
+	else
+		ready.SetToFormat("Ready to sign in as %s", display);
 	_SetFeedback(ready.String(), false);
-	if (Window() != NULL && !Window()->IsHidden())
-		fPasswordControl->MakeFocus(true);
+	if (Window() != NULL && !Window()->IsHidden()) {
+		if (guest)
+			fLoginButton->MakeFocus(true);
+		else
+			fPasswordControl->MakeFocus(true);
+	}
 }
 
 
@@ -632,7 +776,8 @@ LoginView::_AttemptLogin()
 		return;
 	}
 
-	const char* password = fPasswordControl->Text();
+	const char* password = is_guest_account(fSelectedLogin.String())
+		? "" : fPasswordControl->Text();
 	if (password == NULL)
 		password = "";
 
@@ -641,7 +786,8 @@ LoginView::_AttemptLogin()
 	message->AddString("password", password);
 	fPasswordControl->SetText("");
 	_EnableControls(false);
-	_SetFeedback("Checking\xe2\x80\xa6", false);
+	_SetFeedback(is_guest_account(fSelectedLogin.String())
+		? "Signing in as Guest\xe2\x80\xa6" : "Checking\xe2\x80\xa6", false);
 	be_app->PostMessage(message, NULL, this);
 }
 // SPDX-SnippetEnd

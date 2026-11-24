@@ -23,6 +23,7 @@
 
 static const char* kHome = "/boot/home";
 static const char* kUsers = "/boot/home/users";
+static const char* kShared = "/boot/home/Shared";
 
 
 static void
@@ -57,7 +58,8 @@ lock_private_homes()
 	while (struct dirent* entry = readdir(dir)) {
 		if (strcmp(entry->d_name, ".") == 0
 			|| strcmp(entry->d_name, "..") == 0
-			|| strcmp(entry->d_name, "users") == 0)
+			|| strcmp(entry->d_name, "users") == 0
+			|| strcmp(entry->d_name, "Shared") == 0)
 			continue;
 
 		char path[PATH_MAX];
@@ -69,6 +71,13 @@ lock_private_homes()
 		lock_entry(path, S_ISDIR(st.st_mode) ? 0700 : 0600, homeStat.st_dev);
 	}
 	closedir(dir);
+
+	struct stat sharedStat;
+	if (lstat(kShared, &sharedStat) == 0 && S_ISDIR(sharedStat.st_mode)
+		&& !S_ISLNK(sharedStat.st_mode)
+		&& sharedStat.st_dev == homeStat.st_dev) {
+		chmod(kShared, 01777);
+	}
 
 	chmod(kUsers, 0755);
 

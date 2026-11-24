@@ -202,6 +202,8 @@ LoginApp::_AdminRequest(BMessage* request, const r5_admin_sender& sender,
 		case kMsgAdminSetProfile:
 		case kMsgAdminListAccounts:
 		case kMsgAdminSetAccountType:
+		case kMsgAdminGetGuestEnabled:
+		case kMsgAdminSetGuestEnabled:
 			handle_admin_message(request, *reply);
 			break;
 		case kMsgAdminSetDriverBlocked:
@@ -210,6 +212,33 @@ LoginApp::_AdminRequest(BMessage* request, const r5_admin_sender& sender,
 		case kMsgAdminSetDriverSetting:
 			handle_driver_settings_admin_message(request, *reply);
 			break;
+		case kLogoutAction:
+		case kLockAction:
+		{
+			BString sessionUser;
+			bool hasSession = signed_in_name(sessionUser) == B_OK;
+			bool allowed = (sender.uid == 0);
+			if (!allowed && hasSession) {
+				struct passwd* pwd = getpwnam(sessionUser.String());
+				if (pwd != NULL && pwd->pw_uid == sender.uid)
+					allowed = true;
+			}
+			if (!allowed) {
+				reply->AddString("text", "Only the signed-in session may "
+					"lock or log out.");
+				reply->AddInt32("error", B_PERMISSION_DENIED);
+				break;
+			}
+			if (request->what == kLockAction && hasSession
+				&& is_guest_account(sessionUser.String())) {
+				reply->AddString("text", "Guest sessions cannot be locked.");
+				reply->AddInt32("error", B_NOT_ALLOWED);
+				break;
+			}
+			reply->AddInt32("error", B_OK);
+			app->PostMessage(request->what);
+			break;
+		}
 		default:
 			reply->AddString("text", "Unknown request.");
 			reply->AddInt32("error", B_BAD_VALUE);
@@ -240,6 +269,12 @@ LoginApp::ReadyToRun()
 	}
 
 	lock_private_homes();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	ensure_shared_folder();
+	wipe_guest_home();
+// SPDX-SnippetEnd
 	refresh_machine_settings_access();
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
@@ -340,6 +375,8 @@ LoginApp::MessageReceived(BMessage* message)
 // SPDX-License-Identifier: MIT
 		case kMsgAdminListAccounts:
 		case kMsgAdminSetAccountType:
+		case kMsgAdminGetGuestEnabled:
+		case kMsgAdminSetGuestEnabled:
 // SPDX-SnippetEnd
 			// New account messages must be listed here. An unhandled
 			// message still gets an empty reply, and Users treats a missing
@@ -400,6 +437,12 @@ LoginApp::TryLogin(BMessage* message)
 		status = ValidateLogin(login, password);
 		if (status == B_OK) {
 			status = migrate_admin_off_root();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			if (status == B_OK && is_guest_account(login))
+				status = wipe_guest_home();
+// SPDX-SnippetEnd
 			bool wroteSession = false;
 			if (status == B_OK) {
 				status = write_desktop_session(login);
@@ -500,6 +543,13 @@ LoginApp::Lock()
 	BString name;
 	if (signed_in_name(name) != B_OK)
 		return;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// The guest has no password; never lock a guest session (#72).
+	if (is_guest_account(name.String()))
+		return;
+// SPDX-SnippetEnd
 
 	if (fLockWindow != NULL) {
 		if (fLockWindow->Lock()) {
@@ -567,6 +617,13 @@ LoginApp::Logout()
 	// reply; launch_daemon user is the team in the crash dialog, and while
 	// it sits in the debugger that reply never comes.
 	_CloseLock();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	BString loggedOutName;
+	bool wasGuest = signed_in_name(loggedOutName) == B_OK
+		&& is_guest_account(loggedOutName.String());
+// SPDX-SnippetEnd
 	r5_session_log("logout");
 	clear_admin_grants();
 	clear_desktop_session();
@@ -584,6 +641,14 @@ LoginApp::Logout()
 // SPDX-SnippetEnd
 	_WaitGone("application/x-vnd.Be-TRAK");
 	_WaitGone("application/x-vnd.Be-TSKB");
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (wasGuest) {
+		r5_session_log("wipe guest home");
+		wipe_guest_home();
+	}
+// SPDX-SnippetEnd
 	_ShowLogin();
 	r5_session_log("logout done");
 }
@@ -592,6 +657,19 @@ LoginApp::Logout()
 status_t
 LoginApp::ValidateLogin(const char* login, const char* password)
 {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (is_guest_account(login)) {
+		if (!is_guest_enabled())
+			return B_NOT_ALLOWED;
+		BString error;
+		status_t status = ensure_guest_account(error);
+		if (status != B_OK)
+			return status;
+		return B_OK;
+	}
+// SPDX-SnippetEnd
 	struct passwd* pwd = getpwnam(login);
 	if (pwd == NULL || strcmp(pwd->pw_name, login) != 0)
 		return ENOENT;
