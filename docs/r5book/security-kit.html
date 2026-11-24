@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<!--
+  SPDX-FileCopyrightText: 2026 R5OS Contributors
+  SPDX-License-Identifier: MIT
+-->
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Security Kit</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
+	<link rel="stylesheet" href="r5book.css" />
+</head>
+<body data-page="security">
+
+<div class="book">
+	<aside class="toc"></aside>
+
+	<main class="page">
+		<div class="breadcrumb"><a href="index.html">R5Book</a> &rsaquo; <a href="index.html#kits">Kits</a> &rsaquo; Security Kit</div>
+
+		<section class="page-hero">
+			<span class="kit-label">libr5security.so</span>
+			<h1>The Security Kit</h1>
+			<p>Password hashing, key derivation, authenticated encryption, wiped secret memory, and
+			cryptographic random bytes in BeOS style. All classes live in
+			<code class="inline">namespace BSecurityKit</code> and wrap unmodified
+			<strong>Monocypher 4.0.2</strong> (CC0-1.0) with no custom cryptographic primitives.</p>
+		</section>
+
+		<nav class="on-this-page" aria-label="On this page">
+			<h3>What is in this page</h3>
+			<ul>
+				<li><a href="#BSecureBuffer">BSecureBuffer</a> &mdash; Secret memory wiped on clear and destruction.</li>
+				<li><a href="#BRandom">BRandom</a> &mdash; Cryptographically strong random bytes.</li>
+				<li><a href="#BPasswordHash">BPasswordHash</a> &mdash; Argon2id key derivation and PHC password hashes.</li>
+				<li><a href="#BSealedData">BSealedData</a> &mdash; XChaCha20-Poly1305 authenticated encryption for buffers and files.</li>
+				<li><a href="#format">R5SD wire format</a> &mdash; Header, nonce, MAC, and associated data layout.</li>
+				<li><a href="#example">Example</a> &mdash; Deriving a key, sealing a secret, and opening it back.</li>
+			</ul>
+		</nav>
+
+		<table class="facts">
+			<tr><th>Declared in</th><td>&lt;R5Security.h&gt; (namespace BSecurityKit)</td></tr>
+			<tr><th>Library</th><td>libr5security.so (link be and libr5security.so), in the regular and the minimum image</td></tr>
+			<tr><th>Source</th><td>distro/security (MIT), wrapping distro/security/monocypher (Monocypher 4.0.2, CC0-1.0)</td></tr>
+			<tr><th>Contract</th><td>docs/LIBR5.md, "Security Kit"</td></tr>
+		</table>
+
+		<div class="note"><strong>Key storage stays BKeyStore.</strong> To store application passwords or
+		tokens for the signed-in account, continue to use Haiku's <code class="inline">BKeyStore</code>
+		(<code class="inline">&lt;KeyStore.h&gt;</code>). The Security Kit provides the cryptographic
+		building blocks underneath R5's keystore and sign-in password hashing, and is available to any
+		program that needs Argon2id or authenticated encryption.</div>
+
+		<section class="entry" id="BSecureBuffer">
+			<div class="entry-header"><h2>BSecureBuffer</h2><span class="kind">class</span></div>
+			<p>A non-copyable byte buffer for keys, passwords, and decrypted secrets. Every
+			<code class="inline">Wipe()</code>, <code class="inline">Clear()</code>, reallocation, and
+			destruction overwrites the buffer with Monocypher's <code class="inline">crypto_wipe()</code>
+			so the compiler cannot optimize the zeroing away.</p>
+			<div class="member"><div class="sig">BSecureBuffer();
+explicit BSecureBuffer(size_t size);</div>
+				<p>Creates an empty buffer or allocates <code class="inline">size</code> zeroed bytes.
+				Check <code class="inline">InitCheck()</code> after using the sized constructor.</p></div>
+			<div class="member"><div class="sig">status_t Allocate(size_t size);
+status_t SetTo(const void* data, size_t size);</div>
+				<p>Allocates a new buffer (zeroed for <code class="inline">Allocate</code>, copied from
+				<code class="inline">data</code> for <code class="inline">SetTo</code>), then wipes and
+				frees the previous contents. Passing <code class="inline">size == 0</code> clears the
+				buffer and returns <code class="inline">B_OK</code>.</p></div>
+			<div class="member"><div class="sig">void Wipe();
+void Clear();</div>
+				<p><code class="inline">Wipe()</code> zeroes the bytes in place while keeping the allocation.
+				<code class="inline">Clear()</code> wipes, frees, and resets size to 0.</p></div>
+			<div class="member"><div class="sig">uint8* Data();
+const uint8* Data() const;
+size_t Size() const;
+bool IsEmpty() const;</div>
+				<p>Access the raw bytes and size.</p></div>
+			<div class="member"><div class="sig">bool Equals(const BSecureBuffer&amp; other) const;</div>
+				<p>Constant-time byte comparison when sizes match. Returns <code class="inline">false</code>
+				when sizes differ.</p></div>
+			<div class="member"><div class="sig">static void WipeMemory(void* data, size_t size);</div>
+				<p>Wipes any caller-owned memory region (such as a stack password buffer) using
+				<code class="inline">crypto_wipe()</code>.</p></div>
+		</section>
+
+		<section class="entry" id="BRandom">
+			<div class="entry-header"><h2>BRandom</h2><span class="kind">class</span></div>
+			<p>Fills memory with cryptographically strong random bytes read from
+			<code class="inline">/dev/urandom</code> (<code class="inline">O_CLOEXEC</code>). Handles
+			<code class="inline">EINTR</code> and partial reads. On error it wipes the destination buffer
+			and returns <code class="inline">B_IO_ERROR</code> or <code class="inline">B_ERROR</code>;
+			it never falls back to <code class="inline">rand()</code>.</p>
+			<div class="member"><div class="sig">static status_t Fill(void* buffer, size_t size);
+static status_t Fill(BSecureBuffer&amp; buffer);
+static status_t Fill(BSecureBuffer&amp; buffer, size_t size);</div>
+				<p>Fills a raw buffer, an existing <code class="inline">BSecureBuffer</code>, or allocates
+				and fills a <code class="inline">BSecureBuffer</code> of <code class="inline">size</code>
+				bytes.</p></div>
+		</section>
+
+		<section class="entry" id="BPasswordHash">
+			<div class="entry-header"><h2>BPasswordHash</h2><span class="kind">class</span></div>
+			<p>Argon2id (<code class="inline">CRYPTO_ARGON2_ID</code>, RFC 9106) for both key derivation
+			and password storage. Default interactive parameters are
+			<code class="inline">memoryKiB = 65536</code> (64 MiB),
+			<code class="inline">passes = 3</code>, and <code class="inline">lanes = 1</code>. The
+			Argon2 work area is wiped before being freed.</p>
+			<div class="member"><div class="sig">struct Parameters { uint32 memoryKiB; uint32 passes; uint32 lanes; };
+static Parameters DefaultParameters();</div>
+				<p>Returns the default interactive cost parameters. Stored password hashes and protectors
+				record their own parameters so cost can be raised later without breaking existing data.</p></div>
+			<div class="member"><div class="sig">static status_t DeriveKey(const void* password, size_t passwordLength,
+    const void* salt, size_t saltLength, const Parameters&amp; params,
+    BSecureBuffer&amp; outKey, size_t outLength = kDefaultHashSize);</div>
+				<p>Derives <code class="inline">outLength</code> bytes (default 32) into
+				<code class="inline">outKey</code>. An overload also accepts optional
+				<code class="inline">secretKey</code> and <code class="inline">associatedData</code>.</p></div>
+			<div class="member"><div class="sig">static status_t Hash(const char* password, BString&amp; outEncoded,
+    const Parameters&amp; params = DefaultParameters());</div>
+				<p>Generates a 16-byte random salt and formats a standard PHC string:
+				<code class="inline">$argon2id$v=19$m=65536,t=3,p=1$&lt;salt&gt;$&lt;hash&gt;</code>
+				(unpadded standard Base64).</p></div>
+			<div class="member"><div class="sig">static status_t Verify(const char* password, const char* encoded, bool* _matches);</div>
+				<p>Strictly parses <code class="inline">encoded</code>, re-derives the digest, and compares
+				in constant time. Malformed strings return <code class="inline">B_BAD_DATA</code> and set
+				<code class="inline">*_matches = false</code>.</p></div>
+			<div class="member"><div class="sig">static bool NeedsRehash(const char* encoded,
+    const Parameters&amp; params = DefaultParameters());</div>
+				<p>Returns <code class="inline">true</code> when <code class="inline">encoded</code> is
+				not a valid Argon2id PHC string or uses weaker parameters than
+				<code class="inline">params</code>.</p></div>
+		</section>
+
+		<section class="entry" id="BSealedData">
+			<div class="entry-header"><h2>BSealedData</h2><span class="kind">class</span></div>
+			<p>Authenticated encryption using a 32-byte key and a fresh random 24-byte nonce per call
+			(XChaCha20-Poly1305 via Monocypher's <code class="inline">crypto_aead_lock</code> /
+			<code class="inline">crypto_aead_unlock</code>). Any modification to the header, nonce, MAC,
+			associated data, or ciphertext is rejected and <code class="inline">outPlaintext</code> is
+			cleared.</p>
+			<div class="member"><div class="sig">static status_t Seal(const BSecureBuffer&amp; key,
+    const void* plaintext, size_t plaintextSize,
+    const void* aad, size_t aadSize,
+    void* outSealed, size_t outCapacity, size_t* _outSize);</div>
+				<p>Seals <code class="inline">plaintext</code> into <code class="inline">outSealed</code>
+				(which must not overlap <code class="inline">plaintext</code> and must have at least
+				<code class="inline">plaintextSize + kOverhead</code> bytes).</p></div>
+			<div class="member"><div class="sig">static status_t Open(const BSecureBuffer&amp; key,
+    const void* sealed, size_t sealedSize,
+    const void* aad, size_t aadSize,
+    BSecureBuffer&amp; outPlaintext);</div>
+				<p>Verifies the <code class="inline">R5SD</code> header and Poly1305 MAC, then decrypts
+				into <code class="inline">outPlaintext</code>. Returns <code class="inline">B_BAD_DATA</code>
+				for truncated or unknown-header input and <code class="inline">B_NOT_ALLOWED</code> on
+				authentication failure.</p></div>
+			<div class="member"><div class="sig">static status_t SealToFile(const BSecureBuffer&amp; key,
+    const void* plaintext, size_t plaintextSize,
+    const void* aad, size_t aadSize, const char* path);
+static status_t OpenFromFile(const BSecureBuffer&amp; key, const char* path,
+    const void* aad, size_t aadSize, BSecureBuffer&amp; outPlaintext);</div>
+				<p><code class="inline">SealToFile()</code> writes atomically to a sibling temporary file
+				with mode <code class="inline">0600</code>, calls <code class="inline">fsync()</code>, and
+				renames it into place. <code class="inline">OpenFromFile()</code> reads a regular file and
+				passes it to <code class="inline">Open()</code>.</p></div>
+		</section>
+
+		<section class="entry" id="format">
+			<div class="entry-header"><h2 class="plain">R5SD wire format</h2></div>
+			<p>Every blob produced by <code class="inline">BSealedData</code> has a fixed 48-byte
+			overhead (<code class="inline">BSealedData::kOverhead</code>):</p>
+			<table class="facts">
+				<tr><th>Bytes 0..3</th><td>ASCII magic <code class="inline">"R5SD"</code></td></tr>
+				<tr><th>Byte 4</th><td>Format version (<code class="inline">1</code>)</td></tr>
+				<tr><th>Byte 5</th><td>Cipher ID (<code class="inline">1</code> = XChaCha20-Poly1305)</td></tr>
+				<tr><th>Bytes 6..7</th><td>Reserved (<code class="inline">0x00, 0x00</code>)</td></tr>
+				<tr><th>Bytes 8..31</th><td>24-byte random nonce from <code class="inline">BRandom</code></td></tr>
+				<tr><th>Bytes 32..47</th><td>16-byte Poly1305 authentication tag</td></tr>
+				<tr><th>Bytes 48..</th><td>Ciphertext (same length as plaintext)</td></tr>
+			</table>
+			<p>The 8-byte header is always prepended to the caller's <code class="inline">aad</code>
+			before MAC computation, so tampering with the magic, version, or cipher ID fails
+			authentication.</p>
+		</section>
+
+		<section class="entry" id="example">
+			<div class="entry-header"><h2 class="plain">Example</h2></div>
+<pre><code>#include &lt;R5Security.h&gt;
+
+using namespace BSecurityKit;
+
+BSecureBuffer key;
+if (BRandom::Fill(key, BSealedData::kKeySize) == B_OK) {
+	const char* secret = "account-token";
+	const char* aad = "myapp:v1:token";
+	BSealedData::SealToFile(key, secret, strlen(secret),
+		aad, strlen(aad), "/boot/home/config/settings/myapp/token.sealed");
+
+	BSecureBuffer opened;
+	if (BSealedData::OpenFromFile(key,
+		"/boot/home/config/settings/myapp/token.sealed",
+		aad, strlen(aad), opened) == B_OK) {
+		// Use opened.Data(), opened.Size()
+	}
+}	// key and opened are wiped automatically on scope exit</code></pre>
+		</section>
+	</main>
+</div>
+
+<script src="r5book.js"></script>
+</body>
+</html>

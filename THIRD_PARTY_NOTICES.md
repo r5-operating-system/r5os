@@ -437,6 +437,16 @@ The file is unmodified. sha256 `ab108b90f8d4443eaf6742f1bf6f4454fc43bd5c9f3373cb
 |---|---|---|
 | `glslangValidator` 16.6.0 | KhronosGroup/glslang (Google, Inc., The Khronos Group Inc., and others) | BSD-3-Clause, BSD-2-Clause, MIT, Apache-2.0, NVIDIA and Khronos licences per file; the generated parser `glslang_tab.cpp` is GPL-3.0-or-later WITH Bison-exception-2.2 |
 
+### Monocypher
+
+Location: `distro/security/monocypher/monocypher.c` and `monocypher.h`. Compiled into `libr5security.so` (installed in `/system/lib` on both the regular and minimum images).
+
+| Piece | Project | License |
+|---|---|---|
+| `monocypher.c`, `monocypher.h` (4.0.2) | Loup Vaillant (`https://github.com/LoupVaillant/Monocypher`, tag `4.0.2`) | BSD-2-Clause OR CC0-1.0 (R5 takes it under CC0-1.0) |
+
+Both files are unmodified upstream sources. sha256: `monocypher.c` `02174117935699d418443c75a558a287deb06ef8cf7c1adced61d9047d2f323d`, `monocypher.h` `fcaf6ed771358bb4f40fba016f6518ae86ec02b1b877d2cc35ad92d3a26fd7b3`. Source and version record: `distro/security/monocypher/SOURCE.md`. Credited here and in About R5 although CC0-1.0 does not require attribution. The R5 C++ Security Kit wrapper (`distro/security/*.cpp`, `*.h`) is MIT, copyright 2026 R5OS Contributors.
+
 ## Not included
 
 The Linux `amdgpu` driver is not imported. The clear-state table above is the only file taken from that tree.

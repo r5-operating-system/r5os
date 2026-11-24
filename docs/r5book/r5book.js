@@ -187,6 +187,18 @@
 					],
 				},
 				{
+					file: "security-kit.html",
+					label: "Security Kit",
+					items: [
+						["security-kit.html#BSecureBuffer", "BSecureBuffer"],
+						["security-kit.html#BRandom", "BRandom"],
+						["security-kit.html#BPasswordHash", "BPasswordHash"],
+						["security-kit.html#BSealedData", "BSealedData"],
+						["security-kit.html#format", "R5SD wire format"],
+						["security-kit.html#example", "Example"],
+					],
+				},
+				{
 					file: "wifi-kit.html",
 					label: "Wi-Fi Kit",
 					items: [
@@ -358,6 +370,11 @@
 		{ name: "Making themes", kind: "guide", where: "Appearance: Making themes", header: "<Themes.h>", lib: "libr5ui.so", href: "making-themes.html", desc: "Theme files, a control look add-on, the scroll bar width, sharing." },
 		{ name: "Theming", kind: "guide", where: "Appearance: Theming", header: "<Themes.h>", lib: "libr5ui.so", href: "appearance-themes.html#rules", desc: "Draw with be_control_look and ui_color so every theme works." },
 		{ name: "Window effects", kind: "guide", where: "Appearance: Effects", header: "<Window.h>", lib: "app_server", href: "appearance-effects.html#window-effects", desc: "Alpha-ready drawing and glass window hints." },
+		// Security Kit
+		{ name: "BSecureBuffer", kind: "class", where: "Security Kit", header: "<R5Security.h>", lib: "libr5security.so", href: "security-kit.html#BSecureBuffer", desc: "Non-copyable byte buffer for secrets, wiped on clear and destruction." },
+		{ name: "BRandom", kind: "class", where: "Security Kit", header: "<R5Security.h>", lib: "libr5security.so", href: "security-kit.html#BRandom", desc: "Cryptographically strong random bytes from /dev/urandom." },
+		{ name: "BPasswordHash", kind: "class", where: "Security Kit", header: "<R5Security.h>", lib: "libr5security.so", href: "security-kit.html#BPasswordHash", desc: "Argon2id key derivation and PHC password hashing/verification." },
+		{ name: "BSealedData", kind: "class", where: "Security Kit", header: "<R5Security.h>", lib: "libr5security.so", href: "security-kit.html#BSealedData", desc: "Authenticated encryption (XChaCha20-Poly1305) for buffers and files." },
 		// Guides & concepts
 		{ name: "Accounts & sessions", kind: "guide", where: "Guides", header: "", lib: "", href: "accounts.html", desc: "User uid, home folders, admin changes, lock and log out." },
 		{ name: "Interface guidelines", kind: "guide", where: "Guides", header: "", lib: "", href: "guidelines.html", desc: "Forms, cards, buttons, icons, settings pages, words." },

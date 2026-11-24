@@ -1,0 +1,23 @@
+# SPDX-FileCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+#
+# libr5security.so: the R5 Security Kit (<R5Security.h>), namespace BSecurityKit.
+# Monocypher 4 (CC0-1.0) is compiled unchanged from monocypher/monocypher.c.
+# docs/LIBR5.md ("Security Kit"); R5Book: security-kit.html.
+
+SubDir HAIKU_TOP src preferences r5security ;
+
+SubDirHdrs [ FDirName $(SUBDIR) monocypher ] ;
+
+SEARCH_SOURCE += [ FDirName $(SUBDIR) monocypher ] ;
+
+SubDirCcFlags -fvisibility=hidden ;
+
+SharedLibrary [ MultiArchDefaultGristFiles libr5security.so ] :
+	monocypher.c
+	PasswordHash.cpp
+	Random.cpp
+	SealedData.cpp
+	SecureBuffer.cpp
+	: be [ TargetLibstdc++ ]
+	;
