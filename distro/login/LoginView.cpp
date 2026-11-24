@@ -548,7 +548,13 @@ LoginView::AllAttached()
 {
 	BView::AllAttached();
 	_ApplyColors();
-	fPasswordControl->MakeFocus(true);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// The field that is shown: on the first-start screen the password field
+	// is hidden, and keys typed there were lost (QEMU, 24 Nov 2026).
+	_FocusField();
+// SPDX-SnippetEnd
 }
 
 
@@ -633,9 +639,9 @@ LoginView::PrepareForSignIn()
 	BString ready;
 	ready.SetToFormat("Ready to sign in as %s", fActiveName->Text());
 	_SetFeedback(ready.String(), false);
-// SPDX-SnippetEnd
 	_EnableControls(true);
-	fPasswordControl->MakeFocus(true);
+	_FocusField();
+// SPDX-SnippetEnd
 }
 
 
