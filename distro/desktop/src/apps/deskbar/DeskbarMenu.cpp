@@ -51,6 +51,7 @@ All rights reserved.
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+#include <R5Admin.h>
 #include <pwd.h>
 #include <unistd.h>
 // SPDX-SnippetEnd
@@ -389,8 +390,7 @@ B_TRANSLATE_MARK_VOID("About R5")
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 	struct passwd* sessionUser = getpwuid(getuid());
-	bool isGuest = sessionUser != NULL && sessionUser->pw_name != NULL
-		&& strcmp(sessionUser->pw_name, "guest") == 0;
+	bool isGuest = r5_admin_is_system_guest(getuid());
 
 	if (isGuest) {
 		item = new BMenuItem(B_TRANSLATE("Shared folder"),

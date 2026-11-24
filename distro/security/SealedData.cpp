@@ -278,8 +278,8 @@ BSealedData::SealToFile(const BSecureBuffer& key, const void* plaintext,
 	BString tempPath(path);
 	tempPath << ".tmp." << suffix;
 
-	int fd = open(tempPath.String(), O_CREAT | O_EXCL | O_WRONLY | O_CLOEXEC,
-		0600);
+	int fd = open(tempPath.String(),
+		O_CREAT | O_EXCL | O_WRONLY | O_CLOEXEC | O_NOFOLLOW, 0600);
 	if (fd < 0) {
 		free(sealed);
 		return B_IO_ERROR;

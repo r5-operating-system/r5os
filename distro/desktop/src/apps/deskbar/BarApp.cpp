@@ -959,11 +959,8 @@ TBarApp::MessageReceived(BMessage* message)
 // SPDX-License-Identifier: MIT
 		case kLockSession:
 		{
-			struct passwd* pwd = getpwuid(getuid());
-			if (pwd != NULL && pwd->pw_name != NULL
-				&& strcmp(pwd->pw_name, "guest") == 0) {
+			if (r5_admin_is_system_guest(getuid()))
 				break;
-			}
 			BMessenger login("application/x-vnd.Haiku-Login");
 			if (login.IsValid()) {
 				BMessage req(kLockSession);
@@ -986,9 +983,7 @@ TBarApp::MessageReceived(BMessage* message)
 
 		case kLogoutSession:
 		{
-			struct passwd* pwd = getpwuid(getuid());
-			bool isGuest = pwd != NULL && pwd->pw_name != NULL
-				&& strcmp(pwd->pw_name, "guest") == 0;
+			bool isGuest = r5_admin_is_system_guest(getuid());
 			BAlert* alert;
 			if (isGuest) {
 				alert = new BAlert("Log out Guest",

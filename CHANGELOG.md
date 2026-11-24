@@ -8,6 +8,25 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-24 - Fixes from the review of accounts steps 1 to 4
+
+- Problem: a review of #4590, #4592, #4595 and #4601 on `main` found:
+  - Login runs the Argon2id values from an account's own key store file as uid 0, before the seal is checked. `BPasswordHash` allows up to 1 GiB and 64 passes, so a standard account could make Sign in use that much memory and time.
+  - Deskbar recognised the guest by its name alone. Login and the wipe use `is_system_guest()`.
+  - `is_guest_enabled()` did not check who owns the switch file.
+  - The Security Kit wiped its buffers but could let them be written to swap.
+  - `BSealedData::SealToFile()` opened its temporary file without `O_NOFOLLOW`.
+  - Two texts promised more than the code does: #4601 says an administrator can delete any file in Shared, and #4595 says copies of the password are wiped.
+- Changed:
+  - `R5KeyStoreCrypto::IsAllowedPasswordParams()` accepts only at most 64 MiB, 3 passes and 1 lane. Reading a protector, writing one, and `keystore_server`'s unlock and rewrap requests refuse other values. A file with other values counts as a wrong password; Login moves that key store aside as `.old`, as for a password changed outside R5.
+  - `r5_admin_is_system_guest(uid)` at the end of `libr5admin.so` (`docs/LIBR5.md`). Deskbar's guest menu, lock and log-out alert use it.
+  - `is_guest_enabled()` checks owner uid 0 and no group or world write, like the uid file.
+  - `BSecureBuffer` gives each buffer whole pages and calls `mlock()` on them (best effort). Whole pages, because Haiku's `munlock()` is not counted per caller and would unlock a neighbour on the same page.
+  - `SealToFile()` opens its temporary file with `O_NOFOLLOW` too. The final `rename()` already replaced a link instead of following it.
+  - `docs/MULTIUSER.md`, "Limits found in the review of steps 1 to 4": the corrected texts. A second administrator cannot delete someone else's file in Shared; a folder made in Shared has no sticky bit of its own (as with `/tmp`); the password still passes through the admin message to Login unwiped, and `crypt()`'s buffer holds only the hash.
+- Not changed: deleting in Shared by every administrator (that needs a request to Login) and a sticky bit passed on to new folders (a change to BFS that no other system makes). Both are recorded as limits.
+- Tested (24 Nov 2026): the Security Kit tests on the host ("ALL SECURITY KIT TESTS PASSED"); the AMD64 build with `scripts/build-locked.sh`. Not tested: a guest session, a key store file with changed values, and anything on the 5625U.
+
 ## 2026-11-24 - A password before the first desktop, and Try R5 keeps sign-ins in memory (accounts step 5, part 2)
 
 - Problem: the image ships `user` without a password. The owner decided (24 Nov 2026, `generated/GUEST-SHARED-DESIGN.md`):

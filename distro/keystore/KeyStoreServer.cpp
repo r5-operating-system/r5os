@@ -966,6 +966,12 @@ KeyStoreServer::_AdminRequest(BMessage* request, const r5_admin_sender& sender,
 				memcpy(initSalt, saltData, 16);
 				hasInitParams = true;
 			}
+			if (hasInitParams
+				&& !R5KeyStoreCrypto::IsAllowedPasswordParams(initParams)) {
+				kek.Clear();
+				status = B_BAD_VALUE;
+				break;
+			}
 
 			bool recoverMismatch = request->GetBool(kR5KSFieldRecoverMismatch,
 				false);
@@ -1001,7 +1007,8 @@ KeyStoreServer::_AdminRequest(BMessage* request, const r5_admin_sender& sender,
 				|| request->FindUInt32(kR5KSFieldPasses, &newParams.passes)
 					!= B_OK
 				|| request->FindUInt32(kR5KSFieldLanes, &newParams.lanes)
-					!= B_OK) {
+					!= B_OK
+				|| !R5KeyStoreCrypto::IsAllowedPasswordParams(newParams)) {
 				status = B_BAD_VALUE;
 				break;
 			}

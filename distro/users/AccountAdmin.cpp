@@ -1218,6 +1218,12 @@ write_desktop_session(const char* login)
 bool
 is_guest_enabled()
 {
+	// Review fix (24 Nov 2026): the same owner and mode check as the uid
+	// file. Only a root-owned file that others cannot write turns guest on.
+	struct stat st;
+	if (lstat(kGuestEnabledPath, &st) != 0 || !S_ISREG(st.st_mode)
+		|| st.st_uid != 0 || (st.st_mode & (S_IWGRP | S_IWOTH)) != 0)
+		return false;
 	FILE* file = fopen(kGuestEnabledPath, "r");
 	if (file == NULL)
 		return false;
