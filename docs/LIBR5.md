@@ -19,6 +19,7 @@ The R5Book (`docs/r5book/index.html`) shows each part with a picture, what it is
 | `libr5bt.so` | `<R5Bluetooth.h>` | `distro/bluetooth/lib` | The Bluetooth panel (`BluetoothView`), its controller (`BluetoothController`) and state. R5's own, MIT. Regular image only, because it needs `libbluetooth.so`. It links `libr5icons.so` (the Bluetooth glyph and the signal bars) and `libr5ui.so` (`BCard`). See "Bluetooth Kit" below |
 | `libr5game.so` | `<GameController.h>`, `<GameControllerView.h>`, `<GameControllerMotionView.h>` | `distro/game/lib` | Game controllers: `BGameController` (the standard layout, name, vendor and product ID, battery, button labels, plug and unplug messages, rumble, trigger effects and motion), `BGameControllerView` (the live picture) and `BGameControllerMotionView` (tilt and turn). R5's own, MIT. Both images; the mapping database only in the regular image. It links `libr5icons.so` (the PlayStation glyphs) and `libr5ui.so` (`BTiltLevel`, `BAxisBar`). See "Game Kit" below |
 | `libr5power.so` | `<PowerRoster.h>` | `distro/power/lib` | The Power Kit: `BPowerRoster` (batteries, the power source, the processor profile, sleep, the machine's power settings) and its watch message `kMsgPowerChanged`. R5's own, MIT; the battery reading is PowerStatus's former `ACPIDriverInterface`, moved here. Both images. It links `libr5admin.so` for the settings request. See "Power Kit" below |
+| `libr5security.so` | `<R5Security.h>` | `distro/security` | The Security Kit (`namespace BSecurityKit`): `BSecureBuffer` (secret memory wiped on clear/free), `BRandom` (cryptographic random bytes), `BPasswordHash` (Argon2id key derivation and PHC password hashes), and `BSealedData` (XChaCha20-Poly1305 authenticated encryption in the `R5SD` format). R5's own C++ wrapper (MIT) over unmodified Monocypher 4.0.2 (CC0-1.0). Both images. See "Security Kit" below |
 
 `scripts/apply-icons.py` and `scripts/apply-r5ui.py` copy the sources into the Haiku tree, copy the header to `headers/os/interface/`, and add the library to the regular image and the minimum image. On a running system the files are `/system/lib/libr5icons.so` and `/system/lib/libr5ui.so`. The soname is the file name, with no version suffix, the same way `libbe.so` is named.
 
@@ -704,3 +705,20 @@ Limits: the Joy-Cons over USB (only in the charging grip, `057E:200E`) and as a 
 The class has a private data pointer and `_reserved[8]`; new calls go at the end. PowerStatus links the library and reads through the private `BPrivate::BatteryReader` (`<PowerBattery.h>`, `headers/private/power`); its Deskbar item loads the library with it. The Power page in Settings and the power service link it too.
 
 The kernel side is private: `_kern_r5_set_power_profile()` (uid 0 only; the power service) and `_kern_r5_get_power_info()` in `<syscalls.h>`, with `<r5_power_profile.h>`, and version 2 of the cpufreq module interface (`cpufreq_module_info_v2` in `<cpufreq.h>`, a name ending in `/v2`). The existing `cpufreq_module_info` did not change.
+
+## Security Kit
+
+`libr5security.so`, header `<R5Security.h>` (`headers/os/app`), namespace `BSecurityKit`, source `distro/security`, MIT, in both images. The R5Book chapter is `docs/r5book/security-kit.html`. Added 24 Nov 2026 (`generated/GUEST-SHARED-DESIGN.md`, Step 1).
+
+Cryptographic primitives come from unmodified Monocypher 4.0.2 (`distro/security/monocypher/monocypher.c` and `monocypher.h`, `BSD-2-Clause OR CC0-1.0`, taken under `CC0-1.0`; version and SHA-256 recorded in `distro/security/monocypher/SOURCE.md`). R5 adds no cryptographic primitives of its own.
+
+| Class | What it does |
+|---|---|
+| `BSecureBuffer` | Non-copyable byte buffer for secrets. `Allocate(size)`, `SetTo(data, size)`, `Wipe()`, `Clear()`, `Data()`, `Size()`, `IsEmpty()`, constant-time `Equals(other)`, and static `WipeMemory(data, size)`. Always wipes memory with Monocypher's `crypto_wipe()` before freeing or overwriting. Has `_reserved[4]` for ABI stability |
+| `BRandom` | Cryptographically strong random bytes from `/dev/urandom` (`O_CLOEXEC`, handles `EINTR` and short reads; wipes output and fails on error without falling back to `rand()`). `Fill(void*, size_t)`, `Fill(BSecureBuffer&)`, `Fill(BSecureBuffer&, size_t)` |
+| `BPasswordHash` | Argon2id password hashing and key derivation (`CRYPTO_ARGON2_ID`). Default parameters: `kDefaultMemoryKiB = 65536` (64 MiB), `kDefaultPasses = 3`, `kDefaultLanes = 1`. `DeriveKey()` (with optional secret key and associated data), `Hash()` (standard PHC `$argon2id$v=19$m=...,t=...,p=...$<salt>$<hash>`), `Verify()` (strict PHC parser + constant-time compare), `NeedsRehash()` |
+| `BSealedData` | Authenticated encryption with 32-byte keys and random 24-byte nonces (XChaCha20-Poly1305, `crypto_aead_lock`/`unlock`). Wire format `R5SD`: 4-byte magic `"R5SD"`, version `1`, cipher `1`, 2 reserved zero bytes, 24-byte nonce, 16-byte MAC, ciphertext (`kOverhead = 48`). The 8-byte header is always authenticated alongside caller-supplied AAD. `Seal()`, `Open()`, `SealToFile()` (atomic temp file, mode `0600`, `fsync`, `rename`), `OpenFromFile()`. Any modification to header, nonce, MAC, AAD, or ciphertext is refused (`B_NOT_ALLOWED` / `B_BAD_DATA`) and `outPlaintext` is cleared |
+
+Storage for application secrets stays Haiku's `BKeyStore` (`<KeyStore.h>`, `keystore_server`); the Security Kit is the cryptographic engine underneath it. Programs that link only `libbe` are unchanged.
+
+Unit tests (`distro/security/tests/security_test.cpp`) verify the RFC 9106 Section 5.3 Argon2id vector, the draft-irtf-cfrg-xchacha-03 Section A.3.1 AEAD vector, single-bit tampering across every byte of a sealed blob and sealed file, wrong key/AAD refusal, malformed PHC rejection, and memory wiping.

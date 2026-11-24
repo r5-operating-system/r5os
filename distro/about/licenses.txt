@@ -57,3 +57,9 @@ Reading and writing Windows disks, using NTFS-3G by Anton Altaparmakov, Szabolcs
 
 License: GPL-2.0-or-later
 Source: https://github.com/tuxera/ntfs-3g
+
+# Monocypher
+Cryptographic primitives in the R5 Security Kit (libr5security.so), by Loup Vaillant.
+
+License: CC0-1.0
+Source: https://monocypher.org
