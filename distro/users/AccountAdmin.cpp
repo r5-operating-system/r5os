@@ -1152,6 +1152,9 @@ is_session_home(const struct passwd* pwd)
 }
 
 
+static void own_shared_folder(uid_t uid, gid_t gid);
+
+
 status_t
 write_desktop_session(const char* login)
 {
