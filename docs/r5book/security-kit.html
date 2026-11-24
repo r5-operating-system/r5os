@@ -37,6 +37,7 @@
 				<li><a href="#BRandom">BRandom</a> &mdash; Cryptographically strong random bytes.</li>
 				<li><a href="#BPasswordHash">BPasswordHash</a> &mdash; Argon2id key derivation and PHC password hashes.</li>
 				<li><a href="#BSealedData">BSealedData</a> &mdash; XChaCha20-Poly1305 authenticated encryption for buffers and files.</li>
+				<li><a href="#crypt">crypt() and r5_security_crypt()</a> &mdash; Argon2id passwords in <code class="inline">/etc/shadow</code>.</li>
 				<li><a href="#format">R5SD wire format</a> &mdash; Header, nonce, MAC, and associated data layout.</li>
 				<li><a href="#example">Example</a> &mdash; Deriving a key, sealing a secret, and opening it back.</li>
 			</ul>
@@ -54,8 +55,10 @@
 		(<code class="inline">&lt;KeyStore.h&gt;</code>). R5's <code class="inline">keystore_server</code>
 		encrypts each account's key store on disk (<code class="inline">R5KS</code> v2) with a random
 		master key wrapped by a password protector (<code class="inline">R5KP</code> v1, Argon2id) and
-		unlocked by Login at Sign in; without a password (autologin or live session) the key store stays
-		locked and returns <code class="inline">B_NOT_ALLOWED</code>. Note that machine-wide Wi-Fi
+		unlocked by Login at Sign in. In Try R5 (the live medium) the account has no password and Login asks for
+		a key store in memory only: it works for the session and is gone at log out or shut down. An installed
+		R5 asks an account without a password to choose one before its first desktop. Otherwise, without a
+		password, the key store stays locked and returns <code class="inline">B_NOT_ALLOWED</code>. Note that machine-wide Wi-Fi
 		credentials are stored separately by <code class="inline">net_server</code> and are not in
 		<code class="inline">BKeyStore</code>.</div>
 
@@ -64,7 +67,9 @@
 			<p>A non-copyable byte buffer for keys, passwords, and decrypted secrets. Every
 			<code class="inline">Wipe()</code>, <code class="inline">Clear()</code>, reallocation, and
 			destruction overwrites the buffer with Monocypher's <code class="inline">crypto_wipe()</code>
-			so the compiler cannot optimize the zeroing away.</p>
+			so the compiler cannot optimize the zeroing away. Since 24 Nov 2026 each buffer has whole memory pages of
+			its own, kept out of swap with <code class="inline">mlock()</code>. That is best effort: when the system
+			refuses the lock, the buffer still works and is still wiped.</p>
 			<div class="member"><div class="sig">BSecureBuffer();
 explicit BSecureBuffer(size_t size);</div>
 				<p>Creates an empty buffer or allocates <code class="inline">size</code> zeroed bytes.
@@ -168,9 +173,32 @@ static Parameters DefaultParameters();</div>
 static status_t OpenFromFile(const BSecureBuffer&amp; key, const char* path,
     const void* aad, size_t aadSize, BSecureBuffer&amp; outPlaintext);</div>
 				<p><code class="inline">SealToFile()</code> writes atomically to a sibling temporary file
-				with mode <code class="inline">0600</code>, calls <code class="inline">fsync()</code>, and
-				renames it into place. <code class="inline">OpenFromFile()</code> reads a regular file and
+				with mode <code class="inline">0600</code> (opened with <code class="inline">O_EXCL</code> and
+				<code class="inline">O_NOFOLLOW</code>), calls <code class="inline">fsync()</code>, and
+				renames it into place; a link at <code class="inline">path</code> is replaced, not followed. <code class="inline">OpenFromFile()</code> reads a regular file and
 				passes it to <code class="inline">Open()</code>.</p></div>
+		</section>
+
+		<section class="entry" id="crypt">
+			<div class="entry-header"><h2 class="plain">crypt() and r5_security_crypt()</h2><span class="kind">function</span></div>
+			<p>A password set through Login (Add account, Change password, an administrator reset, the first-start
+			screen) is stored in <code class="inline">/etc/shadow</code> as an Argon2id PHC string,
+			<code class="inline">$argon2id$v=19$m=65536,t=3,p=1$&lt;salt&gt;$&lt;hash&gt;</code>, made with
+			<code class="inline">BPasswordHash::Hash()</code>. Older scrypt and DES hashes keep working.</p>
+			<p>libroot's <code class="inline">crypt()</code> hands a setting that starts with
+			<code class="inline">$argon2id$</code> to this library, so a program that checks a password the POSIX way
+			(<code class="inline">su</code>, <code class="inline">login</code>, <code class="inline">sshd</code>) needs no change.
+			Check for <code class="inline">NULL</code>: <code class="inline">crypt()</code> returns it when it cannot read
+			the stored hash.</p>
+			<div class="member"><div class="sig">extern "C" char* r5_security_crypt(const char* key, const char* setting,
+    char* buffer, size_t bufferSize);</div>
+				<p>The back end <code class="inline">crypt()</code> loads. Returns <code class="inline">buffer</code> holding
+				<code class="inline">setting</code> when <code class="inline">key</code> matches it, <code class="inline">"*"</code>
+				when it does not, or <code class="inline">NULL</code> with <code class="inline">errno</code> set when the setting
+				cannot be read or does not fit. Programs call <code class="inline">crypt()</code> or
+				<code class="inline">BPasswordHash::Verify()</code>, not this. Added 24 Nov 2026.</p></div>
+<pre class="code"><span class="k">const char</span>* result = crypt(typed, stored);
+<span class="k">bool</span> ok = result != NULL &amp;&amp; strcmp(result, stored) == 0;</pre>
 		</section>
 
 		<section class="entry" id="format">
