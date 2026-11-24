@@ -582,6 +582,17 @@ def install_bfs_sticky() -> None:
         "bfs sticky")
 
 
+def install_kit_crypt() -> None:
+    """Accounts step 5: crypt() hands an Argon2id PHC setting to the
+    Security Kit (libr5security.so), so su, login and sshd accept the
+    sign-in hashes R5 now writes. Older scrypt and DES settings are
+    unchanged."""
+    root = pathlib.Path(__file__).resolve().parents[1]
+    relative = "src/system/libroot/posix/crypt/crypt.cpp"
+    install_file(root / "distro/kernel" / relative, HAIKU / relative,
+        "kit crypt")
+
+
 def main() -> int:
     install_smp_boot()
     install_kernel_sources()
@@ -591,6 +602,7 @@ def main() -> int:
     install_efi_runtime()
     install_rtsx()
     install_bfs_sticky()
+    install_kit_crypt()
     # i2c_hid (RenkuOS b37a078925) and x86_acpi_cstates (air/OS 2c48d1ae0)
     # are listed in the native build/jam/packages/Haiku in distro/desktop.
     return 0

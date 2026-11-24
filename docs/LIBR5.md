@@ -289,6 +289,27 @@ BAppearanceKit::BPasswordControl* password = new BAppearanceKit::BPasswordContro
 	"password", "Password", "", new BMessage('sign'));
 ```
 
+`BAppearanceKit::BPasswordStrengthBar` was added on 24 Nov 2026 (accounts step 5). It is in the same header, and it draws the strength hint under a new password. It has four parts, lit from the left as far as the strength goes:
+
+- red for weak;
+- a mix of red and green for fair;
+- green from good on.
+
+`SetStrength(0..4)` sets the strength. `StrengthOf(password)` gives it: 0 for empty, 1 under 8 characters, and up to 4 for a long phrase that mixes kinds of characters. `HintFor(strength)` gives the line shown under the bar, for example "Weak. Use at least 8 characters.". Both are static.
+
+Its users:
+
+- "Add account" and "Change password" in Settings;
+- the first-start screen of Sign in.
+
+```cpp
+BAppearanceKit::BPasswordStrengthBar* bar
+	= new BAppearanceKit::BPasswordStrengthBar("strength");
+int32 strength = BAppearanceKit::BPasswordStrengthBar::StrengthOf(text);
+bar->SetStrength(strength);
+hint->SetText(BAppearanceKit::BPasswordStrengthBar::HintFor(strength));
+```
+
 ## Icon view
 
 `BAppearanceKit::BIconView` shows one bitmap at its own pixel size. The header is `<R5IconView.h>` (Haiku already has a private `IconView.h`). The view is exactly as large as the bitmap and never scales it, so a vector icon rendered at the size it is shown stays sharp. Render the bitmap at that size, for example with `r5_vector_icon_bitmap()`, and do not stretch it with `DrawBitmap(bitmap, rect)`: a stretch of even one pixel makes the edges jagged. `SetIcon()` keeps a copy. The background is the parent's color.
@@ -720,5 +741,9 @@ Cryptographic primitives come from unmodified Monocypher 4.0.2 (`distro/security
 | `BSealedData` | Authenticated encryption with 32-byte keys and random 24-byte nonces (XChaCha20-Poly1305, `crypto_aead_lock`/`unlock`). Wire format `R5SD`: 4-byte magic `"R5SD"`, version `1`, cipher `1`, 2 reserved zero bytes, 24-byte nonce, 16-byte MAC, ciphertext (`kOverhead = 48`). The 8-byte header is always authenticated alongside caller-supplied AAD. `Seal()`, `Open()`, `SealToFile()` (atomic temp file, mode `0600`, `fsync`, `rename`), `OpenFromFile()`. Any modification to header, nonce, MAC, AAD, or ciphertext is refused (`B_NOT_ALLOWED` / `B_BAD_DATA`) and `outPlaintext` is cleared |
 
 Storage for application secrets stays Haiku's `BKeyStore` (`<KeyStore.h>`, `keystore_server`); the Security Kit is the cryptographic engine underneath it. Programs that link only `libbe` are unchanged.
+
+| C call | What it does |
+|---|---|
+| `r5_security_crypt(key, setting, buffer, bufferSize)` | Added 24 Nov 2026 (accounts step 5). The `crypt()` back end for an Argon2id PHC setting. libroot's `crypt()` loads `/system/lib/libr5security.so` with `dlopen()` and calls it for a setting that starts with `$argon2id$`. It returns `buffer` holding `setting` when `key` matches, `"*"` when it does not, or `NULL` with `errno` `EINVAL` (setting not readable) or `ERANGE` (buffer too small). So `su`, `login` and `sshd`, which compare `crypt(key, stored)` with the stored hash, accept the hashes R5 writes. A program calls `BPasswordHash::Verify()` instead |
 
 Unit tests (`distro/security/tests/security_test.cpp`) verify the RFC 9106 Section 5.3 Argon2id vector, the draft-irtf-cfrg-xchacha-03 Section A.3.1 AEAD vector, single-bit tampering across every byte of a sealed blob and sealed file, wrong key/AAD refusal, malformed PHC rejection, and memory wiping.

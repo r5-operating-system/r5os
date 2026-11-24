@@ -56,10 +56,6 @@ BBitmap*		account_load_picture(const entry_ref& ref, BString& error);
 void			account_draw_picture(BView* view, BRect circle,
 					const BBitmap* photo, bool admin);
 
-// A hint, 0 (empty) to 4. It never blocks.
-int32			account_password_strength(const char* password);
-const char*		account_strength_text(int32 strength);
-
 BString			account_suggest_username(const char* name);
 bool			account_valid_username(const char* name);
 

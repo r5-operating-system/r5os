@@ -18,6 +18,8 @@ public:
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 	virtual	void				ScreenChanged(BRect frame, color_space mode);
+	virtual	void				DispatchMessage(BMessage* message,
+									BHandler* target);
 // SPDX-SnippetEnd
 			void				PrepareForSignIn();
 };

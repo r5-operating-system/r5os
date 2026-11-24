@@ -22,6 +22,7 @@ class BGroupView;
 class BListView;
 class BScrollView;
 class BStringView;
+class BTextControl;
 
 
 namespace BAppearanceKit {
@@ -29,6 +30,7 @@ class BAccentButton;
 class BCard;
 class BIconView;
 class BPasswordControl;
+class BPasswordStrengthBar;
 }
 
 
@@ -47,6 +49,7 @@ public:
 	virtual	void				MessageReceived(BMessage* message);
 	virtual	void				Pulse();
 			void				PrepareForSignIn();
+			void				FieldsChanged();
 
 private:
 			void				_FillUsers();
@@ -59,6 +62,8 @@ private:
 			void				_ApplyColors();
 			void				_ApplyGlyphs();
 			void				_SetVisible(BView* view, bool visible);
+			void				_UpdateSetup();
+			void				_FocusField();
 
 	BAppearanceKit::BCard*		fHeaderCard;
 	BStringView*				fWelcomeView;
@@ -84,6 +89,17 @@ private:
 	BAppearanceKit::BPasswordControl* fPasswordControl;
 	BGroupView*					fPasswordGroup;
 	BView*						fGuestNote;
+	// Accounts step 5: the first-start screen of an installed R5 (an
+	// account without a password sets one), and the note of Try R5.
+	BGroupView*					fSetupGroup;
+	BTextControl*				fSetupName;
+	BAppearanceKit::BPasswordControl* fSetupPassword;
+	BAppearanceKit::BPasswordControl* fSetupRepeat;
+	BAppearanceKit::BPasswordStrengthBar* fSetupStrength;
+	BStringView*				fSetupHint;
+	BView*						fLiveNote;
+	bool						fSetupMode;
+	bool						fLiveMode;
 	BAppearanceKit::BAccentButton* fLoginButton;
 	BStringView*				fInfoView;
 	bool						fInfoIsError;

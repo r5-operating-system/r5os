@@ -109,7 +109,8 @@ KeyStoreServer::KeyStoreServer()
 // SPDX-License-Identifier: MIT
 	fKeyrings(20),
 	fAdminPort(-1),
-	fStoreUnlocked(false)
+	fStoreUnlocked(false),
+	fMemoryOnly(false)
 {
 	memset(fKeyStoreId, 0, sizeof(fKeyStoreId));
 
@@ -596,6 +597,8 @@ KeyStoreServer::_ReadKeyStoreDatabase()
 // SPDX-License-Identifier: MIT
 	if (!fStoreUnlocked || fMasterKey.Size() != BSealedData::kKeySize)
 		return B_NOT_ALLOWED;
+	if (fMemoryOnly)
+		return B_OK;
 
 	BMessage keystore;
 	status_t result = R5KeyStoreCrypto::ReadEncryptedDatabase(
@@ -616,6 +619,9 @@ KeyStoreServer::_WriteKeyStoreDatabase()
 // SPDX-License-Identifier: MIT
 	if (!fStoreUnlocked || fMasterKey.Size() != BSealedData::kKeySize)
 		return B_NOT_ALLOWED;
+	// Try R5: the key store lives in memory only and is never written.
+	if (fMemoryOnly)
+		return B_OK;
 // SPDX-SnippetEnd
 
 	BMessage keystore;
@@ -923,6 +929,11 @@ KeyStoreServer::_AdminRequest(BMessage* request, const r5_admin_sender& sender,
 	switch (request->what) {
 		case kMsgR5KeyStoreUnlock:
 		{
+			if (request->GetBool(kR5KSFieldMemoryOnly, false)) {
+				status = server->_UnlockInMemory();
+				break;
+			}
+
 			const void* kekData = NULL;
 			ssize_t kekSize = 0;
 			if (request->FindData(kR5KSFieldKek, B_RAW_TYPE, &kekData, &kekSize)
@@ -1158,6 +1169,7 @@ KeyStoreServer::_UnlockWithKek(const BSecureBuffer& kek,
 		return B_NO_INIT;
 
 	_LockStore();
+	fMemoryOnly = false;
 
 	struct stat protSt;
 	bool hasProtector = (lstat(fProtectorsPath.String(), &protSt) == 0);
@@ -1317,8 +1329,42 @@ KeyStoreServer::_RewrapPasswordProtector(const BSecureBuffer& oldKek,
 {
 	if (fProtectorsPath.IsEmpty())
 		return B_NO_INIT;
+	// A key store in memory has no protector to rewrap.
+	if (fMemoryOnly)
+		return B_NOT_ALLOWED;
 	return R5KeyStoreCrypto::RewrapPasswordProtector(fProtectorsPath.String(),
 		oldKek, newKek, newSalt, newParams);
+}
+
+
+/*
+ * Accounts step 5: the key store of Try R5, where the account has no
+ * password. A random master key in memory, an empty master keyring, and no
+ * file read or written. Everything in it is gone when the store is locked at
+ * log out, or when the computer shuts down.
+ */
+status_t
+KeyStoreServer::_UnlockInMemory()
+{
+	_LockStore();
+
+	status_t status = BRandom::Fill(fMasterKey, BSealedData::kKeySize);
+	if (status == B_OK)
+		status = BRandom::Fill(fKeyStoreId, sizeof(fKeyStoreId));
+	if (status != B_OK) {
+		_LockStore();
+		return status;
+	}
+
+	fMasterKeyring = new(std::nothrow) Keyring(kMasterKeyringName);
+	if (fMasterKeyring == NULL) {
+		_LockStore();
+		return B_NO_MEMORY;
+	}
+	fKeyrings.BinaryInsert(fMasterKeyring, &Keyring::Compare);
+	fMemoryOnly = true;
+	fStoreUnlocked = true;
+	return B_OK;
 }
 
 
@@ -1389,6 +1435,12 @@ KeyStoreServer::RecoverOldKeyStore(const char* oldPassword)
 	if (!Lock())
 		return B_ERROR;
 
+	// A store in memory (Try R5) never merges an old store: its write does
+	// not reach the disk, so the old files must stay.
+	if (fMemoryOnly) {
+		Unlock();
+		return B_NOT_ALLOWED;
+	}
 	if (!fStoreUnlocked || !_HasOldKeyStore()) {
 		Unlock();
 		return B_ENTRY_NOT_FOUND;
