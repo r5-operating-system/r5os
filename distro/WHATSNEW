@@ -1,3 +1,12 @@
+R5 2026.1-dev Build 10070 - SD cards and processor updates
+SD cards work in Realtek card readers, including the one in the HP ENVY x360 15. Put a card in and it shows up. Take it out and it is gone at once, and a card you put back works again. At start, R5 brings the processor's microcode up to date, for every AMD and Intel processor R5 supports. About R5 credits the driver for Windows disks (NTFS). Software Update no longer offers Haiku's own system, so it cannot replace R5 with plain Haiku.
+
+R5 2026.1-dev Build 10069 - Themes and dark mode
+Settings has a Theme page under Personalization. Pick a theme with one click: R5, R5 Modern or Classic (Haiku). Choose Light or Dark, and an accent colour. The Parts box lets you mix windows, controls, scroll bars, the Deskbar and effects yourself. R5 Modern brings round buttons, fields and menus. Open programs change along at once, without a restart. In Dark mode the windows, Settings and the Deskbar turn dark. A new computer starts with R5, light.
+
+R5 2026.1-dev Build 10068 - Round windows and a floating Deskbar
+In Appearance, Look and feel, choose Default (R5 Modern): windows get round corners, a soft tab and a thin edge line. With the graphics chip they also get a soft shadow. Default (R5) keeps the familiar square frame. On the Desktop and Deskbar page the Deskbar has two styles: Default (R5), a round bar that can float as a pill with frosted glass, and Classic (Haiku), the Deskbar as you know it. On that page you also choose the layout and the corners. The tray symbols are simple lines in one colour.
+
 R5 2026.1-dev Build 10067 - Power in Settings
 Settings has a Power page under System. It shows your battery: how full it is, how long it lasts and how healthy it is. Choose how fast the processor may run, separately on battery and plugged in: Power saver, Balanced or Performance. Balanced is the new standard. Set when the screen turns off after you stop using the computer, what closing the lid does, and what the power button does; by default it now asks before it shuts down. A slider sets the brightness of the screen, where the screen allows it. Only an administrator changes these settings, and they count for everyone on the computer; anyone can change the brightness. Sleep is not there yet, so its choices are gray for now. PowerStatus and CPU Info show the same information, and CPU Info also shows the profile in use. On a computer with a battery, the battery is in the Deskbar from the first sign-in.
 
