@@ -318,7 +318,8 @@ seal_password_protector_entry(const uint8 keystoreId[kR5KSIdSize],
 	BMessage& outEntry)
 {
 	if (masterKey.Size() != BSealedData::kKeySize
-		|| kek.Size() != BSealedData::kKeySize)
+		|| kek.Size() != BSealedData::kKeySize
+		|| !R5KeyStoreCrypto::IsAllowedPasswordParams(params))
 		return B_BAD_VALUE;
 
 	uint8 aad[128];
@@ -485,6 +486,8 @@ read_password_params_from_message(const BMessage& msg,
 		outParams.kdf.memoryKiB = mem;
 		outParams.kdf.passes = passes;
 		outParams.kdf.lanes = lanes;
+		if (!R5KeyStoreCrypto::IsAllowedPasswordParams(outParams.kdf))
+			return B_BAD_DATA;
 		memcpy(outParams.salt, salt, 16);
 		return B_OK;
 	}
@@ -701,6 +704,18 @@ create_keystore_in_dirfd(int dirFd, uid_t uid, gid_t gid, const char* password)
 
 
 }	// namespace
+
+
+/* static */ bool
+R5KeyStoreCrypto::IsAllowedPasswordParams(
+	const BPasswordHash::Parameters& params)
+{
+	return params.memoryKiB >= BPasswordHash::kMinMemoryKiB
+		&& params.memoryKiB <= BPasswordHash::kDefaultMemoryKiB
+		&& params.passes >= 1
+		&& params.passes <= BPasswordHash::kDefaultPasses
+		&& params.lanes == BPasswordHash::kDefaultLanes;
+}
 
 
 /* static */ bool

@@ -58,6 +58,14 @@ The R5 image is the live medium. `distro/image/r5_late_image` puts `/boot/system
 
 The QEMU and VirtualBox images are the R5 image, so they count as Try R5. To test the first-start screen, remove `/boot/system/settings/r5-live-medium` from a copy of the image.
 
+## Limits found in the review of steps 1 to 4 (24 Nov 2026)
+
+- **Key store values.** An account owns its own protector file (mode 0600), and Login runs the Argon2id values in it as uid 0. Only the fixed choice is accepted: at most 64 MiB, 3 passes, 1 lane (`R5KeyStoreCrypto::IsAllowedPasswordParams()`). A file with other values is refused like a wrong password, and Login moves that key store aside as `.old`.
+- **Who is the guest.** Login, the wipe and Deskbar all use the same rule: login name `guest`, home `/boot/home/users/guest`, and the uid in `/boot/system/settings/r5-guest-uid`. Deskbar asks `r5_admin_is_system_guest()` in `libr5admin.so`. An older account called `guest` keeps its lock and its files. The switch file `r5-guest-enabled` only counts when uid 0 owns it and others cannot write it.
+- **Deleting in Shared.** `/boot/home/Shared` is mode 01777, owned by the first administrator. A file there can be deleted by its owner, by that first administrator and by uid 0. A second administrator cannot delete someone else's file there: the sticky bit does not look at group `admin`.
+- **Folders inside Shared.** The sticky bit protects only Shared itself, as with `/tmp`. A folder made in Shared belongs to its maker and has no sticky bit, so its maker can delete what others put in it.
+- **Copies of a password.** The keys of the key store and the derived key are wiped, and since this review the Security Kit keeps its secret buffers out of swap (`mlock()`, best effort). The password itself still passes through the admin message to Login, which is not wiped. `crypt()`'s static buffer holds the hash, not the password.
+
 ## Who the people are
 
 The image has **one administrator**: login name `user`, gecos R5OS, home `/boot/home`. That is who should work at the desktop after Sign in.

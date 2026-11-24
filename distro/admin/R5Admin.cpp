@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <time.h>
 
 
@@ -328,4 +329,33 @@ r5_admin_sender_allowed(const r5_admin_sender& sender)
 	}
 	fclose(grants);
 	return granted;
+}
+
+
+bool
+r5_admin_is_system_guest(uid_t uid)
+{
+	static const char* kGuestUidPath = "/boot/system/settings/r5-guest-uid";
+
+	struct stat st;
+	if (lstat(kGuestUidPath, &st) != 0 || !S_ISREG(st.st_mode)
+		|| st.st_uid != 0 || (st.st_mode & (S_IWGRP | S_IWOTH)) != 0)
+		return false;
+	FILE* file = fopen(kGuestUidPath, "r");
+	if (file == NULL)
+		return false;
+	long value = -1;
+	bool ok = fscanf(file, "%ld", &value) == 1;
+	fclose(file);
+	if (!ok || value < 1000 || (uid_t)value != uid)
+		return false;
+
+	struct passwd entry;
+	struct passwd* pwd = NULL;
+	char buffer[1024];
+	if (getpwuid_r(uid, &entry, buffer, sizeof(buffer), &pwd) != 0
+		|| pwd == NULL || pwd->pw_name == NULL || pwd->pw_dir == NULL)
+		return false;
+	return strcmp(pwd->pw_name, "guest") == 0
+		&& strcmp(pwd->pw_dir, "/boot/home/users/guest") == 0;
 }

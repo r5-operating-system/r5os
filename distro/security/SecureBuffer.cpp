@@ -12,9 +12,56 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
+#include <unistd.h>
 
 
 namespace BSecurityKit {
+
+
+// Review fix (24 Nov 2026): the bytes of a secure buffer are kept out of the
+// swap file. Each buffer gets whole pages of its own, because Haiku's
+// munlock() makes a page swappable again for every buffer on it. mlock() is
+// best effort: when it fails (a limit on a host), the buffer still works and
+// is still wiped.
+static size_t
+secure_span(size_t size)
+{
+	long page = sysconf(_SC_PAGESIZE);
+	if (page <= 0)
+		page = 4096;
+	return (size + (size_t)page - 1) / (size_t)page * (size_t)page;
+}
+
+
+static uint8*
+secure_alloc(size_t size)
+{
+	long page = sysconf(_SC_PAGESIZE);
+	if (page <= 0)
+		page = 4096;
+	size_t span = secure_span(size);
+	if (span < size)
+		return NULL;
+	void* buffer = NULL;
+	if (posix_memalign(&buffer, (size_t)page, span) != 0)
+		return NULL;
+	memset(buffer, 0, span);
+	mlock(buffer, span);
+	return static_cast<uint8*>(buffer);
+}
+
+
+static void
+secure_free(uint8* buffer, size_t size)
+{
+	if (buffer == NULL)
+		return;
+	size_t span = secure_span(size);
+	crypto_wipe(buffer, span);
+	munlock(buffer, span);
+	free(buffer);
+}
 
 
 BSecureBuffer::BSecureBuffer()
@@ -57,7 +104,7 @@ BSecureBuffer::Allocate(size_t size)
 		return B_OK;
 	}
 
-	uint8* buffer = static_cast<uint8*>(calloc(1, size));
+	uint8* buffer = secure_alloc(size);
 	if (buffer == NULL)
 		return B_NO_MEMORY;
 
@@ -79,7 +126,7 @@ BSecureBuffer::SetTo(const void* data, size_t size)
 	if (data == NULL)
 		return B_BAD_VALUE;
 
-	uint8* buffer = static_cast<uint8*>(malloc(size));
+	uint8* buffer = secure_alloc(size);
 	if (buffer == NULL)
 		return B_NO_MEMORY;
 
@@ -104,9 +151,7 @@ void
 BSecureBuffer::Clear()
 {
 	if (fData != NULL) {
-		if (fSize > 0)
-			crypto_wipe(fData, fSize);
-		free(fData);
+		secure_free(fData, fSize);
 		fData = NULL;
 	}
 	fSize = 0;
