@@ -8,6 +8,26 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-23 - Online Storage, standalone app (not in the image)
+
+Problem: there was no way to sign in to OneDrive or Dropbox and keep one cloud folder and one home folder in step, both ways.
+
+Changed: `distro/apps/onlinestorage` is an ordinary Haiku application. The engine is C++ translated from rclone `c0cef5e872f937727c89bfab71d6be11480f4d40` (MIT, Copyright (C) 2012 by Nick Craig-Wood): OAuth for a public desktop client, Microsoft Graph, and Dropbox. It is not linked into the image. There is no shared library, no background service, and no Settings page.
+
+Choices made without a live service to try them on:
+
+- The client id is a placeholder (`00000000-0000-0000-0000-000000000000` for OneDrive, `r5-placeholder` for Dropbox) until the apps are registered. rclone's client id and secret are not copied. There is no client secret. PKCE S256 is always on. The redirect and the listener are `http://127.0.0.1:53682/`, not rclone's `localhost` string.
+- OneDrive scopes are Files.ReadWrite and offline_access. Dropbox scopes are files.metadata.write, files.content.write and files.content.read, with `token_access_type=offline`.
+- Tokens stay in memory. Signing in is required again after a restart. The encrypted key store in `docs/VPN-KIT.md` is still plaintext, so it is not used.
+- A conflict keeps both copies. The cloud bytes keep the original name. The local bytes are saved as `name (conflict).ext` and uploaded under that name. An upload checks the cloud revision again, then OneDrive sends the eTag as If-Match and Dropbox commits with mode update. If the item changed, nothing is written over it. Names that differ only by letter case are one file on these services: the cloud spelling is kept.
+- Deleting a folder on one side deletes it on the other, including files the service did not list one by one. A file that cannot be read locally stops the sync. It is not treated as a delete.
+- Content is compared by SHA-256. A Retry-After up to five minutes is waited in full (a longer value waits five minutes, so a bad header cannot stall Quit for hours). Dropbox upload chunks are 4 MiB so a resume can be tested.
+- A redirect of 301, 302 or 303 is sent again as a GET with no body. A 307 or 308 keeps the body only on the same host. The scheme check ignores letter case, so `HTTP://` is still a downgrade.
+- The first sync lists the folder. Later syncs continue from that listing's cursor. A cursor taken after the uploads is not used, so an edit that arrives during the sync is still seen next time. If the listing fails, the previous cursor is kept.
+- If both accounts are signed in, Sync now uses OneDrive. The cloud folder is typed as a path under the account root. The local folder is a directory panel.
+
+Limits: nothing was tested against Microsoft or Dropbox. The simulated tests ran on the build host (WSL), not in QEMU. The window was not booted. Google Drive was not started. National clouds, SharePoint, Dropbox Paper and shared-folder mounting are not implemented.
+
 ## 2026-11-23 - Card reader: #4572 and #4573 tested on the 5625U
 
 Tested on the 5625U (stick 80, main after #4573, `generated/boot-5625u-80/` in the stick worktree): the SD card went in and out three times. Each time: `rtsx: card inserted`, a scan, `SDHC card found`, a new disk (`disk/mmc/0/raw`, `/1/raw`, `/2/raw`), the 4 bit bus and 25 reads without an error; on removal `rtsx: card removed`, a scan and `No card in the slot` at once. No `CMD7` timeout (stick 77 and 79), no rtsx or exFAT error, no crash.

@@ -1,0 +1,51 @@
+# SPDX-FileCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+
+SubDir HAIKU_TOP src apps onlinestorage ;
+
+UsePrivateHeaders shared ;
+UsePrivateHeaders net ;
+UsePrivateHeaders netservices2 ;
+UsePrivateSystemHeaders ;
+
+SubDirC++Flags -std=gnu++17 ;
+
+# Basenames, so the object files stay in this directory. Jam does not
+# create engine/ and tests/ under the object directory.
+SEARCH_SOURCE += [ FDirName $(SUBDIR) engine ] ;
+SEARCH_SOURCE += [ FDirName $(SUBDIR) tests ] ;
+
+local architecture = $(TARGET_PACKAGING_ARCH) ;
+
+Application OnlineStorage :
+	OnlineStorageApp.cpp
+	OnlineStorageWindow.cpp
+
+	ApiCall.cpp
+	Dropbox.cpp
+	HttpTransport.cpp
+	JsonUtil.cpp
+	LocalFile.cpp
+	OAuth.cpp
+	OneDrive.cpp
+	Provider.cpp
+	Redirect.cpp
+	Retry.cpp
+	Sha256.cpp
+	SyncEngine.cpp
+	TokenStore.cpp
+	Transport.cpp
+	Url.cpp
+
+	MemoryCloud.cpp
+	ScriptedTransport.cpp
+	SelfTest.cpp
+
+	: be tracker <$(architecture)>libnetservices2.a $(TARGET_NETWORK_LIBS)
+		$(HAIKU_NETAPI_LIB) <$(architecture)>libshared.a
+		[ TargetLibstdc++ ]
+	: OnlineStorage.rdef
+	;
+
+# Build the binary with the image jam. Do not add it to SYSTEM_APPS.
+Depends haiku-image : OnlineStorage ;
