@@ -172,8 +172,10 @@ BCard::Draw(BRect updateRect)
 void
 BCard::MessageReceived(BMessage* message)
 {
-	if (message->what == B_COLORS_UPDATED)
+	if (message->what == B_COLORS_UPDATED) {
+		apply_card_view_color(this, fStyle);
 		Invalidate();
+	}
 	BView::MessageReceived(message);
 }
 

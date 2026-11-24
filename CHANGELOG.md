@@ -28,6 +28,26 @@ Choices made without a live service to try them on:
 
 Limits: nothing was tested against Microsoft or Dropbox. The simulated tests ran on the build host (WSL), not in QEMU. The window was not booted. Google Drive was not started. National clouds, SharePoint, Dropbox Paper and shared-folder mounting are not implemented.
 
+## 2026-11-23 - Themes: code-review bug fixes (live switch fan-out, open menus, R5 scroll bars, BCard live color, desktop icon save, settings permissions)
+
+- Problem: code review (`1-THEMING-BUGS.md`, 23 Nov 2026) on `origin/main` (`fe96ea5926`) found 7 real issues: (1–2) `Themes.cpp:set_theme()` looped `be_app->CountWindows()`/`WindowAt()` without holding the looper-list lock (potential use-after-free on closing windows) and skipped `BMenuWindow`s in the calling app; (3) `'R5db'` desktop icon displacement left `fNeedsSaveLocation` set on temporary pushed spots so quitting Tracker persisted the pushed coordinates; (4) `R5ModernControlLook` only read `scroll_bars`/`scroll_bar_width` when `r5/theme` named `R5ModernControlLook`, ignoring Thin/Wide/Haiku scroll bars on the default `R5` (`R5ControlLook`) theme; (5) `BCard::MessageReceived(B_COLORS_UPDATED)` did not re-run `apply_card_view_color()`, leaving stale dark/light `ViewColor()` on document cards after a live mode switch; (6) open `BMenuWindow`s were not restyled on `B_COLORS_UPDATED`; (7) `Themes.cpp` wrote `r5/`, `r5/theme`, and `deskbar/settings` world-writable (`0777`/`0666`) when run as uid 0 in `FirstBootPrompt`.
+- Changed:
+  - `distro/ui/Themes.cpp`: replaced the unlocked `CountWindows()`/`WindowAt()` loop with `be_app->PostMessage(&message)` so `BApplication::_MessageAllWindows()` fans out `B_COLORS_UPDATED` under the looper-list lock to every window including `BMenuWindow`; removed `0777`/`0666` world-writable `chmod` calls.
+  - `distro/login/R5Desktop.cpp`: added `/config/settings/r5` and `/config/settings/deskbar` (`0700`) plus `/config/settings/r5/theme` and `/config/settings/deskbar/settings` (`0644`, if present) to `ensure_user_settings()` so `r5-desktop` chowns them to the signed-in user before dropping uid.
+  - `distro/desktop/src/add-ons/control_look/R5ModernControlLook/R5ModernControlLook.cpp`: accepted both `R5ModernControlLook` and `R5ControlLook` when reading `scroll_bars` and `scroll_bar_width`.
+  - `distro/ui/Card.cpp`: called `apply_card_view_color(this, fStyle)` on `B_COLORS_UPDATED` before `Invalidate()`.
+  - `distro/desktop/src/kits/interface/Menu.cpp`: called `r5_style_menu_window()` + `InvalidateLayout()` on `B_COLORS_UPDATED` when attached to a `BMenuWindow`.
+  - `distro/desktop/src/kits/tracker/PoseView.cpp`: cleared `fNeedsSaveLocation` after temporarily displacing a desktop icon under Deskbar (if it wasn't already dirty) and marked `SetSaveLocation()` on restore.
+- Not changed: finding 8 (bounded previous `BControlLook` leak on live switch in `Window.cpp`) stays as-is by design to avoid cross-thread draw use-after-free.
+
+## 2026-11-23 - Themes: tested on the 5625U
+
+The owner's three screenshots from the 5625U on 23 Nov (about 22:43) show the theming on hardware:
+- Sign in: the light sign-in window.
+- Dark mode: the Settings home is fully dark, with the category labels coloured per category, and the Deskbar is a dark menu expanded at the top right.
+- R5 Modern, light: the Theme page has the theme cards (R5, R5 Modern, Classic (Haiku), Save as theme…), Mode, Accent and the Parts box. The Deskbar is a floating white glass pill with a shadow, and the Settings window has round corners.
+
+These are screenshots only. The stick number and boot logs are not recorded here, and the syslog was not checked for crashes. Not shown: an open pop-up menu field, Custom colors, and Save as theme….
 ## 2026-11-23 - Card reader: #4572 and #4573 tested on the 5625U
 
 Tested on the 5625U (stick 80, main after #4573, `generated/boot-5625u-80/` in the stick worktree): the SD card went in and out three times. Each time: `rtsx: card inserted`, a scan, `SDHC card found`, a new disk (`disk/mmc/0/raw`, `/1/raw`, `/2/raw`), the 4 bit bus and 25 reads without an error; on removal `rtsx: card removed`, a scan and `No card in the slot` at once. No `CMD7` timeout (stick 77 and 79), no rtsx or exFAT error, no crash.
