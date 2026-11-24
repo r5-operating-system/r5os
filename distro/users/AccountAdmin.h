@@ -19,8 +19,12 @@ class BString;
 
 extern const char* kR5LoginSignature;
 extern const char* kAdminGroupName;
+extern const char* kGuestAccountName;
+extern const char* kGuestHomePath;
 
+static const char* const kSharedFolderPath = "/boot/home/Shared";
 static const uid_t kMinPersonUid = 1000;
+static const uid_t kGuestUid = 1999;
 
 const uint32 kMsgAdminAdd = 'r5aa';
 const uint32 kMsgAdminDelete = 'r5ad';
@@ -53,12 +57,19 @@ const uint32 kMsgAdminListAccounts = 'r5ay';
 // (string) and "admin" (bool). Needs an administrator. The first
 // administrator and the last enabled administrator stay administrators.
 const uint32 kMsgAdminSetAccountType = 'r5ak';
+// Guest sign-in switch (off by default, stored machine-wide by Login).
+// kMsgAdminGetGuestEnabled replies with bool "enabled".
+// kMsgAdminSetGuestEnabled takes bool "enabled" and requires an administrator.
+const uint32 kMsgAdminGetGuestEnabled = 'r5ge';
+const uint32 kMsgAdminSetGuestEnabled = 'r5gs';
 
 // How long an administrator password keeps one preference app unlocked.
 static const int32 kAdminGrantSeconds = 5 * 60;
 
 
 bool is_listed_account(const struct passwd* pwd);
+bool is_guest_account(const char* name);
+bool is_guest_enabled();
 bool is_admin_user(const struct passwd* pwd);
 bool is_disabled_user(const char* name);
 bool is_first_home_admin(const struct passwd* pwd);
@@ -67,6 +78,11 @@ bool account_password_matches(const struct passwd* pwd, const char* plain);
 int32 admin_count();
 
 status_t migrate_admin_off_root();
+status_t ensure_shared_folder();
+status_t ensure_guest_account(BString& error);
+status_t wipe_guest_home();
+// True while a team of the guest account runs (a guest session).
+bool guest_session_active();
 status_t write_desktop_session(const char* login);
 status_t clear_desktop_session();
 status_t signed_in_name(BString& name);

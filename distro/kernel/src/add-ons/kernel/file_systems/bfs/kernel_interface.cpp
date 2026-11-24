@@ -1228,6 +1228,20 @@ bfs_rename(fs_volume* _volume, fs_vnode* _oldDir, const char* oldName,
 	if (vnode.Get(&inode) != B_OK)
 		return B_IO_ERROR;
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// POSIX sticky bit (S_ISVTX) on the source directory: only root, the
+	// directory owner, or the entry owner may rename or move an entry out.
+	if ((oldDirectory->Mode() & S_ISVTX) != 0) {
+		uid_t uid = geteuid();
+		if (uid != 0 && uid != (uid_t)oldDirectory->Node().UserID()
+			&& uid != (uid_t)inode->Node().UserID()) {
+			return B_PERMISSION_DENIED;
+		}
+	}
+// SPDX-SnippetEnd
+
 	// Don't move a directory into one of its children - we soar up
 	// from the newDirectory to either the root node or the old
 	// directory, whichever comes first.

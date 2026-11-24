@@ -29,6 +29,7 @@
 #include <Bitmap.h>
 #include <Button.h>
 #include <Card.h>
+#include <CheckBox.h>
 #include <Entry.h>
 #include <FilePanel.h>
 #include <GridLayout.h>
@@ -38,8 +39,11 @@
 #include <MenuField.h>
 #include <MenuItem.h>
 #include <PopUpMenu.h>
+#include <R5IconView.h>
+#include <R5Icons.h>
 #include <R5UI.h>
 #include <ScrollView.h>
+#include <SeparatorView.h>
 #include <String.h>
 #include <StringView.h>
 #include <UserListItem.h>
@@ -51,6 +55,7 @@
 
 
 using BAppearanceKit::BCard;
+using BAppearanceKit::BIconView;
 using BAppearanceKit::BUserListItem;
 
 
@@ -63,6 +68,8 @@ static const uint32 kMsgEmail = 'acEm';
 static const uint32 kMsgType = 'acTp';
 static const uint32 kMsgPassword = 'acPs';
 static const uint32 kMsgChoose = 'acCh';
+static const uint32 kMsgGuestToggle = 'acGt';
+static const uint32 kMsgOpenShared = 'acSh';
 
 static const char* kDot = " \xc2\xb7 ";
 
@@ -357,7 +364,7 @@ public:
 	virtual	const char*			Keywords() const
 									{ return "user users account accounts "
 										"password administrator standard "
-										"picture email sign in"; }
+										"picture email sign in guest shared"; }
 	virtual	bool				RequiresAdmin() const { return false; }
 	virtual	BView*				CreateView(SettingsContext* context,
 									BRect frame);
@@ -372,6 +379,8 @@ public:
 			void				Remember(const char* name,
 									const BMessage& values);
 			void				Touched(const char* name);
+			void				RememberGuest(bool enabled);
+			void				GuestTouched();
 			void				ClearView(AccountsView* view);
 
 private:
@@ -379,6 +388,9 @@ private:
 			SettingsContext*	fContext;
 			BMessage			fOpened;
 			BMessage			fTouched;
+			bool				fHasOpenedGuest;
+			bool				fOpenedGuest;
+			bool				fGuestTouched;
 };
 
 
@@ -408,11 +420,19 @@ private:
 			void				_DisableOrEnable();
 			void				_Delete();
 			void				_Password();
+			void				_ToggleGuest();
+			void				_OpenShared();
 			bool				_LastAdmin(const AccountInfo& info) const;
 
 			AccountsModule*		fModule;
 			BGroupView*			fLeft;
 			BStringView*		fListCaption;
+			BStringView*		fGuestCaption;
+			BCheckBox*			fGuestSwitch;
+			AccountWrapLabel*	fGuestHint;
+			BStringView*		fSharedTitle;
+			BStringView*		fSharedPath;
+			BButton*			fSharedOpen;
 			bool				fLeftShown;
 			BListView*			fList;
 			BButton*			fAdd;
@@ -454,15 +474,56 @@ AccountsView::AccountsView(AccountsModule* module)
 	fList->SetSelectionMessage(new BMessage(kMsgSelect));
 	BScrollView* scroll = new BScrollView("accounts scroll", fList, 0, false,
 		true);
-	scroll->SetExplicitMinSize(BSize(B_SIZE_UNSET, px(52) * 4 + 4));
+	scroll->SetExplicitMinSize(BSize(B_SIZE_UNSET, px(52) * 3 + 4));
 	fAdd = new BButton("add", "Add account…", new BMessage(kMsgAdd));
 	fDisable = new BButton("disable", "Disable account",
 		new BMessage(kMsgDisable));
 	fDelete = new BButton("delete", "Delete account…",
 		new BMessage(kMsgDelete));
 
+	fGuestCaption = caption("guest caption", "GUEST AND SHARING");
+	fGuestSwitch = new BCheckBox("guest switch",
+		"Allow guests to sign in to this computer",
+		new BMessage(kMsgGuestToggle));
+	fGuestSwitch->SetViewUIColor(B_DOCUMENT_BACKGROUND_COLOR);
+	fGuestHint = new AccountWrapLabel("guest hint",
+		"No password. Everything is deleted at log out.");
+	fGuestHint->SetTextColor(mix_color(ui_color(B_DOCUMENT_BACKGROUND_COLOR),
+		ui_color(B_DOCUMENT_TEXT_COLOR), 140));
+
+	BBitmap* folderBitmap = r5_mime_icon_bitmap(
+		"application/x-vnd.Be-directory", px(24));
+	BIconView* folderIcon = new BIconView("shared icon", folderBitmap);
+	delete folderBitmap;
+	fSharedTitle = new BStringView("shared title", "Shared folder");
+	fSharedPath = new BStringView("shared path", kSharedFolderPath);
+	fSharedPath->SetHighColor(mix_color(ui_color(B_DOCUMENT_BACKGROUND_COLOR),
+		ui_color(B_DOCUMENT_TEXT_COLOR), 140));
+	fSharedOpen = new BButton("shared open", "Open",
+		new BMessage(kMsgOpenShared));
+
+	BCard* guestCard = new BCard("guest card", BAppearanceKit::B_CARD_DOCUMENT);
+	BGroupLayout* guestLayout = (BGroupLayout*)guestCard->GetLayout();
+	guestLayout->SetSpacing(px(6));
+	BLayoutBuilder::Group<>(guestLayout)
+		.SetInsets(px(12), px(8), px(12), px(8))
+		.AddGroup(B_VERTICAL, px(2))
+			.Add(fGuestSwitch)
+			.Add(fGuestHint)
+		.End()
+		.Add(new BSeparatorView(B_HORIZONTAL))
+		.AddGroup(B_HORIZONTAL, px(8))
+			.Add(folderIcon)
+			.AddGroup(B_VERTICAL, 0)
+				.Add(fSharedTitle)
+				.Add(fSharedPath)
+			.End()
+			.AddGlue()
+			.Add(fSharedOpen)
+		.End();
+
 	fListCaption = caption("accounts caption", "ACCOUNTS");
-	fLeft = new BGroupView(B_VERTICAL, px(8));
+	fLeft = new BGroupView(B_VERTICAL, px(6));
 	BLayoutBuilder::Group<>(fLeft)
 		.Add(fListCaption)
 		.Add(scroll)
@@ -471,7 +532,9 @@ AccountsView::AccountsView(AccountsModule* module)
 			.Add(fDisable)
 			.Add(fDelete)
 		.End()
-		// Step 4 adds the "GUEST AND SHARING" caption and its card here.
+		.AddStrut(px(4))
+		.Add(fGuestCaption)
+		.Add(guestCard)
 		.AddGlue();
 	fLeft->SetExplicitPreferredSize(BSize(px(300), B_SIZE_UNSET));
 
@@ -593,15 +656,21 @@ AccountsView::AttachedToWindow()
 	// was attached; the captions and the heading get theirs here.
 	BFont captionFont = sized(r5_settings_bold_font(), 10.5f);
 	fListCaption->SetFont(&captionFont);
+	fGuestCaption->SetFont(&captionFont);
 	fCaption->SetFont(&captionFont);
 	BFont headFont = sized(r5_settings_bold_font(), 15.0f);
 	fHeadName->SetFont(&headFont);
 	BFont lineFont = sized(r5_settings_plain_font(), 11.0f);
 	fHeadLine->SetFont(&lineFont);
+	fSharedPath->SetFont(&lineFont);
+	BFont sharedBold = sized(r5_settings_bold_font(), 12.5f);
+	fSharedTitle->SetFont(&sharedBold);
 	fList->SetTarget(this);
 	fAdd->SetTarget(this);
 	fDisable->SetTarget(this);
 	fDelete->SetTarget(this);
+	fGuestSwitch->SetTarget(this);
+	fSharedOpen->SetTarget(this);
 	fChoose->SetTarget(this);
 	fName->SetTarget(this);
 	fEmail->SetTarget(this);
@@ -655,6 +724,17 @@ AccountsView::Reload(const char* select)
 
 	for (int32 i = fList->CountItems() - 1; i >= 0; i--)
 		delete fList->RemoveItem(i);
+
+	BMessage guestReq(kMsgAdminGetGuestEnabled);
+	BMessage guestReply;
+	BString guestErr;
+	bool guestEnabled = false;
+	if (account_ask_login(guestReq, guestReply, guestErr) == B_OK) {
+		guestEnabled = guestReply.GetBool("enabled", false);
+		if (fModule != NULL)
+			fModule->RememberGuest(guestEnabled);
+	}
+	fGuestSwitch->SetValue(guestEnabled ? B_CONTROL_ON : B_CONTROL_OFF);
 
 	BMessage request(kMsgAdminListAccounts);
 	BMessage reply;
@@ -812,6 +892,7 @@ AccountsView::_SyncEnabled()
 		&& !(fShown.admin && _LastAdmin(fShown)));
 
 	fAdd->SetEnabled(fManaging);
+	fGuestSwitch->SetEnabled(fManaging);
 	bool other = shown && fManaging && !fShown.first && !self;
 	fDisable->SetLabel(shown && fShown.disabled ? "Enable account"
 		: "Disable account");
@@ -828,6 +909,17 @@ AccountsView::MessageReceived(BMessage* message)
 			// The lock opened or closed.
 			Reload();
 			break;
+		case B_COLORS_UPDATED:
+		{
+			rgb_color muted = mix_color(ui_color(B_DOCUMENT_BACKGROUND_COLOR),
+				ui_color(B_DOCUMENT_TEXT_COLOR), 140);
+			fHeadLine->SetHighColor(muted);
+			fGuestHint->SetTextColor(muted);
+			fSharedPath->SetHighColor(muted);
+			fGuestSwitch->SetViewUIColor(B_DOCUMENT_BACKGROUND_COLOR);
+			BGroupView::MessageReceived(message);
+			break;
+		}
 		case kMsgSelect:
 			_ShowSelected();
 			break;
@@ -860,6 +952,12 @@ AccountsView::MessageReceived(BMessage* message)
 			break;
 		case kMsgPassword:
 			_Password();
+			break;
+		case kMsgGuestToggle:
+			_ToggleGuest();
+			break;
+		case kMsgOpenShared:
+			_OpenShared();
 			break;
 		case kMsgChoose:
 			if (message->HasRef("refs")) {
@@ -1064,13 +1162,53 @@ AccountsView::_Password()
 }
 
 
+void
+AccountsView::_ToggleGuest()
+{
+	if (!fManaging)
+		return;
+	bool enabled = fGuestSwitch->Value() == B_CONTROL_ON;
+	BMessage request(kMsgAdminSetGuestEnabled);
+	request.AddBool("enabled", enabled);
+	BMessage reply;
+	BString error;
+	if (account_ask_login(request, reply, error) != B_OK) {
+		show_error(error.Length() > 0 ? error.String()
+			: "The guest setting could not be changed.");
+		fGuestSwitch->SetValue(enabled ? B_CONTROL_OFF : B_CONTROL_ON);
+		return;
+	}
+	if (fModule != NULL)
+		fModule->GuestTouched();
+}
+
+
+void
+AccountsView::_OpenShared()
+{
+	entry_ref ref;
+	if (get_ref_for_path(kSharedFolderPath, &ref) != B_OK) {
+		show_error("The Shared folder could not be found.");
+		return;
+	}
+	BMessage open(B_REFS_RECEIVED);
+	open.AddRef("refs", &ref);
+	BMessenger tracker("application/x-vnd.Be-TRAK");
+	if (tracker.SendMessage(&open) != B_OK)
+		show_error("Tracker could not open the Shared folder.");
+}
+
+
 // #pragma mark - AccountsModule
 
 
 AccountsModule::AccountsModule()
 	:
 	fView(NULL),
-	fContext(NULL)
+	fContext(NULL),
+	fHasOpenedGuest(false),
+	fOpenedGuest(false),
+	fGuestTouched(false)
 {
 }
 
@@ -1099,6 +1237,8 @@ AccountsModule::LoadSettings(SettingsContext* context)
 	fContext = context;
 	fOpened.MakeEmpty();
 	fTouched.MakeEmpty();
+	fHasOpenedGuest = false;
+	fGuestTouched = false;
 	if (fView != NULL && fView->Window() != NULL)
 		fView->Reload();
 	return B_OK;
@@ -1133,10 +1273,29 @@ AccountsModule::Touched(const char* name)
 }
 
 
+void
+AccountsModule::RememberGuest(bool enabled)
+{
+	if (fHasOpenedGuest)
+		return;
+	fHasOpenedGuest = true;
+	fOpenedGuest = enabled;
+}
+
+
+void
+AccountsModule::GuestTouched()
+{
+	fGuestTouched = true;
+	if (fContext != NULL)
+		fContext->NotifyChanged(Identifier());
+}
+
+
 bool
 AccountsModule::IsModified() const
 {
-	return fTouched.CountNames(B_ANY_TYPE) > 0;
+	return fTouched.CountNames(B_ANY_TYPE) > 0 || fGuestTouched;
 }
 
 
@@ -1264,7 +1423,17 @@ AccountsModule::RevertSettings(SettingsContext* context)
 		}
 	}
 
+	if (managing && fGuestTouched && fHasOpenedGuest) {
+		BMessage request(kMsgAdminSetGuestEnabled);
+		request.AddBool("enabled", fOpenedGuest);
+		BMessage reply;
+		BString text;
+		if (account_ask_login(request, reply, text) != B_OK)
+			failed << "\nGuest: " << text;
+	}
+
 	fTouched.MakeEmpty();
+	fGuestTouched = false;
 	if (adminTypeChanged && fView != NULL && fView->Window() != NULL)
 		fView->Window()->PostMessage(kMsgAdminLockChanged);
 	if (fView != NULL)

@@ -82,6 +82,8 @@ private:
 	BadgeView*					fActiveBadge;
 	BStringView*				fPasswordLabel;
 	BAppearanceKit::BPasswordControl* fPasswordControl;
+	BGroupView*					fPasswordGroup;
+	BView*						fGuestNote;
 	BAppearanceKit::BAccentButton* fLoginButton;
 	BStringView*				fInfoView;
 	bool						fInfoIsError;

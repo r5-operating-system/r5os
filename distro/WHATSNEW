@@ -1,3 +1,6 @@
+R5 2026.1-dev Build 10071 - Guest account and Shared folder
+An administrator can now turn on Guest sign-in in Settings under Accounts, Users and Accounts (off by default). When turned on, Guest appears on the Sign in screen without a password; everything created during a Guest session is deleted automatically when Guest logs out or if the computer is switched off. A Guest session cannot be locked, and its Deskbar menu offers Shared folder and Log out Guest and delete files. Every account, including Guest, can read and write files in the Shared folder on the desktop, while only the file's owner or the administrator can remove a file placed there.
+
 R5 2026.1-dev Build 10070 - SD cards and processor updates
 SD cards work in Realtek card readers, including the one in the HP ENVY x360 15. Put a card in and it shows up. Take it out and it is gone at once, and a card you put back works again. At start, R5 brings the processor's microcode up to date, for every AMD and Intel processor R5 supports. About R5 credits the driver for Windows disks (NTFS). Software Update no longer offers Haiku's own system, so it cannot replace R5 with plain Haiku.
 

@@ -56,7 +56,7 @@ Application Deskbar :
 # SPDX-SnippetBegin
 # SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 # SPDX-License-Identifier: MIT
-	libr5ui.so libr5icons.so
+	libr5ui.so libr5icons.so libr5admin.so
 # SPDX-SnippetEnd
 ;
 
