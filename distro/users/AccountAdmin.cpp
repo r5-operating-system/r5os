@@ -270,6 +270,24 @@ add_to_group(const char* groupName, const char* user, BString& errorText)
 }
 
 
+static status_t
+remove_from_group(const char* groupName, const char* user, BString& errorText)
+{
+	if (groupName == NULL || user == NULL)
+		return B_BAD_VALUE;
+	if (getgrnam(groupName) == NULL || !group_has_member(groupName, user))
+		return B_OK;
+	char* argv[] = {
+		const_cast<char*>("/bin/groupmod"),
+		const_cast<char*>("-R"),
+		const_cast<char*>(user),
+		const_cast<char*>(groupName),
+		NULL
+	};
+	return run_argv(argv, errorText);
+}
+
+
 static void ensure_desktop_links(const char* home);
 static void ensure_private_trash(const char* home, uid_t uid, gid_t gid);
 static void ensure_user_mime_db(const char* home, uid_t uid, gid_t gid);
@@ -1869,6 +1887,92 @@ update_profile(BMessage* request, BString& error)
 }
 
 
+// Users and Accounts in Settings reads the accounts here: Login runs as
+// uid 0, so it can read the shadow entry that says whether an account is
+// disabled, which the signed-in account cannot.
+static void
+list_accounts(BMessage* request, BMessage& reply)
+{
+	bool all = sender_may_change(request);
+	uid_t self = (uid_t)-1;
+	bool known = sender_uid(request, self);
+	setpwent();
+	for (;;) {
+		struct passwd* pwd = getpwent();
+		if (pwd == NULL)
+			break;
+		if (!is_listed_account(pwd))
+			continue;
+		if (!all && (!known || pwd->pw_uid != self))
+			continue;
+		reply.AddString("name", pwd->pw_name);
+		reply.AddString("real", pwd->pw_gecos != NULL ? pwd->pw_gecos : "");
+		reply.AddString("home", pwd->pw_dir != NULL ? pwd->pw_dir : "");
+		reply.AddInt32("uid", (int32)pwd->pw_uid);
+		reply.AddBool("admin", is_admin_user(pwd));
+		reply.AddBool("disabled", is_disabled_user(pwd->pw_name));
+		reply.AddBool("first", is_first_home_admin(pwd));
+	}
+	endpwent();
+	if (all)
+		reply.AddInt32("admins", admin_count());
+}
+
+
+static status_t
+set_account_type(const char* name, bool admin, BString& error)
+{
+	struct passwd* pwd = name != NULL ? getpwnam(name) : NULL;
+	if (pwd == NULL || strcmp(pwd->pw_name, name) != 0
+		|| !is_listed_account(pwd)) {
+		error = "That account was not found.";
+		return ENOENT;
+	}
+	char account[64];
+	snprintf(account, sizeof(account), "%s", pwd->pw_name);
+	bool wasAdmin = is_admin_user(pwd);
+	BString detail;
+	if (admin) {
+		if (wasAdmin)
+			return B_OK;
+		if (add_to_group(kAdminGroupName, account, detail) != B_OK) {
+			ensure_admin_group(detail);
+			if (add_to_group(kAdminGroupName, account, detail) != B_OK) {
+				error = "The account could not become an administrator.";
+				return B_ERROR;
+			}
+		}
+		return B_OK;
+	}
+
+	if (!wasAdmin)
+		return B_OK;
+	if (is_first_home_admin(pwd)) {
+		error = "The first administrator stays an administrator.";
+		return B_NOT_ALLOWED;
+	}
+	if (pwd->pw_uid == 0 || pwd->pw_gid == 0) {
+		error = "This account is an administrator through its system group.";
+		return B_NOT_ALLOWED;
+	}
+	if (!is_disabled_user(account) && admin_count() <= 1) {
+		error = "The last administrator cannot become a standard account.";
+		return B_NOT_ALLOWED;
+	}
+	if (remove_from_group(kAdminGroupName, account, detail) != B_OK
+		|| remove_from_group("wheel", account, detail) != B_OK) {
+		error = "The account type could not be changed.";
+		return B_ERROR;
+	}
+	pwd = getpwnam(account);
+	if (pwd != NULL && is_admin_user(pwd)) {
+		error = "The account type could not be changed.";
+		return B_ERROR;
+	}
+	return B_OK;
+}
+
+
 static void
 deny_locked(BMessage& reply)
 {
@@ -1962,6 +2066,10 @@ handle_admin_message(BMessage* request, BMessage& reply)
 			reply.AddInt32("error", B_OK);
 			return B_OK;
 		}
+		case kMsgAdminListAccounts:
+			list_accounts(request, reply);
+			reply.AddInt32("error", B_OK);
+			return B_OK;
 		case kMsgAdminSetProfile:
 			status = update_profile(request, error);
 			if (status != B_OK) {
@@ -2053,6 +2161,14 @@ handle_admin_message(BMessage* request, BMessage& reply)
 			const char* name = NULL;
 			request->FindString("name", &name);
 			status = set_disabled(name, request->GetBool("disable", true),
+				error);
+			break;
+		}
+		case kMsgAdminSetAccountType:
+		{
+			const char* name = NULL;
+			request->FindString("name", &name);
+			status = set_account_type(name, request->GetBool("admin", false),
 				error);
 			break;
 		}

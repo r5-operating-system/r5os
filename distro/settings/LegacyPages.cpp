@@ -205,11 +205,8 @@ register_legacy_pages(SettingsManager& manager)
 		{ "printers", "Printers", "devices",
 			"Printers and the print queue.",
 			"print printer",
-			"application/x-vnd.Be-PRNT" },
-		{ "accounts", "Users and Accounts", "accounts",
-			"People on this computer.",
-			"user password administrator",
-			"application/x-vnd.R5OS-Users" }
+			"application/x-vnd.Be-PRNT" }
+		// Users and Accounts is a page of its own now (AccountsModule.cpp).
 	};
 	for (uint32 i = 0; i < sizeof(pages) / sizeof(pages[0]); i++) {
 		manager.Add(new LegacyModule(pages[i].id, pages[i].name,

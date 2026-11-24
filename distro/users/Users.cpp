@@ -515,7 +515,7 @@ public:
 				.AddGlue()
 				.Add(new BButton("cancel", "Cancel",
 					new BMessage(B_QUIT_REQUESTED)))
-				.Add(new BButton("create", "Create", new BMessage('ucrt')))
+				.Add(new BButton("create", "Add account", new BMessage('ucrt')))
 			.End();
 
 		fName->MakeFocus(true);
@@ -594,11 +594,13 @@ public:
 		fList = new BListView("people");
 		fList->SetSelectionMessage(new BMessage(kMsgSelect));
 		fList->SetExplicitMinSize(BSize(220, 220));
-		fAdd = new BButton("add", "Add...", new BMessage(kMsgAdd));
-		fDisable = new BButton("disable", "Disable", new BMessage(kMsgDisable));
-		fDelete = new BButton("delete", "Delete...", new BMessage(kMsgDelete));
+		fAdd = new BButton("add", "Add account…", new BMessage(kMsgAdd));
+		fDisable = new BButton("disable", "Disable account",
+			new BMessage(kMsgDisable));
+		fDelete = new BButton("delete", "Delete account…",
+			new BMessage(kMsgDelete));
 
-		BStringView* people = new BStringView("people-title", "People");
+		BStringView* people = new BStringView("people-title", "Accounts");
 		BFont font(be_bold_font);
 		people->SetFont(&font);
 
@@ -638,7 +640,7 @@ public:
 		choose->SetExplicitMinSize(BSize(148, B_SIZE_UNSET));
 		clear->SetExplicitMinSize(BSize(148, B_SIZE_UNSET));
 
-		// Same height as "People", so Name starts on the list's top line.
+		// Same height as "Accounts", so Name starts on the list's top line.
 		BStringView* align = new BStringView("card-align", " ");
 		align->SetFont(&font);
 
@@ -1023,13 +1025,14 @@ private:
 		if (!admin || item == NULL) {
 			fDisable->SetEnabled(false);
 			fDelete->SetEnabled(false);
-			fDisable->SetLabel("Disable");
+			fDisable->SetLabel("Disable account");
 			return;
 		}
 		bool firstHome = _SelectedIsFirstHome();
 		fDelete->SetEnabled(!firstHome && item->Uid() != getuid());
 		fDisable->SetEnabled(!firstHome);
-		fDisable->SetLabel(item->IsDisabled() ? "Enable" : "Disable");
+		fDisable->SetLabel(item->IsDisabled() ? "Enable account"
+			: "Disable account");
 	}
 
 	void _Add()

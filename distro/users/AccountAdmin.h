@@ -42,6 +42,17 @@ const uint32 kMsgAdminSetDriverBlocked = 'r5dv';
 // "key" (strings, the lines replaced), "lines" (string) and "replace" (bool).
 // Login only accepts the files and keys in DriverSettingsAdmin.cpp.
 const uint32 kMsgAdminSetDriverSetting = 'r5ds';
+// Users and Accounts in Settings. The accounts, one entry per account in
+// the repeated fields "name", "real" and "home" (strings), "uid" (int32),
+// "admin", "disabled" and "first" (bools, "first" for the administrator
+// whose home is /boot/home), plus "admins" (int32, the enabled
+// administrators; only with every account). An administrator, or a team
+// with a grant, gets every account; any other sender only its own.
+const uint32 kMsgAdminListAccounts = 'r5ay';
+// Make an account an administrator or a standard account. Fields "name"
+// (string) and "admin" (bool). Needs an administrator. The first
+// administrator and the last enabled administrator stay administrators.
+const uint32 kMsgAdminSetAccountType = 'r5ak';
 
 // How long an administrator password keeps one preference app unlocked.
 static const int32 kAdminGrantSeconds = 5 * 60;
