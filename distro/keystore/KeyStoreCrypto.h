@@ -147,7 +147,7 @@ public:
 	// account's own protector file as uid 0, before the seal is checked.
 	// Only the fixed choice (at most 64 MiB, 3 passes, 1 lane) is accepted.
 	static	bool				IsAllowedPasswordParams(
-									const BPasswordHash::Parameters& params);
+									const BSecurityKit::BPasswordHash::Parameters& params);
 };
 
 
