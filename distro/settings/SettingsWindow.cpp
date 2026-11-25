@@ -1059,6 +1059,22 @@ SettingsWindow::MessageReceived(BMessage* message)
 			_ShowCategory(category);
 			break;
 		}
+		case kMsgDesktopColorChanged:
+		{
+			// Every page that was opened gets it, shown or not.
+			for (int32 i = 0; fDeck != NULL && i < fDeck->CountChildren(); i++) {
+				BView* scroller = fDeck->ChildAt(i);
+				if (scroller->Name() == NULL
+					|| strncmp(scroller->Name(), "module:", 7) != 0)
+					continue;
+				for (int32 j = 0; j < scroller->CountChildren(); j++) {
+					BView* child = scroller->ChildAt(j);
+					if (dynamic_cast<BScrollBar*>(child) == NULL)
+						child->MessageReceived(message);
+				}
+			}
+			break;
+		}
 		case kMsgOpenPage:
 		{
 			const char* moduleId = NULL;

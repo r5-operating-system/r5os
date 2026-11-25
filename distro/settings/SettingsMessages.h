@@ -21,6 +21,9 @@ const uint32 kMsgModuleChanged = 'r5sm';
 const uint32 kMsgLockButton = 'r5sl';
 const uint32 kMsgLockTick = 'r5st';
 const uint32 kMsgRefreshPage = 'r5rf';
+// The desktop colour changed outside Settings (a colour dropped on the
+// desktop in Tracker). Carries "RGBColor" (B_RGB_COLOR_TYPE).
+const uint32 kMsgDesktopColorChanged = 'r5dc';
 
 
 #endif

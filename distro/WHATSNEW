@@ -1,3 +1,6 @@
+R5 2026.1-dev Build 10073 - Settings in the Deskbar menu
+The Deskbar menu has a Settings item, with the R5 wave, right under Mount. It opens Settings. Deskbar preferences in the same menu now opens the Desktop and Deskbar page in Settings. Bluetooth now also works on the smaller R5 image: the Bluetooth page, the Deskbar icon, keyboards, mice and game controllers. Bluetooth audio still needs the full image. In Users and Accounts you can remove an account's picture again. Virtual memory tells you when its saved disk is missing. A colour you drop on the desktop now also shows on the Wallpaper and Display pages, and is no longer undone by your next change on Wallpaper.
+
 R5 2026.1-dev Build 10072 - A password for every account
 On an installed R5, an account without a password now chooses one before its first desktop: the Sign in screen asks for your name and a new password, twice, with a hint how strong it is. New passwords are stored in a stronger form, and existing passwords keep working. When you try R5 from the USB stick you still start without a password; mail and online storage can remember their sign-ins during that session and forget them when you shut down. The Sign in screen now says account instead of person.
 

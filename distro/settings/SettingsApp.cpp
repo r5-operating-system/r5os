@@ -95,6 +95,19 @@ SettingsApp::MessageReceived(BMessage* message)
 			return;
 		}
 	}
+	// Tracker forwards a colour dropped on the desktop, as it does to
+	// Backgrounds, so the Wallpaper page does not write its old colour back.
+	const void* data = NULL;
+	ssize_t size = 0;
+	if (message->FindData("RGBColor", B_RGB_COLOR_TYPE, &data, &size) == B_OK
+		&& size >= (ssize_t)sizeof(rgb_color)) {
+		if (fWindow != NULL) {
+			BMessage changed(kMsgDesktopColorChanged);
+			changed.AddData("RGBColor", B_RGB_COLOR_TYPE, data, size);
+			fWindow->PostMessage(&changed);
+		}
+		return;
+	}
 	BApplication::MessageReceived(message);
 }
 

@@ -10,6 +10,7 @@
 
 #include "SettingsFont.h"
 #include "SettingsManager.h"
+#include "SettingsMessages.h"
 #include "SettingsModule.h"
 
 #include <Alert.h>
@@ -232,6 +233,7 @@ public:
 			void				SetOffset(int32 x, int32 y);
 			void				SetOutline(bool outline);
 			void				SetColor(rgb_color color);
+			void				AdoptDesktopColor(rgb_color color);
 			status_t			SelectScope(int32 scope, const char* folder);
 			void				AddPicture(const char* path);
 			void				ClearView(WallpaperView* view);
@@ -1291,6 +1293,18 @@ WallpaperView::MessageReceived(BMessage* message)
 		BGroupView::MessageReceived(message);
 		return;
 	}
+	if (message->what == kMsgDesktopColorChanged) {
+		const void* data = NULL;
+		ssize_t size = 0;
+		if (fModule != NULL && message->FindData("RGBColor",
+				B_RGB_COLOR_TYPE, &data, &size) == B_OK
+			&& size >= (ssize_t)sizeof(rgb_color)) {
+			fModule->AdoptDesktopColor(
+				*static_cast<const rgb_color*>(data));
+			_Refresh();
+		}
+		return;
+	}
 	if (message->WasDropped() && fPicker->IsEnabled()) {
 		const void* data = NULL;
 		ssize_t size = 0;
@@ -1867,6 +1881,17 @@ WallpaperModule::SetColor(rgb_color color)
 		return;
 	fColor = color;
 	_Changed();
+}
+
+
+/*!	The desktop colour was set outside this page (Tracker). Take it without
+	writing it again, so a later change on this page keeps it.
+*/
+void
+WallpaperModule::AdoptDesktopColor(rgb_color color)
+{
+	if (fDesktop)
+		fColor = color;
 }
 
 

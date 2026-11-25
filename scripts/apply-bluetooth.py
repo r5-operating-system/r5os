@@ -24,6 +24,14 @@
   unmodified, into system/non-packaged/data/firmware/h2generic, regular
   image only (docs/BLUETOOTH-2.md, step B0).
 
+Since 25 Nov 2026 (issue #4615) the minimum image has Bluetooth too: the
+stack, h2generic and bluetooth_hid, bluetooth_server with its launch job,
+bluetooth_deskbar, libbluetooth.so, libr5bt.so with libmedia.so (the library
+only, no media_server), the Bluetooth program, the Settings page, and the
+Realtek and MediaTek Bluetooth firmware. Audio and the tests stay in the
+regular image. The minimum block only counts for a minimum build, because
+the regular image reads the minimum definitions first and adds its own.
+
 docs/BLUETOOTH.md is the plan."""
 from __future__ import annotations
 
@@ -42,6 +50,36 @@ AddDirectoryToHaikuImage system non-packaged data launch ;
 AddFilesToHaikuImage system non-packaged data launch : $(r5BtLaunch) ;
 """
 
+MINIMUM_BLOCK = """
+# R5 Bluetooth in the minimum image (scripts/apply-bluetooth.py, issue #4615).
+# The regular image reads this file first and adds the same parts itself,
+# so this block only counts for a minimum build. No audio, no tests.
+if $(HAIKU_BUILD_TYPE) = minimum {
+	SYSTEM_PREFERENCES += Bluetooth ;
+	SYSTEM_SERVERS += bluetooth_server bluetooth_deskbar ;
+	SYSTEM_NETWORK_PROTOCOLS += bluetooth l2cap ;
+	SYSTEM_BT_STACK = hci btCoreData ;
+	SYSTEM_ADD_ONS_DRIVERS_BT_H2 += h2generic ;
+	SYSTEM_ADD_ONS_DRIVERS_BT_HID += bluetooth_hid ;
+	SYSTEM_ADD_ONS_SETTINGS += settings_bluetooth ;
+
+	local r5BtLaunch = <r5-launch>bluetooth ;
+	SEARCH on $(r5BtLaunch) = [ FDirName $(HAIKU_TOP) data launch r5 ] ;
+	AddDirectoryToHaikuImage system non-packaged data launch ;
+	AddFilesToHaikuImage system non-packaged data launch : $(r5BtLaunch) ;
+
+	local r5RtkBt = <r5rtk>rtl8761cu_fw.bin <r5rtk>rtl8761cu_config.bin
+		<r5rtk>LICENCE.rtlwifi_firmware.txt ;
+	SEARCH on $(r5RtkBt) = [ FDirName $(HAIKU_TOP) data firmware realtek ] ;
+	local r5MtkBt = <r5mtk>BT_RAM_CODE_MT7961_1_2_hdr.bin
+		<r5mtk>LICENCE.mediatek ;
+	SEARCH on $(r5MtkBt) = [ FDirName $(HAIKU_TOP) data firmware mediatek ] ;
+	AddDirectoryToHaikuImage system non-packaged data firmware h2generic ;
+	AddFilesToHaikuImage system non-packaged data firmware h2generic
+		: $(r5RtkBt) $(r5MtkBt) ;
+}
+"""
+MINIMUM_LIBS = ("libbluetooth.so", "libr5bt.so", "libmedia.so")
 REALTEK_FIRMWARE = ("rtl8761cu_fw.bin", "rtl8761cu_config.bin",
     "LICENCE.rtlwifi_firmware.txt")
 
@@ -323,6 +361,15 @@ def main() -> int:
     insert_once(HAIKU / "build" / "jam" / "images" / "definitions" / "regular",
         "AddFilesToHaikuImage home config settings : $(shortcutsSettingsFile) ;\n",
         REALTEK_BLOCK, "Realtek firmware image")
+
+    # The minimum image (issue #4615). Its library list is its own rule,
+    # which the regular image replaces, so these lines need no guard.
+    minimum = HAIKU / "build" / "jam" / "images" / "definitions" / "minimum"
+    for lib in MINIMUM_LIBS:
+        insert_once(minimum, "\t\t\tlibr5ui.so\n", "\t\t\t" + lib + "\n",
+            lib + " minimum image")
+    insert_once(minimum, "SYSTEM_ADD_ONS_SETTINGS += settings_fonts ;\n",
+        MINIMUM_BLOCK, "Bluetooth minimum image")
     return 0
 
 

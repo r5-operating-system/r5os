@@ -109,6 +109,7 @@ private:
 			BMenuField*			fVolume;
 			BPopUpMenu*			fVolumeMenu;
 			SizeSlider*			fSize;
+			BStringView*		fNotice;
 };
 
 
@@ -133,6 +134,7 @@ public:
 	virtual	status_t			ApplyDefaults(SettingsContext* context);
 
 			const SwapState&	Current() const { return fCurrent; }
+			const char*			Notice() const { return fNotice.String(); }
 			void				ClearView(VirtualMemoryView* view);
 			void				UserEdited(const SwapState& state);
 
@@ -146,6 +148,7 @@ private:
 			SwapState			fCurrent;
 			SwapState			fOpened;
 			SwapState			fFactory;
+			BString				fNotice;
 };
 
 
@@ -268,7 +271,8 @@ VirtualMemoryView::VirtualMemoryView(VirtualMemoryModule* module)
 	fAutomatic(NULL),
 	fVolume(NULL),
 	fVolumeMenu(NULL),
-	fSize(NULL)
+	fSize(NULL),
+	fNotice(NULL)
 {
 	fEnable = new BCheckBox("enable", "Enable virtual memory",
 		new BMessage(kMsgEnable));
@@ -294,7 +298,14 @@ VirtualMemoryView::VirtualMemoryView(VirtualMemoryModule* module)
 			"Changes take effect on the next start."));
 	box->AddChild(inner);
 
+	// What the VirtualMemory program asked in an alert (issue #4615): the
+	// settings file names a volume that is missing, or cannot be read.
+	fNotice = new BStringView("notice", "");
+	fNotice->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
+	fNotice->Hide();
+
 	BLayoutBuilder::Group<>(this)
+		.Add(fNotice)
 		.Add(box)
 		.AddGlue();
 
@@ -481,6 +492,12 @@ void
 VirtualMemoryView::ApplyState(const SwapState& state)
 {
 	_Show(state);
+	const char* notice = fModule != NULL ? fModule->Notice() : "";
+	fNotice->SetText(notice);
+	if (notice[0] != '\0' && fNotice->IsHidden(fNotice))
+		fNotice->Show();
+	else if (notice[0] == '\0' && !fNotice->IsHidden(fNotice))
+		fNotice->Hide();
 }
 
 
@@ -624,19 +641,26 @@ VirtualMemoryModule::_LoadFile()
 {
 	fFactory = factory_swap();
 	fCurrent = fFactory;
+	fNotice = "";
 	BFile file;
 	if (file.SetTo(kSwapPath, B_READ_ONLY) != B_OK) {
 		fOpened = fCurrent;
 		return;
 	}
+	// From here on the file exists, so a file that cannot be read is
+	// reported, as the VirtualMemory program did.
+	static const char* kUnreadable = "The settings file could not be read. "
+		"The defaults are shown; a change writes them.";
 	off_t length = 0;
 	if (file.GetSize(&length) != B_OK || length <= 0 || length > 64 * 1024) {
+		fNotice = kUnreadable;
 		fOpened = fCurrent;
 		return;
 	}
 	BString text;
 	char* buffer = text.LockBuffer((int32)length);
 	if (buffer == NULL) {
+		fNotice = kUnreadable;
 		fOpened = fCurrent;
 		return;
 	}
@@ -655,6 +679,7 @@ VirtualMemoryModule::_LoadFile()
 		|| !field(text, "swap_volume_device", device)
 		|| !field(text, "swap_volume_filesystem", filesystem)
 		|| !field(text, "swap_volume_capacity", capacity)) {
+		fNotice = kUnreadable;
 		fOpened = fCurrent;
 		return;
 	}
@@ -663,8 +688,11 @@ VirtualMemoryModule::_LoadFile()
 	fCurrent.size = (off_t)atoll(size.String());
 	dev_t volume = match_volume(name.String(), device.String(),
 		filesystem.String(), (off_t)atoll(capacity.String()));
-	if (volume < 0)
+	if (volume < 0) {
 		volume = fFactory.volume;
+		fNotice = "The volume in the settings file was not found. The boot "
+			"volume is shown; a change writes it.";
+	}
 	fCurrent.volume = volume;
 	fOpened = fCurrent;
 }
@@ -742,7 +770,12 @@ VirtualMemoryModule::SaveSettings(SettingsContext* context)
 	fContext = context;
 	if (context == NULL || !context->AdminChangeAllowed())
 		return B_PERMISSION_DENIED;
-	return _Write(fCurrent);
+	status_t status = _Write(fCurrent);
+	if (status == B_OK && fNotice.Length() > 0) {
+		fNotice = "";
+		_Push();
+	}
+	return status;
 }
 
 

@@ -68,6 +68,7 @@ static const uint32 kMsgEmail = 'acEm';
 static const uint32 kMsgType = 'acTp';
 static const uint32 kMsgPassword = 'acPs';
 static const uint32 kMsgChoose = 'acCh';
+static const uint32 kMsgRemovePicture = 'acRp';
 static const uint32 kMsgGuestToggle = 'acGt';
 static const uint32 kMsgOpenShared = 'acSh';
 
@@ -417,6 +418,7 @@ private:
 			void				_SaveEmail();
 			void				_SetType(BMessage* message);
 			void				_SetPicture(BMessage* message);
+			void				_RemovePicture();
 			void				_DisableOrEnable();
 			void				_Delete();
 			void				_Password();
@@ -444,6 +446,7 @@ private:
 			BStringView*		fHeadName;
 			BStringView*		fHeadLine;
 			BButton*			fChoose;
+			BButton*			fRemovePicture;
 			AccountTextField*	fName;
 			AccountTextField*	fEmail;
 			BMenuField*			fType;
@@ -547,6 +550,8 @@ AccountsView::AccountsView(AccountsModule* module)
 		ui_color(B_DOCUMENT_TEXT_COLOR), 140));
 	fChoose = new BButton("choose", "Choose picture…",
 		new BMessage(kMsgChoose));
+	fRemovePicture = new BButton("remove picture", "Remove picture",
+		new BMessage(kMsgRemovePicture));
 
 	fName = new AccountTextField("name", new BMessage(kMsgName));
 	fEmail = new AccountTextField("email", new BMessage(kMsgEmail));
@@ -595,6 +600,7 @@ AccountsView::AccountsView(AccountsModule* module)
 				.AddStrut(px(2))
 				.AddGroup(B_HORIZONTAL)
 					.Add(fChoose)
+					.Add(fRemovePicture)
 					.AddGlue()
 				.End()
 				.AddStrut(px(4))
@@ -672,6 +678,7 @@ AccountsView::AttachedToWindow()
 	fGuestSwitch->SetTarget(this);
 	fSharedOpen->SetTarget(this);
 	fChoose->SetTarget(this);
+	fRemovePicture->SetTarget(this);
 	fName->SetTarget(this);
 	fEmail->SetTarget(this);
 	fType->Menu()->SetTargetForItems(this);
@@ -887,6 +894,7 @@ AccountsView::_SyncEnabled()
 	fName->SetEnabled(edit);
 	fEmail->SetEnabled(edit);
 	fChoose->SetEnabled(edit);
+	fRemovePicture->SetEnabled(edit && fPicture->Picture() != NULL);
 	fPassword->SetEnabled(edit);
 	fType->SetEnabled(shown && fManaging && !fShown.first
 		&& !(fShown.admin && _LastAdmin(fShown)));
@@ -958,6 +966,9 @@ AccountsView::MessageReceived(BMessage* message)
 			break;
 		case kMsgOpenShared:
 			_OpenShared();
+			break;
+		case kMsgRemovePicture:
+			_RemovePicture();
 			break;
 		case kMsgChoose:
 			if (message->HasRef("refs")) {
@@ -1096,6 +1107,34 @@ AccountsView::_SetPicture(BMessage* message)
 	if (fModule != NULL)
 		fModule->Touched(name);
 	Reload(name);
+}
+
+
+/*!	Back to the initials, as "Remove picture" in the Users program
+	(issue #4615). Login removes the stored picture.
+*/
+void
+AccountsView::_RemovePicture()
+{
+	if (!fHasShown || fPicture->Picture() == NULL)
+		return;
+	bool self = fShown.IsSelf();
+	if (!self && !fManaging)
+		return;
+	BString name(fShown.name);
+	BMessage request(kMsgAdminSetProfile);
+	request.AddString("name", name.String());
+	request.AddBool("clear_picture", true);
+	BMessage reply;
+	BString error;
+	if (account_ask_login(request, reply, error) != B_OK) {
+		show_error(error.Length() > 0 ? error.String()
+			: "The picture could not be removed.");
+		return;
+	}
+	if (fModule != NULL)
+		fModule->Touched(name.String());
+	Reload(name.String());
 }
 
 

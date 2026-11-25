@@ -637,6 +637,16 @@ BDeskWindow::MessageReceived(BMessage* message)
 				&initStatus);
 			if (initStatus == B_OK)
 				messenger.SendMessage(message);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			// The Wallpaper page of Settings shows the same colour
+			// (issue #4615).
+			BMessenger settings("application/x-vnd.R5OS-Settings", -1,
+				&initStatus);
+			if (initStatus == B_OK)
+				settings.SendMessage(message);
+// SPDX-SnippetEnd
 
 			return;
 		}
