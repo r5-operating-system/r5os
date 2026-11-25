@@ -7,7 +7,11 @@ Application notification_server :
 	NotificationServer.cpp
 	NotificationView.cpp
 	NotificationWindow.cpp
+# SPDX-SnippetBegin
+# SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
 	: be translation libr5admin.so [ TargetLibstdc++ ] libnotification.a localestub
+# SPDX-SnippetEnd
 	: notification_server.rdef
 ;
 

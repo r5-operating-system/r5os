@@ -101,7 +101,7 @@ NotificationWindow::NotificationWindow()
 // SPDX-License-Identifier: MIT
 	,
 	fAdminPort(-1),
-	fSessionHidden(false)
+	fSessionHidden(0)
 // SPDX-SnippetEnd
 {
 	status_t result = find_directory(B_USER_CACHE_DIRECTORY, &fCachePath);
@@ -208,7 +208,7 @@ NotificationWindow::MessageReceived(BMessage* message)
 // SPDX-License-Identifier: MIT
 			// Fast user switching (Q5): keep notifications arriving while this
 			// session is hidden and show them when the person returns.
-			if (fSessionHidden) {
+			if (atomic_get(&fSessionHidden) != 0) {
 				if (fQueuedNotifications.size() < 64)
 					fQueuedNotifications.push_back(*message);
 				BMessage reply(B_REPLY);
@@ -336,7 +336,7 @@ NotificationWindow::_DeliverNotification(BMessage* message, bool sendReply)
 void
 NotificationWindow::_SetSessionHidden(bool hidden)
 {
-	fSessionHidden = hidden;
+	atomic_set(&fSessionHidden, hidden ? 1 : 0);
 	if (hidden)
 		return;
 

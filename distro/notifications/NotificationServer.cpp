@@ -69,15 +69,18 @@ NotificationServer::MessageReceived(BMessage* message)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-			// Fast user switching (Q5): do not beep while this session is
-			// hidden; the sound will play when the user returns if desired.
+			// Fast user switching (Q5): do not beep while this session is hidden.
 			if (!fWindow->IsSessionHidden()) {
+// SPDX-SnippetEnd
 				int32 type = 0;
 				if (message->FindInt32("_type", &type) == B_OK) {
 					if (type < (int32)(sizeof(kSoundNames) / sizeof(const char*))
 						&& type != B_PROGRESS_NOTIFICATION)
 						system_beep(kSoundNames[type]);
 				}
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
 			}
 // SPDX-SnippetEnd
 

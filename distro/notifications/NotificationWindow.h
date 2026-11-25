@@ -51,7 +51,9 @@ public:
 // SPDX-License-Identifier: MIT
 			port_id					AdminPort() const { return fAdminPort; }
 			bool					IsSessionHidden() const
-										{ return fSessionHidden; }
+										{ return atomic_get(
+											const_cast<int32*>(&fSessionHidden))
+											!= 0; }
 // SPDX-SnippetEnd
 
 private:
@@ -86,7 +88,7 @@ private:
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 			port_id					fAdminPort;
-			bool					fSessionHidden;
+			int32					fSessionHidden;
 			std::vector<BMessage>	fQueuedNotifications;
 // SPDX-SnippetEnd
 };

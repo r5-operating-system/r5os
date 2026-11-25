@@ -55,12 +55,12 @@ public:
 			void				SetRole(const char* role);
 			void				SetAvatar(const BBitmap* avatar);
 
-			bool				IsSignedIn() const;
-			void				SetSignedIn(bool signedIn);
-
 	virtual	void				DrawItem(BView* owner, BRect itemRect,
 									bool complete = false);
 	virtual	void				Update(BView* owner, const BFont* font);
+
+			bool				IsSignedIn() const;
+			void				SetSignedIn(bool signedIn);
 
 private:
 			void				_Init();

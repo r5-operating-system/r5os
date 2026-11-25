@@ -306,18 +306,26 @@ EventDispatcher::_Unset()
 	// second time (which would write a spare 'quit' into fPort that kills the
 	// next desktop's event loop) or post AS_EVENT_STREAM_CLOSED.
 	atomic_set(&fUnsetting, 1);
+// SPDX-SnippetEnd
 	fStream->SendQuit();
 
 	status_t status;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
 	if (fThread >= 0 && fThread != find_thread(NULL))
 		wait_for_thread(fThread, &status);
 	if (fCursorThread >= 0 && fCursorThread != find_thread(NULL))
 		wait_for_thread(fCursorThread, &status);
+// SPDX-SnippetEnd
 
 	fThread = fCursorThread = -1;
 
 	gInputManager->PutStream(fStream);
 	fStream = NULL;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
 	atomic_set(&fUnsetting, 0);
 // SPDX-SnippetEnd
 }

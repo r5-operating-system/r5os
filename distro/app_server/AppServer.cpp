@@ -174,7 +174,37 @@ AppServer::MessageReceived(BMessage* message)
 				// Hold fDesktopLock across lookup and MessagePort() so a
 				// concurrent _DestroyDesktop() cannot free desktop in between.
 				BAutolock locker(fDesktopLock);
-				Desktop* desktop = _FindDesktop(userID, targetScreen);
+				Desktop* desktop = NULL;
+				if (userID == 0 && targetScreen == NULL) {
+					// Login owns desktop 0 (Sign in and Lock screen). Other
+					// uid 0 system servers (such as debug_server crash alerts)
+					// attach to the currently shown desktop so their dialogs
+					// are visible to the person at the keyboard.
+					team_id callerTeam = message->ReturnAddress().Team();
+					team_info callerInfo;
+					bool isLogin = false;
+					if (get_team_info(callerTeam, &callerInfo) == B_OK) {
+						const char* bin = callerInfo.args;
+						const char* space = strchr(bin, ' ');
+						size_t binLen = space != NULL ? (size_t)(space - bin)
+							: strlen(bin);
+						isLogin = (binLen >= 6
+							&& strncmp(bin + binLen - 6, "/Login", 6) == 0)
+							|| (binLen == 5 && strncmp(bin, "Login", 5) == 0);
+					}
+					if (!isLogin) {
+						for (int32 i = 0; i < fDesktops.CountItems(); i++) {
+							Desktop* existing = fDesktops.ItemAt(i);
+							if (existing->TargetScreen() == NULL
+								&& existing->IsShown()) {
+								desktop = existing;
+								break;
+							}
+						}
+					}
+				}
+				if (desktop == NULL)
+					desktop = _FindDesktop(userID, targetScreen);
 				if (desktop == NULL) {
 					// One graphical session until Part 2 StartSession. Tracker
 					// after Sign in is a person uid; only fall back to the

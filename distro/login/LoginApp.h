@@ -54,7 +54,7 @@ private:
 	void			TryLogin(BMessage* message);
 	void			Logout(uid_t targetUid = 0);
 	void			Lock(uid_t targetUid = 0);
-	void			SwitchUser();
+	void			SwitchUser(uid_t targetUid = 0);
 	void			Unlock(BMessage* message);
 	void			_CloseLock();
 	void			HandleAdmin(BMessage* message);
@@ -84,8 +84,7 @@ private:
 	int32			_CountUserApps(uid_t uid) const;
 	void			_FillOtherSessions(uid_t excludeUid,
 						BMessage& reply) const;
-	bool			_ConfirmShutdownIfOthers(bool reboot, uid_t requesterUid,
-						bool requesterIsAdmin);
+	bool			_ConfirmShutdownIfOthers(bool reboot, uid_t requesterUid);
 	void			_PerformShutdown(bool reboot);
 // SPDX-SnippetEnd
 	void			_LaunchSessionHooks(const char* login);
@@ -120,9 +119,11 @@ private:
 	// The sign-in that waits for the first walk of /boot/home.
 	thread_id		fHomeWalkThread;
 	BMessage*		fPendingLogin;
-	// Fast user switching: currently shown desktop uid (0 = Login desktop)
-	// and the login name shown on fLockWindow.
-	uid_t			fActiveUid;
+	// Fast user switching: currently shown desktop uid (0 = Login desktop),
+	// lock state (atomic for _AdminRequest), and the login name shown on
+	// fLockWindow.
+	int32			fActiveUid;
+	int32			fLocked;
 	BString			fLockedLogin;
 // SPDX-SnippetEnd
 };

@@ -85,16 +85,12 @@ namespace BPrivate {
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 #include <Alert.h>
-// SPDX-SnippetBegin
-// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
-// SPDX-License-Identifier: MIT
 #include <AdminLock.h>
 #include <Button.h>
 #include <LayoutBuilder.h>
 #include <StringFormat.h>
 #include <StringView.h>
 #include <TextView.h>
-// SPDX-SnippetEnd
 #include <Invoker.h>
 #include <OS.h>
 #include <LaunchRoster.h>
@@ -1164,13 +1160,37 @@ TBarApp::MessageReceived(BMessage* message)
 						(new ShutdownWarnWindow(reboot, sessionsReply))->Show();
 						break;
 					}
-				}
-				if (r5_admin_is_system_guest(getuid())) {
+					// No other sessions: route through Login so the registrar
+					// receives the shutdown from uid 0 cleanly.
 					BMessage req(reboot ? 'rebo' : 'halt');
 					BMessage reply;
-					r5_admin_send(login, &req, &reply, 5000000LL);
+					if (r5_admin_send(login, &req, &reply, 5000000LL) == B_OK
+						&& reply.GetInt32("error", B_ERROR) == B_OK) {
+						break;
+					}
+					BAlert* alert = new BAlert(
+						reboot ? B_TRANSLATE("Restart")
+							: B_TRANSLATE("Shut down"),
+						reply.GetString("text",
+							B_TRANSLATE("Could not start shut down.")),
+						B_TRANSLATE("OK"), NULL, NULL,
+						B_WIDTH_AS_USUAL, B_WARNING_ALERT);
+					alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
+					alert->Go();
 					break;
 				}
+				// Querying Login failed or timed out: do NOT bypass Login and
+				// shut down without checking other signed-in sessions.
+				BAlert* alert = new BAlert(
+					reboot ? B_TRANSLATE("Restart")
+						: B_TRANSLATE("Shut down"),
+					B_TRANSLATE("Could not check whether other people are "
+						"signed in. Try again in a moment."),
+					B_TRANSLATE("OK"), NULL, NULL,
+					B_WIDTH_AS_USUAL, B_WARNING_ALERT);
+				alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
+				alert->Go();
+				break;
 			}
 // SPDX-SnippetEnd
 

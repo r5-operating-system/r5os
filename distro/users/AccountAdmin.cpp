@@ -1891,19 +1891,38 @@ write_sessions_list(const BStringList& names)
 		return B_OK;
 	}
 
-	FILE* file = fopen(kSessionsListPath, "w");
-	if (file == NULL)
+	BString tmpPath;
+	tmpPath.SetToFormat("%s.tmp", kSessionsListPath);
+	int fd = open(tmpPath.String(), O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW,
+		0600);
+	if (fd < 0)
 		return errno;
+	fchmod(fd, 0600);
+	fchown(fd, 0, 0);
+	FILE* file = fdopen(fd, "w");
+	if (file == NULL) {
+		int err = errno;
+		close(fd);
+		unlink(tmpPath.String());
+		return err;
+	}
 	for (int32 i = 0; i < names.CountStrings(); i++) {
 		if (fprintf(file, "%s\n", names.StringAt(i).String()) < 0) {
 			fclose(file);
+			unlink(tmpPath.String());
 			return EIO;
 		}
 	}
-	if (fclose(file) != 0)
-		return errno;
-	chmod(kSessionsListPath, 0600);
-	chown(kSessionsListPath, 0, 0);
+	if (fflush(file) != 0 || fsync(fileno(file)) != 0 || fclose(file) != 0) {
+		int err = errno;
+		unlink(tmpPath.String());
+		return err;
+	}
+	if (rename(tmpPath.String(), kSessionsListPath) != 0) {
+		int err = errno;
+		unlink(tmpPath.String());
+		return err;
+	}
 	return B_OK;
 }
 
@@ -2003,12 +2022,12 @@ remove_signed_in_session(const char* login)
 	BStringList names;
 	list_signed_in_sessions(names);
 	names.Remove(login);
-	write_sessions_list(names);
+	status_t status = write_sessions_list(names);
 
 	BString active;
 	if (signed_in_name(active) == B_OK && active == login)
 		clear_desktop_session();
-	return B_OK;
+	return status;
 }
 
 

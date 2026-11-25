@@ -61,11 +61,21 @@ MixerInput::MixerInput(MixerCore* core, const media_input& input,
 		&& get_team_info(portInfo.team, &teamInfo) == B_OK) {
 		fOwnerUid = teamInfo.uid;
 	}
-	area_id activeArea = find_area("r5_active_audio_uid");
-	area_info areaInfo;
-	if (activeArea >= 0 && get_area_info(activeArea, &areaInfo) == B_OK
-		&& areaInfo.address != NULL) {
-		fActiveAudioUid = static_cast<int32*>(areaInfo.address);
+	// Resolve the active-uid slot only within our own team (media_addon_server)
+	// so an area with the same name created by another team is never used.
+	thread_info selfThread;
+	team_id selfTeam = get_thread_info(find_thread(NULL), &selfThread) == B_OK
+		? selfThread.team : -1;
+	if (selfTeam >= 0) {
+		ssize_t cookie = 0;
+		area_info areaInfo;
+		while (get_next_area_info(selfTeam, &cookie, &areaInfo) == B_OK) {
+			if (strcmp(areaInfo.name, "r5_active_audio_uid") == 0
+				&& areaInfo.address != NULL) {
+				fActiveAudioUid = static_cast<int32*>(areaInfo.address);
+				break;
+			}
+		}
 	}
 // SPDX-SnippetEnd
 	fix_multiaudio_format(&fInput.format.u.raw_audio);

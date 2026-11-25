@@ -18,10 +18,15 @@
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+#include <AdminLock.h>
 #include <R5Admin.h>
 #include <R5Security.h>
+#include <R5UI.h>
+#include <Button.h>
+#include <LayoutBuilder.h>
 #include <ServerProtocol.h>
 #include <StringFormat.h>
+#include <TextView.h>
 #include "KeyStoreCrypto.h"
 #include "KeyStoreProtocol.h"
 // SPDX-SnippetEnd
@@ -168,7 +173,8 @@ LoginApp::LoginApp()
 	fAdminPort(-1),
 	fHomeWalkThread(-1),
 	fPendingLogin(NULL),
-	fActiveUid(0)
+	fActiveUid(0),
+	fLocked(0)
 {
 }
 
@@ -239,9 +245,17 @@ LoginApp::_AdminRequest(BMessage* request, const r5_admin_sender& sender,
 				}
 			}
 			bool allowed = (sender.uid == 0) || senderSignedIn;
+			if (allowed && sender.uid >= kMinPersonUid
+				&& (request->what == kLockAction
+					|| request->what == kSwitchUserAction)) {
+				uid_t shownUid = (uid_t)atomic_get(&app->fActiveUid);
+				bool isLocked = atomic_get(&app->fLocked) != 0;
+				if (sender.uid != shownUid || isLocked)
+					allowed = false;
+			}
 			if (!allowed) {
-				reply->AddString("text", B_TRANSLATE("Only a signed-in "
-					"session may lock, switch user or log out."));
+				reply->AddString("text", B_TRANSLATE("Only the active "
+					"session may lock or switch user."));
 				reply->AddInt32("error", B_PERMISSION_DENIED);
 				break;
 			}
@@ -269,6 +283,16 @@ LoginApp::_AdminRequest(BMessage* request, const r5_admin_sender& sender,
 		}
 		case kQuerySessionsAction:
 		{
+			bool allowed = (sender.uid == 0);
+			if (!allowed && sender.uid >= kMinPersonUid) {
+				struct passwd* pwd = getpwuid(sender.uid);
+				allowed = pwd != NULL && pwd->pw_name != NULL
+					&& is_user_signed_in(pwd->pw_name);
+			}
+			if (!allowed) {
+				reply->AddInt32("error", B_PERMISSION_DENIED);
+				break;
+			}
 			app->_FillOtherSessions(sender.uid, *reply);
 			reply->AddInt32("error", B_OK);
 			break;
@@ -406,7 +430,7 @@ LoginApp::MessageReceived(BMessage* message)
 				break;
 			}
 			if (message->what == kSwitchUserAction) {
-				SwitchUser();
+				SwitchUser((uid_t)message->GetInt32("uid", 0));
 				break;
 			}
 			if (message->what == kUnlockAction) {
@@ -430,16 +454,10 @@ LoginApp::MessageReceived(BMessage* message)
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 			if (!message->GetBool("confirmed", false)) {
-				uid_t reqUid = 0;
-				bool reqAdmin = false;
-				if (fLockWindow != NULL && fLockedLogin.Length() > 0) {
-					struct passwd* pwd = getpwnam(fLockedLogin.String());
-					if (pwd != NULL) {
-						reqUid = pwd->pw_uid;
-						reqAdmin = is_admin_user(pwd);
-					}
-				}
-				if (!_ConfirmShutdownIfOthers(reboot, reqUid, reqAdmin))
+				// From Sign in or Lock screen, nobody at the keyboard is
+				// authenticated yet; require an administrator unlock if any
+				// session is signed in.
+				if (!_ConfirmShutdownIfOthers(reboot, 0))
 					break;
 			}
 			_PerformShutdown(reboot);
@@ -663,7 +681,7 @@ LoginApp::TryLogin(BMessage* message)
 				set_active_session(login);
 				status = _AppServerActivateDesktop(targetUid);
 				if (status == B_OK) {
-					fActiveUid = targetUid;
+					atomic_set(&fActiveUid, (int32)targetUid);
 					_SetActiveAudioUid(targetUid);
 					_NotifySessionVisible(targetUid, true);
 					_CloseLock();
@@ -727,7 +745,7 @@ LoginApp::TryLogin(BMessage* message)
 					r5_session_log("sign-in done: %s", strerror(status));
 				}
 				if (status == B_OK) {
-					fActiveUid = targetUid;
+					atomic_set(&fActiveUid, (int32)targetUid);
 					_SetActiveAudioUid(targetUid);
 					_NotifySessionVisible(targetUid, true);
 					_CloseLock();
@@ -735,12 +753,20 @@ LoginApp::TryLogin(BMessage* message)
 				} else {
 					if (wroteSession)
 						remove_signed_in_session(login);
+					// Stop any teams already started for this uid before
+					// destroying the desktop so they cannot fall back onto
+					// desktop 0 (the Sign in screen).
+					if (targetUid >= kMinPersonUid) {
+						_QuitUserAppsFor(targetUid);
+						stop_teams_of_uid(targetUid);
+					}
 					if (createdDesktop)
 						_AppServerDestroyDesktop(targetUid);
 				}
 			}
 		}
 	}
+// SPDX-SnippetEnd
 
 	if (status == B_OK) {
 		reply.what = kLoginOk;
@@ -785,34 +811,9 @@ LoginApp::HandleAdmin(BMessage* message)
 void
 LoginApp::Lock(uid_t targetUid)
 {
-	BString name;
-	if (targetUid >= kMinPersonUid) {
-		struct passwd* pwd = getpwuid(targetUid);
-		if (pwd != NULL && pwd->pw_name != NULL)
-			name = pwd->pw_name;
-	}
-	if (name.Length() == 0 && signed_in_name(name) != B_OK)
-		return;
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-	// The guest has no password; never lock a guest session (#72).
-	if (is_guest_account(name.String()))
-		return;
-	struct passwd* pwd = getpwnam(name.String());
-	uid_t lockUid = (pwd != NULL) ? pwd->pw_uid : fActiveUid;
-
-	// Fast user switching: lock lives on Login's own desktop (uid 0).
-	// Hide the person's notifications, mute their audio, and switch the
-	// screen/input to desktop 0 so their apps are never visible while locked.
-	if (fActiveUid >= kMinPersonUid)
-		_NotifySessionVisible(fActiveUid, false);
-	_SetActiveAudioUid(0);
-	_AppServerActivateDesktop(0);
-	fActiveUid = 0;
-	fLockedLogin = name;
-// SPDX-SnippetEnd
-
 	if (fLockWindow != NULL) {
 		if (fLockWindow->Lock()) {
 			fLockWindow->Activate(true);
@@ -820,12 +821,47 @@ LoginApp::Lock(uid_t targetUid)
 		}
 		return;
 	}
+	uid_t shownUid = (uid_t)atomic_get(&fActiveUid);
+	if (targetUid >= kMinPersonUid && targetUid != shownUid)
+		return;
+
+	BString name;
+	uid_t lockUid = targetUid >= kMinPersonUid ? targetUid : shownUid;
+	if (lockUid >= kMinPersonUid) {
+		struct passwd* pwd = getpwuid(lockUid);
+		if (pwd != NULL && pwd->pw_name != NULL)
+			name = pwd->pw_name;
+	}
+	if (name.Length() == 0 && signed_in_name(name) != B_OK)
+		return;
+
+	// The guest has no password; never lock a guest session (#72).
+	if (is_guest_account(name.String()))
+		return;
+
+	// Fast user switching: lock lives on Login's own desktop (uid 0).
+	// Only record the switch if app_server actually activates desktop 0;
+	// otherwise refuse and log rather than failing open.
+	status_t actStatus = _AppServerActivateDesktop(0);
+	if (actStatus != B_OK) {
+		r5_session_log("lock failed: activate desktop 0: %s",
+			strerror(actStatus));
+		return;
+	}
+	if (shownUid >= kMinPersonUid)
+		_NotifySessionVisible(shownUid, false);
+	_SetActiveAudioUid(0);
+	atomic_set(&fActiveUid, 0);
+	fLockedLogin = name;
+	clear_desktop_session();
 
 	// Walked away: a preference grant must not stay open behind the lock.
 	clear_admin_grants();
 	r5_session_log("lock %s (uid %d)", name.String(), (int)lockUid);
 	fLockWindow = new LockWindow(name.String());
+	atomic_set(&fLocked, 1);
 	fLockWindow->Show();
+// SPDX-SnippetEnd
 }
 
 
@@ -833,15 +869,26 @@ LoginApp::Lock(uid_t targetUid)
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 void
-LoginApp::SwitchUser()
+LoginApp::SwitchUser(uid_t targetUid)
 {
+	uid_t shownUid = (uid_t)atomic_get(&fActiveUid);
+	if (targetUid >= kMinPersonUid
+		&& (targetUid != shownUid || fLockWindow != NULL)) {
+		return;
+	}
+	status_t actStatus = _AppServerActivateDesktop(0);
+	if (actStatus != B_OK) {
+		r5_session_log("switch user failed: activate desktop 0: %s",
+			strerror(actStatus));
+		return;
+	}
 	clear_admin_grants();
-	if (fActiveUid >= kMinPersonUid)
-		_NotifySessionVisible(fActiveUid, false);
+	if (shownUid >= kMinPersonUid)
+		_NotifySessionVisible(shownUid, false);
 	_SetActiveAudioUid(0);
-	_AppServerActivateDesktop(0);
-	fActiveUid = 0;
+	atomic_set(&fActiveUid, 0);
 	fLockedLogin = "";
+	clear_desktop_session();
 	_CloseLock();
 	r5_session_log("switch user -> Sign in");
 	_ShowLogin();
@@ -882,10 +929,15 @@ LoginApp::Unlock(BMessage* message)
 // SPDX-License-Identifier: MIT
 	struct passwd* pwd = getpwnam(name.String());
 	uid_t uid = (pwd != NULL) ? pwd->pw_uid : 0;
-	set_active_session(name.String());
 	if (uid >= kMinPersonUid) {
-		_AppServerActivateDesktop(uid);
-		fActiveUid = uid;
+		status_t actStatus = _AppServerActivateDesktop(uid);
+		if (actStatus != B_OK) {
+			r5_session_log("unlock failed: activate desktop %d: %s",
+				(int)uid, strerror(actStatus));
+			return;
+		}
+		set_active_session(name.String());
+		atomic_set(&fActiveUid, (int32)uid);
 		_SetActiveAudioUid(uid);
 		_NotifySessionVisible(uid, true);
 	}
@@ -902,6 +954,11 @@ LoginApp::_CloseLock()
 		return;
 	BWindow* window = fLockWindow;
 	fLockWindow = NULL;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	atomic_set(&fLocked, 0);
+// SPDX-SnippetEnd
 	if (window->Lock())
 		window->Quit();
 }
@@ -936,20 +993,17 @@ LoginApp::Logout(uid_t targetUid)
 			loggedOutUid = pwd->pw_uid;
 	}
 
-	if (fActiveUid == loggedOutUid && loggedOutUid >= kMinPersonUid) {
-		_NotifySessionVisible(loggedOutUid, false);
-		_SetActiveAudioUid(0);
-		_AppServerActivateDesktop(0);
-		fActiveUid = 0;
-	}
-	if (fLockedLogin == loggedOutName)
-		fLockedLogin = "";
-	_CloseLock();
+	uid_t shownUid = (uid_t)atomic_get(&fActiveUid);
+	bool wasActive = (loggedOutUid >= kMinPersonUid && shownUid == loggedOutUid);
+	bool wasLocked = (fLockWindow != NULL && fLockedLogin == loggedOutName);
+
 	r5_session_log("logout %s (uid %d)", loggedOutName.String(),
 		(int)loggedOutUid);
-	clear_admin_grants();
 	if (loggedOutName.Length() > 0)
 		remove_signed_in_session(loggedOutName.String());
+
+	// Ask apps to quit while the person's desktop is still visible (if active)
+	// so any "Save changes?" alert can be seen before the 3 s stop.
 	if (loggedOutUid >= kMinPersonUid) {
 		_QuitUserAppsFor(loggedOutUid);
 		_WaitGoneFor("application/x-vnd.Haiku-keystore_server", loggedOutUid);
@@ -960,15 +1014,32 @@ LoginApp::Logout(uid_t targetUid)
 		// Issue #4642: what the roster does not list stops too. Only the
 		// uid of the person who logs out — never another signed-in person.
 		stop_teams_of_uid(loggedOutUid);
-		_AppServerDestroyDesktop(loggedOutUid);
 	}
+
+	if (wasActive) {
+		_NotifySessionVisible(loggedOutUid, false);
+		_SetActiveAudioUid(0);
+		_AppServerActivateDesktop(0);
+		atomic_set(&fActiveUid, 0);
+		clear_desktop_session();
+	}
+	if (loggedOutUid >= kMinPersonUid)
+		_AppServerDestroyDesktop(loggedOutUid);
+
 	if (wasGuest) {
 		r5_session_log("wipe guest home");
 		wipe_guest_home();
 	}
-// SPDX-SnippetEnd
-	_ShowLogin();
+	if (wasActive || wasLocked) {
+		if (wasLocked) {
+			fLockedLogin = "";
+			_CloseLock();
+		}
+		clear_admin_grants();
+		_ShowLogin();
+	}
 	r5_session_log("logout done");
+// SPDX-SnippetEnd
 }
 
 
@@ -2050,8 +2121,7 @@ LoginApp::_FillOtherSessions(uid_t excludeUid, BMessage& reply) const
 
 
 bool
-LoginApp::_ConfirmShutdownIfOthers(bool reboot, uid_t requesterUid,
-	bool requesterIsAdmin)
+LoginApp::_ConfirmShutdownIfOthers(bool reboot, uid_t requesterUid)
 {
 	BMessage others;
 	_FillOtherSessions(requesterUid, others);
@@ -2060,63 +2130,155 @@ LoginApp::_ConfirmShutdownIfOthers(bool reboot, uid_t requesterUid,
 	if (others.GetInfo("login", &tc, &count) != B_OK || count == 0)
 		return true;
 
-	BString list;
-	for (int32 i = 0; i < count; i++) {
-		const char* display = others.GetString("display", i, "");
-		int32 apps = others.GetInt32("apps", i, 0);
-		BString line;
-		if (apps > 0) {
-			BStringFormat fmt(B_TRANSLATE("{0, plural, "
-				"one{• %name% (# open app)} "
-				"other{• %name% (# open apps)}}"));
-			fmt.Format(line, apps);
-			line.ReplaceFirst("%name%", display);
-		} else {
-			line.SetToFormat("\xe2\x80\xa2 %s", display);
+	// Non-blocking modal window matching Deskbar's warning: anyone at the
+	// Lock screen or Sign in must unlock as an administrator before shutting
+	// down while people are signed in.
+	class LoginShutdownWarnWindow : public BWindow {
+	public:
+		LoginShutdownWarnWindow(bool isReboot, const BMessage& sessions)
+			:
+			BWindow(BRect(0, 0, 420, 220),
+				isReboot ? B_TRANSLATE("Restart") : B_TRANSLATE("Shut down"),
+				B_MODAL_WINDOW_LOOK, B_MODAL_APP_WINDOW_FEEL,
+				B_NOT_RESIZABLE | B_NOT_ZOOMABLE | B_AUTO_UPDATE_SIZE_LIMITS),
+			fReboot(isReboot),
+			fUnlockButton(NULL),
+			fProceedButton(NULL)
+		{
+			BString body;
+			if (fReboot) {
+				body = B_TRANSLATE("Other people are signed in. Restarting "
+					"will close their apps and lose any unsaved work:\n\n");
+			} else {
+				body = B_TRANSLATE("Other people are signed in. Shutting down "
+					"will close their apps and lose any unsaved work:\n\n");
+			}
+			int32 n = 0;
+			type_code type;
+			sessions.GetInfo("login", &type, &n);
+			for (int32 i = 0; i < n; i++) {
+				const char* disp = sessions.GetString("display", i, "");
+				int32 apps = sessions.GetInt32("apps", i, 0);
+				BString line;
+				if (apps > 0) {
+					BStringFormat fmt(B_TRANSLATE("{0, plural, "
+						"one{\xe2\x80\xa2 %name% (# open app)} "
+						"other{\xe2\x80\xa2 %name% (# open apps)}}"));
+					fmt.Format(line, apps);
+					line.ReplaceFirst("%name%", disp);
+				} else {
+					line.SetToFormat("\xe2\x80\xa2 %s", disp);
+				}
+				body << line << "\n";
+			}
+
+			BTextView* text = new BTextView("body");
+			text->SetText(body.String());
+			text->MakeEditable(false);
+			text->MakeSelectable(false);
+			text->SetStylable(false);
+			text->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
+			text->SetHighUIColor(B_PANEL_TEXT_COLOR);
+			text->SetExplicitMinSize(BSize(360, 90));
+
+			BButton* cancel = new BButton("cancel", B_TRANSLATE("Cancel"),
+				new BMessage(B_QUIT_REQUESTED));
+			fUnlockButton = new BButton("unlock",
+				B_TRANSLATE("Unlock" B_UTF8_ELLIPSIS), new BMessage('unlk'));
+			fProceedButton = new BButton("proceed",
+				fReboot ? B_TRANSLATE("Restart anyway")
+					: B_TRANSLATE("Shut down anyway"),
+				new BMessage('go__'));
+			fProceedButton->SetEnabled(false);
+
+			BLayoutBuilder::Group<>(this, B_VERTICAL, B_USE_DEFAULT_SPACING)
+				.SetInsets(B_USE_WINDOW_SPACING)
+				.Add(text)
+				.AddGroup(B_HORIZONTAL, B_USE_DEFAULT_SPACING)
+					.Add(fUnlockButton)
+					.AddGlue()
+					.Add(cancel)
+					.Add(fProceedButton)
+				.End();
+			CenterOnScreen();
 		}
-		list << line << "\n";
-	}
 
-	BString body;
-	if (reboot) {
-		body = B_TRANSLATE("Other people are signed in:\n\n%list%\n"
-			"Restarting will close their apps and lose any unsaved work.");
-	} else {
-		body = B_TRANSLATE("Other people are signed in:\n\n%list%\n"
-			"Shutting down will close their apps and lose any unsaved work.");
-	}
-	body.ReplaceFirst("%list%", list);
+		virtual void MessageReceived(BMessage* msg)
+		{
+			switch (msg->what) {
+				case 'unlk':
+					r5_admin_prompt_unlock(BMessenger(this));
+					break;
+				case kMsgAdminLockChanged:
+				{
+					bool allowed = r5_admin_change_allowed();
+					fProceedButton->SetEnabled(allowed);
+					if (allowed && !fUnlockButton->IsHidden())
+						fUnlockButton->Hide();
+					break;
+				}
+				case 'go__':
+				{
+					BMessage* go = login_local_message(
+						fReboot ? kRebootAction : kHaltAction);
+					go->AddBool("confirmed", true);
+					be_app->PostMessage(go);
+					delete go;
+					PostMessage(B_QUIT_REQUESTED);
+					break;
+				}
+				default:
+					BWindow::MessageReceived(msg);
+					break;
+			}
+		}
 
-	if (!requesterIsAdmin) {
-		body << "\n\n" << B_TRANSLATE("Only an administrator may continue. "
-			"Sign in as an administrator first.");
-		BAlert* alert = new BAlert(
-			reboot ? B_TRANSLATE("Restart") : B_TRANSLATE("Shut down"),
-			body.String(), B_TRANSLATE("OK"), NULL, NULL,
-			B_WIDTH_AS_USUAL, B_WARNING_ALERT);
-		alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
-		alert->Go();
-		return false;
-	}
+	private:
+		bool		fReboot;
+		BButton*	fUnlockButton;
+		BButton*	fProceedButton;
+	};
 
-	BAlert* alert = new BAlert(
-		reboot ? B_TRANSLATE("Restart") : B_TRANSLATE("Shut down"),
-		body.String(), B_TRANSLATE("Cancel"),
-		reboot ? B_TRANSLATE("Restart anyway")
-			: B_TRANSLATE("Shut down anyway"),
-		NULL, B_WIDTH_AS_USUAL, B_WARNING_ALERT);
-	alert->SetShortcut(0, B_ESCAPE);
-	return alert->Go() == 1;
+	(new LoginShutdownWarnWindow(reboot, others))->Show();
+	return false;
 }
 
 
 void
 LoginApp::_PerformShutdown(bool reboot)
 {
-	if (guest_session_active()) {
+	// Switch to desktop 0 so any registrar shutdown UI is visible, and stop
+	// every signed-in person's teams before asking the registrar to shut down
+	// so no hidden app modal ("Save changes?") can block shutdown forever.
+	uid_t shownUid = (uid_t)atomic_get(&fActiveUid);
+	if (shownUid >= kMinPersonUid)
+		_NotifySessionVisible(shownUid, false);
+	_SetActiveAudioUid(0);
+	_AppServerActivateDesktop(0);
+	atomic_set(&fActiveUid, 0);
+	clear_desktop_session();
+
+	bool hadGuest = guest_session_active();
+	BStringList sessions;
+	list_signed_in_sessions(sessions);
+	for (int32 i = 0; i < sessions.CountStrings(); i++) {
+		const char* loginName = sessions.StringAt(i).String();
+		struct passwd* pwd = getpwnam(loginName);
+		if (pwd != NULL && pwd->pw_uid >= kMinPersonUid) {
+			_QuitUserAppsFor(pwd->pw_uid);
+			stop_teams_of_uid(pwd->pw_uid);
+			_AppServerDestroyDesktop(pwd->pw_uid);
+		}
+		remove_signed_in_session(loginName);
+	}
+
+	// Wipe guest home AFTER guest's teams have stopped so they cannot write
+	// settings back during quit.
+	if (hadGuest) {
 		r5_session_log("shutdown: wipe guest home");
 		wipe_guest_home();
 	}
+
 	BRoster roster;
 	BRoster::Private rosterPrivate(roster);
 	status_t error = rosterPrivate.ShutDown(reboot, false, false);

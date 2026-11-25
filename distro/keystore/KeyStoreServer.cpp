@@ -23,6 +23,7 @@
 // SPDX-License-Identifier: MIT
 #include <Alert.h>
 #include <DataIO.h>
+#include <MessengerPrivate.h>
 // SPDX-SnippetEnd
 #include <Directory.h>
 #include <Entry.h>
@@ -767,12 +768,24 @@ KeyStoreServer::_ResolveCallingApp(const BMessage& message,
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-	// Fast user switching: only teams of the store's owner (or uid 0) may
-	// access this person's key store.
+	// Fast user switching: verify from the kernel that the reply port belongs
+	// to the claimed team (prevents forging ReturnAddress().Team() to read
+	// another person's keys), and allow only teams of this store's owner or
+	// Login itself (uid 0 unlock path).
+	BMessenger returnAddress = message.ReturnAddress();
+	port_id replyPort = BMessenger::Private(returnAddress).Port();
+	port_info replyPortInfo;
+	if (replyPort < 0 || get_port_info(replyPort, &replyPortInfo) != B_OK
+		|| replyPortInfo.team != callingTeam) {
+		return B_PERMISSION_DENIED;
+	}
 	team_info callingTeamInfo;
 	if (get_team_info(callingTeam, &callingTeamInfo) != B_OK)
 		return B_PERMISSION_DENIED;
-	if (callingTeamInfo.uid != geteuid() && callingTeamInfo.uid != 0)
+	bool isLogin = callingTeamInfo.uid == 0
+		&& strcmp(callingAppInfo.signature, "application/x-vnd.Haiku-Login")
+			== 0;
+	if (callingTeamInfo.uid != geteuid() && !isLogin)
 		return B_PERMISSION_DENIED;
 // SPDX-SnippetEnd
 

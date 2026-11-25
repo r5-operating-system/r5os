@@ -257,13 +257,13 @@ MediaAddonServer::MediaAddonServer(const char* signature)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-	// Fast user switching (Q2): shared atomic slot read by AudioMixer's
-	// MixerInput in real time (zero locks/syscalls). -1 = unrestricted until
-	// Login sets the active desktop uid.
+	// Fast user switching (Q2): private in-process atomic slot read by
+	// AudioMixer's MixerInput in real time (zero locks/syscalls). Not
+	// B_CLONEABLE_AREA so other teams cannot map and overwrite it.
 	void* areaAddr = NULL;
 	fActiveAudioUidArea = create_area("r5_active_audio_uid", &areaAddr,
 		B_ANY_ADDRESS, B_PAGE_SIZE, B_NO_LOCK,
-		B_READ_AREA | B_WRITE_AREA | B_CLONEABLE_AREA);
+		B_READ_AREA | B_WRITE_AREA);
 	if (fActiveAudioUidArea >= 0 && areaAddr != NULL) {
 		fActiveAudioUid = static_cast<int32*>(areaAddr);
 		atomic_set(fActiveAudioUid, -1);
