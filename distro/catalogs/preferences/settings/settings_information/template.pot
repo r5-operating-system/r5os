@@ -1,0 +1,225 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_information\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+msgctxt "Settings: Information"
+msgid "Drawn by the processor (software)"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "Processor: %value%"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "Information"
+msgstr ""
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+msgctxt "Settings: Information"
+msgid "information device processor memory version build kernel"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "Cancel"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "Display"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "What's new in this build"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "{0, plural, one{# minute} other{# minutes}}"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "%size% in use"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "Memory in use: %value%"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "%used% used · %free% free"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "Rename"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "Display detail: %value%"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "Image built unknown"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "Unknown"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "Processor"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "Graphics detail: %value%"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "{0, plural, one{# core} other{# cores}}"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "Since %time% today"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "Computer: %value%"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "Processor detail: %value%"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "Running for: %value%"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "CPU details…"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "Hardware accelerated"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "Use letters, digits and -, up to 63, not starting or ending with -."
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "Copy details"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "Memory"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "The name could not be saved."
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "System: %value%"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "Storage: %value%"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "Rename…"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "Kernel %name%"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "{0, plural, one{# day} other{# days}}"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "Since %time%, %date%"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "{0, plural, one{# hour} other{# hours}}"
+msgstr ""
+
+#. Keep the product name R5 Operating System
+msgctxt "Settings: Information"
+msgid "R5 Operating System %version% · Build %build% · %architecture%"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "Memory: %value%"
+msgstr ""
+
+#. Fixed text (AGENTS.md): translate the meaning, keep it short
+msgctxt "Settings: Information"
+msgid "View system details"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "%days%, %hours%"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "Name:"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "Display: %value%"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "Kernel"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "%hours%, %minutes%"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "This computer"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "Storage used: %value%"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "Graphics"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "Running for"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "OK"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "Running since: %value%"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "Storage"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "{0, plural, one{# thread} other{# threads}}"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "Less than a minute"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "Graphics: %value%"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "Image built %date%"
+msgstr ""
+
+msgctxt "Settings: Information"
+msgid "%cores%, %threads%"
+msgstr ""

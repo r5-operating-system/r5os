@@ -1,0 +1,18 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_bluetooth\nLanguage: nl\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+#, fuzzy
+msgctxt "Settings: Bluetooth"
+msgid "bluetooth wireless radio headphones mouse keyboard"
+msgstr "bluetooth wireless radio headphones mouse keyboard draadloos koptelefoon oordopjes muis toetsenbord"
+
+#, fuzzy
+msgctxt "Settings: Bluetooth"
+msgid "Bluetooth"
+msgstr "Bluetooth"
+
+#, fuzzy
+msgctxt "Settings: Bluetooth"
+msgid "Find Bluetooth devices nearby"
+msgstr "Bluetooth-apparaten in de buurt zoeken"

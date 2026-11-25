@@ -1,0 +1,22 @@
+1	english	x-vnd.R5OS-settings_fonts	2737844318
+Change the default fonts	Settings: Fonts		Change the default fonts
+Strong	AntialiasingSettingsView		Strong
+The quick brown fox jumps over the lazy dog.	Font Selection view	Don't translate this literally ! Use a phrase showing all chars from A to Z.	The quick brown fox jumps over the lazy dog.
+Off	AntialiasingSettingsView		Off
+Grayscale	AntialiasingSettingsView		Grayscale
+Antialiasing type:	AntialiasingSettingsView		Antialiasing type:
+Antialiasing menu	AntialiasingSettingsView		Antialiasing menu
+Hinting menu	AntialiasingSettingsView		Hinting menu
+Fonts	Settings: Fonts		Fonts
+On	AntialiasingSettingsView		On
+Monospaced fonts only	AntialiasingSettingsView		Monospaced fonts only
+Size:	Font Selection view		Size:
+fonts plain bold fixed menu antialiasing hinting	Settings: Fonts	Search words, separated by spaces. Keep the English words and add words in your language.	fonts plain bold fixed menu antialiasing hinting
+Antialiasing	Settings: Fonts		Antialiasing
+Plain font:	Font view		Plain font:
+Fixed font:	Font view		Fixed font:
+LCD subpixel	AntialiasingSettingsView		LCD subpixel
+Glyph hinting:	AntialiasingSettingsView		Glyph hinting:
+Reduce colored edges filter strength:	AntialiasingSettingsView		Reduce colored edges filter strength:
+Bold font:	Font view		Bold font:
+Menu font:	Font view		Menu font:

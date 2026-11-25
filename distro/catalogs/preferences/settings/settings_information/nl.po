@@ -1,0 +1,280 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_information\nLanguage: nl\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "Drawn by the processor (software)"
+msgstr "Getekend door de processor (software)"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "Processor: %value%"
+msgstr "Processor: %value%"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "Information"
+msgstr "Informatie"
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "information device processor memory version build kernel"
+msgstr "information device processor memory version build kernel informatie apparaat processor geheugen versie kernel"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "Cancel"
+msgstr "Annuleren"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "Display"
+msgstr "Beeldscherm"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "What's new in this build"
+msgstr "Nieuw in deze build"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "{0, plural, one{# minute} other{# minutes}}"
+msgstr "{0, plural, one{# minuut} other{# minuten}}"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "%size% in use"
+msgstr "%size% in gebruik"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "Memory in use: %value%"
+msgstr "Geheugen in gebruik: %value%"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "%used% used · %free% free"
+msgstr "%used% gebruikt · %free% vrij"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "Rename"
+msgstr "Hernoemen"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "Display detail: %value%"
+msgstr "Beeldschermdetails: %value%"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "Image built unknown"
+msgstr "Image-bouwdatum onbekend"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "Unknown"
+msgstr "Onbekend"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "Processor"
+msgstr "Processor"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "Graphics detail: %value%"
+msgstr "Grafische details: %value%"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "{0, plural, one{# core} other{# cores}}"
+msgstr "{0, plural, one{# kern} other{# kernen}}"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "Since %time% today"
+msgstr "Sinds %time% vandaag"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "Computer: %value%"
+msgstr "Computer: %value%"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "Processor detail: %value%"
+msgstr "Processordetails: %value%"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "Running for: %value%"
+msgstr "Actief: %value%"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "CPU details…"
+msgstr "CPU-details…"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "Hardware accelerated"
+msgstr "Hardwareversneld"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "Use letters, digits and -, up to 63, not starting or ending with -."
+msgstr "Gebruik letters, cijfers en -, maximaal 63, niet beginnend of eindigend met -."
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "Copy details"
+msgstr "Gegevens kopiëren"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "Memory"
+msgstr "Geheugen"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "The name could not be saved."
+msgstr "De naam kon niet worden opgeslagen."
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "System: %value%"
+msgstr "Systeem: %value%"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "Storage: %value%"
+msgstr "Opslag: %value%"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "Rename…"
+msgstr "Hernoemen…"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "Kernel %name%"
+msgstr "Kernel %name%"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "{0, plural, one{# day} other{# days}}"
+msgstr "{0, plural, one{# dag} other{# dagen}}"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "Since %time%, %date%"
+msgstr "Sinds %time%, %date%"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "{0, plural, one{# hour} other{# hours}}"
+msgstr "{0, plural, one{# uur} other{# uur}}"
+
+#. Keep the product name R5 Operating System
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "R5 Operating System %version% · Build %build% · %architecture%"
+msgstr "R5 Operating System %version% · Build %build% · %architecture%"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "Memory: %value%"
+msgstr "Geheugen: %value%"
+
+#. Fixed text (AGENTS.md): translate the meaning, keep it short
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "View system details"
+msgstr "Systeemgegevens bekijken"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "%days%, %hours%"
+msgstr "%days%, %hours%"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "Name:"
+msgstr "Naam:"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "Display: %value%"
+msgstr "Beeldscherm: %value%"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "Kernel"
+msgstr "Kernel"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "%hours%, %minutes%"
+msgstr "%hours%, %minutes%"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "This computer"
+msgstr "Deze computer"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "Storage used: %value%"
+msgstr "Opslag gebruikt: %value%"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "Graphics"
+msgstr "Grafisch"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "Running for"
+msgstr "Actief"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "OK"
+msgstr "OK"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "Running since: %value%"
+msgstr "Actief sinds: %value%"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "Storage"
+msgstr "Opslag"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "{0, plural, one{# thread} other{# threads}}"
+msgstr "{0, plural, one{# thread} other{# threads}}"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "Less than a minute"
+msgstr "Minder dan een minuut"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "Graphics: %value%"
+msgstr "Grafisch: %value%"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "Image built %date%"
+msgstr "Image gebouwd op %date%"
+
+#, fuzzy
+msgctxt "Settings: Information"
+msgid "%cores%, %threads%"
+msgstr "%cores%, %threads%"

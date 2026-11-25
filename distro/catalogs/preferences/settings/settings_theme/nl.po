@@ -1,0 +1,481 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_theme\nLanguage: nl\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+msgctxt "Colors tab"
+msgid "Control border"
+msgstr "Keuzerand"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Rounded"
+msgstr "Afgerond"
+
+msgctxt "Colors tab"
+msgid "Shadow"
+msgstr "Schaduw"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "This is the name of a built-in theme. The built-in themes stay as they are; choose another name."
+msgstr "Dit is de naam van een ingebouwd thema. De ingebouwde thema's blijven zoals ze zijn; kies een andere naam."
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Deskbar"
+msgstr "Deskbar"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Windows · %windows%"
+msgstr "Vensters · %windows%"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Dark"
+msgstr "Donker"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Choose how windows, controls and the Deskbar look"
+msgstr "Kies hoe vensters, bedieningselementen en de Deskbar eruitzien"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Scrollbars"
+msgstr "Schuifbalken"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Accent"
+msgstr "Accent"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Built in"
+msgstr "Ingebouwd"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Your theme"
+msgstr "Je thema"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "The controls of Haiku, built into the system."
+msgstr "De bedieningselementen van Haiku, ingebouwd in het systeem."
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Thin"
+msgstr "Dun"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Scrollbars · double arrows"
+msgstr "Schuifbalken · dubbele pijlen"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Strength"
+msgstr "Sterkte"
+
+msgctxt "Colors tab"
+msgid "Success"
+msgstr "Gelukt"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Frosted glass"
+msgstr "Matglas"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Parts"
+msgstr "Onderdelen"
+
+msgctxt "Colors tab"
+msgid "Shine"
+msgstr "Glans"
+
+msgctxt "Colors tab"
+msgid "Menu background"
+msgstr "Achtergrond menu"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Single"
+msgstr "Enkel"
+
+msgctxt "Colors tab"
+msgid "Link active"
+msgstr "Link actief"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Effects"
+msgstr "Effecten"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Default (R5)"
+msgstr "Standaard (R5)"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Keep these choices"
+msgstr "Deze keuzes bewaren"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Vertical"
+msgstr "Verticaal"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Haiku width"
+msgstr "Haiku-breedte"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "%name% (changed)"
+msgstr "%name% (gewijzigd)"
+
+msgctxt "Colors tab"
+msgid "Failure"
+msgstr "Mislukt"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Mode and colors · %mode%, %accent%"
+msgstr "Modus en kleuren · %mode%, %accent%"
+
+msgctxt "Colors tab"
+msgid "Selected menu item text"
+msgstr "Tekst geselecteerd menu-item"
+
+msgctxt "Colors tab"
+msgid "Panel background"
+msgstr "Achtergrond paneel"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Save"
+msgstr "Opslaan"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Balanced"
+msgstr "Gebalanceerd"
+
+msgctxt "Colors tab"
+msgid "Navigation pulse"
+msgstr "Puls navigatie"
+
+#, fuzzy
+msgctxt "Colors tab"
+msgid "Progress bar"
+msgstr "Voortgangsbalk"
+
+msgctxt "Colors tab"
+msgid "Link text"
+msgstr "Linktekst"
+
+msgctxt "Colors tab"
+msgid "Control background"
+msgstr "Achtergrond keuze"
+
+msgctxt "Colors tab"
+msgid "Selected list item text"
+msgstr "Selecteer lijstitem-tekst"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Shadow"
+msgstr "Schaduw"
+
+msgctxt "Colors tab"
+msgid "Selected list item background"
+msgstr "Achtergrond geselecteerde lijstitem"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Wide"
+msgstr "Breed"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Name"
+msgstr "Naam"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Delete the theme \"%name%\"? What you see now stays as it is."
+msgstr "Het thema \"%name%\" verwijderen? Wat je nu ziet blijft zoals het is."
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Deskbar · %style%, %layout%"
+msgstr "Deskbar · %style%, %layout%"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Keep in this theme"
+msgstr "In dit thema bewaren"
+
+msgctxt "Colors tab"
+msgid "Control mark"
+msgstr "Besturingsteken"
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "theme dark light mode accent colors look controls decorator windows scrollbars deskbar effects"
+msgstr "theme dark light mode accent colors look controls decorator windows scrollbars deskbar effects thema donker licht modus kleuren uiterlijk bedieningselementen vensters schuifbalken effecten"
+
+msgctxt "Colors tab"
+msgid "Window border"
+msgstr "Vensterrand"
+
+msgctxt "Colors tab"
+msgid "Inactive window tab"
+msgstr "Niet-actieve venstertab"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Built in · light only"
+msgstr "Ingebouwd · alleen licht"
+
+msgctxt "Colors tab"
+msgid "Document background"
+msgstr "Achtergrond document"
+
+msgctxt "Colors tab"
+msgid "List background"
+msgstr "Achtergrond van lijst"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Controls"
+msgstr "Bedieningselementen"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Light"
+msgstr "Licht"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "The theme could not be saved: %error%"
+msgstr "Het thema kon niet worden opgeslagen: %error%"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Custom colors"
+msgstr "Eigen kleuren"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Cancel"
+msgstr "Annuleren"
+
+msgctxt "Colors tab"
+msgid "Menu item text"
+msgstr "Tekst menu-item"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Quiet"
+msgstr "Rustig"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Windows"
+msgstr "Vensters"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Scrollbars · single arrows"
+msgstr "Schuifbalken · enkele pijlen"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Not every part of the theme could be set: %error%"
+msgstr "Niet elk onderdeel van het thema kon worden ingesteld: %error%"
+
+msgctxt "Colors tab"
+msgid "List item text"
+msgstr "Lijstitemtekst"
+
+msgctxt "Colors tab"
+msgid "Control text"
+msgstr "Tekst keuze"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Horizontal"
+msgstr "Horizontaal"
+
+msgctxt "Colors tab"
+msgid "Selected menu item background"
+msgstr "Achtergrond geselecteerd menu-item"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Away from the screen edges"
+msgstr "Los van de schermranden"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "A theme name cannot contain / \\ or \"."
+msgstr "Een themanaam mag geen / \\ of \" bevatten."
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Compact"
+msgstr "Compact"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Double"
+msgstr "Dubbel"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Delete"
+msgstr "Verwijderen"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Classic (Haiku)"
+msgstr "Klassiek (Haiku)"
+
+#, fuzzy
+msgctxt "Colors tab"
+msgid "Automatically pick secondary colors"
+msgstr "Secundaire kleuren automatisch kiezen"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "own accent"
+msgstr "eigen accent"
+
+msgctxt "Colors tab"
+msgid "Window tab text"
+msgstr "Tekst venstertab"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "License: %license%"
+msgstr "Licentie: %license%"
+
+msgctxt "Colors tab"
+msgid "Tooltip background"
+msgstr "Achtergrond Tooltip"
+
+msgctxt "Colors tab"
+msgid "Window tab"
+msgstr "Venstertab"
+
+msgctxt "Colors tab"
+msgid "Scroll bar thumb"
+msgstr "Schuifbalkknop"
+
+msgctxt "Colors tab"
+msgid "Link visited"
+msgstr "Bezochte link"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Save as theme…"
+msgstr "Opslaan als thema…"
+
+msgctxt "Colors tab"
+msgid "Selected menu item border"
+msgstr "Rand geselecteerd menu-item"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "About"
+msgstr "Over"
+
+msgctxt "Colors tab"
+msgid "Tooltip text"
+msgstr "Tekst Tooltip"
+
+msgctxt "Colors tab"
+msgid "Inactive window tab text"
+msgstr "Tabtekst niet-actief venster"
+
+msgctxt "Colors tab"
+msgid "Navigation base"
+msgstr "Basis navigatie"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Controls · %controls%"
+msgstr "Bedieningselementen · %controls%"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Blue"
+msgstr "Blauw"
+
+msgctxt "Colors tab"
+msgid "Panel text"
+msgstr "Tekst paneel"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Glassy"
+msgstr "Glazig"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Authors: %authors%"
+msgstr "Auteurs: %authors%"
+
+msgctxt "Colors tab"
+msgid "Document text"
+msgstr "Tekst document"
+
+msgctxt "Colors tab"
+msgid "Inactive window border"
+msgstr "Rand van een inactief venster"
+
+msgctxt "Colors tab"
+msgid "Control highlight"
+msgstr "Keuze-accent"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Mode"
+msgstr "Modus"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Animations"
+msgstr "Animaties"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Saved in your own settings. The built-in themes stay as they are."
+msgstr "Opgeslagen in je eigen instellingen. De ingebouwde thema's blijven zoals ze zijn."
+
+msgctxt "Colors tab"
+msgid "Link hover"
+msgstr "Zweven over link"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "OK"
+msgstr "OK"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Save as theme"
+msgstr "Opslaan als thema"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Theme"
+msgstr "Thema"

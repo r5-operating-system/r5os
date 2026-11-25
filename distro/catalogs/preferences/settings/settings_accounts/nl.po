@@ -1,0 +1,423 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_accounts\nLanguage: nl\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "The guest setting could not be changed."
+msgstr "De gastinstelling kon niet worden gewijzigd."
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Users and Accounts"
+msgstr "Gebruikers en accounts"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "The picture could not be removed."
+msgstr "De afbeelding kon niet worden verwijderd."
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Uses apps, changes own settings"
+msgstr "Gebruikt apps, wijzigt eigen instellingen"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "No password. Everything is deleted at log out."
+msgstr "Geen wachtwoord. Alles wordt bij het afmelden gewist."
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "The picture could not be saved."
+msgstr "De afbeelding kon niet worden opgeslagen."
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "The account could not be deleted."
+msgstr "Het account kon niet worden verwijderd."
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "People on this computer."
+msgstr "Mensen op deze computer."
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Name"
+msgstr "Naam"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Start with a lowercase letter; then lowercase letters and numbers."
+msgstr "Begin met een kleine letter; daarna kleine letters en cijfers."
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Allow guests to sign in to this computer"
+msgstr "Gasten toestaan zich aan te melden op deze computer"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Used to sign in; letters and numbers"
+msgstr "Gebruikt om aan te melden; letters en cijfers"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Choose picture…"
+msgstr "Afbeelding kiezen…"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Administrator"
+msgstr "Beheerder"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "The email address could not be saved."
+msgstr "Het e-mailadres kon niet worden opgeslagen."
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Delete account…"
+msgstr "Account verwijderen…"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Remove picture"
+msgstr "Afbeelding verwijderen"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Tracker could not open the Shared folder."
+msgstr "Tracker kon de map Gedeeld niet openen."
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "OK"
+msgstr "OK"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Delete the account of %name%?\n\nKeep files leaves the home folder %home% on the disk. Delete files removes it, with everything in it."
+msgstr "Het account van %name% verwijderen?\n\nBestanden bewaren laat de thuismap %home% op de schijf staan. Bestanden verwijderen wist die map, met alles erin."
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Open"
+msgstr "Openen"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Add an account"
+msgstr "Een account toevoegen"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Changes are saved as you make them. The last administrator cannot become a standard account."
+msgstr "Wijzigingen worden meteen opgeslagen. De laatste beheerder kan geen standaardaccount worden."
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "A standard account sees only its own card (name, email, picture, password). The account list, account types and the guest wait for an administrator's unlock."
+msgstr "Een standaardaccount ziet alleen de eigen kaart (naam, e-mail, afbeelding, wachtwoord). De accountlijst, de accounttypen en de gast wachten tot een beheerder ontgrendelt."
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "They get their own private home folder and settings."
+msgstr "Ze krijgen een eigen, privé thuismap en eigen instellingen."
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Username"
+msgstr "Gebruikersnaam"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "ACCOUNTS"
+msgstr "ACCOUNTS"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "home: %path%"
+msgstr "thuismap: %path%"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Add account…"
+msgstr "Account toevoegen…"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Delete files"
+msgstr "Bestanden verwijderen"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Can also change the computer"
+msgstr "Kan ook de computer wijzigen"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "OK"
+msgstr "OK"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Disable account"
+msgstr "Account uitschakelen"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Change your password"
+msgstr "Je wachtwoord wijzigen"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Choose picture…"
+msgstr "Afbeelding kiezen…"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Administrator"
+msgstr "Beheerder"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "The account was added, but its picture was not saved.\n%error%"
+msgstr "Het account is toegevoegd, maar de afbeelding is niet opgeslagen.\n%error%"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "you"
+msgstr "jij"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Cancel"
+msgstr "Annuleren"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "✓ The passwords match"
+msgstr "✓ De wachtwoorden komen overeen"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Delete account"
+msgstr "Account verwijderen"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Not everything could be put back:"
+msgstr "Niet alles kon worden teruggezet:"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Accounts could not be read: %error%"
+msgstr "Accounts konden niet worden gelezen: %error%"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "That picture could not be used."
+msgstr "Die afbeelding kon niet worden gebruikt."
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Repeat password"
+msgstr "Herhaal wachtwoord"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Sign in must be running to change accounts."
+msgstr "Aanmelden moet actief zijn om accounts te wijzigen."
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "name@example.com"
+msgstr "naam@voorbeeld.nl"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Account type"
+msgstr "Accounttype"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Standard"
+msgstr "Standaard"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "disabled"
+msgstr "uitgeschakeld"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Password"
+msgstr "Wachtwoord"
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "user users account accounts password administrator standard picture email sign in guest shared"
+msgstr "user users account accounts password administrator standard picture email sign in guest shared gebruiker gebruikers wachtwoord beheerder standaard afbeelding foto e-mail aanmelden inloggen gast gedeeld"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Account type"
+msgstr "Accounttype"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Shared folder"
+msgstr "Map Gedeeld"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "The account could not be added."
+msgstr "Het account kon niet worden toegevoegd."
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Cancel"
+msgstr "Annuleren"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Repeat new password"
+msgstr "Herhaal nieuw wachtwoord"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "New password for %name%"
+msgstr "Nieuw wachtwoord voor %name%"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "GUEST AND SHARING"
+msgstr "GAST EN DELEN"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Change password"
+msgstr "Wachtwoord wijzigen"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Change password…"
+msgstr "Wachtwoord wijzigen…"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Password"
+msgstr "Wachtwoord"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Email"
+msgstr "E-mail"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "%name%'s old password is not needed. Tell %name% the new one; it works from the next sign in. Their saved passwords stay locked until they enter their old password once; otherwise they start with an empty key store."
+msgstr "Het oude wachtwoord van %name% is niet nodig. Geef %name% het nieuwe; het werkt vanaf de volgende keer aanmelden. Opgeslagen wachtwoorden blijven vergrendeld tot het oude wachtwoord één keer is ingevoerd; anders begint %name% met een lege sleutelopslag."
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Admin"
+msgstr "Beheerder"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "The name could not be saved."
+msgstr "De naam kon niet worden opgeslagen."
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Guest: %error%"
+msgstr "Gast: %error%"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "That file is not a picture this computer can open."
+msgstr "Dat bestand is geen afbeelding die deze computer kan openen."
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Sign in did not answer."
+msgstr "Aanmelden gaf geen antwoord."
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Name"
+msgstr "Naam"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Add account"
+msgstr "Account toevoegen"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Standard"
+msgstr "Standaard"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "× The passwords don't match yet"
+msgstr "× De wachtwoorden komen nog niet overeen"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "That username is already in use."
+msgstr "Die gebruikersnaam is al in gebruik."
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Users and Accounts"
+msgstr "Gebruikers en accounts"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "The account could not be changed."
+msgstr "Het account kon niet worden gewijzigd."
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Enable account"
+msgstr "Account inschakelen"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "New password"
+msgstr "Nieuw wachtwoord"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Keep files"
+msgstr "Bestanden bewaren"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "The account type could not be changed."
+msgstr "Het accounttype kon niet worden gewijzigd."
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "The Shared folder could not be found."
+msgstr "De map Gedeeld is niet gevonden."
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "The password could not be changed."
+msgstr "Het wachtwoord kon niet worden gewijzigd."
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "home %path%"
+msgstr "thuismap %path%"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Current password"
+msgstr "Huidig wachtwoord"

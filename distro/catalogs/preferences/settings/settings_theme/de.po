@@ -1,0 +1,479 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_theme\nLanguage: de\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+msgctxt "Colors tab"
+msgid "Control border"
+msgstr "Steuerelement - Rahmen"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Rounded"
+msgstr "Abgerundet"
+
+msgctxt "Colors tab"
+msgid "Shadow"
+msgstr "Schatten"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "This is the name of a built-in theme. The built-in themes stay as they are; choose another name."
+msgstr "Dies ist der Name eines eingebauten Designs. Die eingebauten Designs bleiben, wie sie sind; wählen Sie einen anderen Namen."
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Deskbar"
+msgstr "Deskbar"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Windows · %windows%"
+msgstr "Fenster · %windows%"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Dark"
+msgstr "Dunkel"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Choose how windows, controls and the Deskbar look"
+msgstr "Aussehen von Fenstern, Bedienelementen und Deskbar wählen"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Scrollbars"
+msgstr "Bildlaufleisten"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Accent"
+msgstr "Akzent"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Built in"
+msgstr "Eingebaut"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Your theme"
+msgstr "Ihr Design"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "The controls of Haiku, built into the system."
+msgstr "Die Bedienelemente von Haiku, im System eingebaut."
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Thin"
+msgstr "Dünn"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Scrollbars · double arrows"
+msgstr "Bildlaufleisten · doppelte Pfeile"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Strength"
+msgstr "Stärke"
+
+msgctxt "Colors tab"
+msgid "Success"
+msgstr "Erfolg"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Frosted glass"
+msgstr "Milchglas"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Parts"
+msgstr "Teile"
+
+msgctxt "Colors tab"
+msgid "Shine"
+msgstr "Glanz"
+
+msgctxt "Colors tab"
+msgid "Menu background"
+msgstr "Menü - Hintergrund"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Single"
+msgstr "Einfach"
+
+msgctxt "Colors tab"
+msgid "Link active"
+msgstr "Link (geklickt)"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Effects"
+msgstr "Effekte"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Default (R5)"
+msgstr "Standard (R5)"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Keep these choices"
+msgstr "Diese Auswahl behalten"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Vertical"
+msgstr "Senkrecht"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Haiku width"
+msgstr "Haiku-Breite"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "%name% (changed)"
+msgstr "%name% (geändert)"
+
+msgctxt "Colors tab"
+msgid "Failure"
+msgstr "Fehler"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Mode and colors · %mode%, %accent%"
+msgstr "Modus und Farben · %mode%, %accent%"
+
+msgctxt "Colors tab"
+msgid "Selected menu item text"
+msgstr "Menü - Text (ausgewählt)"
+
+msgctxt "Colors tab"
+msgid "Panel background"
+msgstr "Oberfläche - Hintergrund"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Save"
+msgstr "Speichern"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Balanced"
+msgstr "Ausgewogen"
+
+msgctxt "Colors tab"
+msgid "Navigation pulse"
+msgstr "Navigation - Leuchtfarbe"
+
+msgctxt "Colors tab"
+msgid "Progress bar"
+msgstr "Fortschrittsbalken"
+
+msgctxt "Colors tab"
+msgid "Link text"
+msgstr "Link Text"
+
+msgctxt "Colors tab"
+msgid "Control background"
+msgstr "Steuerelement - Hintergrund"
+
+msgctxt "Colors tab"
+msgid "Selected list item text"
+msgstr "Liste - Text (ausgewählt)"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Shadow"
+msgstr "Schatten"
+
+msgctxt "Colors tab"
+msgid "Selected list item background"
+msgstr "Liste - Hintergrund (ausgewählt)"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Wide"
+msgstr "Breit"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Name"
+msgstr "Name"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Delete the theme \"%name%\"? What you see now stays as it is."
+msgstr "Das Design „%name%“ löschen? Was Sie jetzt sehen, bleibt, wie es ist."
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Deskbar · %style%, %layout%"
+msgstr "Deskbar · %style%, %layout%"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Keep in this theme"
+msgstr "In diesem Design behalten"
+
+msgctxt "Colors tab"
+msgid "Control mark"
+msgstr "Steuerelement - Markierung"
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "theme dark light mode accent colors look controls decorator windows scrollbars deskbar effects"
+msgstr "theme dark light mode accent colors look controls decorator windows scrollbars deskbar effects design thema dunkel hell modus akzent farben aussehen bedienelemente fenster bildlaufleisten effekte"
+
+msgctxt "Colors tab"
+msgid "Window border"
+msgstr "Fenster - Rahmen"
+
+msgctxt "Colors tab"
+msgid "Inactive window tab"
+msgstr "Fensterreiter (inaktiv)"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Built in · light only"
+msgstr "Eingebaut · nur hell"
+
+msgctxt "Colors tab"
+msgid "Document background"
+msgstr "Dokument - Hintergrund"
+
+msgctxt "Colors tab"
+msgid "List background"
+msgstr "Liste - Hintergrund"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Controls"
+msgstr "Bedienelemente"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Light"
+msgstr "Hell"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "The theme could not be saved: %error%"
+msgstr "Das Design konnte nicht gespeichert werden: %error%"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Custom colors"
+msgstr "Eigene Farben"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Cancel"
+msgstr "Abbrechen"
+
+msgctxt "Colors tab"
+msgid "Menu item text"
+msgstr "Menü - Text"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Quiet"
+msgstr "Ruhig"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Windows"
+msgstr "Fenster"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Scrollbars · single arrows"
+msgstr "Bildlaufleisten · einfache Pfeile"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Not every part of the theme could be set: %error%"
+msgstr "Nicht jeder Teil des Designs konnte eingestellt werden: %error%"
+
+msgctxt "Colors tab"
+msgid "List item text"
+msgstr "Liste - Text"
+
+msgctxt "Colors tab"
+msgid "Control text"
+msgstr "Steuerelement - Text"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Horizontal"
+msgstr "Waagerecht"
+
+msgctxt "Colors tab"
+msgid "Selected menu item background"
+msgstr "Menü - Hintergrund (ausgewählt)"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Away from the screen edges"
+msgstr "Abstand zu den Bildschirmrändern"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "A theme name cannot contain / \\ or \"."
+msgstr "Ein Designname darf kein / \\ oder \" enthalten."
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Compact"
+msgstr "Kompakt"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Double"
+msgstr "Doppelt"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Delete"
+msgstr "Löschen"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Classic (Haiku)"
+msgstr "Klassisch (Haiku)"
+
+msgctxt "Colors tab"
+msgid "Automatically pick secondary colors"
+msgstr "Übrige Farben automatisch anpassen"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "own accent"
+msgstr "eigener Akzent"
+
+msgctxt "Colors tab"
+msgid "Window tab text"
+msgstr "Fensterreiter - Text"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "License: %license%"
+msgstr "Lizenz: %license%"
+
+msgctxt "Colors tab"
+msgid "Tooltip background"
+msgstr "Tooltip - Hintergrund"
+
+msgctxt "Colors tab"
+msgid "Window tab"
+msgstr "Fensterreiter"
+
+msgctxt "Colors tab"
+msgid "Scroll bar thumb"
+msgstr "Scroll-Balken"
+
+msgctxt "Colors tab"
+msgid "Link visited"
+msgstr "Link (besucht)"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Save as theme…"
+msgstr "Als Design speichern…"
+
+msgctxt "Colors tab"
+msgid "Selected menu item border"
+msgstr "Menü - Rahmen (ausgewählt)"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "About"
+msgstr "Über"
+
+msgctxt "Colors tab"
+msgid "Tooltip text"
+msgstr "Tooltip - Text"
+
+msgctxt "Colors tab"
+msgid "Inactive window tab text"
+msgstr "Fensterreiter - Text (inaktiv)"
+
+msgctxt "Colors tab"
+msgid "Navigation base"
+msgstr "Navigation - Grundfarbe"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Controls · %controls%"
+msgstr "Bedienelemente · %controls%"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Blue"
+msgstr "Blau"
+
+msgctxt "Colors tab"
+msgid "Panel text"
+msgstr "Fenster - Text"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Glassy"
+msgstr "Gläsern"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Authors: %authors%"
+msgstr "Autoren: %authors%"
+
+msgctxt "Colors tab"
+msgid "Document text"
+msgstr "Dokument - Text"
+
+msgctxt "Colors tab"
+msgid "Inactive window border"
+msgstr "Fenster - Rahmen (inaktiv)"
+
+msgctxt "Colors tab"
+msgid "Control highlight"
+msgstr "Steuerelement - Ausgewählt"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Mode"
+msgstr "Modus"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Animations"
+msgstr "Animationen"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Saved in your own settings. The built-in themes stay as they are."
+msgstr "In Ihren eigenen Einstellungen gespeichert. Die eingebauten Designs bleiben, wie sie sind."
+
+msgctxt "Colors tab"
+msgid "Link hover"
+msgstr "Link (unter Mauszeiger)"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "OK"
+msgstr "OK"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Save as theme"
+msgstr "Als Design speichern"
+
+#, fuzzy
+msgctxt "Settings: Theme"
+msgid "Theme"
+msgstr "Design"

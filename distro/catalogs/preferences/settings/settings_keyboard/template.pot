@@ -1,0 +1,31 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_keyboard\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+msgctxt "Settings: Launcher pages"
+msgid "Opens the existing program in its own window."
+msgstr ""
+
+msgctxt "Settings: Keyboard"
+msgid "Keyboard"
+msgstr ""
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+msgctxt "Settings: Keyboard"
+msgid "keymap layout keys"
+msgstr ""
+
+msgctxt "Settings: Launcher pages"
+msgid "OK"
+msgstr ""
+
+msgctxt "Settings: Launcher pages"
+msgid "Could not open %name%."
+msgstr ""
+
+msgctxt "Settings: Keyboard"
+msgid "Keymap and the typing repeat rate."
+msgstr ""
+
+msgctxt "Settings: Launcher pages"
+msgid "Open"
+msgstr ""

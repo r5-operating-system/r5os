@@ -1,0 +1,134 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_discovery\nLanguage: de\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#, fuzzy
+msgctxt "Settings: Discovery"
+msgid "Rename"
+msgstr "Umbenennen"
+
+#, fuzzy
+msgctxt "Settings: Discovery"
+msgid "AirPlay speaker"
+msgstr "AirPlay-Lautsprecher"
+
+#, fuzzy
+msgctxt "Settings: Discovery"
+msgid "Cancel"
+msgstr "Abbrechen"
+
+msgctxt "ServiceView"
+msgid "Disable"
+msgstr "Deaktivieren"
+
+#, fuzzy
+msgctxt "Settings: Discovery"
+msgid "Discovery"
+msgstr "Erkennung"
+
+#, fuzzy
+msgctxt "Settings: Discovery"
+msgid "Refresh"
+msgstr "Aktualisieren"
+
+#, fuzzy
+msgctxt "Settings: Discovery"
+msgid "Printer"
+msgstr "Drucker"
+
+#, fuzzy
+msgctxt "Settings: Discovery"
+msgid "On this network:"
+msgstr "In diesem Netzwerk:"
+
+#, fuzzy
+msgctxt "Settings: Discovery"
+msgid "The name could not be saved."
+msgstr "Der Name konnte nicht gespeichert werden."
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+#, fuzzy
+msgctxt "Settings: Discovery"
+msgid "network bonjour mdns local name hostname ssh ftp telnet share printer airplay"
+msgstr "network bonjour mdns local name hostname ssh ftp telnet share printer airplay netzwerk rechnername freigabe drucker erkennung"
+
+#, fuzzy
+msgctxt "Settings: Discovery"
+msgid "Name:"
+msgstr "Name:"
+
+#, fuzzy
+msgctxt "Settings: Discovery"
+msgid "This computer"
+msgstr "Dieser Computer"
+
+#, fuzzy
+msgctxt "Settings: Discovery"
+msgid "Nothing found"
+msgstr "Nichts gefunden"
+
+#, fuzzy
+msgctxt "Settings: Discovery"
+msgid "An item that is on is also announced, so other devices list it."
+msgstr "Ein eingeschaltetes Element wird auch angekündigt, damit andere Geräte es auflisten."
+
+#, fuzzy
+msgctxt "Settings: Discovery"
+msgid "OK"
+msgstr "OK"
+
+msgctxt "ServiceListItem"
+msgid "on"
+msgstr "an"
+
+#, fuzzy
+msgctxt "Settings: Discovery"
+msgid "Shared from this computer"
+msgstr "Von diesem Computer freigegeben"
+
+#, fuzzy
+msgctxt "Settings: Discovery"
+msgid "Rename…"
+msgstr "Umbenennen…"
+
+#, fuzzy
+msgctxt "Settings: Discovery"
+msgid "File sharing"
+msgstr "Dateifreigabe"
+
+#, fuzzy
+msgctxt "Settings: Discovery"
+msgid "Find devices and services on this network"
+msgstr "Geräte und Dienste in diesem Netzwerk finden"
+
+msgctxt "ServiceView"
+msgid "Enable"
+msgstr "Aktivieren"
+
+#, fuzzy
+msgctxt "Settings: Discovery"
+msgid "Find devices (Bonjour)"
+msgstr "Geräte finden (Bonjour)"
+
+#, fuzzy
+msgctxt "Settings: Discovery"
+msgid "Programs can reach a .local name. Printers and speakers in this list are also offered by Printers and AirPlay."
+msgstr "Programme erreichen einen .local-Namen. Drucker und Lautsprecher in dieser Liste werden auch unter Drucker und AirPlay angeboten."
+
+#, fuzzy
+msgctxt "Settings: Discovery"
+msgid "No device answered on this network."
+msgstr "Kein Gerät in diesem Netzwerk hat geantwortet."
+
+msgctxt "ServiceListItem"
+msgid "off"
+msgstr "aus"
+
+#, fuzzy
+msgctxt "Settings: Discovery"
+msgid "Let other devices find this computer"
+msgstr "Anderen Geräten erlauben, diesen Computer zu finden"
+
+#, fuzzy
+msgctxt "Settings: Discovery"
+msgid "Use letters, digits and -, up to 63, not starting or ending with -."
+msgstr "Buchstaben, Ziffern und -, höchstens 63, nicht mit - am Anfang oder Ende."

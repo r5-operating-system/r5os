@@ -13,12 +13,22 @@ R5's own programs keep their translations in `distro/catalogs/<folder>/<language
 | `preferences/r5bt` | `libr5bt.so`, the Bluetooth Kit | `x-vnd.R5OS-libr5bt` |
 | `preferences/r5wifi` | `libr5wifi.so`, the Wi-Fi Kit | `x-vnd.R5OS-libr5wifi` |
 | `servers/bluetooth_deskbar` | the Bluetooth item in the Deskbar | `x-vnd.R5OS-bluetooth-deskbar` |
+| `preferences/settings/Settings` | the Settings window: the list, Home, search and the bottom row | `x-vnd.R5OS-Settings` |
+| `preferences/settings/settings_<page>` | one Settings page add-on each (19), for example `settings_display` | `x-vnd.R5OS-settings_<page>` |
 
 - **`en.catkeys`** is the English source, a Haiku catalog file. The build extracts it from the `B_TRANSLATE` calls. Do not edit it by hand.
 - **`template.pot`** holds the same texts as a gettext template. `catalogs.py export` writes it from `en.catkeys`. Do not edit it by hand.
 - **`nl.po`, `de.po` and `fr.po`** hold every text of the template. A text with an empty `msgstr` has not been translated yet. A text with the `fuzzy` flag is marked "Needs editing" in Weblate and is not used yet.
 
 Haiku's own programs keep their translations in `haiku/data/catalogs`, as before.
+
+## Settings
+
+Settings and each of its page add-ons have a catalog of their own (decided 25 Nov 2026), because each page is an add-on (`distro/settings/ModuleAPI.md`) and the Locale Kit finds an image's catalog by the signature of that file. Each add-on therefore carries a signature in `distro/settings/settings_<page>.rdef`. The Jamfile sets `HAIKU_MULTIPLE_LOCALIZED_TARGETS`, so each target gets its own folder.
+
+- **Contexts.** Each page has the context `Settings: <page>`, for example `Settings: Display`; the window is `Settings window` and Home is `Settings: Home`. A translator sees on which page a text is. Views copied from Haiku (Fonts, Colors, the Network service list) keep Haiku's context, so Haiku's own translations of them could be taken over.
+- **Fixed texts.** The five fixed descriptions of `AGENTS.md` stay the same in English. They carry the comment "Fixed text (AGENTS.md): translate the meaning, keep it short".
+- **Order and search.** Pages are sorted by their translated name in the order of the user's language (`BCollator`); Information stays first under System. Search also compares the page id, which is its English name, so an English word still finds a page. The keywords carry the comment "Keep the English words and add words in your language".
 
 ## The formats
 
@@ -56,6 +66,8 @@ It does four things:
 
 A program that is not in `distro/catalogs` yet is added with `--add <folder>`. That also creates `nl.po`, `de.po` and `fr.po`.
 
+When the English of a text changes, `export` keeps the translation of the most similar old text in the same context, marked `fuzzy` ("Needs editing"), with the old English as `#| msgid`. Weblate shows that old text next to the new one. The translation is not used until someone checks it. So the English is changed in the code, and the translations follow.
+
 ## Before a build: apply
 
 `scripts/apply-overlay.sh` runs `catalogs.py apply`. It turns each `.po` file into `haiku/data/catalogs/<folder>/<language>.catkeys`, where `DoCatalogs` finds it and links it into the image. The header (signature and fingerprint) and the comments come from `en.catkeys`. It leaves out:
@@ -78,6 +90,23 @@ The project is [hosted.weblate.org/projects/r5](https://hosted.weblate.org/proje
 - version control "GitHub pull request", with "Merge requests maken" (create merge requests) on and automatic merging off. Weblate's changes reach `main` only through a pull request that the owner approves.
 
 Weblate first used the "Haiku catkeys" format. A test (#4607, closed unmerged) showed that Weblate then drops every untranslated text from the file, and the format has no flag for "Needs editing". With gettext both are kept.
+
+### New folders appear by themselves
+
+Set up once, by the owner, in Weblate:
+
+1. On one existing component (for example Bluetooth), add the add-on **Component discovery** with:
+   - regular expression `distro/catalogs/(?P<component>.+)/(?P<language>[^/.]+)\.po`;
+   - component name `{{ component }}`;
+   - base file (template) `distro/catalogs/{{ component }}/template.pot`;
+   - file format "gettext PO file".
+2. In the GitHub repository settings, add the Weblate webhook (`https://hosted.weblate.org/hooks/github/`, event "push").
+
+After that every new folder in `distro/catalogs` on `main` becomes a component, and new or changed texts reach Weblate after each merge. Weblate's changes still come back as a pull request.
+
+## Drafts
+
+A text that Haiku's own translators already translated in the same context is taken over from `haiku/data/catalogs`, without `fuzzy`. Every other text of nl, de and fr in Settings has an AI draft, marked `fuzzy`. It is not shipped until a person has checked it in Weblate.
 
 ## Not done yet
 

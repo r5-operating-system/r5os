@@ -1,0 +1,230 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_power\nLanguage: fr\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "battery power sleep performance profile brightness lid display energy cpu"
+msgstr "battery power sleep performance profile brightness lid display energy cpu batterie alimentation veille performances profil luminosité capot écran énergie processeur"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Profile"
+msgstr "Profil"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Turn off the display after"
+msgstr "Éteindre l'écran après"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Wake with the mouse or touchpad"
+msgstr "Réveiller avec la souris ou le pavé tactile"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Charging"
+msgstr "En charge"
+
+#. Second of two lines, one sentence with the line before
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "\"Sleep\" is gray in these menus."
+msgstr "« Veille » est grisé dans ces menus."
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Put the computer to sleep after"
+msgstr "Mettre l'ordinateur en veille après"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "This computer sleeps with Modern Standby (S0ix)."
+msgstr "Cet ordinateur se met en veille avec Modern Standby (S0ix)."
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "This processor does not let R5 change its speed."
+msgstr "Ce processeur ne permet pas à R5 de modifier sa vitesse."
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Sleep"
+msgstr "Veille"
+
+#. First of two lines, one sentence: the second line is '"Sleep" is gray in these menus.'
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Sleep is not available on this computer yet. Until it is,"
+msgstr "La veille n'est pas encore disponible sur cet ordinateur. En attendant,"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "full in about %time%"
+msgstr "chargée dans environ %time%"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Balanced: fast when you work, slower when the computer waits. Power saver keeps the processor below its boost. Performance always allows the boost."
+msgstr "Équilibré : rapide quand vous travaillez, plus lent quand l'ordinateur attend. Économie d'énergie maintient le processeur sous son boost. Performances autorise toujours le boost."
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Performance: the processor always allows its boost and leans toward speed. Power saver keeps it below its boost."
+msgstr "Performances : le processeur autorise toujours son boost et privilégie la vitesse. Économie d'énergie le maintient sous son boost."
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Performance"
+msgstr "Performances"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Keep working with an external display"
+msgstr "Continuer à travailler avec un écran externe"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Wake when the lid is opened"
+msgstr "Réveiller à l'ouverture du capot"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "On battery"
+msgstr "Sur batterie"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Shut down"
+msgstr "Éteindre"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "This computer cannot sleep."
+msgstr "Cet ordinateur ne peut pas se mettre en veille."
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Brightness"
+msgstr "Luminosité"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "about %time% left"
+msgstr "il reste environ %time%"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Turn off the display"
+msgstr "Éteindre l'écran"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "This computer sleeps with Suspend to RAM (S3)."
+msgstr "Cet ordinateur se met en veille avec la mise en veille en RAM (S3)."
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Battery, performance and sleep"
+msgstr "Batterie, performances et veille"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Wake"
+msgstr "Réveil"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Never"
+msgstr "Jamais"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Power saver"
+msgstr "Économie d'énergie"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Do nothing"
+msgstr "Ne rien faire"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "The power service is not running."
+msgstr "Le service d'alimentation n'est pas en cours d'exécution."
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Battery"
+msgstr "Batterie"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "{0, plural, one{# minute} other{# minutes}}"
+msgstr "{0, plural, one{# minute} other{# minutes}}"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "1 minute"
+msgstr "1 minute"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Battery health %percent% % of its design capacity"
+msgstr "Santé de la batterie %percent% % de sa capacité nominale"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Balanced"
+msgstr "Équilibré"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "When the lid is closed"
+msgstr "Quand le capot est fermé"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "When the power button is pressed"
+msgstr "Quand le bouton d'alimentation est pressé"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Wake with the keyboard"
+msgstr "Réveiller avec le clavier"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Power"
+msgstr "Alimentation"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Power settings are off in Safe mode."
+msgstr "Les paramètres d'alimentation sont désactivés en mode sans échec."
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "1 hour"
+msgstr "1 heure"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Power saver: the processor stays below its boost and leans toward saving energy. Balanced and Performance allow the boost."
+msgstr "Économie d'énergie : le processeur reste sous son boost et privilégie les économies d'énergie. Équilibré et Performances autorisent le boost."
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "full"
+msgstr "chargée"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Plugged in"
+msgstr "Branché"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Ask"
+msgstr "Demander"

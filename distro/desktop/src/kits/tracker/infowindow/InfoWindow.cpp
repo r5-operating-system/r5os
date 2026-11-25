@@ -550,12 +550,21 @@ BInfoWindow::CalcSize(void* castToWindow)
 		off_t size = 0;
 		int32 fileCount = 0;
 		int32 dirCount = 0;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// a walk that stopped on an error has only a partial sum: do not
+		// show that as the folder size (#4627)
 		CopyLoopControl loopControl;
-		FSRecursiveCalcSize(window, &loopControl, &dir, &size, &fileCount,
-			&dirCount);
+		status_t status = FSRecursiveCalcSize(window, &loopControl, &dir,
+			&size, &fileCount, &dirCount);
 
 		// got the size value, update the size string
-		GetSizeString(sizeString, size, fileCount);
+		if (status != B_OK)
+			sizeString = B_TRANSLATE("Error calculating folder size.");
+		else
+			GetSizeString(sizeString, size, fileCount);
+// SPDX-SnippetEnd
 	} else {
 		// in the trash case, iterate through and sum up
 		// size/counts for all present trash dirs
@@ -564,6 +573,11 @@ BInfoWindow::CalcSize(void* castToWindow)
 		int32 totalDirCount = 0, currentDirCount;
 		BVolumeRoster volRoster;
 		volRoster.Rewind();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		bool calcFailed = false;
+// SPDX-SnippetEnd
 		BVolume volume;
 		while (volRoster.GetNextVolume(&volume) == B_OK) {
 			if (!volume.IsPersistent())
@@ -575,15 +589,29 @@ BInfoWindow::CalcSize(void* castToWindow)
 
 			BDirectory trashDir;
 			if (FSGetTrashDir(&trashDir, volume.Device()) == B_OK) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
 				CopyLoopControl loopControl;
-				FSRecursiveCalcSize(window, &loopControl, &trashDir,
-					&currentSize, &currentFileCount, &currentDirCount);
+				if (FSRecursiveCalcSize(window, &loopControl, &trashDir,
+						&currentSize, &currentFileCount, &currentDirCount)
+						!= B_OK) {
+					calcFailed = true;
+				}
+// SPDX-SnippetEnd
 				totalSize += currentSize;
 				totalFileCount += currentFileCount;
 				totalDirCount += currentDirCount;
 			}
 		}
-		GetSizeString(sizeString, totalSize, totalFileCount);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		if (calcFailed)
+			sizeString = B_TRANSLATE("Error calculating folder size.");
+		else
+			GetSizeString(sizeString, totalSize, totalFileCount);
+// SPDX-SnippetEnd
 	}
 
 	if (window->StopCalc()) {

@@ -1,0 +1,106 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-Settings\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+msgctxt "Settings window"
+msgid "Defaults"
+msgstr ""
+
+msgctxt "Settings window"
+msgid "Unlock"
+msgstr ""
+
+msgctxt "Settings window"
+msgid "Display, sound, notifications, virtual memory, and this computer."
+msgstr ""
+
+msgctxt "Settings window"
+msgid "Revert"
+msgstr ""
+
+msgctxt "Settings window"
+msgid "Choose a category, or search for a setting."
+msgstr ""
+
+msgctxt "Settings window"
+msgid "Fonts, look and feel, wallpaper, and the Deskbar."
+msgstr ""
+
+msgctxt "Settings window"
+msgid "Home"
+msgstr ""
+
+msgctxt "System name"
+msgid "Settings"
+msgstr ""
+
+msgctxt "Settings: Home"
+msgid "Recently changed"
+msgstr ""
+
+msgctxt "Settings window"
+msgid "Keyboard, mouse, touchpad, printers, and Bluetooth."
+msgstr ""
+
+msgctxt "Settings window"
+msgid "Administrator"
+msgstr ""
+
+msgctxt "Settings window"
+msgid "Wired and Wi-Fi connections, and network shares."
+msgstr ""
+
+msgctxt "Settings window"
+msgid "Lock"
+msgstr ""
+
+msgctxt "Settings window"
+msgid "Search"
+msgstr ""
+
+msgctxt "Settings window"
+msgid "Could not apply %name%."
+msgstr ""
+
+msgctxt "Settings window"
+msgid "System"
+msgstr ""
+
+msgctxt "Settings window"
+msgid "Could not revert %name%."
+msgstr ""
+
+msgctxt "Settings window"
+msgid "This page could not be opened."
+msgstr ""
+
+msgctxt "Settings window"
+msgid "Accounts"
+msgstr ""
+
+msgctxt "Settings window"
+msgid "Personalization"
+msgstr ""
+
+msgctxt "Settings: Home"
+msgid "Nothing changed yet"
+msgstr ""
+
+msgctxt "Settings window"
+msgid "Network"
+msgstr ""
+
+msgctxt "Settings window"
+msgid "OK"
+msgstr ""
+
+msgctxt "Settings window"
+msgid "Devices"
+msgstr ""
+
+msgctxt "Settings window"
+msgid "The people who use this computer, and how they sign in."
+msgstr ""
+
+msgctxt "Settings window"
+msgid "Could not restore defaults for %name%."
+msgstr ""

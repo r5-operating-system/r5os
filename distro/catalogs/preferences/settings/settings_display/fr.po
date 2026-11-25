@@ -1,0 +1,143 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_display\nLanguage: fr\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "Resolution:"
+msgstr "Résolution :"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "Apply"
+msgstr "Appliquer"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "The Deskbar is on screen %number%."
+msgstr "La Deskbar est sur l'écran %number%."
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "Do you wish to keep these settings?\nThe previous picture returns after 12 seconds."
+msgstr "Voulez-vous conserver ces paramètres ?\nL'affichage précédent revient après 12 secondes."
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "Colors:"
+msgstr "Couleurs :"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "Screen"
+msgstr "Écran"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "Keep"
+msgstr "Conserver"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "{0, plural, one{# workspace. Changes right away. Every screen follows the same workspace.} other{# workspaces. Changes right away. Every screen follows the same workspace.}}"
+msgstr "{0, plural, one{# espace de travail. Modification immédiate. Tous les écrans suivent le même espace de travail.} other{# espaces de travail. Modification immédiate. Tous les écrans suivent le même espace de travail.}}"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "Screen %number% – %name%"
+msgstr "Écran %number% – %name%"
+
+#, fuzzy
+msgctxt "Settings: Display screens"
+msgid "Screen"
+msgstr "Écran"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "Display"
+msgstr "Affichage"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "%resolution% (recommended)"
+msgstr "%resolution% (recommandée)"
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "screen display resolution refresh colors workspaces"
+msgstr "screen display resolution refresh colors workspaces écran affichage résolution fréquence rafraîchissement couleurs espaces travail"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "%bits% bits/pixel"
+msgstr "%bits% bits/pixel"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "Arrangement"
+msgstr "Disposition"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "Screen – %name%"
+msgstr "Écran – %name%"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "Rows:"
+msgstr "Lignes :"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "Apply to:"
+msgstr "Appliquer à :"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "All workspaces"
+msgstr "Tous les espaces de travail"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "Columns:"
+msgstr "Colonnes :"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "The screen mode could not be set.\n"
+msgstr "Le mode d'écran n'a pas pu être défini.\n"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "OK"
+msgstr "OK"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "Drag the screens to match your desk. Click one to change it."
+msgstr "Faites glisser les écrans pour reproduire leur disposition sur votre bureau. Cliquez sur l'un d'eux pour le modifier."
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "Refresh rate:"
+msgstr "Fréquence de rafraîchissement :"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "This workspace"
+msgstr "Cet espace de travail"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "Screens, resolution, and workspaces"
+msgstr "Écrans, résolution et espaces de travail"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "Undo"
+msgstr "Annuler"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "Workspaces"
+msgstr "Espaces de travail"

@@ -22,6 +22,8 @@
 #include <Bitmap.h>
 #include <Button.h>
 #include <Card.h>
+#include <Catalog.h>
+#include <Collator.h>
 #include <CardLayout.h>
 #include <Control.h>
 #include <ControlLook.h>
@@ -31,6 +33,7 @@
 #include <IconUtils.h>
 #include <LayoutBuilder.h>
 #include <LayoutItem.h>
+#include <Locale.h>
 #include <MessageFilter.h>
 #include <MessageRunner.h>
 #include <Mime.h>
@@ -54,6 +57,10 @@
 #include <string.h>
 
 
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "Settings window"
+
+
 struct SettingsCategory {
 	const char* id;
 	const char* name;
@@ -69,20 +76,20 @@ static int32 modules_in_category(SettingsManager* manager,
 
 
 static const SettingsCategory kCategories[] = {
-	{ "personalization", "Personalization",
-		"Fonts, look and feel, wallpaper, and the Deskbar.",
+	{ "personalization", B_TRANSLATE_MARK("Personalization"),
+		B_TRANSLATE_MARK("Fonts, look and feel, wallpaper, and the Deskbar."),
 		"application/x-vnd.Haiku-Appearance", B_CONTROL_HIGHLIGHT_COLOR },
-	{ "system", "System",
-		"Display, sound, notifications, virtual memory, and this computer.",
+	{ "system", B_TRANSLATE_MARK("System"),
+		B_TRANSLATE_MARK("Display, sound, notifications, virtual memory, and this computer."),
 		"application/x-vnd.Haiku-Screen", B_PANEL_TEXT_COLOR },
-	{ "devices", "Devices",
-		"Keyboard, mouse, touchpad, printers, and Bluetooth.",
+	{ "devices", B_TRANSLATE_MARK("Devices"),
+		B_TRANSLATE_MARK("Keyboard, mouse, touchpad, printers, and Bluetooth."),
 		"application/x-vnd.Haiku-Devices", B_SUCCESS_COLOR },
-	{ "network", "Network",
-		"Wired and Wi-Fi connections, and network shares.",
+	{ "network", B_TRANSLATE_MARK("Network"),
+		B_TRANSLATE_MARK("Wired and Wi-Fi connections, and network shares."),
 		"application/x-vnd.Haiku-Network", B_LINK_TEXT_COLOR },
-	{ "accounts", "Accounts",
-		"The people who use this computer, and how they sign in.",
+	{ "accounts", B_TRANSLATE_MARK("Accounts"),
+		B_TRANSLATE_MARK("The people who use this computer, and how they sign in."),
 		"application/x-vnd.Be-PEPL", B_WINDOW_TAB_COLOR }
 };
 
@@ -151,7 +158,7 @@ SearchHint::Draw(BRect update)
 	GetFont(&font);
 	SetHighColor(mix_color(ui_color(B_DOCUMENT_BACKGROUND_COLOR),
 		ui_color(B_DOCUMENT_TEXT_COLOR), 140));
-	DrawString("Search", BPoint(0, search_baseline(font, Bounds().Height())));
+	DrawString(B_TRANSLATE("Search"), BPoint(0, search_baseline(font, Bounds().Height())));
 }
 
 
@@ -870,7 +877,8 @@ PageScroller::DoLayout()
 SettingsWindow::SettingsWindow(SettingsManager* manager,
 	SettingsStorage* storage)
 	:
-	BWindow(BRect(80, 60, 1109, 669), "Settings", B_TITLED_WINDOW,
+	BWindow(BRect(80, 60, 1109, 669), B_TRANSLATE_SYSTEM_NAME("Settings"),
+		B_TITLED_WINDOW,
 		B_QUIT_ON_WINDOW_CLOSE),
 	fManager(manager),
 	fStorage(storage),
@@ -914,8 +922,9 @@ SettingsWindow::SettingsWindow(SettingsManager* manager,
 	fDeck->SetLayout(fCards);
 	fDeck->SetExplicitMinSize(BSize(560, 160));
 
-	fRevert = new BButton("revert", "Revert", new BMessage(kMsgRevert));
-	fDefaults = new BButton("defaults", "Defaults", new BMessage(kMsgDefaults));
+	fRevert = new BButton("revert", B_TRANSLATE("Revert"), new BMessage(kMsgRevert));
+	fDefaults = new BButton("defaults", B_TRANSLATE("Defaults"),
+		new BMessage(kMsgDefaults));
 
 	// The list is 200 wide. Search sits under it. The lock, Revert,
 	// and Defaults sit on the bottom row of the right column. Both
@@ -963,7 +972,7 @@ SettingsWindow::SettingsWindow(SettingsManager* manager,
 	fRevert->SetExplicitMaxSize(BSize(B_SIZE_UNSET, buttonHeight));
 	fDefaults->SetExplicitMinSize(BSize(B_SIZE_UNSET, buttonHeight));
 	fDefaults->SetExplicitMaxSize(BSize(B_SIZE_UNSET, buttonHeight));
-	fLock->SetToolTip("Unlock");
+	fLock->SetToolTip(B_TRANSLATE("Unlock"));
 	_ReloadLock(false);
 	fLockRunner = new BMessageRunner(BMessenger(this),
 		new BMessage(kMsgLockTick), 2000000);
@@ -1009,8 +1018,8 @@ SettingsWindow::ModulesLoaded()
 		message->AddString("category", kCategories[i].id);
 		BAppearanceKit::BActionCard* card
 			= new BAppearanceKit::BActionCard(kCategories[i].id, message);
-		card->SetTitle(kCategories[i].name);
-		card->SetSummary(kCategories[i].summary);
+		card->SetTitle(B_TRANSLATE_NOCOLLECT(kCategories[i].name));
+		card->SetSummary(B_TRANSLATE_NOCOLLECT(kCategories[i].summary));
 		card->SetTagColor(ui_color(kCategories[i].tint));
 		BBitmap* icon = r5_mime_icon_bitmap(kCategories[i].iconSignature, side);
 		if (icon != NULL)
@@ -1101,9 +1110,10 @@ SettingsWindow::MessageReceived(BMessage* message)
 				fLastApplyError = B_OK;
 				status_t status = fCurrent->RevertSettings(fContext);
 				if (status != B_OK) {
-					BString text("Could not revert ");
-					text << fCurrent->Name() << ".\n" << strerror(status);
-					BAlert* alert = new BAlert("Settings", text.String(), "OK",
+					BString text(B_TRANSLATE("Could not revert %name%."));
+					text.ReplaceFirst("%name%", fCurrent->Name());
+					text << "\n" << strerror(status);
+					BAlert* alert = new BAlert("Settings", text.String(), B_TRANSLATE("OK"),
 						NULL, NULL, B_WIDTH_AS_USUAL, B_WARNING_ALERT);
 					alert->Go(NULL);
 				}
@@ -1117,9 +1127,10 @@ SettingsWindow::MessageReceived(BMessage* message)
 				fLastApplyError = B_OK;
 				status_t status = fCurrent->ApplyDefaults(fContext);
 				if (status != B_OK) {
-					BString text("Could not restore defaults for ");
-					text << fCurrent->Name() << ".\n" << strerror(status);
-					BAlert* alert = new BAlert("Settings", text.String(), "OK",
+					BString text(B_TRANSLATE("Could not restore defaults for %name%."));
+					text.ReplaceFirst("%name%", fCurrent->Name());
+					text << "\n" << strerror(status);
+					BAlert* alert = new BAlert("Settings", text.String(), B_TRANSLATE("OK"),
 						NULL, NULL, B_WIDTH_AS_USUAL, B_WARNING_ALERT);
 					alert->Go(NULL);
 				}
@@ -1162,9 +1173,12 @@ module_before(const SettingsModule* left, const SettingsModule* right)
 		&& strcmp(right->Identifier(), "information") == 0;
 	if (leftInfo != rightInfo)
 		return leftInfo;
-	BString leftName(left->Name() != NULL ? left->Name() : "");
-	BString rightName(right->Name() != NULL ? right->Name() : "");
-	int compare = leftName.ICompare(rightName);
+	// The names are translated, so compare them in the order of the
+	// user's language.
+	BCollator collator;
+	BLocale::Default()->GetCollator(&collator);
+	int compare = collator.Compare(left->Name() != NULL ? left->Name() : "",
+		right->Name() != NULL ? right->Name() : "");
 	if (compare != 0)
 		return compare < 0;
 	BString leftId(left->Identifier() != NULL ? left->Identifier() : "");
@@ -1207,7 +1221,7 @@ SettingsWindow::_BuildSidebar()
 	BBitmap* pebble = r5_vector_icon_bitmap(kR5Pebble, sizeof(kR5Pebble),
 		side);
 	BAppearanceKit::BSidebarItem* home
-		= new BAppearanceKit::BSidebarItem("Home", "home", pebble);
+		= new BAppearanceKit::BSidebarItem(B_TRANSLATE("Home"), "home", pebble);
 	home->SetEmphasized(true);
 	delete pebble;
 	fList->AddItem(home);
@@ -1220,7 +1234,8 @@ SettingsWindow::_BuildSidebar()
 			continue;
 		BBitmap* icon = r5_mime_icon_bitmap(kCategories[c].iconSignature, side);
 		BAppearanceKit::BSidebarItem* section
-			= new BAppearanceKit::BSidebarItem(kCategories[c].name,
+			= new BAppearanceKit::BSidebarItem(
+				B_TRANSLATE_NOCOLLECT(kCategories[c].name),
 				kCategories[c].id, icon);
 		delete icon;
 		section->SetCount(count);
@@ -1231,7 +1246,9 @@ SettingsWindow::_BuildSidebar()
 			keywords << " "
 				<< (modules[i]->Keywords() != NULL
 					? modules[i]->Keywords() : "")
-				<< " " << kCategories[c].name;
+				<< " " << B_TRANSLATE_NOCOLLECT(kCategories[c].name)
+				<< " " << kCategories[c].name
+				<< " " << modules[i]->Identifier();
 			BAppearanceKit::BSidebarItem* page
 				= new BAppearanceKit::BSidebarItem(modules[i]->Name(),
 					modules[i]->Identifier());
@@ -1270,8 +1287,8 @@ SettingsWindow::_ShowHome()
 		if (icon != NULL)
 			r5_settings_apply_prefs_overlay(icon);
 	}
-	_SetHeader(NULL, "Settings",
-		"Choose a category, or search for a setting.", icon);
+	_SetHeader(NULL, B_TRANSLATE_SYSTEM_NAME("Settings"),
+		B_TRANSLATE("Choose a category, or search for a setting."), icon);
 	delete icon;
 	fList->ExpandOnly(NULL);
 	fList->SelectId("home");
@@ -1362,9 +1379,10 @@ SettingsWindow::_ApplyCurrent()
 	if (status == fLastApplyError)
 		return;
 	fLastApplyError = status;
-	BString text("Could not apply ");
-	text << fCurrent->Name() << ".\n" << strerror(status);
-	BAlert* alert = new BAlert("Settings", text.String(), "OK",
+	BString text(B_TRANSLATE("Could not apply %name%."));
+	text.ReplaceFirst("%name%", fCurrent->Name());
+	text << "\n" << strerror(status);
+	BAlert* alert = new BAlert("Settings", text.String(), B_TRANSLATE("OK"),
 		NULL, NULL, B_WIDTH_AS_USUAL, B_WARNING_ALERT);
 	alert->Go(NULL);
 }
@@ -1473,11 +1491,11 @@ SettingsWindow::_ReloadLock(bool pageChanged)
 	if (fLock != NULL) {
 		r5_button_set_lock(fLock, !fLockOpen, fLockButtonHeight);
 		if (fLockAdmin)
-			fLock->SetToolTip("Administrator");
+			fLock->SetToolTip(B_TRANSLATE("Administrator"));
 		else if (fLockOpen)
-			fLock->SetToolTip("Lock");
+			fLock->SetToolTip(B_TRANSLATE("Lock"));
 		else
-			fLock->SetToolTip("Unlock");
+			fLock->SetToolTip(B_TRANSLATE("Unlock"));
 	}
 	if (changed || pageChanged) {
 		_ApplyPageLock();
@@ -1578,7 +1596,7 @@ SettingsWindow::_ModuleView(SettingsModule* module)
 	BView* view = module->CreateView(fContext, BRect(0, 0, 0, 0));
 	if (view == NULL) {
 		view = new BStringView(name.String(),
-			"This page could not be opened.");
+			B_TRANSLATE("This page could not be opened."));
 	}
 	r5_settings_apply_plain(view);
 	PageScroller* scroller = new PageScroller(view);
@@ -1665,8 +1683,11 @@ SettingsWindow::_Matches(SettingsModule* module, const char* query) const
 	if (query == NULL || query[0] == '\0')
 		return true;
 	BString hay(module->Name());
+	// The id is the English name ("wallpaper", "display"), so an English
+	// word still finds a page when Settings runs in another language.
 	hay << " " << module->Description() << " " << module->Keywords()
-		<< " " << _CategoryName(module->Category());
+		<< " " << _CategoryName(module->Category()) << " "
+		<< module->Identifier();
 	return hay.IFindFirst(query) >= 0;
 }
 
@@ -1678,7 +1699,7 @@ SettingsWindow::_CategoryName(const char* categoryId) const
 		return "";
 	for (uint32 i = 0; i < sizeof(kCategories) / sizeof(kCategories[0]); i++) {
 		if (strcmp(kCategories[i].id, categoryId) == 0)
-			return kCategories[i].name;
+			return B_TRANSLATE_NOCOLLECT(kCategories[i].name);
 	}
 	return categoryId;
 }
@@ -1691,7 +1712,7 @@ SettingsWindow::_CategorySummary(const char* categoryId) const
 		return "";
 	for (uint32 i = 0; i < sizeof(kCategories) / sizeof(kCategories[0]); i++) {
 		if (strcmp(kCategories[i].id, categoryId) == 0)
-			return kCategories[i].summary;
+			return B_TRANSLATE_NOCOLLECT(kCategories[i].summary);
 	}
 	return "";
 }

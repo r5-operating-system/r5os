@@ -1,0 +1,56 @@
+1	english	x-vnd.R5OS-settings_information	3099462237
+Drawn by the processor (software)	Settings: Information		Drawn by the processor (software)
+Processor: %value%	Settings: Information		Processor: %value%
+Information	Settings: Information		Information
+information device processor memory version build kernel	Settings: Information	Search words, separated by spaces. Keep the English words and add words in your language.	information device processor memory version build kernel
+Cancel	Settings: Information		Cancel
+Display	Settings: Information		Display
+What's new in this build	Settings: Information		What's new in this build
+{0, plural, one{# minute} other{# minutes}}	Settings: Information		{0, plural, one{# minute} other{# minutes}}
+%size% in use	Settings: Information		%size% in use
+Memory in use: %value%	Settings: Information		Memory in use: %value%
+%used% used · %free% free	Settings: Information		%used% used · %free% free
+Rename	Settings: Information		Rename
+Display detail: %value%	Settings: Information		Display detail: %value%
+Image built unknown	Settings: Information		Image built unknown
+Unknown	Settings: Information		Unknown
+Processor	Settings: Information		Processor
+Graphics detail: %value%	Settings: Information		Graphics detail: %value%
+{0, plural, one{# core} other{# cores}}	Settings: Information		{0, plural, one{# core} other{# cores}}
+Since %time% today	Settings: Information		Since %time% today
+Computer: %value%	Settings: Information		Computer: %value%
+Processor detail: %value%	Settings: Information		Processor detail: %value%
+Running for: %value%	Settings: Information		Running for: %value%
+CPU details…	Settings: Information		CPU details…
+Hardware accelerated	Settings: Information		Hardware accelerated
+Use letters, digits and -, up to 63, not starting or ending with -.	Settings: Information		Use letters, digits and -, up to 63, not starting or ending with -.
+Copy details	Settings: Information		Copy details
+Memory	Settings: Information		Memory
+The name could not be saved.	Settings: Information		The name could not be saved.
+System: %value%	Settings: Information		System: %value%
+Storage: %value%	Settings: Information		Storage: %value%
+Rename…	Settings: Information		Rename…
+Kernel %name%	Settings: Information		Kernel %name%
+{0, plural, one{# day} other{# days}}	Settings: Information		{0, plural, one{# day} other{# days}}
+Since %time%, %date%	Settings: Information		Since %time%, %date%
+{0, plural, one{# hour} other{# hours}}	Settings: Information		{0, plural, one{# hour} other{# hours}}
+R5 Operating System %version% · Build %build% · %architecture%	Settings: Information	Keep the product name R5 Operating System	R5 Operating System %version% · Build %build% · %architecture%
+Memory: %value%	Settings: Information		Memory: %value%
+View system details	Settings: Information	Fixed text (AGENTS.md): translate the meaning, keep it short	View system details
+%days%, %hours%	Settings: Information		%days%, %hours%
+Name:	Settings: Information		Name:
+Display: %value%	Settings: Information		Display: %value%
+Kernel	Settings: Information		Kernel
+%hours%, %minutes%	Settings: Information		%hours%, %minutes%
+This computer	Settings: Information		This computer
+Storage used: %value%	Settings: Information		Storage used: %value%
+Graphics	Settings: Information		Graphics
+Running for	Settings: Information		Running for
+OK	Settings: Information		OK
+Running since: %value%	Settings: Information		Running since: %value%
+Storage	Settings: Information		Storage
+{0, plural, one{# thread} other{# threads}}	Settings: Information		{0, plural, one{# thread} other{# threads}}
+Less than a minute	Settings: Information		Less than a minute
+Graphics: %value%	Settings: Information		Graphics: %value%
+Image built %date%	Settings: Information		Image built %date%
+%cores%, %threads%	Settings: Information		%cores%, %threads%

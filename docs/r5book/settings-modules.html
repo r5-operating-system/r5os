@@ -25,8 +25,8 @@
 			<span class="kit-label">Settings add-on</span>
 			<h1>Settings modules</h1>
 			<p>A page in Settings is an add-on. Settings finds it at start, lists it under its category, and
-			shows its view when someone opens it. A new page needs no change to the Settings window. Fonts and
-			Look and feel are built this way.</p>
+			shows its view when someone opens it. A new page needs no change to the Settings window. Every page of
+			Settings is built this way; the Settings program itself has no pages built in.</p>
 		</section>
 
 		<nav class="on-this-page" aria-label="On this page">
@@ -38,6 +38,7 @@
 				<li><a href="#SettingsContext">SettingsContext</a> &mdash; Host callbacks for lock and notifications.</li>
 				<li><a href="#storage">Where the values go</a> &mdash; User settings vs. machine settings.</li>
 				<li><a href="#admin">The lock</a> &mdash; Administrator-gated pages.</li>
+				<li><a href="#translations">Translating the page</a> &mdash; Context, signature and catalog.</li>
 				<li><a href="#example">Example</a> &mdash; Minimal Settings module skeleton.</li>
 				<li><a href="#open-page">Opening a page</a> &mdash; Show one page from another program.</li>
 				<li><a href="#limits">Not yet</a> &mdash; Current limitations.</li>
@@ -193,6 +194,28 @@ virtual status_t LaunchLegacy(const char* signature) = 0;</div>
 			before writing a value for the whole computer. For a driver setting, the clock or the time zone, use
 			the administrator calls in <a href="appearance-settings.html#BAdminLockBar">AdminLock.h</a>; the page itself runs
 			as the signed-in account.</p>
+		</section>
+
+		<section class="entry" id="translations">
+			<div class="entry-header"><h2 class="plain">Translating the page</h2></div>
+			<p>Wrap the page's texts in <code class="inline">B_TRANSLATE</code>, including
+			<code class="inline">Name()</code>, <code class="inline">Description()</code> and
+			<code class="inline">Keywords()</code>, with the context <code class="inline">"Settings: &lt;page&gt;"</code>.
+			The list sorts pages by their translated name. Search also compares the
+			<code class="inline">Identifier()</code>, so keep it the English name of the page.</p>
+<pre class="code">virtual const char* Name() const { return B_TRANSLATE(<span class="s">"Display"</span>); }
+virtual const char* Keywords() const
+	{ return B_TRANSLATE_COMMENT(<span class="s">"screen display resolution"</span>,
+		<span class="s">"Search words, separated by spaces. Keep the English words and add words in your language."</span>); }</pre>
+			<p>The add-on needs a signature of its own, because the Locale Kit finds an add-on's catalog by the
+			signature of its file, and a <code class="inline">DoCatalogs</code> line:</p>
+<pre class="code">// settings_example.rdef
+resource app_signature <span class="s">"application/x-vnd.R5OS-settings_example"</span>;
+
+# Jamfile
+AddResources settings_example : settings_example.rdef ;
+DoCatalogs settings_example : x-vnd.R5OS-settings_example : ExampleModule.cpp ;</pre>
+			<p>The rest is in <a href="translations.html">Translations</a>.</p>
 		</section>
 
 		<section class="entry" id="example">

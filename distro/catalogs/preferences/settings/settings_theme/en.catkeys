@@ -1,0 +1,104 @@
+1	english	x-vnd.R5OS-settings_theme	3536288719
+Control border	Colors tab		Control border
+Rounded	Settings: Theme		Rounded
+Shadow	Colors tab		Shadow
+This is the name of a built-in theme. The built-in themes stay as they are; choose another name.	Settings: Theme		This is the name of a built-in theme. The built-in themes stay as they are; choose another name.
+Deskbar	Settings: Theme		Deskbar
+Windows · %windows%	Settings: Theme		Windows · %windows%
+Dark	Settings: Theme		Dark
+Choose how windows, controls and the Deskbar look	Settings: Theme		Choose how windows, controls and the Deskbar look
+Scrollbars	Settings: Theme		Scrollbars
+Accent	Settings: Theme		Accent
+Built in	Settings: Theme		Built in
+Your theme	Settings: Theme		Your theme
+The controls of Haiku, built into the system.	Settings: Theme		The controls of Haiku, built into the system.
+Thin	Settings: Theme		Thin
+Scrollbars · double arrows	Settings: Theme		Scrollbars · double arrows
+Strength	Settings: Theme		Strength
+Success	Colors tab		Success
+Frosted glass	Settings: Theme		Frosted glass
+Parts	Settings: Theme		Parts
+Shine	Colors tab		Shine
+Menu background	Colors tab		Menu background
+Single	Settings: Theme		Single
+Link active	Colors tab		Link active
+Effects	Settings: Theme		Effects
+Default (R5)	Settings: Theme		Default (R5)
+Keep these choices	Settings: Theme		Keep these choices
+Vertical	Settings: Theme		Vertical
+Haiku width	Settings: Theme		Haiku width
+%name% (changed)	Settings: Theme		%name% (changed)
+Failure	Colors tab		Failure
+Mode and colors · %mode%, %accent%	Settings: Theme		Mode and colors · %mode%, %accent%
+Selected menu item text	Colors tab		Selected menu item text
+Panel background	Colors tab		Panel background
+Save	Settings: Theme		Save
+Balanced	Settings: Theme		Balanced
+Navigation pulse	Colors tab		Navigation pulse
+Progress bar	Colors tab		Progress bar
+Link text	Colors tab		Link text
+Control background	Colors tab		Control background
+Selected list item text	Colors tab		Selected list item text
+Shadow	Settings: Theme		Shadow
+Selected list item background	Colors tab		Selected list item background
+Wide	Settings: Theme		Wide
+Name	Settings: Theme		Name
+Delete the theme \"%name%\"? What you see now stays as it is.	Settings: Theme		Delete the theme \"%name%\"? What you see now stays as it is.
+Deskbar · %style%, %layout%	Settings: Theme		Deskbar · %style%, %layout%
+Keep in this theme	Settings: Theme		Keep in this theme
+Control mark	Colors tab		Control mark
+theme dark light mode accent colors look controls decorator windows scrollbars deskbar effects	Settings: Theme	Search words, separated by spaces. Keep the English words and add words in your language.	theme dark light mode accent colors look controls decorator windows scrollbars deskbar effects
+Window border	Colors tab		Window border
+Inactive window tab	Colors tab		Inactive window tab
+Built in · light only	Settings: Theme		Built in · light only
+Document background	Colors tab		Document background
+List background	Colors tab		List background
+Controls	Settings: Theme		Controls
+Light	Settings: Theme		Light
+The theme could not be saved: %error%	Settings: Theme		The theme could not be saved: %error%
+Custom colors	Settings: Theme		Custom colors
+Cancel	Settings: Theme		Cancel
+Menu item text	Colors tab		Menu item text
+Quiet	Settings: Theme		Quiet
+Windows	Settings: Theme		Windows
+Scrollbars · single arrows	Settings: Theme		Scrollbars · single arrows
+Not every part of the theme could be set: %error%	Settings: Theme		Not every part of the theme could be set: %error%
+List item text	Colors tab		List item text
+Control text	Colors tab		Control text
+Horizontal	Settings: Theme		Horizontal
+Selected menu item background	Colors tab		Selected menu item background
+Away from the screen edges	Settings: Theme		Away from the screen edges
+A theme name cannot contain / \\ or \".	Settings: Theme		A theme name cannot contain / \\ or \".
+Compact	Settings: Theme		Compact
+Double	Settings: Theme		Double
+Delete	Settings: Theme		Delete
+Classic (Haiku)	Settings: Theme		Classic (Haiku)
+Automatically pick secondary colors	Colors tab		Automatically pick secondary colors
+own accent	Settings: Theme		own accent
+Window tab text	Colors tab		Window tab text
+License: %license%	Settings: Theme		License: %license%
+Tooltip background	Colors tab		Tooltip background
+Window tab	Colors tab		Window tab
+Scroll bar thumb	Colors tab		Scroll bar thumb
+Link visited	Colors tab		Link visited
+Save as theme…	Settings: Theme		Save as theme…
+Selected menu item border	Colors tab		Selected menu item border
+About	Settings: Theme		About
+Tooltip text	Colors tab		Tooltip text
+Inactive window tab text	Colors tab		Inactive window tab text
+Navigation base	Colors tab		Navigation base
+Controls · %controls%	Settings: Theme		Controls · %controls%
+Blue	Settings: Theme		Blue
+Panel text	Colors tab		Panel text
+Glassy	Settings: Theme		Glassy
+Authors: %authors%	Settings: Theme		Authors: %authors%
+Document text	Colors tab		Document text
+Inactive window border	Colors tab		Inactive window border
+Control highlight	Colors tab		Control highlight
+Mode	Settings: Theme		Mode
+Animations	Settings: Theme		Animations
+Saved in your own settings. The built-in themes stay as they are.	Settings: Theme		Saved in your own settings. The built-in themes stay as they are.
+Link hover	Colors tab		Link hover
+OK	Settings: Theme		OK
+Save as theme	Settings: Theme		Save as theme
+Theme	Settings: Theme		Theme

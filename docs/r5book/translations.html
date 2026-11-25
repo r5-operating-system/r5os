@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<!--
+  SPDX-FileCopyrightText: 2026 R5OS Contributors
+  SPDX-License-Identifier: MIT
+-->
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Translations</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
+	<link rel="stylesheet" href="r5book.css" />
+</head>
+<body data-page="translations">
+
+<div class="book">
+	<aside class="toc"></aside>
+
+	<main class="page">
+		<div class="breadcrumb"><a href="index.html">R5Book</a> &rsaquo; <a href="index.html#guides">Guides</a> &rsaquo; Translations</div>
+
+		<section class="page-hero">
+			<span class="kit-label">Locale Kit &middot; Weblate</span>
+			<h1>Translations</h1>
+			<p>Text that a user sees in an R5 program goes through Haiku's Locale Kit. The English stays in
+			the code; each language is a file in the repository that translators edit in Weblate. A text
+			that has not been translated, or not been checked, stays English.</p>
+		</section>
+
+		<nav class="on-this-page" aria-label="On this page">
+			<h3>What is in this page</h3>
+			<ul>
+				<li><a href="#code">In the code</a> &mdash; Contexts, B_TRANSLATE, plurals, placeholders.</li>
+				<li><a href="#catalog">The catalog</a> &mdash; DoCatalogs, and a signature for add-ons.</li>
+				<li><a href="#files">The files</a> &mdash; en.catkeys, template.pot and one .po per language.</li>
+				<li><a href="#weblate">Weblate</a> &mdash; Where translators work, and what ships.</li>
+				<li><a href="#change">Changing the English</a> &mdash; What happens to a translation.</li>
+				<li><a href="#limits">Not yet</a> &mdash; Current limitations.</li>
+			</ul>
+		</nav>
+
+		<table class="facts">
+			<tr><th>Declared in</th><td>Catalog.h, StringFormat.h (Haiku Locale Kit)</td></tr>
+			<tr><th>Library</th><td><code class="inline">localestub</code> (static), with <code class="inline">be</code></td></tr>
+			<tr><th>Build rule</th><td><code class="inline">DoCatalogs</code></td></tr>
+			<tr><th>Contract</th><td>docs/TRANSLATIONS.md</td></tr>
+		</table>
+
+		<section class="entry" id="code">
+			<div class="entry-header"><h2 class="plain">In the code</h2></div>
+			<p>Each source file names a context after its includes. The context tells a translator where
+			the text is, so use the window or page, for example <code class="inline">"Settings: Display"</code>.
+			Then wrap every text a user sees.</p>
+<pre class="code"><span class="k">#include</span> &lt;Catalog.h&gt;
+<span class="k">#include</span> &lt;StringFormat.h&gt;
+
+<span class="k">#undef</span> B_TRANSLATION_CONTEXT
+<span class="k">#define</span> B_TRANSLATION_CONTEXT <span class="s">"Settings: Display"</span>
+
+BButton* apply = <span class="k">new</span> BButton(<span class="s">"apply"</span>, B_TRANSLATE(<span class="s">"Apply"</span>), message);
+
+<span class="c">// One sentence with a placeholder, never pieces glued together.</span>
+BString text(B_TRANSLATE(<span class="s">"The Deskbar is on screen %number%."</span>));
+text.ReplaceFirst(<span class="s">"%number%"</span>, number);
+
+<span class="c">// A count: an ICU plural, so every language picks its own form.</span>
+BString count;
+BStringFormat(B_TRANSLATE(<span class="s">"{0, plural, one{# workspace} other{# workspaces}}"</span>))
+	.Format(count, workspaces);</pre>
+			<ul class="plain">
+				<li><code class="inline">B_TRANSLATE_COMMENT(text, comment)</code> adds a note for translators.
+				Use it when the text alone is not clear, or must stay short.</li>
+				<li>In a static table, mark the text with <code class="inline">B_TRANSLATE_MARK()</code> and show it
+				with <code class="inline">B_TRANSLATE_NOCOLLECT()</code>. Never call
+				<code class="inline">B_TRANSLATE</code> in a static initializer.</li>
+				<li>Do not translate ids, settings keys, message fields, file paths, MIME types, view names
+				and log lines.</li>
+				<li>Do not compare a shown label with English text. Compare the message or the stored value.</li>
+				<li>Dates and times go through <code class="inline">BDateFormat</code> and
+				<code class="inline">BTimeFormat</code>, never a fixed <code class="inline">strftime</code> format.</li>
+			</ul>
+		</section>
+
+		<section class="entry" id="catalog">
+			<div class="entry-header"><h2 class="plain">The catalog</h2></div>
+			<p>Add <code class="inline">DoCatalogs</code> to the Jamfile with the signature, without the
+			<code class="inline">application/</code> part, and the files that use <code class="inline">B_TRANSLATE</code>.
+			The build extracts the English texts and installs one catalog per language in
+			<code class="inline">/boot/system/data/locale/catalogs/&lt;signature&gt;</code>.</p>
+<pre class="code">Application MyProgram : MyWindow.cpp : be localestub [ TargetLibstdc++ ] : MyProgram.rdef ;
+
+DoCatalogs MyProgram :
+	x-vnd.R5OS-MyProgram
+	:
+	MyWindow.cpp
+	;</pre>
+			<p>The Locale Kit finds the catalog of an image by the signature of its file. A program has one
+			in its rdef already. An add-on or a shared library needs one of its own, or its texts stay
+			English: give the add-on a small rdef with <code class="inline">resource app_signature</code>,
+			as every Settings page does (<a href="settings-modules.html#translations">Settings modules</a>).
+			When one folder builds several targets, set
+			<code class="inline">HAIKU_MULTIPLE_LOCALIZED_TARGETS on $(SUBDIR) = 1 ;</code> so each gets a folder
+			of its own.</p>
+		</section>
+
+		<section class="entry" id="files">
+			<div class="entry-header"><h2 class="plain">The files</h2></div>
+			<p>R5's own programs keep their translations in <code class="inline">distro/catalogs/&lt;folder&gt;/</code>.
+			The folder is the program's place under <code class="inline">objects/catalogs</code>, for example
+			<code class="inline">preferences/settings/settings_display</code>.</p>
+			<table class="spec">
+				<tr><th>File</th><th>What it is</th></tr>
+				<tr><td><code>en.catkeys</code></td><td>The English, as the build extracted it. Not edited by hand.</td></tr>
+				<tr><td><code>template.pot</code></td><td>The same texts for Weblate. Not edited by hand.</td></tr>
+				<tr><td><code>nl.po</code>, <code>de.po</code>, <code>fr.po</code></td><td>One file per language. Weblate edits these.</td></tr>
+			</table>
+			<p>After a build that adds or changes texts, run
+			<code class="inline">python3 scripts/catalogs.py export haiku .</code> and commit the result. A new
+			program is added with <code class="inline">--add &lt;folder&gt;</code>, which also starts nl, de and fr.
+			Before each build <code class="inline">catalogs.py apply</code> turns the .po files into catalogs.</p>
+		</section>
+
+		<section class="entry" id="weblate">
+			<div class="entry-header"><h2 class="plain">Weblate</h2></div>
+			<p>Translators work at <a href="https://hosted.weblate.org/projects/r5/">hosted.weblate.org/projects/r5</a>.
+			A new folder on <code class="inline">main</code> becomes a component there by itself. Weblate sends its
+			changes back as a pull request.</p>
+			<div class="note"><strong>Only checked text ships.</strong> A first draft, made by a person or by AI,
+			is marked "Needs editing" (the gettext <code class="inline">fuzzy</code> flag). The build leaves it out,
+			so the user sees English until someone has checked the text. Where Haiku's translators already
+			translated the same text in the same context, R5 takes their translation over.</div>
+		</section>
+
+		<section class="entry" id="change">
+			<div class="entry-header"><h2 class="plain">Changing the English</h2></div>
+			<p>Change the English in the code, build and export. The translation of the old text is kept,
+			marked "Needs editing", with the old English next to it in Weblate, so a translator only has to
+			check it.</p>
+		</section>
+
+		<section class="entry" id="limits">
+			<div class="entry-header"><h2 class="plain">Not yet</h2></div>
+			<ul class="plain">
+				<li>Not every R5 program uses <code class="inline">B_TRANSLATE</code> yet. Settings does; the others
+				follow (issue #4599).</li>
+				<li>The languages are Dutch, German and French. Others can be added in Weblate.</li>
+			</ul>
+		</section>
+	</main>
+</div>
+
+<script src="r5book.js"></script>
+</body>
+</html>

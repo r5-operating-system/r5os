@@ -1,0 +1,85 @@
+1	english	x-vnd.R5OS-settings_accounts	1322978859
+The guest setting could not be changed.	Settings: Users and Accounts		The guest setting could not be changed.
+Users and Accounts	Settings: Users and Accounts		Users and Accounts
+The picture could not be removed.	Settings: Users and Accounts		The picture could not be removed.
+Uses apps, changes own settings	Settings: Account dialogs		Uses apps, changes own settings
+No password. Everything is deleted at log out.	Settings: Users and Accounts		No password. Everything is deleted at log out.
+The picture could not be saved.	Settings: Users and Accounts		The picture could not be saved.
+The account could not be deleted.	Settings: Users and Accounts		The account could not be deleted.
+People on this computer.	Settings: Users and Accounts		People on this computer.
+Name	Settings: Users and Accounts		Name
+Start with a lowercase letter; then lowercase letters and numbers.	Settings: Account dialogs		Start with a lowercase letter; then lowercase letters and numbers.
+Allow guests to sign in to this computer	Settings: Users and Accounts		Allow guests to sign in to this computer
+Used to sign in; letters and numbers	Settings: Account dialogs		Used to sign in; letters and numbers
+Choose picture…	Settings: Users and Accounts		Choose picture…
+Administrator	Settings: Users and Accounts		Administrator
+The email address could not be saved.	Settings: Users and Accounts		The email address could not be saved.
+Delete account…	Settings: Users and Accounts		Delete account…
+Remove picture	Settings: Users and Accounts		Remove picture
+Tracker could not open the Shared folder.	Settings: Users and Accounts		Tracker could not open the Shared folder.
+OK	Settings: Users and Accounts		OK
+Delete the account of %name%?\n\nKeep files leaves the home folder %home% on the disk. Delete files removes it, with everything in it.	Settings: Users and Accounts		Delete the account of %name%?\n\nKeep files leaves the home folder %home% on the disk. Delete files removes it, with everything in it.
+Open	Settings: Users and Accounts		Open
+Add an account	Settings: Account dialogs		Add an account
+Changes are saved as you make them. The last administrator cannot become a standard account.	Settings: Users and Accounts		Changes are saved as you make them. The last administrator cannot become a standard account.
+A standard account sees only its own card (name, email, picture, password). The account list, account types and the guest wait for an administrator's unlock.	Settings: Users and Accounts		A standard account sees only its own card (name, email, picture, password). The account list, account types and the guest wait for an administrator's unlock.
+They get their own private home folder and settings.	Settings: Account dialogs		They get their own private home folder and settings.
+Username	Settings: Account dialogs		Username
+ACCOUNTS	Settings: Users and Accounts		ACCOUNTS
+home: %path%	Settings: Account dialogs		home: %path%
+Add account…	Settings: Users and Accounts		Add account…
+Delete files	Settings: Users and Accounts		Delete files
+Can also change the computer	Settings: Account dialogs		Can also change the computer
+OK	Settings: Account dialogs		OK
+Disable account	Settings: Users and Accounts		Disable account
+Change your password	Settings: Account dialogs		Change your password
+Choose picture…	Settings: Account dialogs		Choose picture…
+Administrator	Settings: Account dialogs		Administrator
+The account was added, but its picture was not saved.\n%error%	Settings: Account dialogs		The account was added, but its picture was not saved.\n%error%
+you	Settings: Users and Accounts		you
+Cancel	Settings: Users and Accounts		Cancel
+✓ The passwords match	Settings: Account dialogs		✓ The passwords match
+Delete account	Settings: Users and Accounts		Delete account
+Not everything could be put back:	Settings: Users and Accounts		Not everything could be put back:
+Accounts could not be read: %error%	Settings: Users and Accounts		Accounts could not be read: %error%
+That picture could not be used.	Settings: Account dialogs		That picture could not be used.
+Repeat password	Settings: Account dialogs		Repeat password
+Sign in must be running to change accounts.	Settings: Account dialogs		Sign in must be running to change accounts.
+name@example.com	Settings: Users and Accounts		name@example.com
+Account type	Settings: Users and Accounts		Account type
+Standard	Settings: Account dialogs		Standard
+disabled	Settings: Users and Accounts		disabled
+Password	Settings: Account dialogs		Password
+user users account accounts password administrator standard picture email sign in guest shared	Settings: Users and Accounts	Search words, separated by spaces. Keep the English words and add words in your language.	user users account accounts password administrator standard picture email sign in guest shared
+Account type	Settings: Account dialogs		Account type
+Shared folder	Settings: Users and Accounts		Shared folder
+The account could not be added.	Settings: Account dialogs		The account could not be added.
+Cancel	Settings: Account dialogs		Cancel
+Repeat new password	Settings: Account dialogs		Repeat new password
+New password for %name%	Settings: Account dialogs		New password for %name%
+GUEST AND SHARING	Settings: Users and Accounts		GUEST AND SHARING
+Change password	Settings: Account dialogs		Change password
+Change password…	Settings: Users and Accounts		Change password…
+Password	Settings: Users and Accounts		Password
+Email	Settings: Users and Accounts		Email
+%name%'s old password is not needed. Tell %name% the new one; it works from the next sign in. Their saved passwords stay locked until they enter their old password once; otherwise they start with an empty key store.	Settings: Account dialogs		%name%'s old password is not needed. Tell %name% the new one; it works from the next sign in. Their saved passwords stay locked until they enter their old password once; otherwise they start with an empty key store.
+Admin	Settings: Users and Accounts		Admin
+The name could not be saved.	Settings: Users and Accounts		The name could not be saved.
+Guest: %error%	Settings: Users and Accounts		Guest: %error%
+That file is not a picture this computer can open.	Settings: Account dialogs		That file is not a picture this computer can open.
+Sign in did not answer.	Settings: Account dialogs		Sign in did not answer.
+Name	Settings: Account dialogs		Name
+Add account	Settings: Account dialogs		Add account
+Standard	Settings: Users and Accounts		Standard
+× The passwords don't match yet	Settings: Account dialogs		× The passwords don't match yet
+That username is already in use.	Settings: Account dialogs		That username is already in use.
+Users and Accounts	Settings: Account dialogs		Users and Accounts
+The account could not be changed.	Settings: Users and Accounts		The account could not be changed.
+Enable account	Settings: Users and Accounts		Enable account
+New password	Settings: Account dialogs		New password
+Keep files	Settings: Users and Accounts		Keep files
+The account type could not be changed.	Settings: Users and Accounts		The account type could not be changed.
+The Shared folder could not be found.	Settings: Users and Accounts		The Shared folder could not be found.
+The password could not be changed.	Settings: Account dialogs		The password could not be changed.
+home %path%	Settings: Users and Accounts		home %path%
+Current password	Settings: Account dialogs		Current password
