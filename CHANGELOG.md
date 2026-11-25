@@ -8,6 +8,12 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-25 - Correction: the SD card is read-only because it is exFAT, not because of its switch
+
+- Mistake: the stick 81 entry below said the card's write-protect switch works, because Tracker refused a copy with the switch on. That card is exFAT, and Haiku's exFAT driver, which R5 uses unchanged, is read-only: `exfat/Volume.cpp` always mounts with `B_MOUNT_READ_ONLY`, and its write hooks (`fs_write`, `fs_create`, `fs_unlink`, `fs_rename`, …) are `NULL`. On stick 83 (`eab1f3c773`) the same card stayed read-only with the switch off. The refused copy came from the file system, not from the switch or the RTS5228 driver. The sentence is removed from the stick 81 entry.
+- Still proven: the card is found and mounted, and a mounted card taken out unmounts on its own without a crash.
+- Not proven: writing to a card and the write-protect switch. Both need a FAT32 card (#4586). Writing to exFAT is a separate issue.
+
 ## 2026-11-25 - Translations: R5's own programs, and Weblate finds new folders by itself (#4599)
 
 - Problem: after Settings, the other programs R5 wrote still showed fixed English, or used `B_TRANSLATE` without a catalog (Login, Users, CPU Info, Device Manager, libr5ui, the Game Kit views, the AirPlay item). `libr5bt.so` and `libr5wifi.so` had a catalog but no signature in their file, so the Locale Kit could not find it and their translations (Bluetooth was partly translated into Dutch) were never loaded. Each new catalog folder needed a Weblate component made by hand.
@@ -99,7 +105,7 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 ## 2026-11-25 - Stick 81 on the 5625U: accounts, guest, Shared and the card reader
 
 - Stick 81: `main` `dd905a39c3`, build 10072, anyboot, booted as Try R5 on the 5625U on 25 Nov 2026. Logs: `generated/boot-5625u-81` in the stick worktree (syslog of boot 1 only; Login, the key store, the guest and Shared do not log). Results are the owner's, from the screen.
-- Passed: an SD card (exFAT, 116.5 GiB) in the Realtek RTS5228 slot is mounted and shown on the desktop; with the card's write-protect switch on, Tracker refuses a copy ("You can't move or copy items to read-only volumes"); taking the card out while it was mounted unmounted it on its own, without a crash. Users and Accounts adds a standard account and a second administrator; the standard account's Deskbar menu has "Lock screen" and "Log out sam"; the guest signs in and its log out works. No crash, KDL or panic in the syslog; no errors from the registrar, launch_daemon or app_server.
+- Passed: an SD card (exFAT, 116.5 GiB) in the Realtek RTS5228 slot is mounted and shown on the desktop; taking the card out while it was mounted unmounted it on its own, without a crash. Users and Accounts adds a standard account and a second administrator; the standard account's Deskbar menu has "Lock screen" and "Log out sam"; the guest signs in and its log out works. No crash, KDL or panic in the syslog; no errors from the registrar, launch_daemon or app_server.
 - Failed, fixed since (not yet booted): the Bluetooth tray item drawn on top of ProcessController for a new account, Users and Accounts keeping the previous theme's colors, Shared a broken link for every account but `user`, new accounts without the R5 wallpaper and Deskbar (#4612); VulkanTeapot on RADV stepping on screen at 300+ fps (#4614); the white strip beside tabs (#4616).
 - Not tested, because Shared was broken: deleting another person's file in Shared as a second administrator (#4605), the guest's locked key store. Not recorded: boot 2 (the Wi-Fi password gone after a shutdown, restart and power off without the caps lock blinking), writing a file to the card with the switch off, the first-start password screen of an installed R5. Stick 82 (`efd1e4b339`) carries the fixes and repeats these checks.
 
