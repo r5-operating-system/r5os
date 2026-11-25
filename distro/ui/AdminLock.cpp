@@ -566,8 +566,9 @@ public:
 		:
 		BWindow(BRect(0, 0, 420, 220),
 			isReboot ? B_TRANSLATE("Restart") : B_TRANSLATE("Shut down"),
-			B_MODAL_WINDOW_LOOK, B_MODAL_APP_WINDOW_FEEL,
-			B_NOT_RESIZABLE | B_NOT_ZOOMABLE | B_AUTO_UPDATE_SIZE_LIMITS),
+			B_TITLED_WINDOW_LOOK, B_MODAL_APP_WINDOW_FEEL,
+			B_NOT_RESIZABLE | B_NOT_ZOOMABLE | B_NOT_CLOSABLE
+				| B_AUTO_UPDATE_SIZE_LIMITS),
 		fReboot(isReboot),
 		fTarget(target),
 		fProceedWhat(proceedWhat),
@@ -652,10 +653,20 @@ public:
 	{
 		switch (msg->what) {
 			case 'unlk':
+			{
 				if (!r5_admin_is_local(msg))
 					break;
-				r5_admin_prompt_unlock(BMessenger(this));
+				// Modal like this warning: a plain titled window opened behind
+				// it (B_MODAL_APP_WINDOW_FEEL stays above the app's normal
+				// windows), so Unlock... showed nothing (QEMU, 25 Nov 2026).
+				// A modal subset window does not work here: AddToSubset()
+				// takes only normal windows, and with an empty subset the
+				// Unlock window stayed hidden.
+				UnlockWindow* unlock = new UnlockWindow(BMessenger(this));
+				unlock->SetFeel(B_MODAL_APP_WINDOW_FEEL);
+				unlock->Show();
 				break;
+			}
 			case kMsgAdminLockChanged:
 				if (!r5_admin_is_local(msg))
 					break;

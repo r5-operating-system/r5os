@@ -415,6 +415,16 @@ AppServer::_DestroyDesktop(uid_t userID)
 					return B_BUSY;
 				fDesktops.RemoveItemAt(i);
 				thread = item->Thread();
+				// uid 0 programs attached to this desktop (the registrar,
+				// debug_server) go to the shown desktop, so they can still
+				// open windows (Desktop::_AdoptApp()).
+				for (int32 j = 0; j < fDesktops.CountItems(); j++) {
+					Desktop* shown = fDesktops.ItemAt(j);
+					if (shown->TargetScreen() == NULL && shown->IsShown()) {
+						item->SetHandoffPort(shown->MessagePort());
+						break;
+					}
+				}
 				// Desktop deletes itself on its own looper thread via
 				// B_QUIT_REQUESTED -> kMsgQuitLooper -> MessageLooper::Quit()
 				// -> delete this. Do not dereference or delete item after
