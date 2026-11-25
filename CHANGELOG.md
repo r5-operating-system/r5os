@@ -8,6 +8,25 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-24 - Translations: catalog files for R5's own programs (start of #4599)
+
+- Problem: R5's own programs had no place for translations. Haiku keeps its translations in `haiku/data/catalogs`, but R5 does not change that tree by hand. The owner chose `.catkeys` files in the repository with Weblate as the web interface, and Dutch, German and French first ([#4599](https://github.com/r5-operating-system/r5os/issues/4599)). Hosted Weblate grants its free Libre plan only to a project that has at least one component, and a component needs files in the repository.
+- Changed:
+  - `distro/catalogs/<folder>/` for the three R5 programs that already have `DoCatalogs`: `libr5bt.so` (`preferences/r5bt`, 60 texts), `libr5wifi.so` (`preferences/r5wifi`, 93) and the Bluetooth Deskbar item (`servers/bluetooth_deskbar`, 8). Each folder holds `en.catkeys`, the English source from the build, plus `nl`, `de` and `fr` with every text still untranslated.
+  - `scripts/catalogs.py export` copies `en.catkeys` from `generated.x86_64/objects/catalogs` after a build and brings the language files in line with it: new texts are added untranslated, removed texts are dropped, and translations are kept. `--add <folder>` starts a new program.
+  - `scripts/catalogs.py apply`, run by `apply-overlay.sh` after the `apply-*.py` scripts, copies the language files into `haiku/data/catalogs/<folder>/`, where `DoCatalogs` links them. It leaves out `en.catkeys` and every untranslated text, so such a text stays English instead of blank. A language with nothing translated gets no catalog.
+  - `docs/TRANSLATIONS.md` describes the files, both commands, and the Weblate component settings.
+- Choices made alone:
+  - The language files hold all texts with an empty translation, so Weblate shows what is left to do. The apply step filters out the empty ones.
+  - Haiku's runtime does not insist on a matching fingerprint when a program opens its own catalog (`DefaultCatalog.cpp`: the fingerprint is compared only when one is requested, and `B_TRANSLATE` requests none). So a catalog with fewer texts than English is fine. Haiku ships such catalogs itself: Terminal's `nl.catkeys` has 95 texts, its English 135.
+  - The language names on the first line ("dutch; flemish", "german", "french") are the ones Haiku's own catalogs use.
+- Tested (24 Nov 2026): AMD64 image with `scripts/build-locked.sh` (`jam_exit=0`, `mesa_exit=0`), with one test translation in `servers/bluetooth_deskbar/nl.catkeys` ("Bluetooth: On" as "Bluetooth: aan (TEST)"). The apply step wrote one catalog into `haiku/data/catalogs/servers/bluetooth_deskbar/` with only that entry. The build linked it into `nl.catalog`, which holds the Dutch text, and `haiku.hpkg` contains it under `x-vnd.R5OS-bluetooth-deskbar` next to `en.catalog`. The test translation was taken out again before the commit, and after the build `en.catkeys` of all three folders is byte for byte the one the build extracted (`cmp`). Not booted: no Dutch text was looked at on screen.
+- Not tested:
+  - Weblate itself: no component exists yet.
+  - Whether Weblate writes texts marked "Needs editing" into a `.catkeys` file.
+  - A translated text on screen, in QEMU or on the 5625U.
+- Limits: most of R5's own screens do not use `B_TRANSLATE` yet (28 files, listed in #4599), so they cannot be translated through these files yet.
+
 ## 2026-11-24 - Every administrator can delete in Shared
 
 - Problem: `/boot/home/Shared` (mode 01777) was owned by the first administrator. The sticky bit lets only uid 0, the owner of a file and the owner of the folder delete there, so a second administrator could not remove someone else's file. The review of #4601 found it; #4603 recorded it as a limit.

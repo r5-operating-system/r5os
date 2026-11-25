@@ -100,6 +100,8 @@ for patch in apply-deskbar-bugs.py apply-tracker-desktop.py apply-ui-shell.py ap
 		python3 "$ROOT/scripts/$patch" "$ROOT/haiku"
 	fi
 done
+# Translations of R5's own programs (distro/catalogs, docs/TRANSLATIONS.md).
+python3 "$ROOT/scripts/catalogs.py" apply "$ROOT/haiku" "$ROOT"
 sans="$ROOT/haiku/headers/private/kernel/boot/images-sans-tm.h"
 if [[ -f "$ROOT/distro/artwork/r5-os-splash.bgr" && -f "$sans" ]]; then
 	python3 "$ROOT/scripts/generate_images_sans_tm.py" "$sans"
