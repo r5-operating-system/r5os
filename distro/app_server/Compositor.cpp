@@ -547,6 +547,7 @@ Compositor::Create(Desktop* desktop, HWInterface* screen, bool startHidden)
 	if (compositor == NULL)
 		return NULL;
 	compositor->fSharedDevice = true;
+	sShared.refCount++;
 	compositor->fHidden = startHidden;
 	compositor->fDebug = sShared.options.debug;
 	compositor->fForceFail = sShared.options.fail;
@@ -582,7 +583,6 @@ Compositor::Create(Desktop* desktop, HWInterface* screen, bool startHidden)
 		return NULL;
 	}
 	sShared.compositors.AddItem(compositor);
-	sShared.refCount++;
 	return compositor;
 }
 
@@ -898,30 +898,47 @@ Compositor::~Compositor()
 	if (!fSharedDevice && fFenceFd >= 0)
 		close(fFenceFd);
 	if (releaseShared) {
-		BAutolock _(sSharedLock);
-		// Only release shared Vulkan/Skia state if no new compositor attached
-		// in the meantime.
-		if (sShared.refCount == 0 && sShared.device != NULL) {
-			if (sShared.drawThread >= 0) {
-				sShared.drawQuit = true;
-				if (sShared.drawSem >= 0)
-					release_sem(sShared.drawSem);
-				status_t result;
-				wait_for_thread(sShared.drawThread, &result);
+		// Extract shared handles under sSharedLock, then wait for drawThread
+		// without holding sSharedLock so a RunWork() failure in _SharedDrawLoop
+		// cannot deadlock on sSharedLock.
+		thread_id drawThread = -1;
+		sem_id drawSem = -1;
+		SkiaGpu* skia = NULL;
+		CompositorVulkan* vk = NULL;
+		int fenceFd = -1;
+		{
+			BAutolock _(sSharedLock);
+			if (sShared.refCount == 0 && sShared.device != NULL) {
+				drawThread = sShared.drawThread;
 				sShared.drawThread = -1;
-			}
-			if (sShared.drawSem >= 0) {
-				delete_sem(sShared.drawSem);
+				drawSem = sShared.drawSem;
 				sShared.drawSem = -1;
+				sShared.drawQuit = true;
+				if (drawSem >= 0)
+					release_sem(drawSem);
+				vk = sShared.device;
+				sShared.device = NULL;
+				fenceFd = sShared.fenceFd;
+				sShared.fenceFd = -1;
 			}
-			if (sShared.skia != NULL) {
-				SkiaGpu::SetCurrent(NULL);
-				sShared.skia->DestroyContext();
-				delete sShared.skia;
+		}
+		if (drawThread >= 0) {
+			status_t result;
+			wait_for_thread(drawThread, &result);
+		}
+		if (drawSem >= 0)
+			delete_sem(drawSem);
+		if (vk != NULL) {
+			{
+				BAutolock _(sSharedLock);
+				skia = sShared.skia;
 				sShared.skia = NULL;
 			}
-			CompositorVulkan* vk = sShared.device;
-			sShared.device = NULL;
+			if (skia != NULL) {
+				SkiaGpu::SetCurrent(NULL);
+				skia->DestroyContext();
+				delete skia;
+			}
 			if (vk->device != VK_NULL_HANDLE && vk->vkDeviceWaitIdle != NULL) {
 				SkiaGpu::LockQueue();
 				vk->vkDeviceWaitIdle(vk->device);
@@ -960,13 +977,14 @@ Compositor::~Compositor()
 			if (vk->library != NULL)
 				dlclose(vk->library);
 			delete vk;
-			if (sShared.fenceFd >= 0) {
-				close(sShared.fenceFd);
-				sShared.fenceFd = -1;
+			if (fenceFd >= 0)
+				close(fenceFd);
+			BAutolock _(sSharedLock);
+			if (sShared.refCount == 0 && sShared.device == NULL) {
+				sShared.initialized = false;
+				sShared.failed = false;
+				sShared.drawQuit = false;
 			}
-			sShared.initialized = false;
-			sShared.failed = false;
-			sShared.drawQuit = false;
 		}
 	}
 }

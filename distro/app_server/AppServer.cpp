@@ -147,7 +147,7 @@ AppServer::MessageReceived(BMessage* message)
 	switch (message->what) {
 		case AS_GET_DESKTOP:
 		{
-			Desktop* desktop = NULL;
+			port_id desktopPort = -1;
 
 			int32 userID = message->GetInt32("user", 0);
 			int32 version = message->GetInt32("version", 0);
@@ -168,28 +168,31 @@ AppServer::MessageReceived(BMessage* message)
 					info.args);
 				// SPDX-SnippetEnd
 			} else {
-				desktop = _FindDesktop(userID, targetScreen);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+				// Hold fDesktopLock across lookup and MessagePort() so a
+				// concurrent _DestroyDesktop() cannot free desktop in between.
+				BAutolock locker(fDesktopLock);
+				Desktop* desktop = _FindDesktop(userID, targetScreen);
 				if (desktop == NULL) {
-					// One graphical session until StartSession. Tracker
-					// after Sign in is a person uid; keep it on the
-					// screen already owned by Login (uid 0).
-					{
-						BAutolock locker(fDesktopLock);
-						for (int32 i = 0; i < fDesktops.CountItems();
-							i++) {
-							Desktop* existing = fDesktops.ItemAt(i);
-							if ((existing->TargetScreen() == NULL
-									&& targetScreen == NULL)
-								|| (existing->TargetScreen() != NULL
-									&& targetScreen != NULL
-									&& strcmp(existing->TargetScreen(),
-										targetScreen) == 0)) {
-								desktop = existing;
-								break;
-							}
+					// One graphical session until Part 2 StartSession. Tracker
+					// after Sign in is a person uid; only fall back to the
+					// uid 0 desktop owned by Login, never to another person's
+					// desktop.
+					for (int32 i = 0; i < fDesktops.CountItems(); i++) {
+						Desktop* existing = fDesktops.ItemAt(i);
+						if (existing->UserID() != 0)
+							continue;
+						if ((existing->TargetScreen() == NULL
+								&& targetScreen == NULL)
+							|| (existing->TargetScreen() != NULL
+								&& targetScreen != NULL
+								&& strcmp(existing->TargetScreen(),
+									targetScreen) == 0)) {
+							desktop = existing;
+							break;
 						}
-						if (desktop == NULL && fDesktops.CountItems() > 0)
-							desktop = fDesktops.ItemAt(0);
 					}
 				}
 				if (desktop == NULL) {
@@ -199,11 +202,14 @@ AppServer::MessageReceived(BMessage* message)
 					// authorizing the user
 					desktop = _CreateDesktop(userID, targetScreen);
 				}
+				if (desktop != NULL)
+					desktopPort = desktop->MessagePort();
+// SPDX-SnippetEnd
 			}
 
 			BMessage reply;
-			if (desktop != NULL)
-				reply.AddInt32("port", desktop->MessagePort());
+			if (desktopPort >= 0)
+				reply.AddInt32("port", desktopPort);
 			else
 				reply.what = (uint32)B_ERROR;
 

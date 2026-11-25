@@ -8,6 +8,25 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-25 - Accounts: fast user switching core recheck fixes A-E (#4613)
+
+- Problem: a recheck of PR #4613 (head `f4b19a48df`) found five remaining issues:
+  - A (blocker): confused deputy via `MessageRunnerManager`: a non-root user could register a `BMessageRunner` targeting the registrar's own port (`be_roster`), causing the proxy to stamp registrar's own uid (0) on the delivered message (`B_REG_GET_APP_LIST`, `B_REG_GET_APP_INFO`, `B_REG_SET_SIGNATURE`, `B_REG_BROADCAST`).
+  - B (blocker): `Compositor::Create()` set `fSharedDevice = true` before `_InitSharedVulkan()` / `_Init()`, while `sShared.refCount++` ran only after both succeeded; an init failure deleted `compositor` and decremented `sShared.refCount` without having incremented it, risking teardown of the shared Vulkan/Skia device while another desktop was drawing.
+  - C (should fix): `Compositor::~Compositor()` held `sSharedLock` while calling `wait_for_thread(sShared.drawThread)`, which could deadlock if `_SharedDrawLoop()` hit a `RunWork()` failure and tried to acquire `sSharedLock`.
+  - D (should fix): `TRoster::HandleRemoveApp`, `HandleUpdateActiveApp`, `HandleSetThreadAndTeam`, `HandleCompleteRegistration`, and `HandleRemovePreRegApp` did not verify the proxy stamp or sender uid.
+  - E (nit): `AppServer::MessageReceived()` (`AS_GET_DESKTOP`) used `desktop->MessagePort()` after releasing `fDesktopLock`, and its fallback could attach an app with no desktop of its own to another person's desktop.
+- Changed:
+  - `distro/desktop/src/servers/registrar/Registrar.cpp`: `B_REG_REGISTER_MESSAGE_RUNNER` verifies `Registrar::VerifiedSenderUID()` and refuses non-uid-0 runners whose `target` is in the registrar team or targets `fPublicPort` / `registrar_inner` (`B_PERMISSION_DENIED`).
+  - `distro/desktop/src/servers/registrar/TRoster.cpp`: verified `_SenderUID()` and owning uid (or uid 0) in `HandleRemoveApp`, `HandleUpdateActiveApp`, `HandleSetThreadAndTeam`, `HandleCompleteRegistration`, and `HandleRemovePreRegApp`; for kernel `B_SYSTEM_OBJECT_UPDATE` (`B_TEAM_DELETED`), `HandleRemoveApp` only honors the notification when `get_team_info(team)` confirms the team is actually gone.
+  - `distro/app_server/Compositor.cpp`: incremented `sShared.refCount` immediately alongside `fSharedDevice = true` in `Compositor::Create()`; in `~Compositor()`, extracted `drawThread` / `drawSem` / `vk` under `sSharedLock` and released `sSharedLock` before calling `wait_for_thread(drawThread)` and tearing down Skia/Vulkan.
+  - `distro/app_server/AppServer.cpp`: held `fDesktopLock` across `AS_GET_DESKTOP` lookup, creation, and `desktop->MessagePort()`; restricted the Part 1 fallback to `existing->UserID() == 0` so an app never falls back to another person's desktop.
+- Tested (25 Nov 2026, AMD64 build via `scripts/build-locked.sh`: `jam_exit=0`, `mesa_exit=0`; QEMU KVM on Lavapipe + Skia Graphite, own copy of `r5-os.image`):
+  - `BMessageRunner` confused-deputy probe as `alice` (uid 1002) targeting registrar (`valid=1`): `InitCheck()` refused with `Permission denied`.
+  - `BRoster::Private().RemoveApp(userTrackerTeam)` as `alice`: refused with `Permission denied` (`user`'s Tracker stayed registered).
+  - Re-verified `GetRunningAppInfo`, `SetSignature`, forged `registrar_inner` roster + clipboard (`REFUSED_OK`), 100 KB / 320 KB clipboard, kill + restart Tracker per uid, 3× create/show/hide/destroy cycle (RAM steady `886,620 -> 886,620 -> 886,620 KB`), and two-desktop switching + teardown.
+- Not tested: forced `_InitSharedVulkan()` / `_Init()` failure OOM path (B); forced `RunWork()` failure racing with last-compositor teardown (C); concurrent `AS_GET_DESKTOP` vs `_DestroyDesktop` race (E); cross-uid `HandleUpdateActiveApp`, `HandleSetThreadAndTeam`, `HandleCompleteRegistration`, `HandleRemovePreRegApp`; 5625U (RADV), Safe mode, `BDirectWindow`, ARM64 and RISC-V.
+
 ## 2026-11-25 - Accounts: fast user switching core review fixes (#4613)
 
 - Problem: two code reviews on PR #4613 found nine defects in the fast user switching Part 1 core:

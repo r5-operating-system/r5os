@@ -569,9 +569,36 @@ Registrar::_MessageReceived(BMessage *message)
 			break;
 
 		// message runner requests
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
 		case B_REG_REGISTER_MESSAGE_RUNNER:
+		{
+			uid_t senderUid = 0;
+			if (!Registrar::VerifiedSenderUID(message, &senderUid)) {
+				BMessage reply(B_REG_ERROR);
+				reply.AddInt32("error", B_PERMISSION_DENIED);
+				message->SendReply(&reply);
+				break;
+			}
+			BMessenger target;
+			if (senderUid != 0
+				&& message->FindMessenger("target", &target) == B_OK) {
+				port_id targetPort = BMessenger::Private(target).Port();
+				port_id innerPort = BMessenger::Private(be_app_messenger).Port();
+				if (target.Team() == Team()
+					|| targetPort == fPublicPort
+					|| targetPort == innerPort) {
+					BMessage reply(B_REG_ERROR);
+					reply.AddInt32("error", B_PERMISSION_DENIED);
+					message->SendReply(&reply);
+					break;
+				}
+			}
 			fMessageRunnerManager->HandleRegisterRunner(message);
 			break;
+		}
+// SPDX-SnippetEnd
 		case B_REG_UNREGISTER_MESSAGE_RUNNER:
 			fMessageRunnerManager->HandleUnregisterRunner(message);
 			break;

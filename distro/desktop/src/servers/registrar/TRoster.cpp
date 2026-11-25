@@ -40,6 +40,7 @@
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+#include <system_info.h>
 #include "Registrar.h"
 // SPDX-SnippetEnd
 #include "RegistrarDefs.h"
@@ -371,20 +372,33 @@ TRoster::HandleCompleteRegistration(BMessage* request)
 		SET_ERROR(error, B_BAD_VALUE);
 
 	// team
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	uid_t senderUid = 0;
+	if (error == B_OK && !_SenderUID(request, &senderUid))
+		SET_ERROR(error, B_PERMISSION_DENIED);
 	if (error == B_OK) {
 		if (team >= 0) {
 			// everything is fine -- set the values
 			RosterAppInfo* info = fRegisteredApps.InfoFor(team);
 			if (info && info->state == APP_STATE_PRE_REGISTERED) {
-				info->thread = thread;
-				info->port = port;
-				info->state = APP_STATE_REGISTERED;
-				_AppAdded(info);
-			} else
+				if (senderUid != 0 && info->uid != senderUid) {
+					SET_ERROR(error, B_PERMISSION_DENIED);
+				} else {
+					info->thread = thread;
+					info->port = port;
+					info->state = APP_STATE_REGISTERED;
+					_AppAdded(info);
+				}
+			} else {
 				SET_ERROR(error, B_REG_APP_NOT_PRE_REGISTERED);
-		} else
+			}
+		} else {
 			SET_ERROR(error, B_BAD_VALUE);
+		}
 	}
+// SPDX-SnippetEnd
 
 	// reply to the request
 	if (error == B_OK) {
@@ -507,14 +521,26 @@ TRoster::HandleRemovePreRegApp(BMessage* request)
 	if (request->FindInt32("token", (int32*)&token) != B_OK)
 		SET_ERROR(error, B_BAD_VALUE);
 	// remove the app
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	uid_t senderUid = 0;
+	if (error == B_OK && !_SenderUID(request, &senderUid))
+		SET_ERROR(error, B_PERMISSION_DENIED);
 	if (error == B_OK) {
 		RosterAppInfo* info = fEarlyPreRegisteredApps.InfoForToken(token);
 		if (info) {
-			fEarlyPreRegisteredApps.RemoveInfo(info);
-			delete info;
-		} else
+			if (senderUid != 0 && info->uid != senderUid) {
+				SET_ERROR(error, B_PERMISSION_DENIED);
+			} else {
+				fEarlyPreRegisteredApps.RemoveInfo(info);
+				delete info;
+			}
+		} else {
 			SET_ERROR(error, B_REG_APP_NOT_PRE_REGISTERED);
+		}
 	}
+// SPDX-SnippetEnd
 	// reply to the request
 	if (error == B_OK) {
 		BMessage reply(B_REG_SUCCESS);
@@ -546,13 +572,36 @@ TRoster::HandleRemoveApp(BMessage* request)
 	PRINT("team: %" B_PRId32 "\n", team);
 
 	// remove the app
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	uid_t senderUid = 0;
+	bool kernelTeamDeleted = (request->what == B_SYSTEM_OBJECT_UPDATE);
+	if (error == B_OK) {
+		if (kernelTeamDeleted) {
+			// Kernel B_TEAM_DELETED arrives directly on registrar_inner; only
+			// honor it when the team is actually gone in the kernel.
+			team_info teamInfo;
+			if (get_team_info(team, &teamInfo) == B_OK)
+				SET_ERROR(error, B_PERMISSION_DENIED);
+		} else if (!_SenderUID(request, &senderUid)) {
+			SET_ERROR(error, B_PERMISSION_DENIED);
+		}
+	}
 	if (error == B_OK) {
 		if (RosterAppInfo* info = fRegisteredApps.InfoFor(team)) {
-			RemoveApp(info);
-			delete info;
-		} else
+			if (!kernelTeamDeleted && senderUid != 0
+				&& info->uid != senderUid) {
+				SET_ERROR(error, B_PERMISSION_DENIED);
+			} else {
+				RemoveApp(info);
+				delete info;
+			}
+		} else {
 			SET_ERROR(error, B_REG_APP_NOT_REGISTERED);
+		}
 	}
+// SPDX-SnippetEnd
 	// reply to the request
 	if (error == B_OK) {
 		BMessage reply(B_REG_SUCCESS);
@@ -601,60 +650,71 @@ TRoster::HandleSetThreadAndTeam(BMessage* request)
 	port_id port = -1;
 
 	// update the app_info
-	if (error == B_OK) {
-		RosterAppInfo* info = fEarlyPreRegisteredApps.InfoForToken(token);
-		if (info != NULL) {
-			// Set thread and team, create a port for the application and
-			// move the app_info from the list of the early pre-registered
-			// apps to the list of the (pre-)registered apps.
-			fEarlyPreRegisteredApps.RemoveInfo(info);
-			info->team = team;
-			info->thread = thread;
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+	uid_t senderUid = 0;
+	if (error == B_OK && !_SenderUID(request, &senderUid))
+		SET_ERROR(error, B_PERMISSION_DENIED);
+	if (error == B_OK) {
+		RosterAppInfo* info = fEarlyPreRegisteredApps.InfoForToken(token);
+		if (info != NULL) {
 			team_info teamInfo;
-			if (get_team_info(team, &teamInfo) == B_OK)
-				info->uid = teamInfo.uid;
-// SPDX-SnippetEnd
-			// create and transfer the port
-			info->port = port = create_port(B_REG_APP_LOOPER_PORT_CAPACITY,
-				kRAppLooperPortName);
-			if (info->port < 0)
-				SET_ERROR(error, info->port);
-			if (error == B_OK)
-				SET_ERROR(error, set_port_owner(info->port, team));
-			// add the info to the registered apps list
-			if (error == B_OK)
-				SET_ERROR(error, AddApp(info));
-			// cleanup on failure
-			if (error != B_OK) {
-				if (info->port >= 0)
-					delete_port(info->port);
-				delete info;
-				info = NULL;
-			}
-			// handle pending IsAppRegistered() requests
-			IARRequestMap::iterator it = fIARRequestsByID.find(team);
-			if (it != fIARRequestsByID.end()) {
-				BMessageQueue* requests = it->second;
+			bool hasTeamInfo = (get_team_info(team, &teamInfo) == B_OK);
+			if (senderUid != 0
+				&& (info->uid != senderUid
+					|| (hasTeamInfo && teamInfo.uid != senderUid))) {
+				SET_ERROR(error, B_PERMISSION_DENIED);
+			} else {
+				// Set thread and team, create a port for the application and
+				// move the app_info from the list of the early pre-registered
+				// apps to the list of the (pre-)registered apps.
+				fEarlyPreRegisteredApps.RemoveInfo(info);
+				info->team = team;
+				info->thread = thread;
+				if (hasTeamInfo)
+					info->uid = teamInfo.uid;
+				// create and transfer the port
+				info->port = port = create_port(B_REG_APP_LOOPER_PORT_CAPACITY,
+					kRAppLooperPortName);
+				if (info->port < 0)
+					SET_ERROR(error, info->port);
 				if (error == B_OK)
-					_ReplyToIARRequests(requests, info);
-				delete requests;
-				fIARRequestsByID.erase(it);
-			}
+					SET_ERROR(error, set_port_owner(info->port, team));
+				// add the info to the registered apps list
+				if (error == B_OK)
+					SET_ERROR(error, AddApp(info));
+				// cleanup on failure
+				if (error != B_OK) {
+					if (info->port >= 0)
+						delete_port(info->port);
+					delete info;
+					info = NULL;
+				}
+				// handle pending IsAppRegistered() requests
+				IARRequestMap::iterator it = fIARRequestsByID.find(team);
+				if (it != fIARRequestsByID.end()) {
+					BMessageQueue* requests = it->second;
+					if (error == B_OK)
+						_ReplyToIARRequests(requests, info);
+					delete requests;
+					fIARRequestsByID.erase(it);
+				}
 
-			it = fIARRequestsByToken.find((int32)token);
-			if (it != fIARRequestsByToken.end()) {
-				BMessageQueue* requests = it->second;
-				if (error == B_OK)
-					_ReplyToIARRequests(requests, info);
-				delete requests;
-				fIARRequestsByToken.erase(it);
+				it = fIARRequestsByToken.find((int32)token);
+				if (it != fIARRequestsByToken.end()) {
+					BMessageQueue* requests = it->second;
+					if (error == B_OK)
+						_ReplyToIARRequests(requests, info);
+					delete requests;
+					fIARRequestsByToken.erase(it);
+				}
 			}
-		} else
+		} else {
 			SET_ERROR(error, B_REG_APP_NOT_PRE_REGISTERED);
+		}
 	}
+// SPDX-SnippetEnd
 	// reply to the request
 	if (error == B_OK) {
 		BMessage reply(B_REG_SUCCESS);
@@ -889,12 +949,23 @@ TRoster::HandleUpdateActiveApp(BMessage* request)
 		error = B_BAD_VALUE;
 
 	// activate the app
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	uid_t senderUid = 0;
+	if (error == B_OK && !_SenderUID(request, &senderUid))
+		error = B_PERMISSION_DENIED;
 	if (error == B_OK) {
-		if (RosterAppInfo* info = fRegisteredApps.InfoFor(team))
-			UpdateActiveApp(info);
-		else
+		if (RosterAppInfo* info = fRegisteredApps.InfoFor(team)) {
+			if (senderUid != 0 && info->uid != senderUid)
+				error = B_PERMISSION_DENIED;
+			else
+				UpdateActiveApp(info);
+		} else {
 			error = B_BAD_TEAM_ID;
+		}
 	}
+// SPDX-SnippetEnd
 
 	// reply to the request
 	if (request->IsSourceWaiting()) {
