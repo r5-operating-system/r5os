@@ -87,11 +87,6 @@ msgid "Property:"
 msgstr "Eigenschap:"
 
 #, fuzzy
-msgctxt "DeviceModel"
-msgid "No driver is installed for this device. If you turned its driver off, Action â¸ Turned-off drivers turns it on again."
-msgstr "Er is geen stuurprogramma voor dit apparaat geïnstalleerd. Als je het stuurprogramma hebt uitgeschakeld, schakel je het weer in via Actie ▸ Uitgeschakelde stuurprogramma's."
-
-#, fuzzy
 msgctxt "MainWindow"
 msgid "Turn off driver"
 msgstr "Stuurprogramma uitschakelen"
@@ -185,6 +180,12 @@ msgstr "Apparaatpaden"
 msgctxt "MainWindow"
 msgid "Properties"
 msgstr "Eigenschappen"
+
+#, fuzzy
+#| msgid "No driver is installed for this device. If you turned its driver off, Action â¸ Turned-off drivers turns it on again."
+msgctxt "DeviceModel"
+msgid "No driver is installed for this device. If you turned its driver off, Action ▸ Turned-off drivers turns it on again."
+msgstr "Er is geen stuurprogramma voor dit apparaat geïnstalleerd. Als je het stuurprogramma hebt uitgeschakeld, schakel je het weer in via Actie ▸ Uitgeschakelde stuurprogramma's."
 
 #, fuzzy
 msgctxt "PropertiesWindow"

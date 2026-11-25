@@ -87,11 +87,6 @@ msgid "Property:"
 msgstr "Eigenschaft:"
 
 #, fuzzy
-msgctxt "DeviceModel"
-msgid "No driver is installed for this device. If you turned its driver off, Action â¸ Turned-off drivers turns it on again."
-msgstr "Für dieses Gerät ist kein Treiber installiert. Wenn Sie seinen Treiber ausgeschaltet haben, schaltet Aktion ▸ Ausgeschaltete Treiber ihn wieder ein."
-
-#, fuzzy
 msgctxt "MainWindow"
 msgid "Turn off driver"
 msgstr "Treiber ausschalten"
@@ -185,6 +180,12 @@ msgstr "Gerätepfade"
 msgctxt "MainWindow"
 msgid "Properties"
 msgstr "Eigenschaften"
+
+#, fuzzy
+#| msgid "No driver is installed for this device. If you turned its driver off, Action â¸ Turned-off drivers turns it on again."
+msgctxt "DeviceModel"
+msgid "No driver is installed for this device. If you turned its driver off, Action ▸ Turned-off drivers turns it on again."
+msgstr "Für dieses Gerät ist kein Treiber installiert. Wenn Sie seinen Treiber ausgeschaltet haben, schaltet Aktion ▸ Ausgeschaltete Treiber ihn wieder ein."
 
 #, fuzzy
 msgctxt "PropertiesWindow"

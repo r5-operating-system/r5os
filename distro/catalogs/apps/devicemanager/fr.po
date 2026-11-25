@@ -87,11 +87,6 @@ msgid "Property:"
 msgstr "Propriété :"
 
 #, fuzzy
-msgctxt "DeviceModel"
-msgid "No driver is installed for this device. If you turned its driver off, Action â¸ Turned-off drivers turns it on again."
-msgstr "Aucun pilote n'est installé pour ce périphérique. Si vous avez désactivé son pilote, Action ▸ Pilotes désactivés permet de le réactiver."
-
-#, fuzzy
 msgctxt "MainWindow"
 msgid "Turn off driver"
 msgstr "Désactiver le pilote"
@@ -185,6 +180,12 @@ msgstr "Chemins du périphérique"
 msgctxt "MainWindow"
 msgid "Properties"
 msgstr "Propriétés"
+
+#, fuzzy
+#| msgid "No driver is installed for this device. If you turned its driver off, Action â¸ Turned-off drivers turns it on again."
+msgctxt "DeviceModel"
+msgid "No driver is installed for this device. If you turned its driver off, Action ▸ Turned-off drivers turns it on again."
+msgstr "Aucun pilote n'est installé pour ce périphérique. Si vous avez désactivé son pilote, Action ▸ Pilotes désactivés permet de le réactiver."
 
 #, fuzzy
 msgctxt "PropertiesWindow"

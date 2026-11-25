@@ -69,10 +69,6 @@ msgctxt "PropertiesWindow"
 msgid "Property:"
 msgstr ""
 
-msgctxt "DeviceModel"
-msgid "No driver is installed for this device. If you turned its driver off, Action â¸ Turned-off drivers turns it on again."
-msgstr ""
-
 msgctxt "MainWindow"
 msgid "Turn off driver"
 msgstr ""
@@ -147,6 +143,10 @@ msgstr ""
 
 msgctxt "MainWindow"
 msgid "Properties"
+msgstr ""
+
+msgctxt "DeviceModel"
+msgid "No driver is installed for this device. If you turned its driver off, Action ▸ Turned-off drivers turns it on again."
 msgstr ""
 
 msgctxt "PropertiesWindow"

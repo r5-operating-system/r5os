@@ -1,4 +1,4 @@
-1	english	x-vnd.R5-DeviceManager	258302337
+1	english	x-vnd.R5-DeviceManager	2748646058
 Device Manager	MainWindow		Device Manager
 %lld bytes	PropertiesWindow		%lld bytes
 Value:	PropertiesWindow		Value:
@@ -16,7 +16,6 @@ Human interface devices	DeviceModel		Human interface devices
 Turn on driver	PropertiesWindow		Turn on driver
 The driver is turned off. It stops after a restart.\n\nThe device may then no longer appear in the list. To turn the driver on again, choose Action ▸ Turned-off drivers.	MainWindow		The driver is turned off. It stops after a restart.\n\nThe device may then no longer appear in the list. To turn the driver on again, choose Action ▸ Turned-off drivers.
 Property:	PropertiesWindow		Property:
-No driver is installed for this device. If you turned its driver off, Action â¸ Turned-off drivers turns it on again.	DeviceModel		No driver is installed for this device. If you turned its driver off, Action â¸ Turned-off drivers turns it on again.
 Turn off driver	MainWindow		Turn off driver
 Properties	Report		Properties
 No driver file is known for this device.	DriverControl		No driver file is known for this device.
@@ -36,6 +35,7 @@ Location:	PropertiesWindow		Location:
 Close	TurnedOffWindow		Close
 Device paths	PropertiesWindow		Device paths
 Properties	MainWindow		Properties
+No driver is installed for this device. If you turned its driver off, Action ▸ Turned-off drivers turns it on again.	DeviceModel		No driver is installed for this device. If you turned its driver off, Action ▸ Turned-off drivers turns it on again.
 Unknown	PropertiesWindow		Unknown
 The driver is turned on. It loads after a restart.	MainWindow		The driver is turned on. It loads after a restart.
 Manager	AboutWindow		Manager
