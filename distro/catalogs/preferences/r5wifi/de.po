@@ -1,0 +1,374 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-libr5wifi\nLanguage: de\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+msgctxt "WiFiView"
+msgid "Other networks"
+msgstr ""
+
+msgctxt "WiFiConnectWindow"
+msgid "Enter the password."
+msgstr ""
+
+msgctxt "WiFiView"
+msgid "The network service is not responding; saved networks are unavailable."
+msgstr ""
+
+msgctxt "WiFiConnectWindow"
+msgid "Couldn't reach %name%. Your password wasn't checked. Move closer to the router or try again."
+msgstr ""
+
+msgctxt "WiFiConnectWindow"
+msgid "Open"
+msgstr ""
+
+msgctxt "WiFiView"
+msgid "Disconnect"
+msgstr ""
+
+msgctxt "WiFiConnectWindow"
+msgid "Strong signal"
+msgstr ""
+
+msgctxt "WiFiConnectWindow"
+msgid "Automatic"
+msgstr ""
+
+msgctxt "WiFiConnectWindow"
+msgid "Fair signal"
+msgstr ""
+
+msgctxt "WiFiController"
+msgid "Could not connect to “%name%”. The password may be incorrect."
+msgstr ""
+
+msgctxt "WiFiView"
+msgid "Cancel"
+msgstr ""
+
+msgctxt "WiFiController"
+msgid "Encrypted"
+msgstr ""
+
+msgctxt "WiFiView"
+msgid "Adapter:"
+msgstr ""
+
+msgctxt "WiFiConnectWindow"
+msgid "Connect to Wi-Fi"
+msgstr ""
+
+msgctxt "WiFiView"
+msgid "Looking for Wi-Fi adapters…"
+msgstr ""
+
+msgctxt "WiFiConnectWindow"
+msgid "Wi-Fi"
+msgstr ""
+
+msgctxt "JoinOtherWindow"
+msgid "None"
+msgstr ""
+
+msgctxt "WiFiConnectWindow"
+msgid "WPA3 Personal"
+msgstr ""
+
+msgctxt "WiFiView"
+msgid "Choose a network to join."
+msgstr ""
+
+msgctxt "WiFiView"
+msgid "Connected, obtaining an IP address…"
+msgstr ""
+
+msgctxt "WiFiView"
+msgid "Could not connect."
+msgstr ""
+
+msgctxt "WiFiController"
+msgid "Could not connect to “%name%”: the network service is not responding."
+msgstr ""
+
+msgctxt "WiFiController"
+msgid "Connected, but the network could not be remembered: %error%"
+msgstr ""
+
+msgctxt "WiFiView"
+msgid "Forget the Wi-Fi network “%name%”?\n\nIts saved password is removed and it will no longer be joined automatically."
+msgstr ""
+
+msgctxt "WiFiController"
+msgid "None"
+msgstr ""
+
+msgctxt "WiFiView"
+msgid "Advanced…"
+msgstr ""
+
+msgctxt "WiFiConnectWindow"
+msgid "WPA2/WPA3"
+msgstr ""
+
+msgctxt "WiFiController"
+msgid "Could not connect to “%name%”: %error%"
+msgstr ""
+
+msgctxt "WiFiView"
+msgid "Wi-Fi"
+msgstr ""
+
+msgctxt "WiFiConnectWindow"
+msgid "Good signal"
+msgstr ""
+
+msgctxt "WiFiController"
+msgid "Could not connect to “%name%”. The network did not respond."
+msgstr ""
+
+msgctxt "WiFiConnectWindow"
+msgid "Security"
+msgstr ""
+
+msgctxt "JoinOtherWindow"
+msgid "Show password"
+msgstr ""
+
+msgctxt "WiFiController"
+msgid "Could not forget “%name%”: %error%"
+msgstr ""
+
+msgctxt "WiFiController"
+msgid "Wi-Fi was turned off."
+msgstr ""
+
+msgctxt "WiFiView"
+msgid "There is no Wi-Fi adapter."
+msgstr ""
+
+msgctxt "JoinOtherWindow"
+msgid "Join"
+msgstr ""
+
+msgctxt "WiFiView"
+msgid "Forget network"
+msgstr ""
+
+msgctxt "WiFiController"
+msgid "WPA Enterprise"
+msgstr ""
+
+msgctxt "WiFiConnectWindow"
+msgid "Connecting…"
+msgstr ""
+
+msgctxt "WiFiConnectWindow"
+msgid "%name% didn't accept this password. Check it and try again."
+msgstr ""
+
+msgctxt "JoinOtherWindow"
+msgid "Security:"
+msgstr ""
+
+msgctxt "WiFiController"
+msgid "%name% didn't accept this password."
+msgstr ""
+
+msgctxt "NetworkListView"
+msgid "Saved network"
+msgstr ""
+
+msgctxt "WiFiConnectWindow"
+msgid "WPA2 Personal"
+msgstr ""
+
+msgctxt "JoinOtherWindow"
+msgid "Remember this network"
+msgstr ""
+
+msgctxt "WiFiConnectWindow"
+msgid "Connect automatically"
+msgstr ""
+
+msgctxt "JoinOtherWindow"
+msgid "WEP"
+msgstr ""
+
+msgctxt "WiFiView"
+msgid "Join other network…"
+msgstr ""
+
+msgctxt "WiFiConnectWindow"
+msgid "Weak signal"
+msgstr ""
+
+msgctxt "WiFiView"
+msgid "Connecting…"
+msgstr ""
+
+msgctxt "WiFiView"
+msgid "Could not start the Wi-Fi monitor."
+msgstr ""
+
+msgctxt "NetworkListView"
+msgid "%count% access points"
+msgstr ""
+
+msgctxt "WiFiController"
+msgid "There is no Wi-Fi adapter."
+msgstr ""
+
+msgctxt "NetworkListView"
+msgid "Open network"
+msgstr ""
+
+msgctxt "WiFiConnectWindow"
+msgid "Cancel"
+msgstr ""
+
+msgctxt "JoinOtherWindow"
+msgid "WPA2 Personal"
+msgstr ""
+
+msgctxt "WiFiView"
+msgid "Join"
+msgstr ""
+
+msgctxt "JoinOtherWindow"
+msgid "Join other network"
+msgstr ""
+
+msgctxt "WiFiConnectWindow"
+msgid "Try again"
+msgstr ""
+
+msgctxt "WiFiConnectWindow"
+msgid "› Other options"
+msgstr ""
+
+msgctxt "WiFiView"
+msgid "Connected, no Internet (%address%)"
+msgstr ""
+
+msgctxt "NetworkListView"
+msgid "Connected"
+msgstr ""
+
+msgctxt "JoinOtherWindow"
+msgid "Cancel"
+msgstr ""
+
+msgctxt "WiFiView"
+msgid "Known networks"
+msgstr ""
+
+msgctxt "WiFiConnectWindow"
+msgid "WEP"
+msgstr ""
+
+msgctxt "WiFiView"
+msgid "Forget…"
+msgstr ""
+
+msgctxt "WiFiView"
+msgid "Connected (%address%)"
+msgstr ""
+
+msgctxt "NetworkListView"
+msgid "Not in range"
+msgstr ""
+
+msgctxt "WiFiView"
+msgid "Your router supports %standard%."
+msgstr ""
+
+msgctxt "WiFiConnectWindow"
+msgid "Password"
+msgstr ""
+
+msgctxt "WiFiConnectWindow"
+msgid "WPA Personal"
+msgstr ""
+
+msgctxt "WiFiView"
+msgid "Forget"
+msgstr ""
+
+msgctxt "WiFiController"
+msgid "“%name%” requires a password."
+msgstr ""
+
+msgctxt "WiFiController"
+msgid "Could not connect to “%name%”. A password is required."
+msgstr ""
+
+msgctxt "NetworkListView"
+msgid "Security: %mode%"
+msgstr ""
+
+msgctxt "JoinOtherWindow"
+msgid "WPA Personal"
+msgstr ""
+
+msgctxt "WiFiView"
+msgid "Scanning…"
+msgstr ""
+
+msgctxt "WiFiView"
+msgid "Router: %standard%"
+msgstr ""
+
+msgctxt "JoinOtherWindow"
+msgid "WPA3 Personal"
+msgstr ""
+
+msgctxt "WiFiConnectWindow"
+msgid "Connecting to %name%… checking the password"
+msgstr ""
+
+msgctxt "WiFiConnectWindow"
+msgid "⌄ Other options"
+msgstr ""
+
+msgctxt "NetworkListView"
+msgid "Signal: %percent%% (%dBm% dBm)"
+msgstr ""
+
+msgctxt "WiFiConnectWindow"
+msgid "Connect"
+msgstr ""
+
+msgctxt "JoinOtherWindow"
+msgid "Password:"
+msgstr ""
+
+msgctxt "WiFiView"
+msgid "Turn Wi-Fi on to see nearby networks."
+msgstr ""
+
+msgctxt "WiFiController"
+msgid "Could not connect to “%name%”. Check the password and try again."
+msgstr ""
+
+msgctxt "WiFiView"
+msgid "Wi-Fi is off"
+msgstr ""
+
+msgctxt "JoinOtherWindow"
+msgid "Network name:"
+msgstr ""
+
+msgctxt "WiFiView"
+msgid "No Wi-Fi adapter found"
+msgstr ""
+
+msgctxt "WiFiView"
+msgid "Not connected"
+msgstr ""
+
+msgctxt "WiFiConnectWindow"
+msgid "No signal"
+msgstr ""
+
+msgctxt "WiFiController"
+msgid "The Wi-Fi adapter is no longer available."
+msgstr ""
