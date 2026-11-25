@@ -52,6 +52,7 @@ public:
 			void		ReadUnlock();
 
 			status_t	UpdateNodeFromDisk();
+			void		EnsureCache();
 
 			bool		IsDirectory() const
 							{ return S_ISDIR(Mode()); }
@@ -83,6 +84,12 @@ public:
 								= B_HOST_TO_LENDIAN_INT64(valid);
 						}
 			uint64		CommittedValid() const { return fCommittedValid; }
+			void		SetCommittedValid(uint64 valid)
+							{ fCommittedValid = valid; }
+			void		ClearChainHint();
+			bool		RecallChain(uint64 index, cluster_t& cluster,
+							uint64& from);
+			void		RememberChain(uint64 index, cluster_t cluster);
 			bool		IsDeleted() const { return fDeleted; }
 			void		SetDeleted() { fDeleted = true; }
 			void		SetParent(ino_t parent) { fParent = parent; }
@@ -147,11 +154,10 @@ private:
 			// SPDX-License-Identifier: MIT
 			bool		fDeleted;
 			mutex		fWriterLock;
-			vint32		fWriter;
+			int32		fWriter;
 			int32		fWriteDepth;
-			vint32		fMetaOwner;
-			int32		fMetaDepth;
 			uint64		fCommittedValid;
+			int64		fChainHint;
 			uint32		fDirCluster;
 			uint64		fDirLength;
 			uint8		fDirFlags;

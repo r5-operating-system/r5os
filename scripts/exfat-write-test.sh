@@ -5,8 +5,9 @@
 # Build the host exFAT writer and check images with mkfs.exfat and
 # fsck.exfat. Those programs are only run; their source is not used.
 # The host tool links exfat_update.cpp (exfat_map and exfat_write_bytes).
-# The kernel reads and writes through DataStream::FindBlock and the file
-# cache. FindBlock's byte offset is the same formula as exfat_map.
+# The kernel reads and writes through DataStream::FindBlock and the block
+# cache. That path is scripts/exfat-qemu-test.py. FindBlock's byte offset
+# is the same formula as exfat_map.
 set -eu
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="$HERE/distro/kernel/src/add-ons/kernel/file_systems/exfat"

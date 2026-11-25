@@ -1710,8 +1710,11 @@ write_node_entry(work* job, exfat_node* parent, exfat_node* node,
 		free(bytes);
 		return status;
 	}
-	if (bytes[0] != kTypeFile
-		|| entry_checksum(bytes, entries) != r16(bytes + 2)) {
+	if ((bytes[0] & 0x80) == 0 || (bytes[0] & 0x7f) != (kTypeFile & 0x7f)) {
+		free(bytes);
+		return B_BAD_VALUE;
+	}
+	if (entry_checksum(bytes, entries) != r16(bytes + 2)) {
 		job->disk->can_write = false;
 		free(bytes);
 		return B_BAD_DATA;
@@ -1842,6 +1845,63 @@ exfat_set_size(exfat_store* store, exfat_disk* disk, exfat_node* parent,
 	return status;
 }
 
+/* One flush per FAT or bitmap block, not one per cluster. */
+extern "C" int
+compare_cluster(const void* left, const void* right)
+{
+	uint32 a = *(const uint32*)left;
+	uint32 b = *(const uint32*)right;
+	if (a < b)
+		return -1;
+	if (a > b)
+		return 1;
+	return 0;
+}
+
+
+static status_t
+flush_clusters(work* job, const uint32* list, uint32 count, bool fat)
+{
+	if (count == 0)
+		return B_OK;
+	uint32* order = (uint32*)malloc(count * sizeof(uint32));
+	if (order == NULL)
+		return B_NO_MEMORY;
+	uint32 used = 0;
+	for (uint32 index = 0; index < count; index++) {
+		if (cluster_ok(job->disk, list[index]))
+			order[used++] = list[index];
+	}
+	qsort(order, used, sizeof(uint32), compare_cluster);
+	status_t status = B_OK;
+	uint32 index = 0;
+	uint32 per = job->disk->block_size / 4;
+	uint32 bitsPer = cluster_size(job->disk) * 8;
+	while (index < used && status == B_OK) {
+		uint32 start = order[index];
+		uint32 end = start;
+		uint32 next = index + 1;
+		if (fat) {
+			uint32 block = per == 0 ? 0 : start / per;
+			while (next < used && per != 0 && order[next] / per == block) {
+				end = order[next];
+				next++;
+			}
+			status = flush_fat(job, start, end);
+		} else if (bitsPer != 0) {
+			uint32 block = (start - 2) / bitsPer;
+			while (next < used && (order[next] - 2) / bitsPer == block) {
+				end = order[next];
+				next++;
+			}
+			status = bitmap_flush(job, start, end - start + 1);
+		}
+		index = next;
+	}
+	free(order);
+	return status;
+}
+
 status_t
 exfat_free_allocation(exfat_store* store, exfat_disk* disk, uint32 first,
 	uint64 dataLength, uint8 flags)
@@ -1896,20 +1956,14 @@ exfat_free_allocation(exfat_store* store, exfat_disk* disk, uint32 first,
 	}
 	if (status == B_OK) {
 		for (uint32 index = 0; index < count; index++) {
-			status = flush_fat(&job, list[index], list[index]);
-			if (status != B_OK)
-				break;
-		}
-	}
-	if (status == B_OK) {
-		for (uint32 index = 0; index < count; index++) {
 			if (bitmap_test(disk, list[index])) {
 				bitmap_assign(disk, list[index], false);
 				disk->free_clusters++;
 			}
-			if (status == B_OK)
-				status = bitmap_flush(&job, list[index], 1);
 		}
+		status = flush_clusters(&job, list, count, true);
+		if (status == B_OK)
+			status = flush_clusters(&job, list, count, false);
 	}
 	free(list);
 	work_close(&job);
@@ -1987,11 +2041,13 @@ shrink_allocation(work* job, exfat_node* parent, exfat_node* node,
 				bitmap_assign(job->disk, list[index], false);
 				job->disk->free_clusters++;
 			}
-			if (status == B_OK && (oldFlags & kFlagNoFat) == 0)
-				status = flush_fat(job, list[index], list[index]);
-			if (status == B_OK)
-				status = bitmap_flush(job, list[index], 1);
 		}
+		if (status == B_OK && (oldFlags & kFlagNoFat) == 0)
+			status = flush_clusters(job, list + newCount, oldCount - newCount,
+				true);
+		if (status == B_OK)
+			status = flush_clusters(job, list + newCount, oldCount - newCount,
+				false);
 	}
 	free(list);
 	return status;
@@ -2073,6 +2129,26 @@ exfat_create(exfat_store* store, exfat_disk* disk, exfat_node* parent,
 	return status;
 }
 
+static status_t
+directory_occupied(work* job, const exfat_node* directory)
+{
+	uint32 capacity = (uint32)(directory->data_length / 32);
+	uint8 primary[32];
+	for (uint32 index = 0; index < capacity; index++) {
+		status_t status = read_set(job, directory, index, primary, 1);
+		if (status != B_OK)
+			return status;
+		if (primary[0] == 0)
+			return B_OK;
+		if (primary[0] == kTypeFile)
+			return B_DIRECTORY_NOT_EMPTY;
+		uint32 skip = set_entries_of(primary);
+		if (skip > 1)
+			index += skip - 1;
+	}
+	return B_OK;
+}
+
 status_t
 exfat_remove_entry(exfat_store* store, exfat_disk* disk, exfat_node* parent,
 	exfat_node* directory, const char* name, exfat_node* removed)
@@ -2085,25 +2161,10 @@ exfat_remove_entry(exfat_store* store, exfat_disk* disk, exfat_node* parent,
 		status = work_open(store, disk, &scan);
 		if (status != B_OK)
 			return status;
-		uint32 capacity = (uint32)(removed->data_length / 32);
-		uint8 primary[32];
-		for (uint32 index = 0; index < capacity; index++) {
-			status = read_set(&scan, removed, index, primary, 1);
-			if (status != B_OK) {
-				work_close(&scan);
-				return status;
-			}
-			if (primary[0] == 0)
-				break;
-			if (primary[0] == kTypeFile) {
-				work_close(&scan);
-				return B_DIRECTORY_NOT_EMPTY;
-			}
-			uint32 skip = set_entries_of(primary);
-			if (skip > 1)
-				index += skip - 1;
-		}
+		status = directory_occupied(&scan, removed);
 		work_close(&scan);
+		if (status != B_OK)
+			return status;
 	}
 	work job;
 	status = work_open(store, disk, &job);
@@ -2165,6 +2226,16 @@ exfat_rename(exfat_store* store, exfat_disk* disk, exfat_node* fromParent,
 			return B_IS_A_DIRECTORY;
 		if (!dest.is_dir && source.is_dir)
 			return B_NOT_A_DIRECTORY;
+		if (dest.is_dir) {
+			work scan;
+			status = work_open(store, disk, &scan);
+			if (status != B_OK)
+				return status;
+			status = directory_occupied(&scan, &dest);
+			work_close(&scan);
+			if (status != B_OK)
+				return status;
+		}
 		/* The caller deactivates dest after this publish, and frees its
 		   clusters only when the vnode is gone. Doing it here would reuse
 		   dest's slot for the new set and free clusters still in use. */

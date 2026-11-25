@@ -219,10 +219,16 @@ DirectoryIterator::_GetNext(uint16* utf16Name, size_t* _codeUnitCount,
 		if (fCurrent->type == EXFAT_ENTRY_TYPE_FILE) {
 			chunkCount = fCurrent->file.chunkCount;
 			if (_id != NULL) {
+				// SPDX-SnippetBegin
+				// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+				// SPDX-License-Identifier: MIT
 				*_id = fInode->GetVolume()->GetIno(fCluster, fOffset - 1,
 					fInode->ID(), fInode->StartCluster(),
 					(uint64)fInode->Size(), fInode->StreamFlags(),
 					fInode->ID() == 1);
+				if (*_id == 0)
+					return B_NO_MEMORY;
+				// SPDX-SnippetEnd
 			}
 			TRACE("DirectoryIterator::_GetNext() File chunkCount %" B_PRId32
 				"\n", chunkCount);

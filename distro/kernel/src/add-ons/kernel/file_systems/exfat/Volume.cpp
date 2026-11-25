@@ -294,16 +294,24 @@ Volume::ClusterToBlock(cluster_t cluster, fsblock_t &block)
 cluster_t
 Volume::NextCluster(cluster_t _cluster)
 {
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
 	if (_cluster < EXFAT_FIRST_DATA_CLUSTER
 		|| (_cluster - EXFAT_FIRST_DATA_CLUSTER) >= SuperBlock().ClusterCount())
 		return 0;
+	// SPDX-SnippetEnd
 	uint32 clusterPerBlock = fBlockSize / sizeof(cluster_t);
 	CachedBlock block(this);
 	fsblock_t blockNum = SuperBlock().FirstFatBlock()
 		+ _cluster / clusterPerBlock;
 	cluster_t *cluster = (cluster_t *)block.SetTo(blockNum);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
 	if (cluster == NULL)
 		return 0;
+	// SPDX-SnippetEnd
 	cluster += _cluster % clusterPerBlock;
 	TRACE("Volume::NextCluster() cluster %" B_PRIu32 " next %" B_PRIu32 "\n",
 		_cluster, *cluster);
@@ -325,6 +333,9 @@ Volume::FindInode(cluster_t cluster)
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
 ino_t
 Volume::GetIno(cluster_t cluster, uint32 offset, ino_t parent,
 	uint32 dirCluster, uint64 dirLength, uint8 dirFlags, bool dirRoot)
@@ -401,6 +412,7 @@ Volume::SetDir(ino_t ino, uint32 dirCluster, uint64 dirLength, uint8 dirFlags,
 	node->dir_flags = dirFlags;
 	node->dir_root = dirRoot;
 }
+// SPDX-SnippetEnd
 
 
 //	#pragma mark - Disk scanning and initialization

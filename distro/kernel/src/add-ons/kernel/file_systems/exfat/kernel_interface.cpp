@@ -54,6 +54,9 @@ status_t	exfat_write(fs_volume* volume, fs_vnode* vnode, void* cookie,
 				off_t pos, const void* buffer, size_t* length);
 status_t	exfat_write_pages(fs_volume* volume, fs_vnode* vnode, void* cookie,
 				off_t pos, const iovec* vecs, size_t count, size_t* numBytes);
+status_t	exfat_cached_transfer(Volume* volume, Inode* inode, off_t pos,
+				const iovec* vecs, size_t count, size_t* numBytes, bool write);
+status_t	exfat_commit(fs_volume* volume, fs_vnode* vnode);
 status_t	exfat_fsync(fs_volume* volume, fs_vnode* vnode, bool dataOnly);
 status_t	exfat_sync_volume(fs_volume* volume);
 status_t	exfat_set_file_size(Inode* inode, off_t size);
@@ -297,42 +300,20 @@ exfat_read_pages(fs_volume* _volume, fs_vnode* _node, void*,
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
 	off_t start = pos;
+	size_t bytes = *_numBytes;
 	// SPDX-SnippetEnd
 	inode->ReadLock();
-
-	uint32 vecIndex = 0;
-	size_t vecOffset = 0;
-	size_t bytesLeft = *_numBytes;
-	status_t status;
-
-	while (true) {
-		file_io_vec fileVecs[8];
-		size_t fileVecCount = 8;
-
-		status = file_map_translate(inode->Map(), pos, bytesLeft, fileVecs,
-			&fileVecCount, 0);
-		if (status != B_OK && status != B_BUFFER_OVERFLOW)
-			break;
-
-		bool bufferOverflow = status == B_BUFFER_OVERFLOW;
-
-		size_t bytes = bytesLeft;
-		status = read_file_io_vec_pages(volume->Device(), fileVecs,
-			fileVecCount, vecs, count, &vecIndex, &vecOffset, &bytes);
-		if (status != B_OK || !bufferOverflow)
-			break;
-
-		pos += bytes;
-		bytesLeft -= bytes;
-	}
-
+	status_t status = exfat_cached_transfer(volume, inode, pos, vecs, count,
+		&bytes, false);
 	inode->ReadUnlock();
 
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
-	if (status == B_OK)
-		exfat_zero_past_valid(inode, start, vecs, count, *_numBytes);
+	if (status == B_OK) {
+		*_numBytes = bytes;
+		exfat_zero_past_valid(inode, start, vecs, count, bytes);
+	}
 	// SPDX-SnippetEnd
 	return status;
 }
@@ -404,7 +385,11 @@ exfat_get_file_map(fs_volume* _volume, fs_vnode* _node, off_t offset,
 		offset += blockLength;
 		size -= blockLength;
 
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
 		if (size == 0 || offset >= inode->Size()) {
+		// SPDX-SnippetEnd
 			// We're done!
 			*_count = index;
 			TRACE("exfat_get_file_map for inode %" B_PRIdINO"\n", inode->ID());
@@ -441,7 +426,8 @@ exfat_lookup(fs_volume* _volume, fs_vnode* _directory, const char* name,
 	directory->ReadUnlock();
 	// SPDX-SnippetEnd
 	if (status != B_OK) {
-		ERROR("exfat_lookup: name %s (%s)\n", name, strerror(status));
+		if (status != B_ENTRY_NOT_FOUND)
+			ERROR("exfat_lookup: name %s (%s)\n", name, strerror(status));
 		if (status == B_ENTRY_NOT_FOUND)
 			entry_cache_add_missing(volume->ID(), directory->ID(), name);
 		return status;
@@ -565,7 +551,11 @@ exfat_read(fs_volume* _volume, fs_vnode* _node, void* _cookie, off_t pos,
 static status_t
 exfat_close(fs_volume *_volume, fs_vnode *_node, void *_cookie)
 {
-	return exfat_fsync(_volume, _node, false);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	return exfat_commit(_volume, _node);
+	// SPDX-SnippetEnd
 }
 
 

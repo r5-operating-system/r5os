@@ -52,8 +52,13 @@ DataStream::FindBlock(off_t pos, off_t& physical, off_t *_length)
 	cluster_t cluster = fInode->StartCluster();
 	exfat_disk* disk = fVolume->Disk();
 	uint32 heap = disk->cluster_count + 1;
-	if (cluster < 2 || cluster > heap)
+	if (cluster < 2 || cluster > heap) {
+		dprintf("exfat: map ino %" B_PRIdINO " pos %" B_PRIdOFF
+			" cluster %" B_PRIu32 " heap %" B_PRIu32 " size %" B_PRIdOFF
+			" flags 0x%x contig %d\n", fInode->ID(), pos, cluster, heap,
+			fSize, fInode->StreamFlags(), fInode->IsContiguous() ? 1 : 0);
 		return B_BAD_DATA;
+	}
 	uint64 clusterIndex = (uint64)pos / kClusterSize;
 	uint64 within = (uint64)pos % kClusterSize;
 	if (fInode->IsContiguous()) {
@@ -61,29 +66,39 @@ DataStream::FindBlock(off_t pos, off_t& physical, off_t *_length)
 		if (cluster < 2 || cluster > heap)
 			return B_BAD_DATA;
 	} else {
-		for (uint64 step = 0; step < clusterIndex; step++) {
+		uint64 from = 0;
+		cluster_t recalled = 0;
+		if (fInode->RecallChain(clusterIndex, recalled, from))
+			cluster = recalled;
+		for (uint64 step = from; step < clusterIndex; step++) {
 			cluster_t next = fInode->NextCluster(cluster);
 			if (next < 2 || next > heap)
 				return B_BAD_DATA;
 			cluster = next;
 		}
+		fInode->RememberChain(clusterIndex, cluster);
 	}
 	uint32 blocksPerCluster = kClusterSize / kBlockSize;
 	uint64 block = disk->data_block
 		+ (uint64)(cluster - 2) * blocksPerCluster + within / kBlockSize;
 	physical = (off_t)(block * kBlockSize + within % kBlockSize);
-	off_t run = (off_t)(kClusterSize - within);
-	cluster_t current = cluster;
-	while ((uint64)pos + (uint64)run < (uint64)fSize) {
-		cluster_t next = fInode->IsContiguous()
-			? (cluster_t)(current + 1) : fInode->NextCluster(current);
-		if (next != (cluster_t)(current + 1) || next < 2 || next > heap)
-			break;
-		current = next;
-		run += (off_t)kClusterSize;
+	// The disk reads and writes whole sectors. The run stays inside the
+	// clusters that hold the file, including the bytes past the file's
+	// length in its last cluster.
+	uint64 lastIndex = (uint64)(fSize - 1) / kClusterSize;
+	off_t run = (off_t)((lastIndex - clusterIndex + 1) * kClusterSize
+		- within);
+	if (!fInode->IsContiguous()) {
+		run = (off_t)(kClusterSize - within);
+		cluster_t current = cluster;
+		for (uint64 covered = clusterIndex; covered < lastIndex; covered++) {
+			cluster_t next = fInode->NextCluster(current);
+			if (next != (cluster_t)(current + 1) || next < 2 || next > heap)
+				break;
+			current = next;
+			run += (off_t)kClusterSize;
+		}
 	}
-	if ((uint64)pos + (uint64)run > (uint64)fSize)
-		run = (off_t)(fSize - pos);
 	if (_length != NULL)
 		*_length = run;
 	// SPDX-SnippetEnd

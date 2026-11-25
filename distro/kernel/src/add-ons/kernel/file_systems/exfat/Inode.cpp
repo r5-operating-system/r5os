@@ -133,6 +133,9 @@ Inode::InitCheck()
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
 status_t
 Inode::UpdateNodeFromDisk()
 {
@@ -151,8 +154,13 @@ Inode::UpdateNodeFromDisk()
 	exfat_node found;
 	status_t status = exfat_read_entry(fVolume->Store(), fVolume->Disk(), &dir,
 		fOffset, &found);
-	if (status != B_OK)
+	if (status != B_OK) {
+		dprintf("exfat: load ino %" B_PRIdINO " index %" B_PRIu32
+			" dir cluster %" B_PRIu32 " length %" B_PRIu64
+			" root %d: %s\n", ID(), fOffset, fDirCluster, fDirLength,
+			fDirRoot ? 1 : 0, strerror(status));
 		return status;
+	}
 	memcpy(&fFileEntry, found.primary, 32);
 	fFileInfoEntry.file_info.SetStartCluster(found.first_cluster);
 	fFileInfoEntry.file_info.SetFlag(found.flags);
@@ -162,8 +170,12 @@ Inode::UpdateNodeFromDisk()
 	fCommittedValid = found.valid_length;
 	return B_OK;
 }
+// SPDX-SnippetEnd
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
 void
 Inode::WriteLock()
 {
@@ -194,26 +206,13 @@ Inode::WriteUnlock()
 void
 Inode::MetaLock()
 {
-	thread_id self = find_thread(NULL);
-	if (atomic_get(&fMetaOwner) == self) {
-		fMetaDepth++;
-		return;
-	}
 	rw_lock_write_lock(&fLock);
-	atomic_set(&fMetaOwner, self);
-	fMetaDepth = 1;
 }
 
 
 void
 Inode::MetaUnlock()
 {
-	if (fMetaDepth > 1) {
-		fMetaDepth--;
-		return;
-	}
-	fMetaDepth = 0;
-	atomic_set(&fMetaOwner, -1);
 	rw_lock_write_unlock(&fLock);
 }
 
@@ -221,8 +220,6 @@ Inode::MetaUnlock()
 void
 Inode::ReadLock()
 {
-	if (atomic_get(&fMetaOwner) == find_thread(NULL))
-		return;
 	rw_lock_read_lock(&fLock);
 }
 
@@ -230,10 +227,44 @@ Inode::ReadLock()
 void
 Inode::ReadUnlock()
 {
-	if (atomic_get(&fMetaOwner) == find_thread(NULL))
-		return;
 	rw_lock_read_unlock(&fLock);
 }
+
+
+void
+Inode::ClearChainHint()
+{
+	atomic_set64(&fChainHint, -1);
+}
+
+
+bool
+Inode::RecallChain(uint64 index, cluster_t& cluster, uint64& from)
+{
+	if (index > 0xffffffff)
+		return false;
+	int64 hint = atomic_get64(&fChainHint);
+	if (hint < 0)
+		return false;
+	uint64 hintIndex = (uint64)(uint32)(hint >> 32);
+	cluster_t hintCluster = (cluster_t)(uint32)hint;
+	if (hintIndex > index || hintCluster < 2)
+		return false;
+	cluster = hintCluster;
+	from = hintIndex;
+	return true;
+}
+
+
+void
+Inode::RememberChain(uint64 index, cluster_t cluster)
+{
+	if (index > 0xffffffff)
+		return;
+	int64 packed = ((int64)(uint32)index << 32) | (uint32)cluster;
+	atomic_set64(&fChainHint, packed);
+}
+// SPDX-SnippetEnd
 
 
 cluster_t
@@ -288,9 +319,22 @@ Inode::FindBlock(off_t pos, off_t& physical, off_t *_length)
 }
 
 
+void
+Inode::EnsureCache()
+{
+	if (fCache != NULL || IsDirectory() || IsSymLink() || ID() == 1)
+		return;
+	fCache = file_cache_create(fVolume->ID(), ID(), Size());
+	if (fMap == NULL)
+		fMap = file_map_create(fVolume->ID(), ID(), Size());
+}
+
+
 status_t
 Inode::ReadAt(off_t pos, uint8* buffer, size_t* _length)
 {
+	if (FileCache() == NULL)
+		return B_BAD_VALUE;
 	return file_cache_read(FileCache(), pos, buffer, _length);
 }
 
@@ -324,9 +368,8 @@ Inode::_Init()
 	mutex_init(&fWriterLock, "exfat writer");
 	atomic_set(&fWriter, -1);
 	fWriteDepth = 0;
-	atomic_set(&fMetaOwner, -1);
-	fMetaDepth = 0;
 	fCommittedValid = 0;
+	atomic_set64(&fChainHint, -1);
 	fDirCluster = 0;
 	fDirLength = 0;
 	fDirFlags = 0;
@@ -401,6 +444,7 @@ Inode::AdoptStream(uint32 first, uint64 dataLength, uint64 validLength,
 	fFileEntry.file.SetAttribs(attributes);
 	fFileEntry.file.chunkCount = chunks;
 	fCommittedValid = validLength;
+	ClearChainHint();
 	if (ID() != 1) {
 		fCluster = entryCluster;
 		fOffset = entryOffset;

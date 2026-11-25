@@ -1,5 +1,5 @@
 R5 2026.1-dev Build 10074 - Write to exFAT
-exFAT cards and sticks are not ready to copy onto yet. A card that was pulled out while it was being written still mounts read-only until it is repaired.
+You can copy files onto an exFAT card or stick. Creating, renaming and removing files and folders was checked in a virtual machine, and the card checked out afterwards. A card pulled out while it is being written mounts read-only until it is repaired.
 
 R5 2026.1-dev Build 10073 - Settings in the Deskbar menu
 The Deskbar menu has a Settings item, with the R5 wave, right under Mount. It opens Settings. Deskbar preferences in the same menu now opens the Desktop and Deskbar page in Settings. Bluetooth now also works on the smaller R5 image: the Bluetooth page, the Deskbar icon, keyboards, mice and game controllers. Bluetooth audio still needs the full image. In Users and Accounts you can remove an account's picture again. Virtual memory tells you when its saved disk is missing. A colour you drop on the desktop now also shows on the Wallpaper and Display pages, and is no longer undone by your next change on Wallpaper.

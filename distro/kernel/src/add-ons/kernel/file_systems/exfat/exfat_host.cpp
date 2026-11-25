@@ -307,6 +307,92 @@ run(const char* path, bool large)
 	if (status != B_OK)
 		return fail("free dir", status);
 
+	exfat_node has;
+	status = exfat_create(&store, &disk, NULL, &root, "Has", true, 0, &time,
+		&has);
+	if (status != B_OK)
+		return fail("has", status);
+	has.up = &root;
+	exfat_node inside;
+	status = exfat_create(&store, &disk, &root, &has, "inside.txt", false, 0,
+		&time, &inside);
+	if (status != B_OK)
+		return fail("inside", status);
+	exfat_node emptyDir;
+	status = exfat_create(&store, &disk, NULL, &root, "Empty", true, 0, &time,
+		&emptyDir);
+	if (status != B_OK)
+		return fail("empty dir", status);
+	emptyDir.up = &root;
+	status = exfat_rename(&store, &disk, &root, &root, "Empty", NULL, &root,
+		"Has", &time, &renamed);
+	if (status != B_DIRECTORY_NOT_EMPTY)
+		return fail("rename onto full dir", status);
+	status = exfat_lookup(&store, &disk, &has, "inside.txt", &found);
+	if (status != B_OK)
+		return fail("inside remains", status);
+	status = exfat_rename(&store, &disk, &root, &root, "Has", NULL, &root,
+		"Empty", &time, &renamed);
+	if (status != B_OK)
+		return fail("rename onto empty dir", status);
+	status = exfat_deactivate(&store, &disk, &root, emptyDir.entry_index,
+		(uint32)emptyDir.secondary_count + 1);
+	if (status != B_OK)
+		return fail("deactivate empty", status);
+	status = exfat_free_allocation(&store, &disk, emptyDir.first_cluster,
+		emptyDir.data_length, emptyDir.flags);
+	if (status != B_OK)
+		return fail("free empty", status);
+
+	exfat_node box;
+	status = exfat_create(&store, &disk, NULL, &root, "Packed", true, 0,
+		&time, &box);
+	if (status != B_OK)
+		return fail("packed", status);
+	box.up = &root;
+	uint64 packedLength = box.data_length;
+	int growths = 0;
+	int fit = 0;
+	for (int made = 0; made < 8000 && growths < 2; made++) {
+		char name[32];
+		snprintf(name, sizeof(name), "p%04d", made);
+		exfat_node one;
+		status = exfat_create(&store, &disk, &root, &box, name, false, 0,
+			&time, &one);
+		if (status != B_OK)
+			return fail("pack file", status);
+		if (box.data_length != packedLength) {
+			if (growths == 0)
+				fit = made;
+			growths++;
+			packedLength = box.data_length;
+		}
+	}
+	if (growths < 2 || fit < 1)
+		return fail("pack grow", growths);
+	for (int extra = 0; extra < fit - 1; extra++) {
+		char name[32];
+		snprintf(name, sizeof(name), "q%04d", extra);
+		exfat_node one;
+		status = exfat_create(&store, &disk, &root, &box, name, false, 0,
+			&time, &one);
+		if (status != B_OK)
+			return fail("pack fill", status);
+	}
+	uint64 beforeRename = box.data_length;
+	status = exfat_rename(&store, &disk, &root, &box, "p0000", &root, &box,
+		"moved000", &time, &renamed);
+	if (status != B_OK)
+		return fail("rename full", status);
+	if (box.data_length < beforeRename)
+		return fail("folder shrank", status);
+	status = exfat_lookup(&store, &disk, &box, "moved000", &found);
+	if (status != B_OK)
+		return fail("moved in full dir", status);
+	status = exfat_lookup(&store, &disk, &box, "p0001", &found);
+	if (status != B_OK)
+		return fail("neighbor in full dir", status);
+
 	for (int index = 0; index < 300; index++) {
 		char name[32];
 		snprintf(name, sizeof(name), "f%03d.dat", index);
@@ -455,15 +541,81 @@ cut_power(const char* path)
 	return 0;
 }
 
+static int
+seed(const char* path)
+{
+	int fd = open(path, O_RDWR);
+	if (fd < 0) {
+		perror(path);
+		return 1;
+	}
+	uint8 boot[512];
+	if (pread(fd, boot, sizeof(boot), 0) != (ssize_t)sizeof(boot)) {
+		perror("boot");
+		close(fd);
+		return 1;
+	}
+	uint8 shift = boot[108];
+	if (shift < 9 || shift > 12) {
+		fprintf(stderr, "unexpected sector shift %u\n", shift);
+		close(fd);
+		return 1;
+	}
+	image media;
+	media.fd = fd;
+	media.block_size = 1u << shift;
+	media.writes_left = -1;
+	exfat_store store;
+	store.cookie = &media;
+	store.read = image_read;
+	store.write = image_write;
+	store.flush = image_flush;
+	exfat_disk disk;
+	status_t status = exfat_disk_open(&store, boot, &disk);
+	if (status != B_OK || !disk.can_write) {
+		fprintf(stderr, "seed open %d %s\n", status, disk.read_only_reason);
+		exfat_disk_close(&disk);
+		close(fd);
+		return 1;
+	}
+	exfat_node root;
+	status = exfat_root(&store, &disk, &root);
+	if (status != B_OK) {
+		exfat_disk_close(&disk);
+		close(fd);
+		return fail("seed root", status);
+	}
+	exfat_time time = now_time();
+	exfat_node file;
+	status = exfat_create(&store, &disk, NULL, &root, "hello.txt", false, 0,
+		&time, &file);
+	const char* text = "hello exfat\n";
+	uint64 moved = 0;
+	if (status == B_OK) {
+		status = exfat_write_bytes(&store, &disk, &root, &file, 0, text,
+			strlen(text), &time, &moved);
+	}
+	if (status == B_OK)
+		status = exfat_sync(&store, &disk);
+	exfat_disk_close(&disk);
+	close(fd);
+	if (status != B_OK || moved != strlen(text))
+		return fail("seed", status);
+	printf("seed %s\n", path);
+	return 0;
+}
+
 int
 main(int argc, char** argv)
 {
 	if (argc < 2) {
-		fprintf(stderr, "usage: exfat_host <image> [large|cut]\n");
+		fprintf(stderr, "usage: exfat_host <image> [large|cut|seed]\n");
 		return 2;
 	}
 	if (argc > 2 && strcmp(argv[2], "cut") == 0)
 		return cut_power(argv[1]);
+	if (argc > 2 && strcmp(argv[2], "seed") == 0)
+		return seed(argv[1]);
 	bool large = argc > 2 && strcmp(argv[2], "large") == 0;
 	return run(argv[1], large);
 }
