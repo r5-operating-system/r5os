@@ -5,7 +5,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"PO-Revision-Date: 2026-11-25 10:53+0000\n"
+"PO-Revision-Date: 2026-11-25 15:26+0000\n"
 "Last-Translator: R5 Operating System <r5-operating-"
 "system@users.noreply.hosted.weblate.org>\n"
 "Language-Team: Dutch <https://hosted.weblate.org/projects/r5/bluetooth/nl/>\n"
@@ -26,15 +26,15 @@ msgstr "Gebruik voor audio"
 
 msgctxt "BluetoothView"
 msgid "Uses:"
-msgstr ""
+msgstr "Gebruikt:"
 
 msgctxt "BluetoothView"
 msgid "Only an administrator can turn Bluetooth on or off."
-msgstr ""
+msgstr "Alleen een beheerder kan Bluetooth in- of uitschakelen."
 
 msgctxt "BluetoothView"
 msgid "Pair one under Devices nearby."
-msgstr ""
+msgstr "Koppel een apparaat onder Apparaten in de buurt."
 
 msgctxt "BluetoothView"
 msgid "Bluetooth is off."
@@ -42,7 +42,7 @@ msgstr "Bluetooth is uitgeschakeld."
 
 msgctxt "BluetoothView"
 msgid "Test buttons…"
-msgstr ""
+msgstr "Test de buttons…"
 
 msgctxt "BluetoothController"
 msgid "Headset"
@@ -50,7 +50,7 @@ msgstr "Hoofdtelefoon"
 
 msgctxt "BluetoothView"
 msgid "No Bluetooth radio was found."
-msgstr ""
+msgstr "Geen Bluetooth-adapter gevonden."
 
 msgctxt "BluetoothView"
 msgid "Battery:"
@@ -86,11 +86,11 @@ msgstr "Telefoon"
 
 msgctxt "BluetoothView"
 msgid "Bluetooth is not available: the service could not be started."
-msgstr ""
+msgstr "Bluetooth is niet beschikbaar: de service kan niet worden gestart."
 
 msgctxt "BluetoothController"
 msgid "Remote control"
-msgstr ""
+msgstr "Beheer op afstand"
 
 msgctxt "BluetoothView"
 msgid "Bluetooth Classic"
@@ -106,7 +106,7 @@ msgstr "Bluetooth radio"
 
 msgctxt "BluetoothView"
 msgid "Bluetooth on"
-msgstr ""
+msgstr "Bluetooth aan"
 
 msgctxt "BluetoothView"
 msgid "Paired with %name%."
@@ -114,7 +114,7 @@ msgstr "Verbonden met %name%."
 
 msgctxt "BluetoothView"
 msgid "Bluetooth could not be turned on or off."
-msgstr ""
+msgstr "Bluetooth kon niet worden in- of uitgeschakeld."
 
 msgctxt "BluetoothController"
 msgid "Printer or camera"
@@ -122,11 +122,11 @@ msgstr "Printer of camera"
 
 msgctxt "BluetoothView"
 msgid "Make sure the other device can be found, then press Scan."
-msgstr ""
+msgstr "Zorg dat het andere apparaat vindbaar is en druk vervolgens op Scannen."
 
 msgctxt "BluetoothController"
 msgid "Car audio"
-msgstr ""
+msgstr "Car audio"
 
 msgctxt "BluetoothView"
 msgid "Pairing with %name%…"
@@ -154,15 +154,15 @@ msgstr "Microfoon"
 
 msgctxt "BluetoothView"
 msgid "Scan"
-msgstr ""
+msgstr "Scannen"
 
 msgctxt "BluetoothController"
 msgid "Keyboard and mouse"
-msgstr ""
+msgstr "Toetsenbord en muis"
 
 msgctxt "BluetoothView"
 msgid "the device"
-msgstr ""
+msgstr "het apparaat"
 
 msgctxt "BluetoothView"
 msgid "Status:"
@@ -170,7 +170,7 @@ msgstr "Status:"
 
 msgctxt "BluetoothController"
 msgid "Health device"
-msgstr ""
+msgstr "Gezondheid van apparaat"
 
 msgctxt "BluetoothController"
 msgid "Audio device"
@@ -178,7 +178,7 @@ msgstr "Audio apparaat"
 
 msgctxt "BluetoothView"
 msgid "Disconnect"
-msgstr ""
+msgstr "Verbinding verbreken"
 
 msgctxt "BluetoothView"
 msgid "%name% is forgotten. Pair it again to use it."
@@ -186,15 +186,17 @@ msgstr "%name% is vergeten. Verbind opnieuw om te gebruiken."
 
 msgctxt "BluetoothController"
 msgid "Speaker"
-msgstr ""
+msgstr "Luidspreker"
 
 msgctxt "BluetoothView"
 msgid "{0, plural, =0{No new devices found.} one{# new device found.} other{# new devices found.}}"
 msgstr ""
+"{0, plural, =0{Geen nieuwe apparaten gevonden.} one{# nieuw apparaat "
+"gevonden.} other{# nieuwe apparaten gevonden.}}"
 
 msgctxt "BluetoothController"
 msgid "Mouse"
-msgstr ""
+msgstr "Muis"
 
 msgctxt "BluetoothController"
 msgid "Headphones"
@@ -210,7 +212,7 @@ msgstr "Bluetooth starten…"
 
 msgctxt "BluetoothView"
 msgid "Forget"
-msgstr ""
+msgstr "Vergeet"
 
 msgctxt "BluetoothView"
 msgid "Bluetooth is not available: the service stopped."
@@ -226,7 +228,7 @@ msgstr "Kies een apparaat."
 
 msgctxt "BluetoothController"
 msgid "Toy"
-msgstr ""
+msgstr "Speelgoed"
 
 msgctxt "BluetoothView"
 msgid "Devices nearby"
@@ -234,19 +236,19 @@ msgstr "Apparaten in de buurt"
 
 msgctxt "BluetoothView"
 msgid "Pairing with %name% did not work."
-msgstr ""
+msgstr "Koppelen met %name% is niet gelukt."
 
 msgctxt "BluetoothView"
 msgid "Bluetooth Low Energy"
-msgstr ""
+msgstr "Bluetooth Low Energy (Bluetooth LE)"
 
 msgctxt "BluetoothView"
 msgid "Bluetooth device"
-msgstr ""
+msgstr "Bluetooth-apparaat"
 
 msgctxt "BluetoothView"
 msgid "No paired devices"
-msgstr "Geen verbonden apparaten"
+msgstr "Geen gekoppelde apparaten"
 
 msgctxt "BluetoothView"
 msgid "Stop"
