@@ -9,6 +9,7 @@
 #include "CachedBlock.h"
 #include "DataStream.h"
 #include "Utility.h"
+#include "exfat_update.h"
 
 
 #undef ASSERT
@@ -131,9 +132,78 @@ Inode::InitCheck()
 status_t
 Inode::UpdateNodeFromDisk()
 {
-	DirectoryIterator iterator(this);
-	iterator.LookupEntry(this);
+	if (ID() == 1)
+		return B_OK;
+	Vnode parentNode(fVolume, fParent);
+	Inode* directory = NULL;
+	status_t status = parentNode.Get(&directory);
+	if (status != B_OK)
+		return status;
+	exfat_node dir;
+	memset(&dir, 0, sizeof(dir));
+	dir.first_cluster = directory->StartCluster();
+	dir.data_length = (uint64)directory->Size();
+	dir.valid_length = (uint64)directory->ValidSize();
+	dir.flags = directory->StreamFlags();
+	dir.root = directory->ID() == 1;
+	dir.is_dir = true;
+	exfat_node found;
+	status = exfat_read_entry(fVolume->Store(), fVolume->Disk(), &dir, fOffset,
+		&found);
+	if (status != B_OK)
+		return status;
+	fFileEntry.file.SetAttribs(found.attributes);
+	fFileEntry.file.chunkCount = found.secondary_count;
+	fFileInfoEntry.file_info.SetStartCluster(found.first_cluster);
+	fFileInfoEntry.file_info.SetFlag(found.flags);
+	fFileInfoEntry.file_info.size1 = B_HOST_TO_LENDIAN_INT64(found.valid_length);
+	fFileInfoEntry.file_info.size2 = B_HOST_TO_LENDIAN_INT64(found.data_length);
+	fFileInfoEntry.file_info.name_hash = B_HOST_TO_LENDIAN_INT16(found.name_hash);
 	return B_OK;
+}
+
+
+void
+Inode::WriteLock()
+{
+	if (fWriter == find_thread(NULL)) {
+		fWriteDepth++;
+		return;
+	}
+	rw_lock_write_lock(&fLock);
+	fWriter = find_thread(NULL);
+	fWriteDepth = 1;
+}
+
+
+void
+Inode::WriteUnlock()
+{
+	if (fWriteDepth > 1) {
+		fWriteDepth--;
+		return;
+	}
+	fWriteDepth = 0;
+	fWriter = -1;
+	rw_lock_write_unlock(&fLock);
+}
+
+
+void
+Inode::ReadLock()
+{
+	if (fWriter == find_thread(NULL))
+		return;
+	rw_lock_read_lock(&fLock);
+}
+
+
+void
+Inode::ReadUnlock()
+{
+	if (fWriter == find_thread(NULL))
+		return;
+	rw_lock_read_unlock(&fLock);
 }
 
 
@@ -222,6 +292,8 @@ Inode::_Init()
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
 	fDeleted = false;
+	fWriter = -1;
+	fWriteDepth = 0;
 	// SPDX-SnippetEnd
 }
 

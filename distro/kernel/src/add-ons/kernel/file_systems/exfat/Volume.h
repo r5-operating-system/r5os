@@ -150,6 +150,8 @@ public:
 			mutex*				AllocLock() { return &fAllocLock; }
 			status_t			MoveNode(ino_t ino, cluster_t cluster,
 									uint32 offset, ino_t parent);
+			void				ForgetIno(ino_t ino);
+			void				MarkReadOnly();
 			uint64				ChainBytes(cluster_t start);
 			status_t			FinishMount();
 			status_t			SyncDisk();

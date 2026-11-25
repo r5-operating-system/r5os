@@ -77,6 +77,7 @@ struct exfat_node {
 	uint64		data_length;
 	uint64		valid_length;
 	uint16		attributes;
+	uint16		name_hash;
 	uint8		flags;
 	uint8		secondary_count;
 	bool		root;
@@ -107,6 +108,12 @@ status_t	exfat_root(exfat_store* store, exfat_disk* disk, exfat_node* root);
 status_t	exfat_lookup(exfat_store* store, exfat_disk* disk,
 				const exfat_node* directory, const char* name,
 				exfat_node* found);
+
+status_t	exfat_read_entry(exfat_store* store, exfat_disk* disk,
+				const exfat_node* directory, uint32 index, exfat_node* found);
+
+status_t	exfat_deactivate(exfat_store* store, exfat_disk* disk,
+				const exfat_node* directory, uint32 index, uint32 entries);
 
 status_t	exfat_create(exfat_store* store, exfat_disk* disk,
 				exfat_node* parent, exfat_node* directory, const char* name,

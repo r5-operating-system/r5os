@@ -12,8 +12,12 @@ KernelAddon exfat :
 	kernel_interface.cpp
 	Utility.cpp
 	Volume.cpp
+	# SPDX-SnippetBegin
+	# SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	# SPDX-License-Identifier: MIT
 	exfat_update.cpp
 	exfat_vfs.cpp
+	# SPDX-SnippetEnd
 ;
 
 SEARCH on [ FGristFiles DeviceOpener.cpp ]

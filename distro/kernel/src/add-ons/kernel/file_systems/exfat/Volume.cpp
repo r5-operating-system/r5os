@@ -338,8 +338,16 @@ Volume::GetIno(cluster_t cluster, uint32 offset, ino_t parent)
 	node->key = key;
 	node->ino = _NextID();
 	node->parent = parent;
-	fNodeTree.Insert(node);
-	fInoTree.Insert(node);
+	if (!fNodeTree.Insert(node)) {
+		struct node* existing = fNodeTree.Lookup(key);
+		delete node;
+		return existing != NULL ? existing->ino : 0;
+	}
+	if (!fInoTree.Insert(node)) {
+		fNodeTree.Remove(node);
+		delete node;
+		return 0;
+	}
 	TRACE("Volume::GetIno() new cluster %" B_PRIu32 " offset %" B_PRIu32
 		" ino %" B_PRIdINO "\n", cluster, offset, node->ino);
 	return node->ino;
@@ -463,6 +471,7 @@ Volume::SyncDisk()
 {
 	if (IsReadOnly() || !fDisk.dirty)
 		return B_OK;
+	MutexLocker allocation(fAllocLock);
 	status_t status = exfat_sync(&fStore, &fDisk);
 	if (status != B_OK)
 		dprintf("exfat: sync failed, volume stays dirty\n");
@@ -481,8 +490,36 @@ Volume::MoveNode(ino_t ino, cluster_t cluster, uint32 offset, ino_t parent)
 	node->key.cluster = cluster;
 	node->key.offset = offset;
 	node->parent = parent;
-	fNodeTree.Insert(node);
+	struct node* occupying = fNodeTree.Lookup(node->key);
+	if (occupying != NULL && occupying != node) {
+		fInoTree.Remove(occupying);
+		fNodeTree.Remove(occupying);
+		delete occupying;
+	}
+	if (!fNodeTree.Insert(node))
+		return B_ERROR;
 	return B_OK;
+}
+
+
+void
+Volume::ForgetIno(ino_t ino)
+{
+	MutexLocker locker(fLock);
+	struct node* node = fInoTree.Lookup(ino);
+	if (node == NULL)
+		return;
+	fNodeTree.Remove(node);
+	fInoTree.Remove(node);
+	delete node;
+}
+
+
+void
+Volume::MarkReadOnly()
+{
+	fFlags |= VOLUME_READ_ONLY;
+	fDisk.can_write = false;
 }
 
 

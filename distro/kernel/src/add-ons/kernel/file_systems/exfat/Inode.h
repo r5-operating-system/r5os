@@ -44,6 +44,10 @@ public:
 			cluster_t	NextCluster(cluster_t cluster) const;
 
 			rw_lock*	Lock() { return &fLock; }
+			void		WriteLock();
+			void		WriteUnlock();
+			void		ReadLock();
+			void		ReadUnlock();
 
 			status_t	UpdateNodeFromDisk();
 
@@ -69,6 +73,13 @@ public:
 							{ return fFileEntry.file.Attribs(); }
 			uint8		ChunkCount() const
 							{ return fFileEntry.file.chunkCount; }
+			uint16		NameHash() const
+							{ return B_LENDIAN_TO_HOST_INT16(
+								fFileInfoEntry.file_info.name_hash); }
+			void		SetValidLength(uint64 valid) {
+							fFileInfoEntry.file_info.size1
+								= B_HOST_TO_LENDIAN_INT64(valid);
+						}
 			bool		IsDeleted() const { return fDeleted; }
 			void		SetDeleted() { fDeleted = true; }
 			void		SetParent(ino_t parent) { fParent = parent; }
@@ -131,6 +142,8 @@ private:
 			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 			// SPDX-License-Identifier: MIT
 			bool		fDeleted;
+			thread_id	fWriter;
+			int32		fWriteDepth;
 			// SPDX-SnippetEnd
 
 			SplayTreeLink<Inode> fInoTreeLink;

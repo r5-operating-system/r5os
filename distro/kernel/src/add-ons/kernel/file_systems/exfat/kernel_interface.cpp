@@ -517,7 +517,12 @@ exfat_open(fs_volume* /*_volume*/, fs_vnode* _node, int openMode,
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
 	if ((openMode & O_TRUNC) != 0 && inode->IsFile() && inode->Size() != 0) {
+		if ((openMode & O_ACCMODE) == O_RDONLY
+			|| (inode->Attributes() & 0x01) != 0)
+			return B_NOT_ALLOWED;
+		inode->WriteLock();
 		status = exfat_set_file_size(inode, 0);
+		inode->WriteUnlock();
 		if (status != B_OK)
 			return status;
 		cookie->last_size = 0;
@@ -694,6 +699,9 @@ exfat_free_dir_cookie(fs_volume *_volume, fs_vnode *_node, void *_cookie)
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
 fs_volume_ops gExfatVolumeOps = {
 	&exfat_unmount,
 	&exfat_read_fs_info,
@@ -774,6 +782,7 @@ fs_vnode_ops gExfatVnodeOps = {
 	NULL,	// fs_rename_attr,
 	NULL,	// fs_remove_attr,
 };
+// SPDX-SnippetEnd
 
 
 static file_system_module_info sExfatFileSystem = {

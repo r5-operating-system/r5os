@@ -14,7 +14,7 @@ Problem: Haiku's exFAT driver, used unchanged, always mounted read-only and its 
 
 Changed: the driver now lives under distro/ and can create, delete, rename, grow and shrink files and directories. VolumeDirty is set before the first write and cleared on a clean sync. A dirty volume, or one that fails the bitmap, up-case, TexFAT or media-failure checks, mounts read-only.
 
-Limits: TexFAT stays read-only. There is no repair tool in the image. The 5625U card was not written by this change.
+Limits: TexFAT stays read-only. There is no repair tool in the image. The 5625U card was not written by this change. The follow-up drops a deleted file's inode key, releases the vnode after mkdir, loads an inode from its parent directory, rewrites an unchanged-length entry in place, and refuses a cluster number outside the heap. The host script was run again after that. A QEMU mount is recorded only after it has run.
 
 ## 2026-11-25 - Deskbar: one icon column in the main menu, every label lines up
 

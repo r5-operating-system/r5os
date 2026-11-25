@@ -37,6 +37,7 @@ fill_node(Inode* inode, exfat_node* node, exfat_node* up)
 	node->data_length = (uint64)inode->Size();
 	node->valid_length = (uint64)inode->ValidSize();
 	node->attributes = inode->Attributes();
+	node->name_hash = inode->NameHash();
 	node->flags = inode->StreamFlags();
 	node->secondary_count = inode->ChunkCount();
 	node->root = inode->ID() == 1;
@@ -49,8 +50,6 @@ static void
 adopt(Inode* inode, const exfat_node* node)
 {
 	ino_t parent = inode->Parent();
-	if (node->up != NULL && !node->up->root)
-		parent = inode->Parent();
 	inode->AdoptStream(node->first_cluster, node->data_length,
 		node->valid_length, node->flags, node->attributes,
 		node->secondary_count, node->entry_cluster, node->entry_index);
@@ -99,9 +98,7 @@ hold_parent(Volume* volume, Inode* child, held_parent* parent,
 			return status;
 		}
 		grand->held = true;
-		fill_node(grand->inode, &grand->node, NULL);
 	}
-	fill_node(parent->inode, &parent->node, grand->held ? &grand->node : NULL);
 	return B_OK;
 }
 
@@ -117,17 +114,11 @@ exfat_lookup_id(Volume* volume, Inode* directory, const char* name, ino_t* _id)
 		*_id = directory->ID() == 1 ? directory->ID() : directory->Parent();
 		return B_OK;
 	}
-	held_parent parent;
-	held_parent grand;
-	status_t status = hold_parent(volume, directory, &parent, &grand);
 	exfat_node dir;
-	fill_node(directory, &dir, parent.held ? &parent.node : NULL);
+	fill_node(directory, &dir, NULL);
 	exfat_node found;
-	if (status == B_OK)
-		status = exfat_lookup(volume->Store(), volume->Disk(), &dir, name,
-			&found);
-	release_parent(volume, &grand);
-	release_parent(volume, &parent);
+	status_t status = exfat_lookup(volume->Store(), volume->Disk(), &dir, name,
+		&found);
 	if (status != B_OK)
 		return status;
 	*_id = volume->GetIno(found.entry_cluster, found.entry_index,
@@ -158,8 +149,10 @@ publish_new(Volume* volume, Inode* directory, const exfat_node* created,
 	}
 	if (_cookie != NULL) {
 		file_cookie* cookie = new(std::nothrow) file_cookie;
-		if (cookie == NULL)
+		if (cookie == NULL) {
+			put_vnode(volume->FSVolume(), id);
 			return B_NO_MEMORY;
+		}
 		cookie->open_mode = openMode & EXFAT_OPEN_MODE_USER_MASK;
 		cookie->last_size = inode->Size();
 		cookie->last_notification = system_time();
@@ -189,18 +182,22 @@ create_entry(Volume* volume, Inode* directory, const char* name,
 		if (status != B_OK)
 			return status;
 		grand.held = true;
-		fill_node(grand.inode, &grand.node, NULL);
 	}
 	exfat_node dir;
-	fill_node(directory, &dir, grand.held ? &grand.node : NULL);
 	exfat_time time = current_time();
 	exfat_node created;
 	MutexLocker allocation(volume->AllocLock());
+	if (grand.held)
+		fill_node(grand.inode, &grand.node, NULL);
+	fill_node(directory, &dir, grand.held ? &grand.node : NULL);
 	status_t status = exfat_create(volume->Store(), volume->Disk(),
 		grand.held ? &grand.node : NULL, &dir, name, asDirectory, attributes,
 		&time, &created);
-	if (status == B_OK)
+	if (status == B_OK) {
 		adopt(directory, &dir);
+		if (grand.held)
+			adopt(grand.inode, &grand.node);
+	}
 	allocation.Unlock();
 	if (status != B_OK) {
 		release_parent(volume, &grand);
@@ -210,6 +207,14 @@ create_entry(Volume* volume, Inode* directory, const char* name,
 	if (status == B_OK) {
 		entry_cache_add(volume->ID(), directory->ID(), name, *_id);
 		notify_entry_created(volume->ID(), directory->ID(), name, *_id);
+	} else {
+		MutexLocker again(volume->AllocLock());
+		exfat_deactivate(volume->Store(), volume->Disk(), &dir,
+			created.entry_index, (uint32)created.secondary_count + 1);
+		if (created.first_cluster >= 2) {
+			exfat_free_allocation(volume->Store(), volume->Disk(),
+				created.first_cluster, created.data_length, created.flags);
+		}
 	}
 	release_parent(volume, &grand);
 	return status;
@@ -247,6 +252,8 @@ exfat_create_dir(fs_volume* _volume, fs_vnode* _directory, const char* name,
 	status_t status = create_entry(volume, directory, name, true, 0, 0, NULL,
 		&id);
 	rw_lock_write_unlock(directory->Lock());
+	if (status == B_OK)
+		put_vnode(volume->FSVolume(), id);
 	return status;
 }
 
@@ -267,13 +274,16 @@ unlink_name(Volume* volume, Inode* directory, const char* name, bool directoryOn
 		if (status != B_OK)
 			return status;
 		grand.held = true;
-		fill_node(grand.inode, &grand.node, NULL);
 	}
 	exfat_node dir;
-	fill_node(directory, &dir, grand.held ? &grand.node : NULL);
 	exfat_node found;
+	MutexLocker allocation(volume->AllocLock());
+	if (grand.held)
+		fill_node(grand.inode, &grand.node, NULL);
+	fill_node(directory, &dir, grand.held ? &grand.node : NULL);
 	status_t status = exfat_lookup(volume->Store(), volume->Disk(), &dir, name,
 		&found);
+	allocation.Unlock();
 	if (status != B_OK) {
 		release_parent(volume, &grand);
 		return status;
@@ -294,15 +304,21 @@ unlink_name(Volume* volume, Inode* directory, const char* name, bool directoryOn
 		release_parent(volume, &grand);
 		return status;
 	}
-	MutexLocker allocation(volume->AllocLock());
+	allocation.Lock();
+	if (grand.held)
+		fill_node(grand.inode, &grand.node, NULL);
+	fill_node(directory, &dir, grand.held ? &grand.node : NULL);
 	status = exfat_remove_entry(volume->Store(), volume->Disk(),
 		grand.held ? &grand.node : NULL, &dir, name, &found);
+	if (status == B_OK)
+		adopt(directory, &dir);
 	allocation.Unlock();
 	release_parent(volume, &grand);
 	if (status != B_OK) {
 		put_vnode(volume->FSVolume(), id);
 		return status;
 	}
+	volume->ForgetIno(id);
 	inode->SetDeleted();
 	entry_cache_remove(volume->ID(), directory->ID(), name);
 	notify_entry_removed(volume->ID(), directory->ID(), name, id);
@@ -341,10 +357,13 @@ exfat_remove_vnode(fs_volume* _volume, fs_vnode* _node, bool /*reenter*/)
 {
 	Volume* volume = (Volume*)_volume->private_volume;
 	Inode* inode = (Inode*)_node->private_node;
+	volume->ForgetIno(inode->ID());
 	if (inode->IsDeleted() && inode->ID() != 1) {
 		MutexLocker allocation(volume->AllocLock());
-		exfat_free_allocation(volume->Store(), volume->Disk(),
+		status_t freed = exfat_free_allocation(volume->Store(), volume->Disk(),
 			inode->StartCluster(), (uint64)inode->Size(), inode->StreamFlags());
+		if (freed == B_BAD_DATA)
+			volume->MarkReadOnly();
 	}
 	delete inode;
 	return B_OK;
@@ -376,6 +395,8 @@ same_tree(Volume* volume, ino_t parent, ino_t child)
 		put_vnode(volume->FSVolume(), cursor);
 		cursor = next;
 	}
+	if (cursor > 1)
+		return B_BAD_VALUE;
 	return B_OK;
 }
 
@@ -400,65 +421,114 @@ exfat_rename_vnode(fs_volume* _volume, fs_vnode* _fromDir, const char* fromName,
 	if (first != second)
 		rw_lock_write_lock(second->Lock());
 
+	held_parent fromGrand;
+	held_parent toGrand;
+	memset(&fromGrand, 0, sizeof(fromGrand));
+	memset(&toGrand, 0, sizeof(toGrand));
+	if (fromDir->ID() != 1) {
+		status_t held = get_vnode(volume->FSVolume(), fromDir->Parent(),
+			(void**)&fromGrand.inode);
+		if (held != B_OK)
+			return unlock_pair(first, second, held);
+		fromGrand.held = true;
+	}
+	if (toDir != fromDir && toDir->ID() != 1) {
+		status_t held = get_vnode(volume->FSVolume(), toDir->Parent(),
+			(void**)&toGrand.inode);
+		if (held != B_OK) {
+			release_parent(volume, &fromGrand);
+			return unlock_pair(first, second, held);
+		}
+		toGrand.held = true;
+	}
 	exfat_node fromNode;
 	exfat_node toNode;
-	fill_node(fromDir, &fromNode, NULL);
-	fill_node(toDir, &toNode, NULL);
 	exfat_node source;
+	exfat_node dest;
+	bool replace = false;
+	ino_t sourceID = 0;
+	ino_t destID = 0;
+	MutexLocker allocation(volume->AllocLock());
+	if (fromGrand.held)
+		fill_node(fromGrand.inode, &fromGrand.node, NULL);
+	if (toGrand.held)
+		fill_node(toGrand.inode, &toGrand.node, NULL);
+	fill_node(fromDir, &fromNode, fromGrand.held ? &fromGrand.node : NULL);
+	fill_node(toDir, &toNode, toDir == fromDir
+		? (fromGrand.held ? &fromGrand.node : NULL)
+		: (toGrand.held ? &toGrand.node : NULL));
 	status_t status = exfat_lookup(volume->Store(), volume->Disk(), &fromNode,
 		fromName, &source);
-	if (status != B_OK)
-		return unlock_pair(first, second, status);
-	if (source.is_dir) {
-		ino_t sourceID = volume->GetIno(source.entry_cluster, source.entry_index,
+	if (status == B_OK && source.is_dir) {
+		sourceID = volume->GetIno(source.entry_cluster, source.entry_index,
 			fromDir->ID());
+		allocation.Unlock();
 		status = same_tree(volume, toDir->ID(), sourceID);
-		if (status != B_OK)
-			return unlock_pair(first, second, status);
+		allocation.Lock();
 	}
-
-	exfat_node dest;
-	status = exfat_lookup(volume->Store(), volume->Disk(), &toNode, toName,
-		&dest);
 	if (status == B_OK) {
-		ino_t sourceID = volume->GetIno(source.entry_cluster, source.entry_index,
+		sourceID = volume->GetIno(source.entry_cluster, source.entry_index,
 			fromDir->ID());
-		ino_t destID = volume->GetIno(dest.entry_cluster, dest.entry_index,
-			toDir->ID());
-		if (sourceID != destID) {
-			if (source.is_dir != dest.is_dir) {
-				status = dest.is_dir ? B_IS_A_DIRECTORY : B_NOT_A_DIRECTORY;
-				return unlock_pair(first, second, status);
+		status = exfat_lookup(volume->Store(), volume->Disk(), &toNode, toName,
+			&dest);
+		if (status == B_ENTRY_NOT_FOUND)
+			status = B_OK;
+		else if (status == B_OK) {
+			destID = volume->GetIno(dest.entry_cluster, dest.entry_index,
+				toDir->ID());
+			if (destID != sourceID) {
+				if (source.is_dir != dest.is_dir)
+					status = dest.is_dir ? B_IS_A_DIRECTORY : B_NOT_A_DIRECTORY;
+				else
+					replace = true;
 			}
-			status = unlink_name(volume, toDir, toName, dest.is_dir);
-			if (status != B_OK)
-				return unlock_pair(first, second, status);
 		}
-	} else if (status != B_ENTRY_NOT_FOUND)
-		return unlock_pair(first, second, status);
-
+	}
 	exfat_time time = current_time();
 	exfat_node moved;
-	MutexLocker allocation(volume->AllocLock());
-	status = exfat_rename(volume->Store(), volume->Disk(), NULL, &fromNode,
-		fromName, NULL, &toNode, toName, &time, &moved);
+	if (status == B_OK) {
+		status = exfat_rename(volume->Store(), volume->Disk(),
+			fromGrand.held ? &fromGrand.node : NULL, &fromNode, fromName,
+			toDir == fromDir ? (fromGrand.held ? &fromGrand.node : NULL)
+				: (toGrand.held ? &toGrand.node : NULL),
+			&toNode, toName, &time, &moved);
+	}
+	if (status == B_OK && replace) {
+		status = exfat_deactivate(volume->Store(), volume->Disk(), &toNode,
+			dest.entry_index, (uint32)dest.secondary_count + 1);
+	}
 	if (status == B_OK) {
 		adopt(fromDir, &fromNode);
 		if (fromDir != toDir)
 			adopt(toDir, &toNode);
-		ino_t id = volume->GetIno(source.entry_cluster, source.entry_index,
-			fromDir->ID());
-		volume->MoveNode(id, moved.entry_cluster, moved.entry_index, toDir->ID());
+		if (fromGrand.held)
+			adopt(fromGrand.inode, &fromGrand.node);
+		if (toGrand.held)
+			adopt(toGrand.inode, &toGrand.node);
+		volume->MoveNode(sourceID, moved.entry_cluster, moved.entry_index,
+			toDir->ID());
 		Inode* live = NULL;
-		if (get_vnode(volume->FSVolume(), id, (void**)&live) == B_OK) {
+		if (get_vnode(volume->FSVolume(), sourceID, (void**)&live) == B_OK) {
 			live->AdoptStream(moved.first_cluster, moved.data_length,
 				moved.valid_length, moved.flags, moved.attributes,
 				moved.secondary_count, moved.entry_cluster, moved.entry_index);
 			live->SetParent(toDir->ID());
-			put_vnode(volume->FSVolume(), id);
+			put_vnode(volume->FSVolume(), sourceID);
 		}
+		if (replace)
+			volume->ForgetIno(destID);
 	}
 	allocation.Unlock();
+	if (status == B_OK && replace) {
+		Inode* gone = NULL;
+		if (get_vnode(volume->FSVolume(), destID, (void**)&gone) == B_OK) {
+			gone->SetDeleted();
+			remove_vnode(volume->FSVolume(), destID);
+			put_vnode(volume->FSVolume(), destID);
+		}
+	}
+	release_parent(volume, &fromGrand);
+	release_parent(volume, &toGrand);
 	if (status == B_OK) {
 		entry_cache_remove(volume->ID(), fromDir->ID(), fromName);
 		notify_entry_moved(volume->ID(), fromDir->ID(), fromName, toDir->ID(),
@@ -479,24 +549,49 @@ exfat_set_file_size(Inode* inode, off_t size)
 		return B_READ_ONLY_DEVICE;
 	if (inode->IsDirectory())
 		return B_IS_A_DIRECTORY;
+	inode->WriteLock();
 	held_parent parent;
 	held_parent grand;
 	status_t status = hold_parent(volume, inode, &parent, &grand);
-	if (status != B_OK)
+	if (status != B_OK) {
+		inode->WriteUnlock();
 		return status;
+	}
+	off_t oldSize = inode->Size();
+	off_t oldValid = inode->ValidSize();
+	uint64 valid = (uint64)size;
+	if (size > oldSize)
+		valid = (uint64)oldValid;
+	if (size < oldSize && inode->FileCache() != NULL) {
+		file_cache_set_size(inode->FileCache(), size);
+		file_map_set_size(inode->Map(), size);
+	}
 	exfat_node node;
-	fill_node(inode, &node, parent.held ? &parent.node : NULL);
 	exfat_time time = current_time();
 	MutexLocker allocation(volume->AllocLock());
+	if (parent.held)
+		fill_node(parent.inode, &parent.node, NULL);
+	if (grand.held)
+		fill_node(grand.inode, &grand.node, NULL);
+	fill_node(inode, &node, parent.held ? &parent.node : NULL);
 	status = exfat_set_size(volume->Store(), volume->Disk(),
-		parent.held ? &parent.node : NULL, &node, (uint64)size, (uint64)size,
+		parent.held ? &parent.node : NULL, &node, (uint64)size, valid,
 		&time, true);
+	if (status == B_BAD_DATA)
+		volume->MarkReadOnly();
+	if (status != B_OK && size < oldSize && inode->FileCache() != NULL) {
+		file_cache_set_size(inode->FileCache(), oldSize);
+		file_map_set_size(inode->Map(), oldSize);
+	}
 	if (status == B_OK) {
 		adopt(inode, &node);
 		if (parent.held)
 			adopt(parent.inode, &parent.node);
+		if (grand.held)
+			adopt(grand.inode, &grand.node);
 	}
 	allocation.Unlock();
+	inode->WriteUnlock();
 	release_parent(volume, &grand);
 	release_parent(volume, &parent);
 	if (status == B_OK)
@@ -519,7 +614,7 @@ exfat_write_stat(fs_volume* _volume, fs_vnode* _node, const struct stat* stat,
 			| B_STAT_CHANGE_TIME)) == 0) {
 		return B_OK;
 	}
-	rw_lock_write_lock(inode->Lock());
+	inode->WriteLock();
 	status_t status = B_OK;
 	if ((mask & B_STAT_SIZE) != 0)
 		status = exfat_set_file_size(inode, stat->st_size);
@@ -531,13 +626,12 @@ exfat_write_stat(fs_volume* _volume, fs_vnode* _node, const struct stat* stat,
 		status = hold_parent(volume, inode, &parent, &grand);
 		exfat_node node;
 		fill_node(inode, &node, parent.held ? &parent.node : NULL);
-		exfat_time time = current_time();
-		if ((mask & B_STAT_MODIFICATION_TIME) != 0
-			|| (mask & B_STAT_CHANGE_TIME) != 0) {
-			time.unix_seconds = stat->st_mtim.tv_sec;
-			time.nanoseconds = (uint32)stat->st_mtim.tv_nsec;
-		}
 		MutexLocker allocation(volume->AllocLock());
+		if (parent.held)
+			fill_node(parent.inode, &parent.node, NULL);
+		if (grand.held)
+			fill_node(grand.inode, &grand.node, NULL);
+		fill_node(inode, &node, parent.held ? &parent.node : NULL);
 		if (status == B_OK && (mask & B_STAT_MODE) != 0) {
 			uint16 attributes = node.attributes;
 			if ((stat->st_mode & S_IWUSR) == 0)
@@ -547,21 +641,34 @@ exfat_write_stat(fs_volume* _volume, fs_vnode* _node, const struct stat* stat,
 			status = exfat_set_attributes(volume->Store(), volume->Disk(),
 				parent.held ? &parent.node : NULL, &node, attributes);
 		}
-		uint32 which = 0;
-		if ((mask & (B_STAT_MODIFICATION_TIME | B_STAT_CHANGE_TIME)) != 0)
-			which |= EXFAT_TIME_MODIFY;
-		if ((mask & B_STAT_ACCESS_TIME) != 0)
-			which |= EXFAT_TIME_ACCESS;
-		if ((mask & B_STAT_CREATION_TIME) != 0) {
-			which |= EXFAT_TIME_CREATE;
-			time.unix_seconds = stat->st_crtim.tv_sec;
-			time.nanoseconds = (uint32)stat->st_crtim.tv_nsec;
-		}
-		if (status == B_OK && which != 0)
+		exfat_time accessTime = current_time();
+		exfat_time modifyTime = accessTime;
+		exfat_time createTime = accessTime;
+		accessTime.unix_seconds = stat->st_atim.tv_sec;
+		accessTime.nanoseconds = (uint32)stat->st_atim.tv_nsec;
+		modifyTime.unix_seconds = stat->st_mtim.tv_sec;
+		modifyTime.nanoseconds = (uint32)stat->st_mtim.tv_nsec;
+		createTime.unix_seconds = stat->st_crtim.tv_sec;
+		createTime.nanoseconds = (uint32)stat->st_crtim.tv_nsec;
+		if (status == B_OK && (mask & B_STAT_MODIFICATION_TIME) != 0)
 			status = exfat_set_times(volume->Store(), volume->Disk(),
-				parent.held ? &parent.node : NULL, &node, which, &time);
-		if (status == B_OK)
+				parent.held ? &parent.node : NULL, &node, EXFAT_TIME_MODIFY,
+				&modifyTime);
+		if (status == B_OK && (mask & B_STAT_ACCESS_TIME) != 0)
+			status = exfat_set_times(volume->Store(), volume->Disk(),
+				parent.held ? &parent.node : NULL, &node, EXFAT_TIME_ACCESS,
+				&accessTime);
+		if (status == B_OK && (mask & B_STAT_CREATION_TIME) != 0)
+			status = exfat_set_times(volume->Store(), volume->Disk(),
+				parent.held ? &parent.node : NULL, &node, EXFAT_TIME_CREATE,
+				&createTime);
+		if (status == B_OK) {
 			adopt(inode, &node);
+			if (parent.held)
+				adopt(parent.inode, &parent.node);
+			if (grand.held)
+				adopt(grand.inode, &grand.node);
+		}
 		allocation.Unlock();
 		release_parent(volume, &grand);
 		release_parent(volume, &parent);
@@ -569,7 +676,7 @@ exfat_write_stat(fs_volume* _volume, fs_vnode* _node, const struct stat* stat,
 			notify_stat_changed(volume->ID(), inode->Parent(), inode->ID(),
 				mask);
 	}
-	rw_lock_write_unlock(inode->Lock());
+	inode->WriteUnlock();
 	return status;
 }
 
@@ -589,22 +696,37 @@ exfat_write(fs_volume* _volume, fs_vnode* _node, void* _cookie, off_t pos,
 		return B_BAD_VALUE;
 	if ((inode->Attributes() & 0x01) != 0)
 		return B_NOT_ALLOWED;
+	if (pos < 0)
+		return B_BAD_VALUE;
+	inode->WriteLock();
 	if ((cookie->open_mode & O_APPEND) != 0)
 		pos = inode->Size();
-
+	if (*length > 0 && pos > OFF_MAX - (off_t)*length) {
+		inode->WriteUnlock();
+		return B_DEVICE_FULL;
+	}
 	off_t end = pos + (off_t)*length;
+	uint64 limit = (uint64)volume->Disk()->cluster_count * volume->ClusterSize();
+	if (end < 0 || (uint64)end > limit) {
+		inode->WriteUnlock();
+		return B_DEVICE_FULL;
+	}
 	off_t oldData = inode->Size();
 	off_t oldValid = inode->ValidSize();
-	rw_lock_write_lock(inode->Lock());
 	status_t status = B_OK;
+	static const uint8 kZeroPage[4096] = {};
 	if (end > oldData) {
 		held_parent parent;
 		held_parent grand;
 		status = hold_parent(volume, inode, &parent, &grand);
-		exfat_node node;
-		fill_node(inode, &node, parent.held ? &parent.node : NULL);
 		if (status == B_OK) {
 			MutexLocker allocation(volume->AllocLock());
+			if (parent.held)
+				fill_node(parent.inode, &parent.node, NULL);
+			if (grand.held)
+				fill_node(grand.inode, &grand.node, NULL);
+			exfat_node node;
+			fill_node(inode, &node, parent.held ? &parent.node : NULL);
 			status = exfat_set_size(volume->Store(), volume->Disk(),
 				parent.held ? &parent.node : NULL, &node, (uint64)end,
 				(uint64)oldValid, NULL, false);
@@ -612,23 +734,19 @@ exfat_write(fs_volume* _volume, fs_vnode* _node, void* _cookie, off_t pos,
 				adopt(inode, &node);
 				if (parent.held)
 					adopt(parent.inode, &parent.node);
+				if (grand.held)
+					adopt(grand.inode, &grand.node);
 			}
 		}
 		release_parent(volume, &grand);
 		release_parent(volume, &parent);
 	}
-	rw_lock_write_unlock(inode->Lock());
-	if (status != B_OK)
-		return status;
-
-	if (pos > oldValid) {
-		size_t gap = (size_t)(pos - oldValid);
-		uint8 zeros[4096];
-		memset(zeros, 0, sizeof(zeros));
-		off_t at = oldValid;
+	if (status == B_OK && pos > inode->ValidSize()) {
+		size_t gap = (size_t)(pos - inode->ValidSize());
+		off_t at = inode->ValidSize();
 		while (gap > 0) {
-			size_t piece = gap > sizeof(zeros) ? sizeof(zeros) : gap;
-			status = file_cache_write(inode->FileCache(), at, zeros, &piece);
+			size_t piece = gap > sizeof(kZeroPage) ? sizeof(kZeroPage) : gap;
+			status = file_cache_write(inode->FileCache(), at, kZeroPage, &piece);
 			if (status != B_OK || piece == 0)
 				break;
 			at += (off_t)piece;
@@ -638,35 +756,47 @@ exfat_write(fs_volume* _volume, fs_vnode* _node, void* _cookie, off_t pos,
 	size_t written = *length;
 	if (status == B_OK && written > 0)
 		status = file_cache_write(inode->FileCache(), pos, buffer, &written);
-	if (status != B_OK || (written == 0 && *length > 0)) {
-		if (end > oldData)
-			exfat_set_file_size(inode, oldData);
-		*length = 0;
-		return status != B_OK ? status : B_IO_ERROR;
-	}
-
+	if (status == B_OK)
+		status = file_cache_sync(inode->FileCache());
 	off_t newValid = oldValid;
-	if (pos <= oldValid && pos + (off_t)written > oldValid)
-		newValid = pos + (off_t)written;
-	else if (pos > oldValid)
-		newValid = pos + (off_t)written;
-	if (newValid != oldValid || end > oldData) {
+	if (status == B_OK) {
+		if (pos <= oldValid && pos + (off_t)written > oldValid)
+			newValid = pos + (off_t)written;
+		else if (pos > oldValid)
+			newValid = pos + (off_t)written;
+		inode->SetValidLength((uint64)newValid);
+	}
+	if (status == B_OK && (newValid != oldValid || end > oldData)) {
 		held_parent parent;
 		held_parent grand;
-		status_t stamp = hold_parent(volume, inode, &parent, &grand);
-		exfat_node node;
-		fill_node(inode, &node, parent.held ? &parent.node : NULL);
-		exfat_time time = current_time();
-		if (stamp == B_OK) {
+		status = hold_parent(volume, inode, &parent, &grand);
+		if (status == B_OK) {
 			MutexLocker allocation(volume->AllocLock());
-			stamp = exfat_set_size(volume->Store(), volume->Disk(),
+			if (parent.held)
+				fill_node(parent.inode, &parent.node, NULL);
+			if (grand.held)
+				fill_node(grand.inode, &grand.node, NULL);
+			exfat_node node;
+			fill_node(inode, &node, parent.held ? &parent.node : NULL);
+			exfat_time time = current_time();
+			status = exfat_set_size(volume->Store(), volume->Disk(),
 				parent.held ? &parent.node : NULL, &node,
 				(uint64)inode->Size(), (uint64)newValid, &time, true);
-			if (stamp == B_OK)
+			if (status == B_OK) {
 				adopt(inode, &node);
+				if (parent.held)
+					adopt(parent.inode, &parent.node);
+				if (grand.held)
+					adopt(grand.inode, &grand.node);
+			}
 		}
 		release_parent(volume, &grand);
 		release_parent(volume, &parent);
+	}
+	inode->WriteUnlock();
+	if (status != B_OK) {
+		*length = 0;
+		return status;
 	}
 	*length = written;
 	notify_stat_changed(volume->ID(), inode->Parent(), inode->ID(),
@@ -686,6 +816,7 @@ exfat_write_pages(fs_volume* _volume, fs_vnode* _node, void*,
 	if (inode->Map() == NULL)
 		return B_BAD_VALUE;
 
+	inode->ReadLock();
 	uint32 vecIndex = 0;
 	size_t vecOffset = 0;
 	size_t bytesLeft = *_numBytes;
@@ -706,6 +837,7 @@ exfat_write_pages(fs_volume* _volume, fs_vnode* _node, void*,
 		pos += (off_t)bytes;
 		bytesLeft -= bytes;
 	}
+	inode->ReadUnlock();
 	return status;
 }
 

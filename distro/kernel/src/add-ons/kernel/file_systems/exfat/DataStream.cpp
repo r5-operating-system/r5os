@@ -49,16 +49,30 @@ DataStream::FindBlock(off_t pos, off_t& physical, off_t *_length)
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
-	uint64 physicalByte = 0;
-	uint64 run = 0;
-	status_t status = exfat_map(fVolume->Store(), fVolume->Disk(),
-		fInode->StartCluster(), (uint64)fInode->Size(), fInode->StreamFlags(),
-		(uint64)pos, &physicalByte, &run);
-	if (status != B_OK)
-		return status;
-	physical = (off_t)physicalByte;
+	cluster_t cluster = fInode->StartCluster();
+	if (cluster < 2)
+		return B_BAD_DATA;
+	uint64 clusterIndex = (uint64)pos / kClusterSize;
+	uint64 within = (uint64)pos % kClusterSize;
+	if (fInode->IsContiguous())
+		cluster = (cluster_t)(cluster + clusterIndex);
+	else {
+		for (uint64 step = 0; step < clusterIndex; step++) {
+			cluster_t next = fInode->NextCluster(cluster);
+			if (next < 2)
+				return B_BAD_DATA;
+			cluster = next;
+		}
+	}
+	exfat_disk* disk = fVolume->Disk();
+	if (cluster < 2 || cluster > disk->cluster_count + 1)
+		return B_BAD_DATA;
+	uint32 blocksPerCluster = kClusterSize / kBlockSize;
+	uint64 block = disk->data_block
+		+ (uint64)(cluster - 2) * blocksPerCluster + within / kBlockSize;
+	physical = (off_t)block;
 	if (_length != NULL)
-		*_length = (off_t)min_c(run, (uint64)(fSize - pos));
+		*_length = (off_t)min_c(kClusterSize - within, (uint64)(fSize - pos));
 	// SPDX-SnippetEnd
 	TRACE("inode %" B_PRIdINO ": pos %" B_PRIdOFF ", %" B_PRIdOFF "\n",
 		fInode->ID(), pos, physical);
