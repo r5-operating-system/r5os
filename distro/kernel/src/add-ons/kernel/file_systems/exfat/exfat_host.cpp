@@ -126,6 +126,7 @@ run(const char* path, bool large)
 	store.read = image_read;
 	store.write = image_write;
 	store.flush = image_flush;
+	store.drive_flush = NULL;
 	exfat_disk disk;
 	status_t status = exfat_disk_open(&store, boot, &disk);
 	if (status != B_OK) {
@@ -502,6 +503,7 @@ cut_power(const char* path)
 	store.read = image_read;
 	store.write = image_write;
 	store.flush = image_flush;
+	store.drive_flush = NULL;
 	exfat_disk disk;
 	status_t status = exfat_disk_open(&store, boot, &disk);
 	if (status != B_OK || !disk.can_write) {
@@ -570,6 +572,7 @@ seed(const char* path)
 	store.read = image_read;
 	store.write = image_write;
 	store.flush = image_flush;
+	store.drive_flush = NULL;
 	exfat_disk disk;
 	status_t status = exfat_disk_open(&store, boot, &disk);
 	if (status != B_OK || !disk.can_write) {
@@ -667,6 +670,7 @@ pull(const char* path)
 	store.read = image_read;
 	store.write = image_write;
 	store.flush = image_flush;
+	store.drive_flush = NULL;
 	exfat_disk disk;
 	status_t status = exfat_disk_open(&store, boot, &disk);
 	if (status != B_OK) {
@@ -681,6 +685,8 @@ pull(const char* path)
 		result = fail("pull root", status);
 	if (result == 0)
 		result = expect_mark(&store, &disk, &root, "even.bin", 'a', 1500);
+	if (result == 0)
+		result = expect_mark(&store, &disk, &root, "sync.bin", 'T', 1000);
 	if (result == 0)
 		result = expect_mark(&store, &disk, &root, "pull.bin", 'P', 4196);
 	if (result == 0)

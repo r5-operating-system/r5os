@@ -489,6 +489,21 @@ exfat_store_flush(void* cookie, uint64 block, uint32 blocks)
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+static status_t
+exfat_store_drive_flush(void* cookie)
+{
+	Volume* volume = (Volume*)cookie;
+	int result = ioctl(volume->Device(), B_FLUSH_DRIVE_CACHE);
+	if (result == 0 || result == B_DEV_INVALID_IOCTL)
+		return B_OK;
+	return result;
+}
+// SPDX-SnippetEnd
+
+
 status_t
 Volume::FinishMount()
 {
@@ -496,6 +511,7 @@ Volume::FinishMount()
 	fStore.read = exfat_store_read;
 	fStore.write = exfat_store_write;
 	fStore.flush = exfat_store_flush;
+	fStore.drive_flush = exfat_store_drive_flush;
 
 	uint8* boot = (uint8*)malloc(BlockSize());
 	if (boot == NULL)

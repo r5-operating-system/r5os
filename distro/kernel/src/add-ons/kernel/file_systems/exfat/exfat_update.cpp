@@ -2475,6 +2475,8 @@ exfat_sync(exfat_store* store, exfat_disk* disk)
 	if (status != B_OK)
 		return status;
 	status = flush_blocks(&job, 0, 0);
+	if (status == B_OK && store->drive_flush != NULL)
+		status = store->drive_flush(store->cookie);
 	if (status != B_OK || !disk->dirty || !disk->can_write) {
 		work_close(&job);
 		return status;

@@ -586,11 +586,17 @@ exfat_rename_vnode(fs_volume* _volume, fs_vnode* _fromDir, const char* fromName,
 	}
 	Inode* replaced = NULL;
 	if (status == B_OK && replace) {
-		if (get_vnode(volume->FSVolume(), destID, (void**)&replaced) == B_OK)
-			replaced->SetDeleted();
+		if (get_vnode(volume->FSVolume(), destID, (void**)&replaced) != B_OK)
+			replaced = NULL;
 		status = exfat_deactivate(volume->Store(), volume->Disk(), dirTo,
 			dest.entry_index, (uint32)dest.secondary_count + 1);
 		note_disk(volume, status);
+		if (status == B_OK && replaced != NULL)
+			replaced->SetDeleted();
+		else if (replaced != NULL) {
+			put_vnode(volume->FSVolume(), destID);
+			replaced = NULL;
+		}
 	}
 	if (status == B_OK) {
 		adopt(fromDir, &fromNode, fromGrand.held ? fromGrand.inode
@@ -608,14 +614,10 @@ exfat_rename_vnode(fs_volume* _volume, fs_vnode* _fromDir, const char* fromName,
 			toDir->StreamFlags(), toDir->ID() == 1);
 		Inode* live = NULL;
 		if (get_vnode(volume->FSVolume(), sourceID, (void**)&live) == B_OK) {
-			uint64 keepValid = (uint64)live->ValidSize();
-			uint64 keepCommitted = live->CommittedValid();
 			live->AdoptStream(moved.first_cluster, moved.data_length,
 				moved.valid_length, moved.flags, moved.attributes,
 				moved.secondary_count, moved.entry_cluster,
-				moved.entry_index, moved.name_hash);
-			live->SetValidLength(keepValid);
-			live->SetCommittedValid(keepCommitted);
+				moved.entry_index, moved.name_hash, true);
 			live->SetParent(toDir->ID());
 		}
 		if (replace)
@@ -1108,6 +1110,16 @@ exfat_write_pages(fs_volume* _volume, fs_vnode* _node, void*,
 
 
 static status_t
+flush_drive(Volume* volume)
+{
+	int result = ioctl(volume->Device(), B_FLUSH_DRIVE_CACHE);
+	if (result == 0 || result == B_DEV_INVALID_IOCTL)
+		return B_OK;
+	return result;
+}
+
+
+static status_t
 commit_valid(Inode* inode)
 {
 	if (!inode->IsFile() || inode->IsDeleted())
@@ -1122,6 +1134,11 @@ commit_valid(Inode* inode)
 			inode->WriteUnlock();
 			return status;
 		}
+	}
+	status_t flushed = flush_drive(volume);
+	if (flushed != B_OK) {
+		inode->WriteUnlock();
+		return flushed;
 	}
 	held_parent parent;
 	held_parent grand;
@@ -1183,7 +1200,15 @@ exfat_fsync(fs_volume* _volume, fs_vnode* _node, bool /*dataOnly*/)
 {
 	Volume* volume = (Volume*)_volume->private_volume;
 	Inode* inode = (Inode*)_node->private_node;
-	status_t status = commit_valid(inode);
+	inode->WriteLock();
+	status_t status = B_OK;
+	if (inode->FileCache() != NULL)
+		status = file_cache_sync(inode->FileCache());
+	if (status == B_OK)
+		status = flush_drive(volume);
+	inode->WriteUnlock();
+	if (status == B_OK)
+		status = commit_valid(inode);
 	if (status == B_OK)
 		status = block_cache_sync(volume->BlockCache());
 	return status;

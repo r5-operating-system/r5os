@@ -101,7 +101,8 @@ public:
 			void		AdoptStream(uint32 first, uint64 dataLength,
 							uint64 validLength, uint8 flags, uint16 attributes,
 							uint8 chunks, cluster_t entryCluster,
-							uint32 entryOffset, uint16 nameHash);
+							uint32 entryOffset, uint16 nameHash,
+							bool keepValid = false);
 			// SPDX-SnippetEnd
 			uid_t		UserID() const { return 0;/*fNode.UserID();*/ }
 			gid_t		GroupID() const { return 0;/*fNode.GroupID();*/ }

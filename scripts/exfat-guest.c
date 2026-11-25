@@ -177,7 +177,7 @@ main(int argc, char** argv)
 			length = dirStat.st_size;
 		}
 	}
-	for (int extra = 0; ok && extra < fit; extra++) {
+	for (int extra = 0; ok && extra < fit - 1; extra++) {
 		char name[64];
 		snprintf(name, sizeof(name), "Packed/q%04d", extra);
 		fd = open(name, O_RDWR | O_CREAT | O_TRUNC, 0644);
@@ -189,13 +189,23 @@ main(int argc, char** argv)
 	}
 	struct stat packedBefore;
 	memset(&packedBefore, 0, sizeof(packedBefore));
+	char longName[64];
+	memset(longName, 'n', 48);
+	longName[48] = '\0';
+	memcpy(longName, "Packed/", 7);
 	ok = ok && growths >= 1 && stat("Packed", &packedBefore) == 0
-		&& rename("Packed/p0000", "Packed/moved000") == 0;
+		&& rename("Packed/p0000", longName) == 0;
 	struct stat packedAfter;
 	memset(&packedAfter, 0, sizeof(packedAfter));
-	fd = ok ? open("Packed/moved000", O_RDONLY) : -1;
-	step("full-dir", ok && fd >= 0 && stat("Packed", &packedAfter) == 0
-		&& packedAfter.st_size >= packedBefore.st_size);
+	fd = ok ? open(longName, O_RDONLY) : -1;
+	if (stat("Packed", &packedAfter) == 0) {
+		char line[96];
+		snprintf(line, sizeof(line), "exfat: full-dir size %lld %lld",
+			(long long)packedBefore.st_size, (long long)packedAfter.st_size);
+		say(line);
+	}
+	step("full-dir", ok && fd >= 0
+		&& packedAfter.st_size > packedBefore.st_size);
 	if (fd >= 0)
 		close(fd);
 	fd = ok ? open("Packed/p0001", O_RDONLY) : -1;
@@ -354,6 +364,19 @@ main(int argc, char** argv)
 	free(block);
 	free(back);
 	step("fragment", ok);
+
+	fd = open("sync.bin", O_RDWR | O_CREAT | O_TRUNC, 0644);
+	char oldByte[1000];
+	char newByte[1000];
+	memset(oldByte, 'S', sizeof(oldByte));
+	memset(newByte, 'T', sizeof(newByte));
+	ok = fd >= 0 && write_all(fd, oldByte, sizeof(oldByte)) == 0;
+	if (fd >= 0)
+		close(fd);
+	fd = ok ? open("sync.bin", O_RDWR) : -1;
+	ok = ok && fd >= 0 && write_all(fd, newByte, sizeof(newByte)) == 0
+		&& fsync(fd) == 0;
+	step("fsync", ok);
 
 	char pull[4196];
 	memset(pull, 'P', sizeof(pull));

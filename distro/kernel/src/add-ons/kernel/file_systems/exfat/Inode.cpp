@@ -441,16 +441,18 @@ Inode::_GetTimespec(uint16 date, uint16 time, struct timespec &timespec) const
 void
 Inode::AdoptStream(uint32 first, uint64 dataLength, uint64 validLength,
 	uint8 flags, uint16 attributes, uint8 chunks, cluster_t entryCluster,
-	uint32 entryOffset, uint16 nameHash)
+	uint32 entryOffset, uint16 nameHash, bool keepValid)
 {
 	fFileInfoEntry.file_info.SetStartCluster(first);
 	fFileInfoEntry.file_info.SetFlag(flags);
-	fFileInfoEntry.file_info.size1 = B_HOST_TO_LENDIAN_INT64(validLength);
 	fFileInfoEntry.file_info.size2 = B_HOST_TO_LENDIAN_INT64(dataLength);
 	fFileInfoEntry.file_info.name_hash = B_HOST_TO_LENDIAN_INT16(nameHash);
 	fFileEntry.file.SetAttribs(attributes);
 	fFileEntry.file.chunkCount = chunks;
-	fCommittedValid = validLength;
+	if (!keepValid) {
+		fFileInfoEntry.file_info.size1 = B_HOST_TO_LENDIAN_INT64(validLength);
+		fCommittedValid = validLength;
+	}
 	ClearChainHint();
 	if (ID() != 1) {
 		fCluster = entryCluster;

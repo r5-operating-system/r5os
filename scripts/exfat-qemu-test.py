@@ -215,7 +215,20 @@ def main():
     print(check.stdout)
     print(check.stderr)
     if check.returncode != 0:
-        print("fsck exit", check.returncode)
+        blob = check.stdout + "\n" + check.stderr
+        lines = [line.strip() for line in blob.splitlines() if line.strip()]
+        dirty = True
+        for line in lines:
+            lower = line.lower()
+            if ("dirty" in lower or "not unmounted" in lower
+                    or lower.startswith("exfatprogs")):
+                continue
+            dirty = False
+            break
+        if not lines or not dirty:
+            print("FAIL fsck", check.returncode)
+            return 1
+        print("fsck dirty only", check.returncode)
     print("exfat-qemu-test: clean")
     return 0
 

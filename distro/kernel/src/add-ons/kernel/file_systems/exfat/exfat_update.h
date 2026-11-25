@@ -45,6 +45,7 @@ struct exfat_store {
 	status_t	(*write)(void* cookie, uint64 block, const void* buffer,
 					uint32 blocks);
 	status_t	(*flush)(void* cookie, uint64 block, uint32 blocks);
+	status_t	(*drive_flush)(void* cookie);
 };
 
 struct exfat_disk {
