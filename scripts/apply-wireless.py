@@ -21,7 +21,7 @@ import sys
 HAIKU = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else "/home/nickr/r5os/haiku")
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
-LIB_SOURCES = ("Jamfile", "WiFiController.cpp", "NetworkListView.cpp",
+LIB_SOURCES = ("Jamfile", "libr5wifi.rdef", "WiFiController.cpp", "NetworkListView.cpp",
     "JoinOtherWindow.cpp", "WiFiView.cpp", "WiFiConnectWindow.cpp")
 LIB_HEADERS = ("R5WiFi.h", "R5WiFiNetworkList.h", "R5WiFiGlyphs.h",
     "R5WiFiIconPaths.h", "R5WiFiListView.h", "R5WiFiJoinOther.h",

@@ -32,6 +32,8 @@ from __future__ import annotations
 
 import getpass
 import json
+import os
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -61,7 +63,8 @@ def request(method: str, path: str, token: str, body: dict | None = None):
     req = urllib.request.Request(f"{API}{path}", data=data, method=method,
         headers={"Authorization": f"Token {token}",
             "Content-Type": "application/json",
-            "Accept": "application/json"})
+            "Accept": "application/json",
+            "User-Agent": "r5-weblate-setup/1.0"})
     try:
         with urllib.request.urlopen(req, timeout=60) as response:
             return json.loads(response.read() or b"null")
@@ -81,9 +84,17 @@ def main(argv: list[str]) -> int:
         print("\nNothing sent. Run again with --apply to do it.")
         return 0
 
-    token = getpass.getpass("Weblate API key (not shown, not stored): ").strip()
+    token = os.environ.get("WEBLATE_KEY", "").strip()
+    if not token:
+        token = getpass.getpass("Weblate API key (not shown, not stored; paste "
+            "with a right click): ").strip()
     if not token:
         raise SystemExit("no key given")
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", token):
+        raise SystemExit(f"The key has {len(token)} characters, some of them "
+            "not letters, digits, _ or -. Ctrl+V can type an invisible "
+            "character in this prompt. Paste with a right click instead, or "
+            "set $env:WEBLATE_KEY in your terminal first. Nothing changed.")
 
     components = request("GET", f"/projects/{PROJECT}/components/", token)
     slugs = {item["slug"] for item in (components or {}).get("results", [])}
@@ -111,13 +122,16 @@ def main(argv: list[str]) -> int:
     else:
         print("3. nothing to delete")
 
-    path = f"/components/{PROJECT}/{MAIN}/addons/"
-    present = request("GET", path, token)
-    if any(addon.get("name") == ADDON
-            for addon in (present or {}).get("results", [])):
+    # The add-on list of a component is not readable with GET; the
+    # component lists its add-ons as links instead.
+    main = request("GET", f"/components/{PROJECT}/{MAIN}/", token)
+    names = [request("GET", link.replace(API, ""), token).get("name")
+        for link in (main or {}).get("addons", [])]
+    if ADDON in names:
         print("4. Component discovery was already on")
     else:
-        result = request("POST", path, token, body)
+        result = request("POST", f"/components/{PROJECT}/{MAIN}/addons/",
+            token, body)
         print(f"4. Component discovery is on (add-on {result.get('id')})")
     print("Weblate now creates a component for each catalog folder on main.")
     return 0

@@ -1,0 +1,32 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-libr5game\nLanguage: fr\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#, fuzzy
+msgctxt "libr5game: BGameControllerMotionView"
+msgid "Pitch"
+msgstr "Tangage"
+
+#, fuzzy
+msgctxt "libr5game: BGameControllerMotionView"
+msgid "Yaw"
+msgstr "Lacet"
+
+#, fuzzy
+msgctxt "libr5game: BGameControllerMotionView"
+msgid "Tilt"
+msgstr "Inclinaison"
+
+#, fuzzy
+msgctxt "libr5game: BGameController"
+msgid "Game controller"
+msgstr "Manette de jeu"
+
+#, fuzzy
+msgctxt "libr5game: BGameControllerMotionView"
+msgid "Roll"
+msgstr "Roulis"
+
+#, fuzzy
+msgctxt "libr5game: BGameControllerMotionView"
+msgid "Turn"
+msgstr "Rotation"

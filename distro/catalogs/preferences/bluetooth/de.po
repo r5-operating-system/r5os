@@ -1,0 +1,6 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.Haiku-BluetoothPrefs\nLanguage: de\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+msgctxt "System name"
+msgid "Bluetooth"
+msgstr "Bluetooth"

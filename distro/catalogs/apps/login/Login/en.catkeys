@@ -1,0 +1,133 @@
+1	english	x-vnd.Haiku-Login	352852017
+There must be at least one administrator.	Users: Account admin		There must be at least one administrator.
+An account named \"guest\" already exists. Rename it first.	Users: Account admin		An account named \"guest\" already exists. Rename it first.
+Only system drivers can be turned off here.	Login: Driver admin		Only system drivers can be turned off here.
+Unknown request.	Login: Application		Unknown request.
+%program% failed	Users: Account admin		%program% failed
+The original administrator account cannot be disabled.	Users: Account admin		The original administrator account cannot be disabled.
+Could not start the desktop.	Login: Application		Could not start the desktop.
+Password	Login: Lock window		Password
+That picture is too large.	Users: Account admin		That picture is too large.
+That password is not right.	Login: Sign in view		That password is not right.
+The name could not be saved.	Users: Account admin		The name could not be saved.
+Checking…	Login: Sign in view		Checking…
+That username already exists.	Users: Account admin		That username already exists.
+Please enter a password.	Users: Account admin		Please enter a password.
+The first administrator stays an administrator.	Users: Account admin		The first administrator stays an administrator.
+This driver is not part of a package.	Login: Driver admin		This driver is not part of a package.
+Log out Guest first.	Users: Account admin		Log out Guest first.
+Info	Login: Application		Info
+The request names no setting.	Login: Driver settings admin		The request names no setting.
+A line has no end.	Login: Driver settings admin		A line has no end.
+Ready to sign in as Guest	Login: Sign in view		Ready to sign in as Guest
+Your name	Login: Sign in view		Your name
+Could not encrypt the password.	Users: Account admin		Could not encrypt the password.
+The password could not be saved.	Users: Account admin		The password could not be saved.
+Log out	Login: Lock window		Log out
+Ready to sign in as %name%	Login: Sign in view		Ready to sign in as %name%
+Sign in as Guest	Login: Sign in view		Sign in as Guest
+Guest setting requires the sign-in helper.	Users: Account admin		Guest setting requires the sign-in helper.
+Guest sessions cannot be locked.	Login: Application		Guest sessions cannot be locked.
+The account exists, but the password was not set.	Users: Account admin		The account exists, but the password was not set.
+The guest's old files could not be removed.	Users: Account admin		The guest's old files could not be removed.
+Sign-ins are forgotten when you shut down.	Login: Sign in view		Sign-ins are forgotten when you shut down.
+SELECT ACCOUNT	Login: Sign in view		SELECT ACCOUNT
+This driver is needed to start the system and cannot be turned off.	Login: Driver admin		This driver is needed to start the system and cannot be turned off.
+The account type could not be changed.	Users: Account admin		The account type could not be changed.
+Standard	Login: Lock window		Standard
+Unknown account request.	Users: Account admin		Unknown account request.
+That email address cannot be saved.	Users: Account admin		That email address cannot be saved.
+error %s\n	Desktop Window	A return message from fDesktopShelf->Save(). It can be \"B_OK\"	error %s\n
+The original administrator account cannot be deleted.	Users: Account admin		The original administrator account cannot be deleted.
+Enter password	Login: Lock window		Enter password
+Repeat password	Login: Sign in view		Repeat password
+That name is too long.	Users: Account admin		That name is too long.
+New password	Login: Sign in view		New password
+The last administrator cannot become a standard account.	Users: Account admin		The last administrator cannot become a standard account.
+Could not enable the account.	Users: Account admin		Could not enable the account.
+This value is not allowed.	Login: Driver settings admin		This value is not allowed.
+That account cannot unlock settings.	Users: Account admin		That account cannot unlock settings.
+Password	Login: Sign in view		Password
+Your password was not changed because the key store could not be updated.	Users: Account admin		Your password was not changed because the key store could not be updated.
+That password is not right.	Login: Application		That password is not right.
+Use a lowercase username of letters, digits, underscore or hyphen.	Users: Account admin		Use a lowercase username of letters, digits, underscore or hyphen.
+That account does not exist.	Users: Account admin		That account does not exist.
+Standard	Login: Sign in view		Standard
+Checking…	Login: Lock window		Checking…
+Signing in as:	Login: Sign in view		Signing in as:
+The clock could not be changed.	Users: Account admin		The clock could not be changed.
+You cannot delete the account that is signed in.	Users: Account admin		You cannot delete the account that is signed in.
+The account was not created.	Users: Account admin		The account was not created.
+Enter password	Login: Sign in view		Enter password
+The password could not be saved. If you are later asked for your old password for saved passwords, enter the new password you just typed.	Users: Account admin		The password could not be saved. If you are later asked for your old password for saved passwords, enter the new password you just typed.
+That account was not found.	Users: Account admin		That account was not found.
+Restart	Login: Sign in view		Restart
+Error	Login: Application		Error
+Unlock this with an administrator password.	Login: Driver settings admin		Unlock this with an administrator password.
+The driver file was not found.	Login: Driver admin		The driver file was not found.
+No driver was given.	Login: Driver admin		No driver was given.
+Could not disable the account.	Users: Account admin		Could not disable the account.
+Sign in	Login: Sign in view		Sign in
+Enter your password to unlock	Login: Lock window		Enter your password to unlock
+The settings file could not be written.	Login: Driver admin		The settings file could not be written.
+Choose a password first.	Login: Sign in view		Choose a password first.
+This account has no password yet.	Login: Sign in view		This account has no password yet.
+Driver settings require the sign-in helper.	Login: Driver settings admin		Driver settings require the sign-in helper.
+The picture could not be saved.	Users: Account admin		The picture could not be saved.
+Unlock this with an administrator password.	Users: Account admin		Unlock this with an administrator password.
+The settings file could not be read.	Login: Driver admin		The settings file could not be read.
+The account was removed, but its files could not be deleted.	Users: Account admin		The account was removed, but its files could not be deleted.
+Welcome to R5	Login: Sign in view		Welcome to R5
+The request is empty.	Login: Driver settings admin		The request is empty.
+Choose a password first.	Login: Application		Choose a password first.
+This account already has a password.	Users: Account admin		This account already has a password.
+Drop replicants on this desktop to customize the login background. Quit with Cmd-Q when you are finished.	Login: Application		Drop replicants on this desktop to customize the login background. Quit with Cmd-Q when you are finished.
+A line is not a setting.	Login: Driver settings admin		A line is not a setting.
+Choose a password for this account.	Login: Sign in view		Choose a password for this account.
+Sign in	Login: Sign in window		Sign in
+Too many settings.	Login: Driver settings admin		Too many settings.
+Could not start the session: %error%	Login: Application		Could not start the session: %error%
+Driver changes require the sign-in helper.	Login: Driver admin		Driver changes require the sign-in helper.
+Sleep is not available yet.	Login: Application		Sleep is not available yet.
+Shut down	Login: Lock window		Shut down
+Sign in to start your session	Login: Sign in view		Sign in to start your session
+Account changes require the sign-in helper.	Users: Account admin		Account changes require the sign-in helper.
+No password	Login: Sign in view		No password
+Type a password.	Users: Account admin		Type a password.
+Please enter your password.	Login: Application		Please enter your password.
+The request is incomplete.	Login: Driver settings admin		The request is incomplete.
+Shut down	Login: Sign in view		Shut down
+Could not save the guest setting.	Users: Account admin		Could not save the guest setting.
+Only the signed-in session may lock or log out.	Login: Application		Only the signed-in session may lock or log out.
+Could not create the guest account.	Users: Account admin		Could not create the guest account.
+That password is not right.	Users: Account admin		That password is not right.
+The account folder could not be updated.	Users: Account admin		The account folder could not be updated.
+Desktop	Desktop Window		Desktop
+Administrator	Login: Sign in view		Administrator
+Unlock	Login: Lock window		Unlock
+Signing in as Guest…	Login: Sign in view		Signing in as Guest…
+The two passwords are not the same.	Login: Sign in view		The two passwords are not the same.
+The name cannot contain a colon or a new line.	Users: Account admin		The name cannot contain a colon or a new line.
+Unlock this with an administrator password.	Login: Driver admin		Unlock this with an administrator password.
+OK	Login: Application		OK
+Everything you make as Guest is deleted when you log out. Save what you want to keep on a USB stick or in the Shared folder.	Login: Sign in view		Everything you make as Guest is deleted when you log out. Save what you want to keep on a USB stick or in the Shared folder.
+Guest account setup requires the sign-in helper.	Users: Account admin		Guest account setup requires the sign-in helper.
+Restart	Login: Lock window		Restart
+Could not shut down: %error%	Login: Application		Could not shut down: %error%
+The email address could not be saved.	Users: Account admin		The email address could not be saved.
+Could not save the guest account.	Users: Account admin		Could not save the guest account.
+Save and sign in	Login: Sign in view		Save and sign in
+Guest	Login: Sign in view		Guest
+{0, plural, one{# account available} other{# accounts available}}	Login: Sign in view		{0, plural, one{# account available} other{# accounts available}}
+The request is empty.	Login: Driver admin		The request is empty.
+Only the sign-in helper can set this password.	Users: Account admin		Only the sign-in helper can set this password.
+Administrator	Login: Lock window		Administrator
+The account exists, but it is not an administrator: %error%	Users: Account admin		The account exists, but it is not an administrator: %error%
+The new account did not get a user id of 1000 or higher.	Users: Account admin		The new account did not get a user id of 1000 or higher.
+The existing guest account has an unexpected setup.	Users: Account admin		The existing guest account has an unexpected setup.
+This setting is not allowed.	Login: Driver settings admin		This setting is not allowed.
+Choose an account first.	Login: Sign in view		Choose an account first.
+The account could not become an administrator.	Users: Account admin		The account could not become an administrator.
+That password is not right.	Login: Lock window		That password is not right.
+Locked	Login: Lock window		Locked
+This account is an administrator through its system group.	Users: Account admin		This account is an administrator through its system group.

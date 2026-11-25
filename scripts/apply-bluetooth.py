@@ -221,6 +221,7 @@ def main() -> int:
     # public header next to R5Icons.h and Card.h. It needs libbluetooth,
     # so it is in the regular image only, like the rest of Bluetooth.
     copy_files(SRC / "lib", ("BluetoothController.cpp", "BluetoothView.cpp",
+        "libr5bt.rdef",
         "Jamfile"), HAIKU / "src" / "preferences" / "r5bt", "libr5bt")
     copy_files(SRC / "lib", ("R5Bluetooth.h",),
         HAIKU / "headers" / "os" / "interface", "libr5bt header")

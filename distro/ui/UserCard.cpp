@@ -25,6 +25,7 @@
 #include "UserCard.h"
 
 #include <Bitmap.h>
+#include <Catalog.h>
 #include <Font.h>
 #include <InterfaceDefs.h>
 #include <Message.h>
@@ -34,6 +35,26 @@
 #include <new>
 
 #include "R5UI.h"
+
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "libr5ui: User card"
+
+
+// The caller passes the role in English ("Administrator", "Standard",
+// "No password"), so it
+// can be compared; it is translated only where it is drawn.
+static const char*
+shown_role(const BString& role)
+{
+	if (role.ICompare("Administrator") == 0)
+		return B_TRANSLATE("Administrator");
+	if (role.ICompare("Standard") == 0)
+		return B_TRANSLATE("Standard");
+	if (role.ICompare("No password") == 0)
+		return B_TRANSLATE("No password");
+	return role.String();
+}
 
 
 namespace BAppearanceKit {
@@ -336,7 +357,7 @@ BUserCard::Draw(BRect updateRect)
 				document, 140));
 		}
 
-		BString role(fData->role);
+		BString role(shown_role(fData->role));
 		plainFont.TruncateString(&role, B_TRUNCATE_END, maxWidth);
 		float roleY = nameY + nameHeight.descent + gap + roleHeight.ascent;
 		DrawString(role.String(), BPoint(textLeft, roleY));

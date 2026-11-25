@@ -25,6 +25,11 @@
 // SPDX-SnippetEnd
 
 #include <Alert.h>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <Catalog.h>
+// SPDX-SnippetEnd
 #include <FindDirectory.h>
 #include <LaunchRoster.h>
 #include <List.h>
@@ -48,6 +53,14 @@
 #include <string.h>
 #include <syslog.h>
 #include <unistd.h>
+
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "Login: Application"
+// SPDX-SnippetEnd
 
 extern char** environ;
 
@@ -234,14 +247,16 @@ LoginApp::_AdminRequest(BMessage* request, const r5_admin_sender& sender,
 					allowed = true;
 			}
 			if (!allowed) {
-				reply->AddString("text", "Only the signed-in session may "
-					"lock or log out.");
+				reply->AddString("text", B_TRANSLATE("Only the signed-in "
+					"session may lock or log out."));
 				reply->AddInt32("error", B_PERMISSION_DENIED);
 				break;
 			}
 			if (request->what == kLockAction && hasSession
 				&& is_guest_account(sessionUser.String())) {
-				reply->AddString("text", "Guest sessions cannot be locked.");
+				reply->AddString("text",
+					B_TRANSLATE("Guest sessions cannot be locked."));
+
 				reply->AddInt32("error", B_NOT_ALLOWED);
 				break;
 			}
@@ -255,7 +270,7 @@ LoginApp::_AdminRequest(BMessage* request, const r5_admin_sender& sender,
 			break;
 		}
 		default:
-			reply->AddString("text", "Unknown request.");
+			reply->AddString("text", B_TRANSLATE("Unknown request."));
 			reply->AddInt32("error", B_BAD_VALUE);
 			break;
 	}
@@ -272,10 +287,14 @@ LoginApp::ReadyToRun()
 	BScreen screen;
 
 	if (fEditShelfMode) {
-		BAlert* alert = new BAlert("Info",
-			"Drop replicants on this desktop to customize the login "
-			"background. Quit with Cmd-Q when you are finished.",
-			"OK");
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		BAlert* alert = new BAlert(B_TRANSLATE("Info"),
+			B_TRANSLATE("Drop replicants on this desktop to customize the "
+				"login background. Quit with Cmd-Q when you are finished."),
+			B_TRANSLATE("OK"));
+// SPDX-SnippetEnd
 		alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
 		alert->Go(NULL);
 		fDesktopWindow = new DesktopWindow(screen.Frame(), true);
@@ -356,8 +375,13 @@ LoginApp::MessageReceived(BMessage* message)
 				break;
 			}
 			if (message->what == kSuspendAction) {
-				BAlert* alert = new BAlert("Error",
-					"Sleep is not available yet.", "OK");
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+				BAlert* alert = new BAlert(B_TRANSLATE("Error"),
+					B_TRANSLATE("Sleep is not available yet."),
+					B_TRANSLATE("OK"));
+// SPDX-SnippetEnd
 				alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
 				alert->Go();
 				break;
@@ -368,9 +392,14 @@ LoginApp::MessageReceived(BMessage* message)
 				BRoster::Private rosterPrivate(roster);
 				status_t error = rosterPrivate.ShutDown(reboot, false, false);
 				if (error < B_OK) {
-					BString msg("Could not shut down: ");
-					msg << strerror(error);
-					BAlert* alert = new BAlert("Error", msg.String(), "OK");
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+					BString msg(B_TRANSLATE("Could not shut down: %error%"));
+					msg.ReplaceFirst("%error%", strerror(error));
+					BAlert* alert = new BAlert(B_TRANSLATE("Error"),
+						msg.String(), B_TRANSLATE("OK"));
+// SPDX-SnippetEnd
 					alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
 					alert->Go();
 				}
@@ -512,7 +541,8 @@ LoginApp::TryLogin(BMessage* message)
 // SPDX-License-Identifier: MIT
 	if (fHomeWalkThread >= 0 && message != fPendingLogin) {
 		reply.AddInt32("error", B_BUSY);
-		reply.AddString("text", "Your files are still being prepared.");
+		reply.AddString("text",
+			B_TRANSLATE("Your files are still being prepared."));
 		message->SendReply(&reply);
 		return;
 	}
@@ -543,7 +573,7 @@ LoginApp::TryLogin(BMessage* message)
 			if (newPassword == NULL || newPassword[0] == '\0') {
 				reply.AddInt32("error", B_NOT_ALLOWED);
 				reply.AddBool("needs password", true);
-				reply.AddString("text", "Choose a password first.");
+				reply.AddString("text", B_TRANSLATE("Choose a password first."));
 				message->SendReply(&reply);
 				return;
 			}
@@ -649,20 +679,21 @@ LoginApp::TryLogin(BMessage* message)
 		if (status == B_PERMISSION_DENIED) {
 			const char* entered = message->GetString("password");
 			if (entered == NULL || entered[0] == '\0') {
-				reply.AddString("text", "Please enter your password.");
+				reply.AddString("text", B_TRANSLATE("Please enter your password."));
 			} else
-				reply.AddString("text", "That password is not right.");
+				reply.AddString("text", B_TRANSLATE("That password is not right."));
 		} else
-// SPDX-SnippetEnd
 		if (status == ENOENT)
-			reply.AddString("text", "That password is not right.");
+			reply.AddString("text", B_TRANSLATE("That password is not right."));
 		else if (status == B_NAME_NOT_FOUND || status == B_TIMED_OUT)
-			reply.AddString("text", "Could not start the desktop.");
+			reply.AddString("text", B_TRANSLATE("Could not start the desktop."));
 		else {
-			BString text("Could not start the session: ");
-			text << strerror(status);
+			BString text(B_TRANSLATE("Could not start the session: %error%"));
+			text.ReplaceFirst("%error%", strerror(status));
 			reply.AddString("text", text.String());
 		}
+// SPDX-SnippetEnd
+
 		message->SendReply(&reply);
 	}
 }
@@ -722,10 +753,10 @@ LoginApp::Unlock(BMessage* message)
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 		if (password == NULL || password[0] == '\0')
-			reply.AddString("text", "Please enter your password.");
+			reply.AddString("text", B_TRANSLATE("Please enter your password."));
 		else
 // SPDX-SnippetEnd
-			reply.AddString("text", "That password is not right.");
+			reply.AddString("text", B_TRANSLATE("That password is not right."));
 	}
 	message->SendReply(&reply);
 	if (status != B_OK)
@@ -1612,7 +1643,10 @@ home_walk_progress_report(int64 count, void* cookie)
 {
 	HomeWalkJob* job = (HomeWalkJob*)cookie;
 	BString text;
-	text.SetToFormat("Preparing your files\xe2\x80\xa6 %" B_PRId64, count);
+	text = B_TRANSLATE("Preparing your files\xe2\x80\xa6 %count%");
+	BString number;
+	number << count;
+	text.ReplaceFirst("%count%", number);
 	BMessage* progress = login_local_message(kLoginProgress);
 	progress->AddString("text", text.String());
 	job->view.SendMessage(progress);
@@ -1687,8 +1721,8 @@ LoginApp::_HomeWalkDone(BMessage* message)
 		SignInMessageWiper wiper(pending);
 		BMessage reply(kLoginBad);
 		reply.AddInt32("error", status);
-		BString text("Could not prepare your files: ");
-		text << strerror(status);
+		BString text(B_TRANSLATE("Could not prepare your files: %error%"));
+		text.ReplaceFirst("%error%", strerror(status));
 		reply.AddString("text", text.String());
 		pending->SendReply(&reply);
 	}

@@ -1,0 +1,406 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-Users\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+msgctxt "Users: Account admin"
+msgid "There must be at least one administrator."
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "An account named \"guest\" already exists. Rename it first."
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "%program% failed"
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "Enable account"
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "The original administrator account cannot be disabled."
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "That picture is too large."
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "The name could not be saved."
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "That username already exists."
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "Delete account…"
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "Please enter a password."
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "The first administrator stays an administrator."
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "Log out Guest first."
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "You cannot delete the account that is signed in."
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "Remove picture"
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "standard"
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "Users"
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "That picture could not be used."
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "Could not encrypt the password."
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "Keep files"
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "The password could not be saved."
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "Current"
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "Users & Accounts"
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "The original administrator account cannot be disabled."
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "Add account"
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "Guest setting requires the sign-in helper."
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "The account exists, but the password was not set."
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "The guest's old files could not be removed."
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "Delete %name%?"
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "The account type could not be changed."
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "Unknown account request."
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "That email address cannot be saved."
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "The original administrator account cannot be deleted."
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "That name is too long."
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "OK"
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "The last administrator cannot become a standard account."
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "Change"
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "Could not enable the account."
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "That account cannot unlock settings."
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "Could not save this account."
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "Your password was not changed because the key store could not be updated."
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "Type a password."
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "Username"
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "Use a lowercase username of letters, digits, underscore or hyphen."
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "administrator"
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "Disable account"
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "That account does not exist."
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "Standard account"
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "Delete"
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "The clock could not be changed."
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "You cannot delete the account that is signed in."
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "Cancel"
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "Change password"
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "That file is not a picture this computer can open."
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "Unlock this with an administrator password."
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "The account was not created."
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "Repeat"
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "The password could not be saved. If you are later asked for your old password for saved passwords, enter the new password you just typed."
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "That account was not found."
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "The passwords do not match."
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "Could not disable the account."
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "Name"
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "The picture could not be saved."
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "Unlock this with an administrator password."
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "Email"
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "The account was removed, but its files could not be deleted."
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "This account already has a password."
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "Accounts"
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "The original administrator account cannot be deleted."
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "The password could not be changed."
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "Account"
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "Administrator"
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "Account changes require the sign-in helper."
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "Type a password."
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "Your account"
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "Could not save the guest setting."
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "Save"
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "Could not create the guest account."
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "That password is not right."
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "The account folder could not be updated."
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "Sign in must be running to change accounts."
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "Repeat password"
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "New password"
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "Password"
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "Delete files"
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "Type a new password."
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "Add account…"
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "Choose picture..."
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "The name cannot contain a colon or a new line."
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "sign-in off"
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "Guest account setup requires the sign-in helper."
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "Change password..."
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "The email address could not be saved."
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "Could not save the guest account."
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "Only the sign-in helper can set this password."
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "Sign in did not answer."
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "The account exists, but it is not an administrator: %error%"
+msgstr ""
+
+msgctxt "Users: Main window"
+msgid "off"
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "The new account did not get a user id of 1000 or higher."
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "The existing guest account has an unexpected setup."
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "The account could not become an administrator."
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "This account is an administrator through its system group."
+msgstr ""

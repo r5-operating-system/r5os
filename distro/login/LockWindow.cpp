@@ -15,6 +15,7 @@
 
 #include <AccentButton.h>
 #include <Button.h>
+#include <Catalog.h>
 #include <Card.h>
 #include <GroupView.h>
 #include <LayoutBuilder.h>
@@ -27,6 +28,10 @@
 #include <pwd.h>
 #include <string.h>
 #include <time.h>
+
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "Login: Lock window"
 
 
 using BAppearanceKit::BAccentButton;
@@ -120,8 +125,9 @@ LockView::LockView(const char* name)
 	BIconView* logo = new BIconView("logo", pebble);
 	delete pebble;
 
-	fTitleView = make_label("title", "Locked", font_px(be_bold_font, 18),
-		document);
+	fTitleView = make_label("title", B_TRANSLATE("Locked"),
+		font_px(be_bold_font, 18), document);
+
 	fTitleView->SetExplicitAlignment(
 		BAlignment(B_ALIGN_LEFT, B_ALIGN_VERTICAL_CENTER));
 
@@ -144,7 +150,7 @@ LockView::LockView(const char* name)
 		font_px(be_bold_font, 15), document);
 	BString role;
 	role.SetToFormat("@%s \xc2\xb7 %s", login,
-		fAdmin ? kRoleAdministrator : kRoleStandard);
+		fAdmin ? B_TRANSLATE("Administrator") : B_TRANSLATE("Standard"));
 	fRoleView = make_label("role", role.String(),
 		font_px(fAdmin ? be_bold_font : be_plain_font, 11.5f), document);
 
@@ -159,13 +165,13 @@ LockView::LockView(const char* name)
 		.End()
 		.AddGlue();
 
-	fPasswordLabel = make_label("pwLabel", "Password",
+	fPasswordLabel = make_label("pwLabel", B_TRANSLATE("Password"),
 		font_px(be_bold_font, 12), document);
 	fPasswordControl = new BPasswordControl("password", "", "",
 		login_local_message(kUnlockAction));
-	fPasswordControl->SetPlaceholder("Enter password");
+	fPasswordControl->SetPlaceholder(B_TRANSLATE("Enter password"));
 
-	fUnlockButton = new BAccentButton("unlock", "Unlock",
+	fUnlockButton = new BAccentButton("unlock", B_TRANSLATE("Unlock"),
 		login_local_message(kUnlockAction));
 	fUnlockButton->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
 
@@ -197,11 +203,11 @@ LockView::LockView(const char* name)
 
 	BFont buttonFont = font_px(be_bold_font, 12.5f);
 	BSize buttonHeight(B_SIZE_UNSET, px_side(32) - 1);
-	fLogoutButton = new BButton("logout", "Log out",
+	fLogoutButton = new BButton("logout", B_TRANSLATE("Log out"),
 		login_local_message(kLogoutAction));
-	fRebootButton = new BButton("reboot", "Restart",
+	fRebootButton = new BButton("reboot", B_TRANSLATE("Restart"),
 		login_local_message(kRebootAction));
-	fHaltButton = new BButton("halt", "Shut down",
+	fHaltButton = new BButton("halt", B_TRANSLATE("Shut down"),
 		login_local_message(kHaltAction));
 	BButton* buttons[] = { fLogoutButton, fRebootButton, fHaltButton };
 	for (BButton* button : buttons) {
@@ -245,7 +251,7 @@ LockView::AttachedToWindow()
 	fHaltButton->SetTarget(be_app_messenger);
 	Window()->SetDefaultButton(fUnlockButton);
 	_ApplyGlyphs();
-	_SetFeedback("Enter your password to unlock", false);
+	_SetFeedback(B_TRANSLATE("Enter your password to unlock"), false);
 	Pulse();
 }
 
@@ -270,7 +276,7 @@ LockView::MessageReceived(BMessage* message)
 		{
 			const char* text = NULL;
 			if (message->FindString("text", &text) != B_OK || text == NULL)
-				text = "That password is not right.";
+				text = B_TRANSLATE("That password is not right.");
 			fPasswordControl->SetText("");
 			_SetFeedback(text, true);
 			_EnablePassword(true);
@@ -312,7 +318,7 @@ LockView::_Submit()
 	message->AddString("password", fPasswordControl->Text());
 	fPasswordControl->SetText("");
 	_EnablePassword(false);
-	_SetFeedback("Checking\xe2\x80\xa6", false);
+	_SetFeedback(B_TRANSLATE("Checking\xe2\x80\xa6"), false);
 	be_app->PostMessage(message, NULL, this);
 }
 
@@ -415,7 +421,7 @@ LockCover::ScreenChanged(BRect frame, color_space mode)
 
 LockWindow::LockWindow(const char* name)
 	:
-	BWindow(BRect(0, 0, 360, 240), "Locked", B_TITLED_WINDOW_LOOK,
+	BWindow(BRect(0, 0, 360, 240), B_TRANSLATE("Locked"), B_TITLED_WINDOW_LOOK,
 		B_MODAL_ALL_WINDOW_FEEL,
 		B_NOT_CLOSABLE | B_NOT_ZOOMABLE | B_NOT_MINIMIZABLE
 			| B_NOT_RESIZABLE | B_AUTO_UPDATE_SIZE_LIMITS

@@ -15,11 +15,16 @@
 #include "AccountAdmin.h"
 
 #include <AdminLock.h>
+#include <Catalog.h>
 #include <String.h>
 
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "Login: Driver settings admin"
 
 
 enum value_kind {
@@ -104,14 +109,14 @@ handle_driver_settings_admin_message(BMessage* request, BMessage& reply)
 {
 	reply.MakeEmpty();
 	if (request == NULL)
-		return fail(reply, B_BAD_VALUE, "The request is empty.");
+		return fail(reply, B_BAD_VALUE, B_TRANSLATE("The request is empty."));
 	if (geteuid() != 0) {
 		return fail(reply, B_PERMISSION_DENIED,
-			"Driver settings require the sign-in helper.");
+			B_TRANSLATE("Driver settings require the sign-in helper."));
 	}
 	if (!admin_sender_may_change(request)) {
 		return fail(reply, B_PERMISSION_DENIED,
-			"Unlock this with an administrator password.");
+			B_TRANSLATE("Unlock this with an administrator password."));
 	}
 
 	const char* file = NULL;
@@ -120,20 +125,20 @@ handle_driver_settings_admin_message(BMessage* request, BMessage& reply)
 	if (request->FindString("file", &file) != B_OK
 		|| request->FindString("lines", &lines) != B_OK
 		|| request->FindBool("replace", &replaceFile) != B_OK)
-		return fail(reply, B_BAD_VALUE, "The request is incomplete.");
+		return fail(reply, B_BAD_VALUE, B_TRANSLATE("The request is incomplete."));
 
 	const char* keys[kMaxKeys];
 	int32 keyCount = 0;
 	const char* key = NULL;
 	while (request->FindString("key", keyCount, &key) == B_OK) {
 		if (keyCount >= kMaxKeys)
-			return fail(reply, B_BAD_VALUE, "Too many settings.");
+			return fail(reply, B_BAD_VALUE, B_TRANSLATE("Too many settings."));
 		if (find_allowed(file, key) == NULL)
-			return fail(reply, B_NOT_ALLOWED, "This setting is not allowed.");
+			return fail(reply, B_NOT_ALLOWED, B_TRANSLATE("This setting is not allowed."));
 		keys[keyCount++] = key;
 	}
 	if (keyCount == 0)
-		return fail(reply, B_BAD_VALUE, "The request names no setting.");
+		return fail(reply, B_BAD_VALUE, B_TRANSLATE("The request names no setting."));
 
 	// Every line is "key value" for one of the keys of this request.
 	BString text(lines);
@@ -141,12 +146,12 @@ handle_driver_settings_admin_message(BMessage* request, BMessage& reply)
 	while (start < text.Length()) {
 		int32 end = text.FindFirst('\n', start);
 		if (end < 0)
-			return fail(reply, B_BAD_VALUE, "A line has no end.");
+			return fail(reply, B_BAD_VALUE, B_TRANSLATE("A line has no end."));
 		BString line;
 		text.CopyInto(line, start, end - start);
 		int32 space = line.FindFirst(' ');
 		if (space <= 0)
-			return fail(reply, B_BAD_VALUE, "A line is not a setting.");
+			return fail(reply, B_BAD_VALUE, B_TRANSLATE("A line is not a setting."));
 		BString lineKey;
 		BString value;
 		line.CopyInto(lineKey, 0, space);
@@ -160,7 +165,7 @@ handle_driver_settings_admin_message(BMessage* request, BMessage& reply)
 			}
 		}
 		if (allowed == NULL || !valid_value(allowed->kind, value))
-			return fail(reply, B_NOT_ALLOWED, "This value is not allowed.");
+			return fail(reply, B_NOT_ALLOWED, B_TRANSLATE("This value is not allowed."));
 		start = end + 1;
 	}
 

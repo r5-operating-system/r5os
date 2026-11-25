@@ -9,6 +9,7 @@
 #include <Bitmap.h>
 #include <Button.h>
 #include <Card.h>
+#include <Catalog.h>
 #include <Clipboard.h>
 #include <ControlLook.h>
 #include <Font.h>
@@ -24,6 +25,10 @@
 #include <WindowEffects.h>
 
 #include <string.h>
+
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "CPU Info: Window"
 
 
 static const uint32 kMsgCopyReport = 'cpcp';
@@ -238,7 +243,7 @@ add_row(BGridLayout* grid, int32 row, const char* label, const char* value,
 
 CPUInfoWindow::CPUInfoWindow()
 	:
-	BWindow(BRect(0, 0, 640, 720), "CPU Info", B_TITLED_WINDOW,
+	BWindow(BRect(0, 0, 640, 720), B_TRANSLATE_SYSTEM_NAME("CPU Info"), B_TITLED_WINDOW,
 		B_AUTO_UPDATE_SIZE_LIMITS)
 {
 	CollectCpuReport(fReport);
@@ -246,9 +251,10 @@ CPUInfoWindow::CPUInfoWindow()
 
 	BAppearanceKit::BPageHeader* header = new BAppearanceKit::BPageHeader(
 		"header");
-	header->SetEyebrow("System");
-	header->SetTitle("CPU Info");
-	header->SetSubtitle("Processor hardware and R5 runtime paths");
+	header->SetEyebrow(B_TRANSLATE("System"));
+	header->SetTitle(B_TRANSLATE_SYSTEM_NAME("CPU Info"));
+	header->SetSubtitle(
+		B_TRANSLATE("Processor hardware and R5 runtime paths"));
 
 	// BPageHeader draws its icon in a square of 48 units, as Settings
 	// renders it (SettingsWindow). A smaller bitmap was stretched to that
@@ -261,34 +267,34 @@ CPUInfoWindow::CPUInfoWindow()
 		delete icon;
 	}
 
-	GlassSectionCard* hwCard = new GlassSectionCard("hw", "Processor");
+	GlassSectionCard* hwCard = new GlassSectionCard("hw", B_TRANSLATE("Processor"));
 	BGridView* hwGrid = new BGridView(B_USE_DEFAULT_SPACING,
 		B_USE_SMALL_SPACING);
 	BGridLayout* hwLayout = hwGrid->GridLayout();
 	hwLayout->SetColumnWeight(0, 0.0f);
 	hwLayout->SetColumnWeight(1, 1.0f);
-	add_row(hwLayout, 0, "Vendor", fReport.vendor.String());
-	add_row(hwLayout, 1, "Brand", fReport.brand.String());
-	add_row(hwLayout, 2, "Family / Model / Stepping",
+	add_row(hwLayout, 0, B_TRANSLATE("Vendor"), fReport.vendor.String());
+	add_row(hwLayout, 1, B_TRANSLATE("Brand"), fReport.brand.String());
+	add_row(hwLayout, 2, B_TRANSLATE("Family / Model / Stepping"),
 		fReport.familyModelStepping.String());
-	add_row(hwLayout, 3, "Cores / Threads", fReport.coresThreads.String());
-	add_row(hwLayout, 4, "Caches", fReport.caches.String());
-	add_row(hwLayout, 5, "x86-64 level", fReport.x86_64Level.String());
-	add_row(hwLayout, 6, "Extra features", fReport.extraFeatures.String(), true);
+	add_row(hwLayout, 3, B_TRANSLATE("Cores / Threads"), fReport.coresThreads.String());
+	add_row(hwLayout, 4, B_TRANSLATE("Caches"), fReport.caches.String());
+	add_row(hwLayout, 5, B_TRANSLATE("x86-64 level"), fReport.x86_64Level.String());
+	add_row(hwLayout, 6, B_TRANSLATE("Extra features"), fReport.extraFeatures.String(), true);
 	BLayoutBuilder::Group<>((BGroupLayout*)hwCard->GetLayout())
 		.Add(hwGrid);
 
-	GlassSectionCard* r5Card = new GlassSectionCard("r5", "Enabled features");
+	GlassSectionCard* r5Card = new GlassSectionCard("r5", B_TRANSLATE("Enabled features"));
 	BGridView* r5Grid = new BGridView(B_USE_DEFAULT_SPACING,
 		B_USE_SMALL_SPACING);
 	BGridLayout* r5Layout = r5Grid->GridLayout();
 	r5Layout->SetColumnWeight(0, 0.0f);
 	r5Layout->SetColumnWeight(1, 1.0f);
-	add_row(r5Layout, 0, "Build baseline", fReport.buildBaseline.String());
-	add_row(r5Layout, 1, "User-space paths", fReport.userSpacePaths.String());
+	add_row(r5Layout, 0, B_TRANSLATE("Build baseline"), fReport.buildBaseline.String());
+	add_row(r5Layout, 1, B_TRANSLATE("User-space paths"), fReport.userSpacePaths.String());
 	add_row(r5Layout, 2, "XCR0", fReport.xcr0.String());
-	add_row(r5Layout, 3, "Kernel", fReport.kernelLine.String(), true);
-	add_row(r5Layout, 4, "Power profile", fReport.powerProfile.String(),
+	add_row(r5Layout, 3, B_TRANSLATE("Kernel"), fReport.kernelLine.String(), true);
+	add_row(r5Layout, 4, B_TRANSLATE("Power profile"), fReport.powerProfile.String(),
 		true);
 	BLayoutBuilder::Group<>((BGroupLayout*)r5Card->GetLayout())
 		.Add(r5Grid);
@@ -299,7 +305,7 @@ CPUInfoWindow::CPUInfoWindow()
 		.Add(hwCard)
 		.Add(r5Card);
 
-	BButton* copyButton = new BButton("copy", "Copy report",
+	BButton* copyButton = new BButton("copy", B_TRANSLATE("Copy report"),
 		new BMessage(kMsgCopyReport));
 
 	BLayoutBuilder::Group<>(this, B_VERTICAL, B_USE_DEFAULT_SPACING)

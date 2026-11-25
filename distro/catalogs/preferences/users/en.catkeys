@@ -1,0 +1,102 @@
+1	english	x-vnd.R5OS-Users	49730552
+There must be at least one administrator.	Users: Account admin		There must be at least one administrator.
+An account named \"guest\" already exists. Rename it first.	Users: Account admin		An account named \"guest\" already exists. Rename it first.
+%program% failed	Users: Account admin		%program% failed
+Enable account	Users: Main window		Enable account
+The original administrator account cannot be disabled.	Users: Account admin		The original administrator account cannot be disabled.
+That picture is too large.	Users: Account admin		That picture is too large.
+The name could not be saved.	Users: Account admin		The name could not be saved.
+That username already exists.	Users: Account admin		That username already exists.
+Delete account…	Users: Main window		Delete account…
+Please enter a password.	Users: Account admin		Please enter a password.
+The first administrator stays an administrator.	Users: Account admin		The first administrator stays an administrator.
+Log out Guest first.	Users: Account admin		Log out Guest first.
+You cannot delete the account that is signed in.	Users: Main window		You cannot delete the account that is signed in.
+Remove picture	Users: Main window		Remove picture
+standard	Users: Main window		standard
+Users	Users: Main window		Users
+That picture could not be used.	Users: Main window		That picture could not be used.
+Could not encrypt the password.	Users: Account admin		Could not encrypt the password.
+Keep files	Users: Main window		Keep files
+The password could not be saved.	Users: Account admin		The password could not be saved.
+Current	Users: Main window		Current
+Users & Accounts	Users: Main window		Users & Accounts
+The original administrator account cannot be disabled.	Users: Main window		The original administrator account cannot be disabled.
+Add account	Users: Main window		Add account
+Guest setting requires the sign-in helper.	Users: Account admin		Guest setting requires the sign-in helper.
+The account exists, but the password was not set.	Users: Account admin		The account exists, but the password was not set.
+The guest's old files could not be removed.	Users: Account admin		The guest's old files could not be removed.
+Delete %name%?	Users: Main window		Delete %name%?
+The account type could not be changed.	Users: Account admin		The account type could not be changed.
+Unknown account request.	Users: Account admin		Unknown account request.
+That email address cannot be saved.	Users: Account admin		That email address cannot be saved.
+The original administrator account cannot be deleted.	Users: Account admin		The original administrator account cannot be deleted.
+That name is too long.	Users: Account admin		That name is too long.
+OK	Users: Main window		OK
+The last administrator cannot become a standard account.	Users: Account admin		The last administrator cannot become a standard account.
+Change	Users: Main window		Change
+Could not enable the account.	Users: Account admin		Could not enable the account.
+That account cannot unlock settings.	Users: Account admin		That account cannot unlock settings.
+Could not save this account.	Users: Main window		Could not save this account.
+Your password was not changed because the key store could not be updated.	Users: Account admin		Your password was not changed because the key store could not be updated.
+Type a password.	Users: Main window		Type a password.
+Username	Users: Main window		Username
+Use a lowercase username of letters, digits, underscore or hyphen.	Users: Account admin		Use a lowercase username of letters, digits, underscore or hyphen.
+administrator	Users: Main window		administrator
+Disable account	Users: Main window		Disable account
+That account does not exist.	Users: Account admin		That account does not exist.
+Standard account	Users: Main window		Standard account
+Delete	Users: Main window		Delete
+The clock could not be changed.	Users: Account admin		The clock could not be changed.
+You cannot delete the account that is signed in.	Users: Account admin		You cannot delete the account that is signed in.
+Cancel	Users: Main window		Cancel
+Change password	Users: Main window		Change password
+That file is not a picture this computer can open.	Users: Main window		That file is not a picture this computer can open.
+Unlock this with an administrator password.	Users: Main window		Unlock this with an administrator password.
+The account was not created.	Users: Account admin		The account was not created.
+Repeat	Users: Main window		Repeat
+The password could not be saved. If you are later asked for your old password for saved passwords, enter the new password you just typed.	Users: Account admin		The password could not be saved. If you are later asked for your old password for saved passwords, enter the new password you just typed.
+That account was not found.	Users: Account admin		That account was not found.
+The passwords do not match.	Users: Main window		The passwords do not match.
+Could not disable the account.	Users: Account admin		Could not disable the account.
+Name	Users: Main window		Name
+The picture could not be saved.	Users: Account admin		The picture could not be saved.
+Unlock this with an administrator password.	Users: Account admin		Unlock this with an administrator password.
+Email	Users: Main window		Email
+The account was removed, but its files could not be deleted.	Users: Account admin		The account was removed, but its files could not be deleted.
+This account already has a password.	Users: Account admin		This account already has a password.
+Accounts	Users: Main window		Accounts
+The original administrator account cannot be deleted.	Users: Main window		The original administrator account cannot be deleted.
+The password could not be changed.	Users: Main window		The password could not be changed.
+Account	Users: Main window		Account
+Administrator	Users: Main window		Administrator
+Account changes require the sign-in helper.	Users: Account admin		Account changes require the sign-in helper.
+Type a password.	Users: Account admin		Type a password.
+Your account	Users: Main window		Your account
+Could not save the guest setting.	Users: Account admin		Could not save the guest setting.
+Save	Users: Main window		Save
+Could not create the guest account.	Users: Account admin		Could not create the guest account.
+That password is not right.	Users: Account admin		That password is not right.
+The account folder could not be updated.	Users: Account admin		The account folder could not be updated.
+Sign in must be running to change accounts.	Users: Main window		Sign in must be running to change accounts.
+Repeat password	Users: Main window		Repeat password
+New password	Users: Main window		New password
+Password	Users: Main window		Password
+Delete files	Users: Main window		Delete files
+Type a new password.	Users: Main window		Type a new password.
+Add account…	Users: Main window		Add account…
+Choose picture...	Users: Main window		Choose picture...
+The name cannot contain a colon or a new line.	Users: Account admin		The name cannot contain a colon or a new line.
+sign-in off	Users: Main window		sign-in off
+Guest account setup requires the sign-in helper.	Users: Account admin		Guest account setup requires the sign-in helper.
+Change password...	Users: Main window		Change password...
+The email address could not be saved.	Users: Account admin		The email address could not be saved.
+Could not save the guest account.	Users: Account admin		Could not save the guest account.
+Only the sign-in helper can set this password.	Users: Account admin		Only the sign-in helper can set this password.
+Sign in did not answer.	Users: Main window		Sign in did not answer.
+The account exists, but it is not an administrator: %error%	Users: Account admin		The account exists, but it is not an administrator: %error%
+off	Users: Main window		off
+The new account did not get a user id of 1000 or higher.	Users: Account admin		The new account did not get a user id of 1000 or higher.
+The existing guest account has an unexpected setup.	Users: Account admin		The existing guest account has an unexpected setup.
+The account could not become an administrator.	Users: Account admin		The account could not become an administrator.
+This account is an administrator through its system group.	Users: Account admin		This account is an administrator through its system group.

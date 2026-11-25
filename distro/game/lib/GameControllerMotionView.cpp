@@ -10,6 +10,7 @@
 #include "GameControllerMotionView.h"
 
 #include <AxisBar.h>
+#include <Catalog.h>
 #include <Font.h>
 #include <GridLayout.h>
 #include <GroupLayout.h>
@@ -19,6 +20,10 @@
 
 #include <new>
 #include <string.h>
+
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "libr5game: BGameControllerMotionView"
 
 
 using BAppearanceKit::BAxisBar;
@@ -67,16 +72,16 @@ BGameControllerMotionView::BGameControllerMotionView(const char* name)
 	fPrivate->roll = new BAxisBar("roll");
 	fPrivate->yaw = new BAxisBar("yaw");
 
-	BStringView* tilt = make_label("tilt label", "Tilt", true);
-	BStringView* turn = make_label("turn label", "Turn", true);
+	BStringView* tilt = make_label("tilt label", B_TRANSLATE("Tilt"), true);
+	BStringView* turn = make_label("turn label", B_TRANSLATE("Turn"), true);
 	tilt->SetAlignment(B_ALIGN_CENTER);
 	turn->SetAlignment(B_ALIGN_CENTER);
 	tilt->SetExplicitAlignment(BAlignment(B_ALIGN_HORIZONTAL_CENTER,
 		B_ALIGN_TOP));
 	turn->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
-	BStringView* pitch = make_label("pitch label", "Pitch", true);
-	BStringView* roll = make_label("roll label", "Roll", true);
-	BStringView* yaw = make_label("yaw label", "Yaw", true);
+	BStringView* pitch = make_label("pitch label", B_TRANSLATE("Pitch"), true);
+	BStringView* roll = make_label("roll label", B_TRANSLATE("Roll"), true);
+	BStringView* yaw = make_label("yaw label", B_TRANSLATE("Yaw"), true);
 	fPrivate->labels[0] = tilt;
 	fPrivate->labels[1] = turn;
 	fPrivate->labels[2] = pitch;

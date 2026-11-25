@@ -42,6 +42,7 @@
 #include <unistd.h>
 
 #include <Application.h>
+#include <Catalog.h>
 #include <DecorInfo.h>
 #include <DefaultColors.h>
 #include <Directory.h>
@@ -62,6 +63,10 @@
 #include <driver_settings.h>
 
 #include "WindowEffects.h"
+
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "libr5ui: Themes"
 
 
 namespace BAppearanceKit {
@@ -112,12 +117,12 @@ struct accent {
 // (external review 1.3). Each is the mockup's colour scaled to 124; the
 // mockup's dark blue #2f95ff is 145.
 static const accent kAccents[] = {
-	{ "Blue",		0x0084ff, 0x287fda },
-	{ "Teal",		0x0f9488, 0x12958a },
-	{ "Purple",		0x7c4ddb, 0x855cd5 },
-	{ "Pink",		0xd6457a, 0xbc4b75 },
-	{ "Orange",		0xe07b1a, 0xae6721 },
-	{ "Graphite",	0x6b7280, 0x767c88 }
+	{ B_TRANSLATE_MARK("Blue"),	0x0084ff, 0x287fda },
+	{ B_TRANSLATE_MARK("Teal"),	0x0f9488, 0x12958a },
+	{ B_TRANSLATE_MARK("Purple"),	0x7c4ddb, 0x855cd5 },
+	{ B_TRANSLATE_MARK("Pink"),	0xd6457a, 0xbc4b75 },
+	{ B_TRANSLATE_MARK("Orange"),	0xe07b1a, 0xae6721 },
+	{ B_TRANSLATE_MARK("Graphite"),0x6b7280, 0x767c88 }
 };
 static const int32 kAccentCount = sizeof(kAccents) / sizeof(kAccents[0]);
 
@@ -144,7 +149,7 @@ theme_accent_name(int32 index)
 {
 	if (index < 0 || index >= kAccentCount)
 		return NULL;
-	return kAccents[index].name;
+	return B_TRANSLATE_NOCOLLECT(kAccents[index].name);
 }
 
 

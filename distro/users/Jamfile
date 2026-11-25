@@ -14,6 +14,14 @@ Application Users :
 	KeyStoreCrypto.cpp
 	Users.cpp
 	: be tracker translation libr5ui.so libr5admin.so libr5security.so
-		[ TargetLibstdc++ ]
+		localestub [ TargetLibstdc++ ]
 	: Users.rdef
 ;
+
+DoCatalogs Users :
+	x-vnd.R5OS-Users
+	:
+	AccountAdmin.cpp
+	Users.cpp
+	HomeLock.cpp
+	;

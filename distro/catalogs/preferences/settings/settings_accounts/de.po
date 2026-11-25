@@ -63,13 +63,13 @@ msgstr "Zum Anmelden; Buchstaben und Ziffern"
 
 #, fuzzy
 msgctxt "Settings: Users and Accounts"
-msgid "Choose picture…"
-msgstr "Bild wählen…"
+msgid "Administrator"
+msgstr "Administrator"
 
 #, fuzzy
 msgctxt "Settings: Users and Accounts"
-msgid "Administrator"
-msgstr "Administrator"
+msgid "Choose picture…"
+msgstr "Bild wählen…"
 
 #, fuzzy
 msgctxt "Settings: Users and Accounts"

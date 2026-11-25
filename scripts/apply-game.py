@@ -115,7 +115,7 @@ def main() -> int:
         "GameController.cpp", "GameControllerMapping.cpp",
         "GameControllerMapping.h", "GameControllerPictures.cpp",
         "GameControllerPictures.h", "GameControllerPictureData.h",
-        "GameControllerView.cpp", "Jamfile",
+        "GameControllerView.cpp", "Jamfile", "libr5game.rdef",
         "GameControllerReports.cpp", "GameControllerReports.h",
         "GameControllerMotionView.cpp", "GameControllerFeel.cpp",
         "GameControllerFeel.h")],

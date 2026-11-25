@@ -25,6 +25,7 @@
 #include "UserListItem.h"
 
 #include <Bitmap.h>
+#include <Catalog.h>
 #include <Font.h>
 #include <InterfaceDefs.h>
 #include <Message.h>
@@ -35,6 +36,26 @@
 #include <new>
 
 #include "R5UI.h"
+
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "libr5ui: User card"
+
+
+// The caller passes the role in English ("Administrator", "Standard",
+// "No password"), so it
+// can be compared; it is translated only where it is drawn.
+static const char*
+shown_role(const BString& role)
+{
+	if (role.ICompare("Administrator") == 0)
+		return B_TRANSLATE("Administrator");
+	if (role.ICompare("Standard") == 0)
+		return B_TRANSLATE("Standard");
+	if (role.ICompare("No password") == 0)
+		return B_TRANSLATE("No password");
+	return role.String();
+}
 
 
 namespace BAppearanceKit {
@@ -299,7 +320,7 @@ BUserListItem::DrawItem(BView* owner, BRect itemRect, bool complete)
 		float roleLeft = textLeft + plainFont.StringWidth(login.String());
 		BFont roleFont(admin ? be_bold_font : be_plain_font);
 		roleFont.SetSize(plainFont.Size());
-		BString role(fData->role);
+		BString role(shown_role(fData->role));
 		roleFont.TruncateString(&role, B_TRUNCATE_END,
 			itemRect.right - padding - roleLeft);
 		owner->SetFont(&roleFont);

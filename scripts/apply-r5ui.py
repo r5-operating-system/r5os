@@ -13,6 +13,7 @@ ADMIN_SRC = ROOT / "distro" / "admin"
 ADMIN_FILES = ("Jamfile", "R5Admin.cpp", "R5Admin.h")
 FILES = (
     "Jamfile",
+    "libr5ui.rdef",
     "R5UI.cpp",
     "R5UI.h",
     "Card.cpp",

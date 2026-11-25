@@ -26,6 +26,7 @@
 
 #include "R5ModernStyle.h"
 
+#include <Catalog.h>
 #include <InterfaceDefs.h>
 #include <Message.h>
 #include <ScrollView.h>
@@ -35,6 +36,10 @@
 #include <new>
 #include <string.h>
 #include <vector>
+
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "libr5ui: Sidebar"
 
 
 namespace BAppearanceKit {
@@ -220,7 +225,7 @@ BSidebar::Draw(BRect updateRect)
 	SetFont(&strong);
 	SetHighColor(ui_color(B_DOCUMENT_TEXT_COLOR));
 	float y = box.top + pad + line.ascent;
-	const char* tip = "Tip:";
+	const char* tip = B_TRANSLATE("Tip:");
 	DrawString(tip, BPoint(box.left + pad, y));
 	float used = strong.StringWidth(tip) + u * 4.0f;
 	SetFont(&font);

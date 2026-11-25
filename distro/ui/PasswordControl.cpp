@@ -7,6 +7,7 @@
 #include "PasswordControl.h"
 
 #include <Button.h>
+#include <Catalog.h>
 #include <ControlLook.h>
 #include <Font.h>
 #include <InterfaceDefs.h>
@@ -20,6 +21,10 @@
 #include <math.h>
 #include <string.h>
 #include <new>
+
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "libr5ui: Password control"
 
 
 namespace BAppearanceKit {
@@ -669,15 +674,16 @@ BPasswordStrengthBar::HintFor(int32 strength)
 {
 	switch (strength) {
 		case 1:
-			return "Weak. Use at least 8 characters.";
+			return B_TRANSLATE("Weak. Use at least 8 characters.");
 		case 2:
-			return "Fair. Add another word or a number.";
+			return B_TRANSLATE("Fair. Add another word or a number.");
 		case 3:
-			return "Good. A longer phrase is stronger.";
+			return B_TRANSLATE("Good. A longer phrase is stronger.");
 		case 4:
-			return "Strong.";
+			return B_TRANSLATE("Strong.");
 		default:
-			return "A phrase of a few words is easy to remember.";
+			return B_TRANSLATE(
+				"A phrase of a few words is easy to remember.");
 	}
 }
 

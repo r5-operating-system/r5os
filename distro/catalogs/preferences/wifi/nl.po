@@ -1,0 +1,7 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.Haiku-WiFi\nLanguage: nl\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#, fuzzy
+msgctxt "System name"
+msgid "WiFi"
+msgstr "Wi-Fi"

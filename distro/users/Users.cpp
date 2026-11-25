@@ -9,6 +9,7 @@
 #include <Application.h>
 #include <Bitmap.h>
 #include <Button.h>
+#include <Catalog.h>
 #include <CheckBox.h>
 #include <Entry.h>
 #include <FilePanel.h>
@@ -39,6 +40,10 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "Users: Main window"
 
 
 static const char* kSignature = "application/x-vnd.R5OS-Users";
@@ -72,7 +77,7 @@ wipe_string(BString& text)
 static void
 show_error(const char* text)
 {
-	BAlert* alert = new BAlert("Users", text, "OK");
+	BAlert* alert = new BAlert(B_TRANSLATE("Users"), text, B_TRANSLATE("OK"));
 	alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
 	alert->Go();
 }
@@ -83,7 +88,7 @@ ask_login(BMessage& request, BMessage& reply, BString& error)
 {
 	BMessenger login(kR5LoginSignature);
 	if (!login.IsValid()) {
-		error = "Sign in must be running to change accounts.";
+		error = B_TRANSLATE("Sign in must be running to change accounts.");
 		return B_ERROR;
 	}
 
@@ -97,7 +102,7 @@ ask_login(BMessage& request, BMessage& reply, BString& error)
 
 	int32 code = B_OK;
 	if (reply.FindInt32("error", &code) != B_OK) {
-		error = "Sign in did not answer.";
+		error = B_TRANSLATE("Sign in did not answer.");
 		return B_ERROR;
 	}
 	const char* text = NULL;
@@ -318,9 +323,10 @@ public:
 		owner->DrawString(title.String(), BPoint(frame.left + 10, frame.top + 16));
 
 		BString sub(fName);
-		sub << (fAdmin ? "  ·  administrator" : "  ·  standard");
+		sub << "  ·  "
+			<< (fAdmin ? B_TRANSLATE("administrator") : B_TRANSLATE("standard"));
 		if (fDisabled)
-			sub << "  ·  off";
+			sub << "  ·  " << B_TRANSLATE("off");
 		owner->SetFont(be_plain_font);
 		if (IsSelected())
 			owner->SetHighColor(text);
@@ -363,7 +369,7 @@ class PasswordWindow : public BWindow {
 public:
 	PasswordWindow(BWindow* parent, const char* name, bool needCurrent)
 		:
-		BWindow(BRect(0, 0, 340, 180), "Change password", B_TITLED_WINDOW,
+		BWindow(BRect(0, 0, 340, 180), B_TRANSLATE("Change password"), B_TITLED_WINDOW,
 			B_NOT_ZOOMABLE | B_NOT_RESIZABLE | B_AUTO_UPDATE_SIZE_LIMITS
 				| B_CLOSE_ON_ESCAPE),
 		fParent(parent),
@@ -372,12 +378,12 @@ public:
 		fCurrent(NULL)
 	{
 		if (needCurrent) {
-			fCurrent = new BTextControl("current", "Current", "", NULL);
+			fCurrent = new BTextControl("current", B_TRANSLATE("Current"), "", NULL);
 			fCurrent->TextView()->HideTyping(true);
 		}
-		fNext = new BTextControl("next", "New password", "", NULL);
+		fNext = new BTextControl("next", B_TRANSLATE("New password"), "", NULL);
 		fNext->TextView()->HideTyping(true);
-		fRepeat = new BTextControl("repeat", "Repeat", "", NULL);
+		fRepeat = new BTextControl("repeat", B_TRANSLATE("Repeat"), "", NULL);
 		fRepeat->TextView()->HideTyping(true);
 		pin_one_line(fCurrent);
 		pin_one_line(fNext);
@@ -396,9 +402,9 @@ public:
 				.End()
 				.AddGroup(B_HORIZONTAL)
 					.AddGlue()
-					.Add(new BButton("cancel", "Cancel",
+					.Add(new BButton("cancel", B_TRANSLATE("Cancel"),
 						new BMessage(B_QUIT_REQUESTED)))
-					.Add(new BButton("ok", "Change", new BMessage('pwok')))
+					.Add(new BButton("ok", B_TRANSLATE("Change"), new BMessage('pwok')))
 				.End();
 		} else {
 			BLayoutBuilder::Group<>(this, B_VERTICAL, B_USE_DEFAULT_SPACING)
@@ -411,9 +417,9 @@ public:
 				.End()
 				.AddGroup(B_HORIZONTAL)
 					.AddGlue()
-					.Add(new BButton("cancel", "Cancel",
+					.Add(new BButton("cancel", B_TRANSLATE("Cancel"),
 						new BMessage(B_QUIT_REQUESTED)))
-					.Add(new BButton("ok", "Change", new BMessage('pwok')))
+					.Add(new BButton("ok", B_TRANSLATE("Change"), new BMessage('pwok')))
 				.End();
 		}
 
@@ -435,14 +441,14 @@ public:
 		BString next(fNext->Text());
 		BString repeat(fRepeat->Text());
 		if (next.Length() == 0) {
-			show_error("Type a new password.");
+			show_error(B_TRANSLATE("Type a new password."));
 			wipe_string(current);
 			wipe_string(next);
 			wipe_string(repeat);
 			return;
 		}
 		if (next != repeat) {
-			show_error("The passwords do not match.");
+			show_error(B_TRANSLATE("The passwords do not match."));
 			wipe_string(current);
 			wipe_string(next);
 			wipe_string(repeat);
@@ -460,7 +466,7 @@ public:
 		wipe_string(repeat);
 		if (status != B_OK) {
 			show_error(error.Length() > 0 ? error.String()
-				: "The password could not be changed.");
+				: B_TRANSLATE("The password could not be changed."));
 			return;
 		}
 		if (fParent != NULL)
@@ -482,21 +488,21 @@ class CreateWindow : public BWindow {
 public:
 	CreateWindow(BWindow* parent)
 		:
-		BWindow(BRect(0, 0, 380, 240), "Add account", B_TITLED_WINDOW,
+		BWindow(BRect(0, 0, 380, 240), B_TRANSLATE("Add account"), B_TITLED_WINDOW,
 			B_NOT_ZOOMABLE | B_NOT_RESIZABLE | B_AUTO_UPDATE_SIZE_LIMITS),
 		fParent(parent)
 	{
-		fName = new BTextControl("name", "Username", "", NULL);
-		fReal = new BTextControl("real", "Name", "", NULL);
-		fPassword = new BTextControl("password", "Password", "", NULL);
+		fName = new BTextControl("name", B_TRANSLATE("Username"), "", NULL);
+		fReal = new BTextControl("real", B_TRANSLATE("Name"), "", NULL);
+		fPassword = new BTextControl("password", B_TRANSLATE("Password"), "", NULL);
 		fPassword->TextView()->HideTyping(true);
-		fRepeat = new BTextControl("repeat", "Repeat password", "", NULL);
+		fRepeat = new BTextControl("repeat", B_TRANSLATE("Repeat password"), "", NULL);
 		fRepeat->TextView()->HideTyping(true);
 		pin_one_line(fName);
 		pin_one_line(fReal);
 		pin_one_line(fPassword);
 		pin_one_line(fRepeat);
-		fAdmin = new BCheckBox("admin", "Administrator", NULL);
+		fAdmin = new BCheckBox("admin", B_TRANSLATE("Administrator"), NULL);
 
 		BLayoutBuilder::Group<>(this, B_VERTICAL, B_USE_DEFAULT_SPACING)
 			.SetInsets(B_USE_WINDOW_INSETS)
@@ -513,9 +519,9 @@ public:
 			.Add(fAdmin)
 			.AddGroup(B_HORIZONTAL)
 				.AddGlue()
-				.Add(new BButton("cancel", "Cancel",
+				.Add(new BButton("cancel", B_TRANSLATE("Cancel"),
 					new BMessage(B_QUIT_REQUESTED)))
-				.Add(new BButton("create", "Add account", new BMessage('ucrt')))
+				.Add(new BButton("create", B_TRANSLATE("Add account"), new BMessage('ucrt')))
 			.End();
 
 		fName->MakeFocus(true);
@@ -535,13 +541,13 @@ public:
 		if (password.Length() == 0) {
 			wipe_string(password);
 			wipe_string(repeat);
-			show_error("Type a password.");
+			show_error(B_TRANSLATE("Type a password."));
 			return;
 		}
 		if (password != repeat) {
 			wipe_string(password);
 			wipe_string(repeat);
-			show_error("The passwords do not match.");
+			show_error(B_TRANSLATE("The passwords do not match."));
 			return;
 		}
 
@@ -578,7 +584,7 @@ class UsersWindow : public BWindow {
 public:
 	UsersWindow()
 		:
-		BWindow(BRect(80, 60, 760, 520), "Users & Accounts",
+		BWindow(BRect(80, 60, 760, 520), B_TRANSLATE("Users & Accounts"),
 			B_TITLED_WINDOW, B_AUTO_UPDATE_SIZE_LIMITS | B_QUIT_ON_WINDOW_CLOSE),
 		fList(NULL),
 		fPeople(NULL),
@@ -594,13 +600,13 @@ public:
 		fList = new BListView("people");
 		fList->SetSelectionMessage(new BMessage(kMsgSelect));
 		fList->SetExplicitMinSize(BSize(220, 220));
-		fAdd = new BButton("add", "Add account…", new BMessage(kMsgAdd));
-		fDisable = new BButton("disable", "Disable account",
+		fAdd = new BButton("add", B_TRANSLATE("Add account…"), new BMessage(kMsgAdd));
+		fDisable = new BButton("disable", B_TRANSLATE("Disable account"),
 			new BMessage(kMsgDisable));
-		fDelete = new BButton("delete", "Delete account…",
+		fDelete = new BButton("delete", B_TRANSLATE("Delete account…"),
 			new BMessage(kMsgDelete));
 
-		BStringView* people = new BStringView("people-title", "Accounts");
+		BStringView* people = new BStringView("people-title", B_TRANSLATE("Accounts"));
 		BFont font(be_bold_font);
 		people->SetFont(&font);
 
@@ -619,13 +625,13 @@ public:
 		fNameView = new BStringView("username", "");
 		fNameView->SetExplicitAlignment(
 			BAlignment(B_ALIGN_LEFT, B_ALIGN_VERTICAL_CENTER));
-		BStringView* userLabel = new BStringView("user-label", "Username");
-		fReal = new BTextControl("real", "Name", "", NULL);
-		fEmail = new BTextControl("email", "Email", "", NULL);
+		BStringView* userLabel = new BStringView("user-label", B_TRANSLATE("Username"));
+		fReal = new BTextControl("real", B_TRANSLATE("Name"), "", NULL);
+		fEmail = new BTextControl("email", B_TRANSLATE("Email"), "", NULL);
 		fRole = new BStringView("role", "");
 		fRole->SetExplicitAlignment(
 			BAlignment(B_ALIGN_LEFT, B_ALIGN_VERTICAL_CENTER));
-		BStringView* accountLabel = new BStringView("account-label", "Account");
+		BStringView* accountLabel = new BStringView("account-label", B_TRANSLATE("Account"));
 		accountLabel->SetExplicitAlignment(
 			BAlignment(B_ALIGN_RIGHT, B_ALIGN_VERTICAL_CENTER));
 		userLabel->SetExplicitAlignment(
@@ -633,9 +639,9 @@ public:
 		pin_one_line(fReal);
 		pin_one_line(fEmail);
 
-		BButton* choose = new BButton("picture", "Choose picture...",
+		BButton* choose = new BButton("picture", B_TRANSLATE("Choose picture..."),
 			new BMessage(kMsgPick));
-		BButton* clear = new BButton("clear", "Remove picture",
+		BButton* clear = new BButton("clear", B_TRANSLATE("Remove picture"),
 			new BMessage(kMsgClearPicture));
 		choose->SetExplicitMinSize(BSize(148, B_SIZE_UNSET));
 		clear->SetExplicitMinSize(BSize(148, B_SIZE_UNSET));
@@ -671,9 +677,9 @@ public:
 			.AddGlue()
 			.AddGroup(B_HORIZONTAL)
 				.AddGlue()
-				.Add(new BButton("password", "Change password...",
+				.Add(new BButton("password", B_TRANSLATE("Change password..."),
 					new BMessage(kMsgPassword)))
-				.Add(new BButton("save", "Save", new BMessage(kMsgSave)))
+				.Add(new BButton("save", B_TRANSLATE("Save"), new BMessage(kMsgSave)))
 			.End();
 
 		BGroupView* columns = new BGroupView(B_HORIZONTAL, B_USE_BIG_SPACING);
@@ -764,7 +770,8 @@ private:
 		fManaging = _Managing();
 		if (fPeopleItem != NULL)
 			fPeopleItem->SetVisible(fManaging);
-		SetTitle(fManaging ? "Users & Accounts" : "Your account");
+		SetTitle(fManaging ? B_TRANSLATE("Users & Accounts")
+			: B_TRANSLATE("Your account"));
 	}
 
 	void _Fill()
@@ -850,9 +857,10 @@ private:
 		fAccount = pwd->pw_name;
 		fReal->SetText(pwd->pw_gecos != NULL ? pwd->pw_gecos : "");
 		fNameView->SetText(pwd->pw_name);
-		BString role(is_admin_user(pwd) ? "Administrator" : "Standard account");
+		BString role(is_admin_user(pwd) ? B_TRANSLATE("Administrator")
+			: B_TRANSLATE("Standard account"));
 		if (is_disabled_user(pwd->pw_name))
-			role << "  ·  sign-in off";
+			role << "  ·  " << B_TRANSLATE("sign-in off");
 		fRole->SetText(role.String());
 
 		delete fPhoto;
@@ -950,7 +958,7 @@ private:
 		BString error;
 		if (ask_login(request, error) != B_OK) {
 			show_error(error.Length() > 0 ? error.String()
-				: "Could not save this account.");
+				: B_TRANSLATE("Could not save this account."));
 			return;
 		}
 		_Fill();
@@ -972,14 +980,14 @@ private:
 			return;
 		BBitmap* loaded = BTranslationUtils::GetBitmap(&ref);
 		if (loaded == NULL) {
-			show_error("That file is not a picture this computer can open.");
+			show_error(B_TRANSLATE("That file is not a picture this computer can open."));
 			return;
 		}
 		BBitmap* color = new BBitmap(loaded->Bounds(), B_RGBA32, true);
 		if (color->InitCheck() != B_OK || color->Lock() == false) {
 			delete color;
 			delete loaded;
-			show_error("That picture could not be used.");
+			show_error(B_TRANSLATE("That picture could not be used."));
 			return;
 		}
 		BView* view = new BView(loaded->Bounds(), "scale", 0, 0);
@@ -1025,20 +1033,20 @@ private:
 		if (!admin || item == NULL) {
 			fDisable->SetEnabled(false);
 			fDelete->SetEnabled(false);
-			fDisable->SetLabel("Disable account");
+			fDisable->SetLabel(B_TRANSLATE("Disable account"));
 			return;
 		}
 		bool firstHome = _SelectedIsFirstHome();
 		fDelete->SetEnabled(!firstHome && item->Uid() != getuid());
 		fDisable->SetEnabled(!firstHome);
-		fDisable->SetLabel(item->IsDisabled() ? "Enable account"
-			: "Disable account");
+		fDisable->SetLabel(item->IsDisabled() ? B_TRANSLATE("Enable account")
+			: B_TRANSLATE("Disable account"));
 	}
 
 	void _Add()
 	{
 		if (!_Managing()) {
-			show_error("Unlock this with an administrator password.");
+			show_error(B_TRANSLATE("Unlock this with an administrator password."));
 			return;
 		}
 		CreateWindow* window = new CreateWindow(this);
@@ -1052,8 +1060,8 @@ private:
 		if (item == NULL)
 			return;
 		if (_SelectedIsFirstHome()) {
-			show_error("The original administrator account cannot be "
-				"disabled.");
+			show_error(B_TRANSLATE("The original administrator account cannot be "
+				"disabled."));
 			return;
 		}
 		BMessage request(kMsgAdminSetDisabled);
@@ -1071,18 +1079,21 @@ private:
 		if (item == NULL)
 			return;
 		if (_SelectedIsFirstHome()) {
-			show_error("The original administrator account cannot be deleted.");
+			show_error(B_TRANSLATE("The original administrator account cannot be deleted."));
 			return;
 		}
 		if (item->Uid() == getuid()) {
-			show_error("You cannot delete the account that is signed in.");
+			show_error(B_TRANSLATE("You cannot delete the account that is signed in."));
 			return;
 		}
 		BString text;
-		text.SetToFormat("Delete %s?", item->Real()[0] != '\0'
+		text = B_TRANSLATE("Delete %name%?");
+		text.ReplaceFirst("%name%", item->Real()[0] != '\0'
 			? item->Real() : item->Name());
-		BAlert* alert = new BAlert("Delete", text.String(), "Cancel",
-			"Keep files", "Delete files", B_WIDTH_AS_USUAL, B_WARNING_ALERT);
+		BAlert* alert = new BAlert(B_TRANSLATE("Delete"), text.String(),
+			B_TRANSLATE("Cancel"), B_TRANSLATE("Keep files"),
+			B_TRANSLATE("Delete files"), B_WIDTH_AS_USUAL, B_WARNING_ALERT);
+
 		int32 choice = alert->Go();
 		if (choice == 0)
 			return;
