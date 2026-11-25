@@ -80,5 +80,38 @@ bool		r5_admin_sender_allowed(const r5_admin_sender& sender);
 // "guest" is not the guest. The same rule as Login's wipe and lock.
 bool		r5_admin_is_system_guest(uid_t uid);
 
+// Added 25 Nov 2026 (issue #4639 and the review after it). Marks a message
+// as made in this team: it gets a field with a random token that only this
+// team knows (128 bits from /dev/urandom, made once per team). Use it for a
+// message that one part of a service posts to another part of the same
+// service (a button of its own window, a BMessageRunner it made), where
+// !IsSourceRemote() used to be the check: the reply address is whatever the
+// sender chose, also this team's own messenger. B_OK, or the error of
+// reading /dev/urandom (then r5_admin_is_local() is false for every
+// message).
+status_t	r5_admin_mark_local(BMessage* message);
+// True only when "message" carries this team's token
+// (r5_admin_mark_local()). A message from another team never does.
+bool		r5_admin_is_local(const BMessage* message);
+
+// Added 25 Nov 2026 (issue #4643), for a uid 0 program that changes files
+// in a person's home. Opens "relative" under the directory "base" one part
+// at a time, never following a symbolic link (also not the last part of
+// "base"): a link fails with B_LINK_LIMIT (ELOOP). With "createMode" not 0,
+// missing directories on the way are made with that mode, and so is the
+// last part when "flags" has O_DIRECTORY. "flags" is passed to the last
+// open (O_DIRECTORY, O_RDONLY, O_WRONLY | O_CREAT | O_EXCL, ...);
+// O_NOFOLLOW, O_NONBLOCK and O_CLOEXEC are always added. A NULL or empty
+// "relative" opens "base". Returns the file descriptor, or -1 with errno
+// set.
+int			r5_admin_open_nofollow(const char* base, const char* relative,
+				int flags, mode_t createMode = 0, mode_t fileMode = 0600);
+// Sets the owner and the mode of the open "fd" (fchown(), fchmod()), so
+// the change cannot follow a link. A regular file with more than one hard
+// link is refused (B_NOT_ALLOWED), so a link to a system file is never
+// handed over. uid (uid_t)-1 keeps the owner; mode (mode_t)-1 keeps the
+// mode.
+status_t	r5_admin_set_owner(int fd, uid_t uid, gid_t gid, mode_t mode);
+
 
 #endif	// R5_ADMIN_H

@@ -16,6 +16,7 @@
 #include <Font.h>
 #include <LayoutBuilder.h>
 #include <StringView.h>
+#include <R5Admin.h>
 #include <TextControl.h>
 
 #include <bluetooth/HCI/btHCI_command.h>
@@ -262,6 +263,7 @@ PasskeyWindow::_SendReply(bool accept)
 	if (fLE) {
 		// LE pairing runs in LEManager, not in the radio.
 		BMessage answer(kMsgLEUserAnswer);
+		r5_admin_mark_local(&answer);
 		answer.AddData("bdaddr", B_RAW_TYPE, &fAddress, sizeof(fAddress));
 		answer.AddBool("accept", accept);
 		answer.AddUInt32("passkey", passkey);

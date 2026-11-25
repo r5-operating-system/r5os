@@ -24,6 +24,7 @@
 #include <unistd.h>
 
 #include <OS.h>
+#include <R5Admin.h>
 
 
 extern char** environ;
@@ -55,61 +56,62 @@ read_session_name(char* name, size_t nameSize)
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// Issue #4643: this runs as uid 0, before the drop, in a home that the
+// person owns. Every part of the path is opened without following a link
+// (r5_admin_open_nofollow(), libr5admin.so), and the owner and mode are set
+// on the open directory or file, so nothing outside the home changes owner.
+static void
+own_directory(const struct passwd* pwd, const char* relative)
+{
+	int fd = r5_admin_open_nofollow(pwd->pw_dir, relative,
+		O_RDONLY | O_DIRECTORY, 0700);
+	if (fd < 0) {
+		r5_session_log("settings %s/%s: %s", pwd->pw_dir, relative,
+			strerror(errno));
+		return;
+	}
+	status_t status = r5_admin_set_owner(fd, pwd->pw_uid, pwd->pw_gid, 0700);
+	if (status != B_OK) {
+		r5_session_log("settings own %s/%s: %s", pwd->pw_dir, relative,
+			strerror(status));
+	}
+	close(fd);
+}
+
+
 static void
 ensure_user_cache(const struct passwd* pwd)
 {
 	if (pwd->pw_dir == NULL || pwd->pw_dir[0] == '\0')
 		return;
-
-	char path[B_PATH_NAME_LENGTH];
-	int written = snprintf(path, sizeof(path), "%s/config/cache", pwd->pw_dir);
-	if (written <= 0 || (size_t)written >= sizeof(path))
-		return;
-
 	// The image creates this directory as root, mode 0755. Mesa then
 	// cannot create mesa_shader_cache for the session user.
-	if (mkdir(path, 0700) != 0 && errno != EEXIST) {
-		r5_session_log("cache mkdir %s: %s", path, strerror(errno));
-		return;
-	}
-	if (chown(path, pwd->pw_uid, pwd->pw_gid) != 0)
-		r5_session_log("cache chown %s: %s", path, strerror(errno));
-	if (chmod(path, 0700) != 0)
-		r5_session_log("cache chmod %s: %s", path, strerror(errno));
+	own_directory(pwd, "config/cache");
 }
 
 
 static void
-own_directory(const struct passwd* pwd, const char* path)
+own_file_if_present(const struct passwd* pwd, const char* relative)
 {
+	int fd = r5_admin_open_nofollow(pwd->pw_dir, relative, O_RDONLY);
+	if (fd < 0)
+		return;
 	struct stat st;
-	if (lstat(path, &st) != 0) {
-		if (errno != ENOENT || mkdir(path, 0700) != 0) {
-			r5_session_log("settings mkdir %s: %s", path, strerror(errno));
-			return;
-		}
-	} else if (!S_ISDIR(st.st_mode)) {
-		r5_session_log("settings %s is not a directory", path);
+	if (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode)) {
+		close(fd);
 		return;
 	}
-	if (chown(path, pwd->pw_uid, pwd->pw_gid) != 0)
-		r5_session_log("settings chown %s: %s", path, strerror(errno));
-	if (chmod(path, 0700) != 0)
-		r5_session_log("settings chmod %s: %s", path, strerror(errno));
+	status_t status = r5_admin_set_owner(fd, pwd->pw_uid, pwd->pw_gid, 0644);
+	if (status != B_OK) {
+		r5_session_log("settings own %s/%s: %s", pwd->pw_dir, relative,
+			strerror(status));
+	}
+	close(fd);
 }
-
-
-static void
-own_file_if_present(const struct passwd* pwd, const char* path)
-{
-	struct stat st;
-	if (lstat(path, &st) != 0 || !S_ISREG(st.st_mode))
-		return;
-	if (chown(path, pwd->pw_uid, pwd->pw_gid) != 0)
-		r5_session_log("settings chown %s: %s", path, strerror(errno));
-	if (chmod(path, 0644) != 0)
-		r5_session_log("settings chmod %s: %s", path, strerror(errno));
-}
+// SPDX-SnippetEnd
 
 
 static void
@@ -135,35 +137,23 @@ ensure_user_settings(const struct passwd* pwd)
 		}
 	}
 	const char* suffixes[] = {
-		"/config/settings",
-		"/config/settings/system",
-		"/config/settings/kernel",
-		"/config/settings/kernel/drivers",
-		"/config/settings/r5",
-		"/config/settings/deskbar",
+		"config/settings",
+		"config/settings/system",
+		"config/settings/kernel",
+		"config/settings/kernel/drivers",
+		"config/settings/r5",
+		"config/settings/deskbar",
 		NULL
 	};
-	for (int i = 0; suffixes[i] != NULL; i++) {
-		char path[B_PATH_NAME_LENGTH];
-		int written = snprintf(path, sizeof(path), "%s%s", pwd->pw_dir,
-			suffixes[i]);
-		if (written <= 0 || (size_t)written >= sizeof(path))
-			return;
-		own_directory(pwd, path);
-	}
+	for (int i = 0; suffixes[i] != NULL; i++)
+		own_directory(pwd, suffixes[i]);
 	const char* files[] = {
-		"/config/settings/r5/theme",
-		"/config/settings/deskbar/settings",
+		"config/settings/r5/theme",
+		"config/settings/deskbar/settings",
 		NULL
 	};
-	for (int i = 0; files[i] != NULL; i++) {
-		char path[B_PATH_NAME_LENGTH];
-		int written = snprintf(path, sizeof(path), "%s%s", pwd->pw_dir,
-			files[i]);
-		if (written <= 0 || (size_t)written >= sizeof(path))
-			return;
-		own_file_if_present(pwd, path);
-	}
+	for (int i = 0; files[i] != NULL; i++)
+		own_file_if_present(pwd, files[i]);
 }
 
 

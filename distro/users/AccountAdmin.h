@@ -91,6 +91,15 @@ status_t set_first_password(const char* login, const char* realName,
 int32 admin_count();
 
 status_t migrate_admin_off_root();
+// Issue #4644: after migrate_admin_off_root(), true while /boot/home still
+// has to be given to the first administrator ("uid", "gid"). The walk runs
+// once: own_first_home() writes a marker when it is done. Not on Login's
+// message loop; "progress" is called on the walking thread with the number
+// of entries done.
+typedef void (*home_walk_progress)(int64 count, void* cookie);
+bool first_home_walk_needed(uid_t& uid, gid_t& gid);
+status_t own_first_home(uid_t uid, gid_t gid, home_walk_progress progress,
+	void* cookie);
 status_t ensure_shared_folder();
 status_t ensure_guest_account(BString& error);
 status_t wipe_guest_home();

@@ -39,6 +39,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <image.h>
+#include <new>
 #include <pwd.h>
 #include <shadow.h>
 #include <signal.h>
@@ -122,6 +123,13 @@ team_named(const char* needle)
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+static void stop_teams_of_uid(uid_t uid);
+// SPDX-SnippetEnd
+
+
 static const char* kSessionJobs[] = {
 	"x-vnd.Be-TRAK",
 	"x-vnd.Be-TSKB",
@@ -156,7 +164,9 @@ LoginApp::LoginApp()
 	fLoginWindow(NULL),
 	fLockWindow(NULL),
 	fEditShelfMode(false),
-	fAdminPort(-1)
+	fAdminPort(-1),
+	fHomeWalkThread(-1),
+	fPendingLogin(NULL)
 {
 }
 
@@ -236,7 +246,12 @@ LoginApp::_AdminRequest(BMessage* request, const r5_admin_sender& sender,
 				break;
 			}
 			reply->AddInt32("error", B_OK);
-			app->PostMessage(request->what);
+			// Issue #4639: Deskbar's Lock screen and Log out arrive here,
+			// with the uid the kernel named. MessageReceived() only takes
+			// Login's own (marked) messages.
+			BMessage* action = login_local_message(request->what);
+			app->PostMessage(action);
+			delete action;
 			break;
 		}
 		default:
@@ -313,9 +328,16 @@ LoginApp::MessageReceived(BMessage* message)
 			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 			// SPDX-License-Identifier: MIT
 			// The login window is this team. A BMessenger(Login) from any
-			// other team used to halt, lock, or sign in.
-			if (message->IsSourceRemote())
+			// other team used to halt, lock, or sign in. !IsSourceRemote()
+			// was not enough: the sender chooses the reply address, also
+			// Login's own (issue #4639). Only Login's own windows and its
+			// admin port (lock and log out from the signed-in person) make
+			// a message with Login's token.
+			if (!r5_admin_is_local(message)) {
+				syslog(LOG_WARNING, "Login: refused 0x%08" B_PRIx32
+					" from another team", message->what);
 				break;
+			}
 			// SPDX-SnippetEnd
 			if (message->what == kAttemptLogin) {
 				TryLogin(message);
@@ -359,6 +381,10 @@ LoginApp::MessageReceived(BMessage* message)
 // SPDX-License-Identifier: MIT
 		case R5_ADMIN_PORT_REQUEST:
 			r5_admin_port_reply(message, fAdminPort);
+			break;
+		case kHomeWalkDone:
+			if (r5_admin_is_local(message))
+				_HomeWalkDone(message);
 			break;
 // SPDX-SnippetEnd
 
@@ -436,12 +462,22 @@ LoginApp::ArgvReceived(int32 argc, char** argv)
 struct SignInMessageWiper {
 	SignInMessageWiper(BMessage* message)
 		:
-		fMessage(message)
+		fMessage(message),
+		fKeep(false)
 	{
+	}
+
+	// The sign-in goes on later with this message (issue #4644): wipe
+	// it then, not now.
+	void Keep()
+	{
+		fKeep = true;
 	}
 
 	~SignInMessageWiper()
 	{
+		if (fKeep)
+			return;
 		static const char* kFields[] = { "password", "new password", NULL };
 		for (int32 i = 0; kFields[i] != NULL; i++) {
 			const void* data = NULL;
@@ -455,6 +491,7 @@ struct SignInMessageWiper {
 	}
 
 	BMessage* fMessage;
+	bool fKeep;
 };
 // SPDX-SnippetEnd
 
@@ -470,9 +507,30 @@ LoginApp::TryLogin(BMessage* message)
 	BMessage reply(kLoginBad);
 	status_t status = B_BAD_VALUE;
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (fHomeWalkThread >= 0 && message != fPendingLogin) {
+		reply.AddInt32("error", B_BUSY);
+		reply.AddString("text", "Your files are still being prepared.");
+		message->SendReply(&reply);
+		return;
+	}
+// SPDX-SnippetEnd
+
 	const char* login = NULL;
 	if (message->FindString("login", &login) == B_OK) {
 		const char* password = message->GetString("password");
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// The sign-in that waited for the walk (issue #4644): a first
+		// password was already set from "new password".
+		const char* firstPassword = message->GetString("new password", NULL);
+		if (message == fPendingLogin && firstPassword != NULL
+			&& firstPassword[0] != '\0')
+			password = firstPassword;
+// SPDX-SnippetEnd
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
@@ -509,6 +567,19 @@ LoginApp::TryLogin(BMessage* message)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+			// Issue #4644: the first walk of /boot/home runs on its own
+			// thread; this sign-in goes on when it is done
+			// (_HomeWalkDone()), before anything uses the person's files.
+			uid_t walkUid = 0;
+			gid_t walkGid = 0;
+			if (status == B_OK && message != fPendingLogin
+				&& first_home_walk_needed(walkUid, walkGid)) {
+				status = _StartHomeWalk(message, walkUid, walkGid);
+				if (status == B_OK) {
+					wiper.Keep();
+					return;
+				}
+			}
 			if (status == B_OK && is_guest_account(login))
 				status = wipe_guest_home();
 // SPDX-SnippetEnd
@@ -692,6 +763,12 @@ LoginApp::Logout()
 	BString loggedOutName;
 	bool wasGuest = signed_in_name(loggedOutName) == B_OK
 		&& is_guest_account(loggedOutName.String());
+	uid_t loggedOutUid = 0;
+	if (loggedOutName.Length() > 0) {
+		struct passwd* pwd = getpwnam(loggedOutName.String());
+		if (pwd != NULL)
+			loggedOutUid = pwd->pw_uid;
+	}
 // SPDX-SnippetEnd
 	r5_session_log("logout");
 	clear_admin_grants();
@@ -713,6 +790,11 @@ LoginApp::Logout()
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+	// Issue #4642: what the roster does not list (a Terminal job in the
+	// background, a program without a signature or with "server" in it)
+	// stops too. Only the uid of the person who logs out.
+	if (loggedOutUid >= kMinPersonUid)
+		stop_teams_of_uid(loggedOutUid);
 	if (wasGuest) {
 		r5_session_log("wipe guest home");
 		wipe_guest_home();
@@ -1405,6 +1487,215 @@ LoginApp::_QuitUserApps()
 		return;
 	}
 }
+
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+BMessage*
+login_local_message(uint32 what)
+{
+	BMessage* message = new BMessage(what);
+	if (r5_admin_mark_local(message) != B_OK)
+		syslog(LOG_ERR, "Login: no token for its own messages");
+	return message;
+}
+
+
+// Issue #4642: system servers that are never stopped at Log out, even if
+// one of them runs with the person's uid. A team is kept only when its
+// program is this name in /boot/system/servers (or /system/servers), or
+// the kernel. Everything else of that uid stops: also a Terminal job in
+// the background and a program without a signature.
+static const char* kKeptSystemTeams[] = {
+	"app_server",
+	"debug_server",
+	"input_server",
+	"launch_daemon",
+	"mount_server",
+	"net_server",
+	"package_daemon",
+	"registrar",
+	"syslog_daemon",
+	NULL
+};
+
+
+static bool
+is_kept_system_team(const team_info& info)
+{
+	if (strcmp(info.args, "kernel_team") == 0)
+		return true;
+	char program[sizeof(info.args)];
+	strlcpy(program, info.args, sizeof(program));
+	char* space = strchr(program, ' ');
+	if (space != NULL)
+		*space = '\0';
+	const char* name = NULL;
+	if (strncmp(program, "/boot/system/servers/", 21) == 0)
+		name = program + 21;
+	else if (strncmp(program, "/system/servers/", 16) == 0)
+		name = program + 16;
+	if (name == NULL)
+		return false;
+	for (int32 i = 0; kKeptSystemTeams[i] != NULL; i++) {
+		if (strcmp(name, kKeptSystemTeams[i]) == 0)
+			return true;
+	}
+	return false;
+}
+
+
+// Stops every team of "uid" by the uid the kernel gives the team, not by
+// the roster: SIGTERM, then after a second kill_team(). Only that uid: a
+// person uid, never uid 0, never another signed-in person.
+static void
+stop_teams_of_uid(uid_t uid)
+{
+	if (uid < kMinPersonUid)
+		return;
+	team_id self = be_app != NULL ? be_app->Team() : -1;
+	int32 cookie = 0;
+	team_info info;
+	int32 signalled = 0;
+	while (get_next_team_info(&cookie, &info) == B_OK) {
+		if (info.uid != uid || info.team == self || info.team <= 1
+			|| is_kept_system_team(info))
+			continue;
+		send_signal(info.team, SIGTERM);
+		signalled++;
+	}
+	if (signalled == 0)
+		return;
+	r5_session_log("logout: SIGTERM to %d teams of uid %d", (int)signalled,
+		(int)uid);
+
+	const bigtime_t deadline = system_time() + 1000000LL;
+	for (;;) {
+		bool left = false;
+		cookie = 0;
+		while (get_next_team_info(&cookie, &info) == B_OK) {
+			if (info.uid == uid && info.team != self && info.team > 1
+				&& !is_kept_system_team(info)) {
+				left = true;
+				break;
+			}
+		}
+		if (!left)
+			return;
+		if (system_time() >= deadline)
+			break;
+		snooze(100000);
+	}
+	cookie = 0;
+	while (get_next_team_info(&cookie, &info) == B_OK) {
+		if (info.uid != uid || info.team == self || info.team <= 1
+			|| is_kept_system_team(info))
+			continue;
+		r5_session_log("logout: killing team %d of uid %d", (int)info.team,
+			(int)uid);
+		kill_team(info.team);
+	}
+}
+
+
+struct HomeWalkJob {
+	uid_t		uid;
+	gid_t		gid;
+	BMessenger	view;
+	BMessenger	app;
+};
+
+
+static void
+home_walk_progress_report(int64 count, void* cookie)
+{
+	HomeWalkJob* job = (HomeWalkJob*)cookie;
+	BString text;
+	text.SetToFormat("Preparing your files\xe2\x80\xa6 %" B_PRId64, count);
+	BMessage* progress = login_local_message(kLoginProgress);
+	progress->AddString("text", text.String());
+	job->view.SendMessage(progress);
+	delete progress;
+}
+
+
+static status_t
+home_walk_thread(void* data)
+{
+	HomeWalkJob* job = (HomeWalkJob*)data;
+	status_t status = own_first_home(job->uid, job->gid,
+		&home_walk_progress_report, job);
+	r5_session_log("home walk for uid %d: %s", (int)job->uid,
+		strerror(status));
+	BMessage* done = login_local_message(kHomeWalkDone);
+	done->AddInt32("status", status);
+	job->app.SendMessage(done);
+	delete done;
+	delete job;
+	return B_OK;
+}
+
+
+status_t
+LoginApp::_StartHomeWalk(BMessage* message, uid_t uid, gid_t gid)
+{
+	if (fHomeWalkThread >= 0 || fPendingLogin != NULL)
+		return B_BUSY;
+	HomeWalkJob* job = new(std::nothrow) HomeWalkJob;
+	if (job == NULL)
+		return B_NO_MEMORY;
+	job->uid = uid;
+	job->gid = gid;
+	job->view = message->ReturnAddress();
+	job->app = BMessenger(this);
+
+	thread_id thread = spawn_thread(&home_walk_thread, "home walk",
+		B_LOW_PRIORITY, job);
+	if (thread < 0) {
+		delete job;
+		return thread;
+	}
+	if (message == CurrentMessage())
+		message = DetachCurrentMessage();
+	fPendingLogin = message;
+	fHomeWalkThread = thread;
+	r5_session_log("home walk for uid %d started", (int)uid);
+	home_walk_progress_report(0, job);
+	resume_thread(thread);
+	return B_OK;
+}
+
+
+void
+LoginApp::_HomeWalkDone(BMessage* message)
+{
+	if (fPendingLogin == NULL)
+		return;
+	if (fHomeWalkThread >= 0) {
+		status_t exitValue;
+		wait_for_thread(fHomeWalkThread, &exitValue);
+		fHomeWalkThread = -1;
+	}
+	BMessage* pending = fPendingLogin;
+	status_t status = message->GetInt32("status", B_ERROR);
+	if (status == B_OK) {
+		// fPendingLogin stays set while TryLogin() runs: it skips the walk
+		// check and takes a first password from "new password".
+		TryLogin(pending);
+	} else {
+		SignInMessageWiper wiper(pending);
+		BMessage reply(kLoginBad);
+		reply.AddInt32("error", status);
+		BString text("Could not prepare your files: ");
+		text << strerror(status);
+		reply.AddString("text", text.String());
+		pending->SendReply(&reply);
+	}
+	fPendingLogin = NULL;
+	delete pending;
+}
+// SPDX-SnippetEnd
 
 
 status_t

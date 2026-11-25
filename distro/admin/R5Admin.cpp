@@ -8,14 +8,20 @@
 
 #include <R5Admin.h>
 
+#include <StorageDefs.h>
+
+#include <errno.h>
+#include <fcntl.h>
 #include <grp.h>
 #include <new>
+#include <pthread.h>
 #include <pwd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <time.h>
+#include <unistd.h>
 
 
 static const int32 kRequestCode = 'r5AR';
@@ -358,4 +364,155 @@ r5_admin_is_system_guest(uid_t uid)
 		return false;
 	return strcmp(pwd->pw_name, "guest") == 0
 		&& strcmp(pwd->pw_dir, "/boot/home/users/guest") == 0;
+}
+
+
+// #pragma mark - local messages (25 Nov 2026)
+
+
+static const char* kLocalField = "r5:local";
+static const size_t kLocalTokenSize = 16;
+static uint8 sLocalToken[kLocalTokenSize];
+static status_t sLocalTokenStatus = B_NO_INIT;
+static pthread_once_t sLocalTokenOnce = PTHREAD_ONCE_INIT;
+
+
+static void
+make_local_token()
+{
+	int fd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
+	if (fd < 0) {
+		sLocalTokenStatus = errno;
+		return;
+	}
+	size_t done = 0;
+	while (done < kLocalTokenSize) {
+		ssize_t bytes = read(fd, sLocalToken + done, kLocalTokenSize - done);
+		if (bytes <= 0) {
+			sLocalTokenStatus = bytes < 0 ? errno : B_IO_ERROR;
+			close(fd);
+			return;
+		}
+		done += bytes;
+	}
+	close(fd);
+	sLocalTokenStatus = B_OK;
+}
+
+
+status_t
+r5_admin_mark_local(BMessage* message)
+{
+	if (message == NULL)
+		return B_BAD_VALUE;
+	pthread_once(&sLocalTokenOnce, &make_local_token);
+	if (sLocalTokenStatus != B_OK)
+		return sLocalTokenStatus;
+	message->RemoveName(kLocalField);
+	return message->AddData(kLocalField, B_RAW_TYPE, sLocalToken,
+		kLocalTokenSize);
+}
+
+
+bool
+r5_admin_is_local(const BMessage* message)
+{
+	if (message == NULL)
+		return false;
+	pthread_once(&sLocalTokenOnce, &make_local_token);
+	if (sLocalTokenStatus != B_OK)
+		return false;
+	const void* data = NULL;
+	ssize_t size = 0;
+	if (message->FindData(kLocalField, B_RAW_TYPE, &data, &size) != B_OK
+		|| data == NULL || size != (ssize_t)kLocalTokenSize)
+		return false;
+	// The same time for every wrong token.
+	uint8 difference = 0;
+	for (size_t i = 0; i < kLocalTokenSize; i++)
+		difference |= ((const uint8*)data)[i] ^ sLocalToken[i];
+	return difference == 0;
+}
+
+
+// #pragma mark - files in a person's home (25 Nov 2026)
+
+
+int
+r5_admin_open_nofollow(const char* base, const char* relative, int flags,
+	mode_t createMode, mode_t fileMode)
+{
+	if (base == NULL || base[0] == '\0') {
+		errno = B_BAD_VALUE;
+		return -1;
+	}
+	const int kAlways = O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC;
+	bool hasRelative = relative != NULL && relative[0] != '\0';
+	int fd = open(base, (hasRelative ? O_RDONLY | O_DIRECTORY : flags)
+		| kAlways, fileMode);
+	if (fd < 0 || !hasRelative)
+		return fd;
+
+	const char* cursor = relative;
+	for (;;) {
+		while (*cursor == '/')
+			cursor++;
+		if (*cursor == '\0')
+			return fd;
+
+		char part[B_FILE_NAME_LENGTH];
+		const char* end = strchr(cursor, '/');
+		size_t length = end != NULL ? (size_t)(end - cursor) : strlen(cursor);
+		if (length >= sizeof(part)) {
+			close(fd);
+			errno = B_NAME_TOO_LONG;
+			return -1;
+		}
+		memcpy(part, cursor, length);
+		part[length] = '\0';
+		if (strcmp(part, ".") == 0 || strcmp(part, "..") == 0) {
+			close(fd);
+			errno = B_BAD_VALUE;
+			return -1;
+		}
+		cursor += length;
+		while (*cursor == '/')
+			cursor++;
+		bool last = *cursor == '\0';
+
+		int partFlags = last ? flags : O_RDONLY | O_DIRECTORY;
+		int next = openat(fd, part, partFlags | kAlways, fileMode);
+		if (next < 0 && errno == ENOENT && createMode != 0
+			&& (partFlags & O_DIRECTORY) != 0) {
+			if (mkdirat(fd, part, createMode) == 0 || errno == EEXIST)
+				next = openat(fd, part, partFlags | kAlways, fileMode);
+		}
+		int error = errno;
+		close(fd);
+		if (next < 0) {
+			errno = error;
+			return -1;
+		}
+		fd = next;
+		if (last)
+			return fd;
+	}
+}
+
+
+status_t
+r5_admin_set_owner(int fd, uid_t uid, gid_t gid, mode_t mode)
+{
+	struct stat st;
+	if (fstat(fd, &st) != 0)
+		return errno;
+	if (S_ISREG(st.st_mode) && st.st_nlink > 1)
+		return B_NOT_ALLOWED;
+	if (uid != (uid_t)-1 && (st.st_uid != uid || st.st_gid != gid)
+		&& fchown(fd, uid, gid) != 0)
+		return errno;
+	if (mode != (mode_t)-1 && (st.st_mode & 07777) != (mode & 07777)
+		&& fchmod(fd, mode) != 0)
+		return errno;
+	return B_OK;
 }
