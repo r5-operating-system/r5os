@@ -437,13 +437,26 @@ BStatusWindow::AttemptToQuit()
 	// called when tracker is quitting
 	// try to cancel all the move/copy/empty trash threads in a nice way
 	// by issuing cancels
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// the views go away when their thread finishes, so an empty list means
+	// every copy thread ran its own cancel cleanup (#4621). Only a short
+	// wait for the lock: a copy thread may hold it while it waits for
+	// be_app, which the caller holds.
+	if (LockWithTimeout(100000) != B_OK)
+		return false;
 	int32 count = fViewList.CountItems();
 
-	if (count == 0)
+	if (count == 0) {
+		Unlock();
 		return true;
+	}
 
 	for (int32 index = 0; index < count; index++)
 		fViewList.ItemAt(index)->SetWasCanceled();
+	Unlock();
+// SPDX-SnippetEnd
 
 	// maybe next time everything will have been canceled
 	return false;
@@ -1045,4 +1058,14 @@ void
 BStatusView::SetWasCanceled()
 {
 	fWasCanceled = true;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// a paused copy is suspended in CheckCanceledOrPaused(): wake it so it
+	// sees the cancel and removes its partial file (#4621). Resuming a thread
+	// that runs is harmless, and AttemptToQuit() repeats this, which also
+	// covers a thread that suspends just after this call.
+	fIsPaused = false;
+	resume_thread(Thread());
+// SPDX-SnippetEnd
 }

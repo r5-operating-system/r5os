@@ -8,6 +8,25 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-25 - Tracker: a move keeps the original unless the copy fully succeeded (#4619-#4631)
+
+- Problem: a review of Tracker on `main` filed thirteen issues. Checked against the code: eleven are real, two are not.
+- Changed (`distro/desktop/src/kits/tracker/`, Haiku files with R5 SPDX snippets; no API or `libtracker.so` symbol changed, `CopyFile()` and `CopyAttributes()` keep their signatures and call new static helpers):
+  - #4619, #4620 (`FSUtils.cpp`): `LowLevelCopy` removes the incomplete destination after a short write, a read error or a failed attribute copy. `CopyAttributesChecked` checks every `ReadAttr` and `WriteAttr`. `CopyFileChecked` and `CopyFolder` return whether everything was copied; a move removes a file or folder only then. Continue after an error skips the item and keeps the source. The same rule now also covers a skipped name conflict, a skipped entry, a folder whose own attributes failed, a mount point and a special file inside a moved folder: before, the source was deleted in all of these, and `FSDeleteFolder` removed a moved folder with everything still in it. A file system that cannot write attributes at all (FAT has none; ext2 answers `B_READ_ONLY_DEVICE`) keeps the old best effort, so a move there still works and loses the attributes, as before.
+  - #4629: `MoveEntryToTrash` returns the result of `MoveItem`; a failed item stops the batch, its "original path" attribute is removed again, and only MoveItem's alert is shown (no second one).
+  - #4630: the relative link is built from the two absolute paths, without `getcwd`/`chdir`.
+  - #4621 (`Tracker.cpp`, `StatusWindow.cpp`): quit no longer gives up after five seconds. `QuitRequested` asks again every 0.1 s (a `BMessageRunner`) until no copy thread is left, without blocking the application thread, because a copy thread can wait for `be_app`. `SetWasCanceled` resumes a paused copy so its cancel cleanup runs. `AttemptToQuit` takes the window lock with a timeout.
+  - #4622 (`PoseView.cpp`): a busy node no longer sleeps the window thread up to a second; the notice is posted again after 10 ms, at most 100 times, as before.
+  - #4625: the row of a pose is taken from that pose, so a symlink no longer removes its target's row when the list is re-sorted.
+  - #4626, part: Continue after an error adds only the bytes not yet counted. Open: the preflight total counts allocated blocks while the copy counts bytes, so sparse files still overrun the bar.
+  - #4627 (`InfoWindow.cpp`): Get info shows "Error calculating folder size." instead of a partial sum.
+  - #4628: a finished thumbnail updates every open window of the folder.
+  - #4631: a hidden entry's Model is deleted while a folder is filled.
+- Not real: #4623 and #4624. In icon view `CurrentPoseList()` is `fVSPoseList` (`PoseView.h`), the list sorted by y that `FirstIndexAtOrBelow` searches, and a moved pose is taken out and put back in order; the loops do not mix two lists.
+- Mistakes on the way, fixed before the build: a first version of the quit wait blocked in `QuitRequested` (deadlock with a copy thread that holds the status window and waits for `be_app`); a lock was taken twice in `AttemptToQuit`; ext2 would have failed every move because it claims attributes but cannot write them.
+- Limits: shutdown during a running copy now waits for it, so the registrar may report Tracker as not quitting. A shutdown or log out while a copy waits in an error alert waits for that alert.
+- Tested (25 Nov 2026): AMD64 image with `scripts/build-locked.sh` from this worktree (`jam_exit=0`, `mesa_exit=0`, no warnings in the changed files). QEMU (KVM) on an own copy of the image: boots past the splash to the first-start window, no KDL or crash in the serial log; Tracker itself was not reached (it starts after first start and sign in). Not run: the forced cross-volume failure, Move to Trash with an unremovable item, pause and quit during a large copy, and icon view selection; these need an interactive Tracker session.
+
 ## 2026-11-25 - Stick 81 on the 5625U: accounts, guest, Shared and the card reader
 
 - Stick 81: `main` `dd905a39c3`, build 10072, anyboot, booted as Try R5 on the 5625U on 25 Nov 2026. Logs: `generated/boot-5625u-81` in the stick worktree (syslog of boot 1 only; Login, the key store, the guest and Shared do not log). Results are the owner's, from the screen.
