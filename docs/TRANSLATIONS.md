@@ -93,16 +93,14 @@ Weblate first used the "Haiku catkeys" format. A test (#4607, closed unmerged) s
 
 ### New folders appear by themselves
 
-Set up once, by the owner, in Weblate:
+The owner runs `py scripts/weblate-discovery.py --apply` once, with their own Weblate API key (hosted.weblate.org: picture at the top right > Settings > API access). Without `--apply` it only shows what it will do. It:
 
-1. On one existing component (for example Bluetooth), add the add-on **Component discovery** with:
-   - regular expression `distro/catalogs/(?P<component>.+)/(?P<language>[^/.]+)\.po`;
-   - component name `{{ component }}`;
-   - base file (template) `distro/catalogs/{{ component }}/template.pot`;
-   - file format "gettext PO file".
-2. In the GitHub repository settings, add the Weblate webhook (`https://hosted.weblate.org/hooks/github/`, event "push").
+1. checks that the components `wifi` and `bluetooth_deskbar` have nothing in Weblate that is not in the repository yet, and stops if they have;
+2. renames `bluetooth` to `preferences/r5bt`, so every component is named after its folder;
+3. deletes `wifi` and `bluetooth_deskbar` after you type `delete` (their translations are in the repository; their Weblate history is not kept);
+4. turns on **Component discovery** on `bluetooth`, with the file mask `distro/catalogs/(?P<component>.+)/(?P<language>[^/.]+)\.po` and the template `distro/catalogs/{{ component }}/template.pot`.
 
-After that every new folder in `distro/catalogs` on `main` becomes a component, and new or changed texts reach Weblate after each merge. Weblate's changes still come back as a pull request.
+Discovery then creates one component per folder in `distro/catalogs` on `main`, and new ones after every push. The GitHub webhook (`https://hosted.weblate.org/hooks/github/`, event push) is on since 25 Nov 2026, so Weblate fetches `main` after each merge. Weblate's changes still come back as a pull request.
 
 ## Drafts
 
