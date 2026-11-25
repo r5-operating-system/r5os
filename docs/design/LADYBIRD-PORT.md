@@ -104,7 +104,7 @@ Multi-user: helpers run as the signed-in user (`docs/MULTIUSER.md`), with the pr
 - Ladybird uses **Skia Ganesh** (`GrDirectContext`, `Services/Compositor/SkiaBackendContext.cpp`), no Graphite. Backends: Vulkan (`Libraries/LibGfx/VulkanContext.cpp`, `Services/Compositor/SkiaVulkanMemoryAllocator.cpp`), Metal, Direct3D, and OpenGL ES through ANGLE (`Services/Compositor/OpenGLContext.cpp`). `HAS_VULKAN` is set when the Vulkan headers and loader are found (`Meta/CMake/check_for_dependencies.cmake`). Linux shares frames as dmabuf (`USE_VULKAN_DMABUF_IMAGES`, Linux and BSD only). Without a GPU it most likely draws on the CPU (Skia raster); not checked.
 - R5's Skia is a different build: m158, **Graphite** only, Ganesh off, static, linked only by app_server (`docs/GPU-ARCHITECTURE.md`, M12; `docs/APP-SERVER-GPU-DRAWING.md`, `gn` arguments). That rule stays. So Ladybird gets **its own Skia** (Ganesh, Vulkan, Ladybird's pinned version) as a separate recipe. The two do not share code. They meet only at the Vulkan driver.
 - On R5 the Ladybird Compositor would use Vulkan through the normal loader: **RADV** on a supported GPU, **Lavapipe** otherwise, the same order as app_server. It needs no new kernel call. GL through ANGLE is not needed. Zink is the R5 GL route if it ever is.
-- The missing piece is **getting the frame on screen**. Linux hands the UI a dmabuf. R5 has no dmabuf sharing between processes into app_server. Step one is a copy: the Compositor reads the frame back into shared memory, and the front end draws it as a `BBitmap` in a `BView`. That works on every R5 machine and costs a copy per frame. A zero-copy path (an exported Vulkan image that app_server composes directly) would be a new R5 GPU call, additive under `docs/GPU-ARCHITECTURE.md`, and comes later, if the copy is too slow.
+- The missing piece is **getting the frame on screen**. Linux hands the UI a dmabuf. R5 has no dmabuf sharing between processes into app_server. R5 already shows Vulkan windows without a CPU copy (M11), but the export rule pins one team, and here the Compositor and the window are two processes. See "GPU from the first step" (the owner chose the GPU from the first step, not a CPU copy).
 
 ## 5. The front end
 
@@ -206,7 +206,7 @@ Servo is further along than this document first said (owner's correction; checke
 - **Version 0.8.0**: crate on crates.io 7 Nov 2026, GitHub release 9 Nov 2026, the "October in Servo" post on 19 Nov 2026 (588 commits). Monthly releases since 0.1.0 (13 Apr 2026), an LTS line every six months (0.6.0 LTS, 29 Sep 2026; book `src/embedding/lts-release.md`).
 - **Web Platform Tests**: about **67 %** of tests and **94 %** of subtests (`wpt.servo.org/scores.json`, run of 22 Nov 2026, 0.8.0), against about 24 % in April 2023. No official list of working sites.
 - **Built to be embedded.** Crate `servo` (`components/servo`): `ServoBuilder`, `WebView` (`load`, `resize`, `notify_input_event`, `paint`), `WebViewDelegate` (new frame ready, URL, title, load state, dialogs, file picker, context menu, input method), `ClipboardDelegate`, `NetworkManager`. A **C API** exists (`ffi/capi`, crate `servo-capi`, "eventually also provide a stable ABI"), which suits a C++ `BView`. Rendering contexts in `components/shared/paint/rendering_context.rs`, among them `SoftwareRenderingContext` with `read_to_image()` for pixel readback.
-- **Drawing:** WebRender on **OpenGL** through surfman (EGL; a Mesa surfaceless backend exists). No Vulkan path for WebRender; WebGPU uses wgpu with Vulkan. On R5 that means: start with the software context (llvmpipe) and copy the pixels into a `BBitmap`, later EGL on Zink over RADV. R5's EGL support for this is not checked.
+- **Drawing:** WebRender on **OpenGL** through surfman (EGL; a Mesa surfaceless backend exists). No Vulkan path for WebRender; WebGPU uses wgpu with Vulkan. On R5 OpenGL is Zink: on RADV with a GPU, and Zink can run on Lavapipe without one (`docs/GPU-OPENGL.md`; today R5's OpenGL fallback is llvmpipe, cases 3–7 there). See "GPU from the first step" below.
 - **Single process by default** (`opts.rs`: `multiprocess: false`, `sandbox: false`). `ipc-channel` falls back to an in-process channel on systems it does not know, so Haiku needs no IPC work to start. The cost is no site isolation and no sandbox (gaol is Linux and macOS only, "lightly reviewed").
 - **Platforms:** Linux, macOS, Windows, Android, OpenHarmony; FreeBSD builds since March 2026 (PRs #43116, #43134; issues still open). **No Haiku code or issue** in the repository.
 - **Toolchain:** Rust 1.99.1 (`rust-toolchain.toml`, minimum 1.88, edition 2024). HaikuPorts has `rust_bin-1.94.1`, and Haiku is a Rust tier-3 target, so the newer Rust has to be built. **No C++23 and no new GCC needed** for Servo itself.
@@ -224,11 +224,31 @@ Servo is further along than this document first said (owner's correction; checke
 | Processes and sandbox | multiprocess, no sandbox | multiprocess, no sandbox | single process, no sandbox | multiprocess, no sandbox |
 | Drawing | software (accelerated compositing off) | CPU into `BBitmap` | OpenGL (llvmpipe first, then Zink) | Skia Ganesh on Vulkan |
 | New toolchain for R5 | no | no (already in the port) | Rust 1.99 | C++23, GCC 14+, Rust |
-| Cost to a first page in Aomi (AI sessions) | 4–8 (round 1 in `docs/AOMI.md`) | 6–10 | 8–14 | 14–25 |
+| Cost to a first page in Aomi (AI sessions) | 4–8 (round 1 in `docs/AOMI.md`) | 6–10 | 12–20 with the GPU from the start | 14–25 |
 | Upkeep | Haiku's port | heavy: Haiku port plus own layer every 4 weeks | monthly API changes, or LTS every 6 months | rebase on a fast project with no Haiku CI |
 | License | LGPL-2.1 and BSD | MPL-2.0 | MPL-2.0 | BSD-2-Clause, Qt LGPL for the Qt route |
 
-Servo step estimate: Rust 1.99 for Haiku (1–2), SpiderMonkey via `mozjs` with the Firefox port's Haiku changes as a guide (2–4), the Haiku branches in fonts, surfman and the Unix crates (2–4), a `BServoView` on the software context with pixel copy (1–2), Aomi on top (3–5), then GL through Zink (1–2). Gecko step estimate: build the Haiku Firefox port on R5 (1), the chrome document and the `BMessage` bridge (3–5), the native counterparts of the Firefox UI features Aomi needs (3–6), and every Firefox update after that.
+### GPU from the first step
+
+Owner, 25 Nov 2026: Aomi on a new engine draws on the GPU from the first step, on RADV or on Lavapipe. A first step that copies pixels on the CPU is not worth doing. This overrides the earlier line in `docs/AOMI.md` that Lavapipe gets no browser work.
+
+What R5 has today for that:
+
+- **Vulkan windows without a CPU copy:** done in M11 (`docs/GPU-ARCHITECTURE.md`, M11 row: zero-copy on for VulkanTeapot and `vkcube`, the same look on Lavapipe), through `BO_EXPORT` / `BO_IMPORT` and `BO_PRESENT_MARK` ("Sharing a buffer between teams"). The kernel lets only app_server import, and only for the team pinned at export.
+- **OpenGL windows with a CPU copy:** Zink on RADV draws on the GPU, but on `eglSwapBuffers` the Haiku EGL driver maps the back buffer and copies it into a `BBitmap` (`docs/GPU-OPENGL.md`, the present hook). So GL is accelerated, but each frame goes through the CPU to the screen.
+
+What that means per engine:
+
+| Engine | GPU API | On R5 today | Work for GPU without a CPU copy |
+|---|---|---|---|
+| Ladybird | Vulkan (Skia Ganesh) | RADV or Lavapipe directly, the M11 zero-copy path exists | The frame is drawn in the Compositor process, but the window belongs to the UI process. Either the Compositor presents for that window, or the export rule allows a second team. A new question for the M11 design |
+| Servo | OpenGL (WebRender) | Zink on RADV, or Zink on Lavapipe; presentation copies on the CPU | A zero-copy present for EGL: the Zink back buffer goes to app_server like a Vulkan swapchain image (`BO_EXPORT`), not through `BBitmap`. That is an R5 Mesa change plus a surfman backend for Haiku EGL. Servo is single-process, so the window and the drawing are in the same team, which fits the current export rule |
+| Gecko | CPU into `BBitmap` in the Haiku port; WebGL through `BGLView` | no GPU compositing | WebRender on GL for Haiku, the same zero-copy EGL present as Servo, plus enabling it in the port |
+| WebKit2 | accelerated compositing off on Haiku (`docs/AOMI.md`) | software | EGL on Haiku for WebKit, the same zero-copy EGL present |
+
+So the zero-copy EGL present is shared work: it helps Servo, Gecko, WebKit2 and every OpenGL program on R5 (GLTeapot too). Ladybird is the only engine that needs no GL work, because it is Vulkan, but it has the two-process question.
+
+Servo step estimate, with the GPU from the start: Rust 1.99 for Haiku (1–2), SpiderMonkey via `mozjs` with the Firefox port's Haiku changes as a guide (2–4), the Haiku branches in fonts and the Unix crates (2–3), a surfman backend on R5's Haiku EGL (1–2), the zero-copy EGL present in R5's Mesa (2–3, test on the 5625U and Lavapipe in QEMU), a `BServoView` (1–2), Aomi on top (3–5). Gecko step estimate: build the Haiku Firefox port on R5 (1), the chrome document and the `BMessage` bridge (3–5), the native counterparts of the Firefox UI features Aomi needs (3–6), and every Firefox update after that.
 
 ## Recommendation: Servo first, with Gecko as the fallback
 
@@ -237,7 +257,7 @@ In plain language: Ladybird is the hardest of the four on R5. It needs a newer c
 So:
 
 1. **Now:** check Firefox on R5 (step 0 above), because it is the stopgap while Aomi is not ready.
-2. **Next, one proof round for Servo:** Rust 1.99 and `mozjs` on R5, then a `BServoView` that shows one page with the software context in QEMU. That round decides whether Servo can carry Aomi.
+2. **Next, one proof round for Servo:** Rust 1.99 and `mozjs` on R5, then a `BServoView` that shows one page on the GPU: Zink on Lavapipe in QEMU and Zink on RADV on the 5625U. That round decides whether Servo can carry Aomi. The zero-copy EGL present is the step right after, and it is R5 work that helps every OpenGL program.
 3. **If SpiderMonkey or surfman will not work on R5:** fall back to a BGeckoView on the Haiku Firefox port, which costs more upkeep but uses an engine that already runs here.
 4. **Ladybird:** watch it. Look again when it has a stable embedder API and its toolchain fits R5's.
 
