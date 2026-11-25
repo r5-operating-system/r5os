@@ -1,11 +1,11 @@
 # Aomi window mockup (25 Nov 2026)
 
-The design is `../AOMI-UI.md`. Three layouts for the window of Aomi, the R5 browser, on a 1280 by 800 screen. Nothing is chosen yet.
+The design is `../AOMI-UI.md`. Three layouts for the window of Aomi, the R5 browser, on a 1280 by 800 screen. The owner chose option B on 25 Nov 2026.
 
 | File | What it shows |
 |---|---|
 | `option-a-classic.html` | A: menu bar, tabs, navigation row, bookmarks bar, status line; Downloads as its own window |
-| `option-b-compact.html` | B (recommended): tabs and one toolbar with one menu button; downloads in a panel |
+| `option-b-compact.html` | B (chosen by the owner, 25 Nov 2026): tabs and one toolbar with one menu button; downloads in a panel |
 | `option-c-side-tabs.html` | C: menu bar, one toolbar, tabs in a list on the left like Settings |
 | `aomi.css`, `aomi.js` | The shared look and the builder; each option page sets `data-option` |
 

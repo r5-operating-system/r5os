@@ -3,7 +3,9 @@
 
 # Aomi window: layout options
 
-Design only, 25 Nov 2026. Nothing is built. The owner chooses an option before a brief or code exists.
+Design only, 25 Nov 2026. Nothing is built.
+
+**Owner's choice (25 Nov 2026): option B, Compact.** Options A and C stay below as the record of what was weighed. No brief or code before the owner's explicit go.
 
 Aomi is the R5 browser (`docs/AOMI.md`). Its engine changes: Servo first, Gecko as the fallback (`docs/design/LADYBIRD-PORT.md`, PR #4657). This document designs the window apart from the engine, so the window survives an engine change. The mockups are in `aomi-mockup/`.
 
