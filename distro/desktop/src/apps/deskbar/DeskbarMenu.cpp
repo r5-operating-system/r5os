@@ -378,6 +378,22 @@ B_TRANSLATE_MARK_VOID("About R5")
 	AddItem(mountMenu);
 #endif
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// The Settings application, with the R5 wave pebble (issue #4615).
+	{
+		BRect iconRect(BPoint(0, 0),
+			be_control_look->ComposeIconSize(B_MINI_ICON));
+		const BBitmap* pebble = R5Deskbar::Pebble(iconRect.Width() + 1);
+		item = new IconMenuItem(B_TRANSLATE("Settings"),
+			new BMessage(kOpenSettings), const_cast<BBitmap*>(pebble));
+		item->SetEnabled(!dragging);
+		item->SetTarget(be_app);
+		AddItem(item);
+	}
+// SPDX-SnippetEnd
+
 	BString menuLabel(B_TRANSLATE("%appname% preferences" B_UTF8_ELLIPSIS));
 	menuLabel.ReplaceFirst("%appname%", B_TRANSLATE_SYSTEM_NAME("Deskbar"));
 	item = new BMenuItem(menuLabel, new BMessage(kConfigShow));
@@ -528,6 +544,7 @@ TDeskbarMenu::ResetTargets()
 				case kLogoutSession:
 				case kLockSession:
 				case kOpenSharedFolder:
+				case kOpenSettings:
 // SPDX-SnippetEnd
 				case kRealignReplicants:
 				case kShowHideTime:

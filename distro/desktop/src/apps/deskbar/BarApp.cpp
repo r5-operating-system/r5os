@@ -91,6 +91,7 @@ namespace BPrivate {
 #include <String.h>
 #include <WindowInfo.h>
 #include <R5Admin.h>
+#include <R5UI.h>
 #include <pwd.h>
 #include <unistd.h>
 // SPDX-SnippetEnd
@@ -620,8 +621,22 @@ TBarApp::MessageReceived(BMessage* message)
 			break;
 
 		case kConfigShow:
-			ShowPreferencesWindow();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			// The Desktop and Deskbar page of Settings replaces this window
+			// (issue #4615). ShowPreferencesWindow() stays for now.
+			r5_settings_open_page("deskbar");
+// SPDX-SnippetEnd
 			break;
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		case kOpenSettings:
+			r5_settings_open_page(NULL);
+			break;
+// SPDX-SnippetEnd
 
 		case kConfigQuit:
 			QuitPreferencesWindow();

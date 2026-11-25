@@ -51,7 +51,7 @@ What a launcher still needs:
 | WiFi (R5) | `application/x-vnd.Haiku-WiFi` | `wifi` | Fully covered → launcher |
 | Screen | `application/x-vnd.Haiku-Screen` | `display` | Not yet |
 | Network | `application/x-vnd.Haiku-Network` | `connections` | Not yet |
-| Users & Accounts (R5) | `application/x-vnd.R5OS-Users` | `accounts` | Not yet (one small gap) |
+| Users & Accounts (R5) | `application/x-vnd.R5OS-Users` | `accounts` | Fully covered → launcher (since 25 Nov 2026) |
 | Sounds, Keymap, Input, Printers | see below | `sound`, `keyboard`, `mouse`, `printers` | Not yet: the page is only an "Open" button |
 
 Not a preference program, so no launcher: Theme (no separate program),
@@ -85,8 +85,9 @@ which opens Deskbar's own preferences window.
 | Revert, Defaults | yes |
 
 Who starts it: the Deskbar menu item "Deskbar preferences…" (`DeskbarMenu.cpp`,
-`kConfigShow` handled in `BarApp.cpp`, `ShowPreferencesWindow()`), and the
-Preferences menu by name. Verdict: fully covered. Two changes, not one: the
+`kConfigShow` handled in `BarApp.cpp`), and the Preferences menu by name. Since
+25 Nov 2026 `kConfigShow` opens the Settings page, and the Deskbar menu has a
+Settings item. Verdict: fully covered. Two changes, not one: the
 launcher (`DeskbarPreferences.cpp` opens Settings instead of sending
 `kConfigShow`) and Deskbar's `kConfigShow` handler, which must open Settings
 too, or the menu item still shows the old window.
@@ -119,11 +120,10 @@ signature. Verdict: fully covered → launcher.
 | Use volume (boot volume by default) | yes |
 | Current swap, "takes effect on the next start" | yes |
 | Revert, Defaults | yes |
-| Alert when the settings file names a missing volume | no (small; the page shows the boot volume) |
+| Alert when the settings file names a missing volume | yes (a line on the page, since 25 Nov 2026) |
 
 Who starts it: the Preferences menu by name; the Information page uses only
-its icon. Verdict: fully covered → launcher. The missing-volume alert is worth
-adding to the page but does not block.
+its icon. Verdict: fully covered → launcher.
 
 ### Appearance → `fonts`
 
@@ -159,7 +159,8 @@ Who starts it: the Preferences menu by name; Screen's "Set background" button
 (`ScreenWindow.cpp`, `kBackgroundsSignature`). Messages by signature to a
 running Backgrounds: Tracker's desktop after a colour drop (`DeskWindow.cpp`),
 Backgrounds to Screen (`UPDATE_DESKTOP_COLOR_MSG`). Those only reach a running
-program, so they become no-ops. Verdict: fully covered → launcher.
+program. Since 25 Nov 2026 Tracker also sends the dropped colour to Settings,
+where the Wallpaper and Display pages take it. Verdict: fully covered → launcher.
 
 ### Bluetooth (R5) → `bluetooth`
 
@@ -231,7 +232,7 @@ Who starts it: NetworkStatus (`NetworkStatusView.cpp`, "Open network
 preferences"), the Wi-Fi view (`WiFiView.cpp`), Device Manager. Missing:
 profiles, VPN, dial-up, traffic counters, Renegotiate.
 
-### Users & Accounts (R5) → `accounts`: not yet
+### Users & Accounts (R5) → `accounts`
 
 `/boot/system/preferences/Users`, `distro/users`.
 
@@ -240,11 +241,11 @@ profiles, VPN, dial-up, traffic counters, Renegotiate.
 | Account list, Add, Delete (keep or delete files), Disable/Enable | yes |
 | Name, Email, Account type, Change password | yes |
 | Choose picture | yes |
-| Remove picture | no |
+| Remove picture | yes (since 25 Nov 2026) |
 | Guest sign-in, Shared folder | yes (page only) |
 
-Who starts it: the Preferences menu by name. Missing: Remove picture. After
-that it can become a launcher.
+Who starts it: the Preferences menu by name. With Remove picture added on 25
+Nov 2026 it can become a launcher.
 
 ### Sounds, Keymap, Input, Printers: not yet
 

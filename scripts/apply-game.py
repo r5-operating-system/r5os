@@ -29,6 +29,20 @@ HAIKU = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else ROOT / "haiku")
 GAME = ROOT / "distro" / "game"
 KERNEL = ROOT / "distro" / "kernel"
 
+MINIMUM_BLOCK = """
+# R5 game controllers in the minimum image (scripts/apply-game.py, issue
+# #4615): the Settings page that the Bluetooth page opens, and the mapping
+# database. Only for a minimum build; the regular image adds its own.
+if $(HAIKU_BUILD_TYPE) = minimum {
+	SYSTEM_ADD_ONS_SETTINGS += settings_gamecontrollers ;
+	local r5GameDB = <r5gamedb>gamecontrollerdb.txt <r5gamedb>LICENSE ;
+	SEARCH on $(r5GameDB) = [ FDirName $(HAIKU_TOP) data game_controllers ] ;
+	AddDirectoryToHaikuImage system non-packaged data game_controllers ;
+	AddFilesToHaikuImage system non-packaged data game_controllers
+		: $(r5GameDB) ;
+}
+"""
+
 DATA_BLOCK = """
 # R5 game controller mapping database (distro/game/data), unmodified
 # SDL_GameControllerDB with its LICENSE (zlib). Regular image only.
@@ -162,6 +176,11 @@ def main() -> int:
         "SYSTEM_BIN += gamecontroller_test ;\n",
         "SYSTEM_BIN += gamecontroller_feel_test ;\n",
         "gamecontroller_feel_test image")
+
+    # The minimum image (issue #4615): the page the Bluetooth page opens.
+    insert_once(HAIKU / "build/jam/images/definitions/minimum",
+        "SYSTEM_ADD_ONS_SETTINGS += settings_fonts ;\n",
+        MINIMUM_BLOCK, "game controllers minimum image")
     return 0
 
 

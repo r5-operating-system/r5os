@@ -436,7 +436,10 @@ WorkspaceGrid::Draw(BRect updateRect)
 	BRect plate(0, 0, size.width - 1, size.height - 1);
 	SetHighColor(frame);
 	FillRoundRect(plate, u * 3.0f, u * 3.0f);
-	rgb_color other = tint_color(ui_color(B_DESKTOP_COLOR), B_LIGHTEN_2_TINT);
+	// The desktop colour itself, so a change on the Wallpaper page or a colour
+	// dropped on the desktop shows here (issue #4615).
+	rgb_color other = tint_color(BScreen(Window()).DesktopColor(),
+		B_LIGHTEN_2_TINT);
 	for (uint32 row = 0; row < fRows; row++) {
 		for (uint32 column = 0; column < fColumns; column++) {
 			BRect cell = _Cell(column, row);
@@ -1299,6 +1302,10 @@ void
 DisplayView::MessageReceived(BMessage* message)
 {
 	switch (message->what) {
+		case kMsgDesktopColorChanged:
+			if (fGrid != NULL)
+				fGrid->Invalidate();
+			break;
 		case kMsgRefreshPage:
 		case B_COLORS_UPDATED:
 		case B_FONTS_UPDATED:
