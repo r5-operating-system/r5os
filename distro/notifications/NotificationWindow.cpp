@@ -28,6 +28,11 @@
 #include <Path.h>
 #include <Point.h>
 #include <PropertyInfo.h>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <R5Admin.h>
+// SPDX-SnippetEnd
 #include <Screen.h>
 
 #include "AppGroupView.h"
@@ -91,6 +96,13 @@ NotificationWindow::NotificationWindow()
 		| B_NOT_RESIZABLE | B_NOT_MOVABLE | B_AUTO_UPDATE_SIZE_LIMITS,
 		B_ALL_WORKSPACES),
 	fShouldRun(true)
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	,
+	fAdminPort(-1),
+	fSessionHidden(false)
+// SPDX-SnippetEnd
 {
 	status_t result = find_directory(B_USER_CACHE_DIRECTORY, &fCachePath);
 	fCachePath.Append("Notifications");
@@ -103,6 +115,15 @@ NotificationWindow::NotificationWindow()
 
 	_LoadSettings(true);
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (r5_admin_port_start("r5 notif admin",
+			&NotificationWindow::_AdminRequest, this, &fAdminPort) != B_OK) {
+		fAdminPort = -1;
+	}
+// SPDX-SnippetEnd
+
 	// Start the message loop
 	Hide();
 	Show();
@@ -111,6 +132,14 @@ NotificationWindow::NotificationWindow()
 
 NotificationWindow::~NotificationWindow()
 {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (fAdminPort >= 0) {
+		r5_admin_port_stop(fAdminPort);
+		fAdminPort = -1;
+	}
+// SPDX-SnippetEnd
 	appfilter_t::iterator aIt;
 	for (aIt = fAppFilters.begin(); aIt != fAppFilters.end(); aIt++)
 		delete aIt->second;
@@ -174,65 +203,33 @@ NotificationWindow::MessageReceived(BMessage* message)
 			if (!fShouldRun)
 				break;
 
-			BMessage reply(B_REPLY);
-			BNotification* notification = new BNotification(message);
-
-			if (notification->InitCheck() == B_OK) {
-				bigtime_t timeout;
-				if (message->FindInt64("timeout", &timeout) != B_OK)
-					timeout = fTimeout;
-				BString sourceSignature(notification->SourceSignature());
-				BString sourceName(notification->SourceName());
-
-				bool allow = false;
-				appfilter_t::iterator it = fAppFilters
-					.find(sourceSignature.String());
-
-				AppUsage* appUsage = NULL;
-				if (it == fAppFilters.end()) {
-					if (sourceSignature.Length() > 0
-						&& sourceName.Length() > 0) {
-						appUsage = new AppUsage(sourceName.String(),
-							sourceSignature.String(), true);
-						fAppFilters[sourceSignature.String()] = appUsage;
-						// TODO save back to settings file
-					}
-					allow = true;
-				} else {
-					appUsage = it->second;
-					allow = appUsage->Allowed();
-				}
-
-				if (allow) {
-					BString groupName(notification->Group());
-					appview_t::iterator aIt = fAppViews.find(groupName);
-					AppGroupView* group = NULL;
-					if (aIt == fAppViews.end()) {
-						group = new AppGroupView(this,
-							groupName == "" ? NULL : groupName.String());
-						fAppViews[groupName] = group;
-						GetLayout()->AddView(group);
-					} else
-						group = aIt->second;
-
-					NotificationView* view = new NotificationView(notification, timeout);
-
-					group->AddInfo(view);
-
-					SetPosition();
-					_ShowHide();
-
-					reply.AddInt32("error", B_OK);
-				} else
-					reply.AddInt32("error", B_NOT_ALLOWED);
-			} else {
-				reply.what = B_MESSAGE_NOT_UNDERSTOOD;
-				reply.AddInt32("error", B_ERROR);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			// Fast user switching (Q5): keep notifications arriving while this
+			// session is hidden and show them when the person returns.
+			if (fSessionHidden) {
+				if (fQueuedNotifications.size() < 64)
+					fQueuedNotifications.push_back(*message);
+				BMessage reply(B_REPLY);
+				reply.AddInt32("error", B_OK);
+				message->SendReply(&reply);
+				break;
 			}
-
-			message->SendReply(&reply);
+			_DeliverNotification(message, true);
+// SPDX-SnippetEnd
 			break;
 		}
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		case 'r5sv':
+		{
+			if (r5_admin_is_local(message))
+				_SetSessionHidden(!message->GetBool("visible", true));
+			break;
+		}
+// SPDX-SnippetEnd
 		case kRemoveGroupView:
 		{
 			AppGroupView* view = NULL;
@@ -266,6 +263,119 @@ NotificationWindow::Timeout()
 {
 	return fTimeout;
 }
+
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+void
+NotificationWindow::_DeliverNotification(BMessage* message, bool sendReply)
+{
+	BMessage reply(B_REPLY);
+	BNotification* notification = new BNotification(message);
+
+	if (notification->InitCheck() == B_OK) {
+		bigtime_t timeout;
+		if (message->FindInt64("timeout", &timeout) != B_OK)
+			timeout = fTimeout;
+		BString sourceSignature(notification->SourceSignature());
+		BString sourceName(notification->SourceName());
+
+		bool allow = false;
+		appfilter_t::iterator it = fAppFilters
+			.find(sourceSignature.String());
+
+		AppUsage* appUsage = NULL;
+		if (it == fAppFilters.end()) {
+			if (sourceSignature.Length() > 0 && sourceName.Length() > 0) {
+				appUsage = new AppUsage(sourceName.String(),
+					sourceSignature.String(), true);
+				fAppFilters[sourceSignature.String()] = appUsage;
+			}
+			allow = true;
+		} else {
+			appUsage = it->second;
+			allow = appUsage->Allowed();
+		}
+
+		if (allow) {
+			BString groupName(notification->Group());
+			appview_t::iterator aIt = fAppViews.find(groupName);
+			AppGroupView* group = NULL;
+			if (aIt == fAppViews.end()) {
+				group = new AppGroupView(this,
+					groupName == "" ? NULL : groupName.String());
+				fAppViews[groupName] = group;
+				GetLayout()->AddView(group);
+			} else
+				group = aIt->second;
+
+			NotificationView* view = new NotificationView(notification,
+				timeout);
+			group->AddInfo(view);
+
+			SetPosition();
+			_ShowHide();
+
+			reply.AddInt32("error", B_OK);
+		} else {
+			delete notification;
+			reply.AddInt32("error", B_NOT_ALLOWED);
+		}
+	} else {
+		delete notification;
+		reply.what = B_MESSAGE_NOT_UNDERSTOOD;
+		reply.AddInt32("error", B_ERROR);
+	}
+
+	if (sendReply)
+		message->SendReply(&reply);
+}
+
+
+void
+NotificationWindow::_SetSessionHidden(bool hidden)
+{
+	fSessionHidden = hidden;
+	if (hidden)
+		return;
+
+	if (fQueuedNotifications.empty())
+		return;
+
+	_LoadSettings(false);
+	if (!fShouldRun) {
+		fQueuedNotifications.clear();
+		return;
+	}
+
+	std::vector<BMessage> queued;
+	queued.swap(fQueuedNotifications);
+	for (size_t i = 0; i < queued.size(); i++)
+		_DeliverNotification(&queued[i], false);
+}
+
+
+/*static*/ void
+NotificationWindow::_AdminRequest(BMessage* request,
+	const r5_admin_sender& sender, BMessage* reply, void* cookie)
+{
+	NotificationWindow* window = static_cast<NotificationWindow*>(cookie);
+	if (sender.uid != 0) {
+		reply->AddInt32("error", B_PERMISSION_DENIED);
+		return;
+	}
+	if (request->what == 'r5sv') {
+		BMessage msg('r5sv');
+		msg.AddBool("visible", request->GetBool("visible", true));
+		r5_admin_mark_local(&msg);
+		window->PostMessage(&msg);
+		reply->AddInt32("error", B_OK);
+		return;
+	}
+	reply->AddInt32("error", B_BAD_VALUE);
+}
+// SPDX-SnippetEnd
 
 
 float

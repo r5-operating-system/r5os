@@ -144,7 +144,7 @@ InputServerStream::GetNextEvent(BMessage** _event)
 		} else if (status == B_CANCELED) {
 			// EventDispatcher::_Unset() sent 'quit' to hand this stream back
 			// to InputManager for another desktop; keep fPort valid for reuse.
-			fQuitting = false;
+			// Leave fQuitting for GetNextCursorPosition() to consume.
 			fLatestMouseMoved = NULL;
 			return false;
 // SPDX-SnippetEnd
@@ -154,11 +154,21 @@ InputServerStream::GetNextEvent(BMessage** _event)
 		if (count > 0) {
 			// empty port queue completely while we're at it
 			for (int32 i = 0; i < count; i++) {
-				if (_MessageFromPort(&event, 0) == B_OK) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+				status_t drainStatus = _MessageFromPort(&event, 0);
+				if (drainStatus == B_OK) {
 					if (event->what == B_MOUSE_MOVED)
 						fLatestMouseMoved = event;
 					fEvents.AddMessage(event);
+				} else if (drainStatus == B_CANCELED) {
+					fLatestMouseMoved = NULL;
+					while (BMessage* stale = fEvents.NextMessage())
+						delete stale;
+					return false;
 				}
+// SPDX-SnippetEnd
 			}
 		}
 	}

@@ -269,7 +269,7 @@ screens->SetCaption(NULL);
 
 ## User card
 
-`BAppearanceKit::BUserCard` is a compact account card with an avatar, display name, and role badge. The header is `<UserCard.h>`. It is a `BControl` that sends a message when clicked or activated with Space or Enter.
+`BAppearanceKit::BUserCard` is a compact account card with an avatar, display name, and role badge. The header is `<UserCard.h>`. It is a `BControl` that sends a message when clicked or activated with Space or Enter. `SetSignedIn(true)` / `IsSignedIn()` (added 25 Nov 2026) marks an account that currently has a running session with a green dot (`B_SUCCESS_COLOR`) and "Signed in". Archived as `"r5:signedIn"`.
 
 ```cpp
 #include <UserCard.h>
@@ -277,11 +277,12 @@ screens->SetCaption(NULL);
 BAppearanceKit::BUserCard* card = new BAppearanceKit::BUserCard(
 	"user", "user", "User", "Administrator", avatarBitmap,
 	new BMessage('usel'));
+card->SetSignedIn(true);
 ```
 
 ## User list item
 
-`BAppearanceKit::BUserListItem` is a two-line item for `BListView` adhering to `docs/STYLE.md`. The header is `<UserListItem.h>`. It draws a circular avatar, the display name in bold on the first line, and `@login · role` on the second line.
+`BAppearanceKit::BUserListItem` is a two-line item for `BListView` adhering to `docs/STYLE.md`. The header is `<UserListItem.h>`. It draws a circular avatar, the display name in bold on the first line, and `@login · role` on the second line. `SetSignedIn(true)` / `IsSignedIn()` (added 25 Nov 2026) draws a green dot (`B_SUCCESS_COLOR`) and "Signed in" on the right of the row. Archived as `"r5:signedIn"`.
 
 ```cpp
 #include <UserListItem.h>

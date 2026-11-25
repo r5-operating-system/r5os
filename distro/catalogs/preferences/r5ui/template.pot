@@ -45,6 +45,10 @@ msgctxt "libr5ui: Themes"
 msgid "Graphite"
 msgstr ""
 
+msgctxt "libr5ui: User card"
+msgid "Signed in"
+msgstr ""
+
 msgctxt "libr5ui: Themes"
 msgid "Blue"
 msgstr ""

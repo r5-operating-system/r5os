@@ -448,6 +448,47 @@ B_TRANSLATE_MARK_VOID("About R5")
 		item->SetTarget(be_app);
 		AddItem(item);
 
+		// Fast user switching: show "Switch user…" only when more than one
+		// account exists (not in the guest menu above).
+		int32 accountCount = 0;
+		setpwent();
+		while (struct passwd* pw = getpwent()) {
+			if (pw->pw_uid < 1000 || pw->pw_name == NULL)
+				continue;
+			if (strcmp(pw->pw_name, "sshd") == 0
+				|| strcmp(pw->pw_name, "nobody") == 0
+				|| strcmp(pw->pw_name, "ftp") == 0
+				|| strcmp(pw->pw_name, "guest") == 0) {
+				continue;
+			}
+			if (pw->pw_shell != NULL
+				&& (strcmp(pw->pw_shell, "false") == 0
+					|| strcmp(pw->pw_shell, "/bin/false") == 0)) {
+				continue;
+			}
+			accountCount++;
+		}
+		endpwent();
+		struct stat guestSt;
+		if (lstat("/boot/system/settings/r5-guest-enabled", &guestSt) == 0
+			&& S_ISREG(guestSt.st_mode) && guestSt.st_uid == 0
+			&& (guestSt.st_mode & (S_IWGRP | S_IWOTH)) == 0) {
+			FILE* gf = fopen("/boot/system/settings/r5-guest-enabled", "r");
+			if (gf != NULL) {
+				char gbuf[8];
+				if (fgets(gbuf, sizeof(gbuf), gf) != NULL && gbuf[0] == '1')
+					accountCount++;
+				fclose(gf);
+			}
+		}
+		if (accountCount > 1) {
+			item = new BMenuItem(B_TRANSLATE("Switch user" B_UTF8_ELLIPSIS),
+				new BMessage(kSwitchUserSession));
+			item->SetEnabled(!dragging);
+			item->SetTarget(be_app);
+			AddItem(item);
+		}
+
 		BString logoutLabel(B_TRANSLATE("Log out"));
 		if (sessionUser != NULL && sessionUser->pw_name != NULL
 			&& sessionUser->pw_name[0] != '\0') {
@@ -568,6 +609,7 @@ TDeskbarMenu::ResetTargets()
 // SPDX-License-Identifier: MIT
 				case kLogoutSession:
 				case kLockSession:
+				case kSwitchUserSession:
 				case kOpenSharedFolder:
 				case kOpenSettings:
 // SPDX-SnippetEnd

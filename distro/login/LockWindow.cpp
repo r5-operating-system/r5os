@@ -67,6 +67,7 @@ private:
 			BStringView*	fPasswordLabel;
 			BPasswordControl* fPasswordControl;
 			BAccentButton*	fUnlockButton;
+			BButton*		fSwitchButton;
 			BStringView*	fInfoView;
 			bool			fInfoIsError;
 			BIconView*		fClockIcon;
@@ -89,6 +90,7 @@ LockView::LockView(const char* name)
 	fPasswordLabel(NULL),
 	fPasswordControl(NULL),
 	fUnlockButton(NULL),
+	fSwitchButton(NULL),
 	fInfoView(NULL),
 	fInfoIsError(false),
 	fClockIcon(NULL),
@@ -175,6 +177,15 @@ LockView::LockView(const char* name)
 		login_local_message(kUnlockAction));
 	fUnlockButton->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
 
+	BFont switchFont = font_px(be_bold_font, 12.5f);
+	fSwitchButton = new BButton("switchUser", B_TRANSLATE("Other account"),
+		login_local_message(kSwitchUserAction));
+	fSwitchButton->SetFont(&switchFont);
+	fSwitchButton->SetExplicitMinSize(BSize(B_SIZE_UNSET, px_side(32) - 1));
+	fSwitchButton->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, px_side(32) - 1));
+	if (count_listed_accounts() <= 1)
+		fSwitchButton->Hide();
+
 	fInfoView = make_label("info", "", font_px(be_plain_font, 12.5f),
 		document);
 	fInfoView->SetAlignment(B_ALIGN_CENTER);
@@ -190,9 +201,10 @@ LockView::LockView(const char* name)
 			.Add(fPasswordLabel)
 			.Add(fPasswordControl)
 		.End()
-		.AddGroup(B_VERTICAL, 0)
+		.AddGroup(B_VERTICAL, px(8))
 			.SetInsets(ring, 0, ring, 0)
 			.Add(fUnlockButton)
+			.Add(fSwitchButton)
 		.End()
 		.Add(fInfoView);
 
@@ -246,6 +258,7 @@ LockView::AttachedToWindow()
 	BView::AttachedToWindow();
 	fPasswordControl->SetTarget(this);
 	fUnlockButton->SetTarget(this);
+	fSwitchButton->SetTarget(be_app_messenger);
 	fLogoutButton->SetTarget(be_app_messenger);
 	fRebootButton->SetTarget(be_app_messenger);
 	fHaltButton->SetTarget(be_app_messenger);

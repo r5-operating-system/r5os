@@ -20,6 +20,8 @@
 // SPDX-License-Identifier: MIT
 #include <R5Admin.h>
 #include <R5Security.h>
+#include <ServerProtocol.h>
+#include <StringFormat.h>
 #include "KeyStoreCrypto.h"
 #include "KeyStoreProtocol.h"
 // SPDX-SnippetEnd
@@ -109,20 +111,6 @@ keep_team(const app_info& info, team_id self)
 }
 
 
-static void
-stop_team_named(const char* needle)
-{
-	int32 cookie = 0;
-	team_info info;
-	while (get_next_team_info(&cookie, &info) == B_OK) {
-		if (strstr(info.args, needle) == NULL)
-			continue;
-		send_signal(info.team, SIGTERM);
-		r5_session_log("signal %s team %d", needle, (int)info.team);
-	}
-}
-
-
 static bool
 team_named(const char* needle)
 {
@@ -179,7 +167,8 @@ LoginApp::LoginApp()
 	fEditShelfMode(false),
 	fAdminPort(-1),
 	fHomeWalkThread(-1),
-	fPendingLogin(NULL)
+	fPendingLogin(NULL),
+	fActiveUid(0)
 {
 }
 
@@ -237,34 +226,70 @@ LoginApp::_AdminRequest(BMessage* request, const r5_admin_sender& sender,
 			break;
 		case kLogoutAction:
 		case kLockAction:
+		case kSwitchUserAction:
 		{
-			BString sessionUser;
-			bool hasSession = signed_in_name(sessionUser) == B_OK;
-			bool allowed = (sender.uid == 0);
-			if (!allowed && hasSession) {
-				struct passwd* pwd = getpwnam(sessionUser.String());
-				if (pwd != NULL && pwd->pw_uid == sender.uid)
-					allowed = true;
+			BString senderLogin;
+			bool senderSignedIn = false;
+			if (sender.uid >= kMinPersonUid) {
+				struct passwd* pwd = getpwuid(sender.uid);
+				if (pwd != NULL && pwd->pw_name != NULL
+					&& is_user_signed_in(pwd->pw_name)) {
+					senderLogin = pwd->pw_name;
+					senderSignedIn = true;
+				}
 			}
+			bool allowed = (sender.uid == 0) || senderSignedIn;
 			if (!allowed) {
-				reply->AddString("text", B_TRANSLATE("Only the signed-in "
-					"session may lock or log out."));
+				reply->AddString("text", B_TRANSLATE("Only a signed-in "
+					"session may lock, switch user or log out."));
 				reply->AddInt32("error", B_PERMISSION_DENIED);
 				break;
 			}
-			if (request->what == kLockAction && hasSession
-				&& is_guest_account(sessionUser.String())) {
+			BString activeLogin;
+			if (senderLogin.Length() == 0)
+				signed_in_name(activeLogin);
+			const char* effectiveLogin = senderLogin.Length() > 0
+				? senderLogin.String() : activeLogin.String();
+			if ((request->what == kLockAction
+					|| request->what == kSwitchUserAction)
+				&& effectiveLogin[0] != '\0'
+				&& is_guest_account(effectiveLogin)) {
 				reply->AddString("text",
 					B_TRANSLATE("Guest sessions cannot be locked."));
-
 				reply->AddInt32("error", B_NOT_ALLOWED);
 				break;
 			}
 			reply->AddInt32("error", B_OK);
-			// Issue #4639: Deskbar's Lock screen and Log out arrive here,
-			// with the uid the kernel named. MessageReceived() only takes
-			// Login's own (marked) messages.
 			BMessage* action = login_local_message(request->what);
+			if (sender.uid >= kMinPersonUid)
+				action->AddInt32("uid", (int32)sender.uid);
+			app->PostMessage(action);
+			delete action;
+			break;
+		}
+		case kQuerySessionsAction:
+		{
+			app->_FillOtherSessions(sender.uid, *reply);
+			reply->AddInt32("error", B_OK);
+			break;
+		}
+		case kHaltAction:
+		case kRebootAction:
+		{
+			BMessage others;
+			app->_FillOtherSessions(sender.uid, others);
+			int32 otherCount = 0;
+			type_code tc;
+			others.GetInfo("login", &tc, &otherCount);
+			if (otherCount > 0 && !r5_admin_sender_allowed(sender)) {
+				reply->AddString("text", B_TRANSLATE("Only an administrator "
+					"may shut down while others are signed in."));
+				reply->AddInt32("error", B_PERMISSION_DENIED);
+				break;
+			}
+			reply->AddInt32("error", B_OK);
+			BMessage* action = login_local_message(request->what);
+			action->AddBool("confirmed", true);
 			app->PostMessage(action);
 			delete action;
 			break;
@@ -322,6 +347,15 @@ LoginApp::ReadyToRun()
 		fAdminPort = -1;
 		syslog(LOG_ERR, "Login: no admin port, settings cannot be changed");
 	}
+	// Clean up stale session records from a previous boot (no person desktops
+	// are running yet at boot) and mute person audio while on Sign in.
+	{
+		BStringList stale;
+		list_signed_in_sessions(stale);
+		for (int32 i = 0; i < stale.CountStrings(); i++)
+			remove_signed_in_session(stale.StringAt(i).String());
+	}
+	_SetActiveAudioUid(0);
 // SPDX-SnippetEnd
 
 	fDesktopWindow = new DesktopWindow(screen.Frame(), false);
@@ -339,6 +373,7 @@ LoginApp::MessageReceived(BMessage* message)
 		case kAttemptLogin:
 		case kLogoutAction:
 		case kLockAction:
+		case kSwitchUserAction:
 		case kUnlockAction:
 		case kRebootAction:
 		case kHaltAction:
@@ -350,7 +385,7 @@ LoginApp::MessageReceived(BMessage* message)
 			// other team used to halt, lock, or sign in. !IsSourceRemote()
 			// was not enough: the sender chooses the reply address, also
 			// Login's own (issue #4639). Only Login's own windows and its
-			// admin port (lock and log out from the signed-in person) make
+			// admin port (lock, switch user, log out, shut down) make
 			// a message with Login's token.
 			if (!r5_admin_is_local(message)) {
 				syslog(LOG_WARNING, "Login: refused 0x%08" B_PRIx32
@@ -363,11 +398,15 @@ LoginApp::MessageReceived(BMessage* message)
 				break;
 			}
 			if (message->what == kLogoutAction) {
-				Logout();
+				Logout((uid_t)message->GetInt32("uid", 0));
 				break;
 			}
 			if (message->what == kLockAction) {
-				Lock();
+				Lock((uid_t)message->GetInt32("uid", 0));
+				break;
+			}
+			if (message->what == kSwitchUserAction) {
+				SwitchUser();
 				break;
 			}
 			if (message->what == kUnlockAction) {
@@ -387,23 +426,24 @@ LoginApp::MessageReceived(BMessage* message)
 				break;
 			}
 			reboot = message->what == kRebootAction;
-			{
-				BRoster roster;
-				BRoster::Private rosterPrivate(roster);
-				status_t error = rosterPrivate.ShutDown(reboot, false, false);
-				if (error < B_OK) {
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-					BString msg(B_TRANSLATE("Could not shut down: %error%"));
-					msg.ReplaceFirst("%error%", strerror(error));
-					BAlert* alert = new BAlert(B_TRANSLATE("Error"),
-						msg.String(), B_TRANSLATE("OK"));
-// SPDX-SnippetEnd
-					alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
-					alert->Go();
+			if (!message->GetBool("confirmed", false)) {
+				uid_t reqUid = 0;
+				bool reqAdmin = false;
+				if (fLockWindow != NULL && fLockedLogin.Length() > 0) {
+					struct passwd* pwd = getpwnam(fLockedLogin.String());
+					if (pwd != NULL) {
+						reqUid = pwd->pw_uid;
+						reqAdmin = is_admin_user(pwd);
+					}
 				}
+				if (!_ConfirmShutdownIfOthers(reboot, reqUid, reqAdmin))
+					break;
 			}
+			_PerformShutdown(reboot);
+// SPDX-SnippetEnd
 			break;
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
@@ -610,61 +650,95 @@ LoginApp::TryLogin(BMessage* message)
 					return;
 				}
 			}
-			if (status == B_OK && is_guest_account(login))
-				status = wipe_guest_home();
-// SPDX-SnippetEnd
-			bool wroteSession = false;
-			if (status == B_OK) {
-				status = write_desktop_session(login);
-				wroteSession = status == B_OK;
-			}
-			if (status == B_OK) {
-				r5_session_log("sign-in %s", login);
-// SPDX-SnippetBegin
-// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
-// SPDX-License-Identifier: MIT
-				_StartAndUnlockKeyStore(login, password);
-// SPDX-SnippetEnd
-				_EnableDesktopJobs();
-				status = _WaitGone("application/x-vnd.Be-TRAK");
-				if (status == B_OK)
-					status = _WaitGone("application/x-vnd.Be-TSKB");
-				if (status == B_OK)
-					status = _LaunchSessionApp("/system/Tracker");
-				if (status == B_OK)
-					status = _LaunchSessionApp("/system/Deskbar");
-				if (status == B_OK)
-					status = _WaitSessionTeam("application/x-vnd.Be-TRAK");
-				if (status == B_OK)
-					status = _WaitSessionTeam("application/x-vnd.Be-TSKB");
-				// Do not Target("desktop"). That asks launch_daemon user,
-				// still uid 0 from autologin, to start Tracker again.
+			struct passwd* pwd = getpwnam(login);
+			uid_t targetUid = (pwd != NULL) ? pwd->pw_uid : 0;
+			if (status == B_OK && targetUid < kMinPersonUid)
+				status = ENOENT;
+
+			// Fast user switching: if this person is already signed in, just
+			// switch back to their running desktop with its own workspaces.
+			if (status == B_OK && is_user_signed_in(login)) {
+				r5_session_log("switch back to %s (uid %d)", login,
+					(int)targetUid);
+				set_active_session(login);
+				status = _AppServerActivateDesktop(targetUid);
 				if (status == B_OK) {
-					_LaunchSessionApp("/system/apps/r5-tray");
-					_LaunchSessionApp("/system/bin/desklink",
-						"--add-volume");
-					_LaunchSessionApp("/system/servers/airplay_deskbar");
-// SPDX-SnippetBegin
-// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
-// SPDX-License-Identifier: MIT
-					// The Bluetooth item (regular image only). Its launch job
-					// under target desktop never ran: Sign in does not start
-					// that target (5625U, 16 Nov 2026).
-					if (access("/system/servers/bluetooth_deskbar", X_OK) == 0) {
-						_LaunchSessionApp(
-							"/system/servers/bluetooth_deskbar");
-					}
-// SPDX-SnippetEnd
-					_LaunchSessionApp("/system/servers/r5_vbox_clip");
-					_StartVirtualBoxGuest();
-					_LaunchSessionHooks();
+					fActiveUid = targetUid;
+					_SetActiveAudioUid(targetUid);
+					_NotifySessionVisible(targetUid, true);
+					_CloseLock();
+					_HideLogin();
 				}
-				r5_session_log("sign-in done: %s", strerror(status));
+			} else {
+				if (status == B_OK && is_guest_account(login))
+					status = wipe_guest_home();
+				bool createdDesktop = false;
+				bool wroteSession = false;
+				if (status == B_OK) {
+					status = _AppServerCreateDesktop(targetUid, false);
+					createdDesktop = (status == B_OK);
+				}
+				if (status == B_OK) {
+					status = add_signed_in_session(login);
+					wroteSession = (status == B_OK);
+				}
+				if (status == B_OK) {
+					r5_session_log("sign-in %s (uid %d)", login,
+						(int)targetUid);
+					_StartAndUnlockKeyStore(login, password);
+					_EnableDesktopJobs();
+					_WaitGoneFor("application/x-vnd.Be-TRAK", targetUid);
+					_WaitGoneFor("application/x-vnd.Be-TSKB", targetUid);
+					// Per-session notification server on this person's desktop.
+					_LaunchSessionAppFor(login,
+						"/system/servers/notification_server");
+					status = _LaunchSessionAppFor(login, "/system/Tracker");
+					if (status == B_OK) {
+						status = _LaunchSessionAppFor(login,
+							"/system/Deskbar");
+					}
+					if (status == B_OK) {
+						status = _WaitSessionTeamFor("application/x-vnd.Be-TRAK",
+							targetUid);
+					}
+					if (status == B_OK) {
+						status = _WaitSessionTeamFor("application/x-vnd.Be-TSKB",
+							targetUid);
+					}
+					if (status == B_OK) {
+						_LaunchSessionAppFor(login, "/system/apps/r5-tray");
+						_LaunchSessionAppFor(login, "/system/bin/desklink",
+							"--add-volume");
+						_LaunchSessionAppFor(login,
+							"/system/servers/airplay_deskbar");
+						if (access("/system/servers/bluetooth_deskbar", X_OK)
+								== 0) {
+							_LaunchSessionAppFor(login,
+								"/system/servers/bluetooth_deskbar");
+						}
+						_LaunchSessionAppFor(login,
+							"/system/servers/r5_vbox_clip");
+						_StartVirtualBoxGuest(login);
+						_LaunchSessionHooks(login);
+					}
+					if (status == B_OK) {
+						status = _AppServerActivateDesktop(targetUid);
+					}
+					r5_session_log("sign-in done: %s", strerror(status));
+				}
+				if (status == B_OK) {
+					fActiveUid = targetUid;
+					_SetActiveAudioUid(targetUid);
+					_NotifySessionVisible(targetUid, true);
+					_CloseLock();
+					_HideLogin();
+				} else {
+					if (wroteSession)
+						remove_signed_in_session(login);
+					if (createdDesktop)
+						_AppServerDestroyDesktop(targetUid);
+				}
 			}
-			if (status == B_OK)
-				_HideLogin();
-			else if (wroteSession)
-				clear_desktop_session();
 		}
 	}
 
@@ -709,10 +783,15 @@ LoginApp::HandleAdmin(BMessage* message)
 
 
 void
-LoginApp::Lock()
+LoginApp::Lock(uid_t targetUid)
 {
 	BString name;
-	if (signed_in_name(name) != B_OK)
+	if (targetUid >= kMinPersonUid) {
+		struct passwd* pwd = getpwuid(targetUid);
+		if (pwd != NULL && pwd->pw_name != NULL)
+			name = pwd->pw_name;
+	}
+	if (name.Length() == 0 && signed_in_name(name) != B_OK)
 		return;
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
@@ -720,6 +799,18 @@ LoginApp::Lock()
 	// The guest has no password; never lock a guest session (#72).
 	if (is_guest_account(name.String()))
 		return;
+	struct passwd* pwd = getpwnam(name.String());
+	uid_t lockUid = (pwd != NULL) ? pwd->pw_uid : fActiveUid;
+
+	// Fast user switching: lock lives on Login's own desktop (uid 0).
+	// Hide the person's notifications, mute their audio, and switch the
+	// screen/input to desktop 0 so their apps are never visible while locked.
+	if (fActiveUid >= kMinPersonUid)
+		_NotifySessionVisible(fActiveUid, false);
+	_SetActiveAudioUid(0);
+	_AppServerActivateDesktop(0);
+	fActiveUid = 0;
+	fLockedLogin = name;
 // SPDX-SnippetEnd
 
 	if (fLockWindow != NULL) {
@@ -732,18 +823,40 @@ LoginApp::Lock()
 
 	// Walked away: a preference grant must not stay open behind the lock.
 	clear_admin_grants();
-	r5_session_log("lock %s", name.String());
+	r5_session_log("lock %s (uid %d)", name.String(), (int)lockUid);
 	fLockWindow = new LockWindow(name.String());
 	fLockWindow->Show();
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+void
+LoginApp::SwitchUser()
+{
+	clear_admin_grants();
+	if (fActiveUid >= kMinPersonUid)
+		_NotifySessionVisible(fActiveUid, false);
+	_SetActiveAudioUid(0);
+	_AppServerActivateDesktop(0);
+	fActiveUid = 0;
+	fLockedLogin = "";
+	_CloseLock();
+	r5_session_log("switch user -> Sign in");
+	_ShowLogin();
+}
+// SPDX-SnippetEnd
+
+
 void
 LoginApp::Unlock(BMessage* message)
 {
-	BString name;
+	BString name(fLockedLogin);
+	if (name.Length() == 0)
+		signed_in_name(name);
 	const char* password = message->GetString("password");
-	status_t status = signed_in_name(name);
+	status_t status = name.Length() > 0 ? B_OK : B_NAME_NOT_FOUND;
 	if (status == B_OK)
 		status = ValidateLogin(name.String(), password);
 
@@ -762,9 +875,22 @@ LoginApp::Unlock(BMessage* message)
 	if (status != B_OK)
 		return;
 
-	// Same session. Do not launch Tracker again and do not clear the
-	// session file.
+	// Same session. Return to this person's desktop with its own workspaces.
 	r5_session_log("unlock %s", name.String());
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	struct passwd* pwd = getpwnam(name.String());
+	uid_t uid = (pwd != NULL) ? pwd->pw_uid : 0;
+	set_active_session(name.String());
+	if (uid >= kMinPersonUid) {
+		_AppServerActivateDesktop(uid);
+		fActiveUid = uid;
+		_SetActiveAudioUid(uid);
+		_NotifySessionVisible(uid, true);
+	}
+	fLockedLogin = "";
+// SPDX-SnippetEnd
 	_CloseLock();
 }
 
@@ -782,50 +908,60 @@ LoginApp::_CloseLock()
 
 
 void
-LoginApp::Logout()
+LoginApp::Logout(uid_t targetUid)
 {
 	// Do not call the launch daemon. Stop/SetEnabled/GetJobs wait for a
 	// reply; launch_daemon user is the team in the crash dialog, and while
 	// it sits in the debugger that reply never comes.
-	_CloseLock();
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 	BString loggedOutName;
-	bool wasGuest = signed_in_name(loggedOutName) == B_OK
+	if (targetUid >= kMinPersonUid) {
+		struct passwd* pwd = getpwuid(targetUid);
+		if (pwd != NULL && pwd->pw_name != NULL)
+			loggedOutName = pwd->pw_name;
+	}
+	if (loggedOutName.Length() == 0 && fLockedLogin.Length() > 0)
+		loggedOutName = fLockedLogin;
+	if (loggedOutName.Length() == 0)
+		signed_in_name(loggedOutName);
+
+	bool wasGuest = loggedOutName.Length() > 0
 		&& is_guest_account(loggedOutName.String());
-	uid_t loggedOutUid = 0;
-	if (loggedOutName.Length() > 0) {
+	uid_t loggedOutUid = targetUid;
+	if (loggedOutUid < kMinPersonUid && loggedOutName.Length() > 0) {
 		struct passwd* pwd = getpwnam(loggedOutName.String());
 		if (pwd != NULL)
 			loggedOutUid = pwd->pw_uid;
 	}
-// SPDX-SnippetEnd
-	r5_session_log("logout");
+
+	if (fActiveUid == loggedOutUid && loggedOutUid >= kMinPersonUid) {
+		_NotifySessionVisible(loggedOutUid, false);
+		_SetActiveAudioUid(0);
+		_AppServerActivateDesktop(0);
+		fActiveUid = 0;
+	}
+	if (fLockedLogin == loggedOutName)
+		fLockedLogin = "";
+	_CloseLock();
+	r5_session_log("logout %s (uid %d)", loggedOutName.String(),
+		(int)loggedOutUid);
 	clear_admin_grants();
-	clear_desktop_session();
-	_QuitUserApps();
-	_WaitGone("application/x-vnd.Haiku-ProcessController");
-	_WaitGone("application/x-vnd.Haiku-NetworkStatus");
-	_WaitGone("application/x-vnd.R5OS-airplay-tray");
-	_WaitGone("application/x-vnd.R5OS-vbox-clip");
-	_WaitGone("application/x-vnd.Oracle-VBoxGuest");
-	stop_team_named("VBoxService");
-// SPDX-SnippetBegin
-// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
-// SPDX-License-Identifier: MIT
-	_WaitGone("application/x-vnd.Haiku-keystore_server");
-// SPDX-SnippetEnd
-	_WaitGone("application/x-vnd.Be-TRAK");
-	_WaitGone("application/x-vnd.Be-TSKB");
-// SPDX-SnippetBegin
-// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
-// SPDX-License-Identifier: MIT
-	// Issue #4642: what the roster does not list (a Terminal job in the
-	// background, a program without a signature or with "server" in it)
-	// stops too. Only the uid of the person who logs out.
-	if (loggedOutUid >= kMinPersonUid)
+	if (loggedOutName.Length() > 0)
+		remove_signed_in_session(loggedOutName.String());
+	if (loggedOutUid >= kMinPersonUid) {
+		_QuitUserAppsFor(loggedOutUid);
+		_WaitGoneFor("application/x-vnd.Haiku-keystore_server", loggedOutUid);
+		_WaitGoneFor("application/x-vnd.Haiku-notification_server",
+			loggedOutUid);
+		_WaitGoneFor("application/x-vnd.Be-TRAK", loggedOutUid);
+		_WaitGoneFor("application/x-vnd.Be-TSKB", loggedOutUid);
+		// Issue #4642: what the roster does not list stops too. Only the
+		// uid of the person who logs out — never another signed-in person.
 		stop_teams_of_uid(loggedOutUid);
+		_AppServerDestroyDesktop(loggedOutUid);
+	}
 	if (wasGuest) {
 		r5_session_log("wipe guest home");
 		wipe_guest_home();
@@ -893,12 +1029,17 @@ LoginApp::_EnableDesktopJobs()
 
 
 status_t
-LoginApp::_LaunchSessionApp(const char* program, const char* argument,
-	const char* argument2, const char* argument3, const char* argument4)
+LoginApp::_LaunchSessionAppFor(const char* login, const char* program,
+	const char* argument, const char* argument2, const char* argument3,
+	const char* argument4)
 {
-	const char* args[8];
+	const char* args[10];
 	int32 count = 0;
 	args[count++] = "/system/apps/r5-desktop";
+	if (login != NULL && login[0] != '\0') {
+		args[count++] = "--user";
+		args[count++] = login;
+	}
 	args[count++] = program;
 	if (argument != NULL && argument[0] != '\0')
 		args[count++] = argument;
@@ -910,7 +1051,8 @@ LoginApp::_LaunchSessionApp(const char* program, const char* argument,
 		args[count++] = argument4;
 	args[count] = NULL;
 
-	r5_session_log("launch %s", program);
+	r5_session_log("launch %s (user %s)", program,
+		login != NULL ? login : "?");
 	thread_id thread = load_image(count, args, (const char**)environ);
 	if (thread < B_OK) {
 		r5_session_log("load_image r5-desktop %s: %s", program,
@@ -935,7 +1077,8 @@ LoginApp::_LaunchSessionApp(const char* program, const char* argument,
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 status_t
-LoginApp::_LaunchSessionAppGetTeam(const char* program, team_id* _outTeam)
+LoginApp::_LaunchSessionAppGetTeamFor(const char* login, const char* program,
+	team_id* _outTeam)
 {
 	if (_outTeam != NULL)
 		*_outTeam = -1;
@@ -973,13 +1116,18 @@ LoginApp::_LaunchSessionAppGetTeam(const char* program, team_id* _outTeam)
 	childEnv[outIdx++] = envEntry;
 	childEnv[outIdx] = NULL;
 
-	const char* args[] = {
-		"/system/apps/r5-desktop",
-		program,
-		NULL
-	};
-	r5_session_log("launch %s", program);
-	thread_id thread = load_image(2, args, childEnv);
+	const char* args[5];
+	int32 count = 0;
+	args[count++] = "/system/apps/r5-desktop";
+	if (login != NULL && login[0] != '\0') {
+		args[count++] = "--user";
+		args[count++] = login;
+	}
+	args[count++] = program;
+	args[count] = NULL;
+	r5_session_log("launch %s (user %s)", program,
+		login != NULL ? login : "?");
+	thread_id thread = load_image(count, args, childEnv);
 	free(childEnv);
 	close(fds[1]);
 	if (thread < B_OK) {
@@ -1010,6 +1158,15 @@ LoginApp::_LaunchSessionAppGetTeam(const char* program, team_id* _outTeam)
 
 
 void
+LoginApp::_StopKeyStoreOfUid(uid_t uid)
+{
+	if (uid < kMinPersonUid)
+		return;
+	_WaitGoneFor("application/x-vnd.Haiku-keystore_server", uid);
+}
+
+
+void
 LoginApp::_StartAndUnlockKeyStore(const char* login, const char* password)
 {
 	if (login == NULL)
@@ -1032,10 +1189,12 @@ LoginApp::_StartAndUnlockKeyStore(const char* login, const char* password)
 
 	static const char* kKeyStoreSig
 		= "application/x-vnd.Haiku-keystore_server";
-	_WaitGone(kKeyStoreSig);
+	// Only stop any stale keystore_server of THIS user — never another
+	// signed-in person's keystore_server.
+	_StopKeyStoreOfUid(pwd->pw_uid);
 
 	team_id launchedTeam = -1;
-	if (_LaunchSessionAppGetTeam("/system/servers/keystore_server",
+	if (_LaunchSessionAppGetTeamFor(login, "/system/servers/keystore_server",
 			&launchedTeam) != B_OK || launchedTeam < 0) {
 		r5_session_log("keystore_server: launch failed");
 		return;
@@ -1198,7 +1357,7 @@ LoginApp::_StartAndUnlockKeyStore(const char* login, const char* password)
 
 
 void
-LoginApp::_StartVirtualBoxGuest()
+LoginApp::_StartVirtualBoxGuest(const char* login)
 {
 	// The desktop target in launch_daemon is not enabled. Sign in starts
 	// these itself, and only when the guest device is there. QEMU and real
@@ -1207,12 +1366,12 @@ LoginApp::_StartVirtualBoxGuest()
 		return;
 
 	if (!team_named("VBoxService")) {
-		_LaunchSessionApp("/system/non-packaged/bin/VBoxService",
+		_LaunchSessionAppFor(login, "/system/non-packaged/bin/VBoxService",
 			"-f", "--disable-memballoon", "--timesync-no-set-start");
 	}
 
 	BPath home;
-	if (_SessionHome(home) == B_OK) {
+	if (_SessionHomeFor(login, home) == B_OK) {
 		const char* args[] = {
 			"/bin/sh",
 			"/system/non-packaged/bin/r5-vbox-shares",
@@ -1232,7 +1391,7 @@ LoginApp::_StartVirtualBoxGuest()
 	}
 
 	if (!be_roster->IsRunning("application/x-vnd.Oracle-VBoxGuest"))
-		_LaunchSessionApp("/system/non-packaged/bin/VBoxTray");
+		_LaunchSessionAppFor(login, "/system/non-packaged/bin/VBoxTray");
 }
 
 
@@ -1266,9 +1425,9 @@ gpu_selftest_requested()
 
 
 void
-LoginApp::_LaunchSessionHooks()
+LoginApp::_LaunchSessionHooks(const char* login)
 {
-	status_t status = _LaunchSessionApp("/system/bin/dstcheck");
+	status_t status = _LaunchSessionAppFor(login, "/system/bin/dstcheck");
 	if (status != B_OK)
 		r5_session_log("dstcheck: %s", strerror(status));
 
@@ -1281,20 +1440,20 @@ LoginApp::_LaunchSessionHooks()
 	static bool sGpuSelftestStarted = false;
 	if (gpu_selftest_requested() && !sGpuSelftestStarted) {
 		sGpuSelftestStarted = true;
-		status = _LaunchSessionApp("/system/bin/r5-gpu-selftest");
+		status = _LaunchSessionAppFor(login, "/system/bin/r5-gpu-selftest");
 		if (status != B_OK)
 			r5_session_log("r5-gpu-selftest: %s", strerror(status));
 	}
 // SPDX-SnippetEnd
 
 	BPath home;
-	if (_SessionHome(home) != B_OK)
+	if (_SessionHomeFor(login, home) != B_OK)
 		return;
 
 	BPath script(home);
 	if (script.Append("config/settings/boot/UserBootscript") == B_OK
 		&& access(script.Path(), R_OK) == 0) {
-		status = _LaunchSessionApp("/bin/sh", script.Path());
+		status = _LaunchSessionAppFor(login, "/bin/sh", script.Path());
 		if (status != B_OK)
 			r5_session_log("UserBootscript: %s", strerror(status));
 	}
@@ -1302,8 +1461,9 @@ LoginApp::_LaunchSessionHooks()
 	BPath marker(home);
 	if (marker.Append("config/settings/first_login") == B_OK
 		&& access(marker.Path(), F_OK) == 0) {
-		status = _LaunchSessionApp("/bin/sh", "/system/boot/PostInstallScript",
-			"first login", marker.Path(), "/boot/system/boot/first-login");
+		status = _LaunchSessionAppFor(login, "/bin/sh",
+			"/system/boot/PostInstallScript", "first login", marker.Path(),
+			"/boot/system/boot/first-login");
 		if (status != B_OK)
 			r5_session_log("first-login: %s", strerror(status));
 	}
@@ -1311,27 +1471,12 @@ LoginApp::_LaunchSessionHooks()
 
 
 status_t
-LoginApp::_SessionHome(BPath& path) const
+LoginApp::_SessionHomeFor(const char* login, BPath& path) const
 {
-	char name[64];
-	name[0] = '\0';
-	FILE* file = fopen("/boot/system/settings/r5-desktop-session", "r");
-	if (file != NULL) {
-		if (fgets(name, sizeof(name), file) == NULL)
-			name[0] = '\0';
-		fclose(file);
-	}
-
-	size_t length = strlen(name);
-	while (length > 0
-		&& (name[length - 1] == '\n' || name[length - 1] == '\r'
-			|| name[length - 1] == ' ')) {
-		name[--length] = '\0';
-	}
-	if (length == 0)
+	if (login == NULL || login[0] == '\0')
 		return B_NAME_NOT_FOUND;
 
-	struct passwd* pwd = getpwnam(name);
+	struct passwd* pwd = getpwnam(login);
 	if (pwd == NULL || pwd->pw_dir == NULL || pwd->pw_dir[0] == '\0')
 		return ENOENT;
 	return path.SetTo(pwd->pw_dir);
@@ -1353,47 +1498,25 @@ LoginApp::_WaitRunning(const char* signature)
 
 
 status_t
-LoginApp::_WaitSessionTeam(const char* signature)
+LoginApp::_WaitSessionTeamFor(const char* signature, uid_t uid)
 {
-	status_t status = _WaitRunning(signature);
-	if (status != B_OK)
-		return status;
-
-	team_id team = be_roster->TeamFor(signature);
-	team_info info;
-	if (team < 0 || get_team_info(team, &info) != B_OK) {
-		r5_session_log("%s: no team info", signature);
-		return B_BAD_TEAM_ID;
+	const bigtime_t deadline = system_time() + 8000000LL;
+	while (system_time() < deadline) {
+		BList teams;
+		be_roster->GetAppList(signature, &teams);
+		for (int32 i = 0; i < teams.CountItems(); i++) {
+			team_id team = (team_id)(addr_t)teams.ItemAt(i);
+			team_info info;
+			if (get_team_info(team, &info) == B_OK && info.uid == uid) {
+				r5_session_log("%s team %d uid=%d gid=%d", signature,
+					(int)team, (int)info.uid, (int)info.gid);
+				return B_OK;
+			}
+		}
+		snooze(100000);
 	}
-	r5_session_log("%s team %d uid=%d gid=%d", signature, (int)team,
-		(int)info.uid, (int)info.gid);
-	if (info.uid == 0) {
-		BMessenger(NULL, team).SendMessage(B_QUIT_REQUESTED);
-		return B_NOT_ALLOWED;
-	}
-
-	char name[64];
-	name[0] = '\0';
-	FILE* file = fopen("/boot/system/settings/r5-desktop-session", "r");
-	if (file != NULL) {
-		if (fgets(name, sizeof(name), file) == NULL)
-			name[0] = '\0';
-		fclose(file);
-	}
-	size_t length = strlen(name);
-	while (length > 0
-		&& (name[length - 1] == '\n' || name[length - 1] == '\r'
-			|| name[length - 1] == ' ')) {
-		name[--length] = '\0';
-	}
-	struct passwd* pwd = length > 0 ? getpwnam(name) : NULL;
-	if (pwd == NULL || pwd->pw_uid != info.uid) {
-		r5_session_log("%s uid %d is not session %s", signature,
-			(int)info.uid, length > 0 ? name : "(none)");
-		BMessenger(NULL, team).SendMessage(B_QUIT_REQUESTED);
-		return B_NOT_ALLOWED;
-	}
-	return B_OK;
+	r5_session_log("timeout waiting for %s (uid %d)", signature, (int)uid);
+	return B_TIMED_OUT;
 }
 
 
@@ -1451,13 +1574,19 @@ LoginApp::_OpenLoginWindow()
 
 
 void
-LoginApp::_QuitUserApps()
+LoginApp::_QuitUserAppsFor(uid_t uid)
 {
+	if (uid < kMinPersonUid)
+		return;
+
 	BList teams;
 	be_roster->GetAppList(&teams);
 	team_id self = Team();
 	for (int32 i = 0; i < teams.CountItems(); i++) {
 		team_id team = (team_id)(addr_t)teams.ItemAt(i);
+		team_info tInfo;
+		if (get_team_info(team, &tInfo) != B_OK || tInfo.uid != uid)
+			continue;
 		app_info info;
 		if (be_roster->GetRunningAppInfo(team, &info) != B_OK)
 			continue;
@@ -1473,6 +1602,9 @@ LoginApp::_QuitUserApps()
 		be_roster->GetAppList(&live);
 		for (int32 i = 0; i < live.CountItems(); i++) {
 			team_id team = (team_id)(addr_t)live.ItemAt(i);
+			team_info tInfo;
+			if (get_team_info(team, &tInfo) != B_OK || tInfo.uid != uid)
+				continue;
 			app_info info;
 			if (be_roster->GetRunningAppInfo(team, &info) != B_OK)
 				continue;
@@ -1493,7 +1625,8 @@ LoginApp::_QuitUserApps()
 			if (be_roster->GetRunningAppInfo(team, &info) == B_OK
 				&& info.signature[0] != '\0')
 				name = info.signature;
-			r5_session_log("killing leftover %s team %d", name, (int)team);
+			r5_session_log("killing leftover %s team %d (uid %d)", name,
+				(int)team, (int)uid);
 			kill_team(team);
 		}
 		const bigtime_t killDeadline = system_time() + 1000000LL;
@@ -1503,6 +1636,9 @@ LoginApp::_QuitUserApps()
 			bool remain = false;
 			for (int32 i = 0; i < still.CountItems(); i++) {
 				team_id team = (team_id)(addr_t)still.ItemAt(i);
+				team_info tInfo;
+				if (get_team_info(team, &tInfo) != B_OK || tInfo.uid != uid)
+					continue;
 				app_info info;
 				if (be_roster->GetRunningAppInfo(team, &info) != B_OK)
 					continue;
@@ -1733,30 +1869,264 @@ LoginApp::_HomeWalkDone(BMessage* message)
 
 
 status_t
-LoginApp::_WaitGone(const char* signature)
+LoginApp::_WaitGoneFor(const char* signature, uid_t uid)
 {
-	if (!be_roster->IsRunning(signature))
+	auto findTeam = [signature, uid]() -> team_id {
+		BList teams;
+		be_roster->GetAppList(signature, &teams);
+		for (int32 i = 0; i < teams.CountItems(); i++) {
+			team_id team = (team_id)(addr_t)teams.ItemAt(i);
+			team_info info;
+			if (get_team_info(team, &info) == B_OK && info.uid == uid)
+				return team;
+		}
+		return -1;
+	};
+
+	team_id team = findTeam();
+	if (team < 0)
 		return B_OK;
 
-	team_id team = be_roster->TeamFor(signature);
-	if (team >= 0)
-		BMessenger(NULL, team).SendMessage(B_QUIT_REQUESTED);
+	BMessenger(NULL, team).SendMessage(B_QUIT_REQUESTED);
 
 	const bigtime_t deadline = system_time() + 3000000LL;
-	while (be_roster->IsRunning(signature) && system_time() < deadline)
+	while ((team = findTeam()) >= 0 && system_time() < deadline)
 		snooze(100000);
-	if (be_roster->IsRunning(signature)) {
-		team = be_roster->TeamFor(signature);
-		r5_session_log("killing %s team %d", signature, (int)team);
-		if (team >= 0)
-			kill_team(team);
+	if (team >= 0) {
+		r5_session_log("killing %s team %d (uid %d)", signature, (int)team,
+			(int)uid);
+		kill_team(team);
 		const bigtime_t killDeadline = system_time() + 1000000LL;
-		while (be_roster->IsRunning(signature) && system_time() < killDeadline)
+		while (findTeam() >= 0 && system_time() < killDeadline)
 			snooze(100000);
 	}
-	if (be_roster->IsRunning(signature)) {
-		r5_session_log("still running %s", signature);
+	if (findTeam() >= 0) {
+		r5_session_log("still running %s (uid %d)", signature, (int)uid);
 		return B_BUSY;
 	}
 	return B_OK;
 }
+
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+status_t
+LoginApp::_AppServerCreateDesktop(uid_t uid, bool activate)
+{
+	BMessenger appServer("application/x-vnd.Haiku-app_server");
+	if (!appServer.IsValid())
+		return B_ERROR;
+	BMessage req(AS_R5_CREATE_DESKTOP);
+	req.AddInt32("user", (int32)uid);
+	req.AddBool("activate", activate);
+	BMessage reply;
+	status_t st = r5_admin_send(appServer, &req, &reply, 10000000LL);
+	if (st != B_OK)
+		return st;
+	return (status_t)reply.what;
+}
+
+
+status_t
+LoginApp::_AppServerActivateDesktop(uid_t uid)
+{
+	BMessenger appServer("application/x-vnd.Haiku-app_server");
+	if (!appServer.IsValid())
+		return B_ERROR;
+	BMessage req(AS_R5_ACTIVATE_DESKTOP);
+	req.AddInt32("user", (int32)uid);
+	BMessage reply;
+	status_t st = r5_admin_send(appServer, &req, &reply, 10000000LL);
+	if (st != B_OK)
+		return st;
+	return (status_t)reply.what;
+}
+
+
+status_t
+LoginApp::_AppServerDestroyDesktop(uid_t uid)
+{
+	BMessenger appServer("application/x-vnd.Haiku-app_server");
+	if (!appServer.IsValid())
+		return B_ERROR;
+	BMessage req(AS_R5_DESTROY_DESKTOP);
+	req.AddInt32("user", (int32)uid);
+	BMessage reply;
+	status_t st = r5_admin_send(appServer, &req, &reply, 10000000LL);
+	if (st != B_OK)
+		return st;
+	return (status_t)reply.what;
+}
+
+
+void
+LoginApp::_SetActiveAudioUid(uid_t uid)
+{
+	BMessenger mediaAddon("application/x-vnd.Be.addon-host");
+	if (!mediaAddon.IsValid())
+		return;
+	BMessage req('r5au');
+	req.AddInt32("uid", (int32)uid);
+	BMessage reply;
+	r5_admin_send(mediaAddon, &req, &reply, 2000000LL);
+}
+
+
+void
+LoginApp::_NotifySessionVisible(uid_t uid, bool visible)
+{
+	if (uid < kMinPersonUid)
+		return;
+	BList teams;
+	be_roster->GetAppList("application/x-vnd.Haiku-notification_server",
+		&teams);
+	for (int32 i = 0; i < teams.CountItems(); i++) {
+		team_id team = (team_id)(addr_t)teams.ItemAt(i);
+		team_info info;
+		if (get_team_info(team, &info) != B_OK || info.uid != uid)
+			continue;
+		BMessage req('r5sv');
+		req.AddBool("visible", visible);
+		BMessage reply;
+		r5_admin_send(BMessenger(NULL, team), &req, &reply, 2000000LL);
+		break;
+	}
+}
+
+
+int32
+LoginApp::_CountUserApps(uid_t uid) const
+{
+	if (uid < kMinPersonUid)
+		return 0;
+	int32 count = 0;
+	BList teams;
+	be_roster->GetAppList(&teams);
+	team_id self = Team();
+	for (int32 i = 0; i < teams.CountItems(); i++) {
+		team_id team = (team_id)(addr_t)teams.ItemAt(i);
+		team_info tInfo;
+		if (get_team_info(team, &tInfo) != B_OK || tInfo.uid != uid)
+			continue;
+		app_info info;
+		if (be_roster->GetRunningAppInfo(team, &info) != B_OK)
+			continue;
+		if (keep_team(info, self))
+			continue;
+		if (strcmp(info.signature, "application/x-vnd.Haiku-keystore_server")
+				== 0) {
+			continue;
+		}
+		count++;
+	}
+	return count;
+}
+
+
+void
+LoginApp::_FillOtherSessions(uid_t excludeUid, BMessage& reply) const
+{
+	BStringList names;
+	list_signed_in_sessions(names);
+	for (int32 i = 0; i < names.CountStrings(); i++) {
+		const char* login = names.StringAt(i).String();
+		struct passwd* pwd = getpwnam(login);
+		if (pwd == NULL || pwd->pw_uid < kMinPersonUid)
+			continue;
+		if (excludeUid >= kMinPersonUid && pwd->pw_uid == excludeUid)
+			continue;
+		BString display(login);
+		if (is_guest_account(login))
+			display = B_TRANSLATE("Guest");
+		else if (pwd->pw_gecos != NULL && pwd->pw_gecos[0] != '\0')
+			display = pwd->pw_gecos;
+		reply.AddString("login", login);
+		reply.AddString("display", display);
+		reply.AddInt32("uid", (int32)pwd->pw_uid);
+		reply.AddInt32("apps", _CountUserApps(pwd->pw_uid));
+	}
+}
+
+
+bool
+LoginApp::_ConfirmShutdownIfOthers(bool reboot, uid_t requesterUid,
+	bool requesterIsAdmin)
+{
+	BMessage others;
+	_FillOtherSessions(requesterUid, others);
+	int32 count = 0;
+	type_code tc;
+	if (others.GetInfo("login", &tc, &count) != B_OK || count == 0)
+		return true;
+
+	BString list;
+	for (int32 i = 0; i < count; i++) {
+		const char* display = others.GetString("display", i, "");
+		int32 apps = others.GetInt32("apps", i, 0);
+		BString line;
+		if (apps > 0) {
+			BStringFormat fmt(B_TRANSLATE("{0, plural, "
+				"one{• %name% (# open app)} "
+				"other{• %name% (# open apps)}}"));
+			fmt.Format(line, apps);
+			line.ReplaceFirst("%name%", display);
+		} else {
+			line.SetToFormat("\xe2\x80\xa2 %s", display);
+		}
+		list << line << "\n";
+	}
+
+	BString body;
+	if (reboot) {
+		body = B_TRANSLATE("Other people are signed in:\n\n%list%\n"
+			"Restarting will close their apps and lose any unsaved work.");
+	} else {
+		body = B_TRANSLATE("Other people are signed in:\n\n%list%\n"
+			"Shutting down will close their apps and lose any unsaved work.");
+	}
+	body.ReplaceFirst("%list%", list);
+
+	if (!requesterIsAdmin) {
+		body << "\n\n" << B_TRANSLATE("Only an administrator may continue. "
+			"Sign in as an administrator first.");
+		BAlert* alert = new BAlert(
+			reboot ? B_TRANSLATE("Restart") : B_TRANSLATE("Shut down"),
+			body.String(), B_TRANSLATE("OK"), NULL, NULL,
+			B_WIDTH_AS_USUAL, B_WARNING_ALERT);
+		alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
+		alert->Go();
+		return false;
+	}
+
+	BAlert* alert = new BAlert(
+		reboot ? B_TRANSLATE("Restart") : B_TRANSLATE("Shut down"),
+		body.String(), B_TRANSLATE("Cancel"),
+		reboot ? B_TRANSLATE("Restart anyway")
+			: B_TRANSLATE("Shut down anyway"),
+		NULL, B_WIDTH_AS_USUAL, B_WARNING_ALERT);
+	alert->SetShortcut(0, B_ESCAPE);
+	return alert->Go() == 1;
+}
+
+
+void
+LoginApp::_PerformShutdown(bool reboot)
+{
+	if (guest_session_active()) {
+		r5_session_log("shutdown: wipe guest home");
+		wipe_guest_home();
+	}
+	BRoster roster;
+	BRoster::Private rosterPrivate(roster);
+	status_t error = rosterPrivate.ShutDown(reboot, false, false);
+	if (error < B_OK) {
+		BString msg(B_TRANSLATE("Could not shut down: %error%"));
+		msg.ReplaceFirst("%error%", strerror(error));
+		BAlert* alert = new BAlert(B_TRANSLATE("Error"),
+			msg.String(), B_TRANSLATE("OK"));
+		alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
+		alert->Go();
+	}
+}
+// SPDX-SnippetEnd

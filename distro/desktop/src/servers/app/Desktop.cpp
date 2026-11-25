@@ -3361,7 +3361,12 @@ Desktop::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 		}
 
 		case AS_EVENT_STREAM_CLOSED:
-			_LaunchInputServer();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			if (fShown)
+				_LaunchInputServer();
+// SPDX-SnippetEnd
 			break;
 
 		case B_QUIT_REQUESTED:

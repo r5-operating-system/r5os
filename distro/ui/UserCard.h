@@ -60,6 +60,9 @@ public:
 			bool				IsSelected() const;
 			void				SetSelected(bool selected);
 
+			bool				IsSignedIn() const;
+			void				SetSignedIn(bool signedIn);
+
 	virtual	void				Draw(BRect updateRect);
 	virtual	void				MessageReceived(BMessage* message);
 	virtual	void				MouseDown(BPoint where);

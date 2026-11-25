@@ -6,6 +6,10 @@ msgctxt "Users: Account admin"
 msgid "There must be at least one administrator."
 msgstr "Er moet minstens één beheerder zijn."
 
+msgctxt "Login: Application"
+msgid "{0, plural, one{• %name% (# open app)} other{• %name% (# open apps)}}"
+msgstr ""
+
 #, fuzzy
 msgctxt "Users: Account admin"
 msgid "An account named \"guest\" already exists. Rename it first."
@@ -27,14 +31,14 @@ msgid "%program% failed"
 msgstr "%program% is mislukt"
 
 #, fuzzy
-msgctxt "Users: Account admin"
-msgid "The original administrator account cannot be disabled."
-msgstr "Het oorspronkelijke beheerdersaccount kan niet worden uitgeschakeld."
-
-#, fuzzy
 msgctxt "Login: Application"
 msgid "Could not start the desktop."
 msgstr "Het bureaublad kon niet worden gestart."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The original administrator account cannot be disabled."
+msgstr "Het oorspronkelijke beheerdersaccount kan niet worden uitgeschakeld."
 
 #, fuzzy
 msgctxt "Login: Lock window"
@@ -65,6 +69,10 @@ msgstr "Controleren…"
 msgctxt "Users: Account admin"
 msgid "That username already exists."
 msgstr "Die gebruikersnaam bestaat al."
+
+msgctxt "Login: Application"
+msgid "Shut down"
+msgstr ""
 
 #, fuzzy
 msgctxt "Users: Account admin"
@@ -116,6 +124,10 @@ msgctxt "Users: Account admin"
 msgid "Could not encrypt the password."
 msgstr "Het wachtwoord kon niet worden versleuteld."
 
+msgctxt "Login: Application"
+msgid "Only an administrator may shut down while others are signed in."
+msgstr ""
+
 #, fuzzy
 msgctxt "Users: Account admin"
 msgid "The password could not be saved."
@@ -135,6 +147,14 @@ msgstr "Klaar om aan te melden als %name%"
 msgctxt "Login: Sign in view"
 msgid "Sign in as Guest"
 msgstr "Aanmelden als Gast"
+
+msgctxt "Login: Sign in view"
+msgid "Return to Guest"
+msgstr ""
+
+msgctxt "Login: Application"
+msgid "Restart"
+msgstr ""
 
 #, fuzzy
 msgctxt "Users: Account admin"
@@ -226,6 +246,10 @@ msgctxt "Users: Account admin"
 msgid "The last administrator cannot become a standard account."
 msgstr "De laatste beheerder kan geen standaardaccount worden."
 
+msgctxt "Login: Application"
+msgid "Shut down anyway"
+msgstr ""
+
 #, fuzzy
 msgctxt "Users: Account admin"
 msgid "Could not enable the account."
@@ -250,6 +274,14 @@ msgstr "Wachtwoord"
 msgctxt "Users: Account admin"
 msgid "Your password was not changed because the key store could not be updated."
 msgstr "Je wachtwoord is niet gewijzigd omdat de sleutelopslag niet kon worden bijgewerkt."
+
+msgctxt "Login: Sign in view"
+msgid "Unlock"
+msgstr ""
+
+msgctxt "Login: Application"
+msgid "Other people are signed in:\n\n%list%\nRestarting will close their apps and lose any unsaved work."
+msgstr ""
 
 #, fuzzy
 msgctxt "Login: Application"
@@ -407,6 +439,12 @@ msgid "The request is empty."
 msgstr "Het verzoek is leeg."
 
 #, fuzzy
+#| msgid "Only the signed-in session may lock or log out."
+msgctxt "Login: Application"
+msgid "Only a signed-in session may lock, switch user or log out."
+msgstr "Alleen de aangemelde sessie kan vergrendelen of afmelden."
+
+#, fuzzy
 msgctxt "Login: Application"
 msgid "Choose a password first."
 msgstr "Kies eerst een wachtwoord."
@@ -415,6 +453,10 @@ msgstr "Kies eerst een wachtwoord."
 msgctxt "Users: Account admin"
 msgid "This account already has a password."
 msgstr "Dit account heeft al een wachtwoord."
+
+msgctxt "Login: Application"
+msgid "Only an administrator may continue. Sign in as an administrator first."
+msgstr ""
 
 #, fuzzy
 msgctxt "Login: Application"
@@ -435,6 +477,10 @@ msgstr "Kies een wachtwoord voor dit account."
 msgctxt "Login: Sign in window"
 msgid "Sign in"
 msgstr "Aanmelden"
+
+msgctxt "Login: Application"
+msgid "Guest"
+msgstr ""
 
 #, fuzzy
 msgctxt "Login: Driver settings admin"
@@ -460,6 +506,10 @@ msgstr "Wijzigingen aan stuurprogramma's vereisen de aanmeldhulp."
 msgctxt "Login: Application"
 msgid "Sleep is not available yet."
 msgstr "Slaapstand is nog niet beschikbaar."
+
+msgctxt "Login: Sign in view"
+msgid "Signed in. Enter password to unlock %name%"
+msgstr ""
 
 #, fuzzy
 msgctxt "Login: Lock window"
@@ -507,11 +557,6 @@ msgid "Could not save the guest setting."
 msgstr "De gastinstelling kon niet worden opgeslagen."
 
 #, fuzzy
-msgctxt "Login: Application"
-msgid "Only the signed-in session may lock or log out."
-msgstr "Alleen de aangemelde sessie kan vergrendelen of afmelden."
-
-#, fuzzy
 msgctxt "Users: Account admin"
 msgid "Could not create the guest account."
 msgstr "Het gastaccount kon niet worden aangemaakt."
@@ -529,6 +574,10 @@ msgstr "De accountmap kon niet worden bijgewerkt."
 msgctxt "Desktop Window"
 msgid "Desktop"
 msgstr "Bureaublad"
+
+msgctxt "Login: Application"
+msgid "Restart anyway"
+msgstr ""
 
 #, fuzzy
 msgctxt "Login: Sign in view"
@@ -576,14 +625,14 @@ msgid "Guest account setup requires the sign-in helper."
 msgstr "Het instellen van het gastaccount vereist de aanmeldhulp."
 
 #, fuzzy
-msgctxt "Login: Lock window"
-msgid "Restart"
-msgstr "Opnieuw starten"
-
-#, fuzzy
 msgctxt "Login: Application"
 msgid "Could not shut down: %error%"
 msgstr "Afsluiten mislukt: %error%"
+
+#, fuzzy
+msgctxt "Login: Lock window"
+msgid "Restart"
+msgstr "Opnieuw starten"
 
 #, fuzzy
 msgctxt "Users: Account admin"
@@ -620,6 +669,10 @@ msgctxt "Login: Driver admin"
 msgid "The request is empty."
 msgstr "Het verzoek is leeg."
 
+msgctxt "Login: Sign in view"
+msgid "Guest is already signed in"
+msgstr ""
+
 #, fuzzy
 msgctxt "Users: Account admin"
 msgid "Only the sign-in helper can set this password."
@@ -640,6 +693,10 @@ msgctxt "Users: Account admin"
 msgid "The new account did not get a user id of 1000 or higher."
 msgstr "Het nieuwe account heeft geen gebruikers-ID van 1000 of hoger gekregen."
 
+msgctxt "Login: Application"
+msgid "Other people are signed in:\n\n%list%\nShutting down will close their apps and lose any unsaved work."
+msgstr ""
+
 #, fuzzy
 msgctxt "Users: Account admin"
 msgid "The existing guest account has an unexpected setup."
@@ -650,10 +707,18 @@ msgctxt "Login: Driver settings admin"
 msgid "This setting is not allowed."
 msgstr "Deze instelling is niet toegestaan."
 
+msgctxt "Login: Lock window"
+msgid "Other account"
+msgstr ""
+
 #, fuzzy
 msgctxt "Login: Sign in view"
 msgid "Choose an account first."
 msgstr "Kies eerst een account."
+
+msgctxt "Login: Application"
+msgid "Cancel"
+msgstr ""
 
 #, fuzzy
 msgctxt "Users: Account admin"

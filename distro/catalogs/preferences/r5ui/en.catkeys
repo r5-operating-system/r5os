@@ -1,4 +1,4 @@
-1	english	x-vnd.R5OS-libr5ui	377378303
+1	english	x-vnd.R5OS-libr5ui	840368850
 Sign in must be running.	libr5ui: Admin lock		Sign in must be running.
 Unlocked for a few minutes	libr5ui: Admin lock		Unlocked for a few minutes
 Administrator	libr5ui: Admin lock		Administrator
@@ -10,6 +10,7 @@ Lock	libr5ui: Admin lock		Lock
 Purple	libr5ui: Themes		Purple
 Pink	libr5ui: Themes		Pink
 Graphite	libr5ui: Themes		Graphite
+Signed in	libr5ui: User card		Signed in
 Blue	libr5ui: Themes		Blue
 Strong.	libr5ui: Password control		Strong.
 Standard	libr5ui: User card		Standard

@@ -89,6 +89,7 @@ const uint32 kCheckHungApp = 'HgAp';
 const uint32 kForceQuitTeam = 'FrQt';
 const uint32 kLogoutSession = 'lout';
 const uint32 kLockSession = 'lokc';
+const uint32 kSwitchUserSession = 'swtu';
 const uint32 kOpenSharedFolder = 'ShFd';
 const uint32 kOpenSettings = 'r5St';
 const uint32 kSaveSettings = 'SvSt';

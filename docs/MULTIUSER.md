@@ -2,6 +2,18 @@
 
 Architecture and order of work. Not a claim that login or isolation ships yet.
 
+## Fast user switching (build 10074, 25 Nov 2026)
+
+More than one person can now be signed in at the same time, each on their own `app_server` desktop with their own workspaces, apps, Deskbar, Tracker, clipboard, key store, and notification server.
+
+- **Switching.** Choose **Switch user…** in the Deskbar menu (when more than one account exists; not in the Guest menu) or **Other account** on the lock screen. Login switches `app_server` to Login's own desktop (uid 0) and shows Sign in, marking signed-in people with a green dot and "Signed in". Choosing a signed-in person asks for their password ("Unlock") and returns to their desktop with their workspaces and apps intact.
+- **Locking.** Locking switches `app_server` to Login's own desktop (uid 0) and shows the lock window there; the locked person's desktop is hidden and receives no input.
+- **Logging out.** Logging out stops only that person's teams (via `stop_teams_of_uid()` and the fixed system-team list) and destroys only their desktop; other signed-in people keep running on the shared Vulkan/Skia device.
+- **Shutdown and restart.** When other people are signed in, a warning lists who is signed in and how many apps they have open. Only an administrator (or an unlocked 5-minute administrator grant via `r5_admin_prompt_unlock()`) may proceed; the others' unsaved work is lost.
+- **Shared and Guest.** `/boot/home/Shared` is handed to the administrator whose desktop is currently shown (at sign-in and on every switch). Guest may be one of several signed-in sessions and is still wiped at its log out and at shut down.
+- **Sound and notifications.** Sound from a hidden person's apps is muted in the audio mixer (`MixerInput` checks the active desktop uid set by Login via `r5_admin_send()` to `media_addon_server`) until they return. Notifications arriving for a hidden person are queued in that person's `notification_server` and shown when they return.
+- **Per-uid registrar behavior.** Lookups by signature, `B_EXCLUSIVE_LAUNCH` / `B_SINGLE_LAUNCH`, `GetAppList`, `Broadcast`, active app, watchers, and clipboards are isolated per uid (uid 0 system services remain visible; uid 0 still sees all). Haiku apps keep their `libbe` ABI unchanged.
+
 ## Current system (audit, 2026-10-29)
 
 ### Accounts and desktop
@@ -62,7 +74,7 @@ The QEMU and VirtualBox images are the R5 image, so they count as Try R5. To tes
 
 - **Key store values.** An account owns its own protector file (mode 0600), and Login runs the Argon2id values in it as uid 0. Only the fixed choice is accepted: at most 64 MiB, 3 passes, 1 lane (`R5KeyStoreCrypto::IsAllowedPasswordParams()`). A file with other values is refused like a wrong password, and Login moves that key store aside as `.old`.
 - **Who is the guest.** Login, the wipe and Deskbar all use the same rule: login name `guest`, home `/boot/home/users/guest`, and the uid in `/boot/system/settings/r5-guest-uid`. Deskbar asks `r5_admin_is_system_guest()` in `libr5admin.so`. An older account called `guest` keeps its lock and its files. The switch file `r5-guest-enabled` only counts when uid 0 owns it and others cannot write it.
-- **Deleting in Shared.** `/boot/home/Shared` is mode 01777. The sticky bit lets only uid 0, the owner of a file and the owner of Shared delete there; group `admin` does not count. So when an administrator signs in, Login makes that administrator the owner of Shared (the folder itself, never what is in it; `write_desktop_session()`). One graphical session runs at a time, so the administrator who is signed in can delete any file there. A standard account or the guest leaves the owner as it is.
+- **Deleting in Shared.** `/boot/home/Shared` is mode 01777. The sticky bit lets only uid 0, the owner of a file and the owner of Shared delete there; group `admin` does not count. When an administrator signs in or switches to their desktop, Login makes that administrator the owner of Shared (the folder itself, never what is in it; `write_desktop_session()` / `set_active_session()`). A standard account or the guest leaves the owner as it is.
 - **`/boot/home` is 0755 (25 Nov 2026).** It was 0711. Haiku's `BEntry` opens the parent folder for reading, and BFS refuses that without the read bit, so Tracker showed Shared (`/boot/home/Shared`) as a broken link for every account except the owner of `/boot/home`. Other accounts can now list the names directly under `/boot/home`, not what is in them: those names stay 0700/0600 (`lock_private_homes()`).
 - **Folders inside Shared.** The sticky bit protects only Shared itself, as with `/tmp`. A folder made in Shared belongs to its maker and has no sticky bit, so its maker can delete what others put in it.
 - **Copies of a password.** The keys of the key store and the derived key are wiped, and since this review the Security Kit keeps its secret buffers out of swap (`mlock()`, best effort). The password itself still passes through the admin message to Login, which is not wiped. `crypt()`'s static buffer holds the hash, not the password.

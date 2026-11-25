@@ -52,7 +52,10 @@
 				<code class="inline">user</code>, has a uid of 1000 or higher like everyone else.</li>
 				<li>Only the system services stay at uid 0: the kernel, <code class="inline">launch_daemon</code>, the
 				registrar, the network and package services, and Login itself.</li>
-				<li>One graphical session runs at a time. There is no fast switching between people yet.</li>
+				<li>More than one person can be signed in at the same time (fast user switching, build 10074). Each
+				signed-in person has their own <code class="inline">app_server</code> desktop, workspaces, clipboard,
+				key store, notification server, Deskbar and Tracker. While another person's desktop is shown, your
+				apps keep running, your sound is muted and your notifications wait until you return.</li>
 			</ul>
 			<table class="spec">
 				<tr><th>Account</th><th>Home folder</th><th>Groups</th></tr>
@@ -93,23 +96,26 @@
 		</section>
 
 		<section class="entry" id="session">
-			<div class="entry-header"><h2 class="plain">Lock and log out</h2></div>
-			<p>Deskbar asks Login, by its signature, to lock the screen or to log out. A program can send the same
-			message, for example a "lock" button in a remote-control app.</p>
+			<div class="entry-header"><h2 class="plain">Lock, switch user and log out</h2></div>
+			<p>Deskbar asks Login, through <a href="admin-kit.html#client"><code class="inline">r5_admin_send()</code></a>,
+			to lock the screen, switch user, or log out. The kernel names the sender, so a person can only act on their
+			own session.</p>
 			<table class="spec">
-				<tr><th>Message</th><th>To</th><th>What happens</th></tr>
-				<tr><td><code>'lokc'</code></td><td><code>application/x-vnd.Haiku-Login</code></td><td>The lock screen covers the session. Programs keep running.</td></tr>
-				<tr><td><code>'lout'</code></td><td><code>application/x-vnd.Haiku-Login</code></td><td>The session ends. Deskbar asks the person first; a message you send does not.</td></tr>
+				<tr><th>Message</th><th>To (admin port)</th><th>What happens</th></tr>
+				<tr><td><code>'lokc'</code></td><td><code>application/x-vnd.Haiku-Login</code></td><td>Switches to Login's desktop and shows the lock screen. Programs keep running, sound is muted, notifications wait.</td></tr>
+				<tr><td><code>'swtu'</code></td><td><code>application/x-vnd.Haiku-Login</code></td><td>Locks the current session and shows Sign in with a green dot on signed-in accounts.</td></tr>
+				<tr><td><code>'lout'</code></td><td><code>application/x-vnd.Haiku-Login</code></td><td>Ends only this person's session and destroys their desktop. Other signed-in people keep running.</td></tr>
 			</table>
 <pre class="code">BMessenger login(<span class="s">"application/x-vnd.Haiku-Login"</span>);
-<span class="k">if</span> (login.IsValid())
-	login.SendMessage(<span class="s">'lokc'</span>);	<span class="c">// lock the screen</span></pre>
+<span class="k">if</span> (login.IsValid()) {
+	BMessage req(<span class="s">'lokc'</span>), reply;
+	r5_admin_send(login, &amp;req, &amp;reply);	<span class="c">// lock the screen</span>
+}</pre>
 
 			<h3>When the person logs out</h3>
-			<p>Every program of the session gets <code class="inline">B_QUIT_REQUESTED</code>. Save what you need in
+			<p>Every program of that person's uid gets <code class="inline">B_QUIT_REQUESTED</code>. Save what you need in
 			<code class="inline">QuitRequested()</code> and quit. Do not open a dialog that waits for an answer: the
-			person has already chosen to leave, and Login does not wait for it. The next person who signs in starts
-			with a clean session.</p>
+			person has already chosen to leave, and Login does not wait for it. Other signed-in people are unaffected.</p>
 			<div class="use-grid">
 				<div class="use-box yes"><h4>Do</h4><p>Save quietly, for example a draft next to the document, and return <code class="inline">true</code>.</p></div>
 				<div class="use-box no"><h4>Don't</h4><p>Ask "Save changes?" and return <code class="inline">false</code> until someone answers. Nobody will.</p></div>
@@ -137,7 +143,7 @@
 				<li>Recognise the guest with <a href="admin-kit.html#service"><code class="inline">r5_admin_is_system_guest(getuid())</code></a>,
 				never by the name: an older account may be called "guest" too. The guest has no lock screen.</li>
 				<li><code class="inline">/boot/home/Shared</code> is for everyone (mode 01777). Anyone can put a file there;
-				only its owner, the administrator who is signed in and the system can delete it.</li>
+				only its owner, the administrator whose desktop is currently shown, and the system can delete it.</li>
 				<li>The protection holds for Shared itself, as with <code class="inline">/tmp</code>. A folder made inside Shared
 				belongs to its maker, who can delete what others put in it.</li>
 			</ul>

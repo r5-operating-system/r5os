@@ -26,6 +26,9 @@ const uint32 kLoginOk = 'lgok';
 // (string "text"); the walk thread tells Login when it is done.
 const uint32 kLoginProgress = 'lgpr';
 const uint32 kHomeWalkDone = 'lghw';
+// Fast user switching (part 2):
+const uint32 kSwitchUserAction = 'swtu';
+const uint32 kQuerySessionsAction = 'qses';
 
 // Issue #4639: a message from Login's own windows. Every message that
 // signs in, unlocks, locks, logs out, restarts or shuts down carries
@@ -49,14 +52,16 @@ public:
 
 private:
 	void			TryLogin(BMessage* message);
-	void			Logout();
-	void			Lock();
+	void			Logout(uid_t targetUid = 0);
+	void			Lock(uid_t targetUid = 0);
+	void			SwitchUser();
 	void			Unlock(BMessage* message);
 	void			_CloseLock();
 	void			HandleAdmin(BMessage* message);
 	status_t		ValidateLogin(const char* login, const char* password);
 	void			_EnableDesktopJobs();
-	status_t		_LaunchSessionApp(const char* program,
+	status_t		_LaunchSessionAppFor(const char* login,
+						const char* program,
 						const char* argument = NULL,
 						const char* argument2 = NULL,
 						const char* argument3 = NULL,
@@ -64,20 +69,32 @@ private:
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-	status_t		_LaunchSessionAppGetTeam(const char* program,
-						team_id* _outTeam);
+	status_t		_LaunchSessionAppGetTeamFor(const char* login,
+						const char* program, team_id* _outTeam);
 	void			_StartAndUnlockKeyStore(const char* login,
 						const char* password);
+	void			_StopKeyStoreOfUid(uid_t uid);
+	status_t		_AppServerCreateDesktop(uid_t uid, bool activate);
+	status_t		_AppServerActivateDesktop(uid_t uid);
+	status_t		_AppServerDestroyDesktop(uid_t uid);
+	void			_SetActiveAudioUid(uid_t uid);
+	void			_NotifySessionVisible(uid_t uid, bool visible);
+	status_t		_WaitSessionTeamFor(const char* signature, uid_t uid);
+	void			_QuitUserAppsFor(uid_t uid);
+	int32			_CountUserApps(uid_t uid) const;
+	void			_FillOtherSessions(uid_t excludeUid,
+						BMessage& reply) const;
+	bool			_ConfirmShutdownIfOthers(bool reboot, uid_t requesterUid,
+						bool requesterIsAdmin);
+	void			_PerformShutdown(bool reboot);
 // SPDX-SnippetEnd
-	void			_LaunchSessionHooks();
-	void			_StartVirtualBoxGuest();
-	status_t		_SessionHome(BPath& path) const;
+	void			_LaunchSessionHooks(const char* login);
+	void			_StartVirtualBoxGuest(const char* login);
+	status_t		_SessionHomeFor(const char* login, BPath& path) const;
 	status_t		_WaitRunning(const char* signature);
-	status_t		_WaitSessionTeam(const char* signature);
 	void			_HideLogin();
 	void			_ShowLogin();
 	void			_OpenLoginWindow();
-	void			_QuitUserApps();
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
@@ -85,7 +102,7 @@ private:
 						gid_t gid);
 	void			_HomeWalkDone(BMessage* message);
 // SPDX-SnippetEnd
-	status_t		_WaitGone(const char* signature);
+	status_t		_WaitGoneFor(const char* signature, uid_t uid);
 
 	DesktopWindow*	fDesktopWindow;
 	LoginWindow*	fLoginWindow;
@@ -103,6 +120,10 @@ private:
 	// The sign-in that waits for the first walk of /boot/home.
 	thread_id		fHomeWalkThread;
 	BMessage*		fPendingLogin;
+	// Fast user switching: currently shown desktop uid (0 = Login desktop)
+	// and the login name shown on fLockWindow.
+	uid_t			fActiveUid;
+	BString			fLockedLogin;
 // SPDX-SnippetEnd
 };
 

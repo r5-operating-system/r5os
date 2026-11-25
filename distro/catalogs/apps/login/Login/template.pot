@@ -5,6 +5,10 @@ msgctxt "Users: Account admin"
 msgid "There must be at least one administrator."
 msgstr ""
 
+msgctxt "Login: Application"
+msgid "{0, plural, one{• %name% (# open app)} other{• %name% (# open apps)}}"
+msgstr ""
+
 msgctxt "Users: Account admin"
 msgid "An account named \"guest\" already exists. Rename it first."
 msgstr ""
@@ -21,12 +25,12 @@ msgctxt "Users: Account admin"
 msgid "%program% failed"
 msgstr ""
 
-msgctxt "Users: Account admin"
-msgid "The original administrator account cannot be disabled."
-msgstr ""
-
 msgctxt "Login: Application"
 msgid "Could not start the desktop."
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "The original administrator account cannot be disabled."
 msgstr ""
 
 msgctxt "Login: Lock window"
@@ -51,6 +55,10 @@ msgstr ""
 
 msgctxt "Users: Account admin"
 msgid "That username already exists."
+msgstr ""
+
+msgctxt "Login: Application"
+msgid "Shut down"
 msgstr ""
 
 msgctxt "Users: Account admin"
@@ -93,6 +101,10 @@ msgctxt "Users: Account admin"
 msgid "Could not encrypt the password."
 msgstr ""
 
+msgctxt "Login: Application"
+msgid "Only an administrator may shut down while others are signed in."
+msgstr ""
+
 msgctxt "Users: Account admin"
 msgid "The password could not be saved."
 msgstr ""
@@ -107,6 +119,14 @@ msgstr ""
 
 msgctxt "Login: Sign in view"
 msgid "Sign in as Guest"
+msgstr ""
+
+msgctxt "Login: Sign in view"
+msgid "Return to Guest"
+msgstr ""
+
+msgctxt "Login: Application"
+msgid "Restart"
 msgstr ""
 
 msgctxt "Users: Account admin"
@@ -182,6 +202,10 @@ msgctxt "Users: Account admin"
 msgid "The last administrator cannot become a standard account."
 msgstr ""
 
+msgctxt "Login: Application"
+msgid "Shut down anyway"
+msgstr ""
+
 msgctxt "Users: Account admin"
 msgid "Could not enable the account."
 msgstr ""
@@ -200,6 +224,14 @@ msgstr ""
 
 msgctxt "Users: Account admin"
 msgid "Your password was not changed because the key store could not be updated."
+msgstr ""
+
+msgctxt "Login: Sign in view"
+msgid "Unlock"
+msgstr ""
+
+msgctxt "Login: Application"
+msgid "Other people are signed in:\n\n%list%\nRestarting will close their apps and lose any unsaved work."
 msgstr ""
 
 msgctxt "Login: Application"
@@ -327,11 +359,19 @@ msgid "The request is empty."
 msgstr ""
 
 msgctxt "Login: Application"
+msgid "Only a signed-in session may lock, switch user or log out."
+msgstr ""
+
+msgctxt "Login: Application"
 msgid "Choose a password first."
 msgstr ""
 
 msgctxt "Users: Account admin"
 msgid "This account already has a password."
+msgstr ""
+
+msgctxt "Login: Application"
+msgid "Only an administrator may continue. Sign in as an administrator first."
 msgstr ""
 
 msgctxt "Login: Application"
@@ -348,6 +388,10 @@ msgstr ""
 
 msgctxt "Login: Sign in window"
 msgid "Sign in"
+msgstr ""
+
+msgctxt "Login: Application"
+msgid "Guest"
 msgstr ""
 
 msgctxt "Login: Driver settings admin"
@@ -368,6 +412,10 @@ msgstr ""
 
 msgctxt "Login: Application"
 msgid "Sleep is not available yet."
+msgstr ""
+
+msgctxt "Login: Sign in view"
+msgid "Signed in. Enter password to unlock %name%"
 msgstr ""
 
 msgctxt "Login: Lock window"
@@ -406,10 +454,6 @@ msgctxt "Users: Account admin"
 msgid "Could not save the guest setting."
 msgstr ""
 
-msgctxt "Login: Application"
-msgid "Only the signed-in session may lock or log out."
-msgstr ""
-
 msgctxt "Users: Account admin"
 msgid "Could not create the guest account."
 msgstr ""
@@ -424,6 +468,10 @@ msgstr ""
 
 msgctxt "Desktop Window"
 msgid "Desktop"
+msgstr ""
+
+msgctxt "Login: Application"
+msgid "Restart anyway"
 msgstr ""
 
 msgctxt "Login: Sign in view"
@@ -462,12 +510,12 @@ msgctxt "Users: Account admin"
 msgid "Guest account setup requires the sign-in helper."
 msgstr ""
 
-msgctxt "Login: Lock window"
-msgid "Restart"
-msgstr ""
-
 msgctxt "Login: Application"
 msgid "Could not shut down: %error%"
+msgstr ""
+
+msgctxt "Login: Lock window"
+msgid "Restart"
 msgstr ""
 
 msgctxt "Users: Account admin"
@@ -498,6 +546,10 @@ msgctxt "Login: Driver admin"
 msgid "The request is empty."
 msgstr ""
 
+msgctxt "Login: Sign in view"
+msgid "Guest is already signed in"
+msgstr ""
+
 msgctxt "Users: Account admin"
 msgid "Only the sign-in helper can set this password."
 msgstr ""
@@ -514,6 +566,10 @@ msgctxt "Users: Account admin"
 msgid "The new account did not get a user id of 1000 or higher."
 msgstr ""
 
+msgctxt "Login: Application"
+msgid "Other people are signed in:\n\n%list%\nShutting down will close their apps and lose any unsaved work."
+msgstr ""
+
 msgctxt "Users: Account admin"
 msgid "The existing guest account has an unexpected setup."
 msgstr ""
@@ -522,8 +578,16 @@ msgctxt "Login: Driver settings admin"
 msgid "This setting is not allowed."
 msgstr ""
 
+msgctxt "Login: Lock window"
+msgid "Other account"
+msgstr ""
+
 msgctxt "Login: Sign in view"
 msgid "Choose an account first."
+msgstr ""
+
+msgctxt "Login: Application"
+msgid "Cancel"
 msgstr ""
 
 msgctxt "Users: Account admin"

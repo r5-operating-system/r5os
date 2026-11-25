@@ -108,6 +108,14 @@ bool guest_session_active();
 status_t write_desktop_session(const char* login);
 status_t clear_desktop_session();
 status_t signed_in_name(BString& name);
+// Fast user switching: per-person session records (root-owned
+// /boot/system/settings/r5-desktop-sessions).
+status_t add_signed_in_session(const char* login);
+status_t set_active_session(const char* login);
+status_t remove_signed_in_session(const char* login);
+bool is_user_signed_in(const char* login);
+int32 list_signed_in_sessions(class BStringList& names);
+int32 count_listed_accounts();
 void clear_admin_grants();
 void refresh_machine_settings_access();
 status_t handle_admin_message(BMessage* request, BMessage& reply);

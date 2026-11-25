@@ -160,15 +160,24 @@ ensure_user_settings(const struct passwd* pwd)
 int
 main(int argc, char** argv)
 {
-	if (argc < 2 || argv[1] == NULL || argv[1][0] == '\0') {
+	int cmdIndex = 1;
+	char name[64];
+	name[0] = '\0';
+	if (argc >= 4 && strcmp(argv[1], "--user") == 0
+		&& argv[2] != NULL && argv[2][0] != '\0') {
+		strlcpy(name, argv[2], sizeof(name));
+		cmdIndex = 3;
+	}
+
+	if (argc <= cmdIndex || argv[cmdIndex] == NULL
+		|| argv[cmdIndex][0] == '\0') {
 		r5_session_log("missing command");
 		syslog(LOG_ERR, "r5-desktop: missing command");
 		return 1;
 	}
 
-	char name[64];
-	if (!read_session_name(name, sizeof(name))) {
-		r5_session_log("no session file for %s", argv[1]);
+	if (name[0] == '\0' && !read_session_name(name, sizeof(name))) {
+		r5_session_log("no session file for %s", argv[cmdIndex]);
 		syslog(LOG_ERR, "r5-desktop: no session file");
 		return 1;
 	}
@@ -182,7 +191,7 @@ main(int argc, char** argv)
 	}
 
 	r5_session_log("session %s uid=%d gid=%d cmd=%s", name, (int)pwd->pw_uid,
-		(int)pwd->pw_gid, argv[1]);
+		(int)pwd->pw_gid, argv[cmdIndex]);
 
 	if (pwd->pw_dir != NULL && pwd->pw_dir[0] != '\0')
 		setenv("HOME", pwd->pw_dir, 1);
@@ -225,15 +234,15 @@ main(int argc, char** argv)
 		fcntl(reportTeamFd, F_SETFD, FD_CLOEXEC);
 
 	r5_session_log("dropped uid=%d euid=%d, load_image %s", (int)getuid(),
-		(int)geteuid(), argv[1]);
+		(int)geteuid(), argv[cmdIndex]);
 
-	thread_id thread = load_image(argc - 1, (const char**)(argv + 1),
-		(const char**)environ);
+	thread_id thread = load_image(argc - cmdIndex,
+		(const char**)(argv + cmdIndex), (const char**)environ);
 	if (thread < B_OK) {
 		if (reportTeamFd >= 0)
 			close(reportTeamFd);
-		r5_session_log("load_image %s: %s", argv[1], strerror(thread));
-		syslog(LOG_ERR, "r5-desktop: load_image %s: %s", argv[1],
+		r5_session_log("load_image %s: %s", argv[cmdIndex], strerror(thread));
+		syslog(LOG_ERR, "r5-desktop: load_image %s: %s", argv[cmdIndex],
 			strerror(thread));
 		return 1;
 	}
@@ -245,6 +254,6 @@ main(int argc, char** argv)
 		close(reportTeamFd);
 	}
 	resume_thread(thread);
-	r5_session_log("started team thread %d for %s", (int)thread, argv[1]);
+	r5_session_log("started team thread %d for %s", (int)thread, argv[cmdIndex]);
 	return 0;
 }

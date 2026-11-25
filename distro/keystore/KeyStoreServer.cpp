@@ -764,6 +764,18 @@ KeyStoreServer::_ResolveCallingApp(const BMessage& message,
 	if (callingAppInfo.team != callingTeam)
 		return B_ERROR;
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// Fast user switching: only teams of the store's owner (or uid 0) may
+	// access this person's key store.
+	team_info callingTeamInfo;
+	if (get_team_info(callingTeam, &callingTeamInfo) != B_OK)
+		return B_PERMISSION_DENIED;
+	if (callingTeamInfo.uid != geteuid() && callingTeamInfo.uid != 0)
+		return B_PERMISSION_DENIED;
+// SPDX-SnippetEnd
+
 	return B_OK;
 }
 
