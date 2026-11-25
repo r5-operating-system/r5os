@@ -110,7 +110,13 @@ respective holders. All rights reserved.
 enum {
 	kUserCanceled = B_ERRORS_END + 1,
 	kCopyCanceled = kUserCanceled,
-	kTrashCanceled
+	kTrashCanceled,
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	kTrashItemNotMoved
+		// MoveItem() could not move an item to Trash and already said why
+// SPDX-SnippetEnd
 };
 
 enum ConflictCheckResult {
@@ -131,8 +137,21 @@ namespace BPrivate {
 static status_t FSDeleteFolder(BEntry*, CopyLoopControl*, bool updateStatus,
 	bool deleteTopDir = true, bool upateFileNameInStatus = false);
 static status_t MoveEntryToTrash(BEntry*, BPoint*, Undo &undo);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// LowLevelCopy reports how many bytes it already added to the status bar,
+// and removes the partial destination on any error. CopyFileChecked and
+// CopyFolder return true only when everything was copied, so a move removes
+// the source only then (#4619, #4620).
 static void LowLevelCopy(BEntry*, StatStruct*, BDirectory*, char* destName,
-	CopyLoopControl*, BPoint*);
+	CopyLoopControl*, BPoint*, off_t* reportedBytes);
+static bool CopyFileChecked(BEntry* srcFile, StatStruct* srcStat,
+	BDirectory* destDir, CopyLoopControl* loopControl, BPoint* loc,
+	bool makeOriginalName, Undo &undo);
+static status_t CopyAttributesChecked(CopyLoopControl* control,
+	BNode* srcNode, BNode* destNode, void* buffer, size_t bufsize);
+// SPDX-SnippetEnd
 status_t DuplicateTask(BObjectList<entry_ref, true>* srcList);
 static status_t MoveTask(BObjectList<entry_ref, true>*, BEntry*, BList*, uint32);
 static status_t _DeleteTask(BObjectList<entry_ref, true>*, bool);
@@ -1172,6 +1191,12 @@ MoveTask(BObjectList<entry_ref, true>* srcList, BEntry* destEntry, BList* pointL
 					loc = (BPoint*)pointList->ItemAt(i);
 
 				result = MoveEntryToTrash(&sourceEntry, loc, undo);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+				if (result == kTrashItemNotMoved)
+					break;
+// SPDX-SnippetEnd
 				if (result != B_OK) {
 					BString error(B_TRANSLATE("Error moving \"%name\" to Trash. (%error)"));
 					error.ReplaceFirst("%name", srcRef->name);
@@ -1278,13 +1303,28 @@ public:
 };
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
 void
 CopyFile(BEntry* srcFile, StatStruct* srcStat, BDirectory* destDir,
 	CopyLoopControl* loopControl, BPoint* loc, bool makeOriginalName,
 	Undo &undo)
 {
+	// kept for the existing symbol; the copy engine uses CopyFileChecked()
+	CopyFileChecked(srcFile, srcStat, destDir, loopControl, loc,
+		makeOriginalName, undo);
+}
+
+
+static bool
+CopyFileChecked(BEntry* srcFile, StatStruct* srcStat, BDirectory* destDir,
+	CopyLoopControl* loopControl, BPoint* loc, bool makeOriginalName,
+	Undo &undo)
+{
 	if (loopControl->SkipEntry(srcFile, true))
-		return;
+		return false;
+// SPDX-SnippetEnd
 
 	node_ref node;
 	destDir->GetNodeRef(&node);
@@ -1316,7 +1356,12 @@ CopyFile(BEntry* srcFile, StatStruct* srcStat, BDirectory* destDir,
 		switch (loopControl->OverwriteOnConflict(srcFile, destName, destDir, false, false)) {
 			case TrackerCopyLoopControl::kSkip:
 				// we are about to ignore this entire directory
-				return;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+				// not copied, so a move must keep the source
+				return false;
+// SPDX-SnippetEnd
 
 			case TrackerCopyLoopControl::kReplace:
 				if (!conflictingEntry.IsDirectory()) {
@@ -1330,24 +1375,38 @@ CopyFile(BEntry* srcFile, StatStruct* srcStat, BDirectory* destDir,
 		}
 	}
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	off_t reportedBytes = 0;
 	try {
-		LowLevelCopy(srcFile, srcStat, destDir, destName, loopControl, loc);
+		LowLevelCopy(srcFile, srcStat, destDir, destName, loopControl, loc,
+			&reportedBytes);
 	} catch (status_t err) {
 		if (err == kCopyCanceled)
 			throw (status_t)err;
 
 		if (err != B_OK) {
+			// LowLevelCopy already removed the incomplete destination
 			if (!loopControl->FileError(
 					B_TRANSLATE_NOCOLLECT(kFileErrorString), destName, err,
 					true)) {
 				throw (status_t)err;
-			} else {
-				// user selected continue in spite of error, update status bar
-				loopControl->UpdateStatus(NULL, ref, srcStat->st_size);
 			}
+
+			// user selected continue in spite of error: skip this file,
+			// keep the source, and only add the bytes not yet reported
+			if (srcStat->st_size > reportedBytes) {
+				loopControl->UpdateStatus(NULL, ref,
+					srcStat->st_size - reportedBytes);
+			}
+			return false;
 		}
 	}
+
+	return true;
 }
+// SPDX-SnippetEnd
 
 
 #ifdef _SILENTLY_CORRECT_FILE_NAMES
@@ -1389,10 +1448,16 @@ CreateFileSystemCompatibleName(const BDirectory* destDir, char* destName)
 #endif
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
 static void
 LowLevelCopy(BEntry* srcEntry, StatStruct* srcStat, BDirectory* destDir,
-	char* destName, CopyLoopControl* loopControl, BPoint* loc)
+	char* destName, CopyLoopControl* loopControl, BPoint* loc,
+	off_t* reportedBytes)
 {
+	*reportedBytes = 0;
+// SPDX-SnippetEnd
 	entry_ref ref;
 	ThrowOnError(srcEntry->GetRef(&ref));
 
@@ -1491,6 +1556,11 @@ LowLevelCopy(BEntry* srcEntry, StatStruct* srcStat, BDirectory* destDir,
 					// write to get better update granularity
 					updateBytes = bytes / 2;
 					loopControl->UpdateStatus(NULL, ref, updateBytes, true);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+					*reportedBytes += updateBytes;
+// SPDX-SnippetEnd
 				}
 
 				loopControl->ChecksumChunk(buffer, (size_t)bytes);
@@ -1503,6 +1573,11 @@ LowLevelCopy(BEntry* srcEntry, StatStruct* srcStat, BDirectory* destDir,
 				}
 
 				loopControl->UpdateStatus(NULL, ref, bytes - updateBytes, true);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+				*reportedBytes += bytes - updateBytes;
+// SPDX-SnippetEnd
 			} else if (bytes < 0) {
 				// read error
 				throw (status_t)bytes;
@@ -1512,11 +1587,24 @@ LowLevelCopy(BEntry* srcEntry, StatStruct* srcStat, BDirectory* destDir,
 			}
 		}
 
-		CopyAttributes(loopControl, &srcFile, &destFile, buffer, bufsize);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		ThrowOnError(CopyAttributesChecked(loopControl, &srcFile, &destFile,
+			buffer, bufsize));
 	} catch (...) {
 		delete[] buffer;
+
+		// a short write, a read error or a failed attribute copy leaves an
+		// incomplete file: remove it, so it is never mistaken for a copy
+		// (the cancel path above already removed it)
+		destFile.Unset();
+		BEntry destEntry;
+		if (destDir->FindEntry(destName, &destEntry) == B_OK)
+			destEntry.Remove();
 		throw;
 	}
+// SPDX-SnippetEnd
 
 	destFile.SetPermissions(srcStat->st_mode);
 	destFile.SetOwner(srcStat->st_uid);
@@ -1538,12 +1626,47 @@ LowLevelCopy(BEntry* srcEntry, StatStruct* srcStat, BDirectory* destDir,
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
 void
 CopyAttributes(CopyLoopControl* control, BNode* srcNode, BNode* destNode,
 	void* buffer, size_t bufsize)
 {
+	// kept for the existing symbol; same best-effort behavior as before
+	CopyAttributesChecked(control, srcNode, destNode, buffer, bufsize);
+}
+
+
+// A file system that cannot write attributes at all (ext2 reads them but has
+// no create hook, so the VFS answers B_READ_ONLY_DEVICE) keeps the old
+// best-effort behavior: the data still copies, as before.
+static bool
+AttributeWriteUnsupported(status_t error)
+{
+	return error == B_READ_ONLY_DEVICE || error == B_UNSUPPORTED
+		|| error == B_NOT_SUPPORTED;
+}
+
+
+// Returns an error when an attribute could not be read or written in full.
+// A destination volume without attribute support keeps the old best-effort
+// behavior, because there every attribute write is expected to fail.
+static status_t
+CopyAttributesChecked(CopyLoopControl* control, BNode* srcNode,
+	BNode* destNode, void* buffer, size_t bufsize)
+{
+	bool checkErrors = true;
+	node_ref destNodeRef;
+	if (destNode->GetNodeRef(&destNodeRef) == B_OK) {
+		BVolume destVolume(destNodeRef.device);
+		if (destVolume.InitCheck() == B_OK && !destVolume.KnowsAttr())
+			checkErrors = false;
+	}
+	status_t error = B_OK;
+// SPDX-SnippetEnd
+
 	// ToDo:
-	// Add error checking
 	// prior to coyping attributes, make sure indices are installed
 
 	// When calling CopyAttributes on files, have to make sure destNode
@@ -1570,8 +1693,16 @@ CopyAttributes(CopyLoopControl* control, BNode* srcNode, BNode* destNode,
 
 		// Special case for a size 0 attribute. It wouldn't be written at all
 		// otherwise.
-		if (info.size == 0)
-			destNode->WriteAttr(name, info.type, 0, buffer, 0);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		if (info.size == 0) {
+			ssize_t written = destNode->WriteAttr(name, info.type, 0, buffer, 0);
+			if (written < 0 && checkErrors
+				&& !AttributeWriteUnsupported((status_t)written)) {
+				return (status_t)written;
+			}
+		}
 
 		ssize_t bytes;
 		ssize_t numToRead = (ssize_t)info.size;
@@ -1583,19 +1714,42 @@ CopyAttributes(CopyLoopControl* control, BNode* srcNode, BNode* destNode,
 			bytes = srcNode->ReadAttr(name, info.type, offset,
 				buffer, chunkSize);
 
-			if (bytes <= 0)
+			if (bytes <= 0) {
+				// a read error, or the attribute ended early
+				error = bytes < 0 ? (status_t)bytes : B_IO_ERROR;
 				break;
+			}
 
-			destNode->WriteAttr(name, info.type, offset, buffer,
-				(size_t)bytes);
+			ssize_t written = destNode->WriteAttr(name, info.type, offset,
+				buffer, (size_t)bytes);
+			if (written != bytes) {
+				error = written < 0 ? (status_t)written : B_DEVICE_FULL;
+				if (AttributeWriteUnsupported(error))
+					error = B_OK;
+				break;
+			}
 
 			numToRead -= bytes;
 		}
+
+		if (error != B_OK) {
+			if (checkErrors)
+				return error;
+			error = B_OK;
+		}
 	}
+
+	return B_OK;
 }
+// SPDX-SnippetEnd
 
 
-static void
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// Returns true only when the folder and everything in it was copied. With
+// removeSource, the source is removed only then (#4619, #4620).
+static bool
 CopyFolder(BEntry* srcEntry, BDirectory* destDir,
 	CopyLoopControl* loopControl, BPoint* loc, bool makeOriginalName,
 	Undo &undo, bool removeSource = false)
@@ -1605,9 +1759,11 @@ CopyFolder(BEntry* srcEntry, BDirectory* destDir,
 	status_t err = B_OK;
 	bool createDirectory = true;
 	BEntry existingEntry;
+	bool complete = true;
 
 	if (loopControl->SkipEntry(srcEntry, false))
-		return;
+		return false;
+// SPDX-SnippetEnd
 
 	entry_ref ref;
 	srcEntry->GetRef(&ref);
@@ -1633,7 +1789,11 @@ CopyFolder(BEntry* srcEntry, BDirectory* destDir,
 			true, isDirectory)) {
 			case TrackerCopyLoopControl::kSkip:
 				// we are about to ignore this entire directory
-				return;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+				return false;
+// SPDX-SnippetEnd
 
 
 			case TrackerCopyLoopControl::kReplace:
@@ -1673,16 +1833,33 @@ CopyFolder(BEntry* srcEntry, BDirectory* destDir,
 			}
 
 			// will allow rest of copy to continue
-			return;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			return false;
+// SPDX-SnippetEnd
 		}
 	}
 
 	char* buffer;
 	if (createDirectory && err == B_OK
 		&& (buffer = (char*)malloc(32768)) != 0) {
-		CopyAttributes(loopControl, &srcDir, &newDir, buffer, 32768);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		status_t attrError = CopyAttributesChecked(loopControl, &srcDir,
+			&newDir, buffer, 32768);
 			// don't copy original pose location if new location passed
 		free(buffer);
+		if (attrError != B_OK) {
+			if (!loopControl->FileError(B_TRANSLATE_NOCOLLECT(
+					kFolderErrorString), destName, attrError, true)) {
+				throw attrError;
+			}
+			// copy the contents, but keep the source folder
+			complete = false;
+		}
+// SPDX-SnippetEnd
 	}
 
 	StatStruct statbuf;
@@ -1705,26 +1882,42 @@ CopyFolder(BEntry* srcEntry, BDirectory* destDir,
 			if (statbuf.st_dev != sourceDeviceID) {
 				PRINT(("Avoiding mount point %" B_PRIdDEV ", %" B_PRIdDEV "\n",
 					statbuf.st_dev, sourceDeviceID));
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+				complete = false;
+// SPDX-SnippetEnd
 				continue;
 			}
 
-			CopyFolder(&entry, &newDir, loopControl, 0, false, undo, removeSource);
-			if (removeSource)
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			if (!CopyFolder(&entry, &newDir, loopControl, 0, false, undo,
+					removeSource)) {
+				complete = false;
+			} else if (removeSource)
 				FSDeleteFolder(&entry, loopControl, true, true, false);
 		} else if (S_ISREG(statbuf.st_mode) || S_ISLNK(statbuf.st_mode)) {
-			CopyFile(&entry, &statbuf, &newDir, loopControl, 0, false, undo);
-			if (removeSource)
+			if (!CopyFileChecked(&entry, &statbuf, &newDir, loopControl, 0,
+					false, undo)) {
+				complete = false;
+			} else if (removeSource)
 				entry.Remove();
 		} else {
-			// Ignore special files
+			// Ignore special files; they are not copied, so keep the source
+			complete = false;
 		}
 	}
 
-	if (removeSource)
+	if (removeSource && complete)
 		srcEntry->Remove();
 	else
 		srcEntry->Unset();
+
+	return complete;
 }
+// SPDX-SnippetEnd
 
 
 status_t
@@ -1791,16 +1984,18 @@ MoveItem(BEntry* entry, BDirectory* destDir, BPoint* loc, uint32 moveMode,
 			if (moveMode == kCreateRelativeLink) {
 				if (statbuf.st_dev == destNode.device) {
 					// relative link only works on the same device
-					char oldwd[B_PATH_NAME_LENGTH];
-					getcwd(oldwd, B_PATH_NAME_LENGTH);
-
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+					// the relative path is built from the two absolute paths
+					// alone; no chdir(), which would change the working
+					// directory of every Tracker thread (#4630)
 					BEntry destEntry;
 					destDir->GetEntry(&destEntry);
 					BPath destPath;
-					destEntry.GetPath(&destPath);
-
-					chdir(destPath.Path());
-						// change working dir to target dir
+					MoveError::FailOnError(destEntry.GetPath(&destPath));
+					MoveError::FailOnError(path.InitCheck());
+// SPDX-SnippetEnd
 
 					BString destString(destPath.Path());
 					destString.Append("/");
@@ -1843,9 +2038,6 @@ MoveItem(BEntry* entry, BDirectory* destDir, BPoint* loc, uint32 moveMode,
 
 					source.Append(path.Leaf());
 					err = destDir->CreateSymLink(name, source.String(), &link);
-
-					chdir(oldwd);
-						// change working dir back to original
 				} else
 					moveMode = kCreateLink;
 						// fall back to absolute link mode
@@ -1899,9 +2091,15 @@ MoveItem(BEntry* entry, BDirectory* destDir, BPoint* loc, uint32 moveMode,
 			if (S_ISDIR(statbuf.st_mode)) {
 				CopyFolder(entry, destDir, loopControl, loc, makeOriginalName, undo, removeSource);
 			} else {
-				CopyFile(entry, &statbuf, destDir, loopControl, loc, makeOriginalName, undo);
-				if (removeSource)
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+				// remove the source only after a complete copy (#4619)
+				if (CopyFileChecked(entry, &statbuf, destDir, loopControl, loc,
+						makeOriginalName, undo) && removeSource) {
 					entry->Remove();
+				}
+// SPDX-SnippetEnd
 			}
 		}
 	} catch (status_t error) {
@@ -2136,11 +2334,23 @@ MoveEntryToTrash(BEntry* entry, BPoint* loc, Undo &undo)
 		node.WriteAttrString(kAttrOriginalPath, &originalPath);
 	}
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
 	TrackerCopyLoopControl loopControl;
-	MoveItem(entry, &trashDir, loc, kMoveSelectionTo, name, undo, &loopControl);
+	result = MoveItem(entry, &trashDir, loc, kMoveSelectionTo, name, undo,
+		&loopControl);
+	if (result != B_OK) {
+		// the item stayed where it was: drop the trash path again and let
+		// MoveTask stop the batch (#4629); MoveItem already showed the alert
+		if (node.InitCheck() == B_OK)
+			node.RemoveAttr(kAttrOriginalPath);
+		return kTrashItemNotMoved;
+	}
 
 	return B_OK;
 }
+// SPDX-SnippetEnd
 
 
 ConflictCheckResult
