@@ -24,8 +24,13 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - Mistakes caught during build and VirtualBox boot:
   - First VirtualBox boot revealed `Compositor::SetHidden(false)` leaving `fWakePending == true` (newly activated desktop 1001 stayed frozen on Sign in) and `r5_active_audio_uid` missing `B_CLONEABLE_AREA`. Both fixed and rebuilt cleanly.
   - Second VirtualBox boot proved desktop 1001 rendered with live Deskbar, tray icons (sound, workspaces, Bluetooth, AirPlay), Tracker, per-uid `keystore_server`, per-uid `notification_server`, `/boot/home/Shared` owned by `user`, workspaces 6/3, and clipboard, and then revealed the `EventDispatcher::_Unset()` double-`'quit'` input-handoff bug (keyboard events did not reach desktop 1001). Fixed in `EventDispatcher.{h,cpp}`, `EventStream.cpp`, and `Desktop.cpp`.
+- Tested (VirtualBox `R5OS-fus2`, after final `scripts/build-locked.sh` `jam_exit=0`, `mesa_exit=0`):
+  - Sign in as `user` (uid 1001): activates and paints desktop 1001 with Deskbar, tray icons (sound, workspaces, Bluetooth, AirPlay), Tracker, per-uid `keystore_server` and `notification_server`, `/boot/home/Shared` owned by `user`, workspaces 6/3, clipboard `'user-clip-secret'`, and `BKeyStore` (`ks-set wifi-ssid-user -> No error`, approved via keyboard on desktop 1001, proving `EventDispatcher` input handoff; `Alt+F2` workspace switch on desktop 1001 also verified).
+  - Lock screen as `user`: switches to desktop 0 (`active_user=0`), mutes audio (`audio_uid=0`), rejects wrong password, unlocks back to desktop 1001 (`active_user=1001`, `ws=3/6`, `audio_uid=1001`).
+  - `Switch user…` from `user`'s Deskbar: switches to desktop 0 (`active_user=0`, `audio_uid=0`), Sign in shows `R5OS` with green `Signed in` dot and `Unlock` button.
+  - Sign in as Guest (uid 1003) while `user` (uid 1001) stays running: two concurrent person desktops (`desktops=0(shown=0,ws=0/4),1001(shown=0,ws=3/6),1003(shown=1,ws=0/4)`), `audio_uid=1003`, independent workspaces (`0/4` vs `3/6`), Guest Deskbar + tray icons rendered, and clipboard isolation verified (`uid 1002` reads `<empty>`, not `user`'s clipboard).
 - Limits & not tested:
-  - Full automated multi-session switch/lock/Guest/shutdown-warning run after the `EventDispatcher` input-handoff fix has not yet been re-booted in VirtualBox (only the pre-fix boot verifying desktop 1001 sign-in, rendering, per-uid servers, workspaces, clipboard, and `/boot/home/Shared` ran).
+  - Standard account `alice` (created via `useradd` in the guest test script) did not pass `is_valid_shell()` so `alice` sign-in, shutdown warning modal UI, hidden notification queueing replay, and per-person log-out teardown were not exercised end-to-end in that run.
   - Not tested: Ryzen 5 5625U / RADV hardware, Safe mode, `BDirectWindow` apps, live audio playback muting across two sessions, ARM64, RISC-V.
 
 ## 2026-11-25 - Deskbar: one icon column in the main menu, every label lines up
