@@ -369,6 +369,7 @@
 		{ name: "r5_level_glyph", kind: "enum", where: "Icons Kit", header: "<R5Icons.h>", lib: "libr5icons.so", href: "icons-kit.html#r5_level_glyph", desc: "Multi-level line glyphs (battery, volume, signal)." },
 		{ name: "r5_screen_draw()", kind: "function", where: "Appearance: Functions", header: "<R5UI.h>", lib: "libr5ui.so", href: "appearance-effects.html#functions", desc: "Draws a monitor screen preview with Deskbar." },
 		{ name: "r5_settings_apply_prefs_overlay()", kind: "function", where: "Appearance: Functions", header: "<R5UI.h>", lib: "libr5ui.so", href: "appearance-effects.html#functions", desc: "Applies the Settings wrench overlay to a bitmap." },
+		{ name: "r5_settings_open_page()", kind: "function", where: "Settings modules", header: "<R5UI.h>", lib: "libr5ui.so", href: "settings-modules.html#open-page", desc: "Opens Settings on one page, also when it already runs." },
 		{ name: "sockaddr_l2cap_le", kind: "struct", where: "Bluetooth Kit", header: "<R5Bluetooth.h>", lib: "libr5bt.so", href: "bluetooth-kit.html#le-l2cap", desc: "Socket address for Bluetooth Low Energy L2CAP." },
 		{ name: "vkCreateViewSurfaceRFIVE()", kind: "function", where: "Vulkan", header: "<vulkan/vulkan_r5.h>", lib: "vulkan", href: "vulkan.html#surface", desc: "Creates a VkSurfaceKHR for a Haiku BView." },
 		{ name: "set_theme()", kind: "function", where: "Appearance: Theming", header: "<Themes.h>", lib: "libr5ui.so", href: "appearance-themes.html#api", desc: "Applies the parts of a theme at once, live." },
