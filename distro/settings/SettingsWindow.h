@@ -90,6 +90,7 @@ private:
 			bool				fLockAdmin;
 			bool				fLockOpen;
 			float				fLockButtonHeight;
+			rgb_color			fTileFill;
 };
 
 
