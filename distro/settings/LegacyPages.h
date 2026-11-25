@@ -6,10 +6,13 @@
 #define R5_SETTINGS_LEGACY_H
 
 
-class SettingsManager;
+class SettingsModule;
 
 
-void register_legacy_pages(SettingsManager& manager);
+// The launcher page with this id ("sound", "keyboard", "mouse" or
+// "printers"), or NULL. Each launcher is an add-on of its own
+// (LegacySound.cpp and the others).
+SettingsModule* create_legacy_module(const char* identifier);
 
 
 #endif

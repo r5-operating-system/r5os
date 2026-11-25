@@ -492,6 +492,32 @@ AddFilesToPackage add-ons kernel network protocols
 AddFilesToPackage add-ons Screen\ Savers : $(SYSTEM_ADD_ONS_SCREENSAVERS) ;
 
 AddFilesToPackage add-ons Settings : $(SYSTEM_ADD_ONS_SETTINGS) ;
+# SPDX-SnippetBegin
+# SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+# The pages of Settings, one add-on each (distro/settings/ModuleAPI.md),
+# in both images. settings_fonts, settings_bluetooth and
+# settings_gamecontrollers come in through SYSTEM_ADD_ONS_SETTINGS above
+# (apply-settings.py, apply-bluetooth.py, apply-game.py).
+AddFilesToPackage add-ons Settings :
+	settings_accounts
+	settings_connections
+	settings_deskbar
+	settings_discovery
+	settings_display
+	settings_information
+	settings_keyboard
+	settings_mouse
+	settings_notifications
+	settings_power
+	settings_printers
+	settings_sound
+	settings_theme
+	settings_virtualmemory
+	settings_wallpaper
+	settings_wifi
+	;
+# SPDX-SnippetEnd
 
 AddFilesToPackage add-ons disk_systems :
 	<disk_system>fat

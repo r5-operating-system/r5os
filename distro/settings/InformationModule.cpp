@@ -6,10 +6,8 @@
  */
 
 
-#include "InformationModule.h"
 
 #include "SettingsFont.h"
-#include "SettingsManager.h"
 #include "SettingsMessages.h"
 #include "SettingsModule.h"
 
@@ -1585,8 +1583,17 @@ InformationModule::RevertSettings(SettingsContext* context)
 }
 
 
-void
-register_information_page(SettingsManager& manager)
+// The add-on settings_information (distro/settings/ModuleAPI.md): every
+// Settings page is an add-on of its own.
+extern "C" _EXPORT int32
+settings_api_version()
 {
-	manager.Add(new InformationModule());
+	return kSettingsApiVersion;
+}
+
+
+extern "C" _EXPORT SettingsModule*
+instantiate_settings_module()
+{
+	return new InformationModule();
 }

@@ -6,12 +6,10 @@
  */
 
 
-#include "NotificationsModule.h"
 
 #include <R5UI.h>
 
 #include "SettingsFont.h"
-#include "SettingsManager.h"
 #include "SettingsModule.h"
 
 #include <Alert.h>
@@ -1329,8 +1327,17 @@ NotificationsModule::RevertSettings(SettingsContext* context)
 }
 
 
-void
-register_notifications_page(SettingsManager& manager)
+// The add-on settings_notifications (distro/settings/ModuleAPI.md): every
+// Settings page is an add-on of its own.
+extern "C" _EXPORT int32
+settings_api_version()
 {
-	manager.Add(new NotificationsModule());
+	return kSettingsApiVersion;
+}
+
+
+extern "C" _EXPORT SettingsModule*
+instantiate_settings_module()
+{
+	return new NotificationsModule();
 }

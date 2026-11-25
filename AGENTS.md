@@ -28,6 +28,7 @@ The sequence that landed the fence is `docs/GRAPHICS.md`, section `GFX9 ring on 
 
 This layout is fixed. Do not move it.
 
+- Every Settings page is an add-on in `add-ons/Settings`, one page per add-on, built with the `Addon` rule (`distro/settings/ModuleAPI.md`). The Settings program holds only the window, Home, the list, search, the lock and the loader. Do not build a page into the program.
 - The list starts under the yellow tab and runs down to Search. The list and Search are 200 wide. A home card is at least 280 wide. The window opens at 1030 by 610. The shortest size is 910 by 560. Pages under a category are alphabetical by name. Information stays first under System. A category card and the subtitle of an open page use that page's description. The list shows Home, then the categories. Only the category of the open page is unfolded. Search filters the list.
 - Leave that order, and these five descriptions, as they are until the user explicitly asks to change them. Another Settings task does not include reordering the list or rewriting these lines. Information: "View system details". Virtual memory: "Extra memory stored on disk". Wallpaper: "Set the background of your desktop". Desktop and Deskbar: "Adjust desktop and Deskbar settings". Notifications: "Manage alerts and notifications". Each line is both the card and the subtitle.
 - The title and the subtitle sit beside the list.

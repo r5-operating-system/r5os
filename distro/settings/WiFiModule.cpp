@@ -9,9 +9,7 @@
  */
 
 
-#include "WiFiModule.h"
 
-#include "SettingsManager.h"
 #include "SettingsModule.h"
 
 #include <R5WiFiView.h>
@@ -45,8 +43,17 @@ public:
 };
 
 
-void
-register_wifi_page(SettingsManager& manager)
+// The add-on settings_wifi (distro/settings/ModuleAPI.md): every
+// Settings page is an add-on of its own.
+extern "C" _EXPORT int32
+settings_api_version()
 {
-	manager.Add(new WiFiModule());
+	return kSettingsApiVersion;
+}
+
+
+extern "C" _EXPORT SettingsModule*
+instantiate_settings_module()
+{
+	return new WiFiModule();
 }

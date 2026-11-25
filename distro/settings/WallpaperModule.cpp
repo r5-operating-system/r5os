@@ -6,10 +6,8 @@
  */
 
 
-#include "WallpaperModule.h"
 
 #include "SettingsFont.h"
-#include "SettingsManager.h"
 #include "SettingsMessages.h"
 #include "SettingsModule.h"
 
@@ -1911,8 +1909,17 @@ WallpaperModule::_Changed()
 }
 
 
-void
-register_wallpaper_page(SettingsManager& manager)
+// The add-on settings_wallpaper (distro/settings/ModuleAPI.md): every
+// Settings page is an add-on of its own.
+extern "C" _EXPORT int32
+settings_api_version()
 {
-	manager.Add(new WallpaperModule());
+	return kSettingsApiVersion;
+}
+
+
+extern "C" _EXPORT SettingsModule*
+instantiate_settings_module()
+{
+	return new WallpaperModule();
 }

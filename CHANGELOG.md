@@ -8,6 +8,21 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-25 - Settings: every page is an add-on
+
+- Problem: `distro/settings/ModuleAPI.md` says a module is an add-on, but 16 of the 19 pages were built into the Settings program (`register_*_page()` in `SettingsApp.cpp`). Only Bluetooth, Game controllers and Fonts were add-ons. The owner asked for every page to be an add-on, and for that to be written down clearly.
+- Change:
+  - Twelve pages are now add-ons of their own: `settings_accounts`, `settings_connections`, `settings_deskbar`, `settings_discovery`, `settings_display`, `settings_information`, `settings_notifications`, `settings_power`, `settings_theme`, `settings_virtualmemory`, `settings_wallpaper`, `settings_wifi`. Each module file exports `settings_api_version()` and `instantiate_settings_module()` in place of its `register_*_page()`; the twelve one-line headers are gone.
+  - The four launchers (Sound, Keyboard, Mouse, Printers) are four add-ons (`LegacySound.cpp` and the others) around `create_legacy_module()` in `LegacyPages.cpp`, so it stays one page per add-on and the module API does not change.
+  - `SettingsApp.cpp` registers no page. Settings is the window, Home, the list, search, the lock and the loader, and links fewer libraries (no `libr5wifi.so`, `libr5power.so`, `bnetapi`, `network`).
+  - `SettingsManager::_LoadOne()` no longer calls `LoadSettings()` when an add-on is loaded. The window already calls it when a page is first opened, as it did for the built-in pages, so Settings does not read twenty pages' settings (the Wallpaper scan, the screen modes, the network interfaces) at start.
+  - `distro/desktop/build/jam/packages/Haiku` puts the sixteen new add-ons in `add-ons/Settings`, in both images. Fonts, Bluetooth and Game controllers still come in through `SYSTEM_ADD_ONS_SETTINGS`.
+  - `LookModule.cpp` was removed. It was not built since Look and Feel was merged into Theme.
+  - The rule is in `AGENTS.md` ("Settings window"), `distro/settings/ModuleAPI.md` (with a table of all add-ons and what a new page needs) and `docs/SETTINGS.md`.
+- Mistake: the first build failed to link `settings_accounts` and `settings_notifications`, which use `BFilePanel` from `libtracker`. Both link `tracker` now.
+- Limits: the pages, their order, ids, icons and texts are unchanged on paper; this was not seen running. A user add-on with the same id as a system page still loads first, as before.
+- Tested: `scripts/build-locked.sh` on 25 Nov 2026 exited 0 (second run); `haiku.hpkg` lists the 19 `settings_*` add-ons and no `settings_look`. Not tested: QEMU (owner's choice, a stick follows), the pages on hardware.
+
 ## 2026-11-25 - Tracker: a move keeps the original unless the copy fully succeeded (#4619-#4631)
 
 - Problem: a review of Tracker on `main` filed thirteen issues. Checked against the code: eleven are real, two are not.

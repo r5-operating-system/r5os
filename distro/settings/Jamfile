@@ -18,6 +18,9 @@ SubDirHdrs $(HAIKU_TOP) src bin network ifconfig ;
 SubDirHdrs $(HAIKU_TOP) src preferences users ;
 SEARCH_SOURCE += [ FDirName $(HAIKU_TOP) src preferences network ] ;
 
+# Settings itself is the window, Home, the list, search, the lock and the
+# loader. Every page is an add-on of its own in add-ons/Settings, one page
+# per add-on (ModuleAPI.md). Do not build a page into this program.
 Application Settings :
 	SettingsApp.cpp
 	SettingsWindow.cpp
@@ -27,33 +30,122 @@ Application Settings :
 	HomeView.cpp
 	SettingsFont.cpp
 	SettingsIcon.cpp
-	LegacyPages.cpp
+	: be tracker translation shared libr5icons.so libr5ui.so libr5admin.so
+		[ TargetLibstdc++ ] localestub
+	: Settings.rdef
+	;
+
+# The pages. Each add-on is installed in add-ons/Settings by
+# build/jam/packages/Haiku (distro/desktop), in both images.
+local r5SettingsLibs = be shared localestub libr5icons.so libr5ui.so
+	[ TargetLibstdc++ ] ;
+
+Addon settings_wallpaper :
 	WallpaperModule.cpp
+	SettingsFont.cpp
+	: $(r5SettingsLibs) translation tracker
+	;
+
+Addon settings_deskbar :
 	DeskbarModule.cpp
+	SettingsFont.cpp
+	: $(r5SettingsLibs)
+	;
+
+Addon settings_theme :
 	ThemeModule.cpp
 	ColorsView.cpp
 	Colors.cpp
+	SettingsFont.cpp
+	: $(r5SettingsLibs)
+	;
+
+Addon settings_notifications :
 	NotificationsModule.cpp
+	SettingsFont.cpp
+	: $(r5SettingsLibs) tracker
+	;
+
+Addon settings_virtualmemory :
 	VirtualMemoryModule.cpp
+	SettingsFont.cpp
+	: $(r5SettingsLibs)
+	;
+
+Addon settings_power :
 	PowerModule.cpp
+	SettingsFont.cpp
+	: $(r5SettingsLibs) libr5power.so
+	;
+
+Addon settings_information :
 	InformationModule.cpp
+	SettingsFont.cpp
+	: $(r5SettingsLibs)
+	;
+
+Addon settings_display :
 	DisplayModule.cpp
 	DisplayScreens.cpp
+	SettingsFont.cpp
+	: $(r5SettingsLibs)
+	;
+
+Addon settings_wifi :
 	WiFiModule.cpp
+	: $(r5SettingsLibs) libr5wifi.so
+	;
+
+Addon settings_connections :
 	ConnectionsModule.cpp
-	DiscoveryModule.cpp
 	NetworkPage.cpp
 	IPAddressControl.cpp
+	SettingsFont.cpp
+	: <src!bin!network!ifconfig>MediaTypes.o
+		$(r5SettingsLibs) bnetapi network
+	;
+
+Addon settings_discovery :
+	DiscoveryModule.cpp
+	NetworkPage.cpp
 	NetworkSettingsAddOn.cpp
 	ServiceListItem.cpp
 	ServiceView.cpp
+	SettingsFont.cpp
+	: $(r5SettingsLibs) bnetapi network
+	;
+
+Addon settings_accounts :
 	AccountsModule.cpp
 	AccountDialogs.cpp
-	: <src!bin!network!ifconfig>MediaTypes.o
-		be tracker translation shared libr5icons.so libr5ui.so libr5wifi.so
-		libr5power.so libr5admin.so
-		bnetapi network [ TargetLibstdc++ ] localestub
-	: Settings.rdef
+	SettingsFont.cpp
+	: $(r5SettingsLibs) libr5admin.so translation tracker
+	;
+
+# The launchers of the preference programs that stay separate windows
+# (LegacyPages.cpp), one add-on each.
+Addon settings_sound :
+	LegacySound.cpp
+	LegacyPages.cpp
+	: $(r5SettingsLibs)
+	;
+
+Addon settings_keyboard :
+	LegacyKeyboard.cpp
+	LegacyPages.cpp
+	: $(r5SettingsLibs)
+	;
+
+Addon settings_mouse :
+	LegacyMouse.cpp
+	LegacyPages.cpp
+	: $(r5SettingsLibs)
+	;
+
+Addon settings_printers :
+	LegacyPrinters.cpp
+	LegacyPages.cpp
+	: $(r5SettingsLibs)
 	;
 
 # The Bluetooth page (docs/BLUETOOTH.md, step 3a). An add-on, so Settings

@@ -13,7 +13,6 @@
 */
 
 
-#include "ThemeModule.h"
 
 #include <algorithm>
 #include <ctype.h>
@@ -55,7 +54,6 @@
 
 #include "ColorsView.h"
 #include "SettingsFont.h"
-#include "SettingsManager.h"
 #include "SettingsModule.h"
 
 
@@ -2448,8 +2446,17 @@ ThemeModule::ApplyDefaults(SettingsContext* context)
 }
 
 
-void
-register_theme_page(SettingsManager& manager)
+// The add-on settings_theme (distro/settings/ModuleAPI.md): every
+// Settings page is an add-on of its own.
+extern "C" _EXPORT int32
+settings_api_version()
 {
-	manager.Add(new ThemeModule());
+	return kSettingsApiVersion;
+}
+
+
+extern "C" _EXPORT SettingsModule*
+instantiate_settings_module()
+{
+	return new ThemeModule();
 }

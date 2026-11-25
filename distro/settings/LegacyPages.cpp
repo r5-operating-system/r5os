@@ -8,7 +8,6 @@
 
 #include "LegacyPages.h"
 
-#include "SettingsManager.h"
 #include "SettingsModule.h"
 
 #include <Alert.h>
@@ -178,8 +177,8 @@ LegacyModule::RevertSettings(SettingsContext* context)
 }
 
 
-void
-register_legacy_pages(SettingsManager& manager)
+SettingsModule*
+create_legacy_module(const char* identifier)
 {
 	struct entry {
 		const char* id;
@@ -209,8 +208,11 @@ register_legacy_pages(SettingsManager& manager)
 		// Users and Accounts is a page of its own now (AccountsModule.cpp).
 	};
 	for (uint32 i = 0; i < sizeof(pages) / sizeof(pages[0]); i++) {
-		manager.Add(new LegacyModule(pages[i].id, pages[i].name,
+		if (strcmp(pages[i].id, identifier) != 0)
+			continue;
+		return new LegacyModule(pages[i].id, pages[i].name,
 			pages[i].category, pages[i].description, pages[i].keywords,
-			pages[i].signature));
+			pages[i].signature);
 	}
+	return NULL;
 }

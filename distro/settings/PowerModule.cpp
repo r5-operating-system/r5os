@@ -12,10 +12,8 @@
  */
 
 
-#include "PowerModule.h"
 
 #include "SettingsFont.h"
-#include "SettingsManager.h"
 #include "SettingsMessages.h"
 #include "SettingsModule.h"
 
@@ -1100,8 +1098,17 @@ PowerModule::ApplyDefaults(SettingsContext* context)
 }
 
 
-void
-register_power_page(SettingsManager& manager)
+// The add-on settings_power (distro/settings/ModuleAPI.md): every
+// Settings page is an add-on of its own.
+extern "C" _EXPORT int32
+settings_api_version()
 {
-	manager.Add(new PowerModule());
+	return kSettingsApiVersion;
+}
+
+
+extern "C" _EXPORT SettingsModule*
+instantiate_settings_module()
+{
+	return new PowerModule();
 }
