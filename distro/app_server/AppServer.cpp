@@ -58,19 +58,6 @@ BTokenSpace gTokenSpace;
 uint32 gAppServerSIMDFlags = 0;
 
 
-// SPDX-SnippetBegin
-// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
-// SPDX-License-Identifier: MIT
-static port_id
-create_inner_app_server_port()
-{
-	// The looper gets its own port. The port proxy owns the launch default
-	// port that clients find, as in the registrar.
-	return create_port(B_LOOPER_PORT_DEFAULT_CAPACITY, "picasso_inner");
-}
-// SPDX-SnippetEnd
-
-
 /*!	\brief Constructor
 
 	This loads the default fonts, allocates all the major global variables,
@@ -82,8 +69,8 @@ AppServer::AppServer(status_t* status)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-	SERVER_BASE("application/x-vnd.Haiku-app_server", "picasso_inner",
-		create_inner_app_server_port(), false, status),
+	SERVER_BASE("application/x-vnd.Haiku-app_server", "picasso", -1, false,
+		status),
 	fDesktopLock("AppServerDesktopLock"),
 	fAdminPort(-1),
 	fPublicPort(-1),
@@ -115,30 +102,15 @@ AppServer::AppServer(status_t* status)
 			}
 		}
 	}
-	// Clients find app_server through the launch default port
-	// (BMessenger(signature) takes the launch data first), so the proxy owns
-	// that port, as in the registrar.
-	fPublicPort = BLaunchRoster().GetPort("application/x-vnd.Haiku-app_server",
-		NULL);
-	if (fPublicPort < 0) {
-		fPublicPort = create_port(B_LOOPER_PORT_DEFAULT_CAPACITY,
-			"picasso");
-	}
-	if (fPublicPort >= 0
-		&& fPublicPort == BMessenger::Private(be_app_messenger).Port()) {
-		// The inner port could not be created, so the looper took the
-		// launch port. Never proxy a port to itself; unstamped requests
-		// are refused.
-		syslog(LOG_ERR, "app_server: no inner port, port proxy not started\n");
-		fPublicPort = -1;
-	}
-	if (fPublicPort >= 0) {
-		gAppServerPort = fPublicPort;
-		fProxyThread = spawn_thread(&_PortProxyThread, "app_server port proxy",
-			B_NORMAL_PRIORITY + 1, this);
-		if (fProxyThread >= 0)
-			resume_thread(fProxyThread);
-	}
+	// No port proxy in front of app_server. launch_daemon pre-registers
+	// app_server, and BApplication then always takes the pre-registered
+	// launch port for its looper (Application.cpp, "replace the looper port
+	// with a port created by the roster"), so a proxy can never own the port
+	// that clients reach (booted in QEMU, 25 Nov 2026: no Sign in). The
+	// registrar can use a proxy because it is not pre-registered.
+	// AS_GET_DESKTOP only hands out a desktop port, which grants nothing:
+	// every program must still pass Desktop's AS_CREATE_APP check, which uses
+	// the kernel-verified sender of that port message (MessageLooper).
 	r5_admin_port_start("app_server admin", &_AdminHandler, this, &fAdminPort);
 // SPDX-SnippetEnd
 
@@ -244,51 +216,26 @@ AppServer::MessageReceived(BMessage* message)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-				// Fast user switching: identify the caller from the
-				// kernel-verified port proxy stamp (never ReturnAddress() or
-				// an unverified "user" field). Non-root callers may only get
-				// their own uid's desktop.
-				uid_t senderUid = 0;
-				team_id senderTeam = -1;
-				if (!_VerifiedSender(message, senderUid, senderTeam)) {
-					BMessage reply((uint32)B_PERMISSION_DENIED);
-					message->SendReply(&reply);
-					break;
-				}
-				if (senderUid != 0 && userID != (int32)senderUid) {
-					BMessage reply((uint32)B_PERMISSION_DENIED);
-					message->SendReply(&reply);
-					break;
-				}
+				// Fast user switching: the "user" field only chooses which
+				// desktop port is returned; it grants nothing. Every program
+				// must still pass Desktop's AS_CREATE_APP check (kernel-
+				// verified sender: uid 0 or the desktop's owner), so a program
+				// that names another uid gets a port it cannot use. A uid 0
+				// program (debug_server crash alerts; Login at boot, when
+				// desktop 0 is the shown one) attaches to the shown desktop,
+				// so its dialogs reach the person at the keyboard.
 
 				// Hold fDesktopLock across lookup and MessagePort() so a
 				// concurrent _DestroyDesktop() cannot free desktop in between.
 				BAutolock locker(fDesktopLock);
 				Desktop* desktop = NULL;
-				if (senderUid == 0 && userID == 0 && targetScreen == NULL) {
-					// Login owns desktop 0 (Sign in and Lock screen). Other
-					// uid 0 system servers (such as debug_server crash alerts)
-					// attach to the currently shown desktop so their dialogs
-					// are visible to the person at the keyboard.
-					team_info callerInfo;
-					bool isLogin = false;
-					if (get_team_info(senderTeam, &callerInfo) == B_OK) {
-						const char* bin = callerInfo.args;
-						const char* space = strchr(bin, ' ');
-						size_t binLen = space != NULL ? (size_t)(space - bin)
-							: strlen(bin);
-						isLogin = (binLen >= 6
-							&& strncmp(bin + binLen - 6, "/Login", 6) == 0)
-							|| (binLen == 5 && strncmp(bin, "Login", 5) == 0);
-					}
-					if (!isLogin) {
-						for (int32 i = 0; i < fDesktops.CountItems(); i++) {
-							Desktop* existing = fDesktops.ItemAt(i);
-							if (existing->TargetScreen() == NULL
-								&& existing->IsShown()) {
-								desktop = existing;
-								break;
-							}
+				if (userID == 0 && targetScreen == NULL) {
+					for (int32 i = 0; i < fDesktops.CountItems(); i++) {
+						Desktop* existing = fDesktops.ItemAt(i);
+						if (existing->TargetScreen() == NULL
+							&& existing->IsShown()) {
+							desktop = existing;
+							break;
 						}
 					}
 				}
