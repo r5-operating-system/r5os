@@ -29,6 +29,7 @@
 #include <InterfaceDefs.h>
 #include <Layout.h>
 #include <Message.h>
+#include <TextView.h>
 
 #include <math.h>
 #include <new>
@@ -75,6 +76,79 @@ apply_card_view_color(BView* view, card_style style)
 	} else {
 		view->SetViewUIColor(B_DOCUMENT_BACKGROUND_COLOR);
 		view->SetLowUIColor(B_DOCUMENT_BACKGROUND_COLOR);
+	}
+}
+
+
+struct card_colors {
+	color_which	view;
+	float		viewTint;
+	rgb_color	viewColor;
+	color_which	low;
+	float		lowTint;
+	rgb_color	lowColor;
+};
+
+
+static void
+get_card_colors(BView* view, card_colors& colors)
+{
+	colors.view = view->ViewUIColor(&colors.viewTint);
+	colors.viewColor = view->ViewColor();
+	colors.low = view->LowUIColor(&colors.lowTint);
+	colors.lowColor = view->LowColor();
+}
+
+
+static bool
+same_color(color_which which, float tint, rgb_color color,
+	color_which oldWhich, float oldTint, rgb_color oldColor)
+{
+	if (which != B_NO_COLOR || oldWhich != B_NO_COLOR)
+		return which == oldWhich && tint == oldTint;
+	return color == oldColor;
+}
+
+
+// A child that took the card's colors when it was attached (BStringView
+// adopts its parent's) kept the old face after a change of theme: on the
+// dark theme the card face is a fixed color, so labels stayed dark blocks
+// on a light card (Users and Accounts, 25 Nov 2026). Give such children,
+// and theirs, the card's new face. A child with colors of its own, and a
+// card inside the card, are left alone; so is a text field's own text
+// view, which keeps the document color.
+static void
+follow_card_colors(BView* card, BView* parent, const card_colors& before)
+{
+	card_colors now;
+	get_card_colors(card, now);
+	for (int32 i = 0; BView* child = parent->ChildAt(i); i++) {
+		if (dynamic_cast<BCard*>(child) != NULL
+			|| dynamic_cast<BTextView*>(child) != NULL) {
+			continue;
+		}
+		card_colors old;
+		get_card_colors(child, old);
+		bool changed = false;
+		if (same_color(old.view, old.viewTint, old.viewColor, before.view,
+				before.viewTint, before.viewColor)) {
+			if (now.view != B_NO_COLOR)
+				child->SetViewUIColor(now.view, now.viewTint);
+			else
+				child->SetViewColor(now.viewColor);
+			changed = true;
+		}
+		if (same_color(old.low, old.lowTint, old.lowColor, before.low,
+				before.lowTint, before.lowColor)) {
+			if (now.low != B_NO_COLOR)
+				child->SetLowUIColor(now.low, now.lowTint);
+			else
+				child->SetLowColor(now.lowColor);
+			changed = true;
+		}
+		if (changed)
+			child->Invalidate();
+		follow_card_colors(card, child, before);
 	}
 }
 
@@ -173,7 +247,10 @@ void
 BCard::MessageReceived(BMessage* message)
 {
 	if (message->what == B_COLORS_UPDATED) {
+		card_colors before;
+		get_card_colors(this, before);
 		apply_card_view_color(this, fStyle);
+		follow_card_colors(this, this, before);
 		Invalidate();
 	}
 	BView::MessageReceived(message);
