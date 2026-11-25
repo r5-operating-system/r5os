@@ -28,6 +28,14 @@ struct node {
 	struct node_key key;
 	ino_t ino;
 	ino_t parent;
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	uint32 dir_cluster;
+	uint64 dir_length;
+	uint8 dir_flags;
+	bool dir_root;
+	// SPDX-SnippetEnd
 	SplayTreeLink<struct node> nodeTreeLink;
 	SplayTreeLink<struct node> inoTreeLink;
 };
@@ -140,8 +148,16 @@ public:
 			Inode *				FindInode(cluster_t cluster);
 			cluster_t			NextCluster(cluster_t cluster);
 			ino_t				GetIno(cluster_t cluster, uint32 offset,
-									ino_t parent);
-			struct node_key*	GetNode(ino_t ino, ino_t &parent);
+									ino_t parent, uint32 dirCluster = 0,
+									uint64 dirLength = 0, uint8 dirFlags = 0,
+									bool dirRoot = false);
+			bool				GetNode(ino_t ino, struct node_key& key,
+									ino_t& parent, uint32& dirCluster,
+									uint64& dirLength, uint8& dirFlags,
+									bool& dirRoot);
+			void				SetDir(ino_t ino, uint32 dirCluster,
+									uint64 dirLength, uint8 dirFlags,
+									bool dirRoot);
 			// SPDX-SnippetBegin
 			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 			// SPDX-License-Identifier: MIT

@@ -294,11 +294,16 @@ Volume::ClusterToBlock(cluster_t cluster, fsblock_t &block)
 cluster_t
 Volume::NextCluster(cluster_t _cluster)
 {
+	if (_cluster < EXFAT_FIRST_DATA_CLUSTER
+		|| (_cluster - EXFAT_FIRST_DATA_CLUSTER) >= SuperBlock().ClusterCount())
+		return 0;
 	uint32 clusterPerBlock = fBlockSize / sizeof(cluster_t);
 	CachedBlock block(this);
 	fsblock_t blockNum = SuperBlock().FirstFatBlock()
 		+ _cluster / clusterPerBlock;
 	cluster_t *cluster = (cluster_t *)block.SetTo(blockNum);
+	if (cluster == NULL)
+		return 0;
 	cluster += _cluster % clusterPerBlock;
 	TRACE("Volume::NextCluster() cluster %" B_PRIu32 " next %" B_PRIu32 "\n",
 		_cluster, *cluster);
@@ -321,7 +326,8 @@ Volume::FindInode(cluster_t cluster)
 
 
 ino_t
-Volume::GetIno(cluster_t cluster, uint32 offset, ino_t parent)
+Volume::GetIno(cluster_t cluster, uint32 offset, ino_t parent,
+	uint32 dirCluster, uint64 dirLength, uint8 dirFlags, bool dirRoot)
 {
 	struct node_key key;
 	key.cluster = cluster;
@@ -330,6 +336,12 @@ Volume::GetIno(cluster_t cluster, uint32 offset, ino_t parent)
 	MutexLocker locker(fLock);
 	struct node* node = fNodeTree.Lookup(key);
 	if (node != NULL) {
+		if (dirLength != 0 || dirRoot || dirCluster >= 2) {
+			node->dir_cluster = dirCluster;
+			node->dir_length = dirLength;
+			node->dir_flags = dirFlags;
+			node->dir_root = dirRoot;
+		}
 		TRACE("Volume::GetIno() cached cluster %" B_PRIu32 " offset %" B_PRIu32
 			" ino %" B_PRIdINO "\n", cluster, offset, node->ino);
 		return node->ino;
@@ -338,6 +350,10 @@ Volume::GetIno(cluster_t cluster, uint32 offset, ino_t parent)
 	node->key = key;
 	node->ino = _NextID();
 	node->parent = parent;
+	node->dir_cluster = dirCluster;
+	node->dir_length = dirLength;
+	node->dir_flags = dirFlags;
+	node->dir_root = dirRoot;
 	if (!fNodeTree.Insert(node)) {
 		struct node* existing = fNodeTree.Lookup(key);
 		delete node;
@@ -354,16 +370,36 @@ Volume::GetIno(cluster_t cluster, uint32 offset, ino_t parent)
 }
 
 
-struct node_key*
-Volume::GetNode(ino_t ino, ino_t &parent)
+bool
+Volume::GetNode(ino_t ino, struct node_key& key, ino_t& parent,
+	uint32& dirCluster, uint64& dirLength, uint8& dirFlags, bool& dirRoot)
 {
 	MutexLocker locker(fLock);
 	struct node* node = fInoTree.Lookup(ino);
-	if (node != NULL) {
-		parent = node->parent;
-		return &node->key;
-	}
-	return NULL;
+	if (node == NULL)
+		return false;
+	key = node->key;
+	parent = node->parent;
+	dirCluster = node->dir_cluster;
+	dirLength = node->dir_length;
+	dirFlags = node->dir_flags;
+	dirRoot = node->dir_root;
+	return true;
+}
+
+
+void
+Volume::SetDir(ino_t ino, uint32 dirCluster, uint64 dirLength, uint8 dirFlags,
+	bool dirRoot)
+{
+	MutexLocker locker(fLock);
+	struct node* node = fInoTree.Lookup(ino);
+	if (node == NULL)
+		return;
+	node->dir_cluster = dirCluster;
+	node->dir_length = dirLength;
+	node->dir_flags = dirFlags;
+	node->dir_root = dirRoot;
 }
 
 

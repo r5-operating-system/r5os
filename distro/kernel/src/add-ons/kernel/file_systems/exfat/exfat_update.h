@@ -80,6 +80,10 @@ struct exfat_node {
 	uint16		name_hash;
 	uint8		flags;
 	uint8		secondary_count;
+	uint8		primary[32];
+	uint32		previous_cluster;
+	bool		check_cluster;
+	bool		detached;
 	bool		root;
 	bool		is_dir;
 	/* Directory that holds this entry. Not owned. NULL for the root. */

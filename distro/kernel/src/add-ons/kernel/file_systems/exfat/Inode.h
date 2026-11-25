@@ -46,6 +46,8 @@ public:
 			rw_lock*	Lock() { return &fLock; }
 			void		WriteLock();
 			void		WriteUnlock();
+			void		MetaLock();
+			void		MetaUnlock();
 			void		ReadLock();
 			void		ReadUnlock();
 
@@ -80,13 +82,15 @@ public:
 							fFileInfoEntry.file_info.size1
 								= B_HOST_TO_LENDIAN_INT64(valid);
 						}
+			uint64		CommittedValid() const { return fCommittedValid; }
 			bool		IsDeleted() const { return fDeleted; }
 			void		SetDeleted() { fDeleted = true; }
 			void		SetParent(ino_t parent) { fParent = parent; }
+			void		ApplyCacheSize(off_t invalidateFrom = -1);
 			void		AdoptStream(uint32 first, uint64 dataLength,
 							uint64 validLength, uint8 flags, uint16 attributes,
 							uint8 chunks, cluster_t entryCluster,
-							uint32 entryOffset);
+							uint32 entryOffset, uint16 nameHash);
 			// SPDX-SnippetEnd
 			uid_t		UserID() const { return 0;/*fNode.UserID();*/ }
 			gid_t		GroupID() const { return 0;/*fNode.GroupID();*/ }
@@ -142,8 +146,16 @@ private:
 			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 			// SPDX-License-Identifier: MIT
 			bool		fDeleted;
-			thread_id	fWriter;
+			mutex		fWriterLock;
+			vint32		fWriter;
 			int32		fWriteDepth;
+			vint32		fMetaOwner;
+			int32		fMetaDepth;
+			uint64		fCommittedValid;
+			uint32		fDirCluster;
+			uint64		fDirLength;
+			uint8		fDirFlags;
+			bool		fDirRoot;
 			// SPDX-SnippetEnd
 
 			SplayTreeLink<Inode> fInoTreeLink;

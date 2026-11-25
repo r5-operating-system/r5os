@@ -48,6 +48,7 @@ Inode::Inode(Volume* volume, cluster_t cluster, uint32 offset)
 		uint64 bytes = fVolume->ChainBytes(Cluster());
 		fFileInfoEntry.file_info.size1 = B_HOST_TO_LENDIAN_INT64(bytes);
 		fFileInfoEntry.file_info.size2 = fFileInfoEntry.file_info.size1;
+		fCommittedValid = bytes;
 		// SPDX-SnippetEnd
 	} else {
 		fInitStatus = UpdateNodeFromDisk();
@@ -70,15 +71,16 @@ Inode::Inode(Volume* volume, ino_t ino)
 	fMap(NULL),
 	fInitStatus(B_NO_INIT)
 {
-	struct node_key *key = volume->GetNode(ino, fParent);
-	if (key != NULL) {
-		fCluster = key->cluster;
-		fOffset = key->offset;
+	_Init();
+	struct node_key key;
+	if (volume->GetNode(ino, key, fParent, fDirCluster, fDirLength, fDirFlags,
+			fDirRoot)) {
+		fCluster = key.cluster;
+		fOffset = key.offset;
 		fInitStatus = B_OK;
 	}
 	TRACE("Inode::Inode(%" B_PRIdINO ") cluster %" B_PRIu32 "\n", ID(),
 		Cluster());
-	_Init();
 
 	if (fInitStatus == B_OK && ID() != 1) {
 		fInitStatus = UpdateNodeFromDisk();
@@ -96,6 +98,7 @@ Inode::Inode(Volume* volume, ino_t ino)
 		uint64 bytes = fVolume->ChainBytes(Cluster());
 		fFileInfoEntry.file_info.size1 = B_HOST_TO_LENDIAN_INT64(bytes);
 		fFileInfoEntry.file_info.size2 = fFileInfoEntry.file_info.size1;
+		fCommittedValid = bytes;
 		// SPDX-SnippetEnd
 	}
 }
@@ -118,6 +121,7 @@ Inode::~Inode()
 	TRACE("Inode destructor\n");
 	file_cache_delete(FileCache());
 	file_map_delete(Map());
+	mutex_destroy(&fWriterLock);
 	TRACE("Inode destructor: Done\n");
 }
 
@@ -134,31 +138,28 @@ Inode::UpdateNodeFromDisk()
 {
 	if (ID() == 1)
 		return B_OK;
-	Vnode parentNode(fVolume, fParent);
-	Inode* directory = NULL;
-	status_t status = parentNode.Get(&directory);
-	if (status != B_OK)
-		return status;
 	exfat_node dir;
 	memset(&dir, 0, sizeof(dir));
-	dir.first_cluster = directory->StartCluster();
-	dir.data_length = (uint64)directory->Size();
-	dir.valid_length = (uint64)directory->ValidSize();
-	dir.flags = directory->StreamFlags();
-	dir.root = directory->ID() == 1;
+	dir.first_cluster = fDirCluster;
+	dir.data_length = fDirLength;
+	dir.valid_length = fDirLength;
+	dir.flags = fDirFlags;
+	dir.root = fDirRoot;
 	dir.is_dir = true;
+	if (!dir.root && (dir.first_cluster < 2 || dir.data_length == 0))
+		return B_BAD_DATA;
 	exfat_node found;
-	status = exfat_read_entry(fVolume->Store(), fVolume->Disk(), &dir, fOffset,
-		&found);
+	status_t status = exfat_read_entry(fVolume->Store(), fVolume->Disk(), &dir,
+		fOffset, &found);
 	if (status != B_OK)
 		return status;
-	fFileEntry.file.SetAttribs(found.attributes);
-	fFileEntry.file.chunkCount = found.secondary_count;
+	memcpy(&fFileEntry, found.primary, 32);
 	fFileInfoEntry.file_info.SetStartCluster(found.first_cluster);
 	fFileInfoEntry.file_info.SetFlag(found.flags);
 	fFileInfoEntry.file_info.size1 = B_HOST_TO_LENDIAN_INT64(found.valid_length);
 	fFileInfoEntry.file_info.size2 = B_HOST_TO_LENDIAN_INT64(found.data_length);
 	fFileInfoEntry.file_info.name_hash = B_HOST_TO_LENDIAN_INT16(found.name_hash);
+	fCommittedValid = found.valid_length;
 	return B_OK;
 }
 
@@ -166,12 +167,13 @@ Inode::UpdateNodeFromDisk()
 void
 Inode::WriteLock()
 {
-	if (fWriter == find_thread(NULL)) {
+	thread_id self = find_thread(NULL);
+	if (atomic_get(&fWriter) == self) {
 		fWriteDepth++;
 		return;
 	}
-	rw_lock_write_lock(&fLock);
-	fWriter = find_thread(NULL);
+	mutex_lock(&fWriterLock);
+	atomic_set(&fWriter, self);
 	fWriteDepth = 1;
 }
 
@@ -184,7 +186,34 @@ Inode::WriteUnlock()
 		return;
 	}
 	fWriteDepth = 0;
-	fWriter = -1;
+	atomic_set(&fWriter, -1);
+	mutex_unlock(&fWriterLock);
+}
+
+
+void
+Inode::MetaLock()
+{
+	thread_id self = find_thread(NULL);
+	if (atomic_get(&fMetaOwner) == self) {
+		fMetaDepth++;
+		return;
+	}
+	rw_lock_write_lock(&fLock);
+	atomic_set(&fMetaOwner, self);
+	fMetaDepth = 1;
+}
+
+
+void
+Inode::MetaUnlock()
+{
+	if (fMetaDepth > 1) {
+		fMetaDepth--;
+		return;
+	}
+	fMetaDepth = 0;
+	atomic_set(&fMetaOwner, -1);
 	rw_lock_write_unlock(&fLock);
 }
 
@@ -192,7 +221,7 @@ Inode::WriteUnlock()
 void
 Inode::ReadLock()
 {
-	if (fWriter == find_thread(NULL))
+	if (atomic_get(&fMetaOwner) == find_thread(NULL))
 		return;
 	rw_lock_read_lock(&fLock);
 }
@@ -201,7 +230,7 @@ Inode::ReadLock()
 void
 Inode::ReadUnlock()
 {
-	if (fWriter == find_thread(NULL))
+	if (atomic_get(&fMetaOwner) == find_thread(NULL))
 		return;
 	rw_lock_read_unlock(&fLock);
 }
@@ -292,8 +321,16 @@ Inode::_Init()
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
 	fDeleted = false;
-	fWriter = -1;
+	mutex_init(&fWriterLock, "exfat writer");
+	atomic_set(&fWriter, -1);
 	fWriteDepth = 0;
+	atomic_set(&fMetaOwner, -1);
+	fMetaDepth = 0;
+	fCommittedValid = 0;
+	fDirCluster = 0;
+	fDirLength = 0;
+	fDirFlags = 0;
+	fDirRoot = false;
 	// SPDX-SnippetEnd
 }
 
@@ -354,23 +391,40 @@ Inode::_GetTimespec(uint16 date, uint16 time, struct timespec &timespec) const
 void
 Inode::AdoptStream(uint32 first, uint64 dataLength, uint64 validLength,
 	uint8 flags, uint16 attributes, uint8 chunks, cluster_t entryCluster,
-	uint32 entryOffset)
+	uint32 entryOffset, uint16 nameHash)
 {
 	fFileInfoEntry.file_info.SetStartCluster(first);
 	fFileInfoEntry.file_info.SetFlag(flags);
 	fFileInfoEntry.file_info.size1 = B_HOST_TO_LENDIAN_INT64(validLength);
 	fFileInfoEntry.file_info.size2 = B_HOST_TO_LENDIAN_INT64(dataLength);
+	fFileInfoEntry.file_info.name_hash = B_HOST_TO_LENDIAN_INT16(nameHash);
 	fFileEntry.file.SetAttribs(attributes);
 	fFileEntry.file.chunkCount = chunks;
+	fCommittedValid = validLength;
 	if (ID() != 1) {
 		fCluster = entryCluster;
 		fOffset = entryOffset;
 	}
-	if (FileCache() != NULL) {
-		file_cache_set_size(FileCache(), (off_t)dataLength);
-		file_map_set_size(Map(), (off_t)dataLength);
-		file_map_invalidate(Map(), 0, (off_t)dataLength);
+}
+
+
+void
+Inode::ApplyCacheSize(off_t invalidateFrom)
+{
+	if (FileCache() == NULL)
+		return;
+	off_t bytes = Size();
+	file_cache_set_size(FileCache(), bytes);
+	file_map_set_size(Map(), bytes);
+	off_t from = 0;
+	off_t span = bytes;
+	if (invalidateFrom >= 0) {
+		from = invalidateFrom < bytes ? invalidateFrom : bytes;
+		off_t to = invalidateFrom > bytes ? invalidateFrom : bytes;
+		span = to - from;
 	}
+	if (span > 0)
+		file_map_invalidate(Map(), from, span);
 }
 // SPDX-SnippetEnd
 

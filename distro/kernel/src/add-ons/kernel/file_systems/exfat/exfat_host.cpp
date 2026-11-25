@@ -191,6 +191,78 @@ run(const char* path, bool large)
 		sizeof(block), &time, &moved);
 	if (status != B_OK)
 		return fail("write nested", status);
+	exfat_node note;
+	status = exfat_create(&store, &disk, &root, &folder, "note.txt", false, 0,
+		&time, &note);
+	if (status != B_OK)
+		return fail("note", status);
+	note.up = &folder;
+	status = exfat_rename(&store, &disk, &root, &folder, "note.txt", &root,
+		&folder, "NOTE.TXT", &time, &renamed);
+	if (status != B_OK)
+		return fail("case in subdir", status);
+	status = exfat_lookup(&store, &disk, &folder, "NOTE.TXT", &found);
+	if (status != B_OK)
+		return fail("case lookup", status);
+	status = exfat_lookup(&store, &disk, &root, "Album", &found);
+	if (status != B_OK || !found.is_dir)
+		return fail("parent intact", status);
+	exfat_node drop;
+	status = exfat_create(&store, &disk, &root, &folder, "drop.txt", false, 0,
+		&time, &drop);
+	if (status != B_OK)
+		return fail("drop", status);
+	exfat_node keep;
+	status = exfat_create(&store, &disk, &root, &folder, "keep.txt", false, 0,
+		&time, &keep);
+	if (status != B_OK)
+		return fail("keep", status);
+	const char* mark = "K";
+	status = exfat_write_bytes(&store, &disk, &folder, &keep, 0, mark, 1,
+		&time, &moved);
+	if (status != B_OK)
+		return fail("mark", status);
+	status = exfat_rename(&store, &disk, &root, &folder, "keep.txt", &root,
+		&folder, "drop.txt", &time, &renamed);
+	if (status != B_OK)
+		return fail("rename over", status);
+	status = exfat_deactivate(&store, &disk, &folder, drop.entry_index,
+		(uint32)drop.secondary_count + 1);
+	if (status != B_OK)
+		return fail("deactivate drop", status);
+	status = exfat_free_allocation(&store, &disk, drop.first_cluster,
+		drop.data_length, drop.flags);
+	if (status != B_OK)
+		return fail("free drop", status);
+	status = exfat_lookup(&store, &disk, &folder, "drop.txt", &found);
+	if (status != B_OK)
+		return fail("drop remains", status);
+	status = exfat_read_bytes(&store, &disk, &found, 0, block, 1, &moved);
+	if (status != B_OK || moved != 1 || block[0] != 'K')
+		return fail("renamed bytes", status);
+	uint64 physical = 0;
+	uint64 run = 0;
+	status = exfat_map(&store, &disk, found.first_cluster, found.data_length,
+		found.flags, 0, &physical, &run);
+	if (status != B_OK || physical < (uint64)disk.data_block * disk.block_size
+		|| run == 0)
+		return fail("map bytes", status);
+	status = exfat_remove_entry(&store, &disk, &root, &folder, "NOTE.TXT",
+		&found);
+	if (status != B_OK)
+		return fail("unlink note", status);
+	status = exfat_free_allocation(&store, &disk, found.first_cluster,
+		found.data_length, found.flags);
+	if (status != B_OK)
+		return fail("free note", status);
+	status = exfat_remove_entry(&store, &disk, &root, &folder, "drop.txt",
+		&found);
+	if (status != B_OK)
+		return fail("unlink drop", status);
+	status = exfat_free_allocation(&store, &disk, found.first_cluster,
+		found.data_length, found.flags);
+	if (status != B_OK)
+		return fail("free renamed", status);
 	status = exfat_rename(&store, &disk, &root, &folder, "photo.bin", NULL,
 		&root, "moved.bin", &time, &renamed);
 	if (status != B_OK)

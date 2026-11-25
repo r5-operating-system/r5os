@@ -220,7 +220,9 @@ DirectoryIterator::_GetNext(uint16* utf16Name, size_t* _codeUnitCount,
 			chunkCount = fCurrent->file.chunkCount;
 			if (_id != NULL) {
 				*_id = fInode->GetVolume()->GetIno(fCluster, fOffset - 1,
-					fInode->ID());
+					fInode->ID(), fInode->StartCluster(),
+					(uint64)fInode->Size(), fInode->StreamFlags(),
+					fInode->ID() == 1);
 			}
 			TRACE("DirectoryIterator::_GetNext() File chunkCount %" B_PRId32
 				"\n", chunkCount);

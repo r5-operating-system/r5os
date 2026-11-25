@@ -50,29 +50,42 @@ DataStream::FindBlock(off_t pos, off_t& physical, off_t *_length)
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
 	cluster_t cluster = fInode->StartCluster();
-	if (cluster < 2)
+	exfat_disk* disk = fVolume->Disk();
+	uint32 heap = disk->cluster_count + 1;
+	if (cluster < 2 || cluster > heap)
 		return B_BAD_DATA;
 	uint64 clusterIndex = (uint64)pos / kClusterSize;
 	uint64 within = (uint64)pos % kClusterSize;
-	if (fInode->IsContiguous())
+	if (fInode->IsContiguous()) {
 		cluster = (cluster_t)(cluster + clusterIndex);
-	else {
+		if (cluster < 2 || cluster > heap)
+			return B_BAD_DATA;
+	} else {
 		for (uint64 step = 0; step < clusterIndex; step++) {
 			cluster_t next = fInode->NextCluster(cluster);
-			if (next < 2)
+			if (next < 2 || next > heap)
 				return B_BAD_DATA;
 			cluster = next;
 		}
 	}
-	exfat_disk* disk = fVolume->Disk();
-	if (cluster < 2 || cluster > disk->cluster_count + 1)
-		return B_BAD_DATA;
 	uint32 blocksPerCluster = kClusterSize / kBlockSize;
 	uint64 block = disk->data_block
 		+ (uint64)(cluster - 2) * blocksPerCluster + within / kBlockSize;
-	physical = (off_t)block;
+	physical = (off_t)(block * kBlockSize + within % kBlockSize);
+	off_t run = (off_t)(kClusterSize - within);
+	cluster_t current = cluster;
+	while ((uint64)pos + (uint64)run < (uint64)fSize) {
+		cluster_t next = fInode->IsContiguous()
+			? (cluster_t)(current + 1) : fInode->NextCluster(current);
+		if (next != (cluster_t)(current + 1) || next < 2 || next > heap)
+			break;
+		current = next;
+		run += (off_t)kClusterSize;
+	}
+	if ((uint64)pos + (uint64)run > (uint64)fSize)
+		run = (off_t)(fSize - pos);
 	if (_length != NULL)
-		*_length = (off_t)min_c(kClusterSize - within, (uint64)(fSize - pos));
+		*_length = run;
 	// SPDX-SnippetEnd
 	TRACE("inode %" B_PRIdINO ": pos %" B_PRIdOFF ", %" B_PRIdOFF "\n",
 		fInode->ID(), pos, physical);

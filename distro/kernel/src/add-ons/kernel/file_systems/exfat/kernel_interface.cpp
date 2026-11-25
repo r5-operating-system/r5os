@@ -298,7 +298,7 @@ exfat_read_pages(fs_volume* _volume, fs_vnode* _node, void*,
 	// SPDX-License-Identifier: MIT
 	off_t start = pos;
 	// SPDX-SnippetEnd
-	rw_lock_read_lock(inode->Lock());
+	inode->ReadLock();
 
 	uint32 vecIndex = 0;
 	size_t vecOffset = 0;
@@ -326,7 +326,7 @@ exfat_read_pages(fs_volume* _volume, fs_vnode* _node, void*,
 		bytesLeft -= bytes;
 	}
 
-	rw_lock_read_unlock(inode->Lock());
+	inode->ReadUnlock();
 
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
@@ -383,6 +383,8 @@ exfat_get_file_map(fs_volume* _volume, fs_vnode* _node, off_t offset,
 		status_t status = inode->FindBlock(offset, blockOffset, &blockLength);
 		if (status != B_OK)
 			return status;
+		if (blockLength > (off_t)size)
+			blockLength = (off_t)size;
 
 		if (index > 0 && (vecs[index - 1].offset
 				== blockOffset - vecs[index - 1].length)) {
@@ -402,7 +404,7 @@ exfat_get_file_map(fs_volume* _volume, fs_vnode* _node, off_t offset,
 		offset += blockLength;
 		size -= blockLength;
 
-		if ((off_t)size <= vecs[index - 1].length || offset >= inode->Size()) {
+		if (size == 0 || offset >= inode->Size()) {
 			// We're done!
 			*_count = index;
 			TRACE("exfat_get_file_map for inode %" B_PRIdINO"\n", inode->ID());
@@ -434,7 +436,9 @@ exfat_lookup(fs_volume* _volume, fs_vnode* _directory, const char* name,
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
+	directory->ReadLock();
 	status = exfat_lookup_id(volume, directory, name, _vnodeID);
+	directory->ReadUnlock();
 	// SPDX-SnippetEnd
 	if (status != B_OK) {
 		ERROR("exfat_lookup: name %s (%s)\n", name, strerror(status));
@@ -561,7 +565,7 @@ exfat_read(fs_volume* _volume, fs_vnode* _node, void* _cookie, off_t pos,
 static status_t
 exfat_close(fs_volume *_volume, fs_vnode *_node, void *_cookie)
 {
-	return B_OK;
+	return exfat_fsync(_volume, _node, false);
 }
 
 
@@ -639,7 +643,9 @@ exfat_read_dir(fs_volume *_volume, fs_vnode *_node, void *_cookie,
 {
 	TRACE("exfat_read_dir\n");
 	DirectoryIterator* iterator = (DirectoryIterator*)_cookie;
+	Inode* directory = (Inode*)_node->private_node;
 	Volume* volume = (Volume*)_volume->private_volume;
+	directory->ReadLock();
 
 	uint32 maxCount = *_num;
 	uint32 count = 0;
@@ -653,14 +659,17 @@ exfat_read_dir(fs_volume *_volume, fs_vnode *_node, void *_cookie,
 			break;
 
 		if (status == B_BUFFER_OVERFLOW) {
-			// the remaining name buffer length was too small
-			if (count == 0)
+			if (count == 0) {
+				directory->ReadUnlock();
 				return B_BUFFER_OVERFLOW;
+			}
 			break;
 		}
 
-		if (status != B_OK)
+		if (status != B_OK) {
+			directory->ReadUnlock();
 			return status;
+		}
 
 		dirent->d_dev = volume->ID();
 		dirent->d_ino = id;
@@ -669,6 +678,7 @@ exfat_read_dir(fs_volume *_volume, fs_vnode *_node, void *_cookie,
 		count++;
 	}
 
+	directory->ReadUnlock();
 	*_num = count;
 	TRACE("exfat_read_dir end\n");
 	return B_OK;
