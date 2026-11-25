@@ -21,6 +21,7 @@
 #include <R5Security.h>
 #include <Roster.h>
 #include <String.h>
+#include <StringList.h>
 
 #include <RegistrarDefs.h>
 #include <syscalls.h>
@@ -522,14 +523,17 @@ static void ensure_user_mime_db(const char* home, uid_t uid, gid_t gid);
 static void
 ensure_first_login_marker(const char* home, uid_t uid, gid_t gid)
 {
-	BString path;
-	path.SetToFormat("%s/config/settings/first_login", home);
-	int fd = open(path.String(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC,
-		0600);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Issue #4643: no part of the path may be a link.
+	int fd = r5_admin_open_nofollow(home, "config/settings/first_login",
+		O_WRONLY | O_CREAT | O_EXCL, 0, 0600);
 	if (fd < 0)
 		return;
-	fchown(fd, uid, gid);
+	r5_admin_set_owner(fd, uid, gid, 0600);
 	close(fd);
+	// SPDX-SnippetEnd
 }
 
 
@@ -576,39 +580,51 @@ ensure_default_wallpaper(const char* home)
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// Issue #4643: a directory in a person's home, owned by that person. Login
+// runs as uid 0, and the person can put a link anywhere in their own home:
+// no part of the path is followed (libr5admin.so). A missing directory is
+// made with "mode"; its parents must already exist.
+static status_t
+own_home_dir(const char* home, const char* relative, uid_t uid, gid_t gid,
+	mode_t mode)
+{
+	int fd = r5_admin_open_nofollow(home, relative, O_RDONLY | O_DIRECTORY,
+		mode);
+	if (fd < 0)
+		return errno;
+	status_t status = r5_admin_set_owner(fd, uid, gid, mode);
+	close(fd);
+	return status;
+}
+
+
 static status_t
 create_home(const char* home, uid_t uid, gid_t gid)
 {
 	mkdir(kUsersRoot, 0755);
 	if (mkdir(home, 0700) != 0 && errno != EEXIST)
 		return errno;
-	chmod(home, 0700);
-	if (chown(home, uid, gid) != 0)
-		return errno;
+	// Also the home itself: an old home that was kept can be a link.
+	status_t status = own_home_dir(home, NULL, uid, gid, 0700);
+	if (status != B_OK)
+		return status;
 
 	static const char* kFolders[] = {
 		"Desktop", "Documents", "Pictures", "Videos", "Downloads", "Music",
-		"config", NULL
+		"config", "config/settings", NULL
 	};
-	for (int32 i = 0; kFolders[i] != NULL; i++) {
-		BString path;
-		path.SetToFormat("%s/%s", home, kFolders[i]);
-		mkdir(path.String(), 0700);
-		chmod(path.String(), 0700);
-		chown(path.String(), uid, gid);
-	}
+	for (int32 i = 0; kFolders[i] != NULL; i++)
+		own_home_dir(home, kFolders[i], uid, gid, 0700);
 
-	BString settings;
-	settings.SetToFormat("%s/config/settings", home);
-	mkdir(settings.String(), 0700);
-	chmod(settings.String(), 0700);
-	chown(settings.String(), uid, gid);
-
-	BString deskbar;
-	deskbar.SetToFormat("%s/config/settings/deskbar", home);
-	bool newDeskbar = mkdir(deskbar.String(), 0700) == 0;
-	chmod(deskbar.String(), 0700);
-	chown(deskbar.String(), uid, gid);
+	int existing = r5_admin_open_nofollow(home, "config/settings/deskbar",
+		O_RDONLY | O_DIRECTORY);
+	bool newDeskbar = existing < 0 && errno == ENOENT;
+	if (existing >= 0)
+		close(existing);
+	own_home_dir(home, "config/settings/deskbar", uid, gid, 0700);
 
 	// What the image gives the first home (5625U, stick 81): the first-login
 	// marker, so Login runs default_deskbar_items.sh once (the battery), and
@@ -623,6 +639,7 @@ create_home(const char* home, uid_t uid, gid_t gid)
 	lock_private_homes();
 	return B_OK;
 }
+// SPDX-SnippetEnd
 
 
 int32
@@ -746,17 +763,6 @@ add_unix_user(const char* name, uid_t uid, gid_t gid, const char* home,
 
 
 static status_t
-delete_unix_user(const char* name)
-{
-	BPrivate::KMessage message(BPrivate::B_REG_DELETE_USER);
-	if (message.AddString("name", name) != B_OK)
-		return B_NO_MEMORY;
-	BPrivate::KMessage reply;
-	return BPrivate::send_authentication_request_to_registrar(message, reply);
-}
-
-
-static status_t
 ensure_system_root()
 {
 	mkdir("/boot/system/var", 0755);
@@ -797,78 +803,128 @@ ensure_system_root()
 }
 
 
-static bool
-is_other_person_home(const char* path)
-{
-	const char* prefix = "/boot/home/users/";
-	if (strncmp(path, prefix, 17) != 0)
-		return false;
-	const char* rest = path + 17;
-	if (rest[0] == '\0')
-		return false;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// Issue #4644: the walk that gives the first administrator /boot/home runs
+// once, on its own thread (LoginApp), and Sign in shows how far it is.
+// /boot/home/users stays uid 0: the other homes are in it, and whoever owns
+// it can rename them. The walk does not call getpwnam() (one static
+// buffer, also used by Login's own thread).
+static const char* kHomeOwnerPath = "/boot/system/settings/r5-home-owner";
 
-	char name[64];
-	size_t i = 0;
-	while (rest[i] != '\0' && rest[i] != '/' && i + 1 < sizeof(name)) {
-		name[i] = rest[i];
-		i++;
-	}
-	name[i] = '\0';
-	if (name[0] == '\0')
-		return false;
 
-	BString home;
-	home.SetToFormat("%s/%s", kUsersRoot, name);
-	struct passwd* pwd = getpwnam(name);
-	return pwd != NULL && pwd->pw_dir != NULL
-		&& strcmp(pwd->pw_dir, home.String()) == 0;
-}
+struct home_walk {
+	uid_t				uid;
+	gid_t				gid;
+	dev_t				device;
+	int64				count;
+	bigtime_t			lastReport;
+	home_walk_progress	progress;
+	void*				cookie;
+};
 
 
 static void
-chown_tree(const char* path, uid_t uid, gid_t gid, dev_t homeDevice)
+own_tree(const char* path, home_walk& walk)
 {
 	struct stat st;
 	if (lstat(path, &st) != 0)
 		return;
-	if (st.st_dev != homeDevice)
+	if (st.st_dev != walk.device)
 		return;
 	if (S_ISLNK(st.st_mode))
 		return;
-	if (is_other_person_home(path))
+	if (strcmp(path, kUsersRoot) == 0)
 		return;
-
-	lchown(path, uid, gid);
-	if (!S_ISDIR(st.st_mode))
-		return;
-
-	DIR* dir = opendir(path);
-	if (dir == NULL)
-		return;
-	while (struct dirent* entry = readdir(dir)) {
-		if (strcmp(entry->d_name, ".") == 0
-			|| strcmp(entry->d_name, "..") == 0)
-			continue;
-		char child[PATH_MAX];
-		snprintf(child, sizeof(child), "%s/%s", path, entry->d_name);
-		if (is_other_person_home(child))
-			continue;
-		if (strcmp(child, kSharedFolderPath) == 0) {
-			// Own /boot/home/Shared itself by the first administrator so the
-			// sticky bit lets them delete any file, but never chown files inside.
-			struct stat sharedStat;
-			if (lstat(child, &sharedStat) == 0 && S_ISDIR(sharedStat.st_mode)
-				&& !S_ISLNK(sharedStat.st_mode)
-				&& sharedStat.st_dev == homeDevice) {
-				lchown(child, uid, gid);
-				chmod(child, 01777);
+	if (strcmp(path, kSharedFolderPath) == 0) {
+		// Own /boot/home/Shared itself by the first administrator so the
+		// sticky bit lets them delete any file, but never chown files inside.
+		if (S_ISDIR(st.st_mode)) {
+			int fd = r5_admin_open_nofollow(path, NULL,
+				O_RDONLY | O_DIRECTORY);
+			if (fd >= 0) {
+				r5_admin_set_owner(fd, walk.uid, walk.gid, 01777);
+				close(fd);
 			}
-			continue;
 		}
-		chown_tree(child, uid, gid, homeDevice);
+		return;
 	}
-	closedir(dir);
+
+	if (S_ISDIR(st.st_mode)) {
+		DIR* dir = opendir(path);
+		if (dir != NULL) {
+			while (struct dirent* entry = readdir(dir)) {
+				if (strcmp(entry->d_name, ".") == 0
+					|| strcmp(entry->d_name, "..") == 0)
+					continue;
+				char child[PATH_MAX];
+				if (snprintf(child, sizeof(child), "%s/%s", path,
+						entry->d_name) >= (int)sizeof(child))
+					continue;
+				own_tree(child, walk);
+			}
+			closedir(dir);
+		}
+	}
+
+	// A folder after what is in it: /boot/home itself last, so a walk that
+	// stopped half way leaves /boot/home with uid 0.
+	if (st.st_uid != walk.uid || st.st_gid != walk.gid)
+		lchown(path, walk.uid, walk.gid);
+	walk.count++;
+	if (walk.progress != NULL) {
+		bigtime_t now = system_time();
+		if (now - walk.lastReport >= 200000) {
+			walk.lastReport = now;
+			walk.progress(walk.count, walk.cookie);
+		}
+	}
 }
+
+
+static bool
+read_home_owner(uid_t& uid)
+{
+	struct stat st;
+	if (lstat(kHomeOwnerPath, &st) != 0 || !S_ISREG(st.st_mode)
+		|| st.st_uid != 0 || (st.st_mode & (S_IWGRP | S_IWOTH)) != 0)
+		return false;
+	FILE* file = fopen(kHomeOwnerPath, "r");
+	if (file == NULL)
+		return false;
+	long value = -1;
+	bool ok = fscanf(file, "%ld", &value) == 1;
+	fclose(file);
+	if (!ok || value < 0)
+		return false;
+	uid = (uid_t)value;
+	return true;
+}
+
+
+static status_t
+write_home_owner(uid_t uid)
+{
+	BString temporary;
+	temporary.SetToFormat("%s.new", kHomeOwnerPath);
+	unlink(temporary.String());
+	int fd = open(temporary.String(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC,
+		0644);
+	if (fd < 0)
+		return errno;
+	char line[32];
+	int length = snprintf(line, sizeof(line), "%ld\n", (long)uid);
+	bool ok = write(fd, line, length) == length && fsync(fd) == 0;
+	close(fd);
+	if (!ok || rename(temporary.String(), kHomeOwnerPath) != 0) {
+		status_t status = errno != 0 ? errno : B_IO_ERROR;
+		unlink(temporary.String());
+		return status;
+	}
+	return B_OK;
+}
+// SPDX-SnippetEnd
 
 
 static void
@@ -919,73 +975,91 @@ ensure_private_trash(const char* home, uid_t uid, gid_t gid)
 		} else
 			mkdir(dest.String(), 0700);
 	}
-	chmod(dest.String(), 0700);
-	lchown(dest.String(), uid, gid);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Issue #4643: a link at $h/trash is left alone.
+	own_home_dir(home, "trash", uid, gid, 0700);
+	// SPDX-SnippetEnd
 }
 
 
-static status_t
-copy_node_attributes(BNode& src, BNode& dst)
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// Issue #4643: the copy of the MIME database goes into the person's own
+// config/settings as uid 0. Everything on the person's side is opened from
+// the directory above it, never through a link, and a file is only made
+// new (O_EXCL), never written through an existing name.
+static void
+copy_attributes_to(const char* srcPath, int dstFd)
 {
+	BNode src(srcPath);
+	if (src.InitCheck() != B_OK)
+		return;
 	src.RewindAttrs();
 	char name[B_ATTR_NAME_LENGTH];
 	while (src.GetNextAttrName(name) == B_OK) {
 		attr_info info;
-		if (src.GetAttrInfo(name, &info) != B_OK || info.size < 0)
+		if (src.GetAttrInfo(name, &info) != B_OK || info.size < 0
+			|| info.size > 1024 * 1024)
 			continue;
 		if (info.size == 0) {
-			dst.WriteAttr(name, info.type, 0, NULL, 0);
+			fs_write_attr(dstFd, name, info.type, 0, NULL, 0);
 			continue;
 		}
 		void* buffer = malloc((size_t)info.size);
 		if (buffer == NULL)
-			return B_NO_MEMORY;
+			return;
 		ssize_t bytes = src.ReadAttr(name, info.type, 0, buffer, info.size);
 		if (bytes > 0)
-			dst.WriteAttr(name, info.type, 0, buffer, bytes);
+			fs_write_attr(dstFd, name, info.type, 0, buffer, bytes);
 		free(buffer);
 	}
-	return B_OK;
 }
 
 
 static void
-copy_mime_entry(const char* srcPath, const char* dstPath, uid_t uid, gid_t gid)
+copy_mime_entry_at(const char* srcPath, int dstDir, const char* name,
+	uid_t uid, gid_t gid, int32 depth)
 {
 	struct stat st;
-	if (lstat(srcPath, &st) != 0)
+	if (depth > 16 || lstat(srcPath, &st) != 0)
 		return;
 
 	if (S_ISDIR(st.st_mode)) {
-		mkdir(dstPath, 0755);
-		chmod(dstPath, 0755);
-		lchown(dstPath, uid, gid);
-		BNode src(srcPath);
-		BNode dst(dstPath);
-		if (src.InitCheck() == B_OK && dst.InitCheck() == B_OK)
-			copy_node_attributes(src, dst);
+		mkdirat(dstDir, name, 0755);
+		int fd = openat(dstDir, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW
+			| O_CLOEXEC);
+		if (fd < 0)
+			return;
+		r5_admin_set_owner(fd, uid, gid, 0755);
+		copy_attributes_to(srcPath, fd);
 
 		DIR* dir = opendir(srcPath);
-		if (dir == NULL)
-			return;
-		while (struct dirent* entry = readdir(dir)) {
-			if (strcmp(entry->d_name, ".") == 0
-				|| strcmp(entry->d_name, "..") == 0)
-				continue;
-			BString childSrc;
-			BString childDst;
-			childSrc.SetToFormat("%s/%s", srcPath, entry->d_name);
-			childDst.SetToFormat("%s/%s", dstPath, entry->d_name);
-			copy_mime_entry(childSrc.String(), childDst.String(), uid, gid);
+		if (dir != NULL) {
+			while (struct dirent* entry = readdir(dir)) {
+				if (strcmp(entry->d_name, ".") == 0
+					|| strcmp(entry->d_name, "..") == 0)
+					continue;
+				BString childSrc;
+				childSrc.SetToFormat("%s/%s", srcPath, entry->d_name);
+				copy_mime_entry_at(childSrc.String(), fd, entry->d_name, uid,
+					gid, depth + 1);
+			}
+			closedir(dir);
 		}
-		closedir(dir);
+		close(fd);
 		return;
 	}
+	if (!S_ISREG(st.st_mode))
+		return;
 
-	int in = open(srcPath, O_RDONLY);
+	int in = open(srcPath, O_RDONLY | O_CLOEXEC);
 	if (in < 0)
 		return;
-	int out = open(dstPath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	int out = openat(dstDir, name, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW
+		| O_CLOEXEC, 0644);
 	if (out < 0) {
 		close(in);
 		return;
@@ -998,14 +1072,9 @@ copy_mime_entry(const char* srcPath, const char* dstPath, uid_t uid, gid_t gid)
 			break;
 	}
 	close(in);
+	r5_admin_set_owner(out, uid, gid, 0644);
+	copy_attributes_to(srcPath, out);
 	close(out);
-	chmod(dstPath, 0644);
-	lchown(dstPath, uid, gid);
-
-	BNode src(srcPath);
-	BNode dst(dstPath);
-	if (src.InitCheck() == B_OK && dst.InitCheck() == B_OK)
-		copy_node_attributes(src, dst);
 }
 
 
@@ -1020,38 +1089,60 @@ ensure_user_mime_db(const char* home, uid_t uid, gid_t gid)
 	if (lstat(kSystemMime, &st) != 0 || !S_ISDIR(st.st_mode))
 		return;
 
-	BString dest;
-	dest.SetToFormat("%s/config/settings/mime_db", home);
-	mkdir(dest.String(), 0700);
-	chmod(dest.String(), 0700);
-	lchown(dest.String(), uid, gid);
+	int mimeFd = r5_admin_open_nofollow(home, "config/settings/mime_db",
+		O_RDONLY | O_DIRECTORY, 0700);
+	if (mimeFd < 0)
+		return;
+	r5_admin_set_owner(mimeFd, uid, gid, 0700);
 
-	BString application;
-	application.SetToFormat("%s/application", dest.String());
-	if (lstat(application.String(), &st) != 0)
-		copy_mime_entry(kSystemMime, dest.String(), uid, gid);
+	int appFd = openat(mimeFd, "application", O_RDONLY | O_DIRECTORY
+		| O_NOFOLLOW | O_CLOEXEC);
+	if (appFd < 0 && errno == ENOENT) {
+		copy_attributes_to(kSystemMime, mimeFd);
+		DIR* dir = opendir(kSystemMime);
+		if (dir != NULL) {
+			while (struct dirent* entry = readdir(dir)) {
+				if (strcmp(entry->d_name, ".") == 0
+					|| strcmp(entry->d_name, "..") == 0)
+					continue;
+				BString childSrc;
+				childSrc.SetToFormat("%s/%s", kSystemMime, entry->d_name);
+				copy_mime_entry_at(childSrc.String(), mimeFd, entry->d_name,
+					uid, gid, 1);
+			}
+			closedir(dir);
+		}
+	}
+	if (appFd >= 0)
+		close(appFd);
 
 	// Tracker reads the user mime_db first. The leaf menu draws merged
 	// folders as application/x-vnd.haiku-virtual-directory (blue). Ordinary
 	// folders use application/x-vnd.be-directory (yellow). Keep both on the
 	// yellow system icon, including when this database already existed.
-	mkdir(application.String(), 0755);
-	chmod(application.String(), 0755);
-	lchown(application.String(), uid, gid);
+	mkdirat(mimeFd, "application", 0755);
+	appFd = openat(mimeFd, "application", O_RDONLY | O_DIRECTORY | O_NOFOLLOW
+		| O_CLOEXEC);
+	close(mimeFd);
+	if (appFd < 0)
+		return;
+	r5_admin_set_owner(appFd, uid, gid, 0755);
 	static const char* kYellowTypes[] = {
-		"application/x-vnd.be-directory",
-		"application/x-vnd.haiku-virtual-directory",
+		"x-vnd.be-directory",
+		"x-vnd.haiku-virtual-directory",
 		NULL
 	};
 	for (int32 i = 0; kYellowTypes[i] != NULL; i++) {
 		BString srcType;
-		BString dstType;
-		srcType.SetToFormat("%s/%s", kSystemMime, kYellowTypes[i]);
-		dstType.SetToFormat("%s/%s", dest.String(), kYellowTypes[i]);
-		unlink(dstType.String());
-		copy_mime_entry(srcType.String(), dstType.String(), uid, gid);
+		srcType.SetToFormat("%s/application/%s", kSystemMime,
+			kYellowTypes[i]);
+		unlinkat(appFd, kYellowTypes[i], 0);
+		copy_mime_entry_at(srcType.String(), appFd, kYellowTypes[i], uid, gid,
+			2);
 	}
+	close(appFd);
 }
+// SPDX-SnippetEnd
 
 
 static void
@@ -1081,13 +1172,13 @@ ensure_person_dirs(uid_t uid, gid_t gid)
 		"config/settings/deskbar",
 		NULL
 	};
-	for (int32 i = 0; kRelative[i] != NULL; i++) {
-		BString path;
-		path.SetToFormat("%s/%s", kHome, kRelative[i]);
-		mkdir(path.String(), 0700);
-		chmod(path.String(), 0700);
-		lchown(path.String(), uid, gid);
-	}
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Issue #4643: no part of the path is followed.
+	for (int32 i = 0; kRelative[i] != NULL; i++)
+		own_home_dir(kHome, kRelative[i], uid, gid, 0700);
+	// SPDX-SnippetEnd
 }
 
 
@@ -1120,6 +1211,78 @@ find_first_home_admin(BString& name, uid_t& uid, gid_t& gid)
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// Issue #4640: moves the account to another uid in one registrar request
+// ("new uid", distro/desktop/src/servers/registrar/AuthenticationManager.cpp).
+// The account, its password and its name stay; it is never deleted.
+static status_t
+move_unix_user(const char* name, uid_t uid, gid_t gid)
+{
+	BPrivate::KMessage message(BPrivate::B_REG_UPDATE_USER);
+	if (message.AddString("name", name) != B_OK
+		|| message.AddInt32("new uid", uid) != B_OK
+		|| message.AddInt32("gid", gid) != B_OK)
+		return B_NO_MEMORY;
+	BPrivate::KMessage reply;
+	status_t status = BPrivate::send_authentication_request_to_registrar(
+		message, reply);
+	if (status == B_OK)
+		status = reply.What();
+	return status;
+}
+
+
+// Issue #4641: the groups of the first administrator, by name, so they can
+// be set before the uid changes. "admin" is required; "users" and "wheel"
+// only where the group exists. "added" gets the groups this call added.
+static status_t
+set_first_admin_groups(const char* name, BStringList& added)
+{
+	BString error;
+	status_t status = ensure_admin_group(error);
+	if (status != B_OK) {
+		syslog(LOG_ERR, "Login: no group %s: %s", kAdminGroupName,
+			error.String());
+		return status;
+	}
+	static const char* kGroups[] = { kAdminGroupName, "users", "wheel", NULL };
+	for (int32 i = 0; kGroups[i] != NULL; i++) {
+		if (getgrnam(kGroups[i]) == NULL) {
+			syslog(LOG_WARNING, "Login: there is no group %s", kGroups[i]);
+			continue;
+		}
+		if (group_has_member(kGroups[i], name))
+			continue;
+		status = add_to_group(kGroups[i], name, error);
+		if (status == B_OK && !group_has_member(kGroups[i], name))
+			status = B_ERROR;
+		if (status != B_OK) {
+			syslog(LOG_ERR, "Login: %s not put in group %s: %s", name,
+				kGroups[i], error.String());
+			return status;
+		}
+		added.Add(kGroups[i]);
+	}
+	return B_OK;
+}
+
+
+static void
+remove_added_groups(const char* name, const BStringList& added)
+{
+	for (int32 i = 0; i < added.CountStrings(); i++) {
+		BString error;
+		if (remove_from_group(added.StringAt(i).String(), name, error)
+				!= B_OK) {
+			syslog(LOG_ERR, "Login: %s still in group %s: %s", name,
+				added.StringAt(i).String(), error.String());
+		}
+	}
+}
+
+
 status_t
 migrate_admin_off_root()
 {
@@ -1133,15 +1296,16 @@ migrate_admin_off_root()
 	if (status != B_OK)
 		return status;
 	if (uid != 0) {
-		ensure_system_root();
-		// The account was already moved off uid 0, but this disk can still
-		// have /boot/home owned by uid 0. Tracker then cannot open Desktop
-		// after lock_private_homes() makes that folder mode 0700.
-		struct stat homeStat;
-		if (lstat(kHome, &homeStat) == 0 && S_ISDIR(homeStat.st_mode)
-			&& homeStat.st_uid == 0) {
-			chown_tree(kHome, uid, gid, homeStat.st_dev);
+		if (ensure_system_root() != B_OK)
+			syslog(LOG_WARNING, "Login: the locked root account is missing");
+		// A disk from before issue #4641 can have the administrator
+		// outside group admin. Put it back; the sign-in goes on.
+		if (!group_has_member(kAdminGroupName, name.String())) {
+			BStringList added;
+			set_first_admin_groups(name.String(), added);
 		}
+		// /boot/home itself is given by own_first_home() (LoginApp, off
+		// the message loop, first_home_walk_needed()).
 		ensure_person_dirs(uid, gid);
 		adopt_trash(uid, gid);
 		return B_OK;
@@ -1151,58 +1315,103 @@ migrate_admin_off_root()
 	if (lstat(kHome, &homeStat) != 0 || !S_ISDIR(homeStat.st_mode))
 		return B_NOT_A_DIRECTORY;
 
-	struct passwd* pwd = getpwnam(name.String());
-	if (pwd == NULL)
-		return ENOENT;
-
-	BString home(pwd->pw_dir != NULL ? pwd->pw_dir : kHome);
-	BString shell(pwd->pw_shell != NULL ? pwd->pw_shell : "/bin/sh");
-	BString realName(pwd->pw_gecos != NULL ? pwd->pw_gecos : "");
-	BString shadow;
-	struct spwd* spwd = getspnam(name.String());
-	if (spwd != NULL && spwd->sp_pwdp != NULL)
-		shadow = spwd->sp_pwdp;
-
-	uid_t newUid = first_free_person_uid();
-	gid_t newGid = users_gid();
-
-	status = delete_unix_user(name.String());
-	if (status != B_OK)
-		return status;
-
-	status = ensure_system_root();
+	// First the groups: a failure leaves the account as it was.
+	BStringList added;
+	status = set_first_admin_groups(name.String(), added);
 	if (status != B_OK) {
-		add_unix_user(name.String(), 0, 0, home.String(), shell.String(),
-			realName.String(), shadow.String());
+		remove_added_groups(name.String(), added);
 		return status;
 	}
 
-	status = add_unix_user(name.String(), newUid, newGid, home.String(),
-		shell.String(), realName.String(), shadow.String());
+	uid_t newUid = first_free_person_uid();
+	gid_t newGid = users_gid();
+	status = move_unix_user(name.String(), newUid, newGid);
 	if (status != B_OK) {
-		add_unix_user(name.String(), 0, 0, home.String(), shell.String(),
-			realName.String(), shadow.String());
+		syslog(LOG_ERR, "Login: %s not moved to uid %d: %s", name.String(),
+			(int)newUid, strerror(status));
+		remove_added_groups(name.String(), added);
 		return status;
 	}
 
 	endpwent();
-	pwd = getpwnam(name.String());
-	if (pwd == NULL || pwd->pw_uid != newUid)
+	struct passwd* pwd = getpwnam(name.String());
+	if (pwd == NULL || pwd->pw_uid != newUid) {
+		syslog(LOG_ERR, "Login: %s is not at uid %d after the move",
+			name.String(), (int)newUid);
 		return B_ERROR;
+	}
 
-	BString error;
-	ensure_admin_group(error);
-	add_to_group(kAdminGroupName, name.String(), error);
-	add_to_group("users", name.String(), error);
-	add_to_group("wheel", name.String(), error);
+	// The account is already off uid 0. Without the locked root the next
+	// sign-in tries again (above).
+	status = ensure_system_root();
+	if (status != B_OK) {
+		syslog(LOG_WARNING, "Login: the locked root account was not made: %s",
+			strerror(status));
+	}
 
-	chown_tree(kHome, newUid, newGid, homeStat.st_dev);
 	ensure_person_dirs(newUid, newGid);
 	adopt_trash(newUid, newGid);
 	lock_private_homes();
 	ensure_shared_folder();
 	return B_OK;
 }
+
+
+bool
+first_home_walk_needed(uid_t& uid, gid_t& gid)
+{
+	if (geteuid() != 0)
+		return false;
+	BString name;
+	if (find_first_home_admin(name, uid, gid) != B_OK || uid == 0)
+		return false;
+	uid_t owner = (uid_t)-1;
+	if (read_home_owner(owner) && owner == uid)
+		return false;
+	// A disk from before the marker: the old walk gave /boot/home itself
+	// first, and only when it still had uid 0.
+	struct stat homeStat;
+	if (!read_home_owner(owner) && lstat(kHome, &homeStat) == 0
+		&& S_ISDIR(homeStat.st_mode) && homeStat.st_uid == uid) {
+		write_home_owner(uid);
+		return false;
+	}
+	return true;
+}
+
+
+status_t
+own_first_home(uid_t uid, gid_t gid, home_walk_progress progress,
+	void* cookie)
+{
+	if (geteuid() != 0)
+		return B_PERMISSION_DENIED;
+	if (uid == 0)
+		return B_BAD_VALUE;
+	struct stat homeStat;
+	if (lstat(kHome, &homeStat) != 0 || !S_ISDIR(homeStat.st_mode))
+		return B_NOT_A_DIRECTORY;
+
+	home_walk walk;
+	walk.uid = uid;
+	walk.gid = gid;
+	walk.device = homeStat.st_dev;
+	walk.count = 0;
+	walk.lastReport = system_time();
+	walk.progress = progress;
+	walk.cookie = cookie;
+	own_tree(kHome, walk);
+	if (progress != NULL)
+		progress(walk.count, cookie);
+
+	if (lstat(kHome, &homeStat) != 0 || homeStat.st_uid != uid)
+		return B_PERMISSION_DENIED;
+	status_t status = write_home_owner(uid);
+	if (status != B_OK)
+		syslog(LOG_WARNING, "Login: home owner marker not written");
+	return B_OK;
+}
+// SPDX-SnippetEnd
 
 
 static bool
@@ -1993,34 +2202,60 @@ first_grant_uid()
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// During a grant the granted team owns these folders and can put a link
+// in them; nothing here follows one (the review after issue #4643).
+static void
+chmod_settings_tree_fd(int dirFd, mode_t dirMode, mode_t fileMode,
+	uid_t uid, gid_t gid, int32 depth)
+{
+	r5_admin_set_owner(dirFd, uid, gid, dirMode);
+	if (depth > 16)
+		return;
+	int listFd = dup(dirFd);
+	if (listFd < 0)
+		return;
+	DIR* folder = fdopendir(listFd);
+	if (folder == NULL) {
+		close(listFd);
+		return;
+	}
+	while (struct dirent* entry = readdir(folder)) {
+		if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+			continue;
+		int fd = openat(dirFd, entry->d_name, O_RDONLY | O_NOFOLLOW
+			| O_NONBLOCK | O_CLOEXEC);
+		if (fd < 0)
+			continue;
+		struct stat st;
+		if (fstat(fd, &st) == 0) {
+			if (S_ISDIR(st.st_mode)) {
+				chmod_settings_tree_fd(fd, dirMode, fileMode, uid, gid,
+					depth + 1);
+			} else if (S_ISREG(st.st_mode))
+				r5_admin_set_owner(fd, uid, gid, fileMode);
+		}
+		close(fd);
+	}
+	closedir(folder);
+}
+
+
 static void
 chmod_settings_tree(const char* dir, mode_t dirMode, mode_t fileMode,
 	uid_t uid, gid_t gid)
 {
 	if (dir == NULL)
 		return;
-	chmod(dir, dirMode);
-	chown(dir, uid, gid);
-	DIR* folder = opendir(dir);
-	if (folder == NULL)
+	int fd = r5_admin_open_nofollow(dir, NULL, O_RDONLY | O_DIRECTORY);
+	if (fd < 0)
 		return;
-	while (struct dirent* entry = readdir(folder)) {
-		if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
-			continue;
-		BString path;
-		path.SetToFormat("%s/%s", dir, entry->d_name);
-		struct stat st;
-		if (lstat(path.String(), &st) != 0 || S_ISLNK(st.st_mode))
-			continue;
-		if (S_ISDIR(st.st_mode))
-			chmod_settings_tree(path.String(), dirMode, fileMode, uid, gid);
-		else {
-			chmod(path.String(), fileMode);
-			chown(path.String(), uid, gid);
-		}
-	}
-	closedir(folder);
+	chmod_settings_tree_fd(fd, dirMode, fileMode, uid, gid, 0);
+	close(fd);
 }
+// SPDX-SnippetEnd
 
 
 static void
@@ -2128,10 +2363,16 @@ copy_file_if_missing(const char* from, const char* to)
 static void
 share_file(const char* path, mode_t mode, uid_t uid, gid_t gid)
 {
-	if (access(path, F_OK) != 0)
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// A link put here during a grant is not followed.
+	int fd = r5_admin_open_nofollow(path, NULL, O_RDONLY);
+	if (fd < 0)
 		return;
-	chown(path, uid, gid);
-	chmod(path, mode);
+	r5_admin_set_owner(fd, uid, gid, mode);
+	close(fd);
+	// SPDX-SnippetEnd
 }
 
 

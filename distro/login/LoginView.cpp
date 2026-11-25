@@ -27,6 +27,7 @@
 #include <LayoutBuilder.h>
 #include <ListView.h>
 #include <PasswordControl.h>
+#include <R5Admin.h>
 #include <R5Icons.h>
 #include <R5UI.h>
 #include <ScrollView.h>
@@ -403,11 +404,11 @@ LoginView::LoginView()
 		font_px(be_bold_font, 12), document);
 
 	fPasswordControl = new BPasswordControl("password", "", "",
-		new BMessage(kAttemptLogin));
+		login_local_message(kAttemptLogin));
 	fPasswordControl->SetPlaceholder("Enter password");
 
 	fLoginButton = new BAccentButton("signin", "Sign in",
-		new BMessage(kAttemptLogin));
+		login_local_message(kAttemptLogin));
 	fLoginButton->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
 
 	fInfoView = make_label("info", "", font_px(be_plain_font, 12.5f),
@@ -433,10 +434,10 @@ LoginView::LoginView()
 	// for its name and a password once, before its first desktop.
 	fSetupName = new BTextControl("setupName", NULL, "", NULL);
 	fSetupPassword = new BPasswordControl("setupPassword", "", "",
-		new BMessage(kAttemptLogin));
+		login_local_message(kAttemptLogin));
 	fSetupPassword->SetPlaceholder("New password");
 	fSetupRepeat = new BPasswordControl("setupRepeat", "", "",
-		new BMessage(kAttemptLogin));
+		login_local_message(kAttemptLogin));
 	fSetupRepeat->SetPlaceholder("Repeat password");
 	fSetupStrength = new BPasswordStrengthBar("setupStrength");
 	fSetupStrength->SetViewUIColor(document);
@@ -487,9 +488,9 @@ LoginView::LoginView()
 	BFont buttonFont = font_px(be_bold_font, 12.5f);
 	BSize buttonHeight(B_SIZE_UNSET, px_side(32) - 1);
 	fRebootButton = new BButton("reboot", "Restart",
-		new BMessage(kRebootAction));
+		login_local_message(kRebootAction));
 	fHaltButton = new BButton("halt", "Shut down",
-		new BMessage(kHaltAction));
+		login_local_message(kHaltAction));
 	BButton* buttons[] = { fRebootButton, fHaltButton };
 	for (BButton* button : buttons) {
 		button->SetFont(&buttonFont);
@@ -609,6 +610,15 @@ LoginView::MessageReceived(BMessage* message)
 			_SetFeedback(text, true);
 			_EnableControls(true);
 			_FocusField();
+			break;
+		}
+		case kLoginProgress:
+		{
+			// Issue #4644: the first walk of /boot/home (LoginApp).
+			const char* text = NULL;
+			if (r5_admin_is_local(message)
+				&& message->FindString("text", &text) == B_OK && text != NULL)
+				_SetFeedback(text, false);
 			break;
 		}
 		case kLoginOk:
@@ -863,7 +873,7 @@ LoginView::_AttemptLogin()
 	if (password == NULL)
 		password = "";
 
-	BMessage* message = new BMessage(kAttemptLogin);
+	BMessage* message = login_local_message(kAttemptLogin);
 	message->AddString("login", fSelectedLogin.String());
 	if (fSetupMode) {
 		BString newPassword(fSetupPassword->Text());

@@ -38,7 +38,7 @@ Application Login :
 
 Application r5-desktop :
 	R5Desktop.cpp
-	: [ TargetLibstdc++ ]
+	: be libr5admin.so [ TargetLibstdc++ ]
 ;
 
 Application r5-tray :

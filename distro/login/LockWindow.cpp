@@ -162,11 +162,11 @@ LockView::LockView(const char* name)
 	fPasswordLabel = make_label("pwLabel", "Password",
 		font_px(be_bold_font, 12), document);
 	fPasswordControl = new BPasswordControl("password", "", "",
-		new BMessage(kUnlockAction));
+		login_local_message(kUnlockAction));
 	fPasswordControl->SetPlaceholder("Enter password");
 
 	fUnlockButton = new BAccentButton("unlock", "Unlock",
-		new BMessage(kUnlockAction));
+		login_local_message(kUnlockAction));
 	fUnlockButton->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
 
 	fInfoView = make_label("info", "", font_px(be_plain_font, 12.5f),
@@ -198,11 +198,11 @@ LockView::LockView(const char* name)
 	BFont buttonFont = font_px(be_bold_font, 12.5f);
 	BSize buttonHeight(B_SIZE_UNSET, px_side(32) - 1);
 	fLogoutButton = new BButton("logout", "Log out",
-		new BMessage(kLogoutAction));
+		login_local_message(kLogoutAction));
 	fRebootButton = new BButton("reboot", "Restart",
-		new BMessage(kRebootAction));
+		login_local_message(kRebootAction));
 	fHaltButton = new BButton("halt", "Shut down",
-		new BMessage(kHaltAction));
+		login_local_message(kHaltAction));
 	BButton* buttons[] = { fLogoutButton, fRebootButton, fHaltButton };
 	for (BButton* button : buttons) {
 		button->SetFont(&buttonFont);
@@ -308,7 +308,7 @@ LockView::Pulse()
 void
 LockView::_Submit()
 {
-	BMessage* message = new BMessage(kUnlockAction);
+	BMessage* message = login_local_message(kUnlockAction);
 	message->AddString("password", fPasswordControl->Text());
 	fPasswordControl->SetText("");
 	_EnablePassword(false);

@@ -276,6 +276,7 @@ void BluetoothServer::ReadyToRun(void)
 	LEManager::StartChannels();
 	// The SMP and ATT timeouts are checked every 5 s.
 	BMessage pulse(kMsgR5LEPulse);
+	r5_admin_mark_local(&pulse);
 	fLEPulse = new(std::nothrow) BMessageRunner(be_app_messenger, &pulse,
 		5000000);
 	// SPDX-SnippetEnd
@@ -615,14 +616,15 @@ void BluetoothServer::MessageReceived(BMessage* message)
 		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 		// SPDX-License-Identifier: MIT
 		// LE pairing windows answer here; only from this process
-		// (PasskeyWindow), never from another team.
+		// (PasskeyWindow), never from another team. The reply address
+		// proves nothing; the team token does (r5_admin_mark_local()).
 		case kMsgLEUserAnswer:
-			if (!message->IsSourceRemote())
+			if (r5_admin_is_local(message))
 				LEManager::UserAnswer(message);
 			break;
 
 		case kMsgR5LEPulse:
-			if (!message->IsSourceRemote()) {
+			if (r5_admin_is_local(message)) {
 				LEManager::Pulse();
 				// A Remote Name Request without an answer in time.
 				for (int32 i = 0; i < fLocalDevicesList.CountItems(); i++)

@@ -56,6 +56,23 @@ static const uint32 kMsgShowOldKeyStorePrompt = 'r5OP';
 static const uint32 kMsgShowMissingProtectorAlert = 'r5MP';
 static const uint32 kMsgShowLockedAlert = 'r5LA';
 
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// The three alert messages above are only taken from this team, by its
+// token (r5_admin_mark_local()); !IsSourceRemote() trusted the reply
+// address, which the sender chooses.
+static void
+post_local(BLooper* looper, uint32 what)
+{
+	BMessage message(what);
+	r5_admin_mark_local(&message);
+	looper->PostMessage(&message);
+}
+// SPDX-SnippetEnd
+
+
 static void
 wipe_message_raw_field(BMessage& msg, const char* name)
 {
@@ -175,12 +192,12 @@ KeyStoreServer::MessageReceived(BMessage* message)
 		return;
 	}
 	if (message->what == kMsgShowOldKeyStorePrompt) {
-		if (!message->IsSourceRemote() && fStoreUnlocked && _HasOldKeyStore())
+		if (r5_admin_is_local(message) && fStoreUnlocked && _HasOldKeyStore())
 			(new OldKeyStoreWindow(this))->Show();
 		return;
 	}
 	if (message->what == kMsgShowMissingProtectorAlert) {
-		if (!message->IsSourceRemote()) {
+		if (r5_admin_is_local(message)) {
 			BAlert* alert = new BAlert("Key store",
 				"Your key store protector file was missing. The previous "
 				"encrypted database was kept as a backup and a new empty "
@@ -193,7 +210,7 @@ KeyStoreServer::MessageReceived(BMessage* message)
 	}
 	if (message->what == kMsgShowLockedAlert) {
 		const char* text = message->GetString("text", NULL);
-		if (!message->IsSourceRemote() && text != NULL) {
+		if (r5_admin_is_local(message) && text != NULL) {
 			BAlert* alert = new BAlert("Key store", text, "OK", NULL, NULL,
 				B_WIDTH_AS_USUAL, B_WARNING_ALERT);
 			alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
@@ -1316,14 +1333,14 @@ KeyStoreServer::_UnlockWithKek(const BSecureBuffer& kek,
 		}
 
 		if (missingProtectorBackup)
-			PostMessage(kMsgShowMissingProtectorAlert);
+			post_local(this, kMsgShowMissingProtectorAlert);
 	}
 
 	bool hasOld = _HasOldKeyStore();
 	if (_hasOld != NULL)
 		*_hasOld = hasOld;
 	if (hasOld)
-		PostMessage(kMsgShowOldKeyStorePrompt);
+		post_local(this, kMsgShowOldKeyStorePrompt);
 
 	return B_OK;
 }
@@ -1394,6 +1411,7 @@ void
 KeyStoreServer::_PostLockedAlert(const char* text)
 {
 	BMessage message(kMsgShowLockedAlert);
+	r5_admin_mark_local(&message);
 	message.AddString("text", text);
 	PostMessage(&message);
 }

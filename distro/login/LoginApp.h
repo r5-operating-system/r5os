@@ -19,6 +19,19 @@ const uint32 kLockAction = 'lokc';
 const uint32 kUnlockAction = 'unlk';
 const uint32 kLoginBad = 'lgba';
 const uint32 kLoginOk = 'lgok';
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// Issue #4644: Sign in shows how far the first walk of /boot/home is
+// (string "text"); the walk thread tells Login when it is done.
+const uint32 kLoginProgress = 'lgpr';
+const uint32 kHomeWalkDone = 'lghw';
+
+// Issue #4639: a message from Login's own windows. Every message that
+// signs in, unlocks, locks, logs out, restarts or shuts down carries
+// Login's token (r5_admin_mark_local()); another team cannot make one.
+BMessage* login_local_message(uint32 what);
+// SPDX-SnippetEnd
 
 
 class LoginWindow;
@@ -65,6 +78,13 @@ private:
 	void			_ShowLogin();
 	void			_OpenLoginWindow();
 	void			_QuitUserApps();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	status_t		_StartHomeWalk(BMessage* message, uid_t uid,
+						gid_t gid);
+	void			_HomeWalkDone(BMessage* message);
+// SPDX-SnippetEnd
 	status_t		_WaitGone(const char* signature);
 
 	DesktopWindow*	fDesktopWindow;
@@ -80,6 +100,9 @@ private:
 						const struct r5_admin_sender& sender, BMessage* reply,
 						void* cookie);
 	port_id			fAdminPort;
+	// The sign-in that waits for the first walk of /boot/home.
+	thread_id		fHomeWalkThread;
+	BMessage*		fPendingLogin;
 // SPDX-SnippetEnd
 };
 
