@@ -230,6 +230,7 @@
 						["settings-modules.html#SettingsContext", "SettingsContext"],
 						["settings-modules.html#storage", "Where the values go"],
 						["settings-modules.html#admin", "The lock"],
+						["settings-modules.html#translations", "Translating the page"],
 						["settings-modules.html#example", "Example"],
 						["settings-modules.html#limits", "Not yet"],
 					],
@@ -257,6 +258,18 @@
 						["vulkan.html#modes", "Present modes"],
 						["vulkan.html#fallback", "GPU or software"],
 						["vulkan.html#porting", "Porting a program"],
+					],
+				},
+				{
+					file: "translations.html",
+					label: "Translations",
+					items: [
+						["translations.html#code", "In the code"],
+						["translations.html#catalog", "The catalog"],
+						["translations.html#files", "The files"],
+						["translations.html#weblate", "Weblate"],
+						["translations.html#change", "Changing the English"],
+						["translations.html#limits", "Not yet"],
 					],
 				},
 				{
@@ -385,6 +398,7 @@
 		{ name: "BSealedData", kind: "class", where: "Security Kit", header: "<R5Security.h>", lib: "libr5security.so", href: "security-kit.html#BSealedData", desc: "Authenticated encryption (XChaCha20-Poly1305) for buffers and files." },
 		// Guides & concepts
 		{ name: "Accounts & sessions", kind: "guide", where: "Guides", header: "", lib: "", href: "accounts.html", desc: "User uid, home folders, admin changes, lock and log out, Try R5, the guest and Shared." },
+		{ name: "Translations", kind: "guide", where: "Guides", header: "Catalog.h", lib: "localestub", href: "translations.html", desc: "B_TRANSLATE, DoCatalogs, the catalog files and Weblate." },
 		{ name: "Interface guidelines", kind: "guide", where: "Guides", header: "", lib: "", href: "guidelines.html", desc: "Forms, cards, buttons, icons, settings pages, words." },
 		{ name: "Linking a program", kind: "guide", where: "Start here", header: "", lib: "", href: "index.html#linking", desc: "Libraries, headers, and Jamfile rules for LibR5." },
 		{ name: "Rules for LibR5", kind: "guide", where: "Start here", header: "", lib: "", href: "index.html#rules", desc: "Additive ABI, MIT license, sharp icons, system colors." },
