@@ -24,15 +24,15 @@ Page ids are the first column of `module_icon()` in `SettingsWindow.cpp`.
 
 What a launcher still needs:
 
-1. A launcher calls `be_roster->Launch("application/x-vnd.R5OS-Settings",
-   argc, argv)` with `--page <id>`. Nothing new is needed in Settings for that.
+1. A launcher calls `r5_settings_open_page("<id>")` from `libr5ui.so`
+   (added 25 Nov 2026, `docs/LIBR5.md`, "Open a Settings page") and quits.
+   NetworkStatus and the Bluetooth view use the same call.
 2. The id must be loaded. The Bluetooth page is an add-on that is missing in
    the minimum image; there the launcher would open Settings on Home. Settings
    should fall back to Home for an unknown id (to check), and a launcher for a
    page that is not in that image should not be installed there.
-3. Optional, later: one public call in libr5ui, for example
-   `r5_settings_open_page(const char* id)`, so programs do not copy the argv.
-   Only if more than one program needs it (`docs/LIBR5.md` rule).
+3. Settings itself needs nothing new: `--page <id>` and `kMsgOpenPage`
+   already exist.
 4. Messages sent to a running program by signature (see "Who starts it")
    reach nobody once the program is a launcher, because the launcher is never
    running. They are notifications only, so nothing breaks, but the matching
