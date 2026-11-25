@@ -1,0 +1,115 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_display\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+msgctxt "Settings: Display"
+msgid "Resolution:"
+msgstr ""
+
+msgctxt "Settings: Display"
+msgid "Apply"
+msgstr ""
+
+msgctxt "Settings: Display"
+msgid "The Deskbar is on screen %number%."
+msgstr ""
+
+msgctxt "Settings: Display"
+msgid "Do you wish to keep these settings?\nThe previous picture returns after 12 seconds."
+msgstr ""
+
+msgctxt "Settings: Display"
+msgid "Colors:"
+msgstr ""
+
+msgctxt "Settings: Display"
+msgid "Screen"
+msgstr ""
+
+msgctxt "Settings: Display"
+msgid "Keep"
+msgstr ""
+
+msgctxt "Settings: Display"
+msgid "{0, plural, one{# workspace. Changes right away. Every screen follows the same workspace.} other{# workspaces. Changes right away. Every screen follows the same workspace.}}"
+msgstr ""
+
+msgctxt "Settings: Display"
+msgid "Screen %number% – %name%"
+msgstr ""
+
+msgctxt "Settings: Display screens"
+msgid "Screen"
+msgstr ""
+
+msgctxt "Settings: Display"
+msgid "Display"
+msgstr ""
+
+msgctxt "Settings: Display"
+msgid "%resolution% (recommended)"
+msgstr ""
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+msgctxt "Settings: Display"
+msgid "screen display resolution refresh colors workspaces"
+msgstr ""
+
+msgctxt "Settings: Display"
+msgid "%bits% bits/pixel"
+msgstr ""
+
+msgctxt "Settings: Display"
+msgid "Arrangement"
+msgstr ""
+
+msgctxt "Settings: Display"
+msgid "Screen – %name%"
+msgstr ""
+
+msgctxt "Settings: Display"
+msgid "Rows:"
+msgstr ""
+
+msgctxt "Settings: Display"
+msgid "Apply to:"
+msgstr ""
+
+msgctxt "Settings: Display"
+msgid "All workspaces"
+msgstr ""
+
+msgctxt "Settings: Display"
+msgid "Columns:"
+msgstr ""
+
+msgctxt "Settings: Display"
+msgid "The screen mode could not be set.\n"
+msgstr ""
+
+msgctxt "Settings: Display"
+msgid "OK"
+msgstr ""
+
+msgctxt "Settings: Display"
+msgid "Drag the screens to match your desk. Click one to change it."
+msgstr ""
+
+msgctxt "Settings: Display"
+msgid "Refresh rate:"
+msgstr ""
+
+msgctxt "Settings: Display"
+msgid "This workspace"
+msgstr ""
+
+msgctxt "Settings: Display"
+msgid "Screens, resolution, and workspaces"
+msgstr ""
+
+msgctxt "Settings: Display"
+msgid "Undo"
+msgstr ""
+
+msgctxt "Settings: Display"
+msgid "Workspaces"
+msgstr ""

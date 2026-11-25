@@ -6,16 +6,15 @@
  */
 
 
-#include "WallpaperModule.h"
 
 #include "SettingsFont.h"
-#include "SettingsManager.h"
 #include "SettingsMessages.h"
 #include "SettingsModule.h"
 
 #include <Alert.h>
 #include <Bitmap.h>
 #include <Box.h>
+#include <Catalog.h>
 #include <CheckBox.h>
 #include <ColorControl.h>
 #include <Control.h>
@@ -55,6 +54,10 @@
 
 #include <algorithm>
 #include <vector>
+
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "Settings: Wallpaper"
 
 
 static const uint32 kMsgScope = 'r5ws';
@@ -200,13 +203,17 @@ public:
 	virtual						~WallpaperModule();
 
 	virtual	const char*			Identifier() const { return "wallpaper"; }
-	virtual	const char*			Name() const { return "Wallpaper"; }
+	virtual	const char*			Name() const { return B_TRANSLATE("Wallpaper"); }
 	virtual	const char*			Category() const
 									{ return "personalization"; }
 	virtual	const char*			Description() const
-		{ return "Set the background of your desktop"; }
+		{ return B_TRANSLATE_COMMENT("Set the background of your desktop",
+			"Fixed text (AGENTS.md): translate the meaning, keep it short"); }
 	virtual	const char*			Keywords() const
-		{ return "background wallpaper image color workspace folder"; }
+		{ return B_TRANSLATE_COMMENT("background wallpaper image color "
+			"workspace folder",
+			"Search words, separated by spaces. Keep the English words and "
+			"add words in your language."); }
 
 	virtual	BView*				CreateView(SettingsContext* context,
 									BRect frame);
@@ -825,8 +832,8 @@ WallpaperView::WallpaperView(WallpaperModule* module)
 {
 	fPreview = new WallpaperPreview(this);
 
-	fX = new BTextControl("x", "X:", "", new BMessage(kMsgOffset));
-	fY = new BTextControl("y", "Y:", "", new BMessage(kMsgOffset));
+	fX = new BTextControl("x", B_TRANSLATE("X:"), "", new BMessage(kMsgOffset));
+	fY = new BTextControl("y", B_TRANSLATE("Y:"), "", new BMessage(kMsgOffset));
 	fX->TextView()->SetAlignment(B_ALIGN_RIGHT);
 	fY->TextView()->SetAlignment(B_ALIGN_RIGHT);
 	fX->TextView()->SetMaxBytes(5);
@@ -841,7 +848,7 @@ WallpaperView::WallpaperView(WallpaperModule* module)
 	fY->SetExplicitMaxSize(BSize(90, B_SIZE_UNSET));
 
 	BBox* previewBox = new BBox("preview");
-	previewBox->SetLabel(r5_settings_box_title("Preview"));
+	previewBox->SetLabel(r5_settings_box_title(B_TRANSLATE("Preview")));
 	BGroupView* previewInner = new BGroupView(B_VERTICAL, 0);
 	previewInner->SetExplicitAlignment(BAlignment(B_ALIGN_USE_FULL_WIDTH,
 		B_ALIGN_USE_FULL_HEIGHT));
@@ -860,17 +867,21 @@ WallpaperView::WallpaperView(WallpaperModule* module)
 	fWorkspaceMenu = new BPopUpMenu("workspace");
 	BMessage* all = new BMessage(kMsgScope);
 	all->AddInt32("scope", kScopeAll);
-	fWorkspaceMenu->AddItem(new BMenuItem("All workspaces", all));
+	fWorkspaceMenu->AddItem(new BMenuItem(B_TRANSLATE("All workspaces"),
+		all));
 	BMessage* current = new BMessage(kMsgScope);
 	current->AddInt32("scope", kScopeCurrent);
-	BMenuItem* currentItem = new BMenuItem("Current workspace", current);
+	BMenuItem* currentItem = new BMenuItem(
+		B_TRANSLATE("Current workspace"), current);
 	fWorkspaceMenu->AddItem(currentItem);
 	currentItem->SetMarked(true);
 	fWorkspaceMenu->AddSeparatorItem();
 	BMessage* fallback = new BMessage(kMsgScope);
 	fallback->AddInt32("scope", kScopeDefault);
-	fWorkspaceMenu->AddItem(new BMenuItem("Default folder", fallback));
-	fWorkspaceMenu->AddItem(new BMenuItem("Other folder" B_UTF8_ELLIPSIS,
+	fWorkspaceMenu->AddItem(new BMenuItem(B_TRANSLATE("Default folder"),
+		fallback));
+	fWorkspaceMenu->AddItem(new BMenuItem(
+		B_TRANSLATE("Other folder" B_UTF8_ELLIPSIS),
 		new BMessage(kMsgOtherFolder)));
 
 	BMenuField* workspaceField = new BMenuField("workspace", NULL,
@@ -879,27 +890,31 @@ WallpaperView::WallpaperView(WallpaperModule* module)
 	controlsBox->SetLabel(workspaceField);
 
 	fImageMenu = new BPopUpMenu("image");
-	BMenuField* imageField = new BMenuField("image", "Image:", fImageMenu);
+	BMenuField* imageField = new BMenuField("image", B_TRANSLATE("Image:"),
+		fImageMenu);
 	imageField->SetAlignment(B_ALIGN_RIGHT);
 
 	fPlacementMenu = new BPopUpMenu("placement");
 	struct item { const char* label; int32 mode; };
 	const item items[] = {
-		{ "Manual", kModePosition },
-		{ "Center", kModeCenter },
-		{ "Scale to fit", kModeScale },
-		{ "Tile", kModeTile }
+		{ B_TRANSLATE_MARK("Manual"), kModePosition },
+		{ B_TRANSLATE_MARK("Center"), kModeCenter },
+		{ B_TRANSLATE_MARK("Scale to fit"), kModeScale },
+		{ B_TRANSLATE_MARK("Tile"), kModeTile }
 	};
 	for (uint32 i = 0; i < sizeof(items) / sizeof(items[0]); i++) {
 		BMessage* message = new BMessage(kMsgPlacement);
 		message->AddInt32("mode", items[i].mode);
-		fPlacementMenu->AddItem(new BMenuItem(items[i].label, message));
+		fPlacementMenu->AddItem(new BMenuItem(
+			B_TRANSLATE_NOCOLLECT(items[i].label), message));
 	}
-	BMenuField* placementField = new BMenuField("placement", "Placement:",
+	BMenuField* placementField = new BMenuField("placement",
+		B_TRANSLATE("Placement:"),
 		fPlacementMenu);
 	placementField->SetAlignment(B_ALIGN_RIGHT);
 
-	fOutline = new BCheckBox("Icon label outline", new BMessage(kMsgOutline));
+	fOutline = new BCheckBox(B_TRANSLATE("Icon label outline"),
+		new BMessage(kMsgOutline));
 	fPicker = new BColorControl(BPoint(0, 0), B_CELLS_32x8, 8.0f, "color",
 		new BMessage(kMsgColor));
 
@@ -995,10 +1010,10 @@ WallpaperView::AttachedToWindow()
 		}
 		fImagePanel = new BFilePanel(B_OPEN_PANEL, new BMessenger(this), &ref,
 			B_FILE_NODE, false, NULL, &fImageFilter);
-		fImagePanel->SetButtonLabel(B_DEFAULT_BUTTON, "Select");
+		fImagePanel->SetButtonLabel(B_DEFAULT_BUTTON, B_TRANSLATE("Select"));
 		fFolderPanel = new BFilePanel(B_OPEN_PANEL, new BMessenger(this), NULL,
 			B_DIRECTORY_NODE, false, NULL);
-		fFolderPanel->SetButtonLabel(B_DEFAULT_BUTTON, "Select");
+		fFolderPanel->SetButtonLabel(B_DEFAULT_BUTTON, B_TRANSLATE("Select"));
 	}
 	_Targets();
 }
@@ -1067,8 +1082,9 @@ WallpaperView::_AddRecent(const char* path)
 	message->AddInt32("scope", kScopeFolder);
 	message->AddString("path", path);
 	BPath folder(path);
-	BString label("Folder: ");
-	label << (folder.InitCheck() == B_OK ? folder.Leaf() : path);
+	BString label(B_TRANSLATE("Folder: %folder%"));
+	label.ReplaceFirst("%folder%",
+		folder.InitCheck() == B_OK ? folder.Leaf() : path);
 	fWorkspaceMenu->AddItem(new BMenuItem(label.String(), message));
 	fRecent.push_back(path);
 }
@@ -1106,9 +1122,9 @@ WallpaperView::_FillImageMenu()
 	// The menu message is delivered while the popup is still tracking.
 	// Removing items there frees the item the menu is using, and the
 	// window stops taking clicks. Items stay; the mark moves.
-	const char* noneLabel = "None";
+	const char* noneLabel = B_TRANSLATE("None");
 	if (fModule != NULL && !fModule->IsDesktop())
-		noneLabel = "Default";
+		noneLabel = B_TRANSLATE("Default");
 	const char* selected = fModule != NULL ? fModule->Path() : "";
 	if (selected == NULL)
 		selected = "";
@@ -1119,7 +1135,7 @@ WallpaperView::_FillImageMenu()
 		fImageMenu->AddItem(new BMenuItem(noneLabel, none));
 		fImageMenu->AddSeparatorItem();
 		fImageMenu->AddSeparatorItem();
-		fImageMenu->AddItem(new BMenuItem("Other" B_UTF8_ELLIPSIS,
+		fImageMenu->AddItem(new BMenuItem(B_TRANSLATE("Other" B_UTF8_ELLIPSIS),
 			new BMessage(kMsgOtherImage)));
 	} else if (fImageMenu->ItemAt(0) != NULL)
 		fImageMenu->ItemAt(0)->SetLabel(noneLabel);
@@ -1356,10 +1372,12 @@ WallpaperView::MessageReceived(BMessage* message)
 					path.Path());
 				Apply();
 				if (status != B_OK) {
-					BString text("Could not open that folder.\n");
-					text << strerror(status);
-					BAlert* alert = new BAlert("Settings", text.String(),
-						"OK", NULL, NULL, B_WIDTH_AS_USUAL, B_WARNING_ALERT);
+					BString text(B_TRANSLATE("Could not open that folder.\n"
+						"%error%"));
+					text.ReplaceFirst("%error%", strerror(status));
+					BAlert* alert = new BAlert(B_TRANSLATE("Settings"),
+						text.String(), B_TRANSLATE("OK"), NULL, NULL,
+						B_WIDTH_AS_USUAL, B_WARNING_ALERT);
 					alert->Go(NULL);
 				}
 			} else {
@@ -1390,10 +1408,12 @@ WallpaperView::MessageReceived(BMessage* message)
 			status_t status = B_OK;
 			if (message->FindInt32("error", &status) == B_OK
 				&& status != B_OK) {
-				BString text("Could not open that folder.\n");
-				text << strerror(status);
-				BAlert* alert = new BAlert("Settings", text.String(), "OK",
-					NULL, NULL, B_WIDTH_AS_USUAL, B_WARNING_ALERT);
+				BString text(B_TRANSLATE("Could not open that folder.\n"
+					"%error%"));
+				text.ReplaceFirst("%error%", strerror(status));
+				BAlert* alert = new BAlert(B_TRANSLATE("Settings"),
+					text.String(), B_TRANSLATE("OK"), NULL, NULL,
+					B_WIDTH_AS_USUAL, B_WARNING_ALERT);
 				alert->Go(NULL);
 			}
 			break;
@@ -1911,8 +1931,17 @@ WallpaperModule::_Changed()
 }
 
 
-void
-register_wallpaper_page(SettingsManager& manager)
+// The add-on settings_wallpaper (distro/settings/ModuleAPI.md): every
+// Settings page is an add-on of its own.
+extern "C" _EXPORT int32
+settings_api_version()
 {
-	manager.Add(new WallpaperModule());
+	return kSettingsApiVersion;
+}
+
+
+extern "C" _EXPORT SettingsModule*
+instantiate_settings_module()
+{
+	return new WallpaperModule();
 }

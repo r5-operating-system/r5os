@@ -1,0 +1,313 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_gamecontrollers\nLanguage: de\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Press the d-pad down"
+msgstr "Steuerkreuz nach unten drücken"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Push the right stick down"
+msgstr "Rechten Stick nach unten drücken"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Pull %name%, the left trigger"
+msgstr "%name% ziehen, den linken Trigger"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "This controller cannot be opened."
+msgstr "Dieser Controller kann nicht geöffnet werden."
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Your own setup"
+msgstr "Eigene Belegung"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Automatic"
+msgstr "Automatisch"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Resistance"
+msgstr "Widerstand"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Press the d-pad up"
+msgstr "Steuerkreuz nach oben drücken"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Cancel"
+msgstr "Abbrechen"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Button labels"
+msgstr "Tastenbeschriftung"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Vendor %vendor% · Product %product%"
+msgstr "Hersteller %vendor% · Produkt %product%"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Triggers"
+msgstr "Trigger"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Open Bluetooth…"
+msgstr "Bluetooth öffnen…"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Push the left stick down"
+msgstr "Linken Stick nach unten drücken"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Set up buttons"
+msgstr "Tasten belegen"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Trigger feedback"
+msgstr "Trigger-Rückmeldung"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Starts at"
+msgstr "Beginnt bei"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "One second, both motors."
+msgstr "Eine Sekunde, beide Motoren."
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Press the d-pad to the left"
+msgstr "Steuerkreuz nach links drücken"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Set up buttons…"
+msgstr "Tasten belegen…"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Press the left stick in"
+msgstr "Linken Stick eindrücken"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Skip a control your controller does not have."
+msgstr "Überspringen Sie ein Bedienelement, das Ihr Controller nicht hat."
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Test your controllers and set up their buttons"
+msgstr "Controller testen und ihre Tasten belegen"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Game controllers"
+msgstr "Gamecontroller"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Pull %name%, the right trigger"
+msgstr "%name% ziehen, den rechten Trigger"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Press %name%, the right shoulder button"
+msgstr "%name% drücken, die rechte Schultertaste"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Press Select"
+msgstr "Select drücken"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "No controller"
+msgstr "Kein Controller"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Vibration"
+msgstr "Vibration"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Cross (✕)"
+msgstr "Kreuz (✕)"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Push the right stick to the right"
+msgstr "Rechten Stick nach rechts drücken"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "pull L2 or R2 to feel it"
+msgstr "L2 oder R2 ziehen, um es zu spüren"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Effect"
+msgstr "Effekt"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Triangle (△)"
+msgstr "Dreieck (△)"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Push the left stick to the right"
+msgstr "Linken Stick nach rechts drücken"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Press the right stick in"
+msgstr "Rechten Stick eindrücken"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Strength"
+msgstr "Stärke"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Press %name%, the right face button"
+msgstr "%name% drücken, die rechte Aktionstaste"
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "game controller gamepad joystick joypad test buttons layout mapping setup playstation xbox nintendo sega"
+msgstr "game controller gamepad joystick joypad test buttons layout mapping setup playstation xbox nintendo sega spiel controller tasten belegung testen einrichten"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Circle (○)"
+msgstr "Kreis (○)"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Press %name%, the lower face button"
+msgstr "%name% drücken, die untere Aktionstaste"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Trigger click"
+msgstr "Trigger-Klick"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Layout"
+msgstr "Belegung"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Press %name%, the upper face button"
+msgstr "%name% drücken, die obere Aktionstaste"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Press %name%, the left shoulder button"
+msgstr "%name% drücken, die linke Schultertaste"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Square (□)"
+msgstr "Quadrat (□)"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Connected"
+msgstr "Verbunden"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Step %number% of %count%"
+msgstr "Schritt %number% von %count%"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Plug one in with USB, or pair one in Bluetooth."
+msgstr "Schließen Sie einen per USB an oder koppeln Sie einen über Bluetooth."
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Off"
+msgstr "Aus"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Choose a layout, or set up the buttons one by one."
+msgstr "Wählen Sie eine Belegung oder belegen Sie die Tasten einzeln."
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Press %name%"
+msgstr "%name% drücken"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Press the d-pad to the right"
+msgstr "Steuerkreuz nach rechts drücken"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Skip"
+msgstr "Überspringen"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Strong"
+msgstr "Stark"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Bluetooth"
+msgstr "Bluetooth"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Motion"
+msgstr "Bewegung"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Rumble"
+msgstr "Rumble"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Press Start"
+msgstr "Start drücken"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Light"
+msgstr "Leicht"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Press a button or move a stick: it lights up here."
+msgstr "Drücken Sie eine Taste oder bewegen Sie einen Stick: Hier leuchtet es auf."
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Press %name%, the left face button"
+msgstr "%name% drücken, die linke Aktionstaste"

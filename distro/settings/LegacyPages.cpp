@@ -8,11 +8,11 @@
 
 #include "LegacyPages.h"
 
-#include "SettingsManager.h"
 #include "SettingsModule.h"
 
 #include <Alert.h>
 #include <Button.h>
+#include <Catalog.h>
 #include <Control.h>
 #include <GroupView.h>
 #include <LayoutBuilder.h>
@@ -20,6 +20,10 @@
 #include <StringView.h>
 
 #include <string.h>
+
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "Settings: Launcher pages"
 
 
 class LegacyPage;
@@ -84,9 +88,9 @@ LegacyPage::LegacyPage(LegacyModule* module, SettingsContext* context)
 	fContext(context)
 {
 	BStringView* body = new BStringView("legacy",
-		"Opens the existing program in its own window.");
+		B_TRANSLATE("Opens the existing program in its own window."));
 	body->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
-	BButton* open = new BButton("open", "Open", new BMessage(kMsgOpenLegacy));
+	BButton* open = new BButton("open", B_TRANSLATE("Open"), new BMessage(kMsgOpenLegacy));
 	BLayoutBuilder::Group<>(this)
 		.Add(body)
 		.Add(open)
@@ -116,9 +120,10 @@ LegacyPage::MessageReceived(BMessage* message)
 	}
 	status_t status = fContext->LaunchLegacy(fModule->Signature());
 	if (status != B_OK) {
-		BString error("Could not open ");
-		error << fModule->Name() << ".\n" << strerror(status);
-		BAlert* alert = new BAlert("Settings", error.String(), "OK",
+		BString error(B_TRANSLATE("Could not open %name%."));
+		error.ReplaceFirst("%name%", fModule->Name());
+		error << "\n" << strerror(status);
+		BAlert* alert = new BAlert("Settings", error.String(), B_TRANSLATE("OK"),
 			NULL, NULL, B_WIDTH_AS_USUAL, B_WARNING_ALERT);
 		alert->Go(NULL);
 	}
@@ -178,39 +183,11 @@ LegacyModule::RevertSettings(SettingsContext* context)
 }
 
 
-void
-register_legacy_pages(SettingsManager& manager)
+SettingsModule*
+create_legacy_module(const char* identifier, const char* name,
+	const char* category, const char* description, const char* keywords,
+	const char* signature)
 {
-	struct entry {
-		const char* id;
-		const char* name;
-		const char* category;
-		const char* description;
-		const char* keywords;
-		const char* signature;
-	};
-	const entry pages[] = {
-		{ "sound", "Sound", "system",
-			"Event sounds and the output device.",
-			"audio volume media",
-			"application/x-vnd.Haiku-Sounds" },
-		{ "keyboard", "Keyboard", "devices",
-			"Keymap and the typing repeat rate.",
-			"keymap layout keys",
-			"application/x-vnd.Haiku-Keymap" },
-		{ "mouse", "Mouse", "devices",
-			"Mouse speed, focus, and the scroll wheel.",
-			"input pointer focus",
-			"application/x-vnd.Haiku-Input" },
-		{ "printers", "Printers", "devices",
-			"Printers and the print queue.",
-			"print printer",
-			"application/x-vnd.Be-PRNT" }
-		// Users and Accounts is a page of its own now (AccountsModule.cpp).
-	};
-	for (uint32 i = 0; i < sizeof(pages) / sizeof(pages[0]); i++) {
-		manager.Add(new LegacyModule(pages[i].id, pages[i].name,
-			pages[i].category, pages[i].description, pages[i].keywords,
-			pages[i].signature));
-	}
+	return new LegacyModule(identifier, name, category, description, keywords,
+		signature);
 }

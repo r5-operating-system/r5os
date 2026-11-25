@@ -1,0 +1,18 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_wifi\nLanguage: de\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+#, fuzzy
+msgctxt "Settings: Wi-Fi"
+msgid "wifi wireless wlan ssid password network"
+msgstr "wifi wireless wlan ssid password network drahtlos funknetz passwort kennwort netzwerk"
+
+#, fuzzy
+msgctxt "Settings: Wi-Fi"
+msgid "Connect to wireless networks"
+msgstr "Mit Drahtlosnetzwerken verbinden"
+
+#, fuzzy
+msgctxt "Settings: Wi-Fi"
+msgid "Wi-Fi"
+msgstr "Wi-Fi"

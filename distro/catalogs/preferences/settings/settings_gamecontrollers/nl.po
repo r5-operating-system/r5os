@@ -1,0 +1,313 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_gamecontrollers\nLanguage: nl\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Press the d-pad down"
+msgstr "Druk de d-pad omlaag"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Push the right stick down"
+msgstr "Duw de rechterstick omlaag"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Pull %name%, the left trigger"
+msgstr "Trek %name% in, de linkertrekker"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "This controller cannot be opened."
+msgstr "Deze controller kan niet worden geopend."
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Your own setup"
+msgstr "Eigen indeling"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Automatic"
+msgstr "Automatisch"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Resistance"
+msgstr "Weerstand"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Press the d-pad up"
+msgstr "Druk de d-pad omhoog"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Cancel"
+msgstr "Annuleren"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Button labels"
+msgstr "Knoplabels"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Vendor %vendor% · Product %product%"
+msgstr "Leverancier %vendor% · Product %product%"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Triggers"
+msgstr "Trekkers"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Open Bluetooth…"
+msgstr "Bluetooth openen…"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Push the left stick down"
+msgstr "Duw de linkerstick omlaag"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Set up buttons"
+msgstr "Knoppen instellen"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Trigger feedback"
+msgstr "Trekkerfeedback"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Starts at"
+msgstr "Begint bij"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "One second, both motors."
+msgstr "Eén seconde, beide motoren."
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Press the d-pad to the left"
+msgstr "Druk de d-pad naar links"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Set up buttons…"
+msgstr "Knoppen instellen…"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Press the left stick in"
+msgstr "Druk de linkerstick in"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Skip a control your controller does not have."
+msgstr "Sla een bediening over die je controller niet heeft."
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Test your controllers and set up their buttons"
+msgstr "Test je controllers en stel hun knoppen in"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Game controllers"
+msgstr "Gamecontrollers"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Pull %name%, the right trigger"
+msgstr "Trek %name% in, de rechtertrekker"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Press %name%, the right shoulder button"
+msgstr "Druk op %name%, de rechterschouderknop"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Press Select"
+msgstr "Druk op Select"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "No controller"
+msgstr "Geen controller"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Vibration"
+msgstr "Trillen"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Cross (✕)"
+msgstr "Kruis (✕)"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Push the right stick to the right"
+msgstr "Duw de rechterstick naar rechts"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "pull L2 or R2 to feel it"
+msgstr "trek L2 of R2 in om het te voelen"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Effect"
+msgstr "Effect"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Triangle (△)"
+msgstr "Driehoek (△)"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Push the left stick to the right"
+msgstr "Duw de linkerstick naar rechts"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Press the right stick in"
+msgstr "Druk de rechterstick in"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Strength"
+msgstr "Sterkte"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Press %name%, the right face button"
+msgstr "Druk op %name%, de rechter actieknop"
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "game controller gamepad joystick joypad test buttons layout mapping setup playstation xbox nintendo sega"
+msgstr "game controller gamepad joystick joypad test buttons layout mapping setup playstation xbox nintendo sega spelcontroller knoppen indeling instellen testen"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Circle (○)"
+msgstr "Cirkel (○)"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Press %name%, the lower face button"
+msgstr "Druk op %name%, de onderste actieknop"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Trigger click"
+msgstr "Trekkerklik"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Layout"
+msgstr "Indeling"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Press %name%, the upper face button"
+msgstr "Druk op %name%, de bovenste actieknop"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Press %name%, the left shoulder button"
+msgstr "Druk op %name%, de linkerschouderknop"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Square (□)"
+msgstr "Vierkant (□)"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Connected"
+msgstr "Verbonden"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Step %number% of %count%"
+msgstr "Stap %number% van %count%"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Plug one in with USB, or pair one in Bluetooth."
+msgstr "Sluit er een aan via USB, of koppel er een via Bluetooth."
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Off"
+msgstr "Uit"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Choose a layout, or set up the buttons one by one."
+msgstr "Kies een indeling, of stel de knoppen een voor een in."
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Press %name%"
+msgstr "Druk op %name%"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Press the d-pad to the right"
+msgstr "Druk de d-pad naar rechts"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Skip"
+msgstr "Overslaan"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Strong"
+msgstr "Sterk"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Bluetooth"
+msgstr "Bluetooth"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Motion"
+msgstr "Beweging"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Rumble"
+msgstr "Rommelen"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Press Start"
+msgstr "Druk op Start"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Light"
+msgstr "Licht"
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Press a button or move a stick: it lights up here."
+msgstr "Druk op een knop of beweeg een stick: die licht hier op."
+
+#, fuzzy
+msgctxt "Settings: Game controllers"
+msgid "Press %name%, the left face button"
+msgstr "Druk op %name%, de linker actieknop"

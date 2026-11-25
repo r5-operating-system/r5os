@@ -1,0 +1,79 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_virtualmemory\nLanguage: de\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#, fuzzy
+msgctxt "Settings: Virtual memory"
+msgid "Requested swap file size:"
+msgstr "Gewünschte Größe der Auslagerungsdatei:"
+
+#, fuzzy
+msgctxt "Settings: Virtual memory"
+msgid "The settings file could not be read. The defaults are shown; a change writes them."
+msgstr "Die Einstellungsdatei konnte nicht gelesen werden. Die Standardwerte werden angezeigt; eine Änderung schreibt sie."
+
+#. Fixed text (AGENTS.md): translate the meaning, keep it short
+#, fuzzy
+msgctxt "Settings: Virtual memory"
+msgid "Extra memory stored on disk"
+msgstr "Zusätzlicher Speicher auf dem Datenträger"
+
+#, fuzzy
+msgctxt "Settings: Virtual memory"
+msgid "Current swap:"
+msgstr "Aktuelle Auslagerung:"
+
+#, fuzzy
+msgctxt "Settings: Virtual memory"
+msgid "Virtual memory"
+msgstr "Virtueller Speicher"
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+#, fuzzy
+msgctxt "Settings: Virtual memory"
+msgid "swap virtual memory disk"
+msgstr "swap virtual memory disk auslagerung auslagerungsdatei virtueller speicher datenträger festplatte"
+
+#, fuzzy
+msgctxt "Settings: Virtual memory"
+msgid "The volume in the settings file was not found. The boot volume is shown; a change writes it."
+msgstr "Das Laufwerk aus der Einstellungsdatei wurde nicht gefunden. Das Startlaufwerk wird angezeigt; eine Änderung schreibt es."
+
+#, fuzzy
+msgctxt "Settings: Virtual memory"
+msgid "Automatic swap management"
+msgstr "Auslagerung automatisch verwalten"
+
+#, fuzzy
+msgctxt "Settings: Virtual memory"
+msgid "volume"
+msgstr "Laufwerk"
+
+#, fuzzy
+msgctxt "Settings: Virtual memory"
+msgid "Enable virtual memory"
+msgstr "Virtuellen Speicher aktivieren"
+
+#, fuzzy
+msgctxt "Settings: Virtual memory"
+msgid "Turn off"
+msgstr "Ausschalten"
+
+#, fuzzy
+msgctxt "Settings: Virtual memory"
+msgid "Disabling virtual memory will have unwanted effects on system stability once the memory is used up.\nVirtual memory does not affect system performance until this point is reached.\n\nAre you really sure you want to turn it off?"
+msgstr "Das Abschalten des virtuellen Speichers beeinträchtigt die Systemstabilität, sobald der Arbeitsspeicher voll ist.\nBis zu diesem Punkt hat der virtuelle Speicher keinen Einfluss auf die Systemleistung.\n\nMöchten Sie ihn wirklich ausschalten?"
+
+#, fuzzy
+msgctxt "Settings: Virtual memory"
+msgid "Use volume:"
+msgstr "Laufwerk verwenden:"
+
+#, fuzzy
+msgctxt "Settings: Virtual memory"
+msgid "Changes take effect on the next start."
+msgstr "Änderungen wirken beim nächsten Start."
+
+#, fuzzy
+msgctxt "Settings: Virtual memory"
+msgid "Keep enabled"
+msgstr "Aktiviert lassen"

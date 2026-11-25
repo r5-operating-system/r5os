@@ -1,0 +1,31 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_printers\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+msgctxt "Settings: Launcher pages"
+msgid "Opens the existing program in its own window."
+msgstr ""
+
+msgctxt "Settings: Printers"
+msgid "Printers"
+msgstr ""
+
+msgctxt "Settings: Printers"
+msgid "Printers and the print queue."
+msgstr ""
+
+msgctxt "Settings: Launcher pages"
+msgid "OK"
+msgstr ""
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+msgctxt "Settings: Printers"
+msgid "print printer"
+msgstr ""
+
+msgctxt "Settings: Launcher pages"
+msgid "Could not open %name%."
+msgstr ""
+
+msgctxt "Settings: Launcher pages"
+msgid "Open"
+msgstr ""

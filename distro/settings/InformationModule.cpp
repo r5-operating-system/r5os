@@ -6,10 +6,8 @@
  */
 
 
-#include "InformationModule.h"
 
 #include "SettingsFont.h"
-#include "SettingsManager.h"
 #include "SettingsMessages.h"
 #include "SettingsModule.h"
 
@@ -17,6 +15,7 @@
 #include <Bitmap.h>
 #include <Button.h>
 #include <Card.h>
+#include <Catalog.h>
 #include <Clipboard.h>
 #include <ControlLook.h>
 #include <Font.h>
@@ -30,6 +29,7 @@
 #include <Roster.h>
 #include <Screen.h>
 #include <String.h>
+#include <StringFormat.h>
 #include <StringView.h>
 #include <TextControl.h>
 #include <Volume.h>
@@ -46,6 +46,10 @@
 
 #include <r5_gpu.h>
 #include <system/r5_os_version.h>
+
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "Settings: Information"
 
 
 #ifndef R5_OS_BUILD_DATE
@@ -213,6 +217,32 @@ cpu_counts(int32& cores, int32& threads)
 
 
 static BString
+count_text(const char* pattern, int64 count)
+{
+	BStringFormat format(pattern);
+	BString text;
+	if (format.Format(text, count) != B_OK)
+		text << count;
+	return text;
+}
+
+
+static BString
+core_thread_text(int32 cores, int32 threads)
+{
+	BString threadText = count_text(B_TRANSLATE(
+		"{0, plural, one{# thread} other{# threads}}"), threads);
+	if (cores <= 0)
+		return threadText;
+	BString text(B_TRANSLATE("%cores%, %threads%"));
+	text.ReplaceFirst("%cores%", count_text(B_TRANSLATE(
+		"{0, plural, one{# core} other{# cores}}"), cores).String());
+	text.ReplaceFirst("%threads%", threadText.String());
+	return text;
+}
+
+
+static BString
 frequency_text()
 {
 	cpu_info cpu;
@@ -253,9 +283,14 @@ version_text()
 	int32 dev = version.FindLast("-dev");
 	if (dev >= 0 && dev == version.Length() - 4)
 		version.Truncate(dev);
-	BString text("R5 Operating System ");
-	text << version << " · Build " << (int32)R5_OS_BUILD << " · ";
-	text << architecture_name();
+	BString text(B_TRANSLATE_COMMENT(
+		"R5 Operating System %version% · Build %build% · %architecture%",
+		"Keep the product name R5 Operating System"));
+	BString build;
+	build << (int32)R5_OS_BUILD;
+	text.ReplaceFirst("%version%", version.String());
+	text.ReplaceFirst("%build%", build.String());
+	text.ReplaceFirst("%architecture%", architecture_name().String());
 	return text;
 }
 
@@ -266,7 +301,7 @@ host_name()
 	char host[64];
 	memset(host, 0, sizeof(host));
 	if (gethostname(host, sizeof(host) - 1) != 0 || host[0] == '\0')
-		return BString("This computer");
+		return BString(B_TRANSLATE("This computer"));
 	return BString(host);
 }
 
@@ -338,7 +373,7 @@ graphics_name()
 	BScreen screen;
 	if (!screen.IsValid() || screen.GetDeviceInfo(&device) != B_OK
 		|| device.name[0] == '\0')
-		return BString("Unknown");
+		return BString(B_TRANSLATE("Unknown"));
 	return BString(device.name);
 }
 
@@ -348,7 +383,7 @@ graphics_detail()
 {
 	int fd = open("/dev/gpu/radeon_hd/0", O_RDWR);
 	if (fd < 0)
-		return "Drawn by the processor (software)";
+		return B_TRANSLATE("Drawn by the processor (software)");
 	r5_gpu_info info;
 	memset(&info, 0, sizeof(info));
 	info.size = sizeof(info);
@@ -357,9 +392,9 @@ graphics_detail()
 	close(fd);
 	if (ok && (info.capabilities & R5_GPU_CAP_AVAILABLE) != 0
 		&& (info.capabilities & R5_GPU_CAP_LOST) == 0) {
-		return "Hardware accelerated";
+		return B_TRANSLATE("Hardware accelerated");
 	}
-	return "Drawn by the processor (software)";
+	return B_TRANSLATE("Drawn by the processor (software)");
 }
 
 
@@ -368,10 +403,10 @@ display_value()
 {
 	BScreen screen;
 	if (!screen.IsValid())
-		return BString("Unknown");
+		return BString(B_TRANSLATE("Unknown"));
 	display_mode mode;
 	if (screen.GetMode(&mode) != B_OK)
-		return BString("Unknown");
+		return BString(B_TRANSLATE("Unknown"));
 	BString text;
 	text.SetToFormat("%" B_PRIu16 " × %" B_PRIu16, mode.virtual_width,
 		mode.virtual_height);
@@ -402,7 +437,7 @@ running_value()
 {
 	int64 seconds = system_time() / 1000000;
 	if (seconds < 60)
-		return BString("Less than a minute");
+		return BString(B_TRANSLATE("Less than a minute"));
 	int64 minutes = seconds / 60;
 	int64 hours = minutes / 60;
 	minutes %= 60;
@@ -410,22 +445,32 @@ running_value()
 	hours %= 24;
 	BString text;
 	if (days > 0) {
-		text.SetToFormat("%" B_PRId64 " day%s", days, days == 1 ? "" : "s");
+		text = count_text(B_TRANSLATE(
+			"{0, plural, one{# day} other{# days}}"), days);
 		if (hours > 0) {
-			text << ", " << hours << (hours == 1 ? " hour" : " hours");
+			BString both(B_TRANSLATE("%days%, %hours%"));
+			both.ReplaceFirst("%days%", text.String());
+			both.ReplaceFirst("%hours%", count_text(B_TRANSLATE(
+				"{0, plural, one{# hour} other{# hours}}"), hours).String());
+			text = both;
 		}
 		return text;
 	}
 	if (hours > 0) {
-		text.SetToFormat("%" B_PRId64 " hour%s", hours, hours == 1 ? "" : "s");
+		text = count_text(B_TRANSLATE(
+			"{0, plural, one{# hour} other{# hours}}"), hours);
 		if (minutes > 0) {
-			text << ", " << minutes
-				<< (minutes == 1 ? " minute" : " minutes");
+			BString both(B_TRANSLATE("%hours%, %minutes%"));
+			both.ReplaceFirst("%hours%", text.String());
+			both.ReplaceFirst("%minutes%", count_text(B_TRANSLATE(
+				"{0, plural, one{# minute} other{# minutes}}"), minutes)
+				.String());
+			text = both;
 		}
 		return text;
 	}
-	text.SetToFormat("%" B_PRId64 " minute%s", minutes,
-		minutes == 1 ? "" : "s");
+	text = count_text(B_TRANSLATE(
+		"{0, plural, one{# minute} other{# minutes}}"), minutes);
 	return text;
 }
 
@@ -441,15 +486,16 @@ running_since()
 	localtime_r(&now, &today);
 	char clock[16];
 	strftime(clock, sizeof(clock), "%H:%M", &localTime);
-	BString text("Since ");
-	text << clock;
+	BString text;
 	if (localTime.tm_year == today.tm_year && localTime.tm_yday == today.tm_yday)
-		text << " today";
+		text = B_TRANSLATE("Since %time% today");
 	else {
 		char day[40];
 		strftime(day, sizeof(day), "%d %b %Y", &localTime);
-		text << ", " << day;
+		text = B_TRANSLATE("Since %time%, %date%");
+		text.ReplaceFirst("%date%", day);
 	}
+	text.ReplaceFirst("%time%", clock);
 	return text;
 }
 
@@ -459,12 +505,12 @@ kernel_text()
 {
 	system_info info;
 	if (get_system_info(&info) != B_OK)
-		return BString("Kernel");
+		return BString(B_TRANSLATE("Kernel"));
 	const char* name = info.kernel_name;
 	if (strncmp(name, "kernel_", 7) == 0)
 		name += 7;
-	BString text("Kernel ");
-	text << name;
+	BString text(B_TRANSLATE("Kernel %name%"));
+	text.ReplaceFirst("%name%", name);
 	if (info.kernel_build_date[0] != '\0') {
 		text << ", ";
 		text << info.kernel_build_date;
@@ -480,11 +526,12 @@ kernel_text()
 static BString
 image_text()
 {
-	BString text("Image built ");
-	if (R5_OS_BUILD_DATE[0] != '\0')
-		text << R5_OS_BUILD_DATE;
-	else
-		text << "unknown";
+	BString text;
+	if (R5_OS_BUILD_DATE[0] != '\0') {
+		text = B_TRANSLATE("Image built %date%");
+		text.ReplaceFirst("%date%", R5_OS_BUILD_DATE);
+	} else
+		text = B_TRANSLATE("Image built unknown");
 	return text;
 }
 
@@ -911,7 +958,7 @@ DeviceCard::Draw(BRect update)
 	linkFont.GetHeight(&linkHeight);
 	lineFont.GetHeight(&lineHeight);
 
-	BString link("Rename…");
+	BString link(B_TRANSLATE("Rename…"));
 	float linkWidth = linkFont.StringWidth(link.String());
 	float nameRoom = room - u * 10.0f - linkWidth;
 	if (nameRoom < u * 8.0f)
@@ -1003,7 +1050,7 @@ FooterLine::Draw(BRect update)
 	SetHighColor(quiet_color(140));
 	BString leftText(kernel_text());
 	leftText << " · " << image_text();
-	const char* linkText = "What's new in this build";
+	const char* linkText = B_TRANSLATE("What's new in this build");
 	float linkWidth = link.StringWidth(linkText);
 	float room = Bounds().Width() - linkWidth - u * 12.0f;
 	if (room < u * 8.0f)
@@ -1070,17 +1117,17 @@ private:
 
 RenameWindow::RenameWindow(const char* name, const BMessenger& target)
 	:
-	BWindow(BRect(0, 0, 360, 120), "Rename", B_TITLED_WINDOW,
+	BWindow(BRect(0, 0, 360, 120), B_TRANSLATE("Rename"), B_TITLED_WINDOW,
 		B_NOT_RESIZABLE | B_AUTO_UPDATE_SIZE_LIMITS | B_CLOSE_ON_ESCAPE),
 	fName(NULL),
 	fError(NULL),
 	fTarget(target)
 {
-	fName = new BTextControl("name", "Name:", name, NULL);
+	fName = new BTextControl("name", B_TRANSLATE("Name:"), name, NULL);
 	fError = new BStringView("error", "");
-	BButton* cancel = new BButton("cancel", "Cancel",
+	BButton* cancel = new BButton("cancel", B_TRANSLATE("Cancel"),
 		new BMessage(B_QUIT_REQUESTED));
-	BButton* rename = new BButton("rename", "Rename",
+	BButton* rename = new BButton("rename", B_TRANSLATE("Rename"),
 		new BMessage(kMsgApplyName));
 	BLayoutBuilder::Group<>(this, B_VERTICAL, B_USE_SMALL_SPACING)
 		.SetInsets(B_USE_WINDOW_SPACING)
@@ -1116,8 +1163,8 @@ RenameWindow::_Submit()
 {
 	const char* name = fName->Text();
 	if (!name_ok(name)) {
-		fError->SetText("Use letters, digits and -, up to 63, "
-			"not starting or ending with -.");
+		fError->SetText(B_TRANSLATE("Use letters, digits and -, up to 63, "
+			"not starting or ending with -."));
 		return;
 	}
 	BMessage apply(kMsgApplyName);
@@ -1181,35 +1228,30 @@ InformationView::InformationView(SettingsContext* context)
 	SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
 	float u = unit();
 	fCanRename = fContext != NULL && fContext->AdminChangeAllowed();
-	BButton* copy = new BButton("copy", "Copy details", new BMessage(kMsgCopy));
+	BButton* copy = new BButton("copy", B_TRANSLATE("Copy details"),
+		new BMessage(kMsgCopy));
 	fDevice = new DeviceCard(copy);
 	fDevice->SetName(host_name().String(), fCanRename);
 
-	fProcessor = new InfoTile("processor", "Processor",
+	fProcessor = new InfoTile("processor", B_TRANSLATE("Processor"),
 		"application/x-vnd.Haiku-ActivityMonitor");
-	fMemory = new InfoTile("memory", "Memory",
+	fMemory = new InfoTile("memory", B_TRANSLATE("Memory"),
 		"application/x-vnd.Haiku-VirtualMemory");
-	fStorage = new InfoTile("storage", "Storage",
+	fStorage = new InfoTile("storage", B_TRANSLATE("Storage"),
 		"application/x-vnd.Haiku-DriveSetup");
-	fGraphics = new InfoTile("graphics", "Graphics",
+	fGraphics = new InfoTile("graphics", B_TRANSLATE("Graphics"),
 		"application/x-vnd.Haiku-Devices");
-	fDisplay = new InfoTile("display", "Display",
+	fDisplay = new InfoTile("display", B_TRANSLATE("Display"),
 		"application/x-vnd.Haiku-Screen");
-	fRunning = new InfoTile("running", "Running for",
+	fRunning = new InfoTile("running", B_TRANSLATE("Running for"),
 		"application/x-vnd.Haiku-Clock");
 
 	int32 cores = 0;
 	int32 threads = 0;
 	cpu_counts(cores, threads);
 	BString processorDetail;
-	if (cores > 0) {
-		processorDetail.SetToFormat("%" B_PRId32 " core%s, %" B_PRId32
-			" thread%s", cores, cores == 1 ? "" : "s", threads,
-			threads == 1 ? "" : "s");
-	} else if (threads > 0) {
-		processorDetail.SetToFormat("%" B_PRId32 " thread%s", threads,
-			threads == 1 ? "" : "s");
-	}
+	if (cores > 0 || threads > 0)
+		processorDetail = core_thread_text(cores, threads);
 	BString speed = frequency_text();
 	if (speed.Length() > 0) {
 		if (processorDetail.Length() > 0)
@@ -1218,15 +1260,17 @@ InformationView::InformationView(SettingsContext* context)
 	}
 	BString brand = cpu_brand();
 	if (brand.Length() == 0)
-		brand = "Unknown";
+		brand = B_TRANSLATE("Unknown");
 	fProcessor->SetLines(brand.String(), processorDetail.String(), -1.0f);
 
 	uint64 installed = 0;
 	uint64 used = 0;
 	memory_numbers(installed, used);
-	fMemoryValue = installed > 0 ? format_bytes(installed) : "Unknown";
-	fMemoryDetail = used > 0 ? format_bytes(used) : "0 MB";
-	fMemoryDetail << " in use";
+	fMemoryValue = installed > 0 ? format_bytes(installed)
+		: BString(B_TRANSLATE("Unknown"));
+	fMemoryDetail = B_TRANSLATE("%size% in use");
+	fMemoryDetail.ReplaceFirst("%size%",
+		used > 0 ? format_bytes(used).String() : "0 MB");
 	float memoryBar = installed > 0 ? (float)used / (float)installed : 0.0f;
 	fMemory->SetLines(fMemoryValue.String(), fMemoryDetail.String(),
 		memoryBar);
@@ -1241,10 +1285,10 @@ InformationView::InformationView(SettingsContext* context)
 		named << " · " << storageValue;
 		storageValue = named;
 	}
-	BString storageDetail(format_bytes(stored));
-	storageDetail << " used · ";
-	storageDetail << format_bytes(capacity > stored ? capacity - stored : 0);
-	storageDetail << " free";
+	BString storageDetail(B_TRANSLATE("%used% used · %free% free"));
+	storageDetail.ReplaceFirst("%used%", format_bytes(stored).String());
+	storageDetail.ReplaceFirst("%free%",
+		format_bytes(capacity > stored ? capacity - stored : 0).String());
 	float storageBar = capacity > 0 ? (float)stored / (float)capacity : 0.0f;
 	fStorage->SetLines(storageValue.String(), storageDetail.String(),
 		storageBar);
@@ -1270,7 +1314,7 @@ InformationView::InformationView(SettingsContext* context)
 	// SPDX-SnippetBegin
 	// SPDX-License-Identifier: MIT
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
-	BButton* cpuDetails = new BButton("cpu_details", "CPU details…",
+	BButton* cpuDetails = new BButton("cpu_details", B_TRANSLATE("CPU details…"),
 		new BMessage(kMsgCpuDetails));
 	fProcessor->SetActionButton(cpuDetails);
 	// SPDX-SnippetEnd
@@ -1432,9 +1476,10 @@ InformationView::_Reload()
 	uint64 installed = 0;
 	uint64 used = 0;
 	memory_numbers(installed, used);
-	fMemoryValue = installed > 0 ? format_bytes(installed) : "Unknown";
-	fMemoryDetail = format_bytes(used);
-	fMemoryDetail << " in use";
+	fMemoryValue = installed > 0 ? format_bytes(installed)
+		: BString(B_TRANSLATE("Unknown"));
+	fMemoryDetail = B_TRANSLATE("%size% in use");
+	fMemoryDetail.ReplaceFirst("%size%", format_bytes(used).String());
 	float memoryBar = installed > 0 ? (float)used / (float)installed : 0.0f;
 	if (fMemory != NULL) {
 		fMemory->SetLines(fMemoryValue.String(), fMemoryDetail.String(),
@@ -1455,8 +1500,9 @@ InformationView::_ApplyName(const char* name)
 	if (!fCanRename || !name_ok(name))
 		return;
 	if (sethostname(name, strlen(name)) != 0) {
-		BAlert* alert = new BAlert("Rename", "The name could not be saved.",
-			"OK", NULL, NULL, B_WIDTH_AS_USUAL, B_WARNING_ALERT);
+		BAlert* alert = new BAlert(B_TRANSLATE("Rename"),
+			B_TRANSLATE("The name could not be saved."), B_TRANSLATE("OK"),
+			NULL, NULL, B_WIDTH_AS_USUAL, B_WARNING_ALERT);
 		alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
 		alert->Go(NULL);
 		return;
@@ -1465,43 +1511,64 @@ InformationView::_ApplyName(const char* name)
 }
 
 
+static void
+add_copy_line(BString& text, const char* format, const char* value)
+{
+	BString line(format);
+	line.ReplaceFirst("%value%", value);
+	text << line << "\n";
+}
+
+
 BString
 InformationView::_CopyText() const
 {
 	BString text;
-	text << "Computer: " << host_name() << "\n";
-	text << "System: " << version_text() << "\n";
-	text << "Processor: " << cpu_brand() << "\n";
+	add_copy_line(text, B_TRANSLATE("Computer: %value%"),
+		host_name().String());
+	add_copy_line(text, B_TRANSLATE("System: %value%"),
+		version_text().String());
+	add_copy_line(text, B_TRANSLATE("Processor: %value%"),
+		cpu_brand().String());
 	int32 cores = 0;
 	int32 threads = 0;
 	cpu_counts(cores, threads);
-	text << "Processor detail: ";
-	if (cores > 0)
-		text << cores << (cores == 1 ? " core, " : " cores, ");
-	text << threads << (threads == 1 ? " thread" : " threads");
+	BString processor = core_thread_text(cores, threads);
 	BString speed = frequency_text();
 	if (speed.Length() > 0)
-		text << " · " << speed;
-	text << "\n";
-	text << "Memory: " << fMemoryValue << "\n";
-	text << "Memory in use: " << fMemoryDetail << "\n";
+		processor << " · " << speed;
+	add_copy_line(text, B_TRANSLATE("Processor detail: %value%"),
+		processor.String());
+	add_copy_line(text, B_TRANSLATE("Memory: %value%"), fMemoryValue.String());
+	add_copy_line(text, B_TRANSLATE("Memory in use: %value%"),
+		fMemoryDetail.String());
 	BString volume;
 	uint64 capacity = 0;
 	uint64 stored = 0;
 	storage_numbers(volume, capacity, stored);
-	text << "Storage: ";
+	BString storage;
 	if (volume.Length() > 0)
-		text << volume << " · ";
-	text << format_bytes(capacity) << "\n";
-	text << "Storage used: " << format_bytes(stored) << " used · ";
-	text << format_bytes(capacity > stored ? capacity - stored : 0);
-	text << " free\n";
-	text << "Graphics: " << graphics_name() << "\n";
-	text << "Graphics detail: " << graphics_detail() << "\n";
-	text << "Display: " << display_value() << "\n";
-	text << "Display detail: " << display_detail() << "\n";
-	text << "Running for: " << fRunningValue << "\n";
-	text << "Running since: " << fRunningDetail << "\n";
+		storage << volume << " · ";
+	storage << format_bytes(capacity);
+	add_copy_line(text, B_TRANSLATE("Storage: %value%"), storage.String());
+	BString storageUsed(B_TRANSLATE("%used% used · %free% free"));
+	storageUsed.ReplaceFirst("%used%", format_bytes(stored).String());
+	storageUsed.ReplaceFirst("%free%",
+		format_bytes(capacity > stored ? capacity - stored : 0).String());
+	add_copy_line(text, B_TRANSLATE("Storage used: %value%"),
+		storageUsed.String());
+	add_copy_line(text, B_TRANSLATE("Graphics: %value%"),
+		graphics_name().String());
+	add_copy_line(text, B_TRANSLATE("Graphics detail: %value%"),
+		graphics_detail());
+	add_copy_line(text, B_TRANSLATE("Display: %value%"),
+		display_value().String());
+	add_copy_line(text, B_TRANSLATE("Display detail: %value%"),
+		display_detail().String());
+	add_copy_line(text, B_TRANSLATE("Running for: %value%"),
+		fRunningValue.String());
+	add_copy_line(text, B_TRANSLATE("Running since: %value%"),
+		fRunningDetail.String());
 	text << kernel_text() << "\n";
 	text << image_text();
 	return text;
@@ -1527,12 +1594,16 @@ public:
 	virtual						~InformationModule();
 
 	virtual	const char*			Identifier() const { return kModuleId; }
-	virtual	const char*			Name() const { return "Information"; }
+	virtual	const char*			Name() const { return B_TRANSLATE("Information"); }
 	virtual	const char*			Category() const { return "system"; }
 	virtual	const char*			Description() const
-		{ return "View system details"; }
+		{ return B_TRANSLATE_COMMENT("View system details",
+			"Fixed text (AGENTS.md): translate the meaning, keep it short"); }
 	virtual	const char*			Keywords() const
-		{ return "information device processor memory version build kernel"; }
+		{ return B_TRANSLATE_COMMENT(
+			"information device processor memory version build kernel",
+			"Search words, separated by spaces. Keep the English words and add "
+			"words in your language."); }
 	virtual	bool				CanSave() const { return false; }
 
 	virtual	BView*				CreateView(SettingsContext* context,
@@ -1585,8 +1656,17 @@ InformationModule::RevertSettings(SettingsContext* context)
 }
 
 
-void
-register_information_page(SettingsManager& manager)
+// The add-on settings_information (distro/settings/ModuleAPI.md): every
+// Settings page is an add-on of its own.
+extern "C" _EXPORT int32
+settings_api_version()
 {
-	manager.Add(new InformationModule());
+	return kSettingsApiVersion;
+}
+
+
+extern "C" _EXPORT SettingsModule*
+instantiate_settings_module()
+{
+	return new InformationModule();
 }

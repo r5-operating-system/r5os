@@ -1,0 +1,100 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_notifications\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+msgctxt "Settings: Notifications"
+msgid "Application does not have a valid signature."
+msgstr ""
+
+msgctxt "Settings: Notifications"
+msgid "wide"
+msgstr ""
+
+msgctxt "Settings: Notifications"
+msgid "Enable notifications"
+msgstr ""
+
+msgctxt "Settings: Notifications"
+msgid "Timeout:"
+msgstr ""
+
+msgctxt "Settings: Notifications"
+msgid "Window width"
+msgstr ""
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+msgctxt "Settings: Notifications"
+msgid "timeout position mute width popup alert"
+msgstr ""
+
+msgctxt "Settings: Notifications"
+msgid "%name% is already listed."
+msgstr ""
+
+msgctxt "Settings: Notifications"
+msgid "Lower right"
+msgstr ""
+
+msgctxt "Settings: Notifications"
+msgid "%name% (muted)"
+msgstr ""
+
+msgctxt "Settings: Notifications"
+msgid "Add…"
+msgstr ""
+
+msgctxt "Settings: Notifications"
+msgid "narrow"
+msgstr ""
+
+#. Fixed text (AGENTS.md): translate the meaning, keep it short
+msgctxt "Settings: Notifications"
+msgid "Manage alerts and notifications"
+msgstr ""
+
+msgctxt "Settings: Notifications"
+msgid "Applications"
+msgstr ""
+
+msgctxt "Settings: Notifications"
+msgid "{0, plural, one{Timeout: # second} other{Timeout: # seconds}}"
+msgstr ""
+
+msgctxt "Settings: Notifications"
+msgid "This is a test notification message"
+msgstr ""
+
+msgctxt "Settings: Notifications"
+msgid "Remove"
+msgstr ""
+
+msgctxt "Settings: Notifications"
+msgid "Upper right"
+msgstr ""
+
+msgctxt "Settings: Notifications"
+msgid "Upper left"
+msgstr ""
+
+msgctxt "Settings: Notifications"
+msgid "Mute notifications from this application"
+msgstr ""
+
+msgctxt "Settings: Notifications"
+msgid "OK"
+msgstr ""
+
+msgctxt "Settings: Notifications"
+msgid "Notifications"
+msgstr ""
+
+msgctxt "Settings: Notifications"
+msgid "Follow Deskbar"
+msgstr ""
+
+msgctxt "Settings: Notifications"
+msgid "Notifications sample"
+msgstr ""
+
+msgctxt "Settings: Notifications"
+msgid "Lower left"
+msgstr ""

@@ -1,0 +1,38 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_mouse\nLanguage: fr\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#, fuzzy
+msgctxt "Settings: Mouse"
+msgid "Mouse"
+msgstr "Souris"
+
+#, fuzzy
+msgctxt "Settings: Launcher pages"
+msgid "Opens the existing program in its own window."
+msgstr "Ouvre le programme existant dans sa propre fenêtre."
+
+#, fuzzy
+msgctxt "Settings: Launcher pages"
+msgid "OK"
+msgstr "OK"
+
+#, fuzzy
+msgctxt "Settings: Mouse"
+msgid "Mouse speed, focus, and the scroll wheel."
+msgstr "Vitesse de la souris, focus et molette de défilement."
+
+#, fuzzy
+msgctxt "Settings: Launcher pages"
+msgid "Could not open %name%."
+msgstr "Impossible d'ouvrir %name%."
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+#, fuzzy
+msgctxt "Settings: Mouse"
+msgid "input pointer focus"
+msgstr "input pointer focus souris pointeur entrée curseur"
+
+#, fuzzy
+msgctxt "Settings: Launcher pages"
+msgid "Open"
+msgstr "Ouvrir"

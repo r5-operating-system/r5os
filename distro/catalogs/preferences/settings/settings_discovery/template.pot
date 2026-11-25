@@ -1,0 +1,111 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_discovery\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+msgctxt "Settings: Discovery"
+msgid "Rename"
+msgstr ""
+
+msgctxt "Settings: Discovery"
+msgid "AirPlay speaker"
+msgstr ""
+
+msgctxt "Settings: Discovery"
+msgid "Cancel"
+msgstr ""
+
+msgctxt "ServiceView"
+msgid "Disable"
+msgstr ""
+
+msgctxt "Settings: Discovery"
+msgid "Discovery"
+msgstr ""
+
+msgctxt "Settings: Discovery"
+msgid "Refresh"
+msgstr ""
+
+msgctxt "Settings: Discovery"
+msgid "Printer"
+msgstr ""
+
+msgctxt "Settings: Discovery"
+msgid "On this network:"
+msgstr ""
+
+msgctxt "Settings: Discovery"
+msgid "The name could not be saved."
+msgstr ""
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+msgctxt "Settings: Discovery"
+msgid "network bonjour mdns local name hostname ssh ftp telnet share printer airplay"
+msgstr ""
+
+msgctxt "Settings: Discovery"
+msgid "Name:"
+msgstr ""
+
+msgctxt "Settings: Discovery"
+msgid "This computer"
+msgstr ""
+
+msgctxt "Settings: Discovery"
+msgid "Nothing found"
+msgstr ""
+
+msgctxt "Settings: Discovery"
+msgid "An item that is on is also announced, so other devices list it."
+msgstr ""
+
+msgctxt "Settings: Discovery"
+msgid "OK"
+msgstr ""
+
+msgctxt "ServiceListItem"
+msgid "on"
+msgstr ""
+
+msgctxt "Settings: Discovery"
+msgid "Shared from this computer"
+msgstr ""
+
+msgctxt "Settings: Discovery"
+msgid "Rename…"
+msgstr ""
+
+msgctxt "Settings: Discovery"
+msgid "File sharing"
+msgstr ""
+
+msgctxt "Settings: Discovery"
+msgid "Find devices and services on this network"
+msgstr ""
+
+msgctxt "ServiceView"
+msgid "Enable"
+msgstr ""
+
+msgctxt "Settings: Discovery"
+msgid "Find devices (Bonjour)"
+msgstr ""
+
+msgctxt "Settings: Discovery"
+msgid "Programs can reach a .local name. Printers and speakers in this list are also offered by Printers and AirPlay."
+msgstr ""
+
+msgctxt "Settings: Discovery"
+msgid "No device answered on this network."
+msgstr ""
+
+msgctxt "ServiceListItem"
+msgid "off"
+msgstr ""
+
+msgctxt "Settings: Discovery"
+msgid "Let other devices find this computer"
+msgstr ""
+
+msgctxt "Settings: Discovery"
+msgid "Use letters, digits and -, up to 63, not starting or ending with -."
+msgstr ""

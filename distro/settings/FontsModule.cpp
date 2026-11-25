@@ -15,9 +15,14 @@
 
 #include <Alignment.h>
 #include <Box.h>
+#include <Catalog.h>
 #include <StringView.h>
 #include <GroupView.h>
 #include <LayoutBuilder.h>
+
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "Settings: Fonts"
 
 
 class FontsPage : public BGroupView {
@@ -42,13 +47,16 @@ class FontsModule : public SettingsModule {
 public:
 								FontsModule();
 	virtual	const char*			Identifier() const { return "fonts"; }
-	virtual	const char*			Name() const { return "Fonts"; }
+	virtual	const char*			Name() const { return B_TRANSLATE("Fonts"); }
 	virtual	const char*			Category() const
 									{ return "personalization"; }
 	virtual	const char*			Description() const
-									{ return "Change the default fonts"; }
+									{ return B_TRANSLATE("Change the default fonts"); }
 	virtual	const char*			Keywords() const
-		{ return "fonts plain bold fixed menu antialiasing hinting"; }
+		{ return B_TRANSLATE_COMMENT(
+			"fonts plain bold fixed menu antialiasing hinting",
+			"Search words, separated by spaces. Keep the English "
+			"words and add words in your language."); }
 	virtual	BView*				CreateView(SettingsContext* context,
 									BRect frame);
 	virtual	status_t			LoadSettings(SettingsContext* context);
@@ -88,7 +96,7 @@ FontsPage::FontsPage(FontsModule* module)
 	fAntialias = new AntialiasingSettingsView("antialiasing");
 	keep_height(fFonts);
 	BBox* alias = new BBox("antialiasing box");
-	alias->SetLabel(r5_settings_box_title("Antialiasing"));
+	alias->SetLabel(r5_settings_box_title(B_TRANSLATE("Antialiasing")));
 	alias->AddChild(fAntialias);
 	alias->SetExplicitAlignment(BAlignment(B_ALIGN_USE_FULL_WIDTH,
 		B_ALIGN_TOP));

@@ -1,0 +1,129 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_wallpaper\nLanguage: fr\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Preview"
+msgstr "Aperçu"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Select"
+msgstr "Sélectionner"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Image:"
+msgstr "Image :"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "X:"
+msgstr "X :"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Current workspace"
+msgstr "Espace de travail actuel"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "OK"
+msgstr "OK"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Other…"
+msgstr "Autre…"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Manual"
+msgstr "Manuel"
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "background wallpaper image color workspace folder"
+msgstr "background wallpaper image color workspace folder arrière-plan fond écran couleur espace travail dossier"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Scale to fit"
+msgstr "Ajuster à l'écran"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Could not open that folder.\n%error%"
+msgstr "Impossible d'ouvrir ce dossier.\n%error%"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Placement:"
+msgstr "Placement :"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Y:"
+msgstr "Y :"
+
+#. Fixed text (AGENTS.md): translate the meaning, keep it short
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Set the background of your desktop"
+msgstr "Définir l'arrière-plan de votre bureau"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Center"
+msgstr "Centré"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Wallpaper"
+msgstr "Fond d'écran"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Default"
+msgstr "Par défaut"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Icon label outline"
+msgstr "Contour du nom des icônes"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Tile"
+msgstr "Mosaïque"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Other folder…"
+msgstr "Autre dossier…"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "All workspaces"
+msgstr "Tous les espaces de travail"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "None"
+msgstr "Aucun"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Folder: %folder%"
+msgstr "Dossier : %folder%"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Default folder"
+msgstr "Dossier par défaut"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Settings"
+msgstr "Paramètres"

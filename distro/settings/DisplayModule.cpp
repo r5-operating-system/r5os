@@ -6,11 +6,9 @@
  */
 
 
-#include "DisplayModule.h"
 
 #include "DisplayScreens.h"
 #include "SettingsFont.h"
-#include "SettingsManager.h"
 #include "SettingsMessages.h"
 #include "SettingsModule.h"
 
@@ -18,6 +16,7 @@
 #include <Box.h>
 #include <Button.h>
 #include <Card.h>
+#include <Catalog.h>
 #include <ControlLook.h>
 #include <GroupLayout.h>
 #include <GroupView.h>
@@ -35,12 +34,17 @@
 #include <ScreenArrangement.h>
 #include <Spinner.h>
 #include <String.h>
+#include <StringFormat.h>
 #include <StringView.h>
 
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "Settings: Display"
 
 
 using BAppearanceKit::BCard;
@@ -312,12 +316,15 @@ public:
 	virtual						~DisplayModule();
 
 	virtual	const char*			Identifier() const { return "display"; }
-	virtual	const char*			Name() const { return "Display"; }
+	virtual	const char*			Name() const { return B_TRANSLATE("Display"); }
 	virtual	const char*			Category() const { return "system"; }
 	virtual	const char*			Description() const
-		{ return "Screens, resolution, and workspaces"; }
+		{ return B_TRANSLATE("Screens, resolution, and workspaces"); }
 	virtual	const char*			Keywords() const
-		{ return "screen display resolution refresh colors workspaces"; }
+		{ return B_TRANSLATE_COMMENT(
+			"screen display resolution refresh colors workspaces",
+			"Search words, separated by spaces. Keep the English "
+			"words and add words in your language."); }
 	virtual	bool				RequiresAdmin() const { return true; }
 
 	virtual	BView*				CreateView(SettingsContext* context,
@@ -748,34 +755,34 @@ DisplayView::DisplayView(DisplayModule* module)
 	float u = unit();
 	fArrangement = new BCard("arrangement", BAppearanceKit::B_CARD_DOCUMENT,
 		B_VERTICAL);
-	fArrangeTitle = new BStringView("arrange title", "Arrangement");
+	fArrangeTitle = new BStringView("arrange title", B_TRANSLATE("Arrangement"));
 	fArrangeHint = new BStringView("arrange hint",
-		"Drag the screens to match your desk. Click one to change it.");
+		B_TRANSLATE("Drag the screens to match your desk. Click one to change it."));
 	fScreens = new BScreenArrangement("screens", new BMessage(kMsgScreen));
 	fScreens->SetDraggable(false);
 
 	fScreenBox = new FilledBox("screen");
-	fScreenLabel = new BoxTitle("Screen");
+	fScreenLabel = new BoxTitle(B_TRANSLATE("Screen"));
 	fScreenBox->SetLabel(fScreenLabel);
 
 	fScopeMenu = new BPopUpMenu("scope", true, true);
-	fAllItem = new BMenuItem("All workspaces", new BMessage(kMsgScope));
+	fAllItem = new BMenuItem(B_TRANSLATE("All workspaces"), new BMessage(kMsgScope));
 	fScopeMenu->AddItem(fAllItem);
-	fScopeMenu->AddItem(new BMenuItem("This workspace",
+	fScopeMenu->AddItem(new BMenuItem(B_TRANSLATE("This workspace"),
 		new BMessage(kMsgScope)));
 	fAllItem->SetMarked(true);
-	fScopeField = new BMenuField("scope field", "Apply to:", fScopeMenu);
+	fScopeField = new BMenuField("scope field", B_TRANSLATE("Apply to:"), fScopeMenu);
 
 	fResolutionMenu = new BPopUpMenu("resolution", true, true);
 	fColorsMenu = new BPopUpMenu("colors", true, true);
 	fRefreshMenu = new BPopUpMenu("refresh", true, true);
-	fResolutionField = new BMenuField("resolution field", "Resolution:",
+	fResolutionField = new BMenuField("resolution field", B_TRANSLATE("Resolution:"),
 		fResolutionMenu);
-	fColorsField = new BMenuField("colors field", "Colors:", fColorsMenu);
-	fRefreshField = new BMenuField("refresh field", "Refresh rate:",
+	fColorsField = new BMenuField("colors field", B_TRANSLATE("Colors:"), fColorsMenu);
+	fRefreshField = new BMenuField("refresh field", B_TRANSLATE("Refresh rate:"),
 		fRefreshMenu);
 
-	fApply = new BButton("apply", "Apply", new BMessage(kMsgApply));
+	fApply = new BButton("apply", B_TRANSLATE("Apply"), new BMessage(kMsgApply));
 	fApply->SetEnabled(false);
 
 	fScreenGroup = new BGroupView(B_VERTICAL, 0);
@@ -807,10 +814,10 @@ DisplayView::DisplayView(DisplayModule* module)
 		.AddGlue();
 
 	BBox* workBox = new FilledBox("workspaces");
-	BStringView* workLabel = new BoxTitle("Workspaces");
+	BStringView* workLabel = new BoxTitle(B_TRANSLATE("Workspaces"));
 	workBox->SetLabel(workLabel);
-	fColumns = new BSpinner("columns", "Columns:", new BMessage(kMsgColumns));
-	fRows = new BSpinner("rows", "Rows:", new BMessage(kMsgRows));
+	fColumns = new BSpinner("columns", B_TRANSLATE("Columns:"), new BMessage(kMsgColumns));
+	fRows = new BSpinner("rows", B_TRANSLATE("Rows:"), new BMessage(kMsgRows));
 	fColumns->SetRange(1, 32);
 	fRows->SetRange(1, 32);
 	fGrid = new WorkspaceGrid();
@@ -1010,8 +1017,11 @@ DisplayView::_FillMenus()
 			mode.virtual_width, mode.virtual_height);
 		if (hasRecommended
 			&& mode.virtual_width == recommended.virtual_width
-			&& mode.virtual_height == recommended.virtual_height)
-			name.Append(" (recommended)");
+			&& mode.virtual_height == recommended.virtual_height) {
+			BString recommendedName(B_TRANSLATE("%resolution% (recommended)"));
+			recommendedName.ReplaceFirst("%resolution%", name.String());
+			name = recommendedName;
+		}
 		fResolutionMenu->AddItem(new BMenuItem(name.String(), message));
 	}
 	int32 colorCount = 0;
@@ -1022,8 +1032,10 @@ DisplayView::_FillMenus()
 		BMessage* message = new BMessage(kMsgColors);
 		message->AddInt32("space", spaceOrder[s]);
 		BString name;
-		name.SetToFormat("%" B_PRId32 " bits/pixel",
-			display_bits_per_pixel(spaceOrder[s]));
+		BString bits;
+		bits << display_bits_per_pixel(spaceOrder[s]);
+		name = B_TRANSLATE("%bits% bits/pixel");
+		name.ReplaceFirst("%bits%", bits.String());
 		fColorsMenu->AddItem(new BMenuItem(name.String(), message));
 	}
 	bool showColors = colorCount > 1;
@@ -1125,8 +1137,10 @@ DisplayView::_MarkChoice()
 		choice.width, choice.height);
 	show_marked_label(fResolutionMenu, resolutionLabel.String());
 	BString colorLabel;
-	colorLabel.SetToFormat("%" B_PRId32 " bits/pixel",
-		display_bits_per_pixel(choice.space));
+	BString bits;
+	bits << display_bits_per_pixel(choice.space);
+	colorLabel = B_TRANSLATE("%bits% bits/pixel");
+	colorLabel.ReplaceFirst("%bits%", bits.String());
 	show_marked_label(fColorsMenu, colorLabel.String());
 	BString refreshLabel;
 	display_format_refresh(choice.refresh, refreshLabel);
@@ -1141,9 +1155,12 @@ DisplayView::_MarkChoice()
 	fGrid->SetGrid(choice.columns, choice.rows);
 	int32 count = (int32)(choice.columns * choice.rows);
 	BString line;
-	line.SetToFormat("%" B_PRId32 " workspace%s. Changes right away. "
-		"Every screen follows the same workspace.",
-		count, count == 1 ? "" : "s");
+	BStringFormat lineFormat(B_TRANSLATE("{0, plural, "
+		"one{# workspace. Changes right away. "
+		"Every screen follows the same workspace.} "
+		"other{# workspaces. Changes right away. "
+		"Every screen follows the same workspace.}}"));
+	lineFormat.Format(line, count);
 	fWorkspaceLine->SetText(line.String());
 	fUpdating = false;
 }
@@ -1156,7 +1173,7 @@ DisplayView::_UpdatePicture()
 		return;
 	BObjectList<DisplayScreen, true> screens;
 	if (display_screens_get(screens) != B_OK || screens.CountItems() == 0) {
-		fScreenLabel->SetText("Screen");
+		fScreenLabel->SetText(B_TRANSLATE("Screen"));
 		fScreens->SetScreens(NULL, 0);
 		fScreens->SetCaption(NULL);
 		fScreens->SetDraggable(false);
@@ -1185,18 +1202,25 @@ DisplayView::_UpdatePicture()
 	fScreens->SetSelected(screens.ItemAt(selectedIndex)->id);
 	BString caption;
 	if (screens.CountItems() > 1) {
-		caption.SetToFormat("The Deskbar is on screen %" B_PRId32 ".",
-			mainIndex + 1);
+		BString number;
+		number << mainIndex + 1;
+		caption = B_TRANSLATE("The Deskbar is on screen %number%.");
+		caption.ReplaceFirst("%number%", number.String());
 	}
 	fScreens->SetCaption(caption.String());
 	fScreens->SetDraggable(screens.CountItems() > 1);
 
 	// With one screen the title has no number.
 	BString title;
-	if (screens.CountItems() == 1)
-		title.SetToFormat("Screen – %s", screens.ItemAt(0)->name.String());
-	else {
-		title.SetToFormat("Screen %" B_PRId32 " – %s", selectedIndex + 1,
+	if (screens.CountItems() == 1) {
+		title = B_TRANSLATE("Screen – %name%");
+		title.ReplaceFirst("%name%", screens.ItemAt(0)->name.String());
+	} else {
+		BString number;
+		number << selectedIndex + 1;
+		title = B_TRANSLATE("Screen %number% – %name%");
+		title.ReplaceFirst("%number%", number.String());
+		title.ReplaceFirst("%name%",
 			screens.ItemAt(selectedIndex)->name.String());
 	}
 	fScreenLabel->SetText(title.String());
@@ -1334,9 +1358,10 @@ DisplayView::MessageReceived(BMessage* message)
 				break;
 			status_t status = fModule->Apply();
 			if (status != B_OK) {
-				BString text("The screen mode could not be set.\n");
+				BString text(B_TRANSLATE("The screen mode could not be set.\n"));
 				text << strerror(status);
-				BAlert* alert = new BAlert("Display", text.String(), "OK",
+				BAlert* alert = new BAlert(B_TRANSLATE("Display"), text.String(),
+					B_TRANSLATE("OK"),
 					NULL, NULL, B_WIDTH_AS_USUAL, B_WARNING_ALERT);
 				alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
 				alert->Go();
@@ -1347,10 +1372,10 @@ DisplayView::MessageReceived(BMessage* message)
 			delete fConfirmRunner;
 			fConfirmRunner = new BMessageRunner(BMessenger(this),
 				new BMessage(kMsgDisplayTimeout), 12000000, 1);
-			fAlert = new BAlert("Display",
-				"Do you wish to keep these settings?\n"
-				"The previous picture returns after 12 seconds.",
-				"Undo", "Keep", NULL, B_WIDTH_AS_USUAL, B_WARNING_ALERT);
+			fAlert = new BAlert(B_TRANSLATE("Display"),
+				B_TRANSLATE("Do you wish to keep these settings?\n"
+				"The previous picture returns after 12 seconds."),
+				B_TRANSLATE("Undo"), B_TRANSLATE("Keep"), NULL, B_WIDTH_AS_USUAL, B_WARNING_ALERT);
 			fAlert->SetFlags(fAlert->Flags() | B_CLOSE_ON_ESCAPE);
 			fAlert->Go(new BInvoker(new BMessage(kMsgDisplayChoice), this));
 			break;
@@ -1400,8 +1425,17 @@ DisplayView::~DisplayView()
 }
 
 
-void
-register_display_page(SettingsManager& manager)
+// The add-on settings_display (distro/settings/ModuleAPI.md): every
+// Settings page is an add-on of its own.
+extern "C" _EXPORT int32
+settings_api_version()
 {
-	manager.Add(new DisplayModule());
+	return kSettingsApiVersion;
+}
+
+
+extern "C" _EXPORT SettingsModule*
+instantiate_settings_module()
+{
+	return new DisplayModule();
 }

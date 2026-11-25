@@ -1,0 +1,38 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_keyboard\nLanguage: fr\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#, fuzzy
+msgctxt "Settings: Launcher pages"
+msgid "Opens the existing program in its own window."
+msgstr "Ouvre le programme existant dans sa propre fenêtre."
+
+#, fuzzy
+msgctxt "Settings: Keyboard"
+msgid "Keyboard"
+msgstr "Clavier"
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+#, fuzzy
+msgctxt "Settings: Keyboard"
+msgid "keymap layout keys"
+msgstr "keymap layout keys clavier disposition touches azerty"
+
+#, fuzzy
+msgctxt "Settings: Launcher pages"
+msgid "OK"
+msgstr "OK"
+
+#, fuzzy
+msgctxt "Settings: Launcher pages"
+msgid "Could not open %name%."
+msgstr "Impossible d'ouvrir %name%."
+
+#, fuzzy
+msgctxt "Settings: Keyboard"
+msgid "Keymap and the typing repeat rate."
+msgstr "Disposition du clavier et vitesse de répétition."
+
+#, fuzzy
+msgctxt "Settings: Launcher pages"
+msgid "Open"
+msgstr "Ouvrir"

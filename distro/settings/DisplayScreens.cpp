@@ -9,6 +9,7 @@
 
 #include "DisplayScreens.h"
 
+#include <Catalog.h>
 #include <InterfaceDefs.h>
 #include <OS.h>
 
@@ -16,6 +17,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "Settings: Display screens"
 
 
 int32
@@ -96,7 +101,7 @@ screen_name(const DisplayScreen& screen)
 		if (name.Length() > 0)
 			return name;
 	}
-	return BString("Screen");
+	return BString(B_TRANSLATE("Screen"));
 }
 
 

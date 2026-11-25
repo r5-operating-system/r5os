@@ -15,12 +15,10 @@
  */
 
 
-#include "AccountsModule.h"
 
 #include "AccountAdmin.h"
 #include "AccountDialogs.h"
 #include "SettingsFont.h"
-#include "SettingsManager.h"
 #include "SettingsMessages.h"
 #include "SettingsModule.h"
 
@@ -29,6 +27,7 @@
 #include <Bitmap.h>
 #include <Button.h>
 #include <Card.h>
+#include <Catalog.h>
 #include <CheckBox.h>
 #include <Entry.h>
 #include <FilePanel.h>
@@ -52,6 +51,10 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "Settings: Users and Accounts"
 
 
 using BAppearanceKit::BCard;
@@ -85,8 +88,8 @@ px(float value)
 static void
 show_error(const char* text)
 {
-	BAlert* alert = new BAlert("Users and Accounts", text, "OK", NULL, NULL,
-		B_WIDTH_AS_USUAL, B_WARNING_ALERT);
+	BAlert* alert = new BAlert(B_TRANSLATE("Users and Accounts"), text,
+		B_TRANSLATE("OK"), NULL, NULL, B_WIDTH_AS_USUAL, B_WARNING_ALERT);
 	alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
 	alert->Go(NULL);
 }
@@ -154,7 +157,7 @@ public:
 	AccountItem(const AccountInfo& info, const BBitmap* photo)
 		:
 		BUserListItem(info.name.String(), info.Shown(),
-			info.admin ? "Administrator" : "Standard"),
+			info.admin ? B_TRANSLATE("Administrator") : B_TRANSLATE("Standard")),
 		fInfo(info),
 		fPhoto(photo != NULL ? new BBitmap(photo) : NULL)
 	{
@@ -219,7 +222,8 @@ public:
 
 		// The pill at the right.
 		BFont pillFont = sized(r5_settings_bold_font(), 10.0f);
-		const char* pill = fInfo.admin ? "Admin" : "Standard";
+		const char* pill = fInfo.admin ? B_TRANSLATE("Admin")
+			: B_TRANSLATE("Standard");
 		font_height pillHeight;
 		pillFont.GetHeight(&pillHeight);
 		float pillWidth = pillFont.StringWidth(pill) + px(16);
@@ -277,9 +281,9 @@ public:
 			BString sub("@");
 			sub << fInfo.name;
 			if (fInfo.IsSelf())
-				sub << kDot << "you";
+				sub << kDot << B_TRANSLATE("you");
 			if (fInfo.disabled)
-				sub << kDot << "disabled";
+				sub << kDot << B_TRANSLATE("disabled");
 			small.TruncateString(&sub, B_TRUNCATE_END, width);
 			owner->SetFont(&small);
 			owner->SetHighColor(subColor);
@@ -358,14 +362,17 @@ public:
 								AccountsModule();
 
 	virtual	const char*			Identifier() const { return "accounts"; }
-	virtual	const char*			Name() const { return "Users and Accounts"; }
+	virtual	const char*			Name() const { return B_TRANSLATE("Users and Accounts"); }
 	virtual	const char*			Category() const { return "accounts"; }
 	virtual	const char*			Description() const
-									{ return "People on this computer."; }
+									{ return B_TRANSLATE("People on this computer."); }
 	virtual	const char*			Keywords() const
-									{ return "user users account accounts "
+									{ return B_TRANSLATE_COMMENT(
+										"user users account accounts "
 										"password administrator standard "
-										"picture email sign in guest shared"; }
+										"picture email sign in guest shared",
+										"Search words, separated by spaces. Keep the "
+										"English words and add words in your language."); }
 	virtual	bool				RequiresAdmin() const { return false; }
 	virtual	BView*				CreateView(SettingsContext* context,
 									BRect frame);
@@ -478,19 +485,20 @@ AccountsView::AccountsView(AccountsModule* module)
 	BScrollView* scroll = new BScrollView("accounts scroll", fList, 0, false,
 		true);
 	scroll->SetExplicitMinSize(BSize(B_SIZE_UNSET, px(52) * 3 + 4));
-	fAdd = new BButton("add", "Add account…", new BMessage(kMsgAdd));
-	fDisable = new BButton("disable", "Disable account",
+	fAdd = new BButton("add", B_TRANSLATE("Add account…"),
+		new BMessage(kMsgAdd));
+	fDisable = new BButton("disable", B_TRANSLATE("Disable account"),
 		new BMessage(kMsgDisable));
-	fDelete = new BButton("delete", "Delete account…",
+	fDelete = new BButton("delete", B_TRANSLATE("Delete account…"),
 		new BMessage(kMsgDelete));
 
-	fGuestCaption = caption("guest caption", "GUEST AND SHARING");
+	fGuestCaption = caption("guest caption", B_TRANSLATE("GUEST AND SHARING"));
 	fGuestSwitch = new BCheckBox("guest switch",
-		"Allow guests to sign in to this computer",
+		B_TRANSLATE("Allow guests to sign in to this computer"),
 		new BMessage(kMsgGuestToggle));
 	fGuestSwitch->SetViewUIColor(B_DOCUMENT_BACKGROUND_COLOR);
 	fGuestHint = new AccountWrapLabel("guest hint",
-		"No password. Everything is deleted at log out.");
+		B_TRANSLATE("No password. Everything is deleted at log out."));
 	fGuestHint->SetTextColor(mix_color(ui_color(B_DOCUMENT_BACKGROUND_COLOR),
 		ui_color(B_DOCUMENT_TEXT_COLOR), 140));
 
@@ -498,11 +506,12 @@ AccountsView::AccountsView(AccountsModule* module)
 		"application/x-vnd.Be-directory", px(24));
 	BIconView* folderIcon = new BIconView("shared icon", folderBitmap);
 	delete folderBitmap;
-	fSharedTitle = new BStringView("shared title", "Shared folder");
+	fSharedTitle = new BStringView("shared title",
+		B_TRANSLATE("Shared folder"));
 	fSharedPath = new BStringView("shared path", kSharedFolderPath);
 	fSharedPath->SetHighColor(mix_color(ui_color(B_DOCUMENT_BACKGROUND_COLOR),
 		ui_color(B_DOCUMENT_TEXT_COLOR), 140));
-	fSharedOpen = new BButton("shared open", "Open",
+	fSharedOpen = new BButton("shared open", B_TRANSLATE("Open"),
 		new BMessage(kMsgOpenShared));
 
 	BCard* guestCard = new BCard("guest card", BAppearanceKit::B_CARD_DOCUMENT);
@@ -525,7 +534,7 @@ AccountsView::AccountsView(AccountsModule* module)
 			.Add(fSharedOpen)
 		.End();
 
-	fListCaption = caption("accounts caption", "ACCOUNTS");
+	fListCaption = caption("accounts caption", B_TRANSLATE("ACCOUNTS"));
 	fLeft = new BGroupView(B_VERTICAL, px(6));
 	BLayoutBuilder::Group<>(fLeft)
 		.Add(fListCaption)
@@ -548,40 +557,43 @@ AccountsView::AccountsView(AccountsModule* module)
 	fHeadLine = new BStringView("head line", "");
 	fHeadLine->SetHighColor(mix_color(ui_color(B_DOCUMENT_BACKGROUND_COLOR),
 		ui_color(B_DOCUMENT_TEXT_COLOR), 140));
-	fChoose = new BButton("choose", "Choose picture…",
+	fChoose = new BButton("choose", B_TRANSLATE("Choose picture…"),
 		new BMessage(kMsgChoose));
-	fRemovePicture = new BButton("remove picture", "Remove picture",
+	fRemovePicture = new BButton("remove picture", B_TRANSLATE("Remove picture"),
 		new BMessage(kMsgRemovePicture));
 
 	fName = new AccountTextField("name", new BMessage(kMsgName));
 	fEmail = new AccountTextField("email", new BMessage(kMsgEmail));
-	fEmail->SetPlaceholder("name@example.com");
+	fEmail->SetPlaceholder(B_TRANSLATE("name@example.com"));
 	fName->SetCompact(true);
 	fEmail->SetCompact(true);
 	BPopUpMenu* menu = new BPopUpMenu("type");
 	BMessage* adminMessage = new BMessage(kMsgType);
 	adminMessage->AddBool("admin", true);
-	fTypeAdmin = new BMenuItem("Administrator", adminMessage);
+	fTypeAdmin = new BMenuItem(B_TRANSLATE("Administrator"), adminMessage);
 	BMessage* standardMessage = new BMessage(kMsgType);
 	standardMessage->AddBool("admin", false);
-	fTypeStandard = new BMenuItem("Standard", standardMessage);
+	fTypeStandard = new BMenuItem(B_TRANSLATE("Standard"), standardMessage);
 	menu->AddItem(fTypeAdmin);
 	menu->AddItem(fTypeStandard);
 	fType = new BMenuField("type field", NULL, menu);
-	fPassword = new BButton("password", "Change password…",
+	fPassword = new BButton("password", B_TRANSLATE("Change password…"),
 		new BMessage(kMsgPassword));
 
 	AccountWrapLabel* note = new AccountWrapLabel("card note",
-		"Changes are saved as you make them. The last administrator cannot "
-		"become a standard account.");
+		B_TRANSLATE("Changes are saved as you make them. The last administrator "
+		"cannot become a standard account."));
 	note->SetTextColor(mix_color(ui_color(B_DOCUMENT_BACKGROUND_COLOR),
 		ui_color(B_DOCUMENT_TEXT_COLOR), 140));
 
-	BStringView* nameLabel = new BStringView("name label", "Name");
-	BStringView* emailLabel = new BStringView("email label", "Email");
-	BStringView* typeLabel = new BStringView("type label", "Account type");
+	BStringView* nameLabel = new BStringView("name label",
+		B_TRANSLATE("Name"));
+	BStringView* emailLabel = new BStringView("email label",
+		B_TRANSLATE("Email"));
+	BStringView* typeLabel = new BStringView("type label",
+		B_TRANSLATE("Account type"));
 	BStringView* passwordLabel = new BStringView("password label",
-		"Password");
+		B_TRANSLATE("Password"));
 
 	fPicture->SetExplicitAlignment(
 		BAlignment(B_ALIGN_LEFT, B_ALIGN_VERTICAL_CENTER));
@@ -623,9 +635,9 @@ AccountsView::AccountsView(AccountsModule* module)
 
 	BCard* info = new BCard("standard info", BAppearanceKit::B_CARD_PANEL);
 	AccountWrapLabel* infoText = new AccountWrapLabel("standard info text",
-		"A standard account sees only its own card (name, email, picture, "
-		"password). The account list, account types and the guest wait for "
-		"an administrator's unlock.");
+		B_TRANSLATE("A standard account sees only its own card (name, email, "
+		"picture, password). The account list, account types and the guest "
+		"wait for an administrator's unlock."));
 	infoText->SetTextColor(mix_color(ui_color(B_PANEL_BACKGROUND_COLOR),
 		ui_color(B_PANEL_TEXT_COLOR), 160));
 	BLayoutBuilder::Group<>((BGroupLayout*)info->GetLayout())
@@ -748,8 +760,8 @@ AccountsView::Reload(const char* select)
 	BString error;
 	if (account_ask_login(request, reply, error) != B_OK) {
 		fHasShown = false;
-		BString text("Accounts could not be read: ");
-		text << error;
+		BString text(B_TRANSLATE("Accounts could not be read: %error%"));
+		text.ReplaceFirst("%error%", error.String());
 		fCaption->SetText(text.String());
 		_SyncEnabled();
 		return;
@@ -838,11 +850,15 @@ AccountsView::_ShowAccount(const AccountInfo& info)
 	fCaption->SetText(upper.String());
 	fHeadName->SetText(info.Shown());
 	BString line("@");
-	line << info.name << kDot << (info.admin ? "Administrator" : "Standard");
+	line << info.name << kDot << (info.admin ? B_TRANSLATE("Administrator")
+		: B_TRANSLATE("Standard"));
 	if (info.disabled)
-		line << kDot << "disabled";
-	if (info.home.Length() > 0)
-		line << kDot << "home " << info.home;
+		line << kDot << B_TRANSLATE("disabled");
+	if (info.home.Length() > 0) {
+		BString home(B_TRANSLATE("home %path%"));
+		home.ReplaceFirst("%path%", info.home.String());
+		line << kDot << home;
+	}
 	fHeadLine->SetText(line.String());
 
 	fName->SetText(info.real.String());
@@ -902,8 +918,8 @@ AccountsView::_SyncEnabled()
 	fAdd->SetEnabled(fManaging);
 	fGuestSwitch->SetEnabled(fManaging);
 	bool other = shown && fManaging && !fShown.first && !self;
-	fDisable->SetLabel(shown && fShown.disabled ? "Enable account"
-		: "Disable account");
+	fDisable->SetLabel(shown && fShown.disabled ? B_TRANSLATE("Enable account")
+		: B_TRANSLATE("Disable account"));
 	fDisable->SetEnabled(other && (fShown.disabled || !_LastAdmin(fShown)));
 	fDelete->SetEnabled(other && !_LastAdmin(fShown));
 }
@@ -1012,7 +1028,7 @@ AccountsView::_SaveName()
 	BString error;
 	if (account_ask_login(request, reply, error) != B_OK) {
 		show_error(error.Length() > 0 ? error.String()
-			: "The name could not be saved.");
+			: B_TRANSLATE("The name could not be saved."));
 		fName->SetText(fShown.real.String());
 		return false;
 	}
@@ -1039,7 +1055,7 @@ AccountsView::_SaveEmail()
 	BString error;
 	if (account_ask_login(request, reply, error) != B_OK) {
 		show_error(error.Length() > 0 ? error.String()
-			: "The email address could not be saved.");
+			: B_TRANSLATE("The email address could not be saved."));
 		fEmail->SetText(fShownEmail.String());
 		return;
 	}
@@ -1065,7 +1081,7 @@ AccountsView::_SetType(BMessage* message)
 	BString error;
 	if (account_ask_login(request, reply, error) != B_OK) {
 		show_error(error.Length() > 0 ? error.String()
-			: "The account type could not be changed.");
+			: B_TRANSLATE("The account type could not be changed."));
 		(fShown.admin ? fTypeAdmin : fTypeStandard)->SetMarked(true);
 		return;
 	}
@@ -1101,7 +1117,7 @@ AccountsView::_SetPicture(BMessage* message)
 		status = account_ask_login(request, reply, error);
 	if (status != B_OK) {
 		show_error(error.Length() > 0 ? error.String()
-			: "The picture could not be saved.");
+			: B_TRANSLATE("The picture could not be saved."));
 		return;
 	}
 	if (fModule != NULL)
@@ -1129,7 +1145,7 @@ AccountsView::_RemovePicture()
 	BString error;
 	if (account_ask_login(request, reply, error) != B_OK) {
 		show_error(error.Length() > 0 ? error.String()
-			: "The picture could not be removed.");
+			: B_TRANSLATE("The picture could not be removed."));
 		return;
 	}
 	if (fModule != NULL)
@@ -1151,7 +1167,7 @@ AccountsView::_DisableOrEnable()
 	BString error;
 	if (account_ask_login(request, reply, error) != B_OK) {
 		show_error(error.Length() > 0 ? error.String()
-			: "The account could not be changed.");
+			: B_TRANSLATE("The account could not be changed."));
 	} else if (fModule != NULL)
 		fModule->Touched(name.String());
 	Reload(name.String());
@@ -1164,12 +1180,14 @@ AccountsView::_Delete()
 	if (!fHasShown || !fManaging || fShown.first || fShown.IsSelf())
 		return;
 	BString name(fShown.name);
-	BString text;
-	text.SetToFormat("Delete the account of %s?\n\nKeep files leaves the "
-		"home folder %s on the disk. Delete files removes it, with "
-		"everything in it.", fShown.Shown(), fShown.home.String());
-	BAlert* alert = new BAlert("Delete account", text.String(), "Cancel",
-		"Keep files", "Delete files", B_WIDTH_AS_USUAL, B_WARNING_ALERT);
+	BString text(B_TRANSLATE("Delete the account of %name%?\n\nKeep files "
+		"leaves the home folder %home% on the disk. Delete files removes it, "
+		"with everything in it."));
+	text.ReplaceFirst("%name%", fShown.Shown());
+	text.ReplaceFirst("%home%", fShown.home.String());
+	BAlert* alert = new BAlert(B_TRANSLATE("Delete account"), text.String(),
+		B_TRANSLATE("Cancel"), B_TRANSLATE("Keep files"),
+		B_TRANSLATE("Delete files"), B_WIDTH_AS_USUAL, B_WARNING_ALERT);
 	alert->SetShortcut(0, B_ESCAPE);
 	int32 choice = alert->Go();
 	if (choice <= 0)
@@ -1181,7 +1199,7 @@ AccountsView::_Delete()
 	BString error;
 	if (account_ask_login(request, reply, error) != B_OK) {
 		show_error(error.Length() > 0 ? error.String()
-			: "The account could not be deleted.");
+			: B_TRANSLATE("The account could not be deleted."));
 	}
 	Reload();
 }
@@ -1213,7 +1231,7 @@ AccountsView::_ToggleGuest()
 	BString error;
 	if (account_ask_login(request, reply, error) != B_OK) {
 		show_error(error.Length() > 0 ? error.String()
-			: "The guest setting could not be changed.");
+			: B_TRANSLATE("The guest setting could not be changed."));
 		fGuestSwitch->SetValue(enabled ? B_CONTROL_OFF : B_CONTROL_ON);
 		return;
 	}
@@ -1227,14 +1245,14 @@ AccountsView::_OpenShared()
 {
 	entry_ref ref;
 	if (get_ref_for_path(kSharedFolderPath, &ref) != B_OK) {
-		show_error("The Shared folder could not be found.");
+		show_error(B_TRANSLATE("The Shared folder could not be found."));
 		return;
 	}
 	BMessage open(B_REFS_RECEIVED);
 	open.AddRef("refs", &ref);
 	BMessenger tracker("application/x-vnd.Be-TRAK");
 	if (tracker.SendMessage(&open) != B_OK)
-		show_error("Tracker could not open the Shared folder.");
+		show_error(B_TRANSLATE("Tracker could not open the Shared folder."));
 }
 
 
@@ -1467,8 +1485,11 @@ AccountsModule::RevertSettings(SettingsContext* context)
 		request.AddBool("enabled", fOpenedGuest);
 		BMessage reply;
 		BString text;
-		if (account_ask_login(request, reply, text) != B_OK)
-			failed << "\nGuest: " << text;
+		if (account_ask_login(request, reply, text) != B_OK) {
+			BString guest(B_TRANSLATE("Guest: %error%"));
+			guest.ReplaceFirst("%error%", text.String());
+			failed << "\n" << guest;
+		}
 	}
 
 	fTouched.MakeEmpty();
@@ -1478,7 +1499,7 @@ AccountsModule::RevertSettings(SettingsContext* context)
 	if (fView != NULL)
 		fView->Reload();
 	if (failed.Length() > 0) {
-		BString message("Not everything could be put back:");
+		BString message(B_TRANSLATE("Not everything could be put back:"));
 		message << failed;
 		show_error(message.String());
 	}
@@ -1486,8 +1507,17 @@ AccountsModule::RevertSettings(SettingsContext* context)
 }
 
 
-void
-register_accounts_page(SettingsManager& manager)
+// The add-on settings_accounts (distro/settings/ModuleAPI.md): every
+// Settings page is an add-on of its own.
+extern "C" _EXPORT int32
+settings_api_version()
 {
-	manager.Add(new AccountsModule());
+	return kSettingsApiVersion;
+}
+
+
+extern "C" _EXPORT SettingsModule*
+instantiate_settings_module()
+{
+	return new AccountsModule();
 }

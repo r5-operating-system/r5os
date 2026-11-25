@@ -8,6 +8,36 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-25 - Settings: every text can be translated (#4599)
+
+- Problem: Settings showed fixed English text (issue #4599 lists 18 of its files), and its Jamfile had no `DoCatalogs`, so no catalog was built for it, not even for the views that already used `B_TRANSLATE`.
+- Change:
+  - Every visible text of the Settings window and of its 19 page add-ons goes through `B_TRANSLATE` (about 600 texts), with the context `Settings: <page>` per page (`Settings window` and `Settings: Home` for the window). Sentences that were built from pieces are one text with a `%name%`-style placeholder; counts use `BStringFormat` plurals. Static tables use `B_TRANSLATE_MARK` and `B_TRANSLATE_NOCOLLECT`. The English is unchanged.
+  - The five fixed descriptions of `AGENTS.md` carry a translator comment; the keywords carry "Keep the English words and add words in your language".
+  - Pages sort by their translated name with `BCollator` (Information stays first under System). Search also compares the page id, so an English word finds a page in another language.
+  - Catalogs: `HAIKU_MULTIPLE_LOCALIZED_TARGETS` and one `DoCatalogs` per target, so Settings and each add-on have their own catalog (`distro/catalogs/preferences/settings/<target>/`, 20 folders). Each add-on carries a signature (`settings_<page>.rdef`), because the Locale Kit finds an add-on's catalog by the signature of its file.
+  - nl, de and fr: 60 to 62 texts per language that Haiku's translators already made in the same context (Fonts, Colors, the Network service list) are taken over from `haiku/data/catalogs`, not fuzzy. The other 545 to 547 per language are AI drafts marked `fuzzy` ("Needs editing"), so they are not shipped until a person checks them in Weblate. The image still shows those texts in English.
+  - `catalogs.py export`: a text whose English changed keeps the translation of the most similar old text of its context, marked fuzzy, with the old English as `#| msgid` (tested on a sample: carried as fuzzy, and `apply` left it out).
+  - `docs/TRANSLATIONS.md`: the Settings folders, contexts, fixed texts, sort and search, the drafts, and the one-time Weblate setup (Component discovery and the GitHub webhook) that makes new folders appear as components by themselves.
+- Mistakes: the first build stopped on a `?:` with `BString` and `const char*` in `InformationModule.cpp`; fixed with `BString(...)`. The Power hint "Sleep is not available … Until it is," / "\"Sleep\" is gray in these menus." is one sentence over two lines; both now carry a comment saying so.
+- Limits: dates and times on the Information page still use fixed `strftime` formats (#4598). Units ("MB", "GHz", "%d h %d min"), brand names and button letters stay English. libr5ui's `AdminLock` and `PasswordControl` (#4599 step 3), Login and Users are not part of this change. `catalogs.py export` writes a Weblate header on one line, a formatting change only; that file (`r5bt/nl.po`) was left out of this commit. The AGENTS.md rule from #4599 waits until the other programs have catalogs too.
+- Tested: `scripts/build-locked.sh` on 25 Nov 2026 exited 0 (third run of this change); `haiku.hpkg` has `data/locale/catalogs/x-vnd.R5OS-settings_<page>/en.catalog` for the add-ons; `catalogs.py export` wrote 20 folders. Not tested: Settings running in nl, de or fr (no QEMU, a stick follows), Weblate.
+
+## 2026-11-25 - Settings: every page is an add-on
+
+- Problem: `distro/settings/ModuleAPI.md` says a module is an add-on, but 16 of the 19 pages were built into the Settings program (`register_*_page()` in `SettingsApp.cpp`). Only Bluetooth, Game controllers and Fonts were add-ons. The owner asked for every page to be an add-on, and for that to be written down clearly.
+- Change:
+  - Twelve pages are now add-ons of their own: `settings_accounts`, `settings_connections`, `settings_deskbar`, `settings_discovery`, `settings_display`, `settings_information`, `settings_notifications`, `settings_power`, `settings_theme`, `settings_virtualmemory`, `settings_wallpaper`, `settings_wifi`. Each module file exports `settings_api_version()` and `instantiate_settings_module()` in place of its `register_*_page()`; the twelve one-line headers are gone.
+  - The four launchers (Sound, Keyboard, Mouse, Printers) are four add-ons (`LegacySound.cpp` and the others) around `create_legacy_module()` in `LegacyPages.cpp`, so it stays one page per add-on and the module API does not change.
+  - `SettingsApp.cpp` registers no page. Settings is the window, Home, the list, search, the lock and the loader, and links fewer libraries (no `libr5wifi.so`, `libr5power.so`, `bnetapi`, `network`).
+  - `SettingsManager::_LoadOne()` no longer calls `LoadSettings()` when an add-on is loaded. The window already calls it when a page is first opened, as it did for the built-in pages, so Settings does not read twenty pages' settings (the Wallpaper scan, the screen modes, the network interfaces) at start.
+  - `distro/desktop/build/jam/packages/Haiku` puts the sixteen new add-ons in `add-ons/Settings`, in both images. Fonts, Bluetooth and Game controllers still come in through `SYSTEM_ADD_ONS_SETTINGS`.
+  - `LookModule.cpp` was removed. It was not built since Look and Feel was merged into Theme.
+  - The rule is in `AGENTS.md` ("Settings window"), `distro/settings/ModuleAPI.md` (with a table of all add-ons and what a new page needs) and `docs/SETTINGS.md`.
+- Mistake: the first build failed to link `settings_accounts` and `settings_notifications`, which use `BFilePanel` from `libtracker`. Both link `tracker` now.
+- Limits: the pages, their order, ids, icons and texts are unchanged on paper; this was not seen running. A user add-on with the same id as a system page still loads first, as before.
+- Tested: `scripts/build-locked.sh` on 25 Nov 2026 exited 0 (second run); `haiku.hpkg` lists the 19 `settings_*` add-ons and no `settings_look`. Not tested: QEMU (owner's choice, a stick follows), the pages on hardware.
+
 ## 2026-11-25 - Tracker: a move keeps the original unless the copy fully succeeded (#4619-#4631)
 
 - Problem: a review of Tracker on `main` filed thirteen issues. Checked against the code: eleven are real, two are not.

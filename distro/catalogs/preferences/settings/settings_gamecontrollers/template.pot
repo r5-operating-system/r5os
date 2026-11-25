@@ -1,0 +1,251 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_gamecontrollers\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+msgctxt "Settings: Game controllers"
+msgid "Press the d-pad down"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Push the right stick down"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Pull %name%, the left trigger"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "This controller cannot be opened."
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Your own setup"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Automatic"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Resistance"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Press the d-pad up"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Cancel"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Button labels"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Vendor %vendor% · Product %product%"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Triggers"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Open Bluetooth…"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Push the left stick down"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Set up buttons"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Trigger feedback"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Starts at"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "One second, both motors."
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Press the d-pad to the left"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Set up buttons…"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Press the left stick in"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Skip a control your controller does not have."
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Test your controllers and set up their buttons"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Game controllers"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Pull %name%, the right trigger"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Press %name%, the right shoulder button"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Press Select"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "No controller"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Vibration"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Cross (✕)"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Push the right stick to the right"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "pull L2 or R2 to feel it"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Effect"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Triangle (△)"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Push the left stick to the right"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Press the right stick in"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Strength"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Press %name%, the right face button"
+msgstr ""
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+msgctxt "Settings: Game controllers"
+msgid "game controller gamepad joystick joypad test buttons layout mapping setup playstation xbox nintendo sega"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Circle (○)"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Press %name%, the lower face button"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Trigger click"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Layout"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Press %name%, the upper face button"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Press %name%, the left shoulder button"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Square (□)"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Connected"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Step %number% of %count%"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Plug one in with USB, or pair one in Bluetooth."
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Off"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Choose a layout, or set up the buttons one by one."
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Press %name%"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Press the d-pad to the right"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Skip"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Strong"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Bluetooth"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Motion"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Rumble"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Press Start"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Light"
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Press a button or move a stick: it lights up here."
+msgstr ""
+
+msgctxt "Settings: Game controllers"
+msgid "Press %name%, the left face button"
+msgstr ""

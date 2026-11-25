@@ -1,0 +1,100 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_deskbar\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Expand new applications"
+msgstr ""
+
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Hide application names"
+msgstr ""
+
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Sort applications by name"
+msgstr ""
+
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Show application expander"
+msgstr ""
+
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Auto-raise"
+msgstr ""
+
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Icon size"
+msgstr ""
+
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Open Theme…"
+msgstr ""
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+msgctxt "Settings: Desktop and Deskbar"
+msgid "deskbar desktop menu recent applications location"
+msgstr ""
+
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Menu"
+msgstr ""
+
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Edit in Tracker…"
+msgstr ""
+
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Tracker always first"
+msgstr ""
+
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Recent applications:"
+msgstr ""
+
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Recent folders:"
+msgstr ""
+
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Large"
+msgstr ""
+
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Deskbar appearance (style, layout, corners, floating) is set in Theme."
+msgstr ""
+
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Applications"
+msgstr ""
+
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Window"
+msgstr ""
+
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Always on top"
+msgstr ""
+
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Desktop and Deskbar"
+msgstr ""
+
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Recent documents:"
+msgstr ""
+
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Show applications"
+msgstr ""
+
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Small"
+msgstr ""
+
+#. Fixed text (AGENTS.md): translate the meaning, keep it short
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Adjust desktop and Deskbar settings"
+msgstr ""
+
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Auto-hide"
+msgstr ""

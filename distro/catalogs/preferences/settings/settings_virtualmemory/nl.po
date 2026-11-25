@@ -1,0 +1,79 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_virtualmemory\nLanguage: nl\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#, fuzzy
+msgctxt "Settings: Virtual memory"
+msgid "Requested swap file size:"
+msgstr "Gevraagde grootte van het wisselbestand:"
+
+#, fuzzy
+msgctxt "Settings: Virtual memory"
+msgid "The settings file could not be read. The defaults are shown; a change writes them."
+msgstr "Het instellingenbestand kon niet worden gelezen. De standaardwaarden worden getoond; een wijziging schrijft ze weg."
+
+#. Fixed text (AGENTS.md): translate the meaning, keep it short
+#, fuzzy
+msgctxt "Settings: Virtual memory"
+msgid "Extra memory stored on disk"
+msgstr "Extra geheugen op de schijf"
+
+#, fuzzy
+msgctxt "Settings: Virtual memory"
+msgid "Current swap:"
+msgstr "Huidig wisselgeheugen:"
+
+#, fuzzy
+msgctxt "Settings: Virtual memory"
+msgid "Virtual memory"
+msgstr "Virtueel geheugen"
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+#, fuzzy
+msgctxt "Settings: Virtual memory"
+msgid "swap virtual memory disk"
+msgstr "swap virtual memory disk wisselbestand wisselgeheugen virtueel geheugen schijf"
+
+#, fuzzy
+msgctxt "Settings: Virtual memory"
+msgid "The volume in the settings file was not found. The boot volume is shown; a change writes it."
+msgstr "Het volume uit het instellingenbestand is niet gevonden. Het opstartvolume wordt getoond; een wijziging schrijft het weg."
+
+#, fuzzy
+msgctxt "Settings: Virtual memory"
+msgid "Automatic swap management"
+msgstr "Wisselgeheugen automatisch beheren"
+
+#, fuzzy
+msgctxt "Settings: Virtual memory"
+msgid "volume"
+msgstr "volume"
+
+#, fuzzy
+msgctxt "Settings: Virtual memory"
+msgid "Enable virtual memory"
+msgstr "Virtueel geheugen inschakelen"
+
+#, fuzzy
+msgctxt "Settings: Virtual memory"
+msgid "Turn off"
+msgstr "Uitschakelen"
+
+#, fuzzy
+msgctxt "Settings: Virtual memory"
+msgid "Disabling virtual memory will have unwanted effects on system stability once the memory is used up.\nVirtual memory does not affect system performance until this point is reached.\n\nAre you really sure you want to turn it off?"
+msgstr "Virtueel geheugen uitschakelen heeft ongewenste gevolgen voor de stabiliteit van het systeem zodra het geheugen vol is.\nTot dat moment heeft virtueel geheugen geen invloed op de prestaties van het systeem.\n\nWeet je zeker dat je het wilt uitschakelen?"
+
+#, fuzzy
+msgctxt "Settings: Virtual memory"
+msgid "Use volume:"
+msgstr "Volume gebruiken:"
+
+#, fuzzy
+msgctxt "Settings: Virtual memory"
+msgid "Changes take effect on the next start."
+msgstr "Wijzigingen worden actief bij de volgende start."
+
+#, fuzzy
+msgctxt "Settings: Virtual memory"
+msgid "Keep enabled"
+msgstr "Ingeschakeld laten"

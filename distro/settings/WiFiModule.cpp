@@ -9,24 +9,31 @@
  */
 
 
-#include "WiFiModule.h"
 
-#include "SettingsManager.h"
 #include "SettingsModule.h"
 
+#include <Catalog.h>
 #include <R5WiFiView.h>
+
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "Settings: Wi-Fi"
 
 
 class WiFiModule : public SettingsModule {
 public:
 	virtual	const char*			Identifier() const { return "wifi"; }
-	virtual	const char*			Name() const { return "Wi-Fi"; }
+	virtual	const char*			Name() const
+									{ return B_TRANSLATE("Wi-Fi"); }
 	virtual	const char*			Category() const { return "network"; }
 	virtual	const char*			Description() const
-									{ return "Connect to wireless networks"; }
+									{ return B_TRANSLATE("Connect to wireless networks"); }
 	virtual	const char*			Keywords() const
-									{ return "wifi wireless wlan ssid "
-										"password network"; }
+									{ return B_TRANSLATE_COMMENT("wifi wireless wlan ssid "
+										"password network",
+										"Search words, separated by spaces. Keep "
+										"the English words and add words in your "
+										"language."); }
 	virtual	bool				CanSave() const { return false; }
 
 	virtual	BView*				CreateView(SettingsContext* context,
@@ -45,8 +52,17 @@ public:
 };
 
 
-void
-register_wifi_page(SettingsManager& manager)
+// The add-on settings_wifi (distro/settings/ModuleAPI.md): every
+// Settings page is an add-on of its own.
+extern "C" _EXPORT int32
+settings_api_version()
 {
-	manager.Add(new WiFiModule());
+	return kSettingsApiVersion;
+}
+
+
+extern "C" _EXPORT SettingsModule*
+instantiate_settings_module()
+{
+	return new WiFiModule();
 }

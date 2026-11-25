@@ -1,0 +1,423 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_accounts\nLanguage: fr\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "The guest setting could not be changed."
+msgstr "Le paramètre invité n'a pas pu être modifié."
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Users and Accounts"
+msgstr "Utilisateurs et comptes"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "The picture could not be removed."
+msgstr "L'image n'a pas pu être retirée."
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Uses apps, changes own settings"
+msgstr "Utilise des applications, modifie ses propres paramètres"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "No password. Everything is deleted at log out."
+msgstr "Pas de mot de passe. Tout est effacé à la déconnexion."
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "The picture could not be saved."
+msgstr "L'image n'a pas pu être enregistrée."
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "The account could not be deleted."
+msgstr "Le compte n'a pas pu être supprimé."
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "People on this computer."
+msgstr "Personnes sur cet ordinateur."
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Name"
+msgstr "Nom"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Start with a lowercase letter; then lowercase letters and numbers."
+msgstr "Commencez par une lettre minuscule ; ensuite, des lettres minuscules et des chiffres."
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Allow guests to sign in to this computer"
+msgstr "Autoriser les invités à se connecter à cet ordinateur"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Used to sign in; letters and numbers"
+msgstr "Sert à se connecter ; lettres et chiffres"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Choose picture…"
+msgstr "Choisir une image…"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Administrator"
+msgstr "Administrateur"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "The email address could not be saved."
+msgstr "L'adresse e-mail n'a pas pu être enregistrée."
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Delete account…"
+msgstr "Supprimer le compte…"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Remove picture"
+msgstr "Retirer l'image"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Tracker could not open the Shared folder."
+msgstr "Tracker n'a pas pu ouvrir le dossier partagé."
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "OK"
+msgstr "OK"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Delete the account of %name%?\n\nKeep files leaves the home folder %home% on the disk. Delete files removes it, with everything in it."
+msgstr "Supprimer le compte de %name% ?\n\n« Conserver les fichiers » laisse le dossier personnel %home% sur le disque. « Supprimer les fichiers » le supprime, avec tout son contenu."
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Open"
+msgstr "Ouvrir"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Add an account"
+msgstr "Ajouter un compte"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Changes are saved as you make them. The last administrator cannot become a standard account."
+msgstr "Les modifications sont enregistrées au fur et à mesure. Le dernier administrateur ne peut pas devenir un compte standard."
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "A standard account sees only its own card (name, email, picture, password). The account list, account types and the guest wait for an administrator's unlock."
+msgstr "Un compte standard ne voit que sa propre fiche (nom, e-mail, image, mot de passe). La liste des comptes, les types de compte et l'invité attendent le déverrouillage par un administrateur."
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "They get their own private home folder and settings."
+msgstr "Chaque personne obtient son propre dossier personnel privé et ses propres paramètres."
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Username"
+msgstr "Nom d'utilisateur"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "ACCOUNTS"
+msgstr "COMPTES"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "home: %path%"
+msgstr "dossier personnel : %path%"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Add account…"
+msgstr "Ajouter un compte…"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Delete files"
+msgstr "Supprimer les fichiers"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Can also change the computer"
+msgstr "Peut aussi modifier l'ordinateur"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "OK"
+msgstr "OK"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Disable account"
+msgstr "Désactiver le compte"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Change your password"
+msgstr "Changer votre mot de passe"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Choose picture…"
+msgstr "Choisir une image…"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Administrator"
+msgstr "Administrateur"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "The account was added, but its picture was not saved.\n%error%"
+msgstr "Le compte a été ajouté, mais son image n'a pas été enregistrée.\n%error%"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "you"
+msgstr "vous"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Cancel"
+msgstr "Annuler"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "✓ The passwords match"
+msgstr "✓ Les mots de passe correspondent"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Delete account"
+msgstr "Supprimer le compte"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Not everything could be put back:"
+msgstr "Tout n'a pas pu être rétabli :"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Accounts could not be read: %error%"
+msgstr "Impossible de lire les comptes : %error%"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "That picture could not be used."
+msgstr "Cette image n'a pas pu être utilisée."
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Repeat password"
+msgstr "Répéter le mot de passe"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Sign in must be running to change accounts."
+msgstr "L'écran de connexion doit être actif pour modifier les comptes."
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "name@example.com"
+msgstr "nom@exemple.com"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Account type"
+msgstr "Type de compte"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Standard"
+msgstr "Standard"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "disabled"
+msgstr "désactivé"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Password"
+msgstr "Mot de passe"
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "user users account accounts password administrator standard picture email sign in guest shared"
+msgstr "user users account accounts password administrator standard picture email sign in guest shared utilisateur utilisateurs compte comptes mot de passe administrateur image photo courriel connexion invité partagé"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Account type"
+msgstr "Type de compte"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Shared folder"
+msgstr "Dossier partagé"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "The account could not be added."
+msgstr "Le compte n'a pas pu être ajouté."
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Cancel"
+msgstr "Annuler"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Repeat new password"
+msgstr "Répéter le nouveau mot de passe"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "New password for %name%"
+msgstr "Nouveau mot de passe pour %name%"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "GUEST AND SHARING"
+msgstr "INVITÉ ET PARTAGE"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Change password"
+msgstr "Changer le mot de passe"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Change password…"
+msgstr "Changer le mot de passe…"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Password"
+msgstr "Mot de passe"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Email"
+msgstr "E-mail"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "%name%'s old password is not needed. Tell %name% the new one; it works from the next sign in. Their saved passwords stay locked until they enter their old password once; otherwise they start with an empty key store."
+msgstr "L'ancien mot de passe de %name% n'est pas nécessaire. Communiquez le nouveau à %name% ; il fonctionne dès la prochaine connexion. Ses mots de passe enregistrés restent verrouillés jusqu'à ce que l'ancien mot de passe soit saisi une fois ; sinon, le trousseau repart vide."
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Admin"
+msgstr "Admin"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "The name could not be saved."
+msgstr "Le nom n'a pas pu être enregistré."
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Guest: %error%"
+msgstr "Invité : %error%"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "That file is not a picture this computer can open."
+msgstr "Ce fichier n'est pas une image que cet ordinateur peut ouvrir."
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Sign in did not answer."
+msgstr "L'écran de connexion n'a pas répondu."
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Name"
+msgstr "Nom"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Add account"
+msgstr "Ajouter le compte"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Standard"
+msgstr "Standard"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "× The passwords don't match yet"
+msgstr "× Les mots de passe ne correspondent pas encore"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "That username is already in use."
+msgstr "Ce nom d'utilisateur est déjà utilisé."
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Users and Accounts"
+msgstr "Utilisateurs et comptes"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "The account could not be changed."
+msgstr "Le compte n'a pas pu être modifié."
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Enable account"
+msgstr "Activer le compte"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "New password"
+msgstr "Nouveau mot de passe"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "Keep files"
+msgstr "Conserver les fichiers"
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "The account type could not be changed."
+msgstr "Le type de compte n'a pas pu être modifié."
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "The Shared folder could not be found."
+msgstr "Le dossier partagé est introuvable."
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "The password could not be changed."
+msgstr "Le mot de passe n'a pas pu être modifié."
+
+#, fuzzy
+msgctxt "Settings: Users and Accounts"
+msgid "home %path%"
+msgstr "dossier personnel %path%"
+
+#, fuzzy
+msgctxt "Settings: Account dialogs"
+msgid "Current password"
+msgstr "Mot de passe actuel"

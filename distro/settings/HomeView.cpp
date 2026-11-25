@@ -9,6 +9,7 @@
 #include "SettingsFont.h"
 #include "SettingsMessages.h"
 
+#include <Catalog.h>
 #include <ControlLook.h>
 #include <InterfaceDefs.h>
 #include <GridLayout.h>
@@ -16,6 +17,10 @@
 #include <Window.h>
 
 #include <string.h>
+
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "Settings: Home"
 
 
 static void
@@ -89,7 +94,7 @@ RecentPanel::Draw(BRect update)
 	float x = u * 14.0f;
 	SetFont(&title);
 	SetHighColor(ui_color(B_DOCUMENT_TEXT_COLOR));
-	DrawString("Recently changed", BPoint(x, y));
+	DrawString(B_TRANSLATE("Recently changed"), BPoint(x, y));
 	y += titleHeight.descent + u * 4.0f + bodyHeight.ascent;
 	SetFont(&body);
 	SetHighColor(mix_color(ui_color(B_DOCUMENT_BACKGROUND_COLOR),
@@ -164,7 +169,7 @@ HomeView::SetRecent(const BString* names, const BString* ids, int32 count)
 		delete fRecent;
 		fRecent = NULL;
 	}
-	BString line("Nothing changed yet");
+	BString line(B_TRANSLATE("Nothing changed yet"));
 	if (count > 0 && names != NULL) {
 		line = "";
 		for (int32 i = 0; i < count; i++) {
