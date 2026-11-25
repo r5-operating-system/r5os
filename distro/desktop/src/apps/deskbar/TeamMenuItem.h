@@ -118,6 +118,8 @@ protected:
 public:
 			int32				ListedWindowCount() const
 									{ return fListedWindowCount; }
+			void				SetListedWindowCount(int32 count)
+									{ fListedWindowCount = count; }
 			bool				IsFront() const;
 			void				ModernSize(float* width, float* height)
 									{ _ModernContentSize(width, height); }

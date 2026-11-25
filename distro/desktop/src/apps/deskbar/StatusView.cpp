@@ -690,7 +690,12 @@ TReplicantTray::HandleEntryUpdate(BMessage* message)
 				ref.set_name(name);
 				// change the directory reference to
 				// the new directory
-				MoveItem(&ref, todirectory);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+				// match by node: on a rename "name" is the new name (#4634)
+				MoveItem(&ref, todirectory, node);
+// SPDX-SnippetEnd
 			}
 			break;
 		}
@@ -887,29 +892,47 @@ TReplicantTray::RemoveItem(int32 id)
  *	copying will occur (ENTRY_CREATED) between devices
  */
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
 void
-TReplicantTray::MoveItem(entry_ref* ref, ino_t toDirectory)
+TReplicantTray::MoveItem(entry_ref* ref, ino_t toDirectory, ino_t node)
 {
 	if (ref == NULL)
 		return;
 
-	// scan for a matching entry_ref and update it
-	//
-	// don't need to change node info as it does not change
+	// Match by node (#4634): on a rename ref->name is already the new name,
+	// so comparing it with the stored name never matched. Store the new
+	// directory and name, and write the new path to the shelf settings so
+	// the add-on is loaded again on the next start.
+	node_ref nodeRef(ref->device, node);
+	DeskbarItemInfo* item = DeskbarItemFor(nodeRef);
+	if (item == NULL)
+		return;
 
-	for (int32 i = fItemList->CountItems() - 1; i >= 0; i--) {
-		DeskbarItemInfo* item = (DeskbarItemInfo*)fItemList->ItemAt(i);
-		if (item == NULL)
-			continue;
+	BPath oldPath(&item->entryRef);
+	item->entryRef.directory = toDirectory;
+	item->entryRef.set_name(ref->name);
 
-		if (strcmp(item->entryRef.name, ref->name) == 0
-			&& item->entryRef.device == ref->device
-			&& item->entryRef.directory == ref->directory) {
-			item->entryRef.directory = toDirectory;
+	if (!item->isAddOn)
+		return;
+
+	BPath newPath(&item->entryRef);
+	if (oldPath.InitCheck() != B_OK || newPath.InitCheck() != B_OK)
+		return;
+
+	BString storedPath;
+	for (int32 i = 0; fAddOnSettings.FindString(kReplicantPathField, i,
+			&storedPath) == B_OK; i++) {
+		if (storedPath == oldPath.Path()) {
+			fAddOnSettings.ReplaceString(kReplicantPathField, i,
+				newPath.Path());
+			_SaveSettings();
 			break;
 		}
 	}
 }
+// SPDX-SnippetEnd
 
 #endif // add-on support
 
@@ -1466,25 +1489,14 @@ TReplicantTray::RealignReplicants(int32 startIndex)
 status_t
 TReplicantTray::_SaveSettings()
 {
-	status_t result;
-	BPath path;
-	if ((result = GetDeskbarSettingsDirectory(path, true)) == B_OK) {
-		path.Append(kReplicantSettingsFile);
-
-		BFile file(path.Path(), B_READ_WRITE | B_CREATE_FILE | B_ERASE_FILE);
-		if ((result = file.InitCheck()) == B_OK)
-			result = fAddOnSettings.Flatten(&file);
-		// SPDX-SnippetBegin
-		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
-		// SPDX-License-Identifier: MIT
-		// To the disk now: after the power button the file kept its new
-		// size with old blocks in it, and Deskbar crashed on the next start.
-		if (result == B_OK)
-			file.Sync();
-		// SPDX-SnippetEnd
-	}
-
-	return result;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// After the power button the file kept its new size with old blocks in
+	// it, and Deskbar crashed on the next start. Sync alone still left a
+	// window after the truncate: write beside it and rename (#4635).
+	return r5_save_deskbar_settings(kReplicantSettingsFile, fAddOnSettings);
+// SPDX-SnippetEnd
 }
 
 
