@@ -78,6 +78,8 @@ Pass `NULL` for the view and either call returns without drawing.
 
 `B_CARD_DOCUMENT` fills with `B_DOCUMENT_BACKGROUND_COLOR`. `B_CARD_PANEL` fills with `B_PANEL_BACKGROUND_COLOR` tinted by `B_DARKEN_1_TINT`. The border is one pixel, `B_PANEL_BACKGROUND_COLOR` tinted by `B_DARKEN_2_TINT`. The corner radius is a quarter of `be_plain_font->Size()` (3 px at 12 pt). The inner margin is `B_USE_BIG_SPACING`. Every color comes from `ui_color()`.
 
+On `B_COLORS_UPDATED` (a change of theme) the card takes its new face and passes it to the child views that still carry its old face, such as a `BStringView` that adopted the card's colors when it was attached (25 Nov 2026). A child with colors of its own, a text field's text view and a card inside the card keep theirs.
+
 `Archive()` and `Instantiate()` keep the style. The archived class name is `BAppearanceKit::BCard`.
 
 ```cpp
