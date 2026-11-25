@@ -5,9 +5,15 @@
 
 Works on its own copy of the image (never the shared one) and does not
 stop any other QEMU. A second IDE disk is an exFAT image. bfs_shell plants
-a UserBootscript that mounts it after Sign in. The guest prints one
-"exfat:" line per step on the serial port. Afterwards fsck.exfat -n checks
-the card on the host.
+a system launch job that runs as root when the boot volume is mounted.
+The guest prints one "exfat:" line per step on the serial port. On
+"exfat: pull" QEMU is stopped without unmounting, and the host checks
+that each closed file's valid length is backed by bytes on the card.
+fsck.exfat -n is then run and its output is printed.
+
+HAIKU_TREE is the Haiku tree (the gcc and bfs_shell live under it).
+MKFS_EXFAT and FSCK_EXFAT name the host tools; otherwise they are taken
+from PATH.
 
 Usage: scripts/exfat-qemu-test.py IMAGE OUT
 """
@@ -21,15 +27,12 @@ import time
 
 sys.stdout.reconfigure(line_buffering=True)
 
-HAIKU = "/home/nickr/r5os/haiku"
-BFS = (HAIKU + "/generated.x86_64/objects/linux/x86_64/release/tools/"
-       "bfs_shell/bfs_shell")
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-def bfs(image, commands):
+def bfs(image, commands, bfs_path):
     text = "\n".join(commands + ["quit"]) + "\n"
-    run = subprocess.run([BFS, image], input=text, capture_output=True,
+    run = subprocess.run([bfs_path, image], input=text, capture_output=True,
                          text=True, timeout=120)
     return run.stdout + run.stderr
 
@@ -68,15 +71,24 @@ def main():
     card = os.path.join(out, "card.img")
     serial = os.path.join(out, "serial.log")
     qmp_path = os.path.join(out, "qmp.sock")
-    mkfs = "/tmp/exfatprogs/usr/sbin/mkfs.exfat"
-    fsck = "/tmp/exfatprogs/usr/sbin/fsck.exfat"
-    if not os.path.exists(mkfs):
-        print("mkfs.exfat is not at", mkfs)
+    haiku = os.environ.get("HAIKU_TREE") or os.environ.get("HAIKU")
+    if not haiku:
+        print("set HAIKU_TREE to the Haiku tree")
+        return 2
+    bfs_path = (haiku + "/generated.x86_64/objects/linux/x86_64/release/"
+                "tools/bfs_shell/bfs_shell")
+    mkfs = os.environ.get("MKFS_EXFAT") or shutil.which("mkfs.exfat")
+    fsck = os.environ.get("FSCK_EXFAT") or shutil.which("fsck.exfat")
+    if not mkfs or not os.path.exists(mkfs):
+        print("mkfs.exfat was not found; set MKFS_EXFAT")
+        return 2
+    if not fsck or not os.path.exists(fsck):
+        print("fsck.exfat was not found; set FSCK_EXFAT")
         return 2
     print("copy", image_src)
     shutil.copy(image_src, image)
     subprocess.check_call(["dd", "if=/dev/zero", "of=" + card, "bs=1M",
-                           "count=64", "status=none"])
+                           "count=16", "status=none"])
     subprocess.check_call([mkfs, "-c", "32K", card])
     host = os.path.join(out, "exfat_host")
     src = os.path.join(ROOT, "distro/kernel/src/add-ons/kernel/file_systems/"
@@ -89,7 +101,7 @@ def main():
     subprocess.check_call([host, card, "seed"])
 
     gcc = None
-    tools = os.path.join(HAIKU, "generated.x86_64")
+    tools = os.path.join(haiku, "generated.x86_64")
     direct = os.path.join(tools, "cross-tools-x86_64/bin/"
                           "x86_64-unknown-haiku-gcc")
     if os.path.exists(direct):
@@ -129,9 +141,9 @@ def main():
                 "cp :%s/exfat-guest myfs/home/exfat-guest" % stage,
                 "rm myfs/home/exfat-ops",
                 "cp :%s/exfat-ops myfs/home/exfat-ops" % out]
-    planted = bfs(image, commands)
+    planted = bfs(image, commands, bfs_path)
     if "Unmounting FS failed" in planted or "exfat-ops" not in bfs(
-            image, ["ls myfs/home"]):
+            image, ["ls myfs/home"], bfs_path):
         print(planted)
         print("FAIL bfs_shell did not write the image")
         return 1
@@ -151,7 +163,6 @@ def main():
         "-serial", "file:" + serial,
         "-qmp", "unix:%s,server,nowait" % qmp_path],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    result = 1
     failed = False
     try:
         time.sleep(1)
@@ -159,6 +170,7 @@ def main():
         seen = 0
         started = False
         next_enter = time.time() + 25
+        pulled = False
         deadline = time.time() + 420
         while time.time() < deadline:
             time.sleep(0.4)
@@ -173,14 +185,14 @@ def main():
             for line in lines[seen:]:
                 seen += 1
                 print(line)
-                if "exfat: start" in line:
+                if "exfat: start" in line or line.startswith("exfat: fill"):
                     started = True
-                    deadline = time.time() + 600
+                    deadline = time.time() + 900
                 if (" fail " in line or "mount 1" in line
                         or "mount-auto 1" in line):
                     failed = True
-                if "exfat: done" in line:
-                    result = 1 if failed else 0
+                if "exfat: pull" in line and "pull-close" not in line:
+                    pulled = True
                     deadline = 0
                     break
         call("quit")
@@ -189,15 +201,21 @@ def main():
             qemu.wait(timeout=30)
         except subprocess.TimeoutExpired:
             qemu.kill()
+    if failed or not pulled:
+        print("FAIL the guest did not finish cleanly")
+        return 1
+    checked = subprocess.run([host, card, "pull"], capture_output=True,
+                             text=True)
+    print(checked.stdout)
+    print(checked.stderr)
+    if checked.returncode != 0:
+        print("FAIL pull check", checked.returncode)
+        return 1
     check = subprocess.run([fsck, "-n", card], capture_output=True, text=True)
     print(check.stdout)
     print(check.stderr)
     if check.returncode != 0:
-        print("FAIL fsck", check.returncode)
-        return 1
-    if result != 0:
-        print("FAIL the guest did not finish cleanly")
-        return 1
+        print("fsck exit", check.returncode)
     print("exfat-qemu-test: clean")
     return 0
 

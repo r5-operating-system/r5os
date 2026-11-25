@@ -24,7 +24,7 @@ public:
 								~DataStream();
 
 			status_t			FindBlock(off_t pos, off_t& physical,
-									off_t *_length = NULL);
+									off_t *_length = NULL, off_t maxRun = 0);
 private:
 			const uint32		kBlockSize;
 			const uint32		kClusterSize;

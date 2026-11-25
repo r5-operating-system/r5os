@@ -155,10 +155,9 @@ Inode::UpdateNodeFromDisk()
 	status_t status = exfat_read_entry(fVolume->Store(), fVolume->Disk(), &dir,
 		fOffset, &found);
 	if (status != B_OK) {
-		dprintf("exfat: load ino %" B_PRIdINO " index %" B_PRIu32
-			" dir cluster %" B_PRIu32 " length %" B_PRIu64
-			" root %d: %s\n", ID(), fOffset, fDirCluster, fDirLength,
-			fDirRoot ? 1 : 0, strerror(status));
+		TRACE("exfat: load ino %" B_PRIdINO " index %" B_PRIu32
+			" dir cluster %" B_PRIu32 ": %s\n", ID(), fOffset, fDirCluster,
+			strerror(status));
 		return status;
 	}
 	memcpy(&fFileEntry, found.primary, 32);
@@ -312,13 +311,16 @@ Inode::CheckPermissions(int accessMode) const
 
 
 status_t
-Inode::FindBlock(off_t pos, off_t& physical, off_t *_length)
+Inode::FindBlock(off_t pos, off_t& physical, off_t *_length, off_t maxRun)
 {
 	DataStream stream(fVolume, this, Size());
-	return stream.FindBlock(pos, physical, _length);
+	return stream.FindBlock(pos, physical, _length, maxRun);
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
 void
 Inode::EnsureCache()
 {
@@ -328,13 +330,18 @@ Inode::EnsureCache()
 	if (fMap == NULL)
 		fMap = file_map_create(fVolume->ID(), ID(), Size());
 }
+// SPDX-SnippetEnd
 
 
 status_t
 Inode::ReadAt(off_t pos, uint8* buffer, size_t* _length)
 {
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
 	if (FileCache() == NULL)
 		return B_BAD_VALUE;
+	// SPDX-SnippetEnd
 	return file_cache_read(FileCache(), pos, buffer, _length);
 }
 

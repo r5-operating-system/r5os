@@ -44,6 +44,9 @@ public:
 			cluster_t	NextCluster(cluster_t cluster) const;
 
 			rw_lock*	Lock() { return &fLock; }
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
 			void		WriteLock();
 			void		WriteUnlock();
 			void		MetaLock();
@@ -53,6 +56,7 @@ public:
 
 			status_t	UpdateNodeFromDisk();
 			void		EnsureCache();
+			// SPDX-SnippetEnd
 
 			bool		IsDirectory() const
 							{ return S_ISDIR(Mode()); }
@@ -116,7 +120,7 @@ public:
 			Volume*		GetVolume() const { return fVolume; }
 
 			status_t	FindBlock(off_t logical, off_t& physical,
-							off_t *_length = NULL);
+							off_t *_length = NULL, off_t maxRun = 0);
 			status_t	ReadAt(off_t pos, uint8 *buffer, size_t *length);
 			status_t	FillGapWithZeros(off_t start, off_t end);
 

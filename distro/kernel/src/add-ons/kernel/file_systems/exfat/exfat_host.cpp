@@ -605,17 +605,107 @@ seed(const char* path)
 	return 0;
 }
 
+static int
+expect_mark(exfat_store* store, exfat_disk* disk, exfat_node* root,
+	const char* name, unsigned char mark, uint64 length)
+{
+	exfat_node found;
+	status_t status = exfat_lookup(store, disk, root, name, &found);
+	if (status != B_OK)
+		return fail(name, status);
+	printf("%s valid %llu data %llu flags 0x%x first %u\n", name,
+		(unsigned long long)found.valid_length,
+		(unsigned long long)found.data_length, found.flags,
+		found.first_cluster);
+	if (found.valid_length != length || found.data_length < length)
+		return fail(name, B_BAD_DATA);
+	uint8* buf = (uint8*)malloc((size_t)length);
+	if (buf == NULL)
+		return fail(name, B_NO_MEMORY);
+	uint64 moved = 0;
+	status = exfat_read_bytes(store, disk, &found, 0, buf, length, &moved);
+	int bad = status != B_OK || moved != length;
+	for (uint64 i = 0; !bad && i < length; i++) {
+		if (buf[i] != mark)
+			bad = 1;
+	}
+	free(buf);
+	if (bad)
+		return fail(name, status == B_OK ? B_BAD_DATA : status);
+	if ((found.flags & 0x02) == 0)
+		printf("%s is FAT-chained\n", name);
+	else
+		printf("%s is contiguous\n", name);
+	return 0;
+}
+
+static int
+pull(const char* path)
+{
+	int fd = open(path, O_RDONLY);
+	if (fd < 0) {
+		perror(path);
+		return 1;
+	}
+	uint8 boot[512];
+	if (pread(fd, boot, sizeof(boot), 0) != (ssize_t)sizeof(boot)) {
+		perror("boot");
+		close(fd);
+		return 1;
+	}
+	uint8 shift = boot[108];
+	if (shift < 9 || shift > 12) {
+		close(fd);
+		return fail("sector shift", B_BAD_DATA);
+	}
+	image media;
+	media.fd = fd;
+	media.block_size = 1u << shift;
+	media.writes_left = -1;
+	exfat_store store;
+	store.cookie = &media;
+	store.read = image_read;
+	store.write = image_write;
+	store.flush = image_flush;
+	exfat_disk disk;
+	status_t status = exfat_disk_open(&store, boot, &disk);
+	if (status != B_OK) {
+		close(fd);
+		return fail("pull open", status);
+	}
+	fprintf(stderr, "pull open: %s\n", disk.read_only_reason);
+	exfat_node root;
+	status = exfat_root(&store, &disk, &root);
+	int result = 0;
+	if (status != B_OK)
+		result = fail("pull root", status);
+	if (result == 0)
+		result = expect_mark(&store, &disk, &root, "even.bin", 'a', 1500);
+	if (result == 0)
+		result = expect_mark(&store, &disk, &root, "pull.bin", 'P', 4196);
+	if (result == 0)
+		result = expect_mark(&store, &disk, &root, "frag.bin", 'F',
+			3u * 32768u);
+	exfat_disk_close(&disk);
+	close(fd);
+	if (result == 0)
+		printf("pull %s\n", path);
+	return result;
+}
+
 int
 main(int argc, char** argv)
 {
 	if (argc < 2) {
-		fprintf(stderr, "usage: exfat_host <image> [large|cut|seed]\n");
+		fprintf(stderr, "usage: exfat_host <image> [large|cut|seed|pull]\n");
 		return 2;
 	}
 	if (argc > 2 && strcmp(argv[2], "cut") == 0)
 		return cut_power(argv[1]);
 	if (argc > 2 && strcmp(argv[2], "seed") == 0)
 		return seed(argv[1]);
+	if (argc > 2 && strcmp(argv[2], "pull") == 0)
+		return pull(argv[1]);
 	bool large = argc > 2 && strcmp(argv[2], "large") == 0;
 	return run(argv[1], large);
 }

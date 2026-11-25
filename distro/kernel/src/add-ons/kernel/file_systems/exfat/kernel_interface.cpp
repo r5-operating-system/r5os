@@ -54,7 +54,7 @@ status_t	exfat_write(fs_volume* volume, fs_vnode* vnode, void* cookie,
 				off_t pos, const void* buffer, size_t* length);
 status_t	exfat_write_pages(fs_volume* volume, fs_vnode* vnode, void* cookie,
 				off_t pos, const iovec* vecs, size_t count, size_t* numBytes);
-status_t	exfat_cached_transfer(Volume* volume, Inode* inode, off_t pos,
+status_t	exfat_device_transfer(Volume* volume, Inode* inode, off_t pos,
 				const iovec* vecs, size_t count, size_t* numBytes, bool write);
 status_t	exfat_commit(fs_volume* volume, fs_vnode* vnode);
 status_t	exfat_fsync(fs_volume* volume, fs_vnode* vnode, bool dataOnly);
@@ -301,11 +301,11 @@ exfat_read_pages(fs_volume* _volume, fs_vnode* _node, void*,
 	// SPDX-License-Identifier: MIT
 	off_t start = pos;
 	size_t bytes = *_numBytes;
-	// SPDX-SnippetEnd
 	inode->ReadLock();
-	status_t status = exfat_cached_transfer(volume, inode, pos, vecs, count,
+	status_t status = exfat_device_transfer(volume, inode, pos, vecs, count,
 		&bytes, false);
 	inode->ReadUnlock();
+	// SPDX-SnippetEnd
 
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
@@ -361,11 +361,22 @@ exfat_get_file_map(fs_volume* _volume, fs_vnode* _node, off_t offset,
 	while (true) {
 		off_t blockOffset;
 		off_t blockLength;
-		status_t status = inode->FindBlock(offset, blockOffset, &blockLength);
+		status_t status = inode->FindBlock(offset, blockOffset, &blockLength,
+			(off_t)size);
 		if (status != B_OK)
 			return status;
-		if (blockLength > (off_t)size)
-			blockLength = (off_t)size;
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		if (blockLength > (off_t)size) {
+			off_t need = (off_t)size;
+			uint32 bsize = inode->GetVolume()->BlockSize();
+			if (bsize > 1 && (need % (off_t)bsize) != 0)
+				need += (off_t)bsize - (need % (off_t)bsize);
+			if (blockLength > need)
+				blockLength = need;
+		}
+		// SPDX-SnippetEnd
 
 		if (index > 0 && (vecs[index - 1].offset
 				== blockOffset - vecs[index - 1].length)) {

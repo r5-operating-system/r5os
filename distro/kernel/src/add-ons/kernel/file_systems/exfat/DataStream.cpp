@@ -40,7 +40,7 @@ DataStream::~DataStream()
 
 
 status_t
-DataStream::FindBlock(off_t pos, off_t& physical, off_t *_length)
+DataStream::FindBlock(off_t pos, off_t& physical, off_t *_length, off_t maxRun)
 {
 	if (pos >= fSize) {
 		TRACE("FindBlock: offset larger than size\n");
@@ -53,10 +53,12 @@ DataStream::FindBlock(off_t pos, off_t& physical, off_t *_length)
 	exfat_disk* disk = fVolume->Disk();
 	uint32 heap = disk->cluster_count + 1;
 	if (cluster < 2 || cluster > heap) {
-		dprintf("exfat: map ino %" B_PRIdINO " pos %" B_PRIdOFF
-			" cluster %" B_PRIu32 " heap %" B_PRIu32 " size %" B_PRIdOFF
-			" flags 0x%x contig %d\n", fInode->ID(), pos, cluster, heap,
-			fSize, fInode->StreamFlags(), fInode->IsContiguous() ? 1 : 0);
+		static int32 sMapReport = 0;
+		if (atomic_add(&sMapReport, 1) == 0) {
+			dprintf("exfat: map ino %" B_PRIdINO " pos %" B_PRIdOFF
+				" cluster %" B_PRIu32 " heap %" B_PRIu32 "\n",
+				fInode->ID(), pos, cluster, heap);
+		}
 		return B_BAD_DATA;
 	}
 	uint64 clusterIndex = (uint64)pos / kClusterSize;
@@ -84,14 +86,24 @@ DataStream::FindBlock(off_t pos, off_t& physical, off_t *_length)
 	physical = (off_t)(block * kBlockSize + within % kBlockSize);
 	// The disk reads and writes whole sectors. The run stays inside the
 	// clusters that hold the file, including the bytes past the file's
-	// length in its last cluster.
+	// length in its last cluster. A FAT chain stops at the requested
+	// length (at most 1 MiB) instead of walking the rest of the file.
 	uint64 lastIndex = (uint64)(fSize - 1) / kClusterSize;
+	off_t clusterRest = (off_t)(kClusterSize - within);
+	off_t limit = maxRun;
+	if (limit <= 0 || limit > (off_t)(1024 * 1024))
+		limit = (off_t)(1024 * 1024);
+	if (limit < clusterRest)
+		limit = clusterRest;
 	off_t run = (off_t)((lastIndex - clusterIndex + 1) * kClusterSize
 		- within);
+	if (run > limit)
+		run = limit;
 	if (!fInode->IsContiguous()) {
-		run = (off_t)(kClusterSize - within);
+		run = clusterRest;
 		cluster_t current = cluster;
-		for (uint64 covered = clusterIndex; covered < lastIndex; covered++) {
+		for (uint64 covered = clusterIndex; run < limit && covered < lastIndex;
+				covered++) {
 			cluster_t next = fInode->NextCluster(current);
 			if (next != (cluster_t)(current + 1) || next < 2 || next > heap)
 				break;

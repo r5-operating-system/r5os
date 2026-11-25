@@ -187,10 +187,15 @@ main(int argc, char** argv)
 		}
 		close(fd);
 	}
-	ok = ok && growths >= 1
+	struct stat packedBefore;
+	memset(&packedBefore, 0, sizeof(packedBefore));
+	ok = ok && growths >= 1 && stat("Packed", &packedBefore) == 0
 		&& rename("Packed/p0000", "Packed/moved000") == 0;
+	struct stat packedAfter;
+	memset(&packedAfter, 0, sizeof(packedAfter));
 	fd = ok ? open("Packed/moved000", O_RDONLY) : -1;
-	step("full-dir", ok && fd >= 0);
+	step("full-dir", ok && fd >= 0 && stat("Packed", &packedAfter) == 0
+		&& packedAfter.st_size >= packedBefore.st_size);
 	if (fd >= 0)
 		close(fd);
 	fd = ok ? open("Packed/p0001", O_RDONLY) : -1;
@@ -229,6 +234,136 @@ main(int argc, char** argv)
 
 	ok = mkdir("Gone", 0755) == 0 && rmdir("Gone") == 0;
 	step("rmdir", ok);
-	say("exfat: ops done");
+
+	ok = mkdir("Other", 0755) == 0;
+	fd = ok ? open("cross.txt", O_RDWR | O_CREAT | O_TRUNC, 0644) : -1;
+	ok = ok && fd >= 0 && write_all(fd, "XY", 2) == 0;
+	if (fd >= 0)
+		close(fd);
+	ok = ok && rename("cross.txt", "Other/cross.txt") == 0;
+	fd = ok ? open("Other/cross.txt", O_RDONLY) : -1;
+	char cross[4];
+	got = fd < 0 ? -1 : read(fd, cross, sizeof(cross));
+	if (fd >= 0)
+		close(fd);
+	step("cross", ok && got == 2 && memcmp(cross, "XY", 2) == 0);
+
+	fd = open("log.bin", O_RDWR | O_CREAT | O_TRUNC, 0644);
+	char head[1000];
+	char tail[1000];
+	memset(head, 'A', sizeof(head));
+	memset(tail, 'B', sizeof(tail));
+	ok = fd >= 0 && write_all(fd, head, sizeof(head)) == 0;
+	child = ok ? fork() : -1;
+	if (child == 0) {
+		sleep(1);
+		ssize_t wrote = write(fd, tail, sizeof(tail));
+		_exit(wrote == (ssize_t)sizeof(tail) ? 0 : 1);
+	}
+	if (child > 0)
+		usleep(200000);
+	ok = ok && child > 0 && rename("log.bin", "saved.bin") == 0;
+	childStatus = 1;
+	if (child > 0)
+		waitpid(child, &childStatus, 0);
+	char both[2000];
+	got = -1;
+	if (ok && fd >= 0 && lseek(fd, 0, SEEK_SET) == 0)
+		got = read(fd, both, sizeof(both));
+	if (fd >= 0)
+		close(fd);
+	ok = ok && childStatus == 0 && got == (ssize_t)sizeof(both)
+		&& memcmp(both, head, sizeof(head)) == 0
+		&& memcmp(both + sizeof(head), tail, sizeof(tail)) == 0;
+	step("open-rename", ok);
+
+	char* used = (char*)malloc(65536);
+	ok = used != NULL;
+	if (ok)
+		memset(used, 'Z', 65536);
+	fd = ok ? open("old.bin", O_RDWR | O_CREAT | O_TRUNC, 0644) : -1;
+	ok = ok && fd >= 0 && write_all(fd, used, 65536) == 0;
+	if (fd >= 0)
+		close(fd);
+	ok = ok && unlink("old.bin") == 0;
+	fd = ok ? open("pre.bin", O_RDWR | O_CREAT | O_TRUNC, 0644) : -1;
+	ok = ok && fd >= 0 && ftruncate(fd, 65536) == 0
+		&& ftruncate(fd, 32768) == 0;
+	if (fd >= 0)
+		close(fd);
+	fd = ok ? open("pre.bin", O_RDONLY) : -1;
+	char* trimmed = (char*)malloc(32768);
+	if (trimmed != NULL)
+		memset(trimmed, 1, 32768);
+	got = fd < 0 || trimmed == NULL ? -1 : read(fd, trimmed, 32768);
+	if (fd >= 0)
+		close(fd);
+	ok = ok && trimmed != NULL && got == 32768;
+	for (int i = 0; ok && i < 32768; i++) {
+		if (trimmed[i] != 0)
+			ok = 0;
+	}
+	free(used);
+	free(trimmed);
+	step("prealloc", ok);
+
+	say("exfat: fill start");
+	int holes = 0;
+	for (; holes < 3000; holes++) {
+		char name[64];
+		snprintf(name, sizeof(name), "hole%04d", holes);
+		fd = open(name, O_RDWR | O_CREAT | O_EXCL, 0644);
+		if (fd < 0)
+			break;
+		char byte = 'h';
+		if (write(fd, &byte, 1) != 1) {
+			close(fd);
+			unlink(name);
+			break;
+		}
+		close(fd);
+		if (holes > 0 && holes % 400 == 0) {
+			char line[64];
+			snprintf(line, sizeof(line), "exfat: fill %d", holes);
+			say(line);
+		}
+	}
+	int dropped = 0;
+	for (int i = 1; i < holes; i += 2) {
+		char name[64];
+		snprintf(name, sizeof(name), "hole%04d", i);
+		if (unlink(name) == 0)
+			dropped++;
+	}
+	char* block = (char*)malloc(32768);
+	char* back = (char*)malloc(32768);
+	if (block != NULL)
+		memset(block, 'F', 32768);
+	fd = open("frag.bin", O_RDWR | O_CREAT | O_TRUNC, 0644);
+	ok = fd >= 0 && dropped > 0 && block != NULL && back != NULL;
+	for (int n = 0; ok && n < 3; n++)
+		ok = write_all(fd, block, 32768) == 0;
+	if (ok && lseek(fd, 0, SEEK_SET) == 0) {
+		for (int n = 0; ok && n < 3; n++) {
+			ok = read(fd, back, 32768) == 32768
+				&& memcmp(back, block, 32768) == 0;
+		}
+	}
+	if (fd >= 0)
+		close(fd);
+	free(block);
+	free(back);
+	step("fragment", ok);
+
+	char pull[4196];
+	memset(pull, 'P', sizeof(pull));
+	fd = open("pull.bin", O_RDWR | O_CREAT | O_TRUNC, 0644);
+	ok = fd >= 0 && write_all(fd, pull, sizeof(pull)) == 0;
+	if (fd >= 0)
+		close(fd);
+	step("pull-close", ok);
+	say("exfat: pull");
+	for (;;)
+		sleep(60);
 	return 0;
 }
