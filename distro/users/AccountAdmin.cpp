@@ -516,6 +516,66 @@ static void ensure_private_trash(const char* home, uid_t uid, gid_t gid);
 static void ensure_user_mime_db(const char* home, uid_t uid, gid_t gid);
 
 
+// Haiku's image puts config/settings/first_login in the first home. Login
+// runs /boot/system/boot/first-login for a home that has it, and the
+// PostInstallScript removes it again.
+static void
+ensure_first_login_marker(const char* home, uid_t uid, gid_t gid)
+{
+	BString path;
+	path.SetToFormat("%s/config/settings/first_login", home);
+	int fd = open(path.String(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC,
+		0600);
+	if (fd < 0)
+		return;
+	fchown(fd, uid, gid);
+	close(fd);
+}
+
+
+// The R5 wallpaper, as the image sets it on the first home's Desktop
+// (distro/rest/src/data/directory_attrs/home-desktop.rdef). A Desktop
+// without this attribute showed Haiku's plain blue. A background the
+// account chose itself stays.
+static void
+ensure_default_wallpaper(const char* home)
+{
+	static const char* kAttribute = "be:bgndimginfo";
+	static const char* kWallpaper
+		= "/boot/system/data/artwork/r5-wallpaper.jpg";
+
+	if (access(kWallpaper, R_OK) != 0)
+		return;
+
+	BString path;
+	path.SetToFormat("%s/Desktop", home);
+	int fd = open(path.String(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW
+		| O_CLOEXEC);
+	if (fd < 0)
+		return;
+	attr_info info;
+	if (fs_stat_attr(fd, kAttribute, &info) == 0) {
+		close(fd);
+		return;
+	}
+
+	BMessage background;
+	background.AddString("be:bgndimginfopath", kWallpaper);
+	background.AddInt32("be:bgndimginfomode", 2);
+	background.AddInt32("be:bgndimginfoworkspaces", -1);
+	background.AddPoint("be:bgndimginfooffset", BPoint(0, 0));
+	background.AddBool("be:bgndimginfoerasetext", false);
+	background.AddInt32("be:bgndimginfoset", 0);
+
+	ssize_t size = background.FlattenedSize();
+	char* buffer = size > 0 ? (char*)malloc(size) : NULL;
+	if (buffer != NULL && background.Flatten(buffer, size) == B_OK)
+		fs_write_attr(fd, kAttribute, B_MESSAGE_TYPE, 0, buffer, size);
+	free(buffer);
+	close(fd);
+}
+
+
 static status_t
 create_home(const char* home, uid_t uid, gid_t gid)
 {
@@ -546,9 +606,16 @@ create_home(const char* home, uid_t uid, gid_t gid)
 
 	BString deskbar;
 	deskbar.SetToFormat("%s/config/settings/deskbar", home);
-	mkdir(deskbar.String(), 0700);
+	bool newDeskbar = mkdir(deskbar.String(), 0700) == 0;
 	chmod(deskbar.String(), 0700);
 	chown(deskbar.String(), uid, gid);
+
+	// What the image gives the first home (5625U, stick 81): the first-login
+	// marker, so Login runs default_deskbar_items.sh once (the battery), and
+	// the R5 wallpaper. A new and a wiped guest home get both again.
+	if (newDeskbar)
+		ensure_first_login_marker(home, uid, gid);
+	ensure_default_wallpaper(home);
 
 	ensure_desktop_links(home);
 	ensure_private_trash(home, uid, gid);

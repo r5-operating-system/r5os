@@ -1088,13 +1088,14 @@ TReplicantTray::AddIcon(BMessage* archive, int32* id, const entry_ref* addOn)
 	// a later item takes the look of Default (R5) too
 	if (view != NULL)
 		fBarView->StyleView(view);
+	// Place every item again, not only when this one changed its size. A
+	// new account's first sign-in adds four items at once (r5-tray, desklink,
+	// AirPlay, Bluetooth), and the Bluetooth item was drawn on top of
+	// ProcessController (5625U, stick 81). RealignReplicants() places each
+	// item after the ones before it, so no two share a place.
+	(void)originalBounds;
+	RealignReplicants();
 // SPDX-SnippetEnd
-	if (view != NULL && originalBounds != view->Bounds()) {
-		// The replicant changed its size when added to the window, so we need
-		// to recompute all over again (it's already done once via
-		// BShelf::AddReplicant() and TReplicantShelf::CanAcceptReplicantView())
-		RealignReplicants();
-	}
 
 	float oldWidth = Bounds().Width();
 	float oldHeight = Bounds().Height();

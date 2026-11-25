@@ -8,6 +8,22 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-25 - Accounts: four bugs from stick 81 (Shared, defaults, tray, Users and Accounts colors)
+
+- Problem (5625U, stick 81, main `dd905a39c3`, build 10072, Try R5, tested by the owner on 25 Nov 2026):
+  1. For a new account (standard "sam", a second administrator, the guest) the Bluetooth tray item was drawn on top of ProcessController, and the battery was missing. `user` was fine.
+  2. Settings, Users and Accounts: after a change of Theme mode the labels (Name, Email, Account type, Password), the account name and its line, and "Shared folder" with its path kept the old theme's background.
+  3. The "Shared" desktop link was broken for every account except `user`. This blocked the test of #4605.
+  4. New accounts got Haiku's plain blue desktop instead of the R5 wallpaper.
+- Cause and change:
+  1. Not proven on hardware. A new account's first sign-in adds four tray items at once (r5-tray, desklink, AirPlay, Bluetooth); `TReplicantTray::AddIcon()` placed all items again only when the new item changed its size. It now places every item again after each add (`distro/desktop/src/apps/deskbar/StatusView.cpp`). The battery: Login runs `default_deskbar_items.sh` (which adds PowerStatus once) only for a home with `config/settings/first_login`; Haiku's image puts that file only in the first home. `create_home()` in `distro/users/AccountAdmin.cpp` now writes it when it makes the home's `config/settings/deskbar` (a new home, and a wiped guest home).
+  2. `BAppearanceKit::BCard` (libr5ui) on `B_COLORS_UPDATED` now gives its new face to the child views that still carry its old face. On the dark theme the card face is a fixed color, and a `BStringView` copies its parent's colors when it is attached, so the labels kept the dark face. A child with colors of its own, a text field's text view and a card inside the card keep theirs. This helps every page with a card. `docs/LIBR5.md` says so.
+  3. Proven in the source: Haiku's `BEntry` opens the parent folder for reading (`Entry.cpp`), and BFS's `bfs_open_dir()` asks for the read bit. `/boot/home` was 0711, so for every account but its owner `/boot/home/Shared` could not be resolved. `lock_private_homes()` (`distro/users/HomeLock.cpp`) now sets `/boot/home` to 0755. Its entries stay 0700/0600, so other accounts see the names directly under `/boot/home`, not what is in them. Try R5 and an installed R5 run the same step at every Login start and sign-in. `docs/MULTIUSER.md` says so. The QEMU test of 24 Nov wrote to Shared from a Terminal (POSIX path, no `BEntry`), so it did not see this.
+  4. `create_home()` sets the R5 wallpaper on the home's Desktop (attribute `be:bgndimginfo`, the same values as the image's `home-desktop.rdef`) when the Desktop has none. An account that chose its own background keeps it. Existing accounts get it at their next sign-in.
+- Limits: the Deskbar style and the theme were not changed: both already default to R5 for a new home (`BarApp.cpp`, `Themes.cpp`), so "the Deskbar looks different" is taken to be the tray and the missing battery; not proven. An account made before this build gets the battery only when it is added by hand. Other accounts can now list the names in the first administrator's home.
+- Tested (25 Nov 2026): AMD64 image with `scripts/build-locked.sh` from the `R5OS-fix81` worktree (`jam_exit=0`, `mesa_exit=0`, the four changed files compiled, no warning in them).
+- Not tested: no QEMU boot and no 5625U boot of this build. Not seen on screen: the tray of a new account, the colors after a Theme mode change, the Shared link for another account, the wallpaper and battery of a new account. #4605 (a second administrator deletes in Shared) is still to be tested.
+
 ## 2026-11-25 - A changing bitmap was kept as the previous texture
 
 Problem: On the 5625U (stick 81, main `dd905a39c3`, build 10072) VulkanTeapot on RADV stepped on screen while its title counted more than 300 frames a second. The same step was reported for GLTeapot on RADV on 19 Nov and was not found then. The frames are drawn. They do not become the picture on screen at that rate.
