@@ -231,163 +231,390 @@ safe_mode_option(const char* name)
 }
 
 
+//	#pragma mark - Shared Vulkan / Skia device (fast user switching)
+
+
+struct SharedCompositorState {
+	bool						initialized;
+	bool						failed;
+	bool						splashDone;
+	bool						onLavapipe;
+	settings					options;
+	CompositorVulkan*			device;
+	uint64						budget;
+	int							fenceFd;
+	SkiaGpu*					skia;
+	thread_id					drawThread;
+	sem_id						drawSem;
+	volatile bool				drawQuit;
+	BObjectList<Compositor, false> compositors;
+
+	SharedCompositorState()
+		:
+		initialized(false),
+		failed(false),
+		splashDone(false),
+		onLavapipe(false),
+		device(NULL),
+		budget(0),
+		fenceFd(-1),
+		skia(NULL),
+		drawThread(-1),
+		drawSem(-1),
+		drawQuit(false),
+		compositors(4)
+	{
+		memset(&options, 0, sizeof(options));
+	}
+};
+
+static BLocker sSharedLock("compositor shared");
+static SharedCompositorState sShared;
+
+
 //	#pragma mark - Compositor
 
 
-Compositor*
-Compositor::Create(Desktop* desktop, HWInterface* screen)
+/*static*/ uint64
+Compositor::TotalWindowBytes()
 {
-	settings options;
-	load_settings(options);
-	if (!options.want) {
-		log_line("gpu compositor off: setting");
-		return NULL;
+	return (uint64)atomic_get64(&gCompositorTotalWindowBytes);
+}
+
+
+/*static*/ void
+Compositor::_SharedSkiaWake(void* cookie)
+{
+	(void)cookie;
+	if (sShared.drawSem >= 0)
+		release_sem_etc(sShared.drawSem, 1, B_DO_NOT_RESCHEDULE);
+}
+
+
+/*static*/ status_t
+Compositor::_SharedDrawThread(void* data)
+{
+	(void)data;
+	_SharedDrawLoop();
+	return B_OK;
+}
+
+
+/*static*/ void
+Compositor::_SharedDrawLoop()
+{
+	while (!sShared.drawQuit) {
+		status_t status = acquire_sem_etc(sShared.drawSem, 1,
+			B_RELATIVE_TIMEOUT, 100000);
+		if (status != B_OK && status != B_TIMED_OUT && status != B_INTERRUPTED)
+			break;
+		if (sShared.drawQuit || sShared.skia == NULL
+			|| sShared.skia->IsShutDown())
+			break;
+		const char* reason = NULL;
+		if (!sShared.skia->RunWork(&reason)) {
+			const char* text = reason != NULL ? reason : "draw";
+			BAutolock _(sSharedLock);
+			for (int32 i = 0; i < sShared.compositors.CountItems(); i++)
+				sShared.compositors.ItemAt(i)->_NotifySharedDrawFailure(text);
+			break;
+		}
 	}
-	if (safe_mode_option(B_SAFEMODE_SAFE_MODE)
-		|| safe_mode_option(B_SAFEMODE_FAIL_SAFE_VIDEO_MODE)) {
-		log_line("gpu compositor off: safe mode");
-		return NULL;
+}
+
+
+void
+Compositor::_NotifySharedDrawFailure(const char* reason)
+{
+	fDrawFailure = true;
+	if (fFailure == NULL)
+		fFailure = reason;
+	if (fWakeSem >= 0)
+		release_sem_etc(fWakeSem, 1, B_DO_NOT_RESCHEDULE);
+}
+
+
+Compositor*
+Compositor::Create(Desktop* desktop, HWInterface* screen, bool startHidden)
+{
+	BAutolock sharedLocker(sSharedLock);
+
+	if (!sShared.initialized) {
+		sShared.initialized = true;
+		load_settings(sShared.options);
+		if (!sShared.options.want) {
+			log_line("gpu compositor off: setting");
+			sShared.failed = true;
+			return NULL;
+		}
+		if (safe_mode_option(B_SAFEMODE_SAFE_MODE)
+			|| safe_mode_option(B_SAFEMODE_FAIL_SAFE_VIDEO_MODE)) {
+			log_line("gpu compositor off: safe mode");
+			sShared.failed = true;
+			return NULL;
+		}
+
+		// 5625U stick, 17 Nov 2026: RADV and the R5 DRM library print their
+		// errors on stderr, which did not reach the syslog. With gpu_debug
+		// app_server's stderr goes to a file next to it.
+		if (sShared.options.debug) {
+			char path[B_PATH_NAME_LENGTH];
+			if (find_directory(B_SYSTEM_LOG_DIRECTORY, -1, true, path,
+					sizeof(path)) == B_OK
+				&& strlcat(path, "/app_server-stderr.log", sizeof(path))
+					< sizeof(path)) {
+				struct stat st;
+				if (stat(path, &st) == 0 && st.st_size > 0) {
+					char oldPath[B_PATH_NAME_LENGTH + 8];
+					snprintf(oldPath, sizeof(oldPath), "%s.old", path);
+					rename(path, oldPath);
+				}
+				if (freopen(path, "w", stderr) != NULL) {
+					setvbuf(stderr, NULL, _IOLBF, 0);
+					fprintf(stderr, "app_server: stderr of this session\n");
+					log_line("stderr into %s", path);
+				}
+			}
+		}
+
+		if (sShared.options.noCull)
+			log_line("compose culling off (setting)");
+		// M13 step 3: llvmpipe reads these when the driver starts; RADV does
+		// not look at them. Set once per process before Vulkan loads.
+		if (sShared.options.lavapipeThreads > 0) {
+			char value[16];
+			snprintf(value, sizeof(value), "%d",
+				sShared.options.lavapipeThreads);
+			setenv("LP_NUM_THREADS", value, 1);
+			log_line("lavapipe threads %d (setting)",
+				sShared.options.lavapipeThreads);
+		} else if (sShared.options.lavapipeThreads < 0
+			&& setenv("LP_NUM_THREADS", "2", 0) == 0) {
+			log_line("lavapipe threads %s (default)",
+				getenv("LP_NUM_THREADS"));
+		}
+		if (sShared.options.lavapipeVector > 0) {
+			char value[16];
+			snprintf(value, sizeof(value), "%d",
+				sShared.options.lavapipeVector);
+			setenv("LP_NATIVE_VECTOR_WIDTH", value, 1);
+			log_line("lavapipe vector width %d (setting)",
+				sShared.options.lavapipeVector);
+		} else if (getenv("LP_NATIVE_VECTOR_WIDTH") == NULL) {
+#if defined(__x86_64__)
+			if ((r5_x86_cpu_flags() & R5_CPU_AVX2) != 0
+				&& setenv("LP_NATIVE_VECTOR_WIDTH", "256", 0) == 0) {
+				log_line("lavapipe vector width 256 (avx2)");
+			}
+#endif
+		}
+		if (sShared.options.noZeroCopy)
+			log_line("zero-copy setting off");
+
+		// Bootstrap the shared Vulkan device once using a temporary holder.
+		Compositor* holder = new(std::nothrow) Compositor(desktop, screen);
+		if (holder == NULL) {
+			sShared.failed = true;
+			return NULL;
+		}
+		holder->fDebug = sShared.options.debug;
+
+		const char* reason = NULL;
+		uint64 gttBytes = 0;
+		bool radv = !sShared.options.lavapipe
+			&& gpu_available(&gttBytes, &reason);
+		if (sShared.options.lavapipe)
+			reason = "forced";
+
+		if (radv) {
+			const char* radvReason = NULL;
+			if (holder->_InitVulkan(true, &radvReason) == B_OK) {
+				sShared.budget = gttBytes / 2;
+				if (sShared.budget == 0) {
+					system_info info;
+					get_system_info(&info);
+					sShared.budget = (uint64)info.max_pages * B_PAGE_SIZE / 4;
+				}
+				log_line("gpu compositor on radv (%s)",
+					holder->fVulkan->deviceName);
+				sShared.fenceFd = open("/dev/gpu/radeon_hd/0",
+					O_RDWR | O_CLOEXEC);
+			} else {
+				reason = radvReason;
+				radv = false;
+			}
+		}
+		if (!radv) {
+			const char* lavapipeReason = NULL;
+			if (holder->_InitVulkan(false, &lavapipeReason) != B_OK) {
+				delete holder;
+				sShared.failed = true;
+				return NULL;
+			}
+			sShared.onLavapipe = true;
+			system_info info;
+			get_system_info(&info);
+			sShared.budget = (uint64)info.max_pages * B_PAGE_SIZE / 4;
+			log_line("gpu compositor on lavapipe: %s", reason);
+		}
+
+		// Take ownership of the shared Vulkan device (free the bootstrap
+		// command pool / fence / timestamps; each compositor makes its own).
+		CompositorVulkan* vk = holder->fVulkan;
+		holder->fVulkan = NULL;
+		delete holder;
+		if (vk->timestamps != VK_NULL_HANDLE) {
+			vk->vkDestroyQueryPool(vk->device, vk->timestamps, NULL);
+			vk->timestamps = VK_NULL_HANDLE;
+		}
+		if (vk->fence != VK_NULL_HANDLE) {
+			vk->vkDestroyFence(vk->device, vk->fence, NULL);
+			vk->fence = VK_NULL_HANDLE;
+		}
+		if (vk->commandPool != VK_NULL_HANDLE) {
+			vk->vkDestroyCommandPool(vk->device, vk->commandPool, NULL);
+			vk->commandPool = VK_NULL_HANDLE;
+		}
+		vk->commands = VK_NULL_HANDLE;
+		sShared.device = vk;
+
+		SkiaDrawingEngine::SetDebug(sShared.options.debug);
+		SkiaDrawingEngine::SetClassic(sShared.options.drawClassic);
+		SkiaDrawingEngine::SetHardwareBlend(!sShared.options.noHardwareBlend);
+		if (sShared.options.noHardwareBlend)
+			log_line("gpu draw hardware blend off (setting)");
+		SkiaDrawingEngine::SetLinearEdges(sShared.options.drawLinearEdges == 1);
+
+		if (sShared.options.draw) {
+			skia_vulkan_device device;
+			memset(&device, 0, sizeof(device));
+			device.getInstanceProc = (void*)vk->vkGetInstanceProcAddr;
+			device.instance = (void*)vk->instance;
+			device.physicalDevice = (void*)vk->physical;
+			device.device = (void*)vk->device;
+			device.queue = (void*)vk->queue;
+			device.queueFamily = vk->family;
+			device.apiVersion = VK_API_VERSION_1_1;
+			device.deviceExtensions = vk->extensions;
+			device.deviceExtensionCount = vk->extensionCount;
+			const char* skiaReason = NULL;
+			int samples = sShared.onLavapipe && sShared.options.lavapipeMsaa > 0
+				? sShared.options.lavapipeMsaa : 4;
+			if (sShared.onLavapipe) {
+				const char* thr = getenv("LP_NUM_THREADS");
+				const char* vec = getenv("LP_NATIVE_VECTOR_WIDTH");
+				log_line("lavapipe config threads=%s vector=%s msaa=%d",
+					thr != NULL ? thr : "auto", vec != NULL ? vec : "auto",
+					samples);
+			}
+			if (samples != 4)
+				log_line("lavapipe msaa %d (setting)", samples);
+			SkiaGpu::SetDebug(sShared.options.debug);
+			sShared.skia = SkiaGpu::Create(device, sShared.options.drawFail,
+				samples, &skiaReason);
+			if (sShared.skia == NULL) {
+				log_line("gpu draw off: %s", skiaReason);
+			} else {
+				sShared.skia->SetWaker(&_SharedSkiaWake, NULL);
+				SkiaGpu::SetCurrent(sShared.skia);
+				sShared.drawSem = create_sem(0, "skia draw wake");
+				if (sShared.drawSem >= 0) {
+					sShared.drawThread = spawn_thread(_SharedDrawThread,
+						"skia draw", B_DISPLAY_PRIORITY, NULL);
+					if (sShared.drawThread >= 0)
+						resume_thread(sShared.drawThread);
+				}
+				thread_id warmUp = spawn_thread(&_SkiaWarmUp, "skia warm up",
+					B_LOW_PRIORITY, NULL);
+				if (warmUp >= 0)
+					resume_thread(warmUp);
+				log_line("gpu draw on %s skia %s", vk->deviceName,
+					SkiaGpu::Version());
+			}
+		}
 	}
+
+	if (sShared.failed || sShared.device == NULL)
+		return NULL;
+	if (sShared.skia != NULL && sShared.skia->Abandoned())
+		return NULL;
 
 	Compositor* compositor = new(std::nothrow) Compositor(desktop, screen);
 	if (compositor == NULL)
 		return NULL;
-	compositor->fDebug = options.debug;
-	compositor->fForceFail = options.fail;
-	// 5625U stick, 17 Nov 2026: RADV and the R5 DRM library print their
-	// errors on stderr, which did not reach the syslog. With gpu_debug
-	// app_server's stderr goes to a file next to it. Rotate any prior log
-	// instead of unbounded append, and use line buffering off the submit path.
-	if (options.debug) {
-		char path[B_PATH_NAME_LENGTH];
-		if (find_directory(B_SYSTEM_LOG_DIRECTORY, -1, true, path,
-				sizeof(path)) == B_OK
-			&& strlcat(path, "/app_server-stderr.log", sizeof(path))
-				< sizeof(path)) {
-			struct stat st;
-			if (stat(path, &st) == 0 && st.st_size > 0) {
-				char oldPath[B_PATH_NAME_LENGTH + 8];
-				snprintf(oldPath, sizeof(oldPath), "%s.old", path);
-				rename(path, oldPath);
-			}
-			if (freopen(path, "w", stderr) != NULL) {
-				setvbuf(stderr, NULL, _IOLBF, 0);
-				fprintf(stderr, "app_server: stderr of this session\n");
-				log_line("stderr into %s", path);
-			}
-		}
-	}
-	compositor->fLavapipeMsaa = options.lavapipeMsaa;
-	compositor->fNoCull = options.noCull;
-	if (options.noCull)
-		log_line("compose culling off (setting)");
-	// M13 step 3: llvmpipe reads these when the driver starts; RADV does
-	// not look at them
-	// M13 (owner, 17 Nov 2026): 2 threads by default. QEMU (8 virtual
-	// CPUs, the Painter desktop): drag 18.5 ms per frame with 2, 57 ms
-	// with 4, about 170 ms with Mesa's one per CPU; Lavapipe's threads and
-	// app_server's own crowded each other out. gpu_lavapipe_threads <n>
-	// sets another count, 0 Mesa's own; an LP_NUM_THREADS already in the
-	// environment (a developer's) stays.
-	if (options.lavapipeThreads > 0) {
-		char value[16];
-		snprintf(value, sizeof(value), "%d", options.lavapipeThreads);
-		setenv("LP_NUM_THREADS", value, 1);
-		log_line("lavapipe threads %d (setting)", options.lavapipeThreads);
-	} else if (options.lavapipeThreads < 0
-		&& setenv("LP_NUM_THREADS", "2", 0) == 0) {
-		log_line("lavapipe threads %s (default)", getenv("LP_NUM_THREADS"));
-	}
-	if (options.lavapipeVector > 0) {
-		char value[16];
-		snprintf(value, sizeof(value), "%d", options.lavapipeVector);
-		setenv("LP_NATIVE_VECTOR_WIDTH", value, 1);
-		log_line("lavapipe vector width %d (setting)", options.lavapipeVector);
-	} else if (getenv("LP_NATIVE_VECTOR_WIDTH") == NULL) {
-#if defined(__x86_64__)
-		/* x86-64-v2 stays the baseline. AVX2 picks Lavapipe's 256-bit
-		 * vectors; a CPU without it leaves Mesa's own choice. An
-		 * environment value already set is left alone, and the setting
-		 * above wins over both. */
-		if ((r5_x86_cpu_flags() & R5_CPU_AVX2) != 0
-			&& setenv("LP_NATIVE_VECTOR_WIDTH", "256", 0) == 0) {
-			log_line("lavapipe vector width 256 (avx2)");
-		}
-#endif
-	}
-	compositor->fWantScanout = options.scanout;
-	compositor->fZeroCopyOff = options.noZeroCopy ? 1 : 0;
-	if (options.noZeroCopy)
-		log_line("zero-copy setting off");
+	compositor->fSharedDevice = true;
+	compositor->fHidden = startHidden;
+	compositor->fDebug = sShared.options.debug;
+	compositor->fForceFail = sShared.options.fail;
+	compositor->fLavapipeMsaa = sShared.options.lavapipeMsaa;
+	compositor->fNoCull = sShared.options.noCull;
+	compositor->fWantScanout = sShared.options.scanout;
+	compositor->fZeroCopyOff = sShared.options.noZeroCopy ? 1 : 0;
+	compositor->fOnLavapipe = sShared.onLavapipe;
+	compositor->fBudget = sShared.budget;
+	compositor->fFenceFd = sShared.fenceFd;
+	compositor->fSkia = sShared.skia;
 
-	const char* reason = NULL;
-	uint64 gttBytes = 0;
-	bool radv = !options.lavapipe && gpu_available(&gttBytes, &reason);
-	if (options.lavapipe)
-		reason = "forced";
-
-	if (radv) {
-		const char* radvReason = NULL;
-		if (compositor->_InitVulkan(true, &radvReason) == B_OK) {
-			compositor->fBudget = gttBytes / 2;
-			if (compositor->fBudget == 0) {
-				// no GTT size from the driver: the Lavapipe rule
-				system_info info;
-				get_system_info(&info);
-				compositor->fBudget = (uint64)info.max_pages * B_PAGE_SIZE / 4;
-			}
-			log_line("gpu compositor on radv (%s)",
-				compositor->fVulkan->deviceName);
-			// M11 step 3b: FENCE_WAIT with timeout 0 for the present mark
-			// of a shared view. The sequence is the one GFX ring's, so any
-			// file of the render node can ask.
-			compositor->fFenceFd = open("/dev/gpu/radeon_hd/0",
-				O_RDWR | O_CLOEXEC);
-		} else {
-			reason = radvReason;
-			radv = false;
-		}
-	}
-	if (!radv) {
-		const char* lavapipeReason = NULL;
-		if (compositor->_InitVulkan(false, &lavapipeReason) != B_OK) {
-			// Lavapipe cannot start either: the CPU mode, nothing else
-			// logged (docs/APP-SERVER-COMPOSITOR.md).
-			delete compositor;
-			return NULL;
-		}
-		compositor->fOnLavapipe = true;
-		system_info info;
-		get_system_info(&info);
-		compositor->fBudget = (uint64)info.max_pages * B_PAGE_SIZE / 4;
-		log_line("gpu compositor on lavapipe: %s", reason);
+	const char* initReason = NULL;
+	if (compositor->_InitSharedVulkan(sShared.device, &initReason) != B_OK) {
+		delete compositor;
+		return NULL;
 	}
 
-	SkiaDrawingEngine::SetDebug(options.debug);
-	SkiaDrawingEngine::SetClassic(options.drawClassic);
-	SkiaDrawingEngine::SetHardwareBlend(!options.noHardwareBlend);
-	if (options.noHardwareBlend)
-		log_line("gpu draw hardware blend off (setting)");
-	SkiaDrawingEngine::SetLinearEdges(options.drawLinearEdges == 1);
-	if (options.draw)
-		compositor->_InitSkia(options.drawFail);
-
-	// Start splash (owner, 17 Nov 2026): the boot picture stays until the
-	// first window with a frame is drawn, so Sign in never shows half
-	// built while Lavapipe compiles its shaders
-	const char* splashReason = NULL;
-	if (compositor->_CaptureSplash(&splashReason)) {
-		compositor->fSplashStart = system_time();
-		compositor->fSplashHolding = true;
-		log_line("start splash on");
-	} else
-		log_line("start splash off: %s", splashReason);
+	// Start splash only for the first visible desktop at boot.
+	if (!sShared.splashDone && !startHidden) {
+		sShared.splashDone = true;
+		const char* splashReason = NULL;
+		if (compositor->_CaptureSplash(&splashReason)) {
+			compositor->fSplashStart = system_time();
+			compositor->fSplashHolding = true;
+			log_line("start splash on");
+		} else
+			log_line("start splash off: %s", splashReason);
+	}
 
 	if (compositor->_Init() != B_OK) {
 		delete compositor;
 		return NULL;
 	}
+	sShared.compositors.AddItem(compositor);
 	return compositor;
+}
+
+
+void
+Compositor::SetHidden(bool hidden, HWInterface* screen)
+{
+	if (!fActive)
+		return;
+
+	if (hidden) {
+		fComposeSlot.Lock();
+		fHidden = true;
+		AccelerantHWInterface* accelerant
+			= dynamic_cast<AccelerantHWInterface*>(fScreen);
+		if (accelerant != NULL)
+			accelerant->SetModeGuard(NULL);
+		if (fVulkan != NULL)
+			_ScanoutFree(fVulkan);
+		fScreen = screen;
+		fComposeSlot.Unlock();
+		_DropAnimations();
+	} else {
+		fComposeSlot.Lock();
+		fScreen = screen;
+		AccelerantHWInterface* accelerant
+			= dynamic_cast<AccelerantHWInterface*>(fScreen);
+		if (accelerant != NULL)
+			accelerant->SetModeGuard(&fComposeSlot);
+		fHidden = false;
+		fComposeSlot.Unlock();
+		_UpdatePeriod();
+		if (fScreen != NULL && fDesktop != NULL) {
+			BRect frame = fDesktop->VirtualScreen().Frame();
+			Damage(BRegion(frame));
+		}
+	}
 }
 
 
@@ -593,6 +820,7 @@ Compositor::Compositor(Desktop* desktop, HWInterface* screen)
 	fFrameSlideShift(0),
 	fComposeSlot("compositor slot"),
 	fPaused(false),
+	fHidden(false),
 	fModePending(false),
 	fPauseRedraw(false),
 	fDirectWindows(4),
@@ -601,6 +829,7 @@ Compositor::Compositor(Desktop* desktop, HWInterface* screen)
 	fGpuBusy(0),
 	fSkia(NULL),
 	fDrawFailure(false),
+	fSharedDevice(false),
 	fDrawThread(-1),
 	fDrawSem(-1),
 	fDrawQuit(false),
@@ -622,6 +851,10 @@ Compositor::Compositor(Desktop* desktop, HWInterface* screen)
 
 Compositor::~Compositor()
 {
+	{
+		BAutolock _(sSharedLock);
+		sShared.compositors.RemoveItem(this, false);
+	}
 	AccelerantHWInterface* accelerant
 		= dynamic_cast<AccelerantHWInterface*>(fScreen);
 	// Review after M11: cleared with the slot held, so a SetMode that
@@ -637,9 +870,11 @@ Compositor::~Compositor()
 		status_t result;
 		wait_for_thread(fThread, &result);
 	}
-	_StopDrawThread();
-	if (fDrawSem >= 0)
-		delete_sem(fDrawSem);
+	if (!fSharedDevice) {
+		_StopDrawThread();
+		if (fDrawSem >= 0)
+			delete_sem(fDrawSem);
+	}
 	if (fWakeSem >= 0)
 		delete_sem(fWakeSem);
 	delete fLayers;
@@ -650,7 +885,7 @@ Compositor::~Compositor()
 	_EndSplash();
 	_ExitVulkan();
 	free(fScratch);
-	if (fFenceFd >= 0)
+	if (!fSharedDevice && fFenceFd >= 0)
 		close(fFenceFd);
 }
 
@@ -1457,10 +1692,12 @@ Compositor::_ComposeLoop()
 			return;
 		}
 		_ShareRetireDone();
-		// M12: Skia's work runs on the draw thread (_DrawLoop); only when
-		// that thread could not be made does the compose thread run it
+		// M12: Skia's work runs on the draw thread (_DrawLoop / _SharedDrawLoop);
+		// only when that thread could not be made does the compose thread run it
 		// before the compose. A failure turns the GPU drawing off.
-		if (fDrawThread < 0 && fSkia != NULL && !fSkia->IsShutDown()) {
+		bool hasDrawThread = fSharedDevice
+			? (sShared.drawThread >= 0) : (fDrawThread >= 0);
+		if (!hasDrawThread && fSkia != NULL && !fSkia->IsShutDown()) {
 			const char* drawReason = NULL;
 			if (!fSkia->RunWork(&drawReason)) {
 				fDrawFailure = true;
@@ -1480,7 +1717,7 @@ Compositor::_ComposeLoop()
 			// run, not now, or the old pixels show for a frame.
 			if (wasPaused && !fPaused && fSkia != NULL
 				&& !fSkia->IsShutDown()) {
-				if (fDrawThread >= 0) {
+				if (hasDrawThread) {
 					// one run of the draw thread, at most 250 ms; a slower
 					// run does not keep the screen from coming back
 					fSkia->Finish(250000);
@@ -1490,7 +1727,7 @@ Compositor::_ComposeLoop()
 				}
 			}
 		}
-		if (fPaused) {
+		if (fPaused || fHidden) {
 			// M11 review: no frame runs while paused, but a program whose
 			// window app_server ended still waits for its images. The
 			// last frame waited for its fence, so none is read. Third
@@ -1534,7 +1771,7 @@ Compositor::_ComposeLoop()
 
 		// One frame, in the compose slot: a pause waits for it to end.
 		BAutolock slot(fComposeSlot);
-		if (fPaused) {
+		if (fPaused || fHidden) {
 			// Fourth review: the pause began after the check above; the
 			// ended shares still go now, not at the resume.
 			slot.Unlock();
@@ -2757,6 +2994,11 @@ Compositor::_Compare(const BRegion& damage, const LayerList& layers,
 bool
 Compositor::_RestartAfterReset()
 {
+	if (fSharedDevice) {
+		BAutolock _(sSharedLock);
+		if (sShared.compositors.CountItems() > 1)
+			return false;
+	}
 	fRestarted = true;
 	bigtime_t until = system_time() + kFenceLimit;
 	const char* reason = NULL;
@@ -2858,7 +3100,13 @@ Compositor::_TurnOff(const char* reason)
 	// line when the drawing failed.
 	if (fSkia != NULL) {
 		fSkia->Abandon();
-		_StopDrawThread();
+		if (fSharedDevice) {
+			sShared.drawQuit = true;
+			if (sShared.drawSem >= 0)
+				release_sem(sShared.drawSem);
+		} else {
+			_StopDrawThread();
+		}
 	}
 	if (fDrawFailure)
 		log_line("gpu draw off: %s", reason);

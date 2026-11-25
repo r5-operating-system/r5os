@@ -58,6 +58,8 @@ class BMessage;
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 class Compositor;
+class BitmapHWInterface;
+class UtilityBitmap;
 // SPDX-SnippetEnd
 class DecorAddOn;
 class DrawingEngine;
@@ -81,7 +83,15 @@ public:
 
 			void				RegisterListener(DesktopListener* listener);
 
-			status_t			Init();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			status_t			Init(bool startHidden = false);
+
+			bool				IsShown() const { return fShown; }
+			status_t			Activate();
+			status_t			Deactivate();
+// SPDX-SnippetEnd
 
 			uid_t				UserID() const { return fUserID; }
 			const char*			TargetScreen() { return fTargetScreen; }
@@ -377,6 +387,12 @@ private:
 	friend class DesktopSettings;
 	friend class LockedDesktopSettings;
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			status_t			_EnsureOffscreenTarget(BRect frame);
+			void				_RebindWindowsToScreen(::HWInterface* interface);
+// SPDX-SnippetEnd
 			uid_t				fUserID;
 			char*				fTargetScreen;
 			::VirtualScreen		fVirtualScreen;
@@ -384,6 +400,11 @@ private:
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 			Compositor*			fCompositor;
+			bool				fShown;
+			display_mode		fHiddenMode;
+			BReference<UtilityBitmap> fOffscreenBitmap;
+			ObjectDeleter<BitmapHWInterface> fOffscreenHW;
+			ObjectDeleter<DrawingEngine> fOffscreenEngine;
 // SPDX-SnippetEnd
 			ObjectDeleter<DesktopSettingsPrivate>
 								fSettings;

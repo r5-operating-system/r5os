@@ -34,6 +34,9 @@
 // SPDX-License-Identifier: MIT
 #include "WindowEffectLevels.h"
 
+#include <pwd.h>
+#include <unistd.h>
+
 
 // M11 step 4: the strength in use, for the R5 decorator's shadow extent.
 int32 gWindowEffectStrength = kWindowEffectsBalanced;
@@ -42,9 +45,15 @@ uint32 gWindowEffects = kWindowEffectsAll;
 // SPDX-SnippetEnd
 
 
-DesktopSettingsPrivate::DesktopSettingsPrivate(server_read_only_memory* shared)
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+DesktopSettingsPrivate::DesktopSettingsPrivate(server_read_only_memory* shared,
+	uid_t userID)
 	:
+	fUserID(userID),
 	fShared(*shared)
+// SPDX-SnippetEnd
 {
 	// if the on-disk settings are not complete, the defaults will be kept
 	_SetDefaults();
@@ -157,6 +166,26 @@ DesktopSettingsPrivate::_SetDefaults()
 status_t
 DesktopSettingsPrivate::_GetPath(BPath& path)
 {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (fUserID != 0) {
+		struct passwd pwd;
+		struct passwd* result = NULL;
+		char buf[1024];
+		if (getpwuid_r(fUserID, &pwd, buf, sizeof(buf), &result) == 0
+			&& result != NULL && pwd.pw_dir != NULL && pwd.pw_dir[0] != '\0') {
+			status_t status = path.SetTo(pwd.pw_dir,
+				"config/settings/system/app_server");
+			if (status == B_OK) {
+				status = create_directory(path.Path(), 0755);
+				if (status == B_OK)
+					chown(path.Path(), fUserID, pwd.pw_gid);
+				return status;
+			}
+		}
+	}
+// SPDX-SnippetEnd
 	status_t status = find_directory(B_USER_SETTINGS_DIRECTORY, &path);
 	if (status < B_OK)
 		return status;

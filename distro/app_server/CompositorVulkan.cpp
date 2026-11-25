@@ -13,6 +13,9 @@
 #include "r5_span_avx.h"
 
 
+int64 gCompositorTotalWindowBytes = 0;
+
+
 status_t
 Compositor::_InitVulkan(bool radv, const char** _reason)
 {
@@ -360,6 +363,82 @@ Compositor::_InitVulkan(bool radv, const char** _reason)
 }
 
 
+status_t
+Compositor::_InitSharedVulkan(CompositorVulkan* shared, const char** _reason)
+{
+	_ExitVulkan();
+
+	CompositorVulkan* vk = new(std::nothrow) CompositorVulkan;
+	if (vk == NULL) {
+		*_reason = "no memory";
+		return B_NO_MEMORY;
+	}
+	memcpy(vk, shared, sizeof(*vk));
+	vk->shared = true;
+	vk->commandPool = VK_NULL_HANDLE;
+	vk->commands = VK_NULL_HANDLE;
+	vk->fence = VK_NULL_HANDLE;
+	vk->timestamps = VK_NULL_HANDLE;
+	vk->frame = VK_NULL_HANDLE;
+	vk->frameMemory = VK_NULL_HANDLE;
+	vk->frameBits = NULL;
+	vk->scratch = VK_NULL_HANDLE;
+	vk->scratchMemory = VK_NULL_HANDLE;
+	vk->scratchBytes = 0;
+	vk->slideOld = VK_NULL_HANDLE;
+	vk->slideOldMemory = VK_NULL_HANDLE;
+	vk->slideNew = VK_NULL_HANDLE;
+	vk->slideNewMemory = VK_NULL_HANDLE;
+	vk->slideBytes = 0;
+	vk->scanActive = false;
+	vk->scanGeneration = 0;
+	vk->scanFailedGeneration = 0;
+	vk->back = VK_NULL_HANDLE;
+	vk->backMemory = VK_NULL_HANDLE;
+	vk->backPitch = 0;
+	vk->scanout = VK_NULL_HANDLE;
+	vk->scanoutMemory = VK_NULL_HANDLE;
+	vk->scanPitch = 0;
+
+	fVulkan = vk;
+	fGeneration++;
+
+	VkCommandPoolCreateInfo poolInfo = {};
+	poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+	poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+	poolInfo.queueFamilyIndex = vk->family;
+	if (vk->vkCreateCommandPool(vk->device, &poolInfo, NULL, &vk->commandPool)
+			!= VK_SUCCESS) {
+		*_reason = "command pool";
+		return B_ERROR;
+	}
+	VkCommandBufferAllocateInfo commandInfo = {};
+	commandInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	commandInfo.commandPool = vk->commandPool;
+	commandInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	commandInfo.commandBufferCount = 1;
+	VkFenceCreateInfo fenceInfo = {};
+	fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+	if (vk->vkAllocateCommandBuffers(vk->device, &commandInfo, &vk->commands)
+			!= VK_SUCCESS
+		|| vk->vkCreateFence(vk->device, &fenceInfo, NULL, &vk->fence)
+			!= VK_SUCCESS) {
+		*_reason = "command buffer";
+		return B_ERROR;
+	}
+	if (fDebug && vk->timestampPeriod > 0) {
+		VkQueryPoolCreateInfo queryInfo = {};
+		queryInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+		queryInfo.queryType = VK_QUERY_TYPE_TIMESTAMP;
+		queryInfo.queryCount = kPassStamps;
+		if (vk->vkCreateQueryPool(vk->device, &queryInfo, NULL,
+				&vk->timestamps) != VK_SUCCESS)
+			vk->timestamps = VK_NULL_HANDLE;
+	}
+	return B_OK;
+}
+
+
 /*!	M13 step 2: the sampler of the window images, and the 1x1 image bound
 	when a pass reads a buffer, made ready for the sampler once.
 */
@@ -521,7 +600,7 @@ Compositor::_ExitVulkan()
 		vk->vkDeviceWaitIdle(vk->device);
 		SkiaGpu::UnlockQueue();
 		// M12: Skia's context and every GPU image of it, before the device
-		if (fSkia != NULL) {
+		if (!vk->shared && fSkia != NULL) {
 			_StopDrawThread();
 			fSkia->DestroyContext();
 		}
@@ -557,6 +636,18 @@ Compositor::_ExitVulkan()
 			vk->vkDestroyBuffer(vk->device, vk->slideNew, NULL);
 		if (vk->slideNewMemory != VK_NULL_HANDLE)
 			vk->vkFreeMemory(vk->device, vk->slideNewMemory, NULL);
+		if (vk->timestamps != VK_NULL_HANDLE)
+			vk->vkDestroyQueryPool(vk->device, vk->timestamps, NULL);
+		if (vk->fence != VK_NULL_HANDLE)
+			vk->vkDestroyFence(vk->device, vk->fence, NULL);
+		if (vk->commandPool != VK_NULL_HANDLE)
+			vk->vkDestroyCommandPool(vk->device, vk->commandPool, NULL);
+		if (vk->shared) {
+			delete vk;
+			fFrameWidth = 0;
+			fFrameHeight = 0;
+			return;
+		}
 		if (vk->effectsPipeline != VK_NULL_HANDLE)
 			vk->vkDestroyPipeline(vk->device, vk->effectsPipeline, NULL);
 		if (vk->effectsPipelineLayout != VK_NULL_HANDLE) {
@@ -567,8 +658,6 @@ Compositor::_ExitVulkan()
 			vk->vkDestroyDescriptorSetLayout(vk->device, vk->effectsSetLayout,
 				NULL);
 		}
-		if (vk->timestamps != VK_NULL_HANDLE)
-			vk->vkDestroyQueryPool(vk->device, vk->timestamps, NULL);
 		if (vk->blankView != VK_NULL_HANDLE)
 			vk->vkDestroyImageView(vk->device, vk->blankView, NULL);
 		if (vk->blankImage != VK_NULL_HANDLE)
@@ -577,10 +666,6 @@ Compositor::_ExitVulkan()
 			vk->vkFreeMemory(vk->device, vk->blankMemory, NULL);
 		if (vk->sampler != VK_NULL_HANDLE)
 			vk->vkDestroySampler(vk->device, vk->sampler, NULL);
-		if (vk->fence != VK_NULL_HANDLE)
-			vk->vkDestroyFence(vk->device, vk->fence, NULL);
-		if (vk->commandPool != VK_NULL_HANDLE)
-			vk->vkDestroyCommandPool(vk->device, vk->commandPool, NULL);
 		if (vk->pipeline != VK_NULL_HANDLE)
 			vk->vkDestroyPipeline(vk->device, vk->pipeline, NULL);
 		if (vk->pipelineLayout != VK_NULL_HANDLE)
@@ -715,7 +800,7 @@ Compositor::_AllocateBuffer(uint32 width, uint32 height, bool withMemory)
 	if (fVulkan == NULL || width == 0 || height == 0)
 		return NULL;
 	uint64 bytes = (uint64)width * height * 4;
-	if (fWindowBytes + bytes > fBudget)
+	if ((uint64)atomic_get64(&gCompositorTotalWindowBytes) + bytes > fBudget)
 		return NULL;
 	if (!withMemory) {
 		// M13 step 2: a window that Skia draws; its image (made by the
@@ -723,8 +808,10 @@ Compositor::_AllocateBuffer(uint32 width, uint32 height, bool withMemory)
 		// memory, with the same size
 		WindowBuffer* windowBuffer = new(std::nothrow) WindowBuffer(this,
 			NULL, width, height, 0, 0, fGeneration);
-		if (windowBuffer != NULL)
+		if (windowBuffer != NULL) {
 			atomic_add64((int64*)&fWindowBytes, bytes);
+			atomic_add64(&gCompositorTotalWindowBytes, bytes);
+		}
 		return windowBuffer;
 	}
 
@@ -748,6 +835,7 @@ Compositor::_AllocateBuffer(uint32 width, uint32 height, bool withMemory)
 		return NULL;
 	}
 	atomic_add64((int64*)&fWindowBytes, bytes);
+	atomic_add64(&gCompositorTotalWindowBytes, bytes);
 
 	static bool sLogged = false;
 	if (!sLogged) {
@@ -774,6 +862,7 @@ Compositor::_FreeBuffer(WindowBuffer* buffer, uint64 vulkanBuffer,
 	if (atomic_get(&fGpuBusy) != 0)
 		return;
 	atomic_add64((int64*)&fWindowBytes, -(int64)buffer->Bytes());
+	atomic_add64(&gCompositorTotalWindowBytes, -(int64)buffer->Bytes());
 	if (fVulkan == NULL || buffer->Generation() != fGeneration
 		|| vulkanBuffer == 0)
 		return;

@@ -25,6 +25,12 @@
 #include <RosterPrivate.h>
 
 #include "BitmapManager.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include "Compositor.h"
+#include <R5Admin.h>
+// SPDX-SnippetEnd
 #include "Desktop.h"
 #include "GlobalFontManager.h"
 #include "InputManager.h"
@@ -57,9 +63,20 @@ AppServer::AppServer(status_t* status)
 	:
 	SERVER_BASE("application/x-vnd.Haiku-app_server", "picasso", -1, false,
 		status),
-	fDesktopLock("AppServerDesktopLock")
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	fDesktopLock("AppServerDesktopLock"),
+	fAdminPort(-1)
+// SPDX-SnippetEnd
 {
 	openlog("app_server", 0, LOG_DAEMON);
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	r5_admin_port_start("app_server admin", &_AdminHandler, this, &fAdminPort);
+// SPDX-SnippetEnd
 
 	gInputManager = new InputManager();
 
@@ -98,6 +115,14 @@ AppServer::AppServer(status_t* status)
 */
 AppServer::~AppServer()
 {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (fAdminPort >= 0) {
+		r5_admin_port_stop(fAdminPort);
+		fAdminPort = -1;
+	}
+// SPDX-SnippetEnd
 	delete gBitmapManager;
 
 	gScreenManager->Lock();
@@ -113,6 +138,12 @@ AppServer::~AppServer()
 void
 AppServer::MessageReceived(BMessage* message)
 {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (r5_admin_port_reply(message, fAdminPort))
+		return;
+// SPDX-SnippetEnd
 	switch (message->what) {
 		case AS_GET_DESKTOP:
 		{
@@ -218,14 +249,15 @@ AppServer::QuitRequested()
 /*!	\brief Creates a desktop object for an authorized user
 */
 Desktop*
-AppServer::_CreateDesktop(uid_t userID, const char* targetScreen)
+AppServer::_CreateDesktop(uid_t userID, const char* targetScreen,
+	bool startHidden)
 {
 	BAutolock locker(fDesktopLock);
 	ObjectDeleter<Desktop> desktop;
 	try {
 		desktop.SetTo(new Desktop(userID, targetScreen));
 
-		status_t status = desktop->Init();
+		status_t status = desktop->Init(startHidden);
 		if (status == B_OK)
 			status = desktop->Run();
 		if (status == B_OK && !fDesktops.AddItem(desktop.Get()))
@@ -243,6 +275,198 @@ AppServer::_CreateDesktop(uid_t userID, const char* targetScreen)
 
 	return desktop.Detach();
 }
+
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+status_t
+AppServer::_ActivateDesktop(Desktop* target)
+{
+	if (target == NULL)
+		return B_BAD_VALUE;
+
+	BAutolock locker(fDesktopLock);
+	if (!fDesktops.HasItem(target))
+		return B_NAME_NOT_FOUND;
+	if (target->IsShown())
+		return B_OK;
+
+	Desktop* current = NULL;
+	for (int32 i = 0; i < fDesktops.CountItems(); i++) {
+		Desktop* desktop = fDesktops.ItemAt(i);
+		if (desktop->TargetScreen() == NULL && desktop->IsShown()) {
+			current = desktop;
+			break;
+		}
+	}
+
+	if (current != NULL && current != target) {
+		status_t status = current->Deactivate();
+		if (status != B_OK)
+			return status;
+	}
+
+	status_t status = target->Activate();
+	if (status != B_OK && current != NULL && current != target) {
+		// Roll back to the previously shown desktop if activation failed.
+		current->Activate();
+	}
+	return status;
+}
+
+
+status_t
+AppServer::_DestroyDesktop(uid_t userID)
+{
+	if (userID == 0)
+		return B_PERMISSION_DENIED;
+
+	Desktop* desktop = NULL;
+	{
+		BAutolock locker(fDesktopLock);
+		for (int32 i = 0; i < fDesktops.CountItems(); i++) {
+			Desktop* item = fDesktops.ItemAt(i);
+			if (item->UserID() == userID && item->TargetScreen() == NULL) {
+				if (item->IsShown())
+					return B_BUSY;
+				desktop = fDesktops.RemoveItemAt(i);
+				break;
+			}
+		}
+	}
+
+	if (desktop == NULL)
+		return B_NAME_NOT_FOUND;
+
+	thread_id thread = desktop->Thread();
+	desktop->PostMessage(B_QUIT_REQUESTED);
+	status_t threadStatus;
+	if (thread >= 0)
+		wait_for_thread(thread, &threadStatus);
+	delete desktop;
+	return B_OK;
+}
+
+
+void
+AppServer::_FillDesktopInfo(BMessage* reply)
+{
+	BAutolock locker(fDesktopLock);
+	int32 activeUser = -1;
+	for (int32 i = 0; i < fDesktops.CountItems(); i++) {
+		Desktop* desktop = fDesktops.ItemAt(i);
+		if (desktop->TargetScreen() != NULL)
+			continue;
+		if (desktop->IsShown())
+			activeUser = (int32)desktop->UserID();
+		DesktopSettings settings(desktop);
+		reply->AddInt32("user", (int32)desktop->UserID());
+		reply->AddBool("shown", desktop->IsShown());
+		reply->AddInt32("workspace", desktop->CurrentWorkspace());
+		reply->AddInt32("workspaces_count", settings.WorkspacesCount());
+		reply->AddInt32("workspaces_columns", settings.WorkspacesColumns());
+		reply->AddInt32("workspaces_rows", settings.WorkspacesRows());
+		Compositor* compositor = desktop->GetCompositor();
+		reply->AddInt64("window_bytes",
+			compositor != NULL ? (int64)compositor->WindowBytes() : 0);
+	}
+	reply->AddInt32("active_user", activeUser);
+	reply->AddInt64("total_window_bytes",
+		(int64)Compositor::TotalWindowBytes());
+}
+
+
+/*static*/ void
+AppServer::_AdminHandler(BMessage* request, const r5_admin_sender& sender,
+	BMessage* reply, void* cookie)
+{
+	((AppServer*)cookie)->_HandleAdminRequest(request, sender, reply);
+}
+
+
+void
+AppServer::_HandleAdminRequest(BMessage* request,
+	const r5_admin_sender& sender, BMessage* reply)
+{
+	// Only uid 0 (Login / privileged tools) may manage desktops.
+	if (sender.uid != 0) {
+		reply->what = (uint32)B_PERMISSION_DENIED;
+		return;
+	}
+
+	switch (request->what) {
+		case AS_R5_CREATE_DESKTOP:
+		{
+			int32 userID = -1;
+			if (request->FindInt32("user", &userID) != B_OK || userID < 0) {
+				reply->what = (uint32)B_BAD_VALUE;
+				return;
+			}
+			bool activate = request->GetBool("activate", false);
+			Desktop* desktop = _FindDesktop((uid_t)userID, NULL);
+			if (desktop == NULL) {
+				bool startHidden = true;
+				{
+					BAutolock locker(fDesktopLock);
+					if (fDesktops.CountItems() == 0)
+						startHidden = false;
+				}
+				desktop = _CreateDesktop((uid_t)userID, NULL, startHidden);
+			}
+			if (desktop == NULL) {
+				reply->what = (uint32)B_ERROR;
+				return;
+			}
+			status_t status = B_OK;
+			if (activate && !desktop->IsShown())
+				status = _ActivateDesktop(desktop);
+			reply->what = (uint32)status;
+			if (status == B_OK)
+				reply->AddInt32("port", desktop->MessagePort());
+			break;
+		}
+
+		case AS_R5_ACTIVATE_DESKTOP:
+		{
+			int32 userID = -1;
+			if (request->FindInt32("user", &userID) != B_OK || userID < 0) {
+				reply->what = (uint32)B_BAD_VALUE;
+				return;
+			}
+			Desktop* desktop = _FindDesktop((uid_t)userID, NULL);
+			if (desktop == NULL) {
+				reply->what = (uint32)B_NAME_NOT_FOUND;
+				return;
+			}
+			reply->what = (uint32)_ActivateDesktop(desktop);
+			break;
+		}
+
+		case AS_R5_DESTROY_DESKTOP:
+		{
+			int32 userID = -1;
+			if (request->FindInt32("user", &userID) != B_OK || userID < 0) {
+				reply->what = (uint32)B_BAD_VALUE;
+				return;
+			}
+			reply->what = (uint32)_DestroyDesktop((uid_t)userID);
+			break;
+		}
+
+		case AS_R5_DESKTOP_INFO:
+		{
+			_FillDesktopInfo(reply);
+			reply->what = (uint32)B_OK;
+			break;
+		}
+
+		default:
+			reply->what = (uint32)B_BAD_VALUE;
+			break;
+	}
+}
+// SPDX-SnippetEnd
 
 
 /*!	\brief Finds the desktop object that belongs to a certain user

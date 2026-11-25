@@ -243,7 +243,12 @@ struct CompositorVulkan {
 	VkBuffer					scanout;
 	VkDeviceMemory				scanoutMemory;
 	uint32						scanPitch;
+	// Fast user switching: true when VkInstance/VkDevice/pipelines/sampler
+	// are owned by the shared app_server device rather than this compositor.
+	bool						shared;
 };
+
+extern int64 gCompositorTotalWindowBytes;
 
 
 // M11 step 4: the push constants of effects.comp.

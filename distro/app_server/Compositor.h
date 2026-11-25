@@ -53,8 +53,18 @@ public:
 	// NULL when gpu_compositor is false, in safe mode, or when no Vulkan
 	// device starts:
 	// the desktop then runs in the CPU mode.
-	static	Compositor*			Create(Desktop* desktop, HWInterface* screen);
+	static	Compositor*			Create(Desktop* desktop, HWInterface* screen,
+									bool startHidden = false);
 								~Compositor();
+
+	// Fast user switching: hide or show this desktop's compositor without
+	// destroying its window buffers. Called with fWindowLock write-locked.
+			void				SetHidden(bool hidden, HWInterface* screen);
+			bool				IsHidden() const { return fHidden; }
+			uint64				WindowBytes() const
+									{ return (uint64)atomic_get64(
+										(int64*)&fWindowBytes); }
+	static	uint64				TotalWindowBytes();
 
 	// M13 step 0: a mouse move, for the input latency in the report.
 	// Called by the screen's MoveCursorTo, from the mouse thread.
@@ -165,6 +175,8 @@ private:
 
 			status_t			_Init();
 			status_t			_InitVulkan(bool radv, const char** reason);
+			status_t			_InitSharedVulkan(CompositorVulkan* shared,
+									const char** reason);
 			// M13 step 2: the sampler and the blank image
 			bool				_InitImages(const char** _reason);
 			// M13 step 2, gpu_debug: the compose time per pass
@@ -429,6 +441,7 @@ private:
 			// Order: fWindowLock (write) -> fComposeSlot -> HWInterface.
 			BLocker				fComposeSlot;
 	volatile bool				fPaused;
+	volatile bool				fHidden;
 	volatile bool				fModePending;
 			bool				fPauseRedraw;
 			BObjectList<Window, false> fDirectWindows;
@@ -446,9 +459,14 @@ private:
 			// CPU mode came from the drawing (decision 8).
 			SkiaGpu*			fSkia;
 			bool				fDrawFailure;
+			bool				fSharedDevice;
 			thread_id			fDrawThread;
 			sem_id				fDrawSem;
 			volatile bool		fDrawQuit;
+			void				_NotifySharedDrawFailure(const char* reason);
+	static	void				_SharedSkiaWake(void* cookie);
+	static	status_t			_SharedDrawThread(void* data);
+	static	void				_SharedDrawLoop();
 
 			// Start splash. fSplashHolding is cleared by the compose thread
 			// only; fSplashAsked is set by WindowDrawn() from any thread.

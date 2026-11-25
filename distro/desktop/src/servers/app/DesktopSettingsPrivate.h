@@ -23,8 +23,13 @@ struct server_read_only_memory;
 
 class DesktopSettingsPrivate {
 public:
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
 								DesktopSettingsPrivate(
-									server_read_only_memory* shared);
+									server_read_only_memory* shared,
+									uid_t userID = 0);
+// SPDX-SnippetEnd
 								~DesktopSettingsPrivate();
 
 			bool				DidLoadFontSettings() const
@@ -135,6 +140,7 @@ private:
 // SPDX-License-Identifier: MIT
 			uint32				fWindowEffects;
 			int32				fWindowEffectStrength;
+			uid_t				fUserID;
 // SPDX-SnippetEnd
 
 			server_read_only_memory& fShared;
