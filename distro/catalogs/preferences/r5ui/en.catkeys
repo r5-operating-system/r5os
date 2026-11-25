@@ -1,4 +1,4 @@
-1	english	x-vnd.R5OS-libr5ui	840368850
+1	english	x-vnd.R5OS-libr5ui	2588784292
 Sign in must be running.	libr5ui: Admin lock		Sign in must be running.
 Unlocked for a few minutes	libr5ui: Admin lock		Unlocked for a few minutes
 Administrator	libr5ui: Admin lock		Administrator
@@ -10,20 +10,28 @@ Lock	libr5ui: Admin lock		Lock
 Purple	libr5ui: Themes		Purple
 Pink	libr5ui: Themes		Pink
 Graphite	libr5ui: Themes		Graphite
-Signed in	libr5ui: User card		Signed in
 Blue	libr5ui: Themes		Blue
+Signed in	libr5ui: User card		Signed in
 Strong.	libr5ui: Password control		Strong.
 Standard	libr5ui: User card		Standard
+Shut down anyway	libr5ui: Admin lock		Shut down anyway
 OK	libr5ui: Admin lock		OK
 Unlock...	libr5ui: Admin lock		Unlock...
+Other people are signed in. Restarting will close their apps and lose any unsaved work:\n\n	libr5ui: Admin lock		Other people are signed in. Restarting will close their apps and lose any unsaved work:\n\n
 Fair. Add another word or a number.	libr5ui: Password control		Fair. Add another word or a number.
 Teal	libr5ui: Themes		Teal
+Restart anyway	libr5ui: Admin lock		Restart anyway
+Other people are signed in. Shutting down will close their apps and lose any unsaved work:\n\n	libr5ui: Admin lock		Other people are signed in. Shutting down will close their apps and lose any unsaved work:\n\n
 A phrase of a few words is easy to remember.	libr5ui: Password control		A phrase of a few words is easy to remember.
 No password	libr5ui: User card		No password
+{0, plural, one{• %name% (# open app)} other{• %name% (# open apps)}}	libr5ui: Admin lock		{0, plural, one{• %name% (# open app)} other{• %name% (# open apps)}}
 Orange	libr5ui: Themes		Orange
+Unlock…	libr5ui: Admin lock		Unlock…
 This changes the computer, not only your account.	libr5ui: Admin lock		This changes the computer, not only your account.
 Tip:	libr5ui: Sidebar		Tip:
+Restart	libr5ui: Admin lock		Restart
 Good. A longer phrase is stronger.	libr5ui: Password control		Good. A longer phrase is stronger.
 Could not unlock.	libr5ui: Admin lock		Could not unlock.
 Weak. Use at least 8 characters.	libr5ui: Password control		Weak. Use at least 8 characters.
 Cancel	libr5ui: Admin lock		Cancel
+Shut down	libr5ui: Admin lock		Shut down

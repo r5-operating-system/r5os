@@ -872,9 +872,15 @@ TRoster::HandleGetAppInfo(BMessage* request)
 		if (info == NULL)
 			info = fRegisteredApps.InfoFor(signature, senderUid);
 		if (info == NULL) {
-			if (senderUid != 0)
-				info = fRegisteredApps.InfoFor(signature, (uid_t)0);
-			else
+			if (senderUid != 0) {
+				// Never fall back to uid 0's notification_server for a person's
+				// app (would leak their notification onto the Sign in / Lock
+				// desktop before their own notification_server registers).
+				if (strcasecmp(signature,
+						"application/x-vnd.Haiku-notification_server") != 0) {
+					info = fRegisteredApps.InfoFor(signature, (uid_t)0);
+				}
+			} else
 				info = fRegisteredApps.InfoFor(signature);
 		}
 		if (info == NULL)

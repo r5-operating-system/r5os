@@ -67,6 +67,10 @@ private:
 			void				_HandleAdminRequest(BMessage* request,
 									const r5_admin_sender& sender,
 									BMessage* reply);
+	static	status_t			_PortProxyThread(void* data);
+			void				_PortProxyLoop();
+			bool				_VerifiedSender(const BMessage* message,
+									uid_t& _uid, team_id& _team) const;
 // SPDX-SnippetEnd
 	virtual	Desktop*			_FindDesktop(uid_t userID,
 									const char* targetScreen);
@@ -80,6 +84,9 @@ private:
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 			port_id				fAdminPort;
+			port_id				fPublicPort;
+			thread_id			fProxyThread;
+			uint8				fProxySecret[16];
 // SPDX-SnippetEnd
 };
 

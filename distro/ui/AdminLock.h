@@ -115,5 +115,13 @@ private:
 // The name the system preferences have always used.
 typedef BAppearanceKit::BAdminLockBar AdminLockBar;
 
+// Shows the modal shut-down / restart warning listing other signed-in people
+// and open app counts. When requireUnlock is true (e.g. from Login's Lock or
+// Sign in screen), the proceed button stays disabled until an administrator
+// unlocks via r5_admin_prompt_unlock(). On confirmation, sends a locally
+// marked message (proceedWhat) to target.
+void r5_show_shutdown_warning(bool reboot, const BMessage& sessions,
+	BMessenger target, uint32 proceedWhat, bool requireUnlock = false);
+
 
 #endif

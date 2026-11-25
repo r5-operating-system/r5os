@@ -85,7 +85,8 @@ private:
 	void			_FillOtherSessions(uid_t excludeUid,
 						BMessage& reply) const;
 	bool			_ConfirmShutdownIfOthers(bool reboot, uid_t requesterUid);
-	void			_PerformShutdown(bool reboot);
+	void			_PerformShutdown(bool reboot, bool confirm,
+						uid_t requesterUid);
 // SPDX-SnippetEnd
 	void			_LaunchSessionHooks(const char* login);
 	void			_StartVirtualBoxGuest(const char* login);

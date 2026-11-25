@@ -449,23 +449,33 @@ B_TRANSLATE_MARK_VOID("About R5")
 		AddItem(item);
 
 		// Fast user switching: show "Switch user…" only when more than one
-		// account exists (not in the guest menu above).
+		// listed account exists (matching count_listed_accounts(), not in the
+		// guest menu above).
 		int32 accountCount = 0;
 		setpwent();
 		while (struct passwd* pw = getpwent()) {
-			if (pw->pw_uid < 1000 || pw->pw_name == NULL)
+			if (pw->pw_name == NULL || pw->pw_name[0] == '\0')
 				continue;
 			if (strcmp(pw->pw_name, "sshd") == 0
 				|| strcmp(pw->pw_name, "nobody") == 0
 				|| strcmp(pw->pw_name, "ftp") == 0
+				|| strcmp(pw->pw_name, "root") == 0
 				|| strcmp(pw->pw_name, "guest") == 0) {
+				continue;
+			}
+			if (pw->pw_dir == NULL
+				|| (strcmp(pw->pw_dir, "/boot/home") != 0
+					&& strncmp(pw->pw_dir, "/boot/home/", 11) != 0)) {
 				continue;
 			}
 			if (pw->pw_shell != NULL
 				&& (strcmp(pw->pw_shell, "false") == 0
-					|| strcmp(pw->pw_shell, "/bin/false") == 0)) {
+					|| strcmp(pw->pw_shell, "/bin/false") == 0
+					|| strcmp(pw->pw_shell, "/sbin/nologin") == 0)) {
 				continue;
 			}
+			if (pw->pw_passwd != NULL && pw->pw_passwd[0] == '!')
+				continue;
 			accountCount++;
 		}
 		endpwent();

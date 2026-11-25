@@ -56,14 +56,14 @@ msgctxt "libr5ui: Themes"
 msgid "Graphite"
 msgstr "Grafiet"
 
-msgctxt "libr5ui: User card"
-msgid "Signed in"
-msgstr ""
-
 #, fuzzy
 msgctxt "libr5ui: Themes"
 msgid "Blue"
 msgstr "Blauw"
+
+msgctxt "libr5ui: User card"
+msgid "Signed in"
+msgstr ""
 
 #, fuzzy
 msgctxt "libr5ui: Password control"
@@ -75,6 +75,10 @@ msgctxt "libr5ui: User card"
 msgid "Standard"
 msgstr "Standaard"
 
+msgctxt "libr5ui: Admin lock"
+msgid "Shut down anyway"
+msgstr ""
+
 #, fuzzy
 msgctxt "libr5ui: Admin lock"
 msgid "OK"
@@ -84,6 +88,10 @@ msgstr "OK"
 msgctxt "libr5ui: Admin lock"
 msgid "Unlock..."
 msgstr "Ontgrendelen..."
+
+msgctxt "libr5ui: Admin lock"
+msgid "Other people are signed in. Restarting will close their apps and lose any unsaved work:\n\n"
+msgstr ""
 
 #, fuzzy
 msgctxt "libr5ui: Password control"
@@ -95,6 +103,14 @@ msgctxt "libr5ui: Themes"
 msgid "Teal"
 msgstr "Groenblauw"
 
+msgctxt "libr5ui: Admin lock"
+msgid "Restart anyway"
+msgstr ""
+
+msgctxt "libr5ui: Admin lock"
+msgid "Other people are signed in. Shutting down will close their apps and lose any unsaved work:\n\n"
+msgstr ""
+
 #, fuzzy
 msgctxt "libr5ui: Password control"
 msgid "A phrase of a few words is easy to remember."
@@ -105,10 +121,18 @@ msgctxt "libr5ui: User card"
 msgid "No password"
 msgstr "Geen wachtwoord"
 
+msgctxt "libr5ui: Admin lock"
+msgid "{0, plural, one{• %name% (# open app)} other{• %name% (# open apps)}}"
+msgstr ""
+
 #, fuzzy
 msgctxt "libr5ui: Themes"
 msgid "Orange"
 msgstr "Oranje"
+
+msgctxt "libr5ui: Admin lock"
+msgid "Unlock…"
+msgstr ""
 
 #, fuzzy
 msgctxt "libr5ui: Admin lock"
@@ -119,6 +143,10 @@ msgstr "Dit wijzigt de computer, niet alleen je account."
 msgctxt "libr5ui: Sidebar"
 msgid "Tip:"
 msgstr "Tip:"
+
+msgctxt "libr5ui: Admin lock"
+msgid "Restart"
+msgstr ""
 
 #, fuzzy
 msgctxt "libr5ui: Password control"
@@ -139,3 +167,7 @@ msgstr "Zwak. Gebruik minstens 8 tekens."
 msgctxt "libr5ui: Admin lock"
 msgid "Cancel"
 msgstr "Annuleren"
+
+msgctxt "libr5ui: Admin lock"
+msgid "Shut down"
+msgstr ""

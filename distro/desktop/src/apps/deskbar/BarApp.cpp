@@ -1001,6 +1001,25 @@ TBarApp::MessageReceived(BMessage* message)
 			// TODO: Call BRoster?
 			break;
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		case 'r5sd':
+		case 'r5rb':
+		{
+			if (!r5_admin_is_local(message))
+				break;
+			bool reboot = (message->what == 'r5rb');
+			BMessenger login("application/x-vnd.Haiku-Login");
+			if (login.IsValid()) {
+				BMessage req(reboot ? 'rebo' : 'halt');
+				req.AddBool("confirm", false);
+				BMessage reply;
+				r5_admin_send(login, &req, &reply, 5000000LL);
+			}
+			break;
+		}
+// SPDX-SnippetEnd
 		case kRebootSystem:
 		case kShutdownSystem:
 		{
@@ -1012,8 +1031,9 @@ TBarApp::MessageReceived(BMessage* message)
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 			// Fast user switching (5.7): ask Login whether other people are
-			// signed in. If so, warn who is signed in and require an
-			// administrator (or 5-minute grant via r5_admin_prompt_unlock()).
+			// signed in. If so, show the shared libr5ui warning; otherwise
+			// route through Login passing confirm so the shown person's apps
+			// quit normally with "Save changes?" visible.
 			BMessenger login("application/x-vnd.Haiku-Login");
 			if (login.IsValid()) {
 				BMessage query('qses');
@@ -1024,145 +1044,12 @@ TBarApp::MessageReceived(BMessage* message)
 					type_code tc;
 					if (sessionsReply.GetInfo("login", &tc, &otherCount) == B_OK
 						&& otherCount > 0) {
-						class ShutdownWarnWindow : public BWindow {
-						public:
-							ShutdownWarnWindow(bool isReboot,
-								const BMessage& sessions)
-								:
-								BWindow(BRect(0, 0, 420, 220),
-									isReboot
-										? B_TRANSLATE("Restart")
-										: B_TRANSLATE("Shut down"),
-									B_MODAL_WINDOW_LOOK,
-									B_MODAL_APP_WINDOW_FEEL,
-									B_NOT_RESIZABLE | B_NOT_ZOOMABLE
-										| B_AUTO_UPDATE_SIZE_LIMITS),
-								fReboot(isReboot),
-								fUnlockButton(NULL),
-								fProceedButton(NULL)
-							{
-								BString body;
-								if (fReboot) {
-									body = B_TRANSLATE("Other people are "
-										"signed in. Restarting will close "
-										"their apps and lose any unsaved "
-										"work:\n\n");
-								} else {
-									body = B_TRANSLATE("Other people are "
-										"signed in. Shutting down will close "
-										"their apps and lose any unsaved "
-										"work:\n\n");
-								}
-								int32 count = 0;
-								type_code type;
-								sessions.GetInfo("login", &type, &count);
-								for (int32 i = 0; i < count; i++) {
-									const char* disp = sessions.GetString(
-										"display", i, "");
-									int32 apps = sessions.GetInt32("apps", i, 0);
-									BString line;
-									if (apps > 0) {
-										BStringFormat fmt(B_TRANSLATE(
-											"{0, plural, "
-											"one{\xe2\x80\xa2 %name% (# open app)} "
-											"other{\xe2\x80\xa2 %name% (# open apps)}}"));
-										fmt.Format(line, apps);
-										line.ReplaceFirst("%name%", disp);
-									} else {
-										line.SetToFormat("\xe2\x80\xa2 %s",
-											disp);
-									}
-									body << line << "\n";
-								}
-
-								BTextView* text = new BTextView("body");
-								text->SetText(body.String());
-								text->MakeEditable(false);
-								text->MakeSelectable(false);
-								text->SetStylable(false);
-								text->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
-								text->SetHighUIColor(B_PANEL_TEXT_COLOR);
-								text->SetExplicitMinSize(BSize(360, 90));
-
-								BButton* cancel = new BButton("cancel",
-									B_TRANSLATE("Cancel"),
-									new BMessage(B_QUIT_REQUESTED));
-								fUnlockButton = new BButton("unlock",
-									B_TRANSLATE("Unlock" B_UTF8_ELLIPSIS),
-									new BMessage('unlk'));
-								fProceedButton = new BButton("proceed",
-									fReboot
-										? B_TRANSLATE("Restart anyway")
-										: B_TRANSLATE("Shut down anyway"),
-									new BMessage('go__'));
-
-								bool admin = false;
-								bool unlocked = false;
-								r5_admin_query(admin, unlocked);
-								fProceedButton->SetEnabled(unlocked);
-								if (unlocked)
-									fUnlockButton->Hide();
-
-								BLayoutBuilder::Group<>(this, B_VERTICAL,
-									B_USE_DEFAULT_SPACING)
-									.SetInsets(B_USE_WINDOW_SPACING)
-									.Add(text)
-									.AddGroup(B_HORIZONTAL,
-										B_USE_DEFAULT_SPACING)
-										.Add(fUnlockButton)
-										.AddGlue()
-										.Add(cancel)
-										.Add(fProceedButton)
-									.End();
-								CenterOnScreen();
-							}
-
-							virtual void MessageReceived(BMessage* msg)
-							{
-								switch (msg->what) {
-									case 'unlk':
-										r5_admin_prompt_unlock(BMessenger(this));
-										break;
-									case kMsgAdminLockChanged:
-									{
-										bool allowed = r5_admin_change_allowed();
-										fProceedButton->SetEnabled(allowed);
-										if (allowed && !fUnlockButton->IsHidden())
-											fUnlockButton->Hide();
-										break;
-									}
-									case 'go__':
-									{
-										BMessenger loginApp(
-											"application/x-vnd.Haiku-Login");
-										if (loginApp.IsValid()) {
-											BMessage req(fReboot
-												? 'rebo' : 'halt');
-											BMessage reply;
-											r5_admin_send(loginApp, &req,
-												&reply, 5000000LL);
-										}
-										PostMessage(B_QUIT_REQUESTED);
-										break;
-									}
-									default:
-										BWindow::MessageReceived(msg);
-										break;
-								}
-							}
-
-						private:
-							bool		fReboot;
-							BButton*	fUnlockButton;
-							BButton*	fProceedButton;
-						};
-
-						(new ShutdownWarnWindow(reboot, sessionsReply))->Show();
+						r5_show_shutdown_warning(reboot, sessionsReply,
+							BMessenger(this), reboot ? 'r5rb' : 'r5sd', false);
 						break;
 					}
-					// No other sessions: route through Login so the registrar
-					// receives the shutdown from uid 0 cleanly.
 					BMessage req(reboot ? 'rebo' : 'halt');
+					req.AddBool("confirm", confirm);
 					BMessage reply;
 					if (r5_admin_send(login, &req, &reply, 5000000LL) == B_OK
 						&& reply.GetInt32("error", B_ERROR) == B_OK) {

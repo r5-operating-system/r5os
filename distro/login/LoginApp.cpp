@@ -314,6 +314,8 @@ LoginApp::_AdminRequest(BMessage* request, const r5_admin_sender& sender,
 			reply->AddInt32("error", B_OK);
 			BMessage* action = login_local_message(request->what);
 			action->AddBool("confirmed", true);
+			action->AddBool("confirm", request->GetBool("confirm", false));
+			action->AddInt32("uid", (int32)sender.uid);
 			app->PostMessage(action);
 			delete action;
 			break;
@@ -460,7 +462,8 @@ LoginApp::MessageReceived(BMessage* message)
 				if (!_ConfirmShutdownIfOthers(reboot, 0))
 					break;
 			}
-			_PerformShutdown(reboot);
+			_PerformShutdown(reboot, message->GetBool("confirm", false),
+				(uid_t)message->GetInt32("uid", 0));
 // SPDX-SnippetEnd
 			break;
 // SPDX-SnippetBegin
@@ -934,6 +937,12 @@ LoginApp::Unlock(BMessage* message)
 		if (actStatus != B_OK) {
 			r5_session_log("unlock failed: activate desktop %d: %s",
 				(int)uid, strerror(actStatus));
+			BAlert* alert = new BAlert(B_TRANSLATE("Error"),
+				B_TRANSLATE("Could not switch back to your desktop. "
+					"Try unlocking again."),
+				B_TRANSLATE("OK"));
+			alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
+			alert->Go(NULL);
 			return;
 		}
 		set_active_session(name.String());
@@ -1016,14 +1025,21 @@ LoginApp::Logout(uid_t targetUid)
 		stop_teams_of_uid(loggedOutUid);
 	}
 
+	bool canDestroyDesktop = true;
 	if (wasActive) {
 		_NotifySessionVisible(loggedOutUid, false);
 		_SetActiveAudioUid(0);
-		_AppServerActivateDesktop(0);
-		atomic_set(&fActiveUid, 0);
-		clear_desktop_session();
+		status_t actStatus = _AppServerActivateDesktop(0);
+		if (actStatus == B_OK) {
+			atomic_set(&fActiveUid, 0);
+			clear_desktop_session();
+		} else {
+			r5_session_log("logout: activate desktop 0 failed: %s",
+				strerror(actStatus));
+			canDestroyDesktop = false;
+		}
 	}
-	if (loggedOutUid >= kMinPersonUid)
+	if (loggedOutUid >= kMinPersonUid && canDestroyDesktop)
 		_AppServerDestroyDesktop(loggedOutUid);
 
 	if (wasGuest) {
@@ -2130,158 +2146,85 @@ LoginApp::_ConfirmShutdownIfOthers(bool reboot, uid_t requesterUid)
 	if (others.GetInfo("login", &tc, &count) != B_OK || count == 0)
 		return true;
 
-	// Non-blocking modal window matching Deskbar's warning: anyone at the
-	// Lock screen or Sign in must unlock as an administrator before shutting
-	// down while people are signed in.
-	class LoginShutdownWarnWindow : public BWindow {
-	public:
-		LoginShutdownWarnWindow(bool isReboot, const BMessage& sessions)
-			:
-			BWindow(BRect(0, 0, 420, 220),
-				isReboot ? B_TRANSLATE("Restart") : B_TRANSLATE("Shut down"),
-				B_MODAL_WINDOW_LOOK, B_MODAL_APP_WINDOW_FEEL,
-				B_NOT_RESIZABLE | B_NOT_ZOOMABLE | B_AUTO_UPDATE_SIZE_LIMITS),
-			fReboot(isReboot),
-			fUnlockButton(NULL),
-			fProceedButton(NULL)
-		{
-			BString body;
-			if (fReboot) {
-				body = B_TRANSLATE("Other people are signed in. Restarting "
-					"will close their apps and lose any unsaved work:\n\n");
-			} else {
-				body = B_TRANSLATE("Other people are signed in. Shutting down "
-					"will close their apps and lose any unsaved work:\n\n");
-			}
-			int32 n = 0;
-			type_code type;
-			sessions.GetInfo("login", &type, &n);
-			for (int32 i = 0; i < n; i++) {
-				const char* disp = sessions.GetString("display", i, "");
-				int32 apps = sessions.GetInt32("apps", i, 0);
-				BString line;
-				if (apps > 0) {
-					BStringFormat fmt(B_TRANSLATE("{0, plural, "
-						"one{\xe2\x80\xa2 %name% (# open app)} "
-						"other{\xe2\x80\xa2 %name% (# open apps)}}"));
-					fmt.Format(line, apps);
-					line.ReplaceFirst("%name%", disp);
-				} else {
-					line.SetToFormat("\xe2\x80\xa2 %s", disp);
-				}
-				body << line << "\n";
-			}
-
-			BTextView* text = new BTextView("body");
-			text->SetText(body.String());
-			text->MakeEditable(false);
-			text->MakeSelectable(false);
-			text->SetStylable(false);
-			text->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
-			text->SetHighUIColor(B_PANEL_TEXT_COLOR);
-			text->SetExplicitMinSize(BSize(360, 90));
-
-			BButton* cancel = new BButton("cancel", B_TRANSLATE("Cancel"),
-				new BMessage(B_QUIT_REQUESTED));
-			fUnlockButton = new BButton("unlock",
-				B_TRANSLATE("Unlock" B_UTF8_ELLIPSIS), new BMessage('unlk'));
-			fProceedButton = new BButton("proceed",
-				fReboot ? B_TRANSLATE("Restart anyway")
-					: B_TRANSLATE("Shut down anyway"),
-				new BMessage('go__'));
-			fProceedButton->SetEnabled(false);
-
-			BLayoutBuilder::Group<>(this, B_VERTICAL, B_USE_DEFAULT_SPACING)
-				.SetInsets(B_USE_WINDOW_SPACING)
-				.Add(text)
-				.AddGroup(B_HORIZONTAL, B_USE_DEFAULT_SPACING)
-					.Add(fUnlockButton)
-					.AddGlue()
-					.Add(cancel)
-					.Add(fProceedButton)
-				.End();
-			CenterOnScreen();
-		}
-
-		virtual void MessageReceived(BMessage* msg)
-		{
-			switch (msg->what) {
-				case 'unlk':
-					r5_admin_prompt_unlock(BMessenger(this));
-					break;
-				case kMsgAdminLockChanged:
-				{
-					bool allowed = r5_admin_change_allowed();
-					fProceedButton->SetEnabled(allowed);
-					if (allowed && !fUnlockButton->IsHidden())
-						fUnlockButton->Hide();
-					break;
-				}
-				case 'go__':
-				{
-					BMessage* go = login_local_message(
-						fReboot ? kRebootAction : kHaltAction);
-					go->AddBool("confirmed", true);
-					be_app->PostMessage(go);
-					delete go;
-					PostMessage(B_QUIT_REQUESTED);
-					break;
-				}
-				default:
-					BWindow::MessageReceived(msg);
-					break;
-			}
-		}
-
-	private:
-		bool		fReboot;
-		BButton*	fUnlockButton;
-		BButton*	fProceedButton;
-	};
-
-	(new LoginShutdownWarnWindow(reboot, others))->Show();
+	// Use the shared libr5ui modal warning. From Sign in or Lock screen,
+	// requireUnlock is true so an administrator must unlock first.
+	r5_show_shutdown_warning(reboot, others, be_app_messenger,
+		reboot ? kRebootAction : kHaltAction, true);
 	return false;
 }
 
 
 void
-LoginApp::_PerformShutdown(bool reboot)
+LoginApp::_PerformShutdown(bool reboot, bool confirm, uid_t requesterUid)
 {
-	// Switch to desktop 0 so any registrar shutdown UI is visible, and stop
-	// every signed-in person's teams before asking the registrar to shut down
-	// so no hidden app modal ("Save changes?") can block shutdown forever.
 	uid_t shownUid = (uid_t)atomic_get(&fActiveUid);
-	if (shownUid >= kMinPersonUid)
-		_NotifySessionVisible(shownUid, false);
-	_SetActiveAudioUid(0);
-	_AppServerActivateDesktop(0);
-	atomic_set(&fActiveUid, 0);
-	clear_desktop_session();
+	bool keepShownDesktop = (requesterUid >= kMinPersonUid
+		&& requesterUid == shownUid);
 
-	bool hadGuest = guest_session_active();
+	// Stop only hidden sessions beforehand (they were warned and cannot see
+	// "Save changes?" alerts). Keep the shown person's desktop on screen so
+	// the registrar's normal quit lets them save or cancel!
+	bool hadGuest = false;
+	bool guestStopped = false;
 	BStringList sessions;
 	list_signed_in_sessions(sessions);
 	for (int32 i = 0; i < sessions.CountStrings(); i++) {
 		const char* loginName = sessions.StringAt(i).String();
+		bool isGuest = is_guest_account(loginName);
+		if (isGuest)
+			hadGuest = true;
 		struct passwd* pwd = getpwnam(loginName);
-		if (pwd != NULL && pwd->pw_uid >= kMinPersonUid) {
-			_QuitUserAppsFor(pwd->pw_uid);
-			stop_teams_of_uid(pwd->pw_uid);
+		if (pwd == NULL || pwd->pw_uid < kMinPersonUid)
+			continue;
+		if (keepShownDesktop && pwd->pw_uid == requesterUid && !isGuest)
+			continue;
+		_QuitUserAppsFor(pwd->pw_uid);
+		stop_teams_of_uid(pwd->pw_uid);
+		if (pwd->pw_uid == shownUid) {
+			_NotifySessionVisible(shownUid, false);
+			_SetActiveAudioUid(0);
+			status_t actStatus = _AppServerActivateDesktop(0);
+			if (actStatus == B_OK) {
+				atomic_set(&fActiveUid, 0);
+				clear_desktop_session();
+				_AppServerDestroyDesktop(pwd->pw_uid);
+			} else {
+				r5_session_log("shutdown: activate desktop 0 failed: %s",
+					strerror(actStatus));
+			}
+			keepShownDesktop = false;
+		} else {
 			_AppServerDestroyDesktop(pwd->pw_uid);
 		}
 		remove_signed_in_session(loginName);
+		if (isGuest)
+			guestStopped = true;
+	}
+
+	if (!keepShownDesktop && (uid_t)atomic_get(&fActiveUid) >= kMinPersonUid) {
+		uid_t cur = (uid_t)atomic_get(&fActiveUid);
+		_NotifySessionVisible(cur, false);
+		_SetActiveAudioUid(0);
+		status_t actStatus = _AppServerActivateDesktop(0);
+		if (actStatus == B_OK) {
+			atomic_set(&fActiveUid, 0);
+			clear_desktop_session();
+		} else {
+			r5_session_log("shutdown: activate desktop 0 failed: %s",
+				strerror(actStatus));
+		}
 	}
 
 	// Wipe guest home AFTER guest's teams have stopped so they cannot write
 	// settings back during quit.
-	if (hadGuest) {
+	if (hadGuest && guestStopped) {
 		r5_session_log("shutdown: wipe guest home");
 		wipe_guest_home();
 	}
 
 	BRoster roster;
 	BRoster::Private rosterPrivate(roster);
-	status_t error = rosterPrivate.ShutDown(reboot, false, false);
+	status_t error = rosterPrivate.ShutDown(reboot, confirm, false);
 	if (error < B_OK) {
 		BString msg(B_TRANSLATE("Could not shut down: %error%"));
 		msg.ReplaceFirst("%error%", strerror(error));

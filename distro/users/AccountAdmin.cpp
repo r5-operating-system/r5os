@@ -1913,10 +1913,13 @@ write_sessions_list(const BStringList& names)
 			return EIO;
 		}
 	}
-	if (fflush(file) != 0 || fsync(fileno(file)) != 0 || fclose(file) != 0) {
-		int err = errno;
+	int flushErr = (fflush(file) != 0) ? errno : 0;
+	int syncErr = (flushErr == 0 && fsync(fileno(file)) != 0) ? errno : 0;
+	int closeErr = (fclose(file) != 0) ? errno : 0;
+	int ioErr = flushErr != 0 ? flushErr : (syncErr != 0 ? syncErr : closeErr);
+	if (ioErr != 0) {
 		unlink(tmpPath.String());
-		return err;
+		return ioErr;
 	}
 	if (rename(tmpPath.String(), kSessionsListPath) != 0) {
 		int err = errno;

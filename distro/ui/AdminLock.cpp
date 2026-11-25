@@ -20,8 +20,10 @@
 #include <Messenger.h>
 #include <ScrollBar.h>
 #include <String.h>
+#include <StringFormat.h>
 #include <StringView.h>
 #include <TextControl.h>
+#include <TextView.h>
 #include <Window.h>
 
 #include <R5Admin.h>
@@ -300,7 +302,10 @@ public:
 		}
 
 		fTarget.SendMessage(kMsgRefreshLock);
-		fTarget.SendMessage(kMsgAdminLockChanged);
+		BMessage changed(kMsgAdminLockChanged);
+		changed.AddBool("unlocked", true);
+		r5_admin_mark_local(&changed);
+		fTarget.SendMessage(&changed);
 		PostMessage(B_QUIT_REQUESTED);
 	}
 
@@ -549,4 +554,151 @@ BAdminLockBar::_SyncControls()
 			_DisableTree(Window()->ChildAt(i));
 	}
 	fSyncing = false;
+}
+
+
+namespace {
+
+class ShutdownWarnWindow : public BWindow {
+public:
+	ShutdownWarnWindow(bool isReboot, const BMessage& sessions,
+		BMessenger target, uint32 proceedWhat, bool requireUnlock)
+		:
+		BWindow(BRect(0, 0, 420, 220),
+			isReboot ? B_TRANSLATE("Restart") : B_TRANSLATE("Shut down"),
+			B_MODAL_WINDOW_LOOK, B_MODAL_APP_WINDOW_FEEL,
+			B_NOT_RESIZABLE | B_NOT_ZOOMABLE | B_AUTO_UPDATE_SIZE_LIMITS),
+		fReboot(isReboot),
+		fTarget(target),
+		fProceedWhat(proceedWhat),
+		fUnlocked(false),
+		fUnlockButton(NULL),
+		fProceedButton(NULL)
+	{
+		BString body;
+		if (fReboot) {
+			body = B_TRANSLATE("Other people are signed in. Restarting will "
+				"close their apps and lose any unsaved work:\n\n");
+		} else {
+			body = B_TRANSLATE("Other people are signed in. Shutting down will "
+				"close their apps and lose any unsaved work:\n\n");
+		}
+		int32 count = 0;
+		type_code type;
+		sessions.GetInfo("login", &type, &count);
+		for (int32 i = 0; i < count; i++) {
+			const char* disp = sessions.GetString("display", i, "");
+			int32 apps = sessions.GetInt32("apps", i, 0);
+			BString line;
+			if (apps > 0) {
+				BStringFormat fmt(B_TRANSLATE(
+					"{0, plural, "
+					"one{\xe2\x80\xa2 %name% (# open app)} "
+					"other{\xe2\x80\xa2 %name% (# open apps)}}"));
+				fmt.Format(line, apps);
+				line.ReplaceFirst("%name%", disp);
+			} else {
+				line.SetToFormat("\xe2\x80\xa2 %s", disp);
+			}
+			body << line << "\n";
+		}
+
+		BTextView* text = new BTextView("body");
+		text->SetText(body.String());
+		text->MakeEditable(false);
+		text->MakeSelectable(false);
+		text->SetStylable(false);
+		text->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
+		text->SetHighUIColor(B_PANEL_TEXT_COLOR);
+		text->SetExplicitMinSize(BSize(360, 90));
+
+		BMessage* unlockMsg = new BMessage('unlk');
+		r5_admin_mark_local(unlockMsg);
+		BMessage* proceedMsg = new BMessage('go__');
+		r5_admin_mark_local(proceedMsg);
+
+		BButton* cancel = new BButton("cancel", B_TRANSLATE("Cancel"),
+			new BMessage(B_QUIT_REQUESTED));
+		fUnlockButton = new BButton("unlock",
+			B_TRANSLATE("Unlock" B_UTF8_ELLIPSIS), unlockMsg);
+		fProceedButton = new BButton("proceed",
+			fReboot ? B_TRANSLATE("Restart anyway")
+				: B_TRANSLATE("Shut down anyway"),
+			proceedMsg);
+
+		if (!requireUnlock) {
+			bool admin = false;
+			bool unlocked = false;
+			if (r5_admin_query(admin, unlocked) == B_OK && unlocked)
+				fUnlocked = true;
+		}
+		fProceedButton->SetEnabled(fUnlocked);
+		if (fUnlocked)
+			fUnlockButton->Hide();
+
+		BLayoutBuilder::Group<>(this, B_VERTICAL, B_USE_DEFAULT_SPACING)
+			.SetInsets(B_USE_WINDOW_SPACING)
+			.Add(text)
+			.AddGroup(B_HORIZONTAL, B_USE_DEFAULT_SPACING)
+				.Add(fUnlockButton)
+				.AddGlue()
+				.Add(cancel)
+				.Add(fProceedButton)
+			.End();
+		CenterOnScreen();
+	}
+
+	virtual void MessageReceived(BMessage* msg)
+	{
+		switch (msg->what) {
+			case 'unlk':
+				if (!r5_admin_is_local(msg))
+					break;
+				r5_admin_prompt_unlock(BMessenger(this));
+				break;
+			case kMsgAdminLockChanged:
+				if (!r5_admin_is_local(msg))
+					break;
+				if (msg->GetBool("unlocked", false)) {
+					fUnlocked = true;
+					fProceedButton->SetEnabled(true);
+					if (!fUnlockButton->IsHidden())
+						fUnlockButton->Hide();
+				}
+				break;
+			case 'go__':
+				if (!r5_admin_is_local(msg) || !fUnlocked)
+					break;
+				{
+					BMessage go(fProceedWhat);
+					go.AddBool("confirmed", true);
+					r5_admin_mark_local(&go);
+					fTarget.SendMessage(&go);
+				}
+				PostMessage(B_QUIT_REQUESTED);
+				break;
+			default:
+				BWindow::MessageReceived(msg);
+				break;
+		}
+	}
+
+private:
+	bool		fReboot;
+	BMessenger	fTarget;
+	uint32		fProceedWhat;
+	bool		fUnlocked;
+	BButton*	fUnlockButton;
+	BButton*	fProceedButton;
+};
+
+}	// namespace
+
+
+void
+r5_show_shutdown_warning(bool reboot, const BMessage& sessions,
+	BMessenger target, uint32 proceedWhat, bool requireUnlock)
+{
+	(new ShutdownWarnWindow(reboot, sessions, target, proceedWhat,
+		requireUnlock))->Show();
 }

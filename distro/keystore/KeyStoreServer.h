@@ -97,6 +97,10 @@ private:
 		bool						_HasOldKeyStore() const;
 		void						_PostLockedAlert(const char* text);
 		void						_PostSlotsFullAlert();
+	static	status_t				_PortProxyThread(void* data);
+		void						_PortProxyLoop();
+		bool						_VerifiedSender(const BMessage& message,
+										uid_t& _uid, team_id& _team) const;
 // SPDX-SnippetEnd
 
 		Keyring*					fMasterKeyring;
@@ -107,6 +111,9 @@ private:
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 		port_id						fAdminPort;
+		port_id						fPublicPort;
+		thread_id					fProxyThread;
+		uint8						fProxySecret[16];
 		bool						fStoreUnlocked;
 		bool						fMemoryOnly;
 		BSecurityKit::BSecureBuffer	fMasterKey;

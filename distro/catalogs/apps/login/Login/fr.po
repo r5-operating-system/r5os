@@ -6,10 +6,6 @@ msgctxt "Users: Account admin"
 msgid "There must be at least one administrator."
 msgstr "Il doit y avoir au moins un administrateur."
 
-msgctxt "Login: Application"
-msgid "{0, plural, one{• %name% (# open app)} other{• %name% (# open apps)}}"
-msgstr ""
-
 #, fuzzy
 msgctxt "Users: Account admin"
 msgid "An account named \"guest\" already exists. Rename it first."
@@ -69,10 +65,6 @@ msgstr "Vérification…"
 msgctxt "Users: Account admin"
 msgid "That username already exists."
 msgstr "Ce nom d'utilisateur existe déjà."
-
-msgctxt "Login: Application"
-msgid "Shut down"
-msgstr ""
 
 #, fuzzy
 msgctxt "Users: Account admin"
@@ -152,10 +144,6 @@ msgctxt "Login: Sign in view"
 msgid "Return to Guest"
 msgstr ""
 
-msgctxt "Login: Application"
-msgid "Restart"
-msgstr ""
-
 #, fuzzy
 msgctxt "Users: Account admin"
 msgid "Guest setting requires the sign-in helper."
@@ -175,11 +163,6 @@ msgstr "Le compte existe, mais le mot de passe n'a pas été défini."
 msgctxt "Users: Account admin"
 msgid "The guest's old files could not be removed."
 msgstr "Les anciens fichiers de l'invité n'ont pas pu être supprimés."
-
-#, fuzzy
-msgctxt "Login: Sign in view"
-msgid "Sign-ins are forgotten when you shut down."
-msgstr "Les connexions sont oubliées à l'extinction."
 
 #, fuzzy
 msgctxt "Login: Sign in view"
@@ -246,10 +229,6 @@ msgctxt "Users: Account admin"
 msgid "The last administrator cannot become a standard account."
 msgstr "Le dernier administrateur ne peut pas devenir un compte standard."
 
-msgctxt "Login: Application"
-msgid "Shut down anyway"
-msgstr ""
-
 #, fuzzy
 msgctxt "Users: Account admin"
 msgid "Could not enable the account."
@@ -277,10 +256,6 @@ msgstr "Votre mot de passe n'a pas été modifié, car le trousseau de clés n'a
 
 msgctxt "Login: Sign in view"
 msgid "Unlock"
-msgstr ""
-
-msgctxt "Login: Application"
-msgid "Other people are signed in:\n\n%list%\nRestarting will close their apps and lose any unsaved work."
 msgstr ""
 
 #, fuzzy
@@ -439,12 +414,6 @@ msgid "The request is empty."
 msgstr "La demande est vide."
 
 #, fuzzy
-#| msgid "Only the signed-in session may lock or log out."
-msgctxt "Login: Application"
-msgid "Only a signed-in session may lock, switch user or log out."
-msgstr "Seule la session connectée peut verrouiller ou se déconnecter."
-
-#, fuzzy
 msgctxt "Login: Application"
 msgid "Choose a password first."
 msgstr "Choisissez d'abord un mot de passe."
@@ -453,10 +422,6 @@ msgstr "Choisissez d'abord un mot de passe."
 msgctxt "Users: Account admin"
 msgid "This account already has a password."
 msgstr "Ce compte a déjà un mot de passe."
-
-msgctxt "Login: Application"
-msgid "Only an administrator may continue. Sign in as an administrator first."
-msgstr ""
 
 #, fuzzy
 msgctxt "Login: Application"
@@ -480,6 +445,10 @@ msgstr "Connexion"
 
 msgctxt "Login: Application"
 msgid "Guest"
+msgstr ""
+
+msgctxt "Login: Application"
+msgid "Could not switch back to your desktop. Try unlocking again."
 msgstr ""
 
 #, fuzzy
@@ -575,10 +544,6 @@ msgctxt "Desktop Window"
 msgid "Desktop"
 msgstr "Bureau"
 
-msgctxt "Login: Application"
-msgid "Restart anyway"
-msgstr ""
-
 #, fuzzy
 msgctxt "Login: Sign in view"
 msgid "Administrator"
@@ -670,6 +635,10 @@ msgid "The request is empty."
 msgstr "La demande est vide."
 
 msgctxt "Login: Sign in view"
+msgid "You're trying R5. Passwords for mail and online accounts are forgotten when you shut down."
+msgstr ""
+
+msgctxt "Login: Sign in view"
 msgid "Guest is already signed in"
 msgstr ""
 
@@ -693,10 +662,6 @@ msgctxt "Users: Account admin"
 msgid "The new account did not get a user id of 1000 or higher."
 msgstr "Le nouveau compte n'a pas reçu d'identifiant utilisateur de 1000 ou plus."
 
-msgctxt "Login: Application"
-msgid "Other people are signed in:\n\n%list%\nShutting down will close their apps and lose any unsaved work."
-msgstr ""
-
 #, fuzzy
 msgctxt "Users: Account admin"
 msgid "The existing guest account has an unexpected setup."
@@ -716,10 +681,6 @@ msgctxt "Login: Sign in view"
 msgid "Choose an account first."
 msgstr "Choisissez d'abord un compte."
 
-msgctxt "Login: Application"
-msgid "Cancel"
-msgstr ""
-
 #, fuzzy
 msgctxt "Users: Account admin"
 msgid "The account could not become an administrator."
@@ -734,6 +695,12 @@ msgstr "Ce mot de passe n'est pas correct."
 msgctxt "Login: Lock window"
 msgid "Locked"
 msgstr "Verrouillé"
+
+#, fuzzy
+#| msgid "Only a signed-in session may lock, switch user or log out."
+msgctxt "Login: Application"
+msgid "Only the active session may lock or switch user."
+msgstr "Seule la session connectée peut verrouiller ou se déconnecter."
 
 #, fuzzy
 msgctxt "Users: Account admin"

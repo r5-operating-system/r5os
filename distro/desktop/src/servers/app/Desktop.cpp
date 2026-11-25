@@ -3245,6 +3245,28 @@ Desktop::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 			if (link.ReadString(&appSignature) != B_OK)
 				break;
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			// Fast user switching: verify from the kernel that both the port
+			// message sender and the claimed clientTeamID belong to this
+			// desktop's user (or uid 0). Prevents another person from joining
+			// this desktop even if they enumerate its port via get_next_port_info.
+			team_info clientInfo;
+			bool senderAllowed = (fLastSenderUid == 0
+				|| fLastSenderUid == fUserID);
+			bool teamAllowed = (get_team_info(clientTeamID, &clientInfo) == B_OK
+				&& (clientInfo.uid == 0 || clientInfo.uid == fUserID)
+				&& (fLastSenderUid == 0 || clientTeamID == fLastSenderTeam));
+			if (!senderAllowed || !teamAllowed) {
+				BPrivate::LinkSender reply(clientReplyPort);
+				reply.StartMessage(B_PERMISSION_DENIED);
+				reply.Flush();
+				free(appSignature);
+				break;
+			}
+// SPDX-SnippetEnd
+
 			ObjectDeleter<ServerApp> app(new (std::nothrow) ServerApp(this, clientReplyPort,
 				clientLooperPort, clientTeamID, htoken, appSignature));
 			status_t status = B_OK;
@@ -3374,13 +3396,33 @@ Desktop::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 			// test apps to quit. This situation will occur only when the
 			// server is compiled as a regular Be application.
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			// Fast user switching: do not send AS_QUIT_APP to uid 0 system
+			// servers (such as debug_server or bluetooth_server) that attached
+			// to a person's desktop; detach their ServerApp so they stay alive
+			// and do not block desktop teardown.
 			fApplicationsLock.Lock();
 			fShutdownSemaphore = create_sem(0, "desktop shutdown");
-			fShutdownCount = fApplications.CountItems();
-			fApplicationsLock.Unlock();
-
+			fShutdownCount = 0;
 			fQuitting = true;
-			BroadcastToAllApps(AS_QUIT_APP);
+			for (int32 i = fApplications.CountItems() - 1; i >= 0; i--) {
+				ServerApp* app = fApplications.ItemAt(i);
+				team_info appTeamInfo;
+				bool isForeignSystem = fUserID >= 1000
+					&& get_team_info(app->ClientTeam(), &appTeamInfo) == B_OK
+					&& appTeamInfo.uid == 0;
+				if (isForeignSystem) {
+					fApplications.RemoveItemAt(i);
+					app->PostMessage(kMsgQuitLooper);
+				} else {
+					fShutdownCount++;
+					app->PostMessage(AS_QUIT_APP);
+				}
+			}
+			fApplicationsLock.Unlock();
+// SPDX-SnippetEnd
 
 			// We now need to process the remaining AS_DELETE_APP messages.
 			// We quit the looper when the last app is deleted.
