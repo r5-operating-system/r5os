@@ -39,6 +39,8 @@
 				<li><a href="#paths">Folders and settings</a> &mdash; Using <code class="inline">find_directory()</code>.</li>
 				<li><a href="#admin">Changes that need an administrator</a> &mdash; Using Admin Kit and <code class="inline">BAdminLockBar</code>.</li>
 				<li><a href="#session">Lock and log out</a> &mdash; How programs behave across lock/logout.</li>
+				<li><a href="#first">Try R5 and the first password</a> &mdash; The live medium and an installed R5.</li>
+				<li><a href="#guest">The guest and Shared</a> &mdash; What a guest session means for your program.</li>
 				<li><a href="#example">Example: Sign in</a> &mdash; How Sign in is built from LibR5.</li>
 			</ul>
 		</nav>
@@ -114,6 +116,36 @@
 			</div>
 		</section>
 
+		<section class="entry" id="first">
+			<div class="entry-header"><h2 class="plain">Try R5 and the first password</h2></div>
+			<p>The R5 image is the live medium: it holds <code class="inline">/boot/system/settings/r5-live-medium</code>,
+			and the Installer leaves that file out.</p>
+			<table class="spec">
+				<tr><th></th><th>Try R5</th><th>An installed R5</th></tr>
+				<tr><td>Password</td><td>None. Sign in says "Sign-ins are forgotten when you shut down."</td><td>An account without one chooses it on Sign in, once, before its first desktop: name, password twice, the strength hint.</td></tr>
+				<tr><td><code>BKeyStore</code></td><td>Works, in memory only. Gone at log out or shut down.</td><td>Encrypted on disk, unlocked by the password at Sign in.</td></tr>
+			</table>
+			<p>For your program nothing changes: store secrets with <code class="inline">BKeyStore</code> as always. In Try R5
+			they last for the session, so ask again next time instead of treating a missing key as an error.
+			Passwords are stored as Argon2id (<a href="security-kit.html#crypt">crypt()</a>).</p>
+		</section>
+		<section class="entry" id="guest">
+			<div class="entry-header"><h2 class="plain">The guest and Shared</h2></div>
+			<ul class="plain">
+				<li>The guest is off by default. An administrator turns it on. At log out everything the guest made in its
+				home is deleted.</li>
+				<li>Recognise the guest with <a href="admin-kit.html#service"><code class="inline">r5_admin_is_system_guest(getuid())</code></a>,
+				never by the name: an older account may be called "guest" too. The guest has no lock screen.</li>
+				<li><code class="inline">/boot/home/Shared</code> is for everyone (mode 01777). Anyone can put a file there;
+				only its owner, the administrator who is signed in and the system can delete it.</li>
+				<li>The protection holds for Shared itself, as with <code class="inline">/tmp</code>. A folder made inside Shared
+				belongs to its maker, who can delete what others put in it.</li>
+			</ul>
+			<div class="use-grid">
+				<div class="use-box yes"><h4>Do</h4><p>Offer Shared, or a removable disk, when a guest saves something to keep.</p></div>
+				<div class="use-box no"><h4>Don't</h4><p>Keep a guest's work in its home after log out. It is deleted.</p></div>
+			</div>
+		</section>
 		<section class="entry" id="example">
 			<div class="entry-header"><h2 class="plain">Example: Sign in and the lock screen</h2><span class="kind">built from LibR5</span></div>
 			<p>Sign in and the lock screen are ordinary windows built from the parts in this book. They show how the parts

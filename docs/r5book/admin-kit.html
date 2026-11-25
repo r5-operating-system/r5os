@@ -80,6 +80,12 @@
 				<p>True when the sender may change a machine-wide setting: uid 0, a member of the group admin, or
 				a program the administrator lock was opened for (Login's grant). The same rule Login and the
 				Bluetooth switch use. Added 22 Nov 2026 for the power service.</p></div>
+			<div class="member"><div class="sig">bool r5_admin_is_system_guest(uid_t uid);</div>
+				<p>True when <code class="inline">uid</code> is the guest account R5 made itself: login name
+				<code class="inline">guest</code>, home <code class="inline">/boot/home/users/guest</code>, and the uid
+				recorded in <code class="inline">/boot/system/settings/r5-guest-uid</code> (owned by uid 0, not writable by
+				group or others). An older account that is only called "guest" is not the guest. Use it, never the name,
+				before you hide something from the guest. Deskbar uses it for the guest menu. Added 24 Nov 2026.</p></div>
 			<div class="member"><div class="sig">void r5_admin_port_stop(port_id port);</div>
 				<p>Deletes the port and waits for its thread. Call it without holding the lock the handler takes.</p></div>
 <pre><code>static void

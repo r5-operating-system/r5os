@@ -10,6 +10,7 @@
 
 #include "monocypher/monocypher.h"
 
+#include <errno.h>
 #include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -411,3 +412,34 @@ BPasswordHash::NeedsRehash(const char* encoded, const Parameters& params)
 
 
 }	// namespace BSecurityKit
+
+
+extern "C" char*
+r5_security_crypt(const char* key, const char* setting, char* buffer,
+	size_t bufferSize)
+{
+	if (key == NULL || setting == NULL || buffer == NULL) {
+		errno = EINVAL;
+		return NULL;
+	}
+
+	size_t length = strlen(setting);
+	if (length + 1 > bufferSize || bufferSize < 2) {
+		errno = ERANGE;
+		return NULL;
+	}
+
+	bool matches = false;
+	if (BSecurityKit::BPasswordHash::Verify(key, setting, &matches) != B_OK) {
+		errno = EINVAL;
+		return NULL;
+	}
+
+	// The caller compares the result with the stored hash. "*" never equals
+	// a setting that starts with "$argon2id$".
+	if (matches)
+		memcpy(buffer, setting, length + 1);
+	else
+		strcpy(buffer, "*");
+	return buffer;
+}

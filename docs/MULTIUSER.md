@@ -35,6 +35,37 @@ Admin vs standard: POSIX groups (not only a checkbox). Privileged work through a
 
 Detect actual layout. Typical live disk: one `user` and `/boot/home` already full of files. Map that identity to the first administrator. Back up before chown/move. Fresh install: first-boot create-admin is a later step. If the layout is unknown, refuse destructive changes.
 
+## Password hashes (accounts step 5, 24 Nov 2026)
+
+- A password set through Login (Add account, Change password, an administrator reset) is stored in `/etc/shadow` as an Argon2id PHC string, `$argon2id$v=19$m=65536,t=3,p=1$<salt>$<hash>`, made by the Security Kit (`BPasswordHash::Hash()`, `make_password_hash()` in `distro/users/AccountAdmin.cpp`).
+- `account_password_matches()` checks such a hash with `BPasswordHash::Verify()`. An older hash, scrypt (`$s$`) or DES, still goes through `crypt()` and keeps working. A sign-in does not rewrite an older hash.
+- libroot's `crypt()` (`distro/kernel/src/system/libroot/posix/crypt/crypt.cpp`, an R5 snippet) hands a `$argon2id$` setting to the Kit's `r5_security_crypt()`, so `su`, `login` and `sshd` accept the new hashes too. `crypt(key, NULL)`, which `passwd` uses, still makes scrypt.
+- `/etc/shadow` holds no colon in either format, and `!` in front of either one still means a disabled account.
+
+## Try R5 and an installed R5 (accounts step 5, 24 Nov 2026)
+
+The R5 image is the live medium. `distro/image/r5_late_image` puts `/boot/system/settings/r5-live-medium` (root-owned) in the image. The Installer leaves that file out (`distro/rest/src/apps/installer/WorkerThread.cpp`), so an installed R5 does not have it. `is_live_medium()` in `distro/users/AccountAdmin.cpp` checks for it.
+
+**Try R5 (the live medium).**
+- The account keeps no password. Sign in shows no password field, and shows the note "Sign-ins are forgotten when you shut down."
+- Login starts `keystore_server` for the session and asks for a key store in memory only (`kR5KSFieldMemoryOnly`). The master key is random, nothing is read from or written to disk, and everything in it is gone at log out or shut down.
+- "Keep my things on this stick" waits until it is proven that the stick keeps changes after a restart (`generated/GUEST-SHARED-DESIGN.md`, "The live USB session").
+
+**An installed R5.**
+- An account without a password (not the guest) gets the first-start screen on Sign in, once, before its first desktop: "Your name", a password twice with the eye, and the strength hint (`BPasswordStrengthBar`).
+- Login checks again that the account still has no password, then writes an Argon2id hash and the name (`set_first_password()`). It signs in with the new password, so the key store gets its password protector at that sign-in.
+- Without a new password Login refuses the sign-in ("Choose a password first."). An existing install whose account has no password gets the same screen at its next Sign in.
+
+The QEMU and VirtualBox images are the R5 image, so they count as Try R5. To test the first-start screen, remove `/boot/system/settings/r5-live-medium` from a copy of the image.
+
+## Limits found in the review of steps 1 to 4 (24 Nov 2026)
+
+- **Key store values.** An account owns its own protector file (mode 0600), and Login runs the Argon2id values in it as uid 0. Only the fixed choice is accepted: at most 64 MiB, 3 passes, 1 lane (`R5KeyStoreCrypto::IsAllowedPasswordParams()`). A file with other values is refused like a wrong password, and Login moves that key store aside as `.old`.
+- **Who is the guest.** Login, the wipe and Deskbar all use the same rule: login name `guest`, home `/boot/home/users/guest`, and the uid in `/boot/system/settings/r5-guest-uid`. Deskbar asks `r5_admin_is_system_guest()` in `libr5admin.so`. An older account called `guest` keeps its lock and its files. The switch file `r5-guest-enabled` only counts when uid 0 owns it and others cannot write it.
+- **Deleting in Shared.** `/boot/home/Shared` is mode 01777. The sticky bit lets only uid 0, the owner of a file and the owner of Shared delete there; group `admin` does not count. So when an administrator signs in, Login makes that administrator the owner of Shared (the folder itself, never what is in it; `write_desktop_session()`). One graphical session runs at a time, so the administrator who is signed in can delete any file there. A standard account or the guest leaves the owner as it is.
+- **Folders inside Shared.** The sticky bit protects only Shared itself, as with `/tmp`. A folder made in Shared belongs to its maker and has no sticky bit, so its maker can delete what others put in it.
+- **Copies of a password.** The keys of the key store and the derived key are wiped, and since this review the Security Kit keeps its secret buffers out of swap (`mlock()`, best effort). The password itself still passes through the admin message to Login, which is not wiped. `crypt()`'s static buffer holds the hash, not the password.
+
 ## Who the people are
 
 The image has **one administrator**: login name `user`, gecos R5OS, home `/boot/home`. That is who should work at the desktop after Sign in.

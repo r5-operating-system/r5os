@@ -90,6 +90,9 @@ namespace BPrivate {
 // SPDX-License-Identifier: MIT
 #include <String.h>
 #include <WindowInfo.h>
+#include <R5Admin.h>
+#include <pwd.h>
+#include <unistd.h>
 // SPDX-SnippetEnd
 
 #include <DeskbarPrivate.h>
@@ -956,17 +959,44 @@ TBarApp::MessageReceived(BMessage* message)
 // SPDX-License-Identifier: MIT
 		case kLockSession:
 		{
+			if (r5_admin_is_system_guest(getuid()))
+				break;
 			BMessenger login("application/x-vnd.Haiku-Login");
-			if (login.IsValid())
-				login.SendMessage(kLockSession);
+			if (login.IsValid()) {
+				BMessage req(kLockSession);
+				BMessage reply;
+				r5_admin_send(login, &req, &reply);
+			}
+			break;
+		}
+
+		case kOpenSharedFolder:
+		{
+			entry_ref ref;
+			if (get_ref_for_path("/boot/home/Shared", &ref) == B_OK) {
+				BMessage open(B_REFS_RECEIVED);
+				open.AddRef("refs", &ref);
+				BMessenger(kTrackerSignature).SendMessage(&open);
+			}
 			break;
 		}
 
 		case kLogoutSession:
 		{
-			BAlert* alert = new BAlert("Log out",
-				"Log out of this session?",
-				"Cancel", "Log out");
+			bool isGuest = r5_admin_is_system_guest(getuid());
+			BAlert* alert;
+			if (isGuest) {
+				alert = new BAlert("Log out Guest",
+					"Log out Guest and delete all files created in this "
+					"session?\n\nFiles saved in the Shared folder or on a "
+					"USB stick are kept.",
+					"Cancel", "Log out and delete files", NULL,
+					B_WIDTH_AS_USUAL, B_WARNING_ALERT);
+			} else {
+				alert = new BAlert("Log out",
+					"Log out of this session?",
+					"Cancel", "Log out");
+			}
 			alert->SetShortcut(0, B_ESCAPE);
 			alert->Go(new BInvoker(new BMessage(kConfirmLogout), this));
 			break;
@@ -979,9 +1009,11 @@ TBarApp::MessageReceived(BMessage* message)
 				break;
 
 			BMessenger login("application/x-vnd.Haiku-Login");
-			if (login.IsValid())
-				login.SendMessage(kLogoutSession);
-			else {
+			if (login.IsValid()) {
+				BMessage req(kLogoutSession);
+				BMessage reply;
+				r5_admin_send(login, &req, &reply);
+			} else {
 				BLaunchRoster roster;
 				roster.StopTarget("desktop");
 				roster.Target("login");

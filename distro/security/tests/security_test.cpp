@@ -9,6 +9,7 @@
  * - BSealedData round-trip, tampering (every byte), wrong key/AAD, file sealing
  * - BSecureBuffer wipe and constant-time equality
  * - BRandom entropy output
+ * - r5_security_crypt, the crypt() back end for Argon2id settings
  */
 
 
@@ -18,6 +19,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <cerrno>
 #include <cstring>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -266,6 +268,45 @@ test_password_hash()
 
 
 static void
+test_security_crypt()
+{
+	BPasswordHash::Parameters fastParams = { 1024, 2, 1 };
+	BString encoded;
+	CHECK(BPasswordHash::Hash("open sesame", encoded, fastParams) == B_OK,
+		"r5_security_crypt: Hash succeeds");
+
+	char buffer[512];
+	char* result = r5_security_crypt("open sesame", encoded.String(), buffer,
+		sizeof(buffer));
+	CHECK(result == buffer && strcmp(result, encoded.String()) == 0,
+		"r5_security_crypt returns the setting for the right password");
+
+	result = r5_security_crypt("open sesam", encoded.String(), buffer,
+		sizeof(buffer));
+	CHECK(result == buffer && strcmp(result, encoded.String()) != 0
+		&& strcmp(result, "*") == 0,
+		"r5_security_crypt returns \"*\" for a wrong password");
+
+	result = r5_security_crypt("", encoded.String(), buffer, sizeof(buffer));
+	CHECK(result != NULL && strcmp(result, encoded.String()) != 0,
+		"r5_security_crypt refuses an empty password");
+
+	errno = 0;
+	CHECK(r5_security_crypt("x", "$argon2id$v=19$broken", buffer,
+		sizeof(buffer)) == NULL && errno == EINVAL,
+		"r5_security_crypt refuses a malformed setting");
+
+	errno = 0;
+	CHECK(r5_security_crypt("open sesame", encoded.String(), buffer, 8)
+		== NULL && errno == ERANGE,
+		"r5_security_crypt refuses a buffer that is too small");
+
+	CHECK(r5_security_crypt(NULL, encoded.String(), buffer, sizeof(buffer))
+		== NULL, "r5_security_crypt refuses a NULL key");
+}
+
+
+static void
 test_sealed_data()
 {
 	BSecureBuffer key;
@@ -413,6 +454,7 @@ main()
 	test_secure_buffer();
 	test_random();
 	test_password_hash();
+	test_security_crypt();
 	test_sealed_data();
 
 	if (sFailures == 0) {

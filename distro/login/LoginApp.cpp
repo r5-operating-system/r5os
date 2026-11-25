@@ -202,6 +202,8 @@ LoginApp::_AdminRequest(BMessage* request, const r5_admin_sender& sender,
 		case kMsgAdminSetProfile:
 		case kMsgAdminListAccounts:
 		case kMsgAdminSetAccountType:
+		case kMsgAdminGetGuestEnabled:
+		case kMsgAdminSetGuestEnabled:
 			handle_admin_message(request, *reply);
 			break;
 		case kMsgAdminSetDriverBlocked:
@@ -210,6 +212,33 @@ LoginApp::_AdminRequest(BMessage* request, const r5_admin_sender& sender,
 		case kMsgAdminSetDriverSetting:
 			handle_driver_settings_admin_message(request, *reply);
 			break;
+		case kLogoutAction:
+		case kLockAction:
+		{
+			BString sessionUser;
+			bool hasSession = signed_in_name(sessionUser) == B_OK;
+			bool allowed = (sender.uid == 0);
+			if (!allowed && hasSession) {
+				struct passwd* pwd = getpwnam(sessionUser.String());
+				if (pwd != NULL && pwd->pw_uid == sender.uid)
+					allowed = true;
+			}
+			if (!allowed) {
+				reply->AddString("text", "Only the signed-in session may "
+					"lock or log out.");
+				reply->AddInt32("error", B_PERMISSION_DENIED);
+				break;
+			}
+			if (request->what == kLockAction && hasSession
+				&& is_guest_account(sessionUser.String())) {
+				reply->AddString("text", "Guest sessions cannot be locked.");
+				reply->AddInt32("error", B_NOT_ALLOWED);
+				break;
+			}
+			reply->AddInt32("error", B_OK);
+			app->PostMessage(request->what);
+			break;
+		}
 		default:
 			reply->AddString("text", "Unknown request.");
 			reply->AddInt32("error", B_BAD_VALUE);
@@ -240,6 +269,15 @@ LoginApp::ReadyToRun()
 	}
 
 	lock_private_homes();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	ensure_shared_folder();
+	// A restarted Login must not wipe a guest session that still runs; its
+	// home is wiped at that session's log out.
+	if (!guest_session_active())
+		wipe_guest_home();
+// SPDX-SnippetEnd
 	refresh_machine_settings_access();
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
@@ -340,6 +378,8 @@ LoginApp::MessageReceived(BMessage* message)
 // SPDX-License-Identifier: MIT
 		case kMsgAdminListAccounts:
 		case kMsgAdminSetAccountType:
+		case kMsgAdminGetGuestEnabled:
+		case kMsgAdminSetGuestEnabled:
 // SPDX-SnippetEnd
 			// New account messages must be listed here. An unhandled
 			// message still gets an empty reply, and Users treats a missing
@@ -388,18 +428,90 @@ LoginApp::ArgvReceived(int32 argc, char** argv)
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// Accounts step 5: wipe the password fields of a sign-in message when
+// TryLogin() returns, on every path.
+struct SignInMessageWiper {
+	SignInMessageWiper(BMessage* message)
+		:
+		fMessage(message)
+	{
+	}
+
+	~SignInMessageWiper()
+	{
+		static const char* kFields[] = { "password", "new password", NULL };
+		for (int32 i = 0; kFields[i] != NULL; i++) {
+			const void* data = NULL;
+			ssize_t size = 0;
+			if (fMessage->FindData(kFields[i], B_STRING_TYPE, &data, &size)
+					== B_OK && data != NULL && size > 0) {
+				BSecurityKit::BSecureBuffer::WipeMemory(
+					const_cast<void*>(data), static_cast<size_t>(size));
+			}
+		}
+	}
+
+	BMessage* fMessage;
+};
+// SPDX-SnippetEnd
+
+
 void
 LoginApp::TryLogin(BMessage* message)
 {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	SignInMessageWiper wiper(message);
+// SPDX-SnippetEnd
 	BMessage reply(kLoginBad);
 	status_t status = B_BAD_VALUE;
 
 	const char* login = NULL;
 	if (message->FindString("login", &login) == B_OK) {
 		const char* password = message->GetString("password");
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// Accounts step 5: on an installed R5 an account without a password
+		// sets one (and its name) before its first desktop. Try R5 keeps the
+		// account without a password.
+		if (needs_first_password(login)) {
+			const char* newPassword = message->GetString("new password",
+				NULL);
+			if (newPassword == NULL || newPassword[0] == '\0') {
+				reply.AddInt32("error", B_NOT_ALLOWED);
+				reply.AddBool("needs password", true);
+				reply.AddString("text", "Choose a password first.");
+				message->SendReply(&reply);
+				return;
+			}
+			BString error;
+			status_t setStatus = set_first_password(login,
+				message->GetString("real name", NULL), newPassword, error);
+			if (setStatus != B_OK) {
+				reply.AddInt32("error", setStatus);
+				reply.AddBool("needs password", true);
+				reply.AddString("text", error.String());
+				message->SendReply(&reply);
+				return;
+			}
+			r5_session_log("first password set for %s", login);
+			password = newPassword;
+		}
+// SPDX-SnippetEnd
 		status = ValidateLogin(login, password);
 		if (status == B_OK) {
 			status = migrate_admin_off_root();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			if (status == B_OK && is_guest_account(login))
+				status = wipe_guest_home();
+// SPDX-SnippetEnd
 			bool wroteSession = false;
 			if (status == B_OK) {
 				status = write_desktop_session(login);
@@ -500,6 +612,13 @@ LoginApp::Lock()
 	BString name;
 	if (signed_in_name(name) != B_OK)
 		return;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// The guest has no password; never lock a guest session (#72).
+	if (is_guest_account(name.String()))
+		return;
+// SPDX-SnippetEnd
 
 	if (fLockWindow != NULL) {
 		if (fLockWindow->Lock()) {
@@ -567,6 +686,13 @@ LoginApp::Logout()
 	// reply; launch_daemon user is the team in the crash dialog, and while
 	// it sits in the debugger that reply never comes.
 	_CloseLock();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	BString loggedOutName;
+	bool wasGuest = signed_in_name(loggedOutName) == B_OK
+		&& is_guest_account(loggedOutName.String());
+// SPDX-SnippetEnd
 	r5_session_log("logout");
 	clear_admin_grants();
 	clear_desktop_session();
@@ -584,6 +710,14 @@ LoginApp::Logout()
 // SPDX-SnippetEnd
 	_WaitGone("application/x-vnd.Be-TRAK");
 	_WaitGone("application/x-vnd.Be-TSKB");
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (wasGuest) {
+		r5_session_log("wipe guest home");
+		wipe_guest_home();
+	}
+// SPDX-SnippetEnd
 	_ShowLogin();
 	r5_session_log("logout done");
 }
@@ -592,6 +726,19 @@ LoginApp::Logout()
 status_t
 LoginApp::ValidateLogin(const char* login, const char* password)
 {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (is_guest_account(login)) {
+		if (!is_guest_enabled())
+			return B_NOT_ALLOWED;
+		BString error;
+		status_t status = ensure_guest_account(error);
+		if (status != B_OK)
+			return status;
+		return B_OK;
+	}
+// SPDX-SnippetEnd
 	struct passwd* pwd = getpwnam(login);
 	if (pwd == NULL || strcmp(pwd->pw_name, login) != 0)
 		return ENOENT;
@@ -752,9 +899,18 @@ LoginApp::_LaunchSessionAppGetTeam(const char* program, team_id* _outTeam)
 void
 LoginApp::_StartAndUnlockKeyStore(const char* login, const char* password)
 {
-	// No password (e.g. autologin / live session): leave keystore locked.
-	if (login == NULL || password == NULL || password[0] == '\0')
+	if (login == NULL)
 		return;
+	// Accounts step 5: no password. Try R5 (the live medium) gets a key store
+	// in memory only, so mail and online storage can keep their sign-ins for
+	// this session; they are forgotten at log out or shut down. Elsewhere
+	// (the guest, an autologin) the key store stays locked.
+	bool memoryOnly = false;
+	if (password == NULL || password[0] == '\0') {
+		if (!is_live_medium() || is_guest_account(login))
+			return;
+		memoryOnly = true;
+	}
 
 	struct passwd* pwd = getpwnam(login);
 	if (pwd == NULL || pwd->pw_uid == 0 || pwd->pw_dir == NULL
@@ -799,6 +955,21 @@ LoginApp::_StartAndUnlockKeyStore(const char* login, const char* password)
 		|| (strcmp(imgPath.Path(), "/boot/system/servers/keystore_server") != 0
 			&& strcmp(imgPath.Path(), "/system/servers/keystore_server") != 0)) {
 		r5_session_log("keystore_server: team verification failed");
+		return;
+	}
+
+	if (memoryOnly) {
+		BMessage memoryMsg(BPrivate::kMsgR5KeyStoreUnlock);
+		memoryMsg.AddBool(BPrivate::kR5KSFieldMemoryOnly, true);
+		BMessage memoryReply;
+		status_t memoryStatus = r5_admin_send(BMessenger(NULL, launchedTeam),
+			&memoryMsg, &memoryReply);
+		if (memoryStatus == B_OK) {
+			memoryStatus = memoryReply.GetInt32(BPrivate::kR5KSFieldStatus,
+				B_ERROR);
+		}
+		r5_session_log("keystore_server: in memory (Try R5) %s",
+			strerror(memoryStatus));
 		return;
 	}
 

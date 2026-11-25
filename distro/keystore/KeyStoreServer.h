@@ -92,6 +92,7 @@ private:
 										const BSecurityKit::BSecureBuffer& newKek,
 										const uint8 newSalt[16],
 										const BSecurityKit::BPasswordHash::Parameters& newParams);
+		status_t					_UnlockInMemory();
 		void						_LockStore();
 		bool						_HasOldKeyStore() const;
 		void						_PostLockedAlert(const char* text);
@@ -107,6 +108,7 @@ private:
 // SPDX-License-Identifier: MIT
 		port_id						fAdminPort;
 		bool						fStoreUnlocked;
+		bool						fMemoryOnly;
 		BSecurityKit::BSecureBuffer	fMasterKey;
 		uint8						fKeyStoreId[BPrivate::kR5KSIdSize];
 		BString						fKeyStoreDir;

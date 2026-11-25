@@ -73,5 +73,12 @@ status_t	r5_admin_send(const BMessenger& service, BMessage* request,
 // as bluetooth_server's radio switch and Login's own check.
 bool		r5_admin_sender_allowed(const r5_admin_sender& sender);
 
+// Added 24 Nov 2026 for Deskbar: true when "uid" is the guest account that
+// R5 made itself: login name "guest", home /boot/home/users/guest, and the
+// uid recorded in /boot/system/settings/r5-guest-uid (owned by uid 0, not
+// writable by group or others). An older account that is only called
+// "guest" is not the guest. The same rule as Login's wipe and lock.
+bool		r5_admin_is_system_guest(uid_t uid);
+
 
 #endif	// R5_ADMIN_H

@@ -289,6 +289,27 @@ BAppearanceKit::BPasswordControl* password = new BAppearanceKit::BPasswordContro
 	"password", "Password", "", new BMessage('sign'));
 ```
 
+`BAppearanceKit::BPasswordStrengthBar` was added on 24 Nov 2026 (accounts step 5). It is in the same header, and it draws the strength hint under a new password. It has four parts, lit from the left as far as the strength goes:
+
+- red for weak;
+- a mix of red and green for fair;
+- green from good on.
+
+`SetStrength(0..4)` sets the strength. `StrengthOf(password)` gives it: 0 for empty, 1 under 8 characters, and up to 4 for a long phrase that mixes kinds of characters. `HintFor(strength)` gives the line shown under the bar, for example "Weak. Use at least 8 characters.". Both are static.
+
+Its users:
+
+- "Add account" and "Change password" in Settings;
+- the first-start screen of Sign in.
+
+```cpp
+BAppearanceKit::BPasswordStrengthBar* bar
+	= new BAppearanceKit::BPasswordStrengthBar("strength");
+int32 strength = BAppearanceKit::BPasswordStrengthBar::StrengthOf(text);
+bar->SetStrength(strength);
+hint->SetText(BAppearanceKit::BPasswordStrengthBar::HintFor(strength));
+```
+
 ## Icon view
 
 `BAppearanceKit::BIconView` shows one bitmap at its own pixel size. The header is `<R5IconView.h>` (Haiku already has a private `IconView.h`). The view is exactly as large as the bitmap and never scales it, so a vector icon rendered at the size it is shown stays sharp. Render the bitmap at that size, for example with `r5_vector_icon_bitmap()`, and do not stretch it with `DrawBitmap(bitmap, rect)`: a stretch of even one pixel makes the edges jagged. `SetIcon()` keeps a copy. The background is the parent's color.
@@ -429,6 +450,7 @@ Since November 2026 every one of these calls reaches Login through `r5_admin_sen
 | `r5_admin_port_reply(message, port)` | Service, in `MessageReceived()`: answers `R5_ADMIN_PORT_REQUEST` (`'r5AP'`) with int32 `"port"`. False for any other message |
 | `r5_admin_port_stop(port)` | Service: deletes the port and waits for its thread. Not while holding the lock the handler takes |
 | `r5_admin_sender_allowed(sender)` | Service: true for uid 0, a member of group `admin`, or a team with Login's grant (`/boot/system/settings/r5-machine-unlock`). The rule Login and bluetooth_server's switch use. Added 22 Nov 2026, at the end, for the power service |
+| `r5_admin_is_system_guest(uid)` | True when `uid` is the guest account R5 made itself: login name `guest`, home `/boot/home/users/guest`, and the uid in `/boot/system/settings/r5-guest-uid` (owned by uid 0, not writable by group or others). An older account that is only called `guest` is not the guest. Deskbar uses it for the guest menu. Added 24 Nov 2026, at the end |
 | `r5_admin_send(service, request, reply, timeout)` | Client: asks `service` for its admin port, checks that the port belongs to the service's team, sends the request (at most 64 KB) and waits for the reply. The sent copy is cleared (it may hold a password) |
 
 Services: Login (accounts, unlock, relock, clock, time zone, driver blocking and driver settings; its normal messenger only answers the query) and bluetooth_server (`BT_MSG_R5_SET_RADIO`, administrator or grant; `BT_MSG_R5_AUDIO_*`, uid 0) and the power service (`kMsgPowerSetSettings`, administrator or grant, through `BPowerRoster::SetSettings()`). The R5Book page is `docs/r5book/admin-kit.html`.
@@ -714,11 +736,15 @@ Cryptographic primitives come from unmodified Monocypher 4.0.2 (`distro/security
 
 | Class | What it does |
 |---|---|
-| `BSecureBuffer` | Non-copyable byte buffer for secrets. `Allocate(size)`, `SetTo(data, size)`, `Wipe()`, `Clear()`, `Data()`, `Size()`, `IsEmpty()`, constant-time `Equals(other)`, and static `WipeMemory(data, size)`. Always wipes memory with Monocypher's `crypto_wipe()` before freeing or overwriting. Has `_reserved[4]` for ABI stability |
+| `BSecureBuffer` | Non-copyable byte buffer for secrets. `Allocate(size)`, `SetTo(data, size)`, `Wipe()`, `Clear()`, `Data()`, `Size()`, `IsEmpty()`, constant-time `Equals(other)`, and static `WipeMemory(data, size)`. Always wipes memory with Monocypher's `crypto_wipe()` before freeing or overwriting. Since 24 Nov 2026 each buffer has whole pages of its own, kept out of swap with `mlock()` (best effort: a buffer still works when that fails). Has `_reserved[4]` for ABI stability |
 | `BRandom` | Cryptographically strong random bytes from `/dev/urandom` (`O_CLOEXEC`, handles `EINTR` and short reads; wipes output and fails on error without falling back to `rand()`). `Fill(void*, size_t)`, `Fill(BSecureBuffer&)`, `Fill(BSecureBuffer&, size_t)` |
 | `BPasswordHash` | Argon2id password hashing and key derivation (`CRYPTO_ARGON2_ID`). Default parameters: `kDefaultMemoryKiB = 65536` (64 MiB), `kDefaultPasses = 3`, `kDefaultLanes = 1`. `DeriveKey()` (with optional secret key and associated data), `Hash()` (standard PHC `$argon2id$v=19$m=...,t=...,p=...$<salt>$<hash>`), `Verify()` (strict PHC parser + constant-time compare), `NeedsRehash()` |
 | `BSealedData` | Authenticated encryption with 32-byte keys and random 24-byte nonces (XChaCha20-Poly1305, `crypto_aead_lock`/`unlock`). Wire format `R5SD`: 4-byte magic `"R5SD"`, version `1`, cipher `1`, 2 reserved zero bytes, 24-byte nonce, 16-byte MAC, ciphertext (`kOverhead = 48`). The 8-byte header is always authenticated alongside caller-supplied AAD. `Seal()`, `Open()`, `SealToFile()` (atomic temp file, mode `0600`, `fsync`, `rename`), `OpenFromFile()`. Any modification to header, nonce, MAC, AAD, or ciphertext is refused (`B_NOT_ALLOWED` / `B_BAD_DATA`) and `outPlaintext` is cleared |
 
 Storage for application secrets stays Haiku's `BKeyStore` (`<KeyStore.h>`, `keystore_server`); the Security Kit is the cryptographic engine underneath it. Programs that link only `libbe` are unchanged.
+
+| C call | What it does |
+|---|---|
+| `r5_security_crypt(key, setting, buffer, bufferSize)` | Added 24 Nov 2026 (accounts step 5). The `crypt()` back end for an Argon2id PHC setting. libroot's `crypt()` loads `/system/lib/libr5security.so` with `dlopen()` and calls it for a setting that starts with `$argon2id$`. It returns `buffer` holding `setting` when `key` matches, `"*"` when it does not, or `NULL` with `errno` `EINVAL` (setting not readable) or `ERANGE` (buffer too small). So `su`, `login` and `sshd`, which compare `crypt(key, stored)` with the stored hash, accept the hashes R5 writes. A program calls `BPasswordHash::Verify()` instead |
 
 Unit tests (`distro/security/tests/security_test.cpp`) verify the RFC 9106 Section 5.3 Argon2id vector, the draft-irtf-cfrg-xchacha-03 Section A.3.1 AEAD vector, single-bit tampering across every byte of a sealed blob and sealed file, wrong key/AAD refusal, malformed PHC rejection, and memory wiping.

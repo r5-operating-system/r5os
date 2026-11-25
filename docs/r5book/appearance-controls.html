@@ -47,6 +47,7 @@
 				<li><a href="#BAxisBar">BAxisBar</a> &mdash; Center-zero bar for a value from -1 to 1.</li>
 				<li><a href="#BIconView">BIconView</a> &mdash; Displays a bitmap icon at its exact pixel size.</li>
 				<li><a href="#BPasswordControl">BPasswordControl</a> &mdash; Password field with a show/hide eye glyph.</li>
+				<li><a href="#BPasswordStrengthBar">BPasswordStrengthBar</a> &mdash; Strength hint under a new password.</li>
 				<li><a href="#BScreenArrangement">BScreenArrangement</a> &mdash; Interactive monitor layout preview.</li>
 				<li><a href="#BTiltLevel">BTiltLevel</a> &mdash; Two-axis bubble level indicator.</li>
 			</ul>
@@ -210,7 +211,41 @@ password-&gt;SetPlaceholder(<span class="s">"Enter password"</span>);</pre>
 				<strong>See also</strong>
 				<a href="#BAccentButton">BAccentButton</a>
 				<a href="icons-kit.html#r5_glyph">r5_glyph (R5_GLYPH_EYE)</a>
+				<a href="#BPasswordStrengthBar">BPasswordStrengthBar</a>
 				<a href="accounts.html#example">Example: Sign in</a>
+			</div>
+		</section>
+
+		<!-- BPasswordStrengthBar -->
+		<section class="entry" id="BPasswordStrengthBar">
+			<div class="entry-header"><h2>BPasswordStrengthBar</h2><span class="kind">class</span></div>
+			<table class="facts">
+				<tr><th>Declared in</th><td>&lt;PasswordControl.h&gt;</td></tr>
+				<tr><th>Library</th><td>libr5ui.so</td></tr>
+				<tr><th>Derived from</th><td>BView</td></tr>
+				<tr><th>First user</th><td>Add account, and the first-start screen of Sign in</td></tr>
+			</table>
+			<p><code class="inline">BPasswordStrengthBar</code> is the hint under a new password: four parts, lit from the
+			left as far as the strength goes. It draws on its view colour, so it follows dark mode. Put the line from
+			<code class="inline">HintFor()</code> under it in a plain <code class="inline">BStringView</code>.</p>
+			<div class="member"><div class="sig">BPasswordStrengthBar(const char* name);</div></div>
+			<div class="member"><div class="sig">void SetStrength(int32 strength);
+int32 Strength() const;</div><p>0 (empty) to 4 (strong). The bar redraws when the value changes.</p></div>
+			<div class="member"><div class="sig">static int32 StrengthOf(const char* password);
+static const char* HintFor(int32 strength);</div><p>The strength of a password, and the line shown for it. Use
+			these instead of a rule of your own, so every window judges a password the same way.</p></div>
+
+<pre class="code">BAppearanceKit::BPasswordStrengthBar* bar
+	= <span class="k">new</span> BAppearanceKit::BPasswordStrengthBar(<span class="s">"strength"</span>);
+<span class="c">// on every change of the password field:</span>
+int32 strength = BAppearanceKit::BPasswordStrengthBar::StrengthOf(password-&gt;Text());
+bar-&gt;SetStrength(strength);
+hint-&gt;SetText(BAppearanceKit::BPasswordStrengthBar::HintFor(strength));</pre>
+
+			<div class="see-also">
+				<strong>See also</strong>
+				<a href="#BPasswordControl">BPasswordControl</a>
+				<a href="accounts.html#first">A password before the first desktop</a>
 			</div>
 		</section>
 

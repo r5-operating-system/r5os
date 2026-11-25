@@ -16,3 +16,18 @@
 echo "R5: removing Haiku's system package repository from the image"
 $rm -f "${tPrefix}system/settings/package-repositories/Haiku"
 $rm -f "${tPrefix}system/cache/package-repositories/Haiku"
+
+echo "R5: creating /boot/home/Shared"
+$mkdir -p "${tPrefix}home/Shared"
+
+# Accounts step 5 (docs/MULTIUSER.md, "Try R5 and an installed R5"). This
+# file marks the image as the live medium ("Try R5"): its account keeps no
+# password and its key store lives in memory only. The Installer does not
+# copy it (distro/rest/src/apps/installer/WorkerThread.cpp), so an installed
+# R5 asks for a password before its first desktop.
+echo "R5: marking the image as the live medium"
+r5LiveMarker="$(mktemp)"
+printf '%s\n' "This R5 runs from its install medium (Try R5)." \
+	"The Installer does not copy this file." > "$r5LiveMarker"
+$cp "${sPrefix}$r5LiveMarker" "${tPrefix}system/settings/r5-live-medium"
+rm -f "$r5LiveMarker"
