@@ -118,7 +118,14 @@ InputServerStream::UpdateScreenBounds(BRect bounds)
 	BMessage update(IS_SCREEN_BOUNDS_UPDATED);
 	update.AddRect("screen_bounds", bounds);
 
-	fInputServer.SendMessage(&update);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// No reply target: input_server's reply would land in app_server's
+	// looper, where what 0 reads as AS_GET_DESKTOP and logs a protocol
+	// error at every desktop switch.
+	fInputServer.SendMessage(&update, BMessenger());
+// SPDX-SnippetEnd
 }
 
 
