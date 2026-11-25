@@ -11,16 +11,15 @@
  */
 
 
-#include "ConnectionsModule.h"
 
 #include "NetworkPage.h"
 #include "SettingsFont.h"
-#include "SettingsManager.h"
 #include "SettingsMessages.h"
 #include "SettingsModule.h"
 
 #include <Box.h>
 #include <Button.h>
+#include <Catalog.h>
 #include <CheckBox.h>
 #include <ControlLook.h>
 #include <Deskbar.h>
@@ -59,6 +58,10 @@
 
 #include "IPAddressControl.h"
 #include "MediaTypes.h"
+
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "Settings: Connections"
 
 
 using BNetworkKit::BNetworkInterfaceAddressSettings;
@@ -371,10 +374,10 @@ static BString
 kind_of(const char* name)
 {
 	if (is_wireless(name))
-		return "Wi-Fi";
+		return B_TRANSLATE("Wi-Fi");
 	if (strstr(name, "/usb") != NULL)
-		return "USB Ethernet";
-	return "Ethernet";
+		return B_TRANSLATE("USB Ethernet");
+	return B_TRANSLATE("Ethernet");
 }
 
 
@@ -391,22 +394,22 @@ status_of(const char* name, bool full)
 {
 	BNetworkInterface interface(name);
 	if ((interface.Flags() & IFF_UP) == 0)
-		return "Off";
+		return B_TRANSLATE("Off");
 
 	BNetworkDevice device(name);
 	if (device.IsWireless()) {
 		uint32 cookie = 0;
 		wireless_network network;
 		if (device.GetNextAssociatedNetwork(cookie, network) != B_OK)
-			return "Not connected";
-		BString text;
-		text.SetToFormat("Connected to “%s”", network.name);
+			return B_TRANSLATE("Not connected");
+		BString text(B_TRANSLATE("Connected to “%name%”"));
+		text.ReplaceFirst("%name%", network.name);
 		return text;
 	}
 	if (!interface.HasLink())
-		return "Cable unplugged";
+		return B_TRANSLATE("Cable unplugged");
 
-	BString text("Connected");
+	BString text(B_TRANSLATE("Connected"));
 	int media = interface.Media();
 	const char* speed = (media & IFM_ACTIVE) != 0
 		? media_type_to_string(media) : NULL;
@@ -549,15 +552,17 @@ DnsWindow::DnsWindow(const DnsSetup& dns, const BMessenger& target)
 		B_NOT_RESIZABLE | B_AUTO_UPDATE_SIZE_LIMITS | B_CLOSE_ON_ESCAPE),
 	fTarget(target)
 {
-	fServers = new BTextControl("servers", "Servers:", dns.servers, NULL);
-	fDomain = new BTextControl("domain", "Search domain:", dns.domain, NULL);
+	fServers = new BTextControl("servers", B_TRANSLATE("Servers:"), dns.servers, NULL);
+	fDomain = new BTextControl("domain", B_TRANSLATE("Search domain:"), dns.domain, NULL);
 	BStringView* hint = new BStringView("hint",
-		"Separate the servers with a comma.");
-	BButton* network = new BButton("network", "Use the network's servers",
+		B_TRANSLATE("Separate the servers with a comma."));
+	BButton* network = new BButton("network",
+		B_TRANSLATE("Use the network's servers"),
 		new BMessage(kMsgDnsNetwork));
-	BButton* cancel = new BButton("cancel", "Cancel",
+	BButton* cancel = new BButton("cancel", B_TRANSLATE("Cancel"),
 		new BMessage(B_QUIT_REQUESTED));
-	BButton* save = new BButton("save", "Save", new BMessage(kMsgDnsSave));
+	BButton* save = new BButton("save", B_TRANSLATE("Save"),
+		new BMessage(kMsgDnsSave));
 
 	BLayoutBuilder::Group<>(this, B_VERTICAL)
 		.SetInsets(B_USE_WINDOW_SPACING)
@@ -614,14 +619,18 @@ public:
 								ConnectionsModule();
 
 	virtual	const char*			Identifier() const { return kModuleId; }
-	virtual	const char*			Name() const { return "Connections"; }
+	virtual	const char*			Name() const
+									{ return B_TRANSLATE("Connections"); }
 	virtual	const char*			Category() const { return "network"; }
 	virtual	const char*			Description() const
-									{ return "Wired connections, addresses, "
-										"and DNS"; }
+									{ return B_TRANSLATE("Wired connections, "
+										"addresses, and DNS"); }
 	virtual	const char*			Keywords() const
-									{ return "network ethernet ip ipv4 ipv6 "
-										"dhcp dns address router"; }
+									{ return B_TRANSLATE_COMMENT("network ethernet ip "
+										"ipv4 ipv6 dhcp dns address router",
+										"Search words, separated by spaces. Keep "
+										"the English words and add words in your "
+										"language."); }
 	virtual	bool				RequiresAdmin() const { return true; }
 	virtual	BView*				CreateView(SettingsContext* context,
 									BRect frame);
@@ -739,14 +748,15 @@ ConnectionsView::ConnectionsView(ConnectionsModule* module)
 	BGridView* grid;
 
 	// the list
-	BBox* listBox = _Box("connections box", "Connections", grid);
+	BBox* listBox = _Box("connections box", B_TRANSLATE("Connections"),
+		grid);
 	fList = new BListView("connections list");
 	fList->SetSelectionMessage(new BMessage(kMsgSelect));
 	BScrollView* scroll = new BScrollView("connections scroll", fList, 0,
 		false, false);
 	grid->GridLayout()->AddView(scroll, 0, 0);
 	// the Network program's switch, in the room the list leaves free
-	fDeskbar = new BCheckBox("deskbar", "Show in Deskbar",
+	fDeskbar = new BCheckBox("deskbar", B_TRANSLATE("Show in Deskbar"),
 		new BMessage(kMsgDeskbar));
 	grid->GridLayout()->AddView(fDeskbar, 0, 1);
 	listBox->SetExplicitMinSize(BSize(u * 196, B_SIZE_UNSET));
@@ -754,16 +764,18 @@ ConnectionsView::ConnectionsView(ConnectionsModule* module)
 
 	// the card: the title is the switch, as Enable virtual memory
 	fDeviceBox = new FilledBox("device box");
-	fUp = new BoxCheckBox("up", "Ethernet", new BMessage(kMsgUp));
+	fUp = new BoxCheckBox("up", B_TRANSLATE("Ethernet"),
+		new BMessage(kMsgUp));
 	fDeviceBox->SetLabel(fUp);
 	BGridView* deviceGrid = new BGridView(u * 12, u * 6);
 	deviceGrid->SetViewColor(network_box_fill());
 	fDeviceBox->AddChild(deviceGrid);
 	fStatus = new ValueField("status");
 	fHardware = new ValueField("hardware");
-	BStringView* statusLabel = new BStringView("status label", "Status:");
+	BStringView* statusLabel = new BStringView("status label",
+		B_TRANSLATE("Status:"));
 	BStringView* hardwareLabel = new BStringView("hardware label",
-		"Hardware:");
+		B_TRANSLATE("Hardware:"));
 	statusLabel->SetAlignment(B_ALIGN_RIGHT);
 	hardwareLabel->SetAlignment(B_ALIGN_RIGHT);
 	BLayoutBuilder::Grid<>(deviceGrid)
@@ -781,14 +793,18 @@ ConnectionsView::ConnectionsView(ConnectionsModule* module)
 	// IPv4
 	BGroupView* group4;
 	BBox* box4 = _AddressBox("ipv4 box", "IPv4", group4);
-	fMode4 = _ModeField("Configure:", "Automatic (DHCP)", AF_INET,
+	fMode4 = _ModeField(B_TRANSLATE("Configure:"),
+		B_TRANSLATE("Automatic (DHCP)"), AF_INET,
 		fMode4Menu);
-	fAddress4 = new IPAddressControl(AF_INET, "Address:", "address4");
-	fMask4 = new IPAddressControl(AF_INET, "Subnet mask:", "mask4");
-	fRouter4 = new IPAddressControl(AF_INET, "Router:", "router4");
+	fAddress4 = new IPAddressControl(AF_INET, B_TRANSLATE("Address:"),
+		"address4");
+	fMask4 = new IPAddressControl(AF_INET, B_TRANSLATE("Subnet mask:"),
+		"mask4");
+	fRouter4 = new IPAddressControl(AF_INET, B_TRANSLATE("Router:"),
+		"router4");
 	BMessage* apply4 = new BMessage(kMsgApply);
 	apply4->AddInt32("family", AF_INET);
-	fApply4 = new BButton("apply4", "Apply", apply4);
+	fApply4 = new BButton("apply4", B_TRANSLATE("Apply"), apply4);
 	BLayoutBuilder::Group<>(group4)
 		.AddGrid()
 			.AddMenuField(fMode4, 0, 0, B_ALIGN_RIGHT)
@@ -805,19 +821,24 @@ ConnectionsView::ConnectionsView(ConnectionsModule* module)
 	// IPv6
 	BGroupView* group6;
 	BBox* box6 = _AddressBox("ipv6 box", "IPv6", group6);
-	fMode6 = _ModeField("Configure:", "Automatic", AF_INET6, fMode6Menu);
-	fMode6->SetToolTip("Automatic uses router advertisements (SLAAC) and "
-		"DHCPv6.");
-	fAddressesLabel = new BStringView("addresses label", "Addresses:");
+	fMode6 = _ModeField(B_TRANSLATE("Configure:"),
+		B_TRANSLATE("Automatic"), AF_INET6, fMode6Menu);
+	fMode6->SetToolTip(B_TRANSLATE("Automatic uses router advertisements "
+		"(SLAAC) and DHCPv6."));
+	fAddressesLabel = new BStringView("addresses label",
+		B_TRANSLATE("Addresses:"));
 	fAddressesLabel->SetAlignment(B_ALIGN_RIGHT);
 	fAddresses6 = new BGroupView(B_VERTICAL, u * 3);
 	fAddresses6->SetViewColor(network_box_fill());
-	fAddress6 = new IPAddressControl(AF_INET6, "Address:", "address6");
-	fMask6 = new IPAddressControl(AF_INET6, "Netmask:", "mask6");
-	fRouter6 = new IPAddressControl(AF_INET6, "Router:", "router6");
+	fAddress6 = new IPAddressControl(AF_INET6, B_TRANSLATE("Address:"),
+		"address6");
+	fMask6 = new IPAddressControl(AF_INET6, B_TRANSLATE("Netmask:"),
+		"mask6");
+	fRouter6 = new IPAddressControl(AF_INET6, B_TRANSLATE("Router:"),
+		"router6");
 	BMessage* apply6 = new BMessage(kMsgApply);
 	apply6->AddInt32("family", AF_INET6);
-	fApply6 = new BButton("apply6", "Apply", apply6);
+	fApply6 = new BButton("apply6", B_TRANSLATE("Apply"), apply6);
 	BLayoutBuilder::Group<>(group6)
 		.AddGrid()
 			.AddMenuField(fMode6, 0, 0, B_ALIGN_RIGHT)
@@ -837,10 +858,12 @@ ConnectionsView::ConnectionsView(ConnectionsModule* module)
 	BBox* boxDns = _Box("dns box", "DNS", grid);
 	fServers = new ValueField("servers");
 	fDomain = new ValueField("domain");
-	fEditDns = new BButton("edit dns", "Edit…", new BMessage(kMsgEditDns));
-	BStringView* serversLabel = new BStringView("servers label", "Servers:");
+	fEditDns = new BButton("edit dns", B_TRANSLATE("Edit…"),
+		new BMessage(kMsgEditDns));
+	BStringView* serversLabel = new BStringView("servers label",
+		B_TRANSLATE("Servers:"));
 	BStringView* domainLabel = new BStringView("domain label",
-		"Search domain:");
+		B_TRANSLATE("Search domain:"));
 	serversLabel->SetAlignment(B_ALIGN_RIGHT);
 	domainLabel->SetAlignment(B_ALIGN_RIGHT);
 	BLayoutBuilder::Grid<>(grid)
@@ -925,7 +948,8 @@ ConnectionsView::_ModeField(const char* label, const char* automatic,
 	int family, BPopUpMenu*& menu)
 {
 	menu = new BPopUpMenu("mode");
-	const char* labels[] = { automatic, "Manual", "Off" };
+	const char* labels[] = { automatic, B_TRANSLATE("Manual"),
+		B_TRANSLATE("Off") };
 	for (int32 mode = kModeAuto; mode <= kModeOff; mode++) {
 		BMessage* message = new BMessage(kMsgMode);
 		message->AddInt32("family", family);
@@ -1602,8 +1626,17 @@ ConnectionsModule::ApplyDefaults(SettingsContext* context)
 }
 
 
-void
-register_connections_page(SettingsManager& manager)
+// The add-on settings_connections (distro/settings/ModuleAPI.md): every
+// Settings page is an add-on of its own.
+extern "C" _EXPORT int32
+settings_api_version()
 {
-	manager.Add(new ConnectionsModule());
+	return kSettingsApiVersion;
+}
+
+
+extern "C" _EXPORT SettingsModule*
+instantiate_settings_module()
+{
+	return new ConnectionsModule();
 }

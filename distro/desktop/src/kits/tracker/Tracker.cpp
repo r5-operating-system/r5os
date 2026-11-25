@@ -66,6 +66,11 @@ namespace BPrivate {
 #include <FindDirectory.h>
 #include <Locale.h>
 #include <MenuItem.h>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <MessageRunner.h>
+// SPDX-SnippetEnd
 #include <NodeInfo.h>
 #include <NodeMonitor.h>
 #include <Path.h>
@@ -447,13 +452,20 @@ TTracker::QuitRequested()
 			deskDir.RemoveAttr(kAttrOpenWindows);
 	}
 
-	for (int32 count = 0; count < 50; count++) {
-		// wait 5 seconds for the copiing/moving to quit
-		if (gStatusWindow->AttemptToQuit())
-			break;
-
-		snooze(100000);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// quit only after every copy/move/empty trash thread has finished its
+	// cancel cleanup; leaving earlier kills a thread mid-file (#4621).
+	// Do not wait here: those threads need be_app, which is locked now.
+	// Ask again in a tenth of a second instead.
+	if (!gStatusWindow->AttemptToQuit()) {
+		BMessage quitMessage(B_QUIT_REQUESTED);
+		BMessageRunner::StartSending(be_app_messenger, &quitMessage, 100000,
+			1);
+		return false;
 	}
+// SPDX-SnippetEnd
 
 	return _inherited::QuitRequested();
 }
@@ -713,10 +725,14 @@ TTracker::MessageReceived(BMessage* message)
 						continue;
 
 					BPose* pose = poseView->FindPose(&noderef);
-					if (pose != NULL) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+					// every open window of that folder shows the new
+					// thumbnail, not only the first one (#4628)
+					if (pose != NULL)
 						poseView->UpdateIcon(pose);
-						break; // updated pose icon, exit loop
-					}
+// SPDX-SnippetEnd
 				}
 			}
 			break;

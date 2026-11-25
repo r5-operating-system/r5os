@@ -20,7 +20,9 @@ carries the "fuzzy" flag and is not used in the build.
       distro/catalogs/<subdir>/, write template.pot from it, and bring
       every .po file of that folder in line with it (new texts added
       untranslated, removed texts dropped, translations and the fuzzy
-      flag kept). Only folders already in distro/catalogs are exported;
+      flag kept). A text whose English changed keeps the translation of
+      the most similar old text of its context, marked fuzzy, with the
+      old English as #| msgid. Only folders already in distro/catalogs are exported;
       --add starts a new one, with nl, de and fr.
 
   catalogs.py apply <haiku tree> <repo root>
@@ -30,6 +32,7 @@ carries the "fuzzy" flag and is not used in the build.
       text stays English.
 """
 
+import difflib
 import sys
 from pathlib import Path
 
@@ -175,11 +178,15 @@ def po_texts(entries):
 def write_po(path, header, texts, translations):
     out = ["msgid \"\"", "msgstr " + po_quote(header), ""]
     for context, source, comment in texts:
-        translation, fuzzy = translations.get((context, source), ("", False))
+        found = translations.get((context, source), ("", False))
+        translation, fuzzy = found[0], found[1]
+        previous = found[2] if len(found) > 2 else None
         if comment:
             out.append(f"#. {comment}")
         if fuzzy and translation:
             out.append("#, fuzzy")
+        if previous is not None and translation:
+            out.append("#| msgid " + po_quote(previous))
         out += ["msgctxt " + po_quote(context), "msgid " + po_quote(source),
             "msgstr " + po_quote(translation), ""]
     path.write_bytes("\n".join(out).encode("utf-8"))
@@ -194,8 +201,32 @@ def po_header(language, signature):
     return "".join(line + "\n" for line in lines)
 
 
+def carry_changed(texts, translations):
+    """A text whose English changed keeps its old translation, marked fuzzy
+    ("Needs editing"), with the old English as the previous msgid. The old
+    text is the most similar one of the same context that is gone now."""
+    current = {(context, source) for context, source, _ in texts}
+    gone = [key for key, value in translations.items()
+        if key not in current and value[0] != ""]
+    for context, source, _ in texts:
+        if (context, source) in translations or not gone:
+            continue
+        best, score = None, 0.6
+        for key in gone:
+            if key[0] != context:
+                continue
+            ratio = difflib.SequenceMatcher(None, key[1], source).ratio()
+            if ratio > score:
+                best, score = key, ratio
+        if best is None:
+            continue
+        gone.remove(best)
+        translations[(context, source)] = (translations[best][0], True,
+            best[1])
+
+
 def is_done(translations, context, source):
-    translation, fuzzy = translations.get((context, source), ("", False))
+    translation, fuzzy = translations.get((context, source), ("", False))[:2]
     return translation != "" and not fuzzy
 
 
@@ -226,6 +257,7 @@ def export(tree, root, added):
             path = target / f"{language}.po"
             po_head, translations = (read_po(path) if path.exists()
                 else (None, {}))
+            carry_changed(texts, translations)
             write_po(path, po_head if po_head is not None
                 else po_header(language, header[2]), texts, translations)
             done = sum(1 for context, source, _ in texts

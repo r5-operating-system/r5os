@@ -1,0 +1,38 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_keyboard\nLanguage: nl\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#, fuzzy
+msgctxt "Settings: Launcher pages"
+msgid "Opens the existing program in its own window."
+msgstr "Opent het bestaande programma in een eigen venster."
+
+#, fuzzy
+msgctxt "Settings: Keyboard"
+msgid "Keyboard"
+msgstr "Toetsenbord"
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+#, fuzzy
+msgctxt "Settings: Keyboard"
+msgid "keymap layout keys"
+msgstr "keymap layout keys toetsenbord indeling toetsen toetsenindeling"
+
+#, fuzzy
+msgctxt "Settings: Launcher pages"
+msgid "OK"
+msgstr "OK"
+
+#, fuzzy
+msgctxt "Settings: Launcher pages"
+msgid "Could not open %name%."
+msgstr "Kon %name% niet openen."
+
+#, fuzzy
+msgctxt "Settings: Keyboard"
+msgid "Keymap and the typing repeat rate."
+msgstr "Toetsenindeling en de herhaalsnelheid bij typen."
+
+#, fuzzy
+msgctxt "Settings: Launcher pages"
+msgid "Open"
+msgstr "Openen"

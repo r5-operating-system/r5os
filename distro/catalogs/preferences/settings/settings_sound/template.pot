@@ -1,0 +1,31 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_sound\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+msgctxt "Settings: Launcher pages"
+msgid "Opens the existing program in its own window."
+msgstr ""
+
+msgctxt "Settings: Sound"
+msgid "Sound"
+msgstr ""
+
+msgctxt "Settings: Sound"
+msgid "Event sounds and the output device."
+msgstr ""
+
+msgctxt "Settings: Launcher pages"
+msgid "OK"
+msgstr ""
+
+msgctxt "Settings: Launcher pages"
+msgid "Could not open %name%."
+msgstr ""
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+msgctxt "Settings: Sound"
+msgid "audio volume media"
+msgstr ""
+
+msgctxt "Settings: Launcher pages"
+msgid "Open"
+msgstr ""

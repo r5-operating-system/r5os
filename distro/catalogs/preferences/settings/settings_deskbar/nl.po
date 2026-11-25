@@ -1,0 +1,124 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_deskbar\nLanguage: nl\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Expand new applications"
+msgstr "Nieuwe programma's uitvouwen"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Hide application names"
+msgstr "Programmanamen verbergen"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Sort applications by name"
+msgstr "Programma's sorteren op naam"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Show application expander"
+msgstr "Uitvouwknop voor programma's tonen"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Auto-raise"
+msgstr "Automatisch naar voren"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Icon size"
+msgstr "Pictogramgrootte"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Open Theme…"
+msgstr "Thema openen…"
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "deskbar desktop menu recent applications location"
+msgstr "deskbar desktop menu recent applications location bureaublad recent programma's toepassingen positie plaats"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Menu"
+msgstr "Menu"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Edit in Tracker…"
+msgstr "Bewerken in Tracker…"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Tracker always first"
+msgstr "Tracker altijd eerst"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Recent applications:"
+msgstr "Recente programma's:"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Recent folders:"
+msgstr "Recente mappen:"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Large"
+msgstr "Groot"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Deskbar appearance (style, layout, corners, floating) is set in Theme."
+msgstr "Het uiterlijk van de Deskbar (stijl, indeling, hoeken, zwevend) stel je in bij Thema."
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Applications"
+msgstr "Programma's"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Window"
+msgstr "Venster"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Always on top"
+msgstr "Altijd bovenop"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Desktop and Deskbar"
+msgstr "Bureaublad en Deskbar"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Recent documents:"
+msgstr "Recente documenten:"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Show applications"
+msgstr "Programma's tonen"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Small"
+msgstr "Klein"
+
+#. Fixed text (AGENTS.md): translate the meaning, keep it short
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Adjust desktop and Deskbar settings"
+msgstr "Bureaublad en Deskbar aanpassen"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Auto-hide"
+msgstr "Automatisch verbergen"

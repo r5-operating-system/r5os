@@ -1,0 +1,163 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_connections\nLanguage: nl\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#, fuzzy
+msgctxt "Settings: Connections"
+msgid "Off"
+msgstr "Uit"
+
+#, fuzzy
+msgctxt "Settings: Connections"
+msgid "Not connected"
+msgstr "Niet verbonden"
+
+#, fuzzy
+msgctxt "Settings: Connections"
+msgid "Address:"
+msgstr "Adres:"
+
+#, fuzzy
+msgctxt "Settings: Connections"
+msgid "Servers:"
+msgstr "Servers:"
+
+#, fuzzy
+msgctxt "Settings: Connections"
+msgid "Show in Deskbar"
+msgstr "Tonen in Deskbar"
+
+#, fuzzy
+msgctxt "Settings: Connections"
+msgid "Hardware:"
+msgstr "Hardware:"
+
+#, fuzzy
+msgctxt "Settings: Connections"
+msgid "Connected"
+msgstr "Verbonden"
+
+#, fuzzy
+msgctxt "Settings: Connections"
+msgid "Ethernet"
+msgstr "Ethernet"
+
+#, fuzzy
+msgctxt "Settings: Connections"
+msgid "Addresses:"
+msgstr "Adressen:"
+
+#, fuzzy
+msgctxt "Settings: Connections"
+msgid "Status:"
+msgstr "Status:"
+
+#, fuzzy
+msgctxt "Settings: Connections"
+msgid "Automatic (DHCP)"
+msgstr "Automatisch (DHCP)"
+
+#, fuzzy
+msgctxt "Settings: Connections"
+msgid "USB Ethernet"
+msgstr "USB-Ethernet"
+
+#, fuzzy
+msgctxt "Settings: Connections"
+msgid "Connections"
+msgstr "Verbindingen"
+
+#, fuzzy
+msgctxt "Settings: Connections"
+msgid "Automatic uses router advertisements (SLAAC) and DHCPv6."
+msgstr "Automatisch gebruikt routeraankondigingen (SLAAC) en DHCPv6."
+
+#, fuzzy
+msgctxt "Settings: Connections"
+msgid "Save"
+msgstr "Opslaan"
+
+#, fuzzy
+msgctxt "Settings: Connections"
+msgid "Separate the servers with a comma."
+msgstr "Scheid de servers met een komma."
+
+#, fuzzy
+msgctxt "Settings: Connections"
+msgid "Search domain:"
+msgstr "Zoekdomein:"
+
+#, fuzzy
+msgctxt "Settings: Connections"
+msgid "Configure:"
+msgstr "Configureren:"
+
+#, fuzzy
+msgctxt "Settings: Connections"
+msgid "Edit…"
+msgstr "Bewerken…"
+
+#, fuzzy
+msgctxt "Settings: Connections"
+msgid "Router:"
+msgstr "Router:"
+
+#, fuzzy
+msgctxt "Settings: Connections"
+msgid "Use the network's servers"
+msgstr "De servers van het netwerk gebruiken"
+
+#, fuzzy
+msgctxt "Settings: Connections"
+msgid "Wi-Fi"
+msgstr "Wi-Fi"
+
+#, fuzzy
+msgctxt "Settings: Connections"
+msgid "Cable unplugged"
+msgstr "Kabel losgekoppeld"
+
+#, fuzzy
+msgctxt "Settings: Connections"
+msgid "Automatic"
+msgstr "Automatisch"
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+#, fuzzy
+msgctxt "Settings: Connections"
+msgid "network ethernet ip ipv4 ipv6 dhcp dns address router"
+msgstr "network ethernet ip ipv4 ipv6 dhcp dns address router netwerk adres kabel verbinding"
+
+#, fuzzy
+msgctxt "Settings: Connections"
+msgid "Apply"
+msgstr "Toepassen"
+
+#, fuzzy
+msgctxt "Settings: Connections"
+msgid "Connected to “%name%”"
+msgstr "Verbonden met “%name%”"
+
+#, fuzzy
+msgctxt "Settings: Connections"
+msgid "Subnet mask:"
+msgstr "Subnetmasker:"
+
+#, fuzzy
+msgctxt "Settings: Connections"
+msgid "Netmask:"
+msgstr "Netmasker:"
+
+#, fuzzy
+msgctxt "Settings: Connections"
+msgid "Wired connections, addresses, and DNS"
+msgstr "Bekabelde verbindingen, adressen en DNS"
+
+#, fuzzy
+msgctxt "Settings: Connections"
+msgid "Manual"
+msgstr "Handmatig"
+
+#, fuzzy
+msgctxt "Settings: Connections"
+msgid "Cancel"
+msgstr "Annuleren"

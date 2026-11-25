@@ -1,0 +1,124 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_notifications\nLanguage: fr\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "Application does not have a valid signature."
+msgstr "L'application n'a pas de signature valide."
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "wide"
+msgstr "large"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "Enable notifications"
+msgstr "Activer les notifications"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "Timeout:"
+msgstr "Délai :"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "Window width"
+msgstr "Largeur de la fenêtre"
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "timeout position mute width popup alert"
+msgstr "timeout position mute width popup alert délai muet silence largeur fenêtre alerte"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "%name% is already listed."
+msgstr "%name% est déjà dans la liste."
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "Lower right"
+msgstr "En bas à droite"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "%name% (muted)"
+msgstr "%name% (muet)"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "Add…"
+msgstr "Ajouter…"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "narrow"
+msgstr "étroit"
+
+#. Fixed text (AGENTS.md): translate the meaning, keep it short
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "Manage alerts and notifications"
+msgstr "Gérer les alertes et les notifications"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "Applications"
+msgstr "Applications"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "{0, plural, one{Timeout: # second} other{Timeout: # seconds}}"
+msgstr "{0, plural, one{Délai : # seconde} other{Délai : # secondes}}"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "This is a test notification message"
+msgstr "Ceci est un message de notification de test"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "Remove"
+msgstr "Retirer"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "Upper right"
+msgstr "En haut à droite"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "Upper left"
+msgstr "En haut à gauche"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "Mute notifications from this application"
+msgstr "Couper les notifications de cette application"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "OK"
+msgstr "OK"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "Notifications"
+msgstr "Notifications"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "Follow Deskbar"
+msgstr "Suivre la Deskbar"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "Notifications sample"
+msgstr "Exemple de notification"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "Lower left"
+msgstr "En bas à gauche"

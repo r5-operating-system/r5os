@@ -1,0 +1,7 @@
+/*
+ * SPDX-FileCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * The signature of the Settings page add-on settings_bluetooth. The Locale Kit finds
+ * the add-on's catalog by it (docs/TRANSLATIONS.md).
+ */
+resource app_signature "application/x-vnd.R5OS-settings_bluetooth";

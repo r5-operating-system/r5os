@@ -1,0 +1,143 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_display\nLanguage: de\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "Resolution:"
+msgstr "Auflösung:"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "Apply"
+msgstr "Anwenden"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "The Deskbar is on screen %number%."
+msgstr "Die Deskbar ist auf Bildschirm %number%."
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "Do you wish to keep these settings?\nThe previous picture returns after 12 seconds."
+msgstr "Möchten Sie diese Einstellungen behalten?\nDas vorherige Bild kehrt nach 12 Sekunden zurück."
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "Colors:"
+msgstr "Farben:"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "Screen"
+msgstr "Bildschirm"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "Keep"
+msgstr "Behalten"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "{0, plural, one{# workspace. Changes right away. Every screen follows the same workspace.} other{# workspaces. Changes right away. Every screen follows the same workspace.}}"
+msgstr "{0, plural, one{# Arbeitsfläche. Ändert sich sofort. Jeder Bildschirm folgt derselben Arbeitsfläche.} other{# Arbeitsflächen. Ändert sich sofort. Jeder Bildschirm folgt derselben Arbeitsfläche.}}"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "Screen %number% – %name%"
+msgstr "Bildschirm %number% – %name%"
+
+#, fuzzy
+msgctxt "Settings: Display screens"
+msgid "Screen"
+msgstr "Bildschirm"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "Display"
+msgstr "Bildschirm"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "%resolution% (recommended)"
+msgstr "%resolution% (empfohlen)"
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "screen display resolution refresh colors workspaces"
+msgstr "screen display resolution refresh colors workspaces bildschirm monitor auflösung bildwiederholrate farben arbeitsflächen"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "%bits% bits/pixel"
+msgstr "%bits% Bit/Pixel"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "Arrangement"
+msgstr "Anordnung"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "Screen – %name%"
+msgstr "Bildschirm – %name%"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "Rows:"
+msgstr "Zeilen:"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "Apply to:"
+msgstr "Anwenden auf:"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "All workspaces"
+msgstr "Alle Arbeitsflächen"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "Columns:"
+msgstr "Spalten:"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "The screen mode could not be set.\n"
+msgstr "Der Bildschirmmodus konnte nicht eingestellt werden.\n"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "OK"
+msgstr "OK"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "Drag the screens to match your desk. Click one to change it."
+msgstr "Ziehen Sie die Bildschirme so, wie sie auf Ihrem Tisch stehen. Klicken Sie auf einen, um ihn zu ändern."
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "Refresh rate:"
+msgstr "Bildwiederholrate:"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "This workspace"
+msgstr "Diese Arbeitsfläche"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "Screens, resolution, and workspaces"
+msgstr "Bildschirme, Auflösung und Arbeitsflächen"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "Undo"
+msgstr "Rückgängig"
+
+#, fuzzy
+msgctxt "Settings: Display"
+msgid "Workspaces"
+msgstr "Arbeitsflächen"

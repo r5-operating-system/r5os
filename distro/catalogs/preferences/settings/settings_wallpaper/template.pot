@@ -1,0 +1,104 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_wallpaper\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+msgctxt "Settings: Wallpaper"
+msgid "Preview"
+msgstr ""
+
+msgctxt "Settings: Wallpaper"
+msgid "Select"
+msgstr ""
+
+msgctxt "Settings: Wallpaper"
+msgid "Image:"
+msgstr ""
+
+msgctxt "Settings: Wallpaper"
+msgid "X:"
+msgstr ""
+
+msgctxt "Settings: Wallpaper"
+msgid "Current workspace"
+msgstr ""
+
+msgctxt "Settings: Wallpaper"
+msgid "OK"
+msgstr ""
+
+msgctxt "Settings: Wallpaper"
+msgid "Other…"
+msgstr ""
+
+msgctxt "Settings: Wallpaper"
+msgid "Manual"
+msgstr ""
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+msgctxt "Settings: Wallpaper"
+msgid "background wallpaper image color workspace folder"
+msgstr ""
+
+msgctxt "Settings: Wallpaper"
+msgid "Scale to fit"
+msgstr ""
+
+msgctxt "Settings: Wallpaper"
+msgid "Could not open that folder.\n%error%"
+msgstr ""
+
+msgctxt "Settings: Wallpaper"
+msgid "Placement:"
+msgstr ""
+
+msgctxt "Settings: Wallpaper"
+msgid "Y:"
+msgstr ""
+
+#. Fixed text (AGENTS.md): translate the meaning, keep it short
+msgctxt "Settings: Wallpaper"
+msgid "Set the background of your desktop"
+msgstr ""
+
+msgctxt "Settings: Wallpaper"
+msgid "Center"
+msgstr ""
+
+msgctxt "Settings: Wallpaper"
+msgid "Wallpaper"
+msgstr ""
+
+msgctxt "Settings: Wallpaper"
+msgid "Default"
+msgstr ""
+
+msgctxt "Settings: Wallpaper"
+msgid "Icon label outline"
+msgstr ""
+
+msgctxt "Settings: Wallpaper"
+msgid "Tile"
+msgstr ""
+
+msgctxt "Settings: Wallpaper"
+msgid "Other folder…"
+msgstr ""
+
+msgctxt "Settings: Wallpaper"
+msgid "All workspaces"
+msgstr ""
+
+msgctxt "Settings: Wallpaper"
+msgid "None"
+msgstr ""
+
+msgctxt "Settings: Wallpaper"
+msgid "Folder: %folder%"
+msgstr ""
+
+msgctxt "Settings: Wallpaper"
+msgid "Default folder"
+msgstr ""
+
+msgctxt "Settings: Wallpaper"
+msgid "Settings"
+msgstr ""

@@ -1,0 +1,339 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_accounts\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+msgctxt "Settings: Users and Accounts"
+msgid "The guest setting could not be changed."
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "Users and Accounts"
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "The picture could not be removed."
+msgstr ""
+
+msgctxt "Settings: Account dialogs"
+msgid "Uses apps, changes own settings"
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "No password. Everything is deleted at log out."
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "The picture could not be saved."
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "The account could not be deleted."
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "People on this computer."
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "Name"
+msgstr ""
+
+msgctxt "Settings: Account dialogs"
+msgid "Start with a lowercase letter; then lowercase letters and numbers."
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "Allow guests to sign in to this computer"
+msgstr ""
+
+msgctxt "Settings: Account dialogs"
+msgid "Used to sign in; letters and numbers"
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "Choose picture…"
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "Administrator"
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "The email address could not be saved."
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "Delete account…"
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "Remove picture"
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "Tracker could not open the Shared folder."
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "OK"
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "Delete the account of %name%?\n\nKeep files leaves the home folder %home% on the disk. Delete files removes it, with everything in it."
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "Open"
+msgstr ""
+
+msgctxt "Settings: Account dialogs"
+msgid "Add an account"
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "Changes are saved as you make them. The last administrator cannot become a standard account."
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "A standard account sees only its own card (name, email, picture, password). The account list, account types and the guest wait for an administrator's unlock."
+msgstr ""
+
+msgctxt "Settings: Account dialogs"
+msgid "They get their own private home folder and settings."
+msgstr ""
+
+msgctxt "Settings: Account dialogs"
+msgid "Username"
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "ACCOUNTS"
+msgstr ""
+
+msgctxt "Settings: Account dialogs"
+msgid "home: %path%"
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "Add account…"
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "Delete files"
+msgstr ""
+
+msgctxt "Settings: Account dialogs"
+msgid "Can also change the computer"
+msgstr ""
+
+msgctxt "Settings: Account dialogs"
+msgid "OK"
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "Disable account"
+msgstr ""
+
+msgctxt "Settings: Account dialogs"
+msgid "Change your password"
+msgstr ""
+
+msgctxt "Settings: Account dialogs"
+msgid "Choose picture…"
+msgstr ""
+
+msgctxt "Settings: Account dialogs"
+msgid "Administrator"
+msgstr ""
+
+msgctxt "Settings: Account dialogs"
+msgid "The account was added, but its picture was not saved.\n%error%"
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "you"
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "Cancel"
+msgstr ""
+
+msgctxt "Settings: Account dialogs"
+msgid "✓ The passwords match"
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "Delete account"
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "Not everything could be put back:"
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "Accounts could not be read: %error%"
+msgstr ""
+
+msgctxt "Settings: Account dialogs"
+msgid "That picture could not be used."
+msgstr ""
+
+msgctxt "Settings: Account dialogs"
+msgid "Repeat password"
+msgstr ""
+
+msgctxt "Settings: Account dialogs"
+msgid "Sign in must be running to change accounts."
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "name@example.com"
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "Account type"
+msgstr ""
+
+msgctxt "Settings: Account dialogs"
+msgid "Standard"
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "disabled"
+msgstr ""
+
+msgctxt "Settings: Account dialogs"
+msgid "Password"
+msgstr ""
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+msgctxt "Settings: Users and Accounts"
+msgid "user users account accounts password administrator standard picture email sign in guest shared"
+msgstr ""
+
+msgctxt "Settings: Account dialogs"
+msgid "Account type"
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "Shared folder"
+msgstr ""
+
+msgctxt "Settings: Account dialogs"
+msgid "The account could not be added."
+msgstr ""
+
+msgctxt "Settings: Account dialogs"
+msgid "Cancel"
+msgstr ""
+
+msgctxt "Settings: Account dialogs"
+msgid "Repeat new password"
+msgstr ""
+
+msgctxt "Settings: Account dialogs"
+msgid "New password for %name%"
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "GUEST AND SHARING"
+msgstr ""
+
+msgctxt "Settings: Account dialogs"
+msgid "Change password"
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "Change password…"
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "Password"
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "Email"
+msgstr ""
+
+msgctxt "Settings: Account dialogs"
+msgid "%name%'s old password is not needed. Tell %name% the new one; it works from the next sign in. Their saved passwords stay locked until they enter their old password once; otherwise they start with an empty key store."
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "Admin"
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "The name could not be saved."
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "Guest: %error%"
+msgstr ""
+
+msgctxt "Settings: Account dialogs"
+msgid "That file is not a picture this computer can open."
+msgstr ""
+
+msgctxt "Settings: Account dialogs"
+msgid "Sign in did not answer."
+msgstr ""
+
+msgctxt "Settings: Account dialogs"
+msgid "Name"
+msgstr ""
+
+msgctxt "Settings: Account dialogs"
+msgid "Add account"
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "Standard"
+msgstr ""
+
+msgctxt "Settings: Account dialogs"
+msgid "× The passwords don't match yet"
+msgstr ""
+
+msgctxt "Settings: Account dialogs"
+msgid "That username is already in use."
+msgstr ""
+
+msgctxt "Settings: Account dialogs"
+msgid "Users and Accounts"
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "The account could not be changed."
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "Enable account"
+msgstr ""
+
+msgctxt "Settings: Account dialogs"
+msgid "New password"
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "Keep files"
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "The account type could not be changed."
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "The Shared folder could not be found."
+msgstr ""
+
+msgctxt "Settings: Account dialogs"
+msgid "The password could not be changed."
+msgstr ""
+
+msgctxt "Settings: Users and Accounts"
+msgid "home %path%"
+msgstr ""
+
+msgctxt "Settings: Account dialogs"
+msgid "Current password"
+msgstr ""

@@ -1,0 +1,131 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_connections\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+msgctxt "Settings: Connections"
+msgid "Off"
+msgstr ""
+
+msgctxt "Settings: Connections"
+msgid "Not connected"
+msgstr ""
+
+msgctxt "Settings: Connections"
+msgid "Address:"
+msgstr ""
+
+msgctxt "Settings: Connections"
+msgid "Servers:"
+msgstr ""
+
+msgctxt "Settings: Connections"
+msgid "Show in Deskbar"
+msgstr ""
+
+msgctxt "Settings: Connections"
+msgid "Hardware:"
+msgstr ""
+
+msgctxt "Settings: Connections"
+msgid "Connected"
+msgstr ""
+
+msgctxt "Settings: Connections"
+msgid "Ethernet"
+msgstr ""
+
+msgctxt "Settings: Connections"
+msgid "Addresses:"
+msgstr ""
+
+msgctxt "Settings: Connections"
+msgid "Status:"
+msgstr ""
+
+msgctxt "Settings: Connections"
+msgid "Automatic (DHCP)"
+msgstr ""
+
+msgctxt "Settings: Connections"
+msgid "USB Ethernet"
+msgstr ""
+
+msgctxt "Settings: Connections"
+msgid "Connections"
+msgstr ""
+
+msgctxt "Settings: Connections"
+msgid "Automatic uses router advertisements (SLAAC) and DHCPv6."
+msgstr ""
+
+msgctxt "Settings: Connections"
+msgid "Save"
+msgstr ""
+
+msgctxt "Settings: Connections"
+msgid "Separate the servers with a comma."
+msgstr ""
+
+msgctxt "Settings: Connections"
+msgid "Search domain:"
+msgstr ""
+
+msgctxt "Settings: Connections"
+msgid "Configure:"
+msgstr ""
+
+msgctxt "Settings: Connections"
+msgid "Edit…"
+msgstr ""
+
+msgctxt "Settings: Connections"
+msgid "Router:"
+msgstr ""
+
+msgctxt "Settings: Connections"
+msgid "Use the network's servers"
+msgstr ""
+
+msgctxt "Settings: Connections"
+msgid "Wi-Fi"
+msgstr ""
+
+msgctxt "Settings: Connections"
+msgid "Cable unplugged"
+msgstr ""
+
+msgctxt "Settings: Connections"
+msgid "Automatic"
+msgstr ""
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+msgctxt "Settings: Connections"
+msgid "network ethernet ip ipv4 ipv6 dhcp dns address router"
+msgstr ""
+
+msgctxt "Settings: Connections"
+msgid "Apply"
+msgstr ""
+
+msgctxt "Settings: Connections"
+msgid "Connected to “%name%”"
+msgstr ""
+
+msgctxt "Settings: Connections"
+msgid "Subnet mask:"
+msgstr ""
+
+msgctxt "Settings: Connections"
+msgid "Netmask:"
+msgstr ""
+
+msgctxt "Settings: Connections"
+msgid "Wired connections, addresses, and DNS"
+msgstr ""
+
+msgctxt "Settings: Connections"
+msgid "Manual"
+msgstr ""
+
+msgctxt "Settings: Connections"
+msgid "Cancel"
+msgstr ""

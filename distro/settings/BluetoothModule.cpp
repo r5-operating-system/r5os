@@ -16,10 +16,15 @@
 #include "SettingsMessages.h"
 #include "SettingsModule.h"
 
+#include <Catalog.h>
 #include <GroupView.h>
 #include <LayoutBuilder.h>
 
 #include <R5Bluetooth.h>
+
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "Settings: Bluetooth"
 
 
 /*!	Holds the BluetoothView. The window sends kMsgRefreshPage here when the
@@ -73,13 +78,15 @@ private:
 class BluetoothModule : public SettingsModule {
 public:
 	virtual	const char*			Identifier() const { return "bluetooth"; }
-	virtual	const char*			Name() const { return "Bluetooth"; }
+	virtual	const char*			Name() const { return B_TRANSLATE("Bluetooth"); }
 	virtual	const char*			Category() const { return "devices"; }
 	virtual	const char*			Description() const
-									{ return "Find Bluetooth devices nearby"; }
+									{ return B_TRANSLATE("Find Bluetooth devices nearby"); }
 	virtual	const char*			Keywords() const
-									{ return "bluetooth wireless radio "
-										"headphones mouse keyboard"; }
+									{ return B_TRANSLATE_COMMENT("bluetooth wireless radio "
+										"headphones mouse keyboard",
+										"Search words, separated by spaces. Keep the English "
+										"words and add words in your language."); }
 	virtual	bool				CanSave() const { return false; }
 
 	virtual	BView*				CreateView(SettingsContext* context,

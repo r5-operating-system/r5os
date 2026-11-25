@@ -1,0 +1,33 @@
+1	english	x-vnd.R5OS-settings_connections	1532208951
+Off	Settings: Connections		Off
+Not connected	Settings: Connections		Not connected
+Address:	Settings: Connections		Address:
+Servers:	Settings: Connections		Servers:
+Show in Deskbar	Settings: Connections		Show in Deskbar
+Hardware:	Settings: Connections		Hardware:
+Connected	Settings: Connections		Connected
+Ethernet	Settings: Connections		Ethernet
+Addresses:	Settings: Connections		Addresses:
+Status:	Settings: Connections		Status:
+Automatic (DHCP)	Settings: Connections		Automatic (DHCP)
+USB Ethernet	Settings: Connections		USB Ethernet
+Connections	Settings: Connections		Connections
+Automatic uses router advertisements (SLAAC) and DHCPv6.	Settings: Connections		Automatic uses router advertisements (SLAAC) and DHCPv6.
+Save	Settings: Connections		Save
+Separate the servers with a comma.	Settings: Connections		Separate the servers with a comma.
+Search domain:	Settings: Connections		Search domain:
+Configure:	Settings: Connections		Configure:
+Edit…	Settings: Connections		Edit…
+Router:	Settings: Connections		Router:
+Use the network's servers	Settings: Connections		Use the network's servers
+Wi-Fi	Settings: Connections		Wi-Fi
+Cable unplugged	Settings: Connections		Cable unplugged
+Automatic	Settings: Connections		Automatic
+network ethernet ip ipv4 ipv6 dhcp dns address router	Settings: Connections	Search words, separated by spaces. Keep the English words and add words in your language.	network ethernet ip ipv4 ipv6 dhcp dns address router
+Apply	Settings: Connections		Apply
+Connected to “%name%”	Settings: Connections		Connected to “%name%”
+Subnet mask:	Settings: Connections		Subnet mask:
+Netmask:	Settings: Connections		Netmask:
+Wired connections, addresses, and DNS	Settings: Connections		Wired connections, addresses, and DNS
+Manual	Settings: Connections		Manual
+Cancel	Settings: Connections		Cancel

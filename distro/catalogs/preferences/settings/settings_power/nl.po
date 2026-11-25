@@ -1,0 +1,230 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_power\nLanguage: nl\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "battery power sleep performance profile brightness lid display energy cpu"
+msgstr "battery power sleep performance profile brightness lid display energy cpu accu batterij stroom slaapstand prestaties profiel helderheid deksel beeldscherm energie"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Profile"
+msgstr "Profiel"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Turn off the display after"
+msgstr "Beeldscherm uitzetten na"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Wake with the mouse or touchpad"
+msgstr "Wekken met de muis of het touchpad"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Charging"
+msgstr "Opladen"
+
+#. Second of two lines, one sentence with the line before
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "\"Sleep\" is gray in these menus."
+msgstr "\"Slaapstand\" is grijs in deze menu's."
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Put the computer to sleep after"
+msgstr "Computer in slaapstand zetten na"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "This computer sleeps with Modern Standby (S0ix)."
+msgstr "Deze computer slaapt met Modern Standby (S0ix)."
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "This processor does not let R5 change its speed."
+msgstr "Deze processor laat R5 de snelheid niet wijzigen."
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Sleep"
+msgstr "Slaapstand"
+
+#. First of two lines, one sentence: the second line is '"Sleep" is gray in these menus.'
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Sleep is not available on this computer yet. Until it is,"
+msgstr "Slaapstand is nog niet beschikbaar op deze computer. Tot die tijd is"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "full in about %time%"
+msgstr "vol over ongeveer %time%"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Balanced: fast when you work, slower when the computer waits. Power saver keeps the processor below its boost. Performance always allows the boost."
+msgstr "Gebalanceerd: snel als je werkt, langzamer als de computer wacht. Energiebesparing houdt de processor onder de boost. Prestaties staat de boost altijd toe."
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Performance: the processor always allows its boost and leans toward speed. Power saver keeps it below its boost."
+msgstr "Prestaties: de processor staat de boost altijd toe en kiest voor snelheid. Energiebesparing houdt hem onder de boost."
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Performance"
+msgstr "Prestaties"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Keep working with an external display"
+msgstr "Doorwerken met een extern beeldscherm"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Wake when the lid is opened"
+msgstr "Wekken als het deksel wordt geopend"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "On battery"
+msgstr "Op accu"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Shut down"
+msgstr "Afsluiten"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "This computer cannot sleep."
+msgstr "Deze computer kan niet slapen."
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Brightness"
+msgstr "Helderheid"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "about %time% left"
+msgstr "nog ongeveer %time%"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Turn off the display"
+msgstr "Beeldscherm uitzetten"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "This computer sleeps with Suspend to RAM (S3)."
+msgstr "Deze computer slaapt met Suspend to RAM (S3)."
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Battery, performance and sleep"
+msgstr "Accu, prestaties en slaapstand"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Wake"
+msgstr "Wekken"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Never"
+msgstr "Nooit"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Power saver"
+msgstr "Energiebesparing"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Do nothing"
+msgstr "Niets doen"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "The power service is not running."
+msgstr "De energiedienst is niet actief."
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Battery"
+msgstr "Accu"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "{0, plural, one{# minute} other{# minutes}}"
+msgstr "{0, plural, one{# minuut} other{# minuten}}"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "1 minute"
+msgstr "1 minuut"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Battery health %percent% % of its design capacity"
+msgstr "Accuconditie %percent% % van de oorspronkelijke capaciteit"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Balanced"
+msgstr "Gebalanceerd"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "When the lid is closed"
+msgstr "Als het deksel wordt gesloten"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "When the power button is pressed"
+msgstr "Als de aan/uit-knop wordt ingedrukt"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Wake with the keyboard"
+msgstr "Wekken met het toetsenbord"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Power"
+msgstr "Energie"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Power settings are off in Safe mode."
+msgstr "Energie-instellingen staan uit in de veilige modus."
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "1 hour"
+msgstr "1 uur"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Power saver: the processor stays below its boost and leans toward saving energy. Balanced and Performance allow the boost."
+msgstr "Energiebesparing: de processor blijft onder de boost en kiest voor energiebesparing. Gebalanceerd en Prestaties staan de boost toe."
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "full"
+msgstr "vol"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Plugged in"
+msgstr "Aangesloten"
+
+#, fuzzy
+msgctxt "Settings: Power"
+msgid "Ask"
+msgstr "Vragen"

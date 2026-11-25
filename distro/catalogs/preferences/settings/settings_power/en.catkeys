@@ -1,0 +1,46 @@
+1	english	x-vnd.R5OS-settings_power	1998963457
+battery power sleep performance profile brightness lid display energy cpu	Settings: Power	Search words, separated by spaces. Keep the English words and add words in your language.	battery power sleep performance profile brightness lid display energy cpu
+Profile	Settings: Power		Profile
+Turn off the display after	Settings: Power		Turn off the display after
+Wake with the mouse or touchpad	Settings: Power		Wake with the mouse or touchpad
+Charging	Settings: Power		Charging
+\"Sleep\" is gray in these menus.	Settings: Power	Second of two lines, one sentence with the line before	\"Sleep\" is gray in these menus.
+Put the computer to sleep after	Settings: Power		Put the computer to sleep after
+This computer sleeps with Modern Standby (S0ix).	Settings: Power		This computer sleeps with Modern Standby (S0ix).
+This processor does not let R5 change its speed.	Settings: Power		This processor does not let R5 change its speed.
+Sleep	Settings: Power		Sleep
+Sleep is not available on this computer yet. Until it is,	Settings: Power	First of two lines, one sentence: the second line is '\"Sleep\" is gray in these menus.'	Sleep is not available on this computer yet. Until it is,
+full in about %time%	Settings: Power		full in about %time%
+Balanced: fast when you work, slower when the computer waits. Power saver keeps the processor below its boost. Performance always allows the boost.	Settings: Power		Balanced: fast when you work, slower when the computer waits. Power saver keeps the processor below its boost. Performance always allows the boost.
+Performance: the processor always allows its boost and leans toward speed. Power saver keeps it below its boost.	Settings: Power		Performance: the processor always allows its boost and leans toward speed. Power saver keeps it below its boost.
+Performance	Settings: Power		Performance
+Keep working with an external display	Settings: Power		Keep working with an external display
+Wake when the lid is opened	Settings: Power		Wake when the lid is opened
+On battery	Settings: Power		On battery
+Shut down	Settings: Power		Shut down
+This computer cannot sleep.	Settings: Power		This computer cannot sleep.
+Brightness	Settings: Power		Brightness
+about %time% left	Settings: Power		about %time% left
+Turn off the display	Settings: Power		Turn off the display
+This computer sleeps with Suspend to RAM (S3).	Settings: Power		This computer sleeps with Suspend to RAM (S3).
+Battery, performance and sleep	Settings: Power		Battery, performance and sleep
+Wake	Settings: Power		Wake
+Never	Settings: Power		Never
+Power saver	Settings: Power		Power saver
+Do nothing	Settings: Power		Do nothing
+The power service is not running.	Settings: Power		The power service is not running.
+Battery	Settings: Power		Battery
+{0, plural, one{# minute} other{# minutes}}	Settings: Power		{0, plural, one{# minute} other{# minutes}}
+1 minute	Settings: Power		1 minute
+Battery health %percent% % of its design capacity	Settings: Power		Battery health %percent% % of its design capacity
+Balanced	Settings: Power		Balanced
+When the lid is closed	Settings: Power		When the lid is closed
+When the power button is pressed	Settings: Power		When the power button is pressed
+Wake with the keyboard	Settings: Power		Wake with the keyboard
+Power	Settings: Power		Power
+Power settings are off in Safe mode.	Settings: Power		Power settings are off in Safe mode.
+1 hour	Settings: Power		1 hour
+Power saver: the processor stays below its boost and leans toward saving energy. Balanced and Performance allow the boost.	Settings: Power		Power saver: the processor stays below its boost and leans toward saving energy. Balanced and Performance allow the boost.
+full	Settings: Power		full
+Plugged in	Settings: Power		Plugged in
+Ask	Settings: Power		Ask

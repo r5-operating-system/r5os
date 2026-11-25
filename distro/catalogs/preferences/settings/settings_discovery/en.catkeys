@@ -1,0 +1,28 @@
+1	english	x-vnd.R5OS-settings_discovery	550159927
+Rename	Settings: Discovery		Rename
+AirPlay speaker	Settings: Discovery		AirPlay speaker
+Cancel	Settings: Discovery		Cancel
+Disable	ServiceView		Disable
+Discovery	Settings: Discovery		Discovery
+Refresh	Settings: Discovery		Refresh
+Printer	Settings: Discovery		Printer
+On this network:	Settings: Discovery		On this network:
+The name could not be saved.	Settings: Discovery		The name could not be saved.
+network bonjour mdns local name hostname ssh ftp telnet share printer airplay	Settings: Discovery	Search words, separated by spaces. Keep the English words and add words in your language.	network bonjour mdns local name hostname ssh ftp telnet share printer airplay
+Name:	Settings: Discovery		Name:
+This computer	Settings: Discovery		This computer
+Nothing found	Settings: Discovery		Nothing found
+An item that is on is also announced, so other devices list it.	Settings: Discovery		An item that is on is also announced, so other devices list it.
+OK	Settings: Discovery		OK
+on	ServiceListItem		on
+Shared from this computer	Settings: Discovery		Shared from this computer
+Rename…	Settings: Discovery		Rename…
+File sharing	Settings: Discovery		File sharing
+Find devices and services on this network	Settings: Discovery		Find devices and services on this network
+Enable	ServiceView		Enable
+Find devices (Bonjour)	Settings: Discovery		Find devices (Bonjour)
+Programs can reach a .local name. Printers and speakers in this list are also offered by Printers and AirPlay.	Settings: Discovery		Programs can reach a .local name. Printers and speakers in this list are also offered by Printers and AirPlay.
+No device answered on this network.	Settings: Discovery		No device answered on this network.
+off	ServiceListItem		off
+Let other devices find this computer	Settings: Discovery		Let other devices find this computer
+Use letters, digits and -, up to 63, not starting or ending with -.	Settings: Discovery		Use letters, digits and -, up to 63, not starting or ending with -.

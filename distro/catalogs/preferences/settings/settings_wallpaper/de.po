@@ -1,0 +1,129 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_wallpaper\nLanguage: de\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Preview"
+msgstr "Vorschau"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Select"
+msgstr "Auswählen"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Image:"
+msgstr "Bild:"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "X:"
+msgstr "X:"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Current workspace"
+msgstr "Aktuelle Arbeitsfläche"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "OK"
+msgstr "OK"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Other…"
+msgstr "Andere…"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Manual"
+msgstr "Manuell"
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "background wallpaper image color workspace folder"
+msgstr "background wallpaper image color workspace folder hintergrund hintergrundbild bild farbe arbeitsfläche ordner"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Scale to fit"
+msgstr "Einpassen"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Could not open that folder.\n%error%"
+msgstr "Dieser Ordner konnte nicht geöffnet werden.\n%error%"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Placement:"
+msgstr "Platzierung:"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Y:"
+msgstr "Y:"
+
+#. Fixed text (AGENTS.md): translate the meaning, keep it short
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Set the background of your desktop"
+msgstr "Hintergrund des Schreibtischs festlegen"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Center"
+msgstr "Zentriert"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Wallpaper"
+msgstr "Hintergrund"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Default"
+msgstr "Standard"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Icon label outline"
+msgstr "Umriss der Symbolbeschriftung"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Tile"
+msgstr "Gekachelt"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Other folder…"
+msgstr "Anderer Ordner…"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "All workspaces"
+msgstr "Alle Arbeitsflächen"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "None"
+msgstr "Keine"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Folder: %folder%"
+msgstr "Ordner: %folder%"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Default folder"
+msgstr "Standardordner"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Settings"
+msgstr "Einstellungen"

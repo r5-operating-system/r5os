@@ -1,0 +1,129 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_wallpaper\nLanguage: nl\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Preview"
+msgstr "Voorbeeld"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Select"
+msgstr "Kiezen"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Image:"
+msgstr "Afbeelding:"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "X:"
+msgstr "X:"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Current workspace"
+msgstr "Huidige werkruimte"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "OK"
+msgstr "OK"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Other…"
+msgstr "Andere…"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Manual"
+msgstr "Handmatig"
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "background wallpaper image color workspace folder"
+msgstr "background wallpaper image color workspace folder achtergrond bureaubladachtergrond afbeelding kleur werkruimte map"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Scale to fit"
+msgstr "Schalen om te passen"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Could not open that folder.\n%error%"
+msgstr "Kon die map niet openen.\n%error%"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Placement:"
+msgstr "Plaatsing:"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Y:"
+msgstr "Y:"
+
+#. Fixed text (AGENTS.md): translate the meaning, keep it short
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Set the background of your desktop"
+msgstr "De achtergrond van je bureaublad instellen"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Center"
+msgstr "Centreren"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Wallpaper"
+msgstr "Achtergrond"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Default"
+msgstr "Standaard"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Icon label outline"
+msgstr "Omlijning van pictogramlabels"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Tile"
+msgstr "Tegelen"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Other folder…"
+msgstr "Andere map…"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "All workspaces"
+msgstr "Alle werkruimten"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "None"
+msgstr "Geen"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Folder: %folder%"
+msgstr "Map: %folder%"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Default folder"
+msgstr "Standaardmap"
+
+#, fuzzy
+msgctxt "Settings: Wallpaper"
+msgid "Settings"
+msgstr "Instellingen"

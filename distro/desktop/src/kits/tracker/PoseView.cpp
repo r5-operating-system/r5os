@@ -67,6 +67,11 @@ All rights reserved.
 #include <Locale.h>
 #include <LongAndDragTrackingFilter.h>
 #include <MenuItem.h>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <MessageRunner.h>
+// SPDX-SnippetEnd
 #include <NodeMonitor.h>
 #include <Path.h>
 #include <PopUpMenu.h>
@@ -1633,6 +1638,14 @@ BPoseView::AddPosesTask(void* castToParams)
 
 				if (!PoseVisible(model,
 					&posesResult->fPoseInfos[modelChunkIndex])) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+					// not shown: free the model like EntryCreated does; the
+					// slot is reused, so nothing else would delete it (#4631)
+					posesResult->fModels[modelChunkIndex] = NULL;
+					delete model;
+// SPDX-SnippetEnd
 					modelChunkIndex--;
 					continue;
 				}
@@ -6279,6 +6292,11 @@ BPoseView::AttributeChanged(const BMessage* message)
 
 	int32 index;
 	attr_info info;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	bool retryBusy = false;
+// SPDX-SnippetEnd
 	PoseList* posesFound = CurrentPoseList()->FindAllPoses(&itemNode);
 	int32 posesCount = posesFound->CountItems();
 	for (int i = 0; i < posesCount; i++) {
@@ -6290,24 +6308,29 @@ BPoseView::AttributeChanged(const BMessage* message)
 		}
 		ASSERT(poseModel != NULL);
 
-		status_t result = B_OK;
-		for (int32 count = 0; count < 100; count++) {
-			// if node is busy, wait a little, it may be in the
-			// middle of mimeset and we wan't to pick up the changes
-			result = poseModel->OpenNode();
-			if (result == B_OK || result != B_BUSY)
-				break;
-
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// if node is busy, it may be in the middle of mimeset and we want to
+		// pick up the changes: handle this notice again a little later
+		// instead of sleeping on the window thread (#4622)
+		status_t result = poseModel->OpenNode();
+		if (result == B_BUSY) {
 			PRINT(("poseModel %s busy, retrying in a bit\n", poseModel->Name()));
-			snooze(10000);
+			retryBusy = true;
+			continue;
 		}
 		if (result != B_OK) {
 			PRINT(("Cache Error %s\n", strerror(result)));
 			continue;
 		}
 
-		bool visible = CurrentPoseList()->FindPose(poseModel->NodeRef(), &index) != NULL;
+		// the row of this pose itself; for a symlink, the target's node
+		// would find the target's row instead (#4625)
+		index = CurrentPoseList()->IndexOf(pose);
+		bool visible = index >= 0;
 		int32 poseListIndex = index;
+// SPDX-SnippetEnd
 
 		BPoint poseLoc;
 		if (ViewMode() == kListMode)
@@ -6383,6 +6406,21 @@ BPoseView::AttributeChanged(const BMessage* message)
 		}
 	}
 	delete posesFound;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (retryBusy) {
+		// at most 100 retries 10 ms apart, as the old wait loop did
+		int32 retries = 0;
+		message->FindInt32("r5:busy_retries", &retries);
+		if (retries < 100) {
+			BMessage retry(*message);
+			retry.RemoveName("r5:busy_retries");
+			retry.AddInt32("r5:busy_retries", retries + 1);
+			BMessageRunner::StartSending(BMessenger(this), &retry, 10000, 1);
+		}
+	}
+// SPDX-SnippetEnd
 	if (posesCount == 0) {
 		// we received an attr changed notification for a zombie model, it means
 		// that although we couldn't open the node the first time, it seems

@@ -1,0 +1,92 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_fonts\nLanguage: fr\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#, fuzzy
+msgctxt "Settings: Fonts"
+msgid "Change the default fonts"
+msgstr "Changer les polices par défaut"
+
+msgctxt "AntialiasingSettingsView"
+msgid "Strong"
+msgstr "Épais"
+
+#. Don't translate this literally ! Use a phrase showing all chars from A to Z.
+msgctxt "Font Selection view"
+msgid "The quick brown fox jumps over the lazy dog."
+msgstr "Voix ambiguë d’un cœur qui au zéphyr préfère les jattes de kiwis. 0123456789"
+
+msgctxt "AntialiasingSettingsView"
+msgid "Off"
+msgstr "Désactivé"
+
+msgctxt "AntialiasingSettingsView"
+msgid "Grayscale"
+msgstr "Niveaux de gris"
+
+msgctxt "AntialiasingSettingsView"
+msgid "Antialiasing type:"
+msgstr "Type de lissage :"
+
+msgctxt "AntialiasingSettingsView"
+msgid "Antialiasing menu"
+msgstr "Menu lissage"
+
+msgctxt "AntialiasingSettingsView"
+msgid "Hinting menu"
+msgstr "Menu ajustement"
+
+#, fuzzy
+msgctxt "Settings: Fonts"
+msgid "Fonts"
+msgstr "Polices"
+
+msgctxt "AntialiasingSettingsView"
+msgid "On"
+msgstr "Activé"
+
+msgctxt "AntialiasingSettingsView"
+msgid "Monospaced fonts only"
+msgstr "Seulement les polices à chasse fixe"
+
+msgctxt "Font Selection view"
+msgid "Size:"
+msgstr "Taille :"
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+#, fuzzy
+msgctxt "Settings: Fonts"
+msgid "fonts plain bold fixed menu antialiasing hinting"
+msgstr "fonts plain bold fixed menu antialiasing hinting polices police normale gras fixe lissage anticrénelage"
+
+#, fuzzy
+msgctxt "Settings: Fonts"
+msgid "Antialiasing"
+msgstr "Anticrénelage"
+
+msgctxt "Font view"
+msgid "Plain font:"
+msgstr "Police simple :"
+
+msgctxt "Font view"
+msgid "Fixed font:"
+msgstr "Police à chasse fixe :"
+
+msgctxt "AntialiasingSettingsView"
+msgid "LCD subpixel"
+msgstr "Sous-pixel LCD"
+
+msgctxt "AntialiasingSettingsView"
+msgid "Glyph hinting:"
+msgstr "Consigne de glyphes :"
+
+msgctxt "AntialiasingSettingsView"
+msgid "Reduce colored edges filter strength:"
+msgstr "Intensité du filtre de réduction des bords de couleurs :"
+
+msgctxt "Font view"
+msgid "Bold font:"
+msgstr "Caractères gras :"
+
+msgctxt "Font view"
+msgid "Menu font:"
+msgstr "Police des menus :"

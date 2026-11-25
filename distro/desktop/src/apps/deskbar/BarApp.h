@@ -98,6 +98,11 @@ const uint32 kRealignReplicants = 'Algn';
 class BBitmap;
 class BFile;
 class BList;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+class BMessage;
+// SPDX-SnippetEnd
 class PreferencesWindow;
 class TBarView;
 class TBarWindow;
@@ -137,6 +142,14 @@ public:
 			BBitmap*				icon;
 			BBitmap*				iconCache[kWindowIconCacheCount];
 };
+
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// Writes a Deskbar settings file atomically: temp file, sync, rename.
+status_t r5_save_deskbar_settings(const char* name, const BMessage& message);
+// SPDX-SnippetEnd
 
 
 class TBarApp : public BServer {

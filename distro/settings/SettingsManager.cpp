@@ -180,8 +180,9 @@ SettingsManager::_LoadOne(const char* path, SettingsContext* context)
 		return B_BAD_DATA;
 	}
 
-	if (context != NULL)
-		module->LoadSettings(context);
+	// The window calls LoadSettings() when the page is first opened, so a
+	// page reads its settings when it is shown, not when Settings starts.
+	(void)context;
 
 	if (Find(module->Identifier()) != NULL) {
 		syslog(LOG_ERR, "settings: duplicate module %s from %s",

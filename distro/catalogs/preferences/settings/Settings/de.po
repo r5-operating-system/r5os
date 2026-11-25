@@ -1,0 +1,132 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-Settings\nLanguage: de\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#, fuzzy
+msgctxt "Settings window"
+msgid "Defaults"
+msgstr "Standardwerte"
+
+#, fuzzy
+msgctxt "Settings window"
+msgid "Unlock"
+msgstr "Entsperren"
+
+#, fuzzy
+msgctxt "Settings window"
+msgid "Display, sound, notifications, virtual memory, and this computer."
+msgstr "Bildschirm, Klang, Benachrichtigungen, virtueller Speicher und dieser Computer."
+
+#, fuzzy
+msgctxt "Settings window"
+msgid "Revert"
+msgstr "Zurücksetzen"
+
+#, fuzzy
+msgctxt "Settings window"
+msgid "Choose a category, or search for a setting."
+msgstr "Wählen Sie eine Kategorie oder suchen Sie nach einer Einstellung."
+
+#, fuzzy
+msgctxt "Settings window"
+msgid "Fonts, look and feel, wallpaper, and the Deskbar."
+msgstr "Schriften, Erscheinungsbild, Hintergrund und die Deskbar."
+
+#, fuzzy
+msgctxt "Settings window"
+msgid "Home"
+msgstr "Start"
+
+#, fuzzy
+msgctxt "System name"
+msgid "Settings"
+msgstr "Einstellungen"
+
+#, fuzzy
+msgctxt "Settings: Home"
+msgid "Recently changed"
+msgstr "Zuletzt geändert"
+
+#, fuzzy
+msgctxt "Settings window"
+msgid "Keyboard, mouse, touchpad, printers, and Bluetooth."
+msgstr "Tastatur, Maus, Touchpad, Drucker und Bluetooth."
+
+#, fuzzy
+msgctxt "Settings window"
+msgid "Administrator"
+msgstr "Administrator"
+
+#, fuzzy
+msgctxt "Settings window"
+msgid "Wired and Wi-Fi connections, and network shares."
+msgstr "Kabel- und Wi-Fi-Verbindungen sowie Netzwerkfreigaben."
+
+#, fuzzy
+msgctxt "Settings window"
+msgid "Lock"
+msgstr "Sperren"
+
+#, fuzzy
+msgctxt "Settings window"
+msgid "Search"
+msgstr "Suchen"
+
+#, fuzzy
+msgctxt "Settings window"
+msgid "Could not apply %name%."
+msgstr "%name% konnte nicht angewendet werden."
+
+#, fuzzy
+msgctxt "Settings window"
+msgid "System"
+msgstr "System"
+
+#, fuzzy
+msgctxt "Settings window"
+msgid "Could not revert %name%."
+msgstr "%name% konnte nicht zurückgesetzt werden."
+
+#, fuzzy
+msgctxt "Settings window"
+msgid "This page could not be opened."
+msgstr "Diese Seite konnte nicht geöffnet werden."
+
+#, fuzzy
+msgctxt "Settings window"
+msgid "Accounts"
+msgstr "Konten"
+
+#, fuzzy
+msgctxt "Settings window"
+msgid "Personalization"
+msgstr "Personalisierung"
+
+#, fuzzy
+msgctxt "Settings: Home"
+msgid "Nothing changed yet"
+msgstr "Noch nichts geändert"
+
+#, fuzzy
+msgctxt "Settings window"
+msgid "Network"
+msgstr "Netzwerk"
+
+#, fuzzy
+msgctxt "Settings window"
+msgid "OK"
+msgstr "OK"
+
+#, fuzzy
+msgctxt "Settings window"
+msgid "Devices"
+msgstr "Geräte"
+
+#, fuzzy
+msgctxt "Settings window"
+msgid "The people who use this computer, and how they sign in."
+msgstr "Die Personen, die diesen Computer nutzen, und wie sie sich anmelden."
+
+#, fuzzy
+msgctxt "Settings window"
+msgid "Could not restore defaults for %name%."
+msgstr "Die Standardwerte für %name% konnten nicht wiederhergestellt werden."

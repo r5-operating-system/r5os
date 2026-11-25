@@ -1,0 +1,185 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_power\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+msgctxt "Settings: Power"
+msgid "battery power sleep performance profile brightness lid display energy cpu"
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "Profile"
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "Turn off the display after"
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "Wake with the mouse or touchpad"
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "Charging"
+msgstr ""
+
+#. Second of two lines, one sentence with the line before
+msgctxt "Settings: Power"
+msgid "\"Sleep\" is gray in these menus."
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "Put the computer to sleep after"
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "This computer sleeps with Modern Standby (S0ix)."
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "This processor does not let R5 change its speed."
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "Sleep"
+msgstr ""
+
+#. First of two lines, one sentence: the second line is '"Sleep" is gray in these menus.'
+msgctxt "Settings: Power"
+msgid "Sleep is not available on this computer yet. Until it is,"
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "full in about %time%"
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "Balanced: fast when you work, slower when the computer waits. Power saver keeps the processor below its boost. Performance always allows the boost."
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "Performance: the processor always allows its boost and leans toward speed. Power saver keeps it below its boost."
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "Performance"
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "Keep working with an external display"
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "Wake when the lid is opened"
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "On battery"
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "Shut down"
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "This computer cannot sleep."
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "Brightness"
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "about %time% left"
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "Turn off the display"
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "This computer sleeps with Suspend to RAM (S3)."
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "Battery, performance and sleep"
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "Wake"
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "Never"
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "Power saver"
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "Do nothing"
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "The power service is not running."
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "Battery"
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "{0, plural, one{# minute} other{# minutes}}"
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "1 minute"
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "Battery health %percent% % of its design capacity"
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "Balanced"
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "When the lid is closed"
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "When the power button is pressed"
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "Wake with the keyboard"
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "Power"
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "Power settings are off in Safe mode."
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "1 hour"
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "Power saver: the processor stays below its boost and leans toward saving energy. Balanced and Performance allow the boost."
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "full"
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "Plugged in"
+msgstr ""
+
+msgctxt "Settings: Power"
+msgid "Ask"
+msgstr ""

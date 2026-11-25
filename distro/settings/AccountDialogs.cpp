@@ -18,6 +18,7 @@
 #include <Alert.h>
 #include <Bitmap.h>
 #include <Button.h>
+#include <Catalog.h>
 #include <ControlLook.h>
 #include <Entry.h>
 #include <FilePanel.h>
@@ -39,6 +40,10 @@
 #include <pwd.h>
 #include <stdio.h>
 #include <string.h>
+
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "Settings: Account dialogs"
 
 
 using BAppearanceKit::BPasswordControl;
@@ -132,7 +137,7 @@ account_ask_login(BMessage& request, BMessage& reply, BString& error)
 	BMessenger login(kLoginSignature);
 	status_t status = B_OK;
 	if (!login.IsValid()) {
-		error = "Sign in must be running to change accounts.";
+		error = B_TRANSLATE("Sign in must be running to change accounts.");
 		status = B_ERROR;
 	} else {
 		// Through Login's admin port, where the kernel names the sender.
@@ -147,7 +152,7 @@ account_ask_login(BMessage& request, BMessage& reply, BString& error)
 
 	int32 code = B_OK;
 	if (reply.FindInt32("error", &code) != B_OK) {
-		error = "Sign in did not answer.";
+		error = B_TRANSLATE("Sign in did not answer.");
 		return B_ERROR;
 	}
 	if (code != B_OK) {
@@ -163,8 +168,8 @@ account_ask_login(BMessage& request, BMessage& reply, BString& error)
 static void
 show_error(const char* text)
 {
-	BAlert* alert = new BAlert("Users and Accounts", text, "OK", NULL, NULL,
-		B_WIDTH_AS_USUAL, B_WARNING_ALERT);
+	BAlert* alert = new BAlert(B_TRANSLATE("Users and Accounts"), text,
+		B_TRANSLATE("OK"), NULL, NULL, B_WIDTH_AS_USUAL, B_WARNING_ALERT);
 	alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
 	alert->Go(NULL);
 }
@@ -252,7 +257,7 @@ account_load_picture(const entry_ref& ref, BString& error)
 	BBitmap* loaded = BTranslationUtils::GetBitmap(&ref);
 	if (loaded == NULL || !loaded->IsValid()) {
 		delete loaded;
-		error = "That file is not a picture this computer can open.";
+		error = B_TRANSLATE("That file is not a picture this computer can open.");
 		return NULL;
 	}
 
@@ -270,7 +275,7 @@ account_load_picture(const entry_ref& ref, BString& error)
 	if (picture->InitCheck() != B_OK || !picture->Lock()) {
 		delete picture;
 		delete loaded;
-		error = "That picture could not be used.";
+		error = B_TRANSLATE("That picture could not be used.");
 		return NULL;
 	}
 	BView* view = new BView(target, "scale", 0, 0);
@@ -1061,9 +1066,11 @@ public:
 	virtual void Draw(BRect updateRect)
 	{
 		(void)updateRect;
-		static const char* kNames[] = { "Standard", "Administrator" };
-		static const char* kLines[] = { "Uses apps, changes own settings",
-			"Can also change the computer" };
+		static const char* kNames[] = { B_TRANSLATE_MARK("Standard"),
+			B_TRANSLATE_MARK("Administrator") };
+		static const char* kLines[] = {
+			B_TRANSLATE_MARK("Uses apps, changes own settings"),
+			B_TRANSLATE_MARK("Can also change the computer") };
 		BRect bounds = Bounds();
 		float gap = px(8);
 		float width = (bounds.Width() + 1 - gap) / 2;
@@ -1118,12 +1125,12 @@ public:
 			rgb_color nameColor = IsEnabled() ? text
 				: mix_color(text, fill, 128);
 			SetHighColor(nameColor);
-			BString name(kNames[i]);
+			BString name(B_TRANSLATE_NOCOLLECT(kNames[i]));
 			bold.TruncateString(&name, B_TRUNCATE_END, part.Width() - px(20));
 			DrawString(name.String(), BPoint(left, y));
 			SetFont(&small);
 			SetHighColor(mix_color(fill, text, 140));
-			BString line(kLines[i]);
+			BString line(B_TRANSLATE_NOCOLLECT(kLines[i]));
 			small.TruncateString(&line, B_TRUNCATE_END, part.Width() - px(20));
 			DrawString(line.String(), BPoint(left, y + boldHeight.descent
 				+ px(3) + smallHeight.ascent));
@@ -1163,7 +1170,8 @@ public:
 	{
 		BFont small(be_plain_font);
 		small.SetSize(floorf(be_plain_font->Size() * 11.0f / 12.0f));
-		float width = small.StringWidth("Uses apps, changes own settings");
+		float width = small.StringWidth(
+			B_TRANSLATE("Uses apps, changes own settings"));
 		return BSize(2 * (width + px(24)) + px(8), px(54));
 	}
 
@@ -1245,7 +1253,7 @@ public:
 		SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
 		SetExplicitSize(BSize(side - 1, side - 1));
 		if (pickable)
-			SetToolTip("Choose picture…");
+			SetToolTip(B_TRANSLATE("Choose picture…"));
 	}
 
 	~PictureButton()
@@ -1327,10 +1335,10 @@ set_match_line(BStringView* line, const char* first, const char* second)
 		return;
 	}
 	if (strcmp(first, second) == 0) {
-		line->SetText("\xe2\x9c\x93 The passwords match");
+		line->SetText(B_TRANSLATE("✓ The passwords match"));
 		line->SetHighColor(ui_color(B_SUCCESS_COLOR));
 	} else {
-		line->SetText("\xc3\x97 The passwords don't match yet");
+		line->SetText(B_TRANSLATE("× The passwords don't match yet"));
 		line->SetHighColor(ui_color(B_FAILURE_COLOR));
 	}
 }
@@ -1383,7 +1391,7 @@ private:
 
 AddAccountWindow::AddAccountWindow(BWindow* parent, const BMessenger& page)
 	:
-	BWindow(BRect(0, 0, px(480), px(560)), "Add account",
+	BWindow(BRect(0, 0, px(480), px(560)), B_TRANSLATE("Add account"),
 		B_TITLED_WINDOW_LOOK, B_MODAL_SUBSET_WINDOW_FEEL,
 		B_NOT_ZOOMABLE | B_NOT_RESIZABLE | B_AUTO_UPDATE_SIZE_LIMITS
 			| B_CLOSE_ON_ESCAPE),
@@ -1396,19 +1404,22 @@ AddAccountWindow::AddAccountWindow(BWindow* parent, const BMessenger& page)
 
 	fPicture = new PictureButton(px(64), true, new BMessage(kMsgPickPicture));
 	fPicture->SetPicture(NULL, false);
-	BStringView* heading = new BStringView("heading", "Add an account");
+	BStringView* heading = new BStringView("heading",
+		B_TRANSLATE("Add an account"));
 	BFont headingFont(be_bold_font);
 	headingFont.SetSize(floorf(be_bold_font->Size() * 16.0f / 12.0f));
 	heading->SetFont(&headingFont);
 	AccountWrapLabel* intro = new AccountWrapLabel("intro",
-		"They get their own private home folder and settings.");
+		B_TRANSLATE("They get their own private home folder and settings."));
 	intro->SetTextColor(panel_hint_color());
 
 	fName = new AccountTextField("name", new BMessage(kMsgEdited));
 	fName->SetModificationMessage(new BMessage(kMsgNameEdited));
 	fUsername = new AccountTextField("username", new BMessage(kMsgEdited));
 	fUsername->SetModificationMessage(new BMessage(kMsgUserEdited));
-	fUsername->SetRightHint("home: /boot/home/users/");
+	BString homeHint(B_TRANSLATE("home: %path%"));
+	homeHint.ReplaceFirst("%path%", "/boot/home/users/");
+	fUsername->SetRightHint(homeHint.String());
 	fUsername->TextView()->SetMaxBytes(31);
 	fUserError = small_label("username error", " ");
 	fUserError->SetHighColor(ui_color(B_FAILURE_COLOR));
@@ -1422,9 +1433,10 @@ AddAccountWindow::AddAccountWindow(BWindow* parent, const BMessenger& page)
 	fRepeat = new BPasswordControl("repeat", NULL);
 	fMatch = small_label("match", " ");
 
-	BButton* cancel = new BButton("cancel", "Cancel",
+	BButton* cancel = new BButton("cancel", B_TRANSLATE("Cancel"),
 		new BMessage(B_QUIT_REQUESTED));
-	fAdd = new BButton("add", "Add account", new BMessage(kMsgSubmit));
+	fAdd = new BButton("add", B_TRANSLATE("Add account"),
+		new BMessage(kMsgSubmit));
 	fAdd->SetEnabled(false);
 
 	BLayoutBuilder::Group<>(this, B_VERTICAL, px(6))
@@ -1439,27 +1451,27 @@ AddAccountWindow::AddAccountWindow(BWindow* parent, const BMessenger& page)
 			.End()
 		.End()
 		.AddStrut(px(10))
-		.Add(field_label("name label", "Name"))
+		.Add(field_label("name label", B_TRANSLATE("Name")))
 		.Add(fName)
 		.AddStrut(px(6))
 		.AddGroup(B_HORIZONTAL)
-			.Add(field_label("username label", "Username"))
+			.Add(field_label("username label", B_TRANSLATE("Username")))
 			.AddGlue()
 			.Add(small_label("username hint",
-				"Used to sign in; letters and numbers"))
+				B_TRANSLATE("Used to sign in; letters and numbers")))
 		.End()
 		.Add(fUsername)
 		.Add(fUserError)
 		.AddStrut(px(2))
-		.Add(field_label("type label", "Account type"))
+		.Add(field_label("type label", B_TRANSLATE("Account type")))
 		.Add(fType)
 		.AddStrut(px(6))
-		.Add(field_label("password label", "Password"))
+		.Add(field_label("password label", B_TRANSLATE("Password")))
 		.Add(fPassword)
 		.Add(fStrength)
 		.Add(fStrengthText)
 		.AddStrut(px(6))
-		.Add(field_label("repeat label", "Repeat password"))
+		.Add(field_label("repeat label", B_TRANSLATE("Repeat password")))
 		.Add(fRepeat)
 		.Add(fMatch)
 		.AddStrut(px(10))
@@ -1558,8 +1570,10 @@ void
 AddAccountWindow::_Update()
 {
 	const char* username = fUsername->Text();
-	BString home("home: /boot/home/users/");
-	home << username;
+	BString home(B_TRANSLATE("home: %path%"));
+	BString path("/boot/home/users/");
+	path << username;
+	home.ReplaceFirst("%path%", path.String());
 	fUsername->SetRightHint(home.String());
 
 	bool nameOk = fName->Text()[0] != '\0'
@@ -1569,10 +1583,10 @@ AddAccountWindow::_Update()
 	if (username[0] == '\0')
 		fUserError->SetText(" ");
 	else if (!userOk) {
-		fUserError->SetText("Start with a lowercase letter; then lowercase "
-			"letters and numbers.");
+		fUserError->SetText(B_TRANSLATE("Start with a lowercase letter; then "
+			"lowercase letters and numbers."));
 	} else if (!userFree)
-		fUserError->SetText("That username is already in use.");
+		fUserError->SetText(B_TRANSLATE("That username is already in use."));
 	else
 		fUserError->SetText(" ");
 
@@ -1611,7 +1625,7 @@ AddAccountWindow::_Submit()
 	BString error;
 	if (account_ask_login(request, reply, error) != B_OK) {
 		show_error(error.Length() > 0 ? error.String()
-			: "The account could not be added.");
+			: B_TRANSLATE("The account could not be added."));
 		return;
 	}
 
@@ -1623,9 +1637,9 @@ AddAccountWindow::_Submit()
 			BString pictureError;
 			if (account_ask_login(profile, profileReply, pictureError)
 					!= B_OK) {
-				BString text("The account was added, but its picture was not "
-					"saved.\n");
-				text << pictureError;
+				BString text(B_TRANSLATE("The account was added, but its picture "
+					"was not saved.\n%error%"));
+				text.ReplaceFirst("%error%", pictureError.String());
 				show_error(text.String());
 			}
 		}
@@ -1674,7 +1688,7 @@ PasswordWindow::PasswordWindow(BWindow* parent, const BMessenger& page,
 	const char* name, const char* realName, bool admin, bool self,
 	const BBitmap* photo)
 	:
-	BWindow(BRect(0, 0, px(440), px(400)), "Change password",
+	BWindow(BRect(0, 0, px(440), px(400)), B_TRANSLATE("Change password"),
 		B_TITLED_WINDOW_LOOK, B_MODAL_SUBSET_WINDOW_FEEL,
 		B_NOT_ZOOMABLE | B_NOT_RESIZABLE | B_AUTO_UPDATE_SIZE_LIMITS
 			| B_CLOSE_ON_ESCAPE),
@@ -1695,12 +1709,13 @@ PasswordWindow::PasswordWindow(BWindow* parent, const BMessenger& page,
 	BString title;
 	BString subtitle;
 	if (self) {
-		title = "Change your password";
+		title = B_TRANSLATE("Change your password");
 		subtitle << shown << kDot << "@" << name;
 	} else {
-		title.SetToFormat("New password for %s", shown.String());
+		title = B_TRANSLATE("New password for %name%");
+		title.ReplaceFirst("%name%", shown.String());
 		subtitle << "@" << name << kDot
-			<< (admin ? "Administrator" : "Standard");
+			<< (admin ? B_TRANSLATE("Administrator") : B_TRANSLATE("Standard"));
 	}
 	BStringView* heading = new BStringView("heading", title.String());
 	BFont headingFont(be_bold_font);
@@ -1711,10 +1726,10 @@ PasswordWindow::PasswordWindow(BWindow* parent, const BMessenger& page,
 	fNext = new BPasswordControl("new", NULL);
 	fRepeat = new BPasswordControl("repeat", NULL);
 	fMatch = small_label("match", " ");
-	fChange = new BButton("change", "Change password",
+	fChange = new BButton("change", B_TRANSLATE("Change password"),
 		new BMessage(kMsgSubmit));
 	fChange->SetEnabled(false);
-	BButton* cancel = new BButton("cancel", "Cancel",
+	BButton* cancel = new BButton("cancel", B_TRANSLATE("Cancel"),
 		new BMessage(B_QUIT_REQUESTED));
 
 	BGroupLayout* layout = BLayoutBuilder::Group<>(this, B_VERTICAL, px(6))
@@ -1737,29 +1752,29 @@ PasswordWindow::PasswordWindow(BWindow* parent, const BMessenger& page,
 		fStrengthText = small_label("strength text",
 			BPasswordStrengthBar::HintFor(0));
 		BLayoutBuilder::Group<>(layout)
-			.Add(field_label("current label", "Current password"))
+			.Add(field_label("current label", B_TRANSLATE("Current password")))
 			.Add(fCurrent)
 			.AddStrut(px(6))
-			.Add(field_label("new label", "New password"))
+			.Add(field_label("new label", B_TRANSLATE("New password")))
 			.Add(fNext)
 			.Add(fStrength)
 			.Add(fStrengthText)
 			.AddStrut(px(6));
 	} else {
-		BString note;
-		note.SetToFormat("%s's old password is not needed. Tell %s the new "
-			"one; it works from the next sign in. Their saved passwords stay "
-			"locked until they enter their old password once; otherwise they "
-			"start with an empty key store.", shown.String(), shown.String());
+		BString note(B_TRANSLATE("%name%'s old password is not needed. Tell "
+			"%name% the new one; it works from the next sign in. Their saved "
+			"passwords stay locked until they enter their old password once; "
+			"otherwise they start with an empty key store."));
+		note.ReplaceAll("%name%", shown.String());
 		BLayoutBuilder::Group<>(layout)
 			.Add(new NoteView(note.String()))
 			.AddStrut(px(8))
-			.Add(field_label("new label", "New password"))
+			.Add(field_label("new label", B_TRANSLATE("New password")))
 			.Add(fNext)
 			.AddStrut(px(6));
 	}
 	BLayoutBuilder::Group<>(layout)
-		.Add(field_label("repeat label", "Repeat new password"))
+		.Add(field_label("repeat label", B_TRANSLATE("Repeat new password")))
 		.Add(fRepeat)
 		.Add(fMatch)
 		.AddStrut(px(10))
@@ -1850,7 +1865,7 @@ PasswordWindow::_Submit()
 	BString error;
 	if (account_ask_login(request, reply, error) != B_OK) {
 		show_error(error.Length() > 0 ? error.String()
-			: "The password could not be changed.");
+			: B_TRANSLATE("The password could not be changed."));
 		if (fCurrent != NULL) {
 			clear_password(fCurrent);
 			fCurrent->MakeFocus(true);

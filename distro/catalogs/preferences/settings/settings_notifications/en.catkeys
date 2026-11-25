@@ -1,0 +1,25 @@
+1	english	x-vnd.R5OS-settings_notifications	2353512375
+Application does not have a valid signature.	Settings: Notifications		Application does not have a valid signature.
+wide	Settings: Notifications		wide
+Enable notifications	Settings: Notifications		Enable notifications
+Timeout:	Settings: Notifications		Timeout:
+Window width	Settings: Notifications		Window width
+timeout position mute width popup alert	Settings: Notifications	Search words, separated by spaces. Keep the English words and add words in your language.	timeout position mute width popup alert
+%name% is already listed.	Settings: Notifications		%name% is already listed.
+Lower right	Settings: Notifications		Lower right
+%name% (muted)	Settings: Notifications		%name% (muted)
+Add…	Settings: Notifications		Add…
+narrow	Settings: Notifications		narrow
+Manage alerts and notifications	Settings: Notifications	Fixed text (AGENTS.md): translate the meaning, keep it short	Manage alerts and notifications
+Applications	Settings: Notifications		Applications
+{0, plural, one{Timeout: # second} other{Timeout: # seconds}}	Settings: Notifications		{0, plural, one{Timeout: # second} other{Timeout: # seconds}}
+This is a test notification message	Settings: Notifications		This is a test notification message
+Remove	Settings: Notifications		Remove
+Upper right	Settings: Notifications		Upper right
+Upper left	Settings: Notifications		Upper left
+Mute notifications from this application	Settings: Notifications		Mute notifications from this application
+OK	Settings: Notifications		OK
+Notifications	Settings: Notifications		Notifications
+Follow Deskbar	Settings: Notifications		Follow Deskbar
+Notifications sample	Settings: Notifications		Notifications sample
+Lower left	Settings: Notifications		Lower left
