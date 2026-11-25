@@ -1,0 +1,242 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-libr5bt\nLanguage: nl\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+msgctxt "BluetoothView"
+msgid "My devices"
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "Address:"
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "Use for sound"
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "Uses:"
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "Only an administrator can turn Bluetooth on or off."
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "Pair one under Devices nearby."
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "Bluetooth is off."
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "Test buttons…"
+msgstr ""
+
+msgctxt "BluetoothController"
+msgid "Headset"
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "No Bluetooth radio was found."
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "Battery:"
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "Pair"
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "Bluetooth is off"
+msgstr ""
+
+msgctxt "BluetoothController"
+msgid "Keyboard"
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "Looking for devices…"
+msgstr ""
+
+msgctxt "BluetoothController"
+msgid "Computer"
+msgstr ""
+
+msgctxt "BluetoothController"
+msgid "Input device"
+msgstr ""
+
+msgctxt "BluetoothController"
+msgid "Phone"
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "Bluetooth is not available: the service could not be started."
+msgstr ""
+
+msgctxt "BluetoothController"
+msgid "Remote control"
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "Bluetooth Classic"
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "No radio"
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "Bluetooth radio"
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "Bluetooth on"
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "Paired with %name%."
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "Bluetooth could not be turned on or off."
+msgstr ""
+
+msgctxt "BluetoothController"
+msgid "Printer or camera"
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "Make sure the other device can be found, then press Scan."
+msgstr ""
+
+msgctxt "BluetoothController"
+msgid "Car audio"
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "Pairing with %name%…"
+msgstr ""
+
+msgctxt "BluetoothController"
+msgid "Game controller"
+msgstr ""
+
+msgctxt "BluetoothController"
+msgid "Network access point"
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "Not connected"
+msgstr ""
+
+msgctxt "BluetoothController"
+msgid "Wearable"
+msgstr ""
+
+msgctxt "BluetoothController"
+msgid "Microphone"
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "Scan"
+msgstr ""
+
+msgctxt "BluetoothController"
+msgid "Keyboard and mouse"
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "the device"
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "Status:"
+msgstr ""
+
+msgctxt "BluetoothController"
+msgid "Health device"
+msgstr ""
+
+msgctxt "BluetoothController"
+msgid "Audio device"
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "Disconnect"
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "%name% is forgotten. Pair it again to use it."
+msgstr ""
+
+msgctxt "BluetoothController"
+msgid "Speaker"
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "{0, plural, =0{No new devices found.} one{# new device found.} other{# new devices found.}}"
+msgstr ""
+
+msgctxt "BluetoothController"
+msgid "Mouse"
+msgstr ""
+
+msgctxt "BluetoothController"
+msgid "Headphones"
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "%name% was not paired."
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "Starting Bluetooth…"
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "Forget"
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "Bluetooth is not available: the service stopped."
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "Connected"
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "Choose a device."
+msgstr ""
+
+msgctxt "BluetoothController"
+msgid "Toy"
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "Devices nearby"
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "Pairing with %name% did not work."
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "Bluetooth Low Energy"
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "Bluetooth device"
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "No paired devices"
+msgstr ""
+
+msgctxt "BluetoothView"
+msgid "Stop"
+msgstr ""

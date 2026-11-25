@@ -1,0 +1,34 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-bluetooth-deskbar\nLanguage: fr\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+msgctxt "BluetoothDeskbar"
+msgid "Bluetooth: On"
+msgstr ""
+
+msgctxt "BluetoothDeskbar"
+msgid "No Bluetooth radio"
+msgstr ""
+
+msgctxt "BluetoothDeskbar"
+msgid "Bluetooth settings…"
+msgstr ""
+
+msgctxt "BluetoothDeskbar"
+msgid "Turn Bluetooth on"
+msgstr ""
+
+msgctxt "BluetoothDeskbar"
+msgid "%s: battery %d%%"
+msgstr ""
+
+msgctxt "BluetoothDeskbar"
+msgid "Bluetooth is not available"
+msgstr ""
+
+msgctxt "BluetoothDeskbar"
+msgid "Bluetooth: Off"
+msgstr ""
+
+msgctxt "BluetoothDeskbar"
+msgid "Turn Bluetooth off"
+msgstr ""
