@@ -238,26 +238,16 @@ Nothing here is specific to a CPU. The GPU part concerns RADV and Lavapipe. On A
 
 Steps 2 and 3 change the GPU drawing path, so they need a boot on the 5625U. That boot is the stick test of the milestone that takes them, not a stick of its own.
 
-## 8. Open questions for the owner
+## 8. Decisions of the owner (25 Nov 2026)
 
-- **Q1. Vulkan device.**
-  - One shared by all desktops (recommended: memory is not doubled, and Skia's state stays valid).
-  - One per desktop (more isolation, twice the memory).
-- **Q2. Sound of a hidden person.**
-  - Muted until they return (recommended, as on macOS and Linux).
-  - Keeps playing over the other person's sound.
-- **Q3. The guest.**
-  - May be one of several sessions (recommended; the wipe still runs at its log out).
-  - Only when nobody else is signed in.
-- **Q4. Shared with two administrators signed in.**
-  - Shared goes to the administrator whose desktop is shown (recommended; same rule as now).
-  - Shared stays with the first administrator who signed in.
-- **Q5. Notifications of a hidden person.**
-  - Kept and shown when they return (recommended).
-  - Dropped.
-- **Q6. How many sessions.**
-  - No fixed limit, measure in step 3 (recommended).
-  - A fixed limit, for example four.
+The six open questions were answered by the owner on 25 Nov 2026. Each took the recommended choice.
+
+- **Q1. Vulkan device.** One device shared by all desktops. Memory is not doubled, and Skia's state stays valid.
+- **Q2. Sound of a hidden person.** Muted until they return, as on macOS and Linux.
+- **Q3. The guest.** May be one of several sessions. The wipe still runs at its log out.
+- **Q4. Shared with two administrators signed in.** Shared goes to the administrator whose desktop is shown, the same rule as now.
+- **Q5. Notifications of a hidden person.** Kept, and shown when they return.
+- **Q6. How many sessions.** No fixed limit. Step 3 measures the memory per desktop; a limit is set only if that measurement asks for one.
 
 ## 9. Found on the way (not part of this work)
 
