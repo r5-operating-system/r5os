@@ -109,4 +109,12 @@ struct r5_tray_look {
 struct r5_tray_look r5_deskbar_tray_look();
 bool r5_tray_look_update(struct r5_tray_look* look, const BMessage* message);
 
+// Added 25 Nov 2026 (issue #4615). Open the Settings application on one
+// page, for example "wifi" or "notifications" (the ids in docs/SETTINGS.md).
+// Settings is started when it is not running; when it runs, it shows that
+// page. Called from inside Settings it goes to Settings itself. A NULL or
+// empty pageId opens Settings on Home. Returns B_OK when the request was
+// delivered, or the error from BRoster::Launch().
+status_t r5_settings_open_page(const char* pageId);
+
 #endif

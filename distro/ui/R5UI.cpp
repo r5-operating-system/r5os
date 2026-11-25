@@ -24,10 +24,12 @@
 
 #include "R5UI.h"
 
+#include <Application.h>
 #include <Bitmap.h>
 #include <Font.h>
 #include <InterfaceDefs.h>
 #include <Message.h>
+#include <Roster.h>
 #include <View.h>
 
 #include <algorithm>
@@ -35,6 +37,7 @@
 #include <new>
 #include <pthread.h>
 #include <string.h>
+#include <strings.h>
 
 
 static const float kScreenRatio = 4.0f / 3.0f;
@@ -253,4 +256,39 @@ r5_tray_look_update(struct r5_tray_look* look, const BMessage* message)
 		look->color = color;
 	}
 	return look->style != before.style || look->color != before.color;
+}
+
+
+static const char* kSettingsSignature = "application/x-vnd.R5OS-Settings";
+
+
+status_t
+r5_settings_open_page(const char* pageId)
+{
+	bool hasPage = pageId != NULL && pageId[0] != '\0';
+
+	// BRoster::Launch() refuses to launch the calling team itself
+	// (B_BAD_VALUE, nothing sent; stick 51). Inside Settings the same
+	// arguments go to Settings directly, as B_ARGV_RECEIVED.
+	app_info info;
+	if (be_app != NULL && be_app->GetAppInfo(&info) == B_OK
+		&& strcasecmp(info.signature, kSettingsSignature) == 0) {
+		if (!hasPage)
+			return B_OK;
+		BMessage argv(B_ARGV_RECEIVED);
+		argv.AddInt32("argc", 3);
+		argv.AddString("argv", "Settings");
+		argv.AddString("argv", "--page");
+		argv.AddString("argv", pageId);
+		return be_app->PostMessage(&argv);
+	}
+
+	status_t status;
+	if (hasPage) {
+		const char* args[] = { "--page", pageId, NULL };
+		status = be_roster->Launch(kSettingsSignature, 2, args);
+	} else
+		status = be_roster->Launch(kSettingsSignature);
+	// A running Settings gets the arguments as B_ARGV_RECEIVED.
+	return status == B_ALREADY_RUNNING ? B_OK : status;
 }

@@ -20,7 +20,10 @@ Run in WSL on a private copy of r5-os.image:
 --menu runs only the menu bar check (R5 Modern and R5, a menu open).
 --menus runs the R5 menu style check (Deskbar, StyledEdit, Tracker menus,
 light and dark); with --safe, in Safe mode.
-Usage: scripts/qemu-theming.py IMAGE OUT [--safe] [--menu] [--save-at=X,Y]
+--tabs runs the tab strip check (About R5 and Appearance, light and dark,
+frosted glass on and off).
+Usage: scripts/qemu-theming.py IMAGE OUT [--safe] [--menu] [--menus] [--tabs]
+       [--save-at=X,Y]
 """
 
 import json
@@ -131,6 +134,9 @@ def main():
     menus = "--menus" in args
     if menus:
         args.remove("--menus")
+    tabs = "--tabs" in args
+    if tabs:
+        args.remove("--tabs")
     # --save-at X,Y: where the "Save as theme…" button is on screen (read
     # from a screendump of an earlier run); the guest asks with "click-save"
     save_at = None
@@ -161,7 +167,8 @@ def main():
         "kernel": "syslog_time_stamps true\nsyslog_max_size 4M\n",
         "UserBootscript": "#!/bin/sh\n/bin/sh /boot/home/thtest %s"
                           " > /boot/home/thtest.txt 2>&1 &\n"
-                          % (("safe-menus" if safe else "menus") if menus
+                          % ("tabs" if tabs
+                             else ("safe-menus" if safe else "menus") if menus
                              else "safe" if safe else "menu" if menu else ""),
         "thtest": guest,
     }

@@ -588,29 +588,50 @@ bitmap_hash(const uint8* bits, int32 length)
 }
 
 
-/*!	64 evenly spaced 8-byte words, plus the last word. A bitmap of 512
-	bytes or less is hashed in full, so the sample and the full hash agree.
-	A change between the samples is caught by the full hash every 32 lookups.
+/*!	64 words spread over the picture, or the full hash when that is cheap.
+	A program writes its BBitmap at any time. The sample is how a cached
+	texture notices.
+
+	A linear stride of length/64 is not used. On a 384 by 384 B_RGBA32
+	bitmap (1536 bytes a row) that stride is exactly 6 rows, so all 64
+	words are the first eight bytes of a row, and the tail is the last
+	eight bytes. VulkanTeapot and GLTeapot draw into the middle and leave
+	that border on the clear colour. The sample never changes, FindTexture
+	returns the previous upload, and the full hash runs only on every 32nd
+	lookup. The window then steps about ten times a second while the
+	program's counter, which does not wait for this draw, stays above 300.
+
+	A bitmap of at most 1 MiB is hashed in full, so that picture cannot
+	miss. A larger one (a wallpaper) uses an 8 by 8 grid: odd eighths of
+	the height, and of each row, so a change in the middle is one of the
+	words. A change that falls between those words is still caught by the
+	full hash every 32 lookups.
 */
 static uint64
-bitmap_sample(const uint8* bits, int32 length)
+bitmap_sample(const uint8* bits, int32 length, int32 bytesPerRow)
 {
-	if (length <= 512)
+	if (length <= 1024 * 1024 || bytesPerRow < 8 || length < bytesPerRow)
 		return bitmap_hash(bits, length);
 	const uint64 kPrime = 0x9e3779b97f4a7c15ull;
-	int32 words = length / 8;
-	int32 step = words / 64;
-	if (step < 1)
-		step = 1;
-	uint64 hash = (uint64)length;
-	for (int32 i = 0; i < 64 && i * step < words; i++) {
-		uint64 word;
-		memcpy(&word, bits + (size_t)(i * step) * 8, 8);
-		hash = (hash ^ word) * kPrime;
+	int32 height = length / bytesPerRow;
+	if (height < 1)
+		return bitmap_hash(bits, length);
+	uint64 hash = (uint64)length ^ (uint64)bytesPerRow;
+	int32 rowSpan = bytesPerRow - 7;
+	for (int32 y = 0; y < 8; y++) {
+		int32 row = (int32)(((int64)y * 2 + 1) * height / 16);
+		if (row >= height)
+			row = height - 1;
+		const uint8* line = bits + (size_t)row * (size_t)bytesPerRow;
+		for (int32 x = 0; x < 8; x++) {
+			int32 col = (int32)(((int64)x * 2 + 1) * rowSpan / 16);
+			if (col > rowSpan - 1)
+				col = rowSpan - 1;
+			uint64 word;
+			memcpy(&word, line + col, 8);
+			hash = (hash ^ word) * kPrime;
+		}
 	}
-	uint64 tail;
-	memcpy(&tail, bits + (length - 8), 8);
-	hash = (hash ^ tail) * kPrime;
 	return hash ^ (hash >> 29);
 }
 
@@ -632,7 +653,7 @@ SkiaTarget::FindTexture(const void* id, const uint8* bits, int32 length,
 			if (generation == 0)
 				return nullptr;
 		} else {
-			if (texture.sample != bitmap_sample(bits, length))
+			if (texture.sample != bitmap_sample(bits, length, bytesPerRow))
 				return nullptr;
 			texture.lookups++;
 			if ((texture.lookups % 32) == 0
@@ -729,7 +750,7 @@ SkiaTarget::KeepTexture(const void* id, const uint8* bits, int32 length,
 		texture.length = length;
 		texture.generation = generation;
 		texture.owned = owned;
-		texture.sample = owned ? 0 : bitmap_sample(bits, length);
+		texture.sample = owned ? 0 : bitmap_sample(bits, length, bytesPerRow);
 		texture.hash = owned ? 0 : bitmap_hash(bits, length);
 		texture.lookups = 0;
 		texture.image = image;

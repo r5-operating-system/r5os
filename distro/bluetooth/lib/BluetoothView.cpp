@@ -31,6 +31,7 @@
 #include <Window.h>
 
 #include <Card.h>
+#include <R5UI.h>
 #include <R5Icons.h>
 
 #include <bluetooth/bdaddrUtils.h>
@@ -631,25 +632,8 @@ BluetoothView::MessageReceived(BMessage* message)
 		{
 			// The live test is the Game controllers page of Settings
 			// (docs/GAME-CONTROLLERS.md, step 8), which also runs when
-			// Settings is open already.
-			// BRoster::Launch() refuses a launch of the calling team itself
-			// (B_BAD_VALUE, nothing sent), so on this page inside Settings
-			// the button did nothing (stick 51). There the same "--page"
-			// arguments go to Settings directly, as B_ARGV_RECEIVED.
-			static const char* kSettings = "application/x-vnd.R5OS-Settings";
-			app_info info;
-			if (be_app != NULL && be_app->GetAppInfo(&info) == B_OK
-				&& strcasecmp(info.signature, kSettings) == 0) {
-				BMessage argv(B_ARGV_RECEIVED);
-				argv.AddInt32("argc", 3);
-				argv.AddString("argv", "Settings");
-				argv.AddString("argv", "--page");
-				argv.AddString("argv", "gamecontrollers");
-				be_app->PostMessage(&argv);
-				break;
-			}
-			const char* args[] = { "--page", "gamecontrollers", NULL };
-			be_roster->Launch(kSettings, 2, args);
+			// Settings is open already, and from this page inside Settings.
+			r5_settings_open_page("gamecontrollers");
 			break;
 		}
 

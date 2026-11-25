@@ -47,6 +47,16 @@ Added 22 Nov 2026 for the Deskbar styles (`docs/design/DESKBAR-STYLES.md`), at t
 
 The rule for tray symbols, with an example, is in `docs/ICONS.md` ("Tray symbols").
 
+## Open a Settings page
+
+Added 25 Nov 2026 (issue #4615), at the end of `<R5UI.h>`:
+
+| Call | What it does |
+|---|---|
+| `status_t r5_settings_open_page(const char* pageId)` | Opens Settings (`application/x-vnd.R5OS-Settings`) on one page, by the id in `module_icon()` of `SettingsWindow.cpp` (for example `wifi`, `notifications`, `gamecontrollers`). Starts Settings when it is not running; a running Settings gets the request as `B_ARGV_RECEIVED` and shows the page. Called inside Settings (a page add-on), it posts the same arguments to `be_app`, because `BRoster::Launch()` of the own team sends nothing. A NULL or empty id opens Settings on Home. Returns `B_OK` when the request was delivered, else the error of `BRoster::Launch()` |
+
+Use it instead of building `--page` arguments. The preference programs that hand over to Settings (`docs/design/SETTINGS-LAUNCHERS.md`) call it and quit.
+
 ## Screen picture
 
 `r5_screen_draw()` draws the frame Settings uses for a screen. Notifications, Desktop and Deskbar, and Display all call it. The caller draws anything that sits on the glass, and any label outside the frame.
@@ -77,6 +87,8 @@ Pass `NULL` for the view and either call returns without drawing.
 `BAppearanceKit::BCard` is a view with a group layout inside it. The header is `<Card.h>`, installed next to `<R5UI.h>`. It is not Haiku's `BCardView`. Children are added through `GetLayout()`, the same way as a `BGroupView`.
 
 `B_CARD_DOCUMENT` fills with `B_DOCUMENT_BACKGROUND_COLOR`. `B_CARD_PANEL` fills with `B_PANEL_BACKGROUND_COLOR` tinted by `B_DARKEN_1_TINT`. The border is one pixel, `B_PANEL_BACKGROUND_COLOR` tinted by `B_DARKEN_2_TINT`. The corner radius is a quarter of `be_plain_font->Size()` (3 px at 12 pt). The inner margin is `B_USE_BIG_SPACING`. Every color comes from `ui_color()`.
+
+On `B_COLORS_UPDATED` (a change of theme) the card takes its new face and passes it to the child views that still carry its old face, such as a `BStringView` that adopted the card's colors when it was attached (25 Nov 2026). A child with colors of its own, a text field's text view and a card inside the card keep theirs.
 
 `Archive()` and `Instantiate()` keep the style. The archived class name is `BAppearanceKit::BCard`.
 

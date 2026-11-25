@@ -3,8 +3,13 @@
  * SPDX-License-Identifier: MIT
  * R5OS home modes. Other accounts must not read private files.
  *
- * /boot/home stays traversable (0711) because extra homes live in
- * /boot/home/users/<name>. Private names under /boot/home are 0700/0600.
+ * /boot/home is 0755 because extra homes live in /boot/home/users/<name>
+ * and every account's Shared is /boot/home/Shared. 0711 was not enough:
+ * BEntry opens the parent folder for reading, and BFS refuses that without
+ * the read bit, so Tracker showed Shared as a broken link for every other
+ * account (5625U, stick 81, 25 Nov 2026). Other accounts can list the names
+ * directly under /boot/home, not what is in them: private names under
+ * /boot/home are 0700/0600.
  * After Sign in, the first account is a person uid, so these bits apply.
  */
 
@@ -49,7 +54,7 @@ lock_private_homes()
 		return errno != 0 ? errno : B_ENTRY_NOT_FOUND;
 
 	mkdir(kUsers, 0755);
-	chmod(kHome, 0711);
+	chmod(kHome, 0755);
 
 	DIR* dir = opendir(kHome);
 	if (dir == NULL)
