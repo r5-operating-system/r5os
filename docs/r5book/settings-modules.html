@@ -39,6 +39,7 @@
 				<li><a href="#storage">Where the values go</a> &mdash; User settings vs. machine settings.</li>
 				<li><a href="#admin">The lock</a> &mdash; Administrator-gated pages.</li>
 				<li><a href="#example">Example</a> &mdash; Minimal Settings module skeleton.</li>
+				<li><a href="#open-page">Opening a page</a> &mdash; Show one page from another program.</li>
 				<li><a href="#limits">Not yet</a> &mdash; Current limitations.</li>
 			</ul>
 		</nav>
@@ -231,6 +232,27 @@ Addon settings_example :
 	ExampleModule.cpp
 	: be libr5ui.so [ TargetLibstdc++ ]
 	;</pre>
+		</section>
+
+		<section class="entry" id="open-page">
+			<div class="entry-header"><h2>r5_settings_open_page()</h2><span class="kind">function</span></div>
+<pre class="code">#include &lt;R5UI.h&gt;   // libr5ui.so
+
+status_t r5_settings_open_page(const char* pageId);</pre>
+			<p>Opens Settings on one page. <code class="inline">pageId</code> is the page's
+			<code class="inline">Identifier()</code>, for example <code class="inline">"wifi"</code>,
+			<code class="inline">"notifications"</code> or <code class="inline">"gamecontrollers"</code>. When Settings
+			is not running it is started; when it runs, it shows that page and comes to the front. A page inside
+			Settings can call it too, for a link to another page. <code class="inline">NULL</code> or an empty
+			string opens Home.</p>
+			<p>Returns <code class="inline">B_OK</code> when the request was delivered, or the error from
+			<code class="inline">BRoster::Launch()</code>. Use this call instead of starting Settings with
+			<code class="inline">--page</code> yourself. From a shell, <code class="inline">Settings --page wifi</code>
+			does the same.</p>
+<pre class="code">// A "Wi-Fi settings…" menu item
+case kMsgOpenWifi:
+	r5_settings_open_page("wifi");
+	break;</pre>
 		</section>
 
 		<section class="entry" id="limits">

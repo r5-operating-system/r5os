@@ -336,8 +336,7 @@ NetworkStatusView::MessageReceived(BMessage* message)
 		case kMsgOpenWifi:
 		{
 			// The Wi-Fi page in Settings (libr5wifi.so)
-			const char* args[] = { "--page", "wifi", NULL };
-			be_roster->Launch("application/x-vnd.R5OS-Settings", 2, args);
+			r5_settings_open_page("wifi");
 			break;
 		}
 

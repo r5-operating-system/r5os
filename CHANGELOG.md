@@ -8,6 +8,13 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-25 - libr5ui: one call opens a Settings page
+
+- Problem: programs that open a page of Settings each built the `--page` arguments themselves (NetworkStatus for Wi-Fi, the Bluetooth view for Game controllers), and the Bluetooth view also had to handle being inside Settings, where `BRoster::Launch()` of the own team returns `B_BAD_VALUE` and sends nothing (stick 51). The launchers planned in issue #4615 (`docs/design/SETTINGS-LAUNCHERS.md`) would copy that again.
+- Change: `r5_settings_open_page(const char* pageId)` at the end of `<R5UI.h>` in `libr5ui.so`. It starts Settings with `--page <id>`, treats `B_ALREADY_RUNNING` as delivered (a running Settings gets `B_ARGV_RECEIVED`), posts the arguments to `be_app` when called inside Settings, and opens Home for a NULL or empty id. NetworkStatus and `BluetoothView` now use it. Described in `docs/LIBR5.md`, "Open a Settings page".
+- Limits: an unknown page id is passed on as it is; what Settings does with it was not checked. The launchers themselves are not made yet.
+- Tested: not compiled, no jam and no boot. The four changed files were only read back.
+
 ## 2026-11-25 - Tabs: the strip beside the tabs shows the window behind it
 
 - Problem (stick 81, build 10072, 5625U): in About R5 the strip beside the tabs (the small block left of "What's new" and the band right of "Licenses") was white, in Light and in Dark. About sets its `BTabView` to `B_TRANSPARENT_COLOR`, but without `B_TRANSPARENT_BACKGROUND` app_server clips the parent out of that area and nobody fills it; R5 Modern's `DrawTabFrame()` leaves a transparent view unfilled on purpose.

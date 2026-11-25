@@ -30,7 +30,7 @@ Open `index.html` directly in a browser. Everything is static HTML, CSS (`r5book
 ### Guides (reading order)
 | Page | Covers | Source of truth |
 |---|---|---|
-| `settings-modules.html` | Settings add-ons: `SettingsModule`, `SettingsContext`, entry points | `distro/settings/SettingsModule.h`, `distro/settings/ModuleAPI.md` |
+| `settings-modules.html` | Settings add-ons: `SettingsModule`, `SettingsContext`, entry points; `r5_settings_open_page()` | `distro/settings/SettingsModule.h`, `distro/settings/ModuleAPI.md`, `distro/ui/R5UI.h` |
 | `accounts.html` | Accounts, sessions, lock and log out; Sign in example with screenshots in `img/` | `docs/MULTIUSER.md`, `distro/login` |
 | `vulkan.html` | Vulkan in a `BView`: `VK_RFIVE_view_surface` | `distro/vulkan/include/vulkan/vulkan_r5.h`, `docs/VULKAN-WSI.md` |
 | `guidelines.html` | How an R5 window is put together | `docs/STYLE.md`, `docs/SETTINGS.md`, `AGENTS.md` |

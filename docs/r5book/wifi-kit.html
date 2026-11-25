@@ -195,8 +195,8 @@ BLayoutBuilder::Group&lt;&gt;(this, B_VERTICAL, 0)
 			driver reports a standard or a rate. The tool tip of that network adds
 			<code class="inline">Router: Wi-Fi 6</code>, and <em>Your router supports Wi-Fi 6.</em> when the
 			link uses less. The Deskbar network icon shows the arcs on a computer with a
-			Wi-Fi adapter, and its menu has <em>Wi-Fi settings&hellip;</em>, which runs
-			<code class="inline">Settings --page wifi</code>, and the same line under the connected network.
+			Wi-Fi adapter, and its menu has <em>Wi-Fi settings&hellip;</em>, which calls
+			<a href="settings-modules.html#open-page"><code class="inline">r5_settings_open_page("wifi")</code></a>, and the same line under the connected network.
 			Without a Wi-Fi adapter the icon stays the wired one and the page says there is no adapter. The
 			WiFi program stays installed.</p>
 		</section>
