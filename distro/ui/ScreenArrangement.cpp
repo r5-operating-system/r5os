@@ -844,6 +844,9 @@ BScreenArrangement::MessageReceived(BMessage* message)
 		|| message->what == B_FONTS_UPDATED) {
 		if (fData != NULL)
 			fData->placed = false;
+		// the view color is the picture fill, a color of its own
+		if (message->what == B_COLORS_UPDATED)
+			SetViewColor(picture_fill());
 		Invalidate();
 	}
 	BView::MessageReceived(message);

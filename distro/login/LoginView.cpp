@@ -149,6 +149,12 @@ public:
 		rgb_color border = mix_color(fill, ui_color(B_WINDOW_TAB_COLOR), 160);
 		float radius = floorf(px(6));
 
+		// The corners outside the round box show the parent's face, which
+		// follows the theme.
+		if (Parent() != NULL) {
+			SetHighColor(Parent()->ViewColor());
+			FillRect(bounds);
+		}
 		SetHighColor(fill);
 		FillRoundRect(bounds, radius, radius);
 		SetHighColor(border);
@@ -489,7 +495,8 @@ LoginView::LoginView()
 
 	// Try R5: the account has no password and its key store is in memory.
 	fLiveNote = new GuestNoteView(
-		B_TRANSLATE("Sign-ins are forgotten when you shut down."));
+		B_TRANSLATE("You're trying R5. Passwords for mail and online accounts "
+			"are forgotten when you shut down."));
 	fLiveNote->Hide();
 
 	BGroupLayout* formLayout = (BGroupLayout*)fFormCard->GetLayout();

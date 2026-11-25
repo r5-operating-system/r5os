@@ -8,6 +8,23 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-25 - Theme switch: no more stale bands in Sign in, the lock screen, Users and Accounts and Display; new Try R5 note
+
+- Problem (5625U, stick 83, main `eab1f3c773`): after Light ↔ Dark, parts of R5's own UI kept the old background as a lighter or darker band: the guest block in Users and Accounts, the "Signing in as" and Password rows in Sign in, and on Display the Screen and Workspaces boxes (dark boxes with dark labels after Dark → Light).
+- Causes:
+  - Inside a document card (`BAppearanceKit::BCard`) code gave rows `B_DOCUMENT_BACKGROUND_COLOR`, the card face on the light theme. On the dark theme the card face is a color of its own (panel mixed toward white), so those rows were a band whenever the window was built in Dark. #4612 only fixed the switch while open.
+  - Settings tiles and boxes (`r5_settings_tile_fill()`: Display, Information, Network, Discovery, Connections, Game controllers) set the fill once as a fixed color and never updated it.
+  - The yellow note in the account windows and the `BScreenArrangement` picture kept their view color from creation.
+- Change:
+  - libr5ui `BCard::AllAttached()` (new override, no new symbol slot): when a document card is attached while its face is its own color, children that were given the document background take the card face, the same walk as on `B_COLORS_UPDATED`. `docs/LIBR5.md` says so.
+  - Settings window: on `B_COLORS_UPDATED` every view whose view or low color is still the previous tile fill gets the new one (`r5_settings_follow_tile_fill()`, Settings-internal).
+  - Account windows' note and `BScreenArrangement` recompute their view color on `B_COLORS_UPDATED`. Sign in's Try R5 note fills its corners with the parent face.
+  - Sign in, Try R5: "Sign-ins are forgotten when you shut down." is now "You're trying R5. Passwords for mail and online accounts are forgotten when you shut down." (owner's choice: only key-store passwords are forgotten; Wi-Fi passwords stay). `docs/MULTIUSER.md` and R5Book `accounts.html` quote the new line.
+  - Sweep: the other fixed `SetViewColor`/`SetLowColor` calls in `distro/login`, `settings`, `ui`, `users`, `wifi`, `bluetooth` are in `Draw()`/`DrawItem()` and already take the current colors.
+- Tested: `build-locked.sh` (AMD64, two incremental jams: the Display request came in after the first). QEMU (KVM, own image copy, Try R5), switched with `r5-effects-test theme mode`: Users and Accounts Light → Dark → Light, Display Light → Dark → Light, Wallpaper and Theme and Fonts after a switch, the lock screen opened in Dark then switched to Light while open, Sign in opened in Dark: no bands seen.
+- Not done: `catalogs.py export` for Login. Another session's build replaced the shared tree's Login `en.catkeys` before the export, and the third build was stopped on the owner's request; the next export after a build adds the new text to the `.po` files (nl, de and fr show English until then).
+- Not proven: the 5625U (GPU mode, glass); Sign in switched live while open (only opened in Dark; the live path is the #4612 card walk); text colors that a page mixes once (muted labels) are not part of this sweep.
+
 ## 2026-11-25 - Correction: the SD card is read-only because it is exFAT, not because of its switch
 
 - Mistake: the stick 81 entry below said the card's write-protect switch works, because Tracker refused a copy with the switch on. That card is exFAT, and Haiku's exFAT driver, which R5 uses unchanged, is read-only: `exfat/Volume.cpp` always mounts with `B_MOUNT_READ_ONLY`, and its write hooks (`fs_write`, `fs_create`, `fs_unlink`, `fs_rename`, …) are `NULL`. On stick 83 (`eab1f3c773`) the same card stayed read-only with the switch off. The refused copy came from the file system, not from the switch or the RTS5228 driver. The sentence is removed from the stick 81 entry.

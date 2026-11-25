@@ -257,6 +257,30 @@ BCard::MessageReceived(BMessage* message)
 }
 
 
+// A child that was given the document background because that is the card
+// face on the light theme showed as a darker band on the dark theme, where
+// the face is a color of its own (Sign in, Users and Accounts, 25 Nov 2026).
+// When the card and its children are attached, such children take the
+// card's face, as they do on a change of theme.
+void
+BCard::AllAttached()
+{
+	BView::AllAttached();
+	if (fStyle != B_CARD_DOCUMENT
+		|| ViewUIColor() == B_DOCUMENT_BACKGROUND_COLOR) {
+		return;
+	}
+	card_colors document;
+	document.view = B_DOCUMENT_BACKGROUND_COLOR;
+	document.viewTint = B_NO_TINT;
+	document.viewColor = ui_color(B_DOCUMENT_BACKGROUND_COLOR);
+	document.low = B_DOCUMENT_BACKGROUND_COLOR;
+	document.lowTint = B_NO_TINT;
+	document.lowColor = document.viewColor;
+	follow_card_colors(this, this, document);
+}
+
+
 void
 BCard::SetStyle(card_style style)
 {

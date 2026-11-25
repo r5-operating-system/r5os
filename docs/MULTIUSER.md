@@ -47,7 +47,7 @@ Detect actual layout. Typical live disk: one `user` and `/boot/home` already ful
 The R5 image is the live medium. `distro/image/r5_late_image` puts `/boot/system/settings/r5-live-medium` (root-owned) in the image. The Installer leaves that file out (`distro/rest/src/apps/installer/WorkerThread.cpp`), so an installed R5 does not have it. `is_live_medium()` in `distro/users/AccountAdmin.cpp` checks for it.
 
 **Try R5 (the live medium).**
-- The account keeps no password. Sign in shows no password field, and shows the note "Sign-ins are forgotten when you shut down."
+- The account keeps no password. Sign in shows no password field, and shows the note "You're trying R5. Passwords for mail and online accounts are forgotten when you shut down." (since 25 Nov 2026; Wi-Fi passwords are kept)
 - Login starts `keystore_server` for the session and asks for a key store in memory only (`kR5KSFieldMemoryOnly`). The master key is random, nothing is read from or written to disk, and everything in it is gone at log out or shut down.
 - "Keep my things on this stick" waits until it is proven that the stick keeps changes after a restart (`generated/GUEST-SHARED-DESIGN.md`, "The live USB session").
 
