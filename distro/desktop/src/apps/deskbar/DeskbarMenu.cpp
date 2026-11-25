@@ -70,6 +70,7 @@ All rights reserved.
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 #include "DeskbarStyle.h"
+#include "IconColumnMenuItem.h"
 #include <WindowEffects.h>
 #include <ControlLook.h>
 // SPDX-SnippetEnd
@@ -213,6 +214,14 @@ TDeskbarMenu::DoneBuildingItemList()
 		AddItem(item);
 	} else
 		BNavMenu::DoneBuildingItemList();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// one icon column for the whole menu: the plain items get the column
+	// of the folders, so every label starts at the same x (variant A)
+	TIconColumnMenuItem::AlignPlainItems(this,
+		TIconColumnMenuItem::ModelColumn());
+// SPDX-SnippetEnd
 }
 
 
@@ -253,7 +262,12 @@ TDeskbarMenu::AddNextItem()
 				if (recentItem[i]->RecentsEnabled()) {
 					recentItem[i]->SetTypesList(TypesList());
 					recentItem[i]->SetTarget(Target());
-					AddItem(recentItem[i]);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+					AddItem(new TIconColumnMenuItem(recentItem[i], NULL,
+						TIconColumnMenuItem::ModelColumn()));
+// SPDX-SnippetEnd
 
 					if (data && fBarView && fBarView->Dragging()) {
 						recentItem[i]->InitTrackingHook(data->fTrackingHook,
@@ -375,7 +389,12 @@ B_TRANSLATE_MARK_VOID("About R5")
 	DeskbarMountMenu* mountMenu = new DeskbarMountMenu(
 		B_TRANSLATE_NOCOLLECT(kMountMenuStr));
 	mountMenu->SetEnabled(!dragging);
-	AddItem(mountMenu);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	AddItem(new TIconColumnMenuItem(mountMenu, NULL,
+		TIconColumnMenuItem::ModelColumn()));
+// SPDX-SnippetEnd
 #endif
 
 // SPDX-SnippetBegin
@@ -386,8 +405,9 @@ B_TRANSLATE_MARK_VOID("About R5")
 		BRect iconRect(BPoint(0, 0),
 			be_control_look->ComposeIconSize(B_MINI_ICON));
 		const BBitmap* pebble = R5Deskbar::Pebble(iconRect.Width() + 1);
-		item = new IconMenuItem(B_TRANSLATE("Settings"),
-			new BMessage(kOpenSettings), const_cast<BBitmap*>(pebble));
+		item = new TIconColumnMenuItem(B_TRANSLATE("Settings"),
+			new BMessage(kOpenSettings), TIconColumnMenuItem::ModelColumn(),
+			pebble);
 		item->SetEnabled(!dragging);
 		item->SetTarget(be_app);
 		AddItem(item);
@@ -473,7 +493,12 @@ B_TRANSLATE_MARK_VOID("About R5")
 
 	BMessage* message = new BMessage(kShutdownSystem);
 	message->AddBool("confirm", true);
-	AddItem(new BMenuItem(shutdownMenu, message));
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	AddItem(new TIconColumnMenuItem(shutdownMenu, message,
+		TIconColumnMenuItem::ModelColumn()));
+// SPDX-SnippetEnd
 
 	fAddState = kAddingRecents;
 
@@ -846,6 +871,14 @@ bool
 DeskbarMountMenu::AddDynamicItem(add_state s)
 {
 	BPrivate::MountMenu::AddDynamicItem(s);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// the volumes are IconMenuItems: Mount all and Settings line up with
+	// their labels
+	TIconColumnMenuItem::AlignPlainItems(this,
+		TIconColumnMenuItem::IconColumn());
+// SPDX-SnippetEnd
 
 	SetTargetForItems(BMessenger(kTrackerSignature));
 
