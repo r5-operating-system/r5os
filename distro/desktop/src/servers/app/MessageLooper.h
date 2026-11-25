@@ -14,6 +14,49 @@
 #include <OS.h>
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+/*!	Link receiver that records the kernel-verified sender of the port
+	message it read last (get_port_message_info_etc), and whether the link
+	message just returned is the first one in that port message. Sender
+	tracking is off until SetTrackSender(true); then the receiving thread
+	must be the only reader of the port.
+*/
+class SenderLinkReceiver : public BPrivate::LinkReceiver {
+public:
+								SenderLinkReceiver(port_id port = -1);
+
+			void				SetTrackSender(bool track)
+									{ fTrackSender = track; }
+			uid_t				SenderUid() const { return fSenderUid; }
+			team_id				SenderTeam() const { return fSenderTeam; }
+			bool				TakeNewPortMessage();
+
+protected:
+	virtual	status_t			ReadFromPort(bigtime_t timeout);
+
+private:
+			bool				fTrackSender;
+			bool				fNewPortMessage;
+			uid_t				fSenderUid;
+			team_id				fSenderTeam;
+};
+
+
+class SenderTrackingLink : public BPrivate::PortLink {
+public:
+								SenderTrackingLink();
+
+			SenderLinkReceiver&	TrackingReceiver()
+									{ return *fTrackingReceiver; }
+
+private:
+			SenderLinkReceiver*	fTrackingReceiver;
+};
+// SPDX-SnippetEnd
+
+
 class MessageLooper : public BLocker {
 public:
 								MessageLooper(const char* name);
@@ -48,14 +91,22 @@ protected:
 protected:
 			const char*			fName;
 			thread_id			fThread;
-			BPrivate::PortLink	fLink;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			SenderTrackingLink	fLink;
+// SPDX-SnippetEnd
 			bool				fQuitting;
 			sem_id				fDeathSemaphore;
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+			// Set by the default _MessageLooper() for each link message:
+			// the kernel-verified sender of the port message it came from,
+			// and whether it is the first link message in that port message.
 			uid_t				fLastSenderUid;
 			team_id				fLastSenderTeam;
+			bool				fLastSenderFirst;
 // SPDX-SnippetEnd
 };
 

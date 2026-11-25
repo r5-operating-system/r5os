@@ -16,6 +16,109 @@
 #include <Autolock.h>
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// Same value as kLinkCode in src/kits/app/link_message.h, which is private
+// to libbe.
+static const int32 kR5LinkCode = '_PTL';
+
+
+SenderLinkReceiver::SenderLinkReceiver(port_id port)
+	:
+	BPrivate::LinkReceiver(port),
+	fTrackSender(false),
+	fNewPortMessage(false),
+	fSenderUid((uid_t)-1),
+	fSenderTeam(-1)
+{
+}
+
+
+bool
+SenderLinkReceiver::TakeNewPortMessage()
+{
+	bool isNew = fNewPortMessage;
+	fNewPortMessage = false;
+	return isNew;
+}
+
+
+/*!	LinkReceiver::GetNextMessage() calls this only when the receive buffer is
+	empty. It reads the info of the port message at the head of the queue,
+	then that same message (this thread is the only reader), so the recorded
+	sender is the sender of every link message in the new buffer.
+*/
+status_t
+SenderLinkReceiver::ReadFromPort(bigtime_t timeout)
+{
+	if (!fTrackSender)
+		return BPrivate::LinkReceiver::ReadFromPort(timeout);
+
+	ResetBuffer();
+	fNewPortMessage = false;
+	fSenderUid = (uid_t)-1;
+	fSenderTeam = -1;
+
+	while (true) {
+		port_message_info info;
+		status_t status;
+		do {
+			if (timeout == B_INFINITE_TIMEOUT) {
+				status = get_port_message_info_etc(fReceivePort, &info, 0, 0);
+			} else {
+				status = get_port_message_info_etc(fReceivePort, &info,
+					B_RELATIVE_TIMEOUT, timeout);
+			}
+		} while (status == B_INTERRUPTED);
+		if (status != B_OK)
+			return status;
+
+		status = AdjustReplyBuffer(timeout);
+		if (status != B_OK)
+			return status;
+
+		int32 code;
+		ssize_t bytesRead;
+		do {
+			bytesRead = read_port_etc(fReceivePort, &code, fRecvBuffer,
+				fRecvBufferSize, B_RELATIVE_TIMEOUT, 0);
+		} while (bytesRead == B_INTERRUPTED);
+		if (bytesRead == B_WOULD_BLOCK) {
+			// Not expected with one reader: wait for the next message.
+			continue;
+		}
+		if (bytesRead < B_OK)
+			return (status_t)bytesRead;
+
+		if (code != kR5LinkCode) {
+			// Ignore it, as LinkReceiver does, and take the next message
+			// with its own sender.
+			continue;
+		}
+
+		fDataSize = bytesRead;
+		fSenderUid = info.sender;
+		fSenderTeam = info.sender_team;
+		fNewPortMessage = true;
+		return B_OK;
+	}
+}
+
+
+SenderTrackingLink::SenderTrackingLink()
+	:
+	BPrivate::PortLink()
+{
+	// Replace the plain receiver that PortLink created. ~PortLink() deletes
+	// fReceiver through its virtual destructor.
+	fTrackingReceiver = new SenderLinkReceiver(fReceiver->Port());
+	delete fReceiver;
+	fReceiver = fTrackingReceiver;
+}
+// SPDX-SnippetEnd
+
+
 MessageLooper::MessageLooper(const char* name)
 	:
 	BLocker(name),
@@ -28,7 +131,8 @@ MessageLooper::MessageLooper(const char* name)
 // SPDX-License-Identifier: MIT
 	,
 	fLastSenderUid((uid_t)-1),
-	fLastSenderTeam(-1)
+	fLastSenderTeam(-1),
+	fLastSenderFirst(false)
 // SPDX-SnippetEnd
 {
 }
@@ -147,33 +251,27 @@ void
 MessageLooper::_MessageLooper()
 {
 	BPrivate::LinkReceiver& receiver = fLink.Receiver();
-
-	while (true) {
-		int32 code;
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-		// Capture kernel-verified sender uid/team for every port message read
-		// by LinkReceiver without blocking when a buffered link message is
-		// already waiting.
-		port_message_info msgInfo;
-		if (get_port_message_info_etc(receiver.Port(), &msgInfo,
-				B_RELATIVE_TIMEOUT, 0) == B_OK) {
-			fLastSenderUid = msgInfo.sender;
-			fLastSenderTeam = msgInfo.sender_team;
-		}
-		status_t status = receiver.GetNextMessage(code, 0);
-		if (status == B_TIMED_OUT) {
-			do {
-				status = get_port_message_info_etc(receiver.Port(), &msgInfo,
-					0, 0);
-			} while (status == B_INTERRUPTED);
-			if (status == B_OK) {
-				fLastSenderUid = msgInfo.sender;
-				fLastSenderTeam = msgInfo.sender_team;
-				status = receiver.GetNextMessage(code);
-			}
-		}
+	// This thread is the only reader of the port. The receiver records the
+	// kernel-verified sender each time it reads a new port message, so the
+	// sender always belongs to the link message being handled.
+	SenderLinkReceiver& tracking = fLink.TrackingReceiver();
+	tracking.SetTrackSender(true);
+// SPDX-SnippetEnd
+
+	while (true) {
+		int32 code;
+		status_t status = receiver.GetNextMessage(code);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// GetNextMessage() blocks until a message arrives; an idle port does
+		// not end the loop.
+		fLastSenderFirst = tracking.TakeNewPortMessage();
+		fLastSenderUid = tracking.SenderUid();
+		fLastSenderTeam = tracking.SenderTeam();
 // SPDX-SnippetEnd
 		if (status < B_OK) {
 			// that shouldn't happen, it's our port

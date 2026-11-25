@@ -58,6 +58,19 @@ BTokenSpace gTokenSpace;
 uint32 gAppServerSIMDFlags = 0;
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+static port_id
+create_inner_app_server_port()
+{
+	// The looper gets its own port. The port proxy owns the launch default
+	// port that clients find, as in the registrar.
+	return create_port(B_LOOPER_PORT_DEFAULT_CAPACITY, "picasso_inner");
+}
+// SPDX-SnippetEnd
+
+
 /*!	\brief Constructor
 
 	This loads the default fonts, allocates all the major global variables,
@@ -69,8 +82,8 @@ AppServer::AppServer(status_t* status)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-	SERVER_BASE("application/x-vnd.Haiku-app_server", "picasso_inner", -1,
-		false, status),
+	SERVER_BASE("application/x-vnd.Haiku-app_server", "picasso_inner",
+		create_inner_app_server_port(), false, status),
 	fDesktopLock("AppServerDesktopLock"),
 	fAdminPort(-1),
 	fPublicPort(-1),
@@ -102,11 +115,22 @@ AppServer::AppServer(status_t* status)
 			}
 		}
 	}
+	// Clients find app_server through the launch default port
+	// (BMessenger(signature) takes the launch data first), so the proxy owns
+	// that port, as in the registrar.
 	fPublicPort = BLaunchRoster().GetPort("application/x-vnd.Haiku-app_server",
-		"picasso");
+		NULL);
 	if (fPublicPort < 0) {
 		fPublicPort = create_port(B_LOOPER_PORT_DEFAULT_CAPACITY,
 			"picasso");
+	}
+	if (fPublicPort >= 0
+		&& fPublicPort == BMessenger::Private(be_app_messenger).Port()) {
+		// The inner port could not be created, so the looper took the
+		// launch port. Never proxy a port to itself; unstamped requests
+		// are refused.
+		syslog(LOG_ERR, "app_server: no inner port, port proxy not started\n");
+		fPublicPort = -1;
 	}
 	if (fPublicPort >= 0) {
 		gAppServerPort = fPublicPort;

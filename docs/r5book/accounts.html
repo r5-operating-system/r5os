@@ -54,10 +54,11 @@
 				registrar, the network and package services, and Login itself.</li>
 				<li>More than one person can be signed in at the same time (fast user switching, build 10074). Each
 				signed-in person has their own <code class="inline">app_server</code> desktop, workspaces, clipboard,
-				key store, notification server, Deskbar and Tracker. While another person's desktop is shown, your
-				apps keep running, your sound is muted and your notifications wait until you return.</li>
+				key store, notification server, Deskbar and Tracker. The intent is that while another person's desktop
+				is shown, your apps keep running, your sound is muted and your notifications wait until you return
+				(intended, not yet verified; see the status note).</li>
 			</ul>
-			<p>Status note (build 10074): switching between signed-in sessions, locking on desktop 0, and running Guest alongside another session were verified in VirtualBox; per-person log out with a second session running, live audio muting, held notification replay, and the shutdown warning UI are implemented and awaiting end-to-end verification.</p>
+			<p>Status note (build 10074): switching between signed-in sessions, locking on desktop 0, and running Guest alongside another session were verified in VirtualBox on an earlier build of this work. The checks that keep one person's programs out of another person's desktop and key store, per-person log out with a second session running, live audio muting, held notification replay, and the shutdown warning UI are implemented but intended, not yet verified: the current build has not been booted.</p>
 			<table class="spec">
 				<tr><th>Account</th><th>Home folder</th><th>Groups</th></tr>
 				<tr><td>The administrator (<code>user</code>)</td><td><code>/boot/home</code></td><td><code>users</code>, <code>admin</code></td></tr>
@@ -103,9 +104,9 @@
 			own session.</p>
 			<table class="spec">
 				<tr><th>Message</th><th>To (admin port)</th><th>What happens</th></tr>
-				<tr><td><code>'lokc'</code></td><td><code>application/x-vnd.Haiku-Login</code></td><td>Switches to Login's desktop and shows the lock screen. Programs keep running, sound is muted, notifications wait.</td></tr>
+				<tr><td><code>'lokc'</code></td><td><code>application/x-vnd.Haiku-Login</code></td><td>Switches to Login's desktop and shows the lock screen. Programs keep running. Muted sound and held notifications are intended, not yet verified (see the status note).</td></tr>
 				<tr><td><code>'swtu'</code></td><td><code>application/x-vnd.Haiku-Login</code></td><td>Locks the current session and shows Sign in with a green dot on signed-in accounts.</td></tr>
-				<tr><td><code>'lout'</code></td><td><code>application/x-vnd.Haiku-Login</code></td><td>Ends only this person's session and destroys their desktop. Other signed-in people keep running.</td></tr>
+				<tr><td><code>'lout'</code></td><td><code>application/x-vnd.Haiku-Login</code></td><td>Ends only this person's session and destroys their desktop. Other signed-in people are intended to keep running (not yet verified, see the status note).</td></tr>
 			</table>
 <pre class="code">BMessenger login(<span class="s">"application/x-vnd.Haiku-Login"</span>);
 <span class="k">if</span> (login.IsValid()) {
@@ -116,7 +117,7 @@
 			<h3>When the person logs out</h3>
 			<p>Every program of that person's uid gets <code class="inline">B_QUIT_REQUESTED</code>. Save what you need in
 			<code class="inline">QuitRequested()</code> and quit. Do not open a dialog that waits for an answer: the
-			person has already chosen to leave, and Login does not wait for it. Other signed-in people are unaffected.</p>
+			person has already chosen to leave, and Login does not wait for it. Other signed-in people are intended to be unaffected (not yet verified, see the status note).</p>
 			<div class="use-grid">
 				<div class="use-box yes"><h4>Do</h4><p>Save quietly, for example a draft next to the document, and return <code class="inline">true</code>.</p></div>
 				<div class="use-box no"><h4>Don't</h4><p>Ask "Save changes?" and return <code class="inline">false</code> until someone answers. Nobody will.</p></div>

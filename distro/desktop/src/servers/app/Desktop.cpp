@@ -3252,9 +3252,11 @@ Desktop::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 			// message sender and the claimed clientTeamID belong to this
 			// desktop's user (or uid 0). Prevents another person from joining
 			// this desktop even if they enumerate its port via get_next_port_info.
+			// BApplication sends AS_CREATE_APP as the first link message of a
+			// new link, so refuse one that shares a port message with others.
 			team_info clientInfo;
-			bool senderAllowed = (fLastSenderUid == 0
-				|| fLastSenderUid == fUserID);
+			bool senderAllowed = fLastSenderFirst
+				&& (fLastSenderUid == 0 || fLastSenderUid == fUserID);
 			bool teamAllowed = (get_team_info(clientTeamID, &clientInfo) == B_OK
 				&& (clientInfo.uid == 0 || clientInfo.uid == fUserID)
 				&& (fLastSenderUid == 0 || clientTeamID == fLastSenderTeam));
@@ -3399,27 +3401,28 @@ Desktop::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-			// Fast user switching: do not send AS_QUIT_APP to uid 0 system
-			// servers (such as debug_server or bluetooth_server) that attached
-			// to a person's desktop; detach their ServerApp so they stay alive
-			// and do not block desktop teardown.
+			// Fast user switching: a uid 0 program (such as debug_server or
+			// bluetooth_server) that attached to a person's desktop does not
+			// quit when that person logs out, so its ServerApp would never
+			// send AS_DELETE_APP. Close that ServerApp the way a client that
+			// quits does (B_QUIT_REQUESTED on its link): it sends
+			// AS_DELETE_APP, is deleted below like any other, and no
+			// ServerApp keeps a pointer to this Desktop. The program itself
+			// keeps running, without its windows on this desktop.
 			fApplicationsLock.Lock();
 			fShutdownSemaphore = create_sem(0, "desktop shutdown");
-			fShutdownCount = 0;
+			fShutdownCount = fApplications.CountItems();
 			fQuitting = true;
-			for (int32 i = fApplications.CountItems() - 1; i >= 0; i--) {
+			for (int32 i = 0; i < fApplications.CountItems(); i++) {
 				ServerApp* app = fApplications.ItemAt(i);
 				team_info appTeamInfo;
 				bool isForeignSystem = fUserID >= 1000
 					&& get_team_info(app->ClientTeam(), &appTeamInfo) == B_OK
 					&& appTeamInfo.uid == 0;
-				if (isForeignSystem) {
-					fApplications.RemoveItemAt(i);
-					app->PostMessage(kMsgQuitLooper);
-				} else {
-					fShutdownCount++;
+				if (isForeignSystem)
+					app->PostMessage(B_QUIT_REQUESTED);
+				else
 					app->PostMessage(AS_QUIT_APP);
-				}
 			}
 			fApplicationsLock.Unlock();
 // SPDX-SnippetEnd
