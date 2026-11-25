@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>R5 – Fast user switching (mockup, 25 Nov 2026)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<!--
+  Built on the windows R5 already ships (distro/login): the Sign in window
+  (LoginView.cpp), the lock window (LockWindow.cpp) and the account cards
+  (BUserCard, libr5ui). Sizes follow the QEMU screenshots of build e06d670b65:
+  a 440-wide window, a header card, a form card and a bottom row with the
+  clock and the buttons. Blue outline = what fast user switching adds.
+-->
+<style>
+body{margin:0;overflow:hidden;font-family:'Manrope',system-ui,sans-serif;background:#0f172a}
+.bar{display:flex;gap:8px;align-items:center;padding:10px 16px;background:#0f172a;color:#e2e8f0;font-size:13px;flex-wrap:wrap}
+.bar button{font-family:inherit;font-size:12.5px;padding:5px 12px;border:1px solid #475569;background:#1e293b;color:#e2e8f0;cursor:pointer}
+.bar button[aria-pressed="true"]{background:#0084ff;border-color:#0084ff;color:#fff;font-weight:700}
+.bar .sep{width:1px;height:22px;background:#334155;margin:0 6px}
+.bar .note{color:#94a3b8}
+.desk{width:1190px;height:740px;position:relative;overflow:hidden;background:linear-gradient(#dde8f8,#c3d6f3);color:#141414}
+.scene{position:absolute;inset:0;display:none}
+.scene.on{display:block}
+.waves{position:absolute;left:0;top:0}
+/* The shipped Sign in / lock window */
+.w{position:absolute;width:442px}
+.tab{display:inline-flex;align-items:center;height:31px;box-sizing:border-box;padding:0 10px;width:249px;background:#ffd42e;border:1px solid #fff;border-bottom:none;font-size:12.5px;font-weight:700}
+.body{box-sizing:border-box;border:1px solid #c8cdd4;padding:17px 16px 16px;display:flex;flex-direction:column;gap:14px;box-shadow:0 6px 18px rgba(15,23,42,.25)}
+.glass .body{background:rgba(238,241,245,.78);backdrop-filter:blur(18px) saturate(1.2)}
+.classic .body{background:#eef1f5;box-shadow:none}
+.card{background:#fff;border:1px solid #9aa0a6;padding:14px 16px}
+.head{display:flex;align-items:center;gap:14px}
+.head b{display:block;font-size:18px;font-weight:700}
+.head span{font-size:12.5px;color:#555}
+.banner{display:flex;align-items:center;gap:12px}
+.av{width:44px;height:44px;border-radius:50%;background:#d8ecfb;display:flex;align-items:center;justify-content:center;position:relative;flex-shrink:0}
+.av img{width:30px;height:30px}
+.nm{font-size:14px;font-weight:700}
+.role{font-size:11.5px;font-weight:700;color:#0084ff}
+.lbl{font-size:12px;font-weight:700;color:#555;margin:14px 0 6px}
+.pw{height:38px;box-sizing:border-box;border:1px solid #0084ff;border-radius:3px;display:flex;align-items:center;padding:0 12px;color:#888;font-size:14px;justify-content:space-between}
+.pw img{width:18px;opacity:.6}
+.primary{margin-top:14px;height:38px;border-radius:3px;background:#0084ff;color:#fff;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center}
+.second{margin-top:8px;height:34px;border:1px solid #9aa0a6;background:#f6f7f9;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px}
+.info{margin-top:12px;text-align:center;font-size:12.5px;color:#777}
+.row{display:flex;align-items:center;gap:8px}
+.clock{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:#555;margin-right:auto;padding-left:4px}
+.btn{height:31px;padding:0 9px;border:1px solid #9aa0a6;background:#f6f7f9;font-weight:700;font-size:12.5px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn img{width:14px}
+.btn.danger{background:#c62828;border-color:#9a1d1d;color:#fff}
+.btn.off{opacity:.45}
+.sel{font-size:11.5px;font-weight:700;color:#555;letter-spacing:.03em}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ucard{background:#fff;border:1px solid #9aa0a6;padding:9px 10px;display:flex;align-items:center;gap:10px}
+.ucard.cur{border:2px solid #0084ff;padding:8px 9px}
+.ucard .av{width:36px;height:36px}.ucard .av img{width:24px;height:24px}
+.signed{font-size:11px;font-weight:700;color:#1b7f45}
+.dot{position:absolute;right:-1px;bottom:-1px;width:12px;height:12px;border-radius:50%;background:#22a35a;border:2px solid #fff}
+.new{outline:2px dashed #0084ff;outline-offset:3px}
+/* Deskbar */
+.deskbar{position:absolute;right:0;top:0;width:180px;box-sizing:border-box;background:#e4e4e4;border:1px solid #8c8c8c}
+.glass .deskbar{background:rgba(228,228,228,.78);backdrop-filter:blur(14px)}
+.deskbar .leaf{height:30px;display:flex;align-items:center;padding:0 10px;gap:8px;font-weight:800;font-size:13px;background:#0084ff;color:#fff}
+.deskbar .r{height:24px;display:flex;align-items:center;padding:0 10px;font-size:12px;border-top:1px solid #d0d0d0}
+.menu{position:absolute;right:180px;top:0;width:250px;box-sizing:border-box;background:#f4f4f4;border:1px solid #8c8c8c;padding:4px 0;font-size:13px}
+.glass .menu{background:rgba(246,246,246,.86);backdrop-filter:blur(14px);box-shadow:0 12px 28px rgba(15,23,42,.22)}
+.menu div{height:24px;display:flex;align-items:center;padding:0 14px}
+.menu hr{border:none;border-top:1px solid #cfcfcf;margin:4px 0}
+.menu .hi{background:#0084ff;color:#fff;font-weight:700}
+.menu .sub::after{content:"";margin-left:auto;border-left:5px solid #334155;border-top:4px solid transparent;border-bottom:4px solid transparent}
+.callout{position:absolute;background:#fff8d6;border:1px solid #d9b400;padding:10px 12px;font-size:12px;line-height:1.5;width:290px;color:#3d3200}
+</style>
+</head>
+<body>
+<div class="bar">
+  <strong>Fast user switching</strong>
+  <button type="button" data-scene="menu" aria-pressed="true">1 · Deskbar menu</button>
+  <button type="button" data-scene="lock" aria-pressed="false">2 · Lock screen</button>
+  <button type="button" data-scene="signin" aria-pressed="false">3 · Sign in</button>
+  <button type="button" data-scene="shutdown" aria-pressed="false">4 · Shut down</button>
+  <span class="sep"></span>
+  <button type="button" id="b-glass" aria-pressed="true">Glass</button>
+  <button type="button" id="b-classic" aria-pressed="false">Classic (Safe mode)</button>
+  <span class="note">The shipped Sign in and lock windows · dashed blue = new</span>
+</div>
+
+<div class="desk glass" id="desk">
+  <svg class="waves" aria-hidden="true" width="1190" height="740" viewBox="0 0 1190 740">
+    <path d="M0,290 C240,230 430,270 640,350 C840,430 1010,440 1190,410 L1190,740 L0,740 Z" fill="#a9c4f0"></path>
+    <path d="M0,480 C260,430 470,500 700,580 C900,650 1060,650 1190,620 L1190,740 L0,740 Z" fill="#86a8e6"></path>
+  </svg>
+
+  <!-- 1. Deskbar menu (DeskbarMenu.cpp): "Switch user…" after "Lock screen" -->
+  <div class="scene on" id="s-menu">
+    <div class="deskbar">
+      <div class="leaf"><img src="../login-mockup/icons/r5-symbol.svg" alt="" width="18" height="18">R5</div>
+      <div class="r">Tracker</div><div class="r">Aomi</div><div class="r">StyledEdit</div>
+      <div class="r" style="justify-content:flex-end">14:32</div>
+    </div>
+    <div class="menu">
+      <div>About R5</div><div>Find…</div><hr>
+      <div>Show replicants</div><div>Mount</div><div>Deskbar preferences…</div><hr>
+      <div>Lock screen</div>
+      <div class="hi new">Switch user…</div>
+      <div>Log out nicky</div>
+      <div class="sub">Shut down…</div><hr>
+      <div class="sub">Applications</div><div class="sub">Demos</div>
+      <div class="sub">Desktop applets</div><div class="sub">Preferences</div>
+    </div>
+    <div class="callout" style="right:450px;top:190px">
+      <b>Switch user…</b> locks this session and opens Sign in. Nicky's apps keep running.<br>
+      Shown only when there is more than one account. The guest keeps its own menu ("Log out Guest and delete files…").
+    </div>
+  </div>
+
+  <!-- 2. The lock window (LockWindow.cpp) with "Other account" -->
+  <div class="scene" id="s-lock">
+    <div class="w" style="left:374px;top:46px">
+      <div class="tab">Locked</div>
+      <div class="body">
+        <div class="card head"><img src="../login-mockup/icons/r5-symbol.svg" alt="" width="40" height="40">
+          <div><b>Locked</b></div></div>
+        <div class="card">
+          <div class="banner"><div class="av"><img src="../login-mockup/icons/people.svg" alt=""></div>
+            <div><div class="nm">Nicky</div><div class="role">@nicky · Administrator</div></div></div>
+          <div class="lbl">Password</div>
+          <div class="pw">Enter password<img src="../login-mockup/icons/eye.svg" alt=""></div>
+          <div class="primary">Unlock</div>
+          <div class="second new"><img src="../login-mockup/icons/people.svg" alt="" width="16">Other account</div>
+          <div class="info">Locked since 14:20</div>
+        </div>
+        <div class="row">
+          <span class="clock">◷ 14:32</span>
+          <span class="btn">Log out</span>
+          <span class="btn"><img src="../login-mockup/icons/restart.svg" alt="">Restart</span>
+          <span class="btn"><img src="../login-mockup/icons/power.svg" alt="">Shut down</span>
+        </div>
+      </div>
+    </div>
+    <div class="callout" style="left:840px;top:330px;width:300px">
+      <b>Other account</b> opens Sign in, with Nicky's session left running. Only when there is more than one account. Restart and Shut down follow scene 4.
+    </div>
+  </div>
+
+  <!-- 3. Sign in (LoginView.cpp), 2–4 accounts as BUserCard, two on a row -->
+  <div class="scene" id="s-signin">
+    <div class="w" style="left:374px;top:24px">
+      <div class="tab">Sign in</div>
+      <div class="body">
+        <div class="card head"><img src="../login-mockup/icons/r5-symbol.svg" alt="" width="40" height="40">
+          <div><b>Welcome to R5</b><span>Sign in to start your session</span></div></div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <span class="sel">SELECT ACCOUNT</span>
+          <div class="grid">
+            <div class="ucard new"><div class="av"><img src="../login-mockup/icons/people.svg" alt=""><span class="dot"></span></div>
+              <div><div class="nm">Nicky</div><div class="signed">Signed in</div></div></div>
+            <div class="ucard cur"><div class="av"><img src="../login-mockup/icons/people.svg" alt=""></div>
+              <div><div class="nm">Alex</div><div class="role">Standard</div></div></div>
+            <div class="ucard new"><div class="av"><img src="../login-mockup/icons/people.svg" alt=""><span class="dot"></span></div>
+              <div><div class="nm">Sarah</div><div class="signed">Signed in</div></div></div>
+            <div class="ucard"><div class="av"><img src="../login-mockup/icons/people.svg" alt=""></div>
+              <div><div class="nm">Guest</div><div class="role">Guest</div></div></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="lbl" style="margin-top:0">Password</div>
+          <div class="pw">Enter password<img src="../login-mockup/icons/eye.svg" alt=""></div>
+          <div class="primary">Sign in</div>
+          <div class="info">Ready to sign in as Alex</div>
+        </div>
+        <div class="row">
+          <span class="clock">◷ 14:32</span>
+          <span class="btn"><img src="../login-mockup/icons/restart.svg" alt="">Restart</span>
+          <span class="btn"><img src="../login-mockup/icons/power.svg" alt="">Shut down</span>
+        </div>
+      </div>
+    </div>
+    <div class="callout" style="left:840px;top:150px;width:300px">
+      The account cards get a <b>Signed in</b> line and a green dot: an addition to <code>BUserCard</code> and <code>BUserListItem</code> (five or more accounts use the list). Picking a signed-in person changes the button to <b>Unlock</b>.<br><br>
+      Whether the guest may sign in while others are signed in is an open question in the design.
+    </div>
+  </div>
+
+  <!-- 4. Shut down while others are signed in -->
+  <div class="scene" id="s-shutdown">
+    <div class="w" style="left:70px;top:150px;width:500px">
+      <div class="tab">Shut down</div>
+      <div class="body">
+        <div class="card" style="display:flex;gap:14px">
+          <img src="../login-mockup/icons/power.svg" alt="" width="36" height="36">
+          <div><div class="nm" style="font-size:15px">2 other people are still signed in</div>
+            <div style="font-size:13px;line-height:1.5;margin-top:4px">Alex and Sarah have apps open. If you shut down now, their unsaved work is lost.</div></div>
+        </div>
+        <div class="row" style="justify-content:flex-end"><span class="btn">Cancel</span><span class="btn danger">Shut down anyway</span></div>
+      </div>
+      <div style="font-size:12px;margin-top:8px;color:#1e3a5f"><b>An administrator.</b> Restart says "Restart anyway".</div>
+    </div>
+    <div class="w" style="left:620px;top:150px;width:500px">
+      <div class="tab">Shut down</div>
+      <div class="body">
+        <div class="card" style="display:flex;gap:14px">
+          <img src="../login-mockup/icons/power.svg" alt="" width="36" height="36">
+          <div><div class="nm" style="font-size:15px">Nicky is still signed in</div>
+            <div style="font-size:13px;line-height:1.5;margin-top:4px">Only an administrator can shut down while other people are signed in. Ask Nicky to log out, or unlock with an administrator's password.</div></div>
+        </div>
+        <div class="row"><span class="btn" style="margin-right:auto"><img src="../settings-mockup/icons/unlocked.svg" alt="">Unlock…</span><span class="btn">Cancel</span><span class="btn danger off">Shut down anyway</span></div>
+      </div>
+      <div style="font-size:12px;margin-top:8px;color:#1e3a5f"><b>A standard account.</b> The same lock as in Settings.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const desk = document.getElementById('desk');
+document.querySelectorAll('[data-scene]').forEach(b => b.onclick = () => {
+  document.querySelectorAll('[data-scene]').forEach(x => x.setAttribute('aria-pressed', x === b));
+  document.querySelectorAll('.scene').forEach(s => s.classList.toggle('on', s.id === 's-' + b.dataset.scene));
+});
+const look = g => {
+  desk.classList.toggle('glass', g); desk.classList.toggle('classic', !g);
+  document.getElementById('b-glass').setAttribute('aria-pressed', g);
+  document.getElementById('b-classic').setAttribute('aria-pressed', !g);
+};
+document.getElementById('b-glass').onclick = () => look(true);
+document.getElementById('b-classic').onclick = () => look(false);
+// fast-user-switching.html#lock or #signin-classic opens that scene and look.
+const [h, l] = location.hash.slice(1).split('-');
+if (h) document.querySelector('[data-scene="' + h + '"]')?.click();
+if (l === 'classic') look(false);
+</script>
+</body>
+</html>
