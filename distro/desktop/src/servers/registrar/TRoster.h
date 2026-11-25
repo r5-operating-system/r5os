@@ -103,8 +103,12 @@ private:
 
 			void			_HandleGetRecentEntries(BMessage* request);
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
 			void			_ValidateRunning(const entry_ref& ref,
-								const char* signature);
+								const char* signature, uid_t uid);
+// SPDX-SnippetEnd
 			bool			_IsSystemApp(RosterAppInfo* info) const;
 
 			status_t		_LoadRosterSettings(const char* path = NULL);
@@ -113,7 +117,7 @@ private:
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-	static	uid_t			_SenderUID(const BMessage* request);
+	static	bool			_SenderUID(const BMessage* request, uid_t* _uid);
 // SPDX-SnippetEnd
 
 private:

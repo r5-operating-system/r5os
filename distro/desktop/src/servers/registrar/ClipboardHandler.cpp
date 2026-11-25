@@ -10,6 +10,11 @@
 
 #include "Clipboard.h"
 #include "ClipboardHandler.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include "Registrar.h"
+// SPDX-SnippetEnd
 
 #include <Message.h>
 #include <RegistrarDefs.h>
@@ -73,14 +78,20 @@ void
 ClipboardHandler::MessageReceived(BMessage *message)
 {
 	const char *name;
+	BMessage reply;
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-	int32 rawUid = 0;
-	uid_t senderUid = message->FindInt32("_r5_sender_uid", &rawUid) == B_OK
-		? (uid_t)rawUid : 0;
+	uid_t senderUid = 0;
+	if (!Registrar::VerifiedSenderUID(message, &senderUid)) {
+		if (message->IsSourceWaiting()) {
+			reply.what = B_REG_RESULT;
+			reply.AddInt32("result", B_PERMISSION_DENIED);
+			message->SendReply(&reply);
+		}
+		return;
+	}
 // SPDX-SnippetEnd
-	BMessage reply;
 	switch (message->what) {
 		case B_REG_ADD_CLIPBOARD:
 		{

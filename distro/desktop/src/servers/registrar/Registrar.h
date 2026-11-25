@@ -56,6 +56,7 @@ public:
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 	port_id PublicPort() const { return fPublicPort; }
+	static bool VerifiedSenderUID(const BMessage *message, uid_t *_uid);
 // SPDX-SnippetEnd
 
 	static Registrar *App();
@@ -84,6 +85,7 @@ private:
 // SPDX-License-Identifier: MIT
 	port_id					fPublicPort;
 	thread_id				fPortThread;
+	uint8					fProxySecret[16];
 // SPDX-SnippetEnd
 };
 

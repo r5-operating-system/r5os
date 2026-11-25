@@ -832,38 +832,59 @@ Desktop::Deactivate()
 	if (!fShown)
 		return B_OK;
 
-	// Stop input delivery first (outside fWindowLock to avoid deadlocking
-	// with the event thread).
-	fEventDispatcher.SetTo(NULL);
-
-	AutoWriteLocker windowLock(fWindowLock);
-	if (!fShown)
-		return B_OK;
-
-	_SuspendDirectFrameBufferAccess();
-
-	BRect frame = fVirtualScreen.Frame();
-	if (Screen* screen = fVirtualScreen.ScreenAt(0))
-		screen->GetMode(fHiddenMode);
-
-	status_t status = _EnsureOffscreenTarget(frame);
-	if (status != B_OK)
-		return status;
-
-	if (fCompositor != NULL)
-		fCompositor->SetHidden(true, fOffscreenHW.Get());
-	if (fCompositor == NULL || !fCompositor->IsActive())
-		_RebindWindowsToScreen(fOffscreenHW.Get());
-
+	// Allocate the offscreen target before detaching input so an OOM failure
+	// cannot leave the shown desktop without keyboard or mouse.
 	{
-		AutoWriteLocker screenLock(fScreenLock);
-		fVirtualScreen.SetOffscreen(fOffscreenHW.Get(), fOffscreenEngine.Get(),
-			frame);
-		fShown = false;
+		AutoWriteLocker windowLock(fWindowLock);
+		if (!fShown)
+			return B_OK;
+		status_t status = _EnsureOffscreenTarget(fVirtualScreen.Frame());
+		if (status != B_OK)
+			return status;
 	}
 
-	fEventDispatcher.SetHWInterface(fOffscreenHW.Get());
-	return B_OK;
+	// Stop input delivery outside fWindowLock to avoid deadlocking with the
+	// event thread.
+	fEventDispatcher.SetTo(NULL);
+
+	status_t status = B_OK;
+	{
+		AutoWriteLocker windowLock(fWindowLock);
+		if (!fShown)
+			return B_OK;
+
+		BRect frame = fVirtualScreen.Frame();
+		if (Screen* screen = fVirtualScreen.ScreenAt(0))
+			screen->GetMode(fHiddenMode);
+
+		status = _EnsureOffscreenTarget(frame);
+		if (status == B_OK) {
+			_SuspendDirectFrameBufferAccess();
+
+			if (fCompositor != NULL)
+				fCompositor->SetHidden(true, fOffscreenHW.Get());
+			if (fCompositor == NULL || !fCompositor->IsActive())
+				_RebindWindowsToScreen(fOffscreenHW.Get());
+
+			{
+				AutoWriteLocker screenLock(fScreenLock);
+				fVirtualScreen.SetOffscreen(fOffscreenHW.Get(),
+					fOffscreenEngine.Get(), frame);
+				fShown = false;
+			}
+
+			fEventDispatcher.SetHWInterface(fOffscreenHW.Get());
+		}
+	}
+
+	if (status != B_OK) {
+		// Restore input if the screen resized in between and offscreen
+		// allocation failed.
+		EventStream* stream = gInputManager->GetStream();
+		if (stream != NULL)
+			fEventDispatcher.SetTo(stream);
+	}
+	return status;
 }
 
 

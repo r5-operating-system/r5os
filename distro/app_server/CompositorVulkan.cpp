@@ -583,10 +583,12 @@ Compositor::_ExitVulkan()
 	// (stick 61, VulkanResourceProvider). Leave the device in place.
 	// The engines are already on the screen.
 	if (fSkia != NULL && fSkia->Abandoned()) {
-		_StopDrawThread();
-		fSkia->DestroyContext();
-		if (!fOnLavapipe)
-			log_line("left radv");
+		if (!vk->shared) {
+			_StopDrawThread();
+			fSkia->DestroyContext();
+			if (!fOnLavapipe)
+				log_line("left radv");
+		}
 		delete vk;
 		fFrameWidth = 0;
 		fFrameHeight = 0;

@@ -204,18 +204,22 @@ TRoster::HandleAddApplication(BMessage* request)
 	if (!entry.Exists())
 		SET_ERROR(error, B_ENTRY_NOT_FOUND);
 
-	if (error == B_OK)
-		_ValidateRunning(ref, signature);
-
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-	uid_t appUid = _SenderUID(request);
-	if (team >= 0) {
-		team_info teamInfo;
-		if (get_team_info(team, &teamInfo) == B_OK)
-			appUid = teamInfo.uid;
+	uid_t appUid = 0;
+	if (error == B_OK) {
+		if (!_SenderUID(request, &appUid)) {
+			SET_ERROR(error, B_PERMISSION_DENIED);
+		} else if (team >= 0) {
+			team_info teamInfo;
+			if (get_team_info(team, &teamInfo) == B_OK)
+				appUid = teamInfo.uid;
+		}
 	}
+
+	if (error == B_OK)
+		_ValidateRunning(ref, signature, appUid);
 // SPDX-SnippetEnd
 
 	// entry_ref
@@ -432,19 +436,38 @@ TRoster::HandleIsAppRegistered(BMessage* request)
 
 	// look up the information
 	RosterAppInfo* info = NULL;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	uid_t senderUid = 0;
+	if (error == B_OK && !_SenderUID(request, &senderUid))
+		SET_ERROR(error, B_PERMISSION_DENIED);
 	if (error == B_OK) {
 		if ((info = fRegisteredApps.InfoFor(team)) != NULL) {
-			PRINT("found team in fRegisteredApps\n");
-			_ReplyToIARRequest(request, info);
+			if (senderUid != 0 && info->uid != senderUid && info->uid != 0) {
+				SET_ERROR(error, B_PERMISSION_DENIED);
+			} else {
+				PRINT("found team in fRegisteredApps\n");
+				_ReplyToIARRequest(request, info);
+			}
 		} else if (token > 0
 			&& (info = fEarlyPreRegisteredApps.InfoForToken(token)) != NULL) {
-			PRINT("found ref in fEarlyRegisteredApps (by token)\n");
-			// pre-registered and has no team ID assigned yet -- queue the
-			// request
-			be_app->DetachCurrentMessage();
-			_AddIARRequest(fIARRequestsByToken, token, request);
+			if (senderUid != 0 && info->uid != senderUid && info->uid != 0) {
+				SET_ERROR(error, B_PERMISSION_DENIED);
+			} else {
+				PRINT("found ref in fEarlyRegisteredApps (by token)\n");
+				// pre-registered and has no team ID assigned yet -- queue the
+				// request
+				be_app->DetachCurrentMessage();
+				_AddIARRequest(fIARRequestsByToken, token, request);
+			}
 		} else if (team >= 0
-			&& (info = fEarlyPreRegisteredApps.InfoFor(&ref)) != NULL) {
+			&& ((info = fEarlyPreRegisteredApps.InfoFor(&ref, senderUid)) != NULL
+				|| (senderUid != 0
+					&& (info = fEarlyPreRegisteredApps.InfoFor(&ref, (uid_t)0))
+						!= NULL)
+				|| (senderUid == 0
+					&& (info = fEarlyPreRegisteredApps.InfoFor(&ref)) != NULL))) {
 			PRINT("found ref in fEarlyRegisteredApps (by ref)\n");
 			// pre-registered and has no team ID assigned yet -- queue the
 			// request
@@ -455,12 +478,14 @@ TRoster::HandleIsAppRegistered(BMessage* request)
 			// team not registered, ref/token not early pre-registered
 			_ReplyToIARRequest(request, NULL);
 		}
-	} else {
+	}
+	if (error != B_OK) {
 		// reply to the request on error
 		BMessage reply(B_REG_ERROR);
 		reply.AddInt32("error", error);
 		request->SendReply(&reply);
 	}
+// SPDX-SnippetEnd
 
 	FUNCTION_END();
 }
@@ -664,12 +689,24 @@ TRoster::HandleSetSignature(BMessage* request)
 	if (request->FindString("signature", &signature) != B_OK)
 		error = B_BAD_VALUE;
 	// find the app and set the signature
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	uid_t senderUid = 0;
+	if (error == B_OK && !_SenderUID(request, &senderUid))
+		SET_ERROR(error, B_PERMISSION_DENIED);
 	if (error == B_OK) {
-		if (RosterAppInfo* info = fRegisteredApps.InfoFor(team))
-			strcpy(info->signature, signature);
-		else
+		if (RosterAppInfo* info = fRegisteredApps.InfoFor(team)) {
+			if (senderUid != 0 && info->uid != senderUid) {
+				SET_ERROR(error, B_PERMISSION_DENIED);
+			} else {
+				strlcpy(info->signature, signature, sizeof(info->signature));
+			}
+		} else {
 			SET_ERROR(error, B_REG_APP_NOT_REGISTERED);
+		}
 	}
+// SPDX-SnippetEnd
 	// reply to the request
 	if (error == B_OK) {
 		BMessage reply(B_REG_SUCCESS);
@@ -723,11 +760,16 @@ TRoster::HandleGetAppInfo(BMessage* request)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-	uid_t senderUid = _SenderUID(request);
-	if (hasTeam) {
+	uid_t senderUid = 0;
+	if (!_SenderUID(request, &senderUid)) {
+		SET_ERROR(error, B_PERMISSION_DENIED);
+	} else if (hasTeam) {
 		info = fRegisteredApps.InfoFor(team);
-		if (info == NULL)
+		if (info == NULL) {
 			SET_ERROR(error, B_BAD_TEAM_ID);
+		} else if (senderUid != 0 && info->uid != senderUid && info->uid != 0) {
+			SET_ERROR(error, B_PERMISSION_DENIED);
+		}
 	} else if (hasRef) {
 		info = fRegisteredApps.InfoFor(&ref, senderUid);
 		if (info == NULL) {
@@ -792,12 +834,19 @@ TRoster::HandleGetAppList(BMessage* request)
 		signature = NULL;
 
 	// reply to the request
-	BMessage reply(B_REG_SUCCESS);
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-	uid_t senderUid = _SenderUID(request);
+	uid_t senderUid = 0;
+	if (!_SenderUID(request, &senderUid)) {
+		BMessage reply(B_REG_ERROR);
+		reply.AddInt32("error", B_PERMISSION_DENIED);
+		request->SendReply(&reply);
+		FUNCTION_END();
+		return;
+	}
 // SPDX-SnippetEnd
+	BMessage reply(B_REG_SUCCESS);
 	// get the list
 	for (AppInfoList::Iterator it(fRegisteredApps.It());
 		 RosterAppInfo* info = *it;
@@ -886,6 +935,13 @@ TRoster::HandleBroadcast(BMessage* request)
 		&& request->FindMessenger("reply_target", &replyTarget) != B_OK) {
 		error = B_BAD_VALUE;
 	}
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	uid_t senderUid = 0;
+	if (error == B_OK && !_SenderUID(request, &senderUid))
+		error = B_PERMISSION_DENIED;
+// SPDX-SnippetEnd
 
 	// reply to the request -- do this first, don't let the inquirer wait
 	if (error == B_OK) {
@@ -902,7 +958,6 @@ TRoster::HandleBroadcast(BMessage* request)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-		uid_t senderUid = _SenderUID(request);
 		// the target set (excludes the registrar and the requesting team)
 		class BroadcastMessagingTargetSet
 			: public AppInfoListMessagingTargetSet {
@@ -964,16 +1019,21 @@ TRoster::HandleStartWatching(BMessage* request)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-		Watcher* watcher = new(nothrow) EventMaskWatcher(target, events,
-			_SenderUID(request));
-// SPDX-SnippetEnd
-		if (watcher) {
-			if (!fWatchingService.AddWatcher(watcher)) {
+		uid_t senderUid = 0;
+		if (!_SenderUID(request, &senderUid)) {
+			error = B_PERMISSION_DENIED;
+		} else {
+			Watcher* watcher = new(nothrow) EventMaskWatcher(target, events,
+				senderUid);
+			if (watcher) {
+				if (!fWatchingService.AddWatcher(watcher)) {
+					error = B_NO_MEMORY;
+					delete watcher;
+				}
+			} else
 				error = B_NO_MEMORY;
-				delete watcher;
-			}
-		} else
-			error = B_NO_MEMORY;
+		}
+// SPDX-SnippetEnd
 	}
 	// reply to the request
 	if (error == B_OK) {
@@ -1944,23 +2004,35 @@ TRoster::_HandleGetRecentEntries(BMessage* request)
 	\brief Checks all registered apps for \a ref and \a signature if
 		they are still alive, and removes those that aren't.
 */
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
 void
-TRoster::_ValidateRunning(const entry_ref& ref, const char* signature)
+TRoster::_ValidateRunning(const entry_ref& ref, const char* signature,
+	uid_t uid)
 {
-	while (true) {
-		// get info via ref or signature
-		RosterAppInfo* info = fRegisteredApps.InfoFor(&ref);
-		if (info == NULL && signature != NULL)
-			info = fRegisteredApps.InfoFor(signature);
+	BEntry entry(&ref, true);
+	entry_ref realRef;
+	if (entry.GetRef(&realRef) != B_OK)
+		realRef = ref;
 
-		// if app is alive or does not exist, we can exit
-		if (info == NULL || info->IsRunning())
-			return;
-
-		RemoveApp(info);
-		delete info;
+	AppInfoList deadApps;
+	for (AppInfoList::Iterator it(fRegisteredApps.It());
+			RosterAppInfo* info = *it; ++it) {
+		if (info->uid != uid)
+			continue;
+		bool matches = (info->ref == realRef)
+			|| (signature != NULL && strcasecmp(info->signature, signature) == 0);
+		if (matches && !info->IsRunning())
+			deadApps.AddInfo(info);
 	}
+	for (AppInfoList::Iterator it(deadApps.It());
+			RosterAppInfo* info = *it; ++it) {
+		RemoveApp(info);
+	}
+	deadApps.MakeEmpty(true);
 }
+// SPDX-SnippetEnd
 
 
 bool
@@ -2189,12 +2261,9 @@ TRoster::_SaveRosterSettings(const char* path)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-/*static*/ uid_t
-TRoster::_SenderUID(const BMessage* request)
+/*static*/ bool
+TRoster::_SenderUID(const BMessage* request, uid_t* _uid)
 {
-	int32 uid = 0;
-	if (request != NULL && request->FindInt32("_r5_sender_uid", &uid) == B_OK)
-		return (uid_t)uid;
-	return 0;
+	return Registrar::VerifiedSenderUID(request, _uid);
 }
 // SPDX-SnippetEnd

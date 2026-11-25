@@ -20,7 +20,9 @@
 // SPDX-License-Identifier: MIT
 #include <LaunchRoster.h>
 #include <MessagePrivate.h>
+#include <fcntl.h>
 #include <stdlib.h>
+#include <unistd.h>
 // SPDX-SnippetEnd
 #include <Message.h>
 #include <MessengerPrivate.h>
@@ -101,6 +103,26 @@ Registrar::Registrar(status_t* _error)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+	{
+		bool seeded = false;
+		int fd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
+		if (fd >= 0) {
+			ssize_t got = read(fd, fProxySecret, sizeof(fProxySecret));
+			close(fd);
+			seeded = (got == (ssize_t)sizeof(fProxySecret));
+		}
+		if (!seeded) {
+			bigtime_t t = system_time();
+			uint64 mix = (uint64)t ^ ((uint64)find_thread(NULL) << 32)
+				^ (uint64)(uintptr_t)this;
+			for (size_t i = 0; i < sizeof(fProxySecret); i++) {
+				mix ^= mix >> 12;
+				mix ^= mix << 25;
+				mix ^= mix >> 27;
+				fProxySecret[i] = (uint8)((mix * 0x2545F4914F6CDD1DULL) >> 56);
+			}
+		}
+	}
 	fPublicPort = BLaunchRoster().GetPort(B_REGISTRAR_SIGNATURE, NULL);
 	if (fPublicPort < 0) {
 		fPublicPort = create_port(B_LOOPER_PORT_DEFAULT_CAPACITY,
@@ -214,7 +236,18 @@ Registrar::ReadyToRun()
 	fMessageRunnerManager = new MessageRunnerManager(fEventQueue);
 
 	// init the global be_roster
-	BRoster::Private().SetTo(be_app_messenger, BMessenger(NULL, fMIMEManager));
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// Route registrar's own internal be_roster calls through fPublicPort so
+	// they receive a verified uid 0 stamp from the proxy thread.
+	BMessenger rosterMessenger(be_app_messenger);
+	if (fPublicPort >= 0) {
+		BMessenger::Private mp(rosterMessenger);
+		mp.SetTo(be_app->Team(), fPublicPort, mp.Token());
+	}
+	BRoster::Private().SetTo(rosterMessenger, BMessenger(NULL, fMIMEManager));
+// SPDX-SnippetEnd
 
 	// create the messaging service
 	error = MessagingService::CreateDefault();
@@ -255,6 +288,36 @@ Registrar::QuitRequested()
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+/*static*/ bool
+Registrar::VerifiedSenderUID(const BMessage* message, uid_t* _uid)
+{
+	Registrar* app = Registrar::App();
+	if (app == NULL || message == NULL || _uid == NULL)
+		return false;
+
+	const void* secret = NULL;
+	ssize_t secretSize = 0;
+	if (message->FindData("_r5_proxy_secret", B_RAW_TYPE, &secret, &secretSize)
+			!= B_OK
+		|| secret == NULL
+		|| secretSize != (ssize_t)sizeof(app->fProxySecret)) {
+		return false;
+	}
+	const uint8* got = (const uint8*)secret;
+	uint8 diff = 0;
+	for (size_t i = 0; i < sizeof(app->fProxySecret); i++)
+		diff |= got[i] ^ app->fProxySecret[i];
+	if (diff != 0)
+		return false;
+
+	int32 uid = -1;
+	if (message->FindInt32("_r5_sender_uid", &uid) != B_OK || uid < 0)
+		return false;
+	*_uid = (uid_t)uid;
+	return true;
+}
+
+
 /*static*/ status_t
 Registrar::_PortProxyThread(void* data)
 {
@@ -267,6 +330,7 @@ void
 Registrar::_PortProxyLoop()
 {
 	port_id innerPort = BMessenger::Private(be_app_messenger).Port();
+	team_id selfTeam = be_app->Team();
 	while (true) {
 		port_message_info info;
 		status_t status;
@@ -277,8 +341,22 @@ Registrar::_PortProxyLoop()
 			break;
 
 		char* buffer = info.size > 0 ? (char*)malloc(info.size) : NULL;
-		if (info.size > 0 && buffer == NULL)
+		if (info.size > 0 && buffer == NULL) {
+			// Drain the message so we do not spin on it, and unblock any
+			// synchronous sender with B_NO_REPLY when possible.
+			char discard[256];
+			int32 dropCode = 0;
+			ssize_t dropped = read_port_etc(fPublicPort, &dropCode, discard,
+				sizeof(discard), B_RELATIVE_TIMEOUT, 0);
+			if (dropped > 0 && dropped <= (ssize_t)sizeof(discard)) {
+				BMessage droppedMsg;
+				if (droppedMsg.Unflatten(discard) == B_OK
+					&& droppedMsg.IsSourceWaiting()) {
+					droppedMsg.SendReply(B_NO_REPLY);
+				}
+			}
 			continue;
+		}
 
 		int32 code = 0;
 		ssize_t bytesRead = read_port_etc(fPublicPort, &code, buffer,
@@ -290,30 +368,51 @@ Registrar::_PortProxyLoop()
 			continue;
 		}
 
-		bool forwarded = false;
 		if (bytesRead > 0 && buffer != NULL) {
 			BMessage msg;
 			if (msg.Unflatten(buffer) == B_OK) {
+				free(buffer);
+				buffer = NULL;
+
 				msg.RemoveName("_r5_sender_uid");
 				msg.RemoveName("_r5_sender_team");
-				msg.AddInt32("_r5_sender_uid", (int32)info.sender);
-				msg.AddInt32("_r5_sender_team", (int32)info.sender_team);
-				ssize_t flatSize = msg.FlattenedSize();
-				char* flatBuf = flatSize > 0 ? (char*)malloc(flatSize) : NULL;
-				if (flatBuf != NULL && msg.Flatten(flatBuf, flatSize) == B_OK) {
-					// Clear reply target on local copy so ~BMessage does not
-					// send a spurious B_NO_REPLY before innerPort handles it.
-					BMessage::Private(msg).SetReply(-1, -1, B_NULL_TOKEN);
-					write_port(innerPort, code, flatBuf, flatSize);
-					forwarded = true;
-				} else {
-					BMessage::Private(msg).SetReply(-1, -1, B_NULL_TOKEN);
+				msg.RemoveName("_r5_proxy_secret");
+				status_t stampErr = msg.AddInt32("_r5_sender_uid",
+					(int32)info.sender);
+				if (stampErr == B_OK) {
+					stampErr = msg.AddInt32("_r5_sender_team",
+						(int32)info.sender_team);
 				}
-				free(flatBuf);
+				if (stampErr == B_OK) {
+					stampErr = msg.AddData("_r5_proxy_secret", B_RAW_TYPE,
+						fProxySecret, sizeof(fProxySecret));
+				}
+
+				if (stampErr == B_OK) {
+					// Forward through BMessage::Private::SendMessage so large
+					// messages (> 40 KB / > 256 KB) use direct enqueue or
+					// MESSAGE_FLAG_PASS_BY_AREA and keep reply metadata intact.
+					BMessage::Private msgPriv(msg);
+					bool replyRequired = msg.IsSourceWaiting();
+					BMessenger replyTo;
+					status_t sendErr = msgPriv.SendMessage(innerPort, selfTeam,
+						msgPriv.GetTarget(), B_INFINITE_TIMEOUT, replyRequired,
+						replyTo);
+					if (sendErr != B_OK && msg.IsSourceWaiting())
+						msg.SendReply(B_NO_REPLY);
+				} else if (msg.IsSourceWaiting()) {
+					msg.SendReply(B_NO_REPLY);
+				}
+				continue;
 			}
 		}
-		if (!forwarded)
-			write_port(innerPort, code, buffer, bytesRead);
+
+		status_t writeErr;
+		do {
+			writeErr = write_port_etc(innerPort, code, buffer, bytesRead,
+				B_RELATIVE_TIMEOUT, 5000000);
+		} while (writeErr == B_INTERRUPTED);
+		(void)writeErr;
 		free(buffer);
 	}
 }

@@ -322,7 +322,7 @@ AppServer::_DestroyDesktop(uid_t userID)
 	if (userID == 0)
 		return B_PERMISSION_DENIED;
 
-	Desktop* desktop = NULL;
+	thread_id thread = -1;
 	{
 		BAutolock locker(fDesktopLock);
 		for (int32 i = 0; i < fDesktops.CountItems(); i++) {
@@ -330,21 +330,33 @@ AppServer::_DestroyDesktop(uid_t userID)
 			if (item->UserID() == userID && item->TargetScreen() == NULL) {
 				if (item->IsShown())
 					return B_BUSY;
-				desktop = fDesktops.RemoveItemAt(i);
+				fDesktops.RemoveItemAt(i);
+				thread = item->Thread();
+				// Desktop deletes itself on its own looper thread via
+				// B_QUIT_REQUESTED -> kMsgQuitLooper -> MessageLooper::Quit()
+				// -> delete this. Do not dereference or delete item after
+				// posting B_QUIT_REQUESTED.
+				item->PostMessage(B_QUIT_REQUESTED);
 				break;
 			}
 		}
 	}
 
-	if (desktop == NULL)
+	if (thread < 0)
 		return B_NAME_NOT_FOUND;
 
-	thread_id thread = desktop->Thread();
-	desktop->PostMessage(B_QUIT_REQUESTED);
-	status_t threadStatus;
-	if (thread >= 0)
-		wait_for_thread(thread, &threadStatus);
-	delete desktop;
+	// Bounded wait policy: wait up to 5 s for the desktop thread to exit so
+	// normal teardown finishes before returning B_OK, without blocking the
+	// admin port forever if a client app refuses to quit. On timeout, return
+	// B_TIMED_OUT and let the desktop finish quitting in the background.
+	const bigtime_t kDestroyTimeout = 5000000;
+	bigtime_t deadline = system_time() + kDestroyTimeout;
+	thread_info info;
+	while (get_thread_info(thread, &info) == B_OK) {
+		if (system_time() >= deadline)
+			return B_TIMED_OUT;
+		snooze(50000);
+	}
 	return B_OK;
 }
 
@@ -360,16 +372,29 @@ AppServer::_FillDesktopInfo(BMessage* reply)
 			continue;
 		if (desktop->IsShown())
 			activeUser = (int32)desktop->UserID();
-		DesktopSettings settings(desktop);
+		int32 workspace = 0;
+		int32 count = 0;
+		int32 columns = 0;
+		int32 rows = 0;
+		int64 windowBytes = 0;
+		if (desktop->LockSingleWindow()) {
+			DesktopSettings settings(desktop);
+			workspace = desktop->CurrentWorkspace();
+			count = settings.WorkspacesCount();
+			columns = settings.WorkspacesColumns();
+			rows = settings.WorkspacesRows();
+			Compositor* compositor = desktop->GetCompositor();
+			windowBytes = compositor != NULL
+				? (int64)compositor->WindowBytes() : 0;
+			desktop->UnlockSingleWindow();
+		}
 		reply->AddInt32("user", (int32)desktop->UserID());
 		reply->AddBool("shown", desktop->IsShown());
-		reply->AddInt32("workspace", desktop->CurrentWorkspace());
-		reply->AddInt32("workspaces_count", settings.WorkspacesCount());
-		reply->AddInt32("workspaces_columns", settings.WorkspacesColumns());
-		reply->AddInt32("workspaces_rows", settings.WorkspacesRows());
-		Compositor* compositor = desktop->GetCompositor();
-		reply->AddInt64("window_bytes",
-			compositor != NULL ? (int64)compositor->WindowBytes() : 0);
+		reply->AddInt32("workspace", workspace);
+		reply->AddInt32("workspaces_count", count);
+		reply->AddInt32("workspaces_columns", columns);
+		reply->AddInt32("workspaces_rows", rows);
+		reply->AddInt64("window_bytes", windowBytes);
 	}
 	reply->AddInt32("active_user", activeUser);
 	reply->AddInt64("total_window_bytes",
