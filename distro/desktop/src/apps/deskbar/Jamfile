@@ -51,6 +51,7 @@ Application Deskbar :
 	# Deskbar styles (docs/design/DESKBAR-STYLES.md)
 	DeskbarStyle.cpp
 	DeskbarStyleViews.cpp
+	IconColumnMenuItem.cpp
 # SPDX-SnippetEnd
 	: be translation localestub tracker $(targetLib) [ TargetLibstdc++ ] [ TargetLibsupc++ ]
 # SPDX-SnippetBegin
