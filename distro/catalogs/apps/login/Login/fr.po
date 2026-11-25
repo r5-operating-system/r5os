@@ -1,0 +1,676 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.Haiku-Login\nLanguage: fr\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "There must be at least one administrator."
+msgstr "Il doit y avoir au moins un administrateur."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "An account named \"guest\" already exists. Rename it first."
+msgstr "Un compte nommé « guest » existe déjà. Renommez-le d'abord."
+
+#, fuzzy
+msgctxt "Login: Driver admin"
+msgid "Only system drivers can be turned off here."
+msgstr "Seuls les pilotes système peuvent être désactivés ici."
+
+#, fuzzy
+msgctxt "Login: Application"
+msgid "Unknown request."
+msgstr "Demande inconnue."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "%program% failed"
+msgstr "Échec de %program%"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The original administrator account cannot be disabled."
+msgstr "Le compte administrateur d'origine ne peut pas être désactivé."
+
+#, fuzzy
+msgctxt "Login: Application"
+msgid "Could not start the desktop."
+msgstr "Impossible de démarrer le bureau."
+
+#, fuzzy
+msgctxt "Login: Lock window"
+msgid "Password"
+msgstr "Mot de passe"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "That picture is too large."
+msgstr "Cette image est trop grande."
+
+#, fuzzy
+msgctxt "Login: Sign in view"
+msgid "That password is not right."
+msgstr "Ce mot de passe n'est pas correct."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The name could not be saved."
+msgstr "Le nom n'a pas pu être enregistré."
+
+#, fuzzy
+msgctxt "Login: Sign in view"
+msgid "Checking…"
+msgstr "Vérification…"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "That username already exists."
+msgstr "Ce nom d'utilisateur existe déjà."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Please enter a password."
+msgstr "Veuillez saisir un mot de passe."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The first administrator stays an administrator."
+msgstr "Le premier administrateur reste administrateur."
+
+#, fuzzy
+msgctxt "Login: Driver admin"
+msgid "This driver is not part of a package."
+msgstr "Ce pilote ne fait partie d'aucun paquet."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Log out Guest first."
+msgstr "Déconnectez d'abord l'invité."
+
+#, fuzzy
+msgctxt "Login: Application"
+msgid "Info"
+msgstr "Info"
+
+#, fuzzy
+msgctxt "Login: Driver settings admin"
+msgid "The request names no setting."
+msgstr "La demande ne nomme aucun paramètre."
+
+#, fuzzy
+msgctxt "Login: Driver settings admin"
+msgid "A line has no end."
+msgstr "Une ligne n'a pas de fin."
+
+#, fuzzy
+msgctxt "Login: Sign in view"
+msgid "Ready to sign in as Guest"
+msgstr "Prêt à se connecter en tant qu'invité"
+
+#, fuzzy
+msgctxt "Login: Sign in view"
+msgid "Your name"
+msgstr "Votre nom"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Could not encrypt the password."
+msgstr "Impossible de chiffrer le mot de passe."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The password could not be saved."
+msgstr "Le mot de passe n'a pas pu être enregistré."
+
+#, fuzzy
+msgctxt "Login: Lock window"
+msgid "Log out"
+msgstr "Se déconnecter"
+
+#, fuzzy
+msgctxt "Login: Sign in view"
+msgid "Ready to sign in as %name%"
+msgstr "Prêt à se connecter en tant que %name%"
+
+#, fuzzy
+msgctxt "Login: Sign in view"
+msgid "Sign in as Guest"
+msgstr "Se connecter en tant qu'invité"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Guest setting requires the sign-in helper."
+msgstr "Le paramètre invité nécessite l'assistant de connexion."
+
+#, fuzzy
+msgctxt "Login: Application"
+msgid "Guest sessions cannot be locked."
+msgstr "Les sessions invité ne peuvent pas être verrouillées."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The account exists, but the password was not set."
+msgstr "Le compte existe, mais le mot de passe n'a pas été défini."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The guest's old files could not be removed."
+msgstr "Les anciens fichiers de l'invité n'ont pas pu être supprimés."
+
+#, fuzzy
+msgctxt "Login: Sign in view"
+msgid "Sign-ins are forgotten when you shut down."
+msgstr "Les connexions sont oubliées à l'extinction."
+
+#, fuzzy
+msgctxt "Login: Sign in view"
+msgid "SELECT ACCOUNT"
+msgstr "CHOISIR UN COMPTE"
+
+#, fuzzy
+msgctxt "Login: Driver admin"
+msgid "This driver is needed to start the system and cannot be turned off."
+msgstr "Ce pilote est nécessaire au démarrage du système et ne peut pas être désactivé."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The account type could not be changed."
+msgstr "Le type de compte n'a pas pu être modifié."
+
+#, fuzzy
+msgctxt "Login: Lock window"
+msgid "Standard"
+msgstr "Standard"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Unknown account request."
+msgstr "Demande de compte inconnue."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "That email address cannot be saved."
+msgstr "Cette adresse e-mail ne peut pas être enregistrée."
+
+#. A return message from fDesktopShelf->Save(). It can be "B_OK"
+msgctxt "Desktop Window"
+msgid "error %s\n"
+msgstr "erreur %s\n"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The original administrator account cannot be deleted."
+msgstr "Le compte administrateur d'origine ne peut pas être supprimé."
+
+#, fuzzy
+msgctxt "Login: Lock window"
+msgid "Enter password"
+msgstr "Saisissez le mot de passe"
+
+#, fuzzy
+msgctxt "Login: Sign in view"
+msgid "Repeat password"
+msgstr "Répéter le mot de passe"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "That name is too long."
+msgstr "Ce nom est trop long."
+
+#, fuzzy
+msgctxt "Login: Sign in view"
+msgid "New password"
+msgstr "Nouveau mot de passe"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The last administrator cannot become a standard account."
+msgstr "Le dernier administrateur ne peut pas devenir un compte standard."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Could not enable the account."
+msgstr "Impossible d'activer le compte."
+
+#, fuzzy
+msgctxt "Login: Driver settings admin"
+msgid "This value is not allowed."
+msgstr "Cette valeur n'est pas autorisée."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "That account cannot unlock settings."
+msgstr "Ce compte ne peut pas déverrouiller les paramètres."
+
+#, fuzzy
+msgctxt "Login: Sign in view"
+msgid "Password"
+msgstr "Mot de passe"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Your password was not changed because the key store could not be updated."
+msgstr "Votre mot de passe n'a pas été modifié, car le trousseau de clés n'a pas pu être mis à jour."
+
+#, fuzzy
+msgctxt "Login: Application"
+msgid "That password is not right."
+msgstr "Ce mot de passe n'est pas correct."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Use a lowercase username of letters, digits, underscore or hyphen."
+msgstr "Utilisez un nom d'utilisateur en minuscules : lettres, chiffres, tiret bas ou trait d'union."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "That account does not exist."
+msgstr "Ce compte n'existe pas."
+
+#, fuzzy
+msgctxt "Login: Sign in view"
+msgid "Standard"
+msgstr "Standard"
+
+#, fuzzy
+msgctxt "Login: Lock window"
+msgid "Checking…"
+msgstr "Vérification…"
+
+#, fuzzy
+msgctxt "Login: Sign in view"
+msgid "Signing in as:"
+msgstr "Connexion en tant que :"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The clock could not be changed."
+msgstr "L'horloge n'a pas pu être modifiée."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "You cannot delete the account that is signed in."
+msgstr "Vous ne pouvez pas supprimer le compte actuellement connecté."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The account was not created."
+msgstr "Le compte n'a pas été créé."
+
+#, fuzzy
+msgctxt "Login: Sign in view"
+msgid "Enter password"
+msgstr "Saisissez le mot de passe"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The password could not be saved. If you are later asked for your old password for saved passwords, enter the new password you just typed."
+msgstr "Le mot de passe n'a pas pu être enregistré. Si l'on vous demande plus tard votre ancien mot de passe pour les mots de passe enregistrés, saisissez le nouveau mot de passe que vous venez de taper."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "That account was not found."
+msgstr "Ce compte est introuvable."
+
+#, fuzzy
+msgctxt "Login: Sign in view"
+msgid "Restart"
+msgstr "Redémarrer"
+
+#, fuzzy
+msgctxt "Login: Application"
+msgid "Your files are still being prepared."
+msgstr "Vos fichiers sont encore en préparation."
+
+#, fuzzy
+msgctxt "Login: Application"
+msgid "Error"
+msgstr "Erreur"
+
+#, fuzzy
+msgctxt "Login: Driver settings admin"
+msgid "Unlock this with an administrator password."
+msgstr "Déverrouillez avec un mot de passe administrateur."
+
+#, fuzzy
+msgctxt "Login: Driver admin"
+msgid "The driver file was not found."
+msgstr "Le fichier du pilote est introuvable."
+
+#, fuzzy
+msgctxt "Login: Driver admin"
+msgid "No driver was given."
+msgstr "Aucun pilote n'a été indiqué."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Could not disable the account."
+msgstr "Impossible de désactiver le compte."
+
+#, fuzzy
+msgctxt "Login: Sign in view"
+msgid "Sign in"
+msgstr "Se connecter"
+
+#, fuzzy
+msgctxt "Login: Lock window"
+msgid "Enter your password to unlock"
+msgstr "Saisissez votre mot de passe pour déverrouiller"
+
+#, fuzzy
+msgctxt "Login: Driver admin"
+msgid "The settings file could not be written."
+msgstr "Le fichier de paramètres n'a pas pu être écrit."
+
+#, fuzzy
+msgctxt "Login: Sign in view"
+msgid "Choose a password first."
+msgstr "Choisissez d'abord un mot de passe."
+
+#, fuzzy
+msgctxt "Login: Sign in view"
+msgid "This account has no password yet."
+msgstr "Ce compte n'a pas encore de mot de passe."
+
+#, fuzzy
+msgctxt "Login: Driver settings admin"
+msgid "Driver settings require the sign-in helper."
+msgstr "Les paramètres des pilotes nécessitent l'assistant de connexion."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The picture could not be saved."
+msgstr "L'image n'a pas pu être enregistrée."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Unlock this with an administrator password."
+msgstr "Déverrouillez avec un mot de passe administrateur."
+
+#, fuzzy
+msgctxt "Login: Driver admin"
+msgid "The settings file could not be read."
+msgstr "Le fichier de paramètres n'a pas pu être lu."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The account was removed, but its files could not be deleted."
+msgstr "Le compte a été supprimé, mais ses fichiers n'ont pas pu être effacés."
+
+#, fuzzy
+msgctxt "Login: Sign in view"
+msgid "Welcome to R5"
+msgstr "Bienvenue dans R5"
+
+#, fuzzy
+msgctxt "Login: Driver settings admin"
+msgid "The request is empty."
+msgstr "La demande est vide."
+
+#, fuzzy
+msgctxt "Login: Application"
+msgid "Choose a password first."
+msgstr "Choisissez d'abord un mot de passe."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "This account already has a password."
+msgstr "Ce compte a déjà un mot de passe."
+
+#, fuzzy
+msgctxt "Login: Application"
+msgid "Drop replicants on this desktop to customize the login background. Quit with Cmd-Q when you are finished."
+msgstr "Déposez des réplicants sur ce bureau pour personnaliser l'arrière-plan de connexion. Quittez avec Cmd-Q lorsque vous avez terminé."
+
+#, fuzzy
+msgctxt "Login: Driver settings admin"
+msgid "A line is not a setting."
+msgstr "Une ligne n'est pas un paramètre."
+
+#, fuzzy
+msgctxt "Login: Sign in view"
+msgid "Choose a password for this account."
+msgstr "Choisissez un mot de passe pour ce compte."
+
+#, fuzzy
+msgctxt "Login: Sign in window"
+msgid "Sign in"
+msgstr "Connexion"
+
+#, fuzzy
+msgctxt "Login: Driver settings admin"
+msgid "Too many settings."
+msgstr "Trop de paramètres."
+
+#, fuzzy
+msgctxt "Login: Application"
+msgid "Preparing your files… %count%"
+msgstr "Préparation de vos fichiers… %count%"
+
+#, fuzzy
+msgctxt "Login: Application"
+msgid "Could not start the session: %error%"
+msgstr "Impossible de démarrer la session : %error%"
+
+#, fuzzy
+msgctxt "Login: Driver admin"
+msgid "Driver changes require the sign-in helper."
+msgstr "Les modifications de pilotes nécessitent l'assistant de connexion."
+
+#, fuzzy
+msgctxt "Login: Application"
+msgid "Sleep is not available yet."
+msgstr "La mise en veille n'est pas encore disponible."
+
+#, fuzzy
+msgctxt "Login: Lock window"
+msgid "Shut down"
+msgstr "Éteindre"
+
+#, fuzzy
+msgctxt "Login: Sign in view"
+msgid "Sign in to start your session"
+msgstr "Connectez-vous pour démarrer votre session"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Account changes require the sign-in helper."
+msgstr "Les modifications de comptes nécessitent l'assistant de connexion."
+
+#, fuzzy
+msgctxt "Login: Sign in view"
+msgid "No password"
+msgstr "Aucun mot de passe"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Type a password."
+msgstr "Saisissez un mot de passe."
+
+#, fuzzy
+msgctxt "Login: Application"
+msgid "Please enter your password."
+msgstr "Veuillez saisir votre mot de passe."
+
+#, fuzzy
+msgctxt "Login: Driver settings admin"
+msgid "The request is incomplete."
+msgstr "La demande est incomplète."
+
+#, fuzzy
+msgctxt "Login: Sign in view"
+msgid "Shut down"
+msgstr "Éteindre"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Could not save the guest setting."
+msgstr "Impossible d'enregistrer le paramètre invité."
+
+#, fuzzy
+msgctxt "Login: Application"
+msgid "Only the signed-in session may lock or log out."
+msgstr "Seule la session connectée peut verrouiller ou se déconnecter."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Could not create the guest account."
+msgstr "Impossible de créer le compte invité."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "That password is not right."
+msgstr "Ce mot de passe n'est pas correct."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The account folder could not be updated."
+msgstr "Le dossier du compte n'a pas pu être mis à jour."
+
+msgctxt "Desktop Window"
+msgid "Desktop"
+msgstr "Bureau"
+
+#, fuzzy
+msgctxt "Login: Sign in view"
+msgid "Administrator"
+msgstr "Administrateur"
+
+#, fuzzy
+msgctxt "Login: Lock window"
+msgid "Unlock"
+msgstr "Déverrouiller"
+
+#, fuzzy
+msgctxt "Login: Sign in view"
+msgid "Signing in as Guest…"
+msgstr "Connexion en tant qu'invité…"
+
+#, fuzzy
+msgctxt "Login: Sign in view"
+msgid "The two passwords are not the same."
+msgstr "Les deux mots de passe ne sont pas identiques."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The name cannot contain a colon or a new line."
+msgstr "Le nom ne peut pas contenir de deux-points ni de saut de ligne."
+
+#, fuzzy
+msgctxt "Login: Driver admin"
+msgid "Unlock this with an administrator password."
+msgstr "Déverrouillez avec un mot de passe administrateur."
+
+#, fuzzy
+msgctxt "Login: Application"
+msgid "OK"
+msgstr "OK"
+
+#, fuzzy
+msgctxt "Login: Sign in view"
+msgid "Everything you make as Guest is deleted when you log out. Save what you want to keep on a USB stick or in the Shared folder."
+msgstr "Tout ce que vous créez en tant qu'invité est supprimé à la déconnexion. Enregistrez ce que vous voulez garder sur une clé USB ou dans le dossier partagé."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Guest account setup requires the sign-in helper."
+msgstr "La configuration du compte invité nécessite l'assistant de connexion."
+
+#, fuzzy
+msgctxt "Login: Lock window"
+msgid "Restart"
+msgstr "Redémarrer"
+
+#, fuzzy
+msgctxt "Login: Application"
+msgid "Could not shut down: %error%"
+msgstr "Impossible d'éteindre : %error%"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The email address could not be saved."
+msgstr "L'adresse e-mail n'a pas pu être enregistrée."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Could not save the guest account."
+msgstr "Impossible d'enregistrer le compte invité."
+
+#, fuzzy
+msgctxt "Login: Sign in view"
+msgid "Save and sign in"
+msgstr "Enregistrer et se connecter"
+
+#, fuzzy
+msgctxt "Login: Sign in view"
+msgid "Guest"
+msgstr "Invité"
+
+#, fuzzy
+msgctxt "Login: Sign in view"
+msgid "{0, plural, one{# account available} other{# accounts available}}"
+msgstr "{0, plural, one{# compte disponible} other{# comptes disponibles}}"
+
+#, fuzzy
+msgctxt "Login: Application"
+msgid "Could not prepare your files: %error%"
+msgstr "Impossible de préparer vos fichiers : %error%"
+
+#, fuzzy
+msgctxt "Login: Driver admin"
+msgid "The request is empty."
+msgstr "La demande est vide."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Only the sign-in helper can set this password."
+msgstr "Seul l'assistant de connexion peut définir ce mot de passe."
+
+#, fuzzy
+msgctxt "Login: Lock window"
+msgid "Administrator"
+msgstr "Administrateur"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The account exists, but it is not an administrator: %error%"
+msgstr "Le compte existe, mais ce n'est pas un administrateur : %error%"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The new account did not get a user id of 1000 or higher."
+msgstr "Le nouveau compte n'a pas reçu d'identifiant utilisateur de 1000 ou plus."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The existing guest account has an unexpected setup."
+msgstr "Le compte invité existant a une configuration inattendue."
+
+#, fuzzy
+msgctxt "Login: Driver settings admin"
+msgid "This setting is not allowed."
+msgstr "Ce paramètre n'est pas autorisé."
+
+#, fuzzy
+msgctxt "Login: Sign in view"
+msgid "Choose an account first."
+msgstr "Choisissez d'abord un compte."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The account could not become an administrator."
+msgstr "Le compte n'a pas pu devenir administrateur."
+
+#, fuzzy
+msgctxt "Login: Lock window"
+msgid "That password is not right."
+msgstr "Ce mot de passe n'est pas correct."
+
+#, fuzzy
+msgctxt "Login: Lock window"
+msgid "Locked"
+msgstr "Verrouillé"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "This account is an administrator through its system group."
+msgstr "Ce compte est administrateur par son groupe système."

@@ -26,6 +26,9 @@ UsePrivateHeaders app interface ;
 
 # Primary arch: the target name is libr5ui.so. That is also the soname.
 # Both images install it through HaikuImageGetSystemLibs.
+# The signature by which the Locale Kit finds this library's catalog.
+AddResources [ MultiArchDefaultGristFiles libr5ui.so ] : libr5ui.rdef ;
+
 SharedLibrary [ MultiArchDefaultGristFiles libr5ui.so ] :
 	R5UI.cpp
 	Card.cpp
@@ -47,5 +50,26 @@ SharedLibrary [ MultiArchDefaultGristFiles libr5ui.so ] :
 	CardStripItem.cpp
 	CardStrip.cpp
 	Themes.cpp
-	: be libr5icons.so libr5admin.so [ TargetLibstdc++ ]
+	: be libr5icons.so libr5admin.so localestub [ TargetLibstdc++ ]
+	;
+
+DoCatalogs libr5ui.so :
+	x-vnd.R5OS-libr5ui
+	:
+	R5UI.cpp
+	Card.cpp
+	SidebarItem.cpp
+	Sidebar.cpp
+	ActionCard.cpp
+	PageHeader.cpp
+	ScreenArrangement.cpp
+	UserCard.cpp
+	UserListItem.cpp
+	PasswordControl.cpp
+	IconView.cpp
+	AccentButton.cpp
+	AdminLock.cpp
+	CardStripItem.cpp
+	CardStrip.cpp
+	Themes.cpp
 	;

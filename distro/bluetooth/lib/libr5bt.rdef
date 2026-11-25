@@ -1,0 +1,7 @@
+/*
+ * SPDX-FileCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ * The signature of libr5bt.so. The Locale Kit finds its
+ * catalog by it (docs/TRANSLATIONS.md).
+ */
+resource app_signature "application/x-vnd.R5OS-libr5bt";

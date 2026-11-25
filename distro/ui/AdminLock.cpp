@@ -12,6 +12,7 @@
 
 #include <Alert.h>
 #include <Button.h>
+#include <Catalog.h>
 #include <Control.h>
 #include <LayoutBuilder.h>
 #include <MessageFilter.h>
@@ -27,6 +28,10 @@
 
 #include <string.h>
 #include <unistd.h>
+
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "libr5ui: Admin lock"
 
 
 using BAppearanceKit::BAdminLockBar;
@@ -98,7 +103,7 @@ ask_login(BMessage& request, BMessage& reply, BString& error)
 {
 	BMessenger login(kAdminLockLoginSignature);
 	if (!login.IsValid()) {
-		error = "Sign in must be running.";
+		error = B_TRANSLATE("Sign in must be running.");
 		return B_ERROR;
 	}
 
@@ -242,28 +247,30 @@ class UnlockWindow : public BWindow {
 public:
 	UnlockWindow(BMessenger target)
 		:
-		BWindow(BRect(0, 0, 320, 140), "Unlock", B_TITLED_WINDOW,
+		BWindow(BRect(0, 0, 320, 140), B_TRANSLATE("Unlock"), B_TITLED_WINDOW,
 			B_NOT_RESIZABLE | B_NOT_ZOOMABLE | B_AUTO_UPDATE_SIZE_LIMITS
 				| B_CLOSE_ON_ESCAPE),
 		fTarget(target),
 		fName(NULL),
 		fPassword(NULL)
 	{
-		fName = new BTextControl("name", "Administrator", "user", NULL);
-		fPassword = new BTextControl("password", "Password", "", NULL);
+		fName = new BTextControl("name", B_TRANSLATE("Administrator"), "user",
+			NULL);
+		fPassword = new BTextControl("password", B_TRANSLATE("Password"), "",
+			NULL);
 		fPassword->TextView()->HideTyping(true);
 
 		BLayoutBuilder::Group<>(this, B_VERTICAL, B_USE_SMALL_SPACING)
 			.SetInsets(B_USE_WINDOW_INSETS)
 			.Add(new BStringView("hint",
-				"This changes the computer, not only your account."))
+				B_TRANSLATE("This changes the computer, not only your account.")))
 			.Add(fName)
 			.Add(fPassword)
 			.AddGroup(B_HORIZONTAL)
 				.AddGlue()
-				.Add(new BButton("cancel", "Cancel",
+				.Add(new BButton("cancel", B_TRANSLATE("Cancel"),
 					new BMessage(B_QUIT_REQUESTED)))
-				.Add(new BButton("unlock", "Unlock",
+				.Add(new BButton("unlock", B_TRANSLATE("Unlock"),
 					new BMessage(kMsgUnlockOk)))
 			.End();
 
@@ -285,8 +292,8 @@ public:
 		fPassword->SetText("");
 		if (status != B_OK) {
 			BAlert* alert = new BAlert("Unlock",
-				error.Length() > 0 ? error.String() : "Could not unlock.",
-				"OK");
+				error.Length() > 0 ? error.String() : B_TRANSLATE("Could not unlock."),
+				B_TRANSLATE("OK"));
 			alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
 			alert->Go(NULL);
 			return;
@@ -323,8 +330,8 @@ BAdminLockBar::BAdminLockBar()
 	fUnlocked(false),
 	fSyncing(false)
 {
-	fLabel = new BStringView("admin-lock", "Locked");
-	fButton = new BButton("admin-unlock", "Unlock...",
+	fLabel = new BStringView("admin-lock", B_TRANSLATE("Locked"));
+	fButton = new BButton("admin-unlock", B_TRANSLATE("Unlock..."),
 		new BMessage(kMsgPressUnlock));
 	fFilter = new LockInputFilter(this);
 	BLayoutBuilder::Group<>(this)
@@ -456,15 +463,15 @@ BAdminLockBar::_Reload()
 	}
 
 	if (fAdmin) {
-		fLabel->SetText("Administrator");
+		fLabel->SetText(B_TRANSLATE("Administrator"));
 		fButton->Hide();
 	} else if (fUnlocked) {
-		fLabel->SetText("Unlocked for a few minutes");
-		fButton->SetLabel("Lock");
+		fLabel->SetText(B_TRANSLATE("Unlocked for a few minutes"));
+		fButton->SetLabel(B_TRANSLATE("Lock"));
 		fButton->Show();
 	} else {
-		fLabel->SetText("Locked");
-		fButton->SetLabel("Unlock...");
+		fLabel->SetText(B_TRANSLATE("Locked"));
+		fButton->SetLabel(B_TRANSLATE("Unlock..."));
 		fButton->Show();
 	}
 

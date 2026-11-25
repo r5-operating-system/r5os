@@ -1,0 +1,130 @@
+1	english	x-vnd.R5-DeviceManager	2748646058
+Device Manager	MainWindow		Device Manager
+%lld bytes	PropertiesWindow		%lld bytes
+Value:	PropertiesWindow		Value:
+Events are not available.	PropertiesWindow		Events are not available.
+Events	PropertiesWindow		Events
+Turned-off drivers	TurnedOffWindow		Turned-off drivers
+Cameras	DeviceModel		Cameras
+Not available	PropertiesWindow		Not available
+Turn on driver	MainWindow		Turn on driver
+Driver details	PropertiesWindow		Driver details
+Status	Report		Status
+Computer	DeviceModel		Computer
+About Device Manager	AboutWindow		About Device Manager
+Human interface devices	DeviceModel		Human interface devices
+Turn on driver	PropertiesWindow		Turn on driver
+The driver is turned off. It stops after a restart.\n\nThe device may then no longer appear in the list. To turn the driver on again, choose Action ▸ Turned-off drivers.	MainWindow		The driver is turned off. It stops after a restart.\n\nThe device may then no longer appear in the list. To turn the driver on again, choose Action ▸ Turned-off drivers.
+Property:	PropertiesWindow		Property:
+Turn off driver	MainWindow		Turn off driver
+Properties	Report		Properties
+No driver file is known for this device.	DriverControl		No driver file is known for this device.
+The report could not be saved: %error%	MainWindow		The report could not be saved: %error%
+OK	PropertiesWindow		OK
+Computer	MainWindow		Computer
+This driver is not part of a package.	DriverControl		This driver is not part of a package.
+Package:	PropertiesWindow		Package:
+Devices by type	MainWindow		Devices by type
+Driver file	PropertiesWindow		Driver file
+Devices.txt	MainWindow		Devices.txt
+Driver file:	PropertiesWindow		Driver file:
+Disk drives	DeviceModel		Disk drives
+Show hidden devices	MainWindow		Show hidden devices
+The PCI ID and USB ID lists	AboutWindow		The PCI ID and USB ID lists
+Location:	PropertiesWindow		Location:
+Close	TurnedOffWindow		Close
+Device paths	PropertiesWindow		Device paths
+Properties	MainWindow		Properties
+No driver is installed for this device. If you turned its driver off, Action ▸ Turned-off drivers turns it on again.	DeviceModel		No driver is installed for this device. If you turned its driver off, Action ▸ Turned-off drivers turns it on again.
+Unknown	PropertiesWindow		Unknown
+The driver is turned on. It loads after a restart.	MainWindow		The driver is turned on. It loads after a restart.
+Manager	AboutWindow		Manager
+Device tree.txt	MainWindow		Device tree.txt
+This driver is needed to start the system.	PropertiesWindow		This driver is needed to start the system.
+Help	MainWindow		Help
+Device tree…	MainWindow		Device tree…
+Driver	PropertiesWindow		Driver
+Sign in must be running to change a driver.	MainWindow		Sign in must be running to change a driver.
+Version %s • Part of R5 Operating System	AboutWindow		Version %s • Part of R5 Operating System
+ISA bus	DeviceModel		ISA bus
+Property	PropertiesWindow		Property
+About Device Manager…	MainWindow		About Device Manager…
+(your packages)	TurnedOffWindow		(your packages)
+Turned-off drivers…	MainWindow		Turned-off drivers…
+Computer	Report		Computer
+© 2026 R5OS Contributors	AboutWindow		© 2026 R5OS Contributors
+Devices by connection	MainWindow		Devices by connection
+%.1f MiB	PropertiesWindow		%.1f MiB
+Device status	PropertiesWindow		Device status
+Full details…	MainWindow		Full details…
+Network adapters	DeviceModel		Network adapters
+Export full details	MainWindow		Export full details
+Device Manager report	Report		Device Manager report
+OK	MainWindow		OK
+General	PropertiesWindow		General
+Devices, © 2008–2026 Haiku, Inc. (MIT)	AboutWindow		Devices, © 2008–2026 Haiku, Inc. (MIT)
+No events for this device.	PropertiesWindow		No events for this device.
+ACPI bus	DeviceModel		ACPI bus
+System devices	DeviceModel		System devices
+Quit	MainWindow		Quit
+The change was not saved.	DriverControl		The change was not saved.
+The system does not report which driver serves this device. It may still work.	DeviceModel		The system does not report which driver serves this device. It may still work.
+USB bus	DeviceModel		USB bus
+%.1f KiB	PropertiesWindow		%.1f KiB
+Driver	Report		Driver
+A part of the system serves this device.	PropertiesWindow		A part of the system serves this device.
+Action	MainWindow		Action
+Other system devices	DeviceModel		Other system devices
+Copyright	AboutWindow		Copyright
+Display adapters	DeviceModel		Display adapters
+No drivers are turned off.	TurnedOffWindow		No drivers are turned off.
+Based on	AboutWindow		Based on
+Layout: full details	Report		Layout: full details
+Turning off this driver turns off all devices that use it. The change takes effect after a restart.	MainWindow		Turning off this driver turns off all devices that use it. The change takes effect after a restart.
+License:	PropertiesWindow		License:
+Export	MainWindow		Export
+Cancel	MainWindow		Cancel
+File	MainWindow		File
+Version:	PropertiesWindow		Version:
+None reported	PropertiesWindow		None reported
+Details	PropertiesWindow		Details
+The driver for this device is turned off. It stops after a restart.	DeviceModel		The driver for this device is turned off. It stops after a restart.
+Unknown device	DeviceModel		Unknown device
+Turn off	MainWindow		Turn off
+MIT. Other systems may use and change it.	AboutWindow		MIT. Other systems may use and change it.
+This device is working properly.	DeviceModel		This device is working properly.
+Universal Serial Bus controllers	DeviceModel		Universal Serial Bus controllers
+PCI bus	DeviceModel		PCI bus
+Manufacturer:	PropertiesWindow		Manufacturer:
+Location	Report		Location
+On %s	DeviceModel		On %s
+Layout: device tree	Report		Layout: device tree
+Manufacturer	Report		Manufacturer
+Recent system log lines about this device:	PropertiesWindow		Recent system log lines about this device:
+Device	AboutWindow		Device
+Device Manager	System name		Device Manager
+None	PropertiesWindow		None
+Turn on	TurnedOffWindow		Turn on
+Other devices	DeviceModel		Other devices
+Hidden device	Report		Hidden device
+Scan for hardware changes	MainWindow		Scan for hardware changes
+View	MainWindow		View
+This device is no longer connected.	PropertiesWindow		This device is no longer connected.
+File size:	PropertiesWindow		File size:
+Export device tree	MainWindow		Export device tree
+[!] no driver, [off] driver turned off	Report		[!] no driver, [off] driver turned off
+Device type:	PropertiesWindow		Device type:
+Device paths	Report		Device paths
+Driver:	PropertiesWindow		Driver:
+Processors	DeviceModel		Processors
+PCI bus %s, device %s, function %s	DeviceModel		PCI bus %s, device %s, function %s
+Turn off driver	PropertiesWindow		Turn off driver
+Driver details…	PropertiesWindow		Driver details…
+Hardware names	AboutWindow		Hardware names
+Date modified:	PropertiesWindow		Date modified:
+Sound, video and game controllers	DeviceModel		Sound, video and game controllers
+A driver you turn on loads after a restart.	TurnedOffWindow		A driver you turn on loads after a restart.
+The settings file could not be written.	DriverControl		The settings file could not be written.
+Storage controllers	DeviceModel		Storage controllers
+Date	Report		Date
+License	AboutWindow		License

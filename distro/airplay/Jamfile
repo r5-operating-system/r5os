@@ -10,6 +10,9 @@ local opensslLib = [ FDirName $(opensslRoot) lib libcrypto.so.3 ] ;
 UseHeaders $(opensslInc) : true ;
 SubDirHdrs [ FDirName $(HAIKU_TOP) src servers airplay ] ;
 
+# airplay_deskbar has a catalog of its own (docs/TRANSLATIONS.md).
+HAIKU_MULTIPLE_LOCALIZED_TARGETS on $(SUBDIR) = 1 ;
+
 AddResources airplay_server : AirPlayServer.rdef ;
 
 Application airplay_server :
@@ -26,5 +29,12 @@ AddResources airplay_deskbar : AirPlayDeskbar.rdef ;
 
 Application airplay_deskbar :
 	AirPlayDeskbar.cpp
-	: be network bnetapi libr5ui.so libr5icons.so [ TargetLibstdc++ ]
+	: be network bnetapi libr5ui.so libr5icons.so localestub
+		[ TargetLibstdc++ ]
+	;
+
+DoCatalogs airplay_deskbar :
+	x-vnd.R5OS-airplay-tray
+	:
+	AirPlayDeskbar.cpp
 	;

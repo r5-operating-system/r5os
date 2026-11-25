@@ -15,6 +15,9 @@ SubDirHdrs $(HAIKU_TOP) src apps devicemanager ;
 SEARCH_SOURCE += [ FDirName $(HAIKU_TOP) src apps devices ] ;
 SEARCH_SOURCE += [ FDirName $(HAIKU_TOP) src apps devicemanager ] ;
 
+# Login and r5-tray have a catalog each (docs/TRANSLATIONS.md).
+HAIKU_MULTIPLE_LOCALIZED_TARGETS on $(SUBDIR) = 1 ;
+
 Application Login :
 	AccountAdmin.cpp
 	DesktopWindow.cpp
@@ -45,3 +48,18 @@ Application r5-tray :
 	TrayApp.cpp
 	: be [ TargetLibstdc++ ]
 ;
+
+DoCatalogs Login :
+	x-vnd.Haiku-Login
+	:
+	AccountAdmin.cpp
+	DesktopWindow.cpp
+	DriverAdmin.cpp
+	DriverSettingsAdmin.cpp
+	HomeLock.cpp
+	LockWindow.cpp
+	LoginApp.cpp
+	LoginWindow.cpp
+	LoginView.cpp
+	SignInBackground.cpp
+	;

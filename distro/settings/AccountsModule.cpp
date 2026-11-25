@@ -157,7 +157,9 @@ public:
 	AccountItem(const AccountInfo& info, const BBitmap* photo)
 		:
 		BUserListItem(info.name.String(), info.Shown(),
-			info.admin ? B_TRANSLATE("Administrator") : B_TRANSLATE("Standard")),
+			// English: libr5ui compares the role and translates it when it
+			// draws it.
+			info.admin ? "Administrator" : "Standard"),
 		fInfo(info),
 		fPhoto(photo != NULL ? new BBitmap(photo) : NULL)
 	{

@@ -14,12 +14,17 @@
 #include "BlockedDrivers.h"
 #include "DriverUtils.h"
 
+#include <Catalog.h>
 #include <Entry.h>
 #include <Path.h>
 #include <String.h>
 
 #include <string.h>
 #include <unistd.h>
+
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "Login: Driver admin"
 
 
 static const char* kKernelAddOns = "/boot/system/add-ons/kernel/";
@@ -65,14 +70,14 @@ handle_driver_admin_message(BMessage* request, BMessage& reply)
 {
 	reply.MakeEmpty();
 	if (request == NULL)
-		return fail(reply, B_BAD_VALUE, "The request is empty.");
+		return fail(reply, B_BAD_VALUE, B_TRANSLATE("The request is empty."));
 	if (geteuid() != 0) {
 		return fail(reply, B_PERMISSION_DENIED,
-			"Driver changes require the sign-in helper.");
+			B_TRANSLATE("Driver changes require the sign-in helper."));
 	}
 	if (!admin_sender_may_change(request)) {
 		return fail(reply, B_PERMISSION_DENIED,
-			"Unlock this with an administrator password.");
+			B_TRANSLATE("Unlock this with an administrator password."));
 	}
 
 	const char* driverString = NULL;
@@ -80,7 +85,7 @@ handle_driver_admin_message(BMessage* request, BMessage& reply)
 	if (request->FindString("driver", &driverString) != B_OK
 		|| request->FindBool("blocked", &blocked) != B_OK
 		|| driverString == NULL || driverString[0] == '\0') {
-		return fail(reply, B_BAD_VALUE, "No driver was given.");
+		return fail(reply, B_BAD_VALUE, B_TRANSLATE("No driver was given."));
 	}
 
 	// Only a plain path under the system kernel add-ons, nothing in the
@@ -90,7 +95,7 @@ handle_driver_admin_message(BMessage* request, BMessage& reply)
 		|| driver.FindFirst("/../") >= 0 || driver.FindFirst("//") >= 0
 		|| driver.EndsWith("/.") || driver.EndsWith("/..")) {
 		return fail(reply, B_NOT_ALLOWED,
-			"Only system drivers can be turned off here.");
+			B_TRANSLATE("Only system drivers can be turned off here."));
 	}
 
 	status_t status;
@@ -100,17 +105,17 @@ handle_driver_admin_message(BMessage* request, BMessage& reply)
 		BEntry entry(driverString);
 		if (normalized.InitCheck() != B_OK || driver != normalized.Path()
 			|| !entry.Exists() || entry.IsDirectory()) {
-			return fail(reply, B_ENTRY_NOT_FOUND, "The driver file was not found.");
+			return fail(reply, B_ENTRY_NOT_FOUND, B_TRANSLATE("The driver file was not found."));
 		}
 		if (is_critical_driver_path(driver)) {
-			return fail(reply, B_NOT_ALLOWED, "This driver is needed to start "
-				"the system and cannot be turned off.");
+			return fail(reply, B_NOT_ALLOWED, B_TRANSLATE("This driver is needed to start "
+				"the system and cannot be turned off."));
 		}
 
 		BString packageName;
 		if (!DriverUtils::IsPackagedDriver(driver, &packageName)) {
 			return fail(reply, B_NOT_SUPPORTED,
-				"This driver is not part of a package.");
+				B_TRANSLATE("This driver is not part of a package."));
 		}
 		BPath settingsPath;
 		BString relativePath;
@@ -119,7 +124,7 @@ handle_driver_admin_message(BMessage* request, BMessage& reply)
 		if (status != B_OK
 			|| strcmp(settingsPath.Path(), kSystemPackagesSettings) != 0) {
 			return fail(reply, B_NOT_ALLOWED,
-				"Only system drivers can be turned off here.");
+				B_TRANSLATE("Only system drivers can be turned off here."));
 		}
 		status = DriverUtils::UpdatePackageBlockedEntry(kSystemPackagesSettings,
 			packageName.String(), relativePath.String(), true);
@@ -130,7 +135,7 @@ handle_driver_admin_message(BMessage* request, BMessage& reply)
 		status = read_blocked_drivers(kSystemPackagesSettings, "/boot/system",
 			list);
 		if (status != B_OK)
-			return fail(reply, status, "The settings file could not be read.");
+			return fail(reply, status, B_TRANSLATE("The settings file could not be read."));
 		const BlockedDriver* found = NULL;
 		for (size_t i = 0; i < list.size(); i++) {
 			if (list[i].path == driver) {
@@ -146,7 +151,7 @@ handle_driver_admin_message(BMessage* request, BMessage& reply)
 			found->package.String(), found->relative.String(), false);
 	}
 	if (status != B_OK)
-		return fail(reply, status, "The settings file could not be written.");
+		return fail(reply, status, B_TRANSLATE("The settings file could not be written."));
 
 	reply.AddInt32("error", B_OK);
 	return B_OK;

@@ -1,0 +1,507 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-Users\nLanguage: nl\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "There must be at least one administrator."
+msgstr "Er moet minstens één beheerder zijn."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "An account named \"guest\" already exists. Rename it first."
+msgstr "Er bestaat al een account met de naam \"guest\". Wijzig eerst die naam."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "%program% failed"
+msgstr "%program% is mislukt"
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Enable account"
+msgstr "Account inschakelen"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The original administrator account cannot be disabled."
+msgstr "Het oorspronkelijke beheerdersaccount kan niet worden uitgeschakeld."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "That picture is too large."
+msgstr "Die afbeelding is te groot."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The name could not be saved."
+msgstr "De naam kon niet worden opgeslagen."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "That username already exists."
+msgstr "Die gebruikersnaam bestaat al."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Delete account…"
+msgstr "Account verwijderen…"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Please enter a password."
+msgstr "Voer een wachtwoord in."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The first administrator stays an administrator."
+msgstr "De eerste beheerder blijft beheerder."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Log out Guest first."
+msgstr "Meld Gast eerst af."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "You cannot delete the account that is signed in."
+msgstr "Je kunt het account dat is aangemeld niet verwijderen."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Remove picture"
+msgstr "Afbeelding verwijderen"
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "standard"
+msgstr "standaard"
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Users"
+msgstr "Gebruikers"
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "That picture could not be used."
+msgstr "Die afbeelding kon niet worden gebruikt."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Could not encrypt the password."
+msgstr "Het wachtwoord kon niet worden versleuteld."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Keep files"
+msgstr "Bestanden bewaren"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The password could not be saved."
+msgstr "Het wachtwoord kon niet worden opgeslagen."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Current"
+msgstr "Huidig"
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Users & Accounts"
+msgstr "Gebruikers & accounts"
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "The original administrator account cannot be disabled."
+msgstr "Het oorspronkelijke beheerdersaccount kan niet worden uitgeschakeld."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Add account"
+msgstr "Account toevoegen"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Guest setting requires the sign-in helper."
+msgstr "De gastinstelling vereist de aanmeldhulp."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The account exists, but the password was not set."
+msgstr "Het account bestaat, maar het wachtwoord is niet ingesteld."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The guest's old files could not be removed."
+msgstr "De oude bestanden van de gast konden niet worden verwijderd."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Delete %name%?"
+msgstr "%name% verwijderen?"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The account type could not be changed."
+msgstr "Het accounttype kon niet worden gewijzigd."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Unknown account request."
+msgstr "Onbekend accountverzoek."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "That email address cannot be saved."
+msgstr "Dat e-mailadres kan niet worden opgeslagen."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The original administrator account cannot be deleted."
+msgstr "Het oorspronkelijke beheerdersaccount kan niet worden verwijderd."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "That name is too long."
+msgstr "Die naam is te lang."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "OK"
+msgstr "OK"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The last administrator cannot become a standard account."
+msgstr "De laatste beheerder kan geen standaardaccount worden."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Change"
+msgstr "Wijzigen"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Could not enable the account."
+msgstr "Het account kon niet worden ingeschakeld."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "That account cannot unlock settings."
+msgstr "Dat account kan geen instellingen ontgrendelen."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Could not save this account."
+msgstr "Dit account kon niet worden opgeslagen."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Your password was not changed because the key store could not be updated."
+msgstr "Je wachtwoord is niet gewijzigd omdat de sleutelopslag niet kon worden bijgewerkt."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Type a password."
+msgstr "Typ een wachtwoord."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Username"
+msgstr "Gebruikersnaam"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Use a lowercase username of letters, digits, underscore or hyphen."
+msgstr "Gebruik een gebruikersnaam in kleine letters, met letters, cijfers, liggende streepjes of koppeltekens."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "administrator"
+msgstr "beheerder"
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Disable account"
+msgstr "Account uitschakelen"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "That account does not exist."
+msgstr "Dat account bestaat niet."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Standard account"
+msgstr "Standaardaccount"
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Delete"
+msgstr "Verwijderen"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The clock could not be changed."
+msgstr "De klok kon niet worden gewijzigd."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "You cannot delete the account that is signed in."
+msgstr "Je kunt het account dat is aangemeld niet verwijderen."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Cancel"
+msgstr "Annuleren"
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Change password"
+msgstr "Wachtwoord wijzigen"
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "That file is not a picture this computer can open."
+msgstr "Dat bestand is geen afbeelding die deze computer kan openen."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Unlock this with an administrator password."
+msgstr "Ontgrendel dit met een beheerderswachtwoord."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The account was not created."
+msgstr "Het account is niet aangemaakt."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Repeat"
+msgstr "Herhalen"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The password could not be saved. If you are later asked for your old password for saved passwords, enter the new password you just typed."
+msgstr "Het wachtwoord kon niet worden opgeslagen. Als later om je oude wachtwoord voor opgeslagen wachtwoorden wordt gevraagd, voer dan het nieuwe wachtwoord in dat je net hebt getypt."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "That account was not found."
+msgstr "Dat account is niet gevonden."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "The passwords do not match."
+msgstr "De wachtwoorden komen niet overeen."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Could not disable the account."
+msgstr "Het account kon niet worden uitgeschakeld."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Name"
+msgstr "Naam"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The picture could not be saved."
+msgstr "De afbeelding kon niet worden opgeslagen."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Unlock this with an administrator password."
+msgstr "Ontgrendel dit met een beheerderswachtwoord."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Email"
+msgstr "E-mail"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The account was removed, but its files could not be deleted."
+msgstr "Het account is verwijderd, maar de bestanden ervan konden niet worden gewist."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "This account already has a password."
+msgstr "Dit account heeft al een wachtwoord."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Accounts"
+msgstr "Accounts"
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "The original administrator account cannot be deleted."
+msgstr "Het oorspronkelijke beheerdersaccount kan niet worden verwijderd."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "The password could not be changed."
+msgstr "Het wachtwoord kon niet worden gewijzigd."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Account"
+msgstr "Account"
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Administrator"
+msgstr "Beheerder"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Account changes require the sign-in helper."
+msgstr "Wijzigingen aan accounts vereisen de aanmeldhulp."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Type a password."
+msgstr "Typ een wachtwoord."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Your account"
+msgstr "Je account"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Could not save the guest setting."
+msgstr "De gastinstelling kon niet worden opgeslagen."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Save"
+msgstr "Opslaan"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Could not create the guest account."
+msgstr "Het gastaccount kon niet worden aangemaakt."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "That password is not right."
+msgstr "Dat wachtwoord klopt niet."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The account folder could not be updated."
+msgstr "De accountmap kon niet worden bijgewerkt."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Sign in must be running to change accounts."
+msgstr "Aanmelden moet actief zijn om accounts te wijzigen."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Repeat password"
+msgstr "Herhaal wachtwoord"
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "New password"
+msgstr "Nieuw wachtwoord"
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Password"
+msgstr "Wachtwoord"
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Delete files"
+msgstr "Bestanden verwijderen"
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Type a new password."
+msgstr "Typ een nieuw wachtwoord."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Add account…"
+msgstr "Account toevoegen…"
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Choose picture..."
+msgstr "Afbeelding kiezen..."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The name cannot contain a colon or a new line."
+msgstr "De naam mag geen dubbele punt of nieuwe regel bevatten."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "sign-in off"
+msgstr "aanmelden uit"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Guest account setup requires the sign-in helper."
+msgstr "Het instellen van het gastaccount vereist de aanmeldhulp."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Change password..."
+msgstr "Wachtwoord wijzigen..."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The email address could not be saved."
+msgstr "Het e-mailadres kon niet worden opgeslagen."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Could not save the guest account."
+msgstr "Het gastaccount kon niet worden opgeslagen."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Only the sign-in helper can set this password."
+msgstr "Alleen de aanmeldhulp kan dit wachtwoord instellen."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Sign in did not answer."
+msgstr "Aanmelden gaf geen antwoord."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The account exists, but it is not an administrator: %error%"
+msgstr "Het account bestaat, maar is geen beheerder: %error%"
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "off"
+msgstr "uit"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The new account did not get a user id of 1000 or higher."
+msgstr "Het nieuwe account heeft geen gebruikers-ID van 1000 of hoger gekregen."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The existing guest account has an unexpected setup."
+msgstr "Het bestaande gastaccount is op een onverwachte manier ingericht."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The account could not become an administrator."
+msgstr "Het account kon geen beheerder worden."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "This account is an administrator through its system group."
+msgstr "Dit account is beheerder via zijn systeemgroep."

@@ -63,13 +63,13 @@ msgstr "Gebruikt om aan te melden; letters en cijfers"
 
 #, fuzzy
 msgctxt "Settings: Users and Accounts"
-msgid "Choose picture…"
-msgstr "Afbeelding kiezen…"
+msgid "Administrator"
+msgstr "Beheerder"
 
 #, fuzzy
 msgctxt "Settings: Users and Accounts"
-msgid "Administrator"
-msgstr "Beheerder"
+msgid "Choose picture…"
+msgstr "Afbeelding kiezen…"
 
 #, fuzzy
 msgctxt "Settings: Users and Accounts"

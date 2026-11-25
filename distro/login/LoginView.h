@@ -100,6 +100,7 @@ private:
 	BView*						fLiveNote;
 	bool						fSetupMode;
 	bool						fLiveMode;
+	bool						fBannerAdmin;
 	BAppearanceKit::BAccentButton* fLoginButton;
 	BStringView*				fInfoView;
 	bool						fInfoIsError;

@@ -1,0 +1,507 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-Users\nLanguage: fr\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "There must be at least one administrator."
+msgstr "Il doit y avoir au moins un administrateur."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "An account named \"guest\" already exists. Rename it first."
+msgstr "Un compte nommé « guest » existe déjà. Renommez-le d'abord."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "%program% failed"
+msgstr "Échec de %program%"
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Enable account"
+msgstr "Activer le compte"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The original administrator account cannot be disabled."
+msgstr "Le compte administrateur d'origine ne peut pas être désactivé."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "That picture is too large."
+msgstr "Cette image est trop grande."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The name could not be saved."
+msgstr "Le nom n'a pas pu être enregistré."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "That username already exists."
+msgstr "Ce nom d'utilisateur existe déjà."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Delete account…"
+msgstr "Supprimer le compte…"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Please enter a password."
+msgstr "Veuillez saisir un mot de passe."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The first administrator stays an administrator."
+msgstr "Le premier administrateur reste administrateur."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Log out Guest first."
+msgstr "Déconnectez d'abord l'invité."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "You cannot delete the account that is signed in."
+msgstr "Vous ne pouvez pas supprimer le compte actuellement connecté."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Remove picture"
+msgstr "Retirer l'image"
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "standard"
+msgstr "standard"
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Users"
+msgstr "Utilisateurs"
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "That picture could not be used."
+msgstr "Cette image n'a pas pu être utilisée."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Could not encrypt the password."
+msgstr "Impossible de chiffrer le mot de passe."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Keep files"
+msgstr "Conserver les fichiers"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The password could not be saved."
+msgstr "Le mot de passe n'a pas pu être enregistré."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Current"
+msgstr "Actuel"
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Users & Accounts"
+msgstr "Utilisateurs et comptes"
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "The original administrator account cannot be disabled."
+msgstr "Le compte administrateur d'origine ne peut pas être désactivé."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Add account"
+msgstr "Ajouter un compte"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Guest setting requires the sign-in helper."
+msgstr "Le paramètre invité nécessite l'assistant de connexion."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The account exists, but the password was not set."
+msgstr "Le compte existe, mais le mot de passe n'a pas été défini."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The guest's old files could not be removed."
+msgstr "Les anciens fichiers de l'invité n'ont pas pu être supprimés."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Delete %name%?"
+msgstr "Supprimer %name% ?"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The account type could not be changed."
+msgstr "Le type de compte n'a pas pu être modifié."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Unknown account request."
+msgstr "Demande de compte inconnue."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "That email address cannot be saved."
+msgstr "Cette adresse e-mail ne peut pas être enregistrée."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The original administrator account cannot be deleted."
+msgstr "Le compte administrateur d'origine ne peut pas être supprimé."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "That name is too long."
+msgstr "Ce nom est trop long."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "OK"
+msgstr "OK"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The last administrator cannot become a standard account."
+msgstr "Le dernier administrateur ne peut pas devenir un compte standard."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Change"
+msgstr "Modifier"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Could not enable the account."
+msgstr "Impossible d'activer le compte."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "That account cannot unlock settings."
+msgstr "Ce compte ne peut pas déverrouiller les paramètres."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Could not save this account."
+msgstr "Impossible d'enregistrer ce compte."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Your password was not changed because the key store could not be updated."
+msgstr "Votre mot de passe n'a pas été modifié, car le trousseau de clés n'a pas pu être mis à jour."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Type a password."
+msgstr "Saisissez un mot de passe."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Username"
+msgstr "Nom d'utilisateur"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Use a lowercase username of letters, digits, underscore or hyphen."
+msgstr "Utilisez un nom d'utilisateur en minuscules : lettres, chiffres, tiret bas ou trait d'union."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "administrator"
+msgstr "administrateur"
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Disable account"
+msgstr "Désactiver le compte"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "That account does not exist."
+msgstr "Ce compte n'existe pas."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Standard account"
+msgstr "Compte standard"
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Delete"
+msgstr "Supprimer"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The clock could not be changed."
+msgstr "L'horloge n'a pas pu être modifiée."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "You cannot delete the account that is signed in."
+msgstr "Vous ne pouvez pas supprimer le compte actuellement connecté."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Cancel"
+msgstr "Annuler"
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Change password"
+msgstr "Changer le mot de passe"
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "That file is not a picture this computer can open."
+msgstr "Ce fichier n'est pas une image que cet ordinateur peut ouvrir."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Unlock this with an administrator password."
+msgstr "Déverrouillez avec un mot de passe administrateur."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The account was not created."
+msgstr "Le compte n'a pas été créé."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Repeat"
+msgstr "Répéter"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The password could not be saved. If you are later asked for your old password for saved passwords, enter the new password you just typed."
+msgstr "Le mot de passe n'a pas pu être enregistré. Si l'on vous demande plus tard votre ancien mot de passe pour les mots de passe enregistrés, saisissez le nouveau mot de passe que vous venez de taper."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "That account was not found."
+msgstr "Ce compte est introuvable."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "The passwords do not match."
+msgstr "Les mots de passe ne correspondent pas."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Could not disable the account."
+msgstr "Impossible de désactiver le compte."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Name"
+msgstr "Nom"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The picture could not be saved."
+msgstr "L'image n'a pas pu être enregistrée."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Unlock this with an administrator password."
+msgstr "Déverrouillez avec un mot de passe administrateur."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Email"
+msgstr "E-mail"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The account was removed, but its files could not be deleted."
+msgstr "Le compte a été supprimé, mais ses fichiers n'ont pas pu être effacés."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "This account already has a password."
+msgstr "Ce compte a déjà un mot de passe."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Accounts"
+msgstr "Comptes"
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "The original administrator account cannot be deleted."
+msgstr "Le compte administrateur d'origine ne peut pas être supprimé."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "The password could not be changed."
+msgstr "Le mot de passe n'a pas pu être modifié."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Account"
+msgstr "Compte"
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Administrator"
+msgstr "Administrateur"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Account changes require the sign-in helper."
+msgstr "Les modifications de comptes nécessitent l'assistant de connexion."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Type a password."
+msgstr "Saisissez un mot de passe."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Your account"
+msgstr "Votre compte"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Could not save the guest setting."
+msgstr "Impossible d'enregistrer le paramètre invité."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Save"
+msgstr "Enregistrer"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Could not create the guest account."
+msgstr "Impossible de créer le compte invité."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "That password is not right."
+msgstr "Ce mot de passe n'est pas correct."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The account folder could not be updated."
+msgstr "Le dossier du compte n'a pas pu être mis à jour."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Sign in must be running to change accounts."
+msgstr "L'écran de connexion doit être actif pour modifier les comptes."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Repeat password"
+msgstr "Répéter le mot de passe"
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "New password"
+msgstr "Nouveau mot de passe"
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Password"
+msgstr "Mot de passe"
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Delete files"
+msgstr "Supprimer les fichiers"
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Type a new password."
+msgstr "Saisissez un nouveau mot de passe."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Add account…"
+msgstr "Ajouter un compte…"
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Choose picture..."
+msgstr "Choisir une image..."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The name cannot contain a colon or a new line."
+msgstr "Le nom ne peut pas contenir de deux-points ni de saut de ligne."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "sign-in off"
+msgstr "connexion désactivée"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Guest account setup requires the sign-in helper."
+msgstr "La configuration du compte invité nécessite l'assistant de connexion."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Change password..."
+msgstr "Changer le mot de passe..."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The email address could not be saved."
+msgstr "L'adresse e-mail n'a pas pu être enregistrée."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Could not save the guest account."
+msgstr "Impossible d'enregistrer le compte invité."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "Only the sign-in helper can set this password."
+msgstr "Seul l'assistant de connexion peut définir ce mot de passe."
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "Sign in did not answer."
+msgstr "L'écran de connexion n'a pas répondu."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The account exists, but it is not an administrator: %error%"
+msgstr "Le compte existe, mais ce n'est pas un administrateur : %error%"
+
+#, fuzzy
+msgctxt "Users: Main window"
+msgid "off"
+msgstr "désactivé"
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The new account did not get a user id of 1000 or higher."
+msgstr "Le nouveau compte n'a pas reçu d'identifiant utilisateur de 1000 ou plus."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The existing guest account has an unexpected setup."
+msgstr "Le compte invité existant a une configuration inattendue."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The account could not become an administrator."
+msgstr "Le compte n'a pas pu devenir administrateur."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "This account is an administrator through its system group."
+msgstr "Ce compte est administrateur par son groupe système."

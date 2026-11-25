@@ -1,0 +1,518 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5-DeviceManager\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+msgctxt "MainWindow"
+msgid "Device Manager"
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "%lld bytes"
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "Value:"
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "Events are not available."
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "Events"
+msgstr ""
+
+msgctxt "TurnedOffWindow"
+msgid "Turned-off drivers"
+msgstr ""
+
+msgctxt "DeviceModel"
+msgid "Cameras"
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "Not available"
+msgstr ""
+
+msgctxt "MainWindow"
+msgid "Turn on driver"
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "Driver details"
+msgstr ""
+
+msgctxt "Report"
+msgid "Status"
+msgstr ""
+
+msgctxt "DeviceModel"
+msgid "Computer"
+msgstr ""
+
+msgctxt "AboutWindow"
+msgid "About Device Manager"
+msgstr ""
+
+msgctxt "DeviceModel"
+msgid "Human interface devices"
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "Turn on driver"
+msgstr ""
+
+msgctxt "MainWindow"
+msgid "The driver is turned off. It stops after a restart.\n\nThe device may then no longer appear in the list. To turn the driver on again, choose Action ▸ Turned-off drivers."
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "Property:"
+msgstr ""
+
+msgctxt "MainWindow"
+msgid "Turn off driver"
+msgstr ""
+
+msgctxt "Report"
+msgid "Properties"
+msgstr ""
+
+msgctxt "DriverControl"
+msgid "No driver file is known for this device."
+msgstr ""
+
+msgctxt "MainWindow"
+msgid "The report could not be saved: %error%"
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "OK"
+msgstr ""
+
+msgctxt "MainWindow"
+msgid "Computer"
+msgstr ""
+
+msgctxt "DriverControl"
+msgid "This driver is not part of a package."
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "Package:"
+msgstr ""
+
+msgctxt "MainWindow"
+msgid "Devices by type"
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "Driver file"
+msgstr ""
+
+msgctxt "MainWindow"
+msgid "Devices.txt"
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "Driver file:"
+msgstr ""
+
+msgctxt "DeviceModel"
+msgid "Disk drives"
+msgstr ""
+
+msgctxt "MainWindow"
+msgid "Show hidden devices"
+msgstr ""
+
+msgctxt "AboutWindow"
+msgid "The PCI ID and USB ID lists"
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "Location:"
+msgstr ""
+
+msgctxt "TurnedOffWindow"
+msgid "Close"
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "Device paths"
+msgstr ""
+
+msgctxt "MainWindow"
+msgid "Properties"
+msgstr ""
+
+msgctxt "DeviceModel"
+msgid "No driver is installed for this device. If you turned its driver off, Action ▸ Turned-off drivers turns it on again."
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "Unknown"
+msgstr ""
+
+msgctxt "MainWindow"
+msgid "The driver is turned on. It loads after a restart."
+msgstr ""
+
+msgctxt "AboutWindow"
+msgid "Manager"
+msgstr ""
+
+msgctxt "MainWindow"
+msgid "Device tree.txt"
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "This driver is needed to start the system."
+msgstr ""
+
+msgctxt "MainWindow"
+msgid "Help"
+msgstr ""
+
+msgctxt "MainWindow"
+msgid "Device tree…"
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "Driver"
+msgstr ""
+
+msgctxt "MainWindow"
+msgid "Sign in must be running to change a driver."
+msgstr ""
+
+msgctxt "AboutWindow"
+msgid "Version %s • Part of R5 Operating System"
+msgstr ""
+
+msgctxt "DeviceModel"
+msgid "ISA bus"
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "Property"
+msgstr ""
+
+msgctxt "MainWindow"
+msgid "About Device Manager…"
+msgstr ""
+
+msgctxt "TurnedOffWindow"
+msgid "(your packages)"
+msgstr ""
+
+msgctxt "MainWindow"
+msgid "Turned-off drivers…"
+msgstr ""
+
+msgctxt "Report"
+msgid "Computer"
+msgstr ""
+
+msgctxt "AboutWindow"
+msgid "© 2026 R5OS Contributors"
+msgstr ""
+
+msgctxt "MainWindow"
+msgid "Devices by connection"
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "%.1f MiB"
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "Device status"
+msgstr ""
+
+msgctxt "MainWindow"
+msgid "Full details…"
+msgstr ""
+
+msgctxt "DeviceModel"
+msgid "Network adapters"
+msgstr ""
+
+msgctxt "MainWindow"
+msgid "Export full details"
+msgstr ""
+
+msgctxt "Report"
+msgid "Device Manager report"
+msgstr ""
+
+msgctxt "MainWindow"
+msgid "OK"
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "General"
+msgstr ""
+
+msgctxt "AboutWindow"
+msgid "Devices, © 2008–2026 Haiku, Inc. (MIT)"
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "No events for this device."
+msgstr ""
+
+msgctxt "DeviceModel"
+msgid "ACPI bus"
+msgstr ""
+
+msgctxt "DeviceModel"
+msgid "System devices"
+msgstr ""
+
+msgctxt "MainWindow"
+msgid "Quit"
+msgstr ""
+
+msgctxt "DriverControl"
+msgid "The change was not saved."
+msgstr ""
+
+msgctxt "DeviceModel"
+msgid "The system does not report which driver serves this device. It may still work."
+msgstr ""
+
+msgctxt "DeviceModel"
+msgid "USB bus"
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "%.1f KiB"
+msgstr ""
+
+msgctxt "Report"
+msgid "Driver"
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "A part of the system serves this device."
+msgstr ""
+
+msgctxt "MainWindow"
+msgid "Action"
+msgstr ""
+
+msgctxt "DeviceModel"
+msgid "Other system devices"
+msgstr ""
+
+msgctxt "AboutWindow"
+msgid "Copyright"
+msgstr ""
+
+msgctxt "DeviceModel"
+msgid "Display adapters"
+msgstr ""
+
+msgctxt "TurnedOffWindow"
+msgid "No drivers are turned off."
+msgstr ""
+
+msgctxt "AboutWindow"
+msgid "Based on"
+msgstr ""
+
+msgctxt "Report"
+msgid "Layout: full details"
+msgstr ""
+
+msgctxt "MainWindow"
+msgid "Turning off this driver turns off all devices that use it. The change takes effect after a restart."
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "License:"
+msgstr ""
+
+msgctxt "MainWindow"
+msgid "Export"
+msgstr ""
+
+msgctxt "MainWindow"
+msgid "Cancel"
+msgstr ""
+
+msgctxt "MainWindow"
+msgid "File"
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "Version:"
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "None reported"
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "Details"
+msgstr ""
+
+msgctxt "DeviceModel"
+msgid "The driver for this device is turned off. It stops after a restart."
+msgstr ""
+
+msgctxt "DeviceModel"
+msgid "Unknown device"
+msgstr ""
+
+msgctxt "MainWindow"
+msgid "Turn off"
+msgstr ""
+
+msgctxt "AboutWindow"
+msgid "MIT. Other systems may use and change it."
+msgstr ""
+
+msgctxt "DeviceModel"
+msgid "This device is working properly."
+msgstr ""
+
+msgctxt "DeviceModel"
+msgid "Universal Serial Bus controllers"
+msgstr ""
+
+msgctxt "DeviceModel"
+msgid "PCI bus"
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "Manufacturer:"
+msgstr ""
+
+msgctxt "Report"
+msgid "Location"
+msgstr ""
+
+msgctxt "DeviceModel"
+msgid "On %s"
+msgstr ""
+
+msgctxt "Report"
+msgid "Layout: device tree"
+msgstr ""
+
+msgctxt "Report"
+msgid "Manufacturer"
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "Recent system log lines about this device:"
+msgstr ""
+
+msgctxt "AboutWindow"
+msgid "Device"
+msgstr ""
+
+msgctxt "System name"
+msgid "Device Manager"
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "None"
+msgstr ""
+
+msgctxt "TurnedOffWindow"
+msgid "Turn on"
+msgstr ""
+
+msgctxt "DeviceModel"
+msgid "Other devices"
+msgstr ""
+
+msgctxt "Report"
+msgid "Hidden device"
+msgstr ""
+
+msgctxt "MainWindow"
+msgid "Scan for hardware changes"
+msgstr ""
+
+msgctxt "MainWindow"
+msgid "View"
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "This device is no longer connected."
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "File size:"
+msgstr ""
+
+msgctxt "MainWindow"
+msgid "Export device tree"
+msgstr ""
+
+msgctxt "Report"
+msgid "[!] no driver, [off] driver turned off"
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "Device type:"
+msgstr ""
+
+msgctxt "Report"
+msgid "Device paths"
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "Driver:"
+msgstr ""
+
+msgctxt "DeviceModel"
+msgid "Processors"
+msgstr ""
+
+msgctxt "DeviceModel"
+msgid "PCI bus %s, device %s, function %s"
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "Turn off driver"
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "Driver details…"
+msgstr ""
+
+msgctxt "AboutWindow"
+msgid "Hardware names"
+msgstr ""
+
+msgctxt "PropertiesWindow"
+msgid "Date modified:"
+msgstr ""
+
+msgctxt "DeviceModel"
+msgid "Sound, video and game controllers"
+msgstr ""
+
+msgctxt "TurnedOffWindow"
+msgid "A driver you turn on loads after a restart."
+msgstr ""
+
+msgctxt "DriverControl"
+msgid "The settings file could not be written."
+msgstr ""
+
+msgctxt "DeviceModel"
+msgid "Storage controllers"
+msgstr ""
+
+msgctxt "Report"
+msgid "Date"
+msgstr ""
+
+msgctxt "AboutWindow"
+msgid "License"
+msgstr ""

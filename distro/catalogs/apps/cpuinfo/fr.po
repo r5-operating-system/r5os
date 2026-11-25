@@ -1,0 +1,87 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5-CPUInfo\nLanguage: fr\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#, fuzzy
+msgctxt "CPU Info: Window"
+msgid "Family / Model / Stepping"
+msgstr "Famille / Modèle / Révision"
+
+#, fuzzy
+msgctxt "CPU Info: Window"
+msgid "Power profile"
+msgstr "Profil d'alimentation"
+
+#, fuzzy
+msgctxt "CPU Info: Window"
+msgid "Caches"
+msgstr "Caches"
+
+#, fuzzy
+msgctxt "CPU Info: Window"
+msgid "x86-64 level"
+msgstr "Niveau x86-64"
+
+#, fuzzy
+msgctxt "CPU Info: Window"
+msgid "Vendor"
+msgstr "Fabricant"
+
+#, fuzzy
+msgctxt "CPU Info: Window"
+msgid "Copy report"
+msgstr "Copier le rapport"
+
+#, fuzzy
+msgctxt "CPU Info: Window"
+msgid "Brand"
+msgstr "Marque"
+
+#, fuzzy
+msgctxt "CPU Info: Window"
+msgid "Processor hardware and R5 runtime paths"
+msgstr "Matériel du processeur et chemins d'exécution de R5"
+
+#, fuzzy
+msgctxt "System name"
+msgid "CPU Info"
+msgstr "Infos processeur"
+
+#, fuzzy
+msgctxt "CPU Info: Window"
+msgid "System"
+msgstr "Système"
+
+#, fuzzy
+msgctxt "CPU Info: Window"
+msgid "Build baseline"
+msgstr "Base de compilation"
+
+#, fuzzy
+msgctxt "CPU Info: Window"
+msgid "Cores / Threads"
+msgstr "Cœurs / Threads"
+
+#, fuzzy
+msgctxt "CPU Info: Window"
+msgid "User-space paths"
+msgstr "Chemins de l'espace utilisateur"
+
+#, fuzzy
+msgctxt "CPU Info: Window"
+msgid "Enabled features"
+msgstr "Fonctions activées"
+
+#, fuzzy
+msgctxt "CPU Info: Window"
+msgid "Extra features"
+msgstr "Fonctions supplémentaires"
+
+#, fuzzy
+msgctxt "CPU Info: Window"
+msgid "Processor"
+msgstr "Processeur"
+
+#, fuzzy
+msgctxt "CPU Info: Window"
+msgid "Kernel"
+msgstr "Noyau"

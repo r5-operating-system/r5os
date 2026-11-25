@@ -1,0 +1,137 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-libr5ui\nLanguage: de\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#, fuzzy
+msgctxt "libr5ui: Admin lock"
+msgid "Sign in must be running."
+msgstr "Die Anmeldung muss laufen."
+
+#, fuzzy
+msgctxt "libr5ui: Admin lock"
+msgid "Unlocked for a few minutes"
+msgstr "Für einige Minuten entsperrt"
+
+#, fuzzy
+msgctxt "libr5ui: Admin lock"
+msgid "Administrator"
+msgstr "Administrator"
+
+#, fuzzy
+msgctxt "libr5ui: Admin lock"
+msgid "Locked"
+msgstr "Gesperrt"
+
+#, fuzzy
+msgctxt "libr5ui: Admin lock"
+msgid "Password"
+msgstr "Passwort"
+
+#, fuzzy
+msgctxt "libr5ui: Admin lock"
+msgid "Unlock"
+msgstr "Entsperren"
+
+#, fuzzy
+msgctxt "libr5ui: User card"
+msgid "Administrator"
+msgstr "Administrator"
+
+#, fuzzy
+msgctxt "libr5ui: Admin lock"
+msgid "Lock"
+msgstr "Sperren"
+
+#, fuzzy
+msgctxt "libr5ui: Themes"
+msgid "Purple"
+msgstr "Lila"
+
+#, fuzzy
+msgctxt "libr5ui: Themes"
+msgid "Pink"
+msgstr "Pink"
+
+#, fuzzy
+msgctxt "libr5ui: Themes"
+msgid "Graphite"
+msgstr "Graphit"
+
+#, fuzzy
+msgctxt "libr5ui: Themes"
+msgid "Blue"
+msgstr "Blau"
+
+#, fuzzy
+msgctxt "libr5ui: Password control"
+msgid "Strong."
+msgstr "Stark."
+
+#, fuzzy
+msgctxt "libr5ui: User card"
+msgid "Standard"
+msgstr "Standard"
+
+#, fuzzy
+msgctxt "libr5ui: Admin lock"
+msgid "OK"
+msgstr "OK"
+
+#, fuzzy
+msgctxt "libr5ui: Admin lock"
+msgid "Unlock..."
+msgstr "Entsperren..."
+
+#, fuzzy
+msgctxt "libr5ui: Password control"
+msgid "Fair. Add another word or a number."
+msgstr "Mittel. Fügen Sie ein weiteres Wort oder eine Zahl hinzu."
+
+#, fuzzy
+msgctxt "libr5ui: Themes"
+msgid "Teal"
+msgstr "Petrol"
+
+#, fuzzy
+msgctxt "libr5ui: Password control"
+msgid "A phrase of a few words is easy to remember."
+msgstr "Eine Wortgruppe aus einigen Wörtern ist leicht zu merken."
+
+#, fuzzy
+msgctxt "libr5ui: User card"
+msgid "No password"
+msgstr "Kein Passwort"
+
+#, fuzzy
+msgctxt "libr5ui: Themes"
+msgid "Orange"
+msgstr "Orange"
+
+#, fuzzy
+msgctxt "libr5ui: Admin lock"
+msgid "This changes the computer, not only your account."
+msgstr "Dies ändert den Computer, nicht nur Ihr Konto."
+
+#, fuzzy
+msgctxt "libr5ui: Sidebar"
+msgid "Tip:"
+msgstr "Tipp:"
+
+#, fuzzy
+msgctxt "libr5ui: Password control"
+msgid "Good. A longer phrase is stronger."
+msgstr "Gut. Eine längere Wortgruppe ist stärker."
+
+#, fuzzy
+msgctxt "libr5ui: Admin lock"
+msgid "Could not unlock."
+msgstr "Entsperren fehlgeschlagen."
+
+#, fuzzy
+msgctxt "libr5ui: Password control"
+msgid "Weak. Use at least 8 characters."
+msgstr "Schwach. Verwenden Sie mindestens 8 Zeichen."
+
+#, fuzzy
+msgctxt "libr5ui: Admin lock"
+msgid "Cancel"
+msgstr "Abbrechen"

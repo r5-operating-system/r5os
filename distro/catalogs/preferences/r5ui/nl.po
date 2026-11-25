@@ -1,0 +1,137 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-libr5ui\nLanguage: nl\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#, fuzzy
+msgctxt "libr5ui: Admin lock"
+msgid "Sign in must be running."
+msgstr "Aanmelden moet actief zijn."
+
+#, fuzzy
+msgctxt "libr5ui: Admin lock"
+msgid "Unlocked for a few minutes"
+msgstr "Enkele minuten ontgrendeld"
+
+#, fuzzy
+msgctxt "libr5ui: Admin lock"
+msgid "Administrator"
+msgstr "Beheerder"
+
+#, fuzzy
+msgctxt "libr5ui: Admin lock"
+msgid "Locked"
+msgstr "Vergrendeld"
+
+#, fuzzy
+msgctxt "libr5ui: Admin lock"
+msgid "Password"
+msgstr "Wachtwoord"
+
+#, fuzzy
+msgctxt "libr5ui: Admin lock"
+msgid "Unlock"
+msgstr "Ontgrendelen"
+
+#, fuzzy
+msgctxt "libr5ui: User card"
+msgid "Administrator"
+msgstr "Beheerder"
+
+#, fuzzy
+msgctxt "libr5ui: Admin lock"
+msgid "Lock"
+msgstr "Vergrendelen"
+
+#, fuzzy
+msgctxt "libr5ui: Themes"
+msgid "Purple"
+msgstr "Paars"
+
+#, fuzzy
+msgctxt "libr5ui: Themes"
+msgid "Pink"
+msgstr "Roze"
+
+#, fuzzy
+msgctxt "libr5ui: Themes"
+msgid "Graphite"
+msgstr "Grafiet"
+
+#, fuzzy
+msgctxt "libr5ui: Themes"
+msgid "Blue"
+msgstr "Blauw"
+
+#, fuzzy
+msgctxt "libr5ui: Password control"
+msgid "Strong."
+msgstr "Sterk."
+
+#, fuzzy
+msgctxt "libr5ui: User card"
+msgid "Standard"
+msgstr "Standaard"
+
+#, fuzzy
+msgctxt "libr5ui: Admin lock"
+msgid "OK"
+msgstr "OK"
+
+#, fuzzy
+msgctxt "libr5ui: Admin lock"
+msgid "Unlock..."
+msgstr "Ontgrendelen..."
+
+#, fuzzy
+msgctxt "libr5ui: Password control"
+msgid "Fair. Add another word or a number."
+msgstr "Redelijk. Voeg nog een woord of een getal toe."
+
+#, fuzzy
+msgctxt "libr5ui: Themes"
+msgid "Teal"
+msgstr "Groenblauw"
+
+#, fuzzy
+msgctxt "libr5ui: Password control"
+msgid "A phrase of a few words is easy to remember."
+msgstr "Een zin van een paar woorden is makkelijk te onthouden."
+
+#, fuzzy
+msgctxt "libr5ui: User card"
+msgid "No password"
+msgstr "Geen wachtwoord"
+
+#, fuzzy
+msgctxt "libr5ui: Themes"
+msgid "Orange"
+msgstr "Oranje"
+
+#, fuzzy
+msgctxt "libr5ui: Admin lock"
+msgid "This changes the computer, not only your account."
+msgstr "Dit wijzigt de computer, niet alleen je account."
+
+#, fuzzy
+msgctxt "libr5ui: Sidebar"
+msgid "Tip:"
+msgstr "Tip:"
+
+#, fuzzy
+msgctxt "libr5ui: Password control"
+msgid "Good. A longer phrase is stronger."
+msgstr "Goed. Een langere zin is sterker."
+
+#, fuzzy
+msgctxt "libr5ui: Admin lock"
+msgid "Could not unlock."
+msgstr "Ontgrendelen mislukt."
+
+#, fuzzy
+msgctxt "libr5ui: Password control"
+msgid "Weak. Use at least 8 characters."
+msgstr "Zwak. Gebruik minstens 8 tekens."
+
+#, fuzzy
+msgctxt "libr5ui: Admin lock"
+msgid "Cancel"
+msgstr "Annuleren"

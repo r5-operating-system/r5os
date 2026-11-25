@@ -9,6 +9,7 @@
 
 #include <Application.h>
 #include <Archivable.h>
+#include <Catalog.h>
 #include <Deskbar.h>
 #include <Entry.h>
 #include <FindDirectory.h>
@@ -16,6 +17,7 @@
 #include <Messenger.h>
 #include <Path.h>
 #include <PopUpMenu.h>
+#include <String.h>
 #include <View.h>
 
 #include <image.h>
@@ -25,6 +27,10 @@
 #include <unistd.h>
 
 #include <r5_mdns.h>
+
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "AirPlay: Deskbar item"
 
 
 static status_t
@@ -119,7 +125,8 @@ public:
 	virtual void MouseDown(BPoint where)
 	{
 		BPopUpMenu* menu = new BPopUpMenu(B_EMPTY_STRING, false, false);
-		menu->AddItem(new BMenuItem("This computer (receive)", NULL));
+		menu->AddItem(new BMenuItem(B_TRANSLATE("This computer (receive)"),
+			NULL));
 		menu->ItemAt(0)->SetMarked(true);
 		menu->ItemAt(0)->SetEnabled(false);
 		menu->AddSeparatorItem();
@@ -137,22 +144,23 @@ public:
 				continue;
 			if (strcasestr(svcs[i].name, host) != NULL)
 				continue;
-			char label[96];
 			const char* at = strchr(svcs[i].name, '@');
 			const char* name = at != NULL ? at + 1 : svcs[i].name;
-			snprintf(label, sizeof(label), "Play to %.80s", name);
+			BString label(B_TRANSLATE("Play to %name%"));
+			label.ReplaceFirst("%name%", BString(name, 80));
 			BMessage* msg = new BMessage(kMsgAirPlayPlayTo);
 			msg->AddString("host", inet_ntoa(svcs[i].addr));
 			msg->AddInt32("port", svcs[i].port);
 			msg->AddInt32("ipv4", (int32)ntohl(svcs[i].addr.s_addr));
-			menu->AddItem(new BMenuItem(label, msg));
+			menu->AddItem(new BMenuItem(label.String(), msg));
 			found++;
 		}
 		if (found == 0)
-			menu->AddItem(new BMenuItem("No AirPlay speakers found", NULL));
+			menu->AddItem(new BMenuItem(B_TRANSLATE("No AirPlay speakers found"),
+				NULL));
 
 		menu->AddSeparatorItem();
-		menu->AddItem(new BMenuItem("Stop sending",
+		menu->AddItem(new BMenuItem(B_TRANSLATE("Stop sending"),
 			new BMessage(kMsgAirPlayStopSend)));
 
 		menu->SetTargetForItems(BMessenger(kAirPlaySignature));

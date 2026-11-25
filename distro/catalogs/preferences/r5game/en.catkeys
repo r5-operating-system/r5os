@@ -1,0 +1,7 @@
+1	english	x-vnd.R5OS-libr5game	996455297
+Pitch	libr5game: BGameControllerMotionView		Pitch
+Yaw	libr5game: BGameControllerMotionView		Yaw
+Tilt	libr5game: BGameControllerMotionView		Tilt
+Game controller	libr5game: BGameController		Game controller
+Roll	libr5game: BGameControllerMotionView		Roll
+Turn	libr5game: BGameControllerMotionView		Turn

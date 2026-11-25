@@ -63,13 +63,13 @@ msgstr "Sert à se connecter ; lettres et chiffres"
 
 #, fuzzy
 msgctxt "Settings: Users and Accounts"
-msgid "Choose picture…"
-msgstr "Choisir une image…"
+msgid "Administrator"
+msgstr "Administrateur"
 
 #, fuzzy
 msgctxt "Settings: Users and Accounts"
-msgid "Administrator"
-msgstr "Administrateur"
+msgid "Choose picture…"
+msgstr "Choisir une image…"
 
 #, fuzzy
 msgctxt "Settings: Users and Accounts"

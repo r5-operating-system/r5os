@@ -10,6 +10,14 @@ Application CPUInfo :
 	CPUInfoApp.cpp
 	CPUInfoWindow.cpp
 	CpuReport.cpp
-	: be libr5ui.so libr5icons.so [ TargetLibstdc++ ]
+	: be libr5ui.so libr5icons.so localestub [ TargetLibstdc++ ]
 	: CPUInfo.rdef
 ;
+
+DoCatalogs CPUInfo :
+	x-vnd.R5-CPUInfo
+	:
+	CPUInfoApp.cpp
+	CPUInfoWindow.cpp
+	CpuReport.cpp
+	;

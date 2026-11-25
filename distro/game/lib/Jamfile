@@ -11,6 +11,9 @@ SubDir HAIKU_TOP src preferences r5game ;
 # <joystick_driver.h>, for R5_JOYSTICK_GET_INFO.
 UsePrivateHeaders device ;
 
+# The signature by which the Locale Kit finds this library's catalog.
+AddResources [ MultiArchDefaultGristFiles libr5game.so ] : libr5game.rdef ;
+
 SharedLibrary [ MultiArchDefaultGristFiles libr5game.so ] :
 	GameController.cpp
 	GameControllerMapping.cpp
@@ -19,5 +22,13 @@ SharedLibrary [ MultiArchDefaultGristFiles libr5game.so ] :
 	GameControllerFeel.cpp
 	GameControllerReports.cpp
 	GameControllerMotionView.cpp
-	: be device libr5icons.so libr5ui.so [ TargetLibstdc++ ]
+	: be device libr5icons.so libr5ui.so localestub [ TargetLibstdc++ ]
+	;
+
+DoCatalogs libr5game.so :
+	x-vnd.R5OS-libr5game
+	:
+	GameController.cpp
+	GameControllerView.cpp
+	GameControllerMotionView.cpp
 	;

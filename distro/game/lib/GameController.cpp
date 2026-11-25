@@ -20,6 +20,7 @@
 #include <unistd.h>
 
 #include <Autolock.h>
+#include <Catalog.h>
 #include <Directory.h>
 #include <Entry.h>
 #include <File.h>
@@ -43,6 +44,10 @@
 
 
 using namespace R5GameController;
+
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "libr5game: BGameController"
 
 
 static const char* const kJoystickDirectory = "/dev/joystick";
@@ -546,12 +551,12 @@ BGameController::Open(const char* deviceName)
 	else if (inDatabase && database.name[0] != '\0')
 		d.name = database.name;
 	else
-		d.name = "Game controller";
+		d.name = B_TRANSLATE("Game controller");
 	if (layout != B_GAME_CONTROLLER_FAMILY_UNKNOWN && d.hasMapping)
 		d.family = layout;
 	else {
 		d.family = family_for(vendor, product,
-			inDatabase ? database.name : d.name.String(), d.hasMapping);
+			inDatabase ? database.name : d.info.name, d.hasMapping);
 	}
 	d.deviceName = deviceName;
 	d.open = true;

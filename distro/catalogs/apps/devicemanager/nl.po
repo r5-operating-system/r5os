@@ -1,0 +1,648 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5-DeviceManager\nLanguage: nl\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Device Manager"
+msgstr "Apparaatbeheer"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "%lld bytes"
+msgstr "%lld bytes"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Value:"
+msgstr "Waarde:"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Events are not available."
+msgstr "Gebeurtenissen zijn niet beschikbaar."
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Events"
+msgstr "Gebeurtenissen"
+
+#, fuzzy
+msgctxt "TurnedOffWindow"
+msgid "Turned-off drivers"
+msgstr "Uitgeschakelde stuurprogramma's"
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "Cameras"
+msgstr "Camera's"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Not available"
+msgstr "Niet beschikbaar"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Turn on driver"
+msgstr "Stuurprogramma inschakelen"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Driver details"
+msgstr "Details stuurprogramma"
+
+#, fuzzy
+msgctxt "Report"
+msgid "Status"
+msgstr "Status"
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "Computer"
+msgstr "Computer"
+
+#, fuzzy
+msgctxt "AboutWindow"
+msgid "About Device Manager"
+msgstr "Over Apparaatbeheer"
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "Human interface devices"
+msgstr "Invoerapparaten (HID)"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Turn on driver"
+msgstr "Stuurprogramma inschakelen"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "The driver is turned off. It stops after a restart.\n\nThe device may then no longer appear in the list. To turn the driver on again, choose Action ▸ Turned-off drivers."
+msgstr "Het stuurprogramma is uitgeschakeld. Het stopt na een herstart.\n\nHet apparaat staat daarna misschien niet meer in de lijst. Kies Actie ▸ Uitgeschakelde stuurprogramma's om het stuurprogramma weer in te schakelen."
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Property:"
+msgstr "Eigenschap:"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Turn off driver"
+msgstr "Stuurprogramma uitschakelen"
+
+#, fuzzy
+msgctxt "Report"
+msgid "Properties"
+msgstr "Eigenschappen"
+
+#, fuzzy
+msgctxt "DriverControl"
+msgid "No driver file is known for this device."
+msgstr "Er is geen stuurprogrammabestand bekend voor dit apparaat."
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "The report could not be saved: %error%"
+msgstr "Het rapport kon niet worden opgeslagen: %error%"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "OK"
+msgstr "OK"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Computer"
+msgstr "Computer"
+
+#, fuzzy
+msgctxt "DriverControl"
+msgid "This driver is not part of a package."
+msgstr "Dit stuurprogramma hoort niet bij een pakket."
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Package:"
+msgstr "Pakket:"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Devices by type"
+msgstr "Apparaten per type"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Driver file"
+msgstr "Stuurprogrammabestand"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Devices.txt"
+msgstr "Apparaten.txt"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Driver file:"
+msgstr "Stuurprogrammabestand:"
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "Disk drives"
+msgstr "Schijfstations"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Show hidden devices"
+msgstr "Verborgen apparaten tonen"
+
+#, fuzzy
+msgctxt "AboutWindow"
+msgid "The PCI ID and USB ID lists"
+msgstr "De PCI ID- en USB ID-lijsten"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Location:"
+msgstr "Locatie:"
+
+#, fuzzy
+msgctxt "TurnedOffWindow"
+msgid "Close"
+msgstr "Sluiten"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Device paths"
+msgstr "Apparaatpaden"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Properties"
+msgstr "Eigenschappen"
+
+#, fuzzy
+#| msgid "No driver is installed for this device. If you turned its driver off, Action â¸ Turned-off drivers turns it on again."
+msgctxt "DeviceModel"
+msgid "No driver is installed for this device. If you turned its driver off, Action ▸ Turned-off drivers turns it on again."
+msgstr "Er is geen stuurprogramma voor dit apparaat geïnstalleerd. Als je het stuurprogramma hebt uitgeschakeld, schakel je het weer in via Actie ▸ Uitgeschakelde stuurprogramma's."
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Unknown"
+msgstr "Onbekend"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "The driver is turned on. It loads after a restart."
+msgstr "Het stuurprogramma is ingeschakeld. Het wordt na een herstart geladen."
+
+#, fuzzy
+msgctxt "AboutWindow"
+msgid "Manager"
+msgstr "beheer"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Device tree.txt"
+msgstr "Apparatenboom.txt"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "This driver is needed to start the system."
+msgstr "Dit stuurprogramma is nodig om het systeem te starten."
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Help"
+msgstr "Help"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Device tree…"
+msgstr "Apparatenboom…"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Driver"
+msgstr "Stuurprogramma"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Sign in must be running to change a driver."
+msgstr "Aanmelden moet actief zijn om een stuurprogramma te wijzigen."
+
+#, fuzzy
+msgctxt "AboutWindow"
+msgid "Version %s • Part of R5 Operating System"
+msgstr "Versie %s • Onderdeel van R5 Operating System"
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "ISA bus"
+msgstr "ISA-bus"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Property"
+msgstr "Eigenschap"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "About Device Manager…"
+msgstr "Over Apparaatbeheer…"
+
+#, fuzzy
+msgctxt "TurnedOffWindow"
+msgid "(your packages)"
+msgstr "(je pakketten)"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Turned-off drivers…"
+msgstr "Uitgeschakelde stuurprogramma's…"
+
+#, fuzzy
+msgctxt "Report"
+msgid "Computer"
+msgstr "Computer"
+
+#, fuzzy
+msgctxt "AboutWindow"
+msgid "© 2026 R5OS Contributors"
+msgstr "© 2026 R5OS Contributors"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Devices by connection"
+msgstr "Apparaten per verbinding"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "%.1f MiB"
+msgstr "%.1f MiB"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Device status"
+msgstr "Apparaatstatus"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Full details…"
+msgstr "Alle details…"
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "Network adapters"
+msgstr "Netwerkadapters"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Export full details"
+msgstr "Alle details exporteren"
+
+#, fuzzy
+msgctxt "Report"
+msgid "Device Manager report"
+msgstr "Rapport van Apparaatbeheer"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "OK"
+msgstr "OK"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "General"
+msgstr "Algemeen"
+
+#, fuzzy
+msgctxt "AboutWindow"
+msgid "Devices, © 2008–2026 Haiku, Inc. (MIT)"
+msgstr "Devices, © 2008–2026 Haiku, Inc. (MIT)"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "No events for this device."
+msgstr "Geen gebeurtenissen voor dit apparaat."
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "ACPI bus"
+msgstr "ACPI-bus"
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "System devices"
+msgstr "Systeemapparaten"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Quit"
+msgstr "Afsluiten"
+
+#, fuzzy
+msgctxt "DriverControl"
+msgid "The change was not saved."
+msgstr "De wijziging is niet opgeslagen."
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "The system does not report which driver serves this device. It may still work."
+msgstr "Het systeem meldt niet welk stuurprogramma dit apparaat bedient. Het werkt misschien toch."
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "USB bus"
+msgstr "USB-bus"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "%.1f KiB"
+msgstr "%.1f KiB"
+
+#, fuzzy
+msgctxt "Report"
+msgid "Driver"
+msgstr "Stuurprogramma"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "A part of the system serves this device."
+msgstr "Een onderdeel van het systeem bedient dit apparaat."
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Action"
+msgstr "Actie"
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "Other system devices"
+msgstr "Overige systeemapparaten"
+
+#, fuzzy
+msgctxt "AboutWindow"
+msgid "Copyright"
+msgstr "Copyright"
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "Display adapters"
+msgstr "Beeldschermadapters"
+
+#, fuzzy
+msgctxt "TurnedOffWindow"
+msgid "No drivers are turned off."
+msgstr "Er zijn geen stuurprogramma's uitgeschakeld."
+
+#, fuzzy
+msgctxt "AboutWindow"
+msgid "Based on"
+msgstr "Gebaseerd op"
+
+#, fuzzy
+msgctxt "Report"
+msgid "Layout: full details"
+msgstr "Indeling: alle details"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Turning off this driver turns off all devices that use it. The change takes effect after a restart."
+msgstr "Als je dit stuurprogramma uitschakelt, worden alle apparaten die het gebruiken uitgeschakeld. De wijziging gaat in na een herstart."
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "License:"
+msgstr "Licentie:"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Export"
+msgstr "Exporteren"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Cancel"
+msgstr "Annuleren"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "File"
+msgstr "Bestand"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Version:"
+msgstr "Versie:"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "None reported"
+msgstr "Geen gemeld"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Details"
+msgstr "Details"
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "The driver for this device is turned off. It stops after a restart."
+msgstr "Het stuurprogramma voor dit apparaat is uitgeschakeld. Het stopt na een herstart."
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "Unknown device"
+msgstr "Onbekend apparaat"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Turn off"
+msgstr "Uitschakelen"
+
+#, fuzzy
+msgctxt "AboutWindow"
+msgid "MIT. Other systems may use and change it."
+msgstr "MIT. Andere systemen mogen het gebruiken en wijzigen."
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "This device is working properly."
+msgstr "Dit apparaat werkt naar behoren."
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "Universal Serial Bus controllers"
+msgstr "USB-controllers"
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "PCI bus"
+msgstr "PCI-bus"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Manufacturer:"
+msgstr "Fabrikant:"
+
+#, fuzzy
+msgctxt "Report"
+msgid "Location"
+msgstr "Locatie"
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "On %s"
+msgstr "Op %s"
+
+#, fuzzy
+msgctxt "Report"
+msgid "Layout: device tree"
+msgstr "Indeling: apparatenboom"
+
+#, fuzzy
+msgctxt "Report"
+msgid "Manufacturer"
+msgstr "Fabrikant"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Recent system log lines about this device:"
+msgstr "Recente regels uit het systeemlogboek over dit apparaat:"
+
+#, fuzzy
+msgctxt "AboutWindow"
+msgid "Device"
+msgstr "Apparaat"
+
+#, fuzzy
+msgctxt "System name"
+msgid "Device Manager"
+msgstr "Apparaatbeheer"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "None"
+msgstr "Geen"
+
+#, fuzzy
+msgctxt "TurnedOffWindow"
+msgid "Turn on"
+msgstr "Inschakelen"
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "Other devices"
+msgstr "Overige apparaten"
+
+#, fuzzy
+msgctxt "Report"
+msgid "Hidden device"
+msgstr "Verborgen apparaat"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Scan for hardware changes"
+msgstr "Zoeken naar gewijzigde hardware"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "View"
+msgstr "Beeld"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "This device is no longer connected."
+msgstr "Dit apparaat is niet meer aangesloten."
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "File size:"
+msgstr "Bestandsgrootte:"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Export device tree"
+msgstr "Apparatenboom exporteren"
+
+#, fuzzy
+msgctxt "Report"
+msgid "[!] no driver, [off] driver turned off"
+msgstr "[!] geen stuurprogramma, [off] stuurprogramma uitgeschakeld"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Device type:"
+msgstr "Apparaattype:"
+
+#, fuzzy
+msgctxt "Report"
+msgid "Device paths"
+msgstr "Apparaatpaden"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Driver:"
+msgstr "Stuurprogramma:"
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "Processors"
+msgstr "Processors"
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "PCI bus %s, device %s, function %s"
+msgstr "PCI-bus %s, apparaat %s, functie %s"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Turn off driver"
+msgstr "Stuurprogramma uitschakelen"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Driver details…"
+msgstr "Details stuurprogramma…"
+
+#, fuzzy
+msgctxt "AboutWindow"
+msgid "Hardware names"
+msgstr "Hardwarenamen"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Date modified:"
+msgstr "Gewijzigd op:"
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "Sound, video and game controllers"
+msgstr "Geluid-, video- en gamecontrollers"
+
+#, fuzzy
+msgctxt "TurnedOffWindow"
+msgid "A driver you turn on loads after a restart."
+msgstr "Een stuurprogramma dat je inschakelt, wordt na een herstart geladen."
+
+#, fuzzy
+msgctxt "DriverControl"
+msgid "The settings file could not be written."
+msgstr "Het instellingenbestand kon niet worden geschreven."
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "Storage controllers"
+msgstr "Opslagcontrollers"
+
+#, fuzzy
+msgctxt "Report"
+msgid "Date"
+msgstr "Datum"
+
+#, fuzzy
+msgctxt "AboutWindow"
+msgid "License"
+msgstr "Licentie"

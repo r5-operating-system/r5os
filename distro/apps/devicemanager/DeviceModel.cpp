@@ -931,7 +931,7 @@ DeviceModel::StatusSentence(const DeviceRecord* record)
 				"It stops after a restart.");
 		case DM_STATUS_NO_DRIVER:
 			return B_TRANSLATE("No driver is installed for this device. If you "
-				"turned its driver off, Action â¸ Turned-off drivers turns it on "
+				"turned its driver off, Action ▸ Turned-off drivers turns it on "
 				"again.");
 	}
 	return B_TRANSLATE("The system does not report which driver serves "

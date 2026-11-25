@@ -1,0 +1,648 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5-DeviceManager\nLanguage: de\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Device Manager"
+msgstr "Geräte-Manager"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "%lld bytes"
+msgstr "%lld Byte"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Value:"
+msgstr "Wert:"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Events are not available."
+msgstr "Ereignisse sind nicht verfügbar."
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Events"
+msgstr "Ereignisse"
+
+#, fuzzy
+msgctxt "TurnedOffWindow"
+msgid "Turned-off drivers"
+msgstr "Ausgeschaltete Treiber"
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "Cameras"
+msgstr "Kameras"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Not available"
+msgstr "Nicht verfügbar"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Turn on driver"
+msgstr "Treiber einschalten"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Driver details"
+msgstr "Treiberdetails"
+
+#, fuzzy
+msgctxt "Report"
+msgid "Status"
+msgstr "Status"
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "Computer"
+msgstr "Computer"
+
+#, fuzzy
+msgctxt "AboutWindow"
+msgid "About Device Manager"
+msgstr "Über Geräte-Manager"
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "Human interface devices"
+msgstr "Eingabegeräte (HID)"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Turn on driver"
+msgstr "Treiber einschalten"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "The driver is turned off. It stops after a restart.\n\nThe device may then no longer appear in the list. To turn the driver on again, choose Action ▸ Turned-off drivers."
+msgstr "Der Treiber ist ausgeschaltet. Er wird nach einem Neustart beendet.\n\nDas Gerät erscheint dann möglicherweise nicht mehr in der Liste. Um den Treiber wieder einzuschalten, wählen Sie Aktion ▸ Ausgeschaltete Treiber."
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Property:"
+msgstr "Eigenschaft:"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Turn off driver"
+msgstr "Treiber ausschalten"
+
+#, fuzzy
+msgctxt "Report"
+msgid "Properties"
+msgstr "Eigenschaften"
+
+#, fuzzy
+msgctxt "DriverControl"
+msgid "No driver file is known for this device."
+msgstr "Für dieses Gerät ist keine Treiberdatei bekannt."
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "The report could not be saved: %error%"
+msgstr "Der Bericht konnte nicht gespeichert werden: %error%"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "OK"
+msgstr "OK"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Computer"
+msgstr "Computer"
+
+#, fuzzy
+msgctxt "DriverControl"
+msgid "This driver is not part of a package."
+msgstr "Dieser Treiber gehört zu keinem Paket."
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Package:"
+msgstr "Paket:"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Devices by type"
+msgstr "Geräte nach Typ"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Driver file"
+msgstr "Treiberdatei"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Devices.txt"
+msgstr "Geräte.txt"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Driver file:"
+msgstr "Treiberdatei:"
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "Disk drives"
+msgstr "Laufwerke"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Show hidden devices"
+msgstr "Ausgeblendete Geräte anzeigen"
+
+#, fuzzy
+msgctxt "AboutWindow"
+msgid "The PCI ID and USB ID lists"
+msgstr "Die PCI-ID- und USB-ID-Listen"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Location:"
+msgstr "Ort:"
+
+#, fuzzy
+msgctxt "TurnedOffWindow"
+msgid "Close"
+msgstr "Schließen"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Device paths"
+msgstr "Gerätepfade"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Properties"
+msgstr "Eigenschaften"
+
+#, fuzzy
+#| msgid "No driver is installed for this device. If you turned its driver off, Action â¸ Turned-off drivers turns it on again."
+msgctxt "DeviceModel"
+msgid "No driver is installed for this device. If you turned its driver off, Action ▸ Turned-off drivers turns it on again."
+msgstr "Für dieses Gerät ist kein Treiber installiert. Wenn Sie seinen Treiber ausgeschaltet haben, schaltet Aktion ▸ Ausgeschaltete Treiber ihn wieder ein."
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Unknown"
+msgstr "Unbekannt"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "The driver is turned on. It loads after a restart."
+msgstr "Der Treiber ist eingeschaltet. Er wird nach einem Neustart geladen."
+
+#, fuzzy
+msgctxt "AboutWindow"
+msgid "Manager"
+msgstr "Manager"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Device tree.txt"
+msgstr "Gerätebaum.txt"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "This driver is needed to start the system."
+msgstr "Dieser Treiber wird zum Starten des Systems benötigt."
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Help"
+msgstr "Hilfe"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Device tree…"
+msgstr "Gerätebaum…"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Driver"
+msgstr "Treiber"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Sign in must be running to change a driver."
+msgstr "Die Anmeldung muss laufen, um einen Treiber zu ändern."
+
+#, fuzzy
+msgctxt "AboutWindow"
+msgid "Version %s • Part of R5 Operating System"
+msgstr "Version %s • Teil von R5 Operating System"
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "ISA bus"
+msgstr "ISA-Bus"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Property"
+msgstr "Eigenschaft"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "About Device Manager…"
+msgstr "Über Geräte-Manager…"
+
+#, fuzzy
+msgctxt "TurnedOffWindow"
+msgid "(your packages)"
+msgstr "(Ihre Pakete)"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Turned-off drivers…"
+msgstr "Ausgeschaltete Treiber…"
+
+#, fuzzy
+msgctxt "Report"
+msgid "Computer"
+msgstr "Computer"
+
+#, fuzzy
+msgctxt "AboutWindow"
+msgid "© 2026 R5OS Contributors"
+msgstr "© 2026 R5OS Contributors"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Devices by connection"
+msgstr "Geräte nach Verbindung"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "%.1f MiB"
+msgstr "%.1f MiB"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Device status"
+msgstr "Gerätestatus"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Full details…"
+msgstr "Alle Details…"
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "Network adapters"
+msgstr "Netzwerkadapter"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Export full details"
+msgstr "Alle Details exportieren"
+
+#, fuzzy
+msgctxt "Report"
+msgid "Device Manager report"
+msgstr "Geräte-Manager-Bericht"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "OK"
+msgstr "OK"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "General"
+msgstr "Allgemein"
+
+#, fuzzy
+msgctxt "AboutWindow"
+msgid "Devices, © 2008–2026 Haiku, Inc. (MIT)"
+msgstr "Devices, © 2008–2026 Haiku, Inc. (MIT)"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "No events for this device."
+msgstr "Keine Ereignisse für dieses Gerät."
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "ACPI bus"
+msgstr "ACPI-Bus"
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "System devices"
+msgstr "Systemgeräte"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Quit"
+msgstr "Beenden"
+
+#, fuzzy
+msgctxt "DriverControl"
+msgid "The change was not saved."
+msgstr "Die Änderung wurde nicht gespeichert."
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "The system does not report which driver serves this device. It may still work."
+msgstr "Das System meldet nicht, welcher Treiber dieses Gerät bedient. Es funktioniert möglicherweise trotzdem."
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "USB bus"
+msgstr "USB-Bus"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "%.1f KiB"
+msgstr "%.1f KiB"
+
+#, fuzzy
+msgctxt "Report"
+msgid "Driver"
+msgstr "Treiber"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "A part of the system serves this device."
+msgstr "Ein Teil des Systems bedient dieses Gerät."
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Action"
+msgstr "Aktion"
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "Other system devices"
+msgstr "Andere Systemgeräte"
+
+#, fuzzy
+msgctxt "AboutWindow"
+msgid "Copyright"
+msgstr "Copyright"
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "Display adapters"
+msgstr "Grafikkarten"
+
+#, fuzzy
+msgctxt "TurnedOffWindow"
+msgid "No drivers are turned off."
+msgstr "Keine Treiber sind ausgeschaltet."
+
+#, fuzzy
+msgctxt "AboutWindow"
+msgid "Based on"
+msgstr "Basiert auf"
+
+#, fuzzy
+msgctxt "Report"
+msgid "Layout: full details"
+msgstr "Anordnung: alle Details"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Turning off this driver turns off all devices that use it. The change takes effect after a restart."
+msgstr "Das Ausschalten dieses Treibers schaltet alle Geräte aus, die ihn verwenden. Die Änderung wird nach einem Neustart wirksam."
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "License:"
+msgstr "Lizenz:"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Export"
+msgstr "Exportieren"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Cancel"
+msgstr "Abbrechen"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "File"
+msgstr "Datei"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Version:"
+msgstr "Version:"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "None reported"
+msgstr "Keine gemeldet"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Details"
+msgstr "Details"
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "The driver for this device is turned off. It stops after a restart."
+msgstr "Der Treiber für dieses Gerät ist ausgeschaltet. Er wird nach einem Neustart beendet."
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "Unknown device"
+msgstr "Unbekanntes Gerät"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Turn off"
+msgstr "Ausschalten"
+
+#, fuzzy
+msgctxt "AboutWindow"
+msgid "MIT. Other systems may use and change it."
+msgstr "MIT. Andere Systeme dürfen es verwenden und ändern."
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "This device is working properly."
+msgstr "Dieses Gerät funktioniert einwandfrei."
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "Universal Serial Bus controllers"
+msgstr "USB-Controller"
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "PCI bus"
+msgstr "PCI-Bus"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Manufacturer:"
+msgstr "Hersteller:"
+
+#, fuzzy
+msgctxt "Report"
+msgid "Location"
+msgstr "Ort"
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "On %s"
+msgstr "An %s"
+
+#, fuzzy
+msgctxt "Report"
+msgid "Layout: device tree"
+msgstr "Anordnung: Gerätebaum"
+
+#, fuzzy
+msgctxt "Report"
+msgid "Manufacturer"
+msgstr "Hersteller"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Recent system log lines about this device:"
+msgstr "Neueste Systemprotokollzeilen zu diesem Gerät:"
+
+#, fuzzy
+msgctxt "AboutWindow"
+msgid "Device"
+msgstr "Gerät"
+
+#, fuzzy
+msgctxt "System name"
+msgid "Device Manager"
+msgstr "Geräte-Manager"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "None"
+msgstr "Keine"
+
+#, fuzzy
+msgctxt "TurnedOffWindow"
+msgid "Turn on"
+msgstr "Einschalten"
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "Other devices"
+msgstr "Andere Geräte"
+
+#, fuzzy
+msgctxt "Report"
+msgid "Hidden device"
+msgstr "Ausgeblendetes Gerät"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Scan for hardware changes"
+msgstr "Nach geänderter Hardware suchen"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "View"
+msgstr "Ansicht"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "This device is no longer connected."
+msgstr "Dieses Gerät ist nicht mehr angeschlossen."
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "File size:"
+msgstr "Dateigröße:"
+
+#, fuzzy
+msgctxt "MainWindow"
+msgid "Export device tree"
+msgstr "Gerätebaum exportieren"
+
+#, fuzzy
+msgctxt "Report"
+msgid "[!] no driver, [off] driver turned off"
+msgstr "[!] kein Treiber, [off] Treiber ausgeschaltet"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Device type:"
+msgstr "Gerätetyp:"
+
+#, fuzzy
+msgctxt "Report"
+msgid "Device paths"
+msgstr "Gerätepfade"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Driver:"
+msgstr "Treiber:"
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "Processors"
+msgstr "Prozessoren"
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "PCI bus %s, device %s, function %s"
+msgstr "PCI-Bus %s, Gerät %s, Funktion %s"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Turn off driver"
+msgstr "Treiber ausschalten"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Driver details…"
+msgstr "Treiberdetails…"
+
+#, fuzzy
+msgctxt "AboutWindow"
+msgid "Hardware names"
+msgstr "Hardwarenamen"
+
+#, fuzzy
+msgctxt "PropertiesWindow"
+msgid "Date modified:"
+msgstr "Änderungsdatum:"
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "Sound, video and game controllers"
+msgstr "Audio-, Video- und Gamecontroller"
+
+#, fuzzy
+msgctxt "TurnedOffWindow"
+msgid "A driver you turn on loads after a restart."
+msgstr "Ein Treiber, den Sie einschalten, wird nach einem Neustart geladen."
+
+#, fuzzy
+msgctxt "DriverControl"
+msgid "The settings file could not be written."
+msgstr "Die Einstellungsdatei konnte nicht geschrieben werden."
+
+#, fuzzy
+msgctxt "DeviceModel"
+msgid "Storage controllers"
+msgstr "Speichercontroller"
+
+#, fuzzy
+msgctxt "Report"
+msgid "Date"
+msgstr "Datum"
+
+#, fuzzy
+msgctxt "AboutWindow"
+msgid "License"
+msgstr "Lizenz"

@@ -50,11 +50,11 @@ msgid "Used to sign in; letters and numbers"
 msgstr ""
 
 msgctxt "Settings: Users and Accounts"
-msgid "Choose picture…"
+msgid "Administrator"
 msgstr ""
 
 msgctxt "Settings: Users and Accounts"
-msgid "Administrator"
+msgid "Choose picture…"
 msgstr ""
 
 msgctxt "Settings: Users and Accounts"

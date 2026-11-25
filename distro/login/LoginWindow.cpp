@@ -8,12 +8,30 @@
 
 #include "LoginView.h"
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <Catalog.h>
+// SPDX-SnippetEnd
 #include <LayoutBuilder.h>
+
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "Login: Sign in window"
+// SPDX-SnippetEnd
 
 
 LoginWindow::LoginWindow(BRect frame)
 	:
-	BWindow(frame, "Sign in", B_TITLED_WINDOW_LOOK, B_MODAL_ALL_WINDOW_FEEL,
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	BWindow(frame, B_TRANSLATE("Sign in"), B_TITLED_WINDOW_LOOK, B_MODAL_ALL_WINDOW_FEEL,
+// SPDX-SnippetEnd
+
 		B_NOT_CLOSABLE | B_NOT_ZOOMABLE | B_NOT_MINIMIZABLE
 			| B_AUTO_UPDATE_SIZE_LIMITS | B_ASYNCHRONOUS_CONTROLS,
 		B_ALL_WORKSPACES)

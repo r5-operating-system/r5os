@@ -128,6 +128,21 @@ Application DeviceManager :
 	: DeviceManager.rdef
 ;
 
+DoCatalogs DeviceManager :
+	x-vnd.R5-DeviceManager
+	:
+	AboutWindow.cpp
+	BlockedDrivers.cpp
+	DeviceItem.cpp
+	DeviceManagerApp.cpp
+	DeviceModel.cpp
+	DriverControl.cpp
+	MainWindow.cpp
+	PropertiesWindow.cpp
+	Report.cpp
+	TurnedOffWindow.cpp
+	;
+
 Includes [ FGristFiles DeviceACPI.cpp ] : [ FGristFiles acpipnpids.h isapnpids.h ] ;
 Includes [ FGristFiles DevicePCI.cpp ] : [ FGristFiles pcihdr.h ] ;
 Includes [ FGristFiles DeviceUSB.cpp ] : [ FGristFiles usbhdr.h ] ;

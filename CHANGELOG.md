@@ -8,6 +8,23 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-25 - Translations: R5's own programs, and Weblate finds new folders by itself (#4599)
+
+- Problem: after Settings, the other programs R5 wrote still showed fixed English, or used `B_TRANSLATE` without a catalog (Login, Users, CPU Info, Device Manager, libr5ui, the Game Kit views, the AirPlay item). `libr5bt.so` and `libr5wifi.so` had a catalog but no signature in their file, so the Locale Kit could not find it and their translations (Bluetooth was partly translated into Dutch) were never loaded. Each new catalog folder needed a Weblate component made by hand.
+- Change:
+  - About 280 more texts through `B_TRANSLATE`, one context per window or class: Login and the lock screen (incl. `AccountAdmin` and the driver admin replies), Users, libr5ui (admin lock, password hints, sidebar tip, accent names, the roles on the account cards), libr5game (motion view, fallback name), CPU Info, Device Manager's remaining texts, the AirPlay Deskbar item. Sentences built from pieces are one text with a placeholder; counts use `BStringFormat`.
+  - `DoCatalogs` for Login, Users, CPU Info, Device Manager, the AirPlay item, libr5ui and libr5game; `HAIKU_MULTIPLE_LOCALIZED_TARGETS` where one folder builds several programs (login, airplay). Signature `.rdef` files for `libr5bt.so`, `libr5wifi.so`, `libr5ui.so` and `libr5game.so`, as Haiku's own libraries have (`libbe_version.rdef`).
+  - Nine new folders in `distro/catalogs` (also the Bluetooth and Wi-Fi programs, which had `DoCatalogs` but were not exported). Haiku's translations in the same context are taken over (Login 2, Bluetooth 1 per language); 415 AI drafts per language for nl, de and fr, marked `fuzzy`.
+  - Weblate: `scripts/weblate-discovery.py`, run once by the owner with their own key on 25 Nov 2026, renamed `bluetooth` to `preferences/r5bt`, deleted `wifi` and `bluetooth_deskbar` (their translations are in the repository) and turned on Component discovery (add-on 35946). Weblate then created a component for every folder on `main`, the Settings ones included. The GitHub webhook to Weblate (push) was added the same day.
+- Mistakes:
+  - `main` added three Login texts while this was made ("Preparing your files… %count%", "Your files are still being prepared.", "Could not prepare your files: %error%"); they are wrapped too, and the Login conflicts with `login_local_message()` were resolved by keeping `main`'s code.
+  - #4649 passed the role of an account to libr5ui translated, while libr5ui compares it with "Administrator" to draw it bold and blue; in another language the administrator would have lost that look. The role now stays English in the data and libr5ui translates it where it draws it (`shown_role()`); Login no longer reads the shown banner text to pick the accent colour.
+  - Device Manager showed "Action â¸ Turned-off drivers": the arrow was stored double-encoded in `DeviceModel.cpp`. Fixed to "▸".
+  - `weblate-discovery.py` first sent an invisible character typed by Ctrl+V (Weblate answered 400) and then read the add-on list with GET, which Weblate refuses (405). It now checks the key and reads the add-ons through the component.
+  - The first build missed `libr5bt.rdef`; `apply-bluetooth.py` copies it now.
+- Limits: CPU Info's text report (`CpuReport.cpp`) stays English, because scripts read it; its values also show in English in the window. Haiku programs that R5 changed (Deskbar, Tracker, Screen, keystore) keep Haiku's catalogs; the texts R5 added to them are still English. Units, brand names and log lines stay English.
+- Tested: `scripts/build-locked.sh` on 25 Nov 2026 exited 0 before the Device Manager fix; `catalogs.py export` wrote the nine folders; Weblate lists the new components. Not tested: any program running in nl, de or fr (a stick follows).
+
 ## 2026-11-25 - Accounts: Deskbar lock and log out, a safe first sign-in, log out stops everything (#4639-#4644)
 
 - Problem: a code review of `distro/login` and `distro/users` filed six issues. Checked on `main` `ef0bba64b2`: #4639 was already fixed there (Deskbar sends Lock screen and Log out with `r5_admin_send()` since 17a2409224, and Login's admin port checks the uid). The `!IsSourceRemote()` test that stayed in front of sign in, unlock, restart and shut down was still weak: the sender chooses the reply address, also Login's own messenger. #4640-#4644 were real.

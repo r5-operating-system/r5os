@@ -15,6 +15,19 @@ R5's own programs keep their translations in `distro/catalogs/<folder>/<language
 | `servers/bluetooth_deskbar` | the Bluetooth item in the Deskbar | `x-vnd.R5OS-bluetooth-deskbar` |
 | `preferences/settings/Settings` | the Settings window: the list, Home, search and the bottom row | `x-vnd.R5OS-Settings` |
 | `preferences/settings/settings_<page>` | one Settings page add-on each (19), for example `settings_display` | `x-vnd.R5OS-settings_<page>` |
+| `preferences/r5ui` | `libr5ui.so`: the admin lock, the password field, the account cards, the accent names | `x-vnd.R5OS-libr5ui` |
+| `preferences/r5game` | `libr5game.so`, the Game Kit views | `x-vnd.R5OS-libr5game` |
+| `apps/login/Login` | Sign in and the lock screen | `x-vnd.Haiku-Login` |
+| `preferences/users` | Users | `x-vnd.R5OS-Users` |
+| `preferences/bluetooth` | the Bluetooth program | `x-vnd.Haiku-BluetoothPrefs` |
+| `preferences/wifi` | the Wi-Fi program | `x-vnd.Haiku-WiFi` |
+| `apps/cpuinfo` | CPU Info | `x-vnd.R5-CPUInfo` |
+| `apps/devicemanager` | Device Manager | `x-vnd.R5-DeviceManager` |
+| `servers/airplay/airplay_deskbar` | the AirPlay item in the Deskbar | `x-vnd.R5OS-airplay-tray` |
+
+A shared library or an add-on needs a signature in its own file (an `.rdef` with `resource app_signature`), because the Locale Kit finds an image's catalog by that signature. Haiku's libraries do the same (`libbe_version.rdef`). `libr5bt.so` and `libr5wifi.so` had none until 25 Nov 2026, so their translations were not loaded.
+
+A program whose signature is Haiku's (Login, Bluetooth, Wi-Fi) but whose code is R5's has its catalog here too. Before its folder was added, the texts that Haiku's translators made in the same context were taken over from `haiku/data/catalogs`.
 
 - **`en.catkeys`** is the English source, a Haiku catalog file. The build extracts it from the `B_TRANSLATE` calls. Do not edit it by hand.
 - **`template.pot`** holds the same texts as a gettext template. `catalogs.py export` writes it from `en.catkeys`. Do not edit it by hand.
@@ -93,16 +106,14 @@ Weblate first used the "Haiku catkeys" format. A test (#4607, closed unmerged) s
 
 ### New folders appear by themselves
 
-Set up once, by the owner, in Weblate:
+Done on 25 Nov 2026 (add-on 35946 on `preferences/r5bt`). The owner ran `py scripts/weblate-discovery.py --apply` once, with their own Weblate API key (hosted.weblate.org: picture at the top right > Settings > API access). Without `--apply` it only shows what it will do. It:
 
-1. On one existing component (for example Bluetooth), add the add-on **Component discovery** with:
-   - regular expression `distro/catalogs/(?P<component>.+)/(?P<language>[^/.]+)\.po`;
-   - component name `{{ component }}`;
-   - base file (template) `distro/catalogs/{{ component }}/template.pot`;
-   - file format "gettext PO file".
-2. In the GitHub repository settings, add the Weblate webhook (`https://hosted.weblate.org/hooks/github/`, event "push").
+1. checks that the components `wifi` and `bluetooth_deskbar` have nothing in Weblate that is not in the repository yet, and stops if they have;
+2. renames `bluetooth` to `preferences/r5bt`, so every component is named after its folder;
+3. deletes `wifi` and `bluetooth_deskbar` after you type `delete` (their translations are in the repository; their Weblate history is not kept);
+4. turns on **Component discovery** on `bluetooth`, with the file mask `distro/catalogs/(?P<component>.+)/(?P<language>[^/.]+)\.po` and the template `distro/catalogs/{{ component }}/template.pot`.
 
-After that every new folder in `distro/catalogs` on `main` becomes a component, and new or changed texts reach Weblate after each merge. Weblate's changes still come back as a pull request.
+Discovery then creates one component per folder in `distro/catalogs` on `main`, and new ones after every push. The GitHub webhook (`https://hosted.weblate.org/hooks/github/`, event push) is on since 25 Nov 2026, so Weblate fetches `main` after each merge. Weblate's changes still come back as a pull request.
 
 ## Drafts
 

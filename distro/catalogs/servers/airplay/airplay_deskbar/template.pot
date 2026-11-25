@@ -1,0 +1,18 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-airplay-tray\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+msgctxt "AirPlay: Deskbar item"
+msgid "Stop sending"
+msgstr ""
+
+msgctxt "AirPlay: Deskbar item"
+msgid "This computer (receive)"
+msgstr ""
+
+msgctxt "AirPlay: Deskbar item"
+msgid "No AirPlay speakers found"
+msgstr ""
+
+msgctxt "AirPlay: Deskbar item"
+msgid "Play to %name%"
+msgstr ""

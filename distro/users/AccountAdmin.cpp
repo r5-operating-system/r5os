@@ -13,6 +13,7 @@
 #include "KeyStoreProtocol.h"
 
 #include <fs_attr.h>
+#include <Catalog.h>
 #include <Message.h>
 #include <Node.h>
 #include <OS.h>
@@ -45,6 +46,10 @@
 #include <syslog.h>
 #include <time.h>
 #include <unistd.h>
+
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "Users: Account admin"
 
 
 const char* kR5LoginSignature = "application/x-vnd.Haiku-Login";
@@ -330,7 +335,8 @@ run_argv(char** argv, BString& errorText)
 		return errno;
 	}
 	if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
-		errorText.SetToFormat("%s failed", argv[0]);
+		errorText = B_TRANSLATE("%program% failed");
+		errorText.ReplaceFirst("%program%", argv[0]);
 		return B_ERROR;
 	}
 	return B_OK;
@@ -403,43 +409,43 @@ set_first_password(const char* login, const char* realName,
 	const char* password, BString& error)
 {
 	if (geteuid() != 0) {
-		error = "Only the sign-in helper can set this password.";
+		error = B_TRANSLATE("Only the sign-in helper can set this password.");
 		return B_PERMISSION_DENIED;
 	}
 	if (!needs_first_password(login)) {
-		error = "This account already has a password.";
+		error = B_TRANSLATE("This account already has a password.");
 		return B_NOT_ALLOWED;
 	}
 	if (password == NULL || password[0] == '\0') {
-		error = "Please enter a password.";
+		error = B_TRANSLATE("Please enter a password.");
 		return B_BAD_VALUE;
 	}
 	if (realName != NULL && (strchr(realName, ':') != NULL
 			|| strchr(realName, '\n') != NULL
 			|| strchr(realName, '\r') != NULL)) {
-		error = "The name cannot contain a colon or a new line.";
+		error = B_TRANSLATE("The name cannot contain a colon or a new line.");
 		return B_BAD_VALUE;
 	}
 	if (realName != NULL && strlen(realName) > 80) {
-		error = "That name is too long.";
+		error = B_TRANSLATE("That name is too long.");
 		return B_BAD_VALUE;
 	}
 
 	struct passwd* pwd = getpwnam(login);
 	if (pwd == NULL) {
-		error = "That account does not exist.";
+		error = B_TRANSLATE("That account does not exist.");
 		return ENOENT;
 	}
 	uid_t uid = pwd->pw_uid;
 
 	BString hash;
 	if (make_password_hash(password, hash) != B_OK) {
-		error = "Could not encrypt the password.";
+		error = B_TRANSLATE("Could not encrypt the password.");
 		return B_ERROR;
 	}
 	status_t status = set_shadow_password(login, hash.String());
 	if (status != B_OK) {
-		error = "The password could not be saved.";
+		error = B_TRANSLATE("The password could not be saved.");
 		return status;
 	}
 
@@ -1604,7 +1610,7 @@ status_t
 ensure_guest_account(BString& error)
 {
 	if (geteuid() != 0) {
-		error = "Guest account setup requires the sign-in helper.";
+		error = B_TRANSLATE("Guest account setup requires the sign-in helper.");
 		return B_PERMISSION_DENIED;
 	}
 
@@ -1613,12 +1619,12 @@ ensure_guest_account(BString& error)
 		if (!is_system_guest(pwd)) {
 			// A person made before the name was reserved. Never lock or wipe
 			// that account.
-			error = "An account named \"guest\" already exists. Rename it "
-				"first.";
+			error = B_TRANSLATE("An account named \"guest\" already exists. Rename it "
+				"first.");
 			return B_NOT_ALLOWED;
 		}
 		if (pwd->pw_uid < kMinPersonUid || pwd->pw_uid == 0) {
-			error = "The existing guest account has an unexpected setup.";
+			error = B_TRANSLATE("The existing guest account has an unexpected setup.");
 			return B_NOT_ALLOWED;
 		}
 		// Never allow guest in admin or wheel, and keep shadow locked so only
@@ -1639,12 +1645,12 @@ ensure_guest_account(BString& error)
 	status_t status = add_unix_user(kGuestAccountName, uid, gid,
 		kGuestHomePath, "/bin/sh", "Guest", "!");
 	if (status != B_OK) {
-		error = "Could not create the guest account.";
+		error = B_TRANSLATE("Could not create the guest account.");
 		return status;
 	}
 	endpwent();
 	if (!write_guest_uid(uid)) {
-		error = "Could not save the guest account.";
+		error = B_TRANSLATE("Could not save the guest account.");
 		return B_ERROR;
 	}
 	return B_OK;
@@ -1814,13 +1820,13 @@ static status_t
 set_guest_enabled(bool enabled, BString& error)
 {
 	if (geteuid() != 0) {
-		error = "Guest setting requires the sign-in helper.";
+		error = B_TRANSLATE("Guest setting requires the sign-in helper.");
 		return B_PERMISSION_DENIED;
 	}
 	if (guest_session_active()) {
 		// Turning the guest off while a guest session runs would leave it
 		// running; turning it on would wipe a live home.
-		error = "Log out Guest first.";
+		error = B_TRANSLATE("Log out Guest first.");
 		return B_BUSY;
 	}
 	if (enabled) {
@@ -1830,16 +1836,16 @@ set_guest_enabled(bool enabled, BString& error)
 	}
 	FILE* file = fopen(kGuestEnabledPath, "w");
 	if (file == NULL) {
-		error = "Could not save the guest setting.";
+		error = B_TRANSLATE("Could not save the guest setting.");
 		return errno;
 	}
 	if (fprintf(file, "%d\n", enabled ? 1 : 0) < 0) {
 		fclose(file);
-		error = "Could not save the guest setting.";
+		error = B_TRANSLATE("Could not save the guest setting.");
 		return EIO;
 	}
 	if (fclose(file) != 0) {
-		error = "Could not save the guest setting.";
+		error = B_TRANSLATE("Could not save the guest setting.");
 		return errno;
 	}
 	chmod(kGuestEnabledPath, 0644);
@@ -1847,7 +1853,7 @@ set_guest_enabled(bool enabled, BString& error)
 	if (enabled) {
 		status_t status = wipe_guest_home();
 		if (status != B_OK) {
-			error = "The guest's old files could not be removed.";
+			error = B_TRANSLATE("The guest's old files could not be removed.");
 			return status;
 		}
 	}
@@ -1872,16 +1878,16 @@ create_account(const char* name, const char* real, const char* password,
 	bool admin, BString& error)
 {
 	if (password == NULL || password[0] == '\0') {
-		error = "Type a password.";
+		error = B_TRANSLATE("Type a password.");
 		return B_BAD_VALUE;
 	}
 	if (!valid_username(name)) {
-		error = "Use a lowercase username of letters, digits, underscore "
-			"or hyphen.";
+		error = B_TRANSLATE("Use a lowercase username of letters, digits, underscore "
+			"or hyphen.");
 		return B_BAD_VALUE;
 	}
 	if (getpwnam(name) != NULL) {
-		error = "That username already exists.";
+		error = B_TRANSLATE("That username already exists.");
 		return B_NAME_IN_USE;
 	}
 
@@ -1904,7 +1910,7 @@ create_account(const char* name, const char* real, const char* password,
 
 	struct passwd* pwd = getpwnam(name);
 	if (pwd == NULL) {
-		error = "The account was not created.";
+		error = B_TRANSLATE("The account was not created.");
 		return B_ERROR;
 	}
 	if (pwd->pw_uid < kMinPersonUid) {
@@ -1914,7 +1920,7 @@ create_account(const char* name, const char* real, const char* password,
 			NULL
 		};
 		run_argv(delArgv, error);
-		error = "The new account did not get a user id of 1000 or higher.";
+		error = B_TRANSLATE("The new account did not get a user id of 1000 or higher.");
 		return B_ERROR;
 	}
 
@@ -1922,20 +1928,20 @@ create_account(const char* name, const char* real, const char* password,
 
 	BString encrypted;
 	if (make_password_hash(password, encrypted) != B_OK) {
-		error = "Could not encrypt the password.";
+		error = B_TRANSLATE("Could not encrypt the password.");
 		return B_ERROR;
 	}
 	if (set_shadow_password(name, encrypted.String()) != B_OK) {
-		error = "The account exists, but the password was not set.";
+		error = B_TRANSLATE("The account exists, but the password was not set.");
 		return B_ERROR;
 	}
 
 	if (admin && add_to_group(kAdminGroupName, name, error) != B_OK) {
 		ensure_admin_group(error);
 		if (add_to_group(kAdminGroupName, name, error) != B_OK) {
-			BString text;
-			text.SetToFormat("The account exists, but it is not an "
-				"administrator: %s", error.String());
+			BString text(B_TRANSLATE("The account exists, but it is not an "
+				"administrator: %error%"));
+			text.ReplaceFirst("%error%", error.String());
 			error = text;
 			return B_ERROR;
 		}
@@ -1961,11 +1967,11 @@ set_disabled(const char* name, bool disable, BString& error)
 {
 	struct passwd* pwd = getpwnam(name);
 	if (pwd == NULL || !is_listed_account(pwd)) {
-		error = "That account was not found.";
+		error = B_TRANSLATE("That account was not found.");
 		return ENOENT;
 	}
 	if (is_first_home_admin(pwd)) {
-		error = "The original administrator account cannot be disabled.";
+		error = B_TRANSLATE("The original administrator account cannot be disabled.");
 		return B_NOT_ALLOWED;
 	}
 
@@ -1977,14 +1983,14 @@ set_disabled(const char* name, bool disable, BString& error)
 		if (current[0] == '!')
 			current++;
 		if (set_shadow_password(name, current) != B_OK) {
-			error = "Could not enable the account.";
+			error = B_TRANSLATE("Could not enable the account.");
 			return B_ERROR;
 		}
 		return B_OK;
 	}
 
 	if (is_admin_user(pwd) && admin_count() <= 1) {
-		error = "There must be at least one administrator.";
+		error = B_TRANSLATE("There must be at least one administrator.");
 		return B_NOT_ALLOWED;
 	}
 
@@ -1994,7 +2000,7 @@ set_disabled(const char* name, bool disable, BString& error)
 		&& shadow->sp_pwdp[0] != '!')
 		locked << shadow->sp_pwdp;
 	if (set_shadow_password(name, locked.String()) != B_OK) {
-		error = "Could not disable the account.";
+		error = B_TRANSLATE("Could not disable the account.");
 		return B_ERROR;
 	}
 	return B_OK;
@@ -2040,20 +2046,20 @@ delete_account(const char* name, bool deleteFiles, BString& error)
 {
 	struct passwd* pwd = getpwnam(name);
 	if (pwd == NULL || !is_listed_account(pwd)) {
-		error = "That account was not found.";
+		error = B_TRANSLATE("That account was not found.");
 		return ENOENT;
 	}
 	if (is_first_home_admin(pwd)) {
-		error = "The original administrator account cannot be deleted.";
+		error = B_TRANSLATE("The original administrator account cannot be deleted.");
 		return B_NOT_ALLOWED;
 	}
 	// Login is uid 0. The person at the screen is the session file, not getuid().
 	if (is_signed_in_name(name)) {
-		error = "You cannot delete the account that is signed in.";
+		error = B_TRANSLATE("You cannot delete the account that is signed in.");
 		return B_NOT_ALLOWED;
 	}
 	if (is_admin_user(pwd) && !is_disabled_user(name) && admin_count() <= 1) {
-		error = "There must be at least one administrator.";
+		error = B_TRANSLATE("There must be at least one administrator.");
 		return B_NOT_ALLOWED;
 	}
 
@@ -2077,8 +2083,8 @@ delete_account(const char* name, bool deleteFiles, BString& error)
 			NULL
 		};
 		if (run_argv(rmArgv, error) != B_OK) {
-			error = "The account was removed, but its files could not be "
-				"deleted.";
+			error = B_TRANSLATE("The account was removed, but its files could not be "
+				"deleted.");
 			return B_ERROR;
 		}
 	}
@@ -2607,11 +2613,11 @@ update_profile(BMessage* request, BString& error)
 	struct passwd* pwd = name != NULL ? getpwnam(name) : NULL;
 	if (pwd == NULL || name == NULL || strcmp(pwd->pw_name, name) != 0
 		|| !is_listed_account(pwd)) {
-		error = "That account was not found.";
+		error = B_TRANSLATE("That account was not found.");
 		return ENOENT;
 	}
 	if (!sender_may_edit(request, pwd)) {
-		error = "Unlock this with an administrator password.";
+		error = B_TRANSLATE("Unlock this with an administrator password.");
 		return B_PERMISSION_DENIED;
 	}
 
@@ -2629,11 +2635,11 @@ update_profile(BMessage* request, BString& error)
 	if (request->FindString("real", &real) == B_OK && real != NULL) {
 		if (strchr(real, ':') != NULL || strchr(real, '\n') != NULL
 			|| strchr(real, '\r') != NULL) {
-			error = "The name cannot contain a colon or a new line.";
+			error = B_TRANSLATE("The name cannot contain a colon or a new line.");
 			return B_BAD_VALUE;
 		}
 		if (strlen(real) > 80) {
-			error = "That name is too long.";
+			error = B_TRANSLATE("That name is too long.");
 			return B_BAD_VALUE;
 		}
 		BPrivate::KMessage message(BPrivate::B_REG_UPDATE_USER);
@@ -2644,7 +2650,7 @@ update_profile(BMessage* request, BString& error)
 		status_t status = BPrivate::send_authentication_request_to_registrar(
 			message, registrarReply);
 		if (status != B_OK) {
-			error = "The name could not be saved.";
+			error = B_TRANSLATE("The name could not be saved.");
 			return status;
 		}
 	}
@@ -2654,12 +2660,12 @@ update_profile(BMessage* request, BString& error)
 		pwd = getpwnam(account);
 		const char* current = request->GetString("current", "");
 		if (self && !account_password_matches(pwd, current)) {
-			error = "That password is not right.";
+			error = B_TRANSLATE("That password is not right.");
 			return B_PERMISSION_DENIED;
 		}
 		BString hash;
 		if (make_password_hash(password, hash) != B_OK) {
-			error = "Could not encrypt the password.";
+			error = B_TRANSLATE("Could not encrypt the password.");
 			return B_ERROR;
 		}
 
@@ -2698,8 +2704,8 @@ update_profile(BMessage* request, BString& error)
 					syslog(LOG_ERR,
 						"AccountAdmin: keystore rewrap failed: %s",
 						strerror(rewrapStatus));
-					error = "Your password was not changed because the key "
-						"store could not be updated.";
+					error = B_TRANSLATE("Your password was not changed because the key "
+						"store could not be updated.");
 					return rewrapStatus;
 				}
 				rewrapped = true;
@@ -2707,7 +2713,7 @@ update_profile(BMessage* request, BString& error)
 		}
 
 		if (set_shadow_password(account, hash.String()) != B_OK) {
-			error = "The password could not be saved.";
+			error = B_TRANSLATE("The password could not be saved.");
 			if (rewrapped) {
 				status_t rollback = rewrap_keystore_for_account(home, uid,
 					gid, newKek, oldKek, oldParams.salt, oldParams.kdf);
@@ -2718,9 +2724,9 @@ update_profile(BMessage* request, BString& error)
 					syslog(LOG_ERR, "AccountAdmin: keystore rollback after a "
 						"failed password change failed: %s",
 						strerror(rollback));
-					error = "The password could not be saved. If you are "
+					error = B_TRANSLATE("The password could not be saved. If you are "
 						"later asked for your old password for saved "
-						"passwords, enter the new password you just typed.";
+						"passwords, enter the new password you just typed.");
 				}
 			}
 			oldKek.Clear();
@@ -2746,7 +2752,7 @@ update_profile(BMessage* request, BString& error)
 
 	pwd = getpwnam(account);
 	if (pwd == NULL) {
-		error = "That account was not found.";
+		error = B_TRANSLATE("That account was not found.");
 		return ENOENT;
 	}
 	home.SetTo(pwd->pw_dir != NULL ? pwd->pw_dir : "");
@@ -2766,14 +2772,14 @@ update_profile(BMessage* request, BString& error)
 	BString dir;
 	status_t status = ensure_account_dir(pwd, dir);
 	if (status != B_OK) {
-		error = "The account folder could not be updated.";
+		error = B_TRANSLATE("The account folder could not be updated.");
 		return status;
 	}
 	if (hasEmail) {
 		if (email == NULL)
 			email = "";
 		if (strlen(email) > 200 || strchr(email, '\n') != NULL) {
-			error = "That email address cannot be saved.";
+			error = B_TRANSLATE("That email address cannot be saved.");
 			return B_BAD_VALUE;
 		}
 		BString path;
@@ -2781,7 +2787,7 @@ update_profile(BMessage* request, BString& error)
 		status = write_owned_file(path.String(), email, strlen(email),
 			uid, gid);
 		if (status != B_OK) {
-			error = "The email address could not be saved.";
+			error = B_TRANSLATE("The email address could not be saved.");
 			return status;
 		}
 	}
@@ -2791,13 +2797,13 @@ update_profile(BMessage* request, BString& error)
 		unlink(picturePath.String());
 	else if (hasPicture) {
 		if (pictureSize < 12 || pictureSize > 512 * 1024) {
-			error = "That picture is too large.";
+			error = B_TRANSLATE("That picture is too large.");
 			return B_BAD_VALUE;
 		}
 		status = write_owned_file(picturePath.String(), picture, pictureSize,
 			uid, gid);
 		if (status != B_OK) {
-			error = "The picture could not be saved.";
+			error = B_TRANSLATE("The picture could not be saved.");
 			return status;
 		}
 	}
@@ -2843,7 +2849,7 @@ set_account_type(const char* name, bool admin, BString& error)
 	struct passwd* pwd = name != NULL ? getpwnam(name) : NULL;
 	if (pwd == NULL || strcmp(pwd->pw_name, name) != 0
 		|| !is_listed_account(pwd)) {
-		error = "That account was not found.";
+		error = B_TRANSLATE("That account was not found.");
 		return ENOENT;
 	}
 	char account[64];
@@ -2856,7 +2862,7 @@ set_account_type(const char* name, bool admin, BString& error)
 		if (add_to_group(kAdminGroupName, account, detail) != B_OK) {
 			ensure_admin_group(detail);
 			if (add_to_group(kAdminGroupName, account, detail) != B_OK) {
-				error = "The account could not become an administrator.";
+				error = B_TRANSLATE("The account could not become an administrator.");
 				return B_ERROR;
 			}
 		}
@@ -2866,25 +2872,25 @@ set_account_type(const char* name, bool admin, BString& error)
 	if (!wasAdmin)
 		return B_OK;
 	if (is_first_home_admin(pwd)) {
-		error = "The first administrator stays an administrator.";
+		error = B_TRANSLATE("The first administrator stays an administrator.");
 		return B_NOT_ALLOWED;
 	}
 	if (pwd->pw_uid == 0 || pwd->pw_gid == 0) {
-		error = "This account is an administrator through its system group.";
+		error = B_TRANSLATE("This account is an administrator through its system group.");
 		return B_NOT_ALLOWED;
 	}
 	if (!is_disabled_user(account) && admin_count() <= 1) {
-		error = "The last administrator cannot become a standard account.";
+		error = B_TRANSLATE("The last administrator cannot become a standard account.");
 		return B_NOT_ALLOWED;
 	}
 	if (remove_from_group(kAdminGroupName, account, detail) != B_OK
 		|| remove_from_group("wheel", account, detail) != B_OK) {
-		error = "The account type could not be changed.";
+		error = B_TRANSLATE("The account type could not be changed.");
 		return B_ERROR;
 	}
 	pwd = getpwnam(account);
 	if (pwd != NULL && is_admin_user(pwd)) {
-		error = "The account type could not be changed.";
+		error = B_TRANSLATE("The account type could not be changed.");
 		return B_ERROR;
 	}
 	return B_OK;
@@ -2894,7 +2900,7 @@ set_account_type(const char* name, bool admin, BString& error)
 static void
 deny_locked(BMessage& reply)
 {
-	reply.AddString("text", "Unlock this with an administrator password.");
+	reply.AddString("text", B_TRANSLATE("Unlock this with an administrator password."));
 	reply.AddInt32("error", B_PERMISSION_DENIED);
 }
 
@@ -2906,7 +2912,7 @@ handle_admin_message(BMessage* request, BMessage& reply)
 	if (request == NULL)
 		return B_BAD_VALUE;
 	if (geteuid() != 0) {
-		reply.AddString("text", "Account changes require the sign-in helper.");
+		reply.AddString("text", B_TRANSLATE("Account changes require the sign-in helper."));
 		reply.AddInt32("error", B_PERMISSION_DENIED);
 		return B_PERMISSION_DENIED;
 	}
@@ -2918,6 +2924,7 @@ handle_admin_message(BMessage* request, BMessage& reply)
 	if (!sSenderVerified && request->what != kMsgAdminQuery) {
 		reply.AddString("text", "This request must come through "
 			"r5_admin_send().");
+
 		reply.AddInt32("error", B_NOT_ALLOWED);
 		return B_NOT_ALLOWED;
 	}
@@ -2955,11 +2962,11 @@ handle_admin_message(BMessage* request, BMessage& reply)
 				return B_OK;
 			}
 			if (status == B_PERMISSION_DENIED)
-				error = "That password is not right.";
+				error = B_TRANSLATE("That password is not right.");
 			else if (status == ENOENT)
-				error = "That account was not found.";
+				error = B_TRANSLATE("That account was not found.");
 			else
-				error = "That account cannot unlock settings.";
+				error = B_TRANSLATE("That account cannot unlock settings.");
 			break;
 		}
 		case kMsgAdminRelock:
@@ -2976,7 +2983,7 @@ handle_admin_message(BMessage* request, BMessage& reply)
 			struct passwd* pwd = name != NULL ? getpwnam(name) : NULL;
 			if (pwd == NULL || !is_listed_account(pwd)
 				|| !sender_may_edit(request, pwd)) {
-				reply.AddString("text", "That account was not found.");
+				reply.AddString("text", B_TRANSLATE("That account was not found."));
 				reply.AddInt32("error", B_PERMISSION_DENIED);
 				return B_PERMISSION_DENIED;
 			}
@@ -3030,7 +3037,7 @@ handle_admin_message(BMessage* request, BMessage& reply)
 					request->GetBool("gmt", false));
 			}
 			if (status != B_OK)
-				error = "The clock could not be changed.";
+				error = B_TRANSLATE("The clock could not be changed.");
 			break;
 
 		default:
@@ -3101,7 +3108,7 @@ handle_admin_message(BMessage* request, BMessage& reply)
 			break;
 		}
 		default:
-			error = "Unknown account request.";
+			error = B_TRANSLATE("Unknown account request.");
 			status = B_BAD_VALUE;
 			break;
 	}
