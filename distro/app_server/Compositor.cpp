@@ -562,8 +562,13 @@ Compositor::Create(Desktop* desktop, HWInterface* screen, bool startHidden)
 
 	const char* initReason = NULL;
 	if (compositor->_InitSharedVulkan(sShared.device, &initReason) != B_OK) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		sharedLocker.Unlock();
 		delete compositor;
 		return NULL;
+// SPDX-SnippetEnd
 	}
 
 	// Start splash only for the first visible desktop at boot.
@@ -579,8 +584,13 @@ Compositor::Create(Desktop* desktop, HWInterface* screen, bool startHidden)
 	}
 
 	if (compositor->_Init() != B_OK) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		sharedLocker.Unlock();
 		delete compositor;
 		return NULL;
+// SPDX-SnippetEnd
 	}
 	sShared.compositors.AddItem(compositor);
 	return compositor;
