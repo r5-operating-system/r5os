@@ -365,6 +365,14 @@ main(int argc, char** argv)
 	free(back);
 	step("fragment", ok);
 
+	char pull[4196];
+	memset(pull, 'P', sizeof(pull));
+	fd = open("pull.bin", O_RDWR | O_CREAT | O_TRUNC, 0644);
+	ok = fd >= 0 && write_all(fd, pull, sizeof(pull)) == 0;
+	if (fd >= 0)
+		close(fd);
+	step("pull-close", ok);
+
 	fd = open("sync.bin", O_RDWR | O_CREAT | O_TRUNC, 0644);
 	char oldByte[1000];
 	char newByte[1000];
@@ -377,15 +385,11 @@ main(int argc, char** argv)
 	ok = ok && fd >= 0 && write_all(fd, newByte, sizeof(newByte)) == 0
 		&& fsync(fd) == 0;
 	step("fsync", ok);
-
-	char pull[4196];
-	memset(pull, 'P', sizeof(pull));
-	fd = open("pull.bin", O_RDWR | O_CREAT | O_TRUNC, 0644);
-	ok = fd >= 0 && write_all(fd, pull, sizeof(pull)) == 0;
-	if (fd >= 0)
-		close(fd);
-	step("pull-close", ok);
+	// Nothing is written after this. The host stops on the line, while
+	// sync.bin stays open, so a later close or page write is not the flush.
 	say("exfat: pull");
+	if (access("/boot/home/exfat-unmount", F_OK) == 0)
+		return ok ? 0 : 1;
 	for (;;)
 		sleep(60);
 	return 0;

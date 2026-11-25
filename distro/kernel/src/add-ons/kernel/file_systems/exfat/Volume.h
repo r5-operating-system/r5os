@@ -171,6 +171,7 @@ public:
 			uint64				ChainBytes(cluster_t start);
 			status_t			FinishMount();
 			status_t			SyncDisk();
+			status_t			FlushDrive();
 			// SPDX-SnippetEnd
 private:
 			ino_t				_NextID() { return fNextId++; }

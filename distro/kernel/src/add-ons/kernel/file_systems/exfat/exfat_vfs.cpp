@@ -1110,16 +1110,6 @@ exfat_write_pages(fs_volume* _volume, fs_vnode* _node, void*,
 
 
 static status_t
-flush_drive(Volume* volume)
-{
-	int result = ioctl(volume->Device(), B_FLUSH_DRIVE_CACHE);
-	if (result == 0 || result == B_DEV_INVALID_IOCTL)
-		return B_OK;
-	return result;
-}
-
-
-static status_t
 commit_valid(Inode* inode)
 {
 	if (!inode->IsFile() || inode->IsDeleted())
@@ -1135,7 +1125,7 @@ commit_valid(Inode* inode)
 			return status;
 		}
 	}
-	status_t flushed = flush_drive(volume);
+	status_t flushed = volume->FlushDrive();
 	if (flushed != B_OK) {
 		inode->WriteUnlock();
 		return flushed;
@@ -1205,12 +1195,14 @@ exfat_fsync(fs_volume* _volume, fs_vnode* _node, bool /*dataOnly*/)
 	if (inode->FileCache() != NULL)
 		status = file_cache_sync(inode->FileCache());
 	if (status == B_OK)
-		status = flush_drive(volume);
+		status = volume->FlushDrive();
 	inode->WriteUnlock();
 	if (status == B_OK)
 		status = commit_valid(inode);
 	if (status == B_OK)
 		status = block_cache_sync(volume->BlockCache());
+	if (status == B_OK)
+		status = volume->FlushDrive();
 	return status;
 }
 

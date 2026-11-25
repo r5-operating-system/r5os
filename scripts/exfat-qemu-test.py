@@ -4,12 +4,15 @@
 """Mount an exFAT card in QEMU and run the write steps.
 
 Works on its own copy of the image (never the shared one) and does not
-stop any other QEMU. A second IDE disk is an exFAT image. bfs_shell plants
-a system launch job that runs as root when the boot volume is mounted.
-The guest prints one "exfat:" line per step on the serial port. On
-"exfat: pull" QEMU is stopped without unmounting, and the host checks
-that each closed file's valid length is backed by bytes on the card.
-fsck.exfat -n is then run and its output is printed.
+stop any other QEMU. A second disk is an exFAT image. EXFAT_DRIVE=virtio attaches it with
+-drive if=virtio (no flush); the default is a second IDE disk.
+bfs_shell plants a system launch job that runs as root when the boot
+volume is mounted. The guest prints one "exfat:" line per step on the
+serial port. On "exfat: pull" an IDE run is stopped without unmounting.
+A virtio run lets the guest exit and unmount, and stops on
+"exfat: unmount 0". The host then checks that each closed file's valid
+length is backed by bytes on the card. fsck.exfat -n is then run and
+its output is printed.
 
 HAIKU_TREE is the Haiku tree (the gcc and bfs_shell live under it).
 MKFS_EXFAT and FSCK_EXFAT name the host tools; otherwise they are taken
@@ -147,23 +150,44 @@ def main():
         print(planted)
         print("FAIL bfs_shell did not write the image")
         return 1
-    print("planted")
+    drive = os.environ.get("EXFAT_DRIVE", "ide")
+    if drive not in ("ide", "virtio"):
+        print("EXFAT_DRIVE must be ide or virtio")
+        return 2
+    if drive == "virtio":
+        with open(os.path.join(stage, "exfat-unmount"), "w", newline="\n") as f:
+            f.write("unmount\n")
+        planted = bfs(image, [
+            "rm myfs/home/exfat-unmount",
+            "cp :%s/exfat-unmount myfs/home/exfat-unmount" % stage], bfs_path)
+        if "Unmounting FS failed" in planted:
+            print(planted)
+            print("FAIL bfs_shell did not write the unmount marker")
+            return 1
+    print("planted", drive)
 
     if os.path.exists(serial):
         os.remove(serial)
     if os.path.exists(qmp_path):
         os.remove(qmp_path)
+    drives = [
+        "-drive", "file=%s,format=raw,if=ide,index=0,media=disk" % image]
+    if drive == "virtio":
+        drives += ["-drive", "file=%s,format=raw,if=virtio" % card]
+    else:
+        drives += ["-drive",
+                   "file=%s,format=raw,if=ide,index=1,media=disk" % card]
     qemu = subprocess.Popen([
         "qemu-system-x86_64", "-name", "R5-exfat",
         "-machine", "pc,accel=kvm", "-cpu", "host", "-m", "2048",
-        "-smp", "2", "-display", "none",
-        "-drive", "file=%s,format=raw,if=ide,index=0,media=disk" % image,
-        "-drive", "file=%s,format=raw,if=ide,index=1,media=disk" % card,
+        "-smp", "2", "-display", "none"] + drives + [
         "-vga", "std", "-usb", "-device", "usb-tablet",
         "-serial", "file:" + serial,
         "-qmp", "unix:%s,server,nowait" % qmp_path],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     failed = False
+    pulled = False
+    unmounted = False
     try:
         time.sleep(1)
         call = qmp_key(qmp_path)
@@ -171,6 +195,7 @@ def main():
         started = False
         next_enter = time.time() + 25
         pulled = False
+        unmounted = not (drive == "virtio")
         deadline = time.time() + 420
         while time.time() < deadline:
             time.sleep(0.4)
@@ -193,6 +218,13 @@ def main():
                     failed = True
                 if "exfat: pull" in line and "pull-close" not in line:
                     pulled = True
+                    if drive != "virtio":
+                        deadline = 0
+                        break
+                if drive == "virtio" and line.startswith("exfat: unmount"):
+                    unmounted = line == "exfat: unmount 0"
+                    if not unmounted:
+                        failed = True
                     deadline = 0
                     break
         call("quit")
@@ -201,7 +233,7 @@ def main():
             qemu.wait(timeout=30)
         except subprocess.TimeoutExpired:
             qemu.kill()
-    if failed or not pulled:
+    if failed or not pulled or not unmounted:
         print("FAIL the guest did not finish cleanly")
         return 1
     checked = subprocess.run([host, card, "pull"], capture_output=True,

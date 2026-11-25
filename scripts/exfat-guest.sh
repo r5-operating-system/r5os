@@ -10,7 +10,9 @@ say() { echo "exfat: $*" > /dev/dprintf 2> /dev/null; }
 say start
 sleep 20
 DEV=""
-for path in /dev/disk/ata/0/slave/raw /dev/disk/ata/1/slave/raw \
+for path in /dev/disk/virtual/virtio_block/0/raw \
+	/dev/disk/virtual/virtio_block/1/raw \
+	/dev/disk/ata/0/slave/raw /dev/disk/ata/1/slave/raw \
 	/dev/disk/ata/0/master/raw /dev/disk/scsi/0/0/raw \
 	/dev/disk/scsi/1/0/raw; do
 	if [ -e "$path" ]; then

@@ -492,14 +492,28 @@ exfat_store_flush(void* cookie, uint64 block, uint32 blocks)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+status_t
+Volume::FlushDrive()
+{
+	// ioctl() here is the libroot wrapper: a failure is -1 and the status
+	// is in errno. fd_ioctl() also turns B_DEV_INVALID_IOCTL into ENOTTY
+	// before that return, so the driver code itself never arrives.
+	int result = ioctl(fDevice, B_FLUSH_DRIVE_CACHE);
+	if (result == 0)
+		return B_OK;
+	status_t error = result == -1 ? errno : (status_t)result;
+	if (error == B_DEV_INVALID_IOCTL || error == ENOTTY
+		|| error == B_UNSUPPORTED || error == B_NOT_SUPPORTED
+		|| error == B_BAD_VALUE)
+		return B_OK;
+	return error != 0 ? error : B_ERROR;
+}
+
+
 static status_t
 exfat_store_drive_flush(void* cookie)
 {
-	Volume* volume = (Volume*)cookie;
-	int result = ioctl(volume->Device(), B_FLUSH_DRIVE_CACHE);
-	if (result == 0 || result == B_DEV_INVALID_IOCTL)
-		return B_OK;
-	return result;
+	return ((Volume*)cookie)->FlushDrive();
 }
 // SPDX-SnippetEnd
 
