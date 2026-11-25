@@ -1,87 +1,82 @@
 msgid ""
-msgstr "Project-Id-Version: x-vnd.R5-CPUInfo\nLanguage: nl\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+msgstr ""
+"Project-Id-Version: x-vnd.R5-CPUInfo\n"
+"Language: nl\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"PO-Revision-Date: 2026-11-26 07:42+0000\n"
+"Last-Translator: R5 Operating System <r5-operating-"
+"system@users.noreply.hosted.weblate.org>\n"
+"Language-Team: Dutch <https://hosted.weblate.org/projects/r5/appscpuinfo/nl/>"
+"\n"
+"Plural-Forms: nplurals=2; plural=n != 1;\n"
+"X-Generator: Weblate 2026.12.dev0\n"
 
-#, fuzzy
 msgctxt "CPU Info: Window"
 msgid "Family / Model / Stepping"
 msgstr "Familie / Model / Stepping"
 
-#, fuzzy
 msgctxt "CPU Info: Window"
 msgid "Power profile"
 msgstr "Energieprofiel"
 
-#, fuzzy
 msgctxt "CPU Info: Window"
 msgid "Caches"
 msgstr "Caches"
 
-#, fuzzy
 msgctxt "CPU Info: Window"
 msgid "x86-64 level"
 msgstr "x86-64-niveau"
 
-#, fuzzy
 msgctxt "CPU Info: Window"
 msgid "Vendor"
 msgstr "Fabrikant"
 
-#, fuzzy
 msgctxt "CPU Info: Window"
 msgid "Copy report"
 msgstr "Rapport kopiëren"
 
-#, fuzzy
 msgctxt "CPU Info: Window"
 msgid "Brand"
 msgstr "Merk"
 
-#, fuzzy
 msgctxt "CPU Info: Window"
 msgid "Processor hardware and R5 runtime paths"
-msgstr "Processorhardware en R5-uitvoeringspaden"
+msgstr "Processorhardware en R5 runtime paden"
 
-#, fuzzy
 msgctxt "System name"
 msgid "CPU Info"
 msgstr "CPU-info"
 
-#, fuzzy
 msgctxt "CPU Info: Window"
 msgid "System"
 msgstr "Systeem"
 
-#, fuzzy
 msgctxt "CPU Info: Window"
 msgid "Build baseline"
-msgstr "Bouwbasis"
+msgstr "Build baseline"
 
-#, fuzzy
 msgctxt "CPU Info: Window"
 msgid "Cores / Threads"
 msgstr "Kernen / Threads"
 
-#, fuzzy
 msgctxt "CPU Info: Window"
 msgid "User-space paths"
 msgstr "Paden in gebruikersruimte"
 
-#, fuzzy
 msgctxt "CPU Info: Window"
 msgid "Enabled features"
 msgstr "Ingeschakelde functies"
 
-#, fuzzy
 msgctxt "CPU Info: Window"
 msgid "Extra features"
 msgstr "Extra functies"
 
-#, fuzzy
 msgctxt "CPU Info: Window"
 msgid "Processor"
 msgstr "Processor"
 
-#, fuzzy
 msgctxt "CPU Info: Window"
 msgid "Kernel"
 msgstr "Kernel"
