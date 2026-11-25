@@ -1088,6 +1088,106 @@ TExpandoMenuBar::StopMonitoringWindows()
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// What the window watcher knows about one window, so a pass does not ask the
+// app_server again for a window it already knows (#4637).
+struct WatchedWindow {
+	// same names as in client_window_info
+	BString		name;
+	int32		server_token;
+	uint32		workspaces;
+	bool		is_mini;
+	bool		listed;
+};
+
+typedef std::map<int32, WatchedWindow> WatchedWindowMap;
+	// by server token
+
+struct WatchedTeam {
+	bool				expanded;
+		// the team's item was expanded when this was fetched
+	WatchedWindowMap	windows;
+};
+
+typedef std::map<team_id, WatchedTeam> WatchedTeamMap;
+
+static const int32 kWatcherRefreshPasses = 4;
+	// an expanded team asks again for windows it already knows every 4th
+	// pass (600 ms): titles, minimized and hidden change without a new token
+
+
+// Outside the Deskbar window lock (#4636): asks the app_server for the token
+// list of every team in "teams", and for window info only of tokens it did
+// not know, or, for an expanded team, every kWatcherRefreshPasses passes.
+static void
+fetch_watched_windows(const std::map<team_id, bool>& teams,
+	WatchedTeamMap& cache, bool refreshDue)
+{
+	WatchedTeamMap fresh;
+	std::map<team_id, bool>::const_iterator teamIt = teams.begin();
+	for (; teamIt != teams.end(); teamIt++) {
+		team_id team = teamIt->first;
+		bool expanded = teamIt->second;
+
+		WatchedTeamMap::iterator old = cache.find(team);
+		bool known = old != cache.end();
+		bool refresh = expanded
+			&& (refreshDue || !known || !old->second.expanded);
+
+		WatchedTeam& watched = fresh[team];
+		watched.expanded = expanded;
+
+		int32 count = 0;
+		int32* tokens = get_token_list(team, &count);
+		if (tokens == NULL)
+			continue;
+
+		for (int32 k = 0; k < count; k++) {
+			if (known && !refresh) {
+				WatchedWindowMap::iterator window
+					= old->second.windows.find(tokens[k]);
+				if (window != old->second.windows.end()) {
+					watched.windows[tokens[k]] = window->second;
+					continue;
+				}
+			}
+
+			client_window_info* wInfo = get_window_info(tokens[k]);
+			if (wInfo == NULL)
+				continue;
+
+			WatchedWindow& window = watched.windows[tokens[k]];
+			window.name = wInfo->name;
+			window.server_token = wInfo->server_token;
+			window.workspaces = wInfo->workspaces;
+			window.is_mini = wInfo->is_mini;
+			window.listed = TWindowMenu::WindowShouldBeListed(wInfo);
+			free(wInfo);
+		}
+		free(tokens);
+	}
+	cache.swap(fresh);
+}
+
+
+// True when every team of the item was fetched in the state it has now.
+static bool
+watched_teams_ready(TTeamMenuItem* teamItem, const WatchedTeamMap& cache)
+{
+	int32 teamCount = teamItem->Teams()->CountItems();
+	for (int32 j = 0; j < teamCount; j++) {
+		team_id team = (addr_t)teamItem->Teams()->ItemAt(j);
+		WatchedTeamMap::const_iterator it = cache.find(team);
+		if (it == cache.end() || it->second.expanded != teamItem->IsExpanded())
+			return false;
+	}
+	return true;
+}
+// SPDX-SnippetEnd
+
+
 int32
 TExpandoMenuBar::monitor_team_windows(void* arg)
 {
@@ -1115,10 +1215,25 @@ TExpandoMenuBar::monitor_team_windows(void* arg)
 	}
 // SPDX-SnippetEnd
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// The teams on the bar (and whether their item is expanded), taken under
+	// the lock at the end of a pass for the fetch of the next one.
+	std::map<team_id, bool> watchedTeams;
+	WatchedTeamMap windowCache;
+	int32 pass = 0;
+// SPDX-SnippetEnd
+
 	while (teamMenu->sDoMonitor) {
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+		// No app_server window queries while the Deskbar window is locked
+		// (#4636): fetch first, then apply what was fetched under the lock.
+		fetch_watched_windows(watchedTeams, windowCache,
+			++pass % kWatcherRefreshPasses == 0);
+
 		// Lock Window() before sMonLocker to match RemoveTeam()'s lock order,
 		// and check Window() != NULL in case Deskbar is closing (Haiku #6846).
 		BWindow* window = teamMenu->Window();
@@ -1147,6 +1262,22 @@ TExpandoMenuBar::monitor_team_windows(void* arg)
 					continue;
 
 				teamItem = static_cast<TTeamMenuItem*>(teamMenu->ItemAt(i));
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+				if (!watched_teams_ready(teamItem, windowCache)) {
+					// expanded or collapsed after the fetch: keep what the
+					// item shows until the next pass has fetched it
+					if (teamItem->IsExpanded()) {
+						for (int32 w = i + 1; w < totalItems
+								&& teamMenu->SubmenuAt(w) == NULL; w++) {
+							static_cast<TWindowMenuItem*>(teamMenu->ItemAt(w))
+								->SetRequireUpdate(false);
+						}
+					}
+					continue;
+				}
+// SPDX-SnippetEnd
 				if (teamItem->IsExpanded()) {
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
@@ -1158,16 +1289,19 @@ TExpandoMenuBar::monitor_team_windows(void* arg)
 						// The following code is almost a copy/paste from
 						// WindowMenu.cpp
 						team_id theTeam = (addr_t)teamItem->Teams()->ItemAt(j);
-						int32 count = 0;
-						int32* tokens = get_token_list(theTeam, &count);
-
-						for (int32 k = 0; k < count; k++) {
-							client_window_info* wInfo
-								= get_window_info(tokens[k]);
-							if (wInfo == NULL)
-								continue;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+						// from the fetch outside the lock (#4636, #4637)
+						const WatchedWindowMap& windows
+							= windowCache[theTeam].windows;
+						WatchedWindowMap::const_iterator windowIt
+							= windows.begin();
+						for (; windowIt != windows.end(); windowIt++) {
+							const WatchedWindow* wInfo = &windowIt->second;
 
 							BString windowName(wInfo->name);
+// SPDX-SnippetEnd
 
 							BString teamPrefix(teamItem->Label());
 							teamPrefix.Append(": ");
@@ -1180,10 +1314,10 @@ TExpandoMenuBar::monitor_team_windows(void* arg)
 							if (windowName.EndsWith(teamSuffix))
 								windowName.RemoveLast(teamSuffix);
 
-							if (TWindowMenu::WindowShouldBeListed(wInfo)) {
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+							if (wInfo->listed) {
 								hasListed = true;
 // SPDX-SnippetEnd
 								// Check if we have a matching window item...
@@ -1219,9 +1353,7 @@ TExpandoMenuBar::monitor_team_windows(void* arg)
 									resize = true;
 								}
 							}
-							free(wInfo);
 						}
-						free(tokens);
 					}
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
@@ -1231,11 +1363,29 @@ TExpandoMenuBar::monitor_team_windows(void* arg)
 						itemModified = true;
 					}
 				} else {
+					// from the fetch outside the lock (#4636); the count as
+					// RefreshListedWindowsIfChanged() made it
 					bool hadListed = teamItem->HasListedWindows();
 					int32 hadCount = teamItem->ListedWindowCount();
-					if (teamItem->RefreshListedWindowsIfChanged()
-						&& (teamItem->HasListedWindows() != hadListed
-							|| teamItem->ListedWindowCount() != hadCount)) {
+					int32 listedCount = 0;
+					int32 teamCount = teamItem->Teams()->CountItems();
+					for (int32 j = 0; j < teamCount; j++) {
+						team_id theTeam = (addr_t)teamItem->Teams()->ItemAt(j);
+						const WatchedWindowMap& windows
+							= windowCache[theTeam].windows;
+						WatchedWindowMap::const_iterator windowIt
+							= windows.begin();
+						for (; windowIt != windows.end(); windowIt++) {
+							if (windowIt->second.listed)
+								listedCount++;
+						}
+					}
+					if (!R5Deskbar::Modern() && listedCount > 1)
+						listedCount = 1;
+					if ((listedCount > 0) != hadListed
+						|| listedCount != hadCount) {
+						teamItem->SetHasListedWindows(listedCount > 0);
+						teamItem->SetListedWindowCount(listedCount);
 						itemModified = true;
 						// Default (R5) Horizontal: the count widens the
 						// item (QEMU, 23 Nov 2026: "Style… 2")
@@ -1299,6 +1449,19 @@ TExpandoMenuBar::monitor_team_windows(void* arg)
 					statCpuStart = cpuNow;
 				}
 			}
+			// the teams for the next fetch, taken while the items are locked
+			watchedTeams.clear();
+			for (int32 i = 0; i < totalItems; i++) {
+				if (teamMenu->SubmenuAt(i) == NULL)
+					continue;
+				teamItem = static_cast<TTeamMenuItem*>(teamMenu->ItemAt(i));
+				int32 teamCount = teamItem->Teams()->CountItems();
+				for (int32 j = 0; j < teamCount; j++) {
+					watchedTeams[(addr_t)teamItem->Teams()->ItemAt(j)]
+						= teamItem->IsExpanded();
+				}
+			}
+
 			sMonLocker.Unlock();
 			window->Unlock();
 		}

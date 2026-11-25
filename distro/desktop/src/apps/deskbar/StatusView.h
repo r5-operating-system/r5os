@@ -164,7 +164,12 @@ private:
 										bool removeAll);
 				void				RemoveItem(int32 id);
 
-				void				MoveItem(entry_ref*, ino_t toDirectory);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+				void				MoveItem(entry_ref*, ino_t toDirectory,
+										ino_t node);
+// SPDX-SnippetEnd
 #endif
 
 				BPoint				LocationForReplicant(int32 index,

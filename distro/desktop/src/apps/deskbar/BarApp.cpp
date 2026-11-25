@@ -68,6 +68,11 @@ namespace BPrivate {
 #include <Debug.h>
 #include <Directory.h>
 #include <Dragger.h>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <Entry.h>
+// SPDX-SnippetEnd
 #include <File.h>
 #include <FindDirectory.h>
 #include <IconUtils.h>
@@ -271,6 +276,45 @@ TBarApp::QuitRequested()
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+status_t
+r5_save_deskbar_settings(const char* name, const BMessage& message)
+{
+	// A power loss between a truncate and the new bytes left a file that
+	// Unflatten() rejects, and Deskbar came back on the defaults (#4635).
+	// Write a new file beside it, sync it, then rename it over the old one:
+	// the rename replaces the entry in one step, so the next start reads
+	// either the old settings or the new ones.
+	BPath path;
+	status_t status = GetDeskbarSettingsDirectory(path, true);
+	if (status != B_OK)
+		return status;
+	if ((status = path.Append(name)) != B_OK)
+		return status;
+
+	BString tempPath(path.Path());
+	tempPath << ".new";
+
+	BFile file(tempPath.String(), B_WRITE_ONLY | B_CREATE_FILE | B_ERASE_FILE);
+	if ((status = file.InitCheck()) != B_OK)
+		return status;
+	if ((status = message.Flatten(&file)) == B_OK)
+		status = file.Sync();
+	file.Unset();
+
+	BEntry entry(tempPath.String());
+	if (status == B_OK)
+		status = entry.Rename(path.Path(), true);
+	if (status != B_OK)
+		entry.Remove();
+
+	return status;
+}
+// SPDX-SnippetEnd
+
+
 void
 TBarApp::SaveSettings()
 {
@@ -319,10 +363,9 @@ TBarApp::SaveSettings()
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-		fSettingsFile->SetSize(0);
-		fSettingsFile->Seek(0, SEEK_SET);
+		// written beside the old file, synced, then renamed over it (#4635)
+		r5_save_deskbar_settings("settings", prefs);
 // SPDX-SnippetEnd
-		prefs.Flatten(fSettingsFile);
 	}
 
 // SPDX-SnippetBegin
@@ -340,10 +383,9 @@ TBarApp::SaveSettings()
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-		fClockSettingsFile->SetSize(0);
-		fClockSettingsFile->Seek(0, SEEK_SET);
+		// written beside the old file, synced, then renamed over it (#4635)
+		r5_save_deskbar_settings("clock_settings", prefs);
 // SPDX-SnippetEnd
-		prefs.Flatten(fClockSettingsFile);
 	}
 }
 

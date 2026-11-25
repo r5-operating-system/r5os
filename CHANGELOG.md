@@ -8,6 +8,21 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-25 - Deskbar: a renamed tray add-on stays, settings survive a power loss, the window watcher no longer stalls the bar (#4634-#4637)
+
+- Problem: a code review of `distro/desktop/src/apps/deskbar/` filed five issues. Checked against the code:
+  - #4634 (real): `TReplicantTray::MoveItem` compared the new name from the node monitor with the stored old name, so a rename never matched, and even a move only changed the directory in memory. The path in the `replicants` file stayed the old one, and the add-on was gone after the next start.
+  - #4635 (real): `TBarApp::SaveSettings` truncated `settings` and `clock_settings` (`SetSize(0)`) and flattened without a sync; the `replicants` file was written with `B_ERASE_FILE` and synced afterwards. A power loss after the truncate left a file `Unflatten()` rejects, and Deskbar started on the defaults.
+  - #4636 (real): `monitor_team_windows` held the Deskbar window lock while it called `get_token_list` and `get_window_info` for every window of every expanded team, every 150 ms. The collapsed path (`RefreshListedWindowsIfChanged`) also asked under the lock.
+  - #4637 (real): the expanded path asked the app_server about every window on every pass, also when nothing changed.
+  - #4633 (not a bug in the placement): the `align` value `AcceptAddon` computes is never used. `LocationForReplicant` and `_ModernLocation` place every replicant from the left, and the clock is a child view placed on its own, not a shelf replicant. Haiku has the same code. Fixing the overwrite alone changes nothing on screen; a replicant on the right side is new placement work, not part of this change. Left open with a comment.
+- Change:
+  - `StatusView.cpp`/`.h`: `MoveItem` finds the item by node (`DeskbarItemFor`), stores the new directory and name, replaces the old path in the shelf settings and saves them.
+  - `BarApp.cpp`/`.h`: `r5_save_deskbar_settings()` writes `<name>.new`, syncs it and renames it over the old file (a failed write removes the temp file). `settings`, `clock_settings` and `replicants` all go through it.
+  - `ExpandoMenuBar.cpp`, `TeamMenuItem.h`: the watcher fetches outside the lock into a per-team cache (token to name, minimized, workspaces, listed). Only a token it did not know is asked about; an expanded team asks again for its known windows every 4th pass (600 ms), and on the first pass after it was expanded. Under the lock the pass only applies the cache: the same window items as before, and the listed count of a collapsed team. A team expanded or collapsed after the fetch keeps its items until the next pass. The team list for the fetch is taken under the lock at the end of a pass.
+- Limits: a title, minimize or hide change of a window that already existed shows in the expanded list within 600 ms instead of 150 ms; new and closed windows still within one pass. A collapsed team's count follows only new and closed windows, as before. The other settings writers in the tree with the same truncate-then-write pattern (about 40 files, most of them Haiku code) are not changed here.
+- Tested (25 Nov 2026): AMD64 regular image with `scripts/build-locked.sh` from this worktree (`jam_exit=0`, `mesa_exit=0`, no warning in the changed Deskbar files). Not booted: the QEMU run stopped at a `desklink` step of the test script before the expanded-team and settings steps, and the image did not start again after QEMU was stopped by force; the owner chose to test this on stick 83. Not tested: renaming a tray add-on, the expanded list with several windows, a settings save across a restart, a power loss.
+
 ## 2026-11-25 - Stick 81 on the 5625U: accounts, guest, Shared and the card reader
 
 - Stick 81: `main` `dd905a39c3`, build 10072, anyboot, booted as Try R5 on the 5625U on 25 Nov 2026. Logs: `generated/boot-5625u-81` in the stick worktree (syslog of boot 1 only; Login, the key store, the guest and Shared do not log). Results are the owner's, from the screen.
