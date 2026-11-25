@@ -8,6 +8,14 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-25 - exFAT write support (#4655)
+
+Problem: Haiku's exFAT driver, used unchanged, always mounted read-only and its write hooks were null. On the 5625U (stick 83) Tracker refused copies onto a 116.5 GiB exFAT SD card.
+
+Changed: the driver now lives under distro/ and can create, delete, rename, grow and shrink files and directories. VolumeDirty is set before the first write and cleared on a clean sync. A dirty volume, or one that fails the bitmap, up-case, TexFAT or media-failure checks, mounts read-only.
+
+Limits: TexFAT stays read-only. There is no repair tool in the image. The 5625U card was not written by this change.
+
 ## 2026-11-25 - Deskbar: one icon column in the main menu, every label lines up
 
 - Problem: on stick 83 (5625U, `main` `eab1f3c773`) the items of the Deskbar's main menu with an icon (Settings with the wave pebble, and the folders Applications, Demos, Desktop applets, Preferences) moved their own label right by the icon, so their text did not line up with About R5, Find…, Lock screen and the other plain items. Tracker's `ModelMenuItem` and `IconMenuItem` each put the icon in front of their own label; a plain `BMenuItem` has no room for one.

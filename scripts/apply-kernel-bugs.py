@@ -593,6 +593,20 @@ def install_kit_crypt() -> None:
         "kit crypt")
 
 
+def install_exfat() -> None:
+    """Haiku's exFAT add-on, copied so R5 can write it. The host test stays
+    out of the tree that jam compiles."""
+    root = pathlib.Path(__file__).resolve().parents[1]
+    source = root / "distro/kernel/src/add-ons/kernel/file_systems/exfat"
+    dest = HAIKU / "src/add-ons/kernel/file_systems/exfat"
+    dest.mkdir(parents=True, exist_ok=True)
+    for path in sorted(source.iterdir()):
+        if path.name == "exfat_host.cpp":
+            continue
+        if path.suffix in {".cpp", ".h"} or path.name == "Jamfile":
+            install_file(path, dest / path.name, "exfat")
+
+
 def main() -> int:
     install_smp_boot()
     install_kernel_sources()
@@ -603,6 +617,7 @@ def main() -> int:
     install_rtsx()
     install_bfs_sticky()
     install_kit_crypt()
+    install_exfat()
     # i2c_hid (RenkuOS b37a078925) and x86_acpi_cstates (air/OS 2c48d1ae0)
     # are listed in the native build/jam/packages/Haiku in distro/desktop.
     return 0
