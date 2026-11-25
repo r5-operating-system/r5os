@@ -116,6 +116,27 @@ r5_settings_tile_fill()
 }
 
 
+void
+r5_settings_follow_tile_fill(BView* view, rgb_color before, rgb_color now)
+{
+	if (view == NULL || before == now)
+		return;
+	bool changed = false;
+	if (view->ViewUIColor() == B_NO_COLOR && view->ViewColor() == before) {
+		view->SetViewColor(now);
+		changed = true;
+	}
+	if (view->LowUIColor() == B_NO_COLOR && view->LowColor() == before) {
+		view->SetLowColor(now);
+		changed = true;
+	}
+	if (changed)
+		view->Invalidate();
+	for (int32 i = 0; BView* child = view->ChildAt(i); i++)
+		r5_settings_follow_tile_fill(child, before, now);
+}
+
+
 static bool
 keeps_face(BView* view, const BFont* face)
 {

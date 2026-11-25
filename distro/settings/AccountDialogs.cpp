@@ -1207,13 +1207,29 @@ public:
 		rgb_color fill = _Fill();
 		SetViewColor(fill);
 		SetLowColor(fill);
-		AccountWrapLabel* label = new AccountWrapLabel("note text", text,
-			false);
-		label->SetTextColor(ui_color(B_DOCUMENT_TEXT_COLOR));
+		fLabel = new AccountWrapLabel("note text", text, false);
+		fLabel->SetTextColor(ui_color(B_DOCUMENT_TEXT_COLOR));
 		BLayoutBuilder::Group<>(this)
 			.SetInsets(px(12), px(10), px(12), px(10))
-			.Add(label);
+			.Add(fLabel);
 		SetFlags(Flags() | B_WILL_DRAW | B_FULL_UPDATE_ON_RESIZE);
+	}
+
+	// The fill is a color of its own: a change of theme gives it, and the
+	// text that took it, the new fill.
+	virtual void MessageReceived(BMessage* message)
+	{
+		if (message->what == B_COLORS_UPDATED) {
+			rgb_color fill = _Fill();
+			SetViewColor(fill);
+			SetLowColor(fill);
+			fLabel->SetViewColor(fill);
+			fLabel->SetLowColor(fill);
+			fLabel->SetTextColor(ui_color(B_DOCUMENT_TEXT_COLOR));
+			fLabel->Invalidate();
+			Invalidate();
+		}
+		BGroupView::MessageReceived(message);
 	}
 
 	virtual void Draw(BRect updateRect)
@@ -1236,6 +1252,8 @@ private:
 		return mix_color(ui_color(B_DOCUMENT_BACKGROUND_COLOR),
 			ui_color(B_WINDOW_TAB_COLOR), 70);
 	}
+
+	AccountWrapLabel*	fLabel;
 };
 
 

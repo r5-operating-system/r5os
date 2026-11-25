@@ -901,6 +901,7 @@ SettingsWindow::SettingsWindow(SettingsManager* manager,
 	fLockOpen(false),
 	fLockButtonHeight(0)
 {
+	fTileFill = r5_settings_tile_fill();
 	fContext = new SettingsHost(fStorage, BMessenger(this));
 
 	fSearch = new SearchField();
@@ -1154,6 +1155,18 @@ SettingsWindow::MessageReceived(BMessage* message)
 		case kMsgAdminLockChanged:
 			_ReloadLock(false);
 			break;
+		case B_COLORS_UPDATED:
+		{
+			// The tiles and boxes of the pages took the tile fill as a color
+			// of their own, which a change of theme does not update; every
+			// view that still has the previous fill gets the new one.
+			rgb_color now = r5_settings_tile_fill();
+			for (int32 i = 0; BView* child = ChildAt(i); i++)
+				r5_settings_follow_tile_fill(child, fTileFill, now);
+			fTileFill = now;
+			BWindow::MessageReceived(message);
+			break;
+		}
 		default:
 			BWindow::MessageReceived(message);
 			break;

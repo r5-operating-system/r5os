@@ -51,6 +51,7 @@ public:
 
 	virtual	void				Draw(BRect updateRect);
 	virtual	void				MessageReceived(BMessage* message);
+	virtual	void				AllAttached();
 
 			void				SetStyle(card_style style);
 			card_style			Style() const;
