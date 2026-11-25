@@ -8,6 +8,14 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-25 - Tabs: the strip beside the tabs shows the window behind it
+
+- Problem (stick 81, build 10072, 5625U): in About R5 the strip beside the tabs (the small block left of "What's new" and the band right of "Licenses") was white, in Light and in Dark. About sets its `BTabView` to `B_TRANSPARENT_COLOR`, but without `B_TRANSPARENT_BACKGROUND` app_server clips the parent out of that area and nobody fills it; R5 Modern's `DrawTabFrame()` leaves a transparent view unfilled on purpose.
+- Changed: `BTabView::AttachedToWindow()` (copy in `distro/desktop/src/kits/interface/TabView.cpp`, R5 part as an MIT snippet): when the parent paints a background and the tab view is still the parent's colour (the panel colour) or was made transparent by the program, the tab view gets `B_TRANSPARENT_BACKGROUND` and `B_TRANSPARENT_COLOR`. The strip then shows the parent: its frosted glass where the parent is glass, its colour otherwise, and it follows a theme change with the parent. A tab view on a parent of another colour (for example a white top view) keeps its panel colour as before. The tabs, the box and the content view are unchanged. No new call, `libbe` ABI unchanged.
+- Test tool: `scripts/qemu-theming.py --tabs` (guest `tabs` in `scripts/theming-guest.sh`) shows About R5 and Appearance in Light and Dark with frosted glass on and off.
+- Tested (25 Nov 2026): AMD64 jam with `scripts/build-locked.sh` (`jam_exit=0`, `mesa_exit=0`). QEMU (KVM, Lavapipe compositor, own image copy) with `--tabs`: in About R5 and Appearance the strip is the window's light surface in Light and dark in Dark, with frosted glass on and off; no white band left. In QEMU glass on and off look almost the same at that spot, so the glass itself is not proven there.
+- Not tested: the 5625U (RADV glass); Safe mode; other programs with tabs.
+
 ## 2026-11-25 - Translations: gettext files for Weblate (#4599)
 
 - Problem: the Weblate components (hosted.weblate.org/projects/r5) used the "Haiku catkeys" format. The test pull request #4607 showed that Weblate then writes only the translated texts: `nl.catkeys` of `preferences/r5bt` went from 60 entries to 15, so the other 45 would vanish for Dutch translators after a merge. Hosted Weblate refuses a base file for catkeys ("U kunt geen basisbestand gebruiken voor tweetalige vertaling"), although its documentation shows one. The format also has no flag for "Needs editing". So there is no working catkeys setup on hosted Weblate.

@@ -34,6 +34,25 @@ sleep 15
 note "start $(date)"
 $T theme get >> "$out/notes.txt" 2>&1
 
+if [ "$1" = tabs ]; then
+	# The strip beside the tabs (About R5, Appearance), light and dark,
+	# frosted glass on and off: one shot each.
+	/boot/system/apps/AboutSystem > /dev/null 2>&1 &
+	/boot/system/preferences/Appearance > /dev/null 2>&1 &
+	sleep 10
+	for mode in light dark; do
+		theme mode $mode
+		for glass in on off; do
+			$T frosted $glass >> "$out/notes.txt" 2>&1; sleep 4
+			shot tabs-$mode-glass-$glass
+		done
+	done
+	$T theme get >> "$out/notes.txt" 2>&1
+	$T get >> "$out/notes.txt" 2>&1
+	say "done"
+	exit 0
+fi
+
 if [ "$1" = safe ]; then
 	note "safemode $(safemode)"
 	$T controls 900 > /dev/null 2>&1 &
