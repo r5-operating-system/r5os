@@ -1,13 +1,13 @@
 <!-- SPDX-License-Identifier: MIT -->
 <!-- Copyright 2026 R5OS Contributors -->
 
-# Aomi on Ladybird: what a port would take
+# Aomi on a new engine: Ladybird, Gecko or Servo
 
 Exploration only, 25 Nov 2026. No code, no build, no port attempt. Nothing here is on the roadmap until the owner says so.
 
 ## The plan as the owner framed it
 
-- **Aomi** stays the R5 browser name, but the engine changes from haikuwebkit to Ladybird. The Aomi of today (a copy of WebPositive on `haikuwebkit-1.10.0-2`, `docs/AOMI.md`) is not developed further on WebKit.
+- **Aomi** stays the R5 browser name, but the engine changes from haikuwebkit to a newer one (Ladybird was the first candidate; Gecko and Servo were added later the same day). The Aomi of today (a copy of WebPositive on `haikuwebkit-1.10.0-2`, `docs/AOMI.md`) is not developed further on WebKit.
 - **WebPositive stays** in the image, unchanged, as Haiku's own browser on haikuwebkit.
 - **Firefox** is what people use until Aomi on Ladybird is ready.
 
@@ -19,7 +19,7 @@ Ladybird has become much easier to port than it was in 2024. Swift is gone from 
 2. **Dependencies:** about 45 libraries. HaikuPorts has most of them. Eight are missing (Skia, ANGLE, PulseAudio, simdutf, cpptrace, fast_float, wuffs, zmij), and several are older than Ladybird's pins (Qt, ICU, FFmpeg).
 3. **Front end:** Ladybird has only one UI now, Qt. A native `BWindow`/`BView` front end is new work against an embedder API that the project itself has not documented yet.
 
-The recommendation (end of this document) is **wait, then port in two phases**: first a Qt build as an installable package to see how it holds up on R5, then a native Aomi front end. Start after the alpha has settled and Firefox has been checked on R5.
+The owner then asked about other engines. "Other engines behind a native Aomi window" compares Gecko and Servo with Ladybird and WebKit2. The recommendation (end of this document) is **Servo first, with Gecko as the fallback, and Ladybird watched**: one proof round that shows a page in a `BServoView` on R5, after Firefox has been checked on R5 as the stopgap.
 
 ## 1. Languages and toolchain
 
@@ -180,15 +180,68 @@ Total to a usable Qt alpha (steps 1–7): about 14–25 sessions. To a native Ao
 - **Two Skia builds** on the system (app_server's Graphite m158 and Ladybird's Ganesh) mean two pins to keep up.
 - **Web compatibility:** an alpha with crashes; no site-by-site comparison with haikuwebkit exists.
 
-## Recommendation: wait, with a short first step now
+## Other engines behind a native Aomi window
 
-In plain language: Ladybird is no longer blocked by Swift, and its code still knows Haiku, so a port is possible. But it needs a newer compiler than R5 uses, Rust, about eight new libraries, and a new window of our own. It runs without the protection it has on Linux, from a project that itself says it is not secure yet. That is a lot of work for a browser that is two days into its alpha.
+Added 25 Nov 2026 at the owner's question. The idea is the same for every engine: Aomi is a native R5 app (`BWindow`, Appearance Kit, R5 icons) with one small R5 view that hosts the engine, as WebPositive does with `BWebView`. Read the same day; nothing built.
+
+### Gecko (a "BGeckoView")
+
+What exists on Haiku (HaikuPorts `www-client/firefox/firefox-160.0.1.recipe`, its `patches/firefox-160.0.1.patchset` and `additional-files/mozconfig_native`):
+
+- A **native port**, `--enable-default-toolkit=cairo-haiku`, native since the commit "bump version (native UI enabled)", 30 Sep 2026. `widget/haiku/` has about 50 files and 7,800 lines: `nsWindow`, `HaikuWindow : BWindow`, `HaikuView : BView`, `nsAppShell`, clipboard, drag and drop, `BFilePanel`, IME, `BNotification`, printing. Audio is a new `cubeb_haiku.cpp` on the Media Kit. The whole patchset is one commit of about 19,000 lines in 253 files. Maintainer Gerasim Troeglazov (3dEyes), updated 3, 12 and 20 Nov 2026. It is one release behind (Firefox 161.0 came out 24 Nov 2026, `product-details.mozilla.org/1.0/firefox_versions.json`).
+- **Drawing on the CPU:** `HaikuWindowBuffer` draws into double-buffered `BBitmap`s with a Skia draw target. WebGL goes through `GLContextProviderBGL`. Whether the compositor is software WebRender is not traced.
+- **Multiprocess** most likely on: `GeckoChildProcessHost.cpp` uses the POSIX launcher for Haiku. IPC is Chromium's POSIX IPC over Unix sockets with `SCM_RIGHTS` (with a Haiku fix in `ipc_channel_posix.cc`). **No sandbox:** upstream builds it only for Linux, Windows and macOS. Not verified at run time.
+- SpiderMonkey, Rust and Gecko's whole C++ stack **already build and run on Haiku** through this port.
+
+What is missing is the **embedding layer**. Mozilla has no desktop embedding API in 2026. GeckoView is Android only (`firefox-source-docs.mozilla.org`, GeckoView architecture). Its structure fits, though: an empty chrome document (`mobile/shared/chrome/geckoview/geckoview.xhtml`) with one `<browser remote="true">`, about 40 JavaScript modules (`mobile/shared/modules/geckoview`, about 300 KB) and 34 actors (`mobile/shared/actors`), which are largely platform-neutral, plus an Android-only bridge (`widget/android`, Java API). For R5: reuse `mobile/shared`, write the bridge from `EventDispatcher` to `BMessage`, and reuse `widget/haiku` for the view. Every feature that lives in Firefox's JavaScript UI (permissions, downloads, form fill, session restore, extensions, devtools) needs a native counterpart in Aomi.
+
+The precedent is **Sailfish OS EmbedLite** (`github.com/sailfishos/gecko-dev`, `embedding/embedlite/`, 89 patches): Gecko inside a native Qt view, maintained by a company. It is on ESR 115 while Firefox is at 161 and ESR 153, about three years behind. That is what an out-of-tree embedding costs over time. R5 would carry its layer on top of an out-of-tree Haiku port that is itself rebased every four weeks.
+
+License MPL-2.0, per file: changed Mozilla files stay MPL with source offered; new R5 files (the bridge, Aomi) can be MIT. A modified build may not use the Firefox name or logos (`mozilla.org/en-US/foundation/trademarks/policy/`); it may say in words that it is based on Mozilla technology. Aomi is its own name, as LibreWolf and Floorp do it.
+
+### Servo (a "BServoView")
+
+Servo is further along than this document first said (owner's correction; checked):
+
+- **Version 0.8.0**: crate on crates.io 7 Nov 2026, GitHub release 9 Nov 2026, the "October in Servo" post on 19 Nov 2026 (588 commits). Monthly releases since 0.1.0 (13 Apr 2026), an LTS line every six months (0.6.0 LTS, 29 Sep 2026; book `src/embedding/lts-release.md`).
+- **Web Platform Tests**: about **67 %** of tests and **94 %** of subtests (`wpt.servo.org/scores.json`, run of 22 Nov 2026, 0.8.0), against about 24 % in April 2023. No official list of working sites.
+- **Built to be embedded.** Crate `servo` (`components/servo`): `ServoBuilder`, `WebView` (`load`, `resize`, `notify_input_event`, `paint`), `WebViewDelegate` (new frame ready, URL, title, load state, dialogs, file picker, context menu, input method), `ClipboardDelegate`, `NetworkManager`. A **C API** exists (`ffi/capi`, crate `servo-capi`, "eventually also provide a stable ABI"), which suits a C++ `BView`. Rendering contexts in `components/shared/paint/rendering_context.rs`, among them `SoftwareRenderingContext` with `read_to_image()` for pixel readback.
+- **Drawing:** WebRender on **OpenGL** through surfman (EGL; a Mesa surfaceless backend exists). No Vulkan path for WebRender; WebGPU uses wgpu with Vulkan. On R5 that means: start with the software context (llvmpipe) and copy the pixels into a `BBitmap`, later EGL on Zink over RADV. R5's EGL support for this is not checked.
+- **Single process by default** (`opts.rs`: `multiprocess: false`, `sandbox: false`). `ipc-channel` falls back to an in-process channel on systems it does not know, so Haiku needs no IPC work to start. The cost is no site isolation and no sandbox (gaol is Linux and macOS only, "lightly reviewed").
+- **Platforms:** Linux, macOS, Windows, Android, OpenHarmony; FreeBSD builds since March 2026 (PRs #43116, #43134; issues still open). **No Haiku code or issue** in the repository.
+- **Toolchain:** Rust 1.99.1 (`rust-toolchain.toml`, minimum 1.88, edition 2024). HaikuPorts has `rust_bin-1.94.1`, and Haiku is a Rust tier-3 target, so the newer Rust has to be built. **No C++23 and no new GCC needed** for Servo itself.
+- **Dependencies:** SpiderMonkey through `mozjs` 0.28 (mozjs-sys 153.8), built from source with Clang and Python; whether its build system and JIT know Haiku is not checked, but the Firefox port shows that SpiderMonkey runs on Haiku. FreeType and fontconfig are chosen per OS (`components/fonts/platform/mod.rs`), so Haiku needs its own branch there. GStreamer for media is optional and off by default. Unix crates to check: surfman, nix, mio, aws-lc-rs, arboard.
+- **License:** MPL-2.0 (`Cargo.toml`); surfman MIT OR Apache-2.0 OR MPL-2.0. The rest of the dependency list is not checked.
+- **API stability:** breaking changes every month ("expected", 0.1.0 post), not 1.0. The LTS line or the C API keeps that in check.
+
+### Side by side, for a native Aomi
+
+| | WebKit2 (`BWebView`) | Gecko (BGeckoView) | Servo (BServoView) | Ladybird (native) |
+|---|---|---|---|---|
+| Engine on Haiku today | WebKit2 branch, not packaged (`docs/AOMI.md`) | Firefox 160, maintained | none | none (2023 port dead) |
+| Embedding API | yes, Haiku's own | none; write one (GeckoView model) | yes, Rust and C | yes, undocumented |
+| Websites | mature, older release | mature | WPT 67 %, improving monthly | alpha, "will crash sometimes" |
+| Processes and sandbox | multiprocess, no sandbox | multiprocess, no sandbox | single process, no sandbox | multiprocess, no sandbox |
+| Drawing | software (accelerated compositing off) | CPU into `BBitmap` | OpenGL (llvmpipe first, then Zink) | Skia Ganesh on Vulkan |
+| New toolchain for R5 | no | no (already in the port) | Rust 1.99 | C++23, GCC 14+, Rust |
+| Cost to a first page in Aomi (AI sessions) | 4–8 (round 1 in `docs/AOMI.md`) | 6–10 | 8–14 | 14–25 |
+| Upkeep | Haiku's port | heavy: Haiku port plus own layer every 4 weeks | monthly API changes, or LTS every 6 months | rebase on a fast project with no Haiku CI |
+| License | LGPL-2.1 and BSD | MPL-2.0 | MPL-2.0 | BSD-2-Clause, Qt LGPL for the Qt route |
+
+Servo step estimate: Rust 1.99 for Haiku (1–2), SpiderMonkey via `mozjs` with the Firefox port's Haiku changes as a guide (2–4), the Haiku branches in fonts, surfman and the Unix crates (2–4), a `BServoView` on the software context with pixel copy (1–2), Aomi on top (3–5), then GL through Zink (1–2). Gecko step estimate: build the Haiku Firefox port on R5 (1), the chrome document and the `BMessage` bridge (3–5), the native counterparts of the Firefox UI features Aomi needs (3–6), and every Firefox update after that.
+
+## Recommendation: Servo first, with Gecko as the fallback
+
+In plain language: Ladybird is the hardest of the four on R5. It needs a newer compiler, Rust, eight new libraries and a window of our own, and it is two days into its alpha. Gecko is the best engine today and already runs on Haiku, but Mozilla offers no way to put it inside our own window, and those who built such a layer anyway (Sailfish) fell three years behind. Servo is built for exactly what Aomi wants: a native window with an engine inside, through a C API, in one process, which avoids most of the Haiku gaps that sank the 2023 Ladybird port. It is not finished, but it is moving fast (67 % of the web tests, a release every month) and takes ports to other systems (FreeBSD).
 
 So:
 
-1. **Now:** check Firefox on R5 (step 0), because the plan relies on it while Aomi is not ready. Make the toolchain decision (step 1), which R5 needs anyway for newer software.
-2. **In a few months**, when the alpha has had its first rounds of fixes: steps 2–7, a Ladybird Qt alpha as an installable package, to see if it holds up on R5.
-3. **Only if it holds up:** the native Aomi front end (step 8). Until then WebPositive stays the image's browser and today's Aomi code stays parked.
+1. **Now:** check Firefox on R5 (step 0 above), because it is the stopgap while Aomi is not ready.
+2. **Next, one proof round for Servo:** Rust 1.99 and `mozjs` on R5, then a `BServoView` that shows one page with the software context in QEMU. That round decides whether Servo can carry Aomi.
+3. **If SpiderMonkey or surfman will not work on R5:** fall back to a BGeckoView on the Haiku Firefox port, which costs more upkeep but uses an engine that already runs here.
+4. **Ladybird:** watch it. Look again when it has a stable embedder API and its toolchain fits R5's.
+
+Until one of these carries Aomi, WebPositive stays the image's browser and today's Aomi code (the WebPositive copy) stays parked; its R5 window work carries over to whichever engine wins.
 
 ## Sources
 
@@ -197,4 +250,6 @@ So:
 - Haiku forum, porting Ladybird (pages 1–8 read, page 9 not): https://discuss.haiku-os.org/t/my-progress-at-porting-ladybird-the-serenityos-browser/13886
 - HaikuPorts tree, `master`, 25 Nov 2026: https://github.com/haikuports/haikuports (`www-client/firefox`, `www-client/ladybird` — a 2022 recipe `ladybird-pre20220728`, long dead; `sys-devel/gcc`, `sys-devel/llvm`, library recipes named in section 2).
 - Firefox on Haiku: https://www.osnews.com/story/140473/haiku-gets-tentative-firefox-port/, https://discuss.haiku-os.org/t/progress-on-porting-firefox/13493, https://discuss.haiku-os.org/t/mozilla-officially-gave-us-permission-to-use-the-firefox-name-on-haiku/19582
+- Gecko: HaikuPorts `www-client/firefox` (recipe, patchset, mozconfigs); https://firefox-source-docs.mozilla.org/mobile/android/geckoview/contributor/geckoview-architecture.html; https://github.com/sailfishos/gecko-dev; https://product-details.mozilla.org/1.0/firefox_versions.json; https://www.mozilla.org/en-US/foundation/trademarks/policy/
+- Servo: https://github.com/servo/servo (`components/servo`, `components/shared/paint/rendering_context.rs`, `ffi/capi`, `components/fonts/platform/mod.rs`, `rust-toolchain.toml`, `Cargo.toml`); https://github.com/servo/servo.org (`_posts/2026-04-13-servo-0.1.0-release.md`, `_posts/2026-11-19-october-in-servo.md`, `_posts/2026-04-30-march-in-servo.md`); https://book.servo.org (`src/embedding/`); https://wpt.servo.org/scores.json; https://github.com/servo/ipc-channel; https://github.com/servo/surfman
 - R5: `docs/AOMI.md`, `docs/GPU-ARCHITECTURE.md`, `docs/APP-SERVER-GPU-DRAWING.md`, `docs/LICENSING.md`, `docs/MULTIUSER.md`, `docs/ROADMAP.md`.
