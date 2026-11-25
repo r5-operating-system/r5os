@@ -33,6 +33,7 @@
 #include <Box.h>
 #include <Button.h>
 #include <CardStrip.h>
+#include <Catalog.h>
 #include <GroupView.h>
 #include <LayoutBuilder.h>
 #include <MenuField.h>
@@ -60,6 +61,10 @@
 #include <map>
 #include <string>
 #include <vector>
+
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "Settings: Game controllers"
 
 
 static const uint32 kMsgSelectController = 'gcSe';
@@ -113,9 +118,9 @@ connection_text(game_controller_connection connection)
 		case B_GAME_CONTROLLER_CONNECTION_USB:
 			return "USB";
 		case B_GAME_CONTROLLER_CONNECTION_BLUETOOTH:
-			return "Bluetooth";
+			return B_TRANSLATE("Bluetooth");
 		default:
-			return "Connected";
+			return B_TRANSLATE("Connected");
 	}
 }
 
@@ -409,14 +414,16 @@ face_name(game_controller_family family, game_controller_labels labels,
 {
 	static const char* const kXbox[4] = { "A", "B", "X", "Y" };
 	static const char* const kPlayStation[4]
-		= { "Cross (\xe2\x9c\x95)", "Circle (\xe2\x97\x8b)",
-			"Square (\xe2\x96\xa1)", "Triangle (\xe2\x96\xb3)" };
+		= { B_TRANSLATE_MARK("Cross (\xe2\x9c\x95)"),
+			B_TRANSLATE_MARK("Circle (\xe2\x97\x8b)"),
+			B_TRANSLATE_MARK("Square (\xe2\x96\xa1)"),
+			B_TRANSLATE_MARK("Triangle (\xe2\x96\xb3)") };
 	// The Nintendo shape has A and B, and X and Y, the other way round.
 	static const char* const kNintendo[4] = { "B", "A", "Y", "X" };
 	if (family == B_GAME_CONTROLLER_FAMILY_NINTENDO)
 		return kNintendo[button];
 	if (labels == B_GAME_CONTROLLER_LABELS_PLAYSTATION)
-		return kPlayStation[button];
+		return B_TRANSLATE_NOCOLLECT(kPlayStation[button]);
 	return kXbox[button];
 }
 
@@ -428,8 +435,12 @@ setup_steps(game_controller_family family, game_controller_labels labels)
 	setup_step step;
 	step.axis = false;
 
-	static const char* const kPlace[4] = { "the lower", "the right",
-		"the left", "the upper" };
+	static const char* const kPlace[4] = {
+		B_TRANSLATE_MARK("Press %name%, the lower face button"),
+		B_TRANSLATE_MARK("Press %name%, the right face button"),
+		B_TRANSLATE_MARK("Press %name%, the left face button"),
+		B_TRANSLATE_MARK("Press %name%, the upper face button")
+	};
 
 	if (family == B_GAME_CONTROLLER_FAMILY_SEGA_GENESIS) {
 		// As the picture draws it: X Y Z over A B C; C and Z are the
@@ -452,16 +463,17 @@ setup_steps(game_controller_family family, game_controller_labels labels)
 		for (size_t i = 0; i < sizeof(kKeys) / sizeof(kKeys[0]); i++) {
 			step.axis = kKeys[i].axis;
 			step.target = kKeys[i].target;
-			step.prompt.SetToFormat("Press %s", kKeys[i].name);
+			step.prompt = B_TRANSLATE("Press %name%");
+			step.prompt.ReplaceFirst("%name%", kKeys[i].name);
 			steps.push_back(step);
 		}
 	} else {
 		for (int32 i = 0; i < 4; i++) {
 			step.axis = false;
 			step.target = B_CONTROLLER_BUTTON_A + i;
-			step.prompt.SetToFormat("Press %s, %s face button",
-				face_name(family, labels, (game_controller_button)i),
-				kPlace[i]);
+			step.prompt = B_TRANSLATE_NOCOLLECT(kPlace[i]);
+			step.prompt.ReplaceFirst("%name%",
+				face_name(family, labels, (game_controller_button)i));
 			steps.push_back(step);
 		}
 		bool playstation = labels == B_GAME_CONTROLLER_LABELS_PLAYSTATION
@@ -477,38 +489,40 @@ setup_steps(game_controller_family family, game_controller_labels labels)
 		}
 		step.axis = false;
 		step.target = B_CONTROLLER_BUTTON_LEFT_SHOULDER;
-		step.prompt.SetToFormat("Press %s, the left shoulder button",
-			names[0]);
+		step.prompt = B_TRANSLATE("Press %name%, the left shoulder button");
+		step.prompt.ReplaceFirst("%name%", names[0]);
 		steps.push_back(step);
 		step.target = B_CONTROLLER_BUTTON_RIGHT_SHOULDER;
-		step.prompt.SetToFormat("Press %s, the right shoulder button",
-			names[1]);
+		step.prompt = B_TRANSLATE("Press %name%, the right shoulder button");
+		step.prompt.ReplaceFirst("%name%", names[1]);
 		steps.push_back(step);
 		step.axis = true;
 		step.target = B_CONTROLLER_AXIS_LEFT_TRIGGER;
-		step.prompt.SetToFormat("Pull %s, the left trigger", names[2]);
+		step.prompt = B_TRANSLATE("Pull %name%, the left trigger");
+		step.prompt.ReplaceFirst("%name%", names[2]);
 		steps.push_back(step);
 		step.target = B_CONTROLLER_AXIS_RIGHT_TRIGGER;
-		step.prompt.SetToFormat("Pull %s, the right trigger", names[3]);
+		step.prompt = B_TRANSLATE("Pull %name%, the right trigger");
+		step.prompt.ReplaceFirst("%name%", names[3]);
 		steps.push_back(step);
 		step.target = B_CONTROLLER_AXIS_LEFT_X;
-		step.prompt = "Push the left stick to the right";
+		step.prompt = B_TRANSLATE("Push the left stick to the right");
 		steps.push_back(step);
 		step.target = B_CONTROLLER_AXIS_LEFT_Y;
-		step.prompt = "Push the left stick down";
+		step.prompt = B_TRANSLATE("Push the left stick down");
 		steps.push_back(step);
 		step.target = B_CONTROLLER_AXIS_RIGHT_X;
-		step.prompt = "Push the right stick to the right";
+		step.prompt = B_TRANSLATE("Push the right stick to the right");
 		steps.push_back(step);
 		step.target = B_CONTROLLER_AXIS_RIGHT_Y;
-		step.prompt = "Push the right stick down";
+		step.prompt = B_TRANSLATE("Push the right stick down");
 		steps.push_back(step);
 		step.axis = false;
 		step.target = B_CONTROLLER_BUTTON_LEFT_STICK;
-		step.prompt = "Press the left stick in";
+		step.prompt = B_TRANSLATE("Press the left stick in");
 		steps.push_back(step);
 		step.target = B_CONTROLLER_BUTTON_RIGHT_STICK;
-		step.prompt = "Press the right stick in";
+		step.prompt = B_TRANSLATE("Press the right stick in");
 		steps.push_back(step);
 	}
 
@@ -517,16 +531,16 @@ setup_steps(game_controller_family family, game_controller_labels labels)
 		int32		target;
 		const char*	prompt;
 	} kRest[] = {
-		{ B_CONTROLLER_BUTTON_DPAD_UP, "Press the d-pad up" },
-		{ B_CONTROLLER_BUTTON_DPAD_DOWN, "Press the d-pad down" },
-		{ B_CONTROLLER_BUTTON_DPAD_LEFT, "Press the d-pad to the left" },
-		{ B_CONTROLLER_BUTTON_DPAD_RIGHT, "Press the d-pad to the right" },
-		{ B_CONTROLLER_BUTTON_START, "Press Start" },
-		{ B_CONTROLLER_BUTTON_BACK, "Press Select" }
+		{ B_CONTROLLER_BUTTON_DPAD_UP, B_TRANSLATE_MARK("Press the d-pad up") },
+		{ B_CONTROLLER_BUTTON_DPAD_DOWN, B_TRANSLATE_MARK("Press the d-pad down") },
+		{ B_CONTROLLER_BUTTON_DPAD_LEFT, B_TRANSLATE_MARK("Press the d-pad to the left") },
+		{ B_CONTROLLER_BUTTON_DPAD_RIGHT, B_TRANSLATE_MARK("Press the d-pad to the right") },
+		{ B_CONTROLLER_BUTTON_START, B_TRANSLATE_MARK("Press Start") },
+		{ B_CONTROLLER_BUTTON_BACK, B_TRANSLATE_MARK("Press Select") }
 	};
 	for (size_t i = 0; i < sizeof(kRest) / sizeof(kRest[0]); i++) {
 		step.target = kRest[i].target;
-		step.prompt = kRest[i].prompt;
+		step.prompt = B_TRANSLATE_NOCOLLECT(kRest[i].prompt);
 		steps.push_back(step);
 	}
 	return steps;
@@ -551,7 +565,7 @@ public:
 	ButtonSetupWindow(BWindow* parent, BMessenger page, const char* device,
 		game_controller_family family, game_controller_labels labels)
 		:
-		BWindow(BRect(0, 0, 10, 10), "Set up buttons",
+		BWindow(BRect(0, 0, 10, 10), B_TRANSLATE("Set up buttons"),
 			B_TITLED_WINDOW_LOOK, B_MODAL_SUBSET_WINDOW_FEEL,
 			B_NOT_ZOOMABLE | B_NOT_RESIZABLE | B_AUTO_UPDATE_SIZE_LIMITS
 				| B_ASYNCHRONOUS_CONTROLS | B_CLOSE_ON_ESCAPE),
@@ -579,12 +593,12 @@ public:
 		fProgress = new BStringView("progress", "");
 		fProgress->SetHighColor(quiet_color(140));
 		BStringView* hint = new BStringView("hint",
-			"Skip a control your controller does not have.");
+			B_TRANSLATE("Skip a control your controller does not have."));
 		hint->SetHighColor(quiet_color(140));
 
-		BButton* skip = new BButton("skip", "Skip",
+		BButton* skip = new BButton("skip", B_TRANSLATE("Skip"),
 			new BMessage(kMsgSetupSkip));
-		BButton* cancel = new BButton("cancel", "Cancel",
+		BButton* cancel = new BButton("cancel", B_TRANSLATE("Cancel"),
 			new BMessage(B_QUIT_REQUESTED));
 
 		BLayoutBuilder::Group<>(this, B_VERTICAL, roundf(8 * unit))
@@ -656,8 +670,13 @@ private:
 		}
 		fPrompt->SetText(fSteps[fStep].prompt.String());
 		BString progress;
-		progress.SetToFormat("Step %" B_PRIuSIZE " of %" B_PRIuSIZE,
-			fStep + 1, fSteps.size());
+		BString number;
+		number << (uint64)(fStep + 1);
+		BString count;
+		count << (uint64)fSteps.size();
+		progress = B_TRANSLATE("Step %number% of %count%");
+		progress.ReplaceFirst("%number%", number.String());
+		progress.ReplaceFirst("%count%", count.String());
 		fProgress->SetText(progress.String());
 		// Rest values: what the controller sends while nothing is pressed,
 		// taken over the first polls of the step (the first read after
@@ -1016,16 +1035,18 @@ public:
 
 	virtual	const char*			Identifier() const
 									{ return "gamecontrollers"; }
-	virtual	const char*			Name() const { return "Game controllers"; }
+	virtual	const char*			Name() const { return B_TRANSLATE("Game controllers"); }
 	virtual	const char*			Category() const { return "devices"; }
 	virtual	const char*			Description() const
-									{ return "Test your controllers and "
-										"set up their buttons"; }
+									{ return B_TRANSLATE("Test your controllers and "
+										"set up their buttons"); }
 	virtual	const char*			Keywords() const
-									{ return "game controller gamepad "
+									{ return B_TRANSLATE_COMMENT("game controller gamepad "
 										"joystick joypad test buttons "
 										"layout mapping setup "
-										"playstation xbox nintendo sega"; }
+										"playstation xbox nintendo sega",
+										"Search words, separated by spaces. Keep the English "
+										"words and add words in your language."); }
 
 	virtual	BView*				CreateView(SettingsContext* context,
 									BRect frame)
@@ -1238,7 +1259,7 @@ static const struct {
 	game_controller_family	family;
 	const char*				label;
 } kLayouts[5] = {
-	{ B_GAME_CONTROLLER_FAMILY_UNKNOWN, "Automatic" },
+	{ B_GAME_CONTROLLER_FAMILY_UNKNOWN, B_TRANSLATE_MARK("Automatic") },
 	{ B_GAME_CONTROLLER_FAMILY_XBOX, "Xbox" },
 	{ B_GAME_CONTROLLER_FAMILY_PLAYSTATION, "PlayStation" },
 	{ B_GAME_CONTROLLER_FAMILY_NINTENDO, "Nintendo" },
@@ -1262,9 +1283,9 @@ GameControllersPage::GameControllersPage(GameControllersModule* module,
 	// a dashed card that leads to Bluetooth.
 	fStrip = new BAppearanceKit::BCardStrip("controllers",
 		new BMessage(kMsgSelectController));
-	fStrip->SetEmptyText("No controller",
-		"Plug one in with USB, or pair one in Bluetooth.");
-	fStrip->SetEmptyAction("Open Bluetooth\xe2\x80\xa6",
+	fStrip->SetEmptyText(B_TRANSLATE("No controller"),
+		B_TRANSLATE("Plug one in with USB, or pair one in Bluetooth."));
+	fStrip->SetEmptyAction(B_TRANSLATE("Open Bluetooth\xe2\x80\xa6"),
 		new BMessage(kMsgOpenBluetooth));
 
 	// The layout: where the buttons are and how they are read. A fixed
@@ -1273,14 +1294,15 @@ GameControllersPage::GameControllersPage(GameControllersModule* module,
 	for (int32 i = 0; i < 5; i++) {
 		BMessage* message = new BMessage(kMsgLayoutChosen);
 		message->AddInt32("layout", kLayouts[i].family);
-		fLayoutItems[i] = new BMenuItem(kLayouts[i].label, message);
+		fLayoutItems[i] = new BMenuItem(B_TRANSLATE_NOCOLLECT(kLayouts[i].label),
+			message);
 		layoutMenu->AddItem(fLayoutItems[i]);
 	}
 	layoutMenu->AddSeparatorItem();
-	fOwnSetupItem = new BMenuItem("Your own setup", NULL);
+	fOwnSetupItem = new BMenuItem(B_TRANSLATE("Your own setup"), NULL);
 	fOwnSetupItem->SetEnabled(false);
 	layoutMenu->AddItem(fOwnSetupItem);
-	fLayoutField = new BMenuField("layout field", "Layout", layoutMenu);
+	fLayoutField = new BMenuField("layout field", B_TRANSLATE("Layout"), layoutMenu);
 	fLayoutField->SetViewColor(network_box_fill());
 	fLayoutField->SetLowColor(network_box_fill());
 
@@ -1296,11 +1318,12 @@ GameControllersPage::GameControllersPage(GameControllersModule* module,
 	fPlayStationItem = new BMenuItem("PlayStation", playstation);
 	menu->AddItem(fXboxItem);
 	menu->AddItem(fPlayStationItem);
-	fLabelsField = new BMenuField("labels field", "Button labels", menu);
+	fLabelsField = new BMenuField("labels field", B_TRANSLATE("Button labels"), menu);
 	fLabelsField->SetViewColor(network_box_fill());
 	fLabelsField->SetLowColor(network_box_fill());
 
-	fSetupButton = new BButton("setup buttons", "Set up buttons\xe2\x80\xa6",
+	fSetupButton = new BButton("setup buttons",
+		B_TRANSLATE("Set up buttons\xe2\x80\xa6"),
 		new BMessage(kMsgSetupButtons));
 
 	// Under the picture, not beside Layout: at the smallest window (910 by
@@ -1319,7 +1342,7 @@ GameControllersPage::GameControllersPage(GameControllersModule* module,
 	fTest->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNLIMITED));
 
 	fTestHint = new BStringView("test hint",
-		"Press a button or move a stick: it lights up here.");
+		B_TRANSLATE("Press a button or move a stick: it lights up here."));
 	fTestHint->SetAlignment(B_ALIGN_CENTER);
 	fTestHint->SetHighColor(quiet_color(160));
 	fTestHint->SetViewColor(network_box_fill());
@@ -1334,23 +1357,23 @@ GameControllersPage::GameControllersPage(GameControllersModule* module,
 	BMessage* light = new BMessage(kMsgRumble);
 	light->AddFloat("strong", 0.2f);
 	light->AddFloat("weak", 0.5f);
-	fLightButton = new BButton("rumble light", "Light", light);
+	fLightButton = new BButton("rumble light", B_TRANSLATE("Light"), light);
 	BMessage* strong = new BMessage(kMsgRumble);
 	strong->AddFloat("strong", 1.0f);
 	strong->AddFloat("weak", 1.0f);
-	fStrongButton = new BButton("rumble strong", "Strong", strong);
+	fStrongButton = new BButton("rumble strong", B_TRANSLATE("Strong"), strong);
 	// Xbox controllers: the motors in the triggers (phase 2), a button only
 	// while the chosen controller has them.
 	BMessage* triggerRumble = new BMessage(kMsgRumble);
 	triggerRumble->AddBool("triggers", true);
-	fTriggerButton = new BButton("rumble triggers", "Triggers",
+	fTriggerButton = new BButton("rumble triggers", B_TRANSLATE("Triggers"),
 		triggerRumble);
 	fWaves = new RumbleWaves();
 	BStringView* rumbleHint = new BStringView("rumble hint",
-		"One second, both motors.");
+		B_TRANSLATE("One second, both motors."));
 	rumbleHint->SetHighColor(quietText);
 	BGroupView* content;
-	fRumbleGroup = _MakeFeelGroup("rumble group", "Rumble", &content);
+	fRumbleGroup = _MakeFeelGroup("rumble group", B_TRANSLATE("Rumble"), &content);
 	BLayoutBuilder::Group<>(content)
 		.AddGroup(B_HORIZONTAL, roundf(8 * unit))
 			.Add(fLightButton)
@@ -1362,25 +1385,26 @@ GameControllersPage::GameControllersPage(GameControllersModule* module,
 		.Add(rumbleHint);
 
 	fMotion = new BGameControllerMotionView("motion view");
-	fMotionGroup = _MakeFeelGroup("motion group", "Motion", &content);
+	fMotionGroup = _MakeFeelGroup("motion group", B_TRANSLATE("Motion"), &content);
 	BLayoutBuilder::Group<>(content)
 		.Add(fMotion);
 
-	static const char* const kEffects[4] = { "Off", "Resistance",
-		"Trigger click", "Vibration" };
+	static const char* const kEffects[4] = { B_TRANSLATE_MARK("Off"),
+		B_TRANSLATE_MARK("Resistance"), B_TRANSLATE_MARK("Trigger click"),
+		B_TRANSLATE_MARK("Vibration") };
 	BPopUpMenu* effectMenu = new BPopUpMenu("effect");
 	for (int32 i = 0; i < 4; i++) {
 		BMessage* message = new BMessage(kMsgTriggerChanged);
 		message->AddInt32("effect", i);
-		fEffectItems[i] = new BMenuItem(kEffects[i], message);
+		fEffectItems[i] = new BMenuItem(B_TRANSLATE_NOCOLLECT(kEffects[i]), message);
 		effectMenu->AddItem(fEffectItems[i]);
 	}
 	fEffectItems[0]->SetMarked(true);
 	fEffectField = new BMenuField("effect field", NULL, effectMenu);
-	BStringView* effectLabel = new BStringView("effect label", "Effect");
+	BStringView* effectLabel = new BStringView("effect label", B_TRANSLATE("Effect"));
 	effectLabel->SetFont(&boldFont);
 	BStringView* effectWhere = new BStringView("effect where",
-		"pull L2 or R2 to feel it");
+		B_TRANSLATE("pull L2 or R2 to feel it"));
 	effectWhere->SetHighColor(quietText);
 	fStartSlider = new BSlider("starts at", NULL,
 		new BMessage(kMsgTriggerChanged), 0, 100, B_HORIZONTAL);
@@ -1391,10 +1415,10 @@ GameControllersPage::GameControllersPage(GameControllersModule* module,
 	fStrengthSlider->SetModificationMessage(
 		new BMessage(kMsgTriggerChanged));
 	fStrengthSlider->SetValue(70);
-	BStringView* startLabel = new BStringView("start label", "Starts at");
+	BStringView* startLabel = new BStringView("start label", B_TRANSLATE("Starts at"));
 	startLabel->SetFont(&boldFont);
 	BStringView* strengthLabel = new BStringView("strength label",
-		"Strength");
+		B_TRANSLATE("Strength"));
 	strengthLabel->SetFont(&boldFont);
 	fStartValue = new BStringView("start value", "40 %");
 	fStartValue->SetFont(&boldFont);
@@ -1403,7 +1427,7 @@ GameControllersPage::GameControllersPage(GameControllersModule* module,
 	float valueWidth = ceilf(boldFont.StringWidth("100 %"));
 	fStartValue->SetExplicitMinSize(BSize(valueWidth, B_SIZE_UNSET));
 	fStrengthValue->SetExplicitMinSize(BSize(valueWidth, B_SIZE_UNSET));
-	fTriggerGroup = _MakeFeelGroup("trigger group", "Trigger feedback",
+	fTriggerGroup = _MakeFeelGroup("trigger group", B_TRANSLATE("Trigger feedback"),
 		&content);
 	BLayoutBuilder::Group<>(content)
 		.AddGrid(roundf(8 * unit), roundf(4 * unit))
@@ -1964,7 +1988,7 @@ GameControllersPage::_UpdateTest()
 		fXboxItem->SetMarked(true);
 		fSetupButton->SetEnabled(false);
 		fIDs->SetText("");
-		fTestHint->SetText("This controller cannot be opened.");
+		fTestHint->SetText(B_TRANSLATE("This controller cannot be opened."));
 		return;
 	}
 
@@ -1998,14 +2022,19 @@ GameControllersPage::_UpdateTest()
 
 	if (known) {
 		BString ids;
-		ids.SetToFormat("Vendor %04X \xc2\xb7 Product %04X",
-			controller->VendorID(), controller->ProductID());
+		BString vendor;
+		vendor.SetToFormat("%04X", controller->VendorID());
+		BString product;
+		product.SetToFormat("%04X", controller->ProductID());
+		ids = B_TRANSLATE("Vendor %vendor% \xc2\xb7 Product %product%");
+		ids.ReplaceFirst("%vendor%", vendor.String());
+		ids.ReplaceFirst("%product%", product.String());
 		fIDs->SetText(ids.String());
 	} else
 		fIDs->SetText("");
 	fTestHint->SetText(controller->HasMapping()
-		? "Press a button or move a stick: it lights up here."
-		: "Choose a layout, or set up the buttons one by one.");
+		? B_TRANSLATE("Press a button or move a stick: it lights up here.")
+		: B_TRANSLATE("Choose a layout, or set up the buttons one by one."));
 }
 
 

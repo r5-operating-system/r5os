@@ -1,0 +1,88 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_fonts\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+msgctxt "Settings: Fonts"
+msgid "Change the default fonts"
+msgstr ""
+
+msgctxt "AntialiasingSettingsView"
+msgid "Strong"
+msgstr ""
+
+#. Don't translate this literally ! Use a phrase showing all chars from A to Z.
+msgctxt "Font Selection view"
+msgid "The quick brown fox jumps over the lazy dog."
+msgstr ""
+
+msgctxt "AntialiasingSettingsView"
+msgid "Off"
+msgstr ""
+
+msgctxt "AntialiasingSettingsView"
+msgid "Grayscale"
+msgstr ""
+
+msgctxt "AntialiasingSettingsView"
+msgid "Antialiasing type:"
+msgstr ""
+
+msgctxt "AntialiasingSettingsView"
+msgid "Antialiasing menu"
+msgstr ""
+
+msgctxt "AntialiasingSettingsView"
+msgid "Hinting menu"
+msgstr ""
+
+msgctxt "Settings: Fonts"
+msgid "Fonts"
+msgstr ""
+
+msgctxt "AntialiasingSettingsView"
+msgid "On"
+msgstr ""
+
+msgctxt "AntialiasingSettingsView"
+msgid "Monospaced fonts only"
+msgstr ""
+
+msgctxt "Font Selection view"
+msgid "Size:"
+msgstr ""
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+msgctxt "Settings: Fonts"
+msgid "fonts plain bold fixed menu antialiasing hinting"
+msgstr ""
+
+msgctxt "Settings: Fonts"
+msgid "Antialiasing"
+msgstr ""
+
+msgctxt "Font view"
+msgid "Plain font:"
+msgstr ""
+
+msgctxt "Font view"
+msgid "Fixed font:"
+msgstr ""
+
+msgctxt "AntialiasingSettingsView"
+msgid "LCD subpixel"
+msgstr ""
+
+msgctxt "AntialiasingSettingsView"
+msgid "Glyph hinting:"
+msgstr ""
+
+msgctxt "AntialiasingSettingsView"
+msgid "Reduce colored edges filter strength:"
+msgstr ""
+
+msgctxt "Font view"
+msgid "Bold font:"
+msgstr ""
+
+msgctxt "Font view"
+msgid "Menu font:"
+msgstr ""

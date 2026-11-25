@@ -13,6 +13,7 @@
 
 #include <Alert.h>
 #include <Box.h>
+#include <Catalog.h>
 #include <CheckBox.h>
 #include <Directory.h>
 #include <Entry.h>
@@ -40,6 +41,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "Settings: Virtual memory"
 
 
 static const uint32 kMsgEnable = 'vmEn';
@@ -117,7 +122,7 @@ public:
 	virtual						~VirtualMemoryModule();
 
 	virtual	const char*			Identifier() const { return "virtualmemory"; }
-	virtual	const char*			Name() const { return "Virtual memory"; }
+	virtual	const char*			Name() const { return B_TRANSLATE("Virtual memory"); }
 	virtual	const char*			Category() const { return "system"; }
 	virtual	const char*			Description() const;
 	virtual	const char*			Keywords() const;
@@ -272,15 +277,15 @@ VirtualMemoryView::VirtualMemoryView(VirtualMemoryModule* module)
 	fSize(NULL),
 	fNotice(NULL)
 {
-	fEnable = new BCheckBox("enable", "Enable virtual memory",
+	fEnable = new BCheckBox("enable", B_TRANSLATE("Enable virtual memory"),
 		new BMessage(kMsgEnable));
 	fEnable->SetFont(r5_settings_bold_font());
 	fUsage = new BStatusBar("usage");
-	fAutomatic = new BCheckBox("automatic", "Automatic swap management",
+	fAutomatic = new BCheckBox("automatic", B_TRANSLATE("Automatic swap management"),
 		new BMessage(kMsgAuto));
 	fVolumeMenu = new BPopUpMenu("volume");
-	fVolume = new BMenuField("volume", "Use volume:", fVolumeMenu);
-	fSize = new SizeSlider("size", "Requested swap file size:",
+	fVolume = new BMenuField("volume", B_TRANSLATE("Use volume:"), fVolumeMenu);
+	fSize = new SizeSlider("size", B_TRANSLATE("Requested swap file size:"),
 		new BMessage(kMsgSize), 1, 2);
 
 	BBox* box = new BBox("swap");
@@ -293,7 +298,7 @@ VirtualMemoryView::VirtualMemoryView(VirtualMemoryModule* module)
 		.Add(fVolume)
 		.Add(fSize)
 		.Add(new BStringView("reboot",
-			"Changes take effect on the next start."));
+			B_TRANSLATE("Changes take effect on the next start.")));
 	box->AddChild(inner);
 
 	// What the VirtualMemory program asked in an alert (issue #4615): the
@@ -362,7 +367,7 @@ VirtualMemoryView::_AddVolume(dev_t device)
 	BVolume volume(device);
 	char name[B_FILE_NAME_LENGTH];
 	if (volume.GetName(name) != B_OK)
-		strlcpy(name, "volume", sizeof(name));
+		strlcpy(name, B_TRANSLATE("volume"), sizeof(name));
 	BString label(name);
 	BDirectory root;
 	BEntry entry;
@@ -474,7 +479,7 @@ VirtualMemoryView::_Show(const SwapState& state)
 	trailing << string_for_size(swapUsed, usedBuffer, sizeof(usedBuffer))
 		<< " / " << string_for_size(swapSize, sizeBuffer, sizeof(sizeBuffer));
 	fUsage->SetMaxValue(swapSize / (float)kMegaByte);
-	fUsage->SetTo(swapUsed / (float)kMegaByte, "Current swap:",
+	fUsage->SetTo(swapUsed / (float)kMegaByte, B_TRANSLATE("Current swap:"),
 		trailing.String());
 	if (gray) {
 		fEnable->SetEnabled(false);
@@ -548,14 +553,14 @@ VirtualMemoryView::MessageReceived(BMessage* message)
 			if (fUpdating)
 				break;
 			if (fEnable->Value() == B_CONTROL_OFF) {
-				BAlert* alert = new BAlert("Virtual memory",
-					"Disabling virtual memory will have unwanted effects on "
+				BAlert* alert = new BAlert(B_TRANSLATE("Virtual memory"),
+					B_TRANSLATE("Disabling virtual memory will have unwanted effects on "
 					"system stability once the memory is used up.\n"
 					"Virtual memory does not affect system performance "
 					"until this point is reached.\n\n"
-					"Are you really sure you want to turn it off?",
-					"Turn off", "Keep enabled", NULL, B_WIDTH_AS_USUAL,
-					B_WARNING_ALERT);
+					"Are you really sure you want to turn it off?"),
+					B_TRANSLATE("Turn off"), B_TRANSLATE("Keep enabled"), NULL,
+					B_WIDTH_AS_USUAL, B_WARNING_ALERT);
 				alert->SetShortcut(1, B_ESCAPE);
 				if (alert->Go() == 1) {
 					fUpdating = true;
@@ -581,14 +586,17 @@ VirtualMemoryView::MessageReceived(BMessage* message)
 const char*
 VirtualMemoryModule::Description() const
 {
-	return "Extra memory stored on disk";
+	return B_TRANSLATE_COMMENT("Extra memory stored on disk",
+		"Fixed text (AGENTS.md): translate the meaning, keep it short");
 }
 
 
 const char*
 VirtualMemoryModule::Keywords() const
 {
-	return "swap virtual memory disk";
+	return B_TRANSLATE_COMMENT("swap virtual memory disk",
+		"Search words, separated by spaces. Keep the English words and add "
+		"words in your language.");
 }
 
 
@@ -647,18 +655,19 @@ VirtualMemoryModule::_LoadFile()
 	}
 	// From here on the file exists, so a file that cannot be read is
 	// reported, as the VirtualMemory program did.
-	static const char* kUnreadable = "The settings file could not be read. "
-		"The defaults are shown; a change writes them.";
+	static const char* kUnreadable = B_TRANSLATE_MARK(
+		"The settings file could not be read. "
+		"The defaults are shown; a change writes them.");
 	off_t length = 0;
 	if (file.GetSize(&length) != B_OK || length <= 0 || length > 64 * 1024) {
-		fNotice = kUnreadable;
+		fNotice = B_TRANSLATE_NOCOLLECT(kUnreadable);
 		fOpened = fCurrent;
 		return;
 	}
 	BString text;
 	char* buffer = text.LockBuffer((int32)length);
 	if (buffer == NULL) {
-		fNotice = kUnreadable;
+		fNotice = B_TRANSLATE_NOCOLLECT(kUnreadable);
 		fOpened = fCurrent;
 		return;
 	}
@@ -677,7 +686,7 @@ VirtualMemoryModule::_LoadFile()
 		|| !field(text, "swap_volume_device", device)
 		|| !field(text, "swap_volume_filesystem", filesystem)
 		|| !field(text, "swap_volume_capacity", capacity)) {
-		fNotice = kUnreadable;
+		fNotice = B_TRANSLATE_NOCOLLECT(kUnreadable);
 		fOpened = fCurrent;
 		return;
 	}
@@ -688,8 +697,8 @@ VirtualMemoryModule::_LoadFile()
 		filesystem.String(), (off_t)atoll(capacity.String()));
 	if (volume < 0) {
 		volume = fFactory.volume;
-		fNotice = "The volume in the settings file was not found. The boot "
-			"volume is shown; a change writes it.";
+		fNotice = B_TRANSLATE("The volume in the settings file was not found. "
+			"The boot volume is shown; a change writes it.");
 	}
 	fCurrent.volume = volume;
 	fOpened = fCurrent;

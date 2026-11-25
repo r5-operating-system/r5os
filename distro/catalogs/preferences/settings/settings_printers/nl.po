@@ -1,0 +1,38 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_printers\nLanguage: nl\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#, fuzzy
+msgctxt "Settings: Launcher pages"
+msgid "Opens the existing program in its own window."
+msgstr "Opent het bestaande programma in een eigen venster."
+
+#, fuzzy
+msgctxt "Settings: Printers"
+msgid "Printers"
+msgstr "Printers"
+
+#, fuzzy
+msgctxt "Settings: Printers"
+msgid "Printers and the print queue."
+msgstr "Printers en de afdrukwachtrij."
+
+#, fuzzy
+msgctxt "Settings: Launcher pages"
+msgid "OK"
+msgstr "OK"
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+#, fuzzy
+msgctxt "Settings: Printers"
+msgid "print printer"
+msgstr "print printer afdrukken printen"
+
+#, fuzzy
+msgctxt "Settings: Launcher pages"
+msgid "Could not open %name%."
+msgstr "Kon %name% niet openen."
+
+#, fuzzy
+msgctxt "Settings: Launcher pages"
+msgid "Open"
+msgstr "Openen"

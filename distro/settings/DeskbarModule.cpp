@@ -18,6 +18,7 @@
 #include <Application.h>
 #include <Box.h>
 #include <Button.h>
+#include <Catalog.h>
 #include <CheckBox.h>
 #include <Control.h>
 #include <Deskbar.h>
@@ -41,6 +42,10 @@
 #include <String.h>
 
 #include <syslog.h>
+
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "Settings: Desktop and Deskbar"
 
 
 static const uint32 kMsgChanged = 'r5dc';
@@ -455,13 +460,18 @@ public:
 	virtual						~DeskbarModule();
 
 	virtual	const char*			Identifier() const { return kModuleId; }
-	virtual	const char*			Name() const { return "Desktop and Deskbar"; }
+	virtual	const char*			Name() const
+		{ return B_TRANSLATE("Desktop and Deskbar"); }
 	virtual	const char*			Category() const
 									{ return "personalization"; }
 	virtual	const char*			Description() const
-		{ return "Adjust desktop and Deskbar settings"; }
+		{ return B_TRANSLATE_COMMENT("Adjust desktop and Deskbar settings",
+			"Fixed text (AGENTS.md): translate the meaning, keep it short"); }
 	virtual	const char*			Keywords() const
-		{ return "deskbar desktop menu recent applications location"; }
+		{ return B_TRANSLATE_COMMENT("deskbar desktop menu recent "
+			"applications location",
+			"Search words, separated by spaces. Keep the English words and "
+			"add words in your language."); }
 
 	virtual	BView*				CreateView(SettingsContext* context,
 									BRect frame);
@@ -751,30 +761,34 @@ DeskbarView::DeskbarView(DeskbarModule* module)
 	fCornersMenu(NULL),
 	fCompactItem(NULL)
 {
-	fSort = new BCheckBox("sort", "Sort applications by name",
+	fSort = new BCheckBox("sort", B_TRANSLATE("Sort applications by name"),
 		new BMessage(kMsgChanged));
-	fTrackerFirst = new BCheckBox("tracker", "Tracker always first",
+	fTrackerFirst = new BCheckBox("tracker",
+		B_TRANSLATE("Tracker always first"),
 		new BMessage(kMsgChanged));
-	fExpanders = new BCheckBox("expanders", "Show application expander",
+	fExpanders = new BCheckBox("expanders",
+		B_TRANSLATE("Show application expander"),
 		new BMessage(kMsgChanged));
-	fExpandNew = new BCheckBox("expand new", "Expand new applications",
+	fExpandNew = new BCheckBox("expand new",
+		B_TRANSLATE("Expand new applications"),
 		new BMessage(kMsgChanged));
-	fHideLabels = new BCheckBox("labels", "Hide application names",
+	fHideLabels = new BCheckBox("labels", B_TRANSLATE("Hide application names"),
 		new BMessage(kMsgChanged));
-	fIconSize = new BSlider("icon_size", "Icon size",
+	fIconSize = new BSlider("icon_size", B_TRANSLATE("Icon size"),
 		new BMessage(kMsgChanged), kMinimumIconSize / kIconSizeInterval,
 		kMaximumIconSize / kIconSizeInterval, B_HORIZONTAL);
 	fIconSize->SetHashMarks(B_HASH_MARKS_BOTTOM);
 	fIconSize->SetHashMarkCount((kMaximumIconSize - kMinimumIconSize)
 		/ kIconSizeInterval + 1);
-	fIconSize->SetLimitLabels("Small", "Large");
+	fIconSize->SetLimitLabels(B_TRANSLATE("Small"), B_TRANSLATE("Large"));
 	fIconSize->SetModificationMessage(new BMessage(kMsgChanged));
 
-	fRecentDocs = new BCheckBox("documents", "Recent documents:",
+	fRecentDocs = new BCheckBox("documents", B_TRANSLATE("Recent documents:"),
 		new BMessage(kMsgChanged));
-	fRecentFolders = new BCheckBox("folders", "Recent folders:",
+	fRecentFolders = new BCheckBox("folders", B_TRANSLATE("Recent folders:"),
 		new BMessage(kMsgChanged));
-	fRecentApps = new BCheckBox("applications", "Recent applications:",
+	fRecentApps = new BCheckBox("applications",
+		B_TRANSLATE("Recent applications:"),
 		new BMessage(kMsgChanged));
 	fRecentDocsCount = new BSpinner("document count", NULL,
 		new BMessage(kMsgChanged));
@@ -787,27 +801,29 @@ DeskbarView::DeskbarView(DeskbarModule* module)
 	fRecentAppsCount->SetRange(0, 50);
 
 	fPlace = new DeskbarPlace();
-	fShowApplications = new BCheckBox("show", "Show applications",
+	fShowApplications = new BCheckBox("show", B_TRANSLATE("Show applications"),
 		new BMessage(kMsgChanged));
-	fAlwaysOnTop = new BCheckBox("top", "Always on top",
+	fAlwaysOnTop = new BCheckBox("top", B_TRANSLATE("Always on top"),
 		new BMessage(kMsgChanged));
-	fAutoRaise = new BCheckBox("raise", "Auto-raise",
+	fAutoRaise = new BCheckBox("raise", B_TRANSLATE("Auto-raise"),
 		new BMessage(kMsgChanged));
-	fAutoHide = new BCheckBox("hide", "Auto-hide",
+	fAutoHide = new BCheckBox("hide", B_TRANSLATE("Auto-hide"),
 		new BMessage(kMsgChanged));
-	BButton* edit = new BButton("edit", "Edit in Tracker" B_UTF8_ELLIPSIS,
+	BButton* edit = new BButton("edit",
+		B_TRANSLATE("Edit in Tracker" B_UTF8_ELLIPSIS),
 		new BMessage(kMsgEditTracker));
 
 	// Deskbar appearance (style, layout, corners, floating) lives in Theme
 	// so there are no duplicate controls here.
 	BStringView* themeNote = new BStringView("theme note",
-		"Deskbar appearance (style, layout, corners, floating) is set in Theme.");
+		B_TRANSLATE("Deskbar appearance (style, layout, corners, floating) is "
+			"set in Theme."));
 	themeNote->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNSET));
 	BButton* openTheme = new BButton("open theme",
-		"Open Theme" B_UTF8_ELLIPSIS, new BMessage(kMsgOpenTheme));
+		B_TRANSLATE("Open Theme" B_UTF8_ELLIPSIS), new BMessage(kMsgOpenTheme));
 
 	BBox* applications = new BBox("applications");
-	applications->SetLabel(r5_settings_box_title("Applications"));
+	applications->SetLabel(r5_settings_box_title(B_TRANSLATE("Applications")));
 	BGroupView* applicationsInner = new BGroupView(B_VERTICAL, 0);
 	BLayoutBuilder::Group<>(applicationsInner)
 		.SetInsets(B_USE_DEFAULT_SPACING)
@@ -826,7 +842,7 @@ DeskbarView::DeskbarView(DeskbarModule* module)
 		B_ALIGN_TOP));
 
 	BBox* menu = new BBox("menu");
-	menu->SetLabel(r5_settings_box_title("Menu"));
+	menu->SetLabel(r5_settings_box_title(B_TRANSLATE("Menu")));
 	BGroupView* menuInner = new BGroupView(B_VERTICAL, B_USE_SMALL_SPACING);
 	BLayoutBuilder::Group<>(menuInner)
 		.SetInsets(B_USE_DEFAULT_SPACING)
@@ -849,7 +865,7 @@ DeskbarView::DeskbarView(DeskbarModule* module)
 		B_ALIGN_TOP));
 
 	BBox* window = new BBox("window");
-	window->SetLabel(r5_settings_box_title("Window"));
+	window->SetLabel(r5_settings_box_title(B_TRANSLATE("Window")));
 	BGroupView* windowInner = new BGroupView(B_VERTICAL,
 		B_USE_DEFAULT_SPACING);
 	BLayoutBuilder::Group<>(windowInner)

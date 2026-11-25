@@ -1,0 +1,27 @@
+1	english	x-vnd.R5OS-Settings	554210562
+Defaults	Settings window		Defaults
+Unlock	Settings window		Unlock
+Display, sound, notifications, virtual memory, and this computer.	Settings window		Display, sound, notifications, virtual memory, and this computer.
+Revert	Settings window		Revert
+Choose a category, or search for a setting.	Settings window		Choose a category, or search for a setting.
+Fonts, look and feel, wallpaper, and the Deskbar.	Settings window		Fonts, look and feel, wallpaper, and the Deskbar.
+Home	Settings window		Home
+Settings	System name		Settings
+Recently changed	Settings: Home		Recently changed
+Keyboard, mouse, touchpad, printers, and Bluetooth.	Settings window		Keyboard, mouse, touchpad, printers, and Bluetooth.
+Administrator	Settings window		Administrator
+Wired and Wi-Fi connections, and network shares.	Settings window		Wired and Wi-Fi connections, and network shares.
+Lock	Settings window		Lock
+Search	Settings window		Search
+Could not apply %name%.	Settings window		Could not apply %name%.
+System	Settings window		System
+Could not revert %name%.	Settings window		Could not revert %name%.
+This page could not be opened.	Settings window		This page could not be opened.
+Accounts	Settings window		Accounts
+Personalization	Settings window		Personalization
+Nothing changed yet	Settings: Home		Nothing changed yet
+Network	Settings window		Network
+OK	Settings window		OK
+Devices	Settings window		Devices
+The people who use this computer, and how they sign in.	Settings window		The people who use this computer, and how they sign in.
+Could not restore defaults for %name%.	Settings window		Could not restore defaults for %name%.

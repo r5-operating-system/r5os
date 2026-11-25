@@ -1,0 +1,16 @@
+1	english	x-vnd.R5OS-settings_virtualmemory	3082692182
+Requested swap file size:	Settings: Virtual memory		Requested swap file size:
+The settings file could not be read. The defaults are shown; a change writes them.	Settings: Virtual memory		The settings file could not be read. The defaults are shown; a change writes them.
+Extra memory stored on disk	Settings: Virtual memory	Fixed text (AGENTS.md): translate the meaning, keep it short	Extra memory stored on disk
+Current swap:	Settings: Virtual memory		Current swap:
+Virtual memory	Settings: Virtual memory		Virtual memory
+swap virtual memory disk	Settings: Virtual memory	Search words, separated by spaces. Keep the English words and add words in your language.	swap virtual memory disk
+The volume in the settings file was not found. The boot volume is shown; a change writes it.	Settings: Virtual memory		The volume in the settings file was not found. The boot volume is shown; a change writes it.
+Automatic swap management	Settings: Virtual memory		Automatic swap management
+volume	Settings: Virtual memory		volume
+Enable virtual memory	Settings: Virtual memory		Enable virtual memory
+Turn off	Settings: Virtual memory		Turn off
+Disabling virtual memory will have unwanted effects on system stability once the memory is used up.\nVirtual memory does not affect system performance until this point is reached.\n\nAre you really sure you want to turn it off?	Settings: Virtual memory		Disabling virtual memory will have unwanted effects on system stability once the memory is used up.\nVirtual memory does not affect system performance until this point is reached.\n\nAre you really sure you want to turn it off?
+Use volume:	Settings: Virtual memory		Use volume:
+Changes take effect on the next start.	Settings: Virtual memory		Changes take effect on the next start.
+Keep enabled	Settings: Virtual memory		Keep enabled

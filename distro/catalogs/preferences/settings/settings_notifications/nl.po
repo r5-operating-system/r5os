@@ -1,0 +1,124 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_notifications\nLanguage: nl\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "Application does not have a valid signature."
+msgstr "Programma heeft geen geldige handtekening."
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "wide"
+msgstr "breed"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "Enable notifications"
+msgstr "Meldingen inschakelen"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "Timeout:"
+msgstr "Weergaveduur:"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "Window width"
+msgstr "Vensterbreedte"
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "timeout position mute width popup alert"
+msgstr "timeout position mute width popup alert meldingen melding weergaveduur positie dempen breedte waarschuwing"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "%name% is already listed."
+msgstr "%name% staat al in de lijst."
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "Lower right"
+msgstr "Rechtsonder"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "%name% (muted)"
+msgstr "%name% (gedempt)"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "Add…"
+msgstr "Toevoegen…"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "narrow"
+msgstr "smal"
+
+#. Fixed text (AGENTS.md): translate the meaning, keep it short
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "Manage alerts and notifications"
+msgstr "Waarschuwingen en meldingen beheren"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "Applications"
+msgstr "Programma's"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "{0, plural, one{Timeout: # second} other{Timeout: # seconds}}"
+msgstr "{0, plural, one{Weergaveduur: # seconde} other{Weergaveduur: # seconden}}"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "This is a test notification message"
+msgstr "Dit is een testmelding"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "Remove"
+msgstr "Verwijderen"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "Upper right"
+msgstr "Rechtsboven"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "Upper left"
+msgstr "Linksboven"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "Mute notifications from this application"
+msgstr "Meldingen van dit programma dempen"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "OK"
+msgstr "OK"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "Notifications"
+msgstr "Meldingen"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "Follow Deskbar"
+msgstr "Deskbar volgen"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "Notifications sample"
+msgstr "Voorbeeld van meldingen"
+
+#, fuzzy
+msgctxt "Settings: Notifications"
+msgid "Lower left"
+msgstr "Linksonder"

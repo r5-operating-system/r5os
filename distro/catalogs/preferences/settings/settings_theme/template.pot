@@ -1,0 +1,415 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_theme\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+msgctxt "Colors tab"
+msgid "Control border"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Rounded"
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "Shadow"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "This is the name of a built-in theme. The built-in themes stay as they are; choose another name."
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Deskbar"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Windows · %windows%"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Dark"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Choose how windows, controls and the Deskbar look"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Scrollbars"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Accent"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Built in"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Your theme"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "The controls of Haiku, built into the system."
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Thin"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Scrollbars · double arrows"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Strength"
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "Success"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Frosted glass"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Parts"
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "Shine"
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "Menu background"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Single"
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "Link active"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Effects"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Default (R5)"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Keep these choices"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Vertical"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Haiku width"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "%name% (changed)"
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "Failure"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Mode and colors · %mode%, %accent%"
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "Selected menu item text"
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "Panel background"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Save"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Balanced"
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "Navigation pulse"
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "Progress bar"
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "Link text"
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "Control background"
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "Selected list item text"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Shadow"
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "Selected list item background"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Wide"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Name"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Delete the theme \"%name%\"? What you see now stays as it is."
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Deskbar · %style%, %layout%"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Keep in this theme"
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "Control mark"
+msgstr ""
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+msgctxt "Settings: Theme"
+msgid "theme dark light mode accent colors look controls decorator windows scrollbars deskbar effects"
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "Window border"
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "Inactive window tab"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Built in · light only"
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "Document background"
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "List background"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Controls"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Light"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "The theme could not be saved: %error%"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Custom colors"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Cancel"
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "Menu item text"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Quiet"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Windows"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Scrollbars · single arrows"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Not every part of the theme could be set: %error%"
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "List item text"
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "Control text"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Horizontal"
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "Selected menu item background"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Away from the screen edges"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "A theme name cannot contain / \\ or \"."
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Compact"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Double"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Delete"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Classic (Haiku)"
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "Automatically pick secondary colors"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "own accent"
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "Window tab text"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "License: %license%"
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "Tooltip background"
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "Window tab"
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "Scroll bar thumb"
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "Link visited"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Save as theme…"
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "Selected menu item border"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "About"
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "Tooltip text"
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "Inactive window tab text"
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "Navigation base"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Controls · %controls%"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Blue"
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "Panel text"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Glassy"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Authors: %authors%"
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "Document text"
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "Inactive window border"
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "Control highlight"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Mode"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Animations"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Saved in your own settings. The built-in themes stay as they are."
+msgstr ""
+
+msgctxt "Colors tab"
+msgid "Link hover"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "OK"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Save as theme"
+msgstr ""
+
+msgctxt "Settings: Theme"
+msgid "Theme"
+msgstr ""

@@ -18,6 +18,7 @@
 #include "SettingsModule.h"
 
 #include <Box.h>
+#include <Catalog.h>
 #include <CheckBox.h>
 #include <Entry.h>
 #include <GridLayout.h>
@@ -30,6 +31,7 @@
 #include <Screen.h>
 #include <Slider.h>
 #include <String.h>
+#include <StringFormat.h>
 #include <StringView.h>
 #include <TextView.h>
 
@@ -44,6 +46,10 @@
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
+
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "Settings: Power"
 
 
 static const uint32 kMsgEdited = 'pwEd';
@@ -104,13 +110,16 @@ minutes_label(int32 minutes)
 {
 	BString label;
 	if (minutes == 0)
-		label = "Never";
+		label = B_TRANSLATE("Never");
 	else if (minutes == 60)
-		label = "1 hour";
+		label = B_TRANSLATE("1 hour");
 	else if (minutes == 1)
-		label = "1 minute";
-	else
-		label.SetToFormat("%" B_PRId32 " minutes", minutes);
+		label = B_TRANSLATE("1 minute");
+	else {
+		BStringFormat format(B_TRANSLATE("{0, plural, "
+			"one{# minute} other{# minutes}}"));
+		format.Format(label, minutes);
+	}
 	return label;
 }
 
@@ -151,7 +160,8 @@ choice_field(const char* name, const char* const* labels,
 	for (int32 i = 0; labels[i] != NULL; i++) {
 		BMessage* message = new BMessage(kMsgEdited);
 		message->AddString("value", values[i]);
-		menu->AddItem(new BMenuItem(labels[i], message));
+		menu->AddItem(new BMenuItem(B_TRANSLATE_NOCOLLECT(labels[i]),
+			message));
 	}
 	return new BMenuField(name, NULL, menu);
 }
@@ -160,13 +170,17 @@ choice_field(const char* name, const char* const* labels,
 static BMenuField*
 profile_field(const char* name)
 {
-	static const char* const kLabels[] = { "Power saver", "Balanced",
-		"Performance" };
+	static const char* const kLabels[] = {
+		B_TRANSLATE_MARK("Power saver"),
+		B_TRANSLATE_MARK("Balanced"),
+		B_TRANSLATE_MARK("Performance")
+	};
 	BPopUpMenu* menu = new BPopUpMenu(name);
 	for (int32 i = 0; i < 3; i++) {
 		BMessage* message = new BMessage(kMsgEdited);
 		message->AddInt32("value", i);
-		menu->AddItem(new BMenuItem(kLabels[i], message));
+		menu->AddItem(new BMenuItem(B_TRANSLATE_NOCOLLECT(kLabels[i]),
+			message));
 	}
 	return new BMenuField(name, NULL, menu);
 }
@@ -390,14 +404,18 @@ public:
 								PowerModule();
 
 	virtual	const char*			Identifier() const { return "power"; }
-	virtual	const char*			Name() const { return "Power"; }
+	virtual	const char*			Name() const
+									{ return B_TRANSLATE("Power"); }
 	virtual	const char*			Category() const { return "system"; }
 	virtual	const char*			Description() const
-									{ return "Battery, performance and sleep"; }
+									{ return B_TRANSLATE("Battery, performance and sleep"); }
 	virtual	const char*			Keywords() const
-									{ return "battery power sleep performance "
-										"profile brightness lid display "
-										"energy cpu"; }
+									{ return B_TRANSLATE_COMMENT("battery power sleep "
+										"performance profile brightness lid "
+										"display energy cpu",
+										"Search words, separated by spaces. Keep "
+										"the English words and add words in your "
+										"language."); }
 	virtual	bool				RequiresAdmin() const { return false; }
 	virtual	BView*				CreateView(SettingsContext* context,
 									BRect frame);
@@ -454,11 +472,11 @@ PowerView::PowerView(PowerModule* module, SettingsContext* context)
 	fHasBrightness = BScreen().GetBrightness(&brightness) == B_OK;
 
 	fSafeNote = hint("safe note", safe_mode()
-		? "Power settings are off in Safe mode."
-		: "The power service is not running.");
+		? B_TRANSLATE("Power settings are off in Safe mode.")
+		: B_TRANSLATE("The power service is not running."));
 
 	// Battery
-	fBatteryBox = _Box("battery", "Battery");
+	fBatteryBox = _Box("battery", B_TRANSLATE("Battery"));
 	fGlyph = new BatteryGlyph;
 	fPercent = new BStringView("percent", "");
 	BFont big(r5_settings_bold_font());
@@ -481,40 +499,48 @@ PowerView::PowerView(PowerModule* module, SettingsContext* context)
 	fBatteryBox->AddChild(battery);
 
 	// Sleep
-	fSleepBox = _Box("sleep", "Sleep");
-	fSleepColumnBattery = hint("on battery", "On battery");
-	fSleepColumnAC = hint("plugged in", "Plugged in");
+	fSleepBox = _Box("sleep", B_TRANSLATE("Sleep"));
+	fSleepColumnBattery = hint("on battery", B_TRANSLATE("On battery"));
+	fSleepColumnAC = hint("plugged in", B_TRANSLATE("Plugged in"));
 	fDisplayLabel = new BStringView("display label",
-		"Turn off the display after");
+		B_TRANSLATE("Turn off the display after"));
 	fDisplayBattery = minutes_field("display battery", kPowerDisplayChoices,
 		B_COUNT_OF(kPowerDisplayChoices));
 	fDisplayAC = minutes_field("display ac", kPowerDisplayChoices,
 		B_COUNT_OF(kPowerDisplayChoices));
 	fSleepLabel = new BStringView("sleep label",
-		"Put the computer to sleep after");
+		B_TRANSLATE("Put the computer to sleep after"));
 	fSleepBattery = minutes_field("sleep battery", kPowerSleepChoices,
 		B_COUNT_OF(kPowerSleepChoices));
 	fSleepAC = minutes_field("sleep ac", kPowerSleepChoices,
 		B_COUNT_OF(kPowerSleepChoices));
 
-	static const char* const kLidLabels[] = { "Sleep",
-		"Turn off the display", "Do nothing", NULL };
+	static const char* const kLidLabels[] = { B_TRANSLATE_MARK("Sleep"),
+		B_TRANSLATE_MARK("Turn off the display"),
+		B_TRANSLATE_MARK("Do nothing"), NULL };
 	static const char* const kLidValues[] = { "sleep", "display_off",
 		"nothing", NULL };
-	fLidLabel = new BStringView("lid label", "When the lid is closed");
+	fLidLabel = new BStringView("lid label",
+		B_TRANSLATE("When the lid is closed"));
 	fLid = choice_field("lid", kLidLabels, kLidValues);
-	static const char* const kButtonLabels[] = { "Sleep", "Shut down", "Ask",
-		"Do nothing", NULL };
+	static const char* const kButtonLabels[] = {
+		B_TRANSLATE_MARK("Sleep"), B_TRANSLATE_MARK("Shut down"),
+		B_TRANSLATE_MARK("Ask"), B_TRANSLATE_MARK("Do nothing"), NULL };
 	static const char* const kButtonValues[] = { "sleep", "shutdown", "ask",
 		"nothing", NULL };
 	fButtonLabel = new BStringView("button label",
-		"When the power button is pressed");
+		B_TRANSLATE("When the power button is pressed"));
 	fButton = choice_field("button", kButtonLabels, kButtonValues);
 	fExternal = new BCheckBox("external",
-		"Keep working with an external display", new BMessage(kMsgEdited));
+		B_TRANSLATE("Keep working with an external display"),
+		new BMessage(kMsgEdited));
 	fSleepNote1 = hint("sleep note",
-		"Sleep is not available on this computer yet. Until it is,");
-	fSleepNote2 = hint("sleep note 2", "\"Sleep\" is gray in these menus.");
+		B_TRANSLATE_COMMENT("Sleep is not available on this computer yet. "
+			"Until it is,", "First of two lines, one sentence: the second line "
+			"is '\"Sleep\" is gray in these menus.'"));
+	fSleepNote2 = hint("sleep note 2",
+		B_TRANSLATE_COMMENT("\"Sleep\" is gray in these menus.",
+			"Second of two lines, one sentence with the line before"));
 
 	BGroupView* sleep = new BGroupView(B_VERTICAL, B_USE_HALF_ITEM_SPACING);
 	BGridLayout* grid;
@@ -541,10 +567,13 @@ PowerView::PowerView(PowerModule* module, SettingsContext* context)
 	fSleepBox->AddChild(sleep);
 
 	// Performance
-	fPerformanceBox = _Box("performance", "Performance");
-	fProfileColumnBattery = hint("profile on battery", "On battery");
-	fProfileColumnAC = hint("profile plugged in", "Plugged in");
-	fProfileLabel = new BStringView("profile label", "Profile");
+	fPerformanceBox = _Box("performance", B_TRANSLATE("Performance"));
+	fProfileColumnBattery = hint("profile on battery",
+		B_TRANSLATE("On battery"));
+	fProfileColumnAC = hint("profile plugged in",
+		B_TRANSLATE("Plugged in"));
+	fProfileLabel = new BStringView("profile label",
+		B_TRANSLATE("Profile"));
 	fProfileBattery = profile_field("profile battery");
 	fProfileAC = profile_field("profile ac");
 	fProfileText = new BTextView("profile text");
@@ -566,8 +595,8 @@ PowerView::PowerView(PowerModule* module, SettingsContext* context)
 		"Balanced: fast when you work, slower when"), lines));
 	fProfileText->SetExplicitPreferredSize(BSize(B_SIZE_UNSET, lines));
 	fNoSpeed = hint("no speed",
-		"This processor does not let R5 change its speed.");
-	fBrightness = new BSlider("brightness", "Brightness",
+		B_TRANSLATE("This processor does not let R5 change its speed."));
+	fBrightness = new BSlider("brightness", B_TRANSLATE("Brightness"),
 		new BMessage(kMsgBrightness), 0, 100, B_HORIZONTAL);
 	fBrightness->SetModificationMessage(new BMessage(kMsgBrightness));
 
@@ -588,18 +617,23 @@ PowerView::PowerView(PowerModule* module, SettingsContext* context)
 	fPerformanceBox->AddChild(performance);
 
 	// Wake
-	fWakeBox = _Box("wake", "Wake", &fWakeTitle);
-	fWakeLid = new BCheckBox("wake lid", "Wake when the lid is opened",
+	fWakeBox = _Box("wake", B_TRANSLATE("Wake"), &fWakeTitle);
+	fWakeLid = new BCheckBox("wake lid",
+		B_TRANSLATE("Wake when the lid is opened"),
 		new BMessage(kMsgEdited));
-	fWakeKeyboard = new BCheckBox("wake keyboard", "Wake with the keyboard",
+	fWakeKeyboard = new BCheckBox("wake keyboard",
+		B_TRANSLATE("Wake with the keyboard"),
 		new BMessage(kMsgEdited));
 	fWakeMouse = new BCheckBox("wake mouse",
-		"Wake with the mouse or touchpad", new BMessage(kMsgEdited));
-	const char* sleeps = "This computer cannot sleep.";
+		B_TRANSLATE("Wake with the mouse or touchpad"),
+		new BMessage(kMsgEdited));
+	const char* sleeps = B_TRANSLATE("This computer cannot sleep.");
 	if (sleepState == B_POWER_SLEEP_S0IX)
-		sleeps = "This computer sleeps with Modern Standby (S0ix).";
+		sleeps = B_TRANSLATE("This computer sleeps with Modern Standby "
+			"(S0ix).");
 	else if (sleepState == B_POWER_SLEEP_S3)
-		sleeps = "This computer sleeps with Suspend to RAM (S3).";
+		sleeps = B_TRANSLATE("This computer sleeps with Suspend to RAM "
+			"(S3).");
 	fSleepsWith = hint("sleeps with", sleeps);
 	BGroupView* wake = new BGroupView(B_VERTICAL, B_USE_HALF_ITEM_SPACING);
 	BLayoutBuilder::Group<>(wake)
@@ -766,17 +800,23 @@ PowerView::_UpdateBattery()
 
 	BString status;
 	if ((info.state & B_POWER_BATTERY_DISCHARGING) != 0) {
-		status = "On battery";
-		if (info.time_left > 0)
-			status << kDot << "about " << duration(info.time_left) << " left";
+		status = B_TRANSLATE("On battery");
+		if (info.time_left > 0) {
+			BString left(B_TRANSLATE("about %time% left"));
+			left.ReplaceFirst("%time%", duration(info.time_left));
+			status << kDot << left;
+		}
 	} else if ((info.state & B_POWER_BATTERY_CHARGING) != 0) {
-		status = "Charging";
-		if (info.time_left > 0)
-			status << kDot << "full in about " << duration(info.time_left);
+		status = B_TRANSLATE("Charging");
+		if (info.time_left > 0) {
+			BString full(B_TRANSLATE("full in about %time%"));
+			full.ReplaceFirst("%time%", duration(info.time_left));
+			status << kDot << full;
+		}
 	} else {
-		status = "Plugged in";
+		status = B_TRANSLATE("Plugged in");
 		if (info.percent >= 99)
-			status << kDot << "full";
+			status << kDot << B_TRANSLATE("full");
 	}
 	fStatus->SetText(status.String());
 
@@ -784,8 +824,11 @@ PowerView::_UpdateBattery()
 	// Show() and Hide() are counted: only change what is not so already
 	bool hidden = fHealth->IsHidden(fHealth);
 	if (info.health >= 0) {
-		health.SetToFormat("Battery health %" B_PRId32
-			" %% of its design capacity", info.health);
+		BString value;
+		value << info.health;
+		health = B_TRANSLATE("Battery health %percent% % of its design "
+			"capacity");
+		health.ReplaceFirst("%percent%", value);
 		if (hidden)
 			fHealth->Show();
 	} else if (!hidden)
@@ -803,18 +846,19 @@ PowerView::_UpdateProfileText()
 	const char* text;
 	switch (marked_int(field, B_POWER_PROFILE_BALANCED)) {
 		case B_POWER_PROFILE_SAVER:
-			text = "Power saver: the processor stays below its boost and "
-				"leans toward saving energy. Balanced and Performance allow "
-				"the boost.";
+			text = B_TRANSLATE("Power saver: the processor stays below its "
+				"boost and leans toward saving energy. Balanced and "
+				"Performance allow the boost.");
 			break;
 		case B_POWER_PROFILE_PERFORMANCE:
-			text = "Performance: the processor always allows its boost and "
-				"leans toward speed. Power saver keeps it below its boost.";
+			text = B_TRANSLATE("Performance: the processor always allows its "
+				"boost and leans toward speed. Power saver keeps it below "
+				"its boost.");
 			break;
 		default:
-			text = "Balanced: fast when you work, slower when the computer "
-				"waits. Power saver keeps the processor below its boost. "
-				"Performance always allows the boost.";
+			text = B_TRANSLATE("Balanced: fast when you work, slower when the "
+				"computer waits. Power saver keeps the processor below its "
+				"boost. Performance always allows the boost.");
 			break;
 	}
 	fProfileText->SetText(text);

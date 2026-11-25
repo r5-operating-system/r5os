@@ -15,6 +15,7 @@
 #include <Alert.h>
 #include <Box.h>
 #include <Button.h>
+#include <Catalog.h>
 #include <CheckBox.h>
 #include <Control.h>
 #include <DataIO.h>
@@ -36,6 +37,7 @@
 #include <ScrollView.h>
 #include <Slider.h>
 #include <String.h>
+#include <StringFormat.h>
 #include <StringView.h>
 #include <SupportDefs.h>
 
@@ -47,6 +49,10 @@
 #include <syslog.h>
 #include <unistd.h>
 #include <vector>
+
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "Settings: Notifications"
 
 
 static const uint32 kMsgEnable = 'r5no';
@@ -205,7 +211,8 @@ public:
 	virtual						~NotificationsModule();
 
 	virtual	const char*			Identifier() const { return "notifications"; }
-	virtual	const char*			Name() const { return "Notifications"; }
+	virtual	const char*			Name() const
+		{ return B_TRANSLATE("Notifications"); }
 	virtual	const char*			Category() const { return "system"; }
 	virtual	const char*			Description() const;
 	virtual	const char*			Keywords() const;
@@ -302,11 +309,9 @@ static void
 set_timeout_label(BSlider* slider, int32 timeout)
 {
 	BString label;
-	if (timeout == 1)
-		label = "Timeout: 1 second";
-	else {
-		label.SetToFormat("Timeout: %" B_PRId32 " seconds", timeout);
-	}
+	BStringFormat format(B_TRANSLATE("{0, plural, one{Timeout: # second} "
+		"other{Timeout: # seconds}}"));
+	format.Format(label, timeout);
 	slider->SetLabel(label.String());
 }
 
@@ -316,9 +321,10 @@ send_sample()
 {
 	BNotification notification(B_INFORMATION_NOTIFICATION);
 	notification.SetMessageID("NotificationsSample");
-	notification.SetGroup("Notifications");
-	notification.SetTitle("Notifications sample");
-	notification.SetContent("This is a test notification message");
+	notification.SetGroup(B_TRANSLATE("Notifications"));
+	notification.SetTitle(B_TRANSLATE("Notifications sample"));
+	notification.SetContent(
+		B_TRANSLATE("This is a test notification message"));
 	status_t status = notification.Send();
 	if (status != B_OK) {
 		syslog(LOG_ERR, "settings notifications: sample: %s",
@@ -523,8 +529,10 @@ void
 AppItem::_Refresh()
 {
 	BString label(fName);
-	if (!fAllow)
-		label << " (muted)";
+	if (!fAllow) {
+		label = B_TRANSLATE("%name% (muted)");
+		label.ReplaceFirst("%name%", fName.String());
+	}
 	SetText(label.String());
 }
 
@@ -552,14 +560,14 @@ static const char*
 position_name(int32 position)
 {
 	if (position == (int32)(B_FOLLOW_BOTTOM | B_FOLLOW_RIGHT))
-		return "Lower right";
+		return B_TRANSLATE("Lower right");
 	if (position == (int32)(B_FOLLOW_BOTTOM | B_FOLLOW_LEFT))
-		return "Lower left";
+		return B_TRANSLATE("Lower left");
 	if (position == (int32)(B_FOLLOW_TOP | B_FOLLOW_RIGHT))
-		return "Upper right";
+		return B_TRANSLATE("Upper right");
 	if (position == (int32)(B_FOLLOW_TOP | B_FOLLOW_LEFT))
-		return "Upper left";
-	return "Follow Deskbar";
+		return B_TRANSLATE("Upper left");
+	return B_TRANSLATE("Follow Deskbar");
 }
 
 
@@ -844,7 +852,7 @@ NotificationsView::NotificationsView(NotificationsModule* module)
 	fFilter(NULL),
 	fPanel(NULL)
 {
-	fEnable = new BCheckBox("server", "Enable notifications",
+	fEnable = new BCheckBox("server", B_TRANSLATE("Enable notifications"),
 		new BMessage(kMsgEnable));
 	fEnable->SetFont(r5_settings_bold_font());
 
@@ -853,13 +861,15 @@ NotificationsView::NotificationsView(NotificationsModule* module)
 	int32 maxWidth = (int32)(kMaximumWidth / kWidthStep * ratio);
 	if (maxWidth <= minWidth)
 		maxWidth = minWidth + 1;
-	fWidth = new BSlider("width", "Window width", new BMessage(kMsgWidth),
+	fWidth = new BSlider("width", B_TRANSLATE("Window width"),
+		new BMessage(kMsgWidth),
 		minWidth, maxWidth, B_HORIZONTAL);
 	fWidth->SetHashMarks(B_HASH_MARKS_BOTTOM);
 	fWidth->SetHashMarkCount(maxWidth - minWidth + 1);
-	fWidth->SetLimitLabels("narrow", "wide");
+	fWidth->SetLimitLabels(B_TRANSLATE("narrow"), B_TRANSLATE("wide"));
 
-	fTimeout = new BSlider("duration", "Timeout:", new BMessage(kMsgTimeout),
+	fTimeout = new BSlider("duration", B_TRANSLATE("Timeout:"),
+		new BMessage(kMsgTimeout),
 		kMinimumTimeout, kMaximumTimeout, B_HORIZONTAL);
 	fTimeout->SetHashMarks(B_HASH_MARKS_BOTTOM);
 	fTimeout->SetHashMarkCount(kMaximumTimeout - kMinimumTimeout + 1);
@@ -892,9 +902,12 @@ NotificationsView::NotificationsView(NotificationsModule* module)
 	BScrollView* scroll = new BScrollView("app scroll", fApps, 0, false, true);
 	scroll->SetExplicitMinSize(BSize(220, 160));
 	scroll->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, 220));
-	fAdd = new BButton("add", "Add" B_UTF8_ELLIPSIS, new BMessage(kMsgAdd));
-	fRemove = new BButton("remove", "Remove", new BMessage(kMsgRemove));
-	fMute = new BCheckBox("mute", "Mute notifications from this application",
+	fAdd = new BButton("add", B_TRANSLATE("Add" B_UTF8_ELLIPSIS),
+		new BMessage(kMsgAdd));
+	fRemove = new BButton("remove", B_TRANSLATE("Remove"),
+		new BMessage(kMsgRemove));
+	fMute = new BCheckBox("mute",
+		B_TRANSLATE("Mute notifications from this application"),
 		new BMessage(kMsgMute));
 	float buttonWidth = std::max(fAdd->PreferredSize().Width(),
 		fRemove->PreferredSize().Width());
@@ -902,7 +915,7 @@ NotificationsView::NotificationsView(NotificationsModule* module)
 	fRemove->SetExplicitMinSize(BSize(buttonWidth, B_SIZE_UNSET));
 
 	BBox* applications = new BBox("applications");
-	applications->SetLabel(r5_settings_box_title("Applications"));
+	applications->SetLabel(r5_settings_box_title(B_TRANSLATE("Applications")));
 	BGroupView* applicationsInner = new BGroupView(B_VERTICAL,
 		B_USE_DEFAULT_SPACING);
 	BLayoutBuilder::Group<>(applicationsInner)
@@ -1062,7 +1075,8 @@ NotificationsView::_Edited(bool sample)
 void
 NotificationsView::_Alert(const char* text)
 {
-	BAlert* alert = new BAlert("Notifications", text, "OK", NULL, NULL,
+	BAlert* alert = new BAlert(B_TRANSLATE("Notifications"), text,
+		B_TRANSLATE("OK"), NULL, NULL,
 		B_WIDTH_AS_USUAL, B_WARNING_ALERT);
 	alert->Go(NULL);
 }
@@ -1119,7 +1133,8 @@ NotificationsView::MessageReceived(BMessage* message)
 			ssize_t size = node.ReadAttr("BEOS:APP_SIG", 0, 0, signature,
 				sizeof(signature) - 1);
 			if (size <= 0 || signature[0] == '\0') {
-				_Alert("Application does not have a valid signature.");
+				_Alert(B_TRANSLATE("Application does not have a valid "
+					"signature."));
 				break;
 			}
 			bool exists = false;
@@ -1129,8 +1144,8 @@ NotificationsView::MessageReceived(BMessage* message)
 					exists = true;
 			}
 			if (exists) {
-				BString text(path.Leaf());
-				text << " is already listed.";
+				BString text(B_TRANSLATE("%name% is already listed."));
+				text.ReplaceFirst("%name%", path.Leaf());
 				_Alert(text.String());
 				break;
 			}
@@ -1164,14 +1179,17 @@ NotificationsView::MessageReceived(BMessage* message)
 const char*
 NotificationsModule::Description() const
 {
-	return "Manage alerts and notifications";
+	return B_TRANSLATE_COMMENT("Manage alerts and notifications",
+		"Fixed text (AGENTS.md): translate the meaning, keep it short");
 }
 
 
 const char*
 NotificationsModule::Keywords() const
 {
-	return "timeout position mute width popup alert";
+	return B_TRANSLATE_COMMENT("timeout position mute width popup alert",
+		"Search words, separated by spaces. Keep the English words and add "
+		"words in your language.");
 }
 
 

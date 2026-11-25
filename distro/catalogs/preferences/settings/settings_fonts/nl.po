@@ -1,0 +1,92 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_fonts\nLanguage: nl\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#, fuzzy
+msgctxt "Settings: Fonts"
+msgid "Change the default fonts"
+msgstr "De standaardlettertypen wijzigen"
+
+msgctxt "AntialiasingSettingsView"
+msgid "Strong"
+msgstr "Sterk"
+
+#. Don't translate this literally ! Use a phrase showing all chars from A to Z.
+msgctxt "Font Selection view"
+msgid "The quick brown fox jumps over the lazy dog."
+msgstr "Pa's wijze lynx bezag vroom het fikse aquaduct."
+
+msgctxt "AntialiasingSettingsView"
+msgid "Off"
+msgstr "Uit"
+
+msgctxt "AntialiasingSettingsView"
+msgid "Grayscale"
+msgstr "Grijswaarden"
+
+msgctxt "AntialiasingSettingsView"
+msgid "Antialiasing type:"
+msgstr "Anti-aliasingtype:"
+
+msgctxt "AntialiasingSettingsView"
+msgid "Antialiasing menu"
+msgstr "Anti-aliasing menu"
+
+msgctxt "AntialiasingSettingsView"
+msgid "Hinting menu"
+msgstr "Hinting-menu"
+
+#, fuzzy
+msgctxt "Settings: Fonts"
+msgid "Fonts"
+msgstr "Lettertypen"
+
+msgctxt "AntialiasingSettingsView"
+msgid "On"
+msgstr "Aan"
+
+msgctxt "AntialiasingSettingsView"
+msgid "Monospaced fonts only"
+msgstr "Alleen niet-proportionele lettertypes"
+
+msgctxt "Font Selection view"
+msgid "Size:"
+msgstr "Grootte:"
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+#, fuzzy
+msgctxt "Settings: Fonts"
+msgid "fonts plain bold fixed menu antialiasing hinting"
+msgstr "fonts plain bold fixed menu antialiasing hinting lettertypen lettertype gewoon vet vaste breedte anti-aliasing"
+
+#, fuzzy
+msgctxt "Settings: Fonts"
+msgid "Antialiasing"
+msgstr "Anti-aliasing"
+
+msgctxt "Font view"
+msgid "Plain font:"
+msgstr "Standaardlettertype:"
+
+msgctxt "Font view"
+msgid "Fixed font:"
+msgstr "Vast lettertype:"
+
+msgctxt "AntialiasingSettingsView"
+msgid "LCD subpixel"
+msgstr "LCD-subpixel"
+
+msgctxt "AntialiasingSettingsView"
+msgid "Glyph hinting:"
+msgstr "Glyph hinting:"
+
+msgctxt "AntialiasingSettingsView"
+msgid "Reduce colored edges filter strength:"
+msgstr "Reductie filtersterkte gekleurde randen:"
+
+msgctxt "Font view"
+msgid "Bold font:"
+msgstr "Vet lettertype:"
+
+msgctxt "Font view"
+msgid "Menu font:"
+msgstr "Lettertype voor menu:"

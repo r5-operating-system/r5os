@@ -7,6 +7,10 @@ UsePrivateHeaders interface shared app net r5gpu ;
 UsePrivateHeaders power ;
 UsePrivateSystemHeaders ;
 
+# Settings and each page add-on have a catalog of their own
+# (docs/TRANSLATIONS.md), in objects/catalogs/preferences/settings/<target>.
+HAIKU_MULTIPLE_LOCALIZED_TARGETS on $(SUBDIR) = 1 ;
+
 # Connections and Discovery use the address field, the link speed and the
 # service add-on classes of the Network program, unchanged
 # (src/preferences/network, src/bin/network/ifconfig).
@@ -176,3 +180,46 @@ Addon settings_fonts :
 	SettingsFont.cpp
 	: be shared localestub libr5ui.so [ TargetLibstdc++ ]
 	;
+
+# The catalogs. A page add-on carries its own signature
+# (<target>.rdef), because the Locale Kit finds an image's catalog by the
+# signature of that file. Settings uses application/x-vnd.R5OS-Settings.
+DoCatalogs Settings :
+	x-vnd.R5OS-Settings
+	:
+	SettingsApp.cpp
+	SettingsWindow.cpp
+	SettingsManager.cpp
+	SettingsStorage.cpp
+	SettingsHost.cpp
+	HomeView.cpp
+	SettingsFont.cpp
+	SettingsIcon.cpp
+	;
+
+rule R5SettingsPageCatalog name : sources
+{
+	AddResources $(name) : $(name).rdef ;
+	DoCatalogs $(name) : x-vnd.R5OS-$(name) : $(sources) ;
+}
+
+R5SettingsPageCatalog settings_wallpaper : WallpaperModule.cpp ;
+R5SettingsPageCatalog settings_deskbar : DeskbarModule.cpp ;
+R5SettingsPageCatalog settings_theme : ThemeModule.cpp ColorsView.cpp Colors.cpp ;
+R5SettingsPageCatalog settings_notifications : NotificationsModule.cpp ;
+R5SettingsPageCatalog settings_virtualmemory : VirtualMemoryModule.cpp ;
+R5SettingsPageCatalog settings_power : PowerModule.cpp ;
+R5SettingsPageCatalog settings_information : InformationModule.cpp ;
+R5SettingsPageCatalog settings_display : DisplayModule.cpp DisplayScreens.cpp ;
+R5SettingsPageCatalog settings_wifi : WiFiModule.cpp ;
+R5SettingsPageCatalog settings_connections : ConnectionsModule.cpp NetworkPage.cpp ;
+R5SettingsPageCatalog settings_discovery : DiscoveryModule.cpp NetworkPage.cpp
+	ServiceListItem.cpp ServiceView.cpp ;
+R5SettingsPageCatalog settings_accounts : AccountsModule.cpp AccountDialogs.cpp ;
+R5SettingsPageCatalog settings_sound : LegacySound.cpp LegacyPages.cpp ;
+R5SettingsPageCatalog settings_keyboard : LegacyKeyboard.cpp LegacyPages.cpp ;
+R5SettingsPageCatalog settings_mouse : LegacyMouse.cpp LegacyPages.cpp ;
+R5SettingsPageCatalog settings_printers : LegacyPrinters.cpp LegacyPages.cpp ;
+R5SettingsPageCatalog settings_bluetooth : BluetoothModule.cpp ;
+R5SettingsPageCatalog settings_gamecontrollers : GameControllersModule.cpp NetworkPage.cpp ;
+R5SettingsPageCatalog settings_fonts : FontsModule.cpp FontView.cpp FontSelectionView.cpp AntialiasingSettingsView.cpp ;

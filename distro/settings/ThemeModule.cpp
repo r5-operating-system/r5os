@@ -25,6 +25,7 @@
 #include <AppFileInfo.h>
 #include <Box.h>
 #include <Button.h>
+#include <Catalog.h>
 #include <CheckBox.h>
 #include <ControlLook.h>
 #include <DecorInfo.h>
@@ -55,6 +56,10 @@
 #include "ColorsView.h"
 #include "SettingsFont.h"
 #include "SettingsModule.h"
+
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "Settings: Theme"
 
 
 using namespace BAppearanceKit;
@@ -891,8 +896,10 @@ ThemeCards::_DrawCard(int32 index, BRect frame)
 	plain->GetHeight(&plainHeight);
 
 	BString name(theme.name);
-	if (selected && fChanged)
-		name << " (changed)";
+	if (selected && fChanged) {
+		name = B_TRANSLATE("%name% (changed)");
+		name.ReplaceFirst("%name%", theme.name);
+	}
 	bold->TruncateString(&name, B_TRUNCATE_END, thumb.Width());
 	float y = thumb.bottom + 1 + px(7) + ceilf(boldHeight.ascent);
 	draw_text(this, name.String(), BPoint(thumb.left, y), bold,
@@ -900,11 +907,11 @@ ThemeCards::_DrawCard(int32 index, BRect frame)
 
 	BString sub;
 	if (!is_built_in_theme(theme.name))
-		sub = "Your theme";
+		sub = B_TRANSLATE("Your theme");
 	else if (strcmp(theme.name, "Classic (Haiku)") == 0)
-		sub = "Built in · light only";
+		sub = B_TRANSLATE("Built in · light only");
 	else
-		sub = "Built in";
+		sub = B_TRANSLATE("Built in");
 	BFont small(plain);
 	small.SetSize(plain->Size() * 11.5f / 12.5f);
 	small.TruncateString(&sub, B_TRUNCATE_END, thumb.Width());
@@ -986,12 +993,12 @@ ThemeCards::_DrawSaveCard(BRect frame)
 	font_height plainHeight;
 	plain->GetHeight(&plainHeight);
 	float y = thumb.bottom + 1 + px(7) + ceilf(boldHeight.ascent);
-	draw_text(this, "Save as theme…", BPoint(thumb.left, y), bold,
+	draw_text(this, B_TRANSLATE("Save as theme…"), BPoint(thumb.left, y), bold,
 		ui_color(B_PANEL_TEXT_COLOR));
 	BFont small(plain);
 	small.SetSize(plain->Size() * 11.5f / 12.5f);
 	y += ceilf(boldHeight.descent) + ceilf(plainHeight.ascent);
-	draw_text(this, "Keep these choices", BPoint(thumb.left, y), &small,
+	draw_text(this, B_TRANSLATE("Keep these choices"), BPoint(thumb.left, y), &small,
 		text2_color());
 }
 
@@ -1264,7 +1271,7 @@ SaveThemeWindow::SaveThemeWindow(BWindow* parent, BHandler* target,
 	const theme_info& theme, const char* windowsLabel,
 	const char* controlsLabel)
 	:
-	BWindow(BRect(0, 0, px(440) - 1, px(320) - 1), "Save as theme",
+	BWindow(BRect(0, 0, px(440) - 1, px(320) - 1), B_TRANSLATE("Save as theme"),
 		B_TITLED_WINDOW_LOOK, B_MODAL_SUBSET_WINDOW_FEEL,
 		B_NOT_RESIZABLE | B_NOT_ZOOMABLE | B_NOT_MINIMIZABLE
 			| B_AUTO_UPDATE_SIZE_LIMITS | B_CLOSE_ON_ESCAPE),
@@ -1273,27 +1280,32 @@ SaveThemeWindow::SaveThemeWindow(BWindow* parent, BHandler* target,
 	if (parent != NULL)
 		AddToSubset(parent);
 
-	BStringView* nameLabel = new BStringView("name label", "Name");
+	BStringView* nameLabel = new BStringView("name label", B_TRANSLATE("Name"));
 	nameLabel->SetFont(r5_settings_bold_font());
 	BString suggestion(is_built_in_theme(theme.name) ? "" : theme.name);
 	fName = new BTextControl("name", NULL, suggestion.String(),
 		new BMessage(kMsgSaveNameChanged));
 	fName->SetModificationMessage(new BMessage(kMsgSaveNameChanged));
 
-	BStringView* keepLabel = new BStringView("keep", "Keep in this theme");
+	BStringView* keepLabel = new BStringView("keep",
+		B_TRANSLATE("Keep in this theme"));
 	keepLabel->SetFont(r5_settings_bold_font());
 
 	BString labels[6];
-	labels[0] << "Windows · " << windowsLabel;
-	labels[1] << "Controls · " << controlsLabel;
-	labels[2] << "Scrollbars · "
-		<< (theme.double_arrows ? "double arrows" : "single arrows");
-	labels[3] << "Deskbar · "
-		<< (theme.deskbar_style == B_THEME_DESKBAR_CLASSIC
-			? "Classic (Haiku)" : "Default (R5)")
-		<< ", " << (theme.deskbar_layout == B_THEME_DESKBAR_COMPACT ? "Compact"
-			: theme.deskbar_layout == B_THEME_DESKBAR_HORIZONTAL ? "Horizontal"
-			: "Vertical");
+	labels[0] = B_TRANSLATE("Windows · %windows%");
+	labels[0].ReplaceFirst("%windows%", windowsLabel);
+	labels[1] = B_TRANSLATE("Controls · %controls%");
+	labels[1].ReplaceFirst("%controls%", controlsLabel);
+	labels[2] = theme.double_arrows ? B_TRANSLATE("Scrollbars · double arrows")
+		: B_TRANSLATE("Scrollbars · single arrows");
+	labels[3] = B_TRANSLATE("Deskbar · %style%, %layout%");
+	labels[3].ReplaceFirst("%style%",
+		theme.deskbar_style == B_THEME_DESKBAR_CLASSIC
+			? B_TRANSLATE("Classic (Haiku)") : B_TRANSLATE("Default (R5)"));
+	labels[3].ReplaceFirst("%layout%",
+		theme.deskbar_layout == B_THEME_DESKBAR_COMPACT ? B_TRANSLATE("Compact")
+			: theme.deskbar_layout == B_THEME_DESKBAR_HORIZONTAL
+				? B_TRANSLATE("Horizontal") : B_TRANSLATE("Vertical"));
 	int32 accent = -1;
 	for (int32 i = 0; i < count_theme_accents(); i++) {
 		rgb_color color = theme_accent_at(i, theme.mode);
@@ -1303,12 +1315,14 @@ SaveThemeWindow::SaveThemeWindow(BWindow* parent, BHandler* target,
 			accent = i;
 	}
 	BString accentName(accent >= 0 ? theme_accent_name(accent)
-		: theme.accent.alpha != 0 ? "own accent" : "Blue");
+		: theme.accent.alpha != 0 ? B_TRANSLATE("own accent")
+			: B_TRANSLATE("Blue"));
 	accentName.ToLower();
-	labels[4] << "Mode and colors · "
-		<< (theme.mode == B_THEME_DARK ? "Dark" : "Light") << ", "
-		<< accentName;
-	labels[5] = "Effects";
+	labels[4] = B_TRANSLATE("Mode and colors · %mode%, %accent%");
+	labels[4].ReplaceFirst("%mode%",
+		theme.mode == B_THEME_DARK ? B_TRANSLATE("Dark") : B_TRANSLATE("Light"));
+	labels[4].ReplaceFirst("%accent%", accentName.String());
+	labels[5] = B_TRANSLATE("Effects");
 
 	for (int32 i = 0; i < 6; i++) {
 		fParts[i] = new BCheckBox(labels[i].String(), labels[i].String(),
@@ -1317,13 +1331,15 @@ SaveThemeWindow::SaveThemeWindow(BWindow* parent, BHandler* target,
 	}
 
 	BStringView* note = new QuietLabel("note",
-		"Saved in your own settings. The built-in themes stay as they are.");
+		B_TRANSLATE("Saved in your own settings. The built-in themes stay as "
+			"they are."));
 	BFont small(r5_settings_plain_font());
 	small.SetSize(small.Size() * 12.0f / 12.5f);
 	note->SetFont(&small);
 
-	BButton* cancel = new BButton("Cancel", new BMessage(B_QUIT_REQUESTED));
-	fSave = new BButton("Save", new BMessage(kMsgSaveConfirm));
+	BButton* cancel = new BButton(B_TRANSLATE("Cancel"),
+		new BMessage(B_QUIT_REQUESTED));
+	fSave = new BButton(B_TRANSLATE("Save"), new BMessage(kMsgSaveConfirm));
 
 	float spacing = px(14);
 	BGroupView* root = new BGroupView("save-root", B_VERTICAL, spacing);
@@ -1396,9 +1412,10 @@ SaveThemeWindow::MessageReceived(BMessage* message)
 			if (name.Length() == 0 || parts == 0)
 				break;
 			if (is_built_in_theme(name.String())) {
-				BAlert* alert = new BAlert("Save as theme",
-					"This is the name of a built-in theme. The built-in themes "
-					"stay as they are; choose another name.", "OK");
+				BAlert* alert = new BAlert(B_TRANSLATE("Save as theme"),
+					B_TRANSLATE("This is the name of a built-in theme. The "
+						"built-in themes stay as they are; choose another name."),
+					B_TRANSLATE("OK"));
 				alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
 				alert->Go(NULL);
 				break;
@@ -1411,8 +1428,9 @@ SaveThemeWindow::MessageReceived(BMessage* message)
 			if (control || name == "." || name == ".."
 				|| name.FindFirst('/') >= 0 || name.FindFirst('"') >= 0
 				|| name.FindFirst('\\') >= 0) {
-				BAlert* alert = new BAlert("Save as theme",
-					"A theme name cannot contain / \\ or \".", "OK");
+				BAlert* alert = new BAlert(B_TRANSLATE("Save as theme"),
+					B_TRANSLATE("A theme name cannot contain / \\ or \"."),
+					B_TRANSLATE("OK"));
 				alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
 				alert->Go(NULL);
 				break;
@@ -1506,14 +1524,17 @@ public:
 								ThemeModule();
 
 	virtual	const char*			Identifier() const { return kModuleId; }
-	virtual	const char*			Name() const { return "Theme"; }
+	virtual	const char*			Name() const { return B_TRANSLATE("Theme"); }
 	virtual	const char*			Category() const
 									{ return "personalization"; }
 	virtual	const char*			Description() const
-		{ return "Choose how windows, controls and the Deskbar look"; }
+		{ return B_TRANSLATE("Choose how windows, controls and the Deskbar "
+			"look"); }
 	virtual	const char*			Keywords() const
-		{ return "theme dark light mode accent colors look controls "
-			"decorator windows scrollbars deskbar effects"; }
+		{ return B_TRANSLATE_COMMENT("theme dark light mode accent colors look "
+			"controls decorator windows scrollbars deskbar effects",
+			"Search words, separated by spaces. Keep the English words and "
+			"add words in your language."); }
 	virtual	BView*				CreateView(SettingsContext* context,
 									BRect frame);
 	virtual	status_t			LoadSettings(SettingsContext* context);
@@ -1580,24 +1601,26 @@ ThemePage::ThemePage(ThemeModule* module)
 
 	fCards = new ThemeCards();
 
-	BStringView* modeLabel = new BStringView("mode label", "Mode");
+	BStringView* modeLabel = new BStringView("mode label",
+		B_TRANSLATE("Mode"));
 	fMode = new SegmentedControl("mode", new BMessage(kMsgMode), 26, 12);
-	fMode->AddSegment("Light", R5_GLYPH_SUN);
-	fMode->AddSegment("Dark", R5_GLYPH_MOON);
-	BStringView* accentLabel = new BStringView("accent label", "Accent");
+	fMode->AddSegment(B_TRANSLATE("Light"), R5_GLYPH_SUN);
+	fMode->AddSegment(B_TRANSLATE("Dark"), R5_GLYPH_MOON);
+	BStringView* accentLabel = new BStringView("accent label",
+		B_TRANSLATE("Accent"));
 	fAccent = new AccentControl(new BMessage(kMsgAccent));
 
 	// Parts
 	fWindowsMenu = new BPopUpMenu("windows");
 	_BuildWindowsMenu();
 	fWindows = new BMenuField("windows", NULL, fWindowsMenu);
-	BButton* windowsAbout = new BButton("windows about", "About",
+	BButton* windowsAbout = new BButton("windows about", B_TRANSLATE("About"),
 		new BMessage(kMsgWindowsAbout));
 
 	fControlsMenu = new BPopUpMenu("controls");
 	_BuildControlsMenu();
 	fControls = new BMenuField("controls", NULL, fControlsMenu);
-	BButton* controlsAbout = new BButton("controls about", "About",
+	BButton* controlsAbout = new BButton("controls about", B_TRANSLATE("About"),
 		new BMessage(kMsgControlsAbout));
 
 	fScrollMenu = new BPopUpMenu("scroll bars");
@@ -1605,48 +1628,53 @@ ThemePage::ThemePage(ThemeModule* module)
 	add_item(fScrollMenu, "Haiku", kMsgScrollBars, NULL, NULL, 0);
 	fScroll = new BMenuField("scroll bars", NULL, fScrollMenu);
 	fArrows = new SegmentedControl("arrows", new BMessage(kMsgArrows), 22, 10);
-	fArrows->AddSegment("Single");
-	fArrows->AddSegment("Double");
+	fArrows->AddSegment(B_TRANSLATE("Single"));
+	fArrows->AddSegment(B_TRANSLATE("Double"));
 	// the width a theme gives its scroll bars (Haiku's stays the default)
 	fWidthMenu = new BPopUpMenu("scroll bar width");
-	add_item(fWidthMenu, "Thin", kMsgScrollWidth, NULL, NULL,
+	add_item(fWidthMenu, B_TRANSLATE("Thin"), kMsgScrollWidth, NULL, NULL,
 		B_THEME_SCROLL_BAR_THIN);
-	add_item(fWidthMenu, "Haiku width", kMsgScrollWidth, NULL, NULL, 0);
-	add_item(fWidthMenu, "Wide", kMsgScrollWidth, NULL, NULL,
+	add_item(fWidthMenu, B_TRANSLATE("Haiku width"), kMsgScrollWidth, NULL,
+		NULL, 0);
+	add_item(fWidthMenu, B_TRANSLATE("Wide"), kMsgScrollWidth, NULL, NULL,
 		B_THEME_SCROLL_BAR_WIDE);
 	fWidth = new BMenuField("scroll bar width", NULL, fWidthMenu);
 	fPreview = new ScrollBarPreview();
 
 	fStyleMenu = new BPopUpMenu("deskbar style");
-	add_item(fStyleMenu, "Default (R5)", kMsgDeskbarStyle, NULL, NULL,
+	add_item(fStyleMenu, B_TRANSLATE("Default (R5)"), kMsgDeskbarStyle, NULL, NULL,
 		B_THEME_DESKBAR_R5);
-	add_item(fStyleMenu, "Classic (Haiku)", kMsgDeskbarStyle, NULL, NULL,
+	add_item(fStyleMenu, B_TRANSLATE("Classic (Haiku)"), kMsgDeskbarStyle, NULL, NULL,
 		B_THEME_DESKBAR_CLASSIC);
 	fStyle = new BMenuField("deskbar style", NULL, fStyleMenu);
 	fLayoutMenu = new BPopUpMenu("deskbar layout");
-	add_item(fLayoutMenu, "Vertical", kMsgDeskbarLayout, NULL, NULL,
+	add_item(fLayoutMenu, B_TRANSLATE("Vertical"), kMsgDeskbarLayout, NULL, NULL,
 		B_THEME_DESKBAR_VERTICAL);
-	add_item(fLayoutMenu, "Compact", kMsgDeskbarLayout, NULL, NULL,
+	add_item(fLayoutMenu, B_TRANSLATE("Compact"), kMsgDeskbarLayout, NULL, NULL,
 		B_THEME_DESKBAR_COMPACT);
-	add_item(fLayoutMenu, "Horizontal", kMsgDeskbarLayout, NULL, NULL,
+	add_item(fLayoutMenu, B_TRANSLATE("Horizontal"), kMsgDeskbarLayout, NULL, NULL,
 		B_THEME_DESKBAR_HORIZONTAL);
 	fLayout = new BMenuField("deskbar layout", NULL, fLayoutMenu);
-	fRounded = new BCheckBox("rounded", "Rounded",
+	fRounded = new BCheckBox("rounded", B_TRANSLATE("Rounded"),
 		new BMessage(kMsgDeskbarCheck));
-	fFloating = new BCheckBox("floating", "Away from the screen edges",
+	fFloating = new BCheckBox("floating",
+		B_TRANSLATE("Away from the screen edges"),
 		new BMessage(kMsgDeskbarCheck));
 
-	fShadow = new BCheckBox("shadow", "Shadow", new BMessage(kMsgEffects));
-	fGlass = new BCheckBox("glass", "Frosted glass", new BMessage(kMsgEffects));
-	fAnimations = new BCheckBox("animations", "Animations",
+	fShadow = new BCheckBox("shadow", B_TRANSLATE("Shadow"),
 		new BMessage(kMsgEffects));
-	BStringView* strengthLabel = new QuietLabel("strength label", "Strength");
+	fGlass = new BCheckBox("glass", B_TRANSLATE("Frosted glass"),
+		new BMessage(kMsgEffects));
+	fAnimations = new BCheckBox("animations", B_TRANSLATE("Animations"),
+		new BMessage(kMsgEffects));
+	BStringView* strengthLabel = new QuietLabel("strength label",
+		B_TRANSLATE("Strength"));
 	fStrengthMenu = new BPopUpMenu("strength");
-	add_item(fStrengthMenu, "Quiet", kMsgStrength, NULL, NULL,
+	add_item(fStrengthMenu, B_TRANSLATE("Quiet"), kMsgStrength, NULL, NULL,
 		B_WINDOW_EFFECTS_QUIET);
-	add_item(fStrengthMenu, "Balanced", kMsgStrength, NULL, NULL,
+	add_item(fStrengthMenu, B_TRANSLATE("Balanced"), kMsgStrength, NULL, NULL,
 		B_WINDOW_EFFECTS_BALANCED);
-	add_item(fStrengthMenu, "Glassy", kMsgStrength, NULL, NULL,
+	add_item(fStrengthMenu, B_TRANSLATE("Glassy"), kMsgStrength, NULL, NULL,
 		B_WINDOW_EFFECTS_GLASSY);
 	fStrength = new BMenuField("strength", NULL, fStrengthMenu);
 
@@ -1663,19 +1691,19 @@ ThemePage::ThemePage(ThemeModule* module)
 	fPartsGrid->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
 	BLayoutBuilder::Grid<>(fPartsGrid, px(12), px(7))
 		.SetInsets(px(14), px(4), px(14), px(10))
-		.Add(row_label("Windows"), 0, 0)
+		.Add(row_label(B_TRANSLATE("Windows")), 0, 0)
 		.AddGroup(B_HORIZONTAL, px(8), 1, 0)
 			.Add(fWindows)
 			.Add(windowsAbout)
 			.AddGlue()
 		.End()
-		.Add(row_label("Controls"), 0, 1)
+		.Add(row_label(B_TRANSLATE("Controls")), 0, 1)
 		.AddGroup(B_HORIZONTAL, px(8), 1, 1)
 			.Add(fControls)
 			.Add(controlsAbout)
 			.AddGlue()
 		.End()
-		.Add(row_label("Scrollbars"), 0, 2)
+		.Add(row_label(B_TRANSLATE("Scrollbars")), 0, 2)
 		.AddGroup(B_HORIZONTAL, px(12), 1, 2)
 			.Add(fScroll)
 			.Add(fArrows)
@@ -1683,7 +1711,7 @@ ThemePage::ThemePage(ThemeModule* module)
 			.Add(fPreview)
 			.AddGlue()
 		.End()
-		.Add(row_label("Deskbar"), 0, 3)
+		.Add(row_label(B_TRANSLATE("Deskbar")), 0, 3)
 		.AddGroup(B_HORIZONTAL, px(12), 1, 3)
 			.Add(fStyle)
 			.Add(fLayout)
@@ -1691,7 +1719,7 @@ ThemePage::ThemePage(ThemeModule* module)
 			.Add(fFloating)
 			.AddGlue()
 		.End()
-		.Add(row_label("Effects"), 0, 4)
+		.Add(row_label(B_TRANSLATE("Effects")), 0, 4)
 		.AddGroup(B_HORIZONTAL, px(14), 1, 4)
 			.Add(fShadow)
 			.Add(fGlass)
@@ -1707,13 +1735,14 @@ ThemePage::ThemePage(ThemeModule* module)
 		grid->SetColumnWeight(1, 1.0f);
 	}
 
-	fPartsLabel = new PartsLabel("Parts", kMsgParts, true);
+	fPartsLabel = new PartsLabel(B_TRANSLATE("Parts"), kMsgParts, true);
 	fPartsBox = new BBox("parts");
 	fPartsBox->SetFlags(fPartsBox->Flags() | B_FULL_UPDATE_ON_RESIZE);
 	fPartsBox->SetLabel(fPartsLabel);
 	fPartsBox->AddChild(fPartsGrid);
 
-	fColorsLabel = new PartsLabel("Custom colors", kMsgCustomColors, false);
+	fColorsLabel = new PartsLabel(B_TRANSLATE("Custom colors"),
+		kMsgCustomColors, false);
 	fColorsBox = new BBox("custom colors");
 	fColorsBox->SetFlags(fColorsBox->Flags() | B_FULL_UPDATE_ON_RESIZE);
 	fColors = new ColorsView("colors");
@@ -1822,7 +1851,8 @@ ThemePage::_BuildWindowsMenu()
 			"decor", shortcuts.StringAt(i).String());
 	}
 	// Haiku's built-in one last, as Appearance lists it
-	add_item(fWindowsMenu, "Classic (Haiku)", kMsgWindows, "decor", "");
+	add_item(fWindowsMenu, B_TRANSLATE("Classic (Haiku)"), kMsgWindows, "decor",
+		"");
 }
 
 
@@ -2003,9 +2033,11 @@ ThemePage::_Apply(const theme_info& info, uint32 parts)
 	theme_info next = info;
 	status_t status = set_theme(&next, parts);
 	if (status != B_OK) {
-		BString text("Not every part of the theme could be set: ");
-		text << strerror(status);
-		BAlert* alert = new BAlert("Theme", text.String(), "OK");
+		BString text(B_TRANSLATE("Not every part of the theme could be set: "
+			"%error%"));
+		text.ReplaceFirst("%error%", strerror(status));
+		BAlert* alert = new BAlert(B_TRANSLATE("Theme"), text.String(),
+			B_TRANSLATE("OK"));
 		alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
 		alert->Go(NULL);
 		get_theme(&fCurrent);
@@ -2042,16 +2074,22 @@ ThemePage::_ShowAbout(bool windows)
 		if (decor == NULL)
 			return;
 		text << _WindowsLabel(fCurrent.decorator) << "\n\n";
-		if (decor->Authors().Length() > 0)
-			text << "Authors: " << decor->Authors() << "\n";
-		if (decor->LicenseName().Length() > 0)
-			text << "License: " << decor->LicenseName() << "\n";
+		if (decor->Authors().Length() > 0) {
+			BString line(B_TRANSLATE("Authors: %authors%"));
+			line.ReplaceFirst("%authors%", decor->Authors().String());
+			text << line << "\n";
+		}
+		if (decor->LicenseName().Length() > 0) {
+			BString line(B_TRANSLATE("License: %license%"));
+			line.ReplaceFirst("%license%", decor->LicenseName().String());
+			text << line << "\n";
+		}
 		if (decor->ShortDescription().Length() > 0)
 			text << "\n" << decor->ShortDescription();
 	} else {
 		text << control_look_label(fCurrent.control_look) << "\n\n";
 		if (fCurrent.control_look[0] == '\0')
-			text << "The controls of Haiku, built into the system.";
+			text << B_TRANSLATE("The controls of Haiku, built into the system.");
 		else {
 			BPathFinder finder;
 			BPath path;
@@ -2070,7 +2108,8 @@ ThemePage::_ShowAbout(bool windows)
 			}
 		}
 	}
-	BAlert* alert = new BAlert("About", text.String(), "OK");
+	BAlert* alert = new BAlert(B_TRANSLATE("About"), text.String(),
+		B_TRANSLATE("OK"));
 	alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
 	alert->Go(NULL);
 }
@@ -2259,9 +2298,11 @@ ThemePage::MessageReceived(BMessage* message)
 			strlcpy(info.name, name, sizeof(info.name));
 			status_t status = save_theme(&info, parts);
 			if (status != B_OK) {
-				BString text("The theme could not be saved: ");
-				text << strerror(status);
-				(new BAlert("Save as theme", text.String(), "OK"))->Go(NULL);
+				BString text(B_TRANSLATE("The theme could not be saved: "
+					"%error%"));
+				text.ReplaceFirst("%error%", strerror(status));
+				(new BAlert(B_TRANSLATE("Save as theme"), text.String(),
+					B_TRANSLATE("OK")))->Go(NULL);
 				break;
 			}
 			// the new theme is the one in use now, unchanged
@@ -2279,11 +2320,12 @@ ThemePage::MessageReceived(BMessage* message)
 				targetName = fromCard;
 			if (is_built_in_theme(targetName))
 				break;
-			BString text;
-			text << "Delete the theme \"" << targetName << "\"? What you "
-				"see now stays as it is.";
-			BAlert* alert = new BAlert("Delete", text.String(), "Cancel",
-				"Delete", NULL, B_WIDTH_AS_USUAL, B_WARNING_ALERT);
+			BString text(B_TRANSLATE("Delete the theme \"%name%\"? What you "
+				"see now stays as it is."));
+			text.ReplaceFirst("%name%", targetName);
+			BAlert* alert = new BAlert(B_TRANSLATE("Delete"), text.String(),
+				B_TRANSLATE("Cancel"), B_TRANSLATE("Delete"), NULL,
+				B_WIDTH_AS_USUAL, B_WARNING_ALERT);
 			alert->SetShortcut(0, B_ESCAPE);
 			if (alert->Go() != 1)
 				break;

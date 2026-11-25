@@ -20,6 +20,7 @@
 
 #include <Alert.h>
 #include <Button.h>
+#include <Catalog.h>
 #include <CheckBox.h>
 #include <Directory.h>
 #include <Entry.h>
@@ -53,6 +54,10 @@
 // kMsgSettingsItemUpdated and gNetworkWindow, which the add-on classes use
 #include "NetworkWindow.h"
 #include "ServiceView.h"
+
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "Settings: Discovery"
 
 
 using BNetworkKit::BNetworkSettings;
@@ -108,7 +113,7 @@ host_name()
 	char host[64];
 	memset(host, 0, sizeof(host));
 	if (gethostname(host, sizeof(host) - 1) != 0 || host[0] == '\0')
-		return BString("This computer");
+		return BString(B_TRANSLATE("This computer"));
 	return BString(host);
 }
 
@@ -207,15 +212,16 @@ private:
 DiscoveryRenameWindow::DiscoveryRenameWindow(const char* name,
 	const BMessenger& target)
 	:
-	BWindow(BRect(0, 0, 360, 120), "Rename", B_TITLED_WINDOW,
+	BWindow(BRect(0, 0, 360, 120), B_TRANSLATE("Rename"), B_TITLED_WINDOW,
 		B_NOT_RESIZABLE | B_AUTO_UPDATE_SIZE_LIMITS | B_CLOSE_ON_ESCAPE),
 	fTarget(target)
 {
-	fName = new BTextControl("name", "Name:", name, NULL);
+	fName = new BTextControl("name", B_TRANSLATE("Name:"), name,
+		NULL);
 	fError = new BStringView("error", "");
-	BButton* cancel = new BButton("cancel", "Cancel",
+	BButton* cancel = new BButton("cancel", B_TRANSLATE("Cancel"),
 		new BMessage(B_QUIT_REQUESTED));
-	BButton* rename = new BButton("rename", "Rename",
+	BButton* rename = new BButton("rename", B_TRANSLATE("Rename"),
 		new BMessage(kMsgApplyName));
 	BLayoutBuilder::Group<>(this, B_VERTICAL, B_USE_SMALL_SPACING)
 		.SetInsets(B_USE_WINDOW_SPACING)
@@ -244,8 +250,8 @@ DiscoveryRenameWindow::MessageReceived(BMessage* message)
 	}
 	const char* name = fName->Text();
 	if (!name_ok(name)) {
-		fError->SetText("Use letters, digits and -, up to 63, "
-			"not starting or ending with -.");
+		fError->SetText(B_TRANSLATE("Use letters, digits and -, up to 63, "
+			"not starting or ending with -."));
 		return;
 	}
 	BMessage apply(kMsgApplyName);
@@ -361,15 +367,19 @@ public:
 	virtual						~DiscoveryModule();
 
 	virtual	const char*			Identifier() const { return kModuleId; }
-	virtual	const char*			Name() const { return "Discovery"; }
+	virtual	const char*			Name() const
+									{ return B_TRANSLATE("Discovery"); }
 	virtual	const char*			Category() const { return "network"; }
 	virtual	const char*			Description() const
-									{ return "Find devices and services on "
-										"this network"; }
+									{ return B_TRANSLATE("Find devices and services "
+										"on this network"); }
 	virtual	const char*			Keywords() const
-									{ return "network bonjour mdns local name "
-										"hostname ssh ftp telnet share "
-										"printer airplay"; }
+									{ return B_TRANSLATE_COMMENT("network bonjour mdns "
+										"local name hostname ssh ftp telnet "
+										"share printer airplay",
+										"Search words, separated by spaces. Keep "
+										"the English words and add words in your "
+										"language."); }
 	virtual	bool				RequiresAdmin() const { return true; }
 	virtual	BView*				CreateView(SettingsContext* context,
 									BRect frame);
@@ -422,19 +432,21 @@ DiscoveryView::DiscoveryView(DiscoveryModule* module)
 	BGroupView* group;
 
 	// This computer
-	BBox* computerBox = _Box("This computer", group);
-	BStringView* nameLabel = new BStringView("name label", "Name:");
+	BBox* computerBox = _Box(B_TRANSLATE("This computer"), group);
+	BStringView* nameLabel = new BStringView("name label",
+		B_TRANSLATE("Name:"));
 	BStringView* localLabel = new BStringView("local label",
-		"On this network:");
+		B_TRANSLATE("On this network:"));
 	nameLabel->SetAlignment(B_ALIGN_RIGHT);
 	localLabel->SetAlignment(B_ALIGN_RIGHT);
 	fName = new BStringView("name", "");
 	fName->SetFont(be_bold_font);
-	fRename = new LinkControl("rename", "Rename…", new BMessage(kMsgRename));
+	fRename = new LinkControl("rename", B_TRANSLATE("Rename…"),
+		new BMessage(kMsgRename));
 	fLocalName = new BStringView("local name", "");
 	fLocalName->SetFont(be_fixed_font);
 	fDiscoverable = new BCheckBox("discoverable",
-		"Let other devices find this computer",
+		B_TRANSLATE("Let other devices find this computer"),
 		new BMessage(kMsgDiscoverable));
 	BGridView* grid = new BGridView(u * 12, u * 6);
 	grid->SetViewColor(network_box_fill());
@@ -456,7 +468,8 @@ DiscoveryView::DiscoveryView(DiscoveryModule* module)
 		.Add(fDiscoverable);
 
 	// Shared from this computer: the Network program's service add-ons
-	BBox* sharedBox = _Box("Shared from this computer", group);
+	BBox* sharedBox = _Box(B_TRANSLATE("Shared from this computer"),
+		group);
 	fServices = new BListView("services");
 	fServices->SetSelectionMessage(new BMessage(kMsgServiceSelected));
 	BScrollView* servicesScroll = new BScrollView("services scroll",
@@ -473,21 +486,22 @@ DiscoveryView::DiscoveryView(DiscoveryModule* module)
 			.Add(servicesScroll, 0)
 			.Add(fServiceShell, 1)
 			.End()
-		.Add(network_hint("An item that is on is also announced, so other "
-			"devices list it."), 0);
+		.Add(network_hint(B_TRANSLATE("An item that is on is also announced, "
+			"so other devices list it.")), 0);
 
 	// Find devices
-	BBox* findBox = _Box("Find devices (Bonjour)", group);
+	BBox* findBox = _Box(B_TRANSLATE("Find devices (Bonjour)"), group);
 	fDevices = new BListView("devices");
 	BScrollView* scroll = new BScrollView("devices scroll", fDevices, 0,
 		false, true);
-	fRefresh = new BButton("refresh", "Refresh", new BMessage(kMsgRefresh));
+	fRefresh = new BButton("refresh", B_TRANSLATE("Refresh"),
+		new BMessage(kMsgRefresh));
 	BLayoutBuilder::Group<>(group)
 		.Add(scroll)
 		.AddGroup(B_HORIZONTAL, u * 10)
-			.Add(network_hint("Programs can reach a .local name. Printers "
-				"and speakers in this list are also offered by Printers and "
-				"AirPlay."), 1)
+			.Add(network_hint(B_TRANSLATE("Programs can reach a .local name. "
+				"Printers and speakers in this list are also offered by "
+				"Printers and AirPlay.")), 1)
 			.Add(fRefresh, 0)
 			.End();
 
@@ -674,10 +688,10 @@ DiscoveryView::_SearchThread(void* data)
 		const char*	type;
 		const char*	kind;
 	} types[] = {
-		{ "_ipp._tcp.local", "Printer" },
-		{ "_airplay._tcp.local", "AirPlay speaker" },
+		{ "_ipp._tcp.local", B_TRANSLATE("Printer") },
+		{ "_airplay._tcp.local", B_TRANSLATE("AirPlay speaker") },
 		{ "_ssh._tcp.local", "SSH" },
-		{ "_smb._tcp.local", "File sharing" }
+		{ "_smb._tcp.local", B_TRANSLATE("File sharing") }
 	};
 
 	BMessage found(kMsgFound);
@@ -770,8 +784,9 @@ DiscoveryView::MessageReceived(BMessage* message)
 				fDevices->AddItem(new DeviceItem(name, detail));
 			}
 			if (fDevices->IsEmpty()) {
-				fDevices->AddItem(new DeviceItem("Nothing found",
-					"No device answered on this network."));
+				fDevices->AddItem(new DeviceItem(
+					B_TRANSLATE("Nothing found"),
+					B_TRANSLATE("No device answered on this network.")));
 			}
 			break;
 		}
@@ -928,7 +943,8 @@ DiscoveryModule::_Apply(const DiscoverySetup& to)
 		else {
 			result = B_ERROR;
 			BAlert* alert = new BAlert("Rename",
-				"The name could not be saved.", "OK", NULL, NULL,
+				B_TRANSLATE("The name could not be saved."), B_TRANSLATE("OK"),
+				NULL, NULL,
 				B_WIDTH_AS_USUAL, B_WARNING_ALERT);
 			alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
 			alert->Go(NULL);

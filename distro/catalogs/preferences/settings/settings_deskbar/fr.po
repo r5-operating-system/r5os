@@ -1,0 +1,124 @@
+msgid ""
+msgstr "Project-Id-Version: x-vnd.R5OS-settings_deskbar\nLanguage: fr\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Expand new applications"
+msgstr "Développer les nouvelles applications"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Hide application names"
+msgstr "Masquer le nom des applications"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Sort applications by name"
+msgstr "Trier les applications par nom"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Show application expander"
+msgstr "Afficher les flèches de développement"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Auto-raise"
+msgstr "Premier plan automatique"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Icon size"
+msgstr "Taille des icônes"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Open Theme…"
+msgstr "Ouvrir Thème…"
+
+#. Search words, separated by spaces. Keep the English words and add words in your language.
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "deskbar desktop menu recent applications location"
+msgstr "deskbar desktop menu recent applications location bureau récents récentes emplacement position"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Menu"
+msgstr "Menu"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Edit in Tracker…"
+msgstr "Modifier dans Tracker…"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Tracker always first"
+msgstr "Tracker toujours en premier"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Recent applications:"
+msgstr "Applications récentes :"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Recent folders:"
+msgstr "Dossiers récents :"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Large"
+msgstr "Grande"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Deskbar appearance (style, layout, corners, floating) is set in Theme."
+msgstr "L'apparence de la Deskbar (style, disposition, coins, flottante) se règle dans Thème."
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Applications"
+msgstr "Applications"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Window"
+msgstr "Fenêtre"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Always on top"
+msgstr "Toujours au premier plan"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Desktop and Deskbar"
+msgstr "Bureau et Deskbar"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Recent documents:"
+msgstr "Documents récents :"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Show applications"
+msgstr "Afficher les applications"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Small"
+msgstr "Petite"
+
+#. Fixed text (AGENTS.md): translate the meaning, keep it short
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Adjust desktop and Deskbar settings"
+msgstr "Régler le bureau et la Deskbar"
+
+#, fuzzy
+msgctxt "Settings: Desktop and Deskbar"
+msgid "Auto-hide"
+msgstr "Masquage automatique"

@@ -1,0 +1,29 @@
+1	english	x-vnd.R5OS-settings_display	2998433189
+Resolution:	Settings: Display		Resolution:
+Apply	Settings: Display		Apply
+The Deskbar is on screen %number%.	Settings: Display		The Deskbar is on screen %number%.
+Do you wish to keep these settings?\nThe previous picture returns after 12 seconds.	Settings: Display		Do you wish to keep these settings?\nThe previous picture returns after 12 seconds.
+Colors:	Settings: Display		Colors:
+Screen	Settings: Display		Screen
+Keep	Settings: Display		Keep
+{0, plural, one{# workspace. Changes right away. Every screen follows the same workspace.} other{# workspaces. Changes right away. Every screen follows the same workspace.}}	Settings: Display		{0, plural, one{# workspace. Changes right away. Every screen follows the same workspace.} other{# workspaces. Changes right away. Every screen follows the same workspace.}}
+Screen %number% – %name%	Settings: Display		Screen %number% – %name%
+Screen	Settings: Display screens		Screen
+Display	Settings: Display		Display
+%resolution% (recommended)	Settings: Display		%resolution% (recommended)
+screen display resolution refresh colors workspaces	Settings: Display	Search words, separated by spaces. Keep the English words and add words in your language.	screen display resolution refresh colors workspaces
+%bits% bits/pixel	Settings: Display		%bits% bits/pixel
+Arrangement	Settings: Display		Arrangement
+Screen – %name%	Settings: Display		Screen – %name%
+Rows:	Settings: Display		Rows:
+Apply to:	Settings: Display		Apply to:
+All workspaces	Settings: Display		All workspaces
+Columns:	Settings: Display		Columns:
+The screen mode could not be set.\n	Settings: Display		The screen mode could not be set.\n
+OK	Settings: Display		OK
+Drag the screens to match your desk. Click one to change it.	Settings: Display		Drag the screens to match your desk. Click one to change it.
+Refresh rate:	Settings: Display		Refresh rate:
+This workspace	Settings: Display		This workspace
+Screens, resolution, and workspaces	Settings: Display		Screens, resolution, and workspaces
+Undo	Settings: Display		Undo
+Workspaces	Settings: Display		Workspaces
