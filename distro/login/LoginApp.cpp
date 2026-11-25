@@ -133,6 +133,26 @@ team_named(const char* needle)
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 static void stop_teams_of_uid(uid_t uid);
+
+
+/*!	Returns the uid of the desktop app_server shows, or -1. The query waits
+	for app_server's desktop lock, so after a slow switch it answers once the
+	switch is done.
+*/
+static int32
+app_server_active_user(bigtime_t timeout)
+{
+	BMessenger appServer("application/x-vnd.Haiku-app_server");
+	if (!appServer.IsValid())
+		return -1;
+	BMessage req(AS_R5_DESKTOP_INFO);
+	BMessage reply;
+	if (r5_admin_send(appServer, &req, &reply, timeout) != B_OK
+		|| (status_t)reply.what != B_OK) {
+		return -1;
+	}
+	return reply.GetInt32("active_user", -1);
+}
 // SPDX-SnippetEnd
 
 
@@ -743,7 +763,20 @@ LoginApp::TryLogin(BMessage* message)
 						_LaunchSessionHooks(login);
 					}
 					if (status == B_OK) {
+						bigtime_t switchStart = system_time();
 						status = _AppServerActivateDesktop(targetUid);
+						syslog(LOG_INFO, "Login: activate desktop %d: %s after "
+							"%" B_PRId64 " ms", (int)targetUid, strerror(status),
+							(system_time() - switchStart) / 1000);
+						if (status != B_OK
+							&& app_server_active_user(30000000LL)
+								== (int32)targetUid) {
+							// The switch only answered late (a slow first
+							// compose): the person's desktop is on screen.
+							syslog(LOG_INFO, "Login: desktop %d is shown after "
+								"all, sign-in kept", (int)targetUid);
+							status = B_OK;
+						}
 					}
 					r5_session_log("sign-in done: %s", strerror(status));
 				}
@@ -754,8 +787,15 @@ LoginApp::TryLogin(BMessage* message)
 					_CloseLock();
 					_HideLogin();
 				} else {
+					syslog(LOG_ERR, "Login: sign-in of uid %d failed (%s), "
+						"stopping its teams", (int)targetUid, strerror(status));
 					if (wroteSession)
 						remove_signed_in_session(login);
+					// Show Sign in again first, so the screen never stays on
+					// a desktop whose programs are being stopped, and so the
+					// destroy below is not refused because it is shown.
+					if (app_server_active_user(10000000LL) == (int32)targetUid)
+						_AppServerActivateDesktop(0);
 					// Stop any teams already started for this uid before
 					// destroying the desktop so they cannot fall back onto
 					// desktop 0 (the Sign in screen).

@@ -373,13 +373,24 @@ AppServer::_ActivateDesktop(Desktop* target)
 		}
 	}
 
+	bigtime_t start = system_time();
 	if (current != NULL && current != target) {
 		status_t status = current->Deactivate();
-		if (status != B_OK)
+		if (status != B_OK) {
+			syslog(LOG_ERR, "app_server: switch to %d: deactivate %d: %s\n",
+				(int)target->UserID(), (int)current->UserID(),
+				strerror(status));
 			return status;
+		}
 	}
+	bigtime_t deactivated = system_time();
 
 	status_t status = target->Activate();
+	syslog(LOG_INFO, "app_server: switch %d->%d: deactivate %" B_PRId64
+		" ms, activate %s %" B_PRId64 " ms\n",
+		current != NULL ? (int)current->UserID() : -1, (int)target->UserID(),
+		(deactivated - start) / 1000, strerror(status),
+		(system_time() - deactivated) / 1000);
 	if (status != B_OK && current != NULL && current != target) {
 		// Roll back to the previously shown desktop if activation failed.
 		current->Activate();
