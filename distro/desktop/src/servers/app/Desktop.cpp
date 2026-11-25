@@ -56,6 +56,12 @@
 #include <WindowInfo.h>
 
 #include "AppServer.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include "BitmapHWInterface.h"
+#include "ServerBitmap.h"
+// SPDX-SnippetEnd
 #include "ClickTarget.h"
 #include "DecorManager.h"
 #include "DesktopSettingsPrivate.h"
@@ -490,6 +496,7 @@ Desktop::Desktop(uid_t userID, const char* targetScreen)
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 	fCompositor(NULL),
+	fShown(false),
 // SPDX-SnippetEnd
 	fSettings(NULL),
 	fSharedReadOnlyArea(-1),
@@ -526,6 +533,11 @@ Desktop::Desktop(uid_t userID, const char* targetScreen)
 	fBack(NULL)
 {
 	memset(fLastWorkspaceFocus, 0, sizeof(fLastWorkspaceFocus));
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	memset(&fHiddenMode, 0, sizeof(fHiddenMode));
+// SPDX-SnippetEnd
 
 	char name[B_OS_NAME_LENGTH];
 	Desktop::_GetLooperName(name, sizeof(name));
@@ -551,7 +563,10 @@ Desktop::~Desktop()
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+	fEventDispatcher.SetTo(NULL);
 	delete fCompositor;
+	fCompositor = NULL;
+	fVirtualScreen.SetOffscreen(NULL, NULL, BRect(0, 0, 0, 0));
 // SPDX-SnippetEnd
 	delete_area(fSharedReadOnlyArea);
 	delete_port(fMessagePort);
@@ -570,7 +585,7 @@ Desktop::RegisterListener(DesktopListener* listener)
 /*!	This method is allowed to throw exceptions.
 */
 status_t
-Desktop::Init()
+Desktop::Init(bool startHidden)
 {
 	if (fMessagePort < B_OK)
 		return fMessagePort;
@@ -587,41 +602,74 @@ Desktop::Init()
 	if (fSharedReadOnlyArea < B_OK)
 		return fSharedReadOnlyArea;
 
-	fSettings.SetTo(new DesktopSettingsPrivate(fServerReadOnlyMemory));
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	fSettings.SetTo(new DesktopSettingsPrivate(fServerReadOnlyMemory, fUserID));
+// SPDX-SnippetEnd
 
 	for (int32 i = 0; i < kMaxWorkspaces; i++) {
 		_Windows(i).SetIndex(i);
 		fWorkspaces[i].RestoreConfiguration(*fSettings->WorkspacesMessage(i));
 	}
 
-	status_t status = fVirtualScreen.SetConfiguration(*this,
-		fWorkspaces[0].StoredScreenConfiguration(),
-		fWorkspaces[0].CurrentScreenConfiguration());
-	if (status != B_OK) {
-		debug_printf("app_server: Failed to initialize virtual screen configuration: %s\n",
-			strerror(status));
-		return status;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (startHidden) {
+		BRect frame(0, 0, 1023, 767);
+		gScreenManager->Lock();
+		Screen* screen = gScreenManager->ScreenAt(0);
+		if (screen != NULL) {
+			frame = screen->Frame();
+			screen->GetMode(fHiddenMode);
+		}
+		gScreenManager->Unlock();
+
+		status_t status = _EnsureOffscreenTarget(frame);
+		if (status != B_OK)
+			return status;
+		fVirtualScreen.SetOffscreen(fOffscreenHW.Get(), fOffscreenEngine.Get(),
+			frame);
+		fShown = false;
+	} else {
+		status_t status = fVirtualScreen.SetConfiguration(*this,
+			fWorkspaces[0].StoredScreenConfiguration(),
+			fWorkspaces[0].CurrentScreenConfiguration());
+		if (status != B_OK) {
+			debug_printf("app_server: Failed to initialize virtual screen configuration: %s\n",
+				strerror(status));
+			return status;
+		}
+		fShown = true;
 	}
+// SPDX-SnippetEnd
 
 	if (fVirtualScreen.HWInterface() == NULL) {
 		debug_printf("Could not initialize graphics output. Exiting.\n");
 		return B_ERROR;
 	}
 
-	HWInterface()->SetDPMSMode(B_DPMS_ON);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (fShown) {
+		HWInterface()->SetDPMSMode(B_DPMS_ON);
 
-	// Restore brightness
-	{
+		// Restore brightness
 		Screen* screen = fVirtualScreen.ScreenAt(0);
-		monitor_info info;
-		bool hasInfo = (screen->GetMonitorInfo(info) == B_OK);
+		if (screen != NULL) {
+			monitor_info info;
+			bool hasInfo = (screen->GetMonitorInfo(info) == B_OK);
 
-		screen_configuration* stored = fWorkspaces[0]
-			.StoredScreenConfiguration().BestFit(screen->ID(),
-				hasInfo ? &info : NULL);
-		if (stored != NULL && stored->brightness > 0)
-			HWInterface()->SetBrightness(stored->brightness);
+			screen_configuration* stored = fWorkspaces[0]
+				.StoredScreenConfiguration().BestFit(screen->ID(),
+					hasInfo ? &info : NULL);
+			if (stored != NULL && stored->brightness > 0)
+				HWInterface()->SetBrightness(stored->brightness);
+		}
 	}
+// SPDX-SnippetEnd
 
 	// now that the mode is set, see if we should increase the default font size
 	if (fSettings->DefaultPlainFont() == *gFontManager->DefaultPlainFont()
@@ -673,14 +721,19 @@ Desktop::Init()
 	gInputManager->AddStream(new InputServerStream);
 #endif
 
-	EventStream* stream = fVirtualScreen.HWInterface()->CreateEventStream();
-	if (stream == NULL)
-		stream = gInputManager->GetStream();
-
 	fEventDispatcher.SetDesktop(this);
-	fEventDispatcher.SetTo(stream);
-	if (fEventDispatcher.InitCheck() != B_OK)
-		_LaunchInputServer();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (fShown) {
+		EventStream* stream = fVirtualScreen.HWInterface()->CreateEventStream();
+		if (stream == NULL)
+			stream = gInputManager->GetStream();
+		fEventDispatcher.SetTo(stream);
+		if (fEventDispatcher.InitCheck() != B_OK)
+			_LaunchInputServer();
+	}
+// SPDX-SnippetEnd
 
 	fEventDispatcher.SetHWInterface(fVirtualScreen.HWInterface());
 
@@ -697,7 +750,8 @@ Desktop::Init()
 	// M11: the compositor, on by default. With gpu_compositor false, in
 	// safe mode, or when no Vulkan device starts, the desktop is the CPU
 	// mode.
-	fCompositor = Compositor::Create(this, fVirtualScreen.HWInterface());
+	fCompositor = Compositor::Create(this, fVirtualScreen.HWInterface(),
+		!fShown);
 	// M11 step 4: the window effects from the appearance file
 	if (fCompositor != NULL) {
 		fCompositor->SetInitialEffects(fSettings->WindowEffects(),
@@ -714,10 +768,189 @@ Desktop::Init()
 	SetCursor(NULL);
 		// this will set the default cursor
 
-	fVirtualScreen.HWInterface()->SetCursorVisible(true);
+	if (fShown)
+		fVirtualScreen.HWInterface()->SetCursorVisible(true);
 
 	return B_OK;
 }
+
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+status_t
+Desktop::_EnsureOffscreenTarget(BRect frame)
+{
+	int32 width = max_c(frame.IntegerWidth() + 1, 1);
+	int32 height = max_c(frame.IntegerHeight() + 1, 1);
+	if (fOffscreenBitmap.IsSet() && fOffscreenHW.IsSet()
+		&& fOffscreenEngine.IsSet()
+		&& fOffscreenBitmap->Width() == width
+		&& fOffscreenBitmap->Height() == height) {
+		return B_OK;
+	}
+
+	BReference<UtilityBitmap> bitmap(
+		new(std::nothrow) UtilityBitmap(BRect(0, 0, width - 1, height - 1),
+			B_RGB32, 0),
+		true);
+	if (!bitmap.IsSet() || !bitmap->IsValid())
+		return B_NO_MEMORY;
+	memset(bitmap->Bits(), 0, bitmap->BitsLength());
+
+	ObjectDeleter<BitmapHWInterface> hw(
+		new(std::nothrow) BitmapHWInterface(bitmap.Get()));
+	if (!hw.IsSet() || hw->Initialize() != B_OK)
+		return B_NO_MEMORY;
+
+	ObjectDeleter<DrawingEngine> engine(hw->CreateDrawingEngine());
+	if (!engine.IsSet())
+		return B_NO_MEMORY;
+
+	fOffscreenEngine.SetTo(engine.Detach());
+	fOffscreenHW.SetTo(hw.Detach());
+	fOffscreenBitmap = bitmap;
+	return B_OK;
+}
+
+
+void
+Desktop::_RebindWindowsToScreen(::HWInterface* interface)
+{
+	ASSERT_MULTI_WRITE_LOCKED(fWindowLock);
+	for (Window* window = fAllWindows.FirstWindow(); window != NULL;
+			window = window->NextWindow(kAllWindowList)) {
+		if (window->GetDrawingEngine() != NULL)
+			window->GetDrawingEngine()->SetHWInterface(interface);
+	}
+}
+
+
+status_t
+Desktop::Deactivate()
+{
+	if (!fShown)
+		return B_OK;
+
+	// Allocate the offscreen target before detaching input so an OOM failure
+	// cannot leave the shown desktop without keyboard or mouse.
+	{
+		AutoWriteLocker windowLock(fWindowLock);
+		if (!fShown)
+			return B_OK;
+		status_t status = _EnsureOffscreenTarget(fVirtualScreen.Frame());
+		if (status != B_OK)
+			return status;
+	}
+
+	// Stop input delivery outside fWindowLock to avoid deadlocking with the
+	// event thread.
+	fEventDispatcher.SetTo(NULL);
+
+	status_t status = B_OK;
+	{
+		AutoWriteLocker windowLock(fWindowLock);
+		if (!fShown)
+			return B_OK;
+
+		BRect frame = fVirtualScreen.Frame();
+		if (Screen* screen = fVirtualScreen.ScreenAt(0))
+			screen->GetMode(fHiddenMode);
+
+		status = _EnsureOffscreenTarget(frame);
+		if (status == B_OK) {
+			_SuspendDirectFrameBufferAccess();
+
+			if (fCompositor != NULL)
+				fCompositor->SetHidden(true, fOffscreenHW.Get());
+			if (fCompositor == NULL || !fCompositor->IsActive())
+				_RebindWindowsToScreen(fOffscreenHW.Get());
+
+			{
+				AutoWriteLocker screenLock(fScreenLock);
+				fVirtualScreen.SetOffscreen(fOffscreenHW.Get(),
+					fOffscreenEngine.Get(), frame);
+				fShown = false;
+			}
+
+			fEventDispatcher.SetHWInterface(fOffscreenHW.Get());
+		}
+	}
+
+	if (status != B_OK) {
+		// Restore input if the screen resized in between and offscreen
+		// allocation failed.
+		EventStream* stream = gInputManager->GetStream();
+		if (stream != NULL)
+			fEventDispatcher.SetTo(stream);
+	}
+	return status;
+}
+
+
+status_t
+Desktop::Activate()
+{
+	if (fShown)
+		return B_OK;
+
+	BRect screenFrame;
+	{
+		AutoWriteLocker windowLock(fWindowLock);
+		if (fShown)
+			return B_OK;
+
+		{
+			AutoWriteLocker screenLock(fScreenLock);
+			uint32 changedScreens = 0;
+			status_t status = fVirtualScreen.SetConfiguration(*this,
+				fWorkspaces[fCurrentWorkspace].StoredScreenConfiguration(),
+				fWorkspaces[fCurrentWorkspace].CurrentScreenConfiguration(),
+				&changedScreens);
+			if (status != B_OK)
+				return status;
+			fShown = true;
+			screenFrame = fVirtualScreen.Frame();
+			fScreenRegion = screenFrame;
+		}
+
+		fEventDispatcher.SetHWInterface(fVirtualScreen.HWInterface());
+
+		if (fCompositor != NULL && fCompositor->IsEnabled())
+			fCompositor->SetHidden(false, fVirtualScreen.HWInterface());
+		else
+			_RebindWindowsToScreen(fVirtualScreen.HWInterface());
+
+		BRegion stillAvailableOnScreen;
+		_RebuildClippingForAllWindows(stillAvailableOnScreen);
+		_SetBackground(stillAvailableOnScreen);
+
+		if (fCompositor != NULL && fCompositor->IsActive()) {
+			fCompositor->ClippingChanged();
+			fCompositor->Damage(BRegion(screenFrame));
+		} else {
+			BRegion full(screenFrame);
+			MarkDirty(full);
+		}
+
+		if (fCursor.IsSet())
+			HWInterface()->SetCursor(fCursor.Get());
+		HWInterface()->SetCursorVisible(true);
+
+		_ResumeDirectFrameBufferAccess();
+	}
+
+	// Re-acquire the input stream outside fWindowLock.
+	EventStream* stream = fVirtualScreen.HWInterface()->CreateEventStream();
+	if (stream == NULL)
+		stream = gInputManager->GetStream();
+	if (stream != NULL)
+		fEventDispatcher.SetTo(stream);
+	gInputManager->UpdateScreenBounds(screenFrame);
+
+	return B_OK;
+}
+// SPDX-SnippetEnd
 
 
 /*!	\brief Send a quick (no attachments) message to all applications.
@@ -893,6 +1126,24 @@ Desktop::SetScreenMode(int32 workspace, int32 id, const display_mode& mode,
 	if (workspace < 0 || workspace >= kMaxWorkspaces)
 		return B_BAD_VALUE;
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (!fShown) {
+		// Hidden desktop: record the mode without touching the physical screen.
+		BRect frame(0, 0, mode.virtual_width > 0 ? mode.virtual_width - 1 : 0,
+			mode.virtual_height > 0 ? mode.virtual_height - 1 : 0);
+		fWorkspaces[workspace].CurrentScreenConfiguration().Set(id, NULL,
+			frame, mode);
+		if (makeDefault) {
+			fWorkspaces[workspace].StoredScreenConfiguration().Set(id, NULL,
+				frame, mode);
+			StoreWorkspaceConfiguration(workspace);
+		}
+		return B_OK;
+	}
+// SPDX-SnippetEnd
+
 	Screen* screen = fVirtualScreen.ScreenByID(id);
 	if (screen == NULL)
 		return B_NAME_NOT_FOUND;
@@ -966,11 +1217,25 @@ Desktop::GetScreenMode(int32 workspace, int32 id, display_mode& mode)
 
 	if (workspace == fCurrentWorkspace) {
 		// retrieve from current screen
-		if (screen == NULL)
-			return B_NAME_NOT_FOUND;
-
-		screen->GetMode(mode);
-		return B_OK;
+		if (screen != NULL) {
+			screen->GetMode(mode);
+			return B_OK;
+		}
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		if (!fShown) {
+			screen_configuration* configuration
+				= fWorkspaces[workspace].CurrentScreenConfiguration().GetByID(id);
+			if (configuration != NULL) {
+				mode = configuration->mode;
+				return B_OK;
+			}
+			mode = fHiddenMode;
+			return B_OK;
+		}
+		return B_NAME_NOT_FOUND;
+// SPDX-SnippetEnd
 	}
 
 	// retrieve from settings
@@ -1006,11 +1271,22 @@ Desktop::GetScreenFrame(int32 workspace, int32 id, BRect& frame)
 
 	if (workspace == fCurrentWorkspace) {
 		// retrieve from current screen
-		if (screen == NULL)
-			return B_NAME_NOT_FOUND;
-
-		frame = screen->Frame();
-		return B_OK;
+		if (screen != NULL) {
+			frame = screen->Frame();
+			return B_OK;
+		}
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		if (!fShown) {
+			screen_configuration* configuration
+				= fWorkspaces[workspace].CurrentScreenConfiguration().GetByID(id);
+			frame = configuration != NULL
+				? configuration->frame : fVirtualScreen.Frame();
+			return B_OK;
+		}
+		return B_NAME_NOT_FOUND;
+// SPDX-SnippetEnd
 	}
 
 	// retrieve from settings
@@ -1085,6 +1361,12 @@ Desktop::RevertScreenModes(uint32 workspaces)
 status_t
 Desktop::SetBrightness(int32 id, float brightness)
 {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (!fShown)
+		return B_PERMISSION_DENIED;
+// SPDX-SnippetEnd
 	status_t result = HWInterface()->SetBrightness(brightness);
 
 	if (result == B_OK) {
@@ -1107,6 +1389,12 @@ Desktop::SetBrightness(int32 id, float brightness)
 status_t
 Desktop::LockDirectScreen(team_id team)
 {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (!fShown)
+		return B_PERMISSION_DENIED;
+// SPDX-SnippetEnd
 	// TODO: BWindowScreens should use the same mechanism as BDirectWindow,
 	// which would make this method superfluous.
 
@@ -4060,6 +4348,12 @@ void
 Desktop::_ResumeDirectFrameBufferAccess()
 {
 	ASSERT_MULTI_LOCKED(fWindowLock);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (!fShown)
+		return;
+// SPDX-SnippetEnd
 
 	for (Window* window = fAllWindows.FirstWindow(); window != NULL;
 			window = window->NextWindow(kAllWindowList)) {
@@ -4196,6 +4490,13 @@ void
 Desktop::_SetCurrentWorkspaceConfiguration()
 {
 	ASSERT_MULTI_WRITE_LOCKED(fWindowLock);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// A hidden desktop's workspace change never touches the physical screen.
+	if (!fShown)
+		return;
+// SPDX-SnippetEnd
 
 	status_t status = fDirectScreenLock.LockWithTimeout(1000000L);
 	if (status != B_OK) {

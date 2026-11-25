@@ -421,6 +421,17 @@ enum {
 	AS_R5_SET_WINDOW_EDGE_LINE,
 // SPDX-SnippetEnd
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// Fast user switching (docs/design/FAST-USER-SWITCHING.md, 5.2):
+	// sent over app_server's r5_admin port by uid 0 (Login / test tool).
+	AS_R5_CREATE_DESKTOP,
+	AS_R5_ACTIVATE_DESKTOP,
+	AS_R5_DESTROY_DESKTOP,
+	AS_R5_DESKTOP_INFO,
+// SPDX-SnippetEnd
+
 	AS_LAST_CODE
 };
 

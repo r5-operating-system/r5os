@@ -209,6 +209,10 @@ There is one notification_server. A notification of a hidden person is kept and 
 
 Nothing here is specific to a CPU. The GPU part concerns RADV and Lavapipe. On ARM64 and RISC-V in QEMU, the switch runs on the software path. That is the first test there.
 
+### 5.13 Workspaces
+
+Every desktop keeps its own workspaces, as Haiku's `Desktop` already does per uid: the count and the columns and rows, the current workspace, the windows on each, the background, and the screen mode per workspace. Activating a desktop shows its current workspace with that workspace's screen mode. The workspace keys (`Ctrl+F1` and so on), the Workspaces applet and the Display page act only on the desktop that is shown. A hidden desktop's workspace change never touches the screen.
+
 ## 6. Security of hidden sessions
 
 | Risk | Answer |

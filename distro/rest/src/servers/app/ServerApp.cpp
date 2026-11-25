@@ -3566,7 +3566,13 @@ ServerApp::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 			fLink.Read<int32>(&id);
 
 			BString path;
-			status_t status = fDesktop->HWInterface()->GetAccelerantPath(path);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			status_t status = fDesktop->IsShown()
+				? fDesktop->HWInterface()->GetAccelerantPath(path)
+				: B_PERMISSION_DENIED;
+// SPDX-SnippetEnd
 			fLink.StartMessage(status);
 			if (status == B_OK)
 				fLink.AttachString(path.String());
@@ -3581,7 +3587,13 @@ ServerApp::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 			fLink.Read<int32>(&id);
 
 			BString path;
-			status_t status = fDesktop->HWInterface()->GetDriverPath(path);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			status_t status = fDesktop->IsShown()
+				? fDesktop->HWInterface()->GetDriverPath(path)
+				: B_PERMISSION_DENIED;
+// SPDX-SnippetEnd
 			fLink.StartMessage(status);
 			if (status == B_OK)
 				fLink.AttachString(path.String());
@@ -3598,9 +3610,15 @@ ServerApp::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 			link.Read<bool>(&lock);
 
 			status_t status;
-			if (lock)
-				status = fDesktop->LockDirectScreen(ClientTeam());
-			else
+			if (lock) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+				status = fDesktop->IsShown()
+					? fDesktop->LockDirectScreen(ClientTeam())
+					: B_PERMISSION_DENIED;
+// SPDX-SnippetEnd
+			} else
 				status = fDesktop->UnlockDirectScreen(ClientTeam());
 
 			fLink.StartMessage(status);

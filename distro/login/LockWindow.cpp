@@ -55,7 +55,6 @@ private:
 			void			_ApplyGlyphs();
 
 			BStringView*	fTitleView;
-			BStringView*	fSubtitleView;
 			AvatarView*		fAvatar;
 			BStringView*	fNameView;
 			BStringView*	fRoleView;
@@ -78,7 +77,6 @@ LockView::LockView(const char* name)
 	:
 	BView("LockView", B_WILL_DRAW | B_PULSE_NEEDED | B_SUPPORTS_LAYOUT),
 	fTitleView(NULL),
-	fSubtitleView(NULL),
 	fAvatar(NULL),
 	fNameView(NULL),
 	fRoleView(NULL),
@@ -114,7 +112,7 @@ LockView::LockView(const char* name)
 	const color_which document = B_DOCUMENT_BACKGROUND_COLOR;
 	const color_which panel = B_PANEL_BACKGROUND_COLOR;
 
-	// Header card: the pebble, "Locked" and the reassurance.
+	// Header card: the pebble and "Locked".
 	BCard* header = new BCard("header", BAppearanceKit::B_CARD_DOCUMENT,
 		B_HORIZONTAL);
 	BBitmap* pebble = r5_vector_icon_bitmap(kR5Pebble, sizeof(kR5Pebble),
@@ -124,18 +122,15 @@ LockView::LockView(const char* name)
 
 	fTitleView = make_label("title", "Locked", font_px(be_bold_font, 18),
 		document);
-	fSubtitleView = make_label("subtitle", "Your apps stay open.",
-		font_px(be_plain_font, 12.5f), document);
+	fTitleView->SetExplicitAlignment(
+		BAlignment(B_ALIGN_LEFT, B_ALIGN_VERTICAL_CENTER));
 
 	BGroupLayout* headerLayout = (BGroupLayout*)header->GetLayout();
 	headerLayout->SetSpacing(px(14));
 	BLayoutBuilder::Group<>(headerLayout)
 		.SetInsets(px(16), px(14), px(16), px(14))
 		.Add(logo)
-		.AddGroup(B_VERTICAL, px(2))
-			.Add(fTitleView)
-			.Add(fSubtitleView)
-		.End()
+		.Add(fTitleView)
 		.AddGlue();
 
 	// Form card: the account, the password, Unlock.
@@ -351,7 +346,6 @@ LockView::_ApplyColors()
 	rgb_color soft = mix_color(documentText, document, 125);
 
 	fTitleView->SetHighColor(documentText);
-	fSubtitleView->SetHighColor(mix_color(documentText, document, 100));
 	fNameView->SetHighColor(documentText);
 	if (fAdmin)
 		fRoleView->SetHighUIColor(B_STATUS_BAR_COLOR);
