@@ -1,4 +1,4 @@
-1	english	x-vnd.Haiku-Login	352852017
+1	english	x-vnd.Haiku-Login	3639961931
 There must be at least one administrator.	Users: Account admin		There must be at least one administrator.
 An account named \"guest\" already exists. Rename it first.	Users: Account admin		An account named \"guest\" already exists. Rename it first.
 Only system drivers can be turned off here.	Login: Driver admin		Only system drivers can be turned off here.
@@ -62,6 +62,7 @@ Enter password	Login: Sign in view		Enter password
 The password could not be saved. If you are later asked for your old password for saved passwords, enter the new password you just typed.	Users: Account admin		The password could not be saved. If you are later asked for your old password for saved passwords, enter the new password you just typed.
 That account was not found.	Users: Account admin		That account was not found.
 Restart	Login: Sign in view		Restart
+Your files are still being prepared.	Login: Application		Your files are still being prepared.
 Error	Login: Application		Error
 Unlock this with an administrator password.	Login: Driver settings admin		Unlock this with an administrator password.
 The driver file was not found.	Login: Driver admin		The driver file was not found.
@@ -86,6 +87,7 @@ A line is not a setting.	Login: Driver settings admin		A line is not a setting.
 Choose a password for this account.	Login: Sign in view		Choose a password for this account.
 Sign in	Login: Sign in window		Sign in
 Too many settings.	Login: Driver settings admin		Too many settings.
+Preparing your files… %count%	Login: Application		Preparing your files… %count%
 Could not start the session: %error%	Login: Application		Could not start the session: %error%
 Driver changes require the sign-in helper.	Login: Driver admin		Driver changes require the sign-in helper.
 Sleep is not available yet.	Login: Application		Sleep is not available yet.
@@ -119,6 +121,7 @@ Could not save the guest account.	Users: Account admin		Could not save the guest
 Save and sign in	Login: Sign in view		Save and sign in
 Guest	Login: Sign in view		Guest
 {0, plural, one{# account available} other{# accounts available}}	Login: Sign in view		{0, plural, one{# account available} other{# accounts available}}
+Could not prepare your files: %error%	Login: Application		Could not prepare your files: %error%
 The request is empty.	Login: Driver admin		The request is empty.
 Only the sign-in helper can set this password.	Users: Account admin		Only the sign-in helper can set this password.
 Administrator	Login: Lock window		Administrator

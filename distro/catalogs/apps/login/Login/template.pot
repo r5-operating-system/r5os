@@ -255,6 +255,10 @@ msgid "Restart"
 msgstr ""
 
 msgctxt "Login: Application"
+msgid "Your files are still being prepared."
+msgstr ""
+
+msgctxt "Login: Application"
 msgid "Error"
 msgstr ""
 
@@ -348,6 +352,10 @@ msgstr ""
 
 msgctxt "Login: Driver settings admin"
 msgid "Too many settings."
+msgstr ""
+
+msgctxt "Login: Application"
+msgid "Preparing your files… %count%"
 msgstr ""
 
 msgctxt "Login: Application"
@@ -480,6 +488,10 @@ msgstr ""
 
 msgctxt "Login: Sign in view"
 msgid "{0, plural, one{# account available} other{# accounts available}}"
+msgstr ""
+
+msgctxt "Login: Application"
+msgid "Could not prepare your files: %error%"
 msgstr ""
 
 msgctxt "Login: Driver admin"

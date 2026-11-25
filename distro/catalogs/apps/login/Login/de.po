@@ -318,6 +318,11 @@ msgstr "Neu starten"
 
 #, fuzzy
 msgctxt "Login: Application"
+msgid "Your files are still being prepared."
+msgstr "Deine Dateien werden noch vorbereitet."
+
+#, fuzzy
+msgctxt "Login: Application"
 msgid "Error"
 msgstr "Fehler"
 
@@ -435,6 +440,11 @@ msgstr "Anmelden"
 msgctxt "Login: Driver settings admin"
 msgid "Too many settings."
 msgstr "Zu viele Einstellungen."
+
+#, fuzzy
+msgctxt "Login: Application"
+msgid "Preparing your files… %count%"
+msgstr "Deine Dateien werden vorbereitet… %count%"
 
 #, fuzzy
 msgctxt "Login: Application"
@@ -599,6 +609,11 @@ msgstr "Gast"
 msgctxt "Login: Sign in view"
 msgid "{0, plural, one{# account available} other{# accounts available}}"
 msgstr "{0, plural, one{# Konto verfügbar} other{# Konten verfügbar}}"
+
+#, fuzzy
+msgctxt "Login: Application"
+msgid "Could not prepare your files: %error%"
+msgstr "Deine Dateien konnten nicht vorbereitet werden: %error%"
 
 #, fuzzy
 msgctxt "Login: Driver admin"

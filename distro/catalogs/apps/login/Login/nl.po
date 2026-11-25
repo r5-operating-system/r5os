@@ -318,6 +318,11 @@ msgstr "Opnieuw starten"
 
 #, fuzzy
 msgctxt "Login: Application"
+msgid "Your files are still being prepared."
+msgstr "Je bestanden worden nog voorbereid."
+
+#, fuzzy
+msgctxt "Login: Application"
 msgid "Error"
 msgstr "Fout"
 
@@ -435,6 +440,11 @@ msgstr "Aanmelden"
 msgctxt "Login: Driver settings admin"
 msgid "Too many settings."
 msgstr "Te veel instellingen."
+
+#, fuzzy
+msgctxt "Login: Application"
+msgid "Preparing your files… %count%"
+msgstr "Je bestanden worden voorbereid… %count%"
 
 #, fuzzy
 msgctxt "Login: Application"
@@ -599,6 +609,11 @@ msgstr "Gast"
 msgctxt "Login: Sign in view"
 msgid "{0, plural, one{# account available} other{# accounts available}}"
 msgstr "{0, plural, one{# account beschikbaar} other{# accounts beschikbaar}}"
+
+#, fuzzy
+msgctxt "Login: Application"
+msgid "Could not prepare your files: %error%"
+msgstr "Je bestanden konden niet worden voorbereid: %error%"
 
 #, fuzzy
 msgctxt "Login: Driver admin"
