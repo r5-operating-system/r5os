@@ -255,6 +255,10 @@ AI-assisted work is welcome here. It is held to the same bar as any other change
 - User-visible changes get a What's new entry in plain language. Technical details go in `CHANGELOG.md`.
 - Use the name **R5 Operating System**, short **R5** (see "Name" in `AGENTS.md`). Do not use Haiku or BeOS names or logos on the image.
 
+### Translations
+
+R5's own programs are translated on [Weblate](https://hosted.weblate.org/projects/r5/). You can help there in your browser, without Git. Translations come back to this repository as pull requests. How the files work: [`docs/TRANSLATIONS.md`](docs/TRANSLATIONS.md).
+
 ### Versions
 
 Releases will be called **R5 Operating System 2026.1**, **2026.2**, and so on; a new year starts again at `.1`. Development trees carry `-dev`, and About R5 shows the version together with an increasing build number. The sources for those are [`distro/VERSION`](distro/VERSION) and [`distro/BUILD`](distro/BUILD).
