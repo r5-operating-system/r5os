@@ -50,3 +50,7 @@ The build brief for **Default (R5 Modern)**, the round R5 window decorator chose
 The build brief for the Deskbar styles chosen on 22 Nov 2026: **Classic** (Deskbar as it is now) and **Default (R5)** (as now, pill or bar; round or square; floating or against the edge; following the window-effect steps). It also sets the hover and click states, the line under the front application, and one-colour line symbols for R5's own tray items. Step 0 of the brief is a report; nothing is built before the owner's go.
 
 The mockups for both are private design canvases of the owner, linked from the briefs.
+
+## `FAST-USER-SWITCHING.md` and `fus-mockup/`
+
+The design for fast user switching (25 Nov 2026), with the owner's choices, the research with file and line, the steps and the open questions. The mockup is built on the shipped Sign in and lock windows. Not built yet.
