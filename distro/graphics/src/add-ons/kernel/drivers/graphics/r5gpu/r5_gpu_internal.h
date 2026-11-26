@@ -176,6 +176,7 @@ extern int sDebugOn;
 extern int sSelftestOn;
 extern int sSubmitLogOn;
 extern int sTraceOn;
+extern int sRenderOn;
 extern int sDeferred;
 extern gpu_bo sBo[kMaxBo];
 extern gpu_backing sBacking[kMaxBo];

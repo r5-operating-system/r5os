@@ -8,6 +8,16 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-26 - GPU kernel driver: cache gpu_render_enabled and recycle VRAM page-table pages
+
+- Problem: `gpu_render_enabled()` (`r5_gpu_core.cpp`) called `load_driver_settings("radeon_hd")` on every GPU ioctl. Per-file VRAM page-table pages allocated by `r5_gfx9_file_vm_init()` were never returned when a file closed (`r5_file_tree_free()`) or on init failure, and an overflow of `sDefer[kMaxBo]` dropped freed VRAM offsets permanently.
+- Change:
+  - Cached `gpu_render` in `sRenderOn` inside `gpu_cache_log_settings()` (refreshed by `r5_gpu_init()` and `r5_gpu_set_level()`), so `gpu false` and `gpu_render false` still take effect after a restart without reading the settings file on every ioctl.
+  - Added a 4 KiB VRAM page-table free pool (`r5_vm_page_pool` in `r5_vm.h`, `sPtPool` in `gfx9_k12.cpp`) and `file_vm_free` at the end of `r5_gpu_backend_ops`. `vm_page_alloc()` reuses pooled pages before bumping `vram_pool_cursor`; `r5_file_tree_free()` and the failure paths of `r5_gfx9_file_vm_init()` return all allocated pages to the pool.
+  - Added a heap-backed `sDeferOverflow` list in `r5_gpu_core.cpp` so deferred VRAM frees beyond `kMaxBo` are stamped and reclaimed instead of dropped.
+  - Added host test `scripts/test-r5-vm-pool.cpp` verifying 500 open/close cycles keep the bump cursor flat and that init-failure rollback and defer overflow reclaim every page.
+- Limits: Host-tested and QEMU-booted on AMD64; 5625U hardware stick test pending merge. No speed-up claimed without hardware measurement.
+
 ## 2026-11-26 - A missing message field keeps its default (Bluetooth, Wallpaper, screens, network shares)
 
 Problem: Haiku's `BMessage::Find*()` sets the value to 0 or empty before it looks for the field (`Message.cpp`, `*p = type();`). So `x = default; msg->FindInt32("x", &x);` loses the default when the field is missing. In Aomi (#4684) this made Alt+W always close the first tab. The same pattern was in other R5 code.

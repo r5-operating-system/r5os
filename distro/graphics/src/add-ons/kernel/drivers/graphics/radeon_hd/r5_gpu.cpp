@@ -73,6 +73,7 @@ gpu_cache_log_settings()
 	bool selftestOn = false;
 	bool submitLogOn = false;
 	bool traceOn = false;
+	bool renderOn = false;
 	uint32 hangTest = 0;
 	void* settings = load_driver_settings("radeon_hd");
 	if (settings != NULL) {
@@ -89,6 +90,7 @@ gpu_cache_log_settings()
 			false, true);
 		submitLogOn = get_driver_boolean_parameter(settings, "gpu_submit_log",
 			false, true);
+		renderOn = r5_gpu_switch_named(settings, "gpu_render") != 0;
 		r5_gfx9_set_flush_fence(get_driver_boolean_parameter(settings,
 			"gfx9_flush_fence", false, true) ? 1 : 0);
 		r5_gfx9_set_pasid_map(r5_gpu_switch_named(settings,
@@ -103,6 +105,7 @@ gpu_cache_log_settings()
 			"gfx9_deferred_free", false, true) ? 1 : 0;
 		unload_driver_settings(settings);
 	} else {
+		renderOn = r5_gpu_switch_named(NULL, "gpu_render") != 0;
 		r5_gfx9_set_flush_fence(0);
 		r5_gfx9_set_pasid_map(r5_gpu_switch_named(NULL, "gfx9_pasid_map"));
 		r5_gfx9_set_ce_meta(0);
@@ -115,6 +118,7 @@ gpu_cache_log_settings()
 	sTraceOn = traceOn ? 1 : 0;
 	sSelftestOn = selftestOn ? 1 : 0;
 	sSubmitLogOn = submitLogOn ? 1 : 0;
+	sRenderOn = renderOn ? 1 : 0;
 	sHangTest = hangTest;
 }
 
@@ -1804,6 +1808,13 @@ amd_file_vm_init(void* vm, void* pages, uint32 pagesN)
 }
 
 
+static void
+amd_file_vm_free(void* vm)
+{
+	r5_gfx9_file_vm_free((r5_vm*)vm);
+}
+
+
 static uint32
 amd_commit_dwords(uint32 count, int fileTree, uint32 pasid)
 {
@@ -2257,7 +2268,8 @@ r5_gpu_backend_ops gR5GpuOps = {
 	amd_hang_job,
 	amd_fault_status,
 	amd_hang_release,
-	amd_drop_copies
+	amd_drop_copies,
+	amd_file_vm_free
 };
 
 
