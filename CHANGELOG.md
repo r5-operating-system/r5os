@@ -8,6 +8,15 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-26 - Phase 2 (libroot, runtime_loader IFUNC, CPU): AVX2/FSRM memcpy/memset/memmove, R_X86_64_IRELATIVE, and CPPC preferred-core capacity
+
+- Problem: `memcpy.cpp`, `memset.cpp`, and `memmove.c` used 16-byte SSE for medium/aliased copies, `memcpy_small` and `memcpy_sse` used indirect function-pointer tables, `memset.cpp` ignored `R5_CPU_FSRM`, dispatched `libroot` functions paid an atomic load + indirect jump on every call because `runtime_loader` lacked `R_X86_64_IRELATIVE` / `STT_GNU_IFUNC`, and AMD CPPC preferred cores (5625U: highest 186 vs 181) all received capacity 0.
+- Change:
+  - `distro/kernel/src/system/runtime_loader/arch/x86_64/arch_relocate.cpp` and `elf_symbol_lookup.cpp`: added two-pass `R_X86_64_IRELATIVE` relocation and `STT_GNU_IFUNC` symbol resolution (keeping the 26 Nov TLS race fix in `elf_tls.cpp` / `TPOFF` untouched).
+  - `distro/kernel/src/system/libroot/posix/string/arch/x86_64/{memcpy,memset}.cpp`, `musl/string/memmove.c`, `musl/math/x86_64/{fma,fmaf}.c`: removed small-size indirect call tables (branchless overlapping 8/4/2/1-byte), added AVX2 32-byte and NT paths plus FSRM threshold in `memset`, and switched user-space x86_64 `memcpy`, `memset`, `memmove`, `fma`, and `fmaf` to ELF IFUNC.
+  - `distro/kernel/src/system/kernel/arch/x86/arch_cpu.cpp`: scaled AMD CPPC `MSR_AMD_CPPC_CAP1` `highest_perf * 4` into `cpu->capacity` so the scheduler prefers higher-boost cores on the 5625U (verified `amd_pstates.cpp` already uses local variables in `call_all_cpus_sync()`).
+- Limits: Build and QEMU boot verified after all Phase 2 areas; 5625U CPPC preferred-core capacity requires hardware stick verification. No speed-up claimed without measurement.
+
 ## 2026-11-26 - Phase 2 (Kernel VM, r5_direct_map, arch.S): batched TLB shootdowns, O(1) direct-map collapse & rehash, and user-copy fast paths
 
 - Problem: `X86VMTranslationMap64Bit::UnmapPages()` issued a TLB shootdown per 2 MiB PDE and walked the 4-level page table twice; `arch_cpu_invalidate_tlb_list()` looped `invlpg` even for large page lists; `r5_direct_map.cpp` acquired `kernelMap->Lock()` per page, scanned 512 PTEs on every WB restore, fired nested IPIs under `kernelMap->Lock()`, and never rehashed tombstones; `_arch_cpu_user_memcpy` hit Zen 3 4K-aliasing and non-FSRM `rep movsb` cliffs; `_arch_cpu_user_strlcpy` copied 1 byte per iteration.

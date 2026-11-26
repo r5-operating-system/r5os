@@ -24,12 +24,35 @@
 #include "elf_tls.h"
 
 
+// SPDX-SnippetBegin
+// SPDX-License-Identifier: MIT
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+#ifndef R_X86_64_IRELATIVE
+#define R_X86_64_IRELATIVE 37
+#endif
+// SPDX-SnippetEnd
+
+
 static status_t
 relocate_rela(image_t* rootImage, image_t* image, Elf64_Rela* rel,
 	size_t relLength, SymbolLookupCache* cache)
 {
+	// SPDX-SnippetBegin
+	// SPDX-License-Identifier: MIT
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	bool hasIRelative = false;
+	// SPDX-SnippetEnd
+
 	for (size_t i = 0; i < relLength / sizeof(Elf64_Rela); i++) {
 		int type = ELF64_R_TYPE(rel[i].r_info);
+		// SPDX-SnippetBegin
+		// SPDX-License-Identifier: MIT
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		if (type == R_X86_64_IRELATIVE) {
+			hasIRelative = true;
+			continue;
+		}
+		// SPDX-SnippetEnd
 		int symIndex = ELF64_R_SYM(rel[i].r_info);
 		Elf64_Addr symAddr = 0;
 		image_t* symbolImage = NULL;
@@ -98,6 +121,23 @@ relocate_rela(image_t* rootImage, image_t* image, Elf64_Rela* rel,
 		else
 			*(Elf64_Addr *)relocAddr = relocValue;
 	}
+
+	// SPDX-SnippetBegin
+	// SPDX-License-Identifier: MIT
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// Second pass: resolve R_X86_64_IRELATIVE after all data/GOT relocations
+	// in this section are in place.
+	if (hasIRelative) {
+		for (size_t i = 0; i < relLength / sizeof(Elf64_Rela); i++) {
+			if (ELF64_R_TYPE(rel[i].r_info) != R_X86_64_IRELATIVE)
+				continue;
+			Elf64_Addr relocAddr = image->regions[0].delta + rel[i].r_offset;
+			Elf64_Addr (*resolver)(void)
+				= (Elf64_Addr (*)(void))(image->regions[0].delta + rel[i].r_addend);
+			*(Elf64_Addr *)relocAddr = resolver();
+		}
+	}
+	// SPDX-SnippetEnd
 
 	return B_OK;
 }

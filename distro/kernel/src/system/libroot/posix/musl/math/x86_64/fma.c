@@ -45,6 +45,21 @@ r5_fma_fma4(double x, double y, double z)
 }
 
 
+#if defined(__HAIKU__) && defined(__x86_64__) && !defined(_KERNEL_MODE) \
+	&& !defined(_BOOT_MODE) && !defined(R5_HOST_TEST)
+static double (*r5_fma_resolve(void))(double, double, double)
+{
+	uint32_t flags = r5_x86_cpu_flags();
+	if ((flags & R5_CPU_FMA) != 0)
+		return r5_fma_fma3;
+	if ((flags & R5_CPU_FMA4) != 0)
+		return r5_fma_fma4;
+	return r5_fma_c;
+}
+
+
+double fma(double, double, double) __attribute__((ifunc("r5_fma_resolve")));
+#else
 static double (*r5_fma_impl)(double, double, double);
 
 
@@ -65,6 +80,7 @@ fma(double x, double y, double z)
 	}
 	return fn(x, y, z);
 }
+#endif
 // SPDX-SnippetEnd
 
 #endif

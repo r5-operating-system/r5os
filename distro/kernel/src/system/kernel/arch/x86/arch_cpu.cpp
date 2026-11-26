@@ -1613,6 +1613,21 @@ detect_cpu(int currentCPU, bool full = true)
 		}
 	}
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// AMD CPPC preferred cores (e.g. Ryzen 5 5625U: highest 186 vs 181).
+	// Scale highest_perf (0..255) by 4 into the 0..1024 scheduler capacity
+	// range so single-thread bursts prefer the highest-boost cores.
+	if (cpu->arch.vendor == VENDOR_AMD && cpu->capacity == 0
+		&& (cpu->arch.feature[FEATURE_EXT_8_EBX] & IA32_FEATURE_CPPC) != 0) {
+		uint64 cap1 = x86_read_msr(MSR_AMD_CPPC_CAP1);
+		uint32 highest = AMD_CPPC_HIGHEST_PERF(cap1);
+		if (highest > 0)
+			cpu->capacity = highest * 4;
+	}
+// SPDX-SnippetEnd
+
 #if DUMP_FEATURE_STRING
 	dump_feature_string(currentCPU, cpu);
 #endif

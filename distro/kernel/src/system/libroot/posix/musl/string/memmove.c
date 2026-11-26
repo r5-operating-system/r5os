@@ -4,6 +4,10 @@
 
 #if defined(__x86_64__)
 #include <emmintrin.h>
+#ifndef _KERNEL_MODE
+#include <immintrin.h>
+#include <r5_x86_cpu.h>
+#endif
 
 /* SPDX-SnippetBegin
  * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
@@ -96,9 +100,99 @@ move_sse(unsigned char* d, const unsigned char* s, size_t n, int forward)
 	move_bytes(d, s, n, forward);
 }
 
+
+#ifndef _KERNEL_MODE
+static __attribute__((target("avx2"))) void
+move_avx2(unsigned char* d, const unsigned char* s, size_t n, int forward)
+{
+	if (forward) {
+		while (n >= 32) {
+			__m256i value = _mm256_loadu_si256((const __m256i*)s);
+			_mm256_storeu_si256((__m256i*)d, value);
+			d += 32;
+			s += 32;
+			n -= 32;
+		}
+	} else {
+		while (n >= 32) {
+			n -= 32;
+			__m256i value = _mm256_loadu_si256((const __m256i*)(s + n));
+			_mm256_storeu_si256((__m256i*)(d + n), value);
+		}
+	}
+	move_sse(d, s, n, forward);
+}
+#endif
+
 /* SPDX-SnippetEnd */
 #endif
 
+#if defined(__HAIKU__) && defined(__x86_64__) && !defined(_KERNEL_MODE) \
+	&& !defined(_BOOT_MODE) && !defined(R5_HOST_TEST)
+/* SPDX-SnippetBegin
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * SPDX-License-Identifier: MIT
+ */
+static __attribute__((target("avx2"))) void*
+r5_memmove_avx2(void *dest, const void *src, size_t n)
+{
+	char *d = dest;
+	const char *s = src;
+	if (d == s) return d;
+	if ((uintptr_t)s - (uintptr_t)d - n <= -2 * n) return memcpy(d, s, n);
+	unsigned char* destBytes = (unsigned char*)d;
+	const unsigned char* srcBytes = (const unsigned char*)s;
+	int forward = destBytes < srcBytes;
+	uintptr_t apart = forward
+		? (uintptr_t)(srcBytes - destBytes)
+		: (uintptr_t)(destBytes - srcBytes);
+	if (apart >= 32)
+		move_avx2(destBytes, srcBytes, n, forward);
+	else if (apart >= 16)
+		move_sse(destBytes, srcBytes, n, forward);
+	else if (apart >= 8)
+		move_words64(destBytes, srcBytes, n, forward);
+	else if (apart >= 4)
+		move_words32(destBytes, srcBytes, n, forward);
+	else
+		move_bytes(destBytes, srcBytes, n, forward);
+	return dest;
+}
+
+static void*
+r5_memmove_sse(void *dest, const void *src, size_t n)
+{
+	char *d = dest;
+	const char *s = src;
+	if (d == s) return d;
+	if ((uintptr_t)s - (uintptr_t)d - n <= -2 * n) return memcpy(d, s, n);
+	unsigned char* destBytes = (unsigned char*)d;
+	const unsigned char* srcBytes = (const unsigned char*)s;
+	int forward = destBytes < srcBytes;
+	uintptr_t apart = forward
+		? (uintptr_t)(srcBytes - destBytes)
+		: (uintptr_t)(destBytes - srcBytes);
+	if (apart >= 16)
+		move_sse(destBytes, srcBytes, n, forward);
+	else if (apart >= 8)
+		move_words64(destBytes, srcBytes, n, forward);
+	else if (apart >= 4)
+		move_words32(destBytes, srcBytes, n, forward);
+	else
+		move_bytes(destBytes, srcBytes, n, forward);
+	return dest;
+}
+
+static void* (*r5_memmove_resolve(void))(void*, const void*, size_t)
+{
+	if ((r5_x86_cpu_flags() & R5_CPU_AVX2) != 0)
+		return r5_memmove_avx2;
+	return r5_memmove_sse;
+}
+
+void* memmove(void*, const void*, size_t) __attribute__((ifunc("r5_memmove_resolve")));
+/* SPDX-SnippetEnd */
+#else
 void *memmove(void *dest, const void *src, size_t n)
 {
 	char *d = dest;
@@ -162,3 +256,4 @@ void *memmove(void *dest, const void *src, size_t n)
 
 	return dest;
 }
+#endif
