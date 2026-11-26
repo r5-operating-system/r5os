@@ -178,7 +178,7 @@ def install_wallpaper(haiku: pathlib.Path) -> None:
         '\t"be:bgndimginfomode" = 2,\n'
         '\t"be:bgndimginfoworkspaces" = -1,\n'
         '\t"be:bgndimginfooffset" = point { 0, 0 },\n'
-        '\t"be:bgndimginfoerasetext" = false,\n'
+        '\t"be:bgndimginfoerasetext" = true,\n'
         '\t"be:bgndimginfoset" = 0\n'
         "};\n"
     )

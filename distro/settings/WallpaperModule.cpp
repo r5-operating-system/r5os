@@ -415,7 +415,7 @@ read_records(BNode& node, std::vector<BgRecord>& records)
 		record.mode = kModePosition;
 		record.x = 0;
 		record.y = 0;
-		record.outline = false;
+		record.outline = true;
 		record.imageSet = 0;
 		stored.FindInt32(kBgWorkspaces, index, &record.workspace);
 		stored.FindInt32(kBgMode, index, &record.mode);

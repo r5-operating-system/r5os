@@ -8,6 +8,12 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-26 - Desktop: enable icon label outline by default
+
+- Problem: desktop icon labels render in white text without an outline or shadow, making them hard to read over the light-blue top portion of `r5-wallpaper.jpg` (and other light wallpapers). Haiku Tracker already draws a dark halo + drop shadow around light desktop labels when `be:bgndimginfoerasetext` (`WidgetTextOutline`) is enabled, but R5's default desktop wallpaper attribute set it to `false`.
+- Change: set `be:bgndimginfoerasetext` to `true` by default in `distro/rest/src/data/directory_attrs/home-desktop.rdef`, `distro/users/AccountAdmin.cpp`, `scripts/apply-branding.py`, and the fallback default in `distro/settings/WallpaperModule.cpp` (`read_records`). Users can still toggle "Icon label outline" in Settings → Wallpaper.
+- Not tested yet: no build or QEMU run performed yet (skipped per owner's request; to be checked in QEMU/stick later).
+
 ## 2026-11-26 - Stick 84 fixes: exFAT/VFS forced unmount (#4655), square menus under R5 default, account-switch timing (build 10076)
 
 - Problem (from 5625U stick 84):
