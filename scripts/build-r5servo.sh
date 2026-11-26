@@ -164,7 +164,7 @@ step shared "$CXX" -shared -fPIC -O2 -o "$OUT/libr5servo.so" \
 	-Wl,-soname,libr5servo.so \
 	-Wl,--allow-multiple-definition \
 	-Wl,--whole-archive "$LIBA" -Wl,--no-whole-archive \
-	-lbe -lstdc++ -lz -lbsd -lnetwork -lroot -lgcc_s
+	-lbe -ltracker -lstdc++ -lz -lbsd -lnetwork -lroot -lgcc_s
 step test "$CXX" -O2 -o "$OUT/r5-servo-test" "$ROOT/distro/servo/r5-servo-test.cpp" \
 	-I"$ROOT/distro/servo" \
 	-L"$OUT" \

@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<!--
+  SPDX-FileCopyrightText: 2026 R5OS Contributors
+  SPDX-License-Identifier: MIT
+-->
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>BServoView &mdash; R5Book</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
+	<link rel="stylesheet" href="r5book.css" />
+</head>
+<body data-page="servo-view">
+
+<div class="book">
+	<aside class="toc"></aside>
+
+	<main class="page">
+		<section class="page-hero">
+			<span class="kit-label">Servo &middot; &lt;r5/BServoView.h&gt;</span>
+			<h1>BServoView</h1>
+			<p>A web page in an ordinary <code class="inline">BView</code>: Servo, the engine behind Aomi,
+			for any program. Link <code class="inline">libr5servo.so</code>, add the view to a window
+			and load an address.</p>
+		</section>
+
+		<nav class="on-this-page" aria-label="On this page">
+			<h3>On this page</h3>
+			<ul>
+				<li><a href="#start">A page in a window</a></li>
+				<li><a href="#rules">One engine per program</a></li>
+				<li><a href="#input">Input and drawing</a></li>
+				<li><a href="#questions">Page questions</a></li>
+				<li><a href="#messages">Messages</a></li>
+				<li><a href="#limits">Not yet</a></li>
+			</ul>
+		</nav>
+
+		<section id="start">
+			<h2>A page in a window</h2>
+			<p><strong>Header:</strong> <code class="inline">/boot/system/develop/headers/r5/BServoView.h</code> (MIT)<br />
+			<strong>Library:</strong> <code class="inline">libr5servo.so</code>, package <code class="inline">r5servo</code><br />
+			<strong>Derived from:</strong> <code class="inline">public BView</code></p>
+			<pre><code>#include &lt;r5/BServoView.h&gt;
+
+BWebSession* session = new BWebSession(false);
+BServoView* page = new BServoView("page", session);
+page-&gt;SetListener(BMessenger(this));   // load, title and address messages
+window-&gt;AddChild(page);
+page-&gt;LoadURL("https://www.haiku-os.org/");</code></pre>
+			<p>A load before the view is in a window, or from another thread, waits until the
+			view can start Servo on its window&rsquo;s thread. Link with
+			<code class="inline">-lr5servo</code>.</p>
+		</section>
+
+		<section id="rules">
+			<h2>One engine per program</h2>
+			<p>Servo allows one instance per process, and it stays on the thread that first starts a
+			view. Keep every <code class="inline">BServoView</code> of a program in one window. When the
+			last view is deleted, Servo shuts down and writes its profile; no new view can be made in
+			that process afterwards. A program with several windows runs Servo on a thread of its own,
+			as Aomi does (<code class="inline">distro/apps/aomi/ServoContentView.cpp</code>).</p>
+			<p>Cookies and logins are kept on disk only when the environment variable
+			<code class="inline">AOMI_PROFILE_DIR</code> names a folder before the first view starts.
+			Without it, everything stays in memory.</p>
+		</section>
+
+		<section id="input">
+			<h2>Input and drawing</h2>
+			<p>The view takes the mouse, the wheel and the keyboard, and the Edit shortcuts
+			(<code class="inline">B_COPY</code>, <code class="inline">B_CUT</code>,
+			<code class="inline">B_PASTE</code>, <code class="inline">B_SELECT_ALL</code>) with the R5
+			clipboard. It draws the page at its own size, never stretched. A hidden view tells Servo,
+			which then stops the page&rsquo;s animation frames. Servo draws with Zink on the GPU when
+			R5&rsquo;s GPU settings allow it, and with Zink on Lavapipe otherwise.</p>
+		</section>
+
+		<section id="questions">
+			<h2>Page questions</h2>
+			<p>The view answers what a page asks: <code class="inline">alert()</code>,
+			<code class="inline">confirm()</code>, <code class="inline">prompt()</code>, a sign-in
+			(HTTP authentication), a file upload, the context menu and select lists. A program that
+			wants its own windows, or translated words, calls
+			<code class="inline">r5_servo_ask_control()</code> and
+			<code class="inline">r5_servo_control_answer()</code> from
+			<code class="inline">r5_servo_abi.h</code>, as Aomi does.</p>
+		</section>
+
+		<section id="messages">
+			<h2>Messages</h2>
+			<p>The listener gets the same messages as Aomi&rsquo;s
+			<a href="web-content-view.html">BWebContentView</a>: load started, committed and finished,
+			title, address, favicon, progress, security and protocol.</p>
+		</section>
+
+		<section id="limits">
+			<h2>Not yet</h2>
+			<ul>
+				<li>A page&rsquo;s request for a new window (<code class="inline">target=_blank</code>,
+				<code class="inline">window.open()</code>) is refused and reported as
+				<code class="inline">AOMI_NEW_WINDOW</code>. Aomi adopts such a window as a tab with
+				<code class="inline">r5_servo_set_callback()</code>.</li>
+				<li>Camera, location and notification permissions are denied.</li>
+				<li>Printing and view source return <code class="inline">B_NOT_SUPPORTED</code>.</li>
+			</ul>
+		</section>
+	</main>
+</div>
+<script src="r5book.js"></script>
+</body>
+</html>

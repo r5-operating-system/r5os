@@ -102,14 +102,28 @@ def main() -> None:
             missing.append(f"{name} {version}")
             continue
         spdx = "unknown"
+        authors = []
         manifest = path / "Cargo.toml"
         if manifest.is_file():
             meta = tomllib.loads(manifest.read_text(encoding="utf-8")).get("package", {})
             spdx = meta.get("license") or ("see licence file" if meta.get("license-file") else "unknown")
+            authors = [a for a in meta.get("authors", []) if isinstance(a, str)]
         licences[spdx] += 1
         parts.append("\n" + "=" * 78 + f"\n{name} {version}\nLicense: {spdx}\n")
-        for notice in top_notices(path):
+        if authors:
+            parts.append("Copyright: " + ", ".join(authors) + "\n")
+        notices = top_notices(path)
+        for notice in notices:
             parts.append(f"\n--- {notice.name} ---\n{read(notice)}")
+        if not notices:
+            # The crate ships only the SPDX line in its Cargo.toml; the
+            # licence text itself is in the R5 repository's LICENSES/.
+            parts.append(
+                "\n(This crate ships no licence file. The text of the licence "
+                "above is in LICENSES/ of the R5 repository and in "
+                "/boot/system/data/licenses; the copyright is its authors'.)\n")
+
+
         if name in ("mozjs_sys", "aws-lc-sys"):
             bundled[name] = path
     for name, path in bundled.items():

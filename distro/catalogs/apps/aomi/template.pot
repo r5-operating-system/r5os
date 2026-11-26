@@ -2,7 +2,7 @@ msgid ""
 msgstr "Project-Id-Version: application/x-vnd.R5-Aomi\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
 
 msgctxt "Aomi"
-msgid "Settings…"
+msgid "Bookmarks"
 msgstr ""
 
 msgctxt "Aomi"
@@ -10,7 +10,7 @@ msgid "Print…"
 msgstr ""
 
 msgctxt "Aomi"
-msgid "Bookmarks"
+msgid "Settings…"
 msgstr ""
 
 msgctxt "Aomi"
@@ -19,10 +19,6 @@ msgstr ""
 
 msgctxt "Aomi"
 msgid "Downloads and new bookmarks stay."
-msgstr ""
-
-msgctxt "Aomi"
-msgid "Ask where to save each file"
 msgstr ""
 
 msgctxt "Aomi"
@@ -46,15 +42,11 @@ msgid "Bookmark this page"
 msgstr ""
 
 msgctxt "Aomi"
-msgid "No"
+msgid "Private window"
 msgstr ""
 
 msgctxt "Aomi"
 msgid "Show menu bar"
-msgstr ""
-
-msgctxt "Aomi"
-msgid "Private window"
 msgstr ""
 
 msgctxt "Aomi"
@@ -86,7 +78,7 @@ msgid "Window"
 msgstr ""
 
 msgctxt "Aomi"
-msgid "Yes"
+msgid "User name:"
 msgstr ""
 
 msgctxt "Aomi"
@@ -146,6 +138,10 @@ msgid ", not secure"
 msgstr ""
 
 msgctxt "Aomi"
+msgid "Sign in"
+msgstr ""
+
+msgctxt "Aomi"
 msgid "Home page"
 msgstr ""
 
@@ -166,15 +162,19 @@ msgid "Show home button"
 msgstr ""
 
 msgctxt "Aomi"
-msgid "Edit"
-msgstr ""
-
-msgctxt "Aomi"
 msgid "Cancel"
 msgstr ""
 
 msgctxt "Aomi"
+msgid "Edit"
+msgstr ""
+
+msgctxt "Aomi"
 msgid "Close tab"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Reinstall the r5servo package and open Aomi again."
 msgstr ""
 
 msgctxt "Aomi"
@@ -194,6 +194,10 @@ msgid "Search or type an address"
 msgstr ""
 
 msgctxt "Aomi"
+msgid "Sign in to %s"
+msgstr ""
+
+msgctxt "Aomi"
 msgid "Show all downloads"
 msgstr ""
 
@@ -207,10 +211,6 @@ msgstr ""
 
 msgctxt "Aomi"
 msgid "Reload"
-msgstr ""
-
-msgctxt "Aomi"
-msgid "Zoom text only"
 msgstr ""
 
 msgctxt "Aomi"
@@ -238,11 +238,19 @@ msgid "Search the web or type an address"
 msgstr ""
 
 msgctxt "Aomi"
+msgid "WebPositive is still installed and works as usual."
+msgstr ""
+
+msgctxt "Aomi"
 msgid "Start with:"
 msgstr ""
 
 msgctxt "Aomi"
 msgid "Zoom out"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Servo could not make a drawing surface for this page (EGL)."
 msgstr ""
 
 msgctxt "Aomi"
@@ -255,6 +263,14 @@ msgstr ""
 
 msgctxt "Aomi"
 msgid "A private window forgets its history, cookies and site data when you close it."
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Password:"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "The web engine could not be started"
 msgstr ""
 
 msgctxt "Aomi"

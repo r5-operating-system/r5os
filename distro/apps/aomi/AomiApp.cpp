@@ -93,9 +93,9 @@ remove_tree(const char* path)
 }
 
 
-// Servo allows one engine per process, so every further Aomi window is a
-// process of its own: "--private-process" for a private window, and
-// "--new-window" for another normal one.
+// Normal windows share this process and its one Servo (on its engine
+// thread). A private window is a process of its own: its Servo keeps
+// nothing on disk and shares nothing with the normal windows.
 static void
 launch_window_process(const char* flag, const std::vector<BString>& urls)
 {
@@ -117,8 +117,6 @@ launch_private_process(const std::vector<BString>& urls)
 	launch_window_process("--private-process", urls);
 }
 
-
-static bool sExtraWindow = false;
 
 
 static bool
@@ -157,7 +155,7 @@ public:
 									fDownloads(false),
 									fSettings(false)
 								{
-									if (!fPrivate && !sExtraWindow)
+									if (!fPrivate)
 										write_normal_team(Team());
 								}
 
@@ -176,6 +174,7 @@ public:
 									bool downloads = false;
 									bool settings = false;
 									bool closeSettings = false;
+									bool newWindow = false;
 									bool openLock = false;
 									bool doBack = false;
 									bool doForward = false;
@@ -208,6 +207,8 @@ public:
 											closeSettings = true;
 										else if (strcmp(argv[i], "--lock") == 0)
 											openLock = true;
+										else if (strcmp(argv[i], "--window") == 0)
+											newWindow = true;
 										else if (strcmp(argv[i], "--back") == 0)
 											doBack = true;
 										else if (strcmp(argv[i], "--forward") == 0)
@@ -253,6 +254,20 @@ public:
 										launch_private_process(urls);
 										return;
 									}
+									if (newWindow && !fPrivate) {
+										// A private window asked for a normal
+										// one: it belongs to this process.
+										AomiWindow* fresh = new AomiWindow(
+											new BWebSession(false), false);
+										fresh->Show();
+										for (uint32 i = 0; i < urls.size(); i++) {
+											BMessage openMsg(MSG_OPEN_URL);
+											openMsg.AddString("url", urls[i]);
+											openMsg.AddBool("newTab", i > 0);
+											fresh->PostMessage(&openMsg);
+										}
+										return;
+									}
 									if (closeSettings) {
 										for (int32 i = 0; i < CountWindows(); i++) {
 											AomiSettingsWindow* sw
@@ -273,6 +288,9 @@ public:
 										return;
 									if (!window->Lock())
 										return;
+									// Started again from the Deskbar or
+									// Tracker: bring the window to the front.
+									window->Activate(true);
 									if (goUrl.Length() > 0) {
 										BMessage openMsg(MSG_OPEN_URL);
 										openMsg.AddString("url", goUrl);
@@ -345,6 +363,16 @@ public:
 										window->PostMessage(MSG_SETTINGS);
 								}
 
+	virtual	bool				QuitRequested()
+								{
+									// The windows close first, and with them every tab;
+									// then Servo writes its profile and stops.
+									if (!BApplication::QuitRequested())
+										return false;
+									aomi_servo_shutdown();
+									return true;
+								}
+
 	virtual	void				MessageReceived(BMessage* message)
 								{
 									switch (message->what) {
@@ -361,12 +389,20 @@ public:
 											}
 											break;
 										case MSG_NEW_WINDOW:
-										{
-											std::vector<BString> none;
-											launch_window_process("--new-window",
-												none);
+											if (fPrivate) {
+												// A normal window lives in the
+												// normal process, with its
+												// profile; not in this one.
+												const char* args[] = { "--window" };
+												be_roster->Launch(kAppSig, 1,
+													const_cast<char**>(args));
+											} else {
+												(new AomiWindow(
+													new BWebSession(false),
+													false))->Show();
+											}
 											break;
-										}
+
 										case MSG_NEW_PRIVATE:
 										{
 											std::vector<BString> none;
@@ -397,6 +433,8 @@ main(int argc, char** argv)
 		if (strcmp(argv[i], "--technical-json") == 0) {
 			aomi_engine_start(kEngine);
 			printf("%s", aomi_technical_json().String());
+			// The engine thread started with the library; stop it before exit.
+			aomi_servo_shutdown();
 			return 0;
 		}
 		if (strcmp(argv[i], "--private") == 0
@@ -404,11 +442,10 @@ main(int argc, char** argv)
 			privat = true;
 			break;
 		}
-		if (strcmp(argv[i], "--new-window") == 0)
-			sExtraWindow = true;
 	}
-	if (!privat && !sExtraWindow && forward_to_running_normal(argc, argv))
+	if (!privat && forward_to_running_normal(argc, argv))
 		return 0;
+
 
 	BString privDir;
 	if (privat) {

@@ -101,7 +101,7 @@ Each file in `distro/servo/patches/` applies with `patch -p1` on the unpacked cr
 
 `HOST_CC` stays the Linux gcc; the cross compiler is not the host compiler.
 
-The shared library is Haiku g++ around the Rust staticlib, with `--whole-archive` and `--allow-multiple-definition` (two copies of lz4). A cdylib hid the C++ symbols. NEEDED libraries: `libstdc++`, `libbe`, `libz`, `libbsd`, `libgcc_s`, `libroot`, `libnetwork`. Mesa `libGL` is opened at runtime.
+The shared library is Haiku g++ around the Rust staticlib, with `--whole-archive` and `--allow-multiple-definition` (two copies of lz4). A cdylib hid the C++ symbols. NEEDED libraries: `libstdc++`, `libbe`, `libtracker` (BFilePanel for a page's file upload), `libz`, `libbsd`, `libgcc_s`, `libroot`, `libnetwork`. Mesa `libGL` is opened at runtime.
 
 The first document has to be the web view's initial URL. Creating the engine on `about:blank` and then calling `load()` drops the real document. `LoadURL` from the application thread locks the window before it reads the size.
 

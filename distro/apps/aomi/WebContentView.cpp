@@ -53,15 +53,6 @@ BWebContentView::Report(BMessage* message)
 }
 
 
-status_t
-BWebContentView::AnswerControl(bool accept, int32 value, const char* text)
-{
-	(void)accept;
-	(void)value;
-	(void)text;
-	return B_NOT_SUPPORTED;
-}
-
 
 
 status_t

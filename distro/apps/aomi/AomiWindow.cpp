@@ -1188,9 +1188,12 @@ AomiWindow::_AddTab(const char* url, bool select, BWebContentView* adopt)
 	tab.bookmarked = false;
 	tab.title = fPrivate
 		? B_TRANSLATE("Private – New tab") : B_TRANSLATE("New tab");
-	if (adopt != NULL)
+	if (adopt != NULL) {
+		// A page opened this tab; Servo reports its address soon. Until then
+		// it is not the new tab page.
 		tab.view = adopt;
-	else {
+		tab.url = "about:blank";
+	} else {
 		tab.view = create_aomi_content_view("Servo", "page", fSession);
 	}
 	int32 index = (int32)fTabs.size();
@@ -1429,109 +1432,14 @@ AomiWindow::HandleEngine(BMessage* message, int32 tab)
 	}
 	if (message->what != AOMI_DIALOG)
 		return;
-	if (tab < 0 || tab >= (int32)fTabs.size() || fTabs[tab].view == NULL)
-		return;
-	BWebContentView* view = fTabs[tab].view;
+	// The view asked the user and answered the page itself; the window only
+	// notes what the page asked for.
 	int32 kind = 0;
 	message->FindInt32("kind", &kind);
-	BString text;
-	message->FindString("text", &text);
-	BPoint where(0, 0);
-	message->FindPoint("where", &where);
-
-	switch (kind) {
-		case AOMI_DIALOG_ALERT:
-		{
-			// The page waits for the answer. Go() keeps this window drawn.
-			BAlert* alert = new BAlert("Aomi", text.String(), B_TRANSLATE("OK"));
-			alert->Go();
-			view->AnswerControl(true, 0, NULL);
-			break;
-		}
-		case AOMI_DIALOG_CONFIRM:
-		{
-			BAlert* alert = new BAlert("Aomi", text.String(),
-				B_TRANSLATE("Cancel"), B_TRANSLATE("OK"), NULL,
-				B_WIDTH_AS_USUAL, B_WARNING_ALERT);
-			alert->SetShortcut(0, B_ESCAPE);
-			view->AnswerControl(alert->Go() == 1, 0, NULL);
-			break;
-		}
-		case AOMI_DIALOG_SELECT:
-		{
-			// One menu item per option; group headings are disabled items.
-			BPopUpMenu* menu = new BPopUpMenu("select", false, false);
-			int32 start = 0;
-			while (start <= text.Length()) {
-				int32 end = text.FindFirst('\n', start);
-				if (end < 0)
-					end = text.Length();
-				BString line;
-				text.CopyInto(line, start, end - start);
-				start = end + 1;
-				// "o<TAB>id<TAB>flags<TAB>label" or "g<TAB><TAB><TAB>label".
-				int32 t1 = line.FindFirst('\t');
-				int32 t2 = t1 >= 0 ? line.FindFirst('\t', t1 + 1) : -1;
-				int32 t3 = t2 >= 0 ? line.FindFirst('\t', t2 + 1) : -1;
-				if (t3 < 0)
-					continue;
-				BString label;
-				line.CopyInto(label, t3 + 1, line.Length() - t3 - 1);
-				if (line[0] == 'g') {
-					BMenuItem* heading = new BMenuItem(label.String(), NULL);
-					heading->SetEnabled(false);
-					menu->AddItem(heading);
-					continue;
-				}
-				BString id;
-				BString flags;
-				line.CopyInto(id, t1 + 1, t2 - t1 - 1);
-				line.CopyInto(flags, t2 + 1, t3 - t2 - 1);
-				BMessage* choice = new BMessage('aSel');
-				choice->AddInt32("id", atoi(id.String()));
-				BMenuItem* item = new BMenuItem(label.String(), choice);
-				item->SetEnabled(flags.FindFirst('d') < 0);
-				if (flags.FindFirst('s') >= 0)
-					item->SetMarked(true);
-				menu->AddItem(item);
-			}
-			BMenuItem* chosen = NULL;
-			if (menu->CountItems() > 0) {
-				BView* content = dynamic_cast<BView*>(view);
-				BPoint screen = content != NULL
-					? content->ConvertToScreen(where) : where;
-				chosen = menu->Go(screen, false, true);
-			}
-			int32 id = -1;
-			if (chosen != NULL && chosen->Message() != NULL)
-				chosen->Message()->FindInt32("id", &id);
-			view->AnswerControl(chosen != NULL && id >= 0, id, NULL);
-			delete menu;
-			break;
-		}
-		case AOMI_DIALOG_PROMPT:
-		{
-			// No text entry dialog yet: the page gets "cancelled" (null).
-			view->AnswerControl(false, 0, NULL);
-			BString line("prompt not supported: ");
-			line << text;
-			aomi_log_add(line.String());
-			break;
-		}
-		default:
-		{
-			// Permission requests (denied), file pickers (cancelled) and
-			// sign-in requests are already answered by the engine. They are
-			// logged, not shown: an empty alert helped no one.
-			BString line;
-			line.SetToFormat("page request %d not supported: %s", (int)kind,
-				text.String());
-			aomi_log_add(line.String());
-			break;
-		}
-	}
+	BString line;
+	line.SetToFormat("tab %d page request %d", (int)tab, (int)kind);
+	aomi_log_add(line.String());
 }
-
 
 
 void

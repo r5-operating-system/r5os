@@ -73,9 +73,9 @@ enum {
 	// "id" int32, "text" string
 	AOMI_DOWNLOAD_FAILED		= 'aDlx',
 	// "kind" int32 (AOMI_DIALOG_*), "text" string, "where" BPoint in view
-	// coordinates (a select list: the lower left corner of its box). The
-	// page waits until the window calls AnswerControl() on the view, for
-	// an alert, confirm, prompt or select list.
+	// coordinates. For the listener's information: the view itself asks the
+	// user (alert, confirm, prompt, sign-in, file upload, context menu,
+	// select list) and answers the page.
 	AOMI_DIALOG					= 'aDlg'
 };
 
@@ -144,10 +144,6 @@ public:
 	virtual	status_t			Open(int32 id) = 0;
 	virtual	status_t			ShowInTracker(int32 id) = 0;
 
-	// The user's answer to the last AOMI_DIALOG this view reported. accept
-	// false cancels. value: a select list's option id. text: a prompt's text.
-	virtual	status_t			AnswerControl(bool accept, int32 value,
-									const char* text);
 
 
 protected:

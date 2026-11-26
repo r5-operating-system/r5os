@@ -261,6 +261,26 @@
 					],
 				},
 				{
+					file: "web-content-view.html",
+					label: "Web content view",
+					items: [
+						["web-content-view.html#overview", "Overview"],
+						["web-content-view.html#methods", "Member functions"],
+						["web-content-view.html#messages", "Reported messages"],
+					],
+				},
+				{
+					file: "servo-view.html",
+					label: "A web page in a view",
+					items: [
+						["servo-view.html#start", "A page in a window"],
+						["servo-view.html#rules", "One engine per program"],
+						["servo-view.html#input", "Input and drawing"],
+						["servo-view.html#questions", "Page questions"],
+						["servo-view.html#limits", "Not yet"],
+					],
+				},
+				{
 					file: "translations.html",
 					label: "Translations",
 					items: [

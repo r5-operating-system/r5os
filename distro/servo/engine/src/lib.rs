@@ -15,7 +15,8 @@ use std::sync::{Arc, Mutex, Once, OnceLock};
 use servo::{
     AuthenticationRequest, CreateNewWebViewRequest, Cursor, DeviceIntPoint, DeviceIntRect,
     DeviceIntSize, DevicePoint, EmbedderControl, EventLoopWaker, InputEvent,
-    JSValue, Key, KeyState, KeyboardEvent, LoadStatus, Modifiers, MouseButton,
+    Key, KeyState,
+ KeyboardEvent, LoadStatus, Modifiers, MouseButton,
     MouseButtonAction, MouseButtonEvent, MouseMoveEvent, NamedKey, Opts, PermissionRequest,
     Preferences, RenderingContext, ServoBuilder, SimpleDialog, WebView, WebViewBuilder,
     WebViewDelegate, WebViewPoint, WheelDelta, WheelEvent, WheelMode, WindowRenderingContext,
@@ -36,7 +37,9 @@ thread_local! {
     static SHARED_SERVO: RefCell<Option<Rc<servo::Servo>>> = const { RefCell::new(None) };
     // Engines alive on this thread. An event or JavaScript result for an
     // engine that is no longer listed is dropped.
-    static ENGINES: RefCell<Vec<usize>> = const { RefCell::new(Vec::new()) };
+    static ENGINES: RefCell<Vec<(usize, u64)>> = const { RefCell::new(Vec::new()) };
+    // Set by r5_servo_shutdown(): Servo cannot be built twice in a process.
+    static SHUT_DOWN: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     // Rendering contexts of closed tabs. Destroying one aborts in Haiku
     // Mesa's eglDestroyImageKHR, so a new tab reuses them instead.
     static CONTEXT_POOL: RefCell<Vec<(Rc<WindowRenderingContext>, i32, i32)>> =
@@ -44,7 +47,7 @@ thread_local! {
     // The size the GL storage of a new tab's surface is made with (see
     // surface_size()). r5_servo_set_max_size() sets it; 0 means unset.
     static MAX_SIZE: RefCell<(i32, i32)> = const { RefCell::new((0, 0)) };
-    static WAKE_TARGET: Arc<Mutex<Option<(WakeFn, usize)>>> = Arc::new(Mutex::new(None));
+    // The wake target is process-wide: see WAKE_TARGET below.
 }
 
 // The GL path. Servo's EGL is Mesa's surfaceless platform, where R5's own
@@ -161,8 +164,25 @@ pub extern "C" fn r5_servo_set_max_size(width: i32, height: i32) {
     MAX_SIZE.with(|size| *size.borrow_mut() = (width.max(0), height.max(0)));
 }
 
+// Process-wide: the C++ side may register the waker on another thread than
+// the one that builds Servo (a view is attached on the app thread while its
+// window is constructed).
+static WAKE_TARGET: OnceLock<Arc<Mutex<Option<(WakeFn, usize)>>>> = OnceLock::new();
+static NEXT_ENGINE_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
+fn wake_target() -> Arc<Mutex<Option<(WakeFn, usize)>>> {
+    Arc::clone(WAKE_TARGET.get_or_init(|| Arc::new(Mutex::new(None))))
+}
+
 fn alive(engine: *mut Engine) -> bool {
-    !engine.is_null() && ENGINES.with(|list| list.borrow().contains(&(engine as usize)))
+    !engine.is_null()
+        && ENGINES.with(|list| list.borrow().iter().any(|(ptr, _)| *ptr == engine as usize))
+}
+
+// The address of a freed engine can come back for a new tab; the id cannot.
+fn alive_id(engine: *mut Engine, id: u64) -> bool {
+    !engine.is_null()
+        && ENGINES.with(|list| list.borrow().iter().any(|e| *e == (engine as usize, id)))
 }
 
 // Servo calls wake() from its own threads when it has work for the embedder.
@@ -269,7 +289,6 @@ const R5_EV_NEW_WINDOW: i32 = 13;
 const R5_EV_CLOSE: i32 = 14;
 const R5_EV_FAVICON: i32 = 15;
 const R5_EV_DIALOG: i32 = 16;
-const R5_EV_PAGE_TEXT: i32 = 17;
 
 const OK: i32 = 0;
 const NO_INIT: i32 = -1;
@@ -312,6 +331,8 @@ struct Ev {
     favicon_width: i32,
     favicon_height: i32,
     favicon_format: i32,
+    // R5_EV_NEW_WINDOW: the engine Servo made for the page, as `current`.
+    engine: usize,
 }
 
 impl Ev {
@@ -328,6 +349,7 @@ impl Ev {
             favicon_width: 0,
             favicon_height: 0,
             favicon_format: 0,
+            engine: 0,
         }
     }
 }
@@ -336,7 +358,6 @@ struct Notes {
     history: Vec<String>,
     index: usize,
     protocol: String,
-    asked_body: bool,
     saw_red: bool,
     spins: u32,
     last_url: String,
@@ -359,6 +380,9 @@ struct Inner {
     // The size the context's GL storage was made with.
     storage_w: i32,
     storage_h: i32,
+    // The size of `frame`.
+    frame_w: i32,
+    frame_h: i32,
 }
 
 // A page control waiting for the user's answer (r5_servo_control_answer()).
@@ -366,6 +390,9 @@ struct Inner {
 enum Pending {
     Dialog(SimpleDialog),
     Select(servo::SelectElement),
+    Auth(AuthenticationRequest),
+    File(servo::FilePicker),
+    Menu(servo::ContextMenu),
 }
 
 struct Engine {
@@ -373,22 +400,57 @@ struct Engine {
     inner: RefCell<Inner>,
     events: Mutex<Vec<Ev>>,
     notes: Mutex<Notes>,
-    callback: Callback,
-    callback_ctx: *mut std::ffi::c_void,
+    // None for an engine Servo made for a page until Aomi takes it over.
+    callback: std::cell::Cell<Option<Callback>>,
+    callback_ctx: std::cell::Cell<*mut std::ffi::c_void>,
 }
 
 struct Bridge {
     engine: AtomicPtr<Engine>,
+    id: std::sync::atomic::AtomicU64,
 }
 
 // Null once the engine is destroyed: Servo may still call the delegate of a
 // WebView it has not let go of yet.
 fn engine_ptr(bridge: &Bridge) -> *mut Engine {
     let engine = bridge.engine.load(Ordering::Relaxed);
-    if alive(engine) {
+    if alive_id(engine, bridge.id.load(Ordering::Relaxed)) {
         engine
     } else {
         std::ptr::null_mut()
+    }
+}
+
+// The R5 clipboard (BClipboard "system"), implemented in BServoView.cpp.
+// Servo's default keeps the text inside this process only on Haiku.
+extern "C" {
+    fn r5_servo_clipboard_set(text: *const std::ffi::c_char);
+    fn r5_servo_clipboard_get() -> *mut std::ffi::c_char;
+    fn r5_servo_clipboard_free(text: *mut std::ffi::c_char);
+}
+
+struct R5Clipboard;
+
+impl servo::ClipboardDelegate for R5Clipboard {
+    fn clear(&self, _webview: WebView) {
+        unsafe { r5_servo_clipboard_set(std::ptr::null()) };
+    }
+
+    fn get_text(&self, _webview: WebView, request: servo::StringRequest) {
+        let raw = unsafe { r5_servo_clipboard_get() };
+        if raw.is_null() {
+            request.failure("the clipboard holds no text".to_string());
+            return;
+        }
+        let text = unsafe { std::ffi::CStr::from_ptr(raw) }.to_string_lossy().into_owned();
+        unsafe { r5_servo_clipboard_free(raw) };
+        request.success(text);
+    }
+
+    fn set_text(&self, _webview: WebView, new_contents: String) {
+        if let Ok(text) = CString::new(new_contents.replace('\0', "")) {
+            unsafe { r5_servo_clipboard_set(text.as_ptr()) };
+        }
     }
 }
 
@@ -406,16 +468,20 @@ fn flush(engine: *mut Engine) {
     if !alive(engine) {
         return;
     }
+    let (callback, ctx) = {
+        let engine = unsafe { &*engine };
+        (engine.callback.get(), engine.callback_ctx.get())
+    };
+    // No callback yet: the events wait for r5_servo_set_callback().
+    let Some(callback) = callback else {
+        return;
+    };
     let pending = {
         let engine = unsafe { &*engine };
         match engine.events.lock() {
             Ok(mut events) => std::mem::take(&mut *events),
             Err(_) => return,
         }
-    };
-    let (callback, ctx) = {
-        let engine = unsafe { &*engine };
-        (engine.callback, engine.callback_ctx)
     };
     for event in pending {
         let url = CString::new(event.url.replace('\0', "")).unwrap_or_default();
@@ -428,7 +494,8 @@ fn flush(engine: *mut Engine) {
             a: event.a,
             b: event.b,
             c: event.c,
-            current: 0,
+            current: event.engine as i64,
+
             expected: 0,
             favicon: event.favicon.as_ptr(),
             favicon_width: event.favicon_width,
@@ -437,25 +504,6 @@ fn flush(engine: *mut Engine) {
         };
         callback(ctx, &c_event);
     }
-}
-
-fn protocol_from_body(text: &str) -> Option<&'static str> {
-    let lower = text.to_ascii_lowercase();
-    if lower.contains("\"http2\":1")
-        || lower.contains("\"http2\": 1")
-        || lower.contains("\"http2\":true")
-        || lower.contains("http/2")
-    {
-        return Some("h2");
-    }
-    if lower.contains("\"http2\":0")
-        || lower.contains("\"http2\": 0")
-        || lower.contains("\"http2\":false")
-        || lower.contains("http/1.1")
-    {
-        return Some("http/1.1");
-    }
-    None
 }
 
 impl WebViewDelegate for Bridge {
@@ -475,9 +523,6 @@ impl WebViewDelegate for Bridge {
         if !engine.is_null() {
             if let Ok(mut inner) = unsafe { (*engine).inner.try_borrow_mut() } {
                 inner.https = event.url.starts_with("https:");
-            }
-            if let Ok(mut notes) = unsafe { (*engine).notes.lock() } {
-                notes.asked_body = false;
             }
             let _ = webview;
         }
@@ -532,11 +577,6 @@ impl WebViewDelegate for Bridge {
             nav.c = loading;
             emit(engine, nav);
         }
-        if matches!(status, LoadStatus::Complete) && !engine.is_null() {
-            if let Ok(mut notes) = unsafe { (*engine).notes.lock() } {
-                notes.asked_body = false;
-            }
-        }
     }
 
     fn notify_cursor_changed(&self, _webview: WebView, cursor: Cursor) {
@@ -590,13 +630,45 @@ impl WebViewDelegate for Bridge {
         emit(engine_ptr(self), event);
     }
 
-    fn request_create_new(&self, _parent: WebView, _request: CreateNewWebViewRequest) {
-        // Servo 0.8 does not expose the target URL on the request. The
-        // window still hears that a new view was asked for. Dropping the
-        // request leaves the new view unbuilt.
+    fn request_create_new(&self, _parent: WebView, request: CreateNewWebViewRequest) {
+        // A page opened a window (target=_blank, window.open()). Servo gives
+        // a builder, not an address: build the new WebView now, as an
+        // engine without a view, and tell the parent tab. Its view adopts
+        // the engine (r5_servo_set_callback). Dropping the request refuses.
+        let parent = engine_ptr(self);
+        if parent.is_null() {
+            return;
+        }
+        let (width, height) = match unsafe { (*parent).inner.try_borrow() } {
+            Ok(inner) => (inner.width, inner.height),
+            Err(_) => return,
+        };
+        let Some(servo_engine) = shared_servo() else {
+            return;
+        };
+        let Some((context, storage_w, storage_h, gl)) = make_context(width, height) else {
+            return;
+        };
+        let child = make_engine(
+            servo_engine,
+            context,
+            (storage_w, storage_h),
+            gl,
+            (width, height),
+            move |bridge, context| {
+                request
+                    .builder(context as Rc<dyn RenderingContext>)
+                    .delegate(bridge)
+                    .clipboard_delegate(Rc::new(R5Clipboard))
+                    .build()
+            },
+            None,
+            std::ptr::null_mut(),
+        );
         let mut event = Ev::new(R5_EV_NEW_WINDOW);
         event.a = 1;
-        emit(engine_ptr(self), event);
+        event.engine = child as usize;
+        emit(parent, event);
     }
 
     fn request_permission(&self, _webview: WebView, request: PermissionRequest) {
@@ -608,10 +680,20 @@ impl WebViewDelegate for Bridge {
     }
 
     fn request_authentication(&self, _webview: WebView, request: AuthenticationRequest) {
+        // A site asks for a user name and password (HTTP authentication).
+        // text: the address, and "proxy" on a second line for a proxy.
+        let engine = engine_ptr(self);
+        if engine.is_null() {
+            return;
+        }
         let mut event = Ev::new(R5_EV_DIALOG);
         event.a = 5;
-        event.url = request.url().to_string();
-        emit(engine_ptr(self), event);
+        event.text = request.url().to_string();
+        if request.for_proxy() {
+            event.text.push_str("\nproxy");
+        }
+        set_pending(engine, Pending::Auth(request));
+        emit(engine, event);
     }
 
     fn show_embedder_control(&self, _webview: WebView, control: EmbedderControl) {
@@ -629,7 +711,13 @@ impl WebViewDelegate for Bridge {
                     SimpleDialog::Prompt(_) => 3,
                 };
                 event.text = dialog.message().to_string();
+                if let SimpleDialog::Prompt(prompt) = &dialog {
+                    // "message<NL>default value" for the text field.
+                    event.text.push('\n');
+                    event.text.push_str(prompt.current_value());
+                }
                 set_pending(engine, Pending::Dialog(dialog));
+
                 emit(engine, event);
             }
             EmbedderControl::SelectElement(select) => {
@@ -670,15 +758,43 @@ impl WebViewDelegate for Bridge {
                 emit(engine, event);
             }
             EmbedderControl::FilePicker(picker) => {
-                // Not supported yet: the page sees a cancelled picker.
+                // An upload field. text: "m" (several files) or "s", a tab,
+                // and the allowed extensions separated by commas.
+                let patterns: Vec<String> =
+                    picker.filter_patterns().iter().map(|p| p.0.clone()).collect();
                 let mut event = Ev::new(R5_EV_DIALOG);
                 event.a = 6;
+                event.text = format!(
+                    "{}\t{}",
+                    if picker.allow_select_multiple() { "m" } else { "s" },
+                    patterns.join(",")
+                );
+                set_pending(engine, Pending::File(picker));
                 emit(engine, event);
-                picker.dismiss();
             }
             EmbedderControl::ContextMenu(menu) => {
-                // Not supported yet: no menu, the page goes on.
-                menu.dismiss();
+                // One line per item: "i<TAB>index<TAB>enabled(1/0)<TAB>label",
+                // or "-" for a separator. Answer with the item's index.
+                let mut lines = Vec::new();
+                for (index, item) in menu.items().iter().enumerate() {
+                    match item {
+                        servo::ContextMenuItem::Item { label, enabled, .. } => lines.push(format!(
+                            "i\t{}\t{}\t{}",
+                            index,
+                            *enabled as i32,
+                            label.replace(['\t', '\n'], " ")
+                        )),
+                        servo::ContextMenuItem::Separator => lines.push("-".to_string()),
+                    }
+                }
+                let position = menu.position();
+                let mut event = Ev::new(R5_EV_DIALOG);
+                event.a = 8;
+                event.b = position.min.x;
+                event.c = position.min.y;
+                event.text = lines.join("\n");
+                set_pending(engine, Pending::Menu(menu));
+                emit(engine, event);
             }
             other => drop(other),
         }
@@ -734,6 +850,49 @@ pub extern "C" fn r5_servo_control_answer(
             }
             select.submit();
         }
+        Pending::Auth(request) => {
+            // text: user name, a newline, password. Dropping the request
+            // cancels the sign-in.
+            if accept != 0 && !text.is_null() {
+                let raw = unsafe { std::ffi::CStr::from_ptr(text as *const std::ffi::c_char) };
+                let raw = raw.to_string_lossy();
+                let (user, password) = raw.split_once('\n').unwrap_or((&raw, ""));
+                request.authenticate(user.to_string(), password.to_string());
+            }
+        }
+        Pending::File(mut picker) => {
+            // text: one path per line.
+            if accept != 0 && !text.is_null() {
+                let raw = unsafe { std::ffi::CStr::from_ptr(text as *const std::ffi::c_char) };
+                let paths: Vec<PathBuf> = raw
+                    .to_string_lossy()
+                    .lines()
+                    .filter(|line| !line.is_empty())
+                    .map(PathBuf::from)
+                    .collect();
+                picker.select(&paths);
+                picker.submit();
+            } else {
+                picker.dismiss();
+            }
+        }
+        Pending::Menu(menu) => {
+            let action = if accept != 0 && value >= 0 {
+                match menu.items().get(value as usize) {
+                    Some(servo::ContextMenuItem::Item { action, enabled: true, .. }) => {
+                        Some(*action)
+                    }
+                    _ => None,
+                }
+            } else {
+                None
+            };
+            match action {
+                Some(action) => menu.select(action),
+                None => menu.dismiss(),
+            }
+        }
+
     }
     OK
 }
@@ -744,7 +903,11 @@ fn write_buf(text: &str, buffer: *mut u8, length: i32) -> i32 {
         return BAD_VALUE;
     }
     let bytes = text.as_bytes();
-    let count = bytes.len().min(length as usize - 1);
+    // Never cut a UTF-8 sequence in half.
+    let mut count = bytes.len().min(length as usize - 1);
+    while count > 0 && count < bytes.len() && !text.is_char_boundary(count) {
+        count -= 1;
+    }
     unsafe {
         std::ptr::copy_nonoverlapping(bytes.as_ptr(), buffer, count);
         *buffer.add(count) = 0;
@@ -808,32 +971,22 @@ fn load(engine: *mut Engine, raw: &str) -> i32 {
     OK
 }
 
-#[no_mangle]
-pub extern "C" fn r5_servo_create(
-    width: i32,
-    height: i32,
-    document: *const u8,
-    document_is_html: i32,
-    callback: Callback,
-    callback_ctx: *mut std::ffi::c_void,
-) -> *mut Engine {
-    let width = width.max(16);
-    let height = height.max(16);
+// A rendering context for a tab: a closed tab's one when its storage is
+// large enough, otherwise a new one made at surface_size() (see there).
+fn make_context(width: i32, height: i32) -> Option<(Rc<WindowRenderingContext>, i32, i32, String)> {
+    static GL_PATH: Once = Once::new();
+    GL_PATH.call_once(choose_gl_path);
     let size = dpi::PhysicalSize {
         width: width as u32,
         height: height as u32,
     };
-    static GL_PATH: Once = Once::new();
-    GL_PATH.call_once(choose_gl_path);
     let window = raw_window_handle::HaikuWindowHandle::new(core::ptr::NonNull::dangling());
-
     let window_handle = unsafe {
         raw_window_handle::WindowHandle::borrow_raw(raw_window_handle::RawWindowHandle::Haiku(
             window,
         ))
     };
     let (storage_w, storage_h) = surface_size(width, height);
-    // Reuse a closed tab's context when its storage is large enough.
     let pooled = CONTEXT_POOL.with(|pool| {
         let mut pool = pool.borrow_mut();
         let index = pool
@@ -854,7 +1007,7 @@ pub extern "C" fn r5_servo_create(
             Ok(context) => (Rc::new(context), storage_w, storage_h),
             Err(error) => {
                 println!("r5-servo context-fail {error:?}");
-                return std::ptr::null_mut();
+                return None;
             }
         },
     };
@@ -862,7 +1015,8 @@ pub extern "C" fn r5_servo_create(
     context.resize(size);
     if let Err(error) = context.make_current() {
         println!("r5-servo current-fail {error:?}");
-        return std::ptr::null_mut();
+        CONTEXT_POOL.with(|pool| pool.borrow_mut().push((context, storage_w, storage_h)));
+        return None;
     }
     let gl = format!(
         "gl vendor {} renderer {}",
@@ -871,10 +1025,17 @@ pub extern "C" fn r5_servo_create(
     );
     println!("r5-servo context-ok");
     println!("r5-servo {gl}");
+    Some((context, storage_w, storage_h, gl))
+}
 
+// The one Servo of this thread, built on first use.
+fn shared_servo() -> Option<Rc<servo::Servo>> {
+    if SHUT_DOWN.with(|flag| flag.get()) {
+        println!("r5-servo create-after-shutdown");
+        return None;
+    }
     install_protocol_logger();
-
-    let servo_engine = SHARED_SERVO.with(|slot| {
+    Some(SHARED_SERVO.with(|slot| {
         if let Some(existing) = slot.borrow().as_ref() {
             return Rc::clone(existing);
         }
@@ -888,7 +1049,7 @@ pub extern "C" fn r5_servo_create(
             }
         }
         let waker = Waker {
-            target: WAKE_TARGET.with(Arc::clone),
+            target: wake_target(),
         };
         let mut preferences = Preferences::default();
         preferences.network_http_proxy_uri = String::new();
@@ -902,22 +1063,31 @@ pub extern "C" fn r5_servo_create(
         );
         *slot.borrow_mut() = Some(Rc::clone(&built));
         built
-    });
-    let initial = initial_document(document, document_is_html);
+    }))
+}
+
+// Wraps a WebView in an Engine. `make_webview` gets the delegate and the
+// context and builds the WebView (a new one, or one for a page's
+// window.open()). Without a callback the engine keeps its events until
+// r5_servo_set_callback().
+#[allow(clippy::too_many_arguments)]
+fn make_engine(
+    servo_engine: Rc<servo::Servo>,
+    context: Rc<WindowRenderingContext>,
+    storage: (i32, i32),
+    gl: String,
+    size: (i32, i32),
+    make_webview: impl FnOnce(Rc<Bridge>, Rc<WindowRenderingContext>) -> WebView,
+    callback: Option<Callback>,
+    callback_ctx: *mut std::ffi::c_void,
+) -> *mut Engine {
     let bridge = Rc::new(Bridge {
         engine: AtomicPtr::new(std::ptr::null_mut()),
+        id: std::sync::atomic::AtomicU64::new(0),
     });
-    let mut builder = WebViewBuilder::new(
-        &servo_engine,
-        context.clone() as Rc<dyn RenderingContext>,
-    )
-    .delegate(bridge.clone());
-    if let Some(url) = initial {
-        println!("r5-servo initial {}", url);
-        builder = builder.url(url);
-    }
-    let webview = builder.build();
-
+    let webview = make_webview(bridge.clone(), context.clone());
+    // A new WebView starts focused; the view gives it focus when clicked.
+    webview.set_focused(false);
     let engine = Box::into_raw(Box::new(Engine {
         pending: RefCell::new(None),
         inner: RefCell::new(Inner {
@@ -925,19 +1095,20 @@ pub extern "C" fn r5_servo_create(
             webview: Some(webview),
             context: Some(context),
             frame: Vec::new(),
-            width,
-            height,
+            width: size.0,
+            height: size.1,
             gl,
             https: false,
-            storage_w,
-            storage_h,
+            storage_w: storage.0,
+            storage_h: storage.1,
+            frame_w: 0,
+            frame_h: 0,
         }),
         events: Mutex::new(Vec::new()),
         notes: Mutex::new(Notes {
             history: Vec::new(),
             index: 0,
             protocol: String::new(),
-            asked_body: false,
             saw_red: false,
             spins: 0,
             last_url: String::new(),
@@ -945,23 +1116,83 @@ pub extern "C" fn r5_servo_create(
             frame_ready: true,
             buttons: 0,
         }),
-        callback,
-        callback_ctx,
+        callback: std::cell::Cell::new(callback),
+        callback_ctx: std::cell::Cell::new(callback_ctx),
     }));
+    let id = NEXT_ENGINE_ID.fetch_add(1, Ordering::Relaxed);
+    bridge.id.store(id, Ordering::Relaxed);
     bridge.engine.store(engine, Ordering::Relaxed);
-    ENGINES.with(|list| list.borrow_mut().push(engine as usize));
+    ENGINES.with(|list| list.borrow_mut().push((engine as usize, id)));
     engine
+}
+
+#[no_mangle]
+pub extern "C" fn r5_servo_create(
+    width: i32,
+    height: i32,
+    document: *const u8,
+    document_is_html: i32,
+    callback: Callback,
+    callback_ctx: *mut std::ffi::c_void,
+) -> *mut Engine {
+    let width = width.max(16);
+    let height = height.max(16);
+    let Some(servo_engine) = shared_servo() else {
+        return std::ptr::null_mut();
+    };
+    let Some((context, storage_w, storage_h, gl)) = make_context(width, height) else {
+        return std::ptr::null_mut();
+    };
+    let initial = initial_document(document, document_is_html);
+    let servo_for_builder = Rc::clone(&servo_engine);
+    make_engine(
+        servo_engine,
+        context,
+        (storage_w, storage_h),
+        gl,
+        (width, height),
+        move |bridge, context| {
+            let mut builder =
+                WebViewBuilder::new(&servo_for_builder, context as Rc<dyn RenderingContext>)
+                    .delegate(bridge)
+                    .clipboard_delegate(Rc::new(R5Clipboard));
+            if let Some(url) = initial {
+                println!("r5-servo initial {}", url);
+                builder = builder.url(url);
+            }
+            builder.build()
+        },
+        Some(callback),
+        callback_ctx,
+    )
+}
+
+/// Gives an engine made by Servo for a page (R5_EV_NEW_WINDOW, the engine in
+/// the event's `current` field) its callback; its queued events follow.
+#[no_mangle]
+pub extern "C" fn r5_servo_set_callback(
+    engine: *mut Engine,
+    callback: Callback,
+    callback_ctx: *mut std::ffi::c_void,
+) -> i32 {
+    if !alive(engine) {
+        return NO_INIT;
+    }
+    unsafe {
+        (*engine).callback.set(Some(callback));
+        (*engine).callback_ctx.set(callback_ctx);
+    }
+    flush(engine);
+    OK
 }
 
 /// Where Servo's waker sends its wake-up. Call it on the window thread
 /// before the first r5_servo_create(); a later call changes the target.
 #[no_mangle]
 pub extern "C" fn r5_servo_set_waker(function: Option<WakeFn>, cookie: *mut std::ffi::c_void) {
-    WAKE_TARGET.with(|target| {
-        if let Ok(mut slot) = target.lock() {
-            *slot = function.map(|f| (f, cookie as usize));
-        }
-    });
+    if let Ok(mut slot) = wake_target().lock() {
+        *slot = function.map(|f| (f, cookie as usize));
+    }
 }
 
 /// Runs Servo's event loop once for every tab on this thread and delivers
@@ -973,7 +1204,7 @@ pub extern "C" fn r5_servo_pump() -> i32 {
         return 0;
     };
     servo.spin_event_loop();
-    let engines: Vec<usize> = ENGINES.with(|list| list.borrow().clone());
+    let engines: Vec<usize> = ENGINES.with(|list| list.borrow().iter().map(|e| e.0).collect());
     let mut ready = 0;
     for raw in engines {
         let engine = raw as *mut Engine;
@@ -1064,8 +1295,10 @@ pub extern "C" fn r5_servo_wheel(
     pixels_per_notch: f32,
 ) -> i32 {
     let delta = WheelDelta {
-        x: (dx * pixels_per_notch) as f64,
-        y: (dy * pixels_per_notch) as f64,
+        // Haiku: positive is down or right. Servo: positive scrolls the view
+        // up or left (embedder_traits input_events.rs, WheelDelta).
+        x: (-dx * pixels_per_notch) as f64,
+        y: (-dy * pixels_per_notch) as f64,
         z: 0.0,
         mode: WheelMode::DeltaPixel,
     };
@@ -1172,9 +1405,11 @@ pub extern "C" fn r5_servo_resize(engine: *mut Engine, width: i32, height: i32) 
         };
         inner.width = width;
         inner.height = height;
-        if let Some(ctx) = inner.context.as_ref() {
-            ctx.resize(size);
-        }
+        // Only the WebView: Servo's painter resizes the context itself and
+        // returns early when the context already has the new size
+        // (servo-paint painter.rs, resize_rendering_context), which left the
+        // page laid out at its old size.
+
         if let Some(wv) = inner.webview.as_ref() {
             wv.resize(size);
         }
@@ -1281,16 +1516,73 @@ pub extern "C" fn r5_servo_zoom(engine: *mut Engine, factor: f32, text_only: i32
 }
 
 #[no_mangle]
-pub extern "C" fn r5_servo_focus(engine: *mut Engine, focused: i32) {
-    if engine.is_null() {
-        return;
+pub extern "C" fn r5_servo_focus(engine: *mut Engine, focused: i32) -> i32 {
+    if !alive(engine) {
+        return NO_INIT;
     }
     if let Ok(inner) = unsafe { (*engine).inner.try_borrow() } {
         if let Some(wv) = inner.webview.as_ref() {
             wv.set_focused(focused != 0);
         }
     }
+    OK
 }
+
+/// Copy (0), cut (1) or paste (2) in the page, as the Edit menu or the
+/// shortcut asked. Select all is the key Control+A (r5_servo_key()).
+#[no_mangle]
+pub extern "C" fn r5_servo_editing_action(engine: *mut Engine, action: i32) -> i32 {
+    let action = match action {
+        0 => servo::ClipboardAction::Copy,
+        1 => servo::ClipboardAction::Cut,
+        2 => servo::ClipboardAction::Paste,
+        _ => return BAD_VALUE,
+    };
+    send_input(engine, InputEvent::EditingAction(action))
+}
+
+/// A tab that is not shown: Servo stops its animation frames for it.
+
+#[no_mangle]
+pub extern "C" fn r5_servo_set_visible(engine: *mut Engine, visible: i32) -> i32 {
+    if !alive(engine) {
+        return NO_INIT;
+    }
+    if let Ok(inner) = unsafe { (*engine).inner.try_borrow() } {
+        if let Some(wv) = inner.webview.as_ref() {
+            if visible != 0 {
+                wv.show();
+            } else {
+                wv.hide();
+            }
+        }
+    }
+    flush(engine);
+    OK
+}
+
+/// Shuts Servo down on this thread after the last tab is destroyed. Servo
+/// writes cookies, HSTS and logins to the profile only while shutting down
+/// (servo-net resource_thread.rs, on Exit; sent by Drop for ServoInner), and
+/// that happens nowhere else. Afterwards no new tab can be made in this
+/// process: Servo cannot be built twice.
+#[no_mangle]
+pub extern "C" fn r5_servo_shutdown() {
+    if SHUT_DOWN.with(|flag| flag.replace(true)) {
+        return;
+    }
+    let servo = SHARED_SERVO.with(|slot| slot.borrow_mut().take());
+    // The last Rc: dropping it runs Servo's shutdown here, on this thread.
+    drop(servo);
+    // Destroying a pooled context aborts in Haiku Mesa; the process is
+    // ending, so the pool is let go of without destroying them.
+    CONTEXT_POOL.with(|pool| {
+        for entry in pool.borrow_mut().drain(..) {
+            std::mem::forget(entry);
+        }
+    });
+}
+
 
 #[no_mangle]
 pub extern "C" fn r5_servo_find(
@@ -1371,7 +1663,7 @@ pub extern "C" fn r5_servo_destroy(engine: *mut Engine) {
         return;
     }
     // From here on no event or JavaScript result reaches the C++ view.
-    ENGINES.with(|list| list.borrow_mut().retain(|item| *item != engine as usize));
+    ENGINES.with(|list| list.borrow_mut().retain(|item| item.0 != engine as usize));
     let boxed = unsafe { Box::from_raw(engine) };
     if let Ok(mut inner) = boxed.inner.try_borrow_mut() {
         inner.webview = None;
@@ -1410,13 +1702,13 @@ fn paint_engine(engine: *mut Engine) -> bool {
         return false;
     }
     let mut painted = false;
-    let mut ask_body = false;
     {
         let engine_ref = unsafe { &*engine };
         let Ok(mut inner) = engine_ref.inner.try_borrow_mut() else {
             return false;
         };
-        let mut new_frame: Option<Vec<u8>> = None;
+        let mut new_frame: Option<(Vec<u8>, i32, i32)> = None;
+
         // Paint and read back only when Servo has a new frame: a full
         // read-back per spin is what made scrolling and loading slow.
         let paint_now = engine_ref
@@ -1433,17 +1725,19 @@ fn paint_engine(engine: *mut Engine) -> bool {
             let (Some(wv), Some(ctx)) = (inner.webview.as_ref(), inner.context.as_ref()) else {
                 return false;
             };
+            // No present(): the surface is a generic one, present() only
+            // returns NoWidgetAttached and logs a warning per frame
+            // (surfman base/egl/surface.rs). The painter made the context
+            // current; read_to_image() reads the bound framebuffer.
             let image = if paint_now {
                 wv.paint();
-                ctx.present();
-                // The painter made this context current. A make_current()
-                // here rebinds the swapped (empty) surface and reads black.
                 ctx.read_to_image(rect)
             } else {
                 None
             };
             if let Some(image) = image {
-                let bytes = image.as_raw();
+                let (w, h) = (image.width() as i32, image.height() as i32);
+                let bytes = image.into_raw();
                 if bytes.len() >= 4 {
                     let pixel = [bytes[0], bytes[1], bytes[2], bytes[3]];
                     let mut notes = engine_ref.notes.lock().ok();
@@ -1456,7 +1750,7 @@ fn paint_engine(engine: *mut Engine) -> bool {
                             );
                         }
                     }
-                    new_frame = Some(bytes.to_vec());
+                    new_frame = Some((bytes, w, h));
                 }
             }
             let status = format!("{:?}", wv.load_status());
@@ -1484,46 +1778,13 @@ fn paint_engine(engine: *mut Engine) -> bool {
                     notes.last_url = page;
                 }
             }
-            if inner.https {
-                if let Ok(mut notes) = engine_ref.notes.lock() {
-                    if !notes.asked_body && matches!(wv.load_status(), LoadStatus::Complete) {
-                        notes.asked_body = true;
-                        ask_body = true;
-                    }
-                }
-            }
-            if ask_body {
-                let engine_for_js = engine;
-                wv.evaluate_javascript(
-                    "document.body ? document.body.innerText : ''",
-                    move |result| {
-                        let text = match result {
-                            Ok(JSValue::String(text)) => text,
-                            other => format!("{other:?}"),
-                        };
-                        let clipped: String = text.chars().take(500).collect();
-                        let mut event = Ev::new(R5_EV_PAGE_TEXT);
-                        event.text = clipped.clone();
-                        emit(engine_for_js, event);
-                        if !alive(engine_for_js) {
-                            return;
-                        }
-                        if let Some(protocol) = protocol_from_body(&clipped) {
-                            if let Ok(mut notes) = unsafe { (*engine_for_js).notes.lock() } {
-
-                                notes.protocol = protocol.to_string();
-                            }
-                            let mut event = Ev::new(R5_EV_PROTOCOL);
-                            event.text = protocol.to_string();
-                            println!("r5-servo protocol {protocol}");
-                            emit(engine_for_js, event);
-                        }
-                    },
-                );
-            }
         }
-        if let Some(bytes) = new_frame {
+        if let Some((bytes, w, h)) = new_frame {
+            // The frame keeps its own size: a resize between two frames must
+            // not make r5_servo_frame() report a size the buffer lacks.
             inner.frame = bytes;
+            inner.frame_w = w;
+            inner.frame_h = h;
             painted = true;
         }
     }
@@ -1550,8 +1811,8 @@ pub extern "C" fn r5_servo_frame(
     }
     unsafe {
         *rgba = inner.frame.as_ptr();
-        *width = inner.width;
-        *height = inner.height;
+        *width = inner.frame_w;
+        *height = inner.frame_h;
     }
     OK
 }

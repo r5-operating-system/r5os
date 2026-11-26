@@ -61,6 +61,8 @@ if ! check_r5servo_hash "$r5servo_dst"; then
 	exit 1
 fi
 needed+=("$R5SERVO_PKG")
+# Older r5servo packages: only the pinned one stays in the repository.
+rm -f "$DL/r5servo-0.8.0-1-x86_64.hpkg" "$DL/r5servo-0.8.0-2-x86_64.hpkg"
 rm -f "$DL/mesa-25.3.6-1-x86_64.hpkg" "$DL/mesa-25.3.6-2-x86_64.hpkg" "$DL/mesa-25.3.6-3-x86_64.hpkg" "$DL/mesa-25.3.6-4-x86_64.hpkg" "$DL/mesa_zink-25.3.6-1-x86_64.hpkg" \
 	"$DL/mesa_radv-25.3.6-1-x86_64.hpkg" "$DL/mesa_radv-25.3.6-2-x86_64.hpkg" \
 	"$DL/mesa_radv-25.3.6-3-x86_64.hpkg" "$DL/mesa_radv-25.3.6-4-x86_64.hpkg" "$DL/mesa_radv-25.3.6-5-x86_64.hpkg" "$DL/mesa_radv-25.3.6-6-x86_64.hpkg" "$DL/mesa_radv-25.3.6-7-x86_64.hpkg" "$DL/mesa_radv-25.3.6-8-x86_64.hpkg" "$DL/mesa_radv-25.3.6-9-x86_64.hpkg" "$DL/mesa_radv-25.3.6-10-x86_64.hpkg" \

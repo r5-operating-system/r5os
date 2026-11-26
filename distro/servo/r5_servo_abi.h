@@ -52,6 +52,7 @@ struct r5_servo_event {
 
 
 struct r5_servo;
+class BMessage;
 
 typedef void (*r5_servo_callback)(void* context, const r5_servo_event* event);
 
@@ -142,6 +143,65 @@ void		r5_servo_set_max_size(int32 width, int32 height);
 // prompt's text, or NULL.
 status_t	r5_servo_control_answer(r5_servo* engine, int32 accept, int32 value,
 	const char* text);
+
+// A Haiku input message for the view: B_MOUSE_DOWN, B_MOUSE_UP,
+// B_MOUSE_MOVED, B_MOUSE_WHEEL_CHANGED, B_KEY_DOWN, B_KEY_UP and the unmapped
+// key messages. The point is "be:view_where" when the message has it,
+// otherwise (x, y) in view pixels. Implemented in BServoView.cpp; both
+// BServoView and Aomi use it.
+status_t	r5_servo_input_message(r5_servo* engine, const BMessage* message,
+	float x, float y);
+
+// Shows the page control of the last R5_EV_DIALOG and answers it: an alert
+// or confirm (BAlert), a select list (BPopUpMenu at (x, y) of view, the box's
+// lower left corner). A prompt is answered as cancelled. Call on the window
+// thread; the window stays drawn while it waits. NULL labels are "OK" and
+// "Cancel". Implemented in BServoView.cpp.
+status_t	r5_servo_show_control(r5_servo* engine, class BView* view,
+	int32 kind, const char* text, float x, float y, const char* okLabel,
+	const char* cancelLabel);
+
+// The words of r5_servo_ask_control()'s windows, translated by the caller.
+// signInTo is a format with one %s for the address.
+typedef struct r5_servo_control_labels {
+	const char*	ok;
+	const char*	cancel;
+	const char*	user;
+	const char*	password;
+	const char*	signIn;
+	const char*	signInTo;
+} r5_servo_control_labels;
+
+// Shows the user what an R5_EV_DIALOG asks and returns the answer, without
+// answering the engine (any thread; a window thread stays drawn): alert (1),
+// confirm (2), prompt (3, text "message\ndefault"), sign-in (5, text the
+// address; answer "user\npassword"), file upload (6; answer one path per
+// line), context menu (8) and select list (9; value the chosen id). (x, y)
+// is in view's coordinates. Free *answer with r5_servo_free_answer(); it
+// may hold a password and is cleared first. NULL labels: English.
+status_t	r5_servo_ask_control(class BView* view, int32 kind,
+	const char* text, float x, float y,
+	const r5_servo_control_labels* labels, int32* accept, int32* value,
+	char** answer);
+void		r5_servo_free_answer(char* answer);
+
+// Gives an engine Servo made for a page (R5_EV_NEW_WINDOW, the engine in the
+// event's `current` field) its callback. Its waiting events follow.
+status_t	r5_servo_set_callback(r5_servo* engine, r5_servo_callback callback,
+	void* context);
+
+// Copy (0), cut (1) or paste (2) in the page (B_COPY, B_CUT, B_PASTE).
+// Select all is the key Control+A.
+status_t	r5_servo_editing_action(r5_servo* engine, int32 action);
+
+// A tab that is not shown: Servo stops its animation frames for it.
+status_t	r5_servo_set_visible(r5_servo* engine, int32 visible);
+
+// After the last tab of the process is destroyed: Servo shuts down and writes
+// cookies, HSTS and logins to the profile. No new tab can be made afterwards.
+void		r5_servo_shutdown(void);
+
+
 
 
 

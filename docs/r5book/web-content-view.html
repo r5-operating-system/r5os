@@ -56,7 +56,7 @@ public:
     BWebSession(bool privateSession);
     bool IsPrivate() const;
 };</code></pre>
-			<p>Describes whether a window is a normal or private session. Private windows in Aomi run in an isolated process with a temporary <code class="inline">AOMI_PRIVATE_DIR</code> passed to Servo&rsquo;s <code class="inline">Opts::config_dir</code>, deleted on exit.</p>
+			<p>Describes whether a window is a normal or private session. Normal windows share one process and one Servo, on an engine thread, with the profile in <code class="inline">~/config/settings/Aomi/Servo</code>. A private window runs in a process of its own; its Servo keeps cookies and site data in memory only.</p>
 		</section>
 
 		<section id="methods">
@@ -69,7 +69,6 @@ public:
 					<tr><td>Navigation</td><td><code class="inline">GoBack()</code>, <code class="inline">GoForward()</code>, <code class="inline">GetBackList(BMessage*)</code>, <code class="inline">GetForwardList(BMessage*)</code></td></tr>
 					<tr><td>Page</td><td><code class="inline">URL(BString*)</code>, <code class="inline">Title(BString*)</code>, <code class="inline">SetZoom(float, bool textOnly)</code>, <code class="inline">Find(const char*, bool forward, bool matchCase)</code>, <code class="inline">SavePage(const char*)</code>, <code class="inline">ViewSource()</code>, <code class="inline">Print()</code>, <code class="inline">Protocol(BString*)</code></td></tr>
 					<tr><td>Downloads</td><td><code class="inline">Cancel(int32 id)</code>, <code class="inline">Open(int32 id)</code>, <code class="inline">ShowInTracker(int32 id)</code></td></tr>
-					<tr><td>Page controls</td><td><code class="inline">AnswerControl(bool accept, int32 value, const char* text)</code>: the answer to the last <code class="inline">AOMI_DIALOG</code>. The page waits for it after an alert, a confirm, a prompt or a select list. <code class="inline">value</code> is the chosen option id of a select list, <code class="inline">text</code> a prompt's text.</td></tr>
 				</tbody>
 			</table>
 		</section>
@@ -83,7 +82,7 @@ public:
 				<li><code class="inline">AOMI_TITLE_CHANGED</code> (<code class="inline">'aTit'</code>), <code class="inline">AOMI_URL_CHANGED</code> (<code class="inline">'aUrl'</code>), <code class="inline">AOMI_FAVICON</code> (<code class="inline">'aFav'</code>), <code class="inline">AOMI_HOVER_LINK</code> (<code class="inline">'aHov'</code>)</li>
 				<li><code class="inline">AOMI_SECURITY</code> (<code class="inline">'aSec'</code>: <code class="inline">AOMI_SECURITY_*</code>), <code class="inline">AOMI_PROTOCOL</code> (<code class="inline">'aPrt'</code>: <code class="inline">"h2"</code>, <code class="inline">"http/1.1"</code>, <code class="inline">"h3"</code>)</li>
 				<li><code class="inline">AOMI_PROGRESS</code> (<code class="inline">'aPrg'</code>: 0.0&ndash;1.0), <code class="inline">AOMI_CURSOR</code> (<code class="inline">'aCur'</code>), <code class="inline">AOMI_FULLSCREEN</code> (<code class="inline">'aFsc'</code>)</li>
-				<li><code class="inline">AOMI_NEW_WINDOW</code> (<code class="inline">'aNww'</code>), <code class="inline">AOMI_CLOSE_WANTED</code> (<code class="inline">'aClw'</code>), <code class="inline">AOMI_DIALOG</code> (<code class="inline">'aDlg'</code>: <code class="inline">kind</code> <code class="inline">AOMI_DIALOG_*</code>, <code class="inline">text</code>, <code class="inline">where</code>; for <code class="inline">AOMI_DIALOG_SELECT</code> the text holds one line per option, see <code class="inline">WebContentView.h</code>)</li>
+				<li><code class="inline">AOMI_NEW_WINDOW</code> (<code class="inline">'aNww'</code>), <code class="inline">AOMI_CLOSE_WANTED</code> (<code class="inline">'aClw'</code>), <code class="inline">AOMI_DIALOG</code> (<code class="inline">'aDlg'</code>: <code class="inline">kind</code> <code class="inline">AOMI_DIALOG_*</code>, <code class="inline">text</code>, <code class="inline">where</code>). For the listener&rsquo;s information: the view itself asks the user and answers the page (alert, confirm, prompt, sign-in, file upload, context menu, select list).</li>
 				<li><code class="inline">AOMI_DOWNLOAD_ADDED</code> (<code class="inline">'aDla'</code>), <code class="inline">AOMI_DOWNLOAD_PROGRESS</code> (<code class="inline">'aDlp'</code>), <code class="inline">AOMI_DOWNLOAD_FINISHED</code> (<code class="inline">'aDlf'</code>), <code class="inline">AOMI_DOWNLOAD_FAILED</code> (<code class="inline">'aDlx'</code>)</li>
 			</ul>
 		</section>
