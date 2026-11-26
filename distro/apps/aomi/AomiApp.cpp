@@ -12,6 +12,8 @@
 #include "WebContentView.h"
 
 #include <Application.h>
+#include <Directory.h>
+#include <FindDirectory.h>
 #include <Messenger.h>
 #include <Path.h>
 #include <Roster.h>
@@ -91,28 +93,32 @@ remove_tree(const char* path)
 }
 
 
+// Servo allows one engine per process, so every further Aomi window is a
+// process of its own: "--private-process" for a private window, and
+// "--new-window" for another normal one.
+static void
+launch_window_process(const char* flag, const std::vector<BString>& urls)
+{
+	app_info info;
+	if (be_app == NULL || be_app->GetAppInfo(&info) != B_OK)
+		return;
+	std::vector<const char*> args;
+	args.push_back(flag);
+	for (uint32 i = 0; i < urls.size(); i++)
+		args.push_back(urls[i].String());
+	be_roster->Launch(&info.ref, (int)args.size(),
+		const_cast<char**>(args.data()));
+}
+
+
 static void
 launch_private_process(const std::vector<BString>& urls)
 {
-	app_info info;
-	BString bin("/boot/system/apps/Aomi");
-	if (be_app != NULL && be_app->GetAppInfo(&info) == B_OK) {
-		BPath path(&info.ref);
-		if (path.InitCheck() == B_OK)
-			bin = path.Path();
-	}
-	pid_t pid = fork();
-	if (pid == 0) {
-		std::vector<char*> args;
-		args.push_back(const_cast<char*>(bin.String()));
-		args.push_back(const_cast<char*>("--private-process"));
-		for (uint32 i = 0; i < urls.size(); i++)
-			args.push_back(const_cast<char*>(urls[i].String()));
-		args.push_back(NULL);
-		execv(bin.String(), args.data());
-		_exit(127);
-	}
+	launch_window_process("--private-process", urls);
 }
+
+
+static bool sExtraWindow = false;
 
 
 static bool
@@ -151,7 +157,7 @@ public:
 									fDownloads(false),
 									fSettings(false)
 								{
-									if (!fPrivate)
+									if (!fPrivate && !sExtraWindow)
 										write_normal_team(Team());
 								}
 
@@ -355,9 +361,12 @@ public:
 											}
 											break;
 										case MSG_NEW_WINDOW:
-											(new AomiWindow(new BWebSession(false),
-												false))->Show();
+										{
+											std::vector<BString> none;
+											launch_window_process("--new-window",
+												none);
 											break;
+										}
 										case MSG_NEW_PRIVATE:
 										{
 											std::vector<BString> none;
@@ -395,18 +404,48 @@ main(int argc, char** argv)
 			privat = true;
 			break;
 		}
+		if (strcmp(argv[i], "--new-window") == 0)
+			sExtraWindow = true;
 	}
-	if (!privat && forward_to_running_normal(argc, argv))
+	if (!privat && !sExtraWindow && forward_to_running_normal(argc, argv))
 		return 0;
 
 	BString privDir;
 	if (privat) {
-		privDir.SetToFormat("/tmp/aomi-private-%d", (int)getpid());
-		mkdir(privDir.String(), 0700);
+		// A private window keeps cookies and storage in memory only (no
+		// AOMI_PROFILE_DIR). Anything else that writes a config or cache file
+		// goes to a fresh directory of this user, removed when the window
+		// closes. mkdtemp() makes it 0700 and refuses an existing name.
+		BPath cache;
+		if (find_directory(B_USER_CACHE_DIRECTORY, &cache, true) != B_OK
+			|| cache.Append("Aomi") != B_OK) {
+			fprintf(stderr, "aomi: no cache directory for the private window\n");
+			return 1;
+		}
+		create_directory(cache.Path(), 0700);
+		BString pattern(cache.Path());
+		pattern << "/private-XXXXXX";
+		char* made = mkdtemp(pattern.LockBuffer(pattern.Length()));
+		pattern.UnlockBuffer();
+		if (made == NULL) {
+			fprintf(stderr, "aomi: could not make the private directory\n");
+			return 1;
+		}
+		privDir = pattern;
 		setenv("AOMI_PRIVATE_DIR", privDir.String(), 1);
 		setenv("XDG_CONFIG_HOME", privDir.String(), 1);
 		setenv("XDG_CACHE_HOME", privDir.String(), 1);
+		unsetenv("AOMI_PROFILE_DIR");
+	} else {
+		// Servo keeps cookies, HSTS and saved logins here.
+		BPath profile;
+		if (find_directory(B_USER_SETTINGS_DIRECTORY, &profile, true) == B_OK
+			&& profile.Append("Aomi/Servo") == B_OK
+			&& create_directory(profile.Path(), 0700) == B_OK) {
+			setenv("AOMI_PROFILE_DIR", profile.Path(), 1);
+		}
 	}
+
 	AomiApp app(privat, privDir.String());
 	app.Run();
 	return 0;

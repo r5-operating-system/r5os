@@ -16,18 +16,19 @@ The Back, Forward, Up, and Home pictures in `libr5icons.so` are unmodified HVIF 
 
 ### Servo (libr5servo.so)
 
-Location: `distro/servo/` (MIT wrapper, `Cargo.toml`, `Cargo.lock`, `BUILD.md`, and `distro/servo/patches/`). The full upstream source is not stored in git; the packaged shared library `r5servo-0.8.0-2-x86_64.hpkg` is fetched by sha256 from a GitHub Release asset of this repository. License texts: `LICENSES/MPL-2.0.txt` and `LICENSES/FTL.txt`.
+Location: `distro/servo/` (MIT wrapper, `Cargo.toml`, `Cargo.lock`, `BUILD.md`, and `distro/servo/patches/`). The full upstream source is not stored in git; the packaged shared library `r5servo-0.8.0-3-x86_64.hpkg` is fetched by sha256 from a GitHub Release asset of this repository. The package carries `documentation/packages/r5servo/THIRD_PARTY_NOTICES.txt` with the SPDX expression and every licence, copyright and NOTICE file of each crate and bundled C/C++ library, written by `distro/servo/collect-servo-notices.py`. License texts in this repository: `LICENSES/MPL-2.0.txt`, `LICENSES/FTL.txt`, `LICENSES/MIT.txt`, `LICENSES/Apache-2.0.txt`, `LICENSES/Apache-2.0-with-LLVM-exception.txt`, `LICENSES/ISC.txt`, `LICENSES/Unicode-3.0.txt`, `LICENSES/BSL-1.0.txt`, `LICENSES/CC0-1.0.txt`, `LICENSES/CDLA-Permissive-2.0.txt`, `LICENSES/Unlicense.txt`, and, as shipped by those crates, `LICENSES/adler2-0BSD.txt`, `LICENSES/bytemuck-Zlib.txt`, `LICENSES/arrayref-BSD-2-Clause.txt`, `LICENSES/alloc-no-stdlib-BSD-3-Clause.txt` and `LICENSES/aws-lc-OpenSSL-ISC.txt`.
 
 Servo 0.8.0, SpiderMonkey 153 (`mozjs_sys` 153.6.0-1), WebRender 0.70.1, Stylo 0.23.0, and related Mozilla/Servo crates (84 crates): Mozilla Public License 2.0 (MPL-2.0). Copyright Servo Project Developers, Mozilla Foundation, and contributors. Source offer: pinned crate versions (`distro/servo/engine/Cargo.lock`, `distro/servo/BUILD.md`) and all R5 modifications (`distro/servo/patches/`) are published in this repository; `scripts/build-r5servo.sh` reproduces the patched trees from crates.io.
 
-Remaining 562 resolved Rust crates: permissive licenses (MIT, Apache-2.0, BSD-3-Clause, BSD-2-Clause, ISC, Zlib, Unlicense, CC0-1.0, 0BSD, BSL-1.0, Unicode-3.0, CDLA-Permissive-2.0, Apache-2.0 WITH LLVM-exception). No GPL, LGPL, or AGPL crates are included.
+The other Rust crates are under permissive licences (MIT, Apache-2.0, BSD-3-Clause, BSD-2-Clause, ISC, Zlib, Unlicense, CC0-1.0, 0BSD, BSL-1.0, Unicode-3.0, CDLA-Permissive-2.0, Apache-2.0 WITH LLVM-exception). Where a crate offers a choice, R5 takes the permissive one: one crate is `MIT OR Apache-2.0 OR LGPL-2.1-or-later`, used under MIT. No crate is used under GPL, LGPL or AGPL.
 
 Bundled C libraries inside `libr5servo.so`:
 - **FreeType** (`freetype-sys` 0.23.0, `bundled` feature): distributed under the FreeType License (FTL, `LICENSES/FTL.txt`). Portions of this software are copyright © 2025 The FreeType Project (www.freetype.org). All rights reserved.
 - **zlib** (`libz-sys` 1.1.33): Zlib license. Copyright Jean-loup Gailly and Mark Adler.
 - **zstd** (`zstd-sys`): distributed under BSD-3-Clause. Copyright Meta Platforms, Inc. and affiliates.
 - **HarfBuzz** (`harfbuzz-sys`): MIT license. Copyright Behdad Esfahbod and contributors.
-- **aws-lc / ring / rustls**: ISC, Apache-2.0, and MIT licenses.
+- **aws-lc** (`aws-lc-sys` 0.47.0): ISC, Apache-2.0 and MIT, with parts under the OpenSSL and SSLeay licences (`LICENSES/aws-lc-OpenSSL-ISC.txt`). This product includes cryptographic software written by Eric Young (eay@cryptsoft.com), and software developed by the OpenSSL Project for use in the OpenSSL Toolkit (http://www.openssl.org/). `ring` and `rustls`: ISC, Apache-2.0 and MIT.
+- **Inside SpiderMonkey** (`mozjs_sys`): irregexp (V8, BSD-3-Clause), double-conversion (BSD-3-Clause), fdlibm (FreeBSD licence), Zydis and Zycore (MIT), LZ4 (BSD-2-Clause), fmt (MIT), xsimd (BSD-3-Clause), function2 (BSL-1.0), gemmology (MIT), xsum (MIT), NSPR (MPL-2.0) and VIXL (BSD-3-Clause). Their licence files are in the package's notices file.
 
 ### wpa_supplicant
 

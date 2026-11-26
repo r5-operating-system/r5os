@@ -1429,34 +1429,109 @@ AomiWindow::HandleEngine(BMessage* message, int32 tab)
 	}
 	if (message->what != AOMI_DIALOG)
 		return;
+	if (tab < 0 || tab >= (int32)fTabs.size() || fTabs[tab].view == NULL)
+		return;
+	BWebContentView* view = fTabs[tab].view;
 	int32 kind = 0;
 	message->FindInt32("kind", &kind);
 	BString text;
 	message->FindString("text", &text);
-	if (kind == AOMI_DIALOG_CONFIRM) {
-		BAlert* alert = new BAlert("Aomi", text.String(),
-			B_TRANSLATE("No"), B_TRANSLATE("Yes"), NULL,
-			B_WIDTH_AS_USUAL, B_WARNING_ALERT);
-		int32 button = alert->Go();
-		message->AddBool("result", button == 1);
-		message->AddBool("handled", true);
-		return;
+	BPoint where(0, 0);
+	message->FindPoint("where", &where);
+
+	switch (kind) {
+		case AOMI_DIALOG_ALERT:
+		{
+			// The page waits for the answer. Go() keeps this window drawn.
+			BAlert* alert = new BAlert("Aomi", text.String(), B_TRANSLATE("OK"));
+			alert->Go();
+			view->AnswerControl(true, 0, NULL);
+			break;
+		}
+		case AOMI_DIALOG_CONFIRM:
+		{
+			BAlert* alert = new BAlert("Aomi", text.String(),
+				B_TRANSLATE("Cancel"), B_TRANSLATE("OK"), NULL,
+				B_WIDTH_AS_USUAL, B_WARNING_ALERT);
+			alert->SetShortcut(0, B_ESCAPE);
+			view->AnswerControl(alert->Go() == 1, 0, NULL);
+			break;
+		}
+		case AOMI_DIALOG_SELECT:
+		{
+			// One menu item per option; group headings are disabled items.
+			BPopUpMenu* menu = new BPopUpMenu("select", false, false);
+			int32 start = 0;
+			while (start <= text.Length()) {
+				int32 end = text.FindFirst('\n', start);
+				if (end < 0)
+					end = text.Length();
+				BString line;
+				text.CopyInto(line, start, end - start);
+				start = end + 1;
+				// "o<TAB>id<TAB>flags<TAB>label" or "g<TAB><TAB><TAB>label".
+				int32 t1 = line.FindFirst('\t');
+				int32 t2 = t1 >= 0 ? line.FindFirst('\t', t1 + 1) : -1;
+				int32 t3 = t2 >= 0 ? line.FindFirst('\t', t2 + 1) : -1;
+				if (t3 < 0)
+					continue;
+				BString label;
+				line.CopyInto(label, t3 + 1, line.Length() - t3 - 1);
+				if (line[0] == 'g') {
+					BMenuItem* heading = new BMenuItem(label.String(), NULL);
+					heading->SetEnabled(false);
+					menu->AddItem(heading);
+					continue;
+				}
+				BString id;
+				BString flags;
+				line.CopyInto(id, t1 + 1, t2 - t1 - 1);
+				line.CopyInto(flags, t2 + 1, t3 - t2 - 1);
+				BMessage* choice = new BMessage('aSel');
+				choice->AddInt32("id", atoi(id.String()));
+				BMenuItem* item = new BMenuItem(label.String(), choice);
+				item->SetEnabled(flags.FindFirst('d') < 0);
+				if (flags.FindFirst('s') >= 0)
+					item->SetMarked(true);
+				menu->AddItem(item);
+			}
+			BMenuItem* chosen = NULL;
+			if (menu->CountItems() > 0) {
+				BView* content = dynamic_cast<BView*>(view);
+				BPoint screen = content != NULL
+					? content->ConvertToScreen(where) : where;
+				chosen = menu->Go(screen, false, true);
+			}
+			int32 id = -1;
+			if (chosen != NULL && chosen->Message() != NULL)
+				chosen->Message()->FindInt32("id", &id);
+			view->AnswerControl(chosen != NULL && id >= 0, id, NULL);
+			delete menu;
+			break;
+		}
+		case AOMI_DIALOG_PROMPT:
+		{
+			// No text entry dialog yet: the page gets "cancelled" (null).
+			view->AnswerControl(false, 0, NULL);
+			BString line("prompt not supported: ");
+			line << text;
+			aomi_log_add(line.String());
+			break;
+		}
+		default:
+		{
+			// Permission requests (denied), file pickers (cancelled) and
+			// sign-in requests are already answered by the engine. They are
+			// logged, not shown: an empty alert helped no one.
+			BString line;
+			line.SetToFormat("page request %d not supported: %s", (int)kind,
+				text.String());
+			aomi_log_add(line.String());
+			break;
+		}
 	}
-	if (kind == AOMI_DIALOG_AUTH) {
-		BString user;
-		message->FindString("user", &user);
-		BAlert* alert = new BAlert("Aomi", text.String(),
-			B_TRANSLATE("Cancel"));
-		alert->Go();
-		message->AddBool("handled", false);
-		(void)user;
-		return;
-	}
-	BAlert* alert = new BAlert("Aomi", text.String(), B_TRANSLATE("OK"));
-	alert->Go();
-	message->AddBool("continue", true);
-	message->AddBool("handled", true);
 }
+
 
 
 void
@@ -1764,17 +1839,17 @@ AomiWindow::MessageReceived(BMessage* message)
 		case MSG_ZOOM_IN:
 			fZoom *= 1.2f;
 			if (fActive >= 0 && fTabs[fActive].view != NULL)
-				fTabs[fActive].view->SetZoom(fZoom, fPrefs.zoomText);
+				fTabs[fActive].view->SetZoom(fZoom, false);
 			break;
 		case MSG_ZOOM_OUT:
 			fZoom /= 1.2f;
 			if (fActive >= 0 && fTabs[fActive].view != NULL)
-				fTabs[fActive].view->SetZoom(fZoom, fPrefs.zoomText);
+				fTabs[fActive].view->SetZoom(fZoom, false);
 			break;
 		case MSG_ZOOM_RESET:
 			fZoom = 1;
 			if (fActive >= 0 && fTabs[fActive].view != NULL)
-				fTabs[fActive].view->SetZoom(1, fPrefs.zoomText);
+				fTabs[fActive].view->SetZoom(1, false);
 			break;
 		case MSG_SOURCE:
 			if (fActive >= 0 && fTabs[fActive].view != NULL)
@@ -2181,14 +2256,8 @@ AomiSettingsWindow::AomiSettingsWindow()
 	fShowBar = new BCheckBox("bar", B_TRANSLATE("Show bookmarks bar"),
 		new BMessage(kPrefChanged));
 	fShowBar->SetValue(fPrefs.showBookmarks);
-	fZoomText = new BCheckBox("zoom", B_TRANSLATE("Zoom text only"),
-		new BMessage(kPrefChanged));
-	fZoomText->SetValue(fPrefs.zoomText);
 	fDownloads = new BTextControl("downloads", NULL,
 		fPrefs.downloadPath.String(), new BMessage(kPrefChanged));
-	fAsk = new BCheckBox("ask", B_TRANSLATE("Ask where to save each file"),
-		new BMessage(kPrefChanged));
-	fAsk->SetValue(fPrefs.askDownload);
 
 	BStringView* dlHead = new BStringView("dlh", B_TRANSLATE("Downloads"));
 	dlHead->SetFont(be_bold_font);
@@ -2217,7 +2286,6 @@ AomiSettingsWindow::AomiSettingsWindow()
 			.Add(fSearch, 1, 3)
 			.Add(fShowHome, 1, 4)
 			.Add(fShowBar, 1, 5)
-			.Add(fZoomText, 1, 6)
 		.End()
 		.AddStrut(4)
 		.Add(dlHead)
@@ -2228,7 +2296,6 @@ AomiSettingsWindow::AomiSettingsWindow()
 				.Add(new BButton("choose", B_TRANSLATE("Choose…"),
 					new BMessage(MSG_OPEN_FOLDER)))
 			.End()
-			.Add(fAsk, 1, 1)
 		.End()
 		.AddStrut(4)
 		.Add(privHead)
@@ -2251,9 +2318,7 @@ AomiSettingsWindow::_Save()
 	fPrefs.search = fSearch->Text();
 	fPrefs.showHome = fShowHome->Value() != 0;
 	fPrefs.showBookmarks = fShowBar->Value() != 0;
-	fPrefs.zoomText = fZoomText->Value() != 0;
 	fPrefs.downloadPath = fDownloads->Text();
-	fPrefs.askDownload = fAsk->Value() != 0;
 	BMenu* menu = fStart->Menu();
 	fPrefs.start = 0;
 	if (menu->ItemAt(1) != NULL && menu->ItemAt(1)->IsMarked())
@@ -2295,8 +2360,6 @@ AomiSettingsWindow::MessageReceived(BMessage* message)
 			fDownloads->SetText(fPrefs.downloadPath.String());
 			fShowHome->SetValue(fPrefs.showHome);
 			fShowBar->SetValue(fPrefs.showBookmarks);
-			fZoomText->SetValue(fPrefs.zoomText);
-			fAsk->SetValue(fPrefs.askDownload);
 			_Save();
 			break;
 		case kPrefDefaults:
@@ -2306,8 +2369,6 @@ AomiSettingsWindow::MessageReceived(BMessage* message)
 			fDownloads->SetText(fPrefs.downloadPath.String());
 			fShowHome->SetValue(fPrefs.showHome);
 			fShowBar->SetValue(fPrefs.showBookmarks);
-			fZoomText->SetValue(fPrefs.zoomText);
-			fAsk->SetValue(fPrefs.askDownload);
 			_Save();
 			break;
 		default:

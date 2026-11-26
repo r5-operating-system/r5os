@@ -128,9 +128,7 @@ private:
 			class BMenuField*	fEngine;
 			class BCheckBox*	fShowHome;
 			class BCheckBox*	fShowBar;
-			class BCheckBox*	fZoomText;
 			class BTextControl*	fDownloads;
-			class BCheckBox*	fAsk;
 };
 
 

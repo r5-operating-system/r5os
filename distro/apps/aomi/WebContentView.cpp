@@ -54,6 +54,17 @@ BWebContentView::Report(BMessage* message)
 
 
 status_t
+BWebContentView::AnswerControl(bool accept, int32 value, const char* text)
+{
+	(void)accept;
+	(void)value;
+	(void)text;
+	return B_NOT_SUPPORTED;
+}
+
+
+
+status_t
 aomi_engine_start(const char* engine)
 {
 	if (engine == NULL || strcmp(engine, "Servo") == 0)

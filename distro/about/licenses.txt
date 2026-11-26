@@ -77,7 +77,8 @@ License: FTL
 Source: https://freetype.org
 
 # Bundled C libraries in Servo
-zlib (Zlib), zstd (BSD-3-Clause), HarfBuzz (MIT), aws-lc / ring / rustls (ISC, Apache-2.0, MIT).
+zlib (Zlib), zstd (BSD-3-Clause), HarfBuzz (MIT), ring and rustls (ISC, Apache-2.0, MIT), and aws-lc (ISC, Apache-2.0, MIT, OpenSSL and SSLeay). This product includes cryptographic software written by Eric Young (eay@cryptsoft.com), and software developed by the OpenSSL Project for use in the OpenSSL Toolkit (http://www.openssl.org/). Inside SpiderMonkey: irregexp and double-conversion (V8 authors, BSD-3-Clause), fdlibm (FreeBSD Project), Zydis and Zycore (MIT), LZ4 (Yann Collet, BSD-2-Clause), fmt (MIT), xsimd (BSD-3-Clause), function2 (BSL-1.0), gemmology (MIT), xsum (MIT) and VIXL (BSD-3-Clause). Every licence and copyright text is in /boot/system/documentation/packages/r5servo/THIRD_PARTY_NOTICES.txt.
 
-License: Zlib, BSD-3-Clause, MIT, ISC, Apache-2.0
+License: Zlib, BSD-3-Clause, BSD-2-Clause, MIT, ISC, Apache-2.0, OpenSSL, BSL-1.0
+
 Source: https://github.com/r5-operating-system/r5os

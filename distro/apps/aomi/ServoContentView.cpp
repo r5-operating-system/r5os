@@ -8,6 +8,11 @@
 
 #include <Application.h>
 #include <Bitmap.h>
+#include <ByteOrder.h>
+#include <Catalog.h>
+#include <Handler.h>
+#include <Looper.h>
+#include <OS.h>
 #include <Directory.h>
 #include <Entry.h>
 #include <File.h>
@@ -17,18 +22,25 @@
 #include <MessageRunner.h>
 #include <Path.h>
 #include <Roster.h>
+#include <Screen.h>
+
 #include <String.h>
 #include <Window.h>
 
 #include <R5Icons.h>
 
 #include <dlfcn.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
 #include <vector>
+
+
+#undef B_TRANSLATION_CONTEXT
+#define B_TRANSLATION_CONTEXT "Aomi"
 
 
 // Matches distro/servo/r5_servo_abi.h
@@ -92,6 +104,16 @@ struct ServoApi {
 	status_t	(*gl)(r5_servo*, char*, int32);
 	status_t	(*find)(r5_servo*, const char*, int32, int32);
 	void		(*destroy)(r5_servo*);
+	// Since r5servo 0.8.0-3.
+	void		(*set_waker)(void (*)(void*), void*);
+	int32		(*pump)();
+	int32		(*paint)(r5_servo*);
+	status_t	(*mouse_move)(r5_servo*, float, float);
+	status_t	(*mouse_buttons)(r5_servo*, float, float, uint32);
+	status_t	(*wheel)(r5_servo*, float, float, float, float, float);
+	status_t	(*key)(r5_servo*, int32, int32, const char*, uint32, int32);
+	void		(*set_max_size)(int32, int32);
+	status_t	(*control_answer)(r5_servo*, int32, int32, const char*);
 };
 
 static ServoApi sApi = {};
@@ -117,6 +139,101 @@ static std::vector<DownloadItem> sDownloads;
 static int32 sNextDlId = 1;
 
 static const uint32 kSpinMessage = 'svSp';
+
+// Servo runs one instance per process, on the thread of the one browser
+// window (AomiApp opens every further window as its own process). Servo's
+// threads call servo_wake(); it posts one message to the pump handler on
+// that window, which runs the event loop and paints the visible tab, at
+// most once per frame. A slow tick covers a wake-up that could not be posted.
+static const uint32 kServoWake = 'svWk';
+static const uint32 kServoTick = 'svTk';
+static const uint32 kServoLater = 'svLt';
+static const bigtime_t kFrameTime = 16000;
+static const bigtime_t kTickTime = 250000;
+
+static int32 sWakePending = 0;
+static BMessenger* sWakeTarget = NULL;
+// Every Servo view of this process. They all live in the one browser window,
+// so the pump handler (on that window's thread) may touch them.
+static std::vector<BServoContentView*> sViews;
+static BHandler* sPumpHandler = NULL;
+static bigtime_t sLastPump = 0;
+
+
+static void
+servo_wake(void*)
+{
+	// Called from Servo's threads. sWakeTarget is set once, before Servo
+	// starts, and never freed: a wake-up after the window is gone only fails
+	// to send.
+	if (sWakeTarget == NULL || atomic_get_and_set(&sWakePending, 1) != 0)
+		return;
+	BMessage wake(kServoWake);
+	if (sWakeTarget->SendMessage(&wake, (BHandler*)NULL, 0) != B_OK)
+		atomic_set(&sWakePending, 0);
+}
+
+
+class ServoPumpHandler : public BHandler {
+public:
+	ServoPumpHandler()
+		:
+		BHandler("servo pump"),
+		fLater(NULL),
+		fTick(NULL)
+	{
+	}
+
+	virtual ~ServoPumpHandler()
+	{
+		delete fLater;
+		delete fTick;
+		if (sPumpHandler == this)
+			sPumpHandler = NULL;
+	}
+
+	void StartTick()
+	{
+		BMessage tick(kServoTick);
+		fTick = new BMessageRunner(BMessenger(this), &tick, kTickTime);
+	}
+
+	virtual void MessageReceived(BMessage* message)
+	{
+		switch (message->what) {
+			case kServoWake:
+			case kServoTick:
+			case kServoLater:
+			{
+				if (message->what == kServoWake)
+					atomic_set(&sWakePending, 0);
+				if (message->what == kServoLater) {
+					delete fLater;
+					fLater = NULL;
+				}
+				bigtime_t now = system_time();
+				if (now - sLastPump < kFrameTime) {
+					if (fLater == NULL) {
+						BMessage later(kServoLater);
+						fLater = new BMessageRunner(BMessenger(this), &later,
+							kFrameTime - (now - sLastPump), 1);
+					}
+					return;
+				}
+				sLastPump = now;
+				BServoContentView::PumpAll();
+				return;
+			}
+			default:
+				BHandler::MessageReceived(message);
+				return;
+		}
+	}
+
+private:
+	BMessageRunner*	fLater;
+	BMessageRunner*	fTick;
+};
 
 
 void
@@ -217,10 +334,7 @@ aomi_servo_start()
 		return sAvailable ? B_OK : B_ERROR;
 	sStarted = true;
 
-	// Ensure Zink is selected so Servo uses Vulkan (RADV on GPU, Lavapipe in software)
-	// rather than plain llvmpipe.
-	if (getenv("GALLIUM_DRIVER") == NULL)
-		setenv("GALLIUM_DRIVER", "zink", 0);
+	// libr5servo chooses the GL path itself (Zink on the GPU, or on Lavapipe).
 
 	void* handle = dlopen("libr5servo.so", RTLD_NOW | RTLD_LOCAL);
 	if (handle == NULL) {
@@ -255,8 +369,25 @@ aomi_servo_start()
 	sApi.find = (decltype(sApi.find))dlsym(handle, "r5_servo_find");
 	sApi.destroy = (decltype(sApi.destroy))dlsym(handle, "r5_servo_destroy");
 
+	sApi.set_waker = (decltype(sApi.set_waker))dlsym(handle, "r5_servo_set_waker");
+	sApi.pump = (decltype(sApi.pump))dlsym(handle, "r5_servo_pump");
+	sApi.paint = (decltype(sApi.paint))dlsym(handle, "r5_servo_paint");
+	sApi.mouse_move = (decltype(sApi.mouse_move))dlsym(handle, "r5_servo_mouse_move");
+	sApi.mouse_buttons
+		= (decltype(sApi.mouse_buttons))dlsym(handle, "r5_servo_mouse_buttons");
+	sApi.wheel = (decltype(sApi.wheel))dlsym(handle, "r5_servo_wheel");
+	sApi.key = (decltype(sApi.key))dlsym(handle, "r5_servo_key");
+	sApi.set_max_size
+		= (decltype(sApi.set_max_size))dlsym(handle, "r5_servo_set_max_size");
+	sApi.control_answer = (decltype(sApi.control_answer))dlsym(handle,
+		"r5_servo_control_answer");
+
 	if (sApi.create == NULL || sApi.spin == NULL || sApi.load_url == NULL
-		|| sApi.frame == NULL) {
+		|| sApi.frame == NULL || sApi.set_waker == NULL || sApi.pump == NULL
+		|| sApi.paint == NULL || sApi.mouse_move == NULL
+		|| sApi.mouse_buttons == NULL || sApi.wheel == NULL
+		|| sApi.key == NULL || sApi.destroy == NULL
+		|| sApi.set_max_size == NULL || sApi.control_answer == NULL) {
 		sError = "libr5servo.so is missing required r5_servo_* symbols.";
 		aomi_log_add(sError.String());
 		sAvailable = false;
@@ -411,11 +542,19 @@ BServoContentView::BServoContentView(const char* name, BWebSession* session)
 		aomi_servo_start();
 	if (!sAvailable)
 		fError = sError;
+	sViews.push_back(this);
 }
+
 
 
 BServoContentView::~BServoContentView()
 {
+	for (size_t i = 0; i < sViews.size(); i++) {
+		if (sViews[i] == this) {
+			sViews.erase(sViews.begin() + i);
+			break;
+		}
+	}
 	delete fRunner;
 	delete fBitmap;
 	if (fEngine != NULL && sApi.destroy != NULL)
@@ -428,8 +567,10 @@ void
 BServoContentView::AttachedToWindow()
 {
 	BWebContentView::AttachedToWindow();
-	if (fEngine != NULL && (fLoading || fIdleSpins > 0))
-		_ScheduleSpin(150000);
+	// A tab can be created before it is attached; the pump handler and the
+	// waker need the window.
+	_EnsurePump();
+	_ScheduleSpin(0);
 }
 
 
@@ -446,20 +587,191 @@ void
 BServoContentView::Show()
 {
 	BWebContentView::Show();
-	if (fEngine != NULL && (fLoading || fIdleSpins > 0 || fBitmap == NULL))
-		_ScheduleSpin(100000);
+	// The tab may have painted while hidden; take its latest frame.
+	if (fEngine != NULL && sApi.frame != NULL)
+		_CopyFrame();
+	_ScheduleSpin(0);
+}
+
+
+void
+BServoContentView::Hide()
+{
+	BWebContentView::Hide();
+}
+
+
+void
+BServoContentView::PumpAll()
+{
+	if (sApi.pump == NULL)
+		return;
+	sApi.pump();
+	// A tab is visible when neither it nor a parent is hidden; the tab cards
+	// hide their container, not this view.
+	for (size_t i = 0; i < sViews.size(); i++) {
+		BServoContentView* view = sViews[i];
+		if (view->fEngine == NULL || view->Window() == NULL || view->IsHidden())
+			continue;
+		if (sApi.paint != NULL && sApi.paint(view->fEngine) == 1)
+			view->_CopyFrame();
+	}
 }
 
 
 void
 BServoContentView::_ScheduleSpin(bigtime_t delay)
 {
-	delete fRunner;
-	fRunner = NULL;
-	if (fEngine == NULL || Window() == NULL)
+	// Everything is driven by Servo's wake-ups now; this only asks for one.
+	(void)delay;
+	servo_wake(NULL);
+}
+
+
+void
+BServoContentView::_EnsurePump()
+{
+	if (sPumpHandler != NULL || Window() == NULL)
 		return;
-	BMessage spin(kSpinMessage);
-	fRunner = new BMessageRunner(BMessenger(this), &spin, delay, 1);
+	ServoPumpHandler* handler = new ServoPumpHandler();
+	Window()->AddHandler(handler);
+	sPumpHandler = handler;
+	if (sWakeTarget == NULL)
+		sWakeTarget = new BMessenger(handler);
+	else
+		*sWakeTarget = BMessenger(handler);
+	if (sApi.set_waker != NULL)
+		sApi.set_waker(servo_wake, NULL);
+	handler->StartTick();
+}
+
+
+uint32
+BServoContentView::_Modifiers() const
+{
+	uint32 mods = modifiers();
+	uint32 out = 0;
+	if ((mods & B_SHIFT_KEY) != 0)
+		out |= 1;
+	// Haiku's shortcut key (Alt by default) acts as Control inside a page,
+	// so copy and paste in a form use the same keys as everywhere in R5.
+	if ((mods & (B_CONTROL_KEY | B_COMMAND_KEY)) != 0)
+		out |= 2;
+	if ((mods & B_OPTION_KEY) != 0)
+		out |= 8;
+	return out;
+}
+
+
+void
+BServoContentView::MouseDown(BPoint where)
+{
+	MakeFocus(true);
+	int32 buttons = B_PRIMARY_MOUSE_BUTTON;
+	if (Window() != NULL && Window()->CurrentMessage() != NULL)
+		Window()->CurrentMessage()->FindInt32("buttons", &buttons);
+	SetMouseEventMask(B_POINTER_EVENTS, B_NO_POINTER_HISTORY);
+	fLastMouse = where;
+	if (fEngine != NULL && sApi.mouse_buttons != NULL)
+		sApi.mouse_buttons(fEngine, where.x, where.y, (uint32)buttons);
+	_ScheduleSpin(0);
+}
+
+
+void
+BServoContentView::MouseUp(BPoint where)
+{
+	int32 buttons = 0;
+	if (Window() != NULL && Window()->CurrentMessage() != NULL)
+		Window()->CurrentMessage()->FindInt32("buttons", &buttons);
+	fLastMouse = where;
+	if (fEngine != NULL && sApi.mouse_buttons != NULL)
+		sApi.mouse_buttons(fEngine, where.x, where.y, (uint32)buttons);
+	_ScheduleSpin(0);
+}
+
+
+void
+BServoContentView::MouseMoved(BPoint where, uint32 transit,
+	const BMessage* dragMessage)
+{
+	BWebContentView::MouseMoved(where, transit, dragMessage);
+	fLastMouse = where;
+	if (fEngine != NULL && sApi.mouse_move != NULL)
+		sApi.mouse_move(fEngine, where.x, where.y);
+	_ScheduleSpin(0);
+}
+
+
+void
+BServoContentView::_SendKey(const char* bytes, int32 numBytes, bool down)
+{
+	if (fEngine == NULL || sApi.key == NULL || bytes == NULL || numBytes < 1)
+		return;
+	BMessage* current = Window() != NULL ? Window()->CurrentMessage() : NULL;
+	int32 named = 0;
+	if (numBytes == 1) {
+		switch (bytes[0]) {
+			case B_ENTER: named = 1; break;
+			case B_BACKSPACE: named = 2; break;
+			case B_TAB: named = 3; break;
+			case B_ESCAPE: named = 4; break;
+			case B_DELETE: named = 5; break;
+			case B_LEFT_ARROW: named = 6; break;
+			case B_RIGHT_ARROW: named = 7; break;
+			case B_UP_ARROW: named = 8; break;
+			case B_DOWN_ARROW: named = 9; break;
+			case B_HOME: named = 10; break;
+			case B_END: named = 11; break;
+			case B_PAGE_UP: named = 12; break;
+			case B_PAGE_DOWN: named = 13; break;
+			case B_INSERT: named = 14; break;
+			case B_FUNCTION_KEY:
+			{
+				int32 key = 0;
+				if (current != NULL)
+					current->FindInt32("key", &key);
+				if (key >= B_F1_KEY && key <= B_F12_KEY)
+					named = 21 + (key - B_F1_KEY);
+				else
+					return;
+				break;
+			}
+			default:
+				if ((uint8)bytes[0] < 0x20)
+					return;
+				break;
+		}
+	}
+	int32 repeat = 0;
+	if (current != NULL)
+		current->FindInt32("be:key_repeat", &repeat);
+	BString text(bytes, numBytes);
+	sApi.key(fEngine, down ? 1 : 0, named, text.String(), _Modifiers(),
+		repeat > 0 ? 1 : 0);
+	_ScheduleSpin(0);
+}
+
+
+void
+BServoContentView::KeyDown(const char* bytes, int32 numBytes)
+{
+	if (fEngine == NULL) {
+		BWebContentView::KeyDown(bytes, numBytes);
+		return;
+	}
+	_SendKey(bytes, numBytes, true);
+}
+
+
+void
+BServoContentView::KeyUp(const char* bytes, int32 numBytes)
+{
+	if (fEngine == NULL) {
+		BWebContentView::KeyUp(bytes, numBytes);
+		return;
+	}
+	_SendKey(bytes, numBytes, false);
 }
 
 
@@ -486,6 +798,14 @@ BServoContentView::_Start(const char* document, bool isHTML)
 		width = 16;
 	if (height < 16)
 		height = 16;
+	_EnsurePump();
+	{
+		// libr5servo makes each tab's GL storage this large once; a view is
+		// never larger (see surface_size() in distro/servo/engine/src/lib.rs).
+		BScreen screen(window);
+		BRect frame = screen.Frame();
+		sApi.set_max_size((int32)frame.Width() + 1, (int32)frame.Height() + 1);
+	}
 	fEngine = sApi.create(width, height, document, isHTML ? 1 : 0,
 		&_Callback, this);
 	status_t status = fEngine != NULL ? B_OK : B_ERROR;
@@ -762,7 +1082,20 @@ BServoContentView::Open(int32 id)
 
 
 status_t
+BServoContentView::AnswerControl(bool accept, int32 value, const char* text)
+{
+	if (fEngine == NULL || sApi.control_answer == NULL)
+		return B_NO_INIT;
+	status_t status = engine_status(sApi.control_answer(fEngine, accept ? 1 : 0,
+		value, text));
+	_ScheduleSpin(0);
+	return status;
+}
+
+
+status_t
 BServoContentView::ShowInTracker(int32 id)
+
 {
 	BString path;
 	sDlLock.Lock();
@@ -791,7 +1124,17 @@ BServoContentView::Draw(BRect updateRect)
 {
 	(void)updateRect;
 	if (fBitmap != NULL) {
-		DrawBitmap(fBitmap, Bounds());
+		// Never stretched: the frame is drawn at its own size from the top
+		// left. While a resize waits for Servo's next frame, the rest of the
+		// view keeps the page background.
+		BRect frame = fBitmap->Bounds();
+		DrawBitmap(fBitmap, frame, frame);
+		SetHighColor(255, 255, 255);
+		BRect b = Bounds();
+		if (b.right > frame.right)
+			FillRect(BRect(frame.right + 1, b.top, b.right, b.bottom));
+		if (b.bottom > frame.bottom)
+			FillRect(BRect(b.left, frame.bottom + 1, frame.right, b.bottom));
 		return;
 	}
 	BRect b = Bounds();
@@ -812,36 +1155,41 @@ BServoContentView::Draw(BRect updateRect)
 	FillRect(b, B_SOLID_LOW);
 
 	if (fError.Length() > 0) {
-		float cw = 540;
-		if (cw > b.Width() - 48)
-			cw = b.Width() - 48;
-		float ch = 176;
-		BRect r((b.Width() - cw) / 2, (b.Height() - ch) / 2 - 20,
-			(b.Width() + cw) / 2, (b.Height() + ch) / 2 - 20);
+		// Every size follows the plain font (12 pt is the design size).
+		float s = be_plain_font->Size() / 12.0f;
+		float cw = floorf(540 * s);
+		if (cw > b.Width() - 48 * s)
+			cw = b.Width() - 48 * s;
+		float ch = floorf(176 * s);
+		BRect r(floorf((b.Width() - cw) / 2), floorf((b.Height() - ch) / 2 - 20 * s),
+			floorf((b.Width() + cw) / 2), floorf((b.Height() + ch) / 2 - 20 * s));
 		SetHighColor(card);
-		FillRoundRect(r, 10, 10);
+		FillRoundRect(r, 10 * s, 10 * s);
 		SetHighColor(border);
-		StrokeRoundRect(r, 10, 10);
+		StrokeRoundRect(r, 10 * s, 10 * s);
 
 		BFont titleFont(be_bold_font);
-		titleFont.SetSize(18);
+		titleFont.SetSize(18 * s);
 		SetFont(&titleFont);
 		SetHighColor(fg);
-		DrawString("Servo engine could not be started",
-			BPoint(r.left + 24, r.top + 42));
+		DrawString(B_TRANSLATE("The web engine could not be started"),
+			BPoint(r.left + 24 * s, r.top + 42 * s));
 
 		BFont bodyFont(be_plain_font);
-		bodyFont.SetSize(13.5f);
+		bodyFont.SetSize(13.5f * s);
 		SetFont(&bodyFont);
 		SetHighColor(sub);
-		BString detail(fError);
-		bodyFont.TruncateString(&detail, B_TRUNCATE_END, cw - 48);
-		DrawString(detail.String(), BPoint(r.left + 24, r.top + 78));
-		DrawString(
-			"Install or restore /boot/system/lib/libr5servo.so (the r5servo package) and reopen Aomi.",
-			BPoint(r.left + 24, r.top + 110));
-		DrawString("WebPositive remains installed on the system.",
-			BPoint(r.left + 24, r.top + 138));
+		const char* lines[] = {
+			fError.String(),
+			B_TRANSLATE("Reinstall the r5servo package and open Aomi again."),
+			B_TRANSLATE("WebPositive is still installed and works as usual.")
+		};
+		for (int32 i = 0; i < 3; i++) {
+			BString line(lines[i]);
+			bodyFont.TruncateString(&line, B_TRUNCATE_END, cw - 48 * s);
+			DrawString(line.String(),
+				BPoint(r.left + 24 * s, r.top + (78 + 30 * i) * s));
+		}
 	}
 }
 
@@ -859,6 +1207,7 @@ BServoContentView::FrameResized(float width, float height)
 	if (h < 16)
 		h = 16;
 	sApi.resize(fEngine, w, h);
+	_ScheduleSpin(0);
 }
 
 
@@ -875,20 +1224,19 @@ void
 BServoContentView::MessageReceived(BMessage* message)
 {
 	if (message->what == kSpinMessage) {
-		delete fRunner;
-		fRunner = NULL;
-		if (fEngine != NULL && sApi.spin != NULL) {
-			if (IsHidden() && !fLoading)
-				return;
-			sApi.spin(fEngine);
-			if (!IsHidden())
-				_CopyFrame();
-			if (fLoading)
-				_ScheduleSpin(IsHidden() ? 500000 : 150000);
-			else if (fIdleSpins > 0) {
-				fIdleSpins--;
-				_ScheduleSpin(250000);
-			}
+		_ScheduleSpin(0);
+		return;
+	}
+	if (message->what == B_MOUSE_WHEEL_CHANGED) {
+		float dx = 0;
+		float dy = 0;
+		message->FindFloat("be:wheel_delta_x", &dx);
+		message->FindFloat("be:wheel_delta_y", &dy);
+		if (fEngine != NULL && sApi.wheel != NULL) {
+			// Three lines of the plain font per notch, like BScrollView.
+			float notch = ceilf(be_plain_font->Size() * 4.0f);
+			sApi.wheel(fEngine, fLastMouse.x, fLastMouse.y, dx, dy, notch);
+			_ScheduleSpin(0);
 		}
 		return;
 	}
@@ -923,19 +1271,22 @@ BServoContentView::_CopyFrame()
 			}
 		}
 	}
+	// Servo gives RGBA bytes; B_RGBA32 is B, G, R, A in memory. Swap red
+	// and blue a word at a time and force the alpha opaque.
 	uint8* dest = (uint8*)fBitmap->Bits();
 	int32 stride = fBitmap->BytesPerRow();
 	for (int32 y = 0; y < height; y++) {
-		const uint8* src = rgba + y * width * 4;
-		uint8* row = dest + y * stride;
+		const uint32* src = (const uint32*)(rgba + (size_t)y * width * 4);
+		uint32* row = (uint32*)(dest + (size_t)y * stride);
 		for (int32 x = 0; x < width; x++) {
-			row[x * 4 + 0] = src[x * 4 + 2];
-			row[x * 4 + 1] = src[x * 4 + 1];
-			row[x * 4 + 2] = src[x * 4 + 0];
-			row[x * 4 + 3] = 255;
+			uint32 p = B_LENDIAN_TO_HOST_INT32(src[x]);
+			row[x] = B_HOST_TO_LENDIAN_INT32((p & 0x0000ff00)
+				| ((p & 0x000000ff) << 16) | ((p >> 16) & 0x000000ff)
+				| 0xff000000);
 		}
 	}
 	Invalidate();
+
 }
 
 
@@ -967,8 +1318,10 @@ BServoContentView::_Report(uint32 what, const char* url, const char* text,
 		message.AddInt32("state", a);
 	if (what == AOMI_PROTOCOL && text != NULL)
 		message.AddString("protocol", text);
-	if (what == AOMI_DIALOG)
+	if (what == AOMI_DIALOG) {
 		message.AddInt32("kind", a);
+		message.AddPoint("where", BPoint(b, c));
+	}
 	return Report(&message);
 }
 
@@ -1088,7 +1441,8 @@ BServoContentView::_OnEvent(const r5_servo_event* event)
 			break;
 		}
 		case R5_EV_DIALOG:
-			_Report(AOMI_DIALOG, NULL, event->text, 0, event->a, 0, 0);
+			_Report(AOMI_DIALOG, NULL, event->text, 0, event->a, event->b,
+				event->c);
 			break;
 		default:
 			break;

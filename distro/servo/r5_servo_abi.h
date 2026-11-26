@@ -83,6 +83,67 @@ status_t	r5_servo_find(r5_servo* engine, const char* text, int32 forward,
 	int32 match_case);
 void		r5_servo_destroy(r5_servo* engine);
 
+// Since 0.8.0-3. Servo runs one instance per process, on the thread of the
+// one browser window. The waker is called from Servo's own threads; it should
+// only post a message to that window, which then calls r5_servo_pump() (or
+// r5_servo_spin() for the visible tab) on the window thread.
+typedef void (*r5_servo_wake_function)(void* cookie);
+void		r5_servo_set_waker(r5_servo_wake_function wake, void* cookie);
+int32		r5_servo_pump(void);
+// Paints the tab if Servo has a new frame for it (no event loop). Returns 1
+// when r5_servo_frame() now holds a new frame.
+int32		r5_servo_paint(r5_servo* engine);
+
+// Input, in view pixels. Buttons is Haiku's bit field after the change.
+// Wheel deltas are Haiku's (one notch is 1.0, positive is down or right).
+status_t	r5_servo_mouse_move(r5_servo* engine, float x, float y);
+status_t	r5_servo_mouse_buttons(r5_servo* engine, float x, float y,
+	uint32 buttons);
+status_t	r5_servo_wheel(r5_servo* engine, float x, float y, float dx,
+	float dy, float pixels_per_notch);
+
+enum {
+	R5_SERVO_KEY_NONE		= 0,
+	R5_SERVO_KEY_ENTER		= 1,
+	R5_SERVO_KEY_BACKSPACE	= 2,
+	R5_SERVO_KEY_TAB		= 3,
+	R5_SERVO_KEY_ESCAPE		= 4,
+	R5_SERVO_KEY_DELETE		= 5,
+	R5_SERVO_KEY_LEFT		= 6,
+	R5_SERVO_KEY_RIGHT		= 7,
+	R5_SERVO_KEY_UP			= 8,
+	R5_SERVO_KEY_DOWN		= 9,
+	R5_SERVO_KEY_HOME		= 10,
+	R5_SERVO_KEY_END		= 11,
+	R5_SERVO_KEY_PAGE_UP	= 12,
+	R5_SERVO_KEY_PAGE_DOWN	= 13,
+	R5_SERVO_KEY_INSERT		= 14,
+	R5_SERVO_KEY_F1			= 21	// F1 to F12 are 21 to 32
+};
+
+enum {
+	R5_SERVO_MOD_SHIFT		= 1,
+	R5_SERVO_MOD_CONTROL	= 2,
+	R5_SERVO_MOD_ALT		= 4,
+	R5_SERVO_MOD_META		= 8
+};
+
+// A named key wins over text. Text is the key's UTF-8.
+status_t	r5_servo_key(r5_servo* engine, int32 down, int32 named_key,
+	const char* text, uint32 modifiers, int32 repeat);
+
+// The largest view this process shows, normally the screen. Call before
+// r5_servo_create(): each tab's GL storage is made this large once, and a view
+// is never larger (resizing the storage would mean destroying it).
+void		r5_servo_set_max_size(int32 width, int32 height);
+
+// The answer to the last R5_EV_DIALOG (alert, confirm, prompt, select list).
+// accept = 0 cancels. value: the chosen option id of a select list. text: a
+// prompt's text, or NULL.
+status_t	r5_servo_control_answer(r5_servo* engine, int32 accept, int32 value,
+	const char* text);
+
+
 
 }
 

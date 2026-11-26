@@ -38,7 +38,7 @@ done
 # shellcheck source=/dev/null
 . "$ROOT/distro/servo/r5servo.sha256"
 r5servo_dst="$DL/$R5SERVO_PKG"
-r5servo_local="${SERVO_SRC:-/home/nickr/r5os/servo-build}/r5servo-out/$R5SERVO_PKG"
+r5servo_local="${SERVO_SRC:-$HOME/r5os/servo-build}/r5servo-out/$R5SERVO_PKG"
 check_r5servo_hash() {
 	local file="$1"
 	[[ -f "$file" ]] || return 1
@@ -151,14 +151,15 @@ text = text.replace("\tvulkanteapot-1.0.0-4\n", "\tvulkanteapot-1.0.0-6\n")
 text = text.replace("\tvulkanteapot-1.0.0-5\n", "\tvulkanteapot-1.0.0-6\n")
 if "\tvulkan_loader-1.4.367-4\n" not in text:
     sys.exit("vulkan loader pin missing")
-text = text.replace("\tr5servo-0.8.0-1\n", "\tr5servo-0.8.0-2\n")
-if "\tr5servo-0.8.0-2\n" not in text:
+text = text.replace("\tr5servo-0.8.0-1\n", "\tr5servo-0.8.0-3\n")
+text = text.replace("\tr5servo-0.8.0-2\n", "\tr5servo-0.8.0-3\n")
+if "\tr5servo-0.8.0-3\n" not in text:
     text = text.replace(
         "\tvulkanteapot-1.0.0-6\n",
-        "\tvulkanteapot-1.0.0-6\n\tr5servo-0.8.0-2\n",
+        "\tvulkanteapot-1.0.0-6\n\tr5servo-0.8.0-3\n",
         1,
     )
-if "\tr5servo-0.8.0-2\n" not in text:
+if "\tr5servo-0.8.0-3\n" not in text:
     sys.exit("r5servo pin missing")
 path.write_text(text, encoding="utf-8")
 print("pin updated")

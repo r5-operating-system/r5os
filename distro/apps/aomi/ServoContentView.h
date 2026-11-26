@@ -39,7 +39,14 @@ public:
 	virtual	void				AttachedToWindow();
 	virtual	void				DetachedFromWindow();
 	virtual	void				Show();
+	virtual	void				Hide();
 	virtual	void				Draw(BRect updateRect);
+	virtual	void				MouseDown(BPoint where);
+	virtual	void				MouseUp(BPoint where);
+	virtual	void				MouseMoved(BPoint where, uint32 transit,
+									const BMessage* dragMessage);
+	virtual	void				KeyDown(const char* bytes, int32 numBytes);
+	virtual	void				KeyUp(const char* bytes, int32 numBytes);
 	virtual	void				FrameResized(float width, float height);
 	virtual	void				MakeFocus(bool focused);
 	virtual	void				MessageReceived(BMessage* message);
@@ -68,8 +75,18 @@ public:
 	virtual	status_t			Cancel(int32 id);
 	virtual	status_t			Open(int32 id);
 	virtual	status_t			ShowInTracker(int32 id);
+	virtual	status_t			AnswerControl(bool accept, int32 value,
+									const char* text);
+
+			// Runs Servo's event loop once and copies the new frame of every
+			// visible tab. Called on the window thread by the pump handler.
+	static	void				PumpAll();
 
 private:
+			void				_EnsurePump();
+			uint32				_Modifiers() const;
+			void				_SendKey(const char* bytes, int32 numBytes,
+									bool down);
 			status_t			_Start(const char* document, bool isHTML);
 			void				_ScheduleSpin(bigtime_t delay);
 			void				_CopyFrame();
@@ -91,6 +108,8 @@ private:
 			BString				fCurrentTitle;
 			bool				fLoading;
 			int32				fIdleSpins;
+			BPoint				fLastMouse;
+
 };
 
 

@@ -69,6 +69,7 @@ public:
 					<tr><td>Navigation</td><td><code class="inline">GoBack()</code>, <code class="inline">GoForward()</code>, <code class="inline">GetBackList(BMessage*)</code>, <code class="inline">GetForwardList(BMessage*)</code></td></tr>
 					<tr><td>Page</td><td><code class="inline">URL(BString*)</code>, <code class="inline">Title(BString*)</code>, <code class="inline">SetZoom(float, bool textOnly)</code>, <code class="inline">Find(const char*, bool forward, bool matchCase)</code>, <code class="inline">SavePage(const char*)</code>, <code class="inline">ViewSource()</code>, <code class="inline">Print()</code>, <code class="inline">Protocol(BString*)</code></td></tr>
 					<tr><td>Downloads</td><td><code class="inline">Cancel(int32 id)</code>, <code class="inline">Open(int32 id)</code>, <code class="inline">ShowInTracker(int32 id)</code></td></tr>
+					<tr><td>Page controls</td><td><code class="inline">AnswerControl(bool accept, int32 value, const char* text)</code>: the answer to the last <code class="inline">AOMI_DIALOG</code>. The page waits for it after an alert, a confirm, a prompt or a select list. <code class="inline">value</code> is the chosen option id of a select list, <code class="inline">text</code> a prompt's text.</td></tr>
 				</tbody>
 			</table>
 		</section>
@@ -82,7 +83,7 @@ public:
 				<li><code class="inline">AOMI_TITLE_CHANGED</code> (<code class="inline">'aTit'</code>), <code class="inline">AOMI_URL_CHANGED</code> (<code class="inline">'aUrl'</code>), <code class="inline">AOMI_FAVICON</code> (<code class="inline">'aFav'</code>), <code class="inline">AOMI_HOVER_LINK</code> (<code class="inline">'aHov'</code>)</li>
 				<li><code class="inline">AOMI_SECURITY</code> (<code class="inline">'aSec'</code>: <code class="inline">AOMI_SECURITY_*</code>), <code class="inline">AOMI_PROTOCOL</code> (<code class="inline">'aPrt'</code>: <code class="inline">"h2"</code>, <code class="inline">"http/1.1"</code>, <code class="inline">"h3"</code>)</li>
 				<li><code class="inline">AOMI_PROGRESS</code> (<code class="inline">'aPrg'</code>: 0.0&ndash;1.0), <code class="inline">AOMI_CURSOR</code> (<code class="inline">'aCur'</code>), <code class="inline">AOMI_FULLSCREEN</code> (<code class="inline">'aFsc'</code>)</li>
-				<li><code class="inline">AOMI_NEW_WINDOW</code> (<code class="inline">'aNww'</code>), <code class="inline">AOMI_CLOSE_WANTED</code> (<code class="inline">'aClw'</code>), <code class="inline">AOMI_DIALOG</code> (<code class="inline">'aDlg'</code>)</li>
+				<li><code class="inline">AOMI_NEW_WINDOW</code> (<code class="inline">'aNww'</code>), <code class="inline">AOMI_CLOSE_WANTED</code> (<code class="inline">'aClw'</code>), <code class="inline">AOMI_DIALOG</code> (<code class="inline">'aDlg'</code>: <code class="inline">kind</code> <code class="inline">AOMI_DIALOG_*</code>, <code class="inline">text</code>, <code class="inline">where</code>; for <code class="inline">AOMI_DIALOG_SELECT</code> the text holds one line per option, see <code class="inline">WebContentView.h</code>)</li>
 				<li><code class="inline">AOMI_DOWNLOAD_ADDED</code> (<code class="inline">'aDla'</code>), <code class="inline">AOMI_DOWNLOAD_PROGRESS</code> (<code class="inline">'aDlp'</code>), <code class="inline">AOMI_DOWNLOAD_FINISHED</code> (<code class="inline">'aDlf'</code>), <code class="inline">AOMI_DOWNLOAD_FAILED</code> (<code class="inline">'aDlx'</code>)</li>
 			</ul>
 		</section>
@@ -92,7 +93,7 @@ public:
 			<pre><code>status_t aomi_engine_start(const char* engine);
 BWebContentView* create_aomi_content_view(const char* engine,
     const char* name, BWebSession* session);</code></pre>
-			<p>Aomi calls <code class="inline">aomi_engine_start("Servo")</code> once at startup and creates every tab view via <code class="inline">create_aomi_content_view("Servo", "page", session)</code>. Because <code class="inline">libr5servo.so</code> is loaded via <code class="inline">dlopen()</code>, removing the library does not crash Aomi: the view renders a clear native message explaining how to restore the <code class="inline">r5servo</code> package.</p>
+			<p>Aomi calls <code class="inline">aomi_engine_start("Servo")</code> once at startup and creates every tab view via <code class="inline">create_aomi_content_view("Servo", "page", session)</code>. Because <code class="inline">libr5servo.so</code> is loaded via <code class="inline">dlopen()</code>, removing the library does not crash Aomi: the view shows a clear message that the web engine could not start and how to restore the <code class="inline">r5servo</code> package. The view draws Servo's frame at its own size, never stretched. Servo runs one engine per process, so Aomi opens every further window as its own process.</p>
 		</section>
 	</main>
 </div>

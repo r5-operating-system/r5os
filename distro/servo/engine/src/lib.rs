@@ -10,20 +10,181 @@ use std::ffi::CString;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicPtr, Ordering};
-use std::sync::{Mutex, Once, OnceLock};
+use std::sync::{Arc, Mutex, Once, OnceLock};
 
 use servo::{
     AuthenticationRequest, CreateNewWebViewRequest, Cursor, DeviceIntPoint, DeviceIntRect,
-    DeviceIntSize, EmbedderControl, FilePicker, JSValue, LoadStatus, Opts, PermissionRequest,
+    DeviceIntSize, DevicePoint, EmbedderControl, EventLoopWaker, InputEvent,
+    JSValue, Key, KeyState, KeyboardEvent, LoadStatus, Modifiers, MouseButton,
+    MouseButtonAction, MouseButtonEvent, MouseMoveEvent, NamedKey, Opts, PermissionRequest,
     Preferences, RenderingContext, ServoBuilder, SimpleDialog, WebView, WebViewBuilder,
-    WebViewDelegate, WindowRenderingContext,
+    WebViewDelegate, WebViewPoint, WheelDelta, WheelEvent, WheelMode, WindowRenderingContext,
 };
 
 static PROTOCOL_MAP: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
 static LOGGER_ONCE: Once = Once::new();
+// The map only needs the documents of open tabs. Past this many entries it
+// starts over, so a long session does not grow it without end.
+const PROTOCOL_MAP_LIMIT: usize = 2048;
 
+type WakeFn = extern "C" fn(*mut std::ffi::c_void);
+
+// Servo allows one instance per process (servo_config's OPTIONS is a
+// OnceLock). Aomi runs one browser window per process, and every Servo call
+// happens on that window's thread, so the instance lives in a thread local.
 thread_local! {
     static SHARED_SERVO: RefCell<Option<Rc<servo::Servo>>> = const { RefCell::new(None) };
+    // Engines alive on this thread. An event or JavaScript result for an
+    // engine that is no longer listed is dropped.
+    static ENGINES: RefCell<Vec<usize>> = const { RefCell::new(Vec::new()) };
+    // Rendering contexts of closed tabs. Destroying one aborts in Haiku
+    // Mesa's eglDestroyImageKHR, so a new tab reuses them instead.
+    static CONTEXT_POOL: RefCell<Vec<(Rc<WindowRenderingContext>, i32, i32)>> =
+        const { RefCell::new(Vec::new()) };
+    // The size the GL storage of a new tab's surface is made with (see
+    // surface_size()). r5_servo_set_max_size() sets it; 0 means unset.
+    static MAX_SIZE: RefCell<(i32, i32)> = const { RefCell::new((0, 0)) };
+    static WAKE_TARGET: Arc<Mutex<Option<(WakeFn, usize)>>> = Arc::new(Mutex::new(None));
+}
+
+// The GL path. Servo's EGL is Mesa's surfaceless platform, where R5's own
+// choice in the Haiku EGL driver (M9 decision 3) does not run. This makes the
+// same choice as that driver and r5-gl-test's zink_asked(): Zink on the GPU
+// when the radeon_hd settings allow it and a render node under /dev/gpu
+// reports R5_GPU_CAP_AVAILABLE, otherwise Zink on Lavapipe. Forcing Zink
+// without a GPU made Mesa abort in eglInitialize (QEMU, 26 Nov 2026).
+extern "C" {
+    fn load_driver_settings(name: *const std::ffi::c_char) -> *mut std::ffi::c_void;
+    fn get_driver_boolean_parameter(
+        handle: *mut std::ffi::c_void,
+        key: *const std::ffi::c_char,
+        unknown_value: bool,
+        no_arg_value: bool,
+    ) -> bool;
+    fn unload_driver_settings(handle: *mut std::ffi::c_void) -> i32;
+    fn ioctl(fd: i32, op: u64, ...) -> i32;
+}
+
+fn gpu_settings_allow() -> bool {
+    for path in [
+        "/boot/home/config/settings/kernel/drivers/radeon_hd",
+        "/boot/system/settings/kernel/drivers/radeon_hd",
+    ] {
+        if !std::path::Path::new(path).exists() {
+            continue;
+        }
+        let Ok(name) = CString::new(path) else {
+            return true;
+        };
+        let handle = unsafe { load_driver_settings(name.as_ptr()) };
+        if handle.is_null() {
+            return true;
+        }
+        let flag = |key: &str, default: bool| {
+            let key = CString::new(key).unwrap_or_default();
+            unsafe { get_driver_boolean_parameter(handle, key.as_ptr(), default, true) }
+        };
+        let allow = flag("gpu_opengl", true) && flag("gpu", true) && !flag("gpu_opengl_fail", false);
+        unsafe { unload_driver_settings(handle) };
+        return allow;
+    }
+    true
+}
+
+fn gpu_node_available() -> bool {
+    use std::os::fd::AsRawFd;
+    // R5 GPU interface (r5_gpu.h): GET_INFO is 30479; the first 32 bytes end
+    // with the capabilities, and R5_GPU_CAP_AVAILABLE is 8.
+    let Ok(drivers) = std::fs::read_dir("/dev/gpu") else {
+        return false;
+    };
+    for driver in drivers.flatten() {
+        let Ok(nodes) = std::fs::read_dir(driver.path()) else {
+            continue;
+        };
+        for node in nodes.flatten() {
+            let Ok(file) = std::fs::OpenOptions::new().read(true).write(true).open(node.path())
+            else {
+                continue;
+            };
+            let mut info = [0u32; 8];
+            info[0] = std::mem::size_of_val(&info) as u32;
+            let result = unsafe {
+                ioctl(
+                    file.as_raw_fd(),
+                    30479,
+                    info.as_mut_ptr() as *mut std::ffi::c_void,
+                    std::mem::size_of_val(&info),
+                )
+            };
+            if result == 0 && info[7] & 8 != 0 {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn choose_gl_path() {
+    // A program or the user that set either variable keeps its choice.
+    if std::env::var_os("GALLIUM_DRIVER").is_some()
+        || std::env::var_os("LIBGL_ALWAYS_SOFTWARE").is_some()
+    {
+        return;
+    }
+    std::env::set_var("GALLIUM_DRIVER", "zink");
+    if gpu_settings_allow() && gpu_node_available() {
+        println!("r5-servo gl-path zink-gpu");
+    } else {
+        std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1");
+        println!("r5-servo gl-path zink-lavapipe");
+    }
+}
+
+// Surfman's Mesa surfaceless backend makes a widget surface a GL surface of
+// the size it is created with, and resize_surface() only records a new size
+// (surfman mesa_surfaceless/device.rs). Making a new surface would mean
+// destroying the old one, which aborts in Haiku Mesa's eglDestroyImageKHR.
+// So the storage is made once, as large as the screen, and a view is never
+// larger than its storage. WebRender draws with the recorded size from the
+// lower left corner and read_to_image() reads from there, so a smaller
+// recorded size inside larger storage is correct.
+fn surface_size(width: i32, height: i32) -> (i32, i32) {
+    let (max_w, max_h) = MAX_SIZE.with(|size| *size.borrow());
+    (width.max(max_w).max(16), height.max(max_h).max(16))
+}
+
+/// The largest view this process will show, normally the screen size. Call
+/// before r5_servo_create(); a tab's GL storage is made this large.
+#[no_mangle]
+pub extern "C" fn r5_servo_set_max_size(width: i32, height: i32) {
+    MAX_SIZE.with(|size| *size.borrow_mut() = (width.max(0), height.max(0)));
+}
+
+fn alive(engine: *mut Engine) -> bool {
+    !engine.is_null() && ENGINES.with(|list| list.borrow().contains(&(engine as usize)))
+}
+
+// Servo calls wake() from its own threads when it has work for the embedder.
+// The C++ side then posts one message to the window, which calls
+// r5_servo_pump() on the window thread.
+struct Waker {
+    target: Arc<Mutex<Option<(WakeFn, usize)>>>,
+}
+
+impl EventLoopWaker for Waker {
+    fn clone_box(&self) -> Box<dyn EventLoopWaker> {
+        Box::new(Waker {
+            target: Arc::clone(&self.target),
+        })
+    }
+
+    fn wake(&self) {
+        let target = self.target.lock().ok().and_then(|slot| *slot);
+        if let Some((function, cookie)) = target {
+            function(cookie as *mut std::ffi::c_void);
+        }
+    }
 }
 
 fn protocol_map() -> &'static Mutex<HashMap<String, String>> {
@@ -51,18 +212,16 @@ impl log::Log for ProtocolLogger {
             } else if let Some(u) = msg.strip_prefix("HTTP/1.1 response for ") {
                 Some(("http/1.1", u.trim()))
             } else if let Some(u) = msg.strip_prefix("HTTP/1.0 response for ") {
-                Some(("http/1.1", u.trim()))
+                Some(("http/1.0", u.trim()))
             } else {
                 None
             };
             if let Some((proto, raw_url)) = proto_and_url {
                 if let Ok(mut map) = protocol_map().lock() {
-                    map.insert(raw_url.to_string(), proto.to_string());
-                    if let Ok(parsed) = url::Url::parse(raw_url) {
-                        if let Some(host) = parsed.host_str() {
-                            map.insert(format!("host:{host}"), proto.to_string());
-                        }
+                    if map.len() >= PROTOCOL_MAP_LIMIT {
+                        map.clear();
                     }
+                    map.insert(raw_url.to_string(), proto.to_string());
                 }
             }
             if self.verbose {
@@ -88,17 +247,10 @@ fn install_protocol_logger() {
 
 fn lookup_protocol(raw_url: &str) -> Option<String> {
     let map = protocol_map().lock().ok()?;
-    if let Some(p) = map.get(raw_url) {
-        return Some(p.clone());
-    }
-    if let Ok(parsed) = url::Url::parse(raw_url) {
-        if let Some(host) = parsed.host_str() {
-            if let Some(p) = map.get(&format!("host:{host}")) {
-                return Some(p.clone());
-            }
-        }
-    }
-    None
+    // Only the document itself counts. A host fallback would report the
+    // protocol of whatever image or script came from that host last.
+    map.get(raw_url).cloned()
+
 }
 
 const R5_EV_LOAD_STARTED: i32 = 1;
@@ -189,6 +341,10 @@ struct Notes {
     spins: u32,
     last_url: String,
     last_status: String,
+    // Servo said a new frame is ready, so the next spin paints and reads it.
+    frame_ready: bool,
+    // Buttons held down, so a release reports the right one.
+    buttons: u32,
 }
 
 struct Inner {
@@ -200,9 +356,20 @@ struct Inner {
     height: i32,
     gl: String,
     https: bool,
+    // The size the context's GL storage was made with.
+    storage_w: i32,
+    storage_h: i32,
+}
+
+// A page control waiting for the user's answer (r5_servo_control_answer()).
+// Dropping one gives the page its default answer.
+enum Pending {
+    Dialog(SimpleDialog),
+    Select(servo::SelectElement),
 }
 
 struct Engine {
+    pending: RefCell<Option<Pending>>,
     inner: RefCell<Inner>,
     events: Mutex<Vec<Ev>>,
     notes: Mutex<Notes>,
@@ -214,12 +381,19 @@ struct Bridge {
     engine: AtomicPtr<Engine>,
 }
 
+// Null once the engine is destroyed: Servo may still call the delegate of a
+// WebView it has not let go of yet.
 fn engine_ptr(bridge: &Bridge) -> *mut Engine {
-    bridge.engine.load(Ordering::Relaxed)
+    let engine = bridge.engine.load(Ordering::Relaxed);
+    if alive(engine) {
+        engine
+    } else {
+        std::ptr::null_mut()
+    }
 }
 
 fn emit(engine: *mut Engine, event: Ev) {
-    if engine.is_null() {
+    if !alive(engine) {
         return;
     }
     let engine = unsafe { &*engine };
@@ -229,7 +403,7 @@ fn emit(engine: *mut Engine, event: Ev) {
 }
 
 fn flush(engine: *mut Engine) {
-    if engine.is_null() {
+    if !alive(engine) {
         return;
     }
     let pending = {
@@ -285,6 +459,15 @@ fn protocol_from_body(text: &str) -> Option<&'static str> {
 }
 
 impl WebViewDelegate for Bridge {
+    fn notify_new_frame_ready(&self, _webview: WebView) {
+        let engine = engine_ptr(self);
+        if alive(engine) {
+            if let Ok(mut notes) = unsafe { (*engine).notes.lock() } {
+                notes.frame_ready = true;
+            }
+        }
+    }
+
     fn notify_url_changed(&self, webview: WebView, url: url::Url) {
         let mut event = Ev::new(R5_EV_URL);
         event.url = url.to_string();
@@ -433,8 +616,12 @@ impl WebViewDelegate for Bridge {
 
     fn show_embedder_control(&self, _webview: WebView, control: EmbedderControl) {
         let engine = engine_ptr(self);
+        if engine.is_null() {
+            return;
+        }
         match control {
             EmbedderControl::SimpleDialog(dialog) => {
+                // The page waits until r5_servo_control_answer().
                 let mut event = Ev::new(R5_EV_DIALOG);
                 event.a = match &dialog {
                     SimpleDialog::Alert(_) => 1,
@@ -442,20 +629,55 @@ impl WebViewDelegate for Bridge {
                     SimpleDialog::Prompt(_) => 3,
                 };
                 event.text = dialog.message().to_string();
+                set_pending(engine, Pending::Dialog(dialog));
                 emit(engine, event);
-                // The reply is not wired back. Dismiss so the page does not wait.
-                dialog.dismiss();
+            }
+            EmbedderControl::SelectElement(select) => {
+                // One line per entry: "o<TAB>id<TAB>flags<TAB>label" for an
+                // option (flags: s selected, d disabled) and "g<TAB><TAB><TAB>label"
+                // for a group heading. b and c are the lower left corner of
+                // the list's box in view pixels.
+                let selected = select.selected_options();
+                let option = |o: &servo::SelectElementOption| {
+                    let mut flags = String::new();
+                    if selected.contains(&o.id) {
+                        flags.push('s');
+                    }
+                    if o.is_disabled {
+                        flags.push('d');
+                    }
+                    format!("o\t{}\t{}\t{}", o.id, flags, o.label.replace(['\t', '\n'], " "))
+                };
+                let mut lines = Vec::new();
+                for entry in select.options() {
+                    match entry {
+                        servo::SelectElementOptionOrOptgroup::Option(o) => lines.push(option(o)),
+                        servo::SelectElementOptionOrOptgroup::Optgroup { label, options } => {
+                            lines.push(format!("g\t\t\t{}", label.replace(['\t', '\n'], " ")));
+                            for o in options {
+                                lines.push(option(o));
+                            }
+                        }
+                    }
+                }
+                let position = select.position();
+                let mut event = Ev::new(R5_EV_DIALOG);
+                event.a = 9;
+                event.b = position.min.x;
+                event.c = position.max.y;
+                event.text = lines.join("\n");
+                set_pending(engine, Pending::Select(select));
+                emit(engine, event);
             }
             EmbedderControl::FilePicker(picker) => {
+                // Not supported yet: the page sees a cancelled picker.
                 let mut event = Ev::new(R5_EV_DIALOG);
                 event.a = 6;
                 emit(engine, event);
                 picker.dismiss();
             }
             EmbedderControl::ContextMenu(menu) => {
-                let mut event = Ev::new(R5_EV_DIALOG);
-                event.a = 8;
-                emit(engine, event);
+                // Not supported yet: no menu, the page goes on.
                 menu.dismiss();
             }
             other => drop(other),
@@ -463,7 +685,61 @@ impl WebViewDelegate for Bridge {
     }
 }
 
+fn set_pending(engine: *mut Engine, control: Pending) {
+    if !alive(engine) {
+        return;
+    }
+    // A new control replaces one that was never answered; dropping the old
+    // one gives that page its default answer.
+    let old = unsafe { (*engine).pending.replace(Some(control)) };
+    drop(old);
+}
+
+/// The answer to the last page control (R5_EV_DIALOG). accept = 0 cancels.
+/// For a select list, value is the chosen option's id. For a prompt, text is
+/// the entered text.
+#[no_mangle]
+pub extern "C" fn r5_servo_control_answer(
+    engine: *mut Engine,
+    accept: i32,
+    value: i32,
+    text: *const u8,
+) -> i32 {
+    if !alive(engine) {
+        return NO_INIT;
+    }
+    let Some(control) = (unsafe { (*engine).pending.take() }) else {
+        return BAD_VALUE;
+    };
+    match control {
+        Pending::Dialog(dialog) => {
+            if accept == 0 {
+                dialog.dismiss();
+                return OK;
+            }
+            match dialog {
+                SimpleDialog::Prompt(mut prompt) => {
+                    if !text.is_null() {
+                        let raw = unsafe { std::ffi::CStr::from_ptr(text as *const std::ffi::c_char) };
+                        prompt.set_current_value(&raw.to_string_lossy());
+                    }
+                    prompt.confirm();
+                }
+                other => other.confirm(),
+            }
+        }
+        Pending::Select(mut select) => {
+            if accept != 0 && value >= 0 {
+                select.select(vec![value as usize]);
+            }
+            select.submit();
+        }
+    }
+    OK
+}
+
 fn write_buf(text: &str, buffer: *mut u8, length: i32) -> i32 {
+
     if buffer.is_null() || length < 2 {
         return BAD_VALUE;
     }
@@ -547,23 +823,43 @@ pub extern "C" fn r5_servo_create(
         width: width as u32,
         height: height as u32,
     };
+    static GL_PATH: Once = Once::new();
+    GL_PATH.call_once(choose_gl_path);
     let window = raw_window_handle::HaikuWindowHandle::new(core::ptr::NonNull::dangling());
+
     let window_handle = unsafe {
         raw_window_handle::WindowHandle::borrow_raw(raw_window_handle::RawWindowHandle::Haiku(
             window,
         ))
     };
-    let context = match WindowRenderingContext::new(
-        raw_window_handle::DisplayHandle::haiku(),
-        window_handle,
-        size,
-    ) {
-        Ok(context) => context,
-        Err(error) => {
-            println!("r5-servo context-fail {error:?}");
-            return std::ptr::null_mut();
-        }
+    let (storage_w, storage_h) = surface_size(width, height);
+    // Reuse a closed tab's context when its storage is large enough.
+    let pooled = CONTEXT_POOL.with(|pool| {
+        let mut pool = pool.borrow_mut();
+        let index = pool
+            .iter()
+            .position(|(_, w, h)| *w >= storage_w && *h >= storage_h);
+        index.map(|index| pool.remove(index))
+    });
+    let (context, storage_w, storage_h) = match pooled {
+        Some(entry) => entry,
+        None => match WindowRenderingContext::new(
+            raw_window_handle::DisplayHandle::haiku(),
+            window_handle,
+            dpi::PhysicalSize {
+                width: storage_w as u32,
+                height: storage_h as u32,
+            },
+        ) {
+            Ok(context) => (Rc::new(context), storage_w, storage_h),
+            Err(error) => {
+                println!("r5-servo context-fail {error:?}");
+                return std::ptr::null_mut();
+            }
+        },
     };
+    // The recorded size is the view's; the storage stays as made.
+    context.resize(size);
     if let Err(error) = context.make_current() {
         println!("r5-servo current-fail {error:?}");
         return std::ptr::null_mut();
@@ -582,12 +878,18 @@ pub extern "C" fn r5_servo_create(
         if let Some(existing) = slot.borrow().as_ref() {
             return Rc::clone(existing);
         }
+        // With a config directory Servo keeps cookies, HSTS and logins on
+        // disk. A normal window passes its profile directory; a private
+        // window passes none, so nothing it sees is written anywhere.
         let mut opts = Opts::default();
-        if let Ok(dir) = std::env::var("AOMI_PRIVATE_DIR") {
+        if let Ok(dir) = std::env::var("AOMI_PROFILE_DIR") {
             if !dir.is_empty() {
                 opts.config_dir = Some(PathBuf::from(dir));
             }
         }
+        let waker = Waker {
+            target: WAKE_TARGET.with(Arc::clone),
+        };
         let mut preferences = Preferences::default();
         preferences.network_http_proxy_uri = String::new();
         preferences.network_https_proxy_uri = String::new();
@@ -595,13 +897,13 @@ pub extern "C" fn r5_servo_create(
             ServoBuilder::default()
                 .opts(opts)
                 .preferences(preferences)
+                .event_loop_waker(Box::new(waker))
                 .build(),
         );
         *slot.borrow_mut() = Some(Rc::clone(&built));
         built
     });
     let initial = initial_document(document, document_is_html);
-    let context = Rc::new(context);
     let bridge = Rc::new(Bridge {
         engine: AtomicPtr::new(std::ptr::null_mut()),
     });
@@ -617,6 +919,7 @@ pub extern "C" fn r5_servo_create(
     let webview = builder.build();
 
     let engine = Box::into_raw(Box::new(Engine {
+        pending: RefCell::new(None),
         inner: RefCell::new(Inner {
             servo: servo_engine,
             webview: Some(webview),
@@ -626,6 +929,8 @@ pub extern "C" fn r5_servo_create(
             height,
             gl,
             https: false,
+            storage_w,
+            storage_h,
         }),
         events: Mutex::new(Vec::new()),
         notes: Mutex::new(Notes {
@@ -637,13 +942,218 @@ pub extern "C" fn r5_servo_create(
             spins: 0,
             last_url: String::new(),
             last_status: String::new(),
+            frame_ready: true,
+            buttons: 0,
         }),
         callback,
         callback_ctx,
     }));
     bridge.engine.store(engine, Ordering::Relaxed);
+    ENGINES.with(|list| list.borrow_mut().push(engine as usize));
     engine
 }
+
+/// Where Servo's waker sends its wake-up. Call it on the window thread
+/// before the first r5_servo_create(); a later call changes the target.
+#[no_mangle]
+pub extern "C" fn r5_servo_set_waker(function: Option<WakeFn>, cookie: *mut std::ffi::c_void) {
+    WAKE_TARGET.with(|target| {
+        if let Ok(mut slot) = target.lock() {
+            *slot = function.map(|f| (f, cookie as usize));
+        }
+    });
+}
+
+/// Runs Servo's event loop once for every tab on this thread and delivers
+/// their events. Returns how many tabs have a new frame waiting.
+#[no_mangle]
+pub extern "C" fn r5_servo_pump() -> i32 {
+    let servo = SHARED_SERVO.with(|slot| slot.borrow().clone());
+    let Some(servo) = servo else {
+        return 0;
+    };
+    servo.spin_event_loop();
+    let engines: Vec<usize> = ENGINES.with(|list| list.borrow().clone());
+    let mut ready = 0;
+    for raw in engines {
+        let engine = raw as *mut Engine;
+        flush(engine);
+        if alive(engine) {
+            if let Ok(notes) = unsafe { (*engine).notes.lock() } {
+                if notes.frame_ready {
+                    ready += 1;
+                }
+            }
+        }
+    }
+    ready
+}
+
+fn webview_point(x: f32, y: f32) -> WebViewPoint {
+    DevicePoint::new(x, y).into()
+}
+
+fn send_input(engine: *mut Engine, event: InputEvent) -> i32 {
+    if !alive(engine) {
+        return NO_INIT;
+    }
+    if let Ok(inner) = unsafe { (*engine).inner.try_borrow() } {
+        if let Some(wv) = inner.webview.as_ref() {
+            wv.notify_input_event(event);
+            return OK;
+        }
+    }
+    NO_INIT
+}
+
+/// The pointer moved to (x, y) in the view, in pixels.
+#[no_mangle]
+pub extern "C" fn r5_servo_mouse_move(engine: *mut Engine, x: f32, y: f32) -> i32 {
+    send_input(engine, InputEvent::MouseMove(MouseMoveEvent::new(webview_point(x, y))))
+}
+
+/// Haiku's buttons bit field (primary 1, secondary 2, tertiary 4) after the
+/// change. Down and up are worked out from the previous call.
+#[no_mangle]
+pub extern "C" fn r5_servo_mouse_buttons(engine: *mut Engine, x: f32, y: f32, buttons: u32) -> i32 {
+    if !alive(engine) {
+        return NO_INIT;
+    }
+    let previous = match unsafe { (*engine).notes.lock() } {
+        Ok(mut notes) => {
+            let previous = notes.buttons;
+            notes.buttons = buttons;
+            previous
+        }
+        Err(_) => return NO_INIT,
+    };
+    let map = [
+        (1u32, MouseButton::Primary),
+        (2u32, MouseButton::Secondary),
+        (4u32, MouseButton::Auxiliary),
+    ];
+    let mut result = OK;
+    for (bit, button) in map {
+        let was = previous & bit != 0;
+        let now = buttons & bit != 0;
+        if was == now {
+            continue;
+        }
+        let action = if now {
+            MouseButtonAction::Down
+        } else {
+            MouseButtonAction::Up
+        };
+        result = send_input(
+            engine,
+            InputEvent::MouseButton(MouseButtonEvent::new(action, button, webview_point(x, y))),
+        );
+    }
+    result
+}
+
+/// The wheel turned at (x, y). dx and dy are Haiku's wheel deltas (one notch
+/// is 1.0, positive is down or right); pixels_per_notch scales them.
+#[no_mangle]
+pub extern "C" fn r5_servo_wheel(
+    engine: *mut Engine,
+    x: f32,
+    y: f32,
+    dx: f32,
+    dy: f32,
+    pixels_per_notch: f32,
+) -> i32 {
+    let delta = WheelDelta {
+        x: (dx * pixels_per_notch) as f64,
+        y: (dy * pixels_per_notch) as f64,
+        z: 0.0,
+        mode: WheelMode::DeltaPixel,
+    };
+    send_input(engine, InputEvent::Wheel(WheelEvent::new(delta, webview_point(x, y))))
+}
+
+// Matches R5_SERVO_KEY_* in r5_servo_abi.h.
+fn named_key(code: i32) -> Option<NamedKey> {
+    Some(match code {
+        1 => NamedKey::Enter,
+        2 => NamedKey::Backspace,
+        3 => NamedKey::Tab,
+        4 => NamedKey::Escape,
+        5 => NamedKey::Delete,
+        6 => NamedKey::ArrowLeft,
+        7 => NamedKey::ArrowRight,
+        8 => NamedKey::ArrowUp,
+        9 => NamedKey::ArrowDown,
+        10 => NamedKey::Home,
+        11 => NamedKey::End,
+        12 => NamedKey::PageUp,
+        13 => NamedKey::PageDown,
+        14 => NamedKey::Insert,
+        21 => NamedKey::F1,
+        22 => NamedKey::F2,
+        23 => NamedKey::F3,
+        24 => NamedKey::F4,
+        25 => NamedKey::F5,
+        26 => NamedKey::F6,
+        27 => NamedKey::F7,
+        28 => NamedKey::F8,
+        29 => NamedKey::F9,
+        30 => NamedKey::F10,
+        31 => NamedKey::F11,
+        32 => NamedKey::F12,
+        _ => return None,
+    })
+}
+
+/// A key went down (down = 1) or up. A named key (R5_SERVO_KEY_*) wins over
+/// text; otherwise text is the UTF-8 the key produced. Modifiers:
+/// 1 shift, 2 control, 4 alt, 8 meta.
+#[no_mangle]
+pub extern "C" fn r5_servo_key(
+    engine: *mut Engine,
+    down: i32,
+    named: i32,
+    text: *const u8,
+    modifiers: u32,
+    repeat: i32,
+) -> i32 {
+    let key = if let Some(name) = named_key(named) {
+        Key::Named(name)
+    } else {
+        if text.is_null() {
+            return BAD_VALUE;
+        }
+        let raw = unsafe { std::ffi::CStr::from_ptr(text as *const std::ffi::c_char) };
+        let Ok(raw) = raw.to_str() else {
+            return BAD_VALUE;
+        };
+        if raw.is_empty() {
+            return BAD_VALUE;
+        }
+        Key::Character(raw.to_string())
+    };
+    let mut mods = Modifiers::empty();
+    if modifiers & 1 != 0 {
+        mods |= Modifiers::SHIFT;
+    }
+    if modifiers & 2 != 0 {
+        mods |= Modifiers::CONTROL;
+    }
+    if modifiers & 4 != 0 {
+        mods |= Modifiers::ALT;
+    }
+    if modifiers & 8 != 0 {
+        mods |= Modifiers::META;
+    }
+    let mut event = KeyboardEvent::from_state_and_key(
+        if down != 0 { KeyState::Down } else { KeyState::Up },
+        key,
+    );
+    event.event.modifiers = mods;
+    event.event.repeat = repeat != 0;
+    send_input(engine, InputEvent::Keyboard(event))
+}
+
 
 #[no_mangle]
 pub extern "C" fn r5_servo_resize(engine: *mut Engine, width: i32, height: i32) {
@@ -652,11 +1162,14 @@ pub extern "C" fn r5_servo_resize(engine: *mut Engine, width: i32, height: i32) 
     }
     let width = width.max(16);
     let height = height.max(16);
-    let size = dpi::PhysicalSize {
-        width: width as u32,
-        height: height as u32,
-    };
     if let Ok(mut inner) = unsafe { (*engine).inner.try_borrow_mut() } {
+        // Never larger than the storage (see surface_size()).
+        let width = width.min(inner.storage_w);
+        let height = height.min(inner.storage_h);
+        let size = dpi::PhysicalSize {
+            width: width as u32,
+            height: height as u32,
+        };
         inner.width = width;
         inner.height = height;
         if let Some(ctx) = inner.context.as_ref() {
@@ -793,16 +1306,54 @@ pub extern "C" fn r5_servo_find(
     let Ok(query) = query.to_str() else {
         return BAD_VALUE;
     };
-    let escaped = query
-        .replace('\\', "\\\\")
-        .replace('"', "\\\"")
-        .replace('\n', "\\n")
-        .replace('\r', "");
+    // Servo has no window.find(). This walks the text nodes, selects the
+    // next or previous match after the current selection, wrapping around,
+    // and scrolls it into view. The query goes in as a JSON-style string.
+    let mut escaped = String::with_capacity(query.len() + 2);
+    for ch in query.chars() {
+        match ch {
+            '\\' => escaped.push_str("\\\\"),
+            '"' => escaped.push_str("\\\""),
+            c if (c as u32) < 0x20 || c == '\u{2028}' || c == '\u{2029}' => {
+                escaped.push_str(&format!("\\u{:04x}", c as u32));
+            }
+            c => escaped.push(c),
+        }
+    }
     let js = format!(
-        "window.find(\"{escaped}\", {}, {}, true)",
+        r#"(function(q, cs, fwd) {{
+  if (!q || !document.body) return false;
+  var norm = function(s) {{ return cs ? s : s.toLowerCase(); }};
+  var needle = norm(q);
+  var hits = [];
+  var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (var n = walker.nextNode(); n; n = walker.nextNode()) {{
+    var p = n.parentNode;
+    if (p && (p.nodeName == "SCRIPT" || p.nodeName == "STYLE")) continue;
+    var hay = norm(n.nodeValue), i = hay.indexOf(needle);
+    while (i >= 0) {{ hits.push([n, i]); i = hay.indexOf(needle, i + 1); }}
+  }}
+  if (hits.length == 0) return false;
+  var sel = window.getSelection(), at = -1;
+  if (sel && sel.rangeCount > 0) {{
+    var r = sel.getRangeAt(0);
+    for (var k = 0; k < hits.length; k++)
+      if (hits[k][0] == r.startContainer && hits[k][1] == r.startOffset) {{ at = k; break; }}
+  }}
+  var next = fwd ? (at + 1) % hits.length : (at <= 0 ? hits.length - 1 : at - 1);
+  var range = document.createRange();
+  range.setStart(hits[next][0], hits[next][1]);
+  range.setEnd(hits[next][0], hits[next][1] + q.length);
+  sel.removeAllRanges();
+  sel.addRange(range);
+  var el = hits[next][0].parentNode;
+  if (el && el.scrollIntoView) el.scrollIntoView({{block: "center"}});
+  return true;
+}})("{escaped}", {}, {})"#,
         if match_case != 0 { "true" } else { "false" },
-        if forward == 0 { "true" } else { "false" }
+        if forward != 0 { "true" } else { "false" }
     );
+
     if let Ok(inner) = unsafe { (*engine).inner.try_borrow() } {
         if let Some(wv) = inner.webview.as_ref() {
             wv.evaluate_javascript(&js, |_| {});
@@ -816,40 +1367,82 @@ pub extern "C" fn r5_servo_destroy(engine: *mut Engine) {
     if engine.is_null() {
         return;
     }
-    if let Ok(mut inner) = unsafe { (*engine).inner.try_borrow_mut() } {
-        // Drop the WebView so the tab stops loading, but leak the GL
-        // context to avoid Haiku Mesa eglDestroyImageKHR abort.
-        inner.webview = None;
-        if let Some(ctx) = inner.context.take() {
-            std::mem::forget(ctx);
-        }
+    if !alive(engine) {
+        return;
     }
+    // From here on no event or JavaScript result reaches the C++ view.
+    ENGINES.with(|list| list.borrow_mut().retain(|item| *item != engine as usize));
+    let boxed = unsafe { Box::from_raw(engine) };
+    if let Ok(mut inner) = boxed.inner.try_borrow_mut() {
+        inner.webview = None;
+        // Destroying a rendering context aborts in Haiku Mesa's
+        // eglDestroyImageKHR. The next tab reuses this one.
+        if let Some(ctx) = inner.context.take() {
+            let entry = (ctx, inner.storage_w, inner.storage_h);
+            CONTEXT_POOL.with(|pool| pool.borrow_mut().push(entry));
+        }
+
+        inner.frame = Vec::new();
+    }
+    drop(boxed);
 }
 
 #[no_mangle]
 pub extern "C" fn r5_servo_spin(engine: *mut Engine) {
-    if engine.is_null() {
+    if !alive(engine) {
         return;
     }
+    // Run the event loop for every tab first, outside any borrow, so the
+    // delegate can update this engine while Servo works.
+    r5_servo_pump();
+    paint_engine(engine);
+}
+
+/// Paints the tab if Servo has a new frame for it, without running the event
+/// loop. Returns 1 when r5_servo_frame() now holds a new frame.
+#[no_mangle]
+pub extern "C" fn r5_servo_paint(engine: *mut Engine) -> i32 {
+    paint_engine(engine) as i32
+}
+
+fn paint_engine(engine: *mut Engine) -> bool {
+    if !alive(engine) {
+        return false;
+    }
+    let mut painted = false;
     let mut ask_body = false;
     {
         let engine_ref = unsafe { &*engine };
         let Ok(mut inner) = engine_ref.inner.try_borrow_mut() else {
-            return;
+            return false;
         };
-        inner.servo.spin_event_loop();
         let mut new_frame: Option<Vec<u8>> = None;
+        // Paint and read back only when Servo has a new frame: a full
+        // read-back per spin is what made scrolling and loading slow.
+        let paint_now = engine_ref
+            .notes
+            .lock()
+            .map(|mut notes| std::mem::replace(&mut notes.frame_ready, false))
+            .unwrap_or(false)
+            || inner.frame.is_empty();
         let rect = DeviceIntRect::from_origin_and_size(
             DeviceIntPoint::new(0, 0),
             DeviceIntSize::new(inner.width, inner.height),
         );
         {
             let (Some(wv), Some(ctx)) = (inner.webview.as_ref(), inner.context.as_ref()) else {
-                return;
+                return false;
             };
-            wv.paint();
-            ctx.present();
-            if let Some(image) = ctx.read_to_image(rect) {
+            let image = if paint_now {
+                wv.paint();
+                ctx.present();
+                // The painter made this context current. A make_current()
+                // here rebinds the swapped (empty) surface and reads black.
+                ctx.read_to_image(rect)
+            } else {
+                None
+            };
+            if let Some(image) = image {
                 let bytes = image.as_raw();
                 if bytes.len() >= 4 {
                     let pixel = [bytes[0], bytes[1], bytes[2], bytes[3]];
@@ -912,8 +1505,12 @@ pub extern "C" fn r5_servo_spin(engine: *mut Engine) {
                         let mut event = Ev::new(R5_EV_PAGE_TEXT);
                         event.text = clipped.clone();
                         emit(engine_for_js, event);
+                        if !alive(engine_for_js) {
+                            return;
+                        }
                         if let Some(protocol) = protocol_from_body(&clipped) {
                             if let Ok(mut notes) = unsafe { (*engine_for_js).notes.lock() } {
+
                                 notes.protocol = protocol.to_string();
                             }
                             let mut event = Ev::new(R5_EV_PROTOCOL);
@@ -927,10 +1524,13 @@ pub extern "C" fn r5_servo_spin(engine: *mut Engine) {
         }
         if let Some(bytes) = new_frame {
             inner.frame = bytes;
+            painted = true;
         }
     }
     flush(engine);
+    painted
 }
+
 
 #[no_mangle]
 pub extern "C" fn r5_servo_frame(
