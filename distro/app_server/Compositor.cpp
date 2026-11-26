@@ -626,6 +626,10 @@ Compositor::SetHidden(bool hidden, HWInterface* screen)
 		fComposeSlot.Unlock();
 		_UpdatePeriod();
 		if (fScreen != NULL && fDesktop != NULL) {
+			{
+				BAutolock _(fDamageLock);
+				fWakePending = false;
+			}
 			BRect frame = fDesktop->VirtualScreen().Frame();
 			Damage(BRegion(frame));
 		}

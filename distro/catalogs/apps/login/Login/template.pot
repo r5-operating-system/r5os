@@ -21,12 +21,12 @@ msgctxt "Users: Account admin"
 msgid "%program% failed"
 msgstr ""
 
-msgctxt "Users: Account admin"
-msgid "The original administrator account cannot be disabled."
-msgstr ""
-
 msgctxt "Login: Application"
 msgid "Could not start the desktop."
+msgstr ""
+
+msgctxt "Users: Account admin"
+msgid "The original administrator account cannot be disabled."
 msgstr ""
 
 msgctxt "Login: Lock window"
@@ -93,6 +93,10 @@ msgctxt "Users: Account admin"
 msgid "Could not encrypt the password."
 msgstr ""
 
+msgctxt "Login: Application"
+msgid "Only an administrator may shut down while others are signed in."
+msgstr ""
+
 msgctxt "Users: Account admin"
 msgid "The password could not be saved."
 msgstr ""
@@ -109,6 +113,10 @@ msgctxt "Login: Sign in view"
 msgid "Sign in as Guest"
 msgstr ""
 
+msgctxt "Login: Sign in view"
+msgid "Return to Guest"
+msgstr ""
+
 msgctxt "Users: Account admin"
 msgid "Guest setting requires the sign-in helper."
 msgstr ""
@@ -123,10 +131,6 @@ msgstr ""
 
 msgctxt "Users: Account admin"
 msgid "The guest's old files could not be removed."
-msgstr ""
-
-msgctxt "Login: Sign in view"
-msgid "Sign-ins are forgotten when you shut down."
 msgstr ""
 
 msgctxt "Login: Sign in view"
@@ -200,6 +204,10 @@ msgstr ""
 
 msgctxt "Users: Account admin"
 msgid "Your password was not changed because the key store could not be updated."
+msgstr ""
+
+msgctxt "Login: Sign in view"
+msgid "Unlock"
 msgstr ""
 
 msgctxt "Login: Application"
@@ -350,6 +358,14 @@ msgctxt "Login: Sign in window"
 msgid "Sign in"
 msgstr ""
 
+msgctxt "Login: Application"
+msgid "Guest"
+msgstr ""
+
+msgctxt "Login: Application"
+msgid "Could not switch back to your desktop. Try unlocking again."
+msgstr ""
+
 msgctxt "Login: Driver settings admin"
 msgid "Too many settings."
 msgstr ""
@@ -368,6 +384,10 @@ msgstr ""
 
 msgctxt "Login: Application"
 msgid "Sleep is not available yet."
+msgstr ""
+
+msgctxt "Login: Sign in view"
+msgid "Signed in. Enter password to unlock %name%"
 msgstr ""
 
 msgctxt "Login: Lock window"
@@ -404,10 +424,6 @@ msgstr ""
 
 msgctxt "Users: Account admin"
 msgid "Could not save the guest setting."
-msgstr ""
-
-msgctxt "Login: Application"
-msgid "Only the signed-in session may lock or log out."
 msgstr ""
 
 msgctxt "Users: Account admin"
@@ -462,12 +478,12 @@ msgctxt "Users: Account admin"
 msgid "Guest account setup requires the sign-in helper."
 msgstr ""
 
-msgctxt "Login: Lock window"
-msgid "Restart"
-msgstr ""
-
 msgctxt "Login: Application"
 msgid "Could not shut down: %error%"
+msgstr ""
+
+msgctxt "Login: Lock window"
+msgid "Restart"
 msgstr ""
 
 msgctxt "Users: Account admin"
@@ -498,6 +514,14 @@ msgctxt "Login: Driver admin"
 msgid "The request is empty."
 msgstr ""
 
+msgctxt "Login: Sign in view"
+msgid "You're trying R5. Passwords for mail and online accounts are forgotten when you shut down."
+msgstr ""
+
+msgctxt "Login: Sign in view"
+msgid "Guest is already signed in"
+msgstr ""
+
 msgctxt "Users: Account admin"
 msgid "Only the sign-in helper can set this password."
 msgstr ""
@@ -522,6 +546,10 @@ msgctxt "Login: Driver settings admin"
 msgid "This setting is not allowed."
 msgstr ""
 
+msgctxt "Login: Lock window"
+msgid "Other account"
+msgstr ""
+
 msgctxt "Login: Sign in view"
 msgid "Choose an account first."
 msgstr ""
@@ -536,6 +564,10 @@ msgstr ""
 
 msgctxt "Login: Lock window"
 msgid "Locked"
+msgstr ""
+
+msgctxt "Login: Application"
+msgid "Only the active session may lock or switch user."
 msgstr ""
 
 msgctxt "Users: Account admin"

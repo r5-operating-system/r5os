@@ -91,6 +91,12 @@ public:
 			bool				IsShown() const { return fShown; }
 			status_t			Activate();
 			status_t			Deactivate();
+
+			// Fast user switching: where a uid 0 program attached to this
+			// desktop goes when this desktop quits (the shown desktop's
+			// port). Set by AppServer before B_QUIT_REQUESTED.
+			void				SetHandoffPort(port_id port)
+									{ fHandoffPort = port; }
 // SPDX-SnippetEnd
 
 			uid_t				UserID() const { return fUserID; }
@@ -405,6 +411,21 @@ private:
 			BReference<UtilityBitmap> fOffscreenBitmap;
 			ObjectDeleter<BitmapHWInterface> fOffscreenHW;
 			ObjectDeleter<DrawingEngine> fOffscreenEngine;
+
+			// How each ServerApp was started, so a uid 0 program can be
+			// handed to another desktop (see SetHandoffPort()).
+			struct AppOrigin {
+				ServerApp*	app;
+				port_id		clientReplyPort;
+				port_id		clientLooperPort;
+				int32		clientToken;
+				port_id		relayReplyPort;
+				bool		handOff;
+			};
+			AppOrigin*			_FindOrigin(ServerApp* app);
+			void				_AdoptApp(BPrivate::LinkReceiver& link);
+			BObjectList<AppOrigin, true> fOrigins;
+			port_id				fHandoffPort;
 // SPDX-SnippetEnd
 			ObjectDeleter<DesktopSettingsPrivate>
 								fSettings;

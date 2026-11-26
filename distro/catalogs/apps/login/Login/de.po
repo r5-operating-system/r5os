@@ -27,14 +27,14 @@ msgid "%program% failed"
 msgstr "%program% ist fehlgeschlagen"
 
 #, fuzzy
-msgctxt "Users: Account admin"
-msgid "The original administrator account cannot be disabled."
-msgstr "Das ursprüngliche Administratorkonto kann nicht deaktiviert werden."
-
-#, fuzzy
 msgctxt "Login: Application"
 msgid "Could not start the desktop."
 msgstr "Die Arbeitsfläche konnte nicht gestartet werden."
+
+#, fuzzy
+msgctxt "Users: Account admin"
+msgid "The original administrator account cannot be disabled."
+msgstr "Das ursprüngliche Administratorkonto kann nicht deaktiviert werden."
 
 #, fuzzy
 msgctxt "Login: Lock window"
@@ -116,6 +116,10 @@ msgctxt "Users: Account admin"
 msgid "Could not encrypt the password."
 msgstr "Das Passwort konnte nicht verschlüsselt werden."
 
+msgctxt "Login: Application"
+msgid "Only an administrator may shut down while others are signed in."
+msgstr ""
+
 #, fuzzy
 msgctxt "Users: Account admin"
 msgid "The password could not be saved."
@@ -136,6 +140,10 @@ msgctxt "Login: Sign in view"
 msgid "Sign in as Guest"
 msgstr "Als Gast anmelden"
 
+msgctxt "Login: Sign in view"
+msgid "Return to Guest"
+msgstr ""
+
 #, fuzzy
 msgctxt "Users: Account admin"
 msgid "Guest setting requires the sign-in helper."
@@ -155,11 +163,6 @@ msgstr "Das Konto existiert, aber das Passwort wurde nicht festgelegt."
 msgctxt "Users: Account admin"
 msgid "The guest's old files could not be removed."
 msgstr "Die alten Dateien des Gastes konnten nicht entfernt werden."
-
-#, fuzzy
-msgctxt "Login: Sign in view"
-msgid "Sign-ins are forgotten when you shut down."
-msgstr "Anmeldungen werden beim Ausschalten vergessen."
 
 #, fuzzy
 msgctxt "Login: Sign in view"
@@ -250,6 +253,10 @@ msgstr "Passwort"
 msgctxt "Users: Account admin"
 msgid "Your password was not changed because the key store could not be updated."
 msgstr "Ihr Passwort wurde nicht geändert, weil der Schlüsselbund nicht aktualisiert werden konnte."
+
+msgctxt "Login: Sign in view"
+msgid "Unlock"
+msgstr ""
 
 #, fuzzy
 msgctxt "Login: Application"
@@ -436,6 +443,14 @@ msgctxt "Login: Sign in window"
 msgid "Sign in"
 msgstr "Anmelden"
 
+msgctxt "Login: Application"
+msgid "Guest"
+msgstr ""
+
+msgctxt "Login: Application"
+msgid "Could not switch back to your desktop. Try unlocking again."
+msgstr ""
+
 #, fuzzy
 msgctxt "Login: Driver settings admin"
 msgid "Too many settings."
@@ -460,6 +475,10 @@ msgstr "Treiberänderungen benötigen den Anmeldedienst."
 msgctxt "Login: Application"
 msgid "Sleep is not available yet."
 msgstr "Ruhezustand ist noch nicht verfügbar."
+
+msgctxt "Login: Sign in view"
+msgid "Signed in. Enter password to unlock %name%"
+msgstr ""
 
 #, fuzzy
 msgctxt "Login: Lock window"
@@ -505,11 +524,6 @@ msgstr "Ausschalten"
 msgctxt "Users: Account admin"
 msgid "Could not save the guest setting."
 msgstr "Die Gast-Einstellung konnte nicht gespeichert werden."
-
-#, fuzzy
-msgctxt "Login: Application"
-msgid "Only the signed-in session may lock or log out."
-msgstr "Nur die angemeldete Sitzung kann sperren oder abmelden."
 
 #, fuzzy
 msgctxt "Users: Account admin"
@@ -576,14 +590,14 @@ msgid "Guest account setup requires the sign-in helper."
 msgstr "Die Einrichtung des Gastkontos benötigt den Anmeldedienst."
 
 #, fuzzy
-msgctxt "Login: Lock window"
-msgid "Restart"
-msgstr "Neu starten"
-
-#, fuzzy
 msgctxt "Login: Application"
 msgid "Could not shut down: %error%"
 msgstr "Ausschalten fehlgeschlagen: %error%"
+
+#, fuzzy
+msgctxt "Login: Lock window"
+msgid "Restart"
+msgstr "Neu starten"
 
 #, fuzzy
 msgctxt "Users: Account admin"
@@ -620,6 +634,14 @@ msgctxt "Login: Driver admin"
 msgid "The request is empty."
 msgstr "Die Anfrage ist leer."
 
+msgctxt "Login: Sign in view"
+msgid "You're trying R5. Passwords for mail and online accounts are forgotten when you shut down."
+msgstr ""
+
+msgctxt "Login: Sign in view"
+msgid "Guest is already signed in"
+msgstr ""
+
 #, fuzzy
 msgctxt "Users: Account admin"
 msgid "Only the sign-in helper can set this password."
@@ -650,6 +672,10 @@ msgctxt "Login: Driver settings admin"
 msgid "This setting is not allowed."
 msgstr "Diese Einstellung ist nicht erlaubt."
 
+msgctxt "Login: Lock window"
+msgid "Other account"
+msgstr ""
+
 #, fuzzy
 msgctxt "Login: Sign in view"
 msgid "Choose an account first."
@@ -669,6 +695,12 @@ msgstr "Dieses Passwort ist nicht richtig."
 msgctxt "Login: Lock window"
 msgid "Locked"
 msgstr "Gesperrt"
+
+#, fuzzy
+#| msgid "Only a signed-in session may lock, switch user or log out."
+msgctxt "Login: Application"
+msgid "Only the active session may lock or switch user."
+msgstr "Nur die angemeldete Sitzung kann sperren oder abmelden."
 
 #, fuzzy
 msgctxt "Users: Account admin"

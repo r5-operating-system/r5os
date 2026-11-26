@@ -43,6 +43,11 @@
 #include <MediaRoster.h>
 #include <MessageRunner.h>
 #include <Path.h>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <R5Admin.h>
+// SPDX-SnippetEnd
 #include <Roster.h>
 #include <String.h>
 
@@ -142,6 +147,16 @@ private:
 			bool				fStartup;
 			bool				fStartupSound;
 			SystemTimeSource*	fSystemTimeSource;
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+	static	void				_AdminRequest(BMessage* request,
+									const struct r5_admin_sender& sender,
+									BMessage* reply, void* cookie);
+			port_id				fAdminPort;
+			area_id				fActiveAudioUidArea;
+			int32*				fActiveAudioUid;
+			// SPDX-SnippetEnd
 };
 
 
@@ -229,8 +244,35 @@ MediaAddonServer::MediaAddonServer(const char* signature)
 	fStartup(true),
 	fStartupSound(true),
 	fSystemTimeSource(NULL)
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	,
+	fAdminPort(-1),
+	fActiveAudioUidArea(-1),
+	fActiveAudioUid(NULL)
+// SPDX-SnippetEnd
 {
 	CALLED();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// Fast user switching (Q2): private in-process atomic slot read by
+	// AudioMixer's MixerInput in real time (zero locks/syscalls). Not
+	// B_CLONEABLE_AREA so other teams cannot map and overwrite it.
+	void* areaAddr = NULL;
+	fActiveAudioUidArea = create_area("r5_active_audio_uid", &areaAddr,
+		B_ANY_ADDRESS, B_PAGE_SIZE, B_NO_LOCK,
+		B_READ_AREA | B_WRITE_AREA);
+	if (fActiveAudioUidArea >= 0 && areaAddr != NULL) {
+		fActiveAudioUid = static_cast<int32*>(areaAddr);
+		atomic_set(fActiveAudioUid, -1);
+	}
+	if (r5_admin_port_start("r5 media admin", &MediaAddonServer::_AdminRequest,
+			this, &fAdminPort) != B_OK) {
+		fAdminPort = -1;
+	}
+// SPDX-SnippetEnd
 	fMediaRoster = BMediaRoster::Roster();
 	fControlPort = create_port(64, MEDIA_ADDON_SERVER_PORT_NAME);
 	fControlThread = spawn_thread(_ControlThread, "media_addon_server control",
@@ -242,6 +284,19 @@ MediaAddonServer::MediaAddonServer(const char* signature)
 MediaAddonServer::~MediaAddonServer()
 {
 	CALLED();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (fAdminPort >= 0) {
+		r5_admin_port_stop(fAdminPort);
+		fAdminPort = -1;
+	}
+	if (fActiveAudioUidArea >= 0) {
+		delete_area(fActiveAudioUidArea);
+		fActiveAudioUidArea = -1;
+		fActiveAudioUid = NULL;
+	}
+// SPDX-SnippetEnd
 
 	delete_port(fControlPort);
 	wait_for_thread(fControlThread, NULL);
@@ -366,6 +421,13 @@ void
 MediaAddonServer::MessageReceived(BMessage* message)
 {
 	switch (message->what) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		case R5_ADMIN_PORT_REQUEST:
+			r5_admin_port_reply(message, fAdminPort);
+			break;
+// SPDX-SnippetEnd
 		case MEDIA_ADD_ON_SERVER_PLAY_MEDIA:
 		{
 			const char* name;
@@ -1040,6 +1102,30 @@ MediaAddonServer::_AddOnRemoved(ino_t fileNode)
 
 
 //	#pragma mark -
+
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+/*static*/ void
+MediaAddonServer::_AdminRequest(BMessage* request,
+	const r5_admin_sender& sender, BMessage* reply, void* cookie)
+{
+	MediaAddonServer* server = static_cast<MediaAddonServer*>(cookie);
+	if (sender.uid != 0) {
+		reply->AddInt32("error", B_PERMISSION_DENIED);
+		return;
+	}
+	if (request->what == 'r5au') {
+		int32 uid = request->GetInt32("uid", -1);
+		if (server->fActiveAudioUid != NULL)
+			atomic_set(server->fActiveAudioUid, uid);
+		reply->AddInt32("error", B_OK);
+		return;
+	}
+	reply->AddInt32("error", B_BAD_VALUE);
+}
+// SPDX-SnippetEnd
 
 
 int

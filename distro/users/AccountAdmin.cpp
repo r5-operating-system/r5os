@@ -1873,6 +1873,194 @@ clear_desktop_session()
 }
 
 
+// Fast user switching: list of all currently signed-in people (one login
+// name per line, root-owned, mode 0600). kSessionPath holds the currently
+// active (shown) person's login name.
+static const char* const kSessionsListPath
+	= "/boot/system/settings/r5-desktop-sessions";
+
+
+static status_t
+write_sessions_list(const BStringList& names)
+{
+	if (geteuid() != 0)
+		return B_PERMISSION_DENIED;
+
+	if (names.CountStrings() == 0) {
+		unlink(kSessionsListPath);
+		return B_OK;
+	}
+
+	BString tmpPath;
+	tmpPath.SetToFormat("%s.tmp", kSessionsListPath);
+	int fd = open(tmpPath.String(), O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW,
+		0600);
+	if (fd < 0)
+		return errno;
+	fchmod(fd, 0600);
+	fchown(fd, 0, 0);
+	FILE* file = fdopen(fd, "w");
+	if (file == NULL) {
+		int err = errno;
+		close(fd);
+		unlink(tmpPath.String());
+		return err;
+	}
+	for (int32 i = 0; i < names.CountStrings(); i++) {
+		if (fprintf(file, "%s\n", names.StringAt(i).String()) < 0) {
+			fclose(file);
+			unlink(tmpPath.String());
+			return EIO;
+		}
+	}
+	int flushErr = (fflush(file) != 0) ? errno : 0;
+	int syncErr = (flushErr == 0 && fsync(fileno(file)) != 0) ? errno : 0;
+	int closeErr = (fclose(file) != 0) ? errno : 0;
+	int ioErr = flushErr != 0 ? flushErr : (syncErr != 0 ? syncErr : closeErr);
+	if (ioErr != 0) {
+		unlink(tmpPath.String());
+		return ioErr;
+	}
+	if (rename(tmpPath.String(), kSessionsListPath) != 0) {
+		int err = errno;
+		unlink(tmpPath.String());
+		return err;
+	}
+	return B_OK;
+}
+
+
+int32
+list_signed_in_sessions(BStringList& names)
+{
+	names.MakeEmpty();
+	struct stat st;
+	if (lstat(kSessionsListPath, &st) == 0 && S_ISREG(st.st_mode)
+		&& st.st_uid == 0) {
+		FILE* file = fopen(kSessionsListPath, "r");
+		if (file != NULL) {
+			char line[128];
+			while (fgets(line, sizeof(line), file) != NULL) {
+				size_t len = strlen(line);
+				while (len > 0 && (line[len - 1] == '\n'
+					|| line[len - 1] == '\r' || line[len - 1] == ' ')) {
+					line[--len] = '\0';
+				}
+				if (len > 0 && !names.HasString(line))
+					names.Add(line);
+			}
+			fclose(file);
+		}
+	}
+	return names.CountStrings();
+}
+
+
+bool
+is_user_signed_in(const char* login)
+{
+	if (login == NULL || login[0] == '\0')
+		return false;
+	BStringList names;
+	list_signed_in_sessions(names);
+	return names.HasString(login);
+}
+
+
+status_t
+add_signed_in_session(const char* login)
+{
+	status_t status = write_desktop_session(login);
+	if (status != B_OK)
+		return status;
+
+	BStringList names;
+	list_signed_in_sessions(names);
+	if (!names.HasString(login))
+		names.Add(login);
+	return write_sessions_list(names);
+}
+
+
+status_t
+set_active_session(const char* login)
+{
+	if (geteuid() != 0)
+		return B_PERMISSION_DENIED;
+	if (login == NULL || login[0] == '\0')
+		return clear_desktop_session();
+
+	struct passwd* pwd = getpwnam(login);
+	if (pwd == NULL || strcmp(pwd->pw_name, login) != 0 || pwd->pw_uid == 0)
+		return ENOENT;
+
+	FILE* file = fopen(kSessionPath, "w");
+	if (file == NULL)
+		return errno;
+	if (fprintf(file, "%s\n", login) < 0) {
+		fclose(file);
+		return EIO;
+	}
+	if (fclose(file) != 0)
+		return errno;
+	chmod(kSessionPath, 0600);
+	chown(kSessionPath, 0, 0);
+
+	// Q4: Shared belongs to the administrator whose desktop is shown.
+	if (!is_guest_account(login) && is_admin_user(pwd))
+		own_shared_folder(pwd->pw_uid, pwd->pw_gid);
+
+	return B_OK;
+}
+
+
+status_t
+remove_signed_in_session(const char* login)
+{
+	if (geteuid() != 0)
+		return B_PERMISSION_DENIED;
+	if (login == NULL || login[0] == '\0')
+		return B_BAD_VALUE;
+
+	BStringList names;
+	list_signed_in_sessions(names);
+	names.Remove(login);
+	status_t status = write_sessions_list(names);
+
+	BString active;
+	if (signed_in_name(active) == B_OK && active == login)
+		clear_desktop_session();
+	return status;
+}
+
+
+int32
+count_listed_accounts()
+{
+	int32 count = 0;
+	setpwent();
+	for (;;) {
+		struct passwd* pwd = getpwent();
+		if (pwd == NULL)
+			break;
+		if (!is_listed_account(pwd) || is_disabled_user(pwd->pw_name))
+			continue;
+		if (pwd->pw_shell != NULL
+			&& (strcmp(pwd->pw_shell, "false") == 0
+				|| strcmp(pwd->pw_shell, "true") == 0
+				|| strcmp(pwd->pw_shell, "/bin/false") == 0
+				|| strcmp(pwd->pw_shell, "/bin/true") == 0)) {
+			continue;
+		}
+		count++;
+	}
+	endpwent();
+	if (is_guest_enabled())
+		count++;
+	return count;
+}
+
+
 static status_t
 create_account(const char* name, const char* real, const char* password,
 	bool admin, BString& error)

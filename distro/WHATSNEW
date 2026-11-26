@@ -1,3 +1,6 @@
+R5 2026.1-dev Build 10075 - Switch between signed-in people
+More than one account can now be signed in on the same computer at the same time. Choose Switch user in the Deskbar menu or Other account on the lock screen to return to Sign in while your desktop stays open in the background. Signed-in accounts show a green dot and Unlock on the Sign in screen, and Guest can run alongside another signed-in account. Each signed-in desktop keeps its own workspaces, clipboard, tray icons and key store.
+
 R5 2026.1-dev Build 10074 - Write to exFAT
 You can copy files onto an exFAT card or stick. Eject the card before you pull it out. Creating, renaming and removing files and folders was checked in a virtual machine. A card pulled out while it is being written mounts read-only until it is checked on another computer.
 

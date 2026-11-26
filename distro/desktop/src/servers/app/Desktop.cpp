@@ -89,6 +89,8 @@
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 #include "Compositor.h"
+
+#include <unistd.h>
 // SPDX-SnippetEnd
 
 #if TEST_MODE
@@ -107,6 +109,94 @@
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+// Fast user switching: one desktop hands a uid 0 program to another
+// (Desktop::_AdoptApp()). Sent only by app_server's own desktop threads.
+static const int32 kMsgAdoptApp = 'r5ad';
+// ServerApp::Quit() posts this to the port; the program's old ServerApp is
+// gone by then, so the relay drops it (ServerApp.cpp, kMsgAppQuit).
+static const uint32 kMsgOldAppQuit = 'appQ';
+
+struct r5_relay {
+	port_id	from;
+	port_id	to;
+	bool	toClient;
+};
+
+
+// Moves whole port messages from one port to another. Client to server: the
+// program still writes to the port of its first ServerApp; the stale quit
+// message of that ServerApp is dropped. Server to client: the new ServerApp
+// answers into a relay port; its first message (the AS_CREATE_APP answer,
+// which the program did not ask for) is dropped. Ends when a port is gone.
+static status_t
+r5_relay_thread(void* data)
+{
+	r5_relay relay = *(r5_relay*)data;
+	delete (r5_relay*)data;
+	bool first = true;
+	while (true) {
+		ssize_t size;
+		do {
+			size = port_buffer_size_etc(relay.from, 0, 0);
+		} while (size == B_INTERRUPTED);
+		if (size < 0)
+			break;
+		void* buffer = size > 0 ? malloc(size) : NULL;
+		if (size > 0 && buffer == NULL)
+			break;
+		int32 code;
+		ssize_t got;
+		do {
+			got = read_port(relay.from, &code, buffer, size);
+		} while (got == B_INTERRUPTED);
+		if (got < 0) {
+			free(buffer);
+			break;
+		}
+		bool drop = false;
+		if (relay.toClient) {
+			drop = first;
+			first = false;
+		} else if (got >= 12) {
+			int32 linkSize = ((int32*)buffer)[0];
+			uint32 linkCode = ((uint32*)buffer)[1];
+			drop = linkSize == got && linkCode == kMsgOldAppQuit;
+		}
+		status_t status = B_OK;
+		if (!drop) {
+			do {
+				status = write_port(relay.to, code, buffer, got);
+			} while (status == B_INTERRUPTED);
+		}
+		free(buffer);
+		if (status != B_OK)
+			break;
+	}
+	if (relay.toClient)
+		delete_port(relay.from);
+	return B_OK;
+}
+
+
+static bool
+r5_start_relay(port_id from, port_id to, bool toClient, const char* name)
+{
+	r5_relay* relay = new (std::nothrow) r5_relay;
+	if (relay == NULL)
+		return false;
+	relay->from = from;
+	relay->to = to;
+	relay->toClient = toClient;
+	thread_id thread = spawn_thread(&r5_relay_thread, name,
+		B_DISPLAY_PRIORITY, relay);
+	if (thread < 0 || resume_thread(thread) != B_OK) {
+		delete relay;
+		return false;
+	}
+	return true;
+}
+
+
 static float
 r5_cursor_scale(float fontScale)
 {
@@ -497,6 +587,8 @@ Desktop::Desktop(uid_t userID, const char* targetScreen)
 // SPDX-License-Identifier: MIT
 	fCompositor(NULL),
 	fShown(false),
+	fOrigins(20),
+	fHandoffPort(-1),
 // SPDX-SnippetEnd
 	fSettings(NULL),
 	fSharedReadOnlyArea(-1),
@@ -3245,6 +3337,30 @@ Desktop::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 			if (link.ReadString(&appSignature) != B_OK)
 				break;
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			// Fast user switching: verify from the kernel that both the port
+			// message sender and the claimed clientTeamID belong to this
+			// desktop's user (or uid 0). Prevents another person from joining
+			// this desktop even if they enumerate its port via get_next_port_info.
+			// BApplication sends AS_CREATE_APP as the first link message of a
+			// new link, so refuse one that shares a port message with others.
+			team_info clientInfo;
+			bool senderAllowed = fLastSenderFirst
+				&& (fLastSenderUid == 0 || fLastSenderUid == fUserID);
+			bool teamAllowed = (get_team_info(clientTeamID, &clientInfo) == B_OK
+				&& (clientInfo.uid == 0 || clientInfo.uid == fUserID)
+				&& (fLastSenderUid == 0 || clientTeamID == fLastSenderTeam));
+			if (!senderAllowed || !teamAllowed) {
+				BPrivate::LinkSender reply(clientReplyPort);
+				reply.StartMessage(B_PERMISSION_DENIED);
+				reply.Flush();
+				free(appSignature);
+				break;
+			}
+// SPDX-SnippetEnd
+
 			ObjectDeleter<ServerApp> app(new (std::nothrow) ServerApp(this, clientReplyPort,
 				clientLooperPort, clientTeamID, htoken, appSignature));
 			status_t status = B_OK;
@@ -3255,6 +3371,21 @@ Desktop::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 			if (status == B_OK)
 				status = app->Run();
 			if (status == B_OK) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+				AppOrigin* origin = new (std::nothrow) AppOrigin;
+				if (origin != NULL) {
+					origin->app = app.Get();
+					origin->clientReplyPort = clientReplyPort;
+					origin->clientLooperPort = clientLooperPort;
+					origin->clientToken = htoken;
+					origin->relayReplyPort = -1;
+					origin->handOff = false;
+					if (!fOrigins.AddItem(origin))
+						delete origin;
+				}
+// SPDX-SnippetEnd
 				// add the new ServerApp to the known list of ServerApps
 				fApplicationsLock.Lock();
 				fApplications.AddItem(app.Detach());
@@ -3303,6 +3434,42 @@ Desktop::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 
 			fApplicationsLock.Unlock();
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			// Fast user switching: a uid 0 program marked in B_QUIT_REQUESTED
+			// goes to the shown desktop. Its ServerApp thread has stopped
+			// reading the program's port (it sent this message), and the port
+			// belongs to the program, so it still exists: the shown desktop
+			// serves it from here on. Without this the program kept writing
+			// to a port nobody read and waited for ever (registrar at shut
+			// down, QEMU 25 Nov 2026).
+			AppOrigin* origin = removeApp != NULL
+				? _FindOrigin(removeApp) : NULL;
+			if (origin != NULL) {
+				if (origin->handOff && fHandoffPort >= 0) {
+					BPrivate::LinkSender handOff(fHandoffPort);
+					handOff.StartMessage(kMsgAdoptApp);
+					handOff.Attach<port_id>(removeApp->MessagePort());
+					handOff.Attach<port_id>(origin->clientReplyPort);
+					handOff.Attach<port_id>(origin->clientLooperPort);
+					handOff.Attach<team_id>(removeApp->ClientTeam());
+					handOff.Attach<int32>(origin->clientToken);
+					handOff.AttachString(removeApp->Signature());
+					status_t sent = handOff.Flush(1000000);
+					syslog(LOG_INFO, "app_server: hand %s (team %" B_PRId32
+						") from desktop %" B_PRIu32 " to the shown desktop: %s\n",
+						removeApp->Signature(), removeApp->ClientTeam(),
+						(uint32)fUserID, strerror(sent));
+				}
+				// Replies already in the relay are still delivered; the relay
+				// thread deletes the port once it is empty.
+				if (origin->relayReplyPort >= 0)
+					close_port(origin->relayReplyPort);
+				fOrigins.RemoveItem(origin, true);
+			}
+// SPDX-SnippetEnd
+
 			if (removeApp != NULL)
 				removeApp->Quit(fShutdownSemaphore);
 
@@ -3314,6 +3481,14 @@ Desktop::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 			}
 			break;
 		}
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		case kMsgAdoptApp:
+			_AdoptApp(link);
+			break;
+// SPDX-SnippetEnd
 
 		case AS_ACTIVATE_APP:
 		{
@@ -3361,7 +3536,12 @@ Desktop::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 		}
 
 		case AS_EVENT_STREAM_CLOSED:
-			_LaunchInputServer();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			if (fShown)
+				_LaunchInputServer();
+// SPDX-SnippetEnd
 			break;
 
 		case B_QUIT_REQUESTED:
@@ -3369,13 +3549,39 @@ Desktop::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 			// test apps to quit. This situation will occur only when the
 			// server is compiled as a regular Be application.
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			// Fast user switching: a uid 0 program (such as debug_server or
+			// bluetooth_server) that attached to a person's desktop does not
+			// quit when that person logs out, so its ServerApp would never
+			// send AS_DELETE_APP. Close that ServerApp the way a client that
+			// quits does (B_QUIT_REQUESTED on its link): it sends
+			// AS_DELETE_APP, is deleted below like any other, and no
+			// ServerApp keeps a pointer to this Desktop. The program itself
+			// keeps running, without its windows on this desktop, and
+			// AS_DELETE_APP hands it to the shown desktop (fHandoffPort).
 			fApplicationsLock.Lock();
 			fShutdownSemaphore = create_sem(0, "desktop shutdown");
 			fShutdownCount = fApplications.CountItems();
-			fApplicationsLock.Unlock();
-
 			fQuitting = true;
-			BroadcastToAllApps(AS_QUIT_APP);
+			for (int32 i = 0; i < fApplications.CountItems(); i++) {
+				ServerApp* app = fApplications.ItemAt(i);
+				team_info appTeamInfo;
+				bool isForeignSystem = fUserID >= 1000
+					&& get_team_info(app->ClientTeam(), &appTeamInfo) == B_OK
+					&& appTeamInfo.uid == 0;
+				if (isForeignSystem) {
+					// Handed to the shown desktop in AS_DELETE_APP.
+					AppOrigin* origin = _FindOrigin(app);
+					if (origin != NULL)
+						origin->handOff = true;
+					app->PostMessage(B_QUIT_REQUESTED);
+				} else
+					app->PostMessage(AS_QUIT_APP);
+			}
+			fApplicationsLock.Unlock();
+// SPDX-SnippetEnd
 
 			// We now need to process the remaining AS_DELETE_APP messages.
 			// We quit the looper when the last app is deleted.
@@ -4741,3 +4947,105 @@ Desktop::_SetWorkspace(int32 index, bool moveFocusWindow)
 	if (previousColor != fWorkspaces[fCurrentWorkspace].Color())
 		RedrawBackground();
 }
+
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+Desktop::AppOrigin*
+Desktop::_FindOrigin(ServerApp* app)
+{
+	for (int32 i = 0; i < fOrigins.CountItems(); i++) {
+		if (fOrigins.ItemAt(i)->app == app)
+			return fOrigins.ItemAt(i);
+	}
+	return NULL;
+}
+
+
+/*!	Fast user switching: serve a uid 0 program whose desktop quit (a person
+	logged out, or their session was stopped at shut down). The program keeps
+	its BApplication link: it writes to the port of its first ServerApp and
+	reads answers on its own reply port. A new ServerApp here gets its own
+	ports, and two relay threads connect them. Its windows on the old desktop
+	are gone; new ones open here, on the shown desktop.
+*/
+void
+Desktop::_AdoptApp(BPrivate::LinkReceiver& link)
+{
+	port_id clientPort = -1;
+	port_id clientReplyPort = -1;
+	port_id clientLooperPort = -1;
+	team_id team = -1;
+	int32 token = 0;
+	char* signature = NULL;
+	link.Read<port_id>(&clientPort);
+	link.Read<port_id>(&clientReplyPort);
+	link.Read<port_id>(&clientLooperPort);
+	link.Read<team_id>(&team);
+	link.Read<int32>(&token);
+	if (link.ReadString(&signature) != B_OK)
+		return;
+	MemoryDeleter signatureDeleter(signature);
+
+	// Only another desktop of this app_server may hand over a program, and
+	// only a uid 0 program whose ports are its own.
+	team_info teamInfo;
+	port_info portInfo;
+	if (fLastSenderTeam != getpid() || fQuitting
+		|| get_team_info(team, &teamInfo) != B_OK || teamInfo.uid != 0
+		|| get_port_info(clientPort, &portInfo) != B_OK
+		|| portInfo.team != team
+		|| get_port_info(clientReplyPort, &portInfo) != B_OK
+		|| portInfo.team != team) {
+		syslog(LOG_ERR, "app_server: hand over of team %" B_PRId32
+			" refused\n", team);
+		return;
+	}
+
+	port_id relayReplyPort = create_port(100, "r5 relay reply");
+	if (relayReplyPort < 0)
+		return;
+	ObjectDeleter<ServerApp> app(new (std::nothrow) ServerApp(this,
+		relayReplyPort, clientLooperPort, team, token, signature));
+	AppOrigin* origin = new (std::nothrow) AppOrigin;
+	status_t status = app.IsSet() && origin != NULL ? B_OK : B_NO_MEMORY;
+	if (status == B_OK)
+		status = app->InitCheck();
+	if (status == B_OK)
+		status = app->Run();
+	// The ServerApp's first message goes into the relay port and is dropped
+	// there; the program's messages wait in its port until the relay runs.
+	if (status == B_OK
+		&& (!r5_start_relay(relayReplyPort, clientReplyPort, true,
+				"r5 relay to client")
+			|| !r5_start_relay(clientPort, app->MessagePort(), false,
+				"r5 relay to server"))) {
+		syslog(LOG_ERR, "app_server: no relay for team %" B_PRId32 "\n",
+			team);
+	}
+	if (status != B_OK) {
+		syslog(LOG_ERR, "app_server: hand over of team %" B_PRId32
+			" failed: %s\n", team, strerror(status));
+		delete origin;
+		// The relay to the client deletes its port when that is closed.
+		close_port(relayReplyPort);
+		return;
+	}
+
+	origin->app = app.Get();
+	origin->clientReplyPort = clientReplyPort;
+	origin->clientLooperPort = clientLooperPort;
+	origin->clientToken = token;
+	origin->relayReplyPort = relayReplyPort;
+	origin->handOff = false;
+	if (!fOrigins.AddItem(origin))
+		delete origin;
+
+	fApplicationsLock.Lock();
+	fApplications.AddItem(app.Detach());
+	fApplicationsLock.Unlock();
+	syslog(LOG_INFO, "app_server: desktop %" B_PRIu32 " serves %s (team %"
+		B_PRId32 ")\n", (uint32)fUserID, signature, team);
+}
+// SPDX-SnippetEnd

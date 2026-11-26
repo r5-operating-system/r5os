@@ -72,6 +72,9 @@ public:
 	virtual	BSize				MaxSize();
 	virtual	BSize				PreferredSize();
 
+			bool				IsSignedIn() const;
+			void				SetSignedIn(bool signedIn);
+
 private:
 			void				_Init();
 

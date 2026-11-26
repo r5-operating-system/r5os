@@ -21,7 +21,9 @@
 #include <LaunchRoster.h>
 #include <MessagePrivate.h>
 #include <fcntl.h>
+#include <pwd.h>
 #include <stdlib.h>
+#include <sys/stat.h>
 #include <unistd.h>
 // SPDX-SnippetEnd
 #include <Message.h>
@@ -657,8 +659,48 @@ Registrar::_HandleShutDown(BMessage *request)
 {
 	status_t error = B_OK;
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// Fast user switching (5.7): when other people are signed in, only uid 0
+	// (Login, after checking administrator privileges and showing the warning)
+	// may shut down or restart.
+	uid_t senderUid = 0;
+	bool verified = VerifiedSenderUID(request, &senderUid);
+	if (!verified || senderUid != 0) {
+		struct stat st;
+		const char* sessionsPath = "/boot/system/settings/r5-desktop-sessions";
+		if (lstat(sessionsPath, &st) == 0 && S_ISREG(st.st_mode)
+			&& st.st_uid == 0) {
+			FILE* file = fopen(sessionsPath, "r");
+			if (file != NULL) {
+				char line[128];
+				while (fgets(line, sizeof(line), file) != NULL) {
+					size_t len = strlen(line);
+					while (len > 0 && (line[len - 1] == '\n'
+						|| line[len - 1] == '\r' || line[len - 1] == ' ')) {
+						line[--len] = '\0';
+					}
+					if (len == 0)
+						continue;
+					if (!verified) {
+						error = B_PERMISSION_DENIED;
+						break;
+					}
+					struct passwd* pwd = getpwnam(line);
+					if (pwd != NULL && pwd->pw_uid != senderUid) {
+						error = B_PERMISSION_DENIED;
+						break;
+					}
+				}
+				fclose(file);
+			}
+		}
+	}
+// SPDX-SnippetEnd
+
 	// check, whether we're already shutting down
-	if (fShutdownProcess)
+	if (error == B_OK && fShutdownProcess)
 		error = B_SHUTTING_DOWN;
 
 	bool needsReply = true;

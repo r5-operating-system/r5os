@@ -59,6 +59,9 @@ public:
 									bool complete = false);
 	virtual	void				Update(BView* owner, const BFont* font);
 
+			bool				IsSignedIn() const;
+			void				SetSignedIn(bool signedIn);
+
 private:
 			void				_Init();
 

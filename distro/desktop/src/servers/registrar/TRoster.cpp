@@ -14,6 +14,11 @@
 #include <new>
 
 #include <errno.h>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <pwd.h>
+// SPDX-SnippetEnd
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
@@ -841,11 +846,41 @@ TRoster::HandleGetAppInfo(BMessage* request)
 		if (info == NULL)
 			SET_ERROR(error, B_ERROR);
 	} else if (hasSignature) {
-		info = fRegisteredApps.InfoFor(signature, senderUid);
+		if (senderUid == 0
+			&& strcasecmp(signature,
+				"application/x-vnd.Haiku-notification_server") == 0) {
+			// Route system-service notifications to the currently shown
+			// person's notification_server instead of the hidden uid 0 copy.
+			FILE* f = fopen("/boot/system/settings/r5-desktop-session", "r");
+			if (f != NULL) {
+				char login[128];
+				if (fgets(login, sizeof(login), f) != NULL) {
+					size_t len = strlen(login);
+					while (len > 0 && (login[len - 1] == '\n'
+						|| login[len - 1] == '\r' || login[len - 1] == ' ')) {
+						login[--len] = '\0';
+					}
+					if (len > 0) {
+						struct passwd* pwd = getpwnam(login);
+						if (pwd != NULL && pwd->pw_uid >= 1000)
+							info = fRegisteredApps.InfoFor(signature, pwd->pw_uid);
+					}
+				}
+				fclose(f);
+			}
+		}
+		if (info == NULL)
+			info = fRegisteredApps.InfoFor(signature, senderUid);
 		if (info == NULL) {
-			if (senderUid != 0)
-				info = fRegisteredApps.InfoFor(signature, (uid_t)0);
-			else
+			if (senderUid != 0) {
+				// Never fall back to uid 0's notification_server for a person's
+				// app (would leak their notification onto the Sign in / Lock
+				// desktop before their own notification_server registers).
+				if (strcasecmp(signature,
+						"application/x-vnd.Haiku-notification_server") != 0) {
+					info = fRegisteredApps.InfoFor(signature, (uid_t)0);
+				}
+			} else
 				info = fRegisteredApps.InfoFor(signature);
 		}
 		if (info == NULL)

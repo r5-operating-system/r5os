@@ -29,7 +29,12 @@
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 #include "Compositor.h"
+#include <MessagePrivate.h>
+#include <MessengerPrivate.h>
 #include <R5Admin.h>
+#include <fcntl.h>
+#include <stdlib.h>
+#include <unistd.h>
 // SPDX-SnippetEnd
 #include "Desktop.h"
 #include "GlobalFontManager.h"
@@ -61,13 +66,15 @@ uint32 gAppServerSIMDFlags = 0;
 */
 AppServer::AppServer(status_t* status)
 	:
-	SERVER_BASE("application/x-vnd.Haiku-app_server", "picasso", -1, false,
-		status),
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+	SERVER_BASE("application/x-vnd.Haiku-app_server", "picasso", -1, false,
+		status),
 	fDesktopLock("AppServerDesktopLock"),
-	fAdminPort(-1)
+	fAdminPort(-1),
+	fPublicPort(-1),
+	fProxyThread(-1)
 // SPDX-SnippetEnd
 {
 	openlog("app_server", 0, LOG_DAEMON);
@@ -75,6 +82,35 @@ AppServer::AppServer(status_t* status)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+	memset(fProxySecret, 0, sizeof(fProxySecret));
+	{
+		bool seeded = false;
+		int fd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
+		if (fd >= 0) {
+			ssize_t got = read(fd, fProxySecret, sizeof(fProxySecret));
+			close(fd);
+			seeded = (got == (ssize_t)sizeof(fProxySecret));
+		}
+		if (!seeded) {
+			uint64 mix = (uint64)system_time() ^ ((uint64)find_thread(NULL) << 32)
+				^ (uint64)(uintptr_t)this;
+			for (size_t i = 0; i < sizeof(fProxySecret); i++) {
+				mix ^= mix >> 12;
+				mix ^= mix << 25;
+				mix ^= mix >> 27;
+				fProxySecret[i] = (uint8)((mix * 0x2545F4914F6CDD1DULL) >> 56);
+			}
+		}
+	}
+	// No port proxy in front of app_server. launch_daemon pre-registers
+	// app_server, and BApplication then always takes the pre-registered
+	// launch port for its looper (Application.cpp, "replace the looper port
+	// with a port created by the roster"), so a proxy can never own the port
+	// that clients reach (booted in QEMU, 25 Nov 2026: no Sign in). The
+	// registrar can use a proxy because it is not pre-registered.
+	// AS_GET_DESKTOP only hands out a desktop port, which grants nothing:
+	// every program must still pass Desktop's AS_CREATE_APP check, which uses
+	// the kernel-verified sender of that port message (MessageLooper).
 	r5_admin_port_start("app_server admin", &_AdminHandler, this, &fAdminPort);
 // SPDX-SnippetEnd
 
@@ -118,6 +154,15 @@ AppServer::~AppServer()
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+	if (fPublicPort >= 0) {
+		delete_port(fPublicPort);
+		fPublicPort = -1;
+	}
+	if (fProxyThread >= 0) {
+		status_t threadStatus;
+		wait_for_thread(fProxyThread, &threadStatus);
+		fProxyThread = -1;
+	}
 	if (fAdminPort >= 0) {
 		r5_admin_port_stop(fAdminPort);
 		fAdminPort = -1;
@@ -142,6 +187,12 @@ AppServer::MessageReceived(BMessage* message)
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 	if (r5_admin_port_reply(message, fAdminPort))
+		return;
+	// A reply (input_server answering a desktop switch's update; BMessage
+	// falls back to be_app_messenger when no reply target is given) is not
+	// a request. Its what 0 would read as AS_GET_DESKTOP and log a protocol
+	// error at every switch.
+	if (message->IsReply())
 		return;
 // SPDX-SnippetEnd
 	switch (message->what) {
@@ -171,10 +222,31 @@ AppServer::MessageReceived(BMessage* message)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+				// Fast user switching: the "user" field only chooses which
+				// desktop port is returned; it grants nothing. Every program
+				// must still pass Desktop's AS_CREATE_APP check (kernel-
+				// verified sender: uid 0 or the desktop's owner), so a program
+				// that names another uid gets a port it cannot use. A uid 0
+				// program (debug_server crash alerts; Login at boot, when
+				// desktop 0 is the shown one) attaches to the shown desktop,
+				// so its dialogs reach the person at the keyboard.
+
 				// Hold fDesktopLock across lookup and MessagePort() so a
 				// concurrent _DestroyDesktop() cannot free desktop in between.
 				BAutolock locker(fDesktopLock);
-				Desktop* desktop = _FindDesktop(userID, targetScreen);
+				Desktop* desktop = NULL;
+				if (userID == 0 && targetScreen == NULL) {
+					for (int32 i = 0; i < fDesktops.CountItems(); i++) {
+						Desktop* existing = fDesktops.ItemAt(i);
+						if (existing->TargetScreen() == NULL
+							&& existing->IsShown()) {
+							desktop = existing;
+							break;
+						}
+					}
+				}
+				if (desktop == NULL)
+					desktop = _FindDesktop(userID, targetScreen);
 				if (desktop == NULL) {
 					// One graphical session until Part 2 StartSession. Tracker
 					// after Sign in is a person uid; only fall back to the
@@ -309,11 +381,19 @@ AppServer::_ActivateDesktop(Desktop* target)
 
 	if (current != NULL && current != target) {
 		status_t status = current->Deactivate();
-		if (status != B_OK)
+		if (status != B_OK) {
+			syslog(LOG_ERR, "app_server: switch to %d: deactivate %d: %s\n",
+				(int)target->UserID(), (int)current->UserID(),
+				strerror(status));
 			return status;
+		}
 	}
-
 	status_t status = target->Activate();
+	if (status != B_OK) {
+		syslog(LOG_ERR, "app_server: switch %d->%d: activate %s\n",
+			current != NULL ? (int)current->UserID() : -1,
+			(int)target->UserID(), strerror(status));
+	}
 	if (status != B_OK && current != NULL && current != target) {
 		// Roll back to the previously shown desktop if activation failed.
 		current->Activate();
@@ -338,6 +418,16 @@ AppServer::_DestroyDesktop(uid_t userID)
 					return B_BUSY;
 				fDesktops.RemoveItemAt(i);
 				thread = item->Thread();
+				// uid 0 programs attached to this desktop (the registrar,
+				// debug_server) go to the shown desktop, so they can still
+				// open windows (Desktop::_AdoptApp()).
+				for (int32 j = 0; j < fDesktops.CountItems(); j++) {
+					Desktop* shown = fDesktops.ItemAt(j);
+					if (shown->TargetScreen() == NULL && shown->IsShown()) {
+						item->SetHandoffPort(shown->MessagePort());
+						break;
+					}
+				}
 				// Desktop deletes itself on its own looper thread via
 				// B_QUIT_REQUESTED -> kMsgQuitLooper -> MessageLooper::Quit()
 				// -> delete this. Do not dereference or delete item after
@@ -520,6 +610,138 @@ AppServer::_FindDesktop(uid_t userID, const char* targetScreen)
 
 	return NULL;
 }
+
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+/*static*/ status_t
+AppServer::_PortProxyThread(void* data)
+{
+	((AppServer*)data)->_PortProxyLoop();
+	return B_OK;
+}
+
+
+void
+AppServer::_PortProxyLoop()
+{
+	port_id innerPort = BMessenger::Private(be_app_messenger).Port();
+	team_id selfTeam = Team();
+	while (true) {
+		port_message_info info;
+		status_t status;
+		do {
+			status = get_port_message_info_etc(fPublicPort, &info, 0, 0);
+		} while (status == B_INTERRUPTED);
+		if (status != B_OK)
+			break;
+
+		char* buffer = info.size > 0 ? (char*)malloc(info.size) : NULL;
+		if (info.size > 0 && buffer == NULL) {
+			char discard[256];
+			int32 dropCode = 0;
+			ssize_t dropped = read_port_etc(fPublicPort, &dropCode, discard,
+				sizeof(discard), B_RELATIVE_TIMEOUT, 0);
+			if (dropped > 0 && dropped <= (ssize_t)sizeof(discard)) {
+				BMessage droppedMsg;
+				if (droppedMsg.Unflatten(discard) == B_OK
+					&& droppedMsg.IsSourceWaiting()) {
+					droppedMsg.SendReply(B_NO_REPLY);
+				}
+			}
+			continue;
+		}
+
+		int32 code = 0;
+		ssize_t bytesRead = read_port_etc(fPublicPort, &code, buffer,
+			info.size, B_RELATIVE_TIMEOUT, 0);
+		if (bytesRead < 0) {
+			free(buffer);
+			if (bytesRead == B_BAD_PORT_ID)
+				break;
+			continue;
+		}
+
+		if (bytesRead > 0 && buffer != NULL) {
+			BMessage msg;
+			if (msg.Unflatten(buffer) == B_OK) {
+				free(buffer);
+				buffer = NULL;
+
+				msg.RemoveName("_r5_sender_uid");
+				msg.RemoveName("_r5_sender_team");
+				msg.RemoveName("_r5_proxy_secret");
+				status_t stampErr = msg.AddInt32("_r5_sender_uid",
+					(int32)info.sender);
+				if (stampErr == B_OK) {
+					stampErr = msg.AddInt32("_r5_sender_team",
+						(int32)info.sender_team);
+				}
+				if (stampErr == B_OK) {
+					stampErr = msg.AddData("_r5_proxy_secret", B_RAW_TYPE,
+						fProxySecret, sizeof(fProxySecret));
+				}
+
+				if (stampErr == B_OK) {
+					BMessage::Private msgPriv(msg);
+					bool replyRequired = msg.IsSourceWaiting();
+					BMessenger replyTo;
+					status_t sendErr = msgPriv.SendMessage(innerPort, selfTeam,
+						msgPriv.GetTarget(), B_INFINITE_TIMEOUT, replyRequired,
+						replyTo);
+					if (sendErr != B_OK && msg.IsSourceWaiting())
+						msg.SendReply(B_NO_REPLY);
+				} else if (msg.IsSourceWaiting()) {
+					msg.SendReply(B_NO_REPLY);
+				}
+				continue;
+			}
+		}
+
+		status_t writeErr;
+		do {
+			writeErr = write_port_etc(innerPort, code, buffer, bytesRead,
+				B_RELATIVE_TIMEOUT, 5000000);
+		} while (writeErr == B_INTERRUPTED);
+		(void)writeErr;
+		free(buffer);
+	}
+}
+
+
+bool
+AppServer::_VerifiedSender(const BMessage* message, uid_t& _uid,
+	team_id& _team) const
+{
+	if (message == NULL)
+		return false;
+	const void* secret = NULL;
+	ssize_t secretSize = 0;
+	if (message->FindData("_r5_proxy_secret", B_RAW_TYPE, &secret, &secretSize)
+			!= B_OK
+		|| secret == NULL
+		|| secretSize != (ssize_t)sizeof(fProxySecret)) {
+		return false;
+	}
+	const uint8* got = (const uint8*)secret;
+	uint8 diff = 0;
+	for (size_t i = 0; i < sizeof(fProxySecret); i++)
+		diff |= got[i] ^ fProxySecret[i];
+	if (diff != 0)
+		return false;
+
+	int32 uid = -1;
+	int32 team = -1;
+	if (message->FindInt32("_r5_sender_uid", &uid) != B_OK || uid < 0
+		|| message->FindInt32("_r5_sender_team", &team) != B_OK || team < 0) {
+		return false;
+	}
+	_uid = (uid_t)uid;
+	_team = (team_id)team;
+	return true;
+}
+// SPDX-SnippetEnd
 
 
 //	#pragma mark -

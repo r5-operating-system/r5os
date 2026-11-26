@@ -1,11 +1,11 @@
-1	english	x-vnd.Haiku-Login	3639961931
+1	english	x-vnd.Haiku-Login	13883091
 There must be at least one administrator.	Users: Account admin		There must be at least one administrator.
 An account named \"guest\" already exists. Rename it first.	Users: Account admin		An account named \"guest\" already exists. Rename it first.
 Only system drivers can be turned off here.	Login: Driver admin		Only system drivers can be turned off here.
 Unknown request.	Login: Application		Unknown request.
 %program% failed	Users: Account admin		%program% failed
-The original administrator account cannot be disabled.	Users: Account admin		The original administrator account cannot be disabled.
 Could not start the desktop.	Login: Application		Could not start the desktop.
+The original administrator account cannot be disabled.	Users: Account admin		The original administrator account cannot be disabled.
 Password	Login: Lock window		Password
 That picture is too large.	Users: Account admin		That picture is too large.
 That password is not right.	Login: Sign in view		That password is not right.
@@ -22,15 +22,16 @@ A line has no end.	Login: Driver settings admin		A line has no end.
 Ready to sign in as Guest	Login: Sign in view		Ready to sign in as Guest
 Your name	Login: Sign in view		Your name
 Could not encrypt the password.	Users: Account admin		Could not encrypt the password.
+Only an administrator may shut down while others are signed in.	Login: Application		Only an administrator may shut down while others are signed in.
 The password could not be saved.	Users: Account admin		The password could not be saved.
 Log out	Login: Lock window		Log out
 Ready to sign in as %name%	Login: Sign in view		Ready to sign in as %name%
 Sign in as Guest	Login: Sign in view		Sign in as Guest
+Return to Guest	Login: Sign in view		Return to Guest
 Guest setting requires the sign-in helper.	Users: Account admin		Guest setting requires the sign-in helper.
 Guest sessions cannot be locked.	Login: Application		Guest sessions cannot be locked.
 The account exists, but the password was not set.	Users: Account admin		The account exists, but the password was not set.
 The guest's old files could not be removed.	Users: Account admin		The guest's old files could not be removed.
-Sign-ins are forgotten when you shut down.	Login: Sign in view		Sign-ins are forgotten when you shut down.
 SELECT ACCOUNT	Login: Sign in view		SELECT ACCOUNT
 This driver is needed to start the system and cannot be turned off.	Login: Driver admin		This driver is needed to start the system and cannot be turned off.
 The account type could not be changed.	Users: Account admin		The account type could not be changed.
@@ -49,6 +50,7 @@ This value is not allowed.	Login: Driver settings admin		This value is not allow
 That account cannot unlock settings.	Users: Account admin		That account cannot unlock settings.
 Password	Login: Sign in view		Password
 Your password was not changed because the key store could not be updated.	Users: Account admin		Your password was not changed because the key store could not be updated.
+Unlock	Login: Sign in view		Unlock
 That password is not right.	Login: Application		That password is not right.
 Use a lowercase username of letters, digits, underscore or hyphen.	Users: Account admin		Use a lowercase username of letters, digits, underscore or hyphen.
 That account does not exist.	Users: Account admin		That account does not exist.
@@ -86,11 +88,14 @@ Drop replicants on this desktop to customize the login background. Quit with Cmd
 A line is not a setting.	Login: Driver settings admin		A line is not a setting.
 Choose a password for this account.	Login: Sign in view		Choose a password for this account.
 Sign in	Login: Sign in window		Sign in
+Guest	Login: Application		Guest
+Could not switch back to your desktop. Try unlocking again.	Login: Application		Could not switch back to your desktop. Try unlocking again.
 Too many settings.	Login: Driver settings admin		Too many settings.
 Preparing your files… %count%	Login: Application		Preparing your files… %count%
 Could not start the session: %error%	Login: Application		Could not start the session: %error%
 Driver changes require the sign-in helper.	Login: Driver admin		Driver changes require the sign-in helper.
 Sleep is not available yet.	Login: Application		Sleep is not available yet.
+Signed in. Enter password to unlock %name%	Login: Sign in view		Signed in. Enter password to unlock %name%
 Shut down	Login: Lock window		Shut down
 Sign in to start your session	Login: Sign in view		Sign in to start your session
 Account changes require the sign-in helper.	Users: Account admin		Account changes require the sign-in helper.
@@ -100,7 +105,6 @@ Please enter your password.	Login: Application		Please enter your password.
 The request is incomplete.	Login: Driver settings admin		The request is incomplete.
 Shut down	Login: Sign in view		Shut down
 Could not save the guest setting.	Users: Account admin		Could not save the guest setting.
-Only the signed-in session may lock or log out.	Login: Application		Only the signed-in session may lock or log out.
 Could not create the guest account.	Users: Account admin		Could not create the guest account.
 That password is not right.	Users: Account admin		That password is not right.
 The account folder could not be updated.	Users: Account admin		The account folder could not be updated.
@@ -114,8 +118,8 @@ Unlock this with an administrator password.	Login: Driver admin		Unlock this wit
 OK	Login: Application		OK
 Everything you make as Guest is deleted when you log out. Save what you want to keep on a USB stick or in the Shared folder.	Login: Sign in view		Everything you make as Guest is deleted when you log out. Save what you want to keep on a USB stick or in the Shared folder.
 Guest account setup requires the sign-in helper.	Users: Account admin		Guest account setup requires the sign-in helper.
-Restart	Login: Lock window		Restart
 Could not shut down: %error%	Login: Application		Could not shut down: %error%
+Restart	Login: Lock window		Restart
 The email address could not be saved.	Users: Account admin		The email address could not be saved.
 Could not save the guest account.	Users: Account admin		Could not save the guest account.
 Save and sign in	Login: Sign in view		Save and sign in
@@ -123,14 +127,18 @@ Guest	Login: Sign in view		Guest
 {0, plural, one{# account available} other{# accounts available}}	Login: Sign in view		{0, plural, one{# account available} other{# accounts available}}
 Could not prepare your files: %error%	Login: Application		Could not prepare your files: %error%
 The request is empty.	Login: Driver admin		The request is empty.
+You're trying R5. Passwords for mail and online accounts are forgotten when you shut down.	Login: Sign in view		You're trying R5. Passwords for mail and online accounts are forgotten when you shut down.
+Guest is already signed in	Login: Sign in view		Guest is already signed in
 Only the sign-in helper can set this password.	Users: Account admin		Only the sign-in helper can set this password.
 Administrator	Login: Lock window		Administrator
 The account exists, but it is not an administrator: %error%	Users: Account admin		The account exists, but it is not an administrator: %error%
 The new account did not get a user id of 1000 or higher.	Users: Account admin		The new account did not get a user id of 1000 or higher.
 The existing guest account has an unexpected setup.	Users: Account admin		The existing guest account has an unexpected setup.
 This setting is not allowed.	Login: Driver settings admin		This setting is not allowed.
+Other account	Login: Lock window		Other account
 Choose an account first.	Login: Sign in view		Choose an account first.
 The account could not become an administrator.	Users: Account admin		The account could not become an administrator.
 That password is not right.	Login: Lock window		That password is not right.
 Locked	Login: Lock window		Locked
+Only the active session may lock or switch user.	Login: Application		Only the active session may lock or switch user.
 This account is an administrator through its system group.	Users: Account admin		This account is an administrator through its system group.

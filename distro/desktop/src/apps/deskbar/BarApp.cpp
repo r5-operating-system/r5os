@@ -85,6 +85,12 @@ namespace BPrivate {
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 #include <Alert.h>
+#include <AdminLock.h>
+#include <Button.h>
+#include <LayoutBuilder.h>
+#include <StringFormat.h>
+#include <StringView.h>
+#include <TextView.h>
 #include <Invoker.h>
 #include <OS.h>
 #include <LaunchRoster.h>
@@ -995,12 +1001,85 @@ TBarApp::MessageReceived(BMessage* message)
 			// TODO: Call BRoster?
 			break;
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		case 'r5sd':
+		case 'r5rb':
+		{
+			if (!r5_admin_is_local(message))
+				break;
+			bool reboot = (message->what == 'r5rb');
+			BMessenger login("application/x-vnd.Haiku-Login");
+			if (login.IsValid()) {
+				BMessage req(reboot ? 'rebo' : 'halt');
+				req.AddBool("confirm", false);
+				BMessage reply;
+				r5_admin_send(login, &req, &reply, 5000000LL);
+			}
+			break;
+		}
+// SPDX-SnippetEnd
 		case kRebootSystem:
 		case kShutdownSystem:
 		{
 			bool reboot = (message->what == kRebootSystem);
-			bool confirm;
+			bool confirm = false;
 			message->FindBool("confirm", &confirm);
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			// Fast user switching (5.7): ask Login whether other people are
+			// signed in. If so, show the shared libr5ui warning; otherwise
+			// route through Login passing confirm so the shown person's apps
+			// quit normally with "Save changes?" visible.
+			BMessenger login("application/x-vnd.Haiku-Login");
+			if (login.IsValid()) {
+				BMessage query('qses');
+				BMessage sessionsReply;
+				if (r5_admin_send(login, &query, &sessionsReply, 3000000LL)
+						== B_OK) {
+					int32 otherCount = 0;
+					type_code tc;
+					if (sessionsReply.GetInfo("login", &tc, &otherCount) == B_OK
+						&& otherCount > 0) {
+						r5_show_shutdown_warning(reboot, sessionsReply,
+							BMessenger(this), reboot ? 'r5rb' : 'r5sd', false);
+						break;
+					}
+					BMessage req(reboot ? 'rebo' : 'halt');
+					req.AddBool("confirm", confirm);
+					BMessage reply;
+					if (r5_admin_send(login, &req, &reply, 5000000LL) == B_OK
+						&& reply.GetInt32("error", B_ERROR) == B_OK) {
+						break;
+					}
+					BAlert* alert = new BAlert(
+						reboot ? B_TRANSLATE("Restart")
+							: B_TRANSLATE("Shut down"),
+						reply.GetString("text",
+							B_TRANSLATE("Could not start shut down.")),
+						B_TRANSLATE("OK"), NULL, NULL,
+						B_WIDTH_AS_USUAL, B_WARNING_ALERT);
+					alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
+					alert->Go();
+					break;
+				}
+				// Querying Login failed or timed out: do NOT bypass Login and
+				// shut down without checking other signed-in sessions.
+				BAlert* alert = new BAlert(
+					reboot ? B_TRANSLATE("Restart")
+						: B_TRANSLATE("Shut down"),
+					B_TRANSLATE("Could not check whether other people are "
+						"signed in. Try again in a moment."),
+					B_TRANSLATE("OK"), NULL, NULL,
+					B_WIDTH_AS_USUAL, B_WARNING_ALERT);
+				alert->SetFlags(alert->Flags() | B_CLOSE_ON_ESCAPE);
+				alert->Go();
+				break;
+			}
+// SPDX-SnippetEnd
 
 			BRoster roster;
 			BRoster::Private rosterPrivate(roster);
@@ -1021,6 +1100,19 @@ TBarApp::MessageReceived(BMessage* message)
 			BMessenger login("application/x-vnd.Haiku-Login");
 			if (login.IsValid()) {
 				BMessage req(kLockSession);
+				BMessage reply;
+				r5_admin_send(login, &req, &reply);
+			}
+			break;
+		}
+
+		case kSwitchUserSession:
+		{
+			if (r5_admin_is_system_guest(getuid()))
+				break;
+			BMessenger login("application/x-vnd.Haiku-Login");
+			if (login.IsValid()) {
+				BMessage req(kSwitchUserSession);
 				BMessage reply;
 				r5_admin_send(login, &req, &reply);
 			}

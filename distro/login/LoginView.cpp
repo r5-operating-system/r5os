@@ -681,10 +681,7 @@ LoginView::PrepareForSignIn()
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-	BString ready;
-	ready = B_TRANSLATE("Ready to sign in as %name%");
-	ready.ReplaceFirst("%name%", fActiveName->Text());
-	_SetFeedback(ready.String(), false);
+	_FillUsers();
 	_EnableControls(true);
 	_FocusField();
 // SPDX-SnippetEnd
@@ -771,6 +768,7 @@ LoginView::_FillUsers()
 			BUserCard* card = new BUserCard(accounts[i].login.String(),
 				accounts[i].login.String(), accounts[i].displayName.String(),
 				accounts[i].role.String(), fCardAvatar, message);
+			card->SetSignedIn(is_user_signed_in(accounts[i].login.String()));
 			card->SetTarget(this);
 			grid->AddView(card, (int32)(i % 2), (int32)(i / 2));
 		}
@@ -787,9 +785,11 @@ LoginView::_FillUsers()
 		fAccountCountLabel->SetText(count.String());
 
 		for (size_t i = 0; i < accounts.size(); i++) {
-			fUserList->AddItem(new BUserListItem(accounts[i].login.String(),
+			BUserListItem* item = new BUserListItem(accounts[i].login.String(),
 				accounts[i].displayName.String(), accounts[i].role.String(),
-				fListAvatar));
+				fListAvatar);
+			item->SetSignedIn(is_user_signed_in(accounts[i].login.String()));
+			fUserList->AddItem(item);
 		}
 		fUserList->Select(0);
 	}
@@ -865,10 +865,14 @@ LoginView::_ShowSelected(const char* login, const char* displayName,
 		fSetupRepeat->SetText("");
 		_UpdateSetup();
 	}
+	bool signedIn = is_user_signed_in(login);
 	if (guest)
-		fLoginButton->SetLabel(B_TRANSLATE("Sign in as Guest"));
+		fLoginButton->SetLabel(signedIn ? B_TRANSLATE("Return to Guest")
+			: B_TRANSLATE("Sign in as Guest"));
 	else if (fSetupMode)
 		fLoginButton->SetLabel(B_TRANSLATE("Save and sign in"));
+	else if (signedIn)
+		fLoginButton->SetLabel(B_TRANSLATE("Unlock"));
 	else
 		fLoginButton->SetLabel(B_TRANSLATE("Sign in"));
 
@@ -877,10 +881,14 @@ LoginView::_ShowSelected(const char* login, const char* displayName,
 	fPasswordControl->SetText("");
 	BString ready;
 	if (guest)
-		ready = B_TRANSLATE("Ready to sign in as Guest");
+		ready = signedIn ? B_TRANSLATE("Guest is already signed in")
+			: B_TRANSLATE("Ready to sign in as Guest");
 	else if (fSetupMode)
 		ready = B_TRANSLATE("This account has no password yet.");
-	else {
+	else if (signedIn) {
+		ready = B_TRANSLATE("Signed in. Enter password to unlock %name%");
+		ready.ReplaceFirst("%name%", display);
+	} else {
 		ready = B_TRANSLATE("Ready to sign in as %name%");
 		ready.ReplaceFirst("%name%", display);
 	}

@@ -75,10 +75,12 @@ struct BUserListItem::Data {
 	BString		displayName;
 	BString		role;
 	BBitmap*	avatar;
+	bool		signedIn;
 
 	Data()
 		:
-		avatar(NULL)
+		avatar(NULL),
+		signedIn(false)
 	{
 	}
 
@@ -128,6 +130,7 @@ BUserListItem::BUserListItem(BMessage* archive)
 		fData->displayName = text;
 	if (archive->FindString("r5:role", &text) == B_OK)
 		fData->role = text;
+	archive->FindBool("r5:signedIn", &fData->signedIn);
 
 	BMessage avatarMessage;
 	if (archive->FindMessage("r5:avatar", &avatarMessage) == B_OK) {
@@ -167,6 +170,8 @@ BUserListItem::Archive(BMessage* archive, bool deep) const
 		status = archive->AddString("r5:displayName", fData->displayName);
 	if (status == B_OK)
 		status = archive->AddString("r5:role", fData->role);
+	if (status == B_OK)
+		status = archive->AddBool("r5:signedIn", fData->signedIn);
 	if (status == B_OK && fData->avatar != NULL) {
 		BMessage avatarMessage;
 		if (fData->avatar->Archive(&avatarMessage) == B_OK)
@@ -234,6 +239,22 @@ BUserListItem::SetAvatar(const BBitmap* avatar)
 }
 
 
+bool
+BUserListItem::IsSignedIn() const
+{
+	return fData != NULL && fData->signedIn;
+}
+
+
+void
+BUserListItem::SetSignedIn(bool signedIn)
+{
+	if (fData == NULL)
+		return;
+	fData->signedIn = signedIn;
+}
+
+
 void
 BUserListItem::DrawItem(BView* owner, BRect itemRect, bool complete)
 {
@@ -279,7 +300,34 @@ BUserListItem::DrawItem(BView* owner, BRect itemRect, bool complete)
 		fData->role.ICompare("Administrator") == 0);
 
 	float textLeft = avatarRect.right + 10.0f * u;
-	float maxWidth = itemRect.right - padding - textLeft;
+	float rightLimit = itemRect.right - padding;
+	if (fData->signedIn) {
+		BFont statusFont(be_plain_font);
+		statusFont.SetSize(10.5f * u);
+		font_height statusHeight;
+		statusFont.GetHeight(&statusHeight);
+		BString signedInText(B_TRANSLATE("Signed in"));
+		float dotRadius = 3.0f * u;
+		float textWidth = statusFont.StringWidth(signedInText.String());
+		float statusWidth = dotRadius * 2.0f + 4.0f * u + textWidth;
+		float statusLeft = rightLimit - statusWidth;
+		if (statusLeft > textLeft + 40.0f * u) {
+			float statusY = itemRect.top
+				+ (itemRect.Height() - statusHeight.ascent
+					- statusHeight.descent) / 2.0f + statusHeight.ascent;
+			float dotCenterY = statusY - (statusHeight.ascent * 0.35f);
+			rgb_color green = ui_color(B_SUCCESS_COLOR);
+			owner->SetHighColor(green);
+			owner->FillEllipse(BPoint(statusLeft + dotRadius, dotCenterY),
+				dotRadius, dotRadius);
+			owner->SetFont(&statusFont);
+			owner->DrawString(signedInText.String(),
+				BPoint(statusLeft + dotRadius * 2.0f + 4.0f * u, statusY));
+			rightLimit = statusLeft - 8.0f * u;
+		}
+	}
+
+	float maxWidth = rightLimit - textLeft;
 	if (maxWidth > 4.0f) {
 		BFont boldFont(be_bold_font);
 		boldFont.SetSize(12.5f * u);
@@ -322,7 +370,7 @@ BUserListItem::DrawItem(BView* owner, BRect itemRect, bool complete)
 		roleFont.SetSize(plainFont.Size());
 		BString role(shown_role(fData->role));
 		roleFont.TruncateString(&role, B_TRUNCATE_END,
-			itemRect.right - padding - roleLeft);
+			rightLimit - roleLeft);
 		owner->SetFont(&roleFont);
 		owner->SetHighColor(admin ? accent : gray);
 		owner->DrawString(role.String(), BPoint(roleLeft, roleY));

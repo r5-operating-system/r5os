@@ -49,12 +49,20 @@ msgctxt "libr5ui: Themes"
 msgid "Blue"
 msgstr ""
 
+msgctxt "libr5ui: User card"
+msgid "Signed in"
+msgstr ""
+
 msgctxt "libr5ui: Password control"
 msgid "Strong."
 msgstr ""
 
 msgctxt "libr5ui: User card"
 msgid "Standard"
+msgstr ""
+
+msgctxt "libr5ui: Admin lock"
+msgid "Shut down anyway"
 msgstr ""
 
 msgctxt "libr5ui: Admin lock"
@@ -65,12 +73,24 @@ msgctxt "libr5ui: Admin lock"
 msgid "Unlock..."
 msgstr ""
 
+msgctxt "libr5ui: Admin lock"
+msgid "Other people are signed in. Restarting will close their apps and lose any unsaved work:\n\n"
+msgstr ""
+
 msgctxt "libr5ui: Password control"
 msgid "Fair. Add another word or a number."
 msgstr ""
 
 msgctxt "libr5ui: Themes"
 msgid "Teal"
+msgstr ""
+
+msgctxt "libr5ui: Admin lock"
+msgid "Restart anyway"
+msgstr ""
+
+msgctxt "libr5ui: Admin lock"
+msgid "Other people are signed in. Shutting down will close their apps and lose any unsaved work:\n\n"
 msgstr ""
 
 msgctxt "libr5ui: Password control"
@@ -81,8 +101,16 @@ msgctxt "libr5ui: User card"
 msgid "No password"
 msgstr ""
 
+msgctxt "libr5ui: Admin lock"
+msgid "{0, plural, one{• %name% (# open app)} other{• %name% (# open apps)}}"
+msgstr ""
+
 msgctxt "libr5ui: Themes"
 msgid "Orange"
+msgstr ""
+
+msgctxt "libr5ui: Admin lock"
+msgid "Unlock…"
 msgstr ""
 
 msgctxt "libr5ui: Admin lock"
@@ -91,6 +119,10 @@ msgstr ""
 
 msgctxt "libr5ui: Sidebar"
 msgid "Tip:"
+msgstr ""
+
+msgctxt "libr5ui: Admin lock"
+msgid "Restart"
 msgstr ""
 
 msgctxt "libr5ui: Password control"
@@ -107,4 +139,8 @@ msgstr ""
 
 msgctxt "libr5ui: Admin lock"
 msgid "Cancel"
+msgstr ""
+
+msgctxt "libr5ui: Admin lock"
+msgid "Shut down"
 msgstr ""

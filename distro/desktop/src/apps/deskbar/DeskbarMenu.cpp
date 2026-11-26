@@ -425,7 +425,13 @@ B_TRANSLATE_MARK_VOID("About R5")
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-	struct passwd* sessionUser = getpwuid(getuid());
+	// Copy the name now: the getpwent() loop below reuses the static buffer
+	// of getpwuid(), which made the item read "Log out <last account>".
+	BString sessionName;
+	if (struct passwd* sessionUser = getpwuid(getuid())) {
+		if (sessionUser->pw_name != NULL)
+			sessionName = sessionUser->pw_name;
+	}
 	bool isGuest = r5_admin_is_system_guest(getuid());
 
 	if (isGuest) {
@@ -448,11 +454,60 @@ B_TRANSLATE_MARK_VOID("About R5")
 		item->SetTarget(be_app);
 		AddItem(item);
 
-		BString logoutLabel(B_TRANSLATE("Log out"));
-		if (sessionUser != NULL && sessionUser->pw_name != NULL
-			&& sessionUser->pw_name[0] != '\0') {
-			logoutLabel << ' ' << sessionUser->pw_name;
+		// Fast user switching: show "Switch user…" only when more than one
+		// listed account exists (matching count_listed_accounts(), not in the
+		// guest menu above).
+		int32 accountCount = 0;
+		setpwent();
+		while (struct passwd* pw = getpwent()) {
+			if (pw->pw_name == NULL || pw->pw_name[0] == '\0')
+				continue;
+			if (strcmp(pw->pw_name, "sshd") == 0
+				|| strcmp(pw->pw_name, "nobody") == 0
+				|| strcmp(pw->pw_name, "ftp") == 0
+				|| strcmp(pw->pw_name, "root") == 0
+				|| strcmp(pw->pw_name, "guest") == 0) {
+				continue;
+			}
+			if (pw->pw_dir == NULL
+				|| (strcmp(pw->pw_dir, "/boot/home") != 0
+					&& strncmp(pw->pw_dir, "/boot/home/", 11) != 0)) {
+				continue;
+			}
+			if (pw->pw_shell != NULL
+				&& (strcmp(pw->pw_shell, "false") == 0
+					|| strcmp(pw->pw_shell, "/bin/false") == 0
+					|| strcmp(pw->pw_shell, "/sbin/nologin") == 0)) {
+				continue;
+			}
+			if (pw->pw_passwd != NULL && pw->pw_passwd[0] == '!')
+				continue;
+			accountCount++;
 		}
+		endpwent();
+		struct stat guestSt;
+		if (lstat("/boot/system/settings/r5-guest-enabled", &guestSt) == 0
+			&& S_ISREG(guestSt.st_mode) && guestSt.st_uid == 0
+			&& (guestSt.st_mode & (S_IWGRP | S_IWOTH)) == 0) {
+			FILE* gf = fopen("/boot/system/settings/r5-guest-enabled", "r");
+			if (gf != NULL) {
+				char gbuf[8];
+				if (fgets(gbuf, sizeof(gbuf), gf) != NULL && gbuf[0] == '1')
+					accountCount++;
+				fclose(gf);
+			}
+		}
+		if (accountCount > 1) {
+			item = new BMenuItem(B_TRANSLATE("Switch user" B_UTF8_ELLIPSIS),
+				new BMessage(kSwitchUserSession));
+			item->SetEnabled(!dragging);
+			item->SetTarget(be_app);
+			AddItem(item);
+		}
+
+		BString logoutLabel(B_TRANSLATE("Log out"));
+		if (!sessionName.IsEmpty())
+			logoutLabel << ' ' << sessionName;
 		item = new BMenuItem(logoutLabel.String(),
 			new BMessage(kLogoutSession));
 		item->SetEnabled(!dragging);
@@ -568,6 +623,7 @@ TDeskbarMenu::ResetTargets()
 // SPDX-License-Identifier: MIT
 				case kLogoutSession:
 				case kLockSession:
+				case kSwitchUserSession:
 				case kOpenSharedFolder:
 				case kOpenSettings:
 // SPDX-SnippetEnd

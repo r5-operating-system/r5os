@@ -75,12 +75,14 @@ struct BUserCard::Data {
 	BBitmap*	avatar;
 	bool		selected;
 	bool		hover;
+	bool		signedIn;
 
 	Data()
 		:
 		avatar(NULL),
 		selected(false),
-		hover(false)
+		hover(false),
+		signedIn(false)
 	{
 	}
 
@@ -133,6 +135,7 @@ BUserCard::BUserCard(BMessage* archive)
 	if (archive->FindString("r5:role", &text) == B_OK)
 		fData->role = text;
 	archive->FindBool("r5:selected", &fData->selected);
+	archive->FindBool("r5:signedIn", &fData->signedIn);
 
 	BMessage avatarMessage;
 	if (archive->FindMessage("r5:avatar", &avatarMessage) == B_OK) {
@@ -174,6 +177,8 @@ BUserCard::Archive(BMessage* archive, bool deep) const
 		status = archive->AddString("r5:role", fData->role);
 	if (status == B_OK)
 		status = archive->AddBool("r5:selected", fData->selected);
+	if (status == B_OK)
+		status = archive->AddBool("r5:signedIn", fData->signedIn);
 	if (status == B_OK && fData->avatar != NULL) {
 		BMessage avatarMessage;
 		if (fData->avatar->Archive(&avatarMessage) == B_OK)
@@ -262,6 +267,23 @@ BUserCard::SetSelected(bool selected)
 }
 
 
+bool
+BUserCard::IsSignedIn() const
+{
+	return fData != NULL && fData->signedIn;
+}
+
+
+void
+BUserCard::SetSignedIn(bool signedIn)
+{
+	if (fData == NULL || fData->signedIn == signedIn)
+		return;
+	fData->signedIn = signedIn;
+	Invalidate();
+}
+
+
 void
 BUserCard::Draw(BRect updateRect)
 {
@@ -335,9 +357,16 @@ BUserCard::Draw(BRect updateRect)
 		font_height roleHeight;
 		plainFont.GetHeight(&roleHeight);
 
-		float gap = 2.0f * u;
+		float gap = fData->signedIn ? 1.0f * u : 2.0f * u;
+		BFont statusFont(be_plain_font);
+		statusFont.SetSize(10.0f * u);
+		font_height statusHeight;
+		statusFont.GetHeight(&statusHeight);
+
 		float blockHeight = nameHeight.ascent + nameHeight.descent
 			+ gap + roleHeight.ascent + roleHeight.descent;
+		if (fData->signedIn)
+			blockHeight += gap + statusHeight.ascent + statusHeight.descent;
 		float nameY = bounds.top + (bounds.Height() - blockHeight) / 2.0f
 			+ nameHeight.ascent;
 		DrawString(name.String(), BPoint(textLeft, nameY));
@@ -361,6 +390,25 @@ BUserCard::Draw(BRect updateRect)
 		plainFont.TruncateString(&role, B_TRUNCATE_END, maxWidth);
 		float roleY = nameY + nameHeight.descent + gap + roleHeight.ascent;
 		DrawString(role.String(), BPoint(textLeft, roleY));
+
+		if (fData->signedIn) {
+			float statusY = roleY + roleHeight.descent + gap
+				+ statusHeight.ascent;
+			float dotRadius = 3.0f * u;
+			float dotCenterY = statusY - (statusHeight.ascent * 0.35f);
+			rgb_color green = ui_color(B_SUCCESS_COLOR);
+			SetHighColor(green);
+			FillEllipse(BPoint(textLeft + dotRadius, dotCenterY),
+				dotRadius, dotRadius);
+
+			float labelLeft = textLeft + dotRadius * 2.0f + 4.0f * u;
+			BString signedInText(B_TRANSLATE("Signed in"));
+			statusFont.TruncateString(&signedInText, B_TRUNCATE_END,
+				bounds.right - padding - labelLeft);
+			SetFont(&statusFont);
+			SetHighColor(green);
+			DrawString(signedInText.String(), BPoint(labelLeft, statusY));
+		}
 	}
 }
 
