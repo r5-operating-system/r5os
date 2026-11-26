@@ -36,7 +36,8 @@ echo "release $tag  file $file  size $size  sha256 $sha"
 if gh release view "$tag" -R "$REPO" >/dev/null 2>&1; then
 	echo "release $tag exists; checking its asset"
 else
-	gh release create "$tag" -R "$REPO" --latest=false \
+	# A pre-release is never shown as Latest; the build fetches by tag.
+	gh release create "$tag" -R "$REPO" --prerelease --latest=false \
 		--title "$stem (x86_64)" \
 		--notes "R5-built package $file, used by the image build. sha256 $sha. Recipe and source offer: docs/LICENSING.md and distro/packages/README.md." \
 		"$src"
