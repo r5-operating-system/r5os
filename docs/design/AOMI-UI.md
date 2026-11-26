@@ -75,7 +75,7 @@ The view is a `BView` and draws itself, on the GPU where the engine can (`docs/d
 |---|---|---|
 | Load | `LoadURL(url)`, `LoadHTML(html, baseURL)` for local pages such as `aomi:newtab`, `Reload(bypassCache)`, `StopLoading()` | load started, committed (the new address), finished, failed (code and text) |
 | Navigation | `GoBack()`, `GoForward()`, the back and forward list for the long-press menu | can go back, can go forward, is loading (three bools, as WebPositive's `NavigationCapabilitiesChanged`) |
-| Page | `URL()`, `Title()`, `SetZoom(factor, textOnly)`, `Find(text, forward, matchCase)`, `SavePage(path)`, `ViewSource()`, `Print()` | title changed, address changed, favicon (a `BBitmap`), hovered link, security state (secure, not secure, certificate error with details) |
+| Page | `URL()`, `Title()`, `SetZoom(factor, textOnly)`, `Find(text, forward, matchCase)`, `SavePage(path)`, `ViewSource()`, `Print()`, `Protocol(protocol)` | title changed, address changed, favicon (a `BBitmap`), hovered link, security state (secure, not secure, certificate error with details), the protocol of the main document (`"h2"`, `"http/1.1"`, `"h3"`, or `B_NOT_SUPPORTED`) |
 | Progress | | progress from 0 to 1 |
 | Input | nothing: the view is a `BView` and takes keys, mouse, touch, scrolling and `B_INPUT_METHOD_EVENT` itself, and uses `be_clipboard` for copy and paste | focus wanted, cursor shape, full screen wanted or left |
 | New windows | | new window wanted (address, foreground or not, as WebPositive's `primaryAction`); the window answers with the view for the new tab. Close wanted |
@@ -84,3 +84,7 @@ The view is a `BView` and draws itself, on the GPU where the engine can (`docs/d
 | Session | created with a `BWebSession` (cookies, cache, storage, a private flag); private windows get a session that keeps nothing on disk | |
 
 That list covers what WebPositive uses today from `BWebView` and `BWebPage` (`docs/AOMI.md`) and what the Servo `WebViewDelegate` and a GeckoView-style bridge offer (`docs/design/LADYBIRD-PORT.md`). Something one engine cannot do (for example `SavePage` as MHTML) returns `B_NOT_SUPPORTED`, and the window greys out that item. A new call goes at the end; a call that shipped does not change.
+
+## The header is the contract
+
+`distro/apps/aomi/WebContentView.h` is the contract for every engine. The class is `BWebContentView`. The message codes in that header are the ones in the table above, including `Protocol()` on the page (`"h2"`, `"http/1.1"`, `"h3"`, or `B_NOT_SUPPORTED`). WebKit fills it with `BWebKitContentView`, a `BWebContentView` around Haiku's `BWebView`. The window creates that view only through `create_aomi_content_view()`. The next engine (`BServoView`) is another branch of that function. The window does not include WebKit or Servo headers.

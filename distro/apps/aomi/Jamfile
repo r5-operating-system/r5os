@@ -1,0 +1,41 @@
+# SPDX-FileCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+
+SubDir HAIKU_TOP src apps aomi ;
+
+local architectureObject ;
+for architectureObject in [ MultiArchSubDirSetup ] {
+	on $(architectureObject) {
+		if ! [ FIsBuildFeatureEnabled webkit ] {
+			continue ;
+		}
+
+		UseBuildFeatureHeaders webkit ;
+		UsePrivateHeaders netservices ;
+
+		Application Aomi :
+			AomiApp.cpp
+			WebContentView.cpp
+			WebKitContentView.cpp
+			:
+			bnetapi
+			[ MultiArchDefaultGristFiles libnetservices.a ]
+			[ BuildFeatureAttribute webkit : libraries ]
+			[ TargetLibstdc++ ]
+			localestub
+			be network tracker
+			:
+			Aomi.rdef
+			;
+
+		DoCatalogs Aomi :
+			application/x-vnd.R5-Aomi
+			:
+			AomiApp.cpp
+			WebContentView.cpp
+			WebKitContentView.cpp
+			;
+
+		break ;
+	}
+}
