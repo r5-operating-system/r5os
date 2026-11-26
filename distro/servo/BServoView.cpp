@@ -555,8 +555,9 @@ r5_servo_input_message(r5_servo* engine, const BMessage* message, float x,
 {
 	if (engine == NULL || message == NULL)
 		return B_BAD_VALUE;
-	BPoint where(x, y);
-	message->FindPoint("be:view_where", &where);
+	// GetPoint(): FindPoint() would set (0, 0) when the field is missing (a
+	// wheel message has no be:view_where).
+	BPoint where = message->GetPoint("be:view_where", BPoint(x, y));
 	switch (message->what) {
 		case B_MOUSE_DOWN:
 		case B_MOUSE_UP:

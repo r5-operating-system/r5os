@@ -1209,6 +1209,12 @@ AomiWindow::_AddTab(const char* url, bool select, BWebContentView* adopt)
 	static_cast<PageHost*>(fPages)->Fit();
 	if (url != NULL && url[0] != '\0' && adopt == NULL)
 		_LoadOn(index, url);
+	{
+		BString line;
+		line.SetToFormat("tabs add %d%s", (int)index,
+			adopt != NULL ? " (opened by a page)" : "");
+		_Log(line.String());
+	}
 	if (select)
 		_Select(index);
 	fChrome->Invalidate();
@@ -1315,6 +1321,11 @@ AomiWindow::_Select(int32 index)
 	if (index < 0 || index >= (int32)fTabs.size())
 		return;
 	fActive = index;
+	{
+		BString line;
+		line.SetToFormat("tabs select %d of %d", (int)index, (int)fTabs.size());
+		_Log(line.String());
+	}
 	bool ntp = fTabs[index].url.Length() == 0
 		|| fTabs[index].url == "aomi:newtab";
 	for (int32 i = 0; i < (int32)fTabs.size(); i++) {
@@ -1347,6 +1358,12 @@ AomiWindow::_Close(int32 index)
 {
 	if (index < 0 || index >= (int32)fTabs.size())
 		return;
+	{
+		BString line;
+		line.SetToFormat("tabs close %d of %d (active %d)", (int)index,
+			(int)fTabs.size(), (int)fActive);
+		_Log(line.String());
+	}
 	if (fTabs.size() == 1) {
 		PostMessage(B_QUIT_REQUESTED);
 		return;
@@ -1420,8 +1437,9 @@ AomiWindow::HandleEngine(BMessage* message, int32 tab)
 	if (message->what == AOMI_NEW_WINDOW) {
 		BWebContentView* view = NULL;
 		message->FindPointer("view", reinterpret_cast<void**>(&view));
-		bool primary = true;
-		message->FindBool("primary", &primary);
+		// Get*(): Haiku's Find*() sets the value to 0 when the field is
+		// missing, so a default before it does not survive.
+		bool primary = message->GetBool("primary", true);
 		BString url;
 		message->FindString("url", &url);
 		if (view != NULL)
@@ -1452,7 +1470,7 @@ AomiWindow::MessageReceived(BMessage* message)
 		if (tab < 0)
 			return;
 	} else {
-		message->FindInt32("tab", &tab);
+		tab = message->GetInt32("tab", fActive);
 	}
 	bool validTab = tab >= 0 && tab < (int32)fTabs.size();
 	switch (message->what) {
@@ -1623,8 +1641,12 @@ AomiWindow::MessageReceived(BMessage* message)
 			break;
 		}
 		case AOMI_CLOSE_WANTED:
-			PostMessage(B_QUIT_REQUESTED);
+			// A page called window.close(): that tab closes, not the window
+			// (the window closes with its last tab).
+			if (validTab)
+				_Close(tab);
 			break;
+
 		case MSG_GO:
 		{
 			BString url = aomi_smart_url(
@@ -1682,9 +1704,9 @@ AomiWindow::MessageReceived(BMessage* message)
 		}
 		case MSG_CLOSE_TAB:
 		{
-			int32 index = fActive;
-			message->FindInt32("tab", &index);
-			_Close(index);
+			// No "tab" (Alt+W, the menu): the active tab. FindInt32() would
+			// have set 0 for a missing field and always closed the first tab.
+			_Close(message->GetInt32("tab", fActive));
 			break;
 		}
 		case MSG_NEW_WINDOW:
@@ -1834,8 +1856,8 @@ AomiWindow::MessageReceived(BMessage* message)
 		case MSG_OPEN_URL:
 		{
 			BString url;
-			bool newTab = true;
-			message->FindBool("newTab", &newTab);
+			bool newTab = message->GetBool("newTab", true);
+
 			if (message->FindString("url", &url) == B_OK && url.Length() > 0)
 				OpenURL(url.String(), newTab);
 			break;
