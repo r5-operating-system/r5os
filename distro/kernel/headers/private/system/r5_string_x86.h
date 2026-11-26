@@ -26,9 +26,6 @@
 #include <r5_x86_cpu.h>
 
 
-#define R5_STR_MODE \
-	(_SIDD_UBYTE_OPS | _SIDD_CMP_EQUAL_EACH | _SIDD_LEAST_SIGNIFICANT)
-
 /* Bytes scanned with the inline SSE path before the long-string pointer. */
 #define R5_STR_INLINE 32
 
@@ -37,14 +34,6 @@ static inline unsigned
 r5_page_room(const void* pointer)
 {
 	return (unsigned)(4096u - ((uintptr_t)pointer & 4095u));
-}
-
-
-/* Explicit lengths, so a zero byte is a real compare and not an empty string. */
-static inline int
-r5_index16(__m128i needle, __m128i chunk)
-{
-	return _mm_cmpestri(needle, 16, chunk, 16, R5_STR_MODE);
 }
 
 
@@ -58,25 +47,15 @@ r5_load16(const void* pointer)
 }
 
 
-static inline __m128i
-r5_hide_prefix(__m128i chunk, unsigned skip, int fill)
-{
-	if (skip == 0)
-		return chunk;
-	__m128i index = _mm_setr_epi8(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
-		13, 14, 15);
-	__m128i keep = _mm_cmpgt_epi8(index, _mm_set1_epi8((char)(skip - 1)));
-	return _mm_blendv_epi8(_mm_set1_epi8((char)fill), chunk, keep);
-}
-
-
 static inline int
 r5_zero_in_block(const char* pointer, unsigned skip)
 {
 	__m128i chunk = _mm_load_si128(
 		(const __m128i*)((uintptr_t)pointer & ~(uintptr_t)15));
-	chunk = r5_hide_prefix(chunk, skip, 0x01);
-	return r5_index16(_mm_setzero_si128(), chunk);
+	unsigned mask = (unsigned)_mm_movemask_epi8(
+		_mm_cmpeq_epi8(chunk, _mm_setzero_si128()));
+	mask &= (~0u << skip) & 0xffffu;
+	return mask != 0 ? __builtin_ctz(mask) : 16;
 }
 
 

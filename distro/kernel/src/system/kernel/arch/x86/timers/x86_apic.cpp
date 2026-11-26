@@ -35,6 +35,35 @@ static uint32 sApicTimerConfigBase = 0;
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 static bool sUseTscDeadline = false;
+static uint64 sTimerFreq = 0;
+static uint64 sTimerTicksPerUs = 0;
+static uint64 sTimerFracScale = 0;
+static const uint64 kMaxFastTimeoutUs = 18446744073709ULL; // floor(2^64 / 10^6)
+
+
+static void
+init_timer_scale(uint64 freq)
+{
+	sTimerFreq = freq;
+	sTimerTicksPerUs = freq / 1000000ULL;
+	uint64 rem = freq % 1000000ULL;
+	// ceil(rem * 2^64 / 1000000): exact to the tick for timeout <= 2^64 / 10^6 us.
+	sTimerFracScale = (uint64)((((__uint128_t)rem << 64) + 999999ULL)
+		/ 1000000ULL);
+}
+
+
+static inline uint64
+timeout_to_ticks(uint64 relativeTimeout)
+{
+	if (__builtin_expect(relativeTimeout <= kMaxFastTimeoutUs, 1)) {
+		return relativeTimeout * sTimerTicksPerUs
+			+ (uint64)(((__uint128_t)relativeTimeout * sTimerFracScale) >> 64);
+	}
+	uint64 secs = relativeTimeout / 1000000ULL;
+	uint64 remUs = relativeTimeout % 1000000ULL;
+	return secs * sTimerFreq + (remUs * sTimerFreq) / 1000000ULL;
+}
 
 #ifndef IA32_FEATURE_EXT_TSC_DEADLINE
 #define IA32_FEATURE_EXT_TSC_DEADLINE (1 << 24)
@@ -103,7 +132,7 @@ apic_timer_set_hardware_timer(bigtime_t relativeTimeout)
 		relativeTimeout = 1;
 
 	if (sUseTscDeadline) {
-		uint64 ticks = ((__uint128_t)relativeTimeout * gCPUClockSpeed) / 1000000;
+		uint64 ticks = timeout_to_ticks((uint64)relativeTimeout);
 		if (ticks == 0)
 			ticks = 1;
 		uint64 deadline = read_tsc() + ticks;
@@ -115,13 +144,22 @@ apic_timer_set_hardware_timer(bigtime_t relativeTimeout)
 		return B_OK;
 	}
 
-	__uint128_t ticks128 = ((__uint128_t)relativeTimeout * sApicTicsPerSec) / 1000000;
-	if (ticks128 == 0)
-		ticks128 = 1;
-	if (ticks128 > UINT32_MAX)
-		ticks128 = UINT32_MAX;
+	uint64 ticks;
+	if (__builtin_expect((uint64)relativeTimeout <= kMaxFastTimeoutUs, 1)) {
+		ticks = timeout_to_ticks((uint64)relativeTimeout);
+	} else {
+		uint64 secs = (uint64)relativeTimeout / 1000000ULL;
+		uint64 remUs = (uint64)relativeTimeout % 1000000ULL;
+		__uint128_t total = (__uint128_t)secs * sTimerFreq
+			+ (remUs * sTimerFreq) / 1000000ULL;
+		ticks = total > UINT32_MAX ? UINT32_MAX : (uint64)total;
+	}
+	if (ticks == 0)
+		ticks = 1;
+	if (ticks > UINT32_MAX)
+		ticks = UINT32_MAX;
 
-	apic_set_lvt_initial_timer_count((uint32)ticks128);
+	apic_set_lvt_initial_timer_count((uint32)ticks);
 	return B_OK;
 }
 
@@ -218,6 +256,7 @@ apic_timer_init(struct kernel_args *args)
 		&& gCPUClockSpeed > 0 && !tsc_deadline_has_errata();
 	if (!sUseTscDeadline)
 		sApicTicsPerSec = determine_apic_timer_conversion_factor();
+	init_timer_scale(sUseTscDeadline ? gCPUClockSpeed : sApicTicsPerSec);
 
 	reserve_io_interrupt_vectors(1, 0xfb - ARCH_INTERRUPT_BASE,
 		INTERRUPT_TYPE_LOCAL_IRQ);

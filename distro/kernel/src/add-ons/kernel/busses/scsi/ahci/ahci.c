@@ -279,7 +279,9 @@ ahci_register_device(device_node *parent)
 		size_t bar5Size = info.u.h0.base_register_sizes[5];
 		if ((info.u.h0.base_register_flags[5] & PCI_address_type)
 				== PCI_address_type_64) {
-			bar5 |= (phys_addr_t)info.u.h0.base_registers[6] << 32;
+			/* AHCI ABAR (BAR5) is a 32-bit BAR; base_registers has 6 entries
+			 * (0..5), so do not read past the array. */
+			bar5 = 0;
 		}
 		if (bar5 != 0 && bar5Size >= sizeof(uint32)) {
 			void *mapped = NULL;

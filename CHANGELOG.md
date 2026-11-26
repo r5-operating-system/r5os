@@ -8,6 +8,20 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-26 - libroot and kernel: malloc lock padding, AVX2 string fixes, APIC scale, and leak/OOB fixes
+
+- Problem: `sMallocMutexes` (`wrapper.c`) packed four 16-byte locks per 64-byte cache line; `memcmp_avx2` and `strcmp_avx2` abandoned AVX2 for SSE at the first 4 KiB page edge; `r5_string_x86.h`, `strchrnul.c`, and `memchr.c` used `_mm_cmpestri`; `x86_apic.cpp` ran 128-bit division (`__udivti3`) on every timer re-arm; `efi_arch_init()` leaked `sFPUBuffer` on three early error returns; `usb_disk.cpp` leaked `DMAResource` when `Init()` failed; `ahci.c` read `base_registers[6]` past the 6-element array when checking BAR5.
+- Change:
+  - `distro/kernel/src/system/libroot/posix/malloc/openbsd/wrapper.c`: padded each `sMallocMutexes` slot to 64 bytes (`__attribute__((aligned(64)))`).
+  - `distro/kernel/src/system/libroot/posix/string/{memcmp,strcmp}.c`: fall back to SSE/bytes only for the page-crossing chunk, then resume AVX2.
+  - `distro/kernel/headers/private/system/r5_string_x86.h`, `strchrnul.c`, `memchr.c`: replaced `_mm_cmpestri` and `r5_hide_prefix` with `_mm_cmpeq_epi8` + `_mm_movemask_epi8` + `__builtin_ctz`; dropped redundant page-room check on aligned 32-byte loads in `memchr_avx2`.
+  - `distro/kernel/src/system/kernel/arch/x86/timers/x86_apic.cpp`: precomputed `sTimerTicksPerUs` and 64-bit fractional `sTimerFracScale` at boot so `apic_timer_set_hardware_timer()` matches `((__uint128_t)timeout * freq) / 1000000` to the tick without `__udivti3`.
+  - `distro/kernel/src/add-ons/kernel/generic/efi/arch_x86_64.cpp`: called `efi_arch_uninit()` on early failure returns in `efi_arch_init()`.
+  - `distro/kernel/src/add-ons/kernel/drivers/disk/usb/usb_disk/usb_disk.cpp`: checked `new(std::nothrow) DMAResource` and deleted it when `Init()` fails.
+  - `distro/kernel/src/add-ons/kernel/busses/scsi/ahci/ahci.c`: stopped reading `base_registers[6]` past the 6-entry array.
+  - Added user-space test `scripts/test-r5-string-p1.c` (`scripts/run-test-string-p1.sh`): verifies `memcmp`, `strcmp`, `strlen`, `strchrnul`, and `memchr` against plain byte loops across lengths 0..4200 and offsets 0..63 against a `PROT_NONE` guard page, plus APIC timer scale exactness across 7 frequencies.
+- Limits: Host string/APIC tests pass; AMD64 image build and QEMU boot verified. Hardware stick test pending merge. No speed-up claimed without measurement.
+
 ## 2026-11-26 - GPU kernel driver: cache gpu_render_enabled and recycle VRAM page-table pages
 
 - Problem: `gpu_render_enabled()` (`r5_gpu_core.cpp`) called `load_driver_settings("radeon_hd")` on every GPU ioctl. Per-file VRAM page-table pages allocated by `r5_gfx9_file_vm_init()` were never returned when a file closed (`r5_file_tree_free()`) or on init failure, and an overflow of `sDefer[kMaxBo]` dropped freed VRAM offsets permanently.

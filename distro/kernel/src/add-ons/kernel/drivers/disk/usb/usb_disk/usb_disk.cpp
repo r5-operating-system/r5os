@@ -999,10 +999,18 @@ usb_disk_update_capacity(device_lun* lun)
 		restrictions.high_address = UINT32_MAX;
 		restrictions.max_transfer_size = MAX_IO_BLOCKS * lun->block_size;
 
-		DMAResource* dmaResource = new DMAResource;
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		DMAResource* dmaResource = new(std::nothrow) DMAResource;
+		if (dmaResource == NULL)
+			return B_NO_MEMORY;
 		result = dmaResource->Init(restrictions, lun->block_size, 1, 1);
-		if (result != B_OK)
+		if (result != B_OK) {
+			delete dmaResource;
 			return result;
+		}
+		// SPDX-SnippetEnd
 
 		lun->io_scheduler = new IOSchedulerSimple(dmaResource);
 		result = lun->io_scheduler->Init(DRIVER_NAME);

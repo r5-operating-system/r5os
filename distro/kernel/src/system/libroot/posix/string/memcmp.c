@@ -114,7 +114,19 @@ __attribute__((target("avx2")))
 static int
 memcmp_avx2(const unsigned char *a, const unsigned char *b, size_t count)
 {
-	while (count >= 32 && r5_page_room(a) >= 32 && r5_page_room(b) >= 32) {
+	while (count >= 32) {
+		unsigned roomA = r5_page_room(a);
+		unsigned roomB = r5_page_room(b);
+		unsigned room = roomA < roomB ? roomA : roomB;
+		if (room < 32) {
+			int diff = memcmp_sse(a, b, room);
+			if (diff != 0)
+				return diff;
+			a += room;
+			b += room;
+			count -= room;
+			continue;
+		}
 		__m256i va = _mm256_loadu_si256((const __m256i*)a);
 		__m256i vb = _mm256_loadu_si256((const __m256i*)b);
 		unsigned equal = (unsigned)_mm256_movemask_epi8(
