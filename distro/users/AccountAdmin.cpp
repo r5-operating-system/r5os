@@ -574,7 +574,7 @@ ensure_default_wallpaper(const char* home)
 	background.AddInt32("be:bgndimginfomode", 2);
 	background.AddInt32("be:bgndimginfoworkspaces", -1);
 	background.AddPoint("be:bgndimginfooffset", BPoint(0, 0));
-	background.AddBool("be:bgndimginfoerasetext", false);
+	background.AddBool("be:bgndimginfoerasetext", true);
 	background.AddInt32("be:bgndimginfoset", 0);
 
 	ssize_t size = background.FlattenedSize();
