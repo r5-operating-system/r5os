@@ -43,7 +43,7 @@
 #define B_TRANSLATION_CONTEXT "Aomi"
 
 
-// Matches distro/servo/r5_servo_abi.h
+// Matches r5_servo_abi.h in servo-haiku (distro/servo/servo-haiku.ref)
 enum {
 	R5_EV_LOAD_STARTED		= 1,
 	R5_EV_LOAD_COMMITTED	= 2,
@@ -1189,7 +1189,7 @@ BServoContentView::_Start(const char* document, bool isHTML)
 	request.AddInt32("width", width < 16 ? 16 : width);
 	request.AddInt32("height", height < 16 ? 16 : height);
 	// libr5servo makes a tab's GL storage this large once; a view is never
-	// larger (surface_size() in distro/servo/engine/src/lib.rs).
+	// larger (surface_size() in servo-haiku engine/src/lib.rs).
 	request.AddInt32("maxWidth", (int32)frame.Width() + 1);
 	request.AddInt32("maxHeight", (int32)frame.Height() + 1);
 	request.AddBool("visible", !hidden_in_window(this));

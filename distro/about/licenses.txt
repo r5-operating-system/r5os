@@ -65,7 +65,7 @@ License: CC0-1.0
 Source: https://monocypher.org
 
 # Servo
-Web engine for Aomi (libr5servo.so): Servo 0.8.0, SpiderMonkey 153 (mozjs), WebRender 0.70.1, Stylo 0.23.0, and their Rust dependencies. Source offer: pinned versions and R5 patches are in distro/servo/ in the R5OS repository.
+Web engine for Aomi (libr5servo.so): Servo 0.8.0, SpiderMonkey 153 (mozjs), WebRender 0.70.1, Stylo 0.23.0, and their Rust dependencies. Source offer: pinned versions, the changes and the build script are in github.com/r5-operating-system/servo-haiku.
 
 License: MPL-2.0, MIT, Apache-2.0, BSD-3-Clause, BSD-2-Clause, ISC, Zlib, Unicode-3.0
 Source: https://servo.org
