@@ -151,7 +151,8 @@ BScreenArrangement::BScreenArrangement(BMessage* archive)
 		if (stored.FindString("name", &name) == B_OK)
 			tile.name = name;
 		stored.FindBool("main", &tile.main);
-		stored.FindBool("enabled", &tile.enabled);
+		// FindBool() sets false before it looks; a screen is on by default.
+		tile.enabled = stored.GetBool("enabled", tile.enabled);
 		fData->tiles.push_back(tile);
 		stored.MakeEmpty();
 	}

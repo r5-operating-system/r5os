@@ -170,8 +170,7 @@ check_server()
 		streaming.AddBool("streaming", i == 0);
 		reply.MakeEmpty();
 		status = r5_admin_send(server, &streaming, &reply, 2000000);
-		int32 result = B_ERROR;
-		reply.FindInt32("status", &result);
+		int32 result = reply.GetInt32("status", B_ERROR);
 		check(status == B_OK && result == B_OK, i == 0
 			? "server: audio streaming on (scans paused)"
 			: "server: audio streaming off");

@@ -377,15 +377,22 @@ NetworkShares::_SetShare(const BMessage& message, int32& _id)
 	}
 
 	Share changed = previous;
-	message.FindString("name", &changed.name);
-	message.FindString("server", &changed.server);
-	message.FindString("share", &changed.share);
-	message.FindString("path", &changed.path);
-	message.FindString("user", &changed.user);
-	message.FindString("domain", &changed.domain);
-	message.FindBool("mount at startup", &changed.mountAtStartup);
-	message.FindBool("read only", &changed.readOnly);
-	message.FindBool("encrypt", &changed.encrypt);
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// A field that is not in the message keeps its value. Find*() would
+	// clear it first.
+	changed.name = message.GetString("name", changed.name);
+	changed.server = message.GetString("server", changed.server);
+	changed.share = message.GetString("share", changed.share);
+	changed.path = message.GetString("path", changed.path);
+	changed.user = message.GetString("user", changed.user);
+	changed.domain = message.GetString("domain", changed.domain);
+	changed.mountAtStartup = message.GetBool("mount at startup",
+		changed.mountAtStartup);
+	changed.readOnly = message.GetBool("read only", changed.readOnly);
+	changed.encrypt = message.GetBool("encrypt", changed.encrypt);
+	// SPDX-SnippetEnd
 
 	changed.server.Trim();
 	changed.share.Trim();
@@ -577,16 +584,23 @@ NetworkShares::_ReadSettings()
 		if (share == NULL)
 			return B_NO_MEMORY;
 
-		message.FindInt32("id", &share->id);
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// A field that is not in the file keeps the Share() default (no id
+		// yet, mounted at startup). Find*() would set 0 or false first.
+		share->id = message.GetInt32("id", share->id);
 		message.FindString("name", &share->name);
 		message.FindString("server", &share->server);
 		message.FindString("share", &share->share);
 		message.FindString("path", &share->path);
 		message.FindString("user", &share->user);
 		message.FindString("domain", &share->domain);
-		message.FindBool("mount_at_startup", &share->mountAtStartup);
-		message.FindBool("read_only", &share->readOnly);
-		message.FindBool("encrypt", &share->encrypt);
+		share->mountAtStartup = message.GetBool("mount_at_startup",
+			share->mountAtStartup);
+		share->readOnly = message.GetBool("read_only", share->readOnly);
+		share->encrypt = message.GetBool("encrypt", share->encrypt);
+		// SPDX-SnippetEnd
 
 		// the file can be written by hand, and then there is none
 		if (share->id < 0 || _ShareFor(share->id) != NULL)

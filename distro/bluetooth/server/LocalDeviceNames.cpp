@@ -407,8 +407,8 @@ LocalDeviceImpl::_R5LogInquiryReply(const BMessage& reply, status_t sent)
 
 		const char* name = NULL;
 		reply.FindString("friendly_name", i, &name);
-		int8 rssi = HCI_RSSI_INVALID;
-		reply.FindInt8("rssi", i, &rssi);
+		// A plain inquiry result has no rssi; FindInt8() would make it 0.
+		int8 rssi = reply.GetInt8("rssi", i, HCI_RSSI_INVALID);
 		uint32 deviceClass = 0;
 		const void* classData;
 		if (reply.FindData("dev_class", B_ANY_TYPE, i, &classData, &size)

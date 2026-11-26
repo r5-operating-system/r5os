@@ -417,10 +417,13 @@ read_records(BNode& node, std::vector<BgRecord>& records)
 		record.y = 0;
 		record.outline = true;
 		record.imageSet = 0;
-		stored.FindInt32(kBgWorkspaces, index, &record.workspace);
-		stored.FindInt32(kBgMode, index, &record.mode);
-		stored.FindBool(kBgOutline, index, &record.outline);
-		stored.FindInt32(kBgSet, index, &record.imageSet);
+		// Find*() sets the value to 0 before it looks: a file without a
+		// field would put the picture on no workspace.
+		record.workspace = stored.GetInt32(kBgWorkspaces, index,
+			record.workspace);
+		record.mode = stored.GetInt32(kBgMode, index, record.mode);
+		record.outline = stored.GetBool(kBgOutline, index, record.outline);
+		record.imageSet = stored.GetInt32(kBgSet, index, record.imageSet);
 		BPoint offset;
 		if (stored.FindPoint(kBgOffset, index, &offset) == B_OK) {
 			record.x = (int32)offset.x;

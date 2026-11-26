@@ -692,9 +692,7 @@ public:
 	virtual void MessageReceived(BMessage* message)
 	{
 		if (message->what == 'csel') {
-			int32 index = -2;
-			message->FindInt32("index", &index);
-			fLast = index;
+			fLast = message->GetInt32("index", -2);
 			atomic_add(&fCount, 1);
 			return;
 		}
