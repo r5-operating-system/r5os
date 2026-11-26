@@ -83,6 +83,8 @@ struct exfat_node {
 	uint8		secondary_count;
 	uint8		primary[32];
 	uint32		previous_cluster;
+	uint32		last_cluster;
+	uint32		last_index;
 	bool		check_cluster;
 	bool		detached;
 	bool		root;

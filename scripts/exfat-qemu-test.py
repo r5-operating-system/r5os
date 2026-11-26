@@ -64,6 +64,53 @@ def qmp_key(path):
     return call
 
 
+def check_fsck_output(returncode, stdout, stderr):
+    """Verify fsck.exfat -n output only reports dirty state and the planted CritSec set.
+
+    seed() plants one 5-entry set (0x85, 0xC0, 0xC1 "bad", 0xC2, 0xE0) in
+    /CritSec. exfatprogs fsck.exfat -n reports both the 0xc2 entry and the
+    trailing 0xe0 entry, plus two generic summary lines ("corrupted. directories"
+    and "files corrupted 1, files fixed 0"). Those summary lines are forgiven
+    only when both planted /CritSec lines appear exactly once; if either is
+    missing, or if any other error or a second corrupted file appears, fail.
+    """
+    blob = stdout + "\n" + stderr
+    lines = [line.strip() for line in blob.splitlines() if line.strip()]
+    c2_hits = 0
+    e0_hits = 0
+    summary_corrupted = 0
+    summary_counts = 0
+    unexpected = []
+    for line in lines:
+        lower = line.lower()
+        if ("dirty" in lower or "not unmounted" in lower
+                or lower.startswith("exfatprogs")):
+            continue
+        if "/critsec:" in lower and "unknown entry type 0xc2" in lower:
+            c2_hits += 1
+            continue
+        if "/critsec:" in lower and "unknown entry type 0xe0" in lower:
+            e0_hits += 1
+            continue
+        if lower.endswith("files corrupted 1, files fixed 0"):
+            summary_counts += 1
+            continue
+        if ": corrupted." in lower and "directories" in lower:
+            summary_corrupted += 1
+            continue
+        unexpected.append(line)
+
+    if c2_hits != 1 or e0_hits != 1:
+        return (False,
+                "FAIL fsck: expected planted /CritSec 0xc2 and 0xe0 lines "
+                "(saw c2=%d, e0=%d)" % (c2_hits, e0_hits))
+    if not lines or unexpected or summary_counts > 1 or summary_corrupted > 1:
+        return (False, "FAIL fsck %d" % returncode)
+    if returncode != 0:
+        return (True, "fsck dirty/planted-critsec only %d" % returncode)
+    return (True, "fsck clean")
+
+
 def main():
     if len(sys.argv) != 3:
         print("usage: exfat-qemu-test.py IMAGE OUT")
@@ -246,21 +293,10 @@ def main():
     check = subprocess.run([fsck, "-n", card], capture_output=True, text=True)
     print(check.stdout)
     print(check.stderr)
-    if check.returncode != 0:
-        blob = check.stdout + "\n" + check.stderr
-        lines = [line.strip() for line in blob.splitlines() if line.strip()]
-        dirty = True
-        for line in lines:
-            lower = line.lower()
-            if ("dirty" in lower or "not unmounted" in lower
-                    or lower.startswith("exfatprogs")):
-                continue
-            dirty = False
-            break
-        if not lines or not dirty:
-            print("FAIL fsck", check.returncode)
-            return 1
-        print("fsck dirty only", check.returncode)
+    ok, note = check_fsck_output(check.returncode, check.stdout, check.stderr)
+    print(note)
+    if not ok:
+        return 1
     print("exfat-qemu-test: clean")
     return 0
 

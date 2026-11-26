@@ -185,21 +185,10 @@ fat_set(work* job, uint32 cluster, uint32 value)
 	return write_block(job, block);
 }
 
-static status_t
-flush_fat(work* job, uint32 first, uint32 last)
-{
-	if (last < first)
-		return B_BAD_DATA;
-	uint32 per = job->disk->block_size / 4;
-	uint64 start = job->disk->fat_block + (uint64)first / per;
-	uint64 end = job->disk->fat_block + (uint64)last / per;
-	return flush_blocks(job, start, (uint32)(end - start + 1));
-}
-
 static bool
 cluster_ok(const exfat_disk* disk, uint32 cluster)
 {
-	return cluster >= 2 && cluster <= disk->cluster_count + 1;
+	return cluster >= 2 && (uint64)cluster <= (uint64)disk->cluster_count + 1;
 }
 
 static bool
@@ -269,9 +258,6 @@ bitmap_flush(work* job, uint32 firstCluster, uint32 count)
 				return status;
 			memcpy(job->block + into, disk->bitmap + byte + done, piece);
 			status = write_block(job, block);
-			if (status != B_OK)
-				return status;
-			status = flush_blocks(job, block, 1);
 			if (status != B_OK)
 				return status;
 			done += piece;
@@ -446,39 +432,79 @@ bitmap_give(work* job, uint32 start, uint32 count)
 	return bitmap_flush(job, start, count);
 }
 
+static uint32
+bitmap_next_free(const exfat_disk* disk, uint32 from, uint32 limit)
+{
+	if (from < 2 || from > limit)
+		return limit + 1;
+	uint32 bit = from - 2;
+	uint32 end = limit - 2;
+	while (bit <= end && (bit & 7) != 0) {
+		if ((disk->bitmap[bit / 8] & (uint8)(1u << (bit & 7))) == 0)
+			return bit + 2;
+		bit++;
+	}
+	if (bit > end)
+		return limit + 1;
+	uint32 byte = bit / 8;
+	uint32 endByte = end / 8;
+	while (byte + 8 <= endByte) {
+		uint64 word;
+		memcpy(&word, disk->bitmap + byte, sizeof(word));
+		if (word != ~(uint64)0)
+			break;
+		byte += 8;
+	}
+	while (byte <= endByte && disk->bitmap[byte] == 0xff)
+		byte++;
+	if (byte > endByte)
+		return limit + 1;
+	uint32 candidate = byte * 8;
+	for (uint32 sub = 0; sub < 8 && candidate + sub <= end; sub++) {
+		if ((disk->bitmap[byte] & (uint8)(1u << sub)) == 0)
+			return candidate + sub + 2;
+	}
+	return limit + 1;
+}
+
 static status_t
 alloc_one(work* job, uint32* cluster)
 {
 	exfat_disk* disk = job->disk;
 	if (disk->free_clusters == 0)
 		return B_DEVICE_FULL;
-	uint32 count = disk->cluster_count;
-	uint32 hint = disk->hint < 2 ? 2 : disk->hint;
-	for (uint32 step = 0; step < count; step++) {
-		uint32 candidate = 2 + (uint32)(((uint64)(hint - 2) + step) % count);
-		if (bitmap_test(disk, candidate))
+	uint32 last = disk->cluster_count + 1;
+	uint32 hint = (disk->hint >= 2 && disk->hint <= last) ? disk->hint : 2;
+	for (int pass = 0; pass < 2; pass++) {
+		uint32 cursor = pass == 0 ? hint : 2;
+		uint32 end = pass == 0 ? last : (hint > 2 ? hint - 1 : 0);
+		if (end < cursor)
 			continue;
-		uint32 fat;
-		status_t status = fat_get(job, candidate, &fat);
-		if (status != B_OK)
-			return status;
-		if (fat == kClusterBad) {
-			bitmap_assign(disk, candidate, true);
-			if (disk->free_clusters > 0)
-				disk->free_clusters--;
-			status = bitmap_flush(job, candidate, 1);
+		while (cursor <= end) {
+			uint32 candidate = bitmap_next_free(disk, cursor, end);
+			if (candidate > end)
+				break;
+			uint32 fat;
+			status_t status = fat_get(job, candidate, &fat);
 			if (status != B_OK)
 				return status;
-			continue;
+			if (fat == kClusterBad) {
+				bitmap_assign(disk, candidate, true);
+				if (disk->free_clusters > 0)
+					disk->free_clusters--;
+				status = bitmap_flush(job, candidate, 1);
+				if (status != B_OK)
+					return status;
+				cursor = candidate + 1;
+				continue;
+			}
+			status = bitmap_take(job, candidate, 1);
+			if (status != B_OK)
+				return status;
+			disk->hint = candidate < last ? candidate + 1 : 2;
+			*cluster = candidate;
+			return B_OK;
 		}
-		status = bitmap_take(job, candidate, 1);
-		if (status != B_OK)
-			return status;
-		disk->hint = candidate + 1;
-		if (disk->hint > disk->cluster_count + 1)
-			disk->hint = 2;
-		*cluster = candidate;
-		return B_OK;
 	}
 	return B_DEVICE_FULL;
 }
@@ -486,40 +512,48 @@ alloc_one(work* job, uint32* cluster)
 static status_t
 alloc_run(work* job, uint32 count, uint32 prefer, uint32* first)
 {
+	exfat_disk* disk = job->disk;
 	if (count == 0)
 		return B_BAD_VALUE;
-	if (job->disk->free_clusters < count)
+	if (disk->free_clusters < count)
 		return B_DEVICE_FULL;
-	if (bitmap_run_free(job->disk, prefer, count)) {
+	uint32 last = disk->cluster_count + 1;
+	if (bitmap_run_free(disk, prefer, count)) {
 		status_t status = bitmap_take(job, prefer, count);
 		if (status != B_OK)
 			return status;
 		*first = prefer;
+		disk->hint = (uint64)prefer + count <= last ? prefer + count : 2;
 		return B_OK;
 	}
-	uint32 last = job->disk->cluster_count + 1;
-	uint32 start = 2;
-	while (start <= last && start + count - 1 <= last) {
-		if (bitmap_test(job->disk, start)) {
-			start++;
+	uint32 hint = (disk->hint >= 2 && disk->hint <= last) ? disk->hint : 2;
+	for (int pass = 0; pass < 2; pass++) {
+		uint32 start = pass == 0 ? hint : 2;
+		uint32 limit = pass == 0 ? last : (hint > 2 ? hint - 1 : 0);
+		if (limit < start)
 			continue;
-		}
-		uint32 run = 0;
-		uint32 begin = start;
-		while (start <= last && !bitmap_test(job->disk, start)) {
-			run++;
-			start++;
-			if (run == count) {
-				status_t status = bitmap_take(job, begin, count);
-				if (status != B_OK)
-					return status;
-				*first = begin;
-				job->disk->hint = begin + count;
-				return B_OK;
+		while (start <= limit && (uint64)start + count - 1 <= last) {
+			start = bitmap_next_free(disk, start, limit);
+			if (start > limit || (uint64)start + count - 1 > last)
+				break;
+			uint32 begin = start;
+			uint32 run = 0;
+			while (start <= last && !bitmap_test(disk, start)) {
+				run++;
+				start++;
+				if (run == count) {
+					status_t status = bitmap_take(job, begin, count);
+					if (status != B_OK)
+						return status;
+					*first = begin;
+					disk->hint = (uint64)begin + count <= last
+						? begin + count : 2;
+					return B_OK;
+				}
 			}
+			if (start <= last)
+				start++;
 		}
-		if (start <= last)
-			start++;
 	}
 	return B_ENTRY_NOT_FOUND;
 }
@@ -783,9 +817,10 @@ write_set(work* job, const exfat_node* directory, uint32 index,
 	uint64 offset = (uint64)index * 32;
 	uint32 length = entries * 32;
 	if (one_block(job->disk, offset, length))
-		return dir_transfer(job, directory, offset, NULL, bytes, length, true);
+		return dir_transfer(job, directory, offset, NULL, bytes, length, false);
 
-	uint8* copy = (uint8*)malloc(length);
+	uint8 stackCopy[19 * 32];
+	uint8* copy = entries <= 19 ? stackCopy : (uint8*)malloc(length);
 	if (copy == NULL)
 		return B_NO_MEMORY;
 	memcpy(copy, bytes, length);
@@ -794,12 +829,13 @@ write_set(work* job, const exfat_node* directory, uint32 index,
 	if (copy[0] == 0)
 		copy[0] = 0x05;
 	status_t status = dir_transfer(job, directory, offset, NULL, copy, length,
-		true);
+		false);
 	if (status == B_OK) {
 		copy[0] = type;
-		status = dir_transfer(job, directory, offset, NULL, copy, 1, true);
+		status = dir_transfer(job, directory, offset, NULL, copy, 1, false);
 	}
-	free(copy);
+	if (copy != stackCopy)
+		free(copy);
 	return status;
 }
 
@@ -808,7 +844,8 @@ deactivate_set(work* job, const exfat_node* directory, uint32 index,
 	uint32 entries)
 {
 	uint32 length = entries * 32;
-	uint8* bytes = (uint8*)malloc(length);
+	uint8 stackBytes[19 * 32];
+	uint8* bytes = entries <= 19 ? stackBytes : (uint8*)malloc(length);
 	if (bytes == NULL)
 		return B_NO_MEMORY;
 	status_t status = read_set(job, directory, index, bytes, entries);
@@ -820,18 +857,19 @@ deactivate_set(work* job, const exfat_node* directory, uint32 index,
 		}
 		if (one_block(job->disk, (uint64)index * 32, length)) {
 			status = dir_transfer(job, directory, (uint64)index * 32, NULL,
-				bytes, length, true);
+				bytes, length, false);
 		} else {
 			status = dir_transfer(job, directory, (uint64)index * 32, NULL,
-				bytes, 1, true);
+				bytes, 1, false);
 			for (uint32 entry = 1; status == B_OK && entry < entries; entry++) {
 				status = dir_transfer(job, directory,
 					(uint64)(index + entry) * 32, NULL, bytes + entry * 32, 1,
-					true);
+					false);
 			}
 		}
 	}
-	free(bytes);
+	if (bytes != stackBytes)
+		free(bytes);
 	return status;
 }
 
@@ -926,12 +964,12 @@ place_set(work* job, exfat_node* parent, exfat_node* directory, uint32* index,
 		if (block != 0
 			&& offset / block == (offset + entries * 32 - 1) / block) {
 			return dir_transfer(job, directory, offset, NULL, bytes,
-				entries * 32, true);
+				entries * 32, false);
 		}
 		for (uint32 entry = entries; entry > 0; entry--) {
 			status_t status = dir_transfer(job, directory,
 				(uint64)(*index + entry - 1) * 32, NULL,
-				bytes + (entry - 1) * 32, 32, true);
+				bytes + (entry - 1) * 32, 32, false);
 			if (status != B_OK)
 				return status;
 		}
@@ -1127,7 +1165,9 @@ exfat_disk_open(exfat_store* store, const uint8* boot, exfat_disk* disk)
 		|| memcmp(boot + 3, "EXFAT   ", 8) != 0) {
 		return B_BAD_DATA;
 	}
+	uint64 numBlocks = r64(boot + 72);
 	disk->fat_block = r32(boot + 80);
+	uint32 fatLength = r32(boot + 84);
 	disk->data_block = r32(boot + 88);
 	disk->cluster_count = r32(boot + 92);
 	disk->root_cluster = r32(boot + 96);
@@ -1135,8 +1175,16 @@ exfat_disk_open(exfat_store* store, const uint8* boot, exfat_disk* disk)
 	uint8 blockShift = boot[108];
 	disk->blocks_per_cluster_shift = boot[109];
 	uint8 fatCount = boot[110];
-	if (blockShift < 9 || blockShift > 12 || disk->cluster_count < 1
-		|| disk->root_cluster < 2) {
+	if (blockShift < 9 || blockShift > 12
+		|| disk->blocks_per_cluster_shift > (uint32)(25 - blockShift)
+		|| disk->cluster_count < 1 || disk->cluster_count > 0xfffffff5u
+		|| disk->root_cluster < 2
+		|| (uint64)disk->root_cluster > (uint64)disk->cluster_count + 1
+		|| disk->fat_block >= disk->data_block
+		|| (uint64)disk->fat_block + fatLength > disk->data_block
+		|| (uint64)disk->data_block
+			+ ((uint64)disk->cluster_count << disk->blocks_per_cluster_shift)
+			> numBlocks) {
 		return B_BAD_DATA;
 	}
 	disk->block_size = 1u << blockShift;
@@ -1303,6 +1351,57 @@ entry_cluster(work* job, const exfat_node* directory, uint32 index,
 		directory->flags, (uint64)index * 32, cluster, &within);
 }
 
+struct dir_cursor {
+	uint32		cluster;
+	uint32		cluster_index;
+	uint64		cached_block;
+	bool		has_block;
+};
+
+static status_t
+dir_read_entry_seq(work* job, const exfat_node* directory, dir_cursor* cur,
+	uint32 index, uint8 out[32])
+{
+	uint64 byteOffset = (uint64)index * 32;
+	if (byteOffset + 32 > directory->data_length)
+		return B_BAD_VALUE;
+	uint32 csize = cluster_size(job->disk);
+	uint32 targetClusterIdx = (uint32)(byteOffset / csize);
+	uint32 withinCluster = (uint32)(byteOffset % csize);
+	if (!cur->has_block || targetClusterIdx < cur->cluster_index) {
+		cur->cluster = directory->first_cluster;
+		cur->cluster_index = 0;
+		cur->has_block = false;
+	}
+	if ((directory->flags & kFlagNoFat) != 0) {
+		cur->cluster = directory->first_cluster + targetClusterIdx;
+		cur->cluster_index = targetClusterIdx;
+	} else {
+		while (cur->cluster_index < targetClusterIdx) {
+			uint32 next;
+			status_t status = next_cluster(job, directory->first_cluster,
+				directory->data_length, directory->flags, cur->cluster,
+				cur->cluster_index, &next);
+			if (status != B_OK)
+				return status;
+			cur->cluster = next;
+			cur->cluster_index++;
+			cur->has_block = false;
+		}
+	}
+	uint64 block = cluster_block(job->disk, cur->cluster)
+		+ withinCluster / job->disk->block_size;
+	if (!cur->has_block || cur->cached_block != block) {
+		status_t status = read_block(job, block);
+		if (status != B_OK)
+			return status;
+		cur->cached_block = block;
+		cur->has_block = true;
+	}
+	memcpy(out, job->block + (withinCluster % job->disk->block_size), 32);
+	return B_OK;
+}
+
 static status_t
 lookup_units(work* job, const exfat_node* directory, const uint16* name,
 	uint8 units, exfat_node* found)
@@ -1314,42 +1413,58 @@ lookup_units(work* job, const exfat_node* directory, const uint16* name,
 	uint32 capacity = (uint32)(directory->data_length / 32);
 	uint32 index = 0;
 	uint8 primary[32];
+	dir_cursor cur;
+	memset(&cur, 0, sizeof(cur));
 	while (index < capacity) {
-		status_t status = read_set(job, directory, index, primary, 1);
+		status_t status = dir_read_entry_seq(job, directory, &cur, index,
+			primary);
 		if (status != B_OK)
 			return status;
 		if (primary[0] == 0)
 			return B_ENTRY_NOT_FOUND;
 		uint32 entries = set_entries_of(primary);
-		if (primary[0] == kTypeFile && entries >= 2 && index + entries <= capacity) {
-			uint8* set = (uint8*)malloc(entries * 32);
-			if (set == NULL)
-				return B_NO_MEMORY;
-			status = read_set(job, directory, index, set, entries);
-			if (status == B_OK && set[32] == kTypeStream && set[35] == units
-				&& r16(set + 36) == hash) {
-				uint16 stored[kNameMax];
-				uint32 got = 0;
-				for (uint32 entry = 2; entry < entries && got < units; entry++) {
-					if (set[entry * 32] != kTypeName)
-						break;
-					uint32 copy = units - got;
-					if (copy > 15)
-						copy = 15;
-					for (uint32 unit = 0; unit < copy; unit++)
-						stored[got++] = r16(set + entry * 32 + 2 + unit * 2);
+		if (primary[0] == kTypeFile && entries >= 3 && index + entries <= capacity) {
+			uint32 entryCluster = cur.cluster;
+			uint8 stream[32];
+			status = dir_read_entry_seq(job, directory, &cur, index + 1, stream);
+			if (status != B_OK)
+				return status;
+			if (stream[0] == kTypeStream && stream[3] == units
+				&& r16(stream + 4) == hash) {
+				uint8 stackSet[19 * 32];
+				uint8* set = entries <= 19 ? stackSet
+					: (uint8*)malloc(entries * 32);
+				if (set == NULL)
+					return B_NO_MEMORY;
+				memcpy(set, primary, 32);
+				memcpy(set + 32, stream, 32);
+				for (uint32 e = 2; e < entries && status == B_OK; e++) {
+					status = dir_read_entry_seq(job, directory, &cur, index + e,
+						set + e * 32);
 				}
-				if (got == units && name_equal(job->disk, stored, name, units)) {
-					uint32 cluster;
-					status = entry_cluster(job, directory, index, &cluster);
-					if (status == B_OK)
-						status = node_from_set(job->disk, set, index, cluster,
-							found);
+				if (status == B_OK) {
+					uint16 stored[kNameMax];
+					uint32 got = 0;
+					for (uint32 entry = 2; entry < entries && got < units; entry++) {
+						if (set[entry * 32] != kTypeName)
+							break;
+						uint32 copy = units - got;
+						if (copy > 15)
+							copy = 15;
+						for (uint32 unit = 0; unit < copy; unit++)
+							stored[got++] = r16(set + entry * 32 + 2 + unit * 2);
+					}
+					if (got == units && name_equal(job->disk, stored, name, units)) {
+						status = node_from_set(job->disk, set, index,
+							entryCluster, found);
+						if (set != stackSet)
+							free(set);
+						return status;
+					}
+				}
+				if (set != stackSet)
 					free(set);
-					return status;
-				}
 			}
-			free(set);
 		}
 		if (index + entries <= index)
 			return B_BAD_DATA;
@@ -1394,7 +1509,7 @@ exfat_read_entry(exfat_store* store, exfat_disk* disk,
 	status = read_set(&job, directory, index, primary, 1);
 	uint32 entries = 0;
 	if (status == B_OK) {
-		if (primary[0] != kTypeFile || primary[1] < 1 || primary[1] > 17)
+		if (primary[0] != kTypeFile || primary[1] < 2)
 			status = B_BAD_DATA;
 		else
 			entries = (uint32)primary[1] + 1;
@@ -1506,6 +1621,8 @@ link_new_clusters(work* job, exfat_node* node, uint32 extra)
 		if (status == B_OK) {
 			node->flags = (uint8)(kFlagAlloc | kFlagNoFat);
 			node->first_cluster = first;
+			node->last_cluster = first + extra - 1;
+			node->last_index = extra - 1;
 			return B_OK;
 		}
 		if (status != B_ENTRY_NOT_FOUND)
@@ -1529,8 +1646,6 @@ link_new_clusters(work* job, exfat_node* node, uint32 extra)
 		}
 		if (status == B_OK)
 			status = fat_set(job, fresh[extra - 1], kClusterEnd);
-		for (uint32 index = 0; status == B_OK && index < extra; index++)
-			status = flush_fat(job, fresh[index], fresh[index]);
 		if (status != B_OK) {
 			for (uint32 index = 0; index < extra; index++)
 				bitmap_give(job, fresh[index], 1);
@@ -1539,15 +1654,24 @@ link_new_clusters(work* job, exfat_node* node, uint32 extra)
 		}
 		node->flags = kFlagAlloc;
 		node->first_cluster = fresh[0];
+		node->last_cluster = fresh[extra - 1];
+		node->last_index = extra - 1;
 		free(fresh);
 		return B_OK;
 	}
 	uint32 last = node->first_cluster;
 	if ((node->flags & kFlagNoFat) != 0)
 		last = node->first_cluster + oldCount - 1;
+	else if (node->last_cluster >= 2 && node->last_index == oldCount - 1)
+		last = node->last_cluster;
 	else {
 		uint32 cluster = node->first_cluster;
-		for (uint32 index = 0; index < oldCount - 1; index++) {
+		uint32 startIdx = 0;
+		if (node->last_cluster >= 2 && node->last_index < oldCount - 1) {
+			cluster = node->last_cluster;
+			startIdx = node->last_index;
+		}
+		for (uint32 index = startIdx; index < oldCount - 1; index++) {
 			uint32 next;
 			status_t status = next_cluster(job, node->first_cluster,
 				node->data_length, node->flags, cluster, index, &next);
@@ -1562,6 +1686,8 @@ link_new_clusters(work* job, exfat_node* node, uint32 extra)
 		status_t status = bitmap_take(job, prefer, extra);
 		if (status != B_OK)
 			return status;
+		node->last_cluster = prefer + extra - 1;
+		node->last_index = oldCount + extra - 1;
 		return B_OK;
 	}
 	uint32* fresh = (uint32*)malloc(extra * sizeof(uint32));
@@ -1594,17 +1720,14 @@ link_new_clusters(work* job, exfat_node* node, uint32 extra)
 		status = fat_set(job, fresh[index], fresh[index + 1]);
 	if (status == B_OK)
 		status = fat_set(job, fresh[extra - 1], kClusterEnd);
-	if (status == B_OK && wasContiguous && oldCount > 0) {
-		status = flush_fat(job, node->first_cluster,
-			node->first_cluster + oldCount - 1);
-	}
-	if (status == B_OK && last >= 2)
-		status = flush_fat(job, last, last);
-	for (uint32 index = 0; status == B_OK && index < extra; index++)
-		status = flush_fat(job, fresh[index], fresh[index]);
 	if (status != B_OK) {
+		if (!wasContiguous)
+			fat_set(job, last, kClusterEnd);
 		for (uint32 index = 0; index < extra; index++)
 			bitmap_give(job, fresh[index], 1);
+	} else {
+		node->last_cluster = fresh[extra - 1];
+		node->last_index = oldCount + extra - 1;
 	}
 	free(fresh);
 	return status;
@@ -1626,35 +1749,86 @@ grow_directory(work* job, exfat_node* parent, exfat_node* directory)
 	uint64 oldLength = directory->data_length;
 	uint32 oldFirst = directory->first_cluster;
 	uint8 oldFlags = directory->flags;
+	uint32 oldLastCluster = directory->last_cluster;
+	uint32 oldLastIndex = directory->last_index;
+	uint32 oldCount = clusters_for(job->disk, oldLength);
 	status_t status = mark_dirty(job);
 	if (status != B_OK)
 		return status;
-	status = link_new_clusters(job, directory, 1);
-	if (status != B_OK)
+
+	/* Find the current tail cluster before allocating, so we can zero the new
+	   cluster BEFORE linking it into the FAT chain (crash consistency). */
+	uint32 tail = oldFirst;
+	if (oldCount > 0) {
+		if ((oldFlags & kFlagNoFat) != 0)
+			tail = oldFirst + oldCount - 1;
+		else if (directory->last_cluster >= 2
+			&& directory->last_index == oldCount - 1)
+			tail = directory->last_cluster;
+		else {
+			uint32 cluster = oldFirst;
+			for (uint32 index = 0; index < oldCount - 1; index++) {
+				uint32 next;
+				status = next_cluster(job, oldFirst, oldLength, oldFlags,
+					cluster, index, &next);
+				if (status != B_OK)
+					return status;
+				cluster = next;
+			}
+			tail = cluster;
+		}
+	}
+
+	uint32 newest = 0;
+	bool stayedContiguous = false;
+	if (oldCount > 0 && (oldFlags & kFlagNoFat) != 0
+		&& bitmap_run_free(job->disk, tail + 1, 1)) {
+		status = bitmap_take(job, tail + 1, 1);
+		if (status != B_OK)
+			return status;
+		newest = tail + 1;
+		stayedContiguous = true;
+	} else {
+		status = alloc_one(job, &newest);
+		if (status != B_OK)
+			return status;
+	}
+
+	/* Zero and flush the new cluster BEFORE linking it in the FAT or directory
+	   entry, so a crash never exposes garbage entries in the directory. */
+	status = zero_cluster(job, newest);
+	if (status != B_OK) {
+		bitmap_give(job, newest, 1);
 		return status;
-	uint32 newest = directory->first_cluster;
-	if ((directory->flags & kFlagNoFat) != 0) {
-		newest = directory->first_cluster
-			+ clusters_for(job->disk, oldLength + added) - 1;
-	} else if (oldLength != 0) {
-		uint32 cluster = directory->first_cluster;
-		uint32 count = clusters_for(job->disk, oldLength) + 1;
-		for (uint32 index = 0; index < count - 1; index++) {
-			uint32 next;
-			status = next_cluster(job, directory->first_cluster,
-				oldLength + added, directory->flags, cluster, index, &next);
-			if (status != B_OK)
-				break;
-			cluster = next;
+	}
+
+	bool fatLinked = false;
+	if (oldCount == 0) {
+		directory->first_cluster = newest;
+		directory->flags = (uint8)(kFlagAlloc | kFlagNoFat);
+	} else if (!stayedContiguous) {
+		if ((oldFlags & kFlagNoFat) != 0) {
+			for (uint32 index = 0; index < oldCount - 1; index++) {
+				status = fat_set(job, oldFirst + index, oldFirst + index + 1);
+				if (status != B_OK)
+					break;
+			}
 		}
 		if (status == B_OK)
-			newest = cluster;
+			status = fat_set(job, newest, kClusterEnd);
+		if (status == B_OK) {
+			status = fat_set(job, tail, newest);
+			if (status == B_OK)
+				fatLinked = true;
+		}
+		if (status == B_OK)
+			directory->flags = kFlagAlloc;
 	}
-	if (status == B_OK)
-		status = zero_cluster(job, newest);
 	if (status == B_OK) {
 		directory->data_length = oldLength + added;
 		directory->valid_length = directory->data_length;
+		directory->last_cluster = newest;
+		directory->last_index = oldCount;
 		if (!directory->root) {
 			if (parent == NULL)
 				parent = directory->up;
@@ -1663,27 +1837,17 @@ grow_directory(work* job, exfat_node* parent, exfat_node* directory)
 		}
 	}
 	if (status != B_OK) {
-		uint32 give = newest;
-		if (!(cluster_ok(job->disk, give) && give != oldFirst)
-			&& (directory->flags & kFlagNoFat) == 0
-			&& cluster_ok(job->disk, directory->first_cluster)) {
-			uint32 cluster = directory->first_cluster;
-			uint32 guard = clusters_for(job->disk, oldLength) + 2;
-			for (uint32 index = 0; index < guard; index++) {
-				uint32 next = 0;
-				if (fat_get(job, cluster, &next) != B_OK
-					|| !cluster_ok(job->disk, next))
-					break;
-				cluster = next;
-				give = cluster;
-			}
+		if (fatLinked && (oldFlags & kFlagNoFat) == 0) {
+			fat_set(job, tail, kClusterEnd);
+			fat_set(job, newest, 0);
 		}
-		if (cluster_ok(job->disk, give) && give != oldFirst)
-			bitmap_give(job, give, 1);
+		bitmap_give(job, newest, 1);
 		directory->data_length = oldLength;
 		directory->valid_length = oldLength;
 		directory->first_cluster = oldFirst;
 		directory->flags = oldFlags;
+		directory->last_cluster = oldLastCluster;
+		directory->last_index = oldLastIndex;
 	}
 	return status;
 }
@@ -1764,6 +1928,7 @@ write_node_entry(work* job, exfat_node* parent, exfat_node* node,
 			node->entry_index = index;
 			node->entry_cluster = cluster;
 		}
+		memcpy(node->primary, bytes, 32);
 		node->secondary_count = (uint8)(entries - 1);
 	}
 	free(bytes);
@@ -1845,63 +2010,6 @@ exfat_set_size(exfat_store* store, exfat_disk* disk, exfat_node* parent,
 	return status;
 }
 
-/* One flush per FAT or bitmap block, not one per cluster. */
-extern "C" int
-compare_cluster(const void* left, const void* right)
-{
-	uint32 a = *(const uint32*)left;
-	uint32 b = *(const uint32*)right;
-	if (a < b)
-		return -1;
-	if (a > b)
-		return 1;
-	return 0;
-}
-
-
-static status_t
-flush_clusters(work* job, const uint32* list, uint32 count, bool fat)
-{
-	if (count == 0)
-		return B_OK;
-	uint32* order = (uint32*)malloc(count * sizeof(uint32));
-	if (order == NULL)
-		return B_NO_MEMORY;
-	uint32 used = 0;
-	for (uint32 index = 0; index < count; index++) {
-		if (cluster_ok(job->disk, list[index]))
-			order[used++] = list[index];
-	}
-	qsort(order, used, sizeof(uint32), compare_cluster);
-	status_t status = B_OK;
-	uint32 index = 0;
-	uint32 per = job->disk->block_size / 4;
-	uint32 bitsPer = cluster_size(job->disk) * 8;
-	while (index < used && status == B_OK) {
-		uint32 start = order[index];
-		uint32 end = start;
-		uint32 next = index + 1;
-		if (fat) {
-			uint32 block = per == 0 ? 0 : start / per;
-			while (next < used && per != 0 && order[next] / per == block) {
-				end = order[next];
-				next++;
-			}
-			status = flush_fat(job, start, end);
-		} else if (bitsPer != 0) {
-			uint32 block = (start - 2) / bitsPer;
-			while (next < used && (order[next] - 2) / bitsPer == block) {
-				end = order[next];
-				next++;
-			}
-			status = bitmap_flush(job, start, end - start + 1);
-		}
-		index = next;
-	}
-	free(order);
-	return status;
-}
-
 status_t
 exfat_free_allocation(exfat_store* store, exfat_disk* disk, uint32 first,
 	uint64 dataLength, uint8 flags)
@@ -1929,43 +2037,54 @@ exfat_free_allocation(exfat_store* store, exfat_disk* disk, uint32 first,
 		work_close(&job);
 		return status;
 	}
-	uint32* list = (uint32*)malloc(count * sizeof(uint32));
-	if (list == NULL) {
-		work_close(&job);
-		return B_NO_MEMORY;
-	}
+	/* Free FAT-chained clusters without allocating an unbounded array in the
+	   kernel heap: read next, clear FAT entry, clear bitmap bit in place. */
 	uint32 cluster = first;
+	uint32 minCluster = 0xffffffffu;
+	uint32 maxCluster = 0;
 	for (uint32 index = 0; index < count; index++) {
-		list[index] = cluster;
-		if (index + 1 == count)
-			break;
-		uint32 next;
-		status = fat_get(&job, cluster, &next);
-		if (status != B_OK || !cluster_ok(disk, next)) {
+		if (!cluster_ok(disk, cluster)) {
 			disk->can_write = false;
-			free(list);
-			work_close(&job);
-			return status != B_OK ? status : B_BAD_DATA;
-		}
-		cluster = next;
-	}
-	for (uint32 index = 0; index < count; index++) {
-		status = fat_set(&job, list[index], 0);
-		if (status != B_OK)
+			status = B_BAD_DATA;
 			break;
-	}
-	if (status == B_OK) {
-		for (uint32 index = 0; index < count; index++) {
-			if (bitmap_test(disk, list[index])) {
-				bitmap_assign(disk, list[index], false);
-				disk->free_clusters++;
+		}
+		uint32 next = 0;
+		if (index + 1 < count) {
+			status = fat_get(&job, cluster, &next);
+			if (status != B_OK || !cluster_ok(disk, next)) {
+				disk->can_write = false;
+				if (status == B_OK)
+					status = B_BAD_DATA;
+				break;
 			}
 		}
-		status = flush_clusters(&job, list, count, true);
-		if (status == B_OK)
-			status = flush_clusters(&job, list, count, false);
+		status = fat_set(&job, cluster, 0);
+		if (status != B_OK)
+			break;
+		if (bitmap_test(disk, cluster)) {
+			bitmap_assign(disk, cluster, false);
+			disk->free_clusters++;
+		}
+		if (cluster < minCluster)
+			minCluster = cluster;
+		if (cluster > maxCluster)
+			maxCluster = cluster;
+		if (index + 1 < count) {
+			/* Flush bitmap in bounded spans so fragmented frees don't flush
+			   the entire bitmap on every single cluster. */
+			if (maxCluster - minCluster >= 4096) {
+				status = bitmap_flush(&job, minCluster,
+					maxCluster - minCluster + 1);
+				if (status != B_OK)
+					break;
+				minCluster = 0xffffffffu;
+				maxCluster = 0;
+			}
+			cluster = next;
+		}
 	}
-	free(list);
+	if (status == B_OK && minCluster <= maxCluster)
+		status = bitmap_flush(&job, minCluster, maxCluster - minCluster + 1);
 	work_close(&job);
 	return status;
 }
@@ -1978,35 +2097,44 @@ shrink_allocation(work* job, exfat_node* parent, exfat_node* node,
 {
 	uint32 oldCount = clusters_for(job->disk, node->data_length);
 	uint32 newCount = clusters_for(job->disk, dataLength);
-	uint32* list = (uint32*)malloc(oldCount * sizeof(uint32));
-	if (list == NULL && oldCount != 0)
-		return B_NO_MEMORY;
-	uint32 cluster = node->first_cluster;
-	for (uint32 index = 0; index < oldCount; index++) {
-		if (!cluster_ok(job->disk, cluster)) {
-			job->disk->can_write = false;
-			free(list);
-			return B_BAD_DATA;
-		}
-		list[index] = cluster;
-		if (index + 1 == oldCount)
-			break;
-		if ((node->flags & kFlagNoFat) != 0)
-			cluster = node->first_cluster + index + 1;
-		else {
-			uint32 next;
-			status_t status = fat_get(job, cluster, &next);
-			if (status != B_OK || !cluster_ok(job->disk, next)) {
+	uint32 tailCluster = 0;
+	uint32 freeStart = node->first_cluster;
+
+	if (newCount > 0) {
+		if ((node->flags & kFlagNoFat) != 0) {
+			if (!cluster_ok(job->disk, node->first_cluster)
+				|| !cluster_ok(job->disk, node->first_cluster + oldCount - 1)) {
 				job->disk->can_write = false;
-				free(list);
-				return status != B_OK ? status : B_BAD_DATA;
+				return B_BAD_DATA;
 			}
-			cluster = next;
+			tailCluster = node->first_cluster + newCount - 1;
+			freeStart = node->first_cluster + newCount;
+		} else {
+			uint32 cluster = node->first_cluster;
+			for (uint32 index = 0; index < newCount; index++) {
+				if (!cluster_ok(job->disk, cluster)) {
+					job->disk->can_write = false;
+					return B_BAD_DATA;
+				}
+				tailCluster = cluster;
+				uint32 next = 0;
+				status_t st = fat_get(job, cluster, &next);
+				if (st != B_OK)
+					return st;
+				if (index + 1 < oldCount && !cluster_ok(job->disk, next)) {
+					job->disk->can_write = false;
+					return B_BAD_DATA;
+				}
+				cluster = next;
+			}
+			freeStart = cluster;
 		}
 	}
+
 	uint32 oldFirst = node->first_cluster;
 	uint8 oldFlags = node->flags;
 	uint64 oldData = node->data_length;
+	uint64 oldValid = node->valid_length;
 	node->data_length = dataLength;
 	node->valid_length = validLength;
 	if (newCount == 0) {
@@ -2022,35 +2150,50 @@ shrink_allocation(work* job, exfat_node* parent, exfat_node* node,
 		node->first_cluster = oldFirst;
 		node->flags = oldFlags;
 		node->data_length = oldData;
-		free(list);
+		node->valid_length = oldValid;
 		return status;
 	}
-	if ((oldFlags & kFlagNoFat) == 0 && newCount > 0) {
-		status = fat_set(job, list[newCount - 1], kClusterEnd);
-		if (status == B_OK)
-			status = flush_fat(job, list[newCount - 1], list[newCount - 1]);
+	if (newCount == 0) {
+		node->last_cluster = 0;
+		node->last_index = 0;
+	} else {
+		node->last_cluster = tailCluster;
+		node->last_index = newCount - 1;
 	}
-	if (status == B_OK && newCount < oldCount) {
-		for (uint32 index = newCount; index < oldCount; index++) {
-			if ((oldFlags & kFlagNoFat) == 0) {
-				status = fat_set(job, list[index], 0);
-				if (status != B_OK)
-					break;
-			}
-			if (bitmap_test(job->disk, list[index])) {
-				bitmap_assign(job->disk, list[index], false);
-				job->disk->free_clusters++;
+	if ((oldFlags & kFlagNoFat) == 0 && newCount > 0) {
+		status = fat_set(job, tailCluster, kClusterEnd);
+		if (status != B_OK)
+			return status;
+	}
+	uint32 toFree = oldCount - newCount;
+	if (toFree == 0)
+		return B_OK;
+	if ((oldFlags & kFlagNoFat) != 0)
+		return bitmap_give(job, freeStart, toFree);
+
+	uint32 cluster = freeStart;
+	for (uint32 index = 0; index < toFree; index++) {
+		if (!cluster_ok(job->disk, cluster)) {
+			job->disk->can_write = false;
+			return B_BAD_DATA;
+		}
+		uint32 next = 0;
+		if (index + 1 < toFree) {
+			status = fat_get(job, cluster, &next);
+			if (status != B_OK || !cluster_ok(job->disk, next)) {
+				job->disk->can_write = false;
+				return status != B_OK ? status : B_BAD_DATA;
 			}
 		}
-		if (status == B_OK && (oldFlags & kFlagNoFat) == 0)
-			status = flush_clusters(job, list + newCount, oldCount - newCount,
-				true);
-		if (status == B_OK)
-			status = flush_clusters(job, list + newCount, oldCount - newCount,
-				false);
+		status = fat_set(job, cluster, 0);
+		if (status != B_OK)
+			return status;
+		status = bitmap_give(job, cluster, 1);
+		if (status != B_OK)
+			return status;
+		cluster = next;
 	}
-	free(list);
-	return status;
+	return B_OK;
 }
 
 status_t

@@ -284,6 +284,11 @@ run(const char* path, bool large)
 		&time, &longFile);
 	if (status != B_OK)
 		return fail("long name", status);
+	exfat_node longRead;
+	status = exfat_read_entry(&store, &disk, &root, longFile.entry_index,
+		&longRead);
+	if (status != B_OK || longRead.secondary_count != 18)
+		return fail("read 255-char entry", status);
 	status = exfat_remove_entry(&store, &disk, NULL, &root, longName, &found);
 	if (status != B_OK)
 		return fail("unlink long", status);
@@ -543,6 +548,33 @@ cut_power(const char* path)
 	return 0;
 }
 
+static uint16
+seed_name_hash(const char* ascii)
+{
+	uint16 hash = 0;
+	for (size_t i = 0; ascii[i] != '\0'; i++) {
+		uint8 c = (uint8)ascii[i];
+		if (c >= 'a' && c <= 'z')
+			c = (uint8)(c - 32);
+		hash = (uint16)(((hash & 1) ? 0x8000 : 0) + (hash >> 1) + c);
+		hash = (uint16)(((hash & 1) ? 0x8000 : 0) + (hash >> 1) + 0);
+	}
+	return hash;
+}
+
+static uint16
+seed_entry_checksum(const uint8* bytes, uint32 entries)
+{
+	uint32 length = entries * 32;
+	uint16 sum = 0;
+	for (uint32 i = 0; i < length; i++) {
+		if (i == 2 || i == 3)
+			continue;
+		sum = (uint16)(((sum & 1) ? 0x8000 : 0) + (sum >> 1) + bytes[i]);
+	}
+	return sum;
+}
+
 static int
 seed(const char* path)
 {
@@ -597,6 +629,69 @@ seed(const char* path)
 	if (status == B_OK) {
 		status = exfat_write_bytes(&store, &disk, &root, &file, 0, text,
 			strlen(text), &time, &moved);
+	}
+	/* Plant CritSec folder for the QEMU guest DirectoryIterator test:
+	   alpha.txt, then a 5-entry set (0x85, 0xC0, 0xC1 "bad", 0xC2, 0xE0)
+	   so DirectoryIterator::_GetNext() hits the unknown 0xC2 critical
+	   secondary with one entry left and must enter its skipSet path to
+	   consume the trailing 0xE0 entry, then omega.txt. */
+	if (status == B_OK) {
+		exfat_node critDir;
+		status = exfat_create(&store, &disk, NULL, &root, "CritSec", true, 0,
+			&time, &critDir);
+		if (status == B_OK) {
+			critDir.up = &root;
+			exfat_node alpha;
+			status = exfat_create(&store, &disk, &root, &critDir, "alpha.txt",
+				false, 0, &time, &alpha);
+			if (status == B_OK) {
+				uint64 wrote = 0;
+				status = exfat_write_bytes(&store, &disk, &critDir, &alpha, 0,
+					"alpha\n", 6, &time, &wrote);
+			}
+			if (status == B_OK) {
+				uint32 badSlot = alpha.entry_index + alpha.secondary_count + 1;
+				uint64 badOff = (uint64)badSlot * 32;
+				uint64 phys = 0;
+				uint64 run = 0;
+				status = exfat_map(&store, &disk, critDir.first_cluster,
+					critDir.data_length, critDir.flags, badOff, &phys, &run);
+				if (status == B_OK) {
+					uint8 badSet[5 * 32];
+					memset(badSet, 0, sizeof(badSet));
+					badSet[0] = 0x85;
+					badSet[1] = 4;
+					badSet[32] = 0xc0;
+					badSet[32 + 1] = 0x01;
+					badSet[32 + 3] = 3;
+					uint16 nh = seed_name_hash("bad");
+					badSet[32 + 4] = (uint8)nh;
+					badSet[32 + 5] = (uint8)(nh >> 8);
+					badSet[64] = 0xc1;
+					badSet[64 + 2] = 'b';
+					badSet[64 + 4] = 'a';
+					badSet[64 + 6] = 'd';
+					badSet[96] = 0xc2; /* unknown critical secondary */
+					badSet[128] = 0xe0; /* trailing entry consumed by skipSet */
+					uint16 sum = seed_entry_checksum(badSet, 5);
+					badSet[2] = (uint8)sum;
+					badSet[3] = (uint8)(sum >> 8);
+					if (pwrite(fd, badSet, sizeof(badSet), (off_t)phys)
+							!= (ssize_t)sizeof(badSet))
+						status = B_IO_ERROR;
+				}
+			}
+			if (status == B_OK) {
+				exfat_node omega;
+				status = exfat_create(&store, &disk, &root, &critDir,
+					"omega.txt", false, 0, &time, &omega);
+				if (status == B_OK) {
+					uint64 wrote = 0;
+					status = exfat_write_bytes(&store, &disk, &critDir, &omega,
+						0, "omega\n", 6, &time, &wrote);
+				}
+			}
+		}
 	}
 	if (status == B_OK)
 		status = exfat_sync(&store, &disk);
@@ -699,6 +794,214 @@ pull(const char* path)
 	return result;
 }
 
+static int
+test_bitmap_next_free_edge(void)
+{
+	/* Regression test for bitmap_next_free(): pass 1 limit in the middle of a
+	   byte (cluster 7 = bit 5), bit 0 (cluster 2) free, bits 1-5 (clusters 3-7)
+	   used, hint at cluster 8 (bits 6-7 used), plus one more free cluster (10)
+	   so free_clusters == 2. Allocating count = 2 must not loop forever. */
+	const uint32 blockSize = 512;
+	const uint32 totalBlocks = 64;
+	uint8* mem = (uint8*)calloc(totalBlocks, blockSize);
+	if (mem == NULL)
+		return fail("bitmap edge alloc", B_NO_MEMORY);
+
+	struct mem_store {
+		uint8*	data;
+		uint32	block_size;
+		uint32	blocks;
+	} state = { mem, blockSize, totalBlocks };
+
+	exfat_store store;
+	memset(&store, 0, sizeof(store));
+	store.cookie = &state;
+	store.read = [](void* cookie, uint64 block, void* buf, uint32 blocks) -> status_t {
+		mem_store* s = (mem_store*)cookie;
+		if (block + blocks > s->blocks)
+			return B_IO_ERROR;
+		memcpy(buf, s->data + block * s->block_size, (size_t)blocks * s->block_size);
+		return B_OK;
+	};
+	store.write = [](void* cookie, uint64 block, const void* buf, uint32 blocks) -> status_t {
+		mem_store* s = (mem_store*)cookie;
+		if (block + blocks > s->blocks)
+			return B_IO_ERROR;
+		memcpy(s->data + block * s->block_size, buf, (size_t)blocks * s->block_size);
+		return B_OK;
+	};
+	store.flush = [](void*, uint64, uint32) -> status_t { return B_OK; };
+
+	exfat_disk disk;
+	memset(&disk, 0, sizeof(disk));
+	disk.block_size = blockSize;
+	disk.blocks_per_cluster_shift = 0; /* 1 block (512 B) per cluster */
+	disk.cluster_count = 16; /* clusters 2..17 */
+	disk.fat_block = 4;
+	disk.data_block = 8;
+	disk.root_cluster = 3;
+	disk.can_write = true;
+	disk.dirty = true;
+	disk.bitmap_bytes = 2; /* 16 bits */
+	disk.bitmap = (uint8*)calloc(1, disk.bitmap_bytes);
+	disk.bitmap_clusters = (uint32*)calloc(1, sizeof(uint32));
+	if (disk.bitmap == NULL || disk.bitmap_clusters == NULL) {
+		exfat_disk_close(&disk);
+		free(mem);
+		return fail("bitmap edge disk", B_NO_MEMORY);
+	}
+	disk.bitmap_clusters[0] = 4;
+	disk.bitmap_cluster_count = 1;
+	/* Byte 0 (clusters 2..9): bit 0 (cluster 2) FREE, bits 1..7 (3..9) USED -> 0xFE */
+	disk.bitmap[0] = 0xfe;
+	/* Byte 1 (clusters 10..17): bit 0 (cluster 10) FREE, bits 1..7 (11..17) USED -> 0xFE */
+	disk.bitmap[1] = 0xfe;
+	disk.free_clusters = 2;
+	disk.hint = 8; /* pass 0 scans 8..17, pass 1 scans 2..7 (limit=7, bit 5) */
+
+	exfat_node node;
+	memset(&node, 0, sizeof(node));
+	node.detached = true; /* avoid directory write; exercises alloc_run + alloc_one */
+	node.flags = 0x01;
+	status_t status = exfat_set_size(&store, &disk, NULL, &node,
+		2u * blockSize, 0, NULL, false);
+	int result = 0;
+	if (status != B_OK || disk.free_clusters != 0 || node.first_cluster < 2)
+		result = fail("bitmap_next_free edge", status);
+	exfat_disk_close(&disk);
+	free(mem);
+	return result;
+}
+
+static int
+test_unknown_critical_secondary(void)
+{
+	/* Lookup by name skips a set with an unknown critical secondary (0xC2):
+	   a folder contains alpha.txt, a 4-entry set with a 0xC2 secondary, and
+	   omega.txt. Both normal files must be found by name via exfat_lookup().
+	   (DirectoryIterator listing is kernel-only and tested in QEMU via
+	   scripts/exfat-guest.c.) */
+	const uint32 blockSize = 512;
+	const uint32 totalBlocks = 64;
+	uint8* mem = (uint8*)calloc(totalBlocks, blockSize);
+	if (mem == NULL)
+		return fail("crit secondary alloc", B_NO_MEMORY);
+
+	struct mem_store {
+		uint8*	data;
+		uint32	block_size;
+		uint32	blocks;
+	} state = { mem, blockSize, totalBlocks };
+
+	exfat_store store;
+	memset(&store, 0, sizeof(store));
+	store.cookie = &state;
+	store.read = [](void* cookie, uint64 block, void* buf, uint32 blocks) -> status_t {
+		mem_store* s = (mem_store*)cookie;
+		if (block + blocks > s->blocks)
+			return B_IO_ERROR;
+		memcpy(buf, s->data + block * s->block_size, (size_t)blocks * s->block_size);
+		return B_OK;
+	};
+	store.write = [](void* cookie, uint64 block, const void* buf, uint32 blocks) -> status_t {
+		mem_store* s = (mem_store*)cookie;
+		if (block + blocks > s->blocks)
+			return B_IO_ERROR;
+		memcpy(s->data + block * s->block_size, buf, (size_t)blocks * s->block_size);
+		return B_OK;
+	};
+	store.flush = [](void*, uint64, uint32) -> status_t { return B_OK; };
+
+	exfat_disk disk;
+	memset(&disk, 0, sizeof(disk));
+	disk.block_size = blockSize;
+	disk.blocks_per_cluster_shift = 1; /* 1024 B per cluster (32 dir entries) */
+	disk.cluster_count = 16;
+	disk.fat_block = 4;
+	disk.data_block = 8;
+	disk.root_cluster = 3;
+	disk.can_write = true;
+	disk.dirty = true;
+	disk.bitmap_bytes = 2;
+	disk.bitmap = (uint8*)calloc(1, disk.bitmap_bytes);
+	disk.bitmap_clusters = (uint32*)calloc(1, sizeof(uint32));
+	if (disk.bitmap == NULL || disk.bitmap_clusters == NULL) {
+		exfat_disk_close(&disk);
+		free(mem);
+		return fail("crit secondary disk", B_NO_MEMORY);
+	}
+	disk.bitmap_clusters[0] = 2;
+	disk.bitmap_cluster_count = 1;
+	disk.bitmap[0] = 0x03; /* clusters 2 (bitmap) and 3 (root) used */
+	disk.free_clusters = 14;
+	disk.hint = 4;
+
+	exfat_node dir;
+	memset(&dir, 0, sizeof(dir));
+	dir.root = true;
+	dir.is_dir = true;
+	dir.first_cluster = 3;
+	dir.data_length = 1024;
+	dir.valid_length = 1024;
+	dir.flags = 0x03;
+
+	exfat_time time = now_time();
+	exfat_node firstFile;
+	status_t status = exfat_create(&store, &disk, NULL, &dir, "alpha.txt",
+		false, 0, &time, &firstFile);
+	if (status != B_OK) {
+		exfat_disk_close(&disk);
+		free(mem);
+		return fail("crit alpha create", status);
+	}
+
+	/* Inject a 4-entry set right after alpha.txt (entries 3..6) containing an
+	   unknown critical secondary entry (0xC2): 0x85 (chunkCount=3), 0xC0,
+	   0xC2, 0xC1 ("bad"). */
+	uint8* dirBytes = mem + (disk.data_block + (dir.first_cluster - 2) * 2) * blockSize;
+	uint32 badSlot = firstFile.entry_index + firstFile.secondary_count + 1;
+	uint8* badSet = dirBytes + badSlot * 32;
+	memset(badSet, 0, 4 * 32);
+	badSet[0] = 0x85;
+	badSet[1] = 3;
+	badSet[32] = 0xc0;
+	badSet[32 + 1] = 0x01;
+	badSet[32 + 3] = 3; /* name length */
+	badSet[64] = 0xc2; /* unknown critical secondary */
+	badSet[96] = 0xc1;
+	badSet[96 + 2] = 'b';
+	badSet[96 + 4] = 'a';
+	badSet[96 + 6] = 'd';
+
+	exfat_node secondFile;
+	status = exfat_create(&store, &disk, NULL, &dir, "omega.txt",
+		false, 0, &time, &secondFile);
+	if (status != B_OK) {
+		exfat_disk_close(&disk);
+		free(mem);
+		return fail("crit omega create", status);
+	}
+
+	/* Both normal files must be found by name via exfat_lookup(). */
+	exfat_node found;
+	status = exfat_lookup(&store, &disk, &dir, "alpha.txt", &found);
+	if (status != B_OK || found.entry_index != firstFile.entry_index) {
+		exfat_disk_close(&disk);
+		free(mem);
+		return fail("crit lookup alpha", status);
+	}
+	status = exfat_lookup(&store, &disk, &dir, "omega.txt", &found);
+	if (status != B_OK || found.entry_index != secondFile.entry_index) {
+		exfat_disk_close(&disk);
+		free(mem);
+		return fail("crit lookup omega", status);
+	}
+
+	exfat_disk_close(&disk);
+	free(mem);
+	return 0;
+}
+
 int
 main(int argc, char** argv)
 {
@@ -712,6 +1015,10 @@ main(int argc, char** argv)
 		return seed(argv[1]);
 	if (argc > 2 && strcmp(argv[2], "pull") == 0)
 		return pull(argv[1]);
+	if (test_bitmap_next_free_edge() != 0)
+		return 1;
+	if (test_unknown_critical_secondary() != 0)
+		return 1;
 	bool large = argc > 2 && strcmp(argv[2], "large") == 0;
 	return run(argv[1], large);
 }
