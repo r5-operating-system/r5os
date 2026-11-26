@@ -1815,6 +1815,13 @@ amd_file_vm_free(void* vm)
 }
 
 
+static int
+amd_vram_alloc_raw(uint64 bytes, uint64* offset, uint8** cpuOut)
+{
+	return r5_gfx9_alloc_user_vram_raw(bytes, offset, cpuOut);
+}
+
+
 static uint32
 amd_commit_dwords(uint32 count, int fileTree, uint32 pasid)
 {
@@ -2269,7 +2276,8 @@ r5_gpu_backend_ops gR5GpuOps = {
 	amd_fault_status,
 	amd_hang_release,
 	amd_drop_copies,
-	amd_file_vm_free
+	amd_file_vm_free,
+	amd_vram_alloc_raw
 };
 
 

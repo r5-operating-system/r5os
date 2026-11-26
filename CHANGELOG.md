@@ -8,6 +8,15 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-26 - Phase 2 (GPU kernel driver & libdrm-r5): O(1) VM walk cache, batched TLB flushes, off-lock VRAM zeroing, per-fence wakeups, and batched syncobj
+
+- Problem: `r5_vm_map_page()` and `r5_vm_lookup()` performed 4-level WC VRAM reads and linear `r5_vm_find()` scans per 4 KiB page during `VA_MAP`/`VA_UNMAP`; every `VA_MAP`/`VA_UNMAP` ran a synchronous MMIO TLB flush; `sUserSpans` was capped at 64 and zeroed byte-by-byte under `sGpuLock`; `CS_SUBMIT` ran `gpu_ibs_mapped()` twice even when `gpu_wait_room()` did not sleep, used an 8-slot IB cache that always evicted slot 0, and `r5_gpu_eop()` woke all waiters via `sEop.NotifyAll()`; `libdrm-r5` issued `R5_GPU_GET_INFO` on every static query and looped per-handle ioctls for multi-handle syncobj reset/signal/query.
+- Change:
+  - `r5_vm.h`: added a 2 MiB last-leaf cache (`last_l1_va`/`last_leaf`), a 1024-slot open-addressed `phys_hash` for O(1) `r5_vm_find()`, and a `has_prt` flag to skip WC VRAM leaf reads on normal unmaps.
+  - `r5_gpu_core.cpp`, `r5_gpu_internal.h`: batched shared-VM `VA_MAP`/`VA_UNMAP`/`VA_PRT` TLB flushes until `CS_SUBMIT`/`STAGE_U`/`STAGE_R1` (using the exact same `gpu_hw_flush()` / invalidate word); tracked `tlbSeq` on `r5_file_tree`; expanded `sUserSpans` to 256 (`gfx9_k12.cpp`), added `vram_alloc_raw` (`r5_gpu_backend.h`, `r5_gpu.cpp`, `r5_span.h`) so `gpu_bo_fill()` zeroes VRAM outside `sGpuLock`; skipped the second `gpu_ibs_mapped()` when `gpu_wait_room()` did not drop the lock; expanded `ibCpu` to 32 slots with round-robin eviction; added per-fence `sFenceWaiters` wakeups in `gpu_wait_value()`/`r5_gpu_eop()`.
+  - `r5_gpu.h`, `r5_gpu_core.cpp`, `distro/graphics/libdrm-r5/r5_translate.c`: added additive `R5_GPU_SYNCOBJ_BATCH` (`R5_GPU_OP_BASE + 33`) for multi-handle syncobj reset/signal/query (with fallback on older kernels) and cached static `R5_GPU_GET_INFO` fields in `r5_translate.c`.
+- Limits: GFX9 ring, PSP, shutdown, PTE flags, and invalidate-word contracts unchanged. Hardware 5625U stick verification pending merge. No speed-up claimed without measurement.
+
 ## 2026-11-27 - What's new: Builds 10068 to 10078 rewritten in a friendlier voice
 
 - Problem: The last ten What's new sections listed every detail of a change and read like generated text.

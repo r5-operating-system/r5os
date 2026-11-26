@@ -9,6 +9,7 @@
 #define R5_SPAN_H
 
 #include <stdint.h>
+#include <string.h>
 
 typedef struct {
 	uint64_t	offset;
@@ -47,18 +48,19 @@ r5_span_coalesce(r5_span* spans, int count)
 }
 
 static inline int
-r5_span_take(r5_span* spans, int count, uint64_t bytes, uint64_t* offset)
+r5_span_take_nozero(r5_span* spans, int count, uint64_t bytes,
+	uint64_t* offset, uint8_t** cpuOut)
 {
+	if (cpuOut != NULL)
+		*cpuOut = NULL;
 	for (int i = 0; i < count; i++) {
 		if (!spans[i].live || spans[i].used || spans[i].bytes < bytes)
 			continue;
 		if (spans[i].bytes == bytes) {
 			*offset = spans[i].offset;
 			spans[i].used = 1;
-			if (spans[i].cpu != NULL) {
-				for (uint64_t n = 0; n < bytes; n++)
-					spans[i].cpu[n] = 0;
-			}
+			if (cpuOut != NULL)
+				*cpuOut = spans[i].cpu;
 			return 1;
 		}
 		int slot = -1;
@@ -81,13 +83,22 @@ r5_span_take(r5_span* spans, int count, uint64_t bytes, uint64_t* offset)
 			? spans[i].cpu + bytes : NULL;
 		spans[i].bytes = bytes;
 		spans[i].used = 1;
-		if (spans[i].cpu != NULL) {
-			for (uint64_t n = 0; n < bytes; n++)
-				spans[i].cpu[n] = 0;
-		}
+		if (cpuOut != NULL)
+			*cpuOut = spans[i].cpu;
 		return 1;
 	}
 	return 0;
+}
+
+static inline int
+r5_span_take(r5_span* spans, int count, uint64_t bytes, uint64_t* offset)
+{
+	uint8_t* cpu = NULL;
+	if (!r5_span_take_nozero(spans, count, bytes, offset, &cpu))
+		return 0;
+	if (cpu != NULL)
+		memset(cpu, 0, (size_t)bytes);
+	return 1;
 }
 
 static inline int

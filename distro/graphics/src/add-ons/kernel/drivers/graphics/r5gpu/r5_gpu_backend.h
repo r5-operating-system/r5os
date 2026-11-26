@@ -85,6 +85,10 @@ typedef struct r5_gpu_backend_ops {
 	/* Returns all VRAM page-table pages owned by a per-file r5_vm to the
 	 * backend's free pool. With the GPU lock. */
 	void		(*file_vm_free)(void* vm);
+	/* Allocates user VRAM without zeroing it under the GPU lock; caller
+	 * zeroes *cpuOut (if non-null) after dropping sGpuLock. */
+	int			(*vram_alloc_raw)(uint64_t bytes, uint64_t* offset,
+				uint8_t** cpuOut);
 } r5_gpu_backend_ops;
 
 extern r5_gpu_backend_ops gR5GpuOps;

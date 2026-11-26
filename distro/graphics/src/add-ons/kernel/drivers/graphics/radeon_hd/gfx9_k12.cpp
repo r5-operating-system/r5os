@@ -1805,22 +1805,25 @@ r5_gfx9_alloc_vram(uint64 bytes, uint64 align, uint64* offset, uint8** address)
 }
 
 
-static r5_span sUserSpans[64];
+static const int kUserSpanCount = 256;
+static r5_span sUserSpans[kUserSpanCount];
 
 
 status_t
-r5_gfx9_alloc_user_vram(uint64 bytes, uint64* offset)
+r5_gfx9_alloc_user_vram_raw(uint64 bytes, uint64* offset, uint8** cpuOut)
 {
+	if (cpuOut != NULL)
+		*cpuOut = NULL;
 	if (offset == NULL || bytes == 0)
 		return B_BAD_VALUE;
 	bytes = (bytes + 4095ull) & ~4095ull;
-	if (r5_span_take(sUserSpans, 64, bytes, offset))
+	if (r5_span_take_nozero(sUserSpans, kUserSpanCount, bytes, offset, cpuOut))
 		return B_OK;
 	// Review of the VRAM fallback (16 Nov 2026): with every row in use,
 	// the block below was taken and then lost when r5_span_add() failed.
 	// The R5 DRM library now turns this refusal into a GTT buffer, so the
 	// loss would repeat on every request. Ask for the row first.
-	if (!r5_span_has_room(sUserSpans, 64))
+	if (!r5_span_has_room(sUserSpans, kUserSpanCount))
 		return B_NO_MEMORY;
 	// Page tables are bumped from the same pool (vm_page_alloc); keep
 	// R5_VM_RESERVED_VRAM for them, as Linux does.
@@ -1834,23 +1837,34 @@ r5_gfx9_alloc_user_vram(uint64 bytes, uint64* offset)
 	status_t status = r5_gfx9_alloc_vram(bytes, 4096, &bumped, &address);
 	if (status != B_OK)
 		return status;
-	if (address != NULL)
-		memset(address, 0, (size_t)bytes);
-	if (!r5_span_add(sUserSpans, 64, bumped, bytes))
+	if (!r5_span_add(sUserSpans, kUserSpanCount, bumped, bytes))
 		return B_NO_MEMORY;
-	for (int i = 0; i < 64; i++) {
+	for (int i = 0; i < kUserSpanCount; i++) {
 		if (sUserSpans[i].live && sUserSpans[i].offset == bumped)
 			sUserSpans[i].cpu = address;
 	}
 	*offset = bumped;
+	if (cpuOut != NULL)
+		*cpuOut = address;
 	return B_OK;
+}
+
+
+status_t
+r5_gfx9_alloc_user_vram(uint64 bytes, uint64* offset)
+{
+	uint8* cpu = NULL;
+	status_t status = r5_gfx9_alloc_user_vram_raw(bytes, offset, &cpu);
+	if (status == B_OK && cpu != NULL)
+		memset(cpu, 0, (size_t)((bytes + 4095ull) & ~4095ull));
+	return status;
 }
 
 
 void
 r5_gfx9_free_user_vram(uint64 offset)
 {
-	r5_span_free(sUserSpans, 64, offset);
+	r5_span_free(sUserSpans, kUserSpanCount, offset);
 }
 
 

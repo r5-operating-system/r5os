@@ -270,15 +270,38 @@ r5_version(void *arg)
 }
 
 
+static r5_gpu_info sStaticInfo;
+static r5_gpu_amd_info sStaticAmd;
+static int sStaticInfoValid = 0;
+
+static int
+r5_info_static(int fd, r5_gpu_info *info, r5_gpu_amd_info *amd)
+{
+	if (!sStaticInfoValid) {
+		if (r5_info(fd, &sStaticInfo, &sStaticAmd) != 0)
+			return -1;
+		sStaticInfoValid = 1;
+	}
+	*info = sStaticInfo;
+	*amd = sStaticAmd;
+	return 0;
+}
+
+
 static int
 r5_amdgpu_info(int fd, struct drm_amdgpu_info *query)
 {
 	r5_gpu_info info;
 	r5_gpu_amd_info amd;
 	void *out;
+	int dynamic = (query->query == AMDGPU_INFO_VRAM_USAGE
+		|| query->query == AMDGPU_INFO_VIS_VRAM_USAGE
+		|| query->query == AMDGPU_INFO_GTT_USAGE
+		|| query->query == AMDGPU_INFO_ACCEL_WORKING);
 	memset(&info, 0, sizeof(info));
 	memset(&amd, 0, sizeof(amd));
-	if (r5_info(fd, &info, &amd) != 0)
+	if (dynamic ? r5_info(fd, &info, &amd) != 0
+			: r5_info_static(fd, &info, &amd) != 0)
 		return -1;
 	if (query->query == AMDGPU_INFO_SENSOR || query->query == AMDGPU_INFO_VIDEO_CAPS)
 		R5_DETAIL("query %#x type %#x",
@@ -1537,6 +1560,25 @@ r5_drm_ioctl_body(int fd, unsigned long request, void *arg, size_t size)
 			? R5_GPU_SYNCOBJ_RESET : R5_GPU_SYNCOBJ_SIGNAL;
 		if (handles == NULL)
 			return r5_fail(EINVAL);
+		if (list->count_handles > 1) {
+			r5_gpu_syncobj_batch batch;
+			memset(&batch, 0, sizeof(batch));
+			batch.size = (uint32_t)sizeof(batch);
+			batch.version = 1;
+			batch.op = op == R5_GPU_SYNCOBJ_RESET
+				? R5_GPU_SYNCOBJ_OP_RESET : R5_GPU_SYNCOBJ_OP_SIGNAL;
+			batch.flags = op == R5_GPU_SYNCOBJ_SIGNAL ? R5_GPU_SYNCOBJ_BINARY : 0;
+			batch.count = list->count_handles;
+			batch.handles = list->handles;
+			if (r5_call(fd, R5_GPU_SYNCOBJ_BATCH, &batch, sizeof(batch)) == 0)
+				return 0;
+			if (errno != ENOSYS
+#if defined(__HAIKU__)
+				&& errno != B_UNSUPPORTED
+#endif
+				)
+				return -1;
+		}
 		for (i = 0; i < list->count_handles; i++) {
 			uint32_t flags = op == R5_GPU_SYNCOBJ_SIGNAL ? R5_GPU_SYNCOBJ_BINARY : 0;
 			if (r5_sync_one(fd, op, handles[i], 0, flags, 0) != 0)
@@ -1572,6 +1614,25 @@ r5_drm_ioctl_body(int fd, unsigned long request, void *arg, size_t size)
 		uint32_t i;
 		if (handles == NULL || points == NULL)
 			return r5_fail(EINVAL);
+		if (list->count_handles > 1) {
+			r5_gpu_syncobj_batch batch;
+			memset(&batch, 0, sizeof(batch));
+			batch.size = (uint32_t)sizeof(batch);
+			batch.version = 1;
+			batch.op = R5_GPU_SYNCOBJ_OP_SIGNAL;
+			batch.flags = 0;
+			batch.count = list->count_handles;
+			batch.handles = list->handles;
+			batch.points = list->points;
+			if (r5_call(fd, R5_GPU_SYNCOBJ_BATCH, &batch, sizeof(batch)) == 0)
+				return 0;
+			if (errno != ENOSYS
+#if defined(__HAIKU__)
+				&& errno != B_UNSUPPORTED
+#endif
+				)
+				return -1;
+		}
 		for (i = 0; i < list->count_handles; i++) {
 			if (r5_sync_one(fd, R5_GPU_SYNCOBJ_SIGNAL, handles[i], points[i], 0, 0) != 0)
 				return -1;
@@ -1585,6 +1646,25 @@ r5_drm_ioctl_body(int fd, unsigned long request, void *arg, size_t size)
 		uint32_t i;
 		if (handles == NULL || points == NULL)
 			return r5_fail(EINVAL);
+		if (list->count_handles > 1) {
+			r5_gpu_syncobj_batch batch;
+			memset(&batch, 0, sizeof(batch));
+			batch.size = (uint32_t)sizeof(batch);
+			batch.version = 1;
+			batch.op = R5_GPU_SYNCOBJ_OP_QUERY;
+			batch.flags = 0;
+			batch.count = list->count_handles;
+			batch.handles = list->handles;
+			batch.points = list->points;
+			if (r5_call(fd, R5_GPU_SYNCOBJ_BATCH, &batch, sizeof(batch)) == 0)
+				return 0;
+			if (errno != ENOSYS
+#if defined(__HAIKU__)
+				&& errno != B_UNSUPPORTED
+#endif
+				)
+				return -1;
+		}
 		for (i = 0; i < list->count_handles; i++) {
 			if (r5_sync_call(fd, R5_GPU_SYNCOBJ_QUERY, handles[i], 0, 0, 0,
 				&points[i]) != 0)
