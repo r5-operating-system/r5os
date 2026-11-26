@@ -218,6 +218,9 @@ private:
 			void				_DrawLoop();
 			void				_StopDrawThread();
 			void				_ExitVulkan();
+			bool				_WaitComposeSlot(uint32 slot,
+									const char** _failure = NULL);
+			void				_DrainComposeSlots();
 			WindowBuffer*		_AllocateBuffer(uint32 width, uint32 height,
 									bool memory = true);
 			void				_FreeBuffer(WindowBuffer* buffer,

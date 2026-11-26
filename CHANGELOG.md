@@ -8,6 +8,14 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-26 - Phase 2 (Compositor): unlocked hardware cursor, 2-frame double-buffering, reusable scratch pools, narrower barriers, and reciprocal row-major shadow blur
+
+- Problem: `Compositor::_Compose()` held `fScreen->LockExclusiveAccess()` across `vkQueueSubmit()` and `vkWaitForFences()` even when a hardware cursor was active (stalling cursor movement during GPU rendering), used a single command buffer and fence (1 frame in flight), allocated `VkBufferCopy[]`, `VkBufferImageCopy[]`, and `std::vector<BRegion>` on the heap every frame, emitted `VK_PIPELINE_STAGE_ALL_COMMANDS_BIT` barriers, and ran `box_blur()` with per-pixel integer division and cache-thrashing column-strided access.
+- Change:
+  - `distro/app_server/Compositor.{h,cpp}` & `CompositorPrivate.h` & `CompositorVulkan.cpp`: skipped `fScreen->LockExclusiveAccess()` when no software cursor is active (5625U/RADV hardware cursor moves freely during GPU rendering); added double-buffered `commandBuffers[2]` and `fences[2]` with 2-frames-in-flight async direct scanout on RADV (`_WaitComposeSlot` / `_DrainComposeSlots`); added reusable `CompositorScratch` pools for `bufferCopies`, `imageCopies`, `covered`, and `hidden` regions; narrowed `ALL_COMMANDS` barriers to explicit `COLOR_ATTACHMENT_OUTPUT|FRAGMENT_SHADER|COMPUTE_SHADER|TRANSFER` stages; coalesced full-width contiguous rows in `_Present()`.
+  - `distro/app_server/CompositorEffects.cpp`: replaced per-pixel `sum / divisor` in `box_blur()` with exact 20-bit fixed-point reciprocal multiply (`divisor <= 64`), branchless interior horizontal pass, and 8-column row-major vertical pass.
+- Limits: Dual Kawase `VkImage` + linear sampler blur shader rewrite requires `glslangValidator`/`glslc` (not installed in the WSL build host) to regenerate `compositor_shaders.h`, so `effects.comp` is unchanged; on non-scanout/Lavapipe, `BackBuffer()` stays synced in `_Present()` so software cursor restore and screenshots remain exact. Hardware scanout double-buffering and hardware cursor require 5625U stick verification. No speed-up claimed without measurement.
+
 ## 2026-11-26 - Phase 2 (SkiaGpu): 1-frame-in-flight hardware pipelining, unlocked fence waits, and background pipeline-cache writer
 
 - Problem: `SkiaGpu::RunWork()` blocked on `fRunFence` right after every `submit()` even on hardware GPUs (preventing CPU/GPU overlap), held `fLock` for up to 1000 ms during `vkWaitForFences()` (blocking `NewRecorder`, `AddTarget`, `RemoveTarget`, and `Abandon`), and hashed/wrote the Vulkan pipeline cache synchronously on the draw thread every 10 seconds in `PipelineStorage::store()`.

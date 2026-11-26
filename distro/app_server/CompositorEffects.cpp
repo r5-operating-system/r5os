@@ -18,25 +18,112 @@ static void
 box_blur(uint8* bits, int32 width, int32 height, int32 radius, bool rows,
 	uint8* line)
 {
-	int32 count = rows ? height : width;
-	int32 length = rows ? width : height;
-	int32 step = rows ? 1 : width;
+	if (width <= 0 || height <= 0 || radius <= 0)
+		return;
 	int32 divisor = 2 * radius + 1;
-	for (int32 n = 0; n < count; n++) {
-		uint8* start = rows ? bits + n * width : bits + n;
-		for (int32 i = 0; i < length; i++)
-			line[i] = start[i * step];
+	// Fixed-point reciprocal: exact for all sum in [0, 255 * divisor] when
+	// divisor <= 64 (avoids hardware integer division on every pixel).
+	bool useRecip = divisor <= 64;
+	uint32 recip = useRecip
+		? ((1u << 20) + (uint32)divisor - 1) / (uint32)divisor : 0;
+
+	if (rows) {
+		for (int32 y = 0; y < height; y++) {
+			uint8* start = bits + (size_t)y * width;
+			memcpy(line, start, width);
+			int32 sum = 0;
+			int32 initEnd = min_c(radius + 1, width);
+			for (int32 i = 0; i < initEnd; i++)
+				sum += line[i];
+			int32 midStart = min_c(radius + 1, width);
+			int32 midEnd = max_c(midStart, width - radius - 1);
+			for (int32 i = 0; i < midStart; i++) {
+				start[i] = useRecip ? (uint8)(((uint32)sum * recip) >> 20)
+					: (uint8)(sum / divisor);
+				int32 add = i + radius + 1;
+				if (add < width)
+					sum += line[add];
+			}
+			for (int32 i = midStart; i < midEnd; i++) {
+				start[i] = useRecip ? (uint8)(((uint32)sum * recip) >> 20)
+					: (uint8)(sum / divisor);
+				sum += line[i + radius + 1] - line[i - radius];
+			}
+			for (int32 i = midEnd; i < width; i++) {
+				start[i] = useRecip ? (uint8)(((uint32)sum * recip) >> 20)
+					: (uint8)(sum / divisor);
+				int32 add = i + radius + 1;
+				int32 drop = i - radius;
+				if (add < width)
+					sum += line[add];
+				if (drop >= 0)
+					sum -= line[drop];
+			}
+		}
+		return;
+	}
+
+	// Vertical pass: process 8 columns at a time in row-major order so memory
+	// accesses stay cache-friendly and auto-vectorize cleanly under -O3.
+	uint8* colBuf = line; // caller allocates at least max(width, height) bytes
+	int32 x = 0;
+	if (useRecip && height > 2 * radius + 1) {
+		for (; x + 8 <= width; x += 8) {
+			uint32 sum[8] = {};
+			for (int32 y = 0; y <= radius; y++) {
+				const uint8* row = bits + (size_t)y * width + x;
+				for (int c = 0; c < 8; c++)
+					sum[c] += row[c];
+			}
+			// Keep a rolling window of original values for rows [y - radius..y]
+			// so in-place writes do not clobber unread inputs.
+			int32 winSize = radius + 1;
+			uint8 ring[64][8];
+			if (winSize <= 64) {
+				for (int32 y = 0; y < height; y++) {
+					uint8* dst = bits + (size_t)y * width + x;
+					int32 slot = y % winSize;
+					uint8 oldDrop[8];
+					if (y >= radius) {
+						int32 dropSlot = (y - radius) % winSize;
+						memcpy(oldDrop, ring[dropSlot], 8);
+					}
+					memcpy(ring[slot], dst, 8);
+					for (int c = 0; c < 8; c++)
+						dst[c] = (uint8)((sum[c] * recip) >> 20);
+					int32 addY = y + radius + 1;
+					if (addY < height) {
+						const uint8* addRow = bits + (size_t)addY * width + x;
+						for (int c = 0; c < 8; c++)
+							sum[c] += addRow[c];
+					}
+					if (y >= radius) {
+						for (int c = 0; c < 8; c++)
+							sum[c] -= oldDrop[c];
+					}
+				}
+				continue;
+			}
+			break;
+		}
+	}
+	for (; x < width; x++) {
+		uint8* start = bits + x;
+		for (int32 i = 0; i < height; i++)
+			colBuf[i] = start[(size_t)i * width];
 		int32 sum = 0;
-		for (int32 i = 0; i <= radius && i < length; i++)
-			sum += line[i];
-		for (int32 i = 0; i < length; i++) {
-			start[i * step] = (uint8)(sum / divisor);
+		for (int32 i = 0; i <= radius && i < height; i++)
+			sum += colBuf[i];
+		for (int32 i = 0; i < height; i++) {
+			start[(size_t)i * width] = useRecip
+				? (uint8)(((uint32)sum * recip) >> 20)
+				: (uint8)(sum / divisor);
 			int32 add = i + radius + 1;
 			int32 drop = i - radius;
-			if (add < length)
-				sum += line[add];
+			if (add < height)
+				sum += colBuf[add];
 			if (drop >= 0)
-				sum -= line[drop];
+				sum -= colBuf[drop];
 		}
 	}
 }
@@ -308,7 +395,10 @@ Compositor::_PrepareEffects(BRegion& damage, const LayerList& layers,
 	// shows; what the windows above cover with their plain pixels is left
 	// out. The kept blur there is made again when it shows, because that
 	// is damage below the glass.
-	std::vector<BRegion> hidden(layers.CountItems());
+	std::vector<BRegion>& hidden = fVulkan->scratchPools->hidden;
+	hidden.resize(layers.CountItems());
+	for (size_t i = 0; i < hidden.size(); i++)
+		hidden[i].MakeEmpty();
 	{
 		BRegion over;
 		for (int32 i = layers.CountItems() - 1; i >= 0; i--) {
