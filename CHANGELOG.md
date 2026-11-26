@@ -29,6 +29,12 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
   - Chrome pixel-diff vs `generated/aomi-mockup-b/` (top 110 px band, flat): `page` mean abs 20.14/255, `dark-page` 67.22/255, `newtab` 21.06/255, `dark-newtab` 50.20/255, `private` 39.00/255, `dark-private` 49.39/255, `downloads` 20.91/255, `dark-downloads` 66.13/255, `menu` 22.22/255, `dark-menu` 68.81/255, `settings` 23.13/255, `dark-settings` 70.11/255 (remaining differences: flat QEMU without GPU glass, system font instead of Manrope, Deskbar visible at top-right, plain search field on new-tab page, real page content).
 - Not tested: GPU frosted glass (QEMU has no GPU), 5625U hardware.
 
+## 2026-11-26 - Desktop: enable icon label outline by default
+
+- Problem: desktop icon labels render in white text without an outline or shadow, making them hard to read over the light-blue top portion of `r5-wallpaper.jpg` (and other light wallpapers). Haiku Tracker already draws a dark halo + drop shadow around light desktop labels when `be:bgndimginfoerasetext` (`WidgetTextOutline`) is enabled, but R5's default desktop wallpaper attribute set it to `false`.
+- Change: set `be:bgndimginfoerasetext` to `true` by default in `distro/rest/src/data/directory_attrs/home-desktop.rdef`, `distro/users/AccountAdmin.cpp`, `scripts/apply-branding.py`, and the fallback default in `distro/settings/WallpaperModule.cpp` (`read_records`). Users can still toggle "Icon label outline" in Settings → Wallpaper.
+- Not tested yet: no build or QEMU run performed yet (skipped per owner's request; to be checked in QEMU/stick later).
+
 ## 2026-11-26 - Stick 84 fixes: exFAT/VFS forced unmount (#4655), square menus under R5 default, account-switch timing (build 10076)
 
 - Problem (from 5625U stick 84):
