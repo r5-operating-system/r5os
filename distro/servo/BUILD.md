@@ -132,14 +132,36 @@ This round does not add the library to an image list.
 
 A from-scratch SpiderMonkey rebuild was not run for these numbers. Do not start one if `mozjs-sys` is still at `/home/nickr/r5os/servo-build/mozjs-sys`.
 
-## Where this stopped
+## What already works
 
-26 Nov 2026, QEMU KVM, guest `r5-servo-proof`, beside other sessions' guests. The red `data:` document finished (body text `R5`, one pixel `240 3 0 0`). The GL string was `zink Vulkan 1.4(llvmpipe (LLVM 21.1.8, 256 bits) (MESA_LLVMPIPE))`.
+26 Nov 2026, QEMU KVM, Zink on Lavapipe. `libr5servo.so` and `r5-servo-test` link. The GL string is `zink Vulkan 1.4(llvmpipe (LLVM 21.1.8, 256 bits) (MESA_LLVMPIPE))`. With the first document as the web view's initial URL, the red `data:` page finishes: `load-finished`, body text `R5`. One read-back pixel was `240 3 0 0`, not `255 0 0 255`. The page is loaded; the alpha byte of that read-back is 0.
 
-The boot script waits until `ifconfig` shows an `inet` address other than `127.0.0.1`. On the 10:16–10:22 Europe/Amsterdam boot that wait was `net-wait 0`: the guest already had `10.0.2.15` (QEMU user net). It then requested `https://http2.pro/api/v1`. `net::http_loader` logged the GET at 10:17 Europe/Amsterdam and, one minute later, `dns error` / `No address associated with hostname`. The page text was `Could not load the requested page: client error (Connect)`. No HTTP version line was logged.
+## What does not work
 
-From the host, the same URL answers. `curl` at 10:16 Europe/Amsterdam got `HTTP/2 301` to `https://nhacaitop10.win/api/v1`. The old `{"http2":1}` body is not what that host returns anymore.
+The guest never shows an HTTP/2 response.
 
-## Next step
+On the boot of 10:16–10:22 Europe/Amsterdam the guest already had `inet 10.0.2.15` (QEMU user net) and `127.0.0.1`. `net-wait` was 0. It requested `https://http2.pro/api/v1`. `net::http_loader` logged the GET at 10:17 Europe/Amsterdam. At 10:18 the log was `dns error` / `failed to lookup address information: No address associated with hostname`. The page text was `Could not load the requested page: client error (Connect)`. There is no response-version line, so `Protocol()` stays `B_NOT_SUPPORTED`.
 
-Make the guest resolve `http2.pro` (QEMU user-net's resolver is `10.0.2.3`; this image did not). Load the URL again and record the `net::http_loader` response version. A 301 is still HTTP/2 if that line says so. Do not treat the redirect body as the proof. The TLS change in `elf_tls.cpp` is still source only. The 5625U stick is still not run. `cargo deny check licenses` is still not run.
+From the host, the same minute, `curl` got `HTTP/2 301` to `https://nhacaitop10.win/api/v1`. The name resolves here, and the server speaks HTTP/2. The guest's failure is its own resolver, not "the site is down" and not "Servo has no HTTP/2". That host no longer returns the old `{"http2":1}` body. A 301 page will not match the body check in `Protocol()`, even after DNS works.
+
+Also not done, and not the thing that blocked this boot: the `elf_tls.cpp` change is source only (these boots used `servo.image`), the 5625U stick was not written, and `cargo deny check licenses` was not run.
+
+## What was already tried
+
+1. `LIBRARY_PATH` set to only `non-packaged/lib`. Haiku then does not open `libbe.so`. The variable stays unset. `non-packaged/lib` is already on the default path.
+2. Waiting for Deskbar and for `libbe.so`. This image does not sign in by itself, and Deskbar never appeared. The log finished `about:blank` only. The `data:` document did not finish, and HTTP/2 was never requested. One pixel during that boot was already `240 3 0 0`.
+3. Creating the engine on `about:blank` and then calling `load()`. The real document was dropped. The first document is now the initial URL.
+4. That load from the application thread, without the window lock. The debugger stopped on `Looper must be locked`. `_Start` locks the window before it reads the size.
+5. After 3 and 4, about 10:05–10:13 Europe/Amsterdam: the `data:` page finished and the GET was sent. The test had not waited for an address. The page was `client error (Connect)`, with no version line.
+6. A boot that waits for a non-loopback address was refused while other sessions had their own QEMU. The guard matched every `qemu-system-x86_64`. It now refuses only a second guest named `r5-servo-proof`. Other guests were not stopped.
+7. The 10:16 boot did wait. The address was already there (`10.0.2.15`). Name lookup still failed. An address is not a working resolver.
+
+## Direction
+
+Do not change Servo's HTTP stack for this. The next boot has to make `getaddrinfo("http2.pro")` succeed in the guest, then load the same URL again.
+
+QEMU user net answers DNS at `10.0.2.3`. The next run should print the guest's `resolv.conf` (and the `ifconfig` that this boot only put on the serial log) before the test. If there is no nameserver, or the nameserver does not answer, point the guest at `10.0.2.3` and retry. Do not kill the other QEMU guests. Do not call `scripts/run-qemu-r5.sh`.
+
+The evidence that counts is the `net::http_loader` line that logs the response version. That line is only written after a response. A 301 still counts as HTTP/2 when that line says so. The redirect body is not the proof.
+
+`Protocol()` will stay `B_NOT_SUPPORTED` on that 301, because it only recognises a body that contains `"http2":1` or `HTTP/2`. Servo 0.8 does not give the negotiated version to the embedder except that log. Read the log first. Passing the version into `Protocol()` is a later change in `servo-net`, after a response has been seen.
