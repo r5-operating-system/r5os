@@ -84,7 +84,7 @@ Inode::Inode(Volume* volume, ino_t ino)
 
 	if (fInitStatus == B_OK && ID() != 1) {
 		fInitStatus = UpdateNodeFromDisk();
-		if (!IsDirectory() && !IsSymLink()) {
+		if (fInitStatus == B_OK && !IsDirectory() && !IsSymLink()) {
 			fCache = file_cache_create(fVolume->ID(), ID(), Size());
 			fMap = file_map_create(fVolume->ID(), ID(), Size());
 		}
@@ -101,6 +101,12 @@ Inode::Inode(Volume* volume, ino_t ino)
 		fCommittedValid = bytes;
 		// SPDX-SnippetEnd
 	}
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	if (fInitStatus == B_OK && ID() != 0)
+		fVolume->RegisterInode(this);
+	// SPDX-SnippetEnd
 }
 
 
@@ -119,9 +125,16 @@ Inode::Inode(Volume* volume)
 Inode::~Inode()
 {
 	TRACE("Inode destructor\n");
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	if (fVolume != NULL && fID != 0)
+		fVolume->UnregisterInode(this);
+	// SPDX-SnippetEnd
 	file_cache_delete(FileCache());
 	file_map_delete(Map());
 	mutex_destroy(&fWriterLock);
+	rw_lock_destroy(&fLock);
 	TRACE("Inode destructor: Done\n");
 }
 
@@ -372,11 +385,14 @@ Inode::_Init()
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
 	fDeleted = false;
+	fDataDirty = false;
 	mutex_init(&fWriterLock, "exfat writer");
 	atomic_set(&fWriter, -1);
 	fWriteDepth = 0;
 	fCommittedValid = 0;
 	atomic_set64(&fChainHint, -1);
+	fLastCluster = 0;
+	fLastIndex = 0;
 	fDirCluster = 0;
 	fDirLength = 0;
 	fDirFlags = 0;
@@ -403,23 +419,29 @@ static int leaps(int yr, int mon)
 static int daze[] = { 0,0,31,59,90,120,151,181,212,243,273,304,334,0,0,0 };
 
 void
-Inode::_GetTimespec(uint16 date, uint16 time, struct timespec &timespec) const
+Inode::_GetTimespec(uint16 date, uint16 time, uint8 tenMs, uint8 utcOffset,
+	struct timespec &timespec) const
 {
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
 	int32 tzoffset = 0;
-	// SPDX-SnippetEnd
+	if ((utcOffset & 0x80) != 0) {
+		int32 quarters = (int8)(utcOffset << 1) >> 1;
+		tzoffset = quarters * 15 * 60;
+	} else {
 #ifdef _KERNEL_MODE
-	tzoffset = static_cast<int32>(get_timezone_offset());
+		tzoffset = static_cast<int32>(get_timezone_offset());
 #elif defined USER
-	time_t localTime;
-	time(&localTime);
+		time_t localTime;
+		::time(&localTime);
 
-	struct tm localTm;
-	localtime_r(&localTime, &localTm);
-	tzoffset = localTm.tm_gmtoff;
+		struct tm localTm;
+		localtime_r(&localTime, &localTm);
+		tzoffset = localTm.tm_gmtoff;
 #endif
+	}
+	// SPDX-SnippetEnd
 
 	time_t days = daze[(date >> 5) & 15] + ((date >> 9) + 10) * 365
 		+ leaps((date >> 9) + 10, ((date >> 5) & 15) - 1) + (date & 31) -1;
@@ -427,10 +449,11 @@ Inode::_GetTimespec(uint16 date, uint16 time, struct timespec &timespec) const
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
-	// get_timezone_offset() is seconds. The stamp is local time.
+	if (tenMs > 199)
+		tenMs = 0;
 	timespec.tv_sec = ((days * 24 + (time >> 11)) * 60 + ((time >> 5) & 63))
-		* 60 + 2 * (time & 31) - tzoffset;
-	timespec.tv_nsec = 0;
+		* 60 + 2 * (time & 31) + (tenMs / 100) - tzoffset;
+	timespec.tv_nsec = (long)(tenMs % 100) * 10000000L;
 	// SPDX-SnippetEnd
 }
 
@@ -441,8 +464,10 @@ Inode::_GetTimespec(uint16 date, uint16 time, struct timespec &timespec) const
 void
 Inode::AdoptStream(uint32 first, uint64 dataLength, uint64 validLength,
 	uint8 flags, uint16 attributes, uint8 chunks, cluster_t entryCluster,
-	uint32 entryOffset, uint16 nameHash, bool keepValid)
+	uint32 entryOffset, uint16 nameHash, bool keepValid, const uint8* primary)
 {
+	if (primary != NULL && primary[0] == EXFAT_ENTRY_TYPE_FILE)
+		memcpy(&fFileEntry, primary, 32);
 	fFileInfoEntry.file_info.SetStartCluster(first);
 	fFileInfoEntry.file_info.SetFlag(flags);
 	fFileInfoEntry.file_info.size2 = B_HOST_TO_LENDIAN_INT64(dataLength);

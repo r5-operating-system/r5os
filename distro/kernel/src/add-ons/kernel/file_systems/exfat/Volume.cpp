@@ -77,7 +77,6 @@ exfat_super_block::IsMagicValid()
 bool
 exfat_super_block::IsValid()
 {
-	// TODO: check some more values!
 	if (!IsMagicValid())
 		return false;
 	if (signature != 0xaa55)
@@ -86,6 +85,26 @@ exfat_super_block::IsValid()
 		return false;
 	if (version_minor != 0 || version_major != 1)
 		return false;
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	if (block_shift < 9 || block_shift > 12)
+		return false;
+	if (blocks_per_cluster_shift > (uint8)(25 - block_shift))
+		return false;
+	uint32 clusters = ClusterCount();
+	if (clusters < 1 || clusters > 0xfffffff5u)
+		return false;
+	if (RootDirCluster() < 2 || (uint64)RootDirCluster() > (uint64)clusters + 1)
+		return false;
+	if (FirstFatBlock() >= FirstDataBlock())
+		return false;
+	if ((uint64)FirstFatBlock() + FatLength() > FirstDataBlock())
+		return false;
+	if ((uint64)FirstDataBlock()
+			+ ((uint64)clusters << blocks_per_cluster_shift) > NumBlocks())
+		return false;
+	// SPDX-SnippetEnd
 
 	return true;
 }
@@ -118,6 +137,15 @@ Volume::Volume(fs_volume* volume)
 Volume::~Volume()
 {
 	TRACE("Volume destructor.\n");
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	while (struct node* node = fNodeTree.FindMin()) {
+		fNodeTree.Remove(node);
+		fInoTree.Remove(node);
+		delete node;
+	}
+	// SPDX-SnippetEnd
 	delete fInodesClusterTree;
 	delete fInodesInoTree;
 	// SPDX-SnippetBegin
@@ -125,6 +153,7 @@ Volume::~Volume()
 	// SPDX-License-Identifier: MIT
 	exfat_disk_close(&fDisk);
 	mutex_destroy(&fAllocLock);
+	mutex_destroy(&fLock);
 	// SPDX-SnippetEnd
 }
 
@@ -235,6 +264,13 @@ Volume::Mount(const char* deviceName, uint32 flags)
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+static bool is_media_gone(status_t status);
+// SPDX-SnippetEnd
+
+
 status_t
 Volume::Unmount()
 {
@@ -245,7 +281,9 @@ Volume::Unmount()
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
-	SyncDisk();
+	status_t syncStatus = SyncDisk(true);
+	if (syncStatus != B_OK && is_media_gone(syncStatus))
+		MarkReadOnly();
 	// SPDX-SnippetEnd
 	TRACE("Volume::Unmount(): Deleting the block cache\n");
 	block_cache_delete(fBlockCache, !IsReadOnly());
@@ -314,8 +352,8 @@ Volume::NextCluster(cluster_t _cluster)
 	// SPDX-SnippetEnd
 	cluster += _cluster % clusterPerBlock;
 	TRACE("Volume::NextCluster() cluster %" B_PRIu32 " next %" B_PRIu32 "\n",
-		_cluster, *cluster);
-	return *cluster;
+		_cluster, B_LENDIAN_TO_HOST_INT32(*cluster));
+	return B_LENDIAN_TO_HOST_INT32(*cluster);
 }
 
 
@@ -544,19 +582,101 @@ Volume::FinishMount()
 }
 
 
-status_t
-Volume::SyncDisk()
+extern status_t exfat_commit_inode(Inode* inode, bool flushDrive);
+
+static bool
+is_media_gone(status_t status)
 {
+	return status == B_DEV_NO_MEDIA || status == B_DEV_NOT_READY
+		|| status == ENODEV || status == B_FILE_ERROR
+		|| status == B_IO_ERROR || status == B_DEV_MEDIA_CHANGED
+		|| status == B_DEV_WRITE_ERROR || status == B_DEV_READ_ERROR;
+}
+
+
+void
+Volume::RegisterInode(Inode* inode)
+{
+	if (inode == NULL || inode->ID() == 0)
+		return;
+	MutexLocker locker(fLock);
+	if (fInodesInoTree->Lookup(inode->ID()) == NULL)
+		fInodesInoTree->Insert(inode);
+}
+
+
+void
+Volume::UnregisterInode(Inode* inode)
+{
+	if (inode == NULL || inode->ID() == 0)
+		return;
+	MutexLocker locker(fLock);
+	if (fInodesInoTree->Lookup(inode->ID()) == inode)
+		fInodesInoTree->Remove(inode);
+}
+
+
+status_t
+Volume::SyncOpenInodes()
+{
+	status_t result = B_OK;
+	for (;;) {
+		ino_t batch[32];
+		size_t count = 0;
+		{
+			MutexLocker locker(fLock);
+			InodesInoTree::Iterator it = fInodesInoTree->GetIterator();
+			while (Inode* inode = it.Next()) {
+				if (inode->NeedsCommit()) {
+					batch[count++] = inode->ID();
+					if (count == sizeof(batch) / sizeof(batch[0]))
+						break;
+				}
+			}
+		}
+		if (count == 0)
+			break;
+		for (size_t i = 0; i < count; i++) {
+			Inode* inode = NULL;
+			if (get_vnode(fFSVolume, batch[i], (void**)&inode) != B_OK)
+				continue;
+			status_t st = exfat_commit_inode(inode, false);
+			put_vnode(fFSVolume, batch[i]);
+			if (st != B_OK) {
+				if (is_media_gone(st)) {
+					MarkReadOnly();
+					return st;
+				}
+				if (result == B_OK)
+					result = st;
+			}
+		}
+		if (result != B_OK)
+			break;
+	}
+	return result;
+}
+
+
+status_t
+Volume::SyncDisk(bool unmounting)
+{
+	if (IsReadOnly())
+		return B_OK;
+	if (!unmounting) {
+		status_t openStatus = SyncOpenInodes();
+		if (openStatus != B_OK)
+			return openStatus;
+	}
+	MutexLocker allocation(fAllocLock);
 	if (IsReadOnly() || !fDisk.dirty)
 		return B_OK;
-	MutexLocker allocation(fAllocLock);
 	status_t status = exfat_sync(&fStore, &fDisk);
-	if (status == B_DEV_NO_MEDIA || status == B_DEV_NOT_READY
-		|| status == ENODEV || status == B_FILE_ERROR) {
+	if (is_media_gone(status)) {
 		dprintf("exfat: media removed during sync (%s), marking read-only\n",
 			strerror(status));
 		MarkReadOnly();
-		return B_OK;
+		return status;
 	}
 	if (status != B_OK)
 		dprintf("exfat: sync failed, volume stays dirty\n");
@@ -603,7 +723,7 @@ Volume::ForgetIno(ino_t ino)
 void
 Volume::MarkReadOnly()
 {
-	fFlags |= VOLUME_READ_ONLY;
+	atomic_or(&fFlags, VOLUME_READ_ONLY);
 	fDisk.can_write = false;
 }
 

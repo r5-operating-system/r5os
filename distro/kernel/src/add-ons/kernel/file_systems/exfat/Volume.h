@@ -113,7 +113,8 @@ public:
 
 			bool				IsValidSuperBlock();
 			bool				IsReadOnly() const
-								{ return (fFlags & VOLUME_READ_ONLY) != 0; }
+								{ return (atomic_get((int32*)&fFlags)
+									& VOLUME_READ_ONLY) != 0; }
 
 			Inode*				RootNode() const { return fRootNode; }
 			int					Device() const { return fDevice; }
@@ -170,8 +171,11 @@ public:
 			void				MarkReadOnly();
 			uint64				ChainBytes(cluster_t start);
 			status_t			FinishMount();
-			status_t			SyncDisk();
+			status_t			SyncDisk(bool unmounting = false);
+			status_t			SyncOpenInodes();
 			status_t			FlushDrive();
+			void				RegisterInode(Inode* inode);
+			void				UnregisterInode(Inode* inode);
 			// SPDX-SnippetEnd
 private:
 			ino_t				_NextID() { return fNextId++; }
@@ -182,7 +186,7 @@ private:
 			exfat_super_block	fSuperBlock;
 			char				fName[B_FILE_NAME_LENGTH];
 
-			uint16				fFlags;
+			int32				fFlags;
 			uint32				fBlockSize;
 			uint32				fEntriesPerBlock;
 			Inode*				fRootNode;

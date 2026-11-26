@@ -115,15 +115,24 @@ exfat_identify_partition(int fd, partition_data* partition, void** _cookie)
 		// zero out volume name
 
 	uint32 rootDirCluster = superBlock.RootDirCluster();
-	uint32 blockSize = 1 << superBlock.BlockShift();
+	uint32 blockSize = 1u << superBlock.BlockShift();
 	uint32 clusterSize = blockSize << superBlock.BlocksPerClusterShift();
 	uint64 rootDirectoryOffset = EXFAT_SUPER_BLOCK_OFFSET
 		+ (uint64)superBlock.FirstDataBlock() * blockSize
-		+ (rootDirCluster - 2) * clusterSize;
+		+ (uint64)(rootDirCluster - 2) * clusterSize;
 	struct exfat_entry entry;
 	size_t entrySize = sizeof(struct exfat_entry);
-	for (uint32 i = 0; read_pos(fd, rootDirectoryOffset + i * entrySize,
-			&entry, entrySize) == (ssize_t)entrySize; i++) {
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	uint32 maxEntries = clusterSize / entrySize;
+	if (maxEntries > 4096)
+		maxEntries = 4096;
+	for (uint32 i = 0; i < maxEntries
+			&& read_pos(fd, rootDirectoryOffset + (uint64)i * entrySize,
+				&entry, entrySize) == (ssize_t)entrySize; i++) {
+		if (entry.type == 0)
+			break;
 		if (entry.type == EXFAT_ENTRY_TYPE_NOT_IN_USE
 			|| entry.type == EXFAT_ENTRY_TYPE_LABEL) {
 			if (get_volume_name(&entry, cookie->name, sizeof(cookie->name))
@@ -134,6 +143,7 @@ exfat_identify_partition(int fd, partition_data* partition, void** _cookie)
 			break;
 		}
 	}
+	// SPDX-SnippetEnd
 
 	if (cookie->name[0] == '\0') {
 		off_t fileSystemSize = (off_t)superBlock.NumBlocks()
@@ -227,8 +237,11 @@ exfat_read_fs_info(fs_volume* _volume, struct fs_info* info)
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
-	info->free_blocks = (uint64)volume->Disk()->free_clusters
-		<< volume->SuperBlock().BlocksPerClusterShift();
+	{
+		MutexLocker allocation(volume->AllocLock());
+		info->free_blocks = (uint64)volume->Disk()->free_clusters
+			<< volume->SuperBlock().BlocksPerClusterShift();
+	}
 	// SPDX-SnippetEnd
 
 	// Volume name
@@ -304,16 +317,11 @@ exfat_read_pages(fs_volume* _volume, fs_vnode* _node, void*,
 	inode->ReadLock();
 	status_t status = exfat_device_transfer(volume, inode, pos, vecs, count,
 		&bytes, false);
-	inode->ReadUnlock();
-	// SPDX-SnippetEnd
-
-	// SPDX-SnippetBegin
-	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
-	// SPDX-License-Identifier: MIT
 	if (status == B_OK) {
 		*_numBytes = bytes;
 		exfat_zero_past_valid(inode, start, vecs, count, bytes);
 	}
+	inode->ReadUnlock();
 	// SPDX-SnippetEnd
 	return status;
 }
@@ -394,11 +402,14 @@ exfat_get_file_map(fs_volume* _volume, fs_vnode* _node, off_t offset,
 		}
 
 		offset += blockLength;
-		size -= blockLength;
-
 		// SPDX-SnippetBegin
 		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 		// SPDX-License-Identifier: MIT
+		if ((off_t)size <= blockLength)
+			size = 0;
+		else
+			size -= (size_t)blockLength;
+
 		if (size == 0 || offset >= inode->Size()) {
 		// SPDX-SnippetEnd
 			// We're done!
@@ -439,14 +450,10 @@ exfat_lookup(fs_volume* _volume, fs_vnode* _directory, const char* name,
 	if (status != B_OK) {
 		if (status != B_ENTRY_NOT_FOUND)
 			ERROR("exfat_lookup: name %s (%s)\n", name, strerror(status));
-		if (status == B_ENTRY_NOT_FOUND)
-			entry_cache_add_missing(volume->ID(), directory->ID(), name);
 		return status;
 	}
 
 	TRACE("exfat_lookup: ID %" B_PRIdINO "\n", *_vnodeID);
-	entry_cache_add(volume->ID(), directory->ID(), name, *_vnodeID);
-
 	return get_vnode(volume->FSVolume(), *_vnodeID, NULL);
 }
 
@@ -467,6 +474,11 @@ exfat_read_stat(fs_volume* _volume, fs_vnode* _node, struct stat* stat)
 {
 	Inode* inode = (Inode*)_node->private_node;
 
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	inode->ReadLock();
+	// SPDX-SnippetEnd
 	stat->st_dev = inode->GetVolume()->ID();
 	stat->st_ino = inode->ID();
 	stat->st_nlink = 1;
@@ -484,6 +496,11 @@ exfat_read_stat(fs_volume* _volume, fs_vnode* _node, struct stat* stat)
 
 	stat->st_size = inode->Size();
 	stat->st_blocks = (inode->Size() + DEV_BSIZE - 1) / DEV_BSIZE;
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	inode->ReadUnlock();
+	// SPDX-SnippetEnd
 
 	return B_OK;
 }

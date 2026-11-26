@@ -211,12 +211,32 @@ DirectoryIterator::_GetNext(uint16* utf16Name, size_t* _codeUnitCount,
 	size_t nameIndex = 0;
 	status_t status;
 	int32 chunkCount = 1;
+	bool inFile = false;
+	bool skipSet = false;
 
 	while ((status = _NextEntry()) == B_OK) {
 		TRACE("DirectoryIterator::_GetNext() %" B_PRIu32 "/%p, type 0x%x, "
 			"offset %" B_PRId64 "\n", fInode->Cluster(), fCurrent,
 			fCurrent->type, fOffset);
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		if (skipSet) {
+			chunkCount--;
+			if (chunkCount <= 0) {
+				skipSet = false;
+				inFile = false;
+				nameIndex = 0;
+				*_codeUnitCount = nameMax;
+				chunkCount = 1;
+			}
+			continue;
+		}
+		// SPDX-SnippetEnd
 		if (fCurrent->type == EXFAT_ENTRY_TYPE_FILE) {
+			inFile = true;
+			nameIndex = 0;
+			*_codeUnitCount = nameMax;
 			chunkCount = fCurrent->file.chunkCount;
 			if (_id != NULL) {
 				// SPDX-SnippetBegin
@@ -237,22 +257,54 @@ DirectoryIterator::_GetNext(uint16* utf16Name, size_t* _codeUnitCount,
 		} else if (fCurrent->type == EXFAT_ENTRY_TYPE_FILEINFO) {
 			chunkCount--;
 			*_codeUnitCount = (size_t)fCurrent->file_info.name_length;
+			if (*_codeUnitCount > nameMax)
+				*_codeUnitCount = nameMax;
 			TRACE("DirectoryIterator::_GetNext() Filename chunk: %" B_PRId32
 				", code unit count: %" B_PRIu8 "\n", chunkCount, *_codeUnitCount);
 			if (visitor != NULL)
 				visitor->VisitFileInfo(fCurrent);
 		} else if (fCurrent->type == EXFAT_ENTRY_TYPE_FILENAME) {
 			chunkCount--;
-			size_t utf16Length = sizeof(fCurrent->file_name.name);
-			memcpy(utf16Name + nameIndex, fCurrent->file_name.name, utf16Length);
-			nameIndex += utf16Length / sizeof(uint16);
+			// SPDX-SnippetBegin
+			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			// SPDX-License-Identifier: MIT
+			size_t avail = nameMax > nameIndex ? nameMax - nameIndex : 0;
+			size_t copyUnits = sizeof(fCurrent->file_name.name) / sizeof(uint16);
+			if (copyUnits > avail)
+				copyUnits = avail;
+			if (copyUnits > 0) {
+				memcpy(utf16Name + nameIndex, fCurrent->file_name.name,
+					copyUnits * sizeof(uint16));
+				nameIndex += copyUnits;
+			}
+			// SPDX-SnippetEnd
 			TRACE("DirectoryIterator::_GetNext() Filename index: %zu\n",
 				nameIndex);
 			if (visitor != NULL)
 				visitor->VisitFilename(fCurrent);
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		} else if (inFile && chunkCount > 0 && (fCurrent->type & 0xe0) == 0xe0) {
+			// Skip unknown benign secondary entries (0xE0-0xFF)
+			chunkCount--;
+		} else if (inFile && chunkCount > 0 && (fCurrent->type & 0xc0) == 0xc0) {
+			// Unknown critical secondary entry (0xC2-0xDF): skip the entire set
+			// and continue with the next primary entry in the directory.
+			chunkCount--;
+			if (chunkCount > 0) {
+				skipSet = true;
+			} else {
+				inFile = false;
+				nameIndex = 0;
+				*_codeUnitCount = nameMax;
+				chunkCount = 1;
+			}
+			continue;
 		}
+		// SPDX-SnippetEnd
 
-		if (chunkCount == 0 || nameIndex >= nameMax)
+		if (chunkCount <= 0)
 			break;
 	}
 
@@ -291,8 +343,15 @@ DirectoryIterator::_NextEntry()
 			% (1 << fInode->GetVolume()->SuperBlock().BlocksPerClusterShift());
 		TRACE("DirectoryIterator::_NextEntry() init to block %" B_PRIu64 "\n",
 			block);
-		fCurrent = (struct exfat_entry*)fBlock.SetTo(block)
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		const uint8* blockData = fBlock.SetTo(block);
+		if (blockData == NULL)
+			return B_IO_ERROR;
+		fCurrent = (struct exfat_entry*)blockData
 			+ fOffset % fInode->GetVolume()->EntriesPerBlock();
+		// SPDX-SnippetEnd
 	} else if ((fOffset % fInode->GetVolume()->EntriesPerBlock()) == 0) {
 		fsblock_t block;
 		if ((fOffset % fInode->GetVolume()->EntriesPerCluster()) == 0) {
@@ -310,7 +369,14 @@ DirectoryIterator::_NextEntry()
 			block = fBlock.BlockNumber() + 1;
 
 		TRACE("DirectoryIterator::_NextEntry() block %" B_PRIu64 "\n", block);
-		fCurrent = (struct exfat_entry*)fBlock.SetTo(block);
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		const uint8* blockData = fBlock.SetTo(block);
+		if (blockData == NULL)
+			return B_IO_ERROR;
+		fCurrent = (struct exfat_entry*)blockData;
+		// SPDX-SnippetEnd
 	} else
 		fCurrent++;
 
