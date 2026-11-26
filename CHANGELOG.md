@@ -8,6 +8,12 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-26 - AHCI: shorten post-COMRESET wait on empty ports to 100 ms
+
+- Problem: `AHCIPort::PortReset()` (`ahci_port.cpp`) waited 500 ms after COMRESET even on empty ports where `PxSSTS.DET` reports nothing attached, adding ~1.0 s on dual empty AMD FCH AHCI controllers.
+- Change: `distro/kernel/src/add-ons/kernel/busses/scsi/ahci/ahci_port.cpp` now waits 100 ms first and stops early only when `PxSSTS.DET == SSTS_PORT_DET_NODEV` both before reset and after the 100 ms wait. Any port that had a device before reset or reports non-zero `PxSSTS.DET` (e.g. `DET == 1`, presence detected / negotiating) still waits the remaining 400 ms (500 ms total).
+- Limits: **Not tested on hardware** (5625U stick test and real SATA drive test pending). Build and QEMU boot only; no hardware boot-time speed-up claimed yet.
+
 ## 2026-11-26 - libroot and kernel: malloc lock padding, AVX2 string fixes, APIC scale, and leak/OOB fixes
 
 - Problem: `sMallocMutexes` (`wrapper.c`) packed four 16-byte locks per 64-byte cache line; `memcmp_avx2` and `strcmp_avx2` abandoned AVX2 for SSE at the first 4 KiB page edge; `r5_string_x86.h`, `strchrnul.c`, and `memchr.c` used `_mm_cmpestri`; `x86_apic.cpp` ran 128-bit division (`__udivti3`) on every timer re-arm; `efi_arch_init()` leaked `sFPUBuffer` on three early error returns; `usb_disk.cpp` leaked `DMAResource` when `Init()` failed; `ahci.c` read `base_registers[6]` past the 6-element array when checking BAR5.
