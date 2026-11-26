@@ -395,7 +395,9 @@ Volume::GetIno(cluster_t cluster, uint32 offset, ino_t parent,
 			" ino %" B_PRIdINO "\n", cluster, offset, node->ino);
 		return node->ino;
 	}
-	node = new struct node();
+	node = new(std::nothrow) struct node();
+	if (node == NULL)
+		return 0;
 	node->key = key;
 	node->ino = _NextID();
 	node->parent = parent;
@@ -691,6 +693,8 @@ Volume::MoveNode(ino_t ino, cluster_t cluster, uint32 offset, ino_t parent)
 	struct node* node = fInoTree.Lookup(ino);
 	if (node == NULL)
 		return B_ENTRY_NOT_FOUND;
+	struct node_key oldKey = node->key;
+	ino_t oldParent = node->parent;
 	fNodeTree.Remove(node);
 	node->key.cluster = cluster;
 	node->key.offset = offset;
@@ -701,8 +705,15 @@ Volume::MoveNode(ino_t ino, cluster_t cluster, uint32 offset, ino_t parent)
 		fNodeTree.Remove(occupying);
 		delete occupying;
 	}
-	if (!fNodeTree.Insert(node))
+	if (!fNodeTree.Insert(node)) {
+		node->key = oldKey;
+		node->parent = oldParent;
+		if (!fNodeTree.Insert(node)) {
+			fInoTree.Remove(node);
+			delete node;
+		}
 		return B_ERROR;
+	}
 	return B_OK;
 }
 

@@ -114,6 +114,9 @@ public:
 							uint32 entryOffset, uint16 nameHash,
 							bool keepValid = false,
 							const uint8* primary = NULL);
+			bool		LookupCacheFind(const char* name, ino_t* idOut) const;
+			void		LookupCacheStore(const char* name, ino_t id);
+			void		LookupCacheClear();
 			// SPDX-SnippetEnd
 			uid_t		UserID() const { return 0;/*fNode.UserID();*/ }
 			gid_t		GroupID() const { return 0;/*fNode.GroupID();*/ }
@@ -186,6 +189,16 @@ private:
 			uint64		fDirLength;
 			uint8		fDirFlags;
 			bool		fDirRoot;
+			struct LookupCacheEntry {
+				ino_t	id;
+				uint32	hash;
+				uint8	len;
+				char	name[64];
+			};
+			static const uint32 kLookupCacheSize = 32;
+			mutable mutex		fLookupCacheLock;
+			LookupCacheEntry*	fLookupCache;
+			uint32				fLookupCacheNext;
 			// SPDX-SnippetEnd
 
 			SplayTreeLink<Inode> fInoTreeLink;

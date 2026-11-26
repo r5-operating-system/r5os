@@ -996,16 +996,21 @@ usb_disk_update_capacity(device_lun* lun)
 
 	if (lun->io_scheduler == NULL) {
 		dma_restrictions restrictions = {};
-		restrictions.high_address = UINT32_MAX;
-		restrictions.max_transfer_size = MAX_IO_BLOCKS * lun->block_size;
-
 		// SPDX-SnippetBegin
 		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 		// SPDX-License-Identifier: MIT
+		// USB 3.0+ devices always attach behind xHCI (64-bit DMA capable);
+		// avoid 32-bit bounce buffers above 4 GiB RAM.
+		const usb_device_descriptor* desc
+			= gUSBModule->get_device_descriptor(lun->device->device);
+		restrictions.high_address = (desc != NULL && desc->usb_version >= 0x0300)
+			? UINT64_MAX : UINT32_MAX;
+		restrictions.max_transfer_size = MAX_IO_BLOCKS * lun->block_size;
+
 		DMAResource* dmaResource = new(std::nothrow) DMAResource;
 		if (dmaResource == NULL)
 			return B_NO_MEMORY;
-		result = dmaResource->Init(restrictions, lun->block_size, 1, 1);
+		result = dmaResource->Init(restrictions, lun->block_size, 8, 4);
 		if (result != B_OK) {
 			delete dmaResource;
 			return result;

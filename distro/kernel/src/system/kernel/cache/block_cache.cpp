@@ -104,6 +104,12 @@ struct cached_block {
 		// Block has been checked out for writing without transactions, and
 		// cannot be written back if set
 	bool			is_dirty : 1;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	bool			on_dirty_list : 1;
+	DoublyLinkedListLink<cached_block> dirty_link;
+// SPDX-SnippetEnd
 	bool			unused : 1;
 	bool			discard : 1;
 	bool			busy_reading_waiters : 1;
@@ -233,9 +239,21 @@ struct block_cache : DoublyLinkedListLinkImpl<block_cache> {
 	TransactionTable transaction_hash;
 
 	object_cache*	buffer_cache;
-	spinlock		unused_blocks_lock;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	spinlock		unused_blocks_lock __attribute__((aligned(64)));
+// SPDX-SnippetEnd
 	block_list		unused_blocks;
 	uint32			unused_block_count;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	uint32			soft_cap_blocks;
+	DoublyLinkedList<cached_block,
+		DoublyLinkedListMemberGetLink<cached_block,
+			&cached_block::dirty_link> > dirty_blocks;
+// SPDX-SnippetEnd
 
 	ConditionVariable busy_reading_condition;
 	uint32			busy_reading_count;
@@ -1365,6 +1383,32 @@ BlockWriter::_WriteBlocks(cached_block** blocks, uint32 count)
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+static inline void
+mark_block_dirty(block_cache* cache, cached_block* block)
+{
+	block->is_dirty = true;
+	if (!block->on_dirty_list) {
+		cache->dirty_blocks.Add(block);
+		block->on_dirty_list = true;
+	}
+}
+
+
+static inline void
+unmark_block_dirty(block_cache* cache, cached_block* block)
+{
+	block->is_dirty = false;
+	if (block->on_dirty_list) {
+		cache->dirty_blocks.Remove(block);
+		block->on_dirty_list = false;
+	}
+}
+// SPDX-SnippetEnd
+
+
 void
 BlockWriter::_BlockDone(cached_block* block,
 	cache_transaction* transaction)
@@ -1378,7 +1422,7 @@ BlockWriter::_BlockDone(cached_block* block,
 		fCache->num_dirty_blocks--;
 
 	if (_Data(block) == block->current_data)
-		block->is_dirty = false;
+		unmark_block_dirty(fCache, block);
 
 	_UnmarkWriting(block);
 
@@ -1654,6 +1698,7 @@ block_cache::block_cache(int _fd, off_t numBlocks, size_t blockSize,
 	last_transaction(NULL),
 	buffer_cache(NULL),
 	unused_block_count(0),
+	soft_cap_blocks(0),
 	busy_reading_count(0),
 	busy_reading_waiters(false),
 	busy_writing_count(0),
@@ -1691,6 +1736,22 @@ block_cache::Init()
 		CACHE_NO_DEPOT | CACHE_LARGE_SLAB);
 	if (buffer_cache == NULL)
 		return B_NO_MEMORY;
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#ifdef _KERNEL_MODE
+	// Soft cap on clean unused blocks per cache (1/8 of RAM, clamped to
+	// 32..512 MiB) so BFS/large volumes do not grow unboundedly.
+	uint64 totalBytes = (uint64)vm_page_num_pages() * B_PAGE_SIZE;
+	uint64 capBytes = totalBytes / 8;
+	if (capBytes < 32ULL * 1024 * 1024)
+		capBytes = 32ULL * 1024 * 1024;
+	if (capBytes > 512ULL * 1024 * 1024)
+		capBytes = 512ULL * 1024 * 1024;
+	soft_cap_blocks = (uint32)(capBytes / block_size);
+#endif
+// SPDX-SnippetEnd
 
 	if (hash.Init(1024) != B_OK)
 		return B_NO_MEMORY;
@@ -1789,6 +1850,7 @@ block_cache::NewBlock(off_t blockNumber)
 	block->busy_writing = false;
 	block->is_writing = false;
 	block->is_dirty = false;
+	block->on_dirty_list = false;
 	block->unused = false;
 	block->discard = false;
 	block->busy_reading_waiters = false;
@@ -2291,7 +2353,7 @@ get_writable_cached_block(block_cache* cache, off_t blockNumber,
 
 		if (!block->is_dirty) {
 			cache->num_dirty_blocks++;
-			block->is_dirty = true;
+			mark_block_dirty(cache, block);
 				// mark the block as dirty
 
 #if BLOCK_CACHE_DEBUG_CHANGED
@@ -2398,7 +2460,7 @@ get_writable_cached_block(block_cache* cache, off_t blockNumber,
 		mark_block_unbusy_reading(cache, block);
 	}
 
-	block->is_dirty = true;
+	mark_block_dirty(cache, block);
 
 #if BLOCK_CACHE_DEBUG_CHANGED
 	if (block->compare != NULL) {
@@ -3267,7 +3329,7 @@ cache_abort_transaction(void* _cache, int32 id)
 		block->transaction = NULL;
 		block->discard = false;
 		if (block->previous_transaction == NULL)
-			block->is_dirty = false;
+			unmark_block_dirty(cache, block);
 	}
 
 	cache->transaction_hash.Remove(transaction);
@@ -3433,7 +3495,7 @@ cache_abort_sub_transaction(void* _cache, int32 id)
 			if (block->previous_transaction == NULL) {
 				cache->Free(block->original_data);
 				block->original_data = NULL;
-				block->is_dirty = false;
+				unmark_block_dirty(cache, block);
 
 				if (block->ref_count == 0) {
 					// Move the block into the unused list if possible
@@ -3761,15 +3823,27 @@ block_cache_sync(void* _cache)
 	WriteLocker locker(&cache->lock);
 
 	BlockWriter writer(cache);
-	BlockTable::Iterator iterator(&cache->hash);
-
-	while (iterator.HasNext()) {
-		cached_block* block = iterator.Next();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	auto iterator = cache->dirty_blocks.GetIterator();
+	while (cached_block* block = iterator.Next()) {
 		if (block->CanBeWritten())
 			writer.Add(block);
 	}
+// SPDX-SnippetEnd
 
 	status_t status = writer.Write();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (cache->soft_cap_blocks > 0
+		&& cache->unused_block_count > cache->soft_cap_blocks) {
+		int32 excess = (int32)(cache->unused_block_count
+			- cache->soft_cap_blocks);
+		cache->RemoveUnusedBlocks(excess, 0);
+	}
+// SPDX-SnippetEnd
 
 	locker.Unlock();
 

@@ -133,6 +133,13 @@ Inode::~Inode()
 	// SPDX-SnippetEnd
 	file_cache_delete(FileCache());
 	file_map_delete(Map());
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	free(fLookupCache);
+	fLookupCache = NULL;
+	mutex_destroy(&fLookupCacheLock);
+	// SPDX-SnippetEnd
 	mutex_destroy(&fWriterLock);
 	rw_lock_destroy(&fLock);
 	TRACE("Inode destructor: Done\n");
@@ -199,6 +206,7 @@ Inode::WriteLock()
 	mutex_lock(&fWriterLock);
 	atomic_set(&fWriter, self);
 	fWriteDepth = 1;
+	LookupCacheClear();
 }
 
 
@@ -397,6 +405,9 @@ Inode::_Init()
 	fDirLength = 0;
 	fDirFlags = 0;
 	fDirRoot = false;
+	mutex_init(&fLookupCacheLock, "exfat lookup cache");
+	fLookupCache = NULL;
+	fLookupCacheNext = 0;
 	// SPDX-SnippetEnd
 }
 
@@ -503,6 +514,106 @@ Inode::ApplyCacheSize(off_t invalidateFrom)
 	}
 	if (span > 0)
 		file_map_invalidate(Map(), from, span);
+}
+
+
+static bool
+exfat_ascii_fold_hash(const char* name, uint32* hashOut, uint8* lenOut)
+{
+	uint32 h = 2166136261u;
+	uint32 len = 0;
+	for (; name[len] != '\0'; len++) {
+		unsigned char c = (unsigned char)name[len];
+		if (c >= 0x80 || len >= 63)
+			return false;
+		if (c >= 'A' && c <= 'Z')
+			c = (unsigned char)(c - 'A' + 'a');
+		h ^= c;
+		h *= 16777619u;
+	}
+	*hashOut = h;
+	*lenOut = (uint8)len;
+	return len > 0;
+}
+
+
+static bool
+exfat_ascii_ieq(const char* a, const char* b, uint8 len)
+{
+	for (uint8 i = 0; i < len; i++) {
+		unsigned char ca = (unsigned char)a[i];
+		unsigned char cb = (unsigned char)b[i];
+		if (ca >= 'A' && ca <= 'Z')
+			ca = (unsigned char)(ca - 'A' + 'a');
+		if (cb >= 'A' && cb <= 'Z')
+			cb = (unsigned char)(cb - 'A' + 'a');
+		if (ca != cb)
+			return false;
+	}
+	return true;
+}
+
+
+bool
+Inode::LookupCacheFind(const char* name, ino_t* idOut) const
+{
+	uint32 hash = 0;
+	uint8 len = 0;
+	if (!exfat_ascii_fold_hash(name, &hash, &len))
+		return false;
+	MutexLocker locker(fLookupCacheLock);
+	if (fLookupCache == NULL)
+		return false;
+	for (uint32 i = 0; i < kLookupCacheSize; i++) {
+		const LookupCacheEntry& e = fLookupCache[i];
+		if (e.id != 0 && e.hash == hash && e.len == len
+			&& exfat_ascii_ieq(e.name, name, len)) {
+			*idOut = e.id;
+			return true;
+		}
+	}
+	return false;
+}
+
+
+void
+Inode::LookupCacheStore(const char* name, ino_t id)
+{
+	uint32 hash = 0;
+	uint8 len = 0;
+	if (id == 0 || !exfat_ascii_fold_hash(name, &hash, &len))
+		return;
+	MutexLocker locker(fLookupCacheLock);
+	if (fLookupCache == NULL) {
+		fLookupCache = (LookupCacheEntry*)calloc(kLookupCacheSize,
+			sizeof(LookupCacheEntry));
+		if (fLookupCache == NULL)
+			return;
+	}
+	for (uint32 i = 0; i < kLookupCacheSize; i++) {
+		LookupCacheEntry& e = fLookupCache[i];
+		if (e.id != 0 && e.hash == hash && e.len == len
+			&& exfat_ascii_ieq(e.name, name, len)) {
+			e.id = id;
+			return;
+		}
+	}
+	LookupCacheEntry& slot = fLookupCache[fLookupCacheNext % kLookupCacheSize];
+	fLookupCacheNext = (fLookupCacheNext + 1) % kLookupCacheSize;
+	slot.id = id;
+	slot.hash = hash;
+	slot.len = len;
+	memcpy(slot.name, name, len);
+	slot.name[len] = '\0';
+}
+
+
+void
+Inode::LookupCacheClear()
+{
+	MutexLocker locker(fLookupCacheLock);
+	if (fLookupCache != NULL)
+		memset(fLookupCache, 0, sizeof(LookupCacheEntry) * kLookupCacheSize);
 }
 // SPDX-SnippetEnd
 

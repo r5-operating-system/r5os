@@ -8,6 +8,18 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-26 - Phase 2 (File systems & USB storage): dirty-list block_cache_sync, BFS soft cap, exFAT cache/leaks, packagefs activated-packages & launch_speedup, USB 64-bit DMA
+
+- Problem: `block_cache_sync()` scanned the entire hash table of clean and dirty blocks under exclusive write lock; BFS block caches had no soft cap on unused clean blocks; `distro/package/.../CommitTransactionHandler.cpp` (copied by `apply-high-bugs.py`) lacked the initial `activated-packages` write; `launch_speedup` was not packaged in `add-ons/kernel/file_cache`; `PackageFileHeapAccessorBase` re-decompressed the same 64 KiB HPKG chunk across small-file reads; exFAT lacked a case-insensitive directory lookup cache, `malloc()`'d a block buffer on every `work_open()`, allocated unbounded `extra * 4` arrays in `grow_allocation()`, never released nodes in `exfat_put_vnode()`, omitted `std::nothrow` in `GetIno()`, and could desync trees in `MoveNode()`; `usb_disk.cpp` hardcoded 32-bit DMA (`UINT32_MAX`) and 1 transfer in flight.
+- Change:
+  - `distro/kernel/src/system/kernel/cache/block_cache.cpp`: maintained an intrusive `dirty_blocks` list so `block_cache_sync()` walks only dirty blocks; aligned per-cache `unused_blocks_lock` to 64 bytes; added a per-cache clean unused-block soft cap (1/8 of RAM, clamped to 32..512 MiB).
+  - `distro/package/src/servers/package/CommitTransactionHandler.cpp`: restored the initial `administrative/activated-packages` write on writable volumes.
+  - `distro/desktop/build/jam/packages/Haiku`: packaged `launch_speedup` into `add-ons/kernel/file_cache`.
+  - `distro/kernel/src/kits/package/hpkg/PackageFileHeapAccessorBase.cpp`: added a shared 64-slot (4 MiB) LRU cache of decompressed 64 KiB HPKG chunks in kernel mode.
+  - `distro/kernel/src/add-ons/kernel/file_systems/exfat/{Inode.h,Inode.cpp,Volume.cpp,exfat_update.cpp,exfat_vfs.cpp,kernel_interface.cpp}`: added a 32-entry case-insensitive per-directory lookup cache on `Inode` (invalidated on directory mutation), 4 KiB inline block buffer in `struct work`, chunked 256-cluster `grow_allocation()`, `ForgetIno()` in `exfat_put_vnode()`, `new(std::nothrow)` in `Volume::GetIno()`, and rollback on `MoveNode()` failure.
+  - `distro/kernel/src/add-ons/kernel/drivers/disk/usb/usb_disk/usb_disk.cpp`: enabled 64-bit DMA (`UINT64_MAX`) for USB 3.0+ (`usb_version >= 0x0300`, xHCI) and raised `DMAResource::Init()` from `(1, 1)` to `(8, 4)` transfers.
+- Limits: Global VFS `sVnodeLock` (77 lock sites across `vfs.cpp` coupling `sVnodeTable`, mount covers, and `sUnusedVnodeList`) was left unsharded in this round to avoid VFS deadlock risk; documented in report. Build and QEMU BFS/exFAT verification after all Phase 2 areas; 5625U stick and real USB 3.0 xHCI verification pending merge. No speed-up claimed without measurement.
+
 ## 2026-11-26 - Phase 2 (libroot, runtime_loader IFUNC, CPU): AVX2/FSRM memcpy/memset/memmove, R_X86_64_IRELATIVE, and CPPC preferred-core capacity
 
 - Problem: `memcpy.cpp`, `memset.cpp`, and `memmove.c` used 16-byte SSE for medium/aliased copies, `memcpy_small` and `memcpy_sse` used indirect function-pointer tables, `memset.cpp` ignored `R5_CPU_FSRM`, dispatched `libroot` functions paid an atomic load + indirect jump on every call because `runtime_loader` lacked `R_X86_64_IRELATIVE` / `STT_GNU_IFUNC`, and AMD CPPC preferred cores (5625U: highest 186 vs 181) all received capacity 0.

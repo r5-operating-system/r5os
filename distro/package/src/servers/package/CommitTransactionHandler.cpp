@@ -705,6 +705,39 @@ CommitTransactionHandler::_PrepareFirstBootPackages()
 			(int) i, package->FileName().String());
 		_PreparePackageToActivate(package);
 	}
+
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// Write administrative/activated-packages on writable volumes so subsequent
+	// boots do not fall back to scanning the entire packages directory.
+	if (!fAddedPackages.empty()) {
+		try {
+			BFile existing;
+			if (_OpenPackagesFile(RelativePath(kAdminDirectoryName),
+					kActivationFileName, B_READ_ONLY, existing) != B_OK) {
+				BEntry activationFileEntry;
+				_WriteActivationFile(RelativePath(kAdminDirectoryName),
+					kTemporaryActivationFileName, fAddedPackages, PackageSet(),
+					activationFileEntry);
+				status_t renameError = activationFileEntry.Rename(
+					kActivationFileName, true);
+				if (renameError == B_OK) {
+					INFORM("Wrote initial %s for %zu packages.\n",
+						kActivationFileName, fAddedPackages.size());
+				} else {
+					ERROR("Failed to rename initial %s: %s\n",
+						kActivationFileName, strerror(renameError));
+					activationFileEntry.Remove();
+				}
+			}
+		} catch (Exception& exception) {
+			// Non-fatal on read-only media.
+			ERROR("Skipping initial %s write: %s\n", kActivationFileName,
+				strerror(exception.SystemError()));
+		}
+	}
+	// SPDX-SnippetEnd
 }
 
 
