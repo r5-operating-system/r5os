@@ -631,8 +631,10 @@ seed(const char* path)
 			strlen(text), &time, &moved);
 	}
 	/* Plant CritSec folder for the QEMU guest DirectoryIterator test:
-	   alpha.txt, then a 4-entry set with an unknown 0xC2 critical secondary,
-	   then omega.txt. */
+	   alpha.txt, then a 5-entry set (0x85, 0xC0, 0xC1 "bad", 0xC2, 0xE0)
+	   so DirectoryIterator::_GetNext() hits the unknown 0xC2 critical
+	   secondary with one entry left and must enter its skipSet path to
+	   consume the trailing 0xE0 entry, then omega.txt. */
 	if (status == B_OK) {
 		exfat_node critDir;
 		status = exfat_create(&store, &disk, NULL, &root, "CritSec", true, 0,
@@ -655,10 +657,10 @@ seed(const char* path)
 				status = exfat_map(&store, &disk, critDir.first_cluster,
 					critDir.data_length, critDir.flags, badOff, &phys, &run);
 				if (status == B_OK) {
-					uint8 badSet[4 * 32];
+					uint8 badSet[5 * 32];
 					memset(badSet, 0, sizeof(badSet));
 					badSet[0] = 0x85;
-					badSet[1] = 3;
+					badSet[1] = 4;
 					badSet[32] = 0xc0;
 					badSet[32 + 1] = 0x01;
 					badSet[32 + 3] = 3;
@@ -670,7 +672,8 @@ seed(const char* path)
 					badSet[64 + 4] = 'a';
 					badSet[64 + 6] = 'd';
 					badSet[96] = 0xc2; /* unknown critical secondary */
-					uint16 sum = seed_entry_checksum(badSet, 4);
+					badSet[128] = 0xe0; /* trailing entry consumed by skipSet */
+					uint16 sum = seed_entry_checksum(badSet, 5);
 					badSet[2] = (uint8)sum;
 					badSet[3] = (uint8)(sum >> 8);
 					if (pwrite(fd, badSet, sizeof(badSet), (off_t)phys)
