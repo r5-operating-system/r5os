@@ -182,28 +182,49 @@ map_bo(uint32* handle, uint64 va, uint64 bytes, uint32 flags, void** cpu)
 	bo.bytes = bytes;
 	if (ioctl(sFd, R5_GPU_BO_CREATE, &bo, sizeof(bo)) != 0)
 		return false;
-	*handle = bo.handle;
+	uint32 createdHandle = bo.handle;
+	area_id mappedArea = -1;
+	auto cleanup = [&]() {
+		if (mappedArea >= 0)
+			delete_area(mappedArea);
+		r5_gpu_bo gone;
+		memset(&gone, 0, sizeof(gone));
+		gone.size = (uint32)sizeof(gone);
+		gone.version = 1;
+		gone.handle = createdHandle;
+		ioctl(sFd, R5_GPU_BO_FREE, &gone, sizeof(gone));
+		*handle = 0;
+		*cpu = NULL;
+	};
 	memset(&bo, 0, sizeof(bo));
 	bo.size = (uint32)sizeof(bo);
 	bo.version = 1;
-	bo.handle = *handle;
-	if (ioctl(sFd, R5_GPU_BO_MAP, &bo, sizeof(bo)) != 0)
+	bo.handle = createdHandle;
+	if (ioctl(sFd, R5_GPU_BO_MAP, &bo, sizeof(bo)) != 0) {
+		cleanup();
 		return false;
+	}
+	mappedArea = bo.area;
 	area_info info;
-	if (get_area_info(bo.area, &info) != B_OK)
+	if (get_area_info(mappedArea, &info) != B_OK) {
+		cleanup();
 		return false;
-	*cpu = info.address;
+	}
 	r5_gpu_va map;
 	memset(&map, 0, sizeof(map));
 	map.size = (uint32)sizeof(map);
 	map.version = 1;
 	map.context = 1;
-	map.handle = *handle;
+	map.handle = createdHandle;
 	map.gpu_va = va;
 	map.map_bytes = (bytes + 4095ull) & ~4095ull;
 	map.flags = flags;
-	if (ioctl(sFd, R5_GPU_VA_MAP, &map, sizeof(map)) != 0)
+	if (ioctl(sFd, R5_GPU_VA_MAP, &map, sizeof(map)) != 0) {
+		cleanup();
 		return false;
+	}
+	*handle = createdHandle;
+	*cpu = info.address;
 	return true;
 }
 
@@ -329,6 +350,8 @@ open_node()
 	if (!map_bo(&sIbHandle, 0x210000000ull, kIbBytes,
 			R5_GPU_VA_READ | R5_GPU_VA_WRITE | R5_GPU_VA_EXEC, &sIbBits)) {
 		off("no render node");
+		close(sFd);
+		sFd = -1;
 		return false;
 	}
 	sIbVa = 0x210000000ull;

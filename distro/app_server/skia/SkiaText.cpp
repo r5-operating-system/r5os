@@ -13,6 +13,7 @@
 
 #include "SkiaPainter.h"
 
+#include <limits.h>
 #include <math.h>
 #include <stdio.h>
 
@@ -41,38 +42,62 @@
 #include "IntRect.h"
 
 
+static BLocker sTypefaceLock("skia typefaces");
+static std::map<std::string, sk_sp<SkTypeface>> sFileTypefaces;
+static std::map<std::pair<uint64, long>, sk_sp<SkTypeface>> sMemoryTypefaces;
+
+
+void
+r5_skia_forget_memory_font(uint64 serial)
+{
+	if (serial == 0)
+		return;
+	BAutolock _(sTypefaceLock);
+	auto it = sMemoryTypefaces.lower_bound(std::make_pair(serial, LONG_MIN));
+	while (it != sMemoryTypefaces.end() && it->first.first == serial)
+		it = sMemoryTypefaces.erase(it);
+}
+
+
 /*!	One SkTypeface per font file (or per font a program loaded from
 	memory), made by the empty custom font manager from the same bytes
-	FreeType reads for ServerFont.
+	FreeType reads for ServerFont. Memory fonts are keyed by their unique
+	FontStyle serial and evicted when FontStyle frees or replaces the data.
 */
 static sk_sp<SkTypeface>
 typeface_for(const char* path, long faceIndex, const FT_Byte* data,
-	uint32 dataSize)
+	uint32 dataSize, uint64 dataSerial)
 {
-	static BLocker sLock("skia typefaces");
-	static std::map<std::string, sk_sp<SkTypeface>> sTypefaces;
 	static sk_sp<SkFontMgr> sManager = SkFontMgr_New_Custom_Empty();
 
-	char key[B_PATH_NAME_LENGTH + 64];
 	if (data != NULL && dataSize > 0) {
-		snprintf(key, sizeof(key), "mem:%p:%" B_PRIu32 ":%ld", data,
-			dataSize, faceIndex);
-	} else if (path != NULL && path[0] != '\0')
-		snprintf(key, sizeof(key), "%s:%ld", path, faceIndex);
-	else
+		if (dataSerial == 0) {
+			return sManager->makeFromData(SkData::MakeWithCopy(data,
+				dataSize), (int)faceIndex);
+		}
+		std::pair<uint64, long> memKey(dataSerial, faceIndex);
+		BAutolock _(sTypefaceLock);
+		auto found = sMemoryTypefaces.find(memKey);
+		if (found != sMemoryTypefaces.end())
+			return found->second;
+		sk_sp<SkTypeface> typeface = sManager->makeFromData(
+			SkData::MakeWithCopy(data, dataSize), (int)faceIndex);
+		sMemoryTypefaces[memKey] = typeface;
+		return typeface;
+	}
+
+	if (path == NULL || path[0] == '\0')
 		return nullptr;
 
-	BAutolock _(sLock);
-	auto found = sTypefaces.find(key);
-	if (found != sTypefaces.end())
+	char key[B_PATH_NAME_LENGTH + 64];
+	snprintf(key, sizeof(key), "%s:%ld", path, faceIndex);
+
+	BAutolock _(sTypefaceLock);
+	auto found = sFileTypefaces.find(key);
+	if (found != sFileTypefaces.end())
 		return found->second;
-	sk_sp<SkTypeface> typeface;
-	if (data != NULL && dataSize > 0) {
-		typeface = sManager->makeFromData(SkData::MakeWithCopy(data,
-			dataSize), (int)faceIndex);
-	} else
-		typeface = sManager->makeFromFile(path, (int)faceIndex);
-	sTypefaces[key] = typeface;
+	sk_sp<SkTypeface> typeface = sManager->makeFromFile(path, (int)faceIndex);
+	sFileTypefaces[key] = typeface;
 	return typeface;
 }
 
@@ -81,7 +106,7 @@ static sk_sp<SkTypeface>
 typeface_for(const ServerFont& font)
 {
 	return typeface_for(font.Path(), font.FaceIndex(), font.FontData(),
-		font.FontDataSize());
+		font.FontDataSize(), font.FontDataSerial());
 }
 
 
@@ -113,7 +138,7 @@ fallback_typeface_for(const ServerFont& font, uint32 charCode,
 		if (style == NULL)
 			continue;
 		sk_sp<SkTypeface> typeface = typeface_for(path.String(), faceIndex,
-			NULL, 0);
+			NULL, 0, 0);
 		if (typeface == nullptr)
 			continue;
 		SkGlyphID glyph = typeface->unicharToGlyph((SkUnichar)charCode);

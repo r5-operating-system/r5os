@@ -34,14 +34,18 @@ Includes [ FGristFiles Compositor.cpp CompositorVulkan.cpp
 # headers are the R5 Vulkan headers on the build host, as for r5-wsi-test.
 ObjectC++Flags Compositor.cpp CompositorVulkan.cpp CompositorEffects.cpp
 	CompositorAnimations.cpp CompositorShare.cpp :
+	-O3
 	-I/home/nickr/r5os/mesa-build/vulkan-headers-r5/install/include
 	;
+
+ObjectC++Flags GPUCopy.cpp : -O3 ;
 
 # M12 (docs/APP-SERVER-GPU-DRAWING.md, part 3): Skia's headers only for the
 # R5 Skia code, from the skia_devel staging tree of distro/skia/pack-skia.sh.
 # Skia m158 needs C++20; the defines are those of skia-defines.txt.
 local skiaStage = /home/nickr/r5os/skia-build/pkg-root/develop ;
 local skiaFlags =
+	-O3
 	-std=gnu++20
 	-DSK_CODEC_DECODES_BMP -DSK_CODEC_DECODES_WBMP -DSK_R32_SHIFT=16
 	-DSK_ENABLE_YUVA_PACKED_422 -DSK_ENABLE_PRECOMPILE -DSK_GRAPHITE

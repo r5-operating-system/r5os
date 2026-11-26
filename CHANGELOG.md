@@ -8,6 +8,16 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-26 - app_server and Skia: shader init race, target teardown, single full hash, memory-font eviction, GPUCopy cleanup, and -O3
+
+- Problem: `blend_effect()`, `color_effect()`, and `gradient_effect()` (`SkiaPainter.cpp`) used unsynchronized `static bool sTried` / `static sk_sp` across window threads; `~SkiaTarget()` deleted `fRecorder` before releasing `fTextures` and `fGradients`; `KeepTexture()` hashed `<= 16 MiB` bitmaps twice (and up to three times after a stale lookup); memory-loaded fonts in `SkiaText.cpp` were keyed on raw pointers and kept forever; `GPUCopy.cpp` leaked BOs, areas, and `sFd` on failure paths; `libaslocal.a` compiled Compositor/Skia/GPUCopy at `-O2` while Painter and AGG used `-O3`.
+- Change:
+  - `distro/app_server/skia/SkiaPainter.{h,cpp}`: switched the three `SkRuntimeEffect` statics to thread-safe function-local static initialisers; cleared `fTextures` and `fGradients` before `DeleteRecorder()` in `~SkiaTarget()`; computed the full hash for `<= 16 MiB` bitmaps once and reused it between `FindTexture()` and `KeepTexture()` (full hash preserved; no sampling or generation-counter shortcut).
+  - `distro/app_server/{ServerFont.h,font/FontStyle.{h,cpp},skia/SkiaText.cpp}` and `scripts/apply-app-server.py`: assigned a monotonic `uint64` `fFontDataSerial` in `FontStyle::SetFontData()`, keyed memory fonts in `SkiaText.cpp` by `(serial, faceIndex)`, and evicted them via `r5_skia_forget_memory_font()` when `FontStyle` frees or replaces its data.
+  - `distro/app_server/GPUCopy.cpp`: freed the BO and deleted the mapped area on every failure path of `map_bo()`, and closed `sFd` when `map_bo()` fails in `open_node()`.
+  - `distro/app_server/local-Jamfile`: added `-O3` to `Compositor*.cpp`, `Skia*.cpp`, `DrawCompare.cpp`, and `GPUCopy.cpp`.
+- Limits: Verified with `scripts/build-locked.sh` (zero new warnings) and QEMU desktop + Aomi screenshot check; 5625U hardware stick test pending merge. No speed-up claimed without measurement.
+
 ## 2026-11-26 - AHCI: shorten post-COMRESET wait on empty ports to 100 ms
 
 - Problem: `AHCIPort::PortReset()` (`ahci_port.cpp`) waited 500 ms after COMRESET even on empty ports where `PxSSTS.DET` reports nothing attached, adding ~1.0 s on dual empty AMD FCH AHCI controllers.
