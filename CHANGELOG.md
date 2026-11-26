@@ -19,6 +19,29 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - Found on the way: the patched surfman and ipc-channel trees on R5's build machine differed from what the patches give in four comment lines only (a trailing `r` cut off by an earlier line-ending fix); the code was the same. A Servo build while a jam runs on the same Haiku tree fails in SpiderMonkey (`stdint.h: No such file`), because the cross toolchain's sysroot headers are links into jam's packaging directory; servo-haiku's `docs/BUILDING.md` says so and shows a copied toolchain.
 - Not proven / limits: no boot of this image; the library is byte-equal, so Aomi's behaviour is that of 0.8.0-5. servo-haiku is only built for x86_64, and has not been tried on stock Haiku with the runtime_loader patch.
 
+## 2026-11-26 - Build: package releases are pre-releases
+
+- Problem: GitHub showed `r5servo-0.8.0-5` as the Latest release of r5os, so a visitor could take a Servo package for the R5 release. `--latest=false` does not remove that label while ordinary releases exist.
+- Change: the 16 `pkg-*` releases and `r5servo-0.8.0-5` were marked pre-release by hand; the API `releases/latest` now gives 404. `scripts/publish-package.sh` creates new package releases with `--prerelease`. The unused releases `r5servo-0.8.0-2` to `-4` and their tags were deleted (only `-5` is pinned in `distro/servo/r5servo.sha256`).
+- Tested: `bash -n` on the script; a pinned asset still downloads by its tag URL (HTTP 200). No build: the build fetches by tag, which a pre-release does not change.
+
+## 2026-11-26 - A missing message field keeps its default (Bluetooth, Wallpaper, screens, network shares)
+
+Problem: Haiku's `BMessage::Find*()` sets the value to 0 or empty before it looks for the field (`Message.cpp`, `*p = type();`). So `x = default; msg->FindInt32("x", &x);` loses the default when the field is missing. In Aomi (#4684) this made Alt+W always close the first tab. The same pattern was in other R5 code.
+
+Changed (`Get*()` with the default, or the default kept by hand):
+- Bluetooth: a "conn state" reply without the field read as CONNECTED (0) instead of DISCONNECTED (`kit/RemoteDevice.cpp`). A plain inquiry result has no RSSI; the scan list and the name lookup read 0 (full signal) instead of `HCI_RSSI_INVALID` (`lib/BluetoothController.cpp`, `server/LocalDeviceNames.cpp`).
+- Wallpaper page: a Backgrounds attribute without the workspaces, mode, outline or set field put the picture on no workspace or in mode 0.
+- `BScreenArrangement` (libr5ui): an archive without "enabled" made the screen off. `BSidebarItem`: an archive without "r5:count" gave count 0 instead of none (-1).
+- Network shares: an edit message without a field cleared that field of the share. A hand-written shares file without `id`, `mount_at_startup` or the other bools got id 0 and was not mounted at startup.
+- Tests: `bt_audio_smoke_test` took a reply without "status" as B_OK; `gamecontroller_feel_test` lost its -2 "no index" marker.
+
+Not changed: the other R5 calls without a check have a default of 0, false, NULL or empty, or the sender always adds the field (Display page menus, Deskbar place, Connections, Wi-Fi security, MIDI monitor, AdminLock and others). Lines that are unchanged Haiku code (Tracker `DesktopPoseView`, `FSUtils`, Deskbar `TeamMenu`, SoftwareUpdater, touchpad settings) were left as they are; none of the named ones gives a wrong value. Aomi and Servo were not touched here (Aomi is fixed on its own branch).
+
+Limits: no run-time test; the missing-field cases were found by reading the senders, not by a test that sends such a message.
+
+Tested: compile only. `scripts/build-locked.sh` from this worktree on main after #4691 (jam and image exit 0); the nine changed files built without a warning. Not booted; no QEMU or hardware run.
+
 ## 2026-11-26 - Build: R5 packages as release downloads, not in git (#4681 step 1)
 
 - Problem: R5's own hpkg packages were committed in `distro/packages/x86_64` (43 files, 200 MB in the tree; 135 versions, about 523 MB of the history). An hpkg is already compressed, so git stored every version in full. Only r5servo was already a release download (Aomi part 2).
