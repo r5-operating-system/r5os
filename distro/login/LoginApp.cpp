@@ -763,11 +763,11 @@ LoginApp::TryLogin(BMessage* message)
 						_LaunchSessionHooks(login);
 					}
 					if (status == B_OK) {
-						bigtime_t switchStart = system_time();
 						status = _AppServerActivateDesktop(targetUid);
-						syslog(LOG_INFO, "Login: activate desktop %d: %s after "
-							"%" B_PRId64 " ms", (int)targetUid, strerror(status),
-							(system_time() - switchStart) / 1000);
+						if (status != B_OK) {
+							syslog(LOG_ERR, "Login: activate desktop %d: %s",
+								(int)targetUid, strerror(status));
+						}
 						if (status != B_OK
 							&& app_server_active_user(30000000LL)
 								== (int32)targetUid) {

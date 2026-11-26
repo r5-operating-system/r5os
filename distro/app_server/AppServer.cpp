@@ -188,6 +188,12 @@ AppServer::MessageReceived(BMessage* message)
 // SPDX-License-Identifier: MIT
 	if (r5_admin_port_reply(message, fAdminPort))
 		return;
+	// A reply (input_server answering a desktop switch's update; BMessage
+	// falls back to be_app_messenger when no reply target is given) is not
+	// a request. Its what 0 would read as AS_GET_DESKTOP and log a protocol
+	// error at every switch.
+	if (message->IsReply())
+		return;
 // SPDX-SnippetEnd
 	switch (message->what) {
 		case AS_GET_DESKTOP:
@@ -373,7 +379,6 @@ AppServer::_ActivateDesktop(Desktop* target)
 		}
 	}
 
-	bigtime_t start = system_time();
 	if (current != NULL && current != target) {
 		status_t status = current->Deactivate();
 		if (status != B_OK) {
@@ -383,14 +388,12 @@ AppServer::_ActivateDesktop(Desktop* target)
 			return status;
 		}
 	}
-	bigtime_t deactivated = system_time();
-
 	status_t status = target->Activate();
-	syslog(LOG_INFO, "app_server: switch %d->%d: deactivate %" B_PRId64
-		" ms, activate %s %" B_PRId64 " ms\n",
-		current != NULL ? (int)current->UserID() : -1, (int)target->UserID(),
-		(deactivated - start) / 1000, strerror(status),
-		(system_time() - deactivated) / 1000);
+	if (status != B_OK) {
+		syslog(LOG_ERR, "app_server: switch %d->%d: activate %s\n",
+			current != NULL ? (int)current->UserID() : -1,
+			(int)target->UserID(), strerror(status));
+	}
 	if (status != B_OK && current != NULL && current != target) {
 		// Roll back to the previously shown desktop if activation failed.
 		current->Activate();

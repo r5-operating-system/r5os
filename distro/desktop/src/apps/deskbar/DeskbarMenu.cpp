@@ -425,7 +425,13 @@ B_TRANSLATE_MARK_VOID("About R5")
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-	struct passwd* sessionUser = getpwuid(getuid());
+	// Copy the name now: the getpwent() loop below reuses the static buffer
+	// of getpwuid(), which made the item read "Log out <last account>".
+	BString sessionName;
+	if (struct passwd* sessionUser = getpwuid(getuid())) {
+		if (sessionUser->pw_name != NULL)
+			sessionName = sessionUser->pw_name;
+	}
 	bool isGuest = r5_admin_is_system_guest(getuid());
 
 	if (isGuest) {
@@ -500,10 +506,8 @@ B_TRANSLATE_MARK_VOID("About R5")
 		}
 
 		BString logoutLabel(B_TRANSLATE("Log out"));
-		if (sessionUser != NULL && sessionUser->pw_name != NULL
-			&& sessionUser->pw_name[0] != '\0') {
-			logoutLabel << ' ' << sessionUser->pw_name;
-		}
+		if (!sessionName.IsEmpty())
+			logoutLabel << ' ' << sessionName;
 		item = new BMenuItem(logoutLabel.String(),
 			new BMessage(kLogoutSession));
 		item->SetEnabled(!dragging);

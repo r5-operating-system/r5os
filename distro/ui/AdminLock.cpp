@@ -261,6 +261,8 @@ public:
 		fPassword = new BTextControl("password", B_TRANSLATE("Password"), "",
 			NULL);
 		fPassword->TextView()->HideTyping(true);
+		BButton* unlockButton = new BButton("unlock", B_TRANSLATE("Unlock"),
+			new BMessage(kMsgUnlockOk));
 
 		BLayoutBuilder::Group<>(this, B_VERTICAL, B_USE_SMALL_SPACING)
 			.SetInsets(B_USE_WINDOW_INSETS)
@@ -272,10 +274,11 @@ public:
 				.AddGlue()
 				.Add(new BButton("cancel", B_TRANSLATE("Cancel"),
 					new BMessage(B_QUIT_REQUESTED)))
-				.Add(new BButton("unlock", B_TRANSLATE("Unlock"),
-					new BMessage(kMsgUnlockOk)))
+				.Add(unlockButton)
 			.End();
 
+		// Enter in the password field unlocks.
+		SetDefaultButton(unlockButton);
 		fPassword->MakeFocus(true);
 		CenterOnScreen();
 	}
