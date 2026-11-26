@@ -2,6 +2,7 @@
 # SPDX-FileCopyrightText: 2026 R5OS Contributors
 # SPDX-License-Identifier: MIT
 """Package prebuilt libr5servo.so and BServoView.h into an x86_64 .hpkg."""
+import hashlib
 import os
 import shutil
 import subprocess
@@ -14,7 +15,7 @@ PKG = HAIKU / "generated.x86_64/objects/linux/x86_64/release/tools/package/packa
 STRIP = HAIKU / "generated.x86_64/cross-tools-x86_64/bin/x86_64-unknown-haiku-strip"
 SO_SRC = SERVO_SRC / "r5servo-out" / "libr5servo.so"
 
-VERSION = "0.8.0-1"
+VERSION = "0.8.0-5"
 PKG_NAME = f"r5servo-{VERSION}-x86_64.hpkg"
 
 PACKAGE_INFO = f"""name\t\t\tr5servo
@@ -51,7 +52,7 @@ requires {{
 def main() -> None:
     root = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parents[2]
     hdr_src = root / "distro" / "servo" / "BServoView.h"
-    out_dir = root / "distro" / "packages" / "x86_64"
+    out_dir = Path(sys.argv[2]) if len(sys.argv) > 2 else (SERVO_SRC / "r5servo-out")
     out_dir.mkdir(parents=True, exist_ok=True)
     dest = out_dir / PKG_NAME
 
@@ -78,13 +79,28 @@ def main() -> None:
     hdr_dst = stage / "develop" / "headers" / "r5" / "BServoView.h"
     hdr_dst.write_bytes(hdr_src.read_bytes().replace(b"\r\n", b"\n"))
 
+    # Every licence, copyright and NOTICE file of what is inside the library
+    # travels with it (MIT, BSD, Apache-2.0, ISC, Zlib and OpenSSL ask that).
+    docs = stage / "documentation" / "packages" / "r5servo"
+    docs.mkdir(parents=True)
+    notices = docs / "THIRD_PARTY_NOTICES.txt"
+    subprocess.check_call([
+        sys.executable,
+        str(root / "distro" / "servo" / "collect-servo-notices.py"),
+        str(root / "distro" / "servo" / "engine" / "Cargo.lock"),
+        str(notices),
+    ])
+
+
     (stage / ".PackageInfo").write_text(PACKAGE_INFO, encoding="utf-8", newline="\n")
 
     if dest.exists():
         dest.unlink()
     subprocess.check_call([str(PKG), "create", "-C", str(stage), str(dest)])
+    digest = hashlib.sha256(dest.read_bytes()).hexdigest()
     size_mb = dest.stat().st_size / (1024 * 1024)
     print(f"created {dest} ({dest.stat().st_size} bytes, {size_mb:.2f} MiB)")
+    print(f"sha256 {digest}  {PKG_NAME}")
 
 
 if __name__ == "__main__":

@@ -548,6 +548,8 @@ for linkTarget in $(DESKBAR_APPLICATIONS) {
 	AddSymlinkToPackage data deskbar menu Applications
 		: ../../../../apps/$(linkTarget) : $(linkTarget) ;
 }
+AddSymlinkToPackage data deskbar menu Applications
+	: ../../../../apps/Aomi : "Aomi (experimental)" ;
 
 # "Desktop applets" links
 AddDirectoryToPackage data deskbar menu Desktop\ applets

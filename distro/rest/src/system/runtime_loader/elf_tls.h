@@ -23,7 +23,7 @@ public:
 						TLSBlockTemplate()
 							: fGeneration(0), fAddress(NULL), fFileSize(0),
 								fMemorySize(0), fAlignment(16), fStaticOffset(0),
-								fHasStaticOffset(false) { }
+								fHasStaticOffset(false), fRelocated(false) { }
 	inline				TLSBlockTemplate(void* address, size_t fileSize,
 							size_t memorySize);
 
@@ -46,6 +46,10 @@ public:
 							{ fStaticOffset = offset; fHasStaticOffset = true; }
 			size_t		StaticOffset() const	{ return fStaticOffset; }
 			bool		HasStaticOffset() const	{ return fHasStaticOffset; }
+			// The library's TLS image is mapped and relocated: a thread may
+			// copy it (Materialize()).
+			void		SetRelocated()	{ fRelocated = true; }
+			bool		IsRelocated() const	{ return fRelocated; }
 			// SPDX-SnippetEnd
 
 private:
@@ -60,6 +64,7 @@ private:
 			size_t		fAlignment;
 			size_t		fStaticOffset;
 			bool		fHasStaticOffset;
+			bool		fRelocated;
 			// SPDX-SnippetEnd
 };
 
@@ -82,6 +87,7 @@ public:
 			bool		HasStaticPlacement(unsigned dso) const;
 			uint64		StaticPlacement(unsigned dso) const;
 			void		Materialize();
+			void		SetRelocated(unsigned dso);
 			// SPDX-SnippetEnd
 
 private:
@@ -121,13 +127,19 @@ TLSBlockTemplate::TLSBlockTemplate(void* address, size_t fileSize,
 	fMemorySize(memorySize),
 	fAlignment(16),
 	fStaticOffset(0),
-	fHasStaticOffset(false)
+	fHasStaticOffset(false),
+	fRelocated(false)
 {
 }
 
 
 void*	get_tls_address(unsigned dso, addr_t offset);
 void	destroy_thread_tls();
+// SPDX-SnippetBegin
+// SPDX-License-Identifier: MIT
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+void	tls_reinit_after_fork();
+// SPDX-SnippetEnd
 void	materialize_initial_exec_tls();
 uint64	r5_initial_exec_offset(unsigned dso, uint64 symbolOffset, int64 addend);
 

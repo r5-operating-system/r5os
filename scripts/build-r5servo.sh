@@ -52,6 +52,7 @@ fetch_crate gaol gaol 0.2.1 gaol-0.2.1-haiku-no-sandbox.patch
 fetch_crate servo-fonts servo-fonts 0.8.0 servo-fonts-0.8.0-haiku-freetype.patch
 fetch_crate servo-fonts-traits servo-fonts-traits 0.8.0 servo-fonts-traits-0.8.0-haiku-font-id.patch
 fetch_crate servo-script servo-script 0.8.0 servo-script-0.8.0-haiku-platform.patch
+fetch_crate servo-net servo-net 0.8.0 servo-net-0.8.0-no-credentials-in-uri.patch
 
 for need in \
 	"$CXX" \
@@ -96,7 +97,8 @@ rustc +1.99.1 --version
 STAGE="$SERVO_SRC/r5servo-engine"
 rm -rf "$STAGE"
 mkdir -p "$STAGE/src" "$STAGE/.cargo" "$OUT"
-cp "$ENGINE/Cargo.toml" "$ENGINE/build.rs" "$STAGE/"
+# Cargo.lock too: the build uses the versions recorded in git (source offer).
+cp "$ENGINE/Cargo.toml" "$ENGINE/Cargo.lock" "$ENGINE/build.rs" "$STAGE/"
 cp "$ENGINE/src/lib.rs" "$STAGE/src/"
 # The C++ view is included by path from the repository, not the stage.
 python3 - "$STAGE/Cargo.toml" "$SERVO_SRC" <<'PY'
@@ -111,6 +113,7 @@ repls = {
     ".vendor/servo-fonts-traits": f"{servo}/servo-fonts-traits",
     ".vendor/gaol": f"{servo}/gaol",
     ".vendor/servo-script": f"{servo}/servo-script",
+    ".vendor/servo-net": f"{servo}/servo-net",
 }
 for old, new in repls.items():
     text = text.replace(old, new)
@@ -155,7 +158,9 @@ step() {
 }
 
 cd "$ENGINE"
-step cargo cargo +1.99.1 build -Zbuild-std=std,panic_unwind,panic_abort --release --target x86_64-unknown-haiku -j 4
+# --locked: the build uses exactly the Cargo.lock in git; a Cargo.toml change
+# without its lock stops here.
+step cargo cargo +1.99.1 build --locked -Zbuild-std=std,panic_unwind,panic_abort --release --target x86_64-unknown-haiku -j 4
 LIBA="$CARGO_TARGET_DIR/x86_64-unknown-haiku/release/libr5servo.a"
 # Same NEEDED set as the proof binary servo-min. Mesa's libGL is loaded
 # by the engine at runtime, the way that binary does it.
@@ -164,7 +169,7 @@ step shared "$CXX" -shared -fPIC -O2 -o "$OUT/libr5servo.so" \
 	-Wl,-soname,libr5servo.so \
 	-Wl,--allow-multiple-definition \
 	-Wl,--whole-archive "$LIBA" -Wl,--no-whole-archive \
-	-lbe -lstdc++ -lz -lbsd -lnetwork -lroot -lgcc_s
+	-lbe -ltracker -lstdc++ -lz -lbsd -lnetwork -lroot -lgcc_s
 step test "$CXX" -O2 -o "$OUT/r5-servo-test" "$ROOT/distro/servo/r5-servo-test.cpp" \
 	-I"$ROOT/distro/servo" \
 	-L"$OUT" \

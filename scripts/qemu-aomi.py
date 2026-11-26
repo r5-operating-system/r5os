@@ -82,7 +82,7 @@ def main():
     qemu = subprocess.Popen([
         "qemu-system-x86_64", "-name", "R5-aomi",
         "-machine", "pc,accel=kvm", "-cpu", "host", "-m", "2048",
-        "-smp", "2", "-display", "none",
+        "-smp", "4", "-display", "none",
         "-drive", "file=%s,format=raw,if=ide,index=0,media=disk" % image,
         "-vga", "std", "-usb", "-device", "usb-tablet",
         "-object", "rng-random,id=rng0,filename=/dev/urandom",

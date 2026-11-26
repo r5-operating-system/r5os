@@ -3,44 +3,31 @@
 
 SubDir HAIKU_TOP src apps aomi ;
 
-local architectureObject ;
-for architectureObject in [ MultiArchSubDirSetup ] {
-	on $(architectureObject) {
-		if ! [ FIsBuildFeatureEnabled webkit ] {
-			continue ;
-		}
+UsePrivateHeaders system ;
 
-		UseBuildFeatureHeaders webkit ;
-		UsePrivateHeaders netservices ;
+Application Aomi :
+	AomiApp.cpp
+	AomiPages.cpp
+	AomiWindow.cpp
+	AomiSupport.cpp
+	WebContentView.cpp
+	ServoContentView.cpp
+	:
+	[ TargetLibstdc++ ]
+	localestub
+	be network tracker shared
+	libr5ui.so libr5icons.so
+	:
+	Aomi.rdef
+	;
 
-		Application Aomi :
-			AomiApp.cpp
-			AomiWindow.cpp
-			AomiSupport.cpp
-			WebContentView.cpp
-			WebKitContentView.cpp
-			:
-			bnetapi
-			[ MultiArchDefaultGristFiles libnetservices.a ]
-			[ BuildFeatureAttribute webkit : libraries ]
-			[ TargetLibstdc++ ]
-			localestub
-			be network tracker shared
-			libr5ui.so libr5icons.so
-			:
-			Aomi.rdef
-			;
-
-		DoCatalogs Aomi :
-			application/x-vnd.R5-Aomi
-			:
-			AomiApp.cpp
-			AomiWindow.cpp
-			AomiSupport.cpp
-			WebContentView.cpp
-			WebKitContentView.cpp
-			;
-
-		break ;
-	}
-}
+DoCatalogs Aomi :
+	application/x-vnd.R5-Aomi
+	:
+	AomiApp.cpp
+	AomiPages.cpp
+	AomiWindow.cpp
+	AomiSupport.cpp
+	WebContentView.cpp
+	ServoContentView.cpp
+	;
