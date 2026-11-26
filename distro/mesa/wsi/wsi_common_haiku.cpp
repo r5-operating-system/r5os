@@ -183,6 +183,7 @@ struct r5_swapchain {
 	bigtime_t refresh;
 	bigtime_t last_present;
 	bool retrace_failed;
+	BScreen *screen;
 	/* The image after the last one presented. Zero until the first present. */
 	uint32_t next_image;
 	/* M11 step 3b: the images are shared with app_server. */
@@ -688,15 +689,25 @@ r5_copy_rows(struct wsi_image *image, BBitmap *bitmap, uint32_t width,
 static void
 r5_fifo_wait(struct r5_swapchain *chain, BWindow *window)
 {
-	bigtime_t now = system_time();
-	if (chain->retrace_failed && chain->last_present != 0) {
-		bigtime_t elapsed = now - chain->last_present;
-		if (elapsed < chain->refresh)
-			snooze(chain->refresh - elapsed);
+	if (chain->retrace_failed) {
+		bigtime_t now = system_time();
+		if (chain->last_present != 0) {
+			bigtime_t elapsed = now - chain->last_present;
+			if (elapsed < chain->refresh)
+				snooze(chain->refresh - elapsed);
+		}
+		chain->last_present = system_time();
+		return;
 	}
-	BScreen screen(window);
-	status_t status = screen.WaitForRetrace(chain->refresh);
-	chain->retrace_failed = status != B_OK;
+	if (chain->screen == NULL)
+		chain->screen = new (std::nothrow) BScreen(window);
+	status_t status = chain->screen != NULL
+		? chain->screen->WaitForRetrace(chain->refresh) : B_NO_MEMORY;
+	if (status != B_OK) {
+		chain->retrace_failed = true;
+		delete chain->screen;
+		chain->screen = NULL;
+	}
 	chain->last_present = system_time();
 }
 
@@ -990,6 +1001,9 @@ r5_swapchain_destroy(struct wsi_swapchain *wsi_chain,
 		chain->images[i].bitmap = NULL;
 	}
 
+	delete chain->screen;
+	chain->screen = NULL;
+
 	pthread_mutex_destroy(&chain->mu);
 	pthread_cond_destroy(&chain->cv);
 	pthread_mutex_destroy(&chain->present_mu);
@@ -1252,6 +1266,8 @@ r5_create_swapchain(VkIcdSurfaceBase *icd, VkDevice device,
 		chain->images[i].bitmap = new (std::nothrow) BBitmap(frame, B_RGBA32, false);
 		if (chain->images[i].bitmap == NULL
 			|| chain->images[i].bitmap->InitCheck() != B_OK) {
+			delete chain->images[i].bitmap;
+			chain->images[i].bitmap = NULL;
 			chain->base.image_count = i;
 			r5_swapchain_destroy(&chain->base, allocator);
 			return VK_ERROR_INITIALIZATION_FAILED;

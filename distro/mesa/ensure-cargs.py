@@ -12,6 +12,7 @@ sys.path.insert(0, "/home/nickr/r5os/mesa-build/meson-1.7.0")
 from mesonbuild.options import OptionKey
 
 ARGS = [
+    "-march=x86-64-v2",
     "-DVK_USE_PLATFORM_VIEW_RFIVE",
     "-I/home/nickr/r5os/r5-sysroot/include",
     "-include",

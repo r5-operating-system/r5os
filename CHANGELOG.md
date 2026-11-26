@@ -8,6 +8,16 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-26 - Mesa and Vulkan loader: WSI fixes, BO map locking, x86-64-v2 flags, and stripped libvulkan.so
+
+- Problem: `wsi_common_haiku.cpp` leaked `BBitmap` when `InitCheck() != B_OK`, built a fresh `BScreen` on every present, and kept calling `WaitForRetrace()` after `snooze()` even after `retrace_failed` was set; `haiku-bo-cpu-map.patch` accessed `r5_cpu_maps[32]` without a mutex and overwrote existing handle slots without refcounting; Mesa C/C++ built without `-march=x86-64-v2`; `vulkan_loader` shipped an unstripped `libvulkan.so.1.4.367`.
+- Change:
+  - `distro/mesa/wsi/wsi_common_haiku.cpp`: delete failed `BBitmap` before `r5_swapchain_destroy()`; store `BScreen*` on `r5_swapchain` (freed on destroy) instead of constructing one per present; return after `snooze()` in `r5_fifo_wait()` once `retrace_failed` is set without calling `WaitForRetrace()` again.
+  - `distro/mesa/patches/haiku-bo-cpu-map.patch`: guarded `r5_cpu_maps[32]` with `pthread_mutex_t` and added reference counting (`refs`) so an in-use slot is never overwritten. At slot 33 (all 32 slots occupied by distinct handles), `r5_cpu_map_save()` returns `-1` and `ac_drm_bo_cpu_map()` unmaps the new area and returns `-1` without disturbing existing mappings.
+  - `distro/mesa/haiku-cross.txt`: added `-march=x86-64-v2` to `c_args` and `cpp_args`.
+  - `distro/vulkan/build-loader.sh`: stripped `libvulkan.so.1.4.367` with `x86_64-unknown-haiku-strip --strip-unneeded`.
+- Limits: Mesa patches and Vulkan loader built locally; new `mesa_radv`, `mesa_lavapipe`, and `vulkan_loader` packages are not uploaded until owner approval. Hardware 5625U stick test pending merge. No speed-up claimed without measurement.
+
 ## 2026-11-26 - app_server and Skia: shader init race, target teardown, single full hash, memory-font eviction, GPUCopy cleanup, and -O3
 
 - Problem: `blend_effect()`, `color_effect()`, and `gradient_effect()` (`SkiaPainter.cpp`) used unsynchronized `static bool sTried` / `static sk_sp` across window threads; `~SkiaTarget()` deleted `fRecorder` before releasing `fTextures` and `fGradients`; `KeepTexture()` hashed `<= 16 MiB` bitmaps twice (and up to three times after a stale lookup); memory-loaded fonts in `SkiaText.cpp` were keyed on raw pointers and kept forever; `GPUCopy.cpp` leaked BOs, areas, and `sFd` on failure paths; `libaslocal.a` compiled Compositor/Skia/GPUCopy at `-O2` while Painter and AGG used `-O3`.
