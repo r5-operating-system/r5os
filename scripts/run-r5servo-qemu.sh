@@ -16,8 +16,10 @@ echo START $(date -Is)
 test -x "$OUT/r5-servo-test"
 test -f "$OUT/libr5servo.so"
 test -f "$SRC_IMG"
-if pgrep -f qemu-system-x86_64 >/dev/null; then
-	echo "another qemu-system-x86_64 is running; not booting"
+# Other sessions may have their own QEMU. Refuse only a second copy of
+# this proof. Do not stop those other guests.
+if pgrep -f -- '-name r5-servo-proof' >/dev/null; then
+	echo "r5-servo-proof is already running; not booting"
 	exit 2
 fi
 

@@ -1,6 +1,7 @@
 #!/bin/bash
 # Rebuild libr5servo.so and r5-servo-test for x86_64 Haiku.
-# Pins, patches and the measured times are in distro/servo/BUILD.md.
+# The instruction for the next agent is distro/servo/BUILD.md.
+# Pins, patches, paths and the measured times are there.
 # Job cap is 4. A running jam is left alone; this script does not write
 # the shared Haiku tree.
 set -eu
