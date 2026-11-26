@@ -8,6 +8,12 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-26 - Build: package releases are pre-releases
+
+- Problem: GitHub showed `r5servo-0.8.0-5` as the Latest release of r5os, so a visitor could take a Servo package for the R5 release. `--latest=false` does not remove that label while ordinary releases exist.
+- Change: the 16 `pkg-*` releases and `r5servo-0.8.0-5` were marked pre-release by hand; the API `releases/latest` now gives 404. `scripts/publish-package.sh` creates new package releases with `--prerelease`. The unused releases `r5servo-0.8.0-2` to `-4` and their tags were deleted (only `-5` is pinned in `distro/servo/r5servo.sha256`).
+- Tested: `bash -n` on the script; a pinned asset still downloads by its tag URL (HTTP 200). No build: the build fetches by tag, which a pre-release does not change.
+
 ## 2026-11-26 - A missing message field keeps its default (Bluetooth, Wallpaper, screens, network shares)
 
 Problem: Haiku's `BMessage::Find*()` sets the value to 0 or empty before it looks for the field (`Message.cpp`, `*p = type();`). So `x = default; msg->FindInt32("x", &x);` loses the default when the field is missing. In Aomi (#4684) this made Alt+W always close the first tab. The same pattern was in other R5 code.
