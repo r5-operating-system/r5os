@@ -28,6 +28,7 @@
 
 #include <string.h>
 
+#include <deque>
 #include <new>
 
 #include <Autolock.h>
@@ -111,10 +112,29 @@ public:
 			return NULL;
 		}
 
-		// TODO: The HashTable grows without bounds. We should cleanup
-		// older entries from time to time.
+		// SPDX-SnippetBegin
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		// SPDX-License-Identifier: MIT
+		// Bound per-entry glyph cache so CJK/emoji-heavy sessions do not grow
+		// app_server memory without limit. CacheGlyph() runs under the entry's
+		// write lock, so evicting older entries here is race-free.
+		static const size_t kMaxGlyphs = 2048;
+		while (fOrder.size() >= kMaxGlyphs) {
+			uint32 evictIndex = fOrder.front();
+			fOrder.pop_front();
+			GlyphCache* old = fGlyphTable.Lookup(evictIndex);
+			if (old != NULL) {
+				fGlyphTable.Remove(old);
+				delete old;
+			}
+		}
 
 		fGlyphTable.Insert(glyph);
+		try {
+			fOrder.push_back(glyphIndex);
+		} catch (...) {
+		}
+		// SPDX-SnippetEnd
 
 		return glyph;
 	}
@@ -122,7 +142,12 @@ public:
 private:
 	typedef BOpenHashTable<GlyphHashTableDefinition> GlyphTable;
 
-	GlyphTable	fGlyphTable;
+	GlyphTable			fGlyphTable;
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	std::deque<uint32>	fOrder;
+	// SPDX-SnippetEnd
 };
 
 

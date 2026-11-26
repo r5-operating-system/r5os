@@ -326,6 +326,8 @@ public:
 			void				FillRect(const BRect& r, const rgb_color& c);
 			void				FillRectNoClipping(const clipping_rect& r,
 									const rgb_color& c);
+			void				FillRegionNoClipping(const BRegion& region,
+									const rgb_color& c);
 			BRect				DrawRoundRect(const BRect& r, float xRadius,
 									float yRadius, bool filled,
 									const BGradient* gradient);
@@ -452,6 +454,10 @@ private:
 			bool				fAntialiasText;
 			bool				fHasAlphaMask;
 			AlphaMask*			fAlphaMask;
+			AlphaMask*			fCachedMask;
+			SkiaTarget*			fCachedMaskTarget;
+			SkIRect				fCachedMaskBounds;
+			sk_sp<SkShader>		fCachedMaskShader;
 };
 
 

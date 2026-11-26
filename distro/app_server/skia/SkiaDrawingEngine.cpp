@@ -963,9 +963,7 @@ SkiaDrawingEngine::FillRegion(BRegion& r, const rgb_color& color)
 	Draw draw(this, frame);
 	if (!fTarget->HasSurface())
 		return;
-	int32 count = r.CountRects();
-	for (int32 i = 0; i < count; i++)
-		fSkia->FillRectNoClipping(r.RectAtInt(i), color);
+	fSkia->FillRegionNoClipping(r, color);
 }
 
 
@@ -1051,9 +1049,7 @@ SkiaDrawingEngine::FillRegion(BRegion& r)
 	Draw draw(this, clipped);
 	if (!draw.IsDirty())
 		return;
-	int32 count = r.CountRects();
-	for (int32 i = 0; i < count; i++)
-		fSkia->FillRect(r.RectAt(i), NULL);
+	fSkia->FillRegion(&r, NULL);
 }
 
 
@@ -1069,9 +1065,7 @@ SkiaDrawingEngine::FillRegion(BRegion& r, const BGradient& gradient)
 	Draw draw(this, clipped);
 	if (!draw.IsDirty())
 		return;
-	int32 count = r.CountRects();
-	for (int32 i = 0; i < count; i++)
-		fSkia->FillRect(r.RectAt(i), &gradient);
+	fSkia->FillRegion(&r, &gradient);
 }
 
 
