@@ -3,10 +3,10 @@
 
 The previous file kept the name mesa_radv-25.3.6-1. An older copy of that
 same name, from 9 Nov, could be the one the image installed. The new name
-is mesa_radv-25.3.6-11, so a cached older build cannot be installed in its place.
+is mesa_radv-25.3.6-13, so a cached older build cannot be installed in its place.
 
 pack-radv.py ROOT               -10 plus the freshly built library and the current
-                                stick scripts (-11)
+                                stick scripts (-13)
 pack-radv.py ROOT --tools-only  -10 with its library unchanged and the current
                                 stick scripts (boot-next knows m13 and m13f)
 """
@@ -54,7 +54,7 @@ def main() -> None:
     out_dir = root / "distro" / "packages" / "x86_64"
     base = "25.3.6-10"
     previous = fetch_base(root, f"mesa_radv-{base}-x86_64.hpkg")
-    dest = out_dir / "mesa_radv-25.3.6-11-x86_64.hpkg"
+    dest = out_dir / "mesa_radv-25.3.6-13-x86_64.hpkg"
     stage = Path("/tmp/r5-radv-pkg")
     shutil.rmtree(stage, ignore_errors=True)
     stage.mkdir(parents=True)
@@ -77,9 +77,9 @@ def main() -> None:
         (bindir / name).chmod(0o755)
     info = stage / ".PackageInfo"
     text = info.read_text(encoding="utf-8")
-    text = text.replace(f"version\t\t\t{base}", "version\t\t\t25.3.6-11")
-    text = text.replace(f"mesa_radv = {base}", "mesa_radv = 25.3.6-11")
-    if "25.3.6-11" not in text or base in text:
+    text = text.replace(f"version\t\t\t{base}", "version\t\t\t25.3.6-13")
+    text = text.replace(f"mesa_radv = {base}", "mesa_radv = 25.3.6-13")
+    if "25.3.6-13" not in text or base in text:
         raise SystemExit("package version was not bumped")
     info.write_text(text, encoding="utf-8")
     if dest.exists():

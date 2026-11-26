@@ -61,12 +61,12 @@ done
 rm -f "$DL/r5servo-0.8.0-1-x86_64.hpkg" "$DL/r5servo-0.8.0-2-x86_64.hpkg" \
 	"$DL/r5servo-0.8.0-3-x86_64.hpkg" "$DL/r5servo-0.8.0-4-x86_64.hpkg" \
 	"$DL/r5servo-0.8.0-5-x86_64.hpkg"
-rm -f "$DL/mesa-25.3.6-1-x86_64.hpkg" "$DL/mesa-25.3.6-2-x86_64.hpkg" "$DL/mesa-25.3.6-3-x86_64.hpkg" "$DL/mesa-25.3.6-4-x86_64.hpkg" "$DL/mesa_zink-25.3.6-1-x86_64.hpkg" \
+rm -f "$DL/mesa-25.3.6-1-x86_64.hpkg" "$DL/mesa-25.3.6-2-x86_64.hpkg" "$DL/mesa-25.3.6-3-x86_64.hpkg" "$DL/mesa-25.3.6-4-x86_64.hpkg" "$DL/mesa-25.3.6-5-x86_64.hpkg" "$DL/mesa_zink-25.3.6-1-x86_64.hpkg" \
 	"$DL/mesa_radv-25.3.6-1-x86_64.hpkg" "$DL/mesa_radv-25.3.6-2-x86_64.hpkg" \
-	"$DL/mesa_radv-25.3.6-3-x86_64.hpkg" "$DL/mesa_radv-25.3.6-4-x86_64.hpkg" "$DL/mesa_radv-25.3.6-5-x86_64.hpkg" "$DL/mesa_radv-25.3.6-6-x86_64.hpkg" "$DL/mesa_radv-25.3.6-7-x86_64.hpkg" "$DL/mesa_radv-25.3.6-8-x86_64.hpkg" "$DL/mesa_radv-25.3.6-9-x86_64.hpkg" "$DL/mesa_radv-25.3.6-10-x86_64.hpkg" \
-	"$DL/mesa_lavapipe-25.3.6-2-x86_64.hpkg" "$DL/mesa_lavapipe-25.3.6-3-x86_64.hpkg" "$DL/mesa_lavapipe-25.3.6-4-x86_64.hpkg" \
+	"$DL/mesa_radv-25.3.6-3-x86_64.hpkg" "$DL/mesa_radv-25.3.6-4-x86_64.hpkg" "$DL/mesa_radv-25.3.6-5-x86_64.hpkg" "$DL/mesa_radv-25.3.6-6-x86_64.hpkg" "$DL/mesa_radv-25.3.6-7-x86_64.hpkg" "$DL/mesa_radv-25.3.6-8-x86_64.hpkg" "$DL/mesa_radv-25.3.6-9-x86_64.hpkg" "$DL/mesa_radv-25.3.6-10-x86_64.hpkg" "$DL/mesa_radv-25.3.6-11-x86_64.hpkg" "$DL/mesa_radv-25.3.6-12-x86_64.hpkg" \
+	"$DL/mesa_lavapipe-25.3.6-2-x86_64.hpkg" "$DL/mesa_lavapipe-25.3.6-3-x86_64.hpkg" "$DL/mesa_lavapipe-25.3.6-4-x86_64.hpkg" "$DL/mesa_lavapipe-25.3.6-5-x86_64.hpkg" \
 	"$DL/libdrm-2.4.124-1-x86_64.hpkg" "$DL/libdrm-2.4.124-2-x86_64.hpkg" "$DL/libdrm-2.4.124-3-x86_64.hpkg" "$DL/libdrm-2.4.124-4-x86_64.hpkg" \
-	"$DL/vulkan_loader-1.4.367-2-x86_64.hpkg" "$DL/vulkan_loader-1.4.367-3-x86_64.hpkg" \
+	"$DL/vulkan_loader-1.4.367-2-x86_64.hpkg" "$DL/vulkan_loader-1.4.367-3-x86_64.hpkg" "$DL/vulkan_loader-1.4.367-4-x86_64.hpkg" \
 	"$DL/vulkan_tools-1.4.367-1-x86_64.hpkg" \
 	"$DL/vulkanteapot-1.0.0-1-x86_64.hpkg" "$DL/vulkanteapot-1.0.0-2-x86_64.hpkg" "$DL/vulkanteapot-1.0.0-3-x86_64.hpkg" "$DL/vulkanteapot-1.0.0-4-x86_64.hpkg" "$DL/vulkanteapot-1.0.0-5-x86_64.hpkg"
 
@@ -83,11 +83,11 @@ new = (
     "\tlibglvnd-1.7.0-1\n"
     "\tllvm21_runtime-21.1.8-1\n"
     "\tlibdrm-2.4.124-5\n"
-    "\tmesa-25.3.6-5\n"
+    "\tmesa-25.3.6-6\n"
     "\tmesa_devel-25.3.6-1\n"
-    "\tmesa_lavapipe-25.3.6-5\n"
-    "\tmesa_radv-25.3.6-11\n"
-    "\tvulkan_loader-1.4.367-4\n"
+    "\tmesa_lavapipe-25.3.6-6\n"
+    "\tmesa_radv-25.3.6-13\n"
+    "\tvulkan_loader-1.4.367-5\n"
     "\tvulkan_tools-1.4.367-2\n"
     "\tvulkanteapot-1.0.0-6\n"
 )
@@ -96,21 +96,22 @@ if old in text:
 elif "\tmesa-25.3.6-1\n" in text and "\tmesa_zink-25.3.6-1\n" not in text:
     text = text.replace(
         "\tmesa-25.3.6-1\n",
-        "\tlibdrm-2.4.124-5\n\tmesa_zink-25.3.6-1\n\tmesa_radv-25.3.6-11\n",
+        "\tlibdrm-2.4.124-5\n\tmesa_zink-25.3.6-1\n\tmesa_radv-25.3.6-13\n",
         1,
     )
 elif "\tvulkan_tools-1.4.367-2\n" not in text and "\tvulkan_tools-1.4.367-1\n" not in text:
-    anchor = "\tvulkan_loader-1.4.367-4\n"
+    anchor = "\tvulkan_loader-1.4.367-5\n"
     if anchor not in text:
         sys.exit("mesa pin block not found")
     text = text.replace(anchor, anchor + "\tvulkan_tools-1.4.367-2\n", 1)
-text = text.replace("\tmesa_zink-25.3.6-1\n", "\tmesa-25.3.6-5\n")
-text = text.replace("\tmesa-25.3.6-2\n", "\tmesa-25.3.6-5\n")
-text = text.replace("\tmesa-25.3.6-3\n", "\tmesa-25.3.6-5\n")
-text = text.replace("\tmesa-25.3.6-4\n", "\tmesa-25.3.6-5\n")
+text = text.replace("\tmesa_zink-25.3.6-1\n", "\tmesa-25.3.6-6\n")
+text = text.replace("\tmesa-25.3.6-2\n", "\tmesa-25.3.6-6\n")
+text = text.replace("\tmesa-25.3.6-3\n", "\tmesa-25.3.6-6\n")
+text = text.replace("\tmesa-25.3.6-4\n", "\tmesa-25.3.6-6\n")
+text = text.replace("\tmesa-25.3.6-5\n", "\tmesa-25.3.6-6\n")
 text = text.replace("\tmesa-25.3.6-1\n", "")
-if "\tmesa-25.3.6-5\n" not in text:
-    sys.exit("mesa 25.3.6-5 missing from the pin")
+if "\tmesa-25.3.6-6\n" not in text:
+    sys.exit("mesa 25.3.6-6 missing from the pin")
 if "\tvulkanteapot-1.0.0-6\n" not in text and "\tvulkanteapot-1.0.0-5\n" not in text and "\tvulkanteapot-1.0.0-4\n" not in text and "\tvulkan_tools-1.4.367-2\n" in text:
     text = text.replace(
         "\tvulkan_tools-1.4.367-2\n",
@@ -119,37 +120,41 @@ if "\tvulkanteapot-1.0.0-6\n" not in text and "\tvulkanteapot-1.0.0-5\n" not in 
     )
 if "mesa-22.0.5-3" in text or "mesa_swpipe-22" in text:
     sys.exit("mesa 22 still in the pin")
-text = text.replace("\tmesa_lavapipe-25.3.6-1\n", "\tmesa_lavapipe-25.3.6-5\n")
-text = text.replace("\tmesa_lavapipe-25.3.6-2\n", "\tmesa_lavapipe-25.3.6-5\n")
-text = text.replace("\tmesa_lavapipe-25.3.6-3\n", "\tmesa_lavapipe-25.3.6-5\n")
-text = text.replace("\tmesa_radv-25.3.6-1\n", "\tmesa_radv-25.3.6-11\n")
-text = text.replace("\tmesa_radv-25.3.6-2\n", "\tmesa_radv-25.3.6-11\n")
-text = text.replace("\tmesa_radv-25.3.6-3\n", "\tmesa_radv-25.3.6-11\n")
-text = text.replace("\tmesa_radv-25.3.6-4\n", "\tmesa_radv-25.3.6-11\n")
-text = text.replace("\tmesa_radv-25.3.6-5\n", "\tmesa_radv-25.3.6-11\n")
-text = text.replace("\tmesa_radv-25.3.6-6\n", "\tmesa_radv-25.3.6-11\n")
-text = text.replace("\tmesa_radv-25.3.6-7\n", "\tmesa_radv-25.3.6-11\n")
-text = text.replace("\tmesa_radv-25.3.6-8\n", "\tmesa_radv-25.3.6-11\n")
-text = text.replace("\tmesa_radv-25.3.6-9\n", "\tmesa_radv-25.3.6-11\n")
-text = text.replace("\tmesa_radv-25.3.6-10\n", "\tmesa_radv-25.3.6-11\n")
-text = text.replace("\tmesa_lavapipe-25.3.6-4\n", "\tmesa_lavapipe-25.3.6-5\n")
+text = text.replace("\tmesa_lavapipe-25.3.6-1\n", "\tmesa_lavapipe-25.3.6-6\n")
+text = text.replace("\tmesa_lavapipe-25.3.6-2\n", "\tmesa_lavapipe-25.3.6-6\n")
+text = text.replace("\tmesa_lavapipe-25.3.6-3\n", "\tmesa_lavapipe-25.3.6-6\n")
+text = text.replace("\tmesa_lavapipe-25.3.6-4\n", "\tmesa_lavapipe-25.3.6-6\n")
+text = text.replace("\tmesa_lavapipe-25.3.6-5\n", "\tmesa_lavapipe-25.3.6-6\n")
+text = text.replace("\tmesa_radv-25.3.6-1\n", "\tmesa_radv-25.3.6-13\n")
+text = text.replace("\tmesa_radv-25.3.6-2\n", "\tmesa_radv-25.3.6-13\n")
+text = text.replace("\tmesa_radv-25.3.6-3\n", "\tmesa_radv-25.3.6-13\n")
+text = text.replace("\tmesa_radv-25.3.6-4\n", "\tmesa_radv-25.3.6-13\n")
+text = text.replace("\tmesa_radv-25.3.6-5\n", "\tmesa_radv-25.3.6-13\n")
+text = text.replace("\tmesa_radv-25.3.6-6\n", "\tmesa_radv-25.3.6-13\n")
+text = text.replace("\tmesa_radv-25.3.6-7\n", "\tmesa_radv-25.3.6-13\n")
+text = text.replace("\tmesa_radv-25.3.6-8\n", "\tmesa_radv-25.3.6-13\n")
+text = text.replace("\tmesa_radv-25.3.6-9\n", "\tmesa_radv-25.3.6-13\n")
+text = text.replace("\tmesa_radv-25.3.6-10\n", "\tmesa_radv-25.3.6-13\n")
+text = text.replace("\tmesa_radv-25.3.6-11\n", "\tmesa_radv-25.3.6-13\n")
+text = text.replace("\tmesa_radv-25.3.6-12\n", "\tmesa_radv-25.3.6-13\n")
 text = text.replace("\tlibdrm-2.4.124-1\n", "\tlibdrm-2.4.124-5\n")
 text = text.replace("\tlibdrm-2.4.124-2\n", "\tlibdrm-2.4.124-5\n")
 # M13 step 1: -3 stays in the download folder for branches that still pin it
 text = text.replace("\tlibdrm-2.4.124-3\n", "\tlibdrm-2.4.124-5\n")
 text = text.replace("\tlibdrm-2.4.124-4\n", "\tlibdrm-2.4.124-5\n")
-if "\tmesa_radv-25.3.6-11\n" not in text:
-    sys.exit("mesa_radv 25.3.6-11 missing from the pin")
-text = text.replace("\tvulkan_loader-1.4.367-1\n", "\tvulkan_loader-1.4.367-4\n")
-text = text.replace("\tvulkan_loader-1.4.367-2\n", "\tvulkan_loader-1.4.367-4\n")
-text = text.replace("\tvulkan_loader-1.4.367-3\n", "\tvulkan_loader-1.4.367-4\n")
+if "\tmesa_radv-25.3.6-13\n" not in text:
+    sys.exit("mesa_radv 25.3.6-13 missing from the pin")
+text = text.replace("\tvulkan_loader-1.4.367-1\n", "\tvulkan_loader-1.4.367-5\n")
+text = text.replace("\tvulkan_loader-1.4.367-2\n", "\tvulkan_loader-1.4.367-5\n")
+text = text.replace("\tvulkan_loader-1.4.367-3\n", "\tvulkan_loader-1.4.367-5\n")
+text = text.replace("\tvulkan_loader-1.4.367-4\n", "\tvulkan_loader-1.4.367-5\n")
 text = text.replace("\tvulkan_tools-1.4.367-1\n", "\tvulkan_tools-1.4.367-2\n")
 text = text.replace("\tvulkanteapot-1.0.0-1\n", "\tvulkanteapot-1.0.0-6\n")
 text = text.replace("\tvulkanteapot-1.0.0-2\n", "\tvulkanteapot-1.0.0-6\n")
 text = text.replace("\tvulkanteapot-1.0.0-3\n", "\tvulkanteapot-1.0.0-6\n")
 text = text.replace("\tvulkanteapot-1.0.0-4\n", "\tvulkanteapot-1.0.0-6\n")
 text = text.replace("\tvulkanteapot-1.0.0-5\n", "\tvulkanteapot-1.0.0-6\n")
-if "\tvulkan_loader-1.4.367-4\n" not in text:
+if "\tvulkan_loader-1.4.367-5\n" not in text:
     sys.exit("vulkan loader pin missing")
 for old in ("0.8.0-1", "0.8.0-2", "0.8.0-3", "0.8.0-4", "0.8.0-5"):
     text = text.replace("\tr5servo-%s\n" % old, "\tr5servo-0.8.0-6\n")

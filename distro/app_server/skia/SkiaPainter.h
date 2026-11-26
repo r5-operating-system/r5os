@@ -105,7 +105,9 @@ public:
 			sk_sp<SkImage>		FindTexture(const void* id, const uint8* bits,
 									int32 length, int32 width, int32 height,
 									int32 bytesPerRow, int32 space, bool raw,
-									uint32 generation, bool owned);
+									uint32 generation, bool owned,
+									bool* _hasFullHash = NULL,
+									uint64* _fullHash = NULL);
 	// M13 step 1: the GPU image of a gradient's colours (the 256-entry
 	// ramp, or a vertical gradient's column), kept per target while the
 	// same colours come again; under the lock. NULL when it cannot be
@@ -115,7 +117,9 @@ public:
 									int32 length, int32 width, int32 height,
 									int32 bytesPerRow, int32 space, bool raw,
 									uint32 generation, bool owned,
-									const sk_sp<SkImage>& image);
+									const sk_sp<SkImage>& image,
+									bool hasFullHash = false,
+									uint64 fullHash = 0);
 			bool				HasSurface() const
 									{ return fSurface != nullptr; }
 	// Every pixel has alpha 255 (a window without glass views, an opaque

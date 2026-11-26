@@ -152,6 +152,59 @@ struct r5_vm {
 	void*		cookie;
 };
 
+/* Free-list pool of 4 KiB VRAM page-table pages recycled when a per-file
+ * page-table tree is freed or rolled back on init failure. */
+struct r5_vm_page_pool {
+	r5_vm_page*	pages;
+	uint32_t	capacity;
+	uint32_t	count;
+};
+
+
+static inline int
+r5_vm_pool_take(r5_vm_page_pool* pool, uint64_t* physical, uint64_t** cpu)
+{
+	if (pool == NULL || pool->pages == NULL || pool->count == 0
+		|| physical == NULL || cpu == NULL)
+		return 0;
+	pool->count--;
+	*physical = pool->pages[pool->count].physical;
+	*cpu = pool->pages[pool->count].cpu;
+	pool->pages[pool->count].physical = 0;
+	pool->pages[pool->count].cpu = NULL;
+	return 1;
+}
+
+
+static inline int
+r5_vm_pool_give(r5_vm_page_pool* pool, uint64_t physical, uint64_t* cpu)
+{
+	if (pool == NULL || pool->pages == NULL || pool->count >= pool->capacity
+		|| physical == 0 || cpu == NULL)
+		return 0;
+	pool->pages[pool->count].physical = physical;
+	pool->pages[pool->count].cpu = cpu;
+	pool->count++;
+	return 1;
+}
+
+
+static inline uint32_t
+r5_vm_release_pages(r5_vm* vm, r5_vm_page_pool* pool)
+{
+	uint32_t returned = 0;
+	if (vm == NULL || vm->pages == NULL)
+		return 0;
+	for (uint32_t i = 0; i < vm->used; i++) {
+		if (r5_vm_pool_give(pool, vm->pages[i].physical, vm->pages[i].cpu))
+			returned++;
+		vm->pages[i].physical = 0;
+		vm->pages[i].cpu = NULL;
+	}
+	vm->used = 0;
+	return returned;
+}
+
 
 static inline int
 r5_vm_find(const r5_vm* vm, uint64_t entry)

@@ -117,8 +117,26 @@ strcmp_avx2(const char *a, const char *b)
 		unsigned roomA = r5_page_room(a);
 		unsigned roomB = r5_page_room(b);
 		unsigned room = roomA < roomB ? roomA : roomB;
-		if (room < 32)
-			return strcmp_sse(a, b);
+		if (room < 32) {
+			int done = 0;
+			int diff;
+			if (room >= 16) {
+				diff = cmp16(a, b, &done);
+				if (done)
+					return diff;
+				a += 16;
+				b += 16;
+				room -= 16;
+			}
+			if (room > 0) {
+				diff = cmp_bytes(a, b, room, &done);
+				if (done)
+					return diff;
+				a += room;
+				b += room;
+			}
+			continue;
+		}
 		__m256i va = _mm256_loadu_si256((const __m256i*)a);
 		__m256i vb = _mm256_loadu_si256((const __m256i*)b);
 		unsigned equal = (unsigned)_mm256_movemask_epi8(

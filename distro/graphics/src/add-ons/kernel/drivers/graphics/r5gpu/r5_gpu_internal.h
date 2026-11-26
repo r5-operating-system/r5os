@@ -69,6 +69,8 @@ struct r5_file_tree {
 	uint32			owner;
 	uint64			seen;
 	r5_file_count	count;
+	r5_file_tree*	deferNext;
+	uint64			deferFence;
 };
 
 
@@ -176,6 +178,7 @@ extern int sDebugOn;
 extern int sSelftestOn;
 extern int sSubmitLogOn;
 extern int sTraceOn;
+extern int sRenderOn;
 extern int sDeferred;
 extern gpu_bo sBo[kMaxBo];
 extern gpu_backing sBacking[kMaxBo];

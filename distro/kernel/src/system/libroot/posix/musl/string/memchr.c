@@ -44,9 +44,10 @@ memchr_sse(const unsigned char *s, int c, size_t n)
 	__m128i needle = _mm_set1_epi8((char)c);
 	while (n > 0) {
 		if (n >= 16 && r5_page_room(s) >= 16) {
-			int index = r5_index16(needle, r5_load16(s));
-			if (index < 16)
-				return s + index;
+			unsigned mask = (unsigned)_mm_movemask_epi8(
+				_mm_cmpeq_epi8(r5_load16(s), needle));
+			if (mask != 0)
+				return s + (unsigned)__builtin_ctz(mask);
 			s += 16;
 			n -= 16;
 			continue;
@@ -71,7 +72,7 @@ memchr_avx2(const unsigned char *s, int c, size_t n)
 		n--;
 	}
 	__m256i needle = _mm256_set1_epi8((char)c);
-	while (n >= 32 && r5_page_room(s) >= 32) {
+	while (n >= 32) {
 		__m256i chunk = _mm256_load_si256((const __m256i*)s);
 		unsigned mask = (unsigned)_mm256_movemask_epi8(
 			_mm256_cmpeq_epi8(chunk, needle));

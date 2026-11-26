@@ -287,6 +287,7 @@ efi_arch_init(const r5_efi_runtime_args* args)
 			|| size > kLowerHalfEnd - start) {
 			ERROR("runtime range %#" B_PRIx64 " + %#" B_PRIx64 " cannot be "
 				"identity mapped\n", start, size);
+			efi_arch_uninit();
 			return B_BAD_ADDRESS;
 		}
 		uint64 end = start + size;
@@ -296,6 +297,7 @@ efi_arch_init(const r5_efi_runtime_args* args)
 	if (tableCount > kMaxTablePages) {
 		ERROR("runtime ranges need %" B_PRIu64 " page tables, too many\n",
 			tableCount);
+		efi_arch_uninit();
 		return B_NO_MEMORY;
 	}
 
@@ -303,8 +305,11 @@ efi_arch_init(const r5_efi_runtime_args* args)
 	sTableArea = create_area("efi runtime page tables", (void**)&sTables,
 		B_ANY_KERNEL_ADDRESS, sTableCount * B_PAGE_SIZE, B_CONTIGUOUS,
 		B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA);
-	if (sTableArea < 0)
-		return sTableArea;
+	if (sTableArea < 0) {
+		status_t status = sTableArea;
+		efi_arch_uninit();
+		return status;
+	}
 
 	physical_entry entry;
 	status_t status = get_memory_map(sTables, B_PAGE_SIZE, &entry, 1);

@@ -1755,6 +1755,8 @@ r5_gfx9_k2_gart_page(uint64* mc, uint8** cpu)
 
 static r5_vm sVm;
 static r5_vm_page sVmPages[1024];
+static r5_vm_page sFreePtPages[4096];
+static r5_vm_page_pool sPtPool = { sFreePtPages, 4096, 0 };
 static bool sVmid1 = false;
 /* gfx9_vmid_per_file. The shared tree stays sVm. A file keeps its own. */
 static bool sVmidPerFile = false;
@@ -1765,6 +1767,8 @@ static int
 vm_page_alloc(void* cookie, uint64_t* physical, uint64_t** cpu)
 {
 	(void)cookie;
+	if (r5_vm_pool_take(&sPtPool, physical, cpu))
+		return 1;
 	uint64 offset = 0;
 	uint8* address = NULL;
 	if (sHost.vram_alloc == NULL || sInfo == NULL)
@@ -2301,6 +2305,15 @@ r5_gfx9_vmid1_shared_root(void)
 }
 
 
+void
+r5_gfx9_file_vm_free(r5_vm* vm)
+{
+	if (vm == NULL)
+		return;
+	r5_vm_release_pages(vm, &sPtPool);
+}
+
+
 bool
 r5_gfx9_file_vm_init(r5_vm* vm, r5_vm_page* pages, uint32 capacity)
 {
@@ -2313,10 +2326,14 @@ r5_gfx9_file_vm_init(r5_vm* vm, r5_vm_page* pages, uint32 capacity)
 	vm->alloc = vm_page_alloc;
 	if (!r5_vm_new_page(vm, 0))
 		return false;
-	if (!r5_gfx9_pde_aligned(vm->pages[0].physical))
+	if (!r5_gfx9_pde_aligned(vm->pages[0].physical)) {
+		r5_gfx9_file_vm_free(vm);
 		return false;
-	if (!r5_gfx9_csa_into(vm))
+	}
+	if (!r5_gfx9_csa_into(vm)) {
+		r5_gfx9_file_vm_free(vm);
 		return false;
+	}
 	return true;
 }
 

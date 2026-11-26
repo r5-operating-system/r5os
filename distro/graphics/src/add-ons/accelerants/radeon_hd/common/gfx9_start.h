@@ -107,6 +107,7 @@ bool r5_gfx9_vm_map(struct r5_vm* vm, uint64 va, uint64 pte);
 bool r5_gfx9_vm_lookup(struct r5_vm* vm, uint64 va);
 bool r5_gfx9_file_vm_init(struct r5_vm* vm, struct r5_vm_page* pages,
 	uint32 capacity);
+void r5_gfx9_file_vm_free(struct r5_vm* vm);
 /* Physical address with the valid bit, the root r5_gfx9_vmid1_setup wrote. */
 uint64 r5_gfx9_vmid1_shared_root(void);
 bool r5_gfx9_vmid1_map(uint64 va, uint64 pte);

@@ -163,7 +163,14 @@ valloc(size_t size)
 /* malloc implementation */
 
 #define _MALLOC_MUTEXES 32
-static mutex sMallocMutexes[_MALLOC_MUTEXES];
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+struct r5_padded_mutex {
+	mutex lock;
+} __attribute__((aligned(64)));
+static struct r5_padded_mutex sMallocMutexes[_MALLOC_MUTEXES];
+// SPDX-SnippetEnd
 static pthread_once_t sThreadedMallocInitOnce = PTHREAD_ONCE_INIT;
 
 static int32 sNextMallocThreadID = 1;
@@ -175,14 +182,14 @@ static void _malloc_init(int from_rthreads);
 static inline void
 _MALLOC_LOCK(int32 index)
 {
-	mutex_lock(&sMallocMutexes[index]);
+	mutex_lock(&sMallocMutexes[index].lock);
 }
 
 
 static inline void
 _MALLOC_UNLOCK(int32 index)
 {
-	mutex_unlock(&sMallocMutexes[index]);
+	mutex_unlock(&sMallocMutexes[index].lock);
 }
 
 
@@ -225,7 +232,7 @@ init_threaded_malloc()
 {
 	u_int i;
 	for (i = 2; i < _MALLOC_MUTEXES; i++)
-		r5_init_heap_mutex(&sMallocMutexes[i]);
+		r5_init_heap_mutex(&sMallocMutexes[i].lock);
 
 	_MALLOC_LOCK(0);
 	_malloc_init(1);
@@ -241,8 +248,8 @@ __init_heap()
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
-	r5_init_heap_mutex(&sMallocMutexes[0]);
-	r5_init_heap_mutex(&sMallocMutexes[1]);
+	r5_init_heap_mutex(&sMallocMutexes[0].lock);
+	r5_init_heap_mutex(&sMallocMutexes[1].lock);
 	// SPDX-SnippetEnd
 	_malloc_init(0);
 	return B_OK;
@@ -302,7 +309,7 @@ __heap_after_fork_child()
 		// SPDX-SnippetBegin
 		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 		// SPDX-License-Identifier: MIT
-		r5_init_heap_mutex(&sMallocMutexes[i]);
+		r5_init_heap_mutex(&sMallocMutexes[i].lock);
 		// SPDX-SnippetEnd
 
 	__pages_allocator_after_fork(0);

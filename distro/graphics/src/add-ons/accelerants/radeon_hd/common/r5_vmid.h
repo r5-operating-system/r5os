@@ -173,6 +173,24 @@ r5_vmid_release(struct r5_vmid_mgr* m, uint32_t owner, uint64_t retired)
 	}
 }
 
+
+/* Highest fence currently held by owner across VMIDs 1-15, or 0 if none. */
+static inline uint64_t
+r5_vmid_last_fence(const struct r5_vmid_mgr* m, uint32_t owner)
+{
+	uint64_t best = 0;
+	uint32_t i;
+	if (m == 0 || owner == 0)
+		return 0;
+	for (i = 1; i <= 15u; i++) {
+		if (m->slot[i].owner != owner)
+			continue;
+		if (m->slot[i].fence > best)
+			best = m->slot[i].fence;
+	}
+	return best;
+}
+
 /* After a GPU reset. The chip forgot every VMID's page table, so each
  * slot flushes on its next use. Owners and fences stay: a file that
  * still holds a tree releases only its own slots later, and a slot

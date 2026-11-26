@@ -4,47 +4,100 @@ r5_bo_cpu_map. The shader-cache mmap of a file stays.
 
 --- a/src/amd/common/ac_linux_drm.c
 +++ b/src/amd/common/ac_linux_drm.c
-@@ -962,6 +962,54 @@ int ac_drm_bo_free(ac_drm_device *dev, ac_drm_bo bo)
+@@ -962,6 +962,100 @@ int ac_drm_bo_free(ac_drm_device *dev, ac_drm_bo bo)
     return amdgpu_bo_free(bo.abo);
  }
  
 +#if defined(__HAIKU__) || defined(R5_HOST_TEST)
++#include <pthread.h>
++
 +extern int r5_bo_cpu_map(int fd, unsigned int handle, void **cpu, int *area);
 +extern int r5_bo_cpu_unmap(int fd, int area);
 +
 +struct r5_cpu_map {
 +   uint32_t handle;
 +   int area;
++   void *cpu;
++   uint32_t refs;
 +};
 +
 +static struct r5_cpu_map r5_cpu_maps[32];
++static pthread_mutex_t r5_cpu_map_mu = PTHREAD_MUTEX_INITIALIZER;
 +
 +static int
-+r5_cpu_map_save(uint32_t handle, int area)
++r5_cpu_map_get(uint32_t handle, void **cpu_out)
 +{
 +   unsigned i;
++   pthread_mutex_lock(&r5_cpu_map_mu);
 +   for (i = 0; i < 32; i++) {
-+      if (r5_cpu_maps[i].handle == 0 || r5_cpu_maps[i].handle == handle) {
++      if (r5_cpu_maps[i].handle == handle) {
++         r5_cpu_maps[i].refs++;
++         *cpu_out = r5_cpu_maps[i].cpu;
++         pthread_mutex_unlock(&r5_cpu_map_mu);
++         return 1;
++      }
++   }
++   pthread_mutex_unlock(&r5_cpu_map_mu);
++   return 0;
++}
++
++/* One slot per handle. Returns 0 when saved in a new slot, 1 when another
++ * thread already saved this handle (sets *cpu_out and *existing_area_out
++ * with refs++), or -1 when all 32 slots are occupied by other handles. */
++static int
++r5_cpu_map_save(uint32_t handle, int area, void *mapped_cpu, void **cpu_out,
++                int *existing_area_out)
++{
++   unsigned i;
++   pthread_mutex_lock(&r5_cpu_map_mu);
++   for (i = 0; i < 32; i++) {
++      if (r5_cpu_maps[i].handle == handle) {
++         r5_cpu_maps[i].refs++;
++         *cpu_out = r5_cpu_maps[i].cpu;
++         *existing_area_out = r5_cpu_maps[i].area;
++         pthread_mutex_unlock(&r5_cpu_map_mu);
++         return 1;
++      }
++   }
++   for (i = 0; i < 32; i++) {
++      if (r5_cpu_maps[i].handle == 0) {
 +         r5_cpu_maps[i].handle = handle;
 +         r5_cpu_maps[i].area = area;
++         r5_cpu_maps[i].cpu = mapped_cpu;
++         r5_cpu_maps[i].refs = 1;
++         *cpu_out = mapped_cpu;
++         pthread_mutex_unlock(&r5_cpu_map_mu);
 +         return 0;
 +      }
 +   }
++   pthread_mutex_unlock(&r5_cpu_map_mu);
 +   return -1;
 +}
 +
++/* Returns 1 and sets *area_out when the last reference is dropped; 0 when
++ * references remain; -1 when the handle was not found. */
 +static int
-+r5_cpu_map_take(uint32_t handle)
++r5_cpu_map_take(uint32_t handle, int *area_out)
 +{
 +   unsigned i;
++   pthread_mutex_lock(&r5_cpu_map_mu);
 +   for (i = 0; i < 32; i++) {
 +      if (r5_cpu_maps[i].handle == handle) {
-+         int area = r5_cpu_maps[i].area;
++         if (r5_cpu_maps[i].refs > 1) {
++            r5_cpu_maps[i].refs--;
++            pthread_mutex_unlock(&r5_cpu_map_mu);
++            return 0;
++         }
++         *area_out = r5_cpu_maps[i].area;
 +         r5_cpu_maps[i].handle = 0;
 +         r5_cpu_maps[i].area = 0;
-+         return area;
++         r5_cpu_maps[i].cpu = NULL;
++         r5_cpu_maps[i].refs = 0;
++         pthread_mutex_unlock(&r5_cpu_map_mu);
++         return 1;
 +      }
 +   }
++   pthread_mutex_unlock(&r5_cpu_map_mu);
 +   return -1;
 +}
 +#endif
@@ -52,22 +105,32 @@ r5_bo_cpu_map. The shader-cache mmap of a file stays.
  int ac_drm_bo_cpu_map(ac_drm_device *dev, ac_drm_bo bo,
                        void **cpu)
  {
-@@ -969,7 +1017,22 @@ int ac_drm_bo_cpu_map(ac_drm_device *dev, ac_drm_bo bo,
+@@ -969,7 +1063,33 @@ int ac_drm_bo_cpu_map(ac_drm_device *dev, ac_drm_bo bo,
     if (dev->is_virtio)
        return amdvgpu_bo_cpu_map(dev->vdev, bo.vbo, cpu);
  #endif
 +#if defined(__HAIKU__) || defined(R5_HOST_TEST)
 +   uint32_t handle = 0;
 +   int area = -1;
++   int existing_area = -1;
++   void *mapped_cpu = NULL;
 +   int ret = amdgpu_bo_export(bo.abo, amdgpu_bo_handle_type_kms, &handle);
 +   if (ret)
 +      return ret;
-+   ret = r5_bo_cpu_map(dev->fd, handle, cpu, &area);
++   if (r5_cpu_map_get(handle, cpu))
++      return 0;
++   ret = r5_bo_cpu_map(dev->fd, handle, &mapped_cpu, &area);
 +   if (ret)
 +      return ret;
-+   if (r5_cpu_map_save(handle, area)) {
++   int saved = r5_cpu_map_save(handle, area, mapped_cpu, cpu, &existing_area);
++   if (saved < 0) {
 +      r5_bo_cpu_unmap(dev->fd, area);
 +      return -1;
++   }
++   if (saved > 0) {
++      if (area != existing_area)
++         r5_bo_cpu_unmap(dev->fd, area);
++      return 0;
 +   }
 +   return 0;
 +#else
@@ -76,16 +139,20 @@ r5_bo_cpu_map. The shader-cache mmap of a file stays.
  }
  
  int ac_drm_bo_cpu_unmap(ac_drm_device *dev, ac_drm_bo bo)
-@@ -978,7 +1041,14 @@ int ac_drm_bo_cpu_unmap(ac_drm_device *dev, ac_drm_bo bo)
+@@ -978,7 +1098,19 @@ int ac_drm_bo_cpu_unmap(ac_drm_device *dev, ac_drm_bo bo)
     if (dev->is_virtio)
        return amdvgpu_bo_cpu_unmap(dev->vdev, bo.vbo);
  #endif
 +#if defined(__HAIKU__) || defined(R5_HOST_TEST)
 +   uint32_t handle = 0;
++   int area = -1;
 +   int ret = amdgpu_bo_export(bo.abo, amdgpu_bo_handle_type_kms, &handle);
 +   if (ret)
 +      return ret;
-+   return r5_bo_cpu_unmap(dev->fd, r5_cpu_map_take(handle));
++   int taken = r5_cpu_map_take(handle, &area);
++   if (taken <= 0)
++      return taken == 0 ? 0 : -1;
++   return r5_bo_cpu_unmap(dev->fd, area);
 +#else
     return amdgpu_bo_cpu_unmap(bo.abo);
 +#endif

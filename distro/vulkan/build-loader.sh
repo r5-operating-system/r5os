@@ -24,7 +24,7 @@ fi
 export PATH="$SRCROOT/cmake-3.31.8-linux-x86_64/bin:$SRCROOT:$PATH"
 PKG="$HAIKU/generated.x86_64/objects/linux/x86_64/release/tools/package/package"
 STAGE="$SRCROOT/vulkan-loader-pkg"
-OUT="$ROOT/distro/packages/x86_64/vulkan_loader-1.4.367-4-x86_64.hpkg"
+OUT="$ROOT/distro/packages/x86_64/vulkan_loader-1.4.367-5-x86_64.hpkg"
 
 if [[ ! -f "$TARBALL" ]]; then
 	curl -L --fail -o "$TARBALL" "$URL"
@@ -99,13 +99,14 @@ cmake --install "$WORK/build"
 rm -rf "$STAGE"
 mkdir -p "$STAGE/lib" "$STAGE/develop/headers/vulkan"
 cp -a "$WORK/install/lib/libvulkan.so.1.4.367" "$STAGE/lib/libvulkan.so.1.4.367"
+"$CXX_BIN/x86_64-unknown-haiku-strip" --strip-unneeded "$STAGE/lib/libvulkan.so.1.4.367"
 ln -s libvulkan.so.1.4.367 "$STAGE/lib/libvulkan.so.1"
 cp -a "$ROOT/distro/vulkan/include/vulkan/vulkan_r5.h" "$STAGE/develop/headers/vulkan/vulkan_r5.h"
 cp -a "$ROOT/distro/vulkan/include/vulkan/vk_icd.h" "$STAGE/develop/headers/vulkan/vk_icd.h"
 
 cat > "$STAGE/.PackageInfo" <<'EOF'
 name			vulkan_loader
-version			1.4.367-4
+version			1.4.367-5
 architecture		x86_64
 summary			"Vulkan loader with the view surface"
 description		"The Khronos Vulkan loader 1.4.367, built by R5, with VK_RFIVE_view_surface and the device sort (GPU before CPU). The structure type is the Khronos value for extension 732."

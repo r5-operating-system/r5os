@@ -82,6 +82,9 @@ typedef struct r5_gpu_backend_ops {
 	 * (the copies fork() made of a BO_MAP mapping). 0 when none is left.
 	 * With the GPU lock, before the VRAM under it is freed. */
 	int			(*drop_copies)(int32_t kernelArea);
+	/* Returns all VRAM page-table pages owned by a per-file r5_vm to the
+	 * backend's free pool. With the GPU lock. */
+	void		(*file_vm_free)(void* vm);
 } r5_gpu_backend_ops;
 
 extern r5_gpu_backend_ops gR5GpuOps;

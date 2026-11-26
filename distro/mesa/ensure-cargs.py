@@ -12,6 +12,10 @@ sys.path.insert(0, "/home/nickr/r5os/mesa-build/meson-1.7.0")
 from mesonbuild.options import OptionKey
 
 ARGS = [
+    # Kept in sync with haiku-cross.txt because Meson caches c_args/cpp_args
+    # in coredata.dat and does not re-read them from the cross file on an
+    # existing build directory.
+    "-march=x86-64-v2",
     "-DVK_USE_PLATFORM_VIEW_RFIVE",
     "-I/home/nickr/r5os/r5-sysroot/include",
     "-include",

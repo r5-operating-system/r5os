@@ -36,7 +36,7 @@ Zink takes Vulkan physical device 0 unless `LIBGL_ALWAYS_SOFTWARE` is set, and r
 | 5625U (stick 41 self-test, `vulkaninfo --summary`) | GPU0 `llvmpipe` (CPU), GPU1 `AMD Radeon Graphics (RADV RENOIR)` | RADV first (expected, not yet booted) |
 | QEMU | GPU0 `llvmpipe` only | unchanged |
 
-Lavapipe was device 0 on the 5625U, so Zink would have refused it. The Khronos loader already sorts devices (discrete GPU, integrated GPU, virtual GPU, CPU), but only on Linux and the BSDs. R5's loader build (`distro/vulkan/patches/haiku-device-sort.patch`, `vulkan_loader-1.4.367-4`) turns that sort on for Haiku. Mesa has no device name or ID in it.
+Lavapipe was device 0 on the 5625U, so Zink would have refused it. The Khronos loader already sorts devices (discrete GPU, integrated GPU, virtual GPU, CPU), but only on Linux and the BSDs. R5's loader build (`distro/vulkan/patches/haiku-device-sort.patch`, `vulkan_loader-1.4.367-5`) turns that sort on for Haiku. Mesa has no device name or ID in it.
 
 ## Choosing the driver
 

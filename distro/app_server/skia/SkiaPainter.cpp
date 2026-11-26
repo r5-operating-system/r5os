@@ -123,18 +123,15 @@ upload_texture(skgpu::graphite::Recorder* recorder, sk_sp<SkImage> image)
 static sk_sp<SkRuntimeEffect>
 blend_effect()
 {
-	static sk_sp<SkRuntimeEffect> sEffect;
-	static bool sTried = false;
-	if (!sTried) {
-		sTried = true;
+	static const sk_sp<SkRuntimeEffect> sEffect = []() {
 		SkRuntimeEffect::Result result
 			= SkRuntimeEffect::MakeForShader(SkString(kR5BlendSkSL));
 		if (!result.effect) {
 			fprintf(stderr, "app_server: r5 blend shader: %s\n",
 				result.errorText.c_str());
 		}
-		sEffect = result.effect;
-	}
+		return result.effect;
+	}();
 	return sEffect;
 }
 
@@ -145,15 +142,12 @@ blend_effect()
 static sk_sp<SkRuntimeEffect>
 color_effect()
 {
-	static sk_sp<SkRuntimeEffect> sEffect;
-	static bool sTried = false;
-	if (!sTried) {
-		sTried = true;
+	static const sk_sp<SkRuntimeEffect> sEffect = []() {
 		SkRuntimeEffect::Result result = SkRuntimeEffect::MakeForShader(
 			SkString("uniform float4 color;"
 				"half4 main(float2 p) { return half4(color / 255.0); }"));
-		sEffect = result.effect;
-	}
+		return result.effect;
+	}();
 	return sEffect;
 }
 
@@ -174,18 +168,15 @@ color_shader(const rgb_color& color)
 static sk_sp<SkRuntimeEffect>
 gradient_effect()
 {
-	static sk_sp<SkRuntimeEffect> sEffect;
-	static bool sTried = false;
-	if (!sTried) {
-		sTried = true;
+	static const sk_sp<SkRuntimeEffect> sEffect = []() {
 		SkRuntimeEffect::Result result
 			= SkRuntimeEffect::MakeForShader(SkString(kR5GradientSkSL));
 		if (!result.effect) {
 			fprintf(stderr, "app_server: r5 gradient shader: %s\n",
 				result.errorText.c_str());
 		}
-		sEffect = result.effect;
-	}
+		return result.effect;
+	}();
 	return sEffect;
 }
 
@@ -308,6 +299,9 @@ SkiaTarget::~SkiaTarget()
 		LeakGpu();
 		return;
 	}
+	fTextures.clear();
+	fTextureBytes = 0;
+	fGradients.clear();
 	fSurface.reset();
 	fScratch.reset();
 	fScratchLcd.reset();
@@ -640,11 +634,21 @@ bitmap_sample(const uint8* bits, int32 length, int32 bytesPerRow)
 }
 
 
+static inline bool
+bitmap_uses_full_sample(int32 length, int32 bytesPerRow)
+{
+	return length <= 16 * 1024 * 1024 || bytesPerRow < 8
+		|| length < bytesPerRow;
+}
+
+
 sk_sp<SkImage>
 SkiaTarget::FindTexture(const void* id, const uint8* bits, int32 length,
 	int32 width, int32 height, int32 bytesPerRow, int32 space, bool raw,
-	uint32 generation, bool owned)
+	uint32 generation, bool owned, bool* _hasFullHash, uint64* _fullHash)
 {
+	if (_hasFullHash != NULL)
+		*_hasFullHash = false;
 	for (Texture& texture : fTextures) {
 		if (texture.id != id || texture.width != width
 			|| texture.height != height || texture.bytesPerRow != bytesPerRow
@@ -657,12 +661,25 @@ SkiaTarget::FindTexture(const void* id, const uint8* bits, int32 length,
 			if (generation == 0)
 				return nullptr;
 		} else {
-			if (texture.sample != bitmap_sample(bits, length, bytesPerRow))
+			bool fullSample = bitmap_uses_full_sample(length, bytesPerRow);
+			uint64 sample = fullSample ? bitmap_hash(bits, length)
+				: bitmap_sample(bits, length, bytesPerRow);
+			if (fullSample && _hasFullHash != NULL && _fullHash != NULL) {
+				*_hasFullHash = true;
+				*_fullHash = sample;
+			}
+			if (texture.sample != sample)
 				return nullptr;
 			texture.lookups++;
-			if ((texture.lookups % 32) == 0
-				&& texture.hash != bitmap_hash(bits, length))
-				return nullptr;
+			if (!fullSample && (texture.lookups % 32) == 0) {
+				uint64 full = bitmap_hash(bits, length);
+				if (_hasFullHash != NULL && _fullHash != NULL) {
+					*_hasFullHash = true;
+					*_fullHash = full;
+				}
+				if (texture.hash != full)
+					return nullptr;
+			}
 		}
 		texture.used = system_time();
 		return texture.image;
@@ -722,7 +739,8 @@ SkiaTarget::GradientImage(const SkBitmap& colors)
 void
 SkiaTarget::KeepTexture(const void* id, const uint8* bits, int32 length,
 	int32 width, int32 height, int32 bytesPerRow, int32 space, bool raw,
-	uint32 generation, bool owned, const sk_sp<SkImage>& image)
+	uint32 generation, bool owned, const sk_sp<SkImage>& image,
+	bool hasFullHash, uint64 fullHash)
 {
 	if (length <= 0 || length > kTextureLargest || image == nullptr)
 		return;
@@ -754,8 +772,17 @@ SkiaTarget::KeepTexture(const void* id, const uint8* bits, int32 length,
 		texture.length = length;
 		texture.generation = generation;
 		texture.owned = owned;
-		texture.sample = owned ? 0 : bitmap_sample(bits, length, bytesPerRow);
-		texture.hash = owned ? 0 : bitmap_hash(bits, length);
+		if (owned) {
+			texture.sample = 0;
+			texture.hash = 0;
+		} else if (bitmap_uses_full_sample(length, bytesPerRow)) {
+			uint64 hash = hasFullHash ? fullHash : bitmap_hash(bits, length);
+			texture.sample = hash;
+			texture.hash = hash;
+		} else {
+			texture.sample = bitmap_sample(bits, length, bytesPerRow);
+			texture.hash = hasFullHash ? fullHash : bitmap_hash(bits, length);
+		}
 		texture.lookups = 0;
 		texture.image = image;
 		texture.used = system_time();
@@ -2395,9 +2422,11 @@ SkiaPainter::DrawBitmap(const ServerBitmap* bitmap, BRect bitmapRect,
 	// The key is the bitmap's serial, not its address: a deleted bitmap's
 	// address can come back for a new one of the same size (R5).
 	const void* textureId = (const void*)(addr_t)bitmap->Serial();
+	bool hasFullHash = false;
+	uint64 fullHash = 0;
 	sk_sp<SkImage> image = fTarget->FindTexture(textureId, bitmap->Bits(),
 		bitmap->BitsLength(), width, height, bitmap->BytesPerRow(), space,
-		raw, bitmap->Generation(), owned);
+		raw, bitmap->Generation(), owned, &hasFullHash, &fullHash);
 	if (image == nullptr) {
 	SkBitmap pixels;
 	if (!pixels.tryAllocPixels(target_info(width, height)))
@@ -2441,7 +2470,7 @@ SkiaPainter::DrawBitmap(const ServerBitmap* bitmap, BRect bitmapRect,
 		return touched;
 	fTarget->KeepTexture(textureId, bitmap->Bits(), bitmap->BitsLength(), width,
 		height, bitmap->BytesPerRow(), space, raw, bitmap->Generation(),
-		owned, image);
+		owned, image, hasFullHash, fullHash);
 	}
 
 	// bitmap pixel (sx, sy) covers screen [offset + s * scale, ...)

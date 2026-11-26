@@ -294,11 +294,29 @@ AHCIPort::PortReset()
 
 	Enable();
 
-	if (wait_until_set(&fRegs->ssts, SSTS_PORT_DET_PRESENT, 500000) < B_OK) {
-		TRACE("%s: port %d: no device detected\n", __func__, fIndex);
-		fDevicePresent = false;
-		return B_OK;
+	// SPDX-SnippetBegin
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// SPDX-License-Identifier: MIT
+	// After COMRESET, wait 100 ms first. If no device was detected before
+	// reset and PxSSTS.DET still reports nothing attached (SSTS_PORT_DET_NODEV),
+	// stop waiting; otherwise wait the remaining 400 ms (500 ms total) so a
+	// slow or busy SATA drive is never missed.
+	if (wait_until_set(&fRegs->ssts, SSTS_PORT_DET_PRESENT, 100000) < B_OK) {
+		if (!noDeviceBeforeReset
+			|| (fRegs->ssts & HBA_PORT_DET_MASK) != SSTS_PORT_DET_NODEV) {
+			if (wait_until_set(&fRegs->ssts, SSTS_PORT_DET_PRESENT, 400000)
+					< B_OK) {
+				TRACE("%s: port %d: no device detected\n", __func__, fIndex);
+				fDevicePresent = false;
+				return B_OK;
+			}
+		} else {
+			TRACE("%s: port %d: no device detected\n", __func__, fIndex);
+			fDevicePresent = false;
+			return B_OK;
+		}
 	}
+	// SPDX-SnippetEnd
 
 	return Probe();
 }

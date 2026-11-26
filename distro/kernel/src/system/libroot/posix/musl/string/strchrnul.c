@@ -43,11 +43,11 @@ block_either(const char *s, unsigned skip, int c)
 {
 	__m128i chunk = _mm_load_si128(
 		(const __m128i*)((uintptr_t)s & ~(uintptr_t)15));
-	int fill = c == 1 ? 2 : 1;
-	chunk = r5_hide_prefix(chunk, skip, fill);
-	int zeroAt = r5_index16(_mm_setzero_si128(), chunk);
-	int charAt = r5_index16(_mm_set1_epi8((char)c), chunk);
-	return zeroAt < charAt ? zeroAt : charAt;
+	__m128i eqZero = _mm_cmpeq_epi8(chunk, _mm_setzero_si128());
+	__m128i eqChar = _mm_cmpeq_epi8(chunk, _mm_set1_epi8((char)c));
+	unsigned mask = (unsigned)_mm_movemask_epi8(_mm_or_si128(eqZero, eqChar));
+	mask &= (~0u << skip) & 0xffffu;
+	return mask != 0 ? __builtin_ctz(mask) : 16;
 }
 
 

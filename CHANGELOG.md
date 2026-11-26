@@ -8,6 +8,66 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-26 - Phase 1 review fixes: deferred VM page-table free, per-handle CPU-map slot, BAR5 low32, and package revisions
+
+- Problem: Review of PR #4694 found five items: (1) `r5_file_tree_free()` returned VRAM page-table pages to `sPtPool` immediately even when the file's VMID still had an unretired fence in flight; (2) `mesa`, `mesa_lavapipe`, `mesa_radv`, and `vulkan_loader` kept their already-pinned release version numbers; (3) `haiku-bo-cpu-map.patch` keyed `r5_cpu_maps[32]` on `(handle, area)`, so a second map returning a new area took a second slot and unmap could release the wrong area; (4) `ahci.c` cleared `bar5` when `PCI_address_type_64` was set, skipping the `CAP.S64A` check and forcing 32-bit DMA bounce buffers; (5) `-march=x86-64-v2` was in both `haiku-cross.txt` and `ensure-cargs.py` without documenting why.
+- Change:
+  - `r5_vmid.h`, `r5_gpu_internal.h`, `r5_gpu_core.cpp`: added `r5_vmid_last_fence()` and `sDeferTrees`. When a closing file's VMID still has a fence above `seen`, `r5_file_tree_free()` defers the tree until `gpu_defer_reclaim(seen)` sees the fence retire (or CP stops after loss), only then releasing the VMID and returning page-table pages to `sPtPool`. Extended `scripts/test-r5-vm-pool.cpp` with `test_vm_defer_until_retire()`.
+  - `distro/mesa/patches/haiku-bo-cpu-map.patch`: enforced one slot per handle in `r5_cpu_maps[32]` (storing `void *cpu`). A second map of an already-mapped handle returns the saved `cpu` with `refs++` (and if two threads race, the loser unmaps its redundant new area when `area != existing_area`).
+  - `distro/kernel/src/add-ons/kernel/busses/scsi/ahci/ahci.c`: kept `base_registers[5]` for BAR5 regardless of the 64-bit flag, only dropping the out-of-bounds read of `base_registers[6]`.
+  - `distro/mesa/ensure-cargs.py`: documented that `-march=x86-64-v2` stays in sync with `haiku-cross.txt` because Meson caches `c_args`/`cpp_args` in `coredata.dat` on existing build directories.
+  - Raised package revisions across pack scripts, `pin-mesa-packages.sh`, `install-mesa-packages.sh`, `check-egl-vendor.py`, `check-pre-stick.py`, `distro/gpu/COMPAT`, `docs/GPU-OPENGL.md`, and `docs/LICENSING.md` to `mesa-25.3.6-6`, `mesa_lavapipe-25.3.6-6`, `mesa_radv-25.3.6-13` (packed from base `25.3.6-10` + fresh `libvulkan_radeon.so` + current stick scripts), and `vulkan_loader-1.4.367-5`.
+- Limits: Host tests pass (`test-r5-vm-pool`, `test-cpu-map`, `check-libdrm-symbols.py`); `mesa-25.3.6-6`, `mesa_lavapipe-25.3.6-6`, `mesa_radv-25.3.6-13`, and `vulkan_loader-1.4.367-5` are published and pinned in `distro/packages/packages.sha256`; `scripts/build-locked.sh` (`jam_exit=0`, `mesa_exit=0`, `ok egl vendor`) and QEMU KVM boot to desktop verified with screenshot and clean serial log. 5625U hardware stick test pending merge. No speed-up claimed without measurement.
+
+## 2026-11-26 - Mesa and Vulkan loader: WSI fixes, BO map locking, x86-64-v2 flags, and stripped libvulkan.so
+
+- Problem: `wsi_common_haiku.cpp` leaked `BBitmap` when `InitCheck() != B_OK`, built a fresh `BScreen` on every present, and kept calling `WaitForRetrace()` after `snooze()` even after `retrace_failed` was set; `haiku-bo-cpu-map.patch` accessed `r5_cpu_maps[32]` without a mutex and overwrote existing handle slots without refcounting; Mesa C/C++ built without `-march=x86-64-v2`; `vulkan_loader` shipped an unstripped `libvulkan.so.1.4.367`.
+- Change:
+  - `distro/mesa/wsi/wsi_common_haiku.cpp`: delete failed `BBitmap` before `r5_swapchain_destroy()`; store `BScreen*` on `r5_swapchain` (freed on destroy) instead of constructing one per present; return after `snooze()` in `r5_fifo_wait()` once `retrace_failed` is set without calling `WaitForRetrace()` again.
+  - `distro/mesa/patches/haiku-bo-cpu-map.patch`: guarded `r5_cpu_maps[32]` with `pthread_mutex_t` and added reference counting (`refs`) so an in-use slot is never overwritten. At slot 33 (all 32 slots occupied by distinct handles), `r5_cpu_map_save()` returns `-1` and `ac_drm_bo_cpu_map()` unmaps the new area and returns `-1` without disturbing existing mappings.
+  - `distro/mesa/haiku-cross.txt`: added `-march=x86-64-v2` to `c_args` and `cpp_args`.
+  - `distro/vulkan/build-loader.sh`: stripped `libvulkan.so.1.4.367` with `x86_64-unknown-haiku-strip --strip-unneeded`.
+- Limits: Mesa patches and Vulkan loader built locally; new `mesa_radv`, `mesa_lavapipe`, and `vulkan_loader` packages are not uploaded until owner approval. Hardware 5625U stick test pending merge. No speed-up claimed without measurement.
+
+## 2026-11-26 - app_server and Skia: shader init race, target teardown, single full hash, memory-font eviction, GPUCopy cleanup, and -O3
+
+- Problem: `blend_effect()`, `color_effect()`, and `gradient_effect()` (`SkiaPainter.cpp`) used unsynchronized `static bool sTried` / `static sk_sp` across window threads; `~SkiaTarget()` deleted `fRecorder` before releasing `fTextures` and `fGradients`; `KeepTexture()` hashed `<= 16 MiB` bitmaps twice (and up to three times after a stale lookup); memory-loaded fonts in `SkiaText.cpp` were keyed on raw pointers and kept forever; `GPUCopy.cpp` leaked BOs, areas, and `sFd` on failure paths; `libaslocal.a` compiled Compositor/Skia/GPUCopy at `-O2` while Painter and AGG used `-O3`.
+- Change:
+  - `distro/app_server/skia/SkiaPainter.{h,cpp}`: switched the three `SkRuntimeEffect` statics to thread-safe function-local static initialisers; cleared `fTextures` and `fGradients` before `DeleteRecorder()` in `~SkiaTarget()`; computed the full hash for `<= 16 MiB` bitmaps once and reused it between `FindTexture()` and `KeepTexture()` (full hash preserved; no sampling or generation-counter shortcut).
+  - `distro/app_server/{ServerFont.h,font/FontStyle.{h,cpp},skia/SkiaText.cpp}` and `scripts/apply-app-server.py`: assigned a monotonic `uint64` `fFontDataSerial` in `FontStyle::SetFontData()`, keyed memory fonts in `SkiaText.cpp` by `(serial, faceIndex)`, and evicted them via `r5_skia_forget_memory_font()` when `FontStyle` frees or replaces its data.
+  - `distro/app_server/GPUCopy.cpp`: freed the BO and deleted the mapped area on every failure path of `map_bo()`, and closed `sFd` when `map_bo()` fails in `open_node()`.
+  - `distro/app_server/local-Jamfile`: added `-O3` to `Compositor*.cpp`, `Skia*.cpp`, `DrawCompare.cpp`, and `GPUCopy.cpp`.
+- Limits: Verified with `scripts/build-locked.sh` (zero new warnings) and QEMU desktop + Aomi screenshot check; 5625U hardware stick test pending merge. No speed-up claimed without measurement.
+
+## 2026-11-26 - AHCI: shorten post-COMRESET wait on empty ports to 100 ms
+
+- Problem: `AHCIPort::PortReset()` (`ahci_port.cpp`) waited 500 ms after COMRESET even on empty ports where `PxSSTS.DET` reports nothing attached, adding ~1.0 s on dual empty AMD FCH AHCI controllers.
+- Change: `distro/kernel/src/add-ons/kernel/busses/scsi/ahci/ahci_port.cpp` now waits 100 ms first and stops early only when `PxSSTS.DET == SSTS_PORT_DET_NODEV` both before reset and after the 100 ms wait. Any port that had a device before reset or reports non-zero `PxSSTS.DET` (e.g. `DET == 1`, presence detected / negotiating) still waits the remaining 400 ms (500 ms total).
+- Limits: **Not tested on hardware** (5625U stick test and real SATA drive test pending). Build and QEMU boot only; no hardware boot-time speed-up claimed yet.
+
+## 2026-11-26 - libroot and kernel: malloc lock padding, AVX2 string fixes, APIC scale, and leak/OOB fixes
+
+- Problem: `sMallocMutexes` (`wrapper.c`) packed four 16-byte locks per 64-byte cache line; `memcmp_avx2` and `strcmp_avx2` abandoned AVX2 for SSE at the first 4 KiB page edge; `r5_string_x86.h`, `strchrnul.c`, and `memchr.c` used `_mm_cmpestri`; `x86_apic.cpp` ran 128-bit division (`__udivti3`) on every timer re-arm; `efi_arch_init()` leaked `sFPUBuffer` on three early error returns; `usb_disk.cpp` leaked `DMAResource` when `Init()` failed; `ahci.c` read `base_registers[6]` past the 6-element array when checking BAR5.
+- Change:
+  - `distro/kernel/src/system/libroot/posix/malloc/openbsd/wrapper.c`: padded each `sMallocMutexes` slot to 64 bytes (`__attribute__((aligned(64)))`).
+  - `distro/kernel/src/system/libroot/posix/string/{memcmp,strcmp}.c`: fall back to SSE/bytes only for the page-crossing chunk, then resume AVX2.
+  - `distro/kernel/headers/private/system/r5_string_x86.h`, `strchrnul.c`, `memchr.c`: replaced `_mm_cmpestri` and `r5_hide_prefix` with `_mm_cmpeq_epi8` + `_mm_movemask_epi8` + `__builtin_ctz`; dropped redundant page-room check on aligned 32-byte loads in `memchr_avx2`.
+  - `distro/kernel/src/system/kernel/arch/x86/timers/x86_apic.cpp`: precomputed `sTimerTicksPerUs` and 64-bit fractional `sTimerFracScale` at boot so `apic_timer_set_hardware_timer()` matches `((__uint128_t)timeout * freq) / 1000000` to the tick without `__udivti3`.
+  - `distro/kernel/src/add-ons/kernel/generic/efi/arch_x86_64.cpp`: called `efi_arch_uninit()` on early failure returns in `efi_arch_init()`.
+  - `distro/kernel/src/add-ons/kernel/drivers/disk/usb/usb_disk/usb_disk.cpp`: checked `new(std::nothrow) DMAResource` and deleted it when `Init()` fails.
+  - `distro/kernel/src/add-ons/kernel/busses/scsi/ahci/ahci.c`: stopped reading `base_registers[6]` past the 6-entry array.
+  - Added user-space test `scripts/test-r5-string-p1.c` (`scripts/run-test-string-p1.sh`): verifies `memcmp`, `strcmp`, `strlen`, `strchrnul`, and `memchr` against plain byte loops across lengths 0..4200 and offsets 0..63 against a `PROT_NONE` guard page, plus APIC timer scale exactness across 7 frequencies.
+- Limits: Host string/APIC tests pass; AMD64 image build and QEMU boot verified. Hardware stick test pending merge. No speed-up claimed without measurement.
+
+## 2026-11-26 - GPU kernel driver: cache gpu_render_enabled and recycle VRAM page-table pages
+
+- Problem: `gpu_render_enabled()` (`r5_gpu_core.cpp`) called `load_driver_settings("radeon_hd")` on every GPU ioctl. Per-file VRAM page-table pages allocated by `r5_gfx9_file_vm_init()` were never returned when a file closed (`r5_file_tree_free()`) or on init failure, and an overflow of `sDefer[kMaxBo]` dropped freed VRAM offsets permanently.
+- Change:
+  - Cached `gpu_render` in `sRenderOn` inside `gpu_cache_log_settings()` (refreshed by `r5_gpu_init()` and `r5_gpu_set_level()`), so `gpu false` and `gpu_render false` still take effect after a restart without reading the settings file on every ioctl.
+  - Added a 4 KiB VRAM page-table free pool (`r5_vm_page_pool` in `r5_vm.h`, `sPtPool` in `gfx9_k12.cpp`) and `file_vm_free` at the end of `r5_gpu_backend_ops`. `vm_page_alloc()` reuses pooled pages before bumping `vram_pool_cursor`; `r5_file_tree_free()` and the failure paths of `r5_gfx9_file_vm_init()` return all allocated pages to the pool.
+  - Added a heap-backed `sDeferOverflow` list in `r5_gpu_core.cpp` so deferred VRAM frees beyond `kMaxBo` are stamped and reclaimed instead of dropped.
+  - Added host test `scripts/test-r5-vm-pool.cpp` verifying 500 open/close cycles keep the bump cursor flat and that init-failure rollback and defer overflow reclaim every page.
+- Limits: Host-tested and QEMU-booted on AMD64; 5625U hardware stick test pending merge. No speed-up claimed without hardware measurement.
 ## 2026-11-26 - Aomi: Servo comes from the servo-haiku repository (#4679)
 
 - Problem: the public repository `r5-operating-system/servo-haiku` (made that morning from R5 0be5c00cc6) did not have Aomi part 2, its build script only ran on R5's build machine, it had no prebuilt package, and R5 still built Servo from its own copy in `distro/servo/`.

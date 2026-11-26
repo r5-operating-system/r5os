@@ -63,9 +63,18 @@ int sDebugOn = -1;
 int sSelftestOn = -1;
 int sSubmitLogOn = -1;
 int sTraceOn = -1;
+int sRenderOn = -1;
 int sDeferred = 0;
-/* One deferred VRAM free per backing at most (M11 step 3b: kMaxBo). */
+/* One deferred VRAM free per backing at most (M11 step 3b: kMaxBo).
+ * Overflow entries beyond kMaxBo are chained on the heap so no VRAM
+ * offset is ever dropped from the allocator. */
 static r5_defer sDefer[kMaxBo];
+struct gpu_defer_overflow {
+	r5_defer			entry;
+	gpu_defer_overflow*	next;
+};
+static gpu_defer_overflow* sDeferOverflow = NULL;
+static r5_file_tree* sDeferTrees = NULL;
 
 gpu_bo sBo[kMaxBo];
 gpu_backing sBacking[kMaxBo];
@@ -498,11 +507,9 @@ gpu_gtt_limit()
 bool
 gpu_render_enabled()
 {
-	void* settings = load_driver_settings("radeon_hd");
-	bool enabled = r5_gpu_switch_named(settings, "gpu_render") != 0;
-	if (settings != NULL)
-		unload_driver_settings(settings);
-	return enabled;
+	if (sRenderOn < 0)
+		gpu_cache_log_settings();
+	return sRenderOn != 0;
 }
 
 
@@ -746,13 +753,34 @@ gpu_tree_of(r5_vm* vm)
 
 
 static void
-r5_file_tree_free(r5_file_tree* tree)
+r5_file_tree_destroy(r5_file_tree* tree, uint64 seen)
 {
 	if (tree->owner != 0)
-		r5_vmid_release(&sFileVmids, tree->owner, tree->seen);
+		r5_vmid_release(&sFileVmids, tree->owner, seen);
 	gpu_prt_release_tree(&tree->vm);
+	if (gR5GpuOps.file_vm_free != NULL)
+		gR5GpuOps.file_vm_free(&tree->vm);
 	free(tree->pages);
 	free(tree);
+}
+
+
+static void
+r5_file_tree_free(r5_file_tree* tree)
+{
+	uint64 seen = gpu_cp_stopped_after_loss() ? ~0ull : gpu_hw_seen();
+	if (seen != ~0ull && tree->seen > seen)
+		seen = tree->seen;
+	if (tree->owner != 0 && seen != ~0ull) {
+		uint64 busyFence = r5_vmid_last_fence(&sFileVmids, tree->owner);
+		if (busyFence != 0 && busyFence > seen) {
+			tree->deferFence = busyFence;
+			tree->deferNext = sDeferTrees;
+			sDeferTrees = tree;
+			return;
+		}
+	}
+	r5_file_tree_destroy(tree, seen);
 }
 
 
@@ -859,11 +887,24 @@ gpu_backing_drop(gpu_backing* backing)
 			// gfx9_deferred_free true).
 			gpu_defer_reclaim(gpu_hw_seen());
 			if (!r5_defer_add(sDefer, kMaxBo, backing->vramOffset)) {
-				static bool sLogged = false;
-				if (!sLogged) {
-					sLogged = true;
-					dprintf("radeon_hd: deferred free list full, vram page "
-						"%llx kept\n", (unsigned long long)backing->vramOffset);
+				gpu_defer_overflow* node = (gpu_defer_overflow*)malloc(
+					sizeof(gpu_defer_overflow));
+				if (node != NULL) {
+					node->entry.page = backing->vramOffset;
+					node->entry.seq = 0;
+					node->entry.state = 1;
+					node->next = sDeferOverflow;
+					sDeferOverflow = node;
+				} else if (gpu_cp_stopped_after_loss()) {
+					gpu_hw_vram_free(backing->vramOffset);
+				} else {
+					static bool sLogged = false;
+					if (!sLogged) {
+						sLogged = true;
+						dprintf("radeon_hd: deferred free list full and OOM, "
+							"vram page %llx kept\n",
+							(unsigned long long)backing->vramOffset);
+					}
 				}
 			}
 		}
@@ -1169,6 +1210,10 @@ void
 gpu_defer_stamp(uint64 sequence)
 {
 	r5_defer_stamp(sDefer, kMaxBo, sequence);
+	for (gpu_defer_overflow* node = sDeferOverflow; node != NULL;
+			node = node->next) {
+		r5_defer_stamp(&node->entry, 1, sequence);
+	}
 }
 
 
@@ -1180,6 +1225,30 @@ gpu_defer_reclaim(uint64 seen)
 		dprintf("radeon_hd: deferred page %llx reused\n",
 			(unsigned long long)page);
 		gpu_hw_vram_free(page);
+	}
+	gpu_defer_overflow** link = &sDeferOverflow;
+	while (*link != NULL) {
+		gpu_defer_overflow* node = *link;
+		if (r5_defer_take(&node->entry, 1, seen, &page)) {
+			*link = node->next;
+			free(node);
+			dprintf("radeon_hd: deferred page %llx reused\n",
+				(unsigned long long)page);
+			gpu_hw_vram_free(page);
+		} else {
+			link = &node->next;
+		}
+	}
+	r5_file_tree** treeLink = &sDeferTrees;
+	while (*treeLink != NULL) {
+		r5_file_tree* tree = *treeLink;
+		if (seen == ~0ull || tree->deferFence <= seen) {
+			*treeLink = tree->deferNext;
+			tree->deferNext = NULL;
+			r5_file_tree_destroy(tree, seen);
+		} else {
+			treeLink = &tree->deferNext;
+		}
 	}
 }
 
