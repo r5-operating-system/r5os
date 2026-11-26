@@ -117,7 +117,7 @@ struct ServoApi {
 	int32		(*paint)(r5_servo*);
 	status_t	(*key)(r5_servo*, int32, int32, const char*, uint32, int32);
 	void		(*set_max_size)(int32, int32);
-	status_t	(*control_answer)(r5_servo*, int32, int32, const char*);
+	status_t	(*control_answer)(r5_servo*, int64, int32, int32, const char*);
 	status_t	(*input_message)(r5_servo*, const BMessage*, float, float);
 	status_t	(*ask_control)(BView*, int32, const char*, float, float,
 					const r5_servo_control_labels*, int32*, int32*, char**);
@@ -169,7 +169,9 @@ struct ServoTab {
 		lock("servo tab"),
 		frame(NULL),
 		visible(false),
-		framePending(0)
+		framePending(0),
+		parent(NULL),
+		adopted(true)
 	{
 	}
 
@@ -186,10 +188,15 @@ struct ServoTab {
 	BBitmap*	frame;
 	bool		visible;
 	int32		framePending;
-	// Events not yet delivered to the view. The engine thread never waits
-	// on a window's port: a window that is busy (an open alert) or waits on
-	// the engine (closing a tab) would deadlock it. Engine thread only.
+	// Events not yet delivered to the view, in order. Within one team a
+	// message goes straight into the target's queue and never waits on a
+	// full port (Message.cpp, _SendMessage, direct target), so a send fails
+	// only when the view is gone. Engine thread only.
 	std::vector<BMessage*> outbox;
+	// A tab Servo made for a page (window.open()) until a view adopts it:
+	// the tab that opened it. Destroyed with that tab if never adopted.
+	ServoTab*	parent;
+	bool		adopted;
 };
 
 
@@ -301,10 +308,12 @@ public:
 	// Called on the engine thread from tab_callback for a page's
 	// window.open(): the new engine gets a tab without a view until a view
 	// adopts it.
-	ServoTab* AddChild(r5_servo* engine)
+	ServoTab* AddChild(ServoTab* parent, r5_servo* engine)
 	{
 		ServoTab* tab = new ServoTab();
 		tab->engine = engine;
+		tab->parent = parent;
+		tab->adopted = false;
 		fTabs.push_back(tab);
 		return tab;
 	}
@@ -345,13 +354,17 @@ public:
 			case kEngAnswer:
 			{
 				ServoTab* tab = _Tab(message);
-				const char* answer = NULL;
-				message->FindString("answer", &answer);
+				// The answer buffer is handed over, not copied: it may hold
+				// a password, and r5_servo_free_answer() clears it.
+				char* answer = NULL;
+				message->FindPointer("answer", (void**)&answer);
 				if (tab != NULL && tab->engine != NULL) {
 					sApi.control_answer(tab->engine,
+						message->GetInt64("control", 0),
 						message->GetBool("accept", false) ? 1 : 0,
 						message->GetInt32("value", -1), answer);
 				}
+				sApi.free_answer(answer);
 				_PumpSoon();
 				return;
 			}
@@ -446,6 +459,8 @@ private:
 		ServoTab* tab = _Tab(message);
 		if (tab != NULL && tab->engine != NULL) {
 			message->FindMessenger("view", &tab->view);
+			tab->adopted = true;
+			tab->parent = NULL;
 			tab->visible = message->GetBool("visible", false);
 			sApi.set_visible(tab->engine, tab->visible ? 1 : 0);
 			// Its waiting events follow, to the view.
@@ -458,19 +473,31 @@ private:
 	void _Destroy(BMessage* message)
 	{
 		ServoTab* tab = _Tab(message);
-		if (tab != NULL) {
-			for (size_t i = 0; i < fTabs.size(); i++) {
-				if (fTabs[i] == tab) {
-					fTabs.erase(fTabs.begin() + i);
-					break;
-				}
-			}
-			// After this no event names the tab.
-			if (tab->engine != NULL)
-				sApi.destroy(tab->engine);
-			delete tab;
-		}
+		if (tab != NULL)
+			_DestroyTab(tab);
 		message->SendReply(B_REPLY);
+	}
+
+	// Destroys a tab and the tabs it opened that no view adopted (their
+	// event may have been lost with the closed view).
+	void _DestroyTab(ServoTab* tab)
+	{
+		for (size_t i = 0; i < fTabs.size();) {
+			if (fTabs[i]->parent == tab && !fTabs[i]->adopted)
+				_DestroyTab(fTabs[i]);
+			else
+				i++;
+		}
+		for (size_t i = 0; i < fTabs.size(); i++) {
+			if (fTabs[i] == tab) {
+				fTabs.erase(fTabs.begin() + i);
+				break;
+			}
+		}
+		// After this no event names the tab.
+		if (tab->engine != NULL)
+			sApi.destroy(tab->engine);
+		delete tab;
 	}
 
 	void _Call(BMessage* message)
@@ -638,7 +665,11 @@ tab_callback(void* context, const r5_servo_event* event)
 	if (event->kind == R5_EV_NEW_WINDOW && event->current != 0
 		&& sEngine != NULL) {
 		message.AddPointer("child",
-			sEngine->AddChild((r5_servo*)(addr_t)event->current));
+			sEngine->AddChild(tab, (r5_servo*)(addr_t)event->current));
+	}
+	if (event->kind == R5_EV_DIALOG) {
+		// The id the answer must name.
+		message.AddInt64("control", event->current);
 	}
 	tab->outbox.push_back(new BMessage(message));
 	deliver_outbox(tab);
@@ -981,8 +1012,23 @@ aomi_start_download(const char* url, const char* destDir)
 }
 
 
+// Hidden by itself or by a parent view; unlike IsHidden(), a window that is
+// not shown yet does not count (BView::IsHidden(lookingFrom) checks only the
+// view's own show level when lookingFrom is the view).
+static bool
+hidden_in_window(const BView* view)
+{
+	for (const BView* v = view; v != NULL; v = v->Parent()) {
+		if (v->IsHidden(v))
+			return true;
+	}
+	return false;
+}
+
+
 status_t
 aomi_start_download_to(const char* url, const char* path)
+
 {
 	// Save page: the user chose the name in a save panel, which already asked
 	// about replacing an existing file.
@@ -1065,7 +1111,7 @@ BServoContentView::AttachedToWindow()
 		BMessage request(kEngAdopt);
 		request.AddPointer("tab", fTab);
 		request.AddMessenger("view", BMessenger(this));
-		request.AddBool("visible", !IsHidden());
+		request.AddBool("visible", !hidden_in_window(this));
 		BMessage reply;
 		engine_request(&request, &reply);
 		fAdopted = true;
@@ -1117,7 +1163,7 @@ BServoContentView::_Start(const char* document, bool isHTML)
 	// larger (surface_size() in distro/servo/engine/src/lib.rs).
 	request.AddInt32("maxWidth", (int32)frame.Width() + 1);
 	request.AddInt32("maxHeight", (int32)frame.Height() + 1);
-	request.AddBool("visible", !IsHidden());
+	request.AddBool("visible", !hidden_in_window(this));
 	if (unlock)
 		window->Unlock();
 	BMessage reply;
@@ -1435,8 +1481,9 @@ void
 BServoContentView::Show()
 {
 	BWebContentView::Show();
-	// Shown only when no parent is hidden either.
-	if (!IsHidden())
+	// Shown only when no parent is hidden either. The window itself does
+	// not count: a tab shown before its window appears is the visible one.
+	if (!hidden_in_window(this))
 		_Call(kOpVisible, NULL, 0, true);
 	Invalidate();
 }
@@ -1675,7 +1722,8 @@ BServoContentView::_Report(uint32 what, const char* url, const char* text,
 
 
 void
-BServoContentView::_AskControl(int32 kind, const char* text, BPoint where)
+BServoContentView::_AskControl(int32 kind, const char* text, BPoint where,
+	int64 control)
 {
 	// The page waits for the answer. The window stays drawn while the
 	// question is open; the engine thread keeps the other tabs going.
@@ -1696,12 +1744,13 @@ BServoContentView::_AskControl(int32 kind, const char* text, BPoint where)
 	if (fTab != NULL) {
 		BMessage reply(kEngAnswer);
 		reply.AddPointer("tab", fTab);
+		reply.AddInt64("control", control);
 		reply.AddBool("accept", accept != 0);
 		reply.AddInt32("value", value);
-		if (answer != NULL)
-			reply.AddString("answer", answer);
-		sEngineMessenger.SendMessage(&reply);
-		// The message may hold a password; the engine thread uses it once.
+		// Handed over: the engine thread answers and clears it.
+		reply.AddPointer("answer", answer);
+		if (sEngineMessenger.SendMessage(&reply) == B_OK)
+			return;
 	}
 	sApi.free_answer(answer);
 }
@@ -1796,8 +1845,12 @@ BServoContentView::_OnEvent(BMessage* event)
 			BMessage message(AOMI_NEW_WINDOW);
 			message.AddPointer("view", static_cast<BWebContentView*>(view));
 			message.AddBool("primary", a != 0);
-			Report(&message);
+			if (Report(&message) != B_OK) {
+				// No window took it: the view frees its engine.
+				delete view;
+			}
 			break;
+
 		}
 		case R5_EV_CLOSE:
 			_Report(AOMI_CLOSE_WANTED, NULL, NULL, 0, 0, 0, 0);
@@ -1845,7 +1898,7 @@ BServoContentView::_OnEvent(BMessage* event)
 				aomi_log_add(line.String());
 				break;
 			}
-			_AskControl(a, text, BPoint(b, c));
+			_AskControl(a, text, BPoint(b, c), event->GetInt64("control", 0));
 			break;
 		default:
 			break;

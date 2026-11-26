@@ -43,10 +43,6 @@ static const uint32 kSpinMessage = 'svSp';
 static const uint32 kControlMessage = 'svCt';
 static const uint32 kStartMessage = 'svSt';
 
-// Views of this process with an engine. When the last one goes, Servo is
-// shut down so it writes its profile (r5_servo_shutdown()).
-static int32 sEngineViews = 0;
-
 // A load asked for before the view could start its engine on its window's
 // thread (Servo lives on the thread that creates it). Kept outside the class
 // so BServoView's size does not change.
@@ -141,6 +137,18 @@ wait_keeping_window_drawn(sem_id sem)
 }
 
 
+// Overwrites a string that may hold a password before it is freed.
+static void
+wipe_string(BString& text)
+{
+	int32 length = text.Length();
+	if (length <= 0)
+		return;
+	memset(text.LockBuffer(length), 0, length);
+	text.UnlockBuffer(0);
+}
+
+
 static const uint32 kControlOK = 'svOk';
 static const uint32 kControlCancel = 'svCn';
 
@@ -225,6 +233,10 @@ public:
 				*first = fFirstText;
 			if (second != NULL)
 				*second = fSecondText;
+			// The second field may be a password: clear the window's copies.
+			wipe_string(fFirstText);
+			wipe_string(fSecondText);
+			fSecond->SetText("");
 			Quit();
 		}
 		return accepted;
@@ -374,13 +386,15 @@ r5_servo_ask_control(BView* view, int32 kind, const char* text, float x,
 		}
 		case 3:
 		{
-			// prompt(): "message<NL>default value".
+			// prompt(): "message", U+001F, "default value". Either may hold
+			// line breaks; the separator never appears in them.
 			BString message(all);
 			BString preset;
-			int32 newline = all.FindFirst('\n');
-			if (newline >= 0) {
-				all.CopyInto(message, 0, newline);
-				all.CopyInto(preset, newline + 1, all.Length() - newline - 1);
+			int32 separator = all.FindFirst('\x1f');
+			if (separator >= 0) {
+				all.CopyInto(message, 0, separator);
+				all.CopyInto(preset, separator + 1,
+					all.Length() - separator - 1);
 			}
 			ControlWindow* window = new ControlWindow("page", message.String(),
 				NULL, preset.String(), NULL, false, l.ok, l.cancel);
@@ -403,7 +417,8 @@ r5_servo_ask_control(BView* view, int32 kind, const char* text, float x,
 				l.cancel);
 			*accept = window->Go(&user, &password) ? 1 : 0;
 			reply << user << "\n" << password;
-			password.Truncate(0);
+			wipe_string(user);
+			wipe_string(password);
 			break;
 		}
 		case 6:
@@ -495,8 +510,7 @@ r5_servo_ask_control(BView* view, int32 kind, const char* text, float x,
 	if (reply.Length() > 0) {
 		*answer = strdup(reply.String());
 		// The reply may hold a password: clear the copy here.
-		memset(reply.LockBuffer(reply.Length()), 0, reply.Length());
-		reply.UnlockBuffer(0);
+		wipe_string(reply);
 	}
 	return B_OK;
 }
@@ -513,7 +527,7 @@ r5_servo_free_answer(char* answer)
 
 
 extern "C" status_t
-r5_servo_show_control(r5_servo* engine, BView* view, int32 kind,
+r5_servo_show_control(r5_servo* engine, int64 id, BView* view, int32 kind,
 	const char* text, float x, float y, const char* okLabel,
 	const char* cancelLabel)
 {
@@ -529,7 +543,7 @@ r5_servo_show_control(r5_servo* engine, BView* view, int32 kind,
 		&accept, &value, &answer);
 	if (status != B_OK)
 		return status;
-	status = r5_servo_control_answer(engine, accept, value, answer);
+	status = r5_servo_control_answer(engine, id, accept, value, answer);
 	r5_servo_free_answer(answer);
 	return status;
 }
@@ -681,11 +695,12 @@ BServoView::~BServoView()
 	sPendingStarts.erase(this);
 	// Frees the engine; its GL context is kept for reuse, because destroying
 	// one aborts in Haiku Mesa's eglDestroyImageKHR.
-	if (fEngine != NULL) {
+	// Servo is not shut down here: a program may open a view again later,
+	// and Servo cannot be built twice in a process. A program that wants
+	// its cookies and logins written calls r5_servo_shutdown() on the
+	// view's thread when it is done with every view (R5Book servo-view).
+	if (fEngine != NULL)
 		r5_servo_destroy(fEngine);
-		if (--sEngineViews == 0)
-			r5_servo_shutdown();
-	}
 }
 
 
@@ -758,8 +773,7 @@ BServoView::_Start(const char* document, bool documentIsHTML)
 	fEngine = r5_servo_create(width, height, document, documentIsHTML ? 1 : 0,
 		&_Callback, this);
 	status_t status = fEngine != NULL ? B_OK : B_ERROR;
-	if (status == B_OK)
-		sEngineViews++;
+
 	if (status == B_OK && fPrivate) {
 		fprintf(stderr,
 			"r5-servo private session is not isolated on disk yet\n");
@@ -1083,9 +1097,17 @@ void
 BServoView::Show()
 {
 	BView::Show();
-	// Shown only when no parent is hidden either.
-	if (fEngine != NULL && !IsHidden())
+	// Shown only when no parent is hidden either; a window that is not
+	// shown yet does not count (IsHidden(lookingFrom) with the view itself
+	// checks only its own show level).
+	bool hidden = false;
+	for (const BView* v = this; v != NULL; v = v->Parent()) {
+		if (v->IsHidden(v))
+			hidden = true;
+	}
+	if (fEngine != NULL && !hidden)
 		r5_servo_set_visible(fEngine, 1);
+
 }
 
 
@@ -1128,8 +1150,8 @@ BServoView::MessageReceived(BMessage* message)
 		message->FindInt32("kind", &kind);
 		message->FindString("text", &text);
 		message->FindPoint("where", &where);
-		r5_servo_show_control(fEngine, this, kind, text, where.x, where.y,
-			NULL, NULL);
+		r5_servo_show_control(fEngine, message->GetInt64("control", 0), this,
+			kind, text, where.x, where.y, NULL, NULL);
 		return;
 	}
 	if (fEngine != NULL) {
@@ -1343,6 +1365,8 @@ BServoView::_OnEvent(const r5_servo_event* event)
 			control.AddInt32("kind", event->a);
 			control.AddString("text", event->text != NULL ? event->text : "");
 			control.AddPoint("where", BPoint(event->b, event->c));
+			control.AddInt64("control", event->current);
+
 			BMessenger(this).SendMessage(&control);
 			break;
 		}

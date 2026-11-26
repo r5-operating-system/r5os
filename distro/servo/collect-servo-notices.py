@@ -111,7 +111,8 @@ def main() -> None:
         licences[spdx] += 1
         parts.append("\n" + "=" * 78 + f"\n{name} {version}\nLicense: {spdx}\n")
         if authors:
-            parts.append("Copyright: " + ", ".join(authors) + "\n")
+            # The Cargo authors field is not a copyright statement.
+            parts.append("Authors (Cargo.toml): " + ", ".join(authors) + "\n")
         notices = top_notices(path)
         for notice in notices:
             parts.append(f"\n--- {notice.name} ---\n{read(notice)}")
@@ -121,7 +122,7 @@ def main() -> None:
             parts.append(
                 "\n(This crate ships no licence file. The text of the licence "
                 "above is in LICENSES/ of the R5 repository and in "
-                "/boot/system/data/licenses; the copyright is its authors'.)\n")
+                "/boot/system/data/licenses.)\n")
 
 
         if name in ("mozjs_sys", "aws-lc-sys"):

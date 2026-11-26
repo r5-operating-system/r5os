@@ -331,8 +331,9 @@ struct Ev {
     favicon_width: i32,
     favicon_height: i32,
     favicon_format: i32,
-    // R5_EV_NEW_WINDOW: the engine Servo made for the page, as `current`.
-    engine: usize,
+    // The event's `current`: for R5_EV_NEW_WINDOW the engine Servo made for
+    // the page; for R5_EV_DIALOG the id to answer with.
+    current: i64,
 }
 
 impl Ev {
@@ -349,7 +350,7 @@ impl Ev {
             favicon_width: 0,
             favicon_height: 0,
             favicon_format: 0,
-            engine: 0,
+            current: 0,
         }
     }
 }
@@ -396,7 +397,7 @@ enum Pending {
 }
 
 struct Engine {
-    pending: RefCell<Option<Pending>>,
+    pending: RefCell<Vec<(i64, Pending)>>,
     inner: RefCell<Inner>,
     events: Mutex<Vec<Ev>>,
     notes: Mutex<Notes>,
@@ -494,7 +495,7 @@ fn flush(engine: *mut Engine) {
             a: event.a,
             b: event.b,
             c: event.c,
-            current: event.engine as i64,
+            current: event.current,
 
             expected: 0,
             favicon: event.favicon.as_ptr(),
@@ -667,7 +668,7 @@ impl WebViewDelegate for Bridge {
         );
         let mut event = Ev::new(R5_EV_NEW_WINDOW);
         event.a = 1;
-        event.engine = child as usize;
+        event.current = child as usize as i64;
         emit(parent, event);
     }
 
@@ -692,7 +693,7 @@ impl WebViewDelegate for Bridge {
         if request.for_proxy() {
             event.text.push_str("\nproxy");
         }
-        set_pending(engine, Pending::Auth(request));
+        event.current = set_pending(engine, Pending::Auth(request));
         emit(engine, event);
     }
 
@@ -712,11 +713,13 @@ impl WebViewDelegate for Bridge {
                 };
                 event.text = dialog.message().to_string();
                 if let SimpleDialog::Prompt(prompt) = &dialog {
-                    // "message<NL>default value" for the text field.
-                    event.text.push('\n');
-                    event.text.push_str(prompt.current_value());
+                    // "message<US>default value": U+001F (unit separator)
+                    // cannot be part of either.
+                    event.text.retain(|c| c != '\u{1f}');
+                    event.text.push('\u{1f}');
+                    event.text.push_str(&prompt.current_value().replace('\u{1f}', ""));
                 }
-                set_pending(engine, Pending::Dialog(dialog));
+                event.current = set_pending(engine, Pending::Dialog(dialog));
 
                 emit(engine, event);
             }
@@ -754,7 +757,7 @@ impl WebViewDelegate for Bridge {
                 event.b = position.min.x;
                 event.c = position.max.y;
                 event.text = lines.join("\n");
-                set_pending(engine, Pending::Select(select));
+                event.current = set_pending(engine, Pending::Select(select));
                 emit(engine, event);
             }
             EmbedderControl::FilePicker(picker) => {
@@ -769,7 +772,7 @@ impl WebViewDelegate for Bridge {
                     if picker.allow_select_multiple() { "m" } else { "s" },
                     patterns.join(",")
                 );
-                set_pending(engine, Pending::File(picker));
+                event.current = set_pending(engine, Pending::File(picker));
                 emit(engine, event);
             }
             EmbedderControl::ContextMenu(menu) => {
@@ -793,7 +796,7 @@ impl WebViewDelegate for Bridge {
                 event.b = position.min.x;
                 event.c = position.min.y;
                 event.text = lines.join("\n");
-                set_pending(engine, Pending::Menu(menu));
+                event.current = set_pending(engine, Pending::Menu(menu));
                 emit(engine, event);
             }
             other => drop(other),
@@ -801,22 +804,27 @@ impl WebViewDelegate for Bridge {
     }
 }
 
-fn set_pending(engine: *mut Engine, control: Pending) {
+// Keeps a page control until it is answered, and returns its id (the
+// R5_EV_DIALOG event's `current`). Several can wait at once: each answer
+// names its own.
+fn set_pending(engine: *mut Engine, control: Pending) -> i64 {
     if !alive(engine) {
-        return;
+        return 0;
     }
-    // A new control replaces one that was never answered; dropping the old
-    // one gives that page its default answer.
-    let old = unsafe { (*engine).pending.replace(Some(control)) };
-    drop(old);
+    static NEXT_CONTROL_ID: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(1);
+    let id = NEXT_CONTROL_ID.fetch_add(1, Ordering::Relaxed);
+    unsafe { (*engine).pending.borrow_mut().push((id, control)) };
+    id
 }
 
-/// The answer to the last page control (R5_EV_DIALOG). accept = 0 cancels.
+/// The answer to page control `id` (from R5_EV_DIALOG). accept = 0 cancels.
 /// For a select list, value is the chosen option's id. For a prompt, text is
-/// the entered text.
+/// the entered text; for a sign-in "user\npassword"; for a file upload one
+/// path per line.
 #[no_mangle]
 pub extern "C" fn r5_servo_control_answer(
     engine: *mut Engine,
+    id: i64,
     accept: i32,
     value: i32,
     text: *const u8,
@@ -824,7 +832,12 @@ pub extern "C" fn r5_servo_control_answer(
     if !alive(engine) {
         return NO_INIT;
     }
-    let Some(control) = (unsafe { (*engine).pending.take() }) else {
+    let control = unsafe {
+        let mut pending = (*engine).pending.borrow_mut();
+        let index = pending.iter().position(|(pid, _)| *pid == id);
+        index.map(|index| pending.remove(index).1)
+    };
+    let Some(control) = control else {
         return BAD_VALUE;
     };
     match control {
@@ -846,7 +859,20 @@ pub extern "C" fn r5_servo_control_answer(
         }
         Pending::Select(mut select) => {
             if accept != 0 && value >= 0 {
-                select.select(vec![value as usize]);
+                let chosen = value as usize;
+                if select.allow_select_multiple() {
+                    // A multiple list: the chosen option is switched on or
+                    // off; the others keep their state.
+                    let mut selected = select.selected_options();
+                    if let Some(index) = selected.iter().position(|id| *id == chosen) {
+                        selected.remove(index);
+                    } else {
+                        selected.push(chosen);
+                    }
+                    select.select(selected);
+                } else {
+                    select.select(vec![chosen]);
+                }
             }
             select.submit();
         }
@@ -1089,7 +1115,8 @@ fn make_engine(
     // A new WebView starts focused; the view gives it focus when clicked.
     webview.set_focused(false);
     let engine = Box::into_raw(Box::new(Engine {
-        pending: RefCell::new(None),
+        pending: RefCell::new(Vec::new()),
+
         inner: RefCell::new(Inner {
             servo: servo_engine,
             webview: Some(webview),
@@ -1571,7 +1598,15 @@ pub extern "C" fn r5_servo_shutdown() {
     if SHUT_DOWN.with(|flag| flag.replace(true)) {
         return;
     }
+    // Every engine still alive first, also one Servo made for a page that no
+    // view adopted: each WebView keeps Servo alive, and Servo writes the
+    // profile only when the last reference goes.
+    let left: Vec<usize> = ENGINES.with(|list| list.borrow().iter().map(|e| e.0).collect());
+    for engine in left {
+        r5_servo_destroy(engine as *mut Engine);
+    }
     let servo = SHARED_SERVO.with(|slot| slot.borrow_mut().take());
+
     // The last Rc: dropping it runs Servo's shutdown here, on this thread.
     drop(servo);
     // Destroying a pooled context aborts in Haiku Mesa; the process is

@@ -1803,15 +1803,11 @@ AomiWindow::MessageReceived(BMessage* message)
 			BAppearanceKit::set_view_glass(fChrome, true);
 			if (fMenu != NULL)
 				BAppearanceKit::set_view_glass(fMenu, true);
-			for (uint32 i = 0; i < fTabs.size(); i++) {
-				if (fTabs[i].view == NULL)
-					continue;
-				if (fTabs[i].url.StartsWith("aomi:") || fTabs[i].url.Length() == 0)
-					continue;
-				fTabs[i].view->LoadURL(fTabs[i].url.String());
-			}
+			// Tabs started loading when they were added; a view starts its
+			// engine as soon as it is in the window, so nothing loads again.
 			if (fActive >= 0)
 				_Select(fActive);
+
 			break;
 		case MSG_ABOUT:
 			_AddTab("aomi:about", true, NULL);

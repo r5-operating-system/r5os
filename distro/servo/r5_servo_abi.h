@@ -138,11 +138,12 @@ status_t	r5_servo_key(r5_servo* engine, int32 down, int32 named_key,
 // is never larger (resizing the storage would mean destroying it).
 void		r5_servo_set_max_size(int32 width, int32 height);
 
-// The answer to the last R5_EV_DIALOG (alert, confirm, prompt, select list).
-// accept = 0 cancels. value: the chosen option id of a select list. text: a
-// prompt's text, or NULL.
-status_t	r5_servo_control_answer(r5_servo* engine, int32 accept, int32 value,
-	const char* text);
+// The answer to page control `id` (the R5_EV_DIALOG event's `current`).
+// Several can wait at once; each answer names its own. accept = 0 cancels.
+// value: the chosen option id of a select list. text: a prompt's text, a
+// sign-in's "user\npassword", or a file upload's paths, one per line.
+status_t	r5_servo_control_answer(r5_servo* engine, int64 id, int32 accept,
+	int32 value, const char* text);
 
 // A Haiku input message for the view: B_MOUSE_DOWN, B_MOUSE_UP,
 // B_MOUSE_MOVED, B_MOUSE_WHEEL_CHANGED, B_KEY_DOWN, B_KEY_UP and the unmapped
@@ -152,12 +153,11 @@ status_t	r5_servo_control_answer(r5_servo* engine, int32 accept, int32 value,
 status_t	r5_servo_input_message(r5_servo* engine, const BMessage* message,
 	float x, float y);
 
-// Shows the page control of the last R5_EV_DIALOG and answers it: an alert
-// or confirm (BAlert), a select list (BPopUpMenu at (x, y) of view, the box's
-// lower left corner). A prompt is answered as cancelled. Call on the window
-// thread; the window stays drawn while it waits. NULL labels are "OK" and
-// "Cancel". Implemented in BServoView.cpp.
-status_t	r5_servo_show_control(r5_servo* engine, class BView* view,
+// Shows page control `id` (an R5_EV_DIALOG) with r5_servo_ask_control() and
+// answers it. Call on the thread of the engine; a window thread stays drawn
+// while it waits. NULL labels are "OK" and "Cancel". Implemented in
+// BServoView.cpp.
+status_t	r5_servo_show_control(r5_servo* engine, int64 id, class BView* view,
 	int32 kind, const char* text, float x, float y, const char* okLabel,
 	const char* cancelLabel);
 
@@ -174,7 +174,7 @@ typedef struct r5_servo_control_labels {
 
 // Shows the user what an R5_EV_DIALOG asks and returns the answer, without
 // answering the engine (any thread; a window thread stays drawn): alert (1),
-// confirm (2), prompt (3, text "message\ndefault"), sign-in (5, text the
+// confirm (2), prompt (3, text "message", U+001F, "default"), sign-in (5, text the
 // address; answer "user\npassword"), file upload (6; answer one path per
 // line), context menu (8) and select list (9; value the chosen id). (x, y)
 // is in view's coordinates. Free *answer with r5_servo_free_answer(); it
@@ -197,7 +197,8 @@ status_t	r5_servo_editing_action(r5_servo* engine, int32 action);
 // A tab that is not shown: Servo stops its animation frames for it.
 status_t	r5_servo_set_visible(r5_servo* engine, int32 visible);
 
-// After the last tab of the process is destroyed: Servo shuts down and writes
+// After the last tab of the process (on the engine's thread): every engine
+// left is destroyed, then Servo shuts down and writes
 // cookies, HSTS and logins to the profile. No new tab can be made afterwards.
 void		r5_servo_shutdown(void);
 

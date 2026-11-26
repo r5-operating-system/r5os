@@ -59,13 +59,17 @@ page-&gt;LoadURL("https://www.haiku-os.org/");</code></pre>
 		<section id="rules">
 			<h2>One engine per program</h2>
 			<p>Servo allows one instance per process, and it stays on the thread that first starts a
-			view. Keep every <code class="inline">BServoView</code> of a program in one window. When the
-			last view is deleted, Servo shuts down and writes its profile; no new view can be made in
-			that process afterwards. A program with several windows runs Servo on a thread of its own,
-			as Aomi does (<code class="inline">distro/apps/aomi/ServoContentView.cpp</code>).</p>
+			view. Keep every <code class="inline">BServoView</code> of a program in one window. A program
+			with several windows runs Servo on a thread of its own, as Aomi does
+			(<code class="inline">distro/apps/aomi/ServoContentView.cpp</code>).</p>
 			<p>Cookies and logins are kept on disk only when the environment variable
 			<code class="inline">AOMI_PROFILE_DIR</code> names a folder before the first view starts.
-			Without it, everything stays in memory.</p>
+			Servo writes them when it shuts down: when the program is done with every view, it calls
+			<code class="inline">r5_servo_shutdown()</code> from <code class="inline">r5_servo_abi.h</code>
+			on the views&rsquo; window thread (for example in the window&rsquo;s
+			<code class="inline">QuitRequested()</code>, after removing the views). No new view can be
+			made in that process afterwards. Without <code class="inline">AOMI_PROFILE_DIR</code>,
+			everything stays in memory.</p>
 		</section>
 
 		<section id="input">

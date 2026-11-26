@@ -88,7 +88,7 @@ private:
 			void				_Input(const BMessage* event, BPoint where);
 			void				_OnEvent(BMessage* event);
 			void				_AskControl(int32 kind, const char* text,
-									BPoint where);
+									BPoint where, int64 control);
 			status_t			_Report(uint32 what, const char* url,
 									const char* text, float progress,
 									int32 a, int32 b, int32 c);
