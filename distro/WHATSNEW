@@ -1,3 +1,6 @@
+R5 2026.1-dev Build 10077 - Aomi
+Aomi is the R5 browser. It opens in a compact window: tabs, one row for back, forward, reload and the address, bookmarks and downloads. Pages load with the browser engine that is already on the system. WebPositive is still installed. Browse beyond the horizon.
+
 R5 2026.1-dev Build 10075 - Switch between signed-in people
 More than one account can now be signed in on the same computer at the same time. Choose Switch user in the Deskbar menu or Other account on the lock screen to return to Sign in while your desktop stays open in the background. Signed-in accounts show a green dot and Unlock on the Sign in screen, and Guest can run alongside another signed-in account. Each signed-in desktop keeps its own workspaces, clipboard, tray icons and key store.
 

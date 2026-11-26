@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <Application.h>
 #include <Bitmap.h>
 #include <Directory.h>
 #include <Entry.h>
@@ -46,42 +47,13 @@ struct DownloadSlot {
 
 static DownloadSlot sDownloads[kMaxDownloads];
 static int32 sNextDownload = 1;
-static BMessenger sListeners[16];
-static int32 sListenerCount = 0;
-
-
-static void
-register_listener(const BMessenger& listener)
-{
-	if (!listener.IsValid())
-		return;
-	for (int32 i = 0; i < sListenerCount; i++) {
-		if (sListeners[i] == listener)
-			return;
-	}
-	if (sListenerCount < 16)
-		sListeners[sListenerCount++] = listener;
-}
-
-
-static void
-unregister_listener(const BMessenger& listener)
-{
-	for (int32 i = 0; i < sListenerCount; i++) {
-		if (sListeners[i] != listener)
-			continue;
-		sListeners[i] = sListeners[sListenerCount - 1];
-		sListenerCount--;
-		return;
-	}
-}
 
 
 static void
 notify_listeners(BMessage* message)
 {
-	for (int32 i = 0; i < sListenerCount; i++)
-		sListeners[i].SendMessage(message);
+	if (be_app != NULL)
+		be_app->PostMessage(message);
 }
 
 
@@ -125,7 +97,7 @@ download_directory()
 	BPath desktop;
 	if (find_directory(B_DESKTOP_DIRECTORY, &desktop) == B_OK)
 		return desktop.Path();
-	return BString("/boot/home/Desktop");
+	return BString();
 }
 
 
@@ -319,14 +291,23 @@ aomi_webkit_start()
 	if (started)
 		return B_OK;
 
-	BPath settings;
-	if (find_directory(B_USER_SETTINGS_DIRECTORY, &settings) == B_OK) {
-		settings.Append("WebPositive");
-		create_directory(settings.Path(), 0777);
-		BString cookies(settings.Path());
+	const char* privDir = getenv("AOMI_PRIVATE_DIR");
+	if (privDir != NULL && privDir[0] != '\0') {
+		create_directory(privDir, 0700);
+		BString cookies(privDir);
 		cookies << "/cookie.jar.db";
 		setenv("CURL_COOKIE_JAR_PATH", cookies.String(), 1);
-		BWebSettings::SetPersistentStoragePath(settings.Path());
+		BWebSettings::SetPersistentStoragePath(privDir);
+	} else {
+		BPath settings;
+		if (find_directory(B_USER_SETTINGS_DIRECTORY, &settings) == B_OK) {
+			settings.Append("WebPositive");
+			create_directory(settings.Path(), 0777);
+			BString cookies(settings.Path());
+			cookies << "/cookie.jar.db";
+			setenv("CURL_COOKIE_JAR_PATH", cookies.String(), 1);
+			BWebSettings::SetPersistentStoragePath(settings.Path());
+		}
 	}
 
 	BWebPage::InitializeOnce();
@@ -384,7 +365,6 @@ BWebKitContentView::BWebKitContentView(const char* name, BWebSession* session,
 
 BWebKitContentView::~BWebKitContentView()
 {
-	unregister_listener(fListener);
 	ShutdownEngine();
 }
 
@@ -417,9 +397,6 @@ BWebKitContentView::_Listen()
 	if (fWeb != NULL && fWeb->WebPage() != NULL)
 		fWeb->WebPage()->SetListener(BMessenger(this));
 	ensure_hub();
-	register_listener(fListener);
-	if (fWeb != NULL)
-		fWeb->SetDarkMode(_Dark());
 }
 
 
@@ -437,6 +414,16 @@ BWebKitContentView::AttachedToWindow()
 	BWebContentView::AttachedToWindow();
 	_Listen();
 	_Fit();
+}
+
+
+void
+BWebKitContentView::AllAttached()
+{
+	BWebContentView::AllAttached();
+	// BWebView::AttachedToWindow() sets WebPage's listener to Window();
+	// re-bind to this BWebKitContentView after children have attached.
+	_Listen();
 }
 
 
@@ -512,6 +499,14 @@ BWebKitContentView::MessageReceived(BMessage* message)
 		case LOAD_FINISHED:
 		case LOAD_DL_COMPLETED:
 		{
+			if (fWeb != NULL) {
+				BString title = fWeb->MainFrameTitle();
+				if (title.Length() > 0) {
+					BMessage titleMsg(AOMI_TITLE_CHANGED);
+					titleMsg.AddString("title", title);
+					Report(&titleMsg);
+				}
+			}
 			BString url;
 			message->FindString("url", &url);
 			BMessage report(AOMI_LOAD_FINISHED);
@@ -729,8 +724,10 @@ BWebKitContentView::MessageReceived(BMessage* message)
 			break;
 		}
 		case B_COLORS_UPDATED:
-			if (fWeb != NULL)
-				fWeb->SetDarkMode(_Dark());
+			// Do not call BWebView::SetDarkMode() from the window thread:
+			// Haiku WebKit 1.10 calls WebCore::Page::setUseColorAppearance()
+			// directly without marshalling to the application thread, racing
+			// with WebCore::Style::Resolver.
 			BWebContentView::MessageReceived(message);
 			break;
 		default:

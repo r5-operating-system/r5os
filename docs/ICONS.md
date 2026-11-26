@@ -118,6 +118,17 @@ Haiku's icon set has no power symbol, no circular arrow, no clock face for a sma
 | `R5_GLYPH_MAIL_NEW` | 19 | A smaller envelope with a filled dot at its corner (new mail) |
 | `R5_GLYPH_SUN` | 20 | A ring with eight short rays (the Light button of the Theme page, 23 Nov 2026) |
 | `R5_GLYPH_MOON` | 21 | A crescent (the Dark button of the Theme page, 23 Nov 2026) |
+| `R5_GLYPH_BACK` | 22 | A chevron pointing left (Aomi back, 25 Nov 2026) |
+| `R5_GLYPH_FORWARD` | 23 | A chevron pointing right |
+| `R5_GLYPH_RELOAD` | 24 | A ring open at the upper right, with an arrow head |
+| `R5_GLYPH_STAR` | 25 | A five-point star (bookmark) |
+| `R5_GLYPH_DOWNLOAD` | 26 | An arrow down into a tray |
+| `R5_GLYPH_MENU` | 27 | Three horizontal lines |
+| `R5_GLYPH_LOCK` | 28 | A padlock |
+| `R5_GLYPH_SEARCH` | 29 | A circle and a handle |
+| `R5_GLYPH_MASK` | 30 | A domino mask (a private window) |
+| `R5_GLYPH_PLUS` | 31 | A plus |
+| `R5_GLYPH_HOME` | 32 | A house |
 
 The numbers are part of the contract, the same as `r5_icon`. A new glyph is added at the end of `enum r5_glyph`, with a row in this table.
 
