@@ -51,6 +51,12 @@ reinit_after_fork()
 	status_t returnstatus = B_OK;
 	if (status_t status = elf_reinit_after_fork())
 		returnstatus = status;
+	// SPDX-SnippetBegin
+	// SPDX-License-Identifier: MIT
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// Another thread may have held the TLS template lock at fork().
+	tls_reinit_after_fork();
+	// SPDX-SnippetEnd
 	if (status_t status = heap_reinit_after_fork())
 		returnstatus = status;
 	if (status_t status = commpage_reinit_after_fork())

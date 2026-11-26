@@ -158,7 +158,9 @@ step() {
 }
 
 cd "$ENGINE"
-step cargo cargo +1.99.1 build -Zbuild-std=std,panic_unwind,panic_abort --release --target x86_64-unknown-haiku -j 4
+# --locked: the build uses exactly the Cargo.lock in git; a Cargo.toml change
+# without its lock stops here.
+step cargo cargo +1.99.1 build --locked -Zbuild-std=std,panic_unwind,panic_abort --release --target x86_64-unknown-haiku -j 4
 LIBA="$CARGO_TARGET_DIR/x86_64-unknown-haiku/release/libr5servo.a"
 # Same NEEDED set as the proof binary servo-min. Mesa's libGL is loaded
 # by the engine at runtime, the way that binary does it.

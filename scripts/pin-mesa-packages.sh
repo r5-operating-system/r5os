@@ -63,7 +63,7 @@ fi
 needed+=("$R5SERVO_PKG")
 # Older r5servo packages: only the pinned one stays in the repository.
 rm -f "$DL/r5servo-0.8.0-1-x86_64.hpkg" "$DL/r5servo-0.8.0-2-x86_64.hpkg" \
-	"$DL/r5servo-0.8.0-3-x86_64.hpkg"
+	"$DL/r5servo-0.8.0-3-x86_64.hpkg" "$DL/r5servo-0.8.0-4-x86_64.hpkg"
 rm -f "$DL/mesa-25.3.6-1-x86_64.hpkg" "$DL/mesa-25.3.6-2-x86_64.hpkg" "$DL/mesa-25.3.6-3-x86_64.hpkg" "$DL/mesa-25.3.6-4-x86_64.hpkg" "$DL/mesa_zink-25.3.6-1-x86_64.hpkg" \
 	"$DL/mesa_radv-25.3.6-1-x86_64.hpkg" "$DL/mesa_radv-25.3.6-2-x86_64.hpkg" \
 	"$DL/mesa_radv-25.3.6-3-x86_64.hpkg" "$DL/mesa_radv-25.3.6-4-x86_64.hpkg" "$DL/mesa_radv-25.3.6-5-x86_64.hpkg" "$DL/mesa_radv-25.3.6-6-x86_64.hpkg" "$DL/mesa_radv-25.3.6-7-x86_64.hpkg" "$DL/mesa_radv-25.3.6-8-x86_64.hpkg" "$DL/mesa_radv-25.3.6-9-x86_64.hpkg" "$DL/mesa_radv-25.3.6-10-x86_64.hpkg" \
@@ -154,15 +154,15 @@ text = text.replace("\tvulkanteapot-1.0.0-4\n", "\tvulkanteapot-1.0.0-6\n")
 text = text.replace("\tvulkanteapot-1.0.0-5\n", "\tvulkanteapot-1.0.0-6\n")
 if "\tvulkan_loader-1.4.367-4\n" not in text:
     sys.exit("vulkan loader pin missing")
-for old in ("0.8.0-1", "0.8.0-2", "0.8.0-3"):
-    text = text.replace("\tr5servo-%s\n" % old, "\tr5servo-0.8.0-4\n")
-if "\tr5servo-0.8.0-4\n" not in text:
+for old in ("0.8.0-1", "0.8.0-2", "0.8.0-3", "0.8.0-4"):
+    text = text.replace("\tr5servo-%s\n" % old, "\tr5servo-0.8.0-5\n")
+if "\tr5servo-0.8.0-5\n" not in text:
     text = text.replace(
         "\tvulkanteapot-1.0.0-6\n",
-        "\tvulkanteapot-1.0.0-6\n\tr5servo-0.8.0-4\n",
+        "\tvulkanteapot-1.0.0-6\n\tr5servo-0.8.0-5\n",
         1,
     )
-if "\tr5servo-0.8.0-4\n" not in text:
+if "\tr5servo-0.8.0-5\n" not in text:
     sys.exit("r5servo pin missing")
 path.write_text(text, encoding="utf-8")
 print("pin updated")

@@ -77,6 +77,10 @@ public:
 								{ return fGeneration; }
 			void			PixelsChanged()
 								{ fGeneration++; }
+	//! Unique for the life of app_server: a texture cache key. A freed
+	//! bitmap's address can come back for a new bitmap; its serial does not.
+	inline	uint64			Serial() const
+								{ return fSerial; }
 // SPDX-SnippetEnd
 
 	//! Does a shallow copy of the bitmap passed to it
@@ -121,6 +125,7 @@ protected:
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 			uint32			fGeneration;
+			uint64			fSerial;
 // SPDX-SnippetEnd
 };
 

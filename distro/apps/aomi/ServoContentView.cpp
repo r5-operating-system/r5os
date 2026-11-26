@@ -1104,6 +1104,8 @@ BServoContentView::BServoContentView(const char* name, BWebSession* session,
 	fTab(static_cast<ServoTab*>(adoptTab)),
 	fAdopted(adoptTab == NULL),
 	fLoading(false),
+	fSawFrame(false),
+	fSawDraw(false),
 	fHasPending(false),
 	fPendingHTML(false)
 {
@@ -1551,6 +1553,13 @@ void
 BServoContentView::Draw(BRect updateRect)
 {
 	(void)updateRect;
+	if (!fSawDraw && getenv("R5_SERVO_DEBUG") != NULL) {
+		fSawDraw = true;
+		BString line;
+		line.SetToFormat("view %p first draw, frame %s", this,
+			fTab != NULL && fTab->frame != NULL ? "yes" : "no");
+		aomi_log_add(line.String());
+	}
 	if (fTab != NULL && fTab->lock.Lock()) {
 		BBitmap* page = fTab->frame;
 		if (page != NULL) {
@@ -1705,6 +1714,16 @@ BServoContentView::MessageReceived(BMessage* message)
 		case kViewFrame:
 			if (fTab != NULL)
 				atomic_set(&fTab->framePending, 0);
+			if (!fSawFrame && getenv("R5_SERVO_DEBUG") != NULL) {
+				fSawFrame = true;
+				BRect frame = Frame();
+				BString line;
+				line.SetToFormat("view %p frame in, hidden %d/%d, %gx%g at %g,%g",
+					this, IsHidden(this) ? 1 : 0, IsHidden() ? 1 : 0,
+					frame.Width() + 1, frame.Height() + 1, frame.left,
+					frame.top);
+				aomi_log_add(line.String());
+			}
 			Invalidate();
 			return;
 		case kViewEvent:

@@ -135,6 +135,11 @@ TLSBlockTemplate::TLSBlockTemplate(void* address, size_t fileSize,
 
 void*	get_tls_address(unsigned dso, addr_t offset);
 void	destroy_thread_tls();
+// SPDX-SnippetBegin
+// SPDX-License-Identifier: MIT
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+void	tls_reinit_after_fork();
+// SPDX-SnippetEnd
 void	materialize_initial_exec_tls();
 uint64	r5_initial_exec_offset(unsigned dso, uint64 symbolOffset, int64 addend);
 

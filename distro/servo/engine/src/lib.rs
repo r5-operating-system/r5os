@@ -241,14 +241,15 @@ impl log::Log for ProtocolLogger {
                     if map.len() >= PROTOCOL_MAP_LIMIT {
                         map.clear();
                     }
-                    map.insert(raw_url.to_string(), proto.to_string());
+                    map.insert(shown_text(raw_url), proto.to_string());
                 }
             }
             if self.verbose {
-                eprintln!("[{} {}] {}", record.level(), record.target(), msg);
+                eprintln!("[{} {}] {}", record.level(), record.target(), shown_text(&msg));
             }
         } else if self.verbose || record.level() <= log::Level::Warn {
-            eprintln!("[{} {}] {}", record.level(), record.target(), record.args());
+            let msg = format!("{}", record.args());
+            eprintln!("[{} {}] {}", record.level(), record.target(), shown_text(&msg));
         }
     }
 
@@ -263,6 +264,47 @@ fn install_protocol_logger() {
             log::set_max_level(log::LevelFilter::Debug);
         }
     });
+}
+
+// An address as Aomi shows and logs it: without the user name and password
+// a sign-in put into it (Servo keeps them in the document's URL after an
+// HTTP 401). Password material never goes into the address field, the
+// history or a log.
+// The same for any text that may hold an address (log lines, a link under
+// the mouse): "scheme://user:password@host" loses "user:password@".
+fn shown_text(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(start) = rest.find("://") {
+        let (head, tail) = rest.split_at(start + 3);
+        out.push_str(head);
+        let end = tail
+            .find(|c: char| c == '/' || c == '?' || c == '#' || c.is_whitespace())
+            .unwrap_or(tail.len());
+        match tail[..end].rfind('@') {
+            Some(at) => rest = &tail[at + 1..],
+            None => rest = tail,
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+fn shown_url(url: &url::Url) -> String {
+    if url.username().is_empty() && url.password().is_none() {
+        return url.to_string();
+    }
+    let mut clean = url.clone();
+    let _ = clean.set_username("");
+    let _ = clean.set_password(None);
+    clean.to_string()
+}
+
+// Extra lines about engines, visibility and frames: only with R5_SERVO_DEBUG
+// set (tests).
+fn debug_log() -> bool {
+    static ON: OnceLock<bool> = OnceLock::new();
+    *ON.get_or_init(|| std::env::var("R5_SERVO_DEBUG").is_ok_and(|v| !v.is_empty()))
 }
 
 fn lookup_protocol(raw_url: &str) -> Option<String> {
@@ -365,6 +407,11 @@ struct Notes {
     last_status: String,
     // Servo said a new frame is ready, so the next spin paints and reads it.
     frame_ready: bool,
+    // Diagnostics: the first frame Servo announced and the first one read.
+    seen_ready: bool,
+    seen_frame: bool,
+    last_frame_url: String,
+    last_ink: usize,
     // Buttons held down, so a release reports the right one.
     buttons: u32,
 }
@@ -517,13 +564,19 @@ impl WebViewDelegate for Bridge {
         if alive(engine) {
             if let Ok(mut notes) = unsafe { (*engine).notes.lock() } {
                 notes.frame_ready = true;
+                if !notes.seen_ready {
+                    notes.seen_ready = true;
+                    if debug_log() {
+                        println!("r5-servo first-ready {:p}", engine);
+                    }
+                }
             }
         }
     }
 
     fn notify_url_changed(&self, webview: WebView, url: url::Url) {
         let mut event = Ev::new(R5_EV_URL);
-        event.url = url.to_string();
+        event.url = shown_url(&url);
         let engine = engine_ptr(self);
         if !engine.is_null() {
             if let Ok(mut inner) = unsafe { (*engine).inner.try_borrow_mut() } {
@@ -542,13 +595,13 @@ impl WebViewDelegate for Bridge {
 
     fn notify_status_text_changed(&self, _webview: WebView, status: Option<String>) {
         let mut event = Ev::new(R5_EV_HOVER);
-        event.url = status.unwrap_or_default();
+        event.url = shown_text(&status.unwrap_or_default());
         emit(engine_ptr(self), event);
     }
 
     fn notify_load_status_changed(&self, webview: WebView, status: LoadStatus) {
         let engine = engine_ptr(self);
-        let url = webview.url().map(|item| item.to_string()).unwrap_or_default();
+        let url = webview.url().map(|item| shown_url(&item)).unwrap_or_default();
         let (kind, progress, loading) = match status {
             LoadStatus::Started => (R5_EV_LOAD_STARTED, 0.05, 1),
             LoadStatus::HeadParsed => (R5_EV_PROGRESS, 0.45, 1),
@@ -594,7 +647,7 @@ impl WebViewDelegate for Bridge {
         let engine = engine_ptr(self);
         if !engine.is_null() {
             if let Ok(mut notes) = unsafe { (*engine).notes.lock() } {
-                notes.history = entries.iter().map(|item| item.to_string()).collect();
+                notes.history = entries.iter().map(shown_url).collect();
                 notes.index = current;
             }
         }
@@ -607,6 +660,43 @@ impl WebViewDelegate for Bridge {
 
     fn notify_closed(&self, _webview: WebView) {
         emit(engine_ptr(self), Ev::new(R5_EV_CLOSE));
+    }
+
+    fn notify_crashed(&self, _webview: WebView, reason: String, backtrace: Option<String>) {
+        // Servo already shows its crash page with a Reload button in the
+        // tab (servo-script, NetworkError::Crash). The tab stops loading;
+        // the reason and backtrace go to the log for a bug report.
+        println!("r5-servo crashed {reason}");
+        if let Some(trace) = backtrace {
+            println!("r5-servo crash-backtrace {trace}");
+        }
+        let mut event = Ev::new(R5_EV_LOAD_FAILED);
+        event.text = format!("The page crashed: {reason}");
+        emit(engine_ptr(self), event);
+    }
+
+    fn hide_embedder_control(&self, _webview: WebView, control_id: servo::EmbedderControlId) {
+        // The page closed a select list, file chooser or context menu
+        // itself (it navigated, or removed the element). Its question is
+        // dropped, so a late answer from the still open menu does nothing.
+        let engine = engine_ptr(self);
+        if engine.is_null() {
+            return;
+        }
+        let removed = {
+            let Ok(mut pending) = (unsafe { (*engine).pending.try_borrow_mut() }) else {
+                return;
+            };
+            let index = pending.iter().position(|(_, item)| match item {
+                Pending::Select(select) => select.id() == control_id,
+                Pending::File(picker) => picker.id() == control_id,
+                Pending::Menu(menu) => menu.id() == control_id,
+                _ => false,
+            });
+            index.map(|index| pending.remove(index))
+        };
+        // Dropped outside the borrow: dropping answers the page.
+        drop(removed);
     }
 
     fn notify_fullscreen_state_changed(&self, _webview: WebView, is_fullscreen: bool) {
@@ -704,7 +794,7 @@ impl WebViewDelegate for Bridge {
         }
         let mut event = Ev::new(R5_EV_DIALOG);
         event.a = 5;
-        event.text = request.url().to_string();
+        event.text = shown_url(&request.url());
         if request.for_proxy() {
             event.text.push_str("\nproxy");
         }
@@ -973,7 +1063,7 @@ fn initial_document(document: *const u8, is_html: i32) -> Option<url::Url> {
     match url::Url::parse(&raw) {
         Ok(parsed) => Some(parsed),
         Err(error) => {
-            println!("r5-servo initial-bad {error} {raw}");
+            println!("r5-servo initial-bad {error} {}", shown_text(&raw));
             None
         }
     }
@@ -994,10 +1084,10 @@ fn data_url(html: &str) -> String {
 
 fn load(engine: *mut Engine, raw: &str) -> i32 {
     let Ok(parsed) = url::Url::parse(raw) else {
-        println!("r5-servo load-bad {raw}");
+        println!("r5-servo load-bad {}", shown_text(raw));
         return BAD_VALUE;
     };
-    println!("r5-servo load {raw}");
+    println!("r5-servo load {}", shown_text(raw));
     {
         let engine = unsafe { &*engine };
         let Ok(mut inner) = engine.inner.try_borrow_mut() else {
@@ -1207,6 +1297,10 @@ fn make_engine(
             last_url: String::new(),
             last_status: String::new(),
             frame_ready: true,
+            seen_ready: false,
+            seen_frame: false,
+            last_frame_url: String::new(),
+            last_ink: usize::MAX,
             buttons: 0,
         }),
         callback: std::cell::Cell::new(callback),
@@ -1279,14 +1373,16 @@ fn create_engine(
     let Some(servo_engine) = shared_servo() else {
         return std::ptr::null_mut();
     };
+    let shared = context_of(sibling, width, height);
+    let is_shared = shared.is_some();
     let Some((context, storage_w, storage_h, gl)) =
-        context_of(sibling, width, height).or_else(|| make_context(width, height))
+        shared.or_else(|| make_context(width, height))
     else {
         return std::ptr::null_mut();
     };
     let initial = initial_document(document, document_is_html);
     let servo_for_builder = Rc::clone(&servo_engine);
-    make_engine(
+    let engine = make_engine(
         servo_engine,
         context,
         (storage_w, storage_h),
@@ -1298,14 +1394,18 @@ fn create_engine(
                     .delegate(bridge)
                     .clipboard_delegate(Rc::new(R5Clipboard));
             if let Some(url) = initial {
-                println!("r5-servo initial {}", url);
+                println!("r5-servo initial {}", shown_url(&url));
                 builder = builder.url(url);
             }
             builder.build()
         },
         Some(callback),
         callback_ctx,
-    )
+    );
+    if debug_log() {
+        println!("r5-servo engine {:p} {width}x{height} shared {is_shared}", engine);
+    }
+    engine
 }
 
 /// Gives an engine made by Servo for a page (R5_EV_NEW_WINDOW, the engine in
@@ -1689,6 +1789,9 @@ pub extern "C" fn r5_servo_set_visible(engine: *mut Engine, visible: i32) -> i32
     if !alive(engine) {
         return NO_INIT;
     }
+    if debug_log() {
+        println!("r5-servo visible {:p} {visible}", engine);
+    }
     if let Ok(mut inner) = unsafe { (*engine).inner.try_borrow_mut() } {
         inner.hidden = visible == 0;
         if let Some(wv) = inner.webview.as_ref() {
@@ -1906,7 +2009,16 @@ fn paint_engine(engine: *mut Engine) -> bool {
             // current; read_to_image() reads the bound framebuffer.
             let image = if paint_now {
                 wv.paint();
-                ctx.read_to_image(rect)
+                // read_to_image() reads with whatever GL context is current
+                // (servo-paint-api rendering_context.rs; it does not make
+                // its own current). Painter::render() makes its context
+                // current first, so this only guards the read against
+                // another context made current in between.
+                if ctx.make_current().is_ok() {
+                    ctx.read_to_image(rect)
+                } else {
+                    None
+                }
             } else {
                 None
             };
@@ -1925,11 +2037,38 @@ fn paint_engine(engine: *mut Engine) -> bool {
                             );
                         }
                     }
+                    if let Some(notes) = notes.as_mut() {
+                        if !notes.seen_frame {
+                            notes.seen_frame = true;
+                            if debug_log() {
+                                println!("r5-servo first-frame {w}x{h} {:p}", engine);
+                            }
+                        }
+                    }
                     new_frame = Some((bytes, w, h));
                 }
             }
             let status = format!("{:?}", wv.load_status());
-            let page = wv.url().map(|item| item.to_string()).unwrap_or_default();
+            let page = wv.url().map(|item| shown_url(&item)).unwrap_or_default();
+            // Diagnostics: the first frame read for each new address.
+            if let Some((bytes, _, _)) = new_frame.as_ref().filter(|_| debug_log()) {
+                if let Ok(mut notes) = engine_ref.notes.lock() {
+                    let new_page = notes.last_frame_url != page;
+                    {
+                        // Sampled pixels that are not white: 0 is an empty page.
+                        let ink = bytes
+                            .chunks_exact(4)
+                            .step_by(97)
+                            .filter(|px| px[0] < 200 || px[1] < 200 || px[2] < 200)
+                            .count();
+                        if new_page || ink != notes.last_ink {
+                            println!("r5-servo frame-for {:p} ink {ink} {page}", engine);
+                        }
+                        notes.last_frame_url = page.clone();
+                        notes.last_ink = ink;
+                    }
+                }
+            }
             if let Some(proto) = lookup_protocol(&page) {
                 let mut changed = false;
                 if let Ok(mut notes) = engine_ref.notes.lock() {
@@ -2004,7 +2143,7 @@ pub extern "C" fn r5_servo_url(engine: *mut Engine, buffer: *mut u8, length: i32
         .webview
         .as_ref()
         .and_then(|wv| wv.url())
-        .map(|item| item.to_string())
+        .map(|item| shown_url(&item))
         .unwrap_or_default();
     write_buf(&text, buffer, length)
 }

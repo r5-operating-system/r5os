@@ -150,14 +150,16 @@ TLSBlockTemplates::Register(const TLSBlockTemplate& block)
 	// SPDX-SnippetEnd
 	unsigned dso;
 
-	if (!fFreeDSOs.empty()) {
-		dso = fFreeDSOs.back();
-		fFreeDSOs.pop_back();
-		fTemplates[dso] = block;
-	} else {
-		dso = fTemplates.size();
-		fTemplates.push_back(block);
-	}
+	// SPDX-SnippetBegin
+	// SPDX-License-Identifier: MIT
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// A new slot every time, never a freed one: Materialize() keeps per
+	// thread how many slots it copied, in order. A reused low slot would be
+	// skipped by threads that already passed it, and a thread that started
+	// during the load would stop before libraries above it.
+	dso = fTemplates.size();
+	fTemplates.push_back(block);
+	// SPDX-SnippetEnd
 
 	fTemplates[dso].SetGeneration(fGeneration);
 	// SPDX-SnippetBegin
@@ -210,6 +212,11 @@ TLSBlockTemplates::SetBaseAddress(unsigned dso, addr_t baseAddress)
 unsigned
 TLSBlockTemplates::GetGeneration(unsigned dso) const
 {
+	// SPDX-SnippetBegin
+	// SPDX-License-Identifier: MIT
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	RecursiveLocker locker(sTemplatesLock);
+	// SPDX-SnippetEnd
 	if (dso == unsigned(-1))
 		return fGeneration;
 	return fTemplates[dso].Generation();
@@ -219,6 +226,11 @@ TLSBlockTemplates::GetGeneration(unsigned dso) const
 TLSBlock
 TLSBlockTemplates::CreateBlock(unsigned dso)
 {
+	// SPDX-SnippetBegin
+	// SPDX-License-Identifier: MIT
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	RecursiveLocker locker(sTemplatesLock);
+	// SPDX-SnippetEnd
 	return fTemplates[dso].CreateBlock();
 }
 
@@ -481,6 +493,7 @@ TLSBlockTemplates::_EnsureMapped(addr_t threadPointer, addr_t bytesFromTp)
 bool
 TLSBlockTemplates::HasStaticPlacement(unsigned dso) const
 {
+	RecursiveLocker locker(sTemplatesLock);
 	return dso < fTemplates.size() && fTemplates[dso].HasStaticOffset();
 }
 
@@ -488,6 +501,7 @@ TLSBlockTemplates::HasStaticPlacement(unsigned dso) const
 uint64
 TLSBlockTemplates::StaticPlacement(unsigned dso) const
 {
+	RecursiveLocker locker(sTemplatesLock);
 	if (dso >= fTemplates.size() || !fTemplates[dso].HasStaticOffset())
 		return fStaticBase;
 	return fStaticBase + fTemplates[dso].StaticOffset();
@@ -538,6 +552,15 @@ TLSBlockTemplates::SetRelocated(unsigned dso)
 	RecursiveLocker locker(sTemplatesLock);
 	if (dso < fTemplates.size())
 		fTemplates[dso].SetRelocated();
+}
+
+
+void
+tls_reinit_after_fork()
+{
+	// The child has only the forking thread; a lock another thread held is
+	// free again.
+	recursive_lock_init(&sTemplatesLock, "runtime loader tls templates");
 }
 
 

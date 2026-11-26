@@ -104,6 +104,9 @@ private:
 			BString				fCurrentURL;
 			BString				fCurrentTitle;
 			bool				fLoading;
+			// Diagnostics (R5_SERVO_DEBUG): first frame and first draw.
+			bool				fSawFrame;
+			bool				fSawDraw;
 			BPoint				fLastMouse;
 			bool				fHasPending;
 			bool				fPendingHTML;

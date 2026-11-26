@@ -10,6 +10,19 @@
 
 #include "ServerBitmap.h"
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+static int64 sNextBitmapSerial = 0;
+
+
+static uint64
+next_bitmap_serial()
+{
+	return (uint64)atomic_add64(&sNextBitmapSerial, 1) + 1;
+}
+// SPDX-SnippetEnd
+
 #include <new>
 #include <stdio.h>
 #include <stdlib.h>
@@ -72,7 +85,8 @@ ServerBitmap::ServerBitmap(BRect rect, color_space space, uint32 flags,
 	fSpace(space),
 	fFlags(flags),
 	fOwner(NULL),
-	fGeneration(0)
+	fGeneration(0),
+	fSerial(next_bitmap_serial())
 	// fToken is initialized (if used) by the BitmapManager
 {
 	int32 minBytesPerRow = get_bytes_per_row(space, fWidth);
@@ -88,7 +102,8 @@ ServerBitmap::ServerBitmap(const ServerBitmap* bitmap)
 	fOverlay(NULL),
 	fBuffer(NULL),
 	fOwner(NULL),
-	fGeneration(0)
+	fGeneration(0),
+	fSerial(next_bitmap_serial())
 {
 	if (bitmap) {
 		fWidth = bitmap->fWidth;

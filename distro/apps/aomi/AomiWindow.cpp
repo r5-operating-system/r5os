@@ -1202,8 +1202,11 @@ AomiWindow::_AddTab(const char* url, bool select, BWebContentView* adopt)
 	AddHandler(proxy);
 	if (tab.view != NULL) {
 		tab.view->SetListener(BMessenger(proxy));
-		fPages->AddChild(tab.view);
+		// Hidden before it is attached: the tabs of a window share one Servo
+		// painter, and a view attached while shown starts its engine visible
+		// and would draw into the current tab's frame.
 		tab.view->Hide();
+		fPages->AddChild(tab.view);
 	}
 	fTabs.push_back(tab);
 	static_cast<PageHost*>(fPages)->Fit();
@@ -1328,17 +1331,19 @@ AomiWindow::_Select(int32 index)
 	}
 	bool ntp = fTabs[index].url.Length() == 0
 		|| fTabs[index].url == "aomi:newtab";
+	// Hide the other tabs first, then show this one: never two visible tabs
+	// in the window's shared Servo painter.
 	for (int32 i = 0; i < (int32)fTabs.size(); i++) {
-		if (fTabs[i].view == NULL)
+		if (fTabs[i].view == NULL || (i == index && !ntp))
 			continue;
-		if (i == index && !ntp) {
-			if (fTabs[i].view->IsHidden())
-				fTabs[i].view->Show();
-		} else {
-			if (!fTabs[i].view->IsHidden())
-				fTabs[i].view->Hide();
-		}
+		// IsHidden(view): the view's own state; IsHidden() also counts a
+		// window that is not shown yet.
+		if (!fTabs[i].view->IsHidden(fTabs[i].view))
+			fTabs[i].view->Hide();
 	}
+	if (!ntp && fTabs[index].view != NULL
+		&& fTabs[index].view->IsHidden(fTabs[index].view))
+		fTabs[index].view->Show();
 	if (ntp) {
 		if (fNewTab->IsHidden())
 			fNewTab->Show();
