@@ -109,11 +109,11 @@ Destroying the GL context aborts in `eglDestroyImageKHR`. The engine is leaked o
 
 ## Where it lands
 
-This round does not add the library to an image list.
+`distro/servo/pack-r5servo.py` packs the stripped `libr5servo.so` and `BServoView.h` into `distro/packages/x86_64/r5servo-0.8.0-1-x86_64.hpkg` (~49 MiB). `scripts/pin-mesa-packages.sh` includes it in `r5-opengl.repo` and pins `r5servo-0.8.0-1`, and `distro/UserBuildConfig` adds `r5servo` to `AddHaikuImageSystemPackages`, so jam installs it into the image without running cargo.
 
-- Header, when an image build installs it: `/boot/system/develop/headers/r5/BServoView.h`
-- Library: `/boot/system/lib/libr5servo.so` (soname `libr5servo.so`)
-- The proof copies both into `/boot/system/non-packaged/` on a private image. The `.so` is copied to both `non-packaged/lib` and `non-packaged/bin`.
+- Header: `/boot/system/develop/headers/r5/BServoView.h`
+- Library: `/boot/system/lib/libr5servo.so` (soname `libr5servo.so`, symlinked at `/boot/system/develop/lib/libr5servo.so`)
+- `scripts/run-r5servo-qemu.sh` supports `R5_SERVO_FROM_PKG=1` to boot a full jam-built image without copying `libr5servo.so` into `non-packaged/`.
 
 `r5-servo-test` links `libr5servo.so`. The guest is started with `GALLIUM_DRIVER=zink`, `LIBGL_ALWAYS_SOFTWARE=1`, `RUST_LOG=net::http_loader=debug`, and `R5_SERVO_PROOF=1`. The GL string that counts is `zink Vulkan 1.4(llvmpipe (LLVM 21.1.8, 256 bits) (MESA_LLVMPIPE))`.
 
