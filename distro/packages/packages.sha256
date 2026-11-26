@@ -1,0 +1,33 @@
+# SPDX-FileCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+#
+# R5-built packages are not stored in git. Each one is the asset of the
+# GitHub Release "pkg-<name>-<version>" of r5-operating-system/r5os:
+#   https://github.com/r5-operating-system/r5os/releases/download/pkg-<name>-<version>/<file>
+# scripts/r5-packages.sh fetches a package into the local cache and stops on
+# a wrong sha256. scripts/publish-package.sh uploads a new one and writes its
+# line here. r5servo keeps its own pin in distro/servo/r5servo.sha256.
+#
+# Roles:
+#   image  copied to the download folder and put in r5-opengl.repo
+#   skia   build-only; unpacked to the Skia staging tree when that is missing
+#   base   input of a packing script (pack-radv.py, pack-lavapipe.py,
+#          build-vkcube.sh); fetched only when that script runs
+#
+# file	sha256	role
+libglvnd-1.7.0-1-x86_64.hpkg	c875fca92691ccf860a8eff57db71526b724c17a0be7882aa8d4d641119182d0	image
+llvm21_runtime-21.1.8-1-x86_64.hpkg	6c967e7be5b8c1fa3493c81deb0dc05b695194138845b0c5b1590210fa511c13	image
+libdrm-2.4.124-5-x86_64.hpkg	f6cfd26acb35838b59d8351c874b39c4eef95f2cff1837569c78da1f7b432a01	image
+mesa-25.3.6-5-x86_64.hpkg	593760e3c40a1992fec9ef3d139e2fa0c428a3ae36489cc040e838f670da43eb	image
+mesa_devel-25.3.6-1-x86_64.hpkg	0416fe0f3e1f2056c1221536efe3402fb05ccc766279a1f967a239f6d797c899	image
+mesa_lavapipe-25.3.6-5-x86_64.hpkg	fbc6f14b38bc9fc198e03338668e3f9dd90f0f5db79b4f3c1e84f1cff1602c9b	image
+mesa_radv-25.3.6-11-x86_64.hpkg	ac470792966bfb9b80b378758b0804aa7991dd0c03f9e070931c9ac023f574eb	image
+vulkan_loader-1.4.367-4-x86_64.hpkg	84cd4a3a5bcc2671fa0b80caf4c910d89b0c624eea28b2be4fad69324e1adf2a	image
+vulkan_tools-1.4.367-2-x86_64.hpkg	1ff788b41f6682a44c6eda99af0a21dd8684b31d12e091562cd6e38ac9c1f7d7	image
+vulkanteapot-1.0.0-6-x86_64.hpkg	697167a60005e637d5f7cf0123c97914fee7e3ff22429893f0f40335bac2b99d	image
+wpa_supplicant-2.11.r5.8-1-x86_64.hpkg	7506f66ecf445c79896a591262991f7922a42fd6964d8a418fd31259534faacc	image
+skia_devel-158.0-1-x86_64.hpkg	08168e4e8f33695ca4db4baa19a049ad22a6301c33c284815bcf8846e410e0a7	skia
+mesa_radv-25.3.6-10-x86_64.hpkg	818201b7edfd50dcf84b64d60bca819cdc8156066390f9c0d2ddd3b27ada1778	base
+mesa_lavapipe-25.3.6-1-x86_64.hpkg	e7d2a6d2bdb06e956ad6ac0c544a90600c5973bff895b5ee20d1b7436cb08d3f	base
+vulkan_tools-1.4.367-1-x86_64.hpkg	7abe2fa899c79ab59f97ed15897fd2a100b4ae2fa4c76e80714b8db5bf008749	base
+vulkanteapot-1.0.0-1-x86_64.hpkg	edd1b7e05275738700588cb67b7047253d511f976299a1aaeb660af0ab37c99e	base

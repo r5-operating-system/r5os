@@ -39,10 +39,9 @@ do
 	fi
 done
 echo mesa_packages_ok
-PKGDIR="$(cd "$(dirname "$0")/.." && pwd)/distro/packages/x86_64"
-if [[ ! -d "$PKGDIR" ]]; then
-	PKGDIR=/mnt/c/Users/nickr/Projects/R5OS/distro/packages/x86_64
-fi
+# The packages are not in git (#4681); pin-mesa-packages.sh put the pinned
+# copies in the download folder.
+PKGDIR="$HAIKU/generated.x86_64/download"
 PKG="$HAIKU/generated.x86_64/objects/linux/x86_64/release/tools/package/package"
 LEAK="$(mktemp -d)"
 for name in \
