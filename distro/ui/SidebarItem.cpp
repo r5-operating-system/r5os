@@ -126,7 +126,8 @@ BSidebarItem::BSidebarItem(BMessage* archive)
 		const char* keywords = NULL;
 		if (archive->FindString("r5:keywords", &keywords) == B_OK)
 			fKeywords = keywords;
-		archive->FindInt32("r5:count", &fCount);
+		// FindInt32() sets 0 before it looks; no count is -1.
+		fCount = archive->GetInt32("r5:count", fCount);
 		int32 badge = B_SIDEBAR_BADGE_NONE;
 		if (archive->FindInt32("r5:badge", &badge) == B_OK)
 			fBadge = (sidebar_badge)badge;

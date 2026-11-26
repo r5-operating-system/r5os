@@ -330,8 +330,9 @@ RemoteDevice::GetConnectionState()
 	if (fMessenger == NULL || fMessenger->SendMessage(&request, &reply) != B_OK)
 		return RemoteDevice::DISCONNECTED;
 
-	uint8 conn_state = RemoteDevice::DISCONNECTED;
-	reply.FindUInt8("conn state", &conn_state);
+	// FindUInt8() sets the value to 0, CONNECTED, before it looks.
+	uint8 conn_state = reply.GetUInt8("conn state",
+		RemoteDevice::DISCONNECTED);
 	return static_cast<RemoteDevice::ConnectionState>(conn_state);
 	// SPDX-SnippetEnd
 }

@@ -478,8 +478,8 @@ private:
 					|| classSize != 3)
 					continue;
 				const uint8* record = (const uint8*)deviceClass;
-				int8 rssi = HCI_RSSI_INVALID;
-				message->FindInt8("rssi", i, &rssi);
+				// A plain inquiry result has no rssi; FindInt8() would make it 0.
+				int8 rssi = message->GetInt8("rssi", i, HCI_RSSI_INVALID);
 				BString name;
 				message->FindString("friendly_name", i, &name);
 
