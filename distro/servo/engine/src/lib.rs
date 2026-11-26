@@ -384,6 +384,10 @@ struct Inner {
     // The size of `frame`.
     frame_w: i32,
     frame_h: i32,
+    // Hidden by r5_servo_set_visible(). The tabs of one window share one
+    // context (one Servo painter); a hidden tab must not read it back, the
+    // framebuffer then holds the visible tab.
+    hidden: bool,
 }
 
 // A page control waiting for the user's answer (r5_servo_control_answer()).
@@ -647,7 +651,10 @@ impl WebViewDelegate for Bridge {
         let Some(servo_engine) = shared_servo() else {
             return;
         };
-        let Some((context, storage_w, storage_h, gl)) = make_context(width, height) else {
+        // The new page becomes a tab in the opener's window: same context.
+        let Some((context, storage_w, storage_h, gl)) =
+            context_of(parent, width, height).or_else(|| make_context(width, height))
+        else {
             return;
         };
         let child = make_engine(
@@ -666,6 +673,14 @@ impl WebViewDelegate for Bridge {
             None,
             std::ptr::null_mut(),
         );
+        // Hidden until a view adopts it (r5_servo_set_visible()): it draws
+        // with the opener's context and must not appear in the opener's tab.
+        if let Ok(mut inner) = unsafe { (*child).inner.try_borrow_mut() } {
+            inner.hidden = true;
+            if let Some(wv) = inner.webview.as_ref() {
+                wv.hide();
+            }
+        }
         let mut event = Ev::new(R5_EV_NEW_WINDOW);
         event.a = 1;
         event.current = child as usize as i64;
@@ -1054,6 +1069,56 @@ fn make_context(width: i32, height: i32) -> Option<(Rc<WindowRenderingContext>, 
     Some((context, storage_w, storage_h, gl))
 }
 
+// The context of a live engine, for a new tab in the same window. Servo
+// keeps one painter (one WebRender, its worker threads and its compiled
+// shaders) per rendering context (servo-paint paint.rs,
+// register_rendering_context, Rc::ptr_eq). A tab with a context of its own
+// therefore compiled every shader again, which takes minutes on Lavapipe;
+// servoshell also gives all tabs of a window one context. The painter draws
+// only the WebViews that are not hidden (painter.rs,
+// send_root_pipeline_display_list), so the hidden tabs stay out of the
+// visible tab's frame.
+fn context_of(
+    sibling: *mut Engine,
+    width: i32,
+    height: i32,
+) -> Option<(Rc<WindowRenderingContext>, i32, i32, String)> {
+    if !alive(sibling) {
+        return None;
+    }
+    let inner = unsafe { (*sibling).inner.try_borrow() }.ok()?;
+    let context = inner.context.as_ref()?;
+    if width > inner.storage_w || height > inner.storage_h {
+        return None;
+    }
+    Some((
+        Rc::clone(context),
+        inner.storage_w,
+        inner.storage_h,
+        inner.gl.clone(),
+    ))
+}
+
+// Whether a live engine draws with this context; None when one cannot be
+// checked right now.
+fn context_in_use(context: &Rc<WindowRenderingContext>) -> Option<bool> {
+    let engines: Vec<usize> = ENGINES.with(|list| list.borrow().iter().map(|e| e.0).collect());
+    for engine in engines {
+        let engine = engine as *mut Engine;
+        let Ok(inner) = (unsafe { (*engine).inner.try_borrow() }) else {
+            return None;
+        };
+        if inner
+            .context
+            .as_ref()
+            .is_some_and(|other| Rc::ptr_eq(other, context))
+        {
+            return Some(true);
+        }
+    }
+    Some(false)
+}
+
 // The one Servo of this thread, built on first use.
 fn shared_servo() -> Option<Rc<servo::Servo>> {
     if SHUT_DOWN.with(|flag| flag.get()) {
@@ -1130,6 +1195,7 @@ fn make_engine(
             storage_h: storage.1,
             frame_w: 0,
             frame_h: 0,
+            hidden: false,
         }),
         events: Mutex::new(Vec::new()),
         notes: Mutex::new(Notes {
@@ -1162,12 +1228,60 @@ pub extern "C" fn r5_servo_create(
     callback: Callback,
     callback_ctx: *mut std::ffi::c_void,
 ) -> *mut Engine {
+    create_engine(
+        std::ptr::null_mut(),
+        width,
+        height,
+        document,
+        document_is_html,
+        callback,
+        callback_ctx,
+    )
+}
+
+/// r5_servo_create() for another tab of the window `sibling` is in: the new
+/// tab draws with the sibling's context, so Servo reuses that window's
+/// painter and its compiled shaders. Only one tab per window may be visible
+/// (r5_servo_set_visible()). A dead or null sibling makes a context of its
+/// own, as r5_servo_create().
+#[no_mangle]
+pub extern "C" fn r5_servo_create_sharing(
+    sibling: *mut Engine,
+    width: i32,
+    height: i32,
+    document: *const u8,
+    document_is_html: i32,
+    callback: Callback,
+    callback_ctx: *mut std::ffi::c_void,
+) -> *mut Engine {
+    create_engine(
+        sibling,
+        width,
+        height,
+        document,
+        document_is_html,
+        callback,
+        callback_ctx,
+    )
+}
+
+fn create_engine(
+    sibling: *mut Engine,
+    width: i32,
+    height: i32,
+    document: *const u8,
+    document_is_html: i32,
+    callback: Callback,
+    callback_ctx: *mut std::ffi::c_void,
+) -> *mut Engine {
     let width = width.max(16);
     let height = height.max(16);
     let Some(servo_engine) = shared_servo() else {
         return std::ptr::null_mut();
     };
-    let Some((context, storage_w, storage_h, gl)) = make_context(width, height) else {
+    let Some((context, storage_w, storage_h, gl)) =
+        context_of(sibling, width, height).or_else(|| make_context(width, height))
+    else {
         return std::ptr::null_mut();
     };
     let initial = initial_document(document, document_is_html);
@@ -1575,13 +1689,27 @@ pub extern "C" fn r5_servo_set_visible(engine: *mut Engine, visible: i32) -> i32
     if !alive(engine) {
         return NO_INIT;
     }
-    if let Ok(inner) = unsafe { (*engine).inner.try_borrow() } {
+    if let Ok(mut inner) = unsafe { (*engine).inner.try_borrow_mut() } {
+        inner.hidden = visible == 0;
         if let Some(wv) = inner.webview.as_ref() {
             if visible != 0 {
                 wv.show();
+                // The tabs of a window share the context; this tab's size
+                // is the one to draw at (the painter returns early when the
+                // context already has it).
+                wv.resize(dpi::PhysicalSize {
+                    width: inner.width as u32,
+                    height: inner.height as u32,
+                });
             } else {
                 wv.hide();
             }
+        }
+    }
+    if visible != 0 {
+        // A frame Servo announced while the tab was hidden was not read.
+        if let Ok(mut notes) = unsafe { (*engine).notes.lock() } {
+            notes.frame_ready = true;
         }
     }
     flush(engine);
@@ -1703,10 +1831,19 @@ pub extern "C" fn r5_servo_destroy(engine: *mut Engine) {
     if let Ok(mut inner) = boxed.inner.try_borrow_mut() {
         inner.webview = None;
         // Destroying a rendering context aborts in Haiku Mesa's
-        // eglDestroyImageKHR. The next tab reuses this one.
+        // eglDestroyImageKHR. The next tab reuses this one once no tab of
+        // its window draws with it any more (r5_servo_create_sharing()).
         if let Some(ctx) = inner.context.take() {
-            let entry = (ctx, inner.storage_w, inner.storage_h);
-            CONTEXT_POOL.with(|pool| pool.borrow_mut().push(entry));
+            match context_in_use(&ctx) {
+                Some(false) => {
+                    let entry = (ctx, inner.storage_w, inner.storage_h);
+                    CONTEXT_POOL.with(|pool| pool.borrow_mut().push(entry));
+                }
+                // Another tab still has it: this reference goes.
+                Some(true) => drop(ctx),
+                // Cannot be checked: never risk the last reference.
+                None => std::mem::forget(ctx),
+            }
         }
 
         inner.frame = Vec::new();
@@ -1746,12 +1883,15 @@ fn paint_engine(engine: *mut Engine) -> bool {
 
         // Paint and read back only when Servo has a new frame: a full
         // read-back per spin is what made scrolling and loading slow.
-        let paint_now = engine_ref
-            .notes
-            .lock()
-            .map(|mut notes| std::mem::replace(&mut notes.frame_ready, false))
-            .unwrap_or(false)
-            || inner.frame.is_empty();
+        // A hidden tab keeps its frame_ready for when it is shown: the
+        // shared framebuffer holds the visible tab of its window.
+        let paint_now = !inner.hidden
+            && (engine_ref
+                .notes
+                .lock()
+                .map(|mut notes| std::mem::replace(&mut notes.frame_ready, false))
+                .unwrap_or(false)
+                || inner.frame.is_empty());
         let rect = DeviceIntRect::from_origin_and_size(
             DeviceIntPoint::new(0, 0),
             DeviceIntSize::new(inner.width, inner.height),

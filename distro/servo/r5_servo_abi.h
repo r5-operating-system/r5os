@@ -202,6 +202,15 @@ status_t	r5_servo_set_visible(r5_servo* engine, int32 visible);
 // cookies, HSTS and logins to the profile. No new tab can be made afterwards.
 void		r5_servo_shutdown(void);
 
+// r5_servo_create() for another tab of the window `sibling` belongs to: the
+// new tab draws with the sibling's GL context, so Servo reuses that window's
+// painter and its compiled shaders instead of compiling them again. Keep one
+// tab per window visible (r5_servo_set_visible()); a hidden tab is not read
+// back. A null or destroyed sibling gives a context of its own.
+r5_servo*	r5_servo_create_sharing(r5_servo* sibling, int32 width,
+	int32 height, const char* document, int32 document_is_html,
+	r5_servo_callback callback, void* context);
+
 
 
 

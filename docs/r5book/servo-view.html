@@ -62,6 +62,11 @@ page-&gt;LoadURL("https://www.haiku-os.org/");</code></pre>
 			view. Keep every <code class="inline">BServoView</code> of a program in one window. A program
 			with several windows runs Servo on a thread of its own, as Aomi does
 			(<code class="inline">distro/apps/aomi/ServoContentView.cpp</code>).</p>
+			<p>Each <code class="inline">BServoView</code> has a drawing context of its own, and Servo
+			starts one renderer per context, which compiles its shaders on first use; without a GPU
+			that takes long. A program with tabs that uses the C calls directly makes the further
+			tabs of a window with <code class="inline">r5_servo_create_sharing()</code>, keeps one of
+			them visible, and so compiles once per window.</p>
 			<p>Cookies and logins are kept on disk only when the environment variable
 			<code class="inline">AOMI_PROFILE_DIR</code> names a folder before the first view starts.
 			Servo writes them when it shuts down: when the program is done with every view, it calls

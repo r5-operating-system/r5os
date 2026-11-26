@@ -130,6 +130,10 @@ arch_relocate_image(image_t* rootImage, image_t* image,
 	// SPDX-SnippetBegin
 	// SPDX-License-Identifier: MIT
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// Only now may another thread copy this image's TLS (elf_tls.cpp,
+	// Materialize()): its segments are mapped and relocated.
+	if (image->dso_tls_id != unsigned(-1))
+		TLSBlockTemplates::Get().SetRelocated(image->dso_tls_id);
 	materialize_initial_exec_tls();
 	// SPDX-SnippetEnd
 

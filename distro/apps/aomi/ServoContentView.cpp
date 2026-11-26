@@ -126,6 +126,9 @@ struct ServoApi {
 	status_t	(*set_visible)(r5_servo*, int32);
 	status_t	(*editing_action)(r5_servo*, int32);
 	void		(*shutdown)();
+	// Since r5servo 0.8.0-4.
+	r5_servo*	(*create_sharing)(r5_servo*, int32, int32, const char*, int32,
+					r5_servo_callback, void*);
 };
 
 static ServoApi sApi = {};
@@ -431,9 +434,20 @@ private:
 		const char* document = message->GetString("document", "");
 		sApi.set_max_size(message->GetInt32("maxWidth", 0),
 			message->GetInt32("maxHeight", 0));
-		tab->engine = sApi.create(message->GetInt32("width", 16),
-			message->GetInt32("height", 16), document,
-			message->GetBool("html", false) ? 1 : 0, &tab_callback, tab);
+		// Another tab of the same window, if it still exists: the new tab
+		// draws with its context, so Servo does not compile its shaders
+		// again (r5_servo_create_sharing()).
+		ServoTab* sibling = NULL;
+		message->FindPointer("sibling", (void**)&sibling);
+		r5_servo* siblingEngine = NULL;
+		for (size_t i = 0; i < fTabs.size(); i++) {
+			if (fTabs[i] == sibling)
+				siblingEngine = sibling->engine;
+		}
+		tab->engine = sApi.create_sharing(siblingEngine,
+			message->GetInt32("width", 16), message->GetInt32("height", 16),
+			document, message->GetBool("html", false) ? 1 : 0, &tab_callback,
+			tab);
 		if (tab->engine == NULL) {
 			delete tab;
 			reply.AddPointer("tab", NULL);
@@ -828,6 +842,7 @@ aomi_servo_start()
 	AOMI_SYM(set_visible, "r5_servo_set_visible");
 	AOMI_SYM(editing_action, "r5_servo_editing_action");
 	AOMI_SYM(shutdown, "r5_servo_shutdown");
+	AOMI_SYM(create_sharing, "r5_servo_create_sharing");
 #undef AOMI_SYM
 
 	// Every call is needed; an older libr5servo lacks some.
@@ -846,6 +861,7 @@ aomi_servo_start()
 	AOMI_REQUIRE(ask_control); AOMI_REQUIRE(free_answer);
 	AOMI_REQUIRE(set_callback); AOMI_REQUIRE(set_visible);
 	AOMI_REQUIRE(editing_action); AOMI_REQUIRE(shutdown);
+	AOMI_REQUIRE(create_sharing);
 #undef AOMI_REQUIRE
 	if (missing.Length() > 0) {
 		sError = "libr5servo.so is too old for this Aomi; missing:";
@@ -1175,6 +1191,12 @@ BServoContentView::_Start(const char* document, bool isHTML)
 	request.AddInt32("maxWidth", (int32)frame.Width() + 1);
 	request.AddInt32("maxHeight", (int32)frame.Height() + 1);
 	request.AddBool("visible", !hidden_in_window(this));
+	// Another tab of this window: the new one shares its GL context.
+	ServoTab* sibling = NULL;
+	for (int32 i = 0; sibling == NULL && i < window->CountChildren(); i++)
+		sibling = _TabIn(window->ChildAt(i), this);
+	if (sibling != NULL)
+		request.AddPointer("sibling", sibling);
 	if (unlock)
 		window->Unlock();
 	BMessage reply;
@@ -1192,6 +1214,23 @@ BServoContentView::_Start(const char* document, bool isHTML)
 	fAdopted = true;
 	fLoading = true;
 	return B_OK;
+}
+
+
+// The engine tab of a BServoContentView in this view tree, other than
+// `except`. Called with the window locked.
+/*static*/ ServoTab*
+BServoContentView::_TabIn(BView* view, const BServoContentView* except)
+{
+	BServoContentView* page = dynamic_cast<BServoContentView*>(view);
+	if (page != NULL && page != except && page->fTab != NULL)
+		return page->fTab;
+	for (int32 i = 0; i < view->CountChildren(); i++) {
+		ServoTab* tab = _TabIn(view->ChildAt(i), except);
+		if (tab != NULL)
+			return tab;
+	}
+	return NULL;
 }
 
 

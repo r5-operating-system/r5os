@@ -15,7 +15,7 @@ PKG = HAIKU / "generated.x86_64/objects/linux/x86_64/release/tools/package/packa
 STRIP = HAIKU / "generated.x86_64/cross-tools-x86_64/bin/x86_64-unknown-haiku-strip"
 SO_SRC = SERVO_SRC / "r5servo-out" / "libr5servo.so"
 
-VERSION = "0.8.0-3"
+VERSION = "0.8.0-4"
 PKG_NAME = f"r5servo-{VERSION}-x86_64.hpkg"
 
 PACKAGE_INFO = f"""name\t\t\tr5servo

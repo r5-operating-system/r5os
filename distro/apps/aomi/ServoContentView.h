@@ -94,6 +94,8 @@ private:
 									int32 a, int32 b, int32 c);
 			status_t			_FillHistory(BMessage* items,
 									bool forward) const;
+	static	ServoTab*			_TabIn(BView* view,
+									const BServoContentView* except);
 
 			ServoTab*			fTab;
 			bool				fAdopted;
