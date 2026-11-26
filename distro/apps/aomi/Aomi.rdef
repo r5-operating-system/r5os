@@ -21,4 +21,4 @@ resource app_version
 	long_info  = "Aomi ©2026 R5OS Contributors. MIT license."
 };
 
-resource app_flags B_SINGLE_LAUNCH;
+resource app_flags B_MULTIPLE_LAUNCH;

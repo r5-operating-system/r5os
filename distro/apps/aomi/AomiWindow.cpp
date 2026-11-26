@@ -130,11 +130,15 @@ public:
 
 	virtual void MessageReceived(BMessage* message)
 	{
+		int32 index = fWindow->TabIndexForProxy(this);
+		if (index < 0)
+			return;
 		if (message->what == AOMI_DIALOG || message->what == AOMI_NEW_WINDOW)
-			fWindow->HandleEngine(message, fIndex);
+			fWindow->HandleEngine(message, index);
 		else {
 			BMessage copy(*message);
-			copy.AddInt32("tab", fIndex);
+			copy.AddPointer("proxy", this);
+			copy.AddInt32("tab", index);
 			fWindow->PostMessage(&copy);
 		}
 	}
@@ -340,12 +344,26 @@ public:
 				text.SetFace(B_BOLD_FACE);
 				SetFont(&text);
 				SetHighColor(p.text);
-				DrawString(bold.String(), pen);
-				pen.x += text.StringWidth(bold.String());
-				text.SetFace(B_REGULAR_FACE);
-				SetFont(&text);
-				SetHighColor(p.sub);
-				DrawString(rest.String(), pen);
+				float maxRight = fStar.left - 6;
+				if (pen.x < maxRight) {
+					BString drawBold(bold);
+					font_height fh;
+					text.GetHeight(&fh);
+					(void)fh;
+					text.TruncateString(&drawBold, B_TRUNCATE_END,
+						maxRight - pen.x);
+					DrawString(drawBold.String(), pen);
+					pen.x += text.StringWidth(drawBold.String());
+				}
+				if (rest.Length() > 0 && pen.x < maxRight) {
+					text.SetFace(B_REGULAR_FACE);
+					SetFont(&text);
+					SetHighColor(p.sub);
+					BString drawRest(rest);
+					text.TruncateString(&drawRest, B_TRUNCATE_END,
+						maxRight - pen.x);
+					DrawString(drawRest.String(), pen);
+				}
 			}
 		}
 		if (fWindow->Loading()) {
@@ -567,15 +585,17 @@ public:
 		float w = font.StringWidth(title);
 		DrawString(title, BPoint(center.x - w / 2, 220));
 		if (fPrivate) {
-			font.SetSize(14);
+			font.SetSize(13.5f);
 			font.SetFace(B_REGULAR_FACE);
 			SetFont(&font);
-			const char* note = B_TRANSLATE(
+			SetHighColor(rgb(200, 214, 235));
+			const char* note1 = B_TRANSLATE(
 				"Aomi forgets the history, cookies and site data of this window when you close it.");
-			float nw = font.StringWidth(note);
-			if (nw > b.Width() - 80)
-				nw = b.Width() - 80;
-			DrawString(note, BPoint(center.x - nw / 2, 300));
+			float nw1 = font.StringWidth(note1);
+			DrawString(note1, BPoint(center.x - nw1 / 2, 296));
+			const char* note2 = B_TRANSLATE("Downloads and new bookmarks stay.");
+			float nw2 = font.StringWidth(note2);
+			DrawString(note2, BPoint(center.x - nw2 / 2, 316));
 		}
 	}
 
@@ -914,7 +934,8 @@ AomiWindow::_AddTab(const char* url, bool select, BWebContentView* adopt)
 	tab.progress = 0;
 	tab.security = AOMI_SECURITY_UNKNOWN;
 	tab.bookmarked = false;
-	tab.title = B_TRANSLATE("New tab");
+	tab.title = fPrivate
+		? B_TRANSLATE("Private – New tab") : B_TRANSLATE("New tab");
 	if (adopt != NULL)
 		tab.view = adopt;
 	else {
@@ -950,42 +971,44 @@ AomiWindow::_LoadOn(int32 index, const char* url)
 }
 
 
+int32
+AomiWindow::TabIndexForProxy(const BHandler* proxy) const
+{
+	if (proxy == NULL)
+		return -1;
+	for (int32 i = 0; i < (int32)fTabs.size(); i++) {
+		if (fTabs[i].proxy == proxy)
+			return i;
+	}
+	return -1;
+}
+
+
 void
 AomiWindow::_Select(int32 index)
 {
 	if (index < 0 || index >= (int32)fTabs.size())
 		return;
 	fActive = index;
+	bool ntp = fTabs[index].url.Length() == 0
+		|| fTabs[index].url.StartsWith("aomi:");
 	for (int32 i = 0; i < (int32)fTabs.size(); i++) {
 		if (fTabs[i].view == NULL)
 			continue;
-		if (i == index)
-			fTabs[i].view->Show();
-		else if (!fTabs[i].view->IsHidden())
-			fTabs[i].view->Hide();
+		if (i == index && !ntp) {
+			if (fTabs[i].view->IsHidden())
+				fTabs[i].view->Show();
+		} else {
+			if (!fTabs[i].view->IsHidden())
+				fTabs[i].view->Hide();
+		}
 	}
-	bool ntp = fTabs[index].url.Length() == 0
-		|| fTabs[index].url.StartsWith("aomi:");
 	if (ntp) {
 		if (fNewTab->IsHidden())
 			fNewTab->Show();
-		if (fTabs[index].view != NULL && !fTabs[index].view->IsHidden())
-			fTabs[index].view->Hide();
-		BView* parent = fNewTab->Parent();
-		if (parent != NULL) {
-			parent->RemoveChild(fNewTab);
-			parent->AddChild(fNewTab);
-		}
 	} else {
-		if (fNewTab->IsHidden())
-			fNewTab->Show();
-		fNewTab->Hide();
-		BView* page = fTabs[index].view;
-		BView* parent = page != NULL ? page->Parent() : NULL;
-		if (parent != NULL) {
-			parent->RemoveChild(page);
-			parent->AddChild(page);
-		}
+		if (!fNewTab->IsHidden())
+			fNewTab->Hide();
 	}
 	fHover = fTabs[index].hover;
 	_Title();
@@ -1025,13 +1048,19 @@ AomiWindow::_Close(int32 index)
 void
 AomiWindow::_Title()
 {
-	if (fActive < 0)
+	if (fActive < 0 || fActive >= (int32)fTabs.size())
 		return;
 	BString title = fTabs[fActive].title;
-	if (title.Length() == 0)
+	if (fPrivate) {
+		if (title.Length() == 0 || title == B_TRANSLATE("Private – New tab"))
+			title = B_TRANSLATE("Private – Aomi");
+		else
+			title << " – " << B_TRANSLATE("Private – Aomi");
+	} else if (title.Length() == 0) {
 		title = "Aomi";
-	else
+	} else {
 		title << " – Aomi";
+	}
 	SetTitle(title.String());
 }
 
@@ -1112,15 +1141,25 @@ void
 AomiWindow::MessageReceived(BMessage* message)
 {
 	int32 tab = fActive;
-	message->FindInt32("tab", &tab);
+	void* proxy = NULL;
+	if (message->FindPointer("proxy", &proxy) == B_OK) {
+		tab = TabIndexForProxy(static_cast<const BHandler*>(proxy));
+		if (tab < 0)
+			return;
+	} else {
+		message->FindInt32("tab", &tab);
+	}
+	bool validTab = tab >= 0 && tab < (int32)fTabs.size();
 	switch (message->what) {
 		case AOMI_LOAD_STARTED:
-			if (tab >= 0 && tab < (int32)fTabs.size()) {
+			if (validTab) {
 				fTabs[tab].loading = true;
 				fTabs[tab].progress = 0.1f;
 				BString url;
-				if (message->FindString("url", &url) == B_OK && url.Length() > 0)
+				if (message->FindString("url", &url) == B_OK && url.Length() > 0
+					&& !url.StartsWith("data:")) {
 					fTabs[tab].url = url;
+				}
 			}
 			fChrome->Invalidate();
 			break;
@@ -1128,7 +1167,7 @@ AomiWindow::MessageReceived(BMessage* message)
 		case AOMI_URL_CHANGED:
 		{
 			BString url;
-			if (tab >= 0 && message->FindString("url", &url) == B_OK) {
+			if (validTab && message->FindString("url", &url) == B_OK) {
 				if (!url.StartsWith("data:"))
 					fTabs[tab].url = url;
 				fTabs[tab].bookmarked = aomi_bookmark_has(url.String());
@@ -1151,21 +1190,21 @@ AomiWindow::MessageReceived(BMessage* message)
 			break;
 		}
 		case AOMI_LOAD_FINISHED:
-			if (tab >= 0 && tab < (int32)fTabs.size()) {
+			if (validTab) {
 				fTabs[tab].loading = false;
 				fTabs[tab].progress = 1;
 			}
 			fChrome->Invalidate();
 			break;
 		case AOMI_LOAD_FAILED:
-			if (tab >= 0 && tab < (int32)fTabs.size())
+			if (validTab)
 				fTabs[tab].loading = false;
 			fChrome->Invalidate();
 			break;
 		case AOMI_PROGRESS:
 		{
 			float progress = 0;
-			if (tab >= 0 && message->FindFloat("progress", &progress) == B_OK)
+			if (validTab && message->FindFloat("progress", &progress) == B_OK)
 				fTabs[tab].progress = progress;
 			fChrome->Invalidate();
 			break;
@@ -1173,9 +1212,14 @@ AomiWindow::MessageReceived(BMessage* message)
 		case AOMI_TITLE_CHANGED:
 		{
 			BString title;
-			if (tab >= 0 && message->FindString("title", &title) == B_OK
+			if (validTab && !fTabs[tab].url.StartsWith("aomi:")
+				&& message->FindString("title", &title) == B_OK
 				&& title.Length() > 0) {
 				fTabs[tab].title = title;
+				BString line;
+				line.SetToFormat("title tab=%d url=%s title=%s", (int)tab,
+					fTabs[tab].url.String(), title.String());
+				_Log(line.String());
 				if (tab == fActive)
 					_Title();
 			}
@@ -1183,7 +1227,7 @@ AomiWindow::MessageReceived(BMessage* message)
 			break;
 		}
 		case AOMI_NAVIGATION:
-			if (tab >= 0) {
+			if (validTab) {
 				message->FindBool("canBack", &fTabs[tab].canBack);
 				message->FindBool("canForward", &fTabs[tab].canForward);
 				message->FindBool("loading", &fTabs[tab].loading);
@@ -1194,7 +1238,7 @@ AomiWindow::MessageReceived(BMessage* message)
 		{
 			BString url;
 			message->FindString("url", &url);
-			if (tab >= 0)
+			if (validTab)
 				fTabs[tab].hover = url;
 			if (tab == fActive) {
 				fHover = url;
@@ -1203,7 +1247,7 @@ AomiWindow::MessageReceived(BMessage* message)
 			break;
 		}
 		case AOMI_SECURITY:
-			if (tab >= 0) {
+			if (validTab) {
 				message->FindInt32("state", &fTabs[tab].security);
 				message->FindString("text", &fTabs[tab].securityText);
 			}
@@ -1212,7 +1256,7 @@ AomiWindow::MessageReceived(BMessage* message)
 		case AOMI_FAVICON:
 		{
 			BMessage icon;
-			if (tab >= 0 && message->FindMessage("icon", &icon) == B_OK) {
+			if (validTab && message->FindMessage("icon", &icon) == B_OK) {
 				delete fTabs[tab].icon;
 				fTabs[tab].icon = new BBitmap(&icon);
 			}
@@ -1635,35 +1679,49 @@ AomiSettingsWindow::AomiSettingsWindow()
 		new BMessage(kPrefChanged));
 	fAsk->SetValue(fPrefs.askDownload);
 
-	BLayoutBuilder::Group<>(this, B_VERTICAL, 8)
-		.SetInsets(18, 16, 18, 12)
-		.AddGroup(B_HORIZONTAL, 12)
-			.Add(new BStringView("", B_TRANSLATE("Start with:")))
-			.Add(fStart)
+	BStringView* dlHead = new BStringView("dlh", B_TRANSLATE("Downloads"));
+	dlHead->SetFont(be_bold_font);
+	BStringView* privHead = new BStringView("prvh", B_TRANSLATE("Private windows"));
+	privHead->SetFont(be_bold_font);
+	BStringView* privNote = new BStringView("prvn", B_TRANSLATE(
+		"A private window forgets its history, cookies and site data when you close it."));
+	privNote->SetHighColor(palette().sub);
+
+	auto makeLabel = [](const char* text) {
+		BStringView* view = new BStringView("", text);
+		view->SetAlignment(B_ALIGN_RIGHT);
+		return view;
+	};
+
+	BLayoutBuilder::Group<>(this, B_VERTICAL, 10)
+		.SetInsets(18, 16, 18, 14)
+		.AddGrid(12, 8)
+			.Add(makeLabel(B_TRANSLATE("Start with:")), 0, 0)
+			.Add(fStart, 1, 0)
+			.Add(makeLabel(B_TRANSLATE("Home page:")), 0, 1)
+			.Add(fHome, 1, 1)
+			.Add(makeLabel(B_TRANSLATE("Search engine:")), 0, 2)
+			.Add(fEngine, 1, 2)
+			.Add(makeLabel(B_TRANSLATE("Search address:")), 0, 3)
+			.Add(fSearch, 1, 3)
+			.Add(fShowHome, 1, 4)
+			.Add(fShowBar, 1, 5)
+			.Add(fZoomText, 1, 6)
 		.End()
-		.AddGroup(B_HORIZONTAL, 12)
-			.Add(new BStringView("", B_TRANSLATE("Home page:")))
-			.Add(fHome)
+		.AddStrut(4)
+		.Add(dlHead)
+		.AddGrid(12, 8)
+			.Add(makeLabel(B_TRANSLATE("Save downloads to:")), 0, 0)
+			.AddGroup(B_HORIZONTAL, 6, 1, 0)
+				.Add(fDownloads, 1)
+				.Add(new BButton("choose", B_TRANSLATE("Choose…"),
+					new BMessage(MSG_OPEN_FOLDER)))
+			.End()
+			.Add(fAsk, 1, 1)
 		.End()
-		.AddGroup(B_HORIZONTAL, 12)
-			.Add(new BStringView("", B_TRANSLATE("Search engine:")))
-			.Add(fEngine)
-		.End()
-		.AddGroup(B_HORIZONTAL, 12)
-			.Add(new BStringView("", B_TRANSLATE("Search address:")))
-			.Add(fSearch)
-		.End()
-		.Add(fShowHome)
-		.Add(fShowBar)
-		.Add(fZoomText)
-		.Add(new BStringView("", B_TRANSLATE("Downloads")))
-		.AddGroup(B_HORIZONTAL, 12)
-			.Add(new BStringView("", B_TRANSLATE("Save downloads to:")))
-			.Add(fDownloads)
-		.End()
-		.Add(fAsk)
-		.Add(new BStringView("", B_TRANSLATE(
-			"A private window forgets its history, cookies and site data when you close it.")))
+		.AddStrut(4)
+		.Add(privHead)
+		.Add(privNote)
 		.AddGlue()
 		.AddGroup(B_HORIZONTAL, 8)
 			.AddGlue()

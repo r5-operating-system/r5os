@@ -291,14 +291,23 @@ aomi_webkit_start()
 	if (started)
 		return B_OK;
 
-	BPath settings;
-	if (find_directory(B_USER_SETTINGS_DIRECTORY, &settings) == B_OK) {
-		settings.Append("WebPositive");
-		create_directory(settings.Path(), 0777);
-		BString cookies(settings.Path());
+	const char* privDir = getenv("AOMI_PRIVATE_DIR");
+	if (privDir != NULL && privDir[0] != '\0') {
+		create_directory(privDir, 0700);
+		BString cookies(privDir);
 		cookies << "/cookie.jar.db";
 		setenv("CURL_COOKIE_JAR_PATH", cookies.String(), 1);
-		BWebSettings::SetPersistentStoragePath(settings.Path());
+		BWebSettings::SetPersistentStoragePath(privDir);
+	} else {
+		BPath settings;
+		if (find_directory(B_USER_SETTINGS_DIRECTORY, &settings) == B_OK) {
+			settings.Append("WebPositive");
+			create_directory(settings.Path(), 0777);
+			BString cookies(settings.Path());
+			cookies << "/cookie.jar.db";
+			setenv("CURL_COOKIE_JAR_PATH", cookies.String(), 1);
+			BWebSettings::SetPersistentStoragePath(settings.Path());
+		}
 	}
 
 	BWebPage::InitializeOnce();
@@ -388,8 +397,6 @@ BWebKitContentView::_Listen()
 	if (fWeb != NULL && fWeb->WebPage() != NULL)
 		fWeb->WebPage()->SetListener(BMessenger(this));
 	ensure_hub();
-	if (fWeb != NULL)
-		fWeb->SetDarkMode(_Dark());
 }
 
 
@@ -407,6 +414,16 @@ BWebKitContentView::AttachedToWindow()
 	BWebContentView::AttachedToWindow();
 	_Listen();
 	_Fit();
+}
+
+
+void
+BWebKitContentView::AllAttached()
+{
+	BWebContentView::AllAttached();
+	// BWebView::AttachedToWindow() sets WebPage's listener to Window();
+	// re-bind to this BWebKitContentView after children have attached.
+	_Listen();
 }
 
 
@@ -482,6 +499,14 @@ BWebKitContentView::MessageReceived(BMessage* message)
 		case LOAD_FINISHED:
 		case LOAD_DL_COMPLETED:
 		{
+			if (fWeb != NULL) {
+				BString title = fWeb->MainFrameTitle();
+				if (title.Length() > 0) {
+					BMessage titleMsg(AOMI_TITLE_CHANGED);
+					titleMsg.AddString("title", title);
+					Report(&titleMsg);
+				}
+			}
 			BString url;
 			message->FindString("url", &url);
 			BMessage report(AOMI_LOAD_FINISHED);
@@ -699,8 +724,10 @@ BWebKitContentView::MessageReceived(BMessage* message)
 			break;
 		}
 		case B_COLORS_UPDATED:
-			if (fWeb != NULL)
-				fWeb->SetDarkMode(_Dark());
+			// Do not call BWebView::SetDarkMode() from the window thread:
+			// Haiku WebKit 1.10 calls WebCore::Page::setUseColorAppearance()
+			// directly without marshalling to the application thread, racing
+			// with WebCore::Style::Resolver.
 			BWebContentView::MessageReceived(message);
 			break;
 		default:

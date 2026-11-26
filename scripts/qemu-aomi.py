@@ -59,14 +59,22 @@ def main():
         handle.write("#!/bin/sh\n/bin/sh /boot/home/aomitest "
                      "> /boot/home/aomitest.txt 2>&1 &\n")
     boot = "myfs/home/config/settings/boot"
-    text = bfs(image, [
+    cmds = [
         "mkdir myfs/home/config/settings",
         "mkdir " + boot,
         "rm " + boot + "/UserBootscript",
         "rm myfs/home/aomitest",
         "cp :%s/UserBootscript %s/UserBootscript" % (stage, boot),
         "cp :%s/aomitest myfs/home/aomitest" % stage,
-    ])
+    ]
+    helper = os.environ.get("AOMI_TEST_HELPER", "/tmp/aomi-test-helper")
+    if os.path.isfile(helper):
+        cmds += [
+            "rm myfs/home/aomi-test-helper",
+            "cp :%s myfs/home/aomi-test-helper" % helper,
+            "chmod 755 myfs/home/aomi-test-helper",
+        ]
+    text = bfs(image, cmds)
     if "Unmounting FS failed" in text:
         print(text)
         return 1
@@ -137,7 +145,7 @@ def main():
                     qfile.readline()
                     time.sleep(0.3)
                     to_png(path)
-                    if name == "menu":
+                    if name in ("menu", "dark-menu"):
                         qfile.write('{"execute":"send-key","arguments":{"keys":'
                                     '[{"type":"qcode","data":"esc"}]}}\n')
                         qfile.flush()

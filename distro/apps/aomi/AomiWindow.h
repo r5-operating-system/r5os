@@ -35,6 +35,7 @@ public:
 
 			void				OpenURL(const char* url, bool newTab);
 			void				HandleEngine(BMessage* message, int32 tab);
+			int32				TabIndexForProxy(const BHandler* proxy) const;
 			void				OpenMenu();
 			void				OpenDownloads();
 			void				OpenSettings();

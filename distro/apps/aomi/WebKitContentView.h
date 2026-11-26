@@ -26,6 +26,7 @@ public:
 	virtual						~BWebKitContentView();
 
 	virtual	void				AttachedToWindow();
+	virtual	void				AllAttached();
 	virtual	void				FrameResized(float width, float height);
 	virtual	void				MessageReceived(BMessage* message);
 
