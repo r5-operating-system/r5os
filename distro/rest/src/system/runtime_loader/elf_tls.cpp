@@ -334,6 +334,21 @@ DynamicThreadVector::_ResizeVector(unsigned minimumSize)
 void*
 get_tls_address(unsigned dso, addr_t offset)
 {
+	// SPDX-SnippetBegin
+	// SPDX-License-Identifier: MIT
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// An executable writes an initial-exec TLS symbol at a fixed offset from
+	// the thread pointer. A library reads that same symbol through
+	// __tls_get_addr. The static image is the one the relocation names. A
+	// template without a static offset keeps the dynamic block.
+	TLSBlockTemplates& templates = TLSBlockTemplates::Get();
+	if (templates.HasStaticPlacement(dso)) {
+		materialize_initial_exec_tls();
+		addr_t threadPointer = (addr_t)tls_get(TLS_BASE_ADDRESS_SLOT);
+		return (void*)(threadPointer + templates.StaticPlacement(dso) + offset);
+	}
+	// SPDX-SnippetEnd
+
 	DynamicThreadVector dynamicThreadVector;
 	TLSBlock& block = dynamicThreadVector[dso];
 	if (block.IsInvalid())
@@ -414,6 +429,13 @@ TLSBlockTemplates::_EnsureMapped(addr_t threadPointer, addr_t bytesFromTp)
 		return _kern_resize_area(info.area, newSize) == B_OK;
 	}
 	return false;
+}
+
+
+bool
+TLSBlockTemplates::HasStaticPlacement(unsigned dso) const
+{
+	return dso < fTemplates.size() && fTemplates[dso].HasStaticOffset();
 }
 
 

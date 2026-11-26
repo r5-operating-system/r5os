@@ -8,6 +8,20 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-26 - Servo: BServoView in libr5servo.so packaged as r5servo.hpkg
+
+- Problem: the red-page proof was a one-off program. Aomi needs one view class packaged for jam without running cargo, SpiderMonkey's `std::call_once` needs the initial-exec TLS image in `runtime_loader`, and HTTP/2 in the guest had not been shown because DHCPv6 left only `nameserver fec0::3` in `resolv.conf`.
+- Change:
+  - `BServoView` (`distro/servo/BServoView.{h,cpp}`) matches the engine-view calls and message codes in `docs/design/AOMI-UI.md`. Servo 0.8.0 (`js_jit`, `bundled`) is built as a Rust static library and linked by Haiku g++ into `libr5servo.so` (`scripts/build-r5servo.sh`, `-j4`).
+  - `distro/servo/pack-r5servo.py` packages the stripped `libr5servo.so` (144 MiB) and `BServoView.h` into `distro/packages/x86_64/r5servo-0.8.0-1-x86_64.hpkg` (49.19 MiB). `scripts/pin-mesa-packages.sh` adds `r5servo-0.8.0-1` to `r5-opengl.repo` and the HaikuPorts pin; `distro/UserBuildConfig` adds `r5servo` to `AddHaikuImageSystemPackages`, so jam installs `/boot/system/lib/libr5servo.so` and `/boot/system/develop/headers/r5/BServoView.h` without running cargo.
+  - `distro/rest/src/system/runtime_loader/elf_tls.{h,cpp}`: `get_tls_address()` returns the static initial-exec image when that DSO has one.
+  - `scripts/run-r5servo-qemu.sh`: writes `nameserver 10.0.2.3` to `/boot/system/settings/network/resolv.conf` when IPv4 DNS is missing (QEMU DHCPv6 only wrote `fec0::3`), and supports `R5_SERVO_FROM_PKG=1` to boot a full jam-built image using the packaged `/boot/system/lib/libr5servo.so`.
+- Tested (26 Nov 2026, Europe/Amsterdam):
+  - Full AMD64 image build via `scripts/build-locked.sh` (`jam_exit=0`, `mesa_exit=0`, `r5servo-0.8.0-1-x86_64.hpkg` in `myfs/system/packages/`).
+  - QEMU KVM full-image boot (`R5_SERVO_FROM_PKG=1`, private copy of the freshly built `r5-os.image`, Zink on Lavapipe `zink Vulkan 1.4(llvmpipe (LLVM 21.1.8, 256 bits) (MESA_LLVMPIPE))`): `/boot/system/lib/libr5servo.so` and `/boot/system/develop/headers/r5/BServoView.h` loaded from the package on the newly built `runtime_loader` TLS code; red `data:` page finished (`R5`), and `net::http_loader` logged `HTTP/2.0 response for https://http2.pro/api/v1` (plus HTTP/2.0 responses across redirects and subresources).
+  - License audit (`cargo +1.99.1 metadata --format-version 1 --filter-platform x86_64-unknown-haiku`): 646 crates, 0 missing SPDX, 0 GPL/LGPL/AGPL, 81 MPL-2.0 (+ 3 combined MPL-2.0), remainder permissive.
+- Limits & not tested: A private session is not isolated on disk yet; `Protocol()` still returns `B_NOT_SUPPORTED` on redirects because Servo 0.8 does not expose ALPN to the embedder yet; GL context is leaked on exit (`eglDestroyImageKHR` abort); present uses read-back into `BBitmap`; not tested on 5625U hardware (RADV).
+
 ## 2026-11-26 - Aomi, the compact browser window (build 10077)
 
 - Problem: R5 had WebPositive and no window of its own. The engine (Haiku WebKit, haikuwebkit 1.10.0) and a later engine (Servo) would each have needed their own window. Review 1 of PR #4671 also found: build conflict with `main` (10076), crash on dark-mode switch (`WebCore::Style::Resolver::~Resolver`), stale tab indices when closing a tab while another loads, tab titles stuck on `"New tab"`, probe pages not yet shown, private window sharing `CURL_COOKIE_JAR_PATH`, and missing side-by-side mockup comparisons.
@@ -81,7 +95,6 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
   - In VirtualBox, `VBoxService` starts only for the first signed-in person and `r5_vbox_clip` starts per person on COM1.
   - Deskbar still has no catalog under `distro/catalogs` (tracked under #4599).
   - Not tested: Ryzen 5 5625U / RADV hardware, Safe mode, `BDirectWindow` apps, live audio playback muting, ARM64, RISC-V.
-
 ## 2026-11-25 - exFAT write support (#4655)
 
 Problem: Haiku's exFAT driver, used unchanged, always mounted read-only and its write hooks were null. On the 5625U (stick 83) Tracker refused copies onto a 116.5 GiB exFAT SD card.

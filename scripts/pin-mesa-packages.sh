@@ -22,6 +22,7 @@ needed=(
 	vulkan_loader-1.4.367-4-x86_64.hpkg
 	vulkan_tools-1.4.367-2-x86_64.hpkg
 	vulkanteapot-1.0.0-6-x86_64.hpkg
+	r5servo-0.8.0-1-x86_64.hpkg
 	wpa_supplicant-2.11.r5.8-1-x86_64.hpkg
 )
 mkdir -p "$DL"
@@ -122,6 +123,14 @@ text = text.replace("\tvulkanteapot-1.0.0-4\n", "\tvulkanteapot-1.0.0-6\n")
 text = text.replace("\tvulkanteapot-1.0.0-5\n", "\tvulkanteapot-1.0.0-6\n")
 if "\tvulkan_loader-1.4.367-4\n" not in text:
     sys.exit("vulkan loader pin missing")
+if "\tr5servo-0.8.0-1\n" not in text:
+    text = text.replace(
+        "\tvulkanteapot-1.0.0-6\n",
+        "\tvulkanteapot-1.0.0-6\n\tr5servo-0.8.0-1\n",
+        1,
+    )
+if "\tr5servo-0.8.0-1\n" not in text:
+    sys.exit("r5servo pin missing")
 path.write_text(text, encoding="utf-8")
 print("pin updated")
 PY

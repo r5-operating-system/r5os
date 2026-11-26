@@ -79,6 +79,7 @@ public:
 			// SPDX-SnippetBegin
 			// SPDX-License-Identifier: MIT
 			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+			bool		HasStaticPlacement(unsigned dso) const;
 			uint64		StaticPlacement(unsigned dso) const;
 			void		Materialize();
 			// SPDX-SnippetEnd
