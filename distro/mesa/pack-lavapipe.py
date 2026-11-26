@@ -31,10 +31,17 @@ def drop_build_path(path: Path) -> None:
     path.write_bytes(data)
 
 
+def fetch_base(root: Path, name: str) -> Path:
+    """The base package is a pinned release asset (#4681), not a git file."""
+    out = subprocess.check_output(
+        ["bash", str(root / "scripts" / "r5-packages.sh"), "path", name], text=True)
+    return Path(out.strip())
+
+
 def main() -> None:
     root = Path(sys.argv[1])
     out_dir = root / "distro" / "packages" / "x86_64"
-    previous = out_dir / "mesa_lavapipe-25.3.6-1-x86_64.hpkg"
+    previous = fetch_base(root, "mesa_lavapipe-25.3.6-1-x86_64.hpkg")
     dest = out_dir / "mesa_lavapipe-25.3.6-5-x86_64.hpkg"
     stage = Path("/tmp/r5-lavapipe-pkg")
     shutil.rmtree(stage, ignore_errors=True)

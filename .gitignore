@@ -9,10 +9,8 @@
 *.iso
 *.mmc
 *.hpkg
-!distro/packages/
-!distro/packages/**
-!distro/packages/**/*.hpkg
-distro/packages/x86_64/mesa_zink-25.3.6-1-x86_64.hpkg
+# R5 packages are GitHub Release assets (distro/packages/packages.sha256);
+# distro/packages/x86_64 is only local build output.
 __pycache__/
 .DS_Store
 Thumbs.db

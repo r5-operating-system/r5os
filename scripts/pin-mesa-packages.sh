@@ -4,63 +4,59 @@
 set -eu
 HAIKU=/home/nickr/r5os/haiku
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-PKGDIR="$ROOT/distro/packages/x86_64"
 DL="$HAIKU/generated.x86_64/download"
 PIN="$HAIKU/build/jam/repositories/HaikuPorts/x86_64"
 REPO_TOOL="$HAIKU/generated.x86_64/objects/linux/x86_64/release/tools/package_repo/package_repo"
 CACHE="$HAIKU/generated.x86_64/objects/haiku/x86_64/packaging/repositories/HaikuPorts"
 OUT="$DL/r5-haikuports.repo"
 
-needed=(
-	libglvnd-1.7.0-1-x86_64.hpkg
-	llvm21_runtime-21.1.8-1-x86_64.hpkg
-	libdrm-2.4.124-5-x86_64.hpkg
-	mesa-25.3.6-5-x86_64.hpkg
-	mesa_devel-25.3.6-1-x86_64.hpkg
-	mesa_lavapipe-25.3.6-5-x86_64.hpkg
-	mesa_radv-25.3.6-11-x86_64.hpkg
-	vulkan_loader-1.4.367-4-x86_64.hpkg
-	vulkan_tools-1.4.367-2-x86_64.hpkg
-	vulkanteapot-1.0.0-6-x86_64.hpkg
-	wpa_supplicant-2.11.r5.8-1-x86_64.hpkg
-)
-mkdir -p "$DL"
-for name in "${needed[@]}"; do
-	if [[ ! -f "$PKGDIR/$name" ]]; then
-		echo "missing $PKGDIR/$name" >&2
-		exit 1
-	fi
-	cp -f "$PKGDIR/$name" "$DL/$name"
-done
-
-# r5servo is not stored in git; fetch from the pinned GitHub Release asset
-# (or reuse local build output) and verify its sha256 strictly.
+# R5-built packages are not in git (#4681). Each one comes from the local
+# cache, the local build output or its GitHub Release asset, by sha256
+# (distro/packages/packages.sha256, scripts/r5-packages.sh). A wrong hash
+# stops the build.
 # shellcheck source=/dev/null
-. "$ROOT/distro/servo/r5servo.sha256"
-r5servo_dst="$DL/$R5SERVO_PKG"
-r5servo_local="${SERVO_SRC:-$HOME/r5os/servo-build}/r5servo-out/$R5SERVO_PKG"
-check_r5servo_hash() {
-	local file="$1"
-	[[ -f "$file" ]] || return 1
-	local got
-	got="$(sha256sum "$file" | awk '{print $1}')"
-	[[ "$got" == "$R5SERVO_SHA256" ]]
-}
-if ! check_r5servo_hash "$r5servo_dst"; then
-	if check_r5servo_hash "$r5servo_local"; then
-		cp -f "$r5servo_local" "$r5servo_dst"
-	else
-		echo "fetching $R5SERVO_PKG from $R5SERVO_URL"
-		curl -fsSL -o "${r5servo_dst}.tmp" "$R5SERVO_URL"
-		mv -f "${r5servo_dst}.tmp" "$r5servo_dst"
-	fi
-fi
-if ! check_r5servo_hash "$r5servo_dst"; then
-	echo "ERROR: sha256 mismatch for $r5servo_dst (expected $R5SERVO_SHA256)" >&2
-	rm -f "$r5servo_dst"
+. "$ROOT/scripts/r5-packages.sh"
+mkdir -p "$DL"
+mapfile -t needed < <(r5_pkg_list image)
+if [[ "${#needed[@]}" -eq 0 ]]; then
+	echo "ERROR: no image packages in $R5_PKG_LIST" >&2
 	exit 1
 fi
+for name in "${needed[@]}"; do
+	src="$(r5_pkg_fetch "$name")" || exit 1
+	cp -f "$src" "$DL/$name"
+done
+
+# r5servo keeps its own pin (Aomi part 2); the local Servo build output is
+# taken when its hash matches.
+# shellcheck source=/dev/null
+. "$ROOT/distro/servo/r5servo.sha256"
+r5servo_local="${SERVO_SRC:-$HOME/r5os/servo-build}/r5servo-out/$R5SERVO_PKG"
+if r5_pkg_hash_ok "$r5servo_local" "$R5SERVO_SHA256" \
+		&& ! r5_pkg_hash_ok "$R5_PKG_CACHE/$R5SERVO_PKG" "$R5SERVO_SHA256"; then
+	mkdir -p "$R5_PKG_CACHE"
+	cp -f "$r5servo_local" "$R5_PKG_CACHE/$R5SERVO_PKG"
+fi
+src="$(r5_pkg_fetch "$R5SERVO_PKG" "$R5SERVO_SHA256" "$R5SERVO_URL")" || exit 1
+cp -f "$src" "$DL/$R5SERVO_PKG"
 needed+=("$R5SERVO_PKG")
+
+# Skia is build-only: app_server links the staging tree of
+# distro/skia/pack-skia.sh. Without that tree, unpack the pinned package.
+SKIA_STAGE="$HOME/r5os/skia-build/pkg-root"
+PKG_TOOL="$HAIKU/generated.x86_64/objects/linux/x86_64/release/tools/package/package"
+for name in $(r5_pkg_list skia); do
+	src="$(r5_pkg_fetch "$name")" || exit 1
+	if [[ ! -f "$SKIA_STAGE/develop/lib/libskia.a" ]]; then
+		if [[ ! -x "$PKG_TOOL" ]]; then
+			echo "ERROR: $PKG_TOOL missing; cannot unpack $name" >&2
+			exit 1
+		fi
+		mkdir -p "$SKIA_STAGE"
+		"$PKG_TOOL" extract -C "$SKIA_STAGE" "$src"
+		echo "skia staging tree unpacked from $name"
+	fi
+done
 # Older r5servo packages: only the pinned one stays in the repository.
 rm -f "$DL/r5servo-0.8.0-1-x86_64.hpkg" "$DL/r5servo-0.8.0-2-x86_64.hpkg" \
 	"$DL/r5servo-0.8.0-3-x86_64.hpkg" "$DL/r5servo-0.8.0-4-x86_64.hpkg"

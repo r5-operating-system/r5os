@@ -28,8 +28,9 @@ SYS="$SRCROOT/sysroot"
 HEADERS="$SRCROOT/vulkan-headers-r5/install/include"
 WORK="$SRCROOT/vkcube-r5"
 STAGE="$SRCROOT/vkcube-out"
-TOOLS_SRC="$REPO/distro/packages/x86_64/vulkan_tools-1.4.367-1-x86_64.hpkg"
-TEAPOT_SRC="$REPO/distro/packages/x86_64/vulkanteapot-1.0.0-1-x86_64.hpkg"
+# The base packages are pinned release assets (#4681), not git files.
+TOOLS_SRC="$("$REPO/scripts/r5-packages.sh" path vulkan_tools-1.4.367-1-x86_64.hpkg)"
+TEAPOT_SRC="$("$REPO/scripts/r5-packages.sh" path vulkanteapot-1.0.0-1-x86_64.hpkg)"
 TOOLS="$REPO/distro/packages/x86_64/vulkan_tools-1.4.367-2-x86_64.hpkg"
 TEAPOT="$REPO/distro/packages/x86_64/vulkanteapot-1.0.0-6-x86_64.hpkg"
 
