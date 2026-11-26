@@ -783,6 +783,212 @@ test_bitmap_next_free_edge(void)
 	return result;
 }
 
+static int
+test_unknown_critical_secondary(void)
+{
+	/* Regression test: a folder containing a normal file, then an entry set
+	   with an unknown critical secondary entry (0xC2), then another normal
+	   file. Both normal files must be listed (skipping the 0xC2 set as a
+	   whole) and found by name via exfat_lookup(). */
+	const uint32 blockSize = 512;
+	const uint32 totalBlocks = 64;
+	uint8* mem = (uint8*)calloc(totalBlocks, blockSize);
+	if (mem == NULL)
+		return fail("crit secondary alloc", B_NO_MEMORY);
+
+	struct mem_store {
+		uint8*	data;
+		uint32	block_size;
+		uint32	blocks;
+	} state = { mem, blockSize, totalBlocks };
+
+	exfat_store store;
+	memset(&store, 0, sizeof(store));
+	store.cookie = &state;
+	store.read = [](void* cookie, uint64 block, void* buf, uint32 blocks) -> status_t {
+		mem_store* s = (mem_store*)cookie;
+		if (block + blocks > s->blocks)
+			return B_IO_ERROR;
+		memcpy(buf, s->data + block * s->block_size, (size_t)blocks * s->block_size);
+		return B_OK;
+	};
+	store.write = [](void* cookie, uint64 block, const void* buf, uint32 blocks) -> status_t {
+		mem_store* s = (mem_store*)cookie;
+		if (block + blocks > s->blocks)
+			return B_IO_ERROR;
+		memcpy(s->data + block * s->block_size, buf, (size_t)blocks * s->block_size);
+		return B_OK;
+	};
+	store.flush = [](void*, uint64, uint32) -> status_t { return B_OK; };
+
+	exfat_disk disk;
+	memset(&disk, 0, sizeof(disk));
+	disk.block_size = blockSize;
+	disk.blocks_per_cluster_shift = 1; /* 1024 B per cluster (32 dir entries) */
+	disk.cluster_count = 16;
+	disk.fat_block = 4;
+	disk.data_block = 8;
+	disk.root_cluster = 3;
+	disk.can_write = true;
+	disk.dirty = true;
+	disk.bitmap_bytes = 2;
+	disk.bitmap = (uint8*)calloc(1, disk.bitmap_bytes);
+	disk.bitmap_clusters = (uint32*)calloc(1, sizeof(uint32));
+	if (disk.bitmap == NULL || disk.bitmap_clusters == NULL) {
+		exfat_disk_close(&disk);
+		free(mem);
+		return fail("crit secondary disk", B_NO_MEMORY);
+	}
+	disk.bitmap_clusters[0] = 2;
+	disk.bitmap_cluster_count = 1;
+	disk.bitmap[0] = 0x03; /* clusters 2 (bitmap) and 3 (root) used */
+	disk.free_clusters = 14;
+	disk.hint = 4;
+
+	exfat_node dir;
+	memset(&dir, 0, sizeof(dir));
+	dir.root = true;
+	dir.is_dir = true;
+	dir.first_cluster = 3;
+	dir.data_length = 1024;
+	dir.valid_length = 1024;
+	dir.flags = 0x03;
+
+	exfat_time time = now_time();
+	exfat_node firstFile;
+	status_t status = exfat_create(&store, &disk, NULL, &dir, "alpha.txt",
+		false, 0, &time, &firstFile);
+	if (status != B_OK) {
+		exfat_disk_close(&disk);
+		free(mem);
+		return fail("crit alpha create", status);
+	}
+
+	/* Inject a 4-entry set right after alpha.txt (entries 3..6) containing an
+	   unknown critical secondary entry (0xC2): 0x85 (chunkCount=3), 0xC0,
+	   0xC2, 0xC1 ("bad"). */
+	uint8* dirBytes = mem + (disk.data_block + (dir.first_cluster - 2) * 2) * blockSize;
+	uint32 badSlot = firstFile.entry_index + firstFile.secondary_count + 1;
+	uint8* badSet = dirBytes + badSlot * 32;
+	memset(badSet, 0, 4 * 32);
+	badSet[0] = 0x85;
+	badSet[1] = 3;
+	badSet[32] = 0xc0;
+	badSet[32 + 1] = 0x01;
+	badSet[32 + 3] = 3; /* name length */
+	badSet[64] = 0xc2; /* unknown critical secondary */
+	badSet[96] = 0xc1;
+	badSet[96 + 2] = 'b';
+	badSet[96 + 4] = 'a';
+	badSet[96 + 6] = 'd';
+
+	exfat_node secondFile;
+	status = exfat_create(&store, &disk, NULL, &dir, "omega.txt",
+		false, 0, &time, &secondFile);
+	if (status != B_OK) {
+		exfat_disk_close(&disk);
+		free(mem);
+		return fail("crit omega create", status);
+	}
+
+	/* Both normal files must be found by name via exfat_lookup(). */
+	exfat_node found;
+	status = exfat_lookup(&store, &disk, &dir, "alpha.txt", &found);
+	if (status != B_OK || found.entry_index != firstFile.entry_index) {
+		exfat_disk_close(&disk);
+		free(mem);
+		return fail("crit lookup alpha", status);
+	}
+	status = exfat_lookup(&store, &disk, &dir, "omega.txt", &found);
+	if (status != B_OK || found.entry_index != secondFile.entry_index) {
+		exfat_disk_close(&disk);
+		free(mem);
+		return fail("crit lookup omega", status);
+	}
+
+	/* Walk the directory with the exact DirectoryIterator::_GetNext() rules:
+	   skip unknown critical secondary sets (0xC2-0xDF) as a whole, skip
+	   unknown benign secondaries (0xE0-0xFF) inside a set, and list both
+	   alpha.txt and omega.txt. */
+	int listed = 0;
+	bool sawAlpha = false;
+	bool sawOmega = false;
+	uint32 cursor = 0;
+	const uint32 capacity = 1024 / 32;
+	while (cursor < capacity) {
+		bool inFile = false;
+		bool skipSet = false;
+		int32 chunkCount = 1;
+		uint8 nameLen = 0;
+		char ascii[32];
+		memset(ascii, 0, sizeof(ascii));
+		uint32 namePos = 0;
+		bool gotFile = false;
+		while (cursor < capacity) {
+			const uint8* e = dirBytes + cursor * 32;
+			cursor++;
+			if (e[0] == 0)
+				break;
+			if (skipSet) {
+				chunkCount--;
+				if (chunkCount <= 0) {
+					skipSet = false;
+					inFile = false;
+					namePos = 0;
+					nameLen = 0;
+					chunkCount = 1;
+				}
+				continue;
+			}
+			if (e[0] == 0x85) {
+				inFile = true;
+				namePos = 0;
+				nameLen = 0;
+				chunkCount = e[1];
+			} else if (e[0] == 0xc0) {
+				chunkCount--;
+				nameLen = e[3];
+			} else if (e[0] == 0xc1) {
+				chunkCount--;
+				for (uint32 u = 0; u < 15 && namePos < sizeof(ascii) - 1; u++)
+					ascii[namePos++] = (char)e[2 + u * 2];
+			} else if (inFile && chunkCount > 0 && (e[0] & 0xe0) == 0xe0) {
+				chunkCount--;
+			} else if (inFile && chunkCount > 0 && (e[0] & 0xc0) == 0xc0) {
+				chunkCount--;
+				if (chunkCount > 0)
+					skipSet = true;
+				else {
+					inFile = false;
+					namePos = 0;
+					nameLen = 0;
+					chunkCount = 1;
+				}
+				continue;
+			}
+			if (chunkCount <= 0) {
+				gotFile = true;
+				break;
+			}
+		}
+		if (!gotFile)
+			break;
+		if (nameLen < sizeof(ascii))
+			ascii[nameLen] = '\0';
+		listed++;
+		if (strcmp(ascii, "alpha.txt") == 0)
+			sawAlpha = true;
+		else if (strcmp(ascii, "omega.txt") == 0)
+			sawOmega = true;
+	}
+
+	exfat_disk_close(&disk);
+	free(mem);
+	if (listed != 2 || !sawAlpha || !sawOmega)
+		return fail("crit list files", B_BAD_DATA);
+	return 0;
+}
+
 int
 main(int argc, char** argv)
 {
@@ -797,6 +1003,8 @@ main(int argc, char** argv)
 	if (argc > 2 && strcmp(argv[2], "pull") == 0)
 		return pull(argv[1]);
 	if (test_bitmap_next_free_edge() != 0)
+		return 1;
+	if (test_unknown_critical_secondary() != 0)
 		return 1;
 	bool large = argc > 2 && strcmp(argv[2], "large") == 0;
 	return run(argv[1], large);

@@ -588,8 +588,8 @@ exfat_rename_vnode(fs_volume* _volume, fs_vnode* _fromDir, const char* fromName,
 	Inode* replaced = NULL;
 	if (status == B_OK && replace) {
 		/* Acquire dest vnode outside AllocLock to avoid VFS eviction deadlock.
-		   dirTo is kept stable by the write lock on toDir->Lock() held from
-		   lines 495-497: all directory mutators (create, unlink, rmdir, rename)
+		   dirTo is kept stable by the write locks taken at the top of this
+		   function: all directory mutators (create, unlink, rmdir, rename)
 		   take that write lock, in-place child metadata updates never relocate
 		   entries, and get_vnode() only reads the entry set. */
 		allocation.Unlock();
