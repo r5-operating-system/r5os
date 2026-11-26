@@ -56,6 +56,8 @@ def install_kernel_sources() -> None:
         "src/system/kernel/vm/vm_page_writer.cpp",
         # R5: opt-in block_cache size stats (r5_bfs_cache_stats)
         "src/system/kernel/cache/block_cache.cpp",
+        # R5: forced unmount ignores fs_sync() errors when media is gone
+        "src/system/kernel/fs/vfs.cpp",
         "src/system/kernel/device_manager/IORequest.cpp",
         "src/system/kernel/device_manager/IORequest.h",
         "src/system/kernel/debug/user_debugger.cpp",

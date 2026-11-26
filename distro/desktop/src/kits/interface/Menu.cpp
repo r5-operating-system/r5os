@@ -1775,7 +1775,15 @@ r5_style_menu_window(BMenuWindow* window, BMenu* menu, bool* viewColorSet,
 		*viewColorSet = false;
 	}
 
-	float radius = r5Style
+	bool r5Rounded = false;
+	if (r5Style && be_control_look != NULL) {
+		float left = 0, top = 0, right = 0, bottom = 0;
+		be_control_look->GetBackgroundInsets(
+			BControlLook::B_MENU_BAR_BACKGROUND, 0,
+			left, top, right, bottom);
+		r5Rounded = left > 6.0f;
+	}
+	float radius = r5Rounded
 		? roundf(10 * BPrivate::MenuPrivate::R5Scale()) : 0.0f;
 	if (*windowRadius == radius || (*windowRadius < 0 && !r5Style)) {
 		*windowRadius = radius;

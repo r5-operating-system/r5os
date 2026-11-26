@@ -8,6 +8,26 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-26 - Stick 84 fixes: exFAT/VFS forced unmount (#4655), square menus under R5 default, account-switch timing (build 10076)
+
+- Problem (from 5625U stick 84):
+  1. Pulling an exFAT SD card after writing failed to unmount (`KPartition::UninitializeContents(): Failed to unmount device 7: No media present`), leaving the old volume icon on the desktop, repeating `could not write back` forever, and mounting a re-inserted card as a second read-only device without a capacity bar. Cause: `fs_unmount()` in `vfs.cpp` returned `fs_sync()`'s error even with `B_FORCE_UNMOUNT`, and `exfat` `Volume::SyncDisk()` returned the media-removed write error.
+  2. Under the R5 (square) default theme, the first Deskbar menu was square, while submenus (Applications/Preferences), Tracker menus, and the desktop right-click menu were round. Cause: `r5_style_menu_window()` in `Menu.cpp` gave every menu with `MenuPrivate::R5Style()` a 10 px corner radius, even though both `R5ControlLook` (square) and `R5ModernControlLook` (round) enable the R5 menu layout (`B_MENU_BACKGROUND` > 1).
+  3. Account switching occasionally felt slow on hardware; temporary switch-timing logs had been removed in PR #4663.
+- Change:
+  - `distro/kernel/src/add-ons/kernel/file_systems/exfat/Volume.cpp`: in `Volume::SyncDisk()`, when `exfat_sync()` fails because the media is gone (`B_DEV_NO_MEDIA`, `B_DEV_NOT_READY`, `ENODEV`, or `B_FILE_ERROR` / `EBADF` from disconnected `usb_disk`), log once, call `MarkReadOnly()`, and return `B_OK` so `Volume::Unmount()`'s `block_cache_delete(..., !IsReadOnly())` drops dirty blocks instead of retrying writes.
+  - `distro/kernel/src/system/kernel/fs/vfs.cpp` + `scripts/apply-kernel-bugs.py`: copied Haiku `vfs.cpp` into `distro/kernel/` with a marked MIT snippet in `fs_unmount()` so `(flags & B_FORCE_UNMOUNT) != 0` logs and continues past a failed `fs_sync()` for every file system (exFAT, FAT, BFS) and any driver disconnect error.
+  - `distro/desktop/src/kits/interface/Menu.cpp`: in `r5_style_menu_window()`, gate the 10 px menu window corner radius on `BControlLook::B_MENU_BAR_BACKGROUND` left inset > 6.0f (matching `R5ModernControlLook` vs `R5ControlLook` and `distro/ui/R5ModernStyle.h`), so every menu, submenu, and pop-up menu is square under R5 and round under R5 Modern.
+  - `distro/login/LoginApp.cpp`, `distro/app_server/AppServer.cpp`: added `LOG_DEBUG` `switch-timing:` lines for first sign-in (`create`, `keystore`, `tracker+deskbar`, `activate`, `total`), switch-back, lock, switch-user, unlock (`validate`, `activate`, `total`), and `app_server` `deactivate`/`activate` durations.
+  - Bumped `distro/BUILD` from `10075` to `10076` (no `distro/WHATSNEW` section).
+- Tested (QEMU AMD64, own image copies, build 10076):
+  - exFAT USB hot-unplug (`-device usb-storage,removable=on`, QMP `device_del` after writing a file without unmounting): kernel logged `[97.649] exfat: media removed during sync (Bad file descriptor), marking read-only` once, unmounted `/SDTEST` cleanly, removed the desktop icon with zero repeating `could not write back` lines. Re-inserting the dirty card showed one read-only volume (no capacity bar, matching Haiku Tracker's read-only volume behavior and the documented dirty-on-pull limit); re-inserting a clean card mounted read-write (`----P-W`) as a single volume with the green capacity bar.
+  - Menus under R5 (square) and R5 Modern (round), light and dark: verified Deskbar menu + submenu, Tracker File menu, and desktop right-click menu screenshots — all square under R5, all round under R5 Modern.
+  - Account-switch timing in QEMU (Lavapipe): first sign-in `create=29–37 ms`, `keystore=69–77 ms`, `tracker+deskbar=165–206 ms`, `app_server` switch `5039–9176 ms` while Lavapipe `gpu draw warm up` (54–75 s) was still running (`Compositor::SetHidden()` waits on `fComposeSlot`); after warm-up, lock `deactivate=0 ms activate=1–2 ms` (total `5–6 ms`), unlock `validate=2–5 ms activate=9–14 ms` (total `12–34 ms`), switch-user `4–5 ms`, switch-back `4–11 ms`.
+- Limits & not tested:
+  - A card pulled mid-write remains dirty on disk (existing documented limit) and mounts read-only (no Tracker capacity bar) until repaired.
+  - Not tested on 5625U SD card reader (`rtsx`/`mmc_disk`) hardware or RADV GPU yet; timing logs left in as `LOG_DEBUG` for the next 5625U stick.
+
 ## 2026-11-25 - Accounts: switch between signed-in people (fast user switching, part 2; #63)
 
 - Problem: after part 1 (#4613) added per-uid registrar isolation and multi-desktop `app_server` support, Login still ran a single signed-in person on desktop 0: there was no Switch user action, no per-person `app_server` desktop, no "Signed in" indicator on Sign in, no per-person `keystore_server`, no shutdown warning when other people were signed in, no sound muting for hidden people, and no queueing of notifications for hidden people.
