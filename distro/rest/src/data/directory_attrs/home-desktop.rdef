@@ -14,7 +14,7 @@ resource(1, "be:bgndimginfo") message {
 	"be:bgndimginfomode" = 2,
 	"be:bgndimginfoworkspaces" = -1,
 	"be:bgndimginfooffset" = point { 0, 0 },
-	"be:bgndimginfoerasetext" = false,
+	"be:bgndimginfoerasetext" = true,
 	"be:bgndimginfoset" = 0
 };
 // SPDX-SnippetEnd

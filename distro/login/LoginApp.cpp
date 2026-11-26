@@ -698,11 +698,23 @@ LoginApp::TryLogin(BMessage* message)
 
 			// Fast user switching: if this person is already signed in, just
 			// switch back to their running desktop with its own workspaces.
+			bigtime_t signInStart = system_time();
 			if (status == B_OK && is_user_signed_in(login)) {
 				r5_session_log("switch back to %s (uid %d)", login,
 					(int)targetUid);
+				syslog(LOG_DEBUG,
+					"switch-timing: sign-in switch-back start uid=%d",
+					(int)targetUid);
 				set_active_session(login);
+				bigtime_t tAct = system_time();
 				status = _AppServerActivateDesktop(targetUid);
+				syslog(LOG_DEBUG,
+					"switch-timing: sign-in switch-back uid=%d activate=%lld ms "
+					"total=%lld ms status=%s",
+					(int)targetUid,
+					(long long)((system_time() - tAct) / 1000),
+					(long long)((system_time() - signInStart) / 1000),
+					strerror(status));
 				if (status == B_OK) {
 					atomic_set(&fActiveUid, (int32)targetUid);
 					_SetActiveAudioUid(targetUid);
@@ -715,8 +727,14 @@ LoginApp::TryLogin(BMessage* message)
 					status = wipe_guest_home();
 				bool createdDesktop = false;
 				bool wroteSession = false;
+				bigtime_t createMs = 0;
 				if (status == B_OK) {
+					syslog(LOG_DEBUG,
+						"switch-timing: first sign-in start uid=%d",
+						(int)targetUid);
+					bigtime_t tCreate = system_time();
 					status = _AppServerCreateDesktop(targetUid, false);
+					createMs = (system_time() - tCreate) / 1000;
 					createdDesktop = (status == B_OK);
 				}
 				if (status == B_OK) {
@@ -726,11 +744,14 @@ LoginApp::TryLogin(BMessage* message)
 				if (status == B_OK) {
 					r5_session_log("sign-in %s (uid %d)", login,
 						(int)targetUid);
+					bigtime_t tKeystore = system_time();
 					_StartAndUnlockKeyStore(login, password);
+					bigtime_t keystoreMs = (system_time() - tKeystore) / 1000;
 					_EnableDesktopJobs();
 					_WaitGoneFor("application/x-vnd.Be-TRAK", targetUid);
 					_WaitGoneFor("application/x-vnd.Be-TSKB", targetUid);
 					// Per-session notification server on this person's desktop.
+					bigtime_t tShell = system_time();
 					_LaunchSessionAppFor(login,
 						"/system/servers/notification_server");
 					status = _LaunchSessionAppFor(login, "/system/Tracker");
@@ -746,6 +767,12 @@ LoginApp::TryLogin(BMessage* message)
 						status = _WaitSessionTeamFor("application/x-vnd.Be-TSKB",
 							targetUid);
 					}
+					syslog(LOG_DEBUG,
+						"switch-timing: first sign-in uid=%d create=%lld ms "
+						"keystore=%lld ms tracker+deskbar=%lld ms",
+						(int)targetUid, (long long)createMs,
+						(long long)keystoreMs,
+						(long long)((system_time() - tShell) / 1000));
 					if (status == B_OK) {
 						_LaunchSessionAppFor(login, "/system/apps/r5-tray");
 						_LaunchSessionAppFor(login, "/system/bin/desklink",
@@ -763,7 +790,15 @@ LoginApp::TryLogin(BMessage* message)
 						_LaunchSessionHooks(login);
 					}
 					if (status == B_OK) {
+						bigtime_t tAct = system_time();
 						status = _AppServerActivateDesktop(targetUid);
+						syslog(LOG_DEBUG,
+							"switch-timing: first sign-in uid=%d "
+							"activate=%lld ms total=%lld ms status=%s",
+							(int)targetUid,
+							(long long)((system_time() - tAct) / 1000),
+							(long long)((system_time() - signInStart) / 1000),
+							strerror(status));
 						if (status != B_OK) {
 							syslog(LOG_ERR, "Login: activate desktop %d: %s",
 								(int)targetUid, strerror(status));
@@ -885,7 +920,11 @@ LoginApp::Lock(uid_t targetUid)
 	// Fast user switching: lock lives on Login's own desktop (uid 0).
 	// Only record the switch if app_server actually activates desktop 0;
 	// otherwise refuse and log rather than failing open.
+	bigtime_t tLock = system_time();
 	status_t actStatus = _AppServerActivateDesktop(0);
+	syslog(LOG_DEBUG, "switch-timing: lock uid=%d activate=%lld ms status=%s",
+		(int)shownUid, (long long)((system_time() - tLock) / 1000),
+		strerror(actStatus));
 	if (actStatus != B_OK) {
 		r5_session_log("lock failed: activate desktop 0: %s",
 			strerror(actStatus));
@@ -919,7 +958,12 @@ LoginApp::SwitchUser(uid_t targetUid)
 		&& (targetUid != shownUid || fLockWindow != NULL)) {
 		return;
 	}
+	bigtime_t tSwitch = system_time();
 	status_t actStatus = _AppServerActivateDesktop(0);
+	syslog(LOG_DEBUG,
+		"switch-timing: switch-user uid=%d->0 activate=%lld ms status=%s",
+		(int)shownUid, (long long)((system_time() - tSwitch) / 1000),
+		strerror(actStatus));
 	if (actStatus != B_OK) {
 		r5_session_log("switch user failed: activate desktop 0: %s",
 			strerror(actStatus));
@@ -942,6 +986,7 @@ LoginApp::SwitchUser(uid_t targetUid)
 void
 LoginApp::Unlock(BMessage* message)
 {
+	bigtime_t tUnlock = system_time();
 	BString name(fLockedLogin);
 	if (name.Length() == 0)
 		signed_in_name(name);
@@ -973,7 +1018,15 @@ LoginApp::Unlock(BMessage* message)
 	struct passwd* pwd = getpwnam(name.String());
 	uid_t uid = (pwd != NULL) ? pwd->pw_uid : 0;
 	if (uid >= kMinPersonUid) {
+		bigtime_t tAct = system_time();
 		status_t actStatus = _AppServerActivateDesktop(uid);
+		syslog(LOG_DEBUG,
+			"switch-timing: unlock uid=%d validate=%lld ms activate=%lld ms "
+			"total=%lld ms status=%s",
+			(int)uid, (long long)((tAct - tUnlock) / 1000),
+			(long long)((system_time() - tAct) / 1000),
+			(long long)((system_time() - tUnlock) / 1000),
+			strerror(actStatus));
 		if (actStatus != B_OK) {
 			r5_session_log("unlock failed: activate desktop %d: %s",
 				(int)uid, strerror(actStatus));
