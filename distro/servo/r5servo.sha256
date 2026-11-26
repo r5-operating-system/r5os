@@ -4,4 +4,4 @@
 R5SERVO_VERSION=0.8.0-3
 R5SERVO_PKG=r5servo-0.8.0-3-x86_64.hpkg
 R5SERVO_URL=https://github.com/r5-operating-system/r5os/releases/download/r5servo-0.8.0-3/r5servo-0.8.0-3-x86_64.hpkg
-R5SERVO_SHA256=fc5a0eb05ba34db1f1249d2fac3a384eaf31e3a74fc6b7511b198922099b4a8c
+R5SERVO_SHA256=13db6d55a33aa96cd84cb932764f3da508ef64755b228f9686e46f96bcab8a79

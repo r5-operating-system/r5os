@@ -704,8 +704,19 @@ aomi_log_add(const char* line)
 	if (sLogRing.size() >= kMaxLogLines)
 		sLogRing.erase(sLogRing.begin());
 	sLogRing.push_back(entry);
+	// The same lines go to AOMI_LOG when it is set (tests), as the window's
+	// own log does.
+	const char* path = getenv("AOMI_LOG");
+	if (path != NULL && path[0] != '\0') {
+		FILE* file = fopen(path, "a");
+		if (file != NULL) {
+			fprintf(file, "%s\n", line);
+			fclose(file);
+		}
+	}
 	sLogLock.Unlock();
 }
+
 
 
 BString
@@ -1738,9 +1749,19 @@ BServoContentView::_AskControl(int32 kind, const char* text, BPoint where,
 	int32 accept = 0;
 	int32 value = -1;
 	char* answer = NULL;
-	if (sApi.ask_control(this, kind, text, where.x, where.y, &labels, &accept,
-			&value, &answer) != B_OK)
+	// The log (AOMI_LOG and the technical page) shows what a page asked
+	// and whether it was answered; never the answer itself.
+	BString line;
+	line.SetToFormat("page asks %d", (int)kind);
+	aomi_log_add(line.String());
+	status_t asked = sApi.ask_control(this, kind, text, where.x, where.y,
+		&labels, &accept, &value, &answer);
+	line.SetToFormat("page answered %d %s", (int)kind,
+		asked != B_OK ? "(not shown)" : accept != 0 ? "accept" : "cancel");
+	aomi_log_add(line.String());
+	if (asked != B_OK)
 		return;
+
 	if (fTab != NULL) {
 		BMessage reply(kEngAnswer);
 		reply.AddPointer("tab", fTab);
