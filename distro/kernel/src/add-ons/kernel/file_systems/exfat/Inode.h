@@ -97,12 +97,23 @@ public:
 			bool		IsDeleted() const { return fDeleted; }
 			void		SetDeleted() { fDeleted = true; }
 			void		SetParent(ino_t parent) { fParent = parent; }
+			uint32		LastCluster() const { return fLastCluster; }
+			uint32		LastIndex() const { return fLastIndex; }
+			void		SetLastCluster(uint32 cluster, uint32 index)
+							{ fLastCluster = cluster; fLastIndex = index; }
+			bool		IsDataDirty() const { return fDataDirty; }
+			void		SetDataDirty(bool dirty) { fDataDirty = dirty; }
+			bool		NeedsCommit() const
+							{ return IsFile() && !IsDeleted()
+								&& (fDataDirty
+									|| (uint64)ValidSize() != fCommittedValid); }
 			void		ApplyCacheSize(off_t invalidateFrom = -1);
 			void		AdoptStream(uint32 first, uint64 dataLength,
 							uint64 validLength, uint8 flags, uint16 attributes,
 							uint8 chunks, cluster_t entryCluster,
 							uint32 entryOffset, uint16 nameHash,
-							bool keepValid = false);
+							bool keepValid = false,
+							const uint8* primary = NULL);
 			// SPDX-SnippetEnd
 			uid_t		UserID() const { return 0;/*fNode.UserID();*/ }
 			gid_t		GroupID() const { return 0;/*fNode.GroupID();*/ }
@@ -110,13 +121,18 @@ public:
 							{ GetModificationTime(timespec); }
 			void		GetModificationTime(struct timespec &timespec) const
 							{ _GetTimespec(fFileEntry.file.ModificationDate(),
-								fFileEntry.file.ModificationTime(), timespec); }
+								fFileEntry.file.ModificationTime(),
+								fFileEntry.file.modification_time_low,
+								fFileEntry.file.reserved2[1], timespec); }
 			void		GetCreationTime(struct timespec &timespec) const
 							{ _GetTimespec(fFileEntry.file.CreationDate(),
-								fFileEntry.file.CreationTime(), timespec); }
+								fFileEntry.file.CreationTime(),
+								fFileEntry.file.creation_time_low,
+								fFileEntry.file.reserved2[0], timespec); }
 			void		GetAccessTime(struct timespec &timespec) const
 							{ _GetTimespec(fFileEntry.file.AccessDate(),
-								fFileEntry.file.AccessTime(), timespec); }
+								fFileEntry.file.AccessTime(), 0,
+								fFileEntry.file.reserved2[2], timespec); }
 
 			Volume*		GetVolume() const { return fVolume; }
 
@@ -140,8 +156,8 @@ private:
 						Inode &operator=(const Inode&);
 							// no implementation
 
-			void		_GetTimespec(uint16 date, uint16 time,
-							struct timespec &timespec) const;
+			void		_GetTimespec(uint16 date, uint16 time, uint8 tenMs,
+							uint8 utcOffset, struct timespec &timespec) const;
 			void		_Init();
 
 			rw_lock		fLock;
@@ -158,11 +174,14 @@ private:
 			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 			// SPDX-License-Identifier: MIT
 			bool		fDeleted;
+			bool		fDataDirty;
 			mutex		fWriterLock;
 			int32		fWriter;
 			int32		fWriteDepth;
 			uint64		fCommittedValid;
 			int64		fChainHint;
+			uint32		fLastCluster;
+			uint32		fLastIndex;
 			uint32		fDirCluster;
 			uint64		fDirLength;
 			uint8		fDirFlags;

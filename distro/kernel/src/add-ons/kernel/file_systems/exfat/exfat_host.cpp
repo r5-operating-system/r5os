@@ -284,6 +284,11 @@ run(const char* path, bool large)
 		&time, &longFile);
 	if (status != B_OK)
 		return fail("long name", status);
+	exfat_node longRead;
+	status = exfat_read_entry(&store, &disk, &root, longFile.entry_index,
+		&longRead);
+	if (status != B_OK || longRead.secondary_count != 18)
+		return fail("read 255-char entry", status);
 	status = exfat_remove_entry(&store, &disk, NULL, &root, longName, &found);
 	if (status != B_OK)
 		return fail("unlink long", status);

@@ -42,6 +42,8 @@ DataStream::~DataStream()
 status_t
 DataStream::FindBlock(off_t pos, off_t& physical, off_t *_length, off_t maxRun)
 {
+	if (pos < 0)
+		return B_BAD_VALUE;
 	if (pos >= fSize) {
 		TRACE("FindBlock: offset larger than size\n");
 		return B_ENTRY_NOT_FOUND;
@@ -64,9 +66,10 @@ DataStream::FindBlock(off_t pos, off_t& physical, off_t *_length, off_t maxRun)
 	uint64 clusterIndex = (uint64)pos / kClusterSize;
 	uint64 within = (uint64)pos % kClusterSize;
 	if (fInode->IsContiguous()) {
-		cluster = (cluster_t)(cluster + clusterIndex);
-		if (cluster < 2 || cluster > heap)
+		uint64 next = (uint64)cluster + clusterIndex;
+		if (next < 2 || next > heap)
 			return B_BAD_DATA;
+		cluster = (cluster_t)next;
 	} else {
 		uint64 from = 0;
 		cluster_t recalled = 0;

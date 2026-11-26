@@ -39,6 +39,8 @@ fill_node(Inode* inode, exfat_node* node, exfat_node* up)
 	node->attributes = inode->Attributes();
 	node->name_hash = inode->NameHash();
 	node->previous_cluster = inode->StartCluster();
+	node->last_cluster = inode->LastCluster();
+	node->last_index = inode->LastIndex();
 	node->check_cluster = true;
 	node->detached = inode->IsDeleted();
 	node->flags = inode->StreamFlags();
@@ -56,7 +58,8 @@ adopt(Inode* inode, const exfat_node* node, Inode* holder)
 	inode->AdoptStream(node->first_cluster, node->data_length,
 		node->valid_length, node->flags, node->attributes,
 		node->secondary_count, node->entry_cluster, node->entry_index,
-		node->name_hash);
+		node->name_hash, false, node->primary);
+	inode->SetLastCluster(node->last_cluster, node->last_index);
 	if (inode->ID() == 1)
 		return;
 	inode->GetVolume()->MoveNode(inode->ID(), node->entry_cluster,
@@ -270,7 +273,6 @@ create_entry(Volume* volume, Inode* directory, const char* name,
 	}
 	status = publish_new(volume, directory, &created, openMode, _cookie, _id);
 	if (status == B_OK) {
-		entry_cache_add(volume->ID(), directory->ID(), name, *_id);
 		notify_entry_created(volume->ID(), directory->ID(), name, *_id);
 	} else {
 		MutexLocker again(volume->AllocLock());
@@ -395,7 +397,6 @@ unlink_name(Volume* volume, Inode* directory, const char* name, bool directoryOn
 	}
 	volume->ForgetIno(id);
 	inode->SetDeleted();
-	entry_cache_remove(volume->ID(), directory->ID(), name);
 	notify_entry_removed(volume->ID(), directory->ID(), name, id);
 	remove_vnode(volume->FSVolume(), id);
 	put_vnode(volume->FSVolume(), id);
@@ -586,15 +587,20 @@ exfat_rename_vnode(fs_volume* _volume, fs_vnode* _fromDir, const char* fromName,
 	}
 	Inode* replaced = NULL;
 	if (status == B_OK && replace) {
+		/* Acquire dest vnode outside AllocLock to avoid VFS eviction deadlock. */
+		allocation.Unlock();
 		if (get_vnode(volume->FSVolume(), destID, (void**)&replaced) != B_OK)
 			replaced = NULL;
+		allocation.Lock();
 		status = exfat_deactivate(volume->Store(), volume->Disk(), dirTo,
 			dest.entry_index, (uint32)dest.secondary_count + 1);
 		note_disk(volume, status);
 		if (status == B_OK && replaced != NULL)
 			replaced->SetDeleted();
 		else if (replaced != NULL) {
+			allocation.Unlock();
 			put_vnode(volume->FSVolume(), destID);
+			allocation.Lock();
 			replaced = NULL;
 		}
 	}
@@ -612,14 +618,6 @@ exfat_rename_vnode(fs_volume* _volume, fs_vnode* _fromDir, const char* fromName,
 			toDir->ID());
 		volume->SetDir(sourceID, toDir->StartCluster(), (uint64)toDir->Size(),
 			toDir->StreamFlags(), toDir->ID() == 1);
-		Inode* live = NULL;
-		if (get_vnode(volume->FSVolume(), sourceID, (void**)&live) == B_OK) {
-			live->AdoptStream(moved.first_cluster, moved.data_length,
-				moved.valid_length, moved.flags, moved.attributes,
-				moved.secondary_count, moved.entry_cluster,
-				moved.entry_index, moved.name_hash, true);
-			live->SetParent(toDir->ID());
-		}
 		if (replace)
 			volume->ForgetIno(destID);
 		allocation.Unlock();
@@ -630,7 +628,15 @@ exfat_rename_vnode(fs_volume* _volume, fs_vnode* _fromDir, const char* fromName,
 			fromGrand.inode->ApplyCacheSize();
 		if (toGrand.held)
 			toGrand.inode->ApplyCacheSize();
-		if (live != NULL) {
+		Inode* live = NULL;
+		if (get_vnode(volume->FSVolume(), sourceID, (void**)&live) == B_OK) {
+			live->MetaLock();
+			live->AdoptStream(moved.first_cluster, moved.data_length,
+				moved.valid_length, moved.flags, moved.attributes,
+				moved.secondary_count, moved.entry_cluster,
+				moved.entry_index, moved.name_hash, true, moved.primary);
+			live->SetParent(toDir->ID());
+			live->MetaUnlock();
 			live->ApplyCacheSize();
 			put_vnode(volume->FSVolume(), sourceID);
 		}
@@ -650,10 +656,8 @@ exfat_rename_vnode(fs_volume* _volume, fs_vnode* _fromDir, const char* fromName,
 	release_parent(volume, &fromGrand);
 	release_parent(volume, &toGrand);
 	if (status == B_OK) {
-		entry_cache_remove(volume->ID(), fromDir->ID(), fromName);
 		notify_entry_moved(volume->ID(), fromDir->ID(), fromName, toDir->ID(),
 			toName, sourceID);
-		entry_cache_add(volume->ID(), toDir->ID(), toName, sourceID);
 	}
 	return unlock_pair(first, second, status);
 }
@@ -953,6 +957,8 @@ exfat_write(fs_volume* _volume, fs_vnode* _node, void* _cookie, off_t pos,
 			newValid = pos + (off_t)written;
 		inode->MetaLock();
 		inode->SetValidLength((uint64)newValid);
+		if (written > 0)
+			inode->SetDataDirty(true);
 		inode->MetaUnlock();
 	}
 	inode->WriteUnlock();
@@ -996,7 +1002,7 @@ exfat_device_transfer(Volume* volume, Inode* inode, off_t pos,
 {
 	size_t todo = *_numBytes;
 	size_t done = 0;
-	size_t vecIndex = 0;
+	uint32 vecIndex = 0;
 	size_t vecOff = 0;
 	status_t status = B_OK;
 	uint32 bsize = volume->BlockSize();
@@ -1004,8 +1010,7 @@ exfat_device_transfer(Volume* volume, Inode* inode, off_t pos,
 		return B_BAD_VALUE;
 	uint8* bounce = NULL;
 	while (done < todo && vecIndex < count && status == B_OK) {
-		size_t room = vecs[vecIndex].iov_len - vecOff;
-		if (room == 0) {
+		if (vecOff >= vecs[vecIndex].iov_len) {
 			vecIndex++;
 			vecOff = 0;
 			continue;
@@ -1016,58 +1021,70 @@ exfat_device_transfer(Volume* volume, Inode* inode, off_t pos,
 			(off_t)(todo - done));
 		if (status != B_OK)
 			break;
-		size_t chunk = todo - done;
-		if ((off_t)chunk > run)
-			chunk = (size_t)run;
-		if (chunk > room)
-			chunk = room;
-		uint8* dest = (uint8*)vecs[vecIndex].iov_base + vecOff;
-		size_t chunkDone = 0;
-		while (chunkDone < chunk && status == B_OK) {
-			off_t at = physical + (off_t)chunkDone;
-			uint32 skip = (uint32)((uint64)at & (bsize - 1));
-			size_t aligned = chunk - chunkDone;
-			if (skip == 0 && aligned >= bsize) {
-				aligned &= ~((size_t)bsize - 1);
-				status = device_range(volume->Device(), write, at,
-					dest + chunkDone, aligned);
-				chunkDone += aligned;
-				continue;
-			}
+		size_t avail = todo - done;
+		if ((off_t)avail > run)
+			avail = (size_t)run;
+
+		/* Fast path: sector-aligned scatter-gather transfer across multiple
+		   iovecs in a single device call (up to 256 KiB per call). */
+		uint32 skip = (uint32)((uint64)physical & (bsize - 1));
+		if (skip == 0 && avail >= bsize) {
+			size_t aligned = avail & ~((size_t)bsize - 1);
+			if (aligned > 256 * 1024)
+				aligned = 256 * 1024;
+			file_io_vec fileVec;
+			fileVec.offset = physical;
+			fileVec.length = (off_t)aligned;
+			size_t transferred = aligned;
+			status = write
+				? write_file_io_vec_pages(volume->Device(), &fileVec, 1,
+					vecs, count, &vecIndex, &vecOff, &transferred)
+				: read_file_io_vec_pages(volume->Device(), &fileVec, 1,
+					vecs, count, &vecIndex, &vecOff, &transferred);
+			if (status == B_OK && transferred == 0)
+				status = B_IO_ERROR;
+			if (status != B_OK)
+				break;
+			done += transferred;
+			continue;
+		}
+
+		/* Slow path: unaligned head or tail sector via bounce buffer. */
+		size_t room = vecs[vecIndex].iov_len - vecOff;
+		size_t piece = bsize - skip;
+		if (piece > avail)
+			piece = avail;
+		if (piece > room)
+			piece = room;
+		if (bounce == NULL) {
+			bounce = (uint8*)malloc(bsize);
 			if (bounce == NULL) {
-				bounce = (uint8*)malloc(bsize);
-				if (bounce == NULL) {
-					status = B_NO_MEMORY;
-					break;
-				}
+				status = B_NO_MEMORY;
+				break;
 			}
-			off_t sector = at - (off_t)skip;
-			size_t piece = bsize - skip;
-			if (piece > chunk - chunkDone)
-				piece = chunk - chunkDone;
-			if (write && piece != bsize) {
-				status = device_range(volume->Device(), false, sector, bounce,
-					bsize);
-				if (status != B_OK)
-					break;
-			}
-			if (write)
-				memcpy(bounce + skip, dest + chunkDone, piece);
-			if (write) {
-				status = device_range(volume->Device(), true, sector, bounce,
-					bsize);
-			} else {
-				status = device_range(volume->Device(), false, sector, bounce,
-					bsize);
-				if (status == B_OK)
-					memcpy(dest + chunkDone, bounce + skip, piece);
-			}
-			chunkDone += piece;
+		}
+		off_t sector = physical - (off_t)skip;
+		uint8* dest = (uint8*)vecs[vecIndex].iov_base + vecOff;
+		if (write && piece != bsize) {
+			status = device_range(volume->Device(), false, sector, bounce,
+				bsize);
+			if (status != B_OK)
+				break;
+		}
+		if (write) {
+			memcpy(bounce + skip, dest, piece);
+			status = device_range(volume->Device(), true, sector, bounce,
+				bsize);
+		} else {
+			status = device_range(volume->Device(), false, sector, bounce,
+				bsize);
+			if (status == B_OK)
+				memcpy(dest, bounce + skip, piece);
 		}
 		if (status != B_OK)
 			break;
-		done += chunk;
-		vecOff += chunk;
+		done += piece;
+		vecOff += piece;
 		if (vecOff >= vecs[vecIndex].iov_len) {
 			vecIndex++;
 			vecOff = 0;
@@ -1109,15 +1126,19 @@ exfat_write_pages(fs_volume* _volume, fs_vnode* _node, void*,
 }
 
 
-static status_t
-commit_valid(Inode* inode)
+status_t
+exfat_commit_inode(Inode* inode, bool flushDrive)
 {
-	if (!inode->IsFile() || inode->IsDeleted())
-		return B_OK;
-	if ((uint64)inode->ValidSize() == inode->CommittedValid())
+	if (!inode->NeedsCommit())
 		return B_OK;
 	Volume* volume = inode->GetVolume();
+	if (volume->IsReadOnly())
+		return B_OK;
 	inode->WriteLock();
+	if (!inode->NeedsCommit()) {
+		inode->WriteUnlock();
+		return B_OK;
+	}
 	if (inode->FileCache() != NULL) {
 		status_t status = file_cache_sync(inode->FileCache());
 		if (status != B_OK) {
@@ -1125,10 +1146,12 @@ commit_valid(Inode* inode)
 			return status;
 		}
 	}
-	status_t flushed = volume->FlushDrive();
-	if (flushed != B_OK) {
-		inode->WriteUnlock();
-		return flushed;
+	if (flushDrive) {
+		status_t flushed = volume->FlushDrive();
+		if (flushed != B_OK) {
+			inode->WriteUnlock();
+			return flushed;
+		}
 	}
 	held_parent parent;
 	held_parent grand;
@@ -1165,6 +1188,7 @@ commit_valid(Inode* inode)
 	note_disk(volume, status);
 	if (status == B_OK) {
 		adopt(inode, &node, parent.held ? parent.inode : volume->RootNode());
+		inode->SetDataDirty(false);
 		if (parent.held)
 			adopt(parent.inode, &parent.node, grand.held ? grand.inode
 				: (parent.inode->ID() != 1 ? volume->RootNode() : NULL));
@@ -1181,7 +1205,7 @@ commit_valid(Inode* inode)
 status_t
 exfat_commit(fs_volume* _volume, fs_vnode* _node)
 {
-	return commit_valid((Inode*)_node->private_node);
+	return exfat_commit_inode((Inode*)_node->private_node, false);
 }
 
 
@@ -1198,7 +1222,7 @@ exfat_fsync(fs_volume* _volume, fs_vnode* _node, bool /*dataOnly*/)
 		status = volume->FlushDrive();
 	inode->WriteUnlock();
 	if (status == B_OK)
-		status = commit_valid(inode);
+		status = exfat_commit_inode(inode, true);
 	if (status == B_OK)
 		status = block_cache_sync(volume->BlockCache());
 	if (status == B_OK)
