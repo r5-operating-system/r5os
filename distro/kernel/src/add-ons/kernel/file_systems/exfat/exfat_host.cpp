@@ -548,6 +548,33 @@ cut_power(const char* path)
 	return 0;
 }
 
+static uint16
+seed_name_hash(const char* ascii)
+{
+	uint16 hash = 0;
+	for (size_t i = 0; ascii[i] != '\0'; i++) {
+		uint8 c = (uint8)ascii[i];
+		if (c >= 'a' && c <= 'z')
+			c = (uint8)(c - 32);
+		hash = (uint16)(((hash & 1) ? 0x8000 : 0) + (hash >> 1) + c);
+		hash = (uint16)(((hash & 1) ? 0x8000 : 0) + (hash >> 1) + 0);
+	}
+	return hash;
+}
+
+static uint16
+seed_entry_checksum(const uint8* bytes, uint32 entries)
+{
+	uint32 length = entries * 32;
+	uint16 sum = 0;
+	for (uint32 i = 0; i < length; i++) {
+		if (i == 2 || i == 3)
+			continue;
+		sum = (uint16)(((sum & 1) ? 0x8000 : 0) + (sum >> 1) + bytes[i]);
+	}
+	return sum;
+}
+
 static int
 seed(const char* path)
 {
@@ -602,6 +629,66 @@ seed(const char* path)
 	if (status == B_OK) {
 		status = exfat_write_bytes(&store, &disk, &root, &file, 0, text,
 			strlen(text), &time, &moved);
+	}
+	/* Plant CritSec folder for the QEMU guest DirectoryIterator test:
+	   alpha.txt, then a 4-entry set with an unknown 0xC2 critical secondary,
+	   then omega.txt. */
+	if (status == B_OK) {
+		exfat_node critDir;
+		status = exfat_create(&store, &disk, NULL, &root, "CritSec", true, 0,
+			&time, &critDir);
+		if (status == B_OK) {
+			critDir.up = &root;
+			exfat_node alpha;
+			status = exfat_create(&store, &disk, &root, &critDir, "alpha.txt",
+				false, 0, &time, &alpha);
+			if (status == B_OK) {
+				uint64 wrote = 0;
+				status = exfat_write_bytes(&store, &disk, &critDir, &alpha, 0,
+					"alpha\n", 6, &time, &wrote);
+			}
+			if (status == B_OK) {
+				uint32 badSlot = alpha.entry_index + alpha.secondary_count + 1;
+				uint64 badOff = (uint64)badSlot * 32;
+				uint64 phys = 0;
+				uint64 run = 0;
+				status = exfat_map(&store, &disk, critDir.first_cluster,
+					critDir.data_length, critDir.flags, badOff, &phys, &run);
+				if (status == B_OK) {
+					uint8 badSet[4 * 32];
+					memset(badSet, 0, sizeof(badSet));
+					badSet[0] = 0x85;
+					badSet[1] = 3;
+					badSet[32] = 0xc0;
+					badSet[32 + 1] = 0x01;
+					badSet[32 + 3] = 3;
+					uint16 nh = seed_name_hash("bad");
+					badSet[32 + 4] = (uint8)nh;
+					badSet[32 + 5] = (uint8)(nh >> 8);
+					badSet[64] = 0xc1;
+					badSet[64 + 2] = 'b';
+					badSet[64 + 4] = 'a';
+					badSet[64 + 6] = 'd';
+					badSet[96] = 0xc2; /* unknown critical secondary */
+					uint16 sum = seed_entry_checksum(badSet, 4);
+					badSet[2] = (uint8)sum;
+					badSet[3] = (uint8)(sum >> 8);
+					if (pwrite(fd, badSet, sizeof(badSet), (off_t)phys)
+							!= (ssize_t)sizeof(badSet))
+						status = B_IO_ERROR;
+				}
+			}
+			if (status == B_OK) {
+				exfat_node omega;
+				status = exfat_create(&store, &disk, &root, &critDir,
+					"omega.txt", false, 0, &time, &omega);
+				if (status == B_OK) {
+					uint64 wrote = 0;
+					status = exfat_write_bytes(&store, &disk, &critDir, &omega,
+						0, "omega\n", 6, &time, &wrote);
+				}
+			}
+		}
 	}
 	if (status == B_OK)
 		status = exfat_sync(&store, &disk);
@@ -786,10 +873,11 @@ test_bitmap_next_free_edge(void)
 static int
 test_unknown_critical_secondary(void)
 {
-	/* Regression test: a folder containing a normal file, then an entry set
-	   with an unknown critical secondary entry (0xC2), then another normal
-	   file. Both normal files must be listed (skipping the 0xC2 set as a
-	   whole) and found by name via exfat_lookup(). */
+	/* Lookup by name skips a set with an unknown critical secondary (0xC2):
+	   a folder contains alpha.txt, a 4-entry set with a 0xC2 secondary, and
+	   omega.txt. Both normal files must be found by name via exfat_lookup().
+	   (DirectoryIterator listing is kernel-only and tested in QEMU via
+	   scripts/exfat-guest.c.) */
 	const uint32 blockSize = 512;
 	const uint32 totalBlocks = 64;
 	uint8* mem = (uint8*)calloc(totalBlocks, blockSize);
@@ -906,86 +994,8 @@ test_unknown_critical_secondary(void)
 		return fail("crit lookup omega", status);
 	}
 
-	/* Walk the directory with the exact DirectoryIterator::_GetNext() rules:
-	   skip unknown critical secondary sets (0xC2-0xDF) as a whole, skip
-	   unknown benign secondaries (0xE0-0xFF) inside a set, and list both
-	   alpha.txt and omega.txt. */
-	int listed = 0;
-	bool sawAlpha = false;
-	bool sawOmega = false;
-	uint32 cursor = 0;
-	const uint32 capacity = 1024 / 32;
-	while (cursor < capacity) {
-		bool inFile = false;
-		bool skipSet = false;
-		int32 chunkCount = 1;
-		uint8 nameLen = 0;
-		char ascii[32];
-		memset(ascii, 0, sizeof(ascii));
-		uint32 namePos = 0;
-		bool gotFile = false;
-		while (cursor < capacity) {
-			const uint8* e = dirBytes + cursor * 32;
-			cursor++;
-			if (e[0] == 0)
-				break;
-			if (skipSet) {
-				chunkCount--;
-				if (chunkCount <= 0) {
-					skipSet = false;
-					inFile = false;
-					namePos = 0;
-					nameLen = 0;
-					chunkCount = 1;
-				}
-				continue;
-			}
-			if (e[0] == 0x85) {
-				inFile = true;
-				namePos = 0;
-				nameLen = 0;
-				chunkCount = e[1];
-			} else if (e[0] == 0xc0) {
-				chunkCount--;
-				nameLen = e[3];
-			} else if (e[0] == 0xc1) {
-				chunkCount--;
-				for (uint32 u = 0; u < 15 && namePos < sizeof(ascii) - 1; u++)
-					ascii[namePos++] = (char)e[2 + u * 2];
-			} else if (inFile && chunkCount > 0 && (e[0] & 0xe0) == 0xe0) {
-				chunkCount--;
-			} else if (inFile && chunkCount > 0 && (e[0] & 0xc0) == 0xc0) {
-				chunkCount--;
-				if (chunkCount > 0)
-					skipSet = true;
-				else {
-					inFile = false;
-					namePos = 0;
-					nameLen = 0;
-					chunkCount = 1;
-				}
-				continue;
-			}
-			if (chunkCount <= 0) {
-				gotFile = true;
-				break;
-			}
-		}
-		if (!gotFile)
-			break;
-		if (nameLen < sizeof(ascii))
-			ascii[nameLen] = '\0';
-		listed++;
-		if (strcmp(ascii, "alpha.txt") == 0)
-			sawAlpha = true;
-		else if (strcmp(ascii, "omega.txt") == 0)
-			sawOmega = true;
-	}
-
 	exfat_disk_close(&disk);
 	free(mem);
-	if (listed != 2 || !sawAlpha || !sawOmega)
-		return fail("crit list files", B_BAD_DATA);
 	return 0;
 }
 

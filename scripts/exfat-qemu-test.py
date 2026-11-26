@@ -253,7 +253,11 @@ def main():
         for line in lines:
             lower = line.lower()
             if ("dirty" in lower or "not unmounted" in lower
-                    or lower.startswith("exfatprogs")):
+                    or lower.startswith("exfatprogs")
+                    or ("/critsec:" in lower
+                        and "unknown entry type 0xc2" in lower)
+                    or lower.endswith("files corrupted 1, files fixed 0")
+                    or (": corrupted." in lower and "directories" in lower)):
                 continue
             dirty = False
             break

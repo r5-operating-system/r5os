@@ -7,6 +7,7 @@
  * so the host can read it on the serial port.
  */
 
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -79,6 +80,47 @@ main(int argc, char** argv)
 		close(fd);
 	step("read", stat("hello.txt", &helloStat) == 0 && helloStat.st_size == 12
 		&& got == 12 && memcmp(hello, "hello exfat\n", 12) == 0);
+
+	/* Seeded folder CritSec contains alpha.txt, an entry set with an unknown
+	   0xC2 critical secondary ("bad"), and omega.txt. List it through the
+	   real driver (readdir) and open both normal files by name. */
+	{
+		int sawAlpha = 0;
+		int sawOmega = 0;
+		int sawBad = 0;
+		int dirOk = 0;
+		DIR* dir = opendir("CritSec");
+		if (dir != NULL) {
+			errno = 0;
+			struct dirent* ent;
+			while ((ent = readdir(dir)) != NULL) {
+				if (strcmp(ent->d_name, "alpha.txt") == 0)
+					sawAlpha = 1;
+				else if (strcmp(ent->d_name, "omega.txt") == 0)
+					sawOmega = 1;
+				else if (strcmp(ent->d_name, "bad") == 0)
+					sawBad = 1;
+			}
+			if (errno == 0)
+				dirOk = 1;
+			closedir(dir);
+		}
+		char bufA[16];
+		char bufO[16];
+		memset(bufA, 0, sizeof(bufA));
+		memset(bufO, 0, sizeof(bufO));
+		int fdA = open("CritSec/alpha.txt", O_RDONLY);
+		ssize_t gotA = fdA < 0 ? -1 : read(fdA, bufA, sizeof(bufA) - 1);
+		if (fdA >= 0)
+			close(fdA);
+		int fdO = open("CritSec/omega.txt", O_RDONLY);
+		ssize_t gotO = fdO < 0 ? -1 : read(fdO, bufO, sizeof(bufO) - 1);
+		if (fdO >= 0)
+			close(fdO);
+		step("crit-secondary", dirOk && sawAlpha && sawOmega && !sawBad
+			&& gotA == 6 && memcmp(bufA, "alpha\n", 6) == 0
+			&& gotO == 6 && memcmp(bufO, "omega\n", 6) == 0);
+	}
 
 	char odd[1000];
 	memset(odd, 'a', sizeof(odd));
