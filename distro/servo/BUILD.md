@@ -19,7 +19,7 @@ sed -i 's/\r$//' scripts/build-r5servo.sh scripts/run-r5servo-qemu.sh
 scripts/build-r5servo.sh
 ```
 
-The script stops and names the path if a patched tree or Rust 1.99.1 is missing. A machine without `/home/nickr/r5os/servo-build` cannot start from an empty disk.
+The script downloads a missing third-party tree from the pinned crates.io tarball and applies `distro/servo/patches/`. One line per patch, saying why, is `distro/servo/patches/WHY`. An existing tree is left in place. `R5_SERVO_REFRESH_PATCHES=1` replaces it, and that rebuilds SpiderMonkey. Rust 1.99.1, LLVM, the Haiku cross compiler, and `servo.image` are still only on this machine. The script stops and names the path if one of those is missing.
 
 After a successful `BUILD_OK`, strip before copying onto an image. An unstripped library is about 634M; stripped it is about 144M.
 
@@ -58,7 +58,7 @@ Do not add `libr5servo.so` to an image list, What's new, or `distro/BUILD`. Do n
 |---|---|
 | `rust/` | Rust 1.99.1. `RUSTUP_HOME` is `rust/rustup`, `CARGO_HOME` is `rust/cargo`. Cargo is `cargo +1.99.1`. |
 | `llvm/lib` | `LIBCLANG_PATH` for bindgen. |
-| `mozjs-sys`, `surfman`, `ipc-channel`, `gaol`, `servo-fonts`, `servo-fonts-traits`, `servo-script` | Patched trees. Not git repos. The recipe rewrites `[patch]` to these absolute paths so cargo reuses the SpiderMonkey it already built. |
+| `mozjs-sys`, `surfman`, `ipc-channel`, `gaol`, `servo-fonts`, `servo-fonts-traits`, `servo-script` | Patched trees. Not git repos. Missing ones are recreated from crates.io plus `distro/servo/patches/`. The recipe rewrites `[patch]` to these absolute paths so cargo reuses the SpiderMonkey it already built. |
 | `target/` | Cargo target dir. About 16G once SpiderMonkey is built. |
 | `r5servo-engine/` | Staged copy of `distro/servo/engine` with absolute patch paths. The script deletes and rewrites it. |
 | `r5servo-out/libr5servo.so`, `r5servo-out/r5-servo-test` | The products. |
@@ -89,13 +89,17 @@ SpiderMonkey's `include_next <zlib.h>` needs the vendored header from `libz-sys-
 
 ## Patches, and why
 
-The script points cargo at the trees. It does not re-download them.
+Each file in `distro/servo/patches/` applies with `patch -p1` on the unpacked crates.io tarball of the pinned version. `distro/servo/patches/WHY` is one line per file. The script fetches `https://static.crates.io/crates/<crate>/<crate>-<version>.crate` when the tree is missing.
 
-- **surfman.** Haiku EGL is Mesa's surfaceless platform. The only config is 8/8/8/8 and it has no 24-bit depth or 8-bit stencil, so the context request drops those two. `LIBGL_ALWAYS_SOFTWARE` is left set, so `GALLIUM_DRIVER=zink` reaches Lavapipe. The hardware adapter is the low-power one, so a single GPU is not asked for `DRI_PRIME=1`.
-- **ipc-channel.** Haiku has no `memfd`. The in-process backend is the one Android uses.
-- **gaol.** Haiku has no sandbox. A profile cannot be built; the child is not jailed.
-- **fonts.** Haiku is not in the Linux/Android target list. The build uses the bundled FreeType the Android target already uses, so it does not look for a host `freetype` pkg-config file.
-- **mozjs_sys / servo-script.** The Haiku target is added so SpiderMonkey and the script crate configure and link with the Haiku cross compiler. `HOST_CC` stays the Linux gcc; the cross compiler is not the host compiler.
+- **mozjs_sys 153.6.0-1.** SpiderMonkey's configure does not know Haiku, a few POSIX files need it, and bindgen's host libclang must be pointed at the Haiku C++ headers (`R5_BINDGEN_CLANG_ARGS_FILE`).
+- **surfman 0.14.0.** Haiku EGL is Mesa's surfaceless platform. The only config is 8/8/8/8 and it has no 24-bit depth or 8-bit stencil, so the context request drops those two. `LIBGL_ALWAYS_SOFTWARE` is left set, so `GALLIUM_DRIVER=zink` reaches Lavapipe. The hardware adapter is the low-power one, so a single GPU is not asked for `DRI_PRIME=1`. There is no native window; the widget's size becomes a pbuffer.
+- **ipc-channel 0.23.1.** Haiku has no `memfd`. The in-process backend is the one Android uses.
+- **gaol 0.2.1.** Haiku has no sandbox. A profile cannot be built; the child is not jailed.
+- **servo-fonts 0.8.0.** Haiku is not in the Linux font list. The build uses the bundled FreeType the Android target already uses, so it does not look for a host `freetype` pkg-config file.
+- **servo-fonts-traits 0.8.0.** The font-file identifier is the Unix path code, and Haiku was not in that cfg.
+- **servo-script 0.8.0.** `navigator.platform` has no Haiku string, so the script crate did not build for that target.
+
+`HOST_CC` stays the Linux gcc; the cross compiler is not the host compiler.
 
 The shared library is Haiku g++ around the Rust staticlib, with `--whole-archive` and `--allow-multiple-definition` (two copies of lz4). A cdylib hid the C++ symbols. NEEDED libraries: `libstdc++`, `libbe`, `libz`, `libbsd`, `libgcc_s`, `libroot`, `libnetwork`. Mesa `libGL` is opened at runtime.
 
@@ -127,3 +131,15 @@ This round does not add the library to an image list.
 | `libr5servo.so` after strip | 144M |
 
 A from-scratch SpiderMonkey rebuild was not run for these numbers. Do not start one if `mozjs-sys` is still at `/home/nickr/r5os/servo-build/mozjs-sys`.
+
+## Where this stopped
+
+26 Nov 2026, QEMU KVM, guest `r5-servo-proof`, beside other sessions' guests. The red `data:` document finished (body text `R5`, one pixel `240 3 0 0`). The GL string was `zink Vulkan 1.4(llvmpipe (LLVM 21.1.8, 256 bits) (MESA_LLVMPIPE))`.
+
+The boot script waits until `ifconfig` shows an `inet` address other than `127.0.0.1`. On the 10:16–10:22 Europe/Amsterdam boot that wait was `net-wait 0`: the guest already had `10.0.2.15` (QEMU user net). It then requested `https://http2.pro/api/v1`. `net::http_loader` logged the GET at 10:17 Europe/Amsterdam and, one minute later, `dns error` / `No address associated with hostname`. The page text was `Could not load the requested page: client error (Connect)`. No HTTP version line was logged.
+
+From the host, the same URL answers. `curl` at 10:16 Europe/Amsterdam got `HTTP/2 301` to `https://nhacaitop10.win/api/v1`. The old `{"http2":1}` body is not what that host returns anymore.
+
+## Next step
+
+Make the guest resolve `http2.pro` (QEMU user-net's resolver is `10.0.2.3`; this image did not). Load the URL again and record the `net::http_loader` response version. A 301 is still HTTP/2 if that line says so. Do not treat the redirect body as the proof. The TLS change in `elf_tls.cpp` is still source only. The 5625U stick is still not run. `cargo deny check licenses` is still not run.

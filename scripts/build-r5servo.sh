@@ -15,21 +15,51 @@ GCC="$HAIKU/generated.x86_64/cross-tools-x86_64/bin/x86_64-unknown-haiku-gcc"
 AR="$HAIKU/generated.x86_64/cross-tools-x86_64/bin/x86_64-unknown-haiku-ar"
 OUT="$SERVO_SRC/r5servo-out"
 LOG="$SERVO_SRC/r5servo-build.log"
+PATCHES="$ROOT/distro/servo/patches"
+
+# Recreate a patched tree from the pinned crates.io tarball plus one
+# patch. An existing tree is left in place so SpiderMonkey is not built
+# again. R5_SERVO_REFRESH_PATCHES=1 replaces it.
+fetch_crate() {
+	dir="$1"
+	crate="$2"
+	version="$3"
+	patch="$4"
+	dest="$SERVO_SRC/$dir"
+	if [ -f "$dest/Cargo.toml" ] && [ "${R5_SERVO_REFRESH_PATCHES:-0}" != 1 ]; then
+		return 0
+	fi
+	if [ ! -f "$PATCHES/$patch" ]; then
+		echo "missing $PATCHES/$patch" >&2
+		exit 1
+	fi
+	tmp=$(mktemp -d)
+	echo "fetch $crate $version"
+	curl -fsSL -o "$tmp/crate.tar.gz" \
+		"https://static.crates.io/crates/${crate}/${crate}-${version}.crate"
+	tar -xzf "$tmp/crate.tar.gz" -C "$tmp"
+	unpacked="$tmp/${crate}-${version}"
+	patch -p1 --forward --batch -d "$unpacked" -i "$PATCHES/$patch"
+	rm -rf "$dest"
+	mv "$unpacked" "$dest"
+	rm -rf "$tmp"
+}
+
+fetch_crate mozjs-sys mozjs_sys 153.6.0-1 mozjs_sys-153.6.0-1-haiku.patch
+fetch_crate surfman surfman 0.14.0 surfman-0.14.0-haiku-egl.patch
+fetch_crate ipc-channel ipc-channel 0.23.1 ipc-channel-0.23.1-haiku-inprocess.patch
+fetch_crate gaol gaol 0.2.1 gaol-0.2.1-haiku-no-sandbox.patch
+fetch_crate servo-fonts servo-fonts 0.8.0 servo-fonts-0.8.0-haiku-freetype.patch
+fetch_crate servo-fonts-traits servo-fonts-traits 0.8.0 servo-fonts-traits-0.8.0-haiku-font-id.patch
+fetch_crate servo-script servo-script 0.8.0 servo-script-0.8.0-haiku-platform.patch
 
 for need in \
-	"$SERVO_SRC/mozjs-sys" \
-	"$SERVO_SRC/surfman" \
-	"$SERVO_SRC/ipc-channel" \
-	"$SERVO_SRC/servo-fonts" \
-	"$SERVO_SRC/servo-fonts-traits" \
-	"$SERVO_SRC/gaol" \
-	"$SERVO_SRC/servo-script" \
 	"$CXX" \
 	"$SERVO_SRC/rust/cargo/bin/cargo"
 do
 	if [ ! -e "$need" ]; then
 		echo "missing $need" >&2
-		echo "The patched trees and Rust 1.99.1 live next to the Haiku checkout. See distro/servo/BUILD.md." >&2
+		echo "Rust 1.99.1 and the Haiku cross compiler are not in git. See distro/servo/BUILD.md." >&2
 		exit 1
 	fi
 done
