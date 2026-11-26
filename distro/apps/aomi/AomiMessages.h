@@ -42,7 +42,11 @@ enum {
 	MSG_AUTH_CANCEL		= 'aucx',
 	MSG_SHOW_ALL_DOWNLOADS = 'dall',
 	MSG_OPEN_FOLDER		= 'ofld',
-	MSG_NTP_GO			= 'ntp!'
+	MSG_NTP_GO			= 'ntp!',
+	MSG_TECHNICAL		= 'tech',
+	MSG_COPY_TECHNICAL	= 'ctec',
+	MSG_DOWNLOAD_URL	= 'dlur',
+	MSG_OPEN_URL		= 'ourl'
 };
 
 

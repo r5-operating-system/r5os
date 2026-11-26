@@ -72,11 +72,10 @@ enum {
 	AOMI_DOWNLOAD_FINISHED		= 'aDlf',
 	// "id" int32, "text" string
 	AOMI_DOWNLOAD_FAILED		= 'aDlx',
-	// "kind" int32 (AOMI_DIALOG_*), "text" string.
-	// The window adds its answer to this same message and sets
-	// "handled" bool. Confirm: "result" bool. Auth: "user", "password",
-	// "remember" bool. Certificate: "continue" bool. Prompt: "text"
-	// replaced with the answer. File: "path" string.
+	// "kind" int32 (AOMI_DIALOG_*), "text" string, "where" BPoint in view
+	// coordinates. For the listener's information: the view itself asks the
+	// user (alert, confirm, prompt, sign-in, file upload, context menu,
+	// select list) and answers the page.
 	AOMI_DIALOG					= 'aDlg'
 };
 
@@ -97,7 +96,11 @@ enum {
 	AOMI_DIALOG_AUTH			= 5,
 	AOMI_DIALOG_FILE			= 6,
 	AOMI_DIALOG_PERMISSION		= 7,
-	AOMI_DIALOG_CONTEXT			= 8
+	AOMI_DIALOG_CONTEXT			= 8,
+	// "text": one line per entry, "o<TAB>id<TAB>flags<TAB>label" for an
+	// option (flags: s selected, d disabled), "g<TAB><TAB><TAB>label" for a
+	// group heading. Answer with the chosen option's id as value.
+	AOMI_DIALOG_SELECT			= 9
 };
 
 
@@ -140,6 +143,8 @@ public:
 	virtual	status_t			Cancel(int32 id) = 0;
 	virtual	status_t			Open(int32 id) = 0;
 	virtual	status_t			ShowInTracker(int32 id) = 0;
+
+
 
 protected:
 			status_t			Report(BMessage* message);

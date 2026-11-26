@@ -51,6 +51,7 @@ public:
 			int32				Security() const;
 			bool				Bookmarked() const;
 			bool				Private() const { return fPrivate; }
+			float				PageZoom() const { return fZoom; }
 			const AomiPrefs&	Prefs() const { return fPrefs; }
 			void				ReloadPrefs();
 
@@ -67,8 +68,17 @@ private:
 				float				progress;
 				int32				security;
 				BString				securityText;
+				BString				protocol;
 				BString				hover;
 				bool				bookmarked;
+			};
+
+			struct DlEntry {
+				int32				id;
+				BString				name;
+				BString				path;
+				bool				done;
+				bool				failed;
 			};
 
 			void				_BuildMenu();
@@ -98,6 +108,7 @@ private:
 			float				fZoom;
 			BFilePanel*			fSave;
 			BString				fHover;
+			std::vector<DlEntry> fDownloads;
 };
 
 
@@ -117,9 +128,7 @@ private:
 			class BMenuField*	fEngine;
 			class BCheckBox*	fShowHome;
 			class BCheckBox*	fShowBar;
-			class BCheckBox*	fZoomText;
 			class BTextControl*	fDownloads;
-			class BCheckBox*	fAsk;
 };
 
 

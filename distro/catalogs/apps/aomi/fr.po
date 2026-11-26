@@ -1,0 +1,377 @@
+msgid ""
+msgstr "Project-Id-Version: application/x-vnd.R5-Aomi\nLanguage: fr\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Bookmarks"
+msgstr "Signets"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Print…"
+msgstr "Imprimer…"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Settings…"
+msgstr "Réglages…"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Private"
+msgstr "Privé"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Downloads and new bookmarks stay."
+msgstr "Les téléchargements et les nouveaux signets sont conservés."
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Find:"
+msgstr "Rechercher :"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Actual size"
+msgstr "Taille réelle"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Zoom"
+msgstr "Zoom"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Show bookmarks bar"
+msgstr "Afficher la barre de signets"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Bookmark this page"
+msgstr "Marquer cette page"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Private window"
+msgstr "Fenêtre privée"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Show menu bar"
+msgstr "Afficher la barre de menus"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Private windows"
+msgstr "Fenêtres privées"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Search privately or type an address"
+msgstr "Rechercher en privé ou saisir une adresse"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "New window"
+msgstr "Nouvelle fenêtre"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Connection: "
+msgstr "Connexion : "
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Aomi forgets the history, cookies and site data of this window when you close it."
+msgstr "Aomi oublie l'historique, les cookies et les données de site de cette fenêtre lorsque vous la fermez."
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Zoom in"
+msgstr "Zoom avant"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Window"
+msgstr "Fenêtre"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "User name:"
+msgstr "Nom d'utilisateur :"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "OK"
+msgstr "OK"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Quit"
+msgstr "Quitter"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Downloads"
+msgstr "Téléchargements"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Files you download are listed here."
+msgstr "Les fichiers que vous téléchargez sont listés ici."
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Last session"
+msgstr "Dernière session"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "protocol not reported"
+msgstr "protocole non indiqué"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Choose…"
+msgstr "Choisir…"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Search address:"
+msgstr "Adresse de recherche :"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "HTTP/1.1"
+msgstr "HTTP/1.1"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid ", secure"
+msgstr ", sécurisée"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "View source"
+msgstr "Afficher la source"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "HTTP/2"
+msgstr "HTTP/2"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Home page:"
+msgstr "Page d'accueil :"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid ", not secure"
+msgstr ", non sécurisée"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Sign in"
+msgstr "Se connecter"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Home page"
+msgstr "Page d'accueil"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "About Aomi"
+msgstr "À propos d'Aomi"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "This engine cannot print."
+msgstr "Ce moteur ne peut pas imprimer."
+
+#, fuzzy
+msgctxt "Aomi"
+msgid ", certificate error"
+msgstr ", erreur de certificat"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Show home button"
+msgstr "Afficher le bouton d'accueil"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Cancel"
+msgstr "Annuler"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Edit"
+msgstr "Édition"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Close tab"
+msgstr "Fermer l'onglet"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Reinstall the r5servo package and open Aomi again."
+msgstr "Réinstallez le paquet r5servo et rouvrez Aomi."
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Manage bookmarks"
+msgstr "Gérer les signets"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "View"
+msgstr "Affichage"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Defaults"
+msgstr "Par défaut"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Search or type an address"
+msgstr "Rechercher ou saisir une adresse"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Sign in to %s"
+msgstr "Se connecter à %s"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Show all downloads"
+msgstr "Afficher tous les téléchargements"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Private – New tab"
+msgstr "Privé – Nouvel onglet"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Aomi settings"
+msgstr "Réglages d'Aomi"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Reload"
+msgstr "Recharger"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Save page as…"
+msgstr "Enregistrer la page sous…"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "New private window"
+msgstr "Nouvelle fenêtre privée"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "New tab page"
+msgstr "Page Nouvel onglet"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "HTTP/3"
+msgstr "HTTP/3"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Revert"
+msgstr "Rétablir"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Search the web or type an address"
+msgstr "Rechercher sur le Web ou saisir une adresse"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "WebPositive is still installed and works as usual."
+msgstr "WebPositive est toujours installé et fonctionne comme d'habitude."
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Start with:"
+msgstr "Démarrer avec :"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Zoom out"
+msgstr "Zoom arrière"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Servo could not make a drawing surface for this page (EGL)."
+msgstr "Servo n'a pas pu créer de surface de dessin pour cette page (EGL)."
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Save downloads to:"
+msgstr "Enregistrer les téléchargements dans :"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Technical info"
+msgstr "Informations techniques"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "A private window forgets its history, cookies and site data when you close it."
+msgstr "Une fenêtre privée oublie son historique, ses cookies et ses données de site lorsque vous la fermez."
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Password:"
+msgstr "Mot de passe :"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "The web engine could not be started"
+msgstr "Le moteur web n'a pas pu démarrer"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Find in page…"
+msgstr "Rechercher dans la page…"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Search engine:"
+msgstr "Moteur de recherche :"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "New tab"
+msgstr "Nouvel onglet"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Help"
+msgstr "Aide"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "History"
+msgstr "Historique"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Private – Aomi"
+msgstr "Privé – Aomi"
+
+#, fuzzy
+msgctxt "Aomi"
+msgid "Open folder"
+msgstr "Ouvrir le dossier"

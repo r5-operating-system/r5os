@@ -601,16 +601,20 @@ bitmap_hash(const uint8* bits, int32 length)
 	lookup. The window then steps about ten times a second while the
 	program's counter, which does not wait for this draw, stays above 300.
 
-	A bitmap of at most 1 MiB is hashed in full, so that picture cannot
-	miss. A larger one (a wallpaper) uses an 8 by 8 grid: odd eighths of
-	the height, and of each row, so a change in the middle is one of the
-	words. A change that falls between those words is still caught by the
-	full hash every 32 lookups.
+	A bitmap of at most 16 MiB is hashed in full, so that picture cannot
+	miss. (It was 1 MiB. A browser page of 1251 by 678 pixels is 3.4 MB;
+	a JSON page whose few lines sit between the 64 sampled words kept the
+	previous page's texture, and a page that is not drawn again never
+	reached the full hash every 32 lookups. Hashing is cheaper than the
+	upload a changed picture needs anyway.) A larger one uses an 8 by 8
+	grid: odd eighths of the height, and of each row, so a change in the
+	middle is one of the words. A change that falls between those words is
+	still caught by the full hash every 32 lookups.
 */
 static uint64
 bitmap_sample(const uint8* bits, int32 length, int32 bytesPerRow)
 {
-	if (length <= 1024 * 1024 || bytesPerRow < 8 || length < bytesPerRow)
+	if (length <= 16 * 1024 * 1024 || bytesPerRow < 8 || length < bytesPerRow)
 		return bitmap_hash(bits, length);
 	const uint64 kPrime = 0x9e3779b97f4a7c15ull;
 	int32 height = length / bytesPerRow;
@@ -2388,7 +2392,10 @@ SkiaPainter::DrawBitmap(const ServerBitmap* bitmap, BRect bitmapRect,
 			&& fIdentityTransform && !fHasAlphaMask && !tile);
 	// step 5c: the texture of the same bytes, from an earlier drawing
 	bool owned = bitmap->Owner() == NULL;
-	sk_sp<SkImage> image = fTarget->FindTexture(bitmap, bitmap->Bits(),
+	// The key is the bitmap's serial, not its address: a deleted bitmap's
+	// address can come back for a new one of the same size (R5).
+	const void* textureId = (const void*)(addr_t)bitmap->Serial();
+	sk_sp<SkImage> image = fTarget->FindTexture(textureId, bitmap->Bits(),
 		bitmap->BitsLength(), width, height, bitmap->BytesPerRow(), space,
 		raw, bitmap->Generation(), owned);
 	if (image == nullptr) {
@@ -2432,7 +2439,7 @@ SkiaPainter::DrawBitmap(const ServerBitmap* bitmap, BRect bitmapRect,
 	image = upload_texture(fTarget->Recorder(), pixels.asImage());
 	if (image == nullptr)
 		return touched;
-	fTarget->KeepTexture(bitmap, bitmap->Bits(), bitmap->BitsLength(), width,
+	fTarget->KeepTexture(textureId, bitmap->Bits(), bitmap->BitsLength(), width,
 		height, bitmap->BytesPerRow(), space, raw, bitmap->Generation(),
 		owned, image);
 	}

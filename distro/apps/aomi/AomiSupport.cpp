@@ -95,16 +95,20 @@ aomi_prefs()
 	BMessage message;
 	if (file.InitCheck() != B_OK || message.Unflatten(&file) != B_OK)
 		return prefs;
-	message.FindInt32("start", &prefs.start);
-	message.FindString("home page", &prefs.home);
-	message.FindString("search url", &prefs.search);
-	message.FindBool("show home", &prefs.showHome);
-	message.FindBool("show bookmarks", &prefs.showBookmarks);
-	message.FindBool("zoom text only", &prefs.zoomText);
-	message.FindString("download path", &prefs.downloadPath);
-	message.FindBool("ask download", &prefs.askDownload);
-	message.FindBool("show menu bar", &prefs.showMenuBar);
+	// Get*() with the default: Haiku's Find*() clears the value when the
+	// field is missing (an older settings file), so it cannot keep one.
+	prefs.start = message.GetInt32("start", prefs.start);
+	prefs.home = message.GetString("home page", prefs.home.String());
+	prefs.search = message.GetString("search url", prefs.search.String());
+	prefs.showHome = message.GetBool("show home", prefs.showHome);
+	prefs.showBookmarks = message.GetBool("show bookmarks", prefs.showBookmarks);
+	prefs.zoomText = message.GetBool("zoom text only", prefs.zoomText);
+	prefs.downloadPath = message.GetString("download path",
+		prefs.downloadPath.String());
+	prefs.askDownload = message.GetBool("ask download", prefs.askDownload);
+	prefs.showMenuBar = message.GetBool("show menu bar", prefs.showMenuBar);
 	return prefs;
+
 }
 
 
