@@ -5,17 +5,101 @@
 // Event numbers match distro/servo/r5_servo_abi.h.
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::ffi::CString;
+use std::path::PathBuf;
 use std::rc::Rc;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicPtr, Ordering};
+use std::sync::{Mutex, Once, OnceLock};
 
 use servo::{
     AuthenticationRequest, CreateNewWebViewRequest, Cursor, DeviceIntPoint, DeviceIntRect,
-    DeviceIntSize, EmbedderControl, FilePicker, JSValue, LoadStatus, PermissionRequest,
+    DeviceIntSize, EmbedderControl, FilePicker, JSValue, LoadStatus, Opts, PermissionRequest,
     Preferences, RenderingContext, ServoBuilder, SimpleDialog, WebView, WebViewBuilder,
     WebViewDelegate, WindowRenderingContext,
 };
+
+static PROTOCOL_MAP: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
+static LOGGER_ONCE: Once = Once::new();
+
+thread_local! {
+    static SHARED_SERVO: RefCell<Option<Rc<servo::Servo>>> = const { RefCell::new(None) };
+}
+
+fn protocol_map() -> &'static Mutex<HashMap<String, String>> {
+    PROTOCOL_MAP.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+struct ProtocolLogger {
+    verbose: bool,
+}
+
+impl log::Log for ProtocolLogger {
+    fn enabled(&self, metadata: &log::Metadata) -> bool {
+        metadata.target().contains("http_loader")
+            || metadata.level() <= log::Level::Warn
+            || self.verbose
+    }
+
+    fn log(&self, record: &log::Record) {
+        if record.target().contains("http_loader") {
+            let msg = format!("{}", record.args());
+            let proto_and_url = if let Some(u) = msg.strip_prefix("HTTP/2.0 response for ") {
+                Some(("h2", u.trim()))
+            } else if let Some(u) = msg.strip_prefix("HTTP/3.0 response for ") {
+                Some(("h3", u.trim()))
+            } else if let Some(u) = msg.strip_prefix("HTTP/1.1 response for ") {
+                Some(("http/1.1", u.trim()))
+            } else if let Some(u) = msg.strip_prefix("HTTP/1.0 response for ") {
+                Some(("http/1.1", u.trim()))
+            } else {
+                None
+            };
+            if let Some((proto, raw_url)) = proto_and_url {
+                if let Ok(mut map) = protocol_map().lock() {
+                    map.insert(raw_url.to_string(), proto.to_string());
+                    if let Ok(parsed) = url::Url::parse(raw_url) {
+                        if let Some(host) = parsed.host_str() {
+                            map.insert(format!("host:{host}"), proto.to_string());
+                        }
+                    }
+                }
+            }
+            if self.verbose {
+                eprintln!("[{} {}] {}", record.level(), record.target(), msg);
+            }
+        } else if self.verbose || record.level() <= log::Level::Warn {
+            eprintln!("[{} {}] {}", record.level(), record.target(), record.args());
+        }
+    }
+
+    fn flush(&self) {}
+}
+
+fn install_protocol_logger() {
+    LOGGER_ONCE.call_once(|| {
+        let verbose = std::env::var("RUST_LOG").map(|v| !v.is_empty()).unwrap_or(false);
+        let logger = Box::new(ProtocolLogger { verbose });
+        if log::set_boxed_logger(logger).is_ok() {
+            log::set_max_level(log::LevelFilter::Debug);
+        }
+    });
+}
+
+fn lookup_protocol(raw_url: &str) -> Option<String> {
+    let map = protocol_map().lock().ok()?;
+    if let Some(p) = map.get(raw_url) {
+        return Some(p.clone());
+    }
+    if let Ok(parsed) = url::Url::parse(raw_url) {
+        if let Some(host) = parsed.host_str() {
+            if let Some(p) = map.get(&format!("host:{host}")) {
+                return Some(p.clone());
+            }
+        }
+    }
+    None
+}
 
 const R5_EV_LOAD_STARTED: i32 = 1;
 const R5_EV_LOAD_COMMITTED: i32 = 2;
@@ -108,9 +192,9 @@ struct Notes {
 }
 
 struct Inner {
-    servo: servo::Servo,
-    webview: WebView,
-    context: Rc<WindowRenderingContext>,
+    servo: Rc<servo::Servo>,
+    webview: Option<WebView>,
+    context: Option<Rc<WindowRenderingContext>>,
     frame: Vec<u8>,
     width: i32,
     height: i32,
@@ -239,9 +323,25 @@ impl WebViewDelegate for Bridge {
             LoadStatus::Stopped => (R5_EV_LOAD_FINISHED, 1.0, 0),
         };
         let mut event = Ev::new(kind);
-        event.url = url;
+        event.url = url.clone();
         event.progress = progress;
         emit(engine, event);
+        if let Some(proto) = lookup_protocol(&url) {
+            if !engine.is_null() {
+                let mut changed = false;
+                if let Ok(mut notes) = unsafe { (*engine).notes.lock() } {
+                    if notes.protocol != proto {
+                        notes.protocol = proto.clone();
+                        changed = true;
+                    }
+                }
+                if changed {
+                    let mut pev = Ev::new(R5_EV_PROTOCOL);
+                    pev.text = proto;
+                    emit(engine, pev);
+                }
+            }
+        }
         if !matches!(status, LoadStatus::HeadParsed) {
             let mut nav = Ev::new(R5_EV_NAVIGATION);
             nav.a = webview.can_go_back() as i32;
@@ -424,7 +524,9 @@ fn load(engine: *mut Engine, raw: &str) -> i32 {
             return NO_INIT;
         };
         inner.https = raw.starts_with("https:");
-        inner.webview.load(parsed);
+        if let Some(wv) = inner.webview.as_ref() {
+            wv.load(parsed);
+        }
     }
     flush(engine);
     OK
@@ -474,11 +576,30 @@ pub extern "C" fn r5_servo_create(
     println!("r5-servo context-ok");
     println!("r5-servo {gl}");
 
-    let mut preferences = Preferences::default();
-    preferences.network_http_proxy_uri = String::new();
-    preferences.network_https_proxy_uri = String::new();
-    let servo_engine = ServoBuilder::default().preferences(preferences).build();
-    servo_engine.setup_logging();
+    install_protocol_logger();
+
+    let servo_engine = SHARED_SERVO.with(|slot| {
+        if let Some(existing) = slot.borrow().as_ref() {
+            return Rc::clone(existing);
+        }
+        let mut opts = Opts::default();
+        if let Ok(dir) = std::env::var("AOMI_PRIVATE_DIR") {
+            if !dir.is_empty() {
+                opts.config_dir = Some(PathBuf::from(dir));
+            }
+        }
+        let mut preferences = Preferences::default();
+        preferences.network_http_proxy_uri = String::new();
+        preferences.network_https_proxy_uri = String::new();
+        let built = Rc::new(
+            ServoBuilder::default()
+                .opts(opts)
+                .preferences(preferences)
+                .build(),
+        );
+        *slot.borrow_mut() = Some(Rc::clone(&built));
+        built
+    });
     let initial = initial_document(document, document_is_html);
     let context = Rc::new(context);
     let bridge = Rc::new(Bridge {
@@ -498,8 +619,8 @@ pub extern "C" fn r5_servo_create(
     let engine = Box::into_raw(Box::new(Engine {
         inner: RefCell::new(Inner {
             servo: servo_engine,
-            webview,
-            context,
+            webview: Some(webview),
+            context: Some(context),
             frame: Vec::new(),
             width,
             height,
@@ -538,8 +659,12 @@ pub extern "C" fn r5_servo_resize(engine: *mut Engine, width: i32, height: i32) 
     if let Ok(mut inner) = unsafe { (*engine).inner.try_borrow_mut() } {
         inner.width = width;
         inner.height = height;
-        inner.context.resize(size);
-        inner.webview.resize(size);
+        if let Some(ctx) = inner.context.as_ref() {
+            ctx.resize(size);
+        }
+        if let Some(wv) = inner.webview.as_ref() {
+            wv.resize(size);
+        }
     }
 }
 
@@ -576,7 +701,9 @@ pub extern "C" fn r5_servo_reload(engine: *mut Engine, bypass_cache: i32) -> i32
         return NO_INIT;
     }
     if let Ok(inner) = unsafe { (*engine).inner.try_borrow() } {
-        inner.webview.reload();
+        if let Some(wv) = inner.webview.as_ref() {
+            wv.reload();
+        }
     }
     flush(engine);
     OK
@@ -588,7 +715,9 @@ pub extern "C" fn r5_servo_stop(engine: *mut Engine) -> i32 {
         return NO_INIT;
     }
     if let Ok(inner) = unsafe { (*engine).inner.try_borrow() } {
-        inner.webview.evaluate_javascript("window.stop()", |_| {});
+        if let Some(wv) = inner.webview.as_ref() {
+            wv.evaluate_javascript("window.stop()", |_| {});
+        }
     }
     flush(engine);
     OK
@@ -600,7 +729,9 @@ pub extern "C" fn r5_servo_back(engine: *mut Engine) -> i32 {
         return NO_INIT;
     }
     if let Ok(inner) = unsafe { (*engine).inner.try_borrow() } {
-        let _ = inner.webview.go_back(1);
+        if let Some(wv) = inner.webview.as_ref() {
+            let _ = wv.go_back(1);
+        }
     }
     flush(engine);
     OK
@@ -612,7 +743,9 @@ pub extern "C" fn r5_servo_forward(engine: *mut Engine) -> i32 {
         return NO_INIT;
     }
     if let Ok(inner) = unsafe { (*engine).inner.try_borrow() } {
-        let _ = inner.webview.go_forward(1);
+        if let Some(wv) = inner.webview.as_ref() {
+            let _ = wv.go_forward(1);
+        }
     }
     flush(engine);
     OK
@@ -627,7 +760,9 @@ pub extern "C" fn r5_servo_zoom(engine: *mut Engine, factor: f32, text_only: i32
         return NO_INIT;
     }
     if let Ok(inner) = unsafe { (*engine).inner.try_borrow() } {
-        inner.webview.set_page_zoom(factor);
+        if let Some(wv) = inner.webview.as_ref() {
+            wv.set_page_zoom(factor);
+        }
     }
     OK
 }
@@ -638,7 +773,56 @@ pub extern "C" fn r5_servo_focus(engine: *mut Engine, focused: i32) {
         return;
     }
     if let Ok(inner) = unsafe { (*engine).inner.try_borrow() } {
-        inner.webview.set_focused(focused != 0);
+        if let Some(wv) = inner.webview.as_ref() {
+            wv.set_focused(focused != 0);
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn r5_servo_find(
+    engine: *mut Engine,
+    text: *const u8,
+    forward: i32,
+    match_case: i32,
+) -> i32 {
+    if engine.is_null() || text.is_null() {
+        return BAD_VALUE;
+    }
+    let query = unsafe { std::ffi::CStr::from_ptr(text as *const std::ffi::c_char) };
+    let Ok(query) = query.to_str() else {
+        return BAD_VALUE;
+    };
+    let escaped = query
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\r', "");
+    let js = format!(
+        "window.find(\"{escaped}\", {}, {}, true)",
+        if match_case != 0 { "true" } else { "false" },
+        if forward == 0 { "true" } else { "false" }
+    );
+    if let Ok(inner) = unsafe { (*engine).inner.try_borrow() } {
+        if let Some(wv) = inner.webview.as_ref() {
+            wv.evaluate_javascript(&js, |_| {});
+        }
+    }
+    OK
+}
+
+#[no_mangle]
+pub extern "C" fn r5_servo_destroy(engine: *mut Engine) {
+    if engine.is_null() {
+        return;
+    }
+    if let Ok(mut inner) = unsafe { (*engine).inner.try_borrow_mut() } {
+        // Drop the WebView so the tab stops loading, but leak the GL
+        // context to avoid Haiku Mesa eglDestroyImageKHR abort.
+        inner.webview = None;
+        if let Some(ctx) = inner.context.take() {
+            std::mem::forget(ctx);
+        }
     }
 }
 
@@ -654,78 +838,95 @@ pub extern "C" fn r5_servo_spin(engine: *mut Engine) {
             return;
         };
         inner.servo.spin_event_loop();
-        inner.webview.paint();
-        inner.context.present();
+        let mut new_frame: Option<Vec<u8>> = None;
         let rect = DeviceIntRect::from_origin_and_size(
             DeviceIntPoint::new(0, 0),
             DeviceIntSize::new(inner.width, inner.height),
         );
-        if let Some(image) = inner.context.read_to_image(rect) {
-            let bytes = image.as_raw();
-            if bytes.len() >= 4 {
-                let pixel = [bytes[0], bytes[1], bytes[2], bytes[3]];
-                let mut notes = engine_ref.notes.lock().ok();
-                if let Some(notes) = notes.as_mut() {
-                    if !notes.saw_red && pixel[0] > 200 && pixel[1] < 40 && pixel[2] < 40 {
-                        notes.saw_red = true;
-                        println!(
-                            "r5-servo pixel {} {} {} {}",
-                            pixel[0], pixel[1], pixel[2], pixel[3]
-                        );
-                    }
-                }
-                inner.frame = bytes.to_vec();
-            }
-        }
-        let status = format!("{:?}", inner.webview.load_status());
-        let page = inner
-            .webview
-            .url()
-            .map(|item| item.to_string())
-            .unwrap_or_default();
-        if let Ok(mut notes) = engine_ref.notes.lock() {
-            notes.spins += 1;
-            let changed = notes.last_status != status || notes.last_url != page;
-            if changed {
-                println!("r5-servo beat {} {status} {page}", notes.spins);
-                notes.last_status = status;
-                notes.last_url = page;
-            }
-        }
-        if inner.https {
-            if let Ok(mut notes) = engine_ref.notes.lock() {
-                if !notes.asked_body
-                    && matches!(inner.webview.load_status(), LoadStatus::Complete)
-                {
-                    notes.asked_body = true;
-                    ask_body = true;
-                }
-            }
-        }
-        if ask_body {
-            let engine_for_js = engine;
-            inner.webview.evaluate_javascript(
-                "document.body ? document.body.innerText : ''",
-                move |result| {
-                    let text = match result {
-                        Ok(JSValue::String(text)) => text,
-                        other => format!("{other:?}"),
-                    };
-                    let clipped: String = text.chars().take(500).collect();
-                    let mut event = Ev::new(R5_EV_PAGE_TEXT);
-                    event.text = clipped.clone();
-                    emit(engine_for_js, event);
-                    if let Some(protocol) = protocol_from_body(&clipped) {
-                        if let Ok(mut notes) = unsafe { (*engine_for_js).notes.lock() } {
-                            notes.protocol = protocol.to_string();
+        {
+            let (Some(wv), Some(ctx)) = (inner.webview.as_ref(), inner.context.as_ref()) else {
+                return;
+            };
+            wv.paint();
+            ctx.present();
+            if let Some(image) = ctx.read_to_image(rect) {
+                let bytes = image.as_raw();
+                if bytes.len() >= 4 {
+                    let pixel = [bytes[0], bytes[1], bytes[2], bytes[3]];
+                    let mut notes = engine_ref.notes.lock().ok();
+                    if let Some(notes) = notes.as_mut() {
+                        if !notes.saw_red && pixel[0] > 200 && pixel[1] < 40 && pixel[2] < 40 {
+                            notes.saw_red = true;
+                            println!(
+                                "r5-servo pixel {} {} {} {}",
+                                pixel[0], pixel[1], pixel[2], pixel[3]
+                            );
                         }
-                        let mut event = Ev::new(R5_EV_PROTOCOL);
-                        event.text = protocol.to_string();
-                        println!("r5-servo protocol {protocol}");
-                        emit(engine_for_js, event);
                     }
-                },
-            );
+                    new_frame = Some(bytes.to_vec());
+                }
+            }
+            let status = format!("{:?}", wv.load_status());
+            let page = wv.url().map(|item| item.to_string()).unwrap_or_default();
+            if let Some(proto) = lookup_protocol(&page) {
+                let mut changed = false;
+                if let Ok(mut notes) = engine_ref.notes.lock() {
+                    if notes.protocol != proto {
+                        notes.protocol = proto.clone();
+                        changed = true;
+                    }
+                }
+                if changed {
+                    let mut pev = Ev::new(R5_EV_PROTOCOL);
+                    pev.text = proto;
+                    emit(engine, pev);
+                }
+            }
+            if let Ok(mut notes) = engine_ref.notes.lock() {
+                notes.spins += 1;
+                let changed = notes.last_status != status || notes.last_url != page;
+                if changed {
+                    println!("r5-servo beat {} {status} {page}", notes.spins);
+                    notes.last_status = status;
+                    notes.last_url = page;
+                }
+            }
+            if inner.https {
+                if let Ok(mut notes) = engine_ref.notes.lock() {
+                    if !notes.asked_body && matches!(wv.load_status(), LoadStatus::Complete) {
+                        notes.asked_body = true;
+                        ask_body = true;
+                    }
+                }
+            }
+            if ask_body {
+                let engine_for_js = engine;
+                wv.evaluate_javascript(
+                    "document.body ? document.body.innerText : ''",
+                    move |result| {
+                        let text = match result {
+                            Ok(JSValue::String(text)) => text,
+                            other => format!("{other:?}"),
+                        };
+                        let clipped: String = text.chars().take(500).collect();
+                        let mut event = Ev::new(R5_EV_PAGE_TEXT);
+                        event.text = clipped.clone();
+                        emit(engine_for_js, event);
+                        if let Some(protocol) = protocol_from_body(&clipped) {
+                            if let Ok(mut notes) = unsafe { (*engine_for_js).notes.lock() } {
+                                notes.protocol = protocol.to_string();
+                            }
+                            let mut event = Ev::new(R5_EV_PROTOCOL);
+                            event.text = protocol.to_string();
+                            println!("r5-servo protocol {protocol}");
+                            emit(engine_for_js, event);
+                        }
+                    },
+                );
+            }
+        }
+        if let Some(bytes) = new_frame {
+            inner.frame = bytes;
         }
     }
     flush(engine);
@@ -763,7 +964,12 @@ pub extern "C" fn r5_servo_url(engine: *mut Engine, buffer: *mut u8, length: i32
     let Ok(inner) = (unsafe { (*engine).inner.try_borrow() }) else {
         return NO_INIT;
     };
-    let text = inner.webview.url().map(|item| item.to_string()).unwrap_or_default();
+    let text = inner
+        .webview
+        .as_ref()
+        .and_then(|wv| wv.url())
+        .map(|item| item.to_string())
+        .unwrap_or_default();
     write_buf(&text, buffer, length)
 }
 
@@ -775,7 +981,11 @@ pub extern "C" fn r5_servo_title(engine: *mut Engine, buffer: *mut u8, length: i
     let Ok(inner) = (unsafe { (*engine).inner.try_borrow() }) else {
         return NO_INIT;
     };
-    let text = inner.webview.page_title().unwrap_or_default();
+    let text = inner
+        .webview
+        .as_ref()
+        .and_then(|wv| wv.page_title())
+        .unwrap_or_default();
     write_buf(&text, buffer, length)
 }
 

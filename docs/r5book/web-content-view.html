@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<!--
+  SPDX-FileCopyrightText: 2026 R5OS Contributors
+  SPDX-License-Identifier: MIT
+-->
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>BWebContentView &mdash; R5Book</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
+	<link rel="stylesheet" href="r5book.css" />
+</head>
+<body data-page="web-content-view">
+
+<div class="book">
+	<aside class="toc"></aside>
+
+	<main class="page">
+		<section class="page-hero">
+			<span class="kit-label">Aomi &middot; Web Engine Contract</span>
+			<h1>BWebContentView</h1>
+			<p>The page view that separates Aomi&rsquo;s native R5 window from its web engine.
+			Aomi talks only to <code class="inline">BWebContentView</code> and <code class="inline">BWebSession</code>,
+			never to engine-specific headers. Servo (<code class="inline">BServoContentView</code>) loads
+			<code class="inline">libr5servo.so</code> dynamically through <code class="inline">dlopen()</code>.</p>
+		</section>
+
+		<nav class="on-this-page" aria-label="On this page">
+			<h3>On this page</h3>
+			<ul>
+				<li><a href="#overview">Overview</a></li>
+				<li><a href="#session">BWebSession</a></li>
+				<li><a href="#methods">Member Functions</a></li>
+				<li><a href="#messages">Reported Messages</a></li>
+				<li><a href="#factory">Engine Factory &amp; Fallback</a></li>
+			</ul>
+		</nav>
+
+		<section id="overview">
+			<h2>Overview</h2>
+			<p><strong>Declared in:</strong> <code class="inline">distro/apps/aomi/WebContentView.h</code> (MIT)<br />
+			<strong>Derived from:</strong> <code class="inline">public BView</code><br />
+			<strong>Implementation:</strong> <code class="inline">BServoContentView</code> in <code class="inline">distro/apps/aomi/ServoContentView.cpp</code></p>
+			<p>The view is always opaque (white default background); window glass belongs to the chrome, never to web content.
+			Any capability an engine does not implement returns <code class="inline">B_NOT_SUPPORTED</code> so the window can disable that action cleanly.
+			New calls are appended at the end; shipped calls do not change.</p>
+		</section>
+
+		<section id="session">
+			<h2>BWebSession</h2>
+			<pre><code>class BWebSession {
+public:
+    BWebSession(bool privateSession);
+    bool IsPrivate() const;
+};</code></pre>
+			<p>Describes whether a window is a normal or private session. Private windows in Aomi run in an isolated process with a temporary <code class="inline">AOMI_PRIVATE_DIR</code> passed to Servo&rsquo;s <code class="inline">Opts::config_dir</code>, deleted on exit.</p>
+		</section>
+
+		<section id="methods">
+			<h2>Member Functions</h2>
+			<table>
+				<thead><tr><th>Area</th><th>Calls</th></tr></thead>
+				<tbody>
+					<tr><td>Listener</td><td><code class="inline">SetListener(const BMessenger&amp;)</code>, <code class="inline">Session()</code></td></tr>
+					<tr><td>Load</td><td><code class="inline">LoadURL(const char*)</code>, <code class="inline">LoadHTML(const char*, const char*)</code>, <code class="inline">Reload(bool bypassCache)</code>, <code class="inline">StopLoading()</code></td></tr>
+					<tr><td>Navigation</td><td><code class="inline">GoBack()</code>, <code class="inline">GoForward()</code>, <code class="inline">GetBackList(BMessage*)</code>, <code class="inline">GetForwardList(BMessage*)</code></td></tr>
+					<tr><td>Page</td><td><code class="inline">URL(BString*)</code>, <code class="inline">Title(BString*)</code>, <code class="inline">SetZoom(float, bool textOnly)</code>, <code class="inline">Find(const char*, bool forward, bool matchCase)</code>, <code class="inline">SavePage(const char*)</code>, <code class="inline">ViewSource()</code>, <code class="inline">Print()</code>, <code class="inline">Protocol(BString*)</code></td></tr>
+					<tr><td>Downloads</td><td><code class="inline">Cancel(int32 id)</code>, <code class="inline">Open(int32 id)</code>, <code class="inline">ShowInTracker(int32 id)</code></td></tr>
+				</tbody>
+			</table>
+		</section>
+
+		<section id="messages">
+			<h2>Reported Messages</h2>
+			<p>All engine notifications are delivered to the registered <code class="inline">BMessenger</code> using fixed 4-byte message codes:</p>
+			<ul>
+				<li><code class="inline">AOMI_LOAD_STARTED</code> (<code class="inline">'aLdS'</code>), <code class="inline">AOMI_LOAD_COMMITTED</code> (<code class="inline">'aLdC'</code>), <code class="inline">AOMI_LOAD_FINISHED</code> (<code class="inline">'aLdF'</code>), <code class="inline">AOMI_LOAD_FAILED</code> (<code class="inline">'aLdX'</code>)</li>
+				<li><code class="inline">AOMI_NAVIGATION</code> (<code class="inline">'aNav'</code>: <code class="inline">canBack</code>, <code class="inline">canForward</code>, <code class="inline">loading</code>)</li>
+				<li><code class="inline">AOMI_TITLE_CHANGED</code> (<code class="inline">'aTit'</code>), <code class="inline">AOMI_URL_CHANGED</code> (<code class="inline">'aUrl'</code>), <code class="inline">AOMI_FAVICON</code> (<code class="inline">'aFav'</code>), <code class="inline">AOMI_HOVER_LINK</code> (<code class="inline">'aHov'</code>)</li>
+				<li><code class="inline">AOMI_SECURITY</code> (<code class="inline">'aSec'</code>: <code class="inline">AOMI_SECURITY_*</code>), <code class="inline">AOMI_PROTOCOL</code> (<code class="inline">'aPrt'</code>: <code class="inline">"h2"</code>, <code class="inline">"http/1.1"</code>, <code class="inline">"h3"</code>)</li>
+				<li><code class="inline">AOMI_PROGRESS</code> (<code class="inline">'aPrg'</code>: 0.0&ndash;1.0), <code class="inline">AOMI_CURSOR</code> (<code class="inline">'aCur'</code>), <code class="inline">AOMI_FULLSCREEN</code> (<code class="inline">'aFsc'</code>)</li>
+				<li><code class="inline">AOMI_NEW_WINDOW</code> (<code class="inline">'aNww'</code>), <code class="inline">AOMI_CLOSE_WANTED</code> (<code class="inline">'aClw'</code>), <code class="inline">AOMI_DIALOG</code> (<code class="inline">'aDlg'</code>)</li>
+				<li><code class="inline">AOMI_DOWNLOAD_ADDED</code> (<code class="inline">'aDla'</code>), <code class="inline">AOMI_DOWNLOAD_PROGRESS</code> (<code class="inline">'aDlp'</code>), <code class="inline">AOMI_DOWNLOAD_FINISHED</code> (<code class="inline">'aDlf'</code>), <code class="inline">AOMI_DOWNLOAD_FAILED</code> (<code class="inline">'aDlx'</code>)</li>
+			</ul>
+		</section>
+
+		<section id="factory">
+			<h2>Engine Factory &amp; Fallback</h2>
+			<pre><code>status_t aomi_engine_start(const char* engine);
+BWebContentView* create_aomi_content_view(const char* engine,
+    const char* name, BWebSession* session);</code></pre>
+			<p>Aomi calls <code class="inline">aomi_engine_start("Servo")</code> once at startup and creates every tab view via <code class="inline">create_aomi_content_view("Servo", "page", session)</code>. Because <code class="inline">libr5servo.so</code> is loaded via <code class="inline">dlopen()</code>, removing the library does not crash Aomi: the view renders a clear native message explaining how to restore the <code class="inline">r5servo</code> package.</p>
+		</section>
+	</main>
+</div>
+<script src="r5book.js"></script>
+</body>
+</html>

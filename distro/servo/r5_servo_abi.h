@@ -79,6 +79,9 @@ status_t	r5_servo_protocol(r5_servo* engine, char* buffer, int32 length);
 status_t	r5_servo_history(r5_servo* engine, int32 forward, int32 index,
 	char* buffer, int32 length);
 status_t	r5_servo_gl(r5_servo* engine, char* buffer, int32 length);
+status_t	r5_servo_find(r5_servo* engine, const char* text, int32 forward,
+	int32 match_case);
+void		r5_servo_destroy(r5_servo* engine);
 
 
 }

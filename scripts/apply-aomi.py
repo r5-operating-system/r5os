@@ -35,6 +35,18 @@ def copy_sources() -> None:
             continue
         target.write_bytes(data)
         count += 1
+    pebble = ROOT / "distro" / "desktop" / "src" / "apps" / "deskbar" / "r5_pebble.inc"
+    if pebble.is_file():
+        data = pebble.read_bytes().replace(b"\r\n", b"\n")
+        target = dest / "r5_pebble.inc"
+        if not target.is_file() or target.read_bytes() != data:
+            target.write_bytes(data)
+            count += 1
+    # Remove retired WebKitContentView files from the shared tree if present.
+    for old_name in ("WebKitContentView.h", "WebKitContentView.cpp"):
+        old = dest / old_name
+        if old.is_file():
+            old.unlink()
     print(f"copied {count} Aomi files")
 
 

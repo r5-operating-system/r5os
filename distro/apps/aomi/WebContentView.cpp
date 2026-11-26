@@ -6,7 +6,7 @@
 
 #include "WebContentView.h"
 
-#include "WebKitContentView.h"
+#include "ServoContentView.h"
 
 #include <string.h>
 
@@ -56,8 +56,8 @@ BWebContentView::Report(BMessage* message)
 status_t
 aomi_engine_start(const char* engine)
 {
-	if (engine == NULL || strcmp(engine, "WebKit") == 0)
-		return aomi_webkit_start();
+	if (engine == NULL || strcmp(engine, "Servo") == 0)
+		return aomi_servo_start();
 	return B_NOT_SUPPORTED;
 }
 
@@ -66,7 +66,7 @@ BWebContentView*
 create_aomi_content_view(const char* engine, const char* name,
 	BWebSession* session)
 {
-	if (engine == NULL || strcmp(engine, "WebKit") == 0)
-		return new BWebKitContentView(name, session);
+	if (engine == NULL || strcmp(engine, "Servo") == 0)
+		return new BServoContentView(name, session);
 	return NULL;
 }

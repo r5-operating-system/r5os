@@ -3,6 +3,20 @@
 
 # Aomi Browser
 
+## Status (26 Nov 2026 — Build 10078, Servo-only)
+
+Aomi now ships in Applications as **Aomi (experimental)** on **Servo 0.8.0** as its sole web engine (no WebKit dependency in Aomi). WebPositive stays installed and stays the default browser.
+
+- **Engine contract**: `BWebContentView` (`distro/apps/aomi/WebContentView.h`, documented in R5Book `docs/r5book/web-content-view.html`). `BServoContentView` loads `/boot/system/lib/libr5servo.so` via `dlopen()` so a missing library shows a clear native message rather than crashing or drawing an empty window.
+- **Built-in pages**:
+  - `aomi:newtab`: R5 wave pebble HVIF (72 px, full colour) above "Aomi" (or "Private window"), rounded search field, shortcut tiles.
+  - `aomi:about`: R5Book-styled About Aomi page (mockup: `docs/design/aomi-mockup/about-aomi.html`).
+  - `aomi:technical` (aliases `aomi:version`, `aomi:gpu`): versions, engine, network, graphics, and recent log, with **Copy as text** (`aomi:copy-technical`) and machine-readable JSON (`aomi:technical.json`, `/tmp/aomi-technical.json`, and `Aomi --technical-json`).
+- **Packaging**: `r5servo-0.8.0-2-x86_64.hpkg` is fetched by sha256 from a GitHub Release asset (`distro/servo/r5servo.sha256`); no Servo binary is committed to git.
+- **5625U next combined stick step (`servo-radv-glass`)**: Boot the 5625U with RADV + desktop compositor enabled, open **Aomi (experimental)** on `https://example.com` and `https://http2.pro/api/v1`, verify `aomi:technical` shows `zink Vulkan 1.4(AMD Radeon Graphics (RADV ...))` (not llvmpipe/Lavapipe), lock panel says `HTTP/2, secure`, and frosted glass renders behind the tab strip and toolbar.
+
+---
+
 Plan, herzien 19 november 2026. De motorkeuze is gemaakt op 19 november 2026: de Haiku-WebKit-poort, een schil op `BView`. WebKit blijft de engine. Dit plan is de volgorde daarna. Deze landing bouwt niets.
 
 `generated/BROWSER-PLAN-REVIEW.md` stond niet op deze machine. Geen worktree `R5OS-amd64-stick`, geen kopie in de repo en geen kopie in `/cursor/stores/self`. Gekozen: herzien vanuit `origin/main` (`git show` en `git grep`), en bij een open punt de keuze hieronder zetten. De naam en de rondes komen uit de review van 19 november 2026.

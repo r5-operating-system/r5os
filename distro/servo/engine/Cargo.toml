@@ -17,6 +17,7 @@ crate-type = ["staticlib"]
 [dependencies]
 servo = { version = "=0.8.0", default-features = false, features = ["js_jit", "bundled"] }
 dpi = "0.1"
+log = "0.4"
 raw-window-handle = "0.6"
 url = "2"
 # Haiku is not in servo-fonts' Linux target list. The bundled copy is the

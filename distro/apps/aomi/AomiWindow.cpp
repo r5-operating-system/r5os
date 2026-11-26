@@ -7,14 +7,19 @@
 #include "AomiWindow.h"
 
 #include "AomiMessages.h"
+#include "AomiPages.h"
+#include "ServoContentView.h"
 #include "WebContentView.h"
+#include "r5_pebble.inc"
 
 #include <Alert.h>
 #include <Application.h>
 #include <Button.h>
 #include <Catalog.h>
 #include <CheckBox.h>
+#include <Clipboard.h>
 #include <Entry.h>
+#include <File.h>
 #include <FilePanel.h>
 #include <GroupLayout.h>
 #include <LayoutBuilder.h>
@@ -33,6 +38,7 @@
 #include <Themes.h>
 #include <WindowEffects.h>
 
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -42,9 +48,26 @@
 #define B_TRANSLATION_CONTEXT "Aomi"
 
 
-static const float kTabs = 34;
-static const float kNav = 42;
-static const float kMarks = 26;
+static float
+ui_scale()
+{
+	float size = be_plain_font != NULL ? be_plain_font->Size() : 12.0f;
+	if (size < 8.0f)
+		size = 12.0f;
+	return size / 12.0f;
+}
+
+
+static inline float
+sc(float px)
+{
+	return floorf(px * ui_scale() + 0.5f);
+}
+
+
+static inline float tabs_h() { return sc(34); }
+static inline float nav_h() { return sc(42); }
+static inline float marks_h() { return sc(26); }
 
 
 struct Palette {
@@ -159,7 +182,7 @@ public:
 		SetWordWrap(false);
 		SetInsets(0, 0, 0, 0);
 		BFont font(be_plain_font);
-		font.SetSize(13.5f);
+		font.SetSize(13.5f * ui_scale());
 		SetFontAndColor(&font);
 	}
 
@@ -194,7 +217,16 @@ public:
 
 	float Height() const
 	{
-		return kTabs + kNav + (fWindow->Prefs().showBookmarks ? kMarks : 0);
+		return tabs_h() + nav_h() + (fWindow->Prefs().showBookmarks ? marks_h() : 0);
+	}
+
+	void ApplyFontScale()
+	{
+		BFont font(be_plain_font);
+		font.SetSize(13.5f * ui_scale());
+		fField->SetFontAndColor(&font);
+		_Place();
+		Invalidate();
 	}
 
 	virtual void AttachedToWindow()
@@ -213,6 +245,11 @@ public:
 	virtual void Draw(BRect)
 	{
 		Palette p = palette();
+		float s = ui_scale();
+		float kTabs = tabs_h();
+		float kNav = nav_h();
+		float kMarks = marks_h();
+
 		SetViewColor(p.panel);
 		SetLowColor(p.panel);
 		FillRect(Bounds(), B_SOLID_LOW);
@@ -221,20 +258,26 @@ public:
 		StrokeLine(hair.LeftBottom(), hair.RightBottom());
 
 		BFont font(be_plain_font);
-		font.SetSize(12.5f);
+		font.SetSize(12.5f * s);
 		SetFont(&font);
-		float x = 8;
-		float y = kTabs - 28;
+		font_height tfh;
+		font.GetHeight(&tfh);
+		float x = sc(8);
+		float tabH = sc(27);
+		float tabW = sc(209);
+		float tabStep = sc(214);
+		float tabRad = sc(7);
+		float y = kTabs - sc(28);
 		int32 count = fWindow->CountTabs();
 		int32 active = fWindow->Active();
 		for (int32 i = 0; i < count; i++) {
-			BRect tab(x, y, x + 209, y + 27);
+			BRect tab(x, y, x + tabW, y + tabH);
 			if (i == active) {
 				tab.bottom += 1;
 				SetHighColor(p.field);
-				FillRoundRect(tab, 7, 7);
+				FillRoundRect(tab, tabRad, tabRad);
 				SetHighColor(p.hair);
-				StrokeRoundRect(tab, 7, 7);
+				StrokeRoundRect(tab, tabRad, tabRad);
 				SetHighColor(p.text);
 				font.SetFace(B_BOLD_FACE);
 			} else {
@@ -245,68 +288,74 @@ public:
 			BString title(fWindow->TabTitle(i));
 			if (title.Length() == 0)
 				title = B_TRANSLATE("New tab");
-			float room = 150;
-			while (title.Length() > 1 && font.StringWidth(title.String()) > room)
-				title.Truncate(title.Length() - 1);
-			DrawString(title.String(), BPoint(tab.left + 10, tab.top + 18));
-			BRect close(tab.right - 22, tab.top + 6, tab.right - 6, tab.top + 22);
-			r5_glyph_draw(this, R5_GLYPH_CROSS, close,
-				i == active ? p.sub : p.sub);
+			float room = tabW - sc(40);
+			font.TruncateString(&title, B_TRUNCATE_END, room);
+			float base = tab.top + (tab.Height() + tfh.ascent - tfh.descent) / 2.0f;
+			DrawString(title.String(), BPoint(tab.left + sc(10), base));
+			BRect close(tab.right - sc(22), tab.top + sc(6),
+				tab.right - sc(6), tab.top + sc(22));
+			r5_glyph_draw(this, R5_GLYPH_CROSS, close, p.sub);
 			fClose[i] = close;
 			fTab[i] = tab;
-			x += 214;
+			x += tabStep;
 		}
-		fPlus = BRect(x, y, x + 27, y + 27);
-		r5_glyph_draw(this, R5_GLYPH_PLUS, fPlus.InsetByCopy(4, 4), p.sub);
+		fPlus = BRect(x, y, x + tabH, y + tabH);
+		r5_glyph_draw(this, R5_GLYPH_PLUS, fPlus.InsetByCopy(sc(4), sc(4)), p.sub);
 
 		float navY = kTabs;
 		SetHighColor(p.hair);
 		StrokeLine(BPoint(0, navY), BPoint(Bounds().right, navY));
-		float by = navY + 6;
-		x = 8;
+		float by = navY + sc(6);
+		float btnSize = sc(29);
+		float btnStep = sc(36);
+		x = sc(8);
 		fBack = _Button(x, by, R5_GLYPH_BACK, fWindow->CanBack(), p);
-		x += 36;
+		x += btnStep;
 		fForward = _Button(x, by, R5_GLYPH_FORWARD, fWindow->CanForward(), p);
-		x += 36;
+		x += btnStep;
 		r5_glyph which = fWindow->Loading() ? R5_GLYPH_CROSS : R5_GLYPH_RELOAD;
 		fReload = _Button(x, by, which, true, p);
-		x += 36;
+		x += btnStep;
 		if (fWindow->Prefs().showHome) {
 			fHome = _Button(x, by, R5_GLYPH_HOME, true, p);
-			x += 36;
+			x += btnStep;
 		} else {
 			fHome = BRect();
 		}
-		float right = Bounds().right - 8;
-		fMenu = BRect(right - 29, by, right, by + 29);
+		float right = Bounds().right - sc(8);
+		fMenu = BRect(right - btnSize, by, right, by + btnSize);
 		_Icon(fMenu, R5_GLYPH_MENU, p.text, p);
-		right -= 36;
-		fDownloads = BRect(right - 29, by, right, by + 29);
+		right -= btnStep;
+		fDownloads = BRect(right - btnSize, by, right, by + btnSize);
 		_Icon(fDownloads, R5_GLYPH_DOWNLOAD, p.text, p);
-		right -= 36;
+		right -= btnStep;
 		if (fWindow->Private()) {
 			BFont small(be_plain_font);
-			small.SetSize(12);
+			small.SetSize(12.0f * s);
 			small.SetFace(B_BOLD_FACE);
 			SetFont(&small);
-			float w = small.StringWidth(B_TRANSLATE("Private")) + 28;
-			fPill = BRect(right - w, by + 3, right, by + 26);
+			font_height sfh;
+			small.GetHeight(&sfh);
+			float w = small.StringWidth(B_TRANSLATE("Private")) + sc(28);
+			fPill = BRect(right - w, by + sc(3), right, by + btnSize - sc(3));
 			SetHighColor(p.dark ? rgb(60, 40, 90) : rgb(237, 231, 250));
-			FillRoundRect(fPill, 12, 12);
+			FillRoundRect(fPill, sc(12), sc(12));
 			r5_glyph_draw(this, R5_GLYPH_MASK,
-				BRect(fPill.left + 6, fPill.top + 2, fPill.left + 20, fPill.bottom - 2),
+				BRect(fPill.left + sc(6), fPill.top + sc(2),
+					fPill.left + sc(20), fPill.bottom - sc(2)),
 				p.dark ? rgb(196, 181, 253) : rgb(124, 58, 237));
 			SetHighColor(p.dark ? rgb(196, 181, 253) : rgb(124, 58, 237));
-			DrawString(B_TRANSLATE("Private"), BPoint(fPill.left + 22, fPill.bottom - 6));
-			right = fPill.left - 6;
+			float pbase = fPill.top + (fPill.Height() + sfh.ascent - sfh.descent) / 2.0f;
+			DrawString(B_TRANSLATE("Private"), BPoint(fPill.left + sc(22), pbase));
+			right = fPill.left - sc(6);
 		} else {
 			fPill = BRect();
 		}
-		fURL = BRect(x, by, right, by + 29);
+		fURL = BRect(x, by, right, by + btnSize);
 		SetHighColor(p.field);
-		FillRoundRect(fURL, 7, 7);
+		FillRoundRect(fURL, tabRad, tabRad);
 		SetHighColor(fFocus ? p.accent : p.fline);
-		StrokeRoundRect(fURL, 7, 7);
+		StrokeRoundRect(fURL, tabRad, tabRad);
 		BString address(fWindow->Address());
 		bool blank = address.Length() == 0 || address.StartsWith("aomi:");
 		if (!blank && address.StartsWith("http")) {
@@ -314,20 +363,26 @@ public:
 				? rgb(27, 127, 69) : p.sub;
 			if (fWindow->Security() == AOMI_SECURITY_CERTIFICATE)
 				lock = rgb(180, 40, 40);
-			fLock = BRect(fURL.left + 6, fURL.top + 6, fURL.left + 22, fURL.bottom - 6);
+			fLock = BRect(fURL.left + sc(6), fURL.top + sc(6),
+				fURL.left + sc(22), fURL.bottom - sc(6));
 			r5_glyph_draw(this, R5_GLYPH_LOCK, fLock, lock);
 		} else {
-			fLock = BRect(fURL.left + 6, fURL.top + 5, fURL.left + 24, fURL.bottom - 5);
+			fLock = BRect(fURL.left + sc(6), fURL.top + sc(5),
+				fURL.left + sc(24), fURL.bottom - sc(5));
 			r5_glyph_draw(this, R5_GLYPH_SEARCH, fLock, p.sub);
 		}
-		fStar = BRect(fURL.right - 24, fURL.top + 6, fURL.right - 6, fURL.bottom - 6);
+		fStar = BRect(fURL.right - sc(24), fURL.top + sc(6),
+			fURL.right - sc(6), fURL.bottom - sc(6));
 		r5_glyph_draw(this, R5_GLYPH_STAR, fStar,
 			fWindow->Bookmarked() ? p.accent : p.sub);
 		if (!fFocus) {
 			BFont text(be_plain_font);
-			text.SetSize(13.5f);
+			text.SetSize(13.5f * s);
 			SetFont(&text);
-			BPoint pen(fURL.left + 30, fURL.top + 19);
+			font_height ufh;
+			text.GetHeight(&ufh);
+			float ubase = fURL.top + (fURL.Height() + ufh.ascent - ufh.descent) / 2.0f;
+			BPoint pen(fURL.left + sc(30), ubase);
 			if (blank) {
 				SetHighColor(p.sub);
 				DrawString(B_TRANSLATE("Search or type an address"), pen);
@@ -344,12 +399,9 @@ public:
 				text.SetFace(B_BOLD_FACE);
 				SetFont(&text);
 				SetHighColor(p.text);
-				float maxRight = fStar.left - 6;
+				float maxRight = fStar.left - sc(6);
 				if (pen.x < maxRight) {
 					BString drawBold(bold);
-					font_height fh;
-					text.GetHeight(&fh);
-					(void)fh;
 					text.TruncateString(&drawBold, B_TRUNCATE_END,
 						maxRight - pen.x);
 					DrawString(drawBold.String(), pen);
@@ -368,7 +420,7 @@ public:
 		}
 		if (fWindow->Loading()) {
 			float width = fURL.Width() * fWindow->TabProgress(active);
-			if (width < 40)
+			if (width < sc(40))
 				width = Bounds().Width() * 0.2f;
 			SetHighColor(p.accent);
 			FillRect(BRect(0, navY + kNav - 2, width, navY + kNav - 1));
@@ -479,31 +531,38 @@ public:
 private:
 	BRect _Button(float x, float y, r5_glyph glyph, bool on, const Palette& p)
 	{
-		BRect rect(x, y, x + 29, y + 29);
+		float bSize = sc(29);
+		float rad = sc(7);
+		float inset = sc(5);
+		BRect rect(x, y, x + bSize, y + bSize);
 		SetHighColor(p.ctl);
-		FillRoundRect(rect, 7, 7);
+		FillRoundRect(rect, rad, rad);
 		SetHighColor(p.cline);
-		StrokeRoundRect(rect, 7, 7);
+		StrokeRoundRect(rect, rad, rad);
 		rgb_color color = on ? p.text : mix(p.text, p.panel, 0.62f);
-		r5_glyph_draw(this, glyph, rect.InsetByCopy(5, 5), color);
+		r5_glyph_draw(this, glyph, rect.InsetByCopy(inset, inset), color);
 		return rect;
 	}
 
 	void _Icon(BRect rect, r5_glyph glyph, rgb_color color, const Palette& p)
 	{
 		(void)p;
-		r5_glyph_draw(this, glyph, rect.InsetByCopy(5, 5), color);
+		float inset = sc(5);
+		r5_glyph_draw(this, glyph, rect.InsetByCopy(inset, inset), color);
 	}
 
 	void _Place()
 	{
+		float kTabs = tabs_h();
+		float bSize = sc(29);
 		if (!fURL.IsValid())
-			fURL = BRect(120, kTabs + 6, Bounds().right - 80, kTabs + 35);
-		fField->MoveTo(fURL.left + 28, fURL.top + 4);
-		fField->ResizeTo(fURL.Width() - 56, 20);
+			fURL = BRect(sc(120), kTabs + sc(6), Bounds().right - sc(80),
+				kTabs + sc(6) + bSize);
+		fField->MoveTo(fURL.left + sc(28), fURL.top + sc(4));
+		fField->ResizeTo(fURL.Width() - sc(56), sc(20));
 		if (!fFocus)
 			fField->Hide();
-		SetExplicitMinSize(BSize(400, Height()));
+		SetExplicitMinSize(BSize(sc(400), Height()));
 		SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, Height()));
 	}
 
@@ -526,39 +585,99 @@ private:
 };
 
 
+struct ShortcutTile {
+	const char* badge;
+	const char* label;
+	const char* url;
+	uint8 r, g, b;
+};
+
+static const ShortcutTile kShortcutTiles[] = {
+	{ "R5", "R5", "https://r5-operating-system.github.io/", 0, 132, 255 },
+	{ "S", "Servo", "https://servo.org/", 28, 34, 44 },
+	{ "N", "Northline", "https://example.com/", 176, 74, 16 },
+	{ "W", "Wikipedia", "https://en.wikipedia.org/wiki/Haiku_(operating_system)", 24, 148, 66 },
+	{ "H", "HaikuPorts", "https://www.haiku-os.org/", 124, 58, 237 },
+	{ "G", "GitHub", "https://github.com/login", 22, 118, 86 },
+};
+static const int32 kShortcutCount = 6;
+
+
+class NewTabSearchInput : public BTextView {
+public:
+	NewTabSearchInput()
+		:
+		BTextView("ntp input")
+	{
+		MakeResizable(false);
+		SetWordWrap(false);
+		SetInsets(0, 0, 0, 0);
+		BFont font(be_plain_font);
+		font.SetSize(14.5f * ui_scale());
+		SetFontAndColor(&font);
+	}
+
+	virtual void KeyDown(const char* bytes, int32 numBytes)
+	{
+		if (numBytes == 1 && (bytes[0] == B_ENTER || bytes[0] == B_RETURN)) {
+			Window()->PostMessage(MSG_NTP_GO);
+			return;
+		}
+		BTextView::KeyDown(bytes, numBytes);
+	}
+};
+
+
 class NewTabView : public BView {
 public:
 	NewTabView(bool privat)
 		:
-		BView("new tab", B_WILL_DRAW),
-		fPrivate(privat)
+		BView("new tab", B_WILL_DRAW | B_FULL_UPDATE_ON_RESIZE),
+		fPrivate(privat),
+		fPebble(NULL),
+		fPebbleSize(0),
+		fInput(new NewTabSearchInput())
 	{
-		SetViewColor(fPrivate ? rgb(15, 42, 74) : rgb(234, 244, 255));
-		fSearch = new BTextControl("search", NULL, "", new BMessage(MSG_NTP_GO));
-		AddChild(fSearch);
+		SetViewColor(B_TRANSPARENT_COLOR);
+		AddChild(fInput);
+		_EnsurePebble();
+	}
+
+	virtual ~NewTabView()
+	{
+		delete fPebble;
+	}
+
+	void ApplyFontScale()
+	{
+		_EnsurePebble();
+		_Place();
+		Invalidate();
 	}
 
 	virtual void AttachedToWindow()
 	{
 		BView::AttachedToWindow();
-		fSearch->SetTarget(Window());
-		BFont font(be_plain_font);
-		font.SetSize(15);
-		fSearch->TextView()->SetFontAndColor(&font);
 		_Place();
 	}
 
-	virtual void FrameResized(float, float) { _Place(); }
+	virtual void FrameResized(float, float)
+	{
+		_Place();
+		Invalidate();
+	}
 
 	virtual void Draw(BRect)
 	{
 		Palette p = palette();
+		float s = ui_scale();
+		_EnsurePebble();
 		BRect b = Bounds();
 		for (int32 y = 0; y <= (int32)b.Height(); y += 2) {
 			float t = b.Height() > 0 ? y / b.Height() : 0;
 			rgb_color c;
 			if (fPrivate)
-				c = mix(rgb(27, 42, 90), rgb(15, 42, 74), t);
+				c = mix(rgb(25, 39, 86), rgb(15, 42, 74), t);
 			else if (p.dark)
 				c = mix(rgb(18, 50, 87), rgb(15, 42, 74), t);
 			else
@@ -566,53 +685,185 @@ public:
 			SetHighColor(c);
 			FillRect(BRect(0, y, b.right, y + 1));
 		}
-		BPoint center(b.Width() / 2, 150);
-		SetHighColor(rgb(15, 42, 74));
-		FillEllipse(center, 42, 42);
-		SetHighColor(rgb(56, 152, 255));
-		FillEllipse(BPoint(center.x, center.y + 8), 30, 16);
-		SetHighColor(255, 255, 255);
-		StrokeArc(BRect(center.x - 28, center.y - 4, center.x + 28, center.y + 12),
-			200, 140);
-		FillEllipse(BPoint(center.x, center.y - 14), 5, 5);
+
+		float cx = b.Width() / 2.0f;
+		float pSz = (float)fPebbleSize;
+		float logoTop = fPrivate ? sc(120) : sc(90);
+		if (b.Height() > sc(620))
+			logoTop = fPrivate ? sc(156) : sc(126);
+		if (fPebble != NULL) {
+			SetDrawingMode(B_OP_ALPHA);
+			SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_OVERLAY);
+			DrawBitmap(fPebble, BPoint(floorf(cx - pSz / 2.0f), logoTop));
+			SetDrawingMode(B_OP_COPY);
+		}
+
 		BFont font(be_plain_font);
-		font.SetSize(26);
+		font.SetSize(25.0f * s);
 		font.SetFace(B_BOLD_FACE);
 		SetFont(&font);
 		SetHighColor(fPrivate || p.dark ? rgb(255, 255, 255) : rgb(15, 42, 74));
-		const char* title = fPrivate
-			? B_TRANSLATE("Private window") : "Aomi";
-		float w = font.StringWidth(title);
-		DrawString(title, BPoint(center.x - w / 2, 220));
+		const char* title = fPrivate ? B_TRANSLATE("Private window") : "Aomi";
+		float tw = font.StringWidth(title);
+		float titleY = logoTop + pSz + sc(34);
+		DrawString(title, BPoint(cx - tw / 2, titleY));
+
+		// Rounded search field matching mockup
+		BRect pill = _SearchRect();
+		float pillRad = pill.Height() / 2.0f;
+		rgb_color fieldBg = (p.dark && !fPrivate) ? rgb(26, 32, 42) : rgb(255, 255, 255);
+		rgb_color fieldFg = (p.dark && !fPrivate) ? rgb(230, 233, 239) : rgb(20, 25, 35);
+		SetHighColor(fieldBg);
+		FillRoundRect(pill, pillRad, pillRad);
+		SetHighColor(p.accent);
+		StrokeRoundRect(pill, pillRad, pillRad);
+		float gSz = sc(16);
+		float gTop = pill.top + (pill.Height() - gSz) / 2.0f;
+		r5_glyph_draw(this, R5_GLYPH_SEARCH,
+			BRect(pill.left + sc(16), gTop, pill.left + sc(16) + gSz, gTop + gSz),
+			p.sub);
+
+		fInput->SetViewColor(fieldBg);
+		fInput->SetLowColor(fieldBg);
+		BFont ifont(be_plain_font);
+		ifont.SetSize(14.5f * s);
+		fInput->SetFontAndColor(&ifont, B_FONT_ALL, &fieldFg);
+
+		if (fInput->TextLength() == 0) {
+			BFont ph(be_plain_font);
+			ph.SetSize(14.5f * s);
+			SetFont(&ph);
+			font_height pfh;
+			ph.GetHeight(&pfh);
+			float pbase = pill.top + (pill.Height() + pfh.ascent - pfh.descent) / 2.0f;
+			SetHighColor(p.sub);
+			const char* placeholder = fPrivate
+				? B_TRANSLATE("Search privately or type an address")
+				: B_TRANSLATE("Search the web or type an address");
+			DrawString(placeholder, BPoint(pill.left + sc(42), pbase));
+		}
+
 		if (fPrivate) {
-			font.SetSize(13.5f);
+			font.SetSize(13.5f * s);
 			font.SetFace(B_REGULAR_FACE);
 			SetFont(&font);
 			SetHighColor(rgb(200, 214, 235));
 			const char* note1 = B_TRANSLATE(
 				"Aomi forgets the history, cookies and site data of this window when you close it.");
 			float nw1 = font.StringWidth(note1);
-			DrawString(note1, BPoint(center.x - nw1 / 2, 296));
+			DrawString(note1, BPoint(cx - nw1 / 2, pill.bottom + sc(26)));
 			const char* note2 = B_TRANSLATE("Downloads and new bookmarks stay.");
 			float nw2 = font.StringWidth(note2);
-			DrawString(note2, BPoint(center.x - nw2 / 2, 316));
+			DrawString(note2, BPoint(cx - nw2 / 2, pill.bottom + sc(46)));
+		} else {
+			// 6 shortcut tiles matching mockup; nothing stray at bottom
+			float cardW = sc(104);
+			float cardH = sc(92);
+			float gap = sc(14);
+			float totalW = kShortcutCount * cardW + (kShortcutCount - 1) * gap;
+			if (totalW > b.Width() - sc(32)) {
+				cardW = floorf((b.Width() - sc(32) - (kShortcutCount - 1) * gap)
+					/ kShortcutCount);
+				totalW = kShortcutCount * cardW + (kShortcutCount - 1) * gap;
+			}
+			float startX = cx - totalW / 2;
+			float topY = pill.bottom + sc(32);
+			for (int32 i = 0; i < kShortcutCount; i++) {
+				BRect tile(startX + i * (cardW + gap), topY,
+					startX + i * (cardW + gap) + cardW - 1, topY + cardH - 1);
+				fTiles[i] = tile;
+				SetHighColor(p.dark ? rgb(26, 36, 54) : rgb(255, 255, 255));
+				FillRoundRect(tile, sc(12), sc(12));
+				SetHighColor(p.dark ? rgb(53, 66, 90) : rgb(216, 224, 236));
+				StrokeRoundRect(tile, sc(12), sc(12));
+
+				float bSize = sc(34);
+				BRect badge(tile.left + (cardW - bSize) / 2, tile.top + sc(16),
+					tile.left + (cardW + bSize) / 2 - 1, tile.top + sc(16) + bSize - 1);
+				SetHighColor(rgb(kShortcutTiles[i].r, kShortcutTiles[i].g,
+					kShortcutTiles[i].b));
+				FillRoundRect(badge, sc(8), sc(8));
+
+				BFont bf(be_bold_font);
+				bf.SetSize(13.5f * s);
+				SetFont(&bf);
+				font_height bfh;
+				bf.GetHeight(&bfh);
+				SetHighColor(255, 255, 255);
+				float bw = bf.StringWidth(kShortcutTiles[i].badge);
+				DrawString(kShortcutTiles[i].badge,
+					BPoint(badge.left + (bSize - bw) / 2,
+						badge.top + (bSize + bfh.ascent - bfh.descent) / 2.0f));
+
+				BFont lf(be_plain_font);
+				lf.SetSize(12.5f * s);
+				SetFont(&lf);
+				SetHighColor(p.dark ? rgb(230, 233, 239) : rgb(20, 25, 35));
+				float lw = lf.StringWidth(kShortcutTiles[i].label);
+				DrawString(kShortcutTiles[i].label,
+					BPoint(tile.left + (cardW - lw) / 2, tile.bottom - sc(14)));
+			}
 		}
 	}
 
-	const char* Text() const { return fSearch->Text(); }
-
-private:
-	void _Place()
+	virtual void MouseDown(BPoint where)
 	{
-		float w = 560;
-		if (w > Bounds().Width() - 40)
-			w = Bounds().Width() - 40;
-		fSearch->MoveTo((Bounds().Width() - w) / 2, 240);
-		fSearch->ResizeTo(w, 32);
+		if (!fPrivate) {
+			for (int32 i = 0; i < kShortcutCount; i++) {
+				if (fTiles[i].Contains(where)) {
+					BMessage msg(MSG_OPEN_BOOKMARK);
+					msg.AddString("url", kShortcutTiles[i].url);
+					Window()->PostMessage(&msg);
+					return;
+				}
+			}
+		}
+		if (_SearchRect().Contains(where)) {
+			fInput->MakeFocus(true);
+			Invalidate();
+		}
 	}
 
-	bool			fPrivate;
-	BTextControl*	fSearch;
+	const char* Text() const { return fInput->Text(); }
+
+private:
+	void _EnsurePebble()
+	{
+		int32 want = (int32)sc(72);
+		if (want < 32)
+			want = 32;
+		if (fPebble != NULL && fPebbleSize == want)
+			return;
+		delete fPebble;
+		fPebble = r5_vector_icon_bitmap(kR5Pebble, sizeof(kR5Pebble), want);
+		fPebbleSize = want;
+	}
+
+	BRect _SearchRect() const
+	{
+		float w = sc(560);
+		if (w > Bounds().Width() - sc(48))
+			w = Bounds().Width() - sc(48);
+		float logoTop = fPrivate ? sc(120) : sc(90);
+		if (Bounds().Height() > sc(620))
+			logoTop = fPrivate ? sc(156) : sc(126);
+		float top = logoTop + sc(72) + sc(58);
+		float left = (Bounds().Width() - w) / 2.0f;
+		return BRect(left, top, left + w, top + sc(43));
+	}
+
+	void _Place()
+	{
+		BRect pill = _SearchRect();
+		fInput->MoveTo(pill.left + sc(40), pill.top + sc(11));
+		fInput->ResizeTo(pill.Width() - sc(56), sc(22));
+	}
+
+	bool				fPrivate;
+	BBitmap*			fPebble;
+	int32				fPebbleSize;
+	NewTabSearchInput*	fInput;
+	BRect				fTiles[kShortcutCount];
 };
 
 
@@ -665,8 +916,9 @@ public:
 		for (int32 i = 0; i < CountChildren(); i++) {
 			BView* child = ChildAt(i);
 			if (child->Name() != NULL && strcmp(child->Name(), "find bar") == 0) {
-				child->MoveTo(0, height - 32);
-				child->ResizeTo(width, 32);
+				float fh = sc(32);
+				child->MoveTo(0, height - fh);
+				child->ResizeTo(width, fh);
 			} else {
 				child->MoveTo(0, 0);
 				child->ResizeTo(width, height);
@@ -733,15 +985,15 @@ BRect
 AomiWindow::_Frame()
 {
 	BRect screen = BScreen().Frame();
-	float width = 1252;
-	float height = 760;
-	if (screen.Width() < width + 28)
-		width = screen.Width() - 28;
-	if (screen.Height() < height + 48)
-		height = screen.Height() - 48;
-	float x = 14;
-	float y = 32;
-	return BRect(x, y, x + width - 1, y + height - 1);
+	float width = sc(1252);
+	float height = sc(760);
+	float marginX = sc(14);
+	float topY = sc(32);
+	if (screen.Width() < width + marginX * 2)
+		width = screen.Width() - marginX * 2;
+	if (screen.Height() < height + topY + 12)
+		height = screen.Height() - topY - 12;
+	return BRect(marginX, topY, marginX + width - 1, topY + height - 1);
 }
 
 
@@ -939,7 +1191,7 @@ AomiWindow::_AddTab(const char* url, bool select, BWebContentView* adopt)
 	if (adopt != NULL)
 		tab.view = adopt;
 	else {
-		tab.view = create_aomi_content_view("WebKit", "page", fSession);
+		tab.view = create_aomi_content_view("Servo", "page", fSession);
 	}
 	int32 index = (int32)fTabs.size();
 	TabProxy* proxy = new TabProxy(this, index);
@@ -965,9 +1217,79 @@ AomiWindow::_LoadOn(int32 index, const char* url)
 {
 	if (index < 0 || index >= (int32)fTabs.size() || fTabs[index].view == NULL)
 		return;
+	if (url == NULL || url[0] == '\0')
+		return;
+	if (strcmp(url, "aomi:copy-technical") == 0) {
+		PostMessage(MSG_COPY_TECHNICAL);
+		return;
+	}
 	fTabs[index].url = url;
+	fTabs[index].protocol = "";
+	if (strcmp(url, "aomi:newtab") == 0) {
+		fTabs[index].loading = false;
+		fTabs[index].title = fPrivate
+			? B_TRANSLATE("Private – New tab") : B_TRANSLATE("New tab");
+		if (index == fActive)
+			_Select(fActive);
+		fChrome->Invalidate();
+		return;
+	}
+	if (strcmp(url, "aomi:about") == 0) {
+		fTabs[index].loading = false;
+		fTabs[index].title = B_TRANSLATE("About Aomi");
+		BString html = aomi_about_html(palette().dark);
+		fTabs[index].view->LoadHTML(html.String(), "aomi:about");
+		if (index == fActive)
+			_Select(fActive);
+		fChrome->Invalidate();
+		return;
+	}
+	if (strcmp(url, "aomi:technical") == 0 || strcmp(url, "aomi:version") == 0
+		|| strcmp(url, "aomi:gpu") == 0) {
+		fTabs[index].url = "aomi:technical";
+		fTabs[index].loading = false;
+		fTabs[index].title = B_TRANSLATE("Technical info");
+		BFile jf("/tmp/aomi-technical.json",
+			B_CREATE_FILE | B_ERASE_FILE | B_WRITE_ONLY);
+		if (jf.InitCheck() == B_OK) {
+			BString j = aomi_technical_json();
+			jf.Write(j.String(), j.Length());
+		}
+		BString html = aomi_technical_html(palette().dark);
+		fTabs[index].view->LoadHTML(html.String(), "aomi:technical");
+		if (index == fActive)
+			_Select(fActive);
+		fChrome->Invalidate();
+		return;
+	}
+	if (strcmp(url, "aomi:technical.json") == 0) {
+		fTabs[index].loading = false;
+		fTabs[index].title = "technical.json";
+		BString j = aomi_technical_json();
+		BFile jf("/tmp/aomi-technical.json",
+			B_CREATE_FILE | B_ERASE_FILE | B_WRITE_ONLY);
+		if (jf.InitCheck() == B_OK)
+			jf.Write(j.String(), j.Length());
+		BString html("<!DOCTYPE html><html><head><meta charset='utf-8'>"
+			"<title>technical.json</title><style>body{margin:16px;font:13px/1.5 monospace;background:");
+		html << (palette().dark ? "#15181e;color:#e6e9ef" : "#f6f8fb;color:#141923")
+			<< ";}pre{white-space:pre-wrap;}</style></head><body><pre>";
+		BString esc(j);
+		esc.ReplaceAll("&", "&amp;");
+		esc.ReplaceAll("<", "&lt;");
+		esc.ReplaceAll(">", "&gt;");
+		html << esc << "</pre></body></html>";
+		fTabs[index].view->LoadHTML(html.String(), "aomi:technical.json");
+		if (index == fActive)
+			_Select(fActive);
+		fChrome->Invalidate();
+		return;
+	}
 	fTabs[index].loading = true;
+	aomi_log_add(BString("load ").Append(url).String());
 	fTabs[index].view->LoadURL(url);
+	if (index == fActive)
+		_Select(fActive);
 }
 
 
@@ -991,7 +1313,7 @@ AomiWindow::_Select(int32 index)
 		return;
 	fActive = index;
 	bool ntp = fTabs[index].url.Length() == 0
-		|| fTabs[index].url.StartsWith("aomi:");
+		|| fTabs[index].url == "aomi:newtab";
 	for (int32 i = 0; i < (int32)fTabs.size(); i++) {
 		if (fTabs[i].view == NULL)
 			continue;
@@ -1263,11 +1585,60 @@ AomiWindow::MessageReceived(BMessage* message)
 			fChrome->Invalidate();
 			break;
 		}
-		case AOMI_DOWNLOAD_ADDED:
-		case AOMI_DOWNLOAD_PROGRESS:
-		case AOMI_DOWNLOAD_FINISHED:
-		case AOMI_DOWNLOAD_FAILED:
+		case AOMI_PROTOCOL:
+		{
+			BString proto;
+			if (validTab && message->FindString("protocol", &proto) == B_OK
+				&& proto.Length() > 0) {
+				fTabs[tab].protocol = proto;
+				BString line("protocol tab=");
+				line << tab << " " << proto;
+				_Log(line.String());
+			}
+			fChrome->Invalidate();
 			break;
+		}
+		case AOMI_DOWNLOAD_ADDED:
+		{
+			DlEntry entry;
+			entry.id = 0;
+			entry.done = false;
+			entry.failed = false;
+			message->FindInt32("id", &entry.id);
+			message->FindString("name", &entry.name);
+			fDownloads.push_back(entry);
+			break;
+		}
+		case AOMI_DOWNLOAD_PROGRESS:
+			break;
+		case AOMI_DOWNLOAD_FINISHED:
+		{
+			int32 id = 0;
+			BString path;
+			message->FindInt32("id", &id);
+			message->FindString("path", &path);
+			for (size_t i = 0; i < fDownloads.size(); i++) {
+				if (fDownloads[i].id == id) {
+					fDownloads[i].done = true;
+					fDownloads[i].path = path;
+					break;
+				}
+			}
+			break;
+		}
+		case AOMI_DOWNLOAD_FAILED:
+		{
+			int32 id = 0;
+			message->FindInt32("id", &id);
+			for (size_t i = 0; i < fDownloads.size(); i++) {
+				if (fDownloads[i].id == id) {
+					fDownloads[i].done = true;
+					fDownloads[i].failed = true;
+					break;
+				}
+			}
+			break;
+		}
 		case AOMI_CLOSE_WANTED:
 			PostMessage(B_QUIT_REQUESTED);
 			break;
@@ -1460,16 +1831,60 @@ AomiWindow::MessageReceived(BMessage* message)
 				_Select(fActive);
 			break;
 		case MSG_ABOUT:
+			_AddTab("aomi:about", true, NULL);
+			break;
+		case MSG_TECHNICAL:
+			_AddTab("aomi:technical", true, NULL);
+			break;
+		case MSG_COPY_TECHNICAL:
 		{
-			BAlert* alert = new BAlert("Aomi",
-				B_TRANSLATE("Aomi\nBrowse beyond the horizon."),
-				B_TRANSLATE("OK"));
-			alert->Go(NULL);
+			BString text = aomi_technical_text();
+			if (be_clipboard->Lock()) {
+				be_clipboard->Clear();
+				BMessage* clip = be_clipboard->Data();
+				if (clip != NULL) {
+					clip->AddData("text/plain", B_MIME_TYPE, text.String(),
+						text.Length());
+					be_clipboard->Commit();
+				}
+				be_clipboard->Unlock();
+			}
+			aomi_log_add("Copied technical information to clipboard");
 			break;
 		}
+		case MSG_OPEN_URL:
+		{
+			BString url;
+			bool newTab = true;
+			message->FindBool("newTab", &newTab);
+			if (message->FindString("url", &url) == B_OK && url.Length() > 0)
+				OpenURL(url.String(), newTab);
+			break;
+		}
+		case MSG_DOWNLOAD_URL:
+		{
+			BString url;
+			if (message->FindString("url", &url) == B_OK)
+				aomi_start_download(url.String(), fPrefs.downloadPath.String());
+			break;
+		}
+		case B_FONTS_UPDATED:
+			static_cast<ChromeView*>(fChrome)->ApplyFontScale();
+			static_cast<NewTabView*>(fNewTab)->ApplyFontScale();
+			if (GetLayout() != NULL)
+				GetLayout()->InvalidateLayout();
+			BWindow::MessageReceived(message);
+			break;
 		case B_COLORS_UPDATED:
 			fChrome->Invalidate();
 			fNewTab->Invalidate();
+			if (fActive >= 0 && fActive < (int32)fTabs.size()) {
+				if (fTabs[fActive].url == "aomi:about"
+					|| fTabs[fActive].url == "aomi:technical"
+					|| fTabs[fActive].url == "aomi:technical.json") {
+					_LoadOn(fActive, fTabs[fActive].url.String());
+				}
+			}
 			BWindow::MessageReceived(message);
 			break;
 		default:
@@ -1495,9 +1910,10 @@ AomiWindow::_OpenLock()
 	BStringView* title = new BStringView("host", host.String());
 	title->SetFont(be_bold_font);
 	BString line(B_TRANSLATE("Connection: "));
-	BString protocol;
-	status_t status = fTabs[fActive].view != NULL
-		? fTabs[fActive].view->Protocol(&protocol) : B_NOT_SUPPORTED;
+	BString protocol(fTabs[fActive].protocol);
+	status_t status = protocol.Length() > 0 ? B_OK : B_NOT_SUPPORTED;
+	if (status != B_OK && fTabs[fActive].view != NULL)
+		status = fTabs[fActive].view->Protocol(&protocol);
 	if (status == B_OK && protocol == "h2")
 		line << B_TRANSLATE("HTTP/2");
 	else if (status == B_OK && protocol == "h3")
@@ -1536,8 +1952,21 @@ AomiWindow::OpenDownloads()
 	BStringView* title = new BStringView("dl", B_TRANSLATE("Downloads"));
 	title->SetFont(be_bold_font);
 	view->AddChild(title);
-	view->AddChild(new BStringView("empty",
-		B_TRANSLATE("Files you download are listed here.")));
+	if (fDownloads.empty()) {
+		view->AddChild(new BStringView("empty",
+			B_TRANSLATE("Files you download are listed here.")));
+	} else {
+		for (int32 i = (int32)fDownloads.size() - 1; i >= 0 && i >= (int32)fDownloads.size() - 5; i--) {
+			BString row(fDownloads[i].name);
+			if (fDownloads[i].failed)
+				row << " – Failed";
+			else if (fDownloads[i].done)
+				row << " – Done";
+			else
+				row << " – Downloading…";
+			view->AddChild(new BStringView("dlrow", row.String()));
+		}
+	}
 	BButton* all = new BButton("all", B_TRANSLATE("Show all downloads"),
 		new BMessage(MSG_SHOW_ALL_DOWNLOADS));
 	all->SetTarget(this);
@@ -1548,6 +1977,91 @@ AomiWindow::OpenDownloads()
 	view->AddChild(folder);
 	panel->Show();
 }
+
+
+class ZoomMenuItem : public BMenuItem {
+public:
+	ZoomMenuItem(AomiWindow* window)
+		:
+		BMenuItem(B_TRANSLATE("Zoom"), new BMessage(MSG_ZOOM_RESET)),
+		fWindow(window)
+	{
+	}
+
+	virtual void GetContentSize(float* width, float* height)
+	{
+		BMenuItem::GetContentSize(width, height);
+		if (width != NULL && *width < sc(220))
+			*width = sc(220);
+		if (height != NULL && *height < sc(26))
+			*height = sc(26);
+	}
+
+	virtual void DrawContent()
+	{
+		BMenu* menu = Menu();
+		if (menu == NULL)
+			return;
+		BRect f = Frame();
+		Palette p = palette();
+		BFont font;
+		menu->GetFont(&font);
+		font_height fh;
+		font.GetHeight(&fh);
+		float baseline = f.top + (f.Height() + fh.ascent - fh.descent) / 2.0f;
+
+		menu->SetHighColor(p.text);
+		menu->DrawString(B_TRANSLATE("Zoom"), BPoint(f.left + sc(12), baseline));
+
+		float right = f.right - sc(10);
+		float h = sc(22);
+		float top = f.top + (f.Height() - h) / 2.0f;
+		fPlusRect = BRect(right - sc(24), top, right, top + h);
+		right = fPlusRect.left - sc(4);
+		fResetRect = BRect(right - sc(52), top, right, top + h);
+		right = fResetRect.left - sc(4);
+		fMinusRect = BRect(right - sc(24), top, right, top + h);
+
+		auto drawPill = [&](BRect r, const char* label) {
+			menu->SetHighColor(p.ctl);
+			menu->FillRoundRect(r, sc(6), sc(6));
+			menu->SetHighColor(p.cline);
+			menu->StrokeRoundRect(r, sc(6), sc(6));
+			menu->SetHighColor(p.text);
+			float lw = font.StringWidth(label);
+			menu->DrawString(label, BPoint(r.left + (r.Width() - lw) / 2.0f,
+				r.top + (r.Height() + fh.ascent - fh.descent) / 2.0f));
+		};
+		drawPill(fMinusRect, "−");
+		BString pct;
+		pct.SetToFormat("%d %%", (int)(fWindow->PageZoom() * 100.0f + 0.5f));
+		drawPill(fResetRect, pct.String());
+		drawPill(fPlusRect, "+");
+	}
+
+	virtual status_t Invoke(BMessage* message = NULL)
+	{
+		(void)message;
+		BMenu* menu = Menu();
+		uint32 cmd = MSG_ZOOM_RESET;
+		if (menu != NULL) {
+			BPoint where;
+			uint32 buttons = 0;
+			menu->GetMouse(&where, &buttons, false);
+			if (fMinusRect.Contains(where))
+				cmd = MSG_ZOOM_OUT;
+			else if (fPlusRect.Contains(where))
+				cmd = MSG_ZOOM_IN;
+		}
+		return fWindow->PostMessage(cmd);
+	}
+
+private:
+	AomiWindow*	fWindow;
+	BRect		fMinusRect;
+	BRect		fResetRect;
+	BRect		fPlusRect;
+};
 
 
 void
@@ -1577,12 +2091,7 @@ AomiWindow::OpenMenu()
 	menu->AddItem(new BMenuItem(B_TRANSLATE("Downloads"),
 		new BMessage(MSG_DOWNLOADS), 'D'));
 	menu->AddSeparatorItem();
-	menu->AddItem(new BMenuItem(B_TRANSLATE("Zoom out"),
-		new BMessage(MSG_ZOOM_OUT), '-'));
-	menu->AddItem(new BMenuItem(B_TRANSLATE("100 %"),
-		new BMessage(MSG_ZOOM_RESET), '0'));
-	menu->AddItem(new BMenuItem(B_TRANSLATE("Zoom in"),
-		new BMessage(MSG_ZOOM_IN), '+'));
+	menu->AddItem(new ZoomMenuItem(this));
 	menu->AddItem(new BMenuItem(B_TRANSLATE("Find in page…"),
 		new BMessage(MSG_FIND), 'F'));
 	menu->AddItem(new BMenuItem(B_TRANSLATE("Save page as…"),
@@ -1600,6 +2109,8 @@ AomiWindow::OpenMenu()
 		new BMessage(MSG_SETTINGS), ',', B_COMMAND_KEY));
 	menu->AddItem(new BMenuItem(B_TRANSLATE("About Aomi"),
 		new BMessage(MSG_ABOUT)));
+	menu->AddItem(new BMenuItem(B_TRANSLATE("Technical info"),
+		new BMessage(MSG_TECHNICAL)));
 	menu->AddSeparatorItem();
 	menu->AddItem(new BMenuItem(B_TRANSLATE("Quit"),
 		new BMessage(B_QUIT_REQUESTED), 'Q'));

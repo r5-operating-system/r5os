@@ -7,6 +7,8 @@
 #include "AomiWindow.h"
 
 #include "AomiMessages.h"
+#include "AomiPages.h"
+#include "ServoContentView.h"
 #include "WebContentView.h"
 
 #include <Application.h>
@@ -24,7 +26,7 @@
 #include <vector>
 
 
-static const char* kEngine = "WebKit";
+static const char* kEngine = "Servo";
 static const char* kAppSig = "application/x-vnd.R5-Aomi";
 
 
@@ -168,6 +170,18 @@ public:
 									bool downloads = false;
 									bool settings = false;
 									bool closeSettings = false;
+									bool openLock = false;
+									bool doBack = false;
+									bool doForward = false;
+									bool doReload = false;
+									bool doStop = false;
+									bool doZoomIn = false;
+									bool doZoomOut = false;
+									bool doZoomReset = false;
+									bool doBookmark = false;
+									bool doFind = false;
+									BString downloadUrl;
+									BString goUrl;
 									int32 closeTab = -1;
 									std::vector<BString> urls;
 									for (int32 i = 1; i < argc; i++) {
@@ -186,7 +200,33 @@ public:
 										else if (strcmp(argv[i],
 												"--close-settings") == 0)
 											closeSettings = true;
-										else if (strcmp(argv[i],
+										else if (strcmp(argv[i], "--lock") == 0)
+											openLock = true;
+										else if (strcmp(argv[i], "--back") == 0)
+											doBack = true;
+										else if (strcmp(argv[i], "--forward") == 0)
+											doForward = true;
+										else if (strcmp(argv[i], "--reload") == 0)
+											doReload = true;
+										else if (strcmp(argv[i], "--stop") == 0)
+											doStop = true;
+										else if (strcmp(argv[i], "--zoom-in") == 0)
+											doZoomIn = true;
+										else if (strcmp(argv[i], "--zoom-out") == 0)
+											doZoomOut = true;
+										else if (strcmp(argv[i], "--zoom-reset") == 0)
+											doZoomReset = true;
+										else if (strcmp(argv[i], "--bookmark") == 0)
+											doBookmark = true;
+										else if (strcmp(argv[i], "--find") == 0)
+											doFind = true;
+										else if (strcmp(argv[i], "--download") == 0
+											&& i + 1 < argc) {
+											downloadUrl = argv[++i];
+										} else if (strcmp(argv[i], "--go") == 0
+											&& i + 1 < argc) {
+											goUrl = argv[++i];
+										} else if (strcmp(argv[i],
 												"--close-tab") == 0
 											&& i + 1 < argc) {
 											closeTab = atoi(argv[++i]);
@@ -227,14 +267,48 @@ public:
 										return;
 									if (!window->Lock())
 										return;
-									for (uint32 i = 0; i < urls.size(); i++)
-										window->OpenURL(urls[i].String(), true);
+									if (goUrl.Length() > 0) {
+										BMessage openMsg(MSG_OPEN_URL);
+										openMsg.AddString("url", goUrl);
+										openMsg.AddBool("newTab", false);
+										window->PostMessage(&openMsg);
+									}
+									for (uint32 i = 0; i < urls.size(); i++) {
+										BMessage openMsg(MSG_OPEN_URL);
+										openMsg.AddString("url", urls[i]);
+										openMsg.AddBool("newTab", true);
+										window->PostMessage(&openMsg);
+									}
 									if (menu)
 										window->PostMessage(MSG_MENU);
 									if (downloads)
 										window->PostMessage(MSG_DOWNLOADS);
 									if (settings)
 										window->PostMessage(MSG_SETTINGS);
+									if (openLock)
+										window->PostMessage(MSG_LOCK);
+									if (doBack)
+										window->PostMessage(MSG_BACK);
+									if (doForward)
+										window->PostMessage(MSG_FORWARD);
+									if (doReload)
+										window->PostMessage(MSG_RELOAD);
+									if (doStop)
+										window->PostMessage('esc!');
+									if (doZoomIn)
+										window->PostMessage(MSG_ZOOM_IN);
+									if (doZoomOut)
+										window->PostMessage(MSG_ZOOM_OUT);
+									if (doZoomReset)
+										window->PostMessage(MSG_ZOOM_RESET);
+									if (doBookmark)
+										window->PostMessage(MSG_STAR);
+									if (doFind)
+										window->PostMessage(MSG_FIND);
+									if (downloadUrl.Length() > 0) {
+										aomi_start_download(downloadUrl.String(),
+											window->Prefs().downloadPath.String());
+									}
 									if (closeTab >= 0) {
 										BMessage closeMsg(MSG_CLOSE_TAB);
 										closeMsg.AddInt32("tab", closeTab);
@@ -251,7 +325,10 @@ public:
 									window->Show();
 									bool first = true;
 									for (uint32 i = 0; i < fUrls.size(); i++) {
-										window->OpenURL(fUrls[i].String(), !first);
+										BMessage openMsg(MSG_OPEN_URL);
+										openMsg.AddString("url", fUrls[i]);
+										openMsg.AddBool("newTab", !first);
+										window->PostMessage(&openMsg);
 										first = false;
 									}
 									if (fMenu)
@@ -308,6 +385,11 @@ main(int argc, char** argv)
 {
 	bool privat = false;
 	for (int i = 1; i < argc; i++) {
+		if (strcmp(argv[i], "--technical-json") == 0) {
+			aomi_engine_start(kEngine);
+			printf("%s", aomi_technical_json().String());
+			return 0;
+		}
 		if (strcmp(argv[i], "--private") == 0
 			|| strcmp(argv[i], "--private-process") == 0) {
 			privat = true;
@@ -322,6 +404,8 @@ main(int argc, char** argv)
 		privDir.SetToFormat("/tmp/aomi-private-%d", (int)getpid());
 		mkdir(privDir.String(), 0700);
 		setenv("AOMI_PRIVATE_DIR", privDir.String(), 1);
+		setenv("XDG_CONFIG_HOME", privDir.String(), 1);
+		setenv("XDG_CACHE_HOME", privDir.String(), 1);
 	}
 	AomiApp app(privat, privDir.String());
 	app.Run();

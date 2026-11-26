@@ -8,6 +8,29 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-26 - Aomi on Servo only, app icon, font scaling, licences, and release-pinned r5servo (build 10078)
+
+- Problem: Aomi still linked Haiku WebKit 1.10 (`BWebKitContentView`), `r5servo` was committed as a 49 MiB `.hpkg` binary in git, Servo's licences were not yet credited in `LICENSING.md`/`THIRD_PARTY_NOTICES.md`/`LICENSES/`/About R5, Aomi lacked its own HVIF app icon, About/Technical pages, and font-size scaling.
+- Change:
+  - **Servo-only Aomi**: removed `WebKitContentView.{h,cpp}` and all WebKit dependencies from `distro/apps/aomi/Jamfile` (`readelf -d Aomi` confirms zero WebKit/JavaScriptCore `NEEDED` libraries). Added `BServoContentView` (`distro/apps/aomi/ServoContentView.{h,cpp}`) loading `/boot/system/lib/libr5servo.so` via `dlopen()` (defaults `GALLIUM_DRIVER=zink`). When `libr5servo.so` is missing or cannot start, Aomi renders a clear native error card instead of crashing or showing an empty window.
+  - **Servo engine updates (`r5servo-0.8.0-2`)**: added `ProtocolLogger` in `distro/servo/engine/src/lib.rs` to report `h2`/`h3`/`http/1.1` via `R5_EV_PROTOCOL`, shared `Servo` instance per thread (`SHARED_SERVO`), `AOMI_PRIVATE_DIR` -> `Opts::config_dir` for private isolation, `r5_servo_find()`, and `r5_servo_destroy()`.
+  - **No Servo binary in git**: removed `distro/packages/x86_64/r5servo-0.8.0-1-x86_64.hpkg` from git, published `r5servo-0.8.0-2-x86_64.hpkg` (51,589,958 bytes, 49.20 MiB) to GitHub Release `r5servo-0.8.0-2`, pinned its sha256 in `distro/servo/r5servo.sha256`, and updated `scripts/pin-mesa-packages.sh` to download and strictly verify the hash (stopping the build on mismatch).
+  - **UI, New tab, About & Technical pages, HVIF icon, font scaling**:
+    - New tab page (`NewTabView`): 72 px full-colour R5 wave pebble HVIF (`r5_pebble.inc`) centred above `"Aomi"` / `"Private window"`, rounded search pill, and 6 clickable shortcut tiles; nothing stray at the bottom.
+    - Single-row `ZoomMenuItem` (`−` / `100 %` / `+`) in the popup menu; Alt-based shortcuts kept.
+    - `aomi:about` (R5Book/website style, mockup `docs/design/aomi-mockup/about-aomi.html`) and `aomi:technical` (`aomi:version`, `aomi:gpu`, `aomi:technical.json`, `aomi:copy-technical`, `/tmp/aomi-technical.json`, `Aomi --technical-json`).
+    - Aomi HVIF app icon (`distro/artwork/aomi-icon.hvif`, embedded in `distro/apps/aomi/Aomi.rdef` via `scripts/generate-aomi-icon.py`, GPL-3.0-or-later snippet): lagoon gradient pebble + 55% back / 100% front `#4e7bfb` ring + highlight, LOD switch below 26 px to `r5-small` + thicker ring for 16 and 22 px.
+    - Font-size scaling (`be_plain_font->Size() / 12.0f`) across `ChromeView`, `NewTabView` (re-rasterises pebble from HVIF at target size, never stretches), `ZoomMenuItem`, find bar, and initial window frame, with `B_FONTS_UPDATED` handling.
+    - Shipped in Deskbar Applications as `"Aomi (experimental)"` (`distro/desktop/build/jam/packages/Haiku`); WebPositive stays installed and default.
+  - **Licences & docs**: added `LICENSES/MPL-2.0.txt` and `LICENSES/FTL.txt`; credited Servo (MPL-2.0 with source-offer line matching the `wpa_supplicant` model), FreeType (FTL), zlib, zstd (BSD-3-Clause), HarfBuzz (MIT), and aws-lc/ring/rustls in `docs/LICENSING.md`, `THIRD_PARTY_NOTICES.md`, and About R5 (`distro/about/licenses.txt`). Added R5Book page `docs/r5book/web-content-view.html` (linked from `docs/r5book/index.html`), updated `docs/AOMI.md` (including 5625U `servo-radv-glass` step), `distro/BUILD` (10078), `distro/WHATSNEW`, and exported `distro/catalogs/apps/aomi/` (71 texts).
+- Tested (26 Nov 2026, AMD64):
+  - Full image build via `scripts/build-locked.sh` (`jam_exit=0`, `mesa_exit=0`).
+  - `readelf -d Aomi | grep NEEDED`: only `libstdc++.so.6`, `libbe.so`, `libnetwork.so`, `libtracker.so`, `libr5ui.so`, `libr5icons.so`, `libroot.so`, `libgcc_s.so.1` (zero WebKit).
+  - Wrong-hash rejection: `scripts/pin-mesa-packages.sh` fetched `r5servo-0.8.0-2-x86_64.hpkg` from GitHub Release and exited non-zero with `ERROR: sha256 mismatch` when `R5SERVO_SHA256` was modified.
+  - Image size: 138 packages total 508.95 MiB (459.75 MiB without Servo + 49.20 MiB `r5servo-0.8.0-2-x86_64.hpkg`); 2.0 GiB image has 1.1 GiB free (fits USB stick).
+  - QEMU KVM (`R5_GL_TRACE=1`): confirmed Zink renderer (`zink Vulkan 1.4(llvmpipe (LLVM 21.1.8, 256 bits) (MESA_LLVMPIPE))`), `https://example.com/` loaded with `protocol h2`, `title=Example Domain`, and `1251x678` frame; `Aomi (experimental)` Deskbar symlink and WebPositive present; Aomi HVIF icon rendered cleanly via `r5_file_icon_bitmap()` at 64, 32, and 16 px on white and black (`aomi-icon-preview.png`).
+- Not yet proven / limits: full single-instance QEMU suite (`run4`: all probe pages, About/Technical screenshots, 18 pt scaling screenshots, aligned chrome pixel-diff, missing-`libr5servo.so` screenshot, `--technical-json` validation) is still finishing and needs independent review; 5625U hardware (RADV + GPU glass) not tested.
+
 ## 2026-11-26 - Servo: BServoView in libr5servo.so packaged as r5servo.hpkg
 
 - Problem: the red-page proof was a one-off program. Aomi needs one view class packaged for jam without running cargo, SpiderMonkey's `std::call_once` needs the initial-exec TLS image in `runtime_loader`, and HTTP/2 in the guest had not been shown because DHCPv6 left only `nameserver fec0::3` in `resolv.conf`.

@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
+# Pinned prebuilt r5servo package fetched from GitHub Releases (not stored in git).
+R5SERVO_VERSION=0.8.0-2
+R5SERVO_PKG=r5servo-0.8.0-2-x86_64.hpkg
+R5SERVO_URL=https://github.com/r5-operating-system/r5os/releases/download/r5servo-0.8.0-2/r5servo-0.8.0-2-x86_64.hpkg
+R5SERVO_SHA256=02da8a0c119eb845ac41bbb3d0bf17ae4644d00fe391ed9e13b92d99ddebc183

@@ -1,0 +1,286 @@
+msgid ""
+msgstr "Project-Id-Version: application/x-vnd.R5-Aomi\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\n"
+
+msgctxt "Aomi"
+msgid "Settings…"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Print…"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Bookmarks"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Private"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Downloads and new bookmarks stay."
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Ask where to save each file"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Find:"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Actual size"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Zoom"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Show bookmarks bar"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Bookmark this page"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "No"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Show menu bar"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Private window"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Private windows"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Search privately or type an address"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "New window"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Connection: "
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Aomi forgets the history, cookies and site data of this window when you close it."
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Zoom in"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Window"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Yes"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "OK"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Quit"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Downloads"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Files you download are listed here."
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Last session"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "protocol not reported"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Choose…"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Search address:"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "HTTP/1.1"
+msgstr ""
+
+msgctxt "Aomi"
+msgid ", secure"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "View source"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "HTTP/2"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Home page:"
+msgstr ""
+
+msgctxt "Aomi"
+msgid ", not secure"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Home page"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "About Aomi"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "This engine cannot print."
+msgstr ""
+
+msgctxt "Aomi"
+msgid ", certificate error"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Show home button"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Edit"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Cancel"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Close tab"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Manage bookmarks"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "View"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Defaults"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Search or type an address"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Show all downloads"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Private – New tab"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Aomi settings"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Reload"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Zoom text only"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Save page as…"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "New private window"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "New tab page"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "HTTP/3"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Revert"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Search the web or type an address"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Start with:"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Zoom out"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Save downloads to:"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Technical info"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "A private window forgets its history, cookies and site data when you close it."
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Find in page…"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Search engine:"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "New tab"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Help"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "History"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Private – Aomi"
+msgstr ""
+
+msgctxt "Aomi"
+msgid "Open folder"
+msgstr ""

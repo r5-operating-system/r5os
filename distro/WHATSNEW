@@ -1,3 +1,6 @@
+R5 2026.1-dev Build 10078 - Aomi (experimental) on Servo
+Aomi now runs on Servo as its sole web engine, listed in Applications as Aomi (experimental). WebPositive stays installed as the default browser. The new tab page shows the R5 wave pebble above Aomi with search and shortcuts, the menu has a single-row Zoom control, the lock panel reports HTTP/2, and Aomi adds an About Aomi page and a Technical info page (with Copy as text and JSON).
+
 R5 2026.1-dev Build 10077 - Aomi
 Aomi is the R5 browser. It opens in a compact window: tabs, one row for back, forward, reload and the address, bookmarks and downloads. Pages load with the browser engine that is already on the system. WebPositive is still installed. Browse beyond the horizon.
 
