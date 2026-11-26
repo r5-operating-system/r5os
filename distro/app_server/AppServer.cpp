@@ -379,8 +379,11 @@ AppServer::_ActivateDesktop(Desktop* target)
 		}
 	}
 
+	bigtime_t deactMs = 0;
 	if (current != NULL && current != target) {
+		bigtime_t tDeact = system_time();
 		status_t status = current->Deactivate();
+		deactMs = (system_time() - tDeact) / 1000;
 		if (status != B_OK) {
 			syslog(LOG_ERR, "app_server: switch to %d: deactivate %d: %s\n",
 				(int)target->UserID(), (int)current->UserID(),
@@ -388,7 +391,14 @@ AppServer::_ActivateDesktop(Desktop* target)
 			return status;
 		}
 	}
+	bigtime_t tAct = system_time();
 	status_t status = target->Activate();
+	bigtime_t actMs = (system_time() - tAct) / 1000;
+	syslog(LOG_DEBUG, "switch-timing: app_server %d->%d deactivate=%lld ms "
+		"activate=%lld ms status=%s\n",
+		current != NULL ? (int)current->UserID() : -1,
+		(int)target->UserID(), (long long)deactMs, (long long)actMs,
+		strerror(status));
 	if (status != B_OK) {
 		syslog(LOG_ERR, "app_server: switch %d->%d: activate %s\n",
 			current != NULL ? (int)current->UserID() : -1,

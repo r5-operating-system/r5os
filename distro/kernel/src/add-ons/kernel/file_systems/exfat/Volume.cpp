@@ -551,6 +551,13 @@ Volume::SyncDisk()
 		return B_OK;
 	MutexLocker allocation(fAllocLock);
 	status_t status = exfat_sync(&fStore, &fDisk);
+	if (status == B_DEV_NO_MEDIA || status == B_DEV_NOT_READY
+		|| status == ENODEV || status == B_FILE_ERROR) {
+		dprintf("exfat: media removed during sync (%s), marking read-only\n",
+			strerror(status));
+		MarkReadOnly();
+		return B_OK;
+	}
 	if (status != B_OK)
 		dprintf("exfat: sync failed, volume stays dirty\n");
 	return status;
