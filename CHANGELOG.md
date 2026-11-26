@@ -8,6 +8,23 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-26 - A missing message field keeps its default (Bluetooth, Wallpaper, screens, network shares)
+
+Problem: Haiku's `BMessage::Find*()` sets the value to 0 or empty before it looks for the field (`Message.cpp`, `*p = type();`). So `x = default; msg->FindInt32("x", &x);` loses the default when the field is missing. In Aomi (#4684) this made Alt+W always close the first tab. The same pattern was in other R5 code.
+
+Changed (`Get*()` with the default, or the default kept by hand):
+- Bluetooth: a "conn state" reply without the field read as CONNECTED (0) instead of DISCONNECTED (`kit/RemoteDevice.cpp`). A plain inquiry result has no RSSI; the scan list and the name lookup read 0 (full signal) instead of `HCI_RSSI_INVALID` (`lib/BluetoothController.cpp`, `server/LocalDeviceNames.cpp`).
+- Wallpaper page: a Backgrounds attribute without the workspaces, mode, outline or set field put the picture on no workspace or in mode 0.
+- `BScreenArrangement` (libr5ui): an archive without "enabled" made the screen off. `BSidebarItem`: an archive without "r5:count" gave count 0 instead of none (-1).
+- Network shares: an edit message without a field cleared that field of the share. A hand-written shares file without `id`, `mount_at_startup` or the other bools got id 0 and was not mounted at startup.
+- Tests: `bt_audio_smoke_test` took a reply without "status" as B_OK; `gamecontroller_feel_test` lost its -2 "no index" marker.
+
+Not changed: the other R5 calls without a check have a default of 0, false, NULL or empty, or the sender always adds the field (Display page menus, Deskbar place, Connections, Wi-Fi security, MIDI monitor, AdminLock and others). Lines that are unchanged Haiku code (Tracker `DesktopPoseView`, `FSUtils`, Deskbar `TeamMenu`, SoftwareUpdater, touchpad settings) were left as they are; none of the named ones gives a wrong value. Aomi and Servo were not touched here (Aomi is fixed on its own branch).
+
+Limits: no run-time test; the missing-field cases were found by reading the senders, not by a test that sends such a message.
+
+Tested: compile only. `scripts/build-locked.sh` from this worktree on main after #4691 (jam and image exit 0); the nine changed files built without a warning. Not booted; no QEMU or hardware run.
+
 ## 2026-11-26 - Build: R5 packages as release downloads, not in git (#4681 step 1)
 
 - Problem: R5's own hpkg packages were committed in `distro/packages/x86_64` (43 files, 200 MB in the tree; 135 versions, about 523 MB of the history). An hpkg is already compressed, so git stored every version in full. Only r5servo was already a release download (Aomi part 2).
