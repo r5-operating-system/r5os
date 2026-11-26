@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <Application.h>
 #include <Bitmap.h>
 #include <Directory.h>
 #include <Entry.h>
@@ -46,42 +47,13 @@ struct DownloadSlot {
 
 static DownloadSlot sDownloads[kMaxDownloads];
 static int32 sNextDownload = 1;
-static BMessenger sListeners[16];
-static int32 sListenerCount = 0;
-
-
-static void
-register_listener(const BMessenger& listener)
-{
-	if (!listener.IsValid())
-		return;
-	for (int32 i = 0; i < sListenerCount; i++) {
-		if (sListeners[i] == listener)
-			return;
-	}
-	if (sListenerCount < 16)
-		sListeners[sListenerCount++] = listener;
-}
-
-
-static void
-unregister_listener(const BMessenger& listener)
-{
-	for (int32 i = 0; i < sListenerCount; i++) {
-		if (sListeners[i] != listener)
-			continue;
-		sListeners[i] = sListeners[sListenerCount - 1];
-		sListenerCount--;
-		return;
-	}
-}
 
 
 static void
 notify_listeners(BMessage* message)
 {
-	for (int32 i = 0; i < sListenerCount; i++)
-		sListeners[i].SendMessage(message);
+	if (be_app != NULL)
+		be_app->PostMessage(message);
 }
 
 
@@ -125,7 +97,7 @@ download_directory()
 	BPath desktop;
 	if (find_directory(B_DESKTOP_DIRECTORY, &desktop) == B_OK)
 		return desktop.Path();
-	return BString("/boot/home/Desktop");
+	return BString();
 }
 
 
@@ -384,7 +356,6 @@ BWebKitContentView::BWebKitContentView(const char* name, BWebSession* session,
 
 BWebKitContentView::~BWebKitContentView()
 {
-	unregister_listener(fListener);
 	ShutdownEngine();
 }
 
@@ -417,7 +388,6 @@ BWebKitContentView::_Listen()
 	if (fWeb != NULL && fWeb->WebPage() != NULL)
 		fWeb->WebPage()->SetListener(BMessenger(this));
 	ensure_hub();
-	register_listener(fListener);
 	if (fWeb != NULL)
 		fWeb->SetDarkMode(_Dark());
 }

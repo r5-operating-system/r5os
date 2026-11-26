@@ -129,7 +129,20 @@ enum r5_glyph {
 	R5_GLYPH_MAIL_NEW = 19,
 	// The Light and Dark buttons of the Theme page (docs/design/THEMING.md).
 	R5_GLYPH_SUN = 20,
-	R5_GLYPH_MOON = 21
+	R5_GLYPH_MOON = 21,
+	// Aomi and any other program (docs/ICONS.md). The mockup stand-ins
+	// in docs/design/aomi-mockup/aomi.js, object I. Stop is R5_GLYPH_CROSS.
+	R5_GLYPH_BACK = 22,
+	R5_GLYPH_FORWARD = 23,
+	R5_GLYPH_RELOAD = 24,
+	R5_GLYPH_STAR = 25,
+	R5_GLYPH_DOWNLOAD = 26,
+	R5_GLYPH_MENU = 27,
+	R5_GLYPH_LOCK = 28,
+	R5_GLYPH_SEARCH = 29,
+	R5_GLYPH_MASK = 30,
+	R5_GLYPH_PLUS = 31,
+	R5_GLYPH_HOME = 32
 };
 
 // Draws the glyph inside `frame` of `view`, in `color`. The view's

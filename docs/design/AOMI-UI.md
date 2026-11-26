@@ -60,7 +60,7 @@ Fits as it is:
 
 Missing (named, not designed here):
 
-- **Icons** for reload, stop, bookmark star, downloads, the menu button and the private mask. Not new numbers in `R5_ICON_*` (`docs/AOMI.md`): existing Haiku vector icons through `r5_vector_icon_bitmap()`, chosen with the owner. The mockups use stand-ins.
+- **Icons.** Line glyphs in `libr5icons` (`r5_glyph_draw`), shared with the rest of R5: back, forward, reload, star, download, menu, lock, search, the private mask, plus and home. Stop is `R5_GLYPH_CROSS`. The numbers are at the end of `enum r5_glyph` (`docs/ICONS.md`).
 - **A panel under a button** (option B: downloads; also a site-information panel behind the lock). A borderless floating `BWindow` that closes on a click outside. If a second program needs it (Deskbar, Appsolutely), it belongs in `libr5ui`; until then it stays in Aomi.
 - **Suggestions under the address field** (all options): history, bookmarks and the search suggestion in a list under the field. Stays in Aomi.
 - **A side tab list** (option C only), see above.

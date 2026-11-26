@@ -573,6 +573,88 @@ glyph_paint(BView* view, r5_glyph which, BRect frame)
 			break;
 		}
 
+		case R5_GLYPH_BACK:
+			glyph_line(view, space, 15, 5, 8, 12);
+			glyph_line(view, space, 8, 12, 15, 19);
+			break;
+
+		case R5_GLYPH_FORWARD:
+			glyph_line(view, space, 9, 5, 16, 12);
+			glyph_line(view, space, 16, 12, 9, 19);
+			break;
+
+		case R5_GLYPH_RELOAD:
+			glyph_arc(view, space, 12, 12, 8, 10, 300);
+			glyph_line(view, space, 20, 4, 20, 11);
+			glyph_line(view, space, 20, 11, 13, 11);
+			break;
+
+		case R5_GLYPH_STAR:
+		{
+			BPoint points[10] = {
+				space.Map(12, 3), space.Map(14.7f, 8.6f), space.Map(20.8f, 9.5f),
+				space.Map(16.4f, 13.8f), space.Map(17.4f, 19.9f), space.Map(12, 17),
+				space.Map(6.6f, 19.9f), space.Map(7.6f, 13.8f), space.Map(3.2f, 9.5f),
+				space.Map(9.3f, 8.6f)
+			};
+			view->StrokePolygon(points, 10, true);
+			break;
+		}
+
+		case R5_GLYPH_DOWNLOAD:
+			glyph_line(view, space, 12, 4, 12, 15);
+			glyph_line(view, space, 7, 10, 12, 15);
+			glyph_line(view, space, 12, 15, 17, 10);
+			glyph_line(view, space, 5, 20, 19, 20);
+			break;
+
+		case R5_GLYPH_MENU:
+			glyph_line(view, space, 4, 7, 20, 7);
+			glyph_line(view, space, 4, 12, 20, 12);
+			glyph_line(view, space, 4, 17, 20, 17);
+			break;
+
+		case R5_GLYPH_LOCK:
+			glyph_box(view, space, 5, 11, 19, 20);
+			glyph_line(view, space, 8, 11, 8, 8);
+			glyph_arc(view, space, 12, 8, 4, 180, -180);
+			glyph_line(view, space, 16, 8, 16, 11);
+			break;
+
+		case R5_GLYPH_SEARCH:
+			glyph_arc(view, space, 11, 11, 6, 0, 360);
+			glyph_line(view, space, 15.5f, 15.5f, 20, 20);
+			break;
+
+		case R5_GLYPH_MASK:
+			glyph_line(view, space, 3, 10, 12, 9);
+			glyph_line(view, space, 12, 9, 21, 10);
+			glyph_line(view, space, 21, 10, 16, 17);
+			glyph_line(view, space, 16, 17, 12, 15);
+			glyph_line(view, space, 12, 15, 8, 17);
+			glyph_line(view, space, 8, 17, 3, 10);
+			{
+				BPoint eye = space.Map(8.5f, 12);
+				float radius = space.Size(1);
+				view->FillEllipse(eye, radius, radius);
+				eye = space.Map(15.5f, 12);
+				view->FillEllipse(eye, radius, radius);
+			}
+			break;
+
+		case R5_GLYPH_PLUS:
+			glyph_line(view, space, 12, 5, 12, 19);
+			glyph_line(view, space, 5, 12, 19, 12);
+			break;
+
+		case R5_GLYPH_HOME:
+			glyph_line(view, space, 4, 11, 12, 4);
+			glyph_line(view, space, 12, 4, 20, 11);
+			glyph_line(view, space, 6, 10, 6, 20);
+			glyph_line(view, space, 6, 20, 18, 20);
+			glyph_line(view, space, 18, 20, 18, 10);
+			break;
+
 		default:
 			break;
 	}
@@ -585,7 +667,7 @@ static BBitmap*
 glyph_render(r5_glyph which, BRect paint, BRect bounds, rgb_color color)
 {
 	// The last glyph of enum r5_glyph; update it with every new glyph.
-	if (which < R5_GLYPH_POWER || which > R5_GLYPH_MOON)
+	if (which < R5_GLYPH_POWER || which > R5_GLYPH_HOME)
 		return NULL;
 
 	BBitmap* bitmap = new(std::nothrow) BBitmap(bounds,
