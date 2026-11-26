@@ -8,6 +8,14 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-26 - Phase 2 (SkiaGpu): 1-frame-in-flight hardware pipelining, unlocked fence waits, and background pipeline-cache writer
+
+- Problem: `SkiaGpu::RunWork()` blocked on `fRunFence` right after every `submit()` even on hardware GPUs (preventing CPU/GPU overlap), held `fLock` for up to 1000 ms during `vkWaitForFences()` (blocking `NewRecorder`, `AddTarget`, `RemoveTarget`, and `Abandon`), and hashed/wrote the Vulkan pipeline cache synchronously on the draw thread every 10 seconds in `PipelineStorage::store()`.
+- Change:
+  - `distro/app_server/skia/SkiaGpu.cpp`: kept one run in flight on hardware GPUs (`!fOnCpu`) when no read-back or `Finish()` waiter is pending (waiting on `fRunFence` at the start of the next `RunWork()`, while keeping Lavapipe synchronous to avoid the 15 s compose-fence timeout); polled `vkWaitForFences(..., 0)` and dropped `fLock` immediately on `VK_TIMEOUT` in both fence-wait sites; moved `PipelineStorage::store()` checksumming and disk write to a low-priority background thread (keeping the existing per-vendor/device filename and unchanged-hash skip, and flushing cleanly in `~PipelineStorage()`).
+  - Verified existing Lavapipe controls already present on `main`: `PipelineExecutor` parallel shader compilation, `gpu_lavapipe_msaa` (default 4, 1 disables 4x MSAA), and `gpu_lavapipe_threads` (`LP_NUM_THREADS`, default 2).
+- Limits: Build and QEMU Lavapipe verification after all Phase 2 areas; 5625U RADV 1-frame-in-flight pipelining requires hardware stick verification. No speed-up claimed without measurement.
+
 ## 2026-11-26 - Phase 2 (app_server & Skia): hardware CRC32C bitmap hash, direct scaled DrawBitmap, zero-copy raw upload, cached alpha mask, batched FillRegion, fast SkiaText & bounded glyph cache
 
 - Problem: `bitmap_hash()` hashed up to 16 MiB client bitmaps with a scalar loop; scaled `DrawBitmap()` with `B_OP_COPY`/`B_OP_ALPHA` always took a destination snapshot and ran the full R5 blend shader; raw BGRA32 uploads copied every row into an intermediate `SkBitmap`; `_MaskShader()` rebuilt and re-uploaded the alpha mask texture on every draw; `FillRegion()` looped per-rect into `FillRect()`; `skia_offscreen_sync()` locked `sTrackLock` and searched `sTracked` on every `DrawBitmap()` even when no offscreen bitmaps were tracked; `SkiaText` formatted `snprintf` string keys per `DrawString()`, locked `gFontManager` per fallback glyph, and ran a redundant `SkFont::getBounds()` pass; `FontCacheEntry::GlyphCachePool` grew without bound.
