@@ -14,6 +14,7 @@
 #include "r5_defer.h"
 #include "r5_gpu.h"
 #include "r5_vm.h"
+#include "r5_vmid.h"
 
 
 static int
@@ -171,10 +172,67 @@ test_defer_overflow()
 }
 
 
+static int
+test_vm_defer_until_retire()
+{
+	pt_bump_ctx ctx;
+	r5_vm_page poolBuf[64];
+	r5_vm_page_pool pool = { poolBuf, 64, 0 };
+	memset(&ctx, 0, sizeof(ctx));
+	ctx.pool = &pool;
+	ctx.cursor = 0x200000ull;
+
+	r5_vmid_mgr mgr;
+	r5_vmid_init_files(&mgr);
+	int flush = 0;
+	uint32_t vmid = r5_vmid_reserve(&mgr, 7, 10, 1, &flush);
+	if (vmid < 2 || vmid > 15)
+		return fail("vmid reserve");
+	r5_vmid_arm(&mgr, 25);
+
+	r5_vm vm;
+	r5_vm_page pages[32];
+	memset(&vm, 0, sizeof(vm));
+	memset(pages, 0, sizeof(pages));
+	vm.pages = pages;
+	vm.capacity = 32;
+	vm.alloc = pt_alloc;
+	vm.cookie = &ctx;
+	if (!r5_vm_new_page(&vm, 0))
+		return fail("defer vm root");
+	if (!r5_vm_map_page(&vm, R5_GPU_VA_OFFSET + 0x10000ull,
+			0x400000ull | R5_GFX9_PTE_VALID))
+		return fail("defer vm map");
+	uint32_t used = vm.used;
+
+	/* File closes at seen=20 while fence=25 is still in flight. */
+	uint64_t busyFence = r5_vmid_last_fence(&mgr, 7);
+	if (busyFence != 25 || busyFence <= 20)
+		return fail("busy fence check");
+	/* Must NOT return pages to pool yet. */
+	if (pool.count != 0)
+		return fail("pages returned early");
+
+	/* Fence retires at seen=25: release VMID and return pages. */
+	r5_vmid_release(&mgr, 7, 25);
+	if (r5_vmid_last_fence(&mgr, 7) != 0)
+		return fail("vmid not released after retire");
+	uint32_t returned = r5_vm_release_pages(&vm, &pool);
+	if (returned != used || pool.count != used)
+		return fail("pages not returned after retire");
+
+	printf("ok vm defer until retire: %u pages held until fence 25 retired\n",
+		returned);
+	return 0;
+}
+
+
 int
 main()
 {
 	if (test_vm_page_pool() != 0)
+		return 1;
+	if (test_vm_defer_until_retire() != 0)
 		return 1;
 	if (test_defer_overflow() != 0)
 		return 1;

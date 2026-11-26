@@ -74,6 +74,7 @@ struct gpu_defer_overflow {
 	gpu_defer_overflow*	next;
 };
 static gpu_defer_overflow* sDeferOverflow = NULL;
+static r5_file_tree* sDeferTrees = NULL;
 
 gpu_bo sBo[kMaxBo];
 gpu_backing sBacking[kMaxBo];
@@ -752,15 +753,34 @@ gpu_tree_of(r5_vm* vm)
 
 
 static void
-r5_file_tree_free(r5_file_tree* tree)
+r5_file_tree_destroy(r5_file_tree* tree, uint64 seen)
 {
 	if (tree->owner != 0)
-		r5_vmid_release(&sFileVmids, tree->owner, tree->seen);
+		r5_vmid_release(&sFileVmids, tree->owner, seen);
 	gpu_prt_release_tree(&tree->vm);
 	if (gR5GpuOps.file_vm_free != NULL)
 		gR5GpuOps.file_vm_free(&tree->vm);
 	free(tree->pages);
 	free(tree);
+}
+
+
+static void
+r5_file_tree_free(r5_file_tree* tree)
+{
+	uint64 seen = gpu_cp_stopped_after_loss() ? ~0ull : gpu_hw_seen();
+	if (seen != ~0ull && tree->seen > seen)
+		seen = tree->seen;
+	if (tree->owner != 0 && seen != ~0ull) {
+		uint64 busyFence = r5_vmid_last_fence(&sFileVmids, tree->owner);
+		if (busyFence != 0 && busyFence > seen) {
+			tree->deferFence = busyFence;
+			tree->deferNext = sDeferTrees;
+			sDeferTrees = tree;
+			return;
+		}
+	}
+	r5_file_tree_destroy(tree, seen);
 }
 
 
@@ -1217,6 +1237,17 @@ gpu_defer_reclaim(uint64 seen)
 			gpu_hw_vram_free(page);
 		} else {
 			link = &node->next;
+		}
+	}
+	r5_file_tree** treeLink = &sDeferTrees;
+	while (*treeLink != NULL) {
+		r5_file_tree* tree = *treeLink;
+		if (seen == ~0ull || tree->deferFence <= seen) {
+			*treeLink = tree->deferNext;
+			tree->deferNext = NULL;
+			r5_file_tree_destroy(tree, seen);
+		} else {
+			treeLink = &tree->deferNext;
 		}
 	}
 }

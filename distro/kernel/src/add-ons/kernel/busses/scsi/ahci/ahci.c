@@ -275,14 +275,10 @@ ahci_register_device(device_node *parent)
 			(void **)&device) == B_OK && pci != NULL && device != NULL) {
 		pci_info info;
 		pci->get_pci_info(device, &info);
+		/* AHCI ABAR (BAR5) is a 32-bit BAR; base_registers has 6 entries
+		 * (0..5), so keep base_registers[5] and never read [6]. */
 		phys_addr_t bar5 = info.u.h0.base_registers[5];
 		size_t bar5Size = info.u.h0.base_register_sizes[5];
-		if ((info.u.h0.base_register_flags[5] & PCI_address_type)
-				== PCI_address_type_64) {
-			/* AHCI ABAR (BAR5) is a 32-bit BAR; base_registers has 6 entries
-			 * (0..5), so do not read past the array. */
-			bar5 = 0;
-		}
 		if (bar5 != 0 && bar5Size >= sizeof(uint32)) {
 			void *mapped = NULL;
 			area_id area = map_physical_memory("ahci cap probe", bar5,

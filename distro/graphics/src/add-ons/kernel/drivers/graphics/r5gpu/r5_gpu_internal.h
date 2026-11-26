@@ -69,6 +69,8 @@ struct r5_file_tree {
 	uint32			owner;
 	uint64			seen;
 	r5_file_count	count;
+	r5_file_tree*	deferNext;
+	uint64			deferFence;
 };
 
 
