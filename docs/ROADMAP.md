@@ -54,7 +54,7 @@ The order is impact, not ticket number. `[x]` is done and tested where it is mea
      - [ ] Servo 0.9, expected late December 2026 ([#4676](https://github.com/r5-operating-system/r5os/issues/4676)).
      - [ ] Servo 0.10, expected late January 2027 ([#4677](https://github.com/r5-operating-system/r5os/issues/4677)).
      - [ ] Monthly releases or the LTS line (next LTS expected around March or April 2027): owner's choice ([#4678](https://github.com/r5-operating-system/r5os/issues/4678)).
-     - [ ] Offer the R5 patches upstream, so each update gets smaller ([#4679](https://github.com/r5-operating-system/r5os/issues/4679)).
+     - [ ] A public Servo for Haiku repository with the patches, the build and `BServoView`, for every Haiku-based system; Servo does not accept LLM-generated contributions ([#4679](https://github.com/r5-operating-system/r5os/issues/4679)).
 5. **Network, what is left:**
    1. [~] IPv6: the review fixes are in (DHCPv6, SLAAC, the resolver, the default route). More LAN tests; DHCPv6 IA_NA still needs a LAN with a DHCPv6 server ([#36](https://github.com/r5-operating-system/r5os/issues/36), [#37](https://github.com/r5-operating-system/r5os/issues/37), [#38](https://github.com/r5-operating-system/r5os/issues/38)).
    2. [~] DNS from DHCP next to `.local`: in the image since the Network pages (#4240), with mDNS fixes on 17 Nov 2026. Not tested on a LAN ([#4508](https://github.com/r5-operating-system/r5os/issues/4508)).
