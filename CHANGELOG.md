@@ -8,6 +8,16 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-26 - Servo: BServoView in libr5servo.so (proof, not in the image)
+
+Problem: the red-page proof was a one-off program. Aomi needs one view class, and SpiderMonkey's `std::call_once` needs the initial-exec TLS image or the engine aborts before a page.
+
+Changed: `BServoView` matches the engine-view calls and message codes in `docs/design/AOMI-UI.md`. Servo 0.8.0 (`js_jit`, `bundled`) is a Rust static library; Haiku g++ links it with the view into `libr5servo.so`. `r5-servo-test` links that library. `scripts/build-r5servo.sh` rebuilds it (`-j4`) from the patched trees already on the build machine. `scripts/run-r5servo-qemu.sh` boots a private copy of the proof image and does not stop another QEMU. Calls Servo 0.8 does not have return `B_NOT_SUPPORTED`. The GL context is leaked on purpose: destroying it aborts in `eglDestroyImageKHR`. `get_tls_address()` returns the static initial-exec image when that DSO has one. Nothing was added to the image lists, What's new, or `distro/BUILD`.
+
+Limits: the library is not installed by jam. Header and library for a later image are `/boot/system/develop/headers/r5/BServoView.h` and `/boot/system/lib/libr5servo.so`; this round only copies them under `non-packaged`. A private session is not isolated on disk. Protocol is `B_NOT_SUPPORTED` until a page body is read. Servo 0.8 does not report ALPN to the embedder. Present is a read-back into a `BBitmap`, not zero-copy. The patched Servo trees stay on the build machine.
+
+Tested: QEMU KVM, 26 Nov 2026, 09:25–09:30 Europe/Amsterdam, Zink on Lavapipe (`zink Vulkan 1.4(llvmpipe (LLVM 21.1.8, 256 bits) (MESA_LLVMPIPE))`). The test loaded a red `data:` document. The log shows `about:blank` finishing, one pixel `240 3 0 0`, and no `data:` load-finished. `https://http2.pro/api/v1` was not requested. The TLS change is in the source only; this boot used the earlier proof image and did not rebuild the runtime loader. Not run: the 5625U stick.
+
 ## 2026-11-25 - Accounts: switch between signed-in people (fast user switching, part 2; #63)
 
 - Problem: after part 1 (#4613) added per-uid registrar isolation and multi-desktop `app_server` support, Login still ran a single signed-in person on desktop 0: there was no Switch user action, no per-person `app_server` desktop, no "Signed in" indicator on Sign in, no per-person `keystore_server`, no shutdown warning when other people were signed in, no sound muting for hidden people, and no queueing of notifications for hidden people.
@@ -34,7 +44,6 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
   - In VirtualBox, `VBoxService` starts only for the first signed-in person and `r5_vbox_clip` starts per person on COM1.
   - Deskbar still has no catalog under `distro/catalogs` (tracked under #4599).
   - Not tested: Ryzen 5 5625U / RADV hardware, Safe mode, `BDirectWindow` apps, live audio playback muting, ARM64, RISC-V.
-
 ## 2026-11-25 - exFAT write support (#4655)
 
 Problem: Haiku's exFAT driver, used unchanged, always mounted read-only and its write hooks were null. On the 5625U (stick 83) Tracker refused copies onto a 116.5 GiB exFAT SD card.
