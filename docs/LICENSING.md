@@ -206,6 +206,7 @@ Checked file by file on 2026-10-31. A header was added only where the file is on
 
 | Path | SPDX | Why |
 |---|---|---|
+| `distro/kernel/src/add-ons/kernel/file_systems/exfat/` | MIT | Haiku's exFAT driver (Jérôme Duval, Axel Dörfler, John Scipione, Haiku, Inc.) copied so it can write. Those files keep their headers. `exfat_update.cpp`, `exfat_update.h` and `exfat_vfs.cpp` are new, MIT, copyright 2026 R5OS Contributors. Written from the public exFAT specification (Microsoft, 2019) and Haiku's own FAT and block cache. Linux `fs/exfat`, exfatprogs and exfat-fuse were not read. `exfat_host.cpp` is the host test and is not in the image |
 | `distro/kernel/src/add-ons/kernel/generic/gpio/`, `distro/kernel/headers/os/drivers/GPIO.h` | MIT | GPIO module for kernel drivers. Copyright 2026 R5OS Contributors |
 | `distro/media/src/add-ons/kernel/drivers/audio/cs35l41/`, `distro/media/src/add-ons/kernel/generic/audio_amp/`, `distro/media/headers/os/drivers/AudioAmp.h` | MIT | CS35L41 driver and the speaker amplifier interface. Copyright 2026 R5OS Contributors. Clean room, see above |
 | `distro/kernel/src/add-ons/kernel/busses/mmc/rtsx/rtsx_5228.*`, `rtsx.h`, `rtsx_haiku.cpp`, `Jamfile` | MIT | Realtek card reader: the RTS5228 part and the Haiku attachment. Copyright 2026 R5OS Contributors. Clean room, see above |
