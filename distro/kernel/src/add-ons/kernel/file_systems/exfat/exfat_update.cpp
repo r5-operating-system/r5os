@@ -435,6 +435,8 @@ bitmap_give(work* job, uint32 start, uint32 count)
 static uint32
 bitmap_next_free(const exfat_disk* disk, uint32 from, uint32 limit)
 {
+	if (from < 2 || from > limit)
+		return limit + 1;
 	uint32 bit = from - 2;
 	uint32 end = limit - 2;
 	while (bit <= end && (bit & 7) != 0) {
@@ -442,6 +444,8 @@ bitmap_next_free(const exfat_disk* disk, uint32 from, uint32 limit)
 			return bit + 2;
 		bit++;
 	}
+	if (bit > end)
+		return limit + 1;
 	uint32 byte = bit / 8;
 	uint32 endByte = end / 8;
 	while (byte + 8 <= endByte) {

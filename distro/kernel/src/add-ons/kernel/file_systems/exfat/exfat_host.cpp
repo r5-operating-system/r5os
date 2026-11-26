@@ -704,6 +704,85 @@ pull(const char* path)
 	return result;
 }
 
+static int
+test_bitmap_next_free_edge(void)
+{
+	/* Regression test for bitmap_next_free(): pass 1 limit in the middle of a
+	   byte (cluster 7 = bit 5), bit 0 (cluster 2) free, bits 1-5 (clusters 3-7)
+	   used, hint at cluster 8 (bits 6-7 used), plus one more free cluster (10)
+	   so free_clusters == 2. Allocating count = 2 must not loop forever. */
+	const uint32 blockSize = 512;
+	const uint32 totalBlocks = 64;
+	uint8* mem = (uint8*)calloc(totalBlocks, blockSize);
+	if (mem == NULL)
+		return fail("bitmap edge alloc", B_NO_MEMORY);
+
+	struct mem_store {
+		uint8*	data;
+		uint32	block_size;
+		uint32	blocks;
+	} state = { mem, blockSize, totalBlocks };
+
+	exfat_store store;
+	memset(&store, 0, sizeof(store));
+	store.cookie = &state;
+	store.read = [](void* cookie, uint64 block, void* buf, uint32 blocks) -> status_t {
+		mem_store* s = (mem_store*)cookie;
+		if (block + blocks > s->blocks)
+			return B_IO_ERROR;
+		memcpy(buf, s->data + block * s->block_size, (size_t)blocks * s->block_size);
+		return B_OK;
+	};
+	store.write = [](void* cookie, uint64 block, const void* buf, uint32 blocks) -> status_t {
+		mem_store* s = (mem_store*)cookie;
+		if (block + blocks > s->blocks)
+			return B_IO_ERROR;
+		memcpy(s->data + block * s->block_size, buf, (size_t)blocks * s->block_size);
+		return B_OK;
+	};
+	store.flush = [](void*, uint64, uint32) -> status_t { return B_OK; };
+
+	exfat_disk disk;
+	memset(&disk, 0, sizeof(disk));
+	disk.block_size = blockSize;
+	disk.blocks_per_cluster_shift = 0; /* 1 block (512 B) per cluster */
+	disk.cluster_count = 16; /* clusters 2..17 */
+	disk.fat_block = 4;
+	disk.data_block = 8;
+	disk.root_cluster = 3;
+	disk.can_write = true;
+	disk.dirty = true;
+	disk.bitmap_bytes = 2; /* 16 bits */
+	disk.bitmap = (uint8*)calloc(1, disk.bitmap_bytes);
+	disk.bitmap_clusters = (uint32*)calloc(1, sizeof(uint32));
+	if (disk.bitmap == NULL || disk.bitmap_clusters == NULL) {
+		exfat_disk_close(&disk);
+		free(mem);
+		return fail("bitmap edge disk", B_NO_MEMORY);
+	}
+	disk.bitmap_clusters[0] = 4;
+	disk.bitmap_cluster_count = 1;
+	/* Byte 0 (clusters 2..9): bit 0 (cluster 2) FREE, bits 1..7 (3..9) USED -> 0xFE */
+	disk.bitmap[0] = 0xfe;
+	/* Byte 1 (clusters 10..17): bit 0 (cluster 10) FREE, bits 1..7 (11..17) USED -> 0xFE */
+	disk.bitmap[1] = 0xfe;
+	disk.free_clusters = 2;
+	disk.hint = 8; /* pass 0 scans 8..17, pass 1 scans 2..7 (limit=7, bit 5) */
+
+	exfat_node node;
+	memset(&node, 0, sizeof(node));
+	node.detached = true; /* avoid directory write; exercises alloc_run + alloc_one */
+	node.flags = 0x01;
+	status_t status = exfat_set_size(&store, &disk, NULL, &node,
+		2u * blockSize, 0, NULL, false);
+	int result = 0;
+	if (status != B_OK || disk.free_clusters != 0 || node.first_cluster < 2)
+		result = fail("bitmap_next_free edge", status);
+	exfat_disk_close(&disk);
+	free(mem);
+	return result;
+}
+
 int
 main(int argc, char** argv)
 {
@@ -717,6 +796,8 @@ main(int argc, char** argv)
 		return seed(argv[1]);
 	if (argc > 2 && strcmp(argv[2], "pull") == 0)
 		return pull(argv[1]);
+	if (test_bitmap_next_free_edge() != 0)
+		return 1;
 	bool large = argc > 2 && strcmp(argv[2], "large") == 0;
 	return run(argv[1], large);
 }

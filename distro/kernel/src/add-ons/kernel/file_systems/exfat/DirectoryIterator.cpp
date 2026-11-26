@@ -211,12 +211,14 @@ DirectoryIterator::_GetNext(uint16* utf16Name, size_t* _codeUnitCount,
 	size_t nameIndex = 0;
 	status_t status;
 	int32 chunkCount = 1;
+	bool inFile = false;
 
 	while ((status = _NextEntry()) == B_OK) {
 		TRACE("DirectoryIterator::_GetNext() %" B_PRIu32 "/%p, type 0x%x, "
 			"offset %" B_PRId64 "\n", fInode->Cluster(), fCurrent,
 			fCurrent->type, fOffset);
 		if (fCurrent->type == EXFAT_ENTRY_TYPE_FILE) {
+			inFile = true;
 			chunkCount = fCurrent->file.chunkCount;
 			if (_id != NULL) {
 				// SPDX-SnippetBegin
@@ -265,9 +267,12 @@ DirectoryIterator::_GetNext(uint16* utf16Name, size_t* _codeUnitCount,
 		// SPDX-SnippetBegin
 		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 		// SPDX-License-Identifier: MIT
-		} else if (chunkCount > 0 && (fCurrent->type & 0xc0) == 0xc0) {
-			// Skip benign or unknown secondary entries in the current set
+		} else if (inFile && chunkCount > 0 && (fCurrent->type & 0xe0) == 0xe0) {
+			// Skip unknown benign secondary entries (0xE0-0xFF)
 			chunkCount--;
+		} else if (inFile && chunkCount > 0 && (fCurrent->type & 0xc0) == 0xc0) {
+			// Unknown critical secondary entry (0xC2-0xDF): entry set is invalid
+			return B_BAD_DATA;
 		}
 		// SPDX-SnippetEnd
 

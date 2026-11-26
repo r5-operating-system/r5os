@@ -264,6 +264,13 @@ Volume::Mount(const char* deviceName, uint32 flags)
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+static bool is_media_gone(status_t status);
+// SPDX-SnippetEnd
+
+
 status_t
 Volume::Unmount()
 {
@@ -274,7 +281,8 @@ Volume::Unmount()
 	// SPDX-SnippetBegin
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	// SPDX-License-Identifier: MIT
-	if (SyncDisk(true) != B_OK)
+	status_t syncStatus = SyncDisk(true);
+	if (syncStatus != B_OK && is_media_gone(syncStatus))
 		MarkReadOnly();
 	// SPDX-SnippetEnd
 	TRACE("Volume::Unmount(): Deleting the block cache\n");
