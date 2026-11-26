@@ -59,8 +59,8 @@ typedef void (*r5_servo_callback)(void* context, const r5_servo_event* event);
 extern "C" {
 
 
-r5_servo*	r5_servo_create(int32 width, int32 height, r5_servo_callback callback,
-	void* context);
+r5_servo*	r5_servo_create(int32 width, int32 height, const char* document,
+	int32 document_is_html, r5_servo_callback callback, void* context);
 void		r5_servo_resize(r5_servo* engine, int32 width, int32 height);
 status_t	r5_servo_load_url(r5_servo* engine, const char* url);
 status_t	r5_servo_load_html(r5_servo* engine, const char* html);

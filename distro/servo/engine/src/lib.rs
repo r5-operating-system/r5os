@@ -102,6 +102,9 @@ struct Notes {
     protocol: String,
     asked_body: bool,
     saw_red: bool,
+    spins: u32,
+    last_url: String,
+    last_status: String,
 }
 
 struct Inner {
@@ -205,7 +208,8 @@ impl WebViewDelegate for Bridge {
         if !engine.is_null() {
             if let Ok(mut inner) = unsafe { (*engine).inner.try_borrow_mut() } {
                 inner.https = event.url.starts_with("https:");
-            } else if let Ok(mut notes) = unsafe { (*engine).notes.lock() } {
+            }
+            if let Ok(mut notes) = unsafe { (*engine).notes.lock() } {
                 notes.asked_body = false;
             }
             let _ = webview;
@@ -372,6 +376,29 @@ fn write_buf(text: &str, buffer: *mut u8, length: i32) -> i32 {
     OK
 }
 
+fn initial_document(document: *const u8, is_html: i32) -> Option<url::Url> {
+    if document.is_null() {
+        return None;
+    }
+    let text = unsafe { std::ffi::CStr::from_ptr(document as *const std::ffi::c_char) };
+    let Ok(text) = text.to_str() else {
+        println!("r5-servo initial-bad");
+        return None;
+    };
+    let raw = if is_html != 0 {
+        data_url(text)
+    } else {
+        text.to_string()
+    };
+    match url::Url::parse(&raw) {
+        Ok(parsed) => Some(parsed),
+        Err(error) => {
+            println!("r5-servo initial-bad {error} {raw}");
+            None
+        }
+    }
+}
+
 fn data_url(html: &str) -> String {
     let mut out = String::from("data:text/html;charset=utf-8,");
     for byte in html.bytes() {
@@ -407,6 +434,8 @@ fn load(engine: *mut Engine, raw: &str) -> i32 {
 pub extern "C" fn r5_servo_create(
     width: i32,
     height: i32,
+    document: *const u8,
+    document_is_html: i32,
     callback: Callback,
     callback_ctx: *mut std::ffi::c_void,
 ) -> *mut Engine {
@@ -449,16 +478,22 @@ pub extern "C" fn r5_servo_create(
     preferences.network_http_proxy_uri = String::new();
     preferences.network_https_proxy_uri = String::new();
     let servo_engine = ServoBuilder::default().preferences(preferences).build();
+    servo_engine.setup_logging();
+    let initial = initial_document(document, document_is_html);
     let context = Rc::new(context);
     let bridge = Rc::new(Bridge {
         engine: AtomicPtr::new(std::ptr::null_mut()),
     });
-    let webview = WebViewBuilder::new(
+    let mut builder = WebViewBuilder::new(
         &servo_engine,
         context.clone() as Rc<dyn RenderingContext>,
     )
-    .delegate(bridge.clone())
-    .build();
+    .delegate(bridge.clone());
+    if let Some(url) = initial {
+        println!("r5-servo initial {}", url);
+        builder = builder.url(url);
+    }
+    let webview = builder.build();
 
     let engine = Box::into_raw(Box::new(Engine {
         inner: RefCell::new(Inner {
@@ -478,6 +513,9 @@ pub extern "C" fn r5_servo_create(
             protocol: String::new(),
             asked_body: false,
             saw_red: false,
+            spins: 0,
+            last_url: String::new(),
+            last_status: String::new(),
         }),
         callback,
         callback_ctx,
@@ -637,6 +675,21 @@ pub extern "C" fn r5_servo_spin(engine: *mut Engine) {
                     }
                 }
                 inner.frame = bytes.to_vec();
+            }
+        }
+        let status = format!("{:?}", inner.webview.load_status());
+        let page = inner
+            .webview
+            .url()
+            .map(|item| item.to_string())
+            .unwrap_or_default();
+        if let Ok(mut notes) = engine_ref.notes.lock() {
+            notes.spins += 1;
+            let changed = notes.last_status != status || notes.last_url != page;
+            if changed {
+                println!("r5-servo beat {} {status} {page}", notes.spins);
+                notes.last_status = status;
+                notes.last_url = page;
             }
         }
         if inner.https {

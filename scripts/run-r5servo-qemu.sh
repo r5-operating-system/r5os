@@ -44,6 +44,18 @@ done
 sleep 15
 echo "deskbar-wait $i" > /dev/dprintf
 echo "deskbar-wait $i" >> /boot/home/r5-servo.log
+n=0
+while [ "$n" -lt 40 ]; do
+	if ifconfig 2>/dev/null | grep 'inet ' | grep -v '127.0.0.1' >/dev/null; then
+		break
+	fi
+	n=$((n + 1))
+	sleep 2
+done
+echo "net-wait $n" > /dev/dprintf
+echo "net-wait $n" >> /boot/home/r5-servo.log
+ifconfig > /dev/dprintf
+sync
 export GALLIUM_DRIVER=zink
 export LIBGL_ALWAYS_SOFTWARE=1
 export RUST_LOG=net::http_loader=debug

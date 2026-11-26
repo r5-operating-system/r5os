@@ -12,6 +12,7 @@
 #include <Message.h>
 #include <MessageRunner.h>
 #include <String.h>
+#include <Window.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -81,7 +82,9 @@ void
 BServoView::AttachedToWindow()
 {
 	BView::AttachedToWindow();
-	_Start();
+	// The engine is created on the first load, with that document as the
+	// initial URL. Creating it here and then calling load() races Servo's
+	// about:blank, and the real document is dropped.
 	BMessage spin(kSpinMessage);
 	fRunner = new BMessageRunner(BMessenger(this), &spin, 30000);
 }
@@ -97,38 +100,48 @@ BServoView::DetachedFromWindow()
 
 
 status_t
-BServoView::_Start()
+BServoView::_Start(const char* document, bool documentIsHTML)
 {
 	if (fEngine != NULL)
 		return B_OK;
+	// LoadURL can arrive on the application thread. Bounds() needs the
+	// window lock once the view is attached.
+	BWindow* window = Window();
+	bool unlock = false;
+	if (window != NULL && !window->IsLocked()) {
+		if (!window->Lock())
+			return B_ERROR;
+		unlock = true;
+	}
 	int32 width = (int32)Bounds().Width() + 1;
 	int32 height = (int32)Bounds().Height() + 1;
 	if (width < 16)
 		width = 16;
 	if (height < 16)
 		height = 16;
-	fEngine = r5_servo_create(width, height, &_Callback, this);
-	if (fEngine == NULL)
-		return B_ERROR;
-	if (fPrivate) {
+	fEngine = r5_servo_create(width, height, document, documentIsHTML ? 1 : 0,
+		&_Callback, this);
+	status_t status = fEngine != NULL ? B_OK : B_ERROR;
+	if (status == B_OK && fPrivate) {
 		fprintf(stderr,
 			"r5-servo private session is not isolated on disk yet\n");
 	}
-	char gl[512];
-	if (r5_servo_gl(fEngine, gl, (int32)sizeof(gl)) == 0)
-		fprintf(stderr, "r5-servo %s\n", gl);
-	return B_OK;
+	if (status == B_OK) {
+		char gl[512];
+		if (r5_servo_gl(fEngine, gl, (int32)sizeof(gl)) == 0)
+			fprintf(stderr, "r5-servo %s\n", gl);
+	}
+	if (unlock)
+		window->Unlock();
+	return status;
 }
 
 
 status_t
 BServoView::LoadURL(const char* url)
 {
-	if (fEngine == NULL) {
-		status_t status = _Start();
-		if (status != B_OK)
-			return status;
-	}
+	if (fEngine == NULL)
+		return _Start(url, false);
 	return engine_status(r5_servo_load_url(fEngine, url));
 }
 
@@ -139,11 +152,8 @@ BServoView::LoadHTML(const char* html, const char* baseURL)
 	(void)baseURL;
 	if (html == NULL)
 		return B_BAD_VALUE;
-	if (fEngine == NULL) {
-		status_t status = _Start();
-		if (status != B_OK)
-			return status;
-	}
+	if (fEngine == NULL)
+		return _Start(html, true);
 	// Servo 0.8 is given a data: document. Relative links are not resolved
 	// against baseURL.
 	return engine_status(r5_servo_load_html(fEngine, html));

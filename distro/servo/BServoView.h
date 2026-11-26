@@ -120,7 +120,7 @@ public:
 	virtual	void				MakeFocus(bool focused = true);
 
 private:
-			status_t			_Start();
+			status_t			_Start(const char* document, bool documentIsHTML);
 			status_t			_FillHistory(BMessage* items, bool forward) const;
 			status_t			_Report(uint32 what, const char* url, const char* text,
 									float progress, int32 a, int32 b, int32 c);
