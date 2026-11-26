@@ -8,6 +8,16 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-26 - Phase 2 (Kernel VM, r5_direct_map, arch.S): batched TLB shootdowns, O(1) direct-map collapse & rehash, and user-copy fast paths
+
+- Problem: `X86VMTranslationMap64Bit::UnmapPages()` issued a TLB shootdown per 2 MiB PDE and walked the 4-level page table twice; `arch_cpu_invalidate_tlb_list()` looped `invlpg` even for large page lists; `r5_direct_map.cpp` acquired `kernelMap->Lock()` per page, scanned 512 PTEs on every WB restore, fired nested IPIs under `kernelMap->Lock()`, and never rehashed tombstones; `_arch_cpu_user_memcpy` hit Zen 3 4K-aliasing and non-FSRM `rep movsb` cliffs; `_arch_cpu_user_strlcpy` copied 1 byte per iteration.
+- Change:
+  - `X86VMTranslationMap64Bit.cpp`: moved `Flush()` outside the `UnmapPages()` loop for one batched TLB shootdown and reused the already-resolved PDE to get `pageTable`.
+  - `arch_cpu.cpp`: added `kMaxRangePages = 64` full-flush fallback to `arch_cpu_invalidate_tlb_list()`, and exported `gX86UserMemcpyRepFrom` (64 with CPUID leaf 7 EDX bit 4 FSRM, 2048 otherwise).
+  - `r5_direct_map.cpp`: tracked `sRefTombs` and triggered rehash in `r5_ensure_refs()` when tombstones exceed `sRefSlots / 4`; added O(1) per-table `active` counter on `r5_owned_table` for 2 MiB collapse; held `kernelMap->Lock()` once per batch and ran a single `r5_direct_shootdown()` outside `kernelMap->Lock()` before freeing collapsed tables.
+  - `arch.S`: added FSRM threshold + Zen 3 4K-aliasing guard with 32-byte unrolled GPR loop in `_arch_cpu_user_memcpy`, and page-safe 8-byte SWAR NUL-detection copy loop in `_arch_cpu_user_strlcpy`.
+- Limits: Build and QEMU boot verified after all Phase 2 areas; 5625U hardware stick verification pending merge. No speed-up claimed without measurement.
+
 ## 2026-11-26 - Phase 2 (GPU kernel driver & libdrm-r5): O(1) VM walk cache, batched TLB flushes, off-lock VRAM zeroing, per-fence wakeups, and batched syncobj
 
 - Problem: `r5_vm_map_page()` and `r5_vm_lookup()` performed 4-level WC VRAM reads and linear `r5_vm_find()` scans per 4 KiB page during `VA_MAP`/`VA_UNMAP`; every `VA_MAP`/`VA_UNMAP` ran a synchronous MMIO TLB flush; `sUserSpans` was capped at 64 and zeroed byte-by-byte under `sGpuLock`; `CS_SUBMIT` ran `gpu_ibs_mapped()` twice even when `gpu_wait_room()` did not sleep, used an 8-slot IB cache that always evicted slot 0, and `r5_gpu_eop()` woke all waiters via `sEop.NotifyAll()`; `libdrm-r5` issued `R5_GPU_GET_INFO` on every static query and looped per-handle ioctls for multi-handle syncobj reset/signal/query.

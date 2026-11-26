@@ -67,11 +67,23 @@ struct r5_direct_job {
 	bool				filled;
 };
 
+struct r5_owned_table {
+	phys_addr_t	phys;
+	uint16		active;
+};
+
+struct r5_collapsed_list {
+	static const uint32 kCap = 32;
+	phys_addr_t	tables[kCap];
+	uint32		count;
+};
+
 static r5_ref* sRefs = NULL;
 static uint32 sRefSlots = 0;
 static uint32 sRefLive = 0;
+static uint32 sRefTombs = 0;
 static uint32 sRefReserved = 0;
-static phys_addr_t* sOwned = NULL;
+static r5_owned_table* sOwned = NULL;
 static uint32 sOwnedCount = 0;
 static uint32 sOwnedSlots = 0;
 static uint32 sOwnedReserved = 0;
@@ -130,8 +142,11 @@ r5_ensure_refs()
 			uint32 twice = (uint32)(sum * 2);
 			if (twice > need)
 				need = twice;
-			if (sRefSlots >= need)
+			bool needRehash = sRefSlots > 0 && sRefTombs > (sRefSlots / 4);
+			if (sRefSlots >= need && !needRehash)
 				return B_OK;
+			if (needRehash && sRefSlots > need)
+				need = sRefSlots;
 		}
 
 		uint32 slots = 16;
@@ -159,7 +174,8 @@ r5_ensure_refs()
 				uint32 needNow = (uint32)(sum * 2);
 				if (needNow < 16)
 					needNow = 16;
-				if (sRefSlots >= needNow) {
+				bool needRehash = sRefSlots > 0 && sRefTombs > (sRefSlots / 4);
+				if (sRefSlots >= needNow && !needRehash) {
 					retired = grown;
 					done = true;
 				} else if (slots < needNow) {
@@ -177,6 +193,7 @@ r5_ensure_refs()
 					retired = sRefs;
 					sRefs = grown;
 					sRefSlots = slots;
+					sRefTombs = 0;
 					publish = true;
 				}
 			}
@@ -205,12 +222,12 @@ r5_ensure_owned()
 				return B_OK;
 		}
 
-		phys_addr_t* grown
-			= (phys_addr_t*)malloc(sizeof(phys_addr_t) * need);
+		r5_owned_table* grown
+			= (r5_owned_table*)malloc(sizeof(r5_owned_table) * need);
 		if (grown == NULL)
 			return B_NO_MEMORY;
 
-		phys_addr_t* retired = NULL;
+		r5_owned_table* retired = NULL;
 		bool publish = false;
 		bool done = false;
 		bool retry = false;
@@ -230,7 +247,7 @@ r5_ensure_owned()
 				} else {
 					if (sOwnedCount > 0) {
 						memcpy(grown, sOwned,
-							sizeof(phys_addr_t) * sOwnedCount);
+							sizeof(r5_owned_table) * sOwnedCount);
 					}
 					retired = sOwned;
 					sOwned = grown;
@@ -263,6 +280,8 @@ r5_ref_find(phys_addr_t page, bool insert)
 			if (!insert)
 				return NULL;
 			r5_ref* place = tomb != NULL ? tomb : entry;
+			if (tomb != NULL && sRefTombs > 0)
+				sRefTombs--;
 			place->state = kSlotLive;
 			place->page = page;
 			place->count = 0;
@@ -281,6 +300,8 @@ r5_ref_find(phys_addr_t page, bool insert)
 	// A tombstone from an earlier free is a free slot. Leaving it unused fills
 	// the table after one wave of buffers and every later insert fails.
 	if (insert && tomb != NULL) {
+		if (sRefTombs > 0)
+			sRefTombs--;
 		tomb->state = kSlotLive;
 		tomb->page = page;
 		tomb->count = 0;
@@ -296,27 +317,32 @@ static void
 r5_ref_drop_slot(r5_ref* entry)
 {
 	entry->state = kSlotTomb;
+	sRefTombs++;
 	if (sRefLive > 0)
 		sRefLive--;
 }
 
 
-static bool
-r5_owned_has(phys_addr_t table)
+static r5_owned_table*
+r5_owned_find(phys_addr_t table)
 {
 	for (uint32 i = 0; i < sOwnedCount; i++) {
-		if (sOwned[i] == table)
-			return true;
+		if (sOwned[i].phys == table)
+			return &sOwned[i];
 	}
-	return false;
+	return NULL;
 }
 
 
-static void
+static r5_owned_table*
 r5_owned_add(phys_addr_t table)
 {
-	if (sOwnedCount < sOwnedSlots)
-		sOwned[sOwnedCount++] = table;
+	if (sOwnedCount >= sOwnedSlots)
+		return NULL;
+	r5_owned_table* entry = &sOwned[sOwnedCount++];
+	entry->phys = table;
+	entry->active = 0;
+	return entry;
 }
 
 
@@ -324,7 +350,7 @@ static void
 r5_owned_remove(phys_addr_t table)
 {
 	for (uint32 i = 0; i < sOwnedCount; i++) {
-		if (sOwned[i] != table)
+		if (sOwned[i].phys != table)
 			continue;
 		sOwned[i] = sOwned[sOwnedCount - 1];
 		sOwnedCount--;
@@ -381,13 +407,28 @@ r5_refuse_1gb(X86VMTranslationMap64Bit* kernelMap, addr_t va)
 }
 
 
-/*!	The caller holds sDirectLock. A 2 MiB direct-map page is split before one
- *	4 KiB entry changes. Write-back is restored in place, and a table this
- *	code allocated is collapsed when all 512 entries are write-back again.
+static void
+r5_direct_finish_batch(bool changed, r5_collapsed_list* collapsed)
+{
+	if (changed || collapsed->count > 0)
+		r5_direct_shootdown();
+	for (uint32 i = 0; i < collapsed->count; i++)
+		r5_free_table(collapsed->tables[i]);
+	collapsed->count = 0;
+}
+
+
+/*!	The caller holds sDirectLock and kernelMap->Lock() (with CPU pinned).
+ *	A 2 MiB direct-map page is split before one 4 KiB entry changes.
+ *	Write-back is restored in place, and a table this code allocated is
+ *	collapsed in O(1) when its active non-WB counter drops to 0.
+ *	TLB shootdown and freeing collapsed tables happen once per batch after
+ *	kernelMap->Unlock().
  */
 static status_t
-r5_direct_install(phys_addr_t phys, uint32 type, vm_page_reservation* reservation,
-	bool* changed)
+r5_direct_install_locked(X86VMTranslationMap64Bit* kernelMap, phys_addr_t phys,
+	uint32 type, vm_page_reservation* reservation, bool* changed,
+	r5_collapsed_list* collapsed)
 {
 	if (phys >= KERNEL_PMAP_SIZE || vm_lookup_page(phys / B_PAGE_SIZE) == NULL)
 		return B_OK;
@@ -397,27 +438,20 @@ r5_direct_install(phys_addr_t phys, uint32 type, vm_page_reservation* reservatio
 		arch_vm_flush_memory_type_range((addr_t)phys, B_PAGE_SIZE);
 
 	addr_t va = (addr_t)KERNEL_PMAP_BASE + (addr_t)phys;
-	X86VMTranslationMap64Bit* kernelMap = static_cast<X86VMTranslationMap64Bit*>(
-		VMAddressSpace::Kernel()->TranslationMap());
 	int32 dummy = 0;
-	kernelMap->Lock();
-	ThreadCPUPinner pinner(thread_get_current_thread());
 
-	if (r5_refuse_1gb(kernelMap, va)) {
-		kernelMap->Unlock();
+	if (r5_refuse_1gb(kernelMap, va))
 		return B_NOT_SUPPORTED;
-	}
 
 	uint64* pde = X86PagingMethod64Bit::PageDirectoryEntryForAddress(
 		kernelMap->PagingStructures64Bit()->VirtualPMLTop(), va, true,
 		false, NULL,
 		X86PagingMethod64Bit::Method()->KernelPhysicalPageMapper(), dummy);
-	if (pde == NULL || (*pde & X86_64_PDE_PRESENT) == 0) {
-		kernelMap->Unlock();
+	if (pde == NULL || (*pde & X86_64_PDE_PRESENT) == 0)
 		return B_OK;
-	}
 
 	uint64* table = NULL;
+	r5_owned_table* owned = NULL;
 	if ((*pde & X86_64_PDE_LARGE_PAGE) != 0) {
 		if (toWriteBack) {
 			uint64 value = (*pde & ~X86_64_PDE_MEMORY_TYPE_MASK)
@@ -427,13 +461,10 @@ r5_direct_install(phys_addr_t phys, uint32 type, vm_page_reservation* reservatio
 				X86PagingMethod64Bit::SetTableEntry(pde, value);
 				*changed = true;
 			}
-			memory_write_barrier();
-			kernelMap->Unlock();
 			return B_OK;
 		}
 		if (reservation == NULL || reservation->count == 0
 			|| sOwnedCount >= sOwnedSlots) {
-			kernelMap->Unlock();
 			return B_NO_MEMORY;
 		}
 
@@ -461,63 +492,58 @@ r5_direct_install(phys_addr_t phys, uint32 type, vm_page_reservation* reservatio
 		X86PagingMethod64Bit::SetTableEntry(pde,
 			(tablePhys & X86_64_PDE_ADDRESS_MASK)
 				| X86_64_PDE_PRESENT | X86_64_PDE_WRITABLE | X86_64_PDE_USER);
-		memory_write_barrier();
-		r5_direct_shootdown();
-		r5_owned_add(tablePhys);
+		*changed = true;
+		owned = r5_owned_add(tablePhys);
 	} else {
-		table = (uint64*)((addr_t)KERNEL_PMAP_BASE
-			+ (addr_t)(*pde & X86_64_PDE_ADDRESS_MASK));
+		phys_addr_t tablePhys = *pde & X86_64_PDE_ADDRESS_MASK;
+		table = (uint64*)((addr_t)KERNEL_PMAP_BASE + (addr_t)tablePhys);
+		owned = r5_owned_find(tablePhys);
 	}
 
 	uint64* pte = &table[(va >> 12) & (k64BitTableEntryCount - 1)];
+	uint64 oldPte = *pte;
 	uint64 typeFlags = X86PagingMethod64Bit::MemoryTypeToPageTableEntryFlags(
 		toWriteBack ? B_WRITE_BACK_MEMORY : type);
-	uint64 value = (*pte & ~X86_64_PTE_MEMORY_TYPE_MASK) | typeFlags;
-	if (value != *pte) {
+	uint64 value = (oldPte & ~X86_64_PTE_MEMORY_TYPE_MASK) | typeFlags;
+	if (value != oldPte) {
+		bool wasWb = (oldPte & X86_64_PTE_MEMORY_TYPE_MASK) == 0;
+		bool nowWb = (value & X86_64_PTE_MEMORY_TYPE_MASK) == 0;
 		X86PagingMethod64Bit::SetTableEntry(pte, value);
 		*changed = true;
+		if (owned != NULL) {
+			if (wasWb && !nowWb)
+				owned->active++;
+			else if (!wasWb && nowWb && owned->active > 0)
+				owned->active--;
+		}
 	}
 
-	if (toWriteBack && r5_owned_has(*pde & X86_64_PDE_ADDRESS_MASK)) {
-		phys_addr_t tablePhys = *pde & X86_64_PDE_ADDRESS_MASK;
+	if (toWriteBack && owned != NULL && owned->active == 0
+		&& collapsed->count < r5_collapsed_list::kCap) {
+		phys_addr_t tablePhys = owned->phys;
 		phys_addr_t basePA = table[0] & X86_64_PTE_ADDRESS_MASK;
 		uint64 prot0 = table[0] & (X86_64_PTE_PRESENT | X86_64_PTE_WRITABLE
 			| X86_64_PTE_USER | X86_64_PTE_GLOBAL | X86_64_PTE_NOT_EXECUTABLE);
-		bool collapse = (table[0] & X86_64_PTE_MEMORY_TYPE_MASK) == 0
-			&& (prot0 & X86_64_PTE_PRESENT) != 0;
-		for (uint32 i = 0; collapse && i < k64BitTableEntryCount; i++) {
-			uint64 prot = table[i] & (X86_64_PTE_PRESENT | X86_64_PTE_WRITABLE
-				| X86_64_PTE_USER | X86_64_PTE_GLOBAL
-				| X86_64_PTE_NOT_EXECUTABLE);
-			phys_addr_t pagePA = table[i] & X86_64_PTE_ADDRESS_MASK;
-			if (prot != prot0 || (table[i] & X86_64_PTE_MEMORY_TYPE_MASK) != 0
-				|| pagePA != basePA + (phys_addr_t)i * B_PAGE_SIZE) {
-				collapse = false;
-			}
-		}
-		if (collapse) {
+		if ((prot0 & X86_64_PTE_PRESENT) != 0) {
 			uint64 large = (basePA & X86_64_PDE_LARGE_ADDRESS_MASK)
 				| X86_64_PDE_LARGE_PAGE
 				| (prot0 & ~X86_64_PTE_PAT)
 				| X86_64_PDE_ACCESSED | X86_64_PDE_DIRTY;
 			X86PagingMethod64Bit::SetTableEntry(pde, large);
-			memory_write_barrier();
-			r5_direct_shootdown();
 			r5_owned_remove(tablePhys);
-			r5_free_table(tablePhys);
+			collapsed->tables[collapsed->count++] = tablePhys;
 			*changed = true;
 		}
 	}
 
-	memory_write_barrier();
-	kernelMap->Unlock();
 	return B_OK;
 }
 
 
 static status_t
-r5_direct_add(phys_addr_t phys, uint32 type, vm_page_reservation* reservation,
-	bool* created, bool* changed)
+r5_direct_add(X86VMTranslationMap64Bit* kernelMap, phys_addr_t phys,
+	uint32 type, vm_page_reservation* reservation, bool* created, bool* changed,
+	r5_collapsed_list* collapsed)
 {
 	*created = false;
 	if (phys >= KERNEL_PMAP_SIZE || vm_lookup_page(phys / B_PAGE_SIZE) == NULL)
@@ -530,7 +556,8 @@ r5_direct_add(phys_addr_t phys, uint32 type, vm_page_reservation* reservation,
 		return B_BUSY;
 	}
 	if (entry->count == 0) {
-		status_t status = r5_direct_install(phys, type, reservation, changed);
+		status_t status = r5_direct_install_locked(kernelMap, phys, type,
+			reservation, changed, collapsed);
 		if (status != B_OK) {
 			r5_ref_drop_slot(entry);
 			return status;
@@ -544,7 +571,8 @@ r5_direct_add(phys_addr_t phys, uint32 type, vm_page_reservation* reservation,
 
 
 static status_t
-r5_direct_drop(phys_addr_t phys, bool* created, bool* changed)
+r5_direct_drop(X86VMTranslationMap64Bit* kernelMap, phys_addr_t phys,
+	bool* created, bool* changed, r5_collapsed_list* collapsed)
 {
 	*created = false;
 	if (phys >= KERNEL_PMAP_SIZE || vm_lookup_page(phys / B_PAGE_SIZE) == NULL)
@@ -559,8 +587,8 @@ r5_direct_drop(phys_addr_t phys, bool* created, bool* changed)
 		return B_OK;
 	}
 
-	status_t status = r5_direct_install(phys, B_WRITE_BACK_MEMORY, NULL,
-		changed);
+	status_t status = r5_direct_install_locked(kernelMap, phys,
+		B_WRITE_BACK_MEMORY, NULL, changed, collapsed);
 	if (status != B_OK)
 		return status;
 	entry->count = 0;
@@ -750,37 +778,48 @@ arch_vm_direct_map_apply(VMArea* area, uint32 type, uint32 oldType, void* cookie
 
 	MutexLocker locker(sDirectLock);
 	memset(job->created, 0, count);
+	X86VMTranslationMap64Bit* kernelMap = static_cast<X86VMTranslationMap64Bit*>(
+		VMAddressSpace::Kernel()->TranslationMap());
 	bool changed = false;
-	for (uint32 i = 0; i < count; i++) {
-		bool created = false;
-		if (adding) {
-			status = r5_direct_add(job->pages[i], type,
-				job->reserved ? &job->reservation : NULL, &created, &changed);
-		} else {
-			status = r5_direct_drop(job->pages[i], &created, &changed);
-		}
-		job->created[i] = created ? 1 : 0;
-		if (status != B_OK) {
-			for (uint32 j = 0; j < i; j++) {
-				if (job->created[j] == 0)
-					continue;
-				bool ignored = false;
-				if (adding)
-					r5_direct_drop(job->pages[j], &ignored, &changed);
-				else {
-					r5_direct_add(job->pages[j], oldType,
-						job->reserved ? &job->reservation : NULL, &ignored,
-						&changed);
-				}
+	r5_collapsed_list collapsed;
+	collapsed.count = 0;
+
+	kernelMap->Lock();
+	{
+		ThreadCPUPinner pinner(thread_get_current_thread());
+		for (uint32 i = 0; i < count; i++) {
+			bool created = false;
+			if (adding) {
+				status = r5_direct_add(kernelMap, job->pages[i], type,
+					job->reserved ? &job->reservation : NULL, &created,
+					&changed, &collapsed);
+			} else {
+				status = r5_direct_drop(kernelMap, job->pages[i], &created,
+					&changed, &collapsed);
 			}
-			if (changed)
-				r5_direct_shootdown();
-			return status;
+			job->created[i] = created ? 1 : 0;
+			if (status != B_OK) {
+				for (uint32 j = 0; j < i; j++) {
+					if (job->created[j] == 0)
+						continue;
+					bool ignored = false;
+					if (adding) {
+						r5_direct_drop(kernelMap, job->pages[j], &ignored,
+							&changed, &collapsed);
+					} else {
+						r5_direct_add(kernelMap, job->pages[j], oldType,
+							job->reserved ? &job->reservation : NULL, &ignored,
+							&changed, &collapsed);
+					}
+				}
+				break;
+			}
 		}
+		memory_write_barrier();
 	}
-	if (changed)
-		r5_direct_shootdown();
-	return B_OK;
+	kernelMap->Unlock();
+	r5_direct_finish_batch(changed, &collapsed);
+	return status;
 }
 
 
@@ -842,19 +881,29 @@ arch_vm_direct_map_release_range(VMArea* area, addr_t base, size_t size)
 		arch_vm_direct_map_drain();
 
 		MutexLocker locker(sDirectLock);
+		X86VMTranslationMap64Bit* kernelMap
+			= static_cast<X86VMTranslationMap64Bit*>(
+				VMAddressSpace::Kernel()->TranslationMap());
 		bool changed = false;
-		for (uint32 i = 0; i < count; i++) {
-			bool created = false;
-			status_t status = r5_direct_drop(sReleaseBatch[i], &created,
-				&changed);
-			if (status != B_OK && atomic_add(&sReleaseFail, 1) < 4) {
-				dprintf("R5 VM: wc direct map release failed %#"
-					B_PRIxPHYSADDR " status 0x%" B_PRIx32 "\n",
-					sReleaseBatch[i], (uint32)status);
+		r5_collapsed_list collapsed;
+		collapsed.count = 0;
+		kernelMap->Lock();
+		{
+			ThreadCPUPinner pinner(thread_get_current_thread());
+			for (uint32 i = 0; i < count; i++) {
+				bool created = false;
+				status_t status = r5_direct_drop(kernelMap, sReleaseBatch[i],
+					&created, &changed, &collapsed);
+				if (status != B_OK && atomic_add(&sReleaseFail, 1) < 4) {
+					dprintf("R5 VM: wc direct map release failed %#"
+						B_PRIxPHYSADDR " status 0x%" B_PRIx32 "\n",
+						sReleaseBatch[i], (uint32)status);
+				}
 			}
+			memory_write_barrier();
 		}
-		if (changed)
-			r5_direct_shootdown();
+		kernelMap->Unlock();
+		r5_direct_finish_batch(changed, &collapsed);
 	}
 }
 

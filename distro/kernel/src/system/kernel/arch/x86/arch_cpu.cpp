@@ -124,6 +124,13 @@ extern "C" void x86_reboot(void);
 
 void (*gCpuIdleFunc)(void);
 #ifndef __x86_64__
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+extern "C" uint32 gX86UserMemcpyRepFrom;
+uint32 gX86UserMemcpyRepFrom = 2048;
+// SPDX-SnippetEnd
+
 void (*gX86SwapFPUFunc)(void* oldState, const void* newState) = x86_noop_swap;
 bool gHasSSE = false;
 #endif
@@ -1550,6 +1557,13 @@ detect_cpu(int currentCPU, bool full = true)
 		cpu->arch.feature[FEATURE_7_EBX] = cpuid.regs.ebx;
 		cpu->arch.feature[FEATURE_7_ECX] = cpuid.regs.ecx;
 		cpu->arch.feature[FEATURE_7_EDX] = cpuid.regs.edx;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		/* CPUID leaf 7 EDX bit 4: Fast Short REP MOVSB (FSRM). */
+		if ((cpuid.regs.edx & (1u << 4)) != 0)
+			gX86UserMemcpyRepFrom = 64;
+// SPDX-SnippetEnd
 		get_current_cpuid(&cpuid, 7, 1);
 		cpu->arch.feature[FEATURE_7_1_EAX] = cpuid.regs.eax;
 	}
@@ -2086,6 +2100,19 @@ arch_cpu_invalidate_tlb_list(intptr_t context, addr_t pages[], int num_pages)
 {
 	if (context != 0 && (intptr_t)x86_read_cr3() != context)
 		return;
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	const int kMaxRangePages = 64;
+	if (num_pages >= kMaxRangePages) {
+		if (context != 0)
+			arch_cpu_user_tlb_invalidate(context);
+		else
+			arch_cpu_global_tlb_invalidate();
+		return;
+	}
+// SPDX-SnippetEnd
 
 	for (int i = 0; i < num_pages; i++)
 		invalidate_TLB(pages[i]);
