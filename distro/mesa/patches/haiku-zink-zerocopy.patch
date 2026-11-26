@@ -1,0 +1,379 @@
+--- a/src/egl/drivers/haiku/egl_haiku.cpp
++++ b/src/egl/drivers/haiku/egl_haiku.cpp
+@@ -33,6 +33,7 @@
+ // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ // SPDX-License-Identifier: MIT
+ #include <dirent.h>
++#include <dlfcn.h>
+ #include <fcntl.h>
+ #include <sys/ioctl.h>
+ #include <unistd.h>
+@@ -42,9 +43,17 @@
+ #include <string.h>
+ #include <syslog.h>
+ #include <sys/stat.h>
++#include <typeinfo>
+ 
++#include <Application.h>
+ #include <OS.h>
++#include <View.h>
++#include <Window.h>
+ #include <driver_settings.h>
++
++#include <AppMisc.h>
++#include <AppServerLink.h>
++#include <ServerProtocol.h>
+ // SPDX-SnippetEnd
+ 
+ #include "eglconfig.h"
+@@ -65,7 +74,9 @@
+ // SPDX-SnippetBegin
+ // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ // SPDX-License-Identifier: MIT
++#include "frontend/winsys_handle.h"
+ #include "util/u_inlines.h"
++#include "util/u_box.h"
+ #include "util/format/u_format.h"
+ // SPDX-SnippetEnd
+ #include "mesa/glapi/glapi/glapi.h"
+@@ -158,17 +169,294 @@
+ #define R5_PRESENT_SPARES 2
+ #define R5_PRESENT_SAMPLES 4096
+ #define R5_PRESENT_REPORT 10000000
++#define R5_ZINK_SHARE_IMAGES 3u
++
++typedef int (*r5_zink_fd_to_token_fn)(int fd, uint8_t token[16], uint32_t *id);
++typedef int (*r5_zink_mark_set_fn)(uint32_t id);
+ 
+ struct r5_present {
+    BitmapHook *hook;
+    BBitmap *spare[R5_PRESENT_SPARES];
+    bool failed;
++   // Zero-copy compositor sharing (RADV only; falls back to BBitmap copy).
++   bool share_tried;
++   bool share_active;
++   int32 view_token;
++   int32 share_id;
++   uint32_t share_width;
++   uint32_t share_height;
++   enum pipe_format share_format;
++   uint32_t share_next;
++   uint64_t share_count;
++   struct pipe_resource *share_res[R5_ZINK_SHARE_IMAGES];
++   uint32_t share_export_id[R5_ZINK_SHARE_IMAGES];
++   sem_id share_sem[R5_ZINK_SHARE_IMAGES];
++   bool share_with_server[R5_ZINK_SHARE_IMAGES];
++   uint64_t share_presented[R5_ZINK_SHARE_IMAGES];
+    bigtime_t windowStart;
+    uint32_t frames;
+    uint32_t samples;
+    bigtime_t *sample; // R5_GL_TRACE=1 only
+ };
+ 
++static r5_zink_fd_to_token_fn s_r5_fd_to_token = NULL;
++static r5_zink_mark_set_fn s_r5_mark_set = NULL;
++static int s_r5_drm_loaded = 0;
++
++static bool
++r5_zink_load_drm(void)
++{
++   if (p_atomic_read(&s_r5_drm_loaded) != 0)
++      return s_r5_fd_to_token != NULL && s_r5_mark_set != NULL;
++   void *drm = dlopen("libdrm.so.2", RTLD_NOW | RTLD_LOCAL);
++   if (drm != NULL) {
++      s_r5_fd_to_token = (r5_zink_fd_to_token_fn)dlsym(drm,
++         "r5_drm_fd_to_token");
++      s_r5_mark_set = (r5_zink_mark_set_fn)dlsym(drm, "r5_drm_mark_set");
++   }
++   p_atomic_set(&s_r5_drm_loaded, 1);
++   return s_r5_fd_to_token != NULL && s_r5_mark_set != NULL;
++}
++
++static void
++r5_zink_scan_views(BView *view, uint32_t width, uint32_t height,
++                   BView **found, int *matches)
++{
++   if (view == NULL)
++      return;
++   if (!view->IsHidden()) {
++      BRect b = view->Bounds();
++      if ((uint32_t)(b.IntegerWidth() + 1) == width
++          && (uint32_t)(b.IntegerHeight() + 1) == height) {
++         const char *name = typeid(*view).name();
++         if (name != NULL && strstr(name, "GLView") != NULL) {
++            *found = view;
++            (*matches)++;
++         }
++      }
++   }
++   for (BView *child = view->ChildAt(0); child != NULL;
++        child = child->NextSibling()) {
++      r5_zink_scan_views(child, width, height, found, matches);
++   }
++}
++
++static int32
++r5_zink_find_view_token(BitmapHook *hook, uint32_t width, uint32_t height)
++{
++   if (be_app == NULL || hook == NULL)
++      return -1;
++   const char *env = getenv("R5_ZINK_ZEROCOPY");
++   if (env != NULL && strcmp(env, "0") == 0)
++      return -1;
++   BView *direct = dynamic_cast<BView *>(hook);
++   if (direct != NULL)
++      return _get_object_token_(direct);
++   BView *found = NULL;
++   int matches = 0;
++   int32 winCount = be_app->CountWindows();
++   for (int32 i = 0; i < winCount; i++) {
++      BWindow *win = be_app->WindowAt(i);
++      if (win == NULL)
++         continue;
++      if (win->LockWithTimeout(16667) != B_OK)
++         continue;
++      for (BView *child = win->ChildAt(0); child != NULL;
++           child = child->NextSibling()) {
++         r5_zink_scan_views(child, width, height, &found, &matches);
++      }
++      win->Unlock();
++   }
++   if (matches == 1 && found != NULL)
++      return _get_object_token_(found);
++   return -1;
++}
++
++static void
++r5_zink_share_teardown(struct r5_present *present)
++{
++   if (present->share_active && present->share_id > 0) {
++      BPrivate::AppServerLink link;
++      link.StartMessage(AS_R5_SHARE_END);
++      link.Attach<int32>(present->view_token);
++      link.Attach<int32>(present->share_id);
++      int32 code;
++      link.FlushWithReply(code);
++   }
++   for (uint32_t i = 0; i < R5_ZINK_SHARE_IMAGES; i++) {
++      if (present->share_sem[i] >= 0) {
++         delete_sem(present->share_sem[i]);
++         present->share_sem[i] = -1;
++      }
++      pipe_resource_reference(&present->share_res[i], NULL);
++      present->share_export_id[i] = 0;
++      present->share_with_server[i] = false;
++      present->share_presented[i] = 0;
++   }
++   present->share_active = false;
++   present->share_id = 0;
++   present->share_width = 0;
++   present->share_height = 0;
++   present->share_next = 0;
++}
++
++static bool
++r5_zink_share_setup(struct r5_present *present, struct pipe_context *pipe,
++                    struct pipe_resource *resource)
++{
++   if (!r5_zink_load_drm())
++      return false;
++   struct pipe_screen *screen = pipe->screen;
++   if (screen == NULL || screen->resource_create == NULL
++       || screen->resource_get_handle == NULL)
++      return false;
++   uint32_t width = resource->width0;
++   uint32_t height = resource->height0;
++   int32 viewToken = present->view_token >= 0 ? present->view_token
++      : r5_zink_find_view_token(present->hook, width, height);
++   if (viewToken < 0)
++      return false;
++
++   struct pipe_resource templ;
++   memset(&templ, 0, sizeof(templ));
++   templ.target = PIPE_TEXTURE_2D;
++   templ.format = resource->format;
++   templ.width0 = width;
++   templ.height0 = height;
++   templ.depth0 = 1;
++   templ.array_size = 1;
++   templ.bind = PIPE_BIND_LINEAR | PIPE_BIND_SHARED | PIPE_BIND_RENDER_TARGET;
++
++   uint8_t tokens[R5_ZINK_SHARE_IMAGES][16];
++   uint32_t pitches[R5_ZINK_SHARE_IMAGES];
++   for (uint32_t i = 0; i < R5_ZINK_SHARE_IMAGES; i++) {
++      present->share_sem[i] = -1;
++      present->share_res[i] = screen->resource_create(screen, &templ);
++      if (present->share_res[i] == NULL) {
++         r5_zink_share_teardown(present);
++         return false;
++      }
++      struct winsys_handle whandle;
++      memset(&whandle, 0, sizeof(whandle));
++      whandle.type = WINSYS_HANDLE_TYPE_FD;
++      if (!screen->resource_get_handle(screen, pipe, present->share_res[i],
++                                       &whandle, 0)) {
++         r5_zink_share_teardown(present);
++         return false;
++      }
++      int fd = (int)whandle.handle;
++      int rc = s_r5_fd_to_token(fd, tokens[i], &present->share_export_id[i]);
++      close(fd);
++      if (rc != 0 || whandle.stride < width * 4) {
++         r5_zink_share_teardown(present);
++         return false;
++      }
++      pitches[i] = whandle.stride;
++      present->share_sem[i] = create_sem(0, "r5 zink free");
++      if (present->share_sem[i] < 0) {
++         r5_zink_share_teardown(present);
++         return false;
++      }
++   }
++
++   int32 code = B_ERROR;
++   int32 shareId = 0;
++   BPrivate::AppServerLink link;
++   link.StartMessage(AS_R5_SHARE_IMAGES);
++   link.Attach<int32>(viewToken);
++   link.Attach<uint32>(R5_ZINK_SHARE_IMAGES);
++   for (uint32_t i = 0; i < R5_ZINK_SHARE_IMAGES; i++) {
++      link.Attach(tokens[i], sizeof(tokens[i]));
++      link.Attach<int32>(present->share_sem[i]);
++      link.Attach<uint32>(width);
++      link.Attach<uint32>(height);
++      link.Attach<uint32>(pitches[i]);
++      link.Attach<uint32>((uint32)B_RGBA32);
++   }
++   if (link.FlushWithReply(code) != B_OK)
++      code = B_ERROR;
++   if (code == B_OK) {
++      link.Read<int32>(&shareId);
++      for (uint32_t i = 0; i < R5_ZINK_SHARE_IMAGES; i++) {
++         int32 st = B_ERROR;
++         if (link.Read<int32>(&st) != B_OK || st != B_OK)
++            code = B_ERROR;
++      }
++   }
++   if (code != B_OK) {
++      r5_zink_share_teardown(present);
++      return false;
++   }
++   present->view_token = viewToken;
++   present->share_id = shareId;
++   present->share_width = width;
++   present->share_height = height;
++   present->share_format = resource->format;
++   present->share_active = true;
++   delete present->hook->SetBitmap(NULL);
++   r5_gl_log(true, "egl: zink zero-copy on %ux%u", width, height);
++   return true;
++}
++
++static bool
++r5_zink_present_shared(struct r5_present *present, struct pipe_context *pipe,
++                       struct pipe_resource *resource)
++{
++   uint32_t slot = R5_ZINK_SHARE_IMAGES;
++   for (int attempt = 0; attempt < 2 && slot >= R5_ZINK_SHARE_IMAGES; attempt++) {
++      for (uint32_t n = 0; n < R5_ZINK_SHARE_IMAGES; n++) {
++         uint32_t i = (present->share_next + n) % R5_ZINK_SHARE_IMAGES;
++         if (!present->share_with_server[i]) {
++            slot = i;
++            break;
++         }
++         if (acquire_sem_etc(present->share_sem[i], 1,
++                             B_RELATIVE_TIMEOUT, 0) == B_OK) {
++            present->share_with_server[i] = false;
++            slot = i;
++            break;
++         }
++      }
++      if (slot < R5_ZINK_SHARE_IMAGES)
++         break;
++      uint32_t oldest = 0;
++      for (uint32_t i = 1; i < R5_ZINK_SHARE_IMAGES; i++) {
++         if (present->share_presented[i] < present->share_presented[oldest])
++            oldest = i;
++      }
++      if (acquire_sem_etc(present->share_sem[oldest], 1,
++                          B_RELATIVE_TIMEOUT, 50000) == B_OK) {
++         present->share_with_server[oldest] = false;
++         slot = oldest;
++      }
++   }
++   if (slot >= R5_ZINK_SHARE_IMAGES)
++      return false;
++
++   struct pipe_box box;
++   u_box_2d(0, 0, resource->width0, resource->height0, &box);
++   pipe->resource_copy_region(pipe, present->share_res[slot], 0, 0, 0, 0,
++                              resource, 0, &box);
++   pipe->flush(pipe, NULL, 0);
++
++   status_t code = B_ERROR;
++   if (s_r5_mark_set(present->share_export_id[slot]) == 0) {
++      BPrivate::AppServerLink link;
++      link.StartMessage(AS_R5_SHARE_PRESENT);
++      link.Attach<int32>(present->view_token);
++      link.Attach<int32>(present->share_id);
++      link.Attach<uint32>(slot);
++      if (link.FlushWithReply(code) != B_OK)
++         code = B_ERROR;
++   }
++   if (code != B_OK)
++      return false;
++   present->share_with_server[slot] = true;
++   present->share_presented[slot] = ++present->share_count;
++   present->share_next = (slot + 1) % R5_ZINK_SHARE_IMAGES;
++   return true;
++}
++
+ static bool
+ r5_present_fail(struct r5_present *present, const char *why)
+ {
+@@ -299,6 +587,27 @@
+    bigtime_t start = system_time();
+    uint32_t width = resource->width0;
+    uint32_t height = resource->height0;
++
++   // Try zero-copy GPU sharing with app_server on RADV; falls back to CPU
++   // readback on Lavapipe or if app_server refuses.
++   if (present->share_active
++       && (width != present->share_width || height != present->share_height
++           || resource->format != present->share_format)) {
++      r5_zink_share_teardown(present);
++      present->share_tried = false;
++   }
++   if (!present->share_active && !present->share_tried) {
++      present->share_tried = true;
++      r5_zink_share_setup(present, pipe, resource);
++   }
++   if (present->share_active) {
++      if (r5_zink_present_shared(present, pipe, resource)) {
++         r5_present_measure(present, start, system_time());
++         return true;
++      }
++      r5_zink_share_teardown(present);
++   }
++
+    struct pipe_transfer *transfer = NULL;
+    const uint8_t *map = (const uint8_t *)pipe_texture_map(pipe, resource, 0,
+       0, PIPE_MAP_READ, 0, 0, width, height, &transfer);
+@@ -336,6 +645,9 @@
+    if (present == NULL)
+       return false;
+    present->hook = hook;
++   present->view_token = -1;
++   for (uint32_t i = 0; i < R5_ZINK_SHARE_IMAGES; i++)
++      present->share_sem[i] = -1;
+    buffer->present = r5_present_frame;
+    buffer->present_data = present;
+    return true;
+@@ -348,6 +660,7 @@
+    struct r5_present *present = (struct r5_present *)buffer->present_data;
+    if (present == NULL)
+       return;
++   r5_zink_share_teardown(present);
+    if (present->hook != NULL)
+       delete present->hook->SetBitmap(NULL);
+    for (int i = 0; i < R5_PRESENT_SPARES; i++)

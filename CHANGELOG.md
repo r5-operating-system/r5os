@@ -8,6 +8,15 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-26 - Phase 2 (Mesa Zink zero-copy & Vulkan WSI): AS_R5_SHARE_IMAGES for Zink, WSI present modes & single-lock async Flush
+
+- Problem: Every Zink `eglSwapBuffers()` read back the back buffer to the CPU and copied it into a `BBitmap`; `wsi_common_haiku.cpp` copied row-by-row even when pitches matched, locked `BWindow` twice per present and blocked on synchronous `window->Sync()`, only offered `VK_PRESENT_MODE_FIFO_KHR`, and capped `g_slots` at 4 devices.
+- Change:
+  - `distro/mesa/patches/haiku-zink-zerocopy.patch` & `distro/mesa/build-radv.sh`: added a 3-slot zero-copy GPU-sharing path (`PIPE_BIND_LINEAR | PIPE_BIND_SHARED`, `WINSYS_HANDLE_TYPE_FD`, `r5_drm_fd_to_token`, `AS_R5_SHARE_IMAGES` / `AS_R5_SHARE_PRESENT` / `AS_R5_SHARE_END`) for Zink on RADV, keeping the CPU `BBitmap` readback path as fallback and on Lavapipe (`R5_ZINK_ZEROCOPY=0` disables it).
+  - `distro/mesa/wsi/wsi_common_haiku.cpp`: coalesced `r5_copy_rows()` to one `memcpy` when pitches match; reduced `r5_queue_present()` to a single `BWindow` lock + async `window->Flush()` (removing synchronous `window->Sync()`); added `VK_PRESENT_MODE_MAILBOX_KHR` and `VK_PRESENT_MODE_IMMEDIATE_KHR`; raised `R5_MAX_WSI_SLOTS` from 4 to 32.
+  - `distro/mesa/pack-radv.py`, `distro/mesa/pack-lavapipe.py`, `scripts/build-gpu-packages.py`: bumped Mesa package output revisions to `mesa-25.3.6-7`, `mesa_radv-25.3.6-14`, `mesa_lavapipe-25.3.6-7`.
+- Limits: Paused at owner request before restart; `haiku-zink-zerocopy.patch` needs the `#include "util/u_box.h"` removal, then final Mesa build, `scripts/build-locked.sh`, and QEMU verification after restart.
+
 ## 2026-11-26 - Phase 2 (Compositor): unlocked hardware cursor, 2-frame double-buffering, reusable scratch pools, narrower barriers, and reciprocal row-major shadow blur
 
 - Problem: `Compositor::_Compose()` held `fScreen->LockExclusiveAccess()` across `vkQueueSubmit()` and `vkWaitForFences()` even when a hardware cursor was active (stalling cursor movement during GPU rendering), used a single command buffer and fence (1 frame in flight), allocated `VkBufferCopy[]`, `VkBufferImageCopy[]`, and `std::vector<BRegion>` on the heap every frame, emitted `VK_PIPELINE_STAGE_ALL_COMMANDS_BIT` barriers, and ran `box_blur()` with per-pixel integer division and cache-thrashing column-strided access.

@@ -54,7 +54,7 @@ def main() -> None:
     out_dir = root / "distro" / "packages" / "x86_64"
     base = "25.3.6-10"
     previous = fetch_base(root, f"mesa_radv-{base}-x86_64.hpkg")
-    dest = out_dir / "mesa_radv-25.3.6-13-x86_64.hpkg"
+    dest = out_dir / "mesa_radv-25.3.6-14-x86_64.hpkg"
     stage = Path("/tmp/r5-radv-pkg")
     shutil.rmtree(stage, ignore_errors=True)
     stage.mkdir(parents=True)
@@ -77,9 +77,9 @@ def main() -> None:
         (bindir / name).chmod(0o755)
     info = stage / ".PackageInfo"
     text = info.read_text(encoding="utf-8")
-    text = text.replace(f"version\t\t\t{base}", "version\t\t\t25.3.6-13")
-    text = text.replace(f"mesa_radv = {base}", "mesa_radv = 25.3.6-13")
-    if "25.3.6-13" not in text or base in text:
+    text = text.replace(f"version\t\t\t{base}", "version\t\t\t25.3.6-14")
+    text = text.replace(f"mesa_radv = {base}", "mesa_radv = 25.3.6-14")
+    if "25.3.6-14" not in text or base in text:
         raise SystemExit("package version was not bumped")
     info.write_text(text, encoding="utf-8")
     if dest.exists():
