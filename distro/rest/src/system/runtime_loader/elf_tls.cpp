@@ -128,6 +128,67 @@ TLSBlockTemplate::CreateBlock()
 // this one second, never the other way round.
 static recursive_lock sTemplatesLock
 	= RECURSIVE_LOCK_INITIALIZER("runtime loader tls templates");
+
+// Placements for __tls_get_addr. Published once per load or unload and
+// never freed: a thread may still be reading the previous one. The ready
+// slot in the thread's TLS vector (tls_allocate, not __thread: this
+// function is __tls_get_addr) remembers which snapshot that thread has
+// already copied into its static image.
+struct TlsSnap {
+	uint32		count;
+	uint8*		has;
+	uint64*		placement;
+};
+
+static TlsSnap* sSnap = NULL;
+static int32 sReadySlot = -1;
+
+
+static TlsSnap*
+load_snap()
+{
+	return __atomic_load_n(&sSnap, __ATOMIC_ACQUIRE);
+}
+
+
+static int32
+ready_slot()
+{
+	int32 slot = __atomic_load_n(&sReadySlot, __ATOMIC_ACQUIRE);
+	if (slot >= 0)
+		return slot;
+
+	int32 created = tls_allocate();
+	if (created < 0)
+		return -1;
+
+	int32 expected = -1;
+	if (!__atomic_compare_exchange_n(&sReadySlot, &expected, created,
+			false, __ATOMIC_RELEASE, __ATOMIC_RELAXED))
+		return expected;
+	return created;
+}
+
+
+static bool
+thread_ready(TlsSnap* snap)
+{
+	int32 slot = __atomic_load_n(&sReadySlot, __ATOMIC_ACQUIRE);
+	if (slot < 0 || snap == NULL)
+		return false;
+	return tls_get(slot) == (void*)snap;
+}
+
+
+static void
+mark_ready(TlsSnap* snap)
+{
+	if (snap == NULL)
+		return;
+	int32 slot = ready_slot();
+	if (slot >= 0)
+		tls_set(slot, snap);
+}
 // SPDX-SnippetEnd
 
 
@@ -166,6 +227,7 @@ TLSBlockTemplates::Register(const TLSBlockTemplate& block)
 	// SPDX-License-Identifier: MIT
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	_AssignStaticOffset(dso);
+	_PublishSnap();
 	// SPDX-SnippetEnd
 	return dso;
 }
@@ -191,6 +253,7 @@ TLSBlockTemplates::Unregister(unsigned dso)
 	// offset).
 	fTemplates[dso] = TLSBlockTemplate();
 	fTemplates[dso].SetGeneration(fGeneration);
+	_PublishSnap();
 	// SPDX-SnippetEnd
 	fFreeDSOs.push_back(dso);
 }
@@ -399,11 +462,44 @@ get_tls_address(unsigned dso, addr_t offset)
 	// the thread pointer. A library reads that same symbol through
 	// __tls_get_addr. The static image is the one the relocation names. A
 	// template without a static offset keeps the dynamic block.
-	TLSBlockTemplates& templates = TLSBlockTemplates::Get();
-	if (templates.HasStaticPlacement(dso)) {
-		materialize_initial_exec_tls();
+	//
+	// Every loaded image is given a static offset, so this is the path for
+	// ordinary general-dynamic TLS (Mesa, LLVM, Skia), not a rare case.
+	// Once this thread has copied the published snapshot, the address is
+	// the thread pointer plus that snapshot. No lock, and no walk of the
+	// team's areas: both of those on every call kept the draw thread from
+	// finishing a frame (26 Nov 2026).
+	TlsSnap* snap = load_snap();
+	if (snap != NULL && dso < snap->count && snap->has[dso]
+			&& thread_ready(snap)) {
 		addr_t threadPointer = (addr_t)tls_get(TLS_BASE_ADDRESS_SLOT);
-		return (void*)(threadPointer + templates.StaticPlacement(dso) + offset);
+		return (void*)(threadPointer + snap->placement[dso] + offset);
+	}
+
+	TLSBlockTemplates& templates = TLSBlockTemplates::Get();
+	if (snap != NULL && dso < snap->count && snap->has[dso]) {
+		void* ready = NULL;
+		bool full = templates.Materialize(&ready);
+		if (full && ready != NULL)
+			mark_ready((TlsSnap*)ready);
+		TlsSnap* use = (TlsSnap*)ready;
+		if (use == NULL || dso >= use->count || !use->has[dso])
+			use = load_snap();
+		if (use != NULL && dso < use->count && use->has[dso]) {
+			addr_t threadPointer = (addr_t)tls_get(TLS_BASE_ADDRESS_SLOT);
+			return (void*)(threadPointer + use->placement[dso] + offset);
+		}
+	} else if (templates.HasStaticPlacement(dso)) {
+		// The snapshot could not be published (out of memory). Same
+		// address as before, without the per-call area walk: Materialize
+		// maps once until the copy catches up.
+		void* ready = NULL;
+		templates.Materialize(&ready);
+		if (ready != NULL)
+			mark_ready((TlsSnap*)ready);
+		addr_t threadPointer = (addr_t)tls_get(TLS_BASE_ADDRESS_SLOT);
+		return (void*)(threadPointer + templates.StaticPlacement(dso)
+			+ offset);
 	}
 	// SPDX-SnippetEnd
 
@@ -444,6 +540,33 @@ TLSBlockTemplates::_AssignStaticOffset(unsigned dso)
 	size_t offset = (fStaticNext + alignment - 1) & ~(alignment - 1);
 	stored.SetStaticOffset(offset);
 	fStaticNext = offset + stored.MemorySize();
+}
+
+
+void
+TLSBlockTemplates::_PublishSnap()
+{
+	uint32 count = (uint32)fTemplates.size();
+	TlsSnap* snap = (TlsSnap*)malloc(sizeof(TlsSnap));
+	uint8* has = count > 0 ? (uint8*)malloc(count) : NULL;
+	uint64* placement = count > 0
+		? (uint64*)malloc(count * sizeof(uint64)) : NULL;
+	if (snap == NULL || (count > 0 && (has == NULL || placement == NULL))) {
+		free(snap);
+		free(has);
+		free(placement);
+		return;
+	}
+
+	for (uint32 i = 0; i < count; i++) {
+		has[i] = fTemplates[i].HasStaticOffset() ? 1 : 0;
+		placement[i] = has[i]
+			? fStaticBase + fTemplates[i].StaticOffset() : 0;
+	}
+	snap->count = count;
+	snap->has = has;
+	snap->placement = placement;
+	__atomic_store_n(&sSnap, snap, __ATOMIC_RELEASE);
 }
 
 
@@ -508,41 +631,78 @@ TLSBlockTemplates::StaticPlacement(unsigned dso) const
 }
 
 
-void
-TLSBlockTemplates::Materialize()
+bool
+TLSBlockTemplates::Materialize(void** _readySnap)
 {
-	RecursiveLocker locker(sTemplatesLock);
-	if (!fStaticBaseReady || fStaticNext <= 16)
-		return;
+	if (_readySnap != NULL)
+		*_readySnap = NULL;
 
-	addr_t threadPointer = (addr_t)tls_get(TLS_BASE_ADDRESS_SLOT);
-	if (!_EnsureMapped(threadPointer, fStaticBase + fStaticNext))
-		return;
-
-	uint8* base = (uint8*)(threadPointer + fStaticBase);
-	uint64 done = *(uint64*)base;
-	unsigned count = fTemplates.size();
-	for (unsigned i = 0; i < fTemplates.size(); i++) {
-		if ((uint64)i < done)
-			continue;
-		TLSBlockTemplate& templ = fTemplates[i];
-		if (!templ.HasStaticOffset())
-			continue;
-		if (!templ.IsRelocated()) {
-			// Still being loaded: its image is copied by the next call on
-			// this thread, from where it really is.
-			count = i;
-			break;
-		}
-		uint8* dest = base + templ.StaticOffset();
-		if (templ.Address() != NULL && templ.FileSize() > 0)
-			memcpy(dest, templ.Address(), templ.FileSize());
-		if (templ.MemorySize() > templ.FileSize()) {
-			memset(dest + templ.FileSize(), 0,
-				templ.MemorySize() - templ.FileSize());
-		}
+	TlsSnap* seen = load_snap();
+	if (seen != NULL && thread_ready(seen)) {
+		if (_readySnap != NULL)
+			*_readySnap = seen;
+		return true;
 	}
-	*(uint64*)base = count;
+
+	// Resize the stack area without the template lock. resize and the
+	// area walk are syscalls; holding the lock across them made every
+	// other thread's __tls_get_addr wait, including malloc.
+	for (int attempt = 0; attempt < 4; attempt++) {
+		addr_t threadPointer;
+		addr_t bytes;
+		{
+			RecursiveLocker locker(sTemplatesLock);
+			if (!fStaticBaseReady || fStaticNext <= 16) {
+				if (_readySnap != NULL)
+					*_readySnap = load_snap();
+				return true;
+			}
+			threadPointer = (addr_t)tls_get(TLS_BASE_ADDRESS_SLOT);
+			bytes = fStaticBase + fStaticNext;
+		}
+
+		if (!_EnsureMapped(threadPointer, bytes))
+			return false;
+
+		RecursiveLocker locker(sTemplatesLock);
+		if (!fStaticBaseReady || fStaticNext <= 16) {
+			if (_readySnap != NULL)
+				*_readySnap = load_snap();
+			return true;
+		}
+		if (fStaticBase + fStaticNext > bytes)
+			continue;
+
+		uint8* base = (uint8*)(threadPointer + fStaticBase);
+		uint64 done = *(uint64*)base;
+		unsigned count = fTemplates.size();
+		for (unsigned i = 0; i < fTemplates.size(); i++) {
+			if ((uint64)i < done)
+				continue;
+			TLSBlockTemplate& templ = fTemplates[i];
+			if (!templ.HasStaticOffset())
+				continue;
+			if (!templ.IsRelocated()) {
+				// Still being loaded: its image is copied by the next call on
+				// this thread, from where it really is.
+				count = i;
+				break;
+			}
+			uint8* dest = base + templ.StaticOffset();
+			if (templ.Address() != NULL && templ.FileSize() > 0)
+				memcpy(dest, templ.Address(), templ.FileSize());
+			if (templ.MemorySize() > templ.FileSize()) {
+				memset(dest + templ.FileSize(), 0,
+					templ.MemorySize() - templ.FileSize());
+			}
+		}
+		*(uint64*)base = count;
+		bool full = count == fTemplates.size();
+		if (full && _readySnap != NULL)
+			*_readySnap = load_snap();
+		return full;
+	}
+	return false;
 }
 
 
@@ -559,15 +719,21 @@ void
 tls_reinit_after_fork()
 {
 	// The child has only the forking thread; a lock another thread held is
-	// free again.
+	// free again. The copied static image is used again after the next
+	// Materialize(), in case the parent forked mid-copy.
 	recursive_lock_init(&sTemplatesLock, "runtime loader tls templates");
+	int32 slot = __atomic_load_n(&sReadySlot, __ATOMIC_ACQUIRE);
+	if (slot >= 0)
+		tls_set(slot, NULL);
 }
 
 
 void
 materialize_initial_exec_tls()
 {
-	TLSBlockTemplates::Get().Materialize();
+	void* ready = NULL;
+	if (TLSBlockTemplates::Get().Materialize(&ready))
+		mark_ready((TlsSnap*)ready);
 }
 
 
