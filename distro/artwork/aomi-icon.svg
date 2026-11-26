@@ -1,0 +1,23 @@
+<!--
+  SPDX-FileCopyrightText: 2026 R5OS Contributors
+  SPDX-License-Identifier: GPL-3.0-or-later
+  Aomi app icon, owner's choice 26 Nov 2026. Reference for the HVIF icon.
+  Derived from distro/artwork/brand-kit/r5-symbol.svg, so it is GPL-3.0-or-later like distro/artwork/.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="512" height="512">
+  <defs>
+    <linearGradient id="lagoon" x1="12%" y1="12%" x2="88%" y2="88%">
+      <stop offset="0%" stop-color="#5eead4"/>
+      <stop offset="50%" stop-color="#14b8a6"/>
+      <stop offset="100%" stop-color="#0e4f5c"/>
+    </linearGradient>
+  </defs>
+  <!-- ring, back half (behind the pebble) -->
+  <path d="M3,52 A47 14 0 0 1 97 52" transform="rotate(-18 50 52)" fill="none" stroke="#4e7bfb" stroke-width="3" opacity="0.55"/>
+  <!-- pebble: same shape as the R5 mark, lagoon fill -->
+  <path d="M50,8 C74,8 92,25 92,49 C92,74 73,92 49,92 C25,92 8,75 8,50 C8,24 27,8 50,8 Z M54,24 C42,24 37,32 43,42 C49,51 46,62 35,66 C26,69 27,77 41,77 C64,77 77,64 77,48 C77,33 66,24 54,24 Z" fill="url(#lagoon)" fill-rule="evenodd"/>
+  <!-- ring, front half (over the pebble) -->
+  <path d="M3,52 A47 14 0 0 0 97 52" transform="rotate(-18 50 52)" fill="none" stroke="#4e7bfb" stroke-width="4.2" stroke-linecap="round"/>
+  <!-- highlight, as on the R5 mark -->
+  <path d="M22,29 C30,17 44,12 58,14" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" opacity="0.38"/>
+</svg>
