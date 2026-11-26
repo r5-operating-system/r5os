@@ -28,7 +28,7 @@ A wrong hash stops the build. Once a package is in the cache, the build needs no
 
 1. Build it with its recipe; the output lands in `distro/packages/x86_64`.
 2. Ask the owner before publishing.
-3. From Windows (Git Bash, `gh` signed in): `scripts/publish-package.sh distro/packages/x86_64/<file> <role>`. It creates the release, downloads the asset again, checks the sha256, and replaces the pin line of that package and role.
+3. From Windows (Git Bash, `gh` signed in): `scripts/publish-package.sh distro/packages/x86_64/<file> <role>`. It creates the release as a pre-release (so no package shows as the Latest release of r5os), downloads the asset again, checks the sha256, and replaces the pin line of that package and role.
 4. Change the version where a script names it (the HaikuPorts pin block in `scripts/pin-mesa-packages.sh`, `scripts/install-mesa-packages.sh`, the packing script), and commit `packages.sha256` with it.
 
 ## Source
