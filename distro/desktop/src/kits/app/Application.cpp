@@ -47,6 +47,11 @@
 #include <MenuWindow.h>
 #include <PicturePrivate.h>
 #include <PortLink.h>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <LinkRing.h>
+// SPDX-SnippetEnd
 #include <RosterPrivate.h>
 #include <ServerMemoryAllocator.h>
 #include <ServerProtocol.h>
@@ -1393,6 +1398,13 @@ BApplication::_InitGUIContext()
 status_t
 BApplication::_ConnectToServer()
 {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// A reconnect: the ring of the old app_server goes, on both halves.
+	if (fServerLink != NULL)
+		BPrivate::link_ring_disconnect(*fServerLink);
+// SPDX-SnippetEnd
 	status_t status
 		= create_desktop_connection(fServerLink, "a<app_server", 100);
 	if (status != B_OK)
@@ -1458,6 +1470,15 @@ BApplication::_ConnectToServer()
 		return status;
 
 	fServerReadOnlyMemory = base;
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// The shared-memory link to app_server (LinkRing.h). Without it, or
+	// when app_server says no (the Performance switch, Safe mode), the
+	// link stays on ports.
+	BPrivate::link_ring_connect(*fServerLink);
+// SPDX-SnippetEnd
 
 	return B_OK;
 }

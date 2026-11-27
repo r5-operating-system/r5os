@@ -651,6 +651,14 @@ void
 ServerWindow::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 {
 	switch (code) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		case AS_R5_SET_UP_LINK_RING:
+			_SetUpLinkRing(link, ClientTeam());
+			break;
+// SPDX-SnippetEnd
+
 		case AS_SHOW_OR_HIDE_WINDOW:
 		{
 			int32 showLevel;

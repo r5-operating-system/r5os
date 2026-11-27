@@ -15,6 +15,24 @@
 
 #include <Autolock.h>
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <FindDirectory.h>
+#include <LinkRing.h>
+#include <ServerProtocol.h>
+#include <driver_settings.h>
+#include <safemode_defs.h>
+#include <syscalls.h>
+#include <pthread.h>
+#include <strings.h>
+#include <sys/stat.h>
+#include <syslog.h>
+#if __has_include(<r5_os_version.h>)
+#	include <r5_os_version.h>
+#endif
+// SPDX-SnippetEnd
+
 
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
@@ -307,3 +325,158 @@ MessageLooper::_message_thread(void* _looper)
 	return 0;
 }
 
+
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+//
+// The shared-memory link (LinkRing.h, docs/design/APP-SERVER-RING.md).
+
+
+static bool
+r5_safe_mode()
+{
+	char buffer[B_FILE_NAME_LENGTH];
+	size_t size = sizeof(buffer);
+	if (_kern_get_safemode_option(B_SAFEMODE_SAFE_MODE, buffer, &size)
+			!= B_OK)
+		return false;
+	return strncasecmp(buffer, "true", size) == 0
+		|| strncasecmp(buffer, "yes", size) == 0
+		|| strncasecmp(buffer, "on", size) == 0
+		|| strncasecmp(buffer, "enabled", size) == 0;
+}
+
+
+/*!	The Performance page writes "app_server_ring on" or "off" into the
+	administrator's kernel/drivers/performance (the directory of the
+	radeon_hd settings). Without the line the ring is on in a -dev build.
+	Safe mode always turns it off. Read again when the file changes, so a
+	change reaches applications started after it.
+*/
+/*static*/ bool
+MessageLooper::LinkRingEnabled()
+{
+	static pthread_mutex_t sLock = PTHREAD_MUTEX_INITIALIZER;
+	static int32 sSafeMode = -1;
+	static bool sRead = false;
+	static bool sEnabled = true;
+	static struct timespec sModified;
+
+	pthread_mutex_lock(&sLock);
+	if (sSafeMode < 0) {
+		sSafeMode = r5_safe_mode() ? 1 : 0;
+		if (sSafeMode != 0)
+			syslog(LOG_INFO, "app_server: link ring off: safe mode");
+	}
+	if (sSafeMode != 0) {
+		pthread_mutex_unlock(&sLock);
+		return false;
+	}
+
+	bool enabled = true;
+#ifdef R5_OS_VERSION
+	// Through a volatile pointer: GCC folds the constant and warns.
+	const char* volatile version = R5_OS_VERSION;
+	enabled = strstr(version, "-dev") != NULL;
+#endif
+	char path[B_PATH_NAME_LENGTH];
+	struct stat st;
+	if (find_directory(B_USER_SETTINGS_DIRECTORY, -1, false, path,
+			sizeof(path)) == B_OK
+		&& strlcat(path, "/kernel/drivers/performance", sizeof(path))
+			< sizeof(path)
+		&& stat(path, &st) == 0) {
+		if (sRead && st.st_mtim.tv_sec == sModified.tv_sec
+			&& st.st_mtim.tv_nsec == sModified.tv_nsec) {
+			enabled = sEnabled;
+		} else {
+			FILE* file = fopen(path, "r");
+			if (file != NULL) {
+				char line[128];
+				while (fgets(line, sizeof(line), file) != NULL) {
+					if (strncmp(line, "app_server_ring ", 16) != 0)
+						continue;
+					const char* value = line + 16;
+					if (strncmp(value, "off", 3) == 0
+						|| strncmp(value, "false", 5) == 0)
+						enabled = false;
+					else if (strncmp(value, "on", 2) == 0
+						|| strncmp(value, "true", 4) == 0)
+						enabled = true;
+				}
+				fclose(file);
+			}
+			if (!sRead || enabled != sEnabled) {
+				syslog(LOG_INFO, "app_server: link ring %s for new links "
+					"(performance settings)", enabled ? "on" : "off");
+			}
+			sRead = true;
+			sModified = st.st_mtim;
+			sEnabled = enabled;
+		}
+	} else
+		sRead = false;
+
+	pthread_mutex_unlock(&sLock);
+	return enabled;
+}
+
+
+void
+MessageLooper::_SetUpLinkRing(BPrivate::LinkReceiver& link,
+	team_id clientTeam)
+{
+	int32 version = 0;
+	link.Read<int32>(&version);
+
+	status_t status = B_OK;
+	if (version != BPrivate::kLinkRingVersion)
+		status = B_BAD_VALUE;
+	else if (fLink.Sender().Ring() != NULL)
+		status = B_BUSY;
+	else if (!LinkRingEnabled())
+		status = B_NOT_ALLOWED;
+
+	// The ring goes to the team the kernel names as owner of the client's
+	// reply port, and only when that is the team of this link.
+	team_id team = -1;
+	if (status == B_OK) {
+		port_info info;
+		if (get_port_info(fLink.SenderPort(), &info) != B_OK
+			|| info.team != clientTeam)
+			status = B_NOT_ALLOWED;
+		else
+			team = info.team;
+	}
+
+	BPrivate::LinkRing* ring = NULL;
+	area_id clientArea = -1;
+	uint32 toServerSize = 0;
+	uint32 toClientSize = 0;
+	if (status == B_OK) {
+		ring = BPrivate::LinkRing::CreateServer(team, &clientArea,
+			&toServerSize, &toClientSize);
+		if (ring == NULL)
+			status = B_NO_MEMORY;
+	}
+
+	// The answer still goes through the port; the ring starts after it.
+	fLink.StartMessage(status);
+	if (status == B_OK) {
+		fLink.Attach<area_id>(clientArea);
+		fLink.Attach<uint32>(toServerSize);
+		fLink.Attach<uint32>(toClientSize);
+		fLink.Attach<team_id>(getpid());
+	}
+	fLink.Flush();
+
+	// ServerApp and ServerWindow run their own loops and do not track the
+	// sender (SenderLinkReceiver); ring batches carry no port sender.
+	if (ring != NULL) {
+		BPrivate::link_ring_attach(fLink, ring);
+		ring->ReleaseReference();
+	}
+}
+// SPDX-SnippetEnd

@@ -46,6 +46,11 @@
 #include <MessageRunner.h>
 #include <Path.h>
 #include <PortLink.h>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <LinkRing.h>
+// SPDX-SnippetEnd
 #include <PropertyInfo.h>
 #include <Roster.h>
 #include <RosterPrivate.h>
@@ -890,6 +895,12 @@ BWindow::MessageReceived(BMessage* message)
 			_KeyboardNavigation();
 
 		if (message->what == kMsgAppServerStarted) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			// The ring of the old app_server goes, on both halves.
+			BPrivate::link_ring_disconnect(*fLink);
+// SPDX-SnippetEnd
 			fLink->SetSenderPort(
 				BApplication::Private::ServerLink()->SenderPort());
 
@@ -932,6 +943,14 @@ BWindow::MessageReceived(BMessage* message)
 
 			// Redirect our link to the new window connection
 			fLink->SetSenderPort(sendPort);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			// The shared-memory link to this window (LinkRing.h); without
+			// it the link stays on ports.
+			if (sendPort >= 0)
+				BPrivate::link_ring_connect(*fLink);
+// SPDX-SnippetEnd
 
 			// connect all views to the server again
 			fTopView->_CreateSelf();
@@ -3055,6 +3074,14 @@ BWindow::_InitData(BRect frame, const char* title, window_look look,
 
 		// Redirect our link to the new window connection
 		fLink->SetSenderPort(sendPort);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// The shared-memory link to this window (LinkRing.h); without it
+		// the link stays on ports.
+		if (sendPort >= 0)
+			BPrivate::link_ring_connect(*fLink);
+// SPDX-SnippetEnd
 		STRACE(("Server says that our send port is %ld\n", sendPort));
 	}
 

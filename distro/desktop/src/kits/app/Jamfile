@@ -51,6 +51,8 @@ for architectureObject in [ MultiArchSubDirSetup ] {
 			Invoker.cpp
 			LaunchRoster.cpp
 			LinkReceiver.cpp
+			# R5: the shared-memory link to app_server (MIT)
+			LinkRing.cpp
 			LinkSender.cpp
 			Looper.cpp
 			LooperList.cpp
