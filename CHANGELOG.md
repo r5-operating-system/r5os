@@ -8,6 +8,13 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-27 - Text: slight hinting again, with subpixel (letters no longer crowded or cut off)
+
+- Problem (stick 55, 5625U, owner's screenshots): since the subpixel change (`3d57a98166`) menu, tab and label text was crowded ("Showreplicantshandle"), letters were cut off ("Faiku", "Mcunt"), and grey text (inactive window tabs, the sign-in screen) was spread out and thin. Mistake of the lead session: full hinting (subpixel) and normal hinting (grey) change the glyph widths, while the positions come from ServerFont's unhinted advances (`FontEngine`), so the glyphs no longer fit their places. The comparison image did not show it.
+- Change: `SkiaText.cpp` uses `SkFontHinting::kSlight` (vertical only) in both paths; subpixel coverage for opaque text stays the default.
+- Tested: `scripts/build-locked.sh` `jam_exit=0`; one QEMU/KVM boot (Lavapipe): first-start window, sign-in screen and Deskbar menu checked on screen, spacing as before the subpixel change, no cut-off letters.
+- Limits: not yet seen on the 5625U panel (stick follows). The light-grey text on the sign-in screen keeps its colour (about 3.5:1 contrast); only its rendering changed.
+
 ## 2026-11-27 - Performance phase 3: review fixes (TSC keep path x86_64 only, ordered TSC read, fence table, libdrm 2.4.124-7)
 
 - Problem (review of PR 4710): (1) the path that keeps the firmware TSCs also ran on 32-bit x86, which has no TSC base in `system_time()`; (2) the warp check read the TSC with `lfence; rdtsc` before `init_percpu` sets DE_CFG, so on AMD that LFENCE may not keep RDTSC after the lock; (3) offsets below the lock hand-off time were not documented; (4) the comment on fork was incomplete; (5) a team kept its entry in the 32-team fence table while it lived, also with no GPU file open; (6) libdrm asked the kernel for the fence block again after every `SYNCOBJ_CREATE` and new context, an extra ioctl each time.
