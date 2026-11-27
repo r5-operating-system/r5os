@@ -233,6 +233,16 @@ extern status_t		_kern_r5_set_power_profile(int32 profile);
 extern status_t		_kern_r5_get_power_info(struct r5_power_info* info,
 						size_t size);
 // SPDX-SnippetEnd
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// Maps an area of the calling team into exactly one other team
+// (docs/KERNEL.md, "One-team areas"). Neither area can be cloned, copied
+// by fork() or transferred afterwards. Returns the id of the new area in
+// that team.
+extern area_id		_kern_r5_share_area(area_id area, team_id team,
+						uint32 protection);
+// SPDX-SnippetEnd
 extern status_t		_kern_get_loadavg(struct loadavg* info, size_t size);
 
 // user/group functions

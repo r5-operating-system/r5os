@@ -196,6 +196,17 @@ area_id _user_clone_area(const char *name, void **_address, uint32 addressSpec,
 status_t _user_reserve_address_range(addr_t* userAddress, uint32 addressSpec,
 			addr_t size);
 status_t _user_unreserve_address_range(addr_t address, addr_t size);
+/* SPDX-SnippetBegin
+ * SPDX-License-Identifier: MIT
+ * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+ * One-team areas (docs/KERNEL.md): an area its owner shared with exactly
+ * one other team. Kernel-only flag in the protection field; userland can
+ * neither set nor clear it, and such an area is never cloned, copied by
+ * fork(), transferred, or made B_CLONEABLE_AREA.
+ */
+#define B_R5_ONE_TEAM_AREA	(1 << 15)
+area_id _user_r5_share_area(area_id area, team_id team, uint32 protection);
+/* SPDX-SnippetEnd */
 
 #ifdef __cplusplus
 }

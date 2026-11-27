@@ -2788,6 +2788,14 @@ vm_clone_area(team_id team, const char* name, void** address,
 
 	if (!kernel && (sourceArea->protection & B_KERNEL_AREA) != 0)
 		return B_NOT_ALLOWED;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// A one-team area (_user_r5_share_area()) is never cloned by userland,
+	// not even inside its own team.
+	if (!kernel && (sourceArea->protection & B_R5_ONE_TEAM_AREA) != 0)
+		return B_NOT_ALLOWED;
+// SPDX-SnippetEnd
 
 	AreaCacheLocker cacheLocker(sourceArea);
 	VMCache* cache = cacheLocker.Get();
@@ -3435,6 +3443,14 @@ vm_copy_area(team_id team, const char* name, void** _address,
 
 		cacheLocker.SetTo(cache, true);	// already locked
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// fork() skips one-team areas (team.cpp); nothing else copies them.
+		if ((source->protection & B_R5_ONE_TEAM_AREA) != 0)
+			return B_NOT_ALLOWED;
+// SPDX-SnippetEnd
+
 		sharedArea = (source->protection & B_SHARED_AREA) != 0;
 
 		page_num_t oldWiredPages = wiredPages;
@@ -3570,6 +3586,11 @@ vm_set_area_protection(area_id areaID, uint32 newProtection,
 		", protection = %#" B_PRIx32 ")\n", team_get_current_team_id(), areaID, newProtection));
 
 	const uint32 nonPageProtectionMask = B_OVERCOMMITTING_AREA | B_SHARED_AREA | B_KERNEL_AREA;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	const uint32 r5NonPageMask = nonPageProtectionMask | B_R5_ONE_TEAM_AREA;
+// SPDX-SnippetEnd
 	bool becomesWritable
 		= (newProtection & (B_WRITE_AREA | B_KERNEL_WRITE_AREA)) != 0;
 
@@ -3597,6 +3618,16 @@ vm_set_area_protection(area_id areaID, uint32 newProtection,
 		status = check_protection(areaTeam, &newProtection);
 		if (status != B_OK)
 			return status;
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// A one-team area never becomes cloneable (that is also how
+		// transfer_area() would hand it on).
+		if ((area->protection & B_R5_ONE_TEAM_AREA) != 0
+			&& (newProtection & B_CLONEABLE_AREA) != 0)
+			return B_NOT_ALLOWED;
+// SPDX-SnippetEnd
 
 		// enforce restrictions
 		if (!kernel && (area->address_space == VMAddressSpace::Kernel()
@@ -3627,8 +3658,12 @@ vm_set_area_protection(area_id areaID, uint32 newProtection,
 		}
 
 		// keep non-page-protection area flags
-		newProtection &= ~nonPageProtectionMask;
-		newProtection |= area->protection & nonPageProtectionMask;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		newProtection &= ~r5NonPageMask;
+		newProtection |= area->protection & r5NonPageMask;
+// SPDX-SnippetEnd
 		if (area->protection == newProtection)
 			return B_OK;
 
@@ -5360,6 +5395,14 @@ vm_resize_area(area_id areaID, size_t newSize, bool kernel)
 			// unless you're the kernel, you're only allowed to resize your own areas
 			return B_NOT_ALLOWED;
 		}
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// Both teams of a one-team area map one cache: a resize by one side
+		// would cut the other side's mapping too.
+		if (!kernel && (area->protection & B_R5_ONE_TEAM_AREA) != 0)
+			return B_NOT_ALLOWED;
+// SPDX-SnippetEnd
 
 		oldSize = area->Size();
 		if (newSize == oldSize)
@@ -6515,6 +6558,92 @@ _user_resize_area(area_id area, size_t newSize)
 {
 	return vm_resize_area(area, newSize, false);
 }
+
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+/*!	Maps the calling team's RAM area \a id into exactly one other team,
+	\a target, with \a protection (B_READ_AREA, optionally B_WRITE_AREA).
+	Both areas get B_R5_ONE_TEAM_AREA: from then on userland cannot clone,
+	transfer, fork-copy or make cloneable either of them, and the source
+	cannot be shared a second time. The area must not be mapped anywhere
+	else yet and must not be cloneable. The caller must be uid 0 or have the
+	effective uid of \a target (the rule of send_signal()).
+	Used by app_server for the link rings (docs/KERNEL.md, "One-team areas").
+	Returns the id of the new area in \a target.
+*/
+area_id
+_user_r5_share_area(area_id id, team_id target, uint32 protection)
+{
+	if ((protection & ~(B_READ_AREA | B_WRITE_AREA)) != 0
+		|| (protection & B_READ_AREA) == 0)
+		return B_BAD_VALUE;
+
+	Team* current = thread_get_current_thread()->team;
+	if (target < 0 || target == current->id
+		|| target == VMAddressSpace::KernelID())
+		return B_BAD_TEAM_ID;
+
+	{
+		Team* team = Team::Get(target);
+		if (team == NULL)
+			return B_BAD_TEAM_ID;
+		BReference<Team> teamReference(team, true);
+		uid_t user = current->effective_uid;
+		if (user != 0 && user != team->effective_uid)
+			return B_NOT_ALLOWED;
+	}
+
+	char name[B_OS_NAME_LENGTH];
+	{
+		AddressSpaceWriteLocker locker;
+		VMArea* area;
+		status_t status = locker.SetFromArea(id, area);
+		if (status != B_OK)
+			return status;
+		if (area->address_space->ID() != current->id)
+			return B_NOT_ALLOWED;
+		if ((area->protection
+				& (B_KERNEL_AREA | B_CLONEABLE_AREA | B_R5_ONE_TEAM_AREA)) != 0)
+			return B_NOT_ALLOWED;
+		if ((area->protection & protection) != protection)
+			return B_NOT_ALLOWED;
+		if (area->cache_type != CACHE_TYPE_RAM)
+			return B_NOT_ALLOWED;
+
+		// Nobody else may already see these pages: the area is the only
+		// one on its cache, and no copy-on-write child sits above it.
+		VMCache* cache = vm_area_get_locked_cache(area);
+		bool alone = cache->areas.First() == area
+			&& cache->areas.GetNext(area) == NULL
+			&& cache->consumers.IsEmpty();
+		vm_area_put_locked_cache(cache);
+		if (!alone)
+			return B_BUSY;
+
+		area->protection |= B_R5_ONE_TEAM_AREA;
+		strlcpy(name, area->name, sizeof(name));
+	}
+
+	// The flag stays on the source when this fails: it is then simply an
+	// area that can never be shared or cloned.
+	void* address = NULL;
+	area_id newArea = vm_clone_area(target, name, &address, B_ANY_ADDRESS,
+		protection | B_R5_ONE_TEAM_AREA, REGION_NO_PRIVATE_MAP, id, true);
+	if (newArea < 0)
+		return newArea;
+
+	{
+		AddressSpaceWriteLocker locker;
+		VMArea* area;
+		if (locker.SetFromArea(newArea, area) == B_OK)
+			area->protection_max = protection;
+	}
+
+	return newArea;
+}
+// SPDX-SnippetEnd
 
 
 area_id

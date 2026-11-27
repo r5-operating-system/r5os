@@ -2211,6 +2211,14 @@ fork_team(void)
 
 	areaCookie = 0;
 	while (get_next_area_info(B_CURRENT_TEAM, &areaCookie, &info) == B_OK) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// A one-team area (_user_r5_share_area()) stays with its two teams;
+		// the child does not get it.
+		if ((info.protection & B_R5_ONE_TEAM_AREA) != 0)
+			continue;
+// SPDX-SnippetEnd
 		if (info.area == parentTeam->user_data_area) {
 			// don't clone the user area; just create a new one
 			status = create_team_user_data(team, info.address);
