@@ -1616,7 +1616,7 @@ id	r5_status	branch	commit	notes
 14161	not-applicable			Haiku website/Trac/Gerrit; not in the R5 image
 14165	open			
 14176	open			
-14180	open			
+14180	fixed		faeda08a66	BFS rejects a corrupt B+tree node size instead of dividing by zero (#4706)
 14181	open			
 14188	open			
 14201	open			
@@ -2881,7 +2881,7 @@ id	r5_status	branch	commit	notes
 18079	open			
 18085	open			
 18094	open			
-18095	open			
+18095	fixed		faeda08a66	BTextView clamps a stale offset in word/char lookups (#4706)
 18097	open			
 18106	open			
 18108	open			
@@ -2908,7 +2908,7 @@ id	r5_status	branch	commit	notes
 18176	open			
 18177	open			
 18178	open			
-18182	open			
+18182	fixed		faeda08a66	thread_local destructors run in libroot and keep their library loaded (#4706)
 18184	open			
 18186	open			
 18188	open			

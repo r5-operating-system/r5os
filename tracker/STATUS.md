@@ -4,21 +4,21 @@ Gegenereerd door `scripts/tracker-report.py`. Niet met de hand bewerken.
 
 | R5-status | Aantal |
 |---|---|
-| open | 3664 |
+| open | 3661 |
 | in-progress | 8 |
-| fixed | 155 |
+| fixed | 158 |
 | wontfix | 0 |
 | not-applicable | 109 |
 | **totaal in tracker** | **3936** |
 | open bij Haiku (laatste import) | 3936 |
 
-Nog open in R5OS: **2376** bugs, **1244** enhancements, rest overig (van 3672 open/bezig).
+Nog open in R5OS: **2373** bugs, **1244** enhancements, rest overig (van 3669 open/bezig).
 
 ## Type
 
 | Type | Aantal |
 |---|---|
-| bug | 2376 |
+| bug | 2373 |
 | enhancement | 1244 |
 | task | 52 |
 
@@ -26,7 +26,7 @@ Nog open in R5OS: **2376** bugs, **1244** enhancements, rest overig (van 3672 op
 
 | Priority | Aantal |
 |---|---|
-| normal | 3395 |
+| normal | 3392 |
 | low | 247 |
 | high | 28 |
 | critical | 1 |
@@ -36,7 +36,7 @@ Nog open in R5OS: **2376** bugs, **1244** enhancements, rest overig (van 3672 op
 
 | Milestone | Aantal |
 |---|---|
-| Unscheduled | 2910 |
+| Unscheduled | 2907 |
 | R1 | 414 |
 | R1.1 | 296 |
 | R1/beta7 | 25 |
@@ -49,7 +49,7 @@ Nog open in R5OS: **2376** bugs, **1244** enhancements, rest overig (van 3672 op
 |---|---|
 | Applications/Tracker | 170 |
 | Servers/app_server | 161 |
-| Kits/Interface Kit | 153 |
+| Kits/Interface Kit | 152 |
 | System/Kernel | 149 |
 | Applications/WebPositive | 131 |
 | Kits/Web Kit | 126 |
@@ -145,6 +145,7 @@ Nog open in R5OS: **2376** bugs, **1244** enhancements, rest overig (van 3672 op
 | [#13680](https://dev.haiku-os.org/ticket/13680) | new | Kits/Interface Kit | BSlider missing message on second click |  |
 | [#13754](https://dev.haiku-os.org/ticket/13754) | new | Servers/input_server | Mouse + keyboard input non-functional after install |  |
 | [#14033](https://dev.haiku-os.org/ticket/14033) | new | System/Kernel | Support AMD Topology CPU information from 8000001E leaf |  |
+| [#14180](https://dev.haiku-os.org/ticket/14180) | new | File Systems/BFS | KDL on corrupt BFS - B+tree header size doesn't fit |  |
 | [#14390](https://dev.haiku-os.org/ticket/14390) | assigned | Applications/Tracker | Tracker crash on context menu (Looper must be locked) |  |
 | [#14441](https://dev.haiku-os.org/ticket/14441) | new | Servers/mail_daemon | [mail_daemon] high CPU usage (POP3Protocol::SendCommand Bug! Had to flush 0 bytes:) | cursor/pop3-flush |
 | [#14485](https://dev.haiku-os.org/ticket/14485) | new | Applications/TextSearch | TextSearch crash | cursor/textsearch-line |
@@ -164,8 +165,7 @@ Nog open in R5OS: **2376** bugs, **1244** enhancements, rest overig (van 3672 op
 | [#16002](https://dev.haiku-os.org/ticket/16002) | new | Applications/Mail | Mail: Untranslated strings | claude/issues-2-prefs |
 | [#16057](https://dev.haiku-os.org/ticket/16057) | new | Servers/media_addon_server | "multi_audio audio output" occupies whole CPU indefinitely |  |
 | [#16103](https://dev.haiku-os.org/ticket/16103) | new | Preferences/Printers | [Printers] Make default changes "No pending jobs" text | claude/issues-2-prefs |
-| [#16114](https://dev.haiku-os.org/ticket/16114) | new | Applications/Expander | Expander doesn't give feedback on missing command | claude/issues-1-apps |
-| … | | | *75 meer in r5-status.tsv* | |
+| … | | | *78 meer in r5-status.tsv* | |
 
 ## Nog open (eerste 80)
 
@@ -251,5 +251,5 @@ Nog open in R5OS: **2376** bugs, **1244** enhancements, rest overig (van 3672 op
 | [#2532](https://dev.haiku-os.org/ticket/2532) | assigned | Drivers/Graphics/NeoMagic | broken Video/Audio on Dell Latitude LS [NeoMagic chipset] |  |
 | [#2551](https://dev.haiku-os.org/ticket/2551) | assigned | Applications/Tracker | [Tracker]: Copy To shows wrong content of Desktop directory when selecting a bfs volume on a usb stick |  |
 | [#2615](https://dev.haiku-os.org/ticket/2615) | assigned | Kits/Interface Kit | Improved keyboard navigation with triggers |  |
-| … | | | *3584 meer in r5-status.tsv* | |
+| … | | | *3581 meer in r5-status.tsv* | |
 
