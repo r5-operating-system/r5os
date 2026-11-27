@@ -45,6 +45,8 @@ SOURCES = (
     "settings_notifications.rdef",
     "settings_virtualmemory.rdef",
     "settings_power.rdef",
+    "settings_performance.rdef",
+    "PerformanceModule.cpp",
     "settings_information.rdef",
     "settings_display.rdef",
     "settings_wifi.rdef",

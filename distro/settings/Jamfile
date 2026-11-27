@@ -82,6 +82,13 @@ Addon settings_power :
 	: $(r5SettingsLibs) libr5power.so
 	;
 
+# The Performance page: the switch for the shared-memory link to app_server.
+Addon settings_performance :
+	PerformanceModule.cpp
+	SettingsFont.cpp
+	: $(r5SettingsLibs)
+	;
+
 Addon settings_information :
 	InformationModule.cpp
 	SettingsFont.cpp
@@ -209,6 +216,7 @@ R5SettingsPageCatalog settings_theme : ThemeModule.cpp ColorsView.cpp Colors.cpp
 R5SettingsPageCatalog settings_notifications : NotificationsModule.cpp ;
 R5SettingsPageCatalog settings_virtualmemory : VirtualMemoryModule.cpp ;
 R5SettingsPageCatalog settings_power : PowerModule.cpp ;
+R5SettingsPageCatalog settings_performance : PerformanceModule.cpp ;
 R5SettingsPageCatalog settings_information : InformationModule.cpp ;
 R5SettingsPageCatalog settings_display : DisplayModule.cpp DisplayScreens.cpp ;
 R5SettingsPageCatalog settings_wifi : WiFiModule.cpp ;

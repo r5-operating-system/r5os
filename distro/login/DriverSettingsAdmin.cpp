@@ -47,6 +47,8 @@ static const allowed_key kAllowedKeys[] = {
 	{ "usb_audio", "record_buffer_frames", kValueFrames },
 	{ "usb_audio", "channel_layout", kValueChannels },
 	{ "virtual_surround", "virtual_surround", kValueOnOff },
+	// The Performance page of Settings: the shared-memory link to app_server.
+	{ "performance", "app_server_ring", kValueOnOff },
 };
 
 static const int32 kMaxKeys = 8;
