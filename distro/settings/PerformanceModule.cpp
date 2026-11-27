@@ -23,6 +23,7 @@
 #include <StringView.h>
 #include <TextView.h>
 
+#include <math.h>
 #include <string.h>
 
 #if __has_include(<r5_os_version.h>)
@@ -133,7 +134,16 @@ PerformanceView::PerformanceView(PerformanceModule* module)
 	text->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
 	text->SetLowUIColor(B_PANEL_BACKGROUND_COLOR);
 	text->SetFontAndColor(r5_settings_plain_font(), B_FONT_ALL);
-	text->SetExplicitMinSize(BSize(200, B_SIZE_UNSET));
+	// A BTextView does not ask for the height of its wrapped text in a
+	// layout (PowerModule.cpp): room for four lines, no more, so the text
+	// stays under the box title.
+	font_height fontHeight;
+	r5_settings_plain_font()->GetHeight(&fontHeight);
+	float lines = 4 * ceilf(fontHeight.ascent + fontHeight.descent
+		+ fontHeight.leading);
+	text->SetExplicitMinSize(BSize(200, lines));
+	text->SetExplicitPreferredSize(BSize(B_SIZE_UNSET, lines));
+	text->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, lines));
 
 	BBox* box = new BBox("drawing");
 	box->SetLabel(fRing);
