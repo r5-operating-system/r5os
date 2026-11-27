@@ -46,6 +46,11 @@ fi
 if ! grep -q 'r5_gl_gpu_available' "$MESA/src/egl/drivers/haiku/egl_haiku.cpp"; then
 	patch -p1 -d "$MESA" < "$ROOT/distro/mesa/patches/haiku-zink-available.patch"
 fi
+# Phase 2: Zink zero-copy compositor sharing via AS_R5_SHARE_IMAGES (RADV),
+# keeping the CPU readback path as fallback and on Lavapipe.
+if ! grep -q 'r5_zink_share_setup' "$MESA/src/egl/drivers/haiku/egl_haiku.cpp"; then
+	patch -p1 -d "$MESA" < "$ROOT/distro/mesa/patches/haiku-zink-zerocopy.patch"
+fi
 
 cd "$MESA"
 setup="python3 /home/nickr/r5os/mesa-build/meson-1.7.0/meson.py setup build-radv"

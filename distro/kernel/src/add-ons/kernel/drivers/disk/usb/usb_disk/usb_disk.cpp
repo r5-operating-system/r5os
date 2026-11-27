@@ -996,16 +996,19 @@ usb_disk_update_capacity(device_lun* lun)
 
 	if (lun->io_scheduler == NULL) {
 		dma_restrictions restrictions = {};
-		restrictions.high_address = UINT32_MAX;
-		restrictions.max_transfer_size = MAX_IO_BLOCKS * lun->block_size;
-
 		// SPDX-SnippetBegin
 		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 		// SPDX-License-Identifier: MIT
+		// USB3.h does not expose the host controller's 64-bit DMA width, so
+		// stay at 32-bit DMA; raise DMAResource pool from (1, 1) to (8, 4)
+		// to allow multiple transfers in flight.
+		restrictions.high_address = UINT32_MAX;
+		restrictions.max_transfer_size = MAX_IO_BLOCKS * lun->block_size;
+
 		DMAResource* dmaResource = new(std::nothrow) DMAResource;
 		if (dmaResource == NULL)
 			return B_NO_MEMORY;
-		result = dmaResource->Init(restrictions, lun->block_size, 1, 1);
+		result = dmaResource->Init(restrictions, lun->block_size, 8, 4);
 		if (result != B_OK) {
 			delete dmaResource;
 			return result;

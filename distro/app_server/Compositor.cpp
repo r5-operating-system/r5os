@@ -608,10 +608,14 @@ Compositor::SetHidden(bool hidden, HWInterface* screen)
 		fHidden = true;
 		AccelerantHWInterface* accelerant
 			= dynamic_cast<AccelerantHWInterface*>(fScreen);
-		if (accelerant != NULL)
+		if (accelerant != NULL) {
+			accelerant->SetComposeDrain(NULL, NULL);
 			accelerant->SetModeGuard(NULL);
-		if (fVulkan != NULL)
+		}
+		if (fVulkan != NULL) {
+			_DrainComposeSlots();
 			_ScanoutFree(fVulkan);
+		}
 		fScreen = screen;
 		fComposeSlot.Unlock();
 		_DropAnimations();
@@ -620,8 +624,10 @@ Compositor::SetHidden(bool hidden, HWInterface* screen)
 		fScreen = screen;
 		AccelerantHWInterface* accelerant
 			= dynamic_cast<AccelerantHWInterface*>(fScreen);
-		if (accelerant != NULL)
+		if (accelerant != NULL) {
 			accelerant->SetModeGuard(&fComposeSlot);
+			accelerant->SetComposeDrain(&_DrainForRead, this);
+		}
 		fHidden = false;
 		fComposeSlot.Unlock();
 		_UpdatePeriod();
@@ -776,6 +782,7 @@ Compositor::Compositor(Desktop* desktop, HWInterface* screen)
 	fWantScanout(false),
 	fScanoutLogged(false),
 	fFrontByVulkan(false),
+	fAsyncInFlight(0),
 	fPresentCount(0),
 	fRestarted(false),
 	fGeneration(0),
@@ -1848,6 +1855,7 @@ Compositor::_ComposeLoop()
 			// review: their imports go now too, not at the resume.
 			// Fourth review: the last frame's closing windows go too, or
 			// their buffers stay held for the whole pause.
+			_DrainComposeSlots();
 			delete fFrameGhosts;
 			fFrameGhosts = NULL;
 			BAutolock _(fShareLock);
@@ -1923,6 +1931,7 @@ Compositor::_ComposeLoop()
 		if (back == NULL)
 			continue;
 		if (back->Width() != fFrameWidth || back->Height() != fFrameHeight) {
+			_DrainComposeSlots();
 			if (!_EnsureFrame(back->Width(), back->Height())) {
 				fFailure = "window memory";
 				continue;
@@ -1933,8 +1942,10 @@ Compositor::_ComposeLoop()
 			damage.Set(BRect(0, 0, (float)fFrameWidth - 1,
 				(float)fFrameHeight - 1));
 		}
-		// Decision 4: between two composes the GPU is idle (each one waits
-		// for its fence), so a new back buffer or scanout is imported here.
+		// Decision 4: drain any in-flight compose slot before importing a new
+		// back buffer or scanout.
+		if (fVulkan->scanGeneration != GPUCopy::Generation())
+			_DrainComposeSlots();
 		if (_ScanoutPrepare(back))
 			damage.Set(BRect(0, 0, (float)fFrameWidth - 1,
 				(float)fFrameHeight - 1));
@@ -2148,11 +2159,91 @@ static int64 sComposeFrames = 0;
 
 
 bool
+Compositor::_WaitComposeSlot(uint32 slot, const char** _failure)
+{
+	CompositorVulkan* vk = fVulkan;
+	if (vk == NULL || !vk->slotInFlight[slot])
+		return true;
+	VkFence fence = vk->fences[slot];
+	bigtime_t started = system_time();
+	const char* failure = NULL;
+	while (true) {
+		VkResult result = vk->vkWaitForFences(vk->device, 1, &fence, VK_TRUE,
+			kFenceSlice * 1000);
+		if (result == VK_SUCCESS)
+			break;
+		if (result != VK_TIMEOUT) {
+			failure = "device lost";
+			break;
+		}
+		bigtime_t late = system_time() - started;
+		if (late >= kFenceLimit && !fOnLavapipe) {
+			failure = "fence timeout";
+			break;
+		}
+		if (system_time() - fLateLogged
+				>= (late >= kFenceLimit ? 10000000 : 1000000)) {
+			fLateLogged = system_time();
+			log_line("compose late %" B_PRId64 " ms", late / 1000);
+		}
+	}
+	vk->slotInFlight[slot] = false;
+	if (failure != NULL) {
+		if (_failure != NULL)
+			*_failure = failure;
+		return false;
+	}
+	if (vk->scratchPools != NULL) {
+		if (!vk->scratchPools->slotSignals[slot].empty() && fSkia != NULL) {
+			fSkia->ReturnSignals(vk->scratchPools->slotSignals[slot]);
+			vk->scratchPools->slotSignals[slot].clear();
+		}
+		vk->scratchPools->slotBuffers[slot].clear();
+		vk->scratchPools->slotImages[slot].clear();
+	}
+	return true;
+}
+
+
+void
+Compositor::_DrainComposeSlots()
+{
+	if (fVulkan == NULL)
+		return;
+	for (uint32 i = 0; i < 2; i++)
+		_WaitComposeSlot(i);
+	atomic_set(&fAsyncInFlight, 0);
+}
+
+
+/*static*/ void
+Compositor::_DrainForRead(void* cookie)
+{
+	Compositor* self = static_cast<Compositor*>(cookie);
+	if (self == NULL || atomic_get(&self->fAsyncInFlight) == 0
+		|| find_thread(NULL) == self->fThread) {
+		return;
+	}
+	BAutolock _(self->fComposeSlot);
+	if (atomic_get(&self->fAsyncInFlight) != 0)
+		self->_DrainComposeSlots();
+}
+
+
+bool
 Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 	const ShareDrawList& shares, bool effects)
 {
 	CompositorVulkan* vk = fVulkan;
 	fFrames++;
+	vk->frameSlot = (vk->frameSlot + 1) & 1;
+	vk->commands = vk->commandBuffers[vk->frameSlot];
+	vk->fence = vk->fences[vk->frameSlot];
+	const char* prevFailure = NULL;
+	if (!_WaitComposeSlot(vk->frameSlot, &prevFailure)) {
+		fFailure = prevFailure;
+		return false;
+	}
 	// M11 step 4: the CPU compare knows no effects; it runs only on a
 	// frame without them.
 	bool compare = fDebug && fFrames % 100 == 1 && !effects
@@ -2178,17 +2269,19 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 	begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 	begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 	vk->vkBeginCommandBuffer(vk->commands, &begin);
-	// Review 17 Nov 2026: a semaphore wait makes Skia's writes visible to
-	// its own batch only. Every write submitted before this frame on the
-	// queue (Skia's runs, which compose need not wait for) is visible to
-	// its reads; RADV's flush at the start of a submit did this so far.
+	// Make Skia's colour-attachment/compute/transfer writes and prior compose
+	// writes visible to this frame's compute and transfer reads without a
+	// full ALL_COMMANDS pipeline bubble.
 	VkMemoryBarrier fromBefore = {};
 	fromBefore.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-	fromBefore.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
+	fromBefore.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+		| VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
 	fromBefore.dstAccessMask = VK_ACCESS_SHADER_READ_BIT
 		| VK_ACCESS_TRANSFER_READ_BIT;
 	vk->vkCmdPipelineBarrier(vk->commands,
-		VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+		VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+			| VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
+			| VK_PIPELINE_STAGE_TRANSFER_BIT,
 		VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
 		0, 1, &fromBefore, 0, NULL, 0, NULL);
 	vk->vkCmdBindPipeline(vk->commands, VK_PIPELINE_BIND_POINT_COMPUTE,
@@ -2237,7 +2330,10 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 	// of the frame below stays: the glass with the blur's reach, an
 	// opening window's rectangle, a closing window's fade. No culling
 	// during the workspace slide. The frame is the same pixels.
-	std::vector<BRegion> covered(layers.CountItems() + 1);
+	std::vector<BRegion>& covered = vk->scratchPools->covered;
+	covered.resize(layers.CountItems() + 1);
+	for (size_t i = 0; i < covered.size(); i++)
+		covered[i].MakeEmpty();
 	if (!slide && !fNoCull) {
 		BRegion over;
 		BRegion read;
@@ -2534,15 +2630,30 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 	// lock). The exclusive lock keeps it out for that time, usually a
 	// millisecond; a late fence holds the cursor that long.
 	bool exclusive = false;
+	bool hasSoftwareCursor = false;
 	if (vk->scanActive) {
-		exclusive = fScreen->LockExclusiveAccess();
-		// The software cursor's rectangle is not copied: _DrawCursor puts
-		// it on the front, blended from the new back buffer, as
-		// CopyBackToFront leaves it out. So it never shows without cursor.
-		BRegion copy(damage);
+		// Only take exclusive screen access when a software cursor is active:
+		// a hardware cursor (5625U/RADV) updates CRTC registers independently
+		// and never touches vk->back or vk->scanout, so leaving exclusive
+		// unlocked lets the cursor keep moving smoothly during GPU rendering.
 		clipping_rect cursor;
-		if (static_cast<AccelerantHWInterface*>(fScreen)
-				->SoftwareCursorFrame(&cursor))
+		hasSoftwareCursor = static_cast<AccelerantHWInterface*>(fScreen)
+			->SoftwareCursorFrame(&cursor);
+		if (hasSoftwareCursor) {
+			// Drain any async compose slot before taking exclusive screen
+			// access so _DrainForRead can never invert locks.
+			if (atomic_get(&fAsyncInFlight) != 0)
+				_DrainComposeSlots();
+			exclusive = fScreen->LockExclusiveAccess();
+			hasSoftwareCursor = static_cast<AccelerantHWInterface*>(fScreen)
+				->SoftwareCursorFrame(&cursor);
+			if (!hasSoftwareCursor && exclusive) {
+				fScreen->UnlockExclusiveAccess();
+				exclusive = false;
+			}
+		}
+		BRegion copy(damage);
+		if (hasSoftwareCursor)
 			copy.Exclude(cursor);
 		VkMemoryBarrier toCopy = {};
 		toCopy.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
@@ -2551,43 +2662,35 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 		vk->vkCmdPipelineBarrier(vk->commands,
 			VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
 			VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &toCopy, 0, NULL, 0, NULL);
-		uint32 count = 0;
+		std::vector<VkBufferCopy>& regions = vk->scratchPools->bufferCopies;
+		regions.clear();
 		for (int32 i = 0; i < copy.CountRects(); i++) {
-			clipping_rect r = copy.RectAtInt(i);
-			count += r.bottom - r.top + 1;
-		}
-		VkBufferCopy* regions = new(std::nothrow) VkBufferCopy[count + 1];
-		uint32 n = 0;
-		for (int32 i = 0; regions != NULL && i < copy.CountRects(); i++) {
 			clipping_rect r = copy.RectAtInt(i);
 			uint32 widthBytes = (uint32)(r.right - r.left + 1) * 4;
 			// One linear copy only when the rows are contiguous in both
 			// buffers. A partial row has a gap, and one copy would overwrite it.
 			if (vk->backPitch == vk->scanPitch && r.left == 0
 				&& widthBytes == vk->backPitch) {
-				regions[n].srcOffset = (uint64)r.top * vk->backPitch;
-				regions[n].dstOffset = (uint64)r.top * vk->scanPitch;
-				regions[n].size = (uint64)(r.bottom - r.top + 1)
-					* vk->backPitch;
-				n++;
+				VkBufferCopy c = {};
+				c.srcOffset = (uint64)r.top * vk->backPitch;
+				c.dstOffset = (uint64)r.top * vk->scanPitch;
+				c.size = (uint64)(r.bottom - r.top + 1) * vk->backPitch;
+				regions.push_back(c);
 				continue;
 			}
 			for (int32 y = r.top; y <= r.bottom; y++) {
-				regions[n].srcOffset = (uint64)y * vk->backPitch
-					+ (uint64)r.left * 4;
-				regions[n].dstOffset = (uint64)y * vk->scanPitch
-					+ (uint64)r.left * 4;
-				regions[n].size = widthBytes;
-				n++;
+				VkBufferCopy c = {};
+				c.srcOffset = (uint64)y * vk->backPitch + (uint64)r.left * 4;
+				c.dstOffset = (uint64)y * vk->scanPitch + (uint64)r.left * 4;
+				c.size = widthBytes;
+				regions.push_back(c);
 			}
 		}
-		if (regions != NULL && n > 0)
-			vk->vkCmdCopyBuffer(vk->commands, vk->back, vk->scanout, n,
-				regions);
-		delete[] regions;
-		// Without memory for the list the back buffer still holds the
-		// frame; _Present then lets CopyBackToFront take it to the front.
-		fFrontByVulkan = regions != NULL;
+		if (!regions.empty()) {
+			vk->vkCmdCopyBuffer(vk->commands, vk->back, vk->scanout,
+				(uint32)regions.size(), regions.data());
+		}
+		fFrontByVulkan = true;
 	} else
 		fFrontByVulkan = false;
 
@@ -2599,13 +2702,16 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 	vk->vkCmdPipelineBarrier(vk->commands,
 		VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
 		VK_PIPELINE_STAGE_HOST_BIT, 0, 1, &toHost, 0, NULL, 0, NULL);
-	// M13 step 2: Skia's next run draws into images this frame reads.
-	// Graphite's barrier out of the sampler's layout waits for its own
-	// shader stages only, so everything after this frame waits for its
-	// reads here.
+	// M13 step 2: Skia's next run draws into images this frame reads;
+	// synchronize against Skia's graphics/compute/transfer stages without
+	// stalling ALL_COMMANDS.
 	vk->vkCmdPipelineBarrier(vk->commands,
 		VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
-		VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, NULL, 0, NULL, 0, NULL);
+		VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+			| VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+			| VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
+			| VK_PIPELINE_STAGE_TRANSFER_BIT,
+		0, 0, NULL, 0, NULL, 0, NULL);
 	vk->vkEndCommandBuffer(vk->commands);
 
 	VkSubmitInfo submit = {};
@@ -2640,6 +2746,34 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 		result = VK_ERROR_UNKNOWN;
 	}
 
+	// On hardware direct scanout with a hardware cursor (!exclusive, !compare,
+	// !fOnLavapipe, !fDebug timestamps), keep this compose slot in flight
+	// (2 frames in flight) and hold its signals/buffers/images until the slot
+	// is reused on the next-but-one frame.
+	bool asyncScanout = result == VK_SUCCESS && fFrontByVulkan && !exclusive
+		&& !compare && !fOnLavapipe && vk->timestamps == VK_NULL_HANDLE
+		&& !fFrameAnimating && shares.CountItems() == 0;
+	if (asyncScanout) {
+		uint32 slot = vk->frameSlot;
+		vk->slotInFlight[slot] = true;
+		atomic_set(&fAsyncInFlight, 1);
+		vk->scratchPools->slotSignals[slot].swap(signals);
+		vk->scratchPools->slotBuffers[slot].clear();
+		vk->scratchPools->slotImages[slot].clear();
+		for (int32 i = 0; i < layers.CountItems(); i++) {
+			Layer* layer = layers.ItemAt(i);
+			if (layer->buffer.IsSet())
+				vk->scratchPools->slotBuffers[slot].push_back(layer->buffer);
+			if (layer->image.IsSet())
+				vk->scratchPools->slotImages[slot].push_back(layer->image);
+		}
+		bigtime_t took = system_time() - started;
+		if (fSampleCount < (int32)(sizeof(fSamples) / sizeof(fSamples[0])))
+			fSamples[fSampleCount++] = took;
+		sComposeFrames++;
+		return true;
+	}
+
 	// Decision 14: a late fence is not a failure. Keep the last frame,
 	// keep collecting damage, and wait on; the watchdog decides first.
 	const char* failure = NULL;
@@ -2655,11 +2789,6 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 			break;
 		}
 		bigtime_t late = system_time() - started;
-		// M13 (owner, 16 Nov 2026): Lavapipe is the CPU, not a GPU that
-		// can hang; a late frame there is a busy machine (QEMU: frames of
-		// more than 15 s right after Sign in turned the compositor off).
-		// It waits on, without a limit. RADV keeps the 15 s limit and the
-		// reset ladder.
 		if (late >= kFenceLimit && !fOnLavapipe) {
 			failure = "fence timeout";
 			break;
@@ -2796,9 +2925,8 @@ Compositor::_RecordImageCopy(const Layer* layer, const BRegion& region,
 	CompositorVulkan* vk = fVulkan;
 	SkiaImage* image = layer->image.Get();
 	int32 count = region.CountRects();
-	VkBufferImageCopy* copies = new(std::nothrow) VkBufferImageCopy[count];
-	if (copies == NULL)
-		return false;
+	std::vector<VkBufferImageCopy>& copies = vk->scratchPools->imageCopies;
+	copies.resize(count);
 	int32 sourceLeft = layer->SourceLeft();
 	int32 sourceTop = layer->SourceTop();
 	for (int32 i = 0; i < count; i++) {
@@ -2837,13 +2965,12 @@ Compositor::_RecordImageCopy(const Layer* layer, const BRegion& region,
 		VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
 		VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &before, 0, NULL, 1, &toCopy);
 	vk->vkCmdCopyImageToBuffer(vk->commands, (VkImage)image->Image(),
-		VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, frame, count, copies);
+		VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, frame, count, copies.data());
 	sComposeRegions += count;
 	for (int32 i = 0; i < count; i++) {
 		sComposeCopied += (int64)copies[i].imageExtent.width
 			* copies[i].imageExtent.height;
 	}
-	delete[] copies;
 
 	VkMemoryBarrier after = {};
 	after.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
@@ -2872,16 +2999,9 @@ Compositor::_RecordBufferCopy(const Layer* layer, const BRegion& region,
 	VkBuffer_T* frame, uint32 frameStride)
 {
 	CompositorVulkan* vk = fVulkan;
-	uint32 count = 0;
-	for (int32 i = 0; i < region.CountRects(); i++) {
-		clipping_rect r = region.RectAtInt(i);
-		count += r.bottom - r.top + 1;
-	}
-	VkBufferCopy* copies = new(std::nothrow) VkBufferCopy[count];
-	if (copies == NULL)
-		return false;
+	std::vector<VkBufferCopy>& copies = vk->scratchPools->bufferCopies;
+	copies.clear();
 	uint32 sourceStride = layer->buffer->Width();
-	uint32 n = 0;
 	for (int32 i = 0; i < region.CountRects(); i++) {
 		clipping_rect r = region.RectAtInt(i);
 		uint32 sourceX = r.left - layer->left;
@@ -2892,18 +3012,20 @@ Compositor::_RecordBufferCopy(const Layer* layer, const BRegion& region,
 		if (sourceStride == frameStride && sourceX == 0 && r.left == 0
 			&& width == sourceStride) {
 			uint32 sourceY = r.top - layer->top;
-			copies[n].srcOffset = (uint64)sourceY * sourceStride * 4;
-			copies[n].dstOffset = (uint64)r.top * frameStride * 4;
-			copies[n].size = (uint64)(r.bottom - r.top + 1) * sourceStride * 4;
-			n++;
+			VkBufferCopy c = {};
+			c.srcOffset = (uint64)sourceY * sourceStride * 4;
+			c.dstOffset = (uint64)r.top * frameStride * 4;
+			c.size = (uint64)(r.bottom - r.top + 1) * sourceStride * 4;
+			copies.push_back(c);
 			continue;
 		}
 		for (int32 y = r.top; y <= r.bottom; y++) {
 			uint32 sourceY = y - layer->top;
-			copies[n].srcOffset = ((uint64)sourceY * sourceStride + sourceX) * 4;
-			copies[n].dstOffset = ((uint64)y * frameStride + r.left) * 4;
-			copies[n].size = (uint64)width * 4;
-			n++;
+			VkBufferCopy c = {};
+			c.srcOffset = ((uint64)sourceY * sourceStride + sourceX) * 4;
+			c.dstOffset = ((uint64)y * frameStride + r.left) * 4;
+			c.size = (uint64)width * 4;
+			copies.push_back(c);
 		}
 	}
 	VkMemoryBarrier before = {};
@@ -2914,12 +3036,14 @@ Compositor::_RecordBufferCopy(const Layer* layer, const BRegion& region,
 	vk->vkCmdPipelineBarrier(vk->commands,
 		VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
 		VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &before, 0, NULL, 0, NULL);
-	vk->vkCmdCopyBuffer(vk->commands, (VkBuffer)layer->buffer->VulkanBuffer(),
-		frame, n, copies);
-	sComposeRegions += n;
-	for (uint32 i = 0; i < n; i++)
+	if (!copies.empty()) {
+		vk->vkCmdCopyBuffer(vk->commands,
+			(VkBuffer)layer->buffer->VulkanBuffer(), frame,
+			(uint32)copies.size(), copies.data());
+	}
+	sComposeRegions += (int64)copies.size();
+	for (size_t i = 0; i < copies.size(); i++)
 		sComposeCopied += (int64)copies[i].size / 4;
-	delete[] copies;
 	VkMemoryBarrier after = {};
 	after.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
 	after.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -2999,6 +3123,12 @@ Compositor::_Present(const BRegion& damage)
 		for (int32 i = 0; i < damage.CountRects(); i++) {
 			clipping_rect r = damage.RectAtInt(i);
 			uint32 bytes = (r.right - r.left + 1) * 4;
+			if (frameRow == backRow && r.left == 0 && bytes == frameRow) {
+				r5_span_copy(bits + (size_t)r.top * backRow,
+					frame + (size_t)r.top * frameRow,
+					(size_t)(r.bottom - r.top + 1) * frameRow);
+				continue;
+			}
 			for (int32 y = r.top; y <= r.bottom; y++) {
 				r5_span_copy(bits + y * backRow + r.left * 4,
 					frame + y * frameRow + r.left * 4, bytes);

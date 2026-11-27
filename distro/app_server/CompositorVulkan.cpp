@@ -341,7 +341,7 @@ Compositor::_InitVulkan(bool radv, const char** _reason)
 	VkCommandBufferAllocateInfo commandInfo = {};
 	commandInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 	commandInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-	commandInfo.commandBufferCount = 1;
+	commandInfo.commandBufferCount = 2;
 	VkFenceCreateInfo fenceInfo = {};
 	fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 	if (vk->vkCreateCommandPool(vk->device, &poolInfo, NULL, &vk->commandPool)
@@ -350,12 +350,24 @@ Compositor::_InitVulkan(bool radv, const char** _reason)
 		return B_ERROR;
 	}
 	commandInfo.commandPool = vk->commandPool;
-	if (vk->vkAllocateCommandBuffers(vk->device, &commandInfo, &vk->commands)
+	if (vk->vkAllocateCommandBuffers(vk->device, &commandInfo,
+				vk->commandBuffers) != VK_SUCCESS
+		|| vk->vkCreateFence(vk->device, &fenceInfo, NULL, &vk->fences[0])
 			!= VK_SUCCESS
-		|| vk->vkCreateFence(vk->device, &fenceInfo, NULL, &vk->fence)
+		|| vk->vkCreateFence(vk->device, &fenceInfo, NULL, &vk->fences[1])
 			!= VK_SUCCESS) {
 		*_reason = "command buffer";
 		return B_ERROR;
+	}
+	vk->frameSlot = 0;
+	vk->slotInFlight[0] = false;
+	vk->slotInFlight[1] = false;
+	vk->commands = vk->commandBuffers[0];
+	vk->fence = vk->fences[0];
+	vk->scratchPools = new(std::nothrow) CompositorScratch;
+	if (vk->scratchPools == NULL) {
+		*_reason = "no memory";
+		return B_NO_MEMORY;
 	}
 	if (!_InitImages(_reason))
 		return B_ERROR;
@@ -376,8 +388,16 @@ Compositor::_InitSharedVulkan(CompositorVulkan* shared, const char** _reason)
 	memcpy(vk, shared, sizeof(*vk));
 	vk->shared = true;
 	vk->commandPool = VK_NULL_HANDLE;
+	vk->commandBuffers[0] = VK_NULL_HANDLE;
+	vk->commandBuffers[1] = VK_NULL_HANDLE;
+	vk->fences[0] = VK_NULL_HANDLE;
+	vk->fences[1] = VK_NULL_HANDLE;
+	vk->frameSlot = 0;
+	vk->slotInFlight[0] = false;
+	vk->slotInFlight[1] = false;
 	vk->commands = VK_NULL_HANDLE;
 	vk->fence = VK_NULL_HANDLE;
+	vk->scratchPools = NULL;
 	vk->timestamps = VK_NULL_HANDLE;
 	vk->frame = VK_NULL_HANDLE;
 	vk->frameMemory = VK_NULL_HANDLE;
@@ -416,15 +436,24 @@ Compositor::_InitSharedVulkan(CompositorVulkan* shared, const char** _reason)
 	commandInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 	commandInfo.commandPool = vk->commandPool;
 	commandInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-	commandInfo.commandBufferCount = 1;
+	commandInfo.commandBufferCount = 2;
 	VkFenceCreateInfo fenceInfo = {};
 	fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-	if (vk->vkAllocateCommandBuffers(vk->device, &commandInfo, &vk->commands)
+	if (vk->vkAllocateCommandBuffers(vk->device, &commandInfo,
+				vk->commandBuffers) != VK_SUCCESS
+		|| vk->vkCreateFence(vk->device, &fenceInfo, NULL, &vk->fences[0])
 			!= VK_SUCCESS
-		|| vk->vkCreateFence(vk->device, &fenceInfo, NULL, &vk->fence)
+		|| vk->vkCreateFence(vk->device, &fenceInfo, NULL, &vk->fences[1])
 			!= VK_SUCCESS) {
 		*_reason = "command buffer";
 		return B_ERROR;
+	}
+	vk->commands = vk->commandBuffers[0];
+	vk->fence = vk->fences[0];
+	vk->scratchPools = new(std::nothrow) CompositorScratch;
+	if (vk->scratchPools == NULL) {
+		*_reason = "no memory";
+		return B_NO_MEMORY;
 	}
 	if (fDebug && vk->timestampPeriod > 0) {
 		VkQueryPoolCreateInfo queryInfo = {};
@@ -640,10 +669,14 @@ Compositor::_ExitVulkan()
 			vk->vkFreeMemory(vk->device, vk->slideNewMemory, NULL);
 		if (vk->timestamps != VK_NULL_HANDLE)
 			vk->vkDestroyQueryPool(vk->device, vk->timestamps, NULL);
-		if (vk->fence != VK_NULL_HANDLE)
-			vk->vkDestroyFence(vk->device, vk->fence, NULL);
+		for (int i = 0; i < 2; i++) {
+			if (vk->fences[i] != VK_NULL_HANDLE)
+				vk->vkDestroyFence(vk->device, vk->fences[i], NULL);
+		}
 		if (vk->commandPool != VK_NULL_HANDLE)
 			vk->vkDestroyCommandPool(vk->device, vk->commandPool, NULL);
+		delete vk->scratchPools;
+		vk->scratchPools = NULL;
 		if (vk->shared) {
 			delete vk;
 			fFrameWidth = 0;

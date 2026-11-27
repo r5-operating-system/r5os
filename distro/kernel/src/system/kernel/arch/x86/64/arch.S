@@ -139,8 +139,39 @@ FUNCTION(_arch_cpu_user_memcpy):
 	movq	%rcx, %r9
 
 	ASM_STAC
-	cmpq	$64, %rdx
-	jae		.L_user_memcpy_rep
+	movl	gX86UserMemcpyRepFrom(%rip), %eax
+	cmpq	%rax, %rdx
+	jb		.L_user_memcpy_gpr
+	/* Avoid Zen 3 4K-aliasing penalty on rep movsb when
+	 * ((dst - src) & 0xfff) is in [1..31] or [4080..4095]. */
+	movq	%rdi, %rax
+	subq	%rsi, %rax
+	andl	$0xfff, %eax
+	jz		.L_user_memcpy_rep
+	cmpl	$32, %eax
+	jb		.L_user_memcpy_gpr
+	cmpl	$4080, %eax
+	jae		.L_user_memcpy_gpr
+	jmp		.L_user_memcpy_rep
+
+.L_user_memcpy_gpr:
+	cmpq	$32, %rdx
+	jb		.L_user_memcpy_qword_setup
+.L_user_memcpy_gpr32:
+	movq	0(%rsi), %rax
+	movq	8(%rsi), %rcx
+	movq	16(%rsi), %r10
+	movq	24(%rsi), %r11
+	movq	%rax, 0(%rdi)
+	movq	%rcx, 8(%rdi)
+	movq	%r10, 16(%rdi)
+	movq	%r11, 24(%rdi)
+	addq	$32, %rsi
+	addq	$32, %rdi
+	subq	$32, %rdx
+	cmpq	$32, %rdx
+	jae		.L_user_memcpy_gpr32
+.L_user_memcpy_qword_setup:
 	movq	%rdx, %rcx
 	shrq	$3, %rcx
 	jz		.L_user_memcpy_tail
@@ -247,6 +278,33 @@ FUNCTION(_arch_cpu_user_strlcpy):
 	jz		.L_user_strlcpy_count
 	decq	%rdx
 	jz		.L_user_strlcpy_terminate
+
+	/* SWAR 8-byte copy when >= 8 bytes remain and src does not cross a 4 KiB
+	 * page boundary (so an 8-byte load never faults on an unmapped next page). */
+	movabsq	$0x0101010101010101, %r11
+.L_user_strlcpy_word:
+	cmpq	$8, %rdx
+	jb		.L_user_strlcpy_loop
+	movl	%esi, %eax
+	andl	$0xfff, %eax
+	cmpl	$4088, %eax
+	ja		.L_user_strlcpy_loop
+	movq	(%rsi), %rax
+	movq	%rax, %rcx
+	subq	%r11, %rcx
+	notq	%rax
+	andq	%rax, %rcx
+	notq	%rax
+	shlq	$7, %r11
+	testq	%r11, %rcx
+	jnz		.L_user_strlcpy_loop
+	shrq	$7, %r11
+	movq	%rax, (%rdi)
+	addq	$8, %rsi
+	addq	$8, %rdi
+	subq	$8, %rdx
+	jnz		.L_user_strlcpy_word
+	jmp		.L_user_strlcpy_terminate
 
 .L_user_strlcpy_loop:
 	lodsb

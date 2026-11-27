@@ -123,7 +123,9 @@ struct r5_wsi_slot {
 	uint64_t graphics;
 };
 
-static struct r5_wsi_slot g_slots[4];
+#define R5_MAX_WSI_SLOTS 32
+
+static struct r5_wsi_slot g_slots[R5_MAX_WSI_SLOTS];
 static pthread_mutex_t g_slot_mu = PTHREAD_MUTEX_INITIALIZER;
 
 static uint64_t
@@ -131,7 +133,7 @@ r5_graphics_for(struct wsi_device *wsi)
 {
 	uint64_t mask = 0;
 	pthread_mutex_lock(&g_slot_mu);
-	for (int i = 0; i < 4; i++) {
+	for (int i = 0; i < R5_MAX_WSI_SLOTS; i++) {
 		if (g_slots[i].wsi == wsi)
 			mask = g_slots[i].graphics;
 	}
@@ -452,6 +454,12 @@ r5_get_formats2(VkIcdSurfaceBase *icd, struct wsi_device *wsi,
 	return VK_SUCCESS;
 }
 
+static const VkPresentModeKHR r5_present_modes[3] = {
+	VK_PRESENT_MODE_FIFO_KHR,
+	VK_PRESENT_MODE_MAILBOX_KHR,
+	VK_PRESENT_MODE_IMMEDIATE_KHR,
+};
+
 static VkResult
 r5_get_present_modes(VkIcdSurfaceBase *icd, struct wsi_device *wsi,
 	uint32_t *count, VkPresentModeKHR *modes)
@@ -459,16 +467,14 @@ r5_get_present_modes(VkIcdSurfaceBase *icd, struct wsi_device *wsi,
 	(void)icd;
 	(void)wsi;
 	if (modes == NULL) {
-		*count = 1;
+		*count = 3;
 		return VK_SUCCESS;
 	}
-	if (*count < 1) {
-		*count = 0;
-		return VK_INCOMPLETE;
-	}
-	modes[0] = VK_PRESENT_MODE_FIFO_KHR;
-	*count = 1;
-	return VK_SUCCESS;
+	uint32_t n = *count < 3 ? *count : 3;
+	for (uint32_t i = 0; i < n; i++)
+		modes[i] = r5_present_modes[i];
+	*count = n;
+	return n < 3 ? VK_INCOMPLETE : VK_SUCCESS;
 }
 
 static VkResult
@@ -682,6 +688,10 @@ r5_copy_rows(struct wsi_image *image, BBitmap *bitmap, uint32_t width,
 	uint32_t row = width * 4;
 	if (src_pitch == 0)
 		src_pitch = row;
+	if (src_pitch == row && dst_pitch == row) {
+		memcpy(dst, src, (size_t)row * height);
+		return;
+	}
 	for (uint32_t y = 0; y < height; y++)
 		memcpy(dst + y * dst_pitch, src + y * src_pitch, row);
 }
@@ -738,7 +748,8 @@ r5_present_shared(struct r5_swapchain *chain, uint32_t image_index)
 	bool mismatch = live_w != chain->width || live_h != chain->height;
 	/* WaitForRetrace can need the window thread. Do not hold its lock. */
 	window->Unlock();
-	r5_fifo_wait(chain, window);
+	if (chain->base.present_mode == VK_PRESENT_MODE_FIFO_KHR)
+		r5_fifo_wait(chain, window);
 
 	status_t code = B_ERROR;
 	if (r5_drm_mark_set != NULL && r5_drm_mark_set(image->export_id) == 0) {
@@ -868,6 +879,14 @@ r5_queue_present(struct wsi_swapchain *wsi_chain, uint32_t image_index,
 
 	r5_copy_rows(&image->base, image->bitmap, chain->width, chain->height);
 
+	/* For FIFO, wait for retrace before locking the window so we only lock
+	 * BWindow once per present. */
+	if (chain->base.present_mode == VK_PRESENT_MODE_FIFO_KHR) {
+		if (chain->screen == NULL)
+			chain->screen = new (std::nothrow) BScreen(B_MAIN_SCREEN_ID);
+		r5_fifo_wait(chain, NULL);
+	}
+
 	BWindow *window = NULL;
 	if (!r5_lock_window(surface, chain->refresh, &window)) {
 		bool gone = !surface->window.IsValid();
@@ -899,37 +918,16 @@ r5_queue_present(struct wsi_swapchain *wsi_chain, uint32_t image_index,
 		return VK_ERROR_OUT_OF_DATE_KHR;
 	}
 
-	/* WaitForRetrace can need the window thread. Do not hold its lock. */
-	window->Unlock();
-	r5_fifo_wait(chain, window);
-	if (!r5_lock_window(surface, chain->refresh, &window)) {
-		bool gone = !surface->window.IsValid();
-		if (gone) {
-			pthread_mutex_lock(&chain->mu);
-			chain->lost = true;
-			pthread_mutex_unlock(&chain->mu);
-			r5_release_image(chain, image_index);
-			pthread_mutex_unlock(&chain->present_mu);
-			return VK_ERROR_SURFACE_LOST_KHR;
-		}
-		r5_release_image(chain, image_index);
-		pthread_mutex_unlock(&chain->present_mu);
-		return VK_SUCCESS;
-	}
-
 	BRect src = image->bitmap->Bounds();
-	BRect dst = surface->view->Bounds();
+	BRect dst = bounds;
 	surface->view->SetViewBitmap(image->bitmap, src, dst, B_FOLLOW_ALL, 0);
 	surface->view->Invalidate();
 	r5_set_view_bitmap(surface, image->bitmap);
 	chain->next_image = (image_index + 1) % chain->base.image_count;
-	/*
-	 * BView::Sync() calls CheckOwnerLock() and stops in the debugger if the
-	 * looper is not locked. BWindow::Sync() takes the lock itself, sends
-	 * AS_SYNC, and app_server replies when those drawing commands are done.
-	 * That reply does not run Draw on the window thread.
-	 */
-	window->Sync();
+	/* Flush asynchronously instead of Sync() so the render thread does not
+	 * block on a round-trip IPC to app_server; r5_acquire_next_image keeps
+	 * the currently shown bitmap untouched until replaced. */
+	window->Flush();
 	window->Unlock();
 
 	r5_release_image(chain, image_index);
@@ -1105,7 +1103,7 @@ r5_create_shared(struct r5_surface *surface, VkDevice device,
 	chain->base.acquire_next_image = r5_acquire_next_image;
 	chain->base.release_images = r5_release_images;
 	chain->base.queue_present = r5_queue_present;
-	chain->base.present_mode = VK_PRESENT_MODE_FIFO_KHR;
+	chain->base.present_mode = info->presentMode;
 	chain->base.image_count = count;
 
 	uint8_t tokens[R5_SHARE_IMAGES][16];
@@ -1176,7 +1174,9 @@ r5_create_swapchain(VkIcdSurfaceBase *icd, VkDevice device,
 		r5_log_refuse_once();
 		return VK_ERROR_INITIALIZATION_FAILED;
 	}
-	if (info->presentMode != VK_PRESENT_MODE_FIFO_KHR)
+	if (info->presentMode != VK_PRESENT_MODE_FIFO_KHR
+		&& info->presentMode != VK_PRESENT_MODE_MAILBOX_KHR
+		&& info->presentMode != VK_PRESENT_MODE_IMMEDIATE_KHR)
 		return VK_ERROR_INITIALIZATION_FAILED;
 	if (info->minImageCount > 3 || info->imageArrayLayers != 1)
 		return VK_ERROR_INITIALIZATION_FAILED;
@@ -1258,7 +1258,7 @@ r5_create_swapchain(VkIcdSurfaceBase *icd, VkDevice device,
 	chain->base.acquire_next_image = r5_acquire_next_image;
 	chain->base.release_images = r5_release_images;
 	chain->base.queue_present = r5_queue_present;
-	chain->base.present_mode = VK_PRESENT_MODE_FIFO_KHR;
+	chain->base.present_mode = info->presentMode;
 	chain->base.image_count = count;
 
 	BRect frame(0, 0, (float)chain->width - 1, (float)chain->height - 1);
@@ -1302,7 +1302,7 @@ wsi_view_r5_init_wsi(struct wsi_device *wsi, uint64_t graphics_mask)
 {
 	pthread_mutex_lock(&g_slot_mu);
 	int free_slot = -1;
-	for (int i = 0; i < 4; i++) {
+	for (int i = 0; i < R5_MAX_WSI_SLOTS; i++) {
 		if (g_slots[i].wsi == wsi) {
 			g_slots[i].graphics = graphics_mask;
 			free_slot = -2;
@@ -1324,7 +1324,7 @@ wsi_view_r5_finish_wsi(struct wsi_device *wsi)
 {
 	wsi->wsi[VK_ICD_WSI_PLATFORM_VIEW_RFIVE] = NULL;
 	pthread_mutex_lock(&g_slot_mu);
-	for (int i = 0; i < 4; i++) {
+	for (int i = 0; i < R5_MAX_WSI_SLOTS; i++) {
 		if (g_slots[i].wsi == wsi) {
 			g_slots[i].wsi = NULL;
 			g_slots[i].graphics = 0;

@@ -22,6 +22,7 @@
 
 #include <map>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "include/core/SkData.h"
@@ -44,7 +45,9 @@
 
 static BLocker sTypefaceLock("skia typefaces");
 static std::map<std::string, sk_sp<SkTypeface>> sFileTypefaces;
+static std::unordered_map<uint32, sk_sp<SkTypeface>> sStyleTypefaces;
 static std::map<std::pair<uint64, long>, sk_sp<SkTypeface>> sMemoryTypefaces;
+static std::map<std::string, std::vector<sk_sp<SkTypeface>>> sFallbackTypefaces;
 
 
 void
@@ -105,8 +108,24 @@ typeface_for(const char* path, long faceIndex, const FT_Byte* data,
 static sk_sp<SkTypeface>
 typeface_for(const ServerFont& font)
 {
-	return typeface_for(font.Path(), font.FaceIndex(), font.FontData(),
-		font.FontDataSize(), font.FontDataSerial());
+	if (font.FontData() != NULL && font.FontDataSize() > 0) {
+		return typeface_for(NULL, font.FaceIndex(), font.FontData(),
+			font.FontDataSize(), font.FontDataSerial());
+	}
+	uint32 styleKey = font.GetFamilyAndStyle();
+	{
+		BAutolock _(sTypefaceLock);
+		auto found = sStyleTypefaces.find(styleKey);
+		if (found != sStyleTypefaces.end())
+			return found->second;
+	}
+	sk_sp<SkTypeface> typeface = typeface_for(font.Path(), font.FaceIndex(),
+		NULL, 0, 0);
+	if (typeface != nullptr) {
+		BAutolock _(sTypefaceLock);
+		sStyleTypefaces[styleKey] = typeface;
+	}
+	return typeface;
 }
 
 
@@ -121,26 +140,45 @@ fallback_typeface_for(const ServerFont& font, uint32 charCode,
 		"Noto Sans", "Noto Sans Thai", "Noto Sans CJK JP",
 		"Noto Sans Symbols", "Noto Sans Symbols2", "Noto Color Emoji", NULL
 	};
-	for (int i = 0; kFallbacks[i] != NULL; i++) {
+	const char* styleName = font.Style() != NULL ? font.Style() : "Regular";
+	std::vector<sk_sp<SkTypeface>> list;
+	{
+		BAutolock _(sTypefaceLock);
+		auto found = sFallbackTypefaces.find(styleName);
+		if (found != sFallbackTypefaces.end())
+			list = found->second;
+	}
+	if (list.empty()) {
+		struct Entry {
+			BString	path;
+			long	faceIndex;
+		};
+		std::vector<Entry> resolved;
 		if (!gFontManager->Lock())
 			return nullptr;
-		FontStyle* style = gFontManager->GetStyle(kFallbacks[i],
-			font.Style());
-		if (style == NULL)
-			style = gFontManager->GetStyle(kFallbacks[i], "Regular");
-		BString path;
-		long faceIndex = 0;
-		if (style != NULL) {
-			path = style->Path();
-			faceIndex = style->FreeTypeFace()->face_index;
+		for (int i = 0; kFallbacks[i] != NULL; i++) {
+			FontStyle* style = gFontManager->GetStyle(kFallbacks[i],
+				styleName);
+			if (style == NULL)
+				style = gFontManager->GetStyle(kFallbacks[i], "Regular");
+			if (style != NULL) {
+				Entry e;
+				e.path = style->Path();
+				e.faceIndex = style->FreeTypeFace()->face_index;
+				resolved.push_back(e);
+			}
 		}
 		gFontManager->Unlock();
-		if (style == NULL)
-			continue;
-		sk_sp<SkTypeface> typeface = typeface_for(path.String(), faceIndex,
-			NULL, 0, 0);
-		if (typeface == nullptr)
-			continue;
+		for (const Entry& e : resolved) {
+			sk_sp<SkTypeface> tf = typeface_for(e.path.String(), e.faceIndex,
+				NULL, 0, 0);
+			if (tf != nullptr)
+				list.push_back(tf);
+		}
+		BAutolock _(sTypefaceLock);
+		sFallbackTypefaces[styleName] = list;
+	}
+	for (const sk_sp<SkTypeface>& typeface : list) {
 		SkGlyphID glyph = typeface->unicharToGlyph((SkUnichar)charCode);
 		if (glyph != 0) {
 			*_glyph = glyph;
@@ -331,15 +369,22 @@ SkiaPainter::DrawString(const char* string, uint32 length, BPoint baseLine,
 			(float)g.y));
 	}
 
-	// the ink, in screen pixels
+	// the ink, in screen pixels: reuse GlyphCollector's FreeType bounds
+	// instead of running a second SkFont::getBounds() pass per DrawString().
 	SkRect local = SkRect::MakeEmpty();
-	for (GlyphRun& run : runs) {
-		SkFont runFont(font);
-		runFont.setTypeface(run.typeface);
-		std::vector<SkRect> boxes(run.glyphs.size());
-		runFont.getBounds(run.glyphs, boxes, nullptr);
-		for (size_t i = 0; i < boxes.size(); i++)
-			local.join(boxes[i].makeOffset(run.positions[i]));
+	if (collector.fBounds.IsValid()) {
+		local = SkRect::MakeLTRB(collector.fBounds.left,
+			collector.fBounds.top, collector.fBounds.right + 1,
+			collector.fBounds.bottom + 1);
+	} else {
+		for (GlyphRun& run : runs) {
+			SkFont runFont(font);
+			runFont.setTypeface(run.typeface);
+			std::vector<SkRect> boxes(run.glyphs.size());
+			runFont.getBounds(run.glyphs, boxes, nullptr);
+			for (size_t i = 0; i < boxes.size(); i++)
+				local.join(boxes[i].makeOffset(run.positions[i]));
+		}
 	}
 	bool lines = (fFont.Face() & (B_UNDERSCORE_FACE | B_STRIKEOUT_FACE)) != 0
 		&& collector.fBounds.IsValid();

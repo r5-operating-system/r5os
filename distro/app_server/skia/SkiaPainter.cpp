@@ -19,6 +19,9 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+#if defined(__x86_64__) && defined(__SSE4_2__)
+#include <nmmintrin.h>
+#endif
 
 #include <Bitmap.h>
 #include <GradientConic.h>
@@ -556,21 +559,37 @@ static const int32 kTextureLargest = 64 * 1024 * 1024;
 static uint64
 bitmap_hash(const uint8* bits, int32 length)
 {
+	// 4-lane nonlinear 64-bit multiply-xor-rotate hash over every byte:
+	// keeps the full-bitmap guarantee (#4684) with 64 bits per lane so
+	// single-lane/column edits cannot hit linear 32-bit CRC collisions.
 	const uint64 kPrime = 0x9e3779b97f4a7c15ull;
-	uint64 lanes[4] = { kPrime, kPrime * 3, kPrime * 5, kPrime * 7 };
+	uint64 l0 = kPrime;
+	uint64 l1 = kPrime * 3;
+	uint64 l2 = kPrime * 5;
+	uint64 l3 = kPrime * 7;
 	int32 words = length / 8;
 	int32 i = 0;
 	for (; i + 4 <= words; i += 4) {
-		for (int lane = 0; lane < 4; lane++) {
-			uint64 word;
-			memcpy(&word, bits + (size_t)(i + lane) * 8, 8);
-			uint64 h = (lanes[lane] ^ word) * kPrime;
-			lanes[lane] = (h << 31) | (h >> 33);
-		}
+		uint64 w0, w1, w2, w3;
+		const uint8* p = bits + (size_t)i * 8;
+		memcpy(&w0, p, 8);
+		memcpy(&w1, p + 8, 8);
+		memcpy(&w2, p + 16, 8);
+		memcpy(&w3, p + 24, 8);
+		uint64 h0 = (l0 ^ w0) * kPrime;
+		uint64 h1 = (l1 ^ w1) * kPrime;
+		uint64 h2 = (l2 ^ w2) * kPrime;
+		uint64 h3 = (l3 ^ w3) * kPrime;
+		l0 = (h0 << 31) | (h0 >> 33);
+		l1 = (h1 << 31) | (h1 >> 33);
+		l2 = (h2 << 31) | (h2 >> 33);
+		l3 = (h3 << 31) | (h3 >> 33);
 	}
 	uint64 hash = (uint64)length;
-	for (int lane = 0; lane < 4; lane++)
-		hash = (hash ^ lanes[lane]) * kPrime;
+	hash = (hash ^ l0) * kPrime;
+	hash = (hash ^ l1) * kPrime;
+	hash = (hash ^ l2) * kPrime;
+	hash = (hash ^ l3) * kPrime;
 	for (; i < words; i++) {
 		uint64 word;
 		memcpy(&word, bits + (size_t)i * 8, 8);
@@ -909,7 +928,17 @@ SkiaPainter::SkiaPainter()
 	fRendererY(0),
 	fAntialiasText(true),
 	fHasAlphaMask(false),
-	fAlphaMask(NULL)
+	fAlphaMask(NULL),
+	fCachedMask(NULL),
+	fCachedMaskTarget(NULL),
+	fCachedMaskX(0),
+	fCachedMaskY(0),
+	fCachedMaskOrigin(0, 0),
+	fCachedMaskSize(0),
+	fCachedMaskOutside(0),
+	fCachedMaskInverted(false),
+	fCachedMaskClipped(false),
+	fCachedMaskBounds(SkIRect::MakeEmpty())
 {
 	fHighColor = (rgb_color){ 0, 0, 0, 255 };
 	fLowColor = (rgb_color){ 255, 255, 255, 255 };
@@ -924,6 +953,13 @@ SkiaPainter::~SkiaPainter()
 void
 SkiaPainter::SetTarget(SkiaTarget* target)
 {
+	if (fTarget != target) {
+		fCachedMask.Unset();
+		fCachedMaskTarget = NULL;
+		fCachedMaskSize = 0;
+		fCachedMaskBounds = SkIRect::MakeEmpty();
+		fCachedMaskShader.reset();
+	}
 	fTarget = target;
 }
 
@@ -940,7 +976,18 @@ SkiaPainter::SetDrawState(const DrawState* state, int32 xOffset,
 	// part 4, "Alpha masks": the mask itself is drawn by Skia in the GPU
 	// mode (AlphaMask.cpp, skia_offscreen_engine()); here it only limits
 	// the coverage, as Painter's masked scanline does
-	fAlphaMask = state->GetAlphaMask();
+	AlphaMask* mask = state->GetAlphaMask();
+	BPoint maskOrigin = state->Origin();
+	if (mask != fCachedMask.Get() || xOffset != fCachedMaskX
+		|| yOffset != fCachedMaskY || maskOrigin != fCachedMaskOrigin) {
+		fCachedMask.Unset();
+		fCachedMaskTarget = NULL;
+		fCachedMaskOrigin = maskOrigin;
+		fCachedMaskSize = 0;
+		fCachedMaskBounds = SkIRect::MakeEmpty();
+		fCachedMaskShader.reset();
+	}
+	fAlphaMask = mask;
 	fHasAlphaMask = fAlphaMask != NULL;
 	fDrawingMode = state->GetDrawingMode();
 	fAlphaSrcMode = state->AlphaSrcMode();
@@ -1325,6 +1372,19 @@ SkiaPainter::_MaskShader(const SkIRect& bounds)
 {
 	if (fAlphaMask == NULL || fAlphaMask->Mask() == NULL)
 		return nullptr;
+	agg::clipped_alpha_mask* mask = fAlphaMask->Mask();
+	size_t maskSize = fAlphaMask->BitmapSize();
+	uint8 outside = fAlphaMask->OutsideOpacity();
+	bool inverted = fAlphaMask->IsInverted();
+	bool clipped = fAlphaMask->IsClipped();
+	if (fCachedMask.Get() == fAlphaMask && fCachedMaskTarget == fTarget
+		&& fCachedMaskX == fPatternX && fCachedMaskY == fPatternY
+		&& fCachedMaskSize == maskSize && fCachedMaskOutside == outside
+		&& fCachedMaskInverted == inverted && fCachedMaskClipped == clipped
+		&& fCachedMaskShader != nullptr
+		&& fCachedMaskBounds.contains(bounds)) {
+		return fCachedMaskShader;
+	}
 	int32 width = bounds.width();
 	int32 height = bounds.height();
 	SkBitmap pixels;
@@ -1334,7 +1394,6 @@ SkiaPainter::_MaskShader(const SkIRect& bounds)
 	if (full == NULL)
 		return nullptr;
 	uint8* zero = full + width;
-	agg::clipped_alpha_mask* mask = fAlphaMask->Mask();
 	for (int32 y = 0; y < height; y++) {
 		memset(full, 255, width);
 		memset(zero, 0, width);
@@ -1356,8 +1415,21 @@ SkiaPainter::_MaskShader(const SkIRect& bounds)
 		return nullptr;
 	SkMatrix at = SkMatrix::Translate((float)bounds.fLeft,
 		(float)bounds.fTop);
-	return image->makeShader(SkTileMode::kClamp, SkTileMode::kClamp,
-		SkSamplingOptions(SkFilterMode::kNearest), &at);
+	sk_sp<SkShader> shader = image->makeShader(SkTileMode::kClamp,
+		SkTileMode::kClamp, SkSamplingOptions(SkFilterMode::kNearest), &at);
+	if (shader != nullptr) {
+		fCachedMask.SetTo(fAlphaMask, false);
+		fCachedMaskTarget = fTarget;
+		fCachedMaskX = fPatternX;
+		fCachedMaskY = fPatternY;
+		fCachedMaskSize = maskSize;
+		fCachedMaskOutside = outside;
+		fCachedMaskInverted = inverted;
+		fCachedMaskClipped = clipped;
+		fCachedMaskBounds = bounds;
+		fCachedMaskShader = shader;
+	}
+	return shader;
 }
 
 
@@ -2164,6 +2236,13 @@ SkiaPainter::FillRectNoClipping(const clipping_rect& r, const rgb_color& c)
 }
 
 
+void
+SkiaPainter::FillRegionNoClipping(const BRegion& region, const rgb_color& c)
+{
+	_FillSolid(region, c, false);
+}
+
+
 //! Painter::StrokeRoundRect() and Painter::FillRoundRect()
 BRect
 SkiaPainter::DrawRoundRect(const BRect& r, float xRadius, float yRadius,
@@ -2257,10 +2336,25 @@ SkiaPainter::FillRegion(const BRegion* region, const BGradient* gradient)
 {
 	CHECK_CLIPPING
 
-	BRegion copy(*region);
-	int32 count = copy.CountRects();
+	if (region == NULL)
+		return BRect(0, 0, -1, -1);
+	int32 count = region->CountRects();
 	if (count == 0)
 		return BRect(0, 0, -1, -1);
+
+	if (gradient == NULL && (fDrawingMode == B_OP_COPY
+			|| fDrawingMode == B_OP_OVER)
+		&& !fHasAlphaMask && fIdentityTransform) {
+		if (same_pattern(fPattern, kR5SolidHigh)) {
+			_FillSolid(*region, fHighColor, true);
+			return _Clipped(region->Frame());
+		} else if (same_pattern(fPattern, kR5SolidLow)) {
+			_FillSolid(*region, fLowColor, true);
+			return _Clipped(region->Frame());
+		}
+	}
+
+	BRegion copy(*region);
 	BRect touched = FillRect(copy.RectAt(0), gradient);
 	for (int32 i = 1; i < count; i++)
 		touched = touched | FillRect(copy.RectAt(i), gradient);
@@ -2428,16 +2522,21 @@ SkiaPainter::DrawBitmap(const ServerBitmap* bitmap, BRect bitmapRect,
 		bitmap->BitsLength(), width, height, bitmap->BytesPerRow(), space,
 		raw, bitmap->Generation(), owned, &hasFullHash, &fullHash);
 	if (image == nullptr) {
-	SkBitmap pixels;
-	if (!pixels.tryAllocPixels(target_info(width, height)))
-		return touched;
 	if (raw) {
-		const uint8* from = bitmap->Bits();
-		for (int32 y = 0; y < height; y++) {
-			memcpy((uint8*)pixels.getAddr32(0, y),
-				from + y * bitmap->BytesPerRow(), width * 4);
-		}
+		// Upload directly from the bitmap's BGRA32 memory without an
+		// intermediate SkBitmap row copy: TextureFromImage copies into
+		// Graphite's staging buffer synchronously before returning.
+		SkPixmap pixmap(target_info(width, height), bitmap->Bits(),
+			bitmap->BytesPerRow());
+		sk_sp<SkImage> raster = SkImages::RasterFromPixmap(pixmap, nullptr,
+			nullptr);
+		if (raster == nullptr)
+			return touched;
+		image = upload_texture(fTarget->Recorder(), raster);
 	} else {
+		SkBitmap pixels;
+		if (!pixels.tryAllocPixels(target_info(width, height)))
+			return touched;
 		BBitmap converted(BRect(0, 0, width - 1, height - 1),
 			B_BITMAP_NO_SERVER_LINK, B_RGBA32);
 		if (converted.InitCheck() != B_OK
@@ -2463,9 +2562,9 @@ SkiaPainter::DrawBitmap(const ServerBitmap* bitmap, BRect bitmapRect,
 				}
 			}
 		}
+		pixels.setImmutable();
+		image = upload_texture(fTarget->Recorder(), pixels.asImage());
 	}
-	pixels.setImmutable();
-	image = upload_texture(fTarget->Recorder(), pixels.asImage());
 	if (image == nullptr)
 		return touched;
 	fTarget->KeepTexture(textureId, bitmap->Bits(), bitmap->BitsLength(), width,
@@ -2545,6 +2644,41 @@ SkiaPainter::DrawBitmap(const ServerBitmap* bitmap, BRect bitmapRect,
 			}
 			if (source.special != kSpecialNone) {
 				_Composite(bounds, nullptr, source);
+				return touched;
+			}
+		} else if (sHardwareBlend && !SkiaPainter::Classic()
+			&& fDrawingMode == B_OP_COPY) {
+			// Direct hardware-sampled scaled copy (no destination snapshot or
+			// uber-shader). Classic mode keeps the R5 shader below.
+			SkRect src = SkRect::MakeLTRB(sourceRect.left, sourceRect.top,
+				sourceRect.right + 1, sourceRect.bottom + 1);
+			SkPaint copy;
+			copy.setBlendMode(SkBlendMode::kSrc);
+			_DirectDraw(bounds, SkMatrix::I(), [&](SkCanvas* canvas) {
+				canvas->drawImageRect(image, src, dest, sampling, &copy,
+					SkCanvas::kStrict_SrcRectConstraint);
+			});
+			return touched;
+		} else if (sHardwareBlend && fTarget->IsOpaque()
+			&& !SkiaPainter::Classic()
+			&& ((fDrawingMode == B_OP_ALPHA
+					&& fAlphaSrcMode == B_PIXEL_ALPHA
+					&& fAlphaFncMode == B_ALPHA_OVERLAY)
+				|| (fDrawingMode == B_OP_OVER && space != B_RGB32))) {
+			// Direct hardware-sampled scaled alpha/over blend on an opaque
+			// target in the new look (same bitmap_over_effect as unscaled).
+			sk_sp<SkRuntimeEffect> effect = bitmap_over_effect();
+			if (effect != nullptr) {
+				SkRuntimeShaderBuilder builder(effect);
+				builder.child("image") = source.colors;
+				builder.uniform("mode") = (space == B_CMAP8
+					&& fDrawingMode == B_OP_OVER) ? 2 : 0;
+				SkPaint over;
+				over.setBlendMode(SkBlendMode::kSrcOver);
+				over.setShader(builder.makeShader());
+				_DirectDraw(bounds, SkMatrix::I(), [&](SkCanvas* canvas) {
+					canvas->drawRect(dest, over);
+				});
 				return touched;
 			}
 		} else if (fDrawingMode == B_OP_COPY

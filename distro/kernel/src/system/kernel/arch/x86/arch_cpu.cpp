@@ -119,6 +119,13 @@ bool gHasXsavec = false;
 // SPDX-SnippetEnd
 #endif
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+extern "C" uint32 gX86UserMemcpyRepFrom;
+uint32 gX86UserMemcpyRepFrom = 2048;
+// SPDX-SnippetEnd
+
 extern "C" void x86_reboot(void);
 	// from arch.S
 
@@ -1550,6 +1557,13 @@ detect_cpu(int currentCPU, bool full = true)
 		cpu->arch.feature[FEATURE_7_EBX] = cpuid.regs.ebx;
 		cpu->arch.feature[FEATURE_7_ECX] = cpuid.regs.ecx;
 		cpu->arch.feature[FEATURE_7_EDX] = cpuid.regs.edx;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		/* CPUID leaf 7 EDX bit 4: Fast Short REP MOVSB (FSRM). */
+		if ((cpuid.regs.edx & (1u << 4)) != 0)
+			gX86UserMemcpyRepFrom = 64;
+// SPDX-SnippetEnd
 		get_current_cpuid(&cpuid, 7, 1);
 		cpu->arch.feature[FEATURE_7_1_EAX] = cpuid.regs.eax;
 	}
@@ -1598,6 +1612,36 @@ detect_cpu(int currentCPU, bool full = true)
 			cpu->capacity = (cpuid.regs.ebx >> 28) == 0 ? 1024 : 768;
 		}
 	}
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// AMD CPPC preferred cores (e.g. Ryzen 5 5625U: highest 186 vs 181).
+	// Skip under a hypervisor (where MSR_AMD_CPPC_CAP1 may #GP), and keep
+	// capacity 0 unless cores actually differ in highest_perf.
+	if (cpu->arch.vendor == VENDOR_AMD && cpu->capacity == 0
+		&& (cpu->arch.feature[FEATURE_EXT] & IA32_FEATURE_EXT_HYPERVISOR) == 0
+		&& (cpu->arch.feature[FEATURE_EXT_8_EBX] & IA32_FEATURE_CPPC) != 0) {
+		static uint32 sAmdCppcHighest[SMP_MAX_CPUS];
+		static uint32 sAmdCppcMin = UINT32_MAX;
+		static uint32 sAmdCppcMax = 0;
+		uint64 cap1 = x86_read_msr(MSR_AMD_CPPC_CAP1);
+		uint32 highest = AMD_CPPC_HIGHEST_PERF(cap1);
+		if (highest > 0 && currentCPU >= 0 && currentCPU < SMP_MAX_CPUS) {
+			sAmdCppcHighest[currentCPU] = highest;
+			if (highest < sAmdCppcMin)
+				sAmdCppcMin = highest;
+			if (highest > sAmdCppcMax)
+				sAmdCppcMax = highest;
+			if (sAmdCppcMax - sAmdCppcMin >= 2) {
+				for (int i = 0; i <= currentCPU; i++) {
+					if (sAmdCppcHighest[i] > 0 && gCPU[i].capacity == 0)
+						gCPU[i].capacity = sAmdCppcHighest[i] * 4;
+				}
+			}
+		}
+	}
+// SPDX-SnippetEnd
 
 #if DUMP_FEATURE_STRING
 	dump_feature_string(currentCPU, cpu);
@@ -2086,6 +2130,19 @@ arch_cpu_invalidate_tlb_list(intptr_t context, addr_t pages[], int num_pages)
 {
 	if (context != 0 && (intptr_t)x86_read_cr3() != context)
 		return;
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	const int kMaxRangePages = 64;
+	if (num_pages >= kMaxRangePages) {
+		if (context != 0)
+			arch_cpu_user_tlb_invalidate(context);
+		else
+			arch_cpu_global_tlb_invalidate();
+		return;
+	}
+// SPDX-SnippetEnd
 
 	for (int i = 0; i < num_pages; i++)
 		invalidate_TLB(pages[i]);

@@ -38,6 +38,7 @@
 
 static BLocker sTrackLock("skia offscreen");
 static std::map<const ServerBitmap*, SkiaDrawingEngine*> sTracked;
+static int32 sTrackedCount = 0;
 
 
 /*!	A GPU image whose pixels go into a ServerBitmap's memory at each read
@@ -371,6 +372,7 @@ skia_offscreen_engine(HWInterface* lockInterface, ServerBitmap* bitmap,
 	if (track) {
 		BAutolock _(sTrackLock);
 		sTracked[bitmap] = engine;
+		atomic_set(&sTrackedCount, (int32)sTracked.size());
 		engine->SetTrackedBitmap(bitmap);
 	}
 	return engine;
@@ -382,12 +384,17 @@ skia_offscreen_untrack(const ServerBitmap* bitmap)
 {
 	BAutolock _(sTrackLock);
 	sTracked.erase(bitmap);
+	atomic_set(&sTrackedCount, (int32)sTracked.size());
 }
 
 
 void
 skia_offscreen_sync(const ServerBitmap* bitmap)
 {
+	// Fast path: when no offscreen GPU bitmaps are tracked, avoid taking
+	// sTrackLock on every DrawBitmap().
+	if (atomic_get(&sTrackedCount) == 0)
+		return;
 	// the wait itself is global (everything recorded so far), so it needs
 	// no engine and is done without the track lock (review)
 	SkiaGpu* gpu = NULL;

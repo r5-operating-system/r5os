@@ -168,6 +168,17 @@ typedef int (*r5_mark_get_hook)(uint32_t, uint64_t*);
 typedef int (*r5_import_size_hook)(uint32_t, uint64_t*);
 
 
+struct CompositorScratch {
+	std::vector<VkBufferCopy>				bufferCopies;
+	std::vector<VkBufferImageCopy>			imageCopies;
+	std::vector<BRegion>					covered;
+	std::vector<BRegion>					hidden;
+	std::vector<uint64>						slotSignals[2];
+	std::vector<BReference<WindowBuffer>>	slotBuffers[2];
+	std::vector<BReference<SkiaImage>>		slotImages[2];
+};
+
+
 struct CompositorVulkan {
 	void*						library;
 	PFN_vkGetInstanceProcAddr	vkGetInstanceProcAddr;
@@ -184,8 +195,13 @@ struct CompositorVulkan {
 	VkPipelineLayout			pipelineLayout;
 	VkPipeline					pipeline;
 	VkCommandPool				commandPool;
+	VkCommandBuffer				commandBuffers[2];
+	VkFence						fences[2];
+	uint32						frameSlot;
+	bool						slotInFlight[2];
 	VkCommandBuffer				commands;
 	VkFence						fence;
+	CompositorScratch*			scratchPools;
 
 	// M13 step 2: the sampler for the window images (VK_FILTER_LINEAR),
 	// and a 1x1 image for the binding when a pass reads a buffer

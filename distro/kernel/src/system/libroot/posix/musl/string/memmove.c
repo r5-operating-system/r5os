@@ -4,6 +4,10 @@
 
 #if defined(__x86_64__)
 #include <emmintrin.h>
+#ifndef _KERNEL_MODE
+#include <immintrin.h>
+#include <r5_x86_cpu.h>
+#endif
 
 /* SPDX-SnippetBegin
  * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
@@ -96,6 +100,30 @@ move_sse(unsigned char* d, const unsigned char* s, size_t n, int forward)
 	move_bytes(d, s, n, forward);
 }
 
+
+#ifndef _KERNEL_MODE
+static __attribute__((target("avx2"))) void
+move_avx2(unsigned char* d, const unsigned char* s, size_t n, int forward)
+{
+	if (forward) {
+		while (n >= 32) {
+			__m256i value = _mm256_loadu_si256((const __m256i*)s);
+			_mm256_storeu_si256((__m256i*)d, value);
+			d += 32;
+			s += 32;
+			n -= 32;
+		}
+	} else {
+		while (n >= 32) {
+			n -= 32;
+			__m256i value = _mm256_loadu_si256((const __m256i*)(s + n));
+			_mm256_storeu_si256((__m256i*)(d + n), value);
+		}
+	}
+	move_sse(d, s, n, forward);
+}
+#endif
+
 /* SPDX-SnippetEnd */
 #endif
 
@@ -119,6 +147,17 @@ void *memmove(void *dest, const void *src, size_t n)
 		uintptr_t apart = forward
 			? (uintptr_t)(srcBytes - destBytes)
 			: (uintptr_t)(destBytes - srcBytes);
+#ifndef _KERNEL_MODE
+		static int sMemmoveAvx2 = -1;
+		int useAvx2 = __atomic_load_n(&sMemmoveAvx2, __ATOMIC_RELAXED);
+		if (useAvx2 < 0) {
+			useAvx2 = (r5_x86_cpu_flags() & R5_CPU_AVX2) != 0 ? 1 : 0;
+			__atomic_store_n(&sMemmoveAvx2, useAvx2, __ATOMIC_RELAXED);
+		}
+		if (apart >= 32 && useAvx2)
+			move_avx2(destBytes, srcBytes, n, forward);
+		else
+#endif
 		if (apart >= 16)
 			move_sse(destBytes, srcBytes, n, forward);
 		else if (apart >= 8)

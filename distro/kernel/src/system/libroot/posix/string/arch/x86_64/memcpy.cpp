@@ -10,6 +10,13 @@
 #include <cstdint>
 
 #include <emmintrin.h>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#ifndef _KERNEL_MODE
+#include <immintrin.h>
+#endif
+// SPDX-SnippetEnd
 
 #include <r5_x86_cpu.h>
 
@@ -59,38 +66,35 @@ memcpy_repmovs(uint8_t* destination, const uint8_t* source, size_t length)
 }
 
 
-template<size_t N>
-inline void copy_small(uint8_t* destination, const uint8_t* source)
-{
-	struct data {
-		uint8_t x[N];
-	};
-	*reinterpret_cast<data*>(destination)
-		= *reinterpret_cast<const data*>(source);
-}
-
-
-template<size_t N>
-struct SmallGenerator {
-	constexpr static void (*sValue)(uint8_t*, const uint8_t*) = copy_small<N>;
-};
-constexpr static GenerateTable<SmallGenerator, 8> table_small;
-
-
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
 static inline void
 memcpy_small(uint8_t* destination, const uint8_t* source, size_t length)
 {
-	if (length < 8) {
-		table_small[length](destination, source);
-	} else {
-		auto to = reinterpret_cast<uint64_t*>(destination);
-		auto from = reinterpret_cast<const uint64_t*>(source);
-		*to = *from;
-		to = reinterpret_cast<uint64_t*>(destination + length - 8);
-		from = reinterpret_cast<const uint64_t*>(source + length - 8);
-		*to = *from;
+	if (length >= 8) {
+		uint64_t a, b;
+		__builtin_memcpy(&a, source, 8);
+		__builtin_memcpy(&b, source + length - 8, 8);
+		__builtin_memcpy(destination, &a, 8);
+		__builtin_memcpy(destination + length - 8, &b, 8);
+	} else if (length >= 4) {
+		uint32_t a, b;
+		__builtin_memcpy(&a, source, 4);
+		__builtin_memcpy(&b, source + length - 4, 4);
+		__builtin_memcpy(destination, &a, 4);
+		__builtin_memcpy(destination + length - 4, &b, 4);
+	} else if (length >= 2) {
+		uint16_t a, b;
+		__builtin_memcpy(&a, source, 2);
+		__builtin_memcpy(&b, source + length - 2, 2);
+		__builtin_memcpy(destination, &a, 2);
+		__builtin_memcpy(destination + length - 2, &b, 2);
+	} else if (length == 1) {
+		*destination = *source;
 	}
 }
+// SPDX-SnippetEnd
 
 
 template<size_t N>
@@ -108,13 +112,6 @@ inline void
 copy_sse<0>(__m128i* destination, const __m128i* source)
 {
 }
-
-
-template<size_t N>
-struct SSEGenerator {
-	constexpr static void (*sValue)(__m128i*, const __m128i*) = copy_sse<N>;
-};
-constexpr static GenerateTable<SSEGenerator, 4> table_sse;
 
 
 #ifndef _KERNEL_MODE
@@ -153,6 +150,102 @@ memcpy_nt(uint8_t* destination, const uint8_t* source, size_t length)
 	while (length--)
 		*destination++ = *source++;
 }
+
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+static __attribute__((target("avx2"))) void
+memcpy_nt_avx2(uint8_t* destination, const uint8_t* source, size_t length)
+{
+	while (length != 0
+		&& (reinterpret_cast<uintptr_t>(destination) & 31) != 0) {
+		*destination++ = *source++;
+		length--;
+	}
+	auto to = reinterpret_cast<__m256i*>(destination);
+	auto from = reinterpret_cast<const __m256i*>(source);
+	while (length >= 128) {
+		__m256i a = _mm256_loadu_si256(from);
+		__m256i b = _mm256_loadu_si256(from + 1);
+		__m256i c = _mm256_loadu_si256(from + 2);
+		__m256i d = _mm256_loadu_si256(from + 3);
+		_mm256_stream_si256(to, a);
+		_mm256_stream_si256(to + 1, b);
+		_mm256_stream_si256(to + 2, c);
+		_mm256_stream_si256(to + 3, d);
+		to += 4;
+		from += 4;
+		length -= 128;
+	}
+	while (length >= 32) {
+		_mm256_stream_si256(to, _mm256_loadu_si256(from));
+		to++;
+		from++;
+		length -= 32;
+	}
+	_mm_sfence();
+	destination = reinterpret_cast<uint8_t*>(to);
+	source = reinterpret_cast<const uint8_t*>(from);
+	if (length >= 16) {
+		__m128i a = _mm_loadu_si128(reinterpret_cast<const __m128i*>(source));
+		__m128i b = _mm_loadu_si128(
+			reinterpret_cast<const __m128i*>(source + length - 16));
+		_mm_storeu_si128(reinterpret_cast<__m128i*>(destination), a);
+		_mm_storeu_si128(
+			reinterpret_cast<__m128i*>(destination + length - 16), b);
+	} else if (length > 0) {
+		memcpy_small(destination, source, length);
+	}
+}
+
+
+static __attribute__((target("avx2"))) void
+memcpy_avx2_core(uint8_t* destination, const uint8_t* source, size_t length)
+{
+	if (length <= 32) {
+		__m128i a = _mm_loadu_si128(reinterpret_cast<const __m128i*>(source));
+		__m128i b = _mm_loadu_si128(
+			reinterpret_cast<const __m128i*>(source + length - 16));
+		_mm_storeu_si128(reinterpret_cast<__m128i*>(destination), a);
+		_mm_storeu_si128(
+			reinterpret_cast<__m128i*>(destination + length - 16), b);
+		return;
+	}
+	if (length <= 64) {
+		__m256i a = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(source));
+		__m256i b = _mm256_loadu_si256(
+			reinterpret_cast<const __m256i*>(source + length - 32));
+		_mm256_storeu_si256(reinterpret_cast<__m256i*>(destination), a);
+		_mm256_storeu_si256(
+			reinterpret_cast<__m256i*>(destination + length - 32), b);
+		return;
+	}
+	auto to = reinterpret_cast<__m256i*>(destination);
+	auto from = reinterpret_cast<const __m256i*>(source);
+	auto toEnd = reinterpret_cast<__m256i*>(destination + length - 32);
+	auto fromEnd = reinterpret_cast<const __m256i*>(source + length - 32);
+	while (length >= 128) {
+		__m256i a = _mm256_loadu_si256(from);
+		__m256i b = _mm256_loadu_si256(from + 1);
+		__m256i c = _mm256_loadu_si256(from + 2);
+		__m256i d = _mm256_loadu_si256(from + 3);
+		_mm256_storeu_si256(to, a);
+		_mm256_storeu_si256(to + 1, b);
+		_mm256_storeu_si256(to + 2, c);
+		_mm256_storeu_si256(to + 3, d);
+		to += 4;
+		from += 4;
+		length -= 128;
+	}
+	while (length >= 32) {
+		_mm256_storeu_si256(to++, _mm256_loadu_si256(from++));
+		length -= 32;
+	}
+	if (length)
+		_mm256_storeu_si256(toEnd, _mm256_loadu_si256(fromEnd));
+}
+// SPDX-SnippetEnd
 #endif
 
 
@@ -169,9 +262,9 @@ memcpy_sse(uint8_t* destination, const uint8_t* source, size_t length)
 		from += 4;
 		length -= 64;
 	}
-	if (length >= 16) {
-		table_sse[length / 16](to, from);
-		length %= 16;
+	while (length >= 16) {
+		copy_sse<1>(to++, from++);
+		length -= 16;
 	}
 	if (length) {
 		copy_sse<1>(toEnd, fromEnd);
@@ -182,11 +275,15 @@ memcpy_sse(uint8_t* destination, const uint8_t* source, size_t length)
 } // namespace
 
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
 using MemcpyBulk = void (*)(uint8_t*, const uint8_t*, size_t);
 
 static MemcpyBulk sMemcpyBulk = memcpy_sse;
 static size_t sMemcpyStreaming;
 static size_t sMemcpyRepFrom = 2048;
+static int sMemcpyUseAvx2;
 static int sMemcpyChosen;
 
 
@@ -200,62 +297,56 @@ memcpy(void* destination, const void* source, size_t length)
 		return destination;
 	}
 
-// SPDX-SnippetBegin
-// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
-// SPDX-License-Identifier: MIT
 	MemcpyBulk bulk;
 	size_t streaming;
 	size_t repFrom;
+	int useAvx2;
 	if (__atomic_load_n(&sMemcpyChosen, __ATOMIC_ACQUIRE) == 0) {
 		uint32_t flags = r5_x86_cpu_flags();
 		streaming = (size_t)r5_x86_cpu_llc() / 4 * 3;
 		bulk = (flags & R5_CPU_ERMS) != 0 ? memcpy_repmovs : memcpy_sse;
 		repFrom = ((flags & R5_CPU_ERMS) != 0 && (flags & R5_CPU_FSRM) != 0)
 			? 128 : 2048;
+		useAvx2 = (flags & R5_CPU_AVX2) != 0 ? 1 : 0;
 		__atomic_store_n(&sMemcpyStreaming, streaming, __ATOMIC_RELAXED);
 		__atomic_store_n(&sMemcpyRepFrom, repFrom, __ATOMIC_RELAXED);
+		__atomic_store_n(&sMemcpyUseAvx2, useAvx2, __ATOMIC_RELAXED);
 		__atomic_store_n(&sMemcpyBulk, bulk, __ATOMIC_RELAXED);
 		__atomic_store_n(&sMemcpyChosen, 1, __ATOMIC_RELEASE);
 	} else {
 		streaming = __atomic_load_n(&sMemcpyStreaming, __ATOMIC_RELAXED);
 		repFrom = __atomic_load_n(&sMemcpyRepFrom, __ATOMIC_RELAXED);
+		useAvx2 = __atomic_load_n(&sMemcpyUseAvx2, __ATOMIC_RELAXED);
 		bulk = __atomic_load_n(&sMemcpyBulk, __ATOMIC_RELAXED);
 	}
 
 #ifndef _KERNEL_MODE
 	if (length >= streaming) {
-		memcpy_nt(to, from, length);
+		if (useAvx2)
+			memcpy_nt_avx2(to, from, length);
+		else
+			memcpy_nt(to, from, length);
 		return destination;
 	}
 #endif
 
-	// FSRM makes a short rep movsb fast. Without it the old cut stays.
-	if (bulk != memcpy_repmovs || length < repFrom) {
-		memcpy_sse(to, from, length);
-		return destination;
-	}
-// SPDX-SnippetEnd
-
-	// rep movsb slows down about 14 times when the destination is less than
-	// 16 bytes from the source, modulo the page size (4K aliasing; a
-	// Threadripper 1950X copies at 2.4 instead of 34 GB/s). The SSE loop
-	// keeps its speed there.
 	uintptr_t distance = (reinterpret_cast<uintptr_t>(to)
 		- reinterpret_cast<uintptr_t>(from)) & (kPageSize - 1);
-// SPDX-SnippetBegin
-// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
-// SPDX-License-Identifier: MIT
-	// On Zen 3 (Ryzen 5 5625U) the slow window reaches 31 bytes: 16 KiB at a
-	// distance of 16 to 31 copied at 3.6-3.8 GB/s with rep movsb, against
-	// 54 GB/s with the SSE loop; from 32 on rep movsb is fast again.
 	static const uintptr_t kAliasWindow = 32;
-	if (distance != 0 && (distance < kAliasWindow
-			|| distance > kPageSize - 16)) {
-// SPDX-SnippetEnd
-		memcpy_sse(to, from, length);
+	bool aliased = distance != 0
+		&& (distance < kAliasWindow || distance > kPageSize - 16);
+
+	if (bulk != memcpy_repmovs || length < repFrom || aliased) {
+#ifndef _KERNEL_MODE
+		if (useAvx2)
+			memcpy_avx2_core(to, from, length);
+		else
+#endif
+			memcpy_sse(to, from, length);
 		return destination;
 	}
 
-	bulk(to, from, length);
+	memcpy_repmovs(to, from, length);
 	return destination;
 }
+// SPDX-SnippetEnd

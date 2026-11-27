@@ -75,6 +75,19 @@ struct gpu_defer_overflow {
 };
 static gpu_defer_overflow* sDeferOverflow = NULL;
 static r5_file_tree* sDeferTrees = NULL;
+static bool sVmFlushPending = false;
+static void gpu_va_mark_dirty(r5_vm* vm);
+
+struct gpu_fence_waiter {
+	ConditionVariable		cv;
+	volatile uint64*		value;
+	uint64					target;
+	gpu_client*				client;
+	gpu_fence_waiter*		next;
+};
+static gpu_fence_waiter* sFenceWaiters = NULL;
+static int32 sEopWaiters = 0;
+static void gpu_wake_fence_waiters(uint64 seen);
 
 gpu_bo sBo[kMaxBo];
 gpu_backing sBacking[kMaxBo];
@@ -588,6 +601,7 @@ gpu_lost(void* info, const char* why)
 	(void)info;
 	for (uint32 i = 0; i < kMaxJob; i++)
 		sJobs[i].live = false;
+	gpu_wake_fence_waiters(gpu_hw_seen());
 	sEop.NotifyAll();
 	gpu_hw_dump(why);
 }
@@ -823,12 +837,17 @@ gpu_bo_unmap(gpu_bo* bo)
 		r5_vm* vm = range->vm != NULL ? range->vm : gpu_hw_shared();
 		for (uint64 page = 0; page < range->bytes; page += 4096)
 			gpu_hw_map(vm, range->va + page, 0);
+		if (range->bytes != 0) {
+			gpu_va_mark_dirty(vm);
+			any = true;
+		}
 		range->live = false;
 		range->vm = NULL;
-		any = true;
 	}
-	if (any)
-		gpu_hw_flush();
+	if (any) {
+		if (gpu_hw_flush())
+			sVmFlushPending = false;
+	}
 }
 
 
@@ -1106,11 +1125,27 @@ gpu_bo_fill(gpu_client* client, gpu_bo* bo, r5_gpu_bo* request, uint64 bytes)
 				return gpu_refuse_vram_full(bytes, in.flags);
 			}
 		}
-		if (gR5GpuOps.vram_alloc == NULL)
-			return gpu_refuse("BO_CREATE", "vram", B_NOT_SUPPORTED, 0, in.domain,
-				bytes, 0, 0, 0, in.flags);
-		if (gR5GpuOps.vram_alloc(bytes, &offset) != B_OK)
-			return gpu_refuse_vram_full(bytes, in.flags);
+		if (gR5GpuOps.vram_alloc_raw != NULL) {
+			uint8* cpu = NULL;
+			if (gR5GpuOps.vram_alloc_raw(bytes, &offset, &cpu) != B_OK)
+				return gpu_refuse_vram_full(bytes, in.flags);
+			if (cpu != NULL) {
+				/* Keep bo slot reserved (live=true, owner=NULL) while
+				 * zeroing WC VRAM outside sGpuLock. */
+				bo->live = true;
+				gpu_unlock();
+				memset(cpu, 0, (size_t)bytes);
+				gpu_lock();
+				gpu_wait_reset();
+				bo->live = false;
+			}
+		} else {
+			if (gR5GpuOps.vram_alloc == NULL)
+				return gpu_refuse("BO_CREATE", "vram", B_NOT_SUPPORTED, 0,
+					in.domain, bytes, 0, 0, 0, in.flags);
+			if (gR5GpuOps.vram_alloc(bytes, &offset) != B_OK)
+				return gpu_refuse_vram_full(bytes, in.flags);
+		}
 		bo->backing->vramOffset = offset;
 	} else {
 		// Review of the VRAM fallback (16 Nov 2026): GTT is locked RAM
@@ -1262,9 +1297,11 @@ gpu_wait_reset()
 	while (sResetting) {
 		ConditionVariableEntry entry;
 		sEop.Add(&entry);
+		sEopWaiters++;
 		gpu_unlock();
 		entry.Wait(B_RELATIVE_TIMEOUT, 100000);
 		gpu_lock();
+		sEopWaiters--;
 	}
 }
 
@@ -1354,6 +1391,7 @@ gpu_hang_run(uint32 actions)
 			sResetting = false;
 			dprintf("radeon_hd: gpu off until reboot: %s\n",
 				r5_hang_why(sHang.why));
+			gpu_wake_fence_waiters(gpu_hw_seen());
 			sEop.NotifyAll();
 		} else if ((actions & R5_HANG_ACT_REOPEN) != 0) {
 			/* Owners stay, so a lost file that frees its tree later
@@ -1365,6 +1403,7 @@ gpu_hang_run(uint32 actions)
 			sGuilty = NULL;
 			sLost = false;
 			sResetting = false;
+			gpu_wake_fence_waiters(gpu_hw_seen());
 			sEop.NotifyAll();
 		}
 		actions = next;
@@ -1499,8 +1538,11 @@ gpu_va_clear(r5_vm* vm, uint64 va, uint64 bytes)
 		vm = gpu_hw_shared();
 	for (uint64 page = 0; page < bytes; page += 4096)
 		gpu_hw_map(vm, va + page, 0);
-	if (bytes != 0)
-		gpu_hw_flush();
+	if (bytes != 0) {
+		gpu_va_mark_dirty(vm);
+		if (gpu_hw_flush())
+			sVmFlushPending = false;
+	}
 }
 
 
@@ -1642,6 +1684,31 @@ gpu_prt_add(r5_vm* vm, uint64 va, uint64 bytes)
 }
 
 
+static void
+gpu_va_mark_dirty(r5_vm* vm)
+{
+	if (vm != NULL && vm != gpu_hw_shared()) {
+		r5_file_tree* tree = gpu_tree_of(vm);
+		if (tree != NULL)
+			tree->tlbSeq++;
+	} else {
+		sVmFlushPending = true;
+	}
+}
+
+
+static bool
+gpu_va_flush_pending()
+{
+	if (!sVmFlushPending)
+		return true;
+	if (!gpu_hw_flush())
+		return false;
+	sVmFlushPending = false;
+	return true;
+}
+
+
 static status_t
 gpu_va_write_prt(r5_vm* vm, uint64 va, uint64 bytes)
 {
@@ -1659,10 +1726,7 @@ gpu_va_write_prt(r5_vm* vm, uint64 va, uint64 bytes)
 	}
 	if (gR5GpuOps.vm_flush == NULL)
 		return B_NOT_SUPPORTED;
-	if (!gpu_hw_flush()) {
-		gpu_va_clear(vm, va, bytes);
-		return B_ERROR;
-	}
+	gpu_va_mark_dirty(vm);
 	return B_OK;
 }
 
@@ -1854,11 +1918,7 @@ gpu_va_map_copied(gpu_client* client, const r5_gpu_va* copied)
 		return gpu_refuse("VA_MAP", "flush", B_NOT_SUPPORTED, in.handle,
 			bo->backing->domain, bo->backing->bytes, in.gpu_va, in.bo_offset, in.map_bytes,
 			in.flags);
-	if (!gpu_hw_flush()) {
-		gpu_va_clear(gpu_vm(client), in.gpu_va, in.map_bytes);
-		return gpu_refuse("VA_MAP", "flush", B_ERROR, in.handle, bo->backing->domain,
-			bo->backing->bytes, in.gpu_va, in.bo_offset, in.map_bytes, in.flags);
-	}
+	gpu_va_mark_dirty(gpu_vm(client));
 	bo->ranges[slot].live = true;
 	bo->ranges[slot].va = in.gpu_va;
 	bo->ranges[slot].offset = in.bo_offset;
@@ -1960,9 +2020,12 @@ gpu_va_unmap(gpu_client* client, void* buffer, size_t length)
 					bo->backing->domain, bo->backing->bytes, range->va + page, in.bo_offset,
 					in.map_bytes, in.flags);
 		}
+		gpu_va_mark_dirty(vm);
 		if (!gpu_hw_flush())
-			return gpu_refuse("VA_UNMAP", "flush", B_ERROR, in.handle, bo->backing->domain,
-				bo->backing->bytes, in.gpu_va, in.bo_offset, in.map_bytes, in.flags);
+			return gpu_refuse("VA_UNMAP", "flush", B_ERROR, in.handle,
+				bo->backing->domain, bo->backing->bytes, in.gpu_va,
+				in.bo_offset, in.map_bytes, in.flags);
+		sVmFlushPending = false;
 		range->live = false;
 		range->vm = NULL;
 		return B_OK;
@@ -2015,9 +2078,11 @@ void r5_gfx9_ih_counts(uint32* msi, uint32* early, uint32* eop);
 
 
 static status_t
-gpu_wait_room(void* info, uint32 dwords)
+gpu_wait_room(void* info, uint32 dwords, bool* droppedLock)
 {
 	(void)info;
+	if (droppedLock != NULL)
+		*droppedLock = false;
 	if (gR5GpuOps.user_room == NULL)
 		return B_NOT_SUPPORTED;
 	if (sLost)
@@ -2030,12 +2095,18 @@ gpu_wait_room(void* info, uint32 dwords)
 	while (!gR5GpuOps.user_room(dwords)) {
 		ConditionVariableEntry entry;
 		sEop.Add(&entry);
+		sEopWaiters++;
 		bigtime_t now = system_time();
-		if (gR5GpuOps.user_room(dwords))
+		if (gR5GpuOps.user_room(dwords)) {
+			sEopWaiters--;
 			return B_OK;
-		if (sLost)
+		}
+		if (sLost) {
+			sEopWaiters--;
 			return ECANCELED;
+		}
 		if (now >= deadline) {
+			sEopWaiters--;
 			/* The writeback can sit still while the MMIO read pointer
 			 * moves. The room line tells those apart. The wait lines
 			 * are once a boot: the packet the PFP is polling, and the
@@ -2054,9 +2125,12 @@ gpu_wait_room(void* info, uint32 dwords)
 			}
 			return B_BUSY;
 		}
+		if (droppedLock != NULL)
+			*droppedLock = true;
 		gpu_unlock();
 		entry.Wait(B_RELATIVE_TIMEOUT, deadline - now);
 		gpu_lock();
+		sEopWaiters--;
 		gpu_wait_reset();
 	}
 	return B_OK;
@@ -2130,7 +2204,7 @@ gpu_flush_lines(void* cpu, uint64 bytes)
 static uint8*
 gpu_ib_pointer(gpu_client* client, uint64 va, uint64 bytes)
 {
-	for (uint32 n = 0; n < kMaxList; n++) {
+	for (uint32 n = 0; n < kMaxIbCache; n++) {
 		struct gpu_ib_cpu* known = &client->ibCpu[n];
 		if (!known->valid || known->va != va || known->bytes != bytes)
 			continue;
@@ -2164,12 +2238,16 @@ gpu_ib_pointer(gpu_client* client, uint64 va, uint64 bytes)
 				continue;
 			uint8* cpu = (uint8*)bo->backing->kernel + range->offset
 				+ (va - range->va);
-			struct gpu_ib_cpu* slot = &client->ibCpu[0];
-			for (uint32 n = 0; n < kMaxList; n++) {
+			struct gpu_ib_cpu* slot = NULL;
+			for (uint32 n = 0; n < kMaxIbCache; n++) {
 				if (!client->ibCpu[n].valid) {
 					slot = &client->ibCpu[n];
 					break;
 				}
+			}
+			if (slot == NULL) {
+				slot = &client->ibCpu[client->ibCpuNext % kMaxIbCache];
+				client->ibCpuNext = (client->ibCpuNext + 1u) % kMaxIbCache;
 			}
 			slot->valid = true;
 			slot->va = va;
@@ -2281,12 +2359,16 @@ gpu_submit(gpu_client* client, void* buffer, size_t length)
 					in.ib_count, 0, waits[i].handle, in.ring, waits[i].flags);
 			ConditionVariableEntry entry;
 			sEop.Add(&entry);
-			if (gpu_wait_ready(sync, &waits[i]))
+			sEopWaiters++;
+			if (gpu_wait_ready(sync, &waits[i])) {
+				sEopWaiters--;
 				break;
+			}
 			gpu_unlock();
 			status_t waited = entry.Wait(
 				B_CAN_INTERRUPT | B_RELATIVE_TIMEOUT, deadline - now);
 			gpu_lock();
+			sEopWaiters--;
 			gpu_wait_reset();
 			status = gpu_ibs_mapped(client, ibs, in.ib_count, in.ring);
 			if (status != B_OK)
@@ -2319,7 +2401,8 @@ gpu_submit(gpu_client* client, void* buffer, size_t length)
 	 * count includes one VM flush that touch() will make due. */
 	uint32 dwords = gR5GpuOps.commit_dwords(in.ib_count,
 		client->tree != NULL ? 1 : 0, client->pasid);
-	status = gpu_wait_room(client->info, dwords);
+	bool roomDroppedLock = false;
+	status = gpu_wait_room(client->info, dwords, &roomDroppedLock);
 	if (status != B_OK)
 		return gpu_refuse("CS_SUBMIT", "room", status, in.context, 0, in.ib_count,
 			ibs[0].gpu_va, 0, in.ring, 0);
@@ -2328,9 +2411,14 @@ gpu_submit(gpu_client* client, void* buffer, size_t length)
 	if (gpu_gone(client) || sResetting)
 		return gpu_refuse("CS_SUBMIT", "lost", ECANCELED, in.context, 0,
 			in.ib_count, 0, 0, in.ring, 0);
-	status = gpu_ibs_mapped(client, ibs, in.ib_count, in.ring);
-	if (status != B_OK)
-		return status;
+	if (roomDroppedLock) {
+		status = gpu_ibs_mapped(client, ibs, in.ib_count, in.ring);
+		if (status != B_OK)
+			return status;
+	}
+	if (client->tree == NULL && !gpu_va_flush_pending())
+		return gpu_refuse("CS_SUBMIT", "flush", B_ERROR, in.context, 0,
+			in.ib_count, ibs[0].gpu_va, 0, in.ring, 0);
 	/* A GTT indirect buffer is MTYPE_NC and snooped. The PTE flags stay
 	 * as they are. The lines of the remembered buffer are flushed, then
 	 * one chained buffer found in it, then one fence, before the
@@ -2398,7 +2486,7 @@ gpu_submit(gpu_client* client, void* buffer, size_t length)
 	if (client->tree != NULL) {
 		int flush = 0;
 		uint32 fileVmid = r5_vmid_reserve(&sFileVmids, client->tree->owner,
-			gpu_hw_seen(), client->tree->vm.used, &flush);
+			gpu_hw_seen(), client->tree->tlbSeq, &flush);
 		if (fileVmid == 0)
 			return gpu_refuse("CS_SUBMIT", "vmid", B_BUSY, in.context, 0,
 				in.ib_count, 0, 0, in.ring, 0);
@@ -2673,14 +2761,92 @@ gpu_sync_wait_list(gpu_client* client, void* buffer, size_t length)
 			return B_TIMED_OUT;
 		ConditionVariableEntry entry;
 		sEop.Add(&entry);
+		sEopWaiters++;
 		gpu_unlock();
 		status_t waited = entry.Wait(B_CAN_INTERRUPT | B_RELATIVE_TIMEOUT,
 			deadline - now);
 		gpu_lock();
+		sEopWaiters--;
 		gpu_wait_reset();
 		if (waited == B_INTERRUPTED || waited == B_WOULD_BLOCK)
 			return waited;
 	}
+}
+
+
+static status_t
+gpu_sync_batch(gpu_client* client, void* buffer, size_t length)
+{
+	r5_gpu_syncobj_batch in;
+	status_t status = gpu_copy_in(buffer, length, &in, sizeof(in));
+	if (status != B_OK)
+		return status;
+	if (in.count == 0 || in.count > kMaxSync || in.handles == 0)
+		return B_BAD_VALUE;
+	uint32 handles[kMaxSync];
+	uint64 points[kMaxSync];
+	status = gpu_copy_user(handles, in.handles, sizeof(uint32) * in.count);
+	if (status != B_OK)
+		return status;
+	bool needPoints = (in.op == R5_GPU_SYNCOBJ_OP_QUERY)
+		|| (in.op == R5_GPU_SYNCOBJ_OP_SIGNAL
+			&& (in.flags & R5_GPU_SYNCOBJ_BINARY) == 0);
+	if (needPoints) {
+		if (in.points == 0)
+			return B_BAD_VALUE;
+		if (in.op == R5_GPU_SYNCOBJ_OP_SIGNAL) {
+			status = gpu_copy_user(points, in.points, sizeof(uint64) * in.count);
+			if (status != B_OK)
+				return status;
+		}
+	}
+	gpu_sync* syncs[kMaxSync];
+	for (uint32 i = 0; i < in.count; i++) {
+		syncs[i] = gpu_sync_get(client, handles[i]);
+		if (syncs[i] == NULL)
+			return B_BAD_VALUE;
+	}
+	if (in.op == R5_GPU_SYNCOBJ_OP_RESET) {
+		for (uint32 i = 0; i < in.count; i++) {
+			syncs[i]->point = 0;
+			syncs[i]->submitted = 0;
+		}
+		return B_OK;
+	}
+	if (in.op == R5_GPU_SYNCOBJ_OP_SIGNAL) {
+		bool binary = (in.flags & R5_GPU_SYNCOBJ_BINARY) != 0;
+		for (uint32 i = 0; i < in.count; i++) {
+			if (binary) {
+				uint64 stamp = syncs[i]->submitted;
+				if (syncs[i]->point > stamp)
+					stamp = syncs[i]->point;
+				uint64 high = sHighestSequence == 0 ? 1 : sHighestSequence;
+				if (high > stamp)
+					stamp = high;
+				syncs[i]->submitted = stamp;
+				syncs[i]->point = stamp;
+			} else {
+				if (points[i] > syncs[i]->submitted)
+					syncs[i]->submitted = points[i];
+				if (points[i] > syncs[i]->point)
+					syncs[i]->point = points[i];
+			}
+		}
+		for (gpu_fence_waiter* w = sFenceWaiters; w != NULL; w = w->next) {
+			if (w->value != NULL && *w->value >= w->target)
+				w->cv.NotifyOne();
+		}
+		if (sEopWaiters > 0)
+			sEop.NotifyAll();
+		return B_OK;
+	}
+	if (in.op == R5_GPU_SYNCOBJ_OP_QUERY) {
+		for (uint32 i = 0; i < in.count; i++)
+			points[i] = syncs[i]->point;
+		return user_memcpy((void*)(addr_t)in.points, points,
+			sizeof(uint64) * in.count);
+	}
+	return B_BAD_VALUE;
 }
 
 
@@ -2691,7 +2857,12 @@ gpu_sync_set(gpu_sync* sync, uint64 point)
 		sync->submitted = point;
 	if (point > sync->point)
 		sync->point = point;
-	sEop.NotifyAll();
+	for (gpu_fence_waiter* w = sFenceWaiters; w != NULL; w = w->next) {
+		if (w->value == &sync->point && sync->point >= w->target)
+			w->cv.NotifyOne();
+	}
+	if (sEopWaiters > 0)
+		sEop.NotifyAll();
 }
 
 
@@ -2735,7 +2906,12 @@ gpu_sync_host(gpu_sync* sync)
 		stamp = high;
 	sync->submitted = stamp;
 	sync->point = stamp;
-	sEop.NotifyAll();
+	for (gpu_fence_waiter* w = sFenceWaiters; w != NULL; w = w->next) {
+		if (w->value == &sync->point && sync->point >= w->target)
+			w->cv.NotifyOne();
+	}
+	if (sEopWaiters > 0)
+		sEop.NotifyAll();
 }
 
 
@@ -3526,6 +3702,7 @@ gpu_control(void* cookie, uint32 op, void* buffer, size_t length)
 			dprintf("radeon_hd: r1 skip vmid\n");
 			status = B_NO_INIT;
 		} else {
+			gpu_va_flush_pending();
 			gR5GpuOps.stage_r1(client->info, in.which, in.x, in.y,
 				&in.old_word, &in.new_word);
 			status = sLost ? ECANCELED : B_OK;
@@ -3543,8 +3720,10 @@ gpu_control(void* cookie, uint32 op, void* buffer, size_t length)
 		else
 			if (gR5GpuOps.stage_u == NULL)
 				status = B_NOT_SUPPORTED;
-			else
+			else {
+				gpu_va_flush_pending();
 				status = gR5GpuOps.stage_u(client->info);
+			}
 	} else if (op == R5_GPU_VA_CLEAR)
 		status = gpu_va_replace(client, buffer, length, true);
 	else if (op == R5_GPU_CS_SUBMIT)
@@ -3563,6 +3742,8 @@ gpu_control(void* cookie, uint32 op, void* buffer, size_t length)
 		status = gpu_sync_signal(client, buffer, length);
 	else if (op == R5_GPU_SYNCOBJ_TRANSFER)
 		status = gpu_sync_transfer(client, buffer, length);
+	else if (op == R5_GPU_SYNCOBJ_BATCH)
+		status = gpu_sync_batch(client, buffer, length);
 	else if (op == R5_GPU_SYNCOBJ_RESET || op == R5_GPU_SYNCOBJ_QUERY) {
 		r5_gpu_syncobj in;
 		status = gpu_copy_in(buffer, length, &in, sizeof(in));
@@ -3600,6 +3781,21 @@ static const uint32 kRegionNoPrivateMap = 0;
 
 
 static void
+gpu_wake_fence_waiters(uint64 seen)
+{
+	for (gpu_fence_waiter* w = sFenceWaiters; w != NULL; w = w->next) {
+		bool wake = sLost || (w->client != NULL && w->client->lost);
+		if (!wake) {
+			uint64 cur = w->value == NULL ? seen : *w->value;
+			wake = cur >= w->target;
+		}
+		if (wake)
+			w->cv.NotifyOne();
+	}
+}
+
+
+static void
 r5_gpu_eop()
 {
 	if (!sReady)
@@ -3616,7 +3812,9 @@ r5_gpu_eop()
 		}
 		job->live = false;
 	}
-	sEop.NotifyAll();
+	gpu_wake_fence_waiters(seen);
+	if (sEopWaiters > 0)
+		sEop.NotifyAll();
 }
 
 
@@ -3644,25 +3842,48 @@ gpu_wait_value(gpu_client* client, volatile uint64* value, uint64 target,
 		return ECANCELED;
 	if (step == R5_WAIT_POLL)
 		return B_TIMED_OUT;
+	gpu_fence_waiter waiter;
+	waiter.cv.Init(&waiter, "r5 gpu fence");
+	waiter.value = value;
+	waiter.target = target;
+	waiter.client = client;
+	waiter.next = sFenceWaiters;
+	sFenceWaiters = &waiter;
 	bigtime_t deadline = system_time() + (bigtime_t)timeoutUs;
+	status_t result = B_OK;
 	while (true) {
 		ConditionVariableEntry entry;
-		sEop.Add(&entry);
+		waiter.cv.Add(&entry);
 		bigtime_t now = system_time();
 		step = r5_wait_step(gpu_counter(value), target, timeoutUs,
 			now >= deadline);
-		if (step == R5_WAIT_DONE)
-			return B_OK;
-		if (gpu_gone(client))
-			return ECANCELED;
-		if (step == R5_WAIT_TIMEOUT)
-			return B_TIMED_OUT;
+		if (step == R5_WAIT_DONE) {
+			result = B_OK;
+			break;
+		}
+		if (gpu_gone(client)) {
+			result = ECANCELED;
+			break;
+		}
+		if (step == R5_WAIT_TIMEOUT) {
+			result = B_TIMED_OUT;
+			break;
+		}
 		bigtime_t left = deadline - now;
 		gpu_unlock();
 		entry.Wait(B_RELATIVE_TIMEOUT, left);
 		gpu_lock();
 		gpu_wait_reset();
 	}
+	gpu_fence_waiter** link = &sFenceWaiters;
+	while (*link != NULL) {
+		if (*link == &waiter) {
+			*link = waiter.next;
+			break;
+		}
+		link = &(*link)->next;
+	}
+	return result;
 }
 
 

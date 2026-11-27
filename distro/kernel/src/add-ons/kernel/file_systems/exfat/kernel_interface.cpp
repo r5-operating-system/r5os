@@ -287,7 +287,8 @@ exfat_get_vnode(fs_volume* _volume, ino_t id, fs_vnode* _node, int* _type,
 static status_t
 exfat_put_vnode(fs_volume* _volume, fs_vnode* _node, bool reenter)
 {
-	delete (Inode*)_node->private_node;
+	Inode* inode = (Inode*)_node->private_node;
+	delete inode;
 	return B_OK;
 }
 

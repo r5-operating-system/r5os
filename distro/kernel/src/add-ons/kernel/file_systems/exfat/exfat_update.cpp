@@ -44,6 +44,7 @@ struct work {
 	exfat_store*	store;
 	exfat_disk*		disk;
 	uint8*			block;
+	uint8			inline_block[4096];
 };
 
 static uint32
@@ -106,6 +107,10 @@ work_open(exfat_store* store, exfat_disk* disk, work* out)
 {
 	out->store = store;
 	out->disk = disk;
+	if (disk->block_size <= sizeof(out->inline_block)) {
+		out->block = out->inline_block;
+		return B_OK;
+	}
 	out->block = (uint8*)malloc(disk->block_size);
 	if (out->block == NULL)
 		return B_NO_MEMORY;
@@ -115,7 +120,8 @@ work_open(exfat_store* store, exfat_disk* disk, work* out)
 static void
 work_close(work* job)
 {
-	free(job->block);
+	if (job->block != job->inline_block)
+		free(job->block);
 	job->block = NULL;
 }
 
@@ -1627,36 +1633,51 @@ link_new_clusters(work* job, exfat_node* node, uint32 extra)
 		}
 		if (status != B_ENTRY_NOT_FOUND)
 			return status;
-		uint32* fresh = (uint32*)malloc(extra * sizeof(uint32));
-		if (fresh == NULL)
-			return B_NO_MEMORY;
-		for (uint32 index = 0; index < extra; index++) {
-			status = alloc_one(job, &fresh[index]);
+		uint32 chunk[256];
+		uint32 allocated = 0;
+		uint32 firstCluster = 0;
+		uint32 prevCluster = 0;
+		while (allocated < extra) {
+			uint32 batch = extra - allocated;
+			if (batch > 256)
+				batch = 256;
+			uint32 got = 0;
+			for (; got < batch; got++) {
+				status = alloc_one(job, &chunk[got]);
+				if (status != B_OK)
+					break;
+			}
+			if (status == B_OK) {
+				if (allocated == 0)
+					firstCluster = chunk[0];
+				else
+					status = fat_set(job, prevCluster, chunk[0]);
+				for (uint32 index = 0; status == B_OK && index + 1 < batch; index++)
+					status = fat_set(job, chunk[index], chunk[index + 1]);
+				if (status == B_OK && allocated + batch == extra)
+					status = fat_set(job, chunk[batch - 1], kClusterEnd);
+			}
 			if (status != B_OK) {
-				for (uint32 undo = 0; undo < index; undo++)
-					bitmap_give(job, fresh[undo], 1);
-				free(fresh);
+				for (uint32 undo = 0; undo < got; undo++)
+					bitmap_give(job, chunk[undo], 1);
+				if (allocated > 0) {
+					uint32 cur = firstCluster;
+					for (uint32 u = 0; u < allocated && cur >= 2; u++) {
+						uint32 nxt = 0;
+						fat_get(job, cur, &nxt);
+						bitmap_give(job, cur, 1);
+						cur = nxt;
+					}
+				}
 				return status;
 			}
-		}
-		for (uint32 index = 0; index + 1 < extra; index++) {
-			status = fat_set(job, fresh[index], fresh[index + 1]);
-			if (status != B_OK)
-				break;
-		}
-		if (status == B_OK)
-			status = fat_set(job, fresh[extra - 1], kClusterEnd);
-		if (status != B_OK) {
-			for (uint32 index = 0; index < extra; index++)
-				bitmap_give(job, fresh[index], 1);
-			free(fresh);
-			return status;
+			prevCluster = chunk[batch - 1];
+			allocated += batch;
 		}
 		node->flags = kFlagAlloc;
-		node->first_cluster = fresh[0];
-		node->last_cluster = fresh[extra - 1];
+		node->first_cluster = firstCluster;
+		node->last_cluster = prevCluster;
 		node->last_index = extra - 1;
-		free(fresh);
 		return B_OK;
 	}
 	uint32 last = node->first_cluster;
@@ -1690,18 +1711,6 @@ link_new_clusters(work* job, exfat_node* node, uint32 extra)
 		node->last_index = oldCount + extra - 1;
 		return B_OK;
 	}
-	uint32* fresh = (uint32*)malloc(extra * sizeof(uint32));
-	if (fresh == NULL)
-		return B_NO_MEMORY;
-	for (uint32 index = 0; index < extra; index++) {
-		status_t status = alloc_one(job, &fresh[index]);
-		if (status != B_OK) {
-			for (uint32 undo = 0; undo < index; undo++)
-				bitmap_give(job, fresh[undo], 1);
-			free(fresh);
-			return status;
-		}
-	}
 	status_t status = B_OK;
 	bool wasContiguous = (node->flags & kFlagNoFat) != 0;
 	if (wasContiguous) {
@@ -1709,28 +1718,54 @@ link_new_clusters(work* job, exfat_node* node, uint32 extra)
 			status = fat_set(job, node->first_cluster + index,
 				node->first_cluster + index + 1);
 			if (status != B_OK)
+				return status;
+		}
+		node->flags = kFlagAlloc;
+	}
+	uint32 chunk[256];
+	uint32 allocated = 0;
+	uint32 firstNew = 0;
+	uint32 prevCluster = last;
+	while (allocated < extra) {
+		uint32 batch = extra - allocated;
+		if (batch > 256)
+			batch = 256;
+		uint32 got = 0;
+		for (; got < batch; got++) {
+			status = alloc_one(job, &chunk[got]);
+			if (status != B_OK)
 				break;
 		}
-		if (status == B_OK && oldCount > 0)
-			status = fat_set(job, last, fresh[0]);
-		node->flags = kFlagAlloc;
-	} else
-		status = fat_set(job, last, fresh[0]);
-	for (uint32 index = 0; status == B_OK && index < extra - 1; index++)
-		status = fat_set(job, fresh[index], fresh[index + 1]);
-	if (status == B_OK)
-		status = fat_set(job, fresh[extra - 1], kClusterEnd);
-	if (status != B_OK) {
-		if (!wasContiguous)
+		if (status == B_OK) {
+			if (allocated == 0)
+				firstNew = chunk[0];
+			status = fat_set(job, prevCluster, chunk[0]);
+			for (uint32 index = 0; status == B_OK && index + 1 < batch; index++)
+				status = fat_set(job, chunk[index], chunk[index + 1]);
+			if (status == B_OK && allocated + batch == extra)
+				status = fat_set(job, chunk[batch - 1], kClusterEnd);
+		}
+		if (status != B_OK) {
+			for (uint32 undo = 0; undo < got; undo++)
+				bitmap_give(job, chunk[undo], 1);
+			if (allocated > 0) {
+				uint32 cur = firstNew;
+				for (uint32 u = 0; u < allocated && cur >= 2; u++) {
+					uint32 nxt = 0;
+					fat_get(job, cur, &nxt);
+					bitmap_give(job, cur, 1);
+					cur = nxt;
+				}
+			}
 			fat_set(job, last, kClusterEnd);
-		for (uint32 index = 0; index < extra; index++)
-			bitmap_give(job, fresh[index], 1);
-	} else {
-		node->last_cluster = fresh[extra - 1];
-		node->last_index = oldCount + extra - 1;
+			return status;
+		}
+		prevCluster = chunk[batch - 1];
+		allocated += batch;
 	}
-	free(fresh);
-	return status;
+	node->last_cluster = prevCluster;
+	node->last_index = oldCount + extra - 1;
+	return B_OK;
 }
 
 static status_t

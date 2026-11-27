@@ -144,12 +144,23 @@ struct r5_vm_page {
 	uint64_t*	cpu;
 };
 
+#define R5_VM_HASH_SIZE 1024u
+#define R5_VM_HASH_MASK (R5_VM_HASH_SIZE - 1u)
+
 struct r5_vm {
 	r5_vm_page*	pages;
 	uint32_t	capacity;
 	uint32_t	used;
 	int			(*alloc)(void* cookie, uint64_t* physical, uint64_t** cpu);
 	void*		cookie;
+	/* Last-walked leaf table cache (2 MiB window) to avoid repeated 4-level
+	 * WC VRAM directory reads during contiguous VA_MAP / VA_UNMAP. */
+	uint64_t	last_l1_va;
+	int32_t		last_leaf;
+	uint8_t		has_prt;
+	uint8_t		hash_ready;
+	/* Open-addressed map: physical page -> (index + 1), 0 = empty. */
+	uint16_t	phys_hash[R5_VM_HASH_SIZE];
 };
 
 /* Free-list pool of 4 KiB VRAM page-table pages recycled when a per-file
@@ -190,6 +201,34 @@ r5_vm_pool_give(r5_vm_page_pool* pool, uint64_t physical, uint64_t* cpu)
 
 
 static inline uint32_t
+r5_vm_phys_hash(uint64_t page)
+{
+	uint64_t x = page >> 12;
+	x ^= x >> 16;
+	x *= 0x45d9f3bull;
+	x ^= x >> 16;
+	return (uint32_t)(x & R5_VM_HASH_MASK);
+}
+
+
+static inline void
+r5_vm_hash_insert(r5_vm* vm, uint64_t physical, uint32_t idx)
+{
+	if (idx + 1u > 0xffffu)
+		return;
+	uint32_t slot = r5_vm_phys_hash(physical);
+	for (uint32_t probe = 0; probe < R5_VM_HASH_SIZE; probe++) {
+		uint32_t pos = (slot + probe) & R5_VM_HASH_MASK;
+		if (vm->phys_hash[pos] == 0) {
+			vm->phys_hash[pos] = (uint16_t)(idx + 1u);
+			vm->hash_ready = 1;
+			return;
+		}
+	}
+}
+
+
+static inline uint32_t
 r5_vm_release_pages(r5_vm* vm, r5_vm_page_pool* pool)
 {
 	uint32_t returned = 0;
@@ -202,6 +241,14 @@ r5_vm_release_pages(r5_vm* vm, r5_vm_page_pool* pool)
 		vm->pages[i].cpu = NULL;
 	}
 	vm->used = 0;
+	vm->last_l1_va = 0;
+	vm->last_leaf = -1;
+	vm->has_prt = 0;
+	if (vm->hash_ready) {
+		for (uint32_t i = 0; i < R5_VM_HASH_SIZE; i++)
+			vm->phys_hash[i] = 0;
+		vm->hash_ready = 0;
+	}
 	return returned;
 }
 
@@ -210,6 +257,17 @@ static inline int
 r5_vm_find(const r5_vm* vm, uint64_t entry)
 {
 	uint64_t page = entry & ~0xfffull;
+	if (vm->hash_ready) {
+		uint32_t slot = r5_vm_phys_hash(page);
+		for (uint32_t probe = 0; probe < R5_VM_HASH_SIZE; probe++) {
+			uint16_t v = vm->phys_hash[(slot + probe) & R5_VM_HASH_MASK];
+			if (v == 0)
+				break;
+			uint32_t idx = (uint32_t)v - 1u;
+			if (idx < vm->used && vm->pages[idx].physical == page)
+				return (int)idx;
+		}
+	}
 	for (uint32_t i = 0; i < vm->used; i++) {
 		if (vm->pages[i].physical == page)
 			return (int)i;
@@ -233,9 +291,11 @@ r5_vm_new_page(r5_vm* vm, int leaf)
 	uint64_t fill = leaf ? kR5VmPteEmpty : kR5VmPdeEmpty;
 	for (int i = 0; i < 512; i++)
 		cpu[i] = fill;
-	vm->pages[vm->used].physical = physical;
-	vm->pages[vm->used].cpu = cpu;
+	uint32_t idx = vm->used;
+	vm->pages[idx].physical = physical;
+	vm->pages[idx].cpu = cpu;
 	vm->used++;
+	r5_vm_hash_insert(vm, physical, idx);
 	return 1;
 }
 
@@ -247,31 +307,47 @@ r5_vm_map_page(r5_vm* vm, uint64_t va, uint64_t pte)
 {
 	if (vm == NULL || (va & 0xfffull) != 0)
 		return 0;
-	if (vm->used == 0 && !r5_vm_new_page(vm, 0))
-		return 0;
-	int index = 0;
-	for (int level = 3; level >= 1; level--) {
-		uint32_t slot = r5_vm_index(va, (uint32_t)level);
-		uint64_t entry = vm->pages[index].cpu[slot];
-		if (!r5_vm_is_table(entry)) {
-			if (!r5_vm_new_page(vm, level == 1))
-				return 0;
-			vm->pages[index].cpu[slot] = r5_vm_pde(
-				vm->pages[vm->used - 1].physical);
-			index = (int)vm->used - 1;
-		} else {
-			index = r5_vm_find(vm, entry);
-			if (index < 0)
-				return 0;
+	uint64_t l1_va = (va & 0x0000ffffffffffffull) >> 21;
+	int index = -1;
+	if (vm->last_leaf > 0 && (uint32_t)vm->last_leaf < vm->used
+		&& vm->last_l1_va == l1_va) {
+		index = vm->last_leaf;
+	} else {
+		if (vm->used == 0 && !r5_vm_new_page(vm, 0))
+			return 0;
+		index = 0;
+		for (int level = 3; level >= 1; level--) {
+			uint32_t slot = r5_vm_index(va, (uint32_t)level);
+			uint64_t entry = vm->pages[index].cpu[slot];
+			if (!r5_vm_is_table(entry)) {
+				if (!r5_vm_new_page(vm, level == 1))
+					return 0;
+				vm->pages[index].cpu[slot] = r5_vm_pde(
+					vm->pages[vm->used - 1].physical);
+				index = (int)vm->used - 1;
+			} else {
+				index = r5_vm_find(vm, entry);
+				if (index < 0)
+					return 0;
+			}
 		}
+		vm->last_l1_va = l1_va;
+		vm->last_leaf = index;
 	}
 	uint32_t leaf = r5_vm_index(va, 0);
 	if (pte == 0) {
-		uint64_t current = vm->pages[index].cpu[leaf];
-		if ((current & kR5Gfx9PtePrt) == 0)
+		if (vm->has_prt) {
+			uint64_t current = vm->pages[index].cpu[leaf];
+			if ((current & kR5Gfx9PtePrt) == 0)
+				vm->pages[index].cpu[leaf] = kR5VmPteEmpty;
+		} else {
 			vm->pages[index].cpu[leaf] = kR5VmPteEmpty;
-	} else
+		}
+	} else {
+		if ((pte & kR5Gfx9PtePrt) != 0)
+			vm->has_prt = 1;
 		vm->pages[index].cpu[leaf] = pte;
+	}
 	return 1;
 }
 
@@ -281,14 +357,21 @@ r5_vm_lookup(const r5_vm* vm, uint64_t va, uint64_t* pte)
 {
 	if (vm == NULL || vm->used == 0 || (va & 0xfffull) != 0)
 		return 0;
-	int index = 0;
-	for (int level = 3; level >= 1; level--) {
-		uint64_t entry = vm->pages[index].cpu[r5_vm_index(va, (uint32_t)level)];
-		if (!r5_vm_is_table(entry))
-			return 0;
-		index = r5_vm_find(vm, entry);
-		if (index < 0)
-			return 0;
+	uint64_t l1_va = (va & 0x0000ffffffffffffull) >> 21;
+	int index = -1;
+	if (vm->last_leaf > 0 && (uint32_t)vm->last_leaf < vm->used
+		&& vm->last_l1_va == l1_va) {
+		index = vm->last_leaf;
+	} else {
+		index = 0;
+		for (int level = 3; level >= 1; level--) {
+			uint64_t entry = vm->pages[index].cpu[r5_vm_index(va, (uint32_t)level)];
+			if (!r5_vm_is_table(entry))
+				return 0;
+			index = r5_vm_find(vm, entry);
+			if (index < 0)
+				return 0;
+		}
 	}
 	uint64_t leaf = vm->pages[index].cpu[r5_vm_index(va, 0)];
 	if (pte != NULL)

@@ -68,6 +68,7 @@ struct r5_file_tree {
 	uint32			pagesN;
 	uint32			owner;
 	uint64			seen;
+	uint64			tlbSeq;
 	r5_file_count	count;
 	r5_file_tree*	deferNext;
 	uint64			deferFence;
@@ -142,6 +143,8 @@ struct gpu_ib_cpu {
 };
 
 
+static const uint32 kMaxIbCache = 32;
+
 struct gpu_client {
 	void*			info;
 	uint32			handles[kMaxClientBo];
@@ -168,7 +171,8 @@ struct gpu_client {
 	r5_share_export	exports[R5_SHARE_EXPORTS_PER_FILE];
 	/* "buffer limit <n> reached" was logged for this file. */
 	bool			limitLogged;
-	gpu_ib_cpu		ibCpu[kMaxList];
+	gpu_ib_cpu		ibCpu[kMaxIbCache];
+	uint32			ibCpuNext;
 };
 
 

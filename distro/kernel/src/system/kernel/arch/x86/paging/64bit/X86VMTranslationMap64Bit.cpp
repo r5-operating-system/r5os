@@ -727,18 +727,20 @@ X86VMTranslationMap64Bit::UnmapPages(VMArea* area, addr_t base, size_t size,
 					}
 				}
 
-				Flush();
 				start += k64BitPageTableRange;
 				continue;
 			}
 			_SplitLargePage(pde, ROUNDDOWN(start, k64BitPageTableRange),
 				"unmap_pages_partial");
 		}
+		if ((*pde & X86_64_PDE_PRESENT) == 0) {
+			start = ROUNDUP(start + 1, k64BitPageTableRange);
+			continue;
+		}
+		uint64* pageTable = (uint64*)fPageMapper->GetPageTableAt(
+			*pde & X86_64_PDE_ADDRESS_MASK);
 // SPDX-SnippetEnd
 
-		uint64* pageTable = X86PagingMethod64Bit::PageTableForAddress(
-			fPagingStructures->VirtualPMLTop(), start, fIsKernelMap, false,
-			NULL, fPageMapper, fMapCount);
 		if (pageTable == NULL) {
 			// Move on to the next page table.
 			start = ROUNDUP(start + 1, k64BitPageTableRange);
@@ -771,10 +773,14 @@ X86VMTranslationMap64Bit::UnmapPages(VMArea* area, addr_t base, size_t size,
 					updatePageQueue, &queue);
 			}
 		}
-
-		Flush();
-			// flush explicitly, since we directly use the lock
 	} while (start != 0 && start < end);
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	Flush();
+		// single batched TLB shootdown for the entire unmapped range
+// SPDX-SnippetEnd
 
 	// TODO: As in UnmapPage() we can lose page dirty flags here. ATM it's not
 	// really critical here, as in all cases this method is used, the unmapped

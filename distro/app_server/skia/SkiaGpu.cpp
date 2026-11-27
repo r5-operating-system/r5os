@@ -359,7 +359,11 @@ public:
 		:
 		fIsCpu(properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU),
 		fLastSize(0),
-		fLastChecksum(0)
+		fLastChecksum(0),
+		fLock("skia pipeline storage"),
+		fSem(-1),
+		fWriter(-1),
+		fQuit(false)
 	{
 		snprintf(fKey, sizeof(fKey), "r5 skia %s vendor %#" B_PRIx32
 			" device %#" B_PRIx32 " driver %#" B_PRIx32 " %s uuid ",
@@ -383,6 +387,33 @@ public:
 			snprintf(fPath, sizeof(fPath), "%s/skia-pipelines-%04" B_PRIx32
 				"-%04" B_PRIx32, directory, (uint32)properties.vendorID,
 				(uint32)properties.deviceID);
+		}
+		if (!fIsCpu && fPath[0] != '\0') {
+			fSem = create_sem(0, "skia pipeline store");
+			if (fSem >= 0) {
+				fWriter = spawn_thread(_WriterThread, "skia pipeline cache",
+					B_LOW_PRIORITY, this);
+				if (fWriter >= 0)
+					resume_thread(fWriter);
+			}
+		}
+	}
+
+	~PipelineStorage() override
+	{
+		if (fWriter >= 0) {
+			{
+				BAutolock _(fLock);
+				fQuit = true;
+			}
+			release_sem(fSem);
+			status_t dummy;
+			wait_for_thread(fWriter, &dummy);
+			fWriter = -1;
+		}
+		if (fSem >= 0) {
+			delete_sem(fSem);
+			fSem = -1;
 		}
 	}
 
@@ -426,6 +457,61 @@ public:
 		if (fIsCpu || fPath[0] == '\0' || data.size() == 0
 			|| data.size() > kLargest)
 			return;
+		if (fWriter >= 0) {
+			sk_sp<SkData> copy = SkData::MakeWithCopy(data.data(), data.size());
+			if (copy == nullptr)
+				return;
+			{
+				BAutolock _(fLock);
+				fPending = std::move(copy);
+			}
+			release_sem_etc(fSem, 1, B_DO_NOT_RESCHEDULE);
+			return;
+		}
+		_WriteNow(data);
+	}
+
+private:
+	struct Header {
+		char		magic[8];
+		char		key[256];
+		uint64		size;
+		uint64		checksum;
+	};
+
+	static status_t _WriterThread(void* arg)
+	{
+		((PipelineStorage*)arg)->_WriterLoop();
+		return B_OK;
+	}
+
+	void _WriterLoop()
+	{
+		while (true) {
+			status_t status = acquire_sem(fSem);
+			if (status == B_INTERRUPTED)
+				continue;
+			if (status != B_OK)
+				break;
+			sk_sp<SkData> work;
+			bool quit = false;
+			{
+				BAutolock _(fLock);
+				work = std::move(fPending);
+				quit = fQuit;
+			}
+			if (work != nullptr)
+				_WriteNow(*work);
+			if (quit) {
+				BAutolock _(fLock);
+				if (fPending == nullptr)
+					break;
+			}
+		}
+	}
+
+	void _WriteNow(const SkData& data)
+	{
 		uint64 checksum = _Checksum(data.data(), data.size());
 		if (data.size() == fLastSize && checksum == fLastChecksum)
 			return;
@@ -455,14 +541,6 @@ public:
 			data.size() / 1024);
 	}
 
-private:
-	struct Header {
-		char		magic[8];
-		char		key[256];
-		uint64		size;
-		uint64		checksum;
-	};
-
 	static uint64 _Checksum(const void* data, size_t size)
 	{
 		// FNV-1a: finds a damaged file, not an attack (only uid 0 writes)
@@ -481,6 +559,11 @@ private:
 			bool				fIsCpu;
 			size_t				fLastSize;
 			uint64				fLastChecksum;
+			BLocker				fLock;
+			sem_id				fSem;
+			thread_id			fWriter;
+			bool				fQuit;
+			sk_sp<SkData>		fPending;
 			char				fKey[256];
 			char				fPath[B_PATH_NAME_LENGTH];
 };
@@ -1298,27 +1381,11 @@ SkiaGpu::RunWork(const char** _reason)
 	if (fRunInFlight) {
 		VkFence fence = (VkFence)fRunFence;
 		bigtime_t waitStart = system_time();
-		// The first second stays under fLock, as this wait did before.
-		// A fence that signals in that second is the normal path: no
-		// other thread enters, and fRunInFlight stays as this run left it.
-		// a late GPU is not a failure (M11 decision 14)
-		VkResult result = sWaitForFences(sDevice, 1, &fence, VK_TRUE,
-			1000000000ull);
+		// Quick non-blocking poll first; if the GPU is still busy, drop fLock
+		// immediately so NewRecorder/AddTarget/RemoveTarget/Abandon never stall
+		// waiting for the GPU fence.
+		VkResult result = sWaitForFences(sDevice, 1, &fence, VK_TRUE, 0);
 		if (result == VK_TIMEOUT) {
-			// The ring has not moved. Drop fLock so Abandon() can take
-			// it. The fence is the local copy above, not fRunFence.
-			//
-			// fLock is taken by RunWork, NewRecorder, DeleteRecorder,
-			// AddTarget, RemoveTarget, Shutdown, Abandon and
-			// DestroyContext. RunWork is this thread: the compose thread
-			// calls it only when no draw thread exists. It is the only
-			// writer of fRunInFlight. DestroyContext is the other writer
-			// of fRunFence, and the compose thread calls it only after
-			// this draw thread has returned. Abandon and Shutdown set
-			// fShutDown and do not free the fence or the context.
-			// NewRecorder, DeleteRecorder, AddTarget and RemoveTarget do
-			// not write fRunInFlight or fRunFence. The snap below reads
-			// fTargets only after this relock.
 			bool unlock = fLock.CountLocks() == 1;
 			if (unlock) {
 				fWaitingUnlocked = true;
@@ -1529,36 +1596,20 @@ SkiaGpu::RunWork(const char** _reason)
 		} else {
 			bigtime_t submitTime = system_time();
 			Profile(kTimeSubmit, submitTime - submitStart);
-			// The damage goes out only when the run is done on the GPU: on
-			// Lavapipe a run after Sign in takes 11-15 s, and a compose
-			// queued behind it at once ran into its 15 s fence limit and
-			// turned the compositor off (QEMU, 2 of 2 boots). The compose
-			// itself still waits only on the GPU (the semaphores); nothing
-			// is read back.
-			{
-				// The first second stays under fLock. A fence that signals
-				// in that second never opens the lock. M13 step 4: a
-				// longer wait is without fLock (5625U stick 3, on
-				// Lavapipe: one run's fence took 19.5 s at the first boot,
-				// and Sign in's window waited for it in NewRecorder() and
-				// AddTarget()). The same open lock lets Abandon() run
-				// when the ring is not moving.
-				//
-				// fLock is taken by RunWork, NewRecorder, DeleteRecorder,
-				// AddTarget, RemoveTarget, Shutdown, Abandon and
-				// DestroyContext. RunWork is this thread, and it is the
-				// only writer of fRunInFlight. The fence is the local copy
-				// from before this wait. DestroyContext writes fRunFence
-				// only after this draw thread has returned. Abandon and
-				// Shutdown do not free it. While the lock is open,
-				// fInFlight points at this list: RemoveTarget may clear
-				// one item's target, and this loop treats a NULL target
-				// as already gone. NewRecorder, DeleteRecorder and
-				// AddTarget do not write that list or the fence. The
-				// items are read again only after this relock.
-				// a late GPU is not a failure (M11 decision 14)
+			// On a hardware GPU (!fOnCpu) with no CPU read-back and no
+			// Finish() waiter, keep this run in flight (fRunInFlight stays
+			// true) and deliver window damage immediately: the compositor
+			// synchronizes on the GPU semaphore, and the next RunWork() waits
+			// for fRunFence before snapping. On Lavapipe (fOnCpu), wait here
+			// so a long software run does not trigger the compositor's 15 s
+			// compose fence timeout.
+			bool waitNow = fOnCpu || readBack || atomic_get(&fWaiters) > 0;
+			if (waitNow) {
+				// Quick poll first, then drop fLock immediately so other
+				// threads (NewRecorder, AddTarget, RemoveTarget, Abandon) do
+				// not stall on the GPU fence.
 				VkResult result = sWaitForFences(sDevice, 1, &fence, VK_TRUE,
-					1000000000ull);
+					0);
 				if (result == VK_TIMEOUT) {
 					bool unlock = fLock.CountLocks() == 1;
 					if (unlock) {
@@ -1594,18 +1645,16 @@ SkiaGpu::RunWork(const char** _reason)
 				_ReleaseWaiters();
 				return false;
 			}
-			// read_done() copies into the bitmaps from here (DestroyContext()
-			// waits for fWaitingUnlocked, so the context is still there).
-			// Not after a failed wait: Graphite would poll lost fences.
 			bigtime_t fenceDone = system_time();
-			if (sDebugProfile)
+			if (sDebugProfile && waitNow)
 				Profile(kTimeFenceWait, fenceDone - submitTime);
-			if (ok)
+			if (ok && waitNow)
 				context->checkAsyncWorkCompletion();
 			bigtime_t deliverDone = system_time();
-			if (sDebugProfile)
+			if (sDebugProfile && waitNow)
 				Profile(kTimeAsyncCheck, deliverDone - fenceDone);
-			Profile(kTimeDeliver, deliverDone - submitTime);
+			if (waitNow)
+				Profile(kTimeDeliver, deliverDone - submitTime);
 		}
 		if (context->isDeviceLost()) {
 			*_reason = "device lost";

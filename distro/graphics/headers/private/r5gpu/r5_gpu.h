@@ -65,7 +65,10 @@ enum {
 	/* M11 step 3b: the exporter records its file's last submit on a
 	 * shared buffer; the importer reads it. Older callers never send
 	 * this opcode. */
-	R5_GPU_BO_PRESENT_MARK = R5_GPU_OP_BASE + 32
+	R5_GPU_BO_PRESENT_MARK = R5_GPU_OP_BASE + 32,
+	/* Batched syncobj reset/signal/query in one ioctl. Older callers
+	 * never send this opcode. */
+	R5_GPU_SYNCOBJ_BATCH = R5_GPU_OP_BASE + 33
 };
 
 #define R5_GPU_CAP_RENDER 1u
@@ -593,6 +596,22 @@ typedef struct {
 	uint32_t	op;		/* in: SET or GET */
 	uint64_t	sequence;	/* out: the ring number recorded */
 } r5_gpu_bo_mark;
+
+
+/* R5_GPU_SYNCOBJ_BATCH (+ 33) */
+#define R5_GPU_SYNCOBJ_OP_RESET 1u
+#define R5_GPU_SYNCOBJ_OP_SIGNAL 2u
+#define R5_GPU_SYNCOBJ_OP_QUERY 3u
+typedef struct {
+	uint32_t	size;
+	uint32_t	version;
+	uint32_t	op;
+	uint32_t	flags;
+	uint32_t	count;
+	uint32_t	_pad;
+	uint64_t	handles;
+	uint64_t	points;
+} r5_gpu_syncobj_batch;
 
 
 static inline int

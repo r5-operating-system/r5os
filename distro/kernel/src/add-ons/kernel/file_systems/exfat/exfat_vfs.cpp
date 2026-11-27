@@ -167,6 +167,18 @@ exfat_lookup_id(Volume* volume, Inode* directory, const char* name, ino_t* _id)
 		*_id = directory->ID() == 1 ? directory->ID() : directory->Parent();
 		return B_OK;
 	}
+	if (directory->LookupCacheFind(name, _id)) {
+		struct node_key key;
+		ino_t parent;
+		uint32 dirCluster;
+		uint64 dirLength;
+		uint8 dirFlags;
+		bool dirRoot;
+		if (volume->GetNode(*_id, key, parent, dirCluster, dirLength,
+				dirFlags, dirRoot)) {
+			return B_OK;
+		}
+	}
 	exfat_node dir;
 	fill_node(directory, &dir, NULL);
 	exfat_node found;
@@ -179,6 +191,7 @@ exfat_lookup_id(Volume* volume, Inode* directory, const char* name, ino_t* _id)
 		directory->StreamFlags(), directory->ID() == 1);
 	if (*_id == 0)
 		return B_NO_MEMORY;
+	directory->LookupCacheStore(name, *_id);
 	return B_OK;
 }
 
@@ -494,8 +507,11 @@ exfat_rename_vnode(fs_volume* _volume, fs_vnode* _fromDir, const char* fromName,
 	Inode* first = fromDir->ID() <= toDir->ID() ? fromDir : toDir;
 	Inode* second = first == fromDir ? toDir : fromDir;
 	rw_lock_write_lock(first->Lock());
-	if (first != second)
+	first->LookupCacheClear();
+	if (first != second) {
 		rw_lock_write_lock(second->Lock());
+		second->LookupCacheClear();
+	}
 
 	held_parent fromGrand;
 	held_parent toGrand;
