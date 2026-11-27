@@ -62,7 +62,8 @@ cat "$RESOLV" 2>/dev/null | while IFS= read -r line; do
 	say "resolv $line"
 done
 # No Reload: the tab has to load again by itself.
-sleep 50
+wait_log "title tab=0 url=https://example.com/ title=Example Domain" 120 	&& say "recovered by itself" || say "NOT recovered"
+sleep 5
 say shot 02-online-recovered
 grep -E "network back|title tab=0" "$AOMI_LOG" | tail -n 4 | while IFS= read -r line; do
 	say "evt $line"
@@ -83,26 +84,26 @@ rm -f "$DESK"/10Mb*
 "$AOMI" --download "https://proof.ovh.net/files/10Mb.dat" >/dev/null 2>&1
 i=0
 while [ "$i" -lt 120 ]; do
-	ls "$DESK"/10Mb*.part >/dev/null 2>&1 || break
+	[ "$(grep -c '10Mb.*(ok)' "$AOMI_LOG")" -ge 2 ] && break
 	sleep 1
 	i=$((i + 1))
 done
-sleep 3
+sleep 10
 say shot 04-downloads-twice
 desktop twice
 for f in "$DESK"/10Mb*; do
-	[ -f "$f" ] && say "md5 $(md5sum "$f")"
+	[ -f "$f" ] && say "sum $(sha256sum "$f" 2>&1 || md5sum "$f" 2>&1)"
 done
 
 # 4. The Downloads and Settings windows.
 "$AOMI" --downloads --downloads-window >/dev/null 2>&1
-sleep 10
+sleep 20
 say shot 05-downloads-window
 "$AOMI" --settings >/dev/null 2>&1
-sleep 14
+sleep 25
 say shot 06-settings
 "$AOMI" --settings "--settings-page=appearance" >/dev/null 2>&1
-sleep 5
+sleep 10
 say shot 07-settings-appearance
 "$AOMI" --close-settings >/dev/null 2>&1
 sleep 3
@@ -127,11 +128,11 @@ say shot 08-after-close
 desktop after-close
 
 # 6. Quit during a download: no ".part" may stay behind.
-"$AOMI" --download "https://proof.ovh.net/files/100Mb.dat" >/dev/null 2>&1
+"$AOMI" --download "https://proof.ovh.net/files/1Gb.dat" >/dev/null 2>&1
 sleep 8
 desktop before-quit
 hey "$SIG" quit >/dev/null 2>&1 &
-sleep 10
+sleep 6
 say shot 09-quit-question
 # "Close" is the default button.
 say key ret
