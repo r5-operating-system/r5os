@@ -1,33 +1,64 @@
 R5 2026.1-dev Build 10078 - Aomi (experimental) on Servo
-Aomi now runs on Servo as its web engine and is in Applications as Aomi (experimental). WebPositive stays the default browser. In a page you can click links, type in forms, choose from lists, answer a page's questions and scroll with the mouse wheel, and Find in page works. Each window runs on its own, normal windows remember your sign-ins, and a private window keeps nothing once it closes. The new tab page shows the R5 wave pebble with search and shortcuts, the menu has one Zoom row, the lock shows the connection's HTTP version, and Aomi has an About Aomi page and a Technical info page that copies as text.
+
+Aomi now runs on Servo, a brand-new web engine. You'll find it in Applications as Aomi (experimental). WebPositive stays the default browser for now.
+
+Everyday browsing already works well, and it's starting to feel like a real browser.
+
+It's still experimental, so expect a few rough edges here and there.
 
 
-R5 2026.1-dev Build 10077 - Aomi
-Aomi is the R5 browser. It opens in a compact window: tabs, one row for back, forward, reload and the address, bookmarks and downloads. Pages load with the browser engine that is already on the system. WebPositive is still installed. Browse beyond the horizon.
+R5 2026.1-dev Build 10077 - Introducing Aomi
 
-R5 2026.1-dev Build 10075 - Switch between signed-in people
-More than one account can now be signed in on the same computer at the same time. Choose Switch user in the Deskbar menu or Other account on the lock screen to return to Sign in while your desktop stays open in the background. Signed-in accounts show a green dot and Unlock on the Sign in screen, and Guest can run alongside another signed-in account. Each signed-in desktop keeps its own workspaces, clipboard, tray icons and key store.
+Meet Aomi, the new and lean web browser for R5 Operating System. It keeps things simple, with a clean and compact interface. Try it yourself and browse beyond the horizon!
+
+
+R5 2026.1-dev Build 10075 - Fast user switching
+
+Do you have multiple accounts on your computer? We've finalized our multi-user experience within R5 Operating System. It's now possible to switch to a different user, while keeping all your settings and apps running.
+
 
 R5 2026.1-dev Build 10074 - Write to exFAT
-You can copy files onto an exFAT card or stick. Eject the card before you pull it out. Creating, renaming and removing files and folders was checked in a virtual machine. A card pulled out while it is being written mounts read-only until it is checked on another computer.
 
-R5 2026.1-dev Build 10073 - Settings in the Deskbar menu
-The Deskbar menu has a Settings item, with the R5 wave, right under Mount. It opens Settings. Deskbar preferences in the same menu now opens the Desktop and Deskbar page in Settings. Bluetooth now also works on the smaller R5 image: the Bluetooth page, the Deskbar icon, keyboards, mice and game controllers. Bluetooth audio still needs the full image. In Users and Accounts you can remove an account's picture again. Virtual memory tells you when its saved disk is missing. A colour you drop on the desktop now also shows on the Wallpaper and Display pages, and is no longer undone by your next change on Wallpaper.
+Your exFAT cards and USB sticks are no longer read-only. You can now copy, rename and delete files on them, just like on any other disk.
 
-R5 2026.1-dev Build 10072 - A password for every account
-On an installed R5, an account without a password now chooses one before its first desktop: the Sign in screen asks for your name and a new password, twice, with a hint how strong it is. New passwords are stored in a stronger form, and existing passwords keep working. When you try R5 from the USB stick you still start without a password; mail and online storage can remember their sign-ins during that session and forget them when you shut down. The Sign in screen now says account instead of person.
 
-R5 2026.1-dev Build 10071 - Guest account and Shared folder
-An administrator can now turn on Guest sign-in in Settings under Accounts, Users and Accounts (off by default). When turned on, Guest appears on the Sign in screen without a password; everything created during a Guest session is deleted automatically when Guest logs out or if the computer is switched off. A Guest session cannot be locked, and its Deskbar menu offers Shared folder and Log out Guest and delete files. Every account, including Guest, can read and write files in the Shared folder on the desktop, while only the file's owner or the administrator can remove a file placed there.
+R5 2026.1-dev Build 10073 - Easier access to the Settings App
+
+Settings is now just one click away, right in the Deskbar menu. Bluetooth is enabled everywhere, and we've fixed a handful of small bugs in Settings along the way.
+
+
+R5 2026.1-dev Build 10072 - Safer accounts
+
+Every account on an installed R5 now has a password. If yours doesn't have one yet, R5 asks you to pick one the next time you sign in. Passwords are also stored more securely.
+
+
+R5 2026.1-dev Build 10071 - Guest accounts and a new Shared folder for all!
+
+Letting someone borrow your computer? Turn on the Guest account in Settings. A guest signs in without a password, and everything they do is wiped as soon as they log out.
+
+There's also a new Shared folder on the desktop, where everyone on the computer can leave files for each other.
+
 
 R5 2026.1-dev Build 10070 - SD cards and processor updates
-SD cards work in Realtek card readers, including the one in the HP ENVY x360 15. Put a card in and it shows up. Take it out and it is gone at once, and a card you put back works again. At start, R5 brings the processor's microcode up to date, for every AMD and Intel processor R5 supports. About R5 credits the driver for Windows disks (NTFS). Software Update no longer offers Haiku's own system, so it cannot replace R5 with plain Haiku.
+
+Does your laptop have a Realtek SD card reader? It now works. Pop a card in and it shows up right away.
+
+On top of that, R5 keeps your processor up to date. Every time it starts, it loads the latest fixes from AMD or Intel.
+
 
 R5 2026.1-dev Build 10069 - Themes and dark mode
-Settings has a Theme page under Personalization. Pick a theme with one click: R5, R5 Modern or Classic (Haiku). Choose Light or Dark, and an accent colour. The Parts box lets you mix windows, controls, scroll bars, the Deskbar and effects yourself. R5 Modern brings round buttons, fields and menus. Open programs change along at once, without a restart. In Dark mode the windows, Settings and the Deskbar turn dark. A new computer starts with R5, light.
 
-R5 2026.1-dev Build 10068 - Round windows and a floating Deskbar
-In Appearance, Look and feel, choose Default (R5 Modern): windows get round corners, a soft tab and a thin edge line. With the graphics chip they also get a soft shadow. Default (R5) keeps the familiar square frame. On the Desktop and Deskbar page the Deskbar has two styles: Default (R5), a round bar that can float as a pill with frosted glass, and Classic (Haiku), the Deskbar as you know it. On that page you also choose the layout and the corners. The tray symbols are simple lines in one colour.
+Make R5 your own! The new Theme page in Settings lets you pick a look with one click, switch between light and dark, and choose your favourite accent colour.
+
+Want to go further? Mix and match windows, controls and the Deskbar into a style that's all yours. Everything changes right away, no restart needed.
+
+
+R5 2026.1-dev Build 10068 - A fresh new look
+
+Windows can now have soft, rounded corners, and with a supported graphics chip they get a subtle shadow too. Prefer the familiar square look? It's just one click away.
+
+The Deskbar got a makeover as well. It can float on your desktop as a rounded bar with frosted glass. If you love the original, you can always switch back to Classic.
+
 
 R5 2026.1-dev Build 10067 - Power in Settings
 Settings has a Power page under System. It shows your battery: how full it is, how long it lasts and how healthy it is. Choose how fast the processor may run, separately on battery and plugged in: Power saver, Balanced or Performance. Balanced is the new standard. Set when the screen turns off after you stop using the computer, what closing the lid does, and what the power button does; by default it now asks before it shuts down. A slider sets the brightness of the screen, where the screen allows it. Only an administrator changes these settings, and they count for everyone on the computer; anyone can change the brightness. Sleep is not there yet, so its choices are gray for now. PowerStatus and CPU Info show the same information, and CPU Info also shows the profile in use. On a computer with a battery, the battery is in the Deskbar from the first sign-in.
