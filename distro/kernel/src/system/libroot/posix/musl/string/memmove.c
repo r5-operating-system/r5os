@@ -127,8 +127,8 @@ move_avx2(unsigned char* d, const unsigned char* s, size_t n, int forward)
 /* SPDX-SnippetEnd */
 #endif
 
-#if defined(__HAIKU__) && defined(__x86_64__) && !defined(_KERNEL_MODE) \
-	&& !defined(_BOOT_MODE) && !defined(R5_HOST_TEST)
+#if defined(__R5_USE_IFUNC__) && defined(__HAIKU__) && defined(__x86_64__) \
+	&& !defined(_KERNEL_MODE) && !defined(_BOOT_MODE) && !defined(R5_HOST_TEST)
 /* SPDX-SnippetBegin
  * SPDX-SnippetCopyrightText: 2026 R5OS Contributors
  * SPDX-License-Identifier: MIT

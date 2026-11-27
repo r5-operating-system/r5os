@@ -45,8 +45,8 @@ r5_fmaf_fma4(float x, float y, float z)
 }
 
 
-#if defined(__HAIKU__) && defined(__x86_64__) && !defined(_KERNEL_MODE) \
-	&& !defined(_BOOT_MODE) && !defined(R5_HOST_TEST)
+#if defined(__R5_USE_IFUNC__) && defined(__HAIKU__) && defined(__x86_64__) \
+	&& !defined(_KERNEL_MODE) && !defined(_BOOT_MODE) && !defined(R5_HOST_TEST)
 static float (*r5_fmaf_resolve(void))(float, float, float)
 {
 	uint32_t flags = r5_x86_cpu_flags();

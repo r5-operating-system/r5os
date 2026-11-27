@@ -76,6 +76,7 @@ struct gpu_defer_overflow {
 static gpu_defer_overflow* sDeferOverflow = NULL;
 static r5_file_tree* sDeferTrees = NULL;
 static bool sVmFlushPending = false;
+static void gpu_va_mark_dirty(r5_vm* vm);
 
 struct gpu_fence_waiter {
 	ConditionVariable		cv;
@@ -828,7 +829,6 @@ gpu_bo_hold_tree(gpu_bo* bo)
 static void
 gpu_bo_unmap(gpu_bo* bo)
 {
-	bool any = false;
 	for (uint32 i = 0; i < kMaxRange; i++) {
 		gpu_range* range = &bo->ranges[i];
 		if (!range->live)
@@ -836,12 +836,11 @@ gpu_bo_unmap(gpu_bo* bo)
 		r5_vm* vm = range->vm != NULL ? range->vm : gpu_hw_shared();
 		for (uint64 page = 0; page < range->bytes; page += 4096)
 			gpu_hw_map(vm, range->va + page, 0);
+		if (range->bytes != 0)
+			gpu_va_mark_dirty(vm);
 		range->live = false;
 		range->vm = NULL;
-		any = true;
 	}
-	if (any)
-		gpu_hw_flush();
 }
 
 
@@ -1533,7 +1532,7 @@ gpu_va_clear(r5_vm* vm, uint64 va, uint64 bytes)
 	for (uint64 page = 0; page < bytes; page += 4096)
 		gpu_hw_map(vm, va + page, 0);
 	if (bytes != 0)
-		gpu_hw_flush();
+		gpu_va_mark_dirty(vm);
 }
 
 

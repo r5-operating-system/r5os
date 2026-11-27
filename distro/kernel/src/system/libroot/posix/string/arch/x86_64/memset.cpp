@@ -176,8 +176,8 @@ memset_small(uint8_t* destination, uint8_t value, size_t length)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-#if defined(__HAIKU__) && defined(__x86_64__) && !defined(_KERNEL_MODE) \
-	&& !defined(_BOOT_MODE) && !defined(R5_HOST_TEST)
+#if defined(__R5_USE_IFUNC__) && defined(__HAIKU__) && defined(__x86_64__) \
+	&& !defined(_KERNEL_MODE) && !defined(_BOOT_MODE) && !defined(R5_HOST_TEST)
 static size_t sMemsetStreamingIfunc = (size_t)R5_CPU_LLC_FALLBACK / 4 * 3;
 static size_t sMemsetRepFromIfunc = 2048;
 static int sMemsetUseErmsIfunc = 0;

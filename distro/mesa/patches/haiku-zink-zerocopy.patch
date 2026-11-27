@@ -1,10 +1,11 @@
 --- a/src/egl/drivers/haiku/egl_haiku.cpp
 +++ b/src/egl/drivers/haiku/egl_haiku.cpp
-@@ -33,6 +33,7 @@
+@@ -33,6 +33,8 @@
  // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
  // SPDX-License-Identifier: MIT
  #include <dirent.h>
 +#include <dlfcn.h>
++#include <pthread.h>
  #include <fcntl.h>
  #include <sys/ioctl.h>
  #include <unistd.h>
@@ -26,17 +27,15 @@
  // SPDX-SnippetEnd
  
  #include "eglconfig.h"
-@@ -65,7 +74,9 @@
+@@ -65,6 +74,7 @@
  // SPDX-SnippetBegin
  // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
  // SPDX-License-Identifier: MIT
 +#include "frontend/winsys_handle.h"
  #include "util/u_inlines.h"
-+#include "util/u_box.h"
  #include "util/format/u_format.h"
  // SPDX-SnippetEnd
- #include "mesa/glapi/glapi/glapi.h"
-@@ -158,17 +169,294 @@
+@@ -158,17 +169,303 @@
  #define R5_PRESENT_SPARES 2
  #define R5_PRESENT_SAMPLES 4096
  #define R5_PRESENT_REPORT 10000000
@@ -72,26 +71,29 @@
  
 +static r5_zink_fd_to_token_fn s_r5_fd_to_token = NULL;
 +static r5_zink_mark_set_fn s_r5_mark_set = NULL;
-+static int s_r5_drm_loaded = 0;
++static pthread_once_t s_r5_drm_once = PTHREAD_ONCE_INIT;
 +
-+static bool
-+r5_zink_load_drm(void)
++static void
++r5_zink_load_drm_once(void)
 +{
-+   if (p_atomic_read(&s_r5_drm_loaded) != 0)
-+      return s_r5_fd_to_token != NULL && s_r5_mark_set != NULL;
 +   void *drm = dlopen("libdrm.so.2", RTLD_NOW | RTLD_LOCAL);
 +   if (drm != NULL) {
 +      s_r5_fd_to_token = (r5_zink_fd_to_token_fn)dlsym(drm,
 +         "r5_drm_fd_to_token");
 +      s_r5_mark_set = (r5_zink_mark_set_fn)dlsym(drm, "r5_drm_mark_set");
 +   }
-+   p_atomic_set(&s_r5_drm_loaded, 1);
++}
++
++static bool
++r5_zink_load_drm(void)
++{
++   pthread_once(&s_r5_drm_once, r5_zink_load_drm_once);
 +   return s_r5_fd_to_token != NULL && s_r5_mark_set != NULL;
 +}
 +
 +static void
 +r5_zink_scan_views(BView *view, uint32_t width, uint32_t height,
-+                   BView **found, int *matches)
++                   int32 *foundToken, int *matches)
 +{
 +   if (view == NULL)
 +      return;
@@ -101,14 +103,14 @@
 +          && (uint32_t)(b.IntegerHeight() + 1) == height) {
 +         const char *name = typeid(*view).name();
 +         if (name != NULL && strstr(name, "GLView") != NULL) {
-+            *found = view;
++            *foundToken = _get_object_token_(view);
 +            (*matches)++;
 +         }
 +      }
 +   }
 +   for (BView *child = view->ChildAt(0); child != NULL;
 +        child = child->NextSibling()) {
-+      r5_zink_scan_views(child, width, height, found, matches);
++      r5_zink_scan_views(child, width, height, foundToken, matches);
 +   }
 +}
 +
@@ -123,7 +125,7 @@
 +   BView *direct = dynamic_cast<BView *>(hook);
 +   if (direct != NULL)
 +      return _get_object_token_(direct);
-+   BView *found = NULL;
++   int32 foundToken = -1;
 +   int matches = 0;
 +   int32 winCount = be_app->CountWindows();
 +   for (int32 i = 0; i < winCount; i++) {
@@ -134,12 +136,12 @@
 +         continue;
 +      for (BView *child = win->ChildAt(0); child != NULL;
 +           child = child->NextSibling()) {
-+         r5_zink_scan_views(child, width, height, &found, &matches);
++         r5_zink_scan_views(child, width, height, &foundToken, &matches);
 +      }
 +      win->Unlock();
 +   }
-+   if (matches == 1 && found != NULL)
-+      return _get_object_token_(found);
++   if (matches == 1 && foundToken >= 0)
++      return foundToken;
 +   return -1;
 +}
 +
@@ -173,7 +175,7 @@
 +
 +static bool
 +r5_zink_share_setup(struct r5_present *present, struct pipe_context *pipe,
-+                    struct pipe_resource *resource)
++                    struct pipe_resource *resource, color_space space)
 +{
 +   if (!r5_zink_load_drm())
 +      return false;
@@ -242,7 +244,7 @@
 +      link.Attach<uint32>(width);
 +      link.Attach<uint32>(height);
 +      link.Attach<uint32>(pitches[i]);
-+      link.Attach<uint32>((uint32)B_RGBA32);
++      link.Attach<uint32>((uint32)space);
 +   }
 +   if (link.FlushWithReply(code) != B_OK)
 +      code = B_ERROR;
@@ -305,7 +307,12 @@
 +      return false;
 +
 +   struct pipe_box box;
-+   u_box_2d(0, 0, resource->width0, resource->height0, &box);
++   box.x = 0;
++   box.y = 0;
++   box.z = 0;
++   box.width = (int)resource->width0;
++   box.height = (int)resource->height0;
++   box.depth = 1;
 +   pipe->resource_copy_region(pipe, present->share_res[slot], 0, 0, 0, 0,
 +                              resource, 0, &box);
 +   pipe->flush(pipe, NULL, 0);
@@ -331,7 +338,7 @@
  static bool
  r5_present_fail(struct r5_present *present, const char *why)
  {
-@@ -299,6 +587,27 @@
+@@ -299,6 +596,27 @@
     bigtime_t start = system_time();
     uint32_t width = resource->width0;
     uint32_t height = resource->height0;
@@ -346,7 +353,7 @@
 +   }
 +   if (!present->share_active && !present->share_tried) {
 +      present->share_tried = true;
-+      r5_zink_share_setup(present, pipe, resource);
++      r5_zink_share_setup(present, pipe, resource, space);
 +   }
 +   if (present->share_active) {
 +      if (r5_zink_present_shared(present, pipe, resource)) {
@@ -359,7 +366,7 @@
     struct pipe_transfer *transfer = NULL;
     const uint8_t *map = (const uint8_t *)pipe_texture_map(pipe, resource, 0,
        0, PIPE_MAP_READ, 0, 0, width, height, &transfer);
-@@ -336,6 +645,9 @@
+@@ -336,6 +654,9 @@
     if (present == NULL)
        return false;
     present->hook = hook;
@@ -369,7 +376,7 @@
     buffer->present = r5_present_frame;
     buffer->present_data = present;
     return true;
-@@ -348,6 +660,7 @@
+@@ -348,6 +664,7 @@
     struct r5_present *present = (struct r5_present *)buffer->present_data;
     if (present == NULL)
        return;

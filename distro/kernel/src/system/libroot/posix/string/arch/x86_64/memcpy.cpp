@@ -270,8 +270,8 @@ memcpy_sse(uint8_t* destination, const uint8_t* source, size_t length)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-#if defined(__HAIKU__) && defined(__x86_64__) && !defined(_KERNEL_MODE) \
-	&& !defined(_BOOT_MODE) && !defined(R5_HOST_TEST)
+#if defined(__R5_USE_IFUNC__) && defined(__HAIKU__) && defined(__x86_64__) \
+	&& !defined(_KERNEL_MODE) && !defined(_BOOT_MODE) && !defined(R5_HOST_TEST)
 static size_t sMemcpyStreamingIfunc = (size_t)R5_CPU_LLC_FALLBACK / 4 * 3;
 static size_t sMemcpyRepFromIfunc = 2048;
 static int sMemcpyUseErmsIfunc = 0;

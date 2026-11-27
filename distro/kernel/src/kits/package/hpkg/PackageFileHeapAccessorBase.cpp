@@ -367,16 +367,17 @@ PackageFileHeapAccessorBase::ReadDataToOutput(off_t offset, size_t size,
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+		status_t error = B_OK;
 #if defined(_KERNEL_MODE) && !defined(_BOOT_MODE)
 		if (!decomp_cache_lookup(this, chunkIndex, uncompressedDataBuffer)) {
-			status_t error = ReadAndDecompressChunk(chunkIndex,
+			error = ReadAndDecompressChunk(chunkIndex,
 				compressedDataBuffer, uncompressedDataBuffer, scratch);
 			if (error != B_OK)
 				return error;
 			decomp_cache_store(this, chunkIndex, uncompressedDataBuffer);
 		}
 #else
-		status_t error = ReadAndDecompressChunk(chunkIndex,
+		error = ReadAndDecompressChunk(chunkIndex,
 			compressedDataBuffer, uncompressedDataBuffer, scratch);
 		if (error != B_OK)
 			return error;

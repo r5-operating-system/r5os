@@ -83,7 +83,7 @@ box_blur(uint8* bits, int32 width, int32 height, int32 radius, bool rows,
 				for (int32 y = 0; y < height; y++) {
 					uint8* dst = bits + (size_t)y * width + x;
 					int32 slot = y % winSize;
-					uint8 oldDrop[8];
+					uint8 oldDrop[8] = {};
 					if (y >= radius) {
 						int32 dropSlot = (y - radius) % winSize;
 						memcpy(oldDrop, ring[dropSlot], 8);

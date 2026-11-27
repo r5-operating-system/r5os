@@ -93,11 +93,6 @@ AddFilesToPackage add-ons kernel debugger :
 	;
 AddFilesToPackage add-ons kernel file_systems
 	: $(SYSTEM_ADD_ONS_FILE_SYSTEMS) ;
-# SPDX-SnippetBegin
-# SPDX-SnippetCopyrightText: 2026 R5OS Contributors
-# SPDX-License-Identifier: MIT
-AddFilesToPackage add-ons kernel file_cache : launch_speedup ;
-# SPDX-SnippetEnd
 AddFilesToPackage add-ons kernel generic :
 	ata_adapter
 	audio_amp

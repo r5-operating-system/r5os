@@ -2728,7 +2728,7 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 	// is reused on the next-but-one frame.
 	bool asyncScanout = result == VK_SUCCESS && fFrontByVulkan && !exclusive
 		&& !compare && !fOnLavapipe && vk->timestamps == VK_NULL_HANDLE
-		&& !fFrameAnimating;
+		&& !fFrameAnimating && shares.CountItems() == 0;
 	if (asyncScanout) {
 		uint32 slot = vk->frameSlot;
 		vk->slotInFlight[slot] = true;

@@ -119,11 +119,6 @@ bool gHasXsavec = false;
 // SPDX-SnippetEnd
 #endif
 
-extern "C" void x86_reboot(void);
-	// from arch.S
-
-void (*gCpuIdleFunc)(void);
-#ifndef __x86_64__
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
@@ -131,6 +126,11 @@ extern "C" uint32 gX86UserMemcpyRepFrom;
 uint32 gX86UserMemcpyRepFrom = 2048;
 // SPDX-SnippetEnd
 
+extern "C" void x86_reboot(void);
+	// from arch.S
+
+void (*gCpuIdleFunc)(void);
+#ifndef __x86_64__
 void (*gX86SwapFPUFunc)(void* oldState, const void* newState) = x86_noop_swap;
 bool gHasSSE = false;
 #endif

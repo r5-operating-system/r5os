@@ -294,10 +294,11 @@ FUNCTION(_arch_cpu_user_strlcpy):
 	subq	%r11, %rcx
 	notq	%rax
 	andq	%rax, %rcx
-	movabsq	$0x8080808080808080, %rax
-	testq	%rax, %rcx
+	notq	%rax
+	shlq	$7, %r11
+	testq	%r11, %rcx
 	jnz		.L_user_strlcpy_loop
-	movq	(%rsi), %rax
+	shrq	$7, %r11
 	movq	%rax, (%rdi)
 	addq	$8, %rsi
 	addq	$8, %rdi

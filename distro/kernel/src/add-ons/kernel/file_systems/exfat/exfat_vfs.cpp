@@ -507,8 +507,11 @@ exfat_rename_vnode(fs_volume* _volume, fs_vnode* _fromDir, const char* fromName,
 	Inode* first = fromDir->ID() <= toDir->ID() ? fromDir : toDir;
 	Inode* second = first == fromDir ? toDir : fromDir;
 	rw_lock_write_lock(first->Lock());
-	if (first != second)
+	first->LookupCacheClear();
+	if (first != second) {
 		rw_lock_write_lock(second->Lock());
+		second->LookupCacheClear();
+	}
 
 	held_parent fromGrand;
 	held_parent toGrand;
