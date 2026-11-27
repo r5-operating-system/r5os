@@ -28,7 +28,7 @@
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-#include "r5_dcn_hdmi.h"
+#include "dcn_display.h"
 // SPDX-SnippetEnd
 
 
@@ -743,11 +743,11 @@ connector_walk_object_records(uint16 tableOffset, uint16 tableSize,
 			return;
 
 		if (!encoderRecords && type == ATOM_I2C_RECORD_TYPE && size >= 4) {
-			r5_dcn_note_i2c_record(connectorIndex, bios[position + 2]);
+			dcn_note_i2c_record(connectorIndex, bios[position + 2]);
 			connector_attach_gpio_i2c(connectorIndex, bios[position + 2]);
 		} else if (!encoderRecords && type == ATOM_HPD_INT_RECORD_TYPE
 			&& size >= 4) {
-			r5_dcn_note_hpd_record(connectorIndex, bios[position + 2]);
+			dcn_note_hpd_record(connectorIndex, bios[position + 2]);
 			connector_attach_gpio_hpd(connectorIndex, bios[position + 2]);
 		} else if (encoderRecords && caps != NULL
 			&& type == ATOM_ENCODER_CAP_RECORD_TYPE && size >= 4) {

@@ -8,6 +8,17 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-27 - Display step 2: HDMI test pattern on a free pipe (opt-in), pipe log, crash marker
+
+- Problem: step 1 only reads HDMI. The owner asked for the later steps too, with the display code per DCN version inside radeon_hd, complete like Linux DC, and isolated so a DCN failure cannot take the GPU or the panel with it.
+- Change, layout: the accelerant's DCN code is now `dcn_display.cpp` (version table from the radeon_hd device table's display version, crash marker, DCN lock, switch-off, VBIOS and EDID helpers) plus `dcn21_hotplug.cpp`, `dcn21_head.cpp` and `dcn21_regs.h` behind one `dcn_ops` table. `r5_dcn_hdmi.*` from step 1 moved there unchanged in behaviour.
+- Change, step 2a (reads only, with the step 1 switch): logs DMCUB, the DISPCLK divider, every OTG, HUBP surface, OPP/FMT/DPG and DIG, and the VBIOS display table revisions (`radeon_hd: dcn head:` lines).
+- Change, step 2 (`dcn_hdmi_modeset true`, off by default): Linux DC's sequence for a stream without a plane on DCN 2.1, step by step (`dce110_apply_single_controller_ctx_to_hw`, `dcn20_enable_stream_timing`, `optc1/optc2`, `opp1/opp2`, `link_set_dpms_on`), on the first OTG the firmware left off, DVI signalling, VBIOS `setpixelclock` v1.7, `digxencodercontrol` v1.5 and `dig1transmittercontrol` v1.6, COMBO PHY PLL0, DPG colour squares. The panel's OTG and DIG are excluded by checks. Differences from Linux are listed in `docs/DISPLAY-DCN.md` (DVI instead of HDMI signalling, no DISPCLK/watermark update, global sync without DML, no DMCUB, no init_hw, an added frame-counter check).
+- Change, isolation: every wait has Linux's limit, every step returns an error, a failed step turns its OTG and PHY off and switches DCN off for the boot. A crash marker (`/boot/system/settings/radeon_hd_dcn_marker`, fsynced) is armed around each step; a later start that finds it armed keeps DCN off until the radeon_hd settings change.
+- Change, stick: `boot-next hdmi` (boot 1: step 1 and 2a; boot 2: `dcn_hdmi_modeset true`; then the file is removed), saving the `dcn` syslog lines of each boot in `~/hdmi/boot<n>.txt`. Host-tested with `BOOT_NEXT_YES=0`.
+- Tested: `scripts/build-locked.sh` `jam_exit=0`, `mesa_exit=0`; a single-file recompile of `dcn_display.cpp` after a format-truncation warning fix, no warnings; one QEMU/KVM boot reached the first-start window as before (no AMD GPU, so no DCN code runs); `boot-next hdmi` host test with `BOOT_NEXT_YES=0`.
+- Limits: nothing of steps 1, 2a or 2 has run on the 5625U. Whether the Haiku atom interpreter runs the atomfirmware display tables, whether the pixel clock reaches the OTG, and whether the monitor accepts the picture are unproven. Steps 3 (scanout of a buffer, watermarks, DISPCLK) and 4 (app_server with two screens, Display page) are designed, not written: they depend on what the step 2a and 2 boot reports.
+
 ## 2026-11-27 - Display step 1: HDMI hotplug and EDID on DCN 2.1 (logged only)
 
 - Problem: the owner wants a second screen on the 5625U's HDMI port. R5 has never programmed the display engine (DCN 2.1); the panel runs on the firmware (GOP) picture and HDMI stays dark. The accelerant already reads the VBIOS display paths (HDMI A is path 1, I2C id `0x91`, HPD pin `0x2` in the boot 55 syslog), but found no I2C or HPD pin for any connector.

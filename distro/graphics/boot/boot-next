@@ -130,6 +130,91 @@ if [ "$1" = cs35l41 ] || { [ -z "$1" ] && [ -f "$ampfile" ] \
 	exit 0
 fi
 
+# HDMI display stick (docs/DISPLAY-DCN.md, PR 4712): "boot-next hdmi"
+# starts it, and a radeon_hd settings file with a dcn_hdmi_boot line
+# continues it. Before each step the dcn lines of the boot that ran are saved
+# in ~/hdmi/boot<n>.txt. Boot 1 has every switch at its default: the step 1
+# probe and the step 2a pipe log run, nothing is shown on HDMI. Boot 2 adds
+# dcn_hdmi_modeset true: colour squares on HDMI, the panel unchanged. After
+# boot 2 the file is removed. The note is ~/hdmi/next.
+if [ "$1" = hdmi ] || { [ -z "$1" ] && [ -f "$file" ] \
+		&& grep -q '^dcn_hdmi_boot' "$file"; }; then
+	hd=$home/hdmi
+	mkdir -p "$hd" "$(dirname "$file")"
+	if [ "$1" = hdmi ]; then
+		cur=0
+		next=1
+	else
+		cur=$(sed -n 's/^dcn_hdmi_boot[[:space:]]*\([12]\).*/\1/p' \
+			"$file" | head -n 1)
+		case $cur in
+		1) next=2 ;;
+		2) next=done ;;
+		*)
+			echo "FAIL hdmi: unknown boot '$cur' in $file"
+			exit 1
+			;;
+		esac
+	fi
+	if [ "$cur" != 0 ]; then
+		grep -E 'dcn hdmi|dcn head' "${R5_SYSLOG:-/var/log/syslog}" \
+			> "$hd/boot$cur.txt" 2>/dev/null
+		echo "boot-next: saved $(wc -l < "$hd/boot$cur.txt") lines in" \
+			"$hd/boot$cur.txt"
+	fi
+	rm -f "$file"
+	case $next in
+	1) printf 'dcn_hdmi_boot 1\n' > "$file" ;;
+	2) printf 'dcn_hdmi_modeset true\ndcn_hdmi_boot 2\n' > "$file" ;;
+	esac
+	# Read the file back: a typo here is a lost boot.
+	case $next in
+	1)
+		if ! grep -q '^dcn_hdmi_boot 1$' "$file" \
+			|| grep -q dcn_hdmi_modeset "$file"; then
+			echo "FAIL hdmi: $file is not boot 1"
+			exit 1
+		fi
+		;;
+	2)
+		if ! grep -q '^dcn_hdmi_modeset true$' "$file"; then
+			echo "FAIL hdmi: $file does not say dcn_hdmi_modeset true"
+			exit 1
+		fi
+		;;
+	done)
+		if [ -f "$file" ]; then
+			echo "FAIL hdmi: $file is still there"
+			exit 1
+		fi
+		;;
+	esac
+	echo "$next" > "$hd/next"
+	case $next in
+	1) echo "boot-next: next boot is hdmi boot 1 (hotplug, EDID, pipe log)" ;;
+	2) echo "boot-next: next boot is hdmi boot 2 (dcn_hdmi_modeset true)" ;;
+	done) echo "boot-next: hdmi stick done, settings file removed" ;;
+	esac
+	echo "boot-next: settings file $file"
+	if [ "${BOOT_NEXT_YES:-1}" = 0 ] || [ "$next" = done ]; then
+		echo PASS
+		exit 0
+	fi
+	printf 'boot-next: restart? [y] '
+	read ans
+	if [ "$ans" != y ]; then
+		echo "FAIL not restarted (the settings are written)"
+		exit 1
+	fi
+	echo PASS
+	sync
+	if ! shutdown -r; then
+		echo "FAIL shutdown -r did not start"
+		exit 1
+	fi
+	exit 0
+fi
+
 # Round 3 stick (stick 75: #4499 Power, #4496 card reader, #4553
 # microcode): one boot with every GPU switch at its default. The planted
 # radeon_hd file only has r5_round3_boot, so a plain "boot-next" saves the
