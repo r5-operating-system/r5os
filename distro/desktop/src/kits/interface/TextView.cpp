@@ -198,6 +198,19 @@ static const int32 kMsgNavigateArrow = '_NvA';
 static const int32 kMsgNavigatePage  = '_NvP';
 static const int32 kMsgRemoveWord    = '_RmW';
 
+// SPDX-SnippetBegin
+// SPDX-License-Identifier: MIT
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// A caret or click offset can be from before the text shrank (GitHub #2985).
+static inline int32
+clamp_text_offset(int32 offset, int32 length)
+{
+	if (offset < 0)
+		return 0;
+	return offset > length ? length : offset;
+}
+// SPDX-SnippetEnd
+
 
 static property_info sPropertyList[] = {
 	{
@@ -2183,6 +2196,11 @@ BTextView::TextHeight(int32 startLine, int32 endLine) const
 		- (*fLines)[startLine]->origin;
 
 	if (startLine != endLine && endLine == numLines - 1
+		// SPDX-SnippetBegin
+		// SPDX-License-Identifier: MIT
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		&& fText->Length() > 0
+		// SPDX-SnippetEnd
 		&& fText->RealCharAt(fText->Length() - 1) == B_ENTER) {
 		height += (*fLines)[endLine + 1]->origin - (*fLines)[endLine]->origin;
 	}
@@ -4321,6 +4339,11 @@ BTextView::_NextLineEnd(int32 offset)
 int32
 BTextView::_PreviousWordBoundary(int32 offset)
 {
+	// SPDX-SnippetBegin
+	// SPDX-License-Identifier: MIT
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	offset = clamp_text_offset(offset, fText->Length());
+	// SPDX-SnippetEnd
 	uint32 charType = _CharClassification(offset);
 	int32 previous;
 	while (offset > 0) {
@@ -4337,6 +4360,11 @@ BTextView::_PreviousWordBoundary(int32 offset)
 int32
 BTextView::_NextWordBoundary(int32 offset)
 {
+	// SPDX-SnippetBegin
+	// SPDX-License-Identifier: MIT
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	offset = clamp_text_offset(offset, fText->Length());
+	// SPDX-SnippetEnd
 	int32 textLen = fText->Length();
 	uint32 charType = _CharClassification(offset);
 	while (offset < textLen) {
@@ -4352,6 +4380,11 @@ BTextView::_NextWordBoundary(int32 offset)
 int32
 BTextView::_PreviousWordStart(int32 offset)
 {
+	// SPDX-SnippetBegin
+	// SPDX-License-Identifier: MIT
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	offset = clamp_text_offset(offset, fText->Length());
+	// SPDX-SnippetEnd
 	if (offset <= 1)
 		return 0;
 
@@ -4380,6 +4413,11 @@ BTextView::_PreviousWordStart(int32 offset)
 int32
 BTextView::_NextWordEnd(int32 offset)
 {
+	// SPDX-SnippetBegin
+	// SPDX-License-Identifier: MIT
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	offset = clamp_text_offset(offset, fText->Length());
+	// SPDX-SnippetEnd
 	int32 textLen = fText->Length();
 	if (_CharClassification(offset) != CHAR_CLASS_DEFAULT) {
 		// skip non-word characters
@@ -5671,6 +5709,14 @@ BTextView::_CharClassification(int32 offset) const
 	// And what about other languages ? Isn't there a better way to check
 	// for separator characters ?
 	// Andrew suggested to have a look at UnicodeBlockObject.h
+	// SPDX-SnippetBegin
+	// SPDX-License-Identifier: MIT
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// An offset from before the text shrank is past its end (GitHub #2985);
+	// RealCharAt() stops the team for it.
+	if (offset < 0 || offset >= fText->Length())
+		return CHAR_CLASS_END_OF_TEXT;
+	// SPDX-SnippetEnd
 	switch (fText->RealCharAt(offset)) {
 		case '\0':
 			return CHAR_CLASS_END_OF_TEXT;
