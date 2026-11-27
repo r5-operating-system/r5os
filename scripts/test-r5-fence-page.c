@@ -665,6 +665,19 @@ test_generation(void)
 	CHECK(a.ret == 0 && a.points[0] == 9);
 	CHECK(gIoctlPage == pageCalls + 1);
 
+	/* A syncobj create does not make the next use ask again
+	 * (libdrm 2.4.124-7). The fake kernel refuses the create itself. */
+	pageCalls = gIoctlPage;
+	{
+		struct drm_syncobj_create create;
+		memset(&create, 0, sizeof(create));
+		r5_drm_ioctl(3, DRM_IOCTL_SYNCOBJ_CREATE, &create, sizeof(create));
+	}
+	fast = r5_host_fence_fast;
+	a = do_query(&handle, 1);
+	CHECK(a.ret == 0 && a.points[0] == 9);
+	CHECK(gIoctlPage == pageCalls && r5_host_fence_fast == fast + 1);
+
 	/* A kernel without the call: every answer from the kernel. */
 	gPageSupported = 0;
 	{
@@ -689,7 +702,7 @@ test_generation(void)
 	CHECK(gIoctlWaits == waits + 10);
 	gPageSupported = 1;
 	printf("ok generation: closed block and new owner re-asked, VERSION "
-		"re-asks, a kernel without the call answers every query\n");
+		"re-asks, SYNCOBJ_CREATE does not, a kernel without the call answers every query\n");
 }
 
 

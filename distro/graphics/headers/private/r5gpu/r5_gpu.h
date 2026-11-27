@@ -625,6 +625,11 @@ typedef struct {
  * program can neither write, unprotect nor delete it). It holds a block
  * of R5_GPU_FENCE_BLOCK_BYTES for each open file of that team and nothing
  * else: no other team's file, no kernel address, no global ring number.
+ * A fork child shares the parent's whole area through its copy of the
+ * mapping, also the blocks of files the parent opens after the fork; the
+ * child already holds a copy of the parent's memory, so that is no other
+ * team's data. FENCE_PAGE from the child is B_NOT_ALLOWED for a file the
+ * parent mapped.
  * The kernel writes a block under the GPU lock, each time it releases
  * that lock after the file's syncobjs or jobs changed, so the block is
  * the state every call of that moment would see. A reader takes seq

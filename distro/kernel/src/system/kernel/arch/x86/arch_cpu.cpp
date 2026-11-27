@@ -149,6 +149,7 @@ uint64 gX86TscBase = 0;
  * whether the firmware's TSCs were kept. x86_init_tsc() logs both. */
 int64 gX86TscWarp = 0;
 bool gX86TscKept = false;
+#ifdef __x86_64__
 static int32 sTSCWarpLock;
 static int32 sTSCWarpDone;
 static volatile uint64 sTSCWarpLast;
@@ -156,6 +157,7 @@ static volatile int64 sTSCWarpMax;
 /* Per CPU. Linux's check_tsc_warp takes about 2 ms per CPU pair; this is
  * every CPU at once, a few ms in all. */
 static const int32 kTSCWarpLoops = 2000;
+#endif
 
 
 static inline uint64
@@ -163,11 +165,15 @@ x86_tsc_ordered()
 {
 	uint32 low;
 	uint32 high;
-	asm volatile("lfence; rdtsc" : "=a"(low), "=d"(high) : : "memory");
+	// MFENCE first: this runs before init_percpu sets DE_CFG, so on AMD an
+	// LFENCE alone may not yet keep RDTSC after the lock (Linux uses MFENCE
+	// there for rdtsc_ordered()).
+	asm volatile("mfence; lfence; rdtsc" : "=a"(low), "=d"(high) : : "memory");
 	return ((uint64)high << 32) | low;
 }
 
 
+#ifdef __x86_64__
 /*!	All CPUs at once, from arch_cpu_preboot_init_percpu(): each takes a
 	lock, reads its TSC and compares it with the last one read under that
 	lock, by any CPU. A TSC behind another shows as a step back
@@ -192,6 +198,7 @@ x86_tsc_warp_check()
 		asm volatile("pause" : : : "memory");
 	gX86TscWarp = sTSCWarpMax;
 }
+#endif
 // SPDX-SnippetEnd
 
 /* Some specials for the double fault handler */
@@ -1781,11 +1788,17 @@ arch_cpu_preboot_init_percpu(kernel_args* args, int cpu)
 	// lands, a few hundred ns apart (measured in QEMU/KVM: 145-864 ns), and
 	// then a thread that moves to another CPU can see time go back. That
 	// write stays for TSCs that are not in sync.
+#ifdef __x86_64__
 	bool keepTSC = true;
 	if (smp_get_num_cpus() > 1) {
 		x86_tsc_warp_check();
 		keepTSC = sTSCWarpMax == 0;
 	}
+#else
+	// 32-bit x86 has no TSC base in system_time(): its TSCs are reset on
+	// SMP, as before.
+	bool keepTSC = smp_get_num_cpus() <= 1;
+#endif
 	if (keepTSC) {
 		if (cpu == 0) {
 			gX86TscBase = x86_tsc_ordered();

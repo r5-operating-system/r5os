@@ -3965,14 +3965,18 @@ gpu_fence_flush()
 }
 
 
-/* A team that ended and has no open file left: its kernel area goes. The
- * team's own mapping went with the team. */
+/* A team with no open file left gives its entry and its kernel area back,
+ * so the table does not fill up with teams that live long. Every block
+ * says CLOSED by then. A team that still lives keeps its own mapping: it
+ * holds the pages on the cache, so a reader with an old pointer reads
+ * CLOSED, never a fault, and the mapping goes when the team ends. A later
+ * file of that team gets a new entry and a new mapping. */
 static void
 gpu_fence_reap()
 {
 	for (uint32 i = 0; i < kFenceTeams; i++) {
 		gpu_fence_team* team = &sFenceTeams[i];
-		if (!team->live || team->used != 0 || team_is_valid(team->team))
+		if (!team->live || team->used != 0)
 			continue;
 		delete_area(team->kernelArea);
 		memset(team, 0, sizeof(*team));
@@ -4068,7 +4072,10 @@ gpu_fence_attach(gpu_client* client, team_id teamID)
 /*!	R5_GPU_FENCE_PAGE. The calling team gets its read-only area and this
 	file's block in it. A file answers only the team that first asked; a
 	fork child that shares the file keeps reading the parent's block
-	through its copy of the mapping, and gets B_NOT_ALLOWED here.
+	through its copy of the mapping, and gets B_NOT_ALLOWED here. That
+	copy is the parent's whole area: the child also sees the blocks of
+	files the parent opens after the fork (data the child's copy of the
+	parent's memory had anyway, never another team's).
 */
 static status_t
 gpu_fence_page_map(gpu_client* client, void* buffer, size_t length)

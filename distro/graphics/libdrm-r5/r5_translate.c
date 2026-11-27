@@ -1243,9 +1243,10 @@ r5_timeout_us(int64_t timeout_nsec)
  * bounded by the files the program opens. The block's memory stays
  * mapped while the team lives (the kernel never unmaps it), so a stale
  * binding reads CLOSED or a new generation and asks the kernel again. An
- * fd number can be reused for another file of this team; DRM_IOCTL_VERSION,
- * SYNCOBJ_CREATE and a new context make the next use ask the kernel which
- * block the fd has now. */
+ * fd number can be reused for another file of this team: DRM_IOCTL_VERSION,
+ * the first call of every libdrm device, makes the next use ask the kernel
+ * which block the fd has now. Nothing else re-asks, so a syncobj create or
+ * a new context costs no extra ioctl. */
 #define R5_FENCE_FDS 256
 #define R5_FENCE_TRIES 4
 
@@ -1796,10 +1797,8 @@ r5_drm_ioctl_body(int fd, unsigned long request, void *arg, size_t size)
 	}
 	if (nr == R5_IOC_NR(DRM_IOCTL_GEM_CLOSE))
 		return r5_gem_close(fd, arg);
-	if (nr == R5_IOC_NR(DRM_IOCTL_SYNCOBJ_CREATE)) {
-		r5_fence_recheck(fd);
+	if (nr == R5_IOC_NR(DRM_IOCTL_SYNCOBJ_CREATE))
 		return r5_sync_create(fd, arg);
-	}
 	if (nr == R5_IOC_NR(DRM_IOCTL_SYNCOBJ_DESTROY)) {
 		struct drm_syncobj_destroy *destroy = arg;
 		return r5_sync_one(fd, R5_GPU_SYNCOBJ_DESTROY, destroy->handle, 0, 0, 0);
@@ -1977,12 +1976,8 @@ r5_drm_ioctl_body(int fd, unsigned long request, void *arg, size_t size)
 		return r5_amdgpu_info(fd, arg);
 	if (nr == R5_IOC_NR(DRM_IOCTL_AMDGPU_GEM_CREATE))
 		return r5_gem_create(fd, arg);
-	if (nr == R5_IOC_NR(DRM_IOCTL_AMDGPU_CTX)) {
-		union drm_amdgpu_ctx *ctx = arg;
-		if (ctx->in.op == AMDGPU_CTX_OP_ALLOC_CTX)
-			r5_fence_recheck(fd);
+	if (nr == R5_IOC_NR(DRM_IOCTL_AMDGPU_CTX))
 		return r5_ctx(fd, arg);
-	}
 	if (nr == R5_IOC_NR(DRM_IOCTL_AMDGPU_GEM_VA))
 		return r5_gem_va(fd, arg);
 	if (nr == R5_IOC_NR(DRM_IOCTL_AMDGPU_CS))
