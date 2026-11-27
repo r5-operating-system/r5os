@@ -205,7 +205,12 @@ class ChromeView : public BView {
 public:
 	ChromeView(AomiWindow* window)
 		:
-		BView("chrome", B_WILL_DRAW | B_FULL_UPDATE_ON_RESIZE),
+		// B_FRAME_EVENTS: FrameResized() places the address field. Without
+		// it the field kept its size from AttachedToWindow(), before the
+		// layout gave the view a width: negative, so typed text was never
+		// shown (stick 27 Nov 2026). The same holds for NewTabView.
+		BView("chrome", B_WILL_DRAW | B_FULL_UPDATE_ON_RESIZE
+			| B_FRAME_EVENTS),
 		fWindow(window),
 		fField(new AddressField()),
 		fFocus(false)
@@ -496,7 +501,7 @@ public:
 		}
 		if (fURL.Contains(where)) {
 			fFocus = true;
-			fField->Show();
+			_ShowField(true);
 			BString address(fWindow->Address());
 			if (address.StartsWith("aomi:"))
 				address = "";
@@ -513,11 +518,11 @@ public:
 		if (text != NULL)
 			fField->SetText(text);
 		if (focus) {
-			fField->Show();
+			_ShowField(true);
 			fField->MakeFocus(true);
 		} else {
 			fField->MakeFocus(false);
-			fField->Hide();
+			_ShowField(false);
 		}
 		Invalidate();
 	}
@@ -551,6 +556,19 @@ private:
 		r5_glyph_draw(this, glyph, rect.InsetByCopy(inset, inset), color);
 	}
 
+	// BView::Hide() and Show() nest: _Place() runs on every resize, so
+	// hiding an already hidden field made one Show() leave it hidden. It
+	// then took the keys without drawing them (stick 27 Nov 2026).
+	void _ShowField(bool show)
+	{
+		if (show == fField->IsHidden(fField)) {
+			if (show)
+				fField->Show();
+			else
+				fField->Hide();
+		}
+	}
+
 	void _Place()
 	{
 		float kTabs = tabs_h();
@@ -560,8 +578,13 @@ private:
 				kTabs + sc(6) + bSize);
 		fField->MoveTo(fURL.left + sc(28), fURL.top + sc(4));
 		fField->ResizeTo(fURL.Width() - sc(56), sc(20));
+		// Placed by hand, not by a layout: without word wrap,
+		// BTextView::FrameResized() only moves its text rect, which stayed
+		// 0 x 0 from the layout constructor, so typed text was kept but
+		// never drawn (stick 27 Nov 2026).
+		fField->SetTextRect(fField->Bounds());
 		if (!fFocus)
-			fField->Hide();
+			_ShowField(false);
 		SetExplicitMinSize(BSize(sc(400), Height()));
 		SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, Height()));
 	}
@@ -632,7 +655,8 @@ class NewTabView : public BView {
 public:
 	NewTabView(bool privat)
 		:
-		BView("new tab", B_WILL_DRAW | B_FULL_UPDATE_ON_RESIZE),
+		BView("new tab", B_WILL_DRAW | B_FULL_UPDATE_ON_RESIZE
+			| B_FRAME_EVENTS),
 		fPrivate(privat),
 		fPebble(NULL),
 		fPebbleSize(0),
@@ -857,6 +881,7 @@ private:
 		BRect pill = _SearchRect();
 		fInput->MoveTo(pill.left + sc(40), pill.top + sc(11));
 		fInput->ResizeTo(pill.Width() - sc(56), sc(22));
+		fInput->SetTextRect(fInput->Bounds());
 	}
 
 	bool				fPrivate;
