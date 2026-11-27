@@ -8,6 +8,43 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-27 - Aomi: typed text shows in the address bar and the new-tab search field
+
+- Problem (5625U stick, 27 Nov): typing in Aomi's address bar or the new-tab search field took the keys (Enter searched) but never showed the text or the caret.
+- Cause: `ChromeView` and `NewTabView` (`distro/apps/aomi/AomiWindow.cpp`) place their `BTextView` by hand in `FrameResized()`, but were made without `B_FRAME_EVENTS`, so that hook never ran. The fields kept the size `_Place()` gave them in `AttachedToWindow()`, before the layout gave the view a width: a negative width, so nothing of the field was drawn.
+- Change: both views get `B_FRAME_EVENTS`. Kept from the first attempt: `_ShowField()` (Hide/Show nest, `_Place()` runs on every resize) and `SetTextRect(Bounds())` after placing (a layout-constructed `BTextView` without word wrap only moves its text rect on resize).
+- Mistake on the way: the first round fixed the hide count and the text rect and still saw nothing; the missing frame events were the actual cause. A second symptom in that WIP image (text redrawn after sign-in missing in every window, also in Settings' search field) is gone on main with #4696; it was not caused by Aomi.
+- Tested: QEMU, Skia on Lavapipe, main 217c3067d4 plus this branch: "hello" shows in the new-tab field and "abc" in the address bar. Not tested on the 5625U (RADV).
+
+## 2026-11-27 - Tracker: desktop labels in white with a soft dark glow
+
+- Change (owner, 27 Nov: desktop labels as on Windows 11): `BTextWidget::Draw()` (`distro/desktop/src/kits/tracker/TextWidget.cpp`) draws desktop labels white over a soft dark glow: the string drawn faintly (alpha 34, `B_OP_ALPHA`) at eleven offsets around and just below its place, then once at alpha 70 one pixel lower, instead of dark text in a light halo. `BPoseView::DrawPose()` (`PoseView.cpp`) redraws a desktop label through `Invalidate()`, so the glow is always blended over the wallpaper and never added up over an old glow.
+- Mistake on the way: in the WIP image (before #4696) the glow showed as black blocks; in that window the destination copy of the R5 shader read zeros after sign-in. On main with #4696 the same code draws a glyph-shaped glow.
+- Tested: QEMU, Skia on Lavapipe, light R5 wallpaper, crop of the four desktop labels. Not tested with Painter (`gpu_draw false`) or on the 5625U.
+- Limits: a stand-in for a blur (BView has none); the glow is soft and light, and may need tuning on hardware.
+
+## 2026-11-27 - Aomi: About page shows the Aomi app icon
+
+- Change: `aomi_about_html()` (`distro/apps/aomi/AomiPages.cpp`) replaces the drawn badge with Aomi's own app icon (`r5_file_icon_bitmap()` of the running app, 64 px), translated to PNG and embedded as a data URI; it keeps the badge when that fails. The Aomi Jamfile links `translation`.
+- Tested: QEMU, menu, About Aomi: the icon shows in the header.
+
+## 2026-11-27 - Skia text: subpixel anti-aliasing and full hinting by default
+
+- Change (owner, 27 Nov: text like Windows' ClearType with Manrope): `SkiaPainter::DrawString()` (`distro/app_server/skia/SkiaText.cpp`) uses the Antialiasing settings in both looks: subpixel coverage with full hinting by default, grey with normal hinting when subpixel is off. Subpixel only for `B_OP_COPY` and `B_OP_OVER`; blended text (`B_OP_ALPHA`, the desktop labels) stays grey, since it would get colour fringes.
+- Tested: QEMU, Skia on Lavapipe (text visible in Settings, Aomi, Deskbar). Not judged on the 5625U panel.
+
+## 2026-11-27 - app_server: log why a desktop refuses AS_CREATE_APP
+
+- Problem (5625U stick, 27 Nov): at shut down the registrar stopped with "couldn't obtain new app_server comm port", without a reason in the syslog.
+- Change: `Desktop::_DispatchMessage()` (`distro/desktop/src/servers/app/Desktop.cpp`) writes one warning per refused `AS_CREATE_APP`: the desktop's uid, the team, its signature and which sender check failed.
+- Limits: diagnosis only; the crash itself is not fixed. Not reproduced in QEMU.
+
+## 2026-11-27 - pin-mesa-packages.sh: map any Mesa revision in the shared pin
+
+- Problem: another worktree can leave a newer Mesa revision in the shared HaikuPorts pin; the script then stopped the build.
+- Change: `scripts/pin-mesa-packages.sh` maps any `mesa`, `mesa_lavapipe`, `mesa_radv` and `vulkan_loader` revision to this branch's (mesa 25.3.6-7, lavapipe -7, radv -14, loader 1.4.367-5).
+- Tested: three `scripts/build-locked.sh` builds on 27 Nov.
+
 ## 2026-11-27 - What's new: Build 10079 "Speeeeeeeeeed" for performance phases 1 and 2
 
 - Change: `distro/WHATSNEW` gets the Build 10079 section for the performance work of #4694 (phase 1) and #4696 (phase 2), written with the owner: smoother desktop and Aomi scrolling, quicker start and file work, no slowdown over the day, raised minimum requirements (Mesa is built for x86-64-v2). `distro/BUILD` goes from 10078 to 10079.
