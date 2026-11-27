@@ -111,6 +111,16 @@ text = text.replace("\tmesa-25.3.6-4\n", "\tmesa-25.3.6-7\n")
 text = text.replace("\tmesa-25.3.6-5\n", "\tmesa-25.3.6-7\n")
 text = text.replace("\tmesa-25.3.6-6\n", "\tmesa-25.3.6-7\n")
 text = text.replace("\tmesa-25.3.6-1\n", "")
+# Another worktree may have pinned a newer revision in the shared tree (the
+# HaikuPorts pin is build state, not source): any revision becomes this
+# branch's, so a build never stops on what another branch left (27 Nov 2026).
+import re
+text = re.sub(r"\tmesa-25\.3\.6-(?!1\n)[0-9]+\n", "\tmesa-25.3.6-7\n", text)
+text = re.sub(r"\tmesa_lavapipe-25\.3\.6-[0-9]+\n", "\tmesa_lavapipe-25.3.6-7\n",
+    text)
+text = re.sub(r"\tmesa_radv-25\.3\.6-[0-9]+\n", "\tmesa_radv-25.3.6-14\n", text)
+text = re.sub(r"\tvulkan_loader-1\.4\.367-[0-9]+\n", "\tvulkan_loader-1.4.367-5\n",
+    text)
 if "\tmesa-25.3.6-7\n" not in text:
     sys.exit("mesa 25.3.6-7 missing from the pin")
 if "\tvulkanteapot-1.0.0-6\n" not in text and "\tvulkanteapot-1.0.0-5\n" not in text and "\tvulkanteapot-1.0.0-4\n" not in text and "\tvulkan_tools-1.4.367-2\n" in text:
