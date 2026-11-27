@@ -8,6 +8,14 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-27 - Display step 1: HDMI hotplug and EDID on DCN 2.1 (logged only)
+
+- Problem: the owner wants a second screen on the 5625U's HDMI port. R5 has never programmed the display engine (DCN 2.1); the panel runs on the firmware (GOP) picture and HDMI stays dark. The accelerant already reads the VBIOS display paths (HDMI A is path 1, I2C id `0x91`, HPD pin `0x2` in the boot 55 syslog), but found no I2C or HPD pin for any connector.
+- Found: `gpio_general_populate()` reads the atomfirmware `gpio_pin_lut` with the old 4-byte entry; the v2.1 entry is 8 bytes (`atomfirmware.h`), so every pin came out as `hwPin 0x0`. Not changed here (the DCE paths use that function); step 1 reads the table itself.
+- Change: design `docs/DISPLAY-DCN.md` (steps 1 to 4, registers, firmware, risks, tests, kernel interface, licence check of the Linux DC files: all MIT). New `r5_dcn_hdmi.cpp` in the radeon_hd accelerant: once at start, for each HDMI and DVI connector on a DCN 2.1 GPU, it maps the VBIOS I2C and HPD ids to a DDC pad and HPD number the way Linux `bios_parser2.c` and `hw_translate_dcn21.c` do, reads `DC_GPIO_HPD_Y` and `HPDn_DC_HPD_CONTROL/INT_STATUS`, reads the EDID by bit-banging that DDC pad (its MASK, A and EN registers are saved and put back), and logs `radeon_hd: dcn hdmi: ...` lines (connector, pad, HPD, connected yes or no, monitor name, vendor, preferred mode). `gDisplay[]` is not changed, so app_server and the Display page see the same screens as before. On by default on DCN 2.1 only; `dcn_hdmi_probe false` in the radeon_hd settings turns it off. `scripts/apply-radeon.py` copies the two new files.
+- Tested: `scripts/build-locked.sh` `jam_exit=0`, `mesa_exit=0`; one QEMU/KVM boot of a copy of that image reached the first-start window as before. QEMU has no AMD GPU, so `radeon_hd` did not bind and no `dcn hdmi` line was written (expected).
+- Limits: not run on the 5625U. Whether HPD, the DDC pad mapping and the EDID read work on the HDMI port is unproven until a boot with a monitor attached. HPD sense counts only if the firmware enabled the HPD block; the GPIO pin is logged as well. Nothing is shown on HDMI yet (step 2).
+
 ## 2026-11-27 - Text: grey again in the R5 look (subpixel lost stems on the 5625U)
 
 - Problem (stick 56, 5625U, owner's screenshots): with slight hinting the spacing was right, but subpixel text still had strong yellow and blue fringes and lost thin vertical stems ("Acjust", "Cesktop", "Mcunt") in all app_server text. The QEMU check of the entry below did not prove subpixel: on Lavapipe the text looked grey. With subpixel off in Appearance → Antialiasing the owner confirmed the text is clearly better.

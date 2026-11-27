@@ -31,6 +31,11 @@
 #include "connector.h"
 #include "displayport.h"
 #include "encoder.h"
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include "r5_dcn_hdmi.h"
+// SPDX-SnippetEnd
 
 
 #define TRACE_DISPLAY
@@ -426,6 +431,14 @@ detect_displays()
 
 		displayIndex++;
 	}
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// DCN step 1: log HDMI hotplug and EDID. gDisplay[] stays as it is.
+	if (r5_display_is_dcn())
+		r5_dcn_hdmi_probe();
+// SPDX-SnippetEnd
 
 	// fail if no attached monitors were found
 	if (displayIndex == 0) {

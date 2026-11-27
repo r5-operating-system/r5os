@@ -26,6 +26,7 @@ Addon radeon_hd.accelerant :
 	hooks.cpp
 	mode.cpp
 	pll.cpp
+	r5_dcn_hdmi.cpp
 	ringqueue.cpp
 	: be libaccelerantscommon.a [ TargetLibsupc++ ]
 ;

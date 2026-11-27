@@ -28,6 +28,8 @@ FILES = (
     "src/add-ons/accelerants/radeon_hd/display.cpp",
     "src/add-ons/accelerants/radeon_hd/mode.cpp",
     "src/add-ons/accelerants/radeon_hd/gpu.cpp",
+    "src/add-ons/accelerants/radeon_hd/r5_dcn_hdmi.cpp",
+    "src/add-ons/accelerants/radeon_hd/r5_dcn_hdmi.h",
     "src/add-ons/accelerants/radeon_hd/gfx9_compute.s",
     "src/add-ons/accelerants/radeon_hd/gfx9_compute_shader.h",
     "src/add-ons/accelerants/radeon_hd/gfx9_compute_ib.h",
