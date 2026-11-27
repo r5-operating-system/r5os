@@ -56,8 +56,12 @@ void							aomi_download_list(
 bool							aomi_download_get(int32 id,
 									AomiDownload* download);
 int32							aomi_download_count_running();
-// Stops every download that runs (the program quits).
+// Stops every download that runs and waits for each one to remove its
+// ".part" (the program quits). No download starts after it.
 void							aomi_download_stop_all();
+// The file name for url: the last part of the address, decoded and safe
+// for a file system; "download" when the address has none.
+BString							aomi_download_name(const char* url);
 
 
 class AomiDownloadsWindow : public BWindow {

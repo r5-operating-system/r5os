@@ -71,7 +71,8 @@ void							aomi_bookmark_bar(std::vector<BString>* titles,
 									std::vector<BString>* urls);
 
 // Hands an address that is not a web page (mailto:, tel:) to the program
-// that takes its scheme. B_NAME_NOT_FOUND when none does.
+// that takes its scheme. B_NAME_NOT_FOUND when none does, B_NOT_ALLOWED for
+// a scheme other than mailto: and tel: (a web page may not start programs).
 status_t						aomi_open_external(const char* url);
 
 // The open pages of the last window that closed ("Last session").

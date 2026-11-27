@@ -2155,23 +2155,53 @@ AomiWindow::MessageReceived(BMessage* message)
 			OpenMenu();
 			break;
 		case MSG_MENU_BAR:
-			fPrefs.showMenuBar = !fPrefs.showMenuBar;
-			aomi_prefs_save(fPrefs);
-			ReloadPrefs();
-			break;
 		case MSG_BOOKMARKS_BAR:
-			fPrefs.showBookmarks = !fPrefs.showBookmarks;
-			aomi_prefs_save(fPrefs);
-			ReloadPrefs();
+		{
+			// The saved settings with this one value turned over, then
+			// every window is told: the other browser windows, and the
+			// settings window, whose next save would write the old value
+			// back otherwise.
+			AomiPrefs prefs = aomi_prefs();
+			if (message->what == MSG_MENU_BAR)
+				prefs.showMenuBar = !fPrefs.showMenuBar;
+			else
+				prefs.showBookmarks = !fPrefs.showBookmarks;
+			aomi_prefs_save(prefs);
+			for (int32 i = 0; i < be_app->CountWindows(); i++) {
+				BWindow* window = be_app->WindowAt(i);
+				if (window != NULL)
+					window->PostMessage(MSG_SETTINGS_CHANGED);
+			}
 			break;
+		}
+		case MSG_GET_ADDRESS:
+		{
+			BMessage reply(B_REPLY);
+			reply.AddString("url", Address());
+			message->SendReply(&reply);
+			break;
+		}
 		case MSG_SETTINGS:
 			OpenSettings(message->GetString("page", NULL));
 			break;
 		case MSG_SETTINGS_CHANGED:
+		{
+			int32 oldZoom = fPrefs.zoom;
 			ReloadPrefs();
+			// A new zoom in Aomi settings applies at once, to every tab.
+			if (fPrefs.zoom != oldZoom) {
+				fZoom = fPrefs.zoom / 100.0f;
+				for (int32 i = 0; i < (int32)fTabs.size(); i++) {
+					if (fTabs[i].view != NULL) {
+						fTabs[i].zoomApplied
+							= fTabs[i].view->SetZoom(fZoom, false) == B_OK;
+					}
+				}
+			}
 			for (int32 i = 0; i < (int32)fTabs.size(); i++)
 				_ApplyLook(i);
 			break;
+		}
 		case MSG_FIND:
 			if (fFindBar->IsHidden(fFindBar))
 				fFindBar->Show();
@@ -2411,15 +2441,9 @@ AomiWindow::_Download(const char* url, const char* shown)
 		BMessage message(MSG_DOWNLOAD_SAVE);
 		message.AddString("url", url);
 		fDownloadPanel->SetMessage(&message);
-		BString name(url);
-		int32 cut = name.FindFirst('?');
-		if (cut >= 0)
-			name.Truncate(cut);
-		int32 slash = name.FindLast('/');
-		if (slash >= 0)
-			name.Remove(0, slash + 1);
-		fDownloadPanel->SetSaveText(name.Length() > 0 ? name.String()
-			: "download");
+		// The same name a download without the panel gets: decoded ("%20"
+		// is a space) and cleaned of slashes and control characters.
+		fDownloadPanel->SetSaveText(aomi_download_name(url).String());
 		entry_ref dir;
 		if (get_ref_for_path(fPrefs.downloadPath.String(), &dir) == B_OK)
 			fDownloadPanel->SetPanelDirectory(&dir);
@@ -2436,16 +2460,22 @@ AomiWindow::_Download(const char* url, const char* shown)
 void
 AomiWindow::_OpenExternal(const char* url)
 {
-	// mailto:, tel: and the like belong to another program.
-	if (aomi_open_external(url) == B_OK)
+	// mailto: and tel: belong to another program.
+	status_t status = aomi_open_external(url);
+	if (status == B_OK)
 		return;
 	BString scheme(url);
 	int32 colon = scheme.FindFirst(':');
 	if (colon > 0)
 		scheme.Truncate(colon);
 	BString text;
-	text.SetToFormat(B_TRANSLATE("No program on this computer opens "
-		"\"%s\" links."), scheme.String());
+	if (status == B_NOT_ALLOWED) {
+		text.SetToFormat(B_TRANSLATE("Aomi does not open \"%s\" links from "
+			"a web page."), scheme.String());
+	} else {
+		text.SetToFormat(B_TRANSLATE("No program on this computer opens "
+			"\"%s\" links."), scheme.String());
+	}
 	BAlert* alert = new BAlert("Aomi", text.String(), B_TRANSLATE("OK"));
 	alert->Go(NULL);
 }

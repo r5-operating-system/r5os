@@ -23,6 +23,7 @@
 #include <GroupView.h>
 #include <LayoutBuilder.h>
 #include <Locker.h>
+#include <Messenger.h>
 #include <Notification.h>
 #include <Path.h>
 #include <Roster.h>
@@ -71,6 +72,10 @@ struct Entry {
 BLocker sLock("aomi downloads");
 std::vector<Entry> sList;
 int32 sNextId = 1;
+// Every download thread started, so that quitting can wait for them; and
+// whether Aomi quits, after which no download starts.
+std::vector<thread_id> sThreads;
+bool sStopping = false;
 
 
 Entry*
@@ -111,10 +116,26 @@ exists(const BString& path)
 }
 
 
+// Another download of this list writes to path (sLock held). Its ".part"
+// is made later by curl, so the disk alone does not show it yet.
+bool
+taken(const BString& path, int32 self)
+{
+	for (size_t i = 0; i < sList.size(); i++) {
+		if (sList[i].info.id != self
+			&& sList[i].info.state == AOMI_DOWNLOAD_RUNNING
+			&& sList[i].info.path == path)
+			return true;
+	}
+	return false;
+}
+
+
 // A file name nobody else uses in folder: "name", "name (2)", ... with the
-// ending kept, and no ".part" of that name either.
+// ending kept, no ".part" of that name either, and no running download of
+// this list that writes it (sLock held). self: the download that asks.
 BString
-unique_path(const BString& folder, const BString& name)
+unique_path(const BString& folder, const BString& name, int32 self)
 {
 	BString base(name);
 	BString ending;
@@ -136,7 +157,7 @@ unique_path(const BString& folder, const BString& name)
 		candidate << ending;
 		BString part(candidate);
 		part << ".part";
-		if (!exists(candidate) && !exists(part))
+		if (!exists(candidate) && !exists(part) && !taken(candidate, self))
 			return candidate;
 	}
 	BString fallback(folder);
@@ -331,16 +352,31 @@ download_thread(void* data)
 	sLock.Unlock();
 	part = target;
 	part << ".part";
-	header.SetToFormat("/tmp/aomi-download-%d-%d.head", (int)getpid(),
-		(int)id);
+	// The response headers go to a new file of the user's own cache, not to
+	// a name in the shared /tmp that another account could put a link on.
+	BPath cache;
+	if (find_directory(B_USER_CACHE_DIRECTORY, &cache, true) == B_OK
+		&& cache.Append("Aomi") == B_OK
+		&& create_directory(cache.Path(), 0700) == B_OK) {
+		BString pattern(cache.Path());
+		pattern << "/download-XXXXXX";
+		char* buffer = pattern.LockBuffer(0);
+		int fd = mkstemp(buffer);
+		pattern.UnlockBuffer();
+		if (fd >= 0) {
+			close(fd);
+			header = pattern;
+		}
+	}
 
 	// curl writes the file and the response headers; Aomi reads both for
 	// the progress. No shell: the address is one argument.
 	const char* args[] = { "/bin/curl", "-fsSL", "--proto", "=http,https",
 		"--proto-redir", "=http,https", "--connect-timeout", "30",
 		"-D", header.String(), "-o", part.String(), url.String(), NULL };
-	thread_id team = load_image(13, args, (const char**)environ);
-	int code = 127;
+	thread_id team = header.Length() > 0
+		? load_image(13, args, (const char**)environ) : B_ERROR;
+	int code = header.Length() > 0 ? 127 : 23;
 	int32 status = 0;
 	int64 length = -1;
 	if (team >= 0) {
@@ -416,7 +452,7 @@ download_thread(void* data)
 		// its own (".../download?id=7").
 		if (!entry->chosen && serverName.Length() > 0
 			&& serverName != entry->info.name) {
-			BString better = unique_path(entry->folder, serverName);
+			BString better = unique_path(entry->folder, serverName, id);
 			target = better;
 		}
 		if (rename(part.String(), target.String()) != 0) {
@@ -459,10 +495,27 @@ download_thread(void* data)
 status_t
 run(int32 id)
 {
-	thread_id thread = spawn_thread(download_thread, "aomi download",
-		B_LOW_PRIORITY, (void*)(addr_t)id);
-	if (thread < 0)
+	BAutolock _(sLock);
+	thread_id thread = sStopping ? B_NOT_ALLOWED
+		: spawn_thread(download_thread, "aomi download", B_LOW_PRIORITY,
+			(void*)(addr_t)id);
+	if (thread < 0) {
+		Entry* entry = find_entry(id);
+		if (entry != NULL) {
+			entry->info.state = AOMI_DOWNLOAD_FAILED_STATE;
+			entry->info.error = B_TRANSLATE("The download stopped.");
+		}
 		return thread;
+	}
+	// Threads that ended are dropped here, so the list stays short.
+	for (size_t i = 0; i < sThreads.size();) {
+		thread_info threadInfo;
+		if (get_thread_info(sThreads[i], &threadInfo) != B_OK)
+			sThreads.erase(sThreads.begin() + i);
+		else
+			i++;
+	}
+	sThreads.push_back(thread);
 	return resume_thread(thread);
 }
 
@@ -498,15 +551,23 @@ start(const char* url, const char* folder, const char* path,
 		create_directory(dir.String(), 0755);
 		entry.folder = dir;
 		entry.info.name = name_from_url(url);
-		entry.info.path = unique_path(dir, entry.info.name);
-		entry.info.name = BPath(entry.info.path.String()).Leaf();
 	}
 	entry.info.shown = shown != NULL ? shown : url;
 	entry.info.current = 0;
 	entry.info.expected = -1;
 	entry.info.state = AOMI_DOWNLOAD_RUNNING;
 	sLock.Lock();
+	if (sStopping) {
+		sLock.Unlock();
+		return B_NOT_ALLOWED;
+	}
 	entry.info.id = sNextId++;
+	if (!entry.chosen) {
+		// Under the lock, with the list: the same link twice gets two names.
+		entry.info.path = unique_path(entry.folder, entry.info.name,
+			entry.info.id);
+		entry.info.name = BPath(entry.info.path.String()).Leaf();
+	}
 	sList.push_back(entry);
 	AomiDownload info = entry.info;
 	sLock.Unlock();
@@ -562,14 +623,14 @@ aomi_download_retry(int32 id)
 		return B_NOT_ALLOWED;
 	}
 	entry->cancel = false;
+	if (!entry->chosen) {
+		entry->info.path = unique_path(entry->folder, entry->info.name, id);
+		entry->info.name = BPath(entry->info.path.String()).Leaf();
+	}
 	entry->info.state = AOMI_DOWNLOAD_RUNNING;
 	entry->info.current = 0;
 	entry->info.expected = -1;
 	entry->info.error = "";
-	if (!entry->chosen) {
-		entry->info.path = unique_path(entry->folder, entry->info.name);
-		entry->info.name = BPath(entry->info.path.String()).Leaf();
-	}
 	AomiDownload info = entry->info;
 	sLock.Unlock();
 	post(AOMI_DOWNLOAD_PROGRESS, info);
@@ -634,7 +695,9 @@ aomi_download_count_running()
 void
 aomi_download_stop_all()
 {
-	BAutolock _(sLock);
+	std::vector<thread_id> threads;
+	sLock.Lock();
+	sStopping = true;
 	for (size_t i = 0; i < sList.size(); i++) {
 		if (sList[i].info.state == AOMI_DOWNLOAD_RUNNING) {
 			sList[i].cancel = true;
@@ -642,6 +705,39 @@ aomi_download_stop_all()
 				kill(sList[i].team, SIGTERM);
 		}
 	}
+	threads.swap(sThreads);
+	sLock.Unlock();
+
+	// Each thread sees its curl end within a quarter second (its poll),
+	// removes the ".part" and ends. It takes only sLock and posts to
+	// be_app, so waiting here, in a window or in the application, cannot
+	// hold it up. The time limit only guards against a curl that ignores
+	// SIGTERM.
+	bigtime_t until = system_time() + 5000000;
+	for (size_t i = 0; i < threads.size(); i++) {
+		status_t result;
+		bigtime_t left = until - system_time();
+		if (left > 0 && wait_for_thread_etc(threads[i], B_RELATIVE_TIMEOUT,
+				left, &result) == B_TIMED_OUT) {
+			// Still running after the time limit: every curl is stopped
+			// hard, and its thread cleans up when it sees that.
+			sLock.Lock();
+			for (size_t j = 0; j < sList.size(); j++) {
+				if (sList[j].team >= 0)
+					kill(sList[j].team, SIGKILL);
+			}
+			sLock.Unlock();
+			wait_for_thread_etc(threads[i], B_RELATIVE_TIMEOUT, 1000000,
+				&result);
+		}
+	}
+}
+
+
+BString
+aomi_download_name(const char* url)
+{
+	return name_from_url(url != NULL ? url : "");
 }
 
 
@@ -671,6 +767,7 @@ const uint32 kMsgCancel = 'dCan';
 const uint32 kMsgRetry = 'dRty';
 const uint32 kMsgClear = 'dClr';
 const uint32 kMsgFolder = 'dFld';
+const uint32 kMsgBringUp = 'dBup';
 
 BLocker sWindowLock("aomi downloads window");
 AomiDownloadsWindow* sWindow = NULL;
@@ -953,20 +1050,22 @@ AomiDownloadsWindow::QuitRequested()
 /*static*/ void
 AomiDownloadsWindow::ShowWindow(const char* folder)
 {
+	// The open window is never locked here: it takes sWindowLock while it
+	// holds its own lock (QuitRequested(), the destructor), and the caller
+	// may be a window too. It gets a message instead.
+	BMessage show(kMsgBringUp);
+	show.AddString("folder", folder != NULL ? folder : "");
 	BAutolock _(sWindowLock);
-	if (sWindow == NULL) {
-		sWindow = new AomiDownloadsWindow();
-		sWindow->fFolder = folder != NULL ? folder : "";
-		sWindow->Show();
-		return;
+	if (sWindow != NULL) {
+		status_t status = BMessenger(sWindow).SendMessage(&show,
+			(BHandler*)NULL, 1000000);
+		// Only a window that is gone gets a successor.
+		if (status != B_BAD_PORT_ID && status != B_BAD_HANDLER)
+			return;
 	}
-	if (sWindow->Lock()) {
-		sWindow->fFolder = folder != NULL ? folder : "";
-		if (sWindow->IsHidden())
-			sWindow->Show();
-		sWindow->Activate(true);
-		sWindow->Unlock();
-	}
+	sWindow = new AomiDownloadsWindow();
+	sWindow->fFolder = folder != NULL ? folder : "";
+	sWindow->Show();
 }
 
 
@@ -1036,6 +1135,12 @@ AomiDownloadsWindow::MessageReceived(BMessage* message)
 {
 	int32 id = message->GetInt32("id", 0);
 	switch (message->what) {
+		case kMsgBringUp:
+			fFolder = message->GetString("folder", "");
+			if (IsHidden())
+				Show();
+			Activate(true);
+			break;
 		case AOMI_DOWNLOAD_ADDED:
 			_Rebuild();
 			break;

@@ -730,10 +730,10 @@ NetServer::_ConfigureResolver(BMessage& resolverConfiguration)
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 	// Every source owns one block, opened by "# interface <tag>": IPv4 DHCP
-	// (which sends no "device") is the tag "ipv4", SLAAC and DHCPv6 use
-	// their device. An update replaces only its own block, servers and
-	// domain, and keeps every other block as it was. Untagged lines from
-	// an older file belong to "ipv4".
+	// is the tag "ipv4:<device>" ("ipv4" when it names no device), SLAAC and
+	// DHCPv6 use their device. An update replaces only its own block,
+	// servers and domain, and keeps every other block as it was. Untagged
+	// lines from an older file belong to "ipv4".
 	static const char* kIPv4Tag = "ipv4";
 	struct ServerEntry {
 		char server[96];
@@ -769,9 +769,20 @@ NetServer::_ConfigureResolver(BMessage& resolverConfiguration)
 		if (server != NULL && strchr(server, ':') != NULL)
 			anyIPv6 = true;
 	}
-	if (!anyIPv6)
-		strlcpy(deviceName, kIPv4Tag, sizeof(deviceName));
-	bool ipv4Update = strcmp(deviceName, kIPv4Tag) == 0;
+	// Each IPv4 network keeps its own block: with one tag for all of them,
+	// two networks (cable and Wi-Fi) replaced each other's servers.
+	bool ipv4Update = !anyIPv6;
+	char ipv4Device[64];
+	ipv4Device[0] = '\0';
+	if (ipv4Update) {
+		if (strcmp(deviceName, kIPv4Tag) != 0)
+			strlcpy(ipv4Device, deviceName, sizeof(ipv4Device));
+		if (ipv4Device[0] != '\0') {
+			snprintf(deviceName, sizeof(deviceName), "%s:%s", kIPv4Tag,
+				ipv4Device);
+		} else
+			strlcpy(deviceName, kIPv4Tag, sizeof(deviceName));
+	}
 
 	FILE* existing = fopen(path.Path(), "r");
 	if (existing != NULL) {
@@ -795,6 +806,15 @@ NetServer::_ConfigureResolver(BMessage& resolverConfiguration)
 				continue;
 			}
 			bool ours = strcmp(currentTag, deviceName) == 0;
+			// Blocks an older NetServer wrote for this IPv4 update: the
+			// shared "ipv4" block, and IPv4 servers under the bare device.
+			if (!ours && ipv4Update) {
+				ours = strcmp(currentTag, kIPv4Tag) == 0
+					|| (ipv4Device[0] != '\0'
+						&& strcmp(currentTag, ipv4Device) == 0
+						&& strncmp(line, "nameserver ", 11) == 0
+						&& strchr(line + 11, ':') == NULL);
+			}
 			if (strncmp(line, "domain ", 7) == 0) {
 				if (!ours && line[7] != '\0' && nKeptDomains < 4) {
 					strlcpy(keptDomains[nKeptDomains].domain, line + 7,
@@ -889,7 +909,7 @@ NetServer::_ConfigureResolver(BMessage& resolverConfiguration)
 	} else {
 		int32 pick = -1;
 		for (int32 i = 0; i < nKeptDomains; i++) {
-			if (pick < 0 || strcmp(keptDomains[i].tag, kIPv4Tag) == 0)
+			if (pick < 0 || strncmp(keptDomains[i].tag, kIPv4Tag, 4) == 0)
 				pick = i;
 		}
 		if (pick >= 0) {

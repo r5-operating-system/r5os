@@ -24,6 +24,7 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 
 static const char* kFolder = "WebPositive";
@@ -166,9 +167,22 @@ aomi_prefs_save(const AomiPrefs& prefs)
 	message.AddBool("show menu bar", prefs.showMenuBar);
 	message.AddInt32("page colors", prefs.pageColors);
 	message.AddInt32("zoom", prefs.zoom);
-	BFile file(path.Path(), B_CREATE_FILE | B_ERASE_FILE | B_WRITE_ONLY);
-	if (file.InitCheck() == B_OK)
-		message.Flatten(&file);
+	// Written next to the file and renamed over it: a reader (another
+	// window, the next start) never finds it empty or half written.
+	BString temporary(path.Path());
+	temporary << ".new";
+	status_t status;
+	{
+		BFile file(temporary.String(),
+			B_CREATE_FILE | B_ERASE_FILE | B_WRITE_ONLY);
+		status = file.InitCheck();
+		if (status == B_OK)
+			status = message.Flatten(&file);
+		if (status == B_OK)
+			status = file.Sync();
+	}
+	if (status != B_OK || rename(temporary.String(), path.Path()) != 0)
+		unlink(temporary.String());
 }
 
 
@@ -545,6 +559,17 @@ aomi_open_external(const char* url)
 	BString scheme;
 	text.CopyInto(scheme, 0, colon);
 	scheme.ToLower();
+	// Only schemes that hand an address to a program that asks the user
+	// first. urlwrapper also takes file:, sh:, query:, telnet: and ssh:,
+	// which would let any web page open files or start commands.
+	static const char* const kAllowed[] = { "mailto", "tel", NULL };
+	bool allowed = false;
+	for (int32 i = 0; kAllowed[i] != NULL; i++) {
+		if (scheme == kAllowed[i])
+			allowed = true;
+	}
+	if (!allowed)
+		return B_NOT_ALLOWED;
 	BString signature("application/x-vnd.Be.URL.");
 	signature << scheme;
 	entry_ref ref;

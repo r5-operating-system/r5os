@@ -32,6 +32,7 @@
 #include <Locker.h>
 #include <MenuField.h>
 #include <MenuItem.h>
+#include <Messenger.h>
 #include <Path.h>
 #include <PopUpMenu.h>
 #include <Roster.h>
@@ -71,6 +72,7 @@ const uint32 kMsgChosen = 'sCsn';
 const uint32 kMsgClearHistory = 'sClH';
 const uint32 kMsgClearSiteData = 'sClS';
 const uint32 kMsgShowDownloads = 'sDls';
+const uint32 kMsgBringUp = 'sBup';
 
 const int32 kZooms[] = { 50, 67, 80, 90, 100, 110, 125, 150, 175, 200 };
 const int32 kZoomCount = 10;
@@ -382,22 +384,24 @@ AomiSettingsWindow::QuitRequested()
 /*static*/ void
 AomiSettingsWindow::ShowWindow(const char* page)
 {
+	// The open window is never locked here: it takes sWindowLock while it
+	// holds its own lock (QuitRequested(), the destructor), and the caller
+	// is a browser window. It gets a message instead.
+	BMessage show(kMsgBringUp);
+	if (page != NULL)
+		show.AddString("page", page);
 	BAutolock _(sWindowLock);
-	if (sWindow == NULL) {
-		sWindow = new AomiSettingsWindow();
-		if (page != NULL)
-			sWindow->_SelectPage(page);
-		sWindow->Show();
-		return;
+	if (sWindow != NULL) {
+		status_t status = BMessenger(sWindow).SendMessage(&show,
+			(BHandler*)NULL, 1000000);
+		// Only a window that is gone gets a successor.
+		if (status != B_BAD_PORT_ID && status != B_BAD_HANDLER)
+			return;
 	}
-	if (sWindow->Lock()) {
-		if (page != NULL)
-			sWindow->_SelectPage(page);
-		if (sWindow->IsHidden())
-			sWindow->Show();
-		sWindow->Activate(true);
-		sWindow->Unlock();
-	}
+	sWindow = new AomiSettingsWindow();
+	if (page != NULL)
+		sWindow->_SelectPage(page);
+	sWindow->Show();
 }
 
 
@@ -502,7 +506,7 @@ AomiSettingsWindow::_AppearancePage()
 		text.SetToFormat("%d %%", (int)kZooms[i]);
 		zooms->AddItem(new BMenuItem(text.String(), new BMessage(kMsgChanged)));
 	}
-	fZoom = new BMenuField("zoom", B_TRANSLATE("Zoom of a new tab:"),
+	fZoom = new BMenuField("zoom", B_TRANSLATE("Page zoom:"),
 		zooms);
 
 	BGroupView* pages = new BGroupView(B_VERTICAL);
@@ -688,7 +692,8 @@ AomiSettingsWindow::_UpdateButtons()
 			&& a.downloadPath == b.downloadPath
 			&& a.askDownload == b.askDownload
 			&& a.showMenuBar == b.showMenuBar
-			&& a.pageColors == b.pageColors && a.zoom == b.zoom;
+			&& a.pageColors == b.pageColors && a.zoom == b.zoom
+			&& a.zoomText == b.zoomText;
 	};
 	fRevert->SetEnabled(!same(fPrefs, fOpened));
 	fDefaults->SetEnabled(!same(fPrefs, defaults));
@@ -705,6 +710,27 @@ void
 AomiSettingsWindow::MessageReceived(BMessage* message)
 {
 	switch (message->what) {
+		case kMsgBringUp:
+			_SelectPage(message->GetString("page", NULL));
+			if (IsHidden())
+				Show();
+			Activate(true);
+			break;
+		case MSG_SETTINGS_CHANGED:
+		{
+			// A browser window turned its menu bar or bookmarks bar on or
+			// off, and saved that. Take it over, so the next save here does
+			// not write the old value back.
+			AomiPrefs saved = aomi_prefs();
+			fPrefs.showMenuBar = saved.showMenuBar;
+			fPrefs.showBookmarks = saved.showBookmarks;
+			fFilling = true;
+			fShowMenuBar->SetValue(fPrefs.showMenuBar);
+			fShowBar->SetValue(fPrefs.showBookmarks);
+			fFilling = false;
+			_UpdateButtons();
+			break;
+		}
 		case kMsgPage:
 		{
 			int32 index = fList->CurrentSelection();
@@ -746,13 +772,20 @@ AomiSettingsWindow::MessageReceived(BMessage* message)
 			break;
 		case kMsgUseCurrent:
 		{
+			// Each browser window is asked for its address with a message:
+			// locking it from here, while this window is locked, deadlocks
+			// when that window waits for this one.
 			for (int32 i = 0; i < be_app->CountWindows(); i++) {
 				AomiWindow* window
 					= dynamic_cast<AomiWindow*>(be_app->WindowAt(i));
-				if (window == NULL || !window->Lock())
+				if (window == NULL)
 					continue;
-				BString address(window->Address());
-				window->Unlock();
+				BMessage ask(MSG_GET_ADDRESS);
+				BMessage reply;
+				if (BMessenger(window).SendMessage(&ask, &reply, 1000000,
+						1000000) != B_OK)
+					continue;
+				BString address(reply.GetString("url", ""));
 				if (address.StartsWith("http://")
 					|| address.StartsWith("https://")) {
 					fHome->SetText(address.String());

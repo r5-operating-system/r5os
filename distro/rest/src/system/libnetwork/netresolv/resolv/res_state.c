@@ -72,8 +72,11 @@ __RCSID("$NetBSD: res_state.c,v 1.6 2008/04/28 20:23:02 martin Exp $");
  * and a state, once built, kept the name servers it first read. A program
  * started before the network was up (no resolv.conf yet) never resolved a
  * name until it was restarted, even after the DHCP client wrote the file.
- * Each state now remembers which file it was built from (inode, size, time)
- * and is built again when the file is a different one.
+ * Each pooled state (__res_get_state(), used by getaddrinfo() and
+ * gethostbyname()) now remembers which file it was built from (inode, size,
+ * time) and is built again when the file is a different one. The shared _res
+ * (__res_state()) stays as Haiku has it: a program sets its own options there,
+ * and it has no lock to build it again safely.
  */
 struct r5_conf_stamp {
 	ino_t			inode;
@@ -112,8 +115,6 @@ r5_same_conf_stamp(const struct r5_conf_stamp *a,
 		&& a->modified.tv_nsec == b->modified.tv_nsec;
 }
 
-
-static struct r5_conf_stamp r5_nres_stamp;
 // SPDX-SnippetEnd
 
 struct __res_state _nres
@@ -224,21 +225,10 @@ __res_put_state(res_state res)
 res_state
 __res_state(void)
 {
-// SPDX-SnippetBegin
-// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
-// SPDX-License-Identifier: MIT
-	struct r5_conf_stamp now;
-
-	r5_read_conf_stamp(&now);
-	if ((_nres.options & RES_INIT) == 0
-		|| !r5_same_conf_stamp(&now, &r5_nres_stamp)) {
-		r5_nres_stamp = now;
-		if (res_ninit(&_nres) == -1) {
-			h_errno = NETDB_INTERNAL;
-			return NULL;
-		}
+	if ((_nres.options & RES_INIT) == 0 && res_ninit(&_nres) == -1) {
+		h_errno = NETDB_INTERNAL;
+		return NULL;
 	}
-// SPDX-SnippetEnd
 
 	return &_nres;
 }
