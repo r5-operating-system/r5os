@@ -86,7 +86,9 @@ public:
 			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 			bool		HasStaticPlacement(unsigned dso) const;
 			uint64		StaticPlacement(unsigned dso) const;
-			void		Materialize();
+			// True when this thread's static image covers every template.
+			// _readySnap is the placement snapshot that copy belongs to.
+			bool		Materialize(void** _readySnap);
 			void		SetRelocated(unsigned dso);
 			// SPDX-SnippetEnd
 
@@ -97,6 +99,7 @@ private:
 			// SPDX-License-Identifier: MIT
 			// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 			void		_AssignStaticOffset(unsigned dso);
+			void		_PublishSnap();
 			addr_t		_GapFromThreadPointer() const;
 			bool		_EnsureMapped(addr_t threadPointer, addr_t bytesFromTp);
 			// SPDX-SnippetEnd
