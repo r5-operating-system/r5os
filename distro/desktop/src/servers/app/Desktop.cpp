@@ -3353,17 +3353,17 @@ Desktop::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 				&& (clientInfo.uid == 0 || clientInfo.uid == fUserID)
 				&& (fLastSenderUid == 0 || clientTeamID == fLastSenderTeam));
 			if (!senderAllowed || !teamAllowed) {
-				// Once per refusal: which check failed, so a program that
-				// stops with "couldn't obtain new app_server comm port"
-				// (the registrar at shut down, 27 Nov 2026) can be traced.
-				syslog(LOG_WARNING, "app_server: desktop of uid %" B_PRId32
-					" refused AS_CREATE_APP from team %" B_PRId32 " (%s): "
-					"first %d sender uid %" B_PRId32 " team uid %" B_PRId32,
-					(int32)fUserID, clientTeamID,
+				// Rare, and the only trace of why a program got no GUI
+				// context (the registrar at shut down, 27 Nov 2026).
+				syslog(LOG_WARNING, "app_server: desktop of uid %d refused "
+					"AS_CREATE_APP from team %d (%s): first %d sender uid %d "
+					"team %d, client uid %d",
+					(int)fUserID, (int)clientTeamID,
 					appSignature != NULL ? appSignature : "?",
-					fLastSenderFirst ? 1 : 0, (int32)fLastSenderUid,
+					fLastSenderFirst ? 1 : 0, (int)fLastSenderUid,
+					(int)fLastSenderTeam,
 					get_team_info(clientTeamID, &clientInfo) == B_OK
-						? (int32)clientInfo.uid : (int32)-1);
+						? (int)clientInfo.uid : -1);
 				BPrivate::LinkSender reply(clientReplyPort);
 				reply.StartMessage(B_PERMISSION_DENIED);
 				reply.Flush();
@@ -3402,6 +3402,14 @@ Desktop::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 				fApplications.AddItem(app.Detach());
 				fApplicationsLock.Unlock();
 			} else {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+				syslog(LOG_WARNING, "app_server: desktop of uid %d: "
+					"AS_CREATE_APP from team %d (%s) failed: %s", (int)fUserID,
+					(int)clientTeamID, appSignature != NULL ? appSignature : "?",
+					strerror(status));
+// SPDX-SnippetEnd
 				// if everything went well, ServerApp::Run() will notify
 				// the client - but since it didn't, we do it here
 				BPrivate::LinkSender reply(clientReplyPort);

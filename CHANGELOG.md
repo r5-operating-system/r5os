@@ -33,17 +33,20 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - Change (owner, 27 Nov: text like Windows' ClearType with Manrope): `SkiaPainter::DrawString()` (`distro/app_server/skia/SkiaText.cpp`) uses the Antialiasing settings in both looks: subpixel coverage with full hinting by default, grey with normal hinting when subpixel is off. Subpixel only for `B_OP_COPY` and `B_OP_OVER`; blended text (`B_OP_ALPHA`, the desktop labels) stays grey, since it would get colour fringes.
 - Tested: QEMU, Skia on Lavapipe (text visible in Settings, Aomi, Deskbar). Not judged on the 5625U panel.
 
-## 2026-11-27 - app_server: log why a desktop refuses AS_CREATE_APP
-
-- Problem (5625U stick, 27 Nov): at shut down the registrar stopped with "couldn't obtain new app_server comm port", without a reason in the syslog.
-- Change: `Desktop::_DispatchMessage()` (`distro/desktop/src/servers/app/Desktop.cpp`) writes one warning per refused `AS_CREATE_APP`: the desktop's uid, the team, its signature and which sender check failed.
-- Limits: diagnosis only; the crash itself is not fixed. Not reproduced in QEMU.
-
 ## 2026-11-27 - pin-mesa-packages.sh: map any Mesa revision in the shared pin
 
 - Problem: another worktree can leave a newer Mesa revision in the shared HaikuPorts pin; the script then stopped the build.
 - Change: `scripts/pin-mesa-packages.sh` maps any `mesa`, `mesa_lavapipe`, `mesa_radv` and `vulkan_loader` revision to this branch's (mesa 25.3.6-7, lavapipe -7, radv -14, loader 1.4.367-5).
 - Tested: three `scripts/build-locked.sh` builds on 27 Nov.
+
+## 2026-11-27 - Shut down no longer stops in the debugger when the registrar gets no window
+
+- Problem: On the 5625U (sticks of 27 Nov, `generated/boot-5625u-53`, `-54`), every shut down stopped in the debugger: `BApplication: couldn't obtain new app_server comm port`, from `ShutdownProcess::Init()` → `BServer::InitGUIContext()` → `BApplication::_ConnectToServer()`. app_server answered the registrar's `AS_CREATE_APP` with an error, and libbe then called `debugger()`, so the registrar stopped and the shut down hung until the power button. `ShutdownProcess` already handles a missing GUI (`fHasGUI`); only the `debugger()` call stood in the way.
+- Change:
+  - `distro/desktop/src/kits/app/Application.cpp` (copied from Haiku, R5 snippet): a `BServer` gets the error back instead of `debugger()`, with a syslog line naming the reply code, so the registrar shuts down without its window. Applications keep Haiku's behaviour.
+  - `distro/desktop/src/servers/app/Desktop.cpp`: app_server logs why a desktop refuses `AS_CREATE_APP` (sender first, sender uid and team, client uid) and when creating the `ServerApp` fails (status). Both are rare, and they are the only trace of the cause.
+- Cause: not found yet. In QEMU (same image, first sign-in, shut down through the Deskbar submenu, the menu item and the ACPI power button) the registrar (uid 0) gets the shown desktop of uid 1001 and connects; the shut down completes. The next 5625U stick shows the logged reason.
+- Tested: `scripts/build-locked.sh` (jam exit 0); private QEMU KVM boot, first sign-in, shut down through the Deskbar submenu: QEMU powered off, no `DEBUGGER` line on serial. The no-GUI shut down path itself was not forced in QEMU.
 
 ## 2026-11-27 - What's new: Build 10079 "Speeeeeeeeeed" for performance phases 1 and 2
 
