@@ -8,6 +8,13 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-27 - Text: grey again in the R5 look (subpixel lost stems on the 5625U)
+
+- Problem (stick 56, 5625U, owner's screenshots): with slight hinting the spacing was right, but subpixel text still had strong yellow and blue fringes and lost thin vertical stems ("Acjust", "Cesktop", "Mcunt") in all app_server text. The QEMU check of the entry below did not prove subpixel: on Lavapipe the text looked grey. With subpixel off in Appearance → Antialiasing the owner confirmed the text is clearly better.
+- Change: `SkiaText.cpp` uses subpixel coverage only in Classic again (as in step 5b before `3d57a98166`); the R5 look is grey with slight hinting. The slight hinting from the entry below stays.
+- Tested: `scripts/build-locked.sh` `jam_exit=0`; the grey result itself was confirmed by the owner on the 5625U with subpixel off at run time.
+- Limits: subpixel (ClearType-like) text on RADV is not solved; why the fringes are unfiltered and stems drop needs its own round. Classic still uses subpixel and was not checked on the 5625U.
+
 ## 2026-11-27 - Text: slight hinting again, with subpixel (letters no longer crowded or cut off)
 
 - Problem (stick 55, 5625U, owner's screenshots): since the subpixel change (`3d57a98166`) menu, tab and label text was crowded ("Showreplicantshandle"), letters were cut off ("Faiku", "Mcunt"), and grey text (inactive window tabs, the sign-in screen) was spread out and thin. Mistake of the lead session: full hinting (subpixel) and normal hinting (grey) change the glyph widths, while the positions come from ServerFont's unhinted advances (`FontEngine`), so the glyphs no longer fit their places. The comparison image did not show it.
