@@ -559,14 +559,14 @@ static const int32 kTextureLargest = 64 * 1024 * 1024;
 static uint64
 bitmap_hash(const uint8* bits, int32 length)
 {
+	// 4-lane nonlinear 64-bit multiply-xor-rotate hash over every byte:
+	// keeps the full-bitmap guarantee (#4684) with 64 bits per lane so
+	// single-lane/column edits cannot hit linear 32-bit CRC collisions.
 	const uint64 kPrime = 0x9e3779b97f4a7c15ull;
-#if defined(__x86_64__) && defined(__SSE4_2__)
-	// 4-lane hardware CRC32C over every byte (x86-64-v2 baseline): keeps the
-	// full-bitmap guarantee (#4684) at memory-bandwidth speed.
-	uint64 c0 = (uint64)length ^ kPrime;
-	uint64 c1 = kPrime * 3;
-	uint64 c2 = kPrime * 5;
-	uint64 c3 = kPrime * 7;
+	uint64 l0 = kPrime;
+	uint64 l1 = kPrime * 3;
+	uint64 l2 = kPrime * 5;
+	uint64 l3 = kPrime * 7;
 	int32 words = length / 8;
 	int32 i = 0;
 	for (; i + 4 <= words; i += 4) {
@@ -576,38 +576,20 @@ bitmap_hash(const uint8* bits, int32 length)
 		memcpy(&w1, p + 8, 8);
 		memcpy(&w2, p + 16, 8);
 		memcpy(&w3, p + 24, 8);
-		c0 = _mm_crc32_u64(c0, w0);
-		c1 = _mm_crc32_u64(c1, w1);
-		c2 = _mm_crc32_u64(c2, w2);
-		c3 = _mm_crc32_u64(c3, w3);
-	}
-	for (; i < words; i++) {
-		uint64 word;
-		memcpy(&word, bits + (size_t)i * 8, 8);
-		c0 = _mm_crc32_u64(c0, word);
-	}
-	for (int32 j = words * 8; j < length; j++)
-		c0 = _mm_crc32_u8((uint32)c0, bits[j]);
-	uint64 h0 = (c0 & 0xffffffffull) | ((c2 & 0xffffffffull) << 32);
-	uint64 h1 = (c1 & 0xffffffffull) | ((c3 & 0xffffffffull) << 32);
-	uint64 hash = (h0 * kPrime) ^ (h1 * (kPrime * 3)) ^ (uint64)length;
-	hash *= kPrime;
-	return hash ^ (hash >> 29);
-#else
-	uint64 lanes[4] = { kPrime, kPrime * 3, kPrime * 5, kPrime * 7 };
-	int32 words = length / 8;
-	int32 i = 0;
-	for (; i + 4 <= words; i += 4) {
-		for (int lane = 0; lane < 4; lane++) {
-			uint64 word;
-			memcpy(&word, bits + (size_t)(i + lane) * 8, 8);
-			uint64 h = (lanes[lane] ^ word) * kPrime;
-			lanes[lane] = (h << 31) | (h >> 33);
-		}
+		uint64 h0 = (l0 ^ w0) * kPrime;
+		uint64 h1 = (l1 ^ w1) * kPrime;
+		uint64 h2 = (l2 ^ w2) * kPrime;
+		uint64 h3 = (l3 ^ w3) * kPrime;
+		l0 = (h0 << 31) | (h0 >> 33);
+		l1 = (h1 << 31) | (h1 >> 33);
+		l2 = (h2 << 31) | (h2 >> 33);
+		l3 = (h3 << 31) | (h3 >> 33);
 	}
 	uint64 hash = (uint64)length;
-	for (int lane = 0; lane < 4; lane++)
-		hash = (hash ^ lanes[lane]) * kPrime;
+	hash = (hash ^ l0) * kPrime;
+	hash = (hash ^ l1) * kPrime;
+	hash = (hash ^ l2) * kPrime;
+	hash = (hash ^ l3) * kPrime;
 	for (; i < words; i++) {
 		uint64 word;
 		memcpy(&word, bits + (size_t)i * 8, 8);
@@ -616,7 +598,6 @@ bitmap_hash(const uint8* bits, int32 length)
 	for (int32 j = words * 8; j < length; j++)
 		hash = (hash ^ bits[j]) * kPrime;
 	return hash ^ (hash >> 29);
-#endif
 }
 
 
@@ -950,6 +931,13 @@ SkiaPainter::SkiaPainter()
 	fAlphaMask(NULL),
 	fCachedMask(NULL),
 	fCachedMaskTarget(NULL),
+	fCachedMaskX(0),
+	fCachedMaskY(0),
+	fCachedMaskOrigin(0, 0),
+	fCachedMaskSize(0),
+	fCachedMaskOutside(0),
+	fCachedMaskInverted(false),
+	fCachedMaskClipped(false),
 	fCachedMaskBounds(SkIRect::MakeEmpty())
 {
 	fHighColor = (rgb_color){ 0, 0, 0, 255 };
@@ -966,8 +954,9 @@ void
 SkiaPainter::SetTarget(SkiaTarget* target)
 {
 	if (fTarget != target) {
-		fCachedMask = NULL;
+		fCachedMask.Unset();
 		fCachedMaskTarget = NULL;
+		fCachedMaskSize = 0;
 		fCachedMaskBounds = SkIRect::MakeEmpty();
 		fCachedMaskShader.reset();
 	}
@@ -988,9 +977,13 @@ SkiaPainter::SetDrawState(const DrawState* state, int32 xOffset,
 	// mode (AlphaMask.cpp, skia_offscreen_engine()); here it only limits
 	// the coverage, as Painter's masked scanline does
 	AlphaMask* mask = state->GetAlphaMask();
-	if (mask != fCachedMask) {
-		fCachedMask = NULL;
+	BPoint maskOrigin = state->Origin();
+	if (mask != fCachedMask.Get() || xOffset != fCachedMaskX
+		|| yOffset != fCachedMaskY || maskOrigin != fCachedMaskOrigin) {
+		fCachedMask.Unset();
 		fCachedMaskTarget = NULL;
+		fCachedMaskOrigin = maskOrigin;
+		fCachedMaskSize = 0;
 		fCachedMaskBounds = SkIRect::MakeEmpty();
 		fCachedMaskShader.reset();
 	}
@@ -1379,7 +1372,15 @@ SkiaPainter::_MaskShader(const SkIRect& bounds)
 {
 	if (fAlphaMask == NULL || fAlphaMask->Mask() == NULL)
 		return nullptr;
-	if (fCachedMask == fAlphaMask && fCachedMaskTarget == fTarget
+	agg::clipped_alpha_mask* mask = fAlphaMask->Mask();
+	size_t maskSize = fAlphaMask->BitmapSize();
+	uint8 outside = fAlphaMask->OutsideOpacity();
+	bool inverted = fAlphaMask->IsInverted();
+	bool clipped = fAlphaMask->IsClipped();
+	if (fCachedMask.Get() == fAlphaMask && fCachedMaskTarget == fTarget
+		&& fCachedMaskX == fPatternX && fCachedMaskY == fPatternY
+		&& fCachedMaskSize == maskSize && fCachedMaskOutside == outside
+		&& fCachedMaskInverted == inverted && fCachedMaskClipped == clipped
 		&& fCachedMaskShader != nullptr
 		&& fCachedMaskBounds.contains(bounds)) {
 		return fCachedMaskShader;
@@ -1393,7 +1394,6 @@ SkiaPainter::_MaskShader(const SkIRect& bounds)
 	if (full == NULL)
 		return nullptr;
 	uint8* zero = full + width;
-	agg::clipped_alpha_mask* mask = fAlphaMask->Mask();
 	for (int32 y = 0; y < height; y++) {
 		memset(full, 255, width);
 		memset(zero, 0, width);
@@ -1418,8 +1418,14 @@ SkiaPainter::_MaskShader(const SkIRect& bounds)
 	sk_sp<SkShader> shader = image->makeShader(SkTileMode::kClamp,
 		SkTileMode::kClamp, SkSamplingOptions(SkFilterMode::kNearest), &at);
 	if (shader != nullptr) {
-		fCachedMask = fAlphaMask;
+		fCachedMask.SetTo(fAlphaMask, false);
 		fCachedMaskTarget = fTarget;
+		fCachedMaskX = fPatternX;
+		fCachedMaskY = fPatternY;
+		fCachedMaskSize = maskSize;
+		fCachedMaskOutside = outside;
+		fCachedMaskInverted = inverted;
+		fCachedMaskClipped = clipped;
 		fCachedMaskBounds = bounds;
 		fCachedMaskShader = shader;
 	}

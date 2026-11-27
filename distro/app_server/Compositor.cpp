@@ -608,8 +608,10 @@ Compositor::SetHidden(bool hidden, HWInterface* screen)
 		fHidden = true;
 		AccelerantHWInterface* accelerant
 			= dynamic_cast<AccelerantHWInterface*>(fScreen);
-		if (accelerant != NULL)
+		if (accelerant != NULL) {
+			accelerant->SetComposeDrain(NULL, NULL);
 			accelerant->SetModeGuard(NULL);
+		}
 		if (fVulkan != NULL) {
 			_DrainComposeSlots();
 			_ScanoutFree(fVulkan);
@@ -622,8 +624,10 @@ Compositor::SetHidden(bool hidden, HWInterface* screen)
 		fScreen = screen;
 		AccelerantHWInterface* accelerant
 			= dynamic_cast<AccelerantHWInterface*>(fScreen);
-		if (accelerant != NULL)
+		if (accelerant != NULL) {
 			accelerant->SetModeGuard(&fComposeSlot);
+			accelerant->SetComposeDrain(&_DrainForRead, this);
+		}
 		fHidden = false;
 		fComposeSlot.Unlock();
 		_UpdatePeriod();
@@ -778,6 +782,7 @@ Compositor::Compositor(Desktop* desktop, HWInterface* screen)
 	fWantScanout(false),
 	fScanoutLogged(false),
 	fFrontByVulkan(false),
+	fAsyncInFlight(0),
 	fPresentCount(0),
 	fRestarted(false),
 	fGeneration(0),
@@ -2207,6 +2212,21 @@ Compositor::_DrainComposeSlots()
 		return;
 	for (uint32 i = 0; i < 2; i++)
 		_WaitComposeSlot(i);
+	atomic_set(&fAsyncInFlight, 0);
+}
+
+
+/*static*/ void
+Compositor::_DrainForRead(void* cookie)
+{
+	Compositor* self = static_cast<Compositor*>(cookie);
+	if (self == NULL || atomic_get(&self->fAsyncInFlight) == 0
+		|| find_thread(NULL) == self->fThread) {
+		return;
+	}
+	BAutolock _(self->fComposeSlot);
+	if (atomic_get(&self->fAsyncInFlight) != 0)
+		self->_DrainComposeSlots();
 }
 
 
@@ -2620,6 +2640,10 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 		hasSoftwareCursor = static_cast<AccelerantHWInterface*>(fScreen)
 			->SoftwareCursorFrame(&cursor);
 		if (hasSoftwareCursor) {
+			// Drain any async compose slot before taking exclusive screen
+			// access so _DrainForRead can never invert locks.
+			if (atomic_get(&fAsyncInFlight) != 0)
+				_DrainComposeSlots();
 			exclusive = fScreen->LockExclusiveAccess();
 			hasSoftwareCursor = static_cast<AccelerantHWInterface*>(fScreen)
 				->SoftwareCursorFrame(&cursor);
@@ -2732,6 +2756,7 @@ Compositor::_Compose(const BRegion& damage, const LayerList& layers,
 	if (asyncScanout) {
 		uint32 slot = vk->frameSlot;
 		vk->slotInFlight[slot] = true;
+		atomic_set(&fAsyncInFlight, 1);
 		vk->scratchPools->slotSignals[slot].swap(signals);
 		vk->scratchPools->slotBuffers[slot].clear();
 		vk->scratchPools->slotImages[slot].clear();

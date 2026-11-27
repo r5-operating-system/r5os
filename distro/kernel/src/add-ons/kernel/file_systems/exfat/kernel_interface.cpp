@@ -287,18 +287,8 @@ exfat_get_vnode(fs_volume* _volume, ino_t id, fs_vnode* _node, int* _type,
 static status_t
 exfat_put_vnode(fs_volume* _volume, fs_vnode* _node, bool reenter)
 {
-	// SPDX-SnippetBegin
-	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
-	// SPDX-License-Identifier: MIT
-	Volume* volume = (Volume*)_volume->private_volume;
 	Inode* inode = (Inode*)_node->private_node;
-	if (inode != NULL) {
-		ino_t id = inode->ID();
-		delete inode;
-		if (volume != NULL && id != 1)
-			volume->ForgetIno(id);
-	}
-	// SPDX-SnippetEnd
+	delete inode;
 	return B_OK;
 }
 

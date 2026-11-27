@@ -520,13 +520,30 @@ r5_direct_install_locked(X86VMTranslationMap64Bit* kernelMap, phys_addr_t phys,
 		}
 	}
 
+	// When the O(1) active counter drops to 0, re-verify all 512 PTEs
+	// (present, WB memory type, uniform protection, contiguous 4 KiB pages
+	// from a 2 MiB-aligned base) before collapsing back to a 2 MiB PDE.
+	// If collapsed->count hits kCap in one batch, this table stays split as
+	// valid 4 KiB WB PTEs until a later restore.
 	if (toWriteBack && owned != NULL && owned->active == 0
 		&& collapsed->count < r5_collapsed_list::kCap) {
 		phys_addr_t tablePhys = owned->phys;
 		phys_addr_t basePA = table[0] & X86_64_PTE_ADDRESS_MASK;
-		uint64 prot0 = table[0] & (X86_64_PTE_PRESENT | X86_64_PTE_WRITABLE
-			| X86_64_PTE_USER | X86_64_PTE_GLOBAL | X86_64_PTE_NOT_EXECUTABLE);
-		if ((prot0 & X86_64_PTE_PRESENT) != 0) {
+		const uint64 kProtMask = X86_64_PTE_PRESENT | X86_64_PTE_WRITABLE
+			| X86_64_PTE_USER | X86_64_PTE_GLOBAL | X86_64_PTE_NOT_EXECUTABLE;
+		uint64 prot0 = table[0] & kProtMask;
+		bool canCollapse = (prot0 & X86_64_PTE_PRESENT) != 0
+			&& (basePA & (2ull * 1024 * 1024 - 1)) == 0;
+		for (uint32 i = 0; canCollapse && i < k64BitTableEntryCount; i++) {
+			uint64 entry = table[i];
+			if ((entry & X86_64_PTE_MEMORY_TYPE_MASK) != 0
+				|| (entry & kProtMask) != prot0
+				|| (entry & X86_64_PTE_ADDRESS_MASK)
+					!= basePA + (phys_addr_t)i * B_PAGE_SIZE) {
+				canCollapse = false;
+			}
+		}
+		if (canCollapse) {
 			uint64 large = (basePA & X86_64_PDE_LARGE_ADDRESS_MASK)
 				| X86_64_PDE_LARGE_PAGE
 				| (prot0 & ~X86_64_PTE_PAT)

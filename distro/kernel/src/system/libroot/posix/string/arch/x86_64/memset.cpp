@@ -176,71 +176,6 @@ memset_small(uint8_t* destination, uint8_t value, size_t length)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-#if defined(__R5_USE_IFUNC__) && defined(__HAIKU__) && defined(__x86_64__) \
-	&& !defined(_KERNEL_MODE) && !defined(_BOOT_MODE) && !defined(R5_HOST_TEST)
-static size_t sMemsetStreamingIfunc = (size_t)R5_CPU_LLC_FALLBACK / 4 * 3;
-static size_t sMemsetRepFromIfunc = 2048;
-static int sMemsetUseErmsIfunc = 0;
-
-static __attribute__((target("avx2"))) void*
-r5_memset_avx2(void* ptr, int chr, size_t length)
-{
-	auto value = static_cast<unsigned char>(chr);
-	auto destination = static_cast<uint8_t*>(ptr);
-	if (length < 32) {
-		memset_small(destination, value, length);
-		return ptr;
-	}
-	if (length >= sMemsetStreamingIfunc) {
-		memset_nt_avx2(destination, value, length);
-		return ptr;
-	}
-	if (!sMemsetUseErmsIfunc || length < sMemsetRepFromIfunc) {
-		memset_avx2(destination, value, length);
-		return ptr;
-	}
-	memset_repstos(destination, value, length);
-	return ptr;
-}
-
-static void*
-r5_memset_sse(void* ptr, int chr, size_t length)
-{
-	auto value = static_cast<unsigned char>(chr);
-	auto destination = static_cast<uint8_t*>(ptr);
-	if (length < 32) {
-		memset_small(destination, value, length);
-		return ptr;
-	}
-	if (length >= sMemsetStreamingIfunc) {
-		memset_nt(destination, value, length);
-		return ptr;
-	}
-	if (!sMemsetUseErmsIfunc || length < sMemsetRepFromIfunc) {
-		memset_sse(destination, value, length);
-		return ptr;
-	}
-	memset_repstos(destination, value, length);
-	return ptr;
-}
-
-extern "C" {
-static void* (*r5_memset_resolve(void))(void*, int, size_t)
-{
-	uint32_t flags = r5_x86_cpu_flags();
-	sMemsetStreamingIfunc = (size_t)r5_x86_cpu_llc() / 4 * 3;
-	sMemsetUseErmsIfunc = (flags & R5_CPU_ERMS) != 0 ? 1 : 0;
-	sMemsetRepFromIfunc
-		= ((flags & R5_CPU_ERMS) != 0 && (flags & R5_CPU_FSRM) != 0)
-			? 128 : 2048;
-	if ((flags & R5_CPU_AVX2) != 0)
-		return r5_memset_avx2;
-	return r5_memset_sse;
-}
-
-void* memset(void*, int, size_t) __attribute__((ifunc("r5_memset_resolve")));
-}
-#else
 using MemsetBulk = void (*)(uint8_t*, uint8_t, size_t);
 
 static MemsetBulk sMemsetBulk = memset_sse;
@@ -305,5 +240,4 @@ memset(void* ptr, int chr, size_t length)
 	memset_repstos(destination, value, length);
 	return ptr;
 }
-#endif
 // SPDX-SnippetEnd

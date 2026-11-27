@@ -999,12 +999,10 @@ usb_disk_update_capacity(device_lun* lun)
 		// SPDX-SnippetBegin
 		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 		// SPDX-License-Identifier: MIT
-		// USB 3.0+ devices always attach behind xHCI (64-bit DMA capable);
-		// avoid 32-bit bounce buffers above 4 GiB RAM.
-		const usb_device_descriptor* desc
-			= gUSBModule->get_device_descriptor(lun->device->device);
-		restrictions.high_address = (desc != NULL && desc->usb_version >= 0x0300)
-			? UINT64_MAX : UINT32_MAX;
+		// USB3.h does not expose the host controller's 64-bit DMA width, so
+		// stay at 32-bit DMA; raise DMAResource pool from (1, 1) to (8, 4)
+		// to allow multiple transfers in flight.
+		restrictions.high_address = UINT32_MAX;
 		restrictions.max_transfer_size = MAX_IO_BLOCKS * lun->block_size;
 
 		DMAResource* dmaResource = new(std::nothrow) DMAResource;

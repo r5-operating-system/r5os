@@ -829,6 +829,7 @@ gpu_bo_hold_tree(gpu_bo* bo)
 static void
 gpu_bo_unmap(gpu_bo* bo)
 {
+	bool any = false;
 	for (uint32 i = 0; i < kMaxRange; i++) {
 		gpu_range* range = &bo->ranges[i];
 		if (!range->live)
@@ -836,10 +837,16 @@ gpu_bo_unmap(gpu_bo* bo)
 		r5_vm* vm = range->vm != NULL ? range->vm : gpu_hw_shared();
 		for (uint64 page = 0; page < range->bytes; page += 4096)
 			gpu_hw_map(vm, range->va + page, 0);
-		if (range->bytes != 0)
+		if (range->bytes != 0) {
 			gpu_va_mark_dirty(vm);
+			any = true;
+		}
 		range->live = false;
 		range->vm = NULL;
+	}
+	if (any) {
+		if (gpu_hw_flush())
+			sVmFlushPending = false;
 	}
 }
 
@@ -1531,8 +1538,11 @@ gpu_va_clear(r5_vm* vm, uint64 va, uint64 bytes)
 		vm = gpu_hw_shared();
 	for (uint64 page = 0; page < bytes; page += 4096)
 		gpu_hw_map(vm, va + page, 0);
-	if (bytes != 0)
+	if (bytes != 0) {
 		gpu_va_mark_dirty(vm);
+		if (gpu_hw_flush())
+			sVmFlushPending = false;
+	}
 }
 
 
@@ -2011,6 +2021,11 @@ gpu_va_unmap(gpu_client* client, void* buffer, size_t length)
 					in.map_bytes, in.flags);
 		}
 		gpu_va_mark_dirty(vm);
+		if (!gpu_hw_flush())
+			return gpu_refuse("VA_UNMAP", "flush", B_ERROR, in.handle,
+				bo->backing->domain, bo->backing->bytes, in.gpu_va,
+				in.bo_offset, in.map_bytes, in.flags);
+		sVmFlushPending = false;
 		range->live = false;
 		range->vm = NULL;
 		return B_OK;

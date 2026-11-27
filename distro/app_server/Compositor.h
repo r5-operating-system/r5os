@@ -221,6 +221,7 @@ private:
 			bool				_WaitComposeSlot(uint32 slot,
 									const char** _failure = NULL);
 			void				_DrainComposeSlots();
+	static	void				_DrainForRead(void* cookie);
 			WindowBuffer*		_AllocateBuffer(uint32 width, uint32 height,
 									bool memory = true);
 			void				_FreeBuffer(WindowBuffer* buffer,
@@ -342,6 +343,7 @@ private:
 			bool				fScanoutLogged;
 			// This frame's front was written by the Vulkan copy.
 			bool				fFrontByVulkan;
+			int32				fAsyncInFlight;
 			bigtime_t			fPresentSamples[128];
 			int32				fPresentCount;
 			bool				fRestarted;

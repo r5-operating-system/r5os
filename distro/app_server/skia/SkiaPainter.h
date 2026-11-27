@@ -454,8 +454,15 @@ private:
 			bool				fAntialiasText;
 			bool				fHasAlphaMask;
 			AlphaMask*			fAlphaMask;
-			AlphaMask*			fCachedMask;
+			BReference<AlphaMask> fCachedMask;
 			SkiaTarget*			fCachedMaskTarget;
+			int32				fCachedMaskX;
+			int32				fCachedMaskY;
+			BPoint				fCachedMaskOrigin;
+			size_t				fCachedMaskSize;
+			uint8				fCachedMaskOutside;
+			bool				fCachedMaskInverted;
+			bool				fCachedMaskClipped;
 			SkIRect				fCachedMaskBounds;
 			sk_sp<SkShader>		fCachedMaskShader;
 };

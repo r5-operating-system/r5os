@@ -168,6 +168,8 @@ AccelerantHWInterface::AccelerantHWInterface()
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 	fModeGuard(NULL),
+	fComposeDrain(NULL),
+	fComposeDrainCookie(NULL),
 	fBootPicture(NULL),
 	fBootWidth(0),
 	fBootHeight(0),
@@ -1480,9 +1482,19 @@ AccelerantHWInterface::MoveCursorTo(float x, float y)
 // #pragma mark - buffer access
 
 
+void
+AccelerantHWInterface::_DrainCompose() const
+{
+	void (*hook)(void*) = __atomic_load_n(&fComposeDrain, __ATOMIC_ACQUIRE);
+	if (hook != NULL)
+		hook(__atomic_load_n(&fComposeDrainCookie, __ATOMIC_ACQUIRE));
+}
+
+
 RenderingBuffer*
 AccelerantHWInterface::FrontBuffer() const
 {
+	_DrainCompose();
 	return fFrontBuffer.Get();
 }
 
@@ -1490,6 +1502,7 @@ AccelerantHWInterface::FrontBuffer() const
 RenderingBuffer*
 AccelerantHWInterface::BackBuffer() const
 {
+	_DrainCompose();
 	return fBackBuffer.Get();
 }
 
@@ -1511,6 +1524,7 @@ AccelerantHWInterface::_CopyBackToFront(/*const*/ BRegion& region)
 	// on the front already; HWInterface::Invalidate draws the cursor.
 	if (GPUCopy::FrontCurrent())
 		return;
+	_DrainCompose();
 	clipping_rect bounds;
 	if (GPUCopy::Copy(region, fBackBuffer.Get(), fFrontBuffer.Get(),
 			&bounds)) {

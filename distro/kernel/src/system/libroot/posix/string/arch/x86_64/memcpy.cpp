@@ -187,8 +187,16 @@ memcpy_nt_avx2(uint8_t* destination, const uint8_t* source, size_t length)
 	_mm_sfence();
 	destination = reinterpret_cast<uint8_t*>(to);
 	source = reinterpret_cast<const uint8_t*>(from);
-	if (length > 0)
+	if (length >= 16) {
+		__m128i a = _mm_loadu_si128(reinterpret_cast<const __m128i*>(source));
+		__m128i b = _mm_loadu_si128(
+			reinterpret_cast<const __m128i*>(source + length - 16));
+		_mm_storeu_si128(reinterpret_cast<__m128i*>(destination), a);
+		_mm_storeu_si128(
+			reinterpret_cast<__m128i*>(destination + length - 16), b);
+	} else if (length > 0) {
 		memcpy_small(destination, source, length);
+	}
 }
 
 
@@ -270,81 +278,6 @@ memcpy_sse(uint8_t* destination, const uint8_t* source, size_t length)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-#if defined(__R5_USE_IFUNC__) && defined(__HAIKU__) && defined(__x86_64__) \
-	&& !defined(_KERNEL_MODE) && !defined(_BOOT_MODE) && !defined(R5_HOST_TEST)
-static size_t sMemcpyStreamingIfunc = (size_t)R5_CPU_LLC_FALLBACK / 4 * 3;
-static size_t sMemcpyRepFromIfunc = 2048;
-static int sMemcpyUseErmsIfunc = 0;
-
-static inline bool
-memcpy_is_4k_aliased(const uint8_t* to, const uint8_t* from)
-{
-	uintptr_t distance = (reinterpret_cast<uintptr_t>(to)
-		- reinterpret_cast<uintptr_t>(from)) & (kPageSize - 1);
-	return distance != 0 && (distance < 32 || distance > kPageSize - 16);
-}
-
-static __attribute__((target("avx2"))) void*
-r5_memcpy_avx2(void* destination, const void* source, size_t length)
-{
-	auto to = static_cast<uint8_t*>(destination);
-	auto from = static_cast<const uint8_t*>(source);
-	if (length <= 16) {
-		memcpy_small(to, from, length);
-		return destination;
-	}
-	if (length >= sMemcpyStreamingIfunc) {
-		memcpy_nt_avx2(to, from, length);
-		return destination;
-	}
-	if (!sMemcpyUseErmsIfunc || length < sMemcpyRepFromIfunc
-		|| memcpy_is_4k_aliased(to, from)) {
-		memcpy_avx2_core(to, from, length);
-		return destination;
-	}
-	memcpy_repmovs(to, from, length);
-	return destination;
-}
-
-static void*
-r5_memcpy_sse(void* destination, const void* source, size_t length)
-{
-	auto to = static_cast<uint8_t*>(destination);
-	auto from = static_cast<const uint8_t*>(source);
-	if (length <= 16) {
-		memcpy_small(to, from, length);
-		return destination;
-	}
-	if (length >= sMemcpyStreamingIfunc) {
-		memcpy_nt(to, from, length);
-		return destination;
-	}
-	if (!sMemcpyUseErmsIfunc || length < sMemcpyRepFromIfunc
-		|| memcpy_is_4k_aliased(to, from)) {
-		memcpy_sse(to, from, length);
-		return destination;
-	}
-	memcpy_repmovs(to, from, length);
-	return destination;
-}
-
-extern "C" {
-static void* (*r5_memcpy_resolve(void))(void*, const void*, size_t)
-{
-	uint32_t flags = r5_x86_cpu_flags();
-	sMemcpyStreamingIfunc = (size_t)r5_x86_cpu_llc() / 4 * 3;
-	sMemcpyUseErmsIfunc = (flags & R5_CPU_ERMS) != 0 ? 1 : 0;
-	sMemcpyRepFromIfunc
-		= ((flags & R5_CPU_ERMS) != 0 && (flags & R5_CPU_FSRM) != 0)
-			? 128 : 2048;
-	if ((flags & R5_CPU_AVX2) != 0)
-		return r5_memcpy_avx2;
-	return r5_memcpy_sse;
-}
-
-void* memcpy(void*, const void*, size_t) __attribute__((ifunc("r5_memcpy_resolve")));
-}
-#else
 using MemcpyBulk = void (*)(uint8_t*, const uint8_t*, size_t);
 
 static MemcpyBulk sMemcpyBulk = memcpy_sse;
@@ -416,5 +349,4 @@ memcpy(void* destination, const void* source, size_t length)
 	memcpy_repmovs(to, from, length);
 	return destination;
 }
-#endif
 // SPDX-SnippetEnd
