@@ -130,10 +130,17 @@ static recursive_lock sTemplatesLock
 	= RECURSIVE_LOCK_INITIALIZER("runtime loader tls templates");
 
 // Placements for __tls_get_addr. Published once per load or unload and
-// never freed: a thread may still be reading the previous one. The ready
-// slot in the thread's TLS vector (tls_allocate, not __thread: this
-// function is __tls_get_addr) remembers which snapshot that thread has
-// already copied into its static image.
+// never freed: a thread may still be reading the previous one. Each
+// Register() and each Unregister() leaks one snapshot. A dlopen/dlclose
+// cycle therefore leaks two. A snapshot is one TlsSnap plus one byte and
+// one uint64 per TLS image loaded so far (slots are not reused). A few
+// hundred libraries is a few dozen kilobytes, not a snapshot per call.
+//
+// Which snapshot this thread has copied lives in TLS_STATIC_TLS_READY.
+// That index is reserved in the private TLS header. tls_allocate() is
+// not used: runtime_loader links its own tls.o, so its gNextSlot is a
+// different counter from libroot's and would hand out libroot's first
+// free slot (syslog, the heap, pwd).
 struct TlsSnap {
 	uint32		count;
 	uint8*		has;
@@ -141,7 +148,6 @@ struct TlsSnap {
 };
 
 static TlsSnap* sSnap = NULL;
-static int32 sReadySlot = -1;
 
 
 static TlsSnap*
@@ -151,32 +157,12 @@ load_snap()
 }
 
 
-static int32
-ready_slot()
-{
-	int32 slot = __atomic_load_n(&sReadySlot, __ATOMIC_ACQUIRE);
-	if (slot >= 0)
-		return slot;
-
-	int32 created = tls_allocate();
-	if (created < 0)
-		return -1;
-
-	int32 expected = -1;
-	if (!__atomic_compare_exchange_n(&sReadySlot, &expected, created,
-			false, __ATOMIC_RELEASE, __ATOMIC_RELAXED))
-		return expected;
-	return created;
-}
-
-
 static bool
 thread_ready(TlsSnap* snap)
 {
-	int32 slot = __atomic_load_n(&sReadySlot, __ATOMIC_ACQUIRE);
-	if (slot < 0 || snap == NULL)
+	if (snap == NULL)
 		return false;
-	return tls_get(slot) == (void*)snap;
+	return tls_get(TLS_STATIC_TLS_READY) == (void*)snap;
 }
 
 
@@ -185,9 +171,7 @@ mark_ready(TlsSnap* snap)
 {
 	if (snap == NULL)
 		return;
-	int32 slot = ready_slot();
-	if (slot >= 0)
-		tls_set(slot, snap);
+	tls_set(TLS_STATIC_TLS_READY, snap);
 }
 // SPDX-SnippetEnd
 
@@ -682,12 +666,17 @@ TLSBlockTemplates::Materialize(void** _readySnap)
 			TLSBlockTemplate& templ = fTemplates[i];
 			if (!templ.HasStaticOffset())
 				continue;
-			if (!templ.IsRelocated()) {
-				// Still being loaded: its image is copied by the next call on
-				// this thread, from where it really is.
-				count = i;
-				break;
-			}
+		if (!templ.IsRelocated()) {
+			// Still being loaded. This thread walks the areas again on
+			// the next call, until the image is relocated or the load
+			// fails. A failed load Unregister()s the template
+			// (elf_load_image.cpp): the cleared template has no static
+			// offset, so it is skipped above and the next call finishes
+			// and marks the thread ready. A template left unrelocated
+			// would keep the walk.
+			count = i;
+			break;
+		}
 			uint8* dest = base + templ.StaticOffset();
 			if (templ.Address() != NULL && templ.FileSize() > 0)
 				memcpy(dest, templ.Address(), templ.FileSize());
@@ -722,9 +711,7 @@ tls_reinit_after_fork()
 	// free again. The copied static image is used again after the next
 	// Materialize(), in case the parent forked mid-copy.
 	recursive_lock_init(&sTemplatesLock, "runtime loader tls templates");
-	int32 slot = __atomic_load_n(&sReadySlot, __ATOMIC_ACQUIRE);
-	if (slot >= 0)
-		tls_set(slot, NULL);
+	tls_set(TLS_STATIC_TLS_READY, NULL);
 }
 
 
