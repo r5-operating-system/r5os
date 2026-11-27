@@ -16,7 +16,7 @@ Application Aomi :
 	[ TargetLibstdc++ ]
 	localestub
 	be network tracker shared
-	libr5ui.so libr5icons.so
+	libr5ui.so libr5icons.so translation
 	:
 	Aomi.rdef
 	;
