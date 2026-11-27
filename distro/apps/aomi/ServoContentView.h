@@ -29,10 +29,6 @@ const char*						aomi_servo_last_protocol();
 void							aomi_log_add(const char* line);
 BString							aomi_log_dump_text();
 void							aomi_log_dump_json(BString* out);
-status_t						aomi_start_download(const char* url,
-									const char* destDir);
-status_t						aomi_start_download_to(const char* url,
-									const char* path);
 
 
 class BServoContentView : public BWebContentView {
@@ -79,8 +75,11 @@ public:
 	virtual	status_t			Cancel(int32 id);
 	virtual	status_t			Open(int32 id);
 	virtual	status_t			ShowInTracker(int32 id);
+	virtual	status_t			SetColorScheme(bool dark);
+	virtual	status_t			SetScale(float scale);
 
 private:
+			void				_ApplyLook();
 			status_t			_Start(const char* document, bool isHTML);
 			void				_Call(int32 op, const char* text = NULL,
 									float value = 0, bool on = false,
@@ -111,6 +110,8 @@ private:
 			bool				fHasPending;
 			bool				fPendingHTML;
 			BString				fPendingDocument;
+			bool				fDark;
+			float				fScale;
 };
 
 

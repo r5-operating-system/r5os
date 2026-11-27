@@ -2,4 +2,4 @@
 # SPDX-License-Identifier: MIT
 # The servo-haiku commit R5's Servo is built from (scripts/build-r5servo.sh).
 SERVO_HAIKU_URL=https://github.com/r5-operating-system/servo-haiku.git
-SERVO_HAIKU_COMMIT=b69c97a3e2571160604902fe0560cc17f9c49e00
+SERVO_HAIKU_COMMIT=f5db7467af9ab2639c011c10378315506c3812d8

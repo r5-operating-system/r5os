@@ -1,8 +1,26 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 R5OS Contributors
+# SPDX-License-Identifier: MIT
 # Boot one copy of an R5 image and screenshot Aomi. Does not stop other QEMU.
 # Usage: qemu-aomi.py <image> <out-dir> [url]
-"""Screenshot Aomi on a private image copy. Never calls run-qemu-r5.sh."""
+"""Screenshot Aomi on a private image copy. Never calls run-qemu-r5.sh.
 
+Environment:
+  AOMI_GUEST     guest script to plant (default scripts/aomi-guest.sh)
+  AOMI_LINK_OFF  1: the network cable is out from the start
+  AOMI_HOLD      1: keep QEMU running after "aomi: done" (stop it with
+                 scripts/qmp-aomi.py <out-dir> quit)
+
+The guest asks the host for what it cannot do itself, one line on the
+serial port each:
+  aomi: shot NAME         screendump to <out-dir>/NAME.png
+  aomi: link on|off       plug the network cable in or pull it out
+  aomi: click X Y         left click at screen pixel X, Y (1280 x 800)
+  aomi: keys TEXT         type TEXT (letters, digits, . / : - space)
+  aomi: key COMBO         one key, QEMU qcode names joined by +, e.g. alt+l
+"""
+
+import json
 import os
 import shutil
 import socket
@@ -13,7 +31,18 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BFS = os.path.join(ROOT, "haiku", "generated.x86_64", "objects", "linux",
                    "x86_64", "release", "tools", "bfs_shell", "bfs_shell")
-GUEST = os.path.join(ROOT, "scripts", "aomi-guest.sh")
+GUEST = os.environ.get("AOMI_GUEST",
+                       os.path.join(ROOT, "scripts", "aomi-guest.sh"))
+SCREEN_W = 1280
+SCREEN_H = 800
+
+KEY_NAMES = {
+    " ": "spc", ".": "dot", "/": "slash", ":": "shift+semicolon",
+    "-": "minus", "_": "shift+minus", "?": "shift+slash", "=": "equal",
+    "<": "shift+comma", ">": "shift+dot", "(": "shift+9", ")": "shift+0",
+    ",": "comma", ";": "semicolon", "'": "apostrophe", "+": "shift+equal",
+    "\"": "shift+apostrophe", "%": "shift+5", "#": "shift+3",
+}
 
 
 def bfs(image, commands):
@@ -32,16 +61,76 @@ def to_png(ppm):
         print("png:", error)
 
 
+class Qmp:
+    def __init__(self, path):
+        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.sock.connect(path)
+        self.file = self.sock.makefile("rw")
+        self.file.readline()
+        self.call("qmp_capabilities")
+
+    def call(self, command, arguments=None):
+        message = {"execute": command}
+        if arguments is not None:
+            message["arguments"] = arguments
+        self.file.write(json.dumps(message) + "\n")
+        self.file.flush()
+        while True:
+            line = self.file.readline()
+            if not line:
+                return None
+            reply = json.loads(line)
+            # Asynchronous events come in between; the reply has "return"
+            # or "error".
+            if "return" in reply or "error" in reply:
+                return reply
+
+    def keys(self, combo):
+        names = combo.split("+")
+        self.call("send-key", {"keys": [{"type": "qcode", "data": name}
+                                        for name in names]})
+
+    def type_text(self, text):
+        for char in text:
+            if char in KEY_NAMES:
+                self.keys(KEY_NAMES[char])
+            elif char.isupper():
+                self.keys("shift+" + char.lower())
+            else:
+                self.keys(char)
+            time.sleep(0.08)
+
+    def click(self, x, y):
+        ax = int(x * 32767 / (SCREEN_W - 1))
+        ay = int(y * 32767 / (SCREEN_H - 1))
+        self.call("input-send-event", {"events": [
+            {"type": "abs", "data": {"axis": "x", "value": ax}},
+            {"type": "abs", "data": {"axis": "y", "value": ay}}]})
+        time.sleep(0.15)
+        for down in (True, False):
+            self.call("input-send-event", {"events": [
+                {"type": "btn", "data": {"down": down, "button": "left"}}]})
+            time.sleep(0.1)
+
+    def link(self, on):
+        self.call("set_link", {"name": "net0", "up": on})
+
+    def shot(self, path):
+        self.call("screendump", {"filename": path})
+        time.sleep(0.3)
+        to_png(path)
+
+
 def main():
     if len(sys.argv) < 3:
         print(__doc__)
         return 2
-    source, out = sys.argv[1], sys.argv[2]
+    source, out = sys.argv[1], os.path.abspath(sys.argv[2])
     url = sys.argv[3] if len(sys.argv) > 3 else "https://example.com"
     os.makedirs(out, exist_ok=True)
     image = os.path.join(out, "aomi.image")
-    serial = "/tmp/aomi-serial.log"
-    qmp_path = "/tmp/aomi-qmp.sock"
+    serial = os.path.join(out, "serial.log")
+    qmp_path = os.path.join(out, "qmp.sock")
     for name in (serial, qmp_path):
         if os.path.exists(name):
             os.remove(name)
@@ -81,7 +170,7 @@ def main():
     print("planted")
     qemu = subprocess.Popen([
         "qemu-system-x86_64", "-name", "R5-aomi",
-        "-machine", "pc,accel=kvm", "-cpu", "host", "-m", "2048",
+        "-machine", "pc,accel=kvm", "-cpu", "host", "-m", "3072",
         "-smp", "4", "-display", "none",
         "-drive", "file=%s,format=raw,if=ide,index=0,media=disk" % image,
         "-vga", "std", "-usb", "-device", "usb-tablet",
@@ -91,40 +180,31 @@ def main():
         "-serial", "file:" + serial,
         "-qmp", "unix:%s,server,nowait" % qmp_path],
         stdout=subprocess.DEVNULL,
-        stderr=open("/tmp/aomi-qemu.err", "w"))
-    sock = None
+        stderr=open(os.path.join(out, "qemu.err"), "w"))
+    qmp = None
+    hold = os.environ.get("AOMI_HOLD") == "1"
     try:
         for _ in range(200):
             try:
-                sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-                sock.connect(qmp_path)
+                qmp = Qmp(qmp_path)
                 break
             except OSError:
-                sock = None
+                qmp = None
                 time.sleep(0.1)
-        if sock is None:
+        if qmp is None:
             print("FAIL qmp")
-            try:
-                print(open("/tmp/aomi-qemu.err").read()[-2000:])
-            except OSError:
-                pass
             return 1
-        qfile = sock.makefile("rw")
-        qfile.readline()
-        qfile.write('{"execute":"qmp_capabilities"}\n')
-        qfile.flush()
-        qfile.readline()
+        if os.environ.get("AOMI_LINK_OFF") == "1":
+            qmp.link(False)
+            print("link off")
         seen = 0
         started = False
         next_enter = time.time() + 25
-        deadline = time.time() + 900
+        deadline = time.time() + 1800
         while time.time() < deadline:
             time.sleep(0.4)
             if not started and time.time() >= next_enter:
-                qfile.write('{"execute":"send-key","arguments":{"keys":'
-                            '[{"type":"qcode","data":"ret"}]}}\n')
-                qfile.flush()
-                qfile.readline()
+                qmp.keys("ret")
                 next_enter = time.time() + 20
             try:
                 with open(serial, errors="replace") as handle:
@@ -133,34 +213,43 @@ def main():
                 lines = []
             for line in lines[seen:]:
                 seen += 1
-                print(line)
-                if "start" in line:
+                print(line, flush=True)
+                words = line[line.index("aomi:") + 5:].split()
+                if not words:
+                    continue
+                verb = words[0]
+                if verb == "start":
                     started = True
-                if "shot" in line:
-                    name = line.split()[-1]
-                    path = os.path.join(out, name + ".ppm")
-                    qfile.write('{"execute":"screendump","arguments":'
-                                '{"filename":"%s"}}\n' % path)
-                    qfile.flush()
-                    qfile.readline()
-                    time.sleep(0.3)
-                    to_png(path)
-                    if name in ("menu", "dark-menu"):
-                        qfile.write('{"execute":"send-key","arguments":{"keys":'
-                                    '[{"type":"qcode","data":"esc"}]}}\n')
-                        qfile.flush()
-                        qfile.readline()
-                if line.strip() == "aomi: done":
+                elif verb == "shot" and len(words) > 1:
+                    qmp.shot(os.path.join(out, words[1] + ".ppm"))
+                    if words[1] in ("menu", "dark-menu"):
+                        qmp.keys("esc")
+                elif verb == "link" and len(words) > 1:
+                    qmp.link(words[1] == "on")
+                elif verb == "click" and len(words) > 2:
+                    qmp.click(float(words[1]), float(words[2]))
+                elif verb == "keys" and len(words) > 1:
+                    qmp.type_text(line.split(" keys ", 1)[1])
+                elif verb == "key" and len(words) > 1:
+                    qmp.keys(words[1])
+                elif verb == "done":
                     deadline = time.time()
             if qemu.poll() is not None:
                 break
+        if hold:
+            # One QMP client at a time: let scripts/qmp-aomi.py connect.
+            qmp.file.close()
+            qmp.sock.close()
+            print("holding; qmp at", qmp_path, flush=True)
+            qemu.wait()
         return 0
     finally:
-        qemu.terminate()
-        try:
-            qemu.wait(timeout=15)
-        except subprocess.TimeoutExpired:
-            qemu.kill()
+        if qemu.poll() is None:
+            qemu.terminate()
+            try:
+                qemu.wait(timeout=15)
+            except subprocess.TimeoutExpired:
+                qemu.kill()
 
 
 if __name__ == "__main__":

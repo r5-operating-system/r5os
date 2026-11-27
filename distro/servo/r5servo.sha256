@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 # Pinned prebuilt r5servo package fetched from GitHub Releases (not stored in git).
 # Built from servo-haiku at the commit in servo-haiku.ref (distro/servo/BUILD.md).
-R5SERVO_VERSION=0.8.0-6
-R5SERVO_PKG=r5servo-0.8.0-6-x86_64.hpkg
-R5SERVO_URL=https://github.com/r5-operating-system/servo-haiku/releases/download/r5servo-0.8.0-6/r5servo-0.8.0-6-x86_64.hpkg
-R5SERVO_SHA256=50c594bc1ae098b15924bb3dc53f66a0913803a08c1154f7ae155f98d8ab1473
+R5SERVO_VERSION=0.8.0-7
+R5SERVO_PKG=r5servo-0.8.0-7-x86_64.hpkg
+R5SERVO_URL=https://github.com/r5-operating-system/servo-haiku/releases/download/r5servo-0.8.0-7/r5servo-0.8.0-7-x86_64.hpkg
+R5SERVO_SHA256=2385f49d38a894fe0dfc251189810002bececbeb2654e9d6549b6b70088f6cc7

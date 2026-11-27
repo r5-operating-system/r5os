@@ -7,6 +7,8 @@ Design only, 25 Nov 2026. Nothing is built.
 
 **Owner's choice (25 Nov 2026): option B, Compact.** Options A and C stay below as the record of what was weighed. No brief or code before the owner's explicit go.
 
+**Changed after the owner's review (27 Nov 2026).** The downloads button opens the Downloads window, a normal titled R5 window, instead of a panel under the button: the panel did not look or behave like a window. The settings form became a window in the frame of R5's Settings (a list of pages on the left, the page heading, the page, Revert and Defaults), with five pages: General, Search, Appearance, Downloads, Privacy. Both are opaque, like Settings: glass behind a form showed a box behind every label. The chrome of the browser window keeps the glass.
+
 Aomi is the R5 browser (`docs/AOMI.md`). Its engine changes: Servo first, Gecko as the fallback (`docs/design/LADYBIRD-PORT.md`, PR #4657). This document designs the window apart from the engine, so the window survives an engine change. The mockups are in `aomi-mockup/`.
 
 ## What every option keeps

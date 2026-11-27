@@ -56,6 +56,22 @@ BWebContentView::Report(BMessage* message)
 
 
 status_t
+BWebContentView::SetColorScheme(bool dark)
+{
+	(void)dark;
+	return B_NOT_SUPPORTED;
+}
+
+
+status_t
+BWebContentView::SetScale(float scale)
+{
+	(void)scale;
+	return B_NOT_SUPPORTED;
+}
+
+
+status_t
 aomi_engine_start(const char* engine)
 {
 	if (engine == NULL || strcmp(engine, "Servo") == 0)

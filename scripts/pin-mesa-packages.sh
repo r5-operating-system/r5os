@@ -169,15 +169,16 @@ text = text.replace("\tvulkanteapot-1.0.0-4\n", "\tvulkanteapot-1.0.0-6\n")
 text = text.replace("\tvulkanteapot-1.0.0-5\n", "\tvulkanteapot-1.0.0-6\n")
 if "\tvulkan_loader-1.4.367-5\n" not in text:
     sys.exit("vulkan loader pin missing")
-for old in ("0.8.0-1", "0.8.0-2", "0.8.0-3", "0.8.0-4", "0.8.0-5"):
-    text = text.replace("\tr5servo-%s\n" % old, "\tr5servo-0.8.0-6\n")
-if "\tr5servo-0.8.0-6\n" not in text:
+for old in ("0.8.0-1", "0.8.0-2", "0.8.0-3", "0.8.0-4", "0.8.0-5",
+        "0.8.0-6"):
+    text = text.replace("\tr5servo-%s\n" % old, "\tr5servo-0.8.0-7\n")
+if "\tr5servo-0.8.0-7\n" not in text:
     text = text.replace(
         "\tvulkanteapot-1.0.0-6\n",
-        "\tvulkanteapot-1.0.0-6\n\tr5servo-0.8.0-6\n",
+        "\tvulkanteapot-1.0.0-6\n\tr5servo-0.8.0-7\n",
         1,
     )
-if "\tr5servo-0.8.0-6\n" not in text:
+if "\tr5servo-0.8.0-7\n" not in text:
     sys.exit("r5servo pin missing")
 path.write_text(text, encoding="utf-8")
 print("pin updated")

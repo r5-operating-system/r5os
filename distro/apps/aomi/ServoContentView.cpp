@@ -6,6 +6,8 @@
 
 #include "ServoContentView.h"
 
+#include "AomiDownloads.h"
+
 #include <Application.h>
 #include <Bitmap.h>
 #include <ByteOrder.h>
@@ -61,7 +63,11 @@ enum {
 	R5_EV_CLOSE				= 14,
 	R5_EV_FAVICON			= 15,
 	R5_EV_DIALOG			= 16,
-	R5_EV_PAGE_TEXT			= 17
+	R5_EV_PAGE_TEXT			= 17,
+	// Since r5servo 0.8.0-7.
+	R5_EV_CONSOLE			= 18,
+	R5_EV_EXTERNAL			= 19,
+	R5_EV_DOWNLOAD			= 20
 };
 
 struct r5_servo;
@@ -129,6 +135,9 @@ struct ServoApi {
 	// Since r5servo 0.8.0-4.
 	r5_servo*	(*create_sharing)(r5_servo*, int32, int32, const char*, int32,
 					r5_servo_callback, void*);
+	// Since r5servo 0.8.0-7; optional, an older library leaves them NULL.
+	status_t	(*set_theme)(r5_servo*, int32);
+	status_t	(*set_scale)(r5_servo*, float);
 };
 
 static ServoApi sApi = {};
@@ -141,18 +150,8 @@ static BString sLastProtocol;
 
 static BLocker sLogLock("aomi log");
 static std::vector<BString> sLogRing;
-static const size_t kMaxLogLines = 64;
-
-struct DownloadItem {
-	int32	id;
-	BString	name;
-	BString	path;
-	bool	done;
-	bool	failed;
-};
-static BLocker sDlLock("aomi dl");
-static std::vector<DownloadItem> sDownloads;
-static int32 sNextDlId = 1;
+// Page console lines land here too (R5_EV_CONSOLE).
+static const size_t kMaxLogLines = 200;
 
 
 // The engine thread.
@@ -253,7 +252,9 @@ enum {
 	kOpFind,
 	kOpVisible,
 	kOpEdit,
-	kOpSelectAll
+	kOpSelectAll,
+	kOpTheme,
+	kOpScale
 };
 
 // Messages from the engine thread to a view.
@@ -569,6 +570,14 @@ private:
 				sApi.key(engine, 1, 0, "a", 2, 0);
 				sApi.key(engine, 0, 0, "a", 2, 0);
 				break;
+			case kOpTheme:
+				if (sApi.set_theme != NULL)
+					sApi.set_theme(engine, message->GetBool("on", false) ? 1 : 0);
+				break;
+			case kOpScale:
+				if (sApi.set_scale != NULL)
+					sApi.set_scale(engine, message->GetFloat("value", 1.0f));
+				break;
 		}
 	}
 
@@ -843,6 +852,8 @@ aomi_servo_start()
 	AOMI_SYM(editing_action, "r5_servo_editing_action");
 	AOMI_SYM(shutdown, "r5_servo_shutdown");
 	AOMI_SYM(create_sharing, "r5_servo_create_sharing");
+	AOMI_SYM(set_theme, "r5_servo_set_theme");
+	AOMI_SYM(set_scale, "r5_servo_set_scale");
 #undef AOMI_SYM
 
 	// Every call is needed; an older libr5servo lacks some.
@@ -938,107 +949,6 @@ aomi_servo_last_protocol()
 
 
 
-struct DownloadTask {
-	int32	id;
-	BString	url;
-	BString	path;
-	BString	name;
-};
-
-
-static int32
-download_thread(void* arg)
-{
-	DownloadTask* task = static_cast<DownloadTask*>(arg);
-	BString cmd("/bin/curl -fsSL -o '");
-	BString safePath(task->path);
-	safePath.ReplaceAll("'", "'\\''");
-	BString safeUrl(task->url);
-	safeUrl.ReplaceAll("'", "'\\''");
-	cmd << safePath << "' '" << safeUrl << "'";
-	int rc = system(cmd.String());
-
-	sDlLock.Lock();
-	for (size_t i = 0; i < sDownloads.size(); i++) {
-		if (sDownloads[i].id == task->id) {
-			sDownloads[i].done = true;
-			sDownloads[i].failed = (rc != 0);
-			break;
-		}
-	}
-	sDlLock.Unlock();
-
-	if (be_app != NULL) {
-		BMessage msg(rc == 0 ? AOMI_DOWNLOAD_FINISHED : AOMI_DOWNLOAD_FAILED);
-		msg.AddInt32("id", task->id);
-		if (rc == 0)
-			msg.AddString("path", task->path);
-		else
-			msg.AddString("text", "Download failed");
-		be_app->PostMessage(&msg);
-	}
-	BString logLine;
-	logLine.SetToFormat("download %s -> %s (%s)", task->url.String(),
-		task->path.String(), rc == 0 ? "ok" : "failed");
-	aomi_log_add(logLine.String());
-	delete task;
-	return 0;
-}
-
-
-status_t
-aomi_start_download(const char* url, const char* destDir)
-{
-	if (url == NULL || url[0] == '\0')
-		return B_BAD_VALUE;
-	BString dir(destDir != NULL && destDir[0] != '\0' ? destDir : "/boot/home/Desktop");
-	create_directory(dir.String(), 0755);
-	const char* slash = strrchr(url, '/');
-	BString name(slash != NULL && slash[1] != '\0' ? slash + 1 : "download.bin");
-	int32 q = name.FindFirst('?');
-	if (q >= 0)
-		name.Truncate(q);
-	if (name.Length() == 0)
-		name = "download.bin";
-
-	BString fullPath(dir);
-	fullPath << "/" << name;
-
-	sDlLock.Lock();
-	int32 id = sNextDlId++;
-	DownloadItem item;
-	item.id = id;
-	item.name = name;
-	item.path = fullPath;
-	item.done = false;
-	item.failed = false;
-	sDownloads.push_back(item);
-	sDlLock.Unlock();
-
-	if (be_app != NULL) {
-		BMessage added(AOMI_DOWNLOAD_ADDED);
-		added.AddInt32("id", id);
-		added.AddString("name", name);
-		added.AddInt64("size", -1);
-		be_app->PostMessage(&added);
-	}
-
-	DownloadTask* task = new DownloadTask();
-	task->id = id;
-	task->url = url;
-	task->path = fullPath;
-	task->name = name;
-	thread_id tid = spawn_thread(download_thread, "aomi download",
-		B_NORMAL_PRIORITY, task);
-	if (tid < 0) {
-		delete task;
-		return tid;
-	}
-	resume_thread(tid);
-	return B_OK;
-}
-
-
 // Hidden by itself or by a parent view; unlike IsHidden(), a window that is
 // not shown yet does not count (BView::IsHidden(lookingFrom) checks only the
 // view's own show level when lookingFrom is the view).
@@ -1053,50 +963,6 @@ hidden_in_window(const BView* view)
 }
 
 
-status_t
-aomi_start_download_to(const char* url, const char* path)
-
-{
-	// Save page: the user chose the name in a save panel, which already asked
-	// about replacing an existing file.
-	if (url == NULL || url[0] == '\0' || path == NULL || path[0] == '\0')
-		return B_BAD_VALUE;
-	BPath target(path);
-	if (target.InitCheck() != B_OK)
-		return B_BAD_VALUE;
-	sDlLock.Lock();
-	int32 id = sNextDlId++;
-	DownloadItem item;
-	item.id = id;
-	item.name = target.Leaf();
-	item.path = target.Path();
-	item.done = false;
-	item.failed = false;
-	sDownloads.push_back(item);
-	sDlLock.Unlock();
-	if (be_app != NULL) {
-		BMessage added(AOMI_DOWNLOAD_ADDED);
-		added.AddInt32("id", id);
-		added.AddString("name", target.Leaf());
-		added.AddInt64("size", -1);
-		be_app->PostMessage(&added);
-	}
-	DownloadTask* task = new DownloadTask();
-	task->id = id;
-	task->url = url;
-	task->path = target.Path();
-	task->name = target.Leaf();
-	thread_id tid = spawn_thread(download_thread, "aomi download",
-		B_NORMAL_PRIORITY, task);
-	if (tid < 0) {
-		delete task;
-		return tid;
-	}
-	resume_thread(tid);
-	return B_OK;
-}
-
-
 BServoContentView::BServoContentView(const char* name, BWebSession* session,
 	void* adoptTab)
 	:
@@ -1107,7 +973,9 @@ BServoContentView::BServoContentView(const char* name, BWebSession* session,
 	fSawFrame(false),
 	fSawDraw(false),
 	fHasPending(false),
-	fPendingHTML(false)
+	fPendingHTML(false),
+	fDark(false),
+	fScale(1.0f)
 {
 	if (!sStarted)
 		aomi_servo_start();
@@ -1144,6 +1012,7 @@ BServoContentView::AttachedToWindow()
 		BMessage reply;
 		engine_request(&request, &reply);
 		fAdopted = true;
+		_ApplyLook();
 	}
 	if (fHasPending) {
 		fHasPending = false;
@@ -1215,6 +1084,43 @@ BServoContentView::_Start(const char* document, bool isHTML)
 	fTab = tab;
 	fAdopted = true;
 	fLoading = true;
+	_ApplyLook();
+	return B_OK;
+}
+
+
+// The page's light or dark preference and the font scale, for a new engine
+// and after a change. An older libr5servo has neither call: nothing happens.
+void
+BServoContentView::_ApplyLook()
+{
+	if (fTab == NULL)
+		return;
+	_Call(kOpTheme, NULL, 0, fDark);
+	_Call(kOpScale, NULL, fScale);
+}
+
+
+status_t
+BServoContentView::SetColorScheme(bool dark)
+{
+	fDark = dark;
+	if (sApi.set_theme == NULL)
+		return B_NOT_SUPPORTED;
+	_ApplyLook();
+	return B_OK;
+}
+
+
+status_t
+BServoContentView::SetScale(float scale)
+{
+	if (scale < 0.5f || scale > 4.0f)
+		return B_BAD_VALUE;
+	fScale = scale;
+	if (sApi.set_scale == NULL)
+		return B_NOT_SUPPORTED;
+	_ApplyLook();
 	return B_OK;
 }
 
@@ -1476,27 +1382,19 @@ BServoContentView::Protocol(BString* protocol) const
 status_t
 BServoContentView::Cancel(int32 id)
 {
-	(void)id;
-	return B_NOT_SUPPORTED;
+	return aomi_download_cancel(id);
 }
 
 
 status_t
 BServoContentView::Open(int32 id)
 {
-	BString path;
-	sDlLock.Lock();
-	for (size_t i = 0; i < sDownloads.size(); i++) {
-		if (sDownloads[i].id == id) {
-			path = sDownloads[i].path;
-			break;
-		}
-	}
-	sDlLock.Unlock();
-	if (path.Length() == 0)
+	AomiDownload download;
+	if (!aomi_download_get(id, &download)
+		|| download.state != AOMI_DOWNLOAD_DONE)
 		return B_BAD_INDEX;
 	entry_ref ref;
-	status_t st = get_ref_for_path(path.String(), &ref);
+	status_t st = get_ref_for_path(download.path.String(), &ref);
 	if (st != B_OK)
 		return st;
 	st = be_roster->Launch(&ref);
@@ -1507,18 +1405,10 @@ BServoContentView::Open(int32 id)
 status_t
 BServoContentView::ShowInTracker(int32 id)
 {
-	BString path;
-	sDlLock.Lock();
-	for (size_t i = 0; i < sDownloads.size(); i++) {
-		if (sDownloads[i].id == id) {
-			path = sDownloads[i].path;
-			break;
-		}
-	}
-	sDlLock.Unlock();
-	if (path.Length() == 0)
+	AomiDownload download;
+	if (!aomi_download_get(id, &download))
 		return B_BAD_INDEX;
-	BPath p(path.String());
+	BPath p(download.path.String());
 	p.GetParent(&p);
 	entry_ref ref;
 	status_t st = get_ref_for_path(p.Path(), &ref);
@@ -1967,6 +1857,29 @@ BServoContentView::_OnEvent(BMessage* event)
 			}
 			break;
 		}
+		case R5_EV_CONSOLE:
+		{
+			static const char* kLevels[] = { "log", "info", "warning", "error" };
+			BString line("console ");
+			line << kLevels[a >= 0 && a <= 3 ? a : 0] << ": " << text;
+			aomi_log_add(line.String());
+			break;
+		}
+		case R5_EV_EXTERNAL:
+		{
+			BMessage message(AOMI_EXTERNAL_URL);
+			message.AddString("url", url);
+			Report(&message);
+			break;
+		}
+		case R5_EV_DOWNLOAD:
+		{
+			BMessage message(AOMI_DOWNLOAD_WANTED);
+			message.AddString("url", url);
+			message.AddString("text", text);
+			Report(&message);
+			break;
+		}
 		case R5_EV_DIALOG:
 			_Report(AOMI_DIALOG, NULL, text, 0, a, b, c);
 			if (a == AOMI_DIALOG_PERMISSION) {
@@ -1975,6 +1888,13 @@ BServoContentView::_OnEvent(BMessage* event)
 				BString line("permission denied: ");
 				line << text;
 				aomi_log_add(line.String());
+				break;
+			}
+			if (a == AOMI_DIALOG_LEAVE) {
+				// The question is Aomi's, so it is translated.
+				_AskControl(a, B_TRANSLATE("Leave this page? Changes you "
+					"made may not be saved."), BPoint(b, c),
+					event->GetInt64("control", 0));
 				break;
 			}
 			_AskControl(a, text, BPoint(b, c), event->GetInt64("control", 0));

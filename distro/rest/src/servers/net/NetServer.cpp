@@ -756,6 +756,21 @@ NetServer::_ConfigureResolver(BMessage& resolverConfiguration)
 	if (resolverConfiguration.FindString("device", &device) == B_OK
 		&& device != NULL && device[0] != '\0')
 		strlcpy(deviceName, device, sizeof(deviceName));
+	// Haiku's IPv4 DHCP client names its device too (DHCPClient.cpp, "device"
+	// in the resolver message), so the device does not tell the sources
+	// apart: SLAAC or DHCPv6 on the same interface then replaced the IPv4
+	// block, and resolv.conf kept only an IPv6 server (QEMU, 27 Nov 2026:
+	// "nameserver fec0::3" alone, no page loaded). An update without an IPv6
+	// server is the IPv4 block.
+	bool anyIPv6 = false;
+	const char* server = NULL;
+	for (int32 i = 0; resolverConfiguration.FindString("nameserver", i,
+			&server) == B_OK; i++) {
+		if (server != NULL && strchr(server, ':') != NULL)
+			anyIPv6 = true;
+	}
+	if (!anyIPv6)
+		strlcpy(deviceName, kIPv4Tag, sizeof(deviceName));
 	bool ipv4Update = strcmp(deviceName, kIPv4Tag) == 0;
 
 	FILE* existing = fopen(path.Path(), "r");
