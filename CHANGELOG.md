@@ -8,6 +8,13 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-27 - What's new: Builds 10068 to 10078 rewritten in a friendlier voice
+
+- Problem: The last ten What's new sections listed every detail of a change and read like generated text.
+- Change: `distro/WHATSNEW`, sections 10068 to 10078 rewritten together with the owner, one approval per section. They now say what you can expect, in short paragraphs, and several headings are new (Introducing Aomi, Fast user switching, Easier access to the Settings App, Safer accounts, Guest accounts and a new Shared folder for all!, A fresh new look). Build numbers and order are unchanged; `distro/BUILD` is not bumped because no section was added. Older sections are untouched.
+- Limits: About R5 shows What's new line by line, so the blank lines between paragraphs show as spacing and no paragraph starts with "R5 " (that would be drawn as a heading). The website import of `distro/WHATSNEW` was not checked with multi-paragraph sections.
+- Tested: text only; no build or boot.
+
 ## 2026-11-27 - Desktop slow, glass missing, theme change froze (26 Nov stick)
 
 - Problem: The 26 Nov stick (main `91d50d0a1e`) on the Ryzen 5 5625U with RADV took about 18 s to draw the start splash (normally under 3 s on 23 Nov), the desktop was slow, the screen tore, frosted glass was gone in About and on the window tabs, and a theme change froze the desktop. The syslog (`generated/boot-5625u-52/syslog`) shows `gpu draw warm up 11829 ms` and `gpu draw warm up status Operation timed out`, then a pipeline cache of 254 KB. The 23 Nov boot (`boot-5625u-51`) was `gpu draw warm up 2031 ms`, splash `2875 ms`, cache 529 KB, no timeout. Both boots used RADV Renoir and started with an empty pipeline cache. `Finish()` returns that timeout when the draw thread has not completed the recorded work within 5 s (`SkiaGpu.h`).
