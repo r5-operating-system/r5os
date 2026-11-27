@@ -46,6 +46,14 @@ extern "C" team_id team_get_current_team_id(void);
 /* src/system/kernel/util/Random.cpp (headers/private/kernel/util/Random.h). */
 extern "C" unsigned int secure_random_value(void);
 
+/* R5_GPU_FENCE_PAGE: written when the GPU lock is released. */
+static bool sFenceAllDirty = false;
+static void gpu_fence_flush();
+static void gpu_fence_release(gpu_client* client);
+static void gpu_fence_free_all();
+static status_t gpu_fence_page_map(gpu_client* client, void* buffer,
+	size_t length);
+
 static void r5_gpu_eop();
 static void gpu_fault_retire();
 static status_t gpu_wait_value(gpu_client* client, volatile uint64* value,
@@ -588,6 +596,9 @@ gpu_lock()
 void
 gpu_unlock()
 {
+	/* Every fence block shows the state this release leaves, before any
+	 * other thread can take the lock (R5_GPU_FENCE_PAGE). */
+	gpu_fence_flush();
 	release_lock(&sGpuLock);
 }
 
@@ -598,6 +609,7 @@ gpu_lost(void* info, const char* why)
 	if (sLost)
 		return;
 	sLost = true;
+	sFenceAllDirty = true;
 	(void)info;
 	for (uint32 i = 0; i < kMaxJob; i++)
 		sJobs[i].live = false;
@@ -733,6 +745,11 @@ r5_gpu_init()
 extern "C" void
 r5_gpu_uninit()
 {
+	if (sReady) {
+		gpu_lock();
+		gpu_fence_free_all();
+		gpu_unlock();
+	}
 	sReady = false;
 	if (sRetireSem >= 0)
 		release_sem(sRetireSem);
@@ -1336,6 +1353,9 @@ gpu_hang_run(uint32 actions)
 {
 	while (actions != 0) {
 		uint32 next = 0;
+		/* Each step changes sResetting, sLost or the jobs: every fence
+		 * block is written at the next release of the lock. */
+		sFenceAllDirty = true;
 		if ((actions & R5_HANG_ACT_RESET) != 0) {
 			sResetting = true;
 			gpu_unlock();
@@ -1419,6 +1439,7 @@ gpu_hang(gpu_job* job, bigtime_t now)
 		(long long)((now - job->submitted) / 1000));
 	uint32 actions = r5_hang_step(&sHang, R5_HANG_EV_HANG, &sHang);
 	sCpStopped = false;
+	sFenceAllDirty = true;
 	if ((actions & R5_HANG_ACT_LOSE) != 0) {
 		if (sGuilty == NULL)
 			sGuilty = job->owner;
@@ -3558,6 +3579,15 @@ gpu_control(void* cookie, uint32 op, void* buffer, size_t length)
 
 	gpu_lock();
 	gpu_wait_reset();
+	/* Buffer and address calls leave syncobjs and jobs alone. Every other
+	 * call may change this file's fence block. */
+	if (op != R5_GPU_BO_CREATE && op != R5_GPU_BO_FREE && op != R5_GPU_BO_MAP
+		&& op != R5_GPU_VA_MAP && op != R5_GPU_VA_UNMAP
+		&& op != R5_GPU_VA_REPLACE && op != R5_GPU_VA_CLEAR
+		&& op != R5_GPU_READ_REG && op != R5_GPU_BO_EXPORT
+		&& op != R5_GPU_BO_IMPORT && op != R5_GPU_BO_PRESENT_MARK
+		&& op != R5_GPU_SCANOUT_BO)
+		client->fenceDirty = true;
 	sInfo = client->info;
 	int perFile = gpu_hw_per_file();
 	if (perFile < 0) {
@@ -3744,6 +3774,8 @@ gpu_control(void* cookie, uint32 op, void* buffer, size_t length)
 		status = gpu_sync_transfer(client, buffer, length);
 	else if (op == R5_GPU_SYNCOBJ_BATCH)
 		status = gpu_sync_batch(client, buffer, length);
+	else if (op == R5_GPU_FENCE_PAGE)
+		status = gpu_fence_page_map(client, buffer, length);
 	else if (op == R5_GPU_SYNCOBJ_RESET || op == R5_GPU_SYNCOBJ_QUERY) {
 		r5_gpu_syncobj in;
 		status = gpu_copy_in(buffer, length, &in, sizeof(in));
@@ -3778,6 +3810,325 @@ extern "C" team_id team_get_current_team_id(void);
 
 /* headers/private/system/vm_defs.h: REGION_NO_PRIVATE_MAP = 0. */
 static const uint32 kRegionNoPrivateMap = 0;
+/* headers/private/system/vm_defs.h: the program can neither write,
+ * reprotect, unmap nor delete an area with this bit (vm.cpp). */
+static const uint32 kKernelAreaBit = 1u << 14;
+
+
+//	#pragma mark - R5_GPU_FENCE_PAGE
+
+
+/* One area per team, kFenceBlocks blocks, one per open file of that team.
+ * The area is never unmapped while the team lives: a block that a closed
+ * file leaves says CLOSED and gets a new generation, and a program that
+ * still holds the old pointer reads that, not a fault. */
+static const uint32 kFenceTeams = 32;
+static const uint32 kFenceBlocks = 4;
+
+struct gpu_fence_team {
+	bool		live;
+	team_id		team;
+	area_id		kernelArea;
+	area_id		userArea;
+	uint8*		kernel;
+	uint32		used;
+};
+
+static gpu_fence_team sFenceTeams[kFenceTeams];
+/* With the GPU lock: the one writer. */
+static r5_gpu_fence_slot sFenceScratch[kMaxSync];
+
+static_assert(sizeof(r5_gpu_fence_page) <= R5_GPU_FENCE_BLOCK_BYTES,
+	"fence block");
+static_assert(R5_GPU_FENCE_BLOCK_BYTES % B_PAGE_SIZE == 0, "fence block");
+static_assert(R5_GPU_FENCE_SLOTS == kMaxSync, "fence slots");
+static_assert(kFenceBlocks <= 32, "fence used bits");
+
+
+static r5_gpu_fence_page*
+gpu_fence_block(gpu_fence_team* team, uint32 block)
+{
+	return (r5_gpu_fence_page*)(team->kernel
+		+ (size_t)block * R5_GPU_FENCE_BLOCK_BYTES);
+}
+
+
+/* Linux write_seqcount_begin/end: seq odd, then the data, then seq even.
+ * A release fence keeps each pair of stores in order (a compiler barrier
+ * on x86, a store barrier elsewhere). */
+static void
+gpu_fence_write_begin(r5_gpu_fence_page* page)
+{
+	uint32 seq = __atomic_load_n(&page->seq, __ATOMIC_RELAXED);
+	__atomic_store_n(&page->seq, seq + 1, __ATOMIC_RELAXED);
+	__atomic_thread_fence(__ATOMIC_RELEASE);
+}
+
+
+static void
+gpu_fence_write_end(r5_gpu_fence_page* page)
+{
+	uint32 seq = __atomic_load_n(&page->seq, __ATOMIC_RELAXED);
+	__atomic_thread_fence(__ATOMIC_RELEASE);
+	__atomic_store_n(&page->seq, seq + 1, __ATOMIC_RELAXED);
+}
+
+
+static uint32
+gpu_fence_next_generation(uint32 generation)
+{
+	generation++;
+	return generation == 0 ? 1 : generation;
+}
+
+
+/*!	Writes this file's block from the kernel's own state: the syncobjs, a
+	PENDING bit for every syncobj that a live job lists, the highest
+	retired sequence, and GONE. Only what changed is written, and seq
+	moves only then. With the GPU lock.
+*/
+static void
+gpu_fence_publish(gpu_client* client)
+{
+	gpu_fence_team* team = client->fenceTeam;
+	if (team == NULL || !team->live)
+		return;
+	r5_gpu_fence_page* page = gpu_fence_block(team, client->fenceBlock);
+	uint32 pending[kMaxSync / 32];
+	memset(pending, 0, sizeof(pending));
+	/* Every live job, also one the ring has passed but the retire thread
+	 * has not seen: the kernel's wait looks at the ring's fence for those,
+	 * the block cannot, so it leaves them to the kernel. */
+	for (uint32 i = 0; i < kMaxJob; i++) {
+		const gpu_job* job = &sJobs[i];
+		if (!job->live)
+			continue;
+		for (uint32 n = 0; n < job->count && n < kMaxList; n++) {
+			const gpu_sync* sync = job->syncs[n];
+			if (sync == NULL || sync->owner != client)
+				continue;
+			uint32 index = (uint32)(sync - client->syncs);
+			if (index < kMaxSync)
+				pending[index / 32] |= 1u << (index % 32);
+		}
+	}
+	uint32 flags = (gpu_gone(client) || sResetting || sGpuOff)
+		? R5_GPU_FENCE_GONE : 0;
+	bool changed = page->flags != flags || page->retired != client->retired;
+	for (uint32 i = 0; i < kMaxSync; i++) {
+		const gpu_sync* sync = &client->syncs[i];
+		r5_gpu_fence_slot* next = &sFenceScratch[i];
+		memset(next, 0, sizeof(*next));
+		if (sync->live && sync->owner == client) {
+			next->point = sync->point;
+			next->submitted = sync->submitted;
+			next->flags = R5_GPU_FENCE_SLOT_LIVE;
+			if ((pending[i / 32] & (1u << (i % 32))) != 0)
+				next->flags |= R5_GPU_FENCE_SLOT_PENDING;
+		}
+		const r5_gpu_fence_slot* old = &page->slot[i];
+		if (old->point != next->point || old->submitted != next->submitted
+			|| old->flags != next->flags)
+			changed = true;
+	}
+	if (!changed)
+		return;
+	gpu_fence_write_begin(page);
+	page->flags = flags;
+	page->retired = client->retired;
+	for (uint32 i = 0; i < kMaxSync; i++) {
+		r5_gpu_fence_slot* old = &page->slot[i];
+		const r5_gpu_fence_slot* next = &sFenceScratch[i];
+		if (old->point != next->point || old->submitted != next->submitted
+			|| old->flags != next->flags) {
+			old->point = next->point;
+			old->submitted = next->submitted;
+			old->flags = next->flags;
+		}
+	}
+	gpu_fence_write_end(page);
+}
+
+
+/* Called by gpu_unlock(), with the lock. */
+static void
+gpu_fence_flush()
+{
+	bool all = sFenceAllDirty;
+	sFenceAllDirty = false;
+	for (gpu_client* scan = sClientList; scan != NULL; scan = scan->next) {
+		if (scan->fenceTeam == NULL || (!all && !scan->fenceDirty))
+			continue;
+		scan->fenceDirty = false;
+		gpu_fence_publish(scan);
+	}
+}
+
+
+/* A team that ended and has no open file left: its kernel area goes. The
+ * team's own mapping went with the team. */
+static void
+gpu_fence_reap()
+{
+	for (uint32 i = 0; i < kFenceTeams; i++) {
+		gpu_fence_team* team = &sFenceTeams[i];
+		if (!team->live || team->used != 0 || team_is_valid(team->team))
+			continue;
+		delete_area(team->kernelArea);
+		memset(team, 0, sizeof(*team));
+	}
+}
+
+
+/* exec() takes every area of the team, also this one. A new mapping
+ * shows the same blocks: they are on the kernel area's cache. */
+static status_t
+gpu_fence_map_user(gpu_fence_team* team)
+{
+	area_info info;
+	if (team->userArea >= 0 && get_area_info(team->userArea, &info) == B_OK
+		&& info.team == team->team)
+		return B_OK;
+	void* user = NULL;
+	area_id area = vm_clone_area(team->team, "r5 gpu fence page", &user,
+		B_ANY_ADDRESS, B_READ_AREA | kKernelAreaBit, kRegionNoPrivateMap,
+		team->kernelArea, true);
+	if (area < 0)
+		return area;
+	team->userArea = area;
+	return B_OK;
+}
+
+
+static status_t
+gpu_fence_attach(gpu_client* client, team_id teamID)
+{
+	gpu_fence_team* team = NULL;
+	for (uint32 i = 0; i < kFenceTeams && team == NULL; i++) {
+		if (sFenceTeams[i].live && sFenceTeams[i].team == teamID)
+			team = &sFenceTeams[i];
+	}
+	if (team == NULL) {
+		gpu_fence_reap();
+		for (uint32 i = 0; i < kFenceTeams && team == NULL; i++) {
+			if (!sFenceTeams[i].live)
+				team = &sFenceTeams[i];
+		}
+		if (team == NULL)
+			return B_NO_MEMORY;
+		void* kernel = NULL;
+		area_id kernelArea = create_area("r5 gpu fence pages", &kernel,
+			B_ANY_KERNEL_ADDRESS, kFenceBlocks * R5_GPU_FENCE_BLOCK_BYTES,
+			B_FULL_LOCK, B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA);
+		if (kernelArea < 0)
+			return kernelArea;
+		memset(kernel, 0, kFenceBlocks * R5_GPU_FENCE_BLOCK_BYTES);
+		team->live = true;
+		team->team = teamID;
+		team->kernelArea = kernelArea;
+		team->userArea = -1;
+		team->kernel = (uint8*)kernel;
+		team->used = 0;
+	}
+	status_t status = gpu_fence_map_user(team);
+	if (status != B_OK) {
+		if (team->used == 0) {
+			delete_area(team->kernelArea);
+			memset(team, 0, sizeof(*team));
+		}
+		return status;
+	}
+	uint32 block = kFenceBlocks;
+	for (uint32 i = 0; i < kFenceBlocks && block == kFenceBlocks; i++) {
+		if ((team->used & (1u << i)) == 0)
+			block = i;
+	}
+	if (block == kFenceBlocks)
+		return B_BUSY;
+	r5_gpu_fence_page* page = gpu_fence_block(team, block);
+	gpu_fence_write_begin(page);
+	page->magic = R5_GPU_FENCE_MAGIC;
+	page->version = R5_GPU_FENCE_VERSION;
+	/* GONE until gpu_fence_publish writes the slots, at this call's end. */
+	page->flags = R5_GPU_FENCE_GONE;
+	page->generation = gpu_fence_next_generation(page->generation);
+	page->slot_count = R5_GPU_FENCE_SLOTS;
+	page->retired = 0;
+	memset(page->_reserved, 0, sizeof(page->_reserved));
+	memset(page->slot, 0, sizeof(page->slot));
+	gpu_fence_write_end(page);
+	team->used |= 1u << block;
+	client->fenceTeam = team;
+	client->fenceBlock = block;
+	client->fenceDirty = true;
+	return B_OK;
+}
+
+
+/*!	R5_GPU_FENCE_PAGE. The calling team gets its read-only area and this
+	file's block in it. A file answers only the team that first asked; a
+	fork child that shares the file keeps reading the parent's block
+	through its copy of the mapping, and gets B_NOT_ALLOWED here.
+*/
+static status_t
+gpu_fence_page_map(gpu_client* client, void* buffer, size_t length)
+{
+	r5_gpu_fence_page_map in;
+	status_t status = gpu_copy_in(buffer, length, &in, sizeof(in));
+	if (status != B_OK)
+		return status;
+	team_id teamID = team_get_current_team_id();
+	if (client->fenceTeam == NULL)
+		status = gpu_fence_attach(client, teamID);
+	else if (client->fenceTeam->team != teamID)
+		status = B_NOT_ALLOWED;
+	else
+		status = gpu_fence_map_user(client->fenceTeam);
+	if (status != B_OK)
+		return status;
+	gpu_fence_team* team = client->fenceTeam;
+	in.area = team->userArea;
+	in.offset = client->fenceBlock * R5_GPU_FENCE_BLOCK_BYTES;
+	in.generation = gpu_fence_block(team, client->fenceBlock)->generation;
+	in._pad = 0;
+	return gpu_copy_out(buffer, length, &in, sizeof(in));
+}
+
+
+static void
+gpu_fence_release(gpu_client* client)
+{
+	gpu_fence_team* team = client->fenceTeam;
+	if (team == NULL)
+		return;
+	client->fenceTeam = NULL;
+	if (!team->live)
+		return;
+	r5_gpu_fence_page* page = gpu_fence_block(team, client->fenceBlock);
+	gpu_fence_write_begin(page);
+	page->flags = R5_GPU_FENCE_GONE | R5_GPU_FENCE_CLOSED;
+	page->generation = gpu_fence_next_generation(page->generation);
+	page->retired = 0;
+	memset(page->slot, 0, sizeof(page->slot));
+	gpu_fence_write_end(page);
+	team->used &= ~(1u << client->fenceBlock);
+	gpu_fence_reap();
+}
+
+
+/* r5_gpu_uninit: no file is open any more. */
+static void
+gpu_fence_free_all()
+{
+	for (gpu_client* scan = sClientList; scan != NULL; scan = scan->next)
+		gpu_fence_release(scan);
+	for (uint32 i = 0; i < kFenceTeams; i++) {
+		if (!sFenceTeams[i].live)
+			continue;
+		delete_area(sFenceTeams[i].kernelArea);
+		memset(&sFenceTeams[i], 0, sizeof(sFenceTeams[i]));
+	}
+}
 
 
 static void
@@ -3809,6 +4160,14 @@ r5_gpu_eop()
 			gpu_sync* sync = job->syncs[n];
 			if (sync != NULL && sync->live && job->points[n] > sync->point)
 				sync->point = job->points[n];
+			/* point and PENDING of that file's block change */
+			if (sync != NULL && sync->owner != NULL)
+				sync->owner->fenceDirty = true;
+		}
+		if (job->owner != NULL) {
+			if (job->sequence > job->owner->retired)
+				job->owner->retired = job->sequence;
+			job->owner->fenceDirty = true;
 		}
 		job->live = false;
 	}
@@ -4029,6 +4388,9 @@ gpu_free(void* cookie)
 	gpu_lock();
 	/* Freeing buffers writes page tables and flushes the TLB. */
 	gpu_wait_reset();
+	/* The block says CLOSED with a new generation; the area stays mapped
+	 * in the team, so a reader that still holds it never faults. */
+	gpu_fence_release(client);
 	status_t status = B_OK;
 	uint64 seen = gpu_hw_seen();
 	r5_gpu_eop();

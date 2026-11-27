@@ -82,7 +82,7 @@ old = (
 new = (
     "\tlibglvnd-1.7.0-1\n"
     "\tllvm21_runtime-21.1.8-1\n"
-    "\tlibdrm-2.4.124-5\n"
+    "\tlibdrm-2.4.124-6\n"
     "\tmesa-25.3.6-7\n"
     "\tmesa_devel-25.3.6-1\n"
     "\tmesa_lavapipe-25.3.6-7\n"
@@ -96,7 +96,7 @@ if old in text:
 elif "\tmesa-25.3.6-1\n" in text and "\tmesa_zink-25.3.6-1\n" not in text:
     text = text.replace(
         "\tmesa-25.3.6-1\n",
-        "\tlibdrm-2.4.124-5\n\tmesa_zink-25.3.6-1\n\tmesa_radv-25.3.6-14\n",
+        "\tlibdrm-2.4.124-6\n\tmesa_zink-25.3.6-1\n\tmesa_radv-25.3.6-14\n",
         1,
     )
 elif "\tvulkan_tools-1.4.367-2\n" not in text and "\tvulkan_tools-1.4.367-1\n" not in text:
@@ -150,11 +150,8 @@ text = text.replace("\tmesa_radv-25.3.6-10\n", "\tmesa_radv-25.3.6-14\n")
 text = text.replace("\tmesa_radv-25.3.6-11\n", "\tmesa_radv-25.3.6-14\n")
 text = text.replace("\tmesa_radv-25.3.6-12\n", "\tmesa_radv-25.3.6-14\n")
 text = text.replace("\tmesa_radv-25.3.6-13\n", "\tmesa_radv-25.3.6-14\n")
-text = text.replace("\tlibdrm-2.4.124-1\n", "\tlibdrm-2.4.124-5\n")
-text = text.replace("\tlibdrm-2.4.124-2\n", "\tlibdrm-2.4.124-5\n")
-# M13 step 1: -3 stays in the download folder for branches that still pin it
-text = text.replace("\tlibdrm-2.4.124-3\n", "\tlibdrm-2.4.124-5\n")
-text = text.replace("\tlibdrm-2.4.124-4\n", "\tlibdrm-2.4.124-5\n")
+# Any libdrm revision becomes this branch's (2.4.124-6: the fence page).
+text = re.sub(r"\tlibdrm-2\.4\.124-[0-9]+\n", "\tlibdrm-2.4.124-6\n", text)
 if "\tmesa_radv-25.3.6-14\n" not in text:
     sys.exit("mesa_radv 25.3.6-14 missing from the pin")
 text = text.replace("\tvulkan_loader-1.4.367-1\n", "\tvulkan_loader-1.4.367-5\n")

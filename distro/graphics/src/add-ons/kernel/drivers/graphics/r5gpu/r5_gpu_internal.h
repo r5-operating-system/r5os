@@ -173,6 +173,14 @@ struct gpu_client {
 	bool			limitLogged;
 	gpu_ib_cpu		ibCpu[kMaxIbCache];
 	uint32			ibCpuNext;
+	/* R5_GPU_FENCE_PAGE: this file's block in its team's fence area,
+	 * NULL until the file asks. The block is written when the GPU lock
+	 * is released and fenceDirty is set (or every block is dirty). */
+	struct gpu_fence_team*	fenceTeam;
+	uint32			fenceBlock;
+	bool			fenceDirty;
+	/* The highest sequence of this file's jobs that r5_gpu_eop retired. */
+	uint64			retired;
 };
 
 

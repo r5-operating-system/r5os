@@ -121,6 +121,7 @@ Skia drawing is the default as of 19 Nov 2026 (M13 step 5): RADV when the GPU pa
 | `FENCE_WAIT` | Wait for a sequence number, with a timeout | `amdgpu_cs_query_fence_status` |
 | `SYNCOBJ_*` | Create, wait, signal, export and import of sync objects | `drmSyncobj*` |
 | `BO_EXPORT` / `BO_IMPORT` | Share a buffer with app_server for presentation | `amdgpu_bo_export` / `import` (dma-buf) |
+| `FENCE_PAGE` (`+ 34`) | Read-only block of the file's syncobj states and retired sequence, so a decided wait needs no call ("Fence page" below) | — (Linux reads its fences through `dma_fence` in the kernel) |
 
 ### What the kernel driver does
 
@@ -157,6 +158,27 @@ Not built yet; the design is `docs/APP-SERVER-COMPOSITOR.md`, "Zero-copy design 
 - A buffer gets a reference count: each file's handle, each pending export, and a parked handle for GPU work in flight. The memory goes with the last reference.
 - Haiku has no dma-buf, and no area is used for sharing (the kernel area of a buffer is not cloneable).
 - Buffer slots: the system limit (`kMaxBo`, 256 today) goes up and the per-file limit (`kMaxClientBo`, also 256 today) goes to half of it, with a fixed reserve that only app_server can use, all as starting values. The real values follow from `bo_count` before and after VulkanTeapot in the self-test.
+
+### Fence page (`FENCE_PAGE`, `+ 34`, 27 Nov 2026)
+
+A wait that is already decided needs no call. `R5_GPU_FENCE_PAGE` (`+ 34`, additive; an older kernel answers `B_UNSUPPORTED`) gives the calling team a read-only area and the file's block in it (`r5_gpu_fence_page` in `r5_gpu.h`). The R5 DRM library reads that block and answers without an ioctl and without the kernel's GPU lock:
+
+- `DRM_IOCTL_SYNCOBJ_WAIT` and `SYNCOBJ_TIMELINE_WAIT` when every handle is decided: signalled (`0`), or not signalled with a timeout of 0 (`ETIME`). The rule is the kernel's (`gpu_list_ready`, `gpu_list_submitted`), as an inline function in `r5_gpu.h` (`r5_gpu_fence_wait_list`).
+- `DRM_IOCTL_SYNCOBJ_QUERY` (the point).
+- `AMDGPU_WAIT_CS` and a dependency chunk of `CS` when the sequence is at or below the file's `retired`, the highest sequence of its own jobs that the kernel retired. The ring retires in order, so that sequence is done.
+
+Everything else goes to the kernel as before: a wait that would block, an error case (a handle that does not exist; without `FOR_SUBMIT` a point never submitted), a binary syncobj whose point caught up while a job that lists it is still live (the kernel decides that with the ring's fence), a WAIT_CS whose sequence is above `retired`, and every answer while the block says `GONE`.
+
+What the block holds, and who writes it:
+
+- **Only this file.** One area per team, four blocks of 4 KiB, one per open file of that team (a fifth file gets `B_BUSY` and uses the ioctls). A block has the file's 128 syncobj slots (`point`, `submitted`, `LIVE`, `PENDING`: a job not yet retired lists it), the file's `retired`, `GONE` and `CLOSED`. No other team's file, no kernel address and no global ring number are in it. `retired` is only this file's own jobs.
+- **Read-only.** The team's mapping is a clone with `B_READ_AREA` and `B_KERNEL_AREA`, the bits of the commpage: the program can neither write nor reprotect, unmap or delete it. Another team cannot clone it. A fork child shares the file and sees the same block through its copy of the mapping; `FENCE_PAGE` from the child is `B_NOT_ALLOWED`. After `exec()` the next call maps the area again.
+- **Written at the release of the GPU lock.** `gpu_unlock()` writes every block whose file changed (each call except the buffer and address calls), the blocks of the files whose jobs a retire finished, and every block after a loss or a reset step. The block is then the state every call of that moment would see. A seqlock (`seq` odd while writing, release fences) keeps a reader from mixing two states; the library tries four times, then asks the kernel.
+- **Reset and loss.** `GONE` is set while the device or the file's context is lost, while a reset runs and when the GPU is off, so every answer then comes from the kernel and its rules for a lost context (`ECANCELED`).
+- **Close.** The block says `CLOSED`, gets a new `generation` and loses its slots. The area is not unmapped while the team lives, so a reader that still holds the pointer reads `CLOSED`, never a fault. The next file of the team that gets the block has a new generation; the library compares it with the one `FENCE_PAGE` returned. The kernel deletes its own area when the team ended and no file of it is open.
+- **The library's binding** is per fd number (below 256). `DRM_IOCTL_VERSION`, `SYNCOBJ_CREATE` and a new context make the next use ask the kernel which block the fd has now, so an fd number that a new device got is bound again. Limit: a program that closes an fd and gets the number back for another file of the same team, then waits on handles it never created there before any of those three calls, gets the answer of its earlier file. That is the program's own data, never another team's.
+
+The library also no longer prints a syncobj wait that timed out (`ETIME`) unless `gpu_trace` is set: a poll is an answer, not a failure, and the print was a write to stderr per poll.
 
 ## R5 DRM library (userland)
 
