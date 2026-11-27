@@ -3353,6 +3353,17 @@ Desktop::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 				&& (clientInfo.uid == 0 || clientInfo.uid == fUserID)
 				&& (fLastSenderUid == 0 || clientTeamID == fLastSenderTeam));
 			if (!senderAllowed || !teamAllowed) {
+				// Once per refusal: which check failed, so a program that
+				// stops with "couldn't obtain new app_server comm port"
+				// (the registrar at shut down, 27 Nov 2026) can be traced.
+				syslog(LOG_WARNING, "app_server: desktop of uid %" B_PRId32
+					" refused AS_CREATE_APP from team %" B_PRId32 " (%s): "
+					"first %d sender uid %" B_PRId32 " team uid %" B_PRId32,
+					(int32)fUserID, clientTeamID,
+					appSignature != NULL ? appSignature : "?",
+					fLastSenderFirst ? 1 : 0, (int32)fLastSenderUid,
+					get_team_info(clientTeamID, &clientInfo) == B_OK
+						? (int32)clientInfo.uid : (int32)-1);
 				BPrivate::LinkSender reply(clientReplyPort);
 				reply.StartMessage(B_PERMISSION_DENIED);
 				reply.Flush();
