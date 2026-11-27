@@ -31,6 +31,120 @@ typedef struct callback_node {
 void _thread_do_exit_work(void);
 void _thread_do_exit_notification(void);
 
+// SPDX-SnippetBegin
+// SPDX-License-Identifier: MIT
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+
+/*	thread_local destructors (GitHub #3012, Haiku #18182).
+
+	The compiler registers the destructor of a thread_local object through
+	__cxa_thread_atexit(). libstdc++ only keeps its own list and does not keep
+	the library loaded: when the library was unloaded with dlclose() before the
+	thread ended, the thread called into unmapped code at its end. libroot now
+	keeps the list. Each entry holds a reference to the image that registered
+	it (the runtime loader's pin_image_at_address()), so dlclose() leaves that
+	image mapped until the destructors of every thread that used it ran. The
+	runtime loader binds __cxa_thread_atexit to libroot for every image.
+*/
+
+typedef struct thread_dtor_node {
+	struct thread_dtor_node* next;
+	void (*function)(void*);
+	void* object;
+	void* dso;
+	void* image;
+		// the pinned image this entry gives back, or NULL
+} thread_dtor_node;
+
+
+void _thread_call_tls_destructors(void);
+int __cxa_thread_atexit_impl(void (*function)(void*), void* object,
+	void* dsoHandle);
+int __cxa_thread_atexit(void (*function)(void*), void* object,
+	void* dsoHandle);
+
+
+int
+__cxa_thread_atexit_impl(void (*function)(void*), void* object,
+	void* dsoHandle)
+{
+	thread_dtor_node** head
+		= (thread_dtor_node**)tls_address(TLS_THREAD_DTORS_SLOT);
+	thread_dtor_node* node;
+	thread_dtor_node* other;
+	void* key = dsoHandle != NULL ? dsoHandle : (void*)function;
+	int pinned = 0;
+
+	if (function == NULL)
+		return -1;
+
+	node = (thread_dtor_node*)malloc(sizeof(thread_dtor_node));
+	if (node == NULL)
+		return -1;
+
+	node->function = function;
+	node->object = object;
+	node->dso = key;
+	node->image = NULL;
+
+	// One reference per image and thread is enough: all destructors run
+	// before any reference is given back.
+	for (other = *head; other != NULL; other = other->next) {
+		if (other->dso == key && other->image != NULL) {
+			pinned = 1;
+			break;
+		}
+	}
+	if (!pinned && __gRuntimeLoader->pin_image_at_address != NULL)
+		node->image = __gRuntimeLoader->pin_image_at_address(key);
+
+	node->next = *head;
+	*head = node;
+	return 0;
+}
+
+
+int
+__cxa_thread_atexit(void (*function)(void*), void* object, void* dsoHandle)
+{
+	return __cxa_thread_atexit_impl(function, object, dsoHandle);
+}
+
+
+/*!	Runs the thread_local destructors of the current thread, newest first,
+	including any a destructor registers while they run. Only then the image
+	references are given back, which may unload a library that was closed
+	while this thread still used it. Called at thread exit before the pthread
+	keys and the TLS blocks go away, and by exit() before the static
+	destructors.
+*/
+void
+_thread_call_tls_destructors(void)
+{
+	thread_dtor_node** head
+		= (thread_dtor_node**)tls_address(TLS_THREAD_DTORS_SLOT);
+	thread_dtor_node* pins = NULL;
+	thread_dtor_node* node;
+
+	while ((node = *head) != NULL) {
+		*head = node->next;
+		node->function(node->object);
+
+		if (node->image != NULL) {
+			node->next = pins;
+			pins = node;
+		} else
+			free(node);
+	}
+
+	while ((node = pins) != NULL) {
+		pins = node->next;
+		__gRuntimeLoader->unload_library(node->image);
+		free(node);
+	}
+}
+// SPDX-SnippetEnd
+
 
 static status_t
 thread_entry(void* _entry, void* _thread)
@@ -67,8 +181,16 @@ _thread_do_exit_notification(void)
 void
 _thread_do_exit_work(void)
 {
-	callback_node *node = tls_get(TLS_ON_EXIT_THREAD_SLOT);
+	callback_node *node;
 	callback_node *next;
+
+	// SPDX-SnippetBegin
+	// SPDX-License-Identifier: MIT
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	_thread_call_tls_destructors();
+	// SPDX-SnippetEnd
+
+	node = tls_get(TLS_ON_EXIT_THREAD_SLOT);
 
 	while (node != NULL) {
 		next = node->next;

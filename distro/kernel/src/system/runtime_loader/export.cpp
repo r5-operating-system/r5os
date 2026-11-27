@@ -12,6 +12,14 @@
 #include "elf_tls.h"
 
 
+// SPDX-SnippetBegin
+// SPDX-License-Identifier: MIT
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// elf.cpp
+void* pin_image_at_address(void* address);
+// SPDX-SnippetEnd
+
+
 // exported via the rld_export structure in user space program arguments
 
 
@@ -103,6 +111,7 @@ rldexport_init(void)
 	// SPDX-License-Identifier: MIT
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	gRuntimeLoader.init_initial_exec_tls = materialize_initial_exec_tls;
+	gRuntimeLoader.pin_image_at_address = pin_image_at_address;
 	// SPDX-SnippetEnd
 }
 

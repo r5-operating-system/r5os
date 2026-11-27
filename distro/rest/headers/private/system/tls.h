@@ -36,6 +36,9 @@ enum {
 	// runtime_loader links its own tls.o, so its gNextSlot is not
 	// libroot's. This index is where TLS_FIRST_FREE_SLOT used to be.
 	TLS_STATIC_TLS_READY,
+	// The thread_local destructors of this thread, newest first
+	// (__cxa_thread_atexit_impl() in libroot's thread.c).
+	TLS_THREAD_DTORS_SLOT,
 	// SPDX-SnippetEnd
 
 	TLS_FIRST_FREE_SLOT

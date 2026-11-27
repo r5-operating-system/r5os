@@ -65,6 +65,13 @@ struct rld_export {
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	void (*init_initial_exec_tls)();
 	// SPDX-SnippetEnd
+
+	// SPDX-SnippetBegin
+	// SPDX-License-Identifier: MIT
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// Keeps the image at an address loaded; unload_library() gives it back.
+	void* (*pin_image_at_address)(void* address);
+	// SPDX-SnippetEnd
 };
 
 extern struct rld_export *__gRuntimeLoader;
