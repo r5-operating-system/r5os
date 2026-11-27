@@ -76,7 +76,13 @@ enum {
 	// coordinates. For the listener's information: the view itself asks the
 	// user (alert, confirm, prompt, sign-in, file upload, context menu,
 	// select list) and answers the page.
-	AOMI_DIALOG					= 'aDlg'
+	AOMI_DIALOG					= 'aDlg',
+	// "url" string: an address for another program (mailto:, tel:). The
+	// page stays where it is; the window hands the address on.
+	AOMI_EXTERNAL_URL			= 'aExt',
+	// "url" string, the file to fetch; "text" string, the address to show
+	// and log (no sign-in in it). A link to a file the engine cannot show.
+	AOMI_DOWNLOAD_WANTED		= 'aDlw'
 };
 
 
@@ -143,6 +149,13 @@ public:
 	virtual	status_t			Cancel(int32 id) = 0;
 	virtual	status_t			Open(int32 id) = 0;
 	virtual	status_t			ShowInTracker(int32 id) = 0;
+
+	// Added 27 Nov 2026. The page's light or dark preference
+	// (prefers-color-scheme) and how many device pixels a CSS pixel is
+	// (1 at a 12 point system font). B_NOT_SUPPORTED when the engine
+	// cannot.
+	virtual	status_t			SetColorScheme(bool dark);
+	virtual	status_t			SetScale(float scale);
 
 
 

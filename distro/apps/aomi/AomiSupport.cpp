@@ -19,9 +19,12 @@
 #include <Path.h>
 #include <Roster.h>
 
+#include <algorithm>
+
 #include <ctype.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 
 static const char* kFolder = "WebPositive";
@@ -80,6 +83,32 @@ aomi_prefs_defaults(AomiPrefs* prefs)
 	}
 	prefs->askDownload = false;
 	prefs->showMenuBar = false;
+	prefs->pageColors = 0;
+	prefs->zoom = 100;
+}
+
+
+const AomiSearchEngine kAomiSearchEngines[] = {
+	{ "DuckDuckGo", "https://duckduckgo.com/?q=%s" },
+	{ "Startpage", "https://www.startpage.com/do/search?q=%s" },
+	{ "Ecosia", "https://www.ecosia.org/search?q=%s" },
+	{ "Bing", "https://www.bing.com/search?q=%s" },
+	{ "Google", "https://www.google.com/search?q=%s" },
+	{ "Wikipedia", "https://en.wikipedia.org/w/index.php?search=%s" },
+	{ NULL, NULL }
+};
+
+
+int32
+aomi_search_engine_index(const char* address)
+{
+	if (address == NULL)
+		return -1;
+	for (int32 i = 0; kAomiSearchEngines[i].name != NULL; i++) {
+		if (strcmp(kAomiSearchEngines[i].address, address) == 0)
+			return i;
+	}
+	return -1;
 }
 
 
@@ -107,6 +136,14 @@ aomi_prefs()
 		prefs.downloadPath.String());
 	prefs.askDownload = message.GetBool("ask download", prefs.askDownload);
 	prefs.showMenuBar = message.GetBool("show menu bar", prefs.showMenuBar);
+	prefs.pageColors = message.GetInt32("page colors", prefs.pageColors);
+	if (prefs.pageColors < 0 || prefs.pageColors > 2)
+		prefs.pageColors = 0;
+	prefs.zoom = message.GetInt32("zoom", prefs.zoom);
+	if (prefs.zoom < 30 || prefs.zoom > 300)
+		prefs.zoom = 100;
+	if (prefs.start < 0 || prefs.start > 2)
+		prefs.start = 0;
 	return prefs;
 
 }
@@ -128,9 +165,24 @@ aomi_prefs_save(const AomiPrefs& prefs)
 	message.AddString("download path", prefs.downloadPath);
 	message.AddBool("ask download", prefs.askDownload);
 	message.AddBool("show menu bar", prefs.showMenuBar);
-	BFile file(path.Path(), B_CREATE_FILE | B_ERASE_FILE | B_WRITE_ONLY);
-	if (file.InitCheck() == B_OK)
-		message.Flatten(&file);
+	message.AddInt32("page colors", prefs.pageColors);
+	message.AddInt32("zoom", prefs.zoom);
+	// Written next to the file and renamed over it: a reader (another
+	// window, the next start) never finds it empty or half written.
+	BString temporary(path.Path());
+	temporary << ".new";
+	status_t status;
+	{
+		BFile file(temporary.String(),
+			B_CREATE_FILE | B_ERASE_FILE | B_WRITE_ONLY);
+		status = file.InitCheck();
+		if (status == B_OK)
+			status = message.Flatten(&file);
+		if (status == B_OK)
+			status = file.Sync();
+	}
+	if (status != B_OK || rename(temporary.String(), path.Path()) != 0)
+		unlink(temporary.String());
 }
 
 
@@ -303,6 +355,20 @@ aomi_history_add(const char* url)
 }
 
 
+status_t
+aomi_history_clear()
+{
+	BPath path;
+	status_t status = settings_path(&path, "BrowsingHistory");
+	if (status != B_OK)
+		return status;
+	BEntry entry(path.Path());
+	if (!entry.Exists())
+		return B_OK;
+	return entry.Remove();
+}
+
+
 void
 aomi_fill_history(BMenu* menu, uint32 what)
 {
@@ -418,7 +484,21 @@ aomi_smart_url(const BString& raw, const BString& search)
 	if (slash >= 0)
 		host.Truncate(slash);
 	if (host.FindFirst('.') >= 0 && host.FindFirst(' ') < 0) {
-		BString url("http://");
+		// A typed name opens the secure address, as in other browsers; a
+		// machine on the local network (an IP address, a .local name) the
+		// plain one, which is what such devices usually serve.
+		BString bare(host);
+		int32 port = bare.FindFirst(':');
+		if (port >= 0)
+			bare.Truncate(port);
+		bool local = bare.EndsWith(".local");
+		bool numeric = true;
+		for (int32 i = 0; i < bare.Length(); i++) {
+			char c = bare.String()[i];
+			if (!isdigit((unsigned char)c) && c != '.')
+				numeric = false;
+		}
+		BString url(local || numeric ? "http://" : "https://");
 		url << text;
 		return url;
 	}
@@ -431,4 +511,104 @@ aomi_smart_url(const BString& raw, const BString& search)
 		url << query;
 	}
 	return url;
+}
+
+
+void
+aomi_bookmark_bar(std::vector<BString>* titles, std::vector<BString>* urls)
+{
+	titles->clear();
+	urls->clear();
+	BPath dir;
+	if (bookmarks_dir(&dir, "Bookmark bar") != B_OK)
+		return;
+	std::vector<std::pair<BString, BString> > found;
+	BDirectory directory(dir.Path());
+	BEntry entry;
+	while (directory.GetNextEntry(&entry) == B_OK) {
+		if (entry.IsDirectory())
+			continue;
+		BNode node(&entry);
+		char url[2048];
+		ssize_t n = node.ReadAttr("META:url", B_STRING_TYPE, 0, url,
+			sizeof(url) - 1);
+		if (n <= 0)
+			continue;
+		url[n] = '\0';
+		char name[B_FILE_NAME_LENGTH];
+		entry.GetName(name);
+		found.push_back(std::make_pair(BString(name), BString(url)));
+	}
+	std::sort(found.begin(), found.end());
+	for (size_t i = 0; i < found.size(); i++) {
+		titles->push_back(found[i].first);
+		urls->push_back(found[i].second);
+	}
+}
+
+
+status_t
+aomi_open_external(const char* url)
+{
+	if (url == NULL)
+		return B_BAD_VALUE;
+	BString text(url);
+	int32 colon = text.FindFirst(':');
+	if (colon <= 0)
+		return B_BAD_VALUE;
+	BString scheme;
+	text.CopyInto(scheme, 0, colon);
+	scheme.ToLower();
+	// Only schemes that hand an address to a program that asks the user
+	// first. urlwrapper also takes file:, sh:, query:, telnet: and ssh:,
+	// which would let any web page open files or start commands.
+	static const char* const kAllowed[] = { "mailto", "tel", NULL };
+	bool allowed = false;
+	for (int32 i = 0; kAllowed[i] != NULL; i++) {
+		if (scheme == kAllowed[i])
+			allowed = true;
+	}
+	if (!allowed)
+		return B_NOT_ALLOWED;
+	BString signature("application/x-vnd.Be.URL.");
+	signature << scheme;
+	entry_ref ref;
+	if (be_roster->FindApp(signature.String(), &ref) != B_OK)
+		return B_NAME_NOT_FOUND;
+	const char* args[] = { url, NULL };
+	status_t status = be_roster->Launch(signature.String(), 1,
+		const_cast<char**>(args));
+	return status == B_ALREADY_RUNNING ? B_OK : status;
+}
+
+
+void
+aomi_session_save(const std::vector<BString>& urls)
+{
+	BPath path;
+	if (settings_path(&path, "AomiSession") != B_OK)
+		return;
+	BMessage message;
+	for (size_t i = 0; i < urls.size(); i++)
+		message.AddString("url", urls[i]);
+	BFile file(path.Path(), B_CREATE_FILE | B_ERASE_FILE | B_WRITE_ONLY);
+	if (file.InitCheck() == B_OK)
+		message.Flatten(&file);
+}
+
+
+void
+aomi_session_load(std::vector<BString>* urls)
+{
+	urls->clear();
+	BPath path;
+	if (settings_path(&path, "AomiSession") != B_OK)
+		return;
+	BFile file(path.Path(), B_READ_ONLY);
+	BMessage message;
+	if (file.InitCheck() != B_OK || message.Unflatten(&file) != B_OK)
+		return;
+	const char* url = NULL;
+	for (int32 i = 0; message.FindString("url", i, &url) == B_OK; i++)
+		urls->push_back(url);
 }

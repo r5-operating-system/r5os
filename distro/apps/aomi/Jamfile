@@ -3,11 +3,13 @@
 
 SubDir HAIKU_TOP src apps aomi ;
 
-UsePrivateHeaders system ;
+UsePrivateHeaders shared system ;
 
 Application Aomi :
 	AomiApp.cpp
+	AomiDownloads.cpp
 	AomiPages.cpp
+	AomiSettings.cpp
 	AomiWindow.cpp
 	AomiSupport.cpp
 	WebContentView.cpp
@@ -15,7 +17,7 @@ Application Aomi :
 	:
 	[ TargetLibstdc++ ]
 	localestub
-	be network tracker shared
+	be bnetapi network tracker shared
 	libr5ui.so libr5icons.so translation
 	:
 	Aomi.rdef
@@ -25,7 +27,9 @@ DoCatalogs Aomi :
 	application/x-vnd.R5-Aomi
 	:
 	AomiApp.cpp
+	AomiDownloads.cpp
 	AomiPages.cpp
+	AomiSettings.cpp
 	AomiWindow.cpp
 	AomiSupport.cpp
 	WebContentView.cpp

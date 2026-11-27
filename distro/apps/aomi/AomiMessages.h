@@ -37,6 +37,9 @@ enum {
 	MSG_MANAGE_BOOKMARKS = 'mbmk',
 	MSG_BOOKMARK_PAGE	= 'bmkp',
 	MSG_SETTINGS_CHANGED = 'stch',
+	// The Aomi settings window asks a browser window for its address; the
+	// reply has "url".
+	MSG_GET_ADDRESS		= 'gadr',
 	MSG_SAVE_FILE		= 'svfl',
 	MSG_AUTH_OK			= 'auok',
 	MSG_AUTH_CANCEL		= 'aucx',
@@ -46,7 +49,14 @@ enum {
 	MSG_TECHNICAL		= 'tech',
 	MSG_COPY_TECHNICAL	= 'ctec',
 	MSG_DOWNLOAD_URL	= 'dlur',
-	MSG_OPEN_URL		= 'ourl'
+	MSG_OPEN_URL		= 'ourl',
+	MSG_FOCUS_ADDRESS	= 'flct',
+	MSG_DOWNLOAD_SAVE	= 'dlsv',
+	MSG_NETWORK_RETRY	= 'nrty',
+	MSG_FIND_PREVIOUS	= 'fndp',
+	MSG_FIND_CLOSE		= 'fndx',
+	MSG_OPEN_BAR_ITEM	= 'obar',
+	MSG_BOOKMARKS_CHANGED = 'bmch'
 };
 
 

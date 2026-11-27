@@ -69,6 +69,7 @@ public:
 					<tr><td>Navigation</td><td><code class="inline">GoBack()</code>, <code class="inline">GoForward()</code>, <code class="inline">GetBackList(BMessage*)</code>, <code class="inline">GetForwardList(BMessage*)</code></td></tr>
 					<tr><td>Page</td><td><code class="inline">URL(BString*)</code>, <code class="inline">Title(BString*)</code>, <code class="inline">SetZoom(float, bool textOnly)</code>, <code class="inline">Find(const char*, bool forward, bool matchCase)</code>, <code class="inline">SavePage(const char*)</code>, <code class="inline">ViewSource()</code>, <code class="inline">Print()</code>, <code class="inline">Protocol(BString*)</code></td></tr>
 					<tr><td>Downloads</td><td><code class="inline">Cancel(int32 id)</code>, <code class="inline">Open(int32 id)</code>, <code class="inline">ShowInTracker(int32 id)</code></td></tr>
+					<tr><td>Look (added 27 Nov 2026)</td><td><code class="inline">SetColorScheme(bool dark)</code>: the page&rsquo;s light or dark preference (<code class="inline">prefers-color-scheme</code>); <code class="inline">SetScale(float)</code>: device pixels per CSS pixel, 1 at a 12 point system font. Both return <code class="inline">B_NOT_SUPPORTED</code> when the engine cannot.</td></tr>
 				</tbody>
 			</table>
 		</section>
@@ -84,6 +85,7 @@ public:
 				<li><code class="inline">AOMI_PROGRESS</code> (<code class="inline">'aPrg'</code>: 0.0&ndash;1.0), <code class="inline">AOMI_CURSOR</code> (<code class="inline">'aCur'</code>), <code class="inline">AOMI_FULLSCREEN</code> (<code class="inline">'aFsc'</code>)</li>
 				<li><code class="inline">AOMI_NEW_WINDOW</code> (<code class="inline">'aNww'</code>), <code class="inline">AOMI_CLOSE_WANTED</code> (<code class="inline">'aClw'</code>), <code class="inline">AOMI_DIALOG</code> (<code class="inline">'aDlg'</code>: <code class="inline">kind</code> <code class="inline">AOMI_DIALOG_*</code>, <code class="inline">text</code>, <code class="inline">where</code>). For the listener&rsquo;s information: the view itself asks the user and answers the page (alert, confirm, prompt, sign-in, file upload, context menu, select list).</li>
 				<li><code class="inline">AOMI_DOWNLOAD_ADDED</code> (<code class="inline">'aDla'</code>), <code class="inline">AOMI_DOWNLOAD_PROGRESS</code> (<code class="inline">'aDlp'</code>), <code class="inline">AOMI_DOWNLOAD_FINISHED</code> (<code class="inline">'aDlf'</code>), <code class="inline">AOMI_DOWNLOAD_FAILED</code> (<code class="inline">'aDlx'</code>)</li>
+				<li>Added 27 Nov 2026: <code class="inline">AOMI_EXTERNAL_URL</code> (<code class="inline">'aExt'</code>: <code class="inline">url</code>), an address for another program such as <code class="inline">mailto:</code>; the page stays where it is and the window hands the address on. <code class="inline">AOMI_DOWNLOAD_WANTED</code> (<code class="inline">'aDlw'</code>: <code class="inline">url</code> to fetch, <code class="inline">text</code> to show), a link to a file the engine cannot show. <code class="inline">AOMI_DIALOG_LEAVE</code> is now asked (a page with a <code class="inline">beforeunload</code> handler).</li>
 			</ul>
 		</section>
 

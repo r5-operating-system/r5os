@@ -4,6 +4,8 @@
  */
 
 
+#include "AomiDownloads.h"
+#include "AomiSettings.h"
 #include "AomiWindow.h"
 
 #include "AomiMessages.h"
@@ -153,7 +155,8 @@ public:
 										? privateDir : ""),
 									fMenu(false),
 									fDownloads(false),
-									fSettings(false)
+									fSettings(false),
+									fQuitAsked(false)
 								{
 									if (!fPrivate)
 										write_normal_team(Team());
@@ -187,6 +190,7 @@ public:
 									bool doFind = false;
 									BString downloadUrl;
 									BString goUrl;
+									BString settingsPage;
 									int32 closeTab = -1;
 									std::vector<BString> urls;
 									for (int32 i = 1; i < argc; i++) {
@@ -202,6 +206,13 @@ public:
 										else if (strcmp(argv[i],
 												"--settings") == 0)
 											settings = true;
+										else if (strncmp(argv[i],
+												"--settings-page=", 16) == 0) {
+											settings = true;
+											settingsPage = argv[i] + 16;
+										} else if (strcmp(argv[i],
+												"--downloads-window") == 0)
+											downloads = true;
 										else if (strcmp(argv[i],
 												"--close-settings") == 0)
 											closeSettings = true;
@@ -247,6 +258,7 @@ public:
 										fMenu = menu;
 										fDownloads = downloads;
 										fSettings = settings;
+										fSettingsPage = settingsPage;
 										fUrls = urls;
 										return;
 									}
@@ -307,8 +319,12 @@ public:
 										window->PostMessage(MSG_MENU);
 									if (downloads)
 										window->PostMessage(MSG_DOWNLOADS);
-									if (settings)
-										window->PostMessage(MSG_SETTINGS);
+									if (settings) {
+										BMessage open(MSG_SETTINGS);
+										if (settingsPage.Length() > 0)
+											open.AddString("page", settingsPage);
+										window->PostMessage(&open);
+									}
 									if (openLock)
 										window->PostMessage(MSG_LOCK);
 									if (doBack)
@@ -359,16 +375,52 @@ public:
 										window->PostMessage(MSG_MENU);
 									if (fDownloads)
 										window->PostMessage(MSG_DOWNLOADS);
-									if (fSettings)
-										window->PostMessage(MSG_SETTINGS);
+									if (fSettings) {
+										BMessage open(MSG_SETTINGS);
+										if (fSettingsPage.Length() > 0)
+											open.AddString("page", fSettingsPage);
+										window->PostMessage(&open);
+									}
 								}
 
 	virtual	bool				QuitRequested()
 								{
+									// Quit (Command-Q) or the last browser
+									// window closed. Running downloads ask
+									// first; the open pages are kept for "Last
+									// session" before any window closes.
+									if (!fQuitAsked && !AomiWindow::Quitting()) {
+										int32 running
+											= aomi_download_count_running();
+										if (running > 0
+											&& !AomiWindow::AskStopDownloads(
+												running))
+											return false;
+										if (!fPrivate) {
+											std::vector<BString> urls;
+											for (int32 i = 0; i < CountWindows();
+													i++) {
+												AomiWindow* window
+													= dynamic_cast<AomiWindow*>(
+														WindowAt(i));
+												if (window != NULL
+													&& window->Lock()) {
+													window->GetSession(&urls);
+													window->Unlock();
+												}
+											}
+											aomi_session_save(urls);
+										}
+									}
+									fQuitAsked = true;
+									AomiWindow::SetQuitting();
+									aomi_download_stop_all();
 									// The windows close first, and with them every tab;
 									// then Servo writes its profile and stops.
-									if (!BApplication::QuitRequested())
+									if (!BApplication::QuitRequested()) {
+										fQuitAsked = false;
 										return false;
+									}
 									aomi_servo_shutdown();
 									return true;
 								}
@@ -380,13 +432,11 @@ public:
 										case AOMI_DOWNLOAD_PROGRESS:
 										case AOMI_DOWNLOAD_FINISHED:
 										case AOMI_DOWNLOAD_FAILED:
-											for (int32 i = 0; i < CountWindows(); i++) {
-												AomiWindow* window
-													= dynamic_cast<AomiWindow*>(
-														WindowAt(i));
-												if (window != NULL)
-													window->PostMessage(message);
-											}
+											// The browser windows (their
+											// download button) and the
+											// Downloads window.
+											for (int32 i = 0; i < CountWindows(); i++)
+												WindowAt(i)->PostMessage(message);
 											break;
 										case MSG_NEW_WINDOW:
 											if (fPrivate) {
@@ -421,6 +471,8 @@ private:
 			bool				fMenu;
 			bool				fDownloads;
 			bool				fSettings;
+			bool				fQuitAsked;
+			BString				fSettingsPage;
 			std::vector<BString> fUrls;
 };
 
@@ -477,7 +529,12 @@ main(int argc, char** argv)
 		// Servo keeps cookies, HSTS and saved logins here.
 		BPath profile;
 		if (find_directory(B_USER_SETTINGS_DIRECTORY, &profile, true) == B_OK
-			&& profile.Append("Aomi/Servo") == B_OK
+			&& profile.Append("Aomi/Servo") == B_OK) {
+			// "Clear cookies and site data" in the settings: done here,
+			// before Servo opens the profile.
+			aomi_site_data_clear_if_pending(profile.Path());
+		}
+		if (profile.InitCheck() == B_OK
 			&& create_directory(profile.Path(), 0700) == B_OK) {
 			setenv("AOMI_PROFILE_DIR", profile.Path(), 1);
 		}

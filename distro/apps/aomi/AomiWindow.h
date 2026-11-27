@@ -17,6 +17,7 @@
 
 
 class BFilePanel;
+class BMessageRunner;
 class BTextControl;
 class BTextView;
 class BWebContentView;
@@ -32,13 +33,14 @@ public:
 	virtual	bool				QuitRequested();
 	virtual	void				MessageReceived(BMessage* message);
 	virtual	void				MenusBeginning();
+	virtual	void				WindowActivated(bool active);
 
 			void				OpenURL(const char* url, bool newTab);
 			void				HandleEngine(BMessage* message, int32 tab);
 			int32				TabIndexForProxy(const BHandler* proxy) const;
 			void				OpenMenu();
 			void				OpenDownloads();
-			void				OpenSettings();
+			void				OpenSettings(const char* page = NULL);
 			int32				CountTabs() const { return (int32)fTabs.size(); }
 			int32				Active() const { return fActive; }
 			const char*			TabTitle(int32 index) const;
@@ -54,6 +56,14 @@ public:
 			float				PageZoom() const { return fZoom; }
 			const AomiPrefs&	Prefs() const { return fPrefs; }
 			void				ReloadPrefs();
+			// The addresses of the open web pages (for "Last session").
+			void				GetSession(std::vector<BString>* urls) const;
+
+	// The program quits: windows close without asking again.
+	static	void				SetQuitting();
+	static	bool				Quitting();
+	// "Downloads are still running"; true: stop them and close.
+	static	bool				AskStopDownloads(int32 running);
 
 private:
 			struct Tab {
@@ -71,14 +81,10 @@ private:
 				BString				protocol;
 				BString				hover;
 				bool				bookmarked;
-			};
-
-			struct DlEntry {
-				int32				id;
-				BString				name;
-				BString				path;
-				bool				done;
+				// The engine showed its "could not load" page: loaded
+				// again when the network comes back.
 				bool				failed;
+				bool				zoomApplied;
 			};
 
 			void				_BuildMenu();
@@ -92,6 +98,11 @@ private:
 			void				_Title();
 			void				_OpenLock();
 			void				_Log(const char* text);
+			void				_ApplyLook(int32 index);
+			void				_RetryFailed();
+			void				_OpenExternal(const char* url);
+			void				_Download(const char* url, const char* shown);
+			bool				_IsLastBrowserWindow() const;
 			static BRect		_Frame();
 
 			BWebSession*		fSession;
@@ -108,27 +119,9 @@ private:
 			float				fZoom;
 			BFilePanel*			fSave;
 			BString				fHover;
-			std::vector<DlEntry> fDownloads;
-};
-
-
-class AomiSettingsWindow : public BWindow {
-public:
-								AomiSettingsWindow();
-	virtual	void				MessageReceived(BMessage* message);
-
-private:
-			void				_Load();
-			void				_Save();
-			AomiPrefs			fPrefs;
-			AomiPrefs			fOpened;
-			class BTextControl*	fHome;
-			class BTextControl*	fSearch;
-			class BMenuField*	fStart;
-			class BMenuField*	fEngine;
-			class BCheckBox*	fShowHome;
-			class BCheckBox*	fShowBar;
-			class BTextControl*	fDownloads;
+			BMessageRunner*		fRetry;
+			BMessageRunner*		fRetryPoll;
+			BFilePanel*			fDownloadPanel;
 };
 
 

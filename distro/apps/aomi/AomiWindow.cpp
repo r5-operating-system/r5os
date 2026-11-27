@@ -6,7 +6,9 @@
 
 #include "AomiWindow.h"
 
+#include "AomiDownloads.h"
 #include "AomiMessages.h"
+#include "AomiSettings.h"
 #include "AomiPages.h"
 #include "ServoContentView.h"
 #include "WebContentView.h"
@@ -21,16 +23,20 @@
 #include <Entry.h>
 #include <File.h>
 #include <FilePanel.h>
+#include <FindDirectory.h>
 #include <GroupLayout.h>
+#include <GroupView.h>
 #include <LayoutBuilder.h>
 #include <MenuField.h>
 #include <MenuItem.h>
+#include <MessageRunner.h>
+#include <NetworkNotifications.h>
+#include <NodeMonitor.h>
 #include <Path.h>
 #include <PopUpMenu.h>
 #include <Roster.h>
 #include <Screen.h>
 #include <StringView.h>
-#include <TextControl.h>
 #include <TextControl.h>
 #include <TextView.h>
 
@@ -75,6 +81,7 @@ struct Palette {
 	rgb_color	text;
 	rgb_color	sub;
 	rgb_color	field;
+	rgb_color	fieldText;
 	rgb_color	fline;
 	rgb_color	ctl;
 	rgb_color	cline;
@@ -96,37 +103,6 @@ rgb(int r, int g, int b)
 }
 
 
-static Palette
-palette()
-{
-	rgb_color bg = ui_color(B_PANEL_BACKGROUND_COLOR);
-	Palette p;
-	p.dark = bg.red + bg.green + bg.blue < 380;
-	if (!p.dark) {
-		p.panel = rgb(238, 241, 245);
-		p.text = rgb(20, 20, 20);
-		p.sub = rgb(91, 98, 112);
-		p.field = rgb(255, 255, 255);
-		p.fline = rgb(184, 192, 204);
-		p.ctl = rgb(247, 248, 250);
-		p.cline = rgb(180, 188, 200);
-		p.hair = rgb(211, 216, 223);
-		p.accent = rgb(0, 132, 255);
-	} else {
-		p.panel = rgb(31, 35, 43);
-		p.text = rgb(230, 233, 239);
-		p.sub = rgb(163, 171, 184);
-		p.field = rgb(21, 24, 30);
-		p.fline = rgb(69, 76, 89);
-		p.ctl = rgb(42, 47, 57);
-		p.cline = rgb(69, 76, 89);
-		p.hair = rgb(53, 59, 70);
-		p.accent = rgb(0, 132, 255);
-	}
-	return p;
-}
-
-
 static rgb_color
 mix(rgb_color a, rgb_color b, float t)
 {
@@ -136,6 +112,45 @@ mix(rgb_color a, rgb_color b, float t)
 	c.blue = (uint8)(a.blue + (b.blue - a.blue) * t);
 	c.alpha = 255;
 	return c;
+}
+
+
+// The chrome's colours come from the theme (ui_color()), so every R5
+// theme, light and dark, and a changed accent follow without Aomi code
+// (docs/design/AOMI-UI.md, "Glass with the fallback"). Only the new tab
+// page and the private label keep colours of their own.
+static Palette
+palette()
+{
+	Palette p;
+	p.panel = ui_color(B_PANEL_BACKGROUND_COLOR);
+	p.text = ui_color(B_PANEL_TEXT_COLOR);
+	p.dark = p.panel.IsDark();
+	p.sub = mix(p.text, p.panel, 0.42f);
+	p.field = ui_color(B_DOCUMENT_BACKGROUND_COLOR);
+	p.fieldText = ui_color(B_DOCUMENT_TEXT_COLOR);
+	p.fline = mix(p.panel, p.text, 0.26f);
+	p.ctl = ui_color(B_CONTROL_BACKGROUND_COLOR);
+	p.cline = mix(p.panel, p.text, 0.24f);
+	p.hair = mix(p.panel, p.text, 0.13f);
+	p.accent = ui_color(B_STATUS_BAR_COLOR);
+	return p;
+}
+
+
+// True while the compositor shows frosted glass behind glass views: then
+// the toolbar leaves its background to the glass. Asked when the window is
+// shown and when the effects change, not on every draw (each ask is a
+// message to app_server).
+static bool sGlass = false;
+
+
+static void
+update_glass()
+{
+	sGlass = BAppearanceKit::window_effects_active()
+		&& (BAppearanceKit::window_effects()
+			& BAppearanceKit::B_WINDOW_FROSTED_GLASS) != 0;
 }
 
 
@@ -217,7 +232,22 @@ public:
 	{
 		SetViewColor(palette().panel);
 		AddChild(fField);
-		fField->SetViewColor(palette().field);
+		ApplyColors();
+	}
+
+	// The address field is a document field: theme colours, so typed text
+	// stays readable in dark mode too.
+	void ApplyColors()
+	{
+		Palette p = palette();
+		SetViewColor(p.panel);
+		BFont font(be_plain_font);
+		font.SetSize(13.5f * ui_scale());
+		fField->SetViewColor(p.field);
+		fField->SetLowColor(p.field);
+		fField->SetFontAndColor(&font, B_FONT_ALL, &p.fieldText);
+		fField->Invalidate();
+		Invalidate();
 	}
 
 	float Height() const
@@ -227,9 +257,7 @@ public:
 
 	void ApplyFontScale()
 	{
-		BFont font(be_plain_font);
-		font.SetSize(13.5f * ui_scale());
-		fField->SetFontAndColor(&font);
+		ApplyColors();
 		_Place();
 		Invalidate();
 	}
@@ -255,9 +283,18 @@ public:
 		float kNav = nav_h();
 		float kMarks = marks_h();
 
-		SetViewColor(p.panel);
 		SetLowColor(p.panel);
-		FillRect(Bounds(), B_SOLID_LOW);
+		if (sGlass) {
+			// app_server filled the background with the panel colour at
+			// alpha 0; the blur shows through it. Composite drawing keeps
+			// the alpha of what is drawn on top (docs/LIBR5.md, "Window
+			// effects"). Without the GPU the panel is opaque.
+			SetDrawingMode(B_OP_ALPHA);
+			SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_COMPOSITE);
+		} else {
+			SetDrawingMode(B_OP_COPY);
+			FillRect(Bounds(), B_SOLID_LOW);
+		}
 		BRect hair(Bounds());
 		SetHighColor(p.hair);
 		StrokeLine(hair.LeftBottom(), hair.RightBottom());
@@ -275,6 +312,17 @@ public:
 		float y = kTabs - sc(28);
 		int32 count = fWindow->CountTabs();
 		int32 active = fWindow->Active();
+		// The tab strip shares the width; from 32 tabs on the rest are
+		// reached with Command-1 to 9 and the window menu.
+		if (count > 32)
+			count = 32;
+		if (count > 0 && x + count * tabStep + tabH > Bounds().right) {
+			tabStep = floorf((Bounds().right - x - tabH - sc(8)) / count);
+			if (tabStep < sc(60))
+				tabStep = sc(60);
+			tabW = tabStep - sc(5);
+		}
+		fTabCount = count;
 		for (int32 i = 0; i < count; i++) {
 			BRect tab(x, y, x + tabW, y + tabH);
 			if (i == active) {
@@ -332,7 +380,16 @@ public:
 		_Icon(fMenu, R5_GLYPH_MENU, p.text, p);
 		right -= btnStep;
 		fDownloads = BRect(right - btnSize, by, right, by + btnSize);
-		_Icon(fDownloads, R5_GLYPH_DOWNLOAD, p.text, p);
+		bool running = aomi_download_count_running() > 0;
+		_Icon(fDownloads, R5_GLYPH_DOWNLOAD, running ? p.accent : p.text, p);
+		if (running) {
+			// A file is still coming in: a dot in the accent colour.
+			float d = sc(7);
+			BRect dot(fDownloads.right - d - sc(1), fDownloads.top + sc(1),
+				fDownloads.right - sc(1), fDownloads.top + sc(1) + d);
+			SetHighColor(p.accent);
+			FillEllipse(dot);
+		}
 		right -= btnStep;
 		if (fWindow->Private()) {
 			BFont small(be_plain_font);
@@ -430,11 +487,37 @@ public:
 			SetHighColor(p.accent);
 			FillRect(BRect(0, navY + kNav - 2, width, navY + kNav - 1));
 		}
+		fBarCount = 0;
 		if (fWindow->Prefs().showBookmarks) {
 			float by2 = kTabs + kNav;
 			SetHighColor(p.hair);
 			StrokeLine(BPoint(0, by2 + kMarks - 1),
 				BPoint(Bounds().right, by2 + kMarks - 1));
+			// The "Bookmark bar" folder, by name; Tracker sorts and renames.
+			BFont small(be_plain_font);
+			small.SetSize(12.0f * s);
+			SetFont(&small);
+			font_height bfh;
+			small.GetHeight(&bfh);
+			float bx = sc(10);
+			float base = by2 + (kMarks + bfh.ascent - bfh.descent) / 2.0f - 1;
+			if (fBarTitles.empty()) {
+				SetHighColor(p.sub);
+				DrawString(B_TRANSLATE("Bookmarks in the folder "
+					"\"Bookmark bar\" are shown here."), BPoint(bx, base));
+			}
+			for (size_t i = 0; i < fBarTitles.size() && i < 32; i++) {
+				BString title(fBarTitles[i]);
+				small.TruncateString(&title, B_TRUNCATE_END, sc(160));
+				float w = small.StringWidth(title.String()) + sc(16);
+				if (bx + w > Bounds().right - sc(8))
+					break;
+				fBar[i] = BRect(bx, by2 + sc(3), bx + w, by2 + kMarks - sc(4));
+				SetHighColor(p.text);
+				DrawString(title.String(), BPoint(bx + sc(8), base));
+				bx += w + sc(4);
+				fBarCount = (int32)i + 1;
+			}
 		}
 	}
 
@@ -442,7 +525,15 @@ public:
 	{
 		int32 buttons = 0;
 		Window()->CurrentMessage()->FindInt32("buttons", &buttons);
-		int32 count = fWindow->CountTabs();
+		for (int32 i = 0; i < fBarCount; i++) {
+			if (fBar[i].Contains(where)) {
+				BMessage open(MSG_OPEN_BOOKMARK);
+				open.AddString("url", fBarUrls[i]);
+				Window()->PostMessage(&open);
+				return;
+			}
+		}
+		int32 count = fTabCount;
 		for (int32 i = 0; i < count; i++) {
 			if (fClose[i].Contains(where)) {
 				BMessage close(MSG_CLOSE_TAB);
@@ -499,17 +590,8 @@ public:
 			Window()->PostMessage(MSG_STAR);
 			return;
 		}
-		if (fURL.Contains(where)) {
-			fFocus = true;
-			_ShowField(true);
-			BString address(fWindow->Address());
-			if (address.StartsWith("aomi:"))
-				address = "";
-			fField->SetText(address.String());
-			fField->SelectAll();
-			fField->MakeFocus(true);
-			Invalidate();
-		}
+		if (fURL.Contains(where))
+			FocusAddress();
 	}
 
 	void ShowAddress(const char* text, bool focus)
@@ -518,8 +600,12 @@ public:
 		if (text != NULL)
 			fField->SetText(text);
 		if (focus) {
+			// On the field as it is drawn now (fURL comes from the last
+			// Draw()), shown, then focused.
+			_Place();
 			_ShowField(true);
 			fField->MakeFocus(true);
+			fField->Invalidate();
 		} else {
 			fField->MakeFocus(false);
 			_ShowField(false);
@@ -528,6 +614,22 @@ public:
 	}
 
 	const char* FieldText() const { return fField->Text(); }
+
+	// Command-L: the address, selected, ready to be typed over.
+	void FocusAddress()
+	{
+		BString address(fWindow->Address());
+		if (address.StartsWith("aomi:"))
+			address = "";
+		ShowAddress(address.String(), true);
+		fField->SelectAll();
+	}
+
+	void ReloadBar()
+	{
+		aomi_bookmark_bar(&fBarTitles, &fBarUrls);
+		Invalidate();
+	}
 
 	BRect DownloadsRect() const { return fDownloads; }
 	BRect MenuRect() const { return fMenu; }
@@ -592,6 +694,7 @@ private:
 	AomiWindow*		fWindow;
 	AddressField*	fField;
 	bool			fFocus;
+	int32			fTabCount = 0;
 	BRect			fTab[32];
 	BRect			fClose[32];
 	BRect			fPlus;
@@ -605,25 +708,72 @@ private:
 	BRect			fDownloads;
 	BRect			fMenu;
 	BRect			fPill;
+	std::vector<BString> fBarTitles;
+	std::vector<BString> fBarUrls;
+	BRect			fBar[32];
+	int32			fBarCount = 0;
 };
 
 
 struct ShortcutTile {
-	const char* badge;
-	const char* label;
-	const char* url;
-	uint8 r, g, b;
+	BString		badge;
+	BString		label;
+	BString		url;
+	rgb_color	color;
 };
 
-static const ShortcutTile kShortcutTiles[] = {
-	{ "R5", "R5", "https://r5-operating-system.github.io/", 0, 132, 255 },
-	{ "S", "Servo", "https://servo.org/", 28, 34, 44 },
-	{ "N", "Northline", "https://example.com/", 176, 74, 16 },
-	{ "W", "Wikipedia", "https://en.wikipedia.org/wiki/Haiku_(operating_system)", 24, 148, 66 },
-	{ "H", "HaikuPorts", "https://www.haiku-os.org/", 124, 58, 237 },
-	{ "G", "GitHub", "https://github.com/login", 22, 118, 86 },
-};
-static const int32 kShortcutCount = 6;
+
+// The tiles of the new tab page: the "Bookmark bar" folder (its first six,
+// by name), or a few real sites while that folder is empty.
+static void
+shortcut_tiles(std::vector<ShortcutTile>* tiles)
+{
+	static const struct {
+		const char*	label;
+		const char*	url;
+		uint8		r, g, b;
+	} kDefaults[] = {
+		{ "R5", "https://r5-operating-system.github.io/", 0, 132, 255 },
+		{ "Haiku", "https://www.haiku-os.org/", 124, 58, 237 },
+		{ "Servo", "https://servo.org/", 28, 34, 44 },
+		{ "Wikipedia", "https://www.wikipedia.org/", 24, 148, 66 },
+		{ "DuckDuckGo", "https://duckduckgo.com/", 222, 88, 51 },
+	};
+	static const uint8 kColors[][3] = {
+		{ 0, 132, 255 }, { 124, 58, 237 }, { 24, 148, 66 }, { 222, 88, 51 },
+		{ 14, 116, 144 }, { 190, 24, 93 }
+	};
+	tiles->clear();
+	std::vector<BString> titles;
+	std::vector<BString> urls;
+	aomi_bookmark_bar(&titles, &urls);
+	for (size_t i = 0; i < titles.size() && tiles->size() < 6; i++) {
+		ShortcutTile tile;
+		tile.label = titles[i];
+		tile.url = urls[i];
+		tile.color = rgb(kColors[i % 6][0], kColors[i % 6][1],
+			kColors[i % 6][2]);
+		tiles->push_back(tile);
+	}
+	if (tiles->empty()) {
+		for (size_t i = 0; i < sizeof(kDefaults) / sizeof(kDefaults[0]); i++) {
+			ShortcutTile tile;
+			tile.label = kDefaults[i].label;
+			tile.url = kDefaults[i].url;
+			tile.color = rgb(kDefaults[i].r, kDefaults[i].g, kDefaults[i].b);
+			tiles->push_back(tile);
+		}
+	}
+	for (size_t i = 0; i < tiles->size(); i++) {
+		ShortcutTile& tile = (*tiles)[i];
+		// The badge: the first letter (a whole UTF-8 character), or "R5".
+		if (tile.label == "R5")
+			tile.badge = "R5";
+		else
+			tile.label.CopyCharsInto(tile.badge, 0, 1);
+		tile.badge.ToUpper();
+	}
+}
 
 
 class NewTabSearchInput : public BTextView {
@@ -665,6 +815,13 @@ public:
 		SetViewColor(B_TRANSPARENT_COLOR);
 		AddChild(fInput);
 		_EnsurePebble();
+		shortcut_tiles(&fShortcuts);
+	}
+
+	void ReloadTiles()
+	{
+		shortcut_tiles(&fShortcuts);
+		Invalidate();
 	}
 
 	virtual ~NewTabView()
@@ -784,15 +941,17 @@ public:
 			float cardW = sc(104);
 			float cardH = sc(92);
 			float gap = sc(14);
-			float totalW = kShortcutCount * cardW + (kShortcutCount - 1) * gap;
-			if (totalW > b.Width() - sc(32)) {
-				cardW = floorf((b.Width() - sc(32) - (kShortcutCount - 1) * gap)
-					/ kShortcutCount);
-				totalW = kShortcutCount * cardW + (kShortcutCount - 1) * gap;
+			int32 count = (int32)fShortcuts.size();
+			float totalW = count * cardW + (count - 1) * gap;
+			if (count > 0 && totalW > b.Width() - sc(32)) {
+				cardW = floorf((b.Width() - sc(32) - (count - 1) * gap)
+					/ count);
+				totalW = count * cardW + (count - 1) * gap;
 			}
 			float startX = cx - totalW / 2;
 			float topY = pill.bottom + sc(32);
-			for (int32 i = 0; i < kShortcutCount; i++) {
+			for (int32 i = 0; i < count; i++) {
+				const ShortcutTile& shortcut = fShortcuts[i];
 				BRect tile(startX + i * (cardW + gap), topY,
 					startX + i * (cardW + gap) + cardW - 1, topY + cardH - 1);
 				fTiles[i] = tile;
@@ -804,8 +963,7 @@ public:
 				float bSize = sc(34);
 				BRect badge(tile.left + (cardW - bSize) / 2, tile.top + sc(16),
 					tile.left + (cardW + bSize) / 2 - 1, tile.top + sc(16) + bSize - 1);
-				SetHighColor(rgb(kShortcutTiles[i].r, kShortcutTiles[i].g,
-					kShortcutTiles[i].b));
+				SetHighColor(shortcut.color);
 				FillRoundRect(badge, sc(8), sc(8));
 
 				BFont bf(be_bold_font);
@@ -814,8 +972,8 @@ public:
 				font_height bfh;
 				bf.GetHeight(&bfh);
 				SetHighColor(255, 255, 255);
-				float bw = bf.StringWidth(kShortcutTiles[i].badge);
-				DrawString(kShortcutTiles[i].badge,
+				float bw = bf.StringWidth(shortcut.badge.String());
+				DrawString(shortcut.badge.String(),
 					BPoint(badge.left + (bSize - bw) / 2,
 						badge.top + (bSize + bfh.ascent - bfh.descent) / 2.0f));
 
@@ -823,8 +981,10 @@ public:
 				lf.SetSize(12.5f * s);
 				SetFont(&lf);
 				SetHighColor(p.dark ? rgb(230, 233, 239) : rgb(20, 25, 35));
-				float lw = lf.StringWidth(kShortcutTiles[i].label);
-				DrawString(kShortcutTiles[i].label,
+				BString name(shortcut.label);
+				lf.TruncateString(&name, B_TRUNCATE_END, cardW - sc(12));
+				float lw = lf.StringWidth(name.String());
+				DrawString(name.String(),
 					BPoint(tile.left + (cardW - lw) / 2, tile.bottom - sc(14)));
 			}
 		}
@@ -833,10 +993,10 @@ public:
 	virtual void MouseDown(BPoint where)
 	{
 		if (!fPrivate) {
-			for (int32 i = 0; i < kShortcutCount; i++) {
+			for (int32 i = 0; i < (int32)fShortcuts.size() && i < 6; i++) {
 				if (fTiles[i].Contains(where)) {
 					BMessage msg(MSG_OPEN_BOOKMARK);
-					msg.AddString("url", kShortcutTiles[i].url);
+					msg.AddString("url", fShortcuts[i].url);
 					Window()->PostMessage(&msg);
 					return;
 				}
@@ -888,24 +1048,30 @@ private:
 	BBitmap*			fPebble;
 	int32				fPebbleSize;
 	NewTabSearchInput*	fInput;
-	BRect				fTiles[kShortcutCount];
+	BRect				fTiles[6];
+	std::vector<ShortcutTile> fShortcuts;
 };
 
 
+// A small panel under a toolbar button (the site information behind the
+// lock): a bordered window with round corners and the panel colour, sized
+// to what it holds, closed by a click anywhere else. Opaque: its labels
+// paint the panel colour.
 class FloatPanel : public BWindow {
 public:
-	FloatPanel(BRect frame, const char* title)
+	FloatPanel(BPoint where)
 		:
-		BWindow(frame, title, B_NO_BORDER_WINDOW_LOOK,
-			B_FLOATING_ALL_WINDOW_FEEL,
+		BWindow(BRect(where, where + BPoint(40, 20)), "",
+			B_BORDERED_WINDOW_LOOK, B_FLOATING_APP_WINDOW_FEEL,
 			B_NOT_RESIZABLE | B_NOT_ZOOMABLE | B_NOT_MINIMIZABLE
-				| B_AUTO_UPDATE_SIZE_LIMITS | B_WILL_ACCEPT_FIRST_CLICK)
+				| B_AUTO_UPDATE_SIZE_LIMITS | B_WILL_ACCEPT_FIRST_CLICK
+				| B_CLOSE_ON_ESCAPE)
 	{
-		BAppearanceKit::set_window_glass(this, true);
-		Palette p = palette();
-		fView = new BView(Bounds(), "panel", B_FOLLOW_ALL, B_WILL_DRAW);
-		fView->SetViewColor(p.panel);
-		AddChild(fView);
+		fView = new BGroupView(B_VERTICAL, sc(4));
+		fView->GroupLayout()->SetInsets(sc(14), sc(12), sc(14), sc(12));
+		SetLayout(new BGroupLayout(B_VERTICAL, 0));
+		GetLayout()->AddView(fView);
+		BAppearanceKit::set_window_corner_radius(this, sc(10));
 	}
 
 	virtual void WindowActivated(bool active)
@@ -914,10 +1080,22 @@ public:
 			PostMessage(B_QUIT_REQUESTED);
 	}
 
-	BView* Panel() const { return fView; }
+	BGroupView* Panel() const { return fView; }
+
+	// After the content is in: as large as it needs, the top left at the
+	// point it was opened for, inside the screen.
+	void Open()
+	{
+		ResizeToPreferred();
+		BRect screen = BScreen(this).Frame();
+		BRect frame = Frame();
+		if (frame.right > screen.right - 4)
+			MoveBy(screen.right - 4 - frame.right, 0);
+		Show();
+	}
 
 private:
-	BView*	fView;
+	BGroupView*	fView;
 };
 
 
@@ -968,8 +1146,12 @@ AomiWindow::AomiWindow(BWebSession* session, bool privat)
 	fFind(NULL),
 	fActive(-1),
 	fZoom(1.0f),
-	fSave(NULL)
+	fSave(NULL),
+	fRetry(NULL),
+	fRetryPoll(NULL),
+	fDownloadPanel(NULL)
 {
+	fZoom = fPrefs.zoom / 100.0f;
 	BAppearanceKit::set_window_glass(this, true);
 	SetLayout(new BGroupLayout(B_VERTICAL, 0));
 	_BuildMenu();
@@ -985,20 +1167,51 @@ AomiWindow::AomiWindow(BWebSession* session, bool privat)
 		GetLayout()->ItemAt(0)->SetVisible(false);
 	fFind = new BTextControl("find", B_TRANSLATE("Find:"), "",
 		new BMessage(MSG_FIND_NEXT));
-	fFindBar = new BView("find bar", 0);
-	fFindBar->SetViewColor(palette().panel);
-	fFindBar->AddChild(fFind);
+	// A bar with a layout of its own: PageHost gives it the width and the
+	// height, the layout places the field and the buttons.
+	BGroupView* findBar = new BGroupView("find bar", B_HORIZONTAL,
+		B_USE_SMALL_SPACING);
+	findBar->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
+	BButton* previous = new BButton("previous", B_TRANSLATE("Previous"),
+		new BMessage(MSG_FIND_PREVIOUS));
+	BButton* next = new BButton("next", B_TRANSLATE("Next"),
+		new BMessage(MSG_FIND_NEXT));
+	BButton* close = new BButton("close", B_TRANSLATE("Close"),
+		new BMessage(MSG_FIND_CLOSE));
+	BLayoutBuilder::Group<>(findBar)
+		.SetInsets(B_USE_SMALL_SPACING, 2, B_USE_SMALL_SPACING, 2)
+		.Add(fFind, 1)
+		.Add(previous)
+		.Add(next)
+		.Add(close);
+	fFindBar = findBar;
 	fPages->AddChild(fFindBar);
 	fFindBar->Hide();
-	const char* url = "aomi:newtab";
-	if (!privat && fPrefs.start == 1)
-		url = fPrefs.home.String();
-	_AddTab(url, true, NULL);
+	static_cast<ChromeView*>(fChrome)->ReloadBar();
+	if (privat || fPrefs.start != 2) {
+		const char* url = "aomi:newtab";
+		if (!privat && fPrefs.start == 1 && fPrefs.home.Length() > 0)
+			url = fPrefs.home.String();
+		_AddTab(url, true, NULL);
+	} else {
+		// Last session: the pages that were open when Aomi last closed.
+		std::vector<BString> urls;
+		aomi_session_load(&urls);
+		for (size_t i = 0; i < urls.size() && i < 32; i++)
+			_AddTab(urls[i].String(), i == 0, NULL);
+		if (urls.empty())
+			_AddTab("aomi:newtab", true, NULL);
+	}
 }
 
 
 AomiWindow::~AomiWindow()
 {
+	stop_watching_network(BMessenger(this));
+	stop_watching(BMessenger(this));
+	delete fRetry;
+	delete fRetryPoll;
+	delete fDownloadPanel;
 	delete fSave;
 	delete fSession;
 	for (uint32 i = 0; i < fTabs.size(); i++)
@@ -1031,10 +1244,81 @@ AomiWindow::Show()
 
 
 bool
+AomiWindow::_IsLastBrowserWindow() const
+{
+	for (int32 i = 0; i < be_app->CountWindows(); i++) {
+		AomiWindow* other = dynamic_cast<AomiWindow*>(be_app->WindowAt(i));
+		if (other != NULL && other != this)
+			return false;
+	}
+	return true;
+}
+
+
+void
+AomiWindow::GetSession(std::vector<BString>* urls) const
+{
+	for (size_t i = 0; i < fTabs.size(); i++) {
+		const BString& url = fTabs[i].url;
+		if (url.StartsWith("http://") || url.StartsWith("https://"))
+			urls->push_back(url);
+	}
+}
+
+
+static bool sQuitting = false;
+
+
+/*static*/ void
+AomiWindow::SetQuitting()
+{
+	sQuitting = true;
+}
+
+
+/*static*/ bool
+AomiWindow::Quitting()
+{
+	return sQuitting;
+}
+
+
+/*static*/ bool
+AomiWindow::AskStopDownloads(int32 running)
+{
+	BString text;
+	text.SetToFormat(B_TRANSLATE("%d downloads are still running. "
+		"Closing Aomi stops them."), (int)running);
+	if (running == 1) {
+		text = B_TRANSLATE("A download is still running. Closing Aomi "
+			"stops it.");
+	}
+	BAlert* alert = new BAlert(B_TRANSLATE("Close Aomi"), text.String(),
+		B_TRANSLATE("Keep Aomi open"), B_TRANSLATE("Close"), NULL,
+		B_WIDTH_AS_USUAL, B_WARNING_ALERT);
+	alert->SetShortcut(0, B_ESCAPE);
+	return alert->Go() == 1;
+}
+
+
+bool
 AomiWindow::QuitRequested()
 {
-	if (be_app->CountWindows() <= 1)
-		be_app->PostMessage(B_QUIT_REQUESTED);
+	// The last browser window closes the program, and with it the Settings
+	// and Downloads windows; they alone do not keep Aomi running.
+	if (sQuitting || !_IsLastBrowserWindow())
+		return true;
+	int32 running = aomi_download_count_running();
+	if (running > 0 && !AskStopDownloads(running))
+		return false;
+	if (!fPrivate) {
+		std::vector<BString> urls;
+		GetSession(&urls);
+		aomi_session_save(urls);
+	}
+	sQuitting = true;
+	aomi_download_stop_all();
+	be_app->PostMessage(B_QUIT_REQUESTED);
 	return true;
 }
 
@@ -1050,12 +1334,21 @@ AomiWindow::_BuildMenu()
 		new BMessage(MSG_NEW_WINDOW), 'N'));
 	window->AddItem(new BMenuItem(B_TRANSLATE("New private window"),
 		new BMessage(MSG_NEW_PRIVATE), 'N', B_COMMAND_KEY | B_SHIFT_KEY));
+	window->AddItem(new BMenuItem(B_TRANSLATE("Open location"),
+		new BMessage(MSG_FOCUS_ADDRESS), 'L'));
 	window->AddSeparatorItem();
+	window->AddItem(new BMenuItem(B_TRANSLATE("Settings…"),
+		new BMessage(MSG_SETTINGS), ','));
 	window->AddItem(new BMenuItem(B_TRANSLATE("Downloads"),
 		new BMessage(MSG_DOWNLOADS), 'D'));
 	window->AddSeparatorItem();
 	window->AddItem(new BMenuItem(B_TRANSLATE("Close tab"),
 		new BMessage(MSG_CLOSE_TAB), 'W'));
+	window->AddSeparatorItem();
+	BMenuItem* quit = new BMenuItem(B_TRANSLATE("Quit"),
+		new BMessage(B_QUIT_REQUESTED), 'Q');
+	quit->SetTarget(be_app);
+	window->AddItem(quit);
 	fMenu->AddItem(window);
 	BMenu* edit = new BMenu(B_TRANSLATE("Edit"));
 	edit->AddItem(new BMenuItem(B_TRANSLATE("Find in page…"),
@@ -1108,6 +1401,16 @@ AomiWindow::MenusBeginning()
 			delete bookmarks->RemoveItem((int32)3);
 		aomi_fill_bookmarks(bookmarks, MSG_OPEN_BOOKMARK);
 	}
+}
+
+
+void
+AomiWindow::WindowActivated(bool active)
+{
+	BWindow::WindowActivated(active);
+	// Back from Tracker: the "Bookmark bar" folder may have changed.
+	if (active)
+		PostMessage(MSG_BOOKMARKS_CHANGED);
 }
 
 
@@ -1211,6 +1514,8 @@ AomiWindow::_AddTab(const char* url, bool select, BWebContentView* adopt)
 	tab.progress = 0;
 	tab.security = AOMI_SECURITY_UNKNOWN;
 	tab.bookmarked = false;
+	tab.failed = false;
+	tab.zoomApplied = false;
 	tab.title = fPrivate
 		? B_TRANSLATE("Private – New tab") : B_TRANSLATE("New tab");
 	if (adopt != NULL) {
@@ -1237,6 +1542,7 @@ AomiWindow::_AddTab(const char* url, bool select, BWebContentView* adopt)
 	static_cast<PageHost*>(fPages)->Fit();
 	if (url != NULL && url[0] != '\0' && adopt == NULL)
 		_LoadOn(index, url);
+	_ApplyLook(index);
 	{
 		BString line;
 		line.SetToFormat("tabs add %d%s", (int)index,
@@ -1506,6 +1812,7 @@ AomiWindow::MessageReceived(BMessage* message)
 	switch (message->what) {
 		case AOMI_LOAD_STARTED:
 			if (validTab) {
+				fTabs[tab].failed = false;
 				fTabs[tab].loading = true;
 				fTabs[tab].progress = 0.1f;
 				BString url;
@@ -1521,11 +1828,24 @@ AomiWindow::MessageReceived(BMessage* message)
 		{
 			BString url;
 			if (validTab && message->FindString("url", &url) == B_OK) {
+				// Another page: until it names itself, the tab shows its
+				// address, not the title of the page before.
+				if (url != fTabs[tab].url && !url.StartsWith("data:")
+					&& !fTabs[tab].url.StartsWith("aomi:")) {
+					fTabs[tab].title = url;
+					if (tab == fActive)
+						_Title();
+				}
 				if (!url.StartsWith("data:"))
 					fTabs[tab].url = url;
 				fTabs[tab].bookmarked = aomi_bookmark_has(url.String());
 				if (!fPrivate)
 					aomi_history_add(url.String());
+				if (!fTabs[tab].zoomApplied && fTabs[tab].view != NULL
+					&& fZoom != 1.0f
+					&& fTabs[tab].view->SetZoom(fZoom, false) == B_OK) {
+					fTabs[tab].zoomApplied = true;
+				}
 				BString protocol;
 				status_t proto = fTabs[tab].view != NULL
 					? fTabs[tab].view->Protocol(&protocol) : B_NOT_SUPPORTED;
@@ -1550,8 +1870,10 @@ AomiWindow::MessageReceived(BMessage* message)
 			fChrome->Invalidate();
 			break;
 		case AOMI_LOAD_FAILED:
-			if (validTab)
+			if (validTab) {
 				fTabs[tab].loading = false;
+				fTabs[tab].failed = true;
+			}
 			fChrome->Invalidate();
 			break;
 		case AOMI_PROGRESS:
@@ -1568,6 +1890,30 @@ AomiWindow::MessageReceived(BMessage* message)
 			if (validTab && !fTabs[tab].url.StartsWith("aomi:")
 				&& message->FindString("title", &title) == B_OK
 				&& title.Length() > 0) {
+				// Servo's own page for a load that failed (its resource
+				// neterror.html): the tab is loaded again once the network
+				// is back.
+				if (title == "Error loading page") {
+					fTabs[tab].failed = true;
+					title = B_TRANSLATE("Page could not be loaded");
+					// Not every network reports that it came back (a
+					// driver without link events, an address that did not
+					// change): try again every 15 s for five minutes, as
+					// other browsers do on their error page.
+					bigtime_t interval = 0;
+					int32 left = 0;
+					if (fRetryPoll != NULL
+						&& (fRetryPoll->GetInfo(&interval, &left) != B_OK
+							|| left <= 0)) {
+						delete fRetryPoll;
+						fRetryPoll = NULL;
+					}
+					if (fRetryPoll == NULL) {
+						BMessage retry(MSG_NETWORK_RETRY);
+						fRetryPoll = new BMessageRunner(BMessenger(this),
+							&retry, 15000000, 20);
+					}
+				}
 				fTabs[tab].title = title;
 				BString line;
 				line.SetToFormat("title tab=%d url=%s title=%s", (int)tab,
@@ -1630,46 +1976,79 @@ AomiWindow::MessageReceived(BMessage* message)
 			break;
 		}
 		case AOMI_DOWNLOAD_ADDED:
-		{
-			DlEntry entry;
-			entry.id = 0;
-			entry.done = false;
-			entry.failed = false;
-			message->FindInt32("id", &entry.id);
-			message->FindString("name", &entry.name);
-			fDownloads.push_back(entry);
-			break;
-		}
 		case AOMI_DOWNLOAD_PROGRESS:
-			break;
 		case AOMI_DOWNLOAD_FINISHED:
-		{
-			int32 id = 0;
-			BString path;
-			message->FindInt32("id", &id);
-			message->FindString("path", &path);
-			for (size_t i = 0; i < fDownloads.size(); i++) {
-				if (fDownloads[i].id == id) {
-					fDownloads[i].done = true;
-					fDownloads[i].path = path;
-					break;
-				}
-			}
-			break;
-		}
 		case AOMI_DOWNLOAD_FAILED:
+			// The download button shows a dot while a file comes in.
+			fChrome->Invalidate();
+			break;
+		case AOMI_EXTERNAL_URL:
 		{
-			int32 id = 0;
-			message->FindInt32("id", &id);
-			for (size_t i = 0; i < fDownloads.size(); i++) {
-				if (fDownloads[i].id == id) {
-					fDownloads[i].done = true;
-					fDownloads[i].failed = true;
-					break;
-				}
+			BString url;
+			if (message->FindString("url", &url) == B_OK) {
+				aomi_log_add(BString("external ").Append(url).String());
+				_OpenExternal(url.String());
 			}
 			break;
 		}
+		case AOMI_DOWNLOAD_WANTED:
+		{
+			BString url;
+			BString shown;
+			message->FindString("text", &shown);
+			if (message->FindString("url", &url) == B_OK)
+				_Download(url.String(), shown.String());
+			break;
+		}
+		case B_NODE_MONITOR:
+		case B_NETWORK_MONITOR:
+			aomi_log_add(message->what == B_NODE_MONITOR
+				? "network settings changed" : "network changed");
+			// An interface or a link changed (Wi-Fi joined, cable in). The
+			// DHCP client writes the name servers a moment later, so the
+			// pages that failed load again three times, 3 s apart.
+			delete fRetry;
+			{
+				BMessage retry(MSG_NETWORK_RETRY);
+				fRetry = new BMessageRunner(BMessenger(this), &retry, 3000000,
+					3);
+			}
+			break;
+		case MSG_NETWORK_RETRY:
+			_RetryFailed();
+			break;
+		case MSG_FOCUS_ADDRESS:
+			static_cast<ChromeView*>(fChrome)->FocusAddress();
+			break;
+		case MSG_DOWNLOAD_SAVE:
+		{
+			entry_ref dir;
+			BString name;
+			BString url;
+			if (message->FindRef("directory", &dir) == B_OK
+				&& message->FindString("name", &name) == B_OK
+				&& message->FindString("url", &url) == B_OK) {
+				BPath path(&dir);
+				path.Append(name.String());
+				if (aomi_start_download_to(url.String(), path.Path()) == B_OK)
+					OpenDownloads();
+			}
+			break;
+		}
+		case MSG_FIND_PREVIOUS:
+			if (fActive >= 0 && fTabs[fActive].view != NULL)
+				fTabs[fActive].view->Find(fFind->Text(), false, false);
+			break;
+		case MSG_FIND_CLOSE:
+			if (!fFindBar->IsHidden(fFindBar))
+				fFindBar->Hide();
+			if (fActive >= 0 && fTabs[fActive].view != NULL)
+				fTabs[fActive].view->MakeFocus(true);
+			break;
+		case BAppearanceKit::B_WINDOW_EFFECTS_CHANGED:
+			update_glass();
+			fChrome->Invalidate();
+			break;
 		case AOMI_CLOSE_WANTED:
 			// A page called window.close(): that tab closes, not the window
 			// (the window closes with its last tab).
@@ -1749,11 +2128,15 @@ AomiWindow::MessageReceived(BMessage* message)
 				aomi_bookmark_add(fTabs[fActive].url.String(),
 					fTabs[fActive].title.String());
 				fTabs[fActive].bookmarked = true;
-				fChrome->Invalidate();
+				static_cast<ChromeView*>(fChrome)->ReloadBar();
 			}
 			break;
 		case MSG_MANAGE_BOOKMARKS:
 			aomi_open_bookmarks();
+			break;
+		case MSG_BOOKMARKS_CHANGED:
+			static_cast<ChromeView*>(fChrome)->ReloadBar();
+			static_cast<NewTabView*>(fNewTab)->ReloadTiles();
 			break;
 		case MSG_OPEN_BOOKMARK:
 		{
@@ -1772,25 +2155,60 @@ AomiWindow::MessageReceived(BMessage* message)
 			OpenMenu();
 			break;
 		case MSG_MENU_BAR:
-			fPrefs.showMenuBar = !fPrefs.showMenuBar;
-			aomi_prefs_save(fPrefs);
-			ReloadPrefs();
-			break;
 		case MSG_BOOKMARKS_BAR:
-			fPrefs.showBookmarks = !fPrefs.showBookmarks;
-			aomi_prefs_save(fPrefs);
-			ReloadPrefs();
+		{
+			// The saved settings with this one value turned over, then
+			// every window is told: the other browser windows, and the
+			// settings window, whose next save would write the old value
+			// back otherwise.
+			AomiPrefs prefs = aomi_prefs();
+			if (message->what == MSG_MENU_BAR)
+				prefs.showMenuBar = !fPrefs.showMenuBar;
+			else
+				prefs.showBookmarks = !fPrefs.showBookmarks;
+			aomi_prefs_save(prefs);
+			for (int32 i = 0; i < be_app->CountWindows(); i++) {
+				BWindow* window = be_app->WindowAt(i);
+				if (window != NULL)
+					window->PostMessage(MSG_SETTINGS_CHANGED);
+			}
 			break;
+		}
+		case MSG_GET_ADDRESS:
+		{
+			BMessage reply(B_REPLY);
+			reply.AddString("url", Address());
+			message->SendReply(&reply);
+			break;
+		}
 		case MSG_SETTINGS:
-			OpenSettings();
+			OpenSettings(message->GetString("page", NULL));
 			break;
 		case MSG_SETTINGS_CHANGED:
+		{
+			int32 oldZoom = fPrefs.zoom;
 			ReloadPrefs();
+			// A new zoom in Aomi settings applies at once, to every tab.
+			if (fPrefs.zoom != oldZoom) {
+				fZoom = fPrefs.zoom / 100.0f;
+				for (int32 i = 0; i < (int32)fTabs.size(); i++) {
+					if (fTabs[i].view != NULL) {
+						fTabs[i].zoomApplied
+							= fTabs[i].view->SetZoom(fZoom, false) == B_OK;
+					}
+				}
+			}
+			for (int32 i = 0; i < (int32)fTabs.size(); i++)
+				_ApplyLook(i);
 			break;
+		}
 		case MSG_FIND:
-			if (fFindBar->IsHidden())
+			if (fFindBar->IsHidden(fFindBar))
 				fFindBar->Show();
+			static_cast<PageHost*>(fPages)->Fit();
 			fFind->MakeFocus(true);
+			if (fFind->TextView() != NULL)
+				fFind->TextView()->SelectAll();
 			break;
 		case MSG_FIND_NEXT:
 			if (fActive >= 0 && fTabs[fActive].view != NULL)
@@ -1852,6 +2270,24 @@ AomiWindow::MessageReceived(BMessage* message)
 			break;
 		}
 		case 'shwn':
+			update_glass();
+			// Wi-Fi joined, a cable plugged in: pages that failed without
+			// network load again (B_NETWORK_MONITOR).
+			start_watching_network(B_WATCH_NETWORK_INTERFACE_CHANGES
+				| B_WATCH_NETWORK_LINK_CHANGES, BMessenger(this));
+			{
+				// The name servers arriving is the moment pages can load:
+				// the DHCP client writes resolv.conf (a new file, renamed
+				// into place). Not every driver reports its link (virtio in
+				// QEMU, 27 Nov 2026), so this folder is watched as well.
+				BPath settings;
+				node_ref folder;
+				if (find_directory(B_SYSTEM_SETTINGS_DIRECTORY, &settings)
+						== B_OK
+					&& settings.Append("network") == B_OK
+					&& BEntry(settings.Path()).GetNodeRef(&folder) == B_OK)
+					watch_node(&folder, B_WATCH_DIRECTORY, BMessenger(this));
+			}
 			BAppearanceKit::set_view_glass(fChrome, true);
 			if (fMenu != NULL)
 				BAppearanceKit::set_view_glass(fMenu, true);
@@ -1896,19 +2332,26 @@ AomiWindow::MessageReceived(BMessage* message)
 		{
 			BString url;
 			if (message->FindString("url", &url) == B_OK)
-				aomi_start_download(url.String(), fPrefs.downloadPath.String());
+				_Download(url.String(), url.String());
 			break;
 		}
+		case MSG_SHOW_ALL_DOWNLOADS:
+			OpenDownloads();
+			break;
 		case B_FONTS_UPDATED:
 			static_cast<ChromeView*>(fChrome)->ApplyFontScale();
 			static_cast<NewTabView*>(fNewTab)->ApplyFontScale();
+			for (int32 i = 0; i < (int32)fTabs.size(); i++)
+				_ApplyLook(i);
 			if (GetLayout() != NULL)
 				GetLayout()->InvalidateLayout();
 			BWindow::MessageReceived(message);
 			break;
 		case B_COLORS_UPDATED:
-			fChrome->Invalidate();
+			static_cast<ChromeView*>(fChrome)->ApplyColors();
 			fNewTab->Invalidate();
+			for (int32 i = 0; i < (int32)fTabs.size(); i++)
+				_ApplyLook(i);
 			if (fActive >= 0 && fActive < (int32)fTabs.size()) {
 				if (fTabs[fActive].url == "aomi:about"
 					|| fTabs[fActive].url == "aomi:technical"
@@ -1933,11 +2376,17 @@ AomiWindow::_OpenLock()
 	ChromeView* chrome = static_cast<ChromeView*>(fChrome);
 	BRect rect = chrome->LockRect();
 	chrome->ConvertToScreen(&rect);
-	BRect frame(rect.left, rect.bottom + 6, rect.left + 280, rect.bottom + 90);
-	FloatPanel* panel = new FloatPanel(frame, "");
-	BView* view = panel->Panel();
+	FloatPanel* panel = new FloatPanel(BPoint(rect.left, rect.bottom + 6));
+	BGroupView* view = panel->Panel();
 	Palette p = palette();
+	// The site's name, not the whole address.
 	BString host(fTabs[fActive].url);
+	int32 scheme = host.FindFirst("://");
+	if (scheme >= 0)
+		host.Remove(0, scheme + 3);
+	int32 slash = host.FindFirst('/');
+	if (slash >= 0)
+		host.Truncate(slash);
 	BStringView* title = new BStringView("host", host.String());
 	title->SetFont(be_bold_font);
 	BString line(B_TRANSLATE("Connection: "));
@@ -1960,53 +2409,125 @@ AomiWindow::_OpenLock()
 	else if (fTabs[fActive].security == AOMI_SECURITY_CERTIFICATE)
 		line << B_TRANSLATE(", certificate error");
 	BStringView* detail = new BStringView("conn", line.String());
-	view->SetLayout(new BGroupLayout(B_VERTICAL, 4));
-	view->AddChild(title);
-	view->AddChild(detail);
+	view->GroupLayout()->AddView(title);
+	view->GroupLayout()->AddView(detail);
 	title->SetHighColor(p.text);
 	detail->SetHighColor(p.sub);
-	panel->Show();
-	(void)p;
+	panel->Open();
 }
 
 
 void
 AomiWindow::OpenDownloads()
 {
-	ChromeView* chrome = static_cast<ChromeView*>(fChrome);
-	BRect rect = chrome->DownloadsRect();
-	chrome->ConvertToScreen(&rect);
-	BRect frame(rect.right - 360, rect.bottom + 6, rect.right, rect.bottom + 220);
-	FloatPanel* panel = new FloatPanel(frame, "");
-	BView* view = panel->Panel();
-	view->SetLayout(new BGroupLayout(B_VERTICAL, 4));
-	BStringView* title = new BStringView("dl", B_TRANSLATE("Downloads"));
-	title->SetFont(be_bold_font);
-	view->AddChild(title);
-	if (fDownloads.empty()) {
-		view->AddChild(new BStringView("empty",
-			B_TRANSLATE("Files you download are listed here.")));
-	} else {
-		for (int32 i = (int32)fDownloads.size() - 1; i >= 0 && i >= (int32)fDownloads.size() - 5; i--) {
-			BString row(fDownloads[i].name);
-			if (fDownloads[i].failed)
-				row << " – Failed";
-			else if (fDownloads[i].done)
-				row << " – Done";
-			else
-				row << " – Downloading…";
-			view->AddChild(new BStringView("dlrow", row.String()));
+	// A window of its own, like every other R5 window: it can be moved,
+	// kept open beside the page and closed with its close box.
+	AomiDownloadsWindow::ShowWindow(fPrefs.downloadPath.String());
+}
+
+
+void
+AomiWindow::_Download(const char* url, const char* shown)
+{
+	if (url == NULL || url[0] == '\0')
+		return;
+	if (fPrefs.askDownload) {
+		// "Ask where to save each file": a save panel with the name from
+		// the address.
+		if (fDownloadPanel == NULL) {
+			fDownloadPanel = new BFilePanel(B_SAVE_PANEL, new BMessenger(this),
+				NULL, 0, false, NULL);
 		}
+		BMessage message(MSG_DOWNLOAD_SAVE);
+		message.AddString("url", url);
+		fDownloadPanel->SetMessage(&message);
+		// The same name a download without the panel gets: decoded ("%20"
+		// is a space) and cleaned of slashes and control characters.
+		fDownloadPanel->SetSaveText(aomi_download_name(url).String());
+		entry_ref dir;
+		if (get_ref_for_path(fPrefs.downloadPath.String(), &dir) == B_OK)
+			fDownloadPanel->SetPanelDirectory(&dir);
+		fDownloadPanel->Show();
+		return;
 	}
-	BButton* all = new BButton("all", B_TRANSLATE("Show all downloads"),
-		new BMessage(MSG_SHOW_ALL_DOWNLOADS));
-	all->SetTarget(this);
-	view->AddChild(all);
-	BButton* folder = new BButton("folder", B_TRANSLATE("Open folder"),
-		new BMessage(MSG_OPEN_FOLDER));
-	folder->SetTarget(this);
-	view->AddChild(folder);
-	panel->Show();
+	if (aomi_start_download(url, fPrefs.downloadPath.String(),
+			shown != NULL && shown[0] != '\0' ? shown : NULL) == B_OK) {
+		OpenDownloads();
+	}
+}
+
+
+void
+AomiWindow::_OpenExternal(const char* url)
+{
+	// mailto: and tel: belong to another program.
+	status_t status = aomi_open_external(url);
+	if (status == B_OK)
+		return;
+	BString scheme(url);
+	int32 colon = scheme.FindFirst(':');
+	if (colon > 0)
+		scheme.Truncate(colon);
+	BString text;
+	if (status == B_NOT_ALLOWED) {
+		text.SetToFormat(B_TRANSLATE("Aomi does not open \"%s\" links from "
+			"a web page."), scheme.String());
+	} else {
+		text.SetToFormat(B_TRANSLATE("No program on this computer opens "
+			"\"%s\" links."), scheme.String());
+	}
+	BAlert* alert = new BAlert("Aomi", text.String(), B_TRANSLATE("OK"));
+	alert->Go(NULL);
+}
+
+
+void
+AomiWindow::_ApplyLook(int32 index)
+{
+	if (index < 0 || index >= (int32)fTabs.size()
+		|| fTabs[index].view == NULL)
+		return;
+	// Pages follow R5's light or dark mode unless the settings say
+	// otherwise, and the system font size (12 points is 1:1).
+	bool dark = fPrefs.pageColors == 2
+		|| (fPrefs.pageColors == 0 && palette().dark);
+	fTabs[index].view->SetColorScheme(dark);
+	float scale = ui_scale();
+	if (scale < 0.5f)
+		scale = 0.5f;
+	if (scale > 4.0f)
+		scale = 4.0f;
+	fTabs[index].view->SetScale(scale);
+}
+
+
+void
+AomiWindow::_RetryFailed()
+{
+	bool anyFailed = false;
+	for (size_t i = 0; i < fTabs.size(); i++)
+		anyFailed |= fTabs[i].failed;
+	if (!anyFailed) {
+		delete fRetryPoll;
+		fRetryPoll = NULL;
+		return;
+	}
+	for (int32 i = 0; i < (int32)fTabs.size(); i++) {
+		Tab& tab = fTabs[i];
+		// A tab with the engine's error page counts as failed even when the
+		// engine still reports it as loading.
+		if (!tab.failed || tab.view == NULL)
+			continue;
+		if (!tab.url.StartsWith("http://") && !tab.url.StartsWith("https://"))
+			continue;
+		BString line;
+		line.SetToFormat("network back: tab %d loads %s again", (int)i,
+			tab.url.String());
+		aomi_log_add(line.String());
+		tab.loading = true;
+		tab.view->LoadURL(tab.url.String());
+	}
+	fChrome->Invalidate();
 }
 
 
@@ -2114,8 +2635,10 @@ AomiWindow::OpenMenu()
 		new BMessage(MSG_BOOKMARK_PAGE), 'B'));
 	bookmarks->AddItem(new BMenuItem(B_TRANSLATE("Manage bookmarks"),
 		new BMessage(MSG_MANAGE_BOOKMARKS)));
-	bookmarks->AddItem(new BMenuItem(B_TRANSLATE("Show bookmarks bar"),
-		new BMessage(MSG_BOOKMARKS_BAR)));
+	BMenuItem* bar = new BMenuItem(B_TRANSLATE("Show bookmarks bar"),
+		new BMessage(MSG_BOOKMARKS_BAR));
+	bar->SetMarked(fPrefs.showBookmarks);
+	bookmarks->AddItem(bar);
 	bookmarks->AddSeparatorItem();
 	aomi_fill_bookmarks(bookmarks, MSG_OPEN_BOOKMARK);
 	menu->AddItem(bookmarks);
@@ -2134,8 +2657,10 @@ AomiWindow::OpenMenu()
 	menu->AddItem(new BMenuItem(B_TRANSLATE("View source"),
 		new BMessage(MSG_SOURCE), 'U'));
 	menu->AddSeparatorItem();
-	menu->AddItem(new BMenuItem(B_TRANSLATE("Show menu bar"),
-		new BMessage(MSG_MENU_BAR)));
+	BMenuItem* menuBar = new BMenuItem(B_TRANSLATE("Show menu bar"),
+		new BMessage(MSG_MENU_BAR));
+	menuBar->SetMarked(fPrefs.showMenuBar);
+	menu->AddItem(menuBar);
 	menu->AddItem(new BMenuItem(B_TRANSLATE("Settings…"),
 		new BMessage(MSG_SETTINGS), ',', B_COMMAND_KEY));
 	menu->AddItem(new BMenuItem(B_TRANSLATE("About Aomi"),
@@ -2146,6 +2671,8 @@ AomiWindow::OpenMenu()
 	menu->AddItem(new BMenuItem(B_TRANSLATE("Quit"),
 		new BMessage(B_QUIT_REQUESTED), 'Q'));
 	menu->SetTargetForItems(this);
+	if (BMenuItem* quitItem = menu->FindItem(B_QUIT_REQUESTED))
+		quitItem->SetTarget(be_app);
 	history->SetTargetForItems(this);
 	bookmarks->SetTargetForItems(this);
 	ChromeView* chrome = static_cast<ChromeView*>(fChrome);
@@ -2157,9 +2684,9 @@ AomiWindow::OpenMenu()
 
 
 void
-AomiWindow::OpenSettings()
+AomiWindow::OpenSettings(const char* page)
 {
-	(new AomiSettingsWindow())->Show();
+	AomiSettingsWindow::ShowWindow(page);
 }
 
 
@@ -2168,167 +2695,4 @@ AomiWindow::_Load(const char* url)
 {
 	if (fActive >= 0)
 		_LoadOn(fActive, url);
-}
-
-
-static const uint32 kPrefChanged = 'pchg';
-static const uint32 kPrefRevert = 'prev';
-static const uint32 kPrefDefaults = 'pdef';
-static const uint32 kPrefStart = 'pstt';
-static const uint32 kPrefEngine = 'peng';
-
-
-AomiSettingsWindow::AomiSettingsWindow()
-	:
-	BWindow(BRect(360, 120, 919, 700), B_TRANSLATE("Aomi settings"),
-		B_TITLED_WINDOW, B_AUTO_UPDATE_SIZE_LIMITS)
-{
-	BAppearanceKit::set_window_glass(this, true);
-	fOpened = fPrefs = aomi_prefs();
-	BPopUpMenu* starts = new BPopUpMenu(B_TRANSLATE("New tab page"));
-	starts->SetRadioMode(true);
-	starts->AddItem(new BMenuItem(B_TRANSLATE("New tab page"),
-		new BMessage(kPrefStart)));
-	starts->AddItem(new BMenuItem(B_TRANSLATE("Home page"),
-		new BMessage(kPrefStart)));
-	starts->AddItem(new BMenuItem(B_TRANSLATE("Last session"),
-		new BMessage(kPrefStart)));
-	starts->ItemAt(fPrefs.start >= 0 && fPrefs.start <= 2
-		? fPrefs.start : 0)->SetMarked(true);
-	fStart = new BMenuField("start", NULL, starts);
-	fHome = new BTextControl("home", NULL, fPrefs.home.String(),
-		new BMessage(kPrefChanged));
-	BPopUpMenu* engines = new BPopUpMenu("DuckDuckGo");
-	engines->SetRadioMode(true);
-	engines->AddItem(new BMenuItem("DuckDuckGo", new BMessage(kPrefEngine)));
-	engines->AddItem(new BMenuItem("Google", new BMessage(kPrefEngine)));
-	engines->AddItem(new BMenuItem("Wikipedia", new BMessage(kPrefEngine)));
-	fEngine = new BMenuField("engine", NULL, engines);
-	fSearch = new BTextControl("search", NULL, fPrefs.search.String(),
-		new BMessage(kPrefChanged));
-	fShowHome = new BCheckBox("home button", B_TRANSLATE("Show home button"),
-		new BMessage(kPrefChanged));
-	fShowHome->SetValue(fPrefs.showHome);
-	fShowBar = new BCheckBox("bar", B_TRANSLATE("Show bookmarks bar"),
-		new BMessage(kPrefChanged));
-	fShowBar->SetValue(fPrefs.showBookmarks);
-	fDownloads = new BTextControl("downloads", NULL,
-		fPrefs.downloadPath.String(), new BMessage(kPrefChanged));
-
-	BStringView* dlHead = new BStringView("dlh", B_TRANSLATE("Downloads"));
-	dlHead->SetFont(be_bold_font);
-	BStringView* privHead = new BStringView("prvh", B_TRANSLATE("Private windows"));
-	privHead->SetFont(be_bold_font);
-	BStringView* privNote = new BStringView("prvn", B_TRANSLATE(
-		"A private window forgets its history, cookies and site data when you close it."));
-	privNote->SetHighColor(palette().sub);
-
-	auto makeLabel = [](const char* text) {
-		BStringView* view = new BStringView("", text);
-		view->SetAlignment(B_ALIGN_RIGHT);
-		return view;
-	};
-
-	BLayoutBuilder::Group<>(this, B_VERTICAL, 10)
-		.SetInsets(18, 16, 18, 14)
-		.AddGrid(12, 8)
-			.Add(makeLabel(B_TRANSLATE("Start with:")), 0, 0)
-			.Add(fStart, 1, 0)
-			.Add(makeLabel(B_TRANSLATE("Home page:")), 0, 1)
-			.Add(fHome, 1, 1)
-			.Add(makeLabel(B_TRANSLATE("Search engine:")), 0, 2)
-			.Add(fEngine, 1, 2)
-			.Add(makeLabel(B_TRANSLATE("Search address:")), 0, 3)
-			.Add(fSearch, 1, 3)
-			.Add(fShowHome, 1, 4)
-			.Add(fShowBar, 1, 5)
-		.End()
-		.AddStrut(4)
-		.Add(dlHead)
-		.AddGrid(12, 8)
-			.Add(makeLabel(B_TRANSLATE("Save downloads to:")), 0, 0)
-			.AddGroup(B_HORIZONTAL, 6, 1, 0)
-				.Add(fDownloads, 1)
-				.Add(new BButton("choose", B_TRANSLATE("Choose…"),
-					new BMessage(MSG_OPEN_FOLDER)))
-			.End()
-		.End()
-		.AddStrut(4)
-		.Add(privHead)
-		.Add(privNote)
-		.AddGlue()
-		.AddGroup(B_HORIZONTAL, 8)
-			.AddGlue()
-			.Add(new BButton("revert", B_TRANSLATE("Revert"),
-				new BMessage(kPrefRevert)))
-			.Add(new BButton("defaults", B_TRANSLATE("Defaults"),
-				new BMessage(kPrefDefaults)))
-		.End();
-}
-
-
-void
-AomiSettingsWindow::_Save()
-{
-	fPrefs.home = fHome->Text();
-	fPrefs.search = fSearch->Text();
-	fPrefs.showHome = fShowHome->Value() != 0;
-	fPrefs.showBookmarks = fShowBar->Value() != 0;
-	fPrefs.downloadPath = fDownloads->Text();
-	BMenu* menu = fStart->Menu();
-	fPrefs.start = 0;
-	if (menu->ItemAt(1) != NULL && menu->ItemAt(1)->IsMarked())
-		fPrefs.start = 1;
-	if (menu->ItemAt(2) != NULL && menu->ItemAt(2)->IsMarked())
-		fPrefs.start = 2;
-	aomi_prefs_save(fPrefs);
-	for (int32 i = 0; i < be_app->CountWindows(); i++)
-		be_app->WindowAt(i)->PostMessage(MSG_SETTINGS_CHANGED);
-}
-
-
-void
-AomiSettingsWindow::MessageReceived(BMessage* message)
-{
-	switch (message->what) {
-		case kPrefChanged:
-			_Save();
-			break;
-		case kPrefStart:
-			_Save();
-			break;
-		case kPrefEngine:
-		{
-			BMenuItem* item = fEngine->Menu()->FindMarked();
-			if (item != NULL && strcmp(item->Label(), "Google") == 0)
-				fSearch->SetText("https://www.google.com/search?q=%s");
-			else if (item != NULL && strcmp(item->Label(), "Wikipedia") == 0)
-				fSearch->SetText("https://en.wikipedia.org/w/index.php?search=%s");
-			else
-				fSearch->SetText("https://duckduckgo.com/?q=%s");
-			_Save();
-			break;
-		}
-		case kPrefRevert:
-			fPrefs = fOpened;
-			fHome->SetText(fPrefs.home.String());
-			fSearch->SetText(fPrefs.search.String());
-			fDownloads->SetText(fPrefs.downloadPath.String());
-			fShowHome->SetValue(fPrefs.showHome);
-			fShowBar->SetValue(fPrefs.showBookmarks);
-			_Save();
-			break;
-		case kPrefDefaults:
-			aomi_prefs_defaults(&fPrefs);
-			fHome->SetText(fPrefs.home.String());
-			fSearch->SetText(fPrefs.search.String());
-			fDownloads->SetText(fPrefs.downloadPath.String());
-			fShowHome->SetValue(fPrefs.showHome);
-			fShowBar->SetValue(fPrefs.showBookmarks);
-			_Save();
-			break;
-		default:
-			BWindow::MessageReceived(message);
-			break;
-	}
 }
