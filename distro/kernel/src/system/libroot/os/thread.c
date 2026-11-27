@@ -31,6 +31,182 @@ typedef struct callback_node {
 void _thread_do_exit_work(void);
 void _thread_do_exit_notification(void);
 
+// SPDX-SnippetBegin
+// SPDX-License-Identifier: MIT
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+
+/*	thread_local destructors (GitHub #3012, Haiku #18182).
+
+	The compiler registers the destructor of a thread_local object through
+	__cxa_thread_atexit(). libstdc++ only keeps its own list: when the library
+	was unloaded with dlclose() before the thread ended, the thread called into
+	unmapped code at its end. libroot now keeps the list per thread, and counts
+	per library (the DSO handle the compiler passes) how many destructors are
+	still to run in all threads. dlclose() asks for that count through
+	thread_dtors_pending_in_range() and keeps a library with pending
+	destructors loaded, as glibc does. Registering and running never take the
+	runtime loader's lock: a thread that holds it (dlopen(), dlclose(), their
+	init and exit hooks) may wait for a thread that just registers or ends.
+	The runtime loader binds __cxa_thread_atexit to libroot for every image.
+*/
+
+#include <locks.h>
+
+
+typedef struct thread_dtor_node {
+	struct thread_dtor_node* next;
+	void (*function)(void*);
+	void* object;
+	void* dso;
+} thread_dtor_node;
+
+typedef struct thread_dtor_owner {
+	void* dso;
+	int32 count;
+} thread_dtor_owner;
+
+static mutex sOwnerLock = MUTEX_INITIALIZER("thread_local owners");
+static thread_dtor_owner* sOwners = NULL;
+static int32 sOwnerCount = 0;
+static int32 sOwnerCapacity = 0;
+
+
+void _thread_call_tls_destructors(void);
+int __cxa_thread_atexit_impl(void (*function)(void*), void* object,
+	void* dsoHandle);
+int __cxa_thread_atexit(void (*function)(void*), void* object,
+	void* dsoHandle);
+
+
+static int
+thread_dtors_pending_in_range(addr_t start, addr_t size)
+{
+	int pending = 0;
+	int32 i;
+
+	mutex_lock(&sOwnerLock);
+	for (i = 0; i < sOwnerCount; i++) {
+		addr_t dso = (addr_t)sOwners[i].dso;
+		if (sOwners[i].count > 0 && dso >= start && dso - start < size) {
+			pending = 1;
+			break;
+		}
+	}
+	mutex_unlock(&sOwnerLock);
+	return pending;
+}
+
+
+static int
+owner_add(void* dso)
+{
+	int32 i;
+
+	mutex_lock(&sOwnerLock);
+	for (i = 0; i < sOwnerCount; i++) {
+		if (sOwners[i].dso == dso) {
+			sOwners[i].count++;
+			mutex_unlock(&sOwnerLock);
+			return 0;
+		}
+	}
+	if (sOwnerCount == sOwnerCapacity) {
+		int32 capacity = sOwnerCapacity > 0 ? sOwnerCapacity * 2 : 16;
+		thread_dtor_owner* owners = (thread_dtor_owner*)realloc(sOwners,
+			capacity * sizeof(thread_dtor_owner));
+		if (owners == NULL) {
+			mutex_unlock(&sOwnerLock);
+			return -1;
+		}
+		sOwners = owners;
+		sOwnerCapacity = capacity;
+	}
+	sOwners[sOwnerCount].dso = dso;
+	sOwners[sOwnerCount].count = 1;
+	sOwnerCount++;
+	mutex_unlock(&sOwnerLock);
+
+	// libroot's own hook; the runtime loader asks it in dlclose()
+	__gRuntimeLoader->thread_dtors_pending_in_range
+		= thread_dtors_pending_in_range;
+	return 0;
+}
+
+
+static void
+owner_remove(void* dso)
+{
+	int32 i;
+
+	mutex_lock(&sOwnerLock);
+	for (i = 0; i < sOwnerCount; i++) {
+		if (sOwners[i].dso == dso) {
+			if (--sOwners[i].count == 0)
+				sOwners[i] = sOwners[--sOwnerCount];
+			break;
+		}
+	}
+	mutex_unlock(&sOwnerLock);
+}
+
+
+int
+__cxa_thread_atexit_impl(void (*function)(void*), void* object,
+	void* dsoHandle)
+{
+	thread_dtor_node** head
+		= (thread_dtor_node**)tls_address(TLS_THREAD_DTORS_SLOT);
+	thread_dtor_node* node;
+
+	if (function == NULL)
+		return -1;
+
+	node = (thread_dtor_node*)malloc(sizeof(thread_dtor_node));
+	if (node == NULL)
+		return -1;
+
+	node->function = function;
+	node->object = object;
+	node->dso = dsoHandle != NULL ? dsoHandle : (void*)function;
+	if (owner_add(node->dso) != 0) {
+		free(node);
+		return -1;
+	}
+
+	node->next = *head;
+	*head = node;
+	return 0;
+}
+
+
+int
+__cxa_thread_atexit(void (*function)(void*), void* object, void* dsoHandle)
+{
+	return __cxa_thread_atexit_impl(function, object, dsoHandle);
+}
+
+
+/*!	Runs the thread_local destructors of the current thread, newest first,
+	including any a destructor registers while they run. Called at thread
+	exit before the on-exit callbacks, the pthread keys and the TLS blocks go
+	away, and by exit() before the static destructors.
+*/
+void
+_thread_call_tls_destructors(void)
+{
+	thread_dtor_node** head
+		= (thread_dtor_node**)tls_address(TLS_THREAD_DTORS_SLOT);
+	thread_dtor_node* node;
+
+	while ((node = *head) != NULL) {
+		*head = node->next;
+		node->function(node->object);
+		owner_remove(node->dso);
+		free(node);
+	}
+}
+// SPDX-SnippetEnd
+
 
 static status_t
 thread_entry(void* _entry, void* _thread)
@@ -67,8 +243,16 @@ _thread_do_exit_notification(void)
 void
 _thread_do_exit_work(void)
 {
-	callback_node *node = tls_get(TLS_ON_EXIT_THREAD_SLOT);
+	callback_node *node;
 	callback_node *next;
+
+	// SPDX-SnippetBegin
+	// SPDX-License-Identifier: MIT
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	_thread_call_tls_destructors();
+	// SPDX-SnippetEnd
+
+	node = tls_get(TLS_ON_EXIT_THREAD_SLOT);
 
 	while (node != NULL) {
 		next = node->next;
