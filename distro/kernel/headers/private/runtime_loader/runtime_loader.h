@@ -65,6 +65,15 @@ struct rld_export {
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 	void (*init_initial_exec_tls)();
 	// SPDX-SnippetEnd
+
+	// SPDX-SnippetBegin
+	// SPDX-License-Identifier: MIT
+	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+	// Set by libroot: whether a thread_local destructor registered from
+	// [start, start + size) has still to run in some thread. dlclose() then
+	// keeps that library loaded.
+	int (*thread_dtors_pending_in_range)(addr_t start, addr_t size);
+	// SPDX-SnippetEnd
 };
 
 extern struct rld_export *__gRuntimeLoader;
