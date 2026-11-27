@@ -3,7 +3,7 @@
 
 The previous file kept the name mesa_radv-25.3.6-1. An older copy of that
 same name, from 9 Nov, could be the one the image installed. The new name
-is mesa_radv-25.3.6-13, so a cached older build cannot be installed in its place.
+is mesa_radv-25.3.6-14, so a cached older build cannot be installed in its place.
 
 pack-radv.py ROOT               -10 plus the freshly built library and the current
                                 stick scripts (-13)
