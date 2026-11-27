@@ -213,6 +213,17 @@ void *memmove(void *dest, const void *src, size_t n)
 		uintptr_t apart = forward
 			? (uintptr_t)(srcBytes - destBytes)
 			: (uintptr_t)(destBytes - srcBytes);
+#ifndef _KERNEL_MODE
+		static int sMemmoveAvx2 = -1;
+		int useAvx2 = __atomic_load_n(&sMemmoveAvx2, __ATOMIC_RELAXED);
+		if (useAvx2 < 0) {
+			useAvx2 = (r5_x86_cpu_flags() & R5_CPU_AVX2) != 0 ? 1 : 0;
+			__atomic_store_n(&sMemmoveAvx2, useAvx2, __ATOMIC_RELAXED);
+		}
+		if (apart >= 32 && useAvx2)
+			move_avx2(destBytes, srcBytes, n, forward);
+		else
+#endif
 		if (apart >= 16)
 			move_sse(destBytes, srcBytes, n, forward);
 		else if (apart >= 8)
