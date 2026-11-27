@@ -38,23 +38,37 @@ void _thread_do_exit_notification(void);
 /*	thread_local destructors (GitHub #3012, Haiku #18182).
 
 	The compiler registers the destructor of a thread_local object through
-	__cxa_thread_atexit(). libstdc++ only keeps its own list and does not keep
-	the library loaded: when the library was unloaded with dlclose() before the
-	thread ended, the thread called into unmapped code at its end. libroot now
-	keeps the list. Each entry holds a reference to the image that registered
-	it (the runtime loader's pin_image_at_address()), so dlclose() leaves that
-	image mapped until the destructors of every thread that used it ran. The
-	runtime loader binds __cxa_thread_atexit to libroot for every image.
+	__cxa_thread_atexit(). libstdc++ only keeps its own list: when the library
+	was unloaded with dlclose() before the thread ended, the thread called into
+	unmapped code at its end. libroot now keeps the list per thread, and counts
+	per library (the DSO handle the compiler passes) how many destructors are
+	still to run in all threads. dlclose() asks for that count through
+	thread_dtors_pending_in_range() and keeps a library with pending
+	destructors loaded, as glibc does. Registering and running never take the
+	runtime loader's lock: a thread that holds it (dlopen(), dlclose(), their
+	init and exit hooks) may wait for a thread that just registers or ends.
+	The runtime loader binds __cxa_thread_atexit to libroot for every image.
 */
+
+#include <locks.h>
+
 
 typedef struct thread_dtor_node {
 	struct thread_dtor_node* next;
 	void (*function)(void*);
 	void* object;
 	void* dso;
-	void* image;
-		// the pinned image this entry gives back, or NULL
 } thread_dtor_node;
+
+typedef struct thread_dtor_owner {
+	void* dso;
+	int32 count;
+} thread_dtor_owner;
+
+static mutex sOwnerLock = MUTEX_INITIALIZER("thread_local owners");
+static thread_dtor_owner* sOwners = NULL;
+static int32 sOwnerCount = 0;
+static int32 sOwnerCapacity = 0;
 
 
 void _thread_call_tls_destructors(void);
@@ -64,6 +78,78 @@ int __cxa_thread_atexit(void (*function)(void*), void* object,
 	void* dsoHandle);
 
 
+static int
+thread_dtors_pending_in_range(addr_t start, addr_t size)
+{
+	int pending = 0;
+	int32 i;
+
+	mutex_lock(&sOwnerLock);
+	for (i = 0; i < sOwnerCount; i++) {
+		addr_t dso = (addr_t)sOwners[i].dso;
+		if (sOwners[i].count > 0 && dso >= start && dso - start < size) {
+			pending = 1;
+			break;
+		}
+	}
+	mutex_unlock(&sOwnerLock);
+	return pending;
+}
+
+
+static int
+owner_add(void* dso)
+{
+	int32 i;
+
+	mutex_lock(&sOwnerLock);
+	for (i = 0; i < sOwnerCount; i++) {
+		if (sOwners[i].dso == dso) {
+			sOwners[i].count++;
+			mutex_unlock(&sOwnerLock);
+			return 0;
+		}
+	}
+	if (sOwnerCount == sOwnerCapacity) {
+		int32 capacity = sOwnerCapacity > 0 ? sOwnerCapacity * 2 : 16;
+		thread_dtor_owner* owners = (thread_dtor_owner*)realloc(sOwners,
+			capacity * sizeof(thread_dtor_owner));
+		if (owners == NULL) {
+			mutex_unlock(&sOwnerLock);
+			return -1;
+		}
+		sOwners = owners;
+		sOwnerCapacity = capacity;
+	}
+	sOwners[sOwnerCount].dso = dso;
+	sOwners[sOwnerCount].count = 1;
+	sOwnerCount++;
+	mutex_unlock(&sOwnerLock);
+
+	// libroot's own hook; the runtime loader asks it in dlclose()
+	__gRuntimeLoader->thread_dtors_pending_in_range
+		= thread_dtors_pending_in_range;
+	return 0;
+}
+
+
+static void
+owner_remove(void* dso)
+{
+	int32 i;
+
+	mutex_lock(&sOwnerLock);
+	for (i = 0; i < sOwnerCount; i++) {
+		if (sOwners[i].dso == dso) {
+			if (--sOwners[i].count == 0)
+				sOwners[i] = sOwners[--sOwnerCount];
+			break;
+		}
+	}
+	mutex_unlock(&sOwnerLock);
+}
+
+
 int
 __cxa_thread_atexit_impl(void (*function)(void*), void* object,
 	void* dsoHandle)
@@ -71,9 +157,6 @@ __cxa_thread_atexit_impl(void (*function)(void*), void* object,
 	thread_dtor_node** head
 		= (thread_dtor_node**)tls_address(TLS_THREAD_DTORS_SLOT);
 	thread_dtor_node* node;
-	thread_dtor_node* other;
-	void* key = dsoHandle != NULL ? dsoHandle : (void*)function;
-	int pinned = 0;
 
 	if (function == NULL)
 		return -1;
@@ -84,19 +167,11 @@ __cxa_thread_atexit_impl(void (*function)(void*), void* object,
 
 	node->function = function;
 	node->object = object;
-	node->dso = key;
-	node->image = NULL;
-
-	// One reference per image and thread is enough: all destructors run
-	// before any reference is given back.
-	for (other = *head; other != NULL; other = other->next) {
-		if (other->dso == key && other->image != NULL) {
-			pinned = 1;
-			break;
-		}
+	node->dso = dsoHandle != NULL ? dsoHandle : (void*)function;
+	if (owner_add(node->dso) != 0) {
+		free(node);
+		return -1;
 	}
-	if (!pinned && __gRuntimeLoader->pin_image_at_address != NULL)
-		node->image = __gRuntimeLoader->pin_image_at_address(key);
 
 	node->next = *head;
 	*head = node;
@@ -112,34 +187,21 @@ __cxa_thread_atexit(void (*function)(void*), void* object, void* dsoHandle)
 
 
 /*!	Runs the thread_local destructors of the current thread, newest first,
-	including any a destructor registers while they run. Only then the image
-	references are given back, which may unload a library that was closed
-	while this thread still used it. Called at thread exit before the pthread
-	keys and the TLS blocks go away, and by exit() before the static
-	destructors.
+	including any a destructor registers while they run. Called at thread
+	exit before the on-exit callbacks, the pthread keys and the TLS blocks go
+	away, and by exit() before the static destructors.
 */
 void
 _thread_call_tls_destructors(void)
 {
 	thread_dtor_node** head
 		= (thread_dtor_node**)tls_address(TLS_THREAD_DTORS_SLOT);
-	thread_dtor_node* pins = NULL;
 	thread_dtor_node* node;
 
 	while ((node = *head) != NULL) {
 		*head = node->next;
 		node->function(node->object);
-
-		if (node->image != NULL) {
-			node->next = pins;
-			pins = node;
-		} else
-			free(node);
-	}
-
-	while ((node = pins) != NULL) {
-		pins = node->next;
-		__gRuntimeLoader->unload_library(node->image);
+		owner_remove(node->dso);
 		free(node);
 	}
 }

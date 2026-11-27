@@ -69,8 +69,10 @@ struct rld_export {
 	// SPDX-SnippetBegin
 	// SPDX-License-Identifier: MIT
 	// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
-	// Keeps the image at an address loaded; unload_library() gives it back.
-	void* (*pin_image_at_address)(void* address);
+	// Set by libroot: whether a thread_local destructor registered from
+	// [start, start + size) has still to run in some thread. dlclose() then
+	// keeps that library loaded.
+	int (*thread_dtors_pending_in_range)(addr_t start, addr_t size);
 	// SPDX-SnippetEnd
 };
 

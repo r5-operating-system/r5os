@@ -725,6 +725,57 @@ err:
 }
 
 
+// SPDX-SnippetBegin
+// SPDX-License-Identifier: MIT
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+/*!	Whether dropping one reference to \a image would unload code that a
+	thread_local destructor of some thread still has to run (GitHub #3012).
+	Checks \a image and the dependencies only it keeps loaded. libroot keeps
+	the count of pending destructors per library.
+*/
+static bool
+thread_dtors_pending(image_t* image, uint32 depth)
+{
+	if (image->ref_count != 1 || depth > 32)
+		return false;
+
+	for (uint32 i = 0; i < image->num_regions; i++) {
+		if (gRuntimeLoader.thread_dtors_pending_in_range(
+				image->regions[i].vmstart, image->regions[i].vmsize)) {
+			return true;
+		}
+	}
+
+	if (image->needed == NULL)
+		return false;
+	for (uint32 i = 0; i < image->num_needed; i++) {
+		if (image->needed[i] != NULL
+			&& thread_dtors_pending(image->needed[i], depth + 1)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+
+/*!	Like glibc, a library whose thread_local destructors have not run in
+	every thread yet stays loaded: the reference is kept for good.
+*/
+static bool
+keep_for_thread_dtors(image_t* image)
+{
+	if (gRuntimeLoader.thread_dtors_pending_in_range == NULL
+		|| !thread_dtors_pending(image, 0)) {
+		return false;
+	}
+
+	KTRACE("rld: unload_library(\"%s\"): kept, thread_local destructors "
+		"pending", image->name);
+	return true;
+}
+// SPDX-SnippetEnd
+
+
 status_t
 unload_library(void* handle, image_id imageID, bool addOn)
 {
@@ -749,6 +800,12 @@ unload_library(void* handle, image_id imageID, bool addOn)
 
 	if (handle != NULL) {
 		image = (image_t*)handle;
+		// SPDX-SnippetBegin
+		// SPDX-License-Identifier: MIT
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		if (keep_for_thread_dtors(image))
+			return B_OK;
+		// SPDX-SnippetEnd
 		put_image(image);
 	} else {
 		image = find_loaded_image_by_id(imageID, true);
@@ -758,6 +815,12 @@ unload_library(void* handle, image_id imageID, bool addOn)
 		// unload image
 		if (type != image->type)
 			return B_BAD_VALUE;
+		// SPDX-SnippetBegin
+		// SPDX-License-Identifier: MIT
+		// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+		if (keep_for_thread_dtors(image))
+			return B_OK;
+		// SPDX-SnippetEnd
 		put_image(image);
 	}
 
@@ -800,30 +863,6 @@ unload_library(void* handle, image_id imageID, bool addOn)
 
 	return B_OK;
 }
-
-
-// SPDX-SnippetBegin
-// SPDX-License-Identifier: MIT
-// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
-/*!	Keeps the image that contains \a address loaded until the returned handle
-	is given back with unload_library(). libroot uses it for thread_local
-	destructors (__cxa_thread_atexit_impl()): a dlclose() before the thread
-	ends must not unmap the code a destructor still runs. Returns \c NULL
-	when \a address is not inside a loaded image.
-*/
-void*
-pin_image_at_address(void* address)
-{
-	RecursiveLocker _(sLock);
-
-	image_t* image = find_loaded_image_by_address((addr_t)address);
-	if (image == NULL)
-		return NULL;
-
-	atomic_add(&image->ref_count, 1);
-	return image;
-}
-// SPDX-SnippetEnd
 
 
 status_t
