@@ -750,6 +750,32 @@ BTextWidget::Draw(BRect eraseRect, BRect textRect, BPoseView* view, BView* drawV
 		drawView->GetFont(&font);
 
 		rgb_color textColor = drawView->HighColor();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		// Desktop labels as on Windows (owner, 27 Nov 2026): white text
+		// on a soft dark shadow, whatever the wallpaper, instead of dark
+		// text in a light halo.
+		if (view->IsDesktopView()) {
+			textColor = make_color(255, 255, 255);
+			// A soft dark glow, slightly below the text: the string drawn
+			// faintly around its place stands in for a blur (BView has
+			// none). No hard offset copy, no false bold.
+			static const BPoint kGlow[] = {
+				BPoint(-1, 0), BPoint(1, 0), BPoint(0, -1), BPoint(0, 1),
+				BPoint(-1, 1), BPoint(1, 1), BPoint(0, 2), BPoint(-1, -1),
+				BPoint(1, -1), BPoint(-1, 2), BPoint(1, 2)
+			};
+			rgb_color shadow = kBlack;
+			shadow.alpha = 34;
+			drawView->SetHighColor(shadow);
+			for (size_t i = 0; i < sizeof(kGlow) / sizeof(kGlow[0]); i++)
+				drawView->DrawString(fittingText, location + kGlow[i]);
+			shadow.alpha = 70;
+			drawView->SetHighColor(shadow);
+			drawView->DrawString(fittingText, location + BPoint(0, 1));
+		} else
+// SPDX-SnippetEnd
 		if (textColor.IsDark()) {
 			// dark text on light outline
 			rgb_color glowColor = ui_color(B_SHINE_COLOR);

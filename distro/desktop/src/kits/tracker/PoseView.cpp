@@ -9683,6 +9683,15 @@ BPoseView::DrawPose(BPose* pose, int32 index, bool fullDraw)
 
 	if (TrackerSettings().ShowVolumeSpaceBar() && pose->TargetModel()->IsVolume())
 		Invalidate(rect);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// A desktop label with its glow is blended over the wallpaper: drawn
+	// again without the wallpaper under it, the glow added up to a dark
+	// block (stick 27 Nov 2026). Redraw it through the background instead.
+	else if (IsDesktopView() && WidgetTextOutline())
+		Invalidate(rect);
+// SPDX-SnippetEnd
 	else
 		pose->Draw(rect, rect, this, fullDraw);
 }
