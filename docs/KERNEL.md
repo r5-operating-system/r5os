@@ -267,3 +267,20 @@ For QEMU and test runs that need kernel assertions and lock/heap debugging, the 
 It reports whether the kernel is `release` (`KDEBUG_LEVEL == 0`) or `debug`, and whether SMEP, SMAP, NX, PAT, x2APIC, INVPCID, CLFLUSHOPT, PCID, 2 MB pages (`amd64_large_pages`), CPPC, HWP, TSC-deadline vs APIC timer, and a `cpuidle` module (for MWAIT idle) are active, together with the active XSAVE variant (`FXSAVE`, `XSAVE`, or `XSAVEC`) and `XCR0`. `CPUInfo` (`distro/apps/cpuinfo`) reads this request for the "Enabled features" kernel line and falls back to `"Not reported"` when the request or device is absent.
 
 
+
+## One-team areas
+
+`_kern_r5_share_area(area, team, protection)` (`<syscalls.h>`, `distro/kernel/src/system/kernel/vm/vm.cpp`, MIT, 27 Nov 2026) maps an area of the calling team into exactly one other team and returns the id of the new area there. It is additive: no existing call changed. app_server uses it for the shared-memory link (`docs/design/APP-SERVER-RING.md`).
+
+The problem it solves: in Haiku an area that another team may map must be `B_CLONEABLE_AREA`, and then *every* team can clone it. A ring that app_server shares with one program must not be reachable by a second program.
+
+Rules, all checked in the kernel:
+- The caller owns the area. It is a RAM area, not `B_KERNEL_AREA`, not `B_CLONEABLE_AREA`, and nothing else maps it yet: it is the only area on its cache, and the cache has no copy-on-write child.
+- `protection` is `B_READ_AREA`, optionally with `B_WRITE_AREA`, and not more than the caller's own area has. The new area cannot be made executable later (`protection_max`).
+- The target is another existing user team. The caller is uid 0 or has the target's effective uid (the rule of `send_signal()`).
+- Both areas get the kernel-only flag `B_R5_ONE_TEAM_AREA` (`1 << 15` in the protection field, `vm/vm.h`). Userland cannot set or clear it. With the flag, userland cannot clone the area (not even in its own team), cannot resize it (both teams map one cache, so a shrink would cut app_server's mapping too), cannot make it `B_CLONEABLE_AREA` (so `transfer_area()` fails too), `vm_copy_area()` refuses it, and `fork()` leaves it out of the child. The source cannot be shared a second time.
+- If the mapping into the target fails, the source keeps the flag. It is then an area that can never be shared or cloned.
+
+Each side deletes its own area with `delete_area()`; the pages go when both are gone or both teams have ended. `area_info.protection` shows the flag.
+
+Tested by `/bin/r5_link_ring_test` (in both images): the rings of other teams cannot be cloned or shared, the program's own ring cannot be made cloneable, resized, cloned, transferred or shared again, a `fork()` child does not have it, and a fresh area is shared into one team and not a second time. Test record: `CHANGELOG.md`, 27 Nov 2026.

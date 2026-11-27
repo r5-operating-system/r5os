@@ -138,6 +138,7 @@ StdBinCommands
 	setdecor.cpp
 	settype.cpp
 	spybmessage.cpp
+	r5_link_ring_test.cpp
 	urlwrapper.cpp
 	: be [ TargetLibstdc++ ] [ TargetLibsupc++ ] : $(haiku-utils_rsrc) ;
 

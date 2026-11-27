@@ -413,6 +413,19 @@ def install_pstate() -> None:
         "\tr5_usercopy_test\n",
         "image bins amd64 tests",
     )
+    # R5: the shared-memory link to app_server: garbage, clone and fork checks
+    install_file(
+        root / "distro/cpu/r5_link_ring_test.cpp",
+        HAIKU / "src/bin/r5_link_ring_test.cpp",
+        "link ring test",
+    )
+    insert_once(
+        HAIKU / "build/jam/images/definitions/minimum",
+        "\tr5_usercopy_test\n",
+        "\tr5_usercopy_test\n\tr5_link_ring_test\n",
+        "\tr5_link_ring_test\n",
+        "image bins link ring test",
+    )
     insert_once(
         HAIKU / "src/bin/Jamfile",
         "\t\tr5_fpu_test.cpp\n",

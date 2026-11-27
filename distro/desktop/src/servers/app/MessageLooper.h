@@ -88,6 +88,17 @@ private:
 protected:
 	static	int32				_message_thread(void*_looper);
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			// AS_R5_SET_UP_LINK_RING on an application or window link:
+			// answers with a shared-memory ring for clientTeam, or with an
+			// error, and then puts the ring on fLink (LinkRing.h).
+			void				_SetUpLinkRing(BPrivate::LinkReceiver& link,
+									team_id clientTeam);
+	static	bool				LinkRingEnabled();
+// SPDX-SnippetEnd
+
 protected:
 			const char*			fName;
 			thread_id			fThread;

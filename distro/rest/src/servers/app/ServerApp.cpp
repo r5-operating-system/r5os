@@ -621,6 +621,14 @@ void
 ServerApp::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 {
 	switch (code) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		case AS_R5_SET_UP_LINK_RING:
+			_SetUpLinkRing(link, fClientTeam);
+			break;
+// SPDX-SnippetEnd
+
 		case AS_REGISTER_INPUT_SERVER:
 		{
 			EventStream* stream

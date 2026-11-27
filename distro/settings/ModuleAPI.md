@@ -31,6 +31,7 @@ The pages of the image are in `/boot/system/add-ons/Settings`, in the regular an
 | `settings_keyboard` | Keyboard (opens Keymap) | `LegacyKeyboard.cpp`, `LegacyPages.cpp` |
 | `settings_mouse` | Mouse (opens Input) | `LegacyMouse.cpp`, `LegacyPages.cpp` |
 | `settings_notifications` | Notifications | `NotificationsModule.cpp` |
+| `settings_performance` | Performance | `PerformanceModule.cpp` |
 | `settings_power` | Power | `PowerModule.cpp` |
 | `settings_printers` | Printers (opens Printers) | `LegacyPrinters.cpp`, `LegacyPages.cpp` |
 | `settings_sound` | Sound (opens Sounds) | `LegacySound.cpp`, `LegacyPages.cpp` |

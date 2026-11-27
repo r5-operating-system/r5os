@@ -509,6 +509,7 @@ AddFilesToPackage add-ons Settings :
 	settings_keyboard
 	settings_mouse
 	settings_notifications
+	settings_performance
 	settings_power
 	settings_printers
 	settings_sound

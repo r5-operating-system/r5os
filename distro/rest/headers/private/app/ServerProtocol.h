@@ -432,6 +432,14 @@ enum {
 	AS_R5_DESKTOP_INFO,
 // SPDX-SnippetEnd
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// The shared-memory link (LinkRing.h, docs/design/APP-SERVER-RING.md):
+	// asked on an application or window link, answered with the ring.
+	AS_R5_SET_UP_LINK_RING,
+// SPDX-SnippetEnd
+
 	AS_LAST_CODE
 };
 
