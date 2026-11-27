@@ -706,10 +706,22 @@ AccelerantHWInterface::SetMode(const display_mode& mode)
 // SPDX-License-Identifier: MIT
 	bool r5PitchChanged = fBackBuffer.IsSet()
 		&& fFrontBuffer->BytesPerRow() != fBackBuffer->BytesPerRow();
+	// Step 4: with more than one screen the back buffer is the desktop.
+	uint32 r5BackWidth = fFrontBuffer->Width();
+	uint32 r5BackHeight = fFrontBuffer->Height();
+	if (R5CountOutputs() > 0) {
+		r5BackWidth = max_c(r5BackWidth, (uint32)fR5DesktopWidth);
+		r5BackHeight = max_c(r5BackHeight, (uint32)fR5DesktopHeight);
+		r5PitchChanged = false;
+	}
 // SPDX-SnippetEnd
 	if (!fBackBuffer.IsSet()
-		|| fBackBuffer->Width() != fFrontBuffer->Width()
-		|| fBackBuffer->Height() != fFrontBuffer->Height()
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+		|| fBackBuffer->Width() != r5BackWidth
+		|| fBackBuffer->Height() != r5BackHeight
+// SPDX-SnippetEnd
 		|| r5PitchChanged
 		|| (fFrontBuffer->ColorSpace() == B_RGB32 && fBackBuffer.IsSet())) {
 		// NOTE: backbuffer is always B_RGBA32, this simplifies the
@@ -721,14 +733,17 @@ AccelerantHWInterface::SetMode(const display_mode& mode)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
-		RenderingBuffer* gpuBack = GPUCopy::BackBuffer(fFrontBuffer->Width(),
-			fFrontBuffer->Height(), fFrontBuffer->BytesPerRow());
+		// The GPU back buffer has the front buffer's size; a desktop of more
+		// than one screen gets memory.
+		RenderingBuffer* gpuBack = R5CountOutputs() > 0 ? NULL
+			: GPUCopy::BackBuffer(fFrontBuffer->Width(),
+				fFrontBuffer->Height(), fFrontBuffer->BytesPerRow());
 		if (gpuBack != NULL)
 			fBackBuffer.SetTo(gpuBack);
 		else
+			fBackBuffer.SetTo(new(nothrow) MallocBuffer(r5BackWidth,
+				r5BackHeight));
 // SPDX-SnippetEnd
-		fBackBuffer.SetTo(new(nothrow) MallocBuffer(
-			fFrontBuffer->Width(), fFrontBuffer->Height()));
 
 		status = fBackBuffer.IsSet()
 			? fBackBuffer->InitCheck() : B_NO_MEMORY;
@@ -1357,7 +1372,14 @@ AccelerantHWInterface::SetCursor(ServerCursor* cursor)
 
 	bool cursorSet = false;
 
-	if (fAccSetCursorBitmap != NULL) {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// Step 4: a hardware cursor lives on one head; with more than one
+	// screen the cursor is drawn in software on every screen.
+	bool r5HardwareAllowed = R5CountOutputs() == 0;
+// SPDX-SnippetEnd
+	if (r5HardwareAllowed && fAccSetCursorBitmap != NULL) {
 		// Bitmap cursor
 		// TODO are x and y switched for this, too?
 		uint16 xHotSpot = (uint16)cursor->GetHotSpot().x;
@@ -1372,7 +1394,8 @@ AccelerantHWInterface::SetCursor(ServerCursor* cursor)
 			cursor->Bits()) == B_OK;
 	}
 
-	if (!cursorSet && cursor->CursorData() != NULL && fAccSetCursorShape != NULL) {
+	if (r5HardwareAllowed && !cursorSet && cursor->CursorData() != NULL
+		&& fAccSetCursorShape != NULL) {
 		// BeOS BCursor, 16x16 monochrome
 		uint8 size = cursor->CursorData()[0];
 		// CursorData()[1] is color depth (always monochrome)
@@ -1522,6 +1545,12 @@ AccelerantHWInterface::_CopyBackToFront(/*const*/ BRegion& region)
 // SPDX-License-Identifier: MIT
 	// M11 step 3b, decision 4: the compositor's Vulkan copy put this frame
 	// on the front already; HWInterface::Invalidate draws the cursor.
+	// Step 4: more than one screen; HWInterface splits the copy per screen.
+	if (R5CountOutputs() > 0) {
+		_DrainCompose();
+		HWInterface::_CopyBackToFront(region);
+		return;
+	}
 	if (GPUCopy::FrontCurrent())
 		return;
 	_DrainCompose();
@@ -1554,6 +1583,71 @@ AccelerantHWInterface::_CopyBackToFront(/*const*/ BRegion& region)
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
+status_t
+AccelerantHWInterface::R5SetOutputs(const r5_output* outputs, int32 count,
+	int32 desktopWidth, int32 desktopHeight)
+{
+	// The same order as SetMode: the compositor's slot, then this interface.
+	BLocker* guard = __atomic_load_n(&fModeGuard, __ATOMIC_ACQUIRE);
+	if (guard != NULL)
+		guard->Lock();
+	status_t status;
+	{
+		AutoWriteLocker _(this);
+		if (count == 0 && R5CountOutputs() == 0) {
+			if (guard != NULL)
+				guard->Unlock();
+			return B_OK;
+		}
+		status = HWInterface::R5SetOutputs(outputs, count, desktopWidth,
+			desktopHeight);
+		if (status == B_OK && fHardwareCursorEnabled && count > 0) {
+			if (fAccShowCursor != NULL)
+				fAccShowCursor(false);
+			fHardwareCursorEnabled = false;
+		}
+		uint32 width = fFrontBuffer.IsSet() ? fFrontBuffer->Width() : 0;
+		uint32 height = fFrontBuffer.IsSet() ? fFrontBuffer->Height() : 0;
+		if (count > 0) {
+			width = max_c(width, (uint32)desktopWidth);
+			height = max_c(height, (uint32)desktopHeight);
+		}
+		if (status == B_OK && fFrontBuffer.IsSet() && (!fBackBuffer.IsSet()
+				|| fBackBuffer->Width() != width
+				|| fBackBuffer->Height() != height)) {
+			_DrainCompose();
+			fBackBuffer.Unset();
+			RenderingBuffer* gpuBack = count > 0 ? NULL
+				: GPUCopy::BackBuffer(width, height,
+					fFrontBuffer->BytesPerRow());
+			if (gpuBack != NULL)
+				fBackBuffer.SetTo(gpuBack);
+			else
+				fBackBuffer.SetTo(new(nothrow) MallocBuffer(width, height));
+			if (!fBackBuffer.IsSet() || fBackBuffer->InitCheck() != B_OK) {
+				// Without a buffer for the desktop, go back to one screen.
+				fBackBuffer.Unset();
+				HWInterface::R5SetOutputs(NULL, 0, 0, 0);
+				fBackBuffer.SetTo(new(nothrow) MallocBuffer(
+					fFrontBuffer->Width(), fFrontBuffer->Height()));
+				status = B_NO_MEMORY;
+			}
+			if (fBackBuffer.IsSet() && fBackBuffer->InitCheck() == B_OK)
+				memset(fBackBuffer->Bits(), 255, fBackBuffer->BitsLength());
+		}
+		syslog(LOG_INFO, "app_server: multi_screen: %" B_PRId32 " more"
+			" screen(s), desktop %" B_PRId32 "x%" B_PRId32 ", back buffer %"
+			B_PRIu32 "x%" B_PRIu32 ": %s\n", count, desktopWidth, desktopHeight,
+			fBackBuffer.IsSet() ? fBackBuffer->Width() : 0,
+			fBackBuffer.IsSet() ? fBackBuffer->Height() : 0, strerror(status));
+		_NotifyFrameBufferChanged();
+	}
+	if (guard != NULL)
+		guard->Unlock();
+	return status;
+}
+
+
 bool
 AccelerantHWInterface::SoftwareCursorFrame(clipping_rect* frame)
 {

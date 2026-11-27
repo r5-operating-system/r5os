@@ -2,8 +2,8 @@
  * SPDX-FileCopyrightText: 2026 R5OS Contributors
  * SPDX-License-Identifier: MIT
  * Screen list and mode helpers for the Display page.
- * One screen today: the main screen. A later screen is another item
- * from display_screens_get(), not a change to the page.
+ * Every screen app_server has (BScreen::SetToNext()); the first is the
+ * main screen. More than one with multi_screen true (DISPLAY-DCN step 4).
  */
 
 
@@ -113,15 +113,21 @@ display_screens_get(BObjectList<DisplayScreen, true>& screens)
 	if (!screen.IsValid())
 		return B_ERROR;
 
-	DisplayScreen* item = new DisplayScreen();
-	item->id = B_MAIN_SCREEN_ID.id;
-	item->frame = screen.Frame();
-	item->main = true;
-	memset(&item->monitor, 0, sizeof(item->monitor));
-	item->hasMonitorInfo = screen.GetMonitorInfo(&item->monitor) == B_OK
-		&& item->monitor.name[0] != '\0';
-	item->name = screen_name(*item);
-	screens.AddItem(item);
+	// Every screen in app_server's order; the first is the main screen. The
+	// limit only stops a list that would not end.
+	for (int32 count = 0; count < 8; count++) {
+		DisplayScreen* item = new DisplayScreen();
+		item->id = count == 0 ? B_MAIN_SCREEN_ID.id : screen.ID().id;
+		item->frame = screen.Frame();
+		item->main = count == 0;
+		memset(&item->monitor, 0, sizeof(item->monitor));
+		item->hasMonitorInfo = screen.GetMonitorInfo(&item->monitor) == B_OK
+			&& item->monitor.name[0] != '\0';
+		item->name = screen_name(*item);
+		screens.AddItem(item);
+		if (screen.SetToNext() != B_OK)
+			break;
+	}
 	return B_OK;
 }
 
@@ -129,12 +135,12 @@ display_screens_get(BObjectList<DisplayScreen, true>& screens)
 status_t
 display_screen_modes(int32 screenId, display_mode** modes, uint32* count)
 {
-	(void)screenId;
 	if (modes == NULL || count == NULL)
 		return B_BAD_VALUE;
 	*modes = NULL;
 	*count = 0;
-	BScreen screen(B_MAIN_SCREEN_ID);
+	screen_id id = { screenId };
+	BScreen screen(id);
 	display_mode* list = NULL;
 	uint32 found = 0;
 	status_t status = screen.GetModeList(&list, &found);

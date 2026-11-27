@@ -72,6 +72,7 @@ StaticLibrary libaslocal.a :
 	CompositorAnimations.cpp
 	CompositorShare.cpp
 	GPUCopy.cpp
+	R5OutputHWInterface.cpp
 	WindowBuffer.cpp
 	WindowHWInterface.cpp
 	SkiaGpu.cpp

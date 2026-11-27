@@ -1106,6 +1106,17 @@ bool
 Compositor::_ScanoutPrepare(RenderingBuffer* back)
 {
 	CompositorVulkan* vk = fVulkan;
+	// Step 4 (docs/DISPLAY-DCN.md): with more than one screen the back
+	// buffer is the whole desktop in memory and HWInterface copies it to
+	// every screen; the direct scanout covers one screen only.
+	if (fScreen != NULL && fScreen->R5CountOutputs() > 0) {
+		if (vk != NULL && vk->scanActive) {
+			_ScanoutFree(vk);
+			log_line("scanout through vulkan off: more than one screen");
+			return true;
+		}
+		return false;
+	}
 	if (!fWantScanout || fOnLavapipe || vk == NULL || !vk->canImport
 		|| back == NULL)
 		return false;

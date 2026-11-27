@@ -135,8 +135,11 @@ fi
 # continues it. Before each step the dcn lines of the boot that ran are saved
 # in ~/hdmi/boot<n>.txt. Boot 1 has every switch at its default: the step 1
 # probe and the step 2a pipe log run, nothing is shown on HDMI. Boot 2 adds
-# dcn_hdmi_modeset true: colour squares on HDMI, the panel unchanged. After
-# boot 2 the file is removed. The note is ~/hdmi/next.
+# dcn_hdmi_modeset true: colour squares on HDMI, the panel unchanged. Boot 3
+# is display step 4: multi_screen true with a test screen in memory right of
+# the panel (multi_screen_test_output 1280x720); the desktop spans both. Its
+# picture, /tmp/r5-screen-1.ppm, is copied to ~/hdmi/screen-1.ppm. After
+# boot 3 the file is removed. The note is ~/hdmi/next.
 if [ "$1" = hdmi ] || { [ -z "$1" ] && [ -f "$file" ] \
 		&& grep -q '^dcn_hdmi_boot' "$file"; }; then
 	hd=$home/hdmi
@@ -145,11 +148,12 @@ if [ "$1" = hdmi ] || { [ -z "$1" ] && [ -f "$file" ] \
 		cur=0
 		next=1
 	else
-		cur=$(sed -n 's/^dcn_hdmi_boot[[:space:]]*\([12]\).*/\1/p' \
+		cur=$(sed -n 's/^dcn_hdmi_boot[[:space:]]*\([123]\).*/\1/p' \
 			"$file" | head -n 1)
 		case $cur in
 		1) next=2 ;;
-		2) next=done ;;
+		2) next=3 ;;
+		3) next=done ;;
 		*)
 			echo "FAIL hdmi: unknown boot '$cur' in $file"
 			exit 1
@@ -161,11 +165,25 @@ if [ "$1" = hdmi ] || { [ -z "$1" ] && [ -f "$file" ] \
 			> "$hd/boot$cur.txt" 2>/dev/null
 		echo "boot-next: saved $(wc -l < "$hd/boot$cur.txt") lines in" \
 			"$hd/boot$cur.txt"
+		if [ "$cur" = 3 ]; then
+			grep -E 'multi_screen|screen output' \
+				"${R5_SYSLOG:-/var/log/syslog}" >> "$hd/boot3.txt" 2>/dev/null
+			cp "${R5_SCREEN_DUMP:-/tmp/r5-screen-1.ppm}" \
+				"$hd/screen-1.ppm" 2>/dev/null \
+				&& echo "boot-next: saved $hd/screen-1.ppm"
+		fi
 	fi
 	rm -f "$file"
 	case $next in
 	1) printf 'dcn_hdmi_boot 1\n' > "$file" ;;
 	2) printf 'dcn_hdmi_modeset true\ndcn_hdmi_boot 2\n' > "$file" ;;
+	3)
+		{
+			echo 'multi_screen true'
+			echo 'multi_screen_test_output 1280x720'
+			echo 'dcn_hdmi_boot 3'
+		} > "$file"
+		;;
 	esac
 	# Read the file back: a typo here is a lost boot.
 	case $next in
@@ -182,6 +200,14 @@ if [ "$1" = hdmi ] || { [ -z "$1" ] && [ -f "$file" ] \
 			exit 1
 		fi
 		;;
+	3)
+		if ! grep -q '^multi_screen true$' "$file" \
+			|| ! grep -q '^multi_screen_test_output 1280x720$' "$file" \
+			|| grep -q dcn_hdmi_modeset "$file"; then
+			echo "FAIL hdmi: $file is not boot 3"
+			exit 1
+		fi
+		;;
 	done)
 		if [ -f "$file" ]; then
 			echo "FAIL hdmi: $file is still there"
@@ -193,6 +219,7 @@ if [ "$1" = hdmi ] || { [ -z "$1" ] && [ -f "$file" ] \
 	case $next in
 	1) echo "boot-next: next boot is hdmi boot 1 (hotplug, EDID, pipe log)" ;;
 	2) echo "boot-next: next boot is hdmi boot 2 (dcn_hdmi_modeset true)" ;;
+	3) echo "boot-next: next boot is hdmi boot 3 (multi_screen, test screen)" ;;
 	done) echo "boot-next: hdmi stick done, settings file removed" ;;
 	esac
 	echo "boot-next: settings file $file"

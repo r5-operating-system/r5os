@@ -94,6 +94,11 @@ public:
 	// with a hardware cursor or no cursor. The compositor leaves it out of
 	// its Vulkan copy to the front, as CopyBackToFront does.
 			bool				SoftwareCursorFrame(clipping_rect* frame);
+	// Step 4 (docs/DISPLAY-DCN.md): the back buffer covers the whole
+	// desktop when there is more than one screen.
+	virtual	status_t			R5SetOutputs(const r5_output* outputs,
+									int32 count, int32 desktopWidth,
+									int32 desktopHeight);
 	// M11 review: the compositor's compose slot. SetMode takes it
 	// first, so a frame never uses a back buffer the new mode freed.
 	// Order: fWindowLock (write) -> the slot -> this interface.

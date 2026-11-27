@@ -2,7 +2,7 @@
 
 <!-- SPDX-License-Identifier: MIT -->
 
-Status 27 Nov 2026: steps 1, 2a (read only) and 2 (opt-in test pattern on HDMI) are written. Steps 3 and 4 are a plan. Nothing in this document is tested on the 5625U yet.
+Status 27 Nov 2026: steps 1, 2a (read only), 2 (opt-in test pattern on HDMI) and 4 (opt-in, app_server with more than one screen) are written. Step 3 is a plan. Nothing in this document is tested on the 5625U yet.
 
 This is the display track that `GPU-ARCHITECTURE.md` keeps apart ("Display stays a separate track") and `GRAPHICS.md` calls the second problem: modes, more than one monitor, vsync, and putting a frame on a screen. The GFX9 ring, RADV and the compositor are the other problem and stay as they are. None of the GFX9 contracts in `GRAPHICS.md` change for this track.
 
@@ -139,18 +139,50 @@ Why it is not written yet: it changes resources the panel shares (HUBBUB arbitra
 
 Risks: an underflow from wrong watermarks also hits the panel; raising DISPCLK can blank the panel for a frame; a bad surface address shows garbage (VMID 0 physical addressing, not a hang). Test: one boot, 10 minutes of desktop use on the panel with a moving picture on HDMI, one unplug and replug; the underflow bits stay 0.
 
-### Step 4: app_server, compositor and the Display page (not written yet)
+### Step 4: app_server with more than one screen (written, opt-in)
 
-Goal: an extended desktop.
+Goal: an extended desktop. Switch: `multi_screen true` in `~/config/settings/kernel/drivers/radeon_hd` (off by default; with it off, or with one screen, nothing changes). `multi_screen_test_output <w>x<h>` adds a **test screen in memory** to the right of the main screen, so step 4 can be tested without a second monitor or step 3.
 
-- Haiku's app_server already has a `VirtualScreen` that holds several `Screen` objects with frames, and `BScreen` already has screen ids. R5 uses that: one `Screen` per head, each with its own `HWInterface` on the same accelerant. The accelerant gets one R5 hook that selects a head; the existing hooks (`SET_DISPLAY_MODE`, `GET_EDID_INFO`, `GET_PREFERRED_DISPLAY_MODE`) then answer for that head. A Haiku program that knows only one screen keeps working: the main screen is the panel.
-- The compositor composes per screen into that screen's scanout buffer (`R5_GPU_SCANOUT_BO` per head). Windows keep screen coordinates; a window across the seam is composed into both.
-- The Display page fills `BScreenArrangement` from the real screens (name from the EDID, frame from `VirtualScreen`). The arrangement is saved per monitor (EDID vendor, product and serial).
-- The CPU mode (Painter) and Lavapipe keep working with two screens; a second screen without a working modeset is not shown.
+#### How it works
 
-Test: one boot, drag a window from the panel to the HDMI screen, move the Deskbar, change the arrangement on the Display page.
+Haiku has the pieces for more than one screen and leaves TODOs where the second screen would go. Step 4 fills those, in Haiku's own classes:
 
-Why it is not written yet: it needs a second screen that shows a buffer (step 3). Before that, app_server would get a screen it cannot draw on, and QEMU has no second DCN head to test it with.
+| Haiku class | Haiku today | Step 4 (R5) |
+|---|---|---|
+| `ScreenManager::_ScanDrivers()` | one `AccelerantHWInterface` ("Eventually we will loop ... to support multiple monitors") | with `multi_screen true`, every further output is a `Screen` too: `R5OutputHWInterface` (`distro/app_server/R5OutputHWInterface.cpp`), a `HWInterface` with its own id, mode, mode list and monitor info |
+| `VirtualScreen::AddScreen()` | "this works only for single screen configurations": the last screen's engine and interface | the first screen is the main screen and owns the drawing engine; each further screen sits right of the one before, top aligned |
+| `VirtualScreen::UpdateFrame()` | "compute virtual size depending on the actual screen position!" | the desktop is the union of the screens at their places; the main interface gets the others (`HWInterface::R5SetOutputs()`) |
+| `VirtualScreen::ScreenByID()` | for `B_MAIN_SCREEN_ID` the *last* screen | the exact id; `B_MAIN_SCREEN_ID` is the first |
+| `Desktop::_DetermineScreenFor()` | "choose the screen depending on where most of the area is" | that, so `BScreen(window)` is the screen the window is on |
+| `Desktop::GetScreenFrame()` | `Screen::Frame()` (always at 0, 0) | the screen's place on the desktop |
+| `Desktop::_ScreenChanged()` | the drawable region and the input bounds are that one screen | with more than one screen, all of them |
+| `ServerApp` `AS_VALID_SCREEN_ID`, `AS_GET_NEXT_SCREEN_ID`, `AS_GET_MONITOR_INFO` | only the main id; "for now, just say we're the last one"; the id is not used | every screen; the next one; that screen's monitor |
+| input_server `fFrame` | the main screen | the desktop for relative pointers; a device with absolute coordinates (touch screen, tablet) maps onto the main screen |
+| Display page (`DisplayScreens.cpp`) | the main screen | every screen through `BScreen::SetToNext()`; the screen picture shows them at their places with the monitor's name |
+
+**One drawing buffer for the whole desktop.** app_server draws (Painter, Skia, the compositor) into the main interface's back buffer, which with more than one screen covers the whole desktop. Every write to a front buffer goes through one place, `HWInterface::_CopyToFront()`, in desktop coordinates: the copy after drawing, the software cursor, and the cursor-area restore. With outputs, it splits each rectangle between the main front buffer at (0, 0) and every output's front buffer at its place. With no outputs it is Haiku's transfer, unchanged. The compositor needs no change for this: it sizes its frame from the back buffer and composes the whole desktop.
+
+#### Compared with Haiku and with Linux
+
+- **Haiku** intends one `Screen` per output in one `VirtualScreen` (`ScreenManager`, `BScreen` ids, `screen_configuration` with a frame per screen). Step 4 uses exactly those; nothing new is added to the public API. Where Haiku has a TODO, the table above says what R5 does.
+- **Linux** (DRM/KMS) gives each CRTC a framebuffer and an offset: the compositor (X, Wayland) draws one large desktop and each head scans out its part. R5 draws one large desktop too, but each screen gets a **copy** of its part, because the main screen today is the firmware framebuffer, which cannot scan out a part of another buffer. When step 3 gives a head a buffer of its own, that head can scan out its part directly instead of being copied (a later change in `R5OutputHWInterface`).
+
+#### Deliberate differences and limits
+
+- Screens sit side by side, top aligned, in `ScreenManager` order. Moving them on the Display page is not wired to app_server yet; the tiles do not move.
+- The mode menus on the Display page set the main screen. The test screen has one mode.
+- With more than one screen the compositor's direct GPU scanout and the GPU back-to-front copy are off (they cover one screen); the damaged rectangles are copied by the CPU. The hardware cursor is off (it lives on one head); the cursor is drawn in software on every screen.
+- The R5 wallpaper and the Tracker desktop window cover the main screen; other screens show the desktop colour. The Deskbar stays on the main screen (`BScreen(B_MAIN_SCREEN_ID)`).
+- With screens of different heights, the area below the shorter screen is not part of the desktop region, but the relative pointer can still enter the bounding rectangle there.
+- A real second head is step 3: then `ScreenManager` adds an `R5OutputHWInterface` whose front buffer is that head's scanout buffer.
+
+#### Test without the laptop
+
+`multi_screen_test_output 1280x720` makes a 1280x720 screen in memory. Every 20 s for the first minute, then every minute, it writes `/tmp/r5-screen-<id>.ppm`. In QEMU the main screen is QEMU's own display (screendump); the test screen's file is read out of the image afterwards with `bfs_shell`. QEMU's virtio-gpu with two outputs was not chosen: Haiku's `virtio_gpu` driver drives one scanout, and teaching it a second would test a QEMU driver rather than app_server.
+
+Result, QEMU/KVM 27 Nov 2026 (1280x800 main screen, 1280x720 test screen): `app_server: multi_screen: 1 more screen(s), desktop 2560x800, back buffer 2560x800: No error`; the main screen unchanged; the test screen's picture showed the desktop colour and the pointer cut at the seam, half on each screen. Not covered: a window on the second screen, the Display page with two screens, RADV.
+
+On the 5625U: boot 3 of `boot-next hdmi` runs the same test on RADV with the real compositor.
 
 ## Code layout (owner's decision, 27 Nov 2026)
 
