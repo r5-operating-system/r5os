@@ -122,6 +122,28 @@ def main():
         "rm myfs/home/stabtest",
         "cp :%s/stabtest myfs/home/stabtest" % stage,
         "mkdir myfs/home/stabtests"]
+    if os.environ.get("STAB_DISK2"):
+        # mounting needs root: a system launch job mounts the second disk
+        with open(os.path.join(stage, "disk2"), "w", newline="\n") as handle:
+            handle.write(
+                "#!/bin/sh\n"
+                "say() { echo \"stab: $*\" > /dev/dprintf 2> /dev/null; }\n"
+                "mkdir -p /tmp/disk2\n"
+                "out=$(mount -t bfs /dev/disk/ata/0/slave/raw /tmp/disk2 2>&1)\n"
+                "say \"disk2 mount exit=$? $out\"\n"
+                "say \"disk2 ls: $(ls /tmp/disk2 2>&1 | head -3 | tr '\\n' ' ')\"\n"
+                "unmount /tmp/disk2 > /dev/null 2>&1\n")
+        with open(os.path.join(stage, "disk2-job"), "w", newline="\n") as handle:
+            handle.write("job x-vnd.R5OS-stab-disk2 {\n"
+                         "\tlaunch /bin/sh /boot/home/stabdisk2\n"
+                         "\ton initial_volumes_mounted\n"
+                         "}\n")
+        commands += [
+            "mkdir myfs/system/settings/launch",
+            "rm myfs/system/settings/launch/stab-disk2",
+            "cp :%s/disk2-job myfs/system/settings/launch/stab-disk2" % stage,
+            "rm myfs/home/stabdisk2",
+            "cp :%s/disk2 myfs/home/stabdisk2" % stage]
     for name in ("tls_dtor_test", "libtlsdtor.so", "window_stress"):
         commands += ["rm myfs/home/stabtests/%s" % name,
                      "cp :%s/%s myfs/home/stabtests/%s" % (tests, name, name),
@@ -134,11 +156,18 @@ def main():
         return 1
     print("planted, stress", seconds, "s")
 
+    # STAB_DISK2: a second IDE disk (a copy), e.g. a corrupt BFS image that
+    # stability-guest.sh mounts (GitHub #1719)
+    drives = ["-drive", "file=%s,format=raw,if=ide,index=0,media=disk" % image]
+    if os.environ.get("STAB_DISK2"):
+        disk2 = os.path.join(out, "disk2.img")
+        shutil.copyfile(os.environ["STAB_DISK2"], disk2)
+        drives += ["-drive",
+                   "file=%s,format=raw,if=ide,index=1,media=disk" % disk2]
     qemu = subprocess.Popen([
         "qemu-system-x86_64", "-name", "R5-stab",
         "-machine", "pc,accel=kvm", "-cpu", "host", "-m", "4096",
-        "-smp", "4", "-display", "none",
-        "-drive", "file=%s,format=raw,if=ide,index=0,media=disk" % image,
+        "-smp", "4", "-display", "none"] + drives + [
         "-vga", "std", "-usb", "-device", "usb-tablet",
         "-object", "rng-random,id=rng0,filename=/dev/urandom",
         "-device", "virtio-rng-pci,rng=rng0",
