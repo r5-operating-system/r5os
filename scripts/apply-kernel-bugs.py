@@ -208,6 +208,8 @@ def install_kernel_sources() -> None:
         "src/add-ons/kernel/network/protocols/bluetooth/l2cap/l2cap_signal.cpp",
         "src/add-ons/kernel/network/protocols/bluetooth/l2cap/l2cap_signal.h",
         "src/add-ons/kernel/file_systems/bfs/Volume.cpp",
+        # R5: a corrupt B+tree node size is rejected (GitHub #1719)
+        "src/add-ons/kernel/file_systems/bfs/BPlusTree.cpp",
         "src/add-ons/kernel/drivers/disk/usb/usb_disk/usb_disk.cpp",
         "src/add-ons/kernel/file_systems/bfs/kernel_interface.cpp",
         "src/add-ons/kernel/drivers/input/i2c_hid/Driver.cpp",
