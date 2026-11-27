@@ -1790,6 +1790,14 @@ block_cache::Allocate()
 void
 block_cache::FreeBlock(cached_block* block)
 {
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	if (block->on_dirty_list) {
+		dirty_blocks.Remove(block);
+		block->on_dirty_list = false;
+	}
+// SPDX-SnippetEnd
 	Free(block->current_data);
 
 	if (block->original_data != NULL || block->parent_data != NULL) {

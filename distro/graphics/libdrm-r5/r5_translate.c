@@ -273,14 +273,25 @@ r5_version(void *arg)
 static r5_gpu_info sStaticInfo;
 static r5_gpu_amd_info sStaticAmd;
 static int sStaticInfoValid = 0;
+static pthread_mutex_t sStaticInfoLock = PTHREAD_MUTEX_INITIALIZER;
 
 static int
 r5_info_static(int fd, r5_gpu_info *info, r5_gpu_amd_info *amd)
 {
-	if (!sStaticInfoValid) {
-		if (r5_info(fd, &sStaticInfo, &sStaticAmd) != 0)
+	if (!__atomic_load_n(&sStaticInfoValid, __ATOMIC_ACQUIRE)) {
+		r5_gpu_info tmpInfo;
+		r5_gpu_amd_info tmpAmd;
+		memset(&tmpInfo, 0, sizeof(tmpInfo));
+		memset(&tmpAmd, 0, sizeof(tmpAmd));
+		if (r5_info(fd, &tmpInfo, &tmpAmd) != 0)
 			return -1;
-		sStaticInfoValid = 1;
+		pthread_mutex_lock(&sStaticInfoLock);
+		if (!sStaticInfoValid) {
+			sStaticInfo = tmpInfo;
+			sStaticAmd = tmpAmd;
+			__atomic_store_n(&sStaticInfoValid, 1, __ATOMIC_RELEASE);
+		}
+		pthread_mutex_unlock(&sStaticInfoLock);
 	}
 	*info = sStaticInfo;
 	*amd = sStaticAmd;
@@ -294,14 +305,14 @@ r5_amdgpu_info(int fd, struct drm_amdgpu_info *query)
 	r5_gpu_info info;
 	r5_gpu_amd_info amd;
 	void *out;
-	int dynamic = (query->query == AMDGPU_INFO_VRAM_USAGE
-		|| query->query == AMDGPU_INFO_VIS_VRAM_USAGE
-		|| query->query == AMDGPU_INFO_GTT_USAGE
-		|| query->query == AMDGPU_INFO_ACCEL_WORKING);
+	int isStatic = (query->query == AMDGPU_INFO_DEV_INFO
+		|| query->query == AMDGPU_INFO_FW_VERSION
+		|| query->query == AMDGPU_INFO_HW_IP_COUNT
+		|| query->query == AMDGPU_INFO_HW_IP_INFO);
 	memset(&info, 0, sizeof(info));
 	memset(&amd, 0, sizeof(amd));
-	if (dynamic ? r5_info(fd, &info, &amd) != 0
-			: r5_info_static(fd, &info, &amd) != 0)
+	if (isStatic ? r5_info_static(fd, &info, &amd) != 0
+			: r5_info(fd, &info, &amd) != 0)
 		return -1;
 	if (query->query == AMDGPU_INFO_SENSOR || query->query == AMDGPU_INFO_VIDEO_CAPS)
 		R5_DETAIL("query %#x type %#x",

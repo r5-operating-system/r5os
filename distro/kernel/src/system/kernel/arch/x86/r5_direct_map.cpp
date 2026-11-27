@@ -494,6 +494,8 @@ r5_direct_install_locked(X86VMTranslationMap64Bit* kernelMap, phys_addr_t phys,
 				| X86_64_PDE_PRESENT | X86_64_PDE_WRITABLE | X86_64_PDE_USER);
 		*changed = true;
 		owned = r5_owned_add(tablePhys);
+		if (owned != NULL && (oldPDE & X86_64_PDE_MEMORY_TYPE_MASK) != 0)
+			owned->active = k64BitTableEntryCount;
 	} else {
 		phys_addr_t tablePhys = *pde & X86_64_PDE_ADDRESS_MASK;
 		table = (uint64*)((addr_t)KERNEL_PMAP_BASE + (addr_t)tablePhys);

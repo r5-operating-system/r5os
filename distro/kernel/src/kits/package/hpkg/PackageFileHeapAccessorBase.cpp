@@ -77,22 +77,28 @@ decomp_cache_store(const PackageFileHeapAccessorBase* owner, size_t chunkIndex,
 {
 	MutexLocker locker(sDecompCacheLock);
 	size_t victim = 0;
+	size_t firstEmpty = kDecompCacheSlots;
 	uint64 oldest = UINT64_MAX;
+	bool foundExisting = false;
 	for (size_t i = 0; i < kDecompCacheSlots; i++) {
 		if (sDecompCache[i].owner == owner
 			&& sDecompCache[i].chunkIndex == chunkIndex) {
 			victim = i;
+			foundExisting = true;
 			break;
 		}
 		if (sDecompCache[i].owner == NULL) {
-			victim = i;
-			break;
+			if (firstEmpty == kDecompCacheSlots)
+				firstEmpty = i;
+			continue;
 		}
 		if (sDecompCache[i].stamp < oldest) {
 			oldest = sDecompCache[i].stamp;
 			victim = i;
 		}
 	}
+	if (!foundExisting && firstEmpty < kDecompCacheSlots)
+		victim = firstEmpty;
 	if (sDecompCache[victim].data == NULL) {
 		sDecompCache[victim].data
 			= (uint8*)malloc(PackageFileHeapAccessorBase::kChunkSize);
