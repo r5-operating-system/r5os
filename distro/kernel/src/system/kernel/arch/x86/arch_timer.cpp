@@ -132,6 +132,15 @@ arch_init_timer(kernel_args *args)
 
 uint32 gSystemTimeConversionFactor;
 int64 gCPUClockSpeed;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// arch_cpu.cpp (the TSC warp check at boot) and libroot's system_time.cpp.
+extern uint64 gX86TscBase;
+extern int64 gX86TscWarp;
+extern bool gX86TscKept;
+extern "C" void __x86_setup_system_time_base(uint64_t base);
+// SPDX-SnippetEnd
 
 
 // PIT definitions
@@ -745,6 +754,14 @@ x86_init_tsc(kernel_args* args)
 		panic("failed to calibrate TSC");
 
 	dprintf("R5 kernel: arch_timer TSC guards active\n");
+	// arch_cpu_preboot_init_percpu() measured the TSCs: kept as the firmware
+	// left them (system_time() counts from gX86TscBase), or reset to 0.
+	dprintf("R5 kernel: tsc warp %lld cycles at boot, %s\n",
+		(long long)gX86TscWarp,
+		gX86TscKept ? "kept the firmware TSCs" : "reset the TSCs to 0");
+#ifdef __x86_64__
+	__x86_setup_system_time_base(gX86TscBase);
+#endif
 	// SPDX-SnippetEnd
 
 	gSystemTimeConversionFactor = conversionFactor;

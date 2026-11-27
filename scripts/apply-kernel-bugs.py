@@ -46,6 +46,14 @@ def install_kernel_sources() -> None:
         "src/system/libroot/os/thread.c",
         "src/system/libroot/posix/pthread/pthread.cpp",
         "src/system/libroot/posix/time/timer_support.cpp",
+        # R5: clock_gettime in nanoseconds from the TSC (x86_64)
+        "src/system/libroot/posix/time/clock_support.cpp",
+        # R5: TSCs kept when already in sync at boot; system_time() counts
+        # from the TSC base in the commpage (arch_cpu.cpp, x86_init_tsc)
+        "src/system/libroot/os/arch/x86_64/system_time.cpp",
+        "src/system/libroot/os/arch/x86_64/time.cpp",
+        "headers/private/system/arch/x86_64/arch_real_time_data.h",
+        "src/system/kernel/arch/x86/arch_real_time_clock.cpp",
         "src/add-ons/kernel/bus_managers/pci/pci.cpp",
         # R5: the AC state is read at start and on every read (stick 74)
         "src/add-ons/kernel/drivers/power/acpi_ac/acpi_ac.cpp",

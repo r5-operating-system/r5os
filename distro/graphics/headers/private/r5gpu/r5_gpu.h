@@ -68,7 +68,11 @@ enum {
 	R5_GPU_BO_PRESENT_MARK = R5_GPU_OP_BASE + 32,
 	/* Batched syncobj reset/signal/query in one ioctl. Older callers
 	 * never send this opcode. */
-	R5_GPU_SYNCOBJ_BATCH = R5_GPU_OP_BASE + 33
+	R5_GPU_SYNCOBJ_BATCH = R5_GPU_OP_BASE + 33,
+	/* The fence page of this file: read-only, so a wait that is already
+	 * decided needs no call (r5_gpu_fence_page below). Older callers
+	 * never send this opcode; an older kernel returns B_UNSUPPORTED. */
+	R5_GPU_FENCE_PAGE = R5_GPU_OP_BASE + 34
 };
 
 #define R5_GPU_CAP_RENDER 1u
@@ -612,6 +616,175 @@ typedef struct {
 	uint64_t	handles;
 	uint64_t	points;
 } r5_gpu_syncobj_batch;
+
+
+/* R5_GPU_FENCE_PAGE (+ 34): the fence page (docs/GPU-ARCHITECTURE.md,
+ * "Fence page").
+ *
+ * One area per team, mapped read-only in that team (B_KERNEL_AREA: the
+ * program can neither write, unprotect nor delete it). It holds a block
+ * of R5_GPU_FENCE_BLOCK_BYTES for each open file of that team and nothing
+ * else: no other team's file, no kernel address, no global ring number.
+ * A fork child shares the parent's whole area through its copy of the
+ * mapping, also the blocks of files the parent opens after the fork; the
+ * child already holds a copy of the parent's memory, so that is no other
+ * team's data. FENCE_PAGE from the child is B_NOT_ALLOWED for a file the
+ * parent mapped.
+ * The kernel writes a block under the GPU lock, each time it releases
+ * that lock after the file's syncobjs or jobs changed, so the block is
+ * the state every call of that moment would see. A reader takes seq
+ * before and after; an odd or changed seq means "read again".
+ *
+ * The block is only a shortcut. A reader asks the kernel when GONE or
+ * CLOSED is set, when generation is not the one R5_GPU_FENCE_PAGE gave,
+ * when a handle is not LIVE, or when the answer depends on a job that is
+ * still in the ring (r5_gpu_fence_wait_one says UNKNOWN). A closed file's
+ * block is not unmapped while the team lives; its next owner has a new
+ * generation. The area goes when the team ends. */
+#define R5_GPU_FENCE_MAGIC 0x45434e46u	/* "FNCE" */
+#define R5_GPU_FENCE_VERSION 1u
+#define R5_GPU_FENCE_BLOCK_BYTES 4096u
+#define R5_GPU_FENCE_SLOTS 128u		/* the kernel's syncobjs per file */
+
+/* Block flags. GONE: the device or this file's context is lost, a reset
+ * runs or the GPU is off; every answer comes from the kernel. CLOSED: the
+ * file was closed; this block has no owner. */
+#define R5_GPU_FENCE_GONE 1u
+#define R5_GPU_FENCE_CLOSED 2u
+
+/* Slot flags. LIVE: the handle exists. PENDING: a job that the kernel
+ * has not retired yet lists this syncobj. */
+#define R5_GPU_FENCE_SLOT_LIVE 1u
+#define R5_GPU_FENCE_SLOT_PENDING 2u
+
+typedef struct {
+	uint64_t	point;		/* the syncobj's point: rises at retire */
+	uint64_t	submitted;	/* the highest point submitted */
+	uint32_t	flags;		/* R5_GPU_FENCE_SLOT_* */
+	uint32_t	_pad;
+} r5_gpu_fence_slot;
+
+typedef struct {
+	uint32_t	magic;		/* R5_GPU_FENCE_MAGIC */
+	uint32_t	version;	/* R5_GPU_FENCE_VERSION */
+	uint32_t	seq;		/* odd while the kernel writes */
+	uint32_t	flags;		/* R5_GPU_FENCE_GONE, R5_GPU_FENCE_CLOSED */
+	uint32_t	generation;	/* new for each file that gets the block */
+	uint32_t	slot_count;	/* R5_GPU_FENCE_SLOTS; handle n is slot n - 1 */
+	/* The highest sequence of this file's own jobs that the kernel has
+	 * retired. Every job up to it is done: the ring retires in order. */
+	uint64_t	retired;
+	uint8_t		_reserved[32];
+	r5_gpu_fence_slot	slot[R5_GPU_FENCE_SLOTS];
+} r5_gpu_fence_page;
+
+typedef struct {
+	uint32_t	size;
+	uint32_t	version;
+	int32_t		area;		/* out: the team's area, read-only */
+	uint32_t	offset;		/* out: this file's block in that area */
+	uint32_t	generation;	/* out: the block's generation now */
+	uint32_t	_pad;
+} r5_gpu_fence_page_map;
+
+/* The answer for one syncobj from a block, the same rule as the kernel's
+ * SYNCOBJ_WAIT_LIST (gpu_list_ready, gpu_list_submitted). UNKNOWN means
+ * "ask the kernel": an error case, or a binary syncobj that a job still
+ * in the ring lists (the kernel looks at the ring's fence for that). */
+#define R5_GPU_FENCE_UNKNOWN (-1)
+#define R5_GPU_FENCE_NOT_READY 0
+#define R5_GPU_FENCE_READY 1
+
+/* The kernel refuses the list before it looks at any result: a handle
+ * that does not exist, or (without FOR_SUBMIT) a point never submitted.
+ * Those are EINVAL, so the block leaves them to the kernel. */
+static inline int
+r5_gpu_fence_wait_checked(const r5_gpu_fence_slot* slot, uint64_t target,
+	uint32_t waitFlags)
+{
+	int submitted;
+	if ((slot->flags & R5_GPU_FENCE_SLOT_LIVE) == 0)
+		return 0;
+	if ((waitFlags & R5_GPU_WAIT_FOR_SUBMIT) != 0)
+		return 1;
+	if ((waitFlags & R5_GPU_WAIT_BINARY) != 0)
+		submitted = slot->submitted > 0;
+	else
+		submitted = slot->submitted >= target;
+	return submitted;
+}
+
+/* One handle that passed the check above. */
+static inline int
+r5_gpu_fence_wait_one(const r5_gpu_fence_slot* slot, uint64_t target,
+	uint32_t waitFlags)
+{
+	int binary = (waitFlags & R5_GPU_WAIT_BINARY) != 0;
+	if ((waitFlags & R5_GPU_WAIT_AVAILABLE) != 0) {
+		/* The submitted point, never blocked by a job. */
+		if (binary)
+			return slot->submitted > 0 ? R5_GPU_FENCE_READY
+				: R5_GPU_FENCE_NOT_READY;
+		return slot->submitted >= target ? R5_GPU_FENCE_READY
+			: R5_GPU_FENCE_NOT_READY;
+	}
+	if (binary) {
+		if (slot->submitted == 0 || slot->point < slot->submitted)
+			return R5_GPU_FENCE_NOT_READY;
+		/* point caught up, but a job that is still in the ring lists
+		 * this syncobj: the kernel decides with the ring's fence. */
+		if ((slot->flags & R5_GPU_FENCE_SLOT_PENDING) != 0)
+			return R5_GPU_FENCE_UNKNOWN;
+		return R5_GPU_FENCE_READY;
+	}
+	/* A timeline point at or past the target is never blocked. */
+	return slot->point >= target ? R5_GPU_FENCE_READY
+		: R5_GPU_FENCE_NOT_READY;
+}
+
+/* The whole list, the same order as the kernel. READY sets *first: 0 for
+ * ALL, the first ready index otherwise. NOT_READY means the kernel would
+ * wait, or time out at timeout 0. UNKNOWN: ask the kernel. */
+static inline int
+r5_gpu_fence_wait_list(const r5_gpu_fence_slot* slots, const uint64_t* points,
+	uint32_t count, uint32_t waitFlags, uint32_t* first)
+{
+	uint32_t i;
+	int unknown = 0;
+	if (count == 0 || count > R5_GPU_FENCE_SLOTS)
+		return R5_GPU_FENCE_UNKNOWN;
+	for (i = 0; i < count; i++) {
+		if (!r5_gpu_fence_wait_checked(&slots[i], points != 0 ? points[i] : 0,
+				waitFlags))
+			return R5_GPU_FENCE_UNKNOWN;
+	}
+	for (i = 0; i < count; i++) {
+		int one = r5_gpu_fence_wait_one(&slots[i],
+			points != 0 ? points[i] : 0, waitFlags);
+		if ((waitFlags & R5_GPU_WAIT_ALL) == 0) {
+			/* The first ready handle ends the kernel's scan. An earlier
+			 * undecided one may be the first. */
+			if (one == R5_GPU_FENCE_UNKNOWN)
+				return R5_GPU_FENCE_UNKNOWN;
+			if (one == R5_GPU_FENCE_READY) {
+				*first = i;
+				return R5_GPU_FENCE_READY;
+			}
+		} else {
+			/* One handle that is not ready is enough to wait. */
+			if (one == R5_GPU_FENCE_NOT_READY)
+				return R5_GPU_FENCE_NOT_READY;
+			if (one == R5_GPU_FENCE_UNKNOWN)
+				unknown = 1;
+		}
+	}
+	if ((waitFlags & R5_GPU_WAIT_ALL) == 0)
+		return R5_GPU_FENCE_NOT_READY;
+	if (unknown)
+		return R5_GPU_FENCE_UNKNOWN;
+	*first = 0;
+	return R5_GPU_FENCE_READY;
+}
 
 
 static inline int

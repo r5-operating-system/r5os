@@ -122,6 +122,11 @@ r5_trace_on(void)
 static int
 r5_ioctl_done(int ret)
 {
+	/* A syncobj wait that timed out is an answer, not a failure: RADV
+	 * polls with timeout 0. Printed only with gpu_trace, like a success,
+	 * so a poll costs no write to stderr. */
+	if (ret < 0 && errno == ETIME && !r5_trace_on())
+		return ret;
 	if (ret < 0) {
 		fprintf(stderr, "r5 libdrm: %s linux %#lx nr %#x%s%s errno %d\n",
 			sIoctlName != NULL ? sIoctlName : "ioctl", sIoctlRequest,
@@ -188,6 +193,8 @@ r5_area_address(int area)
 void *r5_area_address(int area);
 int r5_area_destroy(int area);
 #endif
+
+static int r5_fence_sequence_done(int fd, uint64_t sequence);
 
 static void
 r5_unknown(unsigned nr, const char *name)
@@ -1167,6 +1174,8 @@ r5_cs(int fd, union drm_amdgpu_cs *cs)
 				return r5_fail(EINVAL);
 			for (uint32_t n = 0; n < count; n++) {
 				r5_gpu_fence fence;
+				if (r5_fence_sequence_done(fd, list[n].handle))
+					continue;
 				memset(&fence, 0, sizeof(fence));
 				fence.size = (uint32_t)sizeof(fence);
 				fence.version = 1;
@@ -1219,6 +1228,223 @@ r5_timeout_us(int64_t timeout_nsec)
 	if (left < 0)
 		left = 0;
 	return (uint64_t)(left / 1000);
+}
+
+
+/* R5_GPU_FENCE_PAGE (docs/GPU-ARCHITECTURE.md, "Fence page"). A wait that
+ * the file's fence block already decides, a query, and a WAIT_CS whose
+ * sequence this file's retired jobs passed are answered here, without an
+ * ioctl and without the kernel's GPU lock. Everything else, and every
+ * doubt, goes to the kernel as before.
+ *
+ * One binding per fd number below R5_FENCE_FDS. A binding is never freed:
+ * a thread may still read it while another replaces it. It is replaced
+ * only when the kernel hands out another block, so their number is
+ * bounded by the files the program opens. The block's memory stays
+ * mapped while the team lives (the kernel never unmaps it), so a stale
+ * binding reads CLOSED or a new generation and asks the kernel again. An
+ * fd number can be reused for another file of this team: DRM_IOCTL_VERSION,
+ * the first call of every libdrm device, makes the next use ask the kernel
+ * which block the fd has now. Nothing else re-asks, so a syncobj create or
+ * a new context costs no extra ioctl. */
+#define R5_FENCE_FDS 256
+#define R5_FENCE_TRIES 4
+
+typedef struct {
+	const volatile r5_gpu_fence_page *page;	/* NULL: no fence page */
+	uint32_t generation;
+	int32_t area;
+	uint32_t offset;
+} r5_fence_bind;
+
+static const r5_fence_bind sFenceNone = { NULL, 0, -1, 0 };
+static const r5_fence_bind *sFenceBind[R5_FENCE_FDS];
+static int sFenceCheck[R5_FENCE_FDS];
+/* The kernel has no R5_GPU_FENCE_PAGE: never ask again. */
+static int sFenceUnsupported;
+
+#if defined(R5_HOST_TEST)
+/* The host test counts the answers that needed no ioctl. */
+unsigned long r5_host_fence_fast;
+#define R5_FENCE_FAST() (r5_host_fence_fast++)
+#else
+#define R5_FENCE_FAST() ((void)0)
+#endif
+
+
+static void
+r5_fence_recheck(int fd)
+{
+	if (fd >= 0 && fd < R5_FENCE_FDS)
+		__atomic_store_n(&sFenceCheck[fd], 1, __ATOMIC_RELEASE);
+}
+
+
+static const r5_fence_bind *
+r5_fence_bind_fd(int fd, const r5_fence_bind *old)
+{
+	r5_gpu_fence_page_map map;
+	const volatile r5_gpu_fence_page *page;
+	r5_fence_bind *bind;
+	int saved = errno;
+	uint8_t *base;
+
+	/* Cleared first: a recheck that comes in while this runs stays. */
+	__atomic_store_n(&sFenceCheck[fd], 0, __ATOMIC_RELEASE);
+	memset(&map, 0, sizeof(map));
+	map.size = (uint32_t)sizeof(map);
+	map.version = 1;
+	if (r5_call(fd, R5_GPU_FENCE_PAGE, &map, sizeof(map)) != 0) {
+		if (errno == ENOSYS
+#if defined(__HAIKU__)
+			|| errno == B_UNSUPPORTED
+#endif
+			)
+			__atomic_store_n(&sFenceUnsupported, 1, __ATOMIC_RELAXED);
+		errno = saved;
+		__atomic_store_n(&sFenceBind[fd], &sFenceNone, __ATOMIC_RELEASE);
+		return NULL;
+	}
+	errno = saved;
+	if (old != NULL && old->page != NULL && old->area == map.area
+		&& old->offset == map.offset && old->generation == map.generation) {
+		__atomic_store_n(&sFenceBind[fd], old, __ATOMIC_RELEASE);
+		return old;
+	}
+	base = (uint8_t *)r5_area_address(map.area);
+	if (base == NULL || map.offset > 1024u * 1024u
+		|| (map.offset % R5_GPU_FENCE_BLOCK_BYTES) != 0) {
+		__atomic_store_n(&sFenceBind[fd], &sFenceNone, __ATOMIC_RELEASE);
+		return NULL;
+	}
+	page = (const volatile r5_gpu_fence_page *)(base + map.offset);
+	if (page->magic != R5_GPU_FENCE_MAGIC
+		|| page->version != R5_GPU_FENCE_VERSION
+		|| page->slot_count != R5_GPU_FENCE_SLOTS) {
+		__atomic_store_n(&sFenceBind[fd], &sFenceNone, __ATOMIC_RELEASE);
+		return NULL;
+	}
+	bind = malloc(sizeof(*bind));
+	if (bind == NULL)
+		return NULL;
+	bind->page = page;
+	bind->generation = map.generation;
+	bind->area = map.area;
+	bind->offset = map.offset;
+	__atomic_store_n(&sFenceBind[fd], bind, __ATOMIC_RELEASE);
+	return bind;
+}
+
+
+static const r5_fence_bind *
+r5_fence_bound(int fd)
+{
+	const r5_fence_bind *bind;
+	if (fd < 0 || fd >= R5_FENCE_FDS
+		|| __atomic_load_n(&sFenceUnsupported, __ATOMIC_RELAXED))
+		return NULL;
+	bind = __atomic_load_n(&sFenceBind[fd], __ATOMIC_ACQUIRE);
+	if (bind != NULL && !__atomic_load_n(&sFenceCheck[fd], __ATOMIC_ACQUIRE))
+		return bind->page != NULL ? bind : NULL;
+	return r5_fence_bind_fd(fd, bind);
+}
+
+
+/* A consistent copy of the slots of these handles, and of retired. 0: ask
+ * the kernel (GONE, CLOSED, another generation, a handle out of range,
+ * or the kernel kept writing). */
+static int
+r5_fence_snapshot(int fd, const uint32_t *handles, uint32_t count,
+	r5_gpu_fence_slot *slots, uint64_t *retired)
+{
+	const r5_fence_bind *bind = r5_fence_bound(fd);
+	const volatile r5_gpu_fence_page *page;
+	int tries;
+	if (bind == NULL)
+		return 0;
+	page = bind->page;
+	for (tries = 0; tries < R5_FENCE_TRIES; tries++) {
+		uint32_t before = __atomic_load_n(&page->seq, __ATOMIC_ACQUIRE);
+		uint32_t flags;
+		uint32_t generation;
+		uint32_t i;
+		if ((before & 1u) != 0)
+			continue;
+		flags = page->flags;
+		generation = page->generation;
+		if (generation != bind->generation
+			|| (flags & R5_GPU_FENCE_CLOSED) != 0) {
+			/* Another file has this block now, or none does. */
+			r5_fence_recheck(fd);
+			return 0;
+		}
+		if ((flags & R5_GPU_FENCE_GONE) != 0)
+			return 0;
+		for (i = 0; i < count; i++) {
+			uint32_t handle = handles[i];
+			if (handle == 0 || handle > R5_GPU_FENCE_SLOTS)
+				return 0;
+			slots[i].point = page->slot[handle - 1].point;
+			slots[i].submitted = page->slot[handle - 1].submitted;
+			slots[i].flags = page->slot[handle - 1].flags;
+			slots[i]._pad = 0;
+		}
+		if (retired != NULL)
+			*retired = page->retired;
+		__atomic_thread_fence(__ATOMIC_ACQUIRE);
+		if (__atomic_load_n(&page->seq, __ATOMIC_RELAXED) == before)
+			return 1;
+	}
+	return 0;
+}
+
+
+/* 1: decided here (*result is 0, or -1 with errno ETIME). 0: ask the
+ * kernel. Only a timeout of 0 turns NOT_READY into ETIME; a wait that
+ * would block always goes to the kernel. */
+static int
+r5_fence_try_wait(int fd, const uint32_t *handles, const uint64_t *points,
+	uint32_t count, uint32_t waitFlags, uint64_t timeout_us, uint32_t *first,
+	int *result)
+{
+	r5_gpu_fence_slot slots[R5_GPU_FENCE_SLOTS];
+	uint32_t index = 0;
+	int answer;
+	if (count == 0 || count > R5_GPU_FENCE_SLOTS)
+		return 0;
+	if (!r5_fence_snapshot(fd, handles, count, slots, NULL))
+		return 0;
+	answer = r5_gpu_fence_wait_list(slots, points, count, waitFlags, &index);
+	if (answer == R5_GPU_FENCE_READY) {
+		if (first != NULL)
+			*first = index;
+		*result = 0;
+		R5_FENCE_FAST();
+		return 1;
+	}
+	if (answer == R5_GPU_FENCE_NOT_READY && timeout_us == 0) {
+		errno = ETIME;
+		*result = -1;
+		R5_FENCE_FAST();
+		return 1;
+	}
+	return 0;
+}
+
+
+/* A WAIT_CS or a dependency on sequence: done when this file's own retired
+ * jobs passed it. The ring retires in order, so that sequence is done for
+ * every file. Not done yet: the kernel looks at the ring's fence. */
+static int
+r5_fence_sequence_done(int fd, uint64_t sequence)
+{
+	uint64_t retired = 0;
+	if (!r5_fence_snapshot(fd, NULL, 0, NULL, &retired))
+		return 0;
+	if (retired < sequence)
+		return 0;
+	R5_FENCE_FAST();
+	return 1;
 }
 
 
@@ -1285,6 +1511,12 @@ r5_sync_wait(int fd, uint32_t *handles, uint64_t *points, uint32_t count,
 		wait.flags |= R5_GPU_WAIT_FOR_SUBMIT;
 	if (binary)
 		wait.flags |= R5_GPU_WAIT_BINARY;
+	{
+		int result;
+		if (r5_fence_try_wait(fd, handles, points, count, wait.flags,
+				wait.timeout_us, first, &result))
+			return result;
+	}
 	if (r5_call(fd, R5_GPU_SYNCOBJ_WAIT_LIST, &wait, sizeof(wait)) != 0) {
 		if (errno == ETIMEDOUT
 #if defined(__HAIKU__)
@@ -1318,6 +1550,10 @@ r5_wait_cs(int fd, union drm_amdgpu_wait_cs *wait)
 	fence.size = (uint32_t)sizeof(fence);
 	fence.version = 1;
 	fence.sequence = wait->in.handle;
+	if (r5_fence_sequence_done(fd, fence.sequence)) {
+		wait->out.status = 0;
+		return 0;
+	}
 	fence.timeout_us = r5_timeout_us((int64_t)wait->in.timeout);
 	if (r5_call(fd, R5_GPU_FENCE_WAIT, &fence, sizeof(fence)) != 0) {
 		if (errno == ETIMEDOUT
@@ -1546,8 +1782,12 @@ r5_drm_ioctl_body(int fd, unsigned long request, void *arg, size_t size)
 	(void)size;
 	if (arg == NULL)
 		return r5_fail(EINVAL);
-	if (nr == R5_IOC_NR(DRM_IOCTL_VERSION))
+	if (nr == R5_IOC_NR(DRM_IOCTL_VERSION)) {
+		/* A new device on this fd number starts here: ask for its
+		 * fence block at the next wait. */
+		r5_fence_recheck(fd);
 		return r5_version(arg);
+	}
 	if (nr == R5_IOC_NR(DRM_IOCTL_GET_CAP))
 		return r5_get_cap(arg);
 	if (nr == R5_IOC_NR(DRM_IOCTL_GET_CLIENT)) {
@@ -1657,6 +1897,23 @@ r5_drm_ioctl_body(int fd, unsigned long request, void *arg, size_t size)
 		uint32_t i;
 		if (handles == NULL || points == NULL)
 			return r5_fail(EINVAL);
+		if (list->count_handles > 0 && list->count_handles <= R5_GPU_FENCE_SLOTS) {
+			r5_gpu_fence_slot slots[R5_GPU_FENCE_SLOTS];
+			if (r5_fence_snapshot(fd, handles, list->count_handles, slots, NULL)) {
+				int all = 1;
+				for (i = 0; i < list->count_handles; i++) {
+					if ((slots[i].flags & R5_GPU_FENCE_SLOT_LIVE) == 0)
+						all = 0;
+				}
+				if (all) {
+					/* The kernel's QUERY returns the point, as here. */
+					for (i = 0; i < list->count_handles; i++)
+						points[i] = slots[i].point;
+					R5_FENCE_FAST();
+					return 0;
+				}
+			}
+		}
 		if (list->count_handles > 1) {
 			r5_gpu_syncobj_batch batch;
 			memset(&batch, 0, sizeof(batch));

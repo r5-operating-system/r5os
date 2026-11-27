@@ -6,7 +6,7 @@ Vulkan device there.
 
 | Package | What it is |
 |---|---|
-| libdrm 2.4.124 | `libdrm.so.2` and `libdrm_amdgpu.so.1`. AMDGPU ioctls become R5 GPU calls, version `2.4.124-5` (gates successful ioctl logging behind `gpu_trace`). A buffer that asks for VRAM and no longer fits is made in system memory (GTT), as Linux does, within the GTT limit of a quarter of system memory per program |
+| libdrm 2.4.124 | `libdrm.so.2` and `libdrm_amdgpu.so.1`. AMDGPU ioctls become R5 GPU calls, version `2.4.124-7` (`-5` gated successful ioctl logging behind `gpu_trace`; `-6` is the first package with the phase 2 library changes of 26 Nov, `SYNCOBJ_BATCH` and the cached static info, and adds the fence page; `-7` asks for the fence block again only after `DRM_IOCTL_VERSION`). A decided syncobj wait, a query and a finished `WAIT_CS` are answered from the file's fence page without an ioctl (`R5_GPU_FENCE_PAGE`, `docs/GPU-ARCHITECTURE.md`, "Fence page"); with an older kernel every answer comes from the ioctl as before. A syncobj wait that timed out is printed only with `gpu_trace`. A buffer that asks for VRAM and no longer fits is made in system memory (GTT), as Linux does, within the GTT limit of a quarter of system memory per program |
 | mesa_zink 25.3.6 | EGL vendor. Zink when the GPU's availability bit is set, llvmpipe otherwise; `gpu_opengl false` in the radeon_hd settings turns Zink off (`docs/GPU-OPENGL.md`). `GALLIUM_DRIVER=zink` selects Zink. Provides `mesa` |
 | mesa_lavapipe 25.3.6 | Vulkan software driver |
 | mesa_radv 25.3.6 | `libvulkan_radeon.so` and `add-ons/vulkan/icd.d/radeon_icd.json`, version `25.3.6-14` (rebuilt with `-march=x86-64-v2`, WSI single-lock async Flush/MAILBOX/IMMEDIATE/32-slot fixes, and locked per-handle CPU-map table; carries current stick scripts). RADV presents to a window when the availability bit is set (`gpu_present false` turns it off). Also carries the stick scripts (`check`, `boot-next`, `check-user`) |
@@ -57,6 +57,15 @@ transfer or a wait on a sync that a live job still lists waits for that
 job. `SYNCOBJ_DESTROY` detaches the sync from any live job and succeeds.
 The job does not signal a sync that has been destroyed. `DRM_IOCTL_SYNCOBJ_HANDLE_TO_FD`, `FD_TO_HANDLE` and
 `PRIME` return ENOSYS. `SYNCOBJ_TRANSFER` is `R5_GPU_SYNCOBJ_TRANSFER`.
+The fence page (`R5_GPU_FENCE_PAGE`, `+ 34`) is additive. The kernel
+writes the file's block at every release of the GPU lock that followed a
+change; the library answers from it only what the kernel would answer at
+that moment, and asks the kernel for every other case: a wait that would
+block, an error, a binary syncobj that a live job still lists, a `WAIT_CS`
+above the file's retired sequence, and every answer while the block says
+`GONE` (a lost device or context, a reset, the GPU off). A closed file's
+block says `CLOSED` and gets a new generation; the area stays mapped while
+the team lives. Four files per team get a block; a fifth uses the ioctls.
 Any other untranslated ioctl returns ENOSYS and is
 named once on stderr. `GEM_MMAP` is one of those: CPU mapping uses `BO_MAP`.
 

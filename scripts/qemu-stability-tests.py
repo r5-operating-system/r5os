@@ -10,6 +10,12 @@ and a UserBootscript that runs scripts/stability-guest.sh after Sign in.
 Prints the guest's "stab:" lines and saves the screenshots it asks for.
 
 Usage: qemu-stability-tests.py IMAGE OUT TESTS [stress-seconds]
+
+Optional, for another round of tests with the same harness:
+  STAB_GUEST  the guest script instead of scripts/stability-guest.sh
+  STAB_FILES  the programs to plant from TESTS, space-separated
+  STAB_ROOT   a script run as root by a launch job once the volumes are
+              mounted (for calls that need root)
 """
 
 import json
@@ -96,8 +102,10 @@ def main():
 
     stage = os.path.join(out, "stage")
     os.makedirs(stage, exist_ok=True)
-    with open(os.path.join(ROOT, "scripts/stability-guest.sh"),
-              newline="") as handle:
+    guest_path = os.environ.get("STAB_GUEST", "scripts/stability-guest.sh")
+    files = os.environ.get(
+        "STAB_FILES", "tls_dtor_test libtlsdtor.so window_stress").split()
+    with open(os.path.join(ROOT, guest_path), newline="") as handle:
         guest = handle.read().replace("\r\n", "\n")
     with open(os.path.join(stage, "stabtest"), "w", newline="\n") as handle:
         handle.write(guest)
@@ -144,12 +152,29 @@ def main():
             "cp :%s/disk2-job myfs/system/settings/launch/stab-disk2" % stage,
             "rm myfs/home/stabdisk2",
             "cp :%s/disk2 myfs/home/stabdisk2" % stage]
-    for name in ("tls_dtor_test", "libtlsdtor.so", "window_stress"):
+    if os.environ.get("STAB_ROOT"):
+        with open(os.path.join(ROOT, os.environ["STAB_ROOT"]),
+                  newline="") as handle:
+            root_script = handle.read().replace("\r\n", "\n")
+        with open(os.path.join(stage, "stabroot"), "w", newline="\n") as handle:
+            handle.write(root_script)
+        with open(os.path.join(stage, "root-job"), "w", newline="\n") as handle:
+            handle.write("job x-vnd.R5OS-stab-root {\n"
+                         "\tlaunch /bin/sh /boot/home/stabroot\n"
+                         "\ton initial_volumes_mounted\n"
+                         "}\n")
+        commands += [
+            "mkdir myfs/system/settings/launch",
+            "rm myfs/system/settings/launch/stab-root",
+            "cp :%s/root-job myfs/system/settings/launch/stab-root" % stage,
+            "rm myfs/home/stabroot",
+            "cp :%s/stabroot myfs/home/stabroot" % stage]
+    for name in files:
         commands += ["rm myfs/home/stabtests/%s" % name,
                      "cp :%s/%s myfs/home/stabtests/%s" % (tests, name, name),
                      "chmod 755 myfs/home/stabtests/%s" % name]
     text = bfs(image, commands)
-    if "Unmounting FS failed" in text or "window_stress" not in bfs(
+    if "Unmounting FS failed" in text or files[-1] not in bfs(
             image, ["ls myfs/home/stabtests"]):
         print(text)
         print("FAIL bfs_shell did not plant the tests")
