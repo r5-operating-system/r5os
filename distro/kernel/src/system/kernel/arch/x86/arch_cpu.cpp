@@ -139,6 +139,60 @@ static uint32 sCpuRendezvous;
 static uint32 sCpuRendezvous2;
 static uint32 sCpuRendezvous3;
 static vint32 sTSCSyncRendezvous;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+/* R5: the TSC value system_time() counts from (system_time.cpp, the
+ * commpage's system_time_tsc_base). 0 when the TSCs were reset at boot. */
+uint64 gX86TscBase = 0;
+/* The largest step back between two CPUs' TSCs seen at boot, in cycles, and
+ * whether the firmware's TSCs were kept. x86_init_tsc() logs both. */
+int64 gX86TscWarp = 0;
+bool gX86TscKept = false;
+static int32 sTSCWarpLock;
+static int32 sTSCWarpDone;
+static volatile uint64 sTSCWarpLast;
+static volatile int64 sTSCWarpMax;
+/* Per CPU. Linux's check_tsc_warp takes about 2 ms per CPU pair; this is
+ * every CPU at once, a few ms in all. */
+static const int32 kTSCWarpLoops = 2000;
+
+
+static inline uint64
+x86_tsc_ordered()
+{
+	uint32 low;
+	uint32 high;
+	asm volatile("lfence; rdtsc" : "=a"(low), "=d"(high) : : "memory");
+	return ((uint64)high << 32) | low;
+}
+
+
+/*!	All CPUs at once, from arch_cpu_preboot_init_percpu(): each takes a
+	lock, reads its TSC and compares it with the last one read under that
+	lock, by any CPU. A TSC behind another shows as a step back
+	(sTSCWarpMax). Returns when every CPU is done, so all of them see the
+	same result. The kernel does not use the TSC before this.
+*/
+static void
+x86_tsc_warp_check()
+{
+	for (int32 i = 0; i < kTSCWarpLoops; i++) {
+		while (atomic_test_and_set(&sTSCWarpLock, 1, 0) != 0)
+			asm volatile("pause" : : : "memory");
+		uint64 previous = sTSCWarpLast;
+		uint64 now = x86_tsc_ordered();
+		if (previous > now && (int64)(previous - now) > sTSCWarpMax)
+			sTSCWarpMax = (int64)(previous - now);
+		sTSCWarpLast = now;
+		atomic_set(&sTSCWarpLock, 0);
+	}
+	atomic_add(&sTSCWarpDone, 1);
+	while (atomic_get(&sTSCWarpDone) != smp_get_num_cpus())
+		asm volatile("pause" : : : "memory");
+	gX86TscWarp = sTSCWarpMax;
+}
+// SPDX-SnippetEnd
 
 /* Some specials for the double fault handler */
 static addr_t sDoubleFaultStacks = 0;
@@ -1716,9 +1770,31 @@ arch_cpu_preboot_init_percpu(kernel_args* args, int cpu)
 			kDoubleFaultStackSize * smp_get_num_cpus(), 0, 0, 0);
 	}
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// R5: first measure whether the TSCs the firmware left are already in
+	// sync (x86_tsc_warp_check). They are on current machines, and on a
+	// hypervisor that keeps its virtual TSCs together: then they stay as
+	// they are and system_time() counts from gX86TscBase. Writing 0 on every
+	// CPU, the code below, lets each CPU's TSC start when its own write
+	// lands, a few hundred ns apart (measured in QEMU/KVM: 145-864 ns), and
+	// then a thread that moves to another CPU can see time go back. That
+	// write stays for TSCs that are not in sync.
+	bool keepTSC = true;
+	if (smp_get_num_cpus() > 1) {
+		x86_tsc_warp_check();
+		keepTSC = sTSCWarpMax == 0;
+	}
+	if (keepTSC) {
+		if (cpu == 0) {
+			gX86TscBase = x86_tsc_ordered();
+			gX86TscKept = true;
+		}
+	} else if (smp_get_num_cpus() > 1) {
+// SPDX-SnippetEnd
 	// On SMP system we want to synchronize the CPUs' TSCs, so system_time()
 	// will return consistent values.
-	if (smp_get_num_cpus() > 1) {
 		// let the first CPU prepare the rendezvous point
 		if (cpu == 0)
 			sTSCSyncRendezvous = smp_get_num_cpus() - 1;

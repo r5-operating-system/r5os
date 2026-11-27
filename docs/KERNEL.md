@@ -267,3 +267,32 @@ For QEMU and test runs that need kernel assertions and lock/heap debugging, the 
 It reports whether the kernel is `release` (`KDEBUG_LEVEL == 0`) or `debug`, and whether SMEP, SMAP, NX, PAT, x2APIC, INVPCID, CLFLUSHOPT, PCID, 2 MB pages (`amd64_large_pages`), CPPC, HWP, TSC-deadline vs APIC timer, and a `cpuidle` module (for MWAIT idle) are active, together with the active XSAVE variant (`FXSAVE`, `XSAVE`, or `XSAVEC`) and `XCR0`. `CPUInfo` (`distro/apps/cpuinfo`) reads this request for the "Enabled features" kernel line and falls back to `"Not reported"` when the request or device is absent.
 
 
+
+## Time in user space
+
+Checked 27 Nov 2026 (performance phase 3, item 1). On x86_64 the clocks in libroot already need no system call, as in Haiku:
+
+- `system_time()` and `system_time_nsecs()` (`src/system/libroot/os/arch/x86_64/system_time.cpp`) read the TSC with `RDTSCP`, or `LFENCE; RDTSC` without RDTSCP, times the conversion factor. The kernel computes that factor once at boot (`x86_init_tsc`: CPUID leaf 0x15, the AMD/Intel MSRs, the hypervisor leaf, else the PIT) and publishes it in the commpage (`COMMPAGE_ENTRY_REAL_TIME_DATA`, `arch_rtc_init`); libroot reads it once at start (`__arch_init_time`). The factor never changes after boot, so no lock is needed for it.
+- `real_time_clock()`, `real_time_clock_usecs()`, `gettimeofday()`, `time()` and `clock_gettime(CLOCK_REALTIME)` add `system_time_offset` from the commpage. That is one aligned 64-bit word. `set_real_time_clock()`, the time zone (`_user_set_timezone`) and the GMT switch replace it with `atomic_set64`, so a reader sees the old or the new value, never half of each; a seqlock would protect nothing more. There is no NTP slewing (`adjtime`) and no suspend to RAM in R5, so nothing else moves the clocks.
+- The kernel's own `system_time()` is the same TSC with the same factor, so a system-call fallback for a machine without an invariant, synchronised TSC would read that same TSC: there is none, and the order across CPUs is fixed at its source instead (next paragraph).
+- ARM64 reads `CNTVCT_EL0` and RISC-V `rdtime` in user space as well (`os/arch/arm64/system_time.c`, `os/arch/riscv64/system_time.cpp`); neither makes a system call. Not tested on those architectures in this round.
+
+What R5 changes (x86_64 only):
+
+- **TSC order across CPUs** (`distro/kernel/src/system/kernel/arch/x86/arch_cpu.cpp`). Haiku wrote 0 into every CPU's TSC after a rendezvous at boot. Each CPU's TSC then starts when its own write lands, and in QEMU/KVM that left one CPU 145 to 864 ns behind the others: a thread that moved to it could read an earlier time than another thread had read before (`time_test load`: 361 to 759 million of about 1 billion reads stepped back; `time_test skew` showed the same pattern for the kernel's own clock through the system call). Now every CPU first runs a warp check, the method of Linux's `check_tsc_warp`: under a lock each CPU reads its TSC and compares it with the last read of any CPU, 2000 times per CPU. When no step back is seen, the TSCs the firmware (or the hypervisor) left stay as they are, and `system_time()` counts from the TSC that CPU 0 read at that moment (`gX86TscBase`, published as `system_time_tsc_base` in the commpage; `system_time.cpp` subtracts it in the kernel and in libroot), so it still starts at kernel start. When a step back is seen, the old reset to 0 runs, base 0. One CPU: base only, no write (before, a single CPU counted from power-on). The kernel log says which: `R5 kernel: tsc warp <n> cycles at boot, kept the firmware TSCs` or `... reset the TSCs to 0`. A TSC that drifts later (one that stops in deep C-states, without invariant TSC) is not fixed by either; R5 has no other clock source.
+- **Nanoseconds** (`distro/kernel/src/system/libroot/posix/time/clock_support.cpp`): `clock_gettime(CLOCK_MONOTONIC)` and `clock_gettime(CLOCK_REALTIME)` return nanoseconds from `system_time_nsecs()` instead of microseconds from `system_time()`, and `clock_getres()` reports 1 ns for those two clocks. Truncated to microseconds the value is exactly the `system_time()` of the same TSC reading (both are `floor(tsc × factor / 2^32)`, in different units), so the kernel's timeouts and the older clock agree. The CPU-time clocks still use `_kern_get_clock`.
+
+Test: `distro/tests/libroot/time_test.cpp` (`bench`, `load <seconds>`, `rtc`), built by `scripts/build-stability-tests.sh` and run in QEMU by `scripts/qemu-stability-tests.py` with `STAB_GUEST=scripts/perf3-guest.sh` and `STAB_ROOT=scripts/perf3-root.sh` (the real-time step needs root).
+
+Results, 27 Nov 2026, QEMU/KVM, `-cpu host -smp 4`, private image copy (run 3, with every change above):
+
+| Test | Result |
+|---|---|
+| cycles per call (best of 5 × 2,000,000) | `system_time` 43.9, `clock_gettime(MONOTONIC)` 54.8 (ns; the old µs code 50.2), `CLOCK_REALTIME` 56.6, `gettimeofday` 55.5, `time` 49.6; the same clocks through a system call: `_kern_system_time` 199.7, `_kern_get_clock(MONOTONIC)` 238.7, so 4.4× |
+| `time_test load 20`, 8 threads on 4 CPUs | 773,825,943 reads, 0 back within a thread, **0 back across CPUs** (before the TSC change: 361,580,712 and 759,389,840 in two boots, worst 212 and 864 ns), 7 migrations seen |
+| agreement, 14,630,000 checks during that load | the kernel's monotonic and real-time clock always between two user reads around the system call; `gettimeofday()` and `time()` always within `CLOCK_REALTIME` |
+| `time_test skew 5` | 0 steps back for `system_time()`, `_kern_system_time()` and `CLOCK_MONOTONIC`, on every CPU pair (before: CPU 1 behind by 114 to 202 ns, the same for the system call) |
+| `time_test rtc` as root, one hour forward and back | `CLOCK_REALTIME` +3,600,000 ms, monotonic +598 µs (the calls themselves), `gettimeofday()`, `time()` and the kernel's clock follow, back again |
+| kernel log | `tsc warp 0 cycles at boot, kept the firmware TSCs`; `start splash 36269 ms` (before: 38181 ms), so `system_time()` still counts from kernel start |
+
+Not tested: the 5625U and the X1 (the warp check on real firmware; the result is in the kernel log of the next stick), a machine whose TSCs are out of sync (the old reset path; unchanged code), ARM64 and RISC-V.
