@@ -1,3 +1,16 @@
+R5 2026.1-dev Build 10079 - Speeeeeeeeeed
+
+This update is all about speed. We've made performance improvements across the whole system, and you'll feel it in everyday use.
+
+Everything feels more fluid, from moving windows around to scrolling through long pages in Aomi. Photos and big images show up faster too, whether R5 uses your graphics chip or not.
+
+Starting up is quicker and apps open faster. Copying and saving files takes less time, and an SD card full of photos opens without the wait.
+
+We also fixed a few things that made R5 slowly lose speed over the day. Leave it running from morning to evening, and it stays just as quick.
+
+Good to know: because of these optimizations, we've raised the minimum system requirements a little.
+
+
 R5 2026.1-dev Build 10078 - Aomi (experimental) on Servo
 
 Aomi now runs on Servo, a brand-new web engine. You'll find it in Applications as Aomi (experimental). WebPositive stays the default browser for now.

@@ -8,6 +8,12 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-27 - What's new: Build 10079 "Speeeeeeeeeed" for performance phases 1 and 2
+
+- Change: `distro/WHATSNEW` gets the Build 10079 section for the performance work of #4694 (phase 1) and #4696 (phase 2), written with the owner: smoother desktop and Aomi scrolling, quicker start and file work, no slowdown over the day, raised minimum requirements (Mesa is built for x86-64-v2). `distro/BUILD` goes from 10078 to 10079.
+- Limits: the section says what users can expect; no before/after speed measurement was made, and neither phase has had a 5625U stick boot yet.
+- Tested: text only; no build or boot.
+
 ## 2026-11-27 - Phase 2 review fixes (PR #4696): memcpy NT tail, GPU unmap TLB flush, AlphaMask key, nonlinear 64-bit bitmap hash, exFAT stable inos, direct-map 512-PTE check, USB 32-bit DMA, compositor CPU read drain
 
 - Problem: Review of PR #4696 (Claude, 27 Nov 2026) found two blocking memory-corruption bugs (`memcpy_nt_avx2` called 16-byte-max `memcpy_small` for 17..31-byte tails; `gpu_bo_unmap`/`gpu_va_clear`/`gpu_va_unmap` skipped `gpu_hw_flush()` before freeing backing pages), six should-fix issues (stale `AlphaMask` cache key on `SetCanvasGeometry` or address reuse; 32-bit linear CRC32C bitmap hash weaker than #4684; `exfat_put_vnode` breaking inode stability via `ForgetIno`; `r5_direct_map` collapsing without re-checking all 512 PTEs; `usb_disk` inferring controller 64-bit DMA from device `bcdUSB`; compositor async scanout racing CPU screen readers), and four nits (`wsi_common_haiku.cpp` `Flush()`, dead `runtime_loader` IFUNC code, unsafe CPPC MSR read under hypervisors/homogeneous cores, `FontCacheEntry` glyph eviction lock check).
