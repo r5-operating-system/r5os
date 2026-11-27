@@ -8,6 +8,15 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-27 - Shut down no longer stops in the debugger when the registrar gets no window
+
+- Problem: On the 5625U (sticks of 27 Nov, `generated/boot-5625u-53`, `-54`), every shut down stopped in the debugger: `BApplication: couldn't obtain new app_server comm port`, from `ShutdownProcess::Init()` → `BServer::InitGUIContext()` → `BApplication::_ConnectToServer()`. app_server answered the registrar's `AS_CREATE_APP` with an error, and libbe then called `debugger()`, so the registrar stopped and the shut down hung until the power button. `ShutdownProcess` already handles a missing GUI (`fHasGUI`); only the `debugger()` call stood in the way.
+- Change:
+  - `distro/desktop/src/kits/app/Application.cpp` (copied from Haiku, R5 snippet): a `BServer` gets the error back instead of `debugger()`, with a syslog line naming the reply code, so the registrar shuts down without its window. Applications keep Haiku's behaviour.
+  - `distro/desktop/src/servers/app/Desktop.cpp`: app_server logs why a desktop refuses `AS_CREATE_APP` (sender first, sender uid and team, client uid) and when creating the `ServerApp` fails (status). Both are rare, and they are the only trace of the cause.
+- Cause: not found yet. In QEMU (same image, first sign-in, shut down through the Deskbar submenu, the menu item and the ACPI power button) the registrar (uid 0) gets the shown desktop of uid 1001 and connects; the shut down completes. The next 5625U stick shows the logged reason.
+- Tested: `scripts/build-locked.sh` (jam exit 0); private QEMU KVM boot, first sign-in, shut down through the Deskbar submenu: QEMU powered off, no `DEBUGGER` line on serial. The no-GUI shut down path itself was not forced in QEMU.
+
 ## 2026-11-27 - What's new: Build 10079 "Speeeeeeeeeed" for performance phases 1 and 2
 
 - Change: `distro/WHATSNEW` gets the Build 10079 section for the performance work of #4694 (phase 1) and #4696 (phase 2), written with the owner: smoother desktop and Aomi scrolling, quicker start and file work, no slowdown over the day, raised minimum requirements (Mesa is built for x86-64-v2). `distro/BUILD` goes from 10078 to 10079.
