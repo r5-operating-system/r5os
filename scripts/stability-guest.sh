@@ -16,15 +16,33 @@ screenmode 1280 800 32 >/dev/null 2>&1
 say shot desktop
 
 # 1. thread_local destructor after dlclose() (GitHub #3012)
-"$T/tls_dtor_test" 200 > /boot/home/tls_dtor.txt 2>&1
-say "tls_dtor_test exit=$?"
+# A crash stops the team in the debugger, so it gets 60 s.
+"$T/tls_dtor_test" 200 > /boot/home/tls_dtor.txt 2>&1 &
+TLS_PID=$!
+i=0
+while kill -0 "$TLS_PID" 2>/dev/null && [ "$i" -lt 60 ]; do
+	sleep 1
+	i=$((i + 1))
+done
+if kill -0 "$TLS_PID" 2>/dev/null; then
+	say "tls_dtor_test FAIL: still running after 60 s (crashed or hung)"
+	say shot tls-hang
+	kill -9 "$TLS_PID" 2>/dev/null
+else
+	wait "$TLS_PID"
+	say "tls_dtor_test exit=$?"
+fi
 while IFS= read -r line; do say "tls $line"; done < /boot/home/tls_dtor.txt
 
 # 2. many windows (GitHub #3933, #3409); app_server must survive
 say "app_server before: $(ps | grep app_server | head -1)"
-"$T/window_stress" "$SECONDS_STRESS" 4 2>&1 | while IFS= read -r line; do
+("$T/window_stress" "$SECONDS_STRESS" 4 2>&1 | while IFS= read -r line; do
 	say "ws $line"
-done
+done) &
+WS_PID=$!
+sleep 5
+say shot during-stress
+wait "$WS_PID"
 say "window_stress done"
 say "app_server after: $(ps | grep app_server | head -1)"
 ls /boot/system/cache/debug 2>/dev/null | head -5 | while IFS= read -r line; do
@@ -51,6 +69,24 @@ done
 say "aomi title: $(grep 'title tab=0' "$AOMI_LOG" 2>/dev/null | head -1)"
 sleep 3
 say shot aomi
+sleep 10
+say shot aomi-later
+for prop in Title Hidden Frame Workspaces Minimize Look Feel; do
+	say "aomi window $prop: $(hey Aomi get $prop of Window 0 2>&1 | tr '\n' ' ' | cut -c1-150)"
+done
+say "aomi windows: $(hey Aomi count Window 2>&1 | tr '\n' ' ' | cut -c1-100)"
+/boot/system/apps/StyledEdit >/dev/null 2>&1 &
+sleep 5
+say shot stylededit
+for demo in /boot/system/demos/GLTeapot /boot/system/demos/VulkanTeapot; do
+	if [ -x "$demo" ]; then
+		"$demo" >/dev/null 2>&1 &
+		sleep 8
+		say "shot $(basename $demo)"
+	else
+		say "missing $demo"
+	fi
+done
 if kill -0 "$AOMI_PID" 2>/dev/null; then
 	say "aomi alive=yes"
 else

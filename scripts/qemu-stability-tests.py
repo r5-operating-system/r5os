@@ -106,7 +106,10 @@ def main():
         handle.write("#!/bin/sh\n/bin/sh /boot/home/stabtest %s "
                      "> /boot/home/stabtest.txt 2>&1 &\n" % seconds)
     with open(os.path.join(stage, "radeon_hd"), "w", newline="\n") as handle:
-        handle.write("gpu_draw true\ngpu_compositor_lavapipe true\n")
+        # STAB_RADEON replaces the settings, e.g. "gpu_draw false" (Painter)
+        handle.write(os.environ.get(
+            "STAB_RADEON", "gpu_draw true;gpu_compositor_lavapipe true")
+            .replace(";", "\n") + "\n")
     settings = "myfs/home/config/settings"
     # bfs_shell's cp does not replace a file, so each target is removed first
     commands = [
